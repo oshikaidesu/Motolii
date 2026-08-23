@@ -159,14 +159,27 @@ impl canvas::Program<Message> for RulerHeader {
                 let frame = frame_at_x(position.x, width, self.duration_frames);
                 Some(canvas::Action::publish(Message::ScrubTo(frame)).and_capture())
             }
-            // 右クリック = ループ帯ドラッグのキャンセル(正典 §2 Esc・裁定151
-            // 「キャンセルの一般化」— body 側 `input.rs` の `Clip` 腕と同型)。
+            // 右クリック = ループ帯ドラッグ中ならキャンセル(正典 §2 Esc・
+            // 裁定151「キャンセルの一般化」— body 側 `input.rs` の `Clip` 腕と
+            // 同型)。ドラッグ中でなければ locator lane 右クリック追加
+            // (S2 発注 #22「追加 UI が無い」の穴埋め — キーボード M
+            // (`Message::AddMarkerAt` doc 参照)と併存する2入口目、S6 併存
+            // 裁定195)。**クリック位置ではなく playhead へ置く**(裁定222の
+            // 外部資料判断: Premiere Pro は timeline ruler 右クリック→
+            // Markers > Add Marker が M キーと同じく playhead へ置く
+            // https://helpx.adobe.com/premiere/desktop/organize-media/apply-labeling/add-a-marker-to-a-clip.html、
+            // DaVinci Resolve も jog bar 右クリック→Add Marker が playhead へ
+            // 置く仕様 https://www.steakunderwater.com/VFXPedia/__man/Resolve18-6/DaVinciResolve18_Manual_files/part996.htm
+            // — 2製品とも「右クリックした x 座標」ではなく「今の再生位置」を
+            // 使う。他の作法(クリック位置へ置く)は先例に反するため採らない)。
+            // scrub 中の右クリックはまだ意味を持たない(発明しない)。
             mouse::Event::ButtonPressed(mouse::Button::Right) => match state.drag {
                 Some(HeaderDrag::Loop) => {
                     state.drag = None;
                     Some(canvas::Action::publish(Message::LoopDragCancelled).and_capture())
                 }
-                _ => None,
+                Some(HeaderDrag::Scrub) => None,
+                None => Some(canvas::Action::publish(Message::AddMarkerAt(self.playhead)).and_capture()),
             },
             mouse::Event::CursorMoved { .. } => match state.drag {
                 Some(HeaderDrag::Scrub) => {

@@ -1822,6 +1822,13 @@ impl Shell {
                 // 再生の clock は shell(A2)が持つので、状態遷移と tick 駆動を
                 // ここで畳む(`PaneState::update` では no-op)。
                 timeline_pane::Message::Shuttle(command) => self.apply_shuttle(command),
+                // ルーラ locator lane 右クリック(S2 発注 #22「マーカー追加
+                // UI が無い」の穴埋め、2入口目)— キーボード M
+                // (`Message::Marker(MarkerMessage::AddAtPlayhead)`)と同じ
+                // `update_marker` 経路へ畳む(S6 併存、裁定195)。
+                timeline_pane::Message::AddMarkerAt(frame) => {
+                    self.update_marker(timeline::markers::MarkerMessage::AddAtFrame(frame))
+                }
                 other => {
                     if let Some(reason) =
                         self.timeline.update(other, &mut self.doc, &mut self.session, self.keyboard_modifiers)
@@ -2078,7 +2085,7 @@ impl Shell {
             }
         }
         self.refresh_frame();
-        task
+        Task::batch([task, self.poll_waveform_fetches()])
     }
 
 
@@ -2465,6 +2472,20 @@ impl Shell {
                     }
                 }
             }
+            // S2 発注 #22 の2入口目(ルーラ locator lane 右クリック)。
+            // `AddAtPlayhead` と同じ意味・同じ Intent、位置だけ呼び出し元
+            // (`Message::AddMarkerAt(frame)`)が決める。
+            MarkerMessage::AddAtFrame(frame) => {
+                let Some(fps) = self.composition().map(|c| c.fps) else {
+                    return;
+                };
+                let markers = self.markers();
+                if let Some(next) = timeline::markers::added_at_frame(&markers, frame, fps) {
+                    if let Err(error) = self.doc.apply(Intent::SetMarkers { markers: next }) {
+                        self.status = Some(format!("マーカーを置けない: {error}"));
+                    }
+                }
+            }
             // JumpTo は先取り(`ScrubTo`/`timeline_pane::Message::ScrubTo` と
             // 同じ経路 — playhead を直接書く、正典 §5「K/J ナビの補完」)。
             MarkerMessage::JumpTo(frame) => self.session.playhead = frame,
@@ -2769,6 +2790,55 @@ impl Shell {
                     .rename_draft()
                     .map(|(layer, draft)| (layer, draft.to_owned())),
             )
+            // 波形取得状態(TL7 統合手順3、S2 発注 #17「shell 側の呼び出し
+            // 経路が無い」の穴埋め)。`self.timeline.waveforms()` を
+            // `with_rename` と同じ「薄い builder で読み取り専用に運ぶだけ」
+            // の形でそのまま渡す(実際の要求発火は `poll_waveform_fetches`)。
+            .with_waveforms(self.timeline.waveforms().clone())
+    }
+
+    /// 音声 layer の波形取得を計画し、必要な分だけ非同期に発火する(TL7
+    /// 統合手順1・5、S2 発注 #17「shell 側の呼び出し経路が無い」の穴埋め)。
+    /// `Shell::update` の末尾から毎メッセージ後に呼ぶ(`refresh_frame` と
+    /// 同じ「都度呼んでも安いので判断を持たせない」形 — `plan_waveforms`
+    /// 自体が `Loading`/`Ready` を見て何もしない側へ落ちるので、音声 layer が
+    /// 無い/既に取得済みの通常のフレームでは実質 no-op)。
+    ///
+    /// **画面幅は未知(EXACT TARGET 外)**: 実際の bar 幅は canvas 描画時の
+    /// window 幅に依存する(`ruler.rs`/`canvas.rs` の `bounds.width`)が、
+    /// `Shell` は window サイズを保持していない(`grep -n window_size` 0件、
+    /// 実測)。ここでは固定の目安幅
+    /// (`NOMINAL_WAVEFORM_WIDTH_PX`)を渡す — bucket 数が実窓とズレるのは
+    /// 承知の上(発注書「波形は呼び出し経路の説明で足りる。描画の正しさは
+    /// 窓が要るので【未確認】のまま残してよい」)。呼び出し経路(plan→
+    /// Task::perform→WaveformFetched→Ready→canvas 描画)自体は実働する。
+    fn poll_waveform_fetches(&mut self) -> Task<Message> {
+        const NOMINAL_WAVEFORM_WIDTH_PX: f32 = 960.0;
+        let store = self.doc.view();
+        let rows = timeline_pane::audio_rows(&store);
+        if rows.is_empty() {
+            return Task::none();
+        }
+        let requests = self.timeline.plan_waveforms(&rows, |_layer| NOMINAL_WAVEFORM_WIDTH_PX);
+        if requests.is_empty() {
+            return Task::none();
+        }
+        Task::batch(requests.into_iter().map(|(layer, path, buckets)| {
+            Task::perform(
+                async move { motolii_media::waveform_peaks(path, buckets) },
+                move |result| match result {
+                    Ok(peaks) => Message::Timeline(timeline_pane::Message::WaveformFetched {
+                        layer,
+                        buckets,
+                        peaks,
+                    }),
+                    Err(_) => Message::Timeline(timeline_pane::Message::WaveformFetchFailed {
+                        layer,
+                        buckets,
+                    }),
+                },
+            )
+        }))
     }
 
 

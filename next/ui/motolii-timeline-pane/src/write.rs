@@ -230,6 +230,16 @@ pub enum Message {
     /// この腕は運搬役。[`PaneState::update`] では no-op。
     Shuttle(ShuttleCommand),
 
+    // ---- Timeline マーカー(B19、S2 発注 #22「追加 UI が無い」の穴埋め) ----
+    /// ルーラ帯の locator lane を右クリック(ドラッグ中でない時)= その
+    /// クリック位置のフレームへマーカーを置く。キーボード M
+    /// (`next/shell/motolii-shell/src/input.rs` の `resolve_navigation_key`、
+    /// `Message::Marker(MarkerMessage::AddAtPlayhead)`)と併存する2入口目
+    /// (S6 併存、裁定195)。**Select/ScrubTo と同じ「shell 先取りの例外」** —
+    /// 意味(`Intent::SetMarkers`)は shell の `update_marker` が持つので
+    /// [`PaneState::update`] では no-op。
+    AddMarkerAt(i64),
+
     // ---- Split(レイヤー分割、B39 — `crate::split` モジュール doc「統合手順」) ----
     /// Command+B(map 267)/メニュー Split(id 163/317 ほか)。選択レイヤー
     /// (複数可)を playhead で割る。`crate::split::Message::SplitAtPlayhead`
@@ -734,7 +744,8 @@ impl PaneState {
             | Message::StepPlayhead(_)
             | Message::JumpPlayheadToStart
             | Message::JumpPlayheadToEnd
-            | Message::Shuttle(_) => None,
+            | Message::Shuttle(_)
+            | Message::AddMarkerAt(_) => None,
         }
     }
 

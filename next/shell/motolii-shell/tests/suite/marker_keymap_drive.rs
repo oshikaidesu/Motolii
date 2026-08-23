@@ -11,7 +11,7 @@
 //! fixture(`Shell::new_fixture()`)実測値: marker 3個(Aメロ@150・サビ@510・
 //! ラスサビ@1200)、既定 playhead 900(どのマーカーとも重ならない)。
 
-use motolii_shell::{timeline, Message, Shell};
+use motolii_shell::{timeline, timeline_pane, Message, Shell};
 
 #[test]
 fn m_key_resolves_to_add_at_playhead() {
@@ -56,6 +56,45 @@ fn add_at_playhead_adds_exactly_one_marker() {
     let _ = shell.update(Message::Marker(timeline::markers::MarkerMessage::AddAtPlayhead));
 
     assert_eq!(shell.markers().len(), before + 1, "マーカーが1つ増えていない");
+}
+
+#[test]
+fn add_at_playhead_undoes_in_one_step() {
+    // S2 発注 #22 検収条件(裁定220): 「M キー相当でプレイヘッド位置に
+    // マーカーが1つ増え、undo 1回で戻る」。`AddAtPlayhead` は
+    // `Intent::SetMarkers` 1回で完結する(`update_marker` 参照)ので
+    // undo も1回で足りるはず。
+    let mut shell = Shell::new_fixture().0;
+    let before = shell.markers().len();
+
+    let _ = shell.update(Message::Marker(timeline::markers::MarkerMessage::AddAtPlayhead));
+    assert_eq!(shell.markers().len(), before + 1, "マーカーが1つ増えていない");
+
+    let _ = shell.update(Message::Undo);
+    assert_eq!(shell.markers().len(), before, "undo 1回でマーカー追加前に戻らない");
+}
+
+#[test]
+fn ruler_right_click_entry_adds_at_playhead_and_undoes_in_one_step() {
+    // S2 発注 #22 の2入口目(S6 併存、裁定195): ルーラ locator lane
+    // 右クリックが publish する `timeline_pane::Message::AddMarkerAt` は
+    // shell の `Message::Timeline` 例外腕(`AddAtPlayhead` と同じ
+    // `update_marker` 経路)へ畳まれる。`ruler.rs` は常に `self.playhead`
+    // (Premiere/Resolve 先例どおり、クリック位置ではない)を渡すので、この
+    // 試験も playhead をそのまま渡して同じ検収条件を確認する。
+    let mut shell = Shell::new_fixture().0;
+    let before = shell.markers().len();
+    let playhead = shell.session().playhead;
+
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::AddMarkerAt(playhead)));
+    assert_eq!(
+        shell.markers().len(),
+        before + 1,
+        "ルーラ右クリック相当(AddMarkerAt)でマーカーが1つ増えていない"
+    );
+
+    let _ = shell.update(Message::Undo);
+    assert_eq!(shell.markers().len(), before, "undo 1回でマーカー追加前に戻らない");
 }
 
 #[test]
