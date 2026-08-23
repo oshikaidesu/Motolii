@@ -161,7 +161,7 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 160	caption	Show Subtitle Regions	字幕領域表示	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	キャプション/字幕トラックはテキストシステム(text束)の応用として妥当。Show Subtitle Regions(セーフエリア表示)は裁定155が明示的に回収対象として例示するカメラビュー系UIと同種。除外根拠なし	B04		S
 161	caption	Subtitles	字幕をインポート	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	キャプション/字幕トラックはテキストシステム(text束)の応用として妥当。Show Subtitle Regions(セーフエリア表示)は裁定155が明示的に回収対象として例示するカメラビュー系UIと同種。除外根拠なし	B04		S
 162	caption	Subtitles	字幕をエクスポート	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	キャプション/字幕トラックはテキストシステム(text束)の応用として妥当。Show Subtitle Regions(セーフエリア表示)は裁定155が明示的に回収対象として例示するカメラビュー系UIと同種。除外根拠なし	B04		S
-163	clip_edit	Split / Razor (clip at playhead)	プレイヘッド位置でクリップを分割	1	0	1	1	3	3:2:0:0	一致(2件);二次(非公式技術抽出/2015時点);公式(BMD, v11時点);公式(BMDマニュアルPDF)		採用予定		B39		S
+163	clip_edit	Split / Razor (clip at playhead)	プレイヘッド位置でクリップを分割	1	0	1	1	3	3:2:0:0	一致(2件);二次(非公式技術抽出/2015時点);公式(BMD, v11時点);公式(BMDマニュアルPDF)		採用済	2026-08-23 E-1 で結線 — timeline_pane::Message::SplitAtPlayhead / input.rs Cmd+K / context.rs 右クリック / VerbId::SplitAtPlayhead	B39		S
 164	clip_edit	Apply Audio Transition (default, at edit point)	既定のオーディオトランジションを編集点に適用	0	1	1	0	2	2:2:0:0	二次(premiere全体注記);公式(BMDマニュアルPDF)		採用予定		B38		S
 165	clip_edit	Apply Video Transition (default, at edit point)	既定のビデオトランジションを編集点に適用	0	1	1	0	2	2:2:0:0	二次(premiere全体注記);公式(BMDマニュアルPDF)		採用予定		B38		S
 166	clip_edit	Make Subclip	サブクリップを作成	0	1	1	0	2	2:2:0:0	二次(premiere全体注記);公式(BMDマニュアルPDF)		採用予定		B08		S
@@ -429,10 +429,10 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 428	color	Video Scopes	Shift+Command+W	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		拡張	裁定193: vism圏(色補正スイート=Lumetri級)— 単発の色調整ではなく専用グレーディング/スコープ機構一式が要る専門機能でコアの範囲外。継ぎ目=将来のcolor providerプラグイン	B05		S
 429	edit_basic	Copy	コピー	1	1	1	1	4	4:2:0:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点);公式(BMD, v11時点);公式(BMDマニュアルPDF);単一(WebSearch要約経由・要一次確認)		採用済	MB-0でEditメニュー結線(2026-08-22、既存shortcut併存=S6安全)	B33		S
 430	edit_basic	Paste	貼り付け	1	1	1	1	4	4:2:0:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点);公式(BMD, v11時点);公式(BMDマニュアルPDF);単一(同上)		採用済	MB-0でEditメニュー結線(2026-08-22、既存shortcut併存=S6安全)	B33		S
-431	edit_basic	Clear / Delete	選択項目を削除	1	1	1	0	3	3:2:0:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点);公式(BMD, v11時点);公式(BMDマニュアルPDF)		採用済	TimelineDeleteSelectedKeys(shell/lib.rs)	B33		S
+431	edit_basic	Clear / Delete	選択項目を削除	1	1	1	0	3	3:2:0:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点);公式(BMD, v11時点);公式(BMDマニュアルPDF)		採用済	2026-08-23 C-2 で新設 — selection.rs delete_selected_layers(複数選択に効く・1 undo)	B33		S
 432	edit_basic	Cut	切り取り	1	1	1	0	3	3:2:0:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点);公式(BMD, v11時点);公式(BMDマニュアルPDF)		採用済	MB-0でEditメニュー結線(2026-08-22、既存shortcut併存=S6安全)	B33		S
 433	edit_basic	Deselect All	選択解除	1	1	1	0	3	3:3:0:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点);公式(Adobe);公式(BMD, v11時点);公式(BMDマニュアルPDF)		採用済	MB-0でEditメニュー結線(2026-08-22、既存shortcut併存=S6安全)	B31		S
-434	edit_basic	Duplicate	複製	1	1	0	1	3	3:1:0:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点);単一(同上・信頼度低)		採用済	MB-0でEditメニュー結線(2026-08-22、既存shortcut併存=S6安全)	B33		S
+434	edit_basic	Duplicate	複製	1	1	0	1	3	3:1:0:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点);単一(同上・信頼度低)		採用済	2026-08-23 C-2 で複数対応 — selection.rs duplicate_layer が selected_layers 全員へ	B33		S
 435	edit_basic	Redo	やり直す	1	1	1	0	3	3:3:0:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点);公式(Adobe);公式(BMD, v11時点);公式(BMDマニュアルPDF)		採用済	MB-0でEditメニュー結線(2026-08-22、既存shortcut併存=S6安全)	B33		S
 436	edit_basic	Select All	すべて選択	1	1	1	0	3	3:3:0:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点);公式(Adobe);公式(BMD, v11時点);公式(BMDマニュアルPDF)		採用済	MB-0でEditメニュー結線(2026-08-22、既存shortcut併存=S6安全)	B31		S
 437	edit_basic	Undo	元に戻す	1	1	1	0	3	3:3:0:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点);公式(Adobe);公式(BMD, v11時点);公式(BMDマニュアルPDF)		採用済	MB-0でEditメニュー結線(2026-08-22、既存shortcut併存=S6安全)	B33		S
@@ -1222,7 +1222,7 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 1221	project	New Project	新規プロジェクト作成	1	1	1	1	4	4:0:0:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点);公式;公式(BMDマニュアルPDF)		採用済	MB-1でFile束として実装(2026-08-22、rfd・dirty確認・shortcut併設=S6)	B11		S
 1222	project	Project Settings	プロジェクト設定	1	1	1	0	3	5:0:0:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点);公式(BMDマニュアルPDF)		採用済	Composition component(fps/解像度/尺)実装済み(裁定40)	B11		S
 1223	project	Quit / Exit	アプリケーションを終了	1	1	1	0	3	3:3:0:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点);公式(Adobe);公式(BMD, v11時点);公式(BMDマニュアルPDF)		採用済	MB-1でFile束として実装(2026-08-22、rfd・dirty確認・shortcut併設=S6)	B11		S
-1224	project	Save (Project)	プロジェクトを保存	1	1	1	0	3	3:1:0:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点);公式(BMD, v11時点);公式(BMDマニュアルPDF)		採用済	Document::save 実装済み(裁定55/56、GOALS M11「バックは済」)	B11		S
+1224	project	Save (Project)	プロジェクトを保存	1	1	1	0	3	3:1:0:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点);公式(BMD, v11時点);公式(BMDマニュアルPDF)		採用済	2026-08-23 C-1 で結線 — Message::SaveRequested / input.rs Cmd+S(既知パスは無言で上書き)/ menu.rs Save 項目	B11		S
 1225	project	Save As	名前を付けて保存	1	1	1	0	3	3:1:0:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点);公式(BMD, v11時点);公式(BMDマニュアルPDF)		採用済	MB-1でFile束として実装(2026-08-22、rfd・dirty確認・shortcut併設=S6)	B11		S
 1226	project	Open Project	プロジェクトを開く	1	1	0	0	2	2:0:0:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点)		採用済	Document::load 実装済み(裁定55/56)	B11		S
 1227	project	Save a Copy	コピーを保存	1	1	0	0	2	2:0:0:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点)		採用済	MB-1でFile束として実装(2026-08-22、rfd・dirty確認・shortcut併設=S6)	B11		S
@@ -1439,8 +1439,8 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 1438	tool	Underline	下線	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		採用予定	既決との衝突なし	B46		S
 1439	tool	Vertical Type Tool	縦書きテキストツール	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		採用予定	既決との衝突なし(日本語歌詞対応と親和)	B29		S
 1440	tool	Wedge Tool	くさびツール	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		採用予定	既決との衝突なし	B28		S
-1441	view_display	Zoom In	ズームイン	1	1	1	0	3	2:2:0:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点);公式(BMD, v11時点)		採用予定	既決との衝突なし(M18未)	B24		S
-1442	view_display	Zoom Out	ズームアウト	1	1	1	0	3	2:2:0:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点);公式(BMD, v11時点)		採用予定	1441と同根拠	B24		S
+1441	view_display	Zoom In	ズームイン	1	1	1	0	3	2:2:0:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点);公式(BMD, v11時点)		採用済	2026-08-23 C-4 で結線 — stage::zoom::zoom_step / input.rs Cmd+=	B24		S
+1442	view_display	Zoom Out	ズームアウト	1	1	1	0	3	2:2:0:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点);公式(BMD, v11時点)		採用済	2026-08-23 C-4 で結線 — stage::zoom::zoom_step / input.rs Cmd+-	B24		S
 1443	view_display	Activate Zoom In tool	ズームインツール	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし	B24		S
 1444	view_display	Activate Zoom Out tool	ズームアウトツール	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし	B24		S
 1445	view_display	Active Window: Source Viewer	Command+1	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用予定	既決との衝突なし	B25		M
@@ -1489,7 +1489,7 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 1488	view_display	Zoom out time	時間軸をズームアウト	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし	B24		S
 1489	view_display	Zoom out Timeline to show entire composition	コンポ全体表示までズームアウト	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし	B24		S
 1490	view_display	Zoom to 100%	100%表示	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし	B24		S
-1491	view_display	Zoom to fit	フィット表示	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし	B24		S
+1491	view_display	Zoom to fit	フィット表示	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用済	2026-08-23 C-4 で結線 — stage::zoom::named_zoom_level / input.rs Cmd+9	B24		S
 1492	view_display	Zoom to Fit	Shift+Z	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用予定	既決との衝突なし	B24		S
 1493	view_display	Zoom Tool	ズームツール	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		採用予定	既決との衝突なし	B24		S
 1494	workspace	Activate view in multi-view layout	マルチビューでビューを有効化	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし	B26		S
