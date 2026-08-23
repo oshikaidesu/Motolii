@@ -1041,6 +1041,21 @@ impl<'a> StoreView<'a> {
         let Some(mut source_frame) = meta.timing.source_frame(comp_frame) else {
             return Ok(None);
         };
+        // `sr`(Time Stretch)の track 版(A03「Speed(ATTRS)」、裁定63 の穴)。
+        // track があれば `LayerTiming.speed`(静的値)の代わりに使う —
+        // `source_frame` は現在フレームだけの純粋関数なので、速度が時間で変わる
+        // なら「start からここまでの積算」でなければ正しくない(1点上書きでは
+        // 足りない、`LayerTiming::source_frame_with_speed_track` のコメント参照)。
+        // `TIME_REMAP` と同時に張られていてもここでは構わない — 下の remap 分岐が
+        // 最終的に勝つ(適用順は変えない)。
+        if let Some(speed_track) = self.track(layer, &PropertyId::new(property::SPEED)?)? {
+            if let Some(v) =
+                meta.timing
+                    .source_frame_with_speed_track(comp_frame, &speed_track, composition.fps)?
+            {
+                source_frame = v;
+            }
+        }
         // `tm`(Time Remap、precomposition-layer)。track があれば**素材のフレーム番号を
         // 直接**上書きする — 通常の speed/trim による写像より優先する(裁定65 が
         // timing から追い出した分、property 側で戻す)。timing が「居る/居ない」を
