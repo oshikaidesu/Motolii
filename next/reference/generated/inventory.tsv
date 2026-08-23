@@ -1649,7 +1649,7 @@ struct	LayerId	motolii-store	core/motolii-store/src/document.rs:30	pub	1391	laye
 struct	PropertyId	motolii-store	core/motolii-store/src/document.rs:45	pub	637	property の名前。AE の property list の1行に相当する。	
 struct	Revision	motolii-store	core/motolii-store/src/document.rs:532	pub	19	「見えている Document が変わったか」の印。	
 struct	DisplayRevision	motolii-store	core/motolii-store/src/document.rs:545	pub	7	「見えている絵が変わったか」の印。**再描画専用** — undo/redo/保存の意味には一切	
-struct	Document	motolii-store	core/motolii-store/src/document.rs:619	pub	1104		
+struct	Document	motolii-store	core/motolii-store/src/document.rs:619	pub	1105		
 struct	EffectId	motolii-store	core/motolii-store/src/effect.rs:40	pub	122	layer の中での effect インスタンスの安定 ID。マスクの [`crate::MaskId`] と同型の理由 —	
 struct	EffectInstance	motolii-store	core/motolii-store/src/effect.rs:51	pub	78	1つの effect インスタンス。**param の値は持たない**(上記どおり `effect.{id}.param.*`	
 struct	ResolvedEffect	motolii-store	core/motolii-store/src/effect.rs:65	pub	16	ある comp 時刻に解決済みの effect インスタンス。**描く側が要るのはこれだけ**	

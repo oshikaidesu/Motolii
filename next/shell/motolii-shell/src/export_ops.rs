@@ -1,15 +1,15 @@
 //! owns: Export の実行(C-3、波C「書き出し」レーン、`docs/reviews/
 //! 2026-08-23-shell-split-plan.md`「export_ops.rs」節)。
 //!
-//! OWNS-JUSTIFICATION(C): 測定器具ではなく **shell の統合点**として自前になる。
-//!       ここが持つのは「注文を組み立て、専用スレッドへ渡し、進捗と cancel を
-//!       UI へ返す」という接着だけで、実処理(render/encode/mux)は
-//!       `motolii-export` / `motolii-media` に在る。接着そのものは iced の
-//!       `Task::run` と `iced::stream::channel`(いずれも上流の口)を借りており、
-//!       並行機構を発明していない。**借り先が無いのは「Document をスレッドを
-//!       跨がせずにスナップショット経由で渡す」判断の部分**で、これは
-//!       `Document`/`StoreView` が借用型である(意見1・裁定2 の帰結)ことから
-//!       来るため、上流の汎用 crate では代替できない。
+//! OWNS-JUSTIFICATION(A): 意見1(有理時間)と裁定2(Document の実体は rerun store)が
+//!       強制する。ここが持つのは「注文を組み立て、専用スレッドへ渡し、進捗と
+//!       cancel を UI へ返す」という接着だけで、実処理(render/encode/mux)は
+//!       `motolii-export` / `motolii-media` に在り、並行機構も iced の
+//!       `Task::run` + `iced::stream::channel`(上流の口)を借りている。
+//!       **自前になったのは「`Document` をスレッドに跨がせず `.rrd` スナップ
+//!       ショット経由で渡す」1点**で、`Document`/`StoreView` が借用型であること
+//!       —— つまり上の2つの意見の帰結 —— から来る。汎用の非同期 crate では
+//!       この受け渡しを代替できない(コスト: この接着 ~460行)。
 //!
 //! ## 非同期化(旧実装は `update()` を同期でブロックしていた)
 //! `motolii-export` crate 冒頭 doc の「shell(UI)側の非ブロッキング化への示唆」
