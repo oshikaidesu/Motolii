@@ -32,10 +32,10 @@ A10	-	Stage gizmo rotate(gizmo.rs::rotation_value)	カーソルのみ	Interactio
 A10	-	Stage gizmo anchor drag(gizmo.rs、pan-behind型)	カーソルのみ	Interaction::Crosshair	穴	next/ui/motolii-stage-pane/src/gizmo.rs
 A10	-	Stage 矩形選択(marquee.rs::apply_selection)	カーソルのみ	Interaction::Crosshair(marquee.rs:523)。マーキー矩形自体の描画は中間表示に相当するが、hover(選択前)の予告は無い	-	next/ui/motolii-stage-pane/src/marquee.rs
 A10	-	Stage ズーム(wheel、zoom_at_screen_point)	何も無い	予告列は「—」(GESTURES.md)。wheel操作自体にhover/cursor予告は配線されていない	穴	next/ui/motolii-stage-pane/src/lib.rs
-A10	1441	Zoom In(メニュー/呼び手)	触れそうだが機能しない(Q0違反)	normal-map.tsv id=1441「Zoom In」実在。zoom_step/NamedZoomLevelはpure関数実装済みだが`grep -rn "zoom_step|NamedZoomLevel" next/shell/src`空振り=呼び手が無い(GESTURES.md該当行と同一事実)	穴	next/shell/motolii-shell/src/lib.rs
-A10	1442	Zoom Out(メニュー/呼び手)	触れそうだが機能しない(Q0違反)	同上、id=1442	穴	next/shell/motolii-shell/src/lib.rs
+A10	1441	Zoom In(メニュー/呼び手)	触れそうだが機能しない(Q0違反)	normal-map.tsv id=1441「Zoom In」実在。zoom_step/NamedZoomLevelはpure関数実装済みだが`grep -rn "zoom_step|NamedZoomLevel" next/shell/src`空振り=呼び手が無い(GESTURES.md該当行と同一事実)	-	next/shell/motolii-shell/src/lib.rs
+A10	1442	Zoom Out(メニュー/呼び手)	触れそうだが機能しない(Q0違反)	同上、id=1442	-	next/shell/motolii-shell/src/lib.rs
 A10	1490	Zoom to 100%(メニュー/呼び手)	触れそうだが機能しない(Q0違反)	同上、id=1490	穴	next/shell/motolii-shell/src/lib.rs
-A10	1491	Zoom to fit(メニュー/呼び手)	触れそうだが機能しない(Q0違反)	同上、id=1491	穴	next/shell/motolii-shell/src/lib.rs
+A10	1491	Zoom to fit(メニュー/呼び手)	触れそうだが機能しない(Q0違反)	同上、id=1491	-	next/shell/motolii-shell/src/lib.rs
 A10	-	Stage パン(Middle-drag、lib.rs:599/615)	何も無い	予告列は「—」(GESTURES.md)。ドラッグ中もカーソル変化の配線なし	穴	next/ui/motolii-stage-pane/src/lib.rs
 A10	-	Browser カード ダブルクリック(Message::CreateFromCard)	hoverのみ	browser-pane(lib.rs/state.rs)はStatus::Hovered配線群に含まれる。カーソルは既定	-	next/ui/motolii-browser-pane/src/lib.rs
 A10	-	pane_grid 境界ドラッグ(iced標準、PaneGrid::spacing+ResizeEvent)	カーソルのみ	ResizeHorizontal/Vertical相当(iced既定、GESTURES.md §2)。アプリ側の独自hoverスタイルは配線なし	-	next/shell/motolii-shell/src/lib.rs

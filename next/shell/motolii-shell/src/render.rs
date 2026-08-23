@@ -218,6 +218,20 @@ impl Shell {
         // 一切引数に取らない。
         let render_result = self.engine.render_frame(&self.doc.view(), t);
         metrics::record_render_frame(render_start.elapsed());
+        // A-4 結線(id A-4「壊れた素材があったことを status 帯へ出す」)。
+        // **API 分析の根拠**(裁定199): `Engine::layer_failures(&self) -> &[String]`
+        // は「直近の render_frame/render_frame_without_background/…呼び出し
+        // 1回ぶん」の隔離理由を持ち、**次の render 系呼び出しの冒頭で
+        // clear される**(`layer_failures` フィールド doc 実測)。この関数は
+        // 直後に `compute_display_source` を呼び、それが観測カメラ/市松用に
+        // engine をもう一度回す(`checkerboard_preview_source`/
+        // `observation_preview_source` 経由)ため、そこへ進む前に読まないと
+        // この export 真値レンダーぶんの隔離理由を取りこぼす——**ここが
+        // 「clear されるタイミングを間違えない」唯一の場所**。`to_vec()` で
+        // 複製するのは、この後の `compute_display_source` が同じ
+        // `&mut self.engine` を借りて内部の Vec を上書きするため(借用のまま
+        // 持ち越せない)。
+        let layer_failures = self.engine.layer_failures().to_vec();
         match render_result {
             Ok(rgba) => {
                 let display = self.compute_display_source(observation, checkerboard, playhead);
@@ -266,6 +280,18 @@ impl Shell {
                     observation_rgba: display.observation_rgba,
                     resolution_cap,
                 });
+                // 裁定185(説明文は status 帯へ)。**空なら書かない** — この
+                // crate の既存慣習(`Err` 枝も成功時に `status` を戻さない)を
+                // そのまま踏襲し、無関係な既存メッセージを毎フレーム無言で
+                // 消さない(消えるのは何か別の動作が新しい `status` を積んだ
+                // 時だけ)。
+                if !layer_failures.is_empty() {
+                    self.status = Some(format!(
+                        "描けなかった layer {}件 — {}",
+                        layer_failures.len(),
+                        layer_failures.join(" / ")
+                    ));
+                }
             }
             Err(error) => {
                 // 絵が出せなくても**画面は空にしない**(M16)。理由は帯に出す。

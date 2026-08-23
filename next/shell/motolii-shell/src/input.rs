@@ -3,8 +3,59 @@
 
 use crate::{
     export_pane, inspector_pane, stage, timeline,
-    timeline_pane, Message,
+    timeline_pane, Message, Shell,
 };
+
+impl Shell {
+    /// map 1441「Zoom In」(A10 id1441、`resolve_navigation_key` の Cmd+=/+ 腕
+    /// から呼ばれる)。**API 分析の根拠**(裁定199):
+    /// [`stage::zoom::zoom_step`] のシグネチャは
+    /// `fn zoom_step(current: ObservationCamera, direction: ZoomStepDirection)
+    /// -> ObservationCamera`(pure、bounds 不要 — `ZOOM_LADDER` 上の隣接段への
+    /// 純関数ジャンプ)。`current` には `self.observation`(`None` = 「render
+    /// camera を通して見る」既定、`update_stage` の `stage::Message::Observe`
+    /// と同じ書き先)を渡す — `None` の間は `ObservationCamera::default()`
+    /// (`zoom=1.0`)を起点にするのが正しい(既定ズームは1.0のラダー中央、
+    /// `zoom.rs` 冒頭 doc「1.0を中心に2のべき倍」)。結果は必ず `Some` へ積む
+    /// (`ZoomIn`/`ZoomOut` を押した時点で利用者は明示的に自由視点へ入る —
+    /// `ResetToRenderCamera`(Shift+F)が `None` へ戻す経路として既に在る)。
+    pub(crate) fn zoom_in(&mut self) {
+        let current = self.observation.unwrap_or_default();
+        self.observation = Some(stage::zoom::zoom_step(
+            current,
+            stage::zoom::ZoomStepDirection::In,
+        ));
+    }
+
+    /// map 1442「Zoom Out」(A10 id1442)。[`Self::zoom_in`] の doc と同じ根拠、
+    /// `ZoomStepDirection::Out` を渡すだけ。
+    pub(crate) fn zoom_out(&mut self) {
+        let current = self.observation.unwrap_or_default();
+        self.observation = Some(stage::zoom::zoom_step(
+            current,
+            stage::zoom::ZoomStepDirection::Out,
+        ));
+    }
+
+    /// map 1491/1492「Zoom to fit」(A10 id1491)。**API 分析の根拠**:
+    /// [`stage::zoom::named_zoom_level`] は `NamedZoomLevel::Fit` の枝を
+    /// `bounds`/`comp` に触れる前に早期 return する
+    /// (`if level == NamedZoomLevel::Fit { return Some(ObservationCamera::
+    /// default()); }`、`zoom.rs` 実測)——つまり Fit は常に
+    /// `ObservationCamera::default()` で、bounds に依存しない。`Shell` は
+    /// Stage pane の描画時 bounds を保持していない(`iced::Rectangle` は
+    /// `stage_presenter.rs`/`view.rs` の draw 呼び出し引数としてしか出て
+    /// 来ない、`grep -n "Rectangle" src/*.rs` で `Shell` フィールドに無い
+    /// ことを確認済み)ので、ダミーの bounds/comp を渡して関数を呼ぶより、
+    /// 実際に返る値(`ObservationCamera::default()`)を直接代入する方が
+    /// 「渡した引数が意味を持つふりをしない」ぶん正直——関数の**契約**
+    /// (Fit の戻り値)はそのまま使っている。id1490「Zoom to 100%」
+    /// (`NamedZoomLevel::ActualSize`)は `actual_size_zoom` 経由で本物の
+    /// bounds が要るため、この波では結線しない(RETURN 参照)。
+    pub(crate) fn zoom_to_fit(&mut self) {
+        self.observation = Some(motolii_engine::ObservationCamera::default());
+    }
+}
 
 
 /// `Shell::subscription` が使う、Inspector drag-to-scrub 用の window 全体の
@@ -325,6 +376,19 @@ pub fn resolve_navigation_key(
         Key::Character(c) if modifiers.command() && c.eq_ignore_ascii_case("e") => {
             Some(Message::Export(export_pane::Message::ToggleExportDialog))
         }
+        // ---- Stage 離散ズーム束(B24、A10 id1441/1442/1491 の結線 — 第7波)。
+        // Cmd+=/Cmd+-(ブラウザ/多くのエディタ共通の zoom in/out 慣習、`=` は
+        // US 配列で無 shift の「+」キー — `+` も一緒に拾って Shift 有無の
+        // レイアウト差を吸収する)。Cmd+9 = Zoom to fit(Illustrator/Sketch の
+        // 「Fit in Window」慣習に合わせる — 修飾digit は shift でグリフが
+        // 変わる配列があるため Shift 系のキーは避けた、`zoom_to_fit` doc
+        // 参照)。id1490(Zoom to 100%)はキーを発明しない(未結線、RETURN
+        // 参照)。
+        Key::Character(c) if modifiers.command() && (c == "=" || c == "+") => {
+            Some(Message::ZoomIn)
+        }
+        Key::Character(c) if modifiers.command() && c == "-" => Some(Message::ZoomOut),
+        Key::Character(c) if modifiers.command() && c == "9" => Some(Message::ZoomToFit),
         _ => None,
     }
 }

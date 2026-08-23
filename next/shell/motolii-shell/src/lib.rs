@@ -337,6 +337,21 @@ pub enum Message {
     /// (`Document::set_transient` → 確定時 `Intent::SetTrack` 1回 = 1 undo)。
     Gizmo(stage::GizmoDrag),
 
+    // ---- Stage 離散ズーム束(B24、A10 id1441/1442/1491 の結線 — 第7波)----
+    /// map 1441「Zoom In」。[`stage::zoom::zoom_step`] を
+    /// `ZoomStepDirection::In` で呼ぶだけの薄い腕(実装は `input.rs::zoom_in`)。
+    ZoomIn,
+    /// map 1442「Zoom Out」。[`stage::zoom::zoom_step`] を
+    /// `ZoomStepDirection::Out` で呼ぶ(`input.rs::zoom_out`)。
+    ZoomOut,
+    /// map 1491/1492「Zoom to fit」。`bounds` に依存しない唯一の
+    /// [`stage::zoom::NamedZoomLevel`]([`input.rs::zoom_to_fit`] の doc 参照 —
+    /// letterbox が既に comp を bounds へ contain-fit しているため
+    /// `ObservationCamera::default()` と一致する)。id1490「Zoom to 100%」は
+    /// 実 viewport bounds(iced 描画時にしか手に入らず `Shell` は保持しない)
+    /// が要るため、この波では結線しない(RETURN 参照)。
+    ZoomToFit,
+
     // ---- Browser pane(ζ 縫い目調査+裁定162 切片 B0/B1/B2/B3) ----
     /// `motolii_browser_pane::Message` を1本で畳む(`Message::Settings`/
     /// `Message::Stage` と同型)。B2 で rail scope 選択/検索欄/Clear の3腕が、
@@ -1308,6 +1323,9 @@ impl Shell {
             Message::Settings(msg) => task = self.update_settings(msg),
             Message::Stage(msg) => self.update_stage(msg),
             Message::Gizmo(event) => self.update_gizmo(event),
+            Message::ZoomIn => self.zoom_in(),
+            Message::ZoomOut => self.zoom_out(),
+            Message::ZoomToFit => self.zoom_to_fit(),
             // B2/B3: rail scope 選択/検索欄/Clear/ToggleBrowserPanel の4腕
             // (`browser_pane::Message`)を pane 側の唯一の書き口
             // (`PaneState::update`)へそのまま委譲する(`timeline_pane::
@@ -1336,6 +1354,14 @@ impl Shell {
                 }
                 if let browser_pane::Message::ApplyEffectFromCard { plugin_id } = &msg {
                     self.apply_effect_to_selected_layer(plugin_id);
+                }
+                // A01 id616/617(結線切れの実例、`state.rs:126` doc「supervisor が
+                // Intent::SetSource を dispatch する」)。pane 側は意図的に no-op
+                // (`state.rs` の `Message::ReplaceSelectedLayerSource(_) => {}`)
+                // なので、`CreateFromCard`/`AddMaskFromCard`/`ApplyEffectFromCard`
+                // と同じ「shell が横取りして Intent へ落とす」形をここへ足す。
+                if let browser_pane::Message::ReplaceSelectedLayerSource(asset_id) = &msg {
+                    self.replace_selected_layer_source(*asset_id);
                 }
                 self.browser.update(msg);
                 // pane_grid 側は `browser_pane::PaneState::is_open()` が唯一の
