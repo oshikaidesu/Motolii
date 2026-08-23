@@ -42,11 +42,20 @@
 //! [`commit_text_style_track_field`] へ橋渡しする(**新しい draft 型を view
 //! へ追加で通す必要が無い**——`view.rs`(shell、write-set 外)を触らずに
 //! track 化する唯一の道、詳細は `Shell::update_inspector` の
-//! `TextFieldSubmit` 腕 doc 参照)。**3状態 Key oracle の見た目**
-//! (`KeyCellState::{Static,Between,AtKey}` に応じた ◇/◆ の出し分け)は
-//! `TextSectionProjection`(`projection.rs`、write-set 外)に track の有無が
-//! 無いため出せていない——click の**意味**(`toggled_key_track` 経由)は
-//! 完全に結線済みだが、見た目は常に同じボタン(RETURN 参照)。
+//! `TextFieldSubmit` 腕 doc 参照)。
+//!
+//! **3状態 Key oracle の見た目は E-3(2026-08-23)で結線済み** —
+//! `TextSectionProjection`(`projection.rs`)は write-set 内(D-1 時点の
+//! 誤記を訂正)なので `size_key`/`line_height_key`/`tracking_key`
+//! ([`KeyCellState`])を持てる。`text_style_key_button` がそれを
+//! `crate::chrome::key_glyph_for_state`(`key_glyph` から視覚だけを取り出した
+//! 共有関数)へ渡す——click の意味は変わらず、見た目も Position/Scale 行と
+//! 同じ ◇/◆薄/◆濃 の3状態になった。**drag 中の transient 反映も同時に
+//! 直した** — `size`/`line_height`/`tracking` は `resolved_text_document`
+//! 経由(`value_at` が `set_transient` overlay を最優先で読む)で projection
+//! へ入るので、`continue_text_style_drag` が書く transient 値が次の再描画で
+//! そのまま値欄に出る(投影を作り直す再描画の頻度に依存 — Shell 側の
+//! subscription が drag 中も view を呼び直している前提、RETURN 参照)。
 
 use motolii_settings_pane::chrome::{parse_number, section_header};
 use motolii_store::{
@@ -60,8 +69,11 @@ use iced::widget::{button, column, mouse_area, pick_list, row as row_widget, tex
 use iced::{Element, Length};
 
 use crate::projection::TextSectionProjection;
-use crate::transform::format_number;
-use crate::chrome::{bordered_row, flat_button_style, name_input_style, pick_list_style, value_cell_padding};
+use crate::transform::{format_number, KeyCellState};
+use crate::chrome::{
+    bordered_row, flat_button_style, key_glyph_for_state, name_input_style, pick_list_style,
+    value_cell_padding,
+};
 use crate::Message;
 
 /// TEXT section の text_input 系フィールドの識別。**`TransformField` とは
@@ -540,10 +552,8 @@ pub fn text_field_track_target(field: TextField) -> Option<TextStyleField> {
 /// ——static ではなく track、A-1b が意図した「track が正本」の優先順位)+
 /// drag ハンドル([`text_style_drag_handle`])+ Key 列
 /// ([`text_style_key_button`])。**投影(`TextSectionProjection`)は
-/// `resolved_text_document` を経由していない**(`projection.rs` は write-set
-/// 外 — 静的値のまま、RETURN 参照)ので、drag 中の transient 値がこの表示に
-/// 即時反映されない既知の穴が残る(値そのものは正しく track へ書かれる —
-/// `doc.view().value_at` で確認できる、`text.rs` の track 試験参照)。
+/// `resolved_text_document` 経由**(E-3、2026-08-23 訂正)なので、drag 中の
+/// transient 値もこの表示に即時反映される。
 fn size_row(
     text_projection: &TextSectionProjection,
     draft: Option<&TextFieldDraft>,
@@ -571,7 +581,7 @@ fn size_row(
             .width(Length::Fill),
         value_field,
         text_style_drag_handle(TextStyleField::Size, dims, colors),
-        text_style_key_button(TextStyleField::Size, dims, colors),
+        text_style_key_button(TextStyleField::Size, text_projection.size_key, dims, colors),
     ]
     .spacing(dims.spacing_xs)
     .align_y(iced::alignment::Vertical::Center);
@@ -596,25 +606,21 @@ fn text_style_drag_handle(field: TextStyleField, dims: Dimensions, colors: Color
     .into()
 }
 
-/// Key 列ボタン。**3状態 oracle の表示は無い**(`KeyCellState::{Static,
-/// Between,AtKey}` に応じた ◇/◆ の出し分けは `TransformRowProjection` が
-/// 運ぶ `KeyCellProjection` を読んでいる — `TextSectionProjection` にはこの
-/// track の有無/評価値が無い〈`projection.rs` は write-set 外〉ので、ここでは
-/// 常に同じ見た目のボタンにしてある)。click の**意味**は3状態 oracle と
-/// 同じ([`toggle_text_style_key`] が `crate::transform::toggled_key_track`を
-/// そのまま呼ぶ)——見た目の状態表示だけが簡略化されている。
-fn text_style_key_button(field: TextStyleField, dims: Dimensions, colors: Colors) -> Element<'static, Message> {
-    button(
-        text("K")
-            .size(dims.caption_text)
-            .align_x(iced::alignment::Horizontal::Center)
-            .align_y(iced::alignment::Vertical::Center),
-    )
-    .width(Length::Fixed(dims.inspector_glyph_width))
-    .padding(0.0)
-    .on_press(Message::TextStyleKeyPressed(field))
-    .style(move |_theme, status| flat_button_style(colors, status))
-    .into()
+/// Key 列ボタン。**3状態 oracle の表示は Position/Scale 行と共通**
+/// (`KeyCellState::{Static,Between,AtKey}` に応じた ◇/◆薄/◆濃 の出し分け ──
+/// `crate::chrome::key_glyph_for_state` が `crate::chrome::key_glyph`
+/// [`TransformRowProjection`/`KeyCellProjection` 経由]と同じ視覚を描く、
+/// E-3・2026-08-23 で結線)。click の**意味**は3状態 oracle と同じ
+/// ([`toggle_text_style_key`] が `crate::transform::toggled_key_track` を
+/// そのまま呼ぶ)——`Message` だけが `KeyRow` ではなく `TextStyleField` を
+/// 運ぶ別腕([`crate::projection::TextSectionProjection`] struct doc 参照)。
+fn text_style_key_button(
+    field: TextStyleField,
+    state: KeyCellState,
+    dims: Dimensions,
+    colors: Colors,
+) -> Element<'static, Message> {
+    key_glyph_for_state(state, Message::TextStyleKeyPressed(field), dims, colors)
 }
 
 /// Font 行。手打ち欄(`text_input`、`TextField::FontFamily` — 既存文法、
@@ -726,7 +732,7 @@ fn line_height_row(
             .on_press(Message::ResetLineHeightAuto)
             .style(move |_theme, status| flat_button_style(colors, status)),
         text_style_drag_handle(TextStyleField::LineHeight, dims, colors),
-        text_style_key_button(TextStyleField::LineHeight, dims, colors),
+        text_style_key_button(TextStyleField::LineHeight, text_projection.line_height_key, dims, colors),
     ]
     .spacing(dims.spacing_xs)
     .align_y(iced::alignment::Vertical::Center);
@@ -766,7 +772,7 @@ fn tracking_row(
             .on_press(Message::ResetTracking)
             .style(move |_theme, status| flat_button_style(colors, status)),
         text_style_drag_handle(TextStyleField::Tracking, dims, colors),
-        text_style_key_button(TextStyleField::Tracking, dims, colors),
+        text_style_key_button(TextStyleField::Tracking, text_projection.tracking_key, dims, colors),
     ]
     .spacing(dims.spacing_xs)
     .align_y(iced::alignment::Vertical::Center);
