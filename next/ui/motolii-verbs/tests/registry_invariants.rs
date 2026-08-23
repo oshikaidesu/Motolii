@@ -103,5 +103,10 @@ fn all_verbs_has_the_expected_count() {
     // = 26 + 5 + 6 = 37。
     // + CLIP_CONTEXT 固有1(Split — E-1 で新設。GOALS M6 の最後の1件で、
     //   既存メニューの再入口ではない初の clip 右クリック固有動詞)= 38。
-    assert_eq!(ALL_VERBS.len(), 38);
+    // + どの MenuSlot/ContextSlot にも属さない固有1(Add Marker — S2 発注
+    //   #22、裁定222。M キー+ルーラ locator lane 右クリックの2入口とも
+    //   `Entry::ShortcutOnly` で、まだ実在する `ContextSlot` 変種に対応する
+    //   右クリックメニュー関数が無いため、どの `_CONTEXT`/`_MENU` スライスにも
+    //   加えていない)= 39。
+    assert_eq!(ALL_VERBS.len(), 39);
 }

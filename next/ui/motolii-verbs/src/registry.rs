@@ -103,6 +103,32 @@ pub static SPLIT: Verb = Verb {
     bundle: Some("B39"),
 };
 
+/// normal-map 717(B19)。マーカーを playhead へ即置き(Add Marker)。
+/// 入口は M キーとルーラ locator lane 右クリックの2つ(S6 併存、裁定195・
+/// S2 発注 #22「追加 UI が無い」の穴埋め)。**両方とも「隠れていない」
+/// 入口**(`ShortcutOnly` — `Entry::is_hidden` は `Context`/`PanelControl`
+/// だけを隠れた入口とみなす)なので、S6 判定自体は単独でも通る形だが、
+/// 発注(裁定222)が明示的に2入口の実装を要求したため両方を転記する。
+/// M キーは normal-map 717 のコメント「4製品慣習」どおり(AE/Premiere/
+/// Resolve/CapCut とも M=Add Marker at playhead)。右クリックの方は
+/// クリック位置ではなく playhead を使う(`ruler.rs` の doc コメント引用元
+/// 参照 — Premiere/Resolve とも右クリック追加は playhead 基準)。
+pub static ADD_MARKER: Verb = Verb {
+    id: "timeline.add_marker",
+    label: "Add Marker",
+    shortcut: Some("M"),
+    entries: s6_checked(&[
+        Entry::ShortcutOnly(
+            "next/shell/motolii-shell/src/input.rs(M → Message::Marker(MarkerMessage::AddAtPlayhead))",
+        ),
+        Entry::ShortcutOnly(
+            "next/ui/motolii-timeline-pane/src/ruler.rs(ルーラ locator lane 右クリック → Message::AddMarkerAt(playhead))",
+        ),
+    ]),
+    map_ids: &[717],
+    bundle: Some("B19"),
+};
+
 /// normal-map 436、bundle B31(B33外 — 既存 shell 定義の移送)。
 pub static SELECT_ALL: Verb = Verb {
     id: "edit.select_all",
@@ -598,6 +624,7 @@ pub static ALL_VERBS: &[&Verb] = &[
     &PASTE,
     &DUPLICATE,
     &SPLIT,
+    &ADD_MARKER,
     &SELECT_ALL,
     &DESELECT_ALL,
     &NEW_LAYER,

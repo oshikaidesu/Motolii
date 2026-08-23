@@ -177,13 +177,22 @@ pub fn locator_at(
 // ---------------------------------------------------------------------------
 
 /// M タップ=playhead へ即置き(map 717 の UI 入口・728 の add 側、正典 §5)。
+/// [`added_at_frame`] の playhead 特殊形(2入口目の右クリック追加
+/// (`AddMarkerAt`/S2 発注 #22)と意味を共有するための一般化)。
+pub fn added_at_playhead(markers: &[Marker], playhead: i64, fps: Fps) -> Option<Vec<Marker>> {
+    added_at_frame(markers, playhead, fps)
+}
+
+/// 任意フレームへ即置き(`added_at_playhead` の一般化 — S2 発注 #22
+/// 「マーカー追加 UI が無い」の穴埋めで、ルーラ locator lane 右クリック
+/// (`Message::AddMarkerAt`)が playhead 以外の座標を渡せるようにした)。
 /// 名前は空(名前入力に入らない — メニュー経由の即リネームは supervisor の
 /// TextEdit 結線)・尺 0(単発)。**同一フレームに既存なら `None`**(連打は
 /// 1つに畳む — 正典 §5 の明文なので、M13 の「黙る」違反ではない)。
 /// fps 変換が立たない時も `None`(壊れた時刻を書き込まない)。
-pub fn added_at_playhead(markers: &[Marker], playhead: i64, fps: Fps) -> Option<Vec<Marker>> {
-    let time = RationalTime::try_from_frame(playhead, fps).ok()?;
-    if markers.iter().any(|m| locator_frame(m, fps) == Some(playhead)) {
+pub fn added_at_frame(markers: &[Marker], frame: i64, fps: Fps) -> Option<Vec<Marker>> {
+    let time = RationalTime::try_from_frame(frame, fps).ok()?;
+    if markers.iter().any(|m| locator_frame(m, fps) == Some(frame)) {
         return None; // 同一フレーム連打は1つに畳む(正典 §5)。
     }
     let zero = RationalTime::try_from_frame(0, fps).ok()?;
@@ -240,6 +249,9 @@ pub fn removed(markers: &[Marker], index: usize) -> Option<Vec<Marker>> {
 pub enum MarkerMessage {
     /// M タップ / メニュー「Add Marker」(map 717/728)。playhead 位置へ即置き。
     AddAtPlayhead,
+    /// ルーラ locator lane 右クリック(S2 発注 #22 の2入口目、S6 併存
+    /// 裁定195)。クリック位置のフレームへ即置き([`added_at_frame`] 参照)。
+    AddAtFrame(i64),
     /// locator を掴んだ瞬間(正典 §1「判定は押した瞬間の座標」)。
     Grabbed { index: usize, at_frame: i64 },
     /// ドラッグ中のポインタ移動。絶対値で出し直す([`MarkerDrag::dragged`])。

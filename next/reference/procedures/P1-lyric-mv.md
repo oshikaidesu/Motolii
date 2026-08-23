@@ -44,12 +44,12 @@
 |---|---|---|---|---|
 | 15 | Browserの曲カードをドラッグしてTimelineへ配置する | Browser→Timeline | `lib.rs:2213` (Media source配置経路、`AdmitPaths`後の`create_from_card`同型) | 書ける |
 | 16 | 配置直後、音声レイヤーの行がTimelineに立つ | Timeline | `next/ui/motolii-timeline-pane/src/lib.rs` `rows()` | 書ける |
-| 17 | 波形を見てサビの盛り上がりを探す | Timeline canvas | `next/ui/motolii-timeline-pane/src/canvas.rs:259-273`(描画分岐は実在)だが shell側 `plan_waveforms`/`WaveformFetched`/`with_waveforms` は `next/shell/motolii-shell/src/lib.rs` 全体で**0件**(本調査で再grep、round1/round2と同じ) | 【穴】入口が無い |
+| 17 | 波形を見てサビの盛り上がりを探す | Timeline canvas | `next/ui/motolii-timeline-pane/src/canvas.rs:259-273`(描画)+ `next/shell/motolii-shell/src/lib.rs::poll_waveform_fetches`(`Shell::update` 末尾から毎回呼ぶ。`plan_waveforms`→`Task::perform(motolii_media::waveform_peaks)`→`Message::Timeline(WaveformFetched)`→`build_timeline_pane().with_waveforms(...)` の経路が結線済み、S2 施工)。**bar の実画面幅は未知のため固定目安幅(960px)で bucket 数を決めている**(`Shell` は window サイズを保持しない、実測) | 【未確認】(呼び出し経路は繋がった。実際に窓を開いて波形が正しい縮尺・位置で描かれるかは窓が要る) |
 | 18 | (波形が見えないので)代わりに再生して耳で聴く | Space | `lib.rs:1506` `Message::TogglePlayback` | 書ける |
 | 19 | 再生中、Stageに映像が同期して映るか確認する | Stage | `lib.rs:3070` `debug_start_playback_with_session` はテスト用。実cpal経路は `motolii-audio::PlaybackSession` | 【未確認】 |
 | 20 | 耳でサビらしき位置に近づいたら停止する | Space | 同上 `TogglePlayback` トグル | 書ける |
 | 21 | プレイヘッドをドラッグしてスクラブし、位置を微調整する | Timeline ruler | `lib.rs:1266` `Message::ScrubTo(frame) => self.scrub_to(frame)` | 書ける |
-| 22 | サビの位置に印(マーカー)を置こうとする | Timeline | `motolii-verbs/src/registry.rs` に相当動詞なし(round1で確認済み事実の再確認、`Intent::SetMarkers` は store にあるが追加UIが無い) | 【穴】入口が無い |
+| 22 | サビの位置に印(マーカー)を置こうとする | Timeline | 入口2つ(S6 併存、裁定195): (a) M キー — `next/shell/motolii-shell/src/input.rs:379` `Message::Marker(MarkerMessage::AddAtPlayhead)`。(b) ルーラ locator lane 右クリック(ドラッグ中でない時)— `next/ui/motolii-timeline-pane/src/ruler.rs`(`Message::AddMarkerAt(self.playhead)` を publish)→ shell `Message::Timeline` 例外腕 → `update_marker(MarkerMessage::AddAtFrame)`。どちらも `Intent::SetMarkers` 1回・undo 1回(`next/shell/motolii-shell/tests/suite/marker_keymap_drive.rs` の `add_at_playhead_undoes_in_one_step`/`ruler_right_click_entry_adds_at_playhead_and_undoes_in_one_step` で確認)。`motolii-verbs/src/registry.rs::ADD_MARKER` に動詞登録済み(S2 施工) | 書ける |
 | 23 | 仕方なく、プレイヘッド位置を頭の中/別メモに書き留める(迂回) | 手元 | — | 【未確認】(製品外) |
 
 ## 3. 映像素材を配置し、リズムに合わせて切る
