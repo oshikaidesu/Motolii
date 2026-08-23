@@ -6,24 +6,19 @@
 責任ファイルを union-find で束ね、連結成分をそのまま1レーンにしている。
 成分どうしはファイルが交わらないので**同時に走れる**。
 
-- 穴 84件 / レーン 28本 / 責任ファイル未記入 2件
-
-## 責任ファイルが実装に見当たらない(要確認)
-
-- `engine/motolii-compositor/src/blend.rs`
-- `ui/motolii-timeline-pane/src/key_rows.rs`
-- `ui/motolii-timeline-pane/src/rail.rs`
+- 穴 83件 / レーン 29本 / 責任ファイル未記入 2件
 
 ## レーン(重い順)
 
 | レーン | 穴 | write-set | 過積載 |
 |---|---|---|---|
-| `core/motolii-store/src/persist.rs` | 30 | `core/motolii-store/src/persist.rs`, `shell/motolii-shell/src/lib.rs`, `ui/motolii-browser-pane/src/state.rs`, `ui/motolii-shell-state/src/layout.rs` ほか1 | ※ |
-| `ui/motolii-inspector-pane/src/transform.rs` | 7 | `ui/motolii-inspector-pane/src/transform.rs` | ※ |
+| `core/motolii-store/src/persist.rs` | 29 | `core/motolii-store/src/persist.rs`, `shell/motolii-shell/src/lib.rs`, `ui/motolii-browser-pane/src/state.rs`, `ui/motolii-shell-state/src/layout.rs` ほか1 | ※ |
 | `ui/motolii-inspector-pane/src/lib.rs` | 5 | `ui/motolii-inspector-pane/src/lib.rs` | ※ |
 | `ui/motolii-stage-pane/src/gizmo.rs` | 5 | `ui/motolii-stage-pane/src/gizmo.rs` |  |
+| `ui/motolii-inspector-pane/src/transform/mod.rs` | 4 | `ui/motolii-inspector-pane/src/transform/mod.rs` | ※ |
 | `ui/motolii-timeline-pane/src/write.rs` | 4 | `ui/motolii-timeline-pane/src/write.rs` | ※ |
 | `core/motolii-store/src/document.rs` | 3 | `core/motolii-store/src/document.rs`, `core/motolii-store/src/view.rs`, `engine/motolii-compositor/src/lib.rs` | ※ |
+| `ui/motolii-inspector-pane/src/transform/interaction.rs` | 3 | `ui/motolii-inspector-pane/src/transform/interaction.rs` |  |
 | `ui/motolii-timeline-pane/src/key_rows.rs` | 2 | `ui/motolii-timeline-pane/src/key_rows.rs` |  |
 | `ui/motolii-inspector-pane/src/attrs.rs` | 2 | `ui/motolii-inspector-pane/src/attrs.rs` |  |
 | `ui/motolii-inspector-pane/src/matte.rs` | 2 | `ui/motolii-inspector-pane/src/matte.rs` |  |
@@ -39,7 +34,7 @@
 | `core/motolii-store/src/asset.rs` | 1 | `core/motolii-store/src/asset.rs` |  |
 | `engine/motolii-compositor/src/blend.rs` | 1 | `engine/motolii-compositor/src/blend.rs` |  |
 | `shell/motolii-shell/src/pane_layout.rs` | 1 | `shell/motolii-shell/src/pane_layout.rs` |  |
-| `ui/motolii-tokens-rs/src/lib.rs` | 1 | `ui/motolii-tokens-rs/src/lib.rs` |  |
+| `ui/motolii-tokens-rs/src/tokens.rs` | 1 | `ui/motolii-tokens-rs/src/tokens.rs` |  |
 | `ui/motolii-timeline-pane/src/input.rs` | 1 | `ui/motolii-timeline-pane/src/input.rs` |  |
 | `ui/motolii-timeline-pane/src/work_area.rs` | 1 | `ui/motolii-timeline-pane/src/work_area.rs` |  |
 | `ui/motolii-timeline-pane/src/markers.rs` | 1 | `ui/motolii-timeline-pane/src/markers.rs` |  |

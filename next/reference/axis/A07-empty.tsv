@@ -5,7 +5,7 @@
 #sweep: next/shell/motolii-shell/src/lib.rs の fn stage_pane(6066-6180行台)を通読 — frame:None枝
 #sweep: next/ui/motolii-browser-pane/src/lib.rs の card_grid_view(1241-1249)/preview_grid相当(1491-1499)を通読
 #sweep: next/ui/motolii-inspector-pane/src/lib.rs の fn view_with_color_draft/empty_state(478-500行台)を通読
-#sweep: next/ui/motolii-timeline-pane/src/key_rows.rs の band_top・next/ui/motolii-inspector-pane/src/transform.rs の key_cell_state(0キーフレームの描画)を通読
+#sweep: next/ui/motolii-timeline-pane/src/key_rows.rs の band_top・next/ui/motolii-inspector-pane/src/transform/mod.rs の key_cell_state(0キーフレームの描画)を通読
 #sweep: grep -n "fn undo\|fn redo" next/core/motolii-store/src/document.rs、next/shell/motolii-shell/src/lib.rs の呼び出し元(1255-1264行)を通読
 #sweep: grep -n "fn default_document\|fn new(" next/shell/motolii-shell/src/lib.rs(起動直後に既定compを必ず持たせる設計を確認)
 #sweep: grep -n "WaveformState::NotRequested\|WaveformState::Loading" next/ui/motolii-timeline-pane/src/waveform_view.rs(テスト名でNotRequested/Loadingが何も描かないことを確認)

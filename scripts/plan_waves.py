@@ -118,8 +118,14 @@ out = ["# 作業割り(機械導出)", "",
        "責任ファイルを union-find で束ね、連結成分をそのまま1レーンにしている。",
        "成分どうしはファイルが交わらないので**同時に走れる**。", "",
        f"- 穴 {len(items)}件 / レーン {len(ordered)}本 / 責任ファイル未記入 {len(homeless)}件", ""]
+# 実在検査は**ファイルシステムで**行う。inventory.tsv は rustdoc が
+# 公開した項目しか載せないので、中身が全部 pub(crate)/private なモジュールは
+# 載らない — それを「見当たらない」と報告すると偽陽性になる
+# (2026-08-23: blend.rs / key_rows.rs / rail.rs の3件が実在するのに
+#  ずっと報告され続けていた)。責任列は `next/` を省いた相対で書かれる。
 missing = sorted({f for l in ordered for f in l["files"]
-                  if known_files and f not in known_files})
+                  if not os.path.exists(os.path.join(ROOT, "next", f))
+                  and not os.path.exists(os.path.join(ROOT, f))})
 if missing:
     out += ["## 責任ファイルが実装に見当たらない(要確認)", ""]
     out += [f"- `{m}`" for m in missing] + [""]

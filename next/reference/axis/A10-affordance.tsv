@@ -10,8 +10,8 @@
 #sweep: awk -F'\t' '$1==1441||$1==1442||$1==1490||$1==1491{print $1,$3}' next/reference/normal-map.tsv   (Zoom In/Out/to 100%/to fit の4行実在確認)
 #sweep: grep -n "zoom_step\|NamedZoomLevel" next/shell/motolii-shell/src/lib.rs   (空振り = 呼び手が無い)
 axis	map_id	対象	判定	証拠	穴	責任
-A10	-	Inspector 数値ドラッグ(transform.rs::start/continue/finish_field_drag)	カーソルのみ	Interaction::ResizeHorizontal(値セル全域、chrome.rs:382)。Status::Hovered配線はtransform.rs/chrome.rsのgrepに未ヒット=hover視覚変化は未確認	穴	next/ui/motolii-inspector-pane/src/transform.rs
-A10	-	Inspector click→type編集(field_input_id/enter_field_editing)	カーソルのみ	ResizeHorizontal→(切替後は通常text cursor)。ドラッグ列と同根、hover変化未確認	穴	next/ui/motolii-inspector-pane/src/transform.rs
+A10	-	Inspector 数値ドラッグ(transform.rs::start/continue/finish_field_drag)	カーソルのみ	Interaction::ResizeHorizontal(値セル全域、chrome.rs:382)。Status::Hovered配線はtransform.rs/chrome.rsのgrepに未ヒット=hover視覚変化は未確認	穴	next/ui/motolii-inspector-pane/src/transform/interaction.rs
+A10	-	Inspector click→type編集(field_input_id/enter_field_editing)	カーソルのみ	ResizeHorizontal→(切替後は通常text cursor)。ドラッグ列と同根、hover変化未確認	穴	next/ui/motolii-inspector-pane/src/transform/interaction.rs
 A10	-	ラベル色チップ巡回(chrome.rs::label_color_chip)	hoverのみ	chrome.rsはStatus::Hovered配線ありのファイル群に含まれる。明示Interactionは既定(Pointer相当)のみ	-	next/ui/motolii-inspector-pane/src/chrome.rs
 A10	-	Inspector M(Hidden)トグル(chrome.rs::mute_glyph)	hoverのみ	同上chrome.rs、既定カーソル	-	next/ui/motolii-inspector-pane/src/chrome.rs
 A10	-	Timeline rail M/S/L トグル(rail.rs::Message::ToggleMute/Solo/Lock)	予告あり	2026-08-23 E-4結線: glyph_button の style closure が _status を無視し常に surface_hover を敷くバグを修正(transport_button と同形、Hovered|Pressed のみ背景)。カーソルは iced button の既定 Pointer(on_press.is_some() 時、Interaction 明示配線不要)。M/S/L の on/off 状態は text_color(action_active/text_secondary)で別軸に見える	-	next/ui/motolii-timeline-pane/src/rail.rs

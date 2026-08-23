@@ -1,5 +1,4 @@
 lane	axis	map_id	対象	判定	意味(normal-map)	write-set
-core/motolii-store/src/persist.rs	A04	434	Duplicate(複製)	上限がある	複製	shell/motolii-shell/src/lib.rs
 core/motolii-store/src/persist.rs	A04	875	Lock/Unlock All Video Tracks(一括ロック)	上限がある	Option+Shift+9	shell/motolii-shell/src/lib.rs
 core/motolii-store/src/persist.rs	A04	-	AssetTable::admit(素材取り込み時のfingerprint hash)	未計測		shell/motolii-shell/src/lib.rs
 core/motolii-store/src/persist.rs	A04	-	Document::flattened()/save(保存時の直列化)	未計測		core/motolii-store/src/persist.rs
@@ -29,13 +28,6 @@ core/motolii-store/src/persist.rs	A11	-	B4 入力→視覚(host往復)≤2フレ
 core/motolii-store/src/persist.rs	A11	-	B6 起動系スパイク(定常運転50ms超禁止、初回500ms以内)	測る手段が無い		shell/motolii-shell/src/lib.rs
 core/motolii-store/src/persist.rs	A11	-	B7 メインthread停止(4ms超の同期処理禁止、JSON parse・lock待ち含む)	器具はあるが掛けていない		core/motolii-store/src/persist.rs;shell/motolii-shell/src/lib.rs
 core/motolii-store/src/persist.rs	A11	-	group化/ungroup(N layer規模)の同期処理時間	測る手段が無い		shell/motolii-shell/src/lib.rs
-ui/motolii-inspector-pane/src/transform.rs	A03	-	Hidden(M glyph、Inspector chrome.rs)	乗っていない		ui/motolii-inspector-pane/src/transform.rs
-ui/motolii-inspector-pane/src/transform.rs	A03	-	Timeline rail Hidden(M glyph)	乗っていない		ui/motolii-inspector-pane/src/transform.rs
-ui/motolii-inspector-pane/src/transform.rs	A09	-	Position を Inspector で編集(PositionX submit → PositionY submit の2動作)	2 undo以上		ui/motolii-inspector-pane/src/transform.rs
-ui/motolii-inspector-pane/src/transform.rs	A09	-	Scale を Inspector で編集(ScaleX submit → ScaleY submit の2動作)	2 undo以上		ui/motolii-inspector-pane/src/transform.rs
-ui/motolii-inspector-pane/src/transform.rs	A09	-	Anchor を Inspector で編集(AnchorX submit → AnchorY submit の2動作)	2 undo以上		ui/motolii-inspector-pane/src/transform.rs
-ui/motolii-inspector-pane/src/transform.rs	A10	-	Inspector 数値ドラッグ(transform.rs::start/continue/finish_field_drag)	カーソルのみ		ui/motolii-inspector-pane/src/transform.rs
-ui/motolii-inspector-pane/src/transform.rs	A10	-	Inspector click→type編集(field_input_id/enter_field_editing)	カーソルのみ		ui/motolii-inspector-pane/src/transform.rs
 ui/motolii-inspector-pane/src/lib.rs	A01	-	`SetCameraPropertyModulators`(裁定213新設)	入口ゼロ		ui/motolii-inspector-pane/src/lib.rs
 ui/motolii-inspector-pane/src/lib.rs	A01	-	`SetCameraTrack`	入口ゼロ		ui/motolii-inspector-pane/src/lib.rs
 ui/motolii-inspector-pane/src/lib.rs	A01	-	`SetCameraPropertySlot`	入口ゼロ		ui/motolii-inspector-pane/src/lib.rs
@@ -46,6 +38,10 @@ ui/motolii-stage-pane/src/gizmo.rs	A10	-	Stage gizmo scale(gizmo.rs::scale_value
 ui/motolii-stage-pane/src/gizmo.rs	A10	-	Stage gizmo rotate(gizmo.rs::rotation_value)	カーソルのみ		ui/motolii-stage-pane/src/gizmo.rs
 ui/motolii-stage-pane/src/gizmo.rs	A10	-	Stage gizmo anchor drag(gizmo.rs、pan-behind型)	カーソルのみ		ui/motolii-stage-pane/src/gizmo.rs
 ui/motolii-stage-pane/src/gizmo.rs	A11	-	stage-pane gizmo drag(回転/拡大/移動ドラッグ中のフレーム予算)	測る手段が無い		ui/motolii-stage-pane/src/gizmo.rs
+ui/motolii-inspector-pane/src/transform/mod.rs	A03	-	Hidden(M glyph、Inspector chrome.rs)	乗っていない		ui/motolii-inspector-pane/src/transform/mod.rs
+ui/motolii-inspector-pane/src/transform/mod.rs	A03	-	Timeline rail Hidden(M glyph)	乗っていない		ui/motolii-inspector-pane/src/transform/mod.rs
+ui/motolii-inspector-pane/src/transform/mod.rs	A09	-	Scale を Inspector で編集(ScaleX submit → ScaleY submit の2動作)	2 undo以上		ui/motolii-inspector-pane/src/transform/mod.rs
+ui/motolii-inspector-pane/src/transform/mod.rs	A09	-	Anchor を Inspector で編集(AnchorX submit → AnchorY submit の2動作)	2 undo以上		ui/motolii-inspector-pane/src/transform/mod.rs
 ui/motolii-timeline-pane/src/write.rs	A04	-	Timeline write.rs(編集操作 split/trim等)の量依存	未計測		ui/motolii-timeline-pane/src/write.rs
 ui/motolii-timeline-pane/src/write.rs	A08	-	Timeline clip move/trim(`TimelineDragState`)	単数のみ		ui/motolii-timeline-pane/src/write.rs
 ui/motolii-timeline-pane/src/write.rs	A08	509	Timeline `SelectAllKeysOfProperty`(`write.rs:1419 select_all_keys_of_property`)	単数のみ	プロパティの全キーフレームを選択	ui/motolii-timeline-pane/src/write.rs
@@ -53,6 +49,9 @@ ui/motolii-timeline-pane/src/write.rs	A08	-	SetOrder(z順並べ替え、`stackin
 core/motolii-store/src/document.rs	A04	-	motolii-compositor 合成ループ(layer×pass)	未計測		engine/motolii-compositor/src/lib.rs
 core/motolii-store/src/document.rs	A11	-	B5 Stageのリアルタイム追従(scrub中 p95≤16ms)	器具はあるが掛けていない		core/motolii-store/src/view.rs;engine/motolii-compositor/src/lib.rs
 core/motolii-store/src/document.rs	A11	-	時間予算試験2本の負荷依存flake(`edit_storm_with_the_real_track_type`/`r2::stage_projection_fits_a_frame`)	試験がある		core/motolii-store/src/document.rs;core/motolii-store/src/view.rs
+ui/motolii-inspector-pane/src/transform/interaction.rs	A09	-	Position を Inspector で編集(PositionX submit → PositionY submit の2動作)	2 undo以上		ui/motolii-inspector-pane/src/transform/interaction.rs
+ui/motolii-inspector-pane/src/transform/interaction.rs	A10	-	Inspector 数値ドラッグ(transform.rs::start/continue/finish_field_drag)	カーソルのみ		ui/motolii-inspector-pane/src/transform/interaction.rs
+ui/motolii-inspector-pane/src/transform/interaction.rs	A10	-	Inspector click→type編集(field_input_id/enter_field_editing)	カーソルのみ		ui/motolii-inspector-pane/src/transform/interaction.rs
 ui/motolii-timeline-pane/src/key_rows.rs	A02	-	選択キーの削除(Backspace/Delete、`shell/motolii-shell/src/lib.rs:5781`)	穴:マウスで完遂できない		ui/motolii-timeline-pane/src/key_rows.rs
 ui/motolii-timeline-pane/src/key_rows.rs	A04	-	key_rows selected_frame_bounds(選択keyの範囲計算)	計算量で壊れる		ui/motolii-timeline-pane/src/key_rows.rs
 ui/motolii-inspector-pane/src/attrs.rs	A02	-	Speed(ATTRS、`attrs.rs::speed_row`)	穴:マウスで完遂できない		ui/motolii-inspector-pane/src/attrs.rs
@@ -74,7 +73,7 @@ engine/motolii-engine/src/lib.rs	A05	-	Stage合成中、1layerの素材(Media)�
 core/motolii-store/src/asset.rs	A05	-	`motolii_store::Asset`構造体そのものにoffline/missing/broken状態を持つフィールドが無い(裁定154台帳の`Find Missing Footage`はコマンド名のみで状態は台帳に無い、docs/reviews/2026-08-23-normal-map-trunk.md 節1と一致する実装側の裏付け)	黙って握りつぶす		core/motolii-store/src/asset.rs
 engine/motolii-compositor/src/blend.rs	A05	-	`percent-encoded/HSL blend`のSetSat/ClipColor — 色が全チャンネル同値かつ範囲外の極端入力で理論上0除算(NaN)	未確認		engine/motolii-compositor/src/blend.rs
 shell/motolii-shell/src/pane_layout.rs	A06	-	paneレイアウト(実働側 `pane_layout::Layout` ── pane_grid分割比率・Browserパネル開閉)	戻らない		shell/motolii-shell/src/pane_layout.rs
-ui/motolii-tokens-rs/src/lib.rs	A06	-	UI scale(ui_scale)	Document に入れるべきでない(User Settings 行き)		ui/motolii-tokens-rs/src/lib.rs
+ui/motolii-tokens-rs/src/tokens.rs	A06	-	UI scale(ui_scale)	Document に入れるべきでない(User Settings 行き)		ui/motolii-tokens-rs/src/tokens.rs
 ui/motolii-timeline-pane/src/input.rs	A10	-	Playhead scrub(ruler.rs/input.rs、Message::ScrubTo)	カーソルのみ		ui/motolii-timeline-pane/src/input.rs
 ui/motolii-timeline-pane/src/work_area.rs	A10	-	Loop帯(作業範囲) body/edge drag(ruler.rs/work_area.rs::dragged_area)	カーソルのみ		ui/motolii-timeline-pane/src/work_area.rs
 ui/motolii-timeline-pane/src/markers.rs	A10	-	マーカー/ロケータ ドラッグ(markers.rs::MarkerDrag::dragged)	カーソルのみ		ui/motolii-timeline-pane/src/markers.rs

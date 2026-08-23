@@ -17,7 +17,7 @@ A08	429	Layer Copy(`copy_layer`)	単数のみ	`next/shell/motolii-shell/src/lib.
 A08	432	Layer Cut(`cut_layer`)	単数のみ	`next/shell/motolii-shell/src/lib.rs(2026-08-23 分割で行番号が失効)` — 同上	穴	next/shell/motolii-shell/src/lib.rs:2002(cut_layer) ※過積載
 A08	431	Layer Delete	単数のみ	Delete専用動詞が無く `cut_layer`(Cmd+X)を通るのが唯一の削除経路(`RETURN`参照)。よって同じ単数制約を継承 — 歌詞50枚を一度に消せない	-	next/shell/motolii-shell/src/lib.rs:2002(cut_layer) ※過積載
 A08	430	Layer Paste(`paste_layer`)	単数のみ	`shell/motolii-shell/src/selection.rs:55(2026-08-23 分割で移動)` — `clipboard.get()` が単一 `LayerSnapshot` しか保持しない(`copy_layer` が単一しか capture しない時点で複数ペーストの土台が無い)	穴	next/shell/motolii-shell/src/lib.rs:1972(copy_layer が単一capture) ※過積載
-A08	434	Layer Duplicate(`duplicate_layer`)	単数のみ	`next/shell/motolii-shell/src/lib.rs(2026-08-23 分割で行番号が失効)` — `self.session.selection` のみ	-	next/shell/motolii-shell/src/lib.rs:2736(duplicate_layer) ※過積載
+A08	434	Layer Duplicate(`duplicate_layer`)	複数可	`selected_layers` 全員を `apply_all` 1回(=1 undo)へ束ねる。selection(単数)は読まない — shell/motolii-shell/src/selection.rs:119-151 実測(2026-08-23)。旧判定「単数のみ」は取り残し	-	next/shell/motolii-shell/src/selection.rs:119-151
 A08	455	Group(⌘G、`group_selected_layers`)	効く	`next/shell/motolii-shell/src/lib.rs(2026-08-23 分割で行番号が失効)-2088` — `self.session.selected_layers` を丸ごと `doc.group_layers()` へ渡す	-	next/shell/motolii-shell/src/lib.rs:2072
 A08	468	Ungroup(`ungroup_selected_layers`)	効く	`next/shell/motolii-shell/src/lib.rs(2026-08-23 分割で行番号が失効)-2103` — 同上、`selected_layers` を丸ごと処理	-	next/shell/motolii-shell/src/lib.rs:2090
 A08	-	Freeze/Unfreeze(`set_selected_groups_frozen`)	効く	`next/shell/motolii-shell/src/lib.rs(2026-08-23 分割で行番号が失効)-2138` — `selected_layers` を filter して Group のみへ `apply_all` で一括 Intent 発行。map対応行なし(製品側に無い自製語彙)	-	next/shell/motolii-shell/src/lib.rs:2111

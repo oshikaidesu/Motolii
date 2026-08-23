@@ -2,8 +2,8 @@
 #question: 1つの利用者ジェスチャは undo 何回で戻るか。undo 対象外は正しく除外されているか
 #verdicts: 両方|1 undo|2 undo以上|undo できない|undo 対象外(正しい)
 #sweep: awk '/pub enum Intent/,/^}/' next/core/motolii-store/src/document.rs | grep -E "^\s{4}[A-Z][A-Za-z]+"
-#sweep: grep -n "TransformField::PositionX\|TransformField::PositionY\|TransformField::ScaleX\|TransformField::ScaleY\|TransformField::AnchorX\|TransformField::AnchorY" next/ui/motolii-inspector-pane/src/transform.rs
-#sweep: grep -n "fn commit_inspector_field\|fn finish_field_drag" next/ui/motolii-inspector-pane/src/transform.rs
+#sweep: grep -n "TransformField::PositionX\|TransformField::PositionY\|TransformField::ScaleX\|TransformField::ScaleY\|TransformField::AnchorX\|TransformField::AnchorY" next/ui/motolii-inspector-pane/src/transform/mod.rs
+#sweep: grep -n "fn commit_inspector_field\|fn finish_field_drag" next/ui/motolii-inspector-pane/src/transform/interaction.rs
 #sweep: grep -n "GizmoValue::Anchor\|GizmoValue::Scale\|GizmoValue::Position" next/ui/motolii-stage-pane/src/gizmo.rs next/shell/motolii-shell/src/lib.rs
 #sweep: grep -n "apply_all(\|doc.apply(" next/ui/motolii-timeline-pane/src/write.rs
 #sweep: grep -n "fn admit\b" -A 60 next/shell/motolii-shell/src/lib.rs | grep -n "apply_all"
@@ -17,9 +17,9 @@
 axis	map_id	対象	判定	証拠	穴	責任
 A09	-	Position を Inspector で編集(PositionX submit → PositionY submit の2動作)	2 undo以上	`next/ui/motolii-inspector-pane/src/transform/mod.rs`: `TransformField::PositionX`/`PositionY` は別 variant で、`commit_inspector_field`/`finish_field_drag` は1回の呼び出しにつき1 `Intent::SetTrack` しか出さない(`transform/mod.rs:105`・`transform/interaction.rs:232,392`)。2Dの「位置」という1つの意図を達成するのに2回の commit=2 undoが要る(既知事実、`docs/reviews/2026-08-22-plain-edit-3.md:15` が指摘)	穴	next/ui/motolii-inspector-pane/src/transform/interaction.rs:232(commit_inspector_field、X/Y分離の発生源、SP-4で`transform.rs`→ディレクトリ分割)
 A09	-	Position を Stage gizmo で編集(body drag)	1 undo	`GizmoValue::Position([f64;2])` はX/Yを1つのVec2として運び、`Intent::SetTrack` 1回で確定(`gizmo.rs:825`)。同じ意図がInspector側は2 undo・gizmo側は1 undoに割れている非対称そのもの	-	-
-A09	-	Scale を Inspector で編集(ScaleX submit → ScaleY submit の2動作)	2 undo以上	`TransformField::ScaleX`/`ScaleY` も PositionX/Y と同型の分離(`transform.rs:100`)。Position の穴と同根で、先行棚卸し(plain-edit-3.md)が名指ししたのは Position だけだったが Scale にも同じ構造欠陥が及ぶ(新発見・全面拡張)	穴	next/ui/motolii-inspector-pane/src/transform.rs:748 ※過積載(1021行)
+A09	-	Scale を Inspector で編集(ScaleX submit → ScaleY submit の2動作)	2 undo以上	`TransformField::ScaleX`/`ScaleY` も PositionX/Y と同型の分離(`transform.rs:100`)。Position の穴と同根で、先行棚卸し(plain-edit-3.md)が名指ししたのは Position だけだったが Scale にも同じ構造欠陥が及ぶ(新発見・全面拡張)	穴	next/ui/motolii-inspector-pane/src/transform/mod.rs:748 ※過積載(1021行)
 A09	-	Scale を Stage gizmo で編集(角/辺ハンドル drag)	1 undo	`GizmoValue::Scale([f64;2])` を1つのVec2として運び、`Intent::SetTrack` 1回(`gizmo.rs:831`)	-	-
-A09	-	Anchor を Inspector で編集(AnchorX submit → AnchorY submit の2動作)	2 undo以上	`TransformField::AnchorX`/`AnchorY` も同型の分離(`transform.rs:103`)。Position/Scale と同じ穴が Anchor にも及ぶ(新発見)。Inspector 側の Anchor 編集はさらに gizmo 側が行う position 補償(pan-behind)も欠いており、見た目が跳ぶ副作用がある(A03/A09 双方に跨る別問題、本行は undo数のみ判定)	穴	next/ui/motolii-inspector-pane/src/transform.rs:748 ※過積載(1021行)
+A09	-	Anchor を Inspector で編集(AnchorX submit → AnchorY submit の2動作)	2 undo以上	`TransformField::AnchorX`/`AnchorY` も同型の分離(`transform.rs:103`)。Position/Scale と同じ穴が Anchor にも及ぶ(新発見)。Inspector 側の Anchor 編集はさらに gizmo 側が行う position 補償(pan-behind)も欠いており、見た目が跳ぶ副作用がある(A03/A09 双方に跨る別問題、本行は undo数のみ判定)	穴	next/ui/motolii-inspector-pane/src/transform/mod.rs:748 ※過積載(1021行)
 A09	-	Anchor を Stage gizmo で編集(anchor drag)	1 undo	`GizmoValue::Anchor{anchor,position}` はanchor+補償済みpositionの2 propertyを対で運ぶが、確定は`doc.apply_all([...])`で1回にまとめる — `next/shell/motolii-shell/src/lib.rs(2026-08-23 分割で行番号が失効)-3283` doc「2 property(anchor/position)を`apply_all`で1undoへ束ねる(1 gesture=1 commitの契約は変わらない)」と明記、正しく実装済み	-	-
 A09	-	Rotation/Opacity/MaskOpacity/EffectParam/Level/Pan/FadeIn/FadeOut(Inspectorの単一フィールド編集)	1 undo	いずれも `TransformField` の1 variant=1 `PropertyId` で X/Y分離が無いため、X/Y系のような分断は起きない(`transform.rs:98-109`)	-	-
 A09	-	Hidden トグル(Inspector M glyph / Timeline rail M glyph、`ToggleHidden`/`InspectorToggleHidden`)	1 undo	`next/ui/motolii-inspector-pane/src/chrome.rs:47`「即1回のIntent::SetAttrs」、`next/ui/motolii-timeline-pane/src/write.rs:13`。1 click=1 undo	-	-

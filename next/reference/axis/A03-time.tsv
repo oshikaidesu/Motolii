@@ -18,13 +18,13 @@
 #sweep: grep -inP "\tSolo\b|\tLock\b|Composition Settings|Auto.?Save|Zoom In|Zoom Out|colorized red" next/reference/normal-map.tsv
 axis	map_id	対象	判定	証拠	穴	責任
 A03	-	Position X/Y(TRANSFORM)	乗っている	`property::POSITION`(Vec2)、Key列あり(Inspector監査 転記)	-	-
-A03	-	Position Z(TRANSFORM)	乗っている	`property::POSITION_Z` 実在・値は動くがKey列が`KeyRow::Position`に含まれず初回キーの入口が無い(Inspector監査 FINDING1、境界問題ではなく wiring 漏れ)	-	next/ui/motolii-inspector-pane/src/transform.rs:98 ※過積載(1021行)
+A03	-	Position Z(TRANSFORM)	乗っている	`property::POSITION_Z` 実在・値は動くがKey列が`KeyRow::Position`に含まれず初回キーの入口が無い(Inspector監査 FINDING1、境界問題ではなく wiring 漏れ)	-	next/ui/motolii-inspector-pane/src/transform/mod.rs:98 ※過積載(1021行)
 A03	-	Scale X/Y(TRANSFORM)	乗っている	`property::SCALE`(Vec2)、Key列あり	-	-
 A03	-	Rotation(TRANSFORM)	乗っている	`property::ROTATION`	-	-
 A03	-	Opacity(APPEARANCE)	乗っている	`property::OPACITY`	-	-
 A03	-	Anchor X/Y(TRANSFORM)	乗っている	`property::ANCHOR`	-	-
 A03	-	Name(ident帯)	乗るべきでない	識別子。出力(画素)に現れない(裁定214 が名指し)	-	-
-A03	-	Hidden(M glyph、Inspector chrome.rs)	乗っていない	`LayerAttrs.hidden: bool`(`next/core/motolii-store/src/attrs.rs` 冒頭 doc「非アニメーション属性」、2026-08-23時点でも未移行)。出力に現れる(resolve が hidden な layer を落とす)のに track が無い。`Intent::SetAttrs` 経由	穴	next/ui/motolii-inspector-pane/src/transform.rs:98(PropertyId を作る唯一の場所、ここに `Hidden` の枝が無い) ※過積載(1021行)
+A03	-	Hidden(M glyph、Inspector chrome.rs)	乗っていない	`LayerAttrs.hidden: bool`(`next/core/motolii-store/src/attrs.rs` 冒頭 doc「非アニメーション属性」、2026-08-23時点でも未移行)。出力に現れる(resolve が hidden な layer を落とす)のに track が無い。`Intent::SetAttrs` 経由	穴	next/ui/motolii-inspector-pane/src/transform/mod.rs:98(PropertyId を作る唯一の場所、ここに `Hidden` の枝が無い) ※過積載(1021行)
 A03	-	Label Color(色チップ、ident帯)	乗るべきでない	`LayerAttrs.label_color: Option<u8>`。裁定214 修正版が名指し「timelineの整理用タグで出力に一切現れない」	-	-
 A03	-	Blend(ATTRS)	乗っていない	`LayerAttrs.blend_mode: BlendMode`(`next/core/motolii-store/src/attrs.rs:19-46`)。合成に直接効く(出力に現れる)のに `Intent::SetAttrs`巡回ボタンのみ、track 無し	穴	next/ui/motolii-inspector-pane/src/attrs.rs:80(SUPPORTED_BLEND_MODES 定義箇所)
 A03	-	Speed(ATTRS)	乗っていない	`LayerTiming.speed: Speed`(`next/core/motolii-store/src/lib.rs:309-312`)。素材の進み方に直結、出力へ現れる。`Intent::SetTiming` read-modify-write のみ、track 無し(裁定63 が「穴を空けてあった」と明記)	穴	next/core/motolii-store/src/lib.rs:309
@@ -49,7 +49,7 @@ A03	-	Fill Color(TEXT)	乗っている	`PropertyId::text_style_fill_color`(text.
 A03	-	Stroke Color(TEXT)	乗っている	`PropertyId::text_style_stroke_color`(text.rs:623)。A-1b が `resolved_text_document` で評価側を消費済み(tsv 記帳漏れ、副監督A訂正)	-	-
 A03	-	Link 元(source layer+property、LINK)	乗っていない	`PropertySource::Link`。裁定214 修正版「参照先が変われば画素が変わる=property、LayerId は Hold」。まだ `Intent::SetPropertyLink` 丸ごと差し替えのみ	穴	next/ui/motolii-inspector-pane/src/link.rs
 A03	-	Kind ラベル(solid/media/text/…、chrome)	乗るべきでない	`LayerSource` variant から導出、読み取り専用・種別表示のみ	-	-
-A03	-	Timeline rail Hidden(M glyph)	乗っていない	同一 field(`LayerAttrs.hidden`、上記 Inspector 行と同根)を Timeline rail が別 widget で描画(`next/ui/motolii-timeline-pane/src/rail.rs:357`、`Glyph::Mute => Message::ToggleMute`)。穴の実体は1つ(二重計上しない、下記穴カウントに注記)	穴	next/ui/motolii-inspector-pane/src/transform.rs:98 ※過積載(1021行)
+A03	-	Timeline rail Hidden(M glyph)	乗っていない	同一 field(`LayerAttrs.hidden`、上記 Inspector 行と同根)を Timeline rail が別 widget で描画(`next/ui/motolii-timeline-pane/src/rail.rs:357`、`Glyph::Mute => Message::ToggleMute`)。穴の実体は1つ(二重計上しない、下記穴カウントに注記)	穴	next/ui/motolii-inspector-pane/src/transform/mod.rs:98 ※過積載(1021行)
 A03	314	Timeline rail Solo(S glyph)	乗っている	`LayerAttrs.solo: bool`(`next/core/motolii-store/src/attrs.rs:101-107`「描画に効く」と明記)。出力に現れるのに `Intent::SetAttrs` 経由の静止フィールドで track 無し。Inspector 側には対応 glyph 自体が無い(GESTURES.md §7 既知)ので Timeline rail が唯一の入口 〔2026-08-23 store レーンが `PropertyId::solo()` を配線し `resolve_with_solo` が `value_at` 経由で評価する。any_solo も時刻依存へ改修済み〕	-	next/core/motolii-store/src/attrs.rs:107
 A03	873	Timeline rail Locked(L glyph)	乗るべきでない	`LayerAttrs.locked: bool`(`attrs.rs:108-114`「描画には無関係。効くのは書き口」と明記)。出力に現れないので裁定214境界の外	-	-
 A03	-	Clip 開始(placement、`LayerTiming.start`)	乗るべきでない	`next/core/motolii-store/src/lib.rs:304`。軸自身の座標(clipがどこに置かれるか)であって「時刻tでの値」ではない — キーフレーム化は円環になる。裁定214の識別/性質二分法には無い第3カテゴリ(迷った判断、RETURN参照)	-	-
