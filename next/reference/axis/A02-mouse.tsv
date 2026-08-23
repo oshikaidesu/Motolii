@@ -27,7 +27,7 @@ A02	-	JumpMeaningPointPrev/Next相当の手動スクラブ(playheadをkey/marker
 A02	-	Timeline 矩形選択(marquee)	穴:マウスで完遂できない	Timeline に marquee 実装が無い(`grep -rn "Marquee\|marquee" next/ui/motolii-timeline-pane/src` 空振り)。意図の入口自体が存在せず、mouseでもkeyboardでも完遂できない	穴	next/ui/motolii-timeline-pane/src/rail.rs:1(現状複数選択の唯一入口=Cmd/Shiftクリック個別選択のみ)
 A02	-	Timeline キー(菱形)クリック選択(`key_rows.rs`)	マウスで完遂できる	click単独/Cmdトグル/Shift範囲、いずれもdrag不要のclick完結	-	-
 A02	-	Timeline キー(菱形)時刻ドラッグ(`key_gesture.rs::dragged_group_frame`)	マウスで完遂できる	press→drag→release	-	-
-A02	-	選択キーの削除(Backspace/Delete、`shell/lib.rs:5781`)	穴:マウスで完遂できない	削除の**実行**を行うボタン・右クリックメニュー項目が無い(`grep -n "Button::Right" next/ui/motolii-timeline-pane/src` の3ヒットは全てドラッグ取消の腕でDeleteメニュー項目ではない)。選択はclickで完結するが確定(削除)にはキーボードが必須	穴	next/ui/motolii-timeline-pane/src/key_rows.rs:317(選択の器。ここにcontext menuのDelete項目が無い)
+A02	-	選択キーの削除(Backspace/Delete、`shell/motolii-shell/src/lib.rs:5781`)	穴:マウスで完遂できない	削除の**実行**を行うボタン・右クリックメニュー項目が無い(`grep -n "Button::Right" next/ui/motolii-timeline-pane/src` の3ヒットは全てドラッグ取消の腕でDeleteメニュー項目ではない)。選択はclickで完結するが確定(削除)にはキーボードが必須	穴	next/ui/motolii-timeline-pane/src/key_rows.rs:317(選択の器。ここにcontext menuのDelete項目が無い)
 A02	-	レイヤー削除(実質 CutLayer、Cmd+X)	穴:マウスで完遂できない	削除専用ボタン・右クリックメニュー項目・drag-to-trashのいずれも無い(`grep -n "Delete\|Remove\|Clear" next/shell/motolii-shell/src/menu.rs` 空振り)。マウス側の入口がゼロで、キーボード(Cmd+X、意味はCutに間借り)にしか無い	穴	next/shell/motolii-shell/src/menu.rs:252(レイヤー操作メニューの正本)
 A02	-	NudgeKeyframe(既出キードラッグのキー等価)	マウスで完遂できる	ドラッグが上位互換	-	-
 A02	-	Loop帯(作業範囲)body/edge drag(`ruler.rs`/`work_area.rs::dragged_area`)	マウスで完遂できる	press→drag→release(LOOP_GRAB=8px)、In/Out両方をマウスで設定できる	-	-

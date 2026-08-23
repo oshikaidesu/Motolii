@@ -3,7 +3,7 @@
 #verdicts: 予告あり|hoverのみ|カーソルのみ|何も無い|触れそうだが機能しない(Q0違反)
 #sweep: grep -rn "on_press(" next/ui next/shell --include='*.rs' | grep -v /tests/   (38件、GESTURES.md §0 と同数)
 #sweep: grep -rln "mouse_area(" next/ui next/shell --include='*.rs' | grep -v /tests/   (4ファイル: browser-pane lib.rs/state.rs, timeline-pane rail.rs, inspector-pane chrome.rs)
-#sweep: grep -rln "pick_list(" next/ui next/shell --include='*.rs' | grep -v /tests/   (3ファイル: inspector-pane matte.rs/link.rs/text.rs。shell/lib.rs のヒットはコメントのみ)
+#sweep: grep -rln "pick_list(" next/ui next/shell --include='*.rs' | grep -v /tests/   (3ファイル: inspector-pane matte.rs/link.rs/text.rs。shell/motolii-shell/src/lib.rs のヒットはコメントのみ)
 #sweep: grep -rn "Interaction::" next/ui next/shell --include='*.rs' | grep -v /tests/   (62件、GESTURES.md §0 と同数)
 #sweep: grep -rln "Status::Hovered\|button::Status" next/ui next/shell --include='*.rs' | grep -v /tests/   (13ファイル。browser-pane/export-pane/timeline-pane transport.rs/menubar/settings-pane chrome.rs/stage-pane(2)/inspector-pane(2)/shell/lib.rs)
 #sweep: grep -n "Status::Hovered\|button::Status" next/ui/motolii-inspector-pane/src/effects.rs next/ui/motolii-timeline-pane/src/rail.rs   (空振り = 両方とも独自hoverスタイルを持たない)

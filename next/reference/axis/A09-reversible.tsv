@@ -20,7 +20,7 @@ A09	-	Position を Stage gizmo で編集(body drag)	1 undo	`GizmoValue::Position
 A09	-	Scale を Inspector で編集(ScaleX submit → ScaleY submit の2動作)	2 undo以上	`TransformField::ScaleX`/`ScaleY` も PositionX/Y と同型の分離(`transform.rs:100`)。Position の穴と同根で、先行棚卸し(plain-edit-3.md)が名指ししたのは Position だけだったが Scale にも同じ構造欠陥が及ぶ(新発見・全面拡張)	穴	next/ui/motolii-inspector-pane/src/transform.rs:748 ※過積載(1021行)
 A09	-	Scale を Stage gizmo で編集(角/辺ハンドル drag)	1 undo	`GizmoValue::Scale([f64;2])` を1つのVec2として運び、`Intent::SetTrack` 1回(`gizmo.rs:831`)	-	-
 A09	-	Anchor を Inspector で編集(AnchorX submit → AnchorY submit の2動作)	2 undo以上	`TransformField::AnchorX`/`AnchorY` も同型の分離(`transform.rs:103`)。Position/Scale と同じ穴が Anchor にも及ぶ(新発見)。Inspector 側の Anchor 編集はさらに gizmo 側が行う position 補償(pan-behind)も欠いており、見た目が跳ぶ副作用がある(A03/A09 双方に跨る別問題、本行は undo数のみ判定)	穴	next/ui/motolii-inspector-pane/src/transform.rs:748 ※過積載(1021行)
-A09	-	Anchor を Stage gizmo で編集(anchor drag)	1 undo	`GizmoValue::Anchor{anchor,position}` はanchor+補償済みpositionの2 propertyを対で運ぶが、確定は`doc.apply_all([...])`で1回にまとめる — `next/shell/motolii-shell/src/lib.rs:3281-3283` doc「2 property(anchor/position)を`apply_all`で1undoへ束ねる(1 gesture=1 commitの契約は変わらない)」と明記、正しく実装済み	-	-
+A09	-	Anchor を Stage gizmo で編集(anchor drag)	1 undo	`GizmoValue::Anchor{anchor,position}` はanchor+補償済みpositionの2 propertyを対で運ぶが、確定は`doc.apply_all([...])`で1回にまとめる — `next/shell/motolii-shell/src/lib.rs(2026-08-23 分割で行番号が失効)-3283` doc「2 property(anchor/position)を`apply_all`で1undoへ束ねる(1 gesture=1 commitの契約は変わらない)」と明記、正しく実装済み	-	-
 A09	-	Rotation/Opacity/MaskOpacity/EffectParam/Level/Pan/FadeIn/FadeOut(Inspectorの単一フィールド編集)	1 undo	いずれも `TransformField` の1 variant=1 `PropertyId` で X/Y分離が無いため、X/Y系のような分断は起きない(`transform.rs:98-109`)	-	-
 A09	-	Hidden トグル(Inspector M glyph / Timeline rail M glyph、`ToggleHidden`/`InspectorToggleHidden`)	1 undo	`next/ui/motolii-inspector-pane/src/chrome.rs:47`「即1回のIntent::SetAttrs」、`next/ui/motolii-timeline-pane/src/write.rs:13`。1 click=1 undo	-	-
 A09	-	Blend Mode 巡回(`CycleBlendMode`)	1 undo	`next/ui/motolii-inspector-pane/src/lib.rs:209`「`ToggleHidden`と同じ即時操作の形」	-	-
@@ -39,13 +39,13 @@ A09	-	Split at Playhead(単一 or 複数選択layer、`SplitAtPlayhead`)	1 undo	
 A09	-	Restack(Bring Forward/Send Backward/To Front/To Back、`RestackLayer`)	1 undo	`stacking::restacked`の結果を`write.rs:1600-1611`が`Vec<Intent>`へ写し`apply_all`で1回に束ねる。複数layer選択の重なり変更でも1 undo	-	-
 A09	-	Group(⌘G、`group_selected_layers`)	1 undo	`next/core/motolii-store/src/document.rs`の`group_layers`が内部で`apply_all`(1回)	-	-
 A09	-	Ungroup(⌘⇧G、`ungroup_selected_layers`)	1 undo	`ungroup_layers`も同型で`apply_all`	-	-
-A09	-	Freeze/Unfreeze(選択Group全部、`set_selected_groups_frozen`)	1 undo	`next/shell/motolii-shell/src/lib.rs:2133-2142`が対象group全部を1回の`apply_all`にまとめる(コメント「1`apply_all`=1undo(Q2)」明記)	-	-
-A09	-	Cut Layer(⌘X、単一選択のみ)	1 undo	`next/shell/motolii-shell/src/lib.rs:2002-2022`、`Intent::RemoveLayer`1回。`session.selected_layers`(複数選択)は読まず`session.selection`(単一)のみ対象 — 複数選択時の挙動が未定義な点はA08範疇の別問題	-	-
+A09	-	Freeze/Unfreeze(選択Group全部、`set_selected_groups_frozen`)	1 undo	`next/shell/motolii-shell/src/lib.rs(2026-08-23 分割で行番号が失効)-2142`が対象group全部を1回の`apply_all`にまとめる(コメント「1`apply_all`=1undo(Q2)」明記)	-	-
+A09	-	Cut Layer(⌘X、単一選択のみ)	1 undo	`next/shell/motolii-shell/src/lib.rs(2026-08-23 分割で行番号が失効)-2022`、`Intent::RemoveLayer`1回。`session.selected_layers`(複数選択)は読まず`session.selection`(単一)のみ対象 — 複数選択時の挙動が未定義な点はA08範疇の別問題	-	-
 A09	-	Duplicate(⌘D、単一選択)	1 undo	`duplicate_layer`が`snapshot.instantiate`の結果を`apply_all`1回で確定	-	-
 A09	-	Paste(⌘V)	1 undo	同型、`apply_all`1回	-	-
 A09	-	Create From Card(Browser、素材からlayer新規作成)	1 undo	既知事実(`plain-edit-3.md:8`): `AddLayer+SetMeta+SetAttrs+SetShapes`の4 Intentを1回の`apply_all`にまとめる	-	-
-A09	-	素材の複数ファイル同時ドロップ admit(`Shell::admit`)	1 undo	`next/shell/motolii-shell/src/lib.rs:2159-2202`: 複数pathの`Intent::AdmitAsset`(+配置分)を`intents`へ積み、最終`self.doc.apply_all(intents)`(:2243)で1回にまとめる。複数ファイル同時drop=1 gestureとして正しく1 undo	-	-
-A09	-	Marker 作成/移動/削除(`markers.rs`経由)	1 undo	`next/shell/motolii-shell/src/lib.rs:3421,3432,3456`いずれも単発の`Intent::SetMarkers{markers: next}`(丸ごと置換型)、1操作=1呼び出し=1 undo	-	-
+A09	-	素材の複数ファイル同時ドロップ admit(`Shell::admit`)	1 undo	`next/shell/motolii-shell/src/lib.rs(2026-08-23 分割で行番号が失効)-2202`: 複数pathの`Intent::AdmitAsset`(+配置分)を`intents`へ積み、最終`self.doc.apply_all(intents)`(:2243)で1回にまとめる。複数ファイル同時drop=1 gestureとして正しく1 undo	-	-
+A09	-	Marker 作成/移動/削除(`markers.rs`経由)	1 undo	`next/shell/motolii-shell/src/lib.rs(2026-08-23 分割で行番号が失効),3432,3456`いずれも単発の`Intent::SetMarkers{markers: next}`(丸ごと置換型)、1操作=1呼び出し=1 undo	-	-
 A09	-	Composition 数値欄(W/H/FPS/尺)の Enter 確定(`CompFieldSubmit`)	1 undo	`next/ui/motolii-settings-pane/src/sections.rs`: 1 field=1`Intent::SetComposition`(read-modify-write)。フィールドごとに個別確定なので複合操作の分断は起きない(4欄まとめて変えたい場合も4回の意図的操作であり穴ではない)	-	-
 A09	-	rename 確定(inline rename、`RenameCommit`)	1 undo	`write.rs:2313`実書き込みは`Intent::SetAttrs`1回	-	-
 A09	-	選択(`Select`/`SelectAllLayers`/`DeselectAllLayers`等)	undo 対象外(正しい)	`Session.selection`/`selected_layers`はDocumentを経由しない(裁定46/107)。Ctrl+Zで戻らないのが正しい設計	-	-

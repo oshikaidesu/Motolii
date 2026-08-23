@@ -53,7 +53,7 @@ ui/motolii-timeline-pane/src/write.rs	A08	-	SetOrder(z順並べ替え、`stackin
 core/motolii-store/src/document.rs	A04	-	motolii-compositor 合成ループ(layer×pass)	未計測		engine/motolii-compositor/src/lib.rs
 core/motolii-store/src/document.rs	A11	-	B5 Stageのリアルタイム追従(scrub中 p95≤16ms)	器具はあるが掛けていない		core/motolii-store/src/view.rs;engine/motolii-compositor/src/lib.rs
 core/motolii-store/src/document.rs	A11	-	時間予算試験2本の負荷依存flake(`edit_storm_with_the_real_track_type`/`r2::stage_projection_fits_a_frame`)	試験がある		core/motolii-store/src/document.rs;core/motolii-store/src/view.rs
-ui/motolii-timeline-pane/src/key_rows.rs	A02	-	選択キーの削除(Backspace/Delete、`shell/lib.rs:5781`)	穴:マウスで完遂できない		ui/motolii-timeline-pane/src/key_rows.rs
+ui/motolii-timeline-pane/src/key_rows.rs	A02	-	選択キーの削除(Backspace/Delete、`shell/motolii-shell/src/lib.rs:5781`)	穴:マウスで完遂できない		ui/motolii-timeline-pane/src/key_rows.rs
 ui/motolii-timeline-pane/src/key_rows.rs	A04	-	key_rows selected_frame_bounds(選択keyの範囲計算)	計算量で壊れる		ui/motolii-timeline-pane/src/key_rows.rs
 ui/motolii-inspector-pane/src/attrs.rs	A02	-	Speed(ATTRS、`attrs.rs::speed_row`)	穴:マウスで完遂できない		ui/motolii-inspector-pane/src/attrs.rs
 ui/motolii-inspector-pane/src/attrs.rs	A03	-	Blend(ATTRS)	乗っていない		ui/motolii-inspector-pane/src/attrs.rs
