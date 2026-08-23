@@ -26,6 +26,12 @@
 
 use std::path::{Path, PathBuf};
 
+/// 在庫表生成器(`next/reference/generated/inventory.tsv`)。
+/// `src/inventory.rs` の doc を参照。この宣言は「試験器具」の一部として
+/// 上の `owns:` 宣言(C-TESTKIT)にそのまま乗る——別に owns: を切る必要は無い
+/// (同じ crate・同じ「合否を測る道具そのもの」という性質)。
+pub mod inventory;
+
 /// 外部ツールの状態。「未導入」と「導入済みだが実行失敗」を区別する
 /// (区別しないと、壊れた ffmpeg を「無い」と誤診して静かに通してしまう)。
 #[derive(Debug)]
