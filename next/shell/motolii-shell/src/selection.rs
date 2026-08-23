@@ -351,3 +351,92 @@ impl Shell {
     }
 }
 
+use iced::Task;
+use crate::{stage, timeline_pane, Message};
+
+impl Shell {
+    /// Timeline rail の layer 行クリック(E-2、軸台帳 A08 隣接の穴)。
+    /// **裸クリック=単独選択・Cmd=トグル(足し引き)・Shift=範囲**
+    /// (`timeline_pane::rows::LayerSelectionOp` の3形そのまま)。解決自体は
+    /// [`timeline_pane::rows::resolve_layer_selection`](純関数、`Session` を
+    /// 書き換えない)へ委譲し、確定は必ず [`Self::set_selected_layers`]
+    /// (C-2 の唯一の書き手)を経由する — この関数の外で `session.selection`/
+    /// `selected_layers` を直接書き換えない。
+    ///
+    /// `order`(範囲の基準)は今 rail に見えている行(`timeline_pane::rows`、
+    /// 畳まれて非表示の行は対象外 — `key_order` と同じ「見えているものだけ」
+    /// の姿勢、`resolve_layer_selection` doc 参照)。`anchor` は `Session` では
+    /// なく `Shell::layer_selection_anchor`(このレーンの write-set は
+    /// `lib.rs`/`input.rs`/`timeline-pane::write.rs` のみ — `selection.rs` は
+    /// `set_selected_layers` を呼ぶだけで書き換えないため、anchor はここに置く)。
+    pub(crate) fn click_select_layer(&mut self, layer: LayerId) {
+        let order: Vec<LayerId> =
+            timeline_pane::rows(&self.doc.view(), &self.session).into_iter().map(|row| row.id).collect();
+        let op = if self.keyboard_modifiers.command() {
+            timeline_pane::rows::LayerSelectionOp::Toggle(layer)
+        } else if self.keyboard_modifiers.shift() {
+            timeline_pane::rows::LayerSelectionOp::Range(layer)
+        } else {
+            timeline_pane::rows::LayerSelectionOp::Single(layer)
+        };
+        let (selected, anchor) = timeline_pane::rows::resolve_layer_selection(
+            &order,
+            self.layer_selection_anchor,
+            &self.session.selected_layers,
+            op,
+        );
+        self.layer_selection_anchor = anchor;
+        self.set_selected_layers(selected);
+    }
+
+
+    /// `Shell::update` から委譲される領域別 dispatch(2026-08-23 SP-1 レーン、
+    /// `docs/reviews/2026-08-23-shell-split-plan.md` の続き)。**中身は無改変** —
+    /// 元の巨大な `update()` match の腕をそのままここへ移しただけ(裁定どおり
+    /// 移送と委譲だけ、バグ修正・整形は混ぜない)。渡された `message` がこの
+    /// 領域の variant でなければ `Err(message)` で突き返す — `crate::dispatch_message`
+    /// の chain-of-responsibility が次の領域dispatchへ渡す。**新しい Message 枝は
+    /// ここへ腕を1本足すだけで済み、`lib.rs` は触らない**(MC-1 と同じ効能)。
+    pub(crate) fn dispatch_selection(&mut self, message: Message) -> Result<Task<Message>, Message> {
+        let mut task = Task::none();
+        match message {
+            Message::Select(layer) => self.select_single(layer),
+            Message::CopyLayer => self.copy_layer(),
+            Message::PasteLayer => self.paste_layer(),
+            Message::CutLayer => self.cut_layer(),
+            Message::DuplicateLayer => self.duplicate_layer(),
+            Message::SelectAllLayers => self.select_all_layers(),
+            Message::DeselectAllLayers => self.deselect_all_layers(),
+            Message::DeleteSelectedLayers => self.delete_selected_layers(),
+            Message::HideSelectedLayers => self.hide_selected_layers(),
+            Message::SoloSelectedLayers => self.solo_selected_layers(),
+            Message::LockSelectedLayers => self.lock_selected_layers(),
+            Message::GroupLayers => self.group_selected_layers(),
+            Message::UngroupLayers => self.ungroup_selected_layers(),
+            Message::FreezeGroups => self.set_selected_groups_frozen(true),
+            Message::UnfreezeGroups => self.set_selected_groups_frozen(false),
+            Message::Marquee(select) => {
+                let next = stage::marquee::apply_selection(
+                    &self.session.selected_layers,
+                    &select.ids,
+                    select.additive,
+                );
+                self.apply_stage_selection(next);
+            }
+            Message::RenameSelectedLayer => {
+                if let Some(layer) = self.session.selection {
+                    if let Some(reason) = self.timeline.update(
+                        timeline_pane::Message::RenameBegin(layer),
+                        &mut self.doc,
+                        &mut self.session,
+                        self.keyboard_modifiers,
+                    ) {
+                        self.status = Some(reason);
+                    }
+                }
+            }
+            other => return Err(other),
+        }
+        Ok(task)
+    }
+}

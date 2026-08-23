@@ -5,8 +5,9 @@ use motolii_store::{
     Composition, Document, Intent,
 };
 
+use crate::tokens::Tokens;
 use crate::{
-    file_dialogs, Message, Session, Shell,
+    file_dialogs, metrics, Message, Session, Shell,
 };
 
 impl Shell {
@@ -362,3 +363,227 @@ impl Shell {
 
 }
 
+use motolii_store::StoreView;
+
+impl Shell {
+    pub fn layer_count(&self) -> usize {
+        self.doc.view().layers().len()
+    }
+
+    /// `StoreView` をそのまま返す(読むだけ)。**運転席の検分器具用**
+    /// (`layer_count`/`composition` と同じ「運転席が見るための口」の1つ) —
+    /// G1(裁定174)の ungroup 数値証明(`tests/suite/group_drive.rs`)が
+    /// `resolve()`/`local_transform()` を直接叩くのに使う。`view` という名前は
+    /// 既に `Shell::view() -> Element` が使っているので `store_view` にした。
+    pub fn store_view(&self) -> StoreView<'_> {
+        self.doc.view()
+    }
+
+    pub(crate) fn comp_duration(&self) -> i64 {
+        self.doc
+            .view()
+            .composition()
+            .ok()
+            .flatten()
+            .map(|c| c.duration_frames)
+            .unwrap_or(0)
+    }
+
+    pub fn can_undo(&self) -> bool {
+        self.doc.can_undo()
+    }
+
+    /// 直近の Save As が書いた path(未保存・Save a Copy 直後は前回のまま —
+    /// `Message::SaveACopyRequested` doc 参照)。**運転席が見るための口**。
+    pub fn current_path(&self) -> Option<&std::path::Path> {
+        self.current_path.as_deref()
+    }
+
+    /// 未保存の変更があるか。**運転席が見るための口**(`Shell::is_dirty` の
+    /// 公開版 — MB-1、`saved_revision` フィールド doc 参照)。
+    pub fn is_project_dirty(&self) -> bool {
+        self.is_dirty()
+    }
+
+    /// `Message::Redo` の可否。**運転席が見るための口**(`can_undo` と同じ形)。
+    /// drag-to-scrub がキャンセル時に redo 空間を汚していないかを運転席から
+    /// 確かめるのに使う(`inspector_drive.rs`)。
+    pub fn can_redo(&self) -> bool {
+        self.doc.can_redo()
+    }
+
+    pub fn status(&self) -> Option<&str> {
+        self.status.as_deref()
+    }
+
+    /// 今の comp 設定。**screenshot 器具**が Stage の letterbox を組むのに使う
+    /// (`timeline_pane::TimelinePane::new` も同じ `composition()` 呼び出しをする)。
+    pub fn composition(&self) -> Option<Composition> {
+        self.doc.view().composition().ok().flatten()
+    }
+
+    /// 今の Session(選択・再生位置)。**読むだけ** — `Session` 自体のフィールドは
+    /// pub だが、書ける口は `Message` 経由の `update()` だけ。
+    pub fn session(&self) -> &Session {
+        &self.session
+    }
+
+    /// Settings 窓の台帳の読み口(S2、裁定182/188)。旧 `settings_panel_open()`
+    /// (screenshot 器具専用の bool)は廃止 — Settings は OS 窓になり、単窓
+    /// オフスクリーン合成の screenshot 器具の**対象外**(`screenshot.rs` 冒頭
+    /// doc の明示コメント参照)。この口は窓台帳の検分
+    /// (`tests/suite/window_drive.rs`/`q0_fence.rs`)が使う。
+    pub fn settings_window(&self) -> Option<iced::window::Id> {
+        self.settings_window
+    }
+
+    /// Export 窓の台帳の読み口(B09、第6波)。`settings_window()` と同型 —
+    /// 運転席(`tests/suite/export_drive.rs`)が open/close の状態遷移を読む。
+    pub fn export_window(&self) -> Option<iced::window::Id> {
+        self.export_window
+    }
+
+
+
+    /// `Shell::update` から委譲される領域別 dispatch(2026-08-23 SP-1 レーン、
+    /// `docs/reviews/2026-08-23-shell-split-plan.md` の続き)。**中身は無改変** —
+    /// 元の巨大な `update()` match の腕をそのままここへ移しただけ(裁定どおり
+    /// 移送と委譲だけ、バグ修正・整形は混ぜない)。渡された `message` がこの
+    /// 領域の variant でなければ `Err(message)` で突き返す — `crate::dispatch_message`
+    /// の chain-of-responsibility が次の領域dispatchへ渡す。**新しい Message 枝は
+    /// ここへ腕を1本足すだけで済み、`lib.rs` は触らない**(MC-1 と同じ効能)。
+    pub(crate) fn dispatch_document_io(&mut self, message: Message) -> Result<Task<Message>, Message> {
+        let mut task = Task::none();
+        match message {
+            Message::Undo => {
+                if !self.doc.undo() {
+                    self.status = Some("これ以上戻せない".to_owned());
+                }
+            }
+            Message::Redo => {
+                if !self.doc.redo() {
+                    self.status = Some("これ以上進めない".to_owned());
+                }
+            }
+            Message::AdmitPaths(paths) => self.admit(paths),
+            Message::DropReceived(path) => self.pending_drops.push(path),
+            Message::FlushDrops => {
+                if !self.pending_drops.is_empty() {
+                    let paths = std::mem::take(&mut self.pending_drops);
+                    self.admit(paths);
+                }
+            }
+            Message::TokensFileChanged => {
+                self.tokens = Tokens::load();
+                metrics::record_tokens_reload();
+            }
+            Message::MainWindowOpened(id) => self.main_window = Some(id),
+            Message::SettingsWindowOpened(id) => self.settings_window = Some(id),
+            Message::ExportWindowOpened(id) => self.export_window = Some(id),
+            Message::WindowClosed(id) => {
+                if self.main_window == Some(id) {
+                    // main 閉=アプリ終了(probe 注意点1)。daemon は放って
+                    // おくと窓ゼロで生き続け、winit shell が compositor を
+                    // `None` 化(device 破棄)する — zero-copy presenter
+                    // (裁定170/171)の単一 device 前提を守るため、窓ゼロ状態
+                    // そのものを作らない。
+                    task = iced::exit();
+                } else if self.settings_window == Some(id) {
+                    // OS の閉じるボタン経路(トグル経由の close は
+                    // `toggle_settings_window` が先行抹消済み — その場合
+                    // ここへ来る時点で台帳は既に None なので何もしない)。
+                    self.settings_window = None;
+                } else if self.export_window == Some(id) {
+                    // Export 窓の OS 閉じるボタン経路(`toggle_export_window`
+                    // と同じ扱い、Settings 窓と同型)。
+                    self.export_window = None;
+                }
+            }
+            Message::NewProjectRequested => task = self.confirm_then(Message::NewProjectConfirmed),
+            Message::NewProjectConfirmed(confirmed) => {
+                if confirmed {
+                    self.reset_document();
+                }
+            }
+            Message::SaveRequested => {
+                if let Some(path) = self.current_path.clone() {
+                    self.perform_save_as(path);
+                } else {
+                    task = Task::perform(self.dialogs.pick_save_path(), Message::SaveAsPathChosen);
+                }
+            }
+            Message::SaveAsRequested => {
+                task = Task::perform(self.dialogs.pick_save_path(), Message::SaveAsPathChosen);
+            }
+            Message::SaveAsPathChosen(Some(path)) => self.perform_save_as(path),
+            Message::SaveAsPathChosen(None) => {}
+            Message::SaveACopyRequested => {
+                task = Task::perform(self.dialogs.pick_save_path(), Message::SaveACopyPathChosen);
+            }
+            Message::SaveACopyPathChosen(Some(path)) => self.perform_save_a_copy(path),
+            Message::SaveACopyPathChosen(None) => {}
+            Message::OpenRequested => task = self.confirm_then_pick_open(),
+            Message::OpenPathChosen(Some(path)) => self.perform_open(path),
+            Message::OpenPathChosen(None) => {}
+            Message::ImportMediaRequested => {
+                task = Task::perform(self.dialogs.pick_import_paths(), Message::AdmitPaths);
+            }
+            Message::QuitRequested => task = self.confirm_then(Message::QuitConfirmed),
+            Message::QuitConfirmed(confirmed) => {
+                if confirmed {
+                    self.dialogs.quit();
+                }
+            }
+            Message::WindowCloseRequested(id) => {
+                if self.main_window == Some(id) {
+                    task = self.confirm_then(Message::WindowCloseConfirmed);
+                }
+                // Settings/Export 窓は `exit_on_close_request: true`(既定)の
+                // ままなので、この Message は main 以外の id では実際には
+                // 届かない(防御的に無視するだけ)。
+            }
+            Message::WindowCloseConfirmed(confirmed) => {
+                if confirmed {
+                    task = iced::exit();
+                }
+                // false: 何もしない。main 窓は `exit_on_close_request: false`
+                // のおかげでまだ閉じていない(OS へ Close を送っていない)ので、
+                // 見た目どおり編集を続けられる。
+            }
+            Message::LastProjectPathRead(Some(path)) => {
+                match Document::load(&path) {
+                    Ok(doc) => {
+                        self.saved_revision = doc.revision();
+                        self.last_auto_saved = self.saved_revision.clone();
+                        self.doc = doc;
+                        self.current_path = Some(path.clone());
+                        self.session = Session::default();
+                    }
+                    // 拒否は必ず出す(M13)。既定 Document のまま起動を続ける
+                    // ── 黙って上書きしない/黙って落とさない、どちらも避ける。
+                    Err(error) => {
+                        self.status = Some(format!("前回のプロジェクトを開けない: {error}"));
+                    }
+                }
+                if let Some(autosave_path) = Self::recoverable_autosave(&path) {
+                    self.pending_recovery = Some(autosave_path);
+                    task = Task::perform(
+                        self.dialogs.confirm_recover_autosave(),
+                        Message::AutoSaveRecoveryConfirmed,
+                    );
+                }
+            }
+            Message::LastProjectPathRead(None) => {}
+            Message::AutoSaveRecoveryConfirmed(confirmed) => {
+                if let Some(autosave_path) = self.pending_recovery.take() {
+                    if confirmed {
+                        self.perform_recover_autosave(autosave_path);
+                    }
+                }
+            }
+            Message::AutoSaveTick => self.run_auto_save(),
+            other => return Err(other),
+        }
+        Ok(task)
+    }
+}
