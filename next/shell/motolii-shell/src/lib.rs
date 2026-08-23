@@ -23,14 +23,12 @@
 
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::sync::Arc;
 
 use iced::Task;
 
-use motolii_core::{CompSpec, ResolvedCamera};
 use motolii_engine::{Engine, ObservationCamera};
 use motolii_store::{
-    AutoSaveConfig, Composition, DisplayRevision, Document, Fps, Intent, LayerAttrsPatch, LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, ResolvedLayer, Revision, StoreView, TextDocument, Value,
+    AutoSaveConfig, Document, LayerId, Revision,
 };
 // 裁定205 施工第2号 §D: `Fill`/`Brush`/`Rgb`(塗り)だけが `motolii-store`
 // 未輸出(Cargo.toml のコメント参照)。
@@ -168,7 +166,17 @@ use inspector_pane::FieldDraft;
 use settings_pane::BackgroundFieldDraft;
 use transport::Transport;
 
-use tokens::{Colors, Dimensions, Tokens};
+use tokens::Tokens;
+
+// 2026-08-23 SP-1 レーン(shell 分割の続き): `PreviewSnapshot`/`PresenterSource`/
+// `RenderedFrame`/`DisplaySource`/`GizmoShellDrag` は `render.rs` へ、
+// `ValueDragState` は `inspector_ops.rs` へ実体が移った(`Shell` struct の
+// フィールド型としてここでも要る)。旧パス(`crate::PreviewSnapshot` 等)を
+// 壊さないよう、既存の `pub use motolii_timeline_pane as timeline;` などと
+// 同じ「型 alias で外部参照を壊さない」手口で re-export する
+// (`stage_presenter.rs`/`view.rs` は無改修のまま通る)。
+pub(crate) use render::{GizmoShellDrag, PresenterSource, PreviewSnapshot, RenderedFrame};
+pub(crate) use inspector_ops::ValueDragState;
 
 /// Stage 描画の計測。**debug のみ実測**(実機チラつき調査、2026-08-20)。
 /// release は `metrics::*` が全部 no-op になる(呼び出し側はどちらも同じ形で呼べる)。
@@ -599,173 +607,11 @@ pub enum Message {
     RenameSelectedLayer,
 }
 
-/// 裁定171 v2(M4)。GPU zero-copy 経路で使う resolve 済みスナップショット。
-/// `motolii_store::Document` を直接共有できない(`re_entity_db::EntityDb` が
-/// `testing` feature 外では `Clone` を持たない)ので、`Shell::build_preview_snapshot`
-/// が `StoreView` から抜き出した**所有データ**をここへ積む——
-/// `motolii_engine::Engine::render_resolved_to_texture` の入力そのもの。
-///
-/// **`time`/`text_documents` は2026-08-22(ゼロコピー経路にも matte とテキストを
-/// 通す発注)で新設**——`render_resolved_to_texture` がテキストの Hold 評価と
-/// `TextDocument` 本体を要るようになったのに合わせた(`motolii_engine::Engine`
-/// の doc 参照)。`resolved` の中の `LayerSource::Text` layer(matte 元も含む)
-/// だけを対象に、その場で持っている `StoreView` から `text_document(id)` を
-/// 引いて詰める——`resolved_layers(t)` を呼ぶのと同じ `view` から取るので
-/// 追加の Document 走査は増えない。
-#[derive(Clone, Debug)]
-struct PreviewSnapshot {
-    comp: CompSpec,
-    background: [f32; 4],
-    camera: ResolvedCamera,
-    time: RationalTime,
-    resolved: Vec<ResolvedLayer>,
-    text_documents: HashMap<LayerId, TextDocument>,
-}
 
-/// Stage presenter shader へ渡す実体(裁定171 v2 M4)。
-#[derive(Clone, Debug)]
-enum PresenterSource {
-    /// **高速路**(EXACT TARGET 1〜3)。`StagePresenterPipeline::prepare` が
-    /// 世代ゲート越しに [`PreviewSnapshot`] を GPU 直接描画する——CPU
-    /// readback をしない。
-    Gpu(Arc<PreviewSnapshot>),
-    /// **フォールバック**(裁定171 v2 §0-6: 市松 ON、または観測カメラ/½・¼
-    /// resolution cap のように CPU 側で作った RGBA をそのまま見せたい場合)。
-    /// 旧 `presenter_rgba: Arc<Vec<u8>>` と同じ形——`queue.write_texture`
-    /// 経由で永続テクスチャへ上げる(裁定166 の経路、無改造で残す)。
-    Cpu(Arc<Vec<u8>>),
-}
 
-/// 描き上がった1フレーム。**Document の写しではなく、描画の成果物**。
-///
-/// いつ捨てるかは [`Document::revision`] が決める(store 世代 + edit 位置)。
-/// front が「前回の値」を自分で持たないための口がこれ。
-struct RenderedFrame {
-    /// `Document::display_revision()`(履歴 + transient overlay の世代の組)。
-    /// **`revision()` ではない** — drag-to-scrub 中は overlay だけが動き、履歴の
-    /// `revision()` は不変のままなので、`revision()` だけを見ていると drag 中の
-    /// 再描画が起きない(transient overlay 化の要点そのもの)。
-    revision: DisplayRevision,
-    playhead: i64,
-    width: u32,
-    height: u32,
-    /// Stage 表示用の実体(裁定171 v2 — 高速路/フォールバックの両対応、上記
-    /// [`PresenterSource`] 参照)。**裁定166**: 旧 `handle: image::Handle` の
-    /// 置き換え — shader Program の `Primitive`(`StagePresenterPrimitive`)が
-    /// 毎フレーム `Arc::clone`/`clone()` するだけで、内容が変わらない限り
-    /// 複製しない(`Program::draw` は描画のたびに呼ばれる、
-    /// `iced_widget::shader::Program` doc 参照)。
-    presenter_source: PresenterSource,
-    presenter_width: u32,
-    presenter_height: u32,
-    /// `presenter_source` を新しく作り直した回数(単調増加)。shader Pipeline
-    /// 側(`StagePresenterPipeline::upload`/`resolve`)が「前回描いた世代と
-    /// 同じか」をこれで比較し、違う時だけ実際に描く/アップロードする
-    /// (EXACT TARGET 1/2 の核心 — oracle (a) の直接の鍵)。
-    presenter_generation: u64,
-    /// `Engine::render_frame`(背景込み)の生 RGBA。**export/screenshot 真値専用**
-    /// (`screenshot.rs`・`frame_rgba()`)— 通常描画(GPU 高速路)は一切読まない。
-    /// **市松は絶対にここへ乗せない**し、市松トグルで一切変わらない
-    /// (`settings_pane` doc「合成器が出せる」と「書き出しが吐く」は別問題、参照)。
-    ///
-    /// **裁定171 v2 EXACT TARGET 4**: GPU 高速路(`refresh_frame` の新しい早期
-    /// return 枝)はこのフィールドを更新しない——古いままにしておき、
-    /// [`rgba_stale`](RenderedFrame::rgba_stale)を立てる。`frame_rgba()` が
-    /// 実際に呼ばれた時だけ [`Shell::ensure_rgba_fresh`] が追いつかせる
-    /// (「readback は要求された時だけ」を型で保つ)。
-    rgba: Vec<u8>,
-    /// `rgba` が今の `playhead` を反映していない(GPU 高速路がここを飛ばした)
-    /// ことを示す。`frame_rgba()`(screenshot 器具・試験専用)が呼ばれた時だけ
-    /// [`Shell::ensure_rgba_fresh`] がこれを見て CPU readback を1回だけ行う。
-    rgba_stale: bool,
-    /// 市松 ON の間だけ `Some` — 裁定141「AE型の透明可視化モード」の入力
-    /// (`Engine::render_frame_without_background`、背景 layer を省いた合成結果)。
-    /// `presenter_rgba`(Stage 表示)と `screenshot.rs` は市松 ON の間、`rgba` の
-    /// 代わりにこれへ [`settings_pane::composite_checkerboard`] を当てる。
-    /// 市松 OFF の間は `None`(`rgba` をそのまま使う)。**export 真値(`rgba`)
-    /// には一切影響しない** — 別フィールド。
-    checkerboard_preview_rgba: Option<Vec<u8>>,
-    /// `presenter_rgba` が市松込みで作られているか。**Document・playhead
-    /// 非依存**の表示分岐なので、`revision()`/`playhead` が同じでもここが
-    /// 変わっていれば `refresh_frame` は Document の再評価をせず presenter
-    /// だけ作り直す(市松 ON の間は `checkerboard_preview_rgba` を取り直すため
-    /// engine を1回追加で回すが、`Document`/`StoreView` の評価が増える
-    /// わけではない)。
-    checkerboard: bool,
-    /// この `presenter_rgba` を作った時点の観測カメラ(裁定157)。
-    /// `display_revision()`/`playhead`/`checkerboard` と同じ「キャッシュを
-    /// 落とすかどうか」の鍵の一部 — `refresh_frame` の早期 return はこれも
-    /// 比較する(`checkerboard` と同格の表示専用の鍵拡張)。
-    observation: Option<ObservationCamera>,
-    /// 観測カメラ有効時の Stage 表示 RGBA(`Engine::render_frame_with_view_camera`
-    /// の結果そのもの)。**`rgba`(export 真値)とは別物** — `checkerboard_preview_rgba`
-    /// と同じ「表示専用の複製」の形。`observation` が `None` の間は常に `None`。
-    observation_rgba: Option<Vec<u8>>,
-    /// この `presenter_rgba` を作った時点のプレビュー解像度 cap(裁定163 Stage
-    /// 下縁状態帯)。**`checkerboard`/`observation` と同格の鍵拡張** —
-    /// `stage_presenter_rgba` へ渡す実効スケールを変えるだけの表示専用の値
-    /// なので、`revision()`/`playhead` が同じでもここが変わっていれば
-    /// presenter だけ作り直す(Document・engine の再評価は増えない)。
-    resolution_cap: stage::PreviewResolutionCap,
-}
 
-/// [`Shell::compute_display_source`] の戻り値。Stage 表示用の入力を1箇所へ
-/// まとめただけの内部型 — `RenderedFrame` のフィールドへの書き戻しと
-/// `build_stage_presenter_rgba` への引数の両方をこれ1つから作る(呼び出し側の
-/// `refresh_frame` が2箇所(キャッシュヒット/フル再計算)で同じ分岐を書かずに
-/// 済む)。
-struct DisplaySource {
-    /// `build_stage_presenter_rgba` へ渡す実体。`None` なら呼び出し側は
-    /// `RenderedFrame::rgba`(export 真値)をそのまま使う(市松・観測カメラの
-    /// どちらも効いていない既定の場合)。
-    full_rgba: Option<Vec<u8>>,
-    /// `full_rgba` を市松タイルで覆うかどうか(`build_stage_presenter_rgba` の
-    /// 第4引数)。
-    checkerboard: bool,
-    /// `RenderedFrame::checkerboard_preview_rgba` へそのまま書き戻す値。
-    checkerboard_preview_rgba: Option<Vec<u8>>,
-    /// `RenderedFrame::observation_rgba` へそのまま書き戻す値。
-    observation_rgba: Option<Vec<u8>>,
-}
 
-/// Stage ギズモ drag、shell 側の transient(GZ 結線、第5波)。**Document では
-/// ない** — Inspector の `FieldDragState` と同じ「確定まで front だけが持つ」
-/// 身分。ギズモの座標解(`stage::GizmoDragState`)は canvas 内部に住み、shell は
-/// 「どの layer のどの property を書いているか」と、確定のキー upsert の宛先
-/// (Start 時点の playhead/fps — Inspector drag と同じ press 時点固定)だけを
-/// 持つ。
-struct GizmoShellDrag {
-    layer: LayerId,
-    /// Start が申告した property(Esc 連鎖 [`Shell::cancel_gizmo_drag`] の
-    /// transient 掃除の宛先。Move/Commit は値側 [`stage::GizmoValue::property`]
-    /// を読む — 契約上 1 drag = 1 property なので同じ値)。
-    property: stage::GizmoProperty,
-    /// Start 時点の playhead(frame)と fps。確定のキー upsert
-    /// (`inspector_pane::edited_value_track`)の宛先 — drag の起点値は Start
-    /// 時点の絵から読まれているので、確定の宛先も同じ時刻に固定する
-    /// (`inspector_pane::FieldDragState::playhead_frame` と同じ判断)。
-    playhead_frame: i64,
-    fps: Fps,
-    /// 1回でも `set_transient` を書いたか(Cancel 時に overlay を外す要否)。
-    moved: bool,
-}
 
-/// [`stage::GizmoValue`](store の単位そのまま — `gizmo.rs` doc)→ store の
-/// [`Value`]。shell 側は写すだけ(GZ 契約「shell 側は `Value::Vec2`/`Value::F64`
-/// へ写すだけ」そのもの)。**`Anchor` はここへは来ない** — anchor drag は
-/// anchor と position の2 property を対で書く必要があるため、
-/// [`Shell::update_gizmo`] が `GizmoValue::Anchor { .. }` を専用の分岐で
-/// 個別に処理する(`gizmo.rs::GizmoValue::Anchor` doc「shell は両方を同時に
-/// 書く」参照)。
-fn gizmo_store_value(value: stage::GizmoValue) -> Value {
-    match value {
-        stage::GizmoValue::Position(v) | stage::GizmoValue::Scale(v) => Value::Vec2(v),
-        stage::GizmoValue::Rotation(v) => Value::F64(v),
-        stage::GizmoValue::Anchor { .. } => {
-            unreachable!("Anchor は update_gizmo が個別分岐で処理する — ここへは来ない")
-        }
-    }
-}
 
 // ---------------------------------------------------------------------------
 // 連続量 drag(裁定217、E-5)。`Shell::value_drag` doc 参照 — `inspector_drag`
@@ -774,56 +620,8 @@ fn gizmo_store_value(value: stage::GizmoValue) -> Value {
 // (`Shell::finish_value_drag` 参照、write ロジックの複製ゼロ)。
 // ---------------------------------------------------------------------------
 
-/// [`ValueDragState`] が指す先。4つの家系(Composition/AutoSave/Background/
-/// TextDocumentStyle 色)を1つの `Option` へ束ねる — press は排他的に1つしか
-/// 起きない(`inspector_drag`/`inspector_text_style_drag` の排他と同じ形)。
-#[derive(Clone, Copy, Debug, PartialEq)]
-enum ValueDragTarget {
-    CompWidth,
-    CompHeight,
-    CompFps,
-    CompDuration,
-    AutoSaveIntervalMinutes,
-    AutoSaveGenerations,
-    Background(settings_pane::BackgroundChannel),
-    Color(inspector_pane::color::ColorTarget, inspector_pane::color::ColorChannel),
-}
 
-/// 値セルのキャプション drag-to-scrub、進行中の一時状態。
-/// [`inspector_pane::FieldDragState`] と同じ形の縮小版 — Document の
-/// transient overlay は使わない(対象に `LayerId + PropertyId` の宛先が無い
-/// 家系がある)。**move 中は「既存の draft へ書き戻す」だけ** — text_input が
-/// 下書きから表示を読む既存の経路(`comp_field_cell`/`channel_cell` 等)を
-/// そのまま使うので、drag 中の値も Enter 編集中と同じ見た目になる。
-struct ValueDragState {
-    target: ValueDragTarget,
-    /// press 時点の値(対象ごとの「表示単位」— px・fps 小数・フレーム数・分・
-    /// 世代数・0..255 チャンネル)。
-    start_value: f64,
-    /// 最初の `PointerMoved` で確定する基準 x。`None` の間は click か drag か
-    /// まだ未確定(`FieldDragState::origin_x` と同じ理由)。
-    origin_x: Option<f32>,
-    /// 少なくとも1回動いたか。release の確定要否の判定に使う。
-    moved: bool,
-}
 
-/// [`ValueDragTarget`] ごとの px あたりの感度。`inspector_pane::transform::
-/// drag_step_per_pixel` と同じ「値の意味域に合わせた目安」(実窓較正はこの
-/// 発注の範囲外)。
-fn value_drag_step_per_pixel(target: ValueDragTarget) -> f64 {
-    match target {
-        // 解像度・尺は 1px = 1単位(Position と同じ 1:1、`drag_step_per_pixel` 参照)。
-        ValueDragTarget::CompWidth | ValueDragTarget::CompHeight | ValueDragTarget::CompDuration => 1.0,
-        // fps は 1..240 の域を 100px 強で走査できる程度。
-        ValueDragTarget::CompFps => 0.1,
-        // 間隔(分)は 1..1440 の域。
-        ValueDragTarget::AutoSaveIntervalMinutes => 0.5,
-        // 世代数は 1..50 の域、10px で1段動く。
-        ValueDragTarget::AutoSaveGenerations => 0.1,
-        // RGBA は 0..255、Position と同じ 1:1。
-        ValueDragTarget::Background(_) | ValueDragTarget::Color(_, _) => 1.0,
-    }
-}
 
 pub struct Shell {
     doc: Document,
@@ -1104,288 +902,53 @@ pub struct Shell {
 // 本体は既存の commit_* 自由関数をそのまま呼ぶ(`finish_value_drag` 参照)。
 // ---------------------------------------------------------------------------
 
-impl Shell {
-    /// 値セルのキャプション press — click か drag かはまだ未確定
-    /// (`ValueDragState::origin_x` が `None` のまま、`start_field_drag` と
-    /// 同じ形)。対応する値が読めない(comp が無い・選択レイヤが無い等)なら
-    /// 黙って無視 — drag は始まらない。既に別の drag が進行中なら多重起動しない。
-    fn start_value_drag(&mut self, target: ValueDragTarget) {
-        if self.value_drag.is_some() {
-            return;
-        }
-        let Some(start_value) = self.value_drag_start_value(target) else {
-            return;
-        };
-        self.value_drag = Some(ValueDragState {
-            target,
-            start_value,
-            origin_x: None,
-            moved: false,
-        });
-    }
 
-    /// press 時点の「表示単位」の現在値。`None` なら drag を始めない
-    /// (`inspector_pane::drag_origin` と同じ「投影に無ければ何もしない」形)。
-    fn value_drag_start_value(&self, target: ValueDragTarget) -> Option<f64> {
-        match target {
-            ValueDragTarget::CompWidth
-            | ValueDragTarget::CompHeight
-            | ValueDragTarget::CompFps
-            | ValueDragTarget::CompDuration => {
-                let composition = self.doc.view().composition().ok().flatten()?;
-                Some(match target {
-                    ValueDragTarget::CompWidth => f64::from(composition.width),
-                    ValueDragTarget::CompHeight => f64::from(composition.height),
-                    ValueDragTarget::CompFps => composition.fps.as_f64(),
-                    ValueDragTarget::CompDuration => composition.duration_frames as f64,
-                    _ => unreachable!("上の match arm が尽くす"),
-                })
-            }
-            ValueDragTarget::AutoSaveIntervalMinutes => {
-                Some(self.auto_save_config.interval_secs as f64 / 60.0)
-            }
-            ValueDragTarget::AutoSaveGenerations => Some(self.auto_save_config.generations as f64),
-            ValueDragTarget::Background(channel) => {
-                let composition = self.doc.view().composition().ok().flatten()?;
-                Some(f64::from(composition.background[channel.index()]) * 255.0)
-            }
-            ValueDragTarget::Color(color_target, channel) => {
-                let layer = self.session.selection?;
-                let current = self.doc.view().text_document(layer).ok()?;
-                let document = current.unwrap_or_else(inspector_pane::default_text_document);
-                let style = document
-                    .styles
-                    .first()
-                    .cloned()
-                    .unwrap_or_else(inspector_pane::default_text_style);
-                let rgba = inspector_pane::color::text_style_color(&style, color_target);
-                Some(rgba[channel.index()] * 255.0)
-            }
-        }
-    }
 
-    /// window 全体の cursor 移動。drag が armed/dragging でなければ即 no-op
-    /// (`continue_field_drag` と同じ形)。**既存の draft へ書き戻すだけ** —
-    /// text_input はその draft から表示を読むので、Enter 編集中と同じ見た目で
-    /// 値が動く(Document へは release まで一切触らない、`FieldDragState` の
-    /// 「transient overlay」に相当する部分をこの家系では draft が兼ねる)。
-    fn continue_value_drag(&mut self, point: iced::Point) {
-        let Some(state) = self.value_drag.as_mut() else {
-            return;
-        };
-        let Some(origin_x) = state.origin_x else {
-            state.origin_x = Some(point.x);
-            return;
-        };
-        let delta_px = point.x - origin_x;
-        if delta_px == 0.0 && !state.moved {
-            return;
-        }
-        let target = state.target;
-        let start_value = state.start_value;
-        let fine = self.keyboard_modifiers.shift();
-        let factor = if fine { inspector_pane::DRAG_SHIFT_FACTOR } else { 1.0 };
-        let raw = start_value + f64::from(delta_px) * value_drag_step_per_pixel(target) * factor;
-        self.write_value_drag_draft(target, raw);
-        if let Some(state) = self.value_drag.as_mut() {
-            state.moved = true;
-        }
-    }
-
-    /// drag 中の draft 書き戻し。既存の表示関数(`comp_field_display`/
-    /// `auto_save_field_display`/`color_channel_display` 等)をそのまま呼び、
-    /// クランプは既存の `parse_*`/定数をそのまま使う(**別の式を発明しない**、
-    /// 裁定215)。Background の8bit整形だけは `motolii_settings_pane::
-    /// channel_cell` の私有ローカル計算と同じ1行を独立に持つ(pub で公開
-    /// されていないため — 式自体は既存の1行の転記)。
-    fn write_value_drag_draft(&mut self, target: ValueDragTarget, raw: f64) {
-        use settings_pane::sections::{self, AutoSaveField, CompField};
-        match target {
-            ValueDragTarget::CompWidth
-            | ValueDragTarget::CompHeight
-            | ValueDragTarget::CompFps
-            | ValueDragTarget::CompDuration => {
-                let Ok(Some(mut composition)) = self.doc.view().composition() else {
-                    return;
-                };
-                let field = match target {
-                    ValueDragTarget::CompWidth => CompField::Width,
-                    ValueDragTarget::CompHeight => CompField::Height,
-                    ValueDragTarget::CompFps => CompField::Fps,
-                    ValueDragTarget::CompDuration => CompField::DurationFrames,
-                    _ => unreachable!("上の match arm が尽くす"),
-                };
-                match field {
-                    // 下限1・上限 MAX_COMP_DIMENSION_PX(`parse_comp_dimension` と
-                    // 同じクランプ — 0px/負の comp を drag では作らせない、裁定217
-                    // 「判断が割れたら厳しい側」)。
-                    CompField::Width => {
-                        composition.width =
-                            raw.round().clamp(1.0, f64::from(sections::MAX_COMP_DIMENSION_PX)) as u32;
-                    }
-                    CompField::Height => {
-                        composition.height =
-                            raw.round().clamp(1.0, f64::from(sections::MAX_COMP_DIMENSION_PX)) as u32;
-                    }
-                    CompField::Fps => {
-                        let clamped = raw.clamp(1.0, sections::MAX_COMP_FPS);
-                        let per_mille = (clamped * 1000.0).round() as i64;
-                        if let Ok(fps) = Fps::try_new(per_mille, 1000) {
-                            composition.fps = fps;
-                        }
-                    }
-                    CompField::DurationFrames => {
-                        composition.duration_frames = raw
-                            .round()
-                            .clamp(1.0, sections::MAX_COMP_DURATION_FRAMES as f64)
-                            as i64;
-                    }
-                }
-                let text = sections::comp_field_display(field, &composition);
-                self.comp_draft = Some(sections::CompFieldDraft { field, text });
-            }
-            ValueDragTarget::AutoSaveIntervalMinutes | ValueDragTarget::AutoSaveGenerations => {
-                let mut config = self.auto_save_config;
-                let field = match target {
-                    ValueDragTarget::AutoSaveIntervalMinutes => AutoSaveField::IntervalMinutes,
-                    ValueDragTarget::AutoSaveGenerations => AutoSaveField::Generations,
-                    _ => unreachable!("上の match arm が尽くす"),
-                };
-                match field {
-                    AutoSaveField::IntervalMinutes => {
-                        let clamped_minutes = raw.clamp(
-                            sections::MIN_AUTO_SAVE_INTERVAL_MINUTES,
-                            sections::MAX_AUTO_SAVE_INTERVAL_MINUTES,
-                        );
-                        config.interval_secs = (clamped_minutes * 60.0).round() as u64;
-                    }
-                    AutoSaveField::Generations => {
-                        config.generations = raw
-                            .round()
-                            .clamp(1.0, sections::MAX_AUTO_SAVE_GENERATIONS as f64)
-                            as usize;
-                    }
-                }
-                let text = sections::auto_save_field_display(field, &config);
-                self.auto_save_draft = Some(sections::AutoSaveFieldDraft { field, text });
-            }
-            ValueDragTarget::Background(channel) => {
-                // comp が無ければ投影も無い(`comp_field_cell`/`channel_cell` と
-                // 同じ柵) — 値自体は `raw` から直接組む(`Composition` は
-                // read-modify-write の確定側(`finish_value_drag` →
-                // `commit_background_channel`)でのみ触るので、ここで読んだ
-                // 値をそのまま書き戻す必要は無い)。
-                if self.doc.view().composition().ok().flatten().is_none() {
-                    return;
-                }
-                let clamped = raw.clamp(0.0, 255.0);
-                // `motolii_settings_pane::lib.rs::channel_cell` の `current_u8`
-                // 計算と同じ1行(`round().clamp(0,255) as u32 → to_string()`)。
-                let text = (clamped.round() as u32).to_string();
-                self.background_draft = Some(BackgroundFieldDraft { channel, text });
-            }
-            ValueDragTarget::Color(color_target, channel) => {
-                let Some(layer) = self.session.selection else {
-                    return;
-                };
-                let Ok(current) = self.doc.view().text_document(layer) else {
-                    return;
-                };
-                let document = current.unwrap_or_else(inspector_pane::default_text_document);
-                let mut style = document
-                    .styles
-                    .first()
-                    .cloned()
-                    .unwrap_or_else(inspector_pane::default_text_style);
-                let clamped = raw.clamp(0.0, 255.0);
-                inspector_pane::color::set_text_style_color_channel(
-                    &mut style,
-                    color_target,
-                    channel,
-                    clamped / 255.0,
-                );
-                let text = inspector_pane::color::color_channel_display(&style, color_target, channel);
-                self.inspector_color_field_draft = Some(inspector_pane::color::ColorFieldDraft {
-                    target: color_target,
-                    channel,
-                    text,
-                });
-            }
-        }
-    }
-
-    /// 左クリック release(window 全体から)。**drag が実際に動いていたら確定**
-    /// — drag 中に書き戻した draft を、既存の Enter 確定と**同じ commit_*
-    /// 自由関数**へそのまま渡す(1 gesture = 1 undo、書き込みロジックの複製
-    /// ゼロ)。動いていなければ(click)何もしない — draft は press 時点で
-    /// まだ触っていないので、そのまま text_input への通常の click→type 編集に
-    /// 委ねる。
-    fn finish_value_drag(&mut self) {
-        let Some(state) = self.value_drag.take() else {
-            return;
-        };
-        if !state.moved {
-            return;
-        }
-        match state.target {
-            ValueDragTarget::CompWidth
-            | ValueDragTarget::CompHeight
-            | ValueDragTarget::CompFps
-            | ValueDragTarget::CompDuration => {
-                let field = match state.target {
-                    ValueDragTarget::CompWidth => settings_pane::sections::CompField::Width,
-                    ValueDragTarget::CompHeight => settings_pane::sections::CompField::Height,
-                    ValueDragTarget::CompFps => settings_pane::sections::CompField::Fps,
-                    ValueDragTarget::CompDuration => {
-                        settings_pane::sections::CompField::DurationFrames
-                    }
-                    _ => unreachable!("上の match arm が尽くす"),
-                };
-                if let Err(error) =
-                    settings_pane::sections::commit_comp_field(&mut self.doc, &mut self.comp_draft, field)
-                {
-                    self.status = Some(error);
-                }
-            }
-            ValueDragTarget::AutoSaveIntervalMinutes | ValueDragTarget::AutoSaveGenerations => {
-                let field = match state.target {
-                    ValueDragTarget::AutoSaveIntervalMinutes => {
-                        settings_pane::sections::AutoSaveField::IntervalMinutes
-                    }
-                    ValueDragTarget::AutoSaveGenerations => {
-                        settings_pane::sections::AutoSaveField::Generations
-                    }
-                    _ => unreachable!("上の match arm が尽くす"),
-                };
-                if let Err(error) = settings_pane::sections::commit_auto_save_field(
-                    &mut self.auto_save_config,
-                    &mut self.auto_save_draft,
-                    field,
-                ) {
-                    self.status = Some(error);
-                }
-            }
-            ValueDragTarget::Background(channel) => {
-                if let Err(error) = settings_pane::commit_background_channel(
-                    &mut self.doc,
-                    &mut self.background_draft,
-                    channel,
-                ) {
-                    self.status = Some(error);
-                }
-            }
-            ValueDragTarget::Color(color_target, channel) => {
-                if let Err(error) = inspector_pane::color::commit_text_style_color(
-                    &mut self.doc,
-                    &mut self.inspector_color_field_draft,
-                    self.session.selection,
-                    color_target,
-                    channel,
-                ) {
-                    self.status = Some(error);
-                }
-            }
-        }
+/// `Shell::update` の唯一の分配口(2026-08-23 SP-1 レーン、
+/// `docs/reviews/2026-08-23-shell-split-plan.md` の続き)。**chain-of-
+/// responsibility** — 領域別 dispatch 関数(`document_io.rs`/`selection.rs`/
+/// `create.rs`/`inspector_ops.rs`/`playback.rs`/`export_ops.rs`/`render.rs`/
+/// `input.rs`)を順に試し、最初に `Ok` を返した領域の結果を使う。**新しい
+/// `Message` 枝を1つ足しても、対応する領域の dispatch 関数へ腕を1本足すだけで
+/// 済み、この関数(と `lib.rs` 全体)は無改修のまま**——`update()` の巨大な
+/// match が同日中に肥大化して戻った実績(6,228 → 2,127 → 2,886 行)への
+/// 再発防止柵そのもの。`lib.rs` は「どの領域が処理したか」だけを見る。
+fn dispatch_message(shell: &mut Shell, message: Message) -> Task<Message> {
+    let message = match shell.dispatch_document_io(message) {
+        Ok(task) => return task,
+        Err(message) => message,
+    };
+    let message = match shell.dispatch_selection(message) {
+        Ok(task) => return task,
+        Err(message) => message,
+    };
+    let message = match shell.dispatch_create(message) {
+        Ok(task) => return task,
+        Err(message) => message,
+    };
+    let message = match shell.dispatch_inspector_ops(message) {
+        Ok(task) => return task,
+        Err(message) => message,
+    };
+    let message = match shell.dispatch_playback(message) {
+        Ok(task) => return task,
+        Err(message) => message,
+    };
+    let message = match shell.dispatch_export_ops(message) {
+        Ok(task) => return task,
+        Err(message) => message,
+    };
+    let message = match shell.dispatch_render(message) {
+        Ok(task) => return task,
+        Err(message) => message,
+    };
+    match shell.dispatch_input(message) {
+        Ok(task) => task,
+        // どの領域にも属さない Message はここへは来ない(全 variant を上の
+        // 8領域のどこかへ割り当て済み、`docs/reviews/2026-08-23-shell-split-plan.md`
+        // の割当表参照)。万一の取りこぼしは無反応ゼロ(M13)より安全側 —
+        // 何もしないだけで panic はしない。
+        Err(_unhandled) => Task::none(),
     }
 }
 
@@ -1692,39 +1255,6 @@ impl Shell {
         iced::Subscription::batch([window, tokens, pointer, ticks, auto_save, closes, close_requests])
     }
 
-    /// Timeline rail の layer 行クリック(E-2、軸台帳 A08 隣接の穴)。
-    /// **裸クリック=単独選択・Cmd=トグル(足し引き)・Shift=範囲**
-    /// (`timeline_pane::rows::LayerSelectionOp` の3形そのまま)。解決自体は
-    /// [`timeline_pane::rows::resolve_layer_selection`](純関数、`Session` を
-    /// 書き換えない)へ委譲し、確定は必ず [`Self::set_selected_layers`]
-    /// (C-2 の唯一の書き手)を経由する — この関数の外で `session.selection`/
-    /// `selected_layers` を直接書き換えない。
-    ///
-    /// `order`(範囲の基準)は今 rail に見えている行(`timeline_pane::rows`、
-    /// 畳まれて非表示の行は対象外 — `key_order` と同じ「見えているものだけ」
-    /// の姿勢、`resolve_layer_selection` doc 参照)。`anchor` は `Session` では
-    /// なく `Shell::layer_selection_anchor`(このレーンの write-set は
-    /// `lib.rs`/`input.rs`/`timeline-pane::write.rs` のみ — `selection.rs` は
-    /// `set_selected_layers` を呼ぶだけで書き換えないため、anchor はここに置く)。
-    fn click_select_layer(&mut self, layer: LayerId) {
-        let order: Vec<LayerId> =
-            timeline_pane::rows(&self.doc.view(), &self.session).into_iter().map(|row| row.id).collect();
-        let op = if self.keyboard_modifiers.command() {
-            timeline_pane::rows::LayerSelectionOp::Toggle(layer)
-        } else if self.keyboard_modifiers.shift() {
-            timeline_pane::rows::LayerSelectionOp::Range(layer)
-        } else {
-            timeline_pane::rows::LayerSelectionOp::Single(layer)
-        };
-        let (selected, anchor) = timeline_pane::rows::resolve_layer_selection(
-            &order,
-            self.layer_selection_anchor,
-            &self.session.selected_layers,
-            op,
-        );
-        self.layer_selection_anchor = anchor;
-        self.set_selected_layers(selected);
-    }
 
     /// **唯一の書き口**。ここ以外に `doc.apply` を呼ぶ場所を作らない。
     pub fn update(&mut self, message: Message) -> Task<Message> {
@@ -1734,375 +1264,7 @@ impl Shell {
         // widget 内部(vendored iced_aw menu の `close_on_item_click` 既定)。
         // click→type 編集への切り替え(`finish_field_drag`)だけがフォーカス
         // task を返す。他の枝は既定どおり `Task::none()`。
-        let mut task = Task::none();
-        match message {
-            Message::Undo => {
-                if !self.doc.undo() {
-                    self.status = Some("これ以上戻せない".to_owned());
-                }
-            }
-            Message::Redo => {
-                if !self.doc.redo() {
-                    self.status = Some("これ以上進めない".to_owned());
-                }
-            }
-            Message::ScrubTo(frame) => self.scrub_to(frame),
-            Message::Select(layer) => self.select_single(layer),
-            Message::AdmitPaths(paths) => self.admit(paths),
-            Message::DropReceived(path) => self.pending_drops.push(path),
-            Message::FlushDrops => {
-                if !self.pending_drops.is_empty() {
-                    let paths = std::mem::take(&mut self.pending_drops);
-                    self.admit(paths);
-                }
-            }
-            Message::TokensFileChanged => {
-                self.tokens = Tokens::load();
-                metrics::record_tokens_reload();
-            }
-            // ---- 窓台帳(S1 daemon 骨格 + S2 Settings 窓、裁定182/188) ----
-            Message::MainWindowOpened(id) => self.main_window = Some(id),
-            Message::SettingsWindowOpened(id) => self.settings_window = Some(id),
-            Message::ExportWindowOpened(id) => self.export_window = Some(id),
-            Message::WindowClosed(id) => {
-                if self.main_window == Some(id) {
-                    // main 閉=アプリ終了(probe 注意点1)。daemon は放って
-                    // おくと窓ゼロで生き続け、winit shell が compositor を
-                    // `None` 化(device 破棄)する — zero-copy presenter
-                    // (裁定170/171)の単一 device 前提を守るため、窓ゼロ状態
-                    // そのものを作らない。
-                    task = iced::exit();
-                } else if self.settings_window == Some(id) {
-                    // OS の閉じるボタン経路(トグル経由の close は
-                    // `toggle_settings_window` が先行抹消済み — その場合
-                    // ここへ来る時点で台帳は既に None なので何もしない)。
-                    self.settings_window = None;
-                } else if self.export_window == Some(id) {
-                    // Export 窓の OS 閉じるボタン経路(`toggle_export_window`
-                    // と同じ扱い、Settings 窓と同型)。
-                    self.export_window = None;
-                }
-            }
-            Message::Inspector(msg) => {
-                // 裁定217 連続量 drag 化(E-5)。`self.value_drag`(track を
-                // 持たない値向けの第2の経路、struct 冒頭 doc 参照)は
-                // Inspector の `inspector_drag`/`inspector_text_style_drag` と
-                // 同じ window 全体購読(`PointerMoved`/`PointerReleased`)を
-                // 共有する — `inspector_ops.rs::update_inspector` を触らずに
-                // 済むよう、ここで先取りして両方へ配る(`inspector_drag`/
-                // `inspector_text_style_drag` 自身は `update_inspector` 側で
-                // 従来どおり動く、片方が `None` の間は他方も no-op なので
-                // 二重発火しても無害)。
-                match &msg {
-                    inspector_pane::Message::PointerMoved(point) => self.continue_value_drag(*point),
-                    inspector_pane::Message::PointerReleased => self.finish_value_drag(),
-                    _ => {}
-                }
-                match msg {
-                    // 色欄(Fill/Stroke RGBA)のキャプション press。`color::Message`
-                    // に3つ目の variant を足したことで `inspector_ops.rs::
-                    // update_inspector` の `Message::Color(...)` 網羅 match が
-                    // 非網羅になるため、そちらへも1腕(no-op)を足した
-                    // (RETURN「lib.rs と input.rs に追加/変更した行」参照 —
-                    // ここで先取りするので実際にはそちらへは来ない)。
-                    inspector_pane::Message::Color(inspector_pane::color::Message::ChannelDragPressed(
-                        target,
-                        channel,
-                    )) => {
-                        self.start_value_drag(ValueDragTarget::Color(target, channel));
-                    }
-                    other => task = self.update_inspector(other),
-                }
-            }
-            // pane split survey §3.2 exception 1/裁定160 切片7: `Select`/
-            // `ScrubTo` は本来 core 腕、`ToggleMute`/`ToggleSolo`/`ToggleLock`
-            // は `toggle_layer_hidden` が Inspector とも共有する Shell 側の
-            // ヘルパーのため、この5腕だけ `timeline_pane::PaneState::update`
-            // へ渡す前に Shell が先取りする(`timeline_pane::write` モジュール
-            // doc 参照)。残りは pane 側の唯一の書き口(`PaneState::update`)へ
-            // 委譲する — 拒否理由があれば `self.status` へそのまま渡す。
-            Message::Timeline(msg) => match msg {
-                timeline_pane::Message::Select(layer) => self.click_select_layer(layer),
-                timeline_pane::Message::ScrubTo(frame) => self.scrub_to(frame),
-                timeline_pane::Message::ToggleMute(layer) => self.toggle_layer_hidden(layer),
-                timeline_pane::Message::ToggleSolo(layer) => self.toggle_layer_solo(layer),
-                timeline_pane::Message::ToggleLock(layer) => self.toggle_layer_lock(layer),
-                // transport 帯(裁定180)— 意味は shell の既存腕そのもの(5例外と
-                // 同じ先取りの型。pane 側 `PaneState::update` は no-op)。
-                timeline_pane::Message::TogglePlayback => self.toggle_playback(),
-                timeline_pane::Message::StepPlayhead(delta) => self.step_playhead(delta),
-                timeline_pane::Message::JumpPlayheadToStart => self.session.playhead = 0,
-                timeline_pane::Message::JumpPlayheadToEnd => {
-                    let duration = self.composition().map(|c| c.duration_frames).unwrap_or(0);
-                    self.session.playhead = timeline::nav::comp_end_frame(duration);
-                }
-                // JKL シャトル(B21、第5波結線)— transport 4腕と同じ「shell
-                // 先取りの例外」(`timeline_pane::Message::Shuttle` doc): 実時間
-                // 再生の clock は shell(A2)が持つので、状態遷移と tick 駆動を
-                // ここで畳む(`PaneState::update` では no-op)。
-                timeline_pane::Message::Shuttle(command) => self.apply_shuttle(command),
-                // ルーラ locator lane 右クリック(S2 発注 #22「マーカー追加
-                // UI が無い」の穴埋め、2入口目)— キーボード M
-                // (`Message::Marker(MarkerMessage::AddAtPlayhead)`)と同じ
-                // `update_marker` 経路へ畳む(S6 併存、裁定195)。
-                timeline_pane::Message::AddMarkerAt(frame) => {
-                    self.update_marker(timeline::markers::MarkerMessage::AddAtFrame(frame))
-                }
-                other => {
-                    if let Some(reason) =
-                        self.timeline.update(other, &mut self.doc, &mut self.session, self.keyboard_modifiers)
-                    {
-                        self.status = Some(reason);
-                    }
-                }
-            },
-            Message::StepPlayhead(delta) => self.step_playhead(delta),
-            Message::JumpPlayheadToStart => self.session.playhead = 0,
-            Message::JumpPlayheadToEnd => {
-                let duration = self.composition().map(|c| c.duration_frames).unwrap_or(0);
-                self.session.playhead = timeline::nav::comp_end_frame(duration);
-            }
-            Message::JumpMeaningPoint { direction, layer_only } => {
-                self.jump_meaning_point(direction, layer_only);
-            }
-            Message::JumpClipEdge(edge) => self.jump_clip_edge(edge),
-            // map 1064(B18、第5波結線): 作業範囲の先頭/末尾へ。範囲が無ければ
-            // no-op(`jump_clip_edge` と同じ「跳ぶ先が無ければ動かない」)。
-            Message::JumpToWorkAreaStart => {
-                if let Some(area) = self.timeline.work_area() {
-                    self.session.playhead = area.first_frame();
-                }
-            }
-            Message::JumpToWorkAreaEnd => {
-                if let Some(area) = self.timeline.work_area() {
-                    self.session.playhead = area.last_frame();
-                }
-            }
-            Message::KeyboardModifiersChanged(modifiers) => self.keyboard_modifiers = modifiers,
-            // Esc は Timeline ドラッグを優先してキャンセルする(clip → key →
-            // ループ帯 → gizmo の順、どれも掴んでいなければ Inspector 側
-            // (drag/typing 下書き)を試す — 同時に成立するのは1つだけなので
-            // 順序自体に意味は無い、排他)。ループ帯は捨てるだけでは戻らない
-            // (live 更新)ので `cancel_loop_drag` が origin を書き戻す
-            // (裁定151「キャンセルの一般化」の柵、B18 の supervisor 結線)。
-            // gizmo は canvas 側も Esc で `GizmoPhase::Cancel` を publish する
-            // (`gizmo.rs`)が、こちらの連鎖にも置く — どちらが先でも
-            // `cancel_gizmo_drag` は冪等。第6波: rename も同じ連鎖へ足す
-            // (`timeline::write` 冒頭 doc「Esc は shell の EscapePressed が
-            // cancel_rename を直接呼ぶ」)— rename 中は drag 状態と排他なので
-            // 挿し込み位置に意味は無い(既存コメントと同じ理由)。
-            Message::EscapePressed => {
-                if !self.timeline.cancel_drag()
-                    && !self.timeline.cancel_key_drag()
-                    && !self.timeline.cancel_loop_drag()
-                    && !self.timeline.cancel_rename()
-                    && !self.cancel_gizmo_drag()
-                {
-                    self.cancel_inspector_interaction();
-                }
-            }
-            Message::Settings(msg) => task = self.update_settings(msg),
-            Message::Stage(msg) => self.update_stage(msg),
-            Message::Gizmo(event) => self.update_gizmo(event),
-            Message::ZoomIn => self.zoom_in(),
-            Message::ZoomOut => self.zoom_out(),
-            Message::ZoomToFit => self.zoom_to_fit(),
-            // B2/B3: rail scope 選択/検索欄/Clear/ToggleBrowserPanel の4腕
-            // (`browser_pane::Message`)を pane 側の唯一の書き口
-            // (`PaneState::update`)へそのまま委譲する(`timeline_pane::
-            // PaneState::update` への委譲と同型)。Document/Session を一切
-            // 触らない pane-local 状態なので `&mut self.browser` だけで完結
-            // する(引数を追加で貸す必要が無い、`browser_pane::state` crate
-            // doc 参照)。
-            Message::Browser(msg) => {
-                // **畳んだ口**(MC-1、2026-08-23、`create.rs::
-                // dispatch_browser_card_intent` doc 参照)。カード発の意図
-                // (`CreateFromCard`/`AddMaskFromCard`/`ApplyEffectFromCard`/
-                // `ReplaceSelectedLayerSource`/`RemoveAssetFromCard`)を
-                // ここで1つずつ `if let` で横取りしていた5本の分岐は、
-                // 1関数呼び出しへ畳んだ——pane側は元から no-op(`state.rs`の
-                // ORACLE)なので、`&msg` を渡して先に処理しても
-                // `self.browser.update(msg)` との二重処理にはならない。
-                // カードの意図がもう1種類増えても、この行は変えず
-                // `create.rs` の match へ腕を1本足すだけで済む
-                // (write-set が `lib.rs` を引きずらなくなる)。
-                self.dispatch_browser_card_intent(&msg);
-                self.browser.update(msg);
-                // pane_grid 側は `browser_pane::PaneState::is_open()` が唯一の
-                // 真実源(`panes` フィールド doc 参照)——ここで追随させる。
-                // `set_browser_open` は同値なら no-op(`pane_layout::Layout`
-                // doc)なので、`ToggleBrowserPanel` 以外の3腕(rail/検索欄)で
-                // 毎回呼んでも他 split の ratio・ドラッグ配置を潰さない。
-                self.panes.set_browser_open(self.browser.is_open());
-            }
-            Message::PaneClicked(pane) => self.panes.set_focused(pane),
-            Message::PaneResized(event) => self.panes.apply_resize(event),
-            Message::PaneDragged(event) => self.panes.apply_drag(event),
-            Message::AddLayer => {
-                let id = LayerId(self.next_layer_id());
-                // **1操作 = 1 undo**。`AddLayer`/`SetMeta`/`SetAttrs`(差し色の
-                // 自動割当)を別々に書くと利用者は Undo を複数回押すことになる
-                // (ui-quality-bar Q2)。
-                let placed = self.doc.apply_all([
-                    Intent::AddLayer(id),
-                    Intent::SetMeta {
-                        layer: id,
-                        meta: LayerMeta {
-                            source: LayerSource::Solid {
-                                rgba: [80, 160, 220, 255],
-                                width: 240,
-                                height: 135,
-                            },
-                            order: id.0 as i16,
-                            // 尺の決め方は Document が持つ(M4)。
-                            timing: LayerTiming::place(
-                                self.session.playhead,
-                                None,
-                                self.comp_duration(),
-                            ),
-                        },
-                    },
-                    Intent::SetAttrs {
-                        layer: id,
-                        patch: LayerAttrsPatch {
-                            label_color: Some(Some(Self::label_color_for_new_layer(id))),
-                            ..Default::default()
-                        },
-                    },
-                ]);
-                match placed {
-                    Ok(()) => self.select_single(id),
-                    // 拒否は必ず出す。黙って消さない。
-                    Err(error) => self.status = Some(format!("layer を置けない: {error}")),
-                }
-            }
-            Message::CopyLayer => self.copy_layer(),
-            Message::PasteLayer => self.paste_layer(),
-            Message::CutLayer => self.cut_layer(),
-            Message::DuplicateLayer => self.duplicate_layer(),
-            Message::SelectAllLayers => self.select_all_layers(),
-            Message::DeselectAllLayers => self.deselect_all_layers(),
-            Message::DeleteSelectedLayers => self.delete_selected_layers(),
-            Message::HideSelectedLayers => self.hide_selected_layers(),
-            Message::SoloSelectedLayers => self.solo_selected_layers(),
-            Message::LockSelectedLayers => self.lock_selected_layers(),
-            Message::GroupLayers => self.group_selected_layers(),
-            Message::UngroupLayers => self.ungroup_selected_layers(),
-            // MB-2: freeze 意図動詞(裁定119)の UI 初露出(Layer メニュー)。
-            Message::FreezeGroups => self.set_selected_groups_frozen(true),
-            Message::UnfreezeGroups => self.set_selected_groups_frozen(false),
-            Message::NewProjectRequested => task = self.confirm_then(Message::NewProjectConfirmed),
-            Message::NewProjectConfirmed(confirmed) => {
-                if confirmed {
-                    self.reset_document();
-                }
-            }
-            Message::SaveRequested => {
-                if let Some(path) = self.current_path.clone() {
-                    self.perform_save_as(path);
-                } else {
-                    task = Task::perform(self.dialogs.pick_save_path(), Message::SaveAsPathChosen);
-                }
-            }
-            Message::SaveAsRequested => {
-                task = Task::perform(self.dialogs.pick_save_path(), Message::SaveAsPathChosen);
-            }
-            Message::SaveAsPathChosen(Some(path)) => self.perform_save_as(path),
-            Message::SaveAsPathChosen(None) => {}
-            Message::SaveACopyRequested => {
-                task = Task::perform(self.dialogs.pick_save_path(), Message::SaveACopyPathChosen);
-            }
-            Message::SaveACopyPathChosen(Some(path)) => self.perform_save_a_copy(path),
-            Message::SaveACopyPathChosen(None) => {}
-            Message::OpenRequested => task = self.confirm_then_pick_open(),
-            Message::OpenPathChosen(Some(path)) => self.perform_open(path),
-            Message::OpenPathChosen(None) => {}
-            Message::ImportMediaRequested => {
-                task = Task::perform(self.dialogs.pick_import_paths(), Message::AdmitPaths);
-            }
-            Message::QuitRequested => task = self.confirm_then(Message::QuitConfirmed),
-            Message::QuitConfirmed(confirmed) => {
-                if confirmed {
-                    self.dialogs.quit();
-                }
-            }
-            Message::WindowCloseRequested(id) => {
-                if self.main_window == Some(id) {
-                    task = self.confirm_then(Message::WindowCloseConfirmed);
-                }
-                // Settings/Export 窓は `exit_on_close_request: true`(既定)の
-                // ままなので、この Message は main 以外の id では実際には
-                // 届かない(防御的に無視するだけ)。
-            }
-            Message::WindowCloseConfirmed(confirmed) => {
-                if confirmed {
-                    task = iced::exit();
-                }
-                // false: 何もしない。main 窓は `exit_on_close_request: false`
-                // のおかげでまだ閉じていない(OS へ Close を送っていない)ので、
-                // 見た目どおり編集を続けられる。
-            }
-            Message::LastProjectPathRead(Some(path)) => {
-                match Document::load(&path) {
-                    Ok(doc) => {
-                        self.saved_revision = doc.revision();
-                        self.last_auto_saved = self.saved_revision.clone();
-                        self.doc = doc;
-                        self.current_path = Some(path.clone());
-                        self.session = Session::default();
-                    }
-                    // 拒否は必ず出す(M13)。既定 Document のまま起動を続ける
-                    // ── 黙って上書きしない/黙って落とさない、どちらも避ける。
-                    Err(error) => {
-                        self.status = Some(format!("前回のプロジェクトを開けない: {error}"));
-                    }
-                }
-                if let Some(autosave_path) = Self::recoverable_autosave(&path) {
-                    self.pending_recovery = Some(autosave_path);
-                    task = Task::perform(
-                        self.dialogs.confirm_recover_autosave(),
-                        Message::AutoSaveRecoveryConfirmed,
-                    );
-                }
-            }
-            Message::LastProjectPathRead(None) => {}
-            Message::AutoSaveRecoveryConfirmed(confirmed) => {
-                if let Some(autosave_path) = self.pending_recovery.take() {
-                    if confirmed {
-                        self.perform_recover_autosave(autosave_path);
-                    }
-                }
-            }
-            Message::TogglePlayback => self.toggle_playback(),
-            Message::PlaybackTick => self.advance_playback_tick(),
-            Message::AutoSaveTick => self.run_auto_save(),
-
-            // ---- 第6波 shell 結線 ----
-            Message::Sheet(msg) => self.sheet_toggles = self.sheet_toggles.apply(msg),
-            Message::Marquee(select) => {
-                let next = stage::marquee::apply_selection(
-                    &self.session.selected_layers,
-                    &select.ids,
-                    select.additive,
-                );
-                self.apply_stage_selection(next);
-            }
-            Message::Marker(msg) => self.update_marker(msg),
-            Message::Export(msg) => task = self.update_export(msg),
-            Message::ExportProgressed(event) => self.update_export_progressed(event),
-            Message::RenameSelectedLayer => {
-                if let Some(layer) = self.session.selection {
-                    if let Some(reason) = self.timeline.update(
-                        timeline_pane::Message::RenameBegin(layer),
-                        &mut self.doc,
-                        &mut self.session,
-                        self.keyboard_modifiers,
-                    ) {
-                        self.status = Some(reason);
-                    }
-                }
-            }
-        }
+        let task = dispatch_message(self, message);
         self.refresh_frame();
         // S4(#46 の穴塞ぎ): Content 行の永続 `text_editor::Content` を選択と
         // 同期する(`inspector_ops::sync_inspector_content_editor` doc 参照)。
@@ -2117,440 +1279,24 @@ impl Shell {
 
 
 
-    /// 今の playhead を comp の fps で時刻へ写す。comp が無い/fps が壊れているなら
-    /// `None`(M16: panic しない)。
-    fn time_at_playhead(&self) -> Option<RationalTime> {
-        let composition = self.doc.view().composition().ok().flatten()?;
-        RationalTime::try_from_frame(self.session.playhead, composition.fps).ok()
-    }
 
 
 
     // ---- Settings パネル(タスク#18、裁定160 切片9) ----
 
-    /// pane ローカル `Message`(SET+ の [`settings_pane::sections::Message`])を
-    /// 畳んで書き口へ渡す glue。sections.rs 冒頭 doc「結線互換の縫い目」の手順
-    /// 2そのもの: 新項目2腕(`CompFieldInput`/`CompFieldSubmit` —
-    /// `commit_comp_field` が read-modify-write の `Intent::SetComposition` を
-    /// 1回出す)+ 旧腕は [`Self::update_settings_legacy`] へ丸ごと委譲。
-    fn update_settings(&mut self, message: settings_pane::sections::Message) -> Task<Message> {
-        use settings_pane::sections;
-        use sections::{AutoSaveField, CompField};
-        match message {
-            sections::Message::Legacy(legacy) => return self.update_settings_legacy(legacy),
-            sections::Message::CompFieldInput(field, text) => {
-                self.comp_draft = Some(sections::CompFieldDraft { field, text });
-            }
-            sections::Message::CompFieldSubmit(field) => {
-                if let Err(error) =
-                    sections::commit_comp_field(&mut self.doc, &mut self.comp_draft, field)
-                {
-                    self.status = Some(error);
-                }
-            }
-            sections::Message::AutoSaveToggle(enabled) => {
-                self.auto_save_enabled = enabled;
-            }
-            sections::Message::AutoSaveFieldInput(field, text) => {
-                self.auto_save_draft = Some(sections::AutoSaveFieldDraft { field, text });
-            }
-            sections::Message::AutoSaveFieldSubmit(field) => {
-                if let Err(error) = sections::commit_auto_save_field(
-                    &mut self.auto_save_config,
-                    &mut self.auto_save_draft,
-                    field,
-                ) {
-                    self.status = Some(error);
-                }
-            }
-            // 裁定217 連続量 drag 化(E-5)。`start_value_drag` と同じ
-            // 「press だけ own する」形 — move/release は window 全体購読
-            // (`inspector_pointer_event`)を Inspector と共有する。
-            sections::Message::CompFieldDragPressed(field) => {
-                self.start_value_drag(match field {
-                    CompField::Width => ValueDragTarget::CompWidth,
-                    CompField::Height => ValueDragTarget::CompHeight,
-                    CompField::Fps => ValueDragTarget::CompFps,
-                    CompField::DurationFrames => ValueDragTarget::CompDuration,
-                });
-            }
-            sections::Message::AutoSaveFieldDragPressed(field) => {
-                self.start_value_drag(match field {
-                    AutoSaveField::IntervalMinutes => ValueDragTarget::AutoSaveIntervalMinutes,
-                    AutoSaveField::Generations => ValueDragTarget::AutoSaveGenerations,
-                });
-            }
-        }
-        Task::none()
-    }
 
-    /// 旧 `settings_pane::Message` の腕(SET+ 以前の全項目)。write ロジックの
-    /// 実体は `motolii_settings_pane::{apply_background_preset,
-    /// commit_background_channel, commit_ui_scale}`(自由関数、`&mut Document`/
-    /// `&mut Tokens`/下書きを明示引数で受け取る形 — pane crate は `&mut self` を
-    /// 持てないため)。ここでは `self.doc`/`self.tokens`/下書きフィールドを
-    /// そのまま貸すだけで、拒否理由(`Result::Err`)を `self.status` へ write
-    /// する以外の判断は持たない。
-    fn update_settings_legacy(&mut self, message: settings_pane::Message) -> Task<Message> {
-        match message {
-            settings_pane::Message::ToggleSettingsPanel => {
-                // S2(裁定182/188): 意味が「レイアウト分岐」→「窓 open/close」
-                // へ変わった(probe §Q3)。トグル以外の腕は従来どおり
-                // Task を返さない。
-                return self.toggle_settings_window();
-            }
-            settings_pane::Message::BackgroundPreset(preset) => {
-                if let Err(error) = settings_pane::apply_background_preset(&mut self.doc, preset) {
-                    self.status = Some(error);
-                }
-            }
-            settings_pane::Message::BackgroundChannelInput(channel, text) => {
-                self.background_draft = Some(BackgroundFieldDraft { channel, text });
-            }
-            settings_pane::Message::BackgroundChannelSubmit(channel) => {
-                if let Err(error) = settings_pane::commit_background_channel(
-                    &mut self.doc,
-                    &mut self.background_draft,
-                    channel,
-                ) {
-                    self.status = Some(error);
-                }
-            }
-            settings_pane::Message::UiScaleInput(text) => self.ui_scale_draft = Some(text),
-            settings_pane::Message::UiScaleSubmit => {
-                if let Err(error) =
-                    settings_pane::commit_ui_scale(&mut self.tokens, &mut self.ui_scale_draft)
-                {
-                    self.status = Some(error);
-                }
-            }
-            // 裁定217 連続量 drag 化(E-5)。`sections::Message::CompFieldDragPressed`
-            // と同じ形。
-            settings_pane::Message::BackgroundChannelDragPressed(channel) => {
-                self.start_value_drag(ValueDragTarget::Background(channel));
-            }
-        }
-        Task::none()
-    }
 
-    /// S2(裁定182/188): Settings の入口 — header の歯車が出す
-    /// `ToggleSettingsPanel` を OS 窓の open/close へ配線する(浮かし第1号、
-    /// 裁定188「Settings はだいたいポップアップだから」)。
-    ///
-    /// 台帳(`settings_window`)は**同期で先行記帳/先行抹消**する —
-    /// `window::open` は Id を同期で採番し(fork `runtime/src/window.rs:260`)、
-    /// close も「閉じるつもり」の時点で台帳から下ろす。runtime 無しの headless
-    /// 試験(Task は走らない)でも open/close/再open の状態遷移が読めるのは
-    /// この設計のため(`tests/suite/window_drive.rs` の oracle)。OS の閉じる
-    /// ボタン経由は `Message::WindowClosed`(`close_events` 購読)が同じ抹消を
-    /// 行う。
-    fn toggle_settings_window(&mut self) -> Task<Message> {
-        match self.settings_window.take() {
-            Some(id) => iced::window::close(id),
-            None => {
-                let (id, open) = iced::window::open(iced::window::Settings {
-                    // 小さめ・リサイズ可(発注どおり、probe 実証の形)。raw 値は
-                    // pane の意匠値ではなく**窓の初期ジオメトリ**(トンマナ柵
-                    // (裁定142)の対象マーカー外 — `Size::new` は widget 構築
-                    // 呼び出しではない): 幅はプリセット4ボタン+数値欄が
-                    // 折り返さない程度、高さは4行+見出し(probe の 420×320 と
-                    // 同桁)。リサイズ可なので初期値以上の拘束は持たない。
-                    size: iced::Size::new(480.0, 400.0),
-                    resizable: true,
-                    ..iced::window::Settings::default()
-                });
-                self.settings_window = Some(id);
-                open.map(Message::SettingsWindowOpened)
-            }
-        }
-    }
 
     // ---- Stage 観測カメラ(裁定157、裁定160 切片10) ----
 
-    /// pane ローカル `Message` を畳んで書き口へ渡す glue(`update_settings` と
-    /// 同じ形)。**最初の2腕は元々 `self.observation` への直代入だけ**(計算を
-    /// 持たない)だったので、pane crate 側には移していない。`CycleResolutionCap`/
-    /// `ToggleCheckerboard`(裁定163 Stage 下縁状態帯)も同型の直代入 —
-    /// `ToggleCheckerboard` は旧 `settings_pane::Message::ToggleCheckerboard`
-    /// と同じ本体(`self.checkerboard` の反転)をここへ引っ越しただけ
-    /// (`update_settings` 側の対応する腕は削除済み)。
-    fn update_stage(&mut self, message: stage::Message) {
-        match message {
-            stage::Message::Observe(camera) => self.observation = Some(camera),
-            stage::Message::ResetToRenderCamera => self.observation = None,
-            stage::Message::CycleResolutionCap => {
-                self.resolution_cap = self.resolution_cap.next();
-            }
-            stage::Message::ToggleCheckerboard => {
-                self.checkerboard = !self.checkerboard;
-            }
-        }
-    }
 
     // ---- Stage ギズモ(GZ 結線、第5波) ----
 
-    /// ギズモ drag の契約(`stage::GizmoDrag` doc: 1 drag = Start → Move* →
-    /// Commit|Cancel)を Inspector の drag-to-scrub と同じ経路へ写す:
-    /// - Start: shell 側 transient([`GizmoShellDrag`])を立てるだけ(Document
-    ///   は触らない)。宛先時刻(playhead/fps)はこの時点で凍結。
-    /// - Move: `Document::set_transient`(edit timeline に触れない overlay —
-    ///   undo/redo の意味論は drag 中ずっと不変)。
-    /// - Commit: transient を外し、`Intent::SetTrack` を**1回**だけ出す
-    ///   (1 drag = 1 undo)。track の意味は値セル編集と同じ
-    ///   [`inspector_pane::edited_value_track`](キー無し=静的書き換え・
-    ///   キー持ち= playhead へのキー upsert、AE 作法)。
-    /// - Cancel: transient を外すだけ(Esc・空クリック)。
-    fn update_gizmo(&mut self, event: stage::GizmoDrag) {
-        match event.phase {
-            stage::GizmoPhase::Start { property } => {
-                let Ok(Some(composition)) = self.doc.view().composition() else {
-                    return;
-                };
-                self.gizmo_drag = Some(GizmoShellDrag {
-                    layer: event.layer,
-                    property,
-                    playhead_frame: self.session.playhead,
-                    fps: composition.fps,
-                    moved: false,
-                });
-            }
-            stage::GizmoPhase::Move { value } => {
-                let Some(drag) = self.gizmo_drag.as_mut() else {
-                    return;
-                };
-                let layer = drag.layer;
-                drag.moved = true;
-                match value {
-                    // 第6波(anchor drag pairing): anchor と補償済み position を
-                    // 対で transient へ書く(`GizmoValue::Anchor` doc「shell は
-                    // 両方を同時に書く」— 片方だけ書くと絵が跳ぶ)。
-                    stage::GizmoValue::Anchor { anchor, position } => {
-                        if let Ok(anchor_property) =
-                            PropertyId::new(stage::GizmoProperty::Anchor.property_name())
-                        {
-                            self.doc.set_transient(layer, anchor_property, Value::Vec2(anchor));
-                        }
-                        if let Ok(position_property) =
-                            PropertyId::new(stage::GizmoProperty::Position.property_name())
-                        {
-                            self.doc.set_transient(layer, position_property, Value::Vec2(position));
-                        }
-                    }
-                    other => {
-                        let Ok(property) = PropertyId::new(other.property().property_name()) else {
-                            return;
-                        };
-                        self.doc.set_transient(layer, property, gizmo_store_value(other));
-                    }
-                }
-            }
-            stage::GizmoPhase::Commit { value } => {
-                let Some(drag) = self.gizmo_drag.take() else {
-                    return;
-                };
-                match value {
-                    // anchor drag の確定: 2 property(anchor/position)を
-                    // `Document::apply_all` で**1 undo**へ束ねる(1 gesture =
-                    // 1 commit の契約は変わらない — `GizmoValue::Anchor` doc)。
-                    stage::GizmoValue::Anchor { anchor, position } => {
-                        let (Ok(anchor_property), Ok(position_property)) = (
-                            PropertyId::new(stage::GizmoProperty::Anchor.property_name()),
-                            PropertyId::new(stage::GizmoProperty::Position.property_name()),
-                        ) else {
-                            return;
-                        };
-                        let store = self.doc.view();
-                        let anchor_base = store.track(drag.layer, &anchor_property).ok().flatten();
-                        let position_base =
-                            store.track(drag.layer, &position_property).ok().flatten();
-                        let mut write_error = None;
-                        match (
-                            inspector_pane::edited_value_track(
-                                anchor_base.as_ref(),
-                                drag.playhead_frame,
-                                drag.fps,
-                                Value::Vec2(anchor),
-                            ),
-                            inspector_pane::edited_value_track(
-                                position_base.as_ref(),
-                                drag.playhead_frame,
-                                drag.fps,
-                                Value::Vec2(position),
-                            ),
-                        ) {
-                            (Ok(anchor_track), Ok(position_track)) => {
-                                let intents = [
-                                    Intent::SetTrack {
-                                        layer: drag.layer,
-                                        property: anchor_property.clone(),
-                                        track: anchor_track,
-                                    },
-                                    Intent::SetTrack {
-                                        layer: drag.layer,
-                                        property: position_property.clone(),
-                                        track: position_track,
-                                    },
-                                ];
-                                if let Err(error) = self.doc.apply_all(intents) {
-                                    write_error = Some(format!("値を書けない: {error}"));
-                                }
-                            }
-                            (Err(error), _) | (_, Err(error)) => write_error = Some(error),
-                        }
-                        self.doc.clear_transient(drag.layer, &anchor_property);
-                        self.doc.clear_transient(drag.layer, &position_property);
-                        if let Some(error) = write_error {
-                            self.status = Some(error);
-                        }
-                    }
-                    other => {
-                        let Ok(property) = PropertyId::new(other.property().property_name()) else {
-                            return;
-                        };
-                        // transient は `track()` に映らないので、ここで読むのは drag
-                        // 開始前の本 track そのもの(`finish_field_drag` と同じ注記)。
-                        let base_track = self.doc.view().track(drag.layer, &property).ok().flatten();
-                        let mut write_error = None;
-                        match inspector_pane::edited_value_track(
-                            base_track.as_ref(),
-                            drag.playhead_frame,
-                            drag.fps,
-                            gizmo_store_value(other),
-                        ) {
-                            Ok(track) => {
-                                if let Err(error) = self.doc.apply(Intent::SetTrack {
-                                    layer: drag.layer,
-                                    property: property.clone(),
-                                    track,
-                                }) {
-                                    write_error = Some(format!("値を書けない: {error}"));
-                                }
-                            }
-                            Err(error) => write_error = Some(error),
-                        }
-                        // 書き込み失敗時も overlay は必ず外す(`finish_field_drag` と
-                        // 同じ — overlay を残さない)。
-                        self.doc.clear_transient(drag.layer, &property);
-                        if let Some(error) = write_error {
-                            self.status = Some(error);
-                        }
-                    }
-                }
-            }
-            stage::GizmoPhase::Cancel => {
-                self.cancel_gizmo_drag();
-            }
-        }
-    }
 
-    /// Esc 連鎖用(clip/key/loop の並び — `Message::EscapePressed` 腕)。
-    /// transient overlay は edit timeline に触れていないので、外すだけで復元が
-    /// 成立する(`inspector_pane::cancel_field_interaction` と同型)。冪等 —
-    /// canvas 側の Esc(`GizmoPhase::Cancel`)と二重に届いても2回目は `false`。
-    fn cancel_gizmo_drag(&mut self) -> bool {
-        let Some(drag) = self.gizmo_drag.take() else {
-            return false;
-        };
-        if drag.moved {
-            // anchor drag は2 property を対で transient へ書いている
-            // (`update_gizmo` の `Move` 分岐)ので、cancel も両方外す —
-            // 片方だけ残すと絵が跳んだまま止まる。
-            if matches!(drag.property, stage::GizmoProperty::Anchor) {
-                if let Ok(property) = PropertyId::new(stage::GizmoProperty::Anchor.property_name()) {
-                    self.doc.clear_transient(drag.layer, &property);
-                }
-                if let Ok(property) = PropertyId::new(stage::GizmoProperty::Position.property_name()) {
-                    self.doc.clear_transient(drag.layer, &property);
-                }
-            } else if let Ok(property) = PropertyId::new(drag.property.property_name()) {
-                self.doc.clear_transient(drag.layer, &property);
-            }
-        }
-        true
-    }
 
     // ---- Timeline マーカーレーン(B19、第6波、`timeline::markers` 冒頭 doc の
     // 統合手順2「Message::Marker 畳み+JumpTo 先取り」) ----
 
-    /// `Message::Marker` の畳み。**canvas 差し替え・input 優先順位・実際の
-    /// mouse capture(`MarkerMessage::Grabbed`/`DragMoved`/`DragReleased`/
-    /// `DragCancelled` を publish する側)は未結線**(`motolii-timeline-pane`
-    /// の `canvas.rs`/`input.rs` が `pub(crate)` のため、EXACT TARGET
-    /// 「pane crate は読み専用」の範囲で shell からは触れない — RETURN の
-    /// API 要求参照)。この関数は Document 書き込みの意味だけを完結させる
-    /// (keymap M=AddAtPlayhead は実際に届く経路、他は将来 canvas 側が
-    /// publish するようになった時にそのまま機能する形で用意してある)。
-    fn update_marker(&mut self, message: timeline::markers::MarkerMessage) {
-        use timeline::markers::MarkerMessage;
-        match message {
-            MarkerMessage::AddAtPlayhead => {
-                let Some(fps) = self.composition().map(|c| c.fps) else {
-                    return;
-                };
-                let markers = self.markers();
-                if let Some(next) =
-                    timeline::markers::added_at_playhead(&markers, self.session.playhead, fps)
-                {
-                    if let Err(error) = self.doc.apply(Intent::SetMarkers { markers: next }) {
-                        self.status = Some(format!("マーカーを置けない: {error}"));
-                    }
-                }
-            }
-            // S2 発注 #22 の2入口目(ルーラ locator lane 右クリック)。
-            // `AddAtPlayhead` と同じ意味・同じ Intent、位置だけ呼び出し元
-            // (`Message::AddMarkerAt(frame)`)が決める。
-            MarkerMessage::AddAtFrame(frame) => {
-                let Some(fps) = self.composition().map(|c| c.fps) else {
-                    return;
-                };
-                let markers = self.markers();
-                if let Some(next) = timeline::markers::added_at_frame(&markers, frame, fps) {
-                    if let Err(error) = self.doc.apply(Intent::SetMarkers { markers: next }) {
-                        self.status = Some(format!("マーカーを置けない: {error}"));
-                    }
-                }
-            }
-            // JumpTo は先取り(`ScrubTo`/`timeline_pane::Message::ScrubTo` と
-            // 同じ経路 — playhead を直接書く、正典 §5「K/J ナビの補完」)。
-            MarkerMessage::JumpTo(frame) => self.session.playhead = frame,
-            MarkerMessage::Remove(index) => {
-                let markers = self.markers();
-                if let Some(next) = timeline::markers::removed(&markers, index) {
-                    if let Err(error) = self.doc.apply(Intent::SetMarkers { markers: next }) {
-                        self.status = Some(format!("マーカーを削除できない: {error}"));
-                    }
-                }
-            }
-            MarkerMessage::Grabbed { index, at_frame } => {
-                let Some(fps) = self.composition().map(|c| c.fps) else {
-                    return;
-                };
-                let markers = self.markers();
-                self.marker_drag = timeline::markers::MarkerDrag::start(&markers, index, at_frame, fps);
-            }
-            MarkerMessage::DragMoved { at_frame } => {
-                let Some(fps) = self.composition().map(|c| c.fps) else {
-                    return;
-                };
-                let duration = self.comp_duration();
-                if let Some(drag) = self.marker_drag.as_mut() {
-                    drag.dragged(at_frame, fps, duration);
-                }
-            }
-            MarkerMessage::DragReleased => {
-                if let Some(drag) = self.marker_drag.take() {
-                    if let Some(next) = drag.finish() {
-                        if let Err(error) = self.doc.apply(Intent::SetMarkers { markers: next }) {
-                            self.status = Some(format!("マーカーを移動できない: {error}"));
-                        }
-                    }
-                }
-            }
-            MarkerMessage::DragCancelled => {
-                self.marker_drag = None;
-            }
-        }
-    }
 
 
     // ---- Inspector の drag-to-scrub ----
@@ -2566,318 +1312,42 @@ impl Shell {
 
     // ---- 運転席が見るための口。**書けない** ----
 
-    pub fn layer_count(&self) -> usize {
-        self.doc.view().layers().len()
-    }
-
-    /// `StoreView` をそのまま返す(読むだけ)。**運転席の検分器具用**
-    /// (`layer_count`/`composition` と同じ「運転席が見るための口」の1つ) —
-    /// G1(裁定174)の ungroup 数値証明(`tests/suite/group_drive.rs`)が
-    /// `resolve()`/`local_transform()` を直接叩くのに使う。`view` という名前は
-    /// 既に `Shell::view() -> Element` が使っているので `store_view` にした。
-    pub fn store_view(&self) -> StoreView<'_> {
-        self.doc.view()
-    }
-
-    fn comp_duration(&self) -> i64 {
-        self.doc
-            .view()
-            .composition()
-            .ok()
-            .flatten()
-            .map(|c| c.duration_frames)
-            .unwrap_or(0)
-    }
-
-    pub fn can_undo(&self) -> bool {
-        self.doc.can_undo()
-    }
-
-    /// 直近の Save As が書いた path(未保存・Save a Copy 直後は前回のまま —
-    /// `Message::SaveACopyRequested` doc 参照)。**運転席が見るための口**。
-    pub fn current_path(&self) -> Option<&std::path::Path> {
-        self.current_path.as_deref()
-    }
-
-    /// 未保存の変更があるか。**運転席が見るための口**(`Shell::is_dirty` の
-    /// 公開版 — MB-1、`saved_revision` フィールド doc 参照)。
-    pub fn is_project_dirty(&self) -> bool {
-        self.is_dirty()
-    }
-
-    /// `Message::Redo` の可否。**運転席が見るための口**(`can_undo` と同じ形)。
-    /// drag-to-scrub がキャンセル時に redo 空間を汚していないかを運転席から
-    /// 確かめるのに使う(`inspector_drive.rs`)。
-    pub fn can_redo(&self) -> bool {
-        self.doc.can_redo()
-    }
-
-    pub fn status(&self) -> Option<&str> {
-        self.status.as_deref()
-    }
-
-    /// 描き上がったフレームの識別。同じなら描き直していない。
-    pub fn frame_token(&self) -> Option<(DisplayRevision, i64)> {
-        self.frame
-            .as_ref()
-            .map(|frame| (frame.revision.clone(), frame.playhead))
-    }
-
-    /// 今の comp 設定。**screenshot 器具**が Stage の letterbox を組むのに使う
-    /// (`timeline_pane::TimelinePane::new` も同じ `composition()` 呼び出しをする)。
-    pub fn composition(&self) -> Option<Composition> {
-        self.doc.view().composition().ok().flatten()
-    }
-
-    /// 今の Session(選択・再生位置)。**読むだけ** — `Session` 自体のフィールドは
-    /// pub だが、書ける口は `Message` 経由の `update()` だけ。
-    pub fn session(&self) -> &Session {
-        &self.session
-    }
-
-    /// 市松トグルの今の状態。**screenshot 器具**が「実際に画面へ出る絵」を
-    /// 再現するのに使う(`frame_rgba()` は市松を絶対に乗せない生値なので、
-    /// この状態と `settings_pane::composite_checkerboard` を screenshot 側が
-    /// 自分で組み合わせる必要がある — `lib.rs::build_stage_presenter_rgba` と
-    /// 同じ形)。
-    pub fn checkerboard_enabled(&self) -> bool {
-        self.checkerboard
-    }
-
-    /// Settings 窓の台帳の読み口(S2、裁定182/188)。旧 `settings_panel_open()`
-    /// (screenshot 器具専用の bool)は廃止 — Settings は OS 窓になり、単窓
-    /// オフスクリーン合成の screenshot 器具の**対象外**(`screenshot.rs` 冒頭
-    /// doc の明示コメント参照)。この口は窓台帳の検分
-    /// (`tests/suite/window_drive.rs`/`q0_fence.rs`)が使う。
-    pub fn settings_window(&self) -> Option<iced::window::Id> {
-        self.settings_window
-    }
-
-    /// Browser パネルの開閉状態(B3)。**screenshot 器具専用**の読み口
-    /// (`checkerboard_enabled` と同じ形) — `--browser-open` CLI フラグ
-    /// (`main.rs`)経由で `Message::Browser(browser_pane::Message::
-    /// ToggleBrowserPanel)` を実際に通した後の状態を screenshot.rs が読める
-    /// ようにする。フラグそのものは `browser::PaneState::is_open` に住む
-    /// (`state.rs` 冒頭 doc「Shell 側に per-variant 分岐を増やさない」) —
-    /// この口は単なる薄い委譲。
-    pub fn browser_panel_open(&self) -> bool {
-        self.browser.is_open()
-    }
-
-    /// Export 窓の台帳の読み口(B09、第6波)。`settings_window()` と同型 —
-    /// 運転席(`tests/suite/export_drive.rs`)が open/close の状態遷移を読む。
-    pub fn export_window(&self) -> Option<iced::window::Id> {
-        self.export_window
-    }
-
-    /// Stage 方眼シート束のトグル状態の読み口(B22、第6波)。運転席が
-    /// 「View メニューを押す → トグルが反転する」を確かめる口。
-    pub fn sheet_toggles(&self) -> stage::SheetToggles {
-        self.sheet_toggles
-    }
 
 
 
-    /// Stage 下縁状態帯(裁定163)の今のプレビュー解像度 cap。運転席/試験が
-    /// 見るための口(`checkerboard_enabled`/`observation` と同じ形)。
-    pub fn resolution_cap(&self) -> stage::PreviewResolutionCap {
-        self.resolution_cap
-    }
-
-    /// **裁定166 EXACT TARGET (b) の読み口**: shader Primitive へ実際に渡る
-    /// RGBA の寸法。`frame_rgba()`(常に comp 解像度の export 真値)とは別に、
-    /// 「今 Stage へ upload する寸法」だけを独立に確かめられるようにする
-    /// (`resolution_cap()` と同じ形の試験用アクセサ)。
-    pub fn stage_presenter_dims(&self) -> Option<(u32, u32)> {
-        self.frame
-            .as_ref()
-            .map(|frame| (frame.presenter_width, frame.presenter_height))
-    }
-
-    /// Stage presenter の内容が変わった回数(裁定166 EXACT TARGET 1 の CPU 側
-    /// の鍵)。shader Pipeline はこれを「前回アップロードした世代」と比較して
-    /// `queue.write_texture` を省くかどうか決める(`StagePresenterPipeline::
-    /// upload` 参照)。運転席/試験が「同じ内容の再描画では世代が動かない」
-    /// ことを確かめる口。
-    pub fn stage_presenter_generation(&self) -> Option<u64> {
-        self.frame.as_ref().map(|frame| frame.presenter_generation)
-    }
-
-    /// **裁定171 v2 M4 / 残コスト調査(§1-4)の読み口**: 今の presenter が
-    /// GPU 高速路(`PresenterSource::Gpu`)か CPU フォールバック
-    /// (`PresenterSource::Cpu`)かを、実際に GPU device を動かさずに確かめる
-    /// (`metrics::presenter_blits()` は shader Pipeline の実描画時にしか
-    /// 増えない——`iced_test::simulator` は `Widget::draw` を叩かないため
-    /// headless 試験では観測できない、`STAGE_PRESENTER_WGSL` doc 参照。この
-    /// アクセサは `Shell::refresh_frame` が選んだ経路を `RenderedFrame` から
-    /// 直接読むだけなので headless でも確かな証拠になる)。
-    pub fn stage_presenter_is_gpu_backed(&self) -> Option<bool> {
-        self.frame
-            .as_ref()
-            .map(|frame| matches!(frame.presenter_source, PresenterSource::Gpu(_)))
-    }
-
-    /// 今の Timeline の行。運転席が「層3枚の行が立つ」「選択が行と一致する」を
-    /// 確かめる口(pane 自身が使う投影と同じ関数を呼ぶ)。
-    pub fn timeline_rows(&self) -> Vec<timeline_pane::RowProjection> {
-        timeline_pane::rows(&self.doc.view(), &self.session)
-    }
-
-    /// 今の property 行(キー行、第2波 T3)。選択 layer がキーを持つ property を
-    /// 持たなければ空。運転席/`screenshot.rs` 器具が pane 自身と同じ投影を読む口
-    /// (`timeline_rows` と同じ形)。
-    pub fn timeline_property_rows(&self) -> Vec<timeline_pane::PropertyRowProjection> {
-        let fps = self.composition().map(|c| c.fps);
-        timeline_pane::property_rows(&self.doc.view(), &self.session, fps)
-    }
-
-    /// 今のマーカー一覧。**screenshot 器具**が Timeline のマーカー線を描くのに使う
-    /// (`timeline_pane::TimelinePane::new` も同じ `markers()` 呼び出しをする)。
-    pub fn markers(&self) -> Vec<motolii_store::Marker> {
-        self.doc.view().markers().unwrap_or_default()
-    }
-
-    /// 素材台帳の一覧投影(裁定162 B1)。運転席/`browser_drive.rs` が
-    /// 「AdmitPaths → 台帳に載る」を確かめる口(`timeline_rows`/`markers` と
-    /// 同じ形 — pane 側の projection 関数をそのまま呼ぶだけ)。
-    pub fn assets(&self) -> Vec<browser_pane::AssetListItem> {
-        browser_pane::model::assets_with_status(&self.doc.view(), &|id| {
-            self.asset_status.get(&id).cloned()
-        })
-    }
-
-    /// 今の Inspector 投影。運転席が「選択→行が出る」「編集→store が変わる」を
-    /// 確かめる口(pane 自身が `view()` で使う投影と同じ関数を呼ぶ)。
-    pub fn inspector_selection(&self) -> Option<inspector_pane::SelectionProjection> {
-        inspector_pane::project(&self.doc.view(), &self.session)
-            .ok()
-            .flatten()
-    }
-
-    /// 今の Inspector 値セル編集下書き。運転席が「click(ドラッグせず release)
-    /// → type 編集」への切り替わりを確かめる口(`pane` 自身が `view()` で
-    /// 使うのと同じ状態)。
-    pub fn inspector_field_draft(&self) -> Option<&FieldDraft> {
-        self.inspector_field_draft.as_ref()
-    }
-
-    /// 今のデザイン値。運転席がトークン再読込を確かめる口。
-    pub fn tokens(&self) -> &Tokens {
-        &self.tokens
-    }
-
-    /// `ui_scale` を適用した寸法。**全 pane・全 instrument(`screenshot.rs` 含む)は
-    /// ここ経由で寸法を読む** — `tokens.dims` を直接読まない。`ui_scale` を掛ける
-    /// のはこの関数(=[`tokens::Dimensions::scaled`] を呼ぶ唯一の場所)だけ
-    /// (発注書「適用点1箇所」)。
-    pub fn dims(&self) -> Dimensions {
-        self.tokens.dims.scaled(self.tokens.ui_scale)
-    }
-
-    /// 現在の色トークン。`main.rs` の `iced::application(...).theme(...)` 結線
-    /// (`tokens::theme_from_colors` 参照)が窓の外から読む唯一の口 — `dims()`
-    /// と対になる公開アクセサ(`tokens` フィールド自体は private のまま)。
-    pub fn colors(&self) -> Colors {
-        self.tokens.colors
-    }
-
-    /// `TimelinePane` の組み立て。`view()` はこれを呼ぶだけ(第2波T5、正典
-    /// §5.5「プレビューは毎フレーム」) — ドラッグ preview(`self.timeline` =
-    /// `timeline_pane::PaneState`)を投影へ焼き込む経路を運転席が検査できる
-    /// よう関数化した。**`TimelinePane::new` 自体のシグネチャ・既存呼び出し元は
-    /// 汚さない** — `with_key_drag_active` と同じ「薄い builder を積み増す
-    /// だけ」の形をもう2つ足しただけ。裁定160 切片7で `self.timeline_drag`/
-    /// `timeline_key_drag` の2フィールド直読みから `self.timeline`(pane crate
-    /// 所有の `PaneState`)経由の読み取り専用アクセサへ差し替えた
-    /// (`clip_preview`/`key_preview`/`key_drag_active`、値は無改変)。
-    pub fn build_timeline_pane(&self) -> timeline_pane::TimelinePane {
-        let store = self.doc.view();
-        // `ui_scale` 適用済み(`Shell::dims` — 適用点1箇所)。
-        let dims = self.dims();
-        let colors = self.tokens.colors;
-        timeline_pane::TimelinePane::new(&store, &self.session, dims, colors, self.keyboard_modifiers)
-            // 第2波T4: `timeline::key_rows` が継続イベント(move/release/右
-            // クリック)を拾うかどうかの唯一の判断材料
-            // (`TimelinePane::with_key_drag_active` の doc comment 参照)。
-            .with_key_drag_active(self.timeline.key_drag_active())
-            .with_clip_preview(self.timeline.clip_preview())
-            .with_key_preview(self.timeline.key_preview())
-            // B21+B18(第5波結線): 作業範囲/ループの状態は `PaneState` が持ち
-            // (`work_area.rs` doc「型の置き場」)、絵と当たりへはこの読み口
-            // 経由で毎フレーム運ぶ(`with_playing` と同じ薄い builder)。
-            .with_work_area(self.timeline.work_area(), self.timeline.loop_enabled())
-            // 第6波(rename 統合手順1): inline rename の下書きを rail の
-            // `text_input` へ運ぶ(`rail.rs` の `pane.rename` 読み — 供給は
-            // supervisor の仕事、`write.rs` 冒頭 doc 参照)。
-            .with_rename(
-                self.timeline
-                    .rename_draft()
-                    .map(|(layer, draft)| (layer, draft.to_owned())),
-            )
-            // 波形取得状態(TL7 統合手順3、S2 発注 #17「shell 側の呼び出し
-            // 経路が無い」の穴埋め)。`self.timeline.waveforms()` を
-            // `with_rename` と同じ「薄い builder で読み取り専用に運ぶだけ」
-            // の形でそのまま渡す(実際の要求発火は `poll_waveform_fetches`)。
-            .with_waveforms(self.timeline.waveforms().clone())
-    }
-
-    /// 音声 layer の波形取得を計画し、必要な分だけ非同期に発火する(TL7
-    /// 統合手順1・5、S2 発注 #17「shell 側の呼び出し経路が無い」の穴埋め)。
-    /// `Shell::update` の末尾から毎メッセージ後に呼ぶ(`refresh_frame` と
-    /// 同じ「都度呼んでも安いので判断を持たせない」形 — `plan_waveforms`
-    /// 自体が `Loading`/`Ready` を見て何もしない側へ落ちるので、音声 layer が
-    /// 無い/既に取得済みの通常のフレームでは実質 no-op)。
-    ///
-    /// **画面幅は未知(EXACT TARGET 外)**: 実際の bar 幅は canvas 描画時の
-    /// window 幅に依存する(`ruler.rs`/`canvas.rs` の `bounds.width`)が、
-    /// `Shell` は window サイズを保持していない(`grep -n window_size` 0件、
-    /// 実測)。ここでは固定の目安幅
-    /// (`NOMINAL_WAVEFORM_WIDTH_PX`)を渡す — bucket 数が実窓とズレるのは
-    /// 承知の上(発注書「波形は呼び出し経路の説明で足りる。描画の正しさは
-    /// 窓が要るので【未確認】のまま残してよい」)。呼び出し経路(plan→
-    /// Task::perform→WaveformFetched→Ready→canvas 描画)自体は実働する。
-    fn poll_waveform_fetches(&mut self) -> Task<Message> {
-        const NOMINAL_WAVEFORM_WIDTH_PX: f32 = 960.0;
-        let store = self.doc.view();
-        let rows = timeline_pane::audio_rows(&store);
-        if rows.is_empty() {
-            return Task::none();
-        }
-        let requests = self.timeline.plan_waveforms(&rows, |_layer| NOMINAL_WAVEFORM_WIDTH_PX);
-        if requests.is_empty() {
-            return Task::none();
-        }
-        Task::batch(requests.into_iter().map(|(layer, path, buckets)| {
-            Task::perform(
-                async move { motolii_media::waveform_peaks(path, buckets) },
-                move |result| match result {
-                    Ok(peaks) => Message::Timeline(timeline_pane::Message::WaveformFetched {
-                        layer,
-                        buckets,
-                        peaks,
-                    }),
-                    Err(_) => Message::Timeline(timeline_pane::Message::WaveformFetchFailed {
-                        layer,
-                        buckets,
-                    }),
-                },
-            )
-        }))
-    }
 
 
 
-    /// 作業範囲の現在値(B18、第5波結線)。運転席(`tests/suite/`)が
-    /// 「B/N・ループ帯ドラッグ → 範囲が立つ」「Esc → 復元」を検分する読み口
-    /// (`timeline_rows`/`markers` と同じ「pane 自身が読むのと同じ状態」の形)。
-    pub fn timeline_work_area(&self) -> Option<timeline_pane::WorkArea> {
-        self.timeline.work_area()
-    }
 
-    /// ループ on/off の現在値(同上 — `advance_playback_tick` が読むのと同じ値)。
-    pub fn timeline_loop_enabled(&self) -> bool {
-        self.timeline.loop_enabled()
-    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

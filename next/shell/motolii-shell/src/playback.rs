@@ -221,3 +221,205 @@ impl Shell {
 
 }
 
+use iced::Task;
+use crate::Message;
+
+impl Shell {
+    /// 今の playhead を comp の fps で時刻へ写す。comp が無い/fps が壊れているなら
+    /// `None`(M16: panic しない)。
+    pub(crate) fn time_at_playhead(&self) -> Option<RationalTime> {
+        let composition = self.doc.view().composition().ok().flatten()?;
+        RationalTime::try_from_frame(self.session.playhead, composition.fps).ok()
+    }
+
+    /// 今の Timeline の行。運転席が「層3枚の行が立つ」「選択が行と一致する」を
+    /// 確かめる口(pane 自身が使う投影と同じ関数を呼ぶ)。
+    pub fn timeline_rows(&self) -> Vec<timeline_pane::RowProjection> {
+        timeline_pane::rows(&self.doc.view(), &self.session)
+    }
+
+    /// 今の property 行(キー行、第2波 T3)。選択 layer がキーを持つ property を
+    /// 持たなければ空。運転席/`screenshot.rs` 器具が pane 自身と同じ投影を読む口
+    /// (`timeline_rows` と同じ形)。
+    pub fn timeline_property_rows(&self) -> Vec<timeline_pane::PropertyRowProjection> {
+        let fps = self.composition().map(|c| c.fps);
+        timeline_pane::property_rows(&self.doc.view(), &self.session, fps)
+    }
+
+    /// 今のマーカー一覧。**screenshot 器具**が Timeline のマーカー線を描くのに使う
+    /// (`timeline_pane::TimelinePane::new` も同じ `markers()` 呼び出しをする)。
+    pub fn markers(&self) -> Vec<motolii_store::Marker> {
+        self.doc.view().markers().unwrap_or_default()
+    }
+
+    /// `TimelinePane` の組み立て。`view()` はこれを呼ぶだけ(第2波T5、正典
+    /// §5.5「プレビューは毎フレーム」) — ドラッグ preview(`self.timeline` =
+    /// `timeline_pane::PaneState`)を投影へ焼き込む経路を運転席が検査できる
+    /// よう関数化した。**`TimelinePane::new` 自体のシグネチャ・既存呼び出し元は
+    /// 汚さない** — `with_key_drag_active` と同じ「薄い builder を積み増す
+    /// だけ」の形をもう2つ足しただけ。裁定160 切片7で `self.timeline_drag`/
+    /// `timeline_key_drag` の2フィールド直読みから `self.timeline`(pane crate
+    /// 所有の `PaneState`)経由の読み取り専用アクセサへ差し替えた
+    /// (`clip_preview`/`key_preview`/`key_drag_active`、値は無改変)。
+    pub fn build_timeline_pane(&self) -> timeline_pane::TimelinePane {
+        let store = self.doc.view();
+        // `ui_scale` 適用済み(`Shell::dims` — 適用点1箇所)。
+        let dims = self.dims();
+        let colors = self.tokens.colors;
+        timeline_pane::TimelinePane::new(&store, &self.session, dims, colors, self.keyboard_modifiers)
+            // 第2波T4: `timeline::key_rows` が継続イベント(move/release/右
+            // クリック)を拾うかどうかの唯一の判断材料
+            // (`TimelinePane::with_key_drag_active` の doc comment 参照)。
+            .with_key_drag_active(self.timeline.key_drag_active())
+            .with_clip_preview(self.timeline.clip_preview())
+            .with_key_preview(self.timeline.key_preview())
+            // B21+B18(第5波結線): 作業範囲/ループの状態は `PaneState` が持ち
+            // (`work_area.rs` doc「型の置き場」)、絵と当たりへはこの読み口
+            // 経由で毎フレーム運ぶ(`with_playing` と同じ薄い builder)。
+            .with_work_area(self.timeline.work_area(), self.timeline.loop_enabled())
+            // 第6波(rename 統合手順1): inline rename の下書きを rail の
+            // `text_input` へ運ぶ(`rail.rs` の `pane.rename` 読み — 供給は
+            // supervisor の仕事、`write.rs` 冒頭 doc 参照)。
+            .with_rename(
+                self.timeline
+                    .rename_draft()
+                    .map(|(layer, draft)| (layer, draft.to_owned())),
+            )
+            // 波形取得状態(TL7 統合手順3、S2 発注 #17「shell 側の呼び出し
+            // 経路が無い」の穴埋め)。`self.timeline.waveforms()` を
+            // `with_rename` と同じ「薄い builder で読み取り専用に運ぶだけ」
+            // の形でそのまま渡す(実際の要求発火は `poll_waveform_fetches`)。
+            .with_waveforms(self.timeline.waveforms().clone())
+    }
+
+    /// 音声 layer の波形取得を計画し、必要な分だけ非同期に発火する(TL7
+    /// 統合手順1・5、S2 発注 #17「shell 側の呼び出し経路が無い」の穴埋め)。
+    /// `Shell::update` の末尾から毎メッセージ後に呼ぶ(`refresh_frame` と
+    /// 同じ「都度呼んでも安いので判断を持たせない」形 — `plan_waveforms`
+    /// 自体が `Loading`/`Ready` を見て何もしない側へ落ちるので、音声 layer が
+    /// 無い/既に取得済みの通常のフレームでは実質 no-op)。
+    ///
+    /// **画面幅は未知(EXACT TARGET 外)**: 実際の bar 幅は canvas 描画時の
+    /// window 幅に依存する(`ruler.rs`/`canvas.rs` の `bounds.width`)が、
+    /// `Shell` は window サイズを保持していない(`grep -n window_size` 0件、
+    /// 実測)。ここでは固定の目安幅
+    /// (`NOMINAL_WAVEFORM_WIDTH_PX`)を渡す — bucket 数が実窓とズレるのは
+    /// 承知の上(発注書「波形は呼び出し経路の説明で足りる。描画の正しさは
+    /// 窓が要るので【未確認】のまま残してよい」)。呼び出し経路(plan→
+    /// Task::perform→WaveformFetched→Ready→canvas 描画)自体は実働する。
+    pub(crate) fn poll_waveform_fetches(&mut self) -> Task<Message> {
+        const NOMINAL_WAVEFORM_WIDTH_PX: f32 = 960.0;
+        let store = self.doc.view();
+        let rows = timeline_pane::audio_rows(&store);
+        if rows.is_empty() {
+            return Task::none();
+        }
+        let requests = self.timeline.plan_waveforms(&rows, |_layer| NOMINAL_WAVEFORM_WIDTH_PX);
+        if requests.is_empty() {
+            return Task::none();
+        }
+        Task::batch(requests.into_iter().map(|(layer, path, buckets)| {
+            Task::perform(
+                async move { motolii_media::waveform_peaks(path, buckets) },
+                move |result| match result {
+                    Ok(peaks) => Message::Timeline(timeline_pane::Message::WaveformFetched {
+                        layer,
+                        buckets,
+                        peaks,
+                    }),
+                    Err(_) => Message::Timeline(timeline_pane::Message::WaveformFetchFailed {
+                        layer,
+                        buckets,
+                    }),
+                },
+            )
+        }))
+    }
+
+    /// 作業範囲の現在値(B18、第5波結線)。運転席(`tests/suite/`)が
+    /// 「B/N・ループ帯ドラッグ → 範囲が立つ」「Esc → 復元」を検分する読み口
+    /// (`timeline_rows`/`markers` と同じ「pane 自身が読むのと同じ状態」の形)。
+    pub fn timeline_work_area(&self) -> Option<timeline_pane::WorkArea> {
+        self.timeline.work_area()
+    }
+
+    /// ループ on/off の現在値(同上 — `advance_playback_tick` が読むのと同じ値)。
+    pub fn timeline_loop_enabled(&self) -> bool {
+        self.timeline.loop_enabled()
+    }
+
+
+
+    /// `Shell::update` から委譲される領域別 dispatch(2026-08-23 SP-1 レーン、
+    /// `docs/reviews/2026-08-23-shell-split-plan.md` の続き)。**中身は無改変** —
+    /// 元の巨大な `update()` match の腕をそのままここへ移しただけ(裁定どおり
+    /// 移送と委譲だけ、バグ修正・整形は混ぜない)。渡された `message` がこの
+    /// 領域の variant でなければ `Err(message)` で突き返す — `crate::dispatch_message`
+    /// の chain-of-responsibility が次の領域dispatchへ渡す。**新しい Message 枝は
+    /// ここへ腕を1本足すだけで済み、`lib.rs` は触らない**(MC-1 と同じ効能)。
+    pub(crate) fn dispatch_playback(&mut self, message: Message) -> Result<Task<Message>, Message> {
+        let mut task = Task::none();
+        match message {
+            Message::ScrubTo(frame) => self.scrub_to(frame),
+            Message::Timeline(msg) => match msg {
+                timeline_pane::Message::Select(layer) => self.click_select_layer(layer),
+                timeline_pane::Message::ScrubTo(frame) => self.scrub_to(frame),
+                timeline_pane::Message::ToggleMute(layer) => self.toggle_layer_hidden(layer),
+                timeline_pane::Message::ToggleSolo(layer) => self.toggle_layer_solo(layer),
+                timeline_pane::Message::ToggleLock(layer) => self.toggle_layer_lock(layer),
+                // transport 帯(裁定180)— 意味は shell の既存腕そのもの(5例外と
+                // 同じ先取りの型。pane 側 `PaneState::update` は no-op)。
+                timeline_pane::Message::TogglePlayback => self.toggle_playback(),
+                timeline_pane::Message::StepPlayhead(delta) => self.step_playhead(delta),
+                timeline_pane::Message::JumpPlayheadToStart => self.session.playhead = 0,
+                timeline_pane::Message::JumpPlayheadToEnd => {
+                    let duration = self.composition().map(|c| c.duration_frames).unwrap_or(0);
+                    self.session.playhead = timeline::nav::comp_end_frame(duration);
+                }
+                // JKL シャトル(B21、第5波結線)— transport 4腕と同じ「shell
+                // 先取りの例外」(`timeline_pane::Message::Shuttle` doc): 実時間
+                // 再生の clock は shell(A2)が持つので、状態遷移と tick 駆動を
+                // ここで畳む(`PaneState::update` では no-op)。
+                timeline_pane::Message::Shuttle(command) => self.apply_shuttle(command),
+                // ルーラ locator lane 右クリック(S2 発注 #22「マーカー追加
+                // UI が無い」の穴埋め、2入口目)— キーボード M
+                // (`Message::Marker(MarkerMessage::AddAtPlayhead)`)と同じ
+                // `update_marker` 経路へ畳む(S6 併存、裁定195)。
+                timeline_pane::Message::AddMarkerAt(frame) => {
+                    self.update_marker(timeline::markers::MarkerMessage::AddAtFrame(frame))
+                }
+                other => {
+                    if let Some(reason) =
+                        self.timeline.update(other, &mut self.doc, &mut self.session, self.keyboard_modifiers)
+                    {
+                        self.status = Some(reason);
+                    }
+                }
+            },
+            Message::StepPlayhead(delta) => self.step_playhead(delta),
+            Message::JumpPlayheadToStart => self.session.playhead = 0,
+            Message::JumpPlayheadToEnd => {
+                let duration = self.composition().map(|c| c.duration_frames).unwrap_or(0);
+                self.session.playhead = timeline::nav::comp_end_frame(duration);
+            }
+            Message::JumpMeaningPoint { direction, layer_only } => {
+                self.jump_meaning_point(direction, layer_only);
+            }
+            Message::JumpClipEdge(edge) => self.jump_clip_edge(edge),
+            Message::JumpToWorkAreaStart => {
+                if let Some(area) = self.timeline.work_area() {
+                    self.session.playhead = area.first_frame();
+                }
+            }
+            Message::JumpToWorkAreaEnd => {
+                if let Some(area) = self.timeline.work_area() {
+                    self.session.playhead = area.last_frame();
+                }
+            }
+            Message::TogglePlayback => self.toggle_playback(),
+            Message::PlaybackTick => self.advance_playback_tick(),
+            other => return Err(other),
+        }
+        Ok(task)
+    }
+}

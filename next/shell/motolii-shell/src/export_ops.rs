@@ -566,3 +566,23 @@ pub fn run_export_job_for_test(
     let cancel = Cancel::new();
     run_export_job(&spec, &cancel, |_| {})
 }
+
+impl Shell {
+
+    /// `Shell::update` から委譲される領域別 dispatch(2026-08-23 SP-1 レーン、
+    /// `docs/reviews/2026-08-23-shell-split-plan.md` の続き)。**中身は無改変** —
+    /// 元の巨大な `update()` match の腕をそのままここへ移しただけ(裁定どおり
+    /// 移送と委譲だけ、バグ修正・整形は混ぜない)。渡された `message` がこの
+    /// 領域の variant でなければ `Err(message)` で突き返す — `crate::dispatch_message`
+    /// の chain-of-responsibility が次の領域dispatchへ渡す。**新しい Message 枝は
+    /// ここへ腕を1本足すだけで済み、`lib.rs` は触らない**(MC-1 と同じ効能)。
+    pub(crate) fn dispatch_export_ops(&mut self, message: Message) -> Result<Task<Message>, Message> {
+        let mut task = Task::none();
+        match message {
+            Message::Export(msg) => task = self.update_export(msg),
+            Message::ExportProgressed(event) => self.update_export_progressed(event),
+            other => return Err(other),
+        }
+        Ok(task)
+    }
+}

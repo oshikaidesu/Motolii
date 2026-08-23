@@ -886,3 +886,409 @@ impl Shell {
     }
 }
 
+use motolii_store::Fps;
+use crate::settings_pane;
+use crate::settings_pane::BackgroundFieldDraft;
+
+/// [`ValueDragState`] が指す先。4つの家系(Composition/AutoSave/Background/
+/// TextDocumentStyle 色)を1つの `Option` へ束ねる — press は排他的に1つしか
+/// 起きない(`inspector_drag`/`inspector_text_style_drag` の排他と同じ形)。
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum ValueDragTarget {
+    CompWidth,
+    CompHeight,
+    CompFps,
+    CompDuration,
+    AutoSaveIntervalMinutes,
+    AutoSaveGenerations,
+    Background(settings_pane::BackgroundChannel),
+    Color(inspector_pane::color::ColorTarget, inspector_pane::color::ColorChannel),
+}
+
+/// 値セルのキャプション drag-to-scrub、進行中の一時状態。
+/// [`inspector_pane::FieldDragState`] と同じ形の縮小版 — Document の
+/// transient overlay は使わない(対象に `LayerId + PropertyId` の宛先が無い
+/// 家系がある)。**move 中は「既存の draft へ書き戻す」だけ** — text_input が
+/// 下書きから表示を読む既存の経路(`comp_field_cell`/`channel_cell` 等)を
+/// そのまま使うので、drag 中の値も Enter 編集中と同じ見た目になる。
+pub(crate) struct ValueDragState {
+    target: ValueDragTarget,
+    /// press 時点の値(対象ごとの「表示単位」— px・fps 小数・フレーム数・分・
+    /// 世代数・0..255 チャンネル)。
+    start_value: f64,
+    /// 最初の `PointerMoved` で確定する基準 x。`None` の間は click か drag か
+    /// まだ未確定(`FieldDragState::origin_x` と同じ理由)。
+    origin_x: Option<f32>,
+    /// 少なくとも1回動いたか。release の確定要否の判定に使う。
+    moved: bool,
+}
+
+/// [`ValueDragTarget`] ごとの px あたりの感度。`inspector_pane::transform::
+/// drag_step_per_pixel` と同じ「値の意味域に合わせた目安」(実窓較正はこの
+/// 発注の範囲外)。
+fn value_drag_step_per_pixel(target: ValueDragTarget) -> f64 {
+    match target {
+        // 解像度・尺は 1px = 1単位(Position と同じ 1:1、`drag_step_per_pixel` 参照)。
+        ValueDragTarget::CompWidth | ValueDragTarget::CompHeight | ValueDragTarget::CompDuration => 1.0,
+        // fps は 1..240 の域を 100px 強で走査できる程度。
+        ValueDragTarget::CompFps => 0.1,
+        // 間隔(分)は 1..1440 の域。
+        ValueDragTarget::AutoSaveIntervalMinutes => 0.5,
+        // 世代数は 1..50 の域、10px で1段動く。
+        ValueDragTarget::AutoSaveGenerations => 0.1,
+        // RGBA は 0..255、Position と同じ 1:1。
+        ValueDragTarget::Background(_) | ValueDragTarget::Color(_, _) => 1.0,
+    }
+}
+
+
+
+impl Shell {
+    /// `Shell::update` から委譲される領域別 dispatch(2026-08-23 SP-1 レーン、
+    /// `docs/reviews/2026-08-23-shell-split-plan.md` の続き)。**中身は無改変** —
+    /// 元の巨大な `update()` match の腕をそのままここへ移しただけ(裁定どおり
+    /// 移送と委譲だけ、バグ修正・整形は混ぜない)。渡された `message` がこの
+    /// 領域の variant でなければ `Err(message)` で突き返す — `crate::dispatch_message`
+    /// の chain-of-responsibility が次の領域dispatchへ渡す。**新しい Message 枝は
+    /// ここへ腕を1本足すだけで済み、`lib.rs` は触らない**(MC-1 と同じ効能)。
+    pub(crate) fn dispatch_inspector_ops(&mut self, message: Message) -> Result<Task<Message>, Message> {
+        let mut task = Task::none();
+        match message {
+            Message::Inspector(msg) => {
+                // 裁定217 連続量 drag 化(E-5)。`self.value_drag`(track を
+                // 持たない値向けの第2の経路、struct 冒頭 doc 参照)は
+                // Inspector の `inspector_drag`/`inspector_text_style_drag` と
+                // 同じ window 全体購読(`PointerMoved`/`PointerReleased`)を
+                // 共有する — `inspector_ops.rs::update_inspector` を触らずに
+                // 済むよう、ここで先取りして両方へ配る(`inspector_drag`/
+                // `inspector_text_style_drag` 自身は `update_inspector` 側で
+                // 従来どおり動く、片方が `None` の間は他方も no-op なので
+                // 二重発火しても無害)。
+                match &msg {
+                    inspector_pane::Message::PointerMoved(point) => self.continue_value_drag(*point),
+                    inspector_pane::Message::PointerReleased => self.finish_value_drag(),
+                    _ => {}
+                }
+                match msg {
+                    // 色欄(Fill/Stroke RGBA)のキャプション press。`color::Message`
+                    // に3つ目の variant を足したことで `inspector_ops.rs::
+                    // update_inspector` の `Message::Color(...)` 網羅 match が
+                    // 非網羅になるため、そちらへも1腕(no-op)を足した
+                    // (RETURN「lib.rs と input.rs に追加/変更した行」参照 —
+                    // ここで先取りするので実際にはそちらへは来ない)。
+                    inspector_pane::Message::Color(inspector_pane::color::Message::ChannelDragPressed(
+                        target,
+                        channel,
+                    )) => {
+                        self.start_value_drag(ValueDragTarget::Color(target, channel));
+                    }
+                    other => task = self.update_inspector(other),
+                }
+            }
+            other => return Err(other),
+        }
+        Ok(task)
+    }
+
+    /// 今の Inspector 投影。運転席が「選択→行が出る」「編集→store が変わる」を
+    /// 確かめる口(pane 自身が `view()` で使う投影と同じ関数を呼ぶ)。
+    pub fn inspector_selection(&self) -> Option<inspector_pane::SelectionProjection> {
+        inspector_pane::project(&self.doc.view(), &self.session)
+            .ok()
+            .flatten()
+    }
+
+    /// 今の Inspector 値セル編集下書き。運転席が「click(ドラッグせず release)
+    /// → type 編集」への切り替わりを確かめる口(`pane` 自身が `view()` で
+    /// 使うのと同じ状態)。
+    pub fn inspector_field_draft(&self) -> Option<&FieldDraft> {
+        self.inspector_field_draft.as_ref()
+    }
+
+}
+
+impl Shell {
+    /// 値セルのキャプション press — click か drag かはまだ未確定
+    /// (`ValueDragState::origin_x` が `None` のまま、`start_field_drag` と
+    /// 同じ形)。対応する値が読めない(comp が無い・選択レイヤが無い等)なら
+    /// 黙って無視 — drag は始まらない。既に別の drag が進行中なら多重起動しない。
+    pub(crate) fn start_value_drag(&mut self, target: ValueDragTarget) {
+        if self.value_drag.is_some() {
+            return;
+        }
+        let Some(start_value) = self.value_drag_start_value(target) else {
+            return;
+        };
+        self.value_drag = Some(ValueDragState {
+            target,
+            start_value,
+            origin_x: None,
+            moved: false,
+        });
+    }
+
+    /// press 時点の「表示単位」の現在値。`None` なら drag を始めない
+    /// (`inspector_pane::drag_origin` と同じ「投影に無ければ何もしない」形)。
+    fn value_drag_start_value(&self, target: ValueDragTarget) -> Option<f64> {
+        match target {
+            ValueDragTarget::CompWidth
+            | ValueDragTarget::CompHeight
+            | ValueDragTarget::CompFps
+            | ValueDragTarget::CompDuration => {
+                let composition = self.doc.view().composition().ok().flatten()?;
+                Some(match target {
+                    ValueDragTarget::CompWidth => f64::from(composition.width),
+                    ValueDragTarget::CompHeight => f64::from(composition.height),
+                    ValueDragTarget::CompFps => composition.fps.as_f64(),
+                    ValueDragTarget::CompDuration => composition.duration_frames as f64,
+                    _ => unreachable!("上の match arm が尽くす"),
+                })
+            }
+            ValueDragTarget::AutoSaveIntervalMinutes => {
+                Some(self.auto_save_config.interval_secs as f64 / 60.0)
+            }
+            ValueDragTarget::AutoSaveGenerations => Some(self.auto_save_config.generations as f64),
+            ValueDragTarget::Background(channel) => {
+                let composition = self.doc.view().composition().ok().flatten()?;
+                Some(f64::from(composition.background[channel.index()]) * 255.0)
+            }
+            ValueDragTarget::Color(color_target, channel) => {
+                let layer = self.session.selection?;
+                let current = self.doc.view().text_document(layer).ok()?;
+                let document = current.unwrap_or_else(inspector_pane::default_text_document);
+                let style = document
+                    .styles
+                    .first()
+                    .cloned()
+                    .unwrap_or_else(inspector_pane::default_text_style);
+                let rgba = inspector_pane::color::text_style_color(&style, color_target);
+                Some(rgba[channel.index()] * 255.0)
+            }
+        }
+    }
+
+    /// window 全体の cursor 移動。drag が armed/dragging でなければ即 no-op
+    /// (`continue_field_drag` と同じ形)。**既存の draft へ書き戻すだけ** —
+    /// text_input はその draft から表示を読むので、Enter 編集中と同じ見た目で
+    /// 値が動く(Document へは release まで一切触らない、`FieldDragState` の
+    /// 「transient overlay」に相当する部分をこの家系では draft が兼ねる)。
+    fn continue_value_drag(&mut self, point: iced::Point) {
+        let Some(state) = self.value_drag.as_mut() else {
+            return;
+        };
+        let Some(origin_x) = state.origin_x else {
+            state.origin_x = Some(point.x);
+            return;
+        };
+        let delta_px = point.x - origin_x;
+        if delta_px == 0.0 && !state.moved {
+            return;
+        }
+        let target = state.target;
+        let start_value = state.start_value;
+        let fine = self.keyboard_modifiers.shift();
+        let factor = if fine { inspector_pane::DRAG_SHIFT_FACTOR } else { 1.0 };
+        let raw = start_value + f64::from(delta_px) * value_drag_step_per_pixel(target) * factor;
+        self.write_value_drag_draft(target, raw);
+        if let Some(state) = self.value_drag.as_mut() {
+            state.moved = true;
+        }
+    }
+
+    /// drag 中の draft 書き戻し。既存の表示関数(`comp_field_display`/
+    /// `auto_save_field_display`/`color_channel_display` 等)をそのまま呼び、
+    /// クランプは既存の `parse_*`/定数をそのまま使う(**別の式を発明しない**、
+    /// 裁定215)。Background の8bit整形だけは `motolii_settings_pane::
+    /// channel_cell` の私有ローカル計算と同じ1行を独立に持つ(pub で公開
+    /// されていないため — 式自体は既存の1行の転記)。
+    fn write_value_drag_draft(&mut self, target: ValueDragTarget, raw: f64) {
+        use settings_pane::sections::{self, AutoSaveField, CompField};
+        match target {
+            ValueDragTarget::CompWidth
+            | ValueDragTarget::CompHeight
+            | ValueDragTarget::CompFps
+            | ValueDragTarget::CompDuration => {
+                let Ok(Some(mut composition)) = self.doc.view().composition() else {
+                    return;
+                };
+                let field = match target {
+                    ValueDragTarget::CompWidth => CompField::Width,
+                    ValueDragTarget::CompHeight => CompField::Height,
+                    ValueDragTarget::CompFps => CompField::Fps,
+                    ValueDragTarget::CompDuration => CompField::DurationFrames,
+                    _ => unreachable!("上の match arm が尽くす"),
+                };
+                match field {
+                    // 下限1・上限 MAX_COMP_DIMENSION_PX(`parse_comp_dimension` と
+                    // 同じクランプ — 0px/負の comp を drag では作らせない、裁定217
+                    // 「判断が割れたら厳しい側」)。
+                    CompField::Width => {
+                        composition.width =
+                            raw.round().clamp(1.0, f64::from(sections::MAX_COMP_DIMENSION_PX)) as u32;
+                    }
+                    CompField::Height => {
+                        composition.height =
+                            raw.round().clamp(1.0, f64::from(sections::MAX_COMP_DIMENSION_PX)) as u32;
+                    }
+                    CompField::Fps => {
+                        let clamped = raw.clamp(1.0, sections::MAX_COMP_FPS);
+                        let per_mille = (clamped * 1000.0).round() as i64;
+                        if let Ok(fps) = Fps::try_new(per_mille, 1000) {
+                            composition.fps = fps;
+                        }
+                    }
+                    CompField::DurationFrames => {
+                        composition.duration_frames = raw
+                            .round()
+                            .clamp(1.0, sections::MAX_COMP_DURATION_FRAMES as f64)
+                            as i64;
+                    }
+                }
+                let text = sections::comp_field_display(field, &composition);
+                self.comp_draft = Some(sections::CompFieldDraft { field, text });
+            }
+            ValueDragTarget::AutoSaveIntervalMinutes | ValueDragTarget::AutoSaveGenerations => {
+                let mut config = self.auto_save_config;
+                let field = match target {
+                    ValueDragTarget::AutoSaveIntervalMinutes => AutoSaveField::IntervalMinutes,
+                    ValueDragTarget::AutoSaveGenerations => AutoSaveField::Generations,
+                    _ => unreachable!("上の match arm が尽くす"),
+                };
+                match field {
+                    AutoSaveField::IntervalMinutes => {
+                        let clamped_minutes = raw.clamp(
+                            sections::MIN_AUTO_SAVE_INTERVAL_MINUTES,
+                            sections::MAX_AUTO_SAVE_INTERVAL_MINUTES,
+                        );
+                        config.interval_secs = (clamped_minutes * 60.0).round() as u64;
+                    }
+                    AutoSaveField::Generations => {
+                        config.generations = raw
+                            .round()
+                            .clamp(1.0, sections::MAX_AUTO_SAVE_GENERATIONS as f64)
+                            as usize;
+                    }
+                }
+                let text = sections::auto_save_field_display(field, &config);
+                self.auto_save_draft = Some(sections::AutoSaveFieldDraft { field, text });
+            }
+            ValueDragTarget::Background(channel) => {
+                // comp が無ければ投影も無い(`comp_field_cell`/`channel_cell` と
+                // 同じ柵) — 値自体は `raw` から直接組む(`Composition` は
+                // read-modify-write の確定側(`finish_value_drag` →
+                // `commit_background_channel`)でのみ触るので、ここで読んだ
+                // 値をそのまま書き戻す必要は無い)。
+                if self.doc.view().composition().ok().flatten().is_none() {
+                    return;
+                }
+                let clamped = raw.clamp(0.0, 255.0);
+                // `motolii_settings_pane::lib.rs::channel_cell` の `current_u8`
+                // 計算と同じ1行(`round().clamp(0,255) as u32 → to_string()`)。
+                let text = (clamped.round() as u32).to_string();
+                self.background_draft = Some(BackgroundFieldDraft { channel, text });
+            }
+            ValueDragTarget::Color(color_target, channel) => {
+                let Some(layer) = self.session.selection else {
+                    return;
+                };
+                let Ok(current) = self.doc.view().text_document(layer) else {
+                    return;
+                };
+                let document = current.unwrap_or_else(inspector_pane::default_text_document);
+                let mut style = document
+                    .styles
+                    .first()
+                    .cloned()
+                    .unwrap_or_else(inspector_pane::default_text_style);
+                let clamped = raw.clamp(0.0, 255.0);
+                inspector_pane::color::set_text_style_color_channel(
+                    &mut style,
+                    color_target,
+                    channel,
+                    clamped / 255.0,
+                );
+                let text = inspector_pane::color::color_channel_display(&style, color_target, channel);
+                self.inspector_color_field_draft = Some(inspector_pane::color::ColorFieldDraft {
+                    target: color_target,
+                    channel,
+                    text,
+                });
+            }
+        }
+    }
+
+    /// 左クリック release(window 全体から)。**drag が実際に動いていたら確定**
+    /// — drag 中に書き戻した draft を、既存の Enter 確定と**同じ commit_*
+    /// 自由関数**へそのまま渡す(1 gesture = 1 undo、書き込みロジックの複製
+    /// ゼロ)。動いていなければ(click)何もしない — draft は press 時点で
+    /// まだ触っていないので、そのまま text_input への通常の click→type 編集に
+    /// 委ねる。
+    fn finish_value_drag(&mut self) {
+        let Some(state) = self.value_drag.take() else {
+            return;
+        };
+        if !state.moved {
+            return;
+        }
+        match state.target {
+            ValueDragTarget::CompWidth
+            | ValueDragTarget::CompHeight
+            | ValueDragTarget::CompFps
+            | ValueDragTarget::CompDuration => {
+                let field = match state.target {
+                    ValueDragTarget::CompWidth => settings_pane::sections::CompField::Width,
+                    ValueDragTarget::CompHeight => settings_pane::sections::CompField::Height,
+                    ValueDragTarget::CompFps => settings_pane::sections::CompField::Fps,
+                    ValueDragTarget::CompDuration => {
+                        settings_pane::sections::CompField::DurationFrames
+                    }
+                    _ => unreachable!("上の match arm が尽くす"),
+                };
+                if let Err(error) =
+                    settings_pane::sections::commit_comp_field(&mut self.doc, &mut self.comp_draft, field)
+                {
+                    self.status = Some(error);
+                }
+            }
+            ValueDragTarget::AutoSaveIntervalMinutes | ValueDragTarget::AutoSaveGenerations => {
+                let field = match state.target {
+                    ValueDragTarget::AutoSaveIntervalMinutes => {
+                        settings_pane::sections::AutoSaveField::IntervalMinutes
+                    }
+                    ValueDragTarget::AutoSaveGenerations => {
+                        settings_pane::sections::AutoSaveField::Generations
+                    }
+                    _ => unreachable!("上の match arm が尽くす"),
+                };
+                if let Err(error) = settings_pane::sections::commit_auto_save_field(
+                    &mut self.auto_save_config,
+                    &mut self.auto_save_draft,
+                    field,
+                ) {
+                    self.status = Some(error);
+                }
+            }
+            ValueDragTarget::Background(channel) => {
+                if let Err(error) = settings_pane::commit_background_channel(
+                    &mut self.doc,
+                    &mut self.background_draft,
+                    channel,
+                ) {
+                    self.status = Some(error);
+                }
+            }
+            ValueDragTarget::Color(color_target, channel) => {
+                if let Err(error) = inspector_pane::color::commit_text_style_color(
+                    &mut self.doc,
+                    &mut self.inspector_color_field_draft,
+                    self.session.selection,
+                    color_target,
+                    channel,
+                ) {
+                    self.status = Some(error);
+                }
+            }
+        }
+    }
+}
+

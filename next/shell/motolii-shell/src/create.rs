@@ -440,3 +440,103 @@ impl Shell {
 
 }
 
+use iced::Task;
+use crate::Message;
+
+impl Shell {
+
+    /// `Shell::update` から委譲される領域別 dispatch(2026-08-23 SP-1 レーン、
+    /// `docs/reviews/2026-08-23-shell-split-plan.md` の続き)。**中身は無改変** —
+    /// 元の巨大な `update()` match の腕をそのままここへ移しただけ(裁定どおり
+    /// 移送と委譲だけ、バグ修正・整形は混ぜない)。渡された `message` がこの
+    /// 領域の variant でなければ `Err(message)` で突き返す — `crate::dispatch_message`
+    /// の chain-of-responsibility が次の領域dispatchへ渡す。**新しい Message 枝は
+    /// ここへ腕を1本足すだけで済み、`lib.rs` は触らない**(MC-1 と同じ効能)。
+    pub(crate) fn dispatch_create(&mut self, message: Message) -> Result<Task<Message>, Message> {
+        let mut task = Task::none();
+        match message {
+            Message::AddLayer => {
+                let id = LayerId(self.next_layer_id());
+                // **1操作 = 1 undo**。`AddLayer`/`SetMeta`/`SetAttrs`(差し色の
+                // 自動割当)を別々に書くと利用者は Undo を複数回押すことになる
+                // (ui-quality-bar Q2)。
+                let placed = self.doc.apply_all([
+                    Intent::AddLayer(id),
+                    Intent::SetMeta {
+                        layer: id,
+                        meta: LayerMeta {
+                            source: LayerSource::Solid {
+                                rgba: [80, 160, 220, 255],
+                                width: 240,
+                                height: 135,
+                            },
+                            order: id.0 as i16,
+                            // 尺の決め方は Document が持つ(M4)。
+                            timing: LayerTiming::place(
+                                self.session.playhead,
+                                None,
+                                self.comp_duration(),
+                            ),
+                        },
+                    },
+                    Intent::SetAttrs {
+                        layer: id,
+                        patch: LayerAttrsPatch {
+                            label_color: Some(Some(Self::label_color_for_new_layer(id))),
+                            ..Default::default()
+                        },
+                    },
+                ]);
+                match placed {
+                    Ok(()) => self.select_single(id),
+                    // 拒否は必ず出す。黙って消さない。
+                    Err(error) => self.status = Some(format!("layer を置けない: {error}")),
+                }
+            }
+            Message::Browser(msg) => {
+                // **畳んだ口**(MC-1、2026-08-23、`create.rs::
+                // dispatch_browser_card_intent` doc 参照)。カード発の意図
+                // (`CreateFromCard`/`AddMaskFromCard`/`ApplyEffectFromCard`/
+                // `ReplaceSelectedLayerSource`/`RemoveAssetFromCard`)を
+                // ここで1つずつ `if let` で横取りしていた5本の分岐は、
+                // 1関数呼び出しへ畳んだ——pane側は元から no-op(`state.rs`の
+                // ORACLE)なので、`&msg` を渡して先に処理しても
+                // `self.browser.update(msg)` との二重処理にはならない。
+                // カードの意図がもう1種類増えても、この行は変えず
+                // `create.rs` の match へ腕を1本足すだけで済む
+                // (write-set が `lib.rs` を引きずらなくなる)。
+                self.dispatch_browser_card_intent(&msg);
+                self.browser.update(msg);
+                // pane_grid 側は `browser_pane::PaneState::is_open()` が唯一の
+                // 真実源(`panes` フィールド doc 参照)——ここで追随させる。
+                // `set_browser_open` は同値なら no-op(`pane_layout::Layout`
+                // doc)なので、`ToggleBrowserPanel` 以外の3腕(rail/検索欄)で
+                // 毎回呼んでも他 split の ratio・ドラッグ配置を潰さない。
+                self.panes.set_browser_open(self.browser.is_open());
+            }
+            other => return Err(other),
+        }
+        Ok(task)
+    }
+
+    /// Browser パネルの開閉状態(B3)。**screenshot 器具専用**の読み口
+    /// (`checkerboard_enabled` と同じ形) — `--browser-open` CLI フラグ
+    /// (`main.rs`)経由で `Message::Browser(browser_pane::Message::
+    /// ToggleBrowserPanel)` を実際に通した後の状態を screenshot.rs が読める
+    /// ようにする。フラグそのものは `browser::PaneState::is_open` に住む
+    /// (`state.rs` 冒頭 doc「Shell 側に per-variant 分岐を増やさない」) —
+    /// この口は単なる薄い委譲。
+    pub fn browser_panel_open(&self) -> bool {
+        self.browser.is_open()
+    }
+
+    /// 素材台帳の一覧投影(裁定162 B1)。運転席/`browser_drive.rs` が
+    /// 「AdmitPaths → 台帳に載る」を確かめる口(`timeline_rows`/`markers` と
+    /// 同じ形 — pane 側の projection 関数をそのまま呼ぶだけ)。
+    pub fn assets(&self) -> Vec<browser_pane::AssetListItem> {
+        browser_pane::model::assets_with_status(&self.doc.view(), &|id| {
+            self.asset_status.get(&id).cloned()
+        })
+    }
+
+}
