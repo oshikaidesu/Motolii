@@ -580,13 +580,13 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 579	help	DaVinci Resolve Reference Manual	リファレンスマニュアルを開く	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	ヘルプドキュメント/クラッシュレポーター/ライセンス/フォーラム/更新確認/ようこそ画面等はMotolii自身の実装として一般的に妥当。除外根拠なし(ようこそ画面はGOALS M1が要求)	B06		S
 580	help	DaVinci Resolve Training	トレーニング情報を開く	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	ヘルプドキュメント/クラッシュレポーター/ライセンス/フォーラム/更新確認/ようこそ画面等はMotolii自身の実装として一般的に妥当。除外根拠なし(ようこそ画面はGOALS M1が要求)	B06		S
 581	help	Deactivate License	ライセンス解除	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	ヘルプドキュメント/クラッシュレポーター/ライセンス/フォーラム/更新確認/ようこそ画面等はMotolii自身の実装として一般的に妥当。除外根拠なし(ようこそ画面はGOALS M1が要求)	B06		S
-582	help	Documentation	ドキュメントを開く	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	ヘルプドキュメント/クラッシュレポーター/ライセンス/フォーラム/更新確認/ようこそ画面等はMotolii自身の実装として一般的に妥当。除外根拠なし(ようこそ画面はGOALS M1が要求)	B06		S
+582	help	Documentation	ドキュメントを開く	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用済	2026-08-23 双方向照合で検出 — `motolii-verbs` の `OPEN_DOCUMENTATION`(動詞 id `help.open_documentation`)が この行を map_ids で指しており実装済み。verdict が実装に追いついていなかった	B06		S
 583	help	Effect Reference…	エフェクトリファレンス	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	ヘルプドキュメント/クラッシュレポーター/ライセンス/フォーラム/更新確認/ようこそ画面等はMotolii自身の実装として一般的に妥当。除外根拠なし(ようこそ画面はGOALS M1が要求)	B06		S
 584	help	Enable Logging	ログ記録を有効化	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	ヘルプドキュメント/クラッシュレポーター/ライセンス/フォーラム/更新確認/ようこそ画面等はMotolii自身の実装として一般的に妥当。除外根拠なし(ようこそ画面はGOALS M1が要求)	B06		S
-585	help	Online Users Forums…	オンラインフォーラム	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	ヘルプドキュメント/クラッシュレポーター/ライセンス/フォーラム/更新確認/ようこそ画面等はMotolii自身の実装として一般的に妥当。除外根拠なし(ようこそ画面はGOALS M1が要求)	B06		S
+585	help	Online Users Forums…	オンラインフォーラム	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用済	2026-08-23 双方向照合で検出 — `motolii-verbs` の `OPEN_COMMUNITY_FORUM`(動詞 id `help.open_community_forum`)が この行を map_ids で指しており実装済み。verdict が実装に追いついていなかった	B06		S
 586	help	Reveal Logging File	ログファイルを表示	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	ヘルプドキュメント/クラッシュレポーター/ライセンス/フォーラム/更新確認/ようこそ画面等はMotolii自身の実装として一般的に妥当。除外根拠なし(ようこそ画面はGOALS M1が要求)	B06		S
 587	help	Scripting Help…	スクリプトヘルプ	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	ヘルプドキュメント/クラッシュレポーター/ライセンス/フォーラム/更新確認/ようこそ画面等はMotolii自身の実装として一般的に妥当。除外根拠なし(ようこそ画面はGOALS M1が要求)	B06		S
-588	help	Send Feedback…	フィードバック送信	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	ヘルプドキュメント/クラッシュレポーター/ライセンス/フォーラム/更新確認/ようこそ画面等はMotolii自身の実装として一般的に妥当。除外根拠なし(ようこそ画面はGOALS M1が要求)	B06		S
+588	help	Send Feedback…	フィードバック送信	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用済	2026-08-23 双方向照合で検出 — `motolii-verbs` の `SEND_FEEDBACK`(動詞 id `help.send_feedback`)が この行を map_ids で指しており実装済み。verdict が実装に追いついていなかった	B06		S
 589	help	Updates…	アップデート確認	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	ヘルプドキュメント/クラッシュレポーター/ライセンス/フォーラム/更新確認/ようこそ画面等はMotolii自身の実装として一般的に妥当。除外根拠なし(ようこそ画面はGOALS M1が要求)	B06		S
 590	help	Welcome Screen…	ようこそ画面	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	ヘルプドキュメント/クラッシュレポーター/ライセンス/フォーラム/更新確認/ようこそ画面等はMotolii自身の実装として一般的に妥当。除外根拠なし(ようこそ画面はGOALS M1が要求)	B06		S
 591	help	Welcome to DaVinci Resolve	ようこそ画面を開く	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	ヘルプドキュメント/クラッシュレポーター/ライセンス/フォーラム/更新確認/ようこそ画面等はMotolii自身の実装として一般的に妥当。除外根拠なし(ようこそ画面はGOALS M1が要求)	B06		S
@@ -799,7 +799,7 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 798	mask	Unlock All Masks	全マスクのロック解除	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定		B02		S
 799	misc	Active Window: Edit Index	Command+7	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用予定	既決との衝突なし(パネルフォーカス切替、未実装)	B25		M
 800	misc	Active Window: Effects	Command+6	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用予定	既決との衝突なし	B25		M
-801	misc	Active Window: Inspector	Command+9	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用予定	既決との衝突なし	B25		M
+801	misc	Active Window: Inspector	Command+9	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用済	2026-08-23 双方向照合で検出 — `motolii-verbs` の `FOCUS_INSPECTOR`(動詞 id `window.focus_inspector`)が この行を map_ids で指しており実装済み。verdict が実装に追いついていなかった	B25		M
 802	misc	Active Window: Media Folders	Command+4	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用予定	既決との衝突なし	B25		M
 803	misc	Add Edit	編集点追加	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		採用予定	timeline-grammar §2「split」正。未実装	B39		S
 804	misc	Add Edit to All Tracks	全トラックに編集点追加	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		採用予定	既決との衝突なし	B39		S
@@ -1314,8 +1314,8 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 1313	text	Wiggly	ウィグリーセレクタ	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	Wiggly SelectorはRange Selectorとは別のセレクタ種別で未実装(裁定75は1アニメーター=セレクタ1個をRange Selectorとして実装済みのみ)	B46		S
 1314	timeline	Snapping (toggle)	スナップの有効/無効切替	0	1	1	1	3	3:2:0:0	二次(premiere全体注記);公式;公式(BMD, v11時点);公式(BMDマニュアルPDF)		採用済	clip_gesture.rs snap_enabled(Cmd一時トグル)	B52		S
 1315	timeline	New Sequence / Timeline / Composition	新規シーケンス・タイムライン・コンポジションを作成	0	1	1	0	2	2:1:0:0	二次(premiere全体注記);公式(BMD, v11時点);公式(BMDマニュアルPDF)		採用予定		B52	track-project-structure	L
-1316	timeline	Active Window: Timeline	Command+3	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用予定		B25		M
-1317	timeline	Active Window: Timeline Viewer	Command+2	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用予定		B25		M
+1316	timeline	Active Window: Timeline	Command+3	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用済	2026-08-23 双方向照合で検出 — `motolii-verbs` の `FOCUS_TIMELINE`(動詞 id `window.focus_timeline`)が この行を map_ids で指しており実装済み。verdict が実装に追いついていなかった	B25		M
+1317	timeline	Active Window: Timeline Viewer	Command+2	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用済	2026-08-23 双方向照合で検出 — `motolii-verbs` の `FOCUS_STAGE`(動詞 id `window.focus_stage`)が この行を map_ids で指しており実装済み。verdict が実装に追いついていなかった	B25		M
 1318	timeline	Alpha Inverted Matte	反転アルファマット	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定		B52	track-project-structure	L
 1319	timeline	Alpha Matte	アルファマット	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定		B52	track-project-structure	L
 1320	timeline	Append to End of Timeline	末尾に追加	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定		B52	track-project-structure	L
@@ -1497,11 +1497,11 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 1496	workspace	All Panels	全パネル表示ワークスペース	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	裁定128のworkspace/レイアウトプリセット方針	B26	pane-layout	M
 1497	workspace	Animation	アニメーション用ワークスペース	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	既決との衝突なし	B26		S
 1498	workspace	Background Activity	バックグラウンド処理表示	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	既決との衝突なし	B26		S
-1499	workspace	Close active panel or all viewers of type	同種の全ビューアを閉じる	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	裁定128	B25	pane-layout	M
+1499	workspace	Close active panel or all viewers of type	同種の全ビューアを閉じる	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用済	2026-08-23 双方向照合で検出 — `motolii-verbs` の `CLOSE_PANEL`(動詞 id `window.close_panel`)が この行を map_ids で指しており実装済み。verdict が実装に追いついていなかった	B25	pane-layout	M
 1500	workspace	Close active viewer or panel	アクティブビューア/パネルを閉じる	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし	B25		M
 1501	workspace	Console	コンソール表示	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		不採用	裁定6: 拡張の口はtrait1本(Fusion/Luaコンソール相当)			
 1502	workspace	Cycle to previous or next item in active viewer	アクティブビューア内の前後項目を巡回	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし	B26		S
-1503	workspace	Cycle to previous or next panel in active frame	アクティブフレーム内の前後パネルを巡回	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし	B25		M
+1503	workspace	Cycle to previous or next panel in active frame	アクティブフレーム内の前後パネルを巡回	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用済	2026-08-23 双方向照合で検出 — `motolii-verbs` の `CYCLE_PANEL`(動詞 id `window.cycle_panel`)が この行を map_ids で指しており実装済み。verdict が実装に追いついていなかった	B25		M
 1504	workspace	Data Burn-In	データバーンイン	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		不採用	領域外: 放送納品用タイムコードburn-in出力			
 1505	workspace	Delete Workspace…	ワークスペースを削除	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	裁定128	B26	pane-layout	M
 1506	workspace	Dual Screen	デュアルスクリーン	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	既決との衝突なし	B26		S
@@ -1523,7 +1523,7 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 1522	workspace	Open or close Info panel	Infoパネル開閉	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし	B25		M
 1523	workspace	Open or close Paint panel	Paintパネル開閉	1	0	0	0	1	0:1:0:0	公式(Adobe)		拡張	裁定175: コア完成後・継ぎ目候補(L8基盤=パス編集はマスクで既払い・L9島度低)	B27		M
 1524	workspace	Open or close Preview panel	Previewパネル開閉	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし	B25		M
-1525	workspace	Open or close Project panel	Projectパネル開閉	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし	B25		M
+1525	workspace	Open or close Project panel	Projectパネル開閉	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用済	2026-08-23 双方向照合で検出 — `motolii-verbs` の `TOGGLE_BROWSER`(動詞 id `window.toggle_browser`)が この行を map_ids で指しており実装済み。verdict が実装に追いついていなかった	B25		M
 1526	workspace	Open or close Render Queue panel	Render Queueパネル開閉	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし	B25		M
 1527	workspace	Open or close Tools panel	Toolsパネル開閉	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし	B25		M
 1528	workspace	Paint	ペイント用ワークスペース	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		拡張	裁定175: ペイント族(既存9行=989/1023/1374/1427-1430/1468/1519/1523と同族、拾い漏れ分)— vism抽象化候補・拡張として戸を残す(コア完成後・L8/L9継ぎ目候補)	B27		S
