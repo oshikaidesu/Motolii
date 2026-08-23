@@ -312,8 +312,16 @@ impl Shell {
     /// と同型の走査——`motolii-engine` は `Shell` の `view` を共有できないので、
     /// ここで自前にもう一度やる)。`resolved` の中の `LayerSource::Text` layer
     /// (matte 元も含めて区別しない——`layers_from_resolved` が `by_id` 越しに
-    /// どちらも同じ `text_documents` map から引く)だけ `view.text_document(id)`
+    /// どちらも同じ `text_documents` map から引く)だけ `view.resolved_text_document(id, t)`
     /// を引く。
+    ///
+    /// **D-1 修正(2026-08-23)**: 以前は `view.text_document(id)`(静的値のみ)を
+    /// 呼んでいたため、GPU 高速路(この関数の呼び出し元)だけ `text_style.{id}.*`/
+    /// `text_justify` の track を無視していた——`engine::render_frame` の
+    /// `collect_text_documents` は既に `resolved_text_document` を通っている
+    /// (A-1b 着地分)ので、両者は同じ関数を通すのが Preview = Export の唯一の
+    /// 評価経路(背骨2)。zero-copy 経路(GPU 高速路)だけ track を拾わない
+    /// バグを埋める。
     pub(crate) fn build_preview_snapshot(&self, playhead: i64) -> Option<PreviewSnapshot> {
         let view = self.doc.view();
         let composition = view.composition().ok().flatten()?;
@@ -323,7 +331,7 @@ impl Shell {
         let mut text_documents = HashMap::new();
         for layer in &resolved {
             if layer.source == LayerSource::Text {
-                if let Ok(Some(document)) = view.text_document(layer.id) {
+                if let Ok(Some(document)) = view.resolved_text_document(layer.id, t) {
                     text_documents.insert(layer.id, document);
                 }
             }
@@ -467,3 +475,115 @@ impl Shell {
 
 }
 
+
+#[cfg(test)]
+mod text_track_preview_tests {
+    use super::*;
+    use motolii_store::{
+        ContentTrack, FontRef, Interp, Intent, Keyframe, KeyframeTrack, LayerId, LayerMeta,
+        LayerTiming, PropertyId, TextAlignmentOptions, TextDocument, TextDocumentStyle,
+        TextJustify, TextStyleId, Value,
+    };
+
+    fn default_text_style() -> TextDocumentStyle {
+        TextDocumentStyle {
+            id: TextStyleId(0),
+            font: FontRef::default(),
+            size: 12.0,
+            fill: [0.0, 0.0, 0.0, 1.0],
+            line_height: None,
+            tracking: 0.0,
+            stroke_color: None,
+            stroke_width: 0.0,
+            stroke_over_fill: false,
+            axes: Vec::new(),
+            features: Vec::new(),
+        }
+    }
+
+    fn default_text_document() -> TextDocument {
+        TextDocument {
+            content: ContentTrack::new(),
+            justify: TextJustify::Left,
+            wrap_size: None,
+            styles: vec![default_text_style()],
+            slot_id: None,
+            ranges: Vec::new(),
+            alignment: TextAlignmentOptions::default(),
+            runs: Vec::new(),
+        }
+    }
+
+    /// **D-1 の回帰柵**: `build_preview_snapshot`(GPU 高速路、`refresh_frame` の
+    /// zero-copy 分岐が使う)が `text_style.{id}.size` の track を engine と
+    /// 同じ経路(`StoreView::resolved_text_document`)で読むこと。修正前は
+    /// `view.text_document(layer)`(静的値)を呼んでいたため、track を打っても
+    /// この経路の Stage 表示だけ既定値のまま止まっていた(engine 本経路
+    /// `Engine::render_frame` は既に A-1b で resolved 側を読んでいたので、
+    /// 「同じ Document・同じ時刻で違う絵」が生じていた——本試験はこの2経路の
+    /// 値が一致することを直接検査する)。
+    #[test]
+    fn build_preview_snapshot_reads_the_text_style_size_track_like_the_engine_does() {
+        let (mut shell, _) = Shell::new_fixture();
+        let layer = LayerId(90_001);
+        shell.doc.apply(Intent::AddLayer(layer)).unwrap();
+        shell
+            .doc
+            .apply(Intent::SetMeta {
+                layer,
+                meta: LayerMeta {
+                    source: LayerSource::Text,
+                    order: 0,
+                    timing: LayerTiming::place(0, None, 60),
+                },
+            })
+            .unwrap();
+        shell
+            .doc
+            .apply(Intent::SetTextDocument {
+                layer,
+                document: default_text_document(),
+            })
+            .unwrap();
+
+        let property = PropertyId::text_style_size(TextStyleId(0));
+        let mut track = KeyframeTrack::new();
+        track.insert(Keyframe {
+            t: RationalTime::ZERO,
+            value: Value::F64(48.0),
+            interp: Interp::Hold,
+            spatial: None,
+        });
+        shell
+            .doc
+            .apply(Intent::SetTrack {
+                layer,
+                property,
+                track,
+            })
+            .unwrap();
+
+        // engine が実際に読む値(A-1b が既に結線済みの本経路)。
+        let expected = shell
+            .doc
+            .view()
+            .resolved_text_document(layer, RationalTime::ZERO)
+            .unwrap()
+            .unwrap()
+            .styles[0]
+            .size;
+        assert_eq!(expected, 48.0, "resolved_text_document 自体が track を読めていない(前提が壊れている)");
+
+        let snapshot = shell
+            .build_preview_snapshot(0)
+            .expect("fixture には comp があるはず");
+        let document = snapshot
+            .text_documents
+            .get(&layer)
+            .expect("text layer が snapshot の text_documents に無い");
+        assert_eq!(
+            document.styles[0].size, expected,
+            "GPU 高速路(build_preview_snapshot)が engine と違う値を見ている"
+        );
+    }
+}

@@ -126,7 +126,20 @@ fn create_text_layer_type_lyrics_and_change_size_and_color_through_messages() {
         "サビ歌詞がここに出る",
         "Content が Message 経路で書けていない"
     );
-    assert_eq!(document.styles[0].size, 64.0, "Size が Message 経路で書けていない");
+    // **D-1(2026-08-23)**: `TextField::Size`/`LineHeight`/`Tracking` の Enter
+    // 確定は `text_field_track_target` 経由で track 書き口
+    // (`commit_text_style_track_field`)へ橋渡しされるようになった——track が
+    // 正本(`StoreView::resolved_text_document`、A-1b 裁定214)なので、書いた
+    // 値は `TextDocument::styles[0].size`(静的フィールド、もう更新されない)
+    // ではなく `resolved_text_document` 経由で読む必要がある(Preview/Export
+    // が実際に読む経路と同じ、`render.rs`/`lottie.rs` 参照)。
+    let resolved = shell
+        .store_view()
+        .resolved_text_document(layer, RationalTime::ZERO)
+        .ok()
+        .flatten()
+        .expect("resolved_text_document が読めない");
+    assert_eq!(resolved.styles[0].size, 64.0, "Size が Message 経路で書けていない");
     assert_eq!(
         document.styles[0].fill,
         [1.0, 1.0, 1.0, 1.0],

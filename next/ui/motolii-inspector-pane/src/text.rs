@@ -30,19 +30,23 @@
 //! 同じ値を取り合わない(track が有れば読み出し側が track を勝たせる)ので
 //! 二重帳簿ではない。
 //!
-//! **Key 列/drag はまだ crate 本体(`text_section`/`crate::Message`、`lib.rs`)
-//! へ結線していない**——`color.rs`(裁定214 の同型の先行発注)が採ったのと
-//! 同じ「write-set 制約下での自己完結・供覧」の形。この切片の write-set は
-//! `text.rs` 1ファイルのみで、実際に mouse で drag する/Key glyph を押せる
-//! ようにするには (a) `crate::Message`(`lib.rs`)への新 variant 追加と
-//! (b) `motolii-shell` の window-level drag ルーティング(`Shell::update` が
-//! `continue_field_drag` 相当を呼ぶ箇所)の両方が要る——どちらも write-set 外
-//! (RETURN 参照)。ここに置く3関数群([`commit_text_style_track_field`]・
-//! [`toggle_text_style_key`]・[`start_text_style_drag`]/[`continue_text_style_drag`]/
-//! [`finish_text_style_drag`])は**track の意味そのもの
-//! (`crate::transform::{single_hold_track, edited_value_track,
-//! toggled_key_track, key_cell_state}`)を再実装せず再利用**した、書き口の
-//! 純関数——次の結線発注はこれを呼ぶだけで良い形にしてある。
+//! **Key 列/drag は D-1(2026-08-23)で結線済み** —
+//! [`text_style_key_button`]/[`text_style_drag_handle`]([`size_row`]/
+//! [`line_height_row`]/[`tracking_row`] が呼ぶ)が `crate::Message::
+//! TextStyleKeyPressed`/`TextStyleValuePressed` を発火し、`motolii-shell`
+//! (`inspector_ops.rs`、write-set 外だが D-1 の write-set には含む)が
+//! [`toggle_text_style_key`]/[`start_text_style_drag`]/
+//! [`continue_text_style_drag`]/[`finish_text_style_drag`] を呼ぶ。型入力
+//! (Enter)は [`text_field_track_target`] を経由して既存の `TextFieldSubmit`
+//! (`TextField::Size`/`LineHeight`/`Tracking`)からそのまま
+//! [`commit_text_style_track_field`] へ橋渡しする(**新しい draft 型を view
+//! へ追加で通す必要が無い**——`view.rs`(shell、write-set 外)を触らずに
+//! track 化する唯一の道、詳細は `Shell::update_inspector` の
+//! `TextFieldSubmit` 腕 doc 参照)。**3状態 Key oracle の見た目**
+//! (`KeyCellState::{Static,Between,AtKey}` に応じた ◇/◆ の出し分け)は
+//! `TextSectionProjection`(`projection.rs`、write-set 外)に track の有無が
+//! 無いため出せていない——click の**意味**(`toggled_key_track` 経由)は
+//! 完全に結線済みだが、見た目は常に同じボタン(RETURN 参照)。
 
 use motolii_settings_pane::chrome::{parse_number, section_header};
 use motolii_store::{
@@ -52,7 +56,7 @@ use motolii_store::{
 };
 use motolii_tokens_rs::{Colors, Dimensions};
 
-use iced::widget::{button, column, pick_list, row as row_widget, text, text_input};
+use iced::widget::{button, column, mouse_area, pick_list, row as row_widget, text, text_input};
 use iced::{Element, Length};
 
 use crate::projection::TextSectionProjection;
@@ -451,14 +455,7 @@ pub(crate) fn text_section(
             colors,
         ),
         font_family_row(text_projection, draft, dims, colors),
-        text_field_row(
-            "Size",
-            TextField::Size,
-            format_number(text_projection.size as f64, 1),
-            draft,
-            dims,
-            colors,
-        ),
+        size_row(text_projection, draft, dims, colors),
         line_height_row(text_projection, draft, dims, colors),
         tracking_row(text_projection, draft, dims, colors),
         justify_row(text_projection.justify, dims, colors),
@@ -519,6 +516,105 @@ fn text_field_row(
     .align_y(iced::alignment::Vertical::Center);
 
     bordered_row(content.into(), dims)
+}
+
+/// **D-1 結線(2026-08-23)**: `TextField::Size`/`LineHeight`/`Tracking` の
+/// Enter 確定を track 書き口(`commit_text_style_track_field`)へ渡すべき物か
+/// (`Content`/`FontFamily` はそのまま静的値の口 [`commit_text_field`] を使う)。
+/// **`Shell::update_inspector` の `TextFieldSubmit` 腕がこれで分岐する**
+/// (write-set 外の `text_section`/`view` を一切改修せずに track 化するための
+/// 唯一の橋 — `TextFieldDraft` は Content/FontFamily と共有のまま、Shell 側で
+/// 一時的に [`TextStyleTrackDraft`] へ包み替えて `commit_text_style_track_field`
+/// を呼ぶ、詳細は RETURN 参照)。
+pub fn text_field_track_target(field: TextField) -> Option<TextStyleField> {
+    match field {
+        TextField::Size => Some(TextStyleField::Size),
+        TextField::LineHeight => Some(TextStyleField::LineHeight),
+        TextField::Tracking => Some(TextStyleField::Tracking),
+        TextField::Content | TextField::FontFamily => None,
+    }
+}
+
+/// Size 行。`text_field_row` と同じ text_input(Enter は
+/// [`text_field_track_target`] 経由で `commit_text_style_track_field` が書く
+/// ——static ではなく track、A-1b が意図した「track が正本」の優先順位)+
+/// drag ハンドル([`text_style_drag_handle`])+ Key 列
+/// ([`text_style_key_button`])。**投影(`TextSectionProjection`)は
+/// `resolved_text_document` を経由していない**(`projection.rs` は write-set
+/// 外 — 静的値のまま、RETURN 参照)ので、drag 中の transient 値がこの表示に
+/// 即時反映されない既知の穴が残る(値そのものは正しく track へ書かれる —
+/// `doc.view().value_at` で確認できる、`text.rs` の track 試験参照)。
+fn size_row(
+    text_projection: &TextSectionProjection,
+    draft: Option<&TextFieldDraft>,
+    dims: Dimensions,
+    colors: Colors,
+) -> Element<'static, Message> {
+    let displayed = draft
+        .filter(|d| d.field == TextField::Size)
+        .map(|d| d.text.clone())
+        .unwrap_or_else(|| format_number(text_projection.size as f64, 1));
+
+    let value_field = text_input("", displayed)
+        .on_input(|text| Message::TextFieldInput(TextField::Size, text))
+        .on_submit(Message::TextFieldSubmit(TextField::Size))
+        .size(dims.body_text)
+        .width(Length::Fixed(dims.inspector_value_width))
+        .padding(value_cell_padding(dims))
+        .align_x(iced::alignment::Horizontal::Center)
+        .style(move |_theme, status| name_input_style(dims, colors, status));
+
+    let content = row_widget![
+        text("Size")
+            .size(dims.body_text)
+            .color(colors.text_primary)
+            .width(Length::Fill),
+        value_field,
+        text_style_drag_handle(TextStyleField::Size, dims, colors),
+        text_style_key_button(TextStyleField::Size, dims, colors),
+    ]
+    .spacing(dims.spacing_xs)
+    .align_y(iced::alignment::Vertical::Center);
+
+    bordered_row(content.into(), dims)
+}
+
+/// drag ハンドル(`↕`)。**値欄そのものには重ねない** — `text_input` が press
+/// を own するため、同じ矩形に `mouse_area` を重ねても drag の press が
+/// text_input に食われる(write-set 制約下の簡略化、`chrome.rs::
+/// draggable_value_cell` の hover-swap 機構は `chrome.rs` が write-set 外の
+/// ため複製できない)。press だけを持つ(move/release は window 全体購読
+/// 経由で `Shell.inspector_text_style_drag` が追う、`FieldDragState` と同型)。
+fn text_style_drag_handle(field: TextStyleField, dims: Dimensions, colors: Colors) -> Element<'static, Message> {
+    mouse_area(
+        text("\u{2195}")
+            .size(dims.caption_text)
+            .color(colors.text_muted),
+    )
+    .interaction(iced::mouse::Interaction::ResizingHorizontally)
+    .on_press(Message::TextStyleValuePressed(field))
+    .into()
+}
+
+/// Key 列ボタン。**3状態 oracle の表示は無い**(`KeyCellState::{Static,
+/// Between,AtKey}` に応じた ◇/◆ の出し分けは `TransformRowProjection` が
+/// 運ぶ `KeyCellProjection` を読んでいる — `TextSectionProjection` にはこの
+/// track の有無/評価値が無い〈`projection.rs` は write-set 外〉ので、ここでは
+/// 常に同じ見た目のボタンにしてある)。click の**意味**は3状態 oracle と
+/// 同じ([`toggle_text_style_key`] が `crate::transform::toggled_key_track`を
+/// そのまま呼ぶ)——見た目の状態表示だけが簡略化されている。
+fn text_style_key_button(field: TextStyleField, dims: Dimensions, colors: Colors) -> Element<'static, Message> {
+    button(
+        text("K")
+            .size(dims.caption_text)
+            .align_x(iced::alignment::Horizontal::Center)
+            .align_y(iced::alignment::Vertical::Center),
+    )
+    .width(Length::Fixed(dims.inspector_glyph_width))
+    .padding(0.0)
+    .on_press(Message::TextStyleKeyPressed(field))
+    .style(move |_theme, status| flat_button_style(colors, status))
+    .into()
 }
 
 /// Font 行。手打ち欄(`text_input`、`TextField::FontFamily` — 既存文法、
@@ -629,6 +725,8 @@ fn line_height_row(
         button(text("Auto").size(dims.caption_text))
             .on_press(Message::ResetLineHeightAuto)
             .style(move |_theme, status| flat_button_style(colors, status)),
+        text_style_drag_handle(TextStyleField::LineHeight, dims, colors),
+        text_style_key_button(TextStyleField::LineHeight, dims, colors),
     ]
     .spacing(dims.spacing_xs)
     .align_y(iced::alignment::Vertical::Center);
@@ -667,6 +765,8 @@ fn tracking_row(
         button(text("Reset").size(dims.caption_text))
             .on_press(Message::ResetTracking)
             .style(move |_theme, status| flat_button_style(colors, status)),
+        text_style_drag_handle(TextStyleField::Tracking, dims, colors),
+        text_style_key_button(TextStyleField::Tracking, dims, colors),
     ]
     .spacing(dims.spacing_xs)
     .align_y(iced::alignment::Vertical::Center);

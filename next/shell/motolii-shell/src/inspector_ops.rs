@@ -2,7 +2,7 @@
 use iced::Task;
 
 use motolii_store::{
-    Intent, LayerAttrsPatch, LayerId, LayerTiming, Speed,
+    Intent, LayerAttrsPatch, LayerId, LayerTiming, Speed, TextStyleId,
 };
 
 use crate::inspector_pane::{FieldDraft, TransformField};
@@ -48,11 +48,23 @@ impl Shell {
                 self.start_field_drag(field);
                 Task::none()
             }
+            // **D-1 修正**: window 全体購読は `Message::Inspector` を1本しか
+            // 発行しない(`inspector_pointer_event`、write-set 外の
+            // `input.rs`)ので、Transform drag(`inspector_drag`)と text-style
+            // drag(`inspector_text_style_drag`)の両方をここから追う——
+            // press は排他(`ValuePressed`/`TextStyleValuePressed` のどちらか
+            // 一方だけが `Some` を立てる)なので、両方呼んでも無害(片方は
+            // 必ず `None` の no-op)。
             inspector_pane::Message::PointerMoved(point) => {
                 self.continue_field_drag(point);
+                self.continue_text_style_field_drag(point);
                 Task::none()
             }
-            inspector_pane::Message::PointerReleased => self.finish_field_drag(),
+            inspector_pane::Message::PointerReleased => {
+                let task = self.finish_field_drag();
+                self.finish_text_style_field_drag();
+                task
+            }
             inspector_pane::Message::SpeedInput(text) => {
                 self.inspector_speed_draft = Some(text);
                 Task::none()
@@ -160,8 +172,43 @@ impl Shell {
                     Some(inspector_pane::TextFieldDraft { field, text });
                 Task::none()
             }
+            // **D-1 修正(2026-08-23)**: Size/Line Height/Tracking は
+            // `text_field_track_target` で「track 書き口(A-1b)へ渡すべき
+            // field か」を判定する——`view.rs`(shell、write-set 外)を触らずに
+            // track 化するための橋(`inspector_pane::text` モジュール冒頭 doc
+            // 参照)。Content/FontFamily は従来どおり静的値の口
+            // (`commit_text_field`)のまま。
+            //
+            // track 側は下書きの型が違う(`TextFieldDraft` ではなく
+            // `TextStyleTrackDraft`)ので、ここで1回だけ包み替える——
+            // `commit_text_style_track_field` 自身が `Option::take()` で
+            // 消費するので、包み替えた一時 `Option` を渡すだけで良い
+            // (`self.inspector_text_field_draft` 側は下で必ず空にする)。
             inspector_pane::Message::TextFieldSubmit(field) => {
-                if let Err(error) = inspector_pane::commit_text_field(
+                if let Some(style_field) = inspector_pane::text_field_track_target(field) {
+                    let Some(taken) = self.inspector_text_field_draft.take() else {
+                        return Task::none();
+                    };
+                    let Ok(Some(composition)) = self.doc.view().composition() else {
+                        return Task::none();
+                    };
+                    let mut style_draft = Some(inspector_pane::TextStyleTrackDraft {
+                        style: TextStyleId(0),
+                        field: style_field,
+                        text: taken.text,
+                    });
+                    if let Err(error) = inspector_pane::commit_text_style_track_field(
+                        &mut self.doc,
+                        &mut style_draft,
+                        self.session.selection,
+                        self.session.playhead,
+                        composition.fps,
+                        TextStyleId(0),
+                        style_field,
+                    ) {
+                        self.status = Some(error);
+                    }
+                } else if let Err(error) = inspector_pane::commit_text_field(
                     &mut self.doc,
                     &mut self.inspector_text_field_draft,
                     self.session.selection,
@@ -169,6 +216,35 @@ impl Shell {
                 ) {
                     self.status = Some(error);
                 }
+                Task::none()
+            }
+            // Key 列 click(D-1 結線)。`ToggleHidden`/`KeyPressed` と同じ即時
+            // 操作の形——書き込み本体は `toggle_text_style_key`
+            // (`crate::transform::toggled_key_track` を再利用した A-1b の
+            // 純関数)。この section は既定行(`TextStyleId(0)`、裁定98)しか
+            // 編集しないスコープなので id は固定で渡す(`text.rs` doc 参照)。
+            inspector_pane::Message::TextStyleKeyPressed(field) => {
+                let Ok(Some(composition)) = self.doc.view().composition() else {
+                    return Task::none();
+                };
+                if let Err(error) = inspector_pane::toggle_text_style_key(
+                    &mut self.doc,
+                    self.session.selection,
+                    self.session.playhead,
+                    composition.fps,
+                    TextStyleId(0),
+                    field,
+                ) {
+                    self.status = Some(error);
+                }
+                Task::none()
+            }
+            // drag ハンドル press(D-1 結線)。`ValuePressed` と同じ「click か
+            // drag かはまだ未確定」の形——move/release は
+            // `PointerMoved`/`PointerReleased`(下記、window 全体購読を共有)
+            // が `self.inspector_text_style_drag` を追う。
+            inspector_pane::Message::TextStyleValuePressed(field) => {
+                self.start_text_style_field_drag(field);
                 Task::none()
             }
             inspector_pane::Message::CycleTextJustify => {
@@ -606,6 +682,52 @@ impl Shell {
                 self.status = Some(error);
                 Task::none()
             }
+        }
+    }
+
+    /// TEXT section の Size/Line Height/Tracking の値セル press(D-1 結線)。
+    /// `start_field_drag` と同格 — `inspector_drag`(`FieldDragState`)とは
+    /// **別状態**(`self.inspector_text_style_drag`、A-1b の
+    /// `TextStyleDragState`)。この section は既定行(`TextStyleId(0)`)しか
+    /// 編集しないスコープなので id は固定で渡す。
+    pub(crate) fn start_text_style_field_drag(&mut self, field: inspector_pane::TextStyleField) {
+        let Ok(Some(composition)) = self.doc.view().composition() else {
+            return; // comp が無ければ投影も無い — drag は始まらない。
+        };
+        inspector_pane::start_text_style_drag(
+            &mut self.inspector_text_style_drag,
+            &self.doc,
+            self.session.selection,
+            TextStyleId(0),
+            field,
+            self.session.playhead,
+            composition.fps,
+        );
+    }
+
+    /// window 全体の cursor 移動 — text-style drag 版(`continue_field_drag`
+    /// と同格)。`self.inspector_text_style_drag` が `None` なら no-op
+    /// (`inspector_pane::continue_text_style_drag` 自身の早期 return)。
+    pub(crate) fn continue_text_style_field_drag(&mut self, point: iced::Point) {
+        let fine = self.keyboard_modifiers.shift();
+        inspector_pane::continue_text_style_drag(
+            &mut self.doc,
+            &mut self.inspector_text_style_drag,
+            point,
+            fine,
+        );
+    }
+
+    /// release — text-style drag 版(`finish_field_drag` と同格)。動いて
+    /// いなければ [`inspector_pane::finish_text_style_drag`] 自身が no-op
+    /// (`TransformField` 版と違い、text-style は値セルが常時 text_input の
+    /// ままなので「click→type 編集への切替」は要らない——`text.rs` の
+    /// `size_row`/`line_height_row`/`tracking_row` doc 参照)。
+    pub(crate) fn finish_text_style_field_drag(&mut self) {
+        if let Err(error) =
+            inspector_pane::finish_text_style_drag(&mut self.doc, &mut self.inspector_text_style_drag)
+        {
+            self.status = Some(error);
         }
     }
 
