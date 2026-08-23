@@ -60,6 +60,35 @@ pub enum AssetError {
     InvalidNext { next: u64, max_id: u64 },
 }
 
+/// 「いま参照できるかどうか」— **環境の事実であって作品の内容ではない**
+/// (A05: `next/reference/axis/A05-missing.tsv` の2行目、`next/reference/procedures/P3`
+/// 後半の「別マシンで開く」動線)。同じ project でも、開くマシン・その瞬間の
+/// ディスク状態によって変わりうる値なので **Document には入れない**(=このフィールドは
+/// `#[serde(skip)]` — 保存 JSON には一度も書かれない。既存 project ファイルは
+/// このフィールドの有無に関わらずバイト単位で不変)。`Asset::resolve_status` を
+/// 呼んだ側だけが更新する、読み込み直後は必ず [`AssetStatus::Unchecked`]。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AssetStatus {
+    /// `resolve_status` をまだ呼んでいない。または呼んでも判定しようがない
+    /// (パスを1つも持たない = ファイル実体を伴わない素材、生成系など)。
+    /// **「在る」と偽らない既定値**(判断が割れたら厳しい側へ — Present を既定にしない)。
+    Unchecked,
+    /// 絶対 → 相対の順で解決に成功した。実際に使えたパスを保持する
+    /// (`/` 区切りへ正規化済み、[`Asset::normalize_path`] と同じ規約)。
+    Present { resolved_path: String },
+    /// 絶対・相対のどちらの経路でも見つからなかった(`io::ErrorKind::NotFound`)。
+    Missing,
+    /// パスは見えたが読めなかった(権限拒否・ループ・NotFound 以外の IO 種別)。
+    /// **理由を握りつぶさず持ち歩く**(黙って近似しない)。
+    Unreadable { reason: String },
+}
+
+impl Default for AssetStatus {
+    fn default() -> Self {
+        Self::Unchecked
+    }
+}
+
 /// パスは常に `/` 区切りへ正規化して保持する(クロス OS roundtrip)。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, DeserializeDerive)]
 pub struct Asset {
@@ -77,6 +106,11 @@ pub struct Asset {
     pub file_name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub size_bytes: Option<u64>,
+    /// 「いま参照できるか」の環境事実。**保存しない**([`AssetStatus`] doc 参照)。
+    /// 新規 [`Asset`] は常に `Unchecked` から始まり、[`Asset::resolve_status`] を
+    /// 呼んだ側だけが更新する。
+    #[serde(skip)]
+    pub status: AssetStatus,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub head_hash: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -166,6 +200,7 @@ impl AssetDraft {
             head_hash: self.head_hash,
             tail_hash: self.tail_hash,
             duration: self.duration,
+            status: AssetStatus::default(),
         };
         asset.normalize_self();
         asset
@@ -175,6 +210,68 @@ impl AssetDraft {
 impl Asset {
     pub fn normalize_path(path: &str) -> String {
         path.replace('\\', "/")
+    }
+
+    /// 「いま参照できるか」を実際に IO で確かめる(A05: パス解決の経路を1本に揃える)。
+    ///
+    /// 順序は**絶対 → 相対 → 失敗**([`AssetStatus`] doc・A05-missing.tsv の設計判断)。
+    /// `project_root` は `path_project_relative` の起点(通常は project file の
+    /// 置き場所)。どちらのパスも持たない asset(生成系など)は [`AssetStatus::Unchecked`]
+    /// を返す — 「無い」と「確かめようがない」を混同しない。
+    ///
+    /// 借用元: `std::fs::canonicalize`(標準ライブラリ、裁定215 (A) — 「上流に既にある」の
+    /// 最も単純な例。symlink 解決込みの実在確認を自前で書く理由がない)。
+    ///
+    /// **失敗を握りつぶさない**: `NotFound` は `Missing` として明示的に返し、それ以外の
+    /// `io::Error`(権限拒否・ループ等)は理由文字列ごと `Unreadable` として返す。
+    /// 呼び出し側が `Result` の代わりにこの enum を受け取る形なのは、「解決できない」
+    /// こと自体が異常系ではなく素材の状態そのものだから(`?` で伝播させたくない)。
+    pub fn resolve_status(&self, project_root: Option<&std::path::Path>) -> AssetStatus {
+        if self.path_absolute.is_none() && self.path_project_relative.is_none() {
+            return AssetStatus::Unchecked;
+        }
+
+        if let Some(abs) = &self.path_absolute {
+            match std::fs::canonicalize(abs) {
+                Ok(resolved) => {
+                    return AssetStatus::Present {
+                        resolved_path: Self::normalize_path(&resolved.to_string_lossy()),
+                    };
+                }
+                Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                    // 絶対パスで見つからない → 相対パスへ倒す。
+                }
+                Err(err) => {
+                    return AssetStatus::Unreadable {
+                        reason: err.to_string(),
+                    };
+                }
+            }
+        }
+
+        if let Some(rel) = &self.path_project_relative {
+            if let Some(root) = project_root {
+                let candidate = root.join(rel);
+                match std::fs::canonicalize(&candidate) {
+                    Ok(resolved) => {
+                        return AssetStatus::Present {
+                            resolved_path: Self::normalize_path(&resolved.to_string_lossy()),
+                        };
+                    }
+                    Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                        return AssetStatus::Missing;
+                    }
+                    Err(err) => {
+                        return AssetStatus::Unreadable {
+                            reason: err.to_string(),
+                        };
+                    }
+                }
+            }
+        }
+
+        // 絶対パスが無かった/相対で解決できなかった、かつ他に試す経路が無い。
+        AssetStatus::Missing
     }
 
     fn normalize_self(&mut self) {
@@ -402,6 +499,7 @@ mod tests {
                 head_hash: None,
                 tail_hash: None,
                 duration: None,
+                status: AssetStatus::default(),
             }),
             Err(AssetError::Retired {
                 id: id.get(),
@@ -454,6 +552,7 @@ mod tests {
             head_hash: None,
             tail_hash: None,
             duration: None,
+            status: AssetStatus::default(),
         };
         table.restore(future).unwrap();
         assert_eq!(table.peek_next(), 4);
@@ -509,6 +608,7 @@ mod tests {
                 head_hash: Some("h".into()),
                 tail_hash: Some("t".into()),
                 duration: None,
+                status: AssetStatus::default(),
             })
             .unwrap();
 
@@ -540,5 +640,159 @@ mod tests {
         let second = table.admit(draft()).unwrap();
         assert_eq!(first, second);
         assert_eq!(table.len(), 1);
+    }
+
+    /// テスト専用の使い捨てディレクトリ(`tempfile` crate を足さない — 標準ライブラリの
+    /// `env::temp_dir` + プロセス/時刻由来の一意名だけで足りる、裁定215 の「借りる」)。
+    fn unique_scratch_dir(tag: &str) -> std::path::PathBuf {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!(
+            "motolii-store-asset-test-{tag}-{}-{nanos}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    fn blank_asset(path_absolute: Option<String>, path_project_relative: Option<String>) -> Asset {
+        Asset {
+            id: AssetId::from_raw(0),
+            name: "a".into(),
+            asset_type: "video/mp4".into(),
+            content_hash: "h".into(),
+            path_absolute,
+            path_project_relative,
+            file_name: None,
+            size_bytes: None,
+            head_hash: None,
+            tail_hash: None,
+            duration: None,
+            status: AssetStatus::default(),
+        }
+    }
+
+    #[test]
+    fn resolve_status_is_unchecked_without_any_path() {
+        let asset = blank_asset(None, None);
+        assert_eq!(asset.resolve_status(None), AssetStatus::Unchecked);
+    }
+
+    #[test]
+    fn resolve_status_present_via_absolute_path() {
+        let dir = unique_scratch_dir("absolute");
+        let file = dir.join("clip.mp4");
+        std::fs::write(&file, b"payload").unwrap();
+        let canonical = std::fs::canonicalize(&file).unwrap();
+
+        let asset = blank_asset(Some(file.to_string_lossy().into_owned()), None);
+        let status = asset.resolve_status(None);
+        assert_eq!(
+            status,
+            AssetStatus::Present {
+                resolved_path: Asset::normalize_path(&canonical.to_string_lossy())
+            }
+        );
+
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// 絶対パスが見つからない時だけ相対パスへ倒す(**絶対 → 相対 → 失敗**の順序)。
+    #[test]
+    fn resolve_status_falls_back_to_relative_path_when_absolute_is_gone() {
+        let dir = unique_scratch_dir("relative");
+        let file = dir.join("clip.mp4");
+        std::fs::write(&file, b"payload").unwrap();
+        let canonical = std::fs::canonicalize(&file).unwrap();
+
+        let asset = blank_asset(
+            // 絶対パスは存在しない場所を指す(取り込み後にファイルが動いた想定)。
+            Some(
+                dir.join("moved-away")
+                    .join("clip.mp4")
+                    .to_string_lossy()
+                    .into_owned(),
+            ),
+            Some("clip.mp4".into()),
+        );
+        let status = asset.resolve_status(Some(&dir));
+        assert_eq!(
+            status,
+            AssetStatus::Present {
+                resolved_path: Asset::normalize_path(&canonical.to_string_lossy())
+            }
+        );
+
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn resolve_status_missing_when_neither_path_resolves() {
+        let dir = unique_scratch_dir("missing");
+        let asset = blank_asset(
+            Some(dir.join("gone.mp4").to_string_lossy().into_owned()),
+            Some("also-gone.mp4".into()),
+        );
+        assert_eq!(asset.resolve_status(Some(&dir)), AssetStatus::Missing);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn resolve_status_missing_when_only_relative_given_but_no_project_root() {
+        // project_root が無い(=どこからの相対か分からない)なら試しようがない → Missing。
+        let asset = blank_asset(None, Some("clip.mp4".into()));
+        assert_eq!(asset.resolve_status(None), AssetStatus::Missing);
+    }
+
+    /// **後方互換の柵**: `status` を持たない旧形式 JSON(このフィールドが存在しなかった
+    /// 頃に保存された project)がそのまま読める。`#[serde(skip)]` は無い入力を拒否せず
+    /// `Default`(`Unchecked`)で埋める。
+    #[test]
+    fn asset_deserializes_from_pre_status_field_json() {
+        let legacy_json = r#"{
+            "id": 7,
+            "name": "intro",
+            "asset_type": "video/mp4",
+            "content_hash": "sha256:abc",
+            "path_absolute": "/media/intro.mp4",
+            "path_project_relative": "media/intro.mp4",
+            "file_name": "intro.mp4",
+            "size_bytes": 1024
+        }"#;
+        let asset: Asset = serde_json::from_str(legacy_json).unwrap();
+        assert_eq!(asset.id, AssetId::from_raw(7));
+        assert_eq!(asset.status, AssetStatus::Unchecked);
+
+        // 書き戻しても `status` キーは決して現れない(バイト単位で旧形式のまま)。
+        let rewritten = serde_json::to_value(&asset).unwrap();
+        assert!(rewritten.get("status").is_none());
+    }
+
+    /// `AssetTable` 全体の往復でも `status` は書き出されない — 既存 project の
+    /// バイト列を変えない、という `duration` フィールドと同じ互換方針の確認。
+    #[test]
+    fn asset_table_roundtrip_never_serializes_status() {
+        let mut table = AssetTable::new();
+        table
+            .admit(AssetDraft {
+                name: "clip".into(),
+                asset_type: "video/mp4".into(),
+                content_hash: "sha256:roundtrip".into(),
+                path_absolute: None,
+                path_project_relative: None,
+                file_name: None,
+                size_bytes: None,
+                head_hash: None,
+                tail_hash: None,
+                duration: None,
+            })
+            .unwrap();
+
+        let json = serde_json::to_string(&table).unwrap();
+        assert!(!json.contains("status"));
+        let back: AssetTable = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, table);
     }
 }
