@@ -23,7 +23,8 @@
 //! - **Layer** = 旧 "+ Layer" 箱ボタン(`Message::AddLayer`)+G1 の
 //!   Group/Ungroup(裁定174 — MB-0 当時は Layer トップレベルが無く Edit に
 //!   同居させていた分の引っ越し)+**Freeze/Unfreeze(裁定119 の意図動詞、
-//!   store 実装済み・UI 初露出 — `Message::FreezeGroups`/`UnfreezeGroups`)**。
+//!   store 実装済み・UI 初露出 — `Message::FreezeGroups`/`UnfreezeGroups`)**+
+//!   選択 layer の自動採番改名(`Message::BatchRenameSelectedLayers`)。
 //! - **View** = 市松トグル(`stage::Message::ToggleCheckerboard`)と観測視点
 //!   リセット(`stage::Message::ResetToRenderCamera`、Shift+F 相当)。ui_scale
 //!   は Settings パネルに残す(発注書 — View に入れない)。
@@ -173,6 +174,11 @@ pub fn menus() -> Vec<Menu<Message>> {
                 // 旧 "+ Layer" 箱ボタンの動詞。keymap に AddLayer の割当は
                 // 無い(shortcut 出典ゼロ — 発明しない)。
                 Item { label: "New Layer", shortcut: None, message: Message::AddLayer },
+                Item {
+                    label: "Auto-number Selected",
+                    shortcut: None,
+                    message: Message::BatchRenameSelectedLayers,
+                },
                 // G1(裁定174)。MB-0 当時「独立した Layer トップレベルは
                 // まだ無い」と注記して Edit に同居させていた分の引っ越し。
                 Item { label: "Group", shortcut: Some("Cmd+G"), message: Message::GroupLayers },

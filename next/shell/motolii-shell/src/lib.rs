@@ -63,6 +63,7 @@ pub mod transport;
 // (`resolve_navigation_key`/`band_chrome_style`)だけ下記で `pub use` して
 // 旧パス(`motolii_shell::resolve_navigation_key` 等)を無傷に保つ。
 pub(crate) mod assets;
+mod batch_rename;
 pub(crate) mod create;
 pub(crate) mod document_io;
 pub mod export_ops;
@@ -416,6 +417,8 @@ pub enum Message {
     /// クリップボードを経由しないその場複製(Cmd+D)。1 `apply_all` = 1 undo。
     /// 複製後は増えた方を選ぶ(正典 §4)。
     DuplicateLayer,
+    /// 選択中の layer 名を行順の `Layer 001` 形式へ一括採番する。1 undo。
+    BatchRenameSelectedLayers,
     /// 見えている行を選択する(正典 §4「Cmd+A 正: 見えている行だけ」)。fold は
     /// まだ shell に無いので、今は present な全 layer が「見えている」。
     SelectAllLayers,
@@ -1352,5 +1355,4 @@ impl Shell {
 
 
 }
-
 

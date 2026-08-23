@@ -405,6 +405,7 @@ impl Shell {
             Message::PasteLayer => self.paste_layer(),
             Message::CutLayer => self.cut_layer(),
             Message::DuplicateLayer => self.duplicate_layer(),
+            Message::BatchRenameSelectedLayers => self.batch_rename_selected_layers(),
             Message::SelectAllLayers => self.select_all_layers(),
             Message::DeselectAllLayers => self.deselect_all_layers(),
             Message::DeleteSelectedLayers => self.delete_selected_layers(),
@@ -438,5 +439,27 @@ impl Shell {
             other => return Err(other),
         }
         Ok(task)
+    }
+
+    /// Auto-number the selected layer names in Timeline row order. The plan
+    /// and atomic write live in the dedicated batch-rename component.
+    pub(crate) fn batch_rename_selected_layers(&mut self) {
+        let selected = if self.session.selected_layers.is_empty() {
+            self.session.selection.into_iter().collect::<Vec<_>>()
+        } else {
+            self.session.selected_layers.clone()
+        };
+        match crate::batch_rename::apply_selected(&mut self.doc, &selected) {
+            Ok(0) if selected.is_empty() => {
+                self.status = Some("一括改名する layer が選ばれていない".to_owned());
+            }
+            Ok(0) => {
+                self.status = Some("選択中の layer 名は既に採番済み".to_owned());
+            }
+            Ok(changed) => {
+                self.status = Some(format!("{changed} layer を一括採番しました"));
+            }
+            Err(error) => self.status = Some(error),
+        }
     }
 }

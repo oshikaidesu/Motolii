@@ -149,6 +149,9 @@ fn every_menu_item_appears_with_its_shortcut_and_publishes_its_message() {
         // 旧 "+ Layer" 箱ボタンの動詞(`Message::AddLayer`)。shortcut 出典
         // ゼロ(keymap に AddLayer の腕は無い)なので併記しない。
         ("Layer", "New Layer", None, |m| matches!(m, Message::AddLayer)),
+        ("Layer", "Auto-number Selected", None, |m| {
+            matches!(m, Message::BatchRenameSelectedLayers)
+        }),
         ("Layer", "Group", Some("Cmd+G"), |m| matches!(m, Message::GroupLayers)),
         ("Layer", "Ungroup", Some("Cmd+Shift+G"), |m| matches!(m, Message::UngroupLayers)),
         // Freeze/Unfreeze(裁定119 の意図動詞、store 実装済み・UI 初露出)。
