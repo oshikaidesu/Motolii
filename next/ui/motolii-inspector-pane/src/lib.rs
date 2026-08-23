@@ -163,9 +163,11 @@ pub use projection::{
     TextSectionProjection, TransformRowProjection,
 };
 pub use text::{
-    applied_text_field, commit_text_field, commit_text_font_pick, cycle_text_justify,
-    default_text_document, default_text_style, next_text_justify, reset_text_line_height,
-    reset_text_tracking, TextField, TextFieldDraft,
+    applied_text_field, commit_text_field, commit_text_font_pick, commit_text_style_track_field,
+    continue_text_style_drag, cycle_text_justify, default_text_document, default_text_style,
+    finish_text_style_drag, next_text_justify, reset_text_line_height, reset_text_tracking,
+    start_text_style_drag, text_field_track_target, toggle_text_style_key, TextField,
+    TextFieldDraft, TextStyleDragState, TextStyleField, TextStyleTrackDraft,
 };
 pub use transform::{
     cancel_field_interaction, commit_inspector_field, commit_inspector_name,
@@ -313,6 +315,21 @@ pub enum Message {
     /// `path` を編集する手段が無かった穴への対処、
     /// `text.rs::font_family_row` doc 参照)。
     PickFont(String),
+
+    // ---- D-1(2026-08-23): TEXT section の Size/Line Height/Tracking の
+    // Key 列 + drag(A-1b が `text.rs` に用意した track 書き口の結線) ----
+    /// Key 列 click。`KeyPressed` と同じ即時操作の形(即1回の
+    /// `Intent::SetTrack`、書き込み本体は
+    /// [`toggle_text_style_key`])。**3状態表示は無い**(`text.rs`
+    /// `text_style_key_button` doc 参照 — `TextSectionProjection` に track の
+    /// 有無が乗っていないため、常に同じ見た目)。
+    TextStyleKeyPressed(TextStyleField),
+    /// drag ハンドル press。`ValuePressed` と同じ形 — click か drag かは
+    /// release まで未確定、move/release は window 全体購読
+    /// (`PointerMoved`/`PointerReleased` を共有し、`Shell.
+    /// inspector_text_style_drag` 側を追う——`inspector_drag` と同格の
+    /// 別状態、`ValuePressed`/`inspector_drag` とは排他)。
+    TextStyleValuePressed(TextStyleField),
 
     // ---- 色エディタ(`crate::color`、2026-08-22 発注「歌詞が入れられる道を
     // 通す」で結線) ----

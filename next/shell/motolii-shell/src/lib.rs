@@ -803,6 +803,16 @@ pub struct Shell {
     /// 切片8で `motolii-inspector-pane` crate へ移設済み、置き場(この
     /// フィールド自身)は移設していない)。
     inspector_drag: Option<inspector_pane::FieldDragState>,
+    /// TEXT section の Size/Line Height/Tracking の drag-to-scrub(D-1
+    /// 結線、2026-08-23)。**`inspector_drag` とは別状態** — 対象が
+    /// `TransformField`/`KeyRow` ではなく `TextStyleField`(A-1b の
+    /// `TextStyleDragState`、`text.rs` doc 参照)なので同じ `Option` を
+    /// 共有できない。press は排他(`ValuePressed`/`TextStyleValuePressed`)
+    /// なので、window 全体購読(`PointerMoved`/`PointerReleased`)はこの
+    /// 2つの `Option` を両方とも見て、`Some` な方だけ実際に動く
+    /// (`inspector_ops.rs::continue_text_style_field_drag`/
+    /// `finish_text_style_field_drag` 参照)。
+    inspector_text_style_drag: Option<inspector_pane::TextStyleDragState>,
     /// 直近の Shift 押下状態。`CursorMoved` は modifiers を運ばないので
     /// `ModifiersChanged` から別途追う(drag の1/10微調整に使う)。
     keyboard_modifiers: iced::keyboard::Modifiers,
@@ -1022,6 +1032,7 @@ impl Shell {
                 inspector_text_field_draft: None,
                 inspector_color_field_draft: None,
                 inspector_drag: None,
+                inspector_text_style_drag: None,
                 keyboard_modifiers: iced::keyboard::Modifiers::default(),
                 timeline: timeline_pane::PaneState::new(),
                 browser: browser_pane::PaneState::new(),
@@ -1147,6 +1158,7 @@ impl Shell {
             inspector_text_field_draft: None,
             inspector_color_field_draft: None,
             inspector_drag: None,
+            inspector_text_style_drag: None,
             keyboard_modifiers: iced::keyboard::Modifiers::default(),
             timeline: timeline_pane::PaneState::new(),
             browser: browser_pane::PaneState::new(),

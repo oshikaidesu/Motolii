@@ -10,10 +10,11 @@
 use motolii_core::{Fps, RationalTime};
 use motolii_export::export_lottie;
 use motolii_store::{
-    property, Composition, Document, EffectId, EffectInstance, Intent, Interp, Keyframe,
-    KeyframeTrack, LayerAttrsPatch, LayerId, LayerMeta, LayerSource, LayerTiming, Mask, MaskId,
-    MaskMode, Matte, MatteMode, Path, PathVertex, PropertyId, PropertyLink, ShapeNode, SlotId,
-    Value,
+    property, Composition, ContentTrack, Document, EffectId, EffectInstance, FontRef, Intent,
+    Interp, Keyframe, KeyframeTrack, LayerAttrsPatch, LayerId, LayerMeta, LayerSource,
+    LayerTiming, Mask, MaskId, MaskMode, Matte, MatteMode, Path, PathVertex, PropertyId,
+    PropertyLink, ShapeNode, SlotId, TextAlignmentOptions, TextDocument, TextDocumentStyle,
+    TextJustify, TextStyleId, Value,
 };
 use motolii_vector::{Brush, Fill, FillRule, PathSource, Rgb, Shape as VecShape};
 
@@ -508,5 +509,102 @@ fn slot_referenced_property_exports_as_sid_reference() {
     assert_eq!(
         out.json["slots"]["primary_opacity"]["p"],
         serde_json::json!({"a": 0, "k": 0.75})
+    );
+}
+
+// ---------------------------------------------------------------------------
+// text style track(D-1、2026-08-23) — Preview = Export の検収
+// ---------------------------------------------------------------------------
+
+fn default_text_style() -> TextDocumentStyle {
+    TextDocumentStyle {
+        id: TextStyleId(0),
+        font: FontRef::default(),
+        size: 12.0,
+        fill: [0.0, 0.0, 0.0, 1.0],
+        line_height: None,
+        tracking: 0.0,
+        stroke_color: None,
+        stroke_width: 0.0,
+        stroke_over_fill: false,
+        axes: Vec::new(),
+        features: Vec::new(),
+    }
+}
+
+fn base_text_document() -> TextDocument {
+    TextDocument {
+        content: ContentTrack::new(),
+        justify: TextJustify::Left,
+        wrap_size: None,
+        styles: vec![default_text_style()],
+        slot_id: None,
+        ranges: Vec::new(),
+        alignment: TextAlignmentOptions::default(),
+        runs: Vec::new(),
+    }
+}
+
+/// **D-1 の検収の核心**: `StoreView::resolved_text_document`(engine の text
+/// 経路・`Shell::build_preview_snapshot` が読むのと**同じ1本の評価関数**)が
+/// ある時刻で返す `size` と、この Lottie 書き出しが同じ時刻に焼く `s` の値が
+/// 一致する——「同じ Document・同じ時刻で、engine の画とプレビュー/Lottie
+/// 出力が同じ値を見る」ことの機械的な証拠(発注 OUTCOME 1)。修正前は
+/// `export_lottie` が `view.text_document(layer)`(静的値、track を一切見ない)
+/// を呼んでいたため、ここは常に既定の `12.0` を書いていた(track で `48.0`
+/// に変えても書き出しへ反映されなかった)。
+#[test]
+fn text_style_size_track_is_baked_the_same_as_resolved_text_document() {
+    let mut doc = base_document();
+    let layer = LayerId(1);
+    add_layer(&mut doc, layer, LayerSource::Text);
+    doc.apply(Intent::SetTextDocument {
+        layer,
+        document: base_text_document(),
+    })
+    .unwrap();
+
+    let size_property = PropertyId::text_style_size(TextStyleId(0));
+    doc.apply(Intent::SetTrack {
+        layer,
+        property: size_property,
+        track: hold_track(&[(0, 48.0), (10, 96.0)]),
+    })
+    .unwrap();
+
+    // engine/プレビューが実際に読む経路と同じ関数で、両方の時刻の期待値を取る。
+    let at_frame_0 = RationalTime::try_from_frame(0, fps()).unwrap();
+    let at_frame_10 = RationalTime::try_from_frame(10, fps()).unwrap();
+    let expected_0 = doc
+        .view()
+        .resolved_text_document(layer, at_frame_0)
+        .unwrap()
+        .unwrap()
+        .styles[0]
+        .size;
+    let expected_10 = doc
+        .view()
+        .resolved_text_document(layer, at_frame_10)
+        .unwrap()
+        .unwrap()
+        .styles[0]
+        .size;
+    assert_eq!(expected_0, 48.0);
+    assert_eq!(expected_10, 96.0);
+
+    let out = export_lottie(&doc.view()).unwrap();
+    assert!(out.unsupported.is_empty(), "{:?}", out.unsupported);
+
+    let d = &out.json["layers"][0]["t"]["d"];
+    assert_eq!(d["a"], 1, "size が変化する track なので animated(`a`:1)のはず");
+    let keys = d["k"].as_array().unwrap();
+    assert_eq!(keys.len(), 2, "48→96 の変化点1回=2キーのはず: {keys:?}");
+    assert_eq!(
+        keys[0]["s"][0]["s"], expected_0 as f64,
+        "frame0 の焼き込み値が resolved_text_document と食い違う"
+    );
+    assert_eq!(
+        keys[1]["s"][0]["s"], expected_10 as f64,
+        "frame10 の焼き込み値が resolved_text_document と食い違う"
     );
 }
