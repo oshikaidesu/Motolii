@@ -19,8 +19,10 @@ fn binding_counts_match_the_transcribed_shell_allocation() {
     // 差し替え、退役した動詞は `,`/`.` の4本で受け直す(28-4+2+4=30) (c) bare
     // n(SetWorkAreaOut)を1本追加(30→31)。
     assert_eq!(global_bindings().len(), 8, "global 側の行数が実測(8)とずれている");
-    assert_eq!(nav_bundle_bindings().len(), 31, "nav bundle 側の行数が実測(31)とずれている");
-    assert_eq!(default_bindings().len(), 39);
+    // (d) 2026-08-23 C-1: 平の Save(Cmd+S・Shift無し)を1本追加(31→32)。
+    //     Cmd+Shift+S=SaveAs との振り分けは shell の `resolve_navigation_key` と同型。
+    assert_eq!(nav_bundle_bindings().len(), 32, "nav bundle 側の行数が実測(32)とずれている");
+    assert_eq!(default_bindings().len(), 40);
 }
 
 #[test]

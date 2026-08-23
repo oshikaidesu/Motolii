@@ -288,6 +288,13 @@ pub fn nav_bundle_bindings() -> Vec<Binding> {
             Scope::NavigationBundle,
             VerbId::SaveAsRequested,
         ),
+        // Cmd+S(Shift無し) → SaveRequested(裁定150: 4製品とも一度保存したらパスを聞かない)
+        Binding::new(
+            Key::character('s'),
+            ModifierSpec::ANY.command_required(true).shift_required(false),
+            Scope::NavigationBundle,
+            VerbId::SaveRequested,
+        ),
         // 4197-4199: Cmd+Q(shift 不問) → QuitRequested
         Binding::new(
             Key::character('q'),

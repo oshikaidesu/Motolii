@@ -70,7 +70,7 @@ pub fn menus() -> Vec<Menu<Message>> {
                 // 触れない境界にある。出典の無い shortcut を書くと menu.rs
                 // 冒頭の規律(「出典ゼロの項目は shortcut: None」)に自ら反する
                 // ので、Cmd+S の実配線は別途(RETURN 参照)。
-                Item { label: "Save", shortcut: None, message: Message::SaveRequested },
+                Item { label: "Save", shortcut: Some("Cmd+S"), message: Message::SaveRequested },
                 Item {
                     label: "Save As…",
                     shortcut: Some("Cmd+Shift+S"),

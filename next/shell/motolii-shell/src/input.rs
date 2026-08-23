@@ -182,7 +182,7 @@ pub fn inspector_pointer_event(
 /// の注記どおり) — アクション名(`Message::StepPlayhead`/`JumpPlayheadToStart`/
 /// `JumpPlayheadToEnd`/`JumpMeaningPoint`/`JumpClipEdge`/`Message::Undo`/`Redo`/
 /// `CopyLayer`/`PasteLayer`/`CutLayer`/`DuplicateLayer`/`SelectAllLayers`/
-/// `DeselectAllLayers`/`NewProjectRequested`/`SaveAsRequested`/
+/// `DeselectAllLayers`/`NewProjectRequested`/`SaveRequested`/`SaveAsRequested`/
 /// `QuitRequested`)だけを正本として残す。
 pub fn resolve_navigation_key(
     key: &iced::keyboard::Key,
@@ -315,6 +315,11 @@ pub fn resolve_navigation_key(
         }
         Key::Character(c) if modifiers.command() && modifiers.shift() && c.eq_ignore_ascii_case("s") => {
             Some(Message::SaveAsRequested)
+        }
+        // Cmd+S = 平の上書き保存(裁定150: 4製品とも「一度保存したらパスを聞かない」)。
+        // Shift 付きの Save As と同じ振り分けの形で、`!modifiers.shift()` を明示する。
+        Key::Character(c) if modifiers.command() && !modifiers.shift() && c.eq_ignore_ascii_case("s") => {
+            Some(Message::SaveRequested)
         }
         Key::Character(c) if modifiers.command() && c.eq_ignore_ascii_case("q") => {
             Some(Message::QuitRequested)

@@ -109,6 +109,7 @@ fn expected_verb(message: &Message) -> VerbId {
         Message::SelectAllLayers => VerbId::SelectAllLayers,
         Message::DeselectAllLayers => VerbId::DeselectAllLayers,
         Message::NewProjectRequested => VerbId::NewProjectRequested,
+        Message::SaveRequested => VerbId::SaveRequested,
         Message::SaveAsRequested => VerbId::SaveAsRequested,
         Message::QuitRequested => VerbId::QuitRequested,
         Message::GroupLayers => VerbId::GroupLayers,
