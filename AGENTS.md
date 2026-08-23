@@ -29,6 +29,24 @@
 
 Repository-specific agent *conduct* rules were archived in [docs/archive/agent-governance/](docs/archive/agent-governance/) and are not active. The only section below is build/test operations, kept here by user decision (2026-08-21) because every lane pays the cost of not knowing it.
 
+## この repo の規約はここが正本(隠し場所へ書かない)
+
+**エージェント向けの規律は、このファイルと `next/reference/` 配下(git で追える見える物)が正本。**
+`~/.codex/` や `~/.claude/` のようなホーム配下の隠し場所へ**プロジェクト固有のことを書かない** —
+目に見えない二重管理になり、**なぜその規則が在るのかを誰も辿れなくなる**。
+
+2026-08-23 に実際そうなっていた物を撤去した:
+
+| 隠し場所 | 何が積まれていたか |
+|---|---|
+| `~/.codex/rules/default.rules` | 一回限りの承認16件。`PR 176`・`issue 51`・**存在しない crate 名 `motolii-ui`** が焼き付き |
+| `~/.codex/skills/hatch-pet` | 作業と無関係(85KB) |
+| `~/.codex/skills/{ponytail,reuse-before-scratch}` | 空ディレクトリだけ |
+| `.claude/settings.local.json` | 承認の allowlist **336件・うち172件が80字超の一回限り**(未整理) |
+
+各隠し場所には「**ここには書かない・正本は repo 側**」という誘導を置いた。
+**消しただけだと善意で復活する**ため。
+
 ## 段階(`next/reference/generated/steps.md`)
 
 **「普通のモーショングラフィックが出来る」までの階段。** 手順書(`procedures/P*.md`)の
