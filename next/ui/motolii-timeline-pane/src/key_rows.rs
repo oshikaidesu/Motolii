@@ -30,7 +30,7 @@
 use iced::widget::canvas;
 use iced::{mouse, Point, Rectangle, Size};
 
-use super::projection::{frame_at_x, frame_to_x};
+use super::projection::{frame_at_x, frame_to_x, PropertyKeyProjection};
 use super::{KeySelectionOp, KeySelector, TimelinePane};
 use crate::Message;
 
@@ -67,6 +67,45 @@ fn row_at_y(pane: &TimelinePane, top: f32, y: f32) -> Option<usize> {
     }
     let index = index as usize;
     (index < pane.property_rows.len()).then_some(index)
+}
+
+/// **時間軸カリング**(AX-4「計算量で壊れる」finding、`key_rows.rs:92,118`)。
+/// 10分尺(5,400〜9,000フレーム)で1property に数百キーが乗ると、狭い
+/// canvas 幅(数百〜千数百px)へ写した時に**複数キーが同じ画面ピクセル列へ
+/// 重なる**運用が普通にある。重なった列は「後に描く方(= `row.keys` の
+/// 並びで後ろ)が完全に同形・不透明の菱形で前を覆う」ため、手前の物を
+/// 間引いても最終ラスタは1px も変わらない(菱形は `frame_to_x` が返す
+/// 同じ x へ同じ `KEY_DIAMOND_SIZE` で描かれる — 塗り重ねの結果は最後の
+/// 1回だけが効く、canvas の paint 順そのもの)。
+///
+/// **前提**: `row.keys` は frame 昇順(`property_rows` が `track.keys()` の
+/// 並びをそのまま filter_map するだけ — `motolii-eval::KeyframeTrack::eval`
+/// の `binary_search_by` が要求する昇順ソートを継承)。`frame_to_x` は
+/// frame について単調非減少なので、同じ画面ピクセルへ重なるキーは**必ず
+/// 連続区間**になる — 隣(次)と比べるだけで判定できる(全体を2回舐める
+/// 必要も、バケット表も要らない)。
+///
+/// **端は必ず残す**(境界の1本を落とすと絵が変わる、という一般原則の
+/// 適用): 各連続区間の**最後の1本**(= 最終的に画面へ乗る色を決める本人)
+/// だけを残す。区間が長さ1(隣と重ならない)なら、その1本がそのまま残る
+/// ので疎な運用(重なりが無い通常時)では退化して「全キーを描く」に一致する
+/// — 絵はどんな入力でも不変。
+fn keys_for_draw(
+    keys: &[PropertyKeyProjection],
+    width: f32,
+    duration_frames: i64,
+) -> impl Iterator<Item = &PropertyKeyProjection> {
+    keys.iter().enumerate().filter_map(move |(index, key)| {
+        let is_last_in_run = match keys.get(index + 1) {
+            Some(next) => {
+                let cx = frame_to_x(key.frame, width, duration_frames).round();
+                let next_cx = frame_to_x(next.frame, width, duration_frames).round();
+                cx != next_cx
+            }
+            None => true,
+        };
+        is_last_in_run.then_some(key)
+    })
 }
 
 fn diamond_path(cx: f32, cy: f32, half: f32) -> canvas::Path {
@@ -115,7 +154,9 @@ pub(crate) fn draw(pane: &TimelinePane, frame: &mut canvas::Frame, width: f32) {
         );
 
         // キー菱形(描画 8×8、単一菱形 — 裁定151「形状コード不採用」)。
-        for key in &row.keys {
+        // **時間軸カリング**([`keys_for_draw`] doc 参照) — 同じ画面ピクセル
+        // 列に重なるキーは最後の1本だけ描く、絵は不変。
+        for key in keys_for_draw(&row.keys, width, pane.duration_frames) {
             let cx = frame_to_x(key.frame, width, pane.duration_frames);
             let cy = row_top + row_h / 2.0;
             let color = if key.selected {
@@ -314,4 +355,110 @@ pub(crate) fn mouse_interaction(
     } else {
         mouse::Interaction::default()
     })
+}
+
+#[cfg(test)]
+mod culling_tests {
+    use super::*;
+
+    fn key(frame: i64, selected: bool) -> PropertyKeyProjection {
+        PropertyKeyProjection { frame, selected }
+    }
+
+    /// **絵が変わらないことのオラクル**(canvas を通さない層 — `iced_test`
+    /// の Simulator は canvas を構造的に見られないため、`draw` が実際に
+    /// 呼ぶ塗り操作を「最終的にどのピクセル列がどの色になるか」という
+    /// pure な写像へ落として比較する)。
+    ///
+    /// `draw` は `row.keys` を並び順に塗るだけなので、任意の画面ピクセル
+    /// 列の最終色は「その列に重なる最後の(=配列内で最も後ろの)キーの
+    /// `selected`」で決まる(canvas の paint 順そのもの、キー菱形は同形・
+    /// 不透明)。この関数は**フル描画(間引き無し)を仮定した**その写像
+    /// (pixel → 最終 selected)を計算する — [`keys_for_draw`] が返す間引き
+    /// 済み列から同じ写像を計算し、両者が一致すれば「間引いても最終ラスタは
+    /// 変わらない」ことの直接証明になる。
+    fn final_pixel_colors(
+        keys: impl Iterator<Item = PropertyKeyProjection>,
+        width: f32,
+        duration_frames: i64,
+    ) -> std::collections::BTreeMap<i32, bool> {
+        let mut out = std::collections::BTreeMap::new();
+        for k in keys {
+            let px = frame_to_x(k.frame, width, duration_frames).round() as i32;
+            out.insert(px, k.selected); // 後着が前を上書き = draw の paint 順。
+        }
+        out
+    }
+
+    fn assert_same_picture(keys: Vec<PropertyKeyProjection>, width: f32, duration_frames: i64) {
+        let full = final_pixel_colors(keys.iter().cloned(), width, duration_frames);
+        let culled = final_pixel_colors(
+            keys_for_draw(&keys, width, duration_frames).cloned(),
+            width,
+            duration_frames,
+        );
+        assert_eq!(
+            full, culled,
+            "間引き後の最終ピクセル色がフル描画と一致しない(絵が変わった)"
+        );
+    }
+
+    #[test]
+    fn sparse_keys_are_all_kept_unchanged() {
+        // 重ならない疎な配置(通常運用)では退化して「全キーを描く」に一致する。
+        let keys = vec![key(0, false), key(100, false), key(200, true), key(299, false)];
+        let kept: Vec<_> = keys_for_draw(&keys, 800.0, 300).collect();
+        assert_eq!(kept.len(), keys.len(), "疎な配置なのに間引かれた");
+        assert_same_picture(keys, 800.0, 300);
+    }
+
+    #[test]
+    fn dense_run_on_the_same_pixel_collapses_to_the_last_key() {
+        // 800px 幅に 9000 フレームを写すと 1px あたり 11 フレーム強 — 隣接
+        // フレームが同じ画面ピクセルへ何本も重なるのは普通に起こる。
+        let keys: Vec<_> = (0..40).map(|f| key(f, f == 39)).collect(); // 全員 x≈0
+        let kept: Vec<_> = keys_for_draw(&keys, 800.0, 9000).collect();
+        assert!(kept.len() < keys.len(), "密集しているのに間引かれていない");
+        assert_eq!(
+            kept.last().unwrap().frame,
+            39,
+            "区間の最後(最終的に見える色を決める本人)が残っていない"
+        );
+        assert_same_picture(keys, 800.0, 9000);
+    }
+
+    #[test]
+    fn selection_color_of_a_culled_key_is_not_silently_lost_if_it_is_the_last_in_its_run() {
+        // 選択済みキーが重なり区間の最後(=一番上に乗る)なら、選択色は
+        // 間引き後も必ず見える(端の1本は必ず残る、という一般原則)。
+        let keys = vec![key(0, false), key(1, false), key(2, true)];
+        assert_same_picture(keys.clone(), 4000.0, 9000);
+        let kept: Vec<_> = keys_for_draw(&keys, 4000.0, 9000).collect();
+        assert!(kept.iter().any(|k| k.selected), "選択済みキーの色が失われた");
+    }
+
+    #[test]
+    fn ten_thousand_dense_keys_cull_down_to_at_most_the_pixel_width() {
+        // 実尺(9,000フレーム級)より広い密度でも、間引き後の描画本数は
+        // 画面幅(≈px 数)を超えない — O(property行×keyframe数) だった draw
+        // 呼び出しあたりの実描画数が O(width_px) 級へ落ちることの実測。
+        let width = 1200.0;
+        let keys: Vec<_> = (0..10_000).map(|f| key(f, false)).collect();
+        let kept: Vec<_> = keys_for_draw(&keys, width, 10_000).collect();
+        assert!(
+            kept.len() as f32 <= width + 2.0,
+            "間引き後もピクセル幅を大きく超えて描いている: {}",
+            kept.len()
+        );
+        assert_same_picture(keys, width, 10_000);
+    }
+
+    #[test]
+    fn degenerate_zero_width_collapses_to_a_single_key_and_matches_full_draw() {
+        // width<=0(pane 未計測・崩壊直後)では frame_to_x が常に 0.0 を返す
+        // ので、フル描画でも全キーが厳密に同じ座標へ重なる — 間引きは
+        // 「本物の重複」を消しているだけで、この場合も絵は不変。
+        let keys = vec![key(0, false), key(50, true), key(99, false)];
+        assert_same_picture(keys, 0.0, 100);
+    }
 }
