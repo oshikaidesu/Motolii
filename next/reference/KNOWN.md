@@ -46,8 +46,8 @@
 ## 既知の穴(発見報告不要。直すのも別途裁定してから)
 - (失効 2026-08-21: 同日根治)~~effect pass は layer 境界内のみ~~ → `EffectPass::padding()` 宣言で halo あふれ実装済み(glow_golden の外側画素 assert が回帰柵)
 - **effect の複数 pass は連鎖しない(最後勝ち)**(2026-08-21 実測): `LayerWithPasses.passes` の各 pass は元 texture を独立に読み共有 scratch へ書く — 直列合成ではない。現在の呼び出しは全て単一 pass なので実害なし。複数 effect の stack を絵にする時(vism 第2号以降)に直列化が要る
-- bm / matte / ao は store にあるが**合成器が未消費**(地図 note に明記済み)
-- `parent` の変換合成は未実装(循環検査のみ)
+- (失効 2026-08-23: 副監督A実測で覆った)~~bm / matte / ao は store にあるが合成器が未消費~~ → **`bm`(`LayerAttrs.blend_mode`)と `matte`(`LayerAttrs.matte`)は engine/compositor が既に静的フィールドとして消費している**(`next/engine/motolii-engine/src/lib.rs::translate_blend_mode`・`matte` 分岐、`next/engine/motolii-compositor/src/matte.rs`)。未消費なのは **`ao`(`LayerAttrs.auto_orient`)だけ** — `next/engine/motolii-export/src/lottie.rs:217` へ書き出すのみで、engine 側にモーションパス接線への回転計算が無い(別問題領域の機能欠落であって「track が無い」話ではない)。BOARD.md「`bm`/`matte`と同型」の記述(text style/solo が track query 無しという意味)は正しい — track 未消費という点は bm/matte/solo とも共通なので A03 の穴としては生きている
+- (失効 2026-08-23: 副監督A実測で覆った)~~`parent` の変換合成は未実装(循環検査のみ)~~ → **裁定173 H1(2026-08-22, コミット74da6c42)で実装済み** — `next/core/motolii-store/src/view.rs::world_affine` が親の world affine を再帰的に左から合成する(`parent_world * local`)。循環検査(`visiting` セット)はその安全装置であって実装の全体ではない
 - near-plane より手前の層は透視でクリップ(裁定116)
 - 負の Speed の source_frame は未クランプ(doc 明記済み)
 - テキストのアニメータ transform に skew が無い(Lottie/Rive とも語彙なし、text.rs doc 明記)

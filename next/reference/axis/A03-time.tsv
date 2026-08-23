@@ -39,14 +39,14 @@ A03	-	Effect Enabled/Bypass(EFFECTS)	乗っている	新発見(監査訂正): `E
 A03	-	Effect Param(Threshold/Intensity/Radius、EFFECTS)	乗っている	`PropertyId::effect_param`、Key列あり	-	-
 A03	-	Effect 適用順(↑↓ reorder、EFFECTS)	乗るべきでない	`Vec`の並び(構造)であって「値」ではない。Position/Scale と同格ではない	-	-
 A03	-	Level/Pan/FadeIn/FadeOut(AUDIO、4欄)	乗っている	`property::LEVEL/PAN/FADE_IN/FADE_OUT`、Key列あり(4欄とも)	-	-
-A03	-	Text Content(本文、TEXT)	乗っていない	`TextDocument::content: ContentTrack`(`next/core/motolii-store/src/text.rs:135-141,440`)。裁定214 修正版が「既に `ContentTrack` があり、Inspector に Key 列が無いだけ」と確定判定(未決→property)。Inspector の Key 列に Content 用の `KeyRow` 変種が無く単一Holdキーで丸ごと差し替えるのみ	穴	next/ui/motolii-inspector-pane/src/text.rs ※過積載(662行)
+A03	-	Text Content(本文、TEXT)	乗っている	`ContentTrack::eval(t)`(text.rs:167-171)が自前で時刻つき値列を評価する(PropertyId系ではなく独自機構)。既に時間軸に乗っている — 残りは Inspector の Key 列が無いだけ(UI 配線、副監督A write-set 外)	-	-
 A03	-	Font Family + path(TEXT)	乗るべきでない	`FontRef.family/path`。裁定214 が名指し(String 実体path=identity)	-	-
 A03	-	Text Size(TEXT)	乗っている	`PropertyId::text_style_size`。A-1b が `StoreView::resolved_text_document` で評価側を結線、D-1(2026-08-23)が Preview(`render.rs`)/Export(`lottie.rs`)を同じ関数へ揃え、Inspector の Key 列 + drag も結線(`text.rs::size_row`)	-	next/ui/motolii-inspector-pane/src/text.rs ※過積載(662行→拡張)
 A03	-	Line Height(TEXT)	乗っている	`PropertyId::text_style_line_height`。同上	-	next/ui/motolii-inspector-pane/src/text.rs ※過積載(662行→拡張)
 A03	-	Tracking(TEXT)	乗っている	`PropertyId::text_style_tracking`。同上	-	next/ui/motolii-inspector-pane/src/text.rs ※過積載(662行→拡張)
-A03	-	Justify(TEXT)	乗っていない	`TextDocument.justify: TextJustify`(enum)。`Intent::SetTextDocument`巡回ボタン	穴	next/ui/motolii-inspector-pane/src/text.rs ※過積載(662行)
-A03	-	Fill Color(TEXT)	乗っていない	`TextDocumentStyle.fill: [f64;4]`(`text.rs:236`)。`Value::Color` が既にあるのに未接続	穴	next/ui/motolii-inspector-pane/src/text.rs ※過積載(662行)
-A03	-	Stroke Color(TEXT)	乗っていない	`TextDocumentStyle.stroke_color: Option<[f64;4]>`(`text.rs:242`)。同上	穴	next/ui/motolii-inspector-pane/src/text.rs ※過積載(662行)
+A03	-	Justify(TEXT)	乗っている	`PropertyId::text_justify()`(text.rs:634)。A-1b(2026-08-23, コミットda8d0d84)が `resolved_text_document` で評価側を消費済み(tsv 記帳漏れ、副監督A訂正)	-	-
+A03	-	Fill Color(TEXT)	乗っている	`PropertyId::text_style_fill_color`(text.rs:618)。A-1b が `resolved_text_document` で評価側を消費済み(tsv 記帳漏れ、副監督A訂正)	-	-
+A03	-	Stroke Color(TEXT)	乗っている	`PropertyId::text_style_stroke_color`(text.rs:623)。A-1b が `resolved_text_document` で評価側を消費済み(tsv 記帳漏れ、副監督A訂正)	-	-
 A03	-	Link 元(source layer+property、LINK)	乗っていない	`PropertySource::Link`。裁定214 修正版「参照先が変われば画素が変わる=property、LayerId は Hold」。まだ `Intent::SetPropertyLink` 丸ごと差し替えのみ	穴	next/ui/motolii-inspector-pane/src/link.rs
 A03	-	Kind ラベル(solid/media/text/…、chrome)	乗るべきでない	`LayerSource` variant から導出、読み取り専用・種別表示のみ	-	-
 A03	-	Timeline rail Hidden(M glyph)	乗っていない	同一 field(`LayerAttrs.hidden`、上記 Inspector 行と同根)を Timeline rail が別 widget で描画(`next/ui/motolii-timeline-pane/src/rail.rs:357`、`Glyph::Mute => Message::ToggleMute`)。穴の実体は1つ(二重計上しない、下記穴カウントに注記)	穴	next/ui/motolii-inspector-pane/src/transform.rs:98 ※過積載(1021行)
