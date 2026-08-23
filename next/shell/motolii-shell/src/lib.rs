@@ -1889,35 +1889,18 @@ impl Shell {
             // する(引数を追加で貸す必要が無い、`browser_pane::state` crate
             // doc 参照)。
             Message::Browser(msg) => {
-                // 第6波(create タブ実体化): `CreateFromCard` は pane-local の
-                // 状態を一切動かさない(`state.rs` の `Message::CreateFromCard
-                // => {}` — ORACLE)ので、Document への実体化は shell 側で
-                // 先取りする(`timeline_pane` の5例外と同じ「pane 委譲の前に
-                // supervisor が取る」形)。`&msg` で借りるのは、後段の
-                // `self.browser.update(msg)`(pane 側の唯一の書き口)へ
-                // 引き続き渡すため — `CreateFromCard` 自身は no-op なので
-                // 二重処理にはならない。
-                if let browser_pane::Message::CreateFromCard { kind } = &msg {
-                    self.create_from_card(*kind);
-                }
-                // 裁定205 施工第2号 §A/§B: Effects タブの Mask/Glow カードも
-                // 同じ「pane は no-op・shell が横取りして Intent へ落とす」形
-                // (`state.rs` の `AddMaskFromCard`/`ApplyEffectFromCard => {}`
-                // — ORACLE)。
-                if let browser_pane::Message::AddMaskFromCard = &msg {
-                    self.add_mask_to_selected_layer();
-                }
-                if let browser_pane::Message::ApplyEffectFromCard { plugin_id } = &msg {
-                    self.apply_effect_to_selected_layer(plugin_id);
-                }
-                // A01 id616/617(結線切れの実例、`state.rs:126` doc「supervisor が
-                // Intent::SetSource を dispatch する」)。pane 側は意図的に no-op
-                // (`state.rs` の `Message::ReplaceSelectedLayerSource(_) => {}`)
-                // なので、`CreateFromCard`/`AddMaskFromCard`/`ApplyEffectFromCard`
-                // と同じ「shell が横取りして Intent へ落とす」形をここへ足す。
-                if let browser_pane::Message::ReplaceSelectedLayerSource(asset_id) = &msg {
-                    self.replace_selected_layer_source(*asset_id);
-                }
+                // **畳んだ口**(MC-1、2026-08-23、`create.rs::
+                // dispatch_browser_card_intent` doc 参照)。カード発の意図
+                // (`CreateFromCard`/`AddMaskFromCard`/`ApplyEffectFromCard`/
+                // `ReplaceSelectedLayerSource`/`RemoveAssetFromCard`)を
+                // ここで1つずつ `if let` で横取りしていた5本の分岐は、
+                // 1関数呼び出しへ畳んだ——pane側は元から no-op(`state.rs`の
+                // ORACLE)なので、`&msg` を渡して先に処理しても
+                // `self.browser.update(msg)` との二重処理にはならない。
+                // カードの意図がもう1種類増えても、この行は変えず
+                // `create.rs` の match へ腕を1本足すだけで済む
+                // (write-set が `lib.rs` を引きずらなくなる)。
+                self.dispatch_browser_card_intent(&msg);
                 self.browser.update(msg);
                 // pane_grid 側は `browser_pane::PaneState::is_open()` が唯一の
                 // 真実源(`panes` フィールド doc 参照)——ここで追随させる。

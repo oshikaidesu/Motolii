@@ -383,5 +383,60 @@ impl Shell {
         }
     }
 
+    /// 素材を台帳から外す(`A01-entry.tsv` `RemoveAsset` 行 — pane 側は
+    /// `next/ui/motolii-browser-pane/src/lib.rs` の `remove_affordance_row` が
+    /// 押せるボタンを既に出しており(2026-08-23)、`state.rs` の
+    /// `Message::RemoveAssetFromCard(_) => {}` は意図的な no-op(「pane は
+    /// Intent を呼ばない」分業、`replace_selected_layer_source` と同型)。
+    /// 台帳側の `Intent::RemoveAsset { asset }`(`motolii_store::document::Intent`)
+    /// は既に実装・undo込みでテスト済み(`next/core/motolii-store/tests/asset.rs`)
+    /// なので、ここは選択レイヤーの有無を問わずそのまま `apply` へ渡すだけ
+    /// (`RemoveAsset` のdocどおり「この素材を指す layer が居るかは見ない」—
+    /// レイヤー選択のゲートは要らない、`replace_selected_layer_source` の
+    /// 単一選択ゲートとは別種の Intent)。拒否は必ず `status` へ出す
+    /// (`replace_selected_layer_source`/`add_mask_to_selected_layer` と同じ
+    /// 「拒否は必ず出す」規律)。
+    pub(crate) fn remove_asset_from_card(&mut self, asset: motolii_store::AssetId) {
+        if let Err(error) = self.doc.apply(Intent::RemoveAsset { asset }) {
+            self.status = Some(format!("素材を削除できません: {error}"));
+        }
+    }
+
+    /// **畳んだ口**(MC-1、2026-08-23)。`Message::Browser(msg)` 腕が
+    /// カード発の意図(`CreateFromCard`/`AddMaskFromCard`/
+    /// `ApplyEffectFromCard`/`ReplaceSelectedLayerSource`/
+    /// `RemoveAssetFromCard`)を1つずつ `if let` で横取りしていた形
+    /// (5本の別々の分岐がそれぞれ `lib.rs` を書き手に引きずり、`waves.md` の
+    /// 連結成分を太らせていた)を、**1関数=1呼び出し**へ畳む。
+    ///
+    /// `lib.rs` 側の書き方は `self.dispatch_browser_card_intent(&msg);` の
+    /// 1行だけになり、**カードの意図がもう1種類増えても `lib.rs` を触らずに
+    /// この match へ腕を1本足すだけで済む**(write-set が `create.rs` 1枚に
+    /// 収まる)。裁定5(pane は状態を持たない)は崩さない — pane 側の
+    /// `Message` 変種は元から no-op のまま(`state.rs` のORACLE)で、
+    /// ここは pane が発行した「意図の宣言」を読んで `Document` へ実際に
+    /// 書き込む**唯一の書き手**(`self.doc.apply`/`apply_all`)であり続ける。
+    /// pane は依然として `apply_all` を一切呼ばない — 単一書き手は維持。
+    /// 網羅性は `_ => {}` で意図的に緩める(裁定6「口を増やさない」—
+    /// pane 側に無害な新 variant が増えても shell 側の網羅 match を割らない、
+    /// `next/reference/KNOWN.md` の「wildcard 無し網羅 match」問題をこの1点は
+    /// 再発させない)。
+    pub(crate) fn dispatch_browser_card_intent(&mut self, msg: &browser_pane::Message) {
+        match msg {
+            browser_pane::Message::CreateFromCard { kind } => self.create_from_card(*kind),
+            browser_pane::Message::AddMaskFromCard => self.add_mask_to_selected_layer(),
+            browser_pane::Message::ApplyEffectFromCard { plugin_id } => {
+                self.apply_effect_to_selected_layer(plugin_id)
+            }
+            browser_pane::Message::ReplaceSelectedLayerSource(asset_id) => {
+                self.replace_selected_layer_source(*asset_id)
+            }
+            browser_pane::Message::RemoveAssetFromCard(asset_id) => {
+                self.remove_asset_from_card(*asset_id)
+            }
+            _ => {}
+        }
+    }
+
 }
 
