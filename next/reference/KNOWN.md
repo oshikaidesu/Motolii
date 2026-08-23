@@ -132,3 +132,13 @@ python3 scripts/derive_entries.py "$(git rev-parse --show-toplevel)" # 入口が
 - **Stage presenter(裁定166)の GPU 実描画は headless テストで exercise されない**(`iced_test::simulator` は `.snapshot()` 無しでは `Widget::draw` を叩かない、実測): shader Pipeline の prepare/draw の絵の正しさは実窓検分が唯一の審判。screenshot 器具は別経路(`frame_rgba()`)なので代用にならない
 - **sccache は却下(2026-08-21 実測、2系統一致)**: 冷313s → hit75%でも331s(**むしろ遅い**)。理由は公式doc確認済み — bin/proc-macro/リンクは非キャッシュ・incremental(workspace crate全部)も非対象で、律速(リンク+ローカルcrate)に一切効かない。再提案しないこと
 - **ビルド運用(裁定138、2026-08-21)**: 使い捨て worktree 禁止 → **常設 warm worktree を役割別に再利用**(reset --hard で追随、target 温存)。レーンの cargo は **`-p` 集合を固定**(build/test で混在させない)。60s 合格線は warm+`-p` 固定で達成済み(16〜33s)。魔法フラグは無い(却下表は裁定138)。shell の test バイナリ統合が次の構造レバー
+
+## マージ衝突を `--theirs`/`--ours` で解くと修理が消える
+
+2026-08-23、SP-6 の台帳衝突を `--theirs` で解いたところ、**相手側に無い
+自分の修理2件**(`transform.rs` の repoint・Undo の行番号)が一緒に巻き戻った。
+台帳は「行ごとに別々の事実」なので、**片側を丸ごと採る解き方が構造的に合わない**。
+
+- 台帳(`axis/*.tsv`)の衝突は**行単位で両側を読んで手で合成する**
+- 解いた後に必ず `python3 scripts/check_evidence.py .` を回す
+  — 今回はこれが2件とも捕まえた
