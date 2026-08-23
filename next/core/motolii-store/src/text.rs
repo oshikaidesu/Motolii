@@ -547,6 +547,69 @@ fn validate_runs(styles: &[TextDocumentStyle], runs: &[TextRun]) -> Result<(), c
     Ok(())
 }
 
+/// **裁定214(2026-08-23、同日訂正版)**: `TextDocumentStyle` の
+/// size/line_height/tracking/fill/stroke_color と `TextDocument::justify` は
+/// 「出力に現れる」(最終フレームの画素を変える)ので時間軸に乗るべき
+/// property — 裁定92「v1 ではキーフレーム化しない」は本裁定が上書きする
+/// (`text.rs` crate doc 冒頭の 214 引用そのまま)。ここに足すのは
+/// [`crate::PropertyId`] の名前付きコンストラクタ(`impl` はクレートさえ
+/// 同じなら定義ファイルを選べる — 発注 write-set の `text.rs` に置いた)。
+///
+/// **配線は未完**(RETURN 参照): [`crate::view::StoreView::text_document`]
+/// は `TextDocument`(`TextDocumentStyle` を含む)を丸ごと JSON deserialize
+/// するだけで、この track を一切読まない — track の値で `size` 等を上書きする
+/// evaluator 側の overlay は `view.rs`(本発注の write-set 外)の仕事。
+/// `next/engine/motolii-engine` の `text_texture_from_document` も
+/// `StoreView::text_document` が返す静的値をそのまま使う(engine crate も
+/// write-set 外)。したがって、この `PropertyId` で track を書いても
+/// **現時点では最終フレームの画素は変わらない** — `bm`/`matte`/`ao` と同型の
+/// 「store にはあるが合成器が未消費」な意図的未完了。
+///
+/// スタイル表の行([`TextStyleId`])を単位に持つ5つ(size/line_height/
+/// tracking/fill_color/stroke_color)は [`crate::property::TEXT_STYLE_PREFIX`]
+/// に乗せる(`text_style_axis` と同じ形の兄弟 track)。`justify` は
+/// `TextDocument` 直下(id を持たない document 単位の値)なので、id 付き
+/// prefix には乗せず平坦な `"text_justify"` 一語にした(POSITION/OPACITY と
+/// 同じ「素の property 名」の形 — 新しい prefix 語彙を1つ発明する代わりに
+/// 既存2パターンのどちらかへ倒した、判断の記録は RETURN 参照)。
+impl crate::PropertyId {
+    /// `text-document s`(Font Size)。組版のサイズ。
+    pub fn text_style_size(style: TextStyleId) -> Self {
+        Self::text_style_layout_property(style, "size")
+    }
+
+    /// `text-document lh`(Line Height)。
+    pub fn text_style_line_height(style: TextStyleId) -> Self {
+        Self::text_style_layout_property(style, "line_height")
+    }
+
+    /// `text-document tr`(Tracking)。
+    pub fn text_style_tracking(style: TextStyleId) -> Self {
+        Self::text_style_layout_property(style, "tracking")
+    }
+
+    /// `text-document fc`(Fill Color)。`motolii_eval::Value::Color` に乗る。
+    pub fn text_style_fill_color(style: TextStyleId) -> Self {
+        Self::text_style_layout_property(style, "fill_color")
+    }
+
+    /// `text-document sc`(Stroke Color)。`motolii_eval::Value::Color` に乗る。
+    pub fn text_style_stroke_color(style: TextStyleId) -> Self {
+        Self::text_style_layout_property(style, "stroke_color")
+    }
+
+    fn text_style_layout_property(style: TextStyleId, attr: &str) -> Self {
+        let name = format!("{}{style}.{attr}", crate::property::TEXT_STYLE_PREFIX);
+        Self::new(&name).expect("text-style の property 名は予約語でも空でもない")
+    }
+
+    /// `text-document j`(Justify)。`TextDocument` 直下・id 無し(layer 自身が
+    /// 名前空間なので、mask/effect/text-style のような id prefix は要らない)。
+    pub fn text_justify() -> Self {
+        Self::new("text_justify").expect("`text_justify` は予約語でも空でもない")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

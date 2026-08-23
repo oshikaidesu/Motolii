@@ -147,7 +147,12 @@ pub(crate) fn attrs_section(
 }
 
 /// Speed 行(SP1 第一波、supervisor 決定1-7)。**click→type**(drag-to-scrub は
-/// 第一波に含めない、NON-GOALS)— `text_input` は常に存在し、Name 欄
+/// 第一波に含めない、NON-GOALS)。**裁定214/217(2026-08-23)への対応は未完**:
+/// Speed は時間軸に乗るべき property(A03)で drag も要る(A02)と判定済みだが、
+/// 書き口が `motolii-shell::Shell::apply_speed`(`next/shell/motolii-shell/
+/// src/lib.rs`)にあり、この発注は shell 側を明示的に touch 禁止されている
+/// ため、ここでは `motolii_store::PropertyId::speed()`(器のみ、`store/attrs.rs`
+/// 参照)を足しただけで留めた(RETURN 参照)——`text_input` は常に存在し、Name 欄
 /// ([`ident_band`])と同じ「フォーカスするだけで打鍵できる」形。Enter
 /// (`Message::SpeedSubmit`)で確定、下書きが無い間は投影の現在値を表示する。
 /// Reset ボタンは 100% でも常に出す(押せるが変わらない = 無反応ゼロより一貫を

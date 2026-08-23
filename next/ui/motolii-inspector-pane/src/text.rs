@@ -1,16 +1,24 @@
 //! TEXT section(B46 第1切片、裁定184)。
 //!
 //! **持つ**: [`TextField`]/[`TextFieldDraft`](`TransformField` とは別系統 ──
-//! 対象は `KeyframeTrack` ではなく `TextDocumentStyle` の静止フィールド、
-//! 裁定92)・font/size/line-height/tracking/justify の意味と書き口
+//! 対象は `KeyframeTrack` ではなく `TextDocumentStyle` の静止フィールド)・
+//! font/size/line-height/tracking/justify の意味と書き口
 //! ([`default_text_document`]/[`applied_text_field`]/`commit_text_field`/
 //! `cycle_text_justify`/`reset_text_line_height`/`reset_text_tracking`)・
 //! TEXT section の view([`text_section`]/`text_field_row`/`line_height_row`/
 //! `tracking_row`/`justify_row`)。
 //!
-//! **持たない**: `TextDocumentStyle` は裁定92によりキーフレーム化しない(v1)
-//! ので、[`crate::transform`] の値セル文法(`PropertyId`/`Intent::SetTrack`)
-//! には乗らない ── 丸ごと差し替えの `Intent::SetTextDocument` を使う。
+//! **持たない**: この切片は今も丸ごと差し替えの `Intent::SetTextDocument` を
+//! 使う(`[`crate::transform`] の値セル文法 = `PropertyId`/`Intent::SetTrack`
+//! には乗せていない)。**裁定92(「v1ではキーフレーム化しない」)は裁定214が
+//! 同日付で上書き済み** — size/line_height/tracking/fill/stroke_color/justify
+//! は分類上すでに time-axis property(A03 棚卸し)。`motolii_store::text` が
+//! `PropertyId::text_style_size` 等の器を持つ(裁定214 対応、store 側)一方、
+//! `StoreView::text_document`(`view.rs`)は今もこの track を評価しない ——
+//! evaluator の overlay 配線と Inspector の Key 列/drag 化は、この切片の
+//! write-set(`text.rs` 2ファイルのみ)を超える(`view.rs`/`motolii-engine` が
+//! 要る)ため次発注へ持ち越し(RETURN 参照、`bm`/`matte`/`ao` と同型の
+//! 「store にはあるが未消費」)。
 
 use motolii_settings_pane::chrome::{parse_number, section_header};
 use motolii_store::{
