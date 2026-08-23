@@ -205,8 +205,8 @@ pub mod state;
 
 pub use model::{
     AssetListItem, CardKey, CatalogCard, Category, CreateKind, LibraryTab, PreviewCard,
-    PreviewScope, PreviewTag, RailScope, SelectionAction, SortKey, ViewMode, FILTER_CHIPS,
-    LIBRARY_TABS, RAIL_SCOPES, SORT_KEYS,
+    PreviewScope, PreviewTag, RailScope, SelectionAction, ShapeOpKind, SortKey, ViewMode,
+    FILTER_CHIPS, LIBRARY_TABS, RAIL_SCOPES, SORT_KEYS,
 };
 pub use state::{Message, PaneState};
 

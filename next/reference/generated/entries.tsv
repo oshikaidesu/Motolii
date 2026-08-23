@@ -18,7 +18,7 @@ Intent	SetOrder	入口あり	ui/motolii-timeline-pane/src/stacking.rs;ui/motolii
 Intent	SetPropertyLink	入口あり	ui/motolii-inspector-pane/src/lib.rs;ui/motolii-inspector-pane/src/link.rs
 Intent	SetPropertyModulators	入口あり	shell/motolii-shell/src/clipboard.rs;ui/motolii-timeline-pane/src/split.rs
 Intent	SetPropertySlot	入口あり	shell/motolii-shell/src/clipboard.rs;ui/motolii-timeline-pane/src/split.rs
-Intent	SetShapes	入口あり	shell/motolii-shell/src/clipboard.rs;shell/motolii-shell/src/create.rs;ui/motolii-timeline-pane/src/split.rs
+Intent	SetShapes	入口あり	shell/motolii-shell/src/clipboard.rs;shell/motolii-shell/src/create.rs;ui/motolii-browser-pane/src/state.rs;ui/motolii-timeline-pane/src/split.rs
 Intent	SetSlots	入口あり	shell/motolii-shell/src/clipboard.rs
 Intent	SetSource	入口あり	shell/motolii-shell/src/create.rs;ui/motolii-browser-pane/src/card_view.rs;ui/motolii-browser-pane/src/lib.rs;ui/motolii-browser-pane/src/model/projection.rs;ui/motolii-browser-pane/src/state.rs
 Intent	SetTextDocument	入口あり	shell/motolii-shell/src/clipboard.rs;shell/motolii-shell/src/create.rs;shell/motolii-shell/src/render.rs;ui/motolii-font-catalog/src/lib.rs;ui/motolii-inspector-pane/src/color.rs;ui/motolii-inspector-pane/src/lib.rs;ui/motolii-inspector-pane/src/text/mod.rs;ui/motolii-inspector-pane/src/text/style_track.rs;ui/motolii-inspector-pane/src/text/value.rs;ui/motolii-timeline-pane/src/split.rs
