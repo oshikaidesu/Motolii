@@ -74,6 +74,11 @@ pub trait FileDialogs: std::fmt::Debug {
     /// 呼ばれる ── dirty でなければこの関数自体が呼ばれない)。true = 破棄して
     /// 続行。
     fn confirm_discard(&self) -> DialogFuture<bool>;
+    /// クラッシュ復帰の確認(C-1 波C「autosave が書くだけで読み返されない」、
+    /// `Shell::boot` の起動時チェックからのみ呼ばれる)。true = autosave 世代を
+    /// 読み込んで復元(黙って上書きしない ── 復元後は未保存●が点く)、
+    /// false = 何もしない(本体ファイルの内容のまま)。
+    fn confirm_recover_autosave(&self) -> DialogFuture<bool>;
     /// 開く project の path を選ぶ(Open、id 1226)。`None` = キャンセル。
     fn pick_open_path(&self) -> DialogFuture<Option<PathBuf>>;
     /// 保存先 path を選ぶ(Save As/Save a Copy 共通の入口)。`None` = キャンセル
@@ -111,6 +116,21 @@ impl FileDialogs for RfdDialogs {
                 .set_title("Motolii")
                 .set_description("保存されていない変更があります。破棄しますか?")
                 .set_level(rfd::MessageLevel::Warning)
+                .set_buttons(rfd::MessageButtons::YesNo)
+                .show()
+                .await
+                == rfd::MessageDialogResult::Yes
+        })
+    }
+
+    fn confirm_recover_autosave(&self) -> DialogFuture<bool> {
+        Box::pin(async {
+            rfd::AsyncMessageDialog::new()
+                .set_title("Motolii")
+                .set_description(
+                    "前回の保存より新しい自動保存が見つかりました。復元しますか?",
+                )
+                .set_level(rfd::MessageLevel::Info)
                 .set_buttons(rfd::MessageButtons::YesNo)
                 .show()
                 .await
