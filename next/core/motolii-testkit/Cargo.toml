@@ -8,8 +8,3 @@ publish = false
 [dependencies]
 image.workspace = true
 thiserror.workspace = true
-# 在庫表生成器(`src/inventory.rs`)専用。他クレートへは波及させない — この
-# crate だけの直接依存として明示的にバージョン固定する(workspace dep化しない)。
-syn = { version = "2.0.119", default-features = false, features = ["full", "parsing", "printing"] }
-proc-macro2 = { version = "1", features = ["span-locations"] }
-quote = "1"
