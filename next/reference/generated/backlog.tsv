@@ -1,5 +1,4 @@
 crate	bundle	束の名前	map_id	freq	項目	意味	verdict
-ui/motolii-timeline-pane	B39	トリム/カット編集束	163	3	Split / Razor (clip at playhead)	プレイヘッド位置でクリップを分割	採用予定
 ui/motolii-timeline-pane	B52	トラック構造管理束	1315	2	New Sequence / Timeline / Composition	新規シーケンス・タイムライン・コンポジションを作成	採用予定
 ui/motolii-timeline-pane	B39	トリム/カット編集束	1046	1	Add Edit	編集点追加	採用予定
 ui/motolii-timeline-pane	B39	トリム/カット編集束	1047	1	Add Edit to All Tracks	全トラック編集点追加	採用予定
@@ -498,8 +497,6 @@ shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1037
 shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1039	1	Wiggler	キーフレームランダム化パネル	採用予定
 shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1040	1	Workspaces (submenu)	ワークスペース切替サブメニュー(パネル本体ではない)	採用予定
 shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1051	1	Display filename in Info panel	Infoパネルにファイル名を表示	採用予定
-shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1316	1	Active Window: Timeline	Command+3	採用予定
-shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1317	1	Active Window: Timeline Viewer	Command+2	採用予定
 shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1409	1	Open Effect Controls panel	Effect Controlsパネルを開く	採用予定
 shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1410	1	Open Layer	レイヤーパネルを開く	採用予定
 shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1411	1	Open layer in Layer panel	Layerパネルでレイヤーを開く	採用予定
@@ -508,15 +505,12 @@ shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1414
 shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1415	1	Open source in Footage panel	Footageパネルでソースを開く	採用予定
 shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1445	1	Active Window: Source Viewer	Command+1	採用予定
 shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1495	1	Active Panel Selection	アクティブパネル選択	採用予定
-shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1499	1	Close active panel or all viewers of type	同種の全ビューアを閉じる	採用予定
 shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1500	1	Close active viewer or panel	アクティブビューア/パネルを閉じる	採用予定
-shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1503	1	Cycle to previous or next panel in active frame	アクティブフレーム内の前後パネルを巡回	採用予定
 shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1511	1	Maximize or restore panel under pointer	ポインタ下パネルを最大化/復元	採用予定
 shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1520	1	Open or close Effect Controls panel for selected layer	Effect Controlsパネル開閉	採用予定
 shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1521	1	Open or close Effects & Presets panel	Effects & Presetsパネル開閉	採用予定
 shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1522	1	Open or close Info panel	Infoパネル開閉	採用予定
 shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1524	1	Open or close Preview panel	Previewパネル開閉	採用予定
-shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1525	1	Open or close Project panel	Projectパネル開閉	採用予定
 shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1526	1	Open or close Render Queue panel	Render Queueパネル開閉	採用予定
 shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1527	1	Open or close Tools panel	Toolsパネル開閉	採用予定
 shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1540	1	Show Panel in Workspace	ワークスペース内パネル表示	採用予定
@@ -527,7 +521,6 @@ shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	689	
 shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	69	1	View Clip Info Display	クリップ情報表示	採用予定
 shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	799	1	Active Window: Edit Index	Command+7	採用予定
 shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	800	1	Active Window: Effects	Command+6	採用予定
-shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	801	1	Active Window: Inspector	Command+9	採用予定
 shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	802	1	Active Window: Media Folders	Command+4	採用予定
 shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	932	1	Reveal All Modified Properties	変更済み全プロパティを表示	採用予定
 shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	955	1	Show File Names	ファイル名表示	採用予定
@@ -597,48 +590,6 @@ ui/motolii-settings-pane	B12	環境設定束	1237	1	Memory & Multiprocessing…	
 ui/motolii-settings-pane	B12	環境設定束	1239	1	Output…	出力時の既定動作設定	採用予定
 ui/motolii-settings-pane	B12	環境設定束	1240	1	Previews…	プレビュー動作設定	採用予定
 ui/motolii-settings-pane	B12	環境設定束	13	1	Audio Output Mapping…	オーディオ出力チャンネル割当	採用予定
-ui/motolii-menubar	B33	クリップボード/履歴束(MB-0延長)	438	2	Edit Original	元アプリで編集	採用予定
-ui/motolii-menubar	B33	クリップボード/履歴束(MB-0延長)	439	2	Find	検索	採用予定
-ui/motolii-menubar	B33	クリップボード/履歴束(MB-0延長)	440	2	Paste Attributes	属性・プロパティを貼り付け	採用予定
-ui/motolii-menubar	B11	File束(MB-1延長)	1228	1	About After Effects…	バージョン情報	採用予定
-ui/motolii-menubar	B11	File束(MB-1延長)	1229	1	About DaVinci Resolve	バージョン情報スプラッシュを開く	採用予定
-ui/motolii-menubar	B11	File束(MB-1延長)	1232	1	Close Project	プロジェクトを閉じる	採用予定
-ui/motolii-menubar	B11	File束(MB-1延長)	1233	1	Close Project	プロジェクトを閉じる	採用予定
-ui/motolii-menubar	B11	File束(MB-1延長)	1238	1	New project = Ctrl+N	新規プロジェクト	採用予定
-ui/motolii-menubar	B11	File束(MB-1延長)	1243	1	Revert	直前保存状態に戻す	採用予定
-ui/motolii-menubar	B11	File束(MB-1延長)	1244	1	Revert to Last Save Version	直前の保存版に戻す	採用予定
-ui/motolii-menubar	B11	File束(MB-1延長)	1246	1	Save a Copy As XML…	XML形式でコピー保存	採用予定
-ui/motolii-menubar	B33	クリップボード/履歴束(MB-0延長)	448	1	Copy with Property Links	プロパティリンク付きコピー	採用予定
-ui/motolii-menubar	B33	クリップボード/履歴束(MB-0延長)	449	1	Copy/Cut/Paste = Ctrl+C/X/V	コピー/切り取り/貼り付け	採用予定
-ui/motolii-menubar	B33	クリップボード/履歴束(MB-0延長)	453	1	Duplicate selected items	選択項目を複製	採用予定
-ui/motolii-menubar	B33	クリップボード/履歴束(MB-0延長)	458	1	History	操作履歴	採用予定
-ui/motolii-menubar	B33	クリップボード/履歴束(MB-0延長)	459	1	History	アンドゥ履歴サブメニュー	採用予定
-ui/motolii-menubar	B33	クリップボード/履歴束(MB-0延長)	460	1	Paste layers at current time	現在時刻にレイヤーを貼り付け	採用予定
-ui/motolii-menubar	B33	クリップボード/履歴束(MB-0延長)	461	1	Paste Value	パラメータ値の貼り付け(Color)	採用予定
-ui/motolii-menubar	B33	クリップボード/履歴束(MB-0延長)	462	1	Reveal in Finder	Finderで表示	採用予定
-ui/motolii-menubar	B33	クリップボード/履歴束(MB-0延長)	463	1	Reveal in Finder	Finderで表示	採用予定
-ui/motolii-menubar	B33	クリップボード/履歴束(MB-0延長)	464	1	Revival Undo	Option+Command+Z	採用予定
-ui/motolii-menubar	B33	クリップボード/履歴束(MB-0延長)	465	1	Show Duplicate Frames	重複フレーム表示	採用予定
-ui/motolii-menubar	B33	クリップボード/履歴束(MB-0延長)	466	1	Undo	アンドゥ履歴を消去	採用予定
-ui/motolii-menubar	B06	ヘルプ/診断束	570	1	Adobe Crash Reporter…	クラッシュレポーター	採用予定
-ui/motolii-menubar	B06	ヘルプ/診断束	571	1	Adobe Product Improvement Program…	製品改善プログラム	採用予定
-ui/motolii-menubar	B06	ヘルプ/診断束	572	1	After Effects Help…	ヘルプを開く	採用予定
-ui/motolii-menubar	B06	ヘルプ/診断束	573	1	After Effects Support Center…	サポートセンター	採用予定
-ui/motolii-menubar	B06	ヘルプ/診断束	575	1	Check for Updates	新バージョンの有無を確認	採用予定
-ui/motolii-menubar	B06	ヘルプ/診断束	577	1	Create Diagnostics Log on Desktop	診断ログをデスクトップに作成	採用予定
-ui/motolii-menubar	B06	ヘルプ/診断束	579	1	DaVinci Resolve Reference Manual	リファレンスマニュアルを開く	採用予定
-ui/motolii-menubar	B06	ヘルプ/診断束	580	1	DaVinci Resolve Training	トレーニング情報を開く	採用予定
-ui/motolii-menubar	B06	ヘルプ/診断束	581	1	Deactivate License	ライセンス解除	採用予定
-ui/motolii-menubar	B06	ヘルプ/診断束	582	1	Documentation	ドキュメントを開く	採用予定
-ui/motolii-menubar	B06	ヘルプ/診断束	583	1	Effect Reference…	エフェクトリファレンス	採用予定
-ui/motolii-menubar	B06	ヘルプ/診断束	584	1	Enable Logging	ログ記録を有効化	採用予定
-ui/motolii-menubar	B06	ヘルプ/診断束	585	1	Online Users Forums…	オンラインフォーラム	採用予定
-ui/motolii-menubar	B06	ヘルプ/診断束	586	1	Reveal Logging File	ログファイルを表示	採用予定
-ui/motolii-menubar	B06	ヘルプ/診断束	587	1	Scripting Help…	スクリプトヘルプ	採用予定
-ui/motolii-menubar	B06	ヘルプ/診断束	588	1	Send Feedback…	フィードバック送信	採用予定
-ui/motolii-menubar	B06	ヘルプ/診断束	589	1	Updates…	アップデート確認	採用予定
-ui/motolii-menubar	B06	ヘルプ/診断束	590	1	Welcome Screen…	ようこそ画面	採用予定
-ui/motolii-menubar	B06	ヘルプ/診断束	591	1	Welcome to DaVinci Resolve	ようこそ画面を開く	採用予定
 ui/motolii-browser-pane	B08	素材取り込み束	166	2	Make Subclip	サブクリップを作成	採用予定
 ui/motolii-browser-pane	B08	素材取り込み束	167	2	Replace (footage/clip)	素材・クリップを置換	採用予定
 ui/motolii-browser-pane	B08	素材取り込み束	1419	1	Proxy Mode	プロキシ編集モード	採用予定
@@ -680,6 +631,45 @@ ui/motolii-browser-pane	B08	素材取り込み束	922	1	Reload Footage	素材を
 ui/motolii-browser-pane	B08	素材取り込み束	923	1	Remember Interpretation	解釈設定を記憶	採用予定
 ui/motolii-browser-pane	B08	素材取り込み束	933	1	Reveal in Bridge	Bridgeで表示	採用予定
 ui/motolii-browser-pane	B08	素材取り込み束	961	1	Still…	静止画プロキシを作成	採用予定
+ui/motolii-menubar	B33	クリップボード/履歴束(MB-0延長)	438	2	Edit Original	元アプリで編集	採用予定
+ui/motolii-menubar	B33	クリップボード/履歴束(MB-0延長)	439	2	Find	検索	採用予定
+ui/motolii-menubar	B33	クリップボード/履歴束(MB-0延長)	440	2	Paste Attributes	属性・プロパティを貼り付け	採用予定
+ui/motolii-menubar	B11	File束(MB-1延長)	1228	1	About After Effects…	バージョン情報	採用予定
+ui/motolii-menubar	B11	File束(MB-1延長)	1229	1	About DaVinci Resolve	バージョン情報スプラッシュを開く	採用予定
+ui/motolii-menubar	B11	File束(MB-1延長)	1232	1	Close Project	プロジェクトを閉じる	採用予定
+ui/motolii-menubar	B11	File束(MB-1延長)	1233	1	Close Project	プロジェクトを閉じる	採用予定
+ui/motolii-menubar	B11	File束(MB-1延長)	1238	1	New project = Ctrl+N	新規プロジェクト	採用予定
+ui/motolii-menubar	B11	File束(MB-1延長)	1243	1	Revert	直前保存状態に戻す	採用予定
+ui/motolii-menubar	B11	File束(MB-1延長)	1244	1	Revert to Last Save Version	直前の保存版に戻す	採用予定
+ui/motolii-menubar	B11	File束(MB-1延長)	1246	1	Save a Copy As XML…	XML形式でコピー保存	採用予定
+ui/motolii-menubar	B33	クリップボード/履歴束(MB-0延長)	448	1	Copy with Property Links	プロパティリンク付きコピー	採用予定
+ui/motolii-menubar	B33	クリップボード/履歴束(MB-0延長)	449	1	Copy/Cut/Paste = Ctrl+C/X/V	コピー/切り取り/貼り付け	採用予定
+ui/motolii-menubar	B33	クリップボード/履歴束(MB-0延長)	453	1	Duplicate selected items	選択項目を複製	採用予定
+ui/motolii-menubar	B33	クリップボード/履歴束(MB-0延長)	458	1	History	操作履歴	採用予定
+ui/motolii-menubar	B33	クリップボード/履歴束(MB-0延長)	459	1	History	アンドゥ履歴サブメニュー	採用予定
+ui/motolii-menubar	B33	クリップボード/履歴束(MB-0延長)	460	1	Paste layers at current time	現在時刻にレイヤーを貼り付け	採用予定
+ui/motolii-menubar	B33	クリップボード/履歴束(MB-0延長)	461	1	Paste Value	パラメータ値の貼り付け(Color)	採用予定
+ui/motolii-menubar	B33	クリップボード/履歴束(MB-0延長)	462	1	Reveal in Finder	Finderで表示	採用予定
+ui/motolii-menubar	B33	クリップボード/履歴束(MB-0延長)	463	1	Reveal in Finder	Finderで表示	採用予定
+ui/motolii-menubar	B33	クリップボード/履歴束(MB-0延長)	464	1	Revival Undo	Option+Command+Z	採用予定
+ui/motolii-menubar	B33	クリップボード/履歴束(MB-0延長)	465	1	Show Duplicate Frames	重複フレーム表示	採用予定
+ui/motolii-menubar	B33	クリップボード/履歴束(MB-0延長)	466	1	Undo	アンドゥ履歴を消去	採用予定
+ui/motolii-menubar	B06	ヘルプ/診断束	570	1	Adobe Crash Reporter…	クラッシュレポーター	採用予定
+ui/motolii-menubar	B06	ヘルプ/診断束	571	1	Adobe Product Improvement Program…	製品改善プログラム	採用予定
+ui/motolii-menubar	B06	ヘルプ/診断束	572	1	After Effects Help…	ヘルプを開く	採用予定
+ui/motolii-menubar	B06	ヘルプ/診断束	573	1	After Effects Support Center…	サポートセンター	採用予定
+ui/motolii-menubar	B06	ヘルプ/診断束	575	1	Check for Updates	新バージョンの有無を確認	採用予定
+ui/motolii-menubar	B06	ヘルプ/診断束	577	1	Create Diagnostics Log on Desktop	診断ログをデスクトップに作成	採用予定
+ui/motolii-menubar	B06	ヘルプ/診断束	579	1	DaVinci Resolve Reference Manual	リファレンスマニュアルを開く	採用予定
+ui/motolii-menubar	B06	ヘルプ/診断束	580	1	DaVinci Resolve Training	トレーニング情報を開く	採用予定
+ui/motolii-menubar	B06	ヘルプ/診断束	581	1	Deactivate License	ライセンス解除	採用予定
+ui/motolii-menubar	B06	ヘルプ/診断束	583	1	Effect Reference…	エフェクトリファレンス	採用予定
+ui/motolii-menubar	B06	ヘルプ/診断束	584	1	Enable Logging	ログ記録を有効化	採用予定
+ui/motolii-menubar	B06	ヘルプ/診断束	586	1	Reveal Logging File	ログファイルを表示	採用予定
+ui/motolii-menubar	B06	ヘルプ/診断束	587	1	Scripting Help…	スクリプトヘルプ	採用予定
+ui/motolii-menubar	B06	ヘルプ/診断束	589	1	Updates…	アップデート確認	採用予定
+ui/motolii-menubar	B06	ヘルプ/診断束	590	1	Welcome Screen…	ようこそ画面	採用予定
+ui/motolii-menubar	B06	ヘルプ/診断束	591	1	Welcome to DaVinci Resolve	ようこそ画面を開く	採用予定
 ui/motolii-keymap	B45	微調整(ナッジ)束	1400	1	Nudge Selected Object Down by Five Pixels	選択オブジェクトを下へ5px	採用予定
 ui/motolii-keymap	B45	微調整(ナッジ)束	1401	1	Nudge Selected Object Down by One Pixel	選択オブジェクトを下へ1px	採用予定
 ui/motolii-keymap	B45	微調整(ナッジ)束	1402	1	Nudge Selected Object Left by Five Pixels	選択オブジェクトを左へ5px	採用予定
@@ -713,8 +703,6 @@ ui/motolii-export-pane	B09	書き出し束	647	1	Add to Render Queue	レンダ�
 ui/motolii-export-pane	B09	書き出し束	663	1	File…	フレームをファイル保存	採用予定
 ui/motolii-export-pane	B09	書き出し束	907	1	Output Module…	出力モジュールテンプレート	採用予定
 ui/motolii-export-pane	B09	書き出し束	930	1	Render Settings…	レンダー設定テンプレート	採用予定
-(家が未決)	B24	ズーム束(MA L4例示)	1441	3	Zoom In	ズームイン	採用予定
-(家が未決)	B24	ズーム束(MA L4例示)	1442	3	Zoom Out	ズームアウト	採用予定
 (家が未決)	B38	トランジション/エフェクト適用束	164	2	Apply Audio Transition (default, at edit point)	既定のオーディオトランジションを編集点に適用	採用予定
 (家が未決)	B38	トランジション/エフェクト適用束	165	2	Apply Video Transition (default, at edit point)	既定のビデオトランジションを編集点に適用	採用予定
 (家が未決)	B16	解析→自動キーフレーム束(新規発見)	1	1	Auto reframe	画角自動追従で別比率に再構成	採用予定
@@ -825,7 +813,6 @@ ui/motolii-export-pane	B09	書き出し束	930	1	Render Settings…	レンダー
 (家が未決)	B24	ズーム束(MA L4例示)	1488	1	Zoom out time	時間軸をズームアウト	採用予定
 (家が未決)	B24	ズーム束(MA L4例示)	1489	1	Zoom out Timeline to show entire composition	コンポ全体表示までズームアウト	採用予定
 (家が未決)	B24	ズーム束(MA L4例示)	1490	1	Zoom to 100%	100%表示	採用予定
-(家が未決)	B24	ズーム束(MA L4例示)	1491	1	Zoom to fit	フィット表示	採用予定
 (家が未決)	B24	ズーム束(MA L4例示)	1492	1	Zoom to Fit	Shift+Z	採用予定
 (家が未決)	B24	ズーム束(MA L4例示)	1493	1	Zoom Tool	ズームツール	採用予定
 (家が未決)	B26	ワークスペースレイアウト束	1494	1	Activate view in multi-view layout	マルチビューでビューを有効化	採用予定

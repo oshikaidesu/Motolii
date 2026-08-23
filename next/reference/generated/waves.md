@@ -30,7 +30,7 @@
 | `ui/motolii-stage-pane/src/zoom.rs` | 1 | `ui/motolii-stage-pane/src/zoom.rs` |  |
 | `core/motolii-store/src/lib.rs` | 1 | `core/motolii-store/src/lib.rs` |  |
 | `ui/motolii-inspector-pane/src/link.rs` | 1 | `ui/motolii-inspector-pane/src/link.rs` |  |
-| `engine/motolii-engine/src/lib.rs` | 1 | `engine/motolii-engine/src/lib.rs` |  |
+| `engine/motolii-engine/src/render.rs` | 1 | `engine/motolii-engine/src/render.rs`, `engine/motolii-engine/src/texture.rs` |  |
 | `core/motolii-store/src/asset.rs` | 1 | `core/motolii-store/src/asset.rs` |  |
 | `engine/motolii-compositor/src/blend.rs` | 1 | `engine/motolii-compositor/src/blend.rs` |  |
 | `shell/motolii-shell/src/pane_layout.rs` | 1 | `shell/motolii-shell/src/pane_layout.rs` |  |

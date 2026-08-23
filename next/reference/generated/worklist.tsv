@@ -67,7 +67,7 @@ shell/motolii-shell/src/menu.rs	A02	-	レイヤー削除(実質 CutLayer、Cmd+X
 ui/motolii-stage-pane/src/zoom.rs	A02	-	トラックパッド ピンチジェスチャ(Stage ズーム)	穴:ポインタ入力を受け取れない		ui/motolii-stage-pane/src/zoom.rs
 core/motolii-store/src/lib.rs	A03	-	Speed(ATTRS)	乗っていない		core/motolii-store/src/lib.rs
 ui/motolii-inspector-pane/src/link.rs	A03	-	Link 元(source layer+property、LINK)	乗っていない		ui/motolii-inspector-pane/src/link.rs
-engine/motolii-engine/src/lib.rs	A05	-	Stage合成中、1layerの素材(Media)がprobe/decode失敗(削除・非対応コーデック・破損)	理由つきで拒否する		engine/motolii-engine/src/lib.rs
+engine/motolii-engine/src/render.rs	A05	-	Stage合成中、1layerの素材(Media)がprobe/decode失敗(削除・非対応コーデック・破損)	理由つきで拒否する		engine/motolii-engine/src/render.rs;engine/motolii-engine/src/texture.rs
 core/motolii-store/src/asset.rs	A05	-	`motolii_store::Asset`構造体そのものにoffline/missing/broken状態を持つフィールドが無い(裁定154台帳の`Find Missing Footage`はコマンド名のみで状態は台帳に無い、docs/reviews/2026-08-23-normal-map-trunk.md 節1と一致する実装側の裏付け)	黙って握りつぶす		core/motolii-store/src/asset.rs
 engine/motolii-compositor/src/blend.rs	A05	-	`percent-encoded/HSL blend`のSetSat/ClipColor — 色が全チャンネル同値かつ範囲外の極端入力で理論上0除算(NaN)	未確認		engine/motolii-compositor/src/blend.rs
 shell/motolii-shell/src/pane_layout.rs	A06	-	paneレイアウト(実働側 `pane_layout::Layout` ── pane_grid分割比率・Browserパネル開閉)	戻らない		shell/motolii-shell/src/pane_layout.rs
