@@ -62,7 +62,7 @@ use motolii_settings_pane::chrome::{parse_number, value_input_style};
 use motolii_store::{Document, Intent, LayerId, TextDocumentStyle};
 use motolii_tokens_rs::{Colors, Dimensions};
 
-use iced::widget::{column, container, row as row_widget, text, text_input};
+use iced::widget::{column, container, mouse_area, row as row_widget, text, text_input};
 use iced::{Element, Length};
 
 use crate::chrome::label_chip_side;
@@ -271,6 +271,11 @@ pub enum Message {
     /// 色欄の Enter — ここで初めて [`commit_text_style_color`] を1回呼ぶ
     /// (1 gesture = 1 undo)。
     ChannelSubmit(ColorTarget, ColorChannel),
+    /// 色欄のキャプション press(裁定217 連続量 drag 化、E-5)。
+    /// `motolii_settings_pane::sections::Message::CompFieldDragPressed` と同じ
+    /// 「press だけ own する」形(そちら側の doc「AE のスクラブ精神論」参照)—
+    /// 続きは shell 側の window 全体購読 + `Shell::value_drag` が持つ。
+    ChannelDragPressed(ColorTarget, ColorChannel),
 }
 
 // ---------------------------------------------------------------------------
@@ -329,11 +334,18 @@ fn channel_cell(
         .unwrap_or_else(|| color_channel_display(style, target, channel));
 
     column![
-        text(channel.label())
-            .size(dims.caption_text)
-            .color(colors.text_muted)
-            .align_x(iced::alignment::Horizontal::Center)
-            .width(Length::Fixed(dims.inspector_value_width)),
+        // 裁定217 連続量 drag 化(E-5): `motolii_settings_pane` 側の
+        // 数値セルと同じキャプション drag ハンドル(2箇所で別の意匠を
+        // 発明しない — crate doc「意匠」節どおり)。
+        mouse_area(
+            text(channel.label())
+                .size(dims.caption_text)
+                .color(colors.text_muted)
+                .align_x(iced::alignment::Horizontal::Center)
+                .width(Length::Fixed(dims.inspector_value_width))
+        )
+        .interaction(iced::mouse::Interaction::ResizingHorizontally)
+        .on_press(Message::ChannelDragPressed(target, channel)),
         // 裁定170 M01: fork の text_input は借用寿命を返り値に縛るため owned
         // move(値不変、`channel_cell`/`comp_field_cell` と同じ回避)。
         text_input("", displayed)

@@ -369,6 +369,14 @@ impl Shell {
                 }
                 Task::none()
             }
+            // 裁定217 連続量 drag 化(E-5、write-set 外だが `color::Message` の
+            // 網羅性のために必須 — 最小の1腕): 実際には `lib.rs`
+            // (`Message::Inspector` 腕)がこの variant を先取りして
+            // `Shell::start_value_drag` へ渡すため、ここへは来ない
+            // (`lib.rs` 側のコメント参照)。
+            inspector_pane::Message::Color(inspector_pane::color::Message::ChannelDragPressed(..)) => {
+                Task::none()
+            }
         }
     }
 
