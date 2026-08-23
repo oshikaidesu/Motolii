@@ -59,9 +59,27 @@ pub(crate) fn text_section<'a>(
     draft: Option<&TextFieldDraft>,
     color_draft: Option<&crate::color::ColorFieldDraft>,
     content_editor: Option<&'a text_editor::Content>,
+    multi_selection: bool,
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'a, Message> {
+    if multi_selection {
+        return column![
+            section_header("TEXT", dims, colors),
+            size_row(text_projection, draft, true, dims, colors),
+            crate::color::color_row(
+                crate::color::ColorTarget::Fill,
+                &text_projection.style,
+                color_draft,
+                false,
+                dims,
+                colors,
+            )
+            .map(Message::Color),
+        ]
+        .into();
+    }
+
     column![
         section_header("TEXT", dims, colors),
         content_row(
@@ -72,7 +90,7 @@ pub(crate) fn text_section<'a>(
             colors,
         ),
         font_family_row(text_projection, draft, dims, colors),
-        size_row(text_projection, draft, dims, colors),
+        size_row(text_projection, draft, false, dims, colors),
         line_height_row(text_projection, draft, dims, colors),
         tracking_row(text_projection, draft, dims, colors),
         justify_row(text_projection.justify, dims, colors),
@@ -80,6 +98,7 @@ pub(crate) fn text_section<'a>(
             crate::color::ColorTarget::Fill,
             &text_projection.style,
             color_draft,
+            true,
             dims,
             colors,
         )
@@ -88,6 +107,7 @@ pub(crate) fn text_section<'a>(
             crate::color::ColorTarget::Stroke,
             &text_projection.style,
             color_draft,
+            true,
             dims,
             colors,
         )
@@ -258,6 +278,7 @@ pub fn text_field_track_target(field: TextField) -> Option<TextStyleField> {
 fn size_row(
     text_projection: &TextSectionProjection,
     draft: Option<&TextFieldDraft>,
+    multi_selection: bool,
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
@@ -275,17 +296,29 @@ fn size_row(
         .align_x(iced::alignment::Horizontal::Center)
         .style(move |_theme, status| name_input_style(dims, colors, status));
 
-    let content = row_widget![
-        text("Size")
-            .size(dims.body_text)
-            .color(colors.text_primary)
-            .width(Length::Fill),
-        value_field,
-        text_style_drag_handle(TextStyleField::Size, dims, colors),
-        text_style_key_button(TextStyleField::Size, text_projection.size_key, dims, colors),
-    ]
-    .spacing(dims.spacing_xs)
-    .align_y(iced::alignment::Vertical::Center);
+    let content = if multi_selection {
+        row_widget![
+            text("Size")
+                .size(dims.body_text)
+                .color(colors.text_primary)
+                .width(Length::Fill),
+            value_field,
+        ]
+        .spacing(dims.spacing_xs)
+        .align_y(iced::alignment::Vertical::Center)
+    } else {
+        row_widget![
+            text("Size")
+                .size(dims.body_text)
+                .color(colors.text_primary)
+                .width(Length::Fill),
+            value_field,
+            text_style_drag_handle(TextStyleField::Size, dims, colors),
+            text_style_key_button(TextStyleField::Size, text_projection.size_key, dims, colors),
+        ]
+        .spacing(dims.spacing_xs)
+        .align_y(iced::alignment::Vertical::Center)
+    };
 
     bordered_row(content.into(), dims)
 }

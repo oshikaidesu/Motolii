@@ -385,6 +385,8 @@
         // current_vec2 の Y は保たれる。
         let selection = SelectionProjection {
             layer: LayerId(1),
+            selection_count: 1,
+            text_layer_count: 0,
             kind: "solid",
             transform: vec![TransformRowProjection {
                 label: "Scale",
@@ -445,6 +447,8 @@
     fn drag_origin_accepts_keyed_fields() {
         let selection = SelectionProjection {
             layer: LayerId(1),
+            selection_count: 1,
+            text_layer_count: 0,
             kind: "solid",
             transform: vec![TransformRowProjection {
                 label: "Rotation",

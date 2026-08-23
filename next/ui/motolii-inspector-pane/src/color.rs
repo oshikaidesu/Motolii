@@ -284,6 +284,56 @@ pub fn commit_text_style_color(
         .map_err(|error| format!("色を書けない: {error}"))
 }
 
+/// Multi-selection variant of [`commit_text_style_color`]. Only text layers
+/// contribute a `SetTextDocument`; unsupported selected layers are untouched,
+/// and all changed text layers share one undo step.
+pub fn commit_text_style_color_for_layers(
+    doc: &mut Document,
+    draft: &mut Option<ColorFieldDraft>,
+    selected_layers: &[LayerId],
+    target: ColorTarget,
+    channel: ColorChannel,
+) -> Result<(), String> {
+    let Some(taken) = draft.take() else {
+        return Ok(());
+    };
+    if taken.target != target || taken.channel != channel {
+        *draft = Some(taken);
+        return Ok(());
+    }
+    let Some(value_0_1) = parse_color_channel_u8(&taken.text) else {
+        return Err(format!("数値として読めない: {}", taken.text));
+    };
+
+    crate::bulk::apply_to_selected_text_layers(doc, selected_layers, |layer, store| {
+        let current = store
+            .text_document(layer)
+            .map_err(|error| format!("text document を読めない: {error}"))?;
+        let mut document = current.clone().unwrap_or_else(default_text_document);
+        let mut style = document
+            .styles
+            .first()
+            .cloned()
+            .unwrap_or_else(default_text_style);
+        set_text_style_color_channel(&mut style, target, channel, value_0_1);
+        if document.styles.is_empty() {
+            document.styles.push(style);
+        } else {
+            document.styles[0] = style;
+        }
+
+        let unchanged = match &current {
+            Some(existing) => existing == &document,
+            None => document == default_text_document(),
+        };
+        if unchanged {
+            Ok(None)
+        } else {
+            Ok(Some(Intent::SetTextDocument { layer, document }))
+        }
+    })
+}
+
 // ---------------------------------------------------------------------------
 // Message(module ローカル — crate 冒頭 doc「結線互換の縫い目」/
 // `motolii_settings_pane::sections` 第1切片と同じ「自己完結・供覧」の形)。
@@ -321,13 +371,14 @@ pub fn color_row(
     target: ColorTarget,
     style: &TextDocumentStyle,
     draft: Option<&ColorFieldDraft>,
+    allow_drag: bool,
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
     let rgba = text_style_color(style, target);
     let cells: Vec<Element<'static, Message>> = ColorChannel::ALL
         .into_iter()
-        .map(|channel| channel_cell(target, channel, style, draft, dims, colors))
+        .map(|channel| channel_cell(target, channel, style, draft, allow_drag, dims, colors))
         .collect();
 
     let content = row_widget![
@@ -357,6 +408,7 @@ fn channel_cell(
     channel: ColorChannel,
     style: &TextDocumentStyle,
     draft: Option<&ColorFieldDraft>,
+    allow_drag: bool,
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
@@ -365,7 +417,7 @@ fn channel_cell(
         .map(|draft| draft.text.clone())
         .unwrap_or_else(|| color_channel_display(style, target, channel));
 
-    column![
+    let channel_label: Element<'static, Message> = if allow_drag {
         // 裁定217 連続量 drag 化(E-5): `motolii_settings_pane` 側の
         // 数値セルと同じキャプション drag ハンドル(2箇所で別の意匠を
         // 発明しない — crate doc「意匠」節どおり)。
@@ -377,7 +429,19 @@ fn channel_cell(
                 .width(Length::Fixed(dims.inspector_value_width))
         )
         .interaction(iced::mouse::Interaction::ResizingHorizontally)
-        .on_press(Message::ChannelDragPressed(target, channel)),
+        .on_press(Message::ChannelDragPressed(target, channel))
+        .into()
+    } else {
+        text(channel.label())
+            .size(dims.caption_text)
+            .color(colors.text_muted)
+            .align_x(iced::alignment::Horizontal::Center)
+            .width(Length::Fixed(dims.inspector_value_width))
+            .into()
+    };
+
+    column![
+        channel_label,
         // 裁定170 M01: fork の text_input は借用寿命を返り値に縛るため owned
         // move(値不変、`channel_cell`/`comp_field_cell` と同じ回避)。
         text_input("", displayed)

@@ -12,6 +12,16 @@ use crate::{
 };
 
 impl Shell {
+    /// Inspector edits use the selection set as their target. The fallback
+    /// keeps older callers/tests that only populate the single focus working.
+    fn inspector_selected_layers(&self) -> Vec<LayerId> {
+        if self.session.selected_layers.is_empty() {
+            self.session.selection.into_iter().collect()
+        } else {
+            self.session.selected_layers.clone()
+        }
+    }
+
     /// [`Message::Inspector`] の唯一の分配口。腕ごとの意味は
     /// `inspector_pane::Message` 側の doc を参照。書き込み本体は
     /// `motolii-inspector-pane` crate 側の自由関数([`inspector_pane::
@@ -197,10 +207,11 @@ impl Shell {
                         field: style_field,
                         text: taken.text,
                     });
-                    if let Err(error) = inspector_pane::commit_text_style_track_field(
+                    let selected_layers = self.inspector_selected_layers();
+                    if let Err(error) = inspector_pane::commit_text_style_track_field_for_layers(
                         &mut self.doc,
                         &mut style_draft,
-                        self.session.selection,
+                        &selected_layers,
                         self.session.playhead,
                         composition.fps,
                         TextStyleId(0),
@@ -386,10 +397,11 @@ impl Shell {
                 target,
                 channel,
             )) => {
-                if let Err(error) = inspector_pane::color::commit_text_style_color(
+                let selected_layers = self.inspector_selected_layers();
+                if let Err(error) = inspector_pane::color::commit_text_style_color_for_layers(
                     &mut self.doc,
                     &mut self.inspector_color_field_draft,
-                    self.session.selection,
+                    &selected_layers,
                     target,
                     channel,
                 ) {
@@ -1291,4 +1303,3 @@ impl Shell {
         }
     }
 }
-

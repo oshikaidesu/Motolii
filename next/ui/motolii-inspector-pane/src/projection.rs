@@ -257,6 +257,14 @@ fn link_would_cycle(
 #[derive(Clone, Debug, PartialEq)]
 pub struct SelectionProjection {
     pub layer: LayerId,
+    /// Number of live layers represented by this Inspector projection.
+    /// `1` preserves the original single-selection shape; values above one
+    /// use the multi-selection view and do not expose single-layer controls.
+    pub selection_count: usize,
+    /// Number of selected layers whose source is `Text`. Bulk text edits use
+    /// the same compatibility rule, so this count makes mixed selections
+    /// observable instead of implying every selected layer is editable here.
+    pub text_layer_count: usize,
     /// ident 帯の種別ラベル(mock の `.ident s` = 「clip · 0 shared FX」相当)。
     /// **`LayerSource` の実データから引く** — mock の「shared FX」は store に
     /// 対応する概念が無い(effect に "shared" フラグは無い)ので、種別だけ載せ、
@@ -479,12 +487,42 @@ pub fn project(
     store: &StoreView<'_>,
     session: &Session,
 ) -> Result<Option<SelectionProjection>, StoreError> {
-    let Some(layer) = session.selection else {
+    let requested_layers = if session.selected_layers.is_empty() {
+        session.selection.into_iter().collect()
+    } else {
+        session.selected_layers.clone()
+    };
+    let mut selected_layers = Vec::new();
+    let mut seen = HashSet::new();
+    for layer in requested_layers {
+        if seen.insert(layer) && store.has_layer(layer) {
+            selected_layers.push(layer);
+        }
+    }
+    let text_layers: Vec<LayerId> = selected_layers
+        .iter()
+        .copied()
+        .filter(|&layer| {
+            store
+                .meta(layer)
+                .ok()
+                .flatten()
+                .is_some_and(|meta| matches!(meta.source, LayerSource::Text))
+        })
+        .collect();
+    let selection_count = selected_layers.len();
+    let text_layer_count = text_layers.len();
+    let layer = if selection_count > 1 {
+        text_layers
+            .first()
+            .copied()
+            .or_else(|| selected_layers.first().copied())
+    } else {
+        selected_layers.first().copied()
+    };
+    let Some(layer) = layer else {
         return Ok(None);
     };
-    if !store.has_layer(layer) {
-        return Ok(None);
-    }
     let Some(composition) = store.composition()? else {
         return Ok(None);
     };
@@ -902,6 +940,8 @@ pub fn project(
 
     Ok(Some(SelectionProjection {
         layer,
+        selection_count,
+        text_layer_count,
         kind,
         transform: vec![
             position_row,
@@ -918,4 +958,3 @@ pub fn project(
         links: link_rows,
     }))
 }
-

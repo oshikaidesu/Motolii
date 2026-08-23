@@ -68,6 +68,37 @@ fn session_selecting(layer: LayerId) -> Session {
     }
 }
 
+#[test]
+fn multi_text_projection_reports_the_selection_and_text_counts() {
+    let (mut doc, first) = text_layer();
+    let second = LayerId(2);
+    doc.apply_all([
+        Intent::AddLayer(second),
+        Intent::SetMeta {
+            layer: second,
+            meta: LayerMeta {
+                source: LayerSource::Text,
+                order: 1,
+                timing: LayerTiming::place(0, None, 300),
+            },
+        },
+    ])
+    .expect("2枚目のText layerを置けるはず");
+    let session = Session {
+        selection: None,
+        selected_layers: vec![first, second],
+        ..Session::default()
+    };
+
+    let projection = project(&doc.view(), &session)
+        .expect("複数選択の投影を組めるはず")
+        .expect("選択中なのでSomeのはず");
+    assert_eq!(projection.selection_count, 2);
+    assert_eq!(projection.text_layer_count, 2);
+    assert_eq!(projection.kind, "text");
+    assert!(projection.text.is_some(), "複数Text選択にはTEXT entryが必要");
+}
+
 /// `mask_section.rs::collect_targets` と同じ「`find` を尽きるまで繰り返す」手口。
 fn collect_targets(element: iced::Element<'_, Message>) -> Vec<Target> {
     let mut ui = iced_test::simulator(element);

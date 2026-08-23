@@ -433,6 +433,8 @@
         let field = TransformField::MaskOpacity(MaskId(1));
         let selection = SelectionProjection {
             layer: LayerId(1),
+            selection_count: 1,
+            text_layer_count: 0,
             kind: "solid",
             transform: vec![],
             attrs: AttrsProjection {
@@ -485,6 +487,8 @@
     fn drag_origin_finds_the_audio_section_slots() {
         let selection = SelectionProjection {
             layer: LayerId(1),
+            selection_count: 1,
+            text_layer_count: 0,
             kind: "media",
             transform: vec![],
             attrs: AttrsProjection {

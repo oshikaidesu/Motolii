@@ -105,6 +105,8 @@ fn position_row_matching_the_field_report() -> TransformRowProjection {
 fn selection_with_position_row() -> SelectionProjection {
     SelectionProjection {
         layer: LayerId(0),
+        selection_count: 1,
+        text_layer_count: 0,
         kind: "solid",
         transform: vec![position_row_matching_the_field_report()],
         attrs: AttrsProjection {

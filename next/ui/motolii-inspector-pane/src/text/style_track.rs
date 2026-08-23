@@ -122,6 +122,51 @@ pub fn commit_text_style_track_field(
     .map_err(|error| format!("値を書けない: {error}"))
 }
 
+/// Multi-selection variant of [`commit_text_style_track_field`]. The draft is
+/// consumed once, compatible text layers receive one `SetTrack` each, and the
+/// shared bulk boundary commits the whole gesture as one undo step.
+pub fn commit_text_style_track_field_for_layers(
+    doc: &mut Document,
+    draft: &mut Option<TextStyleTrackDraft>,
+    selected_layers: &[LayerId],
+    playhead_frame: i64,
+    fps: Fps,
+    style_id: TextStyleId,
+    field: TextStyleField,
+) -> Result<(), String> {
+    let Some(taken) = draft.take() else {
+        return Ok(());
+    };
+    if taken.style != style_id || taken.field != field {
+        *draft = Some(taken);
+        return Ok(());
+    }
+    let value =
+        parse_number(&taken.text).ok_or_else(|| format!("数値として読めない: {}", taken.text))?;
+    let property = field.property_id(style_id);
+
+    crate::bulk::apply_to_selected_text_layers(doc, selected_layers, |layer, store| {
+        let track = store
+            .track(layer, &property)
+            .map_err(|error| format!("track を読めない: {error}"))?;
+        let new_track = crate::transform::edited_value_track(
+            track.as_ref(),
+            playhead_frame,
+            fps,
+            Value::F64(value),
+        )?;
+        if track.as_ref() == Some(&new_track) {
+            Ok(None)
+        } else {
+            Ok(Some(Intent::SetTrack {
+                layer,
+                property: property.clone(),
+                track: new_track,
+            }))
+        }
+    })
+}
+
 /// Key 列 click の意味(`crate::transform::toggled_key_track` をそのまま
 /// 呼ぶ)。track が無い時の基準値は [`TextStyleField::static_value`]。
 pub fn toggle_text_style_key(
@@ -366,6 +411,70 @@ mod track_field_tests {
             .value_at(layer, &PropertyId::text_style_size(TextStyleId(0)), RationalTime::ZERO)
             .unwrap();
         assert_eq!(value, Some(Value::F64(200.0)));
+    }
+
+    #[test]
+    fn multi_selection_size_writes_text_layers_in_one_undo_and_skips_unsupported_layers() {
+        let (mut doc, first) = doc_with_text_layer();
+        let second = LayerId(2);
+        let solid = LayerId(3);
+        doc.apply_all([
+            Intent::AddLayer(second),
+            Intent::SetMeta {
+                layer: second,
+                meta: LayerMeta {
+                    source: LayerSource::Text,
+                    order: 1,
+                    timing: LayerTiming::place(0, None, 100),
+                },
+            },
+            Intent::SetTextDocument {
+                layer: second,
+                document: default_text_document(),
+            },
+            Intent::AddLayer(solid),
+            Intent::SetMeta {
+                layer: solid,
+                meta: LayerMeta {
+                    source: LayerSource::Solid {
+                        rgba: [0, 0, 0, 255],
+                        width: 64,
+                        height: 64,
+                    },
+                    order: 2,
+                    timing: LayerTiming::place(0, None, 100),
+                },
+            },
+        ])
+        .unwrap();
+        let before = doc.edit_head();
+        let mut draft = Some(TextStyleTrackDraft {
+            style: TextStyleId(0),
+            field: TextStyleField::Size,
+            text: "200".to_owned(),
+        });
+
+        commit_text_style_track_field_for_layers(
+            &mut doc,
+            &mut draft,
+            &[first, second, solid],
+            0,
+            Fps::try_new(30, 1).unwrap(),
+            TextStyleId(0),
+            TextStyleField::Size,
+        )
+        .unwrap();
+
+        let property = PropertyId::text_style_size(TextStyleId(0));
+        assert_eq!(doc.edit_head(), before + 1, "複数 layer の Size は1 undoに束ねる");
+        assert_eq!(doc.view().value_at(first, &property, RationalTime::ZERO).unwrap(), Some(Value::F64(200.0)));
+        assert_eq!(doc.view().value_at(second, &property, RationalTime::ZERO).unwrap(), Some(Value::F64(200.0)));
+        assert_eq!(doc.view().track(solid, &property).unwrap(), None, "非TextへSizeを書かない");
+
+        assert!(doc.undo(), "一括 Size は undo できる");
+        assert_eq!(doc.view().track(first, &property).unwrap(), None);
+        assert_eq!(doc.view().track(second, &property).unwrap(), None);
+        assert_eq!(doc.view().track(solid, &property).unwrap(), None);
     }
 
     /// Line Height は `None`(Auto)の間、track が無ければ 0.0 を基準にする

@@ -119,6 +119,7 @@ use motolii_tokens_rs::{Colors, Dimensions, Ink, TextWeight, LABEL_PALETTE_LEN};
 // ---------------------------------------------------------------------------
 mod attrs;
 mod audio;
+mod bulk;
 mod chrome;
 // 色エディタ(2026-08-22 発注)。crate 本体の `Message`/`view` へはまだ結線
 // していない自己完結モジュール(`motolii-settings-pane::sections` 第1切片と
@@ -164,7 +165,8 @@ pub use projection::{
 };
 pub use text::{
     applied_text_content, applied_text_field, commit_text_field, commit_text_font_pick,
-    commit_text_style_track_field, continue_text_style_drag, cycle_text_justify,
+    commit_text_style_track_field, commit_text_style_track_field_for_layers,
+    continue_text_style_drag, cycle_text_justify,
     default_text_document, default_text_style, finish_text_style_drag, next_text_justify,
     reset_text_line_height, reset_text_tracking, start_text_style_drag, text_document_content,
     text_field_track_target, toggle_text_style_key, TextField, TextFieldDraft,
@@ -565,6 +567,32 @@ fn selected_body<'a>(
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'a, Message> {
+    if selection.selection_count > 1 {
+        let mut rows = column![multi_selection_band(selection, dims, colors)];
+        if let Some(text_projection) = &selection.text {
+            rows = rows.push(text_section(
+                text_projection,
+                text_field_draft,
+                color_field_draft,
+                None,
+                true,
+                dims,
+                colors,
+            ));
+        } else {
+            rows = rows.push(
+                container(
+                    iced_text("選択中に編集できる TEXT レイヤーがありません")
+                        .size(dims.caption_text)
+                        .color(colors.text_muted),
+                )
+                .padding(dims.spacing_m),
+            );
+        }
+        rows = rows.push(hint_row(dims, colors));
+        return scrollable(rows).height(Length::Fill).into();
+    }
+
     let mut rows = column![
         ident_band(selection, name_draft, dims, colors),
         column_header_row(dims, colors),
@@ -597,6 +625,7 @@ fn selected_body<'a>(
             text_field_draft,
             color_field_draft,
             content_editor,
+            false,
             dims,
             colors,
         ));
@@ -615,6 +644,32 @@ fn selected_body<'a>(
     rows = rows.push(hint_row(dims, colors));
 
     scrollable(rows).height(Length::Fill).into()
+}
+
+/// Multi-selection identity band. It intentionally has no name input, mute
+/// glyph, or single-layer metadata because those controls would have no
+/// unambiguous target for the current Inspector write route.
+fn multi_selection_band(
+    selection: &SelectionProjection,
+    dims: Dimensions,
+    colors: Colors,
+) -> Element<'static, Message> {
+    let text_summary = if selection.text_layer_count == selection.selection_count {
+        format!("{} text layers", selection.text_layer_count)
+    } else {
+        format!("{} text layers / {} selected", selection.text_layer_count, selection.selection_count)
+    };
+    container(column![
+        iced_text(format!("{} layers selected", selection.selection_count))
+            .size(dims.body_text)
+            .font(TextWeight::Semibold.font())
+            .color(colors.text_primary),
+        iced_text(text_summary)
+            .size(dims.caption_text)
+            .color(Ink::Secondary.resolve(&colors)),
+    ])
+    .padding([dims.spacing_s, dims.spacing_m])
+    .into()
 }
 
 /// mock の `.ident` 帯: 名前(編集可)+ 種別(読み取り専用)+ M/S glyph。
