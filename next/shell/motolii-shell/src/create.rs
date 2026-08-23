@@ -282,5 +282,66 @@ impl Shell {
         (id.0 % tokens::LABEL_PALETTE_LEN as u64) as u8
     }
 
+    /// A01 id616/617(map「Replace selected footage item」/「Replace selected
+    /// source footage for selected layers」)の shell 側実体化。
+    /// `browser_pane::state::Message::ReplaceSelectedLayerSource` doc が明記する
+    /// 契約どおり — pane は no-op、**supervisor が `AssetId` → `Asset` を引き、
+    /// [`browser_pane::model::asset_to_layer_source`] を呼んで `Some` なら
+    /// `Intent::SetSource` を dispatch する**。
+    ///
+    /// **API 分析の根拠**(裁定199):
+    /// - `self.doc.view().asset(id) -> Result<Option<Asset>, StoreError>`
+    ///   (`motolii_store::view::StoreView::asset`)— 台帳に無ければ `Ok(None)`、
+    ///   store 内部エラーなら `Err`。どちらも「置換できない」なので早期 return
+    ///   で畳む(`Err` を無視するのではなく、以後どのみち `status` へ理由を出す
+    ///   経路が無い致命度ではないため — 台帳に無い asset_id は事実上起こらない
+    ///   はずの経路で、`add_mask_to_selected_layer` 等の既存腕も store 内部
+    ///   エラーを黙って諦める前例が無いのでここでは `status` に一言残す)。
+    /// - `browser_pane::model::asset_to_layer_source(&Asset) -> Option<LayerSource>`
+    ///   ── `path_absolute` 優先・`path_project_relative` へ落ちる・両方無ければ
+    ///   `None`(crate doc「置換できる実体が無い」)。`None` は非ファイル素材
+    ///   (生成系)を指す正常系であって IO 障害ではないので、専用の文言で
+    ///   `status` へ出す。
+    /// - `Intent::SetSource { layer, source }`(`motolii_store::document::Intent`)
+    ///   ── layer に既存 `meta` が無ければ `Err`(「先に SetMeta で配置する
+    ///   こと」)。この腕は `single_selected_layer` を通すので選択レイヤーは
+    ///   既に配置済みのはず(未配置 layer は選択できない、既存 UI 慣習)だが、
+    ///   `apply` の `Result` はそのまま `status` へ落として黙殺しない
+    ///   (`add_mask_to_selected_layer`/`apply_effect_to_selected_layer` と同じ
+    ///   「拒否は必ず出す」規律)。
+    ///
+    /// 単一選択のゲーティングは [`browser_pane::model::can_replace_source`] の
+    /// 契約(「0件・2件以上の選択には何もしない」)をそのままここで踏襲する
+    /// (pane 側の `Replace` ボタン自体が `single_selected_layer` 前提で描画
+    /// されている、`replace_affordance_row` 参照)。
+    pub(crate) fn replace_selected_layer_source(&mut self, asset_id: motolii_store::AssetId) {
+        let target = match self.session.selected_layers.as_slice() {
+            [only] => Some(*only),
+            _ => None,
+        };
+        let Some(layer) = target else {
+            self.status = Some("素材を置き換えるレイヤーを1つ選んでください".to_owned());
+            return;
+        };
+        let asset = match self.doc.view().asset(asset_id) {
+            Ok(Some(asset)) => asset,
+            Ok(None) => {
+                self.status = Some("置き換え元の素材が台帳に見つかりません".to_owned());
+                return;
+            }
+            Err(error) => {
+                self.status = Some(format!("素材を読めません: {error}"));
+                return;
+            }
+        };
+        let Some(source) = browser_pane::model::asset_to_layer_source(&asset) else {
+            self.status = Some("この素材はパスを持たないため置換できません".to_owned());
+            return;
+        };
+        if let Err(error) = self.doc.apply(Intent::SetSource { layer, source }) {
+            self.status = Some(format!("素材を置き換えられません: {error}"));
+        }
+    }
+
 }
 
