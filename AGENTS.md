@@ -1,5 +1,23 @@
 # AGENTS.md
 
+## 読む前に — 繰り返し踏んだ罠(2026-08-23)
+
+**ここを飛ばすと同じ穴を踏みます。** 経緯は [教訓](docs/reviews/2026-08-23-lessons.md)。
+
+| 罠 | 対処 | 実測 |
+|---|---|---|
+| **背景で cargo を投げて待つとレーンが止まる** | **前景で・`timeout 600000`。`&`/`run_in_background`/`Monitor` を使わない。監督役も「待つ」を選択肢から外す** | 1日15件。**文章での禁止は15回とも失敗**し、復帰の定型文は15回とも成功 |
+| **台帳が実装より古くなる** | **機械が出せる列を人が書き写さない**(生成+柵)。触ったら再生成 | 1日25件。**全部この型**だった |
+| **「確認する」を成果物にする** | **OUTCOME は状態の変化で書く**。可能なら機械で判定できる形に(裁定221) | 次の一手が調査になり調査で終わった |
+| **「実装が在る」を「利用者に届く」と読む** | `済` は**実機で確認した物だけ**(裁定219) | 4件が「済」なのに動かなかった |
+| **自前で書く** | **先に外を探す**(裁定215)。自前解析 17,488行 → rustdoc JSON へ置換で取りこぼし2,078項目が判明 | 自前版は doc コメントを呼び手に数えていた |
+| **その場の判断で並列を作る** | **write-set が交わらないことを計算する**(`scripts/plan_waves.py`) | `shell/lib.rs` が 6,228行・責任指名102回 |
+| **勘で優先順位を決める** | **導出する**(`scripts/check_evidence.py`)。「効きそう」は人の手が残っている証拠 | 選んだ軸が実際には最下位だった |
+| **壁を上へ投げる** | **外部資料から決めて出典を書く**(裁定222)。利用者へ上げるのは実通の判定だけ | — |
+
+**発注書を書く前に [教訓](docs/reviews/2026-08-23-lessons.md) を読むこと。**
+
+
 Repository-specific agent *conduct* rules were archived in [docs/archive/agent-governance/](docs/archive/agent-governance/) and are not active. The only section below is build/test operations, kept here by user decision (2026-08-21) because every lane pays the cost of not knowing it.
 
 ## 段階(`next/reference/generated/steps.md`)
