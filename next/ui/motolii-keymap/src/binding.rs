@@ -6,10 +6,15 @@ use crate::key::{Key, ModifierSpec, Modifiers};
 use crate::verb::VerbId;
 
 /// 発火する文脈。**現行 shell に実在する区別だけ**を型にする —
-/// `inspector_pointer_event` は Escape/Backspace/Delete/Alt+矢印/Shift+F を
-/// **`status`(text_input 消費済みか)を無視して常に**発火させ、それ以外
-/// (`resolve_navigation_key` へ委譲する残り全部)は **`status == Captured` の
-/// 間は発火させない**(`resolve_navigation_key` 冒頭 doc 引用「テキスト入力中は
+/// `inspector_pointer_event` の早期 match 腕のうち Escape/Alt+矢印/Shift+F は
+/// **`status`(text_input 消費済みか)を無視して常に**発火させる
+/// (`Scope::Global`)。**Backspace/Delete は同じ関数内の腕だが
+/// `Scope::NavigationBundle`**(2026-08-23 修正 — 旧実装は `status` を一切
+/// 見ずに常時発火しており、Timeline でキーフレームを選択したまま text_input で
+/// Backspace を押すと文字削除とキー削除が二重発火した。`defaults.rs::
+/// global_bindings` 冒頭 doc 参照)。`resolve_navigation_key` へ委譲する残り
+/// 全部も `Scope::NavigationBundle` で、**`status == Captured` の間は発火
+/// させない**(`resolve_navigation_key` 冒頭 doc 引用「テキスト入力中は
 /// 横取りしない」)。この2値が今の shell の全て — pane 別の文脈はまだ shell
 /// 側に実装が無い(`Shell::update` はどの pane がフォーカスされているかで
 /// キー解決を分岐させていない)ので、ここでも作らない(発明しない)。

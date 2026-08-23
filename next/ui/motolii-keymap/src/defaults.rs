@@ -3,9 +3,20 @@
 //! 写しただけ** — 新しい割当は一切発明していない。各行のコメントは移設元の
 //! match 腕を指す(移行の追跡用)。
 //!
-//! 2つの表に分ける理由は [`crate::binding::Scope`] の doc と同じ:
-//! - [`global_bindings`]: `inspector_pointer_event` が `status` を無視して
-//!   常に発火させる腕(Escape/Backspace・Delete/Alt+矢印/Shift+F)
+//! 2つの表に分ける理由は [`crate::binding::Scope`] の doc と同じ —
+//! **「どの関数が捌くか」ではなく「`captured`(text_input が既にそのキーを
+//! 消費したか)を見るかどうか」で分ける**:
+//! - [`global_bindings`]: `inspector_pointer_event` の早期 match 腕。
+//!   Escape/Alt+矢印/Shift+F は `status` を無視して常に発火する
+//!   (`Scope::Global`)。**Backspace/Delete だけは同じ関数内の腕でありながら
+//!   `Scope::NavigationBundle`**(2026-08-23 修正 — 旧実装は
+//!   `inspector_pointer_event` の Backspace/Delete 腕が `status` を一切見ずに
+//!   常時発火しており、Timeline でキーフレームを選択したまま text_input で
+//!   Backspace を押すと文字削除とキー削除が二重発火する実害があった。fork
+//!   `core/src/text/input.rs:181` が Backspace を含む全 `Action::Edit` で
+//!   無条件に `shell.capture_event()` を呼ぶため、text_input にフォーカスが
+//!   ある間は既に `Status::Captured` になっている — Cmd+Z 等と同じ経路。
+//!   `input.rs::inspector_pointer_event` 側のコメント参照)
 //! - [`nav_bundle_bindings`]: `resolve_navigation_key` が受け持つ残り全部
 //!   (テキスト入力中は無効)
 //!
@@ -14,32 +25,36 @@
 //! `next/shell/motolii-shell/tests/suite/keymap_equivalence.rs` は
 //! [`nav_bundle_keymap`] と `motolii_shell::resolve_navigation_key` を突き合わせ、
 //! 両者が同じ入力に同じ結論を返すことを検分する(移行の安全証明)。
-//! `global_bindings` 側は `inspector_pointer_event` が `pub` でないため
-//! shell と直接突き合わせられない——crate 内試験(`tests/keymap_oracle.rs`)
-//! だけで自己無矛盾を確認している(RETURN の逸脱台帳に明記)。
+//! **`inspector_pointer_event` は本レーンで `pub` になった**(shell 分割)ので、
+//! 同ファイルは [`global_bindings`] も `inspector_pointer_event` へ直接突き
+//! 合わせる(`backspace_delete_respect_capture_and_match_global_bindings`)——
+//! 旧 doc が書いていた「pub でないため突き合わせられない」逸脱は解消済み。
 
 use crate::binding::{Binding, Keymap, Scope};
 use crate::key::{Key, ModifierSpec, NamedKey};
 use crate::verb::VerbId;
 
-/// `inspector_pointer_event`(`lib.rs` 4002行目〜)の早期 match 腕。**常に発火**
-/// (`status` 無視)。
+/// `inspector_pointer_event`(`next/shell/motolii-shell/src/input.rs`)の
+/// 早期 match 腕。**Backspace/Delete を除き常に発火**(`status` 無視)。
 pub fn global_bindings() -> Vec<Binding> {
     vec![
-        // 4017-4020: Escape → EscapePressed
+        // Escape → EscapePressed
         Binding::new(Key::Named(NamedKey::Escape), ModifierSpec::ANY, Scope::Global, VerbId::EscapeCancel),
-        // 4028-4035: Backspace/Delete(Mac 主部キーは Backspace として届く) →
-        // Timeline::DeleteSelectedKeys。2キーとも同じ動詞。
+        // Backspace/Delete(Mac 主部キーは Backspace として届く) →
+        // Timeline::DeleteSelectedKeys。2キーとも同じ動詞。**`Scope::
+        // NavigationBundle`**(2026-08-23 修正、上のファイル冒頭 doc 参照) —
+        // text_input にフォーカスがある間は既に `shell.capture_event()` 済み
+        // なので、captured=true では発火してはいけない。
         Binding::new(
             Key::Named(NamedKey::Backspace),
             ModifierSpec::ANY,
-            Scope::Global,
+            Scope::NavigationBundle,
             VerbId::DeleteSelectedKeys,
         ),
         Binding::new(
             Key::Named(NamedKey::Delete),
             ModifierSpec::ANY,
-            Scope::Global,
+            Scope::NavigationBundle,
             VerbId::DeleteSelectedKeys,
         ),
         // 4040-4047: Alt+←(+Shift で10フレーム) → NudgeKeyframe(-1/-10)
