@@ -1,14 +1,16 @@
 lane	axis	map_id	対象	判定	意味(normal-map)	write-set
-core/motolii-store/src/persist.rs	A01	-	`RemoveAsset`	入口あり		shell/motolii-shell/src/lib.rs;ui/motolii-browser-pane/src/lib.rs;ui/motolii-browser-pane/src/state.rs
 core/motolii-store/src/persist.rs	A04	434	Duplicate(複製)	上限がある	複製	shell/motolii-shell/src/lib.rs
 core/motolii-store/src/persist.rs	A04	875	Lock/Unlock All Video Tracks(一括ロック)	上限がある	Option+Shift+9	shell/motolii-shell/src/lib.rs
 core/motolii-store/src/persist.rs	A04	-	AssetTable::admit(素材取り込み時のfingerprint hash)	未計測		shell/motolii-shell/src/lib.rs
 core/motolii-store/src/persist.rs	A04	-	Document::flattened()/save(保存時の直列化)	未計測		core/motolii-store/src/persist.rs
-core/motolii-store/src/persist.rs	A04	-	iced Elm-architecture: playback tick毎の全pane view()再構築	未計測		probes/r4-widget-timeline/src/lib.rs;shell/motolii-shell/src/lib.rs
+core/motolii-store/src/persist.rs	A04	-	iced Elm-architecture: playback tick毎の全pane view()再構築	未計測		shell/motolii-shell/src/lib.rs
 core/motolii-store/src/persist.rs	A05	1393	`Find Missing Footage`コマンド自体(素材再リンクUI)	未確認	見つからない素材を検索	shell/motolii-shell/src/lib.rs
 core/motolii-store/src/persist.rs	A05	-	新規Document起動時の既定comp作成(`default_document`)	黙って握りつぶす		shell/motolii-shell/src/lib.rs
+core/motolii-store/src/persist.rs	A06	-	playhead位置(Session.playhead)	Document に入れるべきでない(User Settings 行き)		ui/motolii-shell-state/src/lib.rs
+core/motolii-store/src/persist.rs	A06	-	選択レイヤー(Session.selection/selected_layers)	Document に入れるべきでない(User Settings 行き)		ui/motolii-shell-state/src/lib.rs
+core/motolii-store/src/persist.rs	A06	-	Timelineキー選択(selected_keys)・Shift範囲基点(key_anchor)・行の折り畳み(timeline_fold)	Document に入れるべきでない(User Settings 行き)		ui/motolii-shell-state/src/lib.rs
+core/motolii-store/src/persist.rs	A06	1517	名前付きワークスペース(WorkspaceBook、"New Workspace…"機能)	戻らない	新規ワークスペース	shell/motolii-shell/src/lib.rs;ui/motolii-shell-state/src/layout.rs
 core/motolii-store/src/persist.rs	A07	-	新規project/起動直後は必ず既定compを持つ設計(「真の空(comp無し)」は起動直後にしか理論上存在しない)	正直に空と映る		shell/motolii-shell/src/lib.rs
-core/motolii-store/src/persist.rs	A07	-	Timeline: layer 0件(comp はあるがlayerが1枚も無い)の rail/rows描画	未確認		ui/motolii-timeline-pane/src/lib.rs
 core/motolii-store/src/persist.rs	A08	-	選択の正本(Session)	一括が無意味		shell/motolii-shell/src/lib.rs;ui/motolii-shell-state/src/lib.rs
 core/motolii-store/src/persist.rs	A08	-	Inspector 値ドラッグ/type入力(`SetTrack`経由の全プロパティ編集)	単数のみ		shell/motolii-shell/src/lib.rs
 core/motolii-store/src/persist.rs	A08	805	Browser effects タブ「Glow を適用」(`apply_effect_to_selected_layer`)	単数のみ	選択レイヤーにエフェクトを追加	shell/motolii-shell/src/lib.rs
@@ -21,7 +23,10 @@ core/motolii-store/src/persist.rs	A08	616	Browser「素材を置換」(`ReplaceS
 core/motolii-store/src/persist.rs	A08	-	テキスト justify巡回/line-height reset/tracking reset(`cycle_text_justify` 等)	単数のみ		shell/motolii-shell/src/lib.rs
 core/motolii-store/src/persist.rs	A08	-	Inspector matte 解除(`clear_inspector_matte`)	単数のみ		shell/motolii-shell/src/lib.rs
 core/motolii-store/src/persist.rs	A10	1490	Zoom to 100%(メニュー/呼び手)	触れそうだが機能しない(Q0違反)	100%表示	shell/motolii-shell/src/lib.rs
-core/motolii-store/src/persist.rs	A11	-	B1 定常フレーム(render thread p99≤8ms・avg≤4ms)	器具はあるが掛けていない		probes/r4-widget-timeline/src/lib.rs;ui/motolii-timeline-pane/src/lib.rs
+core/motolii-store/src/persist.rs	A11	-	B2 gesture中フレーム落ち(16.7ms超連続2枚禁止)	測る手段が無い		shell/motolii-shell/src/lib.rs
+core/motolii-store/src/persist.rs	A11	-	B3 入力→視覚(local preview)≤1フレーム	測る手段が無い		shell/motolii-shell/src/lib.rs
+core/motolii-store/src/persist.rs	A11	-	B4 入力→視覚(host往復)≤2フレーム	測る手段が無い		shell/motolii-shell/src/lib.rs
+core/motolii-store/src/persist.rs	A11	-	B6 起動系スパイク(定常運転50ms超禁止、初回500ms以内)	測る手段が無い		shell/motolii-shell/src/lib.rs
 core/motolii-store/src/persist.rs	A11	-	B7 メインthread停止(4ms超の同期処理禁止、JSON parse・lock待ち含む)	器具はあるが掛けていない		core/motolii-store/src/persist.rs;shell/motolii-shell/src/lib.rs
 core/motolii-store/src/persist.rs	A11	-	group化/ungroup(N layer規模)の同期処理時間	測る手段が無い		shell/motolii-shell/src/lib.rs
 ui/motolii-inspector-pane/src/transform.rs	A03	-	Hidden(M glyph、Inspector chrome.rs)	乗っていない		ui/motolii-inspector-pane/src/transform.rs
@@ -31,6 +36,12 @@ ui/motolii-inspector-pane/src/transform.rs	A09	-	Scale を Inspector で編集(S
 ui/motolii-inspector-pane/src/transform.rs	A09	-	Anchor を Inspector で編集(AnchorX submit → AnchorY submit の2動作)	2 undo以上		ui/motolii-inspector-pane/src/transform.rs
 ui/motolii-inspector-pane/src/transform.rs	A10	-	Inspector 数値ドラッグ(transform.rs::start/continue/finish_field_drag)	カーソルのみ		ui/motolii-inspector-pane/src/transform.rs
 ui/motolii-inspector-pane/src/transform.rs	A10	-	Inspector click→type編集(field_input_id/enter_field_editing)	カーソルのみ		ui/motolii-inspector-pane/src/transform.rs
+ui/motolii-inspector-pane/src/lib.rs	A01	-	`SetPropertySlot`	呼び手はあるが入口ではない(複製/split経路のみ)		ui/motolii-inspector-pane/src/lib.rs
+ui/motolii-inspector-pane/src/lib.rs	A01	-	`SetCameraPropertyModulators`(裁定213新設)	入口ゼロ		ui/motolii-inspector-pane/src/lib.rs
+ui/motolii-inspector-pane/src/lib.rs	A01	-	`SetCameraTrack`	入口ゼロ		ui/motolii-inspector-pane/src/lib.rs
+ui/motolii-inspector-pane/src/lib.rs	A01	-	`SetCameraPropertySlot`	入口ゼロ		ui/motolii-inspector-pane/src/lib.rs
+ui/motolii-inspector-pane/src/lib.rs	A04	-	Inspector 一括編集	上限がある		ui/motolii-inspector-pane/src/lib.rs
+ui/motolii-inspector-pane/src/lib.rs	A04	1290	Remove All Text Animators(アニメーター一括削除)	上限がある	全テキストアニメーターを削除	ui/motolii-inspector-pane/src/lib.rs
 ui/motolii-stage-pane/src/gizmo.rs	A10	-	Stage gizmo move(gizmo.rs::move_value)	カーソルのみ		ui/motolii-stage-pane/src/gizmo.rs
 ui/motolii-stage-pane/src/gizmo.rs	A10	-	Stage gizmo scale(gizmo.rs::scale_value)	カーソルのみ		ui/motolii-stage-pane/src/gizmo.rs
 ui/motolii-stage-pane/src/gizmo.rs	A10	-	Stage gizmo rotate(gizmo.rs::rotation_value)	カーソルのみ		ui/motolii-stage-pane/src/gizmo.rs
@@ -40,9 +51,9 @@ ui/motolii-timeline-pane/src/write.rs	A04	-	Timeline write.rs(編集操作 split
 ui/motolii-timeline-pane/src/write.rs	A08	-	Timeline clip move/trim(`TimelineDragState`)	単数のみ		ui/motolii-timeline-pane/src/write.rs
 ui/motolii-timeline-pane/src/write.rs	A08	509	Timeline `SelectAllKeysOfProperty`(`write.rs:1419 select_all_keys_of_property`)	単数のみ	プロパティの全キーフレームを選択	ui/motolii-timeline-pane/src/write.rs
 ui/motolii-timeline-pane/src/write.rs	A08	-	SetOrder(z順並べ替え、`stacking.rs::restacked`)	単数のみ		ui/motolii-timeline-pane/src/write.rs
-ui/motolii-inspector-pane/src/lib.rs	A01	-	`SetPropertySlot`	呼び手はあるが入口ではない(複製/split経路のみ)		ui/motolii-inspector-pane/src/lib.rs
-ui/motolii-inspector-pane/src/lib.rs	A04	-	Inspector 一括編集	上限がある		ui/motolii-inspector-pane/src/lib.rs
-ui/motolii-inspector-pane/src/lib.rs	A04	1290	Remove All Text Animators(アニメーター一括削除)	上限がある	全テキストアニメーターを削除	ui/motolii-inspector-pane/src/lib.rs
+core/motolii-store/src/document.rs	A04	-	motolii-compositor 合成ループ(layer×pass)	未計測		engine/motolii-compositor/src/lib.rs
+core/motolii-store/src/document.rs	A11	-	B5 Stageのリアルタイム追従(scrub中 p95≤16ms)	器具はあるが掛けていない		core/motolii-store/src/view.rs;engine/motolii-compositor/src/lib.rs
+core/motolii-store/src/document.rs	A11	-	時間予算試験2本の負荷依存flake(`edit_storm_with_the_real_track_type`/`r2::stage_projection_fits_a_frame`)	試験がある		core/motolii-store/src/document.rs;core/motolii-store/src/view.rs
 ui/motolii-inspector-pane/src/link.rs	A01	-	`SetPropertyModulators`(裁定213新設)	入口ゼロ		ui/motolii-inspector-pane/src/link.rs
 ui/motolii-inspector-pane/src/link.rs	A03	-	Link 元(source layer+property、LINK)	乗っていない		ui/motolii-inspector-pane/src/link.rs
 ui/motolii-timeline-pane/src/key_rows.rs	A02	-	選択キーの削除(Backspace/Delete、`shell/lib.rs:5781`)	穴:マウスで完遂できない		ui/motolii-timeline-pane/src/key_rows.rs
@@ -53,38 +64,26 @@ ui/motolii-inspector-pane/src/matte.rs	A03	-	Matte 元(source layer、ATTRS matt
 ui/motolii-inspector-pane/src/matte.rs	A03	-	Matte mode(ATTRS matte行)	乗っていない		ui/motolii-inspector-pane/src/matte.rs
 ui/motolii-inspector-pane/src/mask.rs	A03	-	Mask Mode(MASK)	乗っていない		ui/motolii-inspector-pane/src/mask.rs
 ui/motolii-inspector-pane/src/mask.rs	A03	-	Mask Inverted(MASK)	乗っていない		ui/motolii-inspector-pane/src/mask.rs
+ui/motolii-timeline-pane/src/lib.rs	A07	-	Timeline: layer 0件(comp はあるがlayerが1枚も無い)の rail/rows描画	未確認		ui/motolii-timeline-pane/src/lib.rs
+ui/motolii-timeline-pane/src/lib.rs	A11	-	B1 定常フレーム(render thread p99≤8ms・avg≤4ms)	器具はあるが掛けていない		ui/motolii-timeline-pane/src/lib.rs
 ui/motolii-timeline-pane/src/clip_gesture.rs	A10	-	Timeline clip move(clip_gesture.rs::moved_start)	カーソルのみ		ui/motolii-timeline-pane/src/clip_gesture.rs
 ui/motolii-timeline-pane/src/clip_gesture.rs	A10	-	Timeline clip trim(clip_gesture.rs::trimmed_in_start/trimmed_out_end)	カーソルのみ		ui/motolii-timeline-pane/src/clip_gesture.rs
-core/motolii-store/tests/document.rs	A11	-	B5 Stageのリアルタイム追従(scrub中 p95≤16ms)	器具はあるが掛けていない		probes/r1-frame-throughput/tests/r1.rs;probes/r2-view-projection/tests/r2.rs
-core/motolii-store/tests/document.rs	A11	-	時間予算試験2本の負荷依存flake(`edit_storm_with_the_real_track_type`/`r2::stage_projection_fits_a_frame`)	試験がある		core/motolii-store/tests/document.rs;probes/r2-view-projection/tests/r2.rs
 ui/motolii-timeline-pane/src/rail.rs	A02	-	Timeline 矩形選択(marquee)	穴:マウスで完遂できない		ui/motolii-timeline-pane/src/rail.rs
 shell/motolii-shell/src/menu.rs	A02	-	レイヤー削除(実質 CutLayer、Cmd+X)	穴:マウスで完遂できない		shell/motolii-shell/src/menu.rs
 ui/motolii-stage-pane/src/zoom.rs	A02	-	トラックパッド ピンチジェスチャ(Stage ズーム)	穴:ポインタ入力を受け取れない		ui/motolii-stage-pane/src/zoom.rs
 core/motolii-store/src/lib.rs	A03	-	Speed(ATTRS)	乗っていない		core/motolii-store/src/lib.rs
 core/motolii-store/src/attrs.rs	A03	314	Timeline rail Solo(S glyph)	乗っていない	ソロ切替	core/motolii-store/src/attrs.rs
-engine/motolii-compositor/src/lib.rs	A04	-	motolii-compositor 合成ループ(layer×pass)	未計測		engine/motolii-compositor/src/lib.rs
 engine/motolii-engine/src/lib.rs	A05	-	Stage合成中、1layerの素材(Media)がprobe/decode失敗(削除・非対応コーデック・破損)	理由つきで拒否する		engine/motolii-engine/src/lib.rs
 core/motolii-store/src/asset.rs	A05	-	`motolii_store::Asset`構造体そのものにoffline/missing/broken状態を持つフィールドが無い(裁定154台帳の`Find Missing Footage`はコマンド名のみで状態は台帳に無い、docs/reviews/2026-08-23-normal-map-trunk.md 節1と一致する実装側の裏付け)	黙って握りつぶす		core/motolii-store/src/asset.rs
 engine/motolii-compositor/src/blend.rs	A05	-	`percent-encoded/HSL blend`のSetSat/ClipColor — 色が全チャンネル同値かつ範囲外の極端入力で理論上0除算(NaN)	未確認		engine/motolii-compositor/src/blend.rs
+shell/motolii-shell/src/pane_layout.rs	A06	-	paneレイアウト(実働側 `pane_layout::Layout` ── pane_grid分割比率・Browserパネル開閉)	戻らない		shell/motolii-shell/src/pane_layout.rs
+ui/motolii-tokens-rs/src/lib.rs	A06	-	UI scale(ui_scale)	Document に入れるべきでない(User Settings 行き)		ui/motolii-tokens-rs/src/lib.rs
 ui/motolii-timeline-pane/src/input.rs	A10	-	Playhead scrub(ruler.rs/input.rs、Message::ScrubTo)	カーソルのみ		ui/motolii-timeline-pane/src/input.rs
 ui/motolii-timeline-pane/src/work_area.rs	A10	-	Loop帯(作業範囲) body/edge drag(ruler.rs/work_area.rs::dragged_area)	カーソルのみ		ui/motolii-timeline-pane/src/work_area.rs
 ui/motolii-timeline-pane/src/markers.rs	A10	-	マーカー/ロケータ ドラッグ(markers.rs::MarkerDrag::dragged)	カーソルのみ		ui/motolii-timeline-pane/src/markers.rs
-shell/motolii-shell/tests/suite/render_pipeline_fence.rs	A11	-	B3 入力→視覚(local preview)≤1フレーム	測る手段が無い		shell/motolii-shell/tests/suite/render_pipeline_fence.rs
 ui/motolii-timeline-pane/src/canvas.rs	A11	711	Scroll to current time(既存verb、時間予算との関係)	測る手段が無い	ペイントツールの不透明度を設定	ui/motolii-timeline-pane/src/canvas.rs
 ui/motolii-stage-pane/src/marquee.rs	A11	-	marquee(矩形選択)drag中のフレーム予算	測る手段が無い		ui/motolii-stage-pane/src/marquee.rs
 probes/r6-text-shaping/src/lib.rs	A11	-	テキスト入力(キー毎の再shape)	測る手段が無い		probes/r6-text-shaping/src/lib.rs
-(責任ファイル未記入)	A01	-	`SetCameraPropertyModulators`(裁定213新設)	入口ゼロ		
-(責任ファイル未記入)	A01	-	`SetCameraTrack`	入口ゼロ		
-(責任ファイル未記入)	A01	-	`SetCameraPropertySlot`	入口ゼロ		
 (責任ファイル未記入)	A01	-	`SetSlots`	呼び手はあるが入口ではない(複製/split経路のみ)		
 (責任ファイル未記入)	A06	918	最近使ったファイル(MRU、Open Recent)	保存先が無い	最近使ったプリセット	
-(責任ファイル未記入)	A06	-	playhead位置(Session.playhead)	Document に入れるべきでない(User Settings 行き)		
-(責任ファイル未記入)	A06	-	選択レイヤー(Session.selection/selected_layers)	Document に入れるべきでない(User Settings 行き)		
-(責任ファイル未記入)	A06	-	Timelineキー選択(selected_keys)・Shift範囲基点(key_anchor)・行の折り畳み(timeline_fold)	Document に入れるべきでない(User Settings 行き)		
-(責任ファイル未記入)	A06	-	paneレイアウト(実働側 `pane_layout::Layout` ── pane_grid分割比率・Browserパネル開閉)	戻らない		
-(責任ファイル未記入)	A06	1517	名前付きワークスペース(WorkspaceBook、"New Workspace…"機能)	戻らない	新規ワークスペース	
-(責任ファイル未記入)	A06	-	UI scale(ui_scale)	Document に入れるべきでない(User Settings 行き)		
-(責任ファイル未記入)	A11	-	B2 gesture中フレーム落ち(16.7ms超連続2枚禁止)	測る手段が無い		
-(責任ファイル未記入)	A11	-	B4 入力→視覚(host往復)≤2フレーム	測る手段が無い		
-(責任ファイル未記入)	A11	-	B6 起動系スパイク(定常運転50ms超禁止、初回500ms以内)	測る手段が無い		
 (責任ファイル未記入)	A12	-	ピンチズーム(トラックパッド、2本指つまむ)	入口が無い		
