@@ -14,3 +14,6 @@ re_entity_db.workspace = true
 re_log_types.workspace = true
 re_query.workspace = true
 re_types_core.workspace = true
+
+[lints]
+workspace = true

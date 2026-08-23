@@ -9,3 +9,6 @@ publish = false
 motolii-compositor.workspace = true
 motolii-engine.workspace = true
 motolii-store.workspace = true
+
+[lints]
+workspace = true

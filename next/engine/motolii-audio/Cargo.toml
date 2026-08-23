@@ -45,3 +45,6 @@ rtrb = "0.4"
 [dev-dependencies]
 motolii-testkit.workspace = true
 serde_json.workspace = true
+
+[lints]
+workspace = true

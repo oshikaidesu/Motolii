@@ -24,3 +24,6 @@ license.workspace = true
 
 [dependencies]
 fontdb = { version = "0.23", default-features = false, features = ["std", "fs", "memmap", "fontconfig"] }
+
+[lints]
+workspace = true

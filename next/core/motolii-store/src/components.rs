@@ -145,18 +145,18 @@ impl Component for LayerPresent {
 /// `components.rs` の各 `descriptor_*` と `persist.rs::flattened()` の両方が
 /// ベタ書きしており、名前を変える時に2箇所を揃える必要があった(2026-08-20 の
 /// 敵対的レビュー、DRY の指摘)。
-pub fn archetype_layer() -> &'static str {
+pub(crate) fn archetype_layer() -> &'static str {
     "motolii.archetypes.Layer"
 }
 
 /// `motolii.archetypes.Composition` の archetype 名。同上の理由でここへ寄せる。
-pub fn archetype_composition() -> &'static str {
+pub(crate) fn archetype_composition() -> &'static str {
     "motolii.archetypes.Composition"
 }
 
 /// property ごとに別の `ComponentIdentifier` を割り当てる。
 /// 1 layer = 1 entity、property は component として並ぶ(AE の property list と同じ形)。
-pub fn descriptor_track(property: &crate::PropertyId) -> ComponentDescriptor {
+pub(crate) fn descriptor_track(property: &crate::PropertyId) -> ComponentDescriptor {
     ComponentDescriptor {
         archetype: Some(archetype_layer().into()),
         component: property.component(),
@@ -166,7 +166,7 @@ pub fn descriptor_track(property: &crate::PropertyId) -> ComponentDescriptor {
 
 /// layer の素材と重ね順。track と同じく serde 表現を1つの文字列で持つ
 /// (符号化の流儀を2つにしない)。
-pub fn descriptor_meta() -> ComponentDescriptor {
+pub(crate) fn descriptor_meta() -> ComponentDescriptor {
     ComponentDescriptor {
         archetype: Some(archetype_layer().into()),
         component: "Layer:meta".into(),
@@ -179,7 +179,7 @@ pub fn descriptor_meta() -> ComponentDescriptor {
 /// **`meta` の中へ入れない** — `SetMeta` は素材と重ね順を丸ごと差し替える口なので、
 /// マスクを同居させると「素材を差し替えたらマスクが消えた」が作れる。
 /// 形状と不透明度は普通の property track なので、ここには並びと重ね方だけが入る。
-pub fn descriptor_masks() -> ComponentDescriptor {
+pub(crate) fn descriptor_masks() -> ComponentDescriptor {
     ComponentDescriptor {
         archetype: Some(archetype_layer().into()),
         component: "Layer:masks".into(),
@@ -188,7 +188,7 @@ pub fn descriptor_masks() -> ComponentDescriptor {
 }
 
 /// comp の設定。**layer と同じ JSON 経路を使い回す**(符号化の流儀を増やさない)。
-pub fn descriptor_composition() -> ComponentDescriptor {
+pub(crate) fn descriptor_composition() -> ComponentDescriptor {
     ComponentDescriptor {
         archetype: Some(archetype_composition().into()),
         component: "Composition:settings".into(),
@@ -200,7 +200,7 @@ pub fn descriptor_composition() -> ComponentDescriptor {
 /// `SetComposition` は解像度/fps/尺の意味の口であって、マーカーは別の編集操作
 /// (`Intent::SetMarkers`)なので同居させない(`SetMeta` がマスクを巻き込まないのと
 /// 同じ理由、裁定108(c))。
-pub fn descriptor_markers() -> ComponentDescriptor {
+pub(crate) fn descriptor_markers() -> ComponentDescriptor {
     ComponentDescriptor {
         archetype: Some(archetype_composition().into()),
         component: "Composition:markers".into(),
@@ -211,7 +211,7 @@ pub fn descriptor_markers() -> ComponentDescriptor {
 /// comp の Slots 表(`composition/animation/slots`)。**comp の設定/マーカーとも
 /// 別 component** — `SetComposition`/`SetMarkers` と同じ理由で、テンプレートの
 /// 差し替え口という別の編集操作を巻き込まない([`descriptor_markers`] の doc 参照)。
-pub fn descriptor_slots() -> ComponentDescriptor {
+pub(crate) fn descriptor_slots() -> ComponentDescriptor {
     ComponentDescriptor {
         archetype: Some(archetype_composition().into()),
         component: "Composition:slots".into(),
@@ -223,7 +223,7 @@ pub fn descriptor_slots() -> ComponentDescriptor {
 /// `Composition:markers`/`Composition:slots` と同じく comp 設定とは別 component —
 /// 台帳への記帳は解像度/fps/尺の編集(`SetComposition`)とは別の操作なので、
 /// 差し替え口を巻き込まない(裁定108(c) と同じ理由)。
-pub fn descriptor_assets() -> ComponentDescriptor {
+pub(crate) fn descriptor_assets() -> ComponentDescriptor {
     ComponentDescriptor {
         archetype: Some(archetype_composition().into()),
         component: "Composition:assets".into(),
@@ -231,7 +231,7 @@ pub fn descriptor_assets() -> ComponentDescriptor {
     }
 }
 
-pub fn descriptor_present() -> ComponentDescriptor {
+pub(crate) fn descriptor_present() -> ComponentDescriptor {
     ComponentDescriptor {
         archetype: Some(archetype_layer().into()),
         component: "Layer:present".into(),
@@ -241,7 +241,7 @@ pub fn descriptor_present() -> ComponentDescriptor {
 
 /// layer の小さな非アニメーション属性(hidden / parent / blend mode / matte / name /
 /// auto-orient)。**`meta` の外**(layer-meta 束、裁定108(c) の構造修正)。
-pub fn descriptor_attrs() -> ComponentDescriptor {
+pub(crate) fn descriptor_attrs() -> ComponentDescriptor {
     ComponentDescriptor {
         archetype: Some(archetype_layer().into()),
         component: "Layer:attrs".into(),
@@ -250,7 +250,7 @@ pub fn descriptor_attrs() -> ComponentDescriptor {
 }
 
 /// layer が持つ effect インスタンスの列(id + plugin id のみ、`layer-meta` 束)。
-pub fn descriptor_effects() -> ComponentDescriptor {
+pub(crate) fn descriptor_effects() -> ComponentDescriptor {
     ComponentDescriptor {
         archetype: Some(archetype_layer().into()),
         component: "Layer:effects".into(),
@@ -261,7 +261,7 @@ pub fn descriptor_effects() -> ComponentDescriptor {
 /// shape-layer の図形列(`Vec<motolii_vector::ShapeNode>`、裁定173 H4)。
 /// 旧 `Vec<Shape>` の JSON は `ShapeNode::Leaf` の列として無改造で読める
 /// (`ShapeNode` の `#[serde(untagged)]`)。
-pub fn descriptor_shapes() -> ComponentDescriptor {
+pub(crate) fn descriptor_shapes() -> ComponentDescriptor {
     ComponentDescriptor {
         archetype: Some(archetype_layer().into()),
         component: "Layer:shapes".into(),
@@ -270,7 +270,7 @@ pub fn descriptor_shapes() -> ComponentDescriptor {
 }
 
 /// text-layer の文字列内容(`layers/text-layer/t`)。範囲スタイル等は `text` 束の仕事。
-pub fn descriptor_text() -> ComponentDescriptor {
+pub(crate) fn descriptor_text() -> ComponentDescriptor {
     ComponentDescriptor {
         archetype: Some(archetype_layer().into()),
         component: "Layer:text".into(),

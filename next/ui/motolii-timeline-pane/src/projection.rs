@@ -339,7 +339,7 @@ mod audio_row_tests {
 /// (U1 の複数選択集合)は身分が別(`Session` の doc 参照)だが、**行の見た目は
 /// どちらも同じ選択**(AE 同型: 複数選択の各 layer 行は同一ハイライト。primary の
 /// 区別は property 行の展開(`selected_row_index` = `selection` のみ)が担う)。
-pub fn row_selected(session: &Session, id: LayerId) -> bool {
+pub(crate) fn row_selected(session: &Session, id: LayerId) -> bool {
     session.selection == Some(id) || session.selected_layers.contains(&id)
 }
 

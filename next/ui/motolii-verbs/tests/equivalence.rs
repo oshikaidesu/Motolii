@@ -69,6 +69,7 @@ fn clip_messages() -> ClipContextMessages<FakeMessage> {
         copy: FakeMessage("copy"),
         paste: FakeMessage("paste"),
         duplicate: FakeMessage("duplicate"),
+        split: FakeMessage("split"),
         cut: FakeMessage("cut"),
         group: FakeMessage("group"),
         freeze: FakeMessage("freeze"),

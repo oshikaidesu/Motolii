@@ -17,3 +17,6 @@ thiserror.workspace = true
 [dev-dependencies]
 motolii-compositor.workspace = true
 motolii-testkit.workspace = true
+
+[lints]
+workspace = true

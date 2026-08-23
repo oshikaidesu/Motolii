@@ -31,3 +31,6 @@ taffy = { version = "0.13", features = ["parse"] }
 iced.workspace = true
 iced_test = { git = "https://github.com/oshikaidesu/iced", rev = "73e686ee05efd7d1b61cfea2647186b336d9ab9c" }
 iced_widget = { git = "https://github.com/oshikaidesu/iced", rev = "73e686ee05efd7d1b61cfea2647186b336d9ab9c" }
+
+[lints]
+workspace = true

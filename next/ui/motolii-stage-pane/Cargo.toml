@@ -22,3 +22,6 @@ motolii-tokens-rs.workspace = true
 # 返す `glam::Affine2` を直接使う)。`motolii-shell` 側が持っていた「裁定117 が許す
 # direct 昇格」の理由をそのまま引き継ぐ(裁定160 切片10でこの crate へ移設)。
 glam.workspace = true
+
+[lints]
+workspace = true

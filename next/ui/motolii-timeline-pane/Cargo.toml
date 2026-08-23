@@ -21,3 +21,6 @@ motolii-tokens-rs.workspace = true
 motolii-shell-state.workspace = true
 # 裁定186: transport 5ボタンの文字グリフ→ SVG アイコン置換。
 motolii-icons.workspace = true
+
+[lints]
+workspace = true

@@ -46,6 +46,14 @@ members = [
 edition = "2021"
 license = "MIT OR Apache-2.0"
 
+[workspace.lints.rust]
+# 「呼び手ゼロ」をコンパイラに検出させるための2段構え(2026-08-23 利用者裁定
+# 「外部に答えはあります」— 自前の在庫生成器を撤去した代替):
+#   (1) unreachable_pub で「crate 外から到達不能なのに pub」を絞り pub(crate) へ落とす
+#   (2) 既定で走っている dead_code が、pub(crate) になった物の呼び手ゼロを自動で警告する
+# これで台帳へ手で書き写す工程が消える。
+unreachable_pub = "warn"
+
 [workspace.dependencies]
 # ---------------------------------------------------------------------------
 # rerun fork(store のみ。viewer 層は引かない)

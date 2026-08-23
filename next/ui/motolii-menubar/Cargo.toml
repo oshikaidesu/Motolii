@@ -21,6 +21,10 @@ version = "0.1.0"
 edition = "2024"
 license.workspace = true
 
+# NOTE(2026-08-23): workspace の lints を継承していない。cargo は
+# `[lints] workspace = true` と個別 lint の併記を許さず、かつこの crate は
+# iced_aw の vendored コードなので、我々の規約(unreachable_pub)を当てる対象では
+# ない(上流の可視性をこちらの都合で書き換えない — 裁定181 の移植方針)。
 [lints.rust]
 # vendored コードは upstream の `debug_log` feature 名で cfg を切っている。この crate
 # は feature 自体を持たない(常に off)ので、`unexpected_cfgs` に名前だけ教えて

@@ -15,3 +15,6 @@ iced.workspace = true
 # 別々の型を持つ2ライン共存事故になる(iced_test_spike.rs の既知の注意点と同じ
 # 理由)。dev-only、probe の外へは出さない(motolii-shell の運用と同型)。
 iced_test = { git = "https://github.com/oshikaidesu/iced", rev = "73e686ee05efd7d1b61cfea2647186b336d9ab9c" }
+
+[lints]
+workspace = true

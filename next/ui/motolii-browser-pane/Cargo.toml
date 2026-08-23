@@ -37,3 +37,6 @@ motolii-taffy = { path = "../motolii-taffy" }
 # が実際に Message を publish することを shell(write-set 外)を経由せず
 # 確かめる。dev-only、この crate の外へは出さない。
 iced_test = { git = "https://github.com/oshikaidesu/iced", rev = "73e686ee05efd7d1b61cfea2647186b336d9ab9c" }
+
+[lints]
+workspace = true

@@ -117,3 +117,6 @@ iced_test = { git = "https://github.com/oshikaidesu/iced", rev = "73e686ee05efd7
 # 入っているので新規の依存ではない(裁定117 が許す direct 昇格と同型)。
 # dev-only、shell の外へは出さない。
 iced_runtime = { git = "https://github.com/oshikaidesu/iced", rev = "73e686ee05efd7d1b61cfea2647186b336d9ab9c" }
+
+[lints]
+workspace = true

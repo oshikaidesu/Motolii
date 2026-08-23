@@ -7,3 +7,6 @@ publish = false
 
 [dependencies]
 motolii-store.workspace = true
+
+[lints]
+workspace = true

@@ -25,3 +25,6 @@ motolii-icons.workspace = true
 # 手口・同じ fork 同 rev(裁定170 M01 — 別 rev だと iced_core が2本入り型が
 # 衝突する)。dev-only。
 iced_test = { git = "https://github.com/oshikaidesu/iced", rev = "73e686ee05efd7d1b61cfea2647186b336d9ab9c" }
+
+[lints]
+workspace = true

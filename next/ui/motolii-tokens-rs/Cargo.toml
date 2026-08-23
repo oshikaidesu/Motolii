@@ -14,3 +14,6 @@ serde_json.workspace = true
 # `motolii-shell` から本 crate へ抽出(裁定160 切片1)された、旧 tokens.rs と
 # 同じ依存宣言。
 notify = "8"
+
+[lints]
+workspace = true

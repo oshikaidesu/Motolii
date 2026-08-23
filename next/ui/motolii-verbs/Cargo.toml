@@ -22,3 +22,6 @@ license.workspace = true
 # 既存正本)をそのまま使う。iced 自体には依存しない(この crate は動詞の
 # 記述データ+生成関数のみ、描画は持たない)。
 motolii-menubar.workspace = true
+
+[lints]
+workspace = true

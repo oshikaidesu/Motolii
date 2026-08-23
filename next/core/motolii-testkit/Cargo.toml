@@ -8,3 +8,6 @@ publish = false
 [dependencies]
 image.workspace = true
 thiserror.workspace = true
+
+[lints]
+workspace = true

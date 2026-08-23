@@ -30,3 +30,6 @@ serde.workspace = true
 # 裁定173 H4 の serde oracle(`tests/group.rs`)専用。workspace 全体で既に引いている
 # ため `Cargo.lock` は増えない(`next/Cargo.toml:149` 参照)。
 serde_json.workspace = true
+
+[lints]
+workspace = true

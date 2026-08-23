@@ -10,3 +10,6 @@ license.workspace = true
 # 引かない)。shell 側の実配線(iced イベント → この crate の中立型への変換)は
 # 次切片の仕事(発注書 EXACT TARGET)。
 [dependencies]
+
+[lints]
+workspace = true

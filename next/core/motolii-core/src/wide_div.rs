@@ -10,13 +10,13 @@ pub(crate) struct U256 {
 }
 
 impl U256 {
-    pub const ZERO: Self = Self { hi: 0, lo: 0 };
+    pub(crate) const ZERO: Self = Self { hi: 0, lo: 0 };
 
-    pub fn from_u128(v: u128) -> Self {
+    pub(crate) fn from_u128(v: u128) -> Self {
         Self { hi: 0, lo: v }
     }
 
-    pub fn widening_mul(a: u128, b: u128) -> Self {
+    pub(crate) fn widening_mul(a: u128, b: u128) -> Self {
         const MASK: u128 = (1u128 << 64) - 1;
         let a0 = a & MASK;
         let a1 = a >> 64;
@@ -32,7 +32,7 @@ impl U256 {
         Self { hi, lo }
     }
 
-    pub fn checked_mul_u128(self, m: u128) -> Option<Self> {
+    pub(crate) fn checked_mul_u128(self, m: u128) -> Option<Self> {
         let lo_part = Self::widening_mul(self.lo, m);
         let hi_part = Self::widening_mul(self.hi, m);
         if hi_part.hi != 0 {
@@ -48,27 +48,27 @@ impl U256 {
         })
     }
 
-    pub fn cmp(self, other: Self) -> Ordering {
+    pub(crate) fn cmp(self, other: Self) -> Ordering {
         match self.hi.cmp(&other.hi) {
             Ordering::Equal => self.lo.cmp(&other.lo),
             o => o,
         }
     }
 
-    pub fn saturating_sub(self, other: Self) -> Self {
+    pub(crate) fn saturating_sub(self, other: Self) -> Self {
         debug_assert!(self.cmp(other) != Ordering::Less);
         let (lo, borrow) = self.lo.overflowing_sub(other.lo);
         let hi = self.hi - other.hi - u128::from(borrow);
         Self { hi, lo }
     }
 
-    pub fn shl1(self) -> Self {
+    pub(crate) fn shl1(self) -> Self {
         let hi = (self.hi << 1) | (self.lo >> 127);
         let lo = self.lo << 1;
         Self { hi, lo }
     }
 
-    pub fn bit(self, i: u32) -> bool {
+    pub(crate) fn bit(self, i: u32) -> bool {
         if i >= 128 {
             ((self.hi >> (i - 128)) & 1) == 1
         } else {

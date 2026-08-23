@@ -23,3 +23,6 @@ iced.workspace = true
 # (../../Cargo.toml L65 の workspace dep と同じ線)。probe が独自の版を
 # 引き込むと device 型が二重化して Eq 比較が成立しない。
 wgpu.workspace = true
+
+[lints]
+workspace = true

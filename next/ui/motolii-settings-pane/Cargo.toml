@@ -28,3 +28,6 @@ iced_test = { git = "https://github.com/oshikaidesu/iced", rev = "73e686ee05efd7
 # 自身の dev-dependencies と揃える — 別 rev だと iced_core が2本入る)。
 iced_core = { git = "https://github.com/oshikaidesu/iced", rev = "73e686ee05efd7d1b61cfea2647186b336d9ab9c" }
 iced_widget = { git = "https://github.com/oshikaidesu/iced", rev = "73e686ee05efd7d1b61cfea2647186b336d9ab9c" }
+
+[lints]
+workspace = true

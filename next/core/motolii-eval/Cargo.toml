@@ -13,3 +13,6 @@ thiserror.workspace = true
 # 既に workspace 全体で使っている crate(motolii-store 等)を、この crate の
 # テストからも使えるようにするだけ — 新規依存の追加ではない。
 serde_json.workspace = true
+
+[lints]
+workspace = true
