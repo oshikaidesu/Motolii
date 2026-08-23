@@ -1,7 +1,8 @@
 //! layer の時間 — 配置・trim・split がすべて乗る土台。
 
 use motolii_store::{
-    Composition, Document, Fps, Intent, LayerId, LayerMeta, LayerSource, LayerTiming, RationalTime,
+    property, Composition, Document, Fps, Interp, Intent, KeyframeTrack, Keyframe, LayerId,
+    LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, Value,
 };
 
 fn doc_with_comp(duration_frames: i64) -> Document {
@@ -160,4 +161,69 @@ fn move_trim_and_split_are_all_one_intent() {
     doc.undo();
     let restored = doc.view().resolve(layer, t(50)).unwrap().expect("居る");
     assert_eq!(restored.source_frame, 0);
+}
+
+/// A03「Speed(ATTRS)」の検収条件(裁定218): `speed` track に t=0 で 1.0(等速)・
+/// t=10 で 2.0(倍速)を打つと、t=20 での `source_frame` は「0〜10 フレームは
+/// 等速、10〜20 フレームは倍速で進んだ」場合の期待値(= 10 + 20 = 30)と一致する。
+/// `LayerTiming.speed`(静的値、`Intent::SetTiming` の RMW)は 1:1 固定の穴
+/// (裁定63)だったので、この track が積算で正しく上書きすることを確かめる。
+#[test]
+fn speed_track_accumulates_variable_speed_over_time() {
+    let mut doc = doc_with_comp(300);
+    let layer = LayerId(1);
+    doc.apply_all([
+        Intent::AddLayer(layer),
+        Intent::SetMeta {
+            layer,
+            meta: LayerMeta {
+                source: solid(),
+                order: 0,
+                timing: LayerTiming {
+                    start: 0,
+                    duration: 100,
+                    source_in: 0,
+                    ..Default::default()
+                },
+            },
+        },
+    ])
+    .unwrap();
+
+    // track が無い間は `LayerTiming.speed`(既定 1:1)がそのまま効く。
+    let plain = doc.view().resolve(layer, t(20)).unwrap().expect("居る");
+    assert_eq!(plain.source_frame, 20, "track 無しの等速が崩れている");
+
+    let mut track = KeyframeTrack::new();
+    track.insert(Keyframe {
+        t: t(0),
+        value: Value::F64(1.0),
+        interp: Interp::Hold,
+        spatial: None,
+    });
+    track.insert(Keyframe {
+        t: t(10),
+        value: Value::F64(2.0),
+        interp: Interp::Hold,
+        spatial: None,
+    });
+    doc.apply(Intent::SetTrack {
+        layer,
+        property: PropertyId::new(property::SPEED).unwrap(),
+        track,
+    })
+    .unwrap();
+
+    // 0〜10 フレームは等速(10 フレーム分)、10〜20 フレームは倍速(20 フレーム分)
+    // 進む — 合わせて 30。
+    let sped_up = doc.view().resolve(layer, t(20)).unwrap().expect("居る");
+    assert_eq!(
+        sped_up.source_frame, 30,
+        "可変速度の積算が「0〜10は等速・10〜20は倍速」の期待値と一致しない"
+    );
+
+    // 積算の途中点(t=10、倍速に切り替わった瞬間)でも矛盾しないことを確かめる —
+    // ここまでは等速区間だけなので 10 のまま。
+    let midpoint = doc.view().resolve(layer, t(10)).unwrap().expect("居る");
+    assert_eq!(midpoint.source_frame, 10, "倍速に切り替わる直前の積算がずれている");
 }

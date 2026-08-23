@@ -162,6 +162,14 @@ pub mod property {
     /// 裏返し — Time Remap は timing ではなく property)。track が無ければ通常どおり
     /// `LayerTiming::source_frame` の写像を使う。
     pub const TIME_REMAP: &str = "time_remap";
+    /// `layers/layer/sr`(Time Stretch)の track 版。裁定63 が空けた穴 —
+    /// `LayerTiming.speed` は静的な1点(`Intent::SetTiming` の read-modify-write)
+    /// しか持てないので、時間で変わる速度は別 property track として持つ。
+    /// track が無ければ従来どおり `LayerTiming.speed`(静的値)を使う。`TIME_REMAP`
+    /// と同時に存在しても構わないが **`TIME_REMAP` が勝つ**(`resolve_with_solo` の
+    /// 適用順そのまま — remap は「素材フレーム番号を直接指定する」より強い意味
+    /// なので、速度の積算より後に上書きする現行順を変えない)。
+    pub const SPEED: &str = "speed";
     /// layer の奥行き(裁定113/116)。**既定 0**(全員 z=0)。`position.x`/`position.y`
     /// (split-position 束、裁定111(b))の隣に同じ流儀で置く。単位は `position` と同じ
     /// world = ピクセル。AE と同じ符号(大きいほどカメラから遠い)。
@@ -366,6 +374,157 @@ impl LayerTiming {
             let offset = comp_frame - self.start;
             self.source_in + self.speed.scale_frame_offset(offset)
         })
+    }
+
+    /// [`Self::source_frame`] の speed track 版(A03「Speed(ATTRS)」、裁定63 の穴)。
+    ///
+    /// **`self.speed`(静的値)ではなく積算で決める** — `source_frame` は comp
+    /// フレームだけの純粋な関数だが、speed が時間で変わる時は「start からここまでの
+    /// speed の積算」でなければ正しくない(1点の `value_at` 上書きでは足りない、
+    /// 発注文書の指摘どおり)。
+    ///
+    /// **O(K)**(K = track のキー数)であって **O(comp_frame) ではない** — 毎フレーム
+    /// 積算を1フレームずつ足すと `resolve` が呼ばれる回数($export$ なら総フレーム数)
+    /// だけ効いて O(N²) の性能事故になる(裁定140 が潰した `track()` の
+    /// serde_json 解析コストと同じ形の事故を積算側で再現しないための設計)。
+    /// 区間ごとの閉形式(Hold=定数×区間長、Linear=等差級数の和)で解くことで、
+    /// 区間内のフレーム数によらずキー数だけに比例させる。
+    ///
+    /// `Interp::Bezier` の区間をまたぐ場合は明示的に `Err` を返す — 三次ベジェの
+    /// 積分は閉形式で解けるが、この発注の検収条件(Hold のみ)を超えて黙って
+    /// 近似する判断をここでは下さない(裁定218「根拠を示してからテスト」の裏
+    /// — 根拠を示せない近似は実装しない)。
+    pub fn source_frame_with_speed_track(
+        &self,
+        comp_frame: i64,
+        track: &crate::KeyframeTrack,
+        fps: motolii_core::Fps,
+    ) -> Result<Option<i64>, StoreError> {
+        if !self.covers(comp_frame) {
+            return Ok(None);
+        }
+        let accumulated = accumulate_speed_offset(track, fps, self.start, comp_frame)?;
+        Ok(Some(self.source_in + accumulated))
+    }
+}
+
+/// [`LayerTiming::source_frame_with_speed_track`] 本体。`track` の値(F64、比率)を
+/// comp フレーム `start..comp_frame` の範囲で積算し、素材側の進み幅(フレーム、
+/// 床関数)を返す。
+///
+/// `motolii_eval::KeyframeTrack::eval` と同じ端の規約を使う — 最初のキーより前は
+/// `keys[0].value` で一定、最後のキーより後は `keys[last].value` で一定
+/// (`KeyframeTrack::eval` のクランプと同じ)。
+fn accumulate_speed_offset(
+    track: &crate::KeyframeTrack,
+    fps: motolii_core::Fps,
+    start: i64,
+    comp_frame: i64,
+) -> Result<i64, StoreError> {
+    use crate::{Interp, RationalTime};
+
+    if comp_frame <= start {
+        return Ok(0);
+    }
+    let keys = track.keys();
+    if keys.is_empty() {
+        // `KeyframeTrack::eval` はキー無しを F64(0.0) 一定として扱う — ここも
+        // 同じ規約(速度0 = 素材が一切進まない)。
+        return Ok(0);
+    }
+
+    let frame_time = |f: i64| -> Result<RationalTime, StoreError> {
+        RationalTime::try_from_frame(f, fps).map_err(|e| StoreError::Property(e.to_string()))
+    };
+    // `t` 以上になる最小の整数フレーム番号(`try_to_frame_floor` の上向き版 —
+    // 正準口には ceil が無いので、floor を作ってから復元値と比べて直す)。
+    let ceil_frame = |t: RationalTime| -> Result<i64, StoreError> {
+        let f = t
+            .try_to_frame_floor(fps)
+            .map_err(|e| StoreError::Property(e.to_string()))?;
+        let recon = frame_time(f)?;
+        Ok(if recon < t { f + 1 } else { f })
+    };
+    let value_f64 = |v: &crate::Value| -> Result<f64, StoreError> {
+        match v {
+            crate::Value::F64(x) => Ok(*x),
+            other => Err(StoreError::Property(format!(
+                "{} に数値でない値が入っている: {other:?}",
+                crate::property::SPEED
+            ))),
+        }
+    };
+
+    let mut total = 0.0f64;
+    let n = keys.len();
+
+    // 区間 [lo, hi) に定数 v を積む(Hold、および最初/最後のキーの外側)。
+    let mut add_hold = |lo: i64, hi: i64, v: f64| {
+        let lo = lo.max(start);
+        let hi = hi.min(comp_frame);
+        if hi > lo {
+            total += v * (hi - lo) as f64;
+        }
+    };
+
+    // 先頭キーより前: 一定 keys[0].value。
+    {
+        let hi = ceil_frame(keys[0].t)?;
+        add_hold(start, hi, value_f64(&keys[0].value)?);
+    }
+    // 末尾キー以降: 一定 keys[last].value。
+    {
+        let lo = ceil_frame(keys[n - 1].t)?;
+        add_hold(lo, comp_frame, value_f64(&keys[n - 1].value)?);
+    }
+    // キー間の各区間。
+    for i in 0..n.saturating_sub(1) {
+        let (a, b) = (&keys[i], &keys[i + 1]);
+        let lo = ceil_frame(a.t)?.max(start);
+        let hi = ceil_frame(b.t)?.min(comp_frame);
+        if hi <= lo {
+            continue;
+        }
+        match a.interp {
+            Interp::Hold => {
+                total += value_f64(&a.value)? * (hi - lo) as f64;
+            }
+            Interp::Linear => {
+                let va = value_f64(&a.value)?;
+                let vb = value_f64(&b.value)?;
+                // u(f) = この区間内での正規化位置(0..1)。両端は線形なので、
+                // 区間内の整数フレーム点での u は等差数列 — 平均 × 個数で
+                // 和が閉形式に求まる(1フレームずつ足さない、O(1))。
+                let u = |f: i64| -> Result<f64, StoreError> {
+                    let num = seconds_since(frame_time(f)?, a.t);
+                    let den = seconds_since(b.t, a.t);
+                    Ok(if den == 0.0 { 0.0 } else { num / den })
+                };
+                let u_lo = u(lo)?;
+                let u_hi_last = u(hi - 1)?;
+                let count = (hi - lo) as f64;
+                let sum_u = count * (u_lo + u_hi_last) / 2.0;
+                total += va * count + (vb - va) * sum_u;
+            }
+            Interp::Bezier { .. } => {
+                return Err(StoreError::Property(format!(
+                    "{} の Bezier 補間区間は積算未対応(発注の検収条件は Hold のみ、\
+                     黙って近似しない — 対応するなら別発注で判断すること)",
+                    crate::property::SPEED
+                )));
+            }
+        }
+    }
+
+    Ok(total.floor() as i64)
+}
+
+/// `t - origin` の秒(`motolii_eval::track` の同名の内部関数と同じ規約 —
+/// 差分が有理数として厳密に取れれば厳密経路、溢れ時は f64 秒差へフォールバック)。
+fn seconds_since(t: motolii_core::RationalTime, origin: motolii_core::RationalTime) -> f64 {
+    match t.try_sub(origin) {
+        Ok(rel) => rel.as_seconds_f64(),
+        Err(_) => t.as_seconds_f64() - origin.as_seconds_f64(),
     }
 }
 
