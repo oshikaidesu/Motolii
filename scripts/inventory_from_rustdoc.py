@@ -30,7 +30,14 @@ def ty(t, depth=0):
     if "generic" in t:
         return t["generic"]
     if "resolved_path" in t:
-        return t["resolved_path"].get("path", "_").split("::")[-1]
+        r = t["resolved_path"]
+        base = r.get("path", "_").split("::")[-1]
+        # **総称引数を落とさない。** `Option` だけでは構造体リテラルが書けない
+        # (2026-08-23: `Asset` のフィールドが全部 `Option` と出て役に立たなかった)。
+        args = ((r.get("args") or {}).get("angle_bracketed") or {}).get("args") or []
+        inner = [ty(a.get("type"), depth + 1) for a in args
+                 if isinstance(a, dict) and a.get("type") is not None]
+        return f"{base}<{', '.join(inner)}>" if inner else base
     if "borrowed_ref" in t:
         b = t["borrowed_ref"]
         return ("&mut " if b.get("is_mutable") else "&") + ty(b.get("type"), depth + 1)
@@ -45,6 +52,25 @@ def ty(t, depth=0):
     if "impl_trait" in t or "dyn_trait" in t:
         return "impl/dyn"
     return "_"
+
+
+def variant_shape(inner):
+    """enum のバリアントが unit / tuple / struct のどれかを返す。
+
+    **今日の取り残し2件はどちらも関数の署名ではなく、構造体のフィールドと
+    バリアントだった**(`Asset` に `status` が増えて構造体リテラルが壊れた 等)。
+    だから型と形をここに載せる — これが無いと「適当に書いて cargo に聞く」が消えない。
+    """
+    v = inner.get("variant") or {}
+    k = v.get("kind")
+    if k == "plain" or k is None:
+        return "unit"
+    if isinstance(k, dict):
+        if "tuple" in k:
+            return f"tuple({len(k['tuple'])})"
+        if "struct" in k:
+            return f"struct{{{len(k['struct'].get('fields') or [])}}}"
+    return "unit"
 
 
 def signature(inner):
@@ -81,7 +107,14 @@ for f in sorted(glob.glob(os.path.join(sys.argv[1], "*.json"))):
         vis = item.get("visibility")
         vis = vis if isinstance(vis, str) else "restricted"
         doc = (item.get("docs") or "").strip().split("\n")[0]
-        sig = signature(inner) if kind == "function" else ""
+        if kind == "function":
+            sig = signature(inner)
+        elif kind == "struct_field":
+            sig = ty(inner.get("struct_field"))
+        elif kind == "variant":
+            sig = variant_shape(inner)
+        else:
+            sig = ""
         rows.append((kind, name, crate, f"{fn}:{line}", vis, doc, sig))
 
 rows.sort(key=lambda r: (r[2], r[3], r[1]))

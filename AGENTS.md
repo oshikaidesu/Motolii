@@ -96,8 +96,20 @@ python3 scripts/rank_load_bearing.py "$(git rev-parse --show-toplevel)" # 荷重
 
 ## cargo は何のために回すか
 
-**「その関数は在るか・引数は何か」を cargo に聞かない** — 在庫表の7列目に署名がある
-(2,479関数)。適当に書いて `cargo` で確かめて繋ぎ直すのは**cargo を検索に使っている**。
+**「何が在るか・どう呼ぶか・どう組むか」を cargo に聞かない** — 在庫表の7列目に型がある
+(**関数2,479・構造体フィールド1,165・enum バリアント922**)。適当に書いて `cargo` で
+確かめて繋ぎ直すのは**cargo を検索に使っている**。
+
+```bash
+# 構造体リテラルを書く前に、フィールドと型を引く
+awk -F'\t' '$1=="struct_field" && $4 ~ /asset\.rs/ {print $2, $7}' next/reference/generated/inventory.tsv
+# enum の腕を書く前に、バリアントの形(unit/tuple(n)/struct{n})を引く
+awk -F'\t' '$1=="variant" && $4 ~ /document\.rs/ {print $2, $7}' next/reference/generated/inventory.tsv
+```
+
+**今日の取り残し2件はどちらも構造体フィールドと enum バリアントだった**
+(`Asset` に `status` が増えて構造体リテラルが壊れた・`ClipContextMessages` に `split` が
+増えて試験が壊れた)。**関数の署名だけでは足りない。**
 
 cargo でしか出ないのは **(a) 網羅性**(`match` の腕・enum にバリアントを足した時。
 今日の取り残し検出はこれが担った)と **(b) 借用・生存期間** の2つだけ。
