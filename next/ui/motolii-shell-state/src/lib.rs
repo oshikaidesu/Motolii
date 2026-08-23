@@ -40,11 +40,11 @@ pub struct Session {
     pub playhead: i64,
     pub selection: Option<LayerId>,
     /// 複数 layer 選択(普通地図 消化第1波 U1: Select All / Deselect All が
-    /// 対象とする集合)。**`selection`(Inspector/Timeline が読む単一 focus)とは
-    /// 別の身分** — `Message::Select`/`AddLayer`/クリップボードの貼付/複製は
-    /// `select_single`(lib.rs)経由で両方を単一集合へ揃えるが、`timeline_pane`/
-    /// `inspector_pane` の行 UI 自体はまだこちらを読まない(multi-select の見た目
-    /// 表示は write-set 外、RETURN の finding 参照)。Document には乗らない。
+    /// 対象とする集合)。**`selection`(単一 focus)とは別の身分** —
+    /// `Message::Select`/`AddLayer`/クリップボードの貼付/複製は
+    /// `select_single`(lib.rs)経由で両方を単一集合へ揃える。Inspector はこの集合を
+    /// 投影と TEXT Size/Fill の一括書き込みに使い、Timeline の行 UI にはまだ同じ
+    /// 読み替えを要求していない。Document には乗らない。
     pub selected_layers: Vec<LayerId>,
     /// Timeline property 行(キー行)の選択(第2波 T3・EXACT TARGET 3)。
     /// **Document には乗らない** — layer 選択と同じ Session の身分。

@@ -6,7 +6,7 @@
 先行調査(`docs/reviews/2026-08-22-persona-lyric-mv.md`・`-round2.md`)が「致命的」と
 書いた壁の多く(テキストレイヤー作成入口・文字入力欄・色エディタ・Timeline縦スクロール・
 マスク新規追加)は、本調査の実測時点で**既に着地している**。round2 が挙げた壁のうち
-現存するのはごく一部(一括編集・複製・Split・波形・トランジション・TextRange)。
+現存するのはごく一部(一括リネーム・複製・Split・波形・トランジション・TextRange)。
 この差分自体を「5. 新発見の事実」に記録する。
 
 想定シナリオ: 3〜5分の曲、歌詞100行、映像素材数本。新規プロジェクトを開くところから
@@ -139,8 +139,8 @@
 |---|---|---|---|---|
 | 85 | Cmd+Aで全レイヤーを選ぶ | keymap | `menu.rs:115` `Message::SelectAllLayers`、`lib.rs:2054` `select_all_layers` | 書ける |
 | 86 | 選択件数が100件になったことを確認する(Inspectorやハイライトで) | Inspector/Timeline | `motolii-shell-state/src/lib.rs:44` `selected_layers: Vec<LayerId>` | 【未確認】(選択件数の可視表示が実機依存) |
-| 87 | 選んだ状態でInspector TEXT Sizeを変えようとする | Inspector TEXT | `lib.rs:2464-2470` `TextFieldSubmit`は`self.session.selection`(単一Option)だけを渡す。`motolii-shell-state/src/lib.rs:38-43`のdocが「inspector_pane の行UI自体はまだselected_layersを読まない」と自認 | 【穴】入口が無い(意味は各レイヤーのTextDocumentに存在するがUIが複数選択に読み替えない) |
-| 88 | 選んだ状態でFill色をまとめて変えようとする | Inspector TEXT | `lib.rs:2582-2593` `ChannelSubmit`も同じく`self.session.selection`単一 | 【穴】入口が無い |
+| 87 | 選んだ状態でInspector TEXT Sizeを変えようとする | Inspector TEXT | `motolii-inspector-pane/src/projection.rs:490-523` が `selected_layers` を生きた集合へ投影し、`text/view.rs:66-79` が複数選択時の Size 行を出す。`motolii-shell/src/inspector_ops.rs:197-221` → `text/style_track.rs:125-168` → `bulk.rs:5-43` の `apply_all` で全 TEXT layer を1 undoへ束ねる。実行検査: `tests/multi_selection_bulk.rs` | 書ける |
+| 88 | 選んだ状態でFill色をまとめて変えようとする | Inspector TEXT | `text/view.rs:66-79` が複数選択時の Fill 行を出し、`motolii-shell/src/inspector_ops.rs:396-410` → `color.rs:287-335` → `bulk.rs:5-43` の `apply_all` で全 TEXT layer を1 undoへ束ねる。非TEXTと重複/ stale id は共通境界で除外。実行検査: `tests/multi_selection_bulk.rs` | 書ける |
 | 89 | 選んだ状態でDuplicateして100枚まとめて複製しようとする | Edit menu | `next/shell/motolii-shell/src/selection.rs:119-151` `duplicate_layer`が`self.session.selected_layers`全員のsnapshotを集め、`self.doc.apply_all(intents)` 1回(=1 undo)で適用し、複製後は新規レイヤー全員を選択 | 書ける |
 | 90 | 一括変更が効かないと気づき、1枚ずつ選び直して同じ変更を100回繰り返す(迂回) | Inspector | 手順50/54を1枚ずつ再実行 | 書ける(線形コスト) |
 | 91 | (対比)キーフレームは複数選んで一括ドラッグできることに気づく | Timeline key rows | `write.rs` `origins = session.selected_keys.clone()`を起点にした一括移動(実装済み) | 書ける — 静的フィールド(色/フォント)と動的トラック(位置/不透明度キー)で一括編集能力が非対称 |
@@ -229,21 +229,19 @@
 ## 末尾の集計
 
 ```
-全手順 145 / 書ける 112 / 【穴】入口が無い 9 / 【穴】意味が無い 6 / 【未確認】18
+全手順 145 / 書ける 118 / 【穴】入口が無い 7 / 【穴】意味が無い 6 / 【未確認】18
 ```
 
 機械集計(表の「判定」列を正規表現で走査、`python3`で照合済み)。「書ける(◯◯は【未確認】)」
 のような注記付きの行は無く、各行の判定列は単一の値のみを持つ。
 
-### 【穴】入口が無い(9件: #17, #22, #32, #87, #88, #92, #124, #141, #143)
+### 【穴】入口が無い(7件: #17, #22, #32, #92, #124, #141, #143)
 
 | # | 内容 | normal-map.tsv に対応行があるか |
 |---|---|---|
 | 17 | 波形が見えない(shell未結線) | 対応行なし(`Scroll to current time`はあるが「波形が見える」という項目名は無い) |
 | 22 | サビ位置にマーカーを置く動詞が無い | 対応行なし(`M`キーでマーカーは「標準」節記載だが台帳一致行は未確認) |
 | 32 | Split(Cmd+K相当)のshell/menu/keymap配線が無い | **対応行なし**(`marquee`/`drag`同様「割る」という動詞は製品側リストに現れない語) |
-| 87 | 複数選択でTEXT静的フィールド(Size)を一括変更できない | 対応行なし |
-| 88 | 複数選択でFill色を一括変更できない | 対応行なし |
 | 92 | 100行のバッチリネーム/自動連番が無い | 対応行なし |
 | 124 | 「上書き保存」動詞そのものが無い(Save Asしか無い) | **対応行あり**(`normal-map.tsv`に「Save」相当の項目は複数製品のメニューに実在する語彙のはず — ただし本レーンはtsv非改変のため id 突合せは未実施、要再確認) |
 | 141 | Export中のCancelが実機で押せるか不明(同期実行の疑い) | 対応行なし |
@@ -272,13 +270,11 @@
 3. #32 Split(割る)の入口(動詞はあっても配線という状態は台帳に現れない)
 4. #46 「1行のtext_inputでは改行できない」という制約そのもの
 5. #56 「色見本はクリックしない」という設計意図の可視化
-6. #87 複数選択への静的フィールド一括反映
-7. #88 同上(色)
-8. #92 バッチリネーム/連番
-9. #124 「上書き保存」という動詞(Save As と Save の区別)
-10. #130 OSクローズボタン経路のdirty確認
-11. #141 Export中のCancel到達性
-12. #143 Export音声muxの結線状態
+6. #92 バッチリネーム/連番
+7. #124 「上書き保存」という動詞(Save As と Save の区別)
+8. #130 OSクローズボタン経路のdirty確認
+9. #141 Export中のCancel到達性
+10. #143 Export音声muxの結線状態
 
 ## 3. 書いていて「これは書くまでもないと思ったが、実装が無かった」物
 
@@ -293,10 +289,9 @@
   File>Quit(Cmd+Q)を通った時だけ確認が出る。同じ「アプリを終わらせる」操作なのに経路によって
   安全性が違う。
 - **「複数選んで一度に直す」**(#87, #88, #92): 100行という規模を要求されて初めて、
-  「選ぶ」(Cmd+A・Shift+クリックは通る)と「選んだ状態で効く」(TEXT欄・Renameは
-  単一選択だけを読む)が別の実装であることが分かった。Duplicateはこの調査後に
-  `selected_layers` 全員へ効くよう閉じられた。選択機構は複数選択を保持しているのに、
-  読み手の大半が単一選択決め打ちという非対称が残る。
+  「選ぶ」(Cmd+A・Shift+クリックは通る)と「選んだ状態で効く」(TEXT Size/Fill・Rename)が
+  別の実装であることが分かった。#87/#88 は `selected_layers` → Inspector 投影 →
+  共通 `apply_all` まで閉じたが、バッチRenameだけはなお単一選択を読む。
 
 ## 5. 新発見の事実(KNOWN.md既載は除く)
 
