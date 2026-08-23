@@ -1033,6 +1033,10 @@ pub struct Shell {
     /// (`Message::SaveACopyRequested` doc 参照 — 「現 path 維持のまま別名へ
     /// 書く」)。New Project でリセットされる。
     current_path: Option<std::path::PathBuf>,
+    /// 素材の在り処の解決結果(`AssetId` → `AssetStatus`)。
+    /// `Asset::status` は保存されない(環境の事実であって作品の内容ではない)ので
+    /// shell が持つ。更新は離散イベントのときだけ — `sweep_asset_status()` 参照。
+    asset_status: std::collections::HashMap<motolii_store::AssetId, motolii_store::AssetStatus>,
     /// 直近の保存(Save As)時点の `Document::revision()`。**dirty 判定の唯一の
     /// 鍵**(`Shell::is_dirty` 参照)── `revision()` は履歴の意味だけを表す
     /// (transient overlay は含まない、`document.rs::Revision` doc)ので、
@@ -1432,6 +1436,7 @@ impl Shell {
                 media_size_cache: RefCell::new(HashMap::new()),
                 dialogs,
                 current_path: None,
+            asset_status: std::collections::HashMap::new(),
                 saved_revision,
                 pending_recovery: None,
                 main_window: None,
@@ -1565,6 +1570,7 @@ impl Shell {
             // 無い)ため実際に呼ばれることはない。
             dialogs: Box::new(RfdDialogs),
             current_path: None,
+            asset_status: std::collections::HashMap::new(),
             saved_revision,
             pending_recovery: None,
             main_window: None,
@@ -2707,7 +2713,9 @@ impl Shell {
     /// 「AdmitPaths → 台帳に載る」を確かめる口(`timeline_rows`/`markers` と
     /// 同じ形 — pane 側の projection 関数をそのまま呼ぶだけ)。
     pub fn assets(&self) -> Vec<browser_pane::AssetListItem> {
-        browser_pane::model::assets(&self.doc.view())
+        browser_pane::model::assets_with_status(&self.doc.view(), &|id| {
+            self.asset_status.get(&id).cloned()
+        })
     }
 
     /// 今の Inspector 投影。運転席が「選択→行が出る」「編集→store が変わる」を

@@ -153,9 +153,39 @@ impl Shell {
                 // C-1 波C「再起動で続きが開く」: 明示 Open でも sidecar を
                 // 更新する(次回起動時にこの project を再度開く)。
                 Self::write_last_project_path(&path);
+                // 素材の在り処を**この1回だけ**解決する(2026-08-23)。
+                // `Asset::status` は保存されない(環境の事実であって作品の内容
+                // ではない)ので、開いた直後は全件 `Unchecked`。`canonicalize` は
+                // syscall なので毎フレームは不可 — 「開く」という離散イベントが
+                // 素材数ぶんで頭打ちになる自然な境界。
+                self.sweep_asset_status();
             }
             Err(error) => self.status = Some(format!("開けない: {error}")),
         }
+    }
+
+    /// 全素材の在り処を1回だけ解決して `asset_status` へ溜める。
+    ///
+    /// `Asset::status` は `#[serde(skip)]` なので store から読み直すと必ず
+    /// `Unchecked` に戻る。Browser のバッジはこの map を重ねて出す
+    /// (`browser_pane::model::assets_with_status`)。
+    ///
+    /// **呼ぶのは離散イベントのときだけ** — project を開いた直後と、素材を
+    /// 取り込んだ直後。`canonicalize` は syscall で、素材数ぶん走る。
+    pub(crate) fn sweep_asset_status(&mut self) {
+        let root = self
+            .current_path
+            .as_ref()
+            .and_then(|p| p.parent())
+            .map(|p| p.to_path_buf());
+        let assets = self.doc.view().assets().unwrap_or_default();
+        self.asset_status = assets
+            .into_iter()
+            .map(|asset| {
+                let status = asset.resolve_status(root.as_deref());
+                (asset.id, status)
+            })
+            .collect();
     }
 
     // ---- AUTOSAVE(SET+ B12 第2切片、shell 結線) ----

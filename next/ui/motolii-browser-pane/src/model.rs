@@ -664,11 +664,35 @@ pub fn preview_visible(tab: LibraryTab, scope: PreviewScope, query: &str) -> Vec
 /// この投影は表示専用(`meta`/`markers` 読み系と同じ「表示は空へ丸める」流儀)。
 /// 「読めない」ことそのものを扱いたい呼び手は `store.assets()` を直接呼ぶこと。
 pub fn assets(store: &StoreView<'_>) -> Vec<AssetListItem> {
+    assets_with_status(store, &|_| None)
+}
+
+/// [`assets`] に「解決済みの在り処」を重ねる版。
+///
+/// `Asset::status` は `#[serde(skip)]`(今そこに在るかは**環境の事実**であって
+/// 作品の内容ではない — `motolii_store::AssetStatus` doc)なので、store から
+/// 読み直した `Asset` は必ず `Unchecked` に戻る。よって**呼び手が別に持っている
+/// 解決結果**を渡してもらい、ここで重ねる。`None` を返した素材は store の値
+/// (= `Unchecked`)のまま。
+///
+/// **この関数は IO をしない。** `resolve_status` は `canonicalize`(syscall)を
+/// 呼ぶので、投影のたびに走らせてはいけない — 解決の頻度は呼び手(shell)の責任。
+pub fn assets_with_status(
+    store: &StoreView<'_>,
+    resolved: &dyn Fn(AssetId) -> Option<AssetStatus>,
+) -> Vec<AssetListItem> {
     store
         .assets()
         .unwrap_or_default()
         .into_iter()
-        .map(asset_to_item)
+        .map(|asset| {
+            let overlay = resolved(asset.id);
+            let mut item = asset_to_item(asset);
+            if let Some(status) = overlay {
+                item.status = status;
+            }
+            item
+        })
         .collect()
 }
 

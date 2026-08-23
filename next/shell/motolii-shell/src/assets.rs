@@ -124,6 +124,9 @@ impl Shell {
             .collect();
         if !admitted.is_empty() {
             self.browser.update(browser_pane::Message::RecentlyAdmitted(admitted));
+            // 取り込んだ直後も離散イベントなので在り処を解決する
+            // (`document_io.rs::sweep_asset_status` と同じ理由。毎フレームは不可)。
+            self.sweep_asset_status();
         }
         let mut notices = Vec::new();
         if !rejected.is_empty() {
