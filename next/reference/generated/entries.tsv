@@ -11,7 +11,7 @@ Intent	SetCameraPropertySlot	入口ゼロ
 Intent	SetCameraTrack	入口ゼロ	
 Intent	SetComposition	入口あり	shell/motolii-shell/src/clipboard.rs;shell/motolii-shell/src/document_io.rs;shell/motolii-shell/src/fixture.rs;shell/motolii-shell/src/lib.rs;ui/motolii-inspector-pane/src/text.rs;ui/motolii-settings-pane/src/lib.rs;ui/motolii-settings-pane/src/sections.rs;ui/motolii-stage-pane/src/gizmo.rs;ui/motolii-timeline-pane/src/projection.rs;ui/motolii-timeline-pane/src/write.rs
 Intent	SetEffects	入口あり	shell/motolii-shell/src/clipboard.rs;shell/motolii-shell/src/create.rs;shell/motolii-shell/src/fixture.rs;ui/motolii-browser-pane/src/state.rs;ui/motolii-inspector-pane/src/effects.rs;ui/motolii-inspector-pane/src/lib.rs;ui/motolii-timeline-pane/src/split.rs
-Intent	SetMarkers	入口あり	shell/motolii-shell/src/fixture.rs;shell/motolii-shell/src/lib.rs;ui/motolii-timeline-pane/src/markers.rs
+Intent	SetMarkers	入口あり	shell/motolii-shell/src/fixture.rs;shell/motolii-shell/src/lib.rs;ui/motolii-timeline-pane/src/markers.rs;ui/motolii-timeline-pane/src/write.rs
 Intent	SetMasks	入口あり	shell/motolii-shell/src/clipboard.rs;ui/motolii-inspector-pane/src/lib.rs;ui/motolii-inspector-pane/src/mask.rs;ui/motolii-timeline-pane/src/split.rs
 Intent	SetMeta	入口あり	shell/motolii-shell/src/assets.rs;shell/motolii-shell/src/clipboard.rs;shell/motolii-shell/src/create.rs;shell/motolii-shell/src/fixture.rs;shell/motolii-shell/src/lib.rs;shell/motolii-shell/src/render.rs;ui/motolii-inspector-pane/src/text.rs;ui/motolii-stage-pane/src/gizmo.rs;ui/motolii-timeline-pane/src/projection.rs;ui/motolii-timeline-pane/src/split.rs;ui/motolii-timeline-pane/src/write.rs
 Intent	SetOrder	入口あり	ui/motolii-timeline-pane/src/stacking.rs;ui/motolii-timeline-pane/src/write.rs
