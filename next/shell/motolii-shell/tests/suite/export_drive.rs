@@ -158,3 +158,137 @@ fn picking_output_path_again_replaces_the_previous_choice() {
         "2回目の選択が1回目の path を上書きしていない"
     );
 }
+
+// ---------------------------------------------------------------------------
+// 音声 mux(GOALS M9「音声mux込み」、C-3 波)
+// ---------------------------------------------------------------------------
+
+/// **機械で示す**: 音声を持つ media layer がある project を書き出すと、
+/// 出来た mp4 に実際の音声トラックが乗っている(`motolii_media::probe_audio`
+/// が音声ストリームを見つけられる)。`export_ops::run_export_job_for_test`
+/// (production の `start_export` が背景スレッドで呼ぶのと同じ
+/// `run_export_job` — `Task`/`iced::stream::channel` の非同期機構は経由しない、
+/// `export_ops.rs` module doc 参照)を直接呼ぶ。
+#[test]
+fn exporting_a_project_with_a_media_layer_mux_es_its_audio_track() {
+    use motolii_shell::export_ops;
+    use motolii_store::{
+        Composition, Document, Fps, Intent, LayerId, LayerMeta, LayerSource, LayerTiming,
+    };
+    use std::process::Command;
+
+    if !motolii_testkit::ffmpeg_or_skip() {
+        return;
+    }
+
+    let dir = motolii_testkit::tmp_dir("export-drive-audio-mux");
+    let source = dir.join("source-with-audio.mp4");
+    let out = dir.join("out.mp4");
+
+    // 64x64・30fps・1秒の映像 + 440Hz の正弦波1本(video+audioが同じ file)。
+    let status = Command::new("ffmpeg")
+        .args([
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=orange:s=64x64:d=1:r=30",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=440:duration=1",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:v",
+            "libx264",
+            "-c:a",
+            "aac",
+            "-shortest",
+        ])
+        .arg(&source)
+        .status()
+        .expect("ffmpeg 起動に失敗");
+    assert!(status.success(), "音声付き fixture の生成に失敗");
+
+    let mut doc = Document::new();
+    doc.apply(Intent::SetComposition(Composition {
+        width: 64,
+        height: 64,
+        fps: Fps::try_new(30, 1).unwrap(),
+        duration_frames: 30,
+        background: [0.0, 0.0, 0.0, 1.0],
+    }))
+    .unwrap();
+    let layer = LayerId(1);
+    doc.apply(Intent::AddLayer(layer)).unwrap();
+    doc.apply(Intent::SetMeta {
+        layer,
+        meta: LayerMeta {
+            source: LayerSource::Media {
+                path: source.to_string_lossy().into_owned(),
+                fingerprint: None,
+            },
+            order: 0,
+            timing: LayerTiming::place(0, None, 30),
+        },
+    })
+    .unwrap();
+
+    let outcome = export_ops::run_export_job_for_test(&doc, &out, false, 0, 30)
+        .expect("音声つき project の書き出しが失敗した");
+    assert!(outcome.audio_muxed, "音声ありの project なのに mux していない");
+    assert!(out.exists(), "書き出し先に file が無い");
+
+    let audio = motolii_media::probe_audio(&out)
+        .expect("書き出した mp4 に音声トラックが無い(mux が実際には呼ばれていない)");
+    assert_eq!(audio.codec_name, "aac", "muxed audio codec が想定と違う: {audio:?}");
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// 音声を持つ layer が無い project は mux を呼ばない(無駄な ffmpeg 起動を
+/// しない、`export_ops.rs` module doc「音声 mux」節の分岐)。
+#[test]
+fn exporting_a_project_without_audio_does_not_mux() {
+    use motolii_shell::export_ops;
+    use motolii_store::{Composition, Document, Fps, Intent, LayerId, LayerMeta, LayerSource, LayerTiming};
+
+    if !motolii_testkit::ffmpeg_or_skip() {
+        return;
+    }
+
+    let dir = motolii_testkit::tmp_dir("export-drive-no-audio");
+    let out = dir.join("silent.mp4");
+
+    let mut doc = Document::new();
+    doc.apply(Intent::SetComposition(Composition {
+        width: 32,
+        height: 32,
+        fps: Fps::try_new(30, 1).unwrap(),
+        duration_frames: 10,
+        background: [0.0, 0.0, 0.0, 1.0],
+    }))
+    .unwrap();
+    let layer = LayerId(1);
+    doc.apply(Intent::AddLayer(layer)).unwrap();
+    doc.apply(Intent::SetMeta {
+        layer,
+        meta: LayerMeta {
+            source: LayerSource::Solid {
+                rgba: [255, 255, 255, 255],
+                width: 32,
+                height: 32,
+            },
+            order: 0,
+            timing: LayerTiming::place(0, None, 10),
+        },
+    })
+    .unwrap();
+
+    let outcome = export_ops::run_export_job_for_test(&doc, &out, false, 0, 10)
+        .expect("無音声 project の書き出しが失敗した");
+    assert!(!outcome.audio_muxed, "音声の無い project なのに mux したことになっている");
+    assert!(out.exists());
+
+    std::fs::remove_dir_all(&dir).ok();
+}
