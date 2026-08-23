@@ -6,14 +6,14 @@
 責任ファイルを union-find で束ね、連結成分をそのまま1レーンにしている。
 成分どうしはファイルが交わらないので**同時に走れる**。
 
-- 穴 83件 / レーン 31本 / 責任ファイル未記入 2件
+- 穴 84件 / レーン 31本 / 責任ファイル未記入 2件
 
 ## レーン(重い順)
 
 | レーン | 穴 | write-set | 過積載 |
 |---|---|---|---|
 | `core/motolii-store/src/persist.rs` | 29 | `core/motolii-store/src/persist.rs`, `shell/motolii-shell/src/lib.rs`, `ui/motolii-browser-pane/src/state.rs`, `ui/motolii-shell-state/src/layout.rs` ほか1 | ※ |
-| `ui/motolii-inspector-pane/src/lib.rs` | 5 | `ui/motolii-inspector-pane/src/lib.rs` | ※ |
+| `ui/motolii-inspector-pane/src/lib.rs` | 6 | `ui/motolii-inspector-pane/src/lib.rs` | ※ |
 | `ui/motolii-stage-pane/src/gizmo.rs` | 5 | `ui/motolii-stage-pane/src/gizmo.rs` |  |
 | `ui/motolii-inspector-pane/src/transform/mod.rs` | 4 | `ui/motolii-inspector-pane/src/transform/mod.rs` | ※ |
 | `core/motolii-store/src/document.rs` | 3 | `core/motolii-store/src/document.rs`, `core/motolii-store/src/view.rs`, `engine/motolii-compositor/src/lib.rs` | ※ |

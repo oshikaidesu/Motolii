@@ -31,6 +31,7 @@ core/motolii-store/src/persist.rs	A11	-	group化/ungroup(N layer規模)の同期
 ui/motolii-inspector-pane/src/lib.rs	A01	-	`SetCameraPropertyModulators`(裁定213新設)	入口ゼロ		ui/motolii-inspector-pane/src/lib.rs
 ui/motolii-inspector-pane/src/lib.rs	A01	-	`SetCameraTrack`	入口ゼロ		ui/motolii-inspector-pane/src/lib.rs
 ui/motolii-inspector-pane/src/lib.rs	A01	-	`SetCameraPropertySlot`	入口ゼロ		ui/motolii-inspector-pane/src/lib.rs
+ui/motolii-inspector-pane/src/lib.rs	A01	-	シェイプ演算子のパラメータ(OpKind の start/end/radius/amount/angle/copies)	入口ゼロ		ui/motolii-inspector-pane/src/lib.rs
 ui/motolii-inspector-pane/src/lib.rs	A04	-	Inspector 一括編集	上限がある		ui/motolii-inspector-pane/src/lib.rs
 ui/motolii-inspector-pane/src/lib.rs	A04	1290	Remove All Text Animators(アニメーター一括削除)	上限がある	全テキストアニメーターを削除	ui/motolii-inspector-pane/src/lib.rs
 ui/motolii-stage-pane/src/gizmo.rs	A10	-	Stage gizmo move(gizmo.rs::move_value)	カーソルのみ		ui/motolii-stage-pane/src/gizmo.rs
