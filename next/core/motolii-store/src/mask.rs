@@ -94,6 +94,59 @@ impl Default for MaskMode {
     }
 }
 
+impl MaskMode {
+    /// [`crate::PropertyId::mask_mode`] の `Value::Enum` 表現(裁定214 —
+    /// マスク合成に直接効くので時間軸に乗る)。**補間は Hold**(裁定213)。添字は
+    /// 保存形の一部になるので、既存の並び([`crate::BlendMode::to_enum_value`]と
+    /// 同じ流儀)を変えてはいけない。
+    pub fn to_enum_value(self) -> i64 {
+        match self {
+            MaskMode::Add => 0,
+            MaskMode::Subtract => 1,
+            MaskMode::Intersect => 2,
+            MaskMode::Lighten => 3,
+            MaskMode::Darken => 4,
+            MaskMode::Difference => 5,
+        }
+    }
+
+    /// [`Self::to_enum_value`] の逆写像。未知の値は `None`(壊れた track を近似しない)。
+    pub fn from_enum_value(v: i64) -> Option<Self> {
+        match v {
+            0 => Some(MaskMode::Add),
+            1 => Some(MaskMode::Subtract),
+            2 => Some(MaskMode::Intersect),
+            3 => Some(MaskMode::Lighten),
+            4 => Some(MaskMode::Darken),
+            5 => Some(MaskMode::Difference),
+            _ => None,
+        }
+    }
+}
+
+/// **裁定214**: Mask Mode / Mask Inverted も出力に直接効くので時間軸に乗る
+/// (A03棚卸し行 — マスク合成に直接効く)。id ごとの track なので
+/// [`crate::property::MASK_PREFIX`] 経由の平坦名(`mask.{id}.mode`/
+/// `mask.{id}.inverted`、`mask_shape`/`mask_opacity`/`mask_expansion` と同じ形)。
+/// **配線済み**(`crate::view::StoreView::resolved_masks` が `value_at` 経由で読む、
+/// track 無しは静的 [`Mask::mode`]/[`Mask::inverted`] が既定値、裁定20)。
+impl crate::PropertyId {
+    /// マスクの重ね方(`Value::Enum`、[`MaskMode::to_enum_value`])。
+    pub fn mask_mode(mask: MaskId) -> Self {
+        Self::mask_attr_property(mask, "mode")
+    }
+
+    /// マスクの反転(`Value::Bool`)。
+    pub fn mask_inverted(mask: MaskId) -> Self {
+        Self::mask_attr_property(mask, "inverted")
+    }
+
+    fn mask_attr_property(mask: MaskId, attr: &str) -> Self {
+        let name = format!("{}{mask}.{attr}", crate::property::MASK_PREFIX);
+        Self::new(&name).expect("マスクの property 名は予約語でも空でもない")
+    }
+}
+
 /// マスク1枚のうち、**キーを打たない部分**。
 ///
 /// 形状・不透明度・膨張はここに入れない — 動くので property track が持つ
