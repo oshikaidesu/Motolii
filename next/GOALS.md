@@ -5,6 +5,24 @@
 
 旧 workspace で実装済みでも、新側に無ければ「未」と書く。旧側の実装は移植元であって成果ではない。
 
+## 状態欄の語彙(裁定219)
+
+**`済` は窓を開けて実機で確認した物だけ**に使う。台帳と正典が独立に同じ誤り
+(「バック実装が在る」を「利用者に届く」と取り違える)をした実測が4件あったため、
+語彙を分ける:
+
+| 語 | 意味 |
+|---|---|
+| **済** | **実機で確認した** |
+| **結線済(実機未確認)** | 静的には利用者の動線から到達する。窓での確認はまだ |
+| **結線待ち** | バック実装は在るが到達路が無い(裁定192 の単位) |
+| **未** | 実装が無い |
+
+「部分」は**範囲を明記した上で**のみ使ってよい。
+
+**2026-08-23 時点で `済` と書ける行はほぼ無い** — この日の実装は全て静的検査だけで着地しており、
+**実機検分は一度も行われていない**。これは後退ではなく事実の表示である。
+
 ## 必須 — これが無いと動画ソフトと呼べない
 
 | # | 条件(観測可能な形) | 出所 | `next/` |
@@ -14,19 +32,19 @@
 | M3 | 置いた clip が Timeline に立ち、**Stage に絵が出る**。待たされない | ui-inherited-grammar-gap | **部分→ほぼ済**。Stage に絵が出て、Timeline pane 第1波(行・bar・ruler・playhead・scrub・選択)が実機で稼働(裁定120)。残りはドロップ→行が立つ一周の実機確認 |
 | M4 | clip の尺は min(source, comp残り)。source 終端の先はフリーズせず背景 | first-real-run 欠陥(1) | **済**。`LayerTiming::place` が尺を決め、配置の外は描かない(フレーム全体は落とさない) |
 | M5 | drag=移動 / 端drag=trim / release=確定 / Esc=復元。snap は clip端・key・playhead・loop端・0・終端 | normal-timeline-prior-art | 未 |
-| M6 | split(Cmd+K)・Delete・複製(Cmd+D)・複数選択(Shift/Cmd/marquee/Cmd+A) | 同上 | 未 |
-| M7 | **Copy / Cut / Paste が効く** — 旧 egui は menu に項目があるのに何も起きない(Q0違反の現物) | 同上、egui能力台帳§2 | 未 |
+| M6 | split(Cmd+K)・Delete・複製(Cmd+D)・複数選択(Shift/Cmd/marquee/Cmd+A) | 同上 | **部分(split のみ未)**。Delete/複製/複数選択は C-2 で結線済(実機未確認)。**split(Cmd+K)だけ未統合** — `context.rs:55` が「`SplitAtPlayhead` は宣言のみで shell へ未統合」と明記 |
+| M7 | **Copy / Cut / Paste が効く** — 旧 egui は menu に項目があるのに何も起きない(Q0違反の現物) | 同上、egui能力台帳§2 | **結線済(実機未確認)**。MB-0 で Edit メニューへ Copy/Paste/Cut/Undo/Redo/SelectAll/DeselectAll/Duplicate を配線、既存 shortcut と併存(S6) |
 | M8 | Space で再生。**音が鳴り**、playhead が音に同期。scrub で Stage 追従 | ui-inherited-grammar-gap Tier0 | 未 |
-| M9 | Export → mp4。**音声mux込み**。報告フレーム数=現物、cancel で残骸なし | concept、first-real-run 欠陥(2) | **部分**(報告=現物・cancel は済。音声mux は未結線) |
+| M9 | Export → mp4。**音声mux込み**。報告フレーム数=現物、cancel で残骸なし | concept、first-real-run 欠陥(2) | **結線済(実機未確認)**。C-3 が `mux_mixed_pcm` を `export_ops.rs:508` から呼び、出力 mp4 に音声ストリームが在ることを機械で検査。export は専用スレッドへ逃がして UI が止まらず cancel が届く。残骸は `out_path` を一時 path 経由にして残さない。**既知の限度**: mux 直前の cancel 再チェックは `Cancel::is_cancelled` が非 pub のため不可(わずかに遅れて効く) |
 | M10 | Document を変える操作は**1回の Undo で戻る**。1 gesture = 1 Undo | ui-quality-bar Q2 | **済**。`Document::apply_all` が複数 intent を1つの edit 刻みへ書く。運転席が「layer 追加」「3本ドロップ」の両方で Undo 1回を確認。ドラッグは途中経過を pane が持ち確定の1件だけが intent なので元から1 undo |
-| M11 | Cmd+S・未保存●・閉じる確認・**再起動で続きが開く** | ux-check P2/P5、外部診断F-01 | **部分**。`Document::save` / `load` が往復(bezier・NTSC fps 込み)、保存で履歴を畳む。UI 側(Cmd+S・未保存●・閉じる確認)が残り |
+| M11 | Cmd+S・未保存●・閉じる確認・**再起動で続きが開く** | ux-check P2/P5、外部診断F-01 | **結線済(実機未確認)**。C-1 が全4項目を結線 — Cmd+S(既知パスは無言で上書き・`input.rs:321`)/ 未保存●(`• name — Motolii`)/ ×ボタンの確認(`exit_on_close_request:false` + `close_requests()`)/ 再起動で前回を開く(User Settings 相当の sidecar に直近1件)。autosave からの復帰確認も追加。**MRU 一覧は未** |
 | M12 | **触れそうな物は全部機能する**。未実装の chrome を置かない(disabled も不可=撤去) | ui-quality-bar **Q0**(利用者裁定) | 未 |
 | M13 | **無反応ゼロ**。拒否は理由がその場で分かる。旧 iced は拒否を `let _ =` で捨てていた | ui-quality-bar Q3、能力台帳§5-2 | **部分**。読み口が「無い」と「読めない」を区別し、shell の拒否は status 帯へ出る。運転席が「戻せない」「開けない素材」の2件を確認。全操作を通した確認は Timeline 後 |
 | M14 | 選択・時刻・幾何の正本は1つ。全面が同じ真実を映す | ui-quality-bar Q5 | **済**。幾何=store、fps/解像度/尺=Document の `Composition`(裁定40)、選択/playhead=`Session` 1箇所(裁定46/107)。Timeline と Stage が同じ正本を映すことを利用者が実機確認(裁定120) |
 | M15 | **Preview = Export**。同じ評価関数を通る | concept 絶対規律、DECISIONS #15 | **済**。(1) 経路の一本性は依存グラフが守る(export は compositor を引かない) (2) 入力の一本性は `Composition` が Document にあることで守る(裁定40) (3) 現物での照合は可逆書き出しを decode し直して Y の最大差 ≤ 8(h264 が YUV420 を通るため byte 一致にはならない) |
 | M16 | どの入力でも panic/クラッシュ/喪失なし。render 失敗でも画面を空にしない | ui-quality-bar Q6 | 未 |
 | M17 | 空 project は空として表示。空でも place/scrub/keymap が効く | ui-quality-bar Q7 | 未 |
-| M18 | Zoom(カーソル下の時刻を保つ)と Fit | prior-art 必須12件 | 未 |
+| M18 | Zoom(カーソル下の時刻を保つ)と Fit | prior-art 必須12件 | **部分**。Zoom In/Out/Fit は C-4 が `Cmd+=`/`Cmd+-`/`Cmd+9` へ結線(実機未確認)。**Zoom to 100% は未** — viewport bounds が `Program::draw(&self)` でしか手に入らず `Shell` へ書き戻せない(D-3/C-4 が独立に同じ結論)。**「カーソル下の時刻を保つ」は未確認** |
 | M19 | keyframe の追加/削除/移動が property 単位で効く | 同上 | **部分**(store/eval/書き出しまで済、UI が無い) |
 | M20 | undo/redo/delete がどの面からでも。TextInput 中はテキスト優先。IME を壊さない | ui-quality-bar Q9 | 未 |
 
@@ -84,9 +102,9 @@ iced を採ったのは「**バックができていれば UI は後から生え
 | 穴 | 状態 |
 |---|---|
 | layer の時間(配置・trim・頭出し) | **塞いだ**(裁定51〜53) |
-| 保存・読込(M11) | **バックは済**。形式は上流の `.rrd` そのまま、保存時に履歴を畳む。shell の Cmd+S 結線が残り |
+| 保存・読込(M11) | **結線済(実機未確認)**。形式は上流の `.rrd` そのまま、保存時に履歴を畳む。shell の Cmd+S は 2026-08-23 に結線 |
 | Transform 全軸(anchor / scale / rotation) | **未**。今あるのは position / size / opacity |
-| 音声(decode / mix / 再生 / export mux) | **未**。旧 `motolii-audio` 4,286行が移植候補(`motolii-doc` 依存を切る要) |
+| 音声(decode / mix / 再生 / export mux) | **部分**。export mux は結線済(実機未確認・C-3。`AudioProgram::mix_audio` が同期純関数として既に在り、新規 PCM 生成は不要だった)。**decode / 再生の時計は未** |
 | 再生の時計(M8) | 未 |
 | 拡張の口 | 意図的に未着手(裁定13) |
 
