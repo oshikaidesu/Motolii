@@ -333,6 +333,15 @@ pub fn nav_bundle_bindings() -> Vec<Binding> {
         ),
         // 4213: Space(修飾キー不問 — 元コードは一切見ていない) → TogglePlayback
         Binding::new(Key::Named(NamedKey::Space), ModifierSpec::ANY, Scope::NavigationBundle, VerbId::TogglePlayback),
+        // Split(レイヤー分割、B39/GOALS M6・E-1 結線 — `input.rs::resolve_navigation_key`
+        // 実測)。Cmd+K(Shift 不問。bare `k` は上の ShuttleStop がすでに
+        // `command_required(false)` で取っているので衝突しない)。
+        Binding::new(
+            Key::character('k'),
+            ModifierSpec::ANY.command_required(true),
+            Scope::NavigationBundle,
+            VerbId::SplitAtPlayhead,
+        ),
     ]
 }
 

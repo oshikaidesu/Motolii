@@ -345,6 +345,18 @@ pub fn resolve_navigation_key(
         Key::Character(c) if modifiers.command() && c.eq_ignore_ascii_case("q") => {
             Some(Message::QuitRequested)
         }
+        // ---- Split(レイヤー分割、B39/GOALS M6・E-1 結線) ----
+        // Cmd+K(map 267 は Command+B だが、GOALS.md M6 の既定表記は Cmd+K —
+        // `split.rs` モジュール doc「`write::Message` への統合」参照。bare
+        // `k` は上で ShuttleStop に取られている(`!modifiers.command()` 付き)ので
+        // 衝突しない)。`timeline_pane::Message::SplitAtPlayhead` は shell の
+        // `Message::Timeline` match(`lib.rs`)に専用腕を持たず、`other` 経路
+        // (`PaneState::update`)がそのまま拾う — `ToggleFold`/`ToggleLoop` と
+        // 同じ「shell 先取りなしで pane 側が完結する」形(5例外に数えない、
+        // `write.rs::split_at_playhead` doc 参照)。
+        Key::Character(c) if modifiers.command() && c.eq_ignore_ascii_case("k") => {
+            Some(Message::Timeline(timeline_pane::Message::SplitAtPlayhead))
+        }
         // ---- G1 グループ化動詞(裁定174)。Undo/Redo・SelectAll/DeselectAll と
         // 同じ Shift 振り分けの形(既定割当は仮、上の注記どおり)。
         Key::Character(c) if modifiers.command() && !modifiers.shift() && c.eq_ignore_ascii_case("g") => {

@@ -52,7 +52,7 @@
 //! | Cut | 既存(`Message::CutLayer`) | 同上 + Cmd+X | 採用(発注書の「Delete」枠 — 下記注記) |
 //! | Group | 既存(`Message::GroupLayers`) | Layer メニュー(`crate::menus::layer_menu`)+ Cmd+G | 採用 |
 //! | Freeze | 既存(`Message::FreezeGroups`) | 同上(shortcut 無しだが menu bar 存在で足りる、OR 条件) | 採用 |
-//! | Split | **存在しない** — `motolii_timeline_pane::split::Message::SplitAtPlayhead` は宣言のみで `write::Message`/shell へ未統合(`split.rs` 冒頭 doc「統合手順(次波)」1〜3) | — | 見送り(次波の統合を待つ) |
+//! | Split | 既存(`timeline_pane::Message::SplitAtPlayhead`、GOALS M6・E-1 結線で shell 統合済み) | shortcut Cmd+K(`next/shell/motolii-shell/src/input.rs::resolve_navigation_key`) | 採用 |
 //! | ラベル色(`Label Color`) | 既存(`inspector_pane::Message::CycleLabelColor`) | **裁定195で解禁**: `crate::menus::layer_menu` に `Label Color` 項目を追加した(Inspector の色 swatch button 1本だけだった単一入口を穴埋め) — 今は menu bar が2本目の入口 | 採用 |
 //!
 //! **「Delete」についての注記**: normal-map/shell の実装に「クリップボードを
@@ -123,6 +123,10 @@ pub const SHORTCUT_ONLY_REGISTRY: &[(&str, &str)] = &[
     // Backspace/Delete(Mac は両方 `Named::Backspace` で届く実測注記あり)
     // → `timeline_pane::Message::DeleteSelectedKeys`
     ("Delete", "Backspace"),
+    // next/shell/motolii-shell/src/input.rs::resolve_navigation_key
+    // Cmd+K → `Message::Timeline(timeline_pane::Message::SplitAtPlayhead)`
+    // (GOALS M6・E-1 結線)
+    ("Split", "Cmd+K"),
 ];
 
 /// [`clip_context_items`] が必要とする message 一式(モジュール冒頭 doc の
@@ -145,6 +149,10 @@ pub struct ClipContextMessages<M> {
     /// メニュー `Label Color` と同じ動詞(モジュール冒頭 doc「クリップ
     /// 右クリック」表参照)。
     pub cycle_label_color: M,
+    /// `timeline_pane::Message::SplitAtPlayhead`。GOALS M6・E-1 結線 —
+    /// shortcut Cmd+K(`SHORTCUT_ONLY_REGISTRY`)で S6 が成立する
+    /// (モジュール冒頭 doc「クリップ右クリック」表参照)。
+    pub split: M,
 }
 
 /// クリップ右クリックの項目列を組む。並び・ラベルの正本はこの関数
@@ -154,6 +162,10 @@ pub fn clip_context_items<M>(items: ClipContextMessages<M>) -> Vec<Item<M>> {
         Item { label: "Copy", shortcut: Some("Cmd+C"), message: items.copy },
         Item { label: "Paste", shortcut: Some("Cmd+V"), message: items.paste },
         Item { label: "Duplicate", shortcut: Some("Cmd+D"), message: items.duplicate },
+        // Split(GOALS M6・E-1 結線): AE/Premiere/Resolve とも Duplicate と
+        // Cut/Delete の間に「構造を変える」動詞(Split)を挟む並びが一般的
+        // (裁定150 先例に倣う)。
+        Item { label: "Split", shortcut: Some("Cmd+K"), message: items.split },
         Item { label: "Cut", shortcut: Some("Cmd+X"), message: items.cut },
         Item { label: "Group", shortcut: Some("Cmd+G"), message: items.group },
         Item { label: "Freeze", shortcut: None, message: items.freeze },
@@ -414,6 +426,7 @@ mod tests {
             group: FakeMessage("group"),
             freeze: FakeMessage("freeze"),
             cycle_label_color: FakeMessage("cycle_label_color"),
+            split: FakeMessage("split"),
         }
     }
 
@@ -450,12 +463,12 @@ mod tests {
     }
 
     #[test]
-    fn clip_context_has_seven_items_in_declared_order() {
+    fn clip_context_has_eight_items_in_declared_order() {
         let labels: Vec<&str> =
             clip_context_items(clip_fake_messages()).into_iter().map(|item| item.label).collect();
         assert_eq!(
             labels,
-            vec!["Copy", "Paste", "Duplicate", "Cut", "Group", "Freeze", "Label Color"]
+            vec!["Copy", "Paste", "Duplicate", "Split", "Cut", "Group", "Freeze", "Label Color"]
         );
     }
 
@@ -471,6 +484,7 @@ mod tests {
                 FakeMessage("copy"),
                 FakeMessage("paste"),
                 FakeMessage("duplicate"),
+                FakeMessage("split"),
                 FakeMessage("cut"),
                 FakeMessage("group"),
                 FakeMessage("freeze"),
@@ -480,10 +494,10 @@ mod tests {
     }
 
     /// S6 機械検査: クリップ右クリックの全項目がメニューバーか shortcut に
-    /// 既に存在する(発注書の Split は Message 未統合のためこの関数に現れず
-    /// 検査対象に含まれない。ラベル色は裁定195で `layer_menu` に
-    /// `Label Color` を足したことで S6 が成立し、この検査に含まれるように
-    /// なった — モジュール冒頭 doc の表参照)。
+    /// 既に存在する(Split は GOALS M6・E-1 結線で `SHORTCUT_ONLY_REGISTRY`
+    /// の Cmd+K を得て、この検査に含まれるようになった。ラベル色は裁定195で
+    /// `layer_menu` に `Label Color` を足したことで S6 が成立した —
+    /// モジュール冒頭 doc の表参照)。
     #[test]
     fn clip_context_items_are_all_s6_compliant() {
         let menu_bar = menu_bar_labels();
