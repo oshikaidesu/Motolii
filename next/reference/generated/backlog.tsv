@@ -1,0 +1,984 @@
+crate	bundle	束の名前	map_id	freq	項目	意味	verdict
+ui/motolii-timeline-pane	B39	トリム/カット編集束	163	3	Split / Razor (clip at playhead)	プレイヘッド位置でクリップを分割	採用予定
+ui/motolii-timeline-pane	B52	トラック構造管理束	1315	2	New Sequence / Timeline / Composition	新規シーケンス・タイムライン・コンポジションを作成	採用予定
+ui/motolii-timeline-pane	B39	トリム/カット編集束	1046	1	Add Edit	編集点追加	採用予定
+ui/motolii-timeline-pane	B39	トリム/カット編集束	1047	1	Add Edit to All Tracks	全トラック編集点追加	採用予定
+ui/motolii-timeline-pane	B21	再生/スクラブ束	1052	1	Display snapshot in active viewer	スナップショットを表示	採用予定
+ui/motolii-timeline-pane	B21	再生/スクラブ束	1055	1	Fast Forward	早送り	採用予定
+ui/motolii-timeline-pane	B21	再生/スクラブ束	1057	1	Fast Reverse	早戻し	採用予定
+ui/motolii-timeline-pane	B21	再生/スクラブ束	1059	1	Fast Review	高速レビュー	採用予定
+ui/motolii-timeline-pane	B20	再生ヘッド移動束	1060	1	First Frame	;(semicolon)	採用予定
+ui/motolii-timeline-pane	B21	再生/スクラブ束	1061	1	Frame Step (arrow keys)	矢印キーで1フレーム移動	採用予定
+ui/motolii-timeline-pane	B20	再生ヘッド移動束	1062	1	Go To	指定位置へ移動	採用予定
+ui/motolii-timeline-pane	B20	再生ヘッド移動束	1063	1	Go to beginning of composition, layer, or footage	コンポ/レイヤー/素材の先頭へ	採用予定
+ui/motolii-timeline-pane	B20	再生ヘッド移動束	1065	1	Go to end of composition, layer, or footage	コンポ/レイヤー/素材の末尾へ	採用予定
+ui/motolii-timeline-pane	B18	作業範囲/イン・アウト点束(裁定177 headline例)	1066	1	Go to In	Shift+I	採用予定
+ui/motolii-timeline-pane	B18	作業範囲/イン・アウト点束(裁定177 headline例)	1069	1	Go to next In or Out point	次のIn/Out点へ	採用予定
+ui/motolii-timeline-pane	B18	作業範囲/イン・アウト点束(裁定177 headline例)	1070	1	Go to Out	Shift+O	採用予定
+ui/motolii-timeline-pane	B18	作業範囲/イン・アウト点束(裁定177 headline例)	1071	1	Go to previous In or Out point	前のIn/Out点へ	採用予定
+ui/motolii-timeline-pane	B20	再生ヘッド移動束	1072	1	Go to previous or next visible item in time ruler	タイムルーラーの前後の項目へ	採用予定
+ui/motolii-timeline-pane	B20	再生ヘッド移動束	1073	1	Go to specific time	指定時刻へ移動	採用予定
+ui/motolii-timeline-pane	B20	再生ヘッド移動束	1074	1	Go to Time…	指定時刻へ移動	採用予定
+ui/motolii-timeline-pane	B20	再生ヘッド移動束	1075	1	Go to Time…	該当なし(Viewメニューと重複確認用)	採用予定
+ui/motolii-timeline-pane	B20	再生ヘッド移動束	1076	1	Home/End = 先頭/末尾へ移動	タイムライン先頭/末尾	採用予定
+ui/motolii-timeline-pane	B20	再生ヘッド移動束	1077	1	Jump Left	左へジャンプ	採用予定
+ui/motolii-timeline-pane	B20	再生ヘッド移動束	1078	1	Jump Right	右へジャンプ	採用予定
+ui/motolii-timeline-pane	B20	再生ヘッド移動束	1079	1	Last Frame	'(apostrophe)	採用予定
+ui/motolii-timeline-pane	B20	再生ヘッド移動束	1087	1	Next	次へ	採用予定
+ui/motolii-timeline-pane	B20	再生ヘッド移動束	1088	1	Next Clip/Edit	Down Arrow	結線待ち
+ui/motolii-timeline-pane	B20	再生ヘッド移動束	1089	1	Next Edit	次の編集点へ	結線待ち
+ui/motolii-timeline-pane	B20	再生ヘッド移動束	1090	1	Next Gap	Option+Command+'	採用予定
+ui/motolii-timeline-pane	B20	再生ヘッド移動束	1091	1	Next in Sequence	シーケンス内次へ	採用予定
+ui/motolii-timeline-pane	B21	再生/スクラブ束	1093	1	Play Around Current Frame	/	採用予定
+ui/motolii-timeline-pane	B21	再生/スクラブ束	1094	1	Play Around In	Option+Space	採用予定
+ui/motolii-timeline-pane	B21	再生/スクラブ束	1095	1	Play Around Out	Shift+Space	採用予定
+ui/motolii-timeline-pane	B21	再生/スクラブ束	1096	1	Play Around/To	周辺/指定先まで再生	採用予定
+ui/motolii-timeline-pane	B21	再生/スクラブ束	1102	1	Play Slow	スロー再生	採用予定
+ui/motolii-timeline-pane	B21	再生/スクラブ束	1103	1	Play Still	Option+Command+F	採用予定
+ui/motolii-timeline-pane	B21	再生/スクラブ束	1104	1	Play To Out	Option+Command+/	採用予定
+ui/motolii-timeline-pane	B21	再生/スクラブ束	1105	1	Playback Post-Roll	再生ポストロール	採用予定
+ui/motolii-timeline-pane	B20	再生ヘッド移動束	1107	1	Previous	前へ	採用予定
+ui/motolii-timeline-pane	B20	再生ヘッド移動束	1108	1	Previous Clip/Edit	Up Arrow	結線待ち
+ui/motolii-timeline-pane	B20	再生ヘッド移動束	1109	1	Previous Edit	前の編集点へ	結線待ち
+ui/motolii-timeline-pane	B20	再生ヘッド移動束	1110	1	Previous Gap	Option+Command+;	採用予定
+ui/motolii-timeline-pane	B20	再生ヘッド移動束	1111	1	Previous in Sequence	シーケンス内前へ	採用予定
+ui/motolii-timeline-pane	B21	再生/スクラブ束	1114	1	Record	録画	採用予定
+ui/motolii-timeline-pane	B18	作業範囲/イン・アウト点束(裁定177 headline例)	1116	1	Render Effects in Work Area	ワークエリア内エフェクトレンダリング	採用予定
+ui/motolii-timeline-pane	B21	再生/スクラブ束	1128	1	Slow Left	低速逆再生	採用予定
+ui/motolii-timeline-pane	B21	再生/スクラブ束	1129	1	Slow Right	低速順再生	採用予定
+ui/motolii-timeline-pane	B21	再生/スクラブ束	1130	1	Step Back Five Frames	5フレーム戻る	採用予定
+ui/motolii-timeline-pane	B21	再生/スクラブ束	1131	1	Step Forward Five Frames	5フレーム進む	採用予定
+ui/motolii-timeline-pane	B21	再生/スクラブ束	1132	1	Step One	1コマ送り	採用予定
+ui/motolii-timeline-pane	B21	再生/スクラブ束	1133	1	Step One Second Forward	Shift+Right Arrow	採用予定
+ui/motolii-timeline-pane	B21	再生/スクラブ束	1134	1	Step One Second Reverse	Shift+Left Arrow	採用予定
+ui/motolii-timeline-pane	B21	再生/スクラブ束	1137	1	Stop and Go to Last Position	停止して直前位置へ	採用予定
+ui/motolii-timeline-pane	B39	トリム/カット編集束	1140	1	Trim Edit	トリムモード	採用予定
+ui/motolii-timeline-pane	B52	トラック構造管理束	1318	1	Alpha Inverted Matte	反転アルファマット	採用予定
+ui/motolii-timeline-pane	B52	トラック構造管理束	1319	1	Alpha Matte	アルファマット	採用予定
+ui/motolii-timeline-pane	B52	トラック構造管理束	1320	1	Append to End of Timeline	末尾に追加	採用予定
+ui/motolii-timeline-pane	B52	トラック構造管理束	1321	1	Auto Track Selector	自動トラック選択	採用予定
+ui/motolii-timeline-pane	B52	トラック構造管理束	1322	1	Bounce Mix to Track	ミックスをトラックへバウンス	採用予定
+ui/motolii-timeline-pane	B52	トラック構造管理束	1323	1	Bounce Selected Tracks to New Layer	選択トラックを新レイヤへバウンス	採用予定
+ui/motolii-timeline-pane	B52	トラック構造管理束	1324	1	Clean Up Video Tracks	映像トラック整理	採用予定
+ui/motolii-timeline-pane	B52	トラック構造管理束	1327	1	Close Current Timeline	現在のタイムラインを閉じる	採用予定
+ui/motolii-timeline-pane	B52	トラック構造管理束	1328	1	Decrease Video Track Height	ビデオトラック高を縮小	採用予定
+ui/motolii-timeline-pane	B52	トラック構造管理束	1330	1	Duplicate Clip or Current Timeline	クリップ/現在タイムラインを複製	採用予定
+ui/motolii-timeline-pane	B52	トラック構造管理束	1332	1	Find Current Timeline in Media Pool	Media Poolで現在タイムラインを探す	採用予定
+ui/motolii-timeline-pane	B52	トラック構造管理束	1333	1	Find in Timeline panel	Timelineパネル内検索	採用予定
+ui/motolii-timeline-pane	B52	トラック構造管理束	1335	1	Increase Video Track Height	ビデオトラック高を拡大	採用予定
+ui/motolii-timeline-pane	B52	トラック構造管理束	1336	1	Join Clip	クリップ結合	採用予定
+ui/motolii-timeline-pane	B52	トラック構造管理束	1337	1	Linked Move Across Tracks	トラック横断リンク移動	採用予定
+ui/motolii-timeline-pane	B31	選択束	1338	1	Linked Selection (toggle, global)	リンク済みクリップの連動選択を切替	採用予定
+ui/motolii-timeline-pane	B52	トラック構造管理束	1341	1	Loop Jog	ジョグをループ	採用予定
+ui/motolii-timeline-pane	B52	トラック構造管理束	1342	1	Luma Inverted Matte	反転輝度マット	採用予定
+ui/motolii-timeline-pane	B52	トラック構造管理束	1343	1	Luma Matte	輝度マット	採用予定
+ui/motolii-timeline-pane	B52	トラック構造管理束	1346	1	No Track Matte	トラックマットなし	採用予定
+ui/motolii-timeline-pane	B52	トラック構造管理束	1347	1	Open in Timeline	タイムラインで開く	採用予定
+ui/motolii-timeline-pane	B52	トラック構造管理束	1349	1	Purge snapshot	スナップショットをパージ	採用予定
+ui/motolii-timeline-pane	B52	トラック構造管理束	1350	1	Scroll topmost selected layer to top of Timeline	選択最上位レイヤーを先頭へスクロール	採用予定
+ui/motolii-timeline-pane	B31	選択束	1351	1	Select Clips Backward	後方クリップ選択	採用予定
+ui/motolii-timeline-pane	B31	選択束	1352	1	Select Clips Forward	前方クリップ選択	採用予定
+ui/motolii-timeline-pane	B52	トラック構造管理束	1353	1	Selection Follows Playhead	選択がプレイヘッドに追従	採用予定
+ui/motolii-timeline-pane	B52	トラック構造管理束	1354	1	Snapshot	スナップショットを消去	採用予定
+ui/motolii-timeline-pane	B52	トラック構造管理束	1358	1	Split	クリップをプレイヘッドで分割	採用予定
+ui/motolii-timeline-pane	B52	トラック構造管理束	1361	1	Take snapshot	スナップショットを取得	採用予定
+ui/motolii-timeline-pane	B52	トラック構造管理束	1362	1	Timeline Scrolling	タイムラインスクロール方式	採用予定
+ui/motolii-timeline-pane	B52	トラック構造管理束	1363	1	Timeline Thumbnail Info	タイムラインサムネイル情報	採用予定
+ui/motolii-timeline-pane	B52	トラック構造管理束	1364	1	Timeline Thumbnail Mode	タイムラインサムネイルモード	採用予定
+ui/motolii-timeline-pane	B52	トラック構造管理束	1365	1	Timeline Thumbnail Size	タイムラインサムネイルサイズ	採用予定
+ui/motolii-timeline-pane	B52	トラック構造管理束	1366	1	Track Destination Selection	トラック送り先選択	採用予定
+ui/motolii-timeline-pane	B52	トラック構造管理束	1368	1	Track Magnet	トラック吸着(整列補助)	採用予定
+ui/motolii-timeline-pane	B52	トラック構造管理束	1372	1	Video Track Destination V1-V8(grouped, pattern)	Option+1..Option+8	採用予定
+ui/motolii-timeline-pane	B52	トラック構造管理束	1384	1	Append At End	Shift+F12	採用予定
+ui/motolii-timeline-pane	B21	再生/スクラブ束	14	1	Audio Preview (Here Forward)	現在時刻以降のオーディオプレビュー	採用予定
+ui/motolii-timeline-pane	B21	再生/スクラブ束	15	1	Audio Preview (Work Area)	ワークエリアのオーディオプレビュー	採用予定
+ui/motolii-timeline-pane	B21	再生/スクラブ束	16	1	Audio Scrubbing	音声スクラビング	採用予定
+ui/motolii-timeline-pane	B21	再生/スクラブ束	17	1	Audio Scrubbing	Shift+S	採用予定
+ui/motolii-timeline-pane	B39	トリム/カット編集束	171	1	Add Edit	再生ヘッド位置でカット追加(レーザー相当)	採用予定
+ui/motolii-timeline-pane	B39	トリム/カット編集束	172	1	Add Edit to All Tracks	全トラックにカット追加	採用予定
+ui/motolii-timeline-pane	B52	トラック構造管理束	173	1	Add Tracks	トラック追加(映像/音声/サブミックス)	採用予定
+ui/motolii-timeline-pane	B39	トリム/カット編集束	182	1	Blade Edit Mode	ブレード編集モード	採用予定
+ui/motolii-timeline-pane	B39	トリム/カット編集束	183	1	Blade tool	B	採用予定
+ui/motolii-timeline-pane	B31	選択束	19	1	Auto Select/Deselect All Audio	Option+Command+F9	採用予定
+ui/motolii-timeline-pane	B52	トラック構造管理束	193	1	Decrease Video Tracks Height	映像トラック高縮小	採用予定
+ui/motolii-timeline-pane	B18	作業範囲/イン・アウト点束(裁定177 headline例)	194	1	Delete Renders In to Out	レンダリングファイルを削除	採用予定
+ui/motolii-timeline-pane	B52	トラック構造管理束	195	1	Delete Tracks	空トラックを削除	採用予定
+ui/motolii-timeline-pane	B39	トリム/カット編集束	198	1	Dynamic Trim mode	ダイナミックトリムモード	採用予定
+ui/motolii-timeline-pane	B39	トリム/カット編集束	199	1	Edit Point Type	編集点タイプ切替	採用予定
+ui/motolii-timeline-pane	B31	選択束	20	1	Auto Select/Deselect Audio A1-A8(grouped, pattern)	Option+Command+F1..Option+Command+F8	採用予定
+ui/motolii-timeline-pane	B52	トラック構造管理束	220	1	Increase Video Tracks Height	映像トラック高拡大	採用予定
+ui/motolii-timeline-pane	B52	トラック構造管理束	225	1	Join Clips	Option+\	採用予定
+ui/motolii-timeline-pane	B31	選択束	236	1	Move Edit Selection To	編集選択を移動	採用予定
+ui/motolii-timeline-pane	B39	トリム/カット編集束	247	1	Normal Edit Mode	通常編集モード	採用予定
+ui/motolii-timeline-pane	B18	作業範囲/イン・アウト点束(裁定177 headline例)	26	1	Clear Audio In and Out	音声イン/アウト解除	採用予定
+ui/motolii-timeline-pane	B39	トリム/カット編集束	265	1	Range Selection Mode	範囲選択モード	採用予定
+ui/motolii-timeline-pane	B39	トリム/カット編集束	266	1	Razor Tool	レーザーツール	採用予定
+ui/motolii-timeline-pane	B39	トリム/カット編集束	267	1	Razor(split)	Command+B	採用予定
+ui/motolii-timeline-pane	B18	作業範囲/イン・アウト点束(裁定177 headline例)	268	1	Render In to Out	In-Out間をレンダリング	採用予定
+ui/motolii-timeline-pane	B31	選択束	281	1	Select All Clips Under Playhead	プレイヘッド下の全クリップ選択	採用予定
+ui/motolii-timeline-pane	B31	選択束	282	1	Select Clips Forward On All Tracks	Option+Y	採用予定
+ui/motolii-timeline-pane	B31	選択束	283	1	Select Clips Forward On This Track	Y	採用予定
+ui/motolii-timeline-pane	B31	選択束	284	1	Select Nearest Clip To	最寄りクリップへの選択	採用予定
+ui/motolii-timeline-pane	B31	選択束	285	1	Select Nearest Clip/Gap	最寄りクリップ/ギャップを選択	採用予定
+ui/motolii-timeline-pane	B31	選択束	286	1	Select Nearest Clip/Gap	Shift+V	採用予定
+ui/motolii-timeline-pane	B31	選択束	287	1	Select Nearest Edit Point	最寄り編集点を選択	採用予定
+ui/motolii-timeline-pane	B31	選択束	288	1	Select Nearest Edit To	最寄り編集点への選択	採用予定
+ui/motolii-timeline-pane	B31	選択束	289	1	Select Nearest Video Edit Point	最寄り映像編集点を選択	採用予定
+ui/motolii-timeline-pane	B52	トラック構造管理束	29	1	Decrease Audio Track Height	オーディオトラック高を縮小	採用予定
+ui/motolii-timeline-pane	B31	選択束	290	1	Select next layer in stacking order	次のレイヤーを選択	採用予定
+ui/motolii-timeline-pane	B31	選択束	291	1	Select previous layer in stacking order	前のレイヤーを選択	採用予定
+ui/motolii-timeline-pane	B52	トラック構造管理束	30	1	Decrease Audio Tracks Height	音声トラック高縮小	採用予定
+ui/motolii-timeline-pane	B15	キーフレーム束	300	1	Show Curve Editor	カーブエディタ表示	採用予定
+ui/motolii-timeline-pane	B39	トリム/カット編集束	317	1	Split selected layers	選択レイヤーを分割	採用予定
+ui/motolii-timeline-pane	B52	トラック構造管理束	318	1	Swap Clips Towards Left	左隣クリップと入れ替え	採用予定
+ui/motolii-timeline-pane	B52	トラック構造管理束	319	1	Swap Clips Towards Right	右隣クリップと入れ替え	採用予定
+ui/motolii-timeline-pane	B52	トラック構造管理束	33	1	Flatten Audio Track Layers	音声トラックレイヤーを統合	採用予定
+ui/motolii-timeline-pane	B39	トリム/カット編集束	330	1	Trim In or Out point to current time	現在時刻でIn/Outをトリム	採用予定
+ui/motolii-timeline-pane	B39	トリム/カット編集束	334	1	Trim to Selection	選択範囲にトリム	採用予定
+ui/motolii-timeline-pane	B39	トリム/カット編集束	336	1	Trim/Step Multiframe Left	Shift+,	採用予定
+ui/motolii-timeline-pane	B39	トリム/カット編集束	337	1	Trim/Step Multiframe Right	Shift+.	採用予定
+ui/motolii-timeline-pane	B52	トラック構造管理束	339	1	Update All Clips	Option+Shift+U	採用予定
+ui/motolii-timeline-pane	B52	トラック構造管理束	340	1	Update Selected Clips	Shift+Command+U	採用予定
+ui/motolii-timeline-pane	B52	トラック構造管理束	35	1	Increase Audio Track Height	オーディオトラック高を拡大	採用予定
+ui/motolii-timeline-pane	B52	トラック構造管理束	36	1	Increase Audio Tracks Height	音声トラック高拡大	採用予定
+ui/motolii-timeline-pane	B52	トラック構造管理束	38	1	Layered Audio Editing	レイヤー音声編集	採用予定
+ui/motolii-timeline-pane	B21	再生/スクラブ束	4	1	Audio	オーディオプレビュー	採用予定
+ui/motolii-timeline-pane	B31	選択束	405	1	Select Clips With Clip Color	クリップ色でクリップ選択	採用予定
+ui/motolii-timeline-pane	B31	選択束	406	1	Select Clips With Flag Color	フラグ色でクリップ選択	採用予定
+ui/motolii-timeline-pane	B31	選択束	407	1	Select Clips With Marker Color	マーカー色でクリップ選択	採用予定
+ui/motolii-timeline-pane	B21	再生/スクラブ束	43	1	Manually preview audio	オーディオを手動プレビュー	採用予定
+ui/motolii-timeline-pane	B18	作業範囲/イン・アウト点束(裁定177 headline例)	44	1	Mark Audio In	音声イン点設定	採用予定
+ui/motolii-timeline-pane	B31	選択束	442	1	Auto Select/Deselect All Video	Option+F9	採用予定
+ui/motolii-timeline-pane	B31	選択束	443	1	Auto Select/Deselect Video V1-V8(grouped, pattern)	Option+F1..Option+F8	採用予定
+ui/motolii-timeline-pane	B18	作業範囲/イン・アウト点束(裁定177 headline例)	445	1	Clear Video In and Out	映像イン/アウト解除	採用予定
+ui/motolii-timeline-pane	B18	作業範囲/イン・アウト点束(裁定177 headline例)	45	1	Mark Audio Out	音声アウト点設定	採用予定
+ui/motolii-timeline-pane	B15	キーフレーム束	472	1	Add Keyframe	キーフレームを追加	結線待ち
+ui/motolii-timeline-pane	B15	キーフレーム束	473	1	Add Keyframe	キーフレーム追加	結線待ち
+ui/motolii-timeline-pane	B15	キーフレーム束	474	1	Add Keyframe	Command+[	結線待ち
+ui/motolii-timeline-pane	B15	キーフレーム束	476	1	Add or remove keyframe at current time	現在時刻でキーフレームを追加/削除	結線待ち
+ui/motolii-timeline-pane	B15	キーフレーム束	477	1	Add Static Keyframe	静的キーフレーム追加	結線待ち
+ui/motolii-timeline-pane	B15	キーフレーム束	478	1	Add Static Keyframe	Command+]	結線待ち
+ui/motolii-timeline-pane	B15	キーフレーム束	479	1	Convert Audio to Keyframes	オーディオをキーフレームに変換	採用予定
+ui/motolii-timeline-pane	B15	キーフレーム束	480	1	Convert Expression to Keyframes	エクスプレッションをキーフレームに変換	採用予定
+ui/motolii-timeline-pane	B15	キーフレーム束	481	1	Delete All Keyframes	全キーフレーム削除	採用予定
+ui/motolii-timeline-pane	B15	キーフレーム束	491	1	Exponential Scale	指数スケール	採用予定
+ui/motolii-timeline-pane	B15	キーフレーム束	496	1	Keyframe Timeline Mode	キーフレームタイムラインモード	採用予定
+ui/motolii-timeline-pane	B15	キーフレーム束	497	1	Keyframe Velocity…	キーフレーム速度	採用予定
+ui/motolii-timeline-pane	B21	再生/スクラブ束	5	1	Audio	オーディオ切替	採用予定
+ui/motolii-timeline-pane	B15	キーフレーム束	500	1	Move Selected Keyframes Down	選択キーフレームを下移動	採用予定
+ui/motolii-timeline-pane	B15	キーフレーム束	501	1	Move Selected Keyframes Left	選択キーフレームを左移動	採用予定
+ui/motolii-timeline-pane	B15	キーフレーム束	502	1	Move Selected Keyframes Right	選択キーフレームを右移動	採用予定
+ui/motolii-timeline-pane	B15	キーフレーム束	503	1	Move Selected Keyframes Up	選択キーフレームを上移動	採用予定
+ui/motolii-timeline-pane	B15	キーフレーム束	506	1	Reveal Properties with Keyframes	キーフレーム付きプロパティを表示	採用予定
+ui/motolii-timeline-pane	B15	キーフレーム束	507	1	Reverse paste copied keyframes	コピーしたキーフレームを逆順貼り付け	結線待ち
+ui/motolii-timeline-pane	B15	キーフレーム束	508	1	RPF Camera Import	RPFカメラ読み込み	採用予定
+ui/motolii-timeline-pane	B21	再生/スクラブ束	51	1	Play Again	再度再生	採用予定
+ui/motolii-timeline-pane	B15	キーフレーム束	511	1	Sequence Layers…	レイヤーをシーケンス化	採用予定
+ui/motolii-timeline-pane	B15	キーフレーム束	515	1	Set keyframe interpolation to hold or Auto Bezier	補間をホールド/自動ベジェに設定	採用予定
+ui/motolii-timeline-pane	B15	キーフレーム束	516	1	Set velocity for selected keyframes	選択キーフレームの速度を設定	採用予定
+ui/motolii-timeline-pane	B15	キーフレーム束	517	1	Show Keyframe Editor	キーフレームエディタ表示	採用予定
+ui/motolii-timeline-pane	B15	キーフレーム束	518	1	Time-Reverse Keyframes	キーフレームを時間反転	採用予定
+ui/motolii-timeline-pane	B15	キーフレーム束	519	1	Toggle between Graph Editor and layer bar modes	グラフエディタ/レイヤーバー切替	採用予定
+ui/motolii-timeline-pane	B15	キーフレーム束	520	1	Toggle Hold Keyframe	ホールドキーフレーム切替	採用予定
+ui/motolii-timeline-pane	B21	再生/スクラブ束	53	1	Preview only audio from current time	現在時刻からオーディオのみプレビュー	採用予定
+ui/motolii-timeline-pane	B21	再生/スクラブ束	54	1	Preview only audio in work area	ワークエリアのオーディオのみプレビュー	採用予定
+ui/motolii-timeline-pane	B31	選択束	57	1	Select Nearest Audio Edit Point	最寄り音声編集点を選択	採用予定
+ui/motolii-timeline-pane	B52	トラック構造管理束	58	1	Show Audio Track Layers	音声トラックレイヤー表示	採用予定
+ui/motolii-timeline-pane	B21	再生/スクラブ束	6	1	Audio	音声関連サブメニュー	採用予定
+ui/motolii-timeline-pane	B18	作業範囲/イン・アウト点束(裁定177 headline例)	650	1	Cache Work Area in Background	バックグラウンドでワークエリアをキャッシュ	採用予定
+ui/motolii-timeline-pane	B18	作業範囲/イン・アウト点束(裁定177 headline例)	651	1	Cancel Caching Work Area in Background	バックグラウンドキャッシュを中止	採用予定
+ui/motolii-timeline-pane	B39	トリム/カット編集束	67	1	Trim Audio Edits to Frame Boundaries	音声編集点をフレーム境界にトリム	採用予定
+ui/motolii-timeline-pane	B20	再生ヘッド移動束	670	1	Go backward 10 frames	10フレーム戻る	採用予定
+ui/motolii-timeline-pane	B20	再生ヘッド移動束	671	1	Go forward 10 frames	10フレーム進む	採用予定
+ui/motolii-timeline-pane	B18	作業範囲/イン・アウト点束(裁定177 headline例)	681	1	Move layers so In point at composition beginning	In点をコンポ先頭に	採用予定
+ui/motolii-timeline-pane	B18	作業範囲/イン・アウト点束(裁定177 headline例)	682	1	Move layers so Out point at composition end	Out点をコンポ末尾に	採用予定
+ui/motolii-timeline-pane	B20	再生ヘッド移動束	710	1	Scroll to current time in Timeline panel	現在時刻までスクロール	採用予定
+ui/motolii-timeline-pane	B52	トラック構造管理束	714	1	Take Snapshot	該当なし(参考: PDFにはComposition関連のSnapshotは明記なし、Edit>Purge>Snapshotのみ確認)	採用予定
+ui/motolii-timeline-pane	B18	作業範囲/イン・アウト点束(裁定177 headline例)	715	1	Trim Comp to Work Area	ワークエリアにコンポをトリム	採用予定
+ui/motolii-timeline-pane	B19	マーカー/フラグ束	728	1	Add and Modify Marker	マーカー追加/編集	結線待ち
+ui/motolii-timeline-pane	B19	マーカー/フラグ束	729	1	Add Flag	フラグ追加	採用予定
+ui/motolii-timeline-pane	B19	マーカー/フラグ束	730	1	Add Flag	G	採用予定
+ui/motolii-timeline-pane	B19	マーカー/フラグ束	731	1	Clear Flags	フラグ解除	採用予定
+ui/motolii-timeline-pane	B19	マーカー/フラグ束	732	1	Convert In and Out to Duration Marker	イン/アウトを尺マーカーへ変換	採用予定
+ui/motolii-timeline-pane	B19	マーカー/フラグ束	733	1	Delete All Flags	全フラグ削除	採用予定
+ui/motolii-timeline-pane	B19	マーカー/フラグ束	734	1	Go to In	イン点へ移動	採用予定
+ui/motolii-timeline-pane	B19	マーカー/フラグ束	735	1	Go to In	イン点へ	採用予定
+ui/motolii-timeline-pane	B19	マーカー/フラグ束	736	1	Go to Out	アウト点へ移動	採用予定
+ui/motolii-timeline-pane	B19	マーカー/フラグ束	737	1	Go to Out	アウト点へ	採用予定
+ui/motolii-timeline-pane	B19	マーカー/フラグ束	738	1	Modify Marker	マーカー編集	結線待ち
+ui/motolii-timeline-pane	B19	マーカー/フラグ束	739	1	Modify Marker	Shift+M	結線待ち
+ui/motolii-timeline-pane	B19	マーカー/フラグ束	741	1	Set In and Out from Duration Marker	尺マーカーからイン/アウト設定	採用予定
+ui/motolii-timeline-pane	B19	マーカー/フラグ束	742	1	Show Flags	フラグ表示	採用予定
+ui/motolii-timeline-pane	B19	マーカー/フラグ束	744	1	Synchronize > Clip Markers	クリップマーカーで同期	採用予定
+ui/motolii-timeline-pane	B39	トリム/カット編集束	803	1	Add Edit	編集点追加	採用予定
+ui/motolii-timeline-pane	B39	トリム/カット編集束	804	1	Add Edit to All Tracks	全トラックに編集点追加	採用予定
+ui/motolii-timeline-pane	B18	作業範囲/イン・アウト点束(裁定177 headline例)	818	1	Clean In	クリーンイン	採用予定
+ui/motolii-timeline-pane	B18	作業範囲/イン・アウト点束(裁定177 headline例)	819	1	Clean Out	クリーンアウト	採用予定
+ui/motolii-timeline-pane	B31	選択束	840	1	Extend Selected Edit to Playhead	選択編集点をプレイヘッドまで延長	採用予定
+ui/motolii-timeline-pane	B31	選択束	841	1	Extend selection to next layer	次レイヤーまで選択拡張	採用予定
+ui/motolii-timeline-pane	B31	選択束	842	1	Extend selection to previous item	前項目まで選択範囲を拡張	採用予定
+ui/motolii-timeline-pane	B31	選択束	843	1	Extend selection to previous layer	前レイヤーまで選択拡張	採用予定
+ui/motolii-timeline-pane	B21	再生/スクラブ束	852	1	Grab Still	Option+Command+G	採用予定
+ui/motolii-timeline-pane	B21	再生/スクラブ束	879	1	Manually preview video	ビデオを手動プレビュー	採用予定
+ui/motolii-timeline-pane	B18	作業範囲/イン・アウト点束(裁定177 headline例)	880	1	Mark Video In	映像イン点設定	採用予定
+ui/motolii-timeline-pane	B18	作業範囲/イン・アウト点束(裁定177 headline例)	881	1	Mark Video Out	映像アウト点設定	採用予定
+ui/motolii-timeline-pane	B21	再生/スクラブ束	901	1	Next Still	Option+Command+N	採用予定
+ui/motolii-timeline-pane	B21	再生/スクラブ束	912	1	Preview specified number of frames	指定フレーム数をプレビュー	採用予定
+ui/motolii-timeline-pane	B21	再生/スクラブ束	913	1	Previous Still	Option+Command+P	採用予定
+ui/motolii-timeline-pane	B18	作業範囲/イン・アウト点束(裁定177 headline例)	929	1	Render Effects In to Out	In-Out間エフェクトレンダリング	採用予定
+ui/motolii-timeline-pane	B15	キーフレーム束	934	1	Reveal Properties with Animation	アニメーション付きプロパティを表示	採用予定
+ui/motolii-timeline-pane	B31	選択束	942	1	Select	隣接クリップ選択サブメニュー	採用予定
+ui/motolii-timeline-pane	B31	選択束	945	1	Select layer by number (1-999)	番号でレイヤー選択	採用予定
+ui/motolii-timeline-pane	B18	作業範囲/イン・アウト点束(裁定177 headline例)	949	1	Set In or Out point by time-stretching	タイムストレッチでIn/Outを設定	採用予定
+ui/motolii-timeline-pane	B18	作業範囲/イン・アウト点束(裁定177 headline例)	958	1	Show Preview Marks	プレビューマーク表示	採用予定
+ui/motolii-timeline-pane	B21	再生/スクラブ束	960	1	Start or stop preview	プレビュー開始/停止	採用予定
+ui/motolii-timeline-pane	B31	選択束	966	1	Toggle selection of layer by number (1-999)	番号でレイヤー選択切替	採用予定
+ui/motolii-inspector-pane	B37	速度/リタイム束	169	2	Speed / Duration	クリップの速度・長さを変更	採用予定
+ui/motolii-inspector-pane	B01	ブレンドモード束	101	1	Silhouette Alpha	シルエットアルファ	採用予定
+ui/motolii-inspector-pane	B01	ブレンドモード束	102	1	Silhouette Luma	シルエット輝度	採用予定
+ui/motolii-inspector-pane	B01	ブレンドモード束	104	1	Stencil Alpha	ステンシルアルファ	採用予定
+ui/motolii-inspector-pane	B01	ブレンドモード束	105	1	Stencil Luma	ステンシル輝度	採用予定
+ui/motolii-inspector-pane	B01	ブレンドモード束	106	1	Subtract	減算	採用予定
+ui/motolii-inspector-pane	B01	ブレンドモード束	107	1	Vivid Light	ビビッドライト	採用予定
+ui/motolii-inspector-pane	B02	マスク/マット束	1386	1	Auto Removal	自動背景除去	採用予定
+ui/motolii-inspector-pane	B44	レイヤー変形束	1408	1	Open Auto-Orientation dialog	自動方向ダイアログを開く	採用予定
+ui/motolii-inspector-pane	B02	マスク/マット束	1422	1	Remove background	AI背景除去	採用予定
+ui/motolii-inspector-pane	B44	レイヤー変形束	178	1	Auto Align Clips	クリップ自動アライン	採用予定
+ui/motolii-inspector-pane	B44	レイヤー変形束	185	1	Bring Layer to Front	最前面へ	採用予定
+ui/motolii-inspector-pane	B37	速度/リタイム束	216	1	Freeze (Freeze frame)	フリーズフレーム挿入	採用予定
+ui/motolii-inspector-pane	B37	速度/リタイム束	217	1	Freeze Frame	フレームを静止	採用予定
+ui/motolii-inspector-pane	B37	速度/リタイム束	218	1	Freeze Frame	フリーズフレーム	採用予定
+ui/motolii-inspector-pane	B44	レイヤー変形束	237	1	Move selected items down/up in stacking order	選択項目を重ね順で上下に移動	採用予定
+ui/motolii-inspector-pane	B44	レイヤー変形束	238	1	Move selected items to bottom/top of stacking order	選択項目を最上/最下へ移動	採用予定
+ui/motolii-inspector-pane	B44	レイヤー変形束	259	1	Place on Top	上位トラックに配置	採用予定
+ui/motolii-inspector-pane	B44	レイヤー変形束	260	1	Place On Top	F12	採用予定
+ui/motolii-inspector-pane	B37	速度/リタイム束	270	1	Reset Retime	リタイムをリセット	採用予定
+ui/motolii-inspector-pane	B37	速度/リタイム束	272	1	Retime Clip	Command+R	採用予定
+ui/motolii-inspector-pane	B37	速度/リタイム束	273	1	Retime Controls	リタイムコントロール表示	採用予定
+ui/motolii-inspector-pane	B05	色/アルファ表示束	346	1	AI color correction	AI自動色調補正	採用予定
+ui/motolii-inspector-pane	B05	色/アルファ表示束	354	1	Auto Color	オートカラー	採用予定
+ui/motolii-inspector-pane	B05	色/アルファ表示束	355	1	Auto Color	Option+A	採用予定
+ui/motolii-inspector-pane	B05	色/アルファ表示束	358	1	Classic Color Burn	焼き込みカラー(クラシック)	採用予定
+ui/motolii-inspector-pane	B05	色/アルファ表示束	359	1	Classic Color Dodge	覆い焼きカラー(クラシック)	採用予定
+ui/motolii-inspector-pane	B05	色/アルファ表示束	364	1	Darker Color	カラー比較(暗)	採用予定
+ui/motolii-inspector-pane	B05	色/アルファ表示束	375	1	Lighter Color	カラー比較(明)	採用予定
+ui/motolii-inspector-pane	B05	色/アルファ表示束	408	1	Set Clip Color	クリップ色設定	採用予定
+ui/motolii-inspector-pane	B05	色/アルファ表示束	409	1	Set foreground to average color under pointer	ポインタ周辺の平均色を前景色に	採用予定
+ui/motolii-inspector-pane	B05	色/アルファ表示束	410	1	Set foreground to color under pointer	ポインタ下の色を前景色に	採用予定
+ui/motolii-inspector-pane	B05	色/アルファ表示束	411	1	Show alpha boundary in Layer panel	Layerパネルでアルファ境界表示	採用予定
+ui/motolii-inspector-pane	B05	色/アルファ表示束	412	1	Show alpha overlay in Layer panel	Layerパネルでアルファオーバーレイ表示	採用予定
+ui/motolii-inspector-pane	B05	色/アルファ表示束	413	1	Show colorized red, green, or blue channel	各チャンネルを色付き表示	採用予定
+ui/motolii-inspector-pane	B05	色/アルファ表示束	414	1	Show red, green, blue, or alpha channel as grayscale	各チャンネルをグレースケール表示	採用予定
+ui/motolii-inspector-pane	B05	色/アルファ表示束	419	1	Toggle showing straight RGB color	ストレートRGB表示切替	採用予定
+ui/motolii-inspector-pane	B05	色/アルファ表示束	425	1	Turn display color management on or off	ディスプレイカラーマネジメント切替	採用予定
+ui/motolii-inspector-pane	B05	色/アルファ表示束	426	1	Use Display Color Management	ディスプレイカラーマネジメントを使用	採用予定
+ui/motolii-inspector-pane	B07	プリセット束(MA L4例示)	574	1	Animation Presets…	アニメーションプリセットヘルプ	採用予定
+ui/motolii-inspector-pane	B03	ラベル色束	631	1	Labels…	ラベル色の設定	採用予定
+ui/motolii-inspector-pane	B03	ラベル色束	633	1	None	ラベルなし	採用予定
+ui/motolii-inspector-pane	B03	ラベル色束	641	1	Select Label Group	同ラベルをまとめて選択	採用予定
+ui/motolii-inspector-pane	B44	レイヤー変形束	649	1	Auto-Orient…	自動方向	採用予定
+ui/motolii-inspector-pane	B44	レイヤー変形束	652	1	Center Anchor Point in Layer Content	アンカーポイントをコンテンツ中央へ	採用予定
+ui/motolii-inspector-pane	B44	レイヤー変形束	653	1	Center anchor point in visible content	アンカーポイントを表示内容の中央に	採用予定
+ui/motolii-inspector-pane	B44	レイヤー変形束	655	1	Center in View	ビュー中央に配置	採用予定
+ui/motolii-inspector-pane	B44	レイヤー変形束	660	1	Decrease Scale by 1%	スケールを1%減少	採用予定
+ui/motolii-inspector-pane	B44	レイヤー変形束	661	1	Decrease Scale by 10%	スケールを10%減少	採用予定
+ui/motolii-inspector-pane	B44	レイヤー変形束	667	1	Flip Horizontal	水平反転	採用予定
+ui/motolii-inspector-pane	B44	レイヤー変形束	668	1	Flip Vertical	垂直反転	採用予定
+ui/motolii-inspector-pane	B44	レイヤー変形束	673	1	Increase or decrease Opacity by 1%	不透明度を1%増減	採用予定
+ui/motolii-inspector-pane	B44	レイヤー変形束	674	1	Increase or decrease Opacity by 10%	不透明度を10%増減	採用予定
+ui/motolii-inspector-pane	B44	レイヤー変形束	675	1	Increase or decrease Rotation by 10°	回転を10度増減	採用予定
+ui/motolii-inspector-pane	B44	レイヤー変形束	676	1	Increase or decrease Rotation by 1°	回転を1度増減	採用予定
+ui/motolii-inspector-pane	B44	レイヤー変形束	677	1	Increase Scale by 1%	スケールを1%増加	採用予定
+ui/motolii-inspector-pane	B44	レイヤー変形束	678	1	Increase Scale by 10%	スケールを10%増加	採用予定
+ui/motolii-inspector-pane	B44	レイヤー変形束	698	1	Reference Reposition	Option+Shift+R	採用予定
+ui/motolii-inspector-pane	B44	レイヤー変形束	700	1	Reset	トランスフォームをリセット	採用予定
+ui/motolii-inspector-pane	B44	レイヤー変形束	701	1	Reset Rotation to 0°	回転を0度にリセット	採用予定
+ui/motolii-inspector-pane	B44	レイヤー変形束	702	1	Reset Scale to 100%	スケールを100%にリセット	採用予定
+ui/motolii-inspector-pane	B44	レイヤー変形束	706	1	Scale and reposition layers to fit composition	コンポにフィットさせスケール・再配置	採用予定
+ui/motolii-inspector-pane	B44	レイヤー変形束	707	1	Scale and reposition to fit composition height	コンポ高さにフィット	採用予定
+ui/motolii-inspector-pane	B44	レイヤー変形束	708	1	Scale and reposition to fit composition width	コンポ幅にフィット	採用予定
+ui/motolii-inspector-pane	B44	レイヤー変形束	712	1	Set opacity to 100%	不透明度を100%に	採用予定
+ui/motolii-inspector-pane	B02	マスク/マット束	745	1	Activate and cycle mask and shape tools	マスク/シェイプツールを巡回	採用予定
+ui/motolii-inspector-pane	B02	マスク/マット束	746	1	Activate and cycle Pen and Mask Feather tools	ペン/マスクフェザーツールを巡回	採用予定
+ui/motolii-inspector-pane	B02	マスク/マット束	750	1	Closed	パスを閉じる	採用予定
+ui/motolii-inspector-pane	B02	マスク/マット束	751	1	Create Masks from Text	テキストからマスク作成	採用予定
+ui/motolii-inspector-pane	B02	マスク/マット束	756	1	Enter free-transform mask editing mode	自由変形マスク編集モードへ	採用予定
+ui/motolii-inspector-pane	B02	マスク/マット束	757	1	Free Transform Points	ポイントを自由変形	採用予定
+ui/motolii-inspector-pane	B02	マスク/マット束	758	1	Hide Locked Masks	ロック済マスクを隠す	採用予定
+ui/motolii-inspector-pane	B01	ブレンドモード束	76	1	Alpha Add	アルファ加算	採用予定
+ui/motolii-inspector-pane	B02	マスク/マット束	764	1	Linear	フェザー減衰:線形	採用予定
+ui/motolii-inspector-pane	B02	マスク/マット束	765	1	Lock Other Masks	他マスクをロック	採用予定
+ui/motolii-inspector-pane	B02	マスク/マット束	766	1	Locked	マスクをロック	採用予定
+ui/motolii-inspector-pane	B02	マスク/マット束	767	1	Mask Expansion…	マスク拡張	採用予定
+ui/motolii-inspector-pane	B02	マスク/マット束	768	1	Mask Feather…	マスクフェザー	採用予定
+ui/motolii-inspector-pane	B01	ブレンドモード束	77	1	Classic Difference	差(クラシック)	採用予定
+ui/motolii-inspector-pane	B02	マスク/マット束	770	1	Mask Shape…	マスク形状	採用予定
+ui/motolii-inspector-pane	B02	マスク/マット束	771	1	Move selected path points 1 pixel	選択パスポイントを1px移動	採用予定
+ui/motolii-inspector-pane	B02	マスク/マット束	772	1	Move selected path points 10 pixels	選択パスポイントを10px移動	採用予定
+ui/motolii-inspector-pane	B02	マスク/マット束	775	1	None	マスクモード:なし	採用予定
+ui/motolii-inspector-pane	B02	マスク/マット束	776	1	None	マスクモード:なし	採用予定
+ui/motolii-inspector-pane	B02	マスク/マット束	777	1	Off	モーションブラーOFF	採用予定
+ui/motolii-inspector-pane	B02	マスク/マット束	778	1	On	モーションブラーON	採用予定
+ui/motolii-inspector-pane	B02	マスク/マット束	779	1	Open Mask Feather dialog	マスクフェザーダイアログを開く	採用予定
+ui/motolii-inspector-pane	B01	ブレンドモード束	78	1	Cycle through blending modes	ブレンドモードを巡回	採用予定
+ui/motolii-inspector-pane	B02	マスク/マット束	780	1	Open Mask Shape dialog	マスク形状ダイアログを開く	採用予定
+ui/motolii-inspector-pane	B02	マスク/マット束	782	1	Redraw Bezier handles	ベジェハンドルを再描画	採用予定
+ui/motolii-inspector-pane	B02	マスク/マット束	783	1	Remove All Masks	全マスクを削除	採用予定
+ui/motolii-inspector-pane	B02	マスク/マット束	784	1	Remove Mask	マスクを削除	採用予定
+ui/motolii-inspector-pane	B02	マスク/マット束	786	1	Reset Mask	マスクをリセット	採用予定
+ui/motolii-inspector-pane	B02	マスク/マット束	787	1	RotoBezier	ロトベジエ	採用予定
+ui/motolii-inspector-pane	B02	マスク/マット束	788	1	Same As Layer	レイヤーに準拠	採用予定
+ui/motolii-inspector-pane	B02	マスク/マット束	789	1	Scale around center point in Free Transform	中心点基準で拡大縮小	採用予定
+ui/motolii-inspector-pane	B01	ブレンドモード束	79	1	Dancing Dissolve	ダンシングディゾルブ	採用予定
+ui/motolii-inspector-pane	B02	マスク/マット束	790	1	Select all points in mask	マスクの全ポイントを選択	採用予定
+ui/motolii-inspector-pane	B02	マスク/マット束	791	1	Select next or previous mask	次/前のマスクを選択	採用予定
+ui/motolii-inspector-pane	B02	マスク/マット束	792	1	Set First Vertex	開始頂点を設定	採用予定
+ui/motolii-inspector-pane	B02	マスク/マット束	793	1	Smooth	フェザー減衰:滑らか	採用予定
+ui/motolii-inspector-pane	B02	マスク/マット束	796	1	Toggle between smooth and corner points	スムーズ/コーナーポイント切替	採用予定
+ui/motolii-inspector-pane	B02	マスク/マット束	798	1	Unlock All Masks	全マスクのロック解除	採用予定
+ui/motolii-inspector-pane	B07	プリセット束(MA L4例示)	809	1	Apply Animation Preset…	アニメーションプリセット適用	採用予定
+ui/motolii-inspector-pane	B02	マスク/マット束	812	1	Auto-trace…	オートトレース	採用予定
+ui/motolii-inspector-pane	B07	プリセット束(MA L4例示)	815	1	Browse Presets…	プリセットを参照(Bridge)	採用予定
+ui/motolii-inspector-pane	B44	レイヤー変形束	816	1	Center selected layers in view	選択レイヤーをビュー中央に	採用予定
+ui/motolii-inspector-pane	B01	ブレンドモード束	82	1	Dissolve	ディゾルブ	採用予定
+ui/motolii-inspector-pane	B01	ブレンドモード束	83	1	Divide	除算	採用予定
+ui/motolii-inspector-pane	B37	速度/リタイム束	837	1	Enable Time Remapping	タイムリマップを有効化	採用予定
+ui/motolii-inspector-pane	B37	速度/リタイム束	838	1	Enable time remapping	タイムリマップを有効化	採用予定
+ui/motolii-inspector-pane	B37	速度/リタイム束	849	1	Fit to Fill	尺に合わせて挿入	採用予定
+ui/motolii-inspector-pane	B37	速度/リタイム束	850	1	Fit To Fill	Shift+F11	採用予定
+ui/motolii-inspector-pane	B37	速度/リタイム束	851	1	Frame Mix	フレームミックス	採用予定
+ui/motolii-inspector-pane	B05	色/アルファ表示束	858	1	Highlight	Shift+H	採用予定
+ui/motolii-inspector-pane	B05	色/アルファ表示束	859	1	Highlight B&W	Shift+Option+H	採用予定
+ui/motolii-inspector-pane	B01	ブレンドモード束	86	1	Hard Mix	ハードミックス	採用予定
+ui/motolii-inspector-pane	B05	色/アルファ表示束	860	1	Highlight Difference	Shift+Command+H	採用予定
+ui/motolii-inspector-pane	B01	ブレンドモード束	87	1	Hue	色相	採用予定
+ui/motolii-inspector-pane	B44	レイヤー変形束	870	1	Layer Settings…	レイヤー設定	採用予定
+ui/motolii-inspector-pane	B37	速度/リタイム束	887	1	Motion Blur	モーションブラー切替	採用予定
+ui/motolii-inspector-pane	B01	ブレンドモード束	89	1	Linear Burn	焼き込み(リニア)	採用予定
+ui/motolii-inspector-pane	B01	ブレンドモード束	90	1	Linear Dodge	覆い焼き(リニア)	採用予定
+ui/motolii-inspector-pane	B37	速度/リタイム束	904	1	Off	フレームブレンドOFF	採用予定
+ui/motolii-inspector-pane	B01	ブレンドモード束	91	1	Linear Light	リニアライト	採用予定
+ui/motolii-inspector-pane	B05	色/アルファ表示束	911	1	Preserve Transparency	透明度を保持	採用予定
+ui/motolii-inspector-pane	B07	プリセット束(MA L4例示)	918	1	Recent Animation Presets	最近使ったプリセット	採用予定
+ui/motolii-inspector-pane	B01	ブレンドモード束	92	1	Luminescent Premul	光有りプリマル	採用予定
+ui/motolii-inspector-pane	B01	ブレンドモード束	93	1	Luminosity	輝度	採用予定
+ui/motolii-inspector-pane	B37	速度/リタイム束	935	1	Reverse selected layers in time	選択レイヤーを時間反転	採用予定
+ui/motolii-inspector-pane	B07	プリセット束(MA L4例示)	938	1	Save Animation Preset…	アニメーションプリセット保存	採用予定
+ui/motolii-inspector-pane	B44	レイヤー変形束	946	1	Separate Dimensions	次元を分割	採用予定
+ui/motolii-inspector-pane	B05	色/アルファ表示束	948	1	Set foreground to black, background to white	前景を黒、背景を白に	採用予定
+ui/motolii-inspector-pane	B01	ブレンドモード束	95	1	Next Blending Mode	次のブレンドモードへ	採用予定
+ui/motolii-inspector-pane	B37	速度/リタイム束	964	1	Time-Reverse Layer	レイヤーを逆再生	採用予定
+ui/motolii-inspector-pane	B01	ブレンドモード束	98	1	Pin Light	ピンライト	採用予定
+ui/motolii-inspector-pane	B01	ブレンドモード束	99	1	Saturation	彩度	採用予定
+ui/motolii-stage-pane	B22	ガイド/グリッド表示束	1081	1	Lock or unlock guides	ガイドロック切替	採用予定
+ui/motolii-stage-pane	B17	カメラ/3Dビュー束	111	1	Back	背面視点	採用予定
+ui/motolii-stage-pane	B17	カメラ/3Dビュー束	112	1	Bottom	下視点	採用予定
+ui/motolii-stage-pane	B22	ガイド/グリッド表示束	1120	1	Show or hide guides	ガイド表示切替	採用予定
+ui/motolii-stage-pane	B22	ガイド/グリッド表示束	1121	1	Show or hide layer controls	レイヤーコントロール表示切替	採用予定
+ui/motolii-stage-pane	B22	ガイド/グリッド表示束	1123	1	Show or hide rulers	定規表示切替	採用予定
+ui/motolii-stage-pane	B17	カメラ/3Dビュー束	113	1	Camera…	新規カメラレイヤー	採用予定
+ui/motolii-stage-pane	B22	ガイド/グリッド表示束	1141	1	Turn snapping to grid on or off	グリッドスナップ切替	採用予定
+ui/motolii-stage-pane	B22	ガイド/グリッド表示束	1142	1	Turn snapping to guides on or off	ガイドスナップ切替	採用予定
+ui/motolii-stage-pane	B17	カメラ/3Dビュー束	116	1	Custom View 1	カスタム視点1	採用予定
+ui/motolii-stage-pane	B17	カメラ/3Dビュー束	117	1	Custom View 2	カスタム視点2	採用予定
+ui/motolii-stage-pane	B17	カメラ/3Dビュー束	118	1	Custom View 3	カスタム視点3	採用予定
+ui/motolii-stage-pane	B17	カメラ/3Dビュー束	119	1	Front	正面視点	採用予定
+ui/motolii-stage-pane	B17	カメラ/3Dビュー束	120	1	Left	左視点	採用予定
+ui/motolii-stage-pane	B17	カメラ/3Dビュー束	123	1	Maximize/Restore Frame	フレームの最大化/復帰	採用予定
+ui/motolii-stage-pane	B17	カメラ/3Dビュー束	124	1	Move camera to look at selected 3D layers	選択3Dレイヤーを見るようカメラ移動	採用予定
+ui/motolii-stage-pane	B28	シェイプ/パス描画束	1259	1	Create Shapes from Text	テキストからシェイプ作成	採用予定
+ui/motolii-stage-pane	B17	カメラ/3Dビュー束	128	1	Reset 3D View	3Dビューをリセット	採用予定
+ui/motolii-stage-pane	B17	カメラ/3Dビュー束	129	1	Return to previous view	直前のビューへ戻る	採用予定
+ui/motolii-stage-pane	B17	カメラ/3Dビュー束	130	1	Right	右視点	採用予定
+ui/motolii-stage-pane	B17	カメラ/3Dビュー束	132	1	Switch to 3D view 1 (Front)	3Dビュー1(正面)へ	採用予定
+ui/motolii-stage-pane	B17	カメラ/3Dビュー束	133	1	Switch to 3D view 2 (Custom View 1)	3Dビュー2(カスタム1)へ	採用予定
+ui/motolii-stage-pane	B34	グループ化束(裁定174 G1、未着手)	1334	1	Group clips = Ctrl+G(droidcrunch記載、他NLE用語との混同疑い)	クリップをグループ化	採用予定
+ui/motolii-stage-pane	B17	カメラ/3Dビュー束	134	1	Switch to 3D view 3 (Active Camera)	3Dビュー3(アクティブカメラ)へ	採用予定
+ui/motolii-stage-pane	B17	カメラ/3Dビュー束	136	1	Switch to Camera Originals	カメラオリジナルへ切替	採用予定
+ui/motolii-stage-pane	B17	カメラ/3Dビュー束	137	1	Switch to Dolly camera control	ドリーカメラ操作へ	採用予定
+ui/motolii-stage-pane	B17	カメラ/3Dビュー束	138	1	Switch to Last 3D View	直前の3Dビューへ	採用予定
+ui/motolii-stage-pane	B28	シェイプ/パス描画束	1385	1	Arc Tool	弧ツール(タイトル/グラフィック)	採用予定
+ui/motolii-stage-pane	B17	カメラ/3Dビュー束	139	1	Switch to Orbit camera control	オービットカメラ操作へ	採用予定
+ui/motolii-stage-pane	B28	シェイプ/パス描画束	1391	1	Ellipse Tool	楕円ツール	採用予定
+ui/motolii-stage-pane	B28	シェイプ/パス描画束	1398	1	Line Tool	直線ツール	採用予定
+ui/motolii-stage-pane	B17	カメラ/3Dビュー束	140	1	Switch to Pan camera control	パンカメラ操作へ	採用予定
+ui/motolii-stage-pane	B17	カメラ/3Dビュー束	141	1	Switch to Position gizmo	位置ギズモへ	採用予定
+ui/motolii-stage-pane	B28	シェイプ/パス描画束	1416	1	Pen Tool	ペンツール	採用予定
+ui/motolii-stage-pane	B28	シェイプ/パス描画束	1417	1	Pen Tool	ペンツール	採用予定
+ui/motolii-stage-pane	B17	カメラ/3Dビュー束	142	1	Switch to Rotation gizmo	回転ギズモへ	採用予定
+ui/motolii-stage-pane	B28	シェイプ/パス描画束	1421	1	Rectangle Tool	矩形ツール	採用予定
+ui/motolii-stage-pane	B17	カメラ/3Dビュー束	143	1	Switch to Scale gizmo	スケールギズモへ	採用予定
+ui/motolii-stage-pane	B28	シェイプ/パス描画束	1432	1	Temporarily activate Pen tool with Selection selected	選択ツール中に一時的にペンツール	採用予定
+ui/motolii-stage-pane	B28	シェイプ/パス描画束	1433	1	Temporarily activate Selection tool with pen selected	ペン選択中に一時的に選択ツール	採用予定
+ui/motolii-stage-pane	B28	シェイプ/パス描画束	1434	1	Temporarily convert Selection to Direct Selection tool	一時的にダイレクト選択ツールへ	採用予定
+ui/motolii-stage-pane	B28	シェイプ/パス描画束	1435	1	Temporarily convert Selection to Shape Duplication tool	一時的にシェイプ複製ツールへ	採用予定
+ui/motolii-stage-pane	B17	カメラ/3Dビュー束	144	1	Switch to Universal gizmo	ユニバーサルギズモへ	採用予定
+ui/motolii-stage-pane	B28	シェイプ/パス描画束	1440	1	Wedge Tool	くさびツール	採用予定
+ui/motolii-stage-pane	B22	ガイド/グリッド表示束	1447	1	Clear Guides	ガイドを消去	採用予定
+ui/motolii-stage-pane	B23	プレビュー解像度/画質束	1448	1	Custom…	解像度:カスタム	採用予定
+ui/motolii-stage-pane	B17	カメラ/3Dビュー束	145	1	Top	上視点	採用予定
+ui/motolii-stage-pane	B23	プレビュー解像度/画質束	1451	1	Fast Previews > Wireframe	高速プレビュー:ワイヤーフレーム	採用予定
+ui/motolii-stage-pane	B23	プレビュー解像度/画質束	1452	1	Full	解像度:フル	採用予定
+ui/motolii-stage-pane	B22	ガイド/グリッド表示束	1455	1	Grid & Guides…	グリッド・ガイド・セーフマージン設定	採用予定
+ui/motolii-stage-pane	B22	ガイド/グリッド表示束	1456	1	Guide Layer	ガイドレイヤー化	採用予定
+ui/motolii-stage-pane	B23	プレビュー解像度/画質束	1457	1	Half	解像度:1/2	採用予定
+ui/motolii-stage-pane	B23	プレビュー解像度/画質束	1458	1	Invert Wipe	Option+W	採用予定
+ui/motolii-stage-pane	B23	プレビュー解像度/画質束	1459	1	Lightbox	Shift+Command+F	採用予定
+ui/motolii-stage-pane	B17	カメラ/3Dビュー束	146	1	Track Camera	カメラトラッキング	採用予定
+ui/motolii-stage-pane	B22	ガイド/グリッド表示束	1460	1	Lock Guides	ガイドをロック	採用予定
+ui/motolii-stage-pane	B23	プレビュー解像度/画質束	1462	1	Open View Options dialog for active Composition panel	表示オプションダイアログを開く	採用予定
+ui/motolii-stage-pane	B23	プレビュー解像度/画質束	1463	1	Quarter	解像度:1/4	採用予定
+ui/motolii-stage-pane	B23	プレビュー解像度/画質束	1464	1	Reference Wipe Mode	Option+Shift+W	採用予定
+ui/motolii-stage-pane	B23	プレビュー解像度/画質束	1466	1	Set Quality to Best, Draft, or Wireframe	画質を最高/下書き/ワイヤーフレームに設定	採用予定
+ui/motolii-stage-pane	B23	プレビュー解像度/画質束	1467	1	Set resolution to Full, Half, or Custom	解像度をフル/半分/カスタムに設定	採用予定
+ui/motolii-stage-pane	B22	ガイド/グリッド表示束	1470	1	Show Guides	ガイドを表示	採用予定
+ui/motolii-stage-pane	B23	プレビュー解像度/画質束	1471	1	Show Reference Wipe	Command+W	採用予定
+ui/motolii-stage-pane	B22	ガイド/グリッド表示束	1472	1	Show Rulers	定規を表示	採用予定
+ui/motolii-stage-pane	B22	ガイド/グリッド表示束	1473	1	Snap to Grid	グリッドにスナップ	採用予定
+ui/motolii-stage-pane	B22	ガイド/グリッド表示束	1474	1	Snap to Guides	ガイドにスナップ	採用予定
+ui/motolii-stage-pane	B23	プレビュー解像度/画質束	1478	1	Third	解像度:1/3	採用予定
+ui/motolii-stage-pane	B23	プレビュー解像度/画質束	1479	1	View Options…	表示オプション	採用予定
+ui/motolii-stage-pane	B17	カメラ/3Dビュー束	148	1	With camera tool, move to all 3D layers	カメラツールで全3Dレイヤーへ移動	採用予定
+ui/motolii-stage-pane	B22	ガイド/グリッド表示束	1481	1	Viewer Overlay	ビューアオーバーレイ	採用予定
+ui/motolii-stage-pane	B23	プレビュー解像度/画質束	1483	1	Wipe Style	Shift+W	採用予定
+ui/motolii-stage-pane	B23	プレビュー解像度/画質束	1484	1	Wireframe	画質:ワイヤーフレーム	採用予定
+ui/motolii-stage-pane	B17	カメラ/3Dビュー束	149	1	With camera tool, move to selected 3D layers	カメラツールで選択3Dレイヤーへ移動	採用予定
+ui/motolii-stage-pane	B23	プレビュー解像度/画質束	179	1	Best	画質:最高	採用予定
+ui/motolii-stage-pane	B23	プレビュー解像度/画質束	180	1	Bicubic	サンプリング:バイキュービック	採用予定
+ui/motolii-stage-pane	B23	プレビュー解像度/画質束	181	1	Bilinear	サンプリング:バイリニア	採用予定
+ui/motolii-stage-pane	B23	プレビュー解像度/画質束	197	1	Draft	画質:下書き	採用予定
+ui/motolii-stage-pane	B23	プレビュー解像度/画質束	294	1	Set sampling method to Best/Bicubic	サンプリング:最高/バイキュービック	採用予定
+ui/motolii-stage-pane	B23	プレビュー解像度/画質束	295	1	Set sampling method to Best/Bilinear	サンプリング:最高/バイリニア	採用予定
+ui/motolii-stage-pane	B23	プレビュー解像度/画質束	316	1	Split Screen	Option+Command+W	採用予定
+ui/motolii-stage-pane	B28	シェイプ/パス描画束	662	1	Enter free-transform path editing mode	自由変形パス編集モードへ	採用予定
+ui/motolii-stage-pane	B23	プレビュー解像度/画質束	669	1	Full screen toggle = Ctrl+Shift+F(droidcrunch)またはFlip horizontal(skillademia)	全画面プレビュー、または水平反転(矛盾)	採用予定
+ui/motolii-stage-pane	B22	ガイド/グリッド表示束	692	1	Position Objects to Bottom Title Safe Margin	下タイトルセーフに配置	採用予定
+ui/motolii-stage-pane	B22	ガイド/グリッド表示束	693	1	Position Objects to Left Title Safe Margin	左タイトルセーフに配置	採用予定
+ui/motolii-stage-pane	B22	ガイド/グリッド表示束	694	1	Position Objects to Top Title Safe Margin	上タイトルセーフに配置	採用予定
+ui/motolii-stage-pane	B28	シェイプ/パス描画束	699	1	Reposition shape during creation	作成中にシェイプを再配置	採用予定
+ui/motolii-stage-pane	B28	シェイプ/パス描画束	817	1	Change outer radius of star	星の外側半径を変更	採用予定
+ui/motolii-stage-pane	B28	シェイプ/パス描画束	823	1	Constrain shapes proportionally	シェイプを縦横比固定で作成	採用予定
+ui/motolii-stage-pane	B28	シェイプ/パス描画束	824	1	Create Shapes from Vector Layer	ベクターレイヤーからシェイプ作成	採用予定
+ui/motolii-stage-pane	B28	シェイプ/パス描画束	826	1	Decrease points for star/polygon; decrease roundness for rounded rectangle	星/多角形の頂点数、角丸長方形の丸みを減少	採用予定
+ui/motolii-stage-pane	B28	シェイプ/パス描画束	827	1	Decrease star inner roundness	星の内側の丸みを減少	採用予定
+ui/motolii-stage-pane	B28	シェイプ/パス描画束	861	1	Increase points for star/polygon; increase roundness for rounded rectangle	星/多角形の頂点数、角丸長方形の丸みを増加	採用予定
+ui/motolii-stage-pane	B28	シェイプ/パス描画束	862	1	Increase star inner roundness	星の内側の丸みを増加	採用予定
+ui/motolii-stage-pane	B17	カメラ/3Dビュー束	876	1	Look at All Layers	全レイヤーを見る	採用予定
+ui/motolii-stage-pane	B17	カメラ/3Dビュー束	877	1	Look at Selected Layers	選択レイヤーを見る	採用予定
+ui/motolii-stage-pane	B28	シェイプ/パス描画束	950	1	Set rounded rectangle to maximum; increase outer roundness	角丸長方形を最大丸みに/外側の丸みを増加	採用予定
+ui/motolii-stage-pane	B28	シェイプ/パス描画束	951	1	Set rounded rectangle to sharp; decrease outer roundness	角丸長方形をシャープに/外側の丸みを減少	採用予定
+ui/motolii-stage-pane	B22	ガイド/グリッド表示束	956	1	Show Layer Controls	レイヤーコントロールを表示	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	981	3	Tools / Toolbar panel	編集ツール格納パネル	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	982	2	Effects / Effects & Presets panel	エフェクト一覧パネル	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	983	2	Info panel	選択項目の情報パネル	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1002	1	Floating Timecode Window	タイムコードのフローティング表示	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1004	1	Footage	素材のプレビューパネル	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1006	1	History / Undo History panel	操作履歴パネル	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1007	1	Layer	個別レイヤーのプレビューパネル	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1008	1	Libraries	Creative Cloud Librariesパネル(近年追加)	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1009	1	Libraries	Creative Cloudライブラリアセットパネル	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1014	1	Markers panel	マーカー一覧パネル	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1015	1	Mask Interpolation	マスク補間設定パネル	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1016	1	Media & Assets panel	メディア/素材パネル(インポート・テキスト・ステッカー・フィルター・トランジションへのアクセス)	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1017	1	Media Browser	外部メディアブラウズパネル	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1018	1	Media Browser	外部メディア検索・読み込みパネル	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1019	1	Media Page	メディアの取り込み・整理・メタデータ付与を行うページ	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1020	1	Metadata	メタデータ表示パネル	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1021	1	Metadata	クリップ/シーケンスのメタデータパネル	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1022	1	Motion Sketch	モーションスケッチ記録パネル	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1024	1	Paragraph	段落設定パネル	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1025	1	Preview	プレビュー再生制御パネル	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1028	1	Progress	処理進捗表示パネル	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1031	1	Render Queue	レンダーキュー管理パネル	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1032	1	Smoother	キーフレームスムージングパネル	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1033	1	Source Monitor	素材クリッププレビューパネル	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1034	1	Source Viewer	ソースクリップのプレビュー	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1035	1	Text	Speech-to-Textによる文字起こし・キャプション編集パネル	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1037	1	Track types: Video / Text-title / Voiceover / Music-SFX	トラック種別(映像/字幕/ナレーション/音楽SE)	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1039	1	Wiggler	キーフレームランダム化パネル	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1040	1	Workspaces (submenu)	ワークスペース切替サブメニュー(パネル本体ではない)	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1051	1	Display filename in Info panel	Infoパネルにファイル名を表示	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1316	1	Active Window: Timeline	Command+3	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1317	1	Active Window: Timeline Viewer	Command+2	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1409	1	Open Effect Controls panel	Effect Controlsパネルを開く	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1410	1	Open Layer	レイヤーパネルを開く	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1411	1	Open layer in Layer panel	Layerパネルでレイヤーを開く	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1412	1	Open Layer Source	ソースを開く	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1414	1	Open settings dialog for selected layer	選択レイヤーの設定ダイアログを開く	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1415	1	Open source in Footage panel	Footageパネルでソースを開く	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1445	1	Active Window: Source Viewer	Command+1	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1495	1	Active Panel Selection	アクティブパネル選択	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1499	1	Close active panel or all viewers of type	同種の全ビューアを閉じる	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1500	1	Close active viewer or panel	アクティブビューア/パネルを閉じる	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1503	1	Cycle to previous or next panel in active frame	アクティブフレーム内の前後パネルを巡回	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1511	1	Maximize or restore panel under pointer	ポインタ下パネルを最大化/復元	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1520	1	Open or close Effect Controls panel for selected layer	Effect Controlsパネル開閉	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1521	1	Open or close Effects & Presets panel	Effects & Presetsパネル開閉	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1522	1	Open or close Info panel	Infoパネル開閉	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1524	1	Open or close Preview panel	Previewパネル開閉	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1525	1	Open or close Project panel	Projectパネル開閉	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1526	1	Open or close Render Queue panel	Render Queueパネル開閉	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1527	1	Open or close Tools panel	Toolsパネル開閉	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	1540	1	Show Panel in Workspace	ワークスペース内パネル表示	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	170	1	Active Window: Media Clips	Command+5	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	302	1	Show or hide Layer Switches and Modes columns	スイッチ/モード列表示切替	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	48	1	Open or close Audio panel	Audioパネル開閉	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	689	1	Open selected layer, composition, or footage item	選択項目を開く	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	69	1	View Clip Info Display	クリップ情報表示	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	799	1	Active Window: Edit Index	Command+7	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	800	1	Active Window: Effects	Command+6	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	801	1	Active Window: Inspector	Command+9	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	802	1	Active Window: Media Folders	Command+4	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	932	1	Reveal All Modified Properties	変更済み全プロパティを表示	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	955	1	Show File Names	ファイル名表示	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	984	1	Align	整列パネル	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	985	1	Audio	オーディオレベル操作パネル	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	987	1	Audio Meters	音量VUメーターパネル	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	990	1	Character	文字設定パネル	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	994	1	Cut Page	簡略ツールで高速に編集するページ(Edit簡易版)	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	995	1	Deliver Page	最終書き出し/レンダーキュー管理を行うページ	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	996	1	Edit Index	EDL形式の編集イベント一覧	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	997	1	Effects Library	トランジション/タイトル/ジェネレータ/フィルタ収録	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	998	1	Essential Graphics	Motion Graphicsテンプレート作成パネル(近年追加)	採用予定
+shell/motolii-shell	B25	パネル可視性/フォーカス束(最大統合)	999	1	Essential Graphics	モーショングラフィックステンプレート編集パネル	採用予定
+ui/motolii-settings-pane	B12	環境設定束	1145	2	Keyboard Shortcuts (editor)	キーボードショートカットのカスタマイズ画面	採用予定
+ui/motolii-settings-pane	B12	環境設定束	1146	1	Advanced	特殊構成向け詳細設定	採用予定
+ui/motolii-settings-pane	B12	環境設定束	1150	1	Appearance	UI外観・ラベル/マスクのハイライト色設定	採用予定
+ui/motolii-settings-pane	B12	環境設定束	1151	1	Appearance	UIの明るさ・コントラストなど外観設定	採用予定
+ui/motolii-settings-pane	B12	環境設定束	1152	1	Audio	書き出し時の音声レンダリング設定	採用予定
+ui/motolii-settings-pane	B12	環境設定束	1153	1	Audio Hardware	サウンドデバイス・ドライバ・サンプルレートの選択	採用予定
+ui/motolii-settings-pane	B12	環境設定束	1154	1	Audio Hardware	外部オーディオ機器・サンプルレート設定	採用予定
+ui/motolii-settings-pane	B12	環境設定束	1155	1	Audio Output Mapping	Left/Right Channel割当、Audio Block Duration	採用予定
+ui/motolii-settings-pane	B12	環境設定束	1157	1	Auto Save	自動保存の間隔設定	採用予定
+ui/motolii-settings-pane	B12	環境設定束	1158	1	Auto-Save	自動保存の間隔と保持世代数	採用予定
+ui/motolii-settings-pane	B12	環境設定束	1162	1	Collaboration	共同編集関連設定	採用予定
+ui/motolii-settings-pane	B12	環境設定束	1163	1	Color	カラーピッカー/リップルモード等のカラー設定	採用予定
+ui/motolii-settings-pane	B12	環境設定束	1169	1	Display	モーションパス表示、Projectパネルサムネイル、Infoパネルのレンダリング表示等	採用予定
+ui/motolii-settings-pane	B12	環境設定束	1170	1	Editing	新規タイムライン既定/スマートビン等の編集設定	採用予定
+ui/motolii-settings-pane	B12	環境設定束	1172	1	Enable Proxy (+解像度選択)	プロキシ編集の有効化と解像度選択	採用予定
+ui/motolii-settings-pane	B12	環境設定束	1176	1	General	その他一般設定(アンドゥ回数、ツールチップ表示、OS標準ショートカット使用等)	採用予定
+ui/motolii-settings-pane	B12	環境設定束	1177	1	General	起動時のプロジェクト挙動などの全般設定	採用予定
+ui/motolii-settings-pane	B12	環境設定束	1178	1	General	外部スクリプト/自動更新等の全般設定	採用予定
+ui/motolii-settings-pane	B12	環境設定束	1179	1	General Options	コンフォームオプション/バージョン管理等の全般設定	採用予定
+ui/motolii-settings-pane	B12	環境設定束	1180	1	Graphics	グラフィック関連の初期設定	採用予定
+ui/motolii-settings-pane	B12	環境設定束	1181	1	Grid & Guides	グリッド色・サイズ、ガイド色、セーフマージン(Action Safe / Title Safe / Center-Cut)	採用予定
+ui/motolii-settings-pane	B12	環境設定束	1182	1	Hardware decoding / encoding toggle	ハードウェアデコード/エンコード高速化	採用予定
+ui/motolii-settings-pane	B12	環境設定束	1184	1	Image Scaling	入力/出力の画像スケーリング方式	採用予定
+ui/motolii-settings-pane	B12	環境設定束	1185	1	Import	静止画の既定表示時間、埋め込みアルファの扱い、ドラッグ&ドロップ読み込みの挙動	採用予定
+ui/motolii-settings-pane	B12	環境設定束	1186	1	Internet Accounts	クラウド/動画共有サービスのログイン連携	採用予定
+ui/motolii-settings-pane	B12	環境設定束	1187	1	Keyboard Customization	キーボードカスタマイズウィンドウを開く	採用予定
+ui/motolii-settings-pane	B12	環境設定束	1188	1	Keyboard Customization	ショートカットプリセット選択とカスタムマッピング	採用予定
+ui/motolii-settings-pane	B12	環境設定束	1189	1	Labels	ラベル色とその割当の設定	採用予定
+ui/motolii-settings-pane	B12	環境設定束	1190	1	Labels	ラベル色・既定ラベルの設定	採用予定
+ui/motolii-settings-pane	B12	環境設定束	1191	1	Language	UI表示言語切替	採用予定
+ui/motolii-settings-pane	B12	環境設定束	1192	1	Master Settings	タイムライン形式/ビデオモニタリング/最適化メディア/作業フォルダ	採用予定
+ui/motolii-settings-pane	B12	環境設定束	1193	1	Media	静止画スケーリング・プロキシ設定	採用予定
+ui/motolii-settings-pane	B12	環境設定束	1196	1	Media Storage	メディアストレージの登録フォルダ管理	採用予定
+ui/motolii-settings-pane	B12	環境設定束	12	1	Audio Hardware…	オーディオデバイス設定	採用予定
+ui/motolii-settings-pane	B12	環境設定束	1200	1	Metadata	メタデータプリセットのカスタム項目	採用予定
+ui/motolii-settings-pane	B12	環境設定束	1201	1	Output	出力時のファイル分割、既定ファイル名/フォルダの使用可否	採用予定
+ui/motolii-settings-pane	B12	環境設定束	1202	1	Path Mapping	パスマッピング/プロジェクトメディア所在地	採用予定
+ui/motolii-settings-pane	B12	環境設定束	1203	1	Playback	Mercury Transmitやプレビュー設定	採用予定
+ui/motolii-settings-pane	B12	環境設定束	1204	1	Playback Settings	UIオーバーレイ非表示/パフォーマンスモード	採用予定
+ui/motolii-settings-pane	B12	環境設定束	1205	1	Previews	プレビュー全般の設定(オーディオプレビュー長、適応解像度品質、ハードウェアアクセラレーション等)	採用予定
+ui/motolii-settings-pane	B12	環境設定束	1206	1	Project Save and Load	自動保存/ライブセーブ/バックアップ設定	採用予定
+ui/motolii-settings-pane	B12	環境設定束	1210	1	Subtitles and Transcription	字幕プリセット/文字起こし言語	採用予定
+ui/motolii-settings-pane	B12	環境設定束	1211	1	Sync Settings	Creative Cloud経由でショートカット・設定を同期(Audio Hardware/Output Mapping/一部Media & Disk Cache設定は同期対象外)	採用予定
+ui/motolii-settings-pane	B12	環境設定束	1212	1	Sync Settings	Creative Cloud経由の設定同期	採用予定
+ui/motolii-settings-pane	B12	環境設定束	1213	1	Timeline	既定トランジション長など タイムライン挙動設定	採用予定
+ui/motolii-settings-pane	B12	環境設定束	1214	1	Trim	選択ツールの挙動・トリムオフセット設定	採用予定
+ui/motolii-settings-pane	B12	環境設定束	1215	1	UI Settings	言語/最終プロジェクト再読込等のUI設定	採用予定
+ui/motolii-settings-pane	B12	環境設定束	1216	1	Version / Check for updates	バージョン確認・更新チェック	採用予定
+ui/motolii-settings-pane	B12	環境設定束	1230	1	Appearance…	UI外観・ハイライト色設定	採用予定
+ui/motolii-settings-pane	B12	環境設定束	1231	1	Auto-Save…	自動保存の間隔・世代数設定	採用予定
+ui/motolii-settings-pane	B12	環境設定束	1234	1	Display…	モーションパス等の表示設定	採用予定
+ui/motolii-settings-pane	B12	環境設定束	1235	1	General…	その他一般設定	採用予定
+ui/motolii-settings-pane	B12	環境設定束	1237	1	Memory & Multiprocessing…	メモリ・マルチプロセス設定	採用予定
+ui/motolii-settings-pane	B12	環境設定束	1239	1	Output…	出力時の既定動作設定	採用予定
+ui/motolii-settings-pane	B12	環境設定束	1240	1	Previews…	プレビュー動作設定	採用予定
+ui/motolii-settings-pane	B12	環境設定束	13	1	Audio Output Mapping…	オーディオ出力チャンネル割当	採用予定
+ui/motolii-menubar	B33	クリップボード/履歴束(MB-0延長)	438	2	Edit Original	元アプリで編集	採用予定
+ui/motolii-menubar	B33	クリップボード/履歴束(MB-0延長)	439	2	Find	検索	採用予定
+ui/motolii-menubar	B33	クリップボード/履歴束(MB-0延長)	440	2	Paste Attributes	属性・プロパティを貼り付け	採用予定
+ui/motolii-menubar	B11	File束(MB-1延長)	1228	1	About After Effects…	バージョン情報	採用予定
+ui/motolii-menubar	B11	File束(MB-1延長)	1229	1	About DaVinci Resolve	バージョン情報スプラッシュを開く	採用予定
+ui/motolii-menubar	B11	File束(MB-1延長)	1232	1	Close Project	プロジェクトを閉じる	採用予定
+ui/motolii-menubar	B11	File束(MB-1延長)	1233	1	Close Project	プロジェクトを閉じる	採用予定
+ui/motolii-menubar	B11	File束(MB-1延長)	1238	1	New project = Ctrl+N	新規プロジェクト	採用予定
+ui/motolii-menubar	B11	File束(MB-1延長)	1243	1	Revert	直前保存状態に戻す	採用予定
+ui/motolii-menubar	B11	File束(MB-1延長)	1244	1	Revert to Last Save Version	直前の保存版に戻す	採用予定
+ui/motolii-menubar	B11	File束(MB-1延長)	1246	1	Save a Copy As XML…	XML形式でコピー保存	採用予定
+ui/motolii-menubar	B33	クリップボード/履歴束(MB-0延長)	448	1	Copy with Property Links	プロパティリンク付きコピー	採用予定
+ui/motolii-menubar	B33	クリップボード/履歴束(MB-0延長)	449	1	Copy/Cut/Paste = Ctrl+C/X/V	コピー/切り取り/貼り付け	採用予定
+ui/motolii-menubar	B33	クリップボード/履歴束(MB-0延長)	453	1	Duplicate selected items	選択項目を複製	採用予定
+ui/motolii-menubar	B33	クリップボード/履歴束(MB-0延長)	458	1	History	操作履歴	採用予定
+ui/motolii-menubar	B33	クリップボード/履歴束(MB-0延長)	459	1	History	アンドゥ履歴サブメニュー	採用予定
+ui/motolii-menubar	B33	クリップボード/履歴束(MB-0延長)	460	1	Paste layers at current time	現在時刻にレイヤーを貼り付け	採用予定
+ui/motolii-menubar	B33	クリップボード/履歴束(MB-0延長)	461	1	Paste Value	パラメータ値の貼り付け(Color)	採用予定
+ui/motolii-menubar	B33	クリップボード/履歴束(MB-0延長)	462	1	Reveal in Finder	Finderで表示	採用予定
+ui/motolii-menubar	B33	クリップボード/履歴束(MB-0延長)	463	1	Reveal in Finder	Finderで表示	採用予定
+ui/motolii-menubar	B33	クリップボード/履歴束(MB-0延長)	464	1	Revival Undo	Option+Command+Z	採用予定
+ui/motolii-menubar	B33	クリップボード/履歴束(MB-0延長)	465	1	Show Duplicate Frames	重複フレーム表示	採用予定
+ui/motolii-menubar	B33	クリップボード/履歴束(MB-0延長)	466	1	Undo	アンドゥ履歴を消去	採用予定
+ui/motolii-menubar	B06	ヘルプ/診断束	570	1	Adobe Crash Reporter…	クラッシュレポーター	採用予定
+ui/motolii-menubar	B06	ヘルプ/診断束	571	1	Adobe Product Improvement Program…	製品改善プログラム	採用予定
+ui/motolii-menubar	B06	ヘルプ/診断束	572	1	After Effects Help…	ヘルプを開く	採用予定
+ui/motolii-menubar	B06	ヘルプ/診断束	573	1	After Effects Support Center…	サポートセンター	採用予定
+ui/motolii-menubar	B06	ヘルプ/診断束	575	1	Check for Updates	新バージョンの有無を確認	採用予定
+ui/motolii-menubar	B06	ヘルプ/診断束	577	1	Create Diagnostics Log on Desktop	診断ログをデスクトップに作成	採用予定
+ui/motolii-menubar	B06	ヘルプ/診断束	579	1	DaVinci Resolve Reference Manual	リファレンスマニュアルを開く	採用予定
+ui/motolii-menubar	B06	ヘルプ/診断束	580	1	DaVinci Resolve Training	トレーニング情報を開く	採用予定
+ui/motolii-menubar	B06	ヘルプ/診断束	581	1	Deactivate License	ライセンス解除	採用予定
+ui/motolii-menubar	B06	ヘルプ/診断束	582	1	Documentation	ドキュメントを開く	採用予定
+ui/motolii-menubar	B06	ヘルプ/診断束	583	1	Effect Reference…	エフェクトリファレンス	採用予定
+ui/motolii-menubar	B06	ヘルプ/診断束	584	1	Enable Logging	ログ記録を有効化	採用予定
+ui/motolii-menubar	B06	ヘルプ/診断束	585	1	Online Users Forums…	オンラインフォーラム	採用予定
+ui/motolii-menubar	B06	ヘルプ/診断束	586	1	Reveal Logging File	ログファイルを表示	採用予定
+ui/motolii-menubar	B06	ヘルプ/診断束	587	1	Scripting Help…	スクリプトヘルプ	採用予定
+ui/motolii-menubar	B06	ヘルプ/診断束	588	1	Send Feedback…	フィードバック送信	採用予定
+ui/motolii-menubar	B06	ヘルプ/診断束	589	1	Updates…	アップデート確認	採用予定
+ui/motolii-menubar	B06	ヘルプ/診断束	590	1	Welcome Screen…	ようこそ画面	採用予定
+ui/motolii-menubar	B06	ヘルプ/診断束	591	1	Welcome to DaVinci Resolve	ようこそ画面を開く	採用予定
+ui/motolii-browser-pane	B08	素材取り込み束	166	2	Make Subclip	サブクリップを作成	採用予定
+ui/motolii-browser-pane	B08	素材取り込み束	167	2	Replace (footage/clip)	素材・クリップを置換	採用予定
+ui/motolii-browser-pane	B08	素材取り込み束	1419	1	Proxy Mode	プロキシ編集モード	採用予定
+ui/motolii-browser-pane	B08	素材取り込み束	213	1	File…	素材をファイルで置換	採用予定
+ui/motolii-browser-pane	B08	素材取り込み束	261	1	Placeholder…	プレースホルダーで置換	採用予定
+ui/motolii-browser-pane	B08	素材取り込み束	341	1	With Layered Comp	レイヤー化コンポで置換	採用予定
+ui/motolii-browser-pane	B08	素材取り込み束	596	1	Bin	ビンをインポート	採用予定
+ui/motolii-browser-pane	B08	素材取り込み束	597	1	Delete footage item without warning	警告なしで素材を削除	採用予定
+ui/motolii-browser-pane	B08	素材取り込み束	598	1	Edit selected footage in associated application	関連アプリで素材を編集	採用予定
+ui/motolii-browser-pane	B08	素材取り込み束	600	1	Import from Media Browser	Media Browserから読み込み	採用予定
+ui/motolii-browser-pane	B08	素材取り込み束	601	1	Import Metadata To	CSVからメタデータをインポート	採用予定
+ui/motolii-browser-pane	B08	素材取り込み束	606	1	Import…	読み込み時の既定動作設定	採用予定
+ui/motolii-browser-pane	B08	素材取り込み束	609	1	Open Interpret Footage dialog	素材の解釈ダイアログを開く	採用予定
+ui/motolii-browser-pane	B08	素材取り込み束	610	1	Open movie in After Effects Footage panel	Footageパネルで動画を開く	採用予定
+ui/motolii-browser-pane	B08	素材取り込み束	611	1	Placeholder…	プレースホルダーを読み込む	採用予定
+ui/motolii-browser-pane	B08	素材取り込み束	614	1	Reload selected footage items	選択素材を再読み込み	採用予定
+ui/motolii-browser-pane	B08	素材取り込み束	615	1	Remember footage interpretation	素材の解釈を記憶	採用予定
+ui/motolii-browser-pane	B08	素材取り込み束	616	1	Replace selected footage item	選択素材を置換	採用予定
+ui/motolii-browser-pane	B08	素材取り込み束	617	1	Replace selected source footage for selected layers	選択レイヤーのソースを置換	採用予定
+ui/motolii-browser-pane	B08	素材取り込み束	618	1	Replace source for selected layer	選択レイヤーのソースを置換(ドラッグ)	採用予定
+ui/motolii-browser-pane	B08	素材取り込み束	619	1	Set proxy for selected footage item	選択素材にプロキシを設定	採用予定
+ui/motolii-browser-pane	B08	素材取り込み束	620	1	Solid…	単色を読み込む	採用予定
+ui/motolii-browser-pane	B08	素材取り込み束	621	1	Timeline	タイムラインをインポート	採用予定
+ui/motolii-browser-pane	B08	素材取り込み束	623	1	Watch Folder…	監視フォルダを設定	採用予定
+ui/motolii-browser-pane	B08	素材取り込み束	7	1	Audio Channels	音声チャンネル設定	採用予定
+ui/motolii-browser-pane	B08	素材取り込み束	8	1	Audio Channels	音声チャンネル	採用予定
+ui/motolii-browser-pane	B08	素材取り込み束	811	1	Apply Interpretation	記憶した解釈設定を適用	採用予定
+ui/motolii-browser-pane	B08	素材取り込み束	814	1	Browse in Bridge…	Bridgeで参照	採用予定
+ui/motolii-browser-pane	B08	素材取り込み束	835	1	Elements	字幕テンプレ等の素材集	採用予定
+ui/motolii-browser-pane	B08	素材取り込み束	847	1	File…	プロキシファイルを指定	採用予定
+ui/motolii-browser-pane	B08	素材取り込み束	878	1	Main…	メイン解釈設定を開く	採用予定
+ui/motolii-browser-pane	B08	素材取り込み束	893	1	Movie…	動画プロキシを作成	採用予定
+ui/motolii-browser-pane	B08	素材取り込み束	9	1	Audio Channels	音声チャンネル	採用予定
+ui/motolii-browser-pane	B08	素材取り込み束	915	1	Proxy on the Fly	Command+P	採用予定
+ui/motolii-browser-pane	B08	素材取り込み束	916	1	Proxy…	プロキシ解釈設定を開く	採用予定
+ui/motolii-browser-pane	B08	素材取り込み束	919	1	Reconform from Bins	ビン内メディアでタイムラインを再コンフォーム	採用予定
+ui/motolii-browser-pane	B08	素材取り込み束	920	1	Reconform from Media Storage	フォルダでタイムラインを再コンフォーム	採用予定
+ui/motolii-browser-pane	B08	素材取り込み束	922	1	Reload Footage	素材を再読み込み	採用予定
+ui/motolii-browser-pane	B08	素材取り込み束	923	1	Remember Interpretation	解釈設定を記憶	採用予定
+ui/motolii-browser-pane	B08	素材取り込み束	933	1	Reveal in Bridge	Bridgeで表示	採用予定
+ui/motolii-browser-pane	B08	素材取り込み束	961	1	Still…	静止画プロキシを作成	採用予定
+ui/motolii-keymap	B45	微調整(ナッジ)束	1400	1	Nudge Selected Object Down by Five Pixels	選択オブジェクトを下へ5px	採用予定
+ui/motolii-keymap	B45	微調整(ナッジ)束	1401	1	Nudge Selected Object Down by One Pixel	選択オブジェクトを下へ1px	採用予定
+ui/motolii-keymap	B45	微調整(ナッジ)束	1402	1	Nudge Selected Object Left by Five Pixels	選択オブジェクトを左へ5px	採用予定
+ui/motolii-keymap	B45	微調整(ナッジ)束	1403	1	Nudge Selected Object Left by One Pixel	選択オブジェクトを左へ1px	採用予定
+ui/motolii-keymap	B45	微調整(ナッジ)束	1404	1	Nudge Selected Object Right by Five Pixels	選択オブジェクトを右へ5px	採用予定
+ui/motolii-keymap	B45	微調整(ナッジ)束	1405	1	Nudge Selected Object Right by One Pixel	選択オブジェクトを右へ1px	採用予定
+ui/motolii-keymap	B45	微調整(ナッジ)束	1406	1	Nudge Selected Object Up by Five Pixels	選択オブジェクトを上へ5px	採用予定
+ui/motolii-keymap	B45	微調整(ナッジ)束	1407	1	Nudge Selected Object Up by One Pixel	選択オブジェクトを上へ1px	採用予定
+ui/motolii-keymap	B45	微調整(ナッジ)束	248	1	Nudge	微調整移動	採用予定
+ui/motolii-keymap	B45	微調整(ナッジ)束	249	1	Nudge Clip Left	クリップを左に微調整	採用予定
+ui/motolii-keymap	B45	微調整(ナッジ)束	250	1	Nudge Clip Right	クリップを右に微調整	採用予定
+ui/motolii-keymap	B45	微調整(ナッジ)束	251	1	Nudge Clip Selection Left/Right Five Frames	クリップ選択を5フレーム移動	採用予定
+ui/motolii-keymap	B45	微調整(ナッジ)束	252	1	Nudge Clip Selection Left/Right One Frame	クリップ選択を1フレーム移動	採用予定
+ui/motolii-keymap	B45	微調整(ナッジ)束	253	1	Nudge Edit One Frame Left	,(comma)	採用予定
+ui/motolii-keymap	B45	微調整(ナッジ)束	254	1	Nudge Edit One Frame Right	.(period)	採用予定
+ui/motolii-keymap	B45	微調整(ナッジ)束	885	1	Modify property value by 10x increments	10倍の増減幅でプロパティ変更	採用予定
+ui/motolii-keymap	B45	微調整(ナッジ)束	888	1	Move selected layers 1 frame earlier or later	選択レイヤーを1フレーム前後移動	採用予定
+ui/motolii-keymap	B45	微調整(ナッジ)束	889	1	Move selected layers 1 pixel	選択レイヤーを1px移動	採用予定
+ui/motolii-keymap	B45	微調整(ナッジ)束	890	1	Move selected layers 10 frames earlier or later	選択レイヤーを10フレーム前後移動	採用予定
+ui/motolii-keymap	B45	微調整(ナッジ)束	891	1	Move selected layers 10 pixels	選択レイヤーを10px移動	採用予定
+ui/motolii-keymap	B45	微調整(ナッジ)束	892	1	Move selected layers so In/Out point is at current time	In/Out点を現在時刻へ移動	採用予定
+ui/motolii-export-pane	B09	書き出し束	522	1	Add to Render Queue	レンダーキューに追加	採用予定
+ui/motolii-export-pane	B09	書き出し束	524	1	Adobe Premiere Pro Project…	Premiereプロジェクトへ書き出し	採用予定
+ui/motolii-export-pane	B09	書き出し束	530	1	Current Frame as Still	現在フレームを静止画で書き出す	採用予定
+ui/motolii-export-pane	B09	書き出し束	531	1	Export AAF, XML	Shift+Command+O	採用予定
+ui/motolii-export-pane	B09	書き出し束	532	1	Export Metadata From	メタデータをCSVへ書き出す	採用予定
+ui/motolii-export-pane	B09	書き出し束	535	1	Extend selection to next item in Project/Render Queue/Effect Controls panel	次項目まで選択範囲を拡張	採用予定
+ui/motolii-export-pane	B09	書き出し束	644	1	Add Output Module	出力モジュールを追加	採用予定
+ui/motolii-export-pane	B09	書き出し束	646	1	Add to Adobe Media Encoder Queue…	AMEキューに追加	採用予定
+ui/motolii-export-pane	B09	書き出し束	647	1	Add to Render Queue	レンダーキューに追加	採用予定
+ui/motolii-export-pane	B09	書き出し束	663	1	File…	フレームをファイル保存	採用予定
+ui/motolii-export-pane	B09	書き出し束	907	1	Output Module…	出力モジュールテンプレート	採用予定
+ui/motolii-export-pane	B09	書き出し束	930	1	Render Settings…	レンダー設定テンプレート	採用予定
+(家が未決)	B24	ズーム束(MA L4例示)	1441	3	Zoom In	ズームイン	採用予定
+(家が未決)	B24	ズーム束(MA L4例示)	1442	3	Zoom Out	ズームアウト	採用予定
+(家が未決)	B38	トランジション/エフェクト適用束	164	2	Apply Audio Transition (default, at edit point)	既定のオーディオトランジションを編集点に適用	採用予定
+(家が未決)	B38	トランジション/エフェクト適用束	165	2	Apply Video Transition (default, at edit point)	既定のビデオトランジションを編集点に適用	採用予定
+(家が未決)	B16	解析→自動キーフレーム束(新規発見)	1	1	Auto reframe	画角自動追従で別比率に再構成	採用予定
+(家が未決)	B42	音声内容整形束	10	1	Audio Enhancer	音声補正(AI)	採用予定
+(家が未決)	B16	解析→自動キーフレーム束(新規発見)	1038	1	Tracker	モーション/カメラトラッカーパネル	採用予定
+(家が未決)	B13	キャッシュ/メモリ管理束(継ぎ目)	1049	1	Delete Render Cache	レンダーキャッシュ削除	採用予定
+(家が未決)	B40	ソース参照/マルチカム束	1085	1	Match Frame	一致フレーム検索	採用予定
+(家が未決)	B40	ソース参照/マルチカム束	1086	1	Match Frame	一致フレーム検索	採用予定
+(家が未決)	B29	ツール切替束	109	1	Activate and cycle Camera tools	カメラツールを巡回	採用予定
+(家が未決)	B26	ワークスペースレイアウト束	1092	1	Next Screen	次の画面へ	採用予定
+(家が未決)	B42	音声内容整形束	11	1	Audio Gain / Volume	音声ゲイン・音量を調整	採用予定
+(家が未決)	B13	キャッシュ/メモリ管理束(継ぎ目)	1106	1	Prevent rendering for previews	プレビュー用レンダリングを抑止	採用予定
+(家が未決)	B26	ワークスペースレイアウト束	1112	1	Previous Screen	前の画面へ	採用予定
+(家が未決)	B13	キャッシュ/メモリ管理束(継ぎ目)	1113	1	Proxy Handling	プロキシ処理設定	採用予定
+(家が未決)	B13	キャッシュ/メモリ管理束(継ぎ目)	1115	1	Render Cache	レンダーキャッシュ設定	採用予定
+(家が未決)	B40	ソース参照/マルチカム束	1117	1	Reverse Match Frame	逆方向一致フレーム検索	採用予定
+(家が未決)	B40	ソース参照/マルチカム束	1118	1	Reverse Match Frame	逆一致フレーム検索	採用予定
+(家が未決)	B13	キャッシュ/メモリ管理束(継ぎ目)	1139	1	Timeline Proxy Resolution	タイムラインプロキシ解像度	採用予定
+(家が未決)	B13	キャッシュ/メモリ管理束(継ぎ目)	1143	1	Use Optimized Media if Available	最適化メディア使用	採用予定
+(家が未決)	B10	プロジェクト整理束	1241	1	Project Manager	プロジェクトの整理・書き出し管理	採用予定
+(家が未決)	B10	プロジェクト整理束	1242	1	Project Manager	プロジェクトマネージャーを開く	採用予定
+(家が未決)	B46	テキストプロパティ/アニメータ束	1251	1	Align vertical text top, center, or bottom	垂直テキストの上/中央/下揃え	採用予定
+(家が未決)	B46	テキストプロパティ/アニメータ束	1252	1	All Transform Properties	全トランスフォームプロパティ	採用予定
+(家が未決)	B46	テキストプロパティ/アニメータ束	1255	1	Blur	ぼかし	採用予定
+(家が未決)	B46	テキストプロパティ/アニメータ束	1256	1	Character Offset	文字オフセット	採用予定
+(家が未決)	B46	テキストプロパティ/アニメータ束	1257	1	Character Value	文字値	採用予定
+(家が未決)	B46	テキストプロパティ/アニメータ束	1258	1	Convert to Editable Text	編集可能なテキストに変換	採用予定
+(家が未決)	B48	テキストカーソル/選択束(MA L4例示)	1267	1	Extend or reduce selection by one character in horizontal text	1文字ずつ選択範囲を拡大縮小(横書き)	採用予定
+(家が未決)	B48	テキストカーソル/選択束(MA L4例示)	1268	1	Extend or reduce selection by one character in vertical text	1文字ずつ選択範囲を拡大縮小(縦書き)	採用予定
+(家が未決)	B48	テキストカーソル/選択束(MA L4例示)	1269	1	Extend or reduce selection by one line in horizontal text	1行ずつ選択範囲を拡大縮小(横書き)	採用予定
+(家が未決)	B48	テキストカーソル/選択束(MA L4例示)	1270	1	Extend or reduce selection by one word in horizontal text	1単語ずつ選択範囲を拡大縮小(横書き)	採用予定
+(家が未決)	B48	テキストカーソル/選択束(MA L4例示)	1271	1	Extend or reduce selection one word in vertical text	1単語ずつ選択範囲を拡大縮小(縦書き)	採用予定
+(家が未決)	B46	テキストプロパティ/アニメータ束	1273	1	Find Missing Fonts	見つからないフォントを検索	採用予定
+(家が未決)	B46	テキストプロパティ/アニメータ束	1276	1	Justify paragraph; force last line	強制両端揃え	採用予定
+(家が未決)	B46	テキストプロパティ/アニメータ束	1277	1	Justify paragraph; left align last line	両端揃え(最終行左)	採用予定
+(家が未決)	B46	テキストプロパティ/アニメータ束	1278	1	Justify paragraph; right align last line	両端揃え(最終行右)	採用予定
+(家が未決)	B46	テキストプロパティ/アニメータ束	1279	1	Line Anchor	行のアンカー	採用予定
+(家が未決)	B48	テキストカーソル/選択束(MA L4例示)	1281	1	Move cursor in horizontal text	横書きテキスト内でカーソル移動	採用予定
+(家が未決)	B48	テキストカーソル/選択束(MA L4例示)	1282	1	Move cursor in vertical text	縦書きテキスト内でカーソル移動	採用予定
+(家が未決)	B48	テキストカーソル/選択束(MA L4例示)	1283	1	Move cursor to beginning or end of line	行頭/行末へカーソル移動	採用予定
+(家が未決)	B48	テキストカーソル/選択束(MA L4例示)	1286	1	Open or close Character panel	Characterパネル開閉	採用予定
+(家が未決)	B48	テキストカーソル/選択束(MA L4例示)	1287	1	Open or close Paragraph panel	Paragraphパネル開閉	採用予定
+(家が未決)	B46	テキストプロパティ/アニメータ束	1290	1	Remove All Text Animators	全テキストアニメーターを削除	採用予定
+(家が未決)	B46	テキストプロパティ/アニメータ束	1291	1	Reset tracking to 0	トラッキングを0にリセット	採用予定
+(家が未決)	B48	テキストカーソル/選択束(MA L4例示)	1294	1	Select all text on layer	レイヤー内全テキストを選択	採用予定
+(家が未決)	B48	テキストカーソル/選択束(MA L4例示)	1295	1	Select text from cursor to click point	カーソルからクリック位置まで選択	採用予定
+(家が未決)	B48	テキストカーソル/選択束(MA L4例示)	1296	1	Select text to beginning or end of frame	フレーム先頭/末尾まで選択	採用予定
+(家が未決)	B48	テキストカーソル/選択束(MA L4例示)	1297	1	Select text to beginning or end of line	行頭/行末まで選択	採用予定
+(家が未決)	B48	テキストカーソル/選択束(MA L4例示)	1298	1	Select word, line, paragraph, or entire text frame	単語/行/段落/全体を選択	採用予定
+(家が未決)	B46	テキストプロパティ/アニメータ束	1299	1	Set horizontal scale to 100%	水平比率を100%に	採用予定
+(家が未決)	B46	テキストプロパティ/アニメータ束	1300	1	Set vertical scale to 100%	垂直比率を100%に	採用予定
+(家が未決)	B46	テキストプロパティ/アニメータ束	1301	1	Skew	スキュー	採用予定
+(家が未決)	B46	テキストプロパティ/アニメータ束	1304	1	Text	テキスト用ワークスペース	採用予定
+(家が未決)	B46	テキストプロパティ/アニメータ束	1307	1	Toggle paragraph composer	段落コンポーザ切替	採用予定
+(家が未決)	B46	テキストプロパティ/アニメータ束	1309	1	Turn All Caps on or off	すべて大文字切替	採用予定
+(家が未決)	B46	テキストプロパティ/アニメータ束	1311	1	Turn Subscript on or off	下付き文字切替	採用予定
+(家が未決)	B46	テキストプロパティ/アニメータ束	1312	1	Turn Superscript on or off	上付き文字切替	採用予定
+(家が未決)	B46	テキストプロパティ/アニメータ束	1313	1	Wiggly	ウィグリーセレクタ	採用予定
+(家が未決)	B32	ロック/可視性/リンク束	1325	1	Clear Mutes	ミュート解除	採用予定
+(家が未決)	B32	ロック/可視性/リンク束	1326	1	Clear Solo	ソロ解除	採用予定
+(家が未決)	B16	解析→自動キーフレーム束(新規発見)	1329	1	Detect Scene Cuts	シーンカット自動検出	採用予定
+(家が未決)	B32	ロック/可視性/リンク束	1331	1	Enable/Disable Video Tracks	映像トラック有効/無効	採用予定
+(家が未決)	B32	ロック/可視性/リンク束	1340	1	Lock/Unlock Video Track V1-V8(grouped, pattern)	Option+Shift+1..Option+Shift+8	採用予定
+(家が未決)	B40	ソース参照/マルチカム束	1344	1	Match Frame	マッチフレーム	採用予定
+(家が未決)	B32	ロック/可視性/リンク束	1345	1	Mute Tracks	トラックをミュート	採用予定
+(家が未決)	B32	ロック/可視性/リンク束	1355	1	Solo Tracks	トラックをソロ	採用予定
+(家が未決)	B40	ソース参照/マルチカム束	1356	1	Source/Timeline Viewer	ソース/タイムラインビューア切替	採用予定
+(家が未決)	B40	ソース参照/マルチカム束	1357	1	Source/Timeline Viewer	Q	採用予定
+(家が未決)	B40	ソース参照/マルチカム束	1359	1	Swap Timeline and Source Viewer	タイムライン/ソースビューア入替	採用予定
+(家が未決)	B40	ソース参照/マルチカム束	1360	1	Switch to Timeline After Edit	編集後にタイムラインへ切替	採用予定
+(家が未決)	B16	解析→自動キーフレーム束(新規発見)	1369	1	Track Motion	モーショントラッキング	採用予定
+(家が未決)	B29	ツール切替束	1370	1	Track Select Forward Tool	トラック順方向選択ツール	採用予定
+(家が未決)	B16	解析→自動キーフレーム束(新規発見)	1371	1	Track this Property	このプロパティをトラック	採用予定
+(家が未決)	B24	ズーム束(MA L4例示)	1373	1	Zoom Timeline to single-frame units	1フレーム単位までズーム	採用予定
+(家が未決)	B29	ツール切替束	1376	1	Activate and cycle Type tools	文字ツールを巡回	採用予定
+(家が未決)	B29	ツール切替束	1377	1	Activate Hand tool	手のひらツール	採用予定
+(家が未決)	B29	ツール切替束	1378	1	Activate Pan Behind tool	アンカーポイントツール	採用予定
+(家が未決)	B29	ツール切替束	1380	1	Activate Selection tool	選択ツール	採用予定
+(家が未決)	B46	テキストプロパティ/アニメータ束	1387	1	Bold	太字	採用予定
+(家が未決)	B29	ツール切替束	1389	1	Cycle through tools	ツールを巡回	採用予定
+(家が未決)	B10	プロジェクト整理束	1392	1	Find Missing Effects	見つからないエフェクトを検索	採用予定
+(家が未決)	B10	プロジェクト整理束	1393	1	Find Missing Footage	見つからない素材を検索	採用予定
+(家が未決)	B29	ツール切替束	1394	1	Hand Tool	ハンドツール	採用予定
+(家が未決)	B46	テキストプロパティ/アニメータ束	1395	1	Insert Copyright Symbol	著作権記号挿入	採用予定
+(家が未決)	B46	テキストプロパティ/アニメータ束	1396	1	Insert Registered Symbol	登録商標記号挿入	採用予定
+(家が未決)	B46	テキストプロパティ/アニメータ束	1397	1	Italic	斜体	採用予定
+(家が未決)	B29	ツール切替束	1418	1	Pointer(select tool)	A	採用予定
+(家が未決)	B29	ツール切替束	1420	1	Rate Stretch Tool	レートストレッチツール	採用予定
+(家が未決)	B10	プロジェクト整理束	1423	1	Remove Unused Footage	未使用素材を削除	採用予定
+(家が未決)	B29	ツール切替束	1425	1	Select Tool	選択ツール	採用予定
+(家が未決)	B29	ツール切替束	1426	1	Selection Tool	選択ツール	採用予定
+(家が未決)	B29	ツール切替束	1431	1	Temporarily activate Hand tool	一時的に手のひらツール	採用予定
+(家が未決)	B29	ツール切替束	1436	1	Type Tool	テキストツール	採用予定
+(家が未決)	B29	ツール切替束	1437	1	Type Tool	テキストツール	採用予定
+(家が未決)	B46	テキストプロパティ/アニメータ束	1438	1	Underline	下線	採用予定
+(家が未決)	B29	ツール切替束	1439	1	Vertical Type Tool	縦書きテキストツール	採用予定
+(家が未決)	B24	ズーム束(MA L4例示)	1443	1	Activate Zoom In tool	ズームインツール	採用予定
+(家が未決)	B24	ズーム束(MA L4例示)	1444	1	Activate Zoom Out tool	ズームアウトツール	採用予定
+(家が未決)	B24	ズーム束(MA L4例示)	1446	1	Cinema Viewer	Command+F	採用予定
+(家が未決)	B24	ズーム束(MA L4例示)	1449	1	Enhanced Viewer	Option+F	採用予定
+(家が未決)	B24	ズーム束(MA L4例示)	1453	1	Full Screen Viewer	Shift+F	採用予定
+(家が未決)	B24	ズーム束(MA L4例示)	1461	1	New Viewer	新規ビューアー	採用予定
+(家が未決)	B24	ズーム束(MA L4例示)	1480	1	Viewer Actual Size	Option+Shift+Z	採用予定
+(家が未決)	B24	ズーム束(MA L4例示)	1482	1	Window Outline	Shift+Command+C	採用予定
+(家が未決)	B24	ズーム束(MA L4例示)	1485	1	Zoom in in Composition, Layer, or Footage panel	各パネルでズームイン	採用予定
+(家が未決)	B24	ズーム束(MA L4例示)	1486	1	Zoom in time	時間軸をズームイン	採用予定
+(家が未決)	B24	ズーム束(MA L4例示)	1487	1	Zoom out in Composition, Layer, or Footage panel	各パネルでズームアウト	採用予定
+(家が未決)	B24	ズーム束(MA L4例示)	1488	1	Zoom out time	時間軸をズームアウト	採用予定
+(家が未決)	B24	ズーム束(MA L4例示)	1489	1	Zoom out Timeline to show entire composition	コンポ全体表示までズームアウト	採用予定
+(家が未決)	B24	ズーム束(MA L4例示)	1490	1	Zoom to 100%	100%表示	採用予定
+(家が未決)	B24	ズーム束(MA L4例示)	1491	1	Zoom to fit	フィット表示	採用予定
+(家が未決)	B24	ズーム束(MA L4例示)	1492	1	Zoom to Fit	Shift+Z	採用予定
+(家が未決)	B24	ズーム束(MA L4例示)	1493	1	Zoom Tool	ズームツール	採用予定
+(家が未決)	B26	ワークスペースレイアウト束	1494	1	Activate view in multi-view layout	マルチビューでビューを有効化	採用予定
+(家が未決)	B26	ワークスペースレイアウト束	1496	1	All Panels	全パネル表示ワークスペース	採用予定
+(家が未決)	B26	ワークスペースレイアウト束	1497	1	Animation	アニメーション用ワークスペース	採用予定
+(家が未決)	B26	ワークスペースレイアウト束	1498	1	Background Activity	バックグラウンド処理表示	採用予定
+(家が未決)	B04	字幕束	150	1	Add caption at playhead	プレイヘッド位置にキャプション追加	採用予定
+(家が未決)	B26	ワークスペースレイアウト束	1502	1	Cycle to previous or next item in active viewer	アクティブビューア内の前後項目を巡回	採用予定
+(家が未決)	B26	ワークスペースレイアウト束	1505	1	Delete Workspace…	ワークスペースを削除	採用予定
+(家が未決)	B26	ワークスペースレイアウト束	1506	1	Dual Screen	デュアルスクリーン	採用予定
+(家が未決)	B26	ワークスペースレイアウト束	1507	1	Effects	エフェクト用ワークスペース	採用予定
+(家が未決)	B26	ワークスペースレイアウト束	1508	1	Gallery	ギャラリー表示	採用予定
+(家が未決)	B26	ワークスペースレイアウト束	1509	1	Keyword Dictionary	キーワード辞書表示	採用予定
+(家が未決)	B04	字幕束	151	1	Add new caption track	キャプショントラック追加	採用予定
+(家が未決)	B26	ワークスペースレイアウト束	1510	1	Layout Presets	レイアウトプリセット	採用予定
+(家が未決)	B26	ワークスペースレイアウト束	1512	1	Media Pool Windows	Media Poolウィンドウ	採用予定
+(家が未決)	B26	ワークスペースレイアウト束	1513	1	Minimal	最小構成ワークスペース	採用予定
+(家が未決)	B16	解析→自動キーフレーム束(新規発見)	1515	1	Motion Tracking	モーショントラッキング用ワークスペース	採用予定
+(家が未決)	B26	ワークスペースレイアウト束	1516	1	Move application window to main monitor and resize	メインモニタへ移動しリサイズ	採用予定
+(家が未決)	B26	ワークスペースレイアウト束	1517	1	New Workspace…	新規ワークスペース	採用予定
+(家が未決)	B04	字幕束	152	1	Add new caption track (uncertain placement)	キャプショントラック追加(所属メニュー未確認、ショートカット表由来)	採用予定
+(家が未決)	B26	ワークスペースレイアウト束	1529	1	People	人物ビン表示	採用予定
+(家が未決)	B04	字幕束	153	1	Auto Caption	自動字幕	採用予定
+(家が未決)	B26	ワークスペースレイアウト束	1530	1	Primary Display	プライマリディスプレイ	採用予定
+(家が未決)	B26	ワークスペースレイアウト束	1533	1	Remote Rendering	リモートレンダリング	採用予定
+(家が未決)	B26	ワークスペースレイアウト束	1534	1	Reset UI Layout	UIレイアウトをリセット	採用予定
+(家が未決)	B26	ワークスペースレイアウト束	1535	1	Resize application window to fit screen	アプリウィンドウを画面に合わせてリサイズ	採用予定
+(家が未決)	B16	解析→自動キーフレーム束(新規発見)	1536	1	Scene Cut Detector	シーンカット検出表示	採用予定
+(家が未決)	B26	ワークスペースレイアウト束	1538	1	Show Page	ページ表示	採用予定
+(家が未決)	B26	ワークスペースレイアウト束	1539	1	Show Page Navigation	ページナビゲーション表示	採用予定
+(家が未決)	B04	字幕束	154	1	Auto captions	自動字幕生成	採用予定
+(家が未決)	B26	ワークスペースレイアウト束	1541	1	Single Viewer Mode	シングルビューアモード	採用予定
+(家が未決)	B26	ワークスペースレイアウト束	1542	1	Split frame and create viewer with opposite locked/unlocked state	フレーム分割し反対ロック状態のビューアを作成	採用予定
+(家が未決)	B26	ワークスペースレイアウト束	1543	1	Standard	標準ワークスペース	採用予定
+(家が未決)	B26	ワークスペースレイアウト束	1544	1	Switch to Page	ページ切替	採用予定
+(家が未決)	B26	ワークスペースレイアウト束	1545	1	Switch to workspace	ワークスペース切替	採用予定
+(家が未決)	B26	ワークスペースレイアウト束	1546	1	Timecode Window	タイムコードウィンドウ	採用予定
+(家が未決)	B26	ワークスペースレイアウト束	1547	1	Toggle between Composition and Timeline panels	Composition/Timelineパネル切替	採用予定
+(家が未決)	B26	ワークスペースレイアウト束	1548	1	Undocked Panels	パネル切り離しワークスペース	採用予定
+(家が未決)	B04	字幕束	155	1	Create Subtitles from Audio	音声から字幕生成	採用予定
+(家が未決)	B26	ワークスペースレイアウト束	1550	1	Viewer Mode	ビューアモード	採用予定
+(家が未決)	B26	ワークスペースレイアウト束	1551	1	Workflow Integrations	ワークフロー連携	採用予定
+(家が未決)	B04	字幕束	156	1	Go to next caption segment	次のキャプション区間へ	採用予定
+(家が未決)	B04	字幕束	157	1	Go to next caption segment (uncertain placement)	次のキャプション区間へ(所属メニュー未確認)	採用予定
+(家が未決)	B04	字幕束	158	1	Go to previous caption segment	前のキャプション区間へ	採用予定
+(家が未決)	B04	字幕束	159	1	Keyword Highlight	字幕キーワード強調	採用予定
+(家が未決)	B04	字幕束	160	1	Show Subtitle Regions	字幕領域表示	採用予定
+(家が未決)	B04	字幕束	161	1	Subtitles	字幕をインポート	採用予定
+(家が未決)	B04	字幕束	162	1	Subtitles	字幕をエクスポート	採用予定
+(家が未決)	B38	トランジション/エフェクト適用束	174	1	Add Transition (generic, any track)	トラック種別を問わずトランジションを追加	採用予定
+(家が未決)	B36	新規コンテンツ作成束	175	1	Adjustment Layer	新規調整レイヤー	採用予定
+(家が未決)	B36	新規コンテンツ作成束	176	1	Adjustment Layer	調整レイヤー切替	採用予定
+(家が未決)	B38	トランジション/エフェクト適用束	177	1	Apply Default Transitions to Selection (bulk)	選択範囲に既定トランジションを一括適用	採用予定
+(家が未決)	B32	ロック/可視性/リンク束	187	1	Clip Link	Option+Command+L	採用予定
+(家が未決)	B40	ソース参照/マルチカム束	188	1	Conform Lock Enabled	コンフォームロック有効	採用予定
+(家が未決)	B40	ソース参照/マルチカム束	189	1	Conform Lock with Media Pool Clip	Media Poolクリップとロック	採用予定
+(家が未決)	B38	トランジション/エフェクト適用束	190	1	Crossfade Selection	選択部にクロスフェード	採用予定
+(家が未決)	B38	トランジション/エフェクト適用束	211	1	Fade In to Playhead	プレイヘッドまでフェードイン	採用予定
+(家が未決)	B38	トランジション/エフェクト適用束	212	1	Fade Out to Playhead	プレイヘッドからフェードアウト	採用予定
+(家が未決)	B40	ソース参照/マルチカム束	214	1	Finalize Take	テイク確定	採用予定
+(家が未決)	B40	ソース参照/マルチカム束	215	1	Find Clip in Media Pool	Media Poolでクリップを探す	採用予定
+(家が未決)	B32	ロック/可視性/リンク束	219	1	Hide Other Video	他のビデオを隠す	採用予定
+(家が未決)	B32	ロック/可視性/リンク束	229	1	Link / Unlink (clip A/V sync)	クリップの映像/音声リンクを切替	採用予定
+(家が未決)	B42	音声内容整形束	23	1	Batch Fade Settings	バッチフェード設定	採用予定
+(家が未決)	B32	ロック/可視性/リンク束	230	1	Link Clips	クリップをリンク	採用予定
+(家が未決)	B40	ソース参照/マルチカム束	232	1	Match Frame	ソースクリップをSource Monitorへ読み込み	採用予定
+(家が未決)	B40	ソース参照/マルチカム束	233	1	Match Frame	F	採用予定
+(家が未決)	B40	ソース参照/マルチカム束	234	1	Match Frame to Source Clip	ソースクリップへマッチフレーム	採用予定
+(家が未決)	B27	ペイント束(MA L9継ぎ目候補)	235	1	Move earlier or later by stroke duration	ストローク長単位で前後移動	採用予定
+(家が未決)	B36	新規コンテンツ作成束	243	1	New > Adjustment Layer	調整レイヤーを新規作成	採用予定
+(家が未決)	B36	新規コンテンツ作成束	244	1	New adjustment layer	新規調整レイヤー	採用予定
+(家が未決)	B40	ソース参照/マルチカム束	262	1	Publish Changes for Selected Clips	Shift+Command+T	採用予定
+(家が未決)	B42	音声内容整形束	27	1	Clip Volume Down	クリップ音量ダウン	採用予定
+(家が未決)	B40	ソース参照/マルチカム束	274	1	Reverse Match Frame	タイムライン側の一致フレームを探索	採用予定
+(家が未決)	B42	音声内容整形束	28	1	Clip Volume Up	クリップ音量アップ	採用予定
+(家が未決)	B32	ロック/可視性/リンク束	298	1	Show All Video	全ビデオを表示	採用予定
+(家が未決)	B40	ソース参照/マルチカム束	299	1	Show Current Clip With Handles	ハンドル付きで現在クリップ表示	採用予定
+(家が未決)	B42	音声内容整形束	3	1	Apply Batch Fades	バッチフェード適用	採用予定
+(家が未決)	B26	ワークスペースレイアウト束	301	1	Show Next Screen	次画面表示	採用予定
+(家が未決)	B26	ワークスペースレイアウト束	303	1	Show Previous Screen	前画面表示	採用予定
+(家が未決)	B32	ロック/可視性/リンク束	304	1	Shy	シャイ切替	採用予定
+(家が未決)	B40	ソース参照/マルチカム束	315	1	Source Clip/Source Tape	ソースクリップ/テープ切替	採用予定
+(家が未決)	B40	ソース参照/マルチカム束	320	1	Synchronize > Clip End	クリップ末尾で同期	採用予定
+(家が未決)	B40	ソース参照/マルチカム束	321	1	Synchronize > Clip Start	クリップ先頭で同期	採用予定
+(家が未決)	B40	ソース参照/マルチカム束	322	1	Synchronize > Timecode	タイムコードで同期	採用予定
+(家が未決)	B40	ソース参照/マルチカム束	323	1	Take Selector	テイクセレクタ	採用予定
+(家が未決)	B32	ロック/可視性/リンク束	325	1	Toggle V+A/V/A	映像+音声/映像/音声切替	採用予定
+(家が未決)	B32	ロック/可視性/リンク束	338	1	Turn off all other solo switches	他の全ソロを解除	採用予定
+(家が未決)	B32	ロック/可視性/リンク束	40	1	Lock/Unlock All Audio Tracks	Option+Shift+F9	採用予定
+(家が未決)	B32	ロック/可視性/リンク束	41	1	Lock/Unlock Audio Track A1-A8(grouped, pattern)	Option+Shift+F1..Option+Shift+F8	採用予定
+(家が未決)	B42	音声内容整形束	42	1	Loudness normalisation	音量正規化	採用予定
+(家が未決)	B42	音声内容整形束	47	1	Music	音楽ライブラリから追加	採用予定
+(家が未決)	B16	解析→自動キーフレーム束(新規発見)	494	1	Keyframe Animation and Motion Tracking	キーフレームアニメ/モーショントラッキング	採用予定
+(家が未決)	B10	プロジェクト整理束	525	1	Bin	ビンをエクスポート	採用予定
+(家が未決)	B10	プロジェクト整理束	526	1	Collect Files…	依存ファイルを収集	採用予定
+(家が未決)	B10	プロジェクト整理束	527	1	Consolidate All Footage	重複素材を統合	採用予定
+(家が未決)	B10	プロジェクト整理束	537	1	Media Management	メディアマネジメントウィンドウを開く	採用予定
+(家が未決)	B10	プロジェクト整理束	539	1	Reduce Project	プロジェクトを選択コンポのみに縮小	採用予定
+(家が未決)	B42	音声内容整形束	59	1	Show Clip Gain Line	クリップゲインライン表示	採用予定
+(家が未決)	B42	音声内容整形束	63	1	Sound effects	効果音追加	採用予定
+(家が未決)	B29	ツール切替束	643	1	Activate Rotation tool	回転ツール	採用予定
+(家が未決)	B36	新規コンテンツ作成束	645	1	Add selected items to most recently activated composition	直近コンポへ選択項目を追加	採用予定
+(家が未決)	B40	ソース参照/マルチカム束	65	1	Synchronize > Audio Channels	音声チャンネルで同期	採用予定
+(家が未決)	B36	新規コンテンツ作成束	654	1	Center composition in panel	パネル内でコンポを中央に	採用予定
+(家が未決)	B36	新規コンテンツ作成束	656	1	Composition Flowchart	コンポジションのフローチャート表示	採用予定
+(家が未決)	B36	新規コンテンツ作成束	657	1	Composition Mini-Flowchart	ミニフローチャート表示	採用予定
+(家が未決)	B36	新規コンテンツ作成束	658	1	Composition Settings…	コンポジション設定	採用予定
+(家が未決)	B36	新規コンテンツ作成束	659	1	Crop Comp to Region of Interest	関心領域にコンポをクロップ	採用予定
+(家が未決)	B36	新規コンテンツ作成束	664	1	Fit to Comp	コンポにフィット	採用予定
+(家が未決)	B36	新規コンテンツ作成束	665	1	Fit to Comp Height	コンポ高さにフィット	採用予定
+(家が未決)	B36	新規コンテンツ作成束	666	1	Fit to Comp Width	コンポ幅にフィット	採用予定
+(家が未決)	B36	新規コンテンツ作成束	672	1	Import After Effects Composition	既存AEコンポジションをDynamic Linkで読み込み	採用予定
+(家が未決)	B36	新規コンテンツ作成束	683	1	New > After Effects Composition	AEコンポジションを新規作成しDynamic Linkで接続	採用予定
+(家が未決)	B36	新規コンテンツ作成束	684	1	New Composition…	新規コンポジション	採用予定
+(家が未決)	B42	音声内容整形束	70	1	Vocal isolation	ボーカル分離	採用予定
+(家が未決)	B29	ツール切替束	703	1	Rotation Tool	回転ツール	採用予定
+(家が未決)	B36	新規コンテンツ作成束	713	1	Set Poster Time	ポスターフレーム時刻を設定	採用予定
+(家が未決)	B36	新規コンテンツ作成束	716	1	Upscale	AI高解像度化	採用予定
+(家が未決)	B42	音声内容整形束	72	1	Voice filters	ボイスフィルター適用	採用予定
+(家が未決)	B42	音声内容整形束	73	1	Voiceover	ナレーション録音	採用予定
+(家が未決)	B24	ズーム束(MA L4例示)	74	1	Zoom Audio Waveform	音声波形ズーム	採用予定
+(家が未決)	B16	解析→自動キーフレーム束(新規発見)	797	1	Track Mask	マスクトラッキング	採用予定
+(家が未決)	B38	トランジション/エフェクト適用束	810	1	Apply Default Transition	既定トランジション適用	採用予定
+(家が未決)	B32	ロック/可視性/リンク束	820	1	Close	現在のビューを閉じる	採用予定
+(家が未決)	B32	ロック/可視性/リンク束	821	1	Close	現在のドキュメントを閉じる	採用予定
+(家が未決)	B32	ロック/可視性/リンク束	854	1	Hide After Effects	アプリを隠す(macOS)	採用予定
+(家が未決)	B32	ロック/可視性/リンク束	855	1	Hide DaVinci Resolve	Command+H	採用予定
+(家が未決)	B32	ロック/可視性/リンク束	856	1	Hide Others	他アプリを隠す(macOS)	採用予定
+(家が未決)	B32	ロック/可視性/リンク束	857	1	Hide Others	Option+Command+H	採用予定
+(家が未決)	B10	プロジェクト整理束	863	1	Increment and Save	バージョン番号を上げて保存	採用予定
+(家が未決)	B27	ペイント束(MA L9継ぎ目候補)	868	1	Join current stroke to previous	現在のストロークを前と結合	採用予定
+(家が未決)	B38	トランジション/エフェクト適用束	869	1	Last Effect	直前のエフェクトを再適用	採用予定
+(家が未決)	B32	ロック/可視性/リンク束	875	1	Lock/Unlock All Video Tracks	Option+Shift+9	採用予定
+(家が未決)	B10	プロジェクト整理束	894	1	New Bin	新規ビン作成	採用予定
+(家が未決)	B10	プロジェクト整理束	895	1	New Bin	Shift+Command+N	採用予定
+(家が未決)	B36	新規コンテンツ作成束	896	1	New Comp from Selection…	選択素材から新規コンポ作成	採用予定
+(家が未決)	B10	プロジェクト整理束	897	1	New Folder	新規フォルダ	採用予定
+(家が未決)	B10	プロジェクト整理束	899	1	New Smart Bin	新規スマートビン作成	採用予定
+(家が未決)	B10	プロジェクト整理束	914	1	Project Notes	プロジェクトノートエディタを開く	採用予定
+(家が未決)	B40	ソース参照/マルチカム束	917	1	Publish All Changes	Option+Shift+T	採用予定
+(家が未決)	B38	トランジション/エフェクト適用束	927	1	Remove Attributes	属性の削除	採用予定
+(家が未決)	B10	プロジェクト整理束	928	1	Remove Unused	未使用アセットをプロジェクトから削除	採用予定
+(家が未決)	B13	キャッシュ/メモリ管理束(継ぎ目)	931	1	Reset preview settings	プレビュー設定をリセット	採用予定
+(家が未決)	B10	プロジェクト整理束	939	1	Scenes / Media	素材/メディア選択タブ	採用予定
+(家が未決)	B36	新規コンテンツ作成束	943	1	Select Aspect Ratio	アスペクト比選択	採用予定
+(家が未決)	B27	ペイント束(MA L9継ぎ目候補)	947	1	Set flow to 100%	フローを100%に	採用予定
+(家が未決)	B32	ロック/可視性/リンク束	953	1	Show All	全アプリ表示(macOS)	採用予定
+(家が未決)	B32	ロック/可視性/リンク束	967	1	Toggle V+A/V/A	Option+U	採用予定
+(家が未決)	B38	トランジション/エフェクト適用束	968	1	Transition	トランジション挿入	採用予定
+(家が未決)	B32	ロック/可視性/リンク束	970	1	Unlock All Layers	全レイヤーのロック解除	採用予定
+(家が未決)	B32	ロック/可視性/リンク束	971	1	Unlock all layers	全レイヤーのロック解除	採用予定
+(家が未決)	B38	トランジション/エフェクト適用束	973	1	Video effects	映像エフェクト追加	採用予定
+(家が未決)	B16	解析→自動キーフレーム束(新規発見)	974	1	Warp Stabilizer VFX	ワープスタビライザーVFX	採用予定
+(家が未決)	B24	ズーム束(MA L4例示)	975	1	Zoom	ズームサブメニュー	採用予定
+(家が未決)	B24	ズーム束(MA L4例示)	976	1	Zoom Around Mouse Pointer	マウス位置中心ズーム	採用予定
+(家が未決)	B24	ズーム束(MA L4例示)	977	1	Zoom up to 100% to fit	100%上限でフィット表示	採用予定
