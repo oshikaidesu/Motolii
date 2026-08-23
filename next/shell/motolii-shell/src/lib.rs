@@ -816,6 +816,14 @@ pub struct Shell {
     /// 直近の Shift 押下状態。`CursorMoved` は modifiers を運ばないので
     /// `ModifiersChanged` から別途追う(drag の1/10微調整に使う)。
     keyboard_modifiers: iced::keyboard::Modifiers,
+    /// Timeline rail の layer 行クリックの Shift 範囲選択の基点(E-2、軸台帳
+    /// A08「Timeline clip move/trim」隣接の穴)。`Session::key_anchor`
+    /// (`selected_keys` 側の同役)と同じ役だが、`selection.rs`(C-2 の家、
+    /// `set_selected_layers` 以外は書き換え不可)を侵さないため、`Session`
+    /// ではなくここ(`Shell` 自身、UI transient の置き場 — `keyboard_modifiers`
+    /// と同格)に置く。単独/Cmd クリックで直近クリックへ更新、Shift 範囲では
+    /// 不変(`timeline_pane::rows::resolve_layer_selection` の doc どおり)。
+    layer_selection_anchor: Option<LayerId>,
     /// Timeline pane 専用の transient 状態(クリップ move/trim・キー時刻
     /// ドラッグ/リタイム、進行中の一時状態)。**Document ではない**
     /// (`inspector_drag` と同じ「pane 側の transient」の形)。裁定160 切片7で
@@ -1034,6 +1042,7 @@ impl Shell {
                 inspector_drag: None,
                 inspector_text_style_drag: None,
                 keyboard_modifiers: iced::keyboard::Modifiers::default(),
+                layer_selection_anchor: None,
                 timeline: timeline_pane::PaneState::new(),
                 browser: browser_pane::PaneState::new(),
                 panes: pane_layout::Layout::new(),
@@ -1160,6 +1169,7 @@ impl Shell {
             inspector_drag: None,
             inspector_text_style_drag: None,
             keyboard_modifiers: iced::keyboard::Modifiers::default(),
+            layer_selection_anchor: None,
             timeline: timeline_pane::PaneState::new(),
             browser: browser_pane::PaneState::new(),
             panes: pane_layout::Layout::new(),
@@ -1289,6 +1299,40 @@ impl Shell {
         iced::Subscription::batch([window, tokens, pointer, ticks, auto_save, closes, close_requests])
     }
 
+    /// Timeline rail の layer 行クリック(E-2、軸台帳 A08 隣接の穴)。
+    /// **裸クリック=単独選択・Cmd=トグル(足し引き)・Shift=範囲**
+    /// (`timeline_pane::rows::LayerSelectionOp` の3形そのまま)。解決自体は
+    /// [`timeline_pane::rows::resolve_layer_selection`](純関数、`Session` を
+    /// 書き換えない)へ委譲し、確定は必ず [`Self::set_selected_layers`]
+    /// (C-2 の唯一の書き手)を経由する — この関数の外で `session.selection`/
+    /// `selected_layers` を直接書き換えない。
+    ///
+    /// `order`(範囲の基準)は今 rail に見えている行(`timeline_pane::rows`、
+    /// 畳まれて非表示の行は対象外 — `key_order` と同じ「見えているものだけ」
+    /// の姿勢、`resolve_layer_selection` doc 参照)。`anchor` は `Session` では
+    /// なく `Shell::layer_selection_anchor`(このレーンの write-set は
+    /// `lib.rs`/`input.rs`/`timeline-pane::write.rs` のみ — `selection.rs` は
+    /// `set_selected_layers` を呼ぶだけで書き換えないため、anchor はここに置く)。
+    fn click_select_layer(&mut self, layer: LayerId) {
+        let order: Vec<LayerId> =
+            timeline_pane::rows(&self.doc.view(), &self.session).into_iter().map(|row| row.id).collect();
+        let op = if self.keyboard_modifiers.command() {
+            timeline_pane::rows::LayerSelectionOp::Toggle(layer)
+        } else if self.keyboard_modifiers.shift() {
+            timeline_pane::rows::LayerSelectionOp::Range(layer)
+        } else {
+            timeline_pane::rows::LayerSelectionOp::Single(layer)
+        };
+        let (selected, anchor) = timeline_pane::rows::resolve_layer_selection(
+            &order,
+            self.layer_selection_anchor,
+            &self.session.selected_layers,
+            op,
+        );
+        self.layer_selection_anchor = anchor;
+        self.set_selected_layers(selected);
+    }
+
     /// **唯一の書き口**。ここ以外に `doc.apply` を呼ぶ場所を作らない。
     pub fn update(&mut self, message: Message) -> Task<Message> {
         self.status = None;
@@ -1357,7 +1401,7 @@ impl Shell {
             // doc 参照)。残りは pane 側の唯一の書き口(`PaneState::update`)へ
             // 委譲する — 拒否理由があれば `self.status` へそのまま渡す。
             Message::Timeline(msg) => match msg {
-                timeline_pane::Message::Select(layer) => self.select_single(layer),
+                timeline_pane::Message::Select(layer) => self.click_select_layer(layer),
                 timeline_pane::Message::ScrubTo(frame) => self.scrub_to(frame),
                 timeline_pane::Message::ToggleMute(layer) => self.toggle_layer_hidden(layer),
                 timeline_pane::Message::ToggleSolo(layer) => self.toggle_layer_solo(layer),
