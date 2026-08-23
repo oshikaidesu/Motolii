@@ -42,7 +42,7 @@ mod slot;
 mod text;
 mod view;
 
-pub use asset::{Asset, AssetDraft, AssetError, AssetId, AssetTable};
+pub use asset::{Asset, AssetDraft, AssetError, AssetId, AssetStatus, AssetTable};
 pub use attrs::{BlendMode, LayerAttrs, LayerAttrsPatch, Matte, MatteMode};
 pub use document::{DisplayRevision, Document, Intent, LayerId, PropertyId, Revision};
 pub use effect::{EffectId, EffectInstance, ResolvedEffect};

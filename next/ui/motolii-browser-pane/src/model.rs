@@ -1593,6 +1593,9 @@ mod tests {
             content_hash: "sha256:abc".to_owned(),
             path_absolute: path_absolute.map(str::to_owned),
             path_project_relative: path_project_relative.map(str::to_owned),
+            // 2026-08-23 A-3: 「今そこに在るか」は環境の事実で保存されない
+            // (`#[serde(skip)]`)。試験の固定値は「未確認」が正しい既定。
+            status: motolii_store::AssetStatus::Unchecked,
             file_name: None,
             size_bytes: None,
             head_hash: None,
