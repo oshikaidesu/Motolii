@@ -723,7 +723,25 @@ pub(crate) fn mute_glyph(dims: Dimensions, colors: Colors, hidden: bool) -> Elem
 /// (S4 — 新ロール禁止。「状態の瞬間」の filled=accent は正当)。セル全域が的
 /// (S1 — button が `inspector_glyph_width × glyph_height` の箱ごと押せる)。
 pub(crate) fn key_glyph(key: KeyCellProjection, dims: Dimensions, colors: Colors) -> Element<'static, Message> {
-    let (glyph, text_color, base_alpha): (&str, iced::Color, f32) = match key.state {
+    key_glyph_for_state(key.state, Message::KeyPressed(key.row), dims, colors)
+}
+
+/// [`key_glyph`] の視覚だけを取り出した形(2026-08-23、E-3)。`Message` は
+/// 呼び手が渡す ── Transform 行の `KeyRow`(`Message::KeyPressed`)と TEXT
+/// section の `TextStyleField`(`Message::TextStyleKeyPressed`、`text.rs::
+/// text_style_key_button`)は別の閉じた enum で、同じ `Message::KeyPressed`
+/// の腕には乗せられない(`KeyRow` を拡張すると write-set 外の shell 側
+/// 分岐まで触る必要が出る、`projection.rs::TextSectionProjection` doc
+/// 参照)——だが**見た目**(glyph/色/面のアルファ)は3状態 oracle
+/// ([`KeyCellState`])が共通の正本なので、ここだけ共有する(新しい部品を
+/// 作らない、発注書の勘所)。
+pub(crate) fn key_glyph_for_state(
+    state: KeyCellState,
+    on_press: Message,
+    dims: Dimensions,
+    colors: Colors,
+) -> Element<'static, Message> {
+    let (glyph, text_color, base_alpha): (&str, iced::Color, f32) = match state {
         KeyCellState::Static => ("◇", colors.text_muted, 0.0),
         KeyCellState::Between => ("◆", colors.action_active, 0.12),
         KeyCellState::AtKey => ("◆", colors.action_active, 0.20),
@@ -737,7 +755,7 @@ pub(crate) fn key_glyph(key: KeyCellProjection, dims: Dimensions, colors: Colors
     .width(Length::Fixed(dims.inspector_glyph_width))
     .height(Length::Fixed(glyph_height(dims)))
     .padding(0.0)
-    .on_press(Message::KeyPressed(key.row))
+    .on_press(on_press)
     .style(move |_theme, status| {
         // mock の CSS 後勝ちどおり: hover の面(12%)は Static でだけ見える
         // (animated/current は自分の面が勝つ)= `max` で写す。

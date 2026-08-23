@@ -37,7 +37,7 @@ use motolii_store::{
 use crate::attrs::speed_percent;
 use crate::effects::{plugin_display_name, plugin_params};
 use crate::link::{LinkRowProjection, LinkSourceCandidate, LinkTarget};
-use crate::text::{default_text_document, default_text_style, text_document_content};
+use crate::text::{default_text_document, default_text_style, text_document_content, TextStyleField};
 use crate::transform::{
     field_decimals, has_real_keys, key_cell_state, key_row_property_id, KeyCellState, KeyRow,
     TransformField,
@@ -322,9 +322,24 @@ pub struct AudioSectionProjection {
 }
 
 /// TEXT section の投影(裁定98: `styles[0]` = document 既定行のみを対象 —
-/// 範囲スタイル表・アニメーターは次切片)。Key 列は無い — 対象フィールドは
-/// どれも `KeyframeTrack` に乗らない静止値(裁定92)なので、Position/Scale 等
-/// の3状態 oracle は適用対象外。
+/// 範囲スタイル表・アニメーターは次切片)。
+///
+/// **Key 列(2026-08-23、E-3)**: `Content`/`FontFamily`/`Justify` は
+/// `KeyframeTrack` に乗らない静止値(裁定92)のまま Key 列を持たない ──
+/// これは変わらない。だが `Size`/`LineHeight`/`Tracking` は D-1(2026-08-23)で
+/// `text_style_*` track の書き口([`crate::text::commit_text_style_track_field`]/
+/// [`crate::text::toggle_text_style_key`])が結線済みで、track が実在する
+/// フィールドなので Position/Scale と**同じ3状態 oracle**
+/// ([`key_cell_state`])がそのまま適用できる。`size`/`line_height`/`tracking`
+/// 3フィールドぶんの [`KeyCellState`] を [`size_key`](field)/[`line_height_key`]
+/// (field)/[`tracking_key`](field) として持つ ── `KeyCellProjection` の
+/// `row: KeyRow` は Transform 行専用の閉じた enum で `TextStyleField` を運べない
+/// ため(`KeyRow` を拡張して `Message::KeyPressed` 経路に乗せると shell 側の
+/// 分岐 [`inspector_ops.rs`、write-set 外]まで触る必要が出る)、ここでは
+/// `KeyCellState` を生で持ち、view 側([`crate::text::text_style_key_button`])が
+/// `Message::TextStyleKeyPressed` を直接発火する別腕にした ── 見た目
+/// ([`crate::chrome::key_glyph_for_state`])だけを [`crate::chrome::key_glyph`]
+/// と共有する(RETURN 参照)。
 #[derive(Clone, Debug, PartialEq)]
 pub struct TextSectionProjection {
     /// `text-document t`(Text、本文)。**Hold 評価済みの現在値**
@@ -335,14 +350,29 @@ pub struct TextSectionProjection {
     pub content: String,
     /// `text-document f`(Font Family)。
     pub font_family: String,
-    /// `text-document s`(Font Size)。
+    /// `text-document s`(Font Size)。**2026-08-23 訂正**: 静的値ではなく
+    /// [`StoreView::resolved_text_document`] 経由 ── track があればその
+    /// `value_at` 評価値(drag 中の `set_transient` overlay も含む、
+    /// `StoreView::value_at` が `transient_value_at` を最優先で読むため)、
+    /// 無ければ静的値。旧実装は `store.text_document`(静的値のみ)を直接
+    /// 読んでいたため、drag 中の transient 値がこの表示に反映されなかった
+    /// (`text.rs::size_row` の旧 doc「既知の穴」── 今回この投影の読み替えで
+    /// 埋めた)。
     pub size: f32,
-    /// `text-document lh`(Line Height)。`None` = Auto。
+    /// `text-document lh`(Line Height)。`None` = Auto。[`size`](field)と同じ
+    /// `resolved_text_document` 経由。
     pub line_height: Option<f32>,
-    /// `text-document tr`(Tracking)。
+    /// `text-document tr`(Tracking)。[`size`](field)と同じ
+    /// `resolved_text_document` 経由。
     pub tracking: f32,
     /// `text-document j`(Justify)。
     pub justify: TextJustify,
+    /// `Size` 行の Key 列3状態(◇/◆薄/◆濃)。[`key_cell_state`] そのまま。
+    pub size_key: KeyCellState,
+    /// `Line Height` 行の Key 列3状態。
+    pub line_height_key: KeyCellState,
+    /// `Tracking` 行の Key 列3状態。
+    pub tracking_key: KeyCellState,
     /// スタイル表の既定行そのもの(裁定98、`styles[0]`)。2026-08-22 発注で
     /// 色エディタ([`crate::color::color_row`])へ渡すために追加 —
     /// `fill`/`stroke_color` は個別フィールドへ分解せず、`color_row` が
@@ -350,7 +380,11 @@ pub struct TextSectionProjection {
     /// 二重管理しない)。上の `font_family`/`size`/`line_height`/`tracking` は
     /// 既存 UI 呼び出し口(`text_field_row` 等)の互換のため残す — 同じ値の
     /// 冗長な保持だが、意味は完全に一致する(この `style` が正本、上4フィールドは
-    /// そこからの複写)。
+    /// そこからの複写)。**`style` 自体も `resolved_text_document` 経由**
+    /// (`color_row` へ渡す `fill`/`stroke_color` も track があればその評価値を
+    /// 見るようになる副次効果はあるが、`color.rs` は drag/transient を持たない
+    /// ── この訂正が直すのは `size`/`line_height`/`tracking` の drag 反映のみ、
+    /// RETURN 参照)。
     pub style: TextDocumentStyle,
 }
 
@@ -698,12 +732,27 @@ pub fn project(
     // `default_vec2` と同じ形)。
     let text = match meta.as_ref().map(|meta| &meta.source) {
         Some(LayerSource::Text) => {
-            let document = store.text_document(layer)?.unwrap_or_else(default_text_document);
+            // `resolved_text_document`(2026-08-23 訂正、struct doc 参照): 静的値の
+            // 上に `text_style_*` track の評価値(drag 中の transient overlay を
+            // 含む)を重ねる。`text_document` だけの旧実装は track/transient を
+            // 一切見なかった。
+            let document = store
+                .resolved_text_document(layer, t)?
+                .unwrap_or_else(default_text_document);
             let style = document
                 .styles
                 .first()
                 .cloned()
                 .unwrap_or_else(default_text_style);
+            let style_id = style.id;
+            // Key 列3状態(K1 と同じ oracle) — track の有無・打点は静的値ではなく
+            // 生の track を見る(`key_cell_state` は `store.track` 経由、transient
+            // overlay は関係ない = 打点の有無を drag 中に誤って変えない)。
+            let text_style_key = |field: TextStyleField| -> Result<KeyCellState, StoreError> {
+                let property = field.property_id(style_id);
+                let track = store.track(layer, &property)?;
+                Ok(key_cell_state(track.as_ref(), session.playhead, composition.fps))
+            };
             Some(TextSectionProjection {
                 content: text_document_content(&document),
                 font_family: style.font.family.clone(),
@@ -711,6 +760,9 @@ pub fn project(
                 line_height: style.line_height,
                 tracking: style.tracking,
                 justify: document.justify,
+                size_key: text_style_key(TextStyleField::Size)?,
+                line_height_key: text_style_key(TextStyleField::LineHeight)?,
+                tracking_key: text_style_key(TextStyleField::Tracking)?,
                 style,
             })
         }

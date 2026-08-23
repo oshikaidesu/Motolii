@@ -1,12 +1,11 @@
 //! B46 第1切片(裁定184): Inspector TEXT section — テキストレイヤー選択時
 //! **のみ** section が現れ、Font/Size/Line Height/Tracking/Justify が
 //! `Intent::SetTextDocument`(丸ごと差し替え、`SetMasks` と同じ形)経由で
-//! 書けること。`TextDocumentStyle`/`TextDocument::justify` は裁定92により
-//! `KeyframeTrack` に乗らない(v1)ので Key 列は対象外 — MASK section の
-//! opacity 行のような3状態 oracle のテストは無い。
-//!
-//! 落ちるテスト先行(発注の型)。**このファイルは `cargo check --tests` の
-//! 対象であって `cargo test` では実行しない**(発注の規律どおり)。
+//! 書けること。`TextDocument::justify` は裁定92により `KeyframeTrack` に
+//! 乗らない(v1)ので Key 列は対象外のまま。**`Size`/`LineHeight`/`Tracking`
+//! は D-1(track 書き口)+ E-3(2026-08-23、見た目の3状態結線)で
+//! Position/Scale と同じ Key oracle が乗る** — 下の
+//! `size_key_state_differs_once_a_keyframe_is_placed` がその検収点。
 //!
 //! view の存在照合は `mask_section.rs` と同じ iced_test 手口
 //! (`Target::Text` 列挙)。
@@ -16,12 +15,13 @@ use iced_test::selector::{Candidate, Target};
 use motolii_core::Fps;
 use motolii_inspector_pane::{
     commit_text_field, commit_text_font_pick, cycle_text_justify, project, reset_text_line_height,
-    reset_text_tracking, view, Message, TextField, TextFieldDraft,
+    reset_text_tracking, toggle_text_style_key, view, KeyCellState, Message, TextField,
+    TextFieldDraft, TextStyleField,
 };
 use motolii_shell_state::Session;
 use motolii_store::{
     Composition, Document, Intent, LayerId, LayerMeta, LayerSource, LayerTiming, TextDocument,
-    TextJustify,
+    TextJustify, TextStyleId,
 };
 use motolii_tokens_rs::{Colors, Dimensions};
 
@@ -528,5 +528,102 @@ fn text_section_rows_reuse_the_existing_row_geometry_contract() {
     assert_eq!(
         style.border.color.a, 0.0,
         "TEXT section が依拠する行 border が透明でない(D5 違反)"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// E-3(2026-08-23): Key 列の見た目結線 — 投影の値で示す(`iced_test::
+// Simulator` は canvas を構造的に見られないため、widget を作る前の投影の層で
+// 押さえる、発注書の指示どおり)。
+// ---------------------------------------------------------------------------
+
+/// **検収点**: `Size` の track に打点があると、投影の Key 状態
+/// (`TextSectionProjection::size_key`)が未打点(`Static`)と異なる。
+/// [`toggle_text_style_key`](本物の書き口、click の意味そのもの)で
+/// playhead=0 へ打点し、打点前後で投影を撮り直して比較する。
+#[test]
+fn size_key_state_differs_once_a_keyframe_is_placed() {
+    let (mut doc, layer) = text_layer();
+    let session = session_selecting(layer);
+    let fps = fps30();
+
+    let before = project(&doc.view(), &session)
+        .expect("投影は組めるはず")
+        .expect("選択ありなので Some のはず")
+        .text
+        .expect("text layer なので TEXT 投影は Some のはず")
+        .size_key;
+    assert_eq!(
+        before,
+        KeyCellState::Static,
+        "track を置く前は Static(未打点)のはず"
+    );
+
+    toggle_text_style_key(
+        &mut doc,
+        Some(layer),
+        session.playhead,
+        fps,
+        TextStyleId(0),
+        TextStyleField::Size,
+    )
+    .expect("Key 列 click の意味そのもの ── 打てるはず");
+
+    let after = project(&doc.view(), &session)
+        .expect("投影は組めるはず")
+        .expect("選択ありなので Some のはず")
+        .text
+        .expect("text layer なので TEXT 投影は Some のはず")
+        .size_key;
+
+    assert_ne!(
+        before, after,
+        "打点しても投影の Key 状態が変わっていない(見た目が結線されていない)"
+    );
+    assert_eq!(
+        after,
+        KeyCellState::AtKey,
+        "playhead(=0)にちょうど打ったので AtKey(実菱形・濃)のはず"
+    );
+}
+
+/// [`toggle_text_style_key`] をもう一度呼ぶと同じキーが除去され、投影は
+/// `Static` へ戻る(3状態 oracle が往復対称であることの確認 ── AE のストップ
+/// ウォッチ解除と等価、`crate::transform::toggled_key_track` doc 参照)。
+#[test]
+fn size_key_state_returns_to_static_after_toggling_the_same_keyframe_off() {
+    let (mut doc, layer) = text_layer();
+    let session = session_selecting(layer);
+    let fps = fps30();
+
+    toggle_text_style_key(
+        &mut doc,
+        Some(layer),
+        session.playhead,
+        fps,
+        TextStyleId(0),
+        TextStyleField::Size,
+    )
+    .expect("1回目: 打てるはず");
+    toggle_text_style_key(
+        &mut doc,
+        Some(layer),
+        session.playhead,
+        fps,
+        TextStyleId(0),
+        TextStyleField::Size,
+    )
+    .expect("2回目: 外せるはず(最後の1個 → 静的化)");
+
+    let after = project(&doc.view(), &session)
+        .expect("投影は組めるはず")
+        .expect("選択ありなので Some のはず")
+        .text
+        .expect("text layer なので TEXT 投影は Some のはず")
+        .size_key;
+    assert_eq!(
+        after,
+        KeyCellState::Static,
+        "唯一のキーを外したら Static(静的化)へ戻るはず"
     );
 }
