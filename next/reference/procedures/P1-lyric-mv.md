@@ -64,7 +64,7 @@
 | 29 | クリップ本体をドラッグして開始位置をずらす | Timeline clip | `clip_gesture.rs` Body drag → `write.rs` `timing.start` 書換 | 書ける |
 | 30 | ドラッグを離して確定する | Timeline | `write.rs::continue_drag`終端で1回の `apply_all`(1 gesture = 1 undo) | 書ける |
 | 31 | ドラッグ中にEscを押して元に戻す | キーボード | `next/ui/motolii-keymap/src/defaults.rs` `VerbId::EscapeCancel`(global) | 書ける |
-| 32 | リズムの変わり目でクリップを2つに割る(Split)ことを試みる | Timeline / メニュー / 右クリック | `write.rs:685,811-837` `split_at_playhead`/`split_selected_plan` は実装済みだが、`next/shell/motolii-shell/src/lib.rs`・`menu.rs`・`next/ui/motolii-keymap/src/defaults.rs` を grep して `SplitAtPlayhead` の呼び出し元は**0件**。`next/ui/motolii-menubar/src/context.rs:55` のコメントは stale(write::Message側は複数選択対応まで完成しているのに shell 未配線という事実を反映していない) | 【穴】入口が無い |
+| 32 | リズムの変わり目でクリップを2つに割る(Split)ことを試みる | Timeline / メニュー / 右クリック | `next/shell/motolii-shell/src/input.rs:358` Cmd+K → `timeline_pane::Message::SplitAtPlayhead`、`next/ui/motolii-keymap/src/defaults.rs:343` 対照表、`next/ui/motolii-menubar/src/context.rs:152` 右クリック項目。**2026-08-23 E-1 で結線済**(この行の旧記述「呼び出し元0件」は E-1 着地前のもの) | 書ける |
 | 33 | (Splitが無いので)同じ素材をもう一度Import Mediaで読み込み直す(迂回) | File menu | 手順6〜9の再実行 | 書ける |
 | 34 | 複製した2本目をトリムしてクリップの後半区間だけに絞る(迂回の実体) | Timeline clip | 手順26〜27と同じ機構 | 書ける |
 | 35 | 2本を継ぎ目なく並ぶよう手でドラッグして揃える(迂回の後始末) | Timeline clip | 手順29、スナップ有無は未確認 | 書ける(スナップ精度は【未確認】) |
