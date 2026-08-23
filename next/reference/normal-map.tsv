@@ -1190,7 +1190,7 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 1189	preferences	Labels	ラベル色とその割当の設定	1	0	0	0	1	0:0:0:1	公式(Adobe)		採用予定	既決との衝突なし	B12	theme-runtime	M
 1190	preferences	Labels	ラベル色・既定ラベルの設定	0	1	0	0	1	0:0:0:1	二次(premiere全体注記)		採用予定	既決との衝突なし	B12	theme-runtime	M
 1191	preferences	Language	UI表示言語切替	0	0	0	1	1	0:0:0:1	"公式(原文: ""Go to the General > Language tab"")"		採用予定	既決との衝突なし	B12		S
-1192	preferences	Master Settings	タイムライン形式/ビデオモニタリング/最適化メディア/作業フォルダ	0	0	1	0	1	0:0:0:1	公式(BMDマニュアルPDF)		採用済	既決との衝突なし	B12		S
+1192	preferences	Master Settings	タイムライン形式/ビデオモニタリング/最適化メディア/作業フォルダ	0	0	1	0	1	0:0:0:1	公式(BMDマニュアルPDF)		採用予定	既決との衝突なし	B12		S
 1193	preferences	Media	静止画スケーリング・プロキシ設定	0	1	0	0	1	0:0:0:1	二次(premiere全体注記)		採用予定	既決との衝突なし	B12	proxy	M
 1194	preferences	Media & Disk Cache	キャッシュ・メディアフォルダの場所、Enable Disk Cache、Maximum Disk Cache Size、Enable Compressed Frames等	1	0	0	0	1	0:0:0:1	公式(Adobe)		保留	RB調査(2026-08-22): 根は実在(decode=ffmpeg起動/miss+64枚LRU・永続なし)。対処は根(永続frame cache)が先 — prefs UIは意図優先で最小化してから再判定	B13	frame-cache	M
 1195	preferences	Media Cache	メディアキャッシュファイルの自動削除設定	0	1	0	0	1	0:0:0:1	二次(premiere全体注記)		保留	RB調査(2026-08-22): 根は実在(decode=ffmpeg起動/miss+64枚LRU・永続なし)。対処は根(永続frame cache)が先 — prefs UIは意図優先で最小化してから再判定	B13	frame-cache	M
