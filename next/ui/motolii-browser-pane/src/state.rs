@@ -127,6 +127,20 @@ pub enum Message {
     /// [`PaneState::update`] はこの腕を no-op として扱う(pane-local な状態は
     /// 何も変わらない — supervisor が委譲の前後どちらかで副作用を差し込む)。
     ReplaceSelectedLayerSource(AssetId),
+    /// 素材を台帳から外す(`A01-entry.tsv` `RemoveAsset` 行 — store 側は
+    /// `Intent::RemoveAsset { asset }` が実装・undo 込みでテスト済み
+    /// (`next/core/motolii-store/tests/asset.rs`)、UI 側の入口が皆無だった
+    /// 穴を塞ぐ)。
+    ///
+    /// **この crate は `Intent::RemoveAsset` を呼ばない**
+    /// (`ReplaceSelectedLayerSource` doc と同じ「pane は Intent を呼ばない」
+    /// 分業、crate 冒頭 doc「shell 結線」参照)— supervisor が
+    /// `Intent::RemoveAsset { asset }` を dispatch する。[`PaneState::update`]
+    /// はこの腕を no-op として扱う(pane-local な状態は何も変わらない —
+    /// 台帳から実際に消える描画結果は Document 側の変化を経由して次の
+    /// render で反映される、supervisor が委譲の前後どちらかで副作用を
+    /// 差し込む)。
+    RemoveAssetFromCard(AssetId),
 }
 
 /// Browser pane 専用の transient 状態(rail scope + 検索欄の下書き + パネル
@@ -293,6 +307,11 @@ impl PaneState {
             // (このメンバー doc・crate 冒頭 doc「shell 結線」参照) — pane-local
             // 状態には何も書かない。
             Message::ReplaceSelectedLayerSource(_) => {}
+            // 副作用(`Intent::RemoveAsset` の dispatch)は supervisor の責務
+            // (このメンバー doc・crate 冒頭 doc「shell 結線」参照) — pane-local
+            // 状態には何も書かない(選択状態も保つ — 実際に消えるかは
+            // Document 側の変化を経由する、`selected` を先回りで解除しない)。
+            Message::RemoveAssetFromCard(_) => {}
             // マスク追加/effect 適用も「作る」と同じく pane-local に動かす状態が
             // 無い(`CreateFromCard` と同型 — 選択は `SelectCard` が別途書く)。
             // 実際の `Intent::AddMask`/`Intent::SetEffects` は shell 結線が
@@ -688,6 +707,27 @@ mod tests {
         state.update(Message::QueryChanged("tone".to_owned()));
         state.update(Message::SelectCard(CardKey::Media(AssetId::from_raw(5))));
         state.update(Message::ReplaceSelectedLayerSource(AssetId::from_raw(5)));
+        assert_eq!(state.scope(), RailScope::Audio);
+        assert_eq!(state.query(), "tone");
+        assert_eq!(state.selected(), Some(CardKey::Media(AssetId::from_raw(5))));
+    }
+
+    // -----------------------------------------------------------------
+    // A01-entry RemoveAsset: RemoveAssetFromCard は pane-local 状態への
+    // no-op(`Intent::RemoveAsset` の dispatch は supervisor の責務、
+    // `Message::RemoveAssetFromCard` doc 参照)。
+    // -----------------------------------------------------------------
+
+    /// **ORACLE**(検収条件そのもの、裁定218): この腕は scope/query/selection
+    /// のどれも動かさない — publish 自体は view 側の責務なので、ここで押さえる
+    /// のは「受け取った `PaneState::update` が no-op であること」の1点のみ。
+    #[test]
+    fn remove_asset_from_card_does_not_touch_pane_local_state() {
+        let mut state = PaneState::new();
+        state.update(Message::SelectScope(RailScope::Audio));
+        state.update(Message::QueryChanged("tone".to_owned()));
+        state.update(Message::SelectCard(CardKey::Media(AssetId::from_raw(5))));
+        state.update(Message::RemoveAssetFromCard(AssetId::from_raw(5)));
         assert_eq!(state.scope(), RailScope::Audio);
         assert_eq!(state.query(), "tone");
         assert_eq!(state.selected(), Some(CardKey::Media(AssetId::from_raw(5))));

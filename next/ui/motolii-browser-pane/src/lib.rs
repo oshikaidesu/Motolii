@@ -1299,6 +1299,11 @@ fn card_grid_view(
 /// `single_selected_layer`(第6切片、map B08 616/617): [`replace_affordance_row`]
 /// が `Some` を返す時だけ、カード本体の下へ Replace 行を足す(触れない物に
 /// 触れそうな顔をさせない — `None` の間は行ごと出さない)。
+///
+/// `selected`(`A01-entry.tsv` `RemoveAsset` 行): [`remove_affordance_row`]
+/// が `Some` を返す時だけ、同じくカード本体の下へ Remove 行を足す —
+/// こちらはカード自体の選択状態のみがゲート(layer 選択にもパス有無にも
+/// 依存しない、`remove_affordance_row` doc 参照)。
 fn card_view(
     item: AssetListItem,
     selected: bool,
@@ -1341,7 +1346,8 @@ fn card_view(
     // B08 616/617)。iced の button は入れ子にしない([`card_button`] とは
     // 別の兄弟行にする — カード本体の選択クリックと Replace クリックが
     // 干渉しない、`Message::ReplaceSelectedLayerSource` doc 参照)。
-    match replace_affordance_row(
+    let mut rows: Vec<Element<'static, Message>> = vec![card_button.into()];
+    if let Some(replace_row) = replace_affordance_row(
         single_selected_layer,
         has_usable_path,
         asset_id,
@@ -1349,11 +1355,82 @@ fn card_view(
         dims,
         colors,
     ) {
-        Some(replace_row) => column![card_button, replace_row]
-            .spacing(dims.spacing_xs)
-            .into(),
-        None => card_button.into(),
+        rows.push(replace_row);
     }
+    // カードが選択中の時だけ Remove 行を足す(`A01-entry.tsv` `RemoveAsset`
+    // 行、`Message::RemoveAssetFromCard` doc 参照)。Replace 行と違い
+    // layer 選択にもパス有無にも依存しない — カード自体の選択状態だけが
+    // ゲート(総監督裁定: 判断が割れたら摩擦を増やす側 — 常時×印の一発削除
+    // ではなく「選択→ボタン出現」の2段階にする)。
+    if let Some(remove_row) = remove_affordance_row(
+        selected,
+        asset_id,
+        card_frame_width(view_mode, dims),
+        dims,
+        colors,
+    ) {
+        rows.push(remove_row);
+    }
+    if rows.len() == 1 {
+        rows.pop().expect("rows has exactly 1 element")
+    } else {
+        column(rows).spacing(dims.spacing_xs).into()
+    }
+}
+
+/// カードに Remove affordance を出すかのゲーティング(`A01-entry.tsv`
+/// `RemoveAsset` 行の穴埋め)。`selected` = カード自体が選択中かどうかのみで
+/// ゲートする([`replace_affordance_row`] と違い `single_selected_layer`/
+/// パス有無は無関係 — `Intent::RemoveAsset { asset }` はレイヤーもパスも
+/// 見ない、台帳から `AssetId` を外すだけの Intent、`document.rs` 参照)。
+/// 未選択の間は行ごと出さない(常時×印の一発削除にしない = 誤操作防止の
+/// 摩擦を1段入れる、総監督裁定「割れたら厳しい側」)。
+fn remove_affordance_row(
+    selected: bool,
+    asset_id: motolii_store::AssetId,
+    card_width: Length,
+    dims: Dimensions,
+    colors: Colors,
+) -> Option<Element<'static, Message>> {
+    if !selected {
+        return None;
+    }
+
+    let radius = FILTER_CHIP_CORNER_RADIUS_ROW_HEIGHT_RATIO * dims.row_height;
+    let icon_element = motolii_icons::icon(
+        motolii_icons::Icon::Delete,
+        motolii_icons::frame_px_for_glyph_px(dims.micro_text),
+        colors.text_muted,
+    );
+    let action = button(icon_element)
+        .on_press(Message::RemoveAssetFromCard(asset_id))
+        .width(card_width)
+        .padding([dims.spacing_xs, dims.spacing_s])
+        .style(move |_theme, status| chip_style(dims, colors, false, status, radius));
+
+    Some(
+        tooltip(
+            action,
+            container(
+                text("Remove from library — undo with Cmd+Z")
+                    .size(dims.caption_text)
+                    .color(colors.text_primary),
+            )
+            .padding([dims.spacing_xs, dims.spacing_s])
+            .style(move |_theme| container::Style {
+                background: Some(iced::Background::Color(colors.surface_raised)),
+                border: iced::Border {
+                    color: colors.border_default,
+                    width: dims.border_width,
+                    radius: 0.0.into(),
+                },
+                ..container::Style::default()
+            }),
+            tooltip::Position::Bottom,
+        )
+        .gap(dims.spacing_xs)
+        .into(),
+    )
 }
 
 /// カードに Replace affordance を出すかのゲーティング(第6切片、map B08
