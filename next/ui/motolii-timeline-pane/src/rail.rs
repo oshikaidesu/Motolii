@@ -36,15 +36,32 @@
 //! 増え、上の「単一源」の前提(累計高さの一致)が崩れる。
 //!
 //! ## gesture
-//! 行選択(旧 `lane_bar::Hit::Row`)は行全体を包む `mouse_area.on_press`。
-//! M/S/L(旧 `lane_bar::Hit::Glyph`)は `button.on_press` — `mouse_area` は
+//! 行選択(旧 `lane_bar::Hit::Row`)は行全体を包む `button.on_press`
+//! (2026-08-23 A10 予告発注で `mouse_area` から差し替え — 下の「予告」節参照)。
+//! M/S/L(旧 `lane_bar::Hit::Glyph`)は元から `button.on_press` — `button` は
 //! 子の `update()` を先に呼び、子が `capture_event()` すればそこで終わる
-//! (iced 実測、`widget/src/mouse_area.rs::Widget::update`)ので、M/S/L
-//! ボタンを押した時に行選択が二重発火することはない(旧 canvas 版の
-//! 「Glyph hit は Row hit より優先」という優先順位を、iced 自身の event
-//! capture 規則がそのまま再現する — 新しい調停ロジックを書く必要が無い)。
+//! (iced 実測、`widget/src/button.rs::Widget::update` が `shell.is_event_captured()`
+//! を見て早期 return する形。旧 `mouse_area` も同じ規律だったので、外側を
+//! `button` に変えても M/S/L を押した時に行選択が二重発火しない性質は保たれる)。
 //! 時間場側の gesture(move/trim・scrub・キー選択)は `super::input`/
 //! `super::key_rows` に無改修のまま残る。
+//!
+//! ## 予告(A10、2026-08-23)
+//! `next/reference/axis/A10-affordance.tsv` が「rail M/S/L トグルと行選択は
+//! 何も無い」と指摘した2箇所は、実は**同じ1個のバグ**が原因だった:
+//! [`glyph_button`] の `style` closure が `_status` を無視して常に
+//! `colors.surface_hover` を背景に敷いていた(=常時 hover 中の見た目のまま
+//! 固定されていたので、実際に hover しても**変化が無い**ように見えた)。
+//! 倣った先例は同じ crate の `transport.rs::transport_button`(`button::Status`
+//! で `Hovered|Pressed` の時だけ `surface_hover` を敷く)— これと同じ形に
+//! 直した。行選択も同じ形の `button` へ統一し(旧 `mouse_area` + `container`
+//! を撤去)、`selected` は hover より優先度が高い状態の器として重ねる
+//! (選択中は hover しても色が変わらない — 選択の方が強い情報)。
+//! カーソルは M/S/L・行選択とも `iced::widget::button` が
+//! `on_press.is_some() && is_mouse_over` の時に自動で出す `Interaction::Pointer`
+//! に乗る(`~/.cargo/git/checkouts/iced-*/widget/src/button.rs::mouse_interaction`
+//! 実測 — 明示の `Interaction::` 配線を新たに書く必要が無い、`transport_button`
+//! 等の「hoverのみ」欄が同じ理由で「既定」と書いていたのと同じ現象)。
 //!
 //! ## ツリー行(裁定173 H2)
 //! `RowProjection::depth`/`has_children`/`children_open`(`projection::rows`
@@ -313,26 +330,46 @@ fn layer_row(
 
     let content = row(content_children).align_y(iced::alignment::Vertical::Center).padding([0.0, dims.spacing_s]);
 
-    let selected = proj.selected;
-    let row_container = container(content)
+    // 縦センタリングだけを担う内側 container(`button::Style` は align を
+    // 持たない — `layout::padded` は中身をそのまま置くだけなので、旧
+    // `row_container` が持っていた `.align_y(Center)` はここに残す)。
+    let centered = container(content)
         .width(Length::Fill)
         .height(Length::Fixed(row_height))
-        .align_y(iced::alignment::Vertical::Center)
-        .style(move |_theme| container::Style {
-            background: if selected {
+        .align_y(iced::alignment::Vertical::Center);
+
+    let selected = proj.selected;
+    // 予告(モジュール doc「予告」節): hover の見た目は `button::Status` 経由
+    // (`transport_button` と同じ形)。`selected` は hover より強い状態の器 —
+    // 選択中は hover 変化を上書きしない(旧 `row_container` の選択ハイライト
+    // をそのまま踏襲、`state_selected` token)。
+    button(centered)
+        .width(Length::Fill)
+        .height(Length::Fixed(row_height))
+        .padding(0)
+        .on_press(Message::Select(id))
+        .style(move |_theme, status| {
+            let background = if selected {
                 Some(Background::Color(colors.state_selected))
             } else {
-                None
-            },
-            border: Border {
-                color: colors.border_hairline_weak,
-                width: dims.border_width,
-                radius: 0.0.into(),
-            },
-            ..container::Style::default()
-        });
-
-    mouse_area(row_container).on_press(Message::Select(id)).into()
+                match status {
+                    button::Status::Hovered | button::Status::Pressed => {
+                        Some(Background::Color(colors.surface_hover))
+                    }
+                    _ => None,
+                }
+            };
+            button::Style {
+                background,
+                border: Border {
+                    color: colors.border_hairline_weak,
+                    width: dims.border_width,
+                    radius: 0.0.into(),
+                },
+                ..button::Style::default()
+            }
+        })
+        .into()
 }
 
 /// M/S/L のどれか1個。旧 canvas 手描き(旧 `lane_bar.rs::draw`)の状態→色の
@@ -372,10 +409,22 @@ fn glyph_button(
     .height(Length::Fixed(glyph_size))
     .padding(0)
     .on_press(message)
-    .style(move |_theme, _status| button::Style {
-        background: Some(Background::Color(colors.surface_hover)),
-        text_color,
-        ..button::Style::default()
+    .style(move |_theme, status| {
+        // 予告バグ修正(モジュール doc「予告」節): 旧実装は `_status` を無視
+        // して常に `surface_hover` を敷いていた(=常時 hover 中の見た目に
+        // 固定・hover しても変化が無かった)。`transport_button` と同じ形へ
+        // 揃え、`Hovered|Pressed` の時だけ面を浮かせる。
+        let background = match status {
+            button::Status::Hovered | button::Status::Pressed => {
+                Some(Background::Color(colors.surface_hover))
+            }
+            _ => None,
+        };
+        button::Style {
+            background,
+            text_color,
+            ..button::Style::default()
+        }
     })
     .into()
 }
