@@ -161,6 +161,43 @@ impl Default for LayerAttrs {
     }
 }
 
+/// **裁定214(2026-08-23)**: solo は「Inspector に映る物」の一種として時間軸に
+/// 乗るべき(`Value::Bool` は補間 Hold、キーフレームは打てる — 裁定213 が確認した
+/// 一般則)。この `PropertyId` は「track を作れる」という**器**だけをここへ足す
+/// (`impl PropertyId` は型さえ同じクレートに在れば定義箇所を選べるので、
+/// 発注の write-set である `attrs.rs` に置いた)。
+///
+/// **配線は未完**(RETURN 参照): [`crate::view::StoreView::resolve_with_solo`]
+/// (`view.rs`)は今もこの component の `LayerAttrs::solo`(静的 bool)だけを読み、
+/// この track を一切評価しない — `view.rs` は本発注の write-set 外なので、
+/// track が実際に画を動かす配線はここでは行っていない(`bm`/`matte`/`ao` が
+/// 「store にはあるが合成器が未消費」なのと同型の意図的な未完了、KNOWN.md 既知の穴
+/// の節と同じ扱い)。Inspector 側にも対応する Key 列は無い(1個目のキーを打つ
+/// UI が無ければ track は事実上作れない、裁定212 の入口ゼロ問題と同型) — UI を
+/// 足すには Inspector 側の書き口を `LayerAttrsPatch`(現在の唯一の書き口)から
+/// `Intent::SetTrack` へ切り替える必要があり、それは値編集の意味(静的値
+/// フィールドと track のどちらが正本か)を re-view.rs 側で解決してからでないと
+/// 「動かしても画が変わらない」偽の完遂(Q0 違反)になる。
+impl crate::PropertyId {
+    pub fn solo() -> Self {
+        Self::new("solo").expect("`solo` は予約語でも空でもない")
+    }
+}
+
+/// **裁定214**: Speed(`crate::Speed`、`LayerTiming::speed`)も同じ理由で時間軸に
+/// 乗るべき対象(A03 棚卸し行「Speed(ATTRS)」)。この `PropertyId` も器だけ。
+///
+/// **配線は未完**: Speed の書き口は `motolii-shell::Shell::apply_speed`
+/// (`Intent::SetTiming` の read-modify-write + duration 再計算)にあり、
+/// `next/shell/motolii-shell/src/lib.rs` は本発注で明示的に「触らない」と
+/// 指定されたファイル。そこを `Intent::SetTrack` 経由へ切り替えない限り、
+/// この track を Inspector が書いても再生速度は変わらない。
+impl crate::PropertyId {
+    pub fn speed() -> Self {
+        Self::new("speed").expect("`speed` は予約語でも空でもない")
+    }
+}
+
 /// [`crate::Intent::SetAttrs`] が受け取る部分更新。**全フィールド `Option`** —
 /// `None` = 「このフィールドは触らない」。
 ///
