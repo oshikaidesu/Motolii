@@ -851,6 +851,10 @@ impl<'a> StoreView<'a> {
     }
 
     /// comp 時刻でのマスク。形状も不透明度も普通の property track から取る。
+    ///
+    /// **裁定214**: mode/inverted も track で上書きできる — track が無ければ静的
+    /// [`Mask::mode`]/[`Mask::inverted`] が既定値(`resolved_blend_mode` と同じ
+    /// overlay の形)。
     fn resolved_masks(
         &self,
         layer: LayerId,
@@ -858,6 +862,33 @@ impl<'a> StoreView<'a> {
     ) -> Result<Vec<ResolvedMask>, StoreError> {
         let mut out = Vec::new();
         for mask in self.masks(layer)? {
+            let mode = match self.value_at(layer, &PropertyId::mask_mode(mask.id), t)? {
+                Some(Value::Enum(v)) => crate::MaskMode::from_enum_value(v).ok_or_else(|| {
+                    StoreError::Property(format!(
+                        "マスク {} の mode track に未知の enum 値が入っている: {v}",
+                        mask.id
+                    ))
+                })?,
+                Some(other) => {
+                    return Err(StoreError::Property(format!(
+                        "マスク {} の mode に enum でない値が入っている(track が壊れている): {other:?}",
+                        mask.id
+                    )))
+                }
+                None => mask.mode,
+            };
+
+            let inverted = match self.value_at(layer, &PropertyId::mask_inverted(mask.id), t)? {
+                Some(Value::Bool(v)) => v,
+                Some(other) => {
+                    return Err(StoreError::Property(format!(
+                        "マスク {} の inverted に真偽でない値が入っている(track が壊れている): {other:?}",
+                        mask.id
+                    )))
+                }
+                None => mask.inverted,
+            };
+
             let shape_property = PropertyId::mask_shape(mask.id);
             let shape = match self.value_at(layer, &shape_property, t)? {
                 Some(Value::Path(path)) => path,
@@ -891,8 +922,8 @@ impl<'a> StoreView<'a> {
             };
 
             out.push(ResolvedMask {
-                mode: mask.mode,
-                inverted: mask.inverted,
+                mode,
+                inverted,
                 opacity: opacity.clamp(0.0, 1.0),
                 shape,
             });
@@ -979,7 +1010,7 @@ impl<'a> StoreView<'a> {
         // この再走査を踏まない(2026-08-20 の性能回帰: 層数 N に対し、ここで毎回
         // `any_solo` を呼ぶと `resolved_layers` 経由で N 回 × 全層走査 = O(N²) の
         // attrs 二重読みになっていた)。
-        let any_solo = self.any_solo()?;
+        let any_solo = self.any_solo(t)?;
         // 単発呼び出しなので世界合成のメモ/循環ガードもこの1回限りの使い捨て
         // (裁定173 H1)。祖先を跨いで共有したいのは [`Self::resolved_layers`] が
         // 1回の document-wide resolve の中で複数の子から同じ祖先を引く場面 —
@@ -1013,8 +1044,11 @@ impl<'a> StoreView<'a> {
 
         // hidden は「今フレームは描かない」— present(削除)とは別物(裁定108(c) 系)。
         // 属性が一度も書かれていない layer は既定(非 hidden)として扱う。
+        // **裁定214**: hidden は track でも上書きできる(`resolved_hidden` —
+        // track があればその値、無ければ静的 `attrs.hidden` が既定、裁定20)。
         let attrs = self.attrs(layer)?.unwrap_or_default();
-        if attrs.hidden {
+        let hidden = self.resolved_hidden(layer, t, attrs.hidden)?;
+        if hidden {
             return Ok(None);
         }
 
@@ -1027,7 +1061,10 @@ impl<'a> StoreView<'a> {
         // hidden かどうかを問わず含める — solo フラグは hidden と独立な「意図」の
         // 表明であって、hidden がそれを見えなくするだけで無かったことにはしない
         // (裁定119 のグループ AND 導出と衝突しない、単層の bool のまま)。
-        if any_solo && !attrs.solo {
+        // **裁定214**: solo も track でも上書きできる(`resolved_solo` — hidden と
+        // 同じ overlay の形)。
+        let solo = self.resolved_solo(layer, t, attrs.solo)?;
+        if any_solo && !solo {
             return Ok(None);
         }
 
@@ -1096,8 +1133,10 @@ impl<'a> StoreView<'a> {
             source_frame,
             masks: self.resolved_masks(layer, t)?,
             effects: self.resolved_effects(layer, t)?,
-            blend_mode: attrs.blend_mode,
-            matte: attrs.matte,
+            // **裁定214**: blend_mode/matte(mode)も track で上書きできる
+            // (`resolved_blend_mode`/`resolved_matte` — hidden/solo と同じ overlay の形)。
+            blend_mode: self.resolved_blend_mode(layer, t, attrs.blend_mode)?,
+            matte: self.resolved_matte(layer, t, attrs.matte)?,
             pinned: attrs.pinned,
         }))
     }
@@ -1247,13 +1286,106 @@ impl<'a> StoreView<'a> {
 
     /// comp のどこかに `solo=true` な layer が居るか。**hidden は問わない**
     /// (`resolve` のコメント参照 — solo という意図の表明は hidden と独立)。
-    fn any_solo(&self) -> Result<bool, StoreError> {
+    ///
+    /// **裁定214**: solo は `PropertyId::solo` の track でも表明できるので、この
+    /// 判定は comp 全体の `t` 時点の solo 状態を見る必要がある — `t` を受け取り、
+    /// 各 layer の solo は [`Self::resolved_solo`](track があればその値、無ければ
+    /// 静的値、裁定20)で読む。
+    fn any_solo(&self, t: RationalTime) -> Result<bool, StoreError> {
         for layer in self.layers() {
-            if self.attrs(layer)?.unwrap_or_default().solo {
+            let static_solo = self.attrs(layer)?.unwrap_or_default().solo;
+            if self.resolved_solo(layer, t, static_solo)? {
                 return Ok(true);
             }
         }
         Ok(false)
+    }
+
+    /// **裁定214**: solo の overlay 本体 — `resolved_masks`/`resolved_text_document`
+    /// と同じ形(「track があればその値、無ければ静的値」を `value_at` 1本経由)。
+    /// `Value::Bool`(Hold 補間、裁定213)。型が合わなければ黙って近似せず `Err`。
+    fn resolved_solo(
+        &self,
+        layer: LayerId,
+        t: RationalTime,
+        static_value: bool,
+    ) -> Result<bool, StoreError> {
+        match self.value_at(layer, &PropertyId::solo(), t)? {
+            Some(Value::Bool(v)) => Ok(v),
+            Some(other) => Err(StoreError::Property(format!(
+                "solo に真偽でない値が入っている(track が壊れている): {other:?}"
+            ))),
+            None => Ok(static_value),
+        }
+    }
+
+    /// **裁定214**: hidden の overlay 本体。[`Self::resolved_solo`] と同じ形。
+    fn resolved_hidden(
+        &self,
+        layer: LayerId,
+        t: RationalTime,
+        static_value: bool,
+    ) -> Result<bool, StoreError> {
+        match self.value_at(layer, &PropertyId::hidden(), t)? {
+            Some(Value::Bool(v)) => Ok(v),
+            Some(other) => Err(StoreError::Property(format!(
+                "hidden に真偽でない値が入っている(track が壊れている): {other:?}"
+            ))),
+            None => Ok(static_value),
+        }
+    }
+
+    /// **裁定214**: blend mode の overlay 本体。`Value::Enum`
+    /// (`crate::BlendMode::to_enum_value`/`from_enum_value`)、補間は Hold(裁定213)。
+    fn resolved_blend_mode(
+        &self,
+        layer: LayerId,
+        t: RationalTime,
+        static_value: crate::BlendMode,
+    ) -> Result<crate::BlendMode, StoreError> {
+        match self.value_at(layer, &PropertyId::blend_mode(), t)? {
+            Some(Value::Enum(v)) => crate::BlendMode::from_enum_value(v).ok_or_else(|| {
+                StoreError::Property(format!(
+                    "`blend_mode` track に未知の enum 値が入っている: {v}"
+                ))
+            }),
+            Some(other) => Err(StoreError::Property(format!(
+                "`blend_mode` に enum でない値が入っている(track が壊れている): {other:?}"
+            ))),
+            None => Ok(static_value),
+        }
+    }
+
+    /// **裁定214**: matte の overlay 本体。**`Matte.layer`(参照先)は対象外**
+    /// (裁定214 修正版、A03副監督A発注が明示的に後回しにした枝) — track が上書き
+    /// できるのは `mode` のみで、`matte` 自身が `None`(このレイヤはマットに
+    /// されていない)なら mode track があっても上書き先が無いので効かない
+    /// (`PropertyId::matte_mode` doc 参照)。
+    fn resolved_matte(
+        &self,
+        layer: LayerId,
+        t: RationalTime,
+        static_value: Option<crate::Matte>,
+    ) -> Result<Option<crate::Matte>, StoreError> {
+        let Some(mut matte) = static_value else {
+            return Ok(None);
+        };
+        match self.value_at(layer, &PropertyId::matte_mode(), t)? {
+            Some(Value::Enum(v)) => {
+                matte.mode = crate::MatteMode::from_enum_value(v).ok_or_else(|| {
+                    StoreError::Property(format!(
+                        "`matte_mode` track に未知の enum 値が入っている: {v}"
+                    ))
+                })?;
+            }
+            Some(other) => {
+                return Err(StoreError::Property(format!(
+                    "`matte_mode` に enum でない値が入っている(track が壊れている): {other:?}"
+                )))
+            }
+            None => {}
+        }
+        Ok(Some(matte))
     }
 
     /// この時刻に描くべき layer を**奥から手前の順**で返す。
@@ -1268,7 +1400,7 @@ impl<'a> StoreView<'a> {
     /// 兄弟が同じ祖先を parent に持つ場合、祖先の world アフィンは document-wide の
     /// この呼び出し1回につき1回しか解決されない(メモ化の呼び出し回数証明 oracle)。
     pub fn resolved_layers(&self, t: RationalTime) -> Result<Vec<ResolvedLayer>, StoreError> {
-        let any_solo = self.any_solo()?;
+        let any_solo = self.any_solo(t)?;
         let layers = self.layers();
         let present: HashSet<LayerId> = layers.iter().copied().collect();
         let mut memo = HashMap::new();

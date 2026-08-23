@@ -47,6 +47,61 @@ impl Default for BlendMode {
     }
 }
 
+impl BlendMode {
+    /// [`crate::PropertyId::blend_mode`] の `Value::Enum` 表現(裁定214 — 出力に
+    /// 現れる property は時間軸に乗る。blend mode は合成に直接効くのでその1つ)。
+    /// **補間は Hold**(裁定213 の境界 — `Enum` は変調不可・単一 source が勝つ)。
+    /// 添字は保存形の一部になるので、既存の並び([`TextJustify::to_enum_value`]と
+    /// 同じ流儀)を変えてはいけない — enum 宣言順そのまま。
+    pub fn to_enum_value(self) -> i64 {
+        match self {
+            BlendMode::Normal => 0,
+            BlendMode::Add => 1,
+            BlendMode::Multiply => 2,
+            BlendMode::Screen => 3,
+            BlendMode::Overlay => 4,
+            BlendMode::Darken => 5,
+            BlendMode::Lighten => 6,
+            BlendMode::ColorDodge => 7,
+            BlendMode::ColorBurn => 8,
+            BlendMode::HardLight => 9,
+            BlendMode::SoftLight => 10,
+            BlendMode::Difference => 11,
+            BlendMode::Exclusion => 12,
+            BlendMode::Hue => 13,
+            BlendMode::Saturation => 14,
+            BlendMode::Color => 15,
+            BlendMode::Luminosity => 16,
+        }
+    }
+
+    /// [`Self::to_enum_value`] の逆写像。未知の値は `None`(壊れた track を近似しない
+    /// — 呼び手が `StoreError::Property` へ変える、`TextJustify::from_enum_value` と
+    /// 同じ規約)。
+    pub fn from_enum_value(v: i64) -> Option<Self> {
+        match v {
+            0 => Some(BlendMode::Normal),
+            1 => Some(BlendMode::Add),
+            2 => Some(BlendMode::Multiply),
+            3 => Some(BlendMode::Screen),
+            4 => Some(BlendMode::Overlay),
+            5 => Some(BlendMode::Darken),
+            6 => Some(BlendMode::Lighten),
+            7 => Some(BlendMode::ColorDodge),
+            8 => Some(BlendMode::ColorBurn),
+            9 => Some(BlendMode::HardLight),
+            10 => Some(BlendMode::SoftLight),
+            11 => Some(BlendMode::Difference),
+            12 => Some(BlendMode::Exclusion),
+            13 => Some(BlendMode::Hue),
+            14 => Some(BlendMode::Saturation),
+            15 => Some(BlendMode::Color),
+            16 => Some(BlendMode::Luminosity),
+            _ => None,
+        }
+    }
+}
+
 /// matte の重ね方(Lottie `constants/matte-mode` の4値、AE の語彙、裁定66)。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MatteMode {
@@ -54,6 +109,30 @@ pub enum MatteMode {
     InvertedAlpha,
     Luma,
     InvertedLuma,
+}
+
+impl MatteMode {
+    /// [`crate::PropertyId::matte_mode`] の `Value::Enum` 表現(裁定214)。**補間は
+    /// Hold**(裁定213)。添字は保存形の一部になるので、既存の並びを変えてはいけない。
+    pub fn to_enum_value(self) -> i64 {
+        match self {
+            MatteMode::Alpha => 0,
+            MatteMode::InvertedAlpha => 1,
+            MatteMode::Luma => 2,
+            MatteMode::InvertedLuma => 3,
+        }
+    }
+
+    /// [`Self::to_enum_value`] の逆写像。未知の値は `None`(壊れた track を近似しない)。
+    pub fn from_enum_value(v: i64) -> Option<Self> {
+        match v {
+            0 => Some(MatteMode::Alpha),
+            1 => Some(MatteMode::InvertedAlpha),
+            2 => Some(MatteMode::Luma),
+            3 => Some(MatteMode::InvertedLuma),
+            _ => None,
+        }
+    }
 }
 
 /// 「このレイヤは、あの layer を、この mode でマットにする」を**1フィールドに畳む**
@@ -163,24 +242,42 @@ impl Default for LayerAttrs {
 
 /// **裁定214(2026-08-23)**: solo は「Inspector に映る物」の一種として時間軸に
 /// 乗るべき(`Value::Bool` は補間 Hold、キーフレームは打てる — 裁定213 が確認した
-/// 一般則)。この `PropertyId` は「track を作れる」という**器**だけをここへ足す
-/// (`impl PropertyId` は型さえ同じクレートに在れば定義箇所を選べるので、
-/// 発注の write-set である `attrs.rs` に置いた)。
-///
-/// **配線は未完**(RETURN 参照): [`crate::view::StoreView::resolve_with_solo`]
-/// (`view.rs`)は今もこの component の `LayerAttrs::solo`(静的 bool)だけを読み、
-/// この track を一切評価しない — `view.rs` は本発注の write-set 外なので、
-/// track が実際に画を動かす配線はここでは行っていない(`bm`/`matte`/`ao` が
-/// 「store にはあるが合成器が未消費」なのと同型の意図的な未完了、KNOWN.md 既知の穴
-/// の節と同じ扱い)。Inspector 側にも対応する Key 列は無い(1個目のキーを打つ
-/// UI が無ければ track は事実上作れない、裁定212 の入口ゼロ問題と同型) — UI を
-/// 足すには Inspector 側の書き口を `LayerAttrsPatch`(現在の唯一の書き口)から
-/// `Intent::SetTrack` へ切り替える必要があり、それは値編集の意味(静的値
-/// フィールドと track のどちらが正本か)を re-view.rs 側で解決してからでないと
-/// 「動かしても画が変わらない」偽の完遂(Q0 違反)になる。
+/// 一般則)。**配線は完了**(A03副監督A発注、同日): [`crate::view::StoreView::
+/// resolve_with_solo`]/`any_solo`(`view.rs`)がこの track を `value_at` 経由で
+/// 読み、track が無ければ静的 `LayerAttrs::solo` が既定値になる
+/// (`resolved_masks`/`resolved_text_document` と同じ overlay の形、裁定20)。
+/// Inspector 側の Key 列(書き口を `Intent::SetTrack` へ切り替える枝)はまだ無い
+/// (裁定212 の入口ゼロ問題と同型、本発注の write-set 外)。
 impl crate::PropertyId {
     pub fn solo() -> Self {
         Self::new("solo").expect("`solo` は予約語でも空でもない")
+    }
+
+    /// **裁定214**: hidden も同じ理由で時間軸に乗る。`text_justify`/`solo` と同じ
+    /// 「素の property 名」の形(prefix 無し、layer 自身が名前空間)。**配線済み**
+    /// (`resolve_with_solo` が `value_at` 経由で読む、track 無しは静的
+    /// `LayerAttrs::hidden` が既定値)。
+    pub fn hidden() -> Self {
+        Self::new("hidden").expect("`hidden` は予約語でも空でもない")
+    }
+
+    /// **裁定214**: blend mode も出力に直接効くので時間軸に乗る。`Value::Enum`
+    /// (`BlendMode::to_enum_value`/`from_enum_value`)、補間は Hold(裁定213)。
+    /// **配線済み**(`resolve_with_solo` が読む、track 無しは静的
+    /// `LayerAttrs::blend_mode` が既定値)。
+    pub fn blend_mode() -> Self {
+        Self::new("blend_mode").expect("`blend_mode` は予約語でも空でもない")
+    }
+
+    /// **裁定214**: matte の重ね方(mode)も時間軸に乗る。**`Matte.layer`(参照先)は
+    /// 対象外**(裁定214 修正版「LayerId は Hold でキーフレーム自体は打てるが実装は
+    /// 後回し」— A03副監督A発注が明示的に後回しにした枝)。`matte` 自体が `None`
+    /// (このレイヤはマットにされていない)なら track があっても上書き先が無いので
+    /// 効かない — mode だけを time-vary させる話であって、track 単独で matte を
+    /// 新設することはできない(`resolve_with_solo` 参照)。`Value::Enum`、補間は
+    /// Hold(裁定213)。
+    pub fn matte_mode() -> Self {
+        Self::new("matte_mode").expect("`matte_mode` は予約語でも空でもない")
     }
 }
 
