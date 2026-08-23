@@ -1,0 +1,32 @@
+# 台帳の柵を push ごとに回す(2026-08-23)。
+#
+# **門ではない。** 2026-08-10 の裁定「main へのマージ段差を全廃・直接 push・
+# fix-forward」を覆さない — required check にせず、branch protection も付けない。
+# 目的は**誰かが気づくこと**だけ。今日、browser-pane が壊れたまま main に入り、
+# supervisor が手で `cargo test --workspace` を回すまで誰も気づかなかった
+# (裁定201「並列は取り残しを生む」の実例)。その検知を人から外す。
+#
+# 範囲は**台帳の柵だけ**。コードのビルドは iced/wgpu を引いて重く、
+# **いつも落ちる CI は無いより悪い**。柵は Rust + python だけで速く、しかも
+# 今日いちばん腐った領域(腐り15件はすべて台帳側)。
+name: ledger-fences
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  fences:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: next
+      - name: 台帳の柵(owns 根拠・軸台帳の規約・入口の判定・証拠の実在)
+        run: |
+          cargo test --manifest-path next/Cargo.toml -p motolii-testkit --locked
+      - name: docs の索引整合
+        run: bash scripts/check-docs.sh
