@@ -294,18 +294,26 @@ pub const EASY_EASE_OUT: Interp = Interp::Bezier { x1: 0.0, y1: 0.0, x2: 0.667, 
 /// (`finish_drag` が1回だけ `Intent::SetTiming` を出す) — Esc/右クリックでの
 /// 復元(`cancel_drag`)は履歴に触れていないぶん、単にこの構造体を捨てるだけで
 /// 完全に無傷になる。
-#[derive(Clone, Copy)]
+/// **E-2 で複数選択へ拡張**(軸台帳 A08「Timeline clip move/trim」単数のみの
+/// 穴)。`origins`/`preview` は影響を受ける全 layer の組 — trim(`Edge*`)は
+/// 掴んだ1本だけ(`vec![(layer, origin)]`)、move(`Body`)は掴んだ瞬間に
+/// 選択されていた全 layer(`TimelineKeyDragState::origins` と同じ形 —
+/// キー側が既に「掴んだキー全員の origin を持ち、delta を全員へ適用」して
+/// いるのに倣った)。`layer`(grabbed)は delta の基準・防御的な単体参照に
+/// 使う。
+#[derive(Clone)]
 struct TimelineDragState {
     layer: LayerId,
     part: BarPart,
-    /// 掴んだ瞬間に Document から読んだそのままの値。**move/trim の計算は毎回
-    /// これを基準に絶対値で出し直す**(delta 蓄積禁止、正典 §2)。
-    origin: LayerTiming,
+    /// 掴んだ瞬間に Document から読んだそのままの値(影響を受ける全 layer 分)。
+    /// **move/trim の計算は毎回これを基準に絶対値で出し直す**(delta 蓄積禁止、
+    /// 正典 §2)。
+    origins: Vec<(LayerId, LayerTiming)>,
     /// 掴んだ瞬間のポインタ位置(comp frame、スナップ前)。
     grab_at_frame: i64,
-    /// 直近の move/trim 計算結果。release がこれを(`origin` と違えば)1回
-    /// `apply` する。
-    preview: LayerTiming,
+    /// 直近の move/trim 計算結果。release がこれを(`origins` と違う要素だけ)
+    /// 1回 `apply_all` する。
+    preview: Vec<(LayerId, LayerTiming)>,
 }
 
 /// Timeline キーの時刻ドラッグ/リタイム、進行中の一時状態(第2波T4、正典
@@ -539,10 +547,18 @@ impl PaneState {
         self.drag.is_some() || self.key_drag.is_some() || self.loop_drag.is_some()
     }
 
-    /// `TimelinePane::with_clip_preview` へそのまま渡す。`TimelineDragState` は
-    /// `Copy` なので `&self` のまま値で読める。
+    /// `TimelinePane::with_clip_preview` へそのまま渡す。**掴んだ layer
+    /// (`drag.layer`)1本分だけ**(E-2 で `origins`/`preview` は複数 layer 分
+    /// 持つようになったが、`with_clip_preview`/`apply_clip_preview`(rendering
+    /// 側、`projection.rs`)は単一 layer の絵しか差し替えない — このレーンの
+    /// write-set は `write.rs`/`input.rs`/`lib.rs` のみで rendering 側は
+    /// 含まないため、他の選択済み layer は移動計算(`finish_drag`)には正しく
+    /// 乗るが、ドラッグ中の bar の絵自体は掴んだ1本しか動いて見えない —
+    /// RETURN の finding/見送り参照)。
     pub fn clip_preview(&self) -> Option<(LayerId, LayerTiming)> {
-        self.drag.map(|drag| (drag.layer, drag.preview))
+        self.drag.as_ref().and_then(|drag| {
+            drag.preview.iter().find(|(id, _)| *id == drag.layer).map(|&(id, timing)| (id, timing))
+        })
     }
 
     /// `TimelinePane::with_key_preview` へそのまま渡す。`origins`(掴んだ瞬間の
@@ -881,9 +897,13 @@ impl PaneState {
     // ---- Timeline クリップの move/trim(第2波T2、正典 §2) ----
 
     /// bar を掴んだ瞬間。**ロック中は掴む前に断る**(正典 §2 拘束6・M13: 無反応
-    /// ゼロ)。move(`Body`)は**未選択なら掴んだ瞬間に単独選択へ差し替える**
-    /// (正典 §2) — このソフトの選択は単一(`Session::selection`)なので、
-    /// 「差し替え」は常に「選ぶ」と同義。trim(`Edge*`)は選択を変えない。
+    /// ゼロ)。move(`Body`)は**掴んだ layer が既に選択集合(複数)に居れば
+    /// その選択を保つ、居なければ掴んだ瞬間に単独選択へ差し替える**
+    /// (`start_key_drag` の「既に選択済みのキーを掴んだ場合は選択を保つ」と
+    /// 同じ形 — 軸台帳 A08「Timeline clip move/trim」単数のみの穴を閉じる、
+    /// E-2 RETURN 参照)。trim(`Edge*`)は選択を変えない・掴んだ1本だけを
+    /// 対象にする(複数 clip を跨いだ trim は意味が無い — 正典 §2「単独 clip
+    /// の start/end のみ動かす」)。
     ///
     /// `session.selection`/`selected_layers` を直接更新する(旧
     /// `Shell::select_single` のロジックをここへ複製 — pane crate は Shell の
@@ -906,23 +926,53 @@ impl PaneState {
         if locked {
             return Some(format!("layer {} はロックされているので動かせない", layer.0));
         }
-        if matches!(part, BarPart::Body) {
-            session.selection = Some(layer);
-            session.selected_layers = vec![layer];
-        }
+        let origins: Vec<(LayerId, LayerTiming)> = if matches!(part, BarPart::Body) {
+            let already_multi = session.selected_layers.len() > 1 && session.selected_layers.contains(&layer);
+            if !already_multi {
+                session.selection = Some(layer);
+                session.selected_layers = vec![layer];
+            }
+            // 選択集合のうち素材があり・ロックされていない layer だけを一括
+            // move の対象にする(ロック済みの他 layer は黙って対象外 —
+            // 掴んだ layer 自身は上で既にロック検分済み、`toggle_selected_
+            // layers_attr` 系と同じ「混じっていても動く分だけ動く」姿勢)。
+            let mut targets: Vec<(LayerId, LayerTiming)> = session
+                .selected_layers
+                .iter()
+                .filter_map(|&id| {
+                    let m = doc.view().meta(id).ok().flatten()?;
+                    let locked = doc.view().attrs(id).ok().flatten().unwrap_or_default().locked;
+                    if locked {
+                        return None;
+                    }
+                    Some((id, m.timing))
+                })
+                .collect();
+            if !targets.iter().any(|(id, _)| *id == layer) {
+                targets.push((layer, meta.timing));
+            }
+            targets
+        } else {
+            vec![(layer, meta.timing)]
+        };
         self.drag = Some(TimelineDragState {
             layer,
             part,
-            origin: meta.timing,
+            origins: origins.clone(),
             grab_at_frame: at_frame,
-            preview: meta.timing,
+            preview: origins,
         });
         None
     }
 
-    /// ドラッグ中のポインタ移動。**掴んだ瞬間の値(`origin`)を基準に絶対値で
+    /// ドラッグ中のポインタ移動。**掴んだ瞬間の値(`origins`)を基準に絶対値で
     /// 出し直す**(delta 蓄積禁止、正典 §2)。**Document はまだ一切触らない**
     /// (`preview` は transient な一時値、release まで `apply` しない)。
+    /// **複数 layer の move は同じ delta を全員へ適用して相対間隔を保つ**
+    /// (`continue_key_drag`/`key_gesture::moved_key_group` と同じ「塊制約」の
+    /// 形 — 個別 clamp すると相対間隔が壊れる、`key_gesture::clamp_group_delta`
+    /// をそのまま流用する)。trim(`Edge*`)は `origins` が掴んだ1本だけなので
+    /// 従来どおり単体の計算。
     fn continue_drag(
         &mut self,
         doc: &mut Document,
@@ -931,8 +981,11 @@ impl PaneState {
         px_per_frame: f32,
         modifiers: iced::keyboard::Modifiers,
     ) {
-        let Some(drag) = self.drag else {
+        let Some(drag) = self.drag.clone() else {
             return;
+        };
+        let Some(&(_, grabbed_origin)) = drag.origins.iter().find(|(id, _)| *id == drag.layer) else {
+            return; // 起こらないはずだが安全側(grabbed は必ず origins に居る)。
         };
         let comp_duration = comp_duration(doc);
         let snap_enabled = !modifiers.command();
@@ -940,55 +993,86 @@ impl PaneState {
         let candidates =
             clip_gesture::snap_candidates(&timeline_rows, drag.layer, session.playhead, comp_duration);
 
-        let mut timing = drag.origin;
-        match drag.part {
+        let preview: Vec<(LayerId, LayerTiming)> = match drag.part {
             BarPart::Body => {
-                timing.start = clip_gesture::moved_start(
-                    drag.origin.start,
-                    drag.origin.duration,
-                    drag.grab_at_frame,
-                    at_frame,
-                    comp_duration,
-                    &candidates,
-                    px_per_frame,
-                    snap_enabled,
-                );
+                let raw_target = grabbed_origin.start + (at_frame - drag.grab_at_frame);
+                let snapped_target = if snap_enabled {
+                    clip_gesture::snap_frame(raw_target, &candidates, px_per_frame)
+                } else {
+                    raw_target
+                };
+                let mut delta = snapped_target - grabbed_origin.start;
+                // 塊制約: 集合の誰かが comp の外へ出そうになったら、**全員が
+                // そこで止まる delta へ丸め直す**(個別 clamp では相対間隔が
+                // 壊れる、`key_gesture::clamp_group_delta` doc 参照)。
+                let min_start = drag.origins.iter().map(|(_, t)| t.start).min().unwrap_or(grabbed_origin.start);
+                let max_end = drag
+                    .origins
+                    .iter()
+                    .map(|(_, t)| t.start + t.duration)
+                    .max()
+                    .unwrap_or(grabbed_origin.start + grabbed_origin.duration);
+                delta = key_gesture::clamp_group_delta(min_start, max_end, delta, 0, comp_duration);
+                drag.origins
+                    .iter()
+                    .map(|&(id, timing)| {
+                        let mut next = timing;
+                        next.start = timing.start + delta;
+                        (id, next)
+                    })
+                    .collect()
             }
             BarPart::EdgeIn => {
-                let end = drag.origin.start + drag.origin.duration;
+                let end = grabbed_origin.start + grabbed_origin.duration;
                 let new_start =
                     clip_gesture::trimmed_in_start(end, at_frame, &candidates, px_per_frame, snap_enabled);
-                let delta = new_start - drag.origin.start;
+                let delta = new_start - grabbed_origin.start;
+                let mut timing = grabbed_origin;
                 timing.start = new_start;
-                timing.duration = drag.origin.duration - delta;
-                timing.source_in = drag.origin.source_in + delta;
+                timing.duration = grabbed_origin.duration - delta;
+                timing.source_in = grabbed_origin.source_in + delta;
+                vec![(drag.layer, timing)]
             }
             BarPart::EdgeOut => {
                 let new_end = clip_gesture::trimmed_out_end(
-                    drag.origin.start,
+                    grabbed_origin.start,
                     at_frame,
                     comp_duration,
                     &candidates,
                     px_per_frame,
                     snap_enabled,
                 );
-                timing.duration = new_end - drag.origin.start;
+                let mut timing = grabbed_origin;
+                timing.duration = new_end - grabbed_origin.start;
+                vec![(drag.layer, timing)]
             }
-        }
+        };
 
         if let Some(drag) = self.drag.as_mut() {
-            drag.preview = timing;
+            drag.preview = preview;
         }
     }
 
-    /// release = 確定。**掴んだだけで未移動なら no-op**。動いていれば
-    /// `Intent::SetTiming` を1回だけ出す(1 gesture = 1 undo)。
+    /// release = 確定。**掴んだだけで未移動なら no-op**。動いた layer だけ
+    /// `Intent::SetTiming` を束ね、1回の `apply_all` で確定する(**1 gesture =
+    /// 1 undo** — `finish_key_drag`/`commit_key_frames` と同じ形。N 本動かして
+    /// も undo は1回)。
     fn finish_drag(&mut self, doc: &mut Document) -> Option<String> {
         let drag = self.drag.take()?;
-        if drag.preview == drag.origin {
+        if drag.preview == drag.origins {
             return None;
         }
-        if let Err(error) = doc.apply(Intent::SetTiming { layer: drag.layer, timing: drag.preview }) {
+        let intents: Vec<Intent> = drag
+            .origins
+            .iter()
+            .zip(drag.preview.iter())
+            .filter(|((_, origin), (_, preview))| origin != preview)
+            .map(|(_, &(layer, timing))| Intent::SetTiming { layer, timing })
+            .collect();
+        if intents.is_empty() {
+            return None;
+        }
+        if let Err(error) = doc.apply_all(intents) {
             return Some(format!("timing を書けない: {error}"));
         }
         None

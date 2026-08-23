@@ -678,6 +678,123 @@ fn dragging_near_the_playhead_snaps_to_it_and_command_disables_snapping() {
     );
 }
 
+// ---------------------------------------------------------------------------
+// E-2: layer 行の Shift/Cmd クリック(`resolve_layer_selection` 結線)・
+// 複数選択 clip の一括ドラッグ(軸台帳 A08「Timeline clip move/trim」単数の
+// みの穴 — RETURN 参照)
+// ---------------------------------------------------------------------------
+
+/// **検収条件1**: Shift クリックで範囲が選ばれる。単独クリックで基点(id0)を
+/// 作り、Shift 押下中に id2 をクリックすると id0..=id2(rail に見えている
+/// 並び順)が丸ごと選ばれる(`timeline_pane::rows::resolve_layer_selection`
+/// の `Range` 分岐、`Shell::click_select_layer` 経由)。
+#[test]
+fn shift_clicking_a_layer_row_selects_the_range() {
+    let mut shell = shell();
+    let _ = shell.update(Message::AddLayer);
+    let _ = shell.update(Message::AddLayer);
+    let _ = shell.update(Message::AddLayer);
+    let rows = shell.timeline_rows();
+    assert_eq!(rows.len(), 3, "3枚 layer を足したのに rail に3行出ていない");
+    let (id0, id1, id2) = (rows[0].id, rows[1].id, rows[2].id);
+
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::Select(id0)));
+    assert!(
+        shell.timeline_rows().iter().find(|r| r.id == id0).unwrap().selected,
+        "単独クリックした行が選択扱いでない"
+    );
+
+    let _ = shell.update(Message::KeyboardModifiersChanged(
+        iced::keyboard::Modifiers::SHIFT,
+    ));
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::Select(id2)));
+
+    let rows = shell.timeline_rows();
+    for &id in &[id0, id1, id2] {
+        assert!(
+            rows.iter().find(|r| r.id == id).unwrap().selected,
+            "Shift 範囲選択に {id:?} が入っていない"
+        );
+    }
+}
+
+/// **検収条件2**: 複数選択したクリップをドラッグすると全部動き、undo 1回で
+/// 戻る(軸台帳 A08「Timeline clip move/trim」単数のみの穴を閉じる —
+/// `TimelineDragState` を複数 layer へ広げ、`key_gesture::clamp_group_delta`
+/// で塊制約付きの delta を全員へ適用、`finish_drag` は動いた分だけ
+/// `apply_all` で1回の undo にまとめる)。
+#[test]
+fn dragging_multiple_selected_clips_moves_them_together_and_undoes_in_one_step() {
+    let mut shell = shell();
+    let _ = shell.update(Message::ScrubTo(50));
+    let _ = shell.update(Message::AddLayer);
+    let id_a = shell.timeline_rows()[0].id;
+
+    let _ = shell.update(Message::ScrubTo(100));
+    let _ = shell.update(Message::AddLayer);
+    let id_b = shell
+        .timeline_rows()
+        .iter()
+        .find(|r| r.id != id_a)
+        .expect("2枚目の layer が見当たらない")
+        .id;
+
+    assert_eq!(shell.timeline_rows().iter().find(|r| r.id == id_a).unwrap().start, 50);
+    assert_eq!(shell.timeline_rows().iter().find(|r| r.id == id_b).unwrap().start, 100);
+
+    // id_a を単独選択し、Cmd+click で id_b を足して複数選択にする。
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::Select(id_a)));
+    let _ = shell.update(Message::KeyboardModifiersChanged(
+        iced::keyboard::Modifiers::COMMAND,
+    ));
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::Select(id_b)));
+    let _ = shell.update(Message::KeyboardModifiersChanged(
+        iced::keyboard::Modifiers::default(),
+    ));
+    assert!(shell.timeline_rows().iter().find(|r| r.id == id_a).unwrap().selected);
+    assert!(shell.timeline_rows().iter().find(|r| r.id == id_b).unwrap().selected);
+
+    // 選択済みの id_b の bar を掴んでドラッグ — 選択(複数)が保たれた
+    // ままなら、動いていない id_a も同じ delta で動くはず。
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::BarGrabbed {
+        layer: id_b,
+        part: BarPart::Body,
+        at_frame: 100,
+    }));
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::DragMoved {
+        at_frame: 80,
+        px_per_frame: 1.0,
+    }));
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::DragReleased));
+
+    let rows = shell.timeline_rows();
+    assert_eq!(
+        rows.iter().find(|r| r.id == id_b).unwrap().start,
+        80,
+        "掴んだ clip 自身が動いていない"
+    );
+    assert_eq!(
+        rows.iter().find(|r| r.id == id_a).unwrap().start,
+        30,
+        "複数選択の他方の clip が一緒に動いていない(bar drag が単数のみの穴)"
+    );
+
+    let can_undo_stack_before = shell.can_undo();
+    let _ = shell.update(Message::Undo);
+    let rows = shell.timeline_rows();
+    assert_eq!(
+        rows.iter().find(|r| r.id == id_a).unwrap().start,
+        50,
+        "Undo 1回で id_a が戻っていない(1 gesture = 1 undo 違反、M10)"
+    );
+    assert_eq!(
+        rows.iter().find(|r| r.id == id_b).unwrap().start,
+        100,
+        "Undo 1回で id_b が戻っていない(1 gesture = 1 undo 違反、M10)"
+    );
+    assert!(can_undo_stack_before, "undo 前提が崩れている(2枚の AddLayer が history に無い)");
+}
+
 /// **オラクル(e)**: ロック行は掴む前に拒否され、status 帯に理由が出る(M13)。
 /// 拒否されているので move/release を送っても何も書かれない。
 #[test]
