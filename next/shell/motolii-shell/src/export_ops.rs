@@ -1,6 +1,16 @@
 //! owns: Export の実行(C-3、波C「書き出し」レーン、`docs/reviews/
 //! 2026-08-23-shell-split-plan.md`「export_ops.rs」節)。
 //!
+//! OWNS-JUSTIFICATION(C): 測定器具ではなく **shell の統合点**として自前になる。
+//!       ここが持つのは「注文を組み立て、専用スレッドへ渡し、進捗と cancel を
+//!       UI へ返す」という接着だけで、実処理(render/encode/mux)は
+//!       `motolii-export` / `motolii-media` に在る。接着そのものは iced の
+//!       `Task::run` と `iced::stream::channel`(いずれも上流の口)を借りており、
+//!       並行機構を発明していない。**借り先が無いのは「Document をスレッドを
+//!       跨がせずにスナップショット経由で渡す」判断の部分**で、これは
+//!       `Document`/`StoreView` が借用型である(意見1・裁定2 の帰結)ことから
+//!       来るため、上流の汎用 crate では代替できない。
+//!
 //! ## 非同期化(旧実装は `update()` を同期でブロックしていた)
 //! `motolii-export` crate 冒頭 doc の「shell(UI)側の非ブロッキング化への示唆」
 //! がそのまま処方箋: **別スレッドで回す**。この workspace は `iced::time::every`
