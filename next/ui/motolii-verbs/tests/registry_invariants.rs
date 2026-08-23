@@ -101,5 +101,7 @@ fn all_verbs_has_the_expected_count() {
     // + KeyframeContext 固有6(Interpolation5 + Delete。CLIP_CONTEXT/
     //   CANVAS_CONTEXT は全項目が既存動詞の再入口なので新規動詞ゼロ)
     // = 26 + 5 + 6 = 37。
-    assert_eq!(ALL_VERBS.len(), 37);
+    // + CLIP_CONTEXT 固有1(Split — E-1 で新設。GOALS M6 の最後の1件で、
+    //   既存メニューの再入口ではない初の clip 右クリック固有動詞)= 38。
+    assert_eq!(ALL_VERBS.len(), 38);
 }

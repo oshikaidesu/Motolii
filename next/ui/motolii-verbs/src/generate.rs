@@ -123,13 +123,14 @@ pub fn help_menu<M>(items: HelpMenuMessages<M>) -> Menu<M> {
 pub fn clip_context_items<M>(items: ClipContextMessages<M>) -> Vec<Item<M>> {
     debug_assert_eq!(
         v::CLIP_CONTEXT.len(),
-        7,
+        8,
         "registry::CLIP_CONTEXT の項目数が変わった"
     );
     vec![
         item(&v::COPY, items.copy),
         item(&v::PASTE, items.paste),
         item(&v::DUPLICATE, items.duplicate),
+        item(&v::SPLIT, items.split),
         item(&v::CUT, items.cut),
         item(&v::GROUP, items.group),
         item(&v::FREEZE, items.freeze),

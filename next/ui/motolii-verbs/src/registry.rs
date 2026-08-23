@@ -89,6 +89,20 @@ pub static DUPLICATE: Verb = Verb {
     bundle: Some("B33"),
 };
 
+/// clip を再生ヘッド位置で2本に割る(E-1、GOALS M6 の最後の1件)。
+/// 入口は Cmd+K と clip 右クリックの2つ(S6 併存)。
+pub static SPLIT: Verb = Verb {
+    id: "edit.split",
+    label: "Split",
+    shortcut: Some("Cmd+K"),
+    entries: s6_checked(&[
+        Entry::ShortcutOnly("next/shell/motolii-shell/src/input.rs(Cmd+K → SplitAtPlayhead)"),
+        Entry::Context(ContextSlot::Clip),
+    ]),
+    map_ids: &[],
+    bundle: Some("B39"),
+};
+
 /// normal-map 436、bundle B31(B33外 — 既存 shell 定義の移送)。
 pub static SELECT_ALL: Verb = Verb {
     id: "edit.select_all",
@@ -465,6 +479,7 @@ pub static CLIP_CONTEXT: &[&Verb] = &[
     &COPY,
     &PASTE,
     &DUPLICATE,
+    &SPLIT,
     &CUT,
     &GROUP,
     &FREEZE,
@@ -582,6 +597,7 @@ pub static ALL_VERBS: &[&Verb] = &[
     &COPY,
     &PASTE,
     &DUPLICATE,
+    &SPLIT,
     &SELECT_ALL,
     &DESELECT_ALL,
     &NEW_LAYER,
