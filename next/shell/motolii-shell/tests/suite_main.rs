@@ -78,6 +78,8 @@ mod q0_fence;
 mod rename_drive;
 #[path = "suite/restack_drive.rs"]
 mod restack_drive;
+#[path = "suite/selection_bulk_drive.rs"]
+mod selection_bulk_drive;
 #[path = "suite/settings_drive.rs"]
 mod settings_drive;
 #[path = "suite/sheet_drive.rs"]
