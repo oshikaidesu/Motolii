@@ -6,7 +6,8 @@
 先行調査(`docs/reviews/2026-08-22-persona-lyric-mv.md`・`-round2.md`)が「致命的」と
 書いた壁の多く(テキストレイヤー作成入口・文字入力欄・色エディタ・Timeline縦スクロール・
 マスク新規追加)は、本調査の実測時点で**既に着地している**。round2 が挙げた壁のうち
-現存するのはごく一部(複製・Split・波形・トランジション・TextRange)。
+現行コアに残るのはごく一部(保存・終了確認・Export中断・音声mux)。グリッチ系エフェクトと
+Text AnimatorはVISM後段へ送り、トランジションはAE型のため現行コアでは作らない。
 この差分自体を「5. 新発見の事実」に記録する。
 
 想定シナリオ: 3〜5分の曲、歌詞100行、映像素材数本。新規プロジェクトを開くところから
@@ -165,14 +166,14 @@
 | 100 | Browser Effectsタブを開く | Browser tabs | `next/ui/motolii-browser-pane/src/model.rs` effectsカード一覧 | 書ける |
 | 101 | Glowカードを選択中レイヤーへ適用する | Browser Effects card | `lib.rs:1415-1416` `ApplyEffectFromCard{plugin_id}`→`apply_effect_to_selected_layer` | 書ける |
 | 102 | 適用したGlowのパラメータをInspector EFFECTSで調整する | Inspector EFFECTS | `next/ui/motolii-inspector-pane/src/effects.rs` | 書ける |
-| 103 | Glow以外のエフェクト(グリッチ的な物)を探して適用する | Browser Effects | `next/engine/motolii-engine/src/lib.rs:1491` 「対応plugin_idは"motolii.glow"1本だけ」 | 【穴】意味が無い(グリッチ系エフェクト自体が実装として存在しない) |
+| 103 | Glow以外のエフェクト(グリッチ的な物)を探して適用する | Browser Effects | `next/engine/motolii-engine/src/lib.rs:1491` 「対応plugin_idは"motolii.glow"1本だけ」。利用者裁定: グリッチ系はVISM後段へ送る | 【対象外】(VISM後段) |
 | 104 | BlendModeを巡回してレイヤーの重ね方を変える | Inspector | `motolii-store/src/attrs.rs:24-42` `BlendMode` enum、`Message::CycleBlendMode` | 書ける |
-| 105 | 2つのクリップの間にクロスフェード的なトランジションを入れようとする | Timeline/Inspector | リポジトリ全体で「Transition」という編集概念の実装が無い(round1/round2の再確認、本調査でも grep 0件) | 【穴】意味が無い |
+| 105 | 2つのクリップの間にクロスフェード的なトランジションを入れようとする | Timeline/Inspector | リポジトリ全体で「Transition」という編集概念の実装が無い。利用者裁定: AE型のため現行コアでは作らない | 【対象外】(AE型・現行コア不採用) |
 | 106 | Browser Effectsタブの mask カードを選択中レイヤーへ適用し、新規マスクを追加する | Browser Effects card | `next/ui/motolii-browser-pane/src/model.rs:390` `SelectionAction::AddMask`、`lib.rs:1716` `Intent::AddMask` | 書ける(round2時点では未実装、本調査で着地を確認) |
 | 107 | 追加したマスクのモード(Add/Subtract等)を巡回する | Inspector MASK | `next/ui/motolii-inspector-pane/src/mask.rs` mode巡回 | 書ける |
 | 108 | 下のレイヤーで抜くトラックマット(Matte)のソースを選ぶ | Inspector MATTE | `next/ui/motolii-inspector-pane/src/matte.rs`、`lib.rs:2497` `PickMatteSource` | 書ける(round2時点では未実装、本調査で着地を確認) |
 | 109 | Matteモードを巡回する | Inspector MATTE | `lib.rs:2506` `CycleMatteMode` | 書ける |
-| 110 | 文字を1文字ずつアニメートする(AEのText Animator相当)ことを試みる | Inspector TEXT | `TextRange`/`TextRangeSelector`(`motolii-store/src/text.rs:259-373`)は store 型としてのみ存在。`next/ui/`・`next/shell/` に `TextRange`/`TextAnimator` の参照は0件(本調査で再確認) | 【穴】意味が無い |
+| 110 | 文字を1文字ずつアニメートする(AEのText Animator相当)ことを試みる | Inspector TEXT | `TextRange`/`TextRangeSelector`(`motolii-store/src/text.rs:259-373`)は store 型としてのみ存在。利用者裁定: Text AnimatorはVISM後段へ送る | 【対象外】(VISM後段) |
 | 111 | (1文字ずつは無理なので)レイヤー全体を1塊としてposition/opacityキーでスライド/フェードさせる(迂回) | Inspector Transform | 手順57-63と同型 | 書ける |
 
 ## 10. プレビューと手直し
@@ -229,7 +230,7 @@
 ## 末尾の集計
 
 ```
-全手順 145 / 書ける 119 / 【穴】入口が無い 3 / 【穴】意味が無い 4 / 【未確認】19
+全手順 145 / 書ける 119 / 【対象外】3 / 【穴】入口が無い 3 / 【穴】意味が無い 1 / 【未確認】19
 ```
 
 機械集計(表の「判定」列を正規表現で走査、`python3`で照合済み)。「書ける(◯◯は【未確認】)」
@@ -243,18 +244,23 @@
 | 141 | Export中のCancelが実機で押せるか不明(同期実行の疑い) | 対応行なし |
 | 143 | Export音声muxがshellに未結線 | 対応行なし(「書き出し」自体は台帳語彙にあるが「音付きで書き出す」の粒度では無い) |
 
-### 【穴】意味が無い(4件)
+### 【穴】意味が無い(1件)
 
 | # | 内容 | normal-map.tsv に対応行があるか |
 |---|---|---|
-| 103 | グリッチ系エフェクトが実装として存在しない | 対応行あり得る(各製品のエフェクト一覧は台帳にあるがMotolii側の実装が無い) |
-| 105 | トランジション概念自体が実装として無い | 対応行あり得る(各製品にTransitionメニューがある) |
-| 110 | TextRange(文字ごとアニメータ)が無い | 対応行あり得る(AEのAnimator相当の項目) |
 | 130 | OSクローズボタン経路でdirty確認が効かない | 対応行なし(「閉じる確認」という動作自体が製品の自己申告リストに現れにくい性質) |
 
-**現在残っている静的な穴**: 本文の判定列から機械的に拾えるのは7件で、
-入口が #124/#141/#143、意味が #103/#105/#110/#130。#17/#22/#32 は結線済みで
-【未確認】、#46/#56/#92 は書ける状態へ更新済みなので、穴として数えない。
+### 【対象外】(3件)
+
+| # | 内容 | 扱い |
+|---|---|---|
+| 103 | グリッチ系エフェクト | VISM後段へ送る |
+| 105 | トランジション | AE型のため現行コアでは作らない |
+| 110 | Text Animator | VISM後段へ送る |
+
+**現在残っている現行コアの静的な穴**: 本文の判定列から機械的に拾えるのは4件で、
+入口が #124/#141/#143、意味が #130。#103/#110はVISM後段、#105は現行コア不採用として
+対象外にした。
 
 ## 3. 書いていて「これは書くまでもないと思ったが、実装が無かった」物
 
