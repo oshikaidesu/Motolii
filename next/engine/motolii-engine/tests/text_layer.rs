@@ -10,9 +10,9 @@
 
 use motolii_engine::Engine;
 use motolii_store::{
-    Composition, ContentKeyframe, ContentTrack, Document, FontRef, Fps, Intent, LayerId,
-    LayerMeta, LayerSource, LayerTiming, RationalTime, TextAlignmentOptions, TextDocument,
-    TextDocumentStyle, TextJustify, TextStyleId,
+    Composition, ContentKeyframe, ContentTrack, Document, FontRef, Fps, Intent, Interp, Keyframe,
+    KeyframeTrack, LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime,
+    TextAlignmentOptions, TextDocument, TextDocumentStyle, TextJustify, TextStyleId, Value,
 };
 
 const ARIAL: &str = "/System/Library/Fonts/Supplemental/Arial.ttf";
@@ -228,5 +228,123 @@ fn text_texture_cache_grows_when_content_changes() {
         engine.cached_text_texture_count(),
         2,
         "内容が変わったら新しいキャッシュ行が増えるはず"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// A-1b(裁定214 同日訂正版): `text_style.*` track が実際に画素を変える。
+//
+// A-1 の実測(`view.rs::text_document` doc 参照)は「store に `PropertyId::
+// text_style_*` は在るが、`StoreView::text_document` が丸ごと static
+// deserialize するだけで track を一切読まない」だった——`bm`/`matte`/`ao` と
+// 同型の「在るが未消費」。この2試験は**その穴が実際に閉じたこと**を画素で
+// 固定する: track を書く前は静的値の画、書いた後は track の値の画になる
+// (`StoreView::resolved_text_document`/`Engine::text_texture_for` 経由)。
+// この2試験は本発注の前(`resolved_text_document` 追加前)は共に赤だった
+// (`view.text_document` のまま静的値しか読まないので track の色/寸法が
+// 画に反映されない)。
+// ---------------------------------------------------------------------------
+
+fn red_pixel_count(frame: &[u8]) -> usize {
+    frame
+        .chunks_exact(4)
+        .filter(|p| p[0] > 40 && p[2] <= 40)
+        .count()
+}
+
+fn blue_pixel_count(frame: &[u8]) -> usize {
+    frame
+        .chunks_exact(4)
+        .filter(|p| p[2] > 40 && p[0] <= 40)
+        .count()
+}
+
+/// `PropertyId::text_style_fill_color` の track が静的 `fill`(赤)を上書きして
+/// 画素の色そのものを変える。
+#[test]
+fn text_style_fill_color_track_overrides_the_static_fill_and_changes_pixel_color() {
+    let mut doc = doc_with_comp();
+    let layer = LayerId(1);
+    place_text_layer(&mut doc, layer);
+    doc.apply(Intent::SetTextDocument {
+        layer,
+        document: document_with("Motolii", style(ARIAL, "Arial", 96.0, [1.0, 0.0, 0.0, 1.0])),
+    })
+    .unwrap();
+
+    let mut engine = Engine::new().expect("engine");
+    let red_frame = engine.render_frame(&doc.view(), t(0)).expect("render");
+    assert!(
+        red_pixel_count(&red_frame) > 500,
+        "track を書く前は静的値どおり赤で出ているはず"
+    );
+
+    let property = PropertyId::text_style_fill_color(TextStyleId(0));
+    let mut track = KeyframeTrack::new();
+    track.insert(Keyframe {
+        t: t(0),
+        value: Value::Color([0.0, 0.0, 1.0, 1.0]),
+        interp: Interp::Hold,
+        spatial: None,
+    });
+    doc.apply(Intent::SetTrack {
+        layer,
+        property,
+        track,
+    })
+    .unwrap();
+
+    let blue_frame = engine.render_frame(&doc.view(), t(0)).expect("render");
+    assert!(
+        blue_pixel_count(&blue_frame) > 500,
+        "text_style_fill_color の track が実際の画素色に反映されているはず"
+    );
+    assert_eq!(
+        red_pixel_count(&blue_frame),
+        0,
+        "track を書いた後は静的値(赤)の画素が残っていてはいけない(残っていれば\
+         track が評価側で未消費のまま = A-1 の穴が閉じていない証拠)"
+    );
+}
+
+/// `PropertyId::text_style_size` の track が静的 `size` を上書きして文字の
+/// 大きさ(=色付き画素数)そのものを変える。
+#[test]
+fn text_style_size_track_overrides_the_static_size_and_changes_pixel_count() {
+    let mut doc = doc_with_comp();
+    let layer = LayerId(1);
+    place_text_layer(&mut doc, layer);
+    doc.apply(Intent::SetTextDocument {
+        layer,
+        document: document_with("Motolii", style(ARIAL, "Arial", 32.0, [1.0, 1.0, 1.0, 1.0])),
+    })
+    .unwrap();
+
+    let mut engine = Engine::new().expect("engine");
+    let small_frame = engine.render_frame(&doc.view(), t(0)).expect("render");
+    let small_count = colored_pixel_count(&small_frame);
+    assert!(small_count > 100, "静的 size(32)でもまず画素が出ているはず");
+
+    let property = PropertyId::text_style_size(TextStyleId(0));
+    let mut track = KeyframeTrack::new();
+    track.insert(Keyframe {
+        t: t(0),
+        value: Value::F64(128.0),
+        interp: Interp::Hold,
+        spatial: None,
+    });
+    doc.apply(Intent::SetTrack {
+        layer,
+        property,
+        track,
+    })
+    .unwrap();
+
+    let large_frame = engine.render_frame(&doc.view(), t(0)).expect("render");
+    let large_count = colored_pixel_count(&large_frame);
+    assert!(
+        large_count > small_count * 2,
+        "text_style_size の track(128)が静的値(32)より大きく画素数へ反映\
+         されているはず(small={small_count} large={large_count})"
     );
 }
