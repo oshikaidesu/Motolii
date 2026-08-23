@@ -83,7 +83,7 @@
 | 43 | 変換候補から確定する(スペースキー変換) | IME | 同上 | 【未確認】 |
 | 44 | Enterで確定し、1回のIntentとして書き込まれる | Inspector | `text.rs:293` `if field == TextField::Content { apply_text_document_edit(...) }` | 書ける |
 | 45 | Stageに文字が実際に描画されるか確認する | Stage | engineのtext render経路(cosmic-text→swash→motolii-vector、裁定190) | 【未確認】(実描画は実機検分) |
-| 46 | 2行目の歌詞を続けて書こうとして、同じ欄でEnterを押して改行を試みる | Inspector Content欄 | `text.rs:206-218` 「Content欄は1行のtext_input、Enter=確定であって改行ではない」とコード自身が明記 | 【穴】意味が無い(複数行を1レイヤーへ入れる手段が構造的に無い) |
+| 46 | 2行目の歌詞を続けて書こうとして、同じ欄でEnterを押して改行を試みる | Inspector Content欄 | S4(2026-08-23、裁定222)で `text_input` を `iced::widget::text_editor` へ差し替え——`text.rs::content_row`/`content_key_binding`。Enterは改行(AE直接編集時の実挙動と同じ、出典は `applied_text_content` doc)、確定はCmd/Ctrl+Enter(Slack等の複数行欄と同じ文法)。マウス完遂路=他レイヤーへ選択を移すと自動確定(`motolii_shell::Shell::sync_inspector_content_editor`、裁定216) | 書ける |
 | 47 | (改行できないと気づき)2行目を別のテキストレイヤーとして作ることに決める | 判断 | `text.rs:211-219` のコメントが同じ結論を自認(1行=1レイヤーへ分ける) | 書ける(迂回の形は明確) |
 | 48 | フォントをpick_listから選ぶ | Inspector TEXT Font行 | `text.rs:505` `font_family_row`、`Message::PickFont`→`commit_text_font_pick`(`lib.rs`) | 書ける |
 | 49 | カタログに無いフォント名を手打ちで入力する | Inspector | `text.rs:314` 手打ち欄は family と path を別々に書く経路(pick_listと二重) | 書ける |
@@ -93,7 +93,7 @@
 | 53 | Justify(揃え)を巡回で変える | Inspector TEXT | `text.rs` `justify_row`、`Message::CycleTextJustify` | 書ける |
 | 54 | 塗り色(Fill)をRGBA欄で変える | Inspector TEXT | `text.rs:430-437` `crate::color::color_row(ColorTarget::Fill, ...)`、`lib.rs:2582` `ChannelSubmit`→`commit_text_style_color` | 書ける |
 | 55 | 線色(Stroke)をRGBA欄で変える | Inspector TEXT | `text.rs:438-445` `ColorTarget::Stroke` | 書ける |
-| 56 | 色見本(swatch)をクリックしてポップアップを開こうとする | Inspector | `color.rs` doc「クリックしない、popoverを作らない」設計 | 【穴】意味が無い(色見本自体は編集口ではない、意図的だがUI上は押せそうに見える可能性) |
+| 56 | 色見本(swatch)をクリックしてポップアップを開こうとする | Inspector | S4(2026-08-23、裁定222)——AE/Premiere/Resolve/CapCut/Figma は例外なくswatch→ピッカーだが、満額のグラフィカルピッカーは今回のwrite-set外(新規widget規模)。旧doc「クリックしない」の理由は弱いと判定(裁定150)、click自体は実装: `Message::SwatchPressed`→R channel欄へfocus(`color.rs::channel_input_id`、RGBA欄は元々この行に常時見えている唯一の precise-edit 口) | 書ける |
 
 ## 5. 位置とタイミング(フェード・移動)
 

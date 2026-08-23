@@ -163,11 +163,12 @@ pub use projection::{
     TextSectionProjection, TransformRowProjection,
 };
 pub use text::{
-    applied_text_field, commit_text_field, commit_text_font_pick, commit_text_style_track_field,
-    continue_text_style_drag, cycle_text_justify, default_text_document, default_text_style,
-    finish_text_style_drag, next_text_justify, reset_text_line_height, reset_text_tracking,
-    start_text_style_drag, text_field_track_target, toggle_text_style_key, TextField,
-    TextFieldDraft, TextStyleDragState, TextStyleField, TextStyleTrackDraft,
+    applied_text_content, applied_text_field, commit_text_field, commit_text_font_pick,
+    commit_text_style_track_field, continue_text_style_drag, cycle_text_justify,
+    default_text_document, default_text_style, finish_text_style_drag, next_text_justify,
+    reset_text_line_height, reset_text_tracking, start_text_style_drag, text_document_content,
+    text_field_track_target, toggle_text_style_key, TextField, TextFieldDraft,
+    TextStyleDragState, TextStyleField, TextStyleTrackDraft,
 };
 pub use transform::{
     cancel_field_interaction, commit_inspector_field, commit_inspector_name,
@@ -316,6 +317,20 @@ pub enum Message {
     /// `text.rs::font_family_row` doc 参照)。
     PickFont(String),
 
+    // ---- S4(2026-08-23、#46 の穴塞ぎ): Content 行の複数行 text_editor ----
+    /// `text_editor` への編集操作(打鍵/カーソル移動/選択、すべて含む —
+    /// `iced::widget::text_editor::Action`)。**まだ Document を書かない** —
+    /// `motolii_shell::Shell::inspector_content_editor`(永続 `Content`)へ
+    /// `perform` するだけ(`FieldInput` 系と同じ「確定するまで書かない」形、
+    /// `text.rs::applied_text_content` doc「複数行の扱い」参照)。
+    ContentEditorAction(text_editor::Action),
+    /// Cmd/Ctrl+Enter(`text.rs::content_key_binding` が横取りする唯一の
+    /// chord)——ここで初めて現在の編集バッファ全体を1回の
+    /// `Intent::SetTextDocument` として書く(1 gesture = 1 undo)。マウス完遂路
+    /// は選択を他レイヤーへ移すこと(`Shell::sync_inspector_content_editor`
+    /// の blur-commit、裁定216)。
+    ContentEditorCommit,
+
     // ---- D-1(2026-08-23): TEXT section の Size/Line Height/Tracking の
     // Key 列 + drag(A-1b が `text.rs` に用意した track 書き口の結線) ----
     /// Key 列 click。`KeyPressed` と同じ即時操作の形(即1回の
@@ -374,7 +389,10 @@ pub enum Message {
 // `button`(モジュールパス)は末尾の `mod tests` が `button::Status::..` を
 // 直接参照するため必要(このファイル自身の残存コードは `button` widget 関数を
 // 呼ばない — 中身の意匠は `crate::chrome` へ移設済み)。
-use iced::widget::{button, column, container, row as row_widget, scrollable, text as iced_text, text_input};
+use iced::widget::{
+    button, column, container, row as row_widget, scrollable, text as iced_text, text_editor,
+    text_input,
+};
 use iced::{Element, Length};
 
 pub fn view(
@@ -456,11 +474,46 @@ pub fn view_with_color_draft(
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
+    view_with_content_editor(
+        projection,
+        field_draft,
+        name_draft,
+        speed_draft,
+        text_field_draft,
+        color_field_draft,
+        None,
+        dims,
+        colors,
+    )
+}
+
+/// [`view_with_color_draft`] と同じだが、Content 行(S4、#46 の穴塞ぎ)の
+/// 永続 `text_editor::Content` も渡せる。`motolii_shell::Shell::view` は
+/// こちらを呼ぶ。**`view`/`view_with_speed_draft`/`view_with_text_draft`/
+/// `view_with_color_draft` 自身のシグネチャは変えていない**(既存呼び出し元・
+/// ALLOWLIST 外のテストを無改修のまま通すため、上3つが導入された時と同じ
+/// 判断)— 4つとも `content_editor: None` でここへ委譲するだけ。
+///
+/// **戻り値の寿命が `'a` になる唯一の入口**——`content_editor: Some(&'a
+/// Content)` を渡すと戻り値は `Element<'a, Message>`(`'static` ではない)。
+/// `None` を渡す上4つの経路では今までどおり `'static` に収まる(variance、
+/// `text.rs::text_section` doc 参照)。
+pub fn view_with_content_editor<'a>(
+    projection: Option<&SelectionProjection>,
+    field_draft: Option<&FieldDraft>,
+    name_draft: Option<&str>,
+    speed_draft: Option<&str>,
+    text_field_draft: Option<&TextFieldDraft>,
+    color_field_draft: Option<&color::ColorFieldDraft>,
+    content_editor: Option<&'a text_editor::Content>,
+    dims: Dimensions,
+    colors: Colors,
+) -> Element<'a, Message> {
     // mock v3.1 の `.ptitle`("Inspector" 帯)は転写しない — pane 名の正本は
     // shell の pane 題帯(pane_grid title_bar、drag ハンドル兼任)へ移った。
     // 内部にも残すと "Inspector" が二重表示になる(題帯レーンの API 要求)。
     // mock 側の追随(ptitle 行の除去 or 注記)は supervisor キュー。
-    let body: Element<'static, Message> = match projection {
+    let body: Element<'a, Message> = match projection {
         None => empty_state(dims, colors),
         Some(selection) => selected_body(
             selection,
@@ -469,6 +522,7 @@ pub fn view_with_color_draft(
             speed_draft,
             text_field_draft,
             color_field_draft,
+            content_editor,
             dims,
             colors,
         ),
@@ -500,16 +554,17 @@ fn empty_state(dims: Dimensions, colors: Colors) -> Element<'static, Message> {
 /// APPEARANCE(Opacity)→ ATTRS(Blend)→ hint 行。`selection.transform` 自体の
 /// 並び(既存 `inspector_drive.rs` が固定している)は変えず、view 側で
 /// ラベルによって TRANSFORM/APPEARANCE の見出しへ振り分けるだけ。
-fn selected_body(
+fn selected_body<'a>(
     selection: &SelectionProjection,
     field_draft: Option<&FieldDraft>,
     name_draft: Option<&str>,
     speed_draft: Option<&str>,
     text_field_draft: Option<&TextFieldDraft>,
     color_field_draft: Option<&color::ColorFieldDraft>,
+    content_editor: Option<&'a text_editor::Content>,
     dims: Dimensions,
     colors: Colors,
-) -> Element<'static, Message> {
+) -> Element<'a, Message> {
     let mut rows = column![
         ident_band(selection, name_draft, dims, colors),
         column_header_row(dims, colors),
@@ -541,6 +596,7 @@ fn selected_body(
             text_projection,
             text_field_draft,
             color_field_draft,
+            content_editor,
             dims,
             colors,
         ));

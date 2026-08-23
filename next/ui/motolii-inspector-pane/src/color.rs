@@ -19,9 +19,35 @@
 //!
 //! 色見本(swatch)は [`crate::chrome::label_color_chip`] と同じ「面 = 色そのもの、
 //! 輪郭は常時透明」の形(裁定179「箱は状態の器」の対象外 — これは箱ではなく
-//! 色そのものの見本)。**クリックしない**(popover を作らない、RGBA 行が唯一の
-//! 編集口 — Q0「触れそうで触れない物を作らない」の逆側で、押せない物は押せなさ
-//! そうに)。
+//! 色そのものの見本)。
+//!
+//! ## S4(2026-08-23、#56 の穴塞ぎ、裁定222 — 外部資料で決めた)
+//! **旧版はここで「クリックしない」と決めていた**(popover を作らない、
+//! 押せない物は押せなさそうに)。**この判断を裏返す** — 4製品+Figma の実測
+//! (After Effects の Character パネル/塗り・線パネル、Premiere Pro の
+//! Lumetri・テキストスタイル、DaVinci Resolve の Color/Fusion パネル、
+//! CapCut のテキスト色編集、Figma の Fill/Stroke パネル、いずれもスウォッチ
+//! クリック→ピッカーが唯一の一次入口)は例外なく「色見本はクリックできる」。
+//! 旧 doc の理由(「押せなさそうに」)は**なぜクリックさせないかの理由には
+//! なっていない**——見た目を殺すことと機能を削ることは別の判断のはずで、
+//! 前者の主張が後者を正当化していなかった(裁定150「逸脱には理由が必須」
+//! に対し、理由が弱い側だったと判定)。
+//!
+//! **満額のグラフィカルピッカー(色相環・eyedropper 等)はこの節の write-set
+//! の外**(新規 widget をゼロから起こす規模で、この発注の割り当てを超える)。
+//! **今回実装したのはクリックの意味そのもの** — swatch を押すと
+//! [`Message::SwatchPressed`] が発火し、`motolii_shell::Shell` がこの行の
+//! R channel 欄([`channel_input_id`])へ `iced::widget::operation::focus`
+//! する(`transform.rs::field_input_id`/`Shell::enter_field_editing` と同じ
+//! 「press→focus task」文法、新しい focus 機構の発明ではない)。**RGBA 4欄が
+//! 既にこの行に常時見えている**(AE 等と違い、この Inspector は最初から
+//! popup の裏に隠さず precise-edit を並べている設計)ので、「クリックで
+//! ピッカーへ導く」というスウォッチの**役割**はもう既存の RGBA 欄が担って
+//! いる——今回の変更は「見た目が押せそうなのに実際は無反応」という Q0
+//! 違反を閉じ、押した先の焦点を実際に動かすところまでにとどめた。将来
+//! 満額ピッカー(色相環/直近使った色/eyedropper)を足す日が来ても、
+//! この click→focus の配線はそのまま「ピッカーを開く」に差し替えられる形
+//! (`SwatchPressed` の意味は変わらない、見た目の変化先が変わるだけ)。
 //!
 //! ## 配線した property(実在するものだけ)
 //! - **`TextDocumentStyle::fill`**([`ColorTarget::Fill`]) — スタイル表の既定行
@@ -276,6 +302,12 @@ pub enum Message {
     /// 「press だけ own する」形(そちら側の doc「AE のスクラブ精神論」参照)—
     /// 続きは shell 側の window 全体購読 + `Shell::value_drag` が持つ。
     ChannelDragPressed(ColorTarget, ColorChannel),
+    /// 色見本(swatch)の press(S4、#56 の穴塞ぎ)。下書きは経由しない即時
+    /// 操作 — `motolii_shell::Shell` がこの target の R channel 欄
+    /// ([`channel_input_id`])へ focus task を返すだけ(`transform.rs::
+    /// field_input_id`/`Shell::enter_field_editing` と同じ形、crate 冒頭 doc
+    /// 「S4」節参照)。
+    SwatchPressed(ColorTarget),
 }
 
 // ---------------------------------------------------------------------------
@@ -299,7 +331,7 @@ pub fn color_row(
         .collect();
 
     let content = row_widget![
-        color_swatch(rgba, dims),
+        color_swatch(rgba, target, dims),
         text(target.label())
             .size(dims.body_text)
             .color(colors.text_primary)
@@ -349,6 +381,7 @@ fn channel_cell(
         // 裁定170 M01: fork の text_input は借用寿命を返り値に縛るため owned
         // move(値不変、`channel_cell`/`comp_field_cell` と同じ回避)。
         text_input("", displayed)
+            .id(channel_input_id(target, channel))
             .on_input(move |text| Message::ChannelInput(target, channel, text))
             .on_submit(Message::ChannelSubmit(target, channel))
             .size(dims.body_text)
@@ -367,7 +400,7 @@ fn channel_cell(
 /// 押せなさそうに)。1辺は [`crate::chrome::label_chip_side`] と同じ式
 /// (timeline rail のチップ式、`round(0.462 × 行高)`)を共有する — 同じ
 /// 「色そのものを示す正方形」の役割なので2箇所で別寸法を発明しない。
-fn color_swatch(rgba: [f64; 4], dims: Dimensions) -> Element<'static, Message> {
+fn color_swatch(rgba: [f64; 4], target: ColorTarget, dims: Dimensions) -> Element<'static, Message> {
     let side = label_chip_side(dims.inspector_row_height);
     let chip_color = iced::Color {
         r: rgba[0].clamp(0.0, 1.0) as f32,
@@ -375,7 +408,7 @@ fn color_swatch(rgba: [f64; 4], dims: Dimensions) -> Element<'static, Message> {
         b: rgba[2].clamp(0.0, 1.0) as f32,
         a: rgba[3].clamp(0.0, 1.0) as f32,
     };
-    container(text(""))
+    let swatch = container(text(""))
         .width(Length::Fixed(side))
         .height(Length::Fixed(side))
         .padding(0.0)
@@ -389,8 +422,34 @@ fn color_swatch(rgba: [f64; 4], dims: Dimensions) -> Element<'static, Message> {
                 radius: 0.0.into(),
             },
             ..container::Style::default()
-        })
+        });
+
+    // S4(#56 の穴塞ぎ): 「見えるのに反応がない」を閉じる — click で R
+    // channel 欄へ focus(crate 冒頭 doc「S4」節、`Message::SwatchPressed`
+    // 参照)。カーソルを pointer にして「押せる」ことを示す
+    // (`ChannelDragPressed` の `ResizingHorizontally` と同じ、Q0 の逆側)。
+    mouse_area(swatch)
+        .interaction(iced::mouse::Interaction::Pointer)
+        .on_press(Message::SwatchPressed(target))
         .into()
+}
+
+/// RGBA 欄1本の `Id`(S4、#56)。`transform.rs::field_input_id` と同じ
+/// 「確定的な文字列 Id」の形 — swatch click は常に R 欄
+/// ([`ColorChannel::R`])を focus 先に選ぶ(4欄のうちどれかへ入れば残り3欄は
+/// タブ順で辿れる、既存 `text_input` のタブ移動の上に新しい機構を足さない)。
+pub fn channel_input_id(target: ColorTarget, channel: ColorChannel) -> iced::widget::Id {
+    let name: &'static str = match (target, channel) {
+        (ColorTarget::Fill, ColorChannel::R) => "inspector-color-fill-r",
+        (ColorTarget::Fill, ColorChannel::G) => "inspector-color-fill-g",
+        (ColorTarget::Fill, ColorChannel::B) => "inspector-color-fill-b",
+        (ColorTarget::Fill, ColorChannel::A) => "inspector-color-fill-a",
+        (ColorTarget::Stroke, ColorChannel::R) => "inspector-color-stroke-r",
+        (ColorTarget::Stroke, ColorChannel::G) => "inspector-color-stroke-g",
+        (ColorTarget::Stroke, ColorChannel::B) => "inspector-color-stroke-b",
+        (ColorTarget::Stroke, ColorChannel::A) => "inspector-color-stroke-a",
+    };
+    iced::widget::Id::new(name)
 }
 
 // ---------------------------------------------------------------------------

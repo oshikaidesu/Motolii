@@ -318,18 +318,23 @@ impl Shell {
                 .map(Message::Browser),
                 pane_layout::PaneKind::Inspector => {
                     // Inspector は canvas を使わない標準 widget 構成
-                    // (inspector_pane crate 冒頭の doc comment)なので、
-                    // 投影自体が `Element<'static, _>` を返す。
+                    // (inspector_pane crate 冒頭の doc comment)。Content 行
+                    // (S4、#46 の穴塞ぎ)の `text_editor` だけは永続バッファ
+                    // (`self.inspector_content_editor`)を借用するので、
+                    // このクロージャが返す `Element<'_, _>` の寿命はもう
+                    // `'static` ではない(`view_with_content_editor` doc 参照)
+                    // — `content: Element<'_, Message>` の宣言どおりで問題ない。
                     let inspector_selection = inspector_pane::project(&store, &self.session)
                         .ok()
                         .flatten();
-                    inspector_pane::view_with_color_draft(
+                    inspector_pane::view_with_content_editor(
                         inspector_selection.as_ref(),
                         self.inspector_field_draft.as_ref(),
                         self.inspector_name_draft.as_deref(),
                         self.inspector_speed_draft.as_deref(),
                         self.inspector_text_field_draft.as_ref(),
                         self.inspector_color_field_draft.as_ref(),
+                        Some(&self.inspector_content_editor),
                         dims,
                         colors,
                     )
