@@ -4,6 +4,26 @@
 疑わしい場合は黙って再検証せず、終了報告に「KNOWN.md の X を疑う、理由」と書く(supervisor が裁定)。
 1行1事実、日付と出典を必ず添える。古くなった行は消さず「(失効 YYYY-MM-DD: 理由)」を付ける。
 
+**2026-08-23 追記(KF レーン)**: 手書きの事実台帳は「監督が更新を忘れる」で
+何度も陳腐化した(この日だけで4件)。**機械で追える事実は、この md に書く
+代わりに検査/生成物へ移す**——ソースが変わればそれ自体が赤くなる/差分が
+出る形にする:
+- **在庫表**(`next/reference/generated/inventory.tsv`): `Intent`/`Message` の
+  枝・`property::` の PropId・`pub fn`・`pub struct`/`enum` を `next/` 全体から
+  構文解析で機械抽出し、callers(テキスト一致ヒューリスティック、限界は
+  `src/inventory.rs` doc 参照)と到達経路の目安を1行1シンボルで持つ。
+  生成器: `motolii_testkit::inventory::generate()`
+  (`cargo run --manifest-path next/Cargo.toml -p motolii-testkit --bin gen_inventory`)。
+  柵: `next/core/motolii-testkit/tests/inventory_fence.rs`(コミット済みファイルと
+  再生成結果が食い違ったら赤——生成し忘れの検出)
+- 手で書いた `axis/*.tsv`・`GESTURES.md` 等の**判断込みの台帳**はこの生成物を
+  置き換えない(在庫表は「機械が数えられる生の事実」だけを持ち、「入口として
+  数えてよいか」「穴として数えるべきか」の判断は台帳側に残る)
+- 個別の穴・上流事実を1行ずつ検査化する当初案(`known_holes.rs`/
+  `upstream_facts.rs`)は、機械抽出可能な範囲を広く取れる在庫表アプローチに
+  総監督裁定で置き換えられた(2026-08-23、この節)。以下の「既知の穴」/
+  「上流・依存」節は**索引未整理のまま残っている**(次のレーンへの宿題)
+
 ## 上流・依存(2026-08-20 一次ソース確認済み)
 - rerun(pin 483b855・上流とも)に**操作ギズモは無い**。"gizmo" は軸表示の doc comment のみ。別語彙(manipulate/dragger)でも無し
 - rerun の**音声対応は未実装**(issue #2852/#5181 とも open)。音声・再生時計は自前

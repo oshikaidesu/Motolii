@@ -66,3 +66,16 @@ let inv = m.inverse();
 
 `Mat2` から回転/せん断だけを取り出した行列(det=1 が保証される物)は例外だが、
 **保証の根拠をその場に書くこと**。
+
+## 在庫表の再生成(2026-08-23、KF レーン追記)
+
+`next/reference/generated/inventory.tsv` はソース走査の生成物(人が編集しない)。
+シンボルを増減・改名する変更をした後は、コミット前に必ず再生成する:
+
+```bash
+cargo run --manifest-path "$(git rev-parse --show-toplevel)/next/Cargo.toml" -p motolii-testkit --bin gen_inventory
+```
+
+再生成し忘れると `next/core/motolii-testkit/tests/inventory_fence.rs` が赤くなる
+(生成器と自分の write-set が食い違う症状で気づける)。生成ロジックとその
+精度限界は `next/core/motolii-testkit/src/inventory.rs` の doc を読むこと。
