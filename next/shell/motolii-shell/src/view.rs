@@ -303,7 +303,7 @@ impl Shell {
         let browser_items = browser_pane::model::assets(&store);
         let grid = pane_grid::PaneGrid::new(&self.panes.state, |_pane, kind, _is_maximized| {
             let content: Element<'_, Message> = match kind {
-                pane_layout::PaneKind::Browser => browser_pane::pane_view(
+                pane_layout::PaneKind::Browser => browser_pane::pane_view_with_modifiers(
                     &self.browser,
                     &browser_items,
                     // 素材差替(map 616/617)は「単一選択の時だけ」意味を持つ
@@ -312,6 +312,10 @@ impl Shell {
                         [only] => Some(*only),
                         _ => None,
                     },
+                    browser_pane::CardSelectionModifiers::new(
+                        self.keyboard_modifiers.shift(),
+                        self.keyboard_modifiers.command(),
+                    ),
                     dims,
                     colors,
                 )
@@ -767,4 +771,3 @@ fn status_band<'a>(
 
 // `button_style` は裁定160 切片5(pane split survey §2.4/§6)で
 // `chrome::button_style` へ移設した(純粋な再配置・挙動ゼロ変更)。
-
