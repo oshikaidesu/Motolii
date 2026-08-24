@@ -56,6 +56,18 @@
 //!   格子で評価するため、それ以上細かい分数を持っても意味が無い)。
 //!   track が無ければ(`value_at` が `None`)0.0秒 = フェード無し(裁定20と同型)。
 
+/* motolii-component
+id = "audio.media_soundtrack_input"
+kind = "semantic"
+weight = "render_export"
+maps = []
+entry = ["AudioProgram::from_view"]
+meaning = ["project_soundtrack_input"]
+evaluation = ["layer_mix_source"]
+render = ["MixSource"]
+observable = ["media_layers_become_mix_sources"]
+*/
+
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
@@ -78,6 +90,41 @@ pub struct AudioProgram {
     sources: Vec<MixSource>,
     master_gain: f64,
     composition_duration: RationalTime,
+}
+
+/// `LayerSource::Media` のうち、音声 program が読む候補を正準化した投影。
+///
+/// store に audio 専用の `LayerSource` variant は作らない。動画・静止画・音声は
+/// すべて同じ `Media` を通り、実際に音声 stream があるかは decode 層が判定する。
+/// この投影が先に決めるのは「可視 Media layer は soundtrack program の入力候補で
+/// ある」「hidden または Media 以外は入力候補ではない」という境界だけである。
+/// `layer_mix_source` はこの値を使って decode と `MixSource` への投影を続けるため、
+/// soundtrack の意味を Shell や store と重複所有しない。
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct SoundtrackInput {
+    path: String,
+    cache_key: String,
+}
+
+/// 可視 Media layer を soundtrack program の入力候補へ投影する。
+///
+/// 音声を持たない動画・画像はここで誤って「音声あり」と断定しない。後段の
+/// `load_canonical_stream` が `NoAudioTrack`/`StreamNotFound` を局所的に候補外へ落とす
+///ことで、Media 一本化を保ったまま audio の有無を実データから決める。
+fn project_soundtrack_input(
+    meta: &motolii_store::LayerMeta,
+    hidden: bool,
+) -> Option<SoundtrackInput> {
+    if hidden {
+        return None;
+    }
+    let LayerSource::Media { path, fingerprint } = &meta.source else {
+        return None;
+    };
+    Some(SoundtrackInput {
+        path: path.clone(),
+        cache_key: fingerprint.clone().unwrap_or_else(|| path.clone()),
+    })
 }
 
 impl AudioProgram {
@@ -155,14 +202,10 @@ fn layer_mix_source(
     let Some(meta) = view.meta(layer)? else {
         return Ok(None);
     };
-    let LayerSource::Media { path, fingerprint } = &meta.source else {
-        // Solid/Null/Shape/Text は音声を持たない。
+    let attrs = view.attrs(layer)?.unwrap_or_default();
+    let Some(input) = project_soundtrack_input(meta, attrs.hidden) else {
         return Ok(None);
     };
-    let attrs = view.attrs(layer)?.unwrap_or_default();
-    if attrs.hidden {
-        return Ok(None);
-    }
 
     let timing = meta.timing;
     if timing.speed.num() <= 0 {
@@ -181,8 +224,7 @@ fn layer_mix_source(
     let time_map = TimeMap::constant_speed(source_start, timing.speed.num(), timing.speed.den())
         .map_err(|_| AudioError::InvalidMixRange)?;
 
-    let cache_key = fingerprint.clone().unwrap_or_else(|| path.clone());
-    let pcm = match load_canonical_stream(Path::new(path), &cache_key, 0, caches) {
+    let pcm = match load_canonical_stream(Path::new(&input.path), &input.cache_key, 0, caches) {
         Ok(pcm) => pcm,
         Err(AudioError::NoAudioTrack) | Err(AudioError::StreamNotFound { .. }) => {
             // この素材には音声が無い(静止画・音無し動画) — mix対象から外す。
@@ -277,5 +319,62 @@ pub fn program_from_sources(
         sources,
         master_gain,
         composition_duration,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use motolii_store::{LayerMeta, LayerSource, LayerTiming};
+
+    use super::project_soundtrack_input;
+
+    fn media_meta(path: &str, fingerprint: Option<&str>) -> LayerMeta {
+        LayerMeta {
+            source: LayerSource::Media {
+                path: path.to_owned(),
+                fingerprint: fingerprint.map(str::to_owned),
+            },
+            order: 0,
+            timing: LayerTiming::default(),
+        }
+    }
+
+    #[test]
+    fn visible_media_projects_to_soundtrack_input_with_path_fallback() {
+        let projected = project_soundtrack_input(&media_meta("voice.wav", None), false)
+            .expect("visible Media is a soundtrack input candidate");
+
+        assert_eq!(projected.path, "voice.wav");
+        assert_eq!(projected.cache_key, "voice.wav");
+    }
+
+    #[test]
+    fn fingerprint_is_the_soundtrack_cache_identity_when_present() {
+        let projected =
+            project_soundtrack_input(&media_meta("/moved/voice.wav", Some("sha256:voice")), false)
+                .expect("fingerprinted visible Media remains a soundtrack input candidate");
+
+        assert_eq!(projected.path, "/moved/voice.wav");
+        assert_eq!(projected.cache_key, "sha256:voice");
+    }
+
+    #[test]
+    fn hidden_media_does_not_project_to_soundtrack_input() {
+        assert!(project_soundtrack_input(&media_meta("voice.wav", None), true).is_none());
+    }
+
+    #[test]
+    fn non_media_does_not_project_to_soundtrack_input() {
+        let meta = LayerMeta {
+            source: LayerSource::Solid {
+                rgba: [0, 0, 0, 255],
+                width: 64,
+                height: 64,
+            },
+            order: 0,
+            timing: LayerTiming::default(),
+        };
+
+        assert!(project_soundtrack_input(&meta, false).is_none());
     }
 }
