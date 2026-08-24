@@ -124,6 +124,7 @@ fn selection_with_position_row() -> SelectionProjection {
         audio: None,
         shape: None,
         shape_fill: None,
+        shape_stroke: None,
         links: vec![],
     }
 }

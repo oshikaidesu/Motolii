@@ -46,7 +46,7 @@
 | 20 | 塗りの色をカラーピッカーでつまむ | Inspector | `next/ui/motolii-inspector-pane/src/shape_fill.rs:198-225` の色見本を押すと `ShapeFillFocus` → `shape_fill_input_id` へ focus し、既存の16進欄へ色編集を導く。満額の色相環ではなく、既存の RGBA 色エディタと同じ click→precise input の意味を採る | 書ける |
 | 21 | 塗りの色を16進テキストで打つ | Inspector | `next/ui/motolii-inspector-pane/src/shape_fill.rs:62-125` が `#RRGGBB`/`#RRGGBBAA` を検証し、`Intent::SetShapes` へ1回で確定する。`shape_fill_hex_changes_fill` が Solid と opacity を検収 | 書ける |
 | 22 | グラデーションを付ける | Inspector | `next/ui/motolii-inspector-pane/src/shape_fill.rs:128-154,157-195` が `Brush::Gradient` と2停止点を作り、Gradient ボタンから `Intent::SetShapes` へ確定する。`shape_fill_gradient_changes_fill` が停止点2つを検収 | 書ける |
-| 23 | 線幅・線の形(角/丸)・破線を設定する | Inspector | 【穴】入口が無い — `Stroke`/`Dash`/`LineCap`/`LineJoin` 実装済み・呼び手ゼロ | 【穴】入口が無い |
+| 23 | 線幅・線の形(角/丸)・破線を設定する | Inspector | `next/ui/motolii-inspector-pane/src/shape_stroke.rs:31-226` が線幅・cap・join・dash を投影して描き、`commit_shape_stroke`/`cycle_shape_stroke_cap`/`cycle_shape_stroke_join`/`toggle_shape_stroke_dash` が `Intent::SetShapes` へ1回で確定する。`shape_stroke_changes` が4項目を検収 | 書ける |
 
 ### D. マスクを切る
 
@@ -256,6 +256,6 @@
 3. **別マシンでの絶対パス解決不能という状態そのものに名前が無い**(#108)
 4. **フォント埋め込みが無い**(#114)
 5. **プロジェクト受け渡し後の整合性確認手段が無い**(#116)
-6. **SHAPE sectionのstroke操作が未実装で、シェイプ固有の線操作を一覧化できない**(#23)
+6. **SHAPE sectionのstroke操作が未実装で、シェイプ固有の線操作を一覧化できない**(#23) — 解消済み(2026-08-24)
 
-残る穴は、前半のSHAPE/色表現と、後半の再利用・受け渡しに分かれている。
+残る穴は、前半のマスク/エフェクトと、後半の再利用・受け渡しに分かれている。

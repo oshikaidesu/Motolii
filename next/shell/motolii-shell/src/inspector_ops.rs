@@ -142,6 +142,57 @@ impl Shell {
             inspector_pane::Message::ShapeFillFocus(index) => {
                 iced::widget::operation::focus(inspector_pane::shape_fill_input_id(index))
             }
+            inspector_pane::Message::ShapeStrokeInput(field, text) => {
+                self.inspector_shape_stroke_draft =
+                    Some(inspector_pane::ShapeStrokeDraft { field, text });
+                Task::none()
+            }
+            inspector_pane::Message::ShapeStrokeSubmit(field) => {
+                if self
+                    .inspector_shape_stroke_draft
+                    .as_ref()
+                    .is_some_and(|draft| draft.field == field)
+                {
+                    if let Err(error) = inspector_pane::commit_shape_stroke(
+                        &mut self.doc,
+                        self.session.selection,
+                        &mut self.inspector_shape_stroke_draft,
+                    ) {
+                        self.status = Some(error);
+                    }
+                }
+                Task::none()
+            }
+            inspector_pane::Message::ShapeStrokeCap(index) => {
+                if let Err(error) = inspector_pane::cycle_shape_stroke_cap(
+                    &mut self.doc,
+                    self.session.selection,
+                    index,
+                ) {
+                    self.status = Some(error);
+                }
+                Task::none()
+            }
+            inspector_pane::Message::ShapeStrokeJoin(index) => {
+                if let Err(error) = inspector_pane::cycle_shape_stroke_join(
+                    &mut self.doc,
+                    self.session.selection,
+                    index,
+                ) {
+                    self.status = Some(error);
+                }
+                Task::none()
+            }
+            inspector_pane::Message::ShapeStrokeDash(index) => {
+                if let Err(error) = inspector_pane::toggle_shape_stroke_dash(
+                    &mut self.doc,
+                    self.session.selection,
+                    index,
+                ) {
+                    self.status = Some(error);
+                }
+                Task::none()
+            }
             // MASK section(B02 第1切片、裁定184)。書き込み本体は pane の
             // 自由関数(`ToggleHidden`/`CycleBlendMode` と同じ即時操作の形)—
             // ここは `Err` を status 帯へ渡す glue だけ(M13)。

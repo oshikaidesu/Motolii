@@ -61,6 +61,17 @@ inspector.shape_fill	semantic	core_edit	4		evaluation	shape_fill_hex_changes_fil
 inspector.shape_fill	semantic	core_edit	4		render	shape_fill_section	緑	実装コードに実在	next/ui/motolii-inspector-pane/src/shape_fill.rs:19
 inspector.shape_fill	semantic	core_edit	4		render	shape_fill_swatch	緑	実装コードに実在	next/ui/motolii-inspector-pane/src/shape_fill.rs:19
 inspector.shape_fill	semantic	core_edit	4		observable	shape_fill_hex_changes_fill	緑	実装コードに実在	next/ui/motolii-inspector-pane/src/shape_fill.rs:19
+inspector.shape_stroke	semantic	core_edit	4		entry	ShapeStrokeProjection	緑	実装コードに実在	next/ui/motolii-inspector-pane/src/shape_stroke.rs:18
+inspector.shape_stroke	semantic	core_edit	4		entry	commit_shape_stroke	緑	実装コードに実在	next/ui/motolii-inspector-pane/src/shape_stroke.rs:18
+inspector.shape_stroke	semantic	core_edit	4		meaning	ShapeStrokeInput	緑	実装コードに実在	next/ui/motolii-inspector-pane/src/shape_stroke.rs:18
+inspector.shape_stroke	semantic	core_edit	4		meaning	ShapeStrokeCap	緑	実装コードに実在	next/ui/motolii-inspector-pane/src/shape_stroke.rs:18
+inspector.shape_stroke	semantic	core_edit	4		meaning	ShapeStrokeJoin	緑	実装コードに実在	next/ui/motolii-inspector-pane/src/shape_stroke.rs:18
+inspector.shape_stroke	semantic	core_edit	4		meaning	ShapeStrokeDash	緑	実装コードに実在	next/ui/motolii-inspector-pane/src/shape_stroke.rs:18
+inspector.shape_stroke	semantic	core_edit	4		evaluation	parse_stroke_width	緑	実装コードに実在	next/ui/motolii-inspector-pane/src/shape_stroke.rs:18
+inspector.shape_stroke	semantic	core_edit	4		evaluation	shape_stroke_changes	緑	実装コードに実在	next/ui/motolii-inspector-pane/src/shape_stroke.rs:18
+inspector.shape_stroke	semantic	core_edit	4		render	shape_stroke_section	緑	実装コードに実在	next/ui/motolii-inspector-pane/src/shape_stroke.rs:18
+inspector.shape_stroke	semantic	core_edit	4		render	stroke_width_input	緑	実装コードに実在	next/ui/motolii-inspector-pane/src/shape_stroke.rs:18
+inspector.shape_stroke	semantic	core_edit	4		observable	shape_stroke_changes	緑	実装コードに実在	next/ui/motolii-inspector-pane/src/shape_stroke.rs:18
 io.folder_import_expansion	semantic	core_edit	4		entry	expand_import_paths	緑	実装コードに実在	next/shell/motolii-shell/src/file_dialogs.rs:96
 io.folder_import_expansion	semantic	core_edit	4		meaning	is_supported_import_file	緑	実装コードに実在	next/shell/motolii-shell/src/file_dialogs.rs:96
 io.folder_import_expansion	semantic	core_edit	4		evaluation	append_supported_files	緑	実装コードに実在	next/shell/motolii-shell/src/file_dialogs.rs:96

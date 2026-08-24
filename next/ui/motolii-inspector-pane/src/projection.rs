@@ -292,6 +292,8 @@ pub struct SelectionProjection {
     pub shape: Option<ShapeSectionProjection>,
     /// FILL section。Shape の全 leaf へ塗りの入口を出す。
     pub shape_fill: Option<ShapeFillProjection>,
+    /// STROKE section。Shape の全 leaf へ線幅・線形・破線の入口を出す。
+    pub shape_stroke: Option<crate::shape_stroke::ShapeStrokeProjection>,
     /// LINK section の行(2026-08-22 発注「レイヤーを指す」文法 第3号)。
     /// 標準 property 5種([`LinkTarget::ALL`])を固定で持つ(mask/effect と違い
     /// 「無ければ出さない」ではない — link は任意の layer の任意の標準
@@ -730,6 +732,10 @@ pub fn project(
         Some(LayerSource::Shape) => crate::shape_fill::project_shape_fill(store, layer)?,
         _ => None,
     };
+    let shape_stroke = match meta.as_ref().map(|meta| &meta.source) {
+        Some(LayerSource::Shape) => crate::shape_stroke::project_shape_stroke(store, layer)?,
+        _ => None,
+    };
 
     // MASK section(B02 第1切片): store の並びどおり。opacity 行は layer
     // Opacity 行と同じ組み方(track を読み、無ければ既定 1.0 → 表示 %)。
@@ -1024,6 +1030,7 @@ pub fn project(
         audio,
         shape,
         shape_fill,
+        shape_stroke,
         links: link_rows,
     }))
 }

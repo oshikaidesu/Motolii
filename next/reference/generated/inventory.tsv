@@ -1326,91 +1326,102 @@ function	label	motolii-inspector-pane	ui/motolii-inspector-pane/src/effects.rs:7
 function	default_value	motolii-inspector-pane	ui/motolii-inspector-pane/src/effects.rs:82	public	track の無い param の既定値。**engine の既定	(self: Self) -> f64
 function	plugin_params	motolii-inspector-pane	ui/motolii-inspector-pane/src/effects.rs:93	public	plugin id → param カタログ。**未知 plugin は空**(store は catalog を知らず、	(plugin_id: &str) -> &[GlowParam]
 module	motolii_inspector_pane	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:1	public	wraps: iced — Inspector pane(選択レイヤの属性・transform の読み書き、drag-to-scrub)。書き込みは Intent 経由のみ。	
-function	clone	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:209	default		(self: &Self) -> Message
-function	eq	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:209	default		(self: &Self, other: &Message) -> bool
-function	fmt	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:209	default		(self: &Self, f: &mut Formatter) -> Result
-enum	Message	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:210	public		
-struct_field	0	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:213	default		TransformField
-struct_field	1	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:213	default		String
-variant	FieldInput	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:213	default	Transform 行の値セルへの打鍵。**まだ Document を書かない** — 下書きを	tuple(2)
-struct_field	0	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:216	default		TransformField
-variant	FieldSubmit	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:216	default	Transform 行の Enter — **ここで初めて `Intent::SetTrack` を1回出す**	tuple(1)
-struct_field	0	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:218	default		String
-variant	NameInput	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:218	default	Attrs の Name 欄への打鍵。同上、まだ書かない。	tuple(1)
-variant	NameSubmit	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:220	default	Attrs の Name 欄の Enter — `Intent::SetAttrs` を1回出す。	unit
-variant	ToggleHidden	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:223	default	Attrs の Hidden トグル。下書きを経由せず即 `Intent::SetAttrs` を1回出す	unit
-variant	CycleBlendMode	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:228	default	Attrs の Blend 巡回ボタン。`ToggleHidden` と同じ即時操作の形 — 下書きを	unit
-struct_field	0	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:231	default		TransformField
-variant	ValuePressed	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:231	default	値セルの press。**まだ Document を書かない** — click か drag かは	tuple(1)
-struct_field	0	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:236	default		Point
-variant	PointerMoved	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:236	default	window 全体の cursor 移動(`subscription()` の `inspector_pointer_event`	tuple(1)
-variant	PointerReleased	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:240	default	左クリック release(同じく window 全体から)。drag が実際に動いていれば	unit
-struct_field	0	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:247	default		String
-variant	SpeedInput	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:247	default	Speed 欄への打鍵。**まだ Document を書かない** — 下書きを更新するだけ	tuple(1)
-variant	SpeedSubmit	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:250	default	Speed 欄の Enter — ここで初めて1回の `Intent::SetTiming` を出す	unit
-variant	ResetSpeed	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:254	default	Speed 行の Reset ボタン。下書きを経由せず即 100% へ — 既に100%なら	unit
-struct_field	0	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:262	default		KeyRow
-variant	KeyPressed	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:262	default	Transform 行の Key セル click。下書きを経由せず即1回の `Intent::SetTrack`	tuple(1)
-struct_field	0	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:266	default		ShapeField
-struct_field	1	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:266	default		String
-variant	ShapeFieldInput	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:266	default	SHAPE の寸法/角丸欄への打鍵。Enter まで Document へ書かない。	tuple(2)
-struct_field	0	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:268	default		ShapeField
-variant	ShapeFieldSubmit	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:268	default	SHAPE の寸法/角丸欄の Enter。`SetShapes` を1回だけ出す。	tuple(1)
-struct_field	0	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:270	default		ShapeFillField
-struct_field	1	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:270	default		String
-variant	ShapeFillInput	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:270	default	Shape の fill の16進欄への打鍵。Enter まで Document へ書かない。	tuple(2)
-struct_field	0	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:272	default		ShapeFillField
-variant	ShapeFillSubmit	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:272	default	Shape の fill の16進欄の Enter。`SetShapes` を1回だけ出す。	tuple(1)
-struct_field	0	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:274	default		usize
-variant	ShapeFillGradient	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:274	default	Shape の fill を既定の linear gradient へ切り替える。	tuple(1)
-struct_field	0	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:276	default		usize
-variant	ShapeFillFocus	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:276	default	色見本を押して fill の16進欄へ focus する。	tuple(1)
-struct_field	0	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:282	default		MaskId
-variant	CycleMaskMode	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:282	default	この mask の mode を宣言順の次へ巡回。`CycleBlendMode` と同じ即時操作の	tuple(1)
-struct_field	0	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:285	default		MaskId
-variant	ToggleMaskInverted	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:285	default	この mask の inverted を裏返す。`ToggleHidden` と同じ即時操作の形	tuple(1)
-struct_field	0	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:294	default		EffectId
-variant	RemoveEffect	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:294	default	この effect を適用済み stack から取り除く。即1回の `Intent::SetEffects`	tuple(1)
-struct_field	0	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:297	default		EffectId
-variant	MoveEffectUp	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:297	default	この effect を1つ上(適用順の前)へ。既に先頭なら **Intent を出さない**	tuple(1)
-struct_field	0	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:299	default		EffectId
-variant	MoveEffectDown	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:299	default	この effect を1つ下(適用順の後)へ。既に末尾なら同じく no-op。	tuple(1)
-struct_field	0	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:303	default		EffectId
-variant	ToggleEffectBypass	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:303	default	この effect の enabled(`effects/effect/en`)を裏返す — bypass。	tuple(1)
-variant	CycleLabelColor	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:309	default	ident 帯の色チップ click — `LayerAttrs.label_color` の palette index を	unit
-struct_field	0	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:319	default		TextField
-struct_field	1	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:319	default		String
-variant	TextFieldInput	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:319	default	TEXT section の text_input 系フィールドへの打鍵。**まだ Document を	tuple(2)
-struct_field	0	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:324	default		TextField
-variant	TextFieldSubmit	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:324	default	TEXT section のフィールドの Enter — ここで初めて1回の	tuple(1)
-variant	CycleTextJustify	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:328	default	Justify(揃え、`text-document j`)の巡回ボタン。`CycleBlendMode`/	unit
-variant	ResetLineHeightAuto	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:332	default	Line Height を Auto(`None` — フォントのメトリクスから)へ戻すボタン。	unit
-variant	ResetTracking	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:335	default	Tracking を 0 へ戻すボタン。`ResetSpeed` と同じ即時操作の形(map	unit
-struct_field	0	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:344	default		String
-variant	PickFont	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:344	default	2026-08-22 追い発注「フォントが選べる・選ばなくても落ちない」:	tuple(1)
-struct_field	0	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:352	default		Action
-variant	ContentEditorAction	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:352	default	`text_editor` への編集操作(打鍵/カーソル移動/選択、すべて含む —	tuple(1)
-variant	ContentEditorCommit	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:358	default	Cmd/Ctrl+Enter(`text.rs::content_key_binding` が横取りする唯一の	unit
-struct_field	0	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:367	default		TextStyleField
-variant	TextStyleKeyPressed	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:367	default	Key 列 click。`KeyPressed` と同じ即時操作の形(即1回の	tuple(1)
-struct_field	0	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:373	default		TextStyleField
-variant	TextStyleValuePressed	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:373	default	drag ハンドル press。`ValuePressed` と同じ形 — click か drag かは	tuple(1)
-struct_field	0	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:381	default		Message
-variant	Color	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:381	default	TEXT section の Fill/Stroke 色欄。`color` module は自己完結の	tuple(1)
-struct_field	0	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:388	default		LayerId
-variant	PickMatteSource	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:388	default	MATTE 元の pick_list からの選択。`PickFont` と同じ即時操作の形(下書き	tuple(1)
-variant	CycleMatteMode	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:391	default	MATTE mode 巡回ボタン。`CycleBlendMode`/`CycleMaskMode` と同じ即時	unit
-variant	ClearMatte	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:394	default	MATTE を外す。`ResetSpeed` と同じ即時操作の形(matte が無ければ	unit
-struct_field	0	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:401	default		LinkTarget
-struct_field	1	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:401	default		LinkSourceCandidate
-variant	PickLinkSource	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:401	default	LINK 元の pick_list からの選択(payload = 対象 property + 選んだ	tuple(2)
-struct_field	0	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:405	default		LinkTarget
-variant	ClearLink	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:405	default	LINK を外す(`Intent::SetTrack` を再び投げて static 値へ戻す —	tuple(1)
-function	view	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:424	public		(projection: Option<&SelectionProjection>, field_draft: Option<&FieldDraft>, name_draft: Option<&str>, dims: Dimensions, colors: Colors) -> Element<Message>
-function	view_with_speed_draft	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:441	public	[`view`] と同じだが、Speed 欄(ATTRS、SP1 第一波)の編集下書きも渡せる。	(projection: Option<&SelectionProjection>, field_draft: Option<&FieldDraft>, name_draft: Option<&str>, speed_draft: Option<&str>, dims: Dimensions, colors: Colors) -> Element<Message>
-function	view_with_text_draft	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:466	public	[`view_with_speed_draft`] と同じだが、TEXT section(B46 第1切片、裁定184)の	(projection: Option<&SelectionProjection>, field_draft: Option<&FieldDraft>, name_draft: Option<&str>, speed_draft: Option<&str>, text_field_draft: Option<&TextFieldDraft>, dims: Dimensions, colors: Colors) -> Element<Message>
-function	view_with_color_draft	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:493	public	[`view_with_text_draft`] と同じだが、TEXT section の色エディタ	(projection: Option<&SelectionProjection>, field_draft: Option<&FieldDraft>, name_draft: Option<&str>, speed_draft: Option<&str>, text_field_draft: Option<&TextFieldDraft>, color_field_draft: Option<&ColorFieldDraft>, dims: Dimensions, colors: Colors) -> Element<Message>
-function	view_with_content_editor	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:529	public	[`view_with_color_draft`] と同じだが、Content 行(S4、#46 の穴塞ぎ)の	(projection: Option<&SelectionProjection>, field_draft: Option<&FieldDraft>, name_draft: Option<&str>, speed_draft: Option<&str>, text_field_draft: Option<&TextFieldDraft>, color_field_draft: Option<&ColorFieldDraft>, shape_field_draft: Option<&ShapeFieldDraft>, shape_fill_draft: Option<&ShapeFillDraft>, content_editor: Option<&Content>, dims: Dimensions, colors: Colors) -> Element<Message>
+function	clone	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:216	default		(self: &Self) -> Message
+function	eq	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:216	default		(self: &Self, other: &Message) -> bool
+function	fmt	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:216	default		(self: &Self, f: &mut Formatter) -> Result
+enum	Message	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:217	public		
+struct_field	0	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:220	default		TransformField
+struct_field	1	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:220	default		String
+variant	FieldInput	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:220	default	Transform 行の値セルへの打鍵。**まだ Document を書かない** — 下書きを	tuple(2)
+struct_field	0	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:223	default		TransformField
+variant	FieldSubmit	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:223	default	Transform 行の Enter — **ここで初めて `Intent::SetTrack` を1回出す**	tuple(1)
+struct_field	0	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:225	default		String
+variant	NameInput	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:225	default	Attrs の Name 欄への打鍵。同上、まだ書かない。	tuple(1)
+variant	NameSubmit	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:227	default	Attrs の Name 欄の Enter — `Intent::SetAttrs` を1回出す。	unit
+variant	ToggleHidden	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:230	default	Attrs の Hidden トグル。下書きを経由せず即 `Intent::SetAttrs` を1回出す	unit
+variant	CycleBlendMode	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:235	default	Attrs の Blend 巡回ボタン。`ToggleHidden` と同じ即時操作の形 — 下書きを	unit
+struct_field	0	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:238	default		TransformField
+variant	ValuePressed	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:238	default	値セルの press。**まだ Document を書かない** — click か drag かは	tuple(1)
+struct_field	0	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:243	default		Point
+variant	PointerMoved	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:243	default	window 全体の cursor 移動(`subscription()` の `inspector_pointer_event`	tuple(1)
+variant	PointerReleased	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:247	default	左クリック release(同じく window 全体から)。drag が実際に動いていれば	unit
+struct_field	0	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:254	default		String
+variant	SpeedInput	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:254	default	Speed 欄への打鍵。**まだ Document を書かない** — 下書きを更新するだけ	tuple(1)
+variant	SpeedSubmit	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:257	default	Speed 欄の Enter — ここで初めて1回の `Intent::SetTiming` を出す	unit
+variant	ResetSpeed	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:261	default	Speed 行の Reset ボタン。下書きを経由せず即 100% へ — 既に100%なら	unit
+struct_field	0	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:269	default		KeyRow
+variant	KeyPressed	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:269	default	Transform 行の Key セル click。下書きを経由せず即1回の `Intent::SetTrack`	tuple(1)
+struct_field	0	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:273	default		ShapeField
+struct_field	1	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:273	default		String
+variant	ShapeFieldInput	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:273	default	SHAPE の寸法/角丸欄への打鍵。Enter まで Document へ書かない。	tuple(2)
+struct_field	0	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:275	default		ShapeField
+variant	ShapeFieldSubmit	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:275	default	SHAPE の寸法/角丸欄の Enter。`SetShapes` を1回だけ出す。	tuple(1)
+struct_field	0	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:277	default		ShapeFillField
+struct_field	1	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:277	default		String
+variant	ShapeFillInput	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:277	default	Shape の fill の16進欄への打鍵。Enter まで Document へ書かない。	tuple(2)
+struct_field	0	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:279	default		ShapeFillField
+variant	ShapeFillSubmit	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:279	default	Shape の fill の16進欄の Enter。`SetShapes` を1回だけ出す。	tuple(1)
+struct_field	0	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:281	default		usize
+variant	ShapeFillGradient	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:281	default	Shape の fill を既定の linear gradient へ切り替える。	tuple(1)
+struct_field	0	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:283	default		usize
+variant	ShapeFillFocus	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:283	default	色見本を押して fill の16進欄へ focus する。	tuple(1)
+struct_field	0	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:285	default		ShapeStrokeField
+struct_field	1	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:285	default		String
+variant	ShapeStrokeInput	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:285	default	Shape の stroke 線幅への打鍵。Enter まで Document へ書かない。	tuple(2)
+struct_field	0	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:287	default		ShapeStrokeField
+variant	ShapeStrokeSubmit	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:287	default	Shape の stroke 線幅の Enter。`SetShapes` を1回だけ出す。	tuple(1)
+struct_field	0	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:289	default		usize
+variant	ShapeStrokeCap	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:289	default	Shape の stroke cap を次の形へ巡回する。	tuple(1)
+struct_field	0	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:291	default		usize
+variant	ShapeStrokeJoin	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:291	default	Shape の stroke join を次の形へ巡回する。	tuple(1)
+struct_field	0	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:293	default		usize
+variant	ShapeStrokeDash	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:293	default	Shape の stroke dash を on/off する。	tuple(1)
+struct_field	0	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:299	default		MaskId
+variant	CycleMaskMode	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:299	default	この mask の mode を宣言順の次へ巡回。`CycleBlendMode` と同じ即時操作の	tuple(1)
+struct_field	0	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:302	default		MaskId
+variant	ToggleMaskInverted	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:302	default	この mask の inverted を裏返す。`ToggleHidden` と同じ即時操作の形	tuple(1)
+struct_field	0	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:311	default		EffectId
+variant	RemoveEffect	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:311	default	この effect を適用済み stack から取り除く。即1回の `Intent::SetEffects`	tuple(1)
+struct_field	0	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:314	default		EffectId
+variant	MoveEffectUp	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:314	default	この effect を1つ上(適用順の前)へ。既に先頭なら **Intent を出さない**	tuple(1)
+struct_field	0	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:316	default		EffectId
+variant	MoveEffectDown	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:316	default	この effect を1つ下(適用順の後)へ。既に末尾なら同じく no-op。	tuple(1)
+struct_field	0	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:320	default		EffectId
+variant	ToggleEffectBypass	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:320	default	この effect の enabled(`effects/effect/en`)を裏返す — bypass。	tuple(1)
+variant	CycleLabelColor	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:326	default	ident 帯の色チップ click — `LayerAttrs.label_color` の palette index を	unit
+struct_field	0	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:336	default		TextField
+struct_field	1	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:336	default		String
+variant	TextFieldInput	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:336	default	TEXT section の text_input 系フィールドへの打鍵。**まだ Document を	tuple(2)
+struct_field	0	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:341	default		TextField
+variant	TextFieldSubmit	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:341	default	TEXT section のフィールドの Enter — ここで初めて1回の	tuple(1)
+variant	CycleTextJustify	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:345	default	Justify(揃え、`text-document j`)の巡回ボタン。`CycleBlendMode`/	unit
+variant	ResetLineHeightAuto	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:349	default	Line Height を Auto(`None` — フォントのメトリクスから)へ戻すボタン。	unit
+variant	ResetTracking	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:352	default	Tracking を 0 へ戻すボタン。`ResetSpeed` と同じ即時操作の形(map	unit
+struct_field	0	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:361	default		String
+variant	PickFont	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:361	default	2026-08-22 追い発注「フォントが選べる・選ばなくても落ちない」:	tuple(1)
+struct_field	0	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:369	default		Action
+variant	ContentEditorAction	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:369	default	`text_editor` への編集操作(打鍵/カーソル移動/選択、すべて含む —	tuple(1)
+variant	ContentEditorCommit	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:375	default	Cmd/Ctrl+Enter(`text.rs::content_key_binding` が横取りする唯一の	unit
+struct_field	0	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:384	default		TextStyleField
+variant	TextStyleKeyPressed	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:384	default	Key 列 click。`KeyPressed` と同じ即時操作の形(即1回の	tuple(1)
+struct_field	0	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:390	default		TextStyleField
+variant	TextStyleValuePressed	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:390	default	drag ハンドル press。`ValuePressed` と同じ形 — click か drag かは	tuple(1)
+struct_field	0	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:398	default		Message
+variant	Color	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:398	default	TEXT section の Fill/Stroke 色欄。`color` module は自己完結の	tuple(1)
+struct_field	0	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:405	default		LayerId
+variant	PickMatteSource	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:405	default	MATTE 元の pick_list からの選択。`PickFont` と同じ即時操作の形(下書き	tuple(1)
+variant	CycleMatteMode	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:408	default	MATTE mode 巡回ボタン。`CycleBlendMode`/`CycleMaskMode` と同じ即時	unit
+variant	ClearMatte	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:411	default	MATTE を外す。`ResetSpeed` と同じ即時操作の形(matte が無ければ	unit
+struct_field	0	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:418	default		LinkTarget
+struct_field	1	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:418	default		LinkSourceCandidate
+variant	PickLinkSource	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:418	default	LINK 元の pick_list からの選択(payload = 対象 property + 選んだ	tuple(2)
+struct_field	0	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:422	default		LinkTarget
+variant	ClearLink	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:422	default	LINK を外す(`Intent::SetTrack` を再び投げて static 値へ戻す —	tuple(1)
+function	view	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:441	public		(projection: Option<&SelectionProjection>, field_draft: Option<&FieldDraft>, name_draft: Option<&str>, dims: Dimensions, colors: Colors) -> Element<Message>
+function	view_with_speed_draft	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:458	public	[`view`] と同じだが、Speed 欄(ATTRS、SP1 第一波)の編集下書きも渡せる。	(projection: Option<&SelectionProjection>, field_draft: Option<&FieldDraft>, name_draft: Option<&str>, speed_draft: Option<&str>, dims: Dimensions, colors: Colors) -> Element<Message>
+function	view_with_text_draft	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:483	public	[`view_with_speed_draft`] と同じだが、TEXT section(B46 第1切片、裁定184)の	(projection: Option<&SelectionProjection>, field_draft: Option<&FieldDraft>, name_draft: Option<&str>, speed_draft: Option<&str>, text_field_draft: Option<&TextFieldDraft>, dims: Dimensions, colors: Colors) -> Element<Message>
+function	view_with_color_draft	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:510	public	[`view_with_text_draft`] と同じだが、TEXT section の色エディタ	(projection: Option<&SelectionProjection>, field_draft: Option<&FieldDraft>, name_draft: Option<&str>, speed_draft: Option<&str>, text_field_draft: Option<&TextFieldDraft>, color_field_draft: Option<&ColorFieldDraft>, dims: Dimensions, colors: Colors) -> Element<Message>
+function	view_with_content_editor	motolii-inspector-pane	ui/motolii-inspector-pane/src/lib.rs:547	public	[`view_with_color_draft`] と同じだが、Content 行(S4、#46 の穴塞ぎ)の	(projection: Option<&SelectionProjection>, field_draft: Option<&FieldDraft>, name_draft: Option<&str>, speed_draft: Option<&str>, text_field_draft: Option<&TextFieldDraft>, color_field_draft: Option<&ColorFieldDraft>, shape_field_draft: Option<&ShapeFieldDraft>, shape_fill_draft: Option<&ShapeFillDraft>, shape_stroke_draft: Option<&ShapeStrokeDraft>, content_editor: Option<&Content>, dims: Dimensions, colors: Colors) -> Element<Message>
 function	clone	motolii-inspector-pane	ui/motolii-inspector-pane/src/link.rs:106	default		(self: &Self) -> LinkSourceCandidate
 function	eq	motolii-inspector-pane	ui/motolii-inspector-pane/src/link.rs:106	default		(self: &Self, other: &LinkSourceCandidate) -> bool
 function	fmt	motolii-inspector-pane	ui/motolii-inspector-pane/src/link.rs:106	default		(self: &Self, f: &mut Formatter) -> Result
@@ -1501,58 +1512,59 @@ struct_field	text	motolii-inspector-pane	ui/motolii-inspector-pane/src/projectio
 struct_field	audio	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:290	public	AUDIO section の投影(B42、裁定184 型別 section 第4号)。	Option<AudioSectionProjection>
 struct_field	shape	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:292	public	SHAPE section。矩形/楕円の primitive だけを数値編集へ出す。	Option<ShapeSectionProjection>
 struct_field	shape_fill	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:294	public	FILL section。Shape の全 leaf へ塗りの入口を出す。	Option<ShapeFillProjection>
-struct_field	links	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:299	public	LINK section の行(2026-08-22 発注「レイヤーを指す」文法 第3号)。	Vec<LinkRowProjection>
-function	clone	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:302	default		(self: &Self) -> ShapeSectionProjection
-function	eq	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:302	default		(self: &Self, other: &ShapeSectionProjection) -> bool
-function	fmt	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:302	default		(self: &Self, f: &mut Formatter) -> Result
-struct	ShapeSectionProjection	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:303	public		
-struct_field	rows	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:304	public		Vec<ShapeRowProjection>
-function	clone	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:307	default		(self: &Self) -> ShapeRowProjection
-function	eq	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:307	default		(self: &Self, other: &ShapeRowProjection) -> bool
-function	fmt	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:307	default		(self: &Self, f: &mut Formatter) -> Result
-struct	ShapeRowProjection	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:308	public		
-struct_field	index	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:309	public		usize
-struct_field	kind	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:310	public		&str
-struct_field	width	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:311	public		f64
-struct_field	height	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:312	public		f64
-struct_field	radius	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:313	public		f64
-function	clone	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:316	default		(self: &Self) -> ShapeFillProjection
-function	eq	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:316	default		(self: &Self, other: &ShapeFillProjection) -> bool
-function	fmt	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:316	default		(self: &Self, f: &mut Formatter) -> Result
-struct	ShapeFillProjection	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:317	public		
-struct_field	rows	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:318	public		Vec<ShapeFillRowProjection>
-function	clone	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:321	default		(self: &Self) -> ShapeFillRowProjection
-function	eq	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:321	default		(self: &Self, other: &ShapeFillRowProjection) -> bool
-function	fmt	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:321	default		(self: &Self, f: &mut Formatter) -> Result
-struct	ShapeFillRowProjection	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:322	public		
-struct_field	index	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:323	public		usize
-struct_field	fill	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:324	public		Option<Fill>
-function	clone	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:340	default		(self: &Self) -> AudioSectionProjection
-function	eq	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:340	default		(self: &Self, other: &AudioSectionProjection) -> bool
-function	fmt	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:340	default		(self: &Self, f: &mut Formatter) -> Result
-struct	AudioSectionProjection	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:341	public	AUDIO section の投影(B42、裁定184 型別 section 第4号)。4行とも	
-struct_field	level	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:347	public	`property::LEVEL`(clip の音量、gain)。store は倍率(1.0=等倍)、	TransformRowProjection
-struct_field	pan	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:354	public	`property::PAN`。store 自体が -1.0(全振り左)〜1.0(全振り右)の	TransformRowProjection
-struct_field	fade_in	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:356	public	`property::FADE_IN`(秒)。0.0 = 無効。	TransformRowProjection
-struct_field	fade_out	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:358	public	`property::FADE_OUT`(秒)。0.0 = 無効。[`fade_in`](field)と対称。	TransformRowProjection
-function	clone	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:380	default		(self: &Self) -> TextSectionProjection
-function	eq	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:380	default		(self: &Self, other: &TextSectionProjection) -> bool
-function	fmt	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:380	default		(self: &Self, f: &mut Formatter) -> Result
-struct	TextSectionProjection	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:381	public	TEXT section の投影(裁定98: `styles[0]` = document 既定行のみを対象 —	
-struct_field	content	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:387	public	`text-document t`(Text、本文)。**Hold 評価済みの現在値**	String
-struct_field	font_family	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:389	public	`text-document f`(Font Family)。	String
-struct_field	size	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:398	public	`text-document s`(Font Size)。**2026-08-23 訂正**: 静的値ではなく	f32
-struct_field	line_height	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:401	public	`text-document lh`(Line Height)。`None` = Auto。[`size`](field)と同じ	Option<f32>
-struct_field	tracking	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:404	public	`text-document tr`(Tracking)。[`size`](field)と同じ	f32
-struct_field	justify	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:406	public	`text-document j`(Justify)。	TextJustify
-struct_field	size_key	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:408	public	`Size` 行の Key 列3状態(◇/◆薄/◆濃)。[`key_cell_state`] そのまま。	KeyCellState
-struct_field	line_height_key	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:410	public	`Line Height` 行の Key 列3状態。	KeyCellState
-struct_field	tracking_key	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:412	public	`Tracking` 行の Key 列3状態。	KeyCellState
-struct_field	style	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:425	public	スタイル表の既定行そのもの(裁定98、`styles[0]`)。2026-08-22 発注で	TextDocumentStyle
+struct_field	shape_stroke	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:296	public	STROKE section。Shape の全 leaf へ線幅・線形・破線の入口を出す。	Option<ShapeStrokeProjection>
+struct_field	links	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:301	public	LINK section の行(2026-08-22 発注「レイヤーを指す」文法 第3号)。	Vec<LinkRowProjection>
+function	clone	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:304	default		(self: &Self) -> ShapeSectionProjection
+function	eq	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:304	default		(self: &Self, other: &ShapeSectionProjection) -> bool
+function	fmt	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:304	default		(self: &Self, f: &mut Formatter) -> Result
+struct	ShapeSectionProjection	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:305	public		
+struct_field	rows	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:306	public		Vec<ShapeRowProjection>
+function	clone	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:309	default		(self: &Self) -> ShapeRowProjection
+function	eq	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:309	default		(self: &Self, other: &ShapeRowProjection) -> bool
+function	fmt	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:309	default		(self: &Self, f: &mut Formatter) -> Result
+struct	ShapeRowProjection	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:310	public		
+struct_field	index	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:311	public		usize
+struct_field	kind	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:312	public		&str
+struct_field	width	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:313	public		f64
+struct_field	height	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:314	public		f64
+struct_field	radius	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:315	public		f64
+function	clone	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:318	default		(self: &Self) -> ShapeFillProjection
+function	eq	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:318	default		(self: &Self, other: &ShapeFillProjection) -> bool
+function	fmt	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:318	default		(self: &Self, f: &mut Formatter) -> Result
+struct	ShapeFillProjection	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:319	public		
+struct_field	rows	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:320	public		Vec<ShapeFillRowProjection>
+function	clone	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:323	default		(self: &Self) -> ShapeFillRowProjection
+function	eq	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:323	default		(self: &Self, other: &ShapeFillRowProjection) -> bool
+function	fmt	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:323	default		(self: &Self, f: &mut Formatter) -> Result
+struct	ShapeFillRowProjection	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:324	public		
+struct_field	index	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:325	public		usize
+struct_field	fill	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:326	public		Option<Fill>
+function	clone	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:342	default		(self: &Self) -> AudioSectionProjection
+function	eq	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:342	default		(self: &Self, other: &AudioSectionProjection) -> bool
+function	fmt	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:342	default		(self: &Self, f: &mut Formatter) -> Result
+struct	AudioSectionProjection	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:343	public	AUDIO section の投影(B42、裁定184 型別 section 第4号)。4行とも	
+struct_field	level	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:349	public	`property::LEVEL`(clip の音量、gain)。store は倍率(1.0=等倍)、	TransformRowProjection
+struct_field	pan	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:356	public	`property::PAN`。store 自体が -1.0(全振り左)〜1.0(全振り右)の	TransformRowProjection
+struct_field	fade_in	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:358	public	`property::FADE_IN`(秒)。0.0 = 無効。	TransformRowProjection
+struct_field	fade_out	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:360	public	`property::FADE_OUT`(秒)。0.0 = 無効。[`fade_in`](field)と対称。	TransformRowProjection
+function	clone	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:382	default		(self: &Self) -> TextSectionProjection
+function	eq	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:382	default		(self: &Self, other: &TextSectionProjection) -> bool
+function	fmt	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:382	default		(self: &Self, f: &mut Formatter) -> Result
+struct	TextSectionProjection	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:383	public	TEXT section の投影(裁定98: `styles[0]` = document 既定行のみを対象 —	
+struct_field	content	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:389	public	`text-document t`(Text、本文)。**Hold 評価済みの現在値**	String
+struct_field	font_family	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:391	public	`text-document f`(Font Family)。	String
+struct_field	size	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:400	public	`text-document s`(Font Size)。**2026-08-23 訂正**: 静的値ではなく	f32
+struct_field	line_height	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:403	public	`text-document lh`(Line Height)。`None` = Auto。[`size`](field)と同じ	Option<f32>
+struct_field	tracking	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:406	public	`text-document tr`(Tracking)。[`size`](field)と同じ	f32
+struct_field	justify	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:408	public	`text-document j`(Justify)。	TextJustify
+struct_field	size_key	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:410	public	`Size` 行の Key 列3状態(◇/◆薄/◆濃)。[`key_cell_state`] そのまま。	KeyCellState
+struct_field	line_height_key	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:412	public	`Line Height` 行の Key 列3状態。	KeyCellState
+struct_field	tracking_key	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:414	public	`Tracking` 行の Key 列3状態。	KeyCellState
+struct_field	style	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:427	public	スタイル表の既定行そのもの(裁定98、`styles[0]`)。2026-08-22 発注で	TextDocumentStyle
 function	clone	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:51	default		(self: &Self) -> ComponentSlot
 function	eq	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:51	default		(self: &Self, other: &ComponentSlot) -> bool
 function	fmt	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:51	default		(self: &Self, f: &mut Formatter) -> Result
-function	project	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:515	public	`store`/`session` から選択層の Inspector 投影を組み立てる。**読むだけ**。	(store: &StoreView, session: &Session) -> Result<Option<SelectionProjection>, StoreError>
+function	project	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:517	public	`store`/`session` から選択層の Inspector 投影を組み立てる。**読むだけ**。	(store: &StoreView, session: &Session) -> Result<Option<SelectionProjection>, StoreError>
 struct	ComponentSlot	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:52	public	1成分(X/Y/Z、または scalar 1個)の投影。	
 struct_field	axis	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:53	public		&str
 struct_field	present	motolii-inspector-pane	ui/motolii-inspector-pane/src/projection.rs:57	public	store の意味モデルにこの軸があるか。無ければ表示は `—`(mock の	bool
@@ -1597,7 +1609,7 @@ struct_field	field	motolii-inspector-pane	ui/motolii-inspector-pane/src/shape.rs
 struct_field	text	motolii-inspector-pane	ui/motolii-inspector-pane/src/shape.rs:45	public		String
 function	commit_shape_field	motolii-inspector-pane	ui/motolii-inspector-pane/src/shape.rs:49	public	SHAPE の入力を `SetShapes` へ1回で確定する。	(doc: &mut Document, layer: Option<LayerId>, draft: &mut Option<ShapeFieldDraft>) -> Result<(), String>
 function	commit_shape_fill	motolii-inspector-pane	ui/motolii-inspector-pane/src/shape_fill.rs:110	public	Solid color の下書きを1回の Document 編集へ確定する。	(doc: &mut Document, layer: Option<LayerId>, draft: &mut Option<ShapeFillDraft>) -> Result<(), String>
-function	apply_shape_gradient	motolii-inspector-pane	ui/motolii-inspector-pane/src/shape_fill.rs:129	public	fill が無い shape にも gradient を作れるよう、既定の2停止点を1回で入れる。	(doc: &mut Document, layer: Option<LayerId>, index: usize) -> Result<(), String>
+function	apply_shape_gradient	motolii-inspector-pane	ui/motolii-inspector-pane/src/shape_fill.rs:131	public	fill が無い shape にも gradient を作れるよう、既定の2停止点を1回で入れる。	(doc: &mut Document, layer: Option<LayerId>, index: usize) -> Result<(), String>
 function	clone	motolii-inspector-pane	ui/motolii-inspector-pane/src/shape_fill.rs:31	default		(self: &Self) -> ShapeFillField
 function	eq	motolii-inspector-pane	ui/motolii-inspector-pane/src/shape_fill.rs:31	default		(self: &Self, other: &ShapeFillField) -> bool
 function	fmt	motolii-inspector-pane	ui/motolii-inspector-pane/src/shape_fill.rs:31	default		(self: &Self, f: &mut Formatter) -> Result
@@ -1613,6 +1625,35 @@ struct_field	text	motolii-inspector-pane	ui/motolii-inspector-pane/src/shape_fil
 function	parse_hex_color	motolii-inspector-pane	ui/motolii-inspector-pane/src/shape_fill.rs:63	public	`#RRGGBB` または `#RRGGBBAA` を `Rgb` と opacity へ読む。	(text: &str) -> Result<([f64; N], f64), String>
 function	format_fill_hex	motolii-inspector-pane	ui/motolii-inspector-pane/src/shape_fill.rs:78	public		(fill: Option<&Fill>) -> String
 function	shape_fill_input_id	motolii-inspector-pane	ui/motolii-inspector-pane/src/shape_fill.rs:92	public		(index: usize) -> Id
+function	commit_shape_stroke	motolii-inspector-pane	ui/motolii-inspector-pane/src/shape_stroke.rs:112	public	線幅の下書きを1回の Document 編集へ確定する。	(doc: &mut Document, layer: Option<LayerId>, draft: &mut Option<ShapeStrokeDraft>) -> Result<(), String>
+function	cycle_shape_stroke_cap	motolii-inspector-pane	ui/motolii-inspector-pane/src/shape_stroke.rs:125	public		(doc: &mut Document, layer: Option<LayerId>, index: usize) -> Result<(), String>
+function	cycle_shape_stroke_join	motolii-inspector-pane	ui/motolii-inspector-pane/src/shape_stroke.rs:139	public		(doc: &mut Document, layer: Option<LayerId>, index: usize) -> Result<(), String>
+function	toggle_shape_stroke_dash	motolii-inspector-pane	ui/motolii-inspector-pane/src/shape_stroke.rs:153	public		(doc: &mut Document, layer: Option<LayerId>, index: usize) -> Result<(), String>
+function	clone	motolii-inspector-pane	ui/motolii-inspector-pane/src/shape_stroke.rs:30	default		(self: &Self) -> ShapeStrokeProjection
+function	eq	motolii-inspector-pane	ui/motolii-inspector-pane/src/shape_stroke.rs:30	default		(self: &Self, other: &ShapeStrokeProjection) -> bool
+function	fmt	motolii-inspector-pane	ui/motolii-inspector-pane/src/shape_stroke.rs:30	default		(self: &Self, f: &mut Formatter) -> Result
+struct	ShapeStrokeProjection	motolii-inspector-pane	ui/motolii-inspector-pane/src/shape_stroke.rs:31	public		
+struct_field	rows	motolii-inspector-pane	ui/motolii-inspector-pane/src/shape_stroke.rs:32	public		Vec<ShapeStrokeRowProjection>
+function	clone	motolii-inspector-pane	ui/motolii-inspector-pane/src/shape_stroke.rs:35	default		(self: &Self) -> ShapeStrokeRowProjection
+function	eq	motolii-inspector-pane	ui/motolii-inspector-pane/src/shape_stroke.rs:35	default		(self: &Self, other: &ShapeStrokeRowProjection) -> bool
+function	fmt	motolii-inspector-pane	ui/motolii-inspector-pane/src/shape_stroke.rs:35	default		(self: &Self, f: &mut Formatter) -> Result
+struct	ShapeStrokeRowProjection	motolii-inspector-pane	ui/motolii-inspector-pane/src/shape_stroke.rs:36	public		
+struct_field	index	motolii-inspector-pane	ui/motolii-inspector-pane/src/shape_stroke.rs:37	public		usize
+struct_field	stroke	motolii-inspector-pane	ui/motolii-inspector-pane/src/shape_stroke.rs:38	public		Option<Stroke>
+function	clone	motolii-inspector-pane	ui/motolii-inspector-pane/src/shape_stroke.rs:41	default		(self: &Self) -> ShapeStrokeField
+function	eq	motolii-inspector-pane	ui/motolii-inspector-pane/src/shape_stroke.rs:41	default		(self: &Self, other: &ShapeStrokeField) -> bool
+function	fmt	motolii-inspector-pane	ui/motolii-inspector-pane/src/shape_stroke.rs:41	default		(self: &Self, f: &mut Formatter) -> Result
+enum	ShapeStrokeField	motolii-inspector-pane	ui/motolii-inspector-pane/src/shape_stroke.rs:42	public		
+struct_field	0	motolii-inspector-pane	ui/motolii-inspector-pane/src/shape_stroke.rs:43	default		usize
+variant	Width	motolii-inspector-pane	ui/motolii-inspector-pane/src/shape_stroke.rs:43	default		tuple(1)
+function	clone	motolii-inspector-pane	ui/motolii-inspector-pane/src/shape_stroke.rs:46	default		(self: &Self) -> ShapeStrokeDraft
+function	eq	motolii-inspector-pane	ui/motolii-inspector-pane/src/shape_stroke.rs:46	default		(self: &Self, other: &ShapeStrokeDraft) -> bool
+function	fmt	motolii-inspector-pane	ui/motolii-inspector-pane/src/shape_stroke.rs:46	default		(self: &Self, f: &mut Formatter) -> Result
+struct	ShapeStrokeDraft	motolii-inspector-pane	ui/motolii-inspector-pane/src/shape_stroke.rs:47	public		
+struct_field	field	motolii-inspector-pane	ui/motolii-inspector-pane/src/shape_stroke.rs:48	public		ShapeStrokeField
+struct_field	text	motolii-inspector-pane	ui/motolii-inspector-pane/src/shape_stroke.rs:49	public		String
+function	parse_stroke_width	motolii-inspector-pane	ui/motolii-inspector-pane/src/shape_stroke.rs:72	public		(text: &str) -> Result<f64, String>
+function	shape_stroke_input_id	motolii-inspector-pane	ui/motolii-inspector-pane/src/shape_stroke.rs:83	public		(index: usize) -> Id
 module	style_track	motolii-inspector-pane	ui/motolii-inspector-pane/src/text/style_track.rs:1	restricted	SP-4(2026-08-23) 切り出し: A-1b(裁定214/217)— Size/Line Height/Tracking の	
 function	commit_text_style_track_field_for_layers	motolii-inspector-pane	ui/motolii-inspector-pane/src/text/style_track.rs:128	public	Multi-selection variant of [`commit_text_style_track_field`]. The draft is	(doc: &mut Document, draft: &mut Option<TextStyleTrackDraft>, selected_layers: &[LayerId], playhead_frame: i64, fps: Fps, style_id: TextStyleId, field: TextStyleField) -> Result<(), String>
 function	toggle_text_style_key	motolii-inspector-pane	ui/motolii-inspector-pane/src/text/style_track.rs:172	public	Key 列 click の意味(`crate::transform::toggled_key_track` をそのまま	(doc: &mut Document, selection: Option<LayerId>, playhead_frame: i64, fps: Fps, style_id: TextStyleId, field: TextStyleField) -> Result<(), String>
@@ -2472,18 +2513,18 @@ struct_field	playhead	motolii-shell	shell/motolii-shell/src/fixture.rs:24	public
 struct_field	status	motolii-shell	shell/motolii-shell/src/fixture.rs:27	public	status 帯に出す1件の文言。実際の拒否理由ではなく、fixture が	String
 function	resolve_navigation_key	motolii-shell	shell/motolii-shell/src/input.rs:208	public	U2: playhead ナビゲーション動詞束のキー解決(正典 §5・§8.1)。**pure** —	(key: &Key, modifiers: Modifiers, captured: bool) -> Option<Message>
 function	inspector_pointer_event	motolii-shell	shell/motolii-shell/src/input.rs:79	public	`Shell::subscription` が使う、Inspector drag-to-scrub 用の window 全体の	(event: Event, status: Status, _window: Id) -> Option<Message>
-function	inspector_selection	motolii-shell	shell/motolii-shell/src/inspector_ops.rs:1012	public	今の Inspector 投影。運転席が「選択→行が出る」「編集→store が変わる」を	(self: &Self) -> Option<SelectionProjection>
-function	inspector_field_draft	motolii-shell	shell/motolii-shell/src/inspector_ops.rs:1021	public	今の Inspector 値セル編集下書き。運転席が「click(ドラッグせず release)	(self: &Self) -> Option<&FieldDraft>
+function	inspector_selection	motolii-shell	shell/motolii-shell/src/inspector_ops.rs:1063	public	今の Inspector 投影。運転席が「選択→行が出る」「編集→store が変わる」を	(self: &Self) -> Option<SelectionProjection>
+function	inspector_field_draft	motolii-shell	shell/motolii-shell/src/inspector_ops.rs:1072	public	今の Inspector 値セル編集下書き。運転席が「click(ドラッグせず release)	(self: &Self) -> Option<&FieldDraft>
 module	motolii_shell	motolii-shell	shell/motolii-shell/src/lib.rs:1	public	wraps: iced — front。**store への query の投影**であって、Document の写しを持たない。	
-function	new_with_dialogs	motolii-shell	shell/motolii-shell/src/lib.rs:1003	public	[`Shell::new`] の実体。[`file_dialogs::FileDialogs`] を注入できる形の	(dialogs: Box<impl/dyn>) -> (Self, Task<Message>)
-function	boot	motolii-shell	shell/motolii-shell/src/lib.rs:1084	public	daemon の製品入口(`main.rs`)。[`Shell::new`] で組んだ Shell に main 窓を	() -> (Self, Task<Message>)
-function	boot_with_dialogs	motolii-shell	shell/motolii-shell/src/lib.rs:1091	public	[`Shell::boot`] の dialog 注入版。production は [`Shell::boot`] を使い、	(dialogs: Box<impl/dyn>) -> (Self, Task<Message>)
-function	boot_fixture	motolii-shell	shell/motolii-shell/src/lib.rs:1108	public	`--fixture` 起動の daemon boot([`Shell::boot`] の fixture 版)。	() -> (Self, Task<Message>)
-function	main_window	motolii-shell	shell/motolii-shell/src/lib.rs:1138	public	窓台帳の読み口(main 窓)。試験(`tests/suite/window_drive.rs`)が	(self: &Self) -> Option<Id>
-function	new_fixture	motolii-shell	shell/motolii-shell/src/lib.rs:1146	public	`--fixture` 起動が使う口。**トンマナ検分の器具**(発注書)— `fixture::build()`	() -> (Self, Task<Message>)
-function	title	motolii-shell	shell/motolii-shell/src/lib.rs:1234	public	main 窓の titlebar 文言(C-1 波C「未保存●が無い」の穴を塞ぐ)。	(self: &Self) -> String
-function	subscription	motolii-shell	shell/motolii-shell/src/lib.rs:1249	public	窓の事象 → Message。**ここは翻訳だけで、判断を持たない**。	(self: &Self) -> Subscription<Message>
-function	update	motolii-shell	shell/motolii-shell/src/lib.rs:1326	public	**唯一の更新入口**。Messageはここからdomain moduleへ分配し、各moduleが	(self: &mut Self, message: Message) -> Task<Message>
+function	new_with_dialogs	motolii-shell	shell/motolii-shell/src/lib.rs:1005	public	[`Shell::new`] の実体。[`file_dialogs::FileDialogs`] を注入できる形の	(dialogs: Box<impl/dyn>) -> (Self, Task<Message>)
+function	boot	motolii-shell	shell/motolii-shell/src/lib.rs:1087	public	daemon の製品入口(`main.rs`)。[`Shell::new`] で組んだ Shell に main 窓を	() -> (Self, Task<Message>)
+function	boot_with_dialogs	motolii-shell	shell/motolii-shell/src/lib.rs:1094	public	[`Shell::boot`] の dialog 注入版。production は [`Shell::boot`] を使い、	(dialogs: Box<impl/dyn>) -> (Self, Task<Message>)
+function	boot_fixture	motolii-shell	shell/motolii-shell/src/lib.rs:1111	public	`--fixture` 起動の daemon boot([`Shell::boot`] の fixture 版)。	() -> (Self, Task<Message>)
+function	main_window	motolii-shell	shell/motolii-shell/src/lib.rs:1141	public	窓台帳の読み口(main 窓)。試験(`tests/suite/window_drive.rs`)が	(self: &Self) -> Option<Id>
+function	new_fixture	motolii-shell	shell/motolii-shell/src/lib.rs:1149	public	`--fixture` 起動が使う口。**トンマナ検分の器具**(発注書)— `fixture::build()`	() -> (Self, Task<Message>)
+function	title	motolii-shell	shell/motolii-shell/src/lib.rs:1238	public	main 窓の titlebar 文言(C-1 波C「未保存●が無い」の穴を塞ぐ)。	(self: &Self) -> String
+function	subscription	motolii-shell	shell/motolii-shell/src/lib.rs:1253	public	窓の事象 → Message。**ここは翻訳だけで、判断を持たない**。	(self: &Self) -> Subscription<Message>
+function	update	motolii-shell	shell/motolii-shell/src/lib.rs:1330	public	**唯一の更新入口**。Messageはここからdomain moduleへ分配し、各moduleが	(self: &mut Self, message: Message) -> Task<Message>
 function	clone	motolii-shell	shell/motolii-shell/src/lib.rs:246	default		(self: &Self) -> Message
 function	fmt	motolii-shell	shell/motolii-shell/src/lib.rs:246	default		(self: &Self, f: &mut Formatter) -> Result
 enum	Message	motolii-shell	shell/motolii-shell/src/lib.rs:247	public		
@@ -2605,7 +2646,7 @@ struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:637	default		ExportE
 variant	ExportProgressed	motolii-shell	shell/motolii-shell/src/lib.rs:637	default	Export の実行が背景スレッドから届ける進捗/完了(C-3、	tuple(1)
 variant	RenameSelectedLayer	motolii-shell	shell/motolii-shell/src/lib.rs:642	default	Enter(単一選択時)= rename 開始(正典 §6、`timeline::write` 冒頭 doc)。	unit
 struct	Shell	motolii-shell	shell/motolii-shell/src/lib.rs:652	public		
-function	new	motolii-shell	shell/motolii-shell/src/lib.rs:993	public		() -> (Self, Task<Message>)
+function	new	motolii-shell	shell/motolii-shell/src/lib.rs:995	public		() -> (Self, Task<Message>)
 module	menu	motolii-shell	shell/motolii-shell/src/menu.rs:1	public	header のメニューバーの意味定義(MB-2、`menu.rs` 冒頭 doc 参照)。MB-2 で	
 constant	TOP_LEVEL_LABELS	motolii-shell	shell/motolii-shell/src/menu.rs:47	public	トップレベル4本の正本(左から順)。`menus()` と同じ出典 — q0_fence の	
 function	menus	motolii-shell	shell/motolii-shell/src/menu.rs:51	public	header メニューバーの全定義。`Shell::header` が毎フレーム	() -> Vec<Menu<Message>>
@@ -2724,7 +2765,7 @@ function	window_title	motolii-shell	shell/motolii-shell/src/view.rs:254	public	d
 function	stage_overlay	motolii-shell	shell/motolii-shell/src/view.rs:27	public	`stage::StageOverlay` の組み立て(裁定157・S1〜S3)。`Shell::view` が	(self: &Self) -> Option<StageOverlay>
 function	view	motolii-shell	shell/motolii-shell/src/view.rs:341	public		(self: &Self) -> Element<Message>
 function	stage_gizmo_overlay	motolii-shell	shell/motolii-shell/src/view.rs:61	public	`stage::GizmoOverlay` の組み立て(GZ 結線、第5波)。選択 layer の	(self: &Self) -> Option<GizmoOverlay>
-function	band_chrome_style	motolii-shell	shell/motolii-shell/src/view.rs:833	public	header 帯・status 帯の共通スタイル。線化 D5(裁定179 文法1、	(dims: Dimensions, colors: Colors) -> Style
+function	band_chrome_style	motolii-shell	shell/motolii-shell/src/view.rs:834	public	header 帯・status 帯の共通スタイル。線化 D5(裁定179 文法1、	(dims: Dimensions, colors: Colors) -> Style
 module	focus	motolii-shell-state	ui/motolii-shell-state/src/focus.rs:1	public	パネルのフォーカス/巡回状態(B25 の状態側、発注 2026-08-22)。	
 enum	KeyboardClaim	motolii-shell-state	ui/motolii-shell-state/src/focus.rs:100	public	呼び出し口で明示する「今キーボード入力を誰が掴んでいるか」。pane 巡回/	
 variant	Panes	motolii-shell-state	ui/motolii-shell-state/src/focus.rs:102	default	text_input 等がキー入力を掴んでいない——pane 巡回/close を実行してよい。	unit

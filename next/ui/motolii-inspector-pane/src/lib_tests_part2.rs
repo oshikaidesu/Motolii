@@ -472,6 +472,7 @@
             audio: None,
             shape: None,
             shape_fill: None,
+            shape_stroke: None,
             links: vec![],
         };
         let (start, _) = drag_origin(&selection, field).expect("mask opacity は editable のはず");
@@ -573,6 +574,7 @@
             }),
             shape: None,
             shape_fill: None,
+            shape_stroke: None,
             links: vec![],
         };
         let (level_start, _) =

@@ -138,6 +138,7 @@ mod matte;
 mod projection;
 mod shape;
 mod shape_fill;
+mod shape_stroke;
 mod text;
 mod transform;
 
@@ -171,6 +172,11 @@ pub use shape_fill::{
     apply_shape_gradient, commit_shape_fill, format_fill_hex, parse_hex_color,
     shape_fill_input_id, ShapeFillDraft, ShapeFillField,
 };
+pub use shape_stroke::{
+    commit_shape_stroke, cycle_shape_stroke_cap, cycle_shape_stroke_join,
+    parse_stroke_width, shape_stroke_input_id, toggle_shape_stroke_dash, ShapeStrokeDraft,
+    ShapeStrokeField, ShapeStrokeProjection, ShapeStrokeRowProjection,
+};
 pub use text::{
     applied_text_content, applied_text_field, commit_text_field, commit_text_font_pick,
     commit_text_style_track_field, commit_text_style_track_field_for_layers,
@@ -198,6 +204,7 @@ use mask::*;
 use projection::*;
 use shape::*;
 use shape_fill::*;
+use shape_stroke::*;
 use text::*;
 use transform::*;
 
@@ -274,6 +281,16 @@ pub enum Message {
     ShapeFillGradient(usize),
     /// 色見本を押して fill の16進欄へ focus する。
     ShapeFillFocus(usize),
+    /// Shape の stroke 線幅への打鍵。Enter まで Document へ書かない。
+    ShapeStrokeInput(ShapeStrokeField, String),
+    /// Shape の stroke 線幅の Enter。`SetShapes` を1回だけ出す。
+    ShapeStrokeSubmit(ShapeStrokeField),
+    /// Shape の stroke cap を次の形へ巡回する。
+    ShapeStrokeCap(usize),
+    /// Shape の stroke join を次の形へ巡回する。
+    ShapeStrokeJoin(usize),
+    /// Shape の stroke dash を on/off する。
+    ShapeStrokeDash(usize),
 
     // ---- MASK section(B02 第1切片、裁定184) ----
     /// この mask の mode を宣言順の次へ巡回。`CycleBlendMode` と同じ即時操作の
@@ -510,6 +527,7 @@ pub fn view_with_color_draft(
         None,
         None,
         None,
+        None,
         dims,
         colors,
     )
@@ -535,6 +553,7 @@ pub fn view_with_content_editor<'a>(
     color_field_draft: Option<&color::ColorFieldDraft>,
     shape_field_draft: Option<&ShapeFieldDraft>,
     shape_fill_draft: Option<&ShapeFillDraft>,
+    shape_stroke_draft: Option<&ShapeStrokeDraft>,
     content_editor: Option<&'a text_editor::Content>,
     dims: Dimensions,
     colors: Colors,
@@ -554,6 +573,7 @@ pub fn view_with_content_editor<'a>(
             color_field_draft,
             shape_field_draft,
             shape_fill_draft,
+            shape_stroke_draft,
             content_editor,
             dims,
             colors,
@@ -595,6 +615,7 @@ fn selected_body<'a>(
     color_field_draft: Option<&color::ColorFieldDraft>,
     shape_field_draft: Option<&ShapeFieldDraft>,
     shape_fill_draft: Option<&ShapeFillDraft>,
+    shape_stroke_draft: Option<&ShapeStrokeDraft>,
     content_editor: Option<&'a text_editor::Content>,
     dims: Dimensions,
     colors: Colors,
@@ -673,6 +694,14 @@ fn selected_body<'a>(
     }
     if let Some(shape_fill_projection) = &selection.shape_fill {
         rows = rows.push(shape_fill_section(shape_fill_projection, shape_fill_draft, dims, colors));
+    }
+    if let Some(shape_stroke_projection) = &selection.shape_stroke {
+        rows = rows.push(shape_stroke_section(
+            shape_stroke_projection,
+            shape_stroke_draft,
+            dims,
+            colors,
+        ));
     }
     // LINK section(2026-08-22 発注「レイヤーを指す」文法 第3号): masks/effects
     // と違い「無ければ出さない」の Q0 判断は適用しない ── どの layer でも
