@@ -53,7 +53,8 @@
 //! 戻す(`menu_drive.rs` と同じ「`Shell` の公開 API だけを叩く」black box 手口)。
 
 use std::future::Future;
-use std::path::PathBuf;
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::pin::Pin;
 
 /// 注入可能な OS dialog の戻り値型。non-wasm32 の
@@ -62,6 +63,79 @@ use std::pin::Pin;
 /// (fake)は `std::future::ready(..)` を包む。どちらも `iced::Task::perform`
 /// (`impl Future<Output=A> + MaybeSend + 'static`)へそのまま渡せる。
 pub type DialogFuture<T> = Pin<Box<dyn Future<Output = T> + Send>>;
+
+/// Import Media… が列挙する既存の動画拡張子。
+pub const IMPORT_VIDEO_EXTENSIONS: &[&str] =
+    &["mp4", "mov", "mkv", "webm", "avi", "m4v"];
+
+/// Import Media… が列挙する既存の画像拡張子。
+pub const IMPORT_IMAGE_EXTENSIONS: &[&str] =
+    &["jpg", "jpeg", "png", "gif", "webp", "bmp", "svg"];
+
+/// Import Media… が列挙する既存の音声拡張子。
+pub const IMPORT_AUDIO_EXTENSIONS: &[&str] =
+    &["wav", "mp3", "aac", "flac", "ogg", "m4a"];
+
+/// Import Media… と folder import が共有する supported media 判定。
+///
+/// これは probe の成否を予測するものではない。現在の OS file dialog が
+/// 利用者へ提示している拡張子集合をそのまま再利用する、保守的な入口判定で
+/// ある。新しい形式はここへ勝手に追加しない(出典なし)。
+pub fn is_supported_import_file(path: &Path) -> bool {
+    let Some(extension) = path.extension().and_then(|extension| extension.to_str()) else {
+        return false;
+    };
+
+    IMPORT_VIDEO_EXTENSIONS
+        .iter()
+        .chain(IMPORT_IMAGE_EXTENSIONS)
+        .chain(IMPORT_AUDIO_EXTENSIONS)
+        .any(|supported| extension.eq_ignore_ascii_case(supported))
+}
+
+/// 入力 path 列のフォルダを、supported media の path 列へ展開する。
+///
+/// フォルダは全ての子孫を深さ制限なしで走査する。現行 repo に「直下だけ」
+/// という意味はなく、フォルダ単位で素材をまとめて取り込む要求に対して
+/// 取りこぼしを作らない、最小の決定とした(出典なし)。子ディレクトリは
+/// `read_dir` の path 順で処理し、シンボリックリンクは辿らないので、結果は
+/// 決定的で循環もしない。
+///
+/// 既存の `Message::AdmitPaths(Vec<PathBuf>)` の意味を壊さないため、フォルダ
+/// でない入力 path は拡張子に関係なくそのまま残す。フォルダ内の通常ファイル
+/// だけは [`is_supported_import_file`] を通ったものを残す。ディレクトリを
+/// 読めない場合は `Err` を返し、呼び手が「何も起きなかった」と隠さず扱える
+/// 境界にする。
+pub fn expand_import_paths<I>(paths: I) -> std::io::Result<Vec<PathBuf>>
+where
+    I: IntoIterator<Item = PathBuf>,
+{
+    let mut expanded = Vec::new();
+    for path in paths {
+        if path.is_dir() {
+            append_supported_files(&path, &mut expanded)?;
+        } else {
+            expanded.push(path);
+        }
+    }
+    Ok(expanded)
+}
+
+fn append_supported_files(directory: &Path, output: &mut Vec<PathBuf>) -> std::io::Result<()> {
+    let mut entries = fs::read_dir(directory)?.collect::<std::io::Result<Vec<_>>>()?;
+    entries.sort_by_key(|entry| entry.path());
+
+    for entry in entries {
+        let path = entry.path();
+        let file_type = entry.file_type()?;
+        if file_type.is_dir() {
+            append_supported_files(&path, output)?;
+        } else if file_type.is_file() && is_supported_import_file(&path) {
+            output.push(path);
+        }
+    }
+    Ok(())
+}
 
 /// [`crate::Shell`] が保持する唯一の OS 副作用口。5メソッドが New Project/
 /// Save As/Save a Copy/Open/Quit/素材取り込み/書き出し先選択の全てをまかなう
@@ -165,9 +239,9 @@ impl FileDialogs for RfdDialogs {
             // 完全一致させる(新しい対応形式を発明しない ── フィルタが
             // 実能力より広いと「選べるのに admit で弾かれる」体験になる)。
             rfd::AsyncFileDialog::new()
-                .add_filter("Video", &["mp4", "mov", "mkv", "webm", "avi", "m4v"])
-                .add_filter("Image", &["jpg", "jpeg", "png", "gif", "webp", "bmp", "svg"])
-                .add_filter("Audio", &["wav", "mp3", "aac", "flac", "ogg", "m4a"])
+                .add_filter("Video", IMPORT_VIDEO_EXTENSIONS)
+                .add_filter("Image", IMPORT_IMAGE_EXTENSIONS)
+                .add_filter("Audio", IMPORT_AUDIO_EXTENSIONS)
                 .pick_files()
                 .await
                 .unwrap_or_default()
@@ -192,5 +266,75 @@ impl FileDialogs for RfdDialogs {
 
     fn quit(&self) {
         std::process::exit(0);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{expand_import_paths, is_supported_import_file};
+    use std::path::{Path, PathBuf};
+
+    fn test_directory(name: &str) -> PathBuf {
+        let directory = std::env::temp_dir().join(format!(
+            "motolii-file-dialogs-{name}-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&directory);
+        std::fs::create_dir_all(&directory).expect("test directory");
+        directory
+    }
+
+    #[test]
+    fn supported_import_extensions_are_case_insensitive() {
+        assert!(is_supported_import_file(Path::new("clip.MP4")));
+        assert!(is_supported_import_file(Path::new("still.PnG")));
+        assert!(is_supported_import_file(Path::new("voice.FLAC")));
+        assert!(!is_supported_import_file(Path::new("notes.txt")));
+        assert!(!is_supported_import_file(Path::new("without-extension")));
+    }
+
+    #[test]
+    fn folder_expansion_recurses_in_sorted_order_and_filters_media() {
+        let root = test_directory("recursive");
+        let nested = root.join("nested");
+        let deep = nested.join("deep");
+        std::fs::create_dir_all(&deep).expect("nested test directories");
+        for path in [
+            root.join("z.mp4"),
+            root.join("a.MP3"),
+            root.join("ignore.txt"),
+            nested.join("b.webp"),
+            deep.join("c.MOV"),
+        ] {
+            std::fs::write(path, b"test").expect("test media");
+        }
+
+        let expanded = expand_import_paths([root.clone()]).expect("expand folder");
+
+        assert_eq!(
+            expanded,
+            vec![
+                root.join("a.MP3"),
+                nested.join("b.webp"),
+                deep.join("c.MOV"),
+                root.join("z.mp4"),
+            ]
+        );
+        std::fs::remove_dir_all(root).expect("remove test directory");
+    }
+
+    #[test]
+    fn direct_paths_are_preserved_while_folder_contents_are_filtered() {
+        let root = test_directory("mixed");
+        let unsupported = root.join("notes.txt");
+        let supported = root.join("clip.m4v");
+        std::fs::write(&unsupported, b"test").expect("unsupported test file");
+        std::fs::write(&supported, b"test").expect("supported test file");
+
+        let expanded = expand_import_paths([unsupported.clone(), root.clone()])
+            .expect("expand mixed paths");
+
+        assert_eq!(expanded, vec![unsupported, supported]);
+        std::fs::remove_dir_all(root).expect("remove test directory");
     }
 }
