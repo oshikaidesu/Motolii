@@ -82,6 +82,7 @@ pub(crate) mod render;
 mod render_dispatch;
 mod selection;
 mod settings_ops;
+mod shape_creator;
 mod shape_operator;
 mod shape_ops;
 #[allow(unreachable_pub)]

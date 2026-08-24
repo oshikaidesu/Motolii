@@ -222,6 +222,18 @@ pub enum CardKey {
 ///   view 操作)・656/657(Flowchart)・672/683/807/808/882/883(外部アプリ
 ///   連携)・691/713/716/943(保存/ポスター/AI/アスペクト比 — export・comp
 ///   設定系)。
+/* motolii-component
+id = "browser.shape_creator_catalog"
+kind = "semantic"
+weight = "core_edit"
+maps = []
+entry = ["CreateKind", "CREATE_PREVIEW"]
+meaning = ["CreateFromCard", "PolyStar"]
+evaluation = ["every_create_card_declares_its_create_kind", "create_tab_shows_all_six_create_cards"]
+render = ["preview_catalog", "create_tab_shows_all_six_create_cards"]
+observable = ["double_clicking_a_create_card_publishes_create_from_card"]
+*/
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CreateKind {
     /// 矩形シェイプレイヤー(map 952、`LayerSource::Shape`)。

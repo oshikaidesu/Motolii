@@ -37,7 +37,7 @@
 | 16 | パスの頂点を Stage 上でドラッグして形を変える | Stage | `next/ui/motolii-stage-pane/src/path_edit.rs:52-120` が選択中の flat Bezier leaf の頂点を投影し、`next/ui/motolii-stage-pane/src/path_edit.rs:307-358` が hit-test/drag を layer-local 座標へ戻す。`next/shell/motolii-shell/src/path_ops.rs:32-110` が `edit::move_vertex` → `Intent::SetShapes` で確定し、`path_vertex_drag_changes_shape` が実値を検収 | 書ける |
 | 17 | パスを閉じる/開く | Stage/Inspector | `next/ui/motolii-stage-pane/src/path_edit.rs:145-190` の toolbar が先頭 contour の状態に応じて Close/Open を表示し、`next/shell/motolii-shell/src/path_ops.rs:45-54,96-108` が `edit::{close_path,open_path}` を `SetShapes` へ写す。`path_close_and_open_are_one_document_edit_each` が往復を検収 | 書ける |
 | 18 | 角を丸める(RoundedCorners)・トリムパス・繰り返し(Repeater)などの modifier を足す | Browser/Inspector | `next/ui/motolii-browser-pane/src/model/tabs.rs:409-475` が7種の `ShapeOpKind` カードを宣言し、`preview_view.rs:260`→`Message::ApplyOpFromCard`→`next/shell/motolii-shell/src/shape_operator.rs:36-106` が既定 `OpKind` を組んで `Intent::SetShapes` へ1段積む。カード宣言は `tabs/tests.rs:316-339`、実書き戻しは `shape_operator.rs:118-160` が検収 | 書ける |
-| 19 | 星形・多角形のシェイプを作る | Browser | 【穴】意味が無い — `CreateKind` には Star/Polygon 相当の variant 自体が無い(4種類+Text のみ、`model.rs:341-364`) | 【穴】意味が無い |
+| 19 | 星形・多角形のシェイプを作る | Browser | `next/ui/motolii-browser-pane/src/model/tabs.rs:226-263` の `CreateKind::PolyStar` と `CREATE_PREVIEW`、`next/shell/motolii-shell/src/shape_creator.rs:31-126` の `CreateFromCard`/`PathSource::PolyStar`、`next/shell/motolii-shell/tests/suite/create_from_card_drive.rs:70-94` の実値検収 | 書ける |
 
 ### C. 塗りと線を付ける
 
@@ -226,7 +226,7 @@
 | 14 描画ツール入口なし | あり(間接) | Pen/Rectangle Tool は各社ツールパネルの標準項目、直接名の行は本調査では特定せず |
 | 15 SHAPE 寸法編集入口なし | なし | `ShapeSectionProjection` と `commit_shape_field` を新しい `inspector.shape` component として実装(台帳の抽出粒度より粗い section 単位) |
 | 16-18 SHAPE section の頂点/modifier入口 | なし | 16-17 の `stage.path_edit` と #18 の `browser.shape_operator_catalog`/`shell.shape_operator_writer` component で、flat Bezier の頂点移動・開閉と7種 modifier の入口/書き戻しを解消 |
-| 19 Star/Polygon 作成 | あり | AE 等の Polystar 相当メニュー項目は台帳に存在するはず(未逐一確認、逸脱として明記) |
+| 19 Star/Polygon 作成 | あり | AE 等の Polystar 相当メニュー項目。`CreateKind::PolyStar` と Browser の `poly-star` カード、Shell の `PathSource::PolyStar` が接続済み |
 | 20 カラーピッカー部品皆無 | **なし** | 「色をつまむウィジェットが存在するか」は製品のメニュー/ショートカット/パネル一覧に現れない実装詳細。台帳の抽出規則が構造的に持てない |
 | 34-35 mask expansion 未消費 | あり | id 197 相当(mask.x)は台帳に既載、2026-08-22裁定で「不採用→採用」に回収済み(KNOWN.md) |
 | 36 マスク削除の有無 | 【未確認】のため判定保留 | — |
