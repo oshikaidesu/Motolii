@@ -85,6 +85,85 @@ Lottie は Bodymovin が After Effects のデータ模型を吐いた物なの�
 **束の完了条件 = その束の行が全部 `採用済` になり、evidence がコードに実在すること。**
 だから完了は機械で判定でき、発注もそのまま切り出せる。
 
+### コンポーネント契約から粒を導出する
+
+意味を持つコンポーネントの実装ファイルには `motolii-component` 契約を置く。
+契約の `entry / meaning / evaluation / render / observable` は、利用者の1つの意味を
+検収する5粒である。`scripts/derive_components.py` が契約を読み、
+`reference/generated/components.tsv` と `components.md` を生成する。
+
+契約ブロック以外のコードから各証拠名を探すため、名前を契約に書いただけでは緑にならない。
+実装・結線・評価・描画・観測のどれかが欠ければその粒だけ赤になる。
+`maps = []` は外部地図に対応しないMotolii固有の意味に限る。
+
+重みの初期定数は、機能の大きさではなく優先順位を表す:
+
+| weight | 値 | 意味 |
+|---|---:|---|
+| `truth_safety` | 5 | 保存・破壊防止・結果の正しさ |
+| `core_edit` / `render_export` | 4 | 通常編集経路・画面と書出しの真実性 |
+| `fanout` | 3 | 他の意味へ及ぼす波及 |
+| `frequency` / `portability` | 2 | 使用頻度・再開や受け渡し |
+| `convenience` | 1 | ショートカットや補助入口 |
+
+この数値は外部製品の事実ではなく、Motoliiの優先順位である。外部資料は `maps` の採否を
+支え、PageRank は `fanout` の判断を補助するが、どちらも重みそのものを決めない。
+
+コンポーネントの切り分けは、**独立した意味・状態遷移・失敗方針・検収結果**を1単位とする。
+別の undo/recovery 方針、別 owner、別の観測結果を持つなら分ける。単独では利用者に意味が
+見えないUI部品や補助関数は、意味コンポーネントに数えず内部実装に留める。
+
+## 現在の実装ルート
+
+実装は `plan_steps.py` が示す**最も早い未通過step**を起点にする。stepを進める途中で、
+必要な意味コンポーネントが無い、または契約の粒が赤なら、そのコンポーネントを先に閉じる。
+コンポーネントが緑になったらstepへ戻り、入口から利用者が観測できる結果まで通す。
+
+したがって、stepとcomponentは競合しない。stepが需要を決め、componentがその需要の依存を
+閉じる。componentだけを先回りして増やさない。前半で複数stepに効く基盤を作り、後半ほど
+新規実装量を減らす。ただし後半の表現・再リンク・受け渡しは、量が少なくても意味と検収が
+重くなりうるため、5粒の赤を残したまま完了とはしない。
+
+## 並列レーンへの発注テンプレート
+
+レーンごとの発注は、現場監督の作文ではなく次の固定項目で作る。`plan_waves.py` が出す
+write-set と、component契約の赤粒をそのまま埋める。
+
+```text
+OUTCOME: 状態の変化を1つ(「確認する」ではなく「何が変わるか」)
+STEP: procedures/P*.md の手順番号・map id
+COMPONENT: component id と、閉じる5粒(entry/meaning/evaluation/render/observable)
+TARGET: 変更してよいファイルの絶対的な範囲
+WRITE-SET: plan_waves.py の責任ファイル集合
+WIRE-SET: `//! responsibility: wire` を持つ結線ファイル(意味レーンから除外)
+DO-NOT-TOUCH: 他レーンのファイルと先回りの機能
+STATIC: inventory / derive_components / derive_entries / coherence / rehearse_parallel / diff --check
+CARGO: 原則なし。例外は enum 網羅性・公開型境界・借用生存期間・波末の消費点だけ
+RETURN: 変更ファイル、evidence(file:line)、残った赤、実行した検査と終了コード
+```
+
+エージェントは通常 `cargo` を回さない。静的検査で答えられる問いを先に閉じ、supervisorが
+波の終端または消費点で、影響crateをまとめて `cargo check --tests` する。`cargo test` は
+実窓・push・引き継ぎ前、または前波の実行時挙動に依存する束の前だけに置く。これでcargoの
+lock待ちを並列の上限にしない。
+
+`Shell` rootのような結線ハブは意味componentのwrite-setへ混ぜない。コード側に
+`//! responsibility: wire` を宣言し、意味レーン完了後のWIRE結線へ送る。外部上流の欠如は
+偽の責任ファイルを割り当てず、`(外部依存)`として残す。本当に所有者が無い穴だけを
+`(責任ファイル未記入)`として赤にする。
+
+現行Shellの実装境界もこの形に揃えている。`render.rs` は描画・読み取り口だけ、
+`settings_ops.rs`/`gizmo_ops.rs`/`marker_ops.rs` は各意味更新、
+`render_dispatch.rs` はMessage分配だけのWIREである。Inspectorの横断値ドラッグも
+`value_drag.rs` を共通gestureのWIRE adapterとし、Composition・Settings/Background・
+Text色のdraft/commitは `value_drag_composition.rs`/`value_drag_settings.rs`/
+`value_drag_color.rs` へ分けている。`check_responsibility.py` がWIREのDocument書き込みと、
+描画moduleへの書き戻りを赤にする。
+
+並列を開始する前は `rehearse_parallel.py` を実行する。これは実装を変更せず、意味レーンを
+同時に読み、write-setの交差・WIREの漏れ・全レーンの完了を検査する。40レーンが終わらない
+場合は、エージェントを増やす前に責任境界か台帳の誤りを直す。
+
 
 ### Lottie は**書き出し専用**(2026-08-23 実測・取り込みは未決)
 

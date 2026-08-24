@@ -1,0 +1,6 @@
+component	kind	weight	weight_value	maps	facet	evidence	status	reason	source
+edit.batch_rename	semantic	core_edit	4	785	entry	BatchRenameSelectedLayers	緑	実装コードに実在	next/shell/motolii-shell/src/batch_rename.rs:7
+edit.batch_rename	semantic	core_edit	4	785	meaning	apply_selected	緑	実装コードに実在	next/shell/motolii-shell/src/batch_rename.rs:7
+edit.batch_rename	semantic	core_edit	4	785	evaluation	apply_all	緑	実装コードに実在	next/shell/motolii-shell/src/batch_rename.rs:7
+edit.batch_rename	semantic	core_edit	4	785	render	Timeline	緑	実装コードに実在	next/shell/motolii-shell/src/batch_rename.rs:7
+edit.batch_rename	semantic	core_edit	4	785	observable	auto_rename_follows_row_order_and_undoes_as_one_step	緑	実装コードに実在	next/shell/motolii-shell/src/batch_rename.rs:7

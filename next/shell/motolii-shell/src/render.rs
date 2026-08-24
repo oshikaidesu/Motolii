@@ -1,19 +1,12 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-
 use motolii_engine::ObservationCamera;
-use motolii_store::{
-    DisplayRevision, Fps, Intent, LayerSource, PropertyId, RationalTime,
-};
+use motolii_store::{DisplayRevision, LayerSource, RationalTime};
 
 use crate::stage_presenter::build_stage_presenter_rgba;
-use crate::inspector_ops::ValueDragTarget;
-use crate::settings_pane::BackgroundFieldDraft;
 use crate::tokens::{Colors, Dimensions, Tokens};
-use crate::{
-    metrics, settings_pane, stage, Shell,
-};
+use crate::{metrics, stage, Shell};
 
 impl Shell {
     /// 描き上がった Stage フレームの生 RGBA。**常に背景込みの export 真値**
@@ -128,7 +121,15 @@ impl Shell {
                     ),
                     None => {
                         let frame = self.frame.as_ref().expect("直前の if let で確認済み");
-                        build_stage_presenter_rgba(width, height, &frame.rgba, false, resolution_cap, colors, ui_scale)
+                        build_stage_presenter_rgba(
+                            width,
+                            height,
+                            &frame.rgba,
+                            false,
+                            resolution_cap,
+                            colors,
+                            ui_scale,
+                        )
                     }
                 };
                 if let Some(frame) = self.frame.as_mut() {
@@ -263,8 +264,11 @@ impl Shell {
                 // だから0にリセット」ではない、`self.frame` がまだ無い最初の
                 // 1回だけ0になる)。固定で0を書くと presenter_generation が
                 // 常に0のまま動かなくなる事故を踏んだので明示的に注意書きした。
-                let presenter_generation =
-                    self.frame.as_ref().map(|frame| frame.presenter_generation + 1).unwrap_or(0);
+                let presenter_generation = self
+                    .frame
+                    .as_ref()
+                    .map(|frame| frame.presenter_generation + 1)
+                    .unwrap_or(0);
                 self.frame = Some(RenderedFrame {
                     revision,
                     playhead,
@@ -387,13 +391,20 @@ impl Shell {
     /// (無反応より、背景込みのまま出す方が M16 に近い — 市松が一時的に効かない
     /// だけで Stage 自体は空にならない)。描けなかった時は理由を status へ出す
     /// (M13)。
-    pub(crate) fn checkerboard_preview_source(&mut self, checkerboard: bool, playhead: i64) -> Option<Vec<u8>> {
+    pub(crate) fn checkerboard_preview_source(
+        &mut self,
+        checkerboard: bool,
+        playhead: i64,
+    ) -> Option<Vec<u8>> {
         if !checkerboard {
             return None;
         }
         let composition = self.doc.view().composition().ok().flatten()?;
         let t = RationalTime::try_from_frame(playhead, composition.fps).ok()?;
-        match self.engine.render_frame_without_background(&self.doc.view(), t) {
+        match self
+            .engine
+            .render_frame_without_background(&self.doc.view(), t)
+        {
             Ok(rgba) => Some(rgba),
             Err(error) => {
                 self.status = Some(format!("市松プレビューを描けない: {error}"));
@@ -414,8 +425,17 @@ impl Shell {
     /// crate 側)へ移設済み — ここは `self.engine`/`self.doc.view()` を貸し、
     /// `Some(Err(_))` の枝でだけ `self.status` へ書く glue(関数名・シグネチャは
     /// 無改名、`update_settings` と同じ glue の形)。
-    pub(crate) fn observation_preview_source(&mut self, observation: &ObservationCamera, playhead: i64) -> Option<Vec<u8>> {
-        match stage::observation_preview_source(&mut self.engine, &self.doc.view(), observation, playhead) {
+    pub(crate) fn observation_preview_source(
+        &mut self,
+        observation: &ObservationCamera,
+        playhead: i64,
+    ) -> Option<Vec<u8>> {
+        match stage::observation_preview_source(
+            &mut self.engine,
+            &self.doc.view(),
+            observation,
+            playhead,
+        ) {
             None => None,
             Some(Ok(rgba)) => Some(rgba),
             Some(Err(error)) => {
@@ -474,15 +494,13 @@ impl Shell {
             },
         }
     }
-
 }
-
 
 #[cfg(test)]
 mod text_track_preview_tests {
     use super::*;
     use motolii_store::{
-        ContentTrack, FontRef, Interp, Intent, Keyframe, KeyframeTrack, LayerId, LayerMeta,
+        ContentTrack, FontRef, Intent, Interp, Keyframe, KeyframeTrack, LayerId, LayerMeta,
         LayerTiming, PropertyId, TextAlignmentOptions, TextDocument, TextDocumentStyle,
         TextJustify, TextStyleId, Value,
     };
@@ -574,7 +592,10 @@ mod text_track_preview_tests {
             .unwrap()
             .styles[0]
             .size;
-        assert_eq!(expected, 48.0, "resolved_text_document 自体が track を読めていない(前提が壊れている)");
+        assert_eq!(
+            expected, 48.0,
+            "resolved_text_document 自体が track を読めていない(前提が壊れている)"
+        );
 
         let snapshot = shell
             .build_preview_snapshot(0)
@@ -591,9 +612,7 @@ mod text_track_preview_tests {
 }
 
 use motolii_core::{CompSpec, ResolvedCamera};
-use motolii_store::{LayerId, ResolvedLayer, TextDocument, Value};
-use iced::Task;
-use crate::{inspector_pane, timeline, Message};
+use motolii_store::{LayerId, ResolvedLayer, TextDocument};
 
 /// 裁定171 v2(M4)。GPU zero-copy 経路で使う resolve 済みスナップショット。
 /// `motolii_store::Document` を直接共有できない(`re_entity_db::EntityDb` が
@@ -724,487 +743,7 @@ pub(crate) struct DisplaySource {
     pub(crate) observation_rgba: Option<Vec<u8>>,
 }
 
-/// Stage ギズモ drag、shell 側の transient(GZ 結線、第5波)。**Document では
-/// ない** — Inspector の `FieldDragState` と同じ「確定まで front だけが持つ」
-/// 身分。ギズモの座標解(`stage::GizmoDragState`)は canvas 内部に住み、shell は
-/// 「どの layer のどの property を書いているか」と、確定のキー upsert の宛先
-/// (Start 時点の playhead/fps — Inspector drag と同じ press 時点固定)だけを
-/// 持つ。
-pub(crate) struct GizmoShellDrag {
-    pub(crate) layer: LayerId,
-    /// Start が申告した property(Esc 連鎖 [`Shell::cancel_gizmo_drag`] の
-    /// transient 掃除の宛先。Move/Commit は値側 [`stage::GizmoValue::property`]
-    /// を読む — 契約上 1 drag = 1 property なので同じ値)。
-    pub(crate) property: stage::GizmoProperty,
-    /// Start 時点の playhead(frame)と fps。確定のキー upsert
-    /// (`inspector_pane::edited_value_track`)の宛先 — drag の起点値は Start
-    /// 時点の絵から読まれているので、確定の宛先も同じ時刻に固定する
-    /// (`inspector_pane::FieldDragState::playhead_frame` と同じ判断)。
-    pub(crate) playhead_frame: i64,
-    pub(crate) fps: Fps,
-    /// 1回でも `set_transient` を書いたか(Cancel 時に overlay を外す要否)。
-    pub(crate) moved: bool,
-}
-
-/// [`stage::GizmoValue`](store の単位そのまま — `gizmo.rs` doc)→ store の
-/// [`Value`]。shell 側は写すだけ(GZ 契約「shell 側は `Value::Vec2`/`Value::F64`
-/// へ写すだけ」そのもの)。**`Anchor` はここへは来ない** — anchor drag は
-/// anchor と position の2 property を対で書く必要があるため、
-/// [`Shell::update_gizmo`] が `GizmoValue::Anchor { .. }` を専用の分岐で
-/// 個別に処理する(`gizmo.rs::GizmoValue::Anchor` doc「shell は両方を同時に
-/// 書く」参照)。
-fn gizmo_store_value(value: stage::GizmoValue) -> Value {
-    match value {
-        stage::GizmoValue::Position(v) | stage::GizmoValue::Scale(v) => Value::Vec2(v),
-        stage::GizmoValue::Rotation(v) => Value::F64(v),
-        stage::GizmoValue::Anchor { .. } => {
-            unreachable!("Anchor は update_gizmo が個別分岐で処理する — ここへは来ない")
-        }
-    }
-}
-
-
 impl Shell {
-    /// `Shell::update` から委譲される領域別 dispatch(2026-08-23 SP-1 レーン、
-    /// `docs/reviews/2026-08-23-shell-split-plan.md` の続き)。**中身は無改変** —
-    /// 元の巨大な `update()` match の腕をそのままここへ移しただけ(裁定どおり
-    /// 移送と委譲だけ、バグ修正・整形は混ぜない)。渡された `message` がこの
-    /// 領域の variant でなければ `Err(message)` で突き返す — `crate::dispatch_message`
-    /// の chain-of-responsibility が次の領域dispatchへ渡す。**新しい Message 枝は
-    /// ここへ腕を1本足すだけで済み、`lib.rs` は触らない**(MC-1 と同じ効能)。
-    pub(crate) fn dispatch_render(&mut self, message: Message) -> Result<Task<Message>, Message> {
-        let mut task = Task::none();
-        match message {
-            Message::Settings(msg) => task = self.update_settings(msg),
-            Message::Stage(msg) => self.update_stage(msg),
-            Message::Gizmo(event) => self.update_gizmo(event),
-            Message::Sheet(msg) => self.sheet_toggles = self.sheet_toggles.apply(msg),
-            Message::Marker(msg) => self.update_marker(msg),
-            Message::PaneClicked(pane) => self.panes.set_focused(pane),
-            Message::PaneResized(event) => self.panes.apply_resize(event),
-            Message::PaneDragged(event) => self.panes.apply_drag(event),
-            other => return Err(other),
-        }
-        Ok(task)
-    }
-
-    /// pane ローカル `Message`(SET+ の [`settings_pane::sections::Message`])を
-    /// 畳んで書き口へ渡す glue。sections.rs 冒頭 doc「結線互換の縫い目」の手順
-    /// 2そのもの: 新項目2腕(`CompFieldInput`/`CompFieldSubmit` —
-    /// `commit_comp_field` が read-modify-write の `Intent::SetComposition` を
-    /// 1回出す)+ 旧腕は [`Self::update_settings_legacy`] へ丸ごと委譲。
-    fn update_settings(&mut self, message: settings_pane::sections::Message) -> Task<Message> {
-        use settings_pane::sections;
-        use sections::{AutoSaveField, CompField};
-        match message {
-            sections::Message::Legacy(legacy) => return self.update_settings_legacy(legacy),
-            sections::Message::CompFieldInput(field, text) => {
-                self.comp_draft = Some(sections::CompFieldDraft { field, text });
-            }
-            sections::Message::CompFieldSubmit(field) => {
-                if let Err(error) =
-                    sections::commit_comp_field(&mut self.doc, &mut self.comp_draft, field)
-                {
-                    self.status = Some(error);
-                }
-            }
-            sections::Message::AutoSaveToggle(enabled) => {
-                self.auto_save_enabled = enabled;
-            }
-            sections::Message::AutoSaveFieldInput(field, text) => {
-                self.auto_save_draft = Some(sections::AutoSaveFieldDraft { field, text });
-            }
-            sections::Message::AutoSaveFieldSubmit(field) => {
-                if let Err(error) = sections::commit_auto_save_field(
-                    &mut self.auto_save_config,
-                    &mut self.auto_save_draft,
-                    field,
-                ) {
-                    self.status = Some(error);
-                }
-            }
-            // 裁定217 連続量 drag 化(E-5)。`start_value_drag` と同じ
-            // 「press だけ own する」形 — move/release は window 全体購読
-            // (`inspector_pointer_event`)を Inspector と共有する。
-            sections::Message::CompFieldDragPressed(field) => {
-                self.start_value_drag(match field {
-                    CompField::Width => ValueDragTarget::CompWidth,
-                    CompField::Height => ValueDragTarget::CompHeight,
-                    CompField::Fps => ValueDragTarget::CompFps,
-                    CompField::DurationFrames => ValueDragTarget::CompDuration,
-                });
-            }
-            sections::Message::AutoSaveFieldDragPressed(field) => {
-                self.start_value_drag(match field {
-                    AutoSaveField::IntervalMinutes => ValueDragTarget::AutoSaveIntervalMinutes,
-                    AutoSaveField::Generations => ValueDragTarget::AutoSaveGenerations,
-                });
-            }
-        }
-        Task::none()
-    }
-
-    /// 旧 `settings_pane::Message` の腕(SET+ 以前の全項目)。write ロジックの
-    /// 実体は `motolii_settings_pane::{apply_background_preset,
-    /// commit_background_channel, commit_ui_scale}`(自由関数、`&mut Document`/
-    /// `&mut Tokens`/下書きを明示引数で受け取る形 — pane crate は `&mut self` を
-    /// 持てないため)。ここでは `self.doc`/`self.tokens`/下書きフィールドを
-    /// そのまま貸すだけで、拒否理由(`Result::Err`)を `self.status` へ write
-    /// する以外の判断は持たない。
-    fn update_settings_legacy(&mut self, message: settings_pane::Message) -> Task<Message> {
-        match message {
-            settings_pane::Message::ToggleSettingsPanel => {
-                // S2(裁定182/188): 意味が「レイアウト分岐」→「窓 open/close」
-                // へ変わった(probe §Q3)。トグル以外の腕は従来どおり
-                // Task を返さない。
-                return self.toggle_settings_window();
-            }
-            settings_pane::Message::BackgroundPreset(preset) => {
-                if let Err(error) = settings_pane::apply_background_preset(&mut self.doc, preset) {
-                    self.status = Some(error);
-                }
-            }
-            settings_pane::Message::BackgroundChannelInput(channel, text) => {
-                self.background_draft = Some(BackgroundFieldDraft { channel, text });
-            }
-            settings_pane::Message::BackgroundChannelSubmit(channel) => {
-                if let Err(error) = settings_pane::commit_background_channel(
-                    &mut self.doc,
-                    &mut self.background_draft,
-                    channel,
-                ) {
-                    self.status = Some(error);
-                }
-            }
-            settings_pane::Message::UiScaleInput(text) => self.ui_scale_draft = Some(text),
-            settings_pane::Message::UiScaleSubmit => {
-                if let Err(error) =
-                    settings_pane::commit_ui_scale(&mut self.tokens, &mut self.ui_scale_draft)
-                {
-                    self.status = Some(error);
-                }
-            }
-            // 裁定217 連続量 drag 化(E-5)。`sections::Message::CompFieldDragPressed`
-            // と同じ形。
-            settings_pane::Message::BackgroundChannelDragPressed(channel) => {
-                self.start_value_drag(ValueDragTarget::Background(channel));
-            }
-        }
-        Task::none()
-    }
-
-    /// S2(裁定182/188): Settings の入口 — header の歯車が出す
-    /// `ToggleSettingsPanel` を OS 窓の open/close へ配線する(浮かし第1号、
-    /// 裁定188「Settings はだいたいポップアップだから」)。
-    ///
-    /// 台帳(`settings_window`)は**同期で先行記帳/先行抹消**する —
-    /// `window::open` は Id を同期で採番し(fork `runtime/src/window.rs:260`)、
-    /// close も「閉じるつもり」の時点で台帳から下ろす。runtime 無しの headless
-    /// 試験(Task は走らない)でも open/close/再open の状態遷移が読めるのは
-    /// この設計のため(`tests/suite/window_drive.rs` の oracle)。OS の閉じる
-    /// ボタン経由は `Message::WindowClosed`(`close_events` 購読)が同じ抹消を
-    /// 行う。
-    fn toggle_settings_window(&mut self) -> Task<Message> {
-        match self.settings_window.take() {
-            Some(id) => iced::window::close(id),
-            None => {
-                let (id, open) = iced::window::open(iced::window::Settings {
-                    // 小さめ・リサイズ可(発注どおり、probe 実証の形)。raw 値は
-                    // pane の意匠値ではなく**窓の初期ジオメトリ**(トンマナ柵
-                    // (裁定142)の対象マーカー外 — `Size::new` は widget 構築
-                    // 呼び出しではない): 幅はプリセット4ボタン+数値欄が
-                    // 折り返さない程度、高さは4行+見出し(probe の 420×320 と
-                    // 同桁)。リサイズ可なので初期値以上の拘束は持たない。
-                    size: iced::Size::new(480.0, 400.0),
-                    resizable: true,
-                    ..iced::window::Settings::default()
-                });
-                self.settings_window = Some(id);
-                open.map(Message::SettingsWindowOpened)
-            }
-        }
-    }
-
-    /// pane ローカル `Message` を畳んで書き口へ渡す glue(`update_settings` と
-    /// 同じ形)。**最初の2腕は元々 `self.observation` への直代入だけ**(計算を
-    /// 持たない)だったので、pane crate 側には移していない。`CycleResolutionCap`/
-    /// `ToggleCheckerboard`(裁定163 Stage 下縁状態帯)も同型の直代入 —
-    /// `ToggleCheckerboard` は旧 `settings_pane::Message::ToggleCheckerboard`
-    /// と同じ本体(`self.checkerboard` の反転)をここへ引っ越しただけ
-    /// (`update_settings` 側の対応する腕は削除済み)。
-    fn update_stage(&mut self, message: stage::Message) {
-        match message {
-            stage::Message::Observe(camera) => self.observation = Some(camera),
-            stage::Message::ResetToRenderCamera => self.observation = None,
-            stage::Message::CycleResolutionCap => {
-                self.resolution_cap = self.resolution_cap.next();
-            }
-            stage::Message::ToggleCheckerboard => {
-                self.checkerboard = !self.checkerboard;
-            }
-        }
-    }
-
-    /// ギズモ drag の契約(`stage::GizmoDrag` doc: 1 drag = Start → Move* →
-    /// Commit|Cancel)を Inspector の drag-to-scrub と同じ経路へ写す:
-    /// - Start: shell 側 transient([`GizmoShellDrag`])を立てるだけ(Document
-    ///   は触らない)。宛先時刻(playhead/fps)はこの時点で凍結。
-    /// - Move: `Document::set_transient`(edit timeline に触れない overlay —
-    ///   undo/redo の意味論は drag 中ずっと不変)。
-    /// - Commit: transient を外し、`Intent::SetTrack` を**1回**だけ出す
-    ///   (1 drag = 1 undo)。track の意味は値セル編集と同じ
-    ///   [`inspector_pane::edited_value_track`](キー無し=静的書き換え・
-    ///   キー持ち= playhead へのキー upsert、AE 作法)。
-    /// - Cancel: transient を外すだけ(Esc・空クリック)。
-    fn update_gizmo(&mut self, event: stage::GizmoDrag) {
-        match event.phase {
-            stage::GizmoPhase::Start { property } => {
-                let Ok(Some(composition)) = self.doc.view().composition() else {
-                    return;
-                };
-                self.gizmo_drag = Some(GizmoShellDrag {
-                    layer: event.layer,
-                    property,
-                    playhead_frame: self.session.playhead,
-                    fps: composition.fps,
-                    moved: false,
-                });
-            }
-            stage::GizmoPhase::Move { value } => {
-                let Some(drag) = self.gizmo_drag.as_mut() else {
-                    return;
-                };
-                let layer = drag.layer;
-                drag.moved = true;
-                match value {
-                    // 第6波(anchor drag pairing): anchor と補償済み position を
-                    // 対で transient へ書く(`GizmoValue::Anchor` doc「shell は
-                    // 両方を同時に書く」— 片方だけ書くと絵が跳ぶ)。
-                    stage::GizmoValue::Anchor { anchor, position } => {
-                        if let Ok(anchor_property) =
-                            PropertyId::new(stage::GizmoProperty::Anchor.property_name())
-                        {
-                            self.doc.set_transient(layer, anchor_property, Value::Vec2(anchor));
-                        }
-                        if let Ok(position_property) =
-                            PropertyId::new(stage::GizmoProperty::Position.property_name())
-                        {
-                            self.doc.set_transient(layer, position_property, Value::Vec2(position));
-                        }
-                    }
-                    other => {
-                        let Ok(property) = PropertyId::new(other.property().property_name()) else {
-                            return;
-                        };
-                        self.doc.set_transient(layer, property, gizmo_store_value(other));
-                    }
-                }
-            }
-            stage::GizmoPhase::Commit { value } => {
-                let Some(drag) = self.gizmo_drag.take() else {
-                    return;
-                };
-                match value {
-                    // anchor drag の確定: 2 property(anchor/position)を
-                    // `Document::apply_all` で**1 undo**へ束ねる(1 gesture =
-                    // 1 commit の契約は変わらない — `GizmoValue::Anchor` doc)。
-                    stage::GizmoValue::Anchor { anchor, position } => {
-                        let (Ok(anchor_property), Ok(position_property)) = (
-                            PropertyId::new(stage::GizmoProperty::Anchor.property_name()),
-                            PropertyId::new(stage::GizmoProperty::Position.property_name()),
-                        ) else {
-                            return;
-                        };
-                        let store = self.doc.view();
-                        let anchor_base = store.track(drag.layer, &anchor_property).ok().flatten();
-                        let position_base =
-                            store.track(drag.layer, &position_property).ok().flatten();
-                        let mut write_error = None;
-                        match (
-                            inspector_pane::edited_value_track(
-                                anchor_base.as_ref(),
-                                drag.playhead_frame,
-                                drag.fps,
-                                Value::Vec2(anchor),
-                            ),
-                            inspector_pane::edited_value_track(
-                                position_base.as_ref(),
-                                drag.playhead_frame,
-                                drag.fps,
-                                Value::Vec2(position),
-                            ),
-                        ) {
-                            (Ok(anchor_track), Ok(position_track)) => {
-                                let intents = [
-                                    Intent::SetTrack {
-                                        layer: drag.layer,
-                                        property: anchor_property.clone(),
-                                        track: anchor_track,
-                                    },
-                                    Intent::SetTrack {
-                                        layer: drag.layer,
-                                        property: position_property.clone(),
-                                        track: position_track,
-                                    },
-                                ];
-                                if let Err(error) = self.doc.apply_all(intents) {
-                                    write_error = Some(format!("値を書けない: {error}"));
-                                }
-                            }
-                            (Err(error), _) | (_, Err(error)) => write_error = Some(error),
-                        }
-                        self.doc.clear_transient(drag.layer, &anchor_property);
-                        self.doc.clear_transient(drag.layer, &position_property);
-                        if let Some(error) = write_error {
-                            self.status = Some(error);
-                        }
-                    }
-                    other => {
-                        let Ok(property) = PropertyId::new(other.property().property_name()) else {
-                            return;
-                        };
-                        // transient は `track()` に映らないので、ここで読むのは drag
-                        // 開始前の本 track そのもの(`finish_field_drag` と同じ注記)。
-                        let base_track = self.doc.view().track(drag.layer, &property).ok().flatten();
-                        let mut write_error = None;
-                        match inspector_pane::edited_value_track(
-                            base_track.as_ref(),
-                            drag.playhead_frame,
-                            drag.fps,
-                            gizmo_store_value(other),
-                        ) {
-                            Ok(track) => {
-                                if let Err(error) = self.doc.apply(Intent::SetTrack {
-                                    layer: drag.layer,
-                                    property: property.clone(),
-                                    track,
-                                }) {
-                                    write_error = Some(format!("値を書けない: {error}"));
-                                }
-                            }
-                            Err(error) => write_error = Some(error),
-                        }
-                        // 書き込み失敗時も overlay は必ず外す(`finish_field_drag` と
-                        // 同じ — overlay を残さない)。
-                        self.doc.clear_transient(drag.layer, &property);
-                        if let Some(error) = write_error {
-                            self.status = Some(error);
-                        }
-                    }
-                }
-            }
-            stage::GizmoPhase::Cancel => {
-                self.cancel_gizmo_drag();
-            }
-        }
-    }
-
-    /// Esc 連鎖用(clip/key/loop の並び — `Message::EscapePressed` 腕)。
-    /// transient overlay は edit timeline に触れていないので、外すだけで復元が
-    /// 成立する(`inspector_pane::cancel_field_interaction` と同型)。冪等 —
-    /// canvas 側の Esc(`GizmoPhase::Cancel`)と二重に届いても2回目は `false`。
-    pub(crate) fn cancel_gizmo_drag(&mut self) -> bool {
-        let Some(drag) = self.gizmo_drag.take() else {
-            return false;
-        };
-        if drag.moved {
-            // anchor drag は2 property を対で transient へ書いている
-            // (`update_gizmo` の `Move` 分岐)ので、cancel も両方外す —
-            // 片方だけ残すと絵が跳んだまま止まる。
-            if matches!(drag.property, stage::GizmoProperty::Anchor) {
-                if let Ok(property) = PropertyId::new(stage::GizmoProperty::Anchor.property_name()) {
-                    self.doc.clear_transient(drag.layer, &property);
-                }
-                if let Ok(property) = PropertyId::new(stage::GizmoProperty::Position.property_name()) {
-                    self.doc.clear_transient(drag.layer, &property);
-                }
-            } else if let Ok(property) = PropertyId::new(drag.property.property_name()) {
-                self.doc.clear_transient(drag.layer, &property);
-            }
-        }
-        true
-    }
-
-    /// `Message::Marker` の畳み。**canvas 差し替え・input 優先順位・実際の
-    /// mouse capture(`MarkerMessage::Grabbed`/`DragMoved`/`DragReleased`/
-    /// `DragCancelled` を publish する側)は未結線**(`motolii-timeline-pane`
-    /// の `canvas.rs`/`input.rs` が `pub(crate)` のため、EXACT TARGET
-    /// 「pane crate は読み専用」の範囲で shell からは触れない — RETURN の
-    /// API 要求参照)。この関数は Document 書き込みの意味だけを完結させる
-    /// (keymap M=AddAtPlayhead は実際に届く経路、他は将来 canvas 側が
-    /// publish するようになった時にそのまま機能する形で用意してある)。
-    pub(crate) fn update_marker(&mut self, message: timeline::markers::MarkerMessage) {
-        use timeline::markers::MarkerMessage;
-        match message {
-            MarkerMessage::AddAtPlayhead => {
-                let Some(fps) = self.composition().map(|c| c.fps) else {
-                    return;
-                };
-                let markers = self.markers();
-                if let Some(next) =
-                    timeline::markers::added_at_playhead(&markers, self.session.playhead, fps)
-                {
-                    if let Err(error) = self.doc.apply(Intent::SetMarkers { markers: next }) {
-                        self.status = Some(format!("マーカーを置けない: {error}"));
-                    }
-                }
-            }
-            // S2 発注 #22 の2入口目(ルーラ locator lane 右クリック)。
-            // `AddAtPlayhead` と同じ意味・同じ Intent、位置だけ呼び出し元
-            // (`Message::AddMarkerAt(frame)`)が決める。
-            MarkerMessage::AddAtFrame(frame) => {
-                let Some(fps) = self.composition().map(|c| c.fps) else {
-                    return;
-                };
-                let markers = self.markers();
-                if let Some(next) = timeline::markers::added_at_frame(&markers, frame, fps) {
-                    if let Err(error) = self.doc.apply(Intent::SetMarkers { markers: next }) {
-                        self.status = Some(format!("マーカーを置けない: {error}"));
-                    }
-                }
-            }
-            // JumpTo は先取り(`ScrubTo`/`timeline_pane::Message::ScrubTo` と
-            // 同じ経路 — playhead を直接書く、正典 §5「K/J ナビの補完」)。
-            MarkerMessage::JumpTo(frame) => self.session.playhead = frame,
-            MarkerMessage::Remove(index) => {
-                let markers = self.markers();
-                if let Some(next) = timeline::markers::removed(&markers, index) {
-                    if let Err(error) = self.doc.apply(Intent::SetMarkers { markers: next }) {
-                        self.status = Some(format!("マーカーを削除できない: {error}"));
-                    }
-                }
-            }
-            MarkerMessage::Grabbed { index, at_frame } => {
-                let Some(fps) = self.composition().map(|c| c.fps) else {
-                    return;
-                };
-                let markers = self.markers();
-                self.marker_drag = timeline::markers::MarkerDrag::start(&markers, index, at_frame, fps);
-            }
-            MarkerMessage::DragMoved { at_frame } => {
-                let Some(fps) = self.composition().map(|c| c.fps) else {
-                    return;
-                };
-                let duration = self.comp_duration();
-                if let Some(drag) = self.marker_drag.as_mut() {
-                    drag.dragged(at_frame, fps, duration);
-                }
-            }
-            MarkerMessage::DragReleased => {
-                if let Some(drag) = self.marker_drag.take() {
-                    if let Some(next) = drag.finish() {
-                        if let Err(error) = self.doc.apply(Intent::SetMarkers { markers: next }) {
-                            self.status = Some(format!("マーカーを移動できない: {error}"));
-                        }
-                    }
-                }
-            }
-            MarkerMessage::DragCancelled => {
-                self.marker_drag = None;
-            }
-        }
-    }
-
     /// 描き上がったフレームの識別。同じなら描き直していない。
     pub fn frame_token(&self) -> Option<(DisplayRevision, i64)> {
         self.frame
@@ -1285,5 +824,4 @@ impl Shell {
     pub fn colors(&self) -> Colors {
         self.tokens.colors
     }
-
 }

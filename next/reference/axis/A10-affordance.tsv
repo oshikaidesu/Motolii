@@ -34,7 +34,7 @@ A10	-	Stage 矩形選択(marquee.rs::apply_selection)	カーソルのみ	Interac
 A10	-	Stage ズーム(wheel、zoom_at_screen_point)	予告あり	2026-08-23 E-4検分: 764f8306/00c1d692 で既に配線済みと判明(本行は旧調査時点の観測、TSV記載が先行実装に追いついていなかった)。WheelScrolled は StageOverlay::update が捕捉・publish 済み(lib.rs:593-598)。カーソルは意図的に常時変化なし(module doc: 常時Grabを出すとchromeのhover色と誤読される)	-	next/ui/motolii-stage-pane/src/lib.rs
 A10	1441	Zoom In(メニュー/呼び手)	触れそうだが機能しない(Q0違反)	normal-map.tsv id=1441「Zoom In」実在。zoom_step/NamedZoomLevelはpure関数実装済みだが`grep -rn "zoom_step|NamedZoomLevel" next/shell/src`空振り=呼び手が無い(GESTURES.md該当行と同一事実)	-	next/shell/motolii-shell/src/lib.rs
 A10	1442	Zoom Out(メニュー/呼び手)	触れそうだが機能しない(Q0違反)	同上、id=1442	-	next/shell/motolii-shell/src/lib.rs
-A10	1490	Zoom to 100%(メニュー/呼び手)	触れそうだが機能しない(Q0違反)	同上、id=1490	穴	next/shell/motolii-shell/src/lib.rs
+A10	1490	Zoom to 100%(メニュー/呼び手)	触れそうだが機能しない(Q0違反)	同上、id=1490	穴	next/ui/motolii-stage-pane/src/zoom.rs;next/shell/motolii-shell/src/input.rs;next/shell/motolii-shell/src/lib.rs
 A10	1491	Zoom to fit(メニュー/呼び手)	触れそうだが機能しない(Q0違反)	同上、id=1491	-	next/shell/motolii-shell/src/lib.rs
 A10	-	Stage パン(Middle-drag、lib.rs:599/615)	予告あり	2026-08-23 E-4検分: 764f8306/00c1d692 で既に配線済みと判明(本行は旧調査時点の観測)。ButtonPressed(Middle)/CursorMoved/ButtonReleased を StageOverlay::update が捕捉・publish 済み、ドラッグ中は mouse_interaction が Interaction::Grabbing を返す(lib.rs:664-674)	-	next/ui/motolii-stage-pane/src/lib.rs
 A10	-	Browser カード ダブルクリック(Message::CreateFromCard)	hoverのみ	browser-pane(lib.rs/state.rs)はStatus::Hovered配線群に含まれる。カーソルは既定	-	next/ui/motolii-browser-pane/src/lib.rs

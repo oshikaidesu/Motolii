@@ -15,3 +15,6 @@ RUSTDOCFLAGS="-Z unstable-options --output-format json" \
 python3 "$ROOT/scripts/inventory_from_rustdoc.py" "$ROOT/next/target/doc" \
   > "$ROOT/next/reference/generated/inventory.tsv"
 wc -l < "$ROOT/next/reference/generated/inventory.tsv" | xargs echo "inventory.tsv 行数:"
+python3 "$ROOT/scripts/derive_components.py" "$ROOT"
+python3 "$ROOT/scripts/plan_waves.py" "$ROOT"
+python3 "$ROOT/scripts/check_responsibility.py" "$ROOT"

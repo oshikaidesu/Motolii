@@ -20,6 +20,13 @@
 //! **front が持ってよい状態**は [`Session`] だけ — 選択と再生位置。これらは
 //! Document の写しではなく、undo の対象でもない(rerun も選択は blueprint store の
 //! 外に置いている)。**1箇所で持ち、全 pane がそこを読む**ので M14 は満たされる。
+//!
+//! responsibility: wire
+//!
+//! このファイルは意味componentの所有者ではない。Messageの型、Shellの状態集合、
+//! `Shell::update`/`view`/`subscription`の結線だけを持つ。意味の実装は各domain
+//! moduleへ置き、並列計画ではこのファイルを意味レーンのwrite-setから除外して
+//! WIRE結線レーンへ送る。
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -27,9 +34,7 @@ use std::collections::HashMap;
 use iced::Task;
 
 use motolii_engine::{Engine, ObservationCamera};
-use motolii_store::{
-    AutoSaveConfig, Document, LayerId, Revision,
-};
+use motolii_store::{AutoSaveConfig, Document, LayerId, Revision};
 // 裁定205 施工第2号 §D: `Fill`/`Brush`/`Rgb`(塗り)だけが `motolii-store`
 // 未輸出(Cargo.toml のコメント参照)。
 
@@ -67,12 +72,20 @@ mod batch_rename;
 pub(crate) mod create;
 pub(crate) mod document_io;
 pub mod export_ops;
+mod gizmo_ops;
 mod input;
 pub(crate) mod inspector_ops;
+mod marker_ops;
 pub(crate) mod playback;
 pub(crate) mod render;
+mod render_dispatch;
 mod selection;
+mod settings_ops;
 mod stage_presenter;
+mod value_drag;
+mod value_drag_color;
+mod value_drag_composition;
+mod value_drag_settings;
 mod view;
 
 pub use input::{inspector_pointer_event, resolve_navigation_key};
@@ -171,13 +184,14 @@ use tokens::Tokens;
 
 // 2026-08-23 SP-1 レーン(shell 分割の続き): `PreviewSnapshot`/`PresenterSource`/
 // `RenderedFrame`/`DisplaySource`/`GizmoShellDrag` は `render.rs` へ、
-// `ValueDragState` は `inspector_ops.rs` へ実体が移った(`Shell` struct の
+// `ValueDragState` は `value_drag.rs` へ実体が移った(`Shell` struct の
 // フィールド型としてここでも要る)。旧パス(`crate::PreviewSnapshot` 等)を
 // 壊さないよう、既存の `pub use motolii_timeline_pane as timeline;` などと
 // 同じ「型 alias で外部参照を壊さない」手口で re-export する
 // (`stage_presenter.rs`/`view.rs` は無改修のまま通る)。
-pub(crate) use render::{GizmoShellDrag, PresenterSource, PreviewSnapshot, RenderedFrame};
-pub(crate) use inspector_ops::ValueDragState;
+pub(crate) use gizmo_ops::GizmoShellDrag;
+pub(crate) use render::{PresenterSource, PreviewSnapshot, RenderedFrame};
+pub(crate) use value_drag::ValueDragState;
 
 /// Stage 描画の計測。**debug のみ実測**(実機チラつき調査、2026-08-20)。
 /// release は `metrics::*` が全部 no-op になる(呼び出し側はどちらも同じ形で呼べる)。
@@ -222,7 +236,6 @@ pub mod metrics {
     }
     pub fn reset() {}
 }
-
 
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -608,21 +621,12 @@ pub enum Message {
     RenameSelectedLayer,
 }
 
-
-
-
-
-
-
 // ---------------------------------------------------------------------------
 // 連続量 drag(裁定217、E-5)。`Shell::value_drag` doc 参照 — `inspector_drag`
 // (`LayerId + PropertyId + Intent::SetTrack` 固定)とは別の、track を持たない
 // 値向けの第2の経路。書き込み本体は既存の commit_* 自由関数をそのまま呼ぶ
 // (`Shell::finish_value_drag` 参照、write ロジックの複製ゼロ)。
 // ---------------------------------------------------------------------------
-
-
-
 
 pub struct Shell {
     doc: Document,
@@ -901,8 +905,6 @@ pub struct Shell {
 // 本体は既存の commit_* 自由関数をそのまま呼ぶ(`finish_value_drag` 参照)。
 // ---------------------------------------------------------------------------
 
-
-
 /// `Shell::update` の唯一の分配口(2026-08-23 SP-1 レーン、
 /// `docs/reviews/2026-08-23-shell-split-plan.md` の続き)。**chain-of-
 /// responsibility** — 領域別 dispatch 関数(`document_io.rs`/`selection.rs`/
@@ -1015,7 +1017,7 @@ impl Shell {
                 media_size_cache: RefCell::new(HashMap::new()),
                 dialogs,
                 current_path: None,
-            asset_status: std::collections::HashMap::new(),
+                asset_status: std::collections::HashMap::new(),
                 saved_revision,
                 pending_recovery: None,
                 main_window: None,
@@ -1255,13 +1257,21 @@ impl Shell {
         // なく `CloseRequested` を発行する ── ここを拾って dirty ガード
         // (`Message::WindowCloseRequested` 腕)へ渡す。Settings/Export 窓は
         // 既定のままなのでこの Subscription からは届かない。
-        let close_requests =
-            iced::window::close_requests().map(Message::WindowCloseRequested);
-        iced::Subscription::batch([window, tokens, pointer, ticks, auto_save, closes, close_requests])
+        let close_requests = iced::window::close_requests().map(Message::WindowCloseRequested);
+        iced::Subscription::batch([
+            window,
+            tokens,
+            pointer,
+            ticks,
+            auto_save,
+            closes,
+            close_requests,
+        ])
     }
 
-
-    /// **唯一の書き口**。ここ以外に `doc.apply` を呼ぶ場所を作らない。
+    /// **唯一の更新入口**。Messageはここからdomain moduleへ分配し、各moduleが
+    /// 自分の意味に対応する `Intent` を `Document` へ渡す。root自身は意味の
+    /// `doc.apply` を持たず、更新経路を1本に保つ。
     pub fn update(&mut self, message: Message) -> Task<Message> {
         self.status = None;
         // 旧 MB-0/MB-1 の自動クローズ規律(edit_menu_open/file_menu_open)は
@@ -1279,30 +1289,14 @@ impl Shell {
         Task::batch([task, self.poll_waveform_fetches()])
     }
 
-
-
-
-
-
-
-
-
     // ---- Settings パネル(タスク#18、裁定160 切片9) ----
-
-
-
 
     // ---- Stage 観測カメラ(裁定157、裁定160 切片10) ----
 
-
     // ---- Stage ギズモ(GZ 結線、第5波) ----
-
-
 
     // ---- Timeline マーカーレーン(B19、第6波、`timeline::markers` 冒頭 doc の
     // 統合手順2「Message::Marker 畳み+JumpTo 先取り」) ----
-
-
 
     // ---- Inspector の drag-to-scrub ----
     //
@@ -1314,46 +1308,5 @@ impl Shell {
     // なので、crate を跨いだ `Task` の型変換を増やさないよう root 側に残した
     // (`inspector_pane` crate doc 参照)。
 
-
     // ---- 運転席が見るための口。**書けない** ----
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 }

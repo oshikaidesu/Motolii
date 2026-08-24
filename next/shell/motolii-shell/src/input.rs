@@ -1,10 +1,9 @@
+//! responsibility: wire
+//!
+//! OS/icedの入力をdomain Messageへ翻訳するWIRE層。ズームの意味計算は
+//! `motolii-stage-pane::zoom`へ委譲し、ここはShellの状態へ接続する。
 
-
-
-use crate::{
-    export_pane, inspector_pane, stage, timeline,
-    timeline_pane, Message, Shell,
-};
+use crate::{export_pane, inspector_pane, stage, timeline, timeline_pane, Message, Shell};
 
 impl Shell {
     /// map 1441「Zoom In」(A10 id1441、`resolve_navigation_key` の Cmd+=/+ 腕
@@ -57,7 +56,6 @@ impl Shell {
     }
 }
 
-
 /// `Shell::subscription` が使う、Inspector drag-to-scrub 用の window 全体の
 /// 事象フィルタ。**翻訳だけ**(`subscription()` 冒頭の規律どおり、判断は持たない)
 /// — 実際に drag 中かどうかの判断・Shift の要否は `Shell::update` 側
@@ -84,9 +82,9 @@ pub fn inspector_pointer_event(
     _window: iced::window::Id,
 ) -> Option<Message> {
     match event {
-        iced::Event::Mouse(iced::mouse::Event::CursorMoved { position }) => {
-            Some(Message::Inspector(inspector_pane::Message::PointerMoved(position)))
-        }
+        iced::Event::Mouse(iced::mouse::Event::CursorMoved { position }) => Some(
+            Message::Inspector(inspector_pane::Message::PointerMoved(position)),
+        ),
         iced::Event::Mouse(iced::mouse::Event::ButtonReleased(iced::mouse::Button::Left)) => {
             Some(Message::Inspector(inspector_pane::Message::PointerReleased))
         }
@@ -125,9 +123,9 @@ pub fn inspector_pointer_event(
         | iced::Event::Keyboard(iced::keyboard::Event::KeyPressed {
             key: iced::keyboard::Key::Named(iced::keyboard::key::Named::Delete),
             ..
-        }) if status != iced::event::Status::Captured => {
-            Some(Message::Timeline(timeline_pane::Message::DeleteSelectedKeys))
-        }
+        }) if status != iced::event::Status::Captured => Some(Message::Timeline(
+            timeline_pane::Message::DeleteSelectedKeys,
+        )),
         // NudgeKeyframe(正典 §8.1)。**既定割当は仮**(拘束6・裁定146の隣接注記
         // どおり、キーの皮は keymap 層が無い今だけ直結) — アクション名
         // (`timeline_pane::Message::NudgeKeyframe`)だけを正本として残す。
@@ -138,7 +136,9 @@ pub fn inspector_pointer_event(
             ..
         }) if modifiers.alt() => {
             let step = if modifiers.shift() { 10 } else { 1 };
-            Some(Message::Timeline(timeline_pane::Message::NudgeKeyframe(-step)))
+            Some(Message::Timeline(timeline_pane::Message::NudgeKeyframe(
+                -step,
+            )))
         }
         iced::Event::Keyboard(iced::keyboard::Event::KeyPressed {
             key: iced::keyboard::Key::Named(iced::keyboard::key::Named::ArrowRight),
@@ -146,7 +146,9 @@ pub fn inspector_pointer_event(
             ..
         }) if modifiers.alt() => {
             let step = if modifiers.shift() { 10 } else { 1 };
-            Some(Message::Timeline(timeline_pane::Message::NudgeKeyframe(step)))
+            Some(Message::Timeline(timeline_pane::Message::NudgeKeyframe(
+                step,
+            )))
         }
         // ResetToRenderCamera(裁定157・EXACT TARGET 1「カメラへ戻るは1アクション」)。
         // **既定割当は仮**(NudgeKeyframe と同じ「keymap 層が無い今だけ直結」の
@@ -299,10 +301,14 @@ pub fn resolve_navigation_key(
         // 腕を足して消化する。**既定割当は仮**(上の j/k/i/o と同じ「keymap 層が
         // 無い今だけ直結」の注記どおり、拘束6)。Shift の有無で Undo/Redo・
         // SelectAll/DeselectAll を振り分ける(NudgeKeyframe の歩幅振り分けと同じ形)。
-        Key::Character(c) if modifiers.command() && !modifiers.shift() && c.eq_ignore_ascii_case("z") => {
+        Key::Character(c)
+            if modifiers.command() && !modifiers.shift() && c.eq_ignore_ascii_case("z") =>
+        {
             Some(Message::Undo)
         }
-        Key::Character(c) if modifiers.command() && modifiers.shift() && c.eq_ignore_ascii_case("z") => {
+        Key::Character(c)
+            if modifiers.command() && modifiers.shift() && c.eq_ignore_ascii_case("z") =>
+        {
             Some(Message::Redo)
         }
         Key::Character(c) if modifiers.command() && c.eq_ignore_ascii_case("c") => {
@@ -317,10 +323,14 @@ pub fn resolve_navigation_key(
         Key::Character(c) if modifiers.command() && c.eq_ignore_ascii_case("d") => {
             Some(Message::DuplicateLayer)
         }
-        Key::Character(c) if modifiers.command() && !modifiers.shift() && c.eq_ignore_ascii_case("a") => {
+        Key::Character(c)
+            if modifiers.command() && !modifiers.shift() && c.eq_ignore_ascii_case("a") =>
+        {
             Some(Message::SelectAllLayers)
         }
-        Key::Character(c) if modifiers.command() && modifiers.shift() && c.eq_ignore_ascii_case("a") => {
+        Key::Character(c)
+            if modifiers.command() && modifiers.shift() && c.eq_ignore_ascii_case("a") =>
+        {
             Some(Message::DeselectAllLayers)
         }
         // ---- File 束(MB-1、裁定176)。メニュー(`menu.rs::file_items`)と
@@ -331,15 +341,21 @@ pub fn resolve_navigation_key(
         // 修飾キーを厳密にしないと後から足す動詞と衝突する)。Save a Copy は
         // normal-map の shortcut 出典がゼロなのでキーを発明しない
         // (`menu.rs::file_items` doc 参照)。
-        Key::Character(c) if modifiers.command() && !modifiers.shift() && c.eq_ignore_ascii_case("n") => {
+        Key::Character(c)
+            if modifiers.command() && !modifiers.shift() && c.eq_ignore_ascii_case("n") =>
+        {
             Some(Message::NewProjectRequested)
         }
-        Key::Character(c) if modifiers.command() && modifiers.shift() && c.eq_ignore_ascii_case("s") => {
+        Key::Character(c)
+            if modifiers.command() && modifiers.shift() && c.eq_ignore_ascii_case("s") =>
+        {
             Some(Message::SaveAsRequested)
         }
         // Cmd+S = 平の上書き保存(裁定150: 4製品とも「一度保存したらパスを聞かない」)。
         // Shift 付きの Save As と同じ振り分けの形で、`!modifiers.shift()` を明示する。
-        Key::Character(c) if modifiers.command() && !modifiers.shift() && c.eq_ignore_ascii_case("s") => {
+        Key::Character(c)
+            if modifiers.command() && !modifiers.shift() && c.eq_ignore_ascii_case("s") =>
+        {
             Some(Message::SaveRequested)
         }
         Key::Character(c) if modifiers.command() && c.eq_ignore_ascii_case("q") => {
@@ -359,10 +375,14 @@ pub fn resolve_navigation_key(
         }
         // ---- G1 グループ化動詞(裁定174)。Undo/Redo・SelectAll/DeselectAll と
         // 同じ Shift 振り分けの形(既定割当は仮、上の注記どおり)。
-        Key::Character(c) if modifiers.command() && !modifiers.shift() && c.eq_ignore_ascii_case("g") => {
+        Key::Character(c)
+            if modifiers.command() && !modifiers.shift() && c.eq_ignore_ascii_case("g") =>
+        {
             Some(Message::GroupLayers)
         }
-        Key::Character(c) if modifiers.command() && modifiers.shift() && c.eq_ignore_ascii_case("g") => {
+        Key::Character(c)
+            if modifiers.command() && modifiers.shift() && c.eq_ignore_ascii_case("g") =>
+        {
             Some(Message::UngroupLayers)
         }
         // Play/Pause(A2、正典 §2 拘束5)。`captured`(text_input 入力中)なら
@@ -376,9 +396,9 @@ pub fn resolve_navigation_key(
         // マーカー keymap(B19、`timeline::markers` 冒頭 doc 統合手順5
         // 「keymap M=AddAtPlayhead」)。`!modifiers.command()` は j/k/i/o と
         // 同じ「将来の Cmd+M に予約を残す」防衛ガード。
-        Key::Character(c) if !modifiers.command() && c.eq_ignore_ascii_case("m") => {
-            Some(Message::Marker(timeline::markers::MarkerMessage::AddAtPlayhead))
-        }
+        Key::Character(c) if !modifiers.command() && c.eq_ignore_ascii_case("m") => Some(
+            Message::Marker(timeline::markers::MarkerMessage::AddAtPlayhead),
+        ),
         // rename 開始(正典 §6、`timeline::write` 冒頭 doc「Enter(単一選択)=
         // RenameBegin」)。実際の選択解決(`LayerId`)は `resolve_navigation_key`
         // が選択を知らないため `Shell::update` 側(`Message::RenameSelectedLayer`
@@ -389,22 +409,30 @@ pub fn resolve_navigation_key(
         // いる、`Message::Timeline` の「other」経路がそのまま拾う。ここは
         // keymap の口を1本足すだけ)。Cmd+Alt+↑/↓ = 1歩前面/背面、+Shift =
         // 最前面/最背面(`StackDirection` の4 variant にそのまま対応)。
-        Key::Named(Named::ArrowUp) if modifiers.command() && modifiers.alt() && !modifiers.shift() => {
+        Key::Named(Named::ArrowUp)
+            if modifiers.command() && modifiers.alt() && !modifiers.shift() =>
+        {
             Some(Message::Timeline(timeline_pane::Message::RestackLayer(
                 timeline::StackDirection::Forward,
             )))
         }
-        Key::Named(Named::ArrowDown) if modifiers.command() && modifiers.alt() && !modifiers.shift() => {
+        Key::Named(Named::ArrowDown)
+            if modifiers.command() && modifiers.alt() && !modifiers.shift() =>
+        {
             Some(Message::Timeline(timeline_pane::Message::RestackLayer(
                 timeline::StackDirection::Backward,
             )))
         }
-        Key::Named(Named::ArrowUp) if modifiers.command() && modifiers.alt() && modifiers.shift() => {
+        Key::Named(Named::ArrowUp)
+            if modifiers.command() && modifiers.alt() && modifiers.shift() =>
+        {
             Some(Message::Timeline(timeline_pane::Message::RestackLayer(
                 timeline::StackDirection::ToFront,
             )))
         }
-        Key::Named(Named::ArrowDown) if modifiers.command() && modifiers.alt() && modifiers.shift() => {
+        Key::Named(Named::ArrowDown)
+            if modifiers.command() && modifiers.alt() && modifiers.shift() =>
+        {
             Some(Message::Timeline(timeline_pane::Message::RestackLayer(
                 timeline::StackDirection::ToBack,
             )))
@@ -422,9 +450,7 @@ pub fn resolve_navigation_key(
         // 変わる配列があるため Shift 系のキーは避けた、`zoom_to_fit` doc
         // 参照)。id1490(Zoom to 100%)はキーを発明しない(未結線、RETURN
         // 参照)。
-        Key::Character(c) if modifiers.command() && (c == "=" || c == "+") => {
-            Some(Message::ZoomIn)
-        }
+        Key::Character(c) if modifiers.command() && (c == "=" || c == "+") => Some(Message::ZoomIn),
         Key::Character(c) if modifiers.command() && c == "-" => Some(Message::ZoomOut),
         Key::Character(c) if modifiers.command() && c == "9" => Some(Message::ZoomToFit),
         _ => None,
@@ -434,7 +460,6 @@ pub fn resolve_navigation_key(
 use iced::Task;
 
 impl Shell {
-
     /// `Shell::update` から委譲される領域別 dispatch(2026-08-23 SP-1 レーン、
     /// `docs/reviews/2026-08-23-shell-split-plan.md` の続き)。**中身は無改変** —
     /// 元の巨大な `update()` match の腕をそのままここへ移しただけ(裁定どおり

@@ -4,6 +4,18 @@
 //! inline editing owns one transient text field, while this component owns the
 //! deterministic plan for a selection-wide operation and its one `apply_all`.
 
+/* motolii-component
+id = "edit.batch_rename"
+kind = "semantic"
+weight = "core_edit"
+maps = [785]
+entry = ["BatchRenameSelectedLayers"]
+meaning = ["apply_selected"]
+evaluation = ["apply_all"]
+render = ["Timeline"]
+observable = ["auto_rename_follows_row_order_and_undoes_as_one_step"]
+*/
+
 use motolii_store::{Document, Intent, LayerAttrsPatch, LayerId};
 
 const DEFAULT_PREFIX: &str = "Layer";
@@ -15,7 +27,10 @@ const MIN_WIDTH: usize = 3;
 /// The operation is all-or-nothing for locked layers and creates one undo step.
 /// Stale or duplicate selection ids are ignored. The returned count is the
 /// number of changed names, so a repeated invocation is a no-op.
-pub(crate) fn apply_selected(doc: &mut Document, selected_layers: &[LayerId]) -> Result<usize, String> {
+pub(crate) fn apply_selected(
+    doc: &mut Document,
+    selected_layers: &[LayerId],
+) -> Result<usize, String> {
     let selected: std::collections::HashSet<LayerId> = selected_layers.iter().copied().collect();
     if selected.is_empty() {
         return Ok(0);
@@ -32,7 +47,10 @@ pub(crate) fn apply_selected(doc: &mut Document, selected_layers: &[LayerId]) ->
             .map_err(|error| format!("layer {} の属性を読めない: {error}", layer.0))?
             .unwrap_or_default();
         if attrs.locked {
-            return Err(format!("layer {} はロックされているので一括改名できない", layer.0));
+            return Err(format!(
+                "layer {} はロックされているので一括改名できない",
+                layer.0
+            ));
         }
         targets.push((layer, attrs.name));
     }
@@ -51,7 +69,10 @@ pub(crate) fn apply_selected(doc: &mut Document, selected_layers: &[LayerId]) ->
         if current != next {
             intents.push(Intent::SetAttrs {
                 layer,
-                patch: LayerAttrsPatch { name: Some(next), ..Default::default() },
+                patch: LayerAttrsPatch {
+                    name: Some(next),
+                    ..Default::default()
+                },
             });
         }
     }
@@ -82,14 +103,21 @@ mod tests {
                 Intent::SetMeta {
                     layer: LayerId(id),
                     meta: LayerMeta {
-                        source: LayerSource::Solid { rgba: [0, 0, 0, 255], width: 8, height: 8 },
+                        source: LayerSource::Solid {
+                            rgba: [0, 0, 0, 255],
+                            width: 8,
+                            height: 8,
+                        },
                         order: id as i16,
                         timing: LayerTiming::place(0, None, 100),
                     },
                 },
                 Intent::SetAttrs {
                     layer: LayerId(id),
-                    patch: LayerAttrsPatch { name: Some(format!("old-{id}")), ..Default::default() },
+                    patch: LayerAttrsPatch {
+                        name: Some(format!("old-{id}")),
+                        ..Default::default()
+                    },
                 },
             ])
             .unwrap();
@@ -102,16 +130,29 @@ mod tests {
         let mut doc = doc_with_layers(4);
         doc.mark_undo_floor();
 
-        let changed = apply_selected(&mut doc, &[LayerId(4), LayerId(1), LayerId(3), LayerId(1)]).unwrap();
+        let changed =
+            apply_selected(&mut doc, &[LayerId(4), LayerId(1), LayerId(3), LayerId(1)]).unwrap();
 
         assert_eq!(changed, 3);
-        assert_eq!(doc.view().attrs(LayerId(1)).unwrap().unwrap().name, "Layer 001");
-        assert_eq!(doc.view().attrs(LayerId(3)).unwrap().unwrap().name, "Layer 002");
-        assert_eq!(doc.view().attrs(LayerId(4)).unwrap().unwrap().name, "Layer 003");
+        assert_eq!(
+            doc.view().attrs(LayerId(1)).unwrap().unwrap().name,
+            "Layer 001"
+        );
+        assert_eq!(
+            doc.view().attrs(LayerId(3)).unwrap().unwrap().name,
+            "Layer 002"
+        );
+        assert_eq!(
+            doc.view().attrs(LayerId(4)).unwrap().unwrap().name,
+            "Layer 003"
+        );
         assert_eq!(doc.view().attrs(LayerId(2)).unwrap().unwrap().name, "old-2");
         assert!(doc.undo(), "一括改名は1回で undo できるはず");
         for id in [1, 3, 4] {
-            assert_eq!(doc.view().attrs(LayerId(id)).unwrap().unwrap().name, format!("old-{id}"));
+            assert_eq!(
+                doc.view().attrs(LayerId(id)).unwrap().unwrap().name,
+                format!("old-{id}")
+            );
         }
         assert!(!doc.can_undo());
     }
@@ -121,7 +162,10 @@ mod tests {
         let mut doc = doc_with_layers(2);
         doc.apply(Intent::SetAttrs {
             layer: LayerId(2),
-            patch: LayerAttrsPatch { locked: Some(true), ..Default::default() },
+            patch: LayerAttrsPatch {
+                locked: Some(true),
+                ..Default::default()
+            },
         })
         .unwrap();
         doc.mark_undo_floor();

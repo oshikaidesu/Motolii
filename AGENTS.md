@@ -8,11 +8,14 @@
 python3 scripts/plan_steps.py     "$(git rev-parse --show-toplevel)"   # 次にやる段階と、その障害
 python3 scripts/plan_backlog.py   "$(git rev-parse --show-toplevel)"   # 残作業983件と割り振り
 python3 scripts/plan_waves.py     "$(git rev-parse --show-toplevel)"   # write-set が交わらない組
+python3 scripts/rehearse_parallel.py "$(git rev-parse --show-toplevel)" # 意味レーンを同時実行して隔離を検査
 python3 scripts/derive_entries.py "$(git rev-parse --show-toplevel)"   # 入口が在るか(実コードから)
 python3 scripts/check_evidence.py "$(git rev-parse --show-toplevel)"   # 台帳の証拠が実在するか
 bash    scripts/gen-inventory.sh                                       # 何を持っているか(5,150項目・7列目に署名)
 python3 scripts/check_coherence.py   "$(git rev-parse --show-toplevel)" # 台帳どうしが食い違っていないか
 python3 scripts/rank_load_bearing.py "$(git rev-parse --show-toplevel)" # 荷重(壊すと巻き添えが多い所)
+python3 scripts/derive_components.py "$(git rev-parse --show-toplevel)" # コンポーネント契約から意味の粒と赤/緑を導出
+python3 scripts/check_responsibility.py "$(git rev-parse --show-toplevel)" # WIREが意味を書き込んでいないか
 ```
 
 **現在地は上が出す。引き継ぎ文書は無い**(2026-08-23 廃止 — 状態が生成されるので運ぶ物が無い)。
@@ -127,7 +130,8 @@ cargo でしか出ないのは **(a) 網羅性**(`match` の腕・enum にバリ
 
 - 実測定数(next/ 22crate・`-j 4`): `cargo check --workspace` = **warm 1.4s / cold 50s**。フル `cargo test --workspace --locked --no-fail-fast` = **warm 100s / cold 607s**。壁時計はキャッシュ状態で6倍動くので**実行時間を合否の物差しにしない** — 段の使い分け(機会)で裁く
 - 段の使い分け: doc のみ=check-docs.sh だけ / pane 局所=check+該当pane と shell の suite / store・engine 跨り・fork pin bump・merge 境界=フル必須(判断表は調査 §6)
-- **追いつきターンの波運転(裁定189、2026-08-22)**: 意味既決の消化フェーズでは、レーンの検収線を `cargo check --tests -p <crate>` まで(テストは書くが実行は後送 — 落ちるテスト先行の「書く」は維持)。supervisor が波単位で merge を束ね、一括 cargo test の**必然の関門は2つだけ**: (1) **消費点の手前**(実窓・push・引き継ぎ — ここは必ず緑) (2) **前提結合のある発注の手前だけ該当 suite**(結線レーン・同領域の続編など「前波の実行時挙動」の上に積む場合のみ。map 起点の独立束は該当しない — スコープは台帳由来で実行時の赤に汚されない)。それ以外のタイミングは正しさでなく**コスト最適化**(CPU の空きで安く回す)— エラーは決定論的に再現するので放置で消えも腐りもせず、bisect は worktree 消滅後も機械的に動く。赤は fix-forward(log₂N 有界)。レーン毎の cold テスト税(〜10分)が波1回に集約される。新しい意味論・store/engine 跨りの束は従来の即検収に戻す
+- **追いつきターンの波運転(裁定189・233)**: レーンの検収線は静的検査で、`inventory` / `derive_components` / `derive_entries` / `check_coherence` / `plan_steps` / `plan_waves` / `diff --check` で赤を閉じる。テストは書くが、各エージェントは通常 cargo を回さない。supervisor が波単位で merge を束ね、cargo は波末または消費点で影響範囲をまとめて1回だけ回す。必然の関門は (1) **消費点の手前**(実窓・push・引き継ぎ) (2) **前提結合のある発注の手前だけ該当 suite**(結線レーン・同領域の続編など前波の実行時挙動に依存する場合)。例外は **enum/match の網羅性・公開型境界・借用/生存期間・消費点の実行時挙動**で、該当時も各レーンが個別に回さず supervisor の門へ送る。これで cargo の lock 待ちを並列の上限にしない
+- **責任境界(裁定234)**: `//! responsibility: wire` を持つファイルは意味レーンから除外し、WIRE結線へ送る。`plan_waves.py` は意味write-setだけで連結を作り、外部依存と責任未記入を別々に報告する。WIREへ意味の書き込みを足さないことは `check_responsibility.py` が検査する
 - `-p` サブセットの素朴運用は warm フルより遅くなる(199s vs 100s — 上記「`-p` 集合固定」の再発見。**この節を読まずにビルド調査を始めるとこの再発見を繰り返す**)
 - 時間予算試験(storm・r2)は debug+並列で走らせる事自体が矛盾 — 合否確認は単独 or release で
 - **合否の exit code をパイプ越しに取らない**: `cargo … | tail` は合否を殺す(前任の check-docs 事故)。zsh では `$PIPESTATUS` は空(bash 綴り — zsh は `$pipestatus`)で「検証したつもり」になる(2026-08-22 に2回実測)。**リダイレクトで log へ落とし `$?` を直接見る**のが唯一安全
@@ -179,4 +183,3 @@ let inv = m.inverse();
 
 `Mat2` から回転/せん断だけを取り出した行列(det=1 が保証される物)は例外だが、
 **保証の根拠をその場に書くこと**。
-
