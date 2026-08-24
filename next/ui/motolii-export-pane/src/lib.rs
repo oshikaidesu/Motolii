@@ -41,7 +41,11 @@
 //! - **解像度/フレームレート**: `Composition::{width, height, fps}` の read-only
 //!   投影。export は Document の comp をそのまま使う(`motolii-export` crate doc
 //!   「解像度・fps・尺は Document が持つ — 書けると preview と違う入力で書き出せて
-//!   しまう」)ので、ここに編集欄は作らない。cap は
+//!   しまう」)ので、現在値の表示は編集欄にしない。アスペクトプリセットは例外の
+//!   書き口ではなく、既存の `Intent::SetComposition` へ渡せる**要求の顔**として
+//!   `AspectPresetSelect` を発火するだけである。pane は `Composition` を変更せず、
+//!   Shell がその要求を Document へ適用した後に、preview/export が同じ Composition
+//!   を読む。cap は
 //!   [`motolii_settings_pane::sections::MAX_COMP_DIMENSION_PX`](wgpu 1枚 texture
 //!   の床)— 超過 comp は書き出せないため警告行を出す([`resolution_within_cap`])。
 //! - **範囲**: 全体 = `export_with_cancel` の `0..duration_frames` ループ(実在)。
@@ -79,6 +83,9 @@
 //! 3. 腕: [`Message::ToggleExportDialog`] = open 反転(表示だけのトグル —
 //!    Document にも undo にも乗らない、歯車トグルと同格)/
 //!    [`Message::QualitySelect`]・[`Message::RangeSelect`] = 状態代入 /
+//!    [`Message::AspectPresetSelect`] = [`dimensions_for_aspect`] で寸法を引き、
+//!    既存の `Intent::SetComposition` に read-modify-write する(この pane は
+//!    ここまでで、Document への結線は supervisor の WIRE)/
 //!    [`Message::PickOutputPath`] = `Task::perform(dialogs.pick_export_path(..),
 //!    |p| Message::Export(Message::OutputPathChosen(p)))` /
 //!    [`Message::OutputPathChosen`] = `Some(path)` なら `export_out_path` へ
@@ -113,6 +120,9 @@ pub enum Message {
     QualitySelect(ExportQuality),
     /// 範囲の選択(全体 / 作業範囲のみ)。同じく即時確定。
     RangeSelect(ExportRange),
+    /// Composition のアスペクトプリセット要求。pane は寸法を計算して
+    /// `Intent::SetComposition` の入力候補を返すだけで、Document へは書かない。
+    AspectPresetSelect(AspectPreset),
     /// 書き出し先の選択(2026-08-22 第2波、File 束の rfd 非同期化と同時発注)。
     /// shell が `FileDialogs::pick_export_path` を非同期に呼ぶだけの引き金 ──
     /// この時点ではまだ path は確定しない(結果は [`Message::
@@ -127,6 +137,96 @@ pub enum Message {
     /// 実行中の中断 — shell が保持する `motolii_export::Cancel` の
     /// `.cancel()`(中断は残骸を消してから返る、が意味側の約束)。
     CancelExport,
+}
+
+// ---------------------------------------------------------------------------
+// アスペクトプリセット(要求の顔。Document の書き口は Shell/WIRE)
+// ---------------------------------------------------------------------------
+
+/* motolii-component
+id = "export.aspect_preset"
+kind = "semantic"
+weight = "render_export"
+maps = []
+entry = ["AspectPresetSelect"]
+meaning = ["AspectPreset"]
+evaluation = ["dimensions_for_aspect"]
+render = ["aspect_preset_row"]
+observable = ["aspect_preset_buttons_show_label_and_dimensions"]
+*/
+
+/// Export 窓から要求できる Composition の標準アスペクト。
+///
+/// これは crop の一時設定ではない。Shell がこの要求を Document の
+/// `Composition::{width,height}` へ適用すると、preview と export の両方が同じ
+/// Composition を読む。pane は要求を発火するところまでを担当する。
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum AspectPreset {
+    /// 標準の横長 HD 出力。
+    Landscape16x9,
+    /// 縦型のソーシャル動画向け出力。
+    Portrait9x16,
+    /// 正方形出力。
+    Square1x1,
+}
+
+impl AspectPreset {
+    /// UI に並べる全プリセット。順序は横長・縦長・正方形で固定する。
+    pub const ALL: [Self; 3] = [Self::Landscape16x9, Self::Portrait9x16, Self::Square1x1];
+
+    /// 利用者へ見せる比率ラベル。
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Landscape16x9 => "16:9",
+            Self::Portrait9x16 => "9:16",
+            Self::Square1x1 => "1:1",
+        }
+    }
+}
+
+/// プリセットが要求する Composition 寸法。
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct AspectDimensions {
+    pub width: u32,
+    pub height: u32,
+}
+
+/// アスペクトプリセットから標準寸法への**唯一の純粋な写像**。
+///
+/// 16:9 は現行の既定 Composition `1920 × 1080`を維持し、縦長と正方形は
+/// 1080px を基準辺にする。いずれも現行の texture cap 内で、Shell がそのまま
+/// `Composition` の width/height へ read-modify-write できる値である。
+pub const fn dimensions_for_aspect(preset: AspectPreset) -> AspectDimensions {
+    match preset {
+        AspectPreset::Landscape16x9 => AspectDimensions {
+            width: 1920,
+            height: 1080,
+        },
+        AspectPreset::Portrait9x16 => AspectDimensions {
+            width: 1080,
+            height: 1920,
+        },
+        AspectPreset::Square1x1 => AspectDimensions {
+            width: 1080,
+            height: 1080,
+        },
+    }
+}
+
+/// 現在の Composition がどのプリセット比率かを純粋に判定する。
+///
+/// 寸法そのものではなく比率を比較するため、`1280 × 720`のような既存の
+/// 16:9 Composition も選択中として表示できる。0 寸法や未対応比率は
+/// `None`(custom) になる。
+pub fn aspect_preset_for_dimensions(width: u32, height: u32) -> Option<AspectPreset> {
+    if width == 0 || height == 0 {
+        return None;
+    }
+    AspectPreset::ALL.into_iter().find(|preset| {
+        let dimensions = dimensions_for_aspect(*preset);
+        u64::from(width) * u64::from(dimensions.height)
+            == u64::from(height) * u64::from(dimensions.width)
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -363,6 +463,16 @@ pub fn view(model: ViewModel<'_>, dims: Dimensions, colors: Colors) -> Element<'
                     dims,
                     colors,
                 ),
+                // ASPECT: Composition へ適用可能な要求の顔。現在値そのものは
+                // read-only の Composition 投影であり、ボタンは Message を出す
+                // だけで Document を直接変更しない。
+                section_header("ASPECT", dims, colors),
+                aspect_preset_row(
+                    aspect_preset_for_dimensions(composition.width, composition.height),
+                    !running,
+                    dims,
+                    colors,
+                ),
                 // RANGE: comp 由来の read-only 投影+範囲選択。
                 section_header("RANGE", dims, colors),
                 info_row(
@@ -422,6 +532,72 @@ pub fn view(model: ViewModel<'_>, dims: Dimensions, colors: Colors) -> Element<'
 // ---------------------------------------------------------------------------
 // 行(settings の行文法の延長 — 行高+padding の間隔、線は引かない)
 // ---------------------------------------------------------------------------
+
+/// Composition の現在比率と、Shell が後で Document へ適用できる3つの要求を
+/// ひとまとまりで表示する。`can_select = false`(export 実行中)ではボタンを
+/// disabled にして、実行中の snapshot と次回の Composition を混ぜない。
+fn aspect_preset_row(
+    current: Option<AspectPreset>,
+    can_select: bool,
+    dims: Dimensions,
+    colors: Colors,
+) -> Element<'static, Message> {
+    let current_label = current
+        .map(|preset| preset.label().to_owned())
+        .unwrap_or_else(|| "Custom".to_owned());
+    let mut presets = row![];
+    for preset in AspectPreset::ALL {
+        presets = presets.push(aspect_preset_button(
+            preset,
+            current == Some(preset),
+            can_select,
+            dims,
+            colors,
+        ));
+    }
+
+    column![info_row("Current", current_label, dims, colors), presets]
+        .spacing(dims.spacing_xs)
+        .padding([0.0, dims.spacing_m])
+        .into()
+}
+
+fn aspect_preset_button(
+    preset: AspectPreset,
+    selected: bool,
+    can_select: bool,
+    dims: Dimensions,
+    colors: Colors,
+) -> Element<'static, Message> {
+    let dimensions = dimensions_for_aspect(preset);
+    let mut control = button(
+        column![
+            text(preset.label())
+                .size(dims.body_text)
+                .color(colors.text_primary),
+            text(format_resolution(dimensions.width, dimensions.height))
+                .size(dims.caption_text)
+                .color(colors.text_muted),
+        ]
+        .spacing(dims.spacing_xs),
+    )
+    .width(Length::FillPortion(1))
+    .padding([dims.spacing_xs, dims.spacing_s])
+    .style(move |_theme, status| {
+        let mut style = button_style(dims, colors, status);
+        // `button_style` already owns the shared button grammar.  A selected
+        // preset only reuses the existing selected surface as a persistent
+        // indication; no new color role or local state is introduced.
+        if selected && matches!(status, button::Status::Active) {
+            style.background = Some(iced::Background::Color(colors.state_selected));
+        }
+        style
+    });
+    if can_select {
+        control = control.on_press(Message::AspectPresetSelect(preset));
+    }
+    control.into()
+}
 
 /// read-only の情報行。押せる顔をしない(text のみ、Q0 の逆側 — 触れないなら
 /// 触れなさそうに)。
@@ -632,6 +808,79 @@ pub fn toggler_style(colors: Colors, status: toggler::Status) -> toggler::Style 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // -----------------------------------------------------------------
+    // アスペクトプリセット
+    // -----------------------------------------------------------------
+
+    /// 全プリセットが実際に異なる寸法と比率へ写る。UI の文字だけを増やして
+    /// 実体のない選択肢を置かないための意味実在柵。
+    #[test]
+    fn every_aspect_preset_maps_to_its_canonical_dimensions() {
+        let expected = [
+            (
+                AspectPreset::Landscape16x9,
+                AspectDimensions {
+                    width: 1920,
+                    height: 1080,
+                },
+            ),
+            (
+                AspectPreset::Portrait9x16,
+                AspectDimensions {
+                    width: 1080,
+                    height: 1920,
+                },
+            ),
+            (
+                AspectPreset::Square1x1,
+                AspectDimensions {
+                    width: 1080,
+                    height: 1080,
+                },
+            ),
+        ];
+        for (preset, dimensions) in expected {
+            assert_eq!(dimensions_for_aspect(preset), dimensions);
+        }
+    }
+
+    /// 既存 Composition の縮小版も同じ比率として現在選択を表示できるが、
+    /// 未対応比率や無効寸法は custom のままにする。
+    #[test]
+    fn aspect_preset_for_dimensions_recognizes_ratio_not_only_canonical_size() {
+        assert_eq!(
+            aspect_preset_for_dimensions(1280, 720),
+            Some(AspectPreset::Landscape16x9)
+        );
+        assert_eq!(
+            aspect_preset_for_dimensions(1080, 1920),
+            Some(AspectPreset::Portrait9x16)
+        );
+        assert_eq!(
+            aspect_preset_for_dimensions(1080, 1080),
+            Some(AspectPreset::Square1x1)
+        );
+        assert_eq!(aspect_preset_for_dimensions(0, 1080), None);
+        assert_eq!(aspect_preset_for_dimensions(1000, 700), None);
+    }
+
+    /// クリック契約は pure mapping の結果をそのまま運ぶ。Document への適用は
+    /// Shell WIRE の責任で、pane は別の書き口を持たない。
+    #[test]
+    fn selecting_an_aspect_preset_emits_the_real_pane_message() {
+        assert_eq!(
+            Message::AspectPresetSelect(AspectPreset::Portrait9x16),
+            Message::AspectPresetSelect(AspectPreset::Portrait9x16)
+        );
+        assert_eq!(
+            dimensions_for_aspect(AspectPreset::Portrait9x16),
+            AspectDimensions {
+                width: 1080,
+                height: 1920,
+            }
+        );
+    }
 
     // -----------------------------------------------------------------
     // 意味実在柵: 全選択肢が motolii-export の実在識別子へ写る。

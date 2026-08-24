@@ -17,8 +17,8 @@
 use std::path::Path;
 
 use motolii_export_pane::{
-    view, ExportProgress, ExportQuality, ExportRange, Message, ViewModel, WorkAreaFrames,
-    CONTAINER_CODEC_LABEL,
+    view, AspectPreset, ExportProgress, ExportQuality, ExportRange, Message, ViewModel,
+    WorkAreaFrames, CONTAINER_CODEC_LABEL,
 };
 use motolii_store::{Composition, Fps};
 use motolii_tokens_rs::{Colors, Dimensions};
@@ -63,6 +63,7 @@ fn every_section_and_value_renders_from_the_real_state() {
         "EXPORT",
         "OUTPUT",
         "RANGE",
+        "ASPECT",
         "RUN",
         "/tmp/out.mp4",         // ExportJob::out_path になる予定の表示
         CONTAINER_CODEC_LABEL,  // Encoder の実対応(1種)
@@ -74,6 +75,34 @@ fn every_section_and_value_renders_from_the_real_state() {
         ui.find(expected)
             .unwrap_or_else(|error| panic!("{expected:?} が見えない: {error:?}"));
     }
+}
+
+/// プリセットは飾りの文字ではなく、比率・寸法を表示する実体のある
+/// Message 発火面であることを widget 木で固定する。
+#[test]
+fn aspect_preset_buttons_show_label_and_dimensions() {
+    let composition = fixture_comp();
+    let out = Path::new("/tmp/out.mp4");
+    let mut ui = simulator(wired_model(&composition, Some(out)));
+    for expected in [
+        "ASPECT",
+        "16:9",
+        "1920 × 1080",
+        "9:16",
+        "1080 × 1920",
+        "1:1",
+        "1080 × 1080",
+    ] {
+        ui.find(expected)
+            .unwrap_or_else(|error| panic!("{expected:?} が見えない: {error:?}"));
+    }
+
+    ui.click("9:16").expect("9:16 プリセットを押せない");
+    let messages: Vec<Message> = ui.into_messages().collect();
+    assert!(
+        messages.contains(&Message::AspectPresetSelect(AspectPreset::Portrait9x16)),
+        "9:16 の要求が pane Message にならない: {messages:?}"
+    );
 }
 
 /// **Message 発火の本命(受入条件2)**: Export ボタン押下で `Message::Export`。
