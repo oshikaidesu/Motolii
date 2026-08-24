@@ -133,3 +133,23 @@ fn remove_deletes_the_marker_at_the_given_index() {
         "削除したはずのマーカーがまだ残っている"
     );
 }
+
+#[test]
+fn marker_panel_rename_commits_and_undoes_in_one_step() {
+    let mut shell = Shell::new_fixture().0;
+    let before = shell.markers();
+
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::Marker(
+        timeline::markers::MarkerMessage::RenameBegin(0),
+    )));
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::Marker(
+        timeline::markers::MarkerMessage::RenameEdited("Chorus".to_owned()),
+    )));
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::Marker(
+        timeline::markers::MarkerMessage::RenameCommit,
+    )));
+
+    assert_eq!(shell.markers()[0].name, "Chorus");
+    let _ = shell.update(Message::Undo);
+    assert_eq!(shell.markers(), before, "改名が undo 1回で元に戻らない");
+}

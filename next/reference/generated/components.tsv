@@ -250,6 +250,15 @@ timeline.graph_editor	semantic	core_edit	4		render	view	緑	実装コードに�
 timeline.graph_editor	semantic	core_edit	4		render	GraphCanvas	緑	実装コードに実在	next/ui/motolii-timeline-pane/src/graph_editor.rs:16
 timeline.graph_editor	semantic	core_edit	4		observable	graph_handle_drag_updates_the_control_point	緑	実装コードに実在	next/ui/motolii-timeline-pane/src/graph_editor.rs:16
 timeline.graph_editor	semantic	core_edit	4		observable	committing_graph_control_inputs_writes_bezier	緑	実装コードに実在	next/ui/motolii-timeline-pane/src/graph_editor.rs:16
+timeline.marker_panel	semantic	core_edit	4	1014	entry	MarkerMessage	緑	実装コードに実在	next/ui/motolii-timeline-pane/src/markers.rs:62
+timeline.marker_panel	semantic	core_edit	4	1014	entry	marker_panel	緑	実装コードに実在	next/ui/motolii-timeline-pane/src/markers.rs:62
+timeline.marker_panel	semantic	core_edit	4	1014	meaning	Marker	緑	実装コードに実在	next/ui/motolii-timeline-pane/src/markers.rs:62
+timeline.marker_panel	semantic	core_edit	4	1014	meaning	renamed	緑	実装コードに実在	next/ui/motolii-timeline-pane/src/markers.rs:62
+timeline.marker_panel	semantic	core_edit	4	1014	evaluation	marker_label	緑	実装コードに実在	next/ui/motolii-timeline-pane/src/markers.rs:62
+timeline.marker_panel	semantic	core_edit	4	1014	evaluation	renamed	緑	実装コードに実在	next/ui/motolii-timeline-pane/src/markers.rs:62
+timeline.marker_panel	semantic	core_edit	4	1014	render	marker_panel	緑	実装コードに実在	next/ui/motolii-timeline-pane/src/markers.rs:62
+timeline.marker_panel	semantic	core_edit	4	1014	observable	marker_panel_shows_named_markers	緑	実装コードに実在	next/ui/motolii-timeline-pane/src/markers.rs:62
+timeline.marker_panel	semantic	core_edit	4	1014	observable	marker_panel_rename_commits_and_undoes_in_one_step	緑	実装コードに実在	next/ui/motolii-timeline-pane/src/markers.rs:62
 timeline.transport_navigation	semantic	core_edit	4		entry	transport_spec_with_frame_draft	緑	実装コードに実在	next/ui/motolii-timeline-pane/src/transport.rs:44
 timeline.transport_navigation	semantic	core_edit	4		entry	commit_frame_input	緑	実装コードに実在	next/ui/motolii-timeline-pane/src/transport.rs:44
 timeline.transport_navigation	semantic	core_edit	4		entry	jump_to_keyframe	緑	実装コードに実在	next/ui/motolii-timeline-pane/src/transport.rs:44

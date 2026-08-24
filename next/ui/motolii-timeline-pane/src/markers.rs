@@ -5,9 +5,9 @@
 //! 右クリックで削除。
 //!
 //! ## map 行(bundle B19、`next/reference/normal-map.tsv`)
-//! - **この切片で消化(採用予定)**: 728(Add and Modify Marker — 追加+
-//!   ドラッグでの時刻変更)・738/739(Modify Marker — 同、時刻の modify のみ。
-//!   名前の modify=リネーム UI は次切片、下記「見送り」参照)
+//! - **基盤として残る(時刻変更UIは未結線)**: 728(Add and Modify Marker —
+//!   追加+ドラッグでの時刻変更)・738/739(Modify Marker — 同、時刻の modify
+//!   のみ)。名前の modify は `timeline.marker_panel` で一覧・改名まで結線済み。
 //! - **採用済の UI 入口を補強**: 717(追加)・718(削除)・743(表示)・
 //!   722/723(ジャンプ — click jump は K/J ナビの補完)
 //! - **見送り**: 729/730/731/733/742(フラグ — store `marker.rs` に flag が
@@ -24,10 +24,9 @@
 //! Document には触らない(`work_area.rs` と同じ「値を受けて値を返す」型)。
 //!
 //! ## 別レーン走行中のための独立性(発注 EXACT TARGET)
-//! 同 crate の `write.rs`/`input.rs`/`canvas.rs` は**読み専用** — Message は
-//! [`MarkerMessage`](独立 enum)で表現し、`crate::Message` への合流・
-//! `PaneState` への drag 状態の同居・`canvas::draw` からの呼び出しは
-//! supervisor が差す(ファイル末尾の統合手順ではなく RETURN 文書参照)。
+//! 同 crate の `write.rs`/`input.rs`/`canvas.rs` とは責任を分ける — Message は
+//! [`MarkerMessage`](独立 enum)で表現し、名前入力の下書きだけを `PaneState` に
+//! 閉じる。確定時の `Intent::SetMarkers` は supervisor(Shell) が差す。
 //!
 //! ## 置き場(意匠 — 既存目盛り梯子と衝突しない位置)
 //! ルーラ帯の縦の家割り(正典 §5「ルーラ帯 = ループ帯(最上段)+locator 帯+
@@ -50,14 +49,27 @@
 //! (`way_timeline`/`text_secondary`/`border_width`/`caption_text`/`spacing_xs`)。
 //! icon は不要(グリフは canvas パスで描く — フラグ見送りにより旗 icon も不要)。
 
-use iced::widget::canvas;
-use iced::Point;
+use iced::widget::{button, canvas, column, container, row, scrollable, text, text_input};
+use iced::{Element, Length, Point};
 
 use motolii_store::{Fps, Marker, RationalTime};
 
 use crate::canvas::{loop_band_height, major_tick_length, minor_tick_length};
 use crate::projection::frame_to_x;
 use crate::tokens::{Colors, Dimensions};
+use crate::{Message, TimelinePane};
+
+/* motolii-component
+id = "timeline.marker_panel"
+kind = "semantic"
+weight = "core_edit"
+maps = [1014]
+entry = ["MarkerMessage", "marker_panel"]
+meaning = ["Marker", "renamed"]
+evaluation = ["marker_label", "renamed"]
+render = ["marker_panel"]
+observable = ["marker_panel_shows_named_markers", "marker_panel_rename_commits_and_undoes_in_one_step"]
+*/
 
 // ---------------------------------------------------------------------------
 // 縦の家割り(梯子からの導出のみ — 新しい寸法 token は増やさない)
@@ -238,6 +250,38 @@ pub fn removed(markers: &[Marker], index: usize) -> Option<Vec<Marker>> {
     Some(next)
 }
 
+/// マーカー名の確定。入力欄の下書きは UI 側に置き、ここでは確定した名前だけを
+/// 既存の `Marker` へ適用する。空名は許す(名前を消して無名のビートへ戻すため)。
+/// 同名・範囲外は no-op として undo を汚さない。
+pub fn renamed(markers: &[Marker], index: usize, name: &str) -> Option<Vec<Marker>> {
+    let target = markers.get(index)?;
+    let name = name.trim().to_owned();
+    if target.name == name {
+        return None;
+    }
+    let mut next = markers.to_vec();
+    next[index] = Marker {
+        name,
+        time: target.time.clone(),
+        duration: target.duration.clone(),
+    };
+    Some(next)
+}
+
+/// 一覧で見せる名前。無名マーカーも順番を失わないよう「Marker N」と表示し、
+/// 時刻は常にフレームで添える(クリックで同じ位置へ戻れることを観測できる顔)。
+pub fn marker_label(marker: &Marker, index: usize, fps: Option<Fps>) -> String {
+    let name = if marker.name.trim().is_empty() {
+        format!("Marker {}", index + 1)
+    } else {
+        marker.name.clone()
+    };
+    let frame = fps
+        .and_then(|fps| locator_frame(marker, fps))
+        .map_or_else(|| "?".to_owned(), |frame| frame.to_string());
+    format!("{name}  ·  {frame}f")
+}
+
 // ---------------------------------------------------------------------------
 // pane-local Message(独立 enum — 統合は supervisor)
 // ---------------------------------------------------------------------------
@@ -265,6 +309,16 @@ pub enum MarkerMessage {
     JumpTo(i64),
     /// 右クリック削除(map 718 の UI 入口)。
     Remove(usize),
+    /// 一覧の名前編集を開始する。Document にはまだ触れない。
+    RenameBegin(usize),
+    /// 一覧の名前下書き。確定まで Document/undo には触れない。
+    RenameEdited(String),
+    /// 一覧の名前を1回の `Intent::SetMarkers` として確定する。
+    RenameCommit,
+    /// 一覧の名前編集を取り消す。
+    RenameCancel,
+    /// 名前編集を確定した値。Shell の意味更新へ渡す最終形。
+    Rename { index: usize, name: String },
 }
 
 // ---------------------------------------------------------------------------
@@ -400,5 +454,119 @@ pub fn draw_locators(
                 ..Default::default()
             });
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 一覧パネル(マーカーの名前・時刻・戻り先を1箇所に集める)
+// ---------------------------------------------------------------------------
+
+/// タイムライン上部のコンパクトなマーカー一覧。描画線と同じ `Marker` を読む
+/// だけで、別のマーカー台帳や再生位置を持たない。名前編集中だけ下書きを受け、
+/// 確定は `MarkerMessage::RenameCommit` で Shell に返す。
+pub fn marker_panel(pane: &TimelinePane) -> Element<'static, Message> {
+    let count = pane.markers.len();
+    let header = row![
+        text("Markers").size(pane.dims.caption_text),
+        text(format!("{count}"))
+            .size(pane.dims.caption_text)
+            .color(pane.colors.text_secondary),
+    ]
+    .spacing(pane.dims.spacing_s)
+    .align_y(iced::alignment::Vertical::Center);
+
+    let mut rows = Vec::with_capacity(pane.markers.len().max(1));
+    if pane.markers.is_empty() {
+        rows.push(
+            text("M でビート/歌詞位置を置く")
+                .size(pane.dims.caption_text)
+                .color(pane.colors.text_secondary)
+                .into(),
+        );
+    } else {
+        for (index, marker) in pane.markers.iter().enumerate() {
+            let frame = pane
+                .fps
+                .and_then(|fps| locator_frame(marker, fps))
+                .unwrap_or(0);
+            let name: Element<'static, Message> = match pane.marker_rename.as_ref() {
+                Some((editing, draft)) if *editing == index => text_input("marker name", draft.clone())
+                    .on_input(|value| Message::Marker(MarkerMessage::RenameEdited(value)))
+                    .on_submit(Message::Marker(MarkerMessage::RenameCommit))
+                    .size(pane.dims.caption_text)
+                    .padding([0.0, pane.dims.spacing_xs])
+                    .width(Length::Fill)
+                    .into(),
+                _ => text(marker_label(marker, index, pane.fps))
+                    .size(pane.dims.caption_text)
+                    .color(pane.colors.text_primary)
+                    .width(Length::Fill)
+                    .into(),
+            };
+
+            let jump = button(text(format!("{frame}f")).size(pane.dims.caption_text))
+                .on_press(Message::Marker(MarkerMessage::JumpTo(frame)))
+                .padding([0.0, pane.dims.spacing_xs]);
+            let action = match pane.marker_rename.as_ref() {
+                Some((editing, _)) if *editing == index => {
+                    button(text("Cancel").size(pane.dims.caption_text))
+                        .on_press(Message::Marker(MarkerMessage::RenameCancel))
+                }
+                _ => button(text("Rename").size(pane.dims.caption_text))
+                    .on_press(Message::Marker(MarkerMessage::RenameBegin(index))),
+            };
+            let remove = button(text("Delete").size(pane.dims.caption_text))
+                .on_press(Message::Marker(MarkerMessage::Remove(index)))
+                .padding([0.0, pane.dims.spacing_xs]);
+
+            rows.push(
+                row![name, jump, action, remove]
+                    .spacing(pane.dims.spacing_xs)
+                    .align_y(iced::alignment::Vertical::Center)
+                    .height(Length::Fixed(pane.dims.row_height))
+                    .into(),
+            );
+        }
+    }
+
+    container(
+        column![
+            header,
+            scrollable(column(rows)).height(Length::Fixed(pane.dims.row_height * 4.0))
+        ]
+        .spacing(pane.dims.spacing_xs)
+        .padding([pane.dims.spacing_xs, pane.dims.spacing_s]),
+    )
+    .width(Length::Fill)
+    .into()
+}
+
+#[cfg(test)]
+mod panel_tests {
+    use super::*;
+
+    fn marker(name: &str, frame: i64) -> Marker {
+        let fps = Fps::try_new(30, 1).expect("valid fps");
+        Marker {
+            name: name.to_owned(),
+            time: RationalTime::try_from_frame(frame, fps).expect("valid time"),
+            duration: RationalTime::try_from_frame(0, fps).expect("valid duration"),
+        }
+    }
+
+    #[test]
+    fn renamed_changes_only_the_requested_marker() {
+        let markers = vec![marker("Verse", 30), marker("", 60)];
+        let next = renamed(&markers, 1, "Chorus").expect("name changed");
+        assert_eq!(next[0], markers[0]);
+        assert_eq!(next[1].name, "Chorus");
+        assert!(renamed(&next, 1, " Chorus ").is_none(), "trimmed same name is a no-op");
+    }
+
+    #[test]
+    fn marker_panel_shows_named_markers() {
+        let fps = Fps::try_new(30, 1).expect("valid fps");
+        assert_eq!(marker_label(&marker("Chorus", 45), 0, Some(fps)), "Chorus  ·  45f");
+        assert_eq!(marker_label(&marker("", 45), 2, Some(fps)), "Marker 3  ·  45f");
     }
 }

@@ -303,6 +303,9 @@ pub enum Message {
     /// 意味(`Intent::SetMarkers`)は shell の `update_marker` が持つので
     /// [`PaneState::update`] では no-op。
     AddMarkerAt(i64),
+    /// マーカー一覧の UI 操作。Document へ届く意味更新は Shell が所有し、
+    /// 名前入力の下書きだけを `PaneState` に閉じる。
+    Marker(crate::markers::MarkerMessage),
 
     // ---- Split(レイヤー分割、B39 — `crate::split` モジュール doc「統合手順」) ----
     /// Command+B(map 267)/メニュー Split(id 163/317 ほか)。選択レイヤー
@@ -473,6 +476,8 @@ pub struct PaneState {
     /// — `TimelineDragState` と同じ transient の形(確定まで Document 不接触・
     /// 取消は捨てるだけで履歴無傷)。
     rename: Option<RenameDraft>,
+    /// マーカー一覧の名前編集中下書き。確定まで Document/undo に触れない。
+    marker_rename: Option<MarkerRenameDraft>,
     /// transport のフレーム番号欄の確定前入力。
     frame_draft: Option<String>,
     /// Graph Editor の開閉・数値下書き・ハンドルドラッグ状態。
@@ -505,6 +510,11 @@ pub struct PaneState {
 /// 1回出すまで Document を触らない。
 struct RenameDraft {
     layer: LayerId,
+    draft: String,
+}
+
+struct MarkerRenameDraft {
+    index: usize,
     draft: String,
 }
 
@@ -621,6 +631,37 @@ impl PaneState {
     /// 渡す読み取り専用)。`None` = rename 中ではない。
     pub fn rename_draft(&self) -> Option<(LayerId, &str)> {
         self.rename.as_ref().map(|r| (r.layer, r.draft.as_str()))
+    }
+
+    /// マーカー一覧の名前入力を開始する。現在名は Shell が Document から一度だけ
+    /// 投影して渡す。下書きは pane transient であり、確定まで undo を増やさない。
+    pub fn begin_marker_rename(&mut self, index: usize, name: String) {
+        self.marker_rename = Some(MarkerRenameDraft { index, draft: name });
+    }
+
+    /// マーカー名の毎打鍵下書き。Document はまだ触らない。
+    pub fn edit_marker_rename(&mut self, draft: String) {
+        if let Some(rename) = self.marker_rename.as_mut() {
+            rename.draft = draft;
+        }
+    }
+
+    /// Shell の marker meaning owner が確定するための読み取り口。取り出し時に
+    /// 下書きを消すので、同じ入力を二重に確定しない。
+    pub fn take_marker_rename(&mut self) -> Option<(usize, String)> {
+        self.marker_rename.take().map(|rename| (rename.index, rename.draft))
+    }
+
+    /// 一覧の名前入力を Esc で捨てる。
+    pub fn cancel_marker_rename(&mut self) -> bool {
+        self.marker_rename.take().is_some()
+    }
+
+    /// `TimelinePane` へ運ぶ一覧の下書き。
+    pub fn marker_rename_draft(&self) -> Option<(usize, &str)> {
+        self.marker_rename
+            .as_ref()
+            .map(|rename| (rename.index, rename.draft.as_str()))
     }
 
     /// rename の取消(Esc — `cancel_drag` と同じく shell の
@@ -915,7 +956,8 @@ impl PaneState {
             | Message::JumpPlayheadToStart
             | Message::JumpPlayheadToEnd
             | Message::Shuttle(_)
-            | Message::AddMarkerAt(_) => None,
+            | Message::AddMarkerAt(_)
+            | Message::Marker(_) => None,
         }
     }
 }

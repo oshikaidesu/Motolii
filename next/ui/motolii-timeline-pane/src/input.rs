@@ -231,6 +231,7 @@ mod mouse_interaction_tests {
             graph_editor_open: false,
             graph_editor: None,
             graph_drafts: [None, None, None, None],
+            marker_rename: None,
         }
     }
 

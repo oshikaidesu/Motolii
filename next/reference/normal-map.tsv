@@ -1012,7 +1012,7 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 1011	panel_window	Lumetri Color	カラーグレーディングパネル	0	1	0	0	1	0:0:1:0	二次(premiere全体注記)		拡張	裁定193: vism圏(色補正スイート=Lumetri級)— 単発の色調整ではなく専用グレーディング/スコープ機構一式が要る専門機能でコアの範囲外。継ぎ目=将来のcolor providerプラグイン	B25		S
 1012	panel_window	Lumetri Scopes	波形・ベクトルスコープパネル(近年追加)	1	0	0	0	1	0:0:1:0	公式(Adobe, 個別URL)		拡張	裁定193: vism圏(色補正スイート=Lumetri級)— 単発の色調整ではなく専用グレーディング/スコープ機構一式が要る専門機能でコアの範囲外。継ぎ目=将来のcolor providerプラグイン	B25		S
 1013	panel_window	Lumetri Scopes	波形・ベクトルスコープ等の映像スコープパネル	0	1	0	0	1	0:0:1:0	二次(premiere全体注記)		拡張	裁定193: vism圏(色補正スイート=Lumetri級)— 単発の色調整ではなく専用グレーディング/スコープ機構一式が要る専門機能でコアの範囲外。継ぎ目=将来のcolor providerプラグイン	B25		S
-1014	panel_window	Markers panel	マーカー一覧パネル	0	1	0	0	1	0:0:1:0	二次(premiere全体注記)		採用予定	マーカー実装済み(裁定111)、一覧パネルUIは未	B25		M
+1014	panel_window	Markers panel	マーカー一覧パネル	0	1	0	0	1	0:0:1:0	二次(premiere全体注記)		採用済	markers.rs::marker_panel が名前・フレーム・ジャンプ・改名・削除を一覧で提供	B25		M
 1015	panel_window	Mask Interpolation	マスク補間設定パネル	1	0	0	0	1	0:0:1:0	二次(非公式技術抽出/2015時点)		採用予定	mask実装済み(裁定108/112)、補間設定パネルは未	B25		S
 1016	panel_window	Media & Assets panel	メディア/素材パネル(インポート・テキスト・ステッカー・フィルター・トランジションへのアクセス)	0	0	0	1	1	0:0:1:0	一致(2件、位置表現は「左上/左」で共通)		採用予定	既決との衝突なし	B25		M
 1017	panel_window	Media Browser	外部メディアブラウズパネル	1	0	0	0	1	0:0:1:0	二次(非公式技術抽出/2015時点)		採用予定	既決との衝突なし	B25		M

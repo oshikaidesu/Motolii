@@ -285,6 +285,11 @@ impl Shell {
                     .rename_draft()
                     .map(|(layer, draft)| (layer, draft.to_owned())),
             )
+            .with_marker_rename(
+                self.timeline
+                    .marker_rename_draft()
+                    .map(|(index, draft)| (index, draft.to_owned())),
+            )
             .with_frame_draft(self.timeline.frame_draft().map(str::to_owned))
             .with_graph_editor(
                 self.timeline.graph_editor_open(),
@@ -386,6 +391,28 @@ impl Shell {
                 // 再生の clock は shell(A2)が持つので、状態遷移と tick 駆動を
                 // ここで畳む(`PaneState::update` では no-op)。
                 timeline_pane::Message::Shuttle(command) => self.apply_shuttle(command),
+                timeline_pane::Message::Marker(marker) => {
+                    use timeline::markers::MarkerMessage;
+                    match marker {
+                        MarkerMessage::RenameBegin(index) => {
+                            if let Some(name) = self.markers().get(index).map(|marker| marker.name.clone()) {
+                                self.timeline.begin_marker_rename(index, name);
+                            }
+                        }
+                        MarkerMessage::RenameEdited(draft) => {
+                            self.timeline.edit_marker_rename(draft);
+                        }
+                        MarkerMessage::RenameCommit => {
+                            if let Some((index, name)) = self.timeline.take_marker_rename() {
+                                self.update_marker(MarkerMessage::Rename { index, name });
+                            }
+                        }
+                        MarkerMessage::RenameCancel => {
+                            self.timeline.cancel_marker_rename();
+                        }
+                        other => self.update_marker(other),
+                    }
+                }
                 // ルーラ locator lane 右クリック(S2 発注 #22「マーカー追加
                 // UI が無い」の穴埋め、2入口目)— キーボード M
                 // (`Message::Marker(MarkerMessage::AddAtPlayhead)`)と同じ

@@ -54,6 +54,14 @@ impl Shell {
                     }
                 }
             }
+            MarkerMessage::Rename { index, name } => {
+                let markers = self.markers();
+                if let Some(next) = timeline::markers::renamed(&markers, index, &name) {
+                    if let Err(error) = self.doc.apply(Intent::SetMarkers { markers: next }) {
+                        self.status = Some(format!("マーカー名を変更できない: {error}"));
+                    }
+                }
+            }
             MarkerMessage::Grabbed { index, at_frame } => {
                 let Some(fps) = self.composition().map(|c| c.fps) else {
                     return;
@@ -83,6 +91,13 @@ impl Shell {
             MarkerMessage::DragCancelled => {
                 self.marker_drag = None;
             }
+            // Timeline pane の入力下書きは `dispatch_playback` が
+            // `PaneState` へ閉じる。root の `Message::Marker` は keymap 用の
+            // 入口なので、ここへ漏れても Document を触らず安全に捨てる。
+            MarkerMessage::RenameBegin(_)
+            | MarkerMessage::RenameEdited(_)
+            | MarkerMessage::RenameCommit
+            | MarkerMessage::RenameCancel => {}
         }
     }
 }

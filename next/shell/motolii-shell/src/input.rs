@@ -510,6 +510,7 @@ impl Shell {
                     && !self.timeline.cancel_key_drag()
                     && !self.timeline.cancel_loop_drag()
                     && !self.timeline.cancel_rename()
+                    && !self.timeline.cancel_marker_rename()
                     && !self.timeline.cancel_frame_input()
                     && !self.timeline.cancel_graph_interaction()
                     && !self.cancel_gizmo_drag()

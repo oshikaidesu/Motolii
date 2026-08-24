@@ -198,6 +198,8 @@ pub struct TimelinePane {
     graph_editor: Option<graph_editor::GraphEditorProjection>,
     /// 数値欄/ドラッグの確定前下書き。
     graph_drafts: [Option<String>; 4],
+    /// マーカー一覧の名前編集中下書き。Document へは確定時だけ届く。
+    marker_rename: Option<(usize, String)>,
 }
 
 impl TimelinePane {
@@ -235,6 +237,7 @@ impl TimelinePane {
             graph_editor_open: false,
             graph_editor: Some(graph_editor::project(store, session)),
             graph_drafts: [None, None, None, None],
+            marker_rename: None,
         }
     }
 
@@ -289,6 +292,13 @@ impl TimelinePane {
         waveforms: std::collections::HashMap<LayerId, crate::waveform_view::WaveformState>,
     ) -> Self {
         self.waveforms = waveforms;
+        self
+    }
+
+    /// `Shell::view` だけが呼ぶ。マーカー一覧の名前下書きを表示へ運ぶだけで、
+    /// 変更の確定は `MarkerMessage::RenameCommit` の意味経路が担当する。
+    pub fn with_marker_rename(mut self, draft: Option<(usize, String)>) -> Self {
+        self.marker_rename = draft;
         self
     }
 
@@ -464,10 +474,11 @@ impl TimelinePane {
     pub fn view_with_transport(self) -> Element<'static, Message> {
         let band = transport::view(&self);
         let graph = self.graph_editor_open.then(|| graph_editor::view(&self));
+        let markers = markers::marker_panel(&self);
         let body = self.view();
         match graph {
-            Some(graph) => iced::widget::column![band, graph, body].into(),
-            None => iced::widget::column![band, body].into(),
+            Some(graph) => iced::widget::column![band, graph, markers, body].into(),
+            None => iced::widget::column![band, markers, body].into(),
         }
     }
 }
@@ -601,6 +612,10 @@ mod scroll_tests {
             rename: None,
             frame_draft: None,
             waveforms: std::collections::HashMap::new(),
+            graph_editor_open: false,
+            graph_editor: None,
+            graph_drafts: [None, None, None, None],
+            marker_rename: None,
         }
     }
 
