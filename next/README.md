@@ -115,6 +115,8 @@ Lottie は Bodymovin が After Effects のデータ模型を吐いた物なの�
 
 ## 現在の実装ルート
 
+コンテキスト圧縮後の再開手順は [reference/CONTEXT-COMPACTION.md](reference/CONTEXT-COMPACTION.md) に固定している。圧縮は方針変更ではなく、静的な現在地を取り直して同じ実装ルートへ戻るトリガーである。
+
 実装は `plan_steps.py` が示す**最も早い未通過step**を起点にする。stepを進める途中で、
 必要な意味コンポーネントが無い、または契約の粒が赤なら、そのコンポーネントを先に閉じる。
 コンポーネントが緑になったらstepへ戻り、入口から利用者が観測できる結果まで通す。
