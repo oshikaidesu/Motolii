@@ -25,6 +25,47 @@ use crate::model::{
 };
 use motolii_store::AssetId;
 
+/// OS の Cmd/Ctrl と Shift を pane 境界で意味へ変換した入力。
+///
+/// `iced` のキーボード型を pane-local state に持ち込まず、view/WIRE は
+/// Cmd(macOS) と Ctrl(Windows/Linux) を同じ `toggle` へ正規化する。これで
+/// state は OS を知らず、通常クリック・トグル・範囲選択の責任だけを持つ。
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct CardSelectionModifiers {
+    shift: bool,
+    toggle: bool,
+}
+
+impl CardSelectionModifiers {
+    /// `shift` は範囲選択、`toggle` は Cmd/Ctrl 選択を表す。
+    pub const fn new(shift: bool, toggle: bool) -> Self {
+        Self { shift, toggle }
+    }
+
+    /// 通常クリック。
+    pub const fn plain() -> Self {
+        Self::new(false, false)
+    }
+
+    /// Cmd(macOS)/Ctrl(Windows/Linux) クリック。
+    pub const fn toggle() -> Self {
+        Self::new(false, true)
+    }
+
+    /// Shift クリック。
+    pub const fn range() -> Self {
+        Self::new(true, false)
+    }
+
+    pub const fn is_shift(self) -> bool {
+        self.shift
+    }
+
+    pub const fn is_toggle(self) -> bool {
+        self.toggle
+    }
+}
+
 /// pane ローカル Message(裁定160 切片以降の一貫した形 — root
 /// `motolii_shell::Message::Browser(Message)` が1本で畳む)。
 #[derive(Clone, Debug, PartialEq)]
@@ -40,10 +81,22 @@ pub enum Message {
     /// [`Message::SelectScope`] と同型の「2つの入口が同じ状態を書く」形。
     /// 構造の対称化、利用者実窓指摘 2026-08-22)。
     SelectPreviewScope(PreviewScope),
-    /// カタログのカード click(mock `selectCard` の単一選択のみ — Shift/⌘ の
-    /// 複数選択・selection tray は予約地のまま)。media/preview の2系統を
-    /// [`CardKey`] が型で分ける。
+    /// カタログの通常カード click。従来の単一選択入口を維持する。
     SelectCard(CardKey),
+    /// modifier 付きカード click。
+    ///
+    /// `visible_cards` は現在の表示順(絞り込み後の catalog 順)を view/WIRE
+    /// が渡す。Shift の時だけ anchor から target までの範囲に使い、Cmd/Ctrl
+    /// toggle と通常 click では無視する。順序を `PaneState` にキャッシュ
+    /// しないので、pane は Document/catalog の第二の所有者にならない。
+    ///
+    /// Cmd(macOS) と Ctrl(Windows/Linux) の差は、発行側が
+    /// [`CardSelectionModifiers::toggle`] へ正規化する。
+    SelectCardWithModifiers {
+        key: CardKey,
+        modifiers: CardSelectionModifiers,
+        visible_cards: Vec<CardKey>,
+    },
     /// タブ帯(mock `.libraryTabs`)のタブクリック。mock `chooseTab` の転写 —
     /// 非 media タブへ移る時は rail scope を `AllMedia` へ戻す(mock が
     /// `source='all'`/`tag=''` へ戻すのと同じ意味 — scope は media 種別の
@@ -170,9 +223,12 @@ pub struct PaneState {
     /// mock は1本の `state.tag` を全タブで共有して混線し得るが、こちらは
     /// media 台帳絞り込みへ決して漏れない型の壁)。
     preview_scope: PreviewScope,
-    /// カタログの単一選択(mock `state.selected` の転写、`Option` = 未選択。
-    /// 複数選択・selection tray は予約地)。
+    /// カタログの選択。`selected` は既存 view/API との互換用の focus、
+    /// `selected_cards` が実際の pane-local 選択集合、`selection_anchor` が Shift
+    /// 範囲の起点を持つ。カードの意味や Document の選択は所有しない。
     selected: Option<CardKey>,
+    selected_cards: Vec<CardKey>,
+    selection_anchor: Option<CardKey>,
     query: String,
     open: bool,
     /// cursor が乗っている create カード(B36 — [`Message::CardHovered`] doc
@@ -215,9 +271,25 @@ impl PaneState {
         self.preview_scope
     }
 
-    /// カタログの単一選択(`pane_view` がカードの選択意匠に読む)。
+    /// 既存単一選択 API との互換用の focus。複数選択全体は
+    /// [`Self::selected_cards`] を読む。
     pub fn selected(&self) -> Option<CardKey> {
         self.selected
+    }
+
+    /// 現在のカード選択集合を表示順で返す。
+    pub fn selected_cards(&self) -> &[CardKey] {
+        &self.selected_cards
+    }
+
+    /// カードが現在の選択集合に含まれるか。
+    pub fn is_card_selected(&self, key: CardKey) -> bool {
+        self.selected_cards.contains(&key)
+    }
+
+    /// Shift 範囲選択の起点。view の表示順を再構築する側が必要なら読む。
+    pub fn selection_anchor(&self) -> Option<CardKey> {
+        self.selection_anchor
     }
 
     pub fn query(&self) -> &str {
@@ -265,10 +337,14 @@ impl PaneState {
             Message::SelectScope(scope) => self.scope = scope,
             Message::SelectPreviewScope(scope) => self.preview_scope = scope,
             Message::SelectCard(key) => {
-                self.selected = Some(key);
-                // 新規素材ハイライトは「直後」の一過性 — カードへ触った時点で
-                // 消灯する(触った=気づいた、以降は通常の選択文法へ)。
-                self.recent.clear();
+                self.select_card(key, CardSelectionModifiers::plain(), &[]);
+            }
+            Message::SelectCardWithModifiers {
+                key,
+                modifiers,
+                visible_cards,
+            } => {
+                self.select_card(key, modifiers, &visible_cards);
             }
             Message::SelectTab(tab) => {
                 self.tab = tab;
@@ -284,7 +360,7 @@ impl PaneState {
                 // `PaneState` はカタログを持たない(view 引数で渡る)ため
                 // 「未選択」へ戻す(選択の持ち越しで前タブの selection が
                 // 亡霊として残るのを防ぐ — 逸脱として RETURN 記載)。
-                self.selected = None;
+                self.clear_card_selection();
                 // hover/新規素材ハイライトもタブと一緒に流す(前タブの
                 // 一過性状態を亡霊として持ち越さない — selected と同じ理由)。
                 self.hovered = None;
@@ -336,6 +412,93 @@ impl PaneState {
             Message::ApplyOpFromCard { .. } => {}
         }
     }
+
+    /// modifier-aware なカード選択の唯一の state 書き口。
+    fn select_card(
+        &mut self,
+        key: CardKey,
+        modifiers: CardSelectionModifiers,
+        visible_cards: &[CardKey],
+    ) {
+        let (selected_cards, selection_anchor) = resolve_card_selection(
+            &self.selected_cards,
+            self.selection_anchor,
+            key,
+            modifiers,
+            visible_cards,
+        );
+        self.selected_cards = selected_cards;
+        self.selection_anchor = selection_anchor;
+        self.selected = if self.selected_cards.contains(&key) {
+            Some(key)
+        } else {
+            self.selected_cards.last().copied()
+        };
+        // 新規素材ハイライトは「直後」の一過性 — カードへ触った時点で
+        // 消灯する(触った=気づいた、以降は通常の選択文法へ)。
+        self.recent.clear();
+    }
+
+    fn clear_card_selection(&mut self) {
+        self.selected = None;
+        self.selected_cards.clear();
+        self.selection_anchor = None;
+    }
+}
+
+/// カード選択の意味だけを計算する pure helper。
+///
+/// Shift は anchor と target が現在の表示順に存在する時だけ inclusive range
+/// を作る。フィルタやタブ切替で anchor が見えなくなった場合は、範囲を推測せず
+/// target の通常選択へフォールバックする。Shift+Cmd/Ctrl は Shift を優先する
+/// (範囲選択の意味を一つにして、OS ごとの差を増やさない)。
+fn resolve_card_selection(
+    current: &[CardKey],
+    anchor: Option<CardKey>,
+    target: CardKey,
+    modifiers: CardSelectionModifiers,
+    visible_cards: &[CardKey],
+) -> (Vec<CardKey>, Option<CardKey>) {
+    if modifiers.is_shift() {
+        if let Some(anchor) = anchor {
+            let anchor_index = visible_cards.iter().position(|key| *key == anchor);
+            let target_index = visible_cards.iter().position(|key| *key == target);
+            if let (Some(anchor_index), Some(target_index)) = (anchor_index, target_index) {
+                let start = anchor_index.min(target_index);
+                let end = anchor_index.max(target_index);
+                return (
+                    visible_cards[start..=end].iter().copied().fold(
+                        Vec::new(),
+                        |mut selected, key| {
+                            if !selected.contains(&key) {
+                                selected.push(key);
+                            }
+                            selected
+                        },
+                    ),
+                    Some(anchor),
+                );
+            }
+        }
+        return (vec![target], Some(target));
+    }
+
+    if modifiers.is_toggle() {
+        let mut selected = current.to_vec();
+        if let Some(index) = selected.iter().position(|key| *key == target) {
+            selected.remove(index);
+            let next_anchor = if anchor == Some(target) {
+                selected.last().copied()
+            } else {
+                anchor.filter(|key| selected.contains(key))
+            };
+            return (selected, next_anchor);
+        }
+        selected.push(target);
+        return (selected, anchor.or(Some(target)));
+    }
+
+    (vec![target], Some(target))
 }
 
 #[cfg(test)]
@@ -522,8 +685,118 @@ mod tests {
         assert_eq!(state.selected(), None, "初期状態は未選択のはず");
         state.update(Message::SelectCard(CardKey::Media(AssetId::from_raw(3))));
         assert_eq!(state.selected(), Some(CardKey::Media(AssetId::from_raw(3))));
+        assert_eq!(
+            state.selected_cards(),
+            [CardKey::Media(AssetId::from_raw(3))]
+        );
         state.update(Message::SelectCard(CardKey::Preview("glow")));
         assert_eq!(state.selected(), Some(CardKey::Preview("glow")));
+        assert_eq!(state.selected_cards(), [CardKey::Preview("glow")]);
+        assert_eq!(state.selection_anchor(), Some(CardKey::Preview("glow")));
+    }
+
+    #[test]
+    fn toggle_modifier_adds_and_removes_cards_without_replacing_the_selection() {
+        let first = CardKey::Media(AssetId::from_raw(1));
+        let second = CardKey::Media(AssetId::from_raw(2));
+        let mut state = PaneState::new();
+
+        state.update(Message::SelectCard(first));
+        state.update(Message::SelectCardWithModifiers {
+            key: second,
+            modifiers: CardSelectionModifiers::toggle(),
+            visible_cards: vec![first, second],
+        });
+        assert_eq!(state.selected_cards(), [first, second]);
+        assert_eq!(state.selection_anchor(), Some(first));
+
+        state.update(Message::SelectCardWithModifiers {
+            key: second,
+            modifiers: CardSelectionModifiers::toggle(),
+            visible_cards: vec![first, second],
+        });
+        assert_eq!(state.selected_cards(), [first]);
+        assert_eq!(state.selected(), Some(first));
+        assert_eq!(state.selection_anchor(), Some(first));
+    }
+
+    #[test]
+    fn shift_modifier_selects_the_inclusive_range_from_the_anchor() {
+        let cards = [
+            CardKey::Media(AssetId::from_raw(1)),
+            CardKey::Media(AssetId::from_raw(2)),
+            CardKey::Media(AssetId::from_raw(3)),
+            CardKey::Media(AssetId::from_raw(4)),
+        ];
+        let mut state = PaneState::new();
+
+        state.update(Message::SelectCard(cards[1]));
+        state.update(Message::SelectCardWithModifiers {
+            key: cards[3],
+            modifiers: CardSelectionModifiers::range(),
+            visible_cards: cards.to_vec(),
+        });
+
+        assert_eq!(state.selected_cards(), [cards[1], cards[2], cards[3]]);
+        assert_eq!(state.selected(), Some(cards[3]));
+        assert_eq!(state.selection_anchor(), Some(cards[1]));
+    }
+
+    #[test]
+    fn shift_range_follows_reverse_display_order() {
+        let cards = [
+            CardKey::Media(AssetId::from_raw(1)),
+            CardKey::Media(AssetId::from_raw(2)),
+            CardKey::Media(AssetId::from_raw(3)),
+            CardKey::Media(AssetId::from_raw(4)),
+        ];
+        let mut state = PaneState::new();
+
+        state.update(Message::SelectCard(cards[3]));
+        state.update(Message::SelectCardWithModifiers {
+            key: cards[1],
+            modifiers: CardSelectionModifiers::range(),
+            visible_cards: cards.to_vec(),
+        });
+
+        // 選択集合は表示順で返し、anchor は最初の plain click のまま。
+        assert_eq!(state.selected_cards(), [cards[1], cards[2], cards[3]]);
+        assert_eq!(state.selection_anchor(), Some(cards[3]));
+    }
+
+    #[test]
+    fn shift_without_a_visible_anchor_falls_back_to_plain_selection() {
+        let anchor = CardKey::Media(AssetId::from_raw(1));
+        let target = CardKey::Media(AssetId::from_raw(3));
+        let mut state = PaneState::new();
+
+        state.update(Message::SelectCard(anchor));
+        state.update(Message::SelectCardWithModifiers {
+            key: target,
+            modifiers: CardSelectionModifiers::range(),
+            visible_cards: vec![target],
+        });
+
+        assert_eq!(state.selected_cards(), [target]);
+        assert_eq!(state.selection_anchor(), Some(target));
+    }
+
+    #[test]
+    fn selecting_a_tab_clears_the_multi_selection_and_anchor() {
+        let first = CardKey::Media(AssetId::from_raw(1));
+        let second = CardKey::Media(AssetId::from_raw(2));
+        let mut state = PaneState::new();
+        state.update(Message::SelectCard(first));
+        state.update(Message::SelectCardWithModifiers {
+            key: second,
+            modifiers: CardSelectionModifiers::toggle(),
+            visible_cards: vec![first, second],
+        });
+
+        state.update(Message::SelectTab(LibraryTab::Effects));
+
+        assert!(state.selected_cards().is_empty());
+        assert_eq!(state.selection_anchor(), None);
     }
 
     /// タブ切替で選択は未選択へ戻る(前タブの selection を亡霊として
