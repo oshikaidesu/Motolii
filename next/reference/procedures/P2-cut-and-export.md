@@ -20,14 +20,14 @@
 | 10 | 記帳(fingerprint 計算)だけ失敗した場合の別の拒否理由(「台帳への記帳をスキップ」)を確認する | status 帯 | `admit()` の `admission_skipped` 収集(`next/shell/motolii-shell/src/lib.rs:2183-2185,2259-2264`) — 配置は独立に続行するので絵は出るが台帳に載らない、という**もう1種類の部分失敗** | 書ける |
 | 11 | 代わりに Finder から動画ファイルを1本、ウィンドウへドラッグして落とす | OS drag & drop | `iced::window::Event::FileDropped` → `Message::DropReceived`(`next/shell/motolii-shell/src/lib.rs:1194,1269`) | 書ける |
 | 12 | Finder から複数ファイルを同時に選んでまとめてドラッグする | OS drag & drop | winit は1ファイル1イベントなので `pending_drops` に貯めて描画要求を区切りに `FlushDrops` する(`next/shell/motolii-shell/src/lib.rs:307,547`。GOALS M2 の実装注) | 書ける |
-| 13 | フォルダごとドラッグして中身をまとめて取り込む | OS drag & drop | `file_dialogs::expand_import_paths` が再帰的に supported media だけへ展開し、決定的な順序で `Vec<PathBuf>` を返す(`next/shell/motolii-shell/src/file_dialogs.rs:105-145`)。ただし `FileDropped`/`AdmitPaths` からこの helper を呼ぶ WIRE は未接続 | 【穴】入口が無い |
+| 13 | フォルダごとドラッグして中身をまとめて取り込む | OS drag & drop | `DropReceived`→`FlushDrops`/`AdmitPaths`→`admit_import_paths`→`file_dialogs::expand_import_paths` の実経路が接続済み。再帰的に supported media だけへ展開し、失敗は status 帯へ出す(`next/shell/motolii-shell/src/document_io.rs:15-25,481-488`) | 書ける |
 | 14 | 取り込んだ N 本ぶんが1回の Undo で戻せることを確認する(後で使う) | — | `admit()` は集めた intent を1回の `apply_all` で書く(`next/shell/motolii-shell/src/lib.rs:2237-2240`、doc「1操作=1undo」) | 書ける |
 | 15 | ライブラリでカードのサムネイルを見て素材を見分ける | Browser | `browser-pane` のサムネイル描画(`next/ui/motolii-browser-pane/src/lib.rs`・`model.rs`) | 書ける |
 | 16 | ライブラリの検索欄に名前の一部を打って絞り込む | Browser | `state.query()`(`next/ui/motolii-browser-pane/src/state.rs:137,184-185`、部分一致・大小無視) | 書ける |
 | 17 | 並べ替え(名前順/追加日順)に切り替える | Browser | `SortKey`(Name/AddedDate/Kind)+`sorted()`(`next/ui/motolii-browser-pane/src/model.rs:693-705`) | 書ける |
 | 18 | 取り込んだ素材を1本だけクリックして選ぶ | Browser | `Message::SelectCard`(`next/ui/motolii-browser-pane/src/lib.rs:1322`、`state.rs:242`) | 書ける |
 | 19 | 別の素材を Shift や Cmd を押しながらクリックして、ライブラリ側でまとめて複数選ぶ | Browser | `CardSelectionModifiers`/`SelectCardWithModifiers` と選択解決(`next/ui/motolii-browser-pane/src/state.rs:34-98,416-509`)、表示順を渡すカード入口(`card_view.rs:289-360`)、Shell の modifier 正規化(`next/shell/motolii-shell/src/view.rs:306-318`) | 書ける |
-| 20 | 素材カードをダブルクリックして中身を下見する(再生・イン/アウト確認) | Browser | media タブのカードに `on_double_click` は配線されていない(`CreateFromCard` は create タブ専用、`next/ui/motolii-browser-pane/src/lib.rs:1572`)。Play/scrub 相当も `browser-pane` 全体で grep 0件 | 【穴】入口が無い |
+| 20 | 素材カードをダブルクリックして中身を下見する(再生・イン/アウト確認) | Browser | media card の single click=選択、double click=`PreviewMedia(AssetId)` handoff(`next/ui/motolii-browser-pane/src/media_preview.rs:33-86`, `card_view.rs:452-461`)。Source Monitor 相当の実再生 owner へ渡す Shell WIRE は未接続 | 【穴】入口が無い |
 | 21 | 素材カードを右クリックしてコンテキストメニューを見る(リネーム・削除など) | Browser | media card の `mouse_area.on_right_press` → `OpenContextMenu` → pane-local `context_menu::State` → `context_menu::view`。既存意味の `RemoveAssetFromCard` だけを表示し、Shell の既存削除結線へ渡す(`next/ui/motolii-browser-pane/src/card_view.rs:462-500`, `context_menu.rs`) | 書ける |
 | 22 | 取り込んだ動画3本が、いずれも playhead(0秒)へ重なって置かれているのを Timeline で見る | Timeline | `admit()` のループは `start` に毎回 `self.session.playhead` を渡す(`next/shell/motolii-shell/src/lib.rs:2166,2206`)——3本とも同一開始時刻 | 書ける |
 | 23 | 1本目のクリップを掴む(bar 本体を press) | Timeline | `BarGrabbed`→`start_drag`(`next/ui/motolii-timeline-pane/src/write.rs:573,891`) | 書ける |
@@ -40,7 +40,7 @@
 | 30 | 3本を Shift クリックでレーンバー上まとめて選ぶ(次の一括ドラッグの下準備) | Timeline rail | `rail.rs` が表示順+`pane.modifiers`から `Message::SelectLayer` を発火し(`next/ui/motolii-timeline-pane/src/rail.rs:101-145,357-405`)、`PaneState::update` が `resolve_layer_selection` で `Session::selected_layers` へ確定する(`next/ui/motolii-timeline-pane/src/write/mod.rs:647-660`) | 書ける |
 | 31 | まとめて選んだ3本のうち1本を掴んで動かし、3本ともスナップを保ったまま一緒にスライドさせる | Timeline | `clip_drag.rs` は選択集合への同一 delta、グループ clamp、N 本の一括 `SetTiming` を実装し(`next/ui/motolii-timeline-pane/src/write/clip_drag.rs:40-65,107-187`)、`PaneState::clip_preview()` → `TimelinePane::with_clip_preview` → `projection::apply_clip_preview` が全 preview ペアを表示する(`write/mod.rs:608-620`, `projection/preview.rs`) | 書ける |
 | 32 | Cmd+A で見えている全レイヤーを選ぶ | Timeline | `Message::SelectAllLayers`→`select_all_layers`(`next/shell/motolii-shell/src/lib.rs:2052-2057`)、Cmd+A 配線(`next/shell/motolii-shell/src/lib.rs:5972` 付近) | 書ける |
-| 33 | 音声ファイル(単独 wav/mp3)を同じ Import 手順で取り込み、Timeline へ置く | Timeline | `admit()` は種別を判定せず同じ `LayerSource::Media` 経路で置く(`next/shell/motolii-shell/src/lib.rs:2200-2222`)。専用の「soundtrack」トラック概念は store に無い(`LayerSource` に該当 variant 無し、`next/core/motolii-store/src/lib.rs:191-206`)——正典 §6「曲が無い project への音声=soundtrack」(`next/reference/timeline-grammar.md` 該当節)は未実装で、音声も普通の layer 行として並ぶ | 【穴】意味が無い |
+| 33 | 音声ファイル(単独 wav/mp3)を同じ Import 手順で取り込み、Timeline へ置く | Timeline | 取り込みは既存の `LayerSource::Media` 一本化を保ち、`AudioProgram::project_soundtrack_input` が可視 Media を soundtrack 入力候補へ投影する。fingerprint/path を cache identity に使い、音声有無の確定は既存 decode へ委譲(`next/engine/motolii-audio/src/program.rs:104-140`) | 書ける |
 | 34 | 音声レイヤーの行を選び、波形帯を見て内容を確認する | Timeline | (根拠未収集——本切片の EXACT TARGET 外。波形描画コードの有無は未確認) | 【未確認】 |
 | 35 | 同じ素材(1本目の動画)をもう一度、別の時刻に置きたい(同じ元映像から2つ目のクリップを作る) | Timeline/Browser | ライブラリのカードから Timeline/Stage へ直接ドラッグする経路は無い(`next/ui/motolii-browser-pane/src/lib.rs:123`「drag で Stage/Timeline へ、は将来切片(見送り)」)。media タブのダブルクリックも no-op(id 20)。**唯一の迂回**は File > Import Media… を再度開き、同じファイルをもう一度選ぶこと(`admit` は同一 path を再取り込みでき、`fingerprint` は同一でも `AssetDraft` は別途記帳される——重複統合の仕組みは無いので同名カードが2枚並ぶ) | 書ける(迂回) |
 | 36 | 3本並んだクリップのうち、真ん中の1本の端(頭)を掴んで short trim する(端 8px 以内を狙う) | Timeline | `BarPart::EdgeIn`→`trimmed_in_start`(`next/ui/motolii-timeline-pane/src/clip_gesture.rs:91-100`)、TRIM_EDGE=8px・幅24px未満は端を出さない(`next/reference/timeline-grammar.md:34`) | 書ける |
@@ -53,7 +53,7 @@
 | 43 | Cmd+K でその位置で分割する | Timeline | `Message::SplitAtPlayhead`→`split_at_playhead`(`next/ui/motolii-timeline-pane/src/write.rs:238,685,819`) | 書ける |
 | 44 | 分割後、前半と後半が別クリップになったのを見る | Timeline | 同上。`selected_layers` 複数選択時は選択中の全レイヤーを playhead で割る(`write.rs:820-823`) | 書ける |
 | 45 | 切ってできた不要な後半クリップを選ぶ | Timeline | `Message::Select`(単独選択) | 書ける |
-| 46 | Delete キーを押して消そうとする | Timeline | `Backspace`/`Delete` は `DeleteSelectedKeys`(キーフレーム専用)にしか配線されていない(`next/ui/motolii-keymap/src/defaults.rs:31-43`、`next/shell/motolii-shell/src/lib.rs` 該当腕)——layer には効かない | 【穴】入口が無い |
+| 46 | Delete キーを押して消そうとする | Timeline | `input.rs` が text capture 中を除外して `DeleteSelectionRequested` を発行し、Shell WIRE が `selected_keys` を優先してキー削除、空なら `DeleteSelectedLayers` へ分岐する(`next/shell/motolii-shell/src/input.rs:119-127`, `playback.rs:421-438`) | 書ける |
 | 47 | 代わりに Cmd+X(切り取り)を押して消す | Timeline/メニュー | `Message::CutLayer`→`cut_layer`(`next/shell/motolii-shell/src/lib.rs:104,2002-2022`)、`Intent::RemoveLayer` | 書ける(迂回) |
 | 48 | 消したらクリップボードが上書きされている(後で使う予定だった Copy の中身が消える)ことに気づく | — | `cut_layer` は削除前に `LayerBundle::capture`→`self.clipboard.set_bundle(bundle)` を必ず行う(`next/shell/motolii-shell/src/selection.rs:97-108`)——「消すだけ」の意図でも clipboard が書き換わる | 書ける(意味論上の副作用) |
 | 49 | 複数選択(Cmd+A で全選択した状態)のまま Cmd+X を押し、選んだ全部をまとめて消そうとする | Timeline | `selection::cut_layer` が `selected_layers` 全員を `clipboard::LayerBundle` へ捕捉し、全 `RemoveLayer` を1回の `apply_all` へ束ねる。Paste/Undo と選択解除を `tests/suite/clipboard_drive.rs::multi_cut_captures_all_layers_and_pastes_them_in_one_undo` で検収 | 書ける |
@@ -84,7 +84,7 @@
 | 74 | 品質(qp0 等)を選ぶ | Export 窓 | `Message::QualitySelect`(`next/ui/motolii-export-pane/src/lib.rs:362`、`next/shell/motolii-shell/src/lib.rs:3490`) | 書ける |
 | 75 | 書き出し範囲を「全体」から「work area のみ」に切り替える | Export 窓 | `Message::RangeSelect`(`export-pane/src/lib.rs:388`、`lib.rs:3491`) | 書ける |
 | 76 | 書き出し先ファイルを選ぶボタンを押し、OS ダイアログで保存先を選ぶ | Export 窓/OS dialog | `Message::PickOutputPath`→`pick_export_path`(`next/shell/motolii-shell/src/lib.rs:3494-3500`、拡張子 mp4 固定フィルタ) | 書ける |
-| 77 | 縦(9:16)や正方形(1:1)のアスペクト比を選ぶ | Export 窓 | export 側に独立の crop/aspect プリセット UI は無い(`export-pane/src/lib.rs` に aspect/resolution 選択0件)。遡るとコンポジション自体の width/height を変更する UI(Settings 窓 COMPOSITION 節)が実在する(`next/ui/motolii-settings-pane/src/sections.rs:8,128-132,222-224,253-265`)ので**プロジェクト作成時点まで遡れば迂回できる**——ただし Export 窓の中だけでは選べない | 【穴】入口が無い |
+| 77 | 縦(9:16)や正方形(1:1)のアスペクト比を選ぶ | Export 窓 | `AspectPresetSelect` → `Shell::apply_aspect_preset` → read-modify-write の `Intent::SetComposition` が接続済み。fps/尺/背景を保持し、Stage preview と export が同じ Composition を読む(`next/shell/motolii-shell/src/export_ops.rs:151-199`) | 書ける |
 | 78 | Export ボタンを押して書き出しを開始する | Export 窓 | `Message::Export`→`start_export`(`next/shell/motolii-shell/src/lib.rs:3502,3536-3585`) | 書ける |
 | 79 | 進捗バーが少しずつ進むのを見る | Export 窓 | `export_ops.rs:199-243`が`Task::run(export_stream(...))`でUIを返し、`update_export_progressed`が背景スレッドのprogressを反映する | 書ける |
 | 80 | 書き出しの途中で「取消」ボタンを押して中断する | Export 窓 | `export_ops.rs:167-176`の`CancelExport`が保持中の`Cancel`を立て、`export_ops.rs:439-455`がフレーム境界で検出してpartial outputを削除する | 書ける |
@@ -123,13 +123,9 @@
 - **id 64/67**(単純上書き保存)→ id 1224「Save (Project)」(採用済)が対応。現行mainのCmd+Sと既知path上書きを検分済み
 - **id 77**(Export 窓の中でアスペクト比を選ぶ)→ id 943「Select Aspect Ratio」(採用予定・未消化)が対応
 
-残る **5件が未実装の穴**(normal-map 対応行があっても、現行の入口/意味がまだ閉じていないものを含む):
+残る **1件が未実装の穴**(pane の handoff はあるが、素材を再生する実 owner がまだ無いもの):
 
-1. **id 13** フォルダ単位の取り込み(folder import) — 製品のメニュー項目は「ファイルを開く/取り込む」であって「フォルダの中身を展開する」動詞そのものが無い
-2. **id 20** 素材カードのダブルクリック下見 — 対応行はあるが入口未実装
-3. **id 33** 音声ファイルの soundtrack 特別扱い(曲が無い project への最初の音声) — 正典 §6 にのみ書かれ、製品リストが持つ動詞ではない
-4. **id 46** クリップの直接 Delete キー — Delete/Backspace は「選択対象を消す」という**性質**であって、Motolii の map には対応する項目名が見当たらない
-5. **id 77** Export 窓の中でアスペクト比を選ぶ — 対応行はあるが入口未実装
+1. **id 20** 素材カードのダブルクリック下見 — `PreviewMedia` handoff はあるが Source Monitor 相当の実 owner へ未接続
 
 ---
 
@@ -137,7 +133,7 @@
 
 - **id 31: 複数選択したクリップをまとめてドラッグして動かす。** `clip_drag.rs` は選択集合へ同じ delta を適用し、clamp と一括 `SetTiming` まで実装していた。表示側の `clip_preview()` が掴んだ1本だけを投影していたため、全 preview ペアを `projection::apply_clip_preview` へ渡す責任部品を追加して閉じた。**意味計算と表示投影の責任を分けたことで、後半は表示側だけを直せた**——今回の象徴的な発見
 - **id 30: Timeline レイヤー行の Shift/Cmd マウス複数選択。** 以前は `resolve_layer_selection`/`LayerSelectionOp` が宙に浮いていたが、現在は `rail.rs` → `Message::SelectLayer` → `PaneState::update` まで同一 pane 内で接続済み。残るのは実窓の操作確認だけ
-- **id 21/49**: 右クリックの既存削除意味への接続と、複数 Cut/Paste の一括 undo を今回の責任部品で閉じた。実窓の観測だけが残る。
+- **id 13/21/33/46/49**: フォルダ展開、右クリック削除、音声 soundtrack 投影、文脈付き Delete、複数 Cut/Paste の一括 undo を責任部品と WIRE で閉じた。実窓の観測だけが残る。
 - **id 64/67/72/79/80/83**: 前回のP2調査時点では古い行番号と旧同期Export実装を根拠に穴と判定したが、現行mainではCmd+S、OS close dirtyガード、背景Export、Cancel、音声muxへ更新済み。今回その証拠を現行コードとdriveへ合わせた。
 
 ---
@@ -148,6 +144,7 @@
 2. **Timeline の bar(clip)複数選択ドラッグは、意味計算と表示投影を別責任へ分けて閉じた。** `clip_drag.rs` の一括移動/確定と、`clip_preview()` → `projection::apply_clip_preview` の全 bar 投影が揃った。残るのは実窓の操作確認だけ(id 31/50)
 3. **`resolve_layer_selection`/`LayerSelectionOp`(Timeline レイヤー行の Shift/Cmd 複数選択)は rail の実入力へ接続された。** `Message::SelectLayer` が表示順と modifier を運び、`PaneState::update` が `Session::selected_layers` へ一度だけ確定する。実窓の確認は未実施
 4. **`cut_layer`(Cmd+X) は複数選択を `LayerBundle` へ昇格した。** `selected_layers` 全員の capture・削除・Paste を一つの意味とし、削除と貼り戻しをそれぞれ1 undoへ束ねる。残るのは実窓の操作確認だけ
+5. **音声 Media は専用 LayerSource variant を増やさず `SoundtrackInput` へ投影する。** store の一本化を保ちながら、音声有無の判定だけを decode 層へ委譲できる
 5. **OS ウィンドウの閉じるボタンは、メニュー Quit と異なり `confirm_discard` を経由しない。** `main.rs:89` の doc コメントが「main 窓を閉じたら exit」と、確認を挟まない設計を明言している
 6. **`start_export` は `Task::run(export_stream(...))`で背景実行し、進捗・CancelをUIへ返す。** 音声ありの場合は`export_ops.rs`内でmixとmuxまで完了させる
 8. **`LayerSource` に soundtrack 専用の variant は無い。** 音声ファイルも動画・画像と同じ `Media` variant で扱われ、正典 §6 が書く「曲が無い project への音声=soundtrack」という特別扱いは実装されていない
