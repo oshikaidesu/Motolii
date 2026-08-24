@@ -52,6 +52,15 @@ inspector.shape	semantic	core_edit	4		evaluation	commit_shape_field	緑	実装�
 inspector.shape	semantic	core_edit	4		render	shape_section	緑	実装コードに実在	next/ui/motolii-inspector-pane/src/shape.rs:21
 inspector.shape	semantic	core_edit	4		render	shape_numeric_input	緑	実装コードに実在	next/ui/motolii-inspector-pane/src/shape.rs:21
 inspector.shape	semantic	core_edit	4		observable	shape_inspector_changes_geometry	緑	実装コードに実在	next/ui/motolii-inspector-pane/src/shape.rs:21
+inspector.shape_fill	semantic	core_edit	4		entry	ShapeFillProjection	緑	実装コードに実在	next/ui/motolii-inspector-pane/src/shape_fill.rs:19
+inspector.shape_fill	semantic	core_edit	4		entry	commit_shape_fill	緑	実装コードに実在	next/ui/motolii-inspector-pane/src/shape_fill.rs:19
+inspector.shape_fill	semantic	core_edit	4		meaning	ShapeFillInput	緑	実装コードに実在	next/ui/motolii-inspector-pane/src/shape_fill.rs:19
+inspector.shape_fill	semantic	core_edit	4		meaning	ShapeFillGradient	緑	実装コードに実在	next/ui/motolii-inspector-pane/src/shape_fill.rs:19
+inspector.shape_fill	semantic	core_edit	4		evaluation	parse_hex_color	緑	実装コードに実在	next/ui/motolii-inspector-pane/src/shape_fill.rs:19
+inspector.shape_fill	semantic	core_edit	4		evaluation	shape_fill_hex_changes_fill	緑	実装コードに実在	next/ui/motolii-inspector-pane/src/shape_fill.rs:19
+inspector.shape_fill	semantic	core_edit	4		render	shape_fill_section	緑	実装コードに実在	next/ui/motolii-inspector-pane/src/shape_fill.rs:19
+inspector.shape_fill	semantic	core_edit	4		render	shape_fill_swatch	緑	実装コードに実在	next/ui/motolii-inspector-pane/src/shape_fill.rs:19
+inspector.shape_fill	semantic	core_edit	4		observable	shape_fill_hex_changes_fill	緑	実装コードに実在	next/ui/motolii-inspector-pane/src/shape_fill.rs:19
 io.folder_import_expansion	semantic	core_edit	4		entry	expand_import_paths	緑	実装コードに実在	next/shell/motolii-shell/src/file_dialogs.rs:96
 io.folder_import_expansion	semantic	core_edit	4		meaning	is_supported_import_file	緑	実装コードに実在	next/shell/motolii-shell/src/file_dialogs.rs:96
 io.folder_import_expansion	semantic	core_edit	4		evaluation	append_supported_files	緑	実装コードに実在	next/shell/motolii-shell/src/file_dialogs.rs:96

@@ -683,6 +683,8 @@ pub struct Shell {
     /// Inspector の SHAPE section(P3 #15)の寸法/角丸入力下書き。Enter まで
     /// Document に触れず、確定時に `SetShapes` 1回へ畳む。
     inspector_shape_field_draft: Option<inspector_pane::ShapeFieldDraft>,
+    /// Inspector の Shape FILL section の16進入力下書き。Enter まで Document に触れない。
+    inspector_shape_fill_draft: Option<inspector_pane::ShapeFillDraft>,
     /// Inspector TEXT section の Content 行(S4、#46 の穴塞ぎ)、**永続する**
     /// `text_editor::Content`(cursor/selection/undo history を内部に持つ実体
     /// — フレームごとに作り直すとカーソルが飛ぶ、`inspector_pane::text_section`
@@ -1023,6 +1025,7 @@ impl Shell {
                 inspector_text_field_draft: None,
                 inspector_color_field_draft: None,
                 inspector_shape_field_draft: None,
+                inspector_shape_fill_draft: None,
                 inspector_content_editor: iced::widget::text_editor::Content::new(),
                 inspector_content_editor_layer: None,
                 inspector_drag: None,
@@ -1164,6 +1167,7 @@ impl Shell {
             inspector_text_field_draft: None,
             inspector_color_field_draft: None,
             inspector_shape_field_draft: None,
+            inspector_shape_fill_draft: None,
             inspector_content_editor: iced::widget::text_editor::Content::new(),
             inspector_content_editor_layer: None,
             inspector_drag: None,

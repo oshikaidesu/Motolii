@@ -401,6 +401,7 @@ impl Shell {
                         self.inspector_text_field_draft.as_ref(),
                         self.inspector_color_field_draft.as_ref(),
                         self.inspector_shape_field_draft.as_ref(),
+                        self.inspector_shape_fill_draft.as_ref(),
                         Some(&self.inspector_content_editor),
                         dims,
                         colors,

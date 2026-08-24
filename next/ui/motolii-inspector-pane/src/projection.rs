@@ -290,6 +290,8 @@ pub struct SelectionProjection {
     pub audio: Option<AudioSectionProjection>,
     /// SHAPE section。矩形/楕円の primitive だけを数値編集へ出す。
     pub shape: Option<ShapeSectionProjection>,
+    /// FILL section。Shape の全 leaf へ塗りの入口を出す。
+    pub shape_fill: Option<ShapeFillProjection>,
     /// LINK section の行(2026-08-22 発注「レイヤーを指す」文法 第3号)。
     /// 標準 property 5種([`LinkTarget::ALL`])を固定で持つ(mask/effect と違い
     /// 「無ければ出さない」ではない — link は任意の layer の任意の標準
@@ -309,6 +311,17 @@ pub struct ShapeRowProjection {
     pub width: f64,
     pub height: f64,
     pub radius: f64,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ShapeFillProjection {
+    pub rows: Vec<ShapeFillRowProjection>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ShapeFillRowProjection {
+    pub index: usize,
+    pub fill: Option<motolii_vector::Fill>,
 }
 
 /// AUDIO section の投影(B42、裁定184 型別 section 第4号)。4行とも
@@ -713,6 +726,10 @@ pub fn project(
         }
         _ => None,
     };
+    let shape_fill = match meta.as_ref().map(|meta| &meta.source) {
+        Some(LayerSource::Shape) => crate::shape_fill::project_shape_fill(store, layer)?,
+        _ => None,
+    };
 
     // MASK section(B02 第1切片): store の並びどおり。opacity 行は layer
     // Opacity 行と同じ組み方(track を読み、無ければ既定 1.0 → 表示 %)。
@@ -1006,6 +1023,7 @@ pub fn project(
         text,
         audio,
         shape,
+        shape_fill,
         links: link_rows,
     }))
 }

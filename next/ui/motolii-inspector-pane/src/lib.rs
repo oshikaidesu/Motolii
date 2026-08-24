@@ -137,6 +137,7 @@ mod mask;
 mod matte;
 mod projection;
 mod shape;
+mod shape_fill;
 mod text;
 mod transform;
 
@@ -162,9 +163,14 @@ pub use matte::{
 pub use projection::{
     project, AttrsProjection, AudioSectionProjection, ComponentSlot, EffectRowProjection,
     KeyCellProjection, LayerCandidate, MaskRowProjection, RowValue, SelectionProjection,
-    ShapeRowProjection, ShapeSectionProjection, TextSectionProjection, TransformRowProjection,
+    ShapeFillProjection, ShapeFillRowProjection, ShapeRowProjection, ShapeSectionProjection,
+    TextSectionProjection, TransformRowProjection,
 };
 pub use shape::{commit_shape_field, ShapeField, ShapeFieldDraft};
+pub use shape_fill::{
+    apply_shape_gradient, commit_shape_fill, format_fill_hex, parse_hex_color,
+    shape_fill_input_id, ShapeFillDraft, ShapeFillField,
+};
 pub use text::{
     applied_text_content, applied_text_field, commit_text_field, commit_text_font_pick,
     commit_text_style_track_field, commit_text_style_track_field_for_layers,
@@ -191,6 +197,7 @@ use link::*;
 use mask::*;
 use projection::*;
 use shape::*;
+use shape_fill::*;
 use text::*;
 use transform::*;
 
@@ -259,6 +266,14 @@ pub enum Message {
     ShapeFieldInput(ShapeField, String),
     /// SHAPE の寸法/角丸欄の Enter。`SetShapes` を1回だけ出す。
     ShapeFieldSubmit(ShapeField),
+    /// Shape の fill の16進欄への打鍵。Enter まで Document へ書かない。
+    ShapeFillInput(ShapeFillField, String),
+    /// Shape の fill の16進欄の Enter。`SetShapes` を1回だけ出す。
+    ShapeFillSubmit(ShapeFillField),
+    /// Shape の fill を既定の linear gradient へ切り替える。
+    ShapeFillGradient(usize),
+    /// 色見本を押して fill の16進欄へ focus する。
+    ShapeFillFocus(usize),
 
     // ---- MASK section(B02 第1切片、裁定184) ----
     /// この mask の mode を宣言順の次へ巡回。`CycleBlendMode` と同じ即時操作の
@@ -494,6 +509,7 @@ pub fn view_with_color_draft(
         color_field_draft,
         None,
         None,
+        None,
         dims,
         colors,
     )
@@ -518,6 +534,7 @@ pub fn view_with_content_editor<'a>(
     text_field_draft: Option<&TextFieldDraft>,
     color_field_draft: Option<&color::ColorFieldDraft>,
     shape_field_draft: Option<&ShapeFieldDraft>,
+    shape_fill_draft: Option<&ShapeFillDraft>,
     content_editor: Option<&'a text_editor::Content>,
     dims: Dimensions,
     colors: Colors,
@@ -536,6 +553,7 @@ pub fn view_with_content_editor<'a>(
             text_field_draft,
             color_field_draft,
             shape_field_draft,
+            shape_fill_draft,
             content_editor,
             dims,
             colors,
@@ -576,6 +594,7 @@ fn selected_body<'a>(
     text_field_draft: Option<&TextFieldDraft>,
     color_field_draft: Option<&color::ColorFieldDraft>,
     shape_field_draft: Option<&ShapeFieldDraft>,
+    shape_fill_draft: Option<&ShapeFillDraft>,
     content_editor: Option<&'a text_editor::Content>,
     dims: Dimensions,
     colors: Colors,
@@ -651,6 +670,9 @@ fn selected_body<'a>(
     }
     if let Some(shape_projection) = &selection.shape {
         rows = rows.push(shape_section(shape_projection, shape_field_draft, dims, colors));
+    }
+    if let Some(shape_fill_projection) = &selection.shape_fill {
+        rows = rows.push(shape_fill_section(shape_fill_projection, shape_fill_draft, dims, colors));
     }
     // LINK section(2026-08-22 発注「レイヤーを指す」文法 第3号): masks/effects
     // と違い「無ければ出さない」の Q0 判断は適用しない ── どの layer でも

@@ -3861,6 +3861,7 @@ dependencies = [
  "motolii-store",
  "motolii-taffy",
  "motolii-tokens-rs",
+ "motolii-vector",
  "serde_json",
 ]
 

@@ -43,9 +43,9 @@
 
 | # | 利用者は何をするか | どこで | 実装の証拠 | 判定 |
 |---|---|---|---|---|
-| 20 | 塗りの色をカラーピッカーでつまむ | Inspector | 【穴】意味が無い — `grep -rn "color_picker" next/ui next/shell` = 0件。色ピッカー部品自体が `next/` に存在しない(iced 標準・サードパーティとも) | 【穴】意味が無い |
-| 21 | 塗りの色を16進テキストで打つ | Inspector | 【穴】入口が無い — `Fill`/`Brush::Solid` は store に実装済み(`engine/motolii-vector/src/lib.rs:316-463`)だが SHAPE section が無く読み書き口ゼロ(手順15と同根) | 【穴】入口が無い |
-| 22 | グラデーションを付ける | Inspector | 【穴】入口が無い — `Brush::Gradient`/`Gradient`/`GradientStop` は実装済みだが同上 | 【穴】入口が無い |
+| 20 | 塗りの色をカラーピッカーでつまむ | Inspector | `next/ui/motolii-inspector-pane/src/shape_fill.rs:198-225` の色見本を押すと `ShapeFillFocus` → `shape_fill_input_id` へ focus し、既存の16進欄へ色編集を導く。満額の色相環ではなく、既存の RGBA 色エディタと同じ click→precise input の意味を採る | 書ける |
+| 21 | 塗りの色を16進テキストで打つ | Inspector | `next/ui/motolii-inspector-pane/src/shape_fill.rs:62-125` が `#RRGGBB`/`#RRGGBBAA` を検証し、`Intent::SetShapes` へ1回で確定する。`shape_fill_hex_changes_fill` が Solid と opacity を検収 | 書ける |
+| 22 | グラデーションを付ける | Inspector | `next/ui/motolii-inspector-pane/src/shape_fill.rs:128-154,157-195` が `Brush::Gradient` と2停止点を作り、Gradient ボタンから `Intent::SetShapes` へ確定する。`shape_fill_gradient_changes_fill` が停止点2つを検収 | 書ける |
 | 23 | 線幅・線の形(角/丸)・破線を設定する | Inspector | 【穴】入口が無い — `Stroke`/`Dash`/`LineCap`/`LineJoin` 実装済み・呼び手ゼロ | 【穴】入口が無い |
 
 ### D. マスクを切る
@@ -227,7 +227,7 @@
 | 15 SHAPE 寸法編集入口なし | なし | `ShapeSectionProjection` と `commit_shape_field` を新しい `inspector.shape` component として実装(台帳の抽出粒度より粗い section 単位) |
 | 16-18 SHAPE section の頂点/modifier入口 | なし | 16-17 の `stage.path_edit` と #18 の `browser.shape_operator_catalog`/`shell.shape_operator_writer` component で、flat Bezier の頂点移動・開閉と7種 modifier の入口/書き戻しを解消 |
 | 19 Star/Polygon 作成 | あり | AE 等の Polystar 相当メニュー項目。`CreateKind::PolyStar` と Browser の `poly-star` カード、Shell の `PathSource::PolyStar` が接続済み |
-| 20 カラーピッカー部品皆無 | **なし** | 「色をつまむウィジェットが存在するか」は製品のメニュー/ショートカット/パネル一覧に現れない実装詳細。台帳の抽出規則が構造的に持てない |
+| 20 カラーピッカー部品皆無 | **解消済み(2026-08-24)** | `motolii-inspector-pane/src/shape_fill.rs:198-225` の色見本を押すと `ShapeFillFocus` → `shape_fill_input_id` へ focus し、既存の16進欄へ色編集を導く。満額の色相環ではなく、既存の RGBA 色エディタと同じ click→precise input の意味を採る |
 | 34-35 mask expansion 未消費 | あり | id 197 相当(mask.x)は台帳に既載、2026-08-22裁定で「不採用→採用」に回収済み(KNOWN.md) |
 | 36 マスク削除の有無 | 【未確認】のため判定保留 | — |
 | 40, 46 Effect種が1つのみ | あり(間接) | 個々のエフェクト名(Glow等)は台帳に載るが「複数effectを重ねられるか」という**組合せ能力**は行を持たない |
@@ -248,15 +248,14 @@
 | 114 フォント埋め込みが無い | **なし** | 該当行を発見できず |
 | 116 整合性確認手段が無い | **なし** | 該当行を発見できず |
 
-**「対応行が無い」穴は 6群**: 20、93、96/98、108、114、116。
+**「対応行が無い」穴は 5群**: 93、96/98、108、114、116。
 純粋に**幹だけが要求していて葉に名前が無い物**として際立つのは:
 
-1. **色ピッカー部品の不在**(#20)
-2. **最近使ったファイル一覧が無い**(#93)
-3. **前回のセッション状態(選択・再生ヘッド・パネルレイアウト)が保存も復元もされない**(#96/98)
-4. **別マシンでの絶対パス解決不能という状態そのものに名前が無い**(#108)
-5. **フォント埋め込みが無い**(#114)
-6. **プロジェクト受け渡し後の整合性確認手段が無い**(#116)
-7. **SHAPE sectionのcolor操作が未実装で、シェイプ固有の色・線の操作を一覧化できない**(#20-23)
+1. **最近使ったファイル一覧が無い**(#93)
+2. **前回のセッション状態(選択・再生ヘッド・パネルレイアウト)が保存も復元もされない**(#96/98)
+3. **別マシンでの絶対パス解決不能という状態そのものに名前が無い**(#108)
+4. **フォント埋め込みが無い**(#114)
+5. **プロジェクト受け渡し後の整合性確認手段が無い**(#116)
+6. **SHAPE sectionのstroke操作が未実装で、シェイプ固有の線操作を一覧化できない**(#23)
 
 残る穴は、前半のSHAPE/色表現と、後半の再利用・受け渡しに分かれている。

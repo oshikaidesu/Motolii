@@ -4,8 +4,8 @@
 //! **持つ**: shape-layer の平坦な primitive を読む投影、入力の下書き、値の
 //! 検証と shape 列の差し替え、SHAPE section の view。
 //! **持たない**: Stage の座標変換・描画、任意頂点編集、fill/stroke の色。
-//! そこへ責任を広げず、P3 #16 と P3 C-20〜23 の入口を別 component として
-//! 残す。Group は構造を壊さないためこの section の編集対象にしない。
+//! そこへ責任を広げず、P3 #16 と P3 C-20〜23 の入口は別 component が持つ。
+//! Group は構造を壊さないためこの section の編集対象にしない。
 
 use motolii_settings_pane::chrome::section_header;
 use motolii_store::{Document, Intent, LayerId, OpKind, PathSource, ShapeNode};

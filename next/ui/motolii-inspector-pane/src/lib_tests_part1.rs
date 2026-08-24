@@ -429,6 +429,7 @@
             text: None,
             audio: None,
             shape: None,
+            shape_fill: None,
             links: vec![],
         };
 
@@ -485,6 +486,7 @@
             text: None,
             audio: None,
             shape: None,
+            shape_fill: None,
             links: vec![],
         };
         let (start, _) = drag_origin(&selection, TransformField::Rotation)
