@@ -81,6 +81,7 @@ pub(crate) mod render;
 mod render_dispatch;
 mod selection;
 mod settings_ops;
+mod shape_ops;
 #[allow(unreachable_pub)]
 mod source_preview;
 mod stage_presenter;
@@ -360,6 +361,9 @@ pub enum Message {
     /// 意味づけは [`Shell::update_gizmo`] — Inspector の drag-to-scrub と同経路
     /// (`Document::set_transient` → 確定時 `Intent::SetTrack` 1回 = 1 undo)。
     Gizmo(stage::GizmoDrag),
+    /// Stage shape tool の選択/描画確定。pane は座標を返すだけで、Document への
+    /// `AddLayer`/`SetShapes` は `shape_ops.rs` が1回の `apply_all`へ束ねる。
+    ShapeTool(stage::ShapeToolMessage),
 
     // ---- Stage 離散ズーム束(B24、A10 id1441/1442/1491 の結線 — 第7波)----
     /// map 1441「Zoom In」。[`stage::zoom::zoom_step`] を
@@ -670,6 +674,9 @@ pub struct Shell {
     /// `inspector_text_field_draft` と同型の別下書き(対象は `ColorTarget`/
     /// `ColorChannel` の組で区別する)。
     inspector_color_field_draft: Option<inspector_pane::color::ColorFieldDraft>,
+    /// Inspector の SHAPE section(P3 #15)の寸法/角丸入力下書き。Enter まで
+    /// Document に触れず、確定時に `SetShapes` 1回へ畳む。
+    inspector_shape_field_draft: Option<inspector_pane::ShapeFieldDraft>,
     /// Inspector TEXT section の Content 行(S4、#46 の穴塞ぎ)、**永続する**
     /// `text_editor::Content`(cursor/selection/undo history を内部に持つ実体
     /// — フレームごとに作り直すとカーソルが飛ぶ、`inspector_pane::text_section`
@@ -840,6 +847,9 @@ pub struct Shell {
     /// Stage ギズモ drag の shell 側 transient(GZ 結線 — [`GizmoShellDrag`]
     /// doc 参照)。`inspector_drag` と同格。
     gizmo_drag: Option<GizmoShellDrag>,
+    /// Stage shape tool の選択状態。Document ではない UI transient で、工具列と
+    /// canvas overlay が同じ値を読む。
+    shape_tool: stage::ShapeTool,
     /// Timeline マーカーレーンの drag 進行中状態(第6波、
     /// `timeline::markers::MarkerDrag` doc)。`gizmo_drag` と同格 — 現状は
     /// canvas 側(pub(crate))から `MarkerMessage::Grabbed` を publish する道が
@@ -1006,6 +1016,7 @@ impl Shell {
                 inspector_speed_draft: None,
                 inspector_text_field_draft: None,
                 inspector_color_field_draft: None,
+                inspector_shape_field_draft: None,
                 inspector_content_editor: iced::widget::text_editor::Content::new(),
                 inspector_content_editor_layer: None,
                 inspector_drag: None,
@@ -1032,6 +1043,7 @@ impl Shell {
                 transport: Transport::new(),
                 shuttle: timeline_pane::ShuttleState::stopped(),
                 gizmo_drag: None,
+                shape_tool: stage::ShapeTool::default(),
                 marker_drag: None,
                 media_size_cache: RefCell::new(HashMap::new()),
                 dialogs,
@@ -1145,6 +1157,7 @@ impl Shell {
             inspector_speed_draft: None,
             inspector_text_field_draft: None,
             inspector_color_field_draft: None,
+            inspector_shape_field_draft: None,
             inspector_content_editor: iced::widget::text_editor::Content::new(),
             inspector_content_editor_layer: None,
             inspector_drag: None,
@@ -1171,6 +1184,7 @@ impl Shell {
             transport: Transport::new(),
             shuttle: timeline_pane::ShuttleState::stopped(),
             gizmo_drag: None,
+            shape_tool: stage::ShapeTool::default(),
             marker_drag: None,
             media_size_cache: RefCell::new(HashMap::new()),
             // 器具は screenshot 検分専用(発注書「トンマナ検分の器具」)なので

@@ -804,13 +804,14 @@ impl StagePresenterPipeline {
             return;
         }
 
-        let Ok((texture, view)) = self.gpu_engine.render_resolved_to_texture(
+        let Ok((texture, view)) = self.gpu_engine.render_resolved_to_texture_with_shapes(
             snapshot.comp,
             snapshot.background,
             snapshot.camera,
             snapshot.time,
             &snapshot.resolved,
             &snapshot.text_documents,
+            &snapshot.shape_documents,
         ) else {
             return;
         };
@@ -859,4 +860,3 @@ impl StagePresenterPipeline {
         true
     }
 }
-

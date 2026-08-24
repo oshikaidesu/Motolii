@@ -122,6 +122,7 @@ fn selection_with_position_row() -> SelectionProjection {
         effects: vec![],
         text: None,
         audio: None,
+        shape: None,
         links: vec![],
     }
 }

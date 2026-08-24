@@ -18,11 +18,10 @@ use crate::{
 impl Shell {
     /// create タブのカード実体化(B36、`browser_pane::model::CreateKind` →
     /// `LayerSource::{Shape,Solid,Null,Text}`、`Message::AddLayer` と同じ
-    /// 「AddLayer 合成」の流儀 — 1 `apply_all` = 1 undo)。**Rectangle/Ellipse
-    /// はどちらも `LayerSource::Shape` のまま**(発注 EXACT TARGET 7 の文言
-    /// どおり — 図形の中身(`Layer:shapes` component の `ShapeNode`)を
-    /// 書き分ける差はこの波の範囲外、RETURN 参照)。生成後は選ぶ
-    /// (`Message::AddLayer`/`duplicate_layer` と同じ規律)。
+    /// 「AddLayer 合成」の流儀 — 1 `apply_all` = 1 undo)。Rectangle/Ellipse/
+    /// PolyStar は `LayerSource::Shape` と `Intent::SetShapes` を同じ
+    /// `apply_all` に積み、生成後は選ぶ(`Message::AddLayer`/`duplicate_layer`
+    /// と同じ規律)。
     ///
     /// **Text**(2026-08-22 利用者裁定「追加するものは Browser の中に全部
     /// 入れる」— 歌詞動画/MV ペルソナの致命的欠落への対処、

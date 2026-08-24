@@ -335,17 +335,11 @@ impl Engine {
     /// その場で `StoreView` を持っているので、`text_document(id)` を添えるだけで
     /// 済む——この関数自体は相変わらず `Document`/`StoreView` を知らない。
     ///
-    /// **公開シグネチャは無改造のまま固定**(2026-08-22、シェイプが画に出るように
-    /// する発注)——`motolii-shell` の presenter Pipeline が直接呼ぶ口であり、
-    /// この発注の EXACT TARGET は shell を触らない(別レーンが `create_from_card`
-    /// を施工中)。中身は空の `shape_documents` を添えて
-    /// [`Self::render_resolved_to_texture_with_shapes`]へ委譲するだけの後方互換
-    /// ラッパーへ変わった——shell 経由の zero-copy 経路は今まで通り shape を
-    /// 描かない(shell の `create_from_card` がまだ `Intent::SetShapes` を呼ばない
-    /// ので、実際に空の shape しか存在しない今の実態とも一致する)。zero-copy 経路で
-    /// 実際に shape を描かせたい呼び手は
-    /// [`Self::render_frame_to_texture`](`&StoreView` 版、shape_documents を自動収集)
-    /// か、[`Self::render_resolved_to_texture_with_shapes`]を直接呼ぶ。
+    /// **公開シグネチャは後方互換のため固定**(2026-08-22、シェイプが画に出るように
+    /// する発注)——shape を含む所有データを既に持つ呼び手は
+    /// [`Self::render_resolved_to_texture_with_shapes`]を使う。こちらは shape map を
+    /// 持たない旧呼び手向けに空 map を添える互換ラッパーで、Shape layer を描かない
+    /// のは `SetShapes` が渡されない場合だけである。
     pub fn render_resolved_to_texture(
         &mut self,
         comp: CompSpec,

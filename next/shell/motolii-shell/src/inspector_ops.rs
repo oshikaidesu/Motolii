@@ -86,6 +86,29 @@ impl Shell {
                 self.toggle_inspector_key(row);
                 Task::none()
             }
+            // SHAPE section(P3 #15)。下書きの保持は Shell、形状の意味と
+            // `SetShapes` の一括書き込みは pane component に置く。
+            inspector_pane::Message::ShapeFieldInput(field, text) => {
+                self.inspector_shape_field_draft =
+                    Some(inspector_pane::ShapeFieldDraft { field, text });
+                Task::none()
+            }
+            inspector_pane::Message::ShapeFieldSubmit(field) => {
+                if self
+                    .inspector_shape_field_draft
+                    .as_ref()
+                    .is_some_and(|draft| draft.field == field)
+                {
+                    if let Err(error) = inspector_pane::commit_shape_field(
+                        &mut self.doc,
+                        self.session.selection,
+                        &mut self.inspector_shape_field_draft,
+                    ) {
+                        self.status = Some(error);
+                    }
+                }
+                Task::none()
+            }
             // MASK section(B02 第1切片、裁定184)。書き込み本体は pane の
             // 自由関数(`ToggleHidden`/`CycleBlendMode` と同じ即時操作の形)—
             // ここは `Err` を status 帯へ渡す glue だけ(M13)。

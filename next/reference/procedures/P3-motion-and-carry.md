@@ -31,9 +31,9 @@
 | 10 | Create タブへ切り替える | Browser | `next/ui/motolii-browser-pane/src/model.rs:341-364` `enum CreateKind` | 書ける |
 | 11 | Rectangle カードをダブルクリックして層を作る | Browser | `model.rs:494-556` `CREATE_PREVIEW`、L511 `creates: Some(CreateKind::Rectangle)` | 書ける |
 | 12 | 層が Timeline に1行増え、選択された状態になることを確かめる | Timeline | `AddLayer`+`SetMeta`+`SetAttrs` が同一 `apply_all`(`shell/motolii-shell/src/lib.rs:1548` `create_from_card`) | 書ける |
-| 13 | Stage に矩形が実際に表示されることを確かめる | Stage | 【穴】意味が無い — `create_from_card`(`shell/motolii-shell/src/lib.rs:1548`)は `Intent::SetShapes` を書かない。書いたとしても `engine/motolii-engine/src/lib.rs:926` が `LayerSource::Shape` を `Ok((None,[0,0]))` で返す(テクスチャを焼かない枝)。**層は増えるが画面には何も映らない** | 【穴】意味が無い |
-| 14 | Stage 上でシェイプツール(ペン/矩形/楕円)に持ち替えて手描きする | Stage | 【穴】入口が無い — 描画ツール(`shape_tool.rs`)は `main` 未マージの別 worktree ブランチにのみ存在(`worktree-agent-a7f76304b1786a2fe` のコミット `eabe1c59`)。`git log --all --grep "SHAPE-RENDER"` でも main 側の着地なし | 【穴】入口が無い |
-| 15 | 矩形の幅・高さ・角丸半径を Inspector の数値で変える | Inspector | 【穴】入口が無い — `ui/motolii-inspector-pane/src/projection.rs:138-158` の `SelectionProjection` に `shape` フィールドが無い(MASK/EFFECTS/TEXT と同型の SHAPE section が丸ごと未着手) | 【穴】入口が無い |
+| 13 | Stage に矩形が実際に表示されることを確かめる | Stage | `next/shell/motolii-shell/src/create.rs:58-108` が Rectangle に `Intent::SetShapes` と既定 Fill を同じ `apply_all` で書く。`next/shell/motolii-shell/src/render.rs:331-358` が Stage の `PreviewSnapshot` に shape 本体を集め、`next/shell/motolii-shell/src/stage_presenter.rs:807-816` → `next/engine/motolii-engine/src/render.rs:369-394` → `next/engine/motolii-engine/src/texture.rs:82-90` が GPU 経路へ渡してラスタライズする。回帰柵は `next/shell/motolii-shell/src/render.rs:619-658` | 書ける |
+| 14 | Stage 上でシェイプツール(ペン/矩形/楕円)に持ち替えて手描きする | Stage | `next/ui/motolii-stage-pane/src/shape_tool.rs:31-59` の工具語彙/Message、`next/ui/motolii-stage-pane/src/shape_tool.rs:127-283` の toolbar・座標変換・ドラッグ/ペン確定、`next/shell/motolii-shell/src/shape_ops.rs:27-99` の `AddLayer`+`SetShapes` 一括書き込み。`shape_tool` focused test と shell 型検査が緑 | 書ける |
+| 15 | 矩形の幅・高さ・角丸半径を Inspector の数値で変える | Inspector | `next/ui/motolii-inspector-pane/src/projection.rs:258-310` が矩形/楕円の `ShapeNode` を `ShapeSectionProjection` へ投影し、`next/ui/motolii-inspector-pane/src/shape.rs:37-119` が値を検証して `Intent::SetShapes` へ一括確定、`next/ui/motolii-inspector-pane/src/shape.rs:123-192` が SHAPE section を描く。`shape_inspector_changes_geometry` が角丸追加と幅変更を検収 | 書ける |
 | 16 | パスの頂点を Stage 上でドラッグして形を変える | Stage | 【穴】入口が無い — store 側の `insert_vertex`/`remove_vertex`/`move_vertex`/`set_handles` は実装済み(`engine/motolii-vector/src/edit.rs`)だが `grep -rl "insert_vertex" next/ui next/shell` = 0件 | 【穴】入口が無い |
 | 17 | パスを閉じる/開く | Stage/Inspector | 【穴】入口が無い — `edit::{close_path,open_path}` も同様に呼び手ゼロ | 【穴】入口が無い |
 | 18 | 角を丸める(RoundedCorners)・トリムパス・繰り返し(Repeater)などの modifier を足す | Inspector | 【穴】入口が無い — `OpKind::{TrimPath,Repeater,RoundedCorners,PuckerBloat,ZigZag,OffsetPath,Twist}` は `engine/motolii-vector/src/lib.rs:193-265` に全実装済みだが呼び手ゼロ(`grep -rl "OpKind" next/ui next/shell` = 0件) | 【穴】入口が無い |
@@ -222,9 +222,10 @@
 
 | 穴(手順#) | 対応行あり/なし | 該当 id・備考 |
 |---|---|---|
-| 13 シェイプが画に出ない | あり(間接) | Rectangle/Ellipse 自体は menu 由来カード概念だが、「描いても映らない」という**状態**への行は無い |
+| 13 シェイプが画に出ない | 解消済み(2026-08-24) | `SetShapes` → `PreviewSnapshot.shape_documents` → `render_resolved_to_texture_with_shapes` の GPU 経路を接続。`render.rs:619-658` の回帰柵で snapshot に shape 本体が残ることを確認 |
 | 14 描画ツール入口なし | あり(間接) | Pen/Rectangle Tool は各社ツールパネルの標準項目、直接名の行は本調査では特定せず |
-| 15-18 SHAPE section 不在 | なし | 「編集パネルの section が丸ごと無い」という単位は台帳の抽出粒度(メニュー項目単体)より粗く、対応行を持てない |
+| 15 SHAPE 寸法編集入口なし | なし | `ShapeSectionProjection` と `commit_shape_field` を新しい `inspector.shape` component として実装(台帳の抽出粒度より粗い section 単位) |
+| 16-18 SHAPE section の頂点/modifier入口 | なし | 15 の component は矩形/楕円の寸法と角丸だけ。頂点・path modifier は責任を分けて次の step に残す |
 | 19 Star/Polygon 作成 | あり | AE 等の Polystar 相当メニュー項目は台帳に存在するはず(未逐一確認、逸脱として明記) |
 | 20 カラーピッカー部品皆無 | **なし** | 「色をつまむウィジェットが存在するか」は製品のメニュー/ショートカット/パネル一覧に現れない実装詳細。台帳の抽出規則が構造的に持てない |
 | 34-35 mask expansion 未消費 | あり | id 197 相当(mask.x)は台帳に既載、2026-08-22裁定で「不採用→採用」に回収済み(KNOWN.md) |
@@ -247,7 +248,7 @@
 | 114 フォント埋め込みが無い | **なし** | 該当行を発見できず |
 | 116 整合性確認手段が無い | **なし** | 該当行を発見できず |
 
-**「対応行が無い」穴は 7群**: 15-18(SHAPE section 不在)、20、93、96/98、108、114、116。
+**「対応行が無い」穴は 7群**: 16-18(SHAPE section の未実装領域)、20、93、96/98、108、114、116。
 純粋に**幹だけが要求していて葉に名前が無い物**として際立つのは:
 
 1. **色ピッカー部品の不在**(#20)
@@ -256,6 +257,6 @@
 4. **別マシンでの絶対パス解決不能という状態そのものに名前が無い**(#108)
 5. **フォント埋め込みが無い**(#114)
 6. **プロジェクト受け渡し後の整合性確認手段が無い**(#116)
-7. **SHAPE sectionが無く、シェイプ固有の操作を一覧化できない**(#15-18)
+7. **SHAPE sectionの頂点/modifier/color操作が未実装で、シェイプ固有の操作を一覧化できない**(#16-23)
 
 残る穴は、前半のSHAPE/色表現と、後半の再利用・受け渡しに分かれている。

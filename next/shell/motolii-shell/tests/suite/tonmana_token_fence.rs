@@ -93,7 +93,7 @@ fn timeline_pane_src_dir() -> PathBuf {
 /// (`TimelinePane`/`canvas::Program` impl 本体を含む点は無改変)。
 const SCANNED_FILES: &[&str] = &[
     "timeline/lib.rs",
-    "timeline/projection.rs",
+    "timeline/projection/mod.rs",
     "timeline/hit.rs",
     "timeline/clip_gesture.rs",
     "timeline/canvas.rs",

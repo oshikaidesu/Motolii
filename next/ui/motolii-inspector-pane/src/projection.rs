@@ -31,7 +31,7 @@ use motolii_core::{Fps, RationalTime};
 use motolii_shell_state::Session;
 use motolii_store::{
     property, EffectId, LayerId, LayerSource, MaskId, MaskMode, Matte, PropertyId, PropertySource,
-    StoreError, StoreView, TextDocumentStyle, TextJustify, Value,
+    PathSource, ShapeNode, StoreError, StoreView, TextDocumentStyle, TextJustify, Value,
 };
 
 use crate::attrs::speed_percent;
@@ -288,11 +288,27 @@ pub struct SelectionProjection {
     /// `LayerSource::Media` の layer でのみ `Some`(TEXT section と同じ
     /// 「型が合わない chrome を出さない」判断、Q0)。
     pub audio: Option<AudioSectionProjection>,
+    /// SHAPE section。矩形/楕円の primitive だけを数値編集へ出す。
+    pub shape: Option<ShapeSectionProjection>,
     /// LINK section の行(2026-08-22 発注「レイヤーを指す」文法 第3号)。
     /// 標準 property 5種([`LinkTarget::ALL`])を固定で持つ(mask/effect と違い
     /// 「無ければ出さない」ではない — link は任意の layer の任意の標準
     /// property に張れるので、選択層の種別を問わず常に現れる)。
     pub links: Vec<LinkRowProjection>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ShapeSectionProjection {
+    pub rows: Vec<ShapeRowProjection>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ShapeRowProjection {
+    pub index: usize,
+    pub kind: &'static str,
+    pub width: f64,
+    pub height: f64,
+    pub radius: f64,
 }
 
 /// AUDIO section の投影(B42、裁定184 型別 section 第4号)。4行とも
@@ -664,6 +680,40 @@ pub fn project(
         .map(|meta| source_kind_label(&meta.source))
         .unwrap_or("layer");
 
+    // SHAPE section(P3 #15): geometry の正本は `Layer:shapes` component の
+    // `ShapeNode` 列。矩形/楕円だけを数値編集へ出し、Bezier/Group の未実装
+    // 編集口を見せない(Q0)。角丸がまだ無い primitive も半径0として表示する。
+    let shape = match meta.as_ref().map(|meta| &meta.source) {
+        Some(LayerSource::Shape) => {
+            let mut rows = Vec::new();
+            for (index, node) in store.shapes(layer)?.into_iter().enumerate() {
+                let ShapeNode::Leaf(shape) = node else { continue };
+                let (kind, size) = match shape.source {
+                    PathSource::Rectangle { size } => ("Rectangle", size),
+                    PathSource::Ellipse { size } => ("Ellipse", size),
+                    _ => continue,
+                };
+                let radius = shape
+                    .ops
+                    .iter()
+                    .find_map(|op| match &op.kind {
+                        motolii_store::OpKind::RoundedCorners { radius } => Some(*radius),
+                        _ => None,
+                    })
+                    .unwrap_or(0.0);
+                rows.push(ShapeRowProjection {
+                    index,
+                    kind,
+                    width: size.x,
+                    height: size.y,
+                    radius,
+                });
+            }
+            (!rows.is_empty()).then_some(ShapeSectionProjection { rows })
+        }
+        _ => None,
+    };
+
     // MASK section(B02 第1切片): store の並びどおり。opacity 行は layer
     // Opacity 行と同じ組み方(track を読み、無ければ既定 1.0 → 表示 %)。
     let mut mask_rows = Vec::new();
@@ -955,6 +1005,7 @@ pub fn project(
         effects: effect_rows,
         text,
         audio,
+        shape,
         links: link_rows,
     }))
 }

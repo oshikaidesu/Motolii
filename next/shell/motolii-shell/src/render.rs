@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use motolii_engine::ObservationCamera;
-use motolii_store::{DisplayRevision, LayerSource, RationalTime};
+use motolii_store::{DisplayRevision, LayerSource, RationalTime, ShapeNode};
 
 use crate::stage_presenter::build_stage_presenter_rgba;
 use crate::tokens::{Colors, Dimensions, Tokens};
@@ -335,10 +335,15 @@ impl Shell {
         let camera = view.resolve_camera(t).ok()?;
         let resolved = view.resolved_layers(t).ok()?;
         let mut text_documents = HashMap::new();
+        let mut shape_documents = HashMap::new();
         for layer in &resolved {
             if layer.source == LayerSource::Text {
                 if let Ok(Some(document)) = view.resolved_text_document(layer.id, t) {
                     text_documents.insert(layer.id, document);
+                }
+            } else if layer.source == LayerSource::Shape {
+                if let Ok(shapes) = view.shapes(layer.id) {
+                    shape_documents.insert(layer.id, shapes);
                 }
             }
         }
@@ -349,6 +354,7 @@ impl Shell {
             time: t,
             resolved,
             text_documents,
+            shape_documents,
         })
     }
 
@@ -501,8 +507,8 @@ mod text_track_preview_tests {
     use super::*;
     use motolii_store::{
         ContentTrack, FontRef, Intent, Interp, Keyframe, KeyframeTrack, LayerId, LayerMeta,
-        LayerTiming, PropertyId, TextAlignmentOptions, TextDocument, TextDocumentStyle,
-        TextJustify, TextStyleId, Value,
+        LayerSource, LayerTiming, PathSource, PropertyId, Shape as VectorShape, ShapeNode,
+        TextAlignmentOptions, TextDocument, TextDocumentStyle, TextJustify, TextStyleId, Value,
     };
 
     fn default_text_style() -> TextDocumentStyle {
@@ -609,6 +615,47 @@ mod text_track_preview_tests {
             "GPU 高速路(build_preview_snapshot)が engine と違う値を見ている"
         );
     }
+
+    #[test]
+    fn build_preview_snapshot_carries_shape_documents_to_gpu_path() {
+        let (mut shell, _) = Shell::new_fixture();
+        let layer = LayerId(90_002);
+        shell.doc.apply(Intent::AddLayer(layer)).unwrap();
+        shell
+            .doc
+            .apply(Intent::SetMeta {
+                layer,
+                meta: LayerMeta {
+                    source: LayerSource::Shape,
+                    order: 0,
+                    timing: LayerTiming::place(0, None, 60),
+                },
+            })
+            .unwrap();
+        shell
+            .doc
+            .apply(Intent::SetShapes {
+                layer,
+                shapes: vec![ShapeNode::Leaf(VectorShape {
+                    source: PathSource::Rectangle {
+                        size: motolii_store::VectorPoint { x: 240.0, y: 135.0 },
+                    },
+                    ops: Vec::new(),
+                    fill: Some(Shell::default_new_object_fill()),
+                    stroke: None,
+                })],
+            })
+            .unwrap();
+
+        let snapshot = shell
+            .build_preview_snapshot(0)
+            .expect("fixture には comp があるはず");
+        let shapes = snapshot
+            .shape_documents
+            .get(&layer)
+            .expect("shape layer が GPU snapshot の shape_documents に無い");
+        assert_eq!(shapes.len(), 1);
+    }
 }
 
 use motolii_core::{CompSpec, ResolvedCamera};
@@ -620,13 +667,13 @@ use motolii_store::{LayerId, ResolvedLayer, TextDocument};
 /// が `StoreView` から抜き出した**所有データ**をここへ積む——
 /// `motolii_engine::Engine::render_resolved_to_texture` の入力そのもの。
 ///
-/// **`time`/`text_documents` は2026-08-22(ゼロコピー経路にも matte とテキストを
-/// 通す発注)で新設**——`render_resolved_to_texture` がテキストの Hold 評価と
-/// `TextDocument` 本体を要るようになったのに合わせた(`motolii_engine::Engine`
-/// の doc 参照)。`resolved` の中の `LayerSource::Text` layer(matte 元も含む)
-/// だけを対象に、その場で持っている `StoreView` から `text_document(id)` を
-/// 引いて詰める——`resolved_layers(t)` を呼ぶのと同じ `view` から取るので
-/// 追加の Document 走査は増えない。
+    /// **`time`/`text_documents` は2026-08-22(ゼロコピー経路にも matte とテキストを
+    /// 通す発注)で新設**——`render_resolved_to_texture_with_shapes` がテキストの Hold
+    /// 評価と `TextDocument` 本体を要るようになったのに合わせた(`motolii_engine::Engine`
+    /// の doc 参照)。`shape_documents` も同じ所有データの束として加わり、`resolved`
+    /// の `Text`/`Shape` layer(matte 元も含む)に対応する本体を `StoreView` からここで
+    /// 抜き出す。`resolved_layers(t)` を呼ぶのと同じ `view` から取るため、追加の
+    /// Document 走査は増えない。
 #[derive(Clone, Debug)]
 pub(crate) struct PreviewSnapshot {
     pub(crate) comp: CompSpec,
@@ -635,6 +682,7 @@ pub(crate) struct PreviewSnapshot {
     pub(crate) time: RationalTime,
     pub(crate) resolved: Vec<ResolvedLayer>,
     pub(crate) text_documents: HashMap<LayerId, TextDocument>,
+    pub(crate) shape_documents: HashMap<LayerId, Vec<ShapeNode>>,
 }
 
 /// Stage presenter shader へ渡す実体(裁定171 v2 M4)。

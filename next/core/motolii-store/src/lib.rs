@@ -69,7 +69,8 @@ pub use motolii_eval::{Interp, Keyframe, KeyframeTrack, Path, PathVertex, Spatia
 /// `Layer:shapes` の中身が `Vec<Shape>` から `Vec<ShapeNode>` へ広がった分。
 /// `Shape` 自体はそのまま(旧 flat JSON の着地点 = `ShapeNode::Leaf`)。
 pub use motolii_vector::{
-    PathSource, Point as VectorPoint, RepeaterTransform, Shape, ShapeGroup, ShapeNode,
+    OpKind, PathSource, Point as VectorPoint, RepeaterTransform, Shape, ShapeGroup, ShapeNode,
+    ShapeOp,
 };
 
 /// `edit` timeline の名前。undo/redo はこの軸の移動である。

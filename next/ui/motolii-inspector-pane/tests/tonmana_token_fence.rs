@@ -49,8 +49,8 @@ const SCANNED_FILES: &[&str] = &[
     "effects.rs",
     "mask.rs",
     "projection.rs",
-    "text.rs",
-    "transform.rs",
+    "text/mod.rs",
+    "transform/mod.rs",
 ];
 
 /// `#[cfg(test)]\nmod tests {` の手前までを返す(inline test module は対象外)。

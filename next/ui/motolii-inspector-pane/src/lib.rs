@@ -136,6 +136,7 @@ mod mask;
 // の元を選ぶ pick_list とその意味・書き口。
 mod matte;
 mod projection;
+mod shape;
 mod text;
 mod transform;
 
@@ -161,8 +162,9 @@ pub use matte::{
 pub use projection::{
     project, AttrsProjection, AudioSectionProjection, ComponentSlot, EffectRowProjection,
     KeyCellProjection, LayerCandidate, MaskRowProjection, RowValue, SelectionProjection,
-    TextSectionProjection, TransformRowProjection,
+    ShapeRowProjection, ShapeSectionProjection, TextSectionProjection, TransformRowProjection,
 };
+pub use shape::{commit_shape_field, ShapeField, ShapeFieldDraft};
 pub use text::{
     applied_text_content, applied_text_field, commit_text_field, commit_text_font_pick,
     commit_text_style_track_field, commit_text_style_track_field_for_layers,
@@ -188,6 +190,7 @@ use effects::*;
 use link::*;
 use mask::*;
 use projection::*;
+use shape::*;
 use text::*;
 use transform::*;
 
@@ -250,6 +253,12 @@ pub enum Message {
     /// キー上→除去(最後の1個は値を保って静的化)/ track 有りキー無し→評価値で
     /// キー追加。
     KeyPressed(KeyRow),
+
+    // ---- SHAPE section(P3 #15) ----
+    /// SHAPE の寸法/角丸欄への打鍵。Enter まで Document へ書かない。
+    ShapeFieldInput(ShapeField, String),
+    /// SHAPE の寸法/角丸欄の Enter。`SetShapes` を1回だけ出す。
+    ShapeFieldSubmit(ShapeField),
 
     // ---- MASK section(B02 第1切片、裁定184) ----
     /// この mask の mode を宣言順の次へ巡回。`CycleBlendMode` と同じ即時操作の
@@ -484,6 +493,7 @@ pub fn view_with_color_draft(
         text_field_draft,
         color_field_draft,
         None,
+        None,
         dims,
         colors,
     )
@@ -507,6 +517,7 @@ pub fn view_with_content_editor<'a>(
     speed_draft: Option<&str>,
     text_field_draft: Option<&TextFieldDraft>,
     color_field_draft: Option<&color::ColorFieldDraft>,
+    shape_field_draft: Option<&ShapeFieldDraft>,
     content_editor: Option<&'a text_editor::Content>,
     dims: Dimensions,
     colors: Colors,
@@ -524,6 +535,7 @@ pub fn view_with_content_editor<'a>(
             speed_draft,
             text_field_draft,
             color_field_draft,
+            shape_field_draft,
             content_editor,
             dims,
             colors,
@@ -563,6 +575,7 @@ fn selected_body<'a>(
     speed_draft: Option<&str>,
     text_field_draft: Option<&TextFieldDraft>,
     color_field_draft: Option<&color::ColorFieldDraft>,
+    shape_field_draft: Option<&ShapeFieldDraft>,
     content_editor: Option<&'a text_editor::Content>,
     dims: Dimensions,
     colors: Colors,
@@ -635,6 +648,9 @@ fn selected_body<'a>(
     // 限る、TEXT section と同じ判断)。
     if let Some(audio_projection) = &selection.audio {
         rows = rows.push(audio_section(audio_projection, field_draft, dims, colors));
+    }
+    if let Some(shape_projection) = &selection.shape {
+        rows = rows.push(shape_section(shape_projection, shape_field_draft, dims, colors));
     }
     // LINK section(2026-08-22 発注「レイヤーを指す」文法 第3号): masks/effects
     // と違い「無ければ出さない」の Q0 判断は適用しない ── どの layer でも
