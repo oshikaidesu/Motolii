@@ -50,10 +50,12 @@
 //! (`asset.rs` のフィールド一覧参照)。store にこの形の属性が要る、という
 //! 要求としてこの doc に記録しておく(発注書 RETURN と同じ内容)。
 //!
-//! `Collections`/`Places`/selection tray/tag editor/context menu/履歴 ‹› は
+//! `Collections`/`Places`/selection tray/tag editor/履歴 ‹› は
 //! `browser-semantics.html` 救出台帳が明記する「予約地」のまま(タグ束・
 //! filesystem 走査裁定・意味起草タスク#14 待ち) — この波でも出さない(B2 の
-//! 留保をそのまま延長)。**タブ4種(Media/Effects/Create/Panels)は予約地を
+//! 留保をそのまま延長)。context menu は media カードに実在する
+//! `RemoveAssetFromCard` だけを持つ pane-local component として実装済みで、
+//! 未接続の rename/tag/favorite 項目は出さない。**タブ4種(Media/Effects/Create/Panels)は予約地を
 //! 脱した**(B3 取り残し回収、利用者実窓不合格 2026-08-22): タブ帯
 //! ([`tab_band_view`]、[`pane_view`] が組む)+タブ状態
 //! ([`state::Message::SelectTab`]/[`model::LibraryTab`])+ preview-local
@@ -196,6 +198,7 @@
 //!    そのまま呼んでよい、二重処理にはならない。)
 
 mod card_view;
+mod context_menu;
 mod filter_view;
 pub mod model;
 mod preview_view;
@@ -337,6 +340,7 @@ pub fn pane_view_with_modifiers(
             state.recently_admitted(),
             state.drop_hover(),
             single_selected_layer,
+            state.context_menu_anchor(),
             dims,
             colors,
         ),
@@ -448,8 +452,9 @@ fn tab_style(colors: Colors, selected: bool, status: button::Status) -> button::
 
 /// rail(mock `.librarySidebar` `LIBRARY` 節)+ filter shelf(mock
 /// `.filterShelf`)+ カード grid(mock `.thumbnailGrid`、B3)を描く。
-/// **selection tray/tag editor/context menu はまだ描かない**(予約地、crate
-/// 冒頭 doc 参照)。`items` は [`model::assets`](B1)がそのまま返す未絞り込みの
+/// **selection tray/tag editor はまだ描かない**(予約地、crate 冒頭 doc 参照)。
+/// media カードの context menu は modifier-aware な現行入口でのみ描く。
+/// `items` は [`model::assets`](B1)がそのまま返す未絞り込みの
 /// 投影 — 絞り込みはこの関数の中で [`model::visible`] を呼ぶ(呼び手は
 /// フィルタ済みリストを別途作らなくてよい)。
 ///
@@ -539,6 +544,7 @@ fn media_body_with_selection(
     recent: &[motolii_store::AssetId],
     drop_hover: bool,
     single_selected_layer: Option<motolii_store::LayerId>,
+    context_menu_anchor: Option<CardKey>,
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
@@ -556,6 +562,7 @@ fn media_body_with_selection(
         recent,
         view_mode,
         single_selected_layer,
+        context_menu_anchor,
         dims,
         colors,
     );

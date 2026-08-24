@@ -20,6 +20,7 @@
 //! (`Shell::update` 側に per-variant 分岐を増やさない — crate 冒頭 doc の
 //! 「pane split 流儀」どおり)。`Shell::view` は [`PaneState::is_open`] を読んで
 //! 表示するかどうかだけ判断する。
+use crate::context_menu;
 use crate::model::{
     CardKey, CreateKind, LibraryTab, PreviewScope, RailScope, ShapeOpKind, SortKey, ViewMode,
 };
@@ -83,6 +84,10 @@ pub enum Message {
     SelectPreviewScope(PreviewScope),
     /// カタログの通常カード click。従来の単一選択入口を維持する。
     SelectCard(CardKey),
+    /// media カードの右クリック。対象カードを pane-local context menu の
+    /// anchor として渡す。Document の選択集合を暗黙に書き換えず、menu の
+    /// command が対象 AssetId を明示的に運ぶ。
+    OpenContextMenu(CardKey),
     /// modifier 付きカード click。
     ///
     /// `visible_cards` は現在の表示順(絞り込み後の catalog 順)を view/WIRE
@@ -248,6 +253,10 @@ pub struct PaneState {
     /// grid/list 表示形式(B08 第4切片、既定 = `ViewMode::Grid` — mock 既定
     /// 表示 `data-view="grid"` に一致)。media/preview 両方の catalog に効く。
     view_mode: ViewMode,
+    /// media カード context menu の anchor。カード選択集合とは別の一過性
+    /// 状態であり、対象 AssetId の引き渡しとメニューの表示位置を1つの
+    /// pane-local component に閉じ込める。
+    context_menu: context_menu::State,
 }
 
 impl PaneState {
@@ -331,19 +340,30 @@ impl PaneState {
         self.view_mode
     }
 
+    /// 現在開いている media-card menu の anchor。view はこれを card component
+    /// へ渡すだけで、menu の内部状態や Document を所有しない。
+    pub(crate) fn context_menu_anchor(&self) -> Option<CardKey> {
+        self.context_menu.anchor()
+    }
+
     /// pane 側の唯一の書き口。
     pub fn update(&mut self, message: Message) {
         match message {
             Message::SelectScope(scope) => self.scope = scope,
             Message::SelectPreviewScope(scope) => self.preview_scope = scope,
             Message::SelectCard(key) => {
+                self.context_menu.close();
                 self.select_card(key, CardSelectionModifiers::plain(), &[]);
+            }
+            Message::OpenContextMenu(key) => {
+                self.context_menu.open(key);
             }
             Message::SelectCardWithModifiers {
                 key,
                 modifiers,
                 visible_cards,
             } => {
+                self.context_menu.close();
                 self.select_card(key, modifiers, &visible_cards);
             }
             Message::SelectTab(tab) => {
@@ -365,14 +385,19 @@ impl PaneState {
                 // 一過性状態を亡霊として持ち越さない — selected と同じ理由)。
                 self.hovered = None;
                 self.recent.clear();
+                self.context_menu.close();
             }
             Message::QueryChanged(text) => self.query = text,
             Message::ClearFilters => {
                 self.scope = RailScope::AllMedia;
                 self.preview_scope = PreviewScope::All;
                 self.query.clear();
+                self.context_menu.close();
             }
-            Message::ToggleBrowserPanel => self.open = !self.open,
+            Message::ToggleBrowserPanel => {
+                self.open = !self.open;
+                self.context_menu.close();
+            }
             // 「作る」は pane-local に動かす状態が無い(選択はダブルクリックの
             // press が `SelectCard` で別途書く)。実生成= shell 結線(次波)が
             // この variant を `Shell::update` 側で横取りして `Intent` へ落とす。
@@ -398,7 +423,7 @@ impl PaneState {
             // (このメンバー doc・crate 冒頭 doc「shell 結線」参照) — pane-local
             // 状態には何も書かない(選択状態も保つ — 実際に消えるかは
             // Document 側の変化を経由する、`selected` を先回りで解除しない)。
-            Message::RemoveAssetFromCard(_) => {}
+            Message::RemoveAssetFromCard(_) => self.context_menu.close(),
             // マスク追加/effect 適用も「作る」と同じく pane-local に動かす状態が
             // 無い(`CreateFromCard` と同型 — 選択は `SelectCard` が別途書く)。
             // 実際の `Intent::AddMask`/`Intent::SetEffects` は shell 結線が
@@ -1019,5 +1044,37 @@ mod tests {
         assert_eq!(state.scope(), RailScope::Audio);
         assert_eq!(state.query(), "tone");
         assert_eq!(state.selected(), Some(CardKey::Media(AssetId::from_raw(5))));
+    }
+
+    #[test]
+    fn context_menu_anchor_is_separate_from_card_selection_and_closes_on_select() {
+        let first = CardKey::Media(AssetId::from_raw(1));
+        let second = CardKey::Media(AssetId::from_raw(2));
+        let target = CardKey::Media(AssetId::from_raw(9));
+        let mut state = PaneState::new();
+
+        state.update(Message::SelectCard(first));
+        state.update(Message::SelectCardWithModifiers {
+            key: second,
+            modifiers: CardSelectionModifiers::toggle(),
+            visible_cards: vec![first, second, target],
+        });
+        state.update(Message::OpenContextMenu(target));
+
+        assert_eq!(state.context_menu_anchor(), Some(target));
+        assert_eq!(state.selected_cards(), [first, second]);
+
+        state.update(Message::SelectCard(target));
+        assert_eq!(state.context_menu_anchor(), None);
+        assert_eq!(state.selected_cards(), [target]);
+    }
+
+    #[test]
+    fn preview_card_cannot_open_a_media_context_menu() {
+        let mut state = PaneState::new();
+
+        state.update(Message::OpenContextMenu(CardKey::Preview("glow")));
+
+        assert_eq!(state.context_menu_anchor(), None);
     }
 }

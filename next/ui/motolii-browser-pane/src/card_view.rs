@@ -1,11 +1,12 @@
 //! カード grid(SP-6 分割: 元 `lib.rs` から移送 — カード表示(grid/list 両形式)+
 //! 素材の欠落バッジ)。
 
+use crate::context_menu;
 use crate::filter_view::FILTER_CHIP_CORNER_RADIUS_ROW_HEIGHT_RATIO;
 use crate::model::{self, AssetListItem};
 use crate::search_view::chip_style;
 use crate::{CardSelectionModifiers, Message};
-use iced::widget::{button, column, container, row, scrollable, text, tooltip};
+use iced::widget::{button, column, container, mouse_area, row, scrollable, text, tooltip};
 use iced::{Element, Length};
 use motolii_tokens_rs::{Colors, Dimensions};
 
@@ -274,6 +275,8 @@ pub(crate) fn card_grid_view(
                         is_recent,
                         view_mode,
                         single_selected_layer,
+                        None,
+                        false,
                         dims,
                         colors,
                     )
@@ -305,6 +308,7 @@ pub(crate) fn card_grid_view_with_selection(
     recent: &[motolii_store::AssetId],
     view_mode: model::ViewMode,
     single_selected_layer: Option<motolii_store::LayerId>,
+    context_menu_anchor: Option<model::CardKey>,
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
@@ -338,6 +342,8 @@ pub(crate) fn card_grid_view_with_selection(
                         is_recent,
                         view_mode,
                         single_selected_layer,
+                        context_menu_anchor,
+                        true,
                         dims,
                         colors,
                         Message::SelectCardWithModifiers {
@@ -378,6 +384,8 @@ fn card_view(
     recent: bool,
     view_mode: model::ViewMode,
     single_selected_layer: Option<motolii_store::LayerId>,
+    context_menu_anchor: Option<model::CardKey>,
+    enable_context_menu: bool,
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
@@ -388,6 +396,8 @@ fn card_view(
         recent,
         view_mode,
         single_selected_layer,
+        context_menu_anchor,
+        enable_context_menu,
         dims,
         colors,
         Message::SelectCard(key),
@@ -402,6 +412,8 @@ fn card_view_with_message(
     recent: bool,
     view_mode: model::ViewMode,
     single_selected_layer: Option<motolii_store::LayerId>,
+    context_menu_anchor: Option<model::CardKey>,
+    enable_context_menu: bool,
     dims: Dimensions,
     colors: Colors,
     select_message: Message,
@@ -455,19 +467,36 @@ fn card_view_with_message(
     // layer 選択にもパス有無にも依存しない — カード自体の選択状態だけが
     // ゲート(総監督裁定: 判断が割れたら摩擦を増やす側 — 常時×印の一発削除
     // ではなく「選択→ボタン出現」の2段階にする)。
-    if let Some(remove_row) = remove_affordance_row(
-        selected,
-        asset_id,
-        card_frame_width(view_mode, dims),
-        dims,
-        colors,
-    ) {
-        rows.push(remove_row);
+    if context_menu_anchor != Some(key) {
+        if let Some(remove_row) = remove_affordance_row(
+            selected,
+            asset_id,
+            card_frame_width(view_mode, dims),
+            dims,
+            colors,
+        ) {
+            rows.push(remove_row);
+        }
     }
-    if rows.len() == 1 {
+    let card = if rows.len() == 1 {
         rows.pop().expect("rows has exactly 1 element")
     } else {
         column(rows).spacing(dims.spacing_xs).into()
+    };
+    let card = if enable_context_menu && context_menu_anchor == Some(key) {
+        let menu = context_menu::view(Some(key), card_frame_width(view_mode, dims), dims, colors)
+            .expect("media card context menu has a real action");
+        column![card, menu].spacing(dims.spacing_xs).into()
+    } else {
+        card
+    };
+
+    if enable_context_menu {
+        mouse_area(card)
+            .on_right_press(Message::OpenContextMenu(key))
+            .into()
+    } else {
+        card
     }
 }
 
