@@ -1,6 +1,16 @@
 component	kind	weight	weight_value	maps	facet	evidence	status	reason	source
+browser.asset_context_menu	semantic	convenience	1		entry	OpenContextMenu	緑	実装コードに実在	next/ui/motolii-browser-pane/src/context_menu.rs:10
+browser.asset_context_menu	semantic	convenience	1		meaning	RemoveAssetFromCard	緑	実装コードに実在	next/ui/motolii-browser-pane/src/context_menu.rs:10
+browser.asset_context_menu	semantic	convenience	1		evaluation	actions_for	緑	実装コードに実在	next/ui/motolii-browser-pane/src/context_menu.rs:10
+browser.asset_context_menu	semantic	convenience	1		render	view	緑	実装コードに実在	next/ui/motolii-browser-pane/src/context_menu.rs:10
+browser.asset_context_menu	semantic	convenience	1		observable	media_card_layout_is_anchored_below_the_card	緑	実装コードに実在	next/ui/motolii-browser-pane/src/context_menu.rs:10
 edit.batch_rename	semantic	core_edit	4	785	entry	BatchRenameSelectedLayers	緑	実装コードに実在	next/shell/motolii-shell/src/batch_rename.rs:7
 edit.batch_rename	semantic	core_edit	4	785	meaning	apply_selected	緑	実装コードに実在	next/shell/motolii-shell/src/batch_rename.rs:7
 edit.batch_rename	semantic	core_edit	4	785	evaluation	apply_all	緑	実装コードに実在	next/shell/motolii-shell/src/batch_rename.rs:7
 edit.batch_rename	semantic	core_edit	4	785	render	Timeline	緑	実装コードに実在	next/shell/motolii-shell/src/batch_rename.rs:7
 edit.batch_rename	semantic	core_edit	4	785	observable	auto_rename_follows_row_order_and_undoes_as_one_step	緑	実装コードに実在	next/shell/motolii-shell/src/batch_rename.rs:7
+io.folder_import_expansion	semantic	core_edit	4		entry	expand_import_paths	緑	実装コードに実在	next/shell/motolii-shell/src/file_dialogs.rs:96
+io.folder_import_expansion	semantic	core_edit	4		meaning	is_supported_import_file	緑	実装コードに実在	next/shell/motolii-shell/src/file_dialogs.rs:96
+io.folder_import_expansion	semantic	core_edit	4		evaluation	append_supported_files	緑	実装コードに実在	next/shell/motolii-shell/src/file_dialogs.rs:96
+io.folder_import_expansion	semantic	core_edit	4		render	AdmitPaths	緑	実装コードに実在	next/shell/motolii-shell/src/file_dialogs.rs:96
+io.folder_import_expansion	semantic	core_edit	4		observable	folder_expansion_recurses_in_sorted_order_and_filters_media	緑	実装コードに実在	next/shell/motolii-shell/src/file_dialogs.rs:96

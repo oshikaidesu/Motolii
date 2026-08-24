@@ -93,6 +93,18 @@ pub fn is_supported_import_file(path: &Path) -> bool {
         .any(|supported| extension.eq_ignore_ascii_case(supported))
 }
 
+/* motolii-component
+id = "io.folder_import_expansion"
+kind = "semantic"
+weight = "core_edit"
+maps = []
+entry = ["expand_import_paths"]
+meaning = ["is_supported_import_file"]
+evaluation = ["append_supported_files"]
+render = ["AdmitPaths"]
+observable = ["folder_expansion_recurses_in_sorted_order_and_filters_media"]
+*/
+
 /// 入力 path 列のフォルダを、supported media の path 列へ展開する。
 ///
 /// フォルダは全ての子孫を深さ制限なしで走査する。現行 repo に「直下だけ」

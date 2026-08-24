@@ -6,8 +6,8 @@
 `//! responsibility: wire` を持つShell rootは意味レーンから除外し、
 最後に1本のWIRE結線で接続する。これで結線の共有と意味の所有を混ぜない。
 
-- 穴 83件 / 意味レーン 39本 / WIRE結線 1本
-- WIRE宣言 4ファイル / WIRE関与 23件(結線だけ 0件) / 外部依存 1件 / 責任ファイル未記入 1件
+- 穴 80件 / 意味レーン 39本 / WIRE結線 1本
+- WIRE宣言 4ファイル / WIRE関与 21件(結線だけ 0件) / 外部依存 1件 / 責任ファイル未記入 1件
 
 ## 意味レーン(重い順)
 
@@ -19,10 +19,8 @@ WIRE結線はここへ含めない。意味componentの実装後にsupervisorが
 | `ui/motolii-inspector-pane/src/lib.rs` | 6 | `ui/motolii-inspector-pane/src/lib.rs` | ※ | ※ |
 | `ui/motolii-stage-pane/src/gizmo.rs` | 5 | `ui/motolii-stage-pane/src/gizmo.rs` |  |  |
 | `ui/motolii-inspector-pane/src/transform/mod.rs` | 4 | `ui/motolii-inspector-pane/src/transform/mod.rs` |  | ※ |
-| `shell/motolii-shell/src/selection.rs` | 4 | `shell/motolii-shell/src/selection.rs` | ※ |  |
 | `ui/motolii-inspector-pane/src/matte.rs` | 3 | `ui/motolii-inspector-pane/src/matte.rs` | ※ |  |
 | `core/motolii-store/src/document.rs` | 3 | `core/motolii-store/src/document.rs`, `core/motolii-store/src/view.rs`, `engine/motolii-compositor/src/lib.rs` |  | ※ |
-| `ui/motolii-timeline-pane/src/write/mod.rs` | 3 | `ui/motolii-timeline-pane/src/write/mod.rs` |  | ※ |
 | `ui/motolii-shell-state/src/lib.rs` | 3 | `ui/motolii-shell-state/src/lib.rs` |  |  |
 | `ui/motolii-inspector-pane/src/transform/interaction.rs` | 3 | `ui/motolii-inspector-pane/src/transform/interaction.rs` |  |  |
 | `ui/motolii-timeline-pane/src/key_rows.rs` | 2 | `ui/motolii-timeline-pane/src/key_rows.rs` |  |  |
@@ -30,6 +28,8 @@ WIRE結線はここへ含めない。意味componentの実装後にsupervisorが
 | `ui/motolii-stage-pane/src/zoom.rs` | 2 | `ui/motolii-stage-pane/src/zoom.rs` | ※ |  |
 | `ui/motolii-inspector-pane/src/mask.rs` | 2 | `ui/motolii-inspector-pane/src/mask.rs` |  |  |
 | `shell/motolii-shell/src/inspector_ops.rs` | 2 | `shell/motolii-shell/src/inspector_ops.rs` |  |  |
+| `shell/motolii-shell/src/selection.rs` | 2 | `shell/motolii-shell/src/selection.rs` | ※ |  |
+| `ui/motolii-timeline-pane/src/write/mod.rs` | 2 | `ui/motolii-timeline-pane/src/write/mod.rs` |  | ※ |
 | `ui/motolii-browser-pane/src/state.rs` | 2 | `ui/motolii-browser-pane/src/state.rs` | ※ | ※ |
 | `shell/motolii-shell/src/document_io.rs` | 2 | `shell/motolii-shell/src/document_io.rs` | ※ |  |
 | `ui/motolii-timeline-pane/src/lib.rs` | 2 | `ui/motolii-timeline-pane/src/lib.rs` |  | ※ |
@@ -62,7 +62,7 @@ WIRE結線はここへ含めない。意味componentの実装後にsupervisorが
 | WIREファイル | 責任参照 | 判定 |
 |---|---:|---|
 | `shell/motolii-shell/src/input.rs` | 1 | WIRE |
-| `shell/motolii-shell/src/lib.rs` | 23 | WIRE |
+| `shell/motolii-shell/src/lib.rs` | 21 | WIRE |
 | `shell/motolii-shell/src/render_dispatch.rs` | 0 | WIRE |
 | `shell/motolii-shell/src/value_drag.rs` | 0 | WIRE |
 

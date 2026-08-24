@@ -7,6 +7,18 @@
 //! A menu item is not emitted for preview-local cards because there is no real
 //! removal meaning for those cards.
 
+/* motolii-component
+id = "browser.asset_context_menu"
+kind = "semantic"
+weight = "convenience"
+maps = []
+entry = ["OpenContextMenu"]
+meaning = ["RemoveAssetFromCard"]
+evaluation = ["actions_for"]
+render = ["view"]
+observable = ["media_card_layout_is_anchored_below_the_card"]
+*/
+
 use crate::model::CardKey;
 use crate::Message;
 use iced::widget::{button, column, container, text};

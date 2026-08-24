@@ -22,19 +22,12 @@ ui/motolii-inspector-pane/src/transform/mod.rs	A03	-	Hidden(M glyph、Inspector 
 ui/motolii-inspector-pane/src/transform/mod.rs	A03	-	Timeline rail Hidden(M glyph)	乗っていない	-	ui/motolii-inspector-pane/src/transform/mod.rs	-
 ui/motolii-inspector-pane/src/transform/mod.rs	A09	-	Scale を Inspector で編集(ScaleX submit → ScaleY submit の2動作)	2 undo以上	-	ui/motolii-inspector-pane/src/transform/mod.rs	-
 ui/motolii-inspector-pane/src/transform/mod.rs	A09	-	Anchor を Inspector で編集(AnchorX submit → AnchorY submit の2動作)	2 undo以上	-	ui/motolii-inspector-pane/src/transform/mod.rs	-
-shell/motolii-shell/src/selection.rs	A04	875	Lock/Unlock All Video Tracks(一括ロック)	上限がある	Option+Shift+9	shell/motolii-shell/src/selection.rs	shell/motolii-shell/src/lib.rs
-shell/motolii-shell/src/selection.rs	A08	429	Layer Copy(`copy_layer`)	単数のみ	コピー	shell/motolii-shell/src/selection.rs	shell/motolii-shell/src/lib.rs
-shell/motolii-shell/src/selection.rs	A08	432	Layer Cut(`cut_layer`)	単数のみ	切り取り	shell/motolii-shell/src/selection.rs	shell/motolii-shell/src/lib.rs
-shell/motolii-shell/src/selection.rs	A08	430	Layer Paste(`paste_layer`)	単数のみ	貼り付け	shell/motolii-shell/src/selection.rs	shell/motolii-shell/src/lib.rs
 ui/motolii-inspector-pane/src/matte.rs	A03	-	Matte 元(source layer、ATTRS matte行)	乗っていない	-	ui/motolii-inspector-pane/src/matte.rs	-
 ui/motolii-inspector-pane/src/matte.rs	A03	-	Matte mode(ATTRS matte行)	乗っていない	-	ui/motolii-inspector-pane/src/matte.rs	-
 ui/motolii-inspector-pane/src/matte.rs	A08	-	Inspector matte 解除(`clear_inspector_matte`)	単数のみ	-	ui/motolii-inspector-pane/src/matte.rs	shell/motolii-shell/src/lib.rs
 core/motolii-store/src/document.rs	A04	-	motolii-compositor 合成ループ(layer×pass)	未計測	-	engine/motolii-compositor/src/lib.rs	-
 core/motolii-store/src/document.rs	A11	-	B5 Stageのリアルタイム追従(scrub中 p95≤16ms)	器具はあるが掛けていない	-	core/motolii-store/src/view.rs;engine/motolii-compositor/src/lib.rs	-
 core/motolii-store/src/document.rs	A11	-	時間予算試験2本の負荷依存flake(`edit_storm_with_the_real_track_type`/`r2::stage_projection_fits_a_frame`)	試験がある	-	core/motolii-store/src/document.rs;core/motolii-store/src/view.rs	-
-ui/motolii-timeline-pane/src/write/mod.rs	A04	-	Timeline write.rs(編集操作 split/trim等)の量依存	未計測	-	ui/motolii-timeline-pane/src/write/mod.rs	-
-ui/motolii-timeline-pane/src/write/mod.rs	A08	-	Timeline clip move/trim(`TimelineDragState`)	確定は複数、表示は単数	-	ui/motolii-timeline-pane/src/write/mod.rs	-
-ui/motolii-timeline-pane/src/write/mod.rs	A08	509	Timeline `SelectAllKeysOfProperty`(`write.rs:1419 select_all_keys_of_property`)	単数のみ	プロパティの全キーフレームを選択	ui/motolii-timeline-pane/src/write/mod.rs	-
 ui/motolii-shell-state/src/lib.rs	A06	-	playhead位置(Session.playhead)	Document に入れるべきでない(User Settings 行き)	-	ui/motolii-shell-state/src/lib.rs	-
 ui/motolii-shell-state/src/lib.rs	A06	-	選択レイヤー(Session.selection/selected_layers)	Document に入れるべきでない(User Settings 行き)	-	ui/motolii-shell-state/src/lib.rs	-
 ui/motolii-shell-state/src/lib.rs	A06	-	Timelineキー選択(selected_keys)・Shift範囲基点(key_anchor)・行の折り畳み(timeline_fold)	Document に入れるべきでない(User Settings 行き)	-	ui/motolii-shell-state/src/lib.rs	-
@@ -51,6 +44,10 @@ ui/motolii-inspector-pane/src/mask.rs	A03	-	Mask Mode(MASK)	乗っていない	-
 ui/motolii-inspector-pane/src/mask.rs	A03	-	Mask Inverted(MASK)	乗っていない	-	ui/motolii-inspector-pane/src/mask.rs	-
 shell/motolii-shell/src/inspector_ops.rs	A04	-	Inspector 一括編集(保留: TEXT Size/Fill以外)	上限がある	-	shell/motolii-shell/src/inspector_ops.rs	-
 shell/motolii-shell/src/inspector_ops.rs	A08	-	Inspector 値ドラッグ/type入力(TEXT Size/Fill以外)	単数のみ	-	shell/motolii-shell/src/inspector_ops.rs	-
+shell/motolii-shell/src/selection.rs	A04	875	Lock/Unlock All Video Tracks(一括ロック)	上限がある	Option+Shift+9	shell/motolii-shell/src/selection.rs	shell/motolii-shell/src/lib.rs
+shell/motolii-shell/src/selection.rs	A08	429	Layer Copy(`copy_layer`)	単数のみ	コピー	shell/motolii-shell/src/selection.rs	shell/motolii-shell/src/lib.rs
+ui/motolii-timeline-pane/src/write/mod.rs	A04	-	Timeline write.rs(編集操作 split/trim等)の量依存	未計測	-	ui/motolii-timeline-pane/src/write/mod.rs	-
+ui/motolii-timeline-pane/src/write/mod.rs	A08	509	Timeline `SelectAllKeysOfProperty`(`write.rs:1419 select_all_keys_of_property`)	単数のみ	プロパティの全キーフレームを選択	ui/motolii-timeline-pane/src/write/mod.rs	-
 ui/motolii-browser-pane/src/state.rs	A05	1393	`Find Missing Footage`コマンド自体(素材再リンクUI)	未確認	見つからない素材を検索	ui/motolii-browser-pane/src/state.rs	shell/motolii-shell/src/lib.rs
 ui/motolii-browser-pane/src/state.rs	A08	616	Browser「素材を置換」(`ReplaceSelectedLayerSource`→`Intent::SetSource`)	一括が無意味	選択素材を置換	ui/motolii-browser-pane/src/state.rs	shell/motolii-shell/src/lib.rs
 shell/motolii-shell/src/document_io.rs	A05	-	新規Document起動時の既定comp作成(`default_document`)	黙って握りつぶす	-	shell/motolii-shell/src/document_io.rs	shell/motolii-shell/src/lib.rs
