@@ -83,6 +83,26 @@ fn quality_and_range_select_update_the_held_state() {
 }
 
 #[test]
+fn aspect_preset_updates_only_composition_dimensions_in_one_document_edit() {
+    let mut shell = Shell::new_fixture().0;
+    let before = shell.composition().expect("fixture に comp が無い");
+
+    let _ = shell.update(Message::Export(export_pane::Message::AspectPresetSelect(
+        export_pane::AspectPreset::Portrait9x16,
+    )));
+
+    let after = shell.composition().expect("aspect preset 後に comp が無い");
+    assert_eq!((after.width, after.height), (1080, 1920));
+    assert_eq!(after.fps, before.fps);
+    assert_eq!(after.duration_frames, before.duration_frames);
+    assert_eq!(after.background, before.background);
+
+    // 一つの Intent::SetComposition なので、一度の Undo で元の Composition 全体へ戻る。
+    let _ = shell.update(Message::Undo);
+    assert_eq!(shell.composition(), Some(before));
+}
+
+#[test]
 fn cancel_export_without_a_running_job_is_a_harmless_noop() {
     let mut shell = Shell::new_fixture().0;
     // 実行していない状態で Cancel が来ても panic しない(保持している

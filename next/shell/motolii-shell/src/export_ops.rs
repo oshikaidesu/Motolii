@@ -71,7 +71,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use iced::Task;
 
 use motolii_export::{Cancel, ExportError, ExportJob};
-use motolii_store::Document;
+use motolii_store::{Document, Intent};
 
 use crate::{export_pane, Message, Shell};
 
@@ -153,6 +153,9 @@ impl Shell {
             export_pane::Message::ToggleExportDialog => return self.toggle_export_window(),
             export_pane::Message::QualitySelect(quality) => self.export_quality = quality,
             export_pane::Message::RangeSelect(range) => self.export_range = range,
+            export_pane::Message::AspectPresetSelect(preset) => {
+                self.apply_aspect_preset(preset);
+            }
             // 2026-08-22 第2波(File 束の rfd 非同期化と同時発注): 書き出し先の
             // 選択。`file_dialogs.rs::FileDialogs::pick_export_path` を非同期に
             // 呼び、結果を `OutputPathChosen` で畳んで戻す。
@@ -174,6 +177,24 @@ impl Shell {
             }
         }
         Task::none()
+    }
+
+    /// Export pane の標準比率要求を、現在の Composition へ一度だけ適用する。
+    ///
+    /// pane は寸法写像と要求の発火だけを持ち、Document の書き口はここに集約する。
+    /// `Composition` を read-modify-write することで fps・尺・背景などの既存値を
+    /// 保持し、Stage preview と export が同じ Document を読む不変条件を崩さない。
+    fn apply_aspect_preset(&mut self, preset: export_pane::AspectPreset) {
+        let Some(mut composition) = self.composition() else {
+            self.status = Some("comp が無いのでアスペクト比を変更できない".to_owned());
+            return;
+        };
+        let dimensions = export_pane::dimensions_for_aspect(preset);
+        composition.width = dimensions.width;
+        composition.height = dimensions.height;
+        if let Err(error) = self.doc.apply(Intent::SetComposition(composition)) {
+            self.status = Some(format!("アスペクト比を変更できない: {error}"));
+        }
     }
 
     /// Export 書き出し先 dialog の初期ファイル名。`current_path`(開いている
