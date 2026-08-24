@@ -6,7 +6,7 @@
 `verdict` が `採用予定`/`結線待ち` の行で、どの pane が持つかは `bundle` →
 `intent-bundles.tsv` の `home` から引ける。順番は `freq`(4製品中いくつに在るか)降順。
 
-- 残 970件 / crate 9本 / 家が未決 266件
+- 残 969件 / crate 9本 / 家が未決 266件
 
 ## crate ごと(重い順)— **crate が違えば同時に走れる**
 
@@ -15,7 +15,7 @@
 | `ui/motolii-timeline-pane` | 233 | 1 | B15 キーフレーム束, B18 作業範囲/イン・アウト点束(裁定177 headline例), B19 マーカー/フラグ束 ほか5 |
 | `ui/motolii-inspector-pane` | 137 | 1 | B01 ブレンドモード束, B02 マスク/マット束, B03 ラベル色束 ほか4 |
 | `ui/motolii-stage-pane` | 98 | 0 | B17 カメラ/3Dビュー束, B22 ガイド/グリッド表示束, B23 プレビュー解像度/画質束 ほか2 |
-| `shell/motolii-shell` | 67 | 3 | B25 パネル可視性/フォーカス束(最大統合) |
+| `shell/motolii-shell` | 66 | 3 | B25 パネル可視性/フォーカス束(最大統合) |
 | `ui/motolii-settings-pane` | 56 | 1 | B12 環境設定束 |
 | `ui/motolii-browser-pane` | 41 | 2 | B08 素材取り込み束 |
 | `ui/motolii-menubar` | 39 | 3 | B06 ヘルプ/診断束, B11 File束(MB-1延長), B33 クリップボード/履歴束(MB-0延長) |
