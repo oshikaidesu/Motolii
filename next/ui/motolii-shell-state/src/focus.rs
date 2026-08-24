@@ -84,7 +84,7 @@
 /// 4つのパネル種別。値・並びは `pane_layout::PaneKind`/
 /// `motolii-menubar::menus::window_menu` の Browser/Inspector/Stage/Timeline
 /// と一致させる(モジュール冒頭 doc「独自定義する理由」参照)。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum PaneKind {
     Browser,
     Inspector,

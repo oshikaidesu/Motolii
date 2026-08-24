@@ -10,7 +10,8 @@ use iced_test::selector::{Candidate, Target};
 use motolii_core::{Fps, RationalTime};
 use motolii_inspector_pane::{
     commit_inspector_field, cycle_inspector_mask_mode, project, property_id,
-    toggle_inspector_mask_inverted, view, FieldDraft, Message, TransformField,
+    toggle_inspector_mask_inverted, view, FieldDraft, KeyCellState, KeyRow, Message,
+    RowValue, TransformField,
 };
 use motolii_shell_state::Session;
 use motolii_store::{
@@ -309,6 +310,30 @@ fn committing_a_mask_opacity_draft_writes_the_mask_opacity_track_as_a_ratio() {
     );
 }
 
+/// expansion の値セル Enter は `mask.{id}.expansion` へ通常の数値 track を書く。
+#[test]
+fn committing_a_mask_expansion_draft_writes_the_expansion_track() {
+    let (mut doc, layer) = doc_with_layer();
+    seed_masks(&mut doc, layer, two_masks());
+
+    let field = TransformField::MaskExpansion(MaskId(1));
+    let mut draft = Some(FieldDraft {
+        field,
+        text: "12.5".to_owned(),
+    });
+    commit_inspector_field(&mut doc, &mut draft, Some(layer), 0, fps30(), field)
+        .expect("expansion の確定は成功するはず");
+
+    let property = PropertyId::mask_expansion(MaskId(1));
+    let value = doc
+        .view()
+        .value_at(layer, &property, RationalTime::ZERO)
+        .expect("track を読めるはず")
+        .expect("確定後は値が有るはず");
+    assert_eq!(value, Value::F64(12.5));
+    assert_eq!(property_id(field).expect("property は作れるはず"), property);
+}
+
 /// 投影の opacity 行: 値セルは既存の editable 文法(field 付き・decimals 0・
 /// % 表示)で、Key 列も既存3状態 oracle に乗る。
 #[test]
@@ -335,5 +360,31 @@ fn the_projected_mask_opacity_row_reuses_the_value_cell_grammar() {
             assert_eq!(slot.field, Some(TransformField::MaskOpacity(MaskId(1))));
         }
         other => panic!("opacity 行は Scalar のはず: {other:?}"),
+    }
+}
+
+/// expansion も opacity と同じ値セル/Key 列文法へ接続され、既定0を表示する。
+#[test]
+fn the_projected_mask_expansion_row_reuses_the_value_cell_grammar() {
+    let (mut doc, layer) = doc_with_layer();
+    seed_masks(&mut doc, layer, two_masks());
+    let session = session_selecting(layer);
+    let projection = project(&doc.view(), &session)
+        .expect("投影は組めるはず")
+        .expect("選択ありなので Some のはず");
+
+    let row = &projection.masks[0].expansion;
+    assert_eq!(row.label, "Expansion");
+    assert_eq!(row.decimals, 2);
+    assert_eq!(row.key.row, KeyRow::MaskExpansion(MaskId(1)));
+    assert_eq!(row.key.state, KeyCellState::Static);
+    match &row.value {
+        RowValue::Scalar(slot) => {
+            assert!(slot.present);
+            assert!(slot.editable);
+            assert_eq!(slot.value, 0.0);
+            assert_eq!(slot.field, Some(TransformField::MaskExpansion(MaskId(1))));
+        }
+        other => panic!("expansion 行は Scalar のはず: {other:?}"),
     }
 }

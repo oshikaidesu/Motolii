@@ -21,7 +21,10 @@
 
 use motolii_store::{MaskMode, Path as EvalPath, ResolvedMask};
 use motolii_vector::coverage::{self, Coverage};
-use motolii_vector::{Brush, Canvas, Fill, FillRule, PathSource, Raster, Rgb, Shape, VectorError};
+use motolii_vector::{
+    Brush, Canvas, Fill, FillRule, LineJoin, OpKind, PathSource, Raster, Rgb, Shape, ShapeOp,
+    VectorError,
+};
 
 /// マスク形状の正本 [`motolii_eval::Path`](motolii_store::Path)(単一輪郭・頂点+接線の列)を、
 /// `motolii-vector` の入力形 [`motolii_vector::Path`](輪郭の列)へ橋渡しする。
@@ -67,13 +70,21 @@ fn eval_path_to_vector_path(path: &EvalPath) -> motolii_vector::Path {
 /// coverage として読めばよい。
 ///
 /// `mode` / `inverted` / `opacity` は読まない(module doc 参照 — MK2 の仕事)。
+/// `expansion` が 0 でなければ、既存の vector `OffsetPath` を1段だけ積む。
 pub fn rasterize_mask_coverage(
     mask: &ResolvedMask,
     canvas: &Canvas,
 ) -> Result<Raster, VectorError> {
+    let ops = (mask.expansion != 0.0).then(|| {
+        vec![ShapeOp::new(OpKind::OffsetPath {
+            amount: mask.expansion,
+            join: LineJoin::Miter,
+            miter_limit: 4.0,
+        })]
+    }).unwrap_or_default();
     let shape = Shape {
         source: PathSource::Bezier(eval_path_to_vector_path(&mask.shape)),
-        ops: Vec::new(),
+        ops,
         fill: Some(Fill {
             brush: Brush::Solid(Rgb {
                 r: 1.0,

@@ -13,7 +13,7 @@
 use motolii_shell_state::Session;
 use motolii_store::{Composition, Document, Fps, Intent};
 use motolii_timeline_pane::tokens::{Colors, Dimensions};
-use motolii_timeline_pane::{transport_spec, Message, PaneState, TimelinePane};
+use motolii_timeline_pane::{transport_spec, transport_spec_with_frame_draft, Message, PaneState, TimelinePane};
 
 fn fps30() -> Fps {
     Fps::try_new(30, 1).expect("30/1 は正の既約 fps")
@@ -52,6 +52,13 @@ fn s0_the_five_buttons_run_start_back_play_forward_end() {
         "末尾ボタンが JumpPlayheadToEnd でない: {:?}",
         spec.buttons[4].message
     );
+}
+
+#[test]
+fn transport_exposes_previous_and_next_property_key_buttons() {
+    let spec = transport_spec(0, Some(fps30()), false, false);
+    assert!(matches!(spec.keyframe_buttons[0].message, Message::JumpToPreviousKeyframe));
+    assert!(matches!(spec.keyframe_buttons[1].message, Message::JumpToNextKeyframe));
 }
 
 /// Play ボタンは「次に何が起きるか」を示す(shell 旧 Play バーと同じ慣習):
@@ -104,6 +111,13 @@ fn without_a_composition_the_seconds_go_dark_but_frames_remain() {
     let spec = transport_spec(42, None, false, false);
     assert_eq!(spec.frames, "42");
     assert!(spec.seconds.is_none(), "fps 無しで秒をでっち上げている");
+}
+
+#[test]
+fn the_frame_input_spec_shows_the_draft_until_commit() {
+    let spec = transport_spec_with_frame_draft(42, Some(fps30()), false, false, Some("1"));
+    assert_eq!(spec.frames, "1");
+    assert_eq!(spec.seconds.as_deref(), Some("1.40"), "入力途中の秒表示まで先走っている");
 }
 
 /// transport 帯の存在(S6: 常設可視): `view_with_transport()` が pane の絵の

@@ -132,6 +132,7 @@ mod effects;
 // `PropertySource::Link` の参照先を選ぶ pick_list とその意味・書き口。
 mod link;
 mod mask;
+mod mask_expansion;
 // MATTE 行(2026-08-22 発注「レイヤーを指す」文法 第1号)。`LayerAttrs.matte`
 // の元を選ぶ pick_list とその意味・書き口。
 mod matte;
@@ -157,6 +158,7 @@ pub use mask::{
     cycle_inspector_mask_mode, masks_with_cycled_mode, masks_with_toggled_inverted,
     next_mask_mode, toggle_inspector_mask_inverted,
 };
+pub use mask_expansion::MaskExpansionInput;
 pub use matte::{
     clear_inspector_matte, cycle_inspector_matte_mode, next_matte_mode,
     set_inspector_matte_source,

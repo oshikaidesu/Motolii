@@ -220,6 +220,34 @@ pub enum Message {
     /// transport の末尾へ(map 1044)。shell の既存 `Message::JumpPlayheadToEnd`
     /// (`nav::comp_end_frame`)。
     JumpPlayheadToEnd,
+    /// transport のフレーム番号欄の毎打鍵。Document/Session はまだ触らず、
+    /// `PaneState::frame_draft` へ保持する。
+    FrameInput(String),
+    /// transport のフレーム番号欄を確定。成功時だけ Session の playhead を
+    /// composition 範囲へ収めて下書きを捨てる。失敗時は入力を保持する。
+    FrameCommit,
+    /// 表示中 property 行の次のキーフレームへ移動する。
+    JumpToNextKeyframe,
+    /// 表示中 property 行の前のキーフレームへ移動する。
+    JumpToPreviousKeyframe,
+    /// Graph Editor の数値欄の毎打鍵。確定までは Document を触らない。
+    GraphControlInput(crate::graph_editor::GraphControl, String),
+    /// Graph Editor の x1/y1/x2/y2 を既存選択キーへ一括確定する。
+    GraphCommit,
+    /// Graph Editor のハンドルを掴んだ。
+    GraphHandleGrabbed(crate::graph_editor::GraphControl),
+    /// Graph Editor のハンドルを移動中。値は 0..1 に正規化済み。
+    GraphHandleDragged {
+        control: crate::graph_editor::GraphControl,
+        x: f32,
+        y: f32,
+    },
+    /// Graph Editor のハンドルを離し、現在の制御値を一度だけ確定する。
+    GraphHandleReleased(crate::graph_editor::GraphControl),
+    /// Graph Editor のハンドル移動を取消す。
+    GraphHandleCancelled,
+    /// Graph Editor の表示を切り替える。
+    ToggleGraphEditor,
 
     // ---- Timeline ツリー行(裁定173 H2) ----
     /// rail の fold 三角(開閉ボタン)クリック。**Shell の5例外に含まれない**
@@ -327,7 +355,7 @@ use keys::{
     select_all_visible_keys, set_key_interp, toggle_keyframe_at_playhead,
 };
 use key_drag::nudge_keyframe;
-use misc::{comp_duration, jump_to_clip_edit, restack_layers};
+use misc::{commit_frame_input, comp_duration, jump_to_clip_edit, jump_to_keyframe, restack_layers};
 
 /// Easy Ease(map 485/488): AE の既定 influence 33% を cubic-bezier へ写した
 /// プリセット。**区間モデルの注記**(拘束7(a)の構造差 — 逸脱理由): store の
@@ -445,6 +473,12 @@ pub struct PaneState {
     /// — `TimelineDragState` と同じ transient の形(確定まで Document 不接触・
     /// 取消は捨てるだけで履歴無傷)。
     rename: Option<RenameDraft>,
+    /// transport のフレーム番号欄の確定前入力。
+    frame_draft: Option<String>,
+    /// Graph Editor の開閉・数値下書き・ハンドルドラッグ状態。
+    graph_editor_open: bool,
+    graph_drafts: [Option<String>; 4],
+    graph_drag: Option<crate::graph_editor::GraphControl>,
     /// 波形取得状態(TL7 統合手順3)。key = layer。`work_area`/`loop_enabled`
     /// と同じ「フレームを跨いで生きる」pane-local write-set(このレーンの
     /// write-set は `next/ui/motolii-timeline-pane/src/**` のみ)。
@@ -597,6 +631,32 @@ impl PaneState {
         self.rename.take().is_some()
     }
 
+    /// transport のフレーム番号入力を Esc で捨てる。
+    pub fn cancel_frame_input(&mut self) -> bool {
+        self.frame_draft.take().is_some()
+    }
+
+    /// transport に表示するフレーム番号下書き。`None` は確定 playhead を表示。
+    pub fn frame_draft(&self) -> Option<&str> {
+        self.frame_draft.as_deref()
+    }
+
+    pub fn graph_editor_open(&self) -> bool {
+        self.graph_editor_open
+    }
+
+    pub fn graph_editor_drafts(&self) -> [Option<String>; 4] {
+        self.graph_drafts.clone()
+    }
+
+    /// Graph Editor の進行中入力を Esc で捨てる。
+    pub fn cancel_graph_interaction(&mut self) -> bool {
+        let active = self.graph_drag.is_some() || self.graph_drafts.iter().any(Option::is_some);
+        self.graph_drag = None;
+        self.graph_drafts = [None, None, None, None];
+        active
+    }
+
     /// clip drag/keyドラッグ/ループ帯ドラッグのどれかが進行中か。実時間再生
     /// (A2、正典 §2 拘束5「再生と掴みは相互排他: ドラッグ中に Space は
     /// 効かない」)が `Shell::toggle_playback` から読む — ループ帯も「掴み」
@@ -688,6 +748,58 @@ impl PaneState {
             Message::PasteKeysReversed => self.paste_keys(doc, session, true),
             Message::JumpToNextClipEdit => jump_to_clip_edit(doc, session, nav::JumpDirection::Next),
             Message::JumpToPreviousClipEdit => jump_to_clip_edit(doc, session, nav::JumpDirection::Prev),
+            Message::FrameInput(text) => {
+                self.frame_draft = Some(text);
+                None
+            }
+            Message::FrameCommit => commit_frame_input(self, doc, session),
+            Message::JumpToNextKeyframe => jump_to_keyframe(doc, session, nav::JumpDirection::Next),
+            Message::JumpToPreviousKeyframe => jump_to_keyframe(doc, session, nav::JumpDirection::Prev),
+            Message::GraphControlInput(control, text) => {
+                self.graph_drafts[control.index()] = Some(text);
+                None
+            }
+            Message::GraphCommit => self.commit_graph_editor(doc, session),
+            Message::GraphHandleGrabbed(control) => {
+                self.graph_drag = Some(control);
+                None
+            }
+            Message::GraphHandleDragged { control, x, y } => {
+                // Canvas の物理ハンドルは (x1,y1)/(x2,y2) の2つ。
+                // 数値欄の4腕へ分解するが、drag では同じ一手で x/y を更新する。
+                // 片軸だけを書き換えると、画面上のハンドルと保存値の意味がずれる。
+                match control {
+                    crate::graph_editor::GraphControl::X1 => {
+                        self.graph_drafts[0] = Some(format!("{x:.3}"));
+                        self.graph_drafts[1] = Some(format!("{y:.3}"));
+                    }
+                    crate::graph_editor::GraphControl::X2 => {
+                        self.graph_drafts[2] = Some(format!("{x:.3}"));
+                        self.graph_drafts[3] = Some(format!("{y:.3}"));
+                    }
+                    crate::graph_editor::GraphControl::Y1
+                    | crate::graph_editor::GraphControl::Y2 => {
+                        self.graph_drafts[control.index()] = Some(format!("{y:.3}"));
+                    }
+                }
+                None
+            }
+            Message::GraphHandleReleased(control) => {
+                self.graph_drag = None;
+                let _ = control;
+                self.commit_graph_editor(doc, session)
+            }
+            Message::GraphHandleCancelled => {
+                self.cancel_graph_interaction();
+                None
+            }
+            Message::ToggleGraphEditor => {
+                self.graph_editor_open = !self.graph_editor_open;
+                if !self.graph_editor_open {
+                    self.cancel_graph_interaction();
+                }
+                None
+            }
             Message::RestackLayer(direction) => restack_layers(doc, session, direction),
             Message::RenameBegin(layer) => self.begin_rename(doc, layer),
             Message::RenameEdited(text) => {

@@ -324,6 +324,10 @@
             name_of(KeyRow::MaskOpacity(MaskId(7))),
             PropertyId::mask_opacity(MaskId(7))
         );
+        assert_eq!(
+            name_of(KeyRow::MaskExpansion(MaskId(7))),
+            PropertyId::mask_expansion(MaskId(7))
+        );
 
         assert_eq!(key_row_default_value(KeyRow::Position), Value::Vec2([0.0, 0.0]));
         assert_eq!(key_row_default_value(KeyRow::Scale), Value::Vec2([1.0, 1.0]));
@@ -334,6 +338,11 @@
             key_row_default_value(KeyRow::MaskOpacity(MaskId(7))),
             Value::F64(1.0),
             "mask opacity の既定は layer Opacity と同じ比 1.0 のはず"
+        );
+        assert_eq!(
+            key_row_default_value(KeyRow::MaskExpansion(MaskId(7))),
+            Value::F64(0.0),
+            "mask expansion の既定は無効値 0.0 のはず"
         );
     }
 
@@ -463,6 +472,22 @@
                     decimals: 0,
                     key: KeyCellProjection {
                         row: KeyRow::MaskOpacity(MaskId(1)),
+                        state: KeyCellState::Static,
+                    },
+                },
+                expansion: TransformRowProjection {
+                    label: "Expansion",
+                    value: RowValue::Scalar(ComponentSlot {
+                        axis: "Expansion",
+                        present: true,
+                        value: 0.0,
+                        editable: true,
+                        keyed: false,
+                        field: Some(TransformField::MaskExpansion(MaskId(1))),
+                    }),
+                    decimals: 2,
+                    key: KeyCellProjection {
+                        row: KeyRow::MaskExpansion(MaskId(1)),
                         state: KeyCellState::Static,
                     },
                 },

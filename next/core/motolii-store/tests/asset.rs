@@ -146,6 +146,36 @@ fn removing_an_unknown_asset_id_is_an_error() {
     assert!(doc.apply(Intent::RemoveAsset { asset: bogus }).is_err());
 }
 
+/// RelinkAsset は既存台帳の同じ AssetId だけを書き換え、undo で元の path に戻る。
+#[test]
+fn relink_intent_preserves_asset_identity() {
+    let mut doc = Document::new();
+    doc.apply(Intent::AdmitAsset {
+        draft: draft("sha256:relink"),
+    })
+    .unwrap();
+    let id = doc.view().assets().unwrap()[0].id;
+
+    doc.apply(Intent::RelinkAsset {
+        asset: id,
+        path_absolute: "/project/found.mp4".into(),
+        project_root: Some("/project".into()),
+    })
+    .unwrap();
+    let asset = doc.view().asset(id).unwrap().unwrap();
+    assert_eq!(asset.id, id);
+    assert_eq!(asset.content_hash, "sha256:relink");
+    assert_eq!(asset.path_absolute.as_deref(), Some("/project/found.mp4"));
+    assert_eq!(asset.path_project_relative.as_deref(), Some("found.mp4"));
+
+    assert!(doc.undo());
+    let restored = doc.view().asset(id).unwrap().unwrap();
+    assert_eq!(
+        restored.path_absolute.as_deref(),
+        Some("/project/media/clip.mp4")
+    );
+}
+
 /// 保存は履歴を畳む(裁定56)。台帳は `meta`/`composition` の中に無いぶん、
 /// ここで固定しておかないと `flattened()` の手列挙から黙って落ちる
 /// (`markers` の同型試験、裁定108(b) と同型)。ORACLE (c)。

@@ -47,6 +47,7 @@
 mod canvas;
 mod viewport_canvas;
 pub mod clip_gesture;
+pub mod graph_editor;
 mod hit;
 mod input;
 pub mod key_gesture;
@@ -106,7 +107,7 @@ pub use lane_bar::glyph_size_px;
 pub use shuttle::{ShuttleCommand, ShuttleState, MAX_SHUTTLE_RATE};
 /// Transport 帯(map 1041-1045・1138)の宣言 spec — テスト(絵と意味の対応)
 /// と shell 側検分器具の両方が widget 木の代わりに読む継ぎ目。
-pub use transport::{transport_spec, TransportButton, TransportSpec};
+pub use transport::{transport_spec, transport_spec_with_frame_draft, TransportButton, TransportSpec};
 pub use work_area::{classify_loop_band, LoopBandPart, WorkArea, LOOP_GRAB};
 /// Stage 重なり並べ替え(第3切片)の意味型 — shell の keymap/メニュー層が
 /// `Message::RestackLayer(StackDirection)` で結線する。
@@ -182,12 +183,21 @@ pub struct TimelinePane {
     /// を [`Self::with_rename`] で運ぶだけ(`work_area` と同じ形)。`Some` の間、
     /// rail の該当行の名前 text が `text_input` に差し替わる(`rail::layer_row`)。
     rename: Option<(LayerId, String)>,
+    /// transport のフレーム番号入力中の下書き。確定まで Session の playhead は
+    /// 変えず、Esc で捨てる。`transport::view` へは読み取り専用で運ぶ。
+    frame_draft: Option<String>,
     /// 波形取得状態(TL7 統合手順1・3)。`PaneState::waveforms()` を
     /// [`Self::with_waveforms`] で運ぶだけ(`work_area` と同じ形)。既定は空
     /// (波形を1本も描かない) — `canvas::draw` の bar 描画ループがこの
     /// `HashMap` を `row.id` で引き、`Ready` な layer だけ
     /// `waveform_view::waveform_state_segments`/`waveform_ink` を呼ぶ。
     waveforms: std::collections::HashMap<LayerId, crate::waveform_view::WaveformState>,
+    /// Graph Editor が開いているか。
+    graph_editor_open: bool,
+    /// 選択キーから投影した Bezier 制御値。
+    graph_editor: Option<graph_editor::GraphEditorProjection>,
+    /// 数値欄/ドラッグの確定前下書き。
+    graph_drafts: [Option<String>; 4],
 }
 
 impl TimelinePane {
@@ -220,7 +230,11 @@ impl TimelinePane {
             work_area: None,
             loop_enabled: false,
             rename: None,
+            frame_draft: None,
             waveforms: std::collections::HashMap::new(),
+            graph_editor_open: false,
+            graph_editor: Some(graph_editor::project(store, session)),
+            graph_drafts: [None, None, None, None],
         }
     }
 
@@ -247,6 +261,23 @@ impl TimelinePane {
     /// 壊さない)。
     pub fn with_rename(mut self, rename: Option<(LayerId, String)>) -> Self {
         self.rename = rename;
+        self
+    }
+
+    /// `PaneState::frame_draft()` を transport の text input へ運ぶ薄い builder。
+    pub fn with_frame_draft(mut self, draft: Option<String>) -> Self {
+        self.frame_draft = draft;
+        self
+    }
+
+    /// Graph Editor の開閉と、PaneState が持つ未確定値を表示へ運ぶ薄い builder。
+    pub fn with_graph_editor(
+        mut self,
+        open: bool,
+        drafts: [Option<String>; 4],
+    ) -> Self {
+        self.graph_editor_open = open;
+        self.graph_drafts = drafts;
         self
     }
 
@@ -432,8 +463,12 @@ impl TimelinePane {
     /// write-set 外、RETURN で報告)。
     pub fn view_with_transport(self) -> Element<'static, Message> {
         let band = transport::view(&self);
+        let graph = self.graph_editor_open.then(|| graph_editor::view(&self));
         let body = self.view();
-        iced::widget::column![band, body].into()
+        match graph {
+            Some(graph) => iced::widget::column![band, graph, body].into(),
+            None => iced::widget::column![band, body].into(),
+        }
     }
 }
 
@@ -564,6 +599,7 @@ mod scroll_tests {
             work_area: None,
             loop_enabled: false,
             rename: None,
+            frame_draft: None,
             waveforms: std::collections::HashMap::new(),
         }
     }

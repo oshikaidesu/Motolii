@@ -32,9 +32,12 @@ use motolii_store::{LayerId, PropertyId};
 pub mod layout;
 /// パネルのフォーカス/巡回状態(B25 の状態側、発注 2026-08-22)。
 pub mod focus;
+/// File メニューの最近使ったプロジェクト一覧。Document とは別の
+/// application-level な履歴で、保存されるのは path だけ。
+pub mod recent;
 
 /// front だけが持つ状態。**Document の写しは1つも入れないこと**。
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Session {
     /// 再生位置(フレーム番号)。
     pub playhead: i64,
@@ -84,7 +87,7 @@ impl Default for Session {
 /// そのため、ここでは**畳んだものだけ**を持つ(`folded: HashSet<LayerId>`) —
 /// 何も触っていない `Session::default()` は自動的に「何も畳まれていない」
 /// (=全展開)になり、既存の PNG/atlas 出力を無改造で保つ。
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TimelineFoldState {
     folded: HashSet<LayerId>,
 }
@@ -118,7 +121,7 @@ impl TimelineFoldState {
 /// (EXACT TARGET 3: 選択状態は Session、undo の対象でも Document の写しでもない)。
 /// `frame` は同一 property 内で一意(`KeyframeTrack::insert` が同時刻キーを
 /// 上書きする — `motolii-eval` 側の保証)なので、この3つ組で1本のキーを指せる。
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct KeySelector {
     pub layer: LayerId,
     pub property: PropertyId,

@@ -6,8 +6,9 @@
 //! `&mut Document` を明示引数で受け取る自由関数)・MASK section の view
 //! ([`mask_section`]/`mask_ident_row`)。
 //!
-//! **持たない**: opacity 値そのものの編集 ── [`crate::transform::
-//! TransformField::MaskOpacity`] 経由で既存の値セル文法
+//! **持たない**: opacity/expansion 値そのものの編集 ── [`crate::transform::
+//! TransformField::MaskOpacity`]/[`crate::transform::TransformField::MaskExpansion`]
+//! 経由で既存の値セル文法
 //! ([`crate::transform::transform_row`])が書くので、ここに opacity の書き口は
 //! 無い。
 
@@ -22,6 +23,18 @@ use crate::projection::MaskRowProjection;
 use crate::transform::{transform_row, FieldDraft};
 use crate::chrome::{bordered_row, flat_button_style, glyph_button_style, glyph_height};
 use crate::Message;
+
+/* motolii-component
+id = "inspector.mask_controls"
+kind = "semantic"
+weight = "core_edit"
+maps = []
+entry = ["mask_section", "cycle_inspector_mask_mode", "toggle_inspector_mask_inverted"]
+meaning = ["next_mask_mode", "masks_with_toggled_inverted"]
+evaluation = ["next_mask_mode", "masks_with_toggled_inverted"]
+render = ["mask_section", "mask_ident_row"]
+observable = ["cycling_a_mask_mode_advances_only_that_mask_and_undoes_in_one_step", "toggling_mask_inverted_flips_only_that_mask_and_undoes_in_one_step"]
+*/
 
 // ---------------------------------------------------------------------------
 // MASK section(B02 第1切片、裁定184)— mode 巡回・inverted トグルの意味と書き口。
@@ -134,7 +147,7 @@ fn apply_mask_list_edit(
 }
 
 /// MASK section: mask 1枚 = ident 行(id + mode 巡回 + Inverted トグル)+
-/// opacity 値行([`transform_row`] そのまま — 値セル/Key 列の文法を再利用)。
+/// opacity/expansion 値行([`transform_row`] そのまま — 値セル/Key 列の文法を再利用)。
 /// section header・行高・余白はすべて既存トークン([`section_header`]/
 /// [`bordered_row`])— 新しい寸法・色ロールを発明しない(裁定179/S4)。
 pub(crate) fn mask_section(
@@ -147,6 +160,7 @@ pub(crate) fn mask_section(
     for mask_row in masks {
         section = section.push(mask_ident_row(mask_row, dims, colors));
         section = section.push(transform_row(&mask_row.opacity, field_draft, dims, colors));
+        section = section.push(transform_row(&mask_row.expansion, field_draft, dims, colors));
     }
     section.into()
 }
@@ -191,4 +205,3 @@ fn mask_ident_row(
 
     bordered_row(content.into(), dims)
 }
-

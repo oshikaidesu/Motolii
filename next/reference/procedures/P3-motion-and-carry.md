@@ -62,8 +62,8 @@
 | 31 | マスクを反転(invert)する | Inspector | `ui/motolii-inspector-pane/src/mask.rs` の `toggle_inspector_mask_inverted`(`lib.rs:154` import) | 書ける |
 | 32 | マスクの不透明度を数値で変える | Inspector | `TransformField::MaskOpacity(MaskId)`(`transform.rs:63`) | 書ける |
 | 33 | マスクの不透明度にキーフレームを打つ | Inspector | `KeyRow::MaskOpacity(MaskId)`(`transform.rs` 197 台) | 書ける |
-| 34 | マスクの膨張(Expand)を数値で変える | Inspector | 【穴】入口が無い — `TransformField` に `MaskExpansion` 相当が無い(`Position/Scale/Rotation/Opacity/Anchor/MaskOpacity/EffectParam/...` のみ、`transform.rs:47-70`)。store 側の `PropertyId::mask_expansion`(`core/motolii-store/src/document.rs:89`)は書けても UI に口が無い | 【穴】入口が無い |
-| 35 | Expand を UI 経由で書けたとしても、実際にマスクが膨らんで見えることを確かめる | Stage | 【穴】意味が無い — `ResolvedMask` 構造体自身が `expansion` フィールドを持たず `resolved_masks` も読んでいない(`core/motolii-store/src/mask.rs` 冒頭「未完(次のレーンへ)」) | 【穴】意味が無い |
+| 34 | マスクの膨張(Expand)を数値で変える | Inspector | `next/ui/motolii-inspector-pane/src/mask_expansion.rs` が `MaskRowProjection.expansion` を投影し、`TransformField::MaskExpansion(MaskId)`(`transform/mod.rs`)を既存の値セル・drag・Key 列へ接続する。`committing_a_mask_expansion_draft_writes_the_expansion_track` が `PropertyId::mask_expansion` への数値書き込みを検収 | 書ける |
+| 35 | Expand を UI 経由で書けたとしても、実際にマスクが膨らんで見えることを確かめる | Stage | `StoreView::resolved_masks` が `PropertyId::mask_expansion` を `ResolvedMask.expansion` へ解決し、`next/engine/motolii-engine/src/mask.rs` が既存 vector `OpKind::OffsetPath` で輪郭を広げてから rasterize する。`mask_expansion_changes_coverage` が外側の coverage 変化を検収 | 書ける |
 | 36 | マスクを削除する | Inspector | 【未確認】— `grep -rn "RemoveMask\|DeleteMask" next/shell next/ui` = 0件。`RemoveEffect`(`inspector-pane/src/lib.rs:265`)と同型の `RemoveMask` メッセージは見当たらない。実装が本当に無いのか名前が違うだけか、grep だけでは断定できない(ビルドしない縛りのため実機確認できず) | 【未確認】 |
 
 ### E. エフェクトを足す
@@ -73,13 +73,13 @@
 | 37 | 対象レイヤーを1つ選ぶ | Timeline/Stage | (D-25 と同じ選択機構) | 書ける |
 | 38 | Effects タブの Glow カードをダブルクリックして適用する | Browser | `model.rs:468-476` `applies_to_selection: Some(SelectionAction::ApplyEffect("motolii.glow"))` → `shell/motolii-shell/src/lib.rs:1415-1416` `apply_effect_to_selected_layer` | 書ける |
 | 39 | Glow が実際に画に効くことを Stage で確かめる | Stage | `EffectPass::Glow`(`engine/motolii-compositor/src/effects/mod.rs:24-38`)が唯一の実装 effect | 書ける |
-| 40 | Glow 以外のエフェクト(Echo Bloom / Sine 等)を試す | Browser | 【穴】意味が無い — `EFFECTS_PREVIEW` の Echo Bloom(`model.rs:442-450`)・Sine(`460-467`)は `applies_to_selection: None` の飾りカード(モック)。実装済み effect 種は Glow 1つのみ | 【穴】意味が無い |
+| 40 | Glow 以外のエフェクト(Echo Bloom / Sine 等)を試す | Browser | 【対象外】— Echo Bloom/Opacity/Sine は実在 provider や compositor pass が無い mock-only 語彙なので、`EFFECTS_PREVIEW` から操作可能なカードとして除外した。実装済み provider だけを表示する | 【対象外】 |
 | 41 | エフェクトのパラメータ(強さ等)を数値で変える | Inspector | `TransformField::EffectParam(EffectId, GlowParam)`(`transform.rs:64-67`) | 書ける |
 | 42 | パラメータにキーフレームを打つ | Inspector | `KeyRow::EffectParam(EffectId, GlowParam)`(`transform.rs` 199台) | 書ける |
 | 43 | エフェクトを一時的に無効化する(bypass) | Inspector | `KeyRow::EffectEnabled(EffectId)`(`transform.rs` 200台)、`crate::effects::toggle_inspector_effect_bypass` | 書ける |
 | 44 | エフェクトを削除する | Inspector | `ui/motolii-inspector-pane/src/effects.rs:363` "Remove" ボタン → `Message::RemoveEffect(id)`(`lib.rs:265`)→ `shell/motolii-shell/src/lib.rs:2399` | 書ける |
 | 45 | 削除を Undo で戻し、パラメータも一緒に戻ることを確かめる | Inspector | `effects_section.rs:308` のテストコメントが同保証を明記 | 書ける |
-| 46 | 同じレイヤーに2つ目の違う種類のエフェクトを重ねる(例: Glow の上にもう1種) | Inspector | 【穴】意味が無い — 実装 effect 種が Glow 1つしか無いため「違う種類を重ねる」自体が現状再現不能(手順40と同根) | 【穴】意味が無い |
+| 46 | 同じレイヤーに2つ目の違う種類のエフェクトを重ねる(例: Glow の上にもう1種) | Inspector | 【対象外】— P3 の実装済み provider は Glow 1種で、未実装 provider を UI へ偽装しない。追加 provider は vism の独立コンポーネントとして、意味・評価・描画が揃う発注時に後続段階で追加する | 【対象外】 |
 
 ### F. キーフレームで動かす
 
@@ -90,10 +90,10 @@
 | 49 | Position 行のダイヤモンド(◇)をクリックして、その時刻に打点する | Inspector | `KeyRow::Position`+`toggled_key_track`(`transform.rs:330-402`、Static→insert key)、クリック Message は `lib.rs:247` `KeyPressed(KeyRow)` | 書ける |
 | 50 | ダイヤモンドが実菱形(◆)になった=打点されたことを確かめる | Inspector | `KeyCellState::AtKey`(`transform.rs:276-285`) | 書ける |
 | 51 | 次の時刻(例: +30フレーム)へ移動する | Timeline | `Message::StepPlayhead(delta)` → `nav::step_playhead`(`ui/motolii-timeline-pane/src/nav.rs:19-21`) | 書ける |
-| 52 | 特定のフレーム番号を数字で直接タイプして移動する | Timeline | 【穴】入口が無い — Timecode 表示は読み取り専用(`ui/motolii-timeline-pane/src/transport.rs:61-76,148,188`)。フレーム番号のテキスト入力欄そのものが無い(`Message::ScrubTo(i64)` はルーラーのクリック/ドラッグ駆動のみ) | 【穴】入口が無い |
+| 52 | 特定のフレーム番号を数字で直接タイプして移動する | Timeline | `transport::view` の frame `text_input` → `Message::FrameInput`/`FrameCommit` → `PaneState::commit_frame_input`。`committing_a_frame_input_moves_the_playhead` が入力途中は playhead を動かさず、Enter で確定することを検収 | 書ける |
 | 53 | Position の値を再度変えて、2つ目のキーフレームを打つ | Inspector | 手順48-49と同じ経路 | 書ける |
 | 54 | 2つのキーの間をスクラブして中間の動きを見る | Timeline/Stage | `ScrubTo`(`write.rs:42`)、evaluate は store の補間規則 | 書ける |
-| 55 | 「次のキーフレームへジャンプ」する | Timeline | 【穴】入口が無い — 実装されているのは**クリップの編集点**へのジャンプ(`Message::JumpToNextClipEdit`/`JumpToPreviousClipEdit`、`write.rs:122,125`、`keys2::clip_edit_points`)のみで、property のキーフレーム位置への専用ジャンプは無い(`grep -n "NextKeyframe\|PreviousKeyframe" write.rs` = 0件)。台帳には `Next Keyframe`(id 504)/`Previous Keyframe`(id 505)の行があり両方「採用済」表示だが、実コードは前記のクリップ編集点ジャンプしか無い — **台帳の verdict(採用の意思決定)と実装の有無が一致しない例** | 【穴】入口が無い |
+| 55 | 「次のキーフレームへジャンプ」する | Timeline | transport の Chevron 左右ボタン → `Message::JumpToPreviousKeyframe`/`JumpToNextKeyframe` → `jump_to_keyframe`。`property_rows` の表示中キーだけを `keys2::property_key_points` で集め、既存 `nearest_meaning_point` で次/前へ移動する。`jumping_to_a_property_key_moves_only_the_playhead` が検収 | 書ける |
 | 56 | キーフレームをダイヤモンドではなく、タイムライン上のマーカーとして見て、ドラッグで動かす | Timeline | `Message::KeyGrabbed{key,at_frame,retime}`/`KeyDragMoved`/`KeyDragReleased`(`write.rs:157-165`)、`start_key_drag`/`continue_key_drag`/`finish_key_drag`(`write.rs:620-631`) | 書ける |
 | 57 | Esc でドラッグ中のキー移動を取り消す | Timeline | `Message::KeyDragCancelled`(`write.rs:165`)、`cancel_key_drag` | 書ける |
 | 58 | キーフレームをキーボード(矢印キー)でフレーム単位に動かす | Timeline | `Message::NudgeKeyframe(i64)`(`write.rs:168`)→ `nudge_keyframe`(`write.rs:1614-1633`) | 書ける |
@@ -110,9 +110,9 @@
 | 64 | 「Interpolation: Linear」を選ぶ | メニュー | 同上、`Interp::Linear` | 書ける |
 | 65 | 「Interpolation: Easy Ease」を選ぶ | メニュー | 同上、`timeline_pane::EASY_EASE`(`write.rs:285`、`Interp::Bezier`プリセット) | 書ける |
 | 66 | 「Easy Ease In」/「Easy Ease Out」を選ぶ | メニュー | 同上、`write.rs:287,289` | 書ける |
-| 67 | イージングの切替をキーボードショートカットで行う | どこでも | 【穴】意味が無い — メニュー項目にショートカット未設定(`menu.rs:128-158` の doc「shortcut は未実装」)。ショートカット自体が存在しない設計状態であり、入口が塞がっているのではなく機能そのものが無い | 【穴】意味が無い |
-| 68 | ベジエカーブをグラフで見て、ハンドルをドラッグして調整する(Graph Editor) | 専用パネル | 【穴】意味が無い — Graph Editor 自体が存在しない(round2 §1 壁5)。台帳には対応行あり(id 519「Toggle between Graph Editor and layer bar modes」採用予定) | 【穴】意味が無い |
-| 69 | x1/y1/x2/y2 を数値で直接入力してベジエを調整する | Inspector | 【穴】意味が無い — 数値入力 UI 無し(5固定プリセットのみ、`write.rs:285-289` 不変) | 【穴】意味が無い |
+| 67 | イージングの切替をキーボードショートカットで行う | どこでも | `resolve_easing_shortcut` が F9→Easy Ease、Shift+F9→Easy Ease In、Cmd+Shift+F9→Easy Ease Out を既存 `SetKeyInterp` へ写す。`easing_shortcuts_select_the_three_bezier_presets` が text input 中は横取りせず、3割当が到達することを検収 | 書ける |
+| 68 | ベジエカーブをグラフで見て、ハンドルをドラッグして調整する(Graph Editor) | Timeline | `timeline/graph_editor.rs` の `GraphCanvas` が制御点を描き、press→move→release を `GraphHandleDragged` → `commit_graph_editor` へ結線する。`graph_handle_drag_updates_the_control_point` が制御値の範囲を検収 | 書ける |
+| 69 | x1/y1/x2/y2 を数値で直接入力してベジエを調整する | Timeline Graph Editor | `GraphControlInput`/`GraphCommit` が4欄を既存 `SetKeyInterp(Interp::Bezier)` へ1回で確定する。`committing_graph_control_inputs_writes_bezier` が未入力欄を保持しつつ x1/y2 を書けることを検収 | 書ける |
 
 ### H. 見て直す
 
@@ -161,12 +161,12 @@
 |---|---|---|---|---|
 | 91 | アプリを起動する | OS | 手順1と同じ | 書ける |
 | 92 | 起動直後に「先週保存したプロジェクトが自動的に開いている」ことを期待する | 起動直後 | `document_io.rs:275-310`が保存済みpathをsidecarへ書き/読み、`lib.rs:1046-1060`がboot時に`LastProjectPathRead`を発行し、`document_io.rs:553-560`がDocumentを開く | 書ける |
-| 93 | File メニューの「最近使ったファイル」一覧から選ぶ | メニュー | 【穴】意味が無い — `grep -i "Open Recent\|Recent Project\|Recent File" next/reference/normal-map.tsv` = 0件(そもそも台帳にも対応する製品コマンド行が無い)。実装側も `recent_files` 系の識別子ゼロ | 【穴】意味が無い |
+| 93 | File メニューの「最近使ったファイル」一覧から選ぶ | メニュー | `menu.rs` の `Open Recent…` → `document_io.rs` の `RecentFileSelected`、`motolii-shell-state/src/recent.rs` の bounded path list | 書ける |
 | 94 | File → Open… でファイルダイアログを開き、先週保存したファイルを選ぶ | メニュー/OSダイアログ | `menu.rs:64` `Message::OpenRequested`、`perform_open`(`lib.rs:1902-1918`)、`Document::load`(`core/motolii-store/src/persist.rs:123`) | 書ける |
 | 95 | 開いたプロジェクトが正しく復元されたこと(レイヤー・キーフレーム・マスク・エフェクト)を確かめる | Stage/Timeline/Inspector | `Document::save`/`load` の往復(裁定55/56、bezier・NTSC fps 込み) | 書ける |
-| 96 | 前回どこを見ていたか(再生ヘッド位置・選択レイヤー)が復元されることを期待する | Timeline/Inspector | 【穴】意味が無い — `perform_open`(`lib.rs:1918`)は明示的に `self.session = Session::default()` を実行する。**選択も再生ヘッド位置も毎回ゼロへ戻る**(保存もされていない。`Session` は Document の外にあり persist.rs の対象外) | 【穴】意味が無い |
+| 96 | 前回どこを見ていたか(再生ヘッド位置・選択レイヤー)が復元されることを期待する | Timeline/Inspector | `document_io.rs` の `write_front_state`/`restore_front_state` が project 隣の state sidecar に `Session` を保存・復元する | 書ける |
 | 97 | 開いた直後から新しい編集を始め、Undo が今回のセッション分だけ効くことを確かめる(前回の Undo 履歴は保存時に畳まれている) | Timeline | `Document::save` は `flattened()` で履歴を畳んでから書く(persist.rs doc)。`Document::load` 直後は `mark_undo_floor` 済みで、それ以前へは戻せない(`perform_open` doc コメント) | 書ける |
-| 98 | パネルのレイアウト(パネルの大きさ・並び)が前回のまま復元されることを期待する | 起動直後 | 【穴】意味が無い — 手順96と同根。`Session` すら保存対象外である以上、パネルレイアウトの永続化はさらに手前で存在しない(専用の永続化構造体が見つからない、`grep -rn "layout" next/ui/motolii-shell-state/src` 未実施だが `Session` が唯一の shell 状態構造体である以上、別経路は無い) | 【穴】意味が無い |
+| 98 | パネルのレイアウト(パネルの大きさ・並び)が前回のまま復元されることを期待する | 起動直後 | `pane_layout::Layout::snapshot`/`restore` と `shell-state::WorkspaceSnapshot` が pane 木・比率を project state sidecar へ保存・復元する | 書ける |
 
 ### L. 素材を別のフォルダへ動かしてしまった場合
 
@@ -174,21 +174,21 @@
 |---|---|---|---|---|
 | 99 | Finder で素材ファイルを別フォルダへ動かした後、プロジェクトを開く | OS/メニュー | 手順94と同じ open 経路 | 書ける |
 | 100 | 素材が見つからないレイヤーの Stage 表示を確かめる(エラー表示か、空白か、古いサムネイルか) | Stage | 【未確認】— `Document::load`/`Asset` のデシリアライズは `path_absolute` の実在確認をしない(`core/motolii-store/src/asset.rs`・`persist.rs` に存在チェックのコード無し)。読み込み自体はエラーにならないため**その先の描画結果(空白か既定色か)は実機でないと分からない** | 【未確認】 |
-| 101 | 「この素材が見つかりません」という理由つきの通知が出ることを期待する | どこでも | 【穴】意味が無い — `grep -rn "missing\|relink\|not found\|NotFound" --exclude-dir=target next/ui next/shell` はテスト名か無関係な doc comment のみ(素材/メディアに関する行は0件)。**「素材が欠けている」という状態そのものに名前も通知も無い**(台帳の `Find Missing Footage` はid 1393で回復コマンドとして存在するが、実装側には対応する識別子が無い) | 【穴】意味が無い |
-| 102 | メニューやツールバーから「Find Missing Footage」(素材を探し直す)を実行する | メニュー | 【穴】意味が無い — 台帳には対応行(id 1393、`採用予定`)があるが、`next/ui` `next/shell` に該当コマンドの識別子は存在しない(手順101と同じ grep 結果) | 【穴】意味が無い |
-| 103 | 素材を元の場所に手で戻して解決する(回避策) | OS | 書ける(OS のファイル操作。アプリ機能ではない。`path_absolute` が再び実在すれば次回描画時に解決される想定だが、実機未検証) | 書ける |
-| 104 | Asset の参照パスを Inspector やダイアログで直接テキスト編集して繋ぎ直す | Inspector | 【穴】入口が無い — Asset の `path_absolute`/`path_project_relative`(`core/motolii-store/src/asset.rs:69-79`)を書き換える UI 入口が見当たらない(手順101の grep と同じ範囲で0件) | 【穴】入口が無い |
+| 101 | 「この素材が見つかりません」という理由つきの通知が出ることを期待する | どこでも | `Shell::sweep_asset_status` が `AssetStatus::Missing`/`Unreadable` の件数を status 帯へ出し、Browser の `status_badge_view` がカードにも理由を表示 | 書ける |
+| 102 | メニューやツールバーから「Find Missing Footage」(素材を探し直す)を実行する | メニュー | File メニューの `Message::FindMissingFootageRequested` が欠損件数を再評価し、`FileDialogs::pick_open_path` → `Message::RelinkAssetPathChosen` へ収束 | 書ける |
+| 103 | 素材を元の場所に手で戻して解決する(回避策) | OS | 【対象外】アプリのコア責任ではない。Vism/外部素材運用の後続で扱う | 【対象外】 |
+| 104 | Asset の参照パスを Inspector やダイアログで直接テキスト編集して繋ぎ直す | メニュー/OS ダイアログ | `Intent::RelinkAsset` → `AssetTable::relink` が path だけを差し替え、AssetId・content hash・表示名を保持する。path の直接テキスト編集 UI は作らず、実体選択を正規の入口にする | 書ける |
 
 ### M. 別のマシンで開く(素材のパス・フォント)
 
 | # | 利用者は何をするか | どこで | 実装の証拠 | 判定 |
 |---|---|---|---|---|
-| 105 | プロジェクトファイル(と、素材がプロジェクトの外にあるならその素材)を USB/クラウド同期で別マシンへコピーする | OS | 書ける(OS のファイル操作。アプリ機能ではない) | 書ける |
+| 105 | プロジェクトファイル(と、素材がプロジェクトの外にあるならその素材)を USB/クラウド同期で別マシンへコピーする | OS | 【対象外】AE 型の OS/運用操作であり、アプリのコア機能としては作らない | 【対象外】 |
 | 106 | 別マシンでアプリを起動し、File → Open… でプロジェクトファイルを開く | メニュー | 手順94と同じ | 書ける |
-| 107 | 素材が project フォルダの直下にあった場合、`path_project_relative` のおかげで別マシンでも解決されることを期待する | Stage | 【未確認】— `AssetDraft::from_probed_source`(`core/motolii-store/src/asset.rs:126-152`)が `path_project_relative` を prefix 計算で埋めるのは確認できたが、**読込側がどちらの path を優先して解決を試みるか**(project-relative を実際に使う消費コードの有無)は今回の探索で特定できなかった。実機なしでは判定不能 | 【未確認】 |
-| 108 | 素材が project フォルダの外にあった場合(絶対パスのみ記録)、別マシンでは解決できないことに気づく | Stage | 【穴】意味が無い — `path_absolute` はコピー元マシンの絶対パス文字列のまま(`canonicalize` 呼び出しは無し、`grep -n "canonicalize" next/core/motolii-store/src/*.rs next/engine/motolii-media/src/*.rs` = 0件)。解決できない状態への通知が無いのは手順101と同根 | 【穴】意味が無い |
-| 109 | テキストレイヤーのフォントが別マシンに入っていないことに気づく | Inspector/Stage | 【穴】意味が無い — `find_family(family)`(`ui/motolii-font-catalog/src/lib.rs:132-133`)は見つからなければ `None` を返すだけで、これを消費して利用者へ通知する呼び手は `ui/motolii-inspector-pane/src/text.rs` のフォント選択 UI のみ(`171,329`)。**テキストの実描画経路(engine 側)がフォント未解決をどう扱うかは今回未追跡** — 少なくとも「見つからないフォントがある」という通知コマンドは0件(`grep -i "missing font" next/ui next/shell` 相当なし) | 【穴】意味が無い |
-| 110 | 「Find Missing Fonts」を実行して代替フォントを選ぶ | メニュー | 【穴】意味が無い — 台帳には対応行(id 1273、`採用予定`)があるが実装側に識別子なし(手順109と同じ範囲) | 【穴】意味が無い |
+| 107 | 素材が project フォルダの直下にあった場合、`path_project_relative` のおかげで別マシンでも解決されることを期待する | Stage | `Asset::resolve_status(project_root)` が絶対 path → project-relative の順に解決し、`source_preview` と shell の素材判定が同じ関数へ収束。実窓での別マシン相当の確認は残す | 【未確認】 |
+| 108 | 素材が project フォルダの外にあった場合(絶対パスのみ記録)、別マシンでは解決できないことに気づく | Stage | `AssetStatus::Missing`/`Unreadable` を `Shell::sweep_asset_status` が status 帯へ通知し、Browser の `status_badge_view` もカードへ理由を出す | 書ける |
+| 109 | テキストレイヤーのフォントが別マシンに入っていないことに気づく | Inspector/Stage | `rasterize_text_document` は未解決 font を明示的な `TextRenderError::Shape` にし、`Shell::refresh_frame` が `Stage を描けない: …` と status 帯へ出す。黙って空描画へ落とさない | 書ける |
+| 110 | 「Find Missing Fonts」を実行して代替フォントを選ぶ | メニュー | 【対象外】コア編集ではない。代替フォント/フォント素材の管理は Vism の後続で扱う | 【対象外】 |
 | 111 | 手動でフォントファミリーを別のものに差し替える | Inspector | 書ける — `ui/motolii-inspector-pane/src/text.rs:171` フォント選択欄が `find_family` で候補を引く。差し替え自体はテキスト編集操作として通る(見つからない事への気づき方が無いだけで、差し替え操作自体はある) | 書ける |
 
 ### N. 誰かにプロジェクトごと渡す
@@ -196,10 +196,10 @@
 | # | 利用者は何をするか | どこで | 実装の証拠 | 判定 |
 |---|---|---|---|---|
 | 112 | プロジェクトファイルと素材フォルダを手でまとめて相手に送る(zip 化・クラウド共有等) | OS | 書ける(OS のファイル操作。アプリ機能ではない) | 書ける |
-| 113 | 「依存ファイルを収集する」機能(Collect Files 相当)でアプリに自動でまとめてもらう | メニュー | 【穴】意味が無い — 台帳には対応行(id 526「Collect Files…」、`採用予定`)があるが `grep -rln "collect_files\|CollectFiles\|package_for\|PackageProject" --exclude-dir=target next/` = 0件、実装ゼロ | 【穴】意味が無い |
-| 114 | フォントも一緒に埋め込んで渡す | メニュー | 【穴】意味が無い — フォントは family 名参照のみで埋め込み経路が無い(手順109と同根)。台帳にも対応する「フォント埋め込み」行は見当たらない(埋め込みは Find Missing Fonts=回復コマンドとは別概念) | 【穴】意味が無い |
+| 113 | 「依存ファイルを収集する」機能(Collect Files 相当)でアプリに自動でまとめてもらう | メニュー | File メニューの `Message::CollectFilesRequested` → `collect_project_files` が複製 Document を作り、存在する素材を package 隣の `media/` へコピーして複製側だけ `RelinkAsset` する。現在の作品は変更しない | 書ける |
+| 114 | フォントも一緒に埋め込んで渡す | メニュー | 【対象外】フォント埋め込みはコア編集ではない。フォント素材の配布・代替管理は Vism の後続で扱う | 【対象外】 |
 | 115 | 相手が別マシンで開き、素材/フォントが解決できないことに個別に気づいて手で直す | 相手側 | 手順108-111 の繰り返し(同じ穴を相手側でも踏む。個々の操作自体は開通するので手順としては書ける) | 書ける |
-| 116 | 相手にプロジェクトの「意味の正本」を渡せたことを機械的に確認する手段(チェックサム・バージョン番号の一致確認等)を探す | どこでも | 【穴】意味が無い — そのような検証機能は見当たらない(`grep -rn "checksum\|integrity" next/core/motolii-store/src` 未実施だが、persist.rs の doc に類する記述は無し)。渡した後の整合性確認は利用者の目視のみ | 【穴】意味が無い |
+| 116 | 相手にプロジェクトの「意味の正本」を渡せたことを機械的に確認する手段(チェックサム・バージョン番号の一致確認等)を探す | どこでも | 【対象外】受け渡し後の整合性検証はコア編集ではなく、配布/CI の責任。Collect Files は収集結果と未収集件数を status 帯へ出すところまでを担う | 【対象外】 |
 
 ---
 

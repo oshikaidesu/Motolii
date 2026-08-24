@@ -3934,6 +3934,7 @@ dependencies = [
  "motolii-tokens-rs",
  "motolii-vector",
  "rfd",
+ "serde_json",
 ]
 
 [[package]]

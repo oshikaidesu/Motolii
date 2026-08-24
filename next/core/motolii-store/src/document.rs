@@ -222,6 +222,14 @@ pub enum Intent {
     RemoveAsset {
         asset: crate::AssetId,
     },
+    /// 欠損素材の実体だけを別 path へ繋ぎ直す。AssetId・content hash・表示名は
+    /// 保持し、layer が指す台帳の身分を変えない。project root は相対 path を
+    /// 再計算するための一時的な環境情報で、Document の保存内容には入らない。
+    RelinkAsset {
+        asset: crate::AssetId,
+        path_absolute: String,
+        project_root: Option<String>,
+    },
     /// **freeze 意図動詞**(裁定119、G1 に続く「意図優先の原則」の実装束)。
     /// `group` を指す `LayerAttrs.frozen` を `true` にする。`group` は present な
     /// `LayerSource::Group` layer でなければならない(そうでなければ理由つき `Err`)。

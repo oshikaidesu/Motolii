@@ -185,7 +185,7 @@ impl<'a> StoreView<'a> {
         Ok(Some(document))
     }
 
-    /// comp 時刻でのマスク。形状も不透明度も普通の property track から取る。
+    /// comp 時刻でのマスク。形状・不透明度・膨張を普通の property track から取る。
     ///
     /// **裁定214**: mode/inverted も track で上書きできる — track が無ければ静的
     /// [`Mask::mode`]/[`Mask::inverted`] が既定値(`resolved_blend_mode` と同じ
@@ -256,10 +256,29 @@ impl<'a> StoreView<'a> {
                 None => 1.0,
             };
 
+            let expansion_property = PropertyId::mask_expansion(mask.id);
+            let expansion = match self.value_at(layer, &expansion_property, t)? {
+                Some(Value::F64(v)) if v.is_finite() => v,
+                Some(Value::F64(v)) => {
+                    return Err(StoreError::Property(format!(
+                        "マスク {} の膨張に有限でない値が入っている: {v}",
+                        mask.id
+                    )))
+                }
+                Some(other) => {
+                    return Err(StoreError::Property(format!(
+                        "マスク {} の膨張に数値でない値が入っている: {other:?}",
+                        mask.id
+                    )))
+                }
+                None => 0.0,
+            };
+
             out.push(ResolvedMask {
                 mode,
                 inverted,
                 opacity: opacity.clamp(0.0, 1.0),
+                expansion,
                 shape,
             });
         }

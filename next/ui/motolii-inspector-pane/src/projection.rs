@@ -166,6 +166,8 @@ pub struct MaskRowProjection {
     /// `mask.{id}.opacity` track の値行(label="Opacity"・decimals=0・% 表示 —
     /// layer Opacity 行と同じ形)。Key 列は [`KeyRow::MaskOpacity`]。
     pub opacity: TransformRowProjection,
+    /// `mask.{id}.expansion` track の値行。正で外側、負で内側。
+    pub expansion: TransformRowProjection,
 }
 
 /// 「別レイヤーを指す」pick_list の1候補(2026-08-22 発注)。**id で区別でき、
@@ -769,6 +771,14 @@ pub fn project(
                     state,
                 },
             },
+            expansion: crate::mask_expansion::project_mask_expansion(
+                store,
+                layer,
+                mask.id,
+                t,
+                session,
+                composition.fps,
+            )?,
         });
     }
 

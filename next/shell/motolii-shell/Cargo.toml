@@ -90,6 +90,9 @@ motolii-export.workspace = true
 # に alias が無い(この波で初めて shell から使う)ので path 依存で足す —
 # workspace の Cargo.toml(EXACT TARGET 外)は触らない。
 motolii-export-pane = { path = "../../ui/motolii-export-pane" }
+# Project ごとの front-state/recent-files sidecar。Document の persist 経路とは
+# 分離した UI 状態の JSON 境界でだけ使う。
+serde_json.workspace = true
 
 [dev-dependencies]
 motolii-testkit.workspace = true

@@ -50,7 +50,9 @@ fn drag_step_per_pixel(field: TransformField) -> f64 {
         // 1px=1.0 では数 px で意味域を振り切る、Scale と同じ理由)。
         TransformField::EffectParam(_, _) => 0.01,
         // mask opacity は layer Opacity と同じ感度(0〜100% が 100px で動く)。
-        TransformField::Opacity | TransformField::MaskOpacity(_) => 1.0,
+        TransformField::Opacity
+        | TransformField::MaskOpacity(_)
+        | TransformField::MaskExpansion(_) => 1.0,
         // Level は Opacity と同じ感度(% 表示、100px で100%動く)。
         TransformField::Level => 1.0,
         // Pan は Scale と同じ微調整域(-1..1 の全域が100pxで動く)。
@@ -145,6 +147,9 @@ pub fn field_input_id(field: TransformField) -> iced::widget::Id {
     if let TransformField::MaskOpacity(mask) = field {
         return iced::widget::Id::from(format!("inspector-field-mask-{mask}-opacity"));
     }
+    if let TransformField::MaskExpansion(mask) = field {
+        return iced::widget::Id::from(format!("inspector-field-mask-{mask}-expansion"));
+    }
     if let TransformField::EffectParam(effect, param) = field {
         return iced::widget::Id::from(format!(
             "inspector-field-effect-{effect}-{}",
@@ -165,7 +170,9 @@ pub fn field_input_id(field: TransformField) -> iced::widget::Id {
         TransformField::Pan => "inspector-field-pan",
         TransformField::FadeIn => "inspector-field-fade-in",
         TransformField::FadeOut => "inspector-field-fade-out",
-        TransformField::MaskOpacity(_) | TransformField::EffectParam(_, _) => {
+        TransformField::MaskOpacity(_)
+        | TransformField::MaskExpansion(_)
+        | TransformField::EffectParam(_, _) => {
             unreachable!("上の early return が拾う")
         }
     };
@@ -502,4 +509,3 @@ pub(crate) fn transform_row(
     // (裁定179 文法1)が上書き — 罫線なし([`row_band_style`] doc 参照)。
     bordered_row(content.into(), dims)
 }
-

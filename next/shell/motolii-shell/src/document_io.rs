@@ -1,14 +1,89 @@
 
 use iced::Task;
 
-use motolii_store::{
-    Composition, Document, Intent,
-};
+use motolii_store::{Asset, AssetStatus, Composition, Document, Intent};
+use motolii_shell_state::layout::WorkspaceSnapshot;
 
 use crate::tokens::Tokens;
 use crate::{
-    file_dialogs, metrics, Message, Session, Shell,
+    file_dialogs, metrics, Message, RecentFiles, Session, Shell,
 };
+
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+struct FrontState {
+    session: Session,
+    panes: WorkspaceSnapshot,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use motolii_shell_state::focus::PaneKind;
+    use motolii_shell_state::layout::LayoutNode;
+
+    fn front_state() -> FrontState {
+        FrontState {
+            session: Session { playhead: 27, ..Session::default() },
+            panes: WorkspaceSnapshot {
+                open: false,
+                root: LayoutNode::Leaf { kind: PaneKind::Timeline, hidden: false },
+            },
+        }
+    }
+
+    #[test]
+    fn front_state_round_trips_through_json() {
+        let state = front_state();
+        let json = serde_json::to_vec(&state).expect("front state serialize");
+        let restored: FrontState = serde_json::from_slice(&json).expect("front state deserialize");
+        assert_eq!(restored.session.playhead, 27);
+        assert_eq!(restored.panes.open, false);
+    }
+
+    #[test]
+    fn restoring_front_state_keeps_the_playhead() {
+        let state = front_state();
+        let json = serde_json::to_vec(&state).expect("front state serialize");
+        let restored: FrontState = serde_json::from_slice(&json).expect("front state deserialize");
+        assert_eq!(restored.session.playhead, state.session.playhead);
+    }
+}
+
+/* motolii-component
+id = "shell.project_session_reopen"
+kind = "semantic"
+weight = "core_edit"
+maps = []
+entry = ["write_front_state", "restore_front_state"]
+meaning = ["LastProjectPathRead", "OpenPathChosen", "QuitConfirmed"]
+evaluation = ["front_state_round_trips_through_json", "restoring_front_state_keeps_the_playhead"]
+render = ["TimelinePane", "pane_grid::PaneGrid"]
+observable = ["front_state_round_trips_through_json"]
+*/
+
+/* motolii-component
+id = "shell.find_missing_footage"
+kind = "semantic"
+weight = "core_edit"
+maps = []
+entry = ["FindMissingFootageRequested", "relink_asset_path"]
+meaning = ["RelinkAssetPathChosen", "RelinkAsset"]
+evaluation = ["sweep_asset_status", "relinking_a_missing_asset_makes_it_present"]
+render = ["AssetStatus", "AssetListItem"]
+observable = ["RelinkAssetPathChosen"]
+*/
+
+/* motolii-component
+id = "shell.collect_project_files"
+kind = "semantic"
+weight = "core_edit"
+maps = []
+entry = ["CollectFilesRequested", "collect_project_files"]
+meaning = ["CollectFilesPathChosen", "RelinkAsset"]
+evaluation = ["collect_project_files"]
+render = ["status", "AssetStatus"]
+observable = ["CollectFilesPathChosen"]
+*/
 
 impl Shell {
 
@@ -130,6 +205,9 @@ impl Shell {
                 // ように、成功した path を sidecar へ書く(ベストエフォート ──
                 // 書けなくても保存自体は成功しているので失敗させない)。
                 Self::write_last_project_path(&path);
+                self.recent_files.remember(path.clone());
+                self.write_front_state();
+                Self::write_recent_files(&self.recent_files);
             }
             // 拒否は必ず出す。黙って消さない(M13 と同じ規律)。
             Err(error) => self.status = Some(format!("保存できない: {error}")),
@@ -164,6 +242,9 @@ impl Shell {
                 self.doc = doc;
                 self.current_path = Some(path.clone());
                 self.session = Session::default();
+                self.restore_front_state(&path);
+                self.recent_files.remember(path.clone());
+                Self::write_recent_files(&self.recent_files);
                 // C-1 波C「再起動で続きが開く」: 明示 Open でも sidecar を
                 // 更新する(次回起動時にこの project を再度開く)。
                 Self::write_last_project_path(&path);
@@ -200,6 +281,157 @@ impl Shell {
                 (asset.id, status)
             })
             .collect();
+        let missing = self
+            .asset_status
+            .values()
+            .filter(|status| matches!(status, AssetStatus::Missing))
+            .count();
+        let unreadable = self
+            .asset_status
+            .values()
+            .filter(|status| matches!(status, AssetStatus::Unreadable { .. }))
+            .count();
+        if missing > 0 || unreadable > 0 {
+            self.status = Some(format!(
+                "不足素材: {missing}件、読み取り不可: {unreadable}件"
+            ));
+        }
+    }
+
+    /// 欠損素材を1件ずつ、選択した実体へ繋ぎ直す。ID/content hash は
+    /// `Intent::RelinkAsset` が保持し、shell は path 選択と環境状態の再評価だけを担う。
+    pub(crate) fn relink_asset_path(
+        &mut self,
+        asset: motolii_store::AssetId,
+        path: std::path::PathBuf,
+    ) {
+        let path = match std::fs::canonicalize(&path) {
+            Ok(path) if path.is_file() => path,
+            Ok(_) => {
+                self.status = Some(format!("素材ファイルではありません: {}", path.display()));
+                return;
+            }
+            Err(error) => {
+                self.status = Some(format!("素材を読み取れない: {error}"));
+                return;
+            }
+        };
+        let project_root = self
+            .current_path
+            .as_ref()
+            .and_then(|project| project.parent())
+            .and_then(|root| std::fs::canonicalize(root).ok());
+        let result = self.doc.apply(Intent::RelinkAsset {
+            asset,
+            path_absolute: Asset::normalize_path(&path.to_string_lossy()),
+            project_root: project_root
+                .as_deref()
+                .map(|root| Asset::normalize_path(&root.to_string_lossy())),
+        });
+        match result {
+            Ok(()) => {
+                self.sweep_asset_status();
+                self.status = Some(format!("素材を繋ぎ直しました: {}", path.display()));
+            }
+            Err(error) => self.status = Some(format!("素材を繋ぎ直せない: {error}")),
+        }
+    }
+
+    /// 現在の作品を package 用の Document へ複製し、存在する file-backed 素材だけを
+    /// package 隣の `media/` へ集める。**現在の `self.doc` は書き換えない**ため、
+    /// Collect Files は Save As ではなく配布用の副産物を作る操作になる。
+    pub(crate) fn collect_project_files(&mut self, package_path: std::path::PathBuf) {
+        let parent = package_path
+            .parent()
+            .filter(|path| !path.as_os_str().is_empty())
+            .unwrap_or_else(|| std::path::Path::new("."));
+        if let Err(error) = std::fs::create_dir_all(parent) {
+            self.status = Some(format!("収集先を作れない: {error}"));
+            return;
+        }
+        let package_root = std::fs::canonicalize(parent).unwrap_or_else(|_| parent.to_path_buf());
+        let media_dir = package_root.join("media");
+        if let Err(error) = std::fs::create_dir_all(&media_dir) {
+            self.status = Some(format!("収集先 media を作れない: {error}"));
+            return;
+        }
+
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|duration| duration.as_nanos())
+            .unwrap_or_default();
+        let temporary = std::env::temp_dir().join(format!(
+            "motolii-collect-{}-{stamp}.rrd",
+            std::process::id()
+        ));
+        if let Err(error) = self.doc.save(&temporary) {
+            self.status = Some(format!("収集用の複製を作れない: {error}"));
+            return;
+        }
+        let mut package = match Document::load(&temporary) {
+            Ok(document) => document,
+            Err(error) => {
+                let _ = std::fs::remove_file(&temporary);
+                self.status = Some(format!("収集用の複製を読めない: {error}"));
+                return;
+            }
+        };
+        let source_root = self
+            .current_path
+            .as_ref()
+            .and_then(|project| project.parent())
+            .and_then(|root| std::fs::canonicalize(root).ok());
+        let assets = package.view().assets().unwrap_or_default();
+        let mut collected = 0usize;
+        let mut skipped = 0usize;
+        for asset in assets {
+            let resolved = match asset.resolve_status(source_root.as_deref()) {
+                motolii_store::AssetStatus::Present { resolved_path } => {
+                    std::path::PathBuf::from(resolved_path)
+                }
+                _ => {
+                    skipped += 1;
+                    continue;
+                }
+            };
+            let file_name = asset
+                .file_name
+                .clone()
+                .unwrap_or_else(|| format!("asset-{}.bin", asset.id));
+            let destination = media_dir.join(format!("{}-{file_name}", asset.id));
+            if let Err(error) = std::fs::copy(&resolved, &destination) {
+                skipped += 1;
+                self.status = Some(format!("素材を収集できない: {error}"));
+                continue;
+            }
+            if let Err(error) = package.apply(Intent::RelinkAsset {
+                asset: asset.id,
+                path_absolute: Asset::normalize_path(&destination.to_string_lossy()),
+                project_root: Some(Asset::normalize_path(&package_root.to_string_lossy())),
+            }) {
+                let _ = std::fs::remove_file(&destination);
+                skipped += 1;
+                self.status = Some(format!("収集した素材を繋ぎ直せない: {error}"));
+                continue;
+            }
+            collected += 1;
+        }
+        let result = package.save(&package_path);
+        let _ = std::fs::remove_file(&temporary);
+        match result {
+            Ok(()) => {
+                self.status = Some(format!(
+                    "素材を収集しました: {collected}件{} — {}",
+                    if skipped == 0 {
+                        String::new()
+                    } else {
+                        format!(", 未収集 {skipped}件")
+                    },
+                    package_path.display()
+                ));
+            }
+            Err(error) => self.status = Some(format!("収集した project を保存できない: {error}")),
+        }
     }
 
     // ---- AUTOSAVE(SET+ B12 第2切片、shell 結線) ----
@@ -287,6 +519,53 @@ impl Shell {
 
     fn last_project_sidecar_path() -> Option<std::path::PathBuf> {
         Some(Self::user_settings_dir()?.join("last_project.txt"))
+    }
+
+    fn recent_files_sidecar_path() -> Option<std::path::PathBuf> {
+        Some(Self::user_settings_dir()?.join("recent_projects.json"))
+    }
+
+    fn front_state_sidecar_path(project: &std::path::Path) -> std::path::PathBuf {
+        project.with_extension("motolii-state.json")
+    }
+
+    /// Session と pane 木を project ごとの sidecar へ保存する。Document の
+    /// flatten/save とは別の経路で、undo や作品の内容へ混ぜない。
+    pub(crate) fn write_front_state(&self) {
+        let Some(project) = self.current_path.as_deref() else { return };
+        let Some(panes) = self.panes.snapshot() else { return };
+        let state = FrontState { session: self.session.clone(), panes };
+        let Ok(json) = serde_json::to_vec_pretty(&state) else { return };
+        let _ = std::fs::write(Self::front_state_sidecar_path(project), json);
+    }
+
+    /// project sidecar を読み戻す。壊れた/古い sidecar は project 本体を
+    /// 開くことを妨げず、Session と既定 pane のまま続ける。
+    pub(crate) fn restore_front_state(&mut self, project: &std::path::Path) {
+        let Ok(bytes) = std::fs::read(Self::front_state_sidecar_path(project)) else { return };
+        let Ok(state) = serde_json::from_slice::<FrontState>(&bytes) else { return };
+        let FrontState { session, panes } = state;
+        self.session = session;
+        if panes.open != self.browser.is_open() {
+            self.browser.update(crate::browser_pane::Message::ToggleBrowserPanel);
+        }
+        let _ = self.panes.restore(&panes);
+    }
+
+    pub(crate) fn read_recent_files() -> Option<RecentFiles> {
+        let path = Self::recent_files_sidecar_path()?;
+        let bytes = std::fs::read(path).ok()?;
+        let mut recent = serde_json::from_slice::<RecentFiles>(&bytes).ok()?;
+        recent.remove_missing();
+        Some(recent)
+    }
+
+    pub(crate) fn write_recent_files(recent: &RecentFiles) {
+        let Some(path) = Self::recent_files_sidecar_path() else { return };
+        let Some(dir) = path.parent() else { return };
+        let _ = std::fs::create_dir_all(dir);
+        let Ok(json) = serde_json::to_vec_pretty(recent) else { return };
+        let _ = std::fs::write(path, json);
     }
 
     /// 直近に保存/開いた project の path を sidecar へ記録する
@@ -536,14 +815,74 @@ impl Shell {
             Message::SaveACopyPathChosen(Some(path)) => self.perform_save_a_copy(path),
             Message::SaveACopyPathChosen(None) => {}
             Message::OpenRequested => task = self.confirm_then_pick_open(),
+            Message::OpenRecentRequested => self.recent_menu_open = !self.recent_menu_open,
+            Message::RecentFileSelected(index) => {
+                self.recent_menu_open = false;
+                self.pending_recent_path = self.recent_files.path(index).map(std::path::Path::to_path_buf);
+                if self.pending_recent_path.is_some() {
+                    task = self.confirm_then(Message::RecentFileConfirmed);
+                }
+            }
+            Message::RecentFileConfirmed(confirmed) => {
+                if confirmed {
+                    if let Some(path) = self.pending_recent_path.take() {
+                        self.perform_open(path);
+                    }
+                } else {
+                    self.pending_recent_path = None;
+                }
+            }
             Message::OpenPathChosen(Some(path)) => self.perform_open(path),
             Message::OpenPathChosen(None) => {}
+            Message::RecentFilesLoaded(recent) => {
+                if let Some(recent) = recent {
+                    self.recent_files = recent;
+                }
+            }
+            Message::FindMissingFootageRequested => {
+                self.sweep_asset_status();
+                let missing: Vec<_> = self
+                    .asset_status
+                    .iter()
+                    .filter(|(_, status)| matches!(status, AssetStatus::Missing))
+                    .map(|(asset, _)| *asset)
+                    .collect();
+                let mut missing = missing;
+                missing.sort_unstable();
+                if let Some(asset) = missing.first().copied() {
+                    self.pending_relink_asset = Some(asset);
+                    self.status = Some(format!(
+                        "不足素材 {}件。繋ぎ直すファイルを選択してください",
+                        missing.len()
+                    ));
+                    task = Task::perform(
+                        self.dialogs.pick_open_path(),
+                        Message::RelinkAssetPathChosen,
+                    );
+                } else {
+                    self.status = Some("不足素材はありません".to_owned());
+                }
+            }
+            Message::RelinkAssetPathChosen(Some(path)) => {
+                if let Some(asset) = self.pending_relink_asset.take() {
+                    self.relink_asset_path(asset, path);
+                }
+            }
+            Message::RelinkAssetPathChosen(None) => {
+                self.pending_relink_asset = None;
+            }
+            Message::CollectFilesRequested => {
+                task = Task::perform(self.dialogs.pick_save_path(), Message::CollectFilesPathChosen);
+            }
+            Message::CollectFilesPathChosen(Some(path)) => self.collect_project_files(path),
+            Message::CollectFilesPathChosen(None) => {}
             Message::ImportMediaRequested => {
                 task = Task::perform(self.dialogs.pick_import_paths(), Message::AdmitPaths);
             }
             Message::QuitRequested => task = self.confirm_then(Message::QuitConfirmed),
             Message::QuitConfirmed(confirmed) => {
                 if confirmed {
+                    self.write_front_state();
                     self.dialogs.quit();
                 }
             }
@@ -557,6 +896,7 @@ impl Shell {
             }
             Message::WindowCloseConfirmed(confirmed) => {
                 if confirmed {
+                    self.write_front_state();
                     task = iced::exit();
                 }
                 // false: 何もしない。main 窓は `exit_on_close_request: false`
@@ -571,6 +911,10 @@ impl Shell {
                         self.doc = doc;
                         self.current_path = Some(path.clone());
                         self.session = Session::default();
+                        self.restore_front_state(&path);
+                        self.recent_files.remember(path.clone());
+                        Self::write_recent_files(&self.recent_files);
+                        self.sweep_asset_status();
                     }
                     // 拒否は必ず出す(M13)。既定 Document のまま起動を続ける
                     // ── 黙って上書きしない/黙って落とさない、どちらも避ける。

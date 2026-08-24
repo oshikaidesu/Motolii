@@ -65,6 +65,17 @@ pub fn menus() -> Vec<Menu<Message>> {
                 // Cmd+O 教訓どおり、既に Cmd+O は空いているが出典が無い限り
                 // 埋めない)。
                 Item { label: "Open…", shortcut: None, message: Message::OpenRequested },
+                Item { label: "Open Recent…", shortcut: None, message: Message::OpenRecentRequested },
+                Item {
+                    label: "Find Missing Footage…",
+                    shortcut: None,
+                    message: Message::FindMissingFootageRequested,
+                },
+                Item {
+                    label: "Collect Files…",
+                    shortcut: None,
+                    message: Message::CollectFilesRequested,
+                },
                 // C-1 波C(id 1224、A06「明示 Save が存在しない」の穴を塞ぐ)。
                 // Cmd+S のキーボード入口も `input.rs` に同じ Message で揃える。
                 Item { label: "Save", shortcut: Some("Cmd+S"), message: Message::SaveRequested },

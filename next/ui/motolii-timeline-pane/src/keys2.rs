@@ -241,6 +241,13 @@ pub fn clip_edit_points(rows: &[RowProjection]) -> Vec<i64> {
     out
 }
 
+/// 表示中 property 行のキーフレーム時刻を、既存の意味点ナビゲータへ渡す
+/// 列へ写す。property 行は選択 layer のキーを持つ行だけなので、ここで別の
+/// Document 走査や「見えていない layer」の混入を行わない。
+pub fn property_key_points(rows: &[PropertyRowProjection]) -> Vec<i64> {
+    rows.iter().flat_map(|row| row.keys.iter().map(|key| key.frame)).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -412,5 +419,19 @@ mod tests {
     #[test]
     fn clip_edit_points_of_no_rows_is_empty() {
         assert!(clip_edit_points(&[]).is_empty());
+    }
+
+    #[test]
+    fn property_key_points_flattens_visible_property_rows() {
+        let property = motolii_store::PropertyId::new("opacity").expect("opacity は予約語ではない");
+        let rows = vec![PropertyRowProjection {
+            layer: LayerId(1),
+            property,
+            keys: vec![
+                PropertyKeyProjection { frame: 30, selected: false },
+                PropertyKeyProjection { frame: 90, selected: true },
+            ],
+        }];
+        assert_eq!(property_key_points(&rows), vec![30, 90]);
     }
 }

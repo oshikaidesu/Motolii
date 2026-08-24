@@ -164,7 +164,6 @@ impl MaskPathEditOverlay {
         self.observation
             .map(observation_as_resolved)
             .unwrap_or(self.render_camera)
-            .unwrap_or(self.render_camera)
     }
 
     fn screen_from_comp(&self, bounds: Rectangle) -> Option<Affine2> {

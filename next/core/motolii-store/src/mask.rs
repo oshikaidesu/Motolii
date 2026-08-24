@@ -45,12 +45,8 @@
 //! 表す(裁定20)。キーを打っていない場合の読み戻しは `0.0` = 無効、AE の新規マスクの
 //! 既定と同型。
 //!
-//! **未完(次のレーンへ)**: [`ResolvedMask`] はまだ expansion を運ばない —
-//! `crate::view::StoreView::resolved_masks` が読むのは今も shape/opacity だけなので、
-//! `Intent::SetTrack` で書いた値は保存・undo・読み出し(`StoreView::value_at`)は効くが、
-//! 描画(compositor)へはまだ渡らない。実際にマスクを広げる幾何演算(パスのオフセット)を
-//! 持つのは compositor/engine 側の仕事で、この発注の範囲外(EXACT TARGET が
-//! `mask.rs`/`attrs.rs`/`document.rs` のみだったため、`view.rs` は意図して触っていない)。
+//! `ResolvedMask::expansion` へ解決され、engine が vector の `OffsetPath` として消費する。
+//! これにより「書けるが見た目は変わらない」中間状態を残さない。
 
 use serde::{Deserialize, Serialize};
 
@@ -166,18 +162,14 @@ pub struct Mask {
 }
 
 /// ある comp 時刻に解決済みのマスク。**描く側が要るのはこれだけ**。
-///
-/// **expansion をまだ持たない**(2026-08-22 時点)。`PropertyId::mask_expansion` の
-/// track は書ける・読める・保存できるが、`StoreView::resolved_masks` がまだこれを
-/// 引いていないので、ここには現れない。実際にマスクを広げる幾何演算を持つのは
-/// compositor/engine 側の仕事で、そちらが実装される回にこの struct へフィールドを足し、
-/// `resolved_masks` を対応させる(本ファイル冒頭の節参照)。
 #[derive(Clone, Debug, PartialEq)]
 pub struct ResolvedMask {
     pub mode: MaskMode,
     pub inverted: bool,
     /// 0.0–1.0。比であってパーセントではない。
     pub opacity: f32,
+    /// パスの外側(正)・内側(負)へのオフセット量。`0.0` は恒等。
+    pub expansion: f64,
     pub shape: motolii_eval::Path,
 }
 

@@ -285,6 +285,11 @@ impl Shell {
                     .rename_draft()
                     .map(|(layer, draft)| (layer, draft.to_owned())),
             )
+            .with_frame_draft(self.timeline.frame_draft().map(str::to_owned))
+            .with_graph_editor(
+                self.timeline.graph_editor_open(),
+                self.timeline.graph_editor_drafts(),
+            )
             // 波形取得状態(TL7 統合手順3、S2 発注 #17「shell 側の呼び出し
             // 経路が無い」の穴埋め)。`self.timeline.waveforms()` を
             // `with_rename` と同じ「薄い builder で読み取り専用に運ぶだけ」

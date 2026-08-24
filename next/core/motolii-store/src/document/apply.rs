@@ -487,6 +487,30 @@ impl Document {
                     }],
                 )
             }
+            Intent::RelinkAsset {
+                asset,
+                path_absolute,
+                project_root,
+            } => {
+                let mut table = self.view().assets_table()?;
+                let path = std::path::Path::new(&path_absolute);
+                table
+                    .relink(
+                        asset,
+                        path,
+                        project_root.as_deref().map(std::path::Path::new),
+                    )
+                    .map_err(|e| StoreError::Property(e.to_string()))?;
+                let json = serde_json::to_string(&table)?;
+                (
+                    Self::composition_path(),
+                    vec![SerializedComponentBatch {
+                        descriptor: descriptor_assets(),
+                        array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
+                            .map_err(|e| StoreError::Chunk(e.to_string()))?,
+                    }],
+                )
+            }
             Intent::Freeze { group } => {
                 check_not_locked(&self.view(), group)?;
                 check_not_frozen(&self.view(), group)?;

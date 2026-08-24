@@ -14,3 +14,4 @@ mod rename;
 mod restack;
 mod reverse_selected_keys;
 mod waveform;
+mod keyframe_navigation;

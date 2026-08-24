@@ -471,8 +471,8 @@ fn masks_survive_a_save_and_load_round_trip() {
 
 /// 膨張は shape/opacity と同じ **property track**(B02、2026-08-22、Lottie
 /// `helpers/mask/x`)。キーを打っていない = 既定 0(無効)。`Mask` struct には
-/// フィールドを足していないので、これは `value_at` を直接読んで確かめる
-/// (`ResolvedMask` はまだ運ばない — `crate::mask` 冒頭の節参照)。
+/// フィールドを足していないので、静的な `Mask` ではなく解決済み property を
+/// 直接読んで確かめる(`ResolvedMask` へは resolve 時に既定0として運ばれる)。
 #[test]
 fn mask_expansion_defaults_to_zero_until_a_track_is_written() {
     let (mut doc, layer) = doc_with_layer();
@@ -638,9 +638,10 @@ fn documents_saved_before_expansion_existed_still_load() {
         None,
         "旧保存に無い track が読み込みで生えてはいけない(既定は resolve 側が 0 として扱う)"
     );
-    // resolve 自体は shape/opacity だけを見るので、expansion が無くても壊れない。
+    // resolve された expansion も既定0で保持される。
     let resolved = loaded.view().resolve(layer, t(0)).unwrap().expect("居る");
     assert_eq!(resolved.masks[0].shape.vertices[0].point[0], 4.0);
+    assert_eq!(resolved.masks[0].expansion, 0.0);
 }
 
 /// マスクの expansion 編集も `edit` timeline 上の普通の刻み。

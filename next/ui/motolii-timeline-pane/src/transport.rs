@@ -31,7 +31,7 @@
 //! 節(導出根拠は同 JSON の `_note_*` — 帯高 = Ableton Control Bar 実測30の
 //! 同源転写、gap = 裁定167 梯子下段 0.075×帯高)。
 
-use iced::widget::{button, container, row, text, Space};
+use iced::widget::{button, container, row, text, text_input, Space};
 use iced::{Background, Element, Length};
 
 use motolii_icons::{frame_px_for_glyph_px, Icon};
@@ -40,6 +40,18 @@ use motolii_store::Fps;
 use super::TimelinePane;
 use crate::tokens::{Colors, Dimensions};
 use crate::Message;
+
+/* motolii-component
+id = "timeline.transport_navigation"
+kind = "semantic"
+weight = "core_edit"
+maps = []
+entry = ["transport_spec_with_frame_draft", "commit_frame_input", "jump_to_keyframe"]
+meaning = ["FrameInput", "JumpToNextKeyframe", "JumpToPreviousKeyframe"]
+evaluation = ["parse_frame_input", "property_key_points", "nearest_meaning_point"]
+render = ["transport_spec", "view"]
+observable = ["committing_a_frame_input_moves_the_playhead", "jumping_to_a_property_key_moves_only_the_playhead"]
+*/
 
 /// transport の1ボタンぶんの宣言(絵と意味の対応表)。[`view`] はこの spec を
 /// widget へ写すだけ — テストは widget 木ではなくこの spec を検分する
@@ -71,6 +83,9 @@ pub struct TransportSpec {
     /// 不在で [`Icon::Redo`] を暫定の顔にしていたが、第5波 shell 結線で
     /// vendoring が届いたのでここ1箇所を差し替えた(RETURN 要求の消化)。
     pub loop_button: TransportButton,
+    /// 表示中 property の次/前キーへ渡る2つの押し口。先頭/末尾とは別の
+    /// 意味なので、既存の5ボタン配列へ混ぜずに分ける。
+    pub keyframe_buttons: [TransportButton; 2],
     /// Timecode のフレーム番号部(等幅で描く数字部)。
     pub frames: String,
     /// Timecode の秒部(小数2桁)。comp が無く fps を引けない時は `None` —
@@ -117,9 +132,37 @@ pub fn transport_spec(playhead: i64, fps: Option<Fps>, playing: bool, looping: b
             message: Message::ToggleLoop,
             active: looping,
         },
+        keyframe_buttons: [
+            TransportButton {
+                icon: Icon::ChevronLeft,
+                message: Message::JumpToPreviousKeyframe,
+                active: false,
+            },
+            TransportButton {
+                icon: Icon::ChevronRight,
+                message: Message::JumpToNextKeyframe,
+                active: false,
+            },
+        ],
         frames: playhead.to_string(),
         seconds: seconds_label(playhead, fps),
     }
+}
+
+/// 直接入力中だけ Timecode のフレーム文字列を下書きへ差し替える。
+/// 秒表示はまだ確定 playhead の値を使うため、入力途中に別の時刻を描かない。
+pub fn transport_spec_with_frame_draft(
+    playhead: i64,
+    fps: Option<Fps>,
+    playing: bool,
+    looping: bool,
+    draft: Option<&str>,
+) -> TransportSpec {
+    let mut spec = transport_spec(playhead, fps, playing, looping);
+    if let Some(draft) = draft {
+        spec.frames = draft.to_owned();
+    }
+    spec
 }
 
 /// playhead の秒表示(小数2桁)。有理 fps(`num/den`)から
@@ -133,10 +176,16 @@ fn seconds_label(playhead: i64, fps: Option<Fps>) -> Option<String> {
 pub(crate) fn view(pane: &TimelinePane) -> Element<'static, Message> {
     let dims = pane.dims;
     let colors = pane.colors;
-    let spec = transport_spec(pane.playhead, pane.fps, pane.playing, pane.loop_enabled);
+    let spec = transport_spec_with_frame_draft(
+        pane.playhead,
+        pane.fps,
+        pane.playing,
+        pane.loop_enabled,
+        pane.frame_draft.as_deref(),
+    );
 
     let mut children: Vec<Element<'static, Message>> =
-        Vec::with_capacity(spec.buttons.len() + 8);
+        Vec::with_capacity(spec.buttons.len() + spec.keyframe_buttons.len() + 10);
     for spec_button in spec.buttons {
         children.push(transport_button(spec_button, dims, colors));
     }
@@ -145,13 +194,26 @@ pub(crate) fn view(pane: &TimelinePane) -> Element<'static, Message> {
     // 裁定179)。
     children.push(Space::new().width(Length::Fixed(dims.spacing_m)).into());
     children.push(transport_button(spec.loop_button, dims, colors));
+    children.push(Space::new().width(Length::Fixed(dims.spacing_m)).into());
+    for spec_button in spec.keyframe_buttons {
+        children.push(transport_button(spec_button, dims, colors));
+    }
+    children.push(
+        button(text("Graph").size(dims.caption_text))
+            .on_press(Message::ToggleGraphEditor)
+            .padding([0.0, dims.spacing_xs])
+            .into(),
+    );
     // Timecode(1138)。同じく `spacing_m` で「別の束」であることを示す。
     children.push(Space::new().width(Length::Fixed(dims.spacing_m)).into());
     children.push(
-        text(spec.frames)
+        text_input("frame", spec.frames)
+            .on_input(Message::FrameInput)
+            .on_submit(Message::FrameCommit)
             .size(dims.body_text)
             .font(iced::Font::MONOSPACE)
-            .color(colors.text_primary)
+            .width(Length::Fixed(dims.inspector_value_width))
+            .padding([0.0, dims.spacing_xs])
             .into(),
     );
     children.push(unit_glyph("f", dims, colors));

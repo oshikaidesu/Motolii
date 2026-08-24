@@ -28,6 +28,20 @@ pub fn comp_end_frame(duration_frames: i64) -> i64 {
     (duration_frames - 1).max(0)
 }
 
+/// transport のフレーム番号欄を確定値へ変換する。空白は許すが、負の
+/// フレームは拒否する。composition があれば最後のフレームへ clamp する。
+pub fn parse_frame_input(input: &str, duration_frames: i64) -> Result<i64, &'static str> {
+    let frame = input
+        .trim()
+        .parse::<i64>()
+        .map_err(|_| "フレーム番号は整数で入力してください")?;
+    if frame < 0 {
+        return Err("フレーム番号は0以上で入力してください");
+    }
+    let last = if duration_frames > 0 { duration_frames - 1 } else { i64::MAX };
+    Ok(frame.min(last))
+}
+
 /// JumpPrev/NextMeaningPoint(正典 §8.1)の向き。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum JumpDirection {
@@ -120,6 +134,18 @@ mod tests {
     fn comp_end_frame_is_the_last_frame_index() {
         assert_eq!(comp_end_frame(1800), 1799);
         assert_eq!(comp_end_frame(0), 0, "comp 無しは 0");
+    }
+
+    #[test]
+    fn parse_frame_input_accepts_whitespace_and_clamps_to_the_composition() {
+        assert_eq!(parse_frame_input(" 42 ", 100), Ok(42));
+        assert_eq!(parse_frame_input("999", 100), Ok(99));
+    }
+
+    #[test]
+    fn parse_frame_input_rejects_negative_and_non_integer_values() {
+        assert_eq!(parse_frame_input("-1", 100), Err("フレーム番号は0以上で入力してください"));
+        assert_eq!(parse_frame_input("1.5", 100), Err("フレーム番号は整数で入力してください"));
     }
 
     #[test]

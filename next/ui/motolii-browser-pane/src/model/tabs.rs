@@ -80,12 +80,8 @@ impl LibraryTab {
 /// filter shelf の両方を1つの語彙で賄うのと同型)。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PreviewTag {
-    /// effects(mock `data-tag-filter="color"` — Echo Bloom/Glow)。
+    /// effects の Color 系カード(実装済み provider のみを掲載)。
     Color,
-    /// effects(mock `data-tag-filter="utility"` — Opacity)。
-    Utility,
-    /// effects(mock `data-tag-filter="animation"` — Sine)。
-    Animation,
     /// create(mock `data-tag-filter="shape"`)。
     Shapes,
     /// create(mock `data-tag-filter="builtin"`)。
@@ -116,8 +112,6 @@ impl PreviewTag {
     pub fn label(self) -> &'static str {
         match self {
             Self::Color => "Color",
-            Self::Utility => "Utility",
-            Self::Animation => "Animation",
             Self::Shapes => "Shapes",
             Self::BuiltIn => "Built-in",
             Self::Tags => "Tags",
@@ -132,7 +126,7 @@ impl PreviewTag {
     /// 照合する口)。
     pub fn tab(self) -> LibraryTab {
         match self {
-            Self::Color | Self::Utility | Self::Animation | Self::Masks | Self::ShapeOps => {
+            Self::Color | Self::Masks | Self::ShapeOps => {
                 LibraryTab::Effects
             }
             Self::Shapes | Self::BuiltIn => LibraryTab::Create,
@@ -141,12 +135,10 @@ impl PreviewTag {
     }
 }
 
-/// effects タブの rail カテゴリ並び(mock html:444-446 の掲載順 — S0 慣習順、
-/// 末尾の `Masks` は裁定205 施工第2号 §A で追加)。
-pub const EFFECTS_TAGS: [PreviewTag; 5] = [
+/// effects タブの rail カテゴリ並び。実装済み provider の `Color`、
+/// マスク、シェイプ演算子だけを掲載し、未実装の mock-only effect へ入口を作らない。
+pub const EFFECTS_TAGS: [PreviewTag; 3] = [
     PreviewTag::Color,
-    PreviewTag::Utility,
-    PreviewTag::Animation,
     PreviewTag::Masks,
     PreviewTag::ShapeOps,
 ];
@@ -358,45 +350,12 @@ pub struct PreviewCard {
     pub applies_to_selection: Option<SelectionAction>,
 }
 
-/// effects タブの preview カタログ。mock html:522-530 の3枚(Echo Bloom/
-/// Opacity/Sine)+ 実在 plugin の Glow(発注: 「effects は実在 plugin 名
-/// Glow を含めてよい」 — mock の並びを保ち末尾へ追加。分類は実分類=Color、
-/// caption `effect · Color` と同値)+ Mask(裁定205 施工第2号 §A — マスクは
-/// 新規レイヤーを作らないので Create タブの「新規レイヤー」語彙には属さず、
-/// Effects タブの「選択中レイヤーへ足す」語彙(Glow と同型)へ置く。**この
-/// 配置は判断であって台帳決定ではない** — 施工の RETURN に根拠を記載)。
-const EFFECTS_PREVIEW: [PreviewCard; 12] = [
-    PreviewCard {
-        id: "echo-bloom",
-        name: "Echo Bloom",
-        caption: "effect · Color",
-        glyph: "FX",
-        tags: &[PreviewTag::Color],
-        creates: None,
-        applies_to_selection: None,
-    },
-    PreviewCard {
-        id: "opacity",
-        name: "Opacity",
-        caption: "effect · Utility",
-        glyph: "FX",
-        tags: &[PreviewTag::Utility],
-        creates: None,
-        applies_to_selection: None,
-    },
-    PreviewCard {
-        id: "sine",
-        name: "Sine",
-        caption: "effect · Animation",
-        glyph: "FX",
-        tags: &[PreviewTag::Animation],
-        creates: None,
-        applies_to_selection: None,
-    },
-    // 裁定205 施工第2号 §B: Glow は実在 plugin(`"motolii.glow"`、
-    // `motolii-compositor::effects::EffectPass::Glow`)なので `applies_to_
-    // selection` を `Some` にして shell 結線を持てる — Echo Bloom/Opacity/
-    // Sine は mock 転写の見せ札(実在 plugin ではない)なので `None` のまま。
+/// effects タブの preview カタログ。実在する Glow provider、Mask、Shape Ops だけを
+/// 掲載する。mock-only の Echo Bloom/Opacity/Sine は、実装 pass が無い状態で
+/// 操作可能に見せないため除外した。
+const EFFECTS_PREVIEW: [PreviewCard; 9] = [
+    // Glow は実在 plugin(`"motolii.glow"`、
+    // `motolii-compositor::effects::EffectPass::Glow`)なので選択へ適用できる。
     PreviewCard {
         id: "glow",
         name: "Glow",

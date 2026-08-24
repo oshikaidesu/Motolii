@@ -345,6 +345,22 @@ fn g_the_fifth_wave_keymap_reassignments_resolve_to_the_new_verbs() {
     ));
 }
 
+#[test]
+fn easing_shortcuts_select_the_three_bezier_presets() {
+    use iced::keyboard::{key::Named, Key, Modifiers};
+    use motolii_shell::timeline_pane::Message as TlMessage;
+
+    let f9 = |modifiers| motolii_shell::resolve_navigation_key(&Key::Named(Named::F9), modifiers, false);
+    assert!(matches!(f9(Modifiers::default()), Some(Message::Timeline(TlMessage::SetKeyInterp(_)))));
+    assert!(matches!(f9(Modifiers::SHIFT), Some(Message::Timeline(TlMessage::SetKeyInterp(_)))));
+    assert!(matches!(
+        f9(Modifiers::COMMAND | Modifiers::SHIFT),
+        Some(Message::Timeline(TlMessage::SetKeyInterp(_)))
+    ));
+    assert!(motolii_shell::resolve_navigation_key(&Key::Named(Named::F9), Modifiers::COMMAND, false).is_none());
+    assert!(motolii_shell::resolve_navigation_key(&Key::Named(Named::F9), Modifiers::default(), true).is_none());
+}
+
 /// Alt+←/→ は既存の `NudgeKeyframe` の領分 — 新設の Step とここで衝突しては
 /// いけない(`resolve_navigation_key` は Alt 付きの矢印を一切返さない)。
 #[test]

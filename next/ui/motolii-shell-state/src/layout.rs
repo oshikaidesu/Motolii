@@ -118,6 +118,8 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::focus::PaneKind;
+
 /// 分割の向き。`iced::widget::pane_grid::Axis` と名前まで1:1対応する
 /// (この crate 自体は iced に依存しない——変換は shell 側が書く、
 /// モジュール冒頭 doc の「shell 結線手順」1参照)。
@@ -151,6 +153,25 @@ pub type NodePath = Vec<Branch>;
 pub enum LayoutNode<K> {
     Leaf { kind: K, hidden: bool },
     Split { axis: Axis, ratio: f32, a: Box<LayoutNode<K>>, b: Box<LayoutNode<K>> },
+}
+
+/// shell の pane_grid が現在表示している分割木の保存形。iced の pane id は
+/// 起動ごとに変わるため持たず、panel の種類・木・比率だけを保存する。
+/* motolii-component
+id = "shell.workspace_layout_persistence"
+kind = "semantic"
+weight = "core_edit"
+maps = []
+entry = ["WorkspaceSnapshot", "snapshot", "restore"]
+meaning = ["PaneResized", "PaneDragged", "LastProjectPathRead"]
+evaluation = ["round_trips_through_json", "known_hole_regression_swap_and_resize_survive_a_hide_show_round_trip"]
+render = ["WorkspaceSnapshot", "visible_layout"]
+observable = ["known_hole_regression_swap_and_resize_survive_a_hide_show_round_trip"]
+*/
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WorkspaceSnapshot {
+    pub open: bool,
+    pub root: LayoutNode<PaneKind>,
 }
 
 impl<K: Copy + Eq> LayoutNode<K> {

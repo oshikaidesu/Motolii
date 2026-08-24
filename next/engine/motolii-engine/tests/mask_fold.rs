@@ -21,6 +21,7 @@ fn square_mask(mode: MaskMode, inverted: bool, opacity: f32, half: f64) -> Resol
         mode,
         inverted,
         opacity,
+        expansion: 0.0,
         shape: Path {
             vertices: vec![
                 corner(-half, -half),

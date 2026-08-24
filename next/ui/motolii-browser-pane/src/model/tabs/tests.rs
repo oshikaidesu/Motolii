@@ -31,21 +31,22 @@ fn media_tab_has_no_preview_catalog() {
     assert!(preview_catalog(LibraryTab::Media).is_empty());
 }
 
-/// effects の preview カタログは mock html:522-530 の3枚+実在 plugin の
-/// Glow(発注: 「effects は実在 plugin 名 Glow を含めてよい」)+ Mask
-/// (裁定205 施工第2号 §A — 新規レイヤーを作らないので Create タブではなく
-/// ここに置く判断、`EFFECTS_PREVIEW` doc 参照)。
+/// effects の preview カタログは実装済みの Glow/Mask と Shape Ops だけを持つ。
+/// mock-only の Echo Bloom/Opacity/Sine は操作可能性を偽装するので掲載しない。
 #[test]
-fn effects_preview_catalog_contains_the_mock_cards_and_glow() {
+fn effects_preview_catalog_contains_only_actionable_cards() {
     let names: Vec<&str> = preview_catalog(LibraryTab::Effects)
         .iter()
         .map(|card| card.name)
         .collect();
-    for expected in ["Echo Bloom", "Opacity", "Sine", "Glow", "Mask"] {
+    for expected in ["Glow", "Mask", "Trim Path", "Twist"] {
         assert!(
             names.contains(&expected),
             "effects カタログに {expected:?} が無い: {names:?}"
         );
+    }
+    for removed in ["Echo Bloom", "Opacity", "Sine"] {
+        assert!(!names.contains(&removed), "未実装カード {removed:?} が残っている");
     }
 }
 
@@ -159,11 +160,8 @@ fn preview_catalog_ignores_the_media_rail_scope() {
 // 構造の対称化(2026-08-22): タブ別 rail カテゴリ + preview_visible。
 // -----------------------------------------------------------------
 
-/// **ORACLE**: タブ別 rail カテゴリは mock `.tabScoped-*` の掲載順そのまま
-/// (html:444-446 / 454-455 / 463-465 — S0 慣習順)+ 末尾の `Masks`
-/// (裁定205 施工第2号 §A で追加、mock に無い新規カテゴリ)+ 末尾の
-/// `ShapeOps`(2026-08-24「ブラウザに8枚の札」発注で追加、同じく mock に
-/// 無い新規カテゴリ)。media は空(`RailScope` の語彙が正)。
+/// **ORACLE**: タブ別 rail カテゴリは実装済みカードの語彙と一致する。
+/// media は空(`RailScope` の語彙が正)。
 #[test]
 fn preview_tags_follow_the_mock_declaration_per_tab() {
     assert!(preview_tags(LibraryTab::Media).is_empty());
@@ -171,8 +169,6 @@ fn preview_tags_follow_the_mock_declaration_per_tab() {
         preview_tags(LibraryTab::Effects),
         [
             PreviewTag::Color,
-            PreviewTag::Utility,
-            PreviewTag::Animation,
             PreviewTag::Masks,
             PreviewTag::ShapeOps,
         ]
@@ -223,8 +219,7 @@ fn preview_card_tags_belong_to_their_tab_rail() {
     }
 }
 
-/// **ORACLE**: `PreviewScope::Tag` で preview カタログが絞れる(mock の
-/// `data-tag-filter` 照合の転写 — effects の Color は Echo Bloom+Glow)。
+/// **ORACLE**: `PreviewScope::Tag` で preview カタログが絞れる。
 #[test]
 fn preview_visible_narrows_by_tag() {
     let color: Vec<&str> = preview_visible(
@@ -235,7 +230,7 @@ fn preview_visible_narrows_by_tag() {
     .iter()
     .map(|card| card.name)
     .collect();
-    assert_eq!(color, ["Echo Bloom", "Glow"]);
+    assert_eq!(color, ["Glow"]);
 
     let notes: Vec<&str> =
         preview_visible(LibraryTab::Panels, PreviewScope::Tag(PreviewTag::Notes), "")
@@ -339,13 +334,6 @@ fn effects_action_cards_declare_their_selection_action() {
             "{id:?} の applies_to_selection が ApplyOp({kind:?}) でない"
         );
     }
-    for id in ["echo-bloom", "opacity", "sine"] {
-        assert_eq!(
-            by_id(id).applies_to_selection,
-            None,
-            "{id:?} は見せ札のはずなのに applies_to_selection を持っている"
-        );
-    }
 }
 
 /// `All` は絞らない・並べ替えない(media の `AllMedia` と同じ意味)。
@@ -356,9 +344,6 @@ fn preview_visible_all_keeps_the_declaration_order() {
     assert_eq!(
         names,
         [
-            "Echo Bloom",
-            "Opacity",
-            "Sine",
             "Glow",
             "Mask",
             "Trim Path",
@@ -383,11 +368,11 @@ fn preview_scope_and_query_combine_with_and_semantics() {
     assert_eq!(cards.len(), 1);
     assert_eq!(cards[0].name, "Glow");
 
-    // Color scope だが Utility の名前で検索 → 0件。
+    // Color scope だが未実装 effect 名で検索 → 0件。
     assert!(preview_visible(
         LibraryTab::Effects,
         PreviewScope::Tag(PreviewTag::Color),
-        "opacity"
+        "sine"
     )
     .is_empty());
 }

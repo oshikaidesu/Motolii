@@ -174,7 +174,7 @@ fn category_labels_appear_in_both_the_rail_and_the_filter_shelf() {
     let items = fixture_items();
     let expectations: [(LibraryTab, &[&str]); 4] = [
         (LibraryTab::Media, &["Video", "Images", "Audio"]),
-        (LibraryTab::Effects, &["Color", "Utility", "Animation"]),
+        (LibraryTab::Effects, &["Color", "Masks", "Shape ops"]),
         (LibraryTab::Create, &["Shapes", "Built-in"]),
         (LibraryTab::Panels, &["Tags", "Notes", "Export"]),
     ];

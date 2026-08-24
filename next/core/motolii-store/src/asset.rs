@@ -89,6 +89,18 @@ impl Default for AssetStatus {
     }
 }
 
+/* motolii-component
+id = "asset.relink"
+kind = "semantic"
+weight = "core_edit"
+maps = []
+entry = ["relink", "RelinkAsset"]
+meaning = ["RelinkAsset"]
+evaluation = ["relink_updates_only_the_asset_path", "relink_preserves_asset_identity"]
+render = ["AssetStatus", "AssetListItem"]
+observable = ["relinking_a_missing_asset_makes_it_present"]
+*/
+
 /// パスは常に `/` 区切りへ正規化して保持する(クロス OS roundtrip)。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, DeserializeDerive)]
 pub struct Asset {
@@ -456,6 +468,28 @@ impl AssetTable {
             .remove(&id)
             .ok_or(AssetError::NotFound { id: id.0 })
     }
+
+    /// 欠損素材の実体 path だけを差し替える。ID・content hash・表示名は
+    /// そのままなので、layer の参照や undo の意味を別素材へ付け替えない。
+    pub fn relink(
+        &mut self,
+        id: AssetId,
+        path_absolute: &std::path::Path,
+        project_root: Option<&std::path::Path>,
+    ) -> Result<(), AssetError> {
+        let asset = self
+            .entries
+            .get_mut(&id)
+            .ok_or(AssetError::NotFound { id: id.0 })?;
+        asset.path_absolute = Some(Asset::normalize_path(&path_absolute.to_string_lossy()));
+        asset.path_project_relative = project_root
+            .and_then(|root| path_absolute.strip_prefix(root).ok())
+            .map(|relative| Asset::normalize_path(&relative.to_string_lossy()));
+        asset.file_name = path_absolute
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned());
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -672,6 +706,70 @@ mod tests {
             duration: None,
             status: AssetStatus::default(),
         }
+    }
+
+    fn table_with_asset() -> (AssetTable, AssetId) {
+        let mut table = AssetTable::new();
+        let id = table
+            .admit(AssetDraft {
+                name: "original".into(),
+                asset_type: "video/mp4".into(),
+                content_hash: "sha256:identity".into(),
+                path_absolute: Some("/project/missing/original.mp4".into()),
+                path_project_relative: Some("missing/original.mp4".into()),
+                file_name: Some("original.mp4".into()),
+                size_bytes: Some(42),
+                head_hash: None,
+                tail_hash: None,
+                duration: None,
+            })
+            .unwrap();
+        (table, id)
+    }
+
+    #[test]
+    fn relink_updates_only_the_asset_path() {
+        let (mut table, id) = table_with_asset();
+        table
+            .relink(
+                id,
+                std::path::Path::new("/project/media/found.mp4"),
+                Some(std::path::Path::new("/project")),
+            )
+            .unwrap();
+        let asset = table.get(id).unwrap();
+        assert_eq!(asset.path_absolute.as_deref(), Some("/project/media/found.mp4"));
+        assert_eq!(asset.path_project_relative.as_deref(), Some("media/found.mp4"));
+        assert_eq!(asset.file_name.as_deref(), Some("found.mp4"));
+        assert_eq!(asset.name, "original");
+        assert_eq!(asset.content_hash, "sha256:identity");
+        assert_eq!(asset.size_bytes, Some(42));
+    }
+
+    #[test]
+    fn relink_preserves_asset_identity() {
+        let (mut table, id) = table_with_asset();
+        table
+            .relink(id, std::path::Path::new("/elsewhere/found.mp4"), None)
+            .unwrap();
+        let asset = table.get(id).unwrap();
+        assert_eq!(asset.id, id);
+        assert_eq!(asset.content_hash, "sha256:identity");
+        assert_eq!(asset.asset_type, "video/mp4");
+    }
+
+    #[test]
+    fn relinking_a_missing_asset_makes_it_present() {
+        let dir = unique_scratch_dir("relink");
+        let file = dir.join("found.mp4");
+        std::fs::write(&file, b"payload").unwrap();
+        let (mut table, id) = table_with_asset();
+        table.relink(id, &file, Some(&dir)).unwrap();
+        assert!(matches!(
+            table.get(id).unwrap().resolve_status(Some(&dir)),
+            AssetStatus::Present { .. }
+        ));
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

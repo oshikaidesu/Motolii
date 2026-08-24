@@ -213,6 +213,9 @@ pub fn resolve_navigation_key(
     if captured {
         return None;
     }
+    if let Some(message) = resolve_easing_shortcut(key, modifiers) {
+        return Some(message);
+    }
     use iced::keyboard::key::Named;
     use iced::keyboard::Key;
     match key.as_ref() {
@@ -457,6 +460,39 @@ pub fn resolve_navigation_key(
 
 use iced::Task;
 
+/* motolii-component
+id = "timeline.easing_shortcuts"
+kind = "semantic"
+weight = "core_edit"
+maps = []
+entry = ["resolve_easing_shortcut", "resolve_navigation_key"]
+meaning = ["SetKeyInterp"]
+evaluation = ["EASY_EASE", "EASY_EASE_IN", "EASY_EASE_OUT"]
+render = ["resolve_navigation_key"]
+observable = ["easing_shortcuts_select_the_three_bezier_presets"]
+*/
+
+fn resolve_easing_shortcut(
+    key: &iced::keyboard::Key,
+    modifiers: iced::keyboard::Modifiers,
+) -> Option<Message> {
+    use iced::keyboard::key::Named;
+    use iced::keyboard::Key;
+    let Key::Named(Named::F9) = key.as_ref() else {
+        return None;
+    };
+    let interp = if modifiers.command() && modifiers.shift() {
+        timeline_pane::EASY_EASE_OUT
+    } else if modifiers.shift() {
+        timeline_pane::EASY_EASE_IN
+    } else if !modifiers.command() {
+        timeline_pane::EASY_EASE
+    } else {
+        return None;
+    };
+    Some(Message::Timeline(timeline_pane::Message::SetKeyInterp(interp)))
+}
+
 impl Shell {
     /// `Shell::update` から委譲される領域別 dispatch(2026-08-23 SP-1 レーン、
     /// `docs/reviews/2026-08-23-shell-split-plan.md` の続き)。**中身は無改変** —
@@ -474,6 +510,8 @@ impl Shell {
                     && !self.timeline.cancel_key_drag()
                     && !self.timeline.cancel_loop_drag()
                     && !self.timeline.cancel_rename()
+                    && !self.timeline.cancel_frame_input()
+                    && !self.timeline.cancel_graph_interaction()
                     && !self.cancel_gizmo_drag()
                 {
                     self.cancel_inspector_interaction();

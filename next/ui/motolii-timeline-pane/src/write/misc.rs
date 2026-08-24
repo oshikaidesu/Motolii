@@ -103,6 +103,82 @@ pub(crate) fn jump_to_clip_edit(doc: &Document, session: &mut Session, direction
     None
 }
 
+/// transport のフレーム番号欄を確定する。入力失敗時は下書きを戻して
+/// 編集を継続し、成功時だけ playhead を変える(1操作に履歴は作らない)。
+pub(crate) fn commit_frame_input(
+    pane: &mut PaneState,
+    doc: &Document,
+    session: &mut Session,
+) -> Option<String> {
+    let Some(draft) = pane.frame_draft.take() else {
+        return None;
+    };
+    match nav::parse_frame_input(&draft, comp_duration(doc)) {
+        Ok(frame) => {
+            session.playhead = frame;
+            None
+        }
+        Err(reason) => {
+            pane.frame_draft = Some(draft);
+            Some(reason.to_owned())
+        }
+    }
+}
+
+/// 表示中 property 行の次/前キーへ playhead だけを移す。行の投影は
+/// `property_rows`、時刻の選択は既存 `nearest_meaning_point` に委譲する。
+pub(crate) fn jump_to_keyframe(
+    doc: &Document,
+    session: &mut Session,
+    direction: nav::JumpDirection,
+) -> Option<String> {
+    let store = doc.view();
+    let fps = store.composition().ok().flatten().map(|comp| comp.fps);
+    let rows = property_rows(&store, session, fps);
+    let points = keys2::property_key_points(&rows);
+    if let Some(frame) = nav::nearest_meaning_point(&points, session.playhead, direction) {
+        session.playhead = frame;
+    }
+    None
+}
+
+/// Graph Editor の4制御値を検証して、選択キーへ一度の `SetKeyInterp` として
+///確定する。下書きが空の欄は現在の投影値を使うため、x1だけを直す操作でも
+///他の3値を壊さない。拒否時は下書きを保持する。
+pub(crate) fn commit_graph_editor(
+    pane: &mut PaneState,
+    doc: &mut Document,
+    session: &Session,
+) -> Option<String> {
+    let current = crate::graph_editor::project(&doc.view(), session).controls;
+    let mut values = current;
+    for control in crate::graph_editor::GraphControl::ALL {
+        let index = control.index();
+        let Some(input) = pane.graph_drafts[index].as_deref() else {
+            continue;
+        };
+        let value = match crate::graph_editor::parse_control(input) {
+            Ok(value) => value,
+            Err(reason) => return Some(reason.to_owned()),
+        };
+        values[index] = value;
+    }
+    let reason = super::keys::set_key_interp(
+        doc,
+        session,
+        Interp::Bezier {
+            x1: values[0],
+            y1: values[1],
+            x2: values[2],
+            y2: values[3],
+        },
+    );
+    if reason.is_none() {
+        pane.graph_drafts = [None, None, None, None];
+    }
+    reason
+}
+
 /// Stage 重なりの並べ替え(第3切片、map B44 184/292/293 + 正典 §8.1
 /// ReorderLayerUp/Down(+ToEnd))。意味計算は [`stacking::restacked`](純関数)、
 /// ここは選択の解決・ロック検分・`Intent::SetOrder` の束ね(1回の `apply_all`

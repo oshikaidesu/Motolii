@@ -5,8 +5,9 @@
 //!
 //! **Session 水準**(`Document` に乗らない — `Shell` の `checkerboard`/
 //! `observation`/`resolution_cap` と同格の「意味を持たない純表示状態」、
-//! 裁定157の観測視点と同じ扱い)。再起動間の永続化は本切片の NON-GOAL
-//! (RETURN 「分離レーンへの引き渡しメモ」に置き場候補を記す)。
+//! 裁定157の観測視点と同じ扱い)。現在の pane 木は
+//! `motolii-shell-state::layout::WorkspaceSnapshot` へ投影でき、
+//! `document_io` が project 隣の front-state sidecar に保存・復元する。
 //!
 //! fork rev `73e686ee05efd7d1b61cfea2647186b336d9ab9c`(iced 0.15.0-dev、
 //! `next/Cargo.toml` 裁定170)のベンダソース(`~/.asdf/.../checkouts/
@@ -39,6 +40,8 @@
 use std::collections::BTreeMap;
 
 use iced::widget::pane_grid;
+use motolii_shell_state::focus::PaneKind as StatePaneKind;
+use motolii_shell_state::layout::{Axis as StateAxis, LayoutNode, WorkspaceSnapshot};
 
 /// 4つのパネル種別。`pane_grid::State<PaneKind>` の `T`。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -137,6 +140,51 @@ pub fn build_configuration(open: bool, ratios: Ratios) -> pane_grid::Configurati
 /// with_configuration` へそのまま渡すだけの薄い glue)。
 pub fn build_state(open: bool, ratios: Ratios) -> pane_grid::State<PaneKind> {
     pane_grid::State::with_configuration(build_configuration(open, ratios))
+}
+
+fn snapshot_node(
+    node: &pane_grid::Node,
+    panes: &BTreeMap<pane_grid::Pane, PaneKind>,
+) -> Option<LayoutNode<StatePaneKind>> {
+    match node {
+        pane_grid::Node::Pane(pane) => panes.get(pane).copied().map(|kind| {
+            LayoutNode::Leaf { kind: match kind {
+                PaneKind::Browser => StatePaneKind::Browser,
+                PaneKind::Inspector => StatePaneKind::Inspector,
+                PaneKind::Stage => StatePaneKind::Stage,
+                PaneKind::Timeline => StatePaneKind::Timeline,
+            }, hidden: false }
+        }),
+        pane_grid::Node::Split { axis, ratio, a, b, .. } => Some(LayoutNode::Split {
+            axis: match axis {
+                pane_grid::Axis::Horizontal => StateAxis::Horizontal,
+                pane_grid::Axis::Vertical => StateAxis::Vertical,
+            },
+            ratio: *ratio,
+            a: Box::new(snapshot_node(a, panes)?),
+            b: Box::new(snapshot_node(b, panes)?),
+        }),
+    }
+}
+
+fn configuration_node(node: &LayoutNode<StatePaneKind>) -> pane_grid::Configuration<PaneKind> {
+    match node {
+        LayoutNode::Leaf { kind, .. } => pane_grid::Configuration::Pane(match kind {
+            StatePaneKind::Browser => PaneKind::Browser,
+            StatePaneKind::Inspector => PaneKind::Inspector,
+            StatePaneKind::Stage => PaneKind::Stage,
+            StatePaneKind::Timeline => PaneKind::Timeline,
+        }),
+        LayoutNode::Split { axis, ratio, a, b } => pane_grid::Configuration::Split {
+            axis: match axis {
+                StateAxis::Horizontal => pane_grid::Axis::Horizontal,
+                StateAxis::Vertical => pane_grid::Axis::Vertical,
+            },
+            ratio: *ratio,
+            a: Box::new(configuration_node(a)),
+            b: Box::new(configuration_node(b)),
+        },
+    }
 }
 
 /// `node` の部分木に含まれる `PaneKind` を DFS 順(a→b)で集める。小さい木
@@ -238,6 +286,29 @@ impl Layout {
     /// 現在の比率(試験・screenshot 器具向けの読み口)。
     pub fn ratios(&self) -> Ratios {
         self.ratios
+    }
+
+    /// 現在の pane 配置を pane id から切り離した保存形へ投影する。
+    /// `pane_grid::Pane` は起動ごとに変わるため、path/比率ではなく木の葉の
+    /// 種類を保存する。
+    pub fn snapshot(&self) -> Option<WorkspaceSnapshot> {
+        Some(WorkspaceSnapshot {
+            open: self.open,
+            root: snapshot_node(self.state.layout(), &self.state.panes)?,
+        })
+    }
+
+    /// project sidecar から読み戻した配置を新しい pane id へ再構成する。
+    /// 不正な/空の木は現在の配置を壊さず `false` を返す。
+    pub fn restore(&mut self, snapshot: &WorkspaceSnapshot) -> bool {
+        if snapshot.root.visible_kinds().is_empty() {
+            return false;
+        }
+        self.open = snapshot.open;
+        self.state = pane_grid::State::with_configuration(configuration_node(&snapshot.root));
+        self.ratios = extract_ratios(&self.state, self.ratios);
+        self.focused = None;
+        true
     }
 
     /// Browser パネルの開閉トグルを pane_grid 側へ反映する(`Shell::update`

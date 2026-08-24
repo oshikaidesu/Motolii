@@ -226,7 +226,11 @@ mod mouse_interaction_tests {
             work_area: None,
             loop_enabled: false,
             rename: None,
+            frame_draft: None,
             waveforms: std::collections::HashMap::new(),
+            graph_editor_open: false,
+            graph_editor: None,
+            graph_drafts: [None, None, None, None],
         }
     }
 

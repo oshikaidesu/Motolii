@@ -390,7 +390,10 @@ impl Shell {
         // 全幅ストリップ」の表示分岐はここから退去([`Shell::
         // view_settings_window`] が窓の絵の正本)。main の絵は Settings 窓の
         // 開閉と無関係(Q0: 閉じた道具は木に現れない、の窓版)。
-        let layout = column![self.header()];
+        let mut layout = column![self.header()];
+        if self.recent_menu_open {
+            layout = layout.push(self.recent_projects_view());
+        }
         // 旧 MB-0/MB-1 のドロップダウン表示分岐(file_menu_open/edit_menu_open)
         // は MB-2 で廃止 — menubar の開いた menu は widget 自身の overlay
         // (`motolii_menubar` の vendored `MenuBarOverlay`)として木に現れる。
@@ -544,6 +547,31 @@ impl Shell {
         } else {
             main
         }
+    }
+
+    /// File > Open Recent… の一覧。menubar 基盤は静的な leaf を持つため、
+    /// path を動的に表示するこの小さな projection だけを shell 側に置く。
+    /// 選択後の dirty 確認と Document 差し替えは `document_io` の同じ入口へ
+    /// 収束する。
+    fn recent_projects_view(&self) -> Element<'_, Message> {
+        let mut items = column![]
+            .spacing(self.dims().spacing_xs)
+            .width(Length::Fill);
+        if self.recent_files.paths().is_empty() {
+            items = items.push(text("No recent projects").color(self.tokens.colors.text_muted));
+        } else {
+            for (index, path) in self.recent_files.paths().iter().enumerate() {
+                items = items.push(
+                    button(text(path.display().to_string()))
+                        .width(Length::Fill)
+                        .on_press(Message::RecentFileSelected(index)),
+                );
+            }
+        }
+        container(column![text("OPEN RECENT"), items])
+            .padding([self.dims().spacing_s, self.dims().spacing_m])
+            .width(Length::Fill)
+            .into()
     }
 
     /// pane_grid の各 pane の題帯(pane 名入りの薄い常設帯 = drag ハンドル、

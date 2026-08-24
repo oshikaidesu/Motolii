@@ -114,6 +114,7 @@ pub use view::band_chrome_style;
 /// `motolii_shell::Session` を読む既存参照(`tests/suite/*.rs`)は無改修で済む。
 pub use motolii_shell_state as state;
 pub use state::Session;
+pub use state::recent::RecentFiles;
 
 /// `inspector_pane` は裁定160 切片8 で `motolii-inspector-pane` crate へ抽出
 /// 済み(pane split survey §6 切片8)。`pub use timeline as timeline_pane;` と
@@ -551,9 +552,27 @@ pub enum Message {
     /// ここを埋めない)。dirty なら確認 → 確認できたら open dialog、を1本の
     /// `Task` へ直列化する(`Shell::confirm_then_pick_open` 参照)。
     OpenRequested,
+    /// File > Open Recent… の一覧を開閉する。
+    OpenRecentRequested,
+    /// 最近使った一覧の項目を選択する。dirty の場合は通常の Open と同じ
+    /// discard 確認を通してから開く。
+    RecentFileSelected(usize),
+    /// `RecentFileSelected` の discard 確認結果。
+    RecentFileConfirmed(bool),
+    /// File > Find Missing Footage… の入口。現在の素材状態を再評価し、
+    /// 欠損素材があれば先頭の1件を繋ぎ直す path dialog を開く。
+    FindMissingFootageRequested,
+    /// 欠損素材の繋ぎ直し先。`None` はキャンセル。
+    RelinkAssetPathChosen(Option<std::path::PathBuf>),
+    /// File > Collect Files… の入口。現在の作品は変更せず、package の複製を作る。
+    CollectFilesRequested,
+    /// Collect Files の出力先。`None` はキャンセル。
+    CollectFilesPathChosen(Option<std::path::PathBuf>),
     /// `OpenRequested` の最終結果(確認キャンセル・path キャンセルのどちらも
     /// `None` に畳まれる ── 呼び手は区別しない、`Shell::perform_open` 参照)。
     OpenPathChosen(Option<std::path::PathBuf>),
+    /// application-level の最近使った一覧を起動時に読み戻した結果。
+    RecentFilesLoaded(Option<RecentFiles>),
     /// File > Import Media…(normal-map id 592「Import (media/file)」の第2の
     /// 入口 ── 従来は OS drop のみだった、`file_dialogs.rs::FileDialogs::
     /// pick_import_paths` 冒頭 doc 参照)。複数選択可。選ばれた path はそのまま
@@ -889,6 +908,14 @@ pub struct Shell {
     /// (`Message::SaveACopyRequested` doc 参照 — 「現 path 維持のまま別名へ
     /// 書く」)。New Project でリセットされる。
     current_path: Option<std::path::PathBuf>,
+    /// File > Open Recent の候補。Document の身分とは別の application state。
+    recent_files: RecentFiles,
+    /// Open Recent の候補一覧を表示中か。
+    recent_menu_open: bool,
+    /// 最近使った項目を discard 確認へ渡すまでの一時 path。
+    pending_recent_path: Option<std::path::PathBuf>,
+    /// Find Missing Footage が path 選択を待っている素材。
+    pending_relink_asset: Option<motolii_store::AssetId>,
     /// 素材の在り処の解決結果(`AssetId` → `AssetStatus`)。
     /// `Asset::status` は保存されない(環境の事実であって作品の内容ではない)ので
     /// shell が持つ。更新は離散イベントのときだけ — `sweep_asset_status()` 参照。
@@ -1064,6 +1091,10 @@ impl Shell {
                 media_size_cache: RefCell::new(HashMap::new()),
                 dialogs,
                 current_path: None,
+                recent_files: RecentFiles::default(),
+                recent_menu_open: false,
+                pending_recent_path: None,
+                pending_relink_asset: None,
                 asset_status: std::collections::HashMap::new(),
                 saved_revision,
                 pending_recovery: None,
@@ -1108,7 +1139,11 @@ impl Shell {
             async { Self::read_last_project_path() },
             Message::LastProjectPathRead,
         );
-        (shell, Task::batch([task, reopen]))
+        let recent = Task::perform(
+            async { Self::read_recent_files() },
+            Message::RecentFilesLoaded,
+        );
+        (shell, Task::batch([task, reopen, recent]))
     }
 
     /// `--fixture` 起動の daemon boot([`Shell::boot`] の fixture 版)。
@@ -1212,6 +1247,10 @@ impl Shell {
             // 無い)ため実際に呼ばれることはない。
             dialogs: Box::new(RfdDialogs),
             current_path: None,
+            recent_files: RecentFiles::default(),
+            recent_menu_open: false,
+            pending_recent_path: None,
+            pending_relink_asset: None,
             asset_status: std::collections::HashMap::new(),
             saved_revision,
             pending_recovery: None,

@@ -20,6 +20,7 @@ fn square_mask(half: f64) -> ResolvedMask {
         mode: MaskMode::Add,
         inverted: false,
         opacity: 1.0,
+        expansion: 0.0,
         shape: Path {
             vertices: vec![
                 corner(-half, -half),
@@ -30,6 +31,17 @@ fn square_mask(half: f64) -> ResolvedMask {
             closed: true,
         },
     }
+}
+
+#[test]
+fn mask_expansion_changes_coverage() {
+    let mut mask = square_mask(25.0);
+    let base = rasterize_mask_coverage(&mask, &canvas_100()).expect("base rasterize");
+    mask.expansion = 10.0;
+    let expanded = rasterize_mask_coverage(&mask, &canvas_100()).expect("expanded rasterize");
+
+    assert_eq!(alpha_at(&base, 20, 50), 0, "基準形状の外側が覆われている");
+    assert_eq!(alpha_at(&expanded, 20, 50), 255, "正の膨張が外側へ届いていない");
 }
 
 /// 100x100、局所原点が中央(裁定EXACT TARGETの例と同じ)。

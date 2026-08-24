@@ -70,6 +70,9 @@ pub enum TransformField {
     /// (`PropertyId::mask_opacity`)ので、mask の並べ替え・削除で別の mask へ
     /// 付き直さない(store の同一性設計そのまま)。
     MaskOpacity(MaskId),
+    /// この mask の膨張量(MASK section、B02 第2切片)。正で外側、負で内側。
+    /// `MaskOpacity` と同じ既存の値セル・drag・Key 列文法へ乗る。
+    MaskExpansion(MaskId),
     /// この effect の param(EFFECTS section、B38 第3切片)。
     /// [`TransformField::MaskOpacity`] と同型の拡張 — 既存の値セル文法
     /// (`FieldDraft`/drag-to-scrub/`commit_inspector_field` → `Intent::SetTrack`)
@@ -111,6 +114,7 @@ pub fn property_id(field: TransformField) -> Result<PropertyId, StoreError> {
         TransformField::Opacity => PropertyId::new(property::OPACITY),
         TransformField::AnchorX | TransformField::AnchorY => PropertyId::new(property::ANCHOR),
         TransformField::MaskOpacity(id) => Ok(PropertyId::mask_opacity(id)),
+        TransformField::MaskExpansion(id) => Ok(PropertyId::mask_expansion(id)),
         TransformField::EffectParam(id, param) => PropertyId::effect_param(id, param.name()),
         TransformField::Level => PropertyId::new(property::LEVEL),
         TransformField::Pan => PropertyId::new(property::PAN),
@@ -137,7 +141,9 @@ pub fn next_value(field: TransformField, input: f64, current_vec2: [f64; 2]) -> 
         TransformField::PositionY | TransformField::ScaleY | TransformField::AnchorY => {
             Value::Vec2([current_vec2[0], input])
         }
-        TransformField::PositionZ | TransformField::Rotation => Value::F64(input),
+        TransformField::PositionZ
+        | TransformField::Rotation
+        | TransformField::MaskExpansion(_) => Value::F64(input),
         // effect param は表示 = store 単位(換算なし)。clamp もしない — 値域は
         // plugin(engine 側 shader)の意味で、editor が知ったかぶりしない
         // (engine `translate_glow_params` も clamp しない)。
@@ -205,6 +211,9 @@ pub enum KeyRow {
     /// (3状態 oracle・`toggled_key_track`)へそのまま乗る —
     /// [`TransformField::MaskOpacity`] と同じ拡張の形。
     MaskOpacity(MaskId),
+    /// mask の膨張量行(MASK section、B02 第2切片)。正で外側、負で内側。
+    /// [`TransformField::MaskExpansion`] と同じ property を指す。
+    MaskExpansion(MaskId),
     /// effect param 行(EFFECTS section、B38 第3切片)。同上 —
     /// [`TransformField::EffectParam`] と同じ拡張の形。
     EffectParam(EffectId, GlowParam),
@@ -241,7 +250,10 @@ impl KeyRow {
             Self::Pan => Some(property::PAN),
             Self::FadeIn => Some(property::FADE_IN),
             Self::FadeOut => Some(property::FADE_OUT),
-            Self::MaskOpacity(_) | Self::EffectParam(_, _) | Self::EffectEnabled(_) => None,
+            Self::MaskOpacity(_)
+            | Self::MaskExpansion(_)
+            | Self::EffectParam(_, _)
+            | Self::EffectEnabled(_) => None,
         }
     }
 }
@@ -252,6 +264,7 @@ impl KeyRow {
 pub fn key_row_property_id(row: KeyRow) -> Result<PropertyId, StoreError> {
     match row {
         KeyRow::MaskOpacity(mask) => Ok(PropertyId::mask_opacity(mask)),
+        KeyRow::MaskExpansion(mask) => Ok(PropertyId::mask_expansion(mask)),
         KeyRow::EffectParam(effect, param) => PropertyId::effect_param(effect, param.name()),
         KeyRow::EffectEnabled(effect) => Ok(PropertyId::effect_enabled(effect)),
         _ => PropertyId::new(
@@ -270,6 +283,7 @@ pub fn key_row_default_value(row: KeyRow) -> Value {
         KeyRow::Scale => Value::Vec2([1.0, 1.0]),
         KeyRow::Rotation => Value::F64(0.0),
         KeyRow::Opacity | KeyRow::MaskOpacity(_) => Value::F64(1.0),
+        KeyRow::MaskExpansion(_) => Value::F64(0.0),
         // effect param の既定は plugin カタログ(= engine 既定の写し)から。
         KeyRow::EffectParam(_, param) => Value::F64(param.default_value()),
         // キーを打っていない = 既定で有効(`PropertyId::effect_enabled` doc)。
@@ -532,6 +546,7 @@ pub fn field_decimals(field: TransformField) -> usize {
     match field {
         TransformField::Rotation => 1,
         TransformField::Opacity | TransformField::MaskOpacity(_) => 0,
+        TransformField::MaskExpansion(_) => 2,
         // Glow 既定(1.0/0.75/1.0)の桁がそのまま読める最小の桁。
         TransformField::EffectParam(_, _) => 2,
         // Level は Speed 欄と同じ1桁(% 表示)。Pan/Fade は store の生の刻み
@@ -541,5 +556,4 @@ pub fn field_decimals(field: TransformField) -> usize {
         _ => 3,
     }
 }
-
 
