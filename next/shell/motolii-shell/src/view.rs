@@ -414,12 +414,25 @@ impl Shell {
             },
         });
 
-        layout
+        let main: Element<'_, Message> = layout
             .push(container(grid).width(Length::Fill).height(Length::Fill))
             .push(status_band(self.status.as_deref(), &self.doc, dims, colors))
             .spacing(dims.spacing_m)
             .padding(dims.spacing_l)
             .into()
+
+        // Source Preview は Browser の上に責任を戻さず、main window 上の一時的な
+        // owner として表示する。閉じれば元の pane tree へ戻り、Document は変えない。
+        ;
+        if self.source_preview.is_open() {
+            let preview = self
+                .source_preview
+                .view(dims, colors)
+                .map(Message::SourcePreview);
+            stack![main, preview].into()
+        } else {
+            main
+        }
     }
 
     /// pane_grid の各 pane の題帯(pane 名入りの薄い常設帯 = drag ハンドル、

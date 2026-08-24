@@ -81,6 +81,8 @@ pub(crate) mod render;
 mod render_dispatch;
 mod selection;
 mod settings_ops;
+#[allow(unreachable_pub)]
+mod source_preview;
 mod stage_presenter;
 mod value_drag;
 mod value_drag_color;
@@ -384,6 +386,10 @@ pub enum Message {
     /// 参照)。**B3 で `Shell::view` へ配線した**(`self.browser.is_open()`
     /// の間だけ木へ現れる、`view()` 参照)。
     Browser(browser_pane::Message),
+    /// Browser の素材カードから Source Preview owner へ渡す一時操作。Browser
+    /// 自身は handoff を発行するだけで、素材解決・decode・表示はこの root 側の
+    /// component が持つ(AssetId を二重管理しない)。
+    SourcePreview(source_preview::Message),
 
     // ---- shell の pane_grid 化(2026-08-22 実装レーン、`pane_layout.rs`
     // 冒頭 doc 参照) ----
@@ -740,6 +746,9 @@ pub struct Shell {
     /// 完結する — `settings_window`(旧 `settings_panel_open`)/`edit_menu_open`
     /// と違い、パネル開閉フラグもこの `PaneState` の内側にある)。
     browser: browser_pane::PaneState,
+    /// 素材単体を下見する一時状態。Browser のカード選択や Stage の合成結果とは
+    /// 別 owner で、Document/undo には乗らない。
+    source_preview: source_preview::State,
 
     // ---- shell の pane_grid 化(2026-08-22 実装レーン) ----
     /// リサイズ・ドッキングの layout 状態(`pane_layout.rs` 冒頭 doc 参照)。
@@ -932,6 +941,10 @@ fn dispatch_message(shell: &mut Shell, message: Message) -> Task<Message> {
         Ok(task) => return task,
         Err(message) => message,
     };
+    let message = match shell.dispatch_source_preview(message) {
+        Ok(task) => return task,
+        Err(message) => message,
+    };
     let message = match shell.dispatch_inspector_ops(message) {
         Ok(task) => return task,
         Err(message) => message,
@@ -1002,6 +1015,7 @@ impl Shell {
                 layer_selection_anchor: None,
                 timeline: timeline_pane::PaneState::new(),
                 browser: browser_pane::PaneState::new(),
+                source_preview: source_preview::State::default(),
                 panes: pane_layout::Layout::new(),
                 settings_window: None,
                 checkerboard: false,
@@ -1140,6 +1154,7 @@ impl Shell {
             layer_selection_anchor: None,
             timeline: timeline_pane::PaneState::new(),
             browser: browser_pane::PaneState::new(),
+            source_preview: source_preview::State::default(),
             panes: pane_layout::Layout::new(),
             settings_window: None,
             checkerboard: false,
@@ -1243,6 +1258,12 @@ impl Shell {
         } else {
             iced::Subscription::none()
         };
+        let source_preview_ticks = if self.source_preview.is_playing() {
+            transport::tick_subscription()
+                .map(|()| Message::SourcePreview(source_preview::Message::Tick))
+        } else {
+            iced::Subscription::none()
+        };
         // AUTOSAVE(SET+ B12 第2切片): `auto_save_enabled` の間だけ tick を
         // 束ねる(`ticks` と同じ「無効ならそもそも購読しない」形)。実際の
         // dirty 判定・再生中/ドラッグ中のスキップは `Shell::run_auto_save`
@@ -1268,6 +1289,7 @@ impl Shell {
             tokens,
             pointer,
             ticks,
+            source_preview_ticks,
             auto_save,
             closes,
             close_requests,

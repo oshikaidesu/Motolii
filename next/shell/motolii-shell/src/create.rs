@@ -609,6 +609,9 @@ impl Shell {
                 }
             }
             Message::Browser(msg) => {
+                if let browser_pane::Message::PreviewMedia(request) = &msg {
+                    return Ok(self.open_source_preview(*request));
+                }
                 // **畳んだ口**(MC-1、2026-08-23、`create.rs::
                 // dispatch_browser_card_intent` doc 参照)。カード発の意図
                 // (`CreateFromCard`/`AddMaskFromCard`/`ApplyEffectFromCard`/

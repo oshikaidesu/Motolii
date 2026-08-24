@@ -29,3 +29,11 @@ io.folder_import_expansion	semantic	core_edit	4		meaning	is_supported_import_fil
 io.folder_import_expansion	semantic	core_edit	4		evaluation	append_supported_files	緑	実装コードに実在	next/shell/motolii-shell/src/file_dialogs.rs:96
 io.folder_import_expansion	semantic	core_edit	4		render	AdmitPaths	緑	実装コードに実在	next/shell/motolii-shell/src/file_dialogs.rs:96
 io.folder_import_expansion	semantic	core_edit	4		observable	folder_expansion_recurses_in_sorted_order_and_filters_media	緑	実装コードに実在	next/shell/motolii-shell/src/file_dialogs.rs:96
+shell.source_preview	semantic	render_export	4		entry	SourcePreview	緑	実装コードに実在	next/shell/motolii-shell/src/source_preview.rs:7
+shell.source_preview	semantic	render_export	4		entry	open_source_preview	緑	実装コードに実在	next/shell/motolii-shell/src/source_preview.rs:7
+shell.source_preview	semantic	render_export	4		meaning	update	緑	実装コードに実在	next/shell/motolii-shell/src/source_preview.rs:7
+shell.source_preview	semantic	render_export	4		meaning	read_preview_frame	緑	実装コードに実在	next/shell/motolii-shell/src/source_preview.rs:7
+shell.source_preview	semantic	render_export	4		evaluation	update	緑	実装コードに実在	next/shell/motolii-shell/src/source_preview.rs:7
+shell.source_preview	semantic	render_export	4		evaluation	yuv420p_to_rgba	緑	実装コードに実在	next/shell/motolii-shell/src/source_preview.rs:7
+shell.source_preview	semantic	render_export	4		render	view	緑	実装コードに実在	next/shell/motolii-shell/src/source_preview.rs:7
+shell.source_preview	semantic	render_export	4		observable	source_preview_renders_decoded_frame	緑	実装コードに実在	next/shell/motolii-shell/src/source_preview.rs:7

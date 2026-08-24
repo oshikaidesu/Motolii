@@ -27,7 +27,7 @@
 | 17 | 並べ替え(名前順/追加日順)に切り替える | Browser | `SortKey`(Name/AddedDate/Kind)+`sorted()`(`next/ui/motolii-browser-pane/src/model.rs:693-705`) | 書ける |
 | 18 | 取り込んだ素材を1本だけクリックして選ぶ | Browser | `Message::SelectCard`(`next/ui/motolii-browser-pane/src/lib.rs:1322`、`state.rs:242`) | 書ける |
 | 19 | 別の素材を Shift や Cmd を押しながらクリックして、ライブラリ側でまとめて複数選ぶ | Browser | `CardSelectionModifiers`/`SelectCardWithModifiers` と選択解決(`next/ui/motolii-browser-pane/src/state.rs:34-98,416-509`)、表示順を渡すカード入口(`card_view.rs:289-360`)、Shell の modifier 正規化(`next/shell/motolii-shell/src/view.rs:306-318`) | 書ける |
-| 20 | 素材カードをダブルクリックして中身を下見する(再生・イン/アウト確認) | Browser | media card の single click=選択、double click=`PreviewMedia(AssetId)` handoff(`next/ui/motolii-browser-pane/src/media_preview.rs:33-86`, `card_view.rs:452-461`)。Source Monitor 相当の実再生 owner へ渡す Shell WIRE は未接続 | 【穴】入口が無い |
+| 20 | 素材カードをダブルクリックして中身を下見する(再生・イン/アウト確認) | Browser/Source Preview | media card の single click=選択、double click=`PreviewMedia(AssetId)`→Shell の `open_source_preview`。Asset 解決→probe→`read_preview_frame`→YUV→RGBA→Iced image、Frame±/Play/Pause/Set In/Set Out を一時 owner が持つ(`next/shell/motolii-shell/src/source_preview.rs:240-365`, `next/engine/motolii-media/src/preview.rs:21-105`) | 書ける |
 | 21 | 素材カードを右クリックしてコンテキストメニューを見る(リネーム・削除など) | Browser | media card の `mouse_area.on_right_press` → `OpenContextMenu` → pane-local `context_menu::State` → `context_menu::view`。既存意味の `RemoveAssetFromCard` だけを表示し、Shell の既存削除結線へ渡す(`next/ui/motolii-browser-pane/src/card_view.rs:462-500`, `context_menu.rs`) | 書ける |
 | 22 | 取り込んだ動画3本が、いずれも playhead(0秒)へ重なって置かれているのを Timeline で見る | Timeline | `admit()` のループは `start` に毎回 `self.session.playhead` を渡す(`next/shell/motolii-shell/src/lib.rs:2166,2206`)——3本とも同一開始時刻 | 書ける |
 | 23 | 1本目のクリップを掴む(bar 本体を press) | Timeline | `BarGrabbed`→`start_drag`(`next/ui/motolii-timeline-pane/src/write.rs:573,891`) | 書ける |
@@ -42,7 +42,7 @@
 | 32 | Cmd+A で見えている全レイヤーを選ぶ | Timeline | `Message::SelectAllLayers`→`select_all_layers`(`next/shell/motolii-shell/src/lib.rs:2052-2057`)、Cmd+A 配線(`next/shell/motolii-shell/src/lib.rs:5972` 付近) | 書ける |
 | 33 | 音声ファイル(単独 wav/mp3)を同じ Import 手順で取り込み、Timeline へ置く | Timeline | 取り込みは既存の `LayerSource::Media` 一本化を保ち、`AudioProgram::project_soundtrack_input` が可視 Media を soundtrack 入力候補へ投影する。fingerprint/path を cache identity に使い、音声有無の確定は既存 decode へ委譲(`next/engine/motolii-audio/src/program.rs:104-140`) | 書ける |
 | 34 | 音声レイヤーの行を選び、波形帯を見て内容を確認する | Timeline | (根拠未収集——本切片の EXACT TARGET 外。波形描画コードの有無は未確認) | 【未確認】 |
-| 35 | 同じ素材(1本目の動画)をもう一度、別の時刻に置きたい(同じ元映像から2つ目のクリップを作る) | Timeline/Browser | ライブラリのカードから Timeline/Stage へ直接ドラッグする経路は無い(`next/ui/motolii-browser-pane/src/lib.rs:123`「drag で Stage/Timeline へ、は将来切片(見送り)」)。media タブのダブルクリックも no-op(id 20)。**唯一の迂回**は File > Import Media… を再度開き、同じファイルをもう一度選ぶこと(`admit` は同一 path を再取り込みでき、`fingerprint` は同一でも `AssetDraft` は別途記帳される——重複統合の仕組みは無いので同名カードが2枚並ぶ) | 書ける(迂回) |
+| 35 | 同じ素材(1本目の動画)をもう一度、別の時刻に置きたい(同じ元映像から2つ目のクリップを作る) | Timeline/Browser | ライブラリのカードから Timeline/Stage へ直接ドラッグする経路は無い(`next/ui/motolii-browser-pane/src/lib.rs:123`「drag で Stage/Timeline へ、は将来切片(見送り)」)。ダブルクリックは Source Preview を開くが Timeline へ配置はしない。**唯一の迂回**は File > Import Media… を再度開き、同じファイルをもう一度選ぶこと(`admit` は同一 path を再取り込みでき、`fingerprint` は同一でも `AssetDraft` は別途記帳される——重複統合の仕組みは無いので同名カードが2枚並ぶ) | 書ける(迂回) |
 | 36 | 3本並んだクリップのうち、真ん中の1本の端(頭)を掴んで short trim する(端 8px 以内を狙う) | Timeline | `BarPart::EdgeIn`→`trimmed_in_start`(`next/ui/motolii-timeline-pane/src/clip_gesture.rs:91-100`)、TRIM_EDGE=8px・幅24px未満は端を出さない(`next/reference/timeline-grammar.md:34`) | 書ける |
 | 37 | 動かして、素材の先頭が削られる分だけプレビューが縮むのを確認する | Timeline | `continue_drag` の `BarPart::EdgeIn` 分岐(`next/ui/motolii-timeline-pane/src/write.rs:942-950`、`duration`/`source_in` を同時更新) | 書ける |
 | 38 | 離して確定する | Timeline | `finish_drag`(`write.rs:986-994`) | 書ける |
@@ -123,9 +123,8 @@
 - **id 64/67**(単純上書き保存)→ id 1224「Save (Project)」(採用済)が対応。現行mainのCmd+Sと既知path上書きを検分済み
 - **id 77**(Export 窓の中でアスペクト比を選ぶ)→ id 943「Select Aspect Ratio」(採用予定・未消化)が対応
 
-残る **1件が未実装の穴**(pane の handoff はあるが、素材を再生する実 owner がまだ無いもの):
-
-1. **id 20** 素材カードのダブルクリック下見 — `PreviewMedia` handoff はあるが Source Monitor 相当の実 owner へ未接続
+残る **0件**。P2 の入口/意味穴は静的に閉じた。残る `【未確認】` は実窓を開いて
+検分する席(`id 34`など)であり、静通の不足ではない。
 
 ---
 
@@ -145,9 +144,10 @@
 3. **`resolve_layer_selection`/`LayerSelectionOp`(Timeline レイヤー行の Shift/Cmd 複数選択)は rail の実入力へ接続された。** `Message::SelectLayer` が表示順と modifier を運び、`PaneState::update` が `Session::selected_layers` へ一度だけ確定する。実窓の確認は未実施
 4. **`cut_layer`(Cmd+X) は複数選択を `LayerBundle` へ昇格した。** `selected_layers` 全員の capture・削除・Paste を一つの意味とし、削除と貼り戻しをそれぞれ1 undoへ束ねる。残るのは実窓の操作確認だけ
 5. **音声 Media は専用 LayerSource variant を増やさず `SoundtrackInput` へ投影する。** store の一本化を保ちながら、音声有無の判定だけを decode 層へ委譲できる
-5. **OS ウィンドウの閉じるボタンは、メニュー Quit と異なり `confirm_discard` を経由しない。** `main.rs:89` の doc コメントが「main 窓を閉じたら exit」と、確認を挟まない設計を明言している
-6. **`start_export` は `Task::run(export_stream(...))`で背景実行し、進捗・CancelをUIへ返す。** 音声ありの場合は`export_ops.rs`内でmixとmuxまで完了させる
+6. **OS ウィンドウの閉じるボタンは、メニュー Quit と異なり `confirm_discard` を経由しない。** `main.rs:89` の doc コメントが「main 窓を閉じたら exit」と、確認を挟まない設計を明言している
+7. **`start_export` は `Task::run(export_stream(...))`で背景実行し、進捗・CancelをUIへ返す。** 音声ありの場合は`export_ops.rs`内でmixとmuxまで完了させる
 8. **`LayerSource` に soundtrack 専用の variant は無い。** 音声ファイルも動画・画像と同じ `Media` variant で扱われ、正典 §6 が書く「曲が無い project への音声=soundtrack」という特別扱いは実装されていない
+9. **Source Preview は Browser や Stage に責任を戻さず、AssetId→Asset→path→probe→frame の一時 owner を持つ。** 実フレームの表示境界だけで YUV→RGBA を行い、再生/イン/アウトは Document へ書かない
 
 ---
 
