@@ -73,6 +73,47 @@ fn cut_removes_the_layer_and_undoes_in_one_step() {
     );
 }
 
+/// 複数選択の Cut は全 layer を一つの payload に捕捉し、削除も Paste も
+/// **1 undo** に束ねる。Paste 後は束の全員が選択される。
+#[test]
+fn multi_cut_captures_all_layers_and_pastes_them_in_one_undo() {
+    let mut shell = shell();
+    let _ = shell.update(Message::AddLayer);
+    let _ = shell.update(Message::AddLayer);
+    let _ = shell.update(Message::SelectAllLayers);
+    assert_eq!(shell.session().selected_layers.len(), 2);
+
+    let _ = shell.update(Message::CutLayer);
+    assert_eq!(shell.status(), None, "複数選択 Cut が拒否されている: {:?}", shell.status());
+    assert_eq!(shell.layer_count(), 0, "選択中の全 layer が消えていない");
+    assert!(shell.session().selected_layers.is_empty(), "Cut 後に複数選択が残っている");
+    assert!(shell.session().selection.is_none(), "Cut 後に単一 focus が残っている");
+
+    let _ = shell.update(Message::Undo);
+    assert_eq!(
+        shell.layer_count(),
+        2,
+        "複数 RemoveLayer が別 undo に割れている(1操作=1 undo 違反)"
+    );
+
+    let _ = shell.update(Message::PasteLayer);
+    assert_eq!(shell.status(), None, "複数 Cut 後の Paste が拒否されている: {:?}", shell.status());
+    assert_eq!(shell.layer_count(), 4, "clipboard payload の全 layer が戻っていない");
+    assert_eq!(
+        shell.session().selected_layers,
+        vec![LayerId(3), LayerId(4)],
+        "Paste 後に payload の全 layer を選んでいない"
+    );
+    assert!(shell.session().selection.is_none(), "複数 Paste 後に単一 focus が残っている");
+
+    let _ = shell.update(Message::Undo);
+    assert_eq!(
+        shell.layer_count(),
+        2,
+        "複数 Paste が別 undo に割れている(1操作=1 undo 違反)"
+    );
+}
+
 /// Cut が捕まえた中身は Paste で戻ってくる(Copy と同じ capture 経路を使う)。
 #[test]
 fn cut_then_paste_restores_a_copy_of_the_layer() {

@@ -183,22 +183,79 @@ fn full_patch(attrs: &LayerAttrs) -> LayerAttrsPatch {
     }
 }
 
+/// 複数 layer を一つの意味として運ぶ clipboard payload。
+///
+/// layer ごとの Document 表現は [`LayerSnapshot`] のまま持ち、束としての順序だけを
+/// ここで保つ。Paste 側は束の順序で新しい id を予約し、各 snapshot の intent を
+/// 一つの `apply_all` へ渡す。これにより単一 layer の既存 Copy/Paste と、複数選択の
+/// Cut/Paste が同じ clipboard 契約に乗る。
+#[derive(Clone, Debug, Default)]
+pub struct LayerBundle {
+    layers: Vec<LayerSnapshot>,
+}
+
+impl LayerBundle {
+    /// 選択順の layer を、Document に触れずに一つの payload として捕捉する。
+    pub fn capture(view: &StoreView<'_>, layers: &[LayerId]) -> Result<Self, StoreError> {
+        layers
+            .iter()
+            .copied()
+            .map(|layer| LayerSnapshot::capture(view, layer))
+            .collect::<Result<Vec<_>, _>>()
+            .map(|layers| Self { layers })
+    }
+
+    pub fn from_snapshot(snapshot: LayerSnapshot) -> Self {
+        Self {
+            layers: vec![snapshot],
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        self.layers.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.layers.is_empty()
+    }
+
+    /// `first_id` から束の順に新しい layer id を割り当てる。
+    pub fn new_ids(&self, first_id: LayerId) -> Vec<LayerId> {
+        (0..self.layers.len())
+            .map(|offset| LayerId(first_id.0 + offset as u64))
+            .collect()
+    }
+
+    /// 束全体を一つの Paste 用 intent 列へ展開する。
+    /// 呼び手は必ずこの列を一度の `apply_all` に渡す。
+    pub fn instantiate(&self, first_id: LayerId) -> Vec<Intent> {
+        self.new_ids(first_id)
+            .into_iter()
+            .zip(&self.layers)
+            .flat_map(|(new_id, snapshot)| snapshot.instantiate(new_id))
+            .collect()
+    }
+}
+
 /// アプリ内クリップボード本体。**OS clipboard ではない**(NeoUtl/AviUtl 同型) —
 /// `Shell` が持つだけの front 状態で、Document には一切乗らない(`Session` と同じ
-/// 「undo の対象ではない」身分)。今回の束は単一 layer のみを運ぶ(複数 layer 同時
-/// Copy は multi-select UI が要る — write-set 外、RETURN の finding 参照)。
+/// 「undo の対象ではない」身分)。単一 layer も複数 layer も同じ束として保持する。
 #[derive(Clone, Debug, Default)]
 pub struct Clipboard {
-    layer: Option<LayerSnapshot>,
+    layers: Option<LayerBundle>,
 }
 
 impl Clipboard {
     pub fn set(&mut self, snapshot: LayerSnapshot) {
-        self.layer = Some(snapshot);
+        self.layers = Some(LayerBundle::from_snapshot(snapshot));
     }
 
-    pub fn get(&self) -> Option<&LayerSnapshot> {
-        self.layer.as_ref()
+    pub fn set_bundle(&mut self, bundle: LayerBundle) {
+        self.layers = Some(bundle);
+    }
+
+    pub fn get(&self) -> Option<&LayerBundle> {
+        self.layers.as_ref()
     }
 }
 

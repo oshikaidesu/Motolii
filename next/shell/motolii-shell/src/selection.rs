@@ -67,41 +67,45 @@ impl Shell {
     /// `LayerSnapshot::instantiate` が組む intent 列を1回の `apply_all` で書くので
     /// 1操作 = 1 undo。配置後は増えた方を選ぶ(正典 §4)。
     pub(crate) fn paste_layer(&mut self) {
-        let Some(snapshot) = self.clipboard.get().cloned() else {
+        let Some(bundle) = self.clipboard.get().cloned() else {
             self.status = Some("クリップボードが空".to_owned());
             return;
         };
-        let new_id = LayerId(self.next_layer_id());
-        match self.doc.apply_all(snapshot.instantiate(new_id)) {
-            Ok(()) => self.select_single(new_id),
+        let first_id = LayerId(self.next_layer_id());
+        let new_ids = bundle.new_ids(first_id);
+        match self.doc.apply_all(bundle.instantiate(first_id)) {
+            Ok(()) => self.set_selected_layers(new_ids),
             Err(error) => self.status = Some(format!("layer を貼り付けられない: {error}")),
         }
     }
 
-    /// Cut = Copy + 削除。**削除は `Intent::RemoveLayer` 1回だけ**(capture 自体は
-    /// Document を触らないので、apply 1回 = 1 undo)。locked な layer は
-    /// `Intent::RemoveLayer` の `check_not_locked` が理由つきで拒む(M13) —
-    /// 拒否された時はクリップボードも書き換えない(コピーだけ成立してしまう
-    /// 中途半端を作らない)。
+    /// Cut = Copy + 削除。選択中の全 layer を一つの clipboard payload として捕捉し、
+    /// 全 `Intent::RemoveLayer` を**1回の `apply_all`**へ束ねる(1操作 = 1 undo)。
+    /// locked な layer は `Intent::RemoveLayer` の `check_not_locked` が理由つきで
+    /// 拒む(M13) — 拒否された時はクリップボードも選択も書き換えない(コピーだけ
+    /// 成立してしまう中途半端を作らない)。
     pub(crate) fn cut_layer(&mut self) {
-        let Some(layer) = self.session.selection else {
+        let selected = if self.session.selected_layers.is_empty() {
+            self.session.selection.into_iter().collect::<Vec<_>>()
+        } else {
+            self.session.selected_layers.clone()
+        };
+        if selected.is_empty() {
             self.status = Some("切り取る layer が選ばれていない".to_owned());
             return;
-        };
-        let snapshot = match clipboard::LayerSnapshot::capture(&self.doc.view(), layer) {
-            Ok(snapshot) => snapshot,
+        }
+        let bundle = match clipboard::LayerBundle::capture(&self.doc.view(), &selected) {
+            Ok(bundle) => bundle,
             Err(error) => {
                 self.status = Some(format!("layer をコピーできない: {error}"));
                 return;
             }
         };
-        match self.doc.apply(Intent::RemoveLayer(layer)) {
+        let intents = selected.into_iter().map(Intent::RemoveLayer);
+        match self.doc.apply_all(intents) {
             Ok(()) => {
-                self.clipboard.set(snapshot);
-                if self.session.selection == Some(layer) {
-                    self.session.selection = None;
-                }
-                self.session.selected_layers.retain(|&id| id != layer);
+                self.clipboard.set_bundle(bundle);
+                self.set_selected_layers(Vec::new());
             }
             Err(error) => self.status = Some(format!("layer を切り取れない: {error}")),
         }
