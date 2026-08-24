@@ -428,6 +428,7 @@ fn card_view_with_message(
     // 面は先に抜いておく(`AssetId` は `Copy`、`path.is_some()` は bool へ
     // 丸めて独立させる)。
     let asset_id = item.id;
+    let key = model::CardKey::Media(asset_id);
     let has_usable_path = item.path.is_some();
     let status_badge = status_badge_view(&item.status, dims, colors);
     let body = card_body(
