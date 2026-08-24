@@ -76,6 +76,7 @@ mod gizmo_ops;
 mod input;
 pub(crate) mod inspector_ops;
 mod marker_ops;
+mod mask_path_ops;
 mod path_ops;
 pub(crate) mod playback;
 pub(crate) mod render;
@@ -370,6 +371,9 @@ pub enum Message {
     /// Stage Bezier path の頂点ドラッグ/開閉。投影と gesture 翻訳は pane、
     /// `SetShapes` の確定は `path_ops.rs` が所有する。
     PathEdit(stage::PathEditMessage),
+    /// Stage mask path の頂点ドラッグ。pane は投影と座標変換、書き戻しは
+    /// `mask_path_ops.rs` が `mask.{id}.shape` track へ所有する。
+    MaskPathEdit(stage::MaskPathEditMessage),
 
     // ---- Stage 離散ズーム束(B24、A10 id1441/1442/1491 の結線 — 第7波)----
     /// map 1441「Zoom In」。[`stage::zoom::zoom_step`] を

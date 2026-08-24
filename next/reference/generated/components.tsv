@@ -77,6 +77,13 @@ io.folder_import_expansion	semantic	core_edit	4		meaning	is_supported_import_fil
 io.folder_import_expansion	semantic	core_edit	4		evaluation	append_supported_files	緑	実装コードに実在	next/shell/motolii-shell/src/file_dialogs.rs:96
 io.folder_import_expansion	semantic	core_edit	4		render	AdmitPaths	緑	実装コードに実在	next/shell/motolii-shell/src/file_dialogs.rs:96
 io.folder_import_expansion	semantic	core_edit	4		observable	folder_expansion_recurses_in_sorted_order_and_filters_media	緑	実装コードに実在	next/shell/motolii-shell/src/file_dialogs.rs:96
+shell.mask_path_edit_writer	semantic	core_edit	4		entry	update_mask_path_edit	緑	実装コードに実在	next/shell/motolii-shell/src/mask_path_ops.rs:11
+shell.mask_path_edit_writer	semantic	core_edit	4		entry	commit_mask_vertex_change	緑	実装コードに実在	next/shell/motolii-shell/src/mask_path_ops.rs:11
+shell.mask_path_edit_writer	semantic	core_edit	4		meaning	MoveVertex	緑	実装コードに実在	next/shell/motolii-shell/src/mask_path_ops.rs:11
+shell.mask_path_edit_writer	semantic	core_edit	4		evaluation	move_mask_vertex	緑	実装コードに実在	next/shell/motolii-shell/src/mask_path_ops.rs:11
+shell.mask_path_edit_writer	semantic	core_edit	4		evaluation	edited_value_track	緑	実装コードに実在	next/shell/motolii-shell/src/mask_path_ops.rs:11
+shell.mask_path_edit_writer	semantic	core_edit	4		render	SetTrack	緑	実装コードに実在	next/shell/motolii-shell/src/mask_path_ops.rs:11
+shell.mask_path_edit_writer	semantic	core_edit	4		observable	mask_vertex_drag_changes_shape	緑	実装コードに実在	next/shell/motolii-shell/src/mask_path_ops.rs:11
 shell.path_edit_writer	semantic	core_edit	4		entry	update_path_edit	緑	実装コードに実在	next/shell/motolii-shell/src/path_ops.rs:12
 shell.path_edit_writer	semantic	core_edit	4		entry	commit_path_change	緑	実装コードに実在	next/shell/motolii-shell/src/path_ops.rs:12
 shell.path_edit_writer	semantic	core_edit	4		meaning	MoveVertex	緑	実装コードに実在	next/shell/motolii-shell/src/path_ops.rs:12
@@ -121,6 +128,13 @@ shell.source_preview	semantic	render_export	4		evaluation	update	緑	実装コ�
 shell.source_preview	semantic	render_export	4		evaluation	yuv420p_to_rgba	緑	実装コードに実在	next/shell/motolii-shell/src/source_preview.rs:7
 shell.source_preview	semantic	render_export	4		render	view	緑	実装コードに実在	next/shell/motolii-shell/src/source_preview.rs:7
 shell.source_preview	semantic	render_export	4		observable	source_preview_renders_decoded_frame	緑	実装コードに実在	next/shell/motolii-shell/src/source_preview.rs:7
+stage.mask_path_edit	semantic	core_edit	4		entry	MaskPathEditTarget	緑	実装コードに実在	next/ui/motolii-stage-pane/src/mask_path_edit.rs:18
+stage.mask_path_edit	semantic	core_edit	4		entry	MaskPathEditOverlay	緑	実装コードに実在	next/ui/motolii-stage-pane/src/mask_path_edit.rs:18
+stage.mask_path_edit	semantic	core_edit	4		meaning	MoveVertex	緑	実装コードに実在	next/ui/motolii-stage-pane/src/mask_path_edit.rs:18
+stage.mask_path_edit	semantic	core_edit	4		evaluation	comp_from_screen	緑	実装コードに実在	next/ui/motolii-stage-pane/src/mask_path_edit.rs:18
+stage.mask_path_edit	semantic	core_edit	4		evaluation	layer_from_comp	緑	実装コードに実在	next/ui/motolii-stage-pane/src/mask_path_edit.rs:18
+stage.mask_path_edit	semantic	core_edit	4		render	draw	緑	実装コードに実在	next/ui/motolii-stage-pane/src/mask_path_edit.rs:18
+stage.mask_path_edit	semantic	core_edit	4		observable	mask_vertex_drag_changes_shape	緑	実装コードに実在	next/ui/motolii-stage-pane/src/mask_path_edit.rs:18
 stage.path_edit	semantic	core_edit	4		entry	PathEditTarget	緑	実装コードに実在	next/ui/motolii-stage-pane/src/path_edit.rs:18
 stage.path_edit	semantic	core_edit	4		entry	PathEditOverlay	緑	実装コードに実在	next/ui/motolii-stage-pane/src/path_edit.rs:18
 stage.path_edit	semantic	core_edit	4		meaning	MoveVertex	緑	実装コードに実在	next/ui/motolii-stage-pane/src/path_edit.rs:18

@@ -57,7 +57,7 @@
 | 26 | Mask カードをダブルクリックしてマスクを追加する | Browser | `model.rs:475-489` `id:"mask"` カード → `next/ui/motolii-browser-pane/src/lib.rs:1579-1589` `Message::AddMaskFromCard` → `shell/motolii-shell/src/lib.rs:1410-1414`,`1692-1721` `add_mask_to_selected_layer` が `Intent::AddMask{layer,mask,shape}` を適用(既定の矩形パス込みで1回の apply_all) | 書ける |
 | 27 | 選択済みレイヤーが2つ以上/0の状態でマスクを追加しようとすると、理由つきで断られる | Browser | `shell/motolii-shell/src/lib.rs:1692-1696` — 「マスクを追加するレイヤーを1つ選んでください」を status へ出す | 書ける |
 | 28 | 追加直後、既定の矩形マスクが Stage に反映されることを確かめる | Stage | `Intent::AddMask` が shape を同時に書くため `resolved_masks` はエラーにならない(`core/motolii-store/src/view.rs:671-676` のエラー分岐を回避) | 書ける |
-| 29 | マスクの形をドラッグで変える(頂点編集) | Stage | 【穴】入口が無い — マスクの頂点も B-16 と同じ `motolii-vector` の edit 関数群止まりで呼び手ゼロ | 【穴】入口が無い |
+| 29 | マスクの形をドラッグで変える(頂点編集) | Stage | `next/ui/motolii-stage-pane/src/mask_path_edit.rs` が `ResolvedMask.shape` の頂点を画面へ投影し、`next/shell/motolii-shell/src/mask_path_ops.rs` が `mask.{id}.shape` の `Value::Path` track へ playhead のキーとして書き戻す。`mask_vertex_drag_changes_shape` が頂点移動と接線保持を検収 | 書ける |
 | 30 | マスクのモード(Add/Subtract/Intersect/Lighten/Darken/Difference)を巡回で切り替える | Inspector | `ui/motolii-inspector-pane/src/mask.rs:37-44` `next_mask_mode`、`lib.rs:1720`/`shell/motolii-shell/src/lib.rs:2376` `CycleMaskMode` | 書ける |
 | 31 | マスクを反転(invert)する | Inspector | `ui/motolii-inspector-pane/src/mask.rs` の `toggle_inspector_mask_inverted`(`lib.rs:154` import) | 書ける |
 | 32 | マスクの不透明度を数値で変える | Inspector | `TransformField::MaskOpacity(MaskId)`(`transform.rs:63`) | 書ける |

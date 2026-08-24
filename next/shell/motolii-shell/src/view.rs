@@ -155,6 +155,48 @@ impl Shell {
         ))
     }
 
+    /// `MaskPathEditOverlay` の組み立て(P3 #29)。mask の形状は
+    /// `ResolvedLayer::masks`、安定 id は `StoreView::masks` から同じ順で
+    /// 対応させる。書き戻しは `mask_path_ops.rs` が property track へ行う。
+    pub fn stage_mask_path_edit_overlay(&self) -> Option<stage::MaskPathEditOverlay> {
+        if self.shape_tool != stage::ShapeTool::Select {
+            return None;
+        }
+        let layer = self.session.selection?;
+        let composition = self.composition()?;
+        let time = self.time_at_playhead()?;
+        let store = self.doc.view();
+        let resolved = store.resolve(layer, time).ok().flatten()?;
+        let masks = store.masks(layer).ok()?;
+        let mask_paths = masks
+            .iter()
+            .zip(resolved.masks.iter())
+            .map(|(mask, resolved)| (mask.id, &resolved.shape))
+            .collect::<Vec<_>>();
+        let target = stage::MaskPathEditTarget::from_masks(
+            layer,
+            &mask_paths,
+            resolved.placement.transform,
+        );
+        if target.is_empty() {
+            return None;
+        }
+        let comp = motolii_core::CompSpec {
+            width: composition.width,
+            height: composition.height,
+        };
+        let render_camera = store.resolve_camera(time).ok().unwrap_or_default();
+        Some(stage::MaskPathEditOverlay::new(
+            comp,
+            render_camera,
+            self.observation,
+            target,
+            true,
+            self.dims(),
+            self.tokens.colors,
+        ))
+    }
+
     /// `stage::SheetOverlay` の組み立て(B22、第6波、`sheets.rs` 冒頭 doc
     /// 「家(結線は次波)」— この波で結線)。`stage_overlay`/`stage_gizmo_overlay`
     /// と同じ「毎フレーム不変な投影を作り直す」形。トグル状態
@@ -417,6 +459,7 @@ impl Shell {
                     self.stage_gizmo_overlay(),
                     self.stage_shape_tool_overlay(),
                     self.stage_path_edit_overlay(),
+                    self.stage_mask_path_edit_overlay(),
                     self.shape_tool,
                     self.observation,
                     self.resolution_cap,
@@ -697,6 +740,7 @@ fn stage_pane(
     gizmo: Option<stage::GizmoOverlay>,
     shape_tool: Option<stage::ShapeToolOverlay>,
     path_edit: Option<stage::PathEditOverlay>,
+    mask_path_edit: Option<stage::MaskPathEditOverlay>,
     active_shape_tool: stage::ShapeTool,
     observation: Option<ObservationCamera>,
     resolution_cap: stage::PreviewResolutionCap,
@@ -773,6 +817,9 @@ fn stage_pane(
             if let Some(path_edit) = path_edit.clone() {
                 layered = stack![layered, path_edit.view().map(Message::PathEdit)].into();
             }
+            if let Some(mask_path_edit) = mask_path_edit.clone() {
+                layered = stack![layered, mask_path_edit.view().map(Message::MaskPathEdit)].into();
+            }
             layered
         }
         None => text("comp がまだ無い")
@@ -808,7 +855,11 @@ fn stage_pane(
         .and_then(|overlay| stage::path_edit::toolbar(overlay.target(), dims, colors))
         .map(|toolbar| toolbar.map(Message::PathEdit))
         .unwrap_or_else(|| Space::new().height(0.0).into());
-    let tool_bar = column![shape_tool_bar, path_edit_bar].spacing(0.0);
+    let mask_path_edit_bar: Element<'_, Message> = mask_path_edit
+        .as_ref()
+        .map(|_| stage::mask_path_edit::toolbar(dims, colors).map(Message::MaskPathEdit))
+        .unwrap_or_else(|| Space::new().height(0.0).into());
+    let tool_bar = column![shape_tool_bar, path_edit_bar, mask_path_edit_bar].spacing(0.0);
     container(column![tool_bar, container(body).width(Length::Fill).height(Length::Fill), band].spacing(0.0))
         .width(Length::Fill)
         .height(Length::Fill)

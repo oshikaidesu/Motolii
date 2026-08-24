@@ -94,6 +94,13 @@ pub use shape_tool::{Message as ShapeToolMessage, ShapeTool, ShapeToolOverlay};
 /// 親へ確定事象を返す。
 pub mod path_edit;
 pub use path_edit::{Message as PathEditMessage, PathEditOverlay, PathEditTarget, VertexRef};
+/// Stage mask path の頂点ドラッグ。Shape path edit と同じ座標変換を使うが、
+/// `mask.{id}.shape` の property track へ戻すため別 component として持つ。
+pub mod mask_path_edit;
+pub use mask_path_edit::{
+    MaskPathEditOverlay, MaskPathEditTarget, MaskVertexRef,
+    Message as MaskPathEditMessage,
+};
 /// Viewer の家(発注 2026-08-22)— 視点タブ(B17)+画質(B23)+チャンネル表示
 /// (B05 Viewer 側)。message は既存 [`Message`] と独立(理由はモジュール doc、
 /// `gizmo` と同型)。
