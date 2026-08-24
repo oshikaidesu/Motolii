@@ -76,12 +76,13 @@ mod gizmo_ops;
 mod input;
 pub(crate) mod inspector_ops;
 mod marker_ops;
+mod path_ops;
 pub(crate) mod playback;
 pub(crate) mod render;
 mod render_dispatch;
 mod selection;
 mod settings_ops;
-mod path_ops;
+mod shape_operator;
 mod shape_ops;
 #[allow(unreachable_pub)]
 mod source_preview;

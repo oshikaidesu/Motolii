@@ -14,6 +14,15 @@ browser.media_card_preview	semantic	render_export	4		meaning	preview_media_reque
 browser.media_card_preview	semantic	render_export	4		evaluation	preview_media_target	緑	実装コードに実在	next/ui/motolii-browser-pane/src/media_preview.rs:8
 browser.media_card_preview	semantic	render_export	4		render	media_card_preview	緑	実装コードに実在	next/ui/motolii-browser-pane/src/media_preview.rs:8
 browser.media_card_preview	semantic	render_export	4		observable	media_card_double_click_publishes_preview	緑	実装コードに実在	next/ui/motolii-browser-pane/src/media_preview.rs:8
+browser.shape_operator_catalog	semantic	core_edit	4		entry	ShapeOpKind	緑	実装コードに実在	next/ui/motolii-browser-pane/src/model/tabs.rs:8
+browser.shape_operator_catalog	semantic	core_edit	4		entry	EFFECTS_PREVIEW	緑	実装コードに実在	next/ui/motolii-browser-pane/src/model/tabs.rs:8
+browser.shape_operator_catalog	semantic	core_edit	4		meaning	ApplyOp	緑	実装コードに実在	next/ui/motolii-browser-pane/src/model/tabs.rs:8
+browser.shape_operator_catalog	semantic	core_edit	4		meaning	ShapeOps	緑	実装コードに実在	next/ui/motolii-browser-pane/src/model/tabs.rs:8
+browser.shape_operator_catalog	semantic	core_edit	4		evaluation	preview_tags	緑	実装コードに実在	next/ui/motolii-browser-pane/src/model/tabs.rs:8
+browser.shape_operator_catalog	semantic	core_edit	4		evaluation	effects_action_cards_declare_their_selection_action	緑	実装コードに実在	next/ui/motolii-browser-pane/src/model/tabs.rs:8
+browser.shape_operator_catalog	semantic	core_edit	4		render	ShapeOps	緑	実装コードに実在	next/ui/motolii-browser-pane/src/model/tabs.rs:8
+browser.shape_operator_catalog	semantic	core_edit	4		render	preview_catalog	緑	実装コードに実在	next/ui/motolii-browser-pane/src/model/tabs.rs:8
+browser.shape_operator_catalog	semantic	core_edit	4		observable	effects_action_cards_declare_their_selection_action	緑	実装コードに実在	next/ui/motolii-browser-pane/src/model/tabs.rs:8
 edit.batch_rename	semantic	core_edit	4	785	entry	BatchRenameSelectedLayers	緑	実装コードに実在	next/shell/motolii-shell/src/batch_rename.rs:7
 edit.batch_rename	semantic	core_edit	4	785	meaning	apply_selected	緑	実装コードに実在	next/shell/motolii-shell/src/batch_rename.rs:7
 edit.batch_rename	semantic	core_edit	4	785	evaluation	apply_all	緑	実装コードに実在	next/shell/motolii-shell/src/batch_rename.rs:7
@@ -50,6 +59,14 @@ shell.path_edit_writer	semantic	core_edit	4		evaluation	close_path	緑	実装コ
 shell.path_edit_writer	semantic	core_edit	4		evaluation	open_path	緑	実装コードに実在	next/shell/motolii-shell/src/path_ops.rs:12
 shell.path_edit_writer	semantic	core_edit	4		render	SetShapes	緑	実装コードに実在	next/shell/motolii-shell/src/path_ops.rs:12
 shell.path_edit_writer	semantic	core_edit	4		observable	path_vertex_drag_changes_shape	緑	実装コードに実在	next/shell/motolii-shell/src/path_ops.rs:12
+shell.shape_operator_writer	semantic	core_edit	4		entry	apply_op_to_selected_layer	緑	実装コードに実在	next/shell/motolii-shell/src/shape_operator.rs:8
+shell.shape_operator_writer	semantic	core_edit	4		entry	dispatch_browser_card_intent	緑	実装コードに実在	next/shell/motolii-shell/src/shape_operator.rs:8
+shell.shape_operator_writer	semantic	core_edit	4		meaning	ApplyOpFromCard	緑	実装コードに実在	next/shell/motolii-shell/src/shape_operator.rs:8
+shell.shape_operator_writer	semantic	core_edit	4		meaning	OpKind	緑	実装コードに実在	next/shell/motolii-shell/src/shape_operator.rs:8
+shell.shape_operator_writer	semantic	core_edit	4		evaluation	default_op_kind	緑	実装コードに実在	next/shell/motolii-shell/src/shape_operator.rs:8
+shell.shape_operator_writer	semantic	core_edit	4		evaluation	SetShapes	緑	実装コードに実在	next/shell/motolii-shell/src/shape_operator.rs:8
+shell.shape_operator_writer	semantic	core_edit	4		render	SetShapes	緑	実装コードに実在	next/shell/motolii-shell/src/shape_operator.rs:8
+shell.shape_operator_writer	semantic	core_edit	4		observable	shape_operator_cards_apply_to_selected_shape	緑	実装コードに実在	next/shell/motolii-shell/src/shape_operator.rs:8
 shell.shape_tool_writer	semantic	core_edit	4		entry	ShapeTool	緑	実装コードに実在	next/shell/motolii-shell/src/shape_ops.rs:15
 shell.shape_tool_writer	semantic	core_edit	4		entry	create_drawn_shape	緑	実装コードに実在	next/shell/motolii-shell/src/shape_ops.rs:15
 shell.shape_tool_writer	semantic	core_edit	4		meaning	Create	緑	実装コードに実在	next/shell/motolii-shell/src/shape_ops.rs:15

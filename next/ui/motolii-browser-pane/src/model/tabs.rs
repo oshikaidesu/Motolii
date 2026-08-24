@@ -5,6 +5,18 @@ use super::projection::{visible, AssetListItem};
 use super::rail::RailScope;
 use motolii_store::AssetId;
 
+/* motolii-component
+id = "browser.shape_operator_catalog"
+kind = "semantic"
+weight = "core_edit"
+maps = []
+entry = ["ShapeOpKind", "EFFECTS_PREVIEW"]
+meaning = ["ApplyOp", "ShapeOps"]
+evaluation = ["preview_tags", "effects_action_cards_declare_their_selection_action"]
+render = ["ShapeOps", "preview_catalog"]
+observable = ["effects_action_cards_declare_their_selection_action"]
+*/
+
 // ---------------------------------------------------------------------------
 // タブ4種+preview-local カタログ(mock `.libraryTabs`/`data-tab`、B3 転写の
 // 取り残し回収 — 利用者実窓不合格 2026-08-22 への対応)。
