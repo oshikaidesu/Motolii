@@ -3,6 +3,7 @@
 
 use crate::context_menu;
 use crate::filter_view::FILTER_CHIP_CORNER_RADIUS_ROW_HEIGHT_RATIO;
+use crate::media_preview;
 use crate::model::{self, AssetListItem};
 use crate::search_view::chip_style;
 use crate::{CardSelectionModifiers, Message};
@@ -277,6 +278,7 @@ pub(crate) fn card_grid_view(
                         single_selected_layer,
                         None,
                         false,
+                        false,
                         dims,
                         colors,
                     )
@@ -309,6 +311,7 @@ pub(crate) fn card_grid_view_with_selection(
     view_mode: model::ViewMode,
     single_selected_layer: Option<motolii_store::LayerId>,
     context_menu_anchor: Option<model::CardKey>,
+    hovered: Option<model::CardKey>,
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
@@ -344,6 +347,7 @@ pub(crate) fn card_grid_view_with_selection(
                         single_selected_layer,
                         context_menu_anchor,
                         true,
+                        hovered == Some(key),
                         dims,
                         colors,
                         Message::SelectCardWithModifiers {
@@ -386,6 +390,7 @@ fn card_view(
     single_selected_layer: Option<motolii_store::LayerId>,
     context_menu_anchor: Option<model::CardKey>,
     enable_context_menu: bool,
+    hovered: bool,
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
@@ -398,6 +403,7 @@ fn card_view(
         single_selected_layer,
         context_menu_anchor,
         enable_context_menu,
+        hovered,
         dims,
         colors,
         Message::SelectCard(key),
@@ -414,6 +420,7 @@ fn card_view_with_message(
     single_selected_layer: Option<motolii_store::LayerId>,
     context_menu_anchor: Option<model::CardKey>,
     enable_context_menu: bool,
+    hovered: bool,
     dims: Dimensions,
     colors: Colors,
     select_message: Message,
@@ -442,17 +449,23 @@ fn card_view_with_message(
         status_badge,
     );
 
-    let card_button = button(body)
-        .on_press(select_message)
-        .width(card_frame_width(view_mode, dims))
-        .padding(dims.spacing_xs)
-        .style(move |_theme, status| card_style(dims, colors, selected, recent, status));
+    let card_surface = media_preview::media_card_preview(
+        body,
+        asset_id,
+        selected,
+        recent,
+        hovered,
+        select_message,
+        card_frame_width(view_mode, dims),
+        dims,
+        colors,
+    );
 
     // 選択 layer 1件+パス有りの素材の時だけ Replace 行を足す(第6切片、map
     // B08 616/617)。iced の button は入れ子にしない([`card_button`] とは
     // 別の兄弟行にする — カード本体の選択クリックと Replace クリックが
     // 干渉しない、`Message::ReplaceSelectedLayerSource` doc 参照)。
-    let mut rows: Vec<Element<'static, Message>> = vec![card_button.into()];
+    let mut rows: Vec<Element<'static, Message>> = vec![card_surface];
     if let Some(replace_row) = replace_affordance_row(
         single_selected_layer,
         has_usable_path,

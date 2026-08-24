@@ -21,6 +21,7 @@
 //! 「pane split 流儀」どおり)。`Shell::view` は [`PaneState::is_open`] を読んで
 //! 表示するかどうかだけ判断する。
 use crate::context_menu;
+use crate::media_preview::PreviewMedia;
 use crate::model::{
     CardKey, CreateKind, LibraryTab, PreviewScope, RailScope, ShapeOpKind, SortKey, ViewMode,
 };
@@ -88,6 +89,14 @@ pub enum Message {
     /// anchor として渡す。Document の選択集合を暗黙に書き換えず、menu の
     /// command が対象 AssetId を明示的に運ぶ。
     OpenContextMenu(CardKey),
+    /// media カードのダブルクリックによる素材単体プレビュー要求。
+    ///
+    /// これは Browser が持つ最後の handoff であり、`AssetId` 以外の素材情報や
+    /// player state は持たない。`motolii-shell` の `Message::Browser` 境界から
+    /// Source Monitor 相当の実在 owner へ結線するまで、pane-local state は
+    /// 変更しない。現行 Stage preview は comp 全体の合成経路なので、ここへ
+    /// それを誤接続したり、Browser に再生ボタンを作ったりはしない。
+    PreviewMedia(PreviewMedia),
     /// modifier 付きカード click。
     ///
     /// `visible_cards` は現在の表示順(絞り込み後の catalog 順)を view/WIRE
@@ -358,6 +367,9 @@ impl PaneState {
             Message::OpenContextMenu(key) => {
                 self.context_menu.open(key);
             }
+            // PreviewMedia は外向きの typed handoff。素材/再生の正本を Browser
+            // に複製しないため、pane-local state は変えない。
+            Message::PreviewMedia(_) => {}
             Message::SelectCardWithModifiers {
                 key,
                 modifiers,

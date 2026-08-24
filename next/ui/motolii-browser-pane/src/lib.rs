@@ -201,6 +201,7 @@ mod card_view;
 mod context_menu;
 mod filter_view;
 pub mod model;
+mod media_preview;
 mod preview_view;
 mod rail_view;
 mod search_view;
@@ -211,6 +212,7 @@ pub use model::{
     LibraryTab, PreviewCard, PreviewScope, PreviewTag, RAIL_SCOPES, RailScope, SORT_KEYS,
     SelectionAction, ShapeOpKind, SortKey, ViewMode,
 };
+pub use media_preview::PreviewMedia;
 pub use state::{CardSelectionModifiers, Message, PaneState};
 
 // SP-6(裁定220 レーン)分割: `lib.rs`(旧1,799行)の view 実装は責任ごとに
@@ -341,6 +343,7 @@ pub fn pane_view_with_modifiers(
             state.drop_hover(),
             single_selected_layer,
             state.context_menu_anchor(),
+            state.hovered(),
             dims,
             colors,
         ),
@@ -545,6 +548,7 @@ fn media_body_with_selection(
     drop_hover: bool,
     single_selected_layer: Option<motolii_store::LayerId>,
     context_menu_anchor: Option<CardKey>,
+    hovered: Option<CardKey>,
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
@@ -563,6 +567,7 @@ fn media_body_with_selection(
         view_mode,
         single_selected_layer,
         context_menu_anchor,
+        hovered,
         dims,
         colors,
     );
