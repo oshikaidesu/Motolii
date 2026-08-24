@@ -60,7 +60,7 @@ fn press_card(state: &PaneState, presses: usize) -> Vec<Message> {
     let target = collect_targets(build())
         .into_iter()
         .find_map(|target| match target {
-            Target::Text { content, .. } if content == "intro-clip" => Some(target),
+            Target::Text { ref content, .. } if content == "intro-clip" => Some(target),
             _ => None,
         })
         .expect("media card の名前が atlas に無い");

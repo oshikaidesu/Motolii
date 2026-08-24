@@ -203,7 +203,7 @@ fn layer_mix_source(
         return Ok(None);
     };
     let attrs = view.attrs(layer)?.unwrap_or_default();
-    let Some(input) = project_soundtrack_input(meta, attrs.hidden) else {
+    let Some(input) = project_soundtrack_input(&meta, attrs.hidden) else {
         return Ok(None);
     };
 
