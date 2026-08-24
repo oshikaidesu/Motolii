@@ -53,7 +53,7 @@ fn select_all_then_delete_removes_every_selected_layer_in_one_undo_step() {
     assert_eq!(shell.layer_count(), 3);
 
     let _ = shell.update(Message::SelectAllLayers);
-    let _ = shell.update(Message::DeleteSelectedLayers);
+    let _ = shell.update(Message::DeleteSelectionRequested);
     assert_eq!(shell.status(), None, "Delete が拒否されている: {:?}", shell.status());
     assert_eq!(shell.layer_count(), 0, "選択した3枚のうち一部しか消えていない");
     assert!(shell.session().selected_layers.is_empty());

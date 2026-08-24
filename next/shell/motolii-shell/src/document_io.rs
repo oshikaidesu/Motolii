@@ -12,6 +12,19 @@ use crate::{
 
 impl Shell {
 
+    /// `AdmitPaths`/`FlushDrops` の共有入口。ファイルは従来どおり、フォルダは
+    /// [`file_dialogs::expand_import_paths`] で supported media へ展開してから
+    /// 既存の `admit` へ渡す。展開の I/O 失敗は黙って空扱いにせず status 帯へ
+    /// 出す(M13) — `admit` 自身の probe/fingerprint 拒否とは別の失敗境界。
+    pub(crate) fn admit_import_paths(&mut self, paths: Vec<std::path::PathBuf>) {
+        match file_dialogs::expand_import_paths(paths) {
+            Ok(paths) => self.admit(paths),
+            Err(error) => {
+                self.status = Some(format!("素材フォルダを展開できない: {error}"));
+            }
+        }
+    }
+
     /// 既定 comp だけを持つ、空の Document を組む(`new_with_dialogs`/
     /// `reset_document`(New Project、MB-1)が共有する)。空の Document には
     /// comp が無く Stage が何も出せない(M17 違反)ので、起動直後・New Project
@@ -465,12 +478,12 @@ impl Shell {
                     self.status = Some("これ以上進めない".to_owned());
                 }
             }
-            Message::AdmitPaths(paths) => self.admit(paths),
+            Message::AdmitPaths(paths) => self.admit_import_paths(paths),
             Message::DropReceived(path) => self.pending_drops.push(path),
             Message::FlushDrops => {
                 if !self.pending_drops.is_empty() {
                     let paths = std::mem::take(&mut self.pending_drops);
-                    self.admit(paths);
+                    self.admit_import_paths(paths);
                 }
             }
             Message::TokensFileChanged => {

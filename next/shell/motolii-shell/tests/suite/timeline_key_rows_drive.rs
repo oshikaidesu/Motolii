@@ -318,7 +318,7 @@ fn deleting_a_selected_key_removes_only_that_key_and_undo_restores_it_in_one_ste
     let _ = shell.update(Message::Timeline(timeline_pane::Message::KeySelect(KeySelectionOp::Single(
         target,
     ))));
-    let _ = shell.update(Message::Timeline(timeline_pane::Message::DeleteSelectedKeys));
+    let _ = shell.update(Message::DeleteSelectionRequested);
 
     let after_delete = shell.timeline_property_rows();
     let position_after = after_delete

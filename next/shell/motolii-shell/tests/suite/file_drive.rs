@@ -552,6 +552,46 @@ fn import_media_requested_admits_the_picked_paths_just_like_a_drop() {
     assert_eq!(shell.assets().len(), 2, "Import Media が2件とも台帳に載せていない");
 }
 
+/// **ORACLE**: Import Media… でフォルダを選ぶと、フォルダ自身を素材にせず
+/// supported media の子だけを既存の `AdmitPaths` 経路へ渡す。非対応拡張子は
+/// 除外し、2本の取り込みが1操作として成立する。
+#[test]
+fn import_media_requested_expands_a_folder_before_admit() {
+    use motolii_testkit::{ffmpeg_or_skip, tmp_dir};
+    use std::process::Command;
+
+    if !ffmpeg_or_skip() {
+        return;
+    }
+    let dir = tmp_dir("file-drive-import-folder");
+    let folder = dir.join("media");
+    std::fs::create_dir(&folder).unwrap();
+    for (name, color) in [("a.mp4", "orange"), ("b.mp4", "green")] {
+        let path = folder.join(name);
+        let out = Command::new("ffmpeg")
+            .args([
+                "-y", "-f", "lavfi", "-i",
+            ])
+            .arg(format!("color=c={color}:s=64x64:d=1:r=30"))
+            .args(["-pix_fmt", "yuv420p", "-c:v", "libx264"])
+            .arg(&path)
+            .output()
+            .expect("ffmpeg");
+        assert!(out.status.success());
+    }
+    std::fs::write(folder.join("ignore.txt"), b"not media").unwrap();
+
+    let (mut shell, fake) = shell_with_fake();
+    fake.set_import_paths(vec![folder]);
+    drive(&mut shell, Message::ImportMediaRequested);
+
+    assert_eq!(shell.assets().len(), 2, "フォルダ内の supported media 2本が台帳に載らない");
+    assert_eq!(shell.layer_count(), 2, "フォルダ自身/非対応ファイルを誤って layer 化した");
+    assert_eq!(shell.status(), None, "正常な folder import に拒否理由が出ている");
+    let _ = shell.update(Message::Undo);
+    assert_eq!(shell.layer_count(), 0, "folder import が1操作として Undo できない");
+}
+
 #[test]
 fn import_media_requested_is_a_harmless_noop_when_the_dialog_is_cancelled() {
     let (mut shell, _fake) = shell_with_fake();

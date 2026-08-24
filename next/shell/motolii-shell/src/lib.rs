@@ -441,10 +441,15 @@ pub enum Message {
     /// しなかった削除を独立させた専用動詞 — クリップボードを経由しないので
     /// `selected_layers` を丸ごと1回の `apply_all`(= 1 undo)で消せる
     /// (`selection.rs::delete_selected_layers` doc 参照)。**キーボード入口
-    /// (Backspace/Delete)はまだ無い** — `resolve_navigation_key` は
-    /// write-set 外(`input.rs`、波C C-4 レーン)なので配線できていない
-    /// (RETURN 参照)。
+    /// (Backspace/Delete)は `DeleteSelectionRequested` から入る** — キー選択の
+    /// 有無は `playback.rs` の文脈判断へ残し、この既存動詞の意味は変えない。
     DeleteSelectedLayers,
+    /// Backspace/Delete の文脈付き要求。入力翻訳は text capture の有無だけを
+    /// 見てこの腕を発行し、キー選択優先／レイヤー選択への fallback は
+    /// `playback.rs::dispatch_playback` が判断する。既存の
+    /// `Timeline(DeleteSelectedKeys)` と `DeleteSelectedLayers` の意味は
+    /// それぞれの所有者へ残し、root は要求の型だけを運ぶ。
+    DeleteSelectionRequested,
     /// Timeline rail M glyph 一括版(軸台帳 A08「Hidden トグル」の穴)。
     /// 行ごとのクリック(`inspector_pane::Message::ToggleHidden`)とは併存
     /// (裁定195・S6) — キーボード入口は同じく未配線(RETURN 参照)。

@@ -68,7 +68,7 @@ impl Shell {
 /// NudgeKeyframe/ResetToRenderCamera はその方針どおり `status` を無視する
 /// (Escape は text_input 編集中でも Esc-cancel として意味を持つ望ましい
 /// 二重発火、Alt+Arrow/Shift+F は text_input 内で衝突する意味を持たない)。
-/// **Backspace/Delete(Timeline キー削除)と playhead ナビゲーション動詞束
+/// **Backspace/Delete(キー優先の文脈付き削除)と playhead ナビゲーション動詞束
 /// (U2)は逆** — 前者は `status != Captured` をこの関数内で直接見て
 /// (2026-08-23 修正、下記コメント参照)、後者は `resolve_navigation_key` へ
 /// `status == Captured` を渡す。どちらも text_input が既にそのキーを
@@ -95,7 +95,7 @@ pub fn inspector_pointer_event(
             key: iced::keyboard::Key::Named(iced::keyboard::key::Named::Escape),
             ..
         }) => Some(Message::EscapePressed),
-        // Timeline のキー削除(正典 §3)。**Mac の「Delete」キーラベルは
+        // 選択削除の要求(正典 §3)。**Mac の「Delete」キーラベルは
         // `Named::Backspace` として届く**(`iced_core::keyboard::key` の doc
         // コメント実測 — 主部の物理キーは Backspace、`Named::Delete` は
         // `Fn+Delete`/外付けキーボードの forward-delete)。両方拾う。
@@ -123,9 +123,7 @@ pub fn inspector_pointer_event(
         | iced::Event::Keyboard(iced::keyboard::Event::KeyPressed {
             key: iced::keyboard::Key::Named(iced::keyboard::key::Named::Delete),
             ..
-        }) if status != iced::event::Status::Captured => Some(Message::Timeline(
-            timeline_pane::Message::DeleteSelectedKeys,
-        )),
+        }) if status != iced::event::Status::Captured => Some(Message::DeleteSelectionRequested),
         // NudgeKeyframe(正典 §8.1)。**既定割当は仮**(拘束6・裁定146の隣接注記
         // どおり、キーの皮は keymap 層が無い今だけ直結) — アクション名
         // (`timeline_pane::Message::NudgeKeyframe`)だけを正本として残す。

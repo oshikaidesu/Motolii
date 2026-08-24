@@ -186,6 +186,45 @@ fn three_drops_become_one_operation() {
     assert_eq!(shell.layer_count(), 0, "3本の取り込みが Undo 1回で消えない");
 }
 
+/// **ORACLE**: OS drop が運んだディレクトリは `FlushDrops` の区切りで
+/// supported media へ展開され、フォルダ内の複数素材が1操作になる。
+#[test]
+fn dropping_a_folder_expands_supported_media_at_flush() {
+    use motolii_testkit::{ffmpeg_or_skip, tmp_dir};
+    use std::process::Command;
+
+    if !ffmpeg_or_skip() {
+        return;
+    }
+    let dir = tmp_dir("shell-folder-drop");
+    let folder = dir.join("media");
+    std::fs::create_dir(&folder).unwrap();
+    for (name, color) in [("first.mp4", "red"), ("second.mp4", "blue")] {
+        let path = folder.join(name);
+        let out = Command::new("ffmpeg")
+            .args([
+                "-y", "-f", "lavfi", "-i",
+            ])
+            .arg(format!("color=c={color}:s=64x64:d=1:r=30"))
+            .args(["-pix_fmt", "yuv420p", "-c:v", "libx264"])
+            .arg(&path)
+            .output()
+            .expect("ffmpeg");
+        assert!(out.status.success());
+    }
+    std::fs::write(folder.join("ignore.txt"), b"not media").unwrap();
+
+    let mut shell = shell();
+    let _ = shell.update(Message::DropReceived(folder));
+    assert_eq!(shell.layer_count(), 0, "FlushDrops 前に folder import が確定している");
+    let _ = shell.update(Message::FlushDrops);
+    assert_eq!(shell.layer_count(), 2, "FlushDrops が folder 内 media を展開していない");
+    assert_eq!(shell.status(), None, "正常な folder drop に拒否理由が出ている");
+
+    let _ = shell.update(Message::Undo);
+    assert_eq!(shell.layer_count(), 0, "folder drop が1操作として Undo できない");
+}
+
 // ---------------------------------------------------------------------------
 // Timeline pane(第1波)
 // ---------------------------------------------------------------------------

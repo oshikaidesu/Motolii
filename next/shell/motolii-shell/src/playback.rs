@@ -418,6 +418,24 @@ impl Shell {
             }
             Message::TogglePlayback => self.toggle_playback(),
             Message::PlaybackTick => self.advance_playback_tick(),
+            Message::DeleteSelectionRequested => {
+                // Backspace/Delete の入力翻訳は `input.rs` が担当し、ここだけが
+                // front の文脈(`selected_keys`)を読む。キーがあれば既存の
+                // Timeline 動詞へ、無ければ既存の layer 削除 Message へ戻す。
+                if self.session.selected_keys.is_empty() {
+                    task = match self.dispatch_selection(Message::DeleteSelectedLayers) {
+                        Ok(task) => task,
+                        Err(_) => Task::none(),
+                    };
+                } else if let Some(reason) = self.timeline.update(
+                    timeline_pane::Message::DeleteSelectedKeys,
+                    &mut self.doc,
+                    &mut self.session,
+                    self.keyboard_modifiers,
+                ) {
+                    self.status = Some(reason);
+                }
+            }
             other => return Err(other),
         }
         Ok(task)

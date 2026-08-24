@@ -218,10 +218,7 @@ fn backspace_delete_respect_capture_and_match_global_bindings() {
 
             match (shell_result, keymap_result) {
                 (None, None) => {}
-                (
-                    Some(Message::Timeline(TimelinePaneMessage::DeleteSelectedKeys)),
-                    Some(VerbId::DeleteSelectedKeys),
-                ) => {}
+                (Some(Message::DeleteSelectionRequested), Some(VerbId::DeleteSelectedKeys)) => {}
                 (shell_result, keymap_result) => panic!(
                     "{iced_key:?}/captured={captured}: shell={shell_result:?} \
                      keymap={keymap_result:?}(一致しない、または captured=true なのに発火した)"
