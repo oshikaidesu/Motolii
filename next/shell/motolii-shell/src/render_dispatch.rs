@@ -22,6 +22,7 @@ impl Shell {
             Message::Stage(msg) => self.update_stage(msg),
             Message::Gizmo(event) => self.update_gizmo(event),
             Message::ShapeTool(msg) => self.update_shape_tool(msg),
+            Message::PathEdit(msg) => self.update_path_edit(msg),
             Message::Sheet(msg) => self.sheet_toggles = self.sheet_toggles.apply(msg),
             Message::Marker(msg) => self.update_marker(msg),
             Message::PaneClicked(pane) => self.panes.set_focused(pane),

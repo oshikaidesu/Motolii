@@ -81,6 +81,7 @@ pub(crate) mod render;
 mod render_dispatch;
 mod selection;
 mod settings_ops;
+mod path_ops;
 mod shape_ops;
 #[allow(unreachable_pub)]
 mod source_preview;
@@ -364,6 +365,9 @@ pub enum Message {
     /// Stage shape tool の選択/描画確定。pane は座標を返すだけで、Document への
     /// `AddLayer`/`SetShapes` は `shape_ops.rs` が1回の `apply_all`へ束ねる。
     ShapeTool(stage::ShapeToolMessage),
+    /// Stage Bezier path の頂点ドラッグ/開閉。投影と gesture 翻訳は pane、
+    /// `SetShapes` の確定は `path_ops.rs` が所有する。
+    PathEdit(stage::PathEditMessage),
 
     // ---- Stage 離散ズーム束(B24、A10 id1441/1442/1491 の結線 — 第7波)----
     /// map 1441「Zoom In」。[`stage::zoom::zoom_step`] を

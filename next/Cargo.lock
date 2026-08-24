@@ -3954,6 +3954,7 @@ dependencies = [
  "motolii-engine",
  "motolii-store",
  "motolii-tokens-rs",
+ "motolii-vector",
 ]
 
 [[package]]

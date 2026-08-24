@@ -90,6 +90,10 @@ pub mod marquee;
 /// `ShapeToolMessage` を親へ返す(`shape_tool.rs` 冒頭 doc)。
 pub mod shape_tool;
 pub use shape_tool::{Message as ShapeToolMessage, ShapeTool, ShapeToolOverlay};
+/// Stage Bezier path の頂点ドラッグ/開閉。shape tool と同様、Document は書かず
+/// 親へ確定事象を返す。
+pub mod path_edit;
+pub use path_edit::{Message as PathEditMessage, PathEditOverlay, PathEditTarget, VertexRef};
 /// Viewer の家(発注 2026-08-22)— 視点タブ(B17)+画質(B23)+チャンネル表示
 /// (B05 Viewer 側)。message は既存 [`Message`] と独立(理由はモジュール doc、
 /// `gizmo` と同型)。

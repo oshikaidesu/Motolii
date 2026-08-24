@@ -25,3 +25,8 @@ glam.workspace = true
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+# path projection の fixture だけが vector の Contour/Vertex 具体型を組む。
+# production の読み口は `motolii-store` の ShapeNode/PathSource 再輸出に留める。
+motolii-vector.workspace = true

@@ -117,6 +117,44 @@ impl Shell {
         ))
     }
 
+    /// `PathEditOverlay` の組み立て(P3 #16/#17)。Bezier の flat leaf だけを
+    /// `PathEditTarget` へ投影し、group/primitives は無理に編集対象へ含めない。
+    /// path の意味は stage pane、現在時刻の layer transform の読みは StoreView、
+    /// 確定の Document write は `path_ops.rs` が所有する。
+    pub fn stage_path_edit_overlay(&self) -> Option<stage::PathEditOverlay> {
+        if self.shape_tool != stage::ShapeTool::Select {
+            return None;
+        }
+        let layer = self.session.selection?;
+        let composition = self.composition()?;
+        let time = self.time_at_playhead()?;
+        let store = self.doc.view();
+        let resolved = store.resolve(layer, time).ok().flatten()?;
+        let shapes = store.shapes(layer).ok()?;
+        let target = stage::PathEditTarget::from_shapes(
+            layer,
+            &shapes,
+            resolved.placement.transform,
+        );
+        if target.is_empty() {
+            return None;
+        }
+        let comp = motolii_core::CompSpec {
+            width: composition.width,
+            height: composition.height,
+        };
+        let render_camera = store.resolve_camera(time).ok().unwrap_or_default();
+        Some(stage::PathEditOverlay::new(
+            comp,
+            render_camera,
+            self.observation,
+            target,
+            true,
+            self.dims(),
+            self.tokens.colors,
+        ))
+    }
+
     /// `stage::SheetOverlay` の組み立て(B22、第6波、`sheets.rs` 冒頭 doc
     /// 「家(結線は次波)」— この波で結線)。`stage_overlay`/`stage_gizmo_overlay`
     /// と同じ「毎フレーム不変な投影を作り直す」形。トグル状態
@@ -376,6 +414,7 @@ impl Shell {
                     self.stage_marquee_overlay(),
                     self.stage_gizmo_overlay(),
                     self.stage_shape_tool_overlay(),
+                    self.stage_path_edit_overlay(),
                     self.shape_tool,
                     self.observation,
                     self.resolution_cap,
@@ -655,6 +694,7 @@ fn stage_pane(
     marquee: Option<stage::marquee::MarqueeOverlay>,
     gizmo: Option<stage::GizmoOverlay>,
     shape_tool: Option<stage::ShapeToolOverlay>,
+    path_edit: Option<stage::PathEditOverlay>,
     active_shape_tool: stage::ShapeTool,
     observation: Option<ObservationCamera>,
     resolution_cap: stage::PreviewResolutionCap,
@@ -728,6 +768,9 @@ fn stage_pane(
             if let Some(shape_tool) = shape_tool {
                 layered = stack![layered, shape_tool.view().map(Message::ShapeTool)].into();
             }
+            if let Some(path_edit) = path_edit.clone() {
+                layered = stack![layered, path_edit.view().map(Message::PathEdit)].into();
+            }
             layered
         }
         None => text("comp がまだ無い")
@@ -753,11 +796,17 @@ fn stage_pane(
     // 不変)。letterbox は neutral dark(D8)のまま app 地と同族 — Stage の
     // 範囲は上の pane 題帯(`surface_raised`)・下の状態帯・隣接 pane の
     // `surface_panel` 明度段が読ませる(AE=「暗い隙間」の viewer と同文法)。
-    let tool_bar: Element<'_, Message> = if frame.is_some() {
+    let shape_tool_bar: Element<'_, Message> = if frame.is_some() {
         stage::shape_tool::toolbar(active_shape_tool, dims, colors).map(Message::ShapeTool)
     } else {
         Space::new().height(0.0).into()
     };
+    let path_edit_bar: Element<'_, Message> = path_edit
+        .as_ref()
+        .and_then(|overlay| stage::path_edit::toolbar(overlay.target(), dims, colors))
+        .map(|toolbar| toolbar.map(Message::PathEdit))
+        .unwrap_or_else(|| Space::new().height(0.0).into());
+    let tool_bar = column![shape_tool_bar, path_edit_bar].spacing(0.0);
     container(column![tool_bar, container(body).width(Length::Fill).height(Length::Fill), band].spacing(0.0))
         .width(Length::Fill)
         .height(Length::Fill)
