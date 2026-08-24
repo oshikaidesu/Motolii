@@ -19,7 +19,7 @@ A02	-	Inspector click→type 編集(数値欄、transform.rs)	マウスで完遂
 A02	-	ラベル色チップ 巡回(`chrome.rs::label_color_chip`)	マウスで完遂できる	固定パレット(`LABEL_PALETTE_LEN`)を巡回するclickボタン。enumはBL2巡回文法でdrag不要、色そのものの連続値ではなくindex	-	-
 A02	-	Inspector M(Hidden)トグル(`chrome.rs::mute_glyph`)	マウスで完遂できる	click(bool巡回)	-	-
 A02	-	Timeline rail M/S/L トグル(`rail.rs`)	マウスで完遂できる	click(bool巡回)	-	-
-A02	-	Timeline 行選択(`rail.rs`、mouse_area.on_press)	マウスで完遂できる	click単独。GESTURES旧判定はキーボード動詞欠如を理由に「マウスのみ」としていたが新基準はマウス側の完遂を見るだけ	-	-
+A02	-	Timeline 行選択(`rail.rs`、button.on_press)	マウスで完遂できる	通常click/Cmd(Ctrl) toggle/Shift range。`rail.rs` が `pane.modifiers` と表示順を `Message::SelectLayer` へ渡し、pane側で選択集合へ確定する	-	-
 A02	-	Timeline clip move(`clip_gesture.rs::moved_start`)	マウスで完遂できる	press→drag→release、スナップ有(SNAP_PX=7px)	-	-
 A02	-	Timeline clip trim(`clip_gesture.rs::trimmed_in_start/trimmed_out_end`)	マウスで完遂できる	press→drag→release(TRIM_EDGE=8px)	-	-
 A02	-	Playhead scrub(`ruler.rs`/`input.rs`、ScrubTo)	マウスで完遂できる	press→drag→release、スナップ無し(生ピクセル)	-	-

@@ -26,7 +26,7 @@
 | 16 | ライブラリの検索欄に名前の一部を打って絞り込む | Browser | `state.query()`(`next/ui/motolii-browser-pane/src/state.rs:137,184-185`、部分一致・大小無視) | 書ける |
 | 17 | 並べ替え(名前順/追加日順)に切り替える | Browser | `SortKey`(Name/AddedDate/Kind)+`sorted()`(`next/ui/motolii-browser-pane/src/model.rs:693-705`) | 書ける |
 | 18 | 取り込んだ素材を1本だけクリックして選ぶ | Browser | `Message::SelectCard`(`next/ui/motolii-browser-pane/src/lib.rs:1322`、`state.rs:242`) | 書ける |
-| 19 | 別の素材を Shift や Cmd を押しながらクリックして、ライブラリ側でまとめて複数選ぶ | Browser | `selected: Option<CardKey>`(`next/ui/motolii-browser-pane/src/state.rs:150,194`)——単一選択のみ。Cmd/Shift 分岐自体が無い | 【穴】入口が無い |
+| 19 | 別の素材を Shift や Cmd を押しながらクリックして、ライブラリ側でまとめて複数選ぶ | Browser | `CardSelectionModifiers`/`SelectCardWithModifiers` と選択解決(`next/ui/motolii-browser-pane/src/state.rs:34-98,416-509`)、表示順を渡すカード入口(`card_view.rs:289-360`)、Shell の modifier 正規化(`next/shell/motolii-shell/src/view.rs:306-318`) | 書ける |
 | 20 | 素材カードをダブルクリックして中身を下見する(再生・イン/アウト確認) | Browser | media タブのカードに `on_double_click` は配線されていない(`CreateFromCard` は create タブ専用、`next/ui/motolii-browser-pane/src/lib.rs:1572`)。Play/scrub 相当も `browser-pane` 全体で grep 0件 | 【穴】入口が無い |
 | 21 | 素材カードを右クリックしてコンテキストメニューを見る(リネーム・削除など) | Browser | `on_right_click`/`Button::Right` が `next/ui/motolii-browser-pane/src/lib.rs` に無い(grep 0件) | 【穴】入口が無い |
 | 22 | 取り込んだ動画3本が、いずれも playhead(0秒)へ重なって置かれているのを Timeline で見る | Timeline | `admit()` のループは `start` に毎回 `self.session.playhead` を渡す(`next/shell/motolii-shell/src/lib.rs:2166,2206`)——3本とも同一開始時刻 | 書ける |
@@ -37,8 +37,8 @@
 | 27 | 2本目・3本目のクリップも同じ手順(掴む/動かす/スナップ/離す)で1本ずつ並べ直す | Timeline | 同上を反復。**自動の順送り配置は無い**(id 22 のとおり全部同時刻に置かれるため、並べ直しは必須工程) | 書ける |
 | 28 | 位置調整の途中で Esc を押して掴む前へ戻す | Timeline | `cancel_drag`(`next/ui/motolii-timeline-pane/src/write.rs:433`)、`VerbId::EscapeCancel` → `self.timeline.cancel_drag()`(`next/shell/motolii-shell/src/lib.rs:1377`) | 書ける |
 | 29 | ドラッグ中に Cmd を押してスナップを一時的に切る | Timeline | `continue_drag` の `snap_enabled = !modifiers.command()`(`next/ui/motolii-timeline-pane/src/write.rs:944`) | 書ける |
-| 30 | 3本を Shift クリックでレーンバー上まとめて選ぶ(次の一括ドラッグの下準備) | Timeline rail | 行クリックは常に `Message::Select(id)` の単独選択のみ(`next/ui/motolii-timeline-pane/src/rail.rs:335`)。Shift/Cmd 分岐の解決関数 `resolve_layer_selection`/`LayerSelectionOp` は実装済みだが、呼び手が無い(`next/ui/motolii-timeline-pane/src/rows.rs:83-95` 冒頭 doc が「呼び手(supervisor 統合後の `write.rs`)」と明記——**未統合のまま**、grep でも rows.rs 外に呼び出し0件) | 【穴】入口が無い |
-| 31 | まとめて選んだ3本のうち1本を掴んで動かし、3本ともスナップを保ったまま一緒にスライドさせる | Timeline | Body 掴みは**選択済みかどうかに関係なく無条件で**単独選択へ差し替える(`if matches!(part, BarPart::Body) { session.selection = Some(layer); session.selected_layers = vec![layer]; }`、`next/ui/motolii-timeline-pane/src/write.rs:909-911`)。`finish_drag` も `drag.layer` 1本にしか `SetTiming` を書かない(`write.rs:991`)。正典 §2 は「複数選択は選択集合の root だけを動かす」を明記する(`next/reference/timeline-grammar.md:53`)が、実装は単一 clip 前提のまま——**キー(菱形)ドラッグは同じ場面を正しく処理する**(`start_key_drag` は「既に選択済みのキーを掴んだ場合は選択(複数)を保つ」、`next/ui/motolii-timeline-pane/src/write.rs:997-999`)ので、これは bar 側だけが取り残された非対称 | 【穴】意味が無い |
+| 30 | 3本を Shift クリックでレーンバー上まとめて選ぶ(次の一括ドラッグの下準備) | Timeline rail | `rail.rs` が表示順+`pane.modifiers`から `Message::SelectLayer` を発火し(`next/ui/motolii-timeline-pane/src/rail.rs:101-145,357-405`)、`PaneState::update` が `resolve_layer_selection` で `Session::selected_layers` へ確定する(`next/ui/motolii-timeline-pane/src/write/mod.rs:647-660`) | 書ける |
+| 31 | まとめて選んだ3本のうち1本を掴んで動かし、3本ともスナップを保ったまま一緒にスライドさせる | Timeline | `clip_drag.rs` は選択集合への同一 delta、グループ clamp、N 本の一括 `SetTiming` を実装済み(`next/ui/motolii-timeline-pane/src/write/clip_drag.rs:40-65,107-187`)。ただし `PaneState::clip_preview()` は掴んだ1本だけを投影する(`next/ui/motolii-timeline-pane/src/write/mod.rs:608-620`)ため、確定後の意味はあるがドラッグ中の他 bar の視覚追随が未実装 | 【穴】意味が無い |
 | 32 | Cmd+A で見えている全レイヤーを選ぶ | Timeline | `Message::SelectAllLayers`→`select_all_layers`(`next/shell/motolii-shell/src/lib.rs:2052-2057`)、Cmd+A 配線(`next/shell/motolii-shell/src/lib.rs:5972` 付近) | 書ける |
 | 33 | 音声ファイル(単独 wav/mp3)を同じ Import 手順で取り込み、Timeline へ置く | Timeline | `admit()` は種別を判定せず同じ `LayerSource::Media` 経路で置く(`next/shell/motolii-shell/src/lib.rs:2200-2222`)。専用の「soundtrack」トラック概念は store に無い(`LayerSource` に該当 variant 無し、`next/core/motolii-store/src/lib.rs:191-206`)——正典 §6「曲が無い project への音声=soundtrack」(`next/reference/timeline-grammar.md` 該当節)は未実装で、音声も普通の layer 行として並ぶ | 【穴】意味が無い |
 | 34 | 音声レイヤーの行を選び、波形帯を見て内容を確認する | Timeline | (根拠未収集——本切片の EXACT TARGET 外。波形描画コードの有無は未確認) | 【未確認】 |
@@ -57,7 +57,7 @@
 | 47 | 代わりに Cmd+X(切り取り)を押して消す | Timeline/メニュー | `Message::CutLayer`→`cut_layer`(`next/shell/motolii-shell/src/lib.rs:104,2002-2022`)、`Intent::RemoveLayer` | 書ける(迂回) |
 | 48 | 消したらクリップボードが上書きされている(後で使う予定だった Copy の中身が消える)ことに気づく | — | `cut_layer` は削除前に `LayerSnapshot::capture`→`self.clipboard.set(snapshot)` を必ず行う(`next/shell/motolii-shell/src/lib.rs:2005-2016`)——「消すだけ」の意図でも clipboard が書き換わる | 書ける(意味論上の副作用) |
 | 49 | 複数選択(Cmd+A で全選択した状態)のまま Cmd+X を押し、選んだ全部をまとめて消そうとする | Timeline | `cut_layer` は `self.session.selection`(単一 focus)しか読まない(`next/shell/motolii-shell/src/lib.rs:2003`)。`selected_layers`(複数選択の実体)は無視される——複数選択していても1本しか消えない | 【穴】意味が無い |
-| 50 | 消した後にできた隙間を、後続クリップをまとめてドラッグして詰める | Timeline | id 31 と同じ理由(bar 複数選択ドラッグが単一へ収束する)で不可能。正典 §2/§4 の「複数選択の一括移動」は意味論として書かれているが bar move の実装が単一 clip 前提のまま(拘束1: リップル削除自体は意図的不採用なので、この迂回が唯一の代替手段だった) | 【穴】意味が無い |
+| 50 | 消した後にできた隙間を、後続クリップをまとめてドラッグして詰める | Timeline | id 31 と同じ `clip_drag.rs` の一括確定は成立しているが、`clip_preview()` が掴んだ1本だけを投影するため、詰める途中の全 bar の視覚的追随が未実装(`next/ui/motolii-timeline-pane/src/write/mod.rs:608-620`) | 【穴】意味が無い |
 | 51 | 代わりに後続クリップを1本ずつ選んで前クリップの終端へスナップさせ、隙間を詰める | Timeline | id 23-26 の move/snap/release を反復。100本規模では手間が線形に増えるが個々の操作は成立する | 書ける(迂回) |
 | 52 | 隙間を詰め終えたら Cmd+Z で1つ前の操作(直前のドラッグ確定)だけを取り消す | Timeline | `Intent::SetTiming` 1回=1 undo 単位(`finish_drag`)、`Message::Undo`(`next/shell/motolii-shell/src/lib.rs:4505` 付近) | 書ける |
 | 53 | 誤って Cut したクリップを Cmd+V で貼り戻す | Timeline/メニュー | `Message::PasteLayer`→`paste_layer`(`next/shell/motolii-shell/src/lib.rs:1985-1995`)。元時刻のまま貼り付け、貼り付け後は増えた方を選ぶ | 書ける |
@@ -123,24 +123,22 @@
 - **id 64/67**(単純上書き保存)→ id 1224「Save (Project)」(採用済)が対応。現行mainのCmd+Sと既知path上書きを検分済み
 - **id 77**(Export 窓の中でアスペクト比を選ぶ)→ id 943「Select Aspect Ratio」(採用予定・未消化)が対応
 
-残る **9件が、`normal-map.tsv` に対応行が無い穴**(幹=手順の順序だけが要求していて、製品のどのメニュー木・ショートカット表・パネル一覧・環境設定にも項目名として現れない物):
+残る **7件が、`normal-map.tsv` に対応行が無い穴**(幹=手順の順序だけが要求していて、製品のどのメニュー木・ショートカット表・パネル一覧・環境設定にも項目名として現れない物):
 
 1. **id 13** フォルダ単位の取り込み(folder import) — 製品のメニュー項目は「ファイルを開く/取り込む」であって「フォルダの中身を展開する」動詞そのものが無い
-2. **id 19** ライブラリカードの Shift/Cmd マウス複数選択 — 対応行なし
-3. **id 21** 素材カードの右クリックコンテキストメニュー — 対応行なし
-4. **id 30** Timeline レイヤー行の Shift/Cmd マウス複数選択 — 対応する id 841/843/966/452 は**キーボード**の「次/前レイヤーへ拡張」「番号トグル」であって、マウスの Shift/Cmd クリックとは別の動詞
-5. **id 31** 複数選択クリップの一括ドラッグ移動(隙間を詰めるための合成操作) — 正典 §2 にのみ書かれ、製品リストが持つ動詞ではない
-6. **id 33** 音声ファイルの soundtrack 特別扱い(曲が無い project への最初の音声) — 正典 §6 にのみ書かれ、製品リストの動詞ではない
-7. **id 46** クリップの直接 Delete キー — Delete/Backspace は「選択対象を消す」という**性質**であって、Motolii の map には対応する項目名が見当たらない
-8. **id 49** 複数選択のまま Cut で一括削除 — 対応行なし
-9. **id 50** 複数選択クリップの一括ドラッグでの隙間閉じ — id 31 と同根、対応行なし
+2. **id 21** 素材カードの右クリックコンテキストメニュー — 対応行なし
+3. **id 31** 複数選択クリップの一括ドラッグ移動(隙間を詰めるための合成操作) — 正典 §2 にのみ書かれ、製品リストが持つ動詞ではない
+4. **id 33** 音声ファイルの soundtrack 特別扱い(曲が無い project への最初の音声) — 正典 §6 にのみ書かれ、製品リストが持つ動詞ではない
+5. **id 46** クリップの直接 Delete キー — Delete/Backspace は「選択対象を消す」という**性質**であって、Motolii の map には対応する項目名が見当たらない
+6. **id 49** 複数選択のまま Cut で一括削除 — 対応行なし
+7. **id 50** 複数選択クリップの一括ドラッグでの隙間閉じ — id 31 と同根、対応行なし
 
 ---
 
 ## 「書くまでもないと思ったが、実装が無かった」もの(この作業の核心)
 
-- **id 31: 複数選択したクリップをまとめてドラッグして動かす。** キーフレーム(菱形)ドラッグは「既に選択済みのキーを掴んだ場合は選択を保つ」ことをコード自身が明記して実装している(`write.rs:997-999`)のに、bar(clip)ドラッグは同じ場面で無条件に単独選択へ潰す(`write.rs:909-911`)。正典(`timeline-grammar.md` §2)は複数選択の一括移動を「正」として書いているのに、実装は非対称。**「普通は当然できる」と思って書き始めたら、隣の似た機構(キー)にだけ実装されていて、bar には無かった**——最も象徴的な発見
-- **id 30: Timeline レイヤー行の Shift/Cmd マウス複数選択。** `resolve_layer_selection`/`LayerSelectionOp` という**専用の純関数とテストまで書かれている**のに、呼び手が存在しない。関数の doc コメント自身が「呼び手(supervisor 統合後の `write.rs`)」と将来形で書いており、統合がまだ来ていないことを実装が自白している
+- **id 31: 複数選択したクリップをまとめてドラッグして動かす。** `clip_drag.rs` は選択集合へ同じ delta を適用し、clamp と一括 `SetTiming` まで実装している。一方、`PaneState::clip_preview()` は掴んだ1本だけを投影するため、確定後の値は正しいがドラッグ中の他 bar の視覚追随が残る。**「普通は当然できる」と思って書き始めたら、意味計算と表示投影の責任が別に分かれていて、後者だけが残った**——現在の象徴的な発見
+- **id 30: Timeline レイヤー行の Shift/Cmd マウス複数選択。** 以前は `resolve_layer_selection`/`LayerSelectionOp` が宙に浮いていたが、現在は `rail.rs` → `Message::SelectLayer` → `PaneState::update` まで同一 pane 内で接続済み。残るのは実窓の操作確認だけ
 - **id 64/67/72/79/80/83**: 前回のP2調査時点では古い行番号と旧同期Export実装を根拠に穴と判定したが、現行mainではCmd+S、OS close dirtyガード、背景Export、Cancel、音声muxへ更新済み。今回その証拠を現行コードとdriveへ合わせた。
 
 ---
@@ -148,8 +146,8 @@
 ## 新発見の事実(KNOWN.md 既載は除く)
 
 1. **コンポジションの width/height/fps を編集する UI が実在する**(Settings 窓 COMPOSITION 節、`next/ui/motolii-settings-pane/src/sections.rs:8,128-132,222-224,253-265`)。2026-08-22 の persona-vlog 調査時点では「`SetCompDimensions` 相当の Intent も grep 0件」「縦(9:16)・正方形(1:1)のコンポジションを作る手段が…存在しない」と結論していたが、現行 `main` ではこの結論は覆っている(ただし Export 窓の中に独立の aspect プリセットが無いことは変わらず——id 77 参照)
-2. **Timeline の bar(clip)複数選択ドラッグと key(キーフレーム)複数選択ドラッグは、同じ正典条項の下で非対称に実装されている。** key 側だけが「既存選択を保つ」判定を持ち、bar 側は持たない(id 31 の証拠)
-3. **`resolve_layer_selection`/`LayerSelectionOp`(Timeline レイヤー行の Shift/Cmd 複数選択)は実装され単体テストも通っているが、どこからも呼ばれていない。** 関数のモジュール doc 自身が「呼び手は supervisor 統合後の write.rs」と将来形で書いている——実装は「宙に浮いた部品」のまま止まっている
+2. **Timeline の bar(clip)複数選択ドラッグは、意味計算と表示投影が非対称に残っている。** `clip_drag.rs` の一括移動/確定は成立しているが、`PaneState::clip_preview()` は掴んだ1本だけを表示へ渡す(id 31/50 の証拠)
+3. **`resolve_layer_selection`/`LayerSelectionOp`(Timeline レイヤー行の Shift/Cmd 複数選択)は rail の実入力へ接続された。** `Message::SelectLayer` が表示順と modifier を運び、`PaneState::update` が `Session::selected_layers` へ一度だけ確定する。実窓の確認は未実施
 4. **`cut_layer`(Cmd+X、唯一のレイヤー削除経路)は `session.selection`(単一 focus)しか読まず、`session.selected_layers`(複数選択集合)を無視する。** Cmd+A で全選択しても Cmd+X は1本しか消えない
 5. **OS ウィンドウの閉じるボタンは、メニュー Quit と異なり `confirm_discard` を経由しない。** `main.rs:89` の doc コメントが「main 窓を閉じたら exit」と、確認を挟まない設計を明言している
 6. **`start_export` は `Task::run(export_stream(...))`で背景実行し、進捗・CancelをUIへ返す。** 音声ありの場合は`export_ops.rs`内でmixとmuxまで完了させる

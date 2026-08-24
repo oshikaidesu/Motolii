@@ -248,9 +248,10 @@ constant	THUMB_ASPECT_W	motolii-browser-pane	ui/motolii-browser-pane/src/card_vi
 constant	THUMB_ASPECT_H	motolii-browser-pane	ui/motolii-browser-pane/src/card_view.rs:53	public		
 constant	FILTER_CHIP_CORNER_RADIUS_ROW_HEIGHT_RATIO	motolii-browser-pane	ui/motolii-browser-pane/src/filter_view.rs:18	public	filter chip/Clear の角丸 = `dims.row_height` の何倍か(裁定165「形は	
 module	motolii_browser_pane	motolii-browser-pane	ui/motolii-browser-pane/src/lib.rs:1	public	wraps: iced+motolii-store+motolii-tokens-rs — Browser pane 骨格(B0)+	
-constant	PANEL_HEIGHT_ROW_HEIGHT_RATIO	motolii-browser-pane	ui/motolii-browser-pane/src/lib.rs:242	public	`Shell::view` がパネル全体へ割く高さ = `dims.row_height` の何倍か(裁定165	
-function	pane_view	motolii-browser-pane	ui/motolii-browser-pane/src/lib.rs:273	public	**タブ帯込みの pane 全体**(mock `.libraryTabs` html:411-416 + タブ別	(state: &PaneState, items: &[AssetListItem], single_selected_layer: Option<LayerId>, dims: Dimensions, colors: Colors) -> Element<Message>
-function	view	motolii-browser-pane	ui/motolii-browser-pane/src/lib.rs:411	public	rail(mock `.librarySidebar` `LIBRARY` 節)+ filter shelf(mock	(items: &[AssetListItem], scope: RailScope, query: &str, dims: Dimensions, colors: Colors) -> Element<Message>
+constant	PANEL_HEIGHT_ROW_HEIGHT_RATIO	motolii-browser-pane	ui/motolii-browser-pane/src/lib.rs:244	public	`Shell::view` がパネル全体へ割く高さ = `dims.row_height` の何倍か(裁定165	
+function	pane_view	motolii-browser-pane	ui/motolii-browser-pane/src/lib.rs:275	public	**タブ帯込みの pane 全体**(mock `.libraryTabs` html:411-416 + タブ別	(state: &PaneState, items: &[AssetListItem], single_selected_layer: Option<LayerId>, dims: Dimensions, colors: Colors) -> Element<Message>
+function	pane_view_with_modifiers	motolii-browser-pane	ui/motolii-browser-pane/src/lib.rs:319	public	modifier-aware な Browser pane の入口。	(state: &PaneState, items: &[AssetListItem], single_selected_layer: Option<LayerId>, modifiers: CardSelectionModifiers, dims: Dimensions, colors: Colors) -> Element<Message>
+function	view	motolii-browser-pane	ui/motolii-browser-pane/src/lib.rs:460	public	rail(mock `.librarySidebar` `LIBRARY` 節)+ filter shelf(mock	(items: &[AssetListItem], scope: RailScope, query: &str, dims: Dimensions, colors: Colors) -> Element<Message>
 module	model	motolii-browser-pane	ui/motolii-browser-pane/src/model.rs:1	public	一覧 projection(裁定162 切片 B1)+ rail/filter(切片 B2)— `StoreView::assets()`	
 module	organize	motolii-browser-pane	ui/motolii-browser-pane/src/model/organize.rs:1	public	素材の整理: 並べ替え+表示形式(SP-6 分割: 元 `model.rs` から移送)。	
 function	clone	motolii-browser-pane	ui/motolii-browser-pane/src/model/organize.rs:14	default		(self: &Self) -> SortKey
@@ -415,65 +416,83 @@ variant	Notes	motolii-browser-pane	ui/motolii-browser-pane/src/model/tabs.rs:84	
 variant	Export	motolii-browser-pane	ui/motolii-browser-pane/src/model/tabs.rs:86	default	panels(mock `data-tag-filter="export"`)。	unit
 variant	Masks	motolii-browser-pane	ui/motolii-browser-pane/src/model/tabs.rs:91	default	effects(mock に無い新規カテゴリ — 裁定205 施工第2号 §A。マスクは	unit
 variant	ShapeOps	motolii-browser-pane	ui/motolii-browser-pane/src/model/tabs.rs:97	default	effects(mock に無い新規カテゴリ — 2026-08-24「ブラウザに8枚の札」発注。	unit
-function	create_card_face	motolii-browser-pane	ui/motolii-browser-pane/src/preview_view.rs:194	public	create カード(mouse_area 経路)の面 — button 経路の [`card_style`] と	(colors: Colors, selected: bool, hovered: bool) -> Style
+function	create_card_face	motolii-browser-pane	ui/motolii-browser-pane/src/preview_view.rs:288	public	create カード(mouse_area 経路)の面 — button 経路の [`card_style`] と	(colors: Colors, selected: bool, hovered: bool) -> Style
 function	drop_target_style	motolii-browser-pane	ui/motolii-browser-pane/src/rail_view.rs:187	public	drop 受け入れ面のハイライト(B08 続編)。`motolii-shell` の pane_grid	(dims: Dimensions, colors: Colors) -> Style
 function	panel_container_style	motolii-browser-pane	ui/motolii-browser-pane/src/rail_view.rs:88	public	rail/catalog 容器の共通スタイル。線化 D5(裁定179 文法1「枠は内容と同族色、	(dims: Dimensions, colors: Colors) -> Style
 function	chip_style	motolii-browser-pane	ui/motolii-browser-pane/src/search_view.rs:72	public	[`labeled_button`]/Clear ボタン共通のスタイル(裁定179「箱は状態の器」、	(dims: Dimensions, colors: Colors, selected: bool, status: Status, radius: f32) -> Style
 module	state	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:1	public	pane-local ephemeral 状態(rail scope + 検索文字列、切片 B2)。**Document	
-struct_field	0	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:104	default		Vec<AssetId>
-variant	RecentlyAdmitted	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:104	default	取り込み(admit)直後の新規素材 id 列(B08 続編: 新規素材ハイライト)。	tuple(1)
-struct_field	0	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:110	default		CardKey
-variant	CardHovered	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:110	default	create カードへの cursor 進入(`mouse_area::on_enter`)。create カード	tuple(1)
-struct_field	0	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:114	default		CardKey
-variant	CardUnhovered	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:114	default	create カードからの cursor 退出(`mouse_area::on_exit`)。隣カードへの	tuple(1)
-struct_field	0	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:121	default		SortKey
-variant	SelectSortKey	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:121	default	並べ替えキー選択(B08 第4切片「素材の整理」)。filter shelf のチップ	tuple(1)
-struct_field	0	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:126	default		ViewMode
-variant	SelectViewMode	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:126	default	grid/list 表示形式切替(B08 第4切片。`Icon::GridView`/`Icon::ViewList`	tuple(1)
-struct_field	0	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:140	default		AssetId
-variant	ReplaceSelectedLayerSource	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:140	default	素材の置換(map 616「Replace selected footage item」/617「Replace	tuple(1)
-struct_field	0	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:154	default		AssetId
-variant	RemoveAssetFromCard	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:154	default	素材を台帳から外す(`A01-entry.tsv` `RemoveAsset` 行 — store 側は	tuple(1)
-function	default	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:163	default		() -> PaneState
-struct	PaneState	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:164	public	Browser pane 専用の transient 状態(rail scope + 検索欄の下書き + パネル	
-function	new	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:198	public		() -> Self
-function	tab	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:204	public	active なタブ(mock `state.tab`)。`pane_view` がタブ帯の active 表示と	(self: &Self) -> LibraryTab
-function	scope	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:208	public		(self: &Self) -> RailScope
-function	preview_scope	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:214	public	非 media タブの rail scope(`pane_view` が rail の選択表示と	(self: &Self) -> PreviewScope
-function	selected	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:219	public	カタログの単一選択(`pane_view` がカードの選択意匠に読む)。	(self: &Self) -> Option<CardKey>
-function	query	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:223	public		(self: &Self) -> &str
-function	is_open	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:230	public	パネルが開いているか(B3)。`Shell::view` がこれを読んで	(self: &Self) -> bool
-function	hovered	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:235	public	cursor が乗っている create カード(`pane_view` が hover 意匠に読む)。	(self: &Self) -> Option<CardKey>
-function	drop_hover	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:241	public	OS file-drag が窓に入っているか(`pane_view` が media タブの drop 先	(self: &Self) -> bool
-function	recently_admitted	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:246	public	取り込み直後の新規素材 id 列(`pane_view` がカードのハイライトに読む)。	(self: &Self) -> &[AssetId]
-function	sort_key	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:252	public	並べ替えキー(`pane_view` が media catalog の並べ替えと sort チップの	(self: &Self) -> SortKey
-function	view_mode	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:258	public	grid/list 表示形式(`pane_view` が catalog grid の列数と view mode	(self: &Self) -> ViewMode
-function	update	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:263	public	pane 側の唯一の書き口。	(self: &mut Self, message: Message)
-function	clone	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:30	default		(self: &Self) -> Message
-function	eq	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:30	default		(self: &Self, other: &Message) -> bool
-function	fmt	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:30	default		(self: &Self, f: &mut Formatter) -> Result
-enum	Message	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:31	public	pane ローカル Message(裁定160 切片以降の一貫した形 — root	
-struct_field	0	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:37	default		RailScope
-variant	SelectScope	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:37	default	rail の scope ボタン、または filter shelf の同義チップ	tuple(1)
-struct_field	0	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:42	default		PreviewScope
-variant	SelectPreviewScope	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:42	default	非 media タブの rail 行、または filter shelf の同義チップ	tuple(1)
-struct_field	0	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:46	default		CardKey
-variant	SelectCard	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:46	default	カタログのカード click(mock `selectCard` の単一選択のみ — Shift/⌘ の	tuple(1)
-struct_field	0	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:51	default		LibraryTab
-variant	SelectTab	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:51	default	タブ帯(mock `.libraryTabs`)のタブクリック。mock `chooseTab` の転写 —	tuple(1)
-struct_field	0	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:55	default		String
-variant	QueryChanged	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:55	default	検索欄への打鍵。**即時反映**(Settings の下書き/Enter 確定とは違う —	tuple(1)
-variant	ClearFilters	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:58	default	filter shelf の Clear ボタン(mock `.clearFilter`)。scope を	unit
-variant	ToggleBrowserPanel	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:62	default	header の "Browser" トグル(B3)。`settings_pane::Message::	unit
-variant	CreateFromCard	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:70	default	create タブのカードの**ダブルクリック**=「作る」(B36 実体化 —	struct{1}
-struct_field	kind	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:70	default		CreateKind
-variant	AddMaskFromCard	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:78	default	effects タブの Mask カードのダブルクリック(裁定205 施工第2号 §A —	unit
-variant	ApplyEffectFromCard	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:84	default	effects タブの Glow カードのダブルクリック(裁定205 施工第2号 §B —	struct{1}
-struct_field	plugin_id	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:84	default		&str
-variant	ApplyOpFromCard	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:93	default	effects タブの `OpKind` 演算子カードのダブルクリック(2026-08-24	struct{1}
-struct_field	op	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:93	default		ShapeOpKind
-struct_field	0	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:99	default		bool
-variant	DropHoverChanged	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:99	default	OS の file-drag が窓に入っている/出た(B08 続編: drop 先ハイライト)。	tuple(1)
+struct_field	0	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:104	default		LibraryTab
+variant	SelectTab	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:104	default	タブ帯(mock `.libraryTabs`)のタブクリック。mock `chooseTab` の転写 —	tuple(1)
+struct_field	0	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:108	default		String
+variant	QueryChanged	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:108	default	検索欄への打鍵。**即時反映**(Settings の下書き/Enter 確定とは違う —	tuple(1)
+variant	ClearFilters	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:111	default	filter shelf の Clear ボタン(mock `.clearFilter`)。scope を	unit
+variant	ToggleBrowserPanel	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:115	default	header の "Browser" トグル(B3)。`settings_pane::Message::	unit
+variant	CreateFromCard	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:123	default	create タブのカードの**ダブルクリック**=「作る」(B36 実体化 —	struct{1}
+struct_field	kind	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:123	default		CreateKind
+variant	AddMaskFromCard	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:131	default	effects タブの Mask カードのダブルクリック(裁定205 施工第2号 §A —	unit
+variant	ApplyEffectFromCard	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:137	default	effects タブの Glow カードのダブルクリック(裁定205 施工第2号 §B —	struct{1}
+struct_field	plugin_id	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:137	default		&str
+variant	ApplyOpFromCard	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:146	default	effects タブの `OpKind` 演算子カードのダブルクリック(2026-08-24	struct{1}
+struct_field	op	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:146	default		ShapeOpKind
+struct_field	0	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:152	default		bool
+variant	DropHoverChanged	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:152	default	OS の file-drag が窓に入っている/出た(B08 続編: drop 先ハイライト)。	tuple(1)
+struct_field	0	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:157	default		Vec<AssetId>
+variant	RecentlyAdmitted	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:157	default	取り込み(admit)直後の新規素材 id 列(B08 続編: 新規素材ハイライト)。	tuple(1)
+struct_field	0	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:163	default		CardKey
+variant	CardHovered	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:163	default	create カードへの cursor 進入(`mouse_area::on_enter`)。create カード	tuple(1)
+struct_field	0	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:167	default		CardKey
+variant	CardUnhovered	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:167	default	create カードからの cursor 退出(`mouse_area::on_exit`)。隣カードへの	tuple(1)
+struct_field	0	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:174	default		SortKey
+variant	SelectSortKey	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:174	default	並べ替えキー選択(B08 第4切片「素材の整理」)。filter shelf のチップ	tuple(1)
+struct_field	0	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:179	default		ViewMode
+variant	SelectViewMode	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:179	default	grid/list 表示形式切替(B08 第4切片。`Icon::GridView`/`Icon::ViewList`	tuple(1)
+struct_field	0	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:193	default		AssetId
+variant	ReplaceSelectedLayerSource	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:193	default	素材の置換(map 616「Replace selected footage item」/617「Replace	tuple(1)
+struct_field	0	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:207	default		AssetId
+variant	RemoveAssetFromCard	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:207	default	素材を台帳から外す(`A01-entry.tsv` `RemoveAsset` 行 — store 側は	tuple(1)
+function	default	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:216	default		() -> PaneState
+struct	PaneState	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:217	public	Browser pane 専用の transient 状態(rail scope + 検索欄の下書き + パネル	
+function	new	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:254	public		() -> Self
+function	tab	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:260	public	active なタブ(mock `state.tab`)。`pane_view` がタブ帯の active 表示と	(self: &Self) -> LibraryTab
+function	scope	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:264	public		(self: &Self) -> RailScope
+function	preview_scope	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:270	public	非 media タブの rail scope(`pane_view` が rail の選択表示と	(self: &Self) -> PreviewScope
+function	selected	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:276	public	既存単一選択 API との互換用の focus。複数選択全体は	(self: &Self) -> Option<CardKey>
+function	selected_cards	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:281	public	現在のカード選択集合を表示順で返す。	(self: &Self) -> &[CardKey]
+function	is_card_selected	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:286	public	カードが現在の選択集合に含まれるか。	(self: &Self, key: CardKey) -> bool
+function	selection_anchor	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:291	public	Shift 範囲選択の起点。view の表示順を再構築する側が必要なら読む。	(self: &Self) -> Option<CardKey>
+function	query	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:295	public		(self: &Self) -> &str
+function	is_open	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:302	public	パネルが開いているか(B3)。`Shell::view` がこれを読んで	(self: &Self) -> bool
+function	hovered	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:307	public	cursor が乗っている create カード(`pane_view` が hover 意匠に読む)。	(self: &Self) -> Option<CardKey>
+function	drop_hover	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:313	public	OS file-drag が窓に入っているか(`pane_view` が media タブの drop 先	(self: &Self) -> bool
+function	recently_admitted	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:318	public	取り込み直後の新規素材 id 列(`pane_view` がカードのハイライトに読む)。	(self: &Self) -> &[AssetId]
+function	sort_key	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:324	public	並べ替えキー(`pane_view` が media catalog の並べ替えと sort チップの	(self: &Self) -> SortKey
+function	clone	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:33	default		(self: &Self) -> CardSelectionModifiers
+function	default	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:33	default		() -> CardSelectionModifiers
+function	eq	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:33	default		(self: &Self, other: &CardSelectionModifiers) -> bool
+function	fmt	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:33	default		(self: &Self, f: &mut Formatter) -> Result
+function	view_mode	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:330	public	grid/list 表示形式(`pane_view` が catalog grid の列数と view mode	(self: &Self) -> ViewMode
+function	update	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:335	public	pane 側の唯一の書き口。	(self: &mut Self, message: Message)
+struct	CardSelectionModifiers	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:34	public	OS の Cmd/Ctrl と Shift を pane 境界で意味へ変換した入力。	
+function	new	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:41	public	`shift` は範囲選択、`toggle` は Cmd/Ctrl 選択を表す。	(shift: bool, toggle: bool) -> Self
+function	plain	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:46	public	通常クリック。	() -> Self
+function	toggle	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:51	public	Cmd(macOS)/Ctrl(Windows/Linux) クリック。	() -> Self
+function	range	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:56	public	Shift クリック。	() -> Self
+function	is_shift	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:60	public		(self: Self) -> bool
+function	is_toggle	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:64	public		(self: Self) -> bool
+function	clone	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:71	default		(self: &Self) -> Message
+function	eq	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:71	default		(self: &Self, other: &Message) -> bool
+function	fmt	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:71	default		(self: &Self, f: &mut Formatter) -> Result
+enum	Message	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:72	public	pane ローカル Message(裁定160 切片以降の一貫した形 — root	
+struct_field	0	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:78	default		RailScope
+variant	SelectScope	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:78	default	rail の scope ボタン、または filter shelf の同義チップ	tuple(1)
+struct_field	0	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:83	default		PreviewScope
+variant	SelectPreviewScope	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:83	default	非 media タブの rail 行、または filter shelf の同義チップ	tuple(1)
+struct_field	0	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:85	default		CardKey
+variant	SelectCard	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:85	default	カタログの通常カード click。従来の単一選択入口を維持する。	tuple(1)
+variant	SelectCardWithModifiers	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:95	default	modifier 付きカード click。	struct{3}
+struct_field	key	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:96	default		CardKey
+struct_field	modifiers	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:97	default		CardSelectionModifiers
+struct_field	visible_cards	motolii-browser-pane	ui/motolii-browser-pane/src/state.rs:98	default		Vec<CardKey>
 function	headless	motolii-compositor	engine/motolii-compositor/src/device.rs:12	public	窓を持たない GPU の上に合成器を建てる。**export も preview もこれ1つ**。	() -> Result<Self, CompositorError>
 function	upload_yuv420p	motolii-compositor	engine/motolii-compositor/src/device.rs:122	public	デコード直後の YUV420p(planar)をそのまま GPU へ載せる。	(self: &Self, label: &str, data: &[u8], width: u32, height: u32, color: ColorSpace) -> Result<GpuTexture2D, CompositorError>
 function	with_device	motolii-compositor	engine/motolii-compositor/src/device.rs:44	public	外部から与えられた GPU device/queue の上に合成器を組む第二コンストラクタ	(device: Device, queue: Queue, output_format: TextureFormat, config_provider: impl/dyn) -> Result<Self, CompositorError>
@@ -2320,135 +2339,135 @@ struct_field	doc	motolii-shell	shell/motolii-shell/src/fixture.rs:20	public		Doc
 struct_field	selected	motolii-shell	shell/motolii-shell/src/fixture.rs:22	public	選択済みの1層(「サビ歌詞」)。	LayerId
 struct_field	playhead	motolii-shell	shell/motolii-shell/src/fixture.rs:24	public	中盤(comp 尺の半分)。	i64
 struct_field	status	motolii-shell	shell/motolii-shell/src/fixture.rs:27	public	status 帯に出す1件の文言。実際の拒否理由ではなく、fixture が	String
-function	resolve_navigation_key	motolii-shell	shell/motolii-shell/src/input.rs:208	public	U2: playhead ナビゲーション動詞束のキー解決(正典 §5・§8.1)。**pure** —	(key: &Key, modifiers: Modifiers, captured: bool) -> Option<Message>
-function	inspector_pointer_event	motolii-shell	shell/motolii-shell/src/input.rs:81	public	`Shell::subscription` が使う、Inspector drag-to-scrub 用の window 全体の	(event: Event, status: Status, _window: Id) -> Option<Message>
-function	inspector_selection	motolii-shell	shell/motolii-shell/src/inspector_ops.rs:1007	public	今の Inspector 投影。運転席が「選択→行が出る」「編集→store が変わる」を	(self: &Self) -> Option<SelectionProjection>
-function	inspector_field_draft	motolii-shell	shell/motolii-shell/src/inspector_ops.rs:1016	public	今の Inspector 値セル編集下書き。運転席が「click(ドラッグせず release)	(self: &Self) -> Option<&FieldDraft>
+function	resolve_navigation_key	motolii-shell	shell/motolii-shell/src/input.rs:210	public	U2: playhead ナビゲーション動詞束のキー解決(正典 §5・§8.1)。**pure** —	(key: &Key, modifiers: Modifiers, captured: bool) -> Option<Message>
+function	inspector_pointer_event	motolii-shell	shell/motolii-shell/src/input.rs:79	public	`Shell::subscription` が使う、Inspector drag-to-scrub 用の window 全体の	(event: Event, status: Status, _window: Id) -> Option<Message>
+function	inspector_selection	motolii-shell	shell/motolii-shell/src/inspector_ops.rs:956	public	今の Inspector 投影。運転席が「選択→行が出る」「編集→store が変わる」を	(self: &Self) -> Option<SelectionProjection>
+function	inspector_field_draft	motolii-shell	shell/motolii-shell/src/inspector_ops.rs:965	public	今の Inspector 値セル編集下書き。運転席が「click(ドラッグせず release)	(self: &Self) -> Option<&FieldDraft>
 module	motolii_shell	motolii-shell	shell/motolii-shell/src/lib.rs:1	public	wraps: iced — front。**store への query の投影**であって、Document の写しを持たない。	
-function	boot	motolii-shell	shell/motolii-shell/src/lib.rs:1042	public	daemon の製品入口(`main.rs`)。[`Shell::new`] で組んだ Shell に main 窓を	() -> (Self, Task<Message>)
-function	boot_with_dialogs	motolii-shell	shell/motolii-shell/src/lib.rs:1049	public	[`Shell::boot`] の dialog 注入版。production は [`Shell::boot`] を使い、	(dialogs: Box<impl/dyn>) -> (Self, Task<Message>)
-function	boot_fixture	motolii-shell	shell/motolii-shell/src/lib.rs:1066	public	`--fixture` 起動の daemon boot([`Shell::boot`] の fixture 版)。	() -> (Self, Task<Message>)
-function	main_window	motolii-shell	shell/motolii-shell/src/lib.rs:1096	public	窓台帳の読み口(main 窓)。試験(`tests/suite/window_drive.rs`)が	(self: &Self) -> Option<Id>
-function	new_fixture	motolii-shell	shell/motolii-shell/src/lib.rs:1104	public	`--fixture` 起動が使う口。**トンマナ検分の器具**(発注書)— `fixture::build()`	() -> (Self, Task<Message>)
-function	title	motolii-shell	shell/motolii-shell/src/lib.rs:1188	public	main 窓の titlebar 文言(C-1 波C「未保存●が無い」の穴を塞ぐ)。	(self: &Self) -> String
-function	subscription	motolii-shell	shell/motolii-shell/src/lib.rs:1203	public	窓の事象 → Message。**ここは翻訳だけで、判断を持たない**。	(self: &Self) -> Subscription<Message>
-function	update	motolii-shell	shell/motolii-shell/src/lib.rs:1265	public	**唯一の書き口**。ここ以外に `doc.apply` を呼ぶ場所を作らない。	(self: &mut Self, message: Message) -> Task<Message>
-function	clone	motolii-shell	shell/motolii-shell/src/lib.rs:227	default		(self: &Self) -> Message
-function	fmt	motolii-shell	shell/motolii-shell/src/lib.rs:227	default		(self: &Self, f: &mut Formatter) -> Result
-enum	Message	motolii-shell	shell/motolii-shell/src/lib.rs:228	public		
-variant	Undo	motolii-shell	shell/motolii-shell/src/lib.rs:229	default		unit
-variant	Redo	motolii-shell	shell/motolii-shell/src/lib.rs:230	default		unit
-struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:231	default		i64
-variant	ScrubTo	motolii-shell	shell/motolii-shell/src/lib.rs:231	default		tuple(1)
-struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:232	default		LayerId
-variant	Select	motolii-shell	shell/motolii-shell/src/lib.rs:232	default		tuple(1)
-variant	AddLayer	motolii-shell	shell/motolii-shell/src/lib.rs:233	default		unit
-struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:239	default		Vec<PathBuf>
-variant	AdmitPaths	motolii-shell	shell/motolii-shell/src/lib.rs:239	default	OS から落ちてきた path。**受理も拒否もここ1箇所**で決める。	tuple(1)
-struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:242	default		PathBuf
-variant	DropReceived	motolii-shell	shell/motolii-shell/src/lib.rs:242	default	落下を1件ずつ溜める。winit は1ファイル1事象で送ってくるので、	tuple(1)
-variant	FlushDrops	motolii-shell	shell/motolii-shell/src/lib.rs:244	default	落下の区切り。次の描画要求が来た時点で、溜めた分を**まとめて1操作**にする。	unit
-variant	TokensFileChanged	motolii-shell	shell/motolii-shell/src/lib.rs:247	default	トークンファイル(寸法・色)が変わった。**debug ビルドでしか実際には届かない**	unit
-struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:256	default		Id
-variant	MainWindowOpened	motolii-shell	shell/motolii-shell/src/lib.rs:256	default	boot の `window::open`(`Shell::boot`/`boot_fixture`)が開いた main 窓。	tuple(1)
-struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:260	default		Id
-variant	SettingsWindowOpened	motolii-shell	shell/motolii-shell/src/lib.rs:260	default	`toggle_settings_window` の `window::open` が開いた Settings 窓(S2)。	tuple(1)
-struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:267	default		Id
-variant	WindowClosed	motolii-shell	shell/motolii-shell/src/lib.rs:267	default	どれかの窓が閉じた(`iced::window::close_events` 購読)。**main 窓なら	tuple(1)
-struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:274	default		Message
-variant	Inspector	motolii-shell	shell/motolii-shell/src/lib.rs:274	default	`motolii_inspector_pane::Message` を1本で畳む(iced 標準型 — 子 pane の	tuple(1)
-struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:288	default		Message
-variant	Timeline	motolii-shell	shell/motolii-shell/src/lib.rs:288	default	レーンバー M/S/L・クリップ move/trim・property 行(キー行)のキー選択・	tuple(1)
-struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:294	default		i64
-variant	StepPlayhead	motolii-shell	shell/motolii-shell/src/lib.rs:294	default	Step Forward/Back(正典 §5「矢印キー」)。符号つき frame 数(素で ±1、	tuple(1)
-variant	JumpPlayheadToStart	motolii-shell	shell/motolii-shell/src/lib.rs:296	default	JumpToCompStart(正典 §8.1)。既定割当 Home。	unit
-variant	JumpPlayheadToEnd	motolii-shell	shell/motolii-shell/src/lib.rs:298	default	JumpToCompEnd(正典 §8.1)。既定割当 End。	unit
-variant	JumpMeaningPoint	motolii-shell	shell/motolii-shell/src/lib.rs:302	default	JumpPrev/NextMeaningPoint(正典 §8.1)。既定割当 J(Prev)/K(Next)。	struct{2}
-struct_field	direction	motolii-shell	shell/motolii-shell/src/lib.rs:303	default		JumpDirection
-struct_field	layer_only	motolii-shell	shell/motolii-shell/src/lib.rs:304	default		bool
-struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:308	default		ClipEdge
-variant	JumpClipEdge	motolii-shell	shell/motolii-shell/src/lib.rs:308	default	JumpToClipIn/Out(正典 §8.1)。既定割当 I(In)/O(Out)。選択 layer の	tuple(1)
-variant	JumpToWorkAreaStart	motolii-shell	shell/motolii-shell/src/lib.rs:313	default	JumpToLoopStart(map 1064「作業範囲の先頭へ」、B18/第5波結線)。既定割当	unit
-variant	JumpToWorkAreaEnd	motolii-shell	shell/motolii-shell/src/lib.rs:316	default	JumpToLoopEnd(map 1064「作業範囲の末尾へ」)。既定割当 Shift+End。	unit
-struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:322	default		Modifiers
-variant	KeyboardModifiersChanged	motolii-shell	shell/motolii-shell/src/lib.rs:322	default	Shift の押下状態。`CursorMoved` 自体は modifiers を運ばないので	tuple(1)
-variant	EscapePressed	motolii-shell	shell/motolii-shell/src/lib.rs:324	default	Esc — drag 中なら復元、typing 下書き中(値セル/名前欄)ならそれを破棄。	unit
-struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:333	default		Message
-variant	Settings	motolii-shell	shell/motolii-shell/src/lib.rs:333	default	`motolii_settings_pane::sections::Message` を1本で畳む(iced 標準型 —	tuple(1)
-struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:340	default		Message
-variant	Stage	motolii-shell	shell/motolii-shell/src/lib.rs:340	default	`motolii_stage_pane::Message` を1本で畳む(iced 標準の「子 pane の	tuple(1)
-struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:347	default		GizmoDrag
-variant	Gizmo	motolii-shell	shell/motolii-shell/src/lib.rs:347	default	Stage ギズモの drag 事象(GZ 結線、第5波)。[`stage::GizmoDrag`] は	tuple(1)
-variant	ZoomIn	motolii-shell	shell/motolii-shell/src/lib.rs:352	default	map 1441「Zoom In」。[`stage::zoom::zoom_step`] を	unit
-variant	ZoomOut	motolii-shell	shell/motolii-shell/src/lib.rs:355	default	map 1442「Zoom Out」。[`stage::zoom::zoom_step`] を	unit
-variant	ZoomToFit	motolii-shell	shell/motolii-shell/src/lib.rs:362	default	map 1491/1492「Zoom to fit」。`bounds` に依存しない唯一の	unit
-struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:373	default		Message
-variant	Browser	motolii-shell	shell/motolii-shell/src/lib.rs:373	default	`motolii_browser_pane::Message` を1本で畳む(`Message::Settings`/	tuple(1)
-struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:386	default		Pane
-variant	PaneClicked	motolii-shell	shell/motolii-shell/src/lib.rs:386	default	pane 本体がクリックされた。`iced::widget::pane_grid::PaneGrid::	tuple(1)
-struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:391	default		ResizeEvent
-variant	PaneResized	motolii-shell	shell/motolii-shell/src/lib.rs:391	default	境界ドラッグでリサイズ。`iced::widget::pane_grid::PaneGrid::on_resize`	tuple(1)
-struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:397	default		DragEvent
-variant	PaneDragged	motolii-shell	shell/motolii-shell/src/lib.rs:397	default	パネルのドラッグ並べ替え(ドッキング)。	tuple(1)
-variant	CopyLayer	motolii-shell	shell/motolii-shell/src/lib.rs:408	default	`Session::selection` の layer をアプリ内クリップボードへ写す(`clipboard.rs`	unit
-variant	PasteLayer	motolii-shell	shell/motolii-shell/src/lib.rs:412	default	クリップボードの layer を新規 layer として配置する。**元時刻のまま**	unit
-variant	CutLayer	motolii-shell	shell/motolii-shell/src/lib.rs:416	default	Copy + 削除。**1 undo**(`Intent::RemoveLayer` 1つだけを apply する —	unit
-variant	DuplicateLayer	motolii-shell	shell/motolii-shell/src/lib.rs:419	default	クリップボードを経由しないその場複製(Cmd+D)。1 `apply_all` = 1 undo。	unit
-variant	BatchRenameSelectedLayers	motolii-shell	shell/motolii-shell/src/lib.rs:421	default	選択中の layer 名を行順の `Layer 001` 形式へ一括採番する。1 undo。	unit
-variant	SelectAllLayers	motolii-shell	shell/motolii-shell/src/lib.rs:424	default	見えている行を選択する(正典 §4「Cmd+A 正: 見えている行だけ」)。fold は	unit
-variant	DeselectAllLayers	motolii-shell	shell/motolii-shell/src/lib.rs:426	default	選択を全解除する(正典: 空白クリックと同義のキーボード入口)。	unit
-variant	DeleteSelectedLayers	motolii-shell	shell/motolii-shell/src/lib.rs:434	default	Delete(軸台帳 A08 id431)。Cut(`CutLayer`)の副作用としてしか存在	unit
-variant	HideSelectedLayers	motolii-shell	shell/motolii-shell/src/lib.rs:438	default	Timeline rail M glyph 一括版(軸台帳 A08「Hidden トグル」の穴)。	unit
-variant	SoloSelectedLayers	motolii-shell	shell/motolii-shell/src/lib.rs:440	default	Timeline rail S glyph 一括版(軸台帳 A08 id314 の穴)。	unit
-variant	LockSelectedLayers	motolii-shell	shell/motolii-shell/src/lib.rs:443	default	Timeline rail L glyph 一括版(軸台帳 A08 id874「Lock selected	unit
-variant	GroupLayers	motolii-shell	shell/motolii-shell/src/lib.rs:453	default	⌘G。`Session::selected_layers` を新しい `LayerSource::Group` layer の	unit
-variant	UngroupLayers	motolii-shell	shell/motolii-shell/src/lib.rs:457	default	⌘⇧G。選択に含まれる `LayerSource::Group` layer を解除する(Group でない	unit
-variant	FreezeGroups	motolii-shell	shell/motolii-shell/src/lib.rs:468	default	Layer メニューの Freeze。選択中の `LayerSource::Group` layer の	unit
-variant	UnfreezeGroups	motolii-shell	shell/motolii-shell/src/lib.rs:470	default	Layer メニューの Unfreeze。`FreezeGroups` と対称(`Intent::Unfreeze`)。	unit
-variant	NewProjectRequested	motolii-shell	shell/motolii-shell/src/lib.rs:478	default	New Project(Cmd+N・File メニュー、normal-map id 1221)。dirty なら	unit
-struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:483	default		bool
-variant	NewProjectConfirmed	motolii-shell	shell/motolii-shell/src/lib.rs:483	default	`NewProjectRequested` の確認結果(true = 破棄して `reset_document`、	tuple(1)
-variant	SaveRequested	motolii-shell	shell/motolii-shell/src/lib.rs:492	default	平の Save(id 1224、C-1 波C 発注「保存と復帰」)。**`current_path` が	unit
-variant	SaveAsRequested	motolii-shell	shell/motolii-shell/src/lib.rs:498	default	Save As(Cmd+Shift+S・File メニュー、id 1225)。	unit
-struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:500	default		Option<PathBuf>
-variant	SaveAsPathChosen	motolii-shell	shell/motolii-shell/src/lib.rs:500	default	`SaveAsRequested` の path 選択結果。`None` = キャンセル(何もしない)。	tuple(1)
-variant	SaveACopyRequested	motolii-shell	shell/motolii-shell/src/lib.rs:506	default	Save a Copy(File メニューのみ、id 1227 — normal-map の shortcut 出典が	unit
-struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:508	default		Option<PathBuf>
-variant	SaveACopyPathChosen	motolii-shell	shell/motolii-shell/src/lib.rs:508	default	`SaveACopyRequested` の path 選択結果。`None` = キャンセル。	tuple(1)
-variant	OpenRequested	motolii-shell	shell/motolii-shell/src/lib.rs:515	default	Open(File メニュー、normal-map id 1226「Open Project」── shortcut 出典	unit
-struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:518	default		Option<PathBuf>
-variant	OpenPathChosen	motolii-shell	shell/motolii-shell/src/lib.rs:518	default	`OpenRequested` の最終結果(確認キャンセル・path キャンセルのどちらも	tuple(1)
-variant	ImportMediaRequested	motolii-shell	shell/motolii-shell/src/lib.rs:523	default	File > Import Media…(normal-map id 592「Import (media/file)」の第2の	unit
-variant	QuitRequested	motolii-shell	shell/motolii-shell/src/lib.rs:526	default	Quit(Cmd+Q・File メニュー、id 1223)。dirty なら confirm_discard を	unit
-struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:529	default		bool
-variant	QuitConfirmed	motolii-shell	shell/motolii-shell/src/lib.rs:529	default	`QuitRequested` の確認結果(true = `self.dialogs.quit()`、	tuple(1)
-struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:537	default		Id
-variant	WindowCloseRequested	motolii-shell	shell/motolii-shell/src/lib.rs:537	default	OS の赤信号(×)ボタン(C-1 波C「保存と復帰」、A06「閉じる確認」の穴)。	tuple(1)
-struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:541	default		bool
-variant	WindowCloseConfirmed	motolii-shell	shell/motolii-shell/src/lib.rs:541	default	`WindowCloseRequested` の確認結果(true = `iced::exit()`、false = 何も	tuple(1)
-struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:547	default		Option<PathBuf>
-variant	LastProjectPathRead	motolii-shell	shell/motolii-shell/src/lib.rs:547	default	起動直後、`document_io::read_last_project_path` が返した前回プロジェクト	tuple(1)
+function	boot	motolii-shell	shell/motolii-shell/src/lib.rs:1044	public	daemon の製品入口(`main.rs`)。[`Shell::new`] で組んだ Shell に main 窓を	() -> (Self, Task<Message>)
+function	boot_with_dialogs	motolii-shell	shell/motolii-shell/src/lib.rs:1051	public	[`Shell::boot`] の dialog 注入版。production は [`Shell::boot`] を使い、	(dialogs: Box<impl/dyn>) -> (Self, Task<Message>)
+function	boot_fixture	motolii-shell	shell/motolii-shell/src/lib.rs:1068	public	`--fixture` 起動の daemon boot([`Shell::boot`] の fixture 版)。	() -> (Self, Task<Message>)
+function	main_window	motolii-shell	shell/motolii-shell/src/lib.rs:1098	public	窓台帳の読み口(main 窓)。試験(`tests/suite/window_drive.rs`)が	(self: &Self) -> Option<Id>
+function	new_fixture	motolii-shell	shell/motolii-shell/src/lib.rs:1106	public	`--fixture` 起動が使う口。**トンマナ検分の器具**(発注書)— `fixture::build()`	() -> (Self, Task<Message>)
+function	title	motolii-shell	shell/motolii-shell/src/lib.rs:1190	public	main 窓の titlebar 文言(C-1 波C「未保存●が無い」の穴を塞ぐ)。	(self: &Self) -> String
+function	subscription	motolii-shell	shell/motolii-shell/src/lib.rs:1205	public	窓の事象 → Message。**ここは翻訳だけで、判断を持たない**。	(self: &Self) -> Subscription<Message>
+function	update	motolii-shell	shell/motolii-shell/src/lib.rs:1275	public	**唯一の更新入口**。Messageはここからdomain moduleへ分配し、各moduleが	(self: &mut Self, message: Message) -> Task<Message>
+function	clone	motolii-shell	shell/motolii-shell/src/lib.rs:240	default		(self: &Self) -> Message
+function	fmt	motolii-shell	shell/motolii-shell/src/lib.rs:240	default		(self: &Self, f: &mut Formatter) -> Result
+enum	Message	motolii-shell	shell/motolii-shell/src/lib.rs:241	public		
+variant	Undo	motolii-shell	shell/motolii-shell/src/lib.rs:242	default		unit
+variant	Redo	motolii-shell	shell/motolii-shell/src/lib.rs:243	default		unit
+struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:244	default		i64
+variant	ScrubTo	motolii-shell	shell/motolii-shell/src/lib.rs:244	default		tuple(1)
+struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:245	default		LayerId
+variant	Select	motolii-shell	shell/motolii-shell/src/lib.rs:245	default		tuple(1)
+variant	AddLayer	motolii-shell	shell/motolii-shell/src/lib.rs:246	default		unit
+struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:252	default		Vec<PathBuf>
+variant	AdmitPaths	motolii-shell	shell/motolii-shell/src/lib.rs:252	default	OS から落ちてきた path。**受理も拒否もここ1箇所**で決める。	tuple(1)
+struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:255	default		PathBuf
+variant	DropReceived	motolii-shell	shell/motolii-shell/src/lib.rs:255	default	落下を1件ずつ溜める。winit は1ファイル1事象で送ってくるので、	tuple(1)
+variant	FlushDrops	motolii-shell	shell/motolii-shell/src/lib.rs:257	default	落下の区切り。次の描画要求が来た時点で、溜めた分を**まとめて1操作**にする。	unit
+variant	TokensFileChanged	motolii-shell	shell/motolii-shell/src/lib.rs:260	default	トークンファイル(寸法・色)が変わった。**debug ビルドでしか実際には届かない**	unit
+struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:269	default		Id
+variant	MainWindowOpened	motolii-shell	shell/motolii-shell/src/lib.rs:269	default	boot の `window::open`(`Shell::boot`/`boot_fixture`)が開いた main 窓。	tuple(1)
+struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:273	default		Id
+variant	SettingsWindowOpened	motolii-shell	shell/motolii-shell/src/lib.rs:273	default	`toggle_settings_window` の `window::open` が開いた Settings 窓(S2)。	tuple(1)
+struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:280	default		Id
+variant	WindowClosed	motolii-shell	shell/motolii-shell/src/lib.rs:280	default	どれかの窓が閉じた(`iced::window::close_events` 購読)。**main 窓なら	tuple(1)
+struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:287	default		Message
+variant	Inspector	motolii-shell	shell/motolii-shell/src/lib.rs:287	default	`motolii_inspector_pane::Message` を1本で畳む(iced 標準型 — 子 pane の	tuple(1)
+struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:301	default		Message
+variant	Timeline	motolii-shell	shell/motolii-shell/src/lib.rs:301	default	レーンバー M/S/L・クリップ move/trim・property 行(キー行)のキー選択・	tuple(1)
+struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:307	default		i64
+variant	StepPlayhead	motolii-shell	shell/motolii-shell/src/lib.rs:307	default	Step Forward/Back(正典 §5「矢印キー」)。符号つき frame 数(素で ±1、	tuple(1)
+variant	JumpPlayheadToStart	motolii-shell	shell/motolii-shell/src/lib.rs:309	default	JumpToCompStart(正典 §8.1)。既定割当 Home。	unit
+variant	JumpPlayheadToEnd	motolii-shell	shell/motolii-shell/src/lib.rs:311	default	JumpToCompEnd(正典 §8.1)。既定割当 End。	unit
+variant	JumpMeaningPoint	motolii-shell	shell/motolii-shell/src/lib.rs:315	default	JumpPrev/NextMeaningPoint(正典 §8.1)。既定割当 J(Prev)/K(Next)。	struct{2}
+struct_field	direction	motolii-shell	shell/motolii-shell/src/lib.rs:316	default		JumpDirection
+struct_field	layer_only	motolii-shell	shell/motolii-shell/src/lib.rs:317	default		bool
+struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:321	default		ClipEdge
+variant	JumpClipEdge	motolii-shell	shell/motolii-shell/src/lib.rs:321	default	JumpToClipIn/Out(正典 §8.1)。既定割当 I(In)/O(Out)。選択 layer の	tuple(1)
+variant	JumpToWorkAreaStart	motolii-shell	shell/motolii-shell/src/lib.rs:326	default	JumpToLoopStart(map 1064「作業範囲の先頭へ」、B18/第5波結線)。既定割当	unit
+variant	JumpToWorkAreaEnd	motolii-shell	shell/motolii-shell/src/lib.rs:329	default	JumpToLoopEnd(map 1064「作業範囲の末尾へ」)。既定割当 Shift+End。	unit
+struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:335	default		Modifiers
+variant	KeyboardModifiersChanged	motolii-shell	shell/motolii-shell/src/lib.rs:335	default	Shift の押下状態。`CursorMoved` 自体は modifiers を運ばないので	tuple(1)
+variant	EscapePressed	motolii-shell	shell/motolii-shell/src/lib.rs:337	default	Esc — drag 中なら復元、typing 下書き中(値セル/名前欄)ならそれを破棄。	unit
+struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:346	default		Message
+variant	Settings	motolii-shell	shell/motolii-shell/src/lib.rs:346	default	`motolii_settings_pane::sections::Message` を1本で畳む(iced 標準型 —	tuple(1)
+struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:353	default		Message
+variant	Stage	motolii-shell	shell/motolii-shell/src/lib.rs:353	default	`motolii_stage_pane::Message` を1本で畳む(iced 標準の「子 pane の	tuple(1)
+struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:360	default		GizmoDrag
+variant	Gizmo	motolii-shell	shell/motolii-shell/src/lib.rs:360	default	Stage ギズモの drag 事象(GZ 結線、第5波)。[`stage::GizmoDrag`] は	tuple(1)
+variant	ZoomIn	motolii-shell	shell/motolii-shell/src/lib.rs:365	default	map 1441「Zoom In」。[`stage::zoom::zoom_step`] を	unit
+variant	ZoomOut	motolii-shell	shell/motolii-shell/src/lib.rs:368	default	map 1442「Zoom Out」。[`stage::zoom::zoom_step`] を	unit
+variant	ZoomToFit	motolii-shell	shell/motolii-shell/src/lib.rs:375	default	map 1491/1492「Zoom to fit」。`bounds` に依存しない唯一の	unit
+struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:386	default		Message
+variant	Browser	motolii-shell	shell/motolii-shell/src/lib.rs:386	default	`motolii_browser_pane::Message` を1本で畳む(`Message::Settings`/	tuple(1)
+struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:399	default		Pane
+variant	PaneClicked	motolii-shell	shell/motolii-shell/src/lib.rs:399	default	pane 本体がクリックされた。`iced::widget::pane_grid::PaneGrid::	tuple(1)
+struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:404	default		ResizeEvent
+variant	PaneResized	motolii-shell	shell/motolii-shell/src/lib.rs:404	default	境界ドラッグでリサイズ。`iced::widget::pane_grid::PaneGrid::on_resize`	tuple(1)
+struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:410	default		DragEvent
+variant	PaneDragged	motolii-shell	shell/motolii-shell/src/lib.rs:410	default	パネルのドラッグ並べ替え(ドッキング)。	tuple(1)
+variant	CopyLayer	motolii-shell	shell/motolii-shell/src/lib.rs:421	default	`Session::selection` の layer をアプリ内クリップボードへ写す(`clipboard.rs`	unit
+variant	PasteLayer	motolii-shell	shell/motolii-shell/src/lib.rs:425	default	クリップボードの layer を新規 layer として配置する。**元時刻のまま**	unit
+variant	CutLayer	motolii-shell	shell/motolii-shell/src/lib.rs:429	default	Copy + 削除。**1 undo**(`Intent::RemoveLayer` 1つだけを apply する —	unit
+variant	DuplicateLayer	motolii-shell	shell/motolii-shell/src/lib.rs:432	default	クリップボードを経由しないその場複製(Cmd+D)。1 `apply_all` = 1 undo。	unit
+variant	BatchRenameSelectedLayers	motolii-shell	shell/motolii-shell/src/lib.rs:434	default	選択中の layer 名を行順の `Layer 001` 形式へ一括採番する。1 undo。	unit
+variant	SelectAllLayers	motolii-shell	shell/motolii-shell/src/lib.rs:437	default	見えている行を選択する(正典 §4「Cmd+A 正: 見えている行だけ」)。fold は	unit
+variant	DeselectAllLayers	motolii-shell	shell/motolii-shell/src/lib.rs:439	default	選択を全解除する(正典: 空白クリックと同義のキーボード入口)。	unit
+variant	DeleteSelectedLayers	motolii-shell	shell/motolii-shell/src/lib.rs:447	default	Delete(軸台帳 A08 id431)。Cut(`CutLayer`)の副作用としてしか存在	unit
+variant	HideSelectedLayers	motolii-shell	shell/motolii-shell/src/lib.rs:451	default	Timeline rail M glyph 一括版(軸台帳 A08「Hidden トグル」の穴)。	unit
+variant	SoloSelectedLayers	motolii-shell	shell/motolii-shell/src/lib.rs:453	default	Timeline rail S glyph 一括版(軸台帳 A08 id314 の穴)。	unit
+variant	LockSelectedLayers	motolii-shell	shell/motolii-shell/src/lib.rs:456	default	Timeline rail L glyph 一括版(軸台帳 A08 id874「Lock selected	unit
+variant	GroupLayers	motolii-shell	shell/motolii-shell/src/lib.rs:466	default	⌘G。`Session::selected_layers` を新しい `LayerSource::Group` layer の	unit
+variant	UngroupLayers	motolii-shell	shell/motolii-shell/src/lib.rs:470	default	⌘⇧G。選択に含まれる `LayerSource::Group` layer を解除する(Group でない	unit
+variant	FreezeGroups	motolii-shell	shell/motolii-shell/src/lib.rs:481	default	Layer メニューの Freeze。選択中の `LayerSource::Group` layer の	unit
+variant	UnfreezeGroups	motolii-shell	shell/motolii-shell/src/lib.rs:483	default	Layer メニューの Unfreeze。`FreezeGroups` と対称(`Intent::Unfreeze`)。	unit
+variant	NewProjectRequested	motolii-shell	shell/motolii-shell/src/lib.rs:491	default	New Project(Cmd+N・File メニュー、normal-map id 1221)。dirty なら	unit
+struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:496	default		bool
+variant	NewProjectConfirmed	motolii-shell	shell/motolii-shell/src/lib.rs:496	default	`NewProjectRequested` の確認結果(true = 破棄して `reset_document`、	tuple(1)
+variant	SaveRequested	motolii-shell	shell/motolii-shell/src/lib.rs:505	default	平の Save(id 1224、C-1 波C 発注「保存と復帰」)。**`current_path` が	unit
+variant	SaveAsRequested	motolii-shell	shell/motolii-shell/src/lib.rs:511	default	Save As(Cmd+Shift+S・File メニュー、id 1225)。	unit
+struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:513	default		Option<PathBuf>
+variant	SaveAsPathChosen	motolii-shell	shell/motolii-shell/src/lib.rs:513	default	`SaveAsRequested` の path 選択結果。`None` = キャンセル(何もしない)。	tuple(1)
+variant	SaveACopyRequested	motolii-shell	shell/motolii-shell/src/lib.rs:519	default	Save a Copy(File メニューのみ、id 1227 — normal-map の shortcut 出典が	unit
+struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:521	default		Option<PathBuf>
+variant	SaveACopyPathChosen	motolii-shell	shell/motolii-shell/src/lib.rs:521	default	`SaveACopyRequested` の path 選択結果。`None` = キャンセル。	tuple(1)
+variant	OpenRequested	motolii-shell	shell/motolii-shell/src/lib.rs:528	default	Open(File メニュー、normal-map id 1226「Open Project」── shortcut 出典	unit
+struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:531	default		Option<PathBuf>
+variant	OpenPathChosen	motolii-shell	shell/motolii-shell/src/lib.rs:531	default	`OpenRequested` の最終結果(確認キャンセル・path キャンセルのどちらも	tuple(1)
+variant	ImportMediaRequested	motolii-shell	shell/motolii-shell/src/lib.rs:536	default	File > Import Media…(normal-map id 592「Import (media/file)」の第2の	unit
+variant	QuitRequested	motolii-shell	shell/motolii-shell/src/lib.rs:539	default	Quit(Cmd+Q・File メニュー、id 1223)。dirty なら confirm_discard を	unit
+struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:542	default		bool
+variant	QuitConfirmed	motolii-shell	shell/motolii-shell/src/lib.rs:542	default	`QuitRequested` の確認結果(true = `self.dialogs.quit()`、	tuple(1)
+struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:550	default		Id
+variant	WindowCloseRequested	motolii-shell	shell/motolii-shell/src/lib.rs:550	default	OS の赤信号(×)ボタン(C-1 波C「保存と復帰」、A06「閉じる確認」の穴)。	tuple(1)
 struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:554	default		bool
-variant	AutoSaveRecoveryConfirmed	motolii-shell	shell/motolii-shell/src/lib.rs:554	default	前回プロジェクトを黙って再オープンした直後、autosave 世代の方が	tuple(1)
-variant	TogglePlayback	motolii-shell	shell/motolii-shell/src/lib.rs:560	default	Space。Play/Pause をトグルする。**ドラッグ中は無効**(拘束5「再生と	unit
-variant	PlaybackTick	motolii-shell	shell/motolii-shell/src/lib.rs:564	default	再生中だけ発行される tick(`subscription()` が `is_running()` の間だけ	unit
-variant	AutoSaveTick	motolii-shell	shell/motolii-shell/src/lib.rs:572	default	`auto_save::tick_subscription` が `auto_save_config.interval_secs` 秒	unit
-struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:580	default		SheetMessage
-variant	Sheet	motolii-shell	shell/motolii-shell/src/lib.rs:580	default	Stage 方眼シート束(`stage::sheets` 冒頭 doc「結線は次波」— この波で	tuple(1)
-struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:585	default		SelectLayers
-variant	Marquee	motolii-shell	shell/motolii-shell/src/lib.rs:585	default	Stage 矩形選択(`stage::marquee` 冒頭 doc「結線は supervisor」)。	tuple(1)
-struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:591	default		MarkerMessage
-variant	Marker	motolii-shell	shell/motolii-shell/src/lib.rs:591	default	Timeline マーカーレーン(B19、`timeline::markers` 冒頭 doc の統合手順)。	tuple(1)
-struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:595	default		Message
-variant	Export	motolii-shell	shell/motolii-shell/src/lib.rs:595	default	Export ダイアログ(B09、`export_pane` crate doc「shell 結線」節)。	tuple(1)
-struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:599	default		Id
-variant	ExportWindowOpened	motolii-shell	shell/motolii-shell/src/lib.rs:599	default	`toggle_export_window` の `window::open` が開いた Export 窓。	tuple(1)
-struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:603	default		ExportEvent
-variant	ExportProgressed	motolii-shell	shell/motolii-shell/src/lib.rs:603	default	Export の実行が背景スレッドから届ける進捗/完了(C-3、	tuple(1)
-variant	RenameSelectedLayer	motolii-shell	shell/motolii-shell/src/lib.rs:608	default	Enter(単一選択時)= rename 開始(正典 §6、`timeline::write` 冒頭 doc)。	unit
-struct	Shell	motolii-shell	shell/motolii-shell/src/lib.rs:627	public		
-function	new	motolii-shell	shell/motolii-shell/src/lib.rs:955	public		() -> (Self, Task<Message>)
-function	new_with_dialogs	motolii-shell	shell/motolii-shell/src/lib.rs:965	public	[`Shell::new`] の実体。[`file_dialogs::FileDialogs`] を注入できる形の	(dialogs: Box<impl/dyn>) -> (Self, Task<Message>)
+variant	WindowCloseConfirmed	motolii-shell	shell/motolii-shell/src/lib.rs:554	default	`WindowCloseRequested` の確認結果(true = `iced::exit()`、false = 何も	tuple(1)
+struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:560	default		Option<PathBuf>
+variant	LastProjectPathRead	motolii-shell	shell/motolii-shell/src/lib.rs:560	default	起動直後、`document_io::read_last_project_path` が返した前回プロジェクト	tuple(1)
+struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:567	default		bool
+variant	AutoSaveRecoveryConfirmed	motolii-shell	shell/motolii-shell/src/lib.rs:567	default	前回プロジェクトを黙って再オープンした直後、autosave 世代の方が	tuple(1)
+variant	TogglePlayback	motolii-shell	shell/motolii-shell/src/lib.rs:573	default	Space。Play/Pause をトグルする。**ドラッグ中は無効**(拘束5「再生と	unit
+variant	PlaybackTick	motolii-shell	shell/motolii-shell/src/lib.rs:577	default	再生中だけ発行される tick(`subscription()` が `is_running()` の間だけ	unit
+variant	AutoSaveTick	motolii-shell	shell/motolii-shell/src/lib.rs:585	default	`auto_save::tick_subscription` が `auto_save_config.interval_secs` 秒	unit
+struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:593	default		SheetMessage
+variant	Sheet	motolii-shell	shell/motolii-shell/src/lib.rs:593	default	Stage 方眼シート束(`stage::sheets` 冒頭 doc「結線は次波」— この波で	tuple(1)
+struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:598	default		SelectLayers
+variant	Marquee	motolii-shell	shell/motolii-shell/src/lib.rs:598	default	Stage 矩形選択(`stage::marquee` 冒頭 doc「結線は supervisor」)。	tuple(1)
+struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:604	default		MarkerMessage
+variant	Marker	motolii-shell	shell/motolii-shell/src/lib.rs:604	default	Timeline マーカーレーン(B19、`timeline::markers` 冒頭 doc の統合手順)。	tuple(1)
+struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:608	default		Message
+variant	Export	motolii-shell	shell/motolii-shell/src/lib.rs:608	default	Export ダイアログ(B09、`export_pane` crate doc「shell 結線」節)。	tuple(1)
+struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:612	default		Id
+variant	ExportWindowOpened	motolii-shell	shell/motolii-shell/src/lib.rs:612	default	`toggle_export_window` の `window::open` が開いた Export 窓。	tuple(1)
+struct_field	0	motolii-shell	shell/motolii-shell/src/lib.rs:616	default		ExportEvent
+variant	ExportProgressed	motolii-shell	shell/motolii-shell/src/lib.rs:616	default	Export の実行が背景スレッドから届ける進捗/完了(C-3、	tuple(1)
+variant	RenameSelectedLayer	motolii-shell	shell/motolii-shell/src/lib.rs:621	default	Enter(単一選択時)= rename 開始(正典 §6、`timeline::write` 冒頭 doc)。	unit
+struct	Shell	motolii-shell	shell/motolii-shell/src/lib.rs:631	public		
+function	new	motolii-shell	shell/motolii-shell/src/lib.rs:957	public		() -> (Self, Task<Message>)
+function	new_with_dialogs	motolii-shell	shell/motolii-shell/src/lib.rs:967	public	[`Shell::new`] の実体。[`file_dialogs::FileDialogs`] を注入できる形の	(dialogs: Box<impl/dyn>) -> (Self, Task<Message>)
 module	menu	motolii-shell	shell/motolii-shell/src/menu.rs:1	public	header のメニューバーの意味定義(MB-2、`menu.rs` 冒頭 doc 参照)。MB-2 で	
 constant	TOP_LEVEL_LABELS	motolii-shell	shell/motolii-shell/src/menu.rs:47	public	トップレベル4本の正本(左から順)。`menus()` と同じ出典 — q0_fence の	
 function	menus	motolii-shell	shell/motolii-shell/src/menu.rs:51	public	header メニューバーの全定義。`Shell::header` が毎フレーム	() -> Vec<Menu<Message>>
@@ -2508,20 +2527,20 @@ function	markers	motolii-shell	shell/motolii-shell/src/playback.rs:251	public	�
 function	build_timeline_pane	motolii-shell	shell/motolii-shell/src/playback.rs:264	public	`TimelinePane` の組み立て。`view()` はこれを呼ぶだけ(第2波T5、正典	(self: &Self) -> TimelinePane
 function	timeline_work_area	motolii-shell	shell/motolii-shell/src/playback.rs:342	public	作業範囲の現在値(B18、第5波結線)。運転席(`tests/suite/`)が	(self: &Self) -> Option<WorkArea>
 function	timeline_loop_enabled	motolii-shell	shell/motolii-shell/src/playback.rs:347	public	ループ on/off の現在値(同上 — `advance_playback_tick` が読むのと同じ値)。	(self: &Self) -> bool
-function	frame_token	motolii-shell	shell/motolii-shell/src/render.rs:1209	public	描き上がったフレームの識別。同じなら描き直していない。	(self: &Self) -> Option<(DisplayRevision, i64)>
-function	checkerboard_enabled	motolii-shell	shell/motolii-shell/src/render.rs:1220	public	市松トグルの今の状態。**screenshot 器具**が「実際に画面へ出る絵」を	(self: &Self) -> bool
-function	sheet_toggles	motolii-shell	shell/motolii-shell/src/render.rs:1226	public	Stage 方眼シート束のトグル状態の読み口(B22、第6波)。運転席が	(self: &Self) -> SheetToggles
-function	resolution_cap	motolii-shell	shell/motolii-shell/src/render.rs:1232	public	Stage 下縁状態帯(裁定163)の今のプレビュー解像度 cap。運転席/試験が	(self: &Self) -> PreviewResolutionCap
-function	stage_presenter_dims	motolii-shell	shell/motolii-shell/src/render.rs:1240	public	**裁定166 EXACT TARGET (b) の読み口**: shader Primitive へ実際に渡る	(self: &Self) -> Option<(u32, u32)>
-function	stage_presenter_generation	motolii-shell	shell/motolii-shell/src/render.rs:1251	public	Stage presenter の内容が変わった回数(裁定166 EXACT TARGET 1 の CPU 側	(self: &Self) -> Option<u64>
-function	stage_presenter_is_gpu_backed	motolii-shell	shell/motolii-shell/src/render.rs:1263	public	**裁定171 v2 M4 / 残コスト調査(§1-4)の読み口**: 今の presenter が	(self: &Self) -> Option<bool>
-function	tokens	motolii-shell	shell/motolii-shell/src/render.rs:1270	public	今のデザイン値。運転席がトークン再読込を確かめる口。	(self: &Self) -> &Tokens
-function	dims	motolii-shell	shell/motolii-shell/src/render.rs:1278	public	`ui_scale` を適用した寸法。**全 pane・全 instrument(`screenshot.rs` 含む)は	(self: &Self) -> Dimensions
-function	colors	motolii-shell	shell/motolii-shell/src/render.rs:1285	public	現在の色トークン。`main.rs` の `iced::application(...).theme(...)` 結線	(self: &Self) -> Colors
-function	frame_rgba	motolii-shell	shell/motolii-shell/src/render.rs:31	public	描き上がった Stage フレームの生 RGBA。**常に背景込みの export 真値**	(self: &mut Self) -> Option<(u32, u32, &[u8])>
-function	checkerboard_preview_rgba	motolii-shell	shell/motolii-shell/src/render.rs:42	public	市松 ON の間だけ `Some` — 裁定141「AE型の透明可視化モード」の入力	(self: &Self) -> Option<(u32, u32, &[u8])>
-function	observation	motolii-shell	shell/motolii-shell/src/render.rs:54	public	今の観測カメラの状態(裁定157)。運転席/screenshot 器具が「カメラを通して	(self: &Self) -> Option<ObservationCamera>
-function	observation_rgba	motolii-shell	shell/motolii-shell/src/render.rs:62	public	観測カメラ有効時の Stage 表示 RGBA(`Engine::render_frame_with_view_camera`	(self: &Self) -> Option<(u32, u32, &[u8])>
+function	frame_rgba	motolii-shell	shell/motolii-shell/src/render.rs:24	public	描き上がった Stage フレームの生 RGBA。**常に背景込みの export 真値**	(self: &mut Self) -> Option<(u32, u32, &[u8])>
+function	checkerboard_preview_rgba	motolii-shell	shell/motolii-shell/src/render.rs:35	public	市松 ON の間だけ `Some` — 裁定141「AE型の透明可視化モード」の入力	(self: &Self) -> Option<(u32, u32, &[u8])>
+function	observation	motolii-shell	shell/motolii-shell/src/render.rs:47	public	今の観測カメラの状態(裁定157)。運転席/screenshot 器具が「カメラを通して	(self: &Self) -> Option<ObservationCamera>
+function	observation_rgba	motolii-shell	shell/motolii-shell/src/render.rs:55	public	観測カメラ有効時の Stage 表示 RGBA(`Engine::render_frame_with_view_camera`	(self: &Self) -> Option<(u32, u32, &[u8])>
+function	frame_token	motolii-shell	shell/motolii-shell/src/render.rs:748	public	描き上がったフレームの識別。同じなら描き直していない。	(self: &Self) -> Option<(DisplayRevision, i64)>
+function	checkerboard_enabled	motolii-shell	shell/motolii-shell/src/render.rs:759	public	市松トグルの今の状態。**screenshot 器具**が「実際に画面へ出る絵」を	(self: &Self) -> bool
+function	sheet_toggles	motolii-shell	shell/motolii-shell/src/render.rs:765	public	Stage 方眼シート束のトグル状態の読み口(B22、第6波)。運転席が	(self: &Self) -> SheetToggles
+function	resolution_cap	motolii-shell	shell/motolii-shell/src/render.rs:771	public	Stage 下縁状態帯(裁定163)の今のプレビュー解像度 cap。運転席/試験が	(self: &Self) -> PreviewResolutionCap
+function	stage_presenter_dims	motolii-shell	shell/motolii-shell/src/render.rs:779	public	**裁定166 EXACT TARGET (b) の読み口**: shader Primitive へ実際に渡る	(self: &Self) -> Option<(u32, u32)>
+function	stage_presenter_generation	motolii-shell	shell/motolii-shell/src/render.rs:790	public	Stage presenter の内容が変わった回数(裁定166 EXACT TARGET 1 の CPU 側	(self: &Self) -> Option<u64>
+function	stage_presenter_is_gpu_backed	motolii-shell	shell/motolii-shell/src/render.rs:802	public	**裁定171 v2 M4 / 残コスト調査(§1-4)の読み口**: 今の presenter が	(self: &Self) -> Option<bool>
+function	tokens	motolii-shell	shell/motolii-shell/src/render.rs:809	public	今のデザイン値。運転席がトークン再読込を確かめる口。	(self: &Self) -> &Tokens
+function	dims	motolii-shell	shell/motolii-shell/src/render.rs:817	public	`ui_scale` を適用した寸法。**全 pane・全 instrument(`screenshot.rs` 含む)は	(self: &Self) -> Dimensions
+function	colors	motolii-shell	shell/motolii-shell/src/render.rs:824	public	現在の色トークン。`main.rs` の `iced::application(...).theme(...)` 結線	(self: &Self) -> Colors
 module	screenshot	motolii-shell	shell/motolii-shell/src/screenshot.rs:1	public	`--fixture --screenshot <path>` の検分器具 — 1フレームを PNG へ書いて終了する口。	
 function	write_png	motolii-shell	shell/motolii-shell/src/screenshot.rs:1108	public	1フレーム描いて PNG を書き、終了する口。`main.rs` の `--fixture --screenshot`	(shell: &mut Shell, path: &Path) -> Result<(), String>
 function	inspector_region_x	motolii-shell	shell/motolii-shell/src/screenshot.rs:217	public	Inspector 領域の左端 x 座標。既存の Stage/Timeline 列(`CANVAS_WIDTH` 幅、	(dims: Dimensions) -> f32
@@ -2549,7 +2568,7 @@ function	window_title	motolii-shell	shell/motolii-shell/src/view.rs:192	public	d
 function	stage_overlay	motolii-shell	shell/motolii-shell/src/view.rs:27	public	`stage::StageOverlay` の組み立て(裁定157・S1〜S3)。`Shell::view` が	(self: &Self) -> Option<StageOverlay>
 function	view	motolii-shell	shell/motolii-shell/src/view.rs:279	public		(self: &Self) -> Element<Message>
 function	stage_gizmo_overlay	motolii-shell	shell/motolii-shell/src/view.rs:61	public	`stage::GizmoOverlay` の組み立て(GZ 結線、第5波)。選択 layer の	(self: &Self) -> Option<GizmoOverlay>
-function	band_chrome_style	motolii-shell	shell/motolii-shell/src/view.rs:729	public	header 帯・status 帯の共通スタイル。線化 D5(裁定179 文法1、	(dims: Dimensions, colors: Colors) -> Style
+function	band_chrome_style	motolii-shell	shell/motolii-shell/src/view.rs:733	public	header 帯・status 帯の共通スタイル。線化 D5(裁定179 文法1、	(dims: Dimensions, colors: Colors) -> Style
 module	focus	motolii-shell-state	ui/motolii-shell-state/src/focus.rs:1	public	パネルのフォーカス/巡回状態(B25 の状態側、発注 2026-08-22)。	
 enum	KeyboardClaim	motolii-shell-state	ui/motolii-shell-state/src/focus.rs:100	public	呼び出し口で明示する「今キーボード入力を誰が掴んでいるか」。pane 巡回/	
 variant	Panes	motolii-shell-state	ui/motolii-shell-state/src/focus.rs:102	default	text_input 等がキー入力を掴んでいない——pane 巡回/close を実行してよい。	unit
@@ -4281,119 +4300,122 @@ variant	EdgeOut	motolii-timeline-pane	ui/motolii-timeline-pane/src/work_area.rs:
 variant	Body	motolii-timeline-pane	ui/motolii-timeline-pane/src/work_area.rs:71	default	帯の中(両端の間)。平行移動。	unit
 variant	Blank	motolii-timeline-pane	ui/motolii-timeline-pane/src/work_area.rs:74	default	帯の外(または帯が無い)。ドラッグで新規作成(左右どちらから引いても	unit
 function	classify_loop_band	motolii-timeline-pane	ui/motolii-timeline-pane/src/work_area.rs:81	public	`x`(時間場ローカル px)がループ帯のどこに当たるか。`span_x` は現在の	(x: f32, span_x: Option<(f32, f32)>) -> LoopBandPart
-variant	SelectAllKeysOfProperty	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:101	default	property の全キー選択(map 509・正典 §8.1 SelectAllKeysOfProperty	struct{2}
-struct_field	layer	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:101	default		LayerId
-struct_field	property	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:101	default		PropertyId
-variant	SelectAllVisibleKeys	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:105	default	表示中の全キー・全 property を選択(map 510)。「表示中」= 今の	unit
-variant	ReverseSelectedKeys	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:112	default	Time-Reverse Keyframes(map 518)。選択キー集合を `(layer, property)`	unit
-variant	ToggleKeyframeAtPlayhead	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:124	default	キーの追加/削除(map 472「Add Keyframe」・473/474(公式表記/ショートカット	struct{2}
-struct_field	layer	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:124	default		LayerId
-struct_field	property	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:124	default		PropertyId
-variant	CopySelectedKeys	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:130	default	コピー(map に単体行は無い — 507「Reverse paste」の土台、keys2 モジュール	unit
-variant	PasteKeys	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:134	default	通常貼り付け(507 の土台)。playhead を新しい anchor として	unit
-variant	PasteKeysReversed	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:137	default	Reverse paste copied keyframes(map 507)。同上、	unit
-variant	JumpToNextClipEdit	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:144	default	Next Clip/Edit(map 1088「Next Clip/Edit」・1089「Next Edit」〈Premiere	unit
-variant	JumpToPreviousClipEdit	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:147	default	Previous Clip/Edit(map 1108「Previous Clip/Edit」・1109「Previous	unit
-struct_field	0	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:156	default		StackDirection
-variant	RestackLayer	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:156	default	選択 layer(複数は block)の Stage 合成順(`meta.order`)を動かす。	tuple(1)
-struct_field	0	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:165	default		LayerId
-variant	RenameBegin	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:165	default	rename 開始(正典 §6: Enter(単一選択時)/メニュー — 入口は shell の	tuple(1)
-struct_field	0	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:167	default		String
-variant	RenameEdited	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:167	default	rename 下書きの毎打鍵(rail の `text_input.on_input`)。Document 不接触。	tuple(1)
-variant	RenameCommit	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:172	default	rename 確定(`text_input.on_submit` = Enter)。空名は拒否して**編集継続**	unit
-variant	RenameCancel	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:176	default	rename 取消(Esc は shell の `EscapePressed` が	unit
-variant	KeyGrabbed	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:179	default		struct{3}
-struct_field	key	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:180	default		KeySelector
-struct_field	at_frame	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:181	default		i64
-struct_field	retime	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:182	default		bool
-variant	KeyDragMoved	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:184	default		struct{2}
-struct_field	at_frame	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:185	default		i64
-struct_field	px_per_frame	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:186	default		f32
-variant	KeyDragReleased	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:188	default		unit
-variant	KeyDragCancelled	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:189	default		unit
-struct_field	0	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:190	default		i64
-variant	NudgeKeyframe	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:190	default		tuple(1)
-variant	TogglePlayback	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:199	default	transport の Play‖Pause(map 1041)。**Select/ScrubTo と同じ「例外」の	unit
-struct_field	0	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:203	default		i64
-variant	StepPlayhead	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:203	default	transport の 1コマ戻/進(map 1042/1043)。shell の既存	tuple(1)
-variant	JumpPlayheadToStart	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:205	default	transport の先頭へ(map 1045)。shell の既存 `Message::JumpPlayheadToStart`。	unit
-variant	JumpPlayheadToEnd	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:208	default	transport の末尾へ(map 1044)。shell の既存 `Message::JumpPlayheadToEnd`	unit
-struct_field	0	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:217	default		LayerId
-variant	ToggleFold	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:217	default	rail の fold 三角(開閉ボタン)クリック。**Shell の5例外に含まれない**	tuple(1)
-variant	ToggleLoop	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:224	default	ループ on/off(map 1082/1083 Loop/Unloop・transport 帯のループボタン・	unit
-variant	LoopBandGrabbed	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:228	default	ループ帯(ルーラ最上段)を押した瞬間(正典 §5: 空白=新規・端=リサイズ・	struct{2}
-struct_field	at_frame	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:228	default		i64
-struct_field	part	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:228	default		LoopBandPart
-variant	LoopDragMoved	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:231	default	ループ帯ドラッグ中のポインタ移動。スナップは持たない(正典 §2 の	struct{1}
-struct_field	at_frame	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:231	default		i64
-variant	LoopDragReleased	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:232	default		unit
-variant	LoopDragCancelled	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:233	default		unit
-variant	SetWorkAreaIn	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:235	default	Mark In / Set Work Area In(map 725・296): In 点を playhead へ。	unit
-variant	SetWorkAreaOut	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:237	default	Mark Out / Set Work Area Out(map 726・297): Out 点を playhead へ。	unit
-variant	ClearWorkAreaIn	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:239	default	Clear In(map 719): In 点だけ解除(先頭へ開く)。帯は残る。	unit
-variant	ClearWorkAreaOut	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:241	default	Clear Out(map 721): Out 点だけ解除(終端へ開く)。帯は残る。	unit
-variant	ClearWorkArea	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:243	default	Clear In and Out(map 720): 作業範囲そのものを消す。	unit
-variant	SetWorkAreaToSelection	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:246	default	Mark Clip / Mark Selection(map 724/727): 選択 layer(複数選択は	unit
-struct_field	0	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:253	default		ShuttleCommand
-variant	Shuttle	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:253	default	transport 4腕(`TogglePlayback` 等)と同じ**shell 先取りの例外** —	tuple(1)
-struct_field	0	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:263	default		i64
-variant	AddMarkerAt	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:263	default	ルーラ帯の locator lane を右クリック(ドラッグ中でない時)= その	tuple(1)
-variant	SplitAtPlayhead	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:270	default	Command+B(map 267)/メニュー Split(id 163/317 ほか)。選択レイヤー	unit
-variant	WaveformFetched	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:281	default	非同期取得の完了。shell が(`PaneState::plan_waveforms` が返した要求を	struct{3}
-struct_field	buckets	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:281	default		usize
-struct_field	layer	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:281	default		LayerId
-struct_field	peaks	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:281	default		Vec<(f32, f32)>
-variant	WaveformFetchFailed	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:287	default	非同期取得の失敗(音声トラック無し・ffmpeg 不在 等)。`NotRequested` へ	struct{2}
-struct_field	buckets	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:287	default		usize
-struct_field	layer	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:287	default		LayerId
-constant	EASY_EASE	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:324	public	Easy Ease(map 485/488): AE の既定 influence 33% を cubic-bezier へ写した	
-constant	EASY_EASE_IN	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:326	public	Easy Ease In(map 486/489): 区間の入り口(加速側)だけ緩める。	
-constant	EASY_EASE_OUT	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:328	public	Easy Ease Out(map 487/490): 区間の出口(減速側)だけ緩める。	
-function	default	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:420	default		() -> PaneState
-struct	PaneState	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:421	public	Shell が持つ、Timeline pane 専用の状態(旧 `Shell::timeline_drag`/	
-function	new	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:471	public		() -> Self
-function	cancel_drag	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:480	public	Esc / 右クリック = 進行中ジェスチャの破棄(正典 §2・裁定151「キャンセルの	(self: &mut Self) -> bool
-function	cancel_key_drag	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:485	public	同上、キー drag/リタイム版。	(self: &mut Self) -> bool
-function	cancel_loop_drag	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:494	public	同上、ループ帯ドラッグ版(B21+B18 第1切片)。掴んだ瞬間の作業範囲と	(self: &mut Self) -> bool
-function	work_area	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:507	public	作業範囲の現在値(`TimelinePane::with_work_area` へそのまま渡す読み取り	(self: &Self) -> Option<WorkArea>
-function	loop_enabled	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:513	public	ループ on/off の現在値(同上 + shell の PlaybackClock が	(self: &Self) -> bool
-function	key_drag_active	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:518	public	`TimelinePane::with_key_drag_active` へそのまま渡す読み取り専用フラグ。	(self: &Self) -> bool
-function	waveforms	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:525	public	波形取得状態の全体(`TimelinePane::with_waveforms` へそのまま渡す	(self: &Self) -> &HashMap<LayerId, WaveformState>
-function	plan_waveforms	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:544	public	毎フレーム(`Shell::build_timeline_pane` が呼ぶ想定)判断(TL7 統合手順1)。	(self: &mut Self, audio_rows: &[AudioRowProjection], clip_width_px: impl/dyn) -> Vec<(LayerId, String, usize)>
-function	rename_draft	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:569	public	inline rename の進行中下書き(`TimelinePane::with_rename` へそのまま	(self: &Self) -> Option<(LayerId, &str)>
-function	cancel_rename	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:577	public	rename の取消(Esc — `cancel_drag` と同じく shell の	(self: &mut Self) -> bool
-function	is_dragging	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:585	public	clip drag/keyドラッグ/ループ帯ドラッグのどれかが進行中か。実時間再生	(self: &Self) -> bool
-function	clone	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:59	default		(self: &Self) -> Message
-function	fmt	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:59	default		(self: &Self, f: &mut Formatter) -> Result
-function	clip_preview	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:597	public	`TimelinePane::with_clip_preview` へそのまま渡す。**掴んだ layer	(self: &Self) -> Option<(LayerId, LayerTiming)>
-enum	Message	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:60	public		
-function	key_preview	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:606	public	`TimelinePane::with_key_preview` へそのまま渡す。`origins`(掴んだ瞬間の	(self: &Self) -> Option<Vec<(KeySelector, i64)>>
-struct_field	0	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:62	default		LayerId
-variant	Select	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:62	default	例外: 本来は core 腕(`input.rs` のレーンバー行クリックが直接発行)。	tuple(1)
-function	update	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:620	public	**pane 側の唯一の書き口**。`Message::Select`/`ScrubTo`/`ToggleMute`/	(self: &mut Self, message: Message, doc: &mut Document, session: &mut Session, modifiers: Modifiers) -> Option<String>
-struct_field	0	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:64	default		i64
-variant	ScrubTo	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:64	default	例外: 本来は core 腕(`input.rs` のルーラー/空白部クリックが直接発行)。	tuple(1)
-struct_field	0	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:66	default		LayerId
-variant	ToggleMute	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:66	default	例外: `toggle_layer_hidden` が Inspector と共有のため Shell に残る。	tuple(1)
-struct_field	0	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:67	default		LayerId
-variant	ToggleSolo	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:67	default		tuple(1)
-struct_field	0	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:68	default		LayerId
-variant	ToggleLock	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:68	default		tuple(1)
-variant	BarGrabbed	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:71	default		struct{3}
-struct_field	layer	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:72	default		LayerId
-struct_field	part	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:73	default		BarPart
-struct_field	at_frame	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:74	default		i64
-variant	DragMoved	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:76	default		struct{2}
-struct_field	at_frame	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:77	default		i64
-struct_field	px_per_frame	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:78	default		f32
-variant	DragReleased	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:80	default		unit
-variant	DragCancelled	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:81	default		unit
-struct_field	0	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:84	default		KeySelectionOp
-variant	KeySelect	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:84	default		tuple(1)
-variant	DeleteSelectedKeys	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:85	default		unit
-struct_field	0	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:94	default		Interp
-variant	SetKeyInterp	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:94	default	選択キーの補間切替(map 495/512/513/514・正典 §3「イージング」+ §7-1	tuple(1)
-variant	DeselectAllKeys	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:97	default	全キー・選択解除(map 484 Deselect all keyframes)。Session だけを触る	unit
+struct_field	0	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:108	default		Interp
+variant	SetKeyInterp	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:108	default	選択キーの補間切替(map 495/512/513/514・正典 §3「イージング」+ §7-1	tuple(1)
+variant	DeselectAllKeys	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:111	default	全キー・選択解除(map 484 Deselect all keyframes)。Session だけを触る	unit
+variant	SelectAllKeysOfProperty	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:115	default	property の全キー選択(map 509・正典 §8.1 SelectAllKeysOfProperty	struct{2}
+struct_field	layer	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:115	default		LayerId
+struct_field	property	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:115	default		PropertyId
+variant	SelectAllVisibleKeys	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:119	default	表示中の全キー・全 property を選択(map 510)。「表示中」= 今の	unit
+variant	ReverseSelectedKeys	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:126	default	Time-Reverse Keyframes(map 518)。選択キー集合を `(layer, property)`	unit
+variant	ToggleKeyframeAtPlayhead	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:138	default	キーの追加/削除(map 472「Add Keyframe」・473/474(公式表記/ショートカット	struct{2}
+struct_field	layer	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:138	default		LayerId
+struct_field	property	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:138	default		PropertyId
+variant	CopySelectedKeys	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:144	default	コピー(map に単体行は無い — 507「Reverse paste」の土台、keys2 モジュール	unit
+variant	PasteKeys	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:148	default	通常貼り付け(507 の土台)。playhead を新しい anchor として	unit
+variant	PasteKeysReversed	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:151	default	Reverse paste copied keyframes(map 507)。同上、	unit
+variant	JumpToNextClipEdit	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:158	default	Next Clip/Edit(map 1088「Next Clip/Edit」・1089「Next Edit」〈Premiere	unit
+variant	JumpToPreviousClipEdit	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:161	default	Previous Clip/Edit(map 1108「Previous Clip/Edit」・1109「Previous	unit
+struct_field	0	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:170	default		StackDirection
+variant	RestackLayer	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:170	default	選択 layer(複数は block)の Stage 合成順(`meta.order`)を動かす。	tuple(1)
+struct_field	0	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:179	default		LayerId
+variant	RenameBegin	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:179	default	rename 開始(正典 §6: Enter(単一選択時)/メニュー — 入口は shell の	tuple(1)
+struct_field	0	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:181	default		String
+variant	RenameEdited	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:181	default	rename 下書きの毎打鍵(rail の `text_input.on_input`)。Document 不接触。	tuple(1)
+variant	RenameCommit	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:186	default	rename 確定(`text_input.on_submit` = Enter)。空名は拒否して**編集継続**	unit
+variant	RenameCancel	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:190	default	rename 取消(Esc は shell の `EscapePressed` が	unit
+variant	KeyGrabbed	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:193	default		struct{3}
+struct_field	key	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:194	default		KeySelector
+struct_field	at_frame	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:195	default		i64
+struct_field	retime	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:196	default		bool
+variant	KeyDragMoved	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:198	default		struct{2}
+struct_field	at_frame	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:199	default		i64
+struct_field	px_per_frame	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:200	default		f32
+variant	KeyDragReleased	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:202	default		unit
+variant	KeyDragCancelled	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:203	default		unit
+struct_field	0	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:204	default		i64
+variant	NudgeKeyframe	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:204	default		tuple(1)
+variant	TogglePlayback	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:213	default	transport の Play‖Pause(map 1041)。**Select/ScrubTo と同じ「例外」の	unit
+struct_field	0	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:217	default		i64
+variant	StepPlayhead	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:217	default	transport の 1コマ戻/進(map 1042/1043)。shell の既存	tuple(1)
+variant	JumpPlayheadToStart	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:219	default	transport の先頭へ(map 1045)。shell の既存 `Message::JumpPlayheadToStart`。	unit
+variant	JumpPlayheadToEnd	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:222	default	transport の末尾へ(map 1044)。shell の既存 `Message::JumpPlayheadToEnd`	unit
+struct_field	0	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:231	default		LayerId
+variant	ToggleFold	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:231	default	rail の fold 三角(開閉ボタン)クリック。**Shell の5例外に含まれない**	tuple(1)
+variant	ToggleLoop	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:238	default	ループ on/off(map 1082/1083 Loop/Unloop・transport 帯のループボタン・	unit
+variant	LoopBandGrabbed	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:242	default	ループ帯(ルーラ最上段)を押した瞬間(正典 §5: 空白=新規・端=リサイズ・	struct{2}
+struct_field	at_frame	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:242	default		i64
+struct_field	part	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:242	default		LoopBandPart
+variant	LoopDragMoved	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:245	default	ループ帯ドラッグ中のポインタ移動。スナップは持たない(正典 §2 の	struct{1}
+struct_field	at_frame	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:245	default		i64
+variant	LoopDragReleased	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:246	default		unit
+variant	LoopDragCancelled	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:247	default		unit
+variant	SetWorkAreaIn	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:249	default	Mark In / Set Work Area In(map 725・296): In 点を playhead へ。	unit
+variant	SetWorkAreaOut	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:251	default	Mark Out / Set Work Area Out(map 726・297): Out 点を playhead へ。	unit
+variant	ClearWorkAreaIn	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:253	default	Clear In(map 719): In 点だけ解除(先頭へ開く)。帯は残る。	unit
+variant	ClearWorkAreaOut	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:255	default	Clear Out(map 721): Out 点だけ解除(終端へ開く)。帯は残る。	unit
+variant	ClearWorkArea	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:257	default	Clear In and Out(map 720): 作業範囲そのものを消す。	unit
+variant	SetWorkAreaToSelection	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:260	default	Mark Clip / Mark Selection(map 724/727): 選択 layer(複数選択は	unit
+struct_field	0	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:267	default		ShuttleCommand
+variant	Shuttle	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:267	default	transport 4腕(`TogglePlayback` 等)と同じ**shell 先取りの例外** —	tuple(1)
+struct_field	0	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:277	default		i64
+variant	AddMarkerAt	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:277	default	ルーラ帯の locator lane を右クリック(ドラッグ中でない時)= その	tuple(1)
+variant	SplitAtPlayhead	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:284	default	Command+B(map 267)/メニュー Split(id 163/317 ほか)。選択レイヤー	unit
+variant	WaveformFetched	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:295	default	非同期取得の完了。shell が(`PaneState::plan_waveforms` が返した要求を	struct{3}
+struct_field	buckets	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:295	default		usize
+struct_field	layer	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:295	default		LayerId
+struct_field	peaks	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:295	default		Vec<(f32, f32)>
+variant	WaveformFetchFailed	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:301	default	非同期取得の失敗(音声トラック無し・ffmpeg 不在 等)。`NotRequested` へ	struct{2}
+struct_field	buckets	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:301	default		usize
+struct_field	layer	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:301	default		LayerId
+constant	EASY_EASE	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:338	public	Easy Ease(map 485/488): AE の既定 influence 33% を cubic-bezier へ写した	
+constant	EASY_EASE_IN	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:340	public	Easy Ease In(map 486/489): 区間の入り口(加速側)だけ緩める。	
+constant	EASY_EASE_OUT	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:342	public	Easy Ease Out(map 487/490): 区間の出口(減速側)だけ緩める。	
+function	default	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:434	default		() -> PaneState
+struct	PaneState	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:435	public	Shell が持つ、Timeline pane 専用の状態(旧 `Shell::timeline_drag`/	
+function	new	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:490	public		() -> Self
+function	cancel_drag	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:499	public	Esc / 右クリック = 進行中ジェスチャの破棄(正典 §2・裁定151「キャンセルの	(self: &mut Self) -> bool
+function	cancel_key_drag	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:504	public	同上、キー drag/リタイム版。	(self: &mut Self) -> bool
+function	cancel_loop_drag	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:513	public	同上、ループ帯ドラッグ版(B21+B18 第1切片)。掴んだ瞬間の作業範囲と	(self: &mut Self) -> bool
+function	work_area	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:526	public	作業範囲の現在値(`TimelinePane::with_work_area` へそのまま渡す読み取り	(self: &Self) -> Option<WorkArea>
+function	loop_enabled	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:532	public	ループ on/off の現在値(同上 + shell の PlaybackClock が	(self: &Self) -> bool
+function	key_drag_active	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:537	public	`TimelinePane::with_key_drag_active` へそのまま渡す読み取り専用フラグ。	(self: &Self) -> bool
+function	waveforms	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:544	public	波形取得状態の全体(`TimelinePane::with_waveforms` へそのまま渡す	(self: &Self) -> &HashMap<LayerId, WaveformState>
+function	plan_waveforms	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:563	public	毎フレーム(`Shell::build_timeline_pane` が呼ぶ想定)判断(TL7 統合手順1)。	(self: &mut Self, audio_rows: &[AudioRowProjection], clip_width_px: impl/dyn) -> Vec<(LayerId, String, usize)>
+function	rename_draft	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:588	public	inline rename の進行中下書き(`TimelinePane::with_rename` へそのまま	(self: &Self) -> Option<(LayerId, &str)>
+function	cancel_rename	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:596	public	rename の取消(Esc — `cancel_drag` と同じく shell の	(self: &mut Self) -> bool
+function	is_dragging	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:604	public	clip drag/keyドラッグ/ループ帯ドラッグのどれかが進行中か。実時間再生	(self: &Self) -> bool
+function	clip_preview	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:616	public	`TimelinePane::with_clip_preview` へそのまま渡す。**掴んだ layer	(self: &Self) -> Option<(LayerId, LayerTiming)>
+function	key_preview	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:625	public	`TimelinePane::with_key_preview` へそのまま渡す。`origins`(掴んだ瞬間の	(self: &Self) -> Option<Vec<(KeySelector, i64)>>
+function	update	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:639	public	**pane 側の唯一の書き口**。`Message::Select`/`ScrubTo`/`ToggleMute`/	(self: &mut Self, message: Message, doc: &mut Document, session: &mut Session, modifiers: Modifiers) -> Option<String>
+function	clone	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:65	default		(self: &Self) -> Message
+function	fmt	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:65	default		(self: &Self, f: &mut Formatter) -> Result
+enum	Message	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:66	public		
+struct_field	0	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:69	default		LayerId
+variant	Select	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:69	default	例外: 既存の core 結線互換用。rail の行クリックは	tuple(1)
+variant	SelectLayer	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:73	default	Timeline rail の行選択。`Select` と違い Shell の core 先取りを通さず、	struct{2}
+struct_field	order	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:74	default		Vec<LayerId>
+struct_field	op	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:75	default		LayerSelectionOp
+struct_field	0	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:78	default		i64
+variant	ScrubTo	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:78	default	例外: 本来は core 腕(`input.rs` のルーラー/空白部クリックが直接発行)。	tuple(1)
+struct_field	0	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:80	default		LayerId
+variant	ToggleMute	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:80	default	例外: `toggle_layer_hidden` が Inspector と共有のため Shell に残る。	tuple(1)
+struct_field	0	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:81	default		LayerId
+variant	ToggleSolo	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:81	default		tuple(1)
+struct_field	0	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:82	default		LayerId
+variant	ToggleLock	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:82	default		tuple(1)
+variant	BarGrabbed	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:85	default		struct{3}
+struct_field	layer	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:86	default		LayerId
+struct_field	part	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:87	default		BarPart
+struct_field	at_frame	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:88	default		i64
+variant	DragMoved	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:90	default		struct{2}
+struct_field	at_frame	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:91	default		i64
+struct_field	px_per_frame	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:92	default		f32
+variant	DragReleased	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:94	default		unit
+variant	DragCancelled	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:95	default		unit
+struct_field	0	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:98	default		KeySelectionOp
+variant	KeySelect	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:98	default		tuple(1)
+variant	DeleteSelectedKeys	motolii-timeline-pane	ui/motolii-timeline-pane/src/write/mod.rs:99	default		unit
 struct_field	checkerboard_dark	motolii-tokens-rs	ui/motolii-tokens-rs/src/colors.rs:101	public	市松の暗タイル。[`Colors::checkerboard_light`] と対。値は AE 実機準拠	Color
 struct_field	label_palette	motolii-tokens-rs	ui/motolii-tokens-rs/src/colors.rs:109	public	レイヤー差し色パレット(利用者裁定2026-08-21「色が足りない。Ableton は	[Color; N]
 constant	LABEL_PALETTE_LEN	motolii-tokens-rs	ui/motolii-tokens-rs/src/colors.rs:115	public	[`Colors::label_palette`] の長さ。生成時の決定論自動割当(`motolii_shell` の	
