@@ -5,7 +5,7 @@ use crate::card_view::{card_body, card_frame_width, card_style, columns_for};
 use crate::filter_view::preview_filter_shelf_view;
 use crate::model::{self, LibraryTab, PreviewScope};
 use crate::rail_view::{catalog_container, preview_rail_view};
-use crate::Message;
+use crate::{CardSelectionModifiers, Message};
 use iced::widget::{button, column, container, mouse_area, row, scrollable, text};
 use iced::{Element, Length};
 use motolii_tokens_rs::{Colors, Dimensions};
@@ -39,6 +39,39 @@ pub(crate) fn preview_body(
     row![rail, catalog].spacing(dims.spacing_xs).into()
 }
 
+/// modifier 付きカード選択を使う preview body。`selected_cards` は pane state
+/// から借りた表示用の集合、`CardSelectionModifiers` は Shell WIRE が後から
+/// 注入する正規化済み入力であり、preview 側で OS イベントを読むことはない。
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn preview_body_with_selection(
+    tab: LibraryTab,
+    scope: PreviewScope,
+    query: &str,
+    view_mode: model::ViewMode,
+    selected_cards: &[model::CardKey],
+    modifiers: CardSelectionModifiers,
+    hovered: Option<model::CardKey>,
+    dims: Dimensions,
+    colors: Colors,
+) -> Element<'static, Message> {
+    let rail = preview_rail_view(tab, scope, dims, colors);
+    let catalog = preview_catalog_view_impl(
+        tab,
+        scope,
+        query,
+        view_mode,
+        CardSelectionMode::Modifiers {
+            selected_cards,
+            modifiers,
+        },
+        hovered,
+        dims,
+        colors,
+    );
+
+    row![rail, catalog].spacing(dims.spacing_xs).into()
+}
+
 /// 非 media タブの catalog(filter shelf + 結果件数 + カード grid —
 /// [`catalog_view`] と同じ骨格を preview-local データで組む)。空状態の文言は
 /// media の「絞り込みで0件」と同じ「No matches」(B08 続編の文言整理 —
@@ -50,6 +83,61 @@ fn preview_catalog_view(
     query: &str,
     view_mode: model::ViewMode,
     selected: Option<model::CardKey>,
+    hovered: Option<model::CardKey>,
+    dims: Dimensions,
+    colors: Colors,
+) -> Element<'static, Message> {
+    preview_catalog_view_impl(
+        tab,
+        scope,
+        query,
+        view_mode,
+        CardSelectionMode::Legacy(selected),
+        hovered,
+        dims,
+        colors,
+    )
+}
+
+#[derive(Clone, Copy)]
+enum CardSelectionMode<'a> {
+    Legacy(Option<model::CardKey>),
+    Modifiers {
+        selected_cards: &'a [model::CardKey],
+        modifiers: CardSelectionModifiers,
+    },
+}
+
+impl CardSelectionMode<'_> {
+    fn is_selected(self, key: model::CardKey) -> bool {
+        match self {
+            Self::Legacy(selected) => selected == Some(key),
+            Self::Modifiers { selected_cards, .. } => selected_cards.contains(&key),
+        }
+    }
+
+    fn message(self, key: model::CardKey, visible_cards: &[model::CardKey]) -> Message {
+        match self {
+            Self::Legacy(_) => Message::SelectCard(key),
+            Self::Modifiers { modifiers, .. } => Message::SelectCardWithModifiers {
+                key,
+                modifiers,
+                visible_cards: visible_cards.to_vec(),
+            },
+        }
+    }
+}
+
+/// preview-local カタログの共通実装。`cards_data` の宣言順をそのまま可視列
+/// として各カードへ渡す。Legacy は旧 `SelectCard`、Modifiers は新しい
+/// `SelectCardWithModifiers` を発行するだけで、描画側が選択状態を所有しない。
+#[allow(clippy::too_many_arguments)]
+fn preview_catalog_view_impl(
+    tab: LibraryTab,
+    scope: PreviewScope,
+    query: &str,
+    view_mode: model::ViewMode,
+    selection: CardSelectionMode<'_>,
     hovered: Option<model::CardKey>,
     dims: Dimensions,
     colors: Colors,
@@ -71,6 +159,10 @@ fn preview_catalog_view(
         .padding(dims.spacing_m)
         .into()
     } else {
+        let visible_cards: Vec<model::CardKey> = cards_data
+            .iter()
+            .map(|card| model::CardKey::Preview(card.id))
+            .collect();
         let rows: Vec<Element<'static, Message>> = cards_data
             .chunks(columns_for(view_mode))
             .map(|chunk| {
@@ -80,11 +172,12 @@ fn preview_catalog_view(
                         let key = model::CardKey::Preview(card.id);
                         preview_card_view(
                             card,
-                            selected == Some(key),
+                            selection.is_selected(key),
                             hovered == Some(key),
                             view_mode,
                             dims,
                             colors,
+                            selection.message(key, &visible_cards),
                         )
                     })
                     .collect();
@@ -120,6 +213,7 @@ fn preview_card_view(
     view_mode: model::ViewMode,
     dims: Dimensions,
     colors: Colors,
+    select_message: Message,
 ) -> Element<'static, Message> {
     let key = model::CardKey::Preview(card.id);
     let body = card_body(
@@ -145,7 +239,7 @@ fn preview_card_view(
             .padding(dims.spacing_xs)
             .style(move |_theme| create_card_face(colors, selected, hovered));
         return mouse_area(face)
-            .on_press(Message::SelectCard(key))
+            .on_press(select_message.clone())
             .on_double_click(Message::CreateFromCard { kind })
             .on_enter(Message::CardHovered(key))
             .on_exit(Message::CardUnhovered(key))
@@ -170,7 +264,7 @@ fn preview_card_view(
             .padding(dims.spacing_xs)
             .style(move |_theme| create_card_face(colors, selected, hovered));
         return mouse_area(face)
-            .on_press(Message::SelectCard(key))
+            .on_press(select_message.clone())
             .on_double_click(message)
             .on_enter(Message::CardHovered(key))
             .on_exit(Message::CardUnhovered(key))
@@ -179,7 +273,7 @@ fn preview_card_view(
     }
 
     button(body)
-        .on_press(Message::SelectCard(key))
+        .on_press(select_message)
         .width(frame_width)
         .padding(dims.spacing_xs)
         .style(move |_theme, status| card_style(dims, colors, selected, false, status))

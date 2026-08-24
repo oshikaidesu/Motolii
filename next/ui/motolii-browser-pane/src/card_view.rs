@@ -4,7 +4,7 @@
 use crate::filter_view::FILTER_CHIP_CORNER_RADIUS_ROW_HEIGHT_RATIO;
 use crate::model::{self, AssetListItem};
 use crate::search_view::chip_style;
-use crate::Message;
+use crate::{CardSelectionModifiers, Message};
 use iced::widget::{button, column, container, row, scrollable, text, tooltip};
 use iced::{Element, Length};
 use motolii_tokens_rs::{Colors, Dimensions};
@@ -177,7 +177,12 @@ pub(crate) fn card_body(
             let card_width = dims.row_height * CARD_WIDTH_ROW_HEIGHT_RATIO;
             let thumb_height = card_width * THUMB_ASPECT_H / THUMB_ASPECT_W;
             let thumb = thumb_container(glyph, thumb_fill, card_width, thumb_height, dims, colors);
-            let name = ellipsis_text(name, dims.micro_text, colors.text_primary, Length::Fixed(card_width));
+            let name = ellipsis_text(
+                name,
+                dims.micro_text,
+                colors.text_primary,
+                Length::Fixed(card_width),
+            );
             let caption = ellipsis_text(
                 caption,
                 dims.micro_text,
@@ -283,6 +288,75 @@ pub(crate) fn card_grid_view(
         .into()
 }
 
+/// 複数選択対応のカード grid。`filtered` は scope/query/sort 済みの現在表示
+/// 順であり、この関数はその順を [`Message::SelectCardWithModifiers`] の
+/// `visible_cards` として各カードへ同じように渡す。
+///
+/// 旧 [`card_grid_view`] は `rail_view::catalog_view` と外部の旧 `view()` 利用者
+/// の互換用に残す。新しい Shell WIRE は [`crate::pane_view_with_modifiers`] から
+/// こちらを通る。選択集合は pane state から借りるだけで、この関数やカードが
+/// Document/Store の第二所有者になることはない。
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn card_grid_view_with_selection(
+    filtered: &[AssetListItem],
+    ledger_is_empty: bool,
+    selected_cards: &[model::CardKey],
+    modifiers: CardSelectionModifiers,
+    recent: &[motolii_store::AssetId],
+    view_mode: model::ViewMode,
+    single_selected_layer: Option<motolii_store::LayerId>,
+    dims: Dimensions,
+    colors: Colors,
+) -> Element<'static, Message> {
+    if filtered.is_empty() {
+        let copy = if ledger_is_empty {
+            "Drop files here"
+        } else {
+            "No matches"
+        };
+        return container(text(copy).size(dims.caption_text).color(colors.text_muted))
+            .padding(dims.spacing_m)
+            .into();
+    }
+
+    let visible_cards: Vec<model::CardKey> = filtered
+        .iter()
+        .map(|item| model::CardKey::Media(item.id))
+        .collect();
+    let rows: Vec<Element<'static, Message>> = filtered
+        .chunks(columns_for(view_mode))
+        .map(|chunk| {
+            let cards: Vec<Element<'static, Message>> = chunk
+                .iter()
+                .cloned()
+                .map(|item| {
+                    let key = model::CardKey::Media(item.id);
+                    let is_recent = recent.contains(&item.id);
+                    card_view_with_message(
+                        item,
+                        selected_cards.contains(&key),
+                        is_recent,
+                        view_mode,
+                        single_selected_layer,
+                        dims,
+                        colors,
+                        Message::SelectCardWithModifiers {
+                            key,
+                            modifiers,
+                            visible_cards: visible_cards.clone(),
+                        },
+                    )
+                })
+                .collect();
+            row(cards).spacing(dims.spacing_s).into()
+        })
+        .collect();
+
+    scrollable(column(rows).spacing(dims.spacing_s))
+        .height(Length::Fill)
+        .into()
+}
+
 /// 1枚のカード(mock `.libraryCard` — thumb + `.cardCopy`、本体は
 /// [`card_body`] が grid/list 両表示形式を組む)。
 ///
@@ -306,6 +380,31 @@ fn card_view(
     single_selected_layer: Option<motolii_store::LayerId>,
     dims: Dimensions,
     colors: Colors,
+) -> Element<'static, Message> {
+    let key = model::CardKey::Media(item.id);
+    card_view_with_message(
+        item,
+        selected,
+        recent,
+        view_mode,
+        single_selected_layer,
+        dims,
+        colors,
+        Message::SelectCard(key),
+    )
+}
+
+/// カード本体の共通実装。旧単一選択と modifier 付き選択の差は publish する
+/// Message だけで、カードの body/affordance/selected 見た目は同じ責任に置く。
+fn card_view_with_message(
+    item: AssetListItem,
+    selected: bool,
+    recent: bool,
+    view_mode: model::ViewMode,
+    single_selected_layer: Option<motolii_store::LayerId>,
+    dims: Dimensions,
+    colors: Colors,
+    select_message: Message,
 ) -> Element<'static, Message> {
     let category = model::category_of(&item.kind);
     let caption = format!(
@@ -331,7 +430,7 @@ fn card_view(
     );
 
     let card_button = button(body)
-        .on_press(Message::SelectCard(model::CardKey::Media(asset_id)))
+        .on_press(select_message)
         .width(card_frame_width(view_mode, dims))
         .padding(dims.spacing_xs)
         .style(move |_theme, status| card_style(dims, colors, selected, recent, status));
@@ -575,17 +674,21 @@ fn status_badge_view(
     Some(
         tooltip(
             icon_element,
-            container(text(reason).size(dims.caption_text).color(colors.text_primary))
-                .padding([dims.spacing_xs, dims.spacing_s])
-                .style(move |_theme| container::Style {
-                    background: Some(iced::Background::Color(colors.surface_raised)),
-                    border: iced::Border {
-                        color: colors.border_default,
-                        width: dims.border_width,
-                        radius: 0.0.into(),
-                    },
-                    ..container::Style::default()
-                }),
+            container(
+                text(reason)
+                    .size(dims.caption_text)
+                    .color(colors.text_primary),
+            )
+            .padding([dims.spacing_xs, dims.spacing_s])
+            .style(move |_theme| container::Style {
+                background: Some(iced::Background::Color(colors.surface_raised)),
+                border: iced::Border {
+                    color: colors.border_default,
+                    width: dims.border_width,
+                    radius: 0.0.into(),
+                },
+                ..container::Style::default()
+            }),
             tooltip::Position::Bottom,
         )
         .gap(dims.spacing_xs)

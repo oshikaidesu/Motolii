@@ -204,11 +204,11 @@ mod search_view;
 pub mod state;
 
 pub use model::{
-    AssetListItem, CardKey, CatalogCard, Category, CreateKind, LibraryTab, PreviewCard,
-    PreviewScope, PreviewTag, RailScope, SelectionAction, ShapeOpKind, SortKey, ViewMode,
-    FILTER_CHIPS, LIBRARY_TABS, RAIL_SCOPES, SORT_KEYS,
+    AssetListItem, CardKey, CatalogCard, Category, CreateKind, FILTER_CHIPS, LIBRARY_TABS,
+    LibraryTab, PreviewCard, PreviewScope, PreviewTag, RAIL_SCOPES, RailScope, SORT_KEYS,
+    SelectionAction, ShapeOpKind, SortKey, ViewMode,
 };
-pub use state::{Message, PaneState};
+pub use state::{CardSelectionModifiers, Message, PaneState};
 
 // SP-6(裁定220 レーン)分割: `lib.rs`(旧1,799行)の view 実装は責任ごとに
 // 5分割した(`rail_view`=rail+catalog 容器・`filter_view`=filter shelf+
@@ -222,8 +222,10 @@ pub use preview_view::create_card_face;
 pub use rail_view::{drop_target_style, panel_container_style};
 pub use search_view::chip_style;
 
-use preview_view::preview_body;
-use rail_view::{catalog_view, rail_view};
+use card_view::card_grid_view_with_selection;
+use filter_view::filter_shelf_view;
+use preview_view::{preview_body, preview_body_with_selection};
+use rail_view::{catalog_container, catalog_view, rail_view};
 
 use iced::widget::{button, column, container, row, text};
 use iced::{Element, Length};
@@ -298,6 +300,53 @@ pub fn pane_view(
             state.query(),
             state.view_mode(),
             state.selected(),
+            state.hovered(),
+            dims,
+            colors,
+        ),
+    };
+    column![band, body].spacing(dims.spacing_xs).into()
+}
+
+/// modifier-aware な Browser pane の入口。
+///
+/// 既存の [`pane_view`] は旧 `SelectCard` publish を維持する互換ラッパーで
+/// あり、既存の atlas/外部利用者を壊さない。Shell WIRE が Iced の現在の
+/// Cmd/Ctrl/Shift を [`CardSelectionModifiers`] へ正規化できるようになったら、
+/// こちらへ切り替える。view 側は OS イベントを読まず、Document/Store も所有
+/// しない。
+#[allow(clippy::too_many_arguments)]
+pub fn pane_view_with_modifiers(
+    state: &PaneState,
+    items: &[AssetListItem],
+    single_selected_layer: Option<motolii_store::LayerId>,
+    modifiers: CardSelectionModifiers,
+    dims: Dimensions,
+    colors: Colors,
+) -> Element<'static, Message> {
+    let band = tab_band_view(state.tab(), dims, colors);
+    let body: Element<'static, Message> = match state.tab() {
+        LibraryTab::Media => media_body_with_selection(
+            items,
+            state.scope(),
+            state.query(),
+            state.sort_key(),
+            state.view_mode(),
+            state.selected_cards(),
+            modifiers,
+            state.recently_admitted(),
+            state.drop_hover(),
+            single_selected_layer,
+            dims,
+            colors,
+        ),
+        tab => preview_body_with_selection(
+            tab,
+            state.preview_scope(),
+            state.query(),
+            state.view_mode(),
+            state.selected_cards(),
+            modifiers,
             state.hovered(),
             dims,
             colors,
@@ -474,3 +523,43 @@ fn media_body(
     row![rail, catalog].spacing(dims.spacing_xs).into()
 }
 
+/// modifier-aware な media body。`filtered` の scope/query/sort 後の順序を
+/// [`card_grid_view_with_selection`] へ渡し、カード click が同じ可視列を
+/// Shift 範囲選択の入力として運ぶ。旧 [`media_body`] は互換経路として
+/// `rail_view::catalog_view` を使い続ける。
+#[allow(clippy::too_many_arguments)]
+fn media_body_with_selection(
+    items: &[AssetListItem],
+    scope: RailScope,
+    query: &str,
+    sort_key: model::SortKey,
+    view_mode: model::ViewMode,
+    selected_cards: &[CardKey],
+    modifiers: CardSelectionModifiers,
+    recent: &[motolii_store::AssetId],
+    drop_hover: bool,
+    single_selected_layer: Option<motolii_store::LayerId>,
+    dims: Dimensions,
+    colors: Colors,
+) -> Element<'static, Message> {
+    let filtered = model::sorted(&model::visible(items, scope, query), sort_key);
+    let rail = rail_view(scope, dims, colors);
+    let shelf = filter_shelf_view(scope, query, sort_key, view_mode, dims, colors);
+    let summary = text(format!("Results {}", filtered.len()))
+        .size(dims.micro_text)
+        .color(colors.text_muted);
+    let grid = card_grid_view_with_selection(
+        &filtered,
+        items.is_empty(),
+        selected_cards,
+        modifiers,
+        recent,
+        view_mode,
+        single_selected_layer,
+        dims,
+        colors,
+    );
+    let catalog = catalog_container(column![shelf, summary, grid], drop_hover, dims, colors);
+
+    row![rail, catalog].spacing(dims.spacing_xs).into()
+}
