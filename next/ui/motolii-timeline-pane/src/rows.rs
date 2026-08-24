@@ -254,6 +254,42 @@ mod tests {
         assert_eq!(removed, vec![LayerId(2)]);
     }
 
+    /// 通常クリック→Cmd/Ctrl toggle→Shift range の連続操作でも、toggle で
+    /// 更新した行が次の Shift 範囲の anchor として残る。rail は各クリックを
+    /// `Message::SelectLayer` として発火し、pane の `update` がこの pure helper
+    /// へ渡すため、ここでは操作列の意味だけを固定する。
+    #[test]
+    fn selection_sequence_preserves_toggle_anchor_for_the_next_range() {
+        let order = [LayerId(1), LayerId(2), LayerId(3), LayerId(4)];
+
+        let (selected, anchor) = resolve_layer_selection(
+            &order,
+            None,
+            &[],
+            LayerSelectionOp::Single(LayerId(2)),
+        );
+        assert_eq!(selected, vec![LayerId(2)]);
+        assert_eq!(anchor, Some(LayerId(2)));
+
+        let (selected, anchor) = resolve_layer_selection(
+            &order,
+            anchor,
+            &selected,
+            LayerSelectionOp::Toggle(LayerId(4)),
+        );
+        assert_eq!(selected, vec![LayerId(2), LayerId(4)]);
+        assert_eq!(anchor, Some(LayerId(4)));
+
+        let (selected, anchor) = resolve_layer_selection(
+            &order,
+            anchor,
+            &selected,
+            LayerSelectionOp::Range(LayerId(3)),
+        );
+        assert_eq!(selected, vec![LayerId(3), LayerId(4)]);
+        assert_eq!(anchor, Some(LayerId(4)));
+    }
+
     /// 境界: anchor が無い時は Range も単独選択に安全側で倒れる。
     #[test]
     fn range_without_an_anchor_falls_back_to_a_single_selection() {

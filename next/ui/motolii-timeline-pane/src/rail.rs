@@ -82,6 +82,7 @@ use super::lane_bar::{
     swatch_radius_px, swatch_size_px, Glyph,
 };
 use super::projection::{PropertyRowProjection, RowProjection};
+use super::rows::LayerSelectionOp;
 use super::TimelinePane;
 use crate::tokens::{Colors, Dimensions};
 use crate::Message;
@@ -101,6 +102,7 @@ pub(crate) fn view(pane: &TimelinePane) -> Element<'static, Message> {
     let row_height = dims.row_height;
     let param_row_height = pane.param_row_height();
     let rows_height = pane.rows_area_height();
+    let order: Vec<LayerId> = pane.rows.iter().map(|row| row.id).collect();
 
     let mut children: Vec<Element<'static, Message>> =
         Vec::with_capacity(pane.rows.len() + pane.property_rows.len());
@@ -127,7 +129,17 @@ pub(crate) fn view(pane: &TimelinePane) -> Element<'static, Message> {
             .as_ref()
             .filter(|(layer, _)| *layer == proj.id)
             .map(|(_, draft)| draft.as_str());
-        children.push(layer_row(proj, dims, colors, row_height, rail_width, has_any_tree, rename_draft));
+        children.push(layer_row(
+            proj,
+            dims,
+            colors,
+            row_height,
+            rail_width,
+            has_any_tree,
+            rename_draft,
+            pane.modifiers,
+            &order,
+        ));
         if pane.selected_row_index == Some(index) {
             for (band_index, prow) in pane.property_rows.iter().enumerate() {
                 children.push(property_row(prow, dims, colors, param_row_height, band_index));
@@ -226,10 +238,10 @@ fn fold_toggle(proj: &RowProjection, colors: Colors, size: f32) -> Element<'stat
     .into()
 }
 
-/// 1層ぶんの rail 行(スウォッチ+名前+M/S/L)。行全体を `mouse_area` で包み
-/// 選択(`Message::Select`)を発火する — M/S/L 自身のクリックは
-/// `button.on_press` が先に capture するので、行選択と二重発火しない
-/// (モジュール doc「gesture」節参照)。
+/// 1層ぶんの rail 行(スウォッチ+名前+M/S/L)。行全体の `button.on_press` から
+/// 現在の modifier と表示順を添えた `Message::SelectLayer` を発火する —
+/// M/S/L 自身のクリックは `button.on_press` が先に capture するので、行選択と
+/// 二重発火しない(モジュール doc「gesture」節参照)。
 ///
 /// `has_any_tree`(`view()` が Document 全体を1度見て決める、行ごとではない
 /// bool)が `false` の時はツリーの前置き(インデント・fold 三角)を**1px も
@@ -243,6 +255,8 @@ fn layer_row(
     rail_width: f32,
     has_any_tree: bool,
     rename_draft: Option<&str>,
+    modifiers: iced::keyboard::Modifiers,
+    order: &[LayerId],
 ) -> Element<'static, Message> {
     let id = proj.id;
     let indent_step = indent_step_px(row_height);
@@ -343,11 +357,12 @@ fn layer_row(
     // (`transport_button` と同じ形)。`selected` は hover より強い状態の器 —
     // 選択中は hover 変化を上書きしない(旧 `row_container` の選択ハイライト
     // をそのまま踏襲、`state_selected` token)。
+    let selection_op = layer_selection_op(modifiers, id);
     button(centered)
         .width(Length::Fill)
         .height(Length::Fixed(row_height))
         .padding(0)
-        .on_press(Message::Select(id))
+        .on_press(Message::SelectLayer { order: order.to_vec(), op: selection_op })
         .style(move |_theme, status| {
             let background = if selected {
                 Some(Background::Color(colors.state_selected))
@@ -370,6 +385,19 @@ fn layer_row(
             }
         })
         .into()
+}
+
+/// rail の press 時点で、Iced が pane へ渡している modifier 状態を
+/// `LayerSelectionOp` へ翻訳する。`command()` は macOS の Cmd、その他の
+/// platform の Ctrl を同じ論理 modifier として扱う Iced の既存境界に従う。
+fn layer_selection_op(modifiers: iced::keyboard::Modifiers, id: LayerId) -> LayerSelectionOp {
+    if modifiers.command() {
+        LayerSelectionOp::Toggle(id)
+    } else if modifiers.shift() {
+        LayerSelectionOp::Range(id)
+    } else {
+        LayerSelectionOp::Single(id)
+    }
 }
 
 /// M/S/L のどれか1個。旧 canvas 手描き(旧 `lane_bar.rs::draw`)の状態→色の
@@ -477,4 +505,26 @@ fn property_row(
         })
         .interaction(iced::mouse::Interaction::Pointer)
         .into()
+}
+
+#[cfg(test)]
+mod selection_tests {
+    use super::*;
+
+    #[test]
+    fn rail_modifier_translation_matches_layer_selection_contract() {
+        let id = LayerId(7);
+        assert_eq!(
+            layer_selection_op(iced::keyboard::Modifiers::default(), id),
+            LayerSelectionOp::Single(id)
+        );
+        assert_eq!(
+            layer_selection_op(iced::keyboard::Modifiers::COMMAND, id),
+            LayerSelectionOp::Toggle(id)
+        );
+        assert_eq!(
+            layer_selection_op(iced::keyboard::Modifiers::SHIFT, id),
+            LayerSelectionOp::Range(id)
+        );
+    }
 }

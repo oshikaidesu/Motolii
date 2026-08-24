@@ -25,15 +25,21 @@
 //! `Message::Timeline(motolii_timeline_pane::Message)` で1回だけ畳む
 //! (`Shell::update` 参照)。
 //!
-//! **例外(survey §3.2 exception 1)**: `Select`/`ScrubTo` は本来 core 腕だが
-//! `input.rs` の内部(レーンバー行クリック・ルーラー/空白部クリック)からも
-//! 直接発行される。pane crate から root の `Message` を参照できないので、
-//! ここに同名の腕を複製した。`ToggleMute`/`ToggleSolo`/`ToggleLock` も同じ
-//! 理由で複製している(上の doc 節の `toggle_layer_hidden` 共有の判断とセット)。
+//! **例外(survey §3.2 exception 1)**: `ScrubTo` は本来 core 腕だが
+//! `input.rs` の内部(ルーラー/空白部クリック)からも直接発行される。
+//! `Select`/`ToggleMute`/`ToggleSolo`/`ToggleLock` は既存の root との結線互換
+//! のために同名の腕を残している(上の doc 節の `toggle_layer_hidden` 共有の
+//! 判断とセット)。pane crate から root の `Message` を参照できないため、
+//! ここに同名の腕を複製した。
 //! **`Shell::update` はこの5腕を[`PaneState::update`]へ渡す前に先取りする**
 //! (`select_single`/`playhead`/`toggle_layer_*` へ直接委譲 — 既存の挙動その
 //! まま)。[`PaneState::update`] にこの5腕が来ることは実運用では無いが、
 //! 網羅性のために受理はする(no-op)。
+//!
+//! レール行の複数選択は上の `Select` 例外を使わない。`Select` は Shell の
+//! core 先取りで `PaneState::update` へ届かないため、rail は
+//! [`Message::SelectLayer`] を発行する。この腕は pane が表示順と修飾キー
+//! から解決済みの操作を受け、ここで `Session` の選択へ適用する。
 //!
 //! ## SP-2 分割(2726行 → 800行以下、中身は無改変・純粋な移送)
 //!
@@ -58,8 +64,16 @@
 //! `lib.rs` の再輸出も変えていない。
 #[derive(Debug, Clone)]
 pub enum Message {
-    /// 例外: 本来は core 腕(`input.rs` のレーンバー行クリックが直接発行)。
+    /// 例外: 既存の core 結線互換用。rail の行クリックは
+    /// [`Message::SelectLayer`] を使うため、この腕は legacy の no-op 受け口。
     Select(LayerId),
+    /// Timeline rail の行選択。`Select` と違い Shell の core 先取りを通さず、
+    /// pane の `PaneState::update` へ到達する。`order` は現在 rail に見えて
+    /// いる行順、`op` は rail が保持する修飾キー状態から選んだ操作。
+    SelectLayer {
+        order: Vec<LayerId>,
+        op: rows::LayerSelectionOp,
+    },
     /// 例外: 本来は core 腕(`input.rs` のルーラー/空白部クリックが直接発行)。
     ScrubTo(i64),
     /// 例外: `toggle_layer_hidden` が Inspector と共有のため Shell に残る。
@@ -445,6 +459,11 @@ pub struct PaneState {
     /// clipboard は選択とは別物 — 発注書「`key_anchor` の流儀に合わせて
     /// 決める」に対する判断: 流儀は踏襲しつつ置き場は pane 側)。
     key_clipboard: KeyClipboardState,
+    /// Timeline rail の Shift 範囲選択の基点。`Session` は layer 選択集合を
+    /// 持つが layer 用 anchor は持たないため、キー側の `Session::key_anchor`
+    /// と同じ transient 身分として pane に閉じる。rail 選択以外の既存経路を
+    /// 侵食しないため、最初の Shift クリックは anchor 無しの安全側へ倒れる。
+    layer_selection_anchor: Option<LayerId>,
 }
 
 /// inline rename の一時状態(正典 §6「リネーム」)。掴んだ layer と毎打鍵の
@@ -625,6 +644,21 @@ impl PaneState {
         modifiers: iced::keyboard::Modifiers,
     ) -> Option<String> {
         match message {
+            Message::SelectLayer { order, op } => {
+                let (selected, anchor) = rows::resolve_layer_selection(
+                    &order,
+                    self.layer_selection_anchor,
+                    &session.selected_layers,
+                    op,
+                );
+                self.layer_selection_anchor = anchor;
+                session.selection = match selected.as_slice() {
+                    [only] => Some(*only),
+                    _ => None,
+                };
+                session.selected_layers = selected;
+                None
+            }
             Message::BarGrabbed { layer, part, at_frame } => self.start_drag(doc, session, layer, part, at_frame),
             Message::DragMoved { at_frame, px_per_frame } => {
                 self.continue_drag(doc, session, at_frame, px_per_frame, modifiers);

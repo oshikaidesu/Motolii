@@ -7,6 +7,7 @@
 
 mod fixtures;
 mod fold;
+mod layer_selection;
 mod key_interp;
 mod key_selection_verbs;
 mod rename;
