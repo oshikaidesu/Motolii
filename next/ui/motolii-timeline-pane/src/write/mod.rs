@@ -605,18 +605,13 @@ impl PaneState {
         self.drag.is_some() || self.key_drag.is_some() || self.loop_drag.is_some()
     }
 
-    /// `TimelinePane::with_clip_preview` へそのまま渡す。**掴んだ layer
-    /// (`drag.layer`)1本分だけ**(E-2 で `origins`/`preview` は複数 layer 分
-    /// 持つようになったが、`with_clip_preview`/`apply_clip_preview`(rendering
-    /// 側、`projection.rs`)は単一 layer の絵しか差し替えない — このレーンの
-    /// write-set は `write.rs`/`input.rs`/`lib.rs` のみで rendering 側は
-    /// 含まないため、他の選択済み layer は移動計算(`finish_drag`)には正しく
-    /// 乗るが、ドラッグ中の bar の絵自体は掴んだ1本しか動いて見えない —
-    /// RETURN の finding/見送り参照)。
-    pub fn clip_preview(&self) -> Option<(LayerId, LayerTiming)> {
-        self.drag.as_ref().and_then(|drag| {
-            drag.preview.iter().find(|(id, _)| *id == drag.layer).map(|&(id, timing)| (id, timing))
-        })
+    /// `TimelinePane::with_clip_preview` へ、ドラッグ中の全 layer の
+    /// `(layer, preview timing)` をそのまま渡す。`origins`/`preview` は move
+    /// なら選択済み全 layer、trim なら掴んだ layer だけを持つため、ここで
+    /// 単一 layer へ絞らない。表示側はこの列を投影へ渡して全 bar を毎フレーム
+    /// 差し替える。
+    pub fn clip_preview(&self) -> Option<Vec<(LayerId, LayerTiming)>> {
+        self.drag.as_ref().map(|drag| drag.preview.clone())
     }
 
     /// `TimelinePane::with_key_preview` へそのまま渡す。`origins`(掴んだ瞬間の

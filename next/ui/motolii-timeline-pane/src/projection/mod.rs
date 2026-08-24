@@ -60,8 +60,8 @@ pub struct RowProjection {
     pub selected: bool,
     /// クリップ drag のプレビュー中(第2波T5、正典 §2「ドラッグ中の bar は
     /// ACCENT」)。`rows()` は常に `false` — [`apply_clip_preview`] だけが
-    /// 掴んでいる1行にだけ立てる。`selected` とは別ロール(trim は選択を
-    /// 変えないので、選択と drag 中は独立に真偽が分かれ得る)。
+    /// preview 列に含まれる各行へ立てる。`selected` とは別ロール(trim は
+    /// 選択を変えないので、選択と drag 中は独立に真偽が分かれ得る)。
     pub dragging: bool,
     /// **裁定173 H2**: `attrs.parent` を辺として読んだ木の深さ。0 = 最上位
     /// (parent が無い、または parent が存在しない/循環している孤立行)。

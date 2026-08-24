@@ -271,15 +271,15 @@ impl TimelinePane {
 
     /// `Shell::view`(実際には `Shell::build_timeline_pane`)だけが呼ぶ
     /// (第2波T5、正典 §5.5「プレビューは毎フレーム」)。`PaneState::clip_preview()`
-    /// の `(layer, preview timing)` をそのまま渡すだけの薄い builder —
+    /// の全 `(layer, preview timing)` 列をそのまま渡すだけの薄い builder —
     /// `with_key_drag_active` と同じ形。**置換そのものは
     /// [`projection::apply_clip_preview`](投影段の純関数)がやる** — ここは
     /// 運ぶだけで if を持たない。`None`(非ドラッグ中)なら `rows` は無傷。
-    pub fn with_clip_preview(mut self, preview: Option<(LayerId, LayerTiming)>) -> Self {
+    pub fn with_clip_preview(mut self, preview: Option<Vec<(LayerId, LayerTiming)>>) -> Self {
         if preview.is_some() {
             self.preview_active = true;
         }
-        self.rows = projection::apply_clip_preview(self.rows, preview);
+        self.rows = projection::apply_clip_preview(self.rows, preview.as_deref());
         self
     }
 

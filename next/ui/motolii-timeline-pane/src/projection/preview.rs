@@ -1,9 +1,7 @@
 //! ドラッグ中のライブプレビュー(SP-2 分割、`projection.rs` 773-976行を移設)。
-//! **中身は無改変** — 可視性のみ `pub(super)` → `pub(crate)`(元は
-//! `projection` 直下の兄弟モジュールで `pub(super)` = crate root まで見えて
-//! いたが、`preview` は `projection` の子になったので同じ到達範囲を
-//! `pub(crate)` で保つ。呼び手(`lib.rs`)は `projection::apply_clip_preview`
-//! のまま — `mod.rs` の re-export 参照)。
+//! 呼び手(`lib.rs`)は `projection::apply_clip_preview` のまま —
+//! `mod.rs` の re-export 参照。クリップ preview は move/trim が持つ全
+//! `(LayerId, LayerTiming)` 列を受け取り、投影へ焼き込む。
 
 use super::*;
 #[cfg(test)]
@@ -14,24 +12,24 @@ use super::tree::row_selected;
 // ---------------------------------------------------------------------------
 
 /// クリップ drag のプレビューを行の投影へ焼き込む(`TimelinePane::
-/// with_clip_preview` から呼ばれる純関数)。**`layer` が一致する1行だけ**
-/// `start`/`duration` を置き換え、[`RowProjection::dragging`] を立てる —
+/// with_clip_preview` から呼ばれる純関数)。**preview 列にある全 layer の行**
+/// へ `start`/`duration` を置き換え、[`RowProjection::dragging`] を立てる —
 /// 一致する行が無ければ黙って素通り(発明しない)。`preview` が `None` なら
 /// `rows` をそのまま返す(通常描画、呼び出し側で分岐を増やさない)。
 ///
 /// `TimelineDragState`(`crate::lib` 側の pane-local transient)を直接は
-/// 知らない — 呼び出し側(`Shell::build_timeline_pane`)が `(layer,
-/// drag.preview)` へ薄く写して渡す。EXACT TARGET 1 の「プレビュー後timing」。
+/// 知らない — 呼び出し側(`Shell::build_timeline_pane`)が `drag.preview` を
+/// owned の `Vec` として渡す。EXACT TARGET 1 の「プレビュー後timing」。
 pub(crate) fn apply_clip_preview(
     rows: Vec<RowProjection>,
-    preview: Option<(LayerId, LayerTiming)>,
+    preview: Option<&[(LayerId, LayerTiming)]>,
 ) -> Vec<RowProjection> {
-    let Some((layer, timing)) = preview else {
+    let Some(preview) = preview else {
         return rows;
     };
     rows.into_iter()
         .map(|mut row| {
-            if row.id == layer {
+            if let Some((_, timing)) = preview.iter().find(|(id, _)| *id == row.id) {
                 row.start = timing.start;
                 row.duration = timing.duration;
                 row.dragging = true;
@@ -102,18 +100,21 @@ mod preview_tests {
         LayerTiming { start, duration, source_in: 0, speed: Speed::NORMAL }
     }
 
-    /// **オラクル(赤→緑)**: `preview` の layer に一致する行だけ start/duration が
-    /// 置き換わり `dragging` が立つ。他の行は無傷。
+    /// **オラクル(赤→緑)**: `preview` の全 layer に一致する行だけ
+    /// start/duration が置き換わり `dragging` が立つ。他の行は無傷。
     #[test]
-    fn apply_clip_preview_replaces_only_the_matching_layer() {
-        let rows = vec![row(1, 0, 50), row(2, 60, 20)];
-        let out = apply_clip_preview(rows, Some((LayerId(2), timing(40, 10))));
+    fn apply_clip_preview_replaces_every_matching_layer() {
+        let rows = vec![row(1, 0, 50), row(2, 60, 20), row(3, 90, 15)];
+        let previews = vec![(LayerId(1), timing(10, 50)), (LayerId(3), timing(120, 25))];
+        let out = apply_clip_preview(rows, Some(&previews));
 
-        assert_eq!(out[0], row(1, 0, 50), "掴んでいない行が動いている");
-        assert_eq!(out[1].start, 40);
-        assert_eq!(out[1].duration, 10);
-        assert!(out[1].dragging, "掴んでいる行の dragging が立っていない");
-        assert!(!out[0].dragging);
+        assert_eq!(out[0].start, 10);
+        assert_eq!(out[0].duration, 50);
+        assert!(out[0].dragging, "1つ目の preview 行が dragging になっていない");
+        assert_eq!(out[1], row(2, 60, 20), "preview 外の行が動いている");
+        assert_eq!(out[2].start, 120);
+        assert_eq!(out[2].duration, 25);
+        assert!(out[2].dragging, "2つ目の preview 行が dragging になっていない");
     }
 
     /// `preview == None`(非ドラッグ中)は素通り — 呼び出しが増えても通常描画を
@@ -122,6 +123,17 @@ mod preview_tests {
     fn apply_clip_preview_none_is_a_passthrough() {
         let rows = vec![row(1, 0, 50)];
         let out = apply_clip_preview(rows.clone(), None);
+        assert_eq!(out, rows);
+    }
+
+    /// preview 列に現れない layer は発明せず、そのまま描く。
+    #[test]
+    fn apply_clip_preview_ignores_unknown_layers() {
+        let rows = vec![row(1, 0, 50)];
+        let previews = vec![(LayerId(9), timing(40, 10))];
+
+        let out = apply_clip_preview(rows.clone(), Some(&previews));
+
         assert_eq!(out, rows);
     }
 
