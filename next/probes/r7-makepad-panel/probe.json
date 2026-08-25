@@ -1,0 +1,133 @@
+{
+  "kind": "candidate_ui_probe",
+  "id": "r7-makepad-panel",
+  "status": "visual_slice_accepted",
+  "scope": ["Browser", "Stage", "Inspector", "Timeline"],
+  "implementation": {
+    "script": "panel.splash",
+    "host": "src/main.rs",
+    "host_widget": "HotPanel",
+    "hot_reload_interval_ms": 120,
+    "product_state_owner": "motolii-shell::Shell",
+    "elm_bridge": "TimelineSurface action -> App::handle_actions -> BackendBridge -> Shell::update(Message) -> disposable projection -> redraw",
+    "stage_bridge": "Shell::update -> Shell::frame_rgba -> Makepad Image texture",
+    "stage_frame_source": "Document -> StoreView -> Engine -> re_renderer CPU RGBA readback",
+    "makepad_model_ownership": false,
+    "makepad_transient_state": ["active_gesture", "horizontal_time_viewport"],
+    "async_boundary": "current timeline messages are synchronous; Iced Task and Subscription require a dedicated runtime bridge before broader feature delegation",
+    "resource_strategy": "main_vm_script_mod_with_manifest_path"
+  },
+  "visual_language": {
+    "icon_source": "resources/icons/*.svg",
+    "icon_reference_count": 74,
+    "font_roles": {
+      "regular": "labels_and_asset_names",
+      "bold": "pane_and_section_hierarchy",
+      "code": "numbers_metadata_and_transport"
+    },
+    "line_grammar": {
+      "principle": "a_line_marks_a_change_in_interaction_owner_coordinate_system_or_editable_object",
+      "primary_boundaries": {
+        "width_px": 1,
+        "targets": [
+          "chrome/work_surface",
+          "Browser/Stage",
+          "Stage/Inspector",
+          "top_work_surface/Timeline",
+          "Timeline/status"
+        ]
+      },
+      "secondary_boundaries": [
+        "Browser navigation/results",
+        "Timeline track rail/time field",
+        "Timeline track rows"
+      ],
+      "coordinate_lines": "Timeline minor and major time grid only",
+      "object_boundaries": [
+        "Stage composition",
+        "Browser media thumbnail",
+        "Timeline clip"
+      ],
+      "state_indicators": "fill_icon_or_dot_not_outline",
+      "related_control_grouping": "spacing_before_lines",
+      "forbidden": [
+        "decorative_full_height_accent_lines",
+        "outlines_around_toolbar_actions",
+        "boxed_whole_panel_surfaces"
+      ]
+    },
+    "timeline_geometry": {
+      "rail_px": 150,
+      "ruler_px": 22,
+      "key_row_px": 18,
+      "duration_frames": 1800,
+      "row_count": 15,
+      "lane_height_rule": "(surface_height - ruler_height - property_row_count * key_row_height) / lane_count",
+      "clip_vertical_rule": "lane_top with lane_height minus one separator pixel",
+      "keyframe_vertical_rule": "lane_center",
+      "rail_control_alignment": "each MSL cell centered in x and y",
+      "label_color_rule": "four_pixel_left_sticky_tab_filling_lane_height",
+      "ruler_tick_rule": "motolii_timeline_pane::tick_steps_with_target recalculated from horizontal visible frame span",
+      "ruler_draw_order": "foreground_after_clips_and_body_grid",
+      "playhead_frame": 900,
+      "keyframe_times": [510, 570],
+      "fixture_projection": "all_layers_sorted_front_to_back_from_LayerMeta.order",
+      "selected_layer": "サビ歌詞",
+      "selected_layer_visibility_at_playhead": "off_frame",
+      "zebra_scope": "whole_lane_except_selected",
+      "transport_adopted": false
+    },
+    "timeline_interaction_contract": {
+      "playhead_drag": "Scrub(frame) -> Shell::update(Message::ScrubTo) -> Session.playhead -> frame_rgba and TimelineModel",
+      "lane_drag": "Restack(layer,target_from_front) -> Select(layer) -> RestackLayer(ToIndexFromBack) -> Intent::SetOrder apply_all -> Stage and lane projection",
+      "lane_order_owner": "Document LayerMeta.order",
+      "lane_order_orientation": "timeline_top_is_stage_front",
+      "lane_drag_undo": "one_gesture_one_apply_all_one_undo",
+      "zoom": "TimelineSurface horizontal viewport only; no Document write and no y scale",
+      "zoom_anchor": "pointer_frame",
+      "zoom_ruler": "minor and major ticks recomputed after every viewport change"
+    },
+    "copy_policy": "semantic_names_only; no_explanatory_status_by_default"
+  },
+  "comparison": {
+    "reference_urls": [
+      "https://www.ableton.com/en/live/",
+      "https://www.ableton.com/en/live-manual/12/live-concepts/",
+      "https://www.ableton.com/en/live-manual/12/first-steps/"
+    ],
+    "axes": [
+      "macro_layout",
+      "transport_density",
+      "time_surface_rhythm",
+      "semantic_color",
+      "focus_and_feedback",
+      "copy_minimization"
+    ],
+    "low_spec_llm_confusion": {
+      "role": "visual_smoke_test",
+      "status": "planned",
+      "not_the_acceptance_gate": true
+    }
+  },
+  "authorities": {
+    "visual": [
+      "../../reference/mocks/browser-library.html",
+      "../../reference/mocks/stage-semantics.html",
+      "../../reference/mocks/inspector-library.html",
+      "../../reference/mocks/timeline-semantics.html",
+      "../../reference/mocks/ui-scale-and-z.html"
+    ],
+    "dimensions": "../../ui/motolii-tokens-rs/tokens/dimensions.json"
+  },
+  "upstream": {
+    "name": "makepad",
+    "url": "https://github.com/makepad/makepad",
+    "rev": "6cf59e1509bcb8adb21151e79aafea09b036f4b4"
+  },
+  "evidence": {
+    "real_window_screenshot": "evidence/makepad-panel.png",
+    "density_iteration_02": "evidence/makepad-panel-iteration-02.png",
+    "line_grammar_iteration": "evidence/makepad-panel-line-grammar.png",
+    "acceptance": "cargo run --locked --manifest-path next/probes/r7-makepad-panel/Cargo.toml opens the panel and editing panel.splash reloads it"
+  }
+}

@@ -1,0 +1,20 @@
+[package]
+name = "r7-makepad-panel"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# This is deliberately a standalone candidate probe. It must not enter the
+# product workspace until Makepad is selected as the front-end route.
+[workspace]
+
+[dependencies]
+# Pin the exact upstream used for the accepted visual slice. The panel host
+# only depends on Makepad's public widget crate; the rest stays upstream-owned.
+makepad-widgets = { git = "https://github.com/makepad/makepad.git", rev = "6cf59e1509bcb8adb21151e79aafea09b036f4b4" }
+
+# Elm bridge. `motolii-shell` remains the owner of Document + Session + Engine;
+# Makepad dispatches public Messages and reads disposable projections/RGBA only.
+motolii-shell = { path = "../../shell/motolii-shell" }
+# IDs/Fps are value types crossing that bridge; no Document write API is used.
+motolii-store = { path = "../../core/motolii-store" }
