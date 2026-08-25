@@ -1,7 +1,8 @@
 {
-  "kind": "candidate_ui_probe",
+  "kind": "host_candidate",
   "id": "r7-makepad-panel",
-  "status": "visual_slice_accepted",
+  "status": "interaction_slice_under_acceptance",
+  "positioning": "formal_candidate_to_replace_iced_host",
   "scope": ["Browser", "Stage", "Inspector", "Timeline"],
   "implementation": {
     "script": "panel.splash",
@@ -85,7 +86,13 @@
       "lane_drag_undo": "one_gesture_one_apply_all_one_undo",
       "zoom": "TimelineSurface horizontal viewport only; no Document write and no y scale",
       "zoom_anchor": "pointer_frame",
-      "zoom_ruler": "minor and major ticks recomputed after every viewport change"
+      "zoom_ruler": "minor and major ticks recomputed after every viewport change",
+      "trackpad_pan": "unmodified horizontal two-finger scroll",
+      "wheel_pan": "shift plus vertical wheel",
+      "gesture_seam": "platform transform facts -> gesture_input adapter -> consumer policy",
+      "trackpad_zoom": "option plus scroll fallback; macOS native scale gesture",
+      "trackpad_phase": "axis and verb locked across Began Changed Ended Momentum; Touched catches momentum",
+      "delta_policy": "precise phased deltas preserved; phase-less wheel deltas normalized to 120-unit notches"
     },
     "copy_policy": "semantic_names_only; no_explanatory_status_by_default"
   },

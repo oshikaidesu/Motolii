@@ -4,14 +4,17 @@ version = "0.1.0"
 edition = "2021"
 publish = false
 
-# This is deliberately a standalone candidate probe. It must not enter the
-# product workspace until Makepad is selected as the front-end route.
+# Makepad IS now the selected front-end route (裁定251, 2026-08-26), which
+# overturns 裁定5 ("front は iced のみ"). This crate is still a standalone
+# workspace only because folding it into next/ has not been done yet -- that
+# is pending work, no longer a gate. Do not re-derive the front-end question
+# here; read next/DECISIONS.md 裁定251 first.
 [workspace]
 
 [dependencies]
-# Pin the exact upstream used for the accepted visual slice. The panel host
-# only depends on Makepad's public widget crate; the rest stays upstream-owned.
-makepad-widgets = { git = "https://github.com/makepad/makepad.git", rev = "6cf59e1509bcb8adb21151e79aafea09b036f4b4" }
+# Pin the thin gesture-event fork used by this host. The fork owns platform
+# observations only; Motolii policy stays behind src/gesture_input.rs.
+makepad-widgets = { git = "https://github.com/oshikaidesu/makepad.git", rev = "81946efe3379556acd32d1a9479a7ebb1035dcad" }
 
 # Elm bridge. `motolii-shell` remains the owner of Document + Session + Engine;
 # Makepad dispatches public Messages and reads disposable projections/RGBA only.

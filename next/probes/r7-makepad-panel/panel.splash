@@ -473,9 +473,25 @@ draw_bg.color: #x282828
 
         top_timeline_divider := SurfaceDivider{}
 
-        timeline_surface := TimelineSurface{
+        timeline := View{
             width: Fill
             height: 300
+            flow: Down
+            transport := SolidView{
+                width: Fill height: 24 flow: Right align: Align{x: 0.5 y: 0.5}
+                show_bg: true draw_bg.color: #x292929
+                play_toggle := ButtonFlat{
+                    text: "PLAY / PAUSE"
+                    width: 78 height: 20
+                    draw_bg.color: #x444444
+                    draw_text.color: #xd8b574
+                    draw_text.text_style: theme.font_code{font_size: 9}
+                }
+            }
+            timeline_surface := TimelineSurface{
+                width: Fill
+                height: Fill
+            }
         }
     }
 

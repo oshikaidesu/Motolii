@@ -1,7 +1,8 @@
 # R7 Makepad panel probe
 
-これは Motolii の製品 UI ではなく、Makepad を次の front 候補として検証する
-独立した視覚 probe です。Iced の現在実装や旧世界のモックを正本にしません。
+これは Makepad を Iced に代わる正式ホスト候補として検証する独立実装です。
+まだ製品ホストへの採用決定ではありませんが、視覚だけの使い捨てprobeには限定しません。
+意味と状態は既存の`motolii-shell`へ委託し、旧世界のモックを正本にしません。
 
 ## 正本
 
@@ -32,7 +33,11 @@ Document / Store / Engine / re_renderer 合成結果へ接続します。Makepad
 所有せず、`TimelineSurface action → App::handle_actions → BackendBridge →
 Shell::update(Message)` の一箇所から既存のElm核へ委託します。playhead dragはSession時刻、
 lane dragはDocumentの`LayerMeta.order`へ入り、StageとTimelineが同じ正本から再投影されます。
-横ズームだけは表示窓なのでMakepadの一時状態ですが、縦方向のscaleは持ちません。
+横pan/zoomだけは表示窓なのでMakepadの一時状態ですが、縦方向のscaleは持ちません。二本指の
+horizontal scrollはtime pan、Option-scrollはpointer anchorを保つtime zoom、Shift-wheelは
+horizontal panです。trackpadのaxisと動詞はgesture開始後に固定し、OS momentumは同じownerへ
+継続、次のtouchで停止します。native gestureは`gesture_input.rs`の汎用transform sampleへ変換し、
+macOS pinchはscaleだけをTimeline policyがtime zoomとして解釈します。
 Browser / Inspector の操作と Export はまだ接続していません。
 
 `Shell::update` が返すIced `Task<Message>`は、今回の同期timeline操作では仕事を持ちません。
@@ -45,7 +50,9 @@ runtime bridgeを先に作ります。各WidgetからShellを直接呼ぶ経路�
 SVG リソース解決とホットリロードを同じ面で成立させています。SVG は
 `resources/icons/` に集約し、regular / bold / code のフォント役割を `panel.splash` に明示しています。
 
-Makepad は `Cargo.toml` の git revision へ固定しています。候補の依存を製品 workspace
+Makepad は [oshikaidesu/makepad](https://github.com/oshikaidesu/makepad/tree/motolii-magnify) の
+git revisionへ固定しています。fork差分は意味を持たないgesture transformイベントとplatform producer
+だけに限定し、Timeline固有の判断は`gesture_input.rs`より下流へ置きます。候補の依存を製品 workspace
 へ混ぜないため、この probe 自体も standalone workspace のままにします。Stage bridgeは
 逆向きに既存の `motolii-shell` を path dependency として読むだけです。
 
@@ -66,11 +73,14 @@ SVGだけを更新します。
 - Stage に fixture の `Document → Engine → re_renderer` 由来フレームが表示される
 - playheadをドラッグすると`Session.playhead`とStage frameが同じframeへ更新される
 - laneを上下へドラッグすると`LayerMeta.order`が1 undoで変わり、Stage重なりとlane順が一致する
-- Timeline上のwheel/trackpadで時間軸だけがzoomし、目盛り間隔が表示尺へ追随する
+- Timeline上の二本指horizontal scrollでtime panし、Option-scrollで時間軸だけがzoomして目盛り間隔が表示尺へ追随する
+- 斜めtrackpad入力のaxisがgesture中に変わらず、OS momentumが次のtouchで停止する
+- macOS pinchでpointer anchorを保つtime zoomが連続動作する
+- Windows/Linuxはnative producer着地までAlt/Option-scroll fallbackを使う
 - `panel.splash` の文字または寸法を編集し、再起動なしで表示が更新される
 - Browser / Stage / Inspector / Timeline の操作記号が SVG アイコンで表示され、補助説明ラベルは空にできる
 - 実窓の基準画像は [evidence/makepad-panel.png](evidence/makepad-panel.png)
 - 密度パスの画像は [evidence/makepad-panel-iteration-02.png](evidence/makepad-panel-iteration-02.png)
 
-この probe の成功は Makepad 採用の決定ではありません。意味と状態の正本は現在の
-Iced product routeが使う`motolii-shell`のままで、Makepadは外部View/Input adapterです。
+利用者裁定(2026-08-26): MakepadはIcedに代わる正式ホスト候補です。意味と状態の正本は
+`motolii-shell`のままで、Makepadは外部View/Input adapterとして候補評価を進めます。

@@ -6,6 +6,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::SystemTime;
 
+mod gesture_input;
 mod timeline_surface;
 use timeline_surface::{
     TimelineLane, TimelineModel, TimelinePropertyLane, TimelineSurface, TimelineSurfaceAction,
@@ -58,6 +59,32 @@ const HOT_PANEL_PREFIX: &str =
 /// core; widgets never write Document/Session state directly.
 struct BackendBridge {
     shell: Shell,
+}
+
+enum TimelineUpdate {
+    None,
+    Stage(String),
+    ModelAndStage(String),
+    Status(String),
+}
+
+/// A one-slot mailbox for expensive projections. Producers may run at pointer
+/// frequency; the consumer runs at display frequency and only observes the
+/// newest request. The payload can later become an IOSurface handle without
+/// changing Timeline or App event routing.
+#[derive(Default)]
+struct LatestFrameRequest {
+    pending: bool,
+}
+
+impl LatestFrameRequest {
+    fn request(&mut self) -> bool {
+        std::mem::replace(&mut self.pending, true)
+    }
+
+    fn take(&mut self) -> bool {
+        std::mem::take(&mut self.pending)
+    }
 }
 
 impl BackendBridge {
@@ -203,6 +230,41 @@ impl BackendBridge {
     fn frame_rgba(&mut self) -> Option<(u32, u32, &[u8])> {
         self.shell.frame_rgba()
     }
+
+    fn toggle_playback(&mut self) -> bool {
+        let _ = self.shell.update(Message::TogglePlayback);
+        self.shell.is_playing()
+    }
+
+    fn playback_tick(&mut self) -> bool {
+        if !self.shell.is_playing() {
+            return false;
+        }
+        let _ = self.shell.update(Message::PlaybackTick);
+        true
+    }
+
+    fn apply_timeline_action(&mut self, action: &TimelineSurfaceAction) -> TimelineUpdate {
+        match *action {
+            TimelineSurfaceAction::None => TimelineUpdate::None,
+            TimelineSurfaceAction::Scrub(frame) => {
+                self.scrub_to(frame);
+                TimelineUpdate::Stage(format!("SCRUB  ·  FRAME {frame}"))
+            }
+            TimelineSurfaceAction::Restack {
+                layer_id,
+                target_from_front,
+            } => TimelineUpdate::ModelAndStage(
+                self.restack_from_timeline(layer_id, target_from_front),
+            ),
+            TimelineSurfaceAction::ZoomChanged {
+                start_frame,
+                visible_frames,
+            } => TimelineUpdate::Status(format!(
+                "TIME ZOOM  ·  X ONLY  ·  START {start_frame}  ·  SPAN {visible_frames}F"
+            )),
+        }
+    }
 }
 
 #[derive(Script, ScriptHook, WidgetRegister)]
@@ -303,6 +365,10 @@ impl HotPanel {
         self.view.child_by_path(ids!(timeline_surface))
     }
 
+    fn play_ref(&self) -> WidgetRef {
+        self.view.child_by_path(ids!(play_toggle))
+    }
+
     fn set_timeline_model(&mut self, cx: &mut Cx, model: TimelineModel) -> bool {
         let timeline = self.timeline_ref();
         let found = !timeline.is_empty();
@@ -332,6 +398,12 @@ pub struct App {
     pending_signature: Option<(SystemTime, u64)>,
     #[rust]
     panel_timer: Timer,
+    #[rust]
+    playback_timer: Timer,
+    #[rust]
+    stage_next_frame: NextFrame,
+    #[rust]
+    stage_request: LatestFrameRequest,
     /// The existing product shell remains the sole Document/Engine owner. This
     /// probe only reads its compositor output for the Makepad Stage image.
     #[rust]
@@ -347,24 +419,6 @@ impl App {
             log!("Stage bridge: backend produced no frame");
             return;
         };
-        let mut non_black = 0usize;
-        let mut non_black_opaque = 0usize;
-        let mut bounds = (width, height, 0u32, 0u32);
-        for (index, pixel) in rgba.chunks_exact(4).enumerate() {
-            if pixel[0] == 0 && pixel[1] == 0 && pixel[2] == 0 {
-                continue;
-            }
-            non_black += 1;
-            if pixel[3] != 0 {
-                non_black_opaque += 1;
-            }
-            let x = index as u32 % width;
-            let y = index as u32 / width;
-            bounds.0 = bounds.0.min(x);
-            bounds.1 = bounds.1.min(y);
-            bounds.2 = bounds.2.max(x);
-            bounds.3 = bounds.3.max(y);
-        }
         let Ok(image) = ImageBuffer::new(rgba, width as usize, height as usize) else {
             log!("Stage bridge: invalid RGBA frame {}x{}", width, height);
             return;
@@ -377,16 +431,19 @@ impl App {
             .borrow_mut::<HotPanel>()
             .map(|mut panel| panel.set_stage_texture(cx, texture))
             .unwrap_or(false);
-        cx.redraw_all();
+        panel.redraw(cx);
         log!(
-            "Stage bridge: installed re_renderer frame {}x{} non_black={} opaque={} bounds={:?} image_found={}",
+            "Stage bridge: installed latest re_renderer frame {}x{} image_found={}",
             width,
             height,
-            non_black,
-            non_black_opaque,
-            bounds,
             image_found
         );
+    }
+
+    fn request_stage_frame(&mut self, cx: &mut Cx) {
+        if !self.stage_request.request() {
+            self.stage_next_frame = cx.new_next_frame();
+        }
     }
 
     fn install_timeline_model(&mut self, cx: &mut Cx) {
@@ -419,6 +476,32 @@ impl App {
         })
     }
 
+    fn play_uid(&self, cx: &mut Cx) -> Option<WidgetUid> {
+        let panel = self.ui.widget(cx, ids!(panel_host));
+        panel.borrow::<HotPanel>().and_then(|panel| {
+            let play = panel.play_ref();
+            (!play.is_empty()).then(|| play.widget_uid())
+        })
+    }
+
+    fn toggle_playback(&mut self, cx: &mut Cx) {
+        let playing = self
+            .backend
+            .as_mut()
+            .map(BackendBridge::toggle_playback)
+            .unwrap_or(false);
+        self.set_status(
+            cx,
+            if playing {
+                "PLAYING  ·  SPACE TO PAUSE"
+            } else {
+                "PAUSED"
+            },
+        );
+        self.install_timeline_model(cx);
+        self.request_stage_frame(cx);
+    }
+
     fn load_panel(&mut self, cx: &mut Cx) {
         let Ok(metadata) = fs::metadata(&self.panel_path) else {
             log!("panel file missing: {:?}", self.panel_path);
@@ -442,7 +525,7 @@ impl App {
                 self.panel_signature = Some(signature);
                 self.pending_signature = None;
                 self.install_timeline_model(cx);
-                self.install_stage_frame(cx);
+                self.request_stage_frame(cx);
                 log!("reloaded {:?}", self.panel_path);
             }
             Err(error) => log!("panel read failed: {:?}", error),
@@ -455,49 +538,43 @@ impl MatchEvent for App {
         self.backend = Some(BackendBridge::new_fixture());
         self.panel_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("panel.splash");
         self.panel_timer = cx.start_interval(0.12);
+        self.playback_timer = cx.start_interval(1.0 / 60.0);
         self.load_panel(cx);
     }
 
     fn handle_actions(&mut self, cx: &mut Cx, actions: &Actions) {
+        if let Some(uid) = self.play_uid(cx) {
+            if actions
+                .filter_widget_actions(uid)
+                .any(|action| matches!(action.cast(), ButtonAction::Clicked { .. }))
+            {
+                self.toggle_playback(cx);
+            }
+        }
         let Some(uid) = self.timeline_uid(cx) else {
             return;
         };
         let timeline_actions: Vec<TimelineSurfaceAction> =
             actions.filter_widget_actions_cast(uid).collect();
         for action in timeline_actions {
-            match action {
-                TimelineSurfaceAction::None => {}
-                TimelineSurfaceAction::Scrub(frame) => {
-                    if let Some(backend) = self.backend.as_mut() {
-                        backend.scrub_to(frame);
-                    }
-                    self.install_timeline_model(cx);
-                    self.install_stage_frame(cx);
-                    self.set_status(cx, &format!("SCRUB  ·  FRAME {frame}"));
-                }
-                TimelineSurfaceAction::Restack {
-                    layer_id,
-                    target_from_front,
-                } => {
-                    let status = self
-                        .backend
-                        .as_mut()
-                        .map(|backend| backend.restack_from_timeline(layer_id, target_from_front))
-                        .unwrap_or_else(|| "Timeline backend unavailable".to_owned());
-                    self.install_timeline_model(cx);
-                    self.install_stage_frame(cx);
+            let update = self
+                .backend
+                .as_mut()
+                .map(|backend| backend.apply_timeline_action(&action))
+                .unwrap_or(TimelineUpdate::None);
+            match update {
+                TimelineUpdate::None => {}
+                TimelineUpdate::Stage(status) => {
+                    self.request_stage_frame(cx);
                     self.set_status(cx, &status);
                 }
-                TimelineSurfaceAction::ZoomChanged {
-                    start_frame,
-                    visible_frames,
-                } => {
-                    self.set_status(
-                        cx,
-                        &format!(
-                            "TIME ZOOM  ·  X ONLY  ·  START {start_frame}  ·  SPAN {visible_frames}F"
-                        ),
-                    );
+                TimelineUpdate::ModelAndStage(status) => {
+                    self.install_timeline_model(cx);
+                    self.request_stage_frame(cx);
+                    self.set_status(cx, &status);
+                }
+                TimelineUpdate::Status(status) => {
+                    self.set_status(cx, &status);
                 }
             }
         }
@@ -506,6 +583,28 @@ impl MatchEvent for App {
     fn handle_timer(&mut self, cx: &mut Cx, event: &TimerEvent) {
         if self.panel_timer.is_timer(event).is_some() {
             self.load_panel(cx);
+        }
+        if self.playback_timer.is_timer(event).is_some()
+            && self
+                .backend
+                .as_mut()
+                .map(BackendBridge::playback_tick)
+                .unwrap_or(false)
+        {
+            self.install_timeline_model(cx);
+            self.request_stage_frame(cx);
+        }
+    }
+
+    fn handle_key_down(&mut self, cx: &mut Cx, event: &KeyEvent) {
+        if event.key_code == KeyCode::Space && !event.is_repeat {
+            self.toggle_playback(cx);
+        }
+    }
+
+    fn handle_next_frame(&mut self, cx: &mut Cx, event: &NextFrameEvent) {
+        if event.set.contains(&self.stage_next_frame) && self.stage_request.take() {
+            self.install_stage_frame(cx);
         }
     }
 }
@@ -519,5 +618,52 @@ impl AppMain for App {
     fn handle_event(&mut self, cx: &mut Cx, event: &Event) {
         self.match_event(cx, event);
         self.ui.handle_event(cx, event, &mut Scope::empty());
+    }
+}
+
+#[cfg(test)]
+mod backend_tests {
+    use super::*;
+
+    #[test]
+    fn scrub_action_reaches_shell_session() {
+        let mut backend = BackendBridge::new_fixture();
+        let update = backend.apply_timeline_action(&TimelineSurfaceAction::Scrub(600));
+
+        assert!(matches!(update, TimelineUpdate::Stage(_)));
+        assert_eq!(backend.shell.session().playhead, 600);
+    }
+
+    #[test]
+    fn lane_restack_action_changes_document_derived_stage_order() {
+        let mut backend = BackendBridge::new_fixture();
+        let layer_id = backend
+            .timeline_model()
+            .lanes
+            .last()
+            .expect("fixture lane")
+            .id;
+        let update = backend.apply_timeline_action(&TimelineSurfaceAction::Restack {
+            layer_id,
+            target_from_front: 0,
+        });
+
+        assert!(matches!(update, TimelineUpdate::ModelAndStage(_)));
+        assert_eq!(backend.timeline_model().lanes[0].id, layer_id);
+    }
+
+    #[test]
+    fn stage_requests_coalesce_to_one_latest_delivery() {
+        let mut requests = LatestFrameRequest::default();
+        assert!(!requests.request(), "first request schedules a consumer");
+        assert!(
+            requests.request(),
+            "later requests reuse the pending consumer"
+        );
+        assert!(requests.take());
+        assert!(
+            !requests.take(),
+            "one delivery consumes every coalesced request"
+        );
     }
 }
