@@ -121,9 +121,9 @@ pub use schema::{
     asset_components_require_newer_reader, AudioComponent, AudioOutOfRange, BlendMode, Clip,
     ClipSource, ClippingMaskSettings, CompCameraDoc, CompositeOrder, Composition, CompositionError,
     EffectDefinition, EffectInstance, EffectUse, Group, ItemEnvelope, LineJoin, Locator, MaskMode,
-    PathOp, MAX_COMPOSITION_RESOLUTION_DIMENSION,
-    PointType, Soundtrack, SoundtrackError, StandardShape, StreamKind, StreamSelector, Track,
-    TrackItem, Transform2D, TrimMode, VectorContent, VectorRecipe, VideoComponent,
+    PathOp, PointType, Soundtrack, SoundtrackError, StandardShape, StreamKind, StreamSelector,
+    Track, TrackItem, Transform2D, TrimMode, VectorContent, VectorRecipe, VideoComponent,
+    MAX_COMPOSITION_RESOLUTION_DIMENSION,
 };
 pub use spatial_resolve::resolve_document_spaces;
 pub use stable_id::{

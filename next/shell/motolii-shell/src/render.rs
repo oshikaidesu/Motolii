@@ -97,6 +97,12 @@ impl Shell {
         let resolution_cap = self.resolution_cap;
         let colors = self.tokens.colors;
         let ui_scale = self.tokens.ui_scale;
+        let checkerboard_tile_target_pt = self
+            .tokens
+            .dims
+            .components
+            .settings
+            .checkerboard_tile_target_pt;
 
         if let Some(frame) = &self.frame {
             if frame.revision == revision && frame.playhead == playhead {
@@ -118,6 +124,7 @@ impl Shell {
                         resolution_cap,
                         colors,
                         ui_scale,
+                        checkerboard_tile_target_pt,
                     ),
                     None => {
                         let frame = self.frame.as_ref().expect("直前の if let で確認済み");
@@ -129,6 +136,7 @@ impl Shell {
                             resolution_cap,
                             colors,
                             ui_scale,
+                            checkerboard_tile_target_pt,
                         )
                     }
                 };
@@ -208,6 +216,12 @@ impl Shell {
             self.frame = None;
             return;
         };
+        let checkerboard_tile_target_pt = self
+            .tokens
+            .dims
+            .components
+            .settings
+            .checkerboard_tile_target_pt;
         let Ok(t) = RationalTime::try_from_frame(playhead, composition.fps) else {
             self.status = Some("再生位置を時刻へ写せない".to_owned());
             return;
@@ -247,6 +261,7 @@ impl Shell {
                         resolution_cap,
                         colors,
                         ui_scale,
+                        checkerboard_tile_target_pt,
                     ),
                     None => build_stage_presenter_rgba(
                         composition.width,
@@ -256,6 +271,7 @@ impl Shell {
                         resolution_cap,
                         colors,
                         ui_scale,
+                        checkerboard_tile_target_pt,
                     ),
                 };
                 // 世代は前フレームから引き継いで+1する(裁定166 EXACT TARGET 1)。

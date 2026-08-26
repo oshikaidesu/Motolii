@@ -44,8 +44,8 @@
 
 use std::path::PathBuf;
 
-use motolii_shell_iced::inspector_pane::dims;
 use motolii_shell_iced::browser_pane::dims as browser_dims;
+use motolii_shell_iced::inspector_pane::dims;
 use motolii_shell_iced::timeline::semantics::{OVERVIEW_H, RAIL_W, ROW_H, TRANSPORT_H};
 use motolii_ui::css_metrics::extract;
 use serde_json::Value;
@@ -84,11 +84,15 @@ fn box_x(row: &Value) -> f64 {
 }
 
 fn pad_left(row: &Value) -> f64 {
-    row["padding"]["left"].as_f64().expect("padding.left is a number")
+    row["padding"]["left"]
+        .as_f64()
+        .expect("padding.left is a number")
 }
 
 fn pad_top(row: &Value) -> f64 {
-    row["padding"]["top"].as_f64().expect("padding.top is a number")
+    row["padding"]["top"]
+        .as_f64()
+        .expect("padding.top is a number")
 }
 
 /// 条件に合う最初の行を返す。無ければ、探した条件と行数を添えて panic する
@@ -426,30 +430,62 @@ fn browser_dims_match_css_computed_values() {
     let header = find(&rows, "header.browserHeader", |r| {
         has_class(r, "browserHeader")
     });
-    assert_eq!(box_h(header), browser_dims::HEADER_H as f64, "dims::HEADER_H");
-    assert_eq!(pad_left(header), browser_dims::HEADER_PAD_X as f64, "dims::HEADER_PAD_X");
+    assert_eq!(
+        box_h(header),
+        browser_dims::HEADER_H as f64,
+        "dims::HEADER_H"
+    );
+    assert_eq!(
+        pad_left(header),
+        browser_dims::HEADER_PAD_X as f64,
+        "dims::HEADER_PAD_X"
+    );
 
     // browser-library.css:41 `.browserToolbar{height:30px}` — dims::TOOLBAR_H。
     let toolbar = find(&rows, "div.browserToolbar", |r| {
         has_class(r, "browserToolbar")
     });
-    assert_eq!(box_h(toolbar), browser_dims::TOOLBAR_H as f64, "dims::TOOLBAR_H");
+    assert_eq!(
+        box_h(toolbar),
+        browser_dims::TOOLBAR_H as f64,
+        "dims::TOOLBAR_H"
+    );
     // 2026-08-19 第3波(flat-grammar-canon-revision.md spacing scale {2,4,6,8}):
     // browser-library.css:46 の padding を 3px 5px → 2px 4px へ改定した。
     // dims::TOOLBAR_PAD_Y/X はまだ旧値 — 第3波レーンI(iced追随)で収束予定。
     // 「一致」を主張せず、現状の両側を literal で pin するだけにする
     // (timeline_known_divergences_are_pinned と同じ形)。
-    assert_eq!(pad_top(toolbar), 2.0, "browser-library.css の計算済み .browserToolbar padding-top");
-    assert_eq!(browser_dims::TOOLBAR_PAD_Y, 3.0, "browser_pane::dims::TOOLBAR_PAD_Y(旧値のまま — レーンI待ち)");
-    assert_eq!(pad_left(toolbar), 4.0, "browser-library.css の計算済み .browserToolbar padding-left");
-    assert_eq!(browser_dims::TOOLBAR_PAD_X, 5.0, "browser_pane::dims::TOOLBAR_PAD_X(旧値のまま — レーンI待ち)");
+    assert_eq!(
+        pad_top(toolbar),
+        2.0,
+        "browser-library.css の計算済み .browserToolbar padding-top"
+    );
+    assert_eq!(
+        browser_dims::TOOLBAR_PAD_Y,
+        3.0,
+        "browser_pane::dims::TOOLBAR_PAD_Y(旧値のまま — レーンI待ち)"
+    );
+    assert_eq!(
+        pad_left(toolbar),
+        4.0,
+        "browser-library.css の計算済み .browserToolbar padding-left"
+    );
+    assert_eq!(
+        browser_dims::TOOLBAR_PAD_X,
+        5.0,
+        "browser_pane::dims::TOOLBAR_PAD_X(旧値のまま — レーンI待ち)"
+    );
 
     // browser-library.css:53 共通 control 高さ(history/toolbar/viewModes button)
     // — dims::CONTROL_H。ここでは検索欄(実測 21px)で確かめる。
     let search = find(&rows, "input#library-search", |r| {
         r["id"].as_str() == Some("library-search")
     });
-    assert_eq!(box_h(search), browser_dims::CONTROL_H as f64, "dims::CONTROL_H");
+    assert_eq!(
+        box_h(search),
+        browser_dims::CONTROL_H as f64,
+        "dims::CONTROL_H"
+    );
 
     // browser-library.css:156 `.catalogHeader{height:31px}` — dims::CATALOG_HEADER_H。
     let catalog_header = find(&rows, "header.catalogHeader", |r| {
@@ -470,28 +506,56 @@ fn browser_dims_match_css_computed_values() {
     // — dims::VIEW_BUTTON_W / VIEW_BUTTON_GAP。
     let view_buttons: Vec<&Value> = rows
         .iter()
-        .filter(|r| r["path"].as_str().is_some_and(|p| p.ends_with("viewModes > button")))
+        .filter(|r| {
+            r["path"]
+                .as_str()
+                .is_some_and(|p| p.ends_with("viewModes > button"))
+        })
         .collect();
     assert_eq!(view_buttons.len(), 3, "view mode ボタンは3つ(html:95-97)");
     for button in &view_buttons {
-        assert_eq!(box_w(button), browser_dims::VIEW_BUTTON_W as f64, "dims::VIEW_BUTTON_W");
-        assert_eq!(box_h(button), browser_dims::CONTROL_H as f64, "dims::CONTROL_H(view button)");
+        assert_eq!(
+            box_w(button),
+            browser_dims::VIEW_BUTTON_W as f64,
+            "dims::VIEW_BUTTON_W"
+        );
+        assert_eq!(
+            box_h(button),
+            browser_dims::CONTROL_H as f64,
+            "dims::CONTROL_H(view button)"
+        );
     }
     let gap = box_x(view_buttons[1]) - (box_x(view_buttons[0]) + box_w(view_buttons[0]));
-    assert_eq!(gap, browser_dims::VIEW_BUTTON_GAP as f64, "dims::VIEW_BUTTON_GAP");
+    assert_eq!(
+        gap,
+        browser_dims::VIEW_BUTTON_GAP as f64,
+        "dims::VIEW_BUTTON_GAP"
+    );
 
     // browser-library.css:205 `.resultSummary{height:21px}` — dims::SUMMARY_H。
     let summary = find(&rows, "div.resultSummary", |r| {
         has_class(r, "resultSummary")
     });
-    assert_eq!(box_h(summary), browser_dims::SUMMARY_H as f64, "dims::SUMMARY_H");
-    assert_eq!(pad_left(summary), browser_dims::SUMMARY_PAD_X as f64, "dims::SUMMARY_PAD_X");
+    assert_eq!(
+        box_h(summary),
+        browser_dims::SUMMARY_H as f64,
+        "dims::SUMMARY_H"
+    );
+    assert_eq!(
+        pad_left(summary),
+        browser_dims::SUMMARY_PAD_X as f64,
+        "dims::SUMMARY_PAD_X"
+    );
 
     // browser-library.css:222 `.thumbnailGrid{padding:0 1px 3px}` — dims::GRID_PAD_X/BOTTOM。
     let grid = find(&rows, "div#thumbnail-grid.thumbnailGrid", |r| {
         has_class(r, "thumbnailGrid")
     });
-    assert_eq!(pad_left(grid), browser_dims::GRID_PAD_X as f64, "dims::GRID_PAD_X");
+    assert_eq!(
+        pad_left(grid),
+        browser_dims::GRID_PAD_X as f64,
+        "dims::GRID_PAD_X"
+    );
     assert_eq!(
         grid["padding"]["bottom"].as_f64(),
         Some(browser_dims::GRID_PAD_BOTTOM as f64),
@@ -503,27 +567,55 @@ fn browser_dims_match_css_computed_values() {
     let card = find(&rows, "button.libraryCard (first)", |r| {
         has_class(r, "libraryCard")
     });
-    assert_eq!(pad_left(card), 2.0, "browser-library.css の計算済み .libraryCard padding");
-    assert_eq!(browser_dims::CARD_PAD, 3.0, "browser_pane::dims::CARD_PAD(旧値のまま — レーンI待ち)");
+    assert_eq!(
+        pad_left(card),
+        2.0,
+        "browser-library.css の計算済み .libraryCard padding"
+    );
+    assert_eq!(
+        browser_dims::CARD_PAD,
+        3.0,
+        "browser_pane::dims::CARD_PAD(旧値のまま — レーンI待ち)"
+    );
 
     // browser-library.css:245 `.libraryThumb{padding:2px}`(同上、旧3px)。
     let thumb = find(&rows, "span.libraryThumb (first)", |r| {
         has_class(r, "libraryThumb")
     });
-    assert_eq!(pad_left(thumb), 2.0, "browser-library.css の計算済み .libraryThumb padding");
-    assert_eq!(browser_dims::THUMB_PAD, 3.0, "browser_pane::dims::THUMB_PAD(旧値のまま — レーンI待ち)");
+    assert_eq!(
+        pad_left(thumb),
+        2.0,
+        "browser-library.css の計算済み .libraryThumb padding"
+    );
+    assert_eq!(
+        browser_dims::THUMB_PAD,
+        3.0,
+        "browser_pane::dims::THUMB_PAD(旧値のまま — レーンI待ち)"
+    );
 
     // browser-library.css:279 `.selectionTray{height:27px}` — dims::TRAY_H。
     let tray = find(&rows, "footer.selectionTray", |r| {
         has_class(r, "selectionTray")
     });
     assert_eq!(box_h(tray), browser_dims::TRAY_H as f64, "dims::TRAY_H");
-    assert_eq!(pad_left(tray), browser_dims::TRAY_PAD_X as f64, "dims::TRAY_PAD_X");
+    assert_eq!(
+        pad_left(tray),
+        browser_dims::TRAY_PAD_X as f64,
+        "dims::TRAY_PAD_X"
+    );
 
     // browser-library.css:291 `.selectionDot{width:5px;height:5px}` — dims::TRAY_DOT。
     let dot = find(&rows, "span.selectionDot", |r| has_class(r, "selectionDot"));
-    assert_eq!(box_w(dot), browser_dims::TRAY_DOT as f64, "dims::TRAY_DOT (width)");
-    assert_eq!(box_h(dot), browser_dims::TRAY_DOT as f64, "dims::TRAY_DOT (height)");
+    assert_eq!(
+        box_w(dot),
+        browser_dims::TRAY_DOT as f64,
+        "dims::TRAY_DOT (width)"
+    );
+    assert_eq!(
+        box_h(dot),
+        browser_dims::TRAY_DOT as f64,
+        "dims::TRAY_DOT (height)"
+    );
 }
 
 /// sidebar(`.locationRow`)と filter shelf(chip)は `data-tab="media"` が
@@ -538,26 +630,46 @@ fn browser_sidebar_and_filter_shelf_dims_match_css_computed_values() {
     let heading = find(&rows, "aside.librarySidebar h2 (first, visible)", |r| {
         tag_is(r, "h2") && box_h(r) > 0.0
     });
-    assert_eq!(box_h(heading), browser_dims::SIDEBAR_H2_H as f64, "dims::SIDEBAR_H2_H");
+    assert_eq!(
+        box_h(heading),
+        browser_dims::SIDEBAR_H2_H as f64,
+        "dims::SIDEBAR_H2_H"
+    );
     // 2026-08-19 第3波(spacing scale {2,4,6,8}): browser-library.css:117/134 の
     // 左 padding を 7px→6px へ改定した(sidebar h2 と locationRow で共通)。
     // dims::ROW_PAD_X はまだ旧値7 — レーンI待ち、known-divergence pin。
-    assert_eq!(pad_left(heading), 6.0, "browser-library.css の計算済み sidebar h2 padding-left");
-    assert_eq!(browser_dims::ROW_PAD_X, 7.0, "browser_pane::dims::ROW_PAD_X(旧値のまま — レーンI待ち)");
+    assert_eq!(
+        pad_left(heading),
+        6.0,
+        "browser-library.css の計算済み sidebar h2 padding-left"
+    );
+    assert_eq!(
+        browser_dims::ROW_PAD_X,
+        7.0,
+        "browser_pane::dims::ROW_PAD_X(旧値のまま — レーンI待ち)"
+    );
 
     // browser-library.css:128 `.locationRow{height:19px}` + css:130
     // `padding:2px 6px 0` — dims::ROW_H(一致)/ ROW_PAD_X(上と同じ既知乖離)。
-    let row = find(&rows, "button.locationRow (visible, no modifier class)", |r| {
-        r.get("classes")
-            .and_then(|c| c.as_array())
-            .is_some_and(|c| {
-                c.iter().any(|c| c.as_str() == Some("locationRow"))
-                    && c.len() == 1 // indent/selected/collection 修飾なしの素の行
-            })
-            && box_h(r) > 0.0
-    });
+    let row = find(
+        &rows,
+        "button.locationRow (visible, no modifier class)",
+        |r| {
+            r.get("classes")
+                .and_then(|c| c.as_array())
+                .is_some_and(|c| {
+                    c.iter().any(|c| c.as_str() == Some("locationRow")) && c.len() == 1
+                    // indent/selected/collection 修飾なしの素の行
+                })
+                && box_h(r) > 0.0
+        },
+    );
     assert_eq!(box_h(row), browser_dims::ROW_H as f64, "dims::ROW_H");
-    assert_eq!(pad_left(row), 6.0, "browser-library.css の計算済み .locationRow padding-left");
+    assert_eq!(
+        pad_left(row),
+        6.0,
+        "browser-library.css の計算済み .locationRow padding-left"
+    );
 
     // browser-library.css:147 `.locationRow.indent{padding-left:12px}`
     // (2026-08-19 第3波: インデント単位6pxの倍数へ、旧13→12)。
@@ -565,8 +677,16 @@ fn browser_sidebar_and_filter_shelf_dims_match_css_computed_values() {
     let indent = find(&rows, "button.locationRow.indent", |r| {
         has_class(r, "indent") && has_class(r, "locationRow")
     });
-    assert_eq!(pad_left(indent), 12.0, "browser-library.css の計算済み .locationRow.indent padding-left");
-    assert_eq!(browser_dims::ROW_INDENT, 13.0, "browser_pane::dims::ROW_INDENT(旧値のまま — レーンI待ち)");
+    assert_eq!(
+        pad_left(indent),
+        12.0,
+        "browser-library.css の計算済み .locationRow.indent padding-left"
+    );
+    assert_eq!(
+        browser_dims::ROW_INDENT,
+        13.0,
+        "browser_pane::dims::ROW_INDENT(旧値のまま — レーンI待ち)"
+    );
 
     // browser-library.css:171 `.filterShelf{min-height:24px}` + css:183
     // `padding:2px 4px`(2026-08-19 第3波、旧3px 5px)— dims::SHELF_MIN_H(一致)/
@@ -574,11 +694,31 @@ fn browser_sidebar_and_filter_shelf_dims_match_css_computed_values() {
     let shelf = find(&rows, "div#filter-shelf.filterShelf", |r| {
         has_class(r, "filterShelf")
     });
-    assert_eq!(box_h(shelf), browser_dims::SHELF_MIN_H as f64, "dims::SHELF_MIN_H");
-    assert_eq!(pad_top(shelf), 2.0, "browser-library.css の計算済み .filterShelf padding-top");
-    assert_eq!(browser_dims::SHELF_PAD_Y, 3.0, "browser_pane::dims::SHELF_PAD_Y(旧値のまま — レーンI待ち)");
-    assert_eq!(pad_left(shelf), 4.0, "browser-library.css の計算済み .filterShelf padding-left");
-    assert_eq!(browser_dims::SHELF_PAD_X, 5.0, "browser_pane::dims::SHELF_PAD_X(旧値のまま — レーンI待ち)");
+    assert_eq!(
+        box_h(shelf),
+        browser_dims::SHELF_MIN_H as f64,
+        "dims::SHELF_MIN_H"
+    );
+    assert_eq!(
+        pad_top(shelf),
+        2.0,
+        "browser-library.css の計算済み .filterShelf padding-top"
+    );
+    assert_eq!(
+        browser_dims::SHELF_PAD_Y,
+        3.0,
+        "browser_pane::dims::SHELF_PAD_Y(旧値のまま — レーンI待ち)"
+    );
+    assert_eq!(
+        pad_left(shelf),
+        4.0,
+        "browser-library.css の計算済み .filterShelf padding-left"
+    );
+    assert_eq!(
+        browser_dims::SHELF_PAD_X,
+        5.0,
+        "browser_pane::dims::SHELF_PAD_X(旧値のまま — レーンI待ち)"
+    );
 
     // browser-library.css:195-199 `.filterShelf button{min-height:17px;
     // padding:2px 4px}`(2026-08-19 第3波、旧5pxの左右)—
@@ -588,10 +728,26 @@ fn browser_sidebar_and_filter_shelf_dims_match_css_computed_values() {
             .as_str()
             .is_some_and(|p| p.ends_with("filterGroup > button") && box_h(r) > 0.0)
     });
-    assert_eq!(box_h(chip), browser_dims::CHIP_MIN_H as f64, "dims::CHIP_MIN_H");
-    assert_eq!(pad_top(chip), browser_dims::CHIP_PAD_Y as f64, "dims::CHIP_PAD_Y");
-    assert_eq!(pad_left(chip), 4.0, "browser-library.css の計算済み filterGroup button padding-left");
-    assert_eq!(browser_dims::CHIP_PAD_X, 5.0, "browser_pane::dims::CHIP_PAD_X(旧値のまま — レーンI待ち)");
+    assert_eq!(
+        box_h(chip),
+        browser_dims::CHIP_MIN_H as f64,
+        "dims::CHIP_MIN_H"
+    );
+    assert_eq!(
+        pad_top(chip),
+        browser_dims::CHIP_PAD_Y as f64,
+        "dims::CHIP_PAD_Y"
+    );
+    assert_eq!(
+        pad_left(chip),
+        4.0,
+        "browser-library.css の計算済み filterGroup button padding-left"
+    );
+    assert_eq!(
+        browser_dims::CHIP_PAD_X,
+        5.0,
+        "browser_pane::dims::CHIP_PAD_X(旧値のまま — レーンI待ち)"
+    );
 }
 
 /// pane 幅から解く2つの派生値(module doc「iced の flex 相当」節): 実測できない

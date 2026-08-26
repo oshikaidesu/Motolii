@@ -135,7 +135,7 @@ pub fn view_tabs_view(active: ViewTab, dims: Dimensions, colors: Colors) -> Elem
     let tabs = VIEW_TABS
         .into_iter()
         .map(|tab| segment_item(tab.label(), tab == active, Message::SelectViewTab(tab), dims, colors));
-    row(tabs).spacing(dims.spacing_xs).into()
+    row(tabs).spacing(dims.theme().space.xs).into()
 }
 
 // ---------------------------------------------------------------------------
@@ -177,7 +177,7 @@ pub fn resolution_quality_view(
             colors,
         )
     });
-    row(items).spacing(dims.spacing_xs).into()
+    row(items).spacing(dims.theme().space.xs).into()
 }
 
 // ---------------------------------------------------------------------------
@@ -240,7 +240,7 @@ pub fn channel_display_view(current: ChannelDisplay, dims: Dimensions, colors: C
     let items = CHANNEL_CHOICES.into_iter().map(|choice| {
         segment_item(choice.label(), choice == current, Message::SelectChannelDisplay(choice), dims, colors)
     });
-    row(items).spacing(dims.spacing_xs).into()
+    row(items).spacing(dims.theme().space.xs).into()
 }
 
 /// **表示専用のピクセル変換**(純関数、module 冒頭 doc「engine 側の実能力」
@@ -295,13 +295,13 @@ pub fn viewer_bar_view(
 
     row![
         tabs,
-        iced::widget::Space::new().width(iced::Length::Fixed(dims.spacing_l)),
+        iced::widget::Space::new().width(iced::Length::Fixed(dims.theme().space.l)),
         quality,
-        iced::widget::Space::new().width(iced::Length::Fixed(dims.spacing_l)),
+        iced::widget::Space::new().width(iced::Length::Fixed(dims.theme().space.l)),
         channels,
     ]
-    .spacing(dims.spacing_m)
-    .padding([dims.spacing_xs, dims.spacing_m])
+    .spacing(dims.theme().space.m)
+    .padding([dims.theme().space.xs, dims.theme().space.m])
     .align_y(iced::alignment::Vertical::Center)
     .into()
 }
@@ -323,9 +323,9 @@ fn segment_item(
     colors: Colors,
 ) -> Element<'static> {
     let label = label.into();
-    button(text(label).size(dims.body_text))
+    button(text(label).size(dims.theme().text.body))
         .on_press(message)
-        .padding([dims.spacing_xs, dims.spacing_m])
+        .padding([dims.theme().space.xs, dims.theme().space.m])
         .style(move |_theme, status| {
             let hovered = matches!(status, button::Status::Hovered | button::Status::Pressed);
             let background = if active {

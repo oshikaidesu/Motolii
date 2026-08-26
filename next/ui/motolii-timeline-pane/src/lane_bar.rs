@@ -134,10 +134,10 @@ fn sibling_gap_px(row_height: f32) -> f32 {
 /// のは「名前列に許される最大幅」という**数量**だけ)。
 pub(crate) fn name_column_width(dims: &Dimensions, rail_width: f32, row_height: f32) -> f32 {
     let swatch_size = swatch_size_px(row_height);
-    let name_start_x = dims.spacing_s * 2.0 + swatch_size;
+    let name_start_x = dims.theme().space.s * 2.0 + swatch_size;
     let glyph_w = glyph_size_px(row_height);
-    let chip_block_w = glyph_w * 3.0 + dims.spacing_xs * 2.0;
-    let chip_start_x = rail_width - dims.spacing_s - chip_block_w;
+    let chip_block_w = glyph_w * 3.0 + dims.theme().space.xs * 2.0;
+    let chip_start_x = rail_width - dims.theme().space.s - chip_block_w;
     let gap = sibling_gap_px(row_height);
     (chip_start_x - name_start_x - gap).max(0.0)
 }
@@ -284,10 +284,10 @@ mod tests {
         let width = name_column_width(&dims, rail_width, row_height);
         assert!(width > 0.0, "既定 dims で名前列の実効幅が非正: {width}");
 
-        let name_start_x = dims.spacing_s * 2.0 + swatch_size_px(row_height);
+        let name_start_x = dims.theme().space.s * 2.0 + swatch_size_px(row_height);
         let glyph_w = glyph_size_px(row_height);
-        let chip_block_w = glyph_w * 3.0 + dims.spacing_xs * 2.0;
-        let chip_start_x = rail_width - dims.spacing_s - chip_block_w;
+        let chip_block_w = glyph_w * 3.0 + dims.theme().space.xs * 2.0;
+        let chip_start_x = rail_width - dims.theme().space.s - chip_block_w;
         assert!(
             name_start_x + width <= chip_start_x,
             "名前列がチップ群の開始位置を超えている(緩衝gapが効いていない): \

@@ -28,19 +28,13 @@ pub(super) fn apply_add_effect(
     match doc.effect_definition(def.id) {
         Some(existing) if existing == &def => {
             if introduced_definition {
-                return Err(CommandError::EffectDefinitionAlreadyExists {
-                    id: def.id.get(),
-                });
+                return Err(CommandError::EffectDefinitionAlreadyExists { id: def.id.get() });
             }
         }
-        Some(_) => {
-            return Err(CommandError::EffectDefinitionMismatch { id: def.id.get() })
-        }
+        Some(_) => return Err(CommandError::EffectDefinitionMismatch { id: def.id.get() }),
         None => {
             if !introduced_definition {
-                return Err(CommandError::EffectDefinitionNotFound {
-                    id: def.id.get(),
-                });
+                return Err(CommandError::EffectDefinitionNotFound { id: def.id.get() });
             }
             if stable_id_in_use(doc, def.id.get()) {
                 return Err(CommandError::StableIdCollision { id: def.id.get() });
@@ -184,11 +178,11 @@ pub(super) fn apply_set_effect_enabled(
             effect: effect.get(),
             layer,
         })?;
-    let def = doc.effect_definition_mut(definition_id).ok_or(
-        CommandError::EffectDefinitionNotFound {
-            id: definition_id.get(),
-        },
-    )?;
+    let def =
+        doc.effect_definition_mut(definition_id)
+            .ok_or(CommandError::EffectDefinitionNotFound {
+                id: definition_id.get(),
+            })?;
     def.enabled = new;
     Ok(())
 }
@@ -208,11 +202,11 @@ pub(super) fn apply_delete_effect_definition(
             use_ids,
         });
     }
-    let existing = doc.effect_definition(definition.id).ok_or(
-        CommandError::EffectDefinitionNotFound {
-            id: definition.id.get(),
-        },
-    )?;
+    let existing =
+        doc.effect_definition(definition.id)
+            .ok_or(CommandError::EffectDefinitionNotFound {
+                id: definition.id.get(),
+            })?;
     if existing != definition {
         return Err(CommandError::EffectDefinitionMismatch {
             id: definition.id.get(),

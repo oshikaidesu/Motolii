@@ -171,9 +171,9 @@ pub fn toolbar(
     };
     Some(
         row![
-            button(text(label).size(dims.body_text))
+            button(text(label).size(dims.theme().text.body))
                 .on_press(message)
-                .padding([dims.spacing_xs, dims.spacing_m])
+                .padding([dims.theme().space.xs, dims.theme().space.m])
                 .style(move |_theme, status| {
                     let hovered = matches!(status, button::Status::Hovered | button::Status::Pressed);
                     button::Style {
@@ -184,8 +184,8 @@ pub fn toolbar(
                     }
                 })
         ]
-        .spacing(dims.spacing_xs)
-        .padding([dims.spacing_xs, dims.spacing_m])
+        .spacing(dims.theme().space.xs)
+        .padding([dims.theme().space.xs, dims.theme().space.m])
         .into(),
     )
 }
@@ -399,7 +399,7 @@ impl canvas::Program<Message> for PathEditOverlay {
                     &marker,
                     canvas::Stroke::default()
                         .with_color(accent)
-                        .with_width(self.dims.border_width),
+                        .with_width(self.dims.theme().stroke.hairline),
                 );
             }
         }

@@ -37,7 +37,10 @@ use iced::{Point, Rectangle, Size};
 use motolii_store::{Fps, Marker};
 
 use super::key_rows;
-use super::projection::{frame_at_x, frame_to_x, tick_steps, time_band_segment_frames};
+use super::projection::{
+    frame_at_x, frame_to_x, tick_steps, tick_steps_with_target, time_band_segment_frames,
+    time_band_segment_frames_with_target,
+};
 use super::work_area::WorkArea;
 use super::TimelinePane;
 use crate::tokens::{Colors, Dimensions};
@@ -109,7 +112,7 @@ pub(crate) fn draw(
     // 罫線幅の倍数で意味を分ける — 1x: ルーラー目盛り(hairline)、1.5x: playhead、
     // 2x: マーカー(最も強い accent)。新しい寸法トークンを増やさず、単一の
     // `border_width` から比で導出する(裁定117 の「寸法は token 経由」の範囲内)。
-    let hairline = pane.dims.border_width;
+    let hairline = pane.dims.theme().stroke.hairline;
 
     // **TL-arch Phase 1**: 座標シフトの足し引きは撤去した(モジュール doc
     // 参照) — `width`(= `bounds.width`)は既に時間場だけの幅、`rail_width` を
@@ -275,7 +278,7 @@ pub(crate) fn draw(
                     );
                     frame.stroke(
                         &path,
-                        canvas::Stroke::default().with_color(ink).with_width(pane.dims.border_width),
+                        canvas::Stroke::default().with_color(ink).with_width(pane.dims.theme().stroke.hairline),
                     );
                 }
             }
@@ -326,9 +329,9 @@ pub(crate) fn draw(
             let frame_no = frame_at_x(position.x, width, pane.duration_frames);
             frame.fill_text(canvas::Text {
                 content: frame_no.to_string(),
-                position: Point::new(position.x + pane.dims.spacing_xs, position.y - pane.dims.spacing_l),
+                position: Point::new(position.x + pane.dims.theme().space.xs, position.y - pane.dims.theme().space.l),
                 color: pane.colors.action_active,
-                size: iced::Pixels(pane.dims.caption_text),
+                size: iced::Pixels(pane.dims.theme().text.caption),
                 ..Default::default()
             });
         }
@@ -497,7 +500,13 @@ pub(crate) fn draw_ruler_ticks(
     if duration_frames <= 0 || width <= 0.0 {
         return;
     }
-    let (minor, major) = tick_steps(fps, duration_frames, width, dims.row_height);
+    let (minor, major) = tick_steps_with_target(
+        fps,
+        duration_frames,
+        width,
+        dims.row_height,
+        dims.components.timeline.target_cell_ratio,
+    );
     let last_frame = (duration_frames - 1).max(0);
     let mut frame_no = 0i64;
     while frame_no <= last_frame {
@@ -516,14 +525,14 @@ pub(crate) fn draw_ruler_ticks(
         let tick_path = canvas::Path::line(Point::new(x, top), Point::new(x, height));
         frame.stroke(
             &tick_path,
-            canvas::Stroke::default().with_color(color).with_width(dims.border_width),
+            canvas::Stroke::default().with_color(color).with_width(dims.theme().stroke.hairline),
         );
         if is_major {
             frame.fill_text(canvas::Text {
                 content: frame_no.to_string(),
-                position: Point::new(x + dims.spacing_xs, 0.0),
+                position: Point::new(x + dims.theme().space.xs, 0.0),
                 color: colors.text_secondary,
-                size: iced::Pixels(dims.caption_text),
+                size: iced::Pixels(dims.theme().text.caption),
                 ..Default::default()
             });
         }
@@ -636,7 +645,13 @@ fn draw_time_bands(
         return;
     }
     let segment_frames =
-        time_band_segment_frames(pane.fps, pane.duration_frames, width, pane.dims.row_height);
+        time_band_segment_frames_with_target(
+            pane.fps,
+            pane.duration_frames,
+            width,
+            pane.dims.row_height,
+            pane.dims.components.timeline.target_cell_ratio,
+        );
 
     let mut segment_index: i64 = 0;
     let mut start_frame: i64 = 0;
@@ -680,7 +695,13 @@ fn draw_tick_lines(
     if pane.duration_frames <= 0 || width <= 0.0 || bottom <= top {
         return;
     }
-    let (minor, major) = tick_steps(pane.fps, pane.duration_frames, width, pane.dims.row_height);
+    let (minor, major) = tick_steps_with_target(
+        pane.fps,
+        pane.duration_frames,
+        width,
+        pane.dims.row_height,
+        pane.dims.components.timeline.target_cell_ratio,
+    );
     let last_frame = (pane.duration_frames - 1).max(0);
     let mut frame_no = minor;
     while frame_no <= last_frame {
@@ -694,7 +715,7 @@ fn draw_tick_lines(
         let path = canvas::Path::line(Point::new(x, top), Point::new(x, bottom));
         frame.stroke(
             &path,
-            canvas::Stroke::default().with_color(color).with_width(pane.dims.border_width),
+            canvas::Stroke::default().with_color(color).with_width(pane.dims.theme().stroke.hairline),
         );
         frame_no += minor;
     }

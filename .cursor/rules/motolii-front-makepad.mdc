@@ -1,0 +1,39 @@
+---
+description: 製品 front は Makepad。iced は凍結ホストであり製品 interface ではない
+alwaysApply: true
+---
+
+# 製品 front は Makepad
+
+裁定251/252。`next/README.md` の「front は iced のみ」と FOUNDATION-GATE の「Iced widget を使う」は覆された。再導出しない。
+
+- **製品 front**: `next/probes/r7-makepad-panel`（Makepad）
+- **意味**: `motolii-store` / `motolii-shell-state` / `motolii-engine`
+- **凍結**: `motolii-shell` crate 全体（iced アセンブラ）。`view` も `update` も製品 interface ではない。消さない。引用・延長しない
+
+```text
+# BAD — motolii-shell を製品核として読む / iced UI を足す
+Shell::view に widget を足す
+stage_presenter を Makepad Stage の手本にする
+
+# GOOD — Makepad が描き、store / session / engine へ書く
+Document::apply / Session / Engine
+Stage は共有 Surface handle（裁定251）。frame_rgba は screenshot 専用
+```
+
+r7 は `motolii-shell` を引かない(裁定254)。
+
+製品 UI は Makepad のみ。iced / `motolii-shell` を引かない。UI 作成は [Makepad 技能の割り振り](../../docs/reviews/2026-08-26-makepad-skills-assignment.md) の技能を読んでから書く。ディスク上の `~/.codex/skills/makepad-2.0-*/SKILL.md` を当て、該当技能を読んでから書く。
+
+Stage ゼロコピーの受入面は mac / win / linux(裁定255)。継ぎ目は共有面(IOSurface / DXGI / dma-buf)。wasm は契約外。compositor は共有面へ直接書く。blit しない。切り方の正本は `docs/reviews/2026-08-26-stage-zero-copy-makepad-fork-seam.md`(裁定256)。
+
+Chrome / splash: `ScrollYView` 禁止（eval 白紙）。未登録 `Chrome*` を splash に書くな（葉が落ちる）。
+Chrome の実験は `--hot`。登録してから葉へ `ChromeGallery{}` だけ。未登録 kind を splash に足すな。
+Dock 葉は動いている `View` / `SolidView` / `Label` / `ButtonFlat` だけ直載せ。
+`set_type_default()` を `SolidView` / `View` / `Label` / `ButtonFlat` など Makepad 基底に使うな。別名は代入だけ（切り分けで通った `ChromeFaceAlias` 型）。破ると全面灰色・エラー無し（植物状態）。受理しない。
+
+灰色無エラーは受理しない（植物状態）。失敗の見た目は面のエラー文言。窓の背景色のまま・ログだけ・EXIT=0 を成功にしない。
+- HotPanel は作る時点と差し替え後の両方で Fill + `flow: Down` を apply する。定数だけの死文を残すな
+- splash eval 失敗 / 未登録 kind / 空 View を「view installed」にしない。失敗ならその葉または窓に文言
+- 差し替え後は `cx.redraw_all()`。局所 redraw だけを成功にするな
+画素サンプリングで灰色を検知するな。拒否はインストール経路の分岐。

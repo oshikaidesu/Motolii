@@ -61,10 +61,9 @@ use std::path::PathBuf;
 
 use crate::timeline_rows::{rows, ParamRef, RowKind, TimelineFoldState, TimelineRow};
 use audio_seat::{AudioPlayback, WallClockReason};
-use motolii_audio::PcmCache;
-use waveform_band::{band_height, WaveformBand, WaveformSeat, WaveformWindow};
 use eframe::egui;
 use egui::{Align2, Color32, CornerRadius, FontId, Rect, Sense, Stroke, StrokeKind, Vec2};
+use motolii_audio::PcmCache;
 use motolii_core::{Fps, RationalTime};
 use motolii_doc::{
     collect_layer_ids, find_item_location, Clip, ClipSource, Command, CommandError, DocKeyframe,
@@ -73,6 +72,7 @@ use motolii_doc::{
 };
 use motolii_eval::Interp;
 use std::sync::Arc;
+use waveform_band::{band_height, WaveformBand, WaveformSeat, WaveformWindow};
 
 // mock_tokens が timeline-library.html から出した値（面の大きさで動かないものだけ）
 const BG: Color32 = Color32::from_rgb(0x29, 0x29, 0x29);
@@ -940,9 +940,7 @@ enum BarPart {
 
 /// clip のどちらの端か。**shell 層の intent(`UiIntent::TrimClip`)が運ぶ値**なので、
 /// toolkit 型を持たず、JSONL(`--intent-log`)に載る形を serde で名乗る。
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TrimEdge {
     /// 左端 = 入り点(`prepare_trim_clip_in`)。
@@ -1693,7 +1691,10 @@ impl TimelineEditor {
         }
         let gesture = self.writer.begin_gesture();
         for (i, child) in children.iter().enumerate() {
-            match self.writer.prepare_reparent_clip(*child, parent, index + i, None) {
+            match self
+                .writer
+                .prepare_reparent_clip(*child, parent, index + i, None)
+            {
                 Ok(Some(command)) => {
                     if let Err(error) = self.writer.apply_command(gesture, command) {
                         self.reject(format!("{} rejected: {error}", self.name(*child)));
@@ -1843,9 +1844,9 @@ impl TimelineEditor {
         };
         // 打った(か既にあった)キーへ、画面の値をそのまま入れる。
         // 同値なら `Ok(None)` で何も積まれない — それは失敗ではない。
-        let prepared =
-            self.writer
-                .prepare_set_transform_param_key_value(layer, property, key_id, new_value);
+        let prepared = self
+            .writer
+            .prepare_set_transform_param_key_value(layer, property, key_id, new_value);
         self.apply_in(gesture, param_label(param), prepared);
         self.selected_keys = vec![(layer, param, key_id)];
         self.fold.open_params(layer);
@@ -1895,7 +1896,11 @@ impl TimelineEditor {
             return;
         }
         let Some(key) = self.find_param_key(layer, param, at_seconds) else {
-            self.reject(format!("{}: no key at {:.3}s", self.name(layer), at_seconds));
+            self.reject(format!(
+                "{}: no key at {:.3}s",
+                self.name(layer),
+                at_seconds
+            ));
             return;
         };
         let gesture = self.writer.begin_gesture();
@@ -1913,7 +1918,8 @@ impl TimelineEditor {
         };
         let what = self.name(layer).to_owned();
         if self.apply_in(gesture, &what, prepared) {
-            self.selected_keys.retain(|entry| *entry != (layer, param, key));
+            self.selected_keys
+                .retain(|entry| *entry != (layer, param, key));
             self.status = format!(
                 "{} key removed  undo {}",
                 param_label(param),
@@ -1939,7 +1945,11 @@ impl TimelineEditor {
             return;
         }
         let Some(key) = self.find_param_key(layer, param, from_seconds) else {
-            self.reject(format!("{}: no key at {:.3}s", self.name(layer), from_seconds));
+            self.reject(format!(
+                "{}: no key at {:.3}s",
+                self.name(layer),
+                from_seconds
+            ));
             return;
         };
         let comp = self.document.composition.duration.as_seconds_f64() as f32;
@@ -1970,11 +1980,18 @@ impl TimelineEditor {
         interp: Interp,
     ) {
         if param != ParamRef::Position {
-            self.reject(format!("{}: interp is Position-only in D2", param_label(param)));
+            self.reject(format!(
+                "{}: interp is Position-only in D2",
+                param_label(param)
+            ));
             return;
         }
         let Some(key) = self.find_param_key(layer, param, at_seconds) else {
-            self.reject(format!("{}: no key at {:.3}s", self.name(layer), at_seconds));
+            self.reject(format!(
+                "{}: no key at {:.3}s",
+                self.name(layer),
+                at_seconds
+            ));
             return;
         };
         let gesture = self.writer.begin_gesture();
@@ -2059,16 +2076,18 @@ impl TimelineEditor {
                     },
                 };
                 // いまのキーの値の、その成分だけを差し替える。
-                let Some(old) = envelope_param(&self.document, layer, param).and_then(|doc_param| {
-                    match doc_param {
-                        DocParam::Keyframes(track) => track
-                            .keys()
-                            .iter()
-                            .find(|key| key.id == key_id)
-                            .map(|key| key.value.clone()),
-                        _ => None,
-                    }
-                }) else {
+                let Some(old) =
+                    envelope_param(&self.document, layer, param).and_then(|doc_param| {
+                        match doc_param {
+                            DocParam::Keyframes(track) => track
+                                .keys()
+                                .iter()
+                                .find(|key| key.id == key_id)
+                                .map(|key| key.value.clone()),
+                            _ => None,
+                        }
+                    })
+                else {
                     self.status = format!("{}: key vanished", param_label(param));
                     return;
                 };
@@ -2076,9 +2095,9 @@ impl TimelineEditor {
                     self.status = format!("{}: value type mismatch", param_label(param));
                     return;
                 };
-                let prepared =
-                    self.writer
-                        .prepare_set_transform_param_key_value(layer, property, key_id, new);
+                let prepared = self
+                    .writer
+                    .prepare_set_transform_param_key_value(layer, property, key_id, new);
                 self.apply_in(gesture, param_label(param), prepared);
             }
             other => {
@@ -3560,10 +3579,7 @@ impl TimelineEditor {
                     // 無音でも 0.5px は置く(線が切れると「読めていない」に見える)
                     let h = (peak * half).max(0.5);
                     mesh.add_colored_rect(
-                        Rect::from_min_max(
-                            egui::pos2(x, mid - h),
-                            egui::pos2(x + 1.0, mid + h),
-                        ),
+                        Rect::from_min_max(egui::pos2(x, mid - h), egui::pos2(x + 1.0, mid + h)),
                         WAVE,
                     );
                 }
@@ -3582,9 +3598,9 @@ impl TimelineEditor {
                 Ok(seat) => self.audio = Some(AudioPlayback::Synced(seat)),
                 Err(error) => {
                     self.status = format!("play (no audio: {error})");
-                    self.audio = Some(AudioPlayback::WallClock(
-                        WallClockReason::AudioUnavailable(error.to_string()),
-                    ));
+                    self.audio = Some(AudioPlayback::WallClock(WallClockReason::AudioUnavailable(
+                        error.to_string(),
+                    )));
                 }
             },
             other => self.audio = other,
@@ -3902,9 +3918,9 @@ impl TimelineEditor {
                 Some(Err(error)) => {
                     // clock が壊れたら止まらずに壁時計へ明示的に落ちる
                     self.status = format!("play (no audio: {error})");
-                    self.audio = Some(AudioPlayback::WallClock(
-                        WallClockReason::AudioUnavailable(error.to_string()),
-                    ));
+                    self.audio = Some(AudioPlayback::WallClock(WallClockReason::AudioUnavailable(
+                        error.to_string(),
+                    )));
                     advance_playhead(self.playhead, dt.min(MAX_STEP), comp_seconds)
                 }
                 None => advance_playhead(self.playhead, dt.min(MAX_STEP), comp_seconds),
@@ -4525,10 +4541,13 @@ impl TimelineEditor {
                     let (item_visible, item_solo, item_lock) =
                         item_flags(&self.document, row.layer).unwrap_or((true, false, false));
                     let inherited_lock = effective_lock(&self.document, row.layer) && !item_lock;
-                    for (i, (label, flag)) in
-                        [("M", ItemFlag::Mute), ("S", ItemFlag::Solo), ("L", ItemFlag::Lock)]
-                            .iter()
-                            .enumerate()
+                    for (i, (label, flag)) in [
+                        ("M", ItemFlag::Mute),
+                        ("S", ItemFlag::Solo),
+                        ("L", ItemFlag::Lock),
+                    ]
+                    .iter()
+                    .enumerate()
                     {
                         let b = Rect::from_center_size(
                             egui::pos2(rail.right() - 48.0 + i as f32 * 18.0, cy),
@@ -5528,9 +5547,7 @@ fn doc_value_for(param: ParamRef, components: &[f64]) -> Option<DocValue> {
         ParamRef::Position | ParamRef::Anchor | ParamRef::Scale => {
             (components.len() >= 2).then(|| DocValue::Vec2([components[0], components[1]]))
         }
-        ParamRef::Rotation | ParamRef::Opacity => {
-            components.first().copied().map(DocValue::F64)
-        }
+        ParamRef::Rotation | ParamRef::Opacity => components.first().copied().map(DocValue::F64),
     }
 }
 
@@ -7327,7 +7344,9 @@ mod tests {
 
         assert_eq!(lab.revision, before_rev, "書いていない");
         assert!(
-            lab.take_rejections().iter().any(|r| r.contains("no key at")),
+            lab.take_rejections()
+                .iter()
+                .any(|r| r.contains("no key at")),
             "理由が控えに残る"
         );
     }
@@ -8502,7 +8521,11 @@ mod tests {
     /// いずれでも、矢印はキャレットのものである。
     #[test]
     fn a_focused_text_field_keeps_the_arrow_keys_to_itself() {
-        assert_eq!(frame_step(false, true, false, true), 0, "→ は文字送りへ行く");
+        assert_eq!(
+            frame_step(false, true, false, true),
+            0,
+            "→ は文字送りへ行く"
+        );
         assert_eq!(frame_step(true, false, true, true), 0, "Shift+← も同じ");
     }
 

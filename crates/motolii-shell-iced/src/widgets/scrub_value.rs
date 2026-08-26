@@ -117,7 +117,10 @@ struct ScrubValue<'a, M> {
 enum Phase {
     Idle,
     /// 左ボタンが落ちた。動けば `Dragging`、動かず離せば何もなし。
-    Pressed { start: Point, start_value: f64 },
+    Pressed {
+        start: Point,
+        start_value: f64,
+    },
     /// ドラッグ中。`last` = 直近に `Changed` で言った(=表示している)値。
     Dragging {
         start: Point,
@@ -126,7 +129,10 @@ enum Phase {
     },
     /// ダブルクリックで開いたテキスト入力。`pristine` の間は最初の1字が
     /// 前の値を置き換える(ダブルクリック=全選択の慣行の写し)。
-    Editing { buffer: String, pristine: bool },
+    Editing {
+        buffer: String,
+        pristine: bool,
+    },
 }
 
 struct State {
@@ -209,9 +215,9 @@ impl<M> Widget<M, iced::Theme, iced::Renderer> for ScrubValue<'_, M> {
                         let (start, start_value) = (*start, *start_value);
                         // 初動 — gesture はここで開く。
                         self.publish(shell, ScrubEvent::Started);
-                        let value = self
-                            .spec
-                            .constrain(start_value + f64::from(position.x - start.x) * self.spec.step);
+                        let value = self.spec.constrain(
+                            start_value + f64::from(position.x - start.x) * self.spec.step,
+                        );
                         let mut last = start_value;
                         if value != start_value {
                             self.publish(shell, ScrubEvent::Changed(value));
@@ -230,9 +236,9 @@ impl<M> Widget<M, iced::Theme, iced::Renderer> for ScrubValue<'_, M> {
                         start_value,
                         last,
                     } => {
-                        let value = self
-                            .spec
-                            .constrain(*start_value + f64::from(position.x - start.x) * self.spec.step);
+                        let value = self.spec.constrain(
+                            *start_value + f64::from(position.x - start.x) * self.spec.step,
+                        );
                         if value != *last {
                             *last = value;
                             self.publish(shell, ScrubEvent::Changed(value));
@@ -264,7 +270,8 @@ impl<M> Widget<M, iced::Theme, iced::Renderer> for ScrubValue<'_, M> {
                     }
                     Phase::Editing { .. } => {}
                     Phase::Idle if over => {
-                        let click = mouse::Click::new(position, mouse::Button::Left, state.last_click);
+                        let click =
+                            mouse::Click::new(position, mouse::Button::Left, state.last_click);
                         state.last_click = Some(click);
                         if click.kind() == mouse::click::Kind::Double {
                             state.phase = Phase::Editing {

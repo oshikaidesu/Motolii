@@ -216,7 +216,7 @@ impl canvas::Program<Message> for RulerHeader {
         let mut frame = canvas::Frame::new(renderer, bounds.size());
         let width = bounds.width;
         let ruler_height = self.ruler_height();
-        let hairline = self.dims.border_width;
+        let hairline = self.dims.theme().stroke.hairline;
 
         frame.fill_rectangle(
             Point::new(0.0, 0.0),

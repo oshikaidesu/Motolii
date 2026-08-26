@@ -1,4 +1,4 @@
-//! wraps: iced_aw menu (rev 924be285) の fork API 移植。上流が fork の iced へ追随したら vendored を捨てて戻す
+//! wraps: iced_aw menu (frozen host, not product front; rev 924be285) の fork API 移植。上流が fork の iced へ追随したら vendored を捨てて戻す
 //!
 //! メニューバー基盤(MB-2 上書き裁定 2026-08-22 —「iced_aw が使えないなら、
 //! 使えるようにすべき。ヘッダー部分(menu)が欲しいだけ」)。iced_aw は crate ごと
@@ -87,7 +87,7 @@ pub fn menu_bar<'a, Message: Clone + 'a>(
                     .collect(),
             )
             .width(Length::Fixed(dims.menubar_menu_width))
-            .padding(dims.spacing_xs);
+            .padding(dims.theme().space.xs);
 
             VendoredItem::with_menu(bar_item(menu.label, dims, colors), dropdown)
         })
@@ -121,8 +121,8 @@ fn bar_label<'a, Message: 'a>(
     colors: Colors,
     face: Option<iced::Color>,
 ) -> Element<'a, Message> {
-    container(text(label).size(dims.body_text).color(colors.text_primary))
-        .padding([dims.spacing_xs, dims.spacing_m])
+    container(text(label).size(dims.theme().text.body).color(colors.text_primary))
+        .padding([dims.theme().space.xs, dims.theme().space.m])
         .style(move |_theme| container::Style {
             background: face.map(iced::Background::Color),
             ..container::Style::default()
@@ -140,7 +140,7 @@ fn leaf<'a, Message: Clone + 'a>(
 ) -> Element<'a, Message> {
     let shortcut: Element<'a, Message> = match item.shortcut {
         Some(shortcut) => text(shortcut)
-            .size(dims.caption_text)
+            .size(dims.theme().text.caption)
             .color(colors.text_muted)
             .into(),
         // shortcut 出典ゼロの項目は右側を空けるだけ — 存在しない shortcut を
@@ -150,11 +150,11 @@ fn leaf<'a, Message: Clone + 'a>(
 
     button(
         row![
-            text(item.label).size(dims.body_text),
+            text(item.label).size(dims.theme().text.body),
             Space::new().width(Length::Fill),
             shortcut,
         ]
-        .spacing(dims.spacing_m)
+        .spacing(dims.theme().space.m)
         .align_y(iced::alignment::Vertical::Center),
     )
     .width(Length::Fill)
@@ -190,7 +190,7 @@ fn bar_style(dims: Dimensions, colors: Colors) -> style::menu_bar::Style {
         menu_background: iced::Background::Color(colors.surface_raised),
         menu_border: iced::Border {
             color: colors.border_default,
-            width: dims.border_width,
+            width: dims.theme().stroke.hairline,
             radius: dims.menubar_corner_radius.into(),
         },
         // フラットの文法(裁定137/139 系)— 影で浮かせない。面の明度1段が層を語る。

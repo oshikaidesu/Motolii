@@ -222,7 +222,7 @@ fn link_row(row: &LinkRowProjection, dims: Dimensions, colors: Colors) -> Elemen
         candidate.display_label()
     })
     .on_select(move |candidate: LinkSourceCandidate| Message::PickLinkSource(target, candidate))
-    .text_size(dims.body_text)
+    .text_size(dims.theme().text.body)
     .width(Length::Fixed(dims.inspector_value_width))
     .padding(value_cell_padding(dims))
     .placeholder("Pick…")
@@ -230,15 +230,15 @@ fn link_row(row: &LinkRowProjection, dims: Dimensions, colors: Colors) -> Elemen
 
     let content = row_widget![
         text(target.label())
-            .size(dims.body_text)
+            .size(dims.theme().text.body)
             .color(colors.text_primary)
             .width(Length::Fill),
         picker,
-        button(text("Clear").size(dims.caption_text))
+        button(text("Clear").size(dims.theme().text.caption))
             .on_press(Message::ClearLink(target))
             .style(move |_theme, status| flat_button_style(colors, status)),
     ]
-    .spacing(dims.spacing_xs)
+    .spacing(dims.theme().space.xs)
     .align_y(iced::alignment::Vertical::Center);
 
     bordered_row(content.into(), dims)

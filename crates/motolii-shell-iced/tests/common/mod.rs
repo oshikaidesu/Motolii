@@ -133,7 +133,11 @@ pub fn double_click(mut ui: iced_test::Simulator<'_, Message>, selector: &str) -
 /// focus が無いとキー入力を受け取らない(実機の挙動と同じ)。空の
 /// text_input は placeholder 文字列そのもので selector に掴める
 /// (`iced_test` の `TextInput::text()` は空なら placeholder を返す)。
-pub fn type_into(mut ui: iced_test::Simulator<'_, Message>, selector: &str, text: &str) -> Vec<Message> {
+pub fn type_into(
+    mut ui: iced_test::Simulator<'_, Message>,
+    selector: &str,
+    text: &str,
+) -> Vec<Message> {
     ui.click(selector)
         .unwrap_or_else(|error| panic!("{selector:?} が押せる物として立っていない: {error}"));
     ui.typewrite(text);

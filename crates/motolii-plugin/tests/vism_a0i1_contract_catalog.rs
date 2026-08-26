@@ -6,9 +6,8 @@ use motolii_eval::Value;
 use motolii_plugin::reference::{reference_catalog, register_reference_plugins, CLEAR_FILTER};
 use motolii_plugin::{
     DomainError, ElementType, F64Domain, FilterPlugin, MigrationOp, MigrationPlanError,
-    MigrationStep, NodeDesc,
-    ParamDef, PluginCatalogBuilder, PluginContract, PluginContractError, PluginId, PluginKind,
-    PluginRegistry, PluginRuntime, PluginRuntimeError, ValueType,
+    MigrationStep, NodeDesc, ParamDef, PluginCatalogBuilder, PluginContract, PluginContractError,
+    PluginId, PluginKind, PluginRegistry, PluginRuntime, PluginRuntimeError, ValueType,
 };
 
 fn filter_contract(id: &'static str, version: u32, params: Vec<ParamDef>) -> PluginContract {

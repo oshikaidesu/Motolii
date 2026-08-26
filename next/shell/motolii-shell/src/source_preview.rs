@@ -232,12 +232,12 @@ impl State {
             button(text("Set Out")).on_press(Message::SetOut),
             button(text("Close")).on_press(Message::Close),
         ]
-        .spacing(dims.spacing_s)
+        .spacing(dims.theme().space.s)
         .align_y(iced::alignment::Vertical::Center);
 
-        container(column![text(title).size(dims.body_text), picture, controls]
-            .spacing(dims.spacing_m)
-            .padding(dims.spacing_l))
+        container(column![text(title).size(dims.theme().text.body), picture, controls]
+            .spacing(dims.theme().space.m)
+            .padding(dims.theme().space.l))
         .width(Length::Fill)
         .height(Length::Fill)
         .style(move |_theme| iced::widget::container::Style {

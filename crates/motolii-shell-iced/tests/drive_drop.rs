@@ -71,7 +71,11 @@ fn a_dropped_clip_lands_at_the_playhead_and_the_band_names_it() {
 
     let pressed = press(iced_test::simulator(view(&shell)), view::NEW_PROJECT);
     drain(&mut shell, pressed);
-    assert_eq!(shell.track_item_count(), 0, "新規 project に clip はまだ無い");
+    assert_eq!(
+        shell.track_item_count(),
+        0,
+        "新規 project に clip はまだ無い"
+    );
     let revision_before = shell.revision();
 
     let dropped = feed(

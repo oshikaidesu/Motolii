@@ -289,7 +289,10 @@ impl BrowserPanel {
 
     fn selection_item(&self) -> Option<&LibraryItem> {
         let selected = self.selected.as_deref()?;
-        self.projection.items.iter().find(|item| item.id == selected)
+        self.projection
+            .items
+            .iter()
+            .find(|item| item.id == selected)
     }
 
     // ---- 描画 ----
@@ -317,10 +320,8 @@ impl BrowserPanel {
             workspace.min,
             Vec2::new(sidebar_width(rect.width()), workspace.height()),
         );
-        let catalog = Rect::from_min_max(
-            Pos2::new(sidebar.right(), workspace.top()),
-            workspace.max,
-        );
+        let catalog =
+            Rect::from_min_max(Pos2::new(sidebar.right(), workspace.top()), workspace.max);
         self.draw_sidebar(ui, sidebar);
         // css:348 の `@media (max-width: 420px)` は文書幅 = pane 幅で効く。
         self.draw_catalog(ui, catalog, rect.width())
@@ -332,7 +333,11 @@ impl BrowserPanel {
             Pos2::new(rect.left(), top),
             Vec2::new(rect.width(), theme::HEADER_H),
         );
-        painter.hline(header.x_range(), header.bottom(), Stroke::new(1.0, theme::BORDER));
+        painter.hline(
+            header.x_range(),
+            header.bottom(),
+            Stroke::new(1.0, theme::BORDER),
+        );
         painter.text(
             Pos2::new(header.left() + theme::HEADER_PAD_X, header.center().y),
             Align2::LEFT_CENTER,
@@ -394,7 +399,10 @@ impl BrowserPanel {
         // Filters toggle(css:62 toolbarButton、右端)。
         let filters_w = 34.0;
         let filters = Rect::from_min_size(
-            Pos2::new(toolbar.right() - theme::TOOLBAR_PAD_X - filters_w, button_top),
+            Pos2::new(
+                toolbar.right() - theme::TOOLBAR_PAD_X - filters_w,
+                button_top,
+            ),
             Vec2::new(filters_w, theme::BUTTON_H),
         );
         let filters_response = ui.interact(filters, ui.id().with("filters"), Sense::click());
@@ -403,7 +411,11 @@ impl BrowserPanel {
         }
         let (chip_bg, chip_border, chip_fg) = if self.shelf_open {
             // 開いている間は selected chip と同じ強調(css:201 と同じ語彙)。
-            (theme::CHIP_SELECTED_BG, theme::ACCENT, theme::CHIP_SELECTED_FG)
+            (
+                theme::CHIP_SELECTED_BG,
+                theme::ACCENT,
+                theme::CHIP_SELECTED_FG,
+            )
         } else {
             (theme::BUTTON_BG, theme::BUTTON_BORDER, theme::BUTTON_FG)
         };
@@ -424,11 +436,15 @@ impl BrowserPanel {
         // 検索(css:64-77)。残り幅いっぱい。
         let search = Rect::from_min_max(
             Pos2::new(x, button_top),
-            Pos2::new(filters.left() - theme::TOOLBAR_GAP, button_top + theme::BUTTON_H),
+            Pos2::new(
+                filters.left() - theme::TOOLBAR_GAP,
+                button_top + theme::BUTTON_H,
+            ),
         );
         painter.rect_filled(search, 0.0, theme::SEARCH_BG);
         let mut query = self.query.clone();
-        let mut search_ui = ui.new_child(egui::UiBuilder::new().max_rect(search.shrink2(Vec2::new(6.0, 0.0))));
+        let mut search_ui =
+            ui.new_child(egui::UiBuilder::new().max_rect(search.shrink2(Vec2::new(6.0, 0.0))));
         search_ui.style_mut().visuals.extreme_bg_color = Color32::TRANSPARENT;
         search_ui.style_mut().visuals.override_text_color = Some(theme::SEARCH_FG);
         let edit = search_ui.add_sized(
@@ -472,7 +488,11 @@ impl BrowserPanel {
             Pos2::new(rect.left(), top),
             Vec2::new(rect.width(), theme::TABS_H),
         );
-        painter.hline(tabs.x_range(), tabs.bottom(), Stroke::new(1.0, theme::BORDER));
+        painter.hline(
+            tabs.x_range(),
+            tabs.bottom(),
+            Stroke::new(1.0, theme::BORDER),
+        );
         let tab_list = [
             BrowserTab::Media,
             BrowserTab::Effects,
@@ -490,10 +510,7 @@ impl BrowserPanel {
             if selected {
                 painter.rect_filled(cell, 0.0, theme::TAB_SELECTED_BG);
                 painter.rect_filled(
-                    Rect::from_min_max(
-                        Pos2::new(cell.left(), cell.bottom() - 2.0),
-                        cell.max,
-                    ),
+                    Rect::from_min_max(Pos2::new(cell.left(), cell.bottom() - 2.0), cell.max),
                     0.0,
                     theme::ACCENT,
                 );
@@ -526,7 +543,11 @@ impl BrowserPanel {
     fn draw_sidebar(&mut self, ui: &mut egui::Ui, rect: Rect) {
         let painter = ui.painter().with_clip_rect(rect);
         painter.rect_filled(rect, 0.0, theme::SIDEBAR_BG);
-        painter.vline(rect.right(), rect.y_range(), Stroke::new(1.0, theme::BORDER));
+        painter.vline(
+            rect.right(),
+            rect.y_range(),
+            Stroke::new(1.0, theme::BORDER),
+        );
 
         // 行動作をまとめる小さな描き手。
         struct Row<'a> {
@@ -575,11 +596,7 @@ impl BrowserPanel {
                 for directory in &self.projection.directories {
                     let is_root = directory.path.is_empty();
                     rows.push(Row {
-                        label: format!(
-                            "{}  {}",
-                            if is_root { "▾" } else { "├" },
-                            directory.name
-                        ),
+                        label: format!("{}  {}", if is_root { "▾" } else { "├" }, directory.name),
                         indent: !is_root,
                         selected: self.directory.as_deref() == Some(directory.path.as_str())
                             && !is_root
@@ -837,12 +854,21 @@ impl BrowserPanel {
             }
             let pressed = self.view == view;
             let (bg, border, fg) = if pressed {
-                (theme::VIEW_PRESSED_BG, theme::ACCENT, theme::VIEW_PRESSED_FG)
+                (
+                    theme::VIEW_PRESSED_BG,
+                    theme::ACCENT,
+                    theme::VIEW_PRESSED_FG,
+                )
             } else {
                 (theme::BUTTON_BG, theme::BUTTON_BORDER, theme::BUTTON_FG)
             };
             painter.rect_filled(button, 0.0, bg);
-            painter.rect_stroke(button, 0.0, Stroke::new(1.0, border), egui::StrokeKind::Inside);
+            painter.rect_stroke(
+                button,
+                0.0,
+                Stroke::new(1.0, border),
+                egui::StrokeKind::Inside,
+            );
             painter.text(
                 button.center(),
                 Align2::CENTER_CENTER,
@@ -905,7 +931,11 @@ impl BrowserPanel {
             let response = ui.interact(chip, ui.id().with(("chip", index)), Sense::click());
             let selected = self.tag.as_deref() == Some(id.as_str());
             let (bg, border, fg) = if selected {
-                (theme::CHIP_SELECTED_BG, theme::ACCENT, theme::CHIP_SELECTED_FG)
+                (
+                    theme::CHIP_SELECTED_BG,
+                    theme::ACCENT,
+                    theme::CHIP_SELECTED_FG,
+                )
             } else {
                 (theme::CHIP_BG, theme::CHIP_BORDER, theme::CHIP_FG)
             };
@@ -916,7 +946,13 @@ impl BrowserPanel {
                 Stroke::new(1.0, border),
                 egui::StrokeKind::Inside,
             );
-            painter.text(chip.center(), Align2::CENTER_CENTER, label, chip_font.clone(), fg);
+            painter.text(
+                chip.center(),
+                Align2::CENTER_CENTER,
+                label,
+                chip_font.clone(),
+                fg,
+            );
             if response.clicked() {
                 clicked_tag = Some(id.clone());
             }
@@ -1014,10 +1050,8 @@ impl BrowserPanel {
                     }
                 };
                 let rows = cards.len().div_ceil(columns);
-                let (area, _) = ui.allocate_exact_size(
-                    Vec2::new(full_w, rows as f32 * row_h),
-                    Sense::hover(),
-                );
+                let (area, _) =
+                    ui.allocate_exact_size(Vec2::new(full_w, rows as f32 * row_h), Sense::hover());
                 let painter = ui.painter().with_clip_rect(ui.clip_rect());
                 for (index, card) in cards.iter().enumerate() {
                     let col = index % columns;
@@ -1075,22 +1109,31 @@ impl BrowserPanel {
             BrowserView::List => {
                 let thumb = Rect::from_min_size(
                     inner.min,
-                    Vec2::new(theme::LIST_THUMB_W, theme::LIST_THUMB_W / theme::THUMB_ASPECT),
+                    Vec2::new(
+                        theme::LIST_THUMB_W,
+                        theme::LIST_THUMB_W / theme::THUMB_ASPECT,
+                    ),
                 );
-                (thumb, Some(Rect::from_min_max(
-                    Pos2::new(thumb.right() + 5.0, inner.top()), // css:276 padding-left 5px
-                    inner.max,
-                )))
+                (
+                    thumb,
+                    Some(Rect::from_min_max(
+                        Pos2::new(thumb.right() + 5.0, inner.top()), // css:276 padding-left 5px
+                        inner.max,
+                    )),
+                )
             }
             BrowserView::Grid => {
                 let thumb = Rect::from_min_size(
                     inner.min,
                     Vec2::new(inner.width(), inner.width() / theme::THUMB_ASPECT),
                 );
-                (thumb, Some(Rect::from_min_max(
-                    Pos2::new(inner.left(), thumb.bottom() + 2.0), // css:266 margin-top 2px
-                    inner.max,
-                )))
+                (
+                    thumb,
+                    Some(Rect::from_min_max(
+                        Pos2::new(inner.left(), thumb.bottom() + 2.0), // css:266 margin-top 2px
+                        inner.max,
+                    )),
+                )
             }
             BrowserView::Thumbnails => (
                 Rect::from_min_size(
@@ -1133,10 +1176,10 @@ impl BrowserPanel {
     ) {
         let is_svg = card.name.to_lowercase().ends_with(".svg");
         let (bg, glyph) = match card.kind {
-            "video" => (theme::THUMB_VIDEO, "▶"), // html:123
-            "audio" => (theme::THUMB_AUDIO, "♪"), // html:132
+            "video" => (theme::THUMB_VIDEO, "▶"),     // html:123
+            "audio" => (theme::THUMB_AUDIO, "♪"),     // html:132
             _ if is_svg => (theme::THUMB_SVG, "SVG"), // html:126
-            _ => (theme::THUMB_IMAGE, ""),        // html:129
+            _ => (theme::THUMB_IMAGE, ""),            // html:129
         };
         painter.rect_filled(thumb, 0.0, bg);
         if let Some(texture) = self.texture_for(ctx, &card.id) {
@@ -1166,7 +1209,12 @@ impl BrowserPanel {
         } else {
             theme::THUMB_BORDER // css:246
         };
-        painter.rect_stroke(thumb, 0.0, Stroke::new(1.0, border), egui::StrokeKind::Inside);
+        painter.rect_stroke(
+            thumb,
+            0.0,
+            Stroke::new(1.0, border),
+            egui::StrokeKind::Inside,
+        );
         if card.selected {
             // css:250 `box-shadow: inset 0 0 0 1px #b9a66055`
             painter.rect_stroke(
@@ -1211,7 +1259,11 @@ impl BrowserPanel {
             Pos2::new(rect.right(), top + theme::TRAY_H),
         );
         painter.rect_filled(tray, 0.0, theme::TRAY_BG);
-        painter.hline(tray.x_range(), tray.top(), Stroke::new(1.0, theme::TRAY_BORDER));
+        painter.hline(
+            tray.x_range(),
+            tray.top(),
+            Stroke::new(1.0, theme::TRAY_BORDER),
+        );
         let Some(item) = self.selection_item() else {
             painter.text(
                 Pos2::new(tray.left() + 6.0, tray.center().y),

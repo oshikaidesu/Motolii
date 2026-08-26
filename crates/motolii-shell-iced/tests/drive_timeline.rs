@@ -148,8 +148,7 @@ fn pointer_step(
     let at = Point::new(at.x + origin.x, at.y + origin.y);
     let mut ui = iced_test::simulator(view(shell));
     ui.point_at(at);
-    let events: Vec<iced::event::Event> =
-        std::iter::once(cursor_moved(at)).chain(events).collect();
+    let events: Vec<iced::event::Event> = std::iter::once(cursor_moved(at)).chain(events).collect();
     let _ = ui.simulate(events);
     let messages: Vec<Message> = ui.into_messages().collect();
     drain(shell, messages)
@@ -284,7 +283,10 @@ fn dragging_the_right_edge_trims_the_out_point() {
     let view0 = fresh_view();
 
     let before = clip_span_seconds(&shell.timeline_snapshot().expect("seated"), audio);
-    assert!((before.1 - 13.6).abs() < 1e-3, "fixture の audio は 13.6s 終わり");
+    assert!(
+        (before.1 - 13.6).abs() < 1e-3,
+        "fixture の audio は 13.6s 終わり"
+    );
 
     // audio は行 2。右端の内側 4px を掴む。
     let y = geometry.row_top(2, 0.0) + ROW_H / 2.0;
@@ -295,8 +297,14 @@ fn dragging_the_right_edge_trims_the_out_point() {
     );
 
     let after = clip_span_seconds(&shell.timeline_snapshot().expect("seated"), audio);
-    assert!((after.0 - before.0).abs() < 1e-6, "trim out で start は動かない");
-    assert!((after.1 - 10.0).abs() < 1e-3, "out 点が 10.0s に立たない: {after:?}");
+    assert!(
+        (after.0 - before.0).abs() < 1e-6,
+        "trim out で start は動かない"
+    );
+    assert!(
+        (after.1 - 10.0).abs() < 1e-3,
+        "out 点が 10.0s に立たない: {after:?}"
+    );
 
     let trims: Vec<String> = shell
         .intents()
@@ -330,7 +338,10 @@ fn dragging_the_left_edge_trims_the_in_point() {
     );
 
     let after = clip_span_seconds(&shell.timeline_snapshot().expect("seated"), audio);
-    assert!((after.0 - 3.0).abs() < 1e-3, "in 点が 3.0s に立たない: {after:?}");
+    assert!(
+        (after.0 - 3.0).abs() < 1e-3,
+        "in 点が 3.0s に立たない: {after:?}"
+    );
     assert!(
         (after.1 - before.1).abs() < 1e-3,
         "trim in で旧右端が動いた: {after:?}"
@@ -349,16 +360,26 @@ fn escape_during_a_drag_restores_without_a_trace() {
 
     let before = clip_span_seconds(&shell.timeline_snapshot().expect("seated"), background);
     let revision_before = shell.revision();
-    let undo_before = shell
-        .intents()
-        .len();
+    let undo_before = shell.intents().len();
 
     let y = geometry.row_top(1, 0.0) + ROW_H / 2.0;
-    pointer_step(&mut shell, Point::new(geometry.time_to_x(view0, 2.0), y), [pressed()]);
-    pointer_step(&mut shell, Point::new(geometry.time_to_x(view0, 6.0), y), std::iter::empty());
+    pointer_step(
+        &mut shell,
+        Point::new(geometry.time_to_x(view0, 2.0), y),
+        [pressed()],
+    );
+    pointer_step(
+        &mut shell,
+        Point::new(geometry.time_to_x(view0, 6.0), y),
+        std::iter::empty(),
+    );
     key_step(&mut shell, tap(Named::Escape));
     // 離しても何も確定しない(ジェスチャは Esc で終わっている)。
-    pointer_step(&mut shell, Point::new(geometry.time_to_x(view0, 6.0), y), [released()]);
+    pointer_step(
+        &mut shell,
+        Point::new(geometry.time_to_x(view0, 6.0), y),
+        [released()],
+    );
 
     let after = clip_span_seconds(&shell.timeline_snapshot().expect("seated"), background);
     assert_eq!(after, before, "Esc で戻っていない");
@@ -401,7 +422,11 @@ fn delete_removes_the_selection_and_undo_brings_it_back() {
     );
 
     key_step(&mut shell, common::command_key('z'));
-    assert_eq!(shell.track_item_count(), 3, "Cmd+Z 1回で戻る(1 Delete = 1 Undo)");
+    assert_eq!(
+        shell.track_item_count(),
+        3,
+        "Cmd+Z 1回で戻る(1 Delete = 1 Undo)"
+    );
 }
 
 /// **Cmd+click = 足し引き、複数選択は塊のまま動く。** 左へ突き抜けたら
@@ -690,7 +715,10 @@ fn shift_wheel_pans_horizontally_inside_the_composition() {
     );
     let after = shell.timeline_pane().view;
     assert!(after.start > before.start, "Shift+ホイールでパンしていない");
-    assert!(after.start + after.span <= 16.0 + 1e-3, "窓が composition を出た");
+    assert!(
+        after.start + after.span <= 16.0 + 1e-3,
+        "窓が composition を出た"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -727,7 +755,11 @@ fn a_timeline_session_replays_from_its_intent_log() {
     pointer_step(&mut shell, ruler5, [released()]);
     key_step(&mut shell, tap(Named::ArrowRight));
 
-    let intents: Vec<_> = shell.intents().into_iter().map(|event| event.intent).collect();
+    let intents: Vec<_> = shell
+        .intents()
+        .into_iter()
+        .map(|event| event.intent)
+        .collect();
     let driven_revision = shell.revision();
     let driven_items = shell.track_item_count();
     let driven_selection = shell.timeline_selection();
@@ -741,8 +773,16 @@ fn a_timeline_session_replays_from_its_intent_log() {
     drop(shell);
 
     let replayed = ShellGateway::replay(&intents);
-    assert_eq!(replayed.revision(), driven_revision, "writer 世代が一致する");
-    assert_eq!(replayed.track_item_count(), driven_items, "Document の件数が一致する");
+    assert_eq!(
+        replayed.revision(),
+        driven_revision,
+        "writer 世代が一致する"
+    );
+    assert_eq!(
+        replayed.track_item_count(),
+        driven_items,
+        "Document の件数が一致する"
+    );
     let seat = replayed.project().expect("replay も座っている");
     assert_eq!(
         seat.editor().selected_layers().to_vec(),

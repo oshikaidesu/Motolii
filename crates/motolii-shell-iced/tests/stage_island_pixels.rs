@@ -114,15 +114,16 @@ fn the_known_frame_maps_head_on_through_the_iced_widget() {
         document: None,
         playhead: 0.0,
     };
-    let mut ui: iced_test::Simulator<'_, motolii_shell_iced::Message> = iced_test::Simulator::with_size(
-        iced_test::core::Settings::default(),
-        iced::Size::new(320.0, 240.0),
-        iced::Element::from(
-            iced::widget::shader(island)
-                .width(iced::Fill)
-                .height(iced::Fill),
-        ),
-    );
+    let mut ui: iced_test::Simulator<'_, motolii_shell_iced::Message> =
+        iced_test::Simulator::with_size(
+            iced_test::core::Settings::default(),
+            iced::Size::new(320.0, 240.0),
+            iced::Element::from(
+                iced::widget::shader(island)
+                    .width(iced::Fill)
+                    .height(iced::Fill),
+            ),
+        );
 
     // 1周目で stage が建ち(重い)、2周目で落ち着いた絵を撮る。
     let _ = ui
@@ -152,15 +153,44 @@ fn the_known_frame_maps_head_on_through_the_iced_widget() {
     let inset_x = width * 12 / 100;
     let inset_y = height * 12 / 100;
     let cases = [
-        ("左上", inset_x, inset_y, width / 2 - inset_x, height / 2 - inset_y, Dominant::Red),
-        ("右上", width / 2 + inset_x, inset_y, width - inset_x, height / 2 - inset_y, Dominant::Green),
-        ("左下", inset_x, height / 2 + inset_y, width / 2 - inset_x, height - inset_y, Dominant::Blue),
-        ("右下", width / 2 + inset_x, height / 2 + inset_y, width - inset_x, height - inset_y, Dominant::Yellow),
+        (
+            "左上",
+            inset_x,
+            inset_y,
+            width / 2 - inset_x,
+            height / 2 - inset_y,
+            Dominant::Red,
+        ),
+        (
+            "右上",
+            width / 2 + inset_x,
+            inset_y,
+            width - inset_x,
+            height / 2 - inset_y,
+            Dominant::Green,
+        ),
+        (
+            "左下",
+            inset_x,
+            height / 2 + inset_y,
+            width / 2 - inset_x,
+            height - inset_y,
+            Dominant::Blue,
+        ),
+        (
+            "右下",
+            width / 2 + inset_x,
+            height / 2 + inset_y,
+            width - inset_x,
+            height - inset_y,
+            Dominant::Yellow,
+        ),
     ];
     for (name, x0, y0, x1, y1, expected) in cases {
         let (winner, share) = majority(&image, x0, y0, x1, y1);
         assert_eq!(
-            winner, expected,
+            winner,
+            expected,
             "{name}の象限が {expected:?} でなく {winner:?}(占有 {share:.2})。\
              正対 camera で写っていない(または絵が出ていない)。証拠: {}",
             written.display()
@@ -193,15 +223,16 @@ fn a_drag_through_the_widget_reaches_the_stage_without_validation_errors() {
         document: None,
         playhead: 0.0,
     };
-    let mut ui: iced_test::Simulator<'_, motolii_shell_iced::Message> = iced_test::Simulator::with_size(
-        iced_test::core::Settings::default(),
-        iced::Size::new(200.0, 200.0),
-        iced::Element::from(
-            iced::widget::shader(island)
-                .width(iced::Fill)
-                .height(iced::Fill),
-        ),
-    );
+    let mut ui: iced_test::Simulator<'_, motolii_shell_iced::Message> =
+        iced_test::Simulator::with_size(
+            iced_test::core::Settings::default(),
+            iced::Size::new(200.0, 200.0),
+            iced::Element::from(
+                iced::widget::shader(island)
+                    .width(iced::Fill)
+                    .height(iced::Fill),
+            ),
+        );
 
     let (forwarded_before, _) = stage_island::input_tally();
     // Simulator の cursor は event からは動かない(`point_at` だけが動かす)。
@@ -278,15 +309,16 @@ fn a_gesture_inside_the_dummy_grab_region_is_swallowed() {
         document: None,
         playhead: 0.0,
     };
-    let mut ui: iced_test::Simulator<'_, motolii_shell_iced::Message> = iced_test::Simulator::with_size(
-        iced_test::core::Settings::default(),
-        iced::Size::new(200.0, 200.0),
-        iced::Element::from(
-            iced::widget::shader(island)
-                .width(iced::Fill)
-                .height(iced::Fill),
-        ),
-    );
+    let mut ui: iced_test::Simulator<'_, motolii_shell_iced::Message> =
+        iced_test::Simulator::with_size(
+            iced_test::core::Settings::default(),
+            iced::Size::new(200.0, 200.0),
+            iced::Element::from(
+                iced::widget::shader(island)
+                    .width(iced::Fill)
+                    .height(iced::Fill),
+            ),
+        );
 
     let (_, swallowed_before) = stage_island::input_tally();
     // 押下位置(= 掴み領域の中)を cursor に指しておく(`point_at` の注記と同じ)。

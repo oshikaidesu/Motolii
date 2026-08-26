@@ -103,6 +103,7 @@ mod device;
 mod effects;
 mod headless;
 mod matte;
+mod presentable;
 mod render_basic;
 mod render_effects;
 mod sequential;
@@ -230,13 +231,13 @@ fn fixed_function_tint_alpha(mode: BlendMode, opacity: f32) -> Result<f32, Compo
 }
 
 /// 板の**位置**(原点や角)。z は `LayerPlacement::z`(pinned は常に 0、裁定113)。
-fn to_point3(v: glam::Vec2, z: f32) -> glam::Vec3 {
+pub(crate) fn to_point3(v: glam::Vec2, z: f32) -> glam::Vec3 {
     glam::vec3(v.x, v.y, z)
 }
 
 /// 板の**辺ベクトル**(`extent_u`/`extent_v`)。板は自分の z 平面に対して常に平行
 /// (裁定115: 姿勢の表現はまだ開けない)なので、方向ベクトルの z 成分は常に 0。
-fn to_vector3(v: glam::Vec2) -> glam::Vec3 {
+pub(crate) fn to_vector3(v: glam::Vec2) -> glam::Vec3 {
     glam::vec3(v.x, v.y, 0.0)
 }
 
@@ -253,6 +254,9 @@ pub use effects::EffectPass;
 
 /// track matte の重ね方(BL4、AE/Lottie の4値)。`matte` モジュール doc 参照。
 pub use matte::MatteMode;
+
+/// 共有面へ書く口の検査(裁定256)。`presentable` モジュール doc 参照。
+pub use presentable::{check_presentable_target, PRESENTABLE_FORMAT};
 
 /// 素材ハンドル。上流の型をそのまま通す(包み直さない)。
 pub use re_renderer::resource_managers::GpuTexture2D;
@@ -322,6 +326,14 @@ pub enum CompositorError {
     /// 「分離可能 blend」節参照)。黙って `Normal` へ近似しない。
     #[error("この入口は分離可能 blend mode を表現できない: {0:?}")]
     UnsupportedBlendMode(BlendMode),
+    #[error("共有面の画素形式が Host 仕様ではない: {got}")]
+    PresentableFormat { got: String },
+    #[error("共有面のサイズが comp と違う: got={got:?} expected={expected:?}")]
+    PresentableSize { got: [u32; 2], expected: [u32; 2] },
+    #[error("共有面に RENDER_ATTACHMENT が無い")]
+    PresentableUsage,
+    #[error("共有面への直接書き込みは rerun ViewBuilder::new_with_external_resolved が着くまで公開しない(blit しない)")]
+    PresentableWriteNotWired,
 }
 
 /// 1フレームの内訳。どこで時間を使っているかを隠さない。
@@ -415,7 +427,7 @@ struct SequentialInput<'a> {
 /// `Compositor::accumulate_sequential`/`finalize_readback`/`finalize_texture` が
 /// 繰り返し組み立てる `TargetConfiguration`(既存メソッド群のリテラルをそのまま
 /// 関数化しただけ、新しいフィールドは無い)。
-fn sequential_target_config(
+pub(crate) fn sequential_target_config(
     name: &'static str,
     comp: CompSpec,
     view_from_world: macaw::IsoTransform,

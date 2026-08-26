@@ -203,9 +203,8 @@ fn playback_stops_on_the_correct_frame_after_ticking_into_the_second_shot() {
         document.soundtrack.is_none(),
         "soundtrack 無し前提(壁時計の経路を確かめたい)"
     );
-    let catalog = Arc::new(
-        motolii_plugin::reference::reference_catalog().expect("reference catalog"),
-    );
+    let catalog =
+        Arc::new(motolii_plugin::reference::reference_catalog().expect("reference catalog"));
     let writer = DocumentWriter::new(document, catalog).expect("writer");
     let mut editor = TimelineEditor::new(writer);
 
@@ -223,7 +222,10 @@ fn playback_stops_on_the_correct_frame_after_ticking_into_the_second_shot() {
     }
     // Space でもう一度止める。
     editor.toggle_playing();
-    assert!(!editor.is_playing(), "2度目の toggle_playing で止まっていない");
+    assert!(
+        !editor.is_playing(),
+        "2度目の toggle_playing で止まっていない"
+    );
     assert!(
         (editor.playhead_seconds() - 1.5).abs() < 0.1,
         "1.5s 付近で止まったはずが {}",

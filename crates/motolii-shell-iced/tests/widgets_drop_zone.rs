@@ -38,7 +38,10 @@ fn entering_and_leaving_speak_once_each() {
     point_and_move(&mut ui, 150.0, 50.0); // 中の移動 — 黙る
     point_and_move(&mut ui, 300.0, 50.0); // 出る
 
-    assert_eq!(events(ui), vec![DropEvent::HoverEnter, DropEvent::HoverLeave]);
+    assert_eq!(
+        events(ui),
+        vec![DropEvent::HoverEnter, DropEvent::HoverLeave]
+    );
 }
 
 /// cursor が窓ごと出て行っても leave は言われる(hover が貼りつかない)。
@@ -48,7 +51,10 @@ fn the_cursor_leaving_the_window_counts_as_leave() {
     point_and_move(&mut ui, 100.0, 50.0);
     let _ = ui.simulate([cursor_left()]);
 
-    assert_eq!(events(ui), vec![DropEvent::HoverEnter, DropEvent::HoverLeave]);
+    assert_eq!(
+        events(ui),
+        vec![DropEvent::HoverEnter, DropEvent::HoverLeave]
+    );
 }
 
 /// 受け入れない面でも hover の語彙は同じ(可否は絵で言う)。
@@ -58,5 +64,8 @@ fn a_rejecting_zone_still_reports_hover() {
     point_and_move(&mut ui, 100.0, 50.0);
     point_and_move(&mut ui, 300.0, 50.0);
 
-    assert_eq!(events(ui), vec![DropEvent::HoverEnter, DropEvent::HoverLeave]);
+    assert_eq!(
+        events(ui),
+        vec![DropEvent::HoverEnter, DropEvent::HoverLeave]
+    );
 }

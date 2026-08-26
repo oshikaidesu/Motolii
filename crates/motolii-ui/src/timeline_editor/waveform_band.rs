@@ -154,7 +154,13 @@ impl WaveformPeaks {
         out.reserve(width);
         for column in 0..width {
             let from = origin + per_px * column as f64;
-            out.push(peak_between(buckets, span, from, from + per_px, self.source_seconds));
+            out.push(peak_between(
+                buckets,
+                span,
+                from,
+                from + per_px,
+                self.source_seconds,
+            ));
         }
     }
 
@@ -396,11 +402,7 @@ mod tests {
     fn every_level_keeps_the_overall_peak() {
         let peaks = WaveformPeaks::build(&ramp(4_096)).expect("pyramid");
         assert!(peaks.level_count() > 1, "段が積まれている");
-        let top = peaks
-            .level_peaks(0)
-            .iter()
-            .copied()
-            .fold(0.0f32, f32::max);
+        let top = peaks.level_peaks(0).iter().copied().fold(0.0f32, f32::max);
         for level in 0..peaks.level_count() {
             let here = peaks
                 .level_peaks(level)

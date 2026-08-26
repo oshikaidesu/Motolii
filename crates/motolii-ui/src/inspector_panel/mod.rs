@@ -84,7 +84,9 @@ impl InspectorAction {
     /// `KeyAtPlayhead` が運ぶ成分値。
     pub fn key_components(&self) -> &[f64] {
         match self {
-            Self::KeyAtPlayhead { components, len, .. } => &components[..*len],
+            Self::KeyAtPlayhead {
+                components, len, ..
+            } => &components[..*len],
             _ => &[],
         }
     }
@@ -189,10 +191,7 @@ impl InspectorPanel {
                     Err(error) => self.seat_empty(format!("read-model を作れない: {error}")),
                 }
             }
-            many => self.seat_empty(format!(
-                "{} items selected — pick one to edit",
-                many.len()
-            )),
+            many => self.seat_empty(format!("{} items selected — pick one to edit", many.len())),
         }
     }
 
@@ -343,11 +342,8 @@ impl InspectorPanel {
                 Pos2::new(tabs.left() + half * index as f32, tabs.top()),
                 Vec2::new(half, theme::TABS_H),
             );
-            let response = ui.interact(
-                tab,
-                ui.id().with(("inspector-mode", index)),
-                Sense::click(),
-            );
+            let response =
+                ui.interact(tab, ui.id().with(("inspector-mode", index)), Sense::click());
             let selected = self.mode == mode;
             if selected {
                 // css:67-70 selected: bg surface-app + 下線2px way-inspector
@@ -487,11 +483,8 @@ impl InspectorPanel {
                 Vec2::new(theme::LAYER_STATE_W, theme::LAYER_STATE_H),
             );
             right = button.left() - 3.0;
-            let response = ui.interact(
-                button,
-                ui.id().with(("layer-state", index)),
-                Sense::click(),
-            );
+            let response =
+                ui.interact(button, ui.id().with(("layer-state", index)), Sense::click());
             // painter で描く面なので、名乗らせないと AccessKit の木に出ない
             // = 運転席(kittest)からも支援技術からも掴めない(Browser card と同じ理由)。
             response.widget_info(|| {
@@ -507,12 +500,21 @@ impl InspectorPanel {
                 (accent, mix(accent, 18.0, theme::SURFACE_APP), accent)
             } else if response.hovered() {
                 // css:100-101 hover: border-strong / surface-panel / text-primary
-                (theme::BORDER_STRONG, theme::SURFACE_PANEL, theme::TEXT_PRIMARY)
+                (
+                    theme::BORDER_STRONG,
+                    theme::SURFACE_PANEL,
+                    theme::TEXT_PRIMARY,
+                )
             } else {
                 (theme::BORDER_DEFAULT, theme::SURFACE_APP, theme::TEXT_MUTED)
             };
             painter.rect_filled(button, 0.0, fill);
-            painter.rect_stroke(button, 0.0, Stroke::new(1.0, border), egui::StrokeKind::Inside);
+            painter.rect_stroke(
+                button,
+                0.0,
+                Stroke::new(1.0, border),
+                egui::StrokeKind::Inside,
+            );
             painter.text(
                 button.center(),
                 Align2::CENTER_CENTER,
@@ -557,7 +559,11 @@ impl InspectorPanel {
     ) {
         if model.editable.is_empty() {
             let keyed = matches!(model.position, InspectorPosition::Animated);
-            let subtitle = if keyed { "1 · 1 keyed" } else { "1 · 0 keyed" };
+            let subtitle = if keyed {
+                "1 · 1 keyed"
+            } else {
+                "1 · 0 keyed"
+            };
             let collapsed =
                 self.draw_section_header(ui, 0, "TRANSFORM", subtitle, theme::WAY_INSPECTOR);
             if collapsed {
@@ -573,7 +579,8 @@ impl InspectorPanel {
             .filter(|row| row.key_state != InspectorKeyState::Unkeyed)
             .count();
         let subtitle = format!("{} · {keyed} keyed", model.editable.len());
-        let collapsed = self.draw_section_header(ui, 0, "TRANSFORM", &subtitle, theme::WAY_INSPECTOR);
+        let collapsed =
+            self.draw_section_header(ui, 0, "TRANSFORM", &subtitle, theme::WAY_INSPECTOR);
         if collapsed {
             return;
         }
@@ -707,7 +714,11 @@ impl InspectorPanel {
         {
             let painter = ui.painter().with_clip_rect(cell);
             // css:375 bg = mix(surface-app 74%, panel)
-            painter.rect_filled(cell, 0.0, mix(theme::SURFACE_APP, 74.0, theme::SURFACE_PANEL));
+            painter.rect_filled(
+                cell,
+                0.0,
+                mix(theme::SURFACE_APP, 74.0, theme::SURFACE_PANEL),
+            );
             painter.vline(
                 cell.right(),
                 cell.y_range(),
@@ -995,7 +1006,10 @@ impl InspectorPanel {
         let enabled = definition.enabled;
         let on_size = Vec2::new(25.0, 15.0);
         let on_rect = Rect::from_min_size(
-            Pos2::new(rect.right() - 7.0 - on_size.x, rect.center().y - on_size.y / 2.0),
+            Pos2::new(
+                rect.right() - 7.0 - on_size.x,
+                rect.center().y - on_size.y / 2.0,
+            ),
             on_size,
         );
         let on_response = ui.interact(
@@ -1040,7 +1054,11 @@ impl InspectorPanel {
             Align2::CENTER_CENTER,
             if enabled { "ON" } else { "OFF" },
             FontId::monospace(theme::FS_BADGE),
-            if enabled { effect_color } else { theme::TEXT_MUTED },
+            if enabled {
+                effect_color
+            } else {
+                theme::TEXT_MUTED
+            },
         );
         // css:215 effectSource(`plugin · N params`)。
         painter.text(
@@ -1077,7 +1095,10 @@ impl InspectorPanel {
         if self.status.is_empty() {
             return;
         }
-        let dot = Pos2::new(footer.left() + 9.0 + theme::STATUS_DOT / 2.0, footer.center().y);
+        let dot = Pos2::new(
+            footer.left() + 9.0 + theme::STATUS_DOT / 2.0,
+            footer.center().y,
+        );
         painter.circle_filled(dot, theme::STATUS_DOT / 2.0, theme::WAY_INSPECTOR);
         painter.text(
             Pos2::new(dot.x + theme::STATUS_DOT, footer.center().y),
@@ -1244,7 +1265,11 @@ fn draw_row_name(painter: &egui::Painter, row: Rect, name: &str, size: f32, extr
 /// css:369-414 `.valueCell`(X/Y/Z 1成分)。
 fn draw_value_cell(painter: &egui::Painter, cell: Rect, axis: Option<&str>, value: &str) {
     // css:375 bg = mix(surface-app 74%, panel)
-    painter.rect_filled(cell, 0.0, mix(theme::SURFACE_APP, 74.0, theme::SURFACE_PANEL));
+    painter.rect_filled(
+        cell,
+        0.0,
+        mix(theme::SURFACE_APP, 74.0, theme::SURFACE_PANEL),
+    );
     painter.vline(
         cell.right(),
         cell.y_range(),
@@ -1273,7 +1298,11 @@ fn draw_value_cell(painter: &egui::Painter, cell: Rect, axis: Option<&str>, valu
 
 /// css:415 scalar は3列ぶち抜き(値は右寄せ)。
 fn draw_value_span(painter: &egui::Painter, span: Rect, value: &str) {
-    painter.rect_filled(span, 0.0, mix(theme::SURFACE_APP, 74.0, theme::SURFACE_PANEL));
+    painter.rect_filled(
+        span,
+        0.0,
+        mix(theme::SURFACE_APP, 74.0, theme::SURFACE_PANEL),
+    );
     painter.vline(
         span.right(),
         span.y_range(),
@@ -1290,7 +1319,11 @@ fn draw_value_span(painter: &egui::Painter, span: Rect, value: &str) {
 
 /// css:486-498 `.fillValue` 相当(swatch + 16進)。
 fn draw_color_cell(painter: &egui::Painter, span: Rect, rgba: [f64; 4]) {
-    painter.rect_filled(span, 0.0, mix(theme::SURFACE_APP, 74.0, theme::SURFACE_PANEL));
+    painter.rect_filled(
+        span,
+        0.0,
+        mix(theme::SURFACE_APP, 74.0, theme::SURFACE_PANEL),
+    );
     let swatch = Rect::from_min_size(
         Pos2::new(span.left() + 6.0, span.center().y - 9.5),
         Vec2::new(26.0, 19.0),
@@ -1322,7 +1355,11 @@ fn draw_color_cell(painter: &egui::Painter, span: Rect, rgba: [f64; 4]) {
 
 /// css:89 `.emptyComponent`(Z の無い成分は `—`)。
 fn draw_empty_component(painter: &egui::Painter, cell: Rect) {
-    painter.rect_filled(cell, 0.0, mix(theme::SURFACE_APP, 74.0, theme::SURFACE_PANEL));
+    painter.rect_filled(
+        cell,
+        0.0,
+        mix(theme::SURFACE_APP, 74.0, theme::SURFACE_PANEL),
+    );
     painter.text(
         cell.center(),
         Align2::CENTER_CENTER,
@@ -1401,9 +1438,7 @@ fn draw_fx_toolbar(ui: &mut egui::Ui, model: &InspectorReadModel) {
 fn param_band_color(param: &InspectorParam) -> Color32 {
     match param.value_type {
         // css:300 integer(F64 で domain.integer のもの)
-        motolii_plugin::ValueType::F64
-            if param.f64_domain.is_some_and(|domain| domain.integer) =>
-        {
+        motolii_plugin::ValueType::F64 if param.f64_domain.is_some_and(|domain| domain.integer) => {
             theme::ROLE_SHAPE
         }
         // css:297 scalar
@@ -1424,9 +1459,7 @@ fn param_band_color(param: &InspectorParam) -> Color32 {
 
 fn icon_kind_for(param: &InspectorParam) -> IconKind {
     match param.value_type {
-        motolii_plugin::ValueType::F64
-            if param.f64_domain.is_some_and(|domain| domain.integer) =>
-        {
+        motolii_plugin::ValueType::F64 if param.f64_domain.is_some_and(|domain| domain.integer) => {
             IconKind::Integer
         }
         motolii_plugin::ValueType::F64 => IconKind::Scalar,

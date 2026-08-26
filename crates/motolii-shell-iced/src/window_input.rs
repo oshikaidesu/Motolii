@@ -133,9 +133,9 @@ impl Widget<Message, iced::Theme, iced::Renderer> for WindowInput<'_> {
 
         let pending: &mut Pending = tree.state.downcast_mut();
         match event {
-            Event::Keyboard(iced::keyboard::Event::KeyPressed {
-                key, modifiers, ..
-            }) if modifiers.command() => {
+            Event::Keyboard(iced::keyboard::Event::KeyPressed { key, modifiers, .. })
+                if modifiers.command() =>
+            {
                 let iced::keyboard::Key::Character(character) = key else {
                     return;
                 };

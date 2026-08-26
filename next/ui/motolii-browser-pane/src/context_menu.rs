@@ -100,19 +100,19 @@ pub(crate) fn view(
         .map(|action| match action {
             Action::RemoveAsset(asset) => button(
                 text("Remove from library")
-                    .size(dims.micro_text)
+                    .size(dims.theme().text.micro)
                     .color(colors.text_primary),
             )
             .on_press(Message::RemoveAssetFromCard(asset))
             .width(card_width)
-            .padding([dims.spacing_xs, dims.spacing_s])
+            .padding([dims.theme().space.xs, dims.theme().space.s])
             .style(move |_theme, status| {
                 crate::search_view::chip_style(
                     dims,
                     colors,
                     false,
                     status,
-                    crate::filter_view::FILTER_CHIP_CORNER_RADIUS_ROW_HEIGHT_RATIO
+                    dims.components.browser.filter_chip_corner_radius_row_height_ratio
                         * dims.row_height,
                 )
             })
@@ -121,14 +121,14 @@ pub(crate) fn view(
         .collect::<Vec<Element<'static, Message>>>();
 
     Some(
-        container(column(items).spacing(dims.spacing_xs))
+        container(column(items).spacing(dims.theme().space.xs))
             .width(card_width)
-            .padding(dims.spacing_xs)
+            .padding(dims.theme().space.xs)
             .style(move |_theme| container::Style {
                 background: Some(iced::Background::Color(colors.surface_raised)),
                 border: iced::Border {
                     color: colors.border_default,
-                    width: dims.border_width,
+                    width: dims.theme().stroke.hairline,
                     radius: 0.0.into(),
                 },
                 ..container::Style::default()

@@ -17,7 +17,7 @@
 use iced_test::selector::{Candidate, Target};
 
 use motolii_browser_pane::model::AssetListItem;
-use motolii_browser_pane::{view, Message, RailScope, FILTER_CHIP_CORNER_RADIUS_ROW_HEIGHT_RATIO};
+use motolii_browser_pane::{view, Message, RailScope};
 use motolii_store::AssetId;
 use motolii_tokens_rs::{Colors, Dimensions};
 
@@ -82,7 +82,8 @@ const MOCK_FILTER_CHIP_CORNER_RADIUS_PX: f32 = 8.0;
 #[test]
 fn filter_chip_corner_radius_ratio_matches_the_mock_pixel_value() {
     let dims = Dimensions::default();
-    let radius_px = FILTER_CHIP_CORNER_RADIUS_ROW_HEIGHT_RATIO * dims.row_height;
+    let radius_px = dims.components.browser.filter_chip_corner_radius_row_height_ratio
+        * dims.row_height;
     assert_eq!(
         radius_px, MOCK_FILTER_CHIP_CORNER_RADIUS_PX,
         "FILTER_CHIP_CORNER_RADIUS_ROW_HEIGHT_RATIO × row_height が \
@@ -91,10 +92,10 @@ fn filter_chip_corner_radius_ratio_matches_the_mock_pixel_value() {
 }
 
 /// 台帳の主張(2): rail 行文字・filter チップ文字・検索欄文字・結果件数文字は
-/// 全て `dims.micro_text`(8) と同じ大きさで描かれる(`browser-library.css`
+/// 全て `dims.theme().text.micro`(8) と同じ大きさで描かれる(`browser-library.css`
 /// 実測 — `.locationRow`(css:150)/`.filterShelf button`(css:211)/
 /// `#library-search`(css:83)/`.resultSummary strong,span`(css:225-226)が
-/// 例外なく8pxであるのに対し、旧実装は `dims.caption_text`(9)を使っていた —
+/// 例外なく8pxであるのに対し、旧実装は `dims.theme().text.caption`(9)を使っていた —
 /// `card_view` の名前/caption(既に `micro_text` 確定、`lib.rs` の
 /// `card_view` 参照)と同じ高さで描かれることをもって「micro_text を使って
 /// いる」ことの間接証拠とする(このレーンは新しい pub API を増やさず、

@@ -1,10 +1,11 @@
 //! EFFECTS section(B38 編集側 第3切片、裁定184 型別 section 第2号)。
 //!
-//! **持つ**: 既知 plugin(Glow)のパラメータカタログ([`GlowParam`]/
-//! [`GLOW_PLUGIN_ID`]/[`plugin_params`]/[`plugin_display_name`])・stack の
+//! **読む**: provider/device registry のパラメータカタログ([`GLOW_PLUGIN_ID`]/
+//! [`plugin_params`])・**持つ**: stack の
 //! remove/reorder/bypass の意味と書き口([`effects_with_removed`] 系の純関数+
 //! `remove_inspector_effect` 系の `&mut Document` 書き口)・EFFECTS section の
 //! view([`effects_section`]/`effect_ident_row`)。
+//! plugin の表示名は [`crate::device`] registry を読む。
 //!
 //! **持たない**: param 値そのものの編集 ── [`crate::transform::TransformField::
 //! EffectParam`] 経由で既存の値セル文法([`crate::transform::transform_row`])が
@@ -22,90 +23,29 @@ use iced::{Element, Length};
 use crate::projection::EffectRowProjection;
 use crate::transform::{edited_value_track, transform_row, FieldDraft};
 use crate::chrome::{bordered_row, flat_button_style, glyph_button_style, glyph_height, key_glyph};
+use crate::device::device_for_provider;
 use crate::Message;
 
 // ---------------------------------------------------------------------------
-// EFFECTS: 既知 plugin の param カタログ(B38 第3切片)
+// EFFECTS: provider/device registry への読み口(B38 第3切片)
 // ---------------------------------------------------------------------------
 
 /// 内蔵 vism 第1号 Glow の plugin id(裁定153 S4)。**engine 側の変換表
 /// (`next/engine/motolii-engine/src/lib.rs::translate_effect_passes`)と同期を
 /// 保つ義務がある**([`SUPPORTED_BLEND_MODES`] と同じ二重化の形 — engine が
 /// 対応する plugin だけをここに書く)。
-pub const GLOW_PLUGIN_ID: &str = "motolii.glow";
+pub const GLOW_PLUGIN_ID: &str = crate::device::GLOW_DEVICE.as_str();
 
-/// Glow の param カタログ(engine `translate_glow_params` が読む3つの named
-/// param)。**enum で閉じる** — [`TransformField`]/[`KeyRow`] は `Copy` なので
-/// param 名を `String` で運べない。既定値・小数桁・drag 感度もここに束ねる
-/// (型別 editor registry の考え方、crate doc 参照)。
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum GlowParam {
-    /// bright-pass 閾値(engine 既定 1.0 — proof `bright_fs` のハードコード値)。
-    Threshold,
-    /// composite の減衰率(engine 既定 0.75 — proof `composite_fs`)。
-    Intensity,
-    /// blur タップ間隔スケール(engine 既定 1.0 = proof の固定オフセット)。
-    Radius,
-}
-
-impl GlowParam {
-    /// 宣言順 = 表示順(engine `translate_glow_params` の読み出し順と同じ並び)。
-    pub const ALL: [GlowParam; 3] = [
-        GlowParam::Threshold,
-        GlowParam::Intensity,
-        GlowParam::Radius,
-    ];
-
-    /// track 名の断片(`effect.{id}.param.{name}` の `{name}`)。engine の
-    /// `find("threshold", ..)` 等と一致する義務がある(上記の同期義務と同じ)。
-    pub fn name(self) -> &'static str {
-        match self {
-            Self::Threshold => "threshold",
-            Self::Intensity => "intensity",
-            Self::Radius => "radius",
-        }
-    }
-
-    /// 行ラベル(表示)。`name` の頭を大文字化しただけ — 発明ではない。
-    pub fn label(self) -> &'static str {
-        match self {
-            Self::Threshold => "Threshold",
-            Self::Intensity => "Intensity",
-            Self::Radius => "Radius",
-        }
-    }
-
-    /// track の無い param の既定値。**engine の既定
-    /// (`GLOW_DEFAULT_THRESHOLD`/`INTENSITY`/`RADIUS`、private const)の写し** —
-    /// engine と同期を保つ義務([`GLOW_PLUGIN_ID`] と同じ)。表示既定が engine
-    /// 既定とズレると「値を出しただけで絵が変わって見える」誤読になるため。
-    pub fn default_value(self) -> f64 {
-        match self {
-            Self::Threshold => 1.0,
-            Self::Intensity => 0.75,
-            Self::Radius => 1.0,
-        }
-    }
-}
-
-/// plugin id → param カタログ。**未知 plugin は空**(store は catalog を知らず、
-/// engine も未知 plugin_id を無音 skip する — param 行を捏造しない、M13)。
-pub fn plugin_params(plugin_id: &str) -> &'static [GlowParam] {
-    if plugin_id == GLOW_PLUGIN_ID {
-        &GlowParam::ALL
-    } else {
-        &[]
-    }
-}
+/// 既存の呼び手向け互換名。catalog の実体は [`crate::device`] にあり、ここは
+/// section からの読み口を再輸出するだけである。
+pub use crate::device::parameters_for_provider as plugin_params;
 
 /// plugin id → 表示名。既知 plugin だけ人間可読名、未知は plugin_id をそのまま
 /// (M13: 無い意味を有るふりで出さない — id を隠して汎用名を出す方が嘘になる)。
 pub fn plugin_display_name(plugin_id: &str) -> &str {
-    if plugin_id == GLOW_PLUGIN_ID {
-        "Glow"
-    } else {
-        plugin_id
-    }
+    device_for_provider(plugin_id)
+        .map(|device| device.display_name)
+        .unwrap_or(plugin_id)
 }
 
 // ---------------------------------------------------------------------------
@@ -326,19 +266,19 @@ fn effect_ident_row(
     let caption_button = |label: &'static str, message: Message| {
         button(
             text(label)
-                .size(dims.caption_text)
+                .size(dims.theme().text.caption)
                 .align_x(iced::alignment::Horizontal::Center)
                 .align_y(iced::alignment::Vertical::Center),
         )
         .height(Length::Fixed(glyph_height(dims)))
-        .padding([0.0, dims.spacing_s])
+        .padding([0.0, dims.theme().space.s])
         .on_press(message)
         .style(move |_theme, status| flat_button_style(colors, status))
     };
 
     let content = row_widget![
         text(effect_row.name.clone())
-            .size(dims.body_text)
+            .size(dims.theme().text.body)
             .color(name_color)
             .width(Length::Fill),
         caption_button("↑", Message::MoveEffectUp(id)),
@@ -347,12 +287,12 @@ fn effect_ident_row(
         // accent 縁。押しても消えない = 「消さずに切る」を器で語る)。
         button(
             text("Bypass")
-                .size(dims.caption_text)
+                .size(dims.theme().text.caption)
                 .align_x(iced::alignment::Horizontal::Center)
                 .align_y(iced::alignment::Vertical::Center),
         )
         .height(Length::Fixed(glyph_height(dims)))
-        .padding([0.0, dims.spacing_s])
+        .padding([0.0, dims.theme().space.s])
         .on_press(Message::ToggleEffectBypass(id))
         .style(move |_theme, status| glyph_button_style(dims, colors, status, bypassed)),
         // Key 列(K1、裁定214)— 他の行と全く同じ3状態 oracle・click 文法
@@ -362,10 +302,8 @@ fn effect_ident_row(
         key_glyph(effect_row.enabled_key, dims, colors),
         caption_button("Remove", Message::RemoveEffect(id)),
     ]
-    .spacing(dims.spacing_xs)
+    .spacing(dims.theme().space.xs)
     .align_y(iced::alignment::Vertical::Center);
 
     bordered_row(content.into(), dims)
 }
-
-

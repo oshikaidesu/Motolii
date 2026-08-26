@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "_note": "UIの読みやすさを人の採点ではなく機械で検査する共通契約。閾値はWCAG 2.2の通常文字4.5:1・大きい文字3:1・非テキスト3:1を採用。Google DevelopersのAccessibility/Contrast guidanceも同じ閾値を案内する。値はcheck_ui_readability.pyだけが読む。",
+  "source": {
+    "wcag": "https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html",
+    "google": "https://developers.google.com/tech-writing/accessibility/self-study/sufficient-contrast"
+  },
+  "thresholds": {
+    "normal_text_contrast_min": 4.5,
+    "large_text_contrast_min": 3.0,
+    "non_text_contrast_min": 3.0
+  },
+  "interaction": {
+    "minimum_target_px": 24.0,
+    "focus_indicator_width_px": 2.0,
+    "targets": [
+      "inspector_glyph",
+      "browser_view_mode",
+      "timeline_transport"
+    ]
+  },
+  "roles": {
+    "normal_text": {
+      "foreground": ["text.primary", "text.secondary", "text.muted"],
+      "background": ["surface.app", "surface.panel", "surface.raised"]
+    },
+    "non_text": {
+      "foreground": ["focus", "action.active", "border.strong"],
+      "background": ["surface.app", "surface.panel", "surface.raised"]
+    }
+  }
+}

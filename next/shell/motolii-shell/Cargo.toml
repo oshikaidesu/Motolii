@@ -17,6 +17,7 @@ motolii-core.workspace = true
 motolii-engine.workspace = true
 motolii-media.workspace = true
 motolii-store.workspace = true
+motolii-fixture.workspace = true
 # 裁定205 施工第2号 §D: create タブの Rectangle/Ellipse カードに実際の shape
 # (`Intent::SetShapes`)を積む。`motolii-store` は `PathSource`/`Shape`/
 # `ShapeNode` こそ再輸出しているが `Fill`(塗り)は輸出していない
@@ -33,6 +34,7 @@ motolii-vector.workspace = true
 # 抽出先の `motolii-tokens-rs/Cargo.toml` へ一緒に移した(motolii-shell からは
 # 直接使わなくなった)。
 motolii-tokens-rs.workspace = true
+motolii-presentation-config.workspace = true
 # MB-2(裁定179 D1 根治): header の箱ボタン列を menubar へ差し替え。メニューの
 # 中身(意味)は `src/menu.rs::menus()`、widget は `motolii-menubar` の
 # `menu_bar`(iced_aw menu の vendoring wraps、Simulator oracle 済み)。
@@ -92,6 +94,7 @@ motolii-export.workspace = true
 motolii-export-pane = { path = "../../ui/motolii-export-pane" }
 # Project ごとの front-state/recent-files sidecar。Document の persist 経路とは
 # 分離した UI 状態の JSON 境界でだけ使う。
+serde.workspace = true
 serde_json.workspace = true
 
 [dev-dependencies]

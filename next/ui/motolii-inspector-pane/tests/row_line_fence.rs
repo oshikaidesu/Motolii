@@ -8,7 +8,7 @@
 use motolii_inspector_pane::row_band_style;
 use motolii_tokens_rs::Dimensions;
 
-/// **本命(D5)**: 行の border は透明・幅は `dims.border_width` のまま
+/// **本命(D5)**: 行の border は透明・幅は `dims.theme().stroke.hairline` のまま
 /// (幾何不変)・面は塗らない(行はゼブラも面も持たない — 区切りは間隔)。
 #[test]
 fn row_rule_is_transparent_but_keeps_its_width() {
@@ -20,8 +20,8 @@ fn row_rule_is_transparent_but_keeps_its_width() {
         style.border.color
     );
     assert_eq!(
-        style.border.width, dims.border_width,
-        "行の border 幅が dims.border_width から動いた(幾何不変違反)"
+        style.border.width, dims.theme().stroke.hairline,
+        "行の border 幅が dims.theme().stroke.hairline から動いた(幾何不変違反)"
     );
     assert_eq!(style.border.radius, 0.0.into(), "行の角丸が動いた(幾何不変違反)");
     assert!(

@@ -1,0 +1,107 @@
+{
+  "$schema": "ui-observation-scenarios.schema.json",
+  "version": 1,
+  "source": "real-window",
+  "binary": "next/target/preview/motolii-shell",
+  "capture": {
+    "settle_ms": 1400,
+    "window_timeout_s": 15
+  },
+  "analysis": {
+    "regions": {
+      "window": [0, 0, 1, 1],
+      "header": [0, 0, 1, 0.1],
+      "work_area": [0, 0.1, 1, 0.84],
+      "footer": [0, 0.84, 1, 0.1]
+    },
+    "checks": [
+      {
+        "id": "window-has-tonal-range",
+        "metric": "luma_p95_p05",
+        "region": "window",
+        "op": ">=",
+        "value": 0.12
+      },
+      {
+        "id": "window-has-structure",
+        "metric": "edge_density",
+        "region": "window",
+        "op": ">=",
+        "value": 0.004
+      },
+      {
+        "id": "header-is-rendered",
+        "metric": "edge_density",
+        "region": "header",
+        "op": ">=",
+        "value": 0.001
+      },
+      {
+        "id": "work-area-is-rendered",
+        "metric": "edge_density",
+        "region": "work_area",
+        "op": ">=",
+        "value": 0.003
+      },
+      {
+        "id": "footer-is-rendered",
+        "metric": "luma_p95_p05",
+        "region": "footer",
+        "op": ">=",
+        "value": 0.015
+      }
+    ]
+  },
+  "scenarios": [
+    {
+      "id": "fixture-boot",
+      "label": "fixture起動（実窓）",
+      "operation": "boot fixture document",
+      "argv": ["--fixture"]
+    },
+    {
+      "id": "browser-toggle",
+      "label": "Browserトグル",
+      "operation": "Shell::update Browser::ToggleBrowserPanel",
+      "argv": ["--fixture", "--browser-open"],
+      "reference": "fixture-boot",
+      "delta": {
+        "changed_fraction": 0.005,
+        "mean_abs_rgb": 0.005
+      }
+    },
+    {
+      "id": "transparent-background",
+      "label": "背景をTransparentへ変更",
+      "operation": "Shell::update Settings::BackgroundPreset(Transparent)",
+      "argv": ["--fixture", "--transparent-bg"],
+      "reference": "fixture-boot",
+      "delta": {
+        "changed_fraction": 0.01,
+        "mean_abs_rgb": 0.005
+      }
+    },
+    {
+      "id": "transparent-checkerboard",
+      "label": "Transparent + 市松",
+      "operation": "Shell::update Stage::ToggleCheckerboard",
+      "argv": ["--fixture", "--transparent-bg", "--checkerboard"],
+      "reference": "transparent-background",
+      "delta": {
+        "changed_fraction": 0.01,
+        "mean_abs_rgb": 0.005
+      }
+    },
+    {
+      "id": "observe-camera",
+      "label": "Stage観測カメラ",
+      "operation": "Shell::update Stage::Observe",
+      "argv": ["--fixture", "--observe"],
+      "reference": "fixture-boot",
+      "delta": {
+        "changed_fraction": 0.005,
+        "mean_abs_rgb": 0.005
+      }
+    }
+  ]
+}

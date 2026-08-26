@@ -167,10 +167,10 @@ pub(crate) fn commit_graph_editor(
         doc,
         session,
         Interp::Bezier {
-            x1: values[0],
-            y1: values[1],
-            x2: values[2],
-            y2: values[3],
+            x1: values[0] as f64,
+            y1: values[1] as f64,
+            x2: values[2] as f64,
+            y2: values[3] as f64,
         },
     );
     if reason.is_none() {

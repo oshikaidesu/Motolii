@@ -249,9 +249,10 @@ impl Shell {
                 }
             }
             Message::LayerSelected(layer) => {
-                let _ = self
-                    .gateway
-                    .dispatch(UiIntent::SelectLayer { layer, additive: false });
+                let _ = self.gateway.dispatch(UiIntent::SelectLayer {
+                    layer,
+                    additive: false,
+                });
             }
             Message::TogglePlayPressed => {
                 // **intent ではない**(module doc 参照)。`ShellGateway` の
@@ -299,7 +300,9 @@ impl Shell {
                     Some(path) => {
                         // **OS ドロップと同じ1本の合流点。** 成立も失敗も帯が言う
                         // (`admit_dropped_paths` の一言がそのまま出る)。
-                        let _ = self.gateway.dispatch(UiIntent::AdmitPaths { paths: vec![path] });
+                        let _ = self
+                            .gateway
+                            .dispatch(UiIntent::AdmitPaths { paths: vec![path] });
                     }
                     None => {
                         // 拒否の報酬(Q3): 黙って無視しない。存在しない path を
@@ -354,12 +357,10 @@ impl Shell {
                 definition_id,
                 enabled,
             } => {
-                let _ = self
-                    .gateway
-                    .dispatch(UiIntent::SetEffectEnabled {
-                        definition_id,
-                        enabled,
-                    });
+                let _ = self.gateway.dispatch(UiIntent::SetEffectEnabled {
+                    definition_id,
+                    enabled,
+                });
             }
             InspectorEvent::ToggleMute | InspectorEvent::ToggleSolo => {
                 let Some(layer) = self.inspected_layer() else {
@@ -370,7 +371,9 @@ impl Shell {
                 } else {
                     UiItemFlag::Solo
                 };
-                let _ = self.gateway.dispatch(UiIntent::ToggleItemFlag { layer, flag });
+                let _ = self
+                    .gateway
+                    .dispatch(UiIntent::ToggleItemFlag { layer, flag });
             }
             InspectorEvent::KeyPressed(param) => {
                 let Some(layer) = self.inspected_layer() else {
@@ -402,7 +405,9 @@ impl Shell {
                 };
                 match event {
                     ScrubEvent::Started => {
-                        let _ = self.gateway.dispatch(UiIntent::BeginParamEdit { layer, param });
+                        let _ = self
+                            .gateway
+                            .dispatch(UiIntent::BeginParamEdit { layer, param });
                     }
                     ScrubEvent::Changed(value) => {
                         let _ = self.gateway.dispatch(UiIntent::SetParamComponent {
@@ -448,8 +453,7 @@ impl Shell {
         let seat = self.gateway.project();
         let snapshot = seat.map(|seat| seat.snapshot());
         let root = self.browser_project_root();
-        self.browser
-            .cards(snapshot.as_deref(), root.as_deref())
+        self.browser.cards(snapshot.as_deref(), root.as_deref())
     }
 
     /// card 1枚が指す実ファイル(配置要求の解決)。
@@ -567,9 +571,7 @@ impl Shell {
 
     /// 座っている project のパス。
     pub fn project_path(&self) -> Option<PathBuf> {
-        self.gateway
-            .project()
-            .map(|seat| seat.path().to_path_buf())
+        self.gateway.project().map(|seat| seat.path().to_path_buf())
     }
 
     /// 帯が名乗る project 名(パスが名前を持たなければパスそのもの)。
@@ -739,9 +741,9 @@ impl Shell {
         };
         let document = seat.snapshot();
         let root = seat.editor().project_root().map(Path::to_path_buf);
-        self.waveform_state =
-            self.waveform
-                .poll(&document, root.as_deref(), &mut self.pcm_caches);
+        self.waveform_state = self
+            .waveform
+            .poll(&document, root.as_deref(), &mut self.pcm_caches);
     }
 }
 

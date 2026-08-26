@@ -1,4 +1,8 @@
-//! wraps: iced — front。**store への query の投影**であって、Document の写しを持たない。
+//! wraps: iced — 凍結ホストのアセンブラ。product front は Makepad(裁定251/253)。
+//! 意味の正本は motolii-store / motolii-shell-state / motolii-engine。
+//! この crate は製品核ではない。view も update も製品 interface ではない。
+//!
+//! **store への query の投影**であって、Document の写しを持たない。
 //!
 //! 背骨1 を型で作る:
 //! - **書き口は [`Shell::update`] の1箇所だけ**。pane 関数は `StoreView`(不変)・
@@ -6,16 +10,8 @@
 //!   しか受け取らないので、**書ける物を持っていない**
 //! - `view(&self)` が `&self` を取るので、描画中に Document を触る道が無い
 //!
-//! Stage は **CPU 経路**(合成は CPU、`Engine::render_frame` の RGBA を作る所まで)
-//! だが、**表示だけは裁定166 で GPU 常駐テクスチャへ変えた** — 合成結果の RGBA を
-//! `iced::widget::shader` の自前 Program(永続 `wgpu::Texture` + 世代ゲート付き
-//! `queue.write_texture`)へ渡す。旧実装(`image::Handle::from_rgba` を毎フレーム
-//! 新規発行)は iced_wgpu の非同期アップロード境界(2MB)を超えると「その間
-//! 何も描かない」穴があり、実機のイージングのガタつきの一次原因だった
-//! (`docs/reviews/2026-08-21-stage-presenter-decision.md`)。永続テクスチャ経路
-//! にはその穴が無いので、フル解像度のまま描ける。iced の device の上に
-//! `re_renderer` を建てる道(合成そのものを GPU へ持ち込む道)は裁定44 で撤回
-//! したまま — ここで変わったのは「CPU が作った RGBA を GPU へどう見せるか」だけ。
+//! 凍結ホストの Stage 表示は裁定166 の iced shader Program(永続 `wgpu::Texture`)。
+//! 製品 Stage は裁定251の共有 Surface であり、この iced 経路を延長しない。
 //!
 //! **front が持ってよい状態**は [`Session`] だけ — 選択と再生位置。これらは
 //! Document の写しではなく、undo の対象でもない(rerun も選択は blueprint store の
@@ -47,7 +43,7 @@ pub mod clipboard;
 /// production 実装 [`RfdDialogs`])。`Shell::new_with_dialogs`/test の fake が
 /// 外から参照するため `pub`(`file_dialogs.rs` 冒頭 doc 参照)。
 pub mod file_dialogs;
-pub mod fixture;
+pub use motolii_fixture as fixture;
 /// header のメニューバーの意味定義(MB-2、`menu.rs` 冒頭 doc 参照)。MB-2 で
 /// `pub` 化した — `TOP_LEVEL_LABELS`/`menus()` が対応表の正本で、q0_fence
 /// (menubar のバー領域除外)と menu_drive が外から読む。
@@ -131,6 +127,7 @@ pub use motolii_inspector_pane as inspector_pane;
 /// 「型 alias で外部参照を壊さない」手口(既存の `crate::tokens::X`・
 /// `motolii_shell::tokens::X` 参照はここを直せば無改修で済む)。
 pub use motolii_tokens_rs as tokens;
+pub use motolii_presentation_config as presentation_config;
 
 /// `timeline`/`timeline_pane` は裁定160 切片7(pane split survey §6 切片7)で
 /// `motolii-timeline-pane` crate へ抽出済み — `src/timeline/` 9ファイル +
@@ -189,6 +186,7 @@ use settings_pane::BackgroundFieldDraft;
 use transport::Transport;
 
 use tokens::Tokens;
+use presentation_config::LastGoodPresentation;
 
 // 2026-08-23 SP-1 レーン(shell 分割の続き): `PreviewSnapshot`/`PresenterSource`/
 // `RenderedFrame`/`DisplaySource`/`GizmoShellDrag` は `render.rs` へ、
@@ -266,6 +264,9 @@ pub enum Message {
     /// トークンファイル(寸法・色)が変わった。**debug ビルドでしか実際には届かない**
     /// (裁定117)— release は [`tokens::watch_subscription`] が何も発行しない。
     TokensFileChanged,
+    /// UI の既定表示方針が変わった。Document/Intent には触れない。
+    /// debug ビルドでのみ `presentation_config::watch_subscription` が発行する。
+    PresentationFileChanged,
 
     // ---- 窓台帳(S1 daemon 骨格、裁定182/188 —
     // `docs/reviews/2026-08-22-multiwindow-probe.md`) ----
@@ -683,6 +684,9 @@ pub struct Shell {
     pending_drops: Vec<std::path::PathBuf>,
     /// デザイン値(裁定117)。全 pane がここ経由で寸法・色を読む — raw 値の直書き禁止。
     tokens: Tokens,
+    /// UI 既定表示方針の last-good。ユーザーの現在配置は `panes` 側にあり、
+    /// Document の内容は持たない。
+    presentation: LastGoodPresentation,
     /// Inspector の Transform 行、編集中の下書き。**Document ではない** —
     /// `Message::Inspector(inspector_pane::Message::FieldSubmit)` が来るまで
     /// store に触らない(`pending_drops` と同じ「確定するまで front だけが
@@ -1043,6 +1047,9 @@ impl Shell {
         let saved_revision = doc.revision();
 
         let engine = Engine::new().expect("GPU を用意できない");
+        let presentation = LastGoodPresentation::load();
+        let panes = pane_layout::Layout::from_presentation(presentation.current());
+        let browser_open = panes.browser_open();
         (
             Self {
                 doc,
@@ -1052,6 +1059,7 @@ impl Shell {
                 status: None,
                 pending_drops: Vec::new(),
                 tokens: Tokens::load(),
+                presentation,
                 inspector_field_draft: None,
                 inspector_name_draft: None,
                 inspector_speed_draft: None,
@@ -1068,9 +1076,9 @@ impl Shell {
                 keyboard_modifiers: iced::keyboard::Modifiers::default(),
                 layer_selection_anchor: None,
                 timeline: timeline_pane::PaneState::new(),
-                browser: browser_pane::PaneState::new(),
+                browser: browser_pane::PaneState::with_open(browser_open),
                 source_preview: source_preview::State::default(),
-                panes: pane_layout::Layout::new(),
+                panes,
                 settings_window: None,
                 checkerboard: false,
                 background_draft: None,
@@ -1181,6 +1189,12 @@ impl Shell {
         self.main_window
     }
 
+    /// UI の既定表示方針の読み口。ユーザーが現在動かした pane 配置や
+    /// Document の内容を返さず、Presentation JSON の last-good だけを返す。
+    pub fn presentation_config(&self) -> &presentation_config::PresentationConfig {
+        self.presentation.current()
+    }
+
     /// `--fixture` 起動が使う口。**トンマナ検分の器具**(発注書)— `fixture::build()`
     /// が既存 Intent(`apply_all`)だけで組んだ Document を、通常の `new()` と同じ形で
     /// `Shell` へ包む。`update()` を経由しない点だけが `new()` と違う(初期状態の
@@ -1191,6 +1205,9 @@ impl Shell {
         // `new_with_dialogs` の `saved_revision` と同じ考え方(doc 参照)。
         let saved_revision = built.doc.revision();
         let engine = Engine::new().expect("GPU を用意できない");
+        let presentation = LastGoodPresentation::load();
+        let panes = pane_layout::Layout::from_presentation(presentation.current());
+        let browser_open = panes.browser_open();
         let mut shell = Self {
             doc: built.doc,
             session: Session {
@@ -1203,6 +1220,7 @@ impl Shell {
             status: Some(built.status),
             pending_drops: Vec::new(),
             tokens: Tokens::load(),
+            presentation,
             inspector_field_draft: None,
             inspector_name_draft: None,
             inspector_speed_draft: None,
@@ -1219,9 +1237,9 @@ impl Shell {
             keyboard_modifiers: iced::keyboard::Modifiers::default(),
             layer_selection_anchor: None,
             timeline: timeline_pane::PaneState::new(),
-            browser: browser_pane::PaneState::new(),
+            browser: browser_pane::PaneState::with_open(browser_open),
             source_preview: source_preview::State::default(),
-            panes: pane_layout::Layout::new(),
+            panes,
             settings_window: None,
             checkerboard: false,
             background_draft: None,
@@ -1312,6 +1330,8 @@ impl Shell {
         });
         // debug ビルドのみ実際に発行する(裁定117)。release は `Subscription::none()`。
         let tokens = tokens::watch_subscription().map(|()| Message::TokensFileChanged);
+        let presentation = presentation_config::watch_subscription()
+            .map(|()| Message::PresentationFileChanged);
         // Inspector の drag-to-scrub 用。`mouse_area` は自分の bounds を出た
         // cursor を追えない(iced 0.14 に pointer capture が無い実測)ので、
         // move/release/Escape の主経路を window 全体からここで拾う
@@ -1358,6 +1378,7 @@ impl Shell {
         iced::Subscription::batch([
             window,
             tokens,
+            presentation,
             pointer,
             ticks,
             source_preview_ticks,

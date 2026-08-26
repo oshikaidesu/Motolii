@@ -557,8 +557,8 @@ fn aspect_preset_row(
     }
 
     column![info_row("Current", current_label, dims, colors), presets]
-        .spacing(dims.spacing_xs)
-        .padding([0.0, dims.spacing_m])
+        .spacing(dims.theme().space.xs)
+        .padding([0.0, dims.theme().space.m])
         .into()
 }
 
@@ -573,16 +573,16 @@ fn aspect_preset_button(
     let mut control = button(
         column![
             text(preset.label())
-                .size(dims.body_text)
+                .size(dims.theme().text.body)
                 .color(colors.text_primary),
             text(format_resolution(dimensions.width, dimensions.height))
-                .size(dims.caption_text)
+                .size(dims.theme().text.caption)
                 .color(colors.text_muted),
         ]
-        .spacing(dims.spacing_xs),
+        .spacing(dims.theme().space.xs),
     )
     .width(Length::FillPortion(1))
-    .padding([dims.spacing_xs, dims.spacing_s])
+    .padding([dims.theme().space.xs, dims.theme().space.s])
     .style(move |_theme, status| {
         let mut style = button_style(dims, colors, status);
         // `button_style` already owns the shared button grammar.  A selected
@@ -609,15 +609,15 @@ fn info_row(
 ) -> Element<'static, Message> {
     row![
         text(label)
-            .size(dims.body_text)
+            .size(dims.theme().text.body)
             .color(colors.text_primary)
             .width(Length::Fill),
-        text(value).size(dims.body_text).color(colors.text_primary),
+        text(value).size(dims.theme().text.body).color(colors.text_primary),
     ]
-    .spacing(dims.spacing_xs)
+    .spacing(dims.theme().space.xs)
     .height(Length::Fixed(dims.inspector_row_height))
     .align_y(iced::alignment::Vertical::Center)
-    .padding([0.0, dims.spacing_m])
+    .padding([0.0, dims.theme().space.m])
     .into()
 }
 
@@ -636,23 +636,23 @@ fn destination_row(
         Some(path) => (path.display().to_string(), colors.text_primary),
         None => ("未設定".to_owned(), colors.text_muted),
     };
-    let mut choose = button(text("Choose…").size(dims.body_text))
+    let mut choose = button(text("Choose…").size(dims.theme().text.body))
         .style(move |_theme, status| button_style(dims, colors, status));
     if can_pick {
         choose = choose.on_press(Message::PickOutputPath);
     }
     row![
         text("Destination")
-            .size(dims.body_text)
+            .size(dims.theme().text.body)
             .color(colors.text_primary)
             .width(Length::Fill),
-        text(value).size(dims.body_text).color(color),
+        text(value).size(dims.theme().text.body).color(color),
         choose,
     ]
-    .spacing(dims.spacing_xs)
+    .spacing(dims.theme().space.xs)
     .height(Length::Fixed(dims.inspector_row_height))
     .align_y(iced::alignment::Vertical::Center)
-    .padding([0.0, dims.spacing_m])
+    .padding([0.0, dims.theme().space.m])
     .into()
 }
 
@@ -667,29 +667,29 @@ fn toggle_row(
     colors: Colors,
 ) -> Element<'static, Message> {
     let mut switch = toggler(toggled)
-        .size(dims.body_text)
+        .size(dims.theme().text.body)
         .style(move |_theme, status| toggler_style(colors, status));
     if let Some(on_toggle) = on_toggle {
         switch = switch.on_toggle(on_toggle);
     }
     row![
         text(label)
-            .size(dims.body_text)
+            .size(dims.theme().text.body)
             .color(colors.text_primary)
             .width(Length::Fill),
         switch,
     ]
-    .spacing(dims.spacing_xs)
+    .spacing(dims.theme().space.xs)
     .height(Length::Fixed(dims.inspector_row_height))
     .align_y(iced::alignment::Vertical::Center)
-    .padding([0.0, dims.spacing_m])
+    .padding([0.0, dims.theme().space.m])
     .into()
 }
 
 /// Export 実行行。`can_export = false`(出力先未設定)の間は `on_press` を
 /// 付けない — button が自分で Disabled の顔になる(理由は直下の hint 行)。
 fn run_row(can_export: bool, dims: Dimensions, colors: Colors) -> Element<'static, Message> {
-    let mut export = button(text("Export").size(dims.body_text))
+    let mut export = button(text("Export").size(dims.theme().text.body))
         .style(move |_theme, status| button_style(dims, colors, status));
     if can_export {
         export = export.on_press(Message::Export);
@@ -697,7 +697,7 @@ fn run_row(can_export: bool, dims: Dimensions, colors: Colors) -> Element<'stati
     row![export]
         .height(Length::Fixed(dims.inspector_row_height))
         .align_y(iced::alignment::Vertical::Center)
-        .padding([0.0, dims.spacing_m])
+        .padding([0.0, dims.theme().space.m])
         .into()
 }
 
@@ -709,21 +709,21 @@ fn progress_row(
 ) -> Element<'static, Message> {
     row![
         text(format_progress(progress))
-            .size(dims.body_text)
+            .size(dims.theme().text.body)
             .color(colors.text_primary)
             .width(Length::Fill),
         button(icon(
             Icon::Close,
-            frame_px_for_glyph_px(dims.body_text),
+            frame_px_for_glyph_px(dims.theme().text.body),
             colors.text_primary,
         ))
         .on_press(Message::CancelExport)
         .style(move |_theme, status| button_style(dims, colors, status)),
     ]
-    .spacing(dims.spacing_xs)
+    .spacing(dims.theme().space.xs)
     .height(Length::Fixed(dims.inspector_row_height))
     .align_y(iced::alignment::Vertical::Center)
-    .padding([0.0, dims.spacing_m])
+    .padding([0.0, dims.theme().space.m])
     .into()
 }
 
@@ -733,9 +733,9 @@ fn hint_row(
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
-    container(text(message).size(dims.caption_text).color(colors.text_muted))
+    container(text(message).size(dims.theme().text.caption).color(colors.text_muted))
         .width(Length::Fill)
-        .padding([dims.spacing_xs, dims.spacing_m])
+        .padding([dims.theme().space.xs, dims.theme().space.m])
         .into()
 }
 
@@ -743,11 +743,11 @@ fn hint_row(
 fn warning_row(message: String, dims: Dimensions, colors: Colors) -> Element<'static, Message> {
     container(
         text(message)
-            .size(dims.caption_text)
+            .size(dims.theme().text.caption)
             .color(colors.status_warning),
     )
     .width(Length::Fill)
-    .padding([dims.spacing_xs, dims.spacing_m])
+    .padding([dims.theme().space.xs, dims.theme().space.m])
     .into()
 }
 

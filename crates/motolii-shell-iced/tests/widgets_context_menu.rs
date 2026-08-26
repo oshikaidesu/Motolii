@@ -6,9 +6,7 @@
 mod common;
 
 use common::{left_pressed, left_released, point_and_move};
-use motolii_shell_iced::widgets::context_menu::{
-    context_menu, item_position, MenuEvent, MenuItem,
-};
+use motolii_shell_iced::widgets::context_menu::{context_menu, item_position, MenuEvent, MenuItem};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Msg {
@@ -81,7 +79,9 @@ fn pressing_outside_dismisses() {
 #[test]
 fn escape_dismisses() {
     let mut ui = sim();
-    let _ = ui.tap_key(iced::keyboard::Key::Named(iced::keyboard::key::Named::Escape));
+    let _ = ui.tap_key(iced::keyboard::Key::Named(
+        iced::keyboard::key::Named::Escape,
+    ));
 
     assert_eq!(events(ui), vec![MenuEvent::Dismissed]);
 }

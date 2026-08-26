@@ -241,6 +241,10 @@ impl Engine {
     /// インスタンス自身が新しく持つ**——呼び出し側(`motolii-shell` の presenter
     /// Pipeline)が `Engine::new()` の headless インスタンスと取り違えて共有する
     /// ことはない(構造的に別インスタンス)。
+    pub fn gpu_device(&self) -> &wgpu::Device {
+        self.compositor.device()
+    }
+
     pub fn with_device(device: wgpu::Device, queue: wgpu::Queue) -> Result<Self, EngineError> {
         Ok(Self {
             compositor: Compositor::with_device_using_headless_defaults(device, queue)?,

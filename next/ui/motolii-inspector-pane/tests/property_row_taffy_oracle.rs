@@ -162,7 +162,7 @@ fn property_row_label_column_narrows_by_exactly_the_documented_gap_budget() {
 
     let mock_label = mock_widths[0];
     let taffy_label = taffy_widths[0];
-    let expected_gap_budget = 4.0 * dims.spacing_xs; // label→v0, v0→v1, v1→v2, v2→key の4本。
+    let expected_gap_budget = 4.0 * dims.theme().space.xs; // label→v0, v0→v1, v1→v2, v2→key の4本。
 
     assert!(
         ((mock_label - taffy_label) - expected_gap_budget).abs() <= 1.0,

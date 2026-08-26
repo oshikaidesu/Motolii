@@ -1,3 +1,5 @@
+//! wraps: motolii-store — `--fixture` Document を既存 Intent(`apply_all`)だけで組む。
+//!
 //! `--fixture` 起動が組む「MV 制作の途中に見える」Document(トンマナ検分の器具)。
 //!
 //! **既存 Intent(`apply_all`)だけで組む** — store のコードは1行も触らない
@@ -196,7 +198,7 @@ pub fn build() -> Fixture {
                 // (発注書 ORACLE (e))が意味を持つようここでも同じ規則で
                 // 割り当てる — 15層が12色パレットを一周し、隣接色の
                 // 見分けやすさが検分できる。
-                label_color: Some(Some((id.0 % crate::tokens::LABEL_PALETTE_LEN as u64) as u8)),
+                label_color: Some(Some((id.0 % motolii_tokens_rs::LABEL_PALETTE_LEN as u64) as u8)),
                 ..Default::default()
             },
         });

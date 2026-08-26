@@ -24,10 +24,19 @@
 直列なWIRE結線として数える。Shell rootを全機能の意味責任へ連結しないためである。
 """
 import csv, glob, io, os, re, sys, collections
+from pathlib import Path
+
+from foundation_phase import FoundationPhaseError, load_phase, summary
 
 ROOT = sys.argv[1] if len(sys.argv) > 1 else "."
 AXIS = os.path.join(ROOT, "next/reference/axis")
 GEN = os.path.join(ROOT, "next/reference/generated")
+
+try:
+    FOUNDATION_PHASE = load_phase(Path(ROOT), required=False)
+except FoundationPhaseError as error:
+    print(f"FOUNDATION_PHASE=RED {error}", file=sys.stderr)
+    raise SystemExit(1)
 
 PATH_RE = re.compile(r'(next/[A-Za-z0-9_./-]+?\.rs)')
 WIRE_RE = re.compile(r'^\s*//!\s*responsibility:\s*wire\s*$', re.MULTILINE)
@@ -160,6 +169,11 @@ ordered = sorted(lanes.values(), key=lambda l: -len(l["items"]))
 wire_required = [it for it in items if it["wire_files"]]
 out = ["# 作業割り(機械導出)", "",
        f"`scripts/plan_waves.py` が生成。**手で編集しない。**",
+       "",
+       (f"- 段階ゲート: {summary(FOUNDATION_PHASE)}"
+        if FOUNDATION_PHASE else "- 段階ゲート: UNDECLARED"),
+       (f"- 並列許可: {FOUNDATION_PHASE['parallel_components'].upper()}"
+        if FOUNDATION_PHASE else "- 並列許可: UNKNOWN"),
        "",
        "原理: **意味componentのwrite-setが交わらない作業項目は同時に走れる**。",
        "`//! responsibility: wire` を持つShell rootは意味レーンから除外し、",

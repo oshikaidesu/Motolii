@@ -8,9 +8,7 @@
 mod common;
 
 use common::{left_pressed, left_released, point_and_move};
-use motolii_shell_iced::widgets::scrub_value::{
-    format_value, scrub_value, ScrubEvent, ScrubSpec,
-};
+use motolii_shell_iced::widgets::scrub_value::{format_value, scrub_value, ScrubEvent, ScrubSpec};
 
 #[derive(Debug, Clone, PartialEq)]
 enum Msg {
@@ -65,7 +63,9 @@ fn escape_during_a_drag_cancels_instead_of_committing() {
     point_and_move(&mut ui, 100.0, 10.0);
     let _ = ui.simulate([left_pressed()]);
     point_and_move(&mut ui, 110.0, 10.0);
-    let _ = ui.tap_key(iced::keyboard::Key::Named(iced::keyboard::key::Named::Escape));
+    let _ = ui.tap_key(iced::keyboard::Key::Named(
+        iced::keyboard::key::Named::Escape,
+    ));
     let _ = ui.simulate([left_released()]);
     point_and_move(&mut ui, 130.0, 10.0);
 
@@ -144,9 +144,16 @@ fn integer_specs_snap_to_whole_numbers() {
 fn double_click_opens_text_entry_and_enter_commits() {
     let mut ui = sim(spec(10.0));
     point_and_move(&mut ui, 100.0, 10.0);
-    let _ = ui.simulate([left_pressed(), left_released(), left_pressed(), left_released()]);
+    let _ = ui.simulate([
+        left_pressed(),
+        left_released(),
+        left_pressed(),
+        left_released(),
+    ]);
     let _ = ui.typewrite("42.5");
-    let _ = ui.tap_key(iced::keyboard::Key::Named(iced::keyboard::key::Named::Enter));
+    let _ = ui.tap_key(iced::keyboard::Key::Named(
+        iced::keyboard::key::Named::Enter,
+    ));
 
     assert_eq!(
         events(ui),
@@ -159,9 +166,16 @@ fn double_click_opens_text_entry_and_enter_commits() {
 fn escape_during_text_entry_cancels() {
     let mut ui = sim(spec(10.0));
     point_and_move(&mut ui, 100.0, 10.0);
-    let _ = ui.simulate([left_pressed(), left_released(), left_pressed(), left_released()]);
+    let _ = ui.simulate([
+        left_pressed(),
+        left_released(),
+        left_pressed(),
+        left_released(),
+    ]);
     let _ = ui.typewrite("99");
-    let _ = ui.tap_key(iced::keyboard::Key::Named(iced::keyboard::key::Named::Escape));
+    let _ = ui.tap_key(iced::keyboard::Key::Named(
+        iced::keyboard::key::Named::Escape,
+    ));
 
     assert_eq!(events(ui), vec![ScrubEvent::Started, ScrubEvent::Cancelled]);
 }

@@ -170,10 +170,7 @@ impl<M> overlay::Overlay<M, iced::Theme, iced::Renderer> for MenuOverlay<'_, M> 
             });
             width = width.max(paragraph.min_bounds().width + ITEM_PAD_X * 2.0);
         }
-        let size = Size::new(
-            width,
-            MENU_PAD_Y * 2.0 + ITEM_H * self.items.len() as f32,
-        );
+        let size = Size::new(width, MENU_PAD_Y * 2.0 + ITEM_H * self.items.len() as f32);
 
         // 窓端でははみ出さず内側へ寄る(読めない menu を出さない)。
         let position = Point::new(

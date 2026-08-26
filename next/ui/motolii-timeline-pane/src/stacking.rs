@@ -3,17 +3,19 @@
 //! Back)+ 正典 §8.1 ReorderLayerUp/Down(+ToEnd)の実体 — Timeline 第3切片
 //! (B15+B52 発注)で追加した。
 //!
-//! ## この動詞が動かすのは Stage の重なりだけ(重要な限定)
+//! ## lane 順と Stage 重なりを分離しない
 //!
 //! `projection::rows` は Timeline の縦位置を **LayerId 昇順**で組み、
 //! `meta.order` を読まない(同 doc: 「bar の重ね順(`meta.order`)は Stage 側の
-//! 合成順であって、Timeline の縦位置の所有者にしない」)。したがって
-//! 「レーンバー行の drag 並べ替え」は現行の投影では**意味が store に無い**
-//! (行位置は order の投影ではない) — 発注書の柵「意味が store に無い行は
-//! 選ばない」により、この切片では行 drag は実装しない(RETURN の finding)。
-//! ここにあるのは Stage の重なり(`StoreView::resolved_layers` が
-//! `placement.order` **昇順**で合成する = order が大きいほど前面)を動かす
-//! 動詞の計算だけ。
+//! 合成順であって、Timeline の縦位置の所有者にしない」)。これは現行 Iced
+//! projection の表示規則であって、別の永続 lane-order model を作る根拠ではない。
+//! lane drag を提供する projection は、**上=前面**として `meta.order` から行順を
+//! 作り、この動詞へ委託する。したがって lane の上下移動と Stage のレイヤー上下は
+//! 常に同じ1操作になり、表示ローカルだけ動く状態を残さない。
+//!
+//! `StoreView::resolved_layers` は `placement.order` **昇順**で合成するため、order が
+//! 大きいほど前面。`ToIndexFromBack` は任意位置への lane drag を Forward/Backward
+//! の反復へ分解せず、1回の `apply_all` = 1 undo で確定する入口である。
 //!
 //! ## 決定的な手順(呼び手は [`restacked`] の結果を `Intent::SetOrder` へ写す)
 //!
@@ -43,6 +45,10 @@ pub enum StackDirection {
     ToFront,
     /// 最背面へ(map 293 Send Layer to Back)。
     ToBack,
+    /// 背面を 0 とする任意の stack index へ。Timeline の lane drag が、表示上の
+    /// 移動と Stage 合成順を同じ1操作として確定するための入口。値は対象 block
+    /// を除いた列への挿入位置へ clamp される。
+    ToIndexFromBack(usize),
 }
 
 /// 現在の `(layer, order)` の集合と対象集合から、並べ替え後に **order が変わる
@@ -96,6 +102,7 @@ pub fn restacked(
         StackDirection::Backward => below.saturating_sub(1),
         StackDirection::ToFront => rest.len(),
         StackDirection::ToBack => 0,
+        StackDirection::ToIndexFromBack(index) => index.min(rest.len()),
     };
 
     let mut new_sequence: Vec<LayerId> = Vec::with_capacity(ordered.len());
@@ -169,6 +176,15 @@ mod tests {
         assert_eq!(applied_sequence(&stack, &front), vec![id(2), id(3), id(1)]);
         let back = restacked(&stack, &[id(3)], StackDirection::ToBack);
         assert_eq!(applied_sequence(&stack, &back), vec![id(3), id(1), id(2)]);
+    }
+
+    /// lane drag は途中の任意位置へも1回の `apply_all` で移せる。UI の一gesture
+    /// を Forward/Backward の反復へ分解して undo を増やさないためのオラクル。
+    #[test]
+    fn to_index_moves_to_an_arbitrary_stack_slot_in_one_restack() {
+        let stack = [(id(1), 0), (id(2), 1), (id(3), 2), (id(4), 3)];
+        let changes = restacked(&stack, &[id(1)], StackDirection::ToIndexFromBack(2));
+        assert_eq!(applied_sequence(&stack, &changes), vec![id(2), id(3), id(1), id(4)]);
     }
 
     /// **オラクル(no-op 柵)**: 端で既に止まっている移動は空を返す —

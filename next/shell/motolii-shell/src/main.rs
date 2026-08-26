@@ -1,4 +1,5 @@
-//! wraps: iced — 窓を開けるだけ。判断は `motolii_shell` にあり、ここには置かない。
+//! wraps: iced — 凍結ホストの窓。product front は Makepad(裁定251/252)。
+//! 判断は `motolii_shell` にあり、ここには置かない。
 //!
 //! ここが薄いのは運転席のため — 窓を開けずに `Shell` を直接動かせる形にしてある。
 //!
@@ -17,7 +18,49 @@
 //! ボタン/ホイール/中ボタンドラッグを実際に操作した時と同じ経路
 //! (`--observe` は `stage::StageOverlay` が計算するのと同じ形の
 //! `Message::Stage(stage::Message::Observe(_))` を1回出すだけ — Stage の
-//! ホイールを実際に回した状態を再現する)。
+//! ホイールを実際に回した状態を再現する)。実窓起動でも同じ4本を
+//! `Shell::boot` 後に適用するので、実窓観測の argv が「指定しただけで
+//! 無視される」ことはない。
+
+fn apply_visual_actions(shell: &mut motolii_shell::Shell, args: &[String]) {
+    let checkerboard = args.iter().any(|a| a == "--checkerboard");
+    let transparent_bg = args.iter().any(|a| a == "--transparent-bg");
+    let observe = args.iter().any(|a| a == "--observe");
+    let browser_open = args.iter().any(|a| a == "--browser-open");
+
+    if transparent_bg {
+        // SET+ 結線(第5波): 旧 `settings_pane::Message` は
+        // `sections::Message::Legacy` が包む(`Shell::update_settings` doc)。
+        let _ = shell.update(motolii_shell::Message::Settings(
+            motolii_shell::settings_pane::sections::Message::Legacy(
+                motolii_shell::settings_pane::Message::BackgroundPreset(
+                    motolii_shell::settings_pane::BackgroundPreset::Transparent,
+                ),
+            ),
+        ));
+    }
+    if checkerboard {
+        // 裁定163: 市松トグルは Stage 下縁状態帯へ引っ越した。
+        let _ = shell.update(motolii_shell::Message::Stage(
+            motolii_shell::stage::Message::ToggleCheckerboard,
+        ));
+    }
+    if browser_open {
+        let _ = shell.update(motolii_shell::Message::Browser(
+            motolii_shell::browser_pane::Message::ToggleBrowserPanel,
+        ));
+    }
+    if observe {
+        // Stage のホイール/中ボタンドラッグが実際に計算する物と同じ形の
+        // 観測カメラ値を1回出す。枠が画面内に収まるようズームアウトする。
+        let _ = shell.update(motolii_shell::Message::Stage(
+            motolii_shell::stage::Message::Observe(motolii_engine::ObservationCamera {
+                pan: [100.0, 60.0],
+                zoom: 0.7,
+            }),
+        ));
+    }
+}
 
 fn main() -> iced::Result {
     let args: Vec<String> = std::env::args().collect();
@@ -27,56 +70,12 @@ fn main() -> iced::Result {
         .position(|a| a == "--screenshot")
         .and_then(|i| args.get(i + 1))
         .cloned();
-    let checkerboard = args.iter().any(|a| a == "--checkerboard");
-    let transparent_bg = args.iter().any(|a| a == "--transparent-bg");
-    let observe = args.iter().any(|a| a == "--observe");
-    let browser_open = args.iter().any(|a| a == "--browser-open");
 
     // `--screenshot` は窓を一切開かない一発ツール(検分器具の口)。fixture でしか
     // 意味を持たないので、`--fixture` の有無に関わらずここでは常に fixture を組む。
     if let Some(path) = screenshot_path {
         let (mut shell, _task) = motolii_shell::Shell::new_fixture();
-        if transparent_bg {
-            // SET+ 結線(第5波): 旧 `settings_pane::Message` は
-            // `sections::Message::Legacy` が包む(`Shell::update_settings` doc)。
-            let _ = shell.update(motolii_shell::Message::Settings(
-                motolii_shell::settings_pane::sections::Message::Legacy(
-                    motolii_shell::settings_pane::Message::BackgroundPreset(
-                        motolii_shell::settings_pane::BackgroundPreset::Transparent,
-                    ),
-                ),
-            ));
-        }
-        if checkerboard {
-            // 裁定163: 市松トグルは Stage 下縁状態帯へ引っ越した
-            // (`motolii_shell::settings_pane::Message::ToggleCheckerboard` は
-            // もう存在しない — `motolii_shell::stage::Message` 側)。
-            let _ = shell.update(motolii_shell::Message::Stage(
-                motolii_shell::stage::Message::ToggleCheckerboard,
-            ));
-        }
-        if browser_open {
-            let _ = shell.update(motolii_shell::Message::Browser(
-                motolii_shell::browser_pane::Message::ToggleBrowserPanel,
-            ));
-        }
-        if observe {
-            // Stage のホイール/中ボタンドラッグが実際に計算する物と同じ形の
-            // 観測カメラ値を1回出す(`stage::StageOverlay::update` が publish
-            // する `Message::Stage(stage::Message::Observe(_))` と同じ経路)。
-            // **ズームアウト側**(zoom<1)を選ぶ — ズームインすると comp の
-            // フレーム枠が画面の外側へ広がって screenshot 内に写らなくなる
-            // (数学的には正しい挙動 — 観測がフレームの内側へ寄るほど枠は
-            // 視界の外へ出る)ので、枠が実際に写ることを目視で確かめる
-            // instrument としては枠が画面内に収まるズームアウト+パンの
-            // 組み合わせを選ぶ。
-            let _ = shell.update(motolii_shell::Message::Stage(
-                motolii_shell::stage::Message::Observe(motolii_engine::ObservationCamera {
-                    pan: [100.0, 60.0],
-                    zoom: 0.7,
-                }),
-            ));
-        }
+        apply_visual_actions(&mut shell, &args);
         motolii_shell::screenshot::write_png(&mut shell, std::path::Path::new(&path))
             .unwrap_or_else(|error| panic!("screenshot を書き出せない: {error}"));
         return Ok(());
@@ -88,10 +87,15 @@ fn main() -> iced::Result {
     // 1枚開く。main 窓1枚のときの挙動・見た目は従前どおり(窓の性質は
     // `window::Settings::default()` のまま)。main 窓を閉じたら exit
     // (`Message::WindowClosed` — probe 注意点1「窓ゼロ状態を作らない」)。
-    let boot: fn() -> (motolii_shell::Shell, iced::Task<motolii_shell::Message>) = if fixture {
-        motolii_shell::Shell::boot_fixture
-    } else {
-        motolii_shell::Shell::boot
+    let launch_args = args.clone();
+    let boot = move || {
+        let (mut shell, task) = if fixture {
+            motolii_shell::Shell::boot_fixture()
+        } else {
+            motolii_shell::Shell::boot()
+        };
+        apply_visual_actions(&mut shell, &launch_args);
+        (shell, task)
     };
 
     iced::daemon(

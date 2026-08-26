@@ -273,6 +273,14 @@ impl PaneState {
         Self::default()
     }
 
+    /// Presentation の初期配置と pane-local の開閉を同じ状態から組む入口。
+    /// `Default` は単体の pane 契約どおり閉じたままにし、Shell が保存済み
+    /// layout を復元する時だけこの constructor を使う。これで「木は Browser
+    /// 開だが pane-local は閉」という二重状態を起こさない。
+    pub fn with_open(open: bool) -> Self {
+        Self { open, ..Self::default() }
+    }
+
     /// active なタブ(mock `state.tab`)。`pane_view` がタブ帯の active 表示と
     /// catalog 投影([`crate::model::catalog`])の分岐に読む。
     pub fn tab(&self) -> LibraryTab {
@@ -583,6 +591,13 @@ mod tests {
     fn panel_starts_closed() {
         let state = PaneState::new();
         assert!(!state.is_open());
+    }
+
+    #[test]
+    fn presentation_can_seed_the_panel_open_without_changing_default() {
+        assert!(PaneState::with_open(true).is_open());
+        assert!(!PaneState::with_open(false).is_open());
+        assert!(!PaneState::new().is_open());
     }
 
     #[test]

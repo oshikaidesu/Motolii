@@ -20,8 +20,8 @@ use iced::mouse;
 use iced::Point;
 use motolii_doc::{Document, LayerId, TrackItem};
 use motolii_shell_iced::timeline::semantics::{
-    initial_view, row_fold_arrow_x, row_indent, row_lock_button_x, row_params_toggle_x,
-    row_own_lock, PaneGeometry, ROW_H,
+    initial_view, row_fold_arrow_x, row_indent, row_lock_button_x, row_own_lock,
+    row_params_toggle_x, PaneGeometry, ROW_H,
 };
 use motolii_shell_iced::{view, Message, Outcome, ScriptedPrompts, Shell};
 use motolii_ui::timeline_editor::{lab_fixture, TimelineView};
@@ -104,8 +104,7 @@ fn pointer_step(
     let at = Point::new(at.x + origin.x, at.y + origin.y);
     let mut ui = iced_test::simulator(view(shell));
     ui.point_at(at);
-    let events: Vec<iced::event::Event> =
-        std::iter::once(cursor_moved(at)).chain(events).collect();
+    let events: Vec<iced::event::Event> = std::iter::once(cursor_moved(at)).chain(events).collect();
     let _ = ui.simulate(events);
     let messages: Vec<Message> = ui.into_messages().collect();
     drain(shell, messages)
@@ -265,7 +264,11 @@ fn the_params_toggle_opens_keyed_rows_independently_of_children() {
         5,
         "position + opacity の2行が増える(子は閉じたまま)"
     );
-    assert_eq!(shell.intents().len(), intents_before, "param 開閉も intent にならない");
+    assert_eq!(
+        shell.intents().len(),
+        intents_before,
+        "param 開閉も intent にならない"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -305,11 +308,18 @@ fn double_click_then_enter_commits_a_rename() {
     }
     key_step(&mut shell, named_key(iced::keyboard::key::Named::Enter));
 
-    assert!(shell.timeline_pane().renaming.is_none(), "確定したら編集状態を抜ける");
+    assert!(
+        shell.timeline_pane().renaming.is_none(),
+        "確定したら編集状態を抜ける"
+    );
     let document = shell.timeline_snapshot().expect("seated");
     let name = document.layers.display_name(background).unwrap_or("?");
     assert_eq!(name, "Renamed", "Document の表示名が書き換わらない: {name}");
-    assert_eq!(intents_of_kind(&shell, "rename_layer"), 1, "1確定 = 1 intent");
+    assert_eq!(
+        intents_of_kind(&shell, "rename_layer"),
+        1,
+        "1確定 = 1 intent"
+    );
     let _ = intents_before;
 }
 
@@ -331,7 +341,10 @@ fn escape_while_renaming_cancels_without_touching_the_document() {
     key_step(&mut shell, key_with_modifiers('x', Modifiers::empty()));
     key_step(&mut shell, named_key(iced::keyboard::key::Named::Escape));
 
-    assert!(shell.timeline_pane().renaming.is_none(), "Esc で編集状態を抜ける");
+    assert!(
+        shell.timeline_pane().renaming.is_none(),
+        "Esc で編集状態を抜ける"
+    );
     assert_eq!(shell.revision(), revision_before, "Esc で Document は無傷");
     let document = shell.timeline_snapshot().expect("seated");
     assert_eq!(
@@ -359,14 +372,14 @@ fn the_lock_button_sets_an_explicit_value_and_blocks_the_move_gesture() {
     );
 
     let (lx0, lx1) = row_lock_button_x();
-    let lock_at = Point::new(
-        (lx0 + lx1) / 2.0,
-        geometry.row_top(1, 0.0) + ROW_H / 2.0,
-    );
+    let lock_at = Point::new((lx0 + lx1) / 2.0, geometry.row_top(1, 0.0) + ROW_H / 2.0);
     pointer_step(&mut shell, lock_at, [pressed()]);
 
     let document = shell.timeline_snapshot().expect("seated");
-    assert!(row_own_lock(&document, background), "L を押すとロックが掛かる");
+    assert!(
+        row_own_lock(&document, background),
+        "L を押すとロックが掛かる"
+    );
     assert_eq!(intents_of_kind(&shell, "set_layer_lock"), 1);
 
     // ロック中は drag しても動かない。
@@ -466,7 +479,10 @@ fn cmd_shift_g_ungroups_the_selected_group() {
     pointer_step(&mut shell, Point::new(100.0, y0), [pressed()]);
     assert_eq!(shell.timeline_selection(), vec![group]);
 
-    key_step(&mut shell, key_with_modifiers('G', Modifiers::COMMAND | Modifiers::SHIFT));
+    key_step(
+        &mut shell,
+        key_with_modifiers('G', Modifiers::COMMAND | Modifiers::SHIFT),
+    );
 
     assert_eq!(intents_of_kind(&shell, "ungroup_layer"), 1);
     let document = shell.timeline_snapshot().expect("seated");

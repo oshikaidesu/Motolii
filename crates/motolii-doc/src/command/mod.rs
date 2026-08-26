@@ -29,20 +29,18 @@ mod variant;
 
 pub use clip::{
     prepare_reparent_clip, prepare_set_clip_start, prepare_set_item_color, prepare_set_item_lock,
-    prepare_set_item_solo,
-    prepare_set_item_visible,
-    prepare_trim_clip_in, prepare_trim_clip_out,
+    prepare_set_item_solo, prepare_set_item_visible, prepare_trim_clip_in, prepare_trim_clip_out,
 };
 pub use effect_instance::prepare_set_effect_enabled;
-pub use split::prepare_split_clip;
-pub use track_item::{
-    prepare_add_group, prepare_add_locator, prepare_place_asset_clip, prepare_remove_locator,
-    prepare_remove_track_item,
-    prepare_set_layer_name, prepare_set_locator_text, prepare_set_locator_time,
-};
 pub use error::CommandError;
 pub use ids::{CommandKind, GestureId, MergeKey, ParentLocator, PropertyId, ScalarPropertyId};
 pub use locate::{collect_layer_ids, find_envelope, find_item_location, layer_names_for_item};
+pub use split::prepare_split_clip;
+pub use track_item::{
+    prepare_add_group, prepare_add_locator, prepare_place_asset_clip, prepare_remove_locator,
+    prepare_remove_track_item, prepare_set_layer_name, prepare_set_locator_text,
+    prepare_set_locator_time,
+};
 pub use variant::{Command, PreparedAssetAdmission};
 
 pub(crate) use asset::{prepare_admit_asset, prepare_remove_asset};

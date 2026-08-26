@@ -154,7 +154,7 @@ pub(crate) fn view(pane: &TimelinePane) -> Element<'static, Message> {
             background: Some(Background::Color(colors.surface_panel)),
             border: Border {
                 color: colors.border_default,
-                width: dims.border_width,
+                width: dims.theme().stroke.hairline,
                 radius: 0.0.into(),
             },
             ..container::Style::default()
@@ -189,7 +189,7 @@ pub(crate) fn corner(
         .style(move |_theme| container::Style {
             border: Border {
                 color: colors.border_default,
-                width: dims.border_width,
+                width: dims.theme().stroke.hairline,
                 radius: 0.0.into(),
             },
             ..container::Style::default()
@@ -306,12 +306,12 @@ fn layer_row(
         Some(draft) => text_input(format!("layer {}", id.0), draft.to_owned())
             .on_input(Message::RenameEdited)
             .on_submit(Message::RenameCommit)
-            .size(dims.caption_text)
-            .padding([0.0, dims.spacing_xs])
+            .size(dims.theme().text.caption)
+            .padding([0.0, dims.theme().space.xs])
             .width(Length::Fixed(name_max_width))
             .into(),
         None => text(name_content)
-            .size(dims.caption_text)
+            .size(dims.theme().text.caption)
             .color(name_color)
             .width(Length::Fixed(name_max_width))
             .align_y(iced::alignment::Vertical::Center)
@@ -325,7 +325,7 @@ fn layer_row(
         glyph_button(id, Glyph::Solo, proj, dims, colors),
         glyph_button(id, Glyph::Lock, proj, dims, colors),
     ])
-    .spacing(dims.spacing_xs)
+    .spacing(dims.theme().space.xs)
     .align_y(iced::alignment::Vertical::Center)
     .into();
 
@@ -337,12 +337,12 @@ fn layer_row(
         content_children.push(tree_prefix);
     }
     content_children.push(swatch);
-    content_children.push(Space::new().width(Length::Fixed(dims.spacing_s)).into());
+    content_children.push(Space::new().width(Length::Fixed(dims.theme().space.s)).into());
     content_children.push(name);
     content_children.push(Space::new().width(Length::Fill).into());
     content_children.push(glyphs);
 
-    let content = row(content_children).align_y(iced::alignment::Vertical::Center).padding([0.0, dims.spacing_s]);
+    let content = row(content_children).align_y(iced::alignment::Vertical::Center).padding([0.0, dims.theme().space.s]);
 
     // 縦センタリングだけを担う内側 container(`button::Style` は align を
     // 持たない — `layout::padded` は中身をそのまま置くだけなので、旧
@@ -378,7 +378,7 @@ fn layer_row(
                 background,
                 border: Border {
                     color: colors.border_hairline_weak,
-                    width: dims.border_width,
+                    width: dims.theme().stroke.hairline,
                     radius: 0.0.into(),
                 },
                 ..button::Style::default()
@@ -475,7 +475,7 @@ fn property_row(
 ) -> Element<'static, Message> {
     let zebra = band_index % 2 == 1;
     let label = text(prow.property.name().to_owned())
-        .size(dims.caption_text)
+        .size(dims.theme().text.caption)
         .color(colors.text_secondary)
         .align_y(iced::alignment::Vertical::Center);
 
@@ -483,7 +483,7 @@ fn property_row(
         .width(Length::Fill)
         .height(Length::Fixed(param_row_height))
         .align_y(iced::alignment::Vertical::Center)
-        .padding(iced::padding::left(dims.spacing_l * 2.0))
+        .padding(iced::padding::left(dims.theme().space.l * 2.0))
         .style(move |_theme| container::Style {
             background: if zebra {
                 Some(Background::Color(colors.timeline_row_zebra))
@@ -492,7 +492,7 @@ fn property_row(
             },
             border: Border {
                 color: colors.border_hairline_weak,
-                width: dims.border_width,
+                width: dims.theme().stroke.hairline,
                 radius: 0.0.into(),
             },
             ..container::Style::default()

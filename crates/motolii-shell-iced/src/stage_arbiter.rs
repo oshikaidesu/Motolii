@@ -193,16 +193,26 @@ mod tests {
     #[test]
     fn pass_through_forwards_hover_and_wheel() {
         let mut owner = StagePointerOwner::PassThrough;
-        assert_eq!(route(&mut owner, &moved(50.0, 50.0), Some(&GRAB)), Route::Forward);
+        assert_eq!(
+            route(&mut owner, &moved(50.0, 50.0), Some(&GRAB)),
+            Route::Forward
+        );
         assert_eq!(route(&mut owner, &scroll(), Some(&GRAB)), Route::Forward);
-        assert_eq!(owner, StagePointerOwner::PassThrough, "hover では所有は動かない");
+        assert_eq!(
+            owner,
+            StagePointerOwner::PassThrough,
+            "hover では所有は動かない"
+        );
     }
 
     /// 掴み領域の外で押す → orbit 中。ドラッグ一式が Rerun へ流れ、離しで素通しへ戻る。
     #[test]
     fn a_press_outside_the_grab_region_starts_an_orbit_that_rerun_sees() {
         let mut owner = StagePointerOwner::PassThrough;
-        assert_eq!(route(&mut owner, &down(50.0, 50.0), Some(&GRAB)), Route::Forward);
+        assert_eq!(
+            route(&mut owner, &down(50.0, 50.0), Some(&GRAB)),
+            Route::Forward
+        );
         assert_eq!(
             owner,
             StagePointerOwner::Orbiting {
@@ -210,10 +220,19 @@ mod tests {
             },
             "掴み領域の外の押下で orbit 中になる"
         );
-        assert_eq!(route(&mut owner, &moved(60.0, 55.0), Some(&GRAB)), Route::Forward);
+        assert_eq!(
+            route(&mut owner, &moved(60.0, 55.0), Some(&GRAB)),
+            Route::Forward
+        );
         // 枠際でも orbit は止まらない: 掴み領域の**上**を通っても流れ続ける。
-        assert_eq!(route(&mut owner, &moved(15.0, 15.0), Some(&GRAB)), Route::Forward);
-        assert_eq!(route(&mut owner, &up(15.0, 15.0), Some(&GRAB)), Route::Forward);
+        assert_eq!(
+            route(&mut owner, &moved(15.0, 15.0), Some(&GRAB)),
+            Route::Forward
+        );
+        assert_eq!(
+            route(&mut owner, &up(15.0, 15.0), Some(&GRAB)),
+            Route::Forward
+        );
         assert_eq!(owner, StagePointerOwner::PassThrough, "離しで素通しへ戻る");
     }
 
@@ -221,7 +240,10 @@ mod tests {
     #[test]
     fn a_press_inside_the_grab_region_starves_rerun_of_the_whole_gesture() {
         let mut owner = StagePointerOwner::PassThrough;
-        assert_eq!(route(&mut owner, &down(15.0, 15.0), Some(&GRAB)), Route::Swallow);
+        assert_eq!(
+            route(&mut owner, &down(15.0, 15.0), Some(&GRAB)),
+            Route::Swallow
+        );
         assert_eq!(
             owner,
             StagePointerOwner::Grabbing {
@@ -230,9 +252,15 @@ mod tests {
             "掴み領域の中の押下で掴み中になる"
         );
         // 領域の外へ出ても掴みは続き、Rerun へは流れない。
-        assert_eq!(route(&mut owner, &moved(80.0, 80.0), Some(&GRAB)), Route::Swallow);
+        assert_eq!(
+            route(&mut owner, &moved(80.0, 80.0), Some(&GRAB)),
+            Route::Swallow
+        );
         assert_eq!(route(&mut owner, &scroll(), Some(&GRAB)), Route::Swallow);
-        assert_eq!(route(&mut owner, &up(80.0, 80.0), Some(&GRAB)), Route::Swallow);
+        assert_eq!(
+            route(&mut owner, &up(80.0, 80.0), Some(&GRAB)),
+            Route::Swallow
+        );
         assert_eq!(owner, StagePointerOwner::PassThrough, "離しで素通しへ戻る");
     }
 
@@ -254,7 +282,10 @@ mod tests {
     #[test]
     fn a_second_button_follows_the_current_owner() {
         let mut owner = StagePointerOwner::PassThrough;
-        assert_eq!(route(&mut owner, &down(50.0, 50.0), Some(&GRAB)), Route::Forward);
+        assert_eq!(
+            route(&mut owner, &down(50.0, 50.0), Some(&GRAB)),
+            Route::Forward
+        );
         let second = StageInput::Pointer {
             phase: PointerPhase::Down,
             button: StagePointerButton::Secondary,

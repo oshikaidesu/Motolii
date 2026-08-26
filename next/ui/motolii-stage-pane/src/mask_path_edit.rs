@@ -103,13 +103,13 @@ pub enum Message {
 }
 
 pub fn toolbar(dims: Dimensions, colors: Colors) -> iced::Element<'static, Message> {
-    container(row![text("Mask Path").size(dims.body_text)])
-        .padding([dims.spacing_xs, dims.spacing_m])
+    container(row![text("Mask Path").size(dims.theme().text.body)])
+        .padding([dims.theme().space.xs, dims.theme().space.m])
         .style(move |_theme| iced::widget::container::Style {
             background: Some(Background::Color(colors.surface_raised)),
             border: Border {
                 color: colors.border_default,
-                width: dims.border_width,
+                width: dims.theme().stroke.hairline,
                 radius: 0.0.into(),
             },
             ..Default::default()
@@ -324,7 +324,7 @@ impl canvas::Program<Message> for MaskPathEditOverlay {
                     &marker,
                     canvas::Stroke::default()
                         .with_color(self.colors.action_active)
-                        .with_width(self.dims.border_width),
+                        .with_width(self.dims.theme().stroke.hairline),
                 );
             }
         }

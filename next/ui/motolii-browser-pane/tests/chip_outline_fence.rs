@@ -7,7 +7,7 @@
 //! `browser_ratio_ledger.rs` と同型の「実装側を `use` した両側チェック」を
 //! style 関数レベル([`motolii_browser_pane::chip_style`] — rail 行/チップ/
 //! Clear の3入口が共有する1本)で固定する。幾何不変(発注条件)は
-//! 「border 幅は非選択でも `dims.border_width` のまま・色だけ透明」+
+//! 「border 幅は非選択でも `dims.theme().stroke.hairline` のまま・色だけ透明」+
 //! 「角丸は呼び出し側の値を素通し」で機械照合する。
 //!
 //! ## モック照合(2026-08-22 再確認)
@@ -24,12 +24,12 @@
 
 use iced::widget::button;
 
-use motolii_browser_pane::{chip_style, FILTER_CHIP_CORNER_RADIUS_ROW_HEIGHT_RATIO};
+use motolii_browser_pane::chip_style;
 use motolii_tokens_rs::{Colors, Dimensions};
 
 /// チップの角丸(呼び出し側 `filter_shelf_view` が渡す実値と同じ導出)。
 fn chip_radius(dims: Dimensions) -> f32 {
-    FILTER_CHIP_CORNER_RADIUS_ROW_HEIGHT_RATIO * dims.row_height
+    dims.components.browser.filter_chip_corner_radius_row_height_ratio * dims.row_height
 }
 
 const ALL_STATUSES: [button::Status; 4] = [
@@ -40,7 +40,7 @@ const ALL_STATUSES: [button::Status; 4] = [
 ];
 
 /// **本命(D4)**: 非選択チップ/rail 行の border は全 status で透明 —
-/// ただし幅は `dims.border_width` のまま(幾何不変: レイアウトに効く値を
+/// ただし幅は `dims.theme().stroke.hairline` のまま(幾何不変: レイアウトに効く値を
 /// 変えず、色だけ落とす — 発注書「透明 border で幅を保つ」)。
 #[test]
 fn unselected_border_is_transparent_in_every_status_but_keeps_its_width() {
@@ -55,8 +55,8 @@ fn unselected_border_is_transparent_in_every_status_but_keeps_its_width() {
             style.border.color
         );
         assert_eq!(
-            style.border.width, dims.border_width,
-            "非選択({status:?})の border 幅が dims.border_width から動いた\
+            style.border.width, dims.theme().stroke.hairline,
+            "非選択({status:?})の border 幅が dims.theme().stroke.hairline から動いた\
              (幾何不変違反)"
         );
     }
@@ -79,8 +79,8 @@ fn selected_border_is_opaque_accent() {
             "選択({status:?})の border が透明(選択の器が消えた)"
         );
         assert_eq!(
-            style.border.width, dims.border_width,
-            "選択({status:?})の border 幅が dims.border_width でない"
+            style.border.width, dims.theme().stroke.hairline,
+            "選択({status:?})の border 幅が dims.theme().stroke.hairline でない"
         );
     }
 }

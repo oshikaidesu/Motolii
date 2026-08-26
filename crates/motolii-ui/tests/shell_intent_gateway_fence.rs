@@ -59,7 +59,10 @@ const FORBIDDEN: &[(&str, &str)] = &[
     ("import_dropped_media(", "UiIntent::AdmitPaths"),
     ("ExportRun::start(", "UiIntent::BeginExport"),
     (".cancel()", "UiIntent::CancelExport"),
-    ("DocumentWriter::new(", "ShellGateway(座席の生成はゲートウェイの中)"),
+    (
+        "DocumentWriter::new(",
+        "ShellGateway(座席の生成はゲートウェイの中)",
+    ),
     ("save_document(", "UiIntent::SaveProject"),
 ];
 

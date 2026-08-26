@@ -265,9 +265,9 @@ mod asset_use_tests {
     use super::*;
     use crate::schema::{EffectDefinition, Track};
     use crate::track_id::TrackId;
-    use crate::{Document, LayerId};
-    use crate::EffectDefinitionId;
     use crate::validate::DocumentError;
+    use crate::EffectDefinitionId;
+    use crate::{Document, LayerId};
 
     fn asset_ref(id: AssetId) -> DocParam {
         DocParam::Const(DocValue::AssetRef(id))

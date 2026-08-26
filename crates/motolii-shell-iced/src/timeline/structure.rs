@@ -37,7 +37,11 @@ use crate::theme::Tokens;
 #[allow(clippy::too_many_arguments)]
 pub fn draw_fold_arrow(frame: &mut Frame, x0: f32, x1: f32, y_center: f32, open: bool, ink: Color) {
     frame.fill_text(Text {
-        content: if open { "\u{25be}".to_owned() } else { "\u{25b8}".to_owned() },
+        content: if open {
+            "\u{25be}".to_owned()
+        } else {
+            "\u{25b8}".to_owned()
+        },
         position: Point::new((x0 + x1) * 0.5, y_center),
         color: ink,
         size: Pixels(11.0),
@@ -48,9 +52,20 @@ pub fn draw_fold_arrow(frame: &mut Frame, x0: f32, x1: f32, y_center: f32, open:
 }
 
 /// param 行の開閉(◇/◆)。egui 版と同じ記号(黒ダイヤ=開・白抜き=閉)。
-pub fn draw_params_toggle(frame: &mut Frame, x0: f32, x1: f32, y_center: f32, open: bool, ink: Color) {
+pub fn draw_params_toggle(
+    frame: &mut Frame,
+    x0: f32,
+    x1: f32,
+    y_center: f32,
+    open: bool,
+    ink: Color,
+) {
     frame.fill_text(Text {
-        content: if open { "\u{25c6}".to_owned() } else { "\u{25c7}".to_owned() },
+        content: if open {
+            "\u{25c6}".to_owned()
+        } else {
+            "\u{25c7}".to_owned()
+        },
         position: Point::new((x0 + x1) * 0.5, y_center),
         color: ink,
         size: Pixels(11.0),
@@ -81,7 +96,11 @@ pub fn draw_lock_button(
     let (border, background, text_color) = if own_lock {
         (accent, Color { a: 0.18, ..accent }, accent)
     } else if hovered {
-        (tokens.border_strong, tokens.surface_panel, tokens.text_primary)
+        (
+            tokens.border_strong,
+            tokens.surface_panel,
+            tokens.text_primary,
+        )
     } else {
         (tokens.border_default, tokens.surface_app, tokens.text_muted)
     };

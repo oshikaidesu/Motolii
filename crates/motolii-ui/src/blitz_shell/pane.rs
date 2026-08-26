@@ -1297,7 +1297,10 @@ mod tests {
             said.contains("Title scene is locked by a parent"),
             "拒否の理由が帯に出ていない: {said:?}"
         );
-        assert!(said.starts_with("timeline:"), "どの面が断ったかを言う: {said:?}");
+        assert!(
+            said.starts_with("timeline:"),
+            "どの面が断ったかを言う: {said:?}"
+        );
 
         // 同じ理由を毎フレーム言わない — editor 側が引き取り済みなので次は増えない。
         let before = transcript.len();
@@ -1323,7 +1326,10 @@ mod tests {
             said.contains("合成フレームを Stage へ載せられない"),
             "何が起きたかを言う: {said:?}"
         );
-        assert!(said.contains("no such texture"), "理由を落とさない: {said:?}");
+        assert!(
+            said.contains("no such texture"),
+            "理由を落とさない: {said:?}"
+        );
 
         // 毎フレーム同じ理由で落ちても帯は埋まらない。
         for _ in 0..30 {

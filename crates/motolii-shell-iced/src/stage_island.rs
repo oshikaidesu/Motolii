@@ -395,7 +395,10 @@ impl Embed {
         })
     }
 
-    #[allow(clippy::too_many_arguments, reason = "iced の prepare が運ぶ物そのまま")]
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "iced の prepare が運ぶ物そのまま"
+    )]
     fn frame(
         &mut self,
         device: &wgpu::Device,
@@ -518,8 +521,8 @@ impl Embed {
             // `None`(seat 自身が前の絵を保つ側の面倒を見る — ここは持たない)。
             self.frame_seat.as_ref().and_then(StageFrameSeat::frame)
         } else {
-            let evaluated_is_current = self.presented_frame.is_some()
-                && self.presented_frame == probe_frame_generation();
+            let evaluated_is_current =
+                self.presented_frame.is_some() && self.presented_frame == probe_frame_generation();
             if evaluated_is_current {
                 self.frame_texture.as_ref()
             } else {
@@ -527,9 +530,9 @@ impl Embed {
             }
         };
         let target = self.target.as_ref().expect("target was just ensured");
-        let render_result = self
-            .stage
-            .render(device, queue, &target.view, width, height, evaluated);
+        let render_result =
+            self.stage
+                .render(device, queue, &target.view, width, height, evaluated);
         let pending = scope.pop();
         let _ = device.poll(wgpu::PollType::Wait {
             submission_index: None,
@@ -577,7 +580,9 @@ impl Embed {
                 Ok(seat) => self.frame_seat = Some(seat),
                 Err(error) => {
                     self.frame_seat_failed = true;
-                    report_once(format!("stage: 評価済みフレームの席を立てられない: {error}"));
+                    report_once(format!(
+                        "stage: 評価済みフレームの席を立てられない: {error}"
+                    ));
                 }
             }
         }
@@ -873,13 +878,10 @@ fn probe_frame_generation() -> Option<u64> {
 }
 
 fn probe_frame_pixels() -> Option<(u32, u32, Vec<u8>)> {
-    PROBE_FRAME
-        .lock()
-        .ok()
-        .and_then(|slot| {
-            slot.as_ref()
-                .map(|frame| (frame.width, frame.height, frame.rgba.clone()))
-        })
+    PROBE_FRAME.lock().ok().and_then(|slot| {
+        slot.as_ref()
+            .map(|frame| (frame.width, frame.height, frame.rgba.clone()))
+    })
 }
 
 // ---------------------------------------------------------------------------

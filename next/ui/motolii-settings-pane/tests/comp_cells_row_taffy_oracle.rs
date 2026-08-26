@@ -194,10 +194,10 @@ fn comp_cells_row_lands_on_the_expected_hand_computed_pixels() {
 
     // 左 padding = spacing_m: label の左端がパネル左端から spacing_m だけ空く。
     assert!(
-        (label.x - dims.spacing_m).abs() <= 1.0,
+        (label.x - dims.theme().space.m).abs() <= 1.0,
         "label の左 padding が spacing_m と ±1px を超えてズレている: {} vs {}",
         label.x,
-        dims.spacing_m
+        dims.theme().space.m
     );
 
     // セル幅は inspector_value_width ちょうど。
@@ -220,15 +220,15 @@ fn comp_cells_row_lands_on_the_expected_hand_computed_pixels() {
         ("cell0→cell1", gap_cell0_cell1),
     ] {
         assert!(
-            (gap - dims.spacing_xs).abs() <= 1.0,
+            (gap - dims.theme().space.xs).abs() <= 1.0,
             "{name} の gap が spacing_xs と ±1px を超えてズレている: {} vs {}",
             gap,
-            dims.spacing_xs
+            dims.theme().space.xs
         );
     }
 
     // 右端: cell1 の右端 + 右 padding(spacing_m)が root 幅と一致するはず。
-    let right_edge = cell1.x + cell1.width + dims.spacing_m;
+    let right_edge = cell1.x + cell1.width + dims.theme().space.m;
     assert!(
         (right_edge - size.width).abs() <= 1.0,
         "右 padding 込みの右端が root 幅と ±1px を超えてズレている: {right_edge} vs {}",

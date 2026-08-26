@@ -35,10 +35,7 @@ fn the_status_log_writes_the_same_jsonl_shape_as_the_egui_runner() {
     let written = std::fs::read_to_string(&log_path).expect("status log が書けている");
     assert_eq!(
         written,
-        format!(
-            "{{\"seq\":1,\"text\":\"opened {}\"}}\n",
-            project.display()
-        ),
+        format!("{{\"seq\":1,\"text\":\"opened {}\"}}\n", project.display()),
         "結果の1行は egui runner と同型でなければならない"
     );
 }
@@ -85,13 +82,9 @@ fn both_logs_append_only_what_is_new() {
 #[test]
 fn the_launch_arguments_name_both_logs() {
     let parsed = Launch::parse(
-        [
-            "--intent-log",
-            "/tmp/i.jsonl",
-            "--status-log=/tmp/s.jsonl",
-        ]
-        .into_iter()
-        .map(str::to_owned),
+        ["--intent-log", "/tmp/i.jsonl", "--status-log=/tmp/s.jsonl"]
+            .into_iter()
+            .map(str::to_owned),
     )
     .expect("2本とも読める");
     assert_eq!(

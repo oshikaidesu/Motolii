@@ -38,7 +38,11 @@ fn every_report_lands_in_the_transcript_and_the_band_shows_the_latest() {
     transcript.report("save failed: disk full");
 
     let entries = transcript.entries();
-    assert_eq!(entries.len(), 2, "report が transcript から欠けてはならない");
+    assert_eq!(
+        entries.len(),
+        2,
+        "report が transcript から欠けてはならない"
+    );
     assert_eq!(entries[0].text, "opened a.json");
     assert_eq!(entries[1].text, "save failed: disk full");
     assert_eq!(

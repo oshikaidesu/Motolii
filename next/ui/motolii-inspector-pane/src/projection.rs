@@ -35,7 +35,8 @@ use motolii_store::{
 };
 
 use crate::attrs::speed_percent;
-use crate::effects::{plugin_display_name, plugin_params};
+use crate::device::parameters_for_provider;
+use crate::effects::plugin_display_name;
 use crate::link::{LinkRowProjection, LinkSourceCandidate, LinkTarget};
 use crate::text::{default_text_document, default_text_style, text_document_content, TextStyleField};
 use crate::transform::{
@@ -149,7 +150,7 @@ pub struct EffectRowProjection {
     /// 他の行と同じ3状態 oracle・click 文法にそのまま乗る(裁定214「Inspector
     /// に映る物は全て時間軸で評価できる」の帰結)。
     pub enabled_key: KeyCellProjection,
-    /// param 値行([`plugin_params`] のカタログ順)。未知 plugin は空 —
+    /// param 値行([`parameters_for_provider`] のカタログ順)。未知 plugin は空 —
     /// store は catalog を知らないので param 行を捏造しない(M13)。
     pub params: Vec<TransformRowProjection>,
 }
@@ -783,8 +784,8 @@ pub fn project(
     }
 
     // EFFECTS section(B38 第3切片): store の並び = 適用順どおり。param 行は
-    // 既知 plugin のカタログ([`plugin_params`])分だけ — track を読み、無ければ
-    // engine 既定の写し([`GlowParam::default_value`])。表示 = store 単位
+    // provider catalog([`parameters_for_provider`])分だけ — track を読み、無ければ
+    // descriptor が宣言する engine 既定の写し。表示 = store 単位
     // (opacity 系と違い % 換算しない)。
     let mut effect_rows = Vec::new();
     for effect in store.effects(layer)? {
@@ -808,8 +809,8 @@ pub fn project(
             key_cell_state(enabled_track.as_ref(), session.playhead, composition.fps);
 
         let mut param_rows = Vec::new();
-        for param in plugin_params(&effect.plugin_id) {
-            let property = PropertyId::effect_param(effect.id, param.name())?;
+        for param in parameters_for_provider(&effect.plugin_id) {
+            let property = PropertyId::effect_param(effect.id, param.id)?;
             let track = store.track(layer, &property)?;
             let keyed = has_real_keys(track.as_ref());
             let value = match store.value_at(layer, &property, t)? {
@@ -818,18 +819,18 @@ pub fn project(
             };
             let state = key_cell_state(track.as_ref(), session.playhead, composition.fps);
             param_rows.push(TransformRowProjection {
-                label: param.label(),
+                label: param.display_name,
                 value: RowValue::Scalar(ComponentSlot {
-                    axis: param.label(),
+                    axis: param.display_name,
                     present: true,
                     value,
                     editable: true,
                     keyed,
-                    field: Some(TransformField::EffectParam(effect.id, *param)),
+                    field: Some(TransformField::EffectParam(effect.id, param)),
                 }),
-                decimals: field_decimals(TransformField::EffectParam(effect.id, *param)),
+                decimals: field_decimals(TransformField::EffectParam(effect.id, param)),
                 key: KeyCellProjection {
-                    row: KeyRow::EffectParam(effect.id, *param),
+                    row: KeyRow::EffectParam(effect.id, param),
                     state,
                 },
             });

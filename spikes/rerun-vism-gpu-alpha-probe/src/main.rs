@@ -194,10 +194,16 @@ impl StageHost {
             }
             if !dropped {
                 if self.stress && self.frame_count == STRESS_REIMPORT_AT_FRAME {
-                    println!("stress: re-importing the same texture at frame {STRESS_REIMPORT_AT_FRAME}");
+                    println!(
+                        "stress: re-importing the same texture at frame {STRESS_REIMPORT_AT_FRAME}"
+                    );
                 }
                 self.stage
-                    .copy_gpu_image(&render_ctx, FOREGROUND_IMAGE_PATH, &self.filter_output[index])
+                    .copy_gpu_image(
+                        &render_ctx,
+                        FOREGROUND_IMAGE_PATH,
+                        &self.filter_output[index],
+                    )
                     .map_err(|error| format!("hand Vism GPU output to stage: {error}"))?;
                 if !self.draw_order_sent {
                     // entityは`copy_gpu_image`が作るので、その後でdraw orderだけ足す。
@@ -212,7 +218,10 @@ impl StageHost {
             // 回収されていれば定常、されていなければフレーム数に比例して増える。
             if self.stress && matches!(self.frame_count, 40 | 120 | 200) {
                 let live = render_ctx.gpu_resources.textures.num_resources();
-                println!("stress: frame {} textures in pool = {live}", self.frame_count);
+                println!(
+                    "stress: frame {} textures in pool = {live}",
+                    self.frame_count
+                );
                 self.pool_samples.push(live);
             }
             self.stage
@@ -325,7 +334,11 @@ fn ingest_control_image(stage: &mut SpatialStage) -> Result<(), String> {
     let control =
         re_sdk_types::archetypes::Image::new(straight_alpha_blur_output(), format.clone());
     // 同じ矩形へ既知の良品も置く。こちらが出て`Image`が出ないなら差はvisualizerにある。
-    let grid = GridMap::new(straight_alpha_blur_output(), format.clone(), 1.0 / HEIGHT as f32);
+    let grid = GridMap::new(
+        straight_alpha_blur_output(),
+        format.clone(),
+        1.0 / HEIGHT as f32,
+    );
     let grid_chunk = Chunk::builder(CONTROL_GRID_PATH)
         .with_archetype(RowId::new(), TimePoint::STATIC, &grid)
         .build()
@@ -557,7 +570,9 @@ fn check_layer_oracle(rgba: &[u8]) -> Result<String, String> {
         ));
     }
     if checker < 10_000 {
-        return Err(format!("only {checker} checkerboard pixels — background is hidden"));
+        return Err(format!(
+            "only {checker} checkerboard pixels — background is hidden"
+        ));
     }
     if green < 200 {
         return Err(format!(

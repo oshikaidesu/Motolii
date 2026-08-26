@@ -118,14 +118,12 @@ fn merge_pair(first: &Command, second: Command) -> Command {
         // ロケータを掴んで動かすと、1 gesture の中で何度も出る。**先頭の old を残す**
         // (腕が無いと catch-all の「後着をそのまま」に落ち、Undo が掴む直前ではなく
         //  1フレーム前へ戻る)
-        (
-            Command::SetLocatorTime { index, old, .. },
-            Command::SetLocatorTime { new, .. },
-        ) => Command::SetLocatorTime { index, old, new },
-        (
-            Command::SetLocatorText { index, old, .. },
-            Command::SetLocatorText { new, .. },
-        ) => Command::SetLocatorText { index, old, new },
+        (Command::SetLocatorTime { index, old, .. }, Command::SetLocatorTime { new, .. }) => {
+            Command::SetLocatorTime { index, old, new }
+        }
+        (Command::SetLocatorText { index, old, .. }, Command::SetLocatorText { new, .. }) => {
+            Command::SetLocatorText { index, old, new }
+        }
         (Command::SetClipStart { target, old, .. }, Command::SetClipStart { new, .. }) => {
             Command::SetClipStart { target, old, new }
         }

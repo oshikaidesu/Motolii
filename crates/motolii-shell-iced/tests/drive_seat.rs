@@ -32,7 +32,11 @@ fn every_report_lands_in_the_transcript_and_the_band_shows_the_latest() {
     transcript.report("save failed: disk full");
 
     let entries = transcript.entries();
-    assert_eq!(entries.len(), 2, "report が transcript から欠けてはならない");
+    assert_eq!(
+        entries.len(),
+        2,
+        "report が transcript から欠けてはならない"
+    );
     assert_eq!(entries[0].text, "opened a.json");
     assert_eq!(entries[1].text, "save failed: disk full");
     assert_eq!(
@@ -214,6 +218,10 @@ fn a_cancelled_dialog_leaves_no_trace() {
     drain(&mut shell, pressed);
 
     assert!(!shell.is_seated(), "答えなかった dialog で座ってはならない");
-    assert_eq!(shell.intent_count(), 0, "起きなかった行動は journal に載らない");
+    assert_eq!(
+        shell.intent_count(),
+        0,
+        "起きなかった行動は journal に載らない"
+    );
     assert_eq!(shell.latest_report(), None, "帯も黙ったまま");
 }

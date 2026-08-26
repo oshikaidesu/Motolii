@@ -197,8 +197,6 @@ pub fn named_zoom_level(bounds: Rectangle, comp: CompSpec, level: NamedZoomLevel
 /// すぎないための余白(先例: AE/Figma の「選択にフィット」系動詞は視認用の
 /// 余白を残す挙動が一般的 — 自由なデザイン値、裁定に既定値の指定は無い。
 /// `crate::ZOOM_STEP_FACTOR` の doc comment と同じ「自由な値」の扱い)。
-const FIT_TO_SELECTION_MARGIN: f32 = 0.9;
-
 /// 「選択にフィット」(map に対応行なし、発注書直接指示 — モジュール冒頭 doc
 /// 参照)。comp-pixel/world 空間の軸並行 bbox(`bbox_min`..`bbox_max`)が
 /// ちょうど comp 全体(= letterbox 後は `bounds` いっぱい)へ収まる観測カメラを
@@ -216,6 +214,25 @@ const FIT_TO_SELECTION_MARGIN: f32 = 0.9;
 /// `zoom` は無限大 → [`crate::OBSERVATION_ZOOM_MAX`] へクランプされるだけで
 /// `NaN` にはならない(片方の軸だけ0でも `min` が有限側を拾う)。
 pub fn fit_to_world_bbox(comp: CompSpec, bbox_min: [f32; 2], bbox_max: [f32; 2]) -> Option<ObservationCamera> {
+    fit_to_world_bbox_with_margin(
+        comp,
+        bbox_min,
+        bbox_max,
+        motolii_tokens_rs::Dimensions::default()
+            .components
+            .stage
+            .fit_to_selection_margin,
+    )
+}
+
+/// `fit_to_world_bbox` のUI余白を呼び手のトークンから受け取る版。既存の純関数
+/// 入口は互換のため残し、実際のUI結線はこの版へ寄せられる。
+pub fn fit_to_world_bbox_with_margin(
+    comp: CompSpec,
+    bbox_min: [f32; 2],
+    bbox_max: [f32; 2],
+    margin: f32,
+) -> Option<ObservationCamera> {
     if comp.width == 0 || comp.height == 0 {
         return None;
     }
@@ -228,7 +245,7 @@ pub fn fit_to_world_bbox(comp: CompSpec, bbox_min: [f32; 2], bbox_max: [f32; 2])
     let height = (bbox_max[1] - bbox_min[1]).abs();
     let zoom_x = comp.width as f32 / width;
     let zoom_y = comp.height as f32 / height;
-    let zoom = (zoom_x.min(zoom_y) * FIT_TO_SELECTION_MARGIN)
+    let zoom = (zoom_x.min(zoom_y) * margin)
         .clamp(crate::OBSERVATION_ZOOM_MIN, crate::OBSERVATION_ZOOM_MAX);
     Some(ObservationCamera {
         pan: [bbox_center[0] - comp_center[0], bbox_center[1] - comp_center[1]],

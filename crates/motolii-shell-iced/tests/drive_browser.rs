@@ -24,7 +24,9 @@ use common::{
     double_click, drain, feed, file_dropped, file_hovered, files_hovered_left, press, redraw,
     starter_media_dir,
 };
-use motolii_shell_iced::{browser_pane, view, BrowserRail, BrowserViewMode, Message, ScriptedPrompts, Shell};
+use motolii_shell_iced::{
+    browser_pane, view, BrowserRail, BrowserViewMode, Message, ScriptedPrompts, Shell,
+};
 use motolii_ui::blitz_shell::UiIntent;
 
 /// 新規 project へ座った殻(運転席の型)。
@@ -120,7 +122,10 @@ fn choosing_a_rail_switches_the_pane_without_touching_the_journal() {
     let mut shell = seated_shell("iced_browser_rail_switch");
     let before = shell.intent_count();
 
-    let pressed = press(iced_test::simulator(view(&shell)), browser_pane::RAIL_RECENT);
+    let pressed = press(
+        iced_test::simulator(view(&shell)),
+        browser_pane::RAIL_RECENT,
+    );
     assert_eq!(
         pressed,
         vec![Message::BrowserRailChosen(BrowserRail::Recent)],
@@ -164,7 +169,11 @@ fn a_card_click_selects_and_asks_for_nothing() {
         admissions_before,
         "単クリックは配置要求を出さない(選ぶだけ)"
     );
-    assert_eq!(shell.track_item_count(), 0, "選択で Document が動いてはならない");
+    assert_eq!(
+        shell.track_item_count(),
+        0,
+        "選択で Document が動いてはならない"
+    );
 
     // 選択の報酬: selection tray が名指しする(触ったのに何も変わらない、を作らない)。
     let mut after = iced_test::simulator(view(&shell));
@@ -244,7 +253,11 @@ fn a_card_whose_file_vanished_says_why_and_admits_nothing() {
     let messages = double_click(iced_test::simulator(view(&shell)), "gone.mp4");
     drain(&mut shell, messages);
 
-    assert_eq!(admissions(&shell), Vec::<Vec<PathBuf>>::new(), "存在しない path を intent にしない");
+    assert_eq!(
+        admissions(&shell),
+        Vec::<Vec<PathBuf>>::new(),
+        "存在しない path を intent にしない"
+    );
     assert_eq!(shell.track_item_count(), 0);
     let report = shell.latest_report().unwrap_or_default();
     assert!(
@@ -268,9 +281,15 @@ fn the_project_rail_shows_the_documents_assets_and_all_media_dedupes() {
     let mut shell = seated_shell("iced_browser_project_rail");
 
     // 座った直後の Project rail は正直に空(Q7: 幽霊 card 禁止)。
-    let switched = press(iced_test::simulator(view(&shell)), browser_pane::RAIL_PROJECT);
+    let switched = press(
+        iced_test::simulator(view(&shell)),
+        browser_pane::RAIL_PROJECT,
+    );
     drain(&mut shell, switched);
-    assert!(shell.browser_cards().is_empty(), "空 project に card を発明しない");
+    assert!(
+        shell.browser_cards().is_empty(),
+        "空 project に card を発明しない"
+    );
     let mut empty = iced_test::simulator(view(&shell));
     assert!(
         empty.find(browser_pane::EMPTY_PROJECT).is_ok(),
@@ -286,7 +305,10 @@ fn the_project_rail_shows_the_documents_assets_and_all_media_dedupes() {
     assert_eq!(shell.track_item_count(), 1, "前提: 1本置けている");
 
     // Project rail に、置いた asset が実名で立つ。
-    let switched = press(iced_test::simulator(view(&shell)), browser_pane::RAIL_PROJECT);
+    let switched = press(
+        iced_test::simulator(view(&shell)),
+        browser_pane::RAIL_PROJECT,
+    );
     drain(&mut shell, switched);
     let names: Vec<String> = shell
         .browser_cards()
@@ -314,7 +336,10 @@ fn the_project_rail_shows_the_documents_assets_and_all_media_dedupes() {
         .filter(|card| card.name == "starter-clip.mp4")
         .collect();
     assert_eq!(clips.len(), 1, "同じ file が dedupe されず2枚立っている");
-    assert!(clips[0].in_project, "Project 登録済みであることが card に出ていない");
+    assert!(
+        clips[0].in_project,
+        "Project 登録済みであることが card に出ていない"
+    );
     assert!(
         clips[0].meta.contains("in project"),
         "登録状態は結果上へ示す(ui-interaction-language)。実際: {:?}",
@@ -342,7 +367,10 @@ fn the_recent_rail_lists_the_newest_admission_first() {
     let placed = double_click(iced_test::simulator(view(&shell)), "starter-still.png");
     drain(&mut shell, placed);
 
-    let switched = press(iced_test::simulator(view(&shell)), browser_pane::RAIL_RECENT);
+    let switched = press(
+        iced_test::simulator(view(&shell)),
+        browser_pane::RAIL_RECENT,
+    );
     drain(&mut shell, switched);
     let names: Vec<String> = shell
         .browser_cards()
@@ -351,7 +379,10 @@ fn the_recent_rail_lists_the_newest_admission_first() {
         .collect();
     assert_eq!(
         names,
-        vec!["starter-still.png".to_owned(), "starter-clip.mp4".to_owned()],
+        vec![
+            "starter-still.png".to_owned(),
+            "starter-clip.mp4".to_owned()
+        ],
         "Recent は新しい順(AssetId の降順 = 取り込み順の逆)"
     );
 }
@@ -373,7 +404,10 @@ fn an_empty_library_is_honestly_empty() {
     let pressed = press(iced_test::simulator(view(&shell)), view::NEW_PROJECT);
     drain(&mut shell, pressed);
 
-    assert!(shell.browser_cards().is_empty(), "空 folder に card を発明しない");
+    assert!(
+        shell.browser_cards().is_empty(),
+        "空 folder に card を発明しない"
+    );
     let empty_line = browser_pane::empty_all(&shell.browser().library_root_name());
     let mut ui = iced_test::simulator(view(&shell));
     assert!(
@@ -541,12 +575,19 @@ fn a_kind_chip_narrows_to_that_kind_and_clear_resets_it() {
         kinds.iter().all(|kind| *kind == "image"),
         "Image chip の後に image 以外の card が残っている: {kinds:?}"
     );
-    assert!(kinds.len() >= 2, "starter kit の image は2本(svg/png)残るはず");
+    assert!(
+        kinds.len() >= 2,
+        "starter kit の image は2本(svg/png)残るはず"
+    );
 
     // 押し直すと解除(トグル)。
     let unpressed = press(iced_test::simulator(view(&shell)), browser_pane::CHIP_IMAGE);
     drain(&mut shell, unpressed);
-    assert_eq!(shell.browser().kind_filter(), None, "押し直しは解除になっていない");
+    assert_eq!(
+        shell.browser().kind_filter(),
+        None,
+        "押し直しは解除になっていない"
+    );
 
     // Clear は kind chip と検索語を両方戻す(html:344-350)。
     let ui = iced_test::simulator(view(&shell));
@@ -557,10 +598,17 @@ fn a_kind_chip_narrows_to_that_kind_and_clear_resets_it() {
     assert_eq!(shell.browser().kind_filter(), Some("video"));
     assert_eq!(shell.browser().query(), "clip");
 
-    let cleared = press(iced_test::simulator(view(&shell)), browser_pane::CLEAR_FILTER);
+    let cleared = press(
+        iced_test::simulator(view(&shell)),
+        browser_pane::CLEAR_FILTER,
+    );
     assert_eq!(cleared, vec![Message::BrowserFiltersCleared]);
     drain(&mut shell, cleared);
-    assert_eq!(shell.browser().kind_filter(), None, "Clear が kind filter を戻していない");
+    assert_eq!(
+        shell.browser().kind_filter(),
+        None,
+        "Clear が kind filter を戻していない"
+    );
     assert_eq!(shell.browser().query(), "", "Clear が検索語を戻していない");
     assert_eq!(
         shell.browser_cards().len(),
@@ -575,13 +623,22 @@ fn a_kind_chip_narrows_to_that_kind_and_clear_resets_it() {
 #[test]
 fn the_filters_toggle_opens_and_closes_the_shelf() {
     let mut shell = seated_shell("iced_browser_shelf_toggle");
-    assert!(shell.browser().shelf_open(), "既定は開(html の初期状態と同じ)");
+    assert!(
+        shell.browser().shelf_open(),
+        "既定は開(html の初期状態と同じ)"
+    );
 
     let mut ui = iced_test::simulator(view(&shell));
-    assert!(ui.find(browser_pane::CHIP_VIDEO).is_ok(), "既定で chip が見えていない");
+    assert!(
+        ui.find(browser_pane::CHIP_VIDEO).is_ok(),
+        "既定で chip が見えていない"
+    );
     drop(ui);
 
-    let toggled = press(iced_test::simulator(view(&shell)), browser_pane::FILTERS_TOGGLE);
+    let toggled = press(
+        iced_test::simulator(view(&shell)),
+        browser_pane::FILTERS_TOGGLE,
+    );
     assert_eq!(toggled, vec![Message::BrowserFilterShelfToggled]);
     drain(&mut shell, toggled);
     assert!(!shell.browser().shelf_open());
@@ -593,7 +650,10 @@ fn the_filters_toggle_opens_and_closes_the_shelf() {
     );
     drop(ui);
 
-    let toggled = press(iced_test::simulator(view(&shell)), browser_pane::FILTERS_TOGGLE);
+    let toggled = press(
+        iced_test::simulator(view(&shell)),
+        browser_pane::FILTERS_TOGGLE,
+    );
     drain(&mut shell, toggled);
     assert!(shell.browser().shelf_open(), "もう一度押すと開き直る");
 }
@@ -611,7 +671,10 @@ fn the_view_mode_buttons_switch_between_thumbnails_grid_and_list() {
     assert_eq!(shell.browser().view(), BrowserViewMode::Grid, "既定は Grid");
 
     let pressed = press(iced_test::simulator(view(&shell)), browser_pane::VIEW_LIST);
-    assert_eq!(pressed, vec![Message::BrowserViewChosen(BrowserViewMode::List)]);
+    assert_eq!(
+        pressed,
+        vec![Message::BrowserViewChosen(BrowserViewMode::List)]
+    );
     drain(&mut shell, pressed);
     assert_eq!(shell.browser().view(), BrowserViewMode::List);
 
@@ -623,7 +686,11 @@ fn the_view_mode_buttons_switch_between_thumbnails_grid_and_list() {
     assert_eq!(shell.browser().view(), BrowserViewMode::Thumbnails);
     // css:272 `[data-view="thumbnails"] .cardCopy { display: none }` — この
     // view では名前が絵に出ない(意図どおり)。model 側は壊れていない。
-    assert_eq!(shell.browser_cards().len(), 4, "切り替えても card の中身は壊れない");
+    assert_eq!(
+        shell.browser_cards().len(),
+        4,
+        "切り替えても card の中身は壊れない"
+    );
 
     // Grid(css の cardCopy が出る view)へ戻すと、絵の上でも名前が見える。
     let pressed = press(iced_test::simulator(view(&shell)), browser_pane::VIEW_GRID);

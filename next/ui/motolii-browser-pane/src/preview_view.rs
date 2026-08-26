@@ -36,7 +36,7 @@ pub(crate) fn preview_body(
         tab, scope, query, view_mode, selected, hovered, dims, colors,
     );
 
-    row![rail, catalog].spacing(dims.spacing_xs).into()
+    row![rail, catalog].spacing(dims.theme().space.xs).into()
 }
 
 /// modifier 付きカード選択を使う preview body。`selected_cards` は pane state
@@ -69,7 +69,7 @@ pub(crate) fn preview_body_with_selection(
         colors,
     );
 
-    row![rail, catalog].spacing(dims.spacing_xs).into()
+    row![rail, catalog].spacing(dims.theme().space.xs).into()
 }
 
 /// 非 media タブの catalog(filter shelf + 結果件数 + カード grid —
@@ -147,16 +147,16 @@ fn preview_catalog_view_impl(
     let shelf = preview_filter_shelf_view(tab, scope, query, view_mode, dims, colors);
 
     let summary = text(format!("Results {}", cards_data.len()))
-        .size(dims.micro_text)
+        .size(dims.theme().text.micro)
         .color(colors.text_muted);
 
     let grid: Element<'static, Message> = if cards_data.is_empty() {
         container(
             text("No matches")
-                .size(dims.caption_text)
+                .size(dims.theme().text.caption)
                 .color(colors.text_muted),
         )
-        .padding(dims.spacing_m)
+        .padding(dims.theme().space.m)
         .into()
     } else {
         let visible_cards: Vec<model::CardKey> = cards_data
@@ -164,7 +164,7 @@ fn preview_catalog_view_impl(
             .map(|card| model::CardKey::Preview(card.id))
             .collect();
         let rows: Vec<Element<'static, Message>> = cards_data
-            .chunks(columns_for(view_mode))
+            .chunks(columns_for(view_mode, dims))
             .map(|chunk| {
                 let cards: Vec<Element<'static, Message>> = chunk
                     .iter()
@@ -181,10 +181,10 @@ fn preview_catalog_view_impl(
                         )
                     })
                     .collect();
-                row(cards).spacing(dims.spacing_s).into()
+                row(cards).spacing(dims.theme().space.s).into()
             })
             .collect();
-        scrollable(column(rows).spacing(dims.spacing_s))
+        scrollable(column(rows).spacing(dims.theme().space.s))
             .height(Length::Fill)
             .into()
     };
@@ -236,7 +236,7 @@ fn preview_card_view(
         // container で再現する(hover は pane-local 状態)。
         let face = container(body)
             .width(frame_width)
-            .padding(dims.spacing_xs)
+            .padding(dims.theme().space.xs)
             .style(move |_theme| create_card_face(colors, selected, hovered));
         return mouse_area(face)
             .on_press(select_message.clone())
@@ -261,7 +261,7 @@ fn preview_card_view(
         };
         let face = container(body)
             .width(frame_width)
-            .padding(dims.spacing_xs)
+            .padding(dims.theme().space.xs)
             .style(move |_theme| create_card_face(colors, selected, hovered));
         return mouse_area(face)
             .on_press(select_message.clone())
@@ -275,7 +275,7 @@ fn preview_card_view(
     button(body)
         .on_press(select_message)
         .width(frame_width)
-        .padding(dims.spacing_xs)
+        .padding(dims.theme().space.xs)
         .style(move |_theme, status| card_style(dims, colors, selected, false, status))
         .into()
 }

@@ -43,6 +43,27 @@ Document到達経路そのものは存在し、型付きの門を通っている
 
 > **パス訂正(2026-08-19)**: 上のF17/F18観測が指す`timeline_egui.rs`は2026-08-16に削除され、現在の実装は`crates/motolii-ui/src/timeline_editor/`(9,059行)。観測内容(Cancel位相の不在・enqueue失敗の無音)自体がこの新しい実装でも再発していないかは未確認 — F17/F18は上表の「台帳残」から未消化のまま。
 
+## 実窓観察(2026-08-24)
+
+出典: 実窓シナリオ `20260824T141901Z` の `fixture-boot` / `browser-toggle`。
+ここは機械採点の赤緑とは別の、利用者が画面を見て感じた段差を記録する場所である。
+Stageの黒い余白と小さな矩形は、ユーザー操作の鏡であり正常なため在庫に入れない。
+
+| # | 段差 | severity | 証拠 | 行き先 |
+|---|---|---|---|---|
+| F19 | 画面の基本配置が想定と違う。Timelineを下に置き、上段を左からBrowser・Stage・Inspectorとする編集面の順序が見えず、Browserが左側の縦帯、InspectorがStageの左に分かれている | P1 | `target/ui-observations/20260824T141901Z/scenarios/fixture-boot/window.png` | pane layout の再設計 |
+| F20 | Browserの素材カードが素材の実体である16:9を表さない。素材を選ぶ最初の視覚情報で縦横比が崩れている | P1 | 同上のBrowser領域 | Browser preview の16:9契約 |
+| F21 | Browserのタグと入力欄の区別がつかない。`Video / Images / Audio / Name` が状態・絞り込み・入力のどれなのか、見ただけでは判断できない | P1 | 同上のBrowser filter列 | Browser filter/search の意味表示 |
+| F22 | Inspectorを詰めると項目名と数値が衝突し、文字が読めない。狭幅で情報を隠す/重ねることは編集不能につながる | P0 | `target/ui-observations/20260824T141901Z/scenarios/browser-toggle/window.png` | Inspector responsive contract |
+| F23 | Timelineの青い操作群が何を意味するか説明されず、視覚的な主張だけが強い。説明しないと分からないアイコン・ボタンは、色を強くして置くべきではない | P1 | 同上のTimeline領域 | Timeline control grammar / labeled actions |
+| F24 | Inspectorの選択対象が`サビ歌詞`なのにTimelineの表示レイヤーは`タイトルロゴ`で、Stageにも対象名が出ない。編集対象の対応関係が一目で分からない | P0 | `target/ui-observations/20260824T141901Z/scenarios/fixture-boot/window.png` | shared selection identity |
+| F25 | Browserを開閉する右上アイコンが何をするか分からず、閉じた後に再表示する導線も状態も見えない | P1 | `target/ui-observations/20260824T141901Z/scenarios/browser-toggle/window.png` | panel toggle affordance |
+| F26 | Media・Create・Stageツール・Timelineが同じ強さで並び、素材を置く/レイヤーを作る/対象を選ぶという最初の一手が定まらない | P1 | `target/ui-observations/20260824T141901Z/scenarios/fixture-boot/window.png` | first-action hierarchy |
+| F27 | カテゴリはモーショングラフィックスソフトと推測できるが、矩形/楕円/ペン、X/Y/Z、動画・音声の不在、Composition/Render/Exportの不在が、イラスト/3D/一般キャンバスにも見せる | P2 | 同上の全体 | product identity grammar |
+| F28 | 文字を隠すとBrowserは「メディアブラウザ」ではなく、均質なプリセット棚/スウォッチ棚に見える。選択用の一覧までは伝わるが、素材を閲覧する面としての視覚文法が弱い | P1 | `target/ui-observations/20260824T141901Z/scenarios/fixture-boot/window.png` | Browser media grammar |
+| F29 | 文字を隠すとInspectorはプロパティ編集面より、数値表・設定フォーム・計測パネルに見える。特にBrowser表示中の狭幅で、属性編集という役割が形だけでは成立しない | P1 | 同上のInspector領域 | Inspector property grammar |
+| F30 | **主因ではない(2026-08-24: 利用者否定)**。パネル単体の種類は分かるが、Browser・Inspector・Stage・Timelineが同じ一つの編集対象を共有している証拠がない、という仮説 | — | 同上の全体 | 保留。視覚的不快感の根因とは扱わない |
+
 ## 規則
 
 - 段差の追加は誰でも(発見者が)行う。**削除はorderの着地のみ**

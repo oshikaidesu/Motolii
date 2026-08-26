@@ -16,16 +16,16 @@
 //! **持たない**: MASK/EFFECTS 固有の一覧編集(`mask.rs`/`effects.rs`)・
 //! TEXT/ATTRS 固有の書き口(`text.rs`/`attrs.rs`)・値セルの意匠そのもの
 //! ([`crate::chrome`] ── `value_cell`/`HoverValueBox`)・投影の組み立て
-//! ([`crate::projection`])。`GlowParam`(EFFECTS のパラメータカタログ)は
-//! [`TransformField::EffectParam`]/[`KeyRow::EffectParam`] の型として要るので
-//! `crate::effects` から読むだけ(定義はしない)。
+//! ([`crate::projection`])。provider の [`ParameterDescriptor`] は
+//! [`TransformField::EffectParam`]/[`KeyRow::EffectParam`] の値として参照するだけ
+//! (catalog の定義は [`crate::device`] にある)。
 
 use motolii_core::{Fps, RationalTime};
 use motolii_store::{
     property, EffectId, Interp, Keyframe, KeyframeTrack, MaskId, PropertyId, StoreError, Value,
 };
 
-use crate::effects::GlowParam;
+use crate::device::ParameterDescriptor;
 
 // ---------------------------------------------------------------------------
 // SP-4(2026-08-23): 1,021行だった単一 `transform.rs` をこのディレクトリ
@@ -78,11 +78,11 @@ pub enum TransformField {
     /// (`FieldDraft`/drag-to-scrub/`commit_inspector_field` → `Intent::SetTrack`)
     /// へそのまま乗る。track 名は id + param 名から決まる
     /// (`PropertyId::effect_param` — `effect.{id}.param.{name}`)ので、stack の
-    /// 並べ替え・削除で別の effect へ付き直さない。param は [`GlowParam`]
-    /// (既知 plugin のカタログ)に閉じる — store は plugin の param カタログを
-    /// 知らない(裁定70、`ResolvedEffect::params` doc)ので、既定値を埋める
-    /// 仕事はこの「plugin 定義を知っている層」の側([`GlowParam::default_value`])。
-    EffectParam(EffectId, GlowParam),
+    /// 並べ替え・削除で別の effect へ付き直さない。param は provider catalog の
+    /// 安定 descriptor を参照する。store は plugin の param カタログを知らない
+    /// (裁定70、`ResolvedEffect::params` doc)ので、既定値を埋める仕事は
+    /// provider/device registry 側に置く。
+    EffectParam(EffectId, &'static ParameterDescriptor),
 
     // ---- AUDIO section(B42、裁定184 型別 section 第4号) ----
     /// `property::LEVEL`(clip の音量、gain)。**mask/effect と違い per-id
@@ -102,9 +102,8 @@ pub enum TransformField {
 
 /// この field の store 上の property。標準 property は予約語でも空でもなく、
 /// mask opacity は `PropertyId::mask_opacity`(構築が失敗し得ない形)、effect
-/// param も名前が [`GlowParam::name`](静的・非予約語)に閉じるので実質失敗
-/// し得ない — `motolii_shell::Shell` はこの `Result` を「コードの誤り」
-/// として扱ってよい。
+/// param も descriptor の安定 id(静的・非予約語)に閉じるので実質失敗し得ない —
+/// `motolii_shell::Shell` はこの `Result` を「コードの誤り」として扱ってよい。
 pub fn property_id(field: TransformField) -> Result<PropertyId, StoreError> {
     match field {
         TransformField::PositionX | TransformField::PositionY => PropertyId::new(property::POSITION),
@@ -115,7 +114,7 @@ pub fn property_id(field: TransformField) -> Result<PropertyId, StoreError> {
         TransformField::AnchorX | TransformField::AnchorY => PropertyId::new(property::ANCHOR),
         TransformField::MaskOpacity(id) => Ok(PropertyId::mask_opacity(id)),
         TransformField::MaskExpansion(id) => Ok(PropertyId::mask_expansion(id)),
-        TransformField::EffectParam(id, param) => PropertyId::effect_param(id, param.name()),
+        TransformField::EffectParam(id, param) => PropertyId::effect_param(id, param.id),
         TransformField::Level => PropertyId::new(property::LEVEL),
         TransformField::Pan => PropertyId::new(property::PAN),
         TransformField::FadeIn => PropertyId::new(property::FADE_IN),
@@ -216,7 +215,7 @@ pub enum KeyRow {
     MaskExpansion(MaskId),
     /// effect param 行(EFFECTS section、B38 第3切片)。同上 —
     /// [`TransformField::EffectParam`] と同じ拡張の形。
-    EffectParam(EffectId, GlowParam),
+    EffectParam(EffectId, &'static ParameterDescriptor),
     /// effect の on/off 行(EFFECTS section、裁定213/214 で `EffectInstance::
     /// enabled` という静止 `bool` から `effect.{id}.enabled` の普通の track へ
     /// 移った——**Inspector に映る物は全て時間軸で評価できる**という裁定214の
@@ -265,7 +264,7 @@ pub fn key_row_property_id(row: KeyRow) -> Result<PropertyId, StoreError> {
     match row {
         KeyRow::MaskOpacity(mask) => Ok(PropertyId::mask_opacity(mask)),
         KeyRow::MaskExpansion(mask) => Ok(PropertyId::mask_expansion(mask)),
-        KeyRow::EffectParam(effect, param) => PropertyId::effect_param(effect, param.name()),
+        KeyRow::EffectParam(effect, param) => PropertyId::effect_param(effect, param.id),
         KeyRow::EffectEnabled(effect) => Ok(PropertyId::effect_enabled(effect)),
         _ => PropertyId::new(
             row.static_property_name()
@@ -502,7 +501,7 @@ pub fn format_number(value: f64, decimals: usize) -> String {
 /// **再較正の方法**: 実窓実測(φ 期のように実際のビルドを目で見る)がこの
 /// レーンでは行えないため、`value_cell_legibility.rs` と同じ手口 —
 /// `iced_test` で実フォント(0.15 fork の "Fira Sans" スタック、実窓と同一
-/// レンダラ)を使い `text(content).size(dims.body_text)` の自然幅(`Target::Text`
+/// レンダラ)を使い `text(content).size(dims.theme().text.body)` の自然幅(`Target::Text`
 /// の layout bounds、`iced_widget::text::layout` が `Length::Shrink` を
 /// clamp する前の値)を直接測る決定論的な代替測定を採った(px からの近似換算は
 /// 等幅仮定が崩れて信用できないという旧アンカーの理由はそのまま — ここでは
@@ -556,4 +555,3 @@ pub fn field_decimals(field: TransformField) -> usize {
         _ => 3,
     }
 }
-

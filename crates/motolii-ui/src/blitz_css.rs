@@ -26,7 +26,10 @@ pub(crate) fn template(relative: &str, embedded: &'static str) -> Cow<'static, s
     match std::fs::read_to_string(&path) {
         Ok(text) => Cow::Owned(text),
         Err(error) => {
-            eprintln!("blitz-css: {} を読めないので埋め込みで描く: {error}", path.display());
+            eprintln!(
+                "blitz-css: {} を読めないので埋め込みで描く: {error}",
+                path.display()
+            );
             Cow::Borrowed(embedded)
         }
     }

@@ -65,8 +65,7 @@ pub fn center_disc(color: [u8; 3], radius_fraction: f32) -> Vec<u8> {
     for y in 0..LAYER_H {
         for x in 0..LAYER_W {
             let index = ((y * LAYER_W + x) * 4) as usize;
-            let distance =
-                ((x as f32 - center_x).powi(2) + (y as f32 - center_y).powi(2)).sqrt();
+            let distance = ((x as f32 - center_x).powi(2) + (y as f32 - center_y).powi(2)).sqrt();
             if distance <= radius {
                 rgba[index] = color[0];
                 rgba[index + 1] = color[1];

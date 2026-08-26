@@ -181,22 +181,22 @@ pub fn shape_stroke_section(
         let width = stroke_width_input(field, displayed, dims, colors);
         let cap = button(text(cap_label(stroke.map(|stroke| stroke.cap).unwrap_or_default())))
             .on_press(Message::ShapeStrokeCap(row.index))
-            .padding([dims.spacing_xs, dims.spacing_s]);
+            .padding([dims.theme().space.xs, dims.theme().space.s]);
         let join = button(text(join_label(stroke.map(|stroke| stroke.join).unwrap_or_default())))
             .on_press(Message::ShapeStrokeJoin(row.index))
-            .padding([dims.spacing_xs, dims.spacing_s]);
+            .padding([dims.theme().space.xs, dims.theme().space.s]);
         let dash = button(text(dash_label(stroke.and_then(|stroke| stroke.dash.as_ref()))))
             .on_press(Message::ShapeStrokeDash(row.index))
-            .padding([dims.spacing_xs, dims.spacing_s]);
+            .padding([dims.theme().space.xs, dims.theme().space.s]);
         rows = rows.push(bordered_row(
             row_widget![
-                text(format!("{}", row.index + 1)).size(dims.caption_text),
+                text(format!("{}", row.index + 1)).size(dims.theme().text.caption),
                 width,
                 cap,
                 join,
                 dash,
             ]
-            .spacing(dims.spacing_xs)
+            .spacing(dims.theme().space.xs)
             .align_y(iced::alignment::Vertical::Center)
             .into(),
             dims,
@@ -217,7 +217,7 @@ fn stroke_width_input(
         }))
         .on_input(move |text| Message::ShapeStrokeInput(field, text))
         .on_submit(Message::ShapeStrokeSubmit(field))
-        .size(dims.body_text)
+        .size(dims.theme().text.body)
         .width(Length::Fixed(dims.inspector_value_width))
         .padding(value_cell_padding(dims))
         .style(move |_theme, status| name_input_style(dims, colors, status))

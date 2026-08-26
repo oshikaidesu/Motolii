@@ -2,7 +2,6 @@
 //! 素材の欠落バッジ)。
 
 use crate::context_menu;
-use crate::filter_view::FILTER_CHIP_CORNER_RADIUS_ROW_HEIGHT_RATIO;
 use crate::media_preview;
 use crate::model::{self, AssetListItem};
 use crate::search_view::chip_style;
@@ -21,16 +20,14 @@ use motolii_tokens_rs::{Colors, Dimensions};
 /// editor と同様まだ描かない予約地、crate 冒頭 doc 参照)。**`pub`**:
 /// `motolii-shell::screenshot`(トンマナ検分 instrument)が同じ比率で近似矩形を
 /// 描くため、値を複製せずここから読む。
-pub const GRID_COLUMNS: usize = 2;
-
 /// [`model::ViewMode`] に応じた grid の列数(B08 第4切片「表示形式」)。
 /// List は1列 — mock の list mode(`.libraryBrowser[data-view="list"]
 /// .thumbnailGrid{grid-template-columns:1fr}`、`browser-library.css:304`)。
 /// カードそのものの水平レイアウト(サムネ小+テキスト右)は [`card_body`]/
 /// [`card_frame_width`] が担う(B36 第5切片でこの波から実装済み)。
-pub(crate) fn columns_for(mode: model::ViewMode) -> usize {
+pub(crate) fn columns_for(mode: model::ViewMode, dims: Dimensions) -> usize {
     match mode {
-        model::ViewMode::Grid => GRID_COLUMNS,
+        model::ViewMode::Grid => dims.components.browser.grid_columns,
         model::ViewMode::List => 1,
     }
 }
@@ -44,15 +41,12 @@ pub(crate) fn columns_for(mode: model::ViewMode) -> usize {
 /// List モードのカード幅は [`card_frame_width`] — 行いっぱい(`Length::Fill`)
 /// で、この比率定数は使わない(mock の list mode が `grid-template-columns:
 /// 1fr` = 行幅そのものだから)。
-pub const CARD_WIDTH_ROW_HEIGHT_RATIO: f32 = 6.0;
 
 /// サムネの縦横比(mock `.libraryThumb{aspect-ratio:16/9}` の直接転写、
 /// 分母=9)。**`pub`**: [`GRID_COLUMNS`] と同じ理由。Grid/List どちらの
 /// thumb 幅にもこの比率をそのまま適用する(縦横比は表示形式に依らず一定 —
 /// mock の `.libraryThumb{aspect-ratio:16/9}` 自体は list mode でも上書き
 /// されない、`browser-library.css:304-307` 参照)。
-pub const THUMB_ASPECT_W: f32 = 16.0;
-pub const THUMB_ASPECT_H: f32 = 9.0;
 
 // ---------------------------------------------------------------------------
 // B36 第5切片: List 表示の水平カード(mock `browser-library.css:304-307`
@@ -88,13 +82,13 @@ fn list_card_thumb_css(dims: Dimensions) -> String {
 /// `motolii-taffy/src/css.rs` 冒頭 doc の対応サブセット参照)ため、4値
 /// padding shorthand の左辺だけを埋める形へ機械的に読み替える(値そのものは
 /// mock と不変 — subset の制約であって設計判断の逸脱ではない)。左 padding の
-/// 値は `dims.spacing_s`(4、mock の `4px` と同値の既存 token — cardCopy 専用の
+/// 値は `dims.theme().space.s`(4、mock の `4px` と同値の既存 token — cardCopy 専用の
 /// 新キーは起こさない、`tokens/dimensions.json` の `_note_browser_list_thumb_width`
 /// と同じ判断)。
 fn list_card_text_css(dims: Dimensions) -> String {
     format!(
         "min-width:0; flex:1; padding:0px 0px 0px {pad}px",
-        pad = dims.spacing_s
+        pad = dims.theme().space.s
     )
 }
 
@@ -110,7 +104,7 @@ fn thumb_container(
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
-    container(text(glyph).size(dims.micro_text).color(colors.text_primary))
+    container(text(glyph).size(dims.theme().text.micro).color(colors.text_primary))
         .width(Length::Fixed(width))
         .height(Length::Fixed(height))
         .align_x(iced::alignment::Horizontal::Center)
@@ -119,7 +113,7 @@ fn thumb_container(
             background: Some(iced::Background::Color(fill)),
             border: iced::Border {
                 color: iced::Color::TRANSPARENT,
-                width: dims.border_width,
+                width: dims.theme().stroke.hairline,
                 radius: 0.0.into(),
             },
             ..container::Style::default()
@@ -152,7 +146,9 @@ fn ellipsis_text(
 /// (button/mouse_area どちらの経路も)がこの1本を共有する。
 pub(crate) fn card_frame_width(view_mode: model::ViewMode, dims: Dimensions) -> Length {
     match view_mode {
-        model::ViewMode::Grid => Length::Fixed(dims.row_height * CARD_WIDTH_ROW_HEIGHT_RATIO),
+        model::ViewMode::Grid => Length::Fixed(
+            dims.row_height * dims.components.browser.card_width_row_height_ratio,
+        ),
         model::ViewMode::List => Length::Fill,
     }
 }
@@ -176,18 +172,19 @@ pub(crate) fn card_body(
 ) -> Element<'static, Message> {
     match view_mode {
         model::ViewMode::Grid => {
-            let card_width = dims.row_height * CARD_WIDTH_ROW_HEIGHT_RATIO;
-            let thumb_height = card_width * THUMB_ASPECT_H / THUMB_ASPECT_W;
+            let card_width = dims.row_height * dims.components.browser.card_width_row_height_ratio;
+            let thumb_height = card_width * dims.components.browser.thumb_aspect_h
+                / dims.components.browser.thumb_aspect_w;
             let thumb = thumb_container(glyph, thumb_fill, card_width, thumb_height, dims, colors);
             let name = ellipsis_text(
                 name,
-                dims.micro_text,
+                dims.theme().text.micro,
                 colors.text_primary,
                 Length::Fixed(card_width),
             );
             let caption = ellipsis_text(
                 caption,
-                dims.micro_text,
+                dims.theme().text.micro,
                 colors.text_muted,
                 Length::Fixed(card_width),
             );
@@ -197,20 +194,21 @@ pub(crate) fn card_body(
             }
             children.push(name);
             children.push(caption);
-            column(children).spacing(dims.spacing_xs).into()
+            column(children).spacing(dims.theme().space.xs).into()
         }
         model::ViewMode::List => {
             let thumb_width = dims.browser_list_thumb_width;
-            let thumb_height = thumb_width * THUMB_ASPECT_H / THUMB_ASPECT_W;
+            let thumb_height = thumb_width * dims.components.browser.thumb_aspect_h
+                / dims.components.browser.thumb_aspect_w;
             let thumb = thumb_container(glyph, thumb_fill, thumb_width, thumb_height, dims, colors);
-            let name = ellipsis_text(name, dims.micro_text, colors.text_primary, Length::Fill);
-            let caption = ellipsis_text(caption, dims.micro_text, colors.text_muted, Length::Fill);
+            let name = ellipsis_text(name, dims.theme().text.micro, colors.text_primary, Length::Fill);
+            let caption = ellipsis_text(caption, dims.theme().text.micro, colors.text_muted, Length::Fill);
             let mut text_children: Vec<Element<'static, Message>> = vec![name, caption];
             if let Some(badge) = status_badge {
                 text_children.push(badge);
             }
             let text_block: Element<'static, Message> = column(text_children)
-                .spacing(dims.spacing_xs)
+                .spacing(dims.theme().space.xs)
                 .width(Length::Fill)
                 .into();
 
@@ -256,13 +254,13 @@ pub(crate) fn card_grid_view(
         } else {
             "No matches"
         };
-        return container(text(copy).size(dims.caption_text).color(colors.text_muted))
-            .padding(dims.spacing_m)
+        return container(text(copy).size(dims.theme().text.caption).color(colors.text_muted))
+            .padding(dims.theme().space.m)
             .into();
     }
 
     let rows: Vec<Element<'static, Message>> = filtered
-        .chunks(columns_for(view_mode))
+        .chunks(columns_for(view_mode, dims))
         .map(|chunk| {
             let cards: Vec<Element<'static, Message>> = chunk
                 .iter()
@@ -284,11 +282,11 @@ pub(crate) fn card_grid_view(
                     )
                 })
                 .collect();
-            row(cards).spacing(dims.spacing_s).into()
+            row(cards).spacing(dims.theme().space.s).into()
         })
         .collect();
 
-    scrollable(column(rows).spacing(dims.spacing_s))
+    scrollable(column(rows).spacing(dims.theme().space.s))
         .height(Length::Fill)
         .into()
 }
@@ -321,8 +319,8 @@ pub(crate) fn card_grid_view_with_selection(
         } else {
             "No matches"
         };
-        return container(text(copy).size(dims.caption_text).color(colors.text_muted))
-            .padding(dims.spacing_m)
+        return container(text(copy).size(dims.theme().text.caption).color(colors.text_muted))
+            .padding(dims.theme().space.m)
             .into();
     }
 
@@ -331,7 +329,7 @@ pub(crate) fn card_grid_view_with_selection(
         .map(|item| model::CardKey::Media(item.id))
         .collect();
     let rows: Vec<Element<'static, Message>> = filtered
-        .chunks(columns_for(view_mode))
+        .chunks(columns_for(view_mode, dims))
         .map(|chunk| {
             let cards: Vec<Element<'static, Message>> = chunk
                 .iter()
@@ -358,11 +356,11 @@ pub(crate) fn card_grid_view_with_selection(
                     )
                 })
                 .collect();
-            row(cards).spacing(dims.spacing_s).into()
+            row(cards).spacing(dims.theme().space.s).into()
         })
         .collect();
 
-    scrollable(column(rows).spacing(dims.spacing_s))
+    scrollable(column(rows).spacing(dims.theme().space.s))
         .height(Length::Fill)
         .into()
 }
@@ -495,12 +493,12 @@ fn card_view_with_message(
     let card = if rows.len() == 1 {
         rows.pop().expect("rows has exactly 1 element")
     } else {
-        column(rows).spacing(dims.spacing_xs).into()
+        column(rows).spacing(dims.theme().space.xs).into()
     };
     let card = if enable_context_menu && context_menu_anchor == Some(key) {
         let menu = context_menu::view(Some(key), card_frame_width(view_mode, dims), dims, colors)
             .expect("media card context menu has a real action");
-        column![card, menu].spacing(dims.spacing_xs).into()
+        column![card, menu].spacing(dims.theme().space.xs).into()
     } else {
         card
     };
@@ -532,16 +530,17 @@ fn remove_affordance_row(
         return None;
     }
 
-    let radius = FILTER_CHIP_CORNER_RADIUS_ROW_HEIGHT_RATIO * dims.row_height;
+    let radius = dims.components.browser.filter_chip_corner_radius_row_height_ratio
+        * dims.row_height;
     let icon_element = motolii_icons::icon(
         motolii_icons::Icon::Delete,
-        motolii_icons::frame_px_for_glyph_px(dims.micro_text),
+        motolii_icons::frame_px_for_glyph_px(dims.theme().text.micro),
         colors.text_muted,
     );
     let action = button(icon_element)
         .on_press(Message::RemoveAssetFromCard(asset_id))
         .width(card_width)
-        .padding([dims.spacing_xs, dims.spacing_s])
+        .padding([dims.theme().space.xs, dims.theme().space.s])
         .style(move |_theme, status| chip_style(dims, colors, false, status, radius));
 
     Some(
@@ -549,22 +548,22 @@ fn remove_affordance_row(
             action,
             container(
                 text("Remove from library — undo with Cmd+Z")
-                    .size(dims.caption_text)
+                    .size(dims.theme().text.caption)
                     .color(colors.text_primary),
             )
-            .padding([dims.spacing_xs, dims.spacing_s])
+            .padding([dims.theme().space.xs, dims.theme().space.s])
             .style(move |_theme| container::Style {
                 background: Some(iced::Background::Color(colors.surface_raised)),
                 border: iced::Border {
                     color: colors.border_default,
-                    width: dims.border_width,
+                    width: dims.theme().stroke.hairline,
                     radius: 0.0.into(),
                 },
                 ..container::Style::default()
             }),
             tooltip::Position::Bottom,
         )
-        .gap(dims.spacing_xs)
+        .gap(dims.theme().space.xs)
         .into(),
     )
 }
@@ -596,12 +595,13 @@ fn replace_affordance_row(
         return None;
     }
 
-    let radius = FILTER_CHIP_CORNER_RADIUS_ROW_HEIGHT_RATIO * dims.row_height;
+    let radius = dims.components.browser.filter_chip_corner_radius_row_height_ratio
+        * dims.row_height;
     Some(
-        button(text("Replace").size(dims.micro_text))
+        button(text("Replace").size(dims.theme().text.micro))
             .on_press(Message::ReplaceSelectedLayerSource(asset_id))
             .width(card_width)
-            .padding([dims.spacing_xs, dims.spacing_s])
+            .padding([dims.theme().space.xs, dims.theme().space.s])
             .style(move |_theme, status| chip_style(dims, colors, false, status, radius))
             .into(),
     )
@@ -617,7 +617,7 @@ fn replace_affordance_row(
 /// `recent`(B08 続編: 取り込み直後の新規素材)は縁が `focus` で光る —
 /// [`drop_target_style`] と同じ「操作が着地した場所の合図」ロール(drop 先
 /// ハイライトの続きとして同族色で受け止める)。border は色だけ動かし幅は
-/// `dims.border_width` 固定(裁定179 の幾何不変 — 非 recent は透明)。
+/// `dims.theme().stroke.hairline` 固定(裁定179 の幾何不変 — 非 recent は透明)。
 pub(crate) fn card_style(
     dims: Dimensions,
     colors: Colors,
@@ -643,7 +643,7 @@ pub(crate) fn card_style(
         text_color: colors.text_primary,
         border: iced::Border {
             color: border_color,
-            width: dims.border_width,
+            width: dims.theme().stroke.hairline,
             radius: 0.0.into(),
         },
         ..button::Style::default()
@@ -710,7 +710,7 @@ fn status_badge_view(
 
     let icon_element = motolii_icons::icon(
         motolii_icons::Icon::Warning,
-        motolii_icons::frame_px_for_glyph_px(dims.micro_text),
+        motolii_icons::frame_px_for_glyph_px(dims.theme().text.micro),
         colors.status_warning,
     );
 
@@ -719,22 +719,22 @@ fn status_badge_view(
             icon_element,
             container(
                 text(reason)
-                    .size(dims.caption_text)
+                    .size(dims.theme().text.caption)
                     .color(colors.text_primary),
             )
-            .padding([dims.spacing_xs, dims.spacing_s])
+            .padding([dims.theme().space.xs, dims.theme().space.s])
             .style(move |_theme| container::Style {
                 background: Some(iced::Background::Color(colors.surface_raised)),
                 border: iced::Border {
                     color: colors.border_default,
-                    width: dims.border_width,
+                    width: dims.theme().stroke.hairline,
                     radius: 0.0.into(),
                 },
                 ..container::Style::default()
             }),
             tooltip::Position::Bottom,
         )
-        .gap(dims.spacing_xs)
+        .gap(dims.theme().space.xs)
         .into(),
     )
 }

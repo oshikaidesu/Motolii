@@ -467,10 +467,10 @@ pub fn view(model: ViewModel<'_>, dims: Dimensions, colors: Colors) -> Element<'
     let body: Element<'static, Message> = match model.composition {
         None => container(
             text("comp が無い — 設定を編集できない")
-                .size(dims.caption_text)
+                .size(dims.theme().text.caption)
                 .color(colors.text_muted),
         )
-        .padding([0.0, dims.spacing_m])
+        .padding([0.0, dims.theme().space.m])
         .into(),
         Some(composition) => {
             let mut rows: Vec<Element<'static, Message>> = vec![
@@ -568,8 +568,8 @@ pub fn view(model: ViewModel<'_>, dims: Dimensions, colors: Colors) -> Element<'
 // ここは CSS 宣言の字面としてそれを taffy へ渡すだけ。
 //
 // 旧実装は「label(`Length::Fill`) + 内側 `row(cells).spacing(xs)`」の2段
-// 構造だったが、外側 `.spacing(dims.spacing_xs)` と内側
-// `row(cells).spacing(dims.spacing_xs)` が同値だったため、1段の flex row
+// 構造だったが、外側 `.spacing(dims.theme().space.xs)` と内側
+// `row(cells).spacing(dims.theme().space.xs)` が同値だったため、1段の flex row
 // (`gap` 一発)へフラット化しても見た目は不変 — label→セル0 の間隔・
 // セル間の間隔がどちらも同じ `gap` になる(2フィールドの行しか無いこの
 // section では区別が付かない=フラット化で失う情報が無い)。
@@ -585,9 +585,9 @@ pub fn view(model: ViewModel<'_>, dims: Dimensions, colors: Colors) -> Element<'
 pub fn comp_cells_row_css(dims: Dimensions) -> String {
     format!(
         "display:flex; align-items:center; gap:{gap}px; height:{height}px; padding:0px {pad}px",
-        gap = dims.spacing_xs,
+        gap = dims.theme().space.xs,
         height = dims.inspector_row_height,
-        pad = dims.spacing_m,
+        pad = dims.theme().space.m,
     )
 }
 
@@ -622,7 +622,7 @@ fn comp_cells_row(
         .expect("comp_cell_css は固定テンプレート+dims の px 値のみを埋める — 解釈は必ず成功する");
 
     let label_text: Element<'static, Message> = text(label)
-        .size(dims.body_text)
+        .size(dims.theme().text.body)
         .color(colors.text_primary)
         .into();
 
@@ -661,7 +661,7 @@ fn comp_field_cell(
         // text_input 自体は無改変なので click→type 編集は従来どおり効く。
         mouse_area(
             text(field.caption())
-                .size(dims.caption_text)
+                .size(dims.theme().text.caption)
                 .color(colors.text_muted)
                 .align_x(iced::alignment::Horizontal::Center)
                 .width(Length::Fixed(dims.inspector_value_width))
@@ -673,7 +673,7 @@ fn comp_field_cell(
         text_input("", displayed)
             .on_input(move |text| Message::CompFieldInput(field, text))
             .on_submit(Message::CompFieldSubmit(field))
-            .size(dims.body_text)
+            .size(dims.theme().text.body)
             .width(Length::Fixed(dims.inspector_value_width))
             .padding(0.0)
             .align_x(iced::alignment::Horizontal::Center)
@@ -698,18 +698,18 @@ fn comp_field_cell(
 fn auto_save_toggle_row(enabled: bool, dims: Dimensions, colors: Colors) -> Element<'static, Message> {
     row![
         text("Automatically Save Projects")
-            .size(dims.body_text)
+            .size(dims.theme().text.body)
             .color(colors.text_primary)
             .width(Length::Fill),
         toggler(enabled)
-            .size(dims.body_text)
+            .size(dims.theme().text.body)
             .on_toggle(Message::AutoSaveToggle)
             .style(move |_theme, status| toggler_style(colors, status)),
     ]
-    .spacing(dims.spacing_xs)
+    .spacing(dims.theme().space.xs)
     .height(Length::Fixed(dims.inspector_row_height))
     .align_y(iced::alignment::Vertical::Center)
-    .padding([0.0, dims.spacing_m])
+    .padding([0.0, dims.theme().space.m])
     .into()
 }
 
@@ -732,7 +732,7 @@ fn auto_save_cells_row(
         .expect("comp_cell_css は固定テンプレート+dims の px 値のみを埋める — 解釈は必ず成功する");
 
     let label_text: Element<'static, Message> = text(label)
-        .size(dims.body_text)
+        .size(dims.theme().text.body)
         .color(colors.text_primary)
         .into();
 
@@ -766,7 +766,7 @@ fn auto_save_field_cell(
         // drag ハンドル(冒頭コメント参照)。
         mouse_area(
             text(field.caption())
-                .size(dims.caption_text)
+                .size(dims.theme().text.caption)
                 .color(colors.text_muted)
                 .align_x(iced::alignment::Horizontal::Center)
                 .width(Length::Fixed(dims.inspector_value_width))
@@ -777,7 +777,7 @@ fn auto_save_field_cell(
         text_input("", displayed)
             .on_input(move |text| Message::AutoSaveFieldInput(field, text))
             .on_submit(Message::AutoSaveFieldSubmit(field))
-            .size(dims.body_text)
+            .size(dims.theme().text.body)
             .width(Length::Fixed(dims.inspector_value_width))
             .padding(0.0)
             .align_x(iced::alignment::Horizontal::Center)
@@ -796,17 +796,17 @@ fn preview_cache_row(
 ) -> Element<'static, Message> {
     row![
         text("Preview cache (frames)")
-            .size(dims.body_text)
+            .size(dims.theme().text.body)
             .color(colors.text_primary)
             .width(Length::Fill),
         text(format!("{} / {}", stats.held_frames, stats.limit))
-            .size(dims.body_text)
+            .size(dims.theme().text.body)
             .color(colors.text_primary),
     ]
-    .spacing(dims.spacing_xs)
+    .spacing(dims.theme().space.xs)
     .height(Length::Fixed(dims.inspector_row_height))
     .align_y(iced::alignment::Vertical::Center)
-    .padding([0.0, dims.spacing_m])
+    .padding([0.0, dims.theme().space.m])
     .into()
 }
 

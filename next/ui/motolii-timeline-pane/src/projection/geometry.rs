@@ -39,8 +39,6 @@ pub fn frame_at_x(x: f32, width: f32, duration_frames: i64) -> i64 {
 /// 梯子を選び 0.92 になり「モック通りでない」を利用者が検出した実例の修理
 /// (発注書 EXACT TARGET 1)。絶対 px が許されるのは物理由来の下限のみ
 /// (ヒット寸 12px 等 — ここは該当しない)。
-pub(crate) const TARGET_CELL_RATIO: f32 = 0.52;
-
 /// 目盛りの候補ステップ(フレーム数、昇順・重複無し)。**時刻へ絶対整列**
 /// (0, step, 2*step, ... — 全尺等分と違い端数のフレームが出ない)。
 ///
@@ -73,7 +71,7 @@ fn step_ladder_frames(fps: Option<Fps>) -> Vec<i64> {
 /// 持たない)。
 ///
 /// 小目盛 = [`step_ladder_frames`] の中で「セル比率(小目盛の px 間隔 /
-/// `row_height`)が [`TARGET_CELL_RATIO`] に最も近い」ステップ(比率の原則
+/// `row_height`)が JSON 正本の `target_cell_ratio` に最も近い」ステップ(比率の原則
 /// — 発注書 EXACT TARGET 1・2)。同点(浮動小数の完全一致)はラダー順で先に
 /// 見つかった方(`Iterator::min_by` の安定順)を採る。
 ///
@@ -94,6 +92,25 @@ pub fn tick_steps(
     clip_width: f32,
     row_height: f32,
 ) -> (i64, i64) {
+    tick_steps_with_target(
+        fps,
+        duration_frames,
+        clip_width,
+        row_height,
+        crate::tokens::Dimensions::default()
+            .components
+            .timeline
+            .target_cell_ratio,
+    )
+}
+
+pub fn tick_steps_with_target(
+    fps: Option<Fps>,
+    duration_frames: i64,
+    clip_width: f32,
+    row_height: f32,
+    target_cell_ratio: f32,
+) -> (i64, i64) {
     let ladder = step_ladder_frames(fps);
     if duration_frames <= 0 || clip_width <= 0.0 || row_height <= 0.0 {
         let minor = ladder.first().copied().unwrap_or(1);
@@ -101,7 +118,7 @@ pub fn tick_steps(
     }
     let px_per_frame = clip_width / duration_frames as f32;
     let cell_ratio_gap = |step: i64| -> f32 {
-        (step as f32 * px_per_frame / row_height - TARGET_CELL_RATIO).abs()
+        (step as f32 * px_per_frame / row_height - target_cell_ratio).abs()
     };
     let minor = ladder
         .iter()
@@ -130,7 +147,7 @@ pub fn tick_steps(
 /// 両方がこの1つの式から区間境界を出す(2箇所で別のフォールバックを持たない)。
 ///
 /// `clip_width`/`row_height` を引数に足した(裁定160 切片7時点は `clip_width`
-/// すら無かった) — 大目盛は [`TARGET_CELL_RATIO`] のセル比率(`clip_width`と
+/// すら無かった) — 大目盛は JSON 正本の `target_cell_ratio` のセル比率(`clip_width`と
 /// `row_height` の両方に依存)から出るので、区間幅も同じ入力を要る。
 ///
 /// `pub`: `motolii_shell::screenshot` が Timeline canvas と同じ区間の刻み方を
@@ -141,12 +158,43 @@ pub fn time_band_segment_frames(
     clip_width: f32,
     row_height: f32,
 ) -> i64 {
-    tick_steps(fps, duration_frames, clip_width, row_height).1
+    time_band_segment_frames_with_target(
+        fps,
+        duration_frames,
+        clip_width,
+        row_height,
+        crate::tokens::Dimensions::default()
+            .components
+            .timeline
+            .target_cell_ratio,
+    )
+}
+
+pub fn time_band_segment_frames_with_target(
+    fps: Option<Fps>,
+    duration_frames: i64,
+    clip_width: f32,
+    row_height: f32,
+    target_cell_ratio: f32,
+) -> i64 {
+    tick_steps_with_target(
+        fps,
+        duration_frames,
+        clip_width,
+        row_height,
+        target_cell_ratio,
+    )
+    .1
 }
 
 #[cfg(test)]
 mod tick_tests {
     use super::*;
+    use crate::tokens::Dimensions;
+
+    fn target_cell_ratio() -> f32 {
+        Dimensions::default().components.timeline.target_cell_ratio
+    }
 
     fn fps30() -> Fps {
         Fps::try_new(30, 1).expect("30/1 は正の既約 fps")
@@ -156,7 +204,7 @@ mod tick_tests {
     /// の行高 26px)— 発注書の EXACT TARGET/ORACLE (a) が指す値。
     const MOCK_ROW_HEIGHT: f32 = 26.0;
 
-    /// ラダーの中で [`TARGET_CELL_RATIO`] に最も近いステップを、テスト側でも
+    /// ラダーの中で JSON 正本の `target_cell_ratio` に最も近いステップを、テスト側でも
     /// 独立に計算する(発注書オラクル(a)「期待値はテスト内で梯子から計算」)。
     /// `tick_steps` 本体と同じ式を **意図して重複実装**する — 実装のバグを
     /// 実装自身の式で覆い隠さないため(oracle は独立検算)。
@@ -166,7 +214,9 @@ mod tick_tests {
         ladder
             .into_iter()
             .min_by(|&a, &b| {
-                let gap = |step: i64| (step as f32 * px_per_frame / row_height - TARGET_CELL_RATIO).abs();
+                let gap = |step: i64| {
+                    (step as f32 * px_per_frame / row_height - target_cell_ratio()).abs()
+                };
                 gap(a).partial_cmp(&gap(b)).unwrap_or(std::cmp::Ordering::Equal)
             })
             .expect("ladder は常に非空(step_ladder_frames が最低 [1,5,10] を返す)")
@@ -174,7 +224,7 @@ mod tick_tests {
 
     /// **オラクル(a)**: 30fps・尺1800f・幅1426px・行高26px(発注書 EXACT TARGET)
     /// → 選ばれる小目盛が、全ラダー候補の中でセル比率(spacing_px/row_height)を
-    /// [`TARGET_CELL_RATIO`](0.52)に最も近づけるステップと一致する。具体値
+    /// JSON 正本のセル比率(0.52)に最も近づけるステップと一致する。具体値
     /// (10f)も assert する — 期待値はテスト内の独立計算([`nearest_minor_by_ratio`])
     /// から出しており、実装のマジックナンバーをそのまま複製していない。
     #[test]
@@ -207,7 +257,7 @@ mod tick_tests {
         let px_per_frame = 810.0 / 1800.0;
         let ratio = minor as f32 * px_per_frame / MOCK_ROW_HEIGHT;
         assert!(
-            (ratio - TARGET_CELL_RATIO).abs() < 0.01,
+            (ratio - target_cell_ratio()).abs() < 0.01,
             "選ばれた小目盛のセル比率がモック実測(0.52)から遠すぎる: {ratio}"
         );
     }

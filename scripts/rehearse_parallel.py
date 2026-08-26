@@ -12,9 +12,12 @@ import argparse
 import csv
 import hashlib
 import re
+import sys
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+
+from foundation_phase import FoundationPhaseError, load_phase, summary
 
 
 SPECIAL_LANES = {"(外部依存)", "(責任ファイル未記入)"}
@@ -107,6 +110,14 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("root", type=Path)
     args = parser.parse_args()
+    try:
+        phase = load_phase(args.root.resolve(), required=False)
+    except FoundationPhaseError as error:
+        print(f"FOUNDATION_PHASE=RED {error}", file=sys.stderr)
+        return 1
+    if phase:
+        print(f"FOUNDATION_PHASE {summary(phase)}")
+        print(f"PARALLEL_AUTHORIZATION={phase['parallel_components'].upper()}")
     for key, value in rehearse(args.root.resolve()).items():
         print(f"{key}={value}")
     return 0

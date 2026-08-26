@@ -122,14 +122,14 @@ pub(crate) fn attrs_section(
 ) -> Element<'static, Message> {
     let blend_content = row_widget![
         text("Blend")
-            .size(dims.body_text)
+            .size(dims.theme().text.body)
             .color(colors.text_primary)
             .width(Length::Fill),
-        button(text(attrs.blend_mode.clone()).size(dims.body_text))
+        button(text(attrs.blend_mode.clone()).size(dims.theme().text.body))
             .on_press(Message::CycleBlendMode)
             .style(move |_theme, status| flat_button_style(colors, status)),
     ]
-    .spacing(dims.spacing_xs)
+    .spacing(dims.theme().space.xs)
     .align_y(iced::alignment::Vertical::Center);
 
     // `.prow` 系の行として同じ hairline を使う(mock 断片には Blend 行自体は
@@ -175,7 +175,7 @@ fn speed_row(
     let value_field = text_input("", displayed)
         .on_input(Message::SpeedInput)
         .on_submit(Message::SpeedSubmit)
-        .size(dims.body_text)
+        .size(dims.theme().text.body)
         .width(Length::Fixed(dims.inspector_value_width))
         .padding(value_cell_padding(dims))
         .align_x(iced::alignment::Horizontal::Center)
@@ -183,18 +183,17 @@ fn speed_row(
 
     let content = row_widget![
         text("Speed")
-            .size(dims.body_text)
+            .size(dims.theme().text.body)
             .color(colors.text_primary)
             .width(Length::Fill),
         value_field,
-        text("%").size(dims.caption_text).color(colors.text_muted),
-        button(text("Reset").size(dims.caption_text))
+        text("%").size(dims.theme().text.caption).color(colors.text_muted),
+        button(text("Reset").size(dims.theme().text.caption))
             .on_press(Message::ResetSpeed)
             .style(move |_theme, status| flat_button_style(colors, status)),
     ]
-    .spacing(dims.spacing_xs)
+    .spacing(dims.theme().space.xs)
     .align_y(iced::alignment::Vertical::Center);
 
     bordered_row(content.into(), dims)
 }
-

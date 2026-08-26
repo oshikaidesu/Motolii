@@ -13,8 +13,8 @@ use motolii_core::{Fps, RationalTime};
 use motolii_inspector_pane::{
     commit_inspector_field, effects_with_moved_down, effects_with_moved_up, effects_with_removed,
     move_inspector_effect_down, move_inspector_effect_up, project, property_id,
-    remove_inspector_effect, toggle_inspector_effect_bypass, view, FieldDraft, GlowParam,
-    KeyCellState, KeyRow, Message, RowValue, TransformField, GLOW_PLUGIN_ID,
+    parameter_for_provider, remove_inspector_effect, toggle_inspector_effect_bypass, view,
+    FieldDraft, KeyCellState, KeyRow, Message, RowValue, TransformField, GLOW_PLUGIN_ID,
 };
 use motolii_shell_state::Session;
 use motolii_store::{
@@ -63,6 +63,10 @@ fn session_selecting(layer: LayerId) -> Session {
         selection: Some(layer),
         ..Session::default()
     }
+}
+
+fn glow_param(id: &str) -> &'static motolii_inspector_pane::ParameterDescriptor {
+    parameter_for_provider(GLOW_PLUGIN_ID, id).expect("Glow parameter が catalog にあるはず")
 }
 
 /// **裁定213**: `enabled` は `effect.{id}.enabled` track の `t=0` 評価値
@@ -249,9 +253,9 @@ fn glow_param_rows_follow_the_catalog_and_unknown_plugins_get_none() {
     assert_eq!(labels, vec!["Threshold", "Intensity", "Radius"]);
 
     for (row, (param, default)) in glow.params.iter().zip([
-        (GlowParam::Threshold, 1.0),
-        (GlowParam::Intensity, 0.75),
-        (GlowParam::Radius, 1.0),
+        (glow_param("threshold"), 1.0),
+        (glow_param("intensity"), 0.75),
+        (glow_param("radius"), 1.0),
     ]) {
         assert_eq!(row.decimals, 2, "param 行の精度は2桁のはず");
         assert_eq!(row.key.row, KeyRow::EffectParam(EffectId(1), param));
@@ -311,7 +315,7 @@ fn removing_an_effect_drops_only_that_effect_and_undoes_in_one_step() {
 fn removing_an_effect_keeps_its_param_tracks_inert_in_the_document() {
     let (mut doc, layer) = doc_with_two_effects();
     let property = PropertyId::effect_param(EffectId(1), "radius").expect("param 名は非予約語");
-    let field = TransformField::EffectParam(EffectId(1), GlowParam::Radius);
+    let field = TransformField::EffectParam(EffectId(1), glow_param("radius"));
     let mut draft = Some(FieldDraft {
         field,
         text: "2".to_owned(),
@@ -430,7 +434,7 @@ fn effect_edits_without_a_selection_or_with_a_stale_id_are_silent_no_ops() {
 fn committing_a_glow_param_draft_writes_the_effect_param_track_raw() {
     let (mut doc, layer) = doc_with_two_effects();
 
-    let field = TransformField::EffectParam(EffectId(1), GlowParam::Threshold);
+    let field = TransformField::EffectParam(EffectId(1), glow_param("threshold"));
     let mut draft = Some(FieldDraft {
         field,
         text: "0.6".to_owned(),

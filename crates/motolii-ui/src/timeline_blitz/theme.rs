@@ -81,7 +81,10 @@ mod tests {
             ("INK", INK),
             ("BAR_INK", BAR_INK),
         ] {
-            let expected = format!("pub(super) const {name}: Color32 = {};", from_rgb_literal(hex));
+            let expected = format!(
+                "pub(super) const {name}: Color32 = {};",
+                from_rgb_literal(hex)
+            );
             assert!(
                 EGUI_THEME.contains(&expected),
                 "timeline_egui/theme.rs に {expected} が無い"

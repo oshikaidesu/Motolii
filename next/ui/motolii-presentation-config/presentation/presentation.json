@@ -1,0 +1,35 @@
+{
+  "$schema": "presentation-config.schema.json",
+  "version": 1,
+  "sources": {
+    "layout": "https://www.ableton.com/en/manual/arrangement-view/",
+    "readability": "https://developers.google.com/style/accessibility"
+  },
+  "layout_defaults": {
+    "browser_open": true,
+    "ratios": {
+      "browser": 0.30,
+      "inspector": 0.31,
+      "content_timeline": 0.62
+    }
+  },
+  "browser": {
+    "tabs": {
+      "order": ["media", "effects", "create", "panels"],
+      "visible": ["media", "effects", "create", "panels"]
+    }
+  },
+  "stage": {
+    "view_tabs": {
+      "order": ["camera", "user_view"],
+      "visible": ["camera", "user_view"]
+    }
+  },
+  "timeline": {
+    "detail_tabs": {
+      "order": ["timeline", "graph"],
+      "visible": ["timeline", "graph"],
+      "default": "timeline"
+    }
+  }
+}

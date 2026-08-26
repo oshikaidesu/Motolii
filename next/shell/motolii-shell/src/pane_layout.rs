@@ -33,13 +33,14 @@
 //!
 //! **既知の限界(NON-GOAL 隣接、分離レーンへの申し送り)**: Browser 開閉で
 //! `Configuration` から作り直すため、開閉をまたいだ**ドラッグ並べ替えの
-//! 記憶は保持しない**(Inspector/Stage/Timeline の *リサイズ比率* は
+//! 記憶は保持しない**(Browser/Stage/Inspector/Timeline の *リサイズ比率* は
 //! [`Ratios`] 経由で保持するが、ドラッグで入れ替えた *配置* そのものは
-//! 開閉のたびに既定形(Inspector 左・Stage 右・Timeline 下帯)へ戻る)。
+//! 開閉のたびに既定形(Browser・Stage・Inspector の上段、Timeline 下帯)へ戻る)。
 
 use std::collections::BTreeMap;
 
 use iced::widget::pane_grid;
+use motolii_presentation_config::PresentationConfig;
 use motolii_shell_state::focus::PaneKind as StatePaneKind;
 use motolii_shell_state::layout::{Axis as StateAxis, LayoutNode, WorkspaceSnapshot};
 
@@ -74,65 +75,77 @@ pub fn title(kind: PaneKind) -> &'static str {
 /// ではない)。
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Ratios {
-    /// Browser | (Inspector/Stage/Timeline) を分ける split(`Axis::Vertical`)。
+    /// Browser | (Stage/Inspector/Timeline) を分ける split(`Axis::Vertical`)。
     pub browser: f32,
-    /// Inspector | Stage を分ける split(`Axis::Vertical`)。
+    /// Inspector の幅。Configuration の Stage | Inspector split では、Stage 側
+    /// の raw ratio を `1.0 - inspector` として組み立てる。
     pub inspector: f32,
-    /// (Inspector/Stage) | Timeline を分ける split(`Axis::Horizontal`)。
+    /// (Browser/Stage/Inspector) | Timeline を分ける split(`Axis::Horizontal`)。
     pub content_timeline: f32,
 }
 
 impl Default for Ratios {
-    /// 視覚正本 `next/reference/mocks/browser-library.html` の
-    /// `.libraryBrowser { width: min(100%, 700px); }`(700px 幅の縦パネル)を
-    /// 踏まえた近似——pane_grid の ratio は実行時 window 幅に対する比率で
-    /// あって px 固定ではないため、厳密な 700px 一致はユーザーがドラッグで
-    /// 決める(本レーンの目的そのもの)。`inspector`/`content_timeline` は
-    /// 旧固定レイアウトの見た目(`dims.inspector_panel_width` = 496px /
-    /// `screenshot.rs::CANVAS_WIDTH` = 1600px 系列の比)を初期値として踏襲する。
+    /// 初期比率はPresentation JSONから読む。テストや保存状態の変換が
+    /// `Ratios`だけを必要とする時も、配置の既定値をRustへ複製しない。
     fn default() -> Self {
+        Self::from_presentation(&PresentationConfig::default())
+    }
+}
+
+impl Ratios {
+    /// Presentation JSON から初期比率を読む。ここで別の既定値を持たないことが
+    /// 「配置はAbletonベース」という実装上の境界になる。
+    pub fn from_presentation(config: &PresentationConfig) -> Self {
+        let ratios = &config.layout_defaults.ratios;
         Self {
-            browser: 0.3,
-            inspector: 0.31,
-            content_timeline: 0.62,
+            browser: ratios.browser,
+            inspector: ratios.inspector,
+            content_timeline: ratios.content_timeline,
         }
     }
 }
 
 /// `open`/`ratios` から `pane_grid::Configuration` を組む純関数(oracle (a)
-/// の直接対象)。**初期配置**(発注書 OUTCOME): Browser=左の全高カラム(`open`
-/// の間だけ)・Inspector・Stage は現行の並び(Inspector 左・Stage 右)・
-/// Timeline=下帯。ASCII 図(`open == true`):
+/// の直接対象)。**初期配置**(発注書 OUTCOME): Browser=上段左(`open` の間だけ)・
+/// Stage・Inspector は指定された順序(Browser 左・Stage 中央・
+/// Inspector 右)・Timeline=下帯。ASCII 図(`open == true`):
 ///
 /// ```text
-/// +----------+---------------------------+
-/// |          |  Inspector  |    Stage    |
-/// | Browser  +---------------------------+
-/// |          |          Timeline         |
-/// +----------+---------------------------+
+/// +----------+----------------+-------------+
+/// | Browser  |     Stage      |  Inspector  |
+/// +----------+----------------+-------------+
+/// |                 Timeline                |
+/// +-----------------------------------------+
 /// ```
 pub fn build_configuration(open: bool, ratios: Ratios) -> pane_grid::Configuration<PaneKind> {
-    let content = pane_grid::Configuration::Split {
-        axis: pane_grid::Axis::Horizontal,
-        ratio: ratios.content_timeline,
-        a: Box::new(pane_grid::Configuration::Split {
+    let top = pane_grid::Configuration::Split {
+        axis: pane_grid::Axis::Vertical,
+        ratio: ratios.browser,
+        a: Box::new(pane_grid::Configuration::Pane(PaneKind::Browser)),
+        b: Box::new(pane_grid::Configuration::Split {
             axis: pane_grid::Axis::Vertical,
-            ratio: ratios.inspector,
-            a: Box::new(pane_grid::Configuration::Pane(PaneKind::Inspector)),
-            b: Box::new(pane_grid::Configuration::Pane(PaneKind::Stage)),
+            ratio: 1.0 - ratios.inspector,
+            a: Box::new(pane_grid::Configuration::Pane(PaneKind::Stage)),
+            b: Box::new(pane_grid::Configuration::Pane(PaneKind::Inspector)),
         }),
-        b: Box::new(pane_grid::Configuration::Pane(PaneKind::Timeline)),
     };
 
-    if open {
+    let top = if open {
+        top
+    } else {
         pane_grid::Configuration::Split {
             axis: pane_grid::Axis::Vertical,
-            ratio: ratios.browser,
-            a: Box::new(pane_grid::Configuration::Pane(PaneKind::Browser)),
-            b: Box::new(content),
+            ratio: 1.0 - ratios.inspector,
+            a: Box::new(pane_grid::Configuration::Pane(PaneKind::Stage)),
+            b: Box::new(pane_grid::Configuration::Pane(PaneKind::Inspector)),
         }
-    } else {
-        content
+    };
+
+    pane_grid::Configuration::Split {
+        axis: pane_grid::Axis::Horizontal,
+        ratio: ratios.content_timeline,
+        a: Box::new(top),
+        b: Box::new(pane_grid::Configuration::Pane(PaneKind::Timeline)),
     }
 }
 
@@ -223,6 +236,7 @@ fn extract_from_node(node: &pane_grid::Node, panes: &BTreeMap<pane_grid::Pane, P
 
         match (a_kinds.as_slice(), b_kinds.as_slice()) {
             ([PaneKind::Browser], _) => ratios.browser = *ratio,
+            ([PaneKind::Stage], [PaneKind::Inspector]) => ratios.inspector = 1.0 - *ratio,
             ([PaneKind::Inspector], [PaneKind::Stage]) => ratios.inspector = *ratio,
             (_, [PaneKind::Timeline]) => ratios.content_timeline = *ratio,
             _ => {}
@@ -261,6 +275,15 @@ impl Layout {
     /// 「閉じていれば木に無い」)。
     pub fn new() -> Self {
         Self::with_ratios(false, Ratios::default())
+    }
+
+    /// 製品起動時の初期配置。保存済みのfront-stateがあれば後段でそれが優先
+    /// されるが、新規セッションはPresentation JSONの配置をそのまま使う。
+    pub fn from_presentation(config: &PresentationConfig) -> Self {
+        Self::with_ratios(
+            config.layout_defaults.browser_open,
+            Ratios::from_presentation(config),
+        )
     }
 
     fn with_ratios(open: bool, ratios: Ratios) -> Self {
@@ -364,32 +387,61 @@ mod tests {
             .unwrap_or_else(|| panic!("{kind:?} が pane_grid State に無い"))
     }
 
+    fn split_between(
+        state: &pane_grid::State<PaneKind>,
+        left: PaneKind,
+        right: PaneKind,
+    ) -> pane_grid::Split {
+        fn find(
+            node: &pane_grid::Node,
+            panes: &BTreeMap<pane_grid::Pane, PaneKind>,
+            left: PaneKind,
+            right: PaneKind,
+        ) -> Option<pane_grid::Split> {
+            let pane_grid::Node::Split { id, a, b, .. } = node else {
+                return None;
+            };
+
+            let mut a_kinds = Vec::new();
+            kinds_in(a, panes, &mut a_kinds);
+            let mut b_kinds = Vec::new();
+            kinds_in(b, panes, &mut b_kinds);
+            if a_kinds == vec![left] && b_kinds == vec![right] {
+                return Some(*id);
+            }
+
+            find(a, panes, left, right).or_else(|| find(b, panes, left, right))
+        }
+
+        find(state.layout(), &state.panes, left, right)
+            .unwrap_or_else(|| panic!("{left:?}|{right:?} の split が無い"))
+    }
+
     // -----------------------------------------------------------------
-    // oracle (a): 初期レイアウトの構造(Browser が左・Timeline が下)。
+    // oracle (a): 初期レイアウトの構造(Browser/Stage/Inspector が上・Timeline が下)。
     // -----------------------------------------------------------------
 
-    /// Browser 開: 最外郭は `Axis::Vertical` split で、`a` 側(左)が丸ごと
-    /// Browser 1枚だけ——「左の全高カラム」の直接の証拠(Inspector/Stage/
-    /// Timeline のどれも `a` 側に混ざらない)。
+    /// Browser 開: 最外郭は `Axis::Horizontal` split で、`a` 側(上)に
+    /// Browser/Stage/Inspector が指定順で並び、`b` 側(下)が Timeline。
     #[test]
-    fn browser_open_puts_browser_alone_on_the_left_of_the_outermost_split() {
+    fn browser_open_puts_browser_stage_inspector_in_order_above_timeline() {
         let state = build_state(true, Ratios::default());
         let pane_grid::Node::Split { axis, a, b, .. } = state.layout() else {
             panic!("最外郭が split ではない");
         };
-        assert_eq!(*axis, pane_grid::Axis::Vertical, "Browser|残り の分割は縦線(左右)のはず");
+        assert_eq!(*axis, pane_grid::Axis::Horizontal, "上段|Timeline の分割は横線(上下)のはず");
 
         let mut a_kinds = Vec::new();
         kinds_in(a, &state.panes, &mut a_kinds);
-        assert_eq!(a_kinds, vec![PaneKind::Browser], "左側が Browser 単独ではない: {a_kinds:?}");
+        assert_eq!(
+            a_kinds,
+            vec![PaneKind::Browser, PaneKind::Stage, PaneKind::Inspector],
+            "上段の並びが Browser/Stage/Inspector ではない: {a_kinds:?}"
+        );
 
         let mut b_kinds = Vec::new();
         kinds_in(b, &state.panes, &mut b_kinds);
-        assert_eq!(
-            b_kinds,
-            vec![PaneKind::Inspector, PaneKind::Stage, PaneKind::Timeline],
-            "右側の並びが Inspector/Stage/Timeline ではない: {b_kinds:?}"
-        );
+        assert_eq!(b_kinds, vec![PaneKind::Timeline], "下段が Timeline 単独ではない: {b_kinds:?}");
     }
 
     /// Timeline は常に一番下(content/timeline split の `b` 側)——Browser の
@@ -419,33 +471,33 @@ mod tests {
         }
     }
 
-    /// Inspector が左・Stage が右(「Inspector・Stage は現行の並び」)。
+    /// Stage が左・Inspector が右(利用者指定の上段固定順)。
     #[test]
-    fn inspector_is_left_of_stage() {
+    fn stage_is_left_of_inspector() {
         for open in [true, false] {
             let state = build_state(open, Ratios::default());
 
-            fn find_inspector_stage_split(node: &pane_grid::Node) -> Option<(&pane_grid::Node, &pane_grid::Node)> {
+            fn find_stage_inspector_split(node: &pane_grid::Node) -> Option<(&pane_grid::Node, &pane_grid::Node)> {
                 match node {
                     pane_grid::Node::Split { a, b, .. } => {
                         if matches!(**a, pane_grid::Node::Pane(_)) && matches!(**b, pane_grid::Node::Pane(_)) {
                             Some((a, b))
                         } else {
-                            find_inspector_stage_split(a).or_else(|| find_inspector_stage_split(b))
+                            find_stage_inspector_split(a).or_else(|| find_stage_inspector_split(b))
                         }
                     }
                     pane_grid::Node::Pane(_) => None,
                 }
             }
 
-            let (a, b) = find_inspector_stage_split(state.layout())
-                .unwrap_or_else(|| panic!("Inspector|Stage の葉split が無い(open={open})"));
+            let (a, b) = find_stage_inspector_split(state.layout())
+                .unwrap_or_else(|| panic!("Stage|Inspector の葉split が無い(open={open})"));
             let mut a_kinds = Vec::new();
             kinds_in(a, &state.panes, &mut a_kinds);
             let mut b_kinds = Vec::new();
             kinds_in(b, &state.panes, &mut b_kinds);
-            assert_eq!(a_kinds, vec![PaneKind::Inspector], "左が Inspector ではない(open={open})");
-            assert_eq!(b_kinds, vec![PaneKind::Stage], "右が Stage ではない(open={open})");
+            assert_eq!(a_kinds, vec![PaneKind::Stage], "左が Stage ではない(open={open})");
+            assert_eq!(b_kinds, vec![PaneKind::Inspector], "右が Inspector ではない(open={open})");
         }
     }
 
@@ -458,7 +510,7 @@ mod tests {
             state.iter().all(|(_, kind)| *kind != PaneKind::Browser),
             "Browser 閉のはずが state.panes に Browser が残っている"
         );
-        assert_eq!(state.len(), 3, "Browser 閉は Inspector/Stage/Timeline の3枚のはず");
+        assert_eq!(state.len(), 3, "Browser 閉は Stage/Inspector/Timeline の3枚のはず");
     }
 
     /// Browser 開は4枚ちょうど。
@@ -466,6 +518,16 @@ mod tests {
     fn browser_open_has_exactly_four_panes() {
         let state = build_state(true, Ratios::default());
         assert_eq!(state.len(), 4);
+    }
+
+    #[test]
+    fn presentation_json_is_the_product_default_layout() {
+        let config = PresentationConfig::default();
+        let layout = Layout::from_presentation(&config);
+
+        assert_eq!(layout.browser_open(), config.layout_defaults.browser_open);
+        assert_eq!(layout.ratios(), Ratios::from_presentation(&config));
+        assert_eq!(layout.state.len(), 4, "bundled default opens Browser");
     }
 
     // -----------------------------------------------------------------
@@ -491,18 +553,9 @@ mod tests {
     fn resize_is_deterministic_and_isolated_to_the_targeted_split() {
         let mut layout = Layout::new();
         let before = layout.ratios();
-        let inspector_stage_split = {
-            let pane_grid::Node::Split { id, a, .. } = layout.state.layout() else {
-                panic!("root が split ではない");
-            };
-            let pane_grid::Node::Split { id: inner_id, .. } = a.as_ref() else {
-                panic!("a 側が split ではない");
-            };
-            let _ = id;
-            *inner_id
-        };
+        let stage_inspector_split = split_between(&layout.state, PaneKind::Stage, PaneKind::Inspector);
 
-        layout.apply_resize(pane_grid::ResizeEvent { split: inspector_stage_split, ratio: 0.5 });
+        layout.apply_resize(pane_grid::ResizeEvent { split: stage_inspector_split, ratio: 0.5 });
 
         let after = layout.ratios();
         assert_eq!(after.inspector, 0.5, "対象 split の ratio が反映されていない");
@@ -512,22 +565,14 @@ mod tests {
         );
     }
 
-    /// Browser 開閉をまたいでも、resize で変えた Inspector|Stage の比率は
+    /// Browser 開閉をまたいでも、resize で変えた Stage|Inspector の比率は
     /// 保持される(モジュール冒頭 doc の「比率は保持・配置は保持しない」の
     /// うち「比率は保持」の直接証拠)。
     #[test]
-    fn browser_toggle_preserves_the_resized_inspector_ratio() {
+    fn browser_toggle_preserves_the_resized_stage_inspector_ratio() {
         let mut layout = Layout::new();
-        let inspector_stage_split = {
-            let pane_grid::Node::Split { a, .. } = layout.state.layout() else {
-                panic!("root が split ではない");
-            };
-            let pane_grid::Node::Split { id, .. } = a.as_ref() else {
-                panic!("a 側が split ではない");
-            };
-            *id
-        };
-        layout.apply_resize(pane_grid::ResizeEvent { split: inspector_stage_split, ratio: 0.45 });
+        let stage_inspector_split = split_between(&layout.state, PaneKind::Stage, PaneKind::Inspector);
+        layout.apply_resize(pane_grid::ResizeEvent { split: stage_inspector_split, ratio: 1.0 - 0.45 });
 
         layout.set_browser_open(true);
         layout.set_browser_open(false);
@@ -535,7 +580,7 @@ mod tests {
         assert_eq!(layout.ratios().inspector, 0.45, "Browser 開閉で resize した比率が失われた");
     }
 
-    /// ドラッグで Inspector と Stage を入れ替える(`DragEvent::Dropped` +
+    /// ドラッグで Stage と Inspector を入れ替える(`DragEvent::Dropped` +
     /// `Target::Pane(_, Region::Center)` は `State::swap` 相当、`state.rs::
     /// drop`/`split_with` 実測)。**`State::swap` は `panes`(id→`PaneKind`)
     /// ではなく `layout`(id→幾何位置の木)を書き換える**(`state.rs::swap`
@@ -544,7 +589,7 @@ mod tests {
     /// 判定は「木の *左* 位置に今どの id がいて、その id の種別は何か」)。
     /// pane id は不変、**木のどちらの位置にいるか**だけが入れ替わる —
     /// レンダリング(`PaneGrid::layout`)はこの木を辿って各 id の Content を
-    /// 置くので、見た目としては Inspector/Stage の位置が正しく入れ替わる。
+    /// 置くので、見た目としては Stage/Inspector の位置が正しく入れ替わる。
     #[test]
     fn drag_dropped_on_a_pane_swaps_their_screen_positions_deterministically() {
         let mut layout = Layout::new();
@@ -575,7 +620,7 @@ mod tests {
             }
         }
         let (left_id, right_id) =
-            leaf_positions(layout.state.layout()).expect("Inspector|Stage の葉split が無い");
+            leaf_positions(layout.state.layout()).expect("Stage|Inspector の葉split が無い");
         assert_eq!(
             layout.state.get(left_id),
             Some(&PaneKind::Stage),
@@ -631,16 +676,8 @@ mod tests {
     #[test]
     fn set_browser_open_is_a_no_op_when_the_value_does_not_change() {
         let mut layout = Layout::new();
-        let inspector_stage_split = {
-            let pane_grid::Node::Split { a, .. } = layout.state.layout() else {
-                panic!("root が split ではない");
-            };
-            let pane_grid::Node::Split { id, .. } = a.as_ref() else {
-                panic!("a 側が split ではない");
-            };
-            *id
-        };
-        layout.apply_resize(pane_grid::ResizeEvent { split: inspector_stage_split, ratio: 0.4 });
+        let stage_inspector_split = split_between(&layout.state, PaneKind::Stage, PaneKind::Inspector);
+        layout.apply_resize(pane_grid::ResizeEvent { split: stage_inspector_split, ratio: 1.0 - 0.4 });
 
         layout.set_browser_open(false); // 既に閉じている——no-op のはず
 

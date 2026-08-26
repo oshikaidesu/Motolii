@@ -8,7 +8,7 @@ use crate::{Document, LayerId};
 
 use super::clip::{clip_interval_overflow, validate_clip_duration};
 use super::locate::{
-    envelope_of, ensure_layer_names_match_item, find_item_location, find_items_vec,
+    ensure_layer_names_match_item, envelope_of, find_item_location, find_items_vec,
     find_items_vec_mut, find_track_item_mut,
 };
 use super::{Command, CommandError, ParentLocator};

@@ -769,6 +769,11 @@ impl Shell {
                 self.tokens = Tokens::load();
                 metrics::record_tokens_reload();
             }
+            Message::PresentationFileChanged => {
+                if let Err(error) = self.presentation.reload() {
+                    self.status = Some(format!("Presentation設定を保持: {error}"));
+                }
+            }
             Message::MainWindowOpened(id) => self.main_window = Some(id),
             Message::SettingsWindowOpened(id) => self.settings_window = Some(id),
             Message::ExportWindowOpened(id) => self.export_window = Some(id),

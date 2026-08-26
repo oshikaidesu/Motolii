@@ -17,7 +17,7 @@
 
 use anyrender::{PaintScene, Scene};
 use blitz_dom::node::{ComputedStyles, Widget};
-use blitz_traits::events::{UiEvent, BlitzPointerEvent};
+use blitz_traits::events::{BlitzPointerEvent, UiEvent};
 use motolii_doc::{KeyframeId, LayerId};
 use std::sync::{Arc, Mutex};
 use vello_common::kurbo::{Affine, Point, Rect};
@@ -233,10 +233,15 @@ impl TimelineSurface {
         if row.property == Some("Position") {
             let cy = ((y / row_height).floor() + 0.5) * row_height;
             let half = 4.0;
-            if let Some(key) = row.keys.iter().find(|key| {
-                (x - key.fraction * self.width).abs() + (y - cy).abs() <= half
-            }) {
-                return TimelineSurfaceHit::PositionKey { layer: row.layer, key: key.id };
+            if let Some(key) = row
+                .keys
+                .iter()
+                .find(|key| (x - key.fraction * self.width).abs() + (y - cy).abs() <= half)
+            {
+                return TimelineSurfaceHit::PositionKey {
+                    layer: row.layer,
+                    key: key.id,
+                };
             }
         }
         let (Some(start), Some(end)) = (row.start, row.end) else {

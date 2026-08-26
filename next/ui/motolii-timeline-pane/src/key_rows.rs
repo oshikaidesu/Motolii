@@ -34,11 +34,6 @@ use super::projection::{frame_at_x, frame_to_x, PropertyKeyProjection};
 use super::{KeySelectionOp, KeySelector, TimelinePane};
 use crate::Message;
 
-/// 描画サイズ(正典 §1「文法定数」)。**当たりは絵より大きい**(bar 端と同じ
-/// 思想 — 細い菱形をピクセル単位で狙わせない)。
-const KEY_DIAMOND_SIZE: f32 = 8.0;
-const KEY_HIT: f32 = 12.0;
-
 /// property 行の帯が始まる y。**縦スクロール発注(2026-08-22)**: ルーラーは
 /// `super::ruler::RulerHeader` へ移設され、この canvas(body)の y=0 は
 /// もう「ルーラー下」ではなく「行0の上端」そのもの(`super::canvas`
@@ -150,10 +145,11 @@ pub(crate) fn draw(pane: &TimelinePane, frame: &mut canvas::Frame, width: f32) {
             &hairline_path,
             canvas::Stroke::default()
                 .with_color(pane.colors.border_hairline_weak)
-                .with_width(pane.dims.border_width),
+                .with_width(pane.dims.theme().stroke.hairline),
         );
 
-        // キー菱形(描画 8×8、単一菱形 — 裁定151「形状コード不採用」)。
+        // キー菱形(描画寸は JSON 正本の key_diamond_size、単一菱形 —
+        // 裁定151「形状コード不採用」)。
         // **時間軸カリング**([`keys_for_draw`] doc 参照) — 同じ画面ピクセル
         // 列に重なるキーは最後の1本だけ描く、絵は不変。
         for key in keys_for_draw(&row.keys, width, pane.duration_frames) {
@@ -164,7 +160,14 @@ pub(crate) fn draw(pane: &TimelinePane, frame: &mut canvas::Frame, width: f32) {
             } else {
                 pane.colors.way_timeline
             };
-            frame.fill(&diamond_path(cx, cy, KEY_DIAMOND_SIZE / 2.0), color);
+            frame.fill(
+                &diamond_path(
+                    cx,
+                    cy,
+                    pane.dims.components.timeline.key_diamond_size / 2.0,
+                ),
+                color,
+            );
         }
     }
 }
@@ -266,7 +269,7 @@ pub(crate) fn update(
 
     let hit_key = row.keys.iter().find(|key| {
         let cx = frame_to_x(key.frame, clip_width, pane.duration_frames);
-        (local_x - cx).abs() <= KEY_HIT / 2.0
+        (local_x - cx).abs() <= pane.dims.components.timeline.key_hit / 2.0
     });
     let Some(key) = hit_key else {
         return Some(canvas::Action::capture()); // 行の空白 — 吸収のみ。
@@ -348,7 +351,7 @@ pub(crate) fn mouse_interaction(
     let local_x = position.x;
     let over_key = row.keys.iter().any(|key| {
         let cx = frame_to_x(key.frame, clip_width, pane.duration_frames);
-        (local_x - cx).abs() <= KEY_HIT / 2.0
+        (local_x - cx).abs() <= pane.dims.components.timeline.key_hit / 2.0
     });
     Some(if over_key {
         mouse::Interaction::Pointer

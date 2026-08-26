@@ -438,6 +438,38 @@ impl Engine {
         )
     }
 
+    /// 共有面へ直接書く。`render_frame_to_texture` と同じ層構築。blit しない。
+    pub fn render_frame_into(
+        &mut self,
+        view: &StoreView<'_>,
+        t: RationalTime,
+        target: &wgpu::Texture,
+    ) -> Result<(), EngineError> {
+        let composition = view
+            .composition()
+            .map_err(|e| EngineError::Store(e.to_string()))?
+            .ok_or(EngineError::NoComposition)?;
+        let comp = composition.spec();
+        let camera = view
+            .resolve_camera(t)
+            .map_err(|e| EngineError::Store(e.to_string()))?;
+        let resolved = view
+            .resolved_layers(t)
+            .map_err(|e| EngineError::Store(e.to_string()))?;
+        let text_documents = collect_text_documents(view, &resolved, t)?;
+        let shape_documents = collect_shape_documents(view, &resolved)?;
+        let layers = self.layers_from_resolved(
+            comp,
+            composition.background,
+            camera,
+            t,
+            &resolved,
+            &text_documents,
+            &shape_documents,
+        )?;
+        Ok(self.compositor.render_into(target, comp, camera, &layers)?)
+    }
+
     /// **BL4 track matte 消費**。`target`(matte を持つ本体、既に texture が乗った
     /// [`Layer`])を `matte_source`(直上の matte 元、同じく既に texture が乗った
     /// [`Layer`])と `mode` で合成し、「絵から除外しつつマットとして消費し終えた

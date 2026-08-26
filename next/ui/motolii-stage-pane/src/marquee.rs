@@ -504,7 +504,7 @@ impl canvas::Program<SelectLayers> for MarqueeOverlay {
             &path,
             canvas::Stroke::default()
                 .with_color(accent)
-                .with_width(self.dims.border_width),
+                .with_width(self.dims.theme().stroke.hairline),
         );
         vec![frame.into_geometry()]
     }

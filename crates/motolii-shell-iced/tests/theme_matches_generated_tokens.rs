@@ -62,10 +62,7 @@ fn tokens_dark_matches_the_generated_css_one_to_one() {
         let generated = css
             .get(name)
             .unwrap_or_else(|| panic!("`--motolii-color-{name}` が生成物に無い — 発明された role"));
-        assert_eq!(
-            color, *generated,
-            "`{name}` の値が生成物とずれた(写し損ね)"
-        );
+        assert_eq!(color, *generated, "`{name}` の値が生成物とずれた(写し損ね)");
     }
 }
 

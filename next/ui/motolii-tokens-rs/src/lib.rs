@@ -32,11 +32,17 @@
 mod colors;
 mod dimensions;
 mod style;
+mod theme;
 mod tokens;
 mod watch;
 
 pub use colors::{theme_from_colors, Colors, LABEL_PALETTE_LEN};
-pub use dimensions::Dimensions;
+pub use dimensions::{
+    BrowserValues, ComponentValues, Dimensions, SettingsValues, StageValues, TimelineValues,
+};
 pub use style::{Ink, TextWeight};
+pub use theme::{
+    SizeScale, SpaceScale, StrokeScale, TargetScale, TextScale, UiTheme,
+};
 pub use tokens::{replace_ui_scale, save_ui_scale, write_ui_scale_to_path, Tokens};
 pub use watch::watch_subscription;

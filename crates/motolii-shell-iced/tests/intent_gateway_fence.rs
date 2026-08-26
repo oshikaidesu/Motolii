@@ -30,8 +30,14 @@ const SCANNED: &[(&str, &str)] = &[
     ("main.rs", include_str!("../src/main.rs")),
     ("browser.rs", include_str!("../src/browser.rs")),
     ("browser_pane.rs", include_str!("../src/browser_pane.rs")),
-    ("inspector_model.rs", include_str!("../src/inspector_model.rs")),
-    ("inspector_pane.rs", include_str!("../src/inspector_pane.rs")),
+    (
+        "inspector_model.rs",
+        include_str!("../src/inspector_model.rs"),
+    ),
+    (
+        "inspector_pane.rs",
+        include_str!("../src/inspector_pane.rs"),
+    ),
     ("intent_log.rs", include_str!("../src/intent_log.rs")),
     ("jsonl.rs", include_str!("../src/jsonl.rs")),
     ("launch.rs", include_str!("../src/launch.rs")),
@@ -66,7 +72,10 @@ const SCANNED: &[(&str, &str)] = &[
     ),
     ("window_input.rs", include_str!("../src/window_input.rs")),
     ("timeline/mod.rs", include_str!("../src/timeline/mod.rs")),
-    ("timeline/canvas.rs", include_str!("../src/timeline/canvas.rs")),
+    (
+        "timeline/canvas.rs",
+        include_str!("../src/timeline/canvas.rs"),
+    ),
     ("timeline/keys.rs", include_str!("../src/timeline/keys.rs")),
     (
         "timeline/palette.rs",

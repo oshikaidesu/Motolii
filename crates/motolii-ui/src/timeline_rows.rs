@@ -209,7 +209,8 @@ mod tests {
         RationalTime::try_new(seconds, 1).expect("fixture time")
     }
 
-    fn position_keys(document: &mut Document) -> DocParam { // single-writer-exempt: テスト fixture が Document を所有している
+    fn position_keys(document: &mut Document) -> DocParam {
+        // single-writer-exempt: テスト fixture が Document を所有している
         let key_id = KeyframeId::from_raw(document.next_stable_id.allocate().expect("key id"));
         let mut keys = DocKeyframeTrack::new();
         keys.insert(DocKeyframe {
@@ -221,7 +222,8 @@ mod tests {
         DocParam::Keyframes(keys)
     }
 
-    fn clip(document: &mut Document, name: &str, keyed: bool) -> (TrackItem, LayerId) { // single-writer-exempt: テスト fixture が Document を所有している
+    fn clip(document: &mut Document, name: &str, keyed: bool) -> (TrackItem, LayerId) {
+        // single-writer-exempt: テスト fixture が Document を所有している
         let asset = document
             .assets
             .allocate(name, "video/mp4", &format!("{name}-hash"))
@@ -281,7 +283,11 @@ mod tests {
         let out = rows(&document, &TimelineFoldState::default());
 
         let layers: Vec<LayerId> = out.iter().map(|r| r.layer).collect();
-        assert_eq!(layers, vec![group, sibling], "畳んだ子は出ない。Group行は残る");
+        assert_eq!(
+            layers,
+            vec![group, sibling],
+            "畳んだ子は出ない。Group行は残る"
+        );
         assert!(!layers.contains(&child_a));
         assert!(!layers.contains(&child_b));
         assert!(out[0].has_children, "空でないGroupは矢印を出す");
@@ -297,7 +303,11 @@ mod tests {
         let out = rows(&document, &fold);
 
         let layers: Vec<LayerId> = out.iter().map(|r| r.layer).collect();
-        assert_eq!(layers, vec![group, child_a, child_b, sibling], "子はGroupの直後");
+        assert_eq!(
+            layers,
+            vec![group, child_a, child_b, sibling],
+            "子はGroupの直後"
+        );
         assert_eq!(out[0].depth, 0);
         assert_eq!(out[1].depth, 1);
         assert_eq!(out[2].depth, 1);
@@ -363,11 +373,13 @@ mod tests {
 
         let out = rows(&document, &fold);
         assert!(
-            !out.iter().any(|r| r.layer == child_b && matches!(r.kind, RowKind::Property(_))),
+            !out.iter()
+                .any(|r| r.layer == child_b && matches!(r.kind, RowKind::Property(_))),
             "キーを持たないパラメータの行は出さない"
         );
         assert!(
-            out.iter().any(|r| r.layer == child_b && r.kind == RowKind::Object),
+            out.iter()
+                .any(|r| r.layer == child_b && r.kind == RowKind::Object),
             "object行そのものは出る"
         );
     }

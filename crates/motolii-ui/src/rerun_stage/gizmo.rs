@@ -1,11 +1,11 @@
-use egui::{
-    Align2, Color32, FontId, Pos2, Vec2,
-    epaint::{Mesh, Vertex as EguiVertex},
-};
 use crate::stage_app_geometry::AppStageTransformEdit;
+use egui::{
+    epaint::{Mesh, Vertex as EguiVertex},
+    Align2, Color32, FontId, Pos2, Vec2,
+};
 use transform_gizmo::{
-    GizmoConfig, GizmoInteraction, GizmoMode, GizmoOrientation, GizmoResult,
     math::{DMat4, DQuat, DVec3, Pos2 as GizmoPos2, Rect as GizmoRect, Transform},
+    GizmoConfig, GizmoInteraction, GizmoMode, GizmoOrientation, GizmoResult,
 };
 
 use super::adapter::{EmbeddedSpatialStage, StageGizmoAction};

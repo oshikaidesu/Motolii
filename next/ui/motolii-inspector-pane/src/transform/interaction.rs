@@ -153,7 +153,7 @@ pub fn field_input_id(field: TransformField) -> iced::widget::Id {
     if let TransformField::EffectParam(effect, param) = field {
         return iced::widget::Id::from(format!(
             "inspector-field-effect-{effect}-{}",
-            param.name()
+            param.id
         ));
     }
     let name: &'static str = match field {
@@ -478,7 +478,7 @@ pub(crate) fn transform_row(
     colors: Colors,
 ) -> Element<'static, Message> {
     let label = text(row_projection.label)
-        .size(dims.body_text)
+        .size(dims.theme().text.body)
         .color(colors.text_primary)
         .width(Length::Fill);
 
@@ -502,7 +502,7 @@ pub(crate) fn transform_row(
         row_widget(value_cells).spacing(sibling_gap_px(dims.inspector_row_height)),
         key_glyph(row_projection.key, dims, colors), // Key 列(K1 — 結線済み)。
     ]
-    .spacing(dims.spacing_xs)
+    .spacing(dims.theme().space.xs)
     .align_y(iced::alignment::Vertical::Center);
 
     // mock `.prow{border-bottom:var(--line) solid rgba(0,0,0,.35)}` は線化 D5

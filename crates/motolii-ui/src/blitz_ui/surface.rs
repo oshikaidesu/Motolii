@@ -115,7 +115,9 @@ impl BlitzSurface {
             return false;
         }
         self.texture = create_texture(device, width, height);
-        self.view = self.texture.create_view(&wgpu::TextureViewDescriptor::default());
+        self.view = self
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
         self.renderer = Renderer::new(
             device,
             &RenderTargetConfig {
@@ -212,7 +214,15 @@ impl BlitzSurface {
                 &mut self.texture_bindings,
                 &self.device_handle,
             );
-            paint_scene(&mut painter, &mut self.doc, 1.0, self.width, self.height, 0, 0);
+            paint_scene(
+                &mut painter,
+                &mut self.doc,
+                1.0,
+                self.width,
+                self.height,
+                0,
+                0,
+            );
         }
         let _ = self.renderer.render(
             &scene,
@@ -292,7 +302,11 @@ fn pointer_event(x: f32, y: f32, phase: SurfacePointer) -> BlitzPointerEvent {
         },
         mods: Modifiers::default(),
         details: PointerDetails {
-            pressure: if matches!(phase, SurfacePointer::Down) { 0.5 } else { 0.0 },
+            pressure: if matches!(phase, SurfacePointer::Down) {
+                0.5
+            } else {
+                0.0
+            },
             tangential_pressure: 0.0,
             tilt_x: 0,
             tilt_y: 0,

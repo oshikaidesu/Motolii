@@ -15,8 +15,6 @@ use motolii_tokens_rs::{Colors, Dimensions};
 /// `0.4 × 20px = 8px`(mock の絶対pxと厳密一致、台帳1b節)。rail 行
 /// (`.locationRow`)には角丸指定が無い(直角のまま、[`scope_button`] の
 /// rail 呼び出し側は `0.0`)。
-pub const FILTER_CHIP_CORNER_RADIUS_ROW_HEIGHT_RATIO: f32 = 0.4;
-
 /// filter shelf 本体(mock `.filterShelf` — 検索欄 + 種別チップ + Clear)。
 /// チップは [`FILTER_CHIPS`](rail の `RAIL_SCOPES` から `AllMedia` を除いた
 /// もの、mock に `All media` チップが無いのと同じ)。**台帳(1a/1c節)**:
@@ -24,7 +22,7 @@ pub const FILTER_CHIP_CORNER_RADIUS_ROW_HEIGHT_RATIO: f32 = 0.4;
 /// (`#library-search`/`.filterShelf button` とも `browser-library.css`)—
 /// `micro_text` を使う。チップ/Clear の padding は mock `.filterShelf
 /// button{padding:2px 4px}`(css:205)と完全一致する `[spacing_xs,
-/// spacing_s]`。角丸は [`FILTER_CHIP_CORNER_RADIUS_ROW_HEIGHT_RATIO`]。
+/// spacing_s]`。角丸は `dims.components.browser` の比率を使う。
 pub(crate) fn filter_shelf_view(
     scope: RailScope,
     query: &str,
@@ -33,8 +31,9 @@ pub(crate) fn filter_shelf_view(
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
-    let chip_radius = FILTER_CHIP_CORNER_RADIUS_ROW_HEIGHT_RATIO * dims.row_height;
-    let chip_padding = [dims.spacing_xs, dims.spacing_s];
+    let chip_radius = dims.components.browser.filter_chip_corner_radius_row_height_ratio
+        * dims.row_height;
+    let chip_padding = [dims.theme().space.xs, dims.theme().space.s];
     let chips: Vec<Element<'static, Message>> = FILTER_CHIPS
         .into_iter()
         .map(|option| {
@@ -72,8 +71,9 @@ fn sort_control_view(
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
-    let chip_radius = FILTER_CHIP_CORNER_RADIUS_ROW_HEIGHT_RATIO * dims.row_height;
-    let chip_padding = [dims.spacing_xs, dims.spacing_s];
+    let chip_radius = dims.components.browser.filter_chip_corner_radius_row_height_ratio
+        * dims.row_height;
+    let chip_padding = [dims.theme().space.xs, dims.theme().space.s];
     let chips: Vec<Element<'static, Message>> = model::SORT_KEYS
         .into_iter()
         .map(|key| {
@@ -89,7 +89,7 @@ fn sort_control_view(
             )
         })
         .collect();
-    row(chips).spacing(dims.spacing_xs).into()
+    row(chips).spacing(dims.theme().space.xs).into()
 }
 
 /// 非 media タブの filter shelf(mock `.filterGroup[data-filter-group=
@@ -106,8 +106,9 @@ pub(crate) fn preview_filter_shelf_view(
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
-    let chip_radius = FILTER_CHIP_CORNER_RADIUS_ROW_HEIGHT_RATIO * dims.row_height;
-    let chip_padding = [dims.spacing_xs, dims.spacing_s];
+    let chip_radius = dims.components.browser.filter_chip_corner_radius_row_height_ratio
+        * dims.row_height;
+    let chip_padding = [dims.theme().space.xs, dims.theme().space.s];
     let chips: Vec<Element<'static, Message>> = model::preview_tags(tab)
         .iter()
         .map(|&tag| {
@@ -139,19 +140,20 @@ fn shelf_row(
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
-    let chip_radius = FILTER_CHIP_CORNER_RADIUS_ROW_HEIGHT_RATIO * dims.row_height;
-    let chip_padding = [dims.spacing_xs, dims.spacing_s];
+    let chip_radius = dims.components.browser.filter_chip_corner_radius_row_height_ratio
+        * dims.row_height;
+    let chip_padding = [dims.theme().space.xs, dims.theme().space.s];
 
     let mut controls: Vec<Element<'static, Message>> = vec![
         search_field(query, dims, colors),
-        row(chips).spacing(dims.spacing_xs).into(),
+        row(chips).spacing(dims.theme().space.xs).into(),
     ];
     // 並べ替えチップは media タブのみ([`sort_control_view`] doc 参照)。
     if let Some(sort_control) = sort_control {
         controls.push(sort_control);
     }
     controls.push(
-        button(text("Clear").size(dims.micro_text))
+        button(text("Clear").size(dims.theme().text.micro))
             .on_press(Message::ClearFilters)
             .padding(chip_padding)
             .style(move |_theme, status| chip_style(dims, colors, false, status, chip_radius))
@@ -162,7 +164,7 @@ fn shelf_row(
     controls.push(view_mode_toggle_view(view_mode, dims, colors));
 
     row(controls)
-        .spacing(dims.spacing_xs)
+        .spacing(dims.theme().space.xs)
         .align_y(iced::alignment::Vertical::Center)
         .into()
 }
@@ -184,7 +186,7 @@ fn view_mode_toggle_view(
         .into_iter()
         .map(|(mode, glyph)| view_mode_button(mode, glyph, mode == active, dims, colors))
         .collect();
-    row(buttons).spacing(dims.spacing_xs).into()
+    row(buttons).spacing(dims.theme().space.xs).into()
 }
 
 /// 1個の view mode icon ボタン(輪郭なし・hover/選択で面、裁定179)+ tooltip
@@ -204,10 +206,13 @@ fn view_mode_button(
         colors.text_muted
     };
     let icon_element =
-        motolii_icons::icon(glyph, motolii_icons::frame_px_for_glyph_px(dims.micro_text), ink);
+        motolii_icons::icon(glyph, motolii_icons::frame_px_for_glyph_px(dims.theme().text.micro), ink);
     let action = button(icon_element)
         .on_press(Message::SelectViewMode(mode))
-        .padding(dims.spacing_xs)
+        // 視覚グリフは密度を保ち、押下面だけはGoogle系の最小対象寸法を満たす。
+        .width(Length::Fixed(dims.theme().target.minimum))
+        .height(Length::Fixed(dims.theme().target.minimum))
+        .padding(dims.theme().space.xs)
         .style(move |_theme, status| {
             let background = if selected {
                 Some(iced::Background::Color(colors.state_selected))
@@ -232,21 +237,21 @@ fn view_mode_button(
         action,
         container(
             text(mode.tooltip_label())
-                .size(dims.caption_text)
+                .size(dims.theme().text.caption)
                 .color(colors.text_primary),
         )
-        .padding([dims.spacing_xs, dims.spacing_s])
+        .padding([dims.theme().space.xs, dims.theme().space.s])
         .style(move |_theme| container::Style {
             background: Some(iced::Background::Color(colors.surface_raised)),
             border: iced::Border {
                 color: colors.border_default,
-                width: dims.border_width,
+                width: dims.theme().stroke.hairline,
                 radius: 0.0.into(),
             },
             ..container::Style::default()
         }),
         tooltip::Position::Bottom,
     )
-    .gap(dims.spacing_xs)
+    .gap(dims.theme().space.xs)
     .into()
 }

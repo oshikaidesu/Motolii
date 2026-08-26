@@ -25,7 +25,9 @@ fn the_start_screen_matches_its_golden_image() {
         view(&shell),
     );
 
-    let snapshot = ui.snapshot(&theme::product()).expect("draw the start screen");
+    let snapshot = ui
+        .snapshot(&theme::product())
+        .expect("draw the start screen");
     assert!(
         snapshot
             .matches_image(concat!(

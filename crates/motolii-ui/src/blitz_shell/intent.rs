@@ -334,7 +334,10 @@ impl IntentJournal {
 
     /// intent だけを順に。replay へそのまま渡せる形。
     pub fn intents(&self) -> Vec<UiIntent> {
-        self.lock().iter().map(|event| event.intent.clone()).collect()
+        self.lock()
+            .iter()
+            .map(|event| event.intent.clone())
+            .collect()
     }
 
     /// 既に `count` 行を見た側が、その後に増えた分だけ受け取る(`--intent-log` 用)。
@@ -606,10 +609,12 @@ impl ShellGateway {
                 }
             }),
             UiIntent::ToggleItemFlag { layer, flag } => self.edit(|editor| {
-                editor.toggle_item_flag(motolii_doc::LayerId::from_raw(*layer), flag.to_item_flag());
+                editor
+                    .toggle_item_flag(motolii_doc::LayerId::from_raw(*layer), flag.to_item_flag());
             }),
             UiIntent::BeginParamEdit { layer, param } => self.edit(|editor| {
-                editor.begin_param_edit(motolii_doc::LayerId::from_raw(*layer), param.to_param_ref());
+                editor
+                    .begin_param_edit(motolii_doc::LayerId::from_raw(*layer), param.to_param_ref());
             }),
             UiIntent::SetParamComponent {
                 layer,
@@ -697,7 +702,11 @@ impl ShellGateway {
 
             // ---- Timeline のキー編集(M-6)。実体は timeline_editor に足した
             //      1本ずつの操作 API — MoveClips/TrimClip と同じ with_editor 経路。
-            UiIntent::RemoveParamKey { layer, param, at_us } => self.with_editor(|editor| {
+            UiIntent::RemoveParamKey {
+                layer,
+                param,
+                at_us,
+            } => self.with_editor(|editor| {
                 let before = editor.revision();
                 editor.remove_param_key_at(
                     motolii_doc::LayerId::from_raw(*layer),
@@ -1123,7 +1132,10 @@ fn seat_inspection_selection(editor: &mut TimelineEditor) {
     let Some(raw) = std::env::var_os("MOTOLII_SELECT_LAYER") else {
         return;
     };
-    let Some(id) = raw.to_str().and_then(|text| text.trim().parse::<u64>().ok()) else {
+    let Some(id) = raw
+        .to_str()
+        .and_then(|text| text.trim().parse::<u64>().ok())
+    else {
         return;
     };
     editor.select_layer(motolii_doc::LayerId::from_raw(id));
@@ -1385,8 +1397,8 @@ mod tests {
         let second = dir.join("second.json");
         create_project_file(&second).expect("create");
 
-        let mut gateway = ShellGateway::new(ShellTranscript::default())
-            .remembering(Some(store.clone()));
+        let mut gateway =
+            ShellGateway::new(ShellTranscript::default()).remembering(Some(store.clone()));
         assert!(gateway.dispatch(UiIntent::NewProject {
             path: first.clone()
         }));
@@ -1484,7 +1496,10 @@ mod tests {
         let gateway = ShellGateway::resumed(transcript.clone(), resume_last_project(Some(&store)));
 
         assert!(!gateway.is_seated());
-        assert!(gateway.journal().intents().is_empty(), "起きていない行動は記録しない");
+        assert!(
+            gateway.journal().intents().is_empty(),
+            "起きていない行動は記録しない"
+        );
         assert_eq!(transcript.latest(), None, "初回起動に帯は要らない");
     }
 

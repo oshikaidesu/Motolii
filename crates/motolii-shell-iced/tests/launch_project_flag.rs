@@ -7,12 +7,8 @@ use motolii_shell_iced::Launch;
 
 #[test]
 fn the_project_flag_is_read_with_a_separate_argument() {
-    let parsed = Launch::parse(
-        ["--project", "/tmp/p.json"]
-            .into_iter()
-            .map(str::to_owned),
-    )
-    .expect("--project <path> は読める");
+    let parsed = Launch::parse(["--project", "/tmp/p.json"].into_iter().map(str::to_owned))
+        .expect("--project <path> は読める");
     assert_eq!(parsed.project.as_deref(), Some(Path::new("/tmp/p.json")));
 }
 
@@ -46,8 +42,14 @@ fn the_project_flag_combines_with_the_existing_logs() {
     )
     .expect("3本とも読める");
     assert_eq!(parsed.project.as_deref(), Some(Path::new("/tmp/p.json")));
-    assert_eq!(parsed.intent_log.as_deref(), Some(Path::new("/tmp/i.jsonl")));
-    assert_eq!(parsed.status_log.as_deref(), Some(Path::new("/tmp/s.jsonl")));
+    assert_eq!(
+        parsed.intent_log.as_deref(),
+        Some(Path::new("/tmp/i.jsonl"))
+    );
+    assert_eq!(
+        parsed.status_log.as_deref(),
+        Some(Path::new("/tmp/s.jsonl"))
+    );
 }
 
 #[test]

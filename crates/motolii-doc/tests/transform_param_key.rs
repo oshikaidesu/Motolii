@@ -211,9 +211,13 @@ fn scale_const_f64_is_type_mismatch() {
             source: ClipSource::asset_video_only(asset),
         })],
     });
-    let err =
-        prepare_add_transform_param_key(&mut doc, layer, ScalarPropertyId::Scale, RationalTime::ZERO)
-            .expect_err("F64 scale must fail");
+    let err = prepare_add_transform_param_key(
+        &mut doc,
+        layer,
+        ScalarPropertyId::Scale,
+        RationalTime::ZERO,
+    )
+    .expect_err("F64 scale must fail");
     assert!(matches!(
         err,
         AddTransformParamKeyPrepareError::ValueTypeMismatch { .. }
@@ -259,7 +263,8 @@ fn rotation_and_opacity_const_emit_set_property_f64_keyframes() {
         (ScalarPropertyId::Rotation, 0.25),
         (ScalarPropertyId::Opacity, 0.5),
     ] {
-        let prepared = prepare_add_transform_param_key(&mut doc, layer, property.clone(), t).unwrap();
+        let prepared =
+            prepare_add_transform_param_key(&mut doc, layer, property.clone(), t).unwrap();
         let command = match prepared {
             AddTransformParamKeyPreparation::Prepared { command, .. } => command,
             AddTransformParamKeyPreparation::AlreadyPresent { .. } => panic!("const must prepare"),

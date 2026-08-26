@@ -20,7 +20,7 @@ use blitz_html::HtmlDocument;
 use blitz_traits::shell::{ColorScheme, Viewport};
 use std::path::Path;
 
-pub use library_view::{BrowserItem, DEFAULT_MAX_ITEMS, image_items};
+pub use library_view::{image_items, BrowserItem, DEFAULT_MAX_ITEMS};
 
 /// パネル生成の失敗。
 #[derive(Debug, thiserror::Error)]
@@ -252,5 +252,4 @@ mod tests {
         }
         assert!(!html.contains("file:///tmp/mocks/a.png"));
     }
-
 }

@@ -179,28 +179,28 @@ fn mask_ident_row(
 
     let content = row_widget![
         text(format!("Mask {id}"))
-            .size(dims.body_text)
+            .size(dims.theme().text.body)
             .color(colors.text_primary)
             .width(Length::Fill),
         // mode 巡回(`CycleBlendMode` と同じ即時操作・同じ意匠)。表示は
         // `MaskMode` の `Debug`(`Add`/`Subtract`/… — blend の表示と同じ流儀)。
-        button(text(format!("{:?}", mask_row.mode)).size(dims.body_text))
+        button(text(format!("{:?}", mask_row.mode)).size(dims.theme().text.body))
             .on_press(Message::CycleMaskMode(id))
             .style(move |_theme, status| flat_button_style(colors, status)),
         // inverted トグル(M glyph と同じ「チップ輪郭=状態の器」文法 —
         // 裁定179。glyph 幅1文字では意図が読めないので語で出す: 意図優先・裁定174)。
         button(
             text("Inverted")
-                .size(dims.caption_text)
+                .size(dims.theme().text.caption)
                 .align_x(iced::alignment::Horizontal::Center)
                 .align_y(iced::alignment::Vertical::Center),
         )
         .height(Length::Fixed(glyph_height(dims)))
-        .padding([0.0, dims.spacing_s])
+        .padding([0.0, dims.theme().space.s])
         .on_press(Message::ToggleMaskInverted(id))
         .style(move |_theme, status| glyph_button_style(dims, colors, status, inverted)),
     ]
-    .spacing(dims.spacing_xs)
+    .spacing(dims.theme().space.xs)
     .align_y(iced::alignment::Vertical::Center);
 
     bordered_row(content.into(), dims)

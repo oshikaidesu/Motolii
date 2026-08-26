@@ -222,9 +222,11 @@ fn panel_header<'a>(meta: Option<String>) -> Element<'a, Message> {
     .spacing(7)
     .align_y(Center);
     if let Some(meta) = meta {
-        header = header
-            .push(space().width(Fill))
-            .push(text(meta).size(type_scale::DENSE).style(crate::theme::style::text_muted));
+        header = header.push(space().width(Fill)).push(
+            text(meta)
+                .size(type_scale::DENSE)
+                .style(crate::theme::style::text_muted),
+        );
     }
     column![
         container(header)
@@ -701,11 +703,13 @@ fn value_cell<'a>(
     value: f64,
     accent: iced::Color,
 ) -> Element<'a, Message> {
-    let tag = container(text(axis).size(type_scale::MICRO).style(move |_theme: &iced::Theme| {
-        iced::widget::text::Style {
-            color: Some(accent),
-        }
-    }))
+    let tag = container(
+        text(axis)
+            .size(type_scale::MICRO)
+            .style(move |_theme: &iced::Theme| iced::widget::text::Style {
+                color: Some(accent),
+            }),
+    )
     .width(8.0);
     row![tag, scrub(param, component, value, accent)]
         .spacing(2)
@@ -985,11 +989,15 @@ fn effect_kind_glyph(value: EffectParamValue) -> &'static str {
 
 /// footer のヒント行。inspector-library.css:519 相当(footer)。
 fn footer_hint<'a>() -> Element<'a, Message> {
-    container(text(HINT).size(type_scale::DENSE).style(crate::theme::style::text_muted))
-        .padding([5, 9])
-        .width(Fill)
-        .style(section_band_style)
-        .into()
+    container(
+        text(HINT)
+            .size(type_scale::DENSE)
+            .style(crate::theme::style::text_muted),
+    )
+    .padding([5, 9])
+    .width(Fill)
+    .style(section_band_style)
+    .into()
 }
 
 fn format_components(components: &[f64]) -> String {

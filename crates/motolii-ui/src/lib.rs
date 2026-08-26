@@ -35,13 +35,13 @@ pub mod inspector_blitz;
 /// read-model の意味の正本は guard-tests(inspector-read-model-decoder.test.mjs)。
 pub mod inspector_panel;
 mod interaction_state;
+/// 「最後に開いていた project」の置き場。引数なし起動で続きを開く(F-01)。
+mod last_project;
 mod layout;
 mod layout_authority;
 mod layout_geometry;
 mod layout_runtime;
 mod layout_runtime_adapter;
-/// 「最後に開いていた project」の置き場。引数なし起動で続きを開く(F-01)。
-mod last_project;
 /// Media library の read-model(走査・種別判定・path 解決)。toolkit 非依存。
 /// iced shell の Browser pane(M-4a)も**同じ owner** を差すので `pub`
 /// (走査を2つ持たない。M-1 が `ShellPrompts` 群を共用したのと同じ理由)。
@@ -95,6 +95,10 @@ pub use document_command_request::{DocumentCommandRequest, DocumentCommandReques
 pub use interaction_state::{
     InteractionState, InteractionStateMachine, InteractionTransitionError,
 };
+pub use last_project::{
+    default_last_project_path, load_last_project, remember_last_project, LastProjectError,
+    LAST_PROJECT_FILE_NAME, LAST_PROJECT_VERSION,
+};
 pub use motolii_input::{
     builtin_command_registry, decode_keymap_json, encode_keymap_json, product_action_host_kind,
     product_action_repeat_disposition, product_builtin_keymap, resolve_keymap,
@@ -115,10 +119,6 @@ pub use motolii_input::{
     PRODUCT_HOST_KIND_TOGGLE_PLAYBACK, PRODUCT_HOST_KIND_TRIM_CLIP_IN,
     PRODUCT_HOST_KIND_TRIM_CLIP_OUT, PRODUCT_KEYMAP_PROFILE_ID, PRODUCT_UNWIRED_DUPLICATE,
     PRODUCT_UNWIRED_MUTE, PRODUCT_UNWIRED_SOLO, PRODUCT_UNWIRED_SPLIT,
-};
-pub use last_project::{
-    default_last_project_path, load_last_project, remember_last_project, LastProjectError,
-    LAST_PROJECT_FILE_NAME, LAST_PROJECT_VERSION,
 };
 pub use palette_settings::{
     default_user_palette_settings_path, Palette, PaletteColor, PaletteColorId, PaletteId,

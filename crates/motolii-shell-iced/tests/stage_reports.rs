@@ -65,15 +65,16 @@ fn a_broken_probe_frame_is_reported_not_swallowed() {
         playhead: 0.0,
         grab_probe: None,
     };
-    let mut ui: iced_test::Simulator<'_, motolii_shell_iced::Message> = iced_test::Simulator::with_size(
-        iced_test::core::Settings::default(),
-        iced::Size::new(160.0, 160.0),
-        iced::Element::from(
-            iced::widget::shader(island)
-                .width(iced::Fill)
-                .height(iced::Fill),
-        ),
-    );
+    let mut ui: iced_test::Simulator<'_, motolii_shell_iced::Message> =
+        iced_test::Simulator::with_size(
+            iced_test::core::Settings::default(),
+            iced::Size::new(160.0, 160.0),
+            iced::Element::from(
+                iced::widget::shader(island)
+                    .width(iced::Fill)
+                    .height(iced::Fill),
+            ),
+        );
 
     // 1周目の snapshot で prepare が走って mailbox に溜まり、
     // 次の RedrawRequested が Message として吐き出す。

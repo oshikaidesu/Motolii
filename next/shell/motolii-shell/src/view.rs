@@ -1,3 +1,5 @@
+//! Frozen Iced host view. Product front is Makepad (裁定251/252).
+//! Do not add new UI here. Hosts use `Shell::update` and projections.
 
 use iced::widget::{
     button, column, container, pane_grid, row, stack, text, tooltip, Shader, Space,
@@ -59,6 +61,9 @@ impl Shell {
     ///   側が決める)ため**ギズモを出さない**(Q0「触れない物を描かない」の
     ///   安全側 — RETURN 逸脱報告)。
     pub fn stage_gizmo_overlay(&self) -> Option<stage::GizmoOverlay> {
+        if !self.shape_tool.allows_selection_overlays() {
+            return None;
+        }
         let layer = self.session.selection?;
         let composition = self.composition()?;
         let store = self.doc.view();
@@ -122,7 +127,7 @@ impl Shell {
     /// path の意味は stage pane、現在時刻の layer transform の読みは StoreView、
     /// 確定の Document write は `path_ops.rs` が所有する。
     pub fn stage_path_edit_overlay(&self) -> Option<stage::PathEditOverlay> {
-        if self.shape_tool != stage::ShapeTool::Select {
+        if !self.shape_tool.allows_selection_overlays() {
             return None;
         }
         let layer = self.session.selection?;
@@ -159,7 +164,7 @@ impl Shell {
     /// `ResolvedLayer::masks`、安定 id は `StoreView::masks` から同じ順で
     /// 対応させる。書き戻しは `mask_path_ops.rs` が property track へ行う。
     pub fn stage_mask_path_edit_overlay(&self) -> Option<stage::MaskPathEditOverlay> {
-        if self.shape_tool != stage::ShapeTool::Select {
+        if !self.shape_tool.allows_selection_overlays() {
             return None;
         }
         let layer = self.session.selection?;
@@ -342,7 +347,7 @@ impl Shell {
         )
         .width(Length::Fill)
         .height(Length::Fill)
-        .padding(dims.spacing_l)
+        .padding(dims.theme().space.l)
         .into()
     }
 
@@ -376,10 +381,12 @@ impl Shell {
         )
         .width(Length::Fill)
         .height(Length::Fill)
-        .padding(dims.spacing_l)
+        .padding(dims.theme().space.l)
         .into()
     }
 
+    /// Frozen Iced host. Product front is Makepad (裁定251/252).
+    /// New UI does not go here; hosts call [`Shell::update`] and read projections.
     pub fn view(&self) -> Element<'_, Message> {
         // pane が受け取るのは不変の投影だけ。
         let dims = self.dims();
@@ -398,7 +405,7 @@ impl Shell {
         // は MB-2 で廃止 — menubar の開いた menu は widget 自身の overlay
         // (`motolii_menubar` の vendored `MenuBarOverlay`)として木に現れる。
 
-        // Browser/Inspector/Stage/Timeline は `pane_grid`(shell の pane_grid
+        // Browser/Stage/Inspector/Timeline は `pane_grid`(shell の pane_grid
         // 化、2026-08-22 実装レーン、`pane_layout.rs` 冒頭 doc 参照)。
         // Browser パネル(裁定162 切片 B3)は**表示だけの分岐ではなくなった**
         // — `self.panes.state` 自体が「開いていれば木にある・閉じていれば
@@ -488,12 +495,10 @@ impl Shell {
         })
         .width(Length::Fill)
         .height(Length::Fill)
-        // フラット文法: リサイズグリップ = 8px(装飾余白としては使用不可、
-        // `docs/reviews/2026-08-19-flat-grammar-canon-revision.md`)。
-        // `spacing_m` が既にその値(8.0、`motolii-tokens-rs` 既定)——新しい
-        // token を作らず既存を読む。`on_resize` の leeway=0 なので掴める幅は
-        // `spacing + leeway` = `spacing_m` ちょうど(`PaneGrid::on_resize` doc)。
-        .spacing(dims.spacing_m)
+        // パネル間は余白ではなく共有の hairline で区分する。`PaneGrid::spacing`
+        // は split の物理幅と resize の掴み幅を兼ねるため、`on_resize` の
+        // leeway=0 なら掴める幅もこの1pxだけになる。
+        .spacing(dims.theme().stroke.hairline)
         // 退化(潰れて使えなくなる)パネルを防ぐ床(M13 無反応ゼロの一環)。
         .min_size(dims.row_height * 3.0)
         // Q0 適合に必須(`Message::PaneClicked` doc 参照) — pane_grid は
@@ -506,33 +511,44 @@ impl Shell {
         // draw` の hovered_region 描画、fork rev 73e686e 実測)。色は既存
         // ロールのみ(S4): 面=`surface_hover`(「hover」の意味役割そのもの —
         // drag 中に cursor が乗っている受け入れ面)、縁=`focus`(操作が着地
-        // する場所の合図)。split 線(picked/hovered)も `focus` — 太さは
-        // `border_width * 2.0`(ln 器具の強調線と同じ導出、
+        // する場所の合図)。通常の split 線は grid の親面
+        // (`border_default`)で見せ、操作中だけ `focus` に昇格する。太さは
+        // `border_width * 2.0`(既存の強調線と同じ導出、
         // `tests/suite/tonmana_token_fence.rs` の許容形)。
         .style(move |_theme| pane_grid::Style {
             hovered_region: pane_grid::Highlight {
                 background: iced::Background::Color(colors.surface_hover),
                 border: iced::Border {
                     color: colors.focus,
-                    width: dims.border_width * 2.0,
+                    width: dims.theme().stroke.hairline * 2.0,
                     radius: 0.0.into(),
                 },
             },
             picked_split: pane_grid::Line {
                 color: colors.focus,
-                width: dims.border_width * 2.0,
+                width: dims.theme().stroke.hairline * 2.0,
             },
             hovered_split: pane_grid::Line {
                 color: colors.focus,
-                width: dims.border_width * 2.0,
+                width: dims.theme().stroke.hairline * 2.0,
             },
         });
 
+        let grid = container(grid)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            // pane_grid の1px split領域にこの面が現れ、パネル同士を区間で
+            // 離さず同じ線で区切る。
+            .style(move |_theme| container::Style {
+                background: Some(iced::Background::Color(colors.border_default)),
+                ..container::Style::default()
+            });
+
         let main: Element<'_, Message> = layout
-            .push(container(grid).width(Length::Fill).height(Length::Fill))
+            .push(grid)
             .push(status_band(self.status.as_deref(), &self.doc, dims, colors))
-            .spacing(dims.spacing_m)
-            .padding(dims.spacing_l)
+            .spacing(dims.theme().space.m)
+            .padding(dims.theme().space.l)
             .into()
 
         // Source Preview は Browser の上に責任を戻さず、main window 上の一時的な
@@ -555,7 +571,7 @@ impl Shell {
     /// 収束する。
     fn recent_projects_view(&self) -> Element<'_, Message> {
         let mut items = column![]
-            .spacing(self.dims().spacing_xs)
+            .spacing(self.dims().theme().space.xs)
             .width(Length::Fill);
         if self.recent_files.paths().is_empty() {
             items = items.push(text("No recent projects").color(self.tokens.colors.text_muted));
@@ -569,7 +585,7 @@ impl Shell {
             }
         }
         container(column![text("OPEN RECENT"), items])
-            .padding([self.dims().spacing_s, self.dims().spacing_m])
+            .padding([self.dims().theme().space.s, self.dims().theme().space.m])
             .width(Length::Fill)
             .into()
     }
@@ -612,12 +628,12 @@ impl Shell {
         pane_grid::TitleBar::new(
             container(
                 text(pane_layout::title(kind))
-                    .size(dims.micro_text)
+                    .size(dims.theme().text.micro)
                     .color(colors.text_secondary),
             )
-            .height(Length::Fixed(dims.pane_header_height))
+            .height(Length::Fixed(dims.theme().size.pane_header))
             .align_y(iced::alignment::Vertical::Center)
-            .padding([0.0, dims.spacing_m]),
+            .padding([0.0, dims.theme().space.m]),
         )
         .padding(0)
         .style(move |_theme| container::Style {
@@ -673,15 +689,15 @@ impl Shell {
                 colors,
             ),
         ]
-        .spacing(dims.spacing_m)
+        .spacing(dims.theme().space.m)
         .align_y(iced::alignment::Vertical::Center);
 
         // 線化 D5(裁定179 文法1): 帯の輪郭線は廃止 — `surface_panel` の面が
         // app 地から明度1段浮くことが帯の輪郭([`band_chrome_style`] doc 参照)。
         container(content)
             .width(Length::Fill)
-            .height(Length::Fixed(dims.panel_header_height))
-            .padding([0.0, dims.spacing_s])
+            .height(Length::Fixed(dims.theme().size.panel_header))
+            .padding([0.0, dims.theme().space.s])
             .align_y(iced::alignment::Vertical::Center)
             .style(move |_theme| band_chrome_style(dims, colors))
             .into()
@@ -704,12 +720,12 @@ impl Shell {
     ) -> Element<'a, Message> {
         let glyph = motolii_icons::icon(
             icon,
-            motolii_icons::frame_px_for_glyph_px(dims.body_text),
+            motolii_icons::frame_px_for_glyph_px(dims.theme().text.body),
             colors.text_secondary,
         );
         let action = button(glyph)
             // 踏面はアイコンより大きく(S1、transport_button と同じ判断)。
-            .padding(dims.spacing_s)
+            .padding(dims.theme().space.s)
             .on_press(message)
             .style(move |_theme, status| {
                 let background = match status {
@@ -730,20 +746,20 @@ impl Shell {
             });
         tooltip(
             action,
-            container(text(label).size(dims.caption_text).color(colors.text_primary))
-                .padding([dims.spacing_xs, dims.spacing_s])
+            container(text(label).size(dims.theme().text.caption).color(colors.text_primary))
+                .padding([dims.theme().space.xs, dims.theme().space.s])
                 .style(move |_theme| container::Style {
                     background: Some(iced::Background::Color(colors.surface_raised)),
                     border: iced::Border {
                         color: colors.border_default,
-                        width: dims.border_width,
+                        width: dims.theme().stroke.hairline,
                         radius: 0.0.into(),
                     },
                     ..container::Style::default()
                 }),
             tooltip::Position::Bottom,
         )
-        .gap(dims.spacing_xs)
+        .gap(dims.theme().space.xs)
         .into()
     }
 
@@ -851,7 +867,7 @@ fn stage_pane(
             layered
         }
         None => text("comp がまだ無い")
-            .size(dims.body_text)
+            .size(dims.theme().text.body)
             .color(colors.text_muted)
             .into(),
     };
@@ -895,7 +911,7 @@ fn stage_pane(
             background: Some(iced::Background::Color(colors.surface_app)),
             border: iced::Border {
                 color: iced::Color::TRANSPARENT,
-                width: dims.border_width,
+                width: dims.theme().stroke.hairline,
                 radius: 0.0.into(),
             },
             ..container::Style::default()
@@ -915,7 +931,7 @@ pub fn band_chrome_style(dims: Dimensions, colors: Colors) -> container::Style {
         background: Some(iced::Background::Color(colors.surface_panel)),
         border: iced::Border {
             color: iced::Color::TRANSPARENT,
-            width: dims.border_width,
+            width: dims.theme().stroke.hairline,
             radius: 0.0.into(),
         },
         ..container::Style::default()
@@ -942,9 +958,9 @@ fn status_band<'a>(
             colors.text_muted,
         ),
     };
-    container(text(message).size(dims.caption_text).color(color))
+    container(text(message).size(dims.theme().text.caption).color(color))
         .width(Length::Fill)
-        .padding([dims.spacing_xs, dims.spacing_m])
+        .padding([dims.theme().space.xs, dims.theme().space.m])
         .style(move |_theme| band_chrome_style(dims, colors))
         .into()
 }

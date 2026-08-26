@@ -38,12 +38,20 @@ Never claim an evaluated visual result when it is produced by a second, approxim
 
 ## Verify the user result
 
-Before reporting success, exercise the real UI and capture evidence for:
+Before reporting success, capture evidence for:
 
 1. the action changes the intended Stage view;
 2. at least one materially different input changes it differently;
 3. normal and enlarged views meet the stated representation requirement;
 4. the semantic write/evaluation boundary is distinct from transient UI state.
+
+Pick the cheapest evidence route that can still fail:
+
+- **Semantic boundary** — a headless test asserting the action writes the intended document change. Always required; this is what makes 1, 2, and 4 falsifiable.
+- **Rendered appearance** — capture the running window *alone*. A full-desktop screenshot is not evidence: the reader cannot tell what they are looking at.
+- **Interaction itself** (drag, hover, press-vs-click) — only this tier justifies desktop automation. Before spending a turn on it, check whether this host's toolkit answers accessibility at all.
+
+Do not re-derive the capture route each session. The host-specific commands, and which toolkits do not answer accessibility, are recorded in the repo `AGENTS.md`; read that instead of a automation skill document.
 
 State separately what is fixture-only, what reaches persistent product data, and what remains unconnected.
 

@@ -1,7 +1,7 @@
 //! U1a-2で仕様許可されたegui layout/input adapter。
 
-use motolii_input::{ImeGateState, SafetyInterrupt};
 use crate::layout::{SeparatorAction, SplitAxis};
+use motolii_input::{ImeGateState, SafetyInterrupt};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) enum StageDropTerminal {

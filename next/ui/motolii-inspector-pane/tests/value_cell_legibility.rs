@@ -198,7 +198,7 @@ fn a_shrink_text_widget_inside_a_fixed_width_container_reports_layout_bounds_cla
     let content = "12345678.000";
 
     let natural: iced::Element<'static, motolii_inspector_pane::Message> =
-        text(content.to_owned()).size(dims.body_text).into();
+        text(content.to_owned()).size(dims.theme().text.body).into();
     let natural_targets = collect_targets(natural);
     let natural_width = natural_targets
         .iter()
@@ -209,7 +209,7 @@ fn a_shrink_text_widget_inside_a_fixed_width_container_reports_layout_bounds_cla
 
     let boxed: iced::Element<'static, motolii_inspector_pane::Message> = container(
         text(content.to_owned())
-            .size(dims.body_text)
+            .size(dims.theme().text.body)
             .align_x(iced::alignment::Horizontal::Center),
     )
     .width(Length::Fixed(dims.inspector_value_width))

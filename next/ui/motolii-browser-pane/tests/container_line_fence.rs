@@ -8,7 +8,7 @@
 use motolii_browser_pane::panel_container_style;
 use motolii_tokens_rs::{Colors, Dimensions};
 
-/// **本命(D5)**: 容器の border は透明・幅は `dims.border_width` のまま
+/// **本命(D5)**: 容器の border は透明・幅は `dims.theme().stroke.hairline` のまま
 /// (幾何不変)。
 #[test]
 fn container_border_is_transparent_but_keeps_its_width() {
@@ -21,8 +21,8 @@ fn container_border_is_transparent_but_keeps_its_width() {
         style.border.color
     );
     assert_eq!(
-        style.border.width, dims.border_width,
-        "容器の border 幅が dims.border_width から動いた(幾何不変違反)"
+        style.border.width, dims.theme().stroke.hairline,
+        "容器の border 幅が dims.theme().stroke.hairline から動いた(幾何不変違反)"
     );
     assert_eq!(style.border.radius, 0.0.into(), "容器の角丸が動いた(幾何不変違反)");
 }

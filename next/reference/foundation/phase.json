@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "current_stage": "design_profile_v0",
+  "mode": "serial",
+  "parallel_components": "locked",
+  "parallel_stage": "component_parallel",
+  "parallel_unlock_requires_closed": [
+    "design_profile_v0",
+    "core_m0_real_window"
+  ],
+  "stages": [
+    {
+      "id": "design_profile_v0",
+      "kind": "serial",
+      "status": "open",
+      "depends_on": [],
+      "owner": "ui-foundation"
+    },
+    {
+      "id": "core_m0_real_window",
+      "kind": "serial",
+      "status": "blocked",
+      "depends_on": [
+        "design_profile_v0"
+      ],
+      "owner": "supervisor"
+    },
+    {
+      "id": "component_parallel",
+      "kind": "parallel",
+      "status": "locked",
+      "depends_on": [
+        "design_profile_v0",
+        "core_m0_real_window"
+      ],
+      "owner": "lane-supervisor"
+    }
+  ],
+  "serial_write_set": [
+    "next/probes/r7-makepad-panel",
+    "next/ui/motolii-tokens-rs",
+    "next/ui/motolii-presentation-config"
+  ],
+  "deferred_extensions": [
+    "observer_camera_named_views",
+    "advanced_3d_camera",
+    "advanced_graph_editor",
+    "render_queue_and_ame",
+    "frame_cache_and_analysis_provider"
+  ]
+}

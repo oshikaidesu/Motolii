@@ -318,14 +318,14 @@ pub fn open_at<'a, Message: Clone + 'a>(
     let leaves: Vec<Element<'a, Message>> =
         items.into_iter().map(|item| leaf(item, dims, colors)).collect();
 
-    let panel = container(column(leaves).spacing(dims.spacing_xs))
-        .padding(dims.spacing_xs)
+    let panel = container(column(leaves).spacing(dims.theme().space.xs))
+        .padding(dims.theme().space.xs)
         .width(Length::Fixed(dims.menubar_menu_width))
         .style(move |_theme| container::Style {
             background: Some(iced::Background::Color(colors.surface_raised)),
             border: Border {
                 color: colors.border_default,
-                width: dims.border_width,
+                width: dims.theme().stroke.hairline,
                 radius: dims.menubar_corner_radius.into(),
             },
             ..container::Style::default()

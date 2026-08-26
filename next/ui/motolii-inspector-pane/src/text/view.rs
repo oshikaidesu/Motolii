@@ -136,7 +136,7 @@ fn text_field_row(
     let value_field = text_input("", displayed)
         .on_input(move |text| Message::TextFieldInput(field, text))
         .on_submit(Message::TextFieldSubmit(field))
-        .size(dims.body_text)
+        .size(dims.theme().text.body)
         .width(Length::Fixed(dims.inspector_value_width))
         .padding(value_cell_padding(dims))
         .align_x(iced::alignment::Horizontal::Center)
@@ -144,12 +144,12 @@ fn text_field_row(
 
     let content = row_widget![
         text(label)
-            .size(dims.body_text)
+            .size(dims.theme().text.body)
             .color(colors.text_primary)
             .width(Length::Fill),
         value_field,
     ]
-    .spacing(dims.spacing_xs)
+    .spacing(dims.theme().space.xs)
     .align_y(iced::alignment::Vertical::Center);
 
     bordered_row(content.into(), dims)
@@ -189,7 +189,7 @@ fn content_row<'a>(
         .on_action(Message::ContentEditorAction)
         .key_binding(content_key_binding)
         .placeholder("歌詞をここに(Enter=改行、⌘/Ctrl+Enter=確定)")
-        .size(dims.body_text)
+        .size(dims.theme().text.body)
         .padding(value_cell_padding(dims))
         .height(Length::Fixed(row_height))
         .style(move |_theme, status| content_editor_style(dims, colors, status));
@@ -199,12 +199,12 @@ fn content_row<'a>(
     // 見える(他行の狭い固定幅を Content にも押し付けない)。
     let content = row_widget![
         text("Content")
-            .size(dims.body_text)
+            .size(dims.theme().text.body)
             .color(colors.text_primary)
             .width(Length::Shrink),
         Element::from(editor),
     ]
-    .spacing(dims.spacing_xs)
+    .spacing(dims.theme().space.xs)
     .align_y(iced::alignment::Vertical::Top);
 
     bordered_row_sized(content.into(), dims, row_height)
@@ -228,7 +228,7 @@ fn content_editor_style(
         background: iced::Background::Color(background),
         border: iced::Border {
             color: border_color,
-            width: dims.border_width,
+            width: dims.theme().stroke.hairline,
             radius: 0.0.into(),
         },
         placeholder: colors.text_muted,
@@ -290,7 +290,7 @@ fn size_row(
     let value_field = text_input("", displayed)
         .on_input(|text| Message::TextFieldInput(TextField::Size, text))
         .on_submit(Message::TextFieldSubmit(TextField::Size))
-        .size(dims.body_text)
+        .size(dims.theme().text.body)
         .width(Length::Fixed(dims.inspector_value_width))
         .padding(value_cell_padding(dims))
         .align_x(iced::alignment::Horizontal::Center)
@@ -299,24 +299,24 @@ fn size_row(
     let content = if multi_selection {
         row_widget![
             text("Size")
-                .size(dims.body_text)
+                .size(dims.theme().text.body)
                 .color(colors.text_primary)
                 .width(Length::Fill),
             value_field,
         ]
-        .spacing(dims.spacing_xs)
+        .spacing(dims.theme().space.xs)
         .align_y(iced::alignment::Vertical::Center)
     } else {
         row_widget![
             text("Size")
-                .size(dims.body_text)
+                .size(dims.theme().text.body)
                 .color(colors.text_primary)
                 .width(Length::Fill),
             value_field,
             text_style_drag_handle(TextStyleField::Size, dims, colors),
             text_style_key_button(TextStyleField::Size, text_projection.size_key, dims, colors),
         ]
-        .spacing(dims.spacing_xs)
+        .spacing(dims.theme().space.xs)
         .align_y(iced::alignment::Vertical::Center)
     };
 
@@ -332,7 +332,7 @@ fn size_row(
 fn text_style_drag_handle(field: TextStyleField, dims: Dimensions, colors: Colors) -> Element<'static, Message> {
     mouse_area(
         text("\u{2195}")
-            .size(dims.caption_text)
+            .size(dims.theme().text.caption)
             .color(colors.text_muted),
     )
     .interaction(iced::mouse::Interaction::ResizingHorizontally)
@@ -385,7 +385,7 @@ fn font_family_row(
     let value_field = text_input("", displayed)
         .on_input(|text| Message::TextFieldInput(TextField::FontFamily, text))
         .on_submit(Message::TextFieldSubmit(TextField::FontFamily))
-        .size(dims.body_text)
+        .size(dims.theme().text.body)
         .width(Length::Fixed(dims.inspector_value_width))
         .padding(value_cell_padding(dims))
         .align_x(iced::alignment::Horizontal::Center)
@@ -408,7 +408,7 @@ fn font_family_row(
     // Color)` と同じ「バリアントを関数として渡す」形)。
     let picker = pick_list(selected, options, |family: &String| family.clone())
         .on_select(Message::PickFont)
-        .text_size(dims.body_text)
+        .text_size(dims.theme().text.body)
         .width(Length::Fixed(dims.inspector_value_width))
         .padding(value_cell_padding(dims))
         .placeholder("Pick…")
@@ -416,13 +416,13 @@ fn font_family_row(
 
     let content = row_widget![
         text("Font")
-            .size(dims.body_text)
+            .size(dims.theme().text.body)
             .color(colors.text_primary)
             .width(Length::Fill),
         value_field,
         picker,
     ]
-    .spacing(dims.spacing_xs)
+    .spacing(dims.theme().space.xs)
     .align_y(iced::alignment::Vertical::Center);
 
     bordered_row(content.into(), dims)
@@ -450,7 +450,7 @@ fn line_height_row(
     let value_field = text_input("", displayed)
         .on_input(|text| Message::TextFieldInput(TextField::LineHeight, text))
         .on_submit(Message::TextFieldSubmit(TextField::LineHeight))
-        .size(dims.body_text)
+        .size(dims.theme().text.body)
         .width(Length::Fixed(dims.inspector_value_width))
         .padding(value_cell_padding(dims))
         .align_x(iced::alignment::Horizontal::Center)
@@ -458,17 +458,17 @@ fn line_height_row(
 
     let content = row_widget![
         text("Line Height")
-            .size(dims.body_text)
+            .size(dims.theme().text.body)
             .color(colors.text_primary)
             .width(Length::Fill),
         value_field,
-        button(text("Auto").size(dims.caption_text))
+        button(text("Auto").size(dims.theme().text.caption))
             .on_press(Message::ResetLineHeightAuto)
             .style(move |_theme, status| flat_button_style(colors, status)),
         text_style_drag_handle(TextStyleField::LineHeight, dims, colors),
         text_style_key_button(TextStyleField::LineHeight, text_projection.line_height_key, dims, colors),
     ]
-    .spacing(dims.spacing_xs)
+    .spacing(dims.theme().space.xs)
     .align_y(iced::alignment::Vertical::Center);
 
     bordered_row(content.into(), dims)
@@ -490,7 +490,7 @@ fn tracking_row(
     let value_field = text_input("", displayed)
         .on_input(|text| Message::TextFieldInput(TextField::Tracking, text))
         .on_submit(Message::TextFieldSubmit(TextField::Tracking))
-        .size(dims.body_text)
+        .size(dims.theme().text.body)
         .width(Length::Fixed(dims.inspector_value_width))
         .padding(value_cell_padding(dims))
         .align_x(iced::alignment::Horizontal::Center)
@@ -498,17 +498,17 @@ fn tracking_row(
 
     let content = row_widget![
         text("Tracking")
-            .size(dims.body_text)
+            .size(dims.theme().text.body)
             .color(colors.text_primary)
             .width(Length::Fill),
         value_field,
-        button(text("Reset").size(dims.caption_text))
+        button(text("Reset").size(dims.theme().text.caption))
             .on_press(Message::ResetTracking)
             .style(move |_theme, status| flat_button_style(colors, status)),
         text_style_drag_handle(TextStyleField::Tracking, dims, colors),
         text_style_key_button(TextStyleField::Tracking, text_projection.tracking_key, dims, colors),
     ]
-    .spacing(dims.spacing_xs)
+    .spacing(dims.theme().space.xs)
     .align_y(iced::alignment::Vertical::Center);
 
     bordered_row(content.into(), dims)
@@ -520,14 +520,14 @@ fn tracking_row(
 fn justify_row(justify: TextJustify, dims: Dimensions, colors: Colors) -> Element<'static, Message> {
     let content = row_widget![
         text("Justify")
-            .size(dims.body_text)
+            .size(dims.theme().text.body)
             .color(colors.text_primary)
             .width(Length::Fill),
-        button(text(format!("{justify:?}")).size(dims.body_text))
+        button(text(format!("{justify:?}")).size(dims.theme().text.body))
             .on_press(Message::CycleTextJustify)
             .style(move |_theme, status| flat_button_style(colors, status)),
     ]
-    .spacing(dims.spacing_xs)
+    .spacing(dims.theme().space.xs)
     .align_y(iced::alignment::Vertical::Center);
 
     bordered_row(content.into(), dims)

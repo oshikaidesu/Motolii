@@ -1,0 +1,52 @@
+map_id	technical_route	technical_delegate	scratch_policy	scratch_boundary	judgment	evidence
+4	上流+移植+既存構造	FFmpeg;Symphonia/Rubato/Cpal;旧motolii-audio/transport;Document/Session	許容	decode/resample/deviceは委託; deterministic mix/program/PlaybackClockだけ自前	音声I/Oは既存実装と上流へ預け、Documentと同期するmix/clockだけを最小自前にする	next/reference/OPINIONS.md:36
+16	上流+移植+既存構造	FFmpeg;Symphonia/Rubato/Cpal;旧motolii-audio/transport;Document/Session	許容	decode/resample/deviceは委託; scrub用のmix/PlaybackClockだけ自前	音声scrubの対話性は自前の最小mix/clockに残し、decode・resample・deviceを再発明しない	next/reference/KNOWN.md:116
+109	既存構造+先例	Composition.camera;Stage/gizmo;AE/Blender	抑制	tool selectionは薄いinput adapterだけ; camera stateを二重化しない	カメラツールの巡回は既存cameraとStage操作へ委託し、専用カメラ状態を増やさない	next/DECISIONS.md:123
+113	既存構造+先例+自前最小	Composition.camera;Lottie/AE;glam/re_renderer	許容	pose propertyの継ぎ目だけ自前; projection mathは既存cameraへ委託	向きの表現と補間の継ぎ目だけは不足しているため自前を許容し、意味と投影は先例・既存計算へ預ける	next/DECISIONS.md:229
+134	既存構造+先例+上流	Composition.camera;glam/re_renderer;AE Active Camera	抑制	active cameraの表示切替だけ; render cameraを増やさない	Active Camera表示は既存Composition.cameraと共有投影へ接続し、別render経路を作らない	next/DECISIONS.md:123
+137	既存構造+先例	Composition.camera;Stage/gizmo;Blender Dolly	抑制	操作量を既存camera propertyへ変換するadapterだけ	Dollyの意味は先例から借り、値の保持と評価は既存camera propertyへ委託する	next/DECISIONS.md:123
+139	既存構造+先例	Composition.camera;Stage/gizmo;Blender Orbit	抑制	操作量をpose propertyへ渡す薄いadapterだけ	Orbitの操作文法は先例から借り、カメラ状態の正本はComposition.cameraに置く	next/DECISIONS.md:229
+140	既存構造+先例	Composition.camera;Stage/gizmo;Blender Pan	抑制	操作量を既存camera propertyへ変換するadapterだけ	Panは既存cameraの移動へ委託し、pan専用状態を持たない	next/DECISIONS.md:123
+146	上流+既存構造+先例	analysis-provider;PropertyId/KeyframeTrack;AE/Blender	抑制	tracking解析はproviderへ委託;生成trackを既存propertyへ接続するadapterだけ	カメラ解析アルゴリズムを自前実装せず、providerの結果を既存trackへ焼く	next/DECISIONS.md:229
+167	既存構造+外部依存+上流	Document/Asset;filesystem;FFmpeg	抑制	source差替えとvalidationの薄い結線だけ	素材置換は既存AssetとDocumentのfield単位の書き口へ預け、メディアI/Oを再発明しない	next/DECISIONS.md:112
+169	既存構造+先例	PropertyId/KeyframeTrack;LayerTiming/SetTiming;Lottie/AE	抑制	既存track/timingのadapterだけ; speed機構を二重化しない	速度と尺は既存の時間正本へ収め、専用のretime状態や別補間を作らない	next/DECISIONS.md:231
+171	既存構造+先例	Document::apply_all;LayerTiming/SetTiming;AE/Premiere timeline grammar	抑制	既存SetTimingと一つのedit刻みだけ	Add Editは先例の意味を既存LayerTimingと単一writerへ委託する	next/reference/timeline-grammar.md:16
+173	既存構造+先例	Document tracks;Timeline projection;AE/Premiere	抑制	track collectionの薄い編集口だけ	トラック追加は既存Documentのtrack構造へ接続し、pane固有のtrack stateを作らない	next/DECISIONS.md:112
+195	既存構造+先例	Document tracks;Timeline projection;AE/Premiere	抑制	既存track collectionの更新だけ	トラック削除は既存のDocument構造とundoへ委託し、別削除状態を持たない	next/DECISIONS.md:112
+230	先例+既存構造+自前最小	Document/Asset;A/V link semantics;AE/Premiere	許容	A/V relationのfieldとvalidationだけ自前; selection/undoは既存経路	映像と音声を同時に保つ関係は不足した継ぎ目なので最小のlink relationだけを持ち、編集機構は既存Documentへ預ける	next/DECISIONS.md:206
+317	既存構造+先例	Document::apply_all;LayerTiming/SetTiming;AE/Premiere timeline grammar	抑制	既存SetTimingと一つのedit刻みだけ	Splitは新しい編集機構ではなく、既存の時間正本へ委託するaliasである	next/reference/timeline-grammar.md:16
+330	既存構造+先例	LayerTiming/SetTiming;Timeline projection;AE/Premiere	抑制	trim計算とpreviewは既存timing経路だけ	TrimはLayerTimingの境界変更へ収め、別のtrim modelを作らない	next/reference/timeline-grammar.md:60
+449	既存構造+先例	Document::apply_all;clipboard payload;AE/Premiere	抑制	clipboardはpayload adapter;書き込みはDocumentだけ	Copy/Cut/Pasteの意味は先例から借り、書き込みとundoは既存Documentへ委託する	next/DECISIONS.md:17
+453	既存構造+先例	Document::apply_all;clipboard payload;AE/Premiere	抑制	複製は既存copy payloadとDocument applyだけ	Duplicateは新しいlayer生成機構を作らず、既存clipboard/document経路へ預ける	next/DECISIONS.md:17
+466	既存構造+上流	Document::apply_all;rerun undo timeline	抑制	履歴stackを新設せず既存edit timelineを使う	Undoは既存storeの時間移動へ委託し、専用履歴モデルを増やさない	next/reference/timeline-grammar.md:11
+472	既存構造+先例	PropertyId/KeyframeTrack;Inspector provider catalog;Lottie	抑制	keyframe入口は既存trackへ接続する薄いadapterだけ	キーフレーム追加はPropertyId/KeyframeTrackの既存機構へ委託する	next/DECISIONS.md:72
+473	既存構造+先例	PropertyId/KeyframeTrack;Inspector provider catalog;Lottie	抑制	keyframe入口は既存trackへ接続する薄いadapterだけ	同じ意味の重複行を別keyframe機構にせず、既存trackへ収める	next/DECISIONS.md:72
+474	既存構造+先例	PropertyId/KeyframeTrack;Inspector provider catalog;Lottie	抑制	shortcutは既存keyframe intentの別入口だけ	ショートカットは意味を発明せず、既存keyframe intentへ委託する	next/DECISIONS.md:72
+476	既存構造+先例	PropertyId/KeyframeTrack;Inspector provider catalog;Lottie	抑制	current-time lookupと既存track更新だけ	現在時刻の追加削除は既存trackの一操作として扱い、専用状態を増やさない	next/DECISIONS.md:72
+477	既存構造+先例	PropertyId/KeyframeTrack;Inspector provider catalog;Lottie	抑制	静的keyの既存track表現だけ	静的keyはkeyframe trackのHold表現へ委託し、別static modeを作らない	next/DECISIONS.md:72
+478	既存構造+先例	PropertyId/KeyframeTrack;Inspector provider catalog;Lottie	抑制	shortcutは既存keyframe intentの別入口だけ	静的keyframeのshortcutは既存track経路の別入口に留める	next/DECISIONS.md:72
+507	既存構造+先例	PropertyId/KeyframeTrack;clipboard payload;Lottie	抑制	既存keyframe payloadとtrack更新だけ	逆順pasteは既存keyframe payloadの変換に留め、別の時間モデルを作らない	next/DECISIONS.md:72
+606	既存構造+外部依存+上流	Document/Asset;filesystem;FFmpeg	抑制	file dialog/default設定の薄い結線だけ	Importは既存Asset admissionと外部filesystemへ委託し、読み込み台帳を二重化しない	next/DECISIONS.md:112
+614	既存構造+外部依存+上流	Document/Asset;filesystem;FFmpeg	抑制	reloadはsource fingerprintと既存Asset更新だけ	素材再読み込みは既存source/Asset経路へ預け、decoderやcacheを新設しない	next/DECISIONS.md:112
+616	既存構造+外部依存+上流	Document/Asset;filesystem;FFmpeg	抑制	selected Assetの差替えadapterだけ	選択素材の置換はSetSource/Asset経路に委託し、独自replace stateを作らない	next/DECISIONS.md:103
+618	既存構造+外部依存+上流	Document/Asset;filesystem;FFmpeg	抑制	selected layerのSetSource結線だけ	layer sourceの置換は既存field単位の書き口へ委託する	next/DECISIONS.md:103
+658	既存構造+上流	Document/Composition;DocumentIO/.rrd	抑制	SetCompositionのread-modify-writeだけ	Composition Settingsは既存Compositionと保存形式へ委託し、設定専用の正本を作らない	next/DECISIONS.md:17
+684	既存構造+上流	Document/Composition;DocumentIO/.rrd	抑制	新規Compositionの既存admit経路だけ	New Compositionは既存Document/Composition admissionへ預け、別project modelを作らない	next/DECISIONS.md:17
+728	既存構造+先例	Composition:markers;Document::SetMarkers;Lottie markers	抑制	markers componentと既存marker operationだけ	MarkerはLottieの意味と既存SetMarkersへ接続し、pane独自のmarker storeを持たない	next/core/motolii-store/src/marker.rs:3
+738	既存構造+先例	Composition:markers;Document::SetMarkers;Lottie markers	抑制	既存marker operationの編集adapterだけ	Marker編集は既存markers componentのread-modify-writeへ委託する	next/core/motolii-store/src/document.rs:191
+739	既存構造+先例	Composition:markers;Document::SetMarkers;Lottie markers	抑制	shortcutは既存marker operationの別入口だけ	Marker shortcutは意味を増やさず既存marker operationへ委託する	next/shell/motolii-shell/src/input.rs:397
+837	既存構造+先例	PropertyId/KeyframeTrack;LayerTiming;Lottie/AE	抑制	TIME_REMAP trackのUI adapterだけ	Time Remapは既存PropertyId/trackへ委託し、別のretime mechanismを作らない	next/DECISIONS.md:112
+879	既存構造+上流	Engine::render_frame;Compositor;re_renderer	抑制	preview inputと既存render入口の結線だけ	Video previewはEngine::render_frameとCompositorへ委託し、preview専用の描画真実を作らない	next/shell/motolii-shell/src/render.rs:232
+960	既存構造+上流	Engine::render_frame;Compositor;re_renderer	抑制	start/stop controlは既存playback/sessionへ接続	Preview開始停止は既存render/playback経路へ委託し、別preview rendererを作らない	next/shell/motolii-shell/src/render.rs:236
+1088	既存構造+先例	Session;Timeline projection;AE/Premiere	抑制	既存playhead/navigation projectionだけ	Next Clip/Editは既存SessionとTimeline projectionへ委託し、navigation専用時間正本を作らない	next/reference/timeline-grammar.md:60
+1089	既存構造+先例	Session;Timeline projection;AE/Premiere	抑制	既存playhead/navigation projectionだけ	Next Editは既存playheadとedit point projectionの別入口に留める	next/reference/timeline-grammar.md:60
+1108	既存構造+先例	Session;Timeline projection;AE/Premiere	抑制	既存playhead/navigation projectionだけ	Previous Clip/Editは既存SessionとTimeline projectionへ委託する	next/reference/timeline-grammar.md:60
+1109	既存構造+先例	Session;Timeline projection;AE/Premiere	抑制	既存playhead/navigation projectionだけ	Previous Editは既存playheadとedit point projectionの別入口に留める	next/reference/timeline-grammar.md:60
+1232	既存構造+上流	Document;DocumentIO/.rrd;filesystem	抑制	closeは既存save/dirty確認とDocumentIOだけ	Close Projectは既存Document lifecycleと保存形式へ委託し、project stateを二重化しない	next/DECISIONS.md:17
+1238	既存構造+上流	Document;DocumentIO/.rrd;filesystem	抑制	newは既存Document/Composition admissionだけ	New Projectは既存Document lifecycleへ預け、別project graphを作らない	next/DECISIONS.md:17
+1243	既存構造+上流	Document;DocumentIO/.rrd;filesystem	抑制	revertは既存persist/load経路だけ	Revertは保存形式とDocumentIOへ委託し、別undo/revert stackを作らない	next/DECISIONS.md:17
+1315	既存構造+先例	Document/Composition;Timeline projection;AE/Premiere	抑制	既存Composition admissionとtimeline viewだけ	新規Timeline/Compositionは既存Document ownerへ接続し、pane独自のcompositionを作らない	next/DECISIONS.md:113
+1327	既存構造+先例	Document/Composition;Timeline projection;AE/Premiere	抑制	既存Composition closeとSession切替だけ	Timelineを閉じる操作は既存Document/Session経路へ委託する	next/DECISIONS.md:113
+1331	既存構造+先例	Document tracks;Timeline projection;AE/Premiere	抑制	既存track enabled fieldの更新だけ	track enableは既存Documentの属性とTimeline投影へ接続し、専用track modeを持たない	next/DECISIONS.md:112
+1340	既存構造+先例	Document tracks;Timeline projection;AE/Premiere	抑制	既存track lock fieldの更新だけ	track lockは既存Documentの属性とTimeline投影へ接続し、専用lock storeを持たない	next/DECISIONS.md:112
+1368	既存構造+先例	Timeline projection;AE/Premiere;existing snap helpers	抑制	snap calculationは既存projection/helperへ接続	Track Magnetは時間編集の補助であり、別の時間正本を作らず既存snap経路へ委託する	next/reference/timeline-grammar.md:60

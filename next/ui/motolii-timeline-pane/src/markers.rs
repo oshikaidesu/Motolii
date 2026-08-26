@@ -441,16 +441,16 @@ pub fn draw_locators(
             &stem,
             canvas::Stroke::default()
                 .with_color(colors.way_timeline)
-                .with_width(dims.border_width),
+                .with_width(dims.theme().stroke.hairline),
         );
 
         // ラベル(cm)。無名(M タップ既定)は描かない。
         if !locator.name.is_empty() {
             frame.fill_text(canvas::Text {
                 content: locator.name.clone(),
-                position: Point::new(x + half_width + dims.spacing_xs, head_top),
+                position: Point::new(x + half_width + dims.theme().space.xs, head_top),
                 color: colors.text_secondary,
-                size: iced::Pixels(dims.caption_text),
+                size: iced::Pixels(dims.theme().text.caption),
                 ..Default::default()
             });
         }
@@ -463,23 +463,25 @@ pub fn draw_locators(
 
 /// タイムライン上部のコンパクトなマーカー一覧。描画線と同じ `Marker` を読む
 /// だけで、別のマーカー台帳や再生位置を持たない。名前編集中だけ下書きを受け、
-/// 確定は `MarkerMessage::RenameCommit` で Shell に返す。
+/// 確定は `MarkerMessage::RenameCommit` で Shell に返す。現在は画面の優先順位に
+/// より `TimelinePane::view_with_transport` から mount していないが、意味と操作
+/// の部品は後続の再表示に備えて保持する。
 pub fn marker_panel(pane: &TimelinePane) -> Element<'static, Message> {
     let count = pane.markers.len();
     let header = row![
-        text("Markers").size(pane.dims.caption_text),
+        text("Markers").size(pane.dims.theme().text.caption),
         text(format!("{count}"))
-            .size(pane.dims.caption_text)
+            .size(pane.dims.theme().text.caption)
             .color(pane.colors.text_secondary),
     ]
-    .spacing(pane.dims.spacing_s)
+    .spacing(pane.dims.theme().space.s)
     .align_y(iced::alignment::Vertical::Center);
 
     let mut rows = Vec::with_capacity(pane.markers.len().max(1));
     if pane.markers.is_empty() {
         rows.push(
             text("M でビート/歌詞位置を置く")
-                .size(pane.dims.caption_text)
+                .size(pane.dims.theme().text.caption)
                 .color(pane.colors.text_secondary)
                 .into(),
         );
@@ -493,35 +495,35 @@ pub fn marker_panel(pane: &TimelinePane) -> Element<'static, Message> {
                 Some((editing, draft)) if *editing == index => text_input("marker name", draft.clone())
                     .on_input(|value| Message::Marker(MarkerMessage::RenameEdited(value)))
                     .on_submit(Message::Marker(MarkerMessage::RenameCommit))
-                    .size(pane.dims.caption_text)
-                    .padding([0.0, pane.dims.spacing_xs])
+                    .size(pane.dims.theme().text.caption)
+                    .padding([0.0, pane.dims.theme().space.xs])
                     .width(Length::Fill)
                     .into(),
                 _ => text(marker_label(marker, index, pane.fps))
-                    .size(pane.dims.caption_text)
+                    .size(pane.dims.theme().text.caption)
                     .color(pane.colors.text_primary)
                     .width(Length::Fill)
                     .into(),
             };
 
-            let jump = button(text(format!("{frame}f")).size(pane.dims.caption_text))
+            let jump = button(text(format!("{frame}f")).size(pane.dims.theme().text.caption))
                 .on_press(Message::Marker(MarkerMessage::JumpTo(frame)))
-                .padding([0.0, pane.dims.spacing_xs]);
+                .padding([0.0, pane.dims.theme().space.xs]);
             let action = match pane.marker_rename.as_ref() {
                 Some((editing, _)) if *editing == index => {
-                    button(text("Cancel").size(pane.dims.caption_text))
+                    button(text("Cancel").size(pane.dims.theme().text.caption))
                         .on_press(Message::Marker(MarkerMessage::RenameCancel))
                 }
-                _ => button(text("Rename").size(pane.dims.caption_text))
+                _ => button(text("Rename").size(pane.dims.theme().text.caption))
                     .on_press(Message::Marker(MarkerMessage::RenameBegin(index))),
             };
-            let remove = button(text("Delete").size(pane.dims.caption_text))
+            let remove = button(text("Delete").size(pane.dims.theme().text.caption))
                 .on_press(Message::Marker(MarkerMessage::Remove(index)))
-                .padding([0.0, pane.dims.spacing_xs]);
+                .padding([0.0, pane.dims.theme().space.xs]);
 
             rows.push(
                 row![name, jump, action, remove]
-                    .spacing(pane.dims.spacing_xs)
+                    .spacing(pane.dims.theme().space.xs)
                     .align_y(iced::alignment::Vertical::Center)
                     .height(Length::Fixed(pane.dims.row_height))
                     .into(),
@@ -534,8 +536,8 @@ pub fn marker_panel(pane: &TimelinePane) -> Element<'static, Message> {
             header,
             scrollable(column(rows)).height(Length::Fixed(pane.dims.row_height * 4.0))
         ]
-        .spacing(pane.dims.spacing_xs)
-        .padding([pane.dims.spacing_xs, pane.dims.spacing_s]),
+        .spacing(pane.dims.theme().space.xs)
+        .padding([pane.dims.theme().space.xs, pane.dims.theme().space.s]),
     )
     .width(Length::Fill)
     .into()

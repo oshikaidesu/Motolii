@@ -39,7 +39,11 @@ fn the_project_flag_opens_and_seats() {
     let resume = decide_resume(&launch_with_project(Some(project.clone())), None);
     match resume {
         Resume::Seated(seat) => {
-            assert_eq!(seat.path(), project.as_path(), "--project で開いた座席のパスが違う");
+            assert_eq!(
+                seat.path(),
+                project.as_path(),
+                "--project で開いた座席のパスが違う"
+            );
         }
         _ => panic!("--project が開けるのに座っていない"),
     }
@@ -91,7 +95,10 @@ fn no_arguments_with_nothing_remembered_is_silent_start_screen() {
     let store = dir.join("last-project.json");
 
     let resume = decide_resume(&launch_with_project(None), Some(&store));
-    assert!(matches!(resume, Resume::Nothing), "初回起動は Nothing でなければならない");
+    assert!(
+        matches!(resume, Resume::Nothing),
+        "初回起動は Nothing でなければならない"
+    );
 }
 
 /// `--project` が指定されていれば、覚えていた project があってもそちらへは
@@ -109,7 +116,11 @@ fn the_project_flag_takes_priority_over_the_remembered_project() {
     let resume = decide_resume(&launch_with_project(Some(explicit.clone())), Some(&store));
     match resume {
         Resume::Seated(seat) => {
-            assert_eq!(seat.path(), explicit.as_path(), "--project より覚えていた方へ座ってしまった");
+            assert_eq!(
+                seat.path(),
+                explicit.as_path(),
+                "--project より覚えていた方へ座ってしまった"
+            );
         }
         _ => panic!("--project が開けるのに座っていない"),
     }

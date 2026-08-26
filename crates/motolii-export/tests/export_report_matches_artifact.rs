@@ -126,8 +126,7 @@ fn document_with_short_soundtrack(video: &Path, audio: &Path) -> Document {
             source: ClipSource::asset_video_only(video_id),
         })],
     });
-    doc.soundtrack =
-        Some(Soundtrack::try_new(audio_id, RationalTime::ZERO, 1.0).unwrap());
+    doc.soundtrack = Some(Soundtrack::try_new(audio_id, RationalTime::ZERO, 1.0).unwrap());
     doc.validate().unwrap();
     doc
 }

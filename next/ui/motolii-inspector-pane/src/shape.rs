@@ -130,15 +130,15 @@ fn shape_row(
     colors: Colors,
 ) -> Element<'static, Message> {
     let label = text(format!("{} {}", shape.kind, shape.index + 1))
-        .size(dims.body_text)
+        .size(dims.theme().text.body)
         .color(colors.text_primary)
         .width(Length::Fill);
     let width = shape_numeric_input(ShapeField::Width(shape.index), shape.width, draft, dims, colors);
     let height = shape_numeric_input(ShapeField::Height(shape.index), shape.height, draft, dims, colors);
     let radius = shape_numeric_input(ShapeField::Radius(shape.index), shape.radius, draft, dims, colors);
     bordered_row(
-        row_widget![label, width, text("×").size(dims.caption_text), height, text("r").size(dims.caption_text), radius]
-            .spacing(dims.spacing_xs)
+        row_widget![label, width, text("×").size(dims.theme().text.caption), height, text("r").size(dims.theme().text.caption), radius]
+            .spacing(dims.theme().space.xs)
             .align_y(iced::alignment::Vertical::Center)
             .into(),
         dims,
@@ -159,7 +159,7 @@ fn shape_numeric_input(
     text_input("", displayed)
         .on_input(move |text| Message::ShapeFieldInput(field, text))
         .on_submit(Message::ShapeFieldSubmit(field))
-        .size(dims.body_text)
+        .size(dims.theme().text.body)
         .width(Length::Fixed(dims.inspector_value_width))
         .padding(value_cell_padding(dims))
         .align_x(iced::alignment::Horizontal::Center)

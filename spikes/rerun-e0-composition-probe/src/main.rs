@@ -238,7 +238,9 @@ fn probe_camera(out_dir: &Path) -> Result<String, String> {
                 pos.x, pos.y, pos.z, fwd.x, fwd.y, fwd.z, eye.fov_y,
             ));
             if (pos - glam::vec3(0.0, 0.0, camera_z)).length() > 1.0e-4 {
-                failures.push(format!("last_eye() position ({pos:?}) is not the injected one"));
+                failures.push(format!(
+                    "last_eye() position ({pos:?}) is not the injected one"
+                ));
             }
             if (fwd - glam::vec3(0.0, 0.0, -1.0)).length() > 1.0e-4 {
                 failures.push(format!("last_eye() forward ({fwd:?}) is not -Z"));

@@ -63,7 +63,7 @@ pub fn button_style(dims: Dimensions, colors: Colors, status: button::Status) ->
         text_color,
         border: iced::Border {
             color: iced::Color::TRANSPARENT,
-            width: dims.border_width,
+            width: dims.theme().stroke.hairline,
             radius: 0.0.into(),
         },
         ..button::Style::default()
@@ -85,7 +85,7 @@ pub fn panel_container_style(dims: Dimensions, colors: Colors) -> container::Sty
         background: Some(iced::Background::Color(colors.surface_panel)),
         border: iced::Border {
             color: iced::Color::TRANSPARENT,
-            width: dims.border_width,
+            width: dims.theme().stroke.hairline,
             radius: 0.0.into(),
         },
         ..container::Style::default()
@@ -110,12 +110,12 @@ pub fn section_header<Message: 'static>(
     // 帯が周囲の `.prow` 行と違う沈んだ色の箱に見えていたのが実体)。
     container(
         text(label)
-            .size(dims.caption_text)
+            .size(dims.theme().text.caption)
             .color(Ink::Muted.resolve(&colors)),
     )
     .width(Length::Fill)
     .height(Length::Fixed(dims.inspector_section_header_height))
-    .padding([0.0, dims.spacing_m])
+    .padding([0.0, dims.theme().space.m])
     .align_y(iced::alignment::Vertical::Center)
     .into()
 }
@@ -136,7 +136,11 @@ pub fn value_input_style(
         background: iced::Background::Color(colors.surface_app),
         border: iced::Border {
             color: border_color,
-            width: dims.border_width,
+            width: if matches!(status, text_input::Status::Focused { .. }) {
+                dims.theme().stroke.focus
+            } else {
+                dims.theme().stroke.hairline
+            },
             radius: 0.0.into(),
         },
         // 裁定170 M01: fork(0.15.0-dev)で `text_input::Style` から `icon`

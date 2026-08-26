@@ -163,7 +163,7 @@ impl canvas::Program<GizmoDrag> for GizmoOverlay {
         let handle_fill = self.colors.surface_raised;
         let hairline = canvas::Stroke::default()
             .with_color(accent)
-            .with_width(self.dims.border_width);
+            .with_width(self.dims.theme().stroke.hairline);
 
         // 選択の器(bbox)。
         let bbox = canvas::Path::new(|builder| {
@@ -305,4 +305,3 @@ pub fn resize_interaction(direction: Vec2) -> mouse::Interaction {
         mouse::Interaction::ResizingDiagonallyUp
     }
 }
-

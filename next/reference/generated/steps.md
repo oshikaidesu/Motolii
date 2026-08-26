@@ -2,6 +2,9 @@
 
 `scripts/plan_steps.py` が生成。**手で編集しない。**
 
+- 基盤ゲート: current_stage=design_profile_v0 mode=serial parallel_components=locked
+- 並列許可: LOCKED
+
 **段階は発明していない** — 手順書(`procedures/P*.md`)の節をそのまま段階とし、
 各手順の判定を数えた。**その節の全手順が「書ける」または「対象外」になったら段階が通る。**
 

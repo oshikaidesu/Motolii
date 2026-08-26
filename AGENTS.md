@@ -7,6 +7,7 @@
 ```bash
 python3 scripts/plan_steps.py     "$(git rev-parse --show-toplevel)"   # 次にやる段階と、その障害
 python3 scripts/plan_backlog.py   "$(git rev-parse --show-toplevel)"   # 残作業983件と割り振り
+python3 scripts/check_foundation_phase.py "$(git rev-parse --show-toplevel)" # 基盤段階と並列解禁状態
 python3 scripts/plan_waves.py     "$(git rev-parse --show-toplevel)"   # write-set が交わらない組
 python3 scripts/rehearse_parallel.py "$(git rev-parse --show-toplevel)" # 意味レーンを同時実行して隔離を検査
 python3 scripts/derive_entries.py "$(git rev-parse --show-toplevel)"   # 入口が在るか(実コードから)
@@ -16,10 +17,15 @@ python3 scripts/check_coherence.py   "$(git rev-parse --show-toplevel)" # 台帳
 python3 scripts/rank_load_bearing.py "$(git rev-parse --show-toplevel)" # 荷重(壊すと巻き添えが多い所)
 python3 scripts/derive_components.py "$(git rev-parse --show-toplevel)" # コンポーネント契約から意味の粒と赤/緑を導出
 python3 scripts/check_responsibility.py "$(git rev-parse --show-toplevel)" # WIREが意味を書き込んでいないか
+python3 scripts/derive_technical_delegation.py "$(git rev-parse --show-toplevel)" # 技術の委託先とスクラッチ境界を導出
+python3 scripts/check_technical_delegation.py "$(git rev-parse --show-toplevel)" # 技術委託台帳のjoin・証拠・語彙を検査
+python3 scripts/check_icebook_panel_drafts.py "$(git rev-parse --show-toplevel)" # Icebook向けパネル草案の件数・必須欄を検査
+python3 scripts/derive_icebook_panel_stories.py "$(git rev-parse --show-toplevel)" # パネル草案をIcebook story索引へ導出
 ```
 
-**現在地は上が出す。引き継ぎ文書は無い**(2026-08-23 廃止 — 状態が生成されるので運ぶ物が無い)。
-**会話の文脈が無くても、ここから再開できる。**
+**現在地は上が出す。引き継ぎ文書に依存しない。** 段階状態は
+`next/reference/foundation/phase.json`、作業割りは生成台帳、現在の意味はコードと証拠が出す。
+**会話の文脈が無くても、ここから構造を辿って再開できる。**
 
 ## 完了の定義(Done when)
 
@@ -47,9 +53,14 @@ python3 scripts/check_responsibility.py "$(git rev-parse --show-toplevel)" # WIR
 | **外部資料** | **意味の正本**。4製品(AE/Premiere/Resolve/CapCut)・Lottie 地図・Rive・各社公式ドキュメント | — |
 | **機械** | **現在地**(上の4コマンド)と**赤/緑**(柵・型) | — |
 | **この repo の文書** | **仮説**。機械と食い違ったら**機械が正しい** | 権威ではない |
+| **製品 front** | **Makepad**(`next/probes/r7-makepad-panel`)。裁定251/252 | **`motolii-shell` crate**（凍結 iced アセンブラ）。view/update とも製品 interface ではない |
 
 **利用者の指示は「目的」であって「事実」ではない。** 前提が外れていると思ったら、
 **確かめてから進む**(止まらない)。確かめ方は上の4コマンドか `grep` で足りる。
+
+意味の正本は `motolii-store` / `motolii-shell-state` / `motolii-engine`。
+`motolii-shell` は iced 窓のアセンブラであり、製品核ではない(裁定253/254)。
+製品 front はこれを引かない。`next/README.md` の「front は iced のみ」は裁定251が覆した。再導出しない。
 
 **壁に当たっても上へ聞かない**(裁定222)。**外部資料を引いて自分で決め、出典を書く。**
 先例が割れていても止まらず、人口の多い作法を採って**採らなかった理由も残す**。
@@ -153,6 +164,28 @@ cargo build --manifest-path "$(git rev-parse --show-toplevel)/next/Cargo.toml" -
 # storm/r2 の無罪確認(負荷 flake — release 単独)
 cargo test --manifest-path "$(git rev-parse --show-toplevel)/next/Cargo.toml" --release -p motolii-store --test document edit_storm_with_the_real_track_type
 ```
+
+### 実窓を見る時(2026-08-25 実測 — computer-use 迂回の根治)
+
+- **Makepad の窓は macOS のアクセシビリティに応答しない**。computer-use の `get_app_state` はタイムアウトする。`.app` ラッパーへ包み直しても変わらない(2026-08-25 に両方実測)。**AX が返らないのは実装の欠陥ではなく Makepad の性質**なので、ここから原因調査を始めない
+- **全画面 `screencapture -x` を証拠にしない** — 窓が画面のどこにあるか読めず、利用者からは「見えない」。窓単体を撮る:
+
+```bash
+# 窓IDを引く(owner 名で絞る。プロセス名の一部を渡す)
+swift -e 'import CoreGraphics
+let info = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as! [[String: Any]]
+for w in info { let o = w[kCGWindowOwnerName as String] as? String ?? ""
+  if o.contains("r7-makepad") { print(o, w[kCGWindowNumber as String] ?? "") } }'
+
+# その窓だけを撮る
+screencapture -x -l <窓ID> /tmp/window.png
+```
+
+- **GUI の起動プロセスを待たない**: 窓は終了しないので `yield_time_ms` 付きの待ちは丸ごと空振りする(2026-08-25 に30秒×6回=3分を捨てた)。起動は投げっぱなしにし、存在確認は `pgrep -af`、結果確認は上のキャプチャで取る
+- **実窓で時間を測るなら debug バイナリを使わない**(2026-08-25 実測の失敗): `./target/debug/` のまま計測すると支配項が偽装される。実例 — `ImageBuffer::new`(1920×1080 RGBA = 8.3MB のゼロ埋め)が **46.578ms** と出て「CPU 画像経路が主因」と結論されたが、これは約180MB/s = 最適化なしの1バイトずつゼロ埋めの速度で、release では `memset` になり1ms未満。57.654ms の中央値のうち**81%が debug artifact の疑い**だった。「検収の3段」の『合否確認は単独 or release で』は実窓の計測にもそのまま効く。**窓の計測は `--profile preview` で取る**(release同等opt+incremental、この用途のために既に用意してある)
+- **計測値を根拠に構造判断へ進む前に、桁が物理的に妥当か1度問う**: 8MB のメモリ操作が数十msなら、それは処理コストではなくビルド設定を測っている
+
+- computer-use を触るのは**操作そのもの(ドラッグ・hover・押し分け)が検査対象の時だけ**。見た目の確認は上の2コマンドで足りるので、`computer-use/SKILL.md`(211行)を読む必要はない(2026-08-25 は1セッションで9回読み直し、圧縮5回の主因になった)
 
 ### 既知の構造ギャップと改善ルート(未着手 — 変更時はここを更新)
 

@@ -144,7 +144,7 @@ pub(crate) fn matte_row(
         candidate.label.clone()
     })
     .on_select(|candidate: LayerCandidate| Message::PickMatteSource(candidate.id))
-    .text_size(dims.body_text)
+    .text_size(dims.theme().text.body)
     .width(Length::Fixed(dims.inspector_value_width))
     .padding(value_cell_padding(dims))
     .placeholder("Pick…")
@@ -156,18 +156,18 @@ pub(crate) fn matte_row(
 
     let content = row_widget![
         text("Matte")
-            .size(dims.body_text)
+            .size(dims.theme().text.body)
             .color(colors.text_primary)
             .width(Length::Fill),
         picker,
-        button(text(mode_label).size(dims.body_text))
+        button(text(mode_label).size(dims.theme().text.body))
             .on_press(Message::CycleMatteMode)
             .style(move |_theme, status| flat_button_style(colors, status)),
-        button(text("Clear").size(dims.caption_text))
+        button(text("Clear").size(dims.theme().text.caption))
             .on_press(Message::ClearMatte)
             .style(move |_theme, status| flat_button_style(colors, status)),
     ]
-    .spacing(dims.spacing_xs)
+    .spacing(dims.theme().space.xs)
     .align_y(iced::alignment::Vertical::Center);
 
     bordered_row(content.into(), dims)

@@ -70,8 +70,6 @@ use crate::observation_as_resolved;
 /// 方眼の分割数(縦)。mock `.grid9` = 45px セルを 405px 高の comp に敷く
 /// (405/45 = 9)— セルは正方形(横も同じ 45px ピッチ)なので、セル寸は
 /// 「comp 高さの 1/9」だけで決まる。
-pub const GRID_DIVISIONS: u32 = 9;
-
 /// 三分割線の位置(両軸共通)。mock `.thirds` の 33.33% / 66.67%。
 pub const THIRDS_FRACTIONS: [f32; 2] = [1.0 / 3.0, 2.0 / 3.0];
 
@@ -79,20 +77,15 @@ pub const THIRDS_FRACTIONS: [f32; 2] = [1.0 / 3.0, 2.0 / 3.0];
 pub const PHI_FRACTIONS: [f32; 2] = [0.382, 0.618];
 
 /// Action safe の内接率。mock `.safe.a{inset:5%}`(放送セーフの慣習値)。
-pub const ACTION_SAFE_INSET: f32 = 0.05;
-
 /// Title safe の内接率。mock `.safe.t{inset:10%}`。
-pub const TITLE_SAFE_INSET: f32 = 0.10;
-
 /// 方眼線の ink 減量率。mock の alpha 比(`.grid9` = .10、`.sheet i` = .22)を
 /// 転写 — 新色ではなく既存 [`Ink::Muted`] の alpha を掛けるだけ(裁定142)。
-const GRID_INK_FACTOR: f32 = 0.10 / 0.22;
 
 /// セーフ枠の破線の1セグメント長(実線・空白とも)。mock は CSS `dashed`
 /// (実装依存の既定ピッチ)なので専用寸は起こさず、既存段 `spacing_s` を借用
 /// (独自の中間値を発明しない — `gizmo_rotate_offset` と同じ流儀)。
 fn safe_dash_segment(dims: &Dimensions) -> f32 {
-    dims.spacing_s
+    dims.theme().space.s
 }
 
 // ---------------------------------------------------------------------------
@@ -175,11 +168,15 @@ pub struct SheetLine {
 /// 二重になるだけ)。セル = 高さの 1/9([`GRID_DIVISIONS`])の正方形。
 /// comp が退化していれば空。
 pub fn grid_lines(comp: CompSpec) -> Vec<SheetLine> {
+    grid_lines_with_divisions(comp, Dimensions::default().components.stage.grid_divisions)
+}
+
+fn grid_lines_with_divisions(comp: CompSpec, divisions: u32) -> Vec<SheetLine> {
     let (w, h) = (comp.width as f32, comp.height as f32);
     if comp.width == 0 || comp.height == 0 {
         return Vec::new();
     }
-    let cell = h / GRID_DIVISIONS as f32;
+    let cell = h / divisions.max(1) as f32;
     let mut lines = Vec::new();
     // 縦線: x = cell, 2*cell, … < w(右縁ちょうどは縁扱いで描かない)。
     let mut x = cell;
@@ -372,7 +369,7 @@ impl canvas::Program<SheetMessage> for SheetOverlay {
         let ink = Ink::Muted.resolve(&self.colors);
         let hairline = canvas::Stroke::default()
             .with_color(ink)
-            .with_width(self.dims.border_width);
+            .with_width(self.dims.theme().stroke.hairline);
 
         let stroke_lines = |frame: &mut canvas::Frame, lines: &[SheetLine], stroke: &canvas::Stroke| {
             for line in lines {
@@ -386,11 +383,18 @@ impl canvas::Program<SheetMessage> for SheetOverlay {
         if self.toggles.grid {
             let grid_stroke = canvas::Stroke::default()
                 .with_color(iced::Color {
-                    a: ink.a * GRID_INK_FACTOR,
+                    a: ink.a * self.dims.components.stage.grid_ink_factor,
                     ..ink
                 })
-                .with_width(self.dims.border_width);
-            stroke_lines(&mut frame, &grid_lines(self.comp), &grid_stroke);
+                .with_width(self.dims.theme().stroke.hairline);
+            stroke_lines(
+                &mut frame,
+                &grid_lines_with_divisions(
+                    self.comp,
+                    self.dims.components.stage.grid_divisions,
+                ),
+                &grid_stroke,
+            );
         }
 
         // 三分割・黄金比(ink 最弱段そのまま)。
@@ -412,7 +416,10 @@ impl canvas::Program<SheetMessage> for SheetOverlay {
                 },
                 ..hairline.clone()
             };
-            for inset in [ACTION_SAFE_INSET, TITLE_SAFE_INSET] {
+            for inset in [
+                self.dims.components.stage.action_safe_inset,
+                self.dims.components.stage.title_safe_inset,
+            ] {
                 let path = transformed_rect_path(affine, safe_rect(self.comp, inset));
                 frame.stroke(&path, dashed.clone());
             }
@@ -495,10 +502,11 @@ mod tests {
     /// Safe areas: action 5% / title 10% の内接矩形(mock `.safe` の転写)。
     #[test]
     fn safe_rects_inset_by_five_and_ten_percent() {
-        let action = safe_rect(COMP, ACTION_SAFE_INSET);
+        let stage = Dimensions::default().components.stage;
+        let action = safe_rect(COMP, stage.action_safe_inset);
         assert!(approx(action.x, 32.0) && approx(action.y, 18.0));
         assert!(approx(action.width, 576.0) && approx(action.height, 324.0));
-        let title = safe_rect(COMP, TITLE_SAFE_INSET);
+        let title = safe_rect(COMP, stage.title_safe_inset);
         assert!(approx(title.x, 64.0) && approx(title.y, 36.0));
         assert!(approx(title.width, 512.0) && approx(title.height, 288.0));
     }

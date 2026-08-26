@@ -13,13 +13,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if path.exists() {
         return Err(format!("refusing to overwrite existing project: {}", path.display()).into());
     }
-    let parent = path.parent().ok_or("project path needs a parent directory")?;
+    let parent = path
+        .parent()
+        .ok_or("project path needs a parent directory")?;
     std::fs::create_dir_all(parent)?;
     let template = motolii_doc::load_document(Path::new(TEMPLATE))?;
-    let mut session = motolii_doc::ProjectSession::acquire(
-        &path,
-        &motolii_doc::ResourceLimits::production(),
-    )?;
+    let mut session =
+        motolii_doc::ProjectSession::acquire(&path, &motolii_doc::ResourceLimits::production())?;
     session.save_document(&template, &motolii_doc::SaveOptions::default())?;
     println!("created {}", session.document_path().display());
     Ok(())

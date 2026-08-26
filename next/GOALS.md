@@ -1,6 +1,10 @@
-# 「普通の動画ソフト」の合否条件
+# Motolii の目的と合否条件 — Hero creation
 
-**この表が「完成」の定義**。既存台帳(`../docs/`)から組み立てたもので、ここで新しく発明していない。
+Motolii の製品定義は、一般的な動画ソフトの縮小版ではなく、制作者が自分や作品の hero を立ち上げ、
+制作と発信へ進む動機を生むことにある。一般的な動画ソフトの条件は、その目的を成立させるための基礎床であって、
+製品の同一性そのものではない。
+
+**この表が「完成」の検収面**。既存台帳(`../docs/`)から組み立てたもので、ここで新しく発明していない。
 出所欄は `../docs/` 配下。状態欄は **新 workspace(`next/`)** の実装状況。
 
 旧 workspace で実装済みでも、新側に無ければ「未」と書く。旧側の実装は移植元であって成果ではない。
@@ -23,7 +27,114 @@
 **2026-08-23 時点で `済` と書ける行はほぼ無い** — この日の実装は全て静的検査だけで着地しており、
 **実機検分は一度も行われていない**。これは後退ではなく事実の表示である。
 
-## 必須 — これが無いと動画ソフトと呼べない
+## 問題起点の優先順位(裁定244)
+
+この台帳の1粒は「機能があるか」だけでなく、**何の失敗・停滞・不安を解決するか**を持つ。
+出典に機能名しかない場合も、採用理由は利用者の問題と観測可能な結果へ翻訳してから決める。
+「便利そう」は問題の名前にならない。主張が弱い粒をhero creationの根拠に昇格させない。
+
+| 優先度 | 解決する問題 | 扱い |
+|---|---|---|
+| **P0 信頼・安全** | 作品の喪失、誤った出力、無反応、面ごとの不一致、復旧不能 | 最優先。hero以前に、触っても壊れないことを保証する |
+| **P1 制作ループ** | 素材を入れ、編集し、結果を見て、再生・保存・書き出しまで進められない | 次点。制作を止めず、最初の結果へ到達させる |
+| **P2 hero表現** | 結果が一般的な素材の並べ替えで終わり、作品の主役・動機・個性を立ち上げられない | Motoliiの主張。点群・3D・文字MV・音楽同期・時間変化はこちら |
+| **P3 摩擦削減** | 同じ制作を何度も行う際の手数、探索、視線、移行コストが大きい | P0〜P2を壊さない範囲で進める。単独で製品の主張にしない |
+| **P4 便利** | あれば快適だが、無くても作品の意味・安全・制作ループが成立する | 主張を抑え、後回し。先回り実装しない |
+
+現行の基礎床20粒をこの問題レンズで読むと次の順になる。元の検収条件・出典・状態欄は変更せず、
+ここでは優先順位と解決対象だけを補う。
+
+| 粒 | 解決する問題 | 結果 | 優先度 |
+|---|---|---|---|
+| M1 | 起動時に制作の入口がなく、既存作品にも戻れない | 空 project または既存 project から制作を開始できる | P0 |
+| M2 | 素材を持っているのに制作へ入れられず、拒否理由も分からない | 素材が理由つきでDocumentへ入る | P1 |
+| M3 | 配置した結果が見えず、操作が正しいか判断できない | TimelineとStageが同じ結果を示す | P1 |
+| M4 | 素材終端や尺の境界で、存在しない映像を出力してしまう | 時間境界が正しく、背景も正しく見える | P0 |
+| M5 | 時間上の編集が意図どおりに確定せず、直し方が分からない | 移動・trim・snap・復元が予測可能に働く | P1 |
+| M6 | 置いた素材を分ける・消す・複製するという基本修正ができない | 失敗を作り直さず修正できる | P1 |
+| M7 | 既存素材や編集結果を再利用できず、同じ作業を繰り返す | Copy/Cut/Pasteが編集の継続を支える | P1 |
+| M8 | 動きと音の結果を体験できず、heroの良し悪しを判断できない | 再生・scrub・音・playheadが同期する | P1 |
+| M9 | 書き出し結果が再現されず、完成物を外へ持ち出せない | Previewと音声mux込みExportが一致する | P0 |
+| M10 | 試すことが怖く、1回の操作で戻せない | 1 gesture = 1 Undoで安全に試せる | P0 |
+| M11 | 作業を中断・再起動すると作品や状態を失う | 保存・復帰・終了確認が成立する | P0 |
+| M12 | 見た目が操作を約束するのに、押すと何も起きない | 偽の入口を置かず、触れる物は反応する | P0 |
+| M13 | 失敗が無言で、次に何を直せばよいか分からない | 拒否が理由つきで観測できる | P0 |
+| M14 | Stage・Timeline・Inspectorが別々の真実を表示する | 選択・時刻・幾何が一つのDocumentを映す | P0 |
+| M15 | Previewで良く見えた作品がExportで変わる | 同じ評価関数で結果を再現する | P0 |
+| M16 | 入力やrender失敗がpanic・クラッシュ・喪失へつながる | 失敗しても作品と画面を失わない | P0 |
+| M17 | 空の状態が制作の最初の一歩を拒む | 空でもplace・scrub・keymapが働く | P1 |
+| M18 | 見たい時間・範囲へ移動するだけで制作が止まる | Zoom/Fitが視線移動の摩擦を下げる | P3 |
+| M19 | 値を時間で変化させられず、heroの動きが作れない | property単位のkeyframe操作が働く | P2 |
+| M20 | 面を跨いだ編集・IME・Undoが互いに干渉する | どの面からでも安全に修正できる | P0 |
+
+この表でP3/P4に分類される機能は、実装されても「Motoliiの本質」とは宣伝しない。
+P2はheroを生む直接の表現、P0/P1はheroへ到達するための条件であり、三つを同じ「機能数」として数えない。
+
+なお、`reference/normal-map.tsv` は他製品に存在する語彙を並べた**カウンター／候補在庫**であり、
+その全行がMotoliiのバックログになるわけではない。`採用予定`または`採用済`へ進める粒だけが、
+この問題表のM/D粒またはcomponentへ接続し、問題・結果・優先度を持つ。未採用・未判定の粒を
+「不足」と数えてP3/P4の実装を先回りしない。
+
+### 最小コアの剪定(裁定245〜247)
+
+`normal-map.tsv` は候補在庫として残したまま、現行の hero 縦切りと基礎床へ直接つながらない
+純粋な拡張束を `採用予定` から `拡張` へ戻した。第一剪定で507粒、第二剪定で410粒、計917粒を
+移し、静的スナップショットは全1,551粒のうち `採用予定 954 → 37`、`拡張 59 → 976` となった。
+続く裁定248の因果判定で、既存の正本へ収まり独立実装を増やさない128粒を
+`scope=absorbed / verdict=構造吸収`へ移し、現在の `拡張` は848粒となった。
+最終的に残した37粒は、入口・素材差替え・基本編集・再生・安全、property時間変化、点群用3Dカメラに
+直接対応する未着地候補である。各行の理由欄に `PROBLEM / OUTCOME / PRIORITY` を付け、機能名だけで
+採用を正当化しない。マスク/シェイプ、カラー、トランジション、グラフ編集、テキスト詳細、
+音声制作、パネル/ワークスペース、細かな3Dビュー/ギズモ、マーカーやnudge等は候補在庫として残す。
+行や既存の `採用済` の証拠は削除していない。構造吸収128粒も候補在庫には残るが、独立した
+実装・検収の粒量には数えない。この数字は静的台帳の現在地であり、実機受入やコンパイル成功を
+意味しない。
+
+### 因果で見る構造吸収(裁定248)
+
+「普通のソフトに名前がある」ことは、Motoliiの独立した実装粒であることを意味しない。
+まず問題と観測結果を固定し、既存の正本がその結果を一度だけ生むなら、個別の入口・モード・
+enum・パネル・ショートカットは作らない。`normal-map.tsv` では行を消さず、`構造吸収` として
+在庫に残す。これは意味を捨てる判定ではなく、独立した状態・owner・検収を増やさない判定である。
+
+| 因果 | 問題 | Motoliiの解決粒(証拠) | 観測可能な結果 | 構造へ吸収する粒の型 |
+|---|---|---|---|---|
+| C1 | 1操作が複数履歴・専用undoへ分裂する | `Document::apply/apply_all` が唯一の書き口で同じedit刻みに原子化する (`next/core/motolii-store/src/document.rs:502-545`) | 1操作を1回のundoで戻せる | History/Revival Undo/専用履歴パネル |
+| C2 | 時間編集ごとに別モード・別intentが増える | `LayerTiming` と `SetTiming` に move/trim/split/speed を収める (`next/core/motolii-store/src/document.rs:95-147`, `next/core/motolii-store/src/lib.rs:311`) | 時間上の変更が同じ正本で評価される | Add Edit/Razor/Blade/Trimの別入口・別alias |
+| C3 | 追加・置換の入口が面ごとに増え、書き方が分岐する | Browser cardの意図を一つのdispatchへ畳み、`Document::apply/apply_all`へ送る (`next/shell/motolii-shell/src/create.rs:272-305`) | 追加/置換が同じDocumentへ届く | File/Media Browser/Effects panel等の入口重複 |
+| C4 | propertyごとに値・補間・keyframe UIが別機構になる | `PropertyId`/`KeyframeTrack` と providerの `ParameterDescriptor` (`next/core/motolii-eval/src/track.rs:234-303`, `next/ui/motolii-inspector-pane/src/device.rs:63-71,283-300`) | 一つのproperty系で値と時間変化を扱える | Keyframe mode/reveal/editor/move/reverse/holdの専用粒 |
+| C5 | 3D view・gizmoのプリセットがカメラ状態を増殖させる | `Composition.camera` と既存property/Stage gizmo (`next/DECISIONS.md:123-125`) | 同じカメラ/transform結果を操作できる | Front/Back/Custom View/個別gizmo起動 |
+| C6 | PreviewとExportが別の画を計算する | `Engine::render_frame` を共有する (`next/shell/motolii-shell/src/render.rs:232-236`) | 同じDocumentから同じframe truthが出る | 別preview/export render経路や表示だけのPreview panel |
+| C7 | transformの便利操作ごとに専用状態・書き口が増える | Property/LayerPlacement/SetOrderへ書く (`next/core/motolii-store/src/document.rs:95-109`, `next/DECISIONS.md:61,112`) | 位置・拡縮・回転・順序の結果だけが変わる | reset/center/flip/increment/fit/stackのalias・tool |
+| C8 | workspace/panelのプリセットが製品固有の第二状態になる | Browser/Stage/Inspector/Timelineの固定pane構造 (`next/shell/motolii-shell/src/pane_layout.rs:109-124`) | 同じ4役割で制作を続けられる | workspace preset/page/maximize/dockの専用粒 |
+
+この分類で独立に残すのは「問題の結果」が増える粒である。heroの主役を立ち上げるカメラ操作、
+property別イージング、素材復旧、音声同期、保存/書き出しの安全は、汎用構造に吸収せず残す。
+逆に、同じ結果へ到達する別名・別パネル・別ショートカットは、最小コアの粒量を増やさない。
+
+### 技術委託とスクラッチ抑制(裁定250)
+
+ここでいう委託は、人やレーンへの作業委託ではない。各問題を解くときに、意味・評価・I/O・
+描画のどこを **既存構造、上流、先例、移植元へ預けられるか**、どこだけがMotolii固有の
+継ぎ目として自前に残るかを決めることである。`verdict` の意味判定と混ぜず、
+`reference/generated/technical-delegation.tsv` を `map_id` でjoinして見る。
+
+| 問題束 | 技術の委託先 | スクラッチ境界 |
+|---|---|---|
+| project / save / recovery | `Document` / `Composition` / `DocumentIO` / `.rrd` / filesystem | **抑制**。lifecycleのadapterだけ。第二のproject正本は作らない |
+| asset import / replace | `Document` / `Asset` / filesystem / FFmpeg | **抑制**。decoder・cache・replace stateを二重化しない |
+| timeline edit / split / trim | `apply_all` / `LayerTiming` / Timeline grammar / AE・Premiere先例 | **抑制**。専用edit modeを増やさない |
+| keyframe / retime | `PropertyId` / `KeyframeTrack` / provider catalog / Lottie | **抑制**。値・補間・keyframeの別機構を作らない |
+| playback / audio sync | decode・resample・deviceは上流/移植元、mix・program・`PlaybackClock`は既存のMotolii音声正本 | **許容**。同期を成立させるmix/clockだけ自前。音声全体を無条件に外注しない |
+| hero camera | `Composition.camera` / `re_renderer` / `glam` / AE・Blender先例 | **抑制**が既定。向きのpose propertyという不足した継ぎ目だけ**許容** |
+| WIRE / marker / navigation | 既存のpane message → `Shell::update` → `Intent` → `Document` | **抑制**。結線を意味の新実装にしない |
+
+したがって、`採用予定` は「スクラッチで作る」という意味ではない。技術台帳の
+`scratch_policy=抑制` を既定にし、`許容`を付ける場合だけ `scratch_boundary` と
+`evidence` を必須にする。現在は構造吸収128粒と最小コア/結線待ち51粒の179粒を監査済み、
+残り1,372粒は未監査として残している。候補を増やすために未監査を勝手に自前実装へ倒さない。
+
+## 基礎床 — 一般的な動画ソフトとして壊してはいけない条件
 
 | # | 条件(観測可能な形) | 出所 | `next/` |
 |---|---|---|---|
@@ -48,7 +159,22 @@
 | M19 | keyframe の追加/削除/移動が property 単位で効く | 同上 | **部分**(store/eval/書き出しまで済、UI が無い) |
 | M20 | undo/redo/delete がどの面からでも。TextInput 中はテキスト優先。IME を壊さない | ui-quality-bar Q9 | 未 |
 
-## 標準 — 普通は持っている
+## 参考基線 — 典型的な動画ソフトの慣習
+
+この節の粒は、典型的であること自体を採用理由にしない。
+
+| 参考群 | 解決する問題 | 優先度 |
+|---|---|---|
+| context menu、カーソル、矢印/Home/End | 操作の意味が画面ごとに違い、既存知識が移行できない | P3 |
+| rename、label、lock、mute/solo、fold | 複数素材の見分け・整理・事故防止が難しい | P2〜P3 |
+| group、marker、loop、playhead追従、waveform | 時間構造と音楽の中で、狙った瞬間を見失う | P2 |
+| easing、Time Remap、parent、Effect UI | 値を置くだけでなく、時間変化と関係性を表現したい | P2 |
+| Inspector行、Stageハンドル、Browser drag | 表現を探すだけでなく、直接触って形にしたい | P2 |
+| Export設定・進捗、日本語・空白名、性能 | 制作結果を安全に外へ出せず、環境差で止まる | P0〜P1 |
+| テキストレイヤー | 文字を作品の主役として動かせない | P2(製品の芯) |
+
+したがって、この節の項目を一括して「標準だから必要」とは扱わない。各粒が上の問題を解決するか、
+単なる快適化かを判定してから、基礎床・hero表現・後回しへ送る。
 
 context menu / カーソル言語(trim端=resize、clip=grab、marquee=crosshair)/ 矢印1フレーム送り・Home/End /
 行の rename・label色・lock・mute-solo / fold と**グループ化**(プリコンポの代替)/ M キーでマーカー /
@@ -60,7 +186,26 @@ Browser から **drag で配置** / Export 設定 UI と割合進捗 /
 トンマナ不変の機械検収 / 日本語・スペース入りファイル名 / soundtrack の差し替え・gain・clip音声mix /
 **テキストレイヤー**(2026-08-20 利用者裁定で**製品の芯**へ格上げ。「文字MV」)
 
-## 差別化 — Motolii がそれである理由
+## Hero creation — Motolii が存在する理由
+
+ここでは、基礎床の上で「作った結果を見て、さらに作りたくなる」ことへ寄与する意味を評価する。
+一般的な NLE と同じ機能でも、hero を立ち上げる動線に効くなら採用する。逆に、一般的であっても
+目的へ寄与しない機能を、数合わせだけで追加しない。
+
+| 粒 | 解決する問題 | 優先度 |
+|---|---|---|
+| D1 | Previewと完成物の不一致で、作品への信頼を失う | P0 |
+| D2 | 深い試行錯誤でUndoが破綻し、表現を試せない | P0 |
+| D3 | 動きが直線的で、感情や勢いを表せない | P2 |
+| D4 | 構造が深くなり、heroの調整箇所を見失う | P2 |
+| D5 | 文字列式を覚えないと、表現の再利用や接続ができない | P2 |
+| D6 | 拡張するたびにコアを壊し、表現の入口が狭くなる | P3 |
+| D7 | 長い作品を完成物として書き出せず、発信へ進めない | P1 |
+| D8 | 音楽の拍と映像の変化が結び付かず、MVの起点を失う | P2 |
+| D9 | 最初の結果が遠く、制作意欲が立ち上がる前に離脱する | P1 |
+| D10 | 音楽に反応する表現を手作業だけで作れない | P2 |
+| D11 | 文字を作品の主役として細かく動かせない | P2 |
+| D12 | 2Dの平面表現だけでは、空間的なheroの印象を作れない | P2 |
 
 | # | 条件 | `next/` |
 |---|---|---|

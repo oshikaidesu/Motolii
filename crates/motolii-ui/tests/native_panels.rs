@@ -275,7 +275,9 @@ fn browser_panel_uses_the_shared_thumbnail_cache() {
         .expect("png card")
         .id
         .clone();
-    let thumb = panel.thumbnail_path(&still).expect("image gets a thumbnail");
+    let thumb = panel
+        .thumbnail_path(&still)
+        .expect("image gets a thumbnail");
     assert!(thumb.is_file());
     assert_ne!(thumb, dir.join("still.png"));
 

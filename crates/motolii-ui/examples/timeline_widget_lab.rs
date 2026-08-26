@@ -18,8 +18,8 @@ use keyboard_types::Modifiers;
 use motolii_core::RationalTime;
 use motolii_doc::{DocumentWriter, GestureId, KeyframeId, LayerId};
 use motolii_ui::timeline_blitz::{
-    attach_surface_interactive, project_for_blitz, timeline_html, timeline_html_dom_prototype, TimelineInput,
-    TimelinePointerEvent, TimelinePointerPhase, TimelineSurfaceHit,
+    attach_surface_interactive, project_for_blitz, timeline_html, timeline_html_dom_prototype,
+    TimelineInput, TimelinePointerEvent, TimelinePointerPhase, TimelineSurfaceHit,
 };
 use rustc_hash::FxHashMap;
 use std::path::PathBuf;
@@ -73,10 +73,25 @@ struct App {
 }
 
 enum Drag {
-    Move { layer: LayerId, offset: RationalTime, gesture: GestureId },
-    TrimIn { layer: LayerId, gesture: GestureId },
-    TrimOut { layer: LayerId, gesture: GestureId },
-    Key { layer: LayerId, key: KeyframeId, offset: RationalTime, gesture: GestureId },
+    Move {
+        layer: LayerId,
+        offset: RationalTime,
+        gesture: GestureId,
+    },
+    TrimIn {
+        layer: LayerId,
+        gesture: GestureId,
+    },
+    TrimOut {
+        layer: LayerId,
+        gesture: GestureId,
+    },
+    Key {
+        layer: LayerId,
+        key: KeyframeId,
+        offset: RationalTime,
+        gesture: GestureId,
+    },
 }
 
 impl App {
@@ -116,7 +131,12 @@ impl App {
             &motolii_doc::ResourceLimits::production(),
             &catalog,
         )
-        .unwrap_or_else(|error| panic!("timeline lab cannot open {}: {error}", project_path.display()));
+        .unwrap_or_else(|error| {
+            panic!(
+                "timeline lab cannot open {}: {error}",
+                project_path.display()
+            )
+        });
         let writer = DocumentWriter::new(opened.recovered.document, catalog)
             .expect("opened project must create its DocumentWriter");
         let (document, input) = timeline_document(&writer.snapshot(), None, scale, width, height);
@@ -146,10 +166,25 @@ impl App {
             height,
             scale,
             device_handle: DeviceHandle {
-                instance: state.adapter.get_info().backend.to_string().parse().ok().map_or_else(
-                    || wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle()),
-                    |_: u8| wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle()),
-                ),
+                instance: state
+                    .adapter
+                    .get_info()
+                    .backend
+                    .to_string()
+                    .parse()
+                    .ok()
+                    .map_or_else(
+                        || {
+                            wgpu::Instance::new(
+                                wgpu::InstanceDescriptor::new_without_display_handle(),
+                            )
+                        },
+                        |_: u8| {
+                            wgpu::Instance::new(
+                                wgpu::InstanceDescriptor::new_without_display_handle(),
+                            )
+                        },
+                    ),
                 adapter: state.adapter.clone(),
                 device: state.device.clone(),
                 queue: state.queue.clone(),
@@ -178,7 +213,9 @@ impl App {
     }
 
     fn receive_timeline_event(&mut self, event: TimelinePointerEvent, scale: f64) {
-        let Some(pointer_time) = self.time_at(event.time_fraction) else { return };
+        let Some(pointer_time) = self.time_at(event.time_fraction) else {
+            return;
+        };
         match event.phase {
             TimelinePointerPhase::Down => self.begin_drag(event.hit, pointer_time),
             TimelinePointerPhase::Move => self.apply_drag(pointer_time, scale),
@@ -199,18 +236,35 @@ impl App {
 
     fn begin_drag(&mut self, hit: TimelineSurfaceHit, pointer_time: RationalTime) {
         let snapshot = self.writer.snapshot();
-        let projection = match project_for_blitz(&snapshot) { Ok(value) => value, Err(_) => return };
+        let projection = match project_for_blitz(&snapshot) {
+            Ok(value) => value,
+            Err(_) => return,
+        };
         let gesture = self.writer.begin_gesture();
         self.drag = match hit {
-            TimelineSurfaceHit::ClipBody { layer } => projection.bars().iter().find(|bar| bar.layer == layer)
+            TimelineSurfaceHit::ClipBody { layer } => projection
+                .bars()
+                .iter()
+                .find(|bar| bar.layer == layer)
                 .and_then(|bar| bar.start.try_sub(pointer_time).ok())
-                .map(|offset| Drag::Move { layer, offset, gesture }),
+                .map(|offset| Drag::Move {
+                    layer,
+                    offset,
+                    gesture,
+                }),
             TimelineSurfaceHit::ClipLeft { layer } => Some(Drag::TrimIn { layer, gesture }),
             TimelineSurfaceHit::ClipRight { layer } => Some(Drag::TrimOut { layer, gesture }),
-            TimelineSurfaceHit::PositionKey { layer, key } => projection.keys().iter()
+            TimelineSurfaceHit::PositionKey { layer, key } => projection
+                .keys()
+                .iter()
                 .find(|item| item.layer == layer && item.key == key)
                 .and_then(|item| item.t.try_sub(pointer_time).ok())
-                .map(|offset| Drag::Key { layer, key, offset, gesture }),
+                .map(|offset| Drag::Key {
+                    layer,
+                    key,
+                    offset,
+                    gesture,
+                }),
             TimelineSurfaceHit::None => None,
         };
         self.primary = match hit {
@@ -223,17 +277,28 @@ impl App {
     }
 
     fn apply_drag(&mut self, pointer_time: RationalTime, scale: f64) {
-        let Some(drag) = self.drag.as_ref() else { return };
+        let Some(drag) = self.drag.as_ref() else {
+            return;
+        };
         let prepared = match *drag {
-            Drag::Move { layer, offset, .. } => offset.try_add(pointer_time)
-                .ok().map_or_else(|| Err(motolii_doc::CommandError::LayerNotFound(layer.get())), |time| self.writer.prepare_set_clip_start(layer, time)),
+            Drag::Move { layer, offset, .. } => offset.try_add(pointer_time).ok().map_or_else(
+                || Err(motolii_doc::CommandError::LayerNotFound(layer.get())),
+                |time| self.writer.prepare_set_clip_start(layer, time),
+            ),
             Drag::TrimIn { layer, .. } => self.writer.prepare_trim_clip_in(layer, pointer_time),
             Drag::TrimOut { layer, .. } => self.writer.prepare_trim_clip_out(layer, pointer_time),
-            Drag::Key { layer, key, offset, .. } => offset.try_add(pointer_time)
-                .ok().map_or_else(|| Err(motolii_doc::CommandError::LayerNotFound(layer.get())), |time| self.writer.prepare_set_position_key_time(layer, key, time)),
+            Drag::Key {
+                layer, key, offset, ..
+            } => offset.try_add(pointer_time).ok().map_or_else(
+                || Err(motolii_doc::CommandError::LayerNotFound(layer.get())),
+                |time| self.writer.prepare_set_position_key_time(layer, key, time),
+            ),
         };
         let gesture = match *drag {
-            Drag::Move { gesture, .. } | Drag::TrimIn { gesture, .. } | Drag::TrimOut { gesture, .. } | Drag::Key { gesture, .. } => gesture,
+            Drag::Move { gesture, .. }
+            | Drag::TrimIn { gesture, .. }
+            | Drag::TrimOut { gesture, .. }
+            | Drag::Key { gesture, .. } => gesture,
         };
         match prepared {
             Ok(Some(command)) => match self.writer.apply_command(gesture, command) {
@@ -248,8 +313,12 @@ impl App {
         }
     }
 
-    fn session_save(&mut self, snapshot: &motolii_doc::Document) -> Result<(), Box<motolii_doc::ProjectError>> {
-        self._session.save_with_journal(snapshot, &motolii_doc::SaveProjectOptions::default())
+    fn session_save(
+        &mut self,
+        snapshot: &motolii_doc::Document,
+    ) -> Result<(), Box<motolii_doc::ProjectError>> {
+        self._session
+            .save_with_journal(snapshot, &motolii_doc::SaveProjectOptions::default())
     }
 
     fn render(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
@@ -305,7 +374,10 @@ impl App {
 
 impl eframe::App for App {
     fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
-        ui.label(egui::RichText::new("Timeline widget lab · current timeline_blitz · ProjectSession").strong());
+        ui.label(
+            egui::RichText::new("Timeline widget lab · current timeline_blitz · ProjectSession")
+                .strong(),
+        );
         ui.label(format!(
             "resolve {:.2} ms · render {:.2} ms · {}",
             self.resolve_ms, self.render_ms, self.status
@@ -314,7 +386,9 @@ impl eframe::App for App {
             egui::vec2(LOGICAL_W as f32, LOGICAL_H as f32),
             egui::Sense::click_and_drag(),
         );
-        let pointer = response.interact_pointer_pos().or_else(|| ui.ctx().pointer_latest_pos());
+        let pointer = response
+            .interact_pointer_pos()
+            .or_else(|| ui.ctx().pointer_latest_pos());
         if let Some(pointer) = pointer {
             if rect.contains(pointer) || response.dragged() || response.drag_stopped() {
                 let local = || pointer_at(pointer.x - rect.min.x, pointer.y - rect.min.y);

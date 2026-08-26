@@ -14,7 +14,9 @@ use std::path::{Path, PathBuf};
 
 use motolii_doc::{Document, TrackItem};
 use motolii_testkit::ffmpeg_or_skip;
-use motolii_ui::blitz_shell::{admit_dropped_paths, create_project_file, reseat_project, ProjectSeat};
+use motolii_ui::blitz_shell::{
+    admit_dropped_paths, create_project_file, reseat_project, ProjectSeat,
+};
 
 /// 使い捨ての作業 dir。project も、落とすファイルもここへ置く。
 fn work_dir(tag: &str) -> PathBuf {

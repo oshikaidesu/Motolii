@@ -1,4 +1,4 @@
-//! wraps: iced+motolii-store+motolii-tokens-rs — Browser pane 骨格(B0)+
+//! wraps: iced (frozen host, not product front)+motolii-store+motolii-tokens-rs — Browser pane 骨格(B0)+
 //! 一覧 projection(B1)+ rail/filter(B2)+ view 配線(B3、この波)。
 //!
 //! ζ 縫い目調査(`docs/reviews/2026-08-21-browser-seam-survey.md`)+裁定162 の
@@ -69,11 +69,11 @@
 //! `motolii-tokens-rs` は書き換えない(この波の allowlist 外) — 新しい寸法は
 //! 全部この crate 内のローカル定数として、既存 token(`Dimensions::
 //! row_height`)からの**比率**で導出する(裁定165「形は比率で定数化」)。
-//! [`CARD_WIDTH_ROW_HEIGHT_RATIO`]/[`THUMB_ASPECT_W`]/[`THUMB_ASPECT_H`]/
-//! [`FILTER_CHIP_CORNER_RADIUS_ROW_HEIGHT_RATIO`] の doc に分母と出典を明記
-//! する。余白は既存の spacing ラダー(`dims.spacing_xs`/`spacing_s`/
+//! `Dimensions::components.browser` のカード比率・thumb比・filter角丸比の
+//! doc に分母と出典を明記
+//! する。余白は既存の spacing ラダー(`dims.theme().space.xs`/`spacing_s`/
 //! `spacing_m`)をそのまま再利用する(裁定167 のラダー自体は `Dimensions`
-//! 側で既に量子化済みの段 — 新しい段を発明しない)。文字は `dims.micro_text`
+//! 側で既に量子化済みの段 — 新しい段を発明しない)。文字は `dims.theme().text.micro`
 //! (mock `.cardCopy strong/small{font-size:8px}` と一致する既存の未消費段 —
 //! 裁定168 の em 族はこの crate 独自の余白計算をしない分適用対象が無い、
 //! 名前/caption の非衝突は rail.rs と同じ native ellipsis 手口([`card_view`]
@@ -86,7 +86,7 @@
 //! 実測、Inspector I-ratio→I-tokens と同型の2段を1レーンで実施)により、
 //! rail 行/filter チップ/検索欄/結果件数の文字を `caption_text`(9、自前
 //! 判断)から `micro_text`(8、mock 実測)へ、filter チップ/Clear の角丸を
-//! `FILTER_CHIP_CORNER_RADIUS_ROW_HEIGHT_RATIO`(mock `border-radius:8px`
+//! Browser component token( mock `border-radius:8px`
 //! 実測)へ、rail 行/filter チップの padding を mock 実測へ最近傍の既存
 //! token へ転写した。card 幅・rail:catalog 比・card 間 gap は
 //! `motolii-shell::screenshot`(ALLOWLIST 外)が同じ定数を直読みしており、
@@ -221,8 +221,6 @@ pub use state::{CardSelectionModifiers, Message, PaneState};
 // `card_view`=カード grid+素材の欠落バッジ・`preview_view`=preview-local
 // カタログ)。crate 外から呼ばれていた `pub` 項目はここから再輸出する
 // (呼び出し経路 `motolii_browser_pane::X` を変えないため)。
-pub use card_view::{CARD_WIDTH_ROW_HEIGHT_RATIO, GRID_COLUMNS, THUMB_ASPECT_H, THUMB_ASPECT_W};
-pub use filter_view::FILTER_CHIP_CORNER_RADIUS_ROW_HEIGHT_RATIO;
 pub use preview_view::create_card_face;
 pub use rail_view::{drop_target_style, panel_container_style};
 pub use search_view::chip_style;
@@ -239,15 +237,13 @@ use motolii_tokens_rs::{Colors, Dimensions};
 
 /// `Shell::view` がパネル全体へ割く高さ = `dims.row_height` の何倍か(裁定165
 /// 「形は比率で定数化・分母明記」、**分母 = `Dimensions::row_height`**)。
-/// filter shelf+結果件数(≈2行)+ カード2行ぶん([`CARD_WIDTH_ROW_HEIGHT_RATIO`]/
-/// [`THUMB_ASPECT_W`]/[`THUMB_ASPECT_H`] から逆算した1行あたりの高さ)+ 余白を
+/// filter shelf+結果件数(≈2行)+ カード2行ぶん(component token のカード比率/
+/// thumb比から逆算した1行あたりの高さ)+ 余白を
 /// 目安に丸めた値。**`pub`**: `motolii-shell::lib.rs::Shell::view`(実配線)と
 /// `motolii-shell::screenshot`(トンマナ検分 instrument)の両方がこの1つの値を
 /// 共有する(値を複製しない — 複製すると2箇所が食い違う典型的な二重保守)。
 /// スクロール自体は内側の `scrollable`(mock 同様)が持つので、この高さは
 /// 「全カードが常に見える高さ」である必要はない。
-pub const PANEL_HEIGHT_ROW_HEIGHT_RATIO: f32 = 14.0;
-
 /// **タブ帯込みの pane 全体**(mock `.libraryTabs` html:411-416 + タブ別
 /// catalog — B3 転写の取り残し回収、利用者実窓不合格 2026-08-22 対応)。
 /// `Shell::view` はこちらへ乗り換えるのが正 — [`view`] は media タブの
@@ -310,7 +306,7 @@ pub fn pane_view(
             colors,
         ),
     };
-    column![band, body].spacing(dims.spacing_xs).into()
+    column![band, body].spacing(dims.theme().space.xs).into()
 }
 
 /// modifier-aware な Browser pane の入口。
@@ -359,17 +355,17 @@ pub fn pane_view_with_modifiers(
             colors,
         ),
     };
-    column![band, body].spacing(dims.spacing_xs).into()
+    column![band, body].spacing(dims.theme().space.xs).into()
 }
 
 /// タブ帯(mock `.libraryTabs` の転写)。寸法は tokens 経由のみ:
 /// - 帯高 = `dims.browser_tab_bar_height`(mock `height:26px` 実測、JSON 正本)
 /// - active 下線 = `dims.browser_tab_underline`(mock `border-bottom:2px` 実測)
 ///   × 色は `colors.action_active`(mock `#d8b574` と同役)
-/// - 帯下の罫線 = 線化 D5(裁定179 文法1)で**塗らない** — `dims.border_width`
+/// - 帯下の罫線 = 線化 D5(裁定179 文法1)で**塗らない** — `dims.theme().stroke.hairline`
 ///   ぶんの間隔だけ残す(mock `border-bottom:1px solid border-default` は
 ///   「区切りは明度1段+間隔」が上書き。幾何不変)
-/// - 文字 = `dims.micro_text`(mock `.libraryTabs button{font-size:8px}`)
+/// - 文字 = `dims.theme().text.micro`(mock `.libraryTabs button{font-size:8px}`)
 /// - タブ幅 = 等分(mock `flex:1` → `Length::FillPortion(1)`)
 fn tab_band_view(
     active: LibraryTab,
@@ -378,13 +374,13 @@ fn tab_band_view(
 ) -> Element<'static, Message> {
     let underline_height = dims.browser_tab_underline;
     let button_height =
-        (dims.browser_tab_bar_height - underline_height - dims.border_width).max(0.0);
+        (dims.browser_tab_bar_height - underline_height - dims.theme().stroke.hairline).max(0.0);
 
     let tabs: Vec<Element<'static, Message>> = LIBRARY_TABS
         .into_iter()
         .map(|tab| {
             let selected = tab == active;
-            let label = container(text(tab.label()).size(dims.micro_text))
+            let label = container(text(tab.label()).size(dims.theme().text.micro))
                 .width(Length::Fill)
                 .height(Length::Fill)
                 .align_x(iced::alignment::Horizontal::Center)
@@ -419,7 +415,7 @@ fn tab_band_view(
     let divider = container(
         iced::widget::Space::new()
             .width(Length::Fill)
-            .height(Length::Fixed(dims.border_width)),
+            .height(Length::Fixed(dims.theme().stroke.hairline)),
     );
 
     column![row(tabs), divider].into()
@@ -528,7 +524,7 @@ fn media_body(
         colors,
     );
 
-    row![rail, catalog].spacing(dims.spacing_xs).into()
+    row![rail, catalog].spacing(dims.theme().space.xs).into()
 }
 
 /// modifier-aware な media body。`filtered` の scope/query/sort 後の順序を
@@ -556,7 +552,7 @@ fn media_body_with_selection(
     let rail = rail_view(scope, dims, colors);
     let shelf = filter_shelf_view(scope, query, sort_key, view_mode, dims, colors);
     let summary = text(format!("Results {}", filtered.len()))
-        .size(dims.micro_text)
+        .size(dims.theme().text.micro)
         .color(colors.text_muted);
     let grid = card_grid_view_with_selection(
         &filtered,
@@ -573,5 +569,5 @@ fn media_body_with_selection(
     );
     let catalog = catalog_container(column![shelf, summary, grid], drop_hover, dims, colors);
 
-    row![rail, catalog].spacing(dims.spacing_xs).into()
+    row![rail, catalog].spacing(dims.theme().space.xs).into()
 }

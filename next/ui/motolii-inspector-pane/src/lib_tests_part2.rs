@@ -617,7 +617,7 @@
     #[test]
     fn inspector_character_size_ratio_is_locked_within_the_charter_168_band() {
         let dims = Dimensions::default();
-        let ratio = dims.body_text / dims.inspector_row_height;
+        let ratio = dims.theme().text.body / dims.inspector_row_height;
 
         const TARGET: f32 = 0.42;
         const TOLERANCE: f32 = 0.05;

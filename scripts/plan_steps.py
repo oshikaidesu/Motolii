@@ -15,10 +15,19 @@
 「先回りで作らない」の機械的な担保になる。
 """
 import io, os, re, sys, glob, collections
+from pathlib import Path
+
+from foundation_phase import FoundationPhaseError, load_phase, summary
 
 ROOT = sys.argv[1] if len(sys.argv) > 1 else "."
 PROC = os.path.join(ROOT, "next/reference/procedures")
 ROW = re.compile(r'^\|\s*(\d+)\s*\|(.+?)\|(.+?)\|(.+?)\|(.+?)\|\s*$')
+
+try:
+    FOUNDATION_PHASE = load_phase(Path(ROOT), required=False)
+except FoundationPhaseError as error:
+    print(f"FOUNDATION_PHASE=RED {error}", file=sys.stderr)
+    raise SystemExit(1)
 
 def verdict_of(cell):
     c = cell.strip()
@@ -55,6 +64,10 @@ for path in sorted(glob.glob(os.path.join(PROC, "P*.md"))):
 
 out = ["# 段階(機械導出)", "",
        "`scripts/plan_steps.py` が生成。**手で編集しない。**", "",
+       (f"- 基盤ゲート: {summary(FOUNDATION_PHASE)}"
+        if FOUNDATION_PHASE else "- 基盤ゲート: UNDECLARED"),
+       (f"- 並列許可: {FOUNDATION_PHASE['parallel_components'].upper()}"
+        if FOUNDATION_PHASE else "- 並列許可: UNKNOWN"), "",
        "**段階は発明していない** — 手順書(`procedures/P*.md`)の節をそのまま段階とし、",
        "各手順の判定を数えた。**その節の全手順が「書ける」または「対象外」になったら段階が通る。**", "",
        "**次にやる仕事は「まだ通っていない最も早い段階」から選ぶ。**",
@@ -94,6 +107,8 @@ io.open(os.path.join(ROOT, "next/reference/generated/steps.md"), "w", encoding="
 tot = sum(len(s['rows']) for b in books for s in b['stages'])
 okk = sum(1 for b in books for s in b['stages'] for r in s['rows'] if r['verdict']=="書ける")
 print(f"手順 {tot} / 書ける {okk} / 段階 {sum(len(b['stages']) for b in books)}")
+if FOUNDATION_PHASE:
+    print(f"基盤ゲート {summary(FOUNDATION_PHASE)} / 並列許可 {FOUNDATION_PHASE['parallel_components'].upper()}")
 stat = sum(1 for b in books for s in b['stages']
            if not [r for r in s['rows'] if r['verdict'] in ("入口が無い","意味が無い")])
 print(f"静通 {stat}/{sum(len(b['stages']) for b in books)} 段階")

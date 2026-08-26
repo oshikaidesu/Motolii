@@ -25,7 +25,7 @@
 
 use motolii_store::LayerId;
 
-use crate::projection::{PropertyRowProjection, RowProjection};
+use crate::projection::{PropertyKeyProjection, PropertyRowProjection, RowProjection};
 use crate::state::KeySelector;
 
 // ---------------------------------------------------------------------------

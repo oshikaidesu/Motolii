@@ -93,13 +93,10 @@ fn pressing_export_starts_a_run_and_the_band_offers_cancel() {
     drain(&mut shell, pressed);
 
     assert!(
-        shell
-            .intents()
-            .iter()
-            .any(|event| event.intent
-                == UiIntent::BeginExport {
-                    output: output.clone()
-                }),
+        shell.intents().iter().any(|event| event.intent
+            == UiIntent::BeginExport {
+                output: output.clone()
+            }),
         "dialog の答え(保存先)ごと BeginExport が journal に載る: {:?}",
         shell.intents()
     );

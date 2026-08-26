@@ -211,7 +211,6 @@ pub fn prepare_trim_clip_out(
     }))
 }
 
-
 /// dest の `(parent, index)` は「外したあとの挿入位置」。同じ親なら dest の現在indexでよい。
 pub fn prepare_reparent_clip(
     doc: &Document,
@@ -345,7 +344,6 @@ pub fn prepare_set_item_color(
         new,
     }))
 }
-
 
 pub(super) fn apply_reparent_track_item(
     doc: &mut Document,

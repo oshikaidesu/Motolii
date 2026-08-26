@@ -108,8 +108,7 @@ fn pointer_step(
     let at = Point::new(at.x + origin.x, at.y + origin.y);
     let mut ui = iced_test::simulator(view(shell));
     ui.point_at(at);
-    let events: Vec<iced::event::Event> =
-        std::iter::once(cursor_moved(at)).chain(events).collect();
+    let events: Vec<iced::event::Event> = std::iter::once(cursor_moved(at)).chain(events).collect();
     let _ = ui.simulate(events);
     let messages: Vec<Message> = ui.into_messages().collect();
     drain(shell, messages)
@@ -172,11 +171,9 @@ fn dragging_a_locked_clip_reports_the_lock_reason_in_the_status_band() {
 
     dispatch(&mut shell, TimelineMsg::LockPressed { layer: background });
     assert!(
-        shell
-            .timeline_snapshot()
-            .is_some_and(|document| motolii_shell_iced::timeline::semantics::row_own_lock(
-                &document, background
-            )),
+        shell.timeline_snapshot().is_some_and(|document| {
+            motolii_shell_iced::timeline::semantics::row_own_lock(&document, background)
+        }),
         "前提: L を押したらロックが掛かる"
     );
 
@@ -425,7 +422,12 @@ fn moving_a_key_on_a_locked_layer_reports_the_lock_reason() {
             additive: false,
         },
     );
-    dispatch(&mut shell, TimelineMsg::PointerMoved { at_seconds: t0 + 2.0 });
+    dispatch(
+        &mut shell,
+        TimelineMsg::PointerMoved {
+            at_seconds: t0 + 2.0,
+        },
+    );
     dispatch(&mut shell, TimelineMsg::PointerReleased);
 
     let after = param_keys(

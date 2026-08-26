@@ -449,9 +449,9 @@ fn project_position(envelope: &ItemEnvelope) -> Result<InspectorPosition, Inspec
         }),
         DocParam::Keyframes(_) => Ok(InspectorPosition::Animated),
         DocParam::Data { .. } => Err(InspectorReadModelError::UnsupportedPosition { kind: "data" }),
-        DocParam::Vec2Axes { .. } => Err(InspectorReadModelError::UnsupportedPosition {
-            kind: "vec2_axes",
-        }),
+        DocParam::Vec2Axes { .. } => {
+            Err(InspectorReadModelError::UnsupportedPosition { kind: "vec2_axes" })
+        }
         DocParam::LookAt { .. } => {
             Err(InspectorReadModelError::UnsupportedPosition { kind: "look_at" })
         }

@@ -14,8 +14,8 @@ use motolii_doc::{
     SourceFingerprintV1,
 };
 use motolii_media::{probe, probe_admission_source, MediaError};
-use motolii_testkit::{ffmpeg_or_skip, tmp_dir};
 use motolii_testkit::cpu_reference::expected_source_content_hash_of_file;
+use motolii_testkit::{ffmpeg_or_skip, tmp_dir};
 
 fn run_ffmpeg(args: &[&str]) {
     let status = Command::new("ffmpeg")
@@ -274,7 +274,10 @@ fn real_file_probe_to_document_admission_via_existing_route() {
         asset.path_project_relative.as_deref(),
         Some("media/clip.mp4")
     );
-    assert_eq!(asset.content_hash, expected_source_content_hash_of_file(&path));
+    assert_eq!(
+        asset.content_hash,
+        expected_source_content_hash_of_file(&path)
+    );
     assert_eq!(
         asset.size_bytes,
         Some(std::fs::metadata(&path).unwrap().len())

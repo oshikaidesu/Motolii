@@ -90,11 +90,7 @@ fn button_of(button: mouse::Button) -> Option<StagePointerButton> {
 /// 返り値が空なら「この橋には関係のない事象」。ドラッグ中はカーソルが widget の
 /// 外へ出ても座標を送り続ける(spike と同じ。egui-winit の振る舞いで、
 /// そうしないと枠際で orbit が止まる)。
-pub fn translate(
-    event: &iced::Event,
-    bounds: Rectangle,
-    cursor: mouse::Cursor,
-) -> Vec<StageInput> {
+pub fn translate(event: &iced::Event, bounds: Rectangle, cursor: mouse::Cursor) -> Vec<StageInput> {
     let local = |point: iced::Point| (point.x - bounds.x, point.y - bounds.y);
     let cursor_local = || cursor.position().map(local);
 

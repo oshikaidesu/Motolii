@@ -212,10 +212,10 @@ const CANVAS_WIDTH: u32 = 1600;
 
 /// Inspector 領域の左端 x 座標。既存の Stage/Timeline 列(`CANVAS_WIDTH` 幅、
 /// 手つかず)のすぐ右に `spacing_m`(pane 間の gap、`Shell::view` の
-/// `row![inspector, stage_pane].spacing(dims.spacing_m)` と同じ token)を
+/// `row![inspector, stage_pane].spacing(dims.theme().space.m)` と同じ token)を
 /// 空けて置く。
 pub fn inspector_region_x(dims: Dimensions) -> f32 {
-    CANVAS_WIDTH as f32 + dims.spacing_m
+    CANVAS_WIDTH as f32 + dims.theme().space.m
 }
 
 /// Inspector 領域の上端 y 座標。`Shell::view` の実レイアウトでは
@@ -223,7 +223,7 @@ pub fn inspector_region_x(dims: Dimensions) -> f32 {
 /// 同じ行に同居する)ので、この instrument でも Stage と同じ y から始める
 /// (header 帯の直下)。
 pub fn inspector_region_top(dims: Dimensions) -> f32 {
-    dims.spacing_l + dims.panel_header_height + dims.spacing_m
+    dims.theme().space.l + dims.theme().size.panel_header + dims.theme().space.m
 }
 
 /// ident 帯の高さ。実 widget は `column![name_field, subtitle].spacing(0.0)`
@@ -231,13 +231,13 @@ pub fn inspector_region_top(dims: Dimensions) -> f32 {
 /// 描かないこの instrument では、行高の近似(`body_text` + `caption_text` +
 /// 上下 `spacing_s`)で矩形の高さだけ再現する。
 fn inspector_ident_height(dims: Dimensions) -> f32 {
-    dims.spacing_s * 2.0 + dims.body_text + dims.caption_text
+    dims.theme().space.s * 2.0 + dims.theme().text.body + dims.theme().text.caption
 }
 
 /// hint 行の高さ。実 widget は `padding([spacing_xs, spacing_m])` (`hint_row`
 /// 参照) — 同じ近似。
 fn inspector_hint_height(dims: Dimensions) -> f32 {
-    dims.spacing_xs * 2.0 + dims.caption_text
+    dims.theme().space.xs * 2.0 + dims.theme().text.caption
 }
 
 /// Inspector 領域全体の高さ。`selection` が `None`(選択なし)なら
@@ -294,16 +294,16 @@ fn draw_property_row(canvas: &mut RgbaImage, dims: Dimensions, colors: Colors, x
     stroke_rect(
         canvas,
         Rect { x, y, w: width, h: row_h },
-        dims.border_width,
+        dims.theme().stroke.hairline,
         to_rgba(colors.border_hairline_weak, colors.border_hairline_weak.a),
     );
 
     let cell_w = dims.inspector_value_width;
-    let cell_h = (row_h - dims.spacing_s).max(1.0);
+    let cell_h = (row_h - dims.theme().space.s).max(1.0);
     let cell_y = y + (row_h - cell_h) / 2.0;
-    let gap = dims.spacing_xs;
+    let gap = dims.theme().space.xs;
     let block_w = cell_w * 3.0 + gap * 2.0 + gap + dims.inspector_glyph_width;
-    let mut cx = x + width - dims.spacing_m - block_w;
+    let mut cx = x + width - dims.theme().space.m - block_w;
     for _ in 0..3 {
         fill_rect(canvas, cx, cell_y, cell_w, cell_h, to_rgba(colors.surface_app, 1.0));
         cx += cell_w + gap;
@@ -329,7 +329,7 @@ fn draw_inspector(
     stroke_rect(
         canvas,
         Rect { x, y, w: width, h: total_h },
-        dims.border_width,
+        dims.theme().stroke.hairline,
         to_rgba(colors.border_default, 1.0),
     );
 
@@ -340,7 +340,7 @@ fn draw_inspector(
     stroke_rect(
         canvas,
         Rect { x, y: cy, w: width, h: header_h },
-        dims.border_width,
+        dims.theme().stroke.hairline,
         to_rgba(colors.border_default, 1.0),
     );
     cy += header_h;
@@ -356,7 +356,7 @@ fn draw_inspector(
     stroke_rect(
         canvas,
         Rect { x, y: cy, w: width, h: ident_h },
-        dims.border_width,
+        dims.theme().stroke.hairline,
         to_rgba(colors.border_default, 1.0),
     );
     cy += ident_h;
@@ -366,7 +366,7 @@ fn draw_inspector(
     stroke_rect(
         canvas,
         Rect { x, y: cy, w: width, h: col_h },
-        dims.border_width,
+        dims.theme().stroke.hairline,
         to_rgba(colors.border_default, 1.0),
     );
     cy += col_h;
@@ -394,7 +394,7 @@ fn draw_inspector(
     stroke_rect(
         canvas,
         Rect { x, y: cy, w: width, h: blend_h },
-        dims.border_width,
+        dims.theme().stroke.hairline,
         to_rgba(colors.border_hairline_weak, colors.border_hairline_weak.a),
     );
     cy += blend_h;
@@ -404,7 +404,7 @@ fn draw_inspector(
     stroke_rect(
         canvas,
         Rect { x, y: cy, w: width, h: hint_h },
-        dims.border_width,
+        dims.theme().stroke.hairline,
         to_rgba(colors.border_default, 1.0),
     );
 
@@ -442,53 +442,55 @@ fn draw_inspector(
 // ---------------------------------------------------------------------------
 
 /// カード grid のカード1行ぶんの高さの近似(`motolii_browser_pane::card_view`
-/// と同じ比: サムネ = `CARD_WIDTH_ROW_HEIGHT_RATIO × row_height` を
-/// `THUMB_ASPECT_W`:`THUMB_ASPECT_H` で割った高さ + 名前/caption 2行ぶんの
+/// と同じ比: サムネ = Browser component token のカード比率×row_height を
+/// thumb比で割った高さ + 名前/caption 2行ぶんの
 /// `micro_text` + 内側 padding)。値そのものは複製しない(`motolii_browser_pane`
 /// の `pub const` 3本を読むだけ)。
 fn browser_card_row_height(dims: Dimensions) -> f32 {
-    let card_width = dims.row_height * motolii_browser_pane::CARD_WIDTH_ROW_HEIGHT_RATIO;
+    let browser = dims.components.browser;
+    let card_width = dims.row_height * browser.card_width_row_height_ratio;
     let thumb_h =
-        card_width * motolii_browser_pane::THUMB_ASPECT_H / motolii_browser_pane::THUMB_ASPECT_W;
-    thumb_h + dims.spacing_xs * 3.0 + dims.micro_text * 2.0
+        card_width * browser.thumb_aspect_h / browser.thumb_aspect_w;
+    thumb_h + dims.theme().space.xs * 3.0 + dims.theme().text.micro * 2.0
 }
 
 /// Browser 領域全体を描く。`area`(`Rect` — 引数を1つの struct へ畳んで
 /// clippy `too_many_arguments` を避ける、`Rect` 自身の
 /// doc「意味も無い8引数を並べない」と同じ理由)の `h` は
-/// `motolii_browser_pane::PANEL_HEIGHT_ROW_HEIGHT_RATIO × row_height`
+/// Browser component token のpane高比×row_height
 /// (呼び出し元と同じ値、`render` 参照)。**サムネ矩形は実データ由来** —
 /// `item_count` 件ぶん(上限あり、パネルの高さを超えて描いても見えないので
 /// 意味が無い)を rail の右側(カード grid 領域)へ実際に並べる。列数・幅比は
-/// `motolii_browser_pane::{GRID_COLUMNS,CARD_WIDTH_ROW_HEIGHT_RATIO}` と揃える。
+/// Browser component token の列数・カード比と揃える。
 fn draw_browser(canvas: &mut RgbaImage, dims: Dimensions, colors: Colors, area: Rect, item_count: usize) {
+    let browser = dims.components.browser;
     fill_rect(canvas, area.x, area.y, area.w, area.h, to_rgba(colors.surface_panel, 1.0));
-    stroke_rect(canvas, area, dims.border_width, to_rgba(colors.border_default, 1.0));
+    stroke_rect(canvas, area, dims.theme().stroke.hairline, to_rgba(colors.border_default, 1.0));
 
     // rail(mock `.librarySidebar` 相当、`browser_pane::rail_view` の
     // `FillPortion(1)` を width 比で近似)。
     let rail_w = area.w / 5.0;
     fill_rect(canvas, area.x, area.y, rail_w, area.h, to_rgba(colors.surface_raised, 0.4));
-    stroke_v(canvas, area.x + rail_w, area.y, area.y + area.h, dims.border_width, to_rgba(colors.border_default, 1.0));
+    stroke_v(canvas, area.x + rail_w, area.y, area.y + area.h, dims.theme().stroke.hairline, to_rgba(colors.border_default, 1.0));
 
     // カード grid(rail の右、`catalog_view` の `FillPortion(4)` 領域)。
-    let catalog_x = area.x + rail_w + dims.spacing_xs;
-    let catalog_w = (area.w - rail_w - dims.spacing_xs * 2.0).max(0.0);
+    let catalog_x = area.x + rail_w + dims.theme().space.xs;
+    let catalog_w = (area.w - rail_w - dims.theme().space.xs * 2.0).max(0.0);
     let card_row_h = browser_card_row_height(dims);
-    let card_w = ((catalog_w - dims.spacing_s) / motolii_browser_pane::GRID_COLUMNS as f32).max(0.0);
-    let mut cy = area.y + dims.spacing_m;
+    let card_w = ((catalog_w - dims.theme().space.s) / browser.grid_columns as f32).max(0.0);
+    let mut cy = area.y + dims.theme().space.m;
     let mut column = 0usize;
     for _ in 0..item_count {
         if cy + card_row_h > area.y + area.h {
             break; // パネルの高さを超えたら描かない(実 widget もこの下は scroll で隠れる)。
         }
-        let cx = catalog_x + column as f32 * (card_w + dims.spacing_s);
+        let cx = catalog_x + column as f32 * (card_w + dims.theme().space.s);
         fill_rect(canvas, cx, cy, card_w, card_row_h, to_rgba(colors.surface_raised, 1.0));
-        stroke_rect(canvas, Rect { x: cx, y: cy, w: card_w, h: card_row_h }, dims.border_width, to_rgba(colors.border_default, 1.0));
+        stroke_rect(canvas, Rect { x: cx, y: cy, w: card_w, h: card_row_h }, dims.theme().stroke.hairline, to_rgba(colors.border_default, 1.0));
         column += 1;
-        if column == motolii_browser_pane::GRID_COLUMNS {
+        if column == browser.grid_columns {
             column = 0;
-            cy += card_row_h + dims.spacing_s;
+            cy += card_row_h + dims.theme().space.s;
         }
     }
 }
@@ -523,11 +525,11 @@ pub fn render(shell: &mut Shell) -> RgbaImage {
     let fps = composition.as_ref().map(|c| c.fps);
     let inspector_selection = shell.inspector_selection();
 
-    let padding = dims.spacing_l;
-    let gap = dims.spacing_m;
+    let padding = dims.theme().space.l;
+    let gap = dims.theme().space.m;
     let content_width = CANVAS_WIDTH as f32 - padding * 2.0;
 
-    let header_h = dims.panel_header_height;
+    let header_h = dims.theme().size.panel_header;
     let stage_aspect = composition
         .as_ref()
         .map(|c| c.height as f32 / c.width.max(1) as f32)
@@ -545,7 +547,7 @@ pub fn render(shell: &mut Shell) -> RgbaImage {
     let timeline_h = dims.row_height
         + dims.row_height * rows.len() as f32
         + dims.timeline_param_row_height * property_rows.len() as f32;
-    let transport_h = dims.transport_band;
+    let transport_h = dims.theme().size.transport;
     let status_h = dims.row_height;
 
     // Settings は S2(裁定182/188)で OS 窓へ移住 — この器具の対象外
@@ -558,7 +560,7 @@ pub fn render(shell: &mut Shell) -> RgbaImage {
     // (`lib.rs::Shell::view` の押し順どおり)。
     let browser_open = shell.browser_panel_open();
     let browser_h = if browser_open {
-        dims.row_height * motolii_browser_pane::PANEL_HEIGHT_ROW_HEIGHT_RATIO
+        dims.row_height * dims.components.browser.panel_height_row_height_ratio
     } else {
         0.0
     };
@@ -610,21 +612,21 @@ pub fn render(shell: &mut Shell) -> RgbaImage {
     stroke_rect(
         &mut canvas,
         Rect { x: padding, y, w: content_width, h: header_h },
-        dims.border_width,
+        dims.theme().stroke.hairline,
         to_rgba(colors.border_default, 1.0),
     );
     let button_w = 72.0_f32.min((content_width - gap * 2.0) / 3.0);
-    let mut bx = padding + dims.spacing_s;
+    let mut bx = padding + dims.theme().space.s;
     for _ in 0..3 {
         fill_rect(
             &mut canvas,
             bx,
-            y + dims.spacing_xs,
+            y + dims.theme().space.xs,
             button_w,
-            header_h - dims.spacing_xs * 2.0,
+            header_h - dims.theme().space.xs * 2.0,
             to_rgba(colors.surface_raised, 1.0),
         );
-        bx += button_w + dims.spacing_s;
+        bx += button_w + dims.theme().space.s;
     }
     y += header_h + gap;
 
@@ -713,7 +715,7 @@ pub fn render(shell: &mut Shell) -> RgbaImage {
             stroke_closed_polyline(
                 &mut canvas,
                 &points,
-                dims.border_width * 1.5,
+                dims.theme().stroke.hairline * 1.5,
                 to_rgba(colors.action_active, 1.0),
             );
         }
@@ -729,7 +731,7 @@ pub fn render(shell: &mut Shell) -> RgbaImage {
     stroke_rect(
         &mut canvas,
         Rect { x: padding, y: y + stage_picture_h, w: content_width, h: stage_band_h },
-        dims.border_width,
+        dims.theme().stroke.hairline,
         to_rgba(colors.border_hairline_weak, colors.border_hairline_weak.a),
     );
     y += stage_h + gap;
@@ -768,7 +770,7 @@ pub fn render(shell: &mut Shell) -> RgbaImage {
     stroke_rect(
         &mut canvas,
         Rect { x: padding, y, w: content_width, h: ruler_h },
-        dims.border_width,
+        dims.theme().stroke.hairline,
         to_rgba(colors.border_default, 1.0),
     );
 
@@ -779,8 +781,13 @@ pub fn render(shell: &mut Shell) -> RgbaImage {
     // (小目盛=短く弱い hairline、大目盛=長く強い)だけは既存の描画手段
     // (`stroke_v`)で再現できるので、階層そのものはこの PNG でも視認できる。
     if duration_frames > 0 && clip_width > 0.0 {
-        let (minor, major) =
-            timeline_pane::tick_steps(fps, duration_frames, clip_width, dims.row_height);
+        let (minor, major) = timeline_pane::tick_steps_with_target(
+            fps,
+            duration_frames,
+            clip_width,
+            dims.row_height,
+            dims.components.timeline.target_cell_ratio,
+        );
         let last_frame = (duration_frames - 1).max(0);
         let mut frame_no: i64 = 0;
         while frame_no <= last_frame {
@@ -789,14 +796,14 @@ pub fn render(shell: &mut Shell) -> RgbaImage {
             // `timeline/canvas.rs::draw_ruler_ticks` と同じ「ルーラー下端から
             // spacing 分だけ上へ」— 大目盛は spacing_m(長い)、小目盛は
             // spacing_s(短い)。
-            let offset = if is_major { dims.spacing_m } else { dims.spacing_s };
+            let offset = if is_major { dims.theme().space.m } else { dims.theme().space.s };
             let top = (y + ruler_h - offset).max(y);
             let color = if is_major {
                 to_rgba(colors.border_strong, 1.0)
             } else {
                 to_rgba(colors.border_hairline_weak, colors.border_hairline_weak.a)
             };
-            stroke_v(&mut canvas, x, top, y + ruler_h, dims.border_width, color);
+            stroke_v(&mut canvas, x, top, y + ruler_h, dims.theme().stroke.hairline, color);
             frame_no += minor;
         }
     }
@@ -829,7 +836,13 @@ pub fn render(shell: &mut Shell) -> RgbaImage {
     }
     if duration_frames > 0 && clip_width > 0.0 && rows_bottom > rows_top {
         let segment_frames =
-            timeline_pane::time_band_segment_frames(fps, duration_frames, clip_width, dims.row_height);
+            timeline_pane::time_band_segment_frames_with_target(
+                fps,
+                duration_frames,
+                clip_width,
+                dims.row_height,
+                dims.components.timeline.target_cell_ratio,
+            );
         let mut segment_index: i64 = 0;
         let mut start_frame: i64 = 0;
         while start_frame < duration_frames {
@@ -861,7 +874,13 @@ pub fn render(shell: &mut Shell) -> RgbaImage {
     // 開始してその踏襲(`timeline/canvas.rs::draw_tick_lines` と同じ)。
     if duration_frames > 0 && clip_width > 0.0 && rows_bottom > rows_top {
         let (minor, major) =
-            timeline_pane::tick_steps(fps, duration_frames, clip_width, dims.row_height);
+            timeline_pane::tick_steps_with_target(
+                fps,
+                duration_frames,
+                clip_width,
+                dims.row_height,
+                dims.components.timeline.target_cell_ratio,
+            );
         let last_frame = (duration_frames - 1).max(0);
         let mut frame_no = minor;
         while frame_no <= last_frame {
@@ -872,7 +891,7 @@ pub fn render(shell: &mut Shell) -> RgbaImage {
             } else {
                 to_rgba(colors.timeline_grid_minor, colors.timeline_grid_minor.a)
             };
-            stroke_v(&mut canvas, x, rows_top, rows_bottom, dims.border_width, color);
+            stroke_v(&mut canvas, x, rows_top, rows_bottom, dims.theme().stroke.hairline, color);
             frame_no += minor;
         }
     }
@@ -888,7 +907,7 @@ pub fn render(shell: &mut Shell) -> RgbaImage {
             x,
             timeline_top,
             timeline_top + ruler_h,
-            dims.border_width * 2.0,
+            dims.theme().stroke.hairline * 2.0,
             to_rgba(colors.way_timeline, 1.0),
         );
     }
@@ -938,9 +957,9 @@ pub fn render(shell: &mut Shell) -> RgbaImage {
         fill_rect(
             &mut canvas,
             start_x,
-            row_top + dims.spacing_xs,
+            row_top + dims.theme().space.xs,
             (end_x - start_x).max(1.0),
-            (dims.row_height - dims.spacing_s).max(1.0),
+            (dims.row_height - dims.theme().space.s).max(1.0),
             to_rgba(bar_color, 1.0),
         );
 
@@ -951,18 +970,18 @@ pub fn render(shell: &mut Shell) -> RgbaImage {
             padding,
             padding + content_width,
             row_top + dims.row_height,
-            dims.border_width,
+            dims.theme().stroke.hairline,
             to_rgba(colors.border_hairline_weak, colors.border_hairline_weak.a),
         );
 
         // レーンバー(行ヘッダ列、裁定147): スウォッチ + M/S/L の枠
         // (`timeline/lane_bar.rs::draw` と同じ幾何 — この instrument は文字を
         // 描かないので枠と色面だけ再現する)。
-        let swatch_size = dims.spacing_m;
+        let swatch_size = dims.theme().space.m;
         let swatch_y = row_top + (dims.row_height - swatch_size) / 2.0;
         fill_rect(
             &mut canvas,
-            padding + dims.spacing_s,
+            padding + dims.theme().space.s,
             swatch_y,
             swatch_size,
             swatch_size,
@@ -970,17 +989,17 @@ pub fn render(shell: &mut Shell) -> RgbaImage {
         );
 
         let glyph_w = dims.inspector_glyph_width;
-        let glyph_h = (dims.row_height - dims.spacing_xs).max(1.0);
+        let glyph_h = (dims.row_height - dims.theme().space.xs).max(1.0);
         let glyph_y = row_top + (dims.row_height - glyph_h) / 2.0;
-        let glyph_gap = dims.spacing_xs;
+        let glyph_gap = dims.theme().space.xs;
         let block_w = glyph_w * 3.0 + glyph_gap * 2.0;
-        let mut glyph_x = padding + rail_width - dims.spacing_s - block_w;
+        let mut glyph_x = padding + rail_width - dims.theme().space.s - block_w;
         for active in [row.hidden, row.solo, row.locked] {
             let border_color = if active { colors.action_active } else { colors.border_default };
             stroke_rect(
                 &mut canvas,
                 Rect { x: glyph_x, y: glyph_y, w: glyph_w, h: glyph_h },
-                dims.border_width,
+                dims.theme().stroke.hairline,
                 to_rgba(border_color, 1.0),
             );
             glyph_x += glyph_w + glyph_gap;
@@ -990,7 +1009,7 @@ pub fn render(shell: &mut Shell) -> RgbaImage {
     // property 行(キー行、第2波 T3・裁定148/151) — `timeline/key_rows.rs::draw`
     // と同じ位置関係(選択 layer の行のすぐ下)。**文字は描かない**(この
     // instrument の「正直な限界」どおり、property 名のラベルは省く)。キーは
-    // 菱形の代わりに正方形マーク(`dims.spacing_m` 角、canon の描画寸法8pxと
+    // 菱形の代わりに正方形マーク(`dims.theme().space.m` 角、canon の描画寸法8pxと
     // 同値)で近似する — この instrument はトンマナ(色・位置)の照合が目的で、
     // 形状の忠実さは対象外(モジュール doc 冒頭)。
     if let Some(selected) = selected_row_index {
@@ -1014,10 +1033,10 @@ pub fn render(shell: &mut Shell) -> RgbaImage {
                     padding,
                     padding + content_width,
                     row_top + param_h,
-                    dims.border_width,
+                    dims.theme().stroke.hairline,
                     to_rgba(colors.border_hairline_weak, colors.border_hairline_weak.a),
                 );
-                let mark = dims.spacing_m;
+                let mark = dims.theme().space.m;
                 let half_mark = mark / 2.0;
                 let mark_y = row_top + (param_h - mark) / 2.0;
                 for key in &row.keys {
@@ -1042,7 +1061,7 @@ pub fn render(shell: &mut Shell) -> RgbaImage {
         clip_x0,
         timeline_top,
         rows_bottom,
-        dims.border_width,
+        dims.theme().stroke.hairline,
         to_rgba(colors.border_default, 1.0),
     );
 
@@ -1052,7 +1071,7 @@ pub fn render(shell: &mut Shell) -> RgbaImage {
         playhead_x,
         timeline_top,
         timeline_top + timeline_h,
-        dims.border_width * 1.5,
+        dims.theme().stroke.hairline * 1.5,
         to_rgba(colors.action_active, 1.0),
     );
     y += timeline_h + gap;
@@ -1079,14 +1098,14 @@ pub fn render(shell: &mut Shell) -> RgbaImage {
     stroke_rect(
         &mut canvas,
         Rect { x: padding, y, w: content_width, h: status_h },
-        dims.border_width,
+        dims.theme().stroke.hairline,
         to_rgba(colors.border_default, 1.0),
     );
     fill_rect(
         &mut canvas,
         padding,
         y,
-        dims.spacing_xs,
+        dims.theme().space.xs,
         status_h,
         to_rgba(status_color, 1.0),
     );

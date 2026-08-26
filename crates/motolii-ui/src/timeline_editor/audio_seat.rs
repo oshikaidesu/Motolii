@@ -120,9 +120,9 @@ pub(crate) fn open_playback(
     };
     match AudioSeat::open(program, playhead, fps) {
         Ok(seat) => AudioPlayback::Synced(seat),
-        Err(error) => {
-            AudioPlayback::WallClock(WallClockReason::AudioUnavailable(format!("device: {error}")))
-        }
+        Err(error) => AudioPlayback::WallClock(WallClockReason::AudioUnavailable(format!(
+            "device: {error}"
+        ))),
     }
 }
 
@@ -227,7 +227,10 @@ mod tests {
     #[test]
     fn a_project_without_a_soundtrack_stays_on_the_wall_clock() {
         let (document, _names) = crate::timeline_editor::lab_fixture();
-        assert!(document.soundtrack.is_none(), "fixture は soundtrack を持たない前提");
+        assert!(
+            document.soundtrack.is_none(),
+            "fixture は soundtrack を持たない前提"
+        );
         let mut caches = HashMap::new();
         let fps = document.composition.fps;
         match open_playback(&document, None, &mut caches, 0.0, fps) {
@@ -275,7 +278,10 @@ mod tests {
 
         std::thread::sleep(std::time::Duration::from_millis(150));
         let (later, _) = seat.follow(2.0).expect("clock");
-        assert!(later > at, "実 device の callback で clock が進む: {at} → {later}");
+        assert!(
+            later > at,
+            "実 device の callback で clock が進む: {at} → {later}"
+        );
 
         let mut seat = seat.reseek(0.25, fps).expect("reseek");
         let (at, keep) = seat.follow(2.0).expect("clock");

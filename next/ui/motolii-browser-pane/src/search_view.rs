@@ -17,7 +17,7 @@ pub(crate) fn search_field(query: &str, dims: Dimensions, colors: Colors) -> Ele
     let query_owned = query.to_owned();
     text_input("Search files and tags", query_owned)
         .on_input(Message::QueryChanged)
-        .size(dims.micro_text)
+        .size(dims.theme().text.micro)
         .width(Length::FillPortion(2))
         .style(move |_theme, status| search_input_style(dims, colors, status))
         .into()
@@ -43,7 +43,7 @@ pub(crate) fn labeled_button(
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
-    button(text(label).size(dims.micro_text))
+    button(text(label).size(dims.theme().text.micro))
         .on_press(message)
         .width(width)
         .padding(padding)
@@ -56,7 +56,7 @@ pub(crate) fn labeled_button(
 /// 輪郭は**選択の器**としてのみ描く:
 /// - 非選択= 素の文字(地なし)+ hover 面(`surface_hover`) —
 ///   `tab_style`/[`card_style`]/transport と同じ既存文法。border は色だけ
-///   透明にし、幅は `dims.border_width` のまま(幾何不変 — レイアウトに
+///   透明にし、幅は `dims.theme().stroke.hairline` のまま(幾何不変 — レイアウトに
 ///   効く値を動かさない)。mock が非選択チップへ宣言する常時
 ///   `border-default` 輪郭(`browser-library.css:215-226`)はこの裁定が
 ///   上書き(rail 行 `.locationRow` は mock 自体が非選択透明、css:135-152)。
@@ -65,7 +65,7 @@ pub(crate) fn labeled_button(
 ///   宣言どおり — 選択状態の輪郭は mock が明示する部分)。
 ///
 /// `radius` は呼び出し側の mock 実測値
-/// ([`FILTER_CHIP_CORNER_RADIUS_ROW_HEIGHT_RATIO`]/rail の `0.0`)を素通し。
+/// (Browser component token/rail の `0.0`)を素通し。
 /// **pub**: `tests/chip_outline_fence.rs` が「非選択= border 透明・選択=
 /// 不透明」を style 関数レベルで固定する(`browser_ratio_ledger.rs` と同型の
 /// 両側チェック)。
@@ -102,7 +102,7 @@ pub fn chip_style(
         text_color,
         border: iced::Border {
             color: border_color,
-            width: dims.border_width,
+            width: dims.theme().stroke.hairline,
             radius: radius.into(),
         },
         ..button::Style::default()
@@ -125,7 +125,7 @@ fn search_input_style(
         background: iced::Background::Color(colors.surface_raised),
         border: iced::Border {
             color: border_color,
-            width: dims.border_width,
+            width: dims.theme().stroke.hairline,
             radius: 0.0.into(),
         },
         placeholder: colors.text_muted,

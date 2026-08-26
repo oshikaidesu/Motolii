@@ -206,10 +206,7 @@ fn the_start_offset_puts_the_wave_where_the_soundtrack_actually_sounds() {
         &columns[..25]
     );
     assert!(columns[..9].iter().all(|v| *v == 0.0), "頭は無音");
-    assert!(
-        columns[21..60].iter().all(|v| *v == 0.0),
-        "音の後ろは無音"
-    );
+    assert!(columns[21..60].iter().all(|v| *v == 0.0), "音の後ろは無音");
     assert!(
         columns[61..].iter().all(|v| *v == 0.0),
         "音源の尻(timeline 0.6s)より後ろに音は無い"
@@ -251,7 +248,10 @@ fn a_project_without_a_soundtrack_gets_no_band_at_all() {
 fn the_fixture_editor_reports_no_band() {
     use motolii_ui::timeline_editor::lab_fixture;
     let (document, _names) = lab_fixture();
-    assert!(document.soundtrack.is_none(), "fixture は soundtrack を持たない");
+    assert!(
+        document.soundtrack.is_none(),
+        "fixture は soundtrack を持たない"
+    );
     assert_eq!(
         band_height(document.soundtrack.is_some()),
         0.0,

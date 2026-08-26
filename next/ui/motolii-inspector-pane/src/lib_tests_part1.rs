@@ -44,19 +44,19 @@
     // B38 第3切片: Glow param カタログ(engine 同期義務の柵)
     // -----------------------------------------------------------------------
 
-    /// カタログの3点固定: 名前は engine `translate_glow_params` の `find` 名、
-    /// 既定値は engine の `GLOW_DEFAULT_*`(private const)の写し —
-    /// [`SUPPORTED_BLEND_MODES`] と同じ二重化なので、engine 側を変えたら
-    /// ここが red になって同期漏れを拾う(値の正本は engine 側)。
+    /// provider/device catalog の3点固定: 名前は engine `translate_glow_params` の
+    /// `find` 名、既定値は engine の `GLOW_DEFAULT_*`(private const)の写し。
+    /// catalog は Inspector section ではなく device registry が持つ。
     #[test]
     fn the_glow_param_catalog_mirrors_the_engine_names_and_defaults() {
-        assert_eq!(GlowParam::ALL.len(), 3);
-        assert_eq!(GlowParam::Threshold.name(), "threshold");
-        assert_eq!(GlowParam::Intensity.name(), "intensity");
-        assert_eq!(GlowParam::Radius.name(), "radius");
-        assert_eq!(GlowParam::Threshold.default_value(), 1.0);
-        assert_eq!(GlowParam::Intensity.default_value(), 0.75);
-        assert_eq!(GlowParam::Radius.default_value(), 1.0);
+        let parameters = plugin_params(GLOW_PLUGIN_ID);
+        assert_eq!(parameters.len(), 3);
+        assert_eq!(parameters[0].id, "threshold");
+        assert_eq!(parameters[1].id, "intensity");
+        assert_eq!(parameters[2].id, "radius");
+        assert_eq!(parameters[0].default_value(), 1.0);
+        assert_eq!(parameters[1].default_value(), 0.75);
+        assert_eq!(parameters[2].default_value(), 1.0);
     }
 
     /// 既知 plugin(`motolii.glow`)だけカタログと表示名を持ち、未知は
@@ -70,6 +70,18 @@
             plugin_display_name("third-party.sparkle"),
             "third-party.sparkle"
         );
+
+        let glow_device = device_for_provider(GLOW_PLUGIN_ID).expect("Glow は device registry にある");
+        let descriptor_ids: Vec<_> = glow_device
+            .parameters
+            .iter()
+            .map(|parameter| parameter.id)
+            .collect();
+        let effect_ids: Vec<_> = plugin_params(GLOW_PLUGIN_ID)
+            .iter()
+            .map(|parameter| parameter.id)
+            .collect();
+        assert_eq!(descriptor_ids, effect_ids, "Glow の descriptor と effect catalog が同期しているはず");
     }
 
     /// effect param の field/KeyRow → property の対応が
@@ -78,18 +90,21 @@
     fn effect_param_fields_and_key_rows_map_to_the_flat_effect_property() {
         let expected =
             PropertyId::effect_param(EffectId(7), "radius").expect("param 名は非予約語");
+        let radius = parameter_for_provider(GLOW_PLUGIN_ID, "radius").expect("radius が必要");
+        let intensity =
+            parameter_for_provider(GLOW_PLUGIN_ID, "intensity").expect("intensity が必要");
         assert_eq!(
-            property_id(TransformField::EffectParam(EffectId(7), GlowParam::Radius))
+            property_id(TransformField::EffectParam(EffectId(7), radius))
                 .expect("作れるはず"),
             expected
         );
         assert_eq!(
-            key_row_property_id(KeyRow::EffectParam(EffectId(7), GlowParam::Radius))
+            key_row_property_id(KeyRow::EffectParam(EffectId(7), radius))
                 .expect("作れるはず"),
             expected
         );
         assert_eq!(
-            key_row_default_value(KeyRow::EffectParam(EffectId(7), GlowParam::Intensity)),
+            key_row_default_value(KeyRow::EffectParam(EffectId(7), intensity)),
             Value::F64(0.75),
             "Key 列の初キー値も engine 既定の写しのはず"
         );
@@ -164,14 +179,14 @@
     /// (`git log` 参照 — このテストを旧コードに当てると
     /// `padding.left == 0.0`/`padding.right == 0.0` が真になり fail する)。
     /// 縦は行高合わせのため0のまま、横だけ 裁定168 の `0.6em`
-    /// (`dims.body_text * 0.6` の最近傍丸め)が入っていること。旧実装は
+    /// (`dims.theme().text.body * 0.6` の最近傍丸め)が入っていること。旧実装は
     /// `spacing_xs`(mock `--sp1`=2px)を転用していたが、裁定168 施工で
     /// この式へ差し替えた(既定 dims では 11*0.6=6.6→7.0px、旧値2pxより広い)。
     #[test]
     fn value_cell_padding_keeps_the_vertical_zero_and_restores_only_horizontal_inset() {
         let dims = Dimensions::default();
         let padding = value_cell_padding(dims);
-        let expected = single_row_horizontal_inset(dims.body_text);
+        let expected = single_row_horizontal_inset(dims.theme().text.body);
         assert_eq!(padding.top, 0.0, "縦(上)は行高合わせのため0のはず");
         assert_eq!(padding.bottom, 0.0, "縦(下)は行高合わせのため0のはず");
         assert_eq!(
@@ -204,7 +219,7 @@
     fn value_cell_padding_scales_with_ui_scale() {
         let dims = Dimensions::default().scaled(1.5);
         let padding = value_cell_padding(dims);
-        assert_eq!(padding.left, single_row_horizontal_inset(dims.body_text));
+        assert_eq!(padding.left, single_row_horizontal_inset(dims.theme().text.body));
     }
 
     // -----------------------------------------------------------------------
@@ -534,7 +549,7 @@
         assert_eq!(sibling_gap_px(dims.inspector_row_height), 3.0);
         assert_ne!(
             sibling_gap_px(dims.inspector_row_height),
-            dims.spacing_xs,
+            dims.theme().space.xs,
             "gap が旧トークン(spacing_xs)のままでは inspector_row_height の変化に追従しない"
         );
     }

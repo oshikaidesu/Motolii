@@ -117,7 +117,10 @@ fn a_recorded_session_replays_into_the_same_shell_state() {
                 paths: vec![clip.clone()]
             },
             UiIntent::SaveProject,
-            UiIntent::SelectLayer { layer, additive: false },
+            UiIntent::SelectLayer {
+                layer,
+                additive: false
+            },
             UiIntent::ToggleItemFlag {
                 layer,
                 flag: UiItemFlag::Mute,
@@ -181,7 +184,10 @@ fn a_recorded_session_replays_into_the_same_shell_state() {
         .expect("同じ clip が居る");
     assert!(!envelope.visible, "M(mute)が replay で再現されない");
     assert!(
-        matches!(envelope.transform.position, motolii_doc::DocParam::Keyframes(_)),
+        matches!(
+            envelope.transform.position,
+            motolii_doc::DocParam::Keyframes(_)
+        ),
         "Position のキーが replay で再現されない"
     );
 
@@ -278,7 +284,11 @@ fn a_session_with_stage_reports_replays_from_intents_alone() {
     std::fs::remove_file(&project).expect("駆動が作った project を消して初期状態へ戻す");
 
     let replayed = ShellGateway::replay(&intents);
-    assert_eq!(replayed.revision(), driven_revision, "writer 世代が一致する");
+    assert_eq!(
+        replayed.revision(),
+        driven_revision,
+        "writer 世代が一致する"
+    );
     assert_eq!(
         replayed.track_item_count(),
         driven_items,
@@ -352,7 +362,10 @@ fn timeline_row_pick_selects_the_same_layer_the_inspector_reads() {
         motolii_shell_iced::InspectorSeat::Ready(model) => model.layer_id,
         other => panic!("Timeline の行選択が Inspector へ座らない: {other:?}"),
     };
-    assert_eq!(selected, layer, "Timeline が選んだ layer と Inspector が映す layer が一致しない");
+    assert_eq!(
+        selected, layer,
+        "Timeline が選んだ layer と Inspector が映す layer が一致しない"
+    );
 
     let intents: Vec<UiIntent> = shell
         .intents()
@@ -361,7 +374,10 @@ fn timeline_row_pick_selects_the_same_layer_the_inspector_reads() {
         .collect();
     assert_eq!(
         intents.last(),
-        Some(&UiIntent::SelectLayer { layer, additive: false }),
+        Some(&UiIntent::SelectLayer {
+            layer,
+            additive: false
+        }),
         "Timeline のクリックは Stage/Inspector と同じ SelectLayer 1種類に合流する"
     );
 
@@ -371,6 +387,14 @@ fn timeline_row_pick_selects_the_same_layer_the_inspector_reads() {
     std::fs::remove_file(&project).expect("駆動が作った project を消して初期状態へ戻す");
 
     let replayed = ShellGateway::replay(&intents);
-    assert_eq!(replayed.revision(), driven_revision, "writer 世代が一致する");
-    assert_eq!(replayed.track_item_count(), driven_items, "同じ Document へ着く");
+    assert_eq!(
+        replayed.revision(),
+        driven_revision,
+        "writer 世代が一致する"
+    );
+    assert_eq!(
+        replayed.track_item_count(),
+        driven_items,
+        "同じ Document へ着く"
+    );
 }

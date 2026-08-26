@@ -1,13 +1,25 @@
 pub use makepad_widgets;
 
 use makepad_widgets::*;
-use motolii_shell::{Message, Shell};
+use motolii_engine::Engine;
+use motolii_shell_state::Session;
+use motolii_store::{Document, Intent, LayerId, RationalTime};
+use motolii_timeline_pane::{self as timeline_pane, stacking::restacked, StackDirection};
 use std::fs;
 use std::path::PathBuf;
-use std::time::SystemTime;
+use std::time::{Instant, SystemTime};
 
+mod browser_surface;
+mod chrome;
+mod export_surface;
 mod gesture_input;
+mod inspector_surface;
+mod settings_surface;
+mod stage_chrome;
+mod stage_import;
+mod stage_surface;
 mod timeline_surface;
+use stage_surface::{SharedOsHandle, SharedSurfaceDesc, StagePresent};
 use timeline_surface::{
     TimelineLane, TimelineModel, TimelinePropertyLane, TimelineSurface, TimelineSurfaceAction,
 };
@@ -19,20 +31,14 @@ script_mod! {
     use mod.widgets.*
 
     mod.widgets.HotPanelBase = #(HotPanel::register_widget(vm))
-    mod.widgets.TimelineSurfaceBase = #(TimelineSurface::register_widget(vm))
-    mod.widgets.TimelineSurface = set_type_default() do mod.widgets.TimelineSurfaceBase{
-        width: Fill
-        height: Fill
-        draw_bg +: {color: #x363636}
-        draw_item +: {color: #xffffff}
-        draw_text +: {
-            color: #xb8b8b8
-            text_style: theme.font_code{font_size: 8}
-        }
-    }
     mod.widgets.HotPanel = set_type_default() do mod.widgets.HotPanelBase{
         width: Fill
         height: Fill
+        flow: Down
+        show_bg: true
+        new_batch: true
+        draw_bg.color: #x1c1c1c
+        panel_error := Label{width: Fill height: Fill align: Align{x: 0.5 y: 0.5} text: "" draw_text.color: #xe8c48a draw_text.text_style: theme.font_code{font_size: 10}}
     }
 
     startup() do #(App::script_component(vm)){
@@ -44,6 +50,7 @@ script_mod! {
                     panel_host := mod.widgets.HotPanel{
                         width: Fill
                         height: Fill
+                        flow: Down
                     }
                 }
             }
@@ -54,11 +61,37 @@ script_mod! {
 const HOT_PANEL_PREFIX: &str =
     "use mod.prelude.widgets.*\nuse mod.widgets.*\nView{width:Fill height:Fill flow:Down, ";
 
-/// Makepad is an external Elm view adapter. This is the only translation point
-/// between Makepad actions and the existing Iced-era `Shell::update(Message)`
-/// core; widgets never write Document/Session state directly.
+const PANEL_ERROR_SOURCE: &str = concat!(
+    "use mod.prelude.widgets.*\nuse mod.widgets.*\n",
+    "SolidView{width:Fill height:Fill flow:Down show_bg:true new_batch:true draw_bg.color:#x1c1c1c ",
+    "panel_error := Label{width:Fill height:Fill align:Align{x:0.5 y:0.5} text:\"\" ",
+    "draw_text.color:#xe8c48a draw_text.text_style:theme.font_code{font_size:10}}}",
+);
+
+fn format_panel_eval_errors(errors: &[String]) -> String {
+    match errors.first() {
+        Some(first) if errors.len() == 1 => format!("panel.splash: {first}"),
+        Some(first) => format!("panel.splash: {first} （+{}）", errors.len() - 1),
+        None => "panel.splash を評価できない".to_string(),
+    }
+}
+
+fn view_has_children(view: &View) -> bool {
+    !view.children.is_empty()
+}
+
+/// Makepad view adapter. Writes go to Document / Session; pixels come from Engine.
+/// widgets never keep a second Document.
 struct BackendBridge {
-    shell: Shell,
+    doc: Document,
+    session: Session,
+    engine: Engine,
+    frame: Option<(u32, u32, Vec<u8>)>,
+    status: Option<String>,
+    playing: bool,
+    present: StagePresent,
+    stage_texture: Option<Texture>,
+    stage_gpu: Option<wgpu::Texture>,
 }
 
 enum TimelineUpdate {
@@ -68,9 +101,15 @@ enum TimelineUpdate {
     Status(String),
 }
 
+enum SharedPresentResult {
+    Shown,
+    CreateFailed,
+    WriteFailed,
+}
+
 /// A one-slot mailbox for expensive projections. Producers may run at pointer
 /// frequency; the consumer runs at display frequency and only observes the
-/// newest request. The payload can later become an IOSurface handle without
+/// newest request. The payload can later become a `StageSurfaceSlot` without
 /// changing Timeline or App event routing.
 #[derive(Default)]
 struct LatestFrameRequest {
@@ -89,8 +128,23 @@ impl LatestFrameRequest {
 
 impl BackendBridge {
     fn new_fixture() -> Self {
-        let (shell, _startup_task) = Shell::new_fixture();
-        Self { shell }
+        let built = motolii_fixture::build();
+        Self {
+            session: Session {
+                playhead: built.playhead,
+                selection: Some(built.selected),
+                selected_layers: vec![built.selected],
+                ..Session::default()
+            },
+            doc: built.doc,
+            engine: Engine::new().expect("GPU を用意できない"),
+            frame: None,
+            status: Some(built.status),
+            playing: false,
+            present: StagePresent::FallbackCpu,
+            stage_texture: None,
+            stage_gpu: None,
+        }
     }
 
     fn display_name(name: &str) -> String {
@@ -116,8 +170,8 @@ impl BackendBridge {
     }
 
     fn timeline_model(&self) -> TimelineModel {
-        let mut rows = self.shell.timeline_rows();
-        let store = self.shell.store_view();
+        let store = self.doc.view();
+        let mut rows = timeline_pane::rows(&store, &self.session);
         // Timeline top means Stage front. Both are derived from the same
         // `LayerMeta.order`; no independent lane-order state exists here.
         rows.sort_by(|left, right| {
@@ -156,17 +210,19 @@ impl BackendBridge {
                 selected: row.selected,
             })
             .collect();
-        let property_lanes = self
-            .shell
-            .timeline_property_rows()
-            .into_iter()
-            .map(|row| TimelinePropertyLane {
-                layer_id: row.layer.0,
-                name: format!("> {}", row.property.name()),
-                keys: row.keys.into_iter().map(|key| key.frame).collect(),
-            })
-            .collect();
-        let composition = self.shell.composition();
+        let property_lanes = timeline_pane::property_rows(
+            &self.doc.view(),
+            &self.session,
+            self.doc.view().composition().ok().flatten().map(|c| c.fps),
+        )
+        .into_iter()
+        .map(|row| TimelinePropertyLane {
+            layer_id: row.layer.0,
+            name: format!("> {}", row.property.name()),
+            keys: row.keys.into_iter().map(|key| key.frame).collect(),
+        })
+        .collect();
+        let composition = self.doc.view().composition().ok().flatten();
         let (duration_frames, fps_num, fps_den) = composition
             .map(|composition| {
                 (
@@ -181,66 +237,111 @@ impl BackendBridge {
             lanes,
             property_lanes,
             duration_frames,
-            playhead: self.shell.session().playhead,
+            playhead: self.session.playhead,
             fps_num,
             fps_den,
         }
     }
 
     fn scrub_to(&mut self, frame: i64) {
-        let _ = self.shell.update(Message::ScrubTo(frame));
+        let started = Instant::now();
+        self.session.playhead = frame.max(0);
+        self.frame = None;
+        log!(
+            "PERF store_scrub frame={} elapsed_us={}",
+            frame,
+            started.elapsed().as_micros()
+        );
     }
 
     fn restack_from_timeline(&mut self, layer_id: u64, target_from_front: usize) -> String {
-        let Some(layer) = self
-            .shell
-            .timeline_rows()
+        let store = self.doc.view();
+        let Some(layer) = timeline_pane::rows(&store, &self.session)
             .into_iter()
             .find(|row| row.id.0 == layer_id)
             .map(|row| row.id)
         else {
             return format!("Timeline: layer {layer_id} no longer exists");
         };
-        let layer_count = self.shell.store_view().layers().len();
+        let layer_count = store.layers().len();
+        drop(store);
         let target_from_front = target_from_front.min(layer_count.saturating_sub(1));
         let target_from_back = layer_count
             .saturating_sub(1)
             .saturating_sub(target_from_front);
 
-        // Selection is UI/session state. Restack is a single Document apply_all,
-        // so one completed lane drag creates exactly one undo step.
-        let _ = self.shell.update(Message::Select(layer));
-        let _ = self.shell.update(Message::Timeline(
-            motolii_shell::timeline_pane::Message::RestackLayer(
-                motolii_shell::timeline::StackDirection::ToIndexFromBack(target_from_back),
-            ),
+        self.session.selection = Some(layer);
+        self.session.selected_layers = vec![layer];
+
+        let store = self.doc.view();
+        let stack: Vec<(LayerId, i16)> = store
+            .layers()
+            .into_iter()
+            .filter_map(|id| store.meta(id).ok().flatten().map(|meta| (id, meta.order)))
+            .collect();
+        drop(store);
+        let changes = restacked(
+            &stack,
+            &[layer],
+            StackDirection::ToIndexFromBack(target_from_back),
+        );
+        if !changes.is_empty() {
+            let intents: Vec<Intent> = changes
+                .into_iter()
+                .map(|(layer, order)| Intent::SetOrder { layer, order })
+                .collect();
+            if let Err(error) = self.doc.apply_all(intents) {
+                return format!("重なりを書けない: {error}");
+            }
+            self.frame = None;
+        }
+        self.status = Some(format!(
+            "Timeline: layer {} moved to lane {} / Stage stack updated",
+            layer_id,
+            target_from_front + 1
         ));
-        self.shell
-            .status()
-            .map(ToOwned::to_owned)
-            .unwrap_or_else(|| {
-                format!(
-                    "Timeline: layer {} moved to lane {} / Stage stack updated",
-                    layer_id,
-                    target_from_front + 1
-                )
-            })
+        self.status.clone().expect("just set")
     }
 
+    /// screenshot / export など明示 fallback 専用。通常の playhead / 再生からは呼ばない。
     fn frame_rgba(&mut self) -> Option<(u32, u32, &[u8])> {
-        self.shell.frame_rgba()
+        if self.frame.is_none() {
+            let composition = self.doc.view().composition().ok().flatten()?;
+            let t = RationalTime::try_from_frame(self.session.playhead, composition.fps).ok()?;
+            let rgba = self.engine.render_frame(&self.doc.view(), t).ok()?;
+            self.frame = Some((composition.width, composition.height, rgba));
+        }
+        self.frame
+            .as_ref()
+            .map(|(width, height, rgba)| (*width, *height, rgba.as_slice()))
     }
 
     fn toggle_playback(&mut self) -> bool {
-        let _ = self.shell.update(Message::TogglePlayback);
-        self.shell.is_playing()
+        self.playing = !self.playing;
+        self.playing
     }
 
     fn playback_tick(&mut self) -> bool {
-        if !self.shell.is_playing() {
+        if !self.playing {
             return false;
         }
-        let _ = self.shell.update(Message::PlaybackTick);
+        let started = Instant::now();
+        let duration = self
+            .doc
+            .view()
+            .composition()
+            .ok()
+            .flatten()
+            .map(|composition| composition.duration_frames)
+            .unwrap_or(1)
+            .max(1);
+        self.session.playhead = (self.session.playhead + 1) % duration;
+        self.frame = None;
+        log!(
+            "PERF store_playback frame={} elapsed_us={}",
+            self.session.playhead,
+            started.elapsed().as_micros()
+        );
         true
     }
 
@@ -277,6 +378,8 @@ pub struct HotPanel {
     view: View,
     #[live]
     body: ArcStringMut,
+    #[rust]
+    host_error: Option<String>,
 }
 
 impl WidgetNode for HotPanel {
@@ -315,58 +418,122 @@ impl Widget for HotPanel {
     }
 
     fn set_text(&mut self, cx: &mut Cx, value: &str) {
-        if self.body.as_ref() == value {
+        if self.body.as_ref() == value && self.host_error.is_none() {
             log!("panel source unchanged; keeping installed view");
             return;
         }
 
         let code = format!("{}{}", HOT_PANEL_PREFIX, value);
-        let file = "panel.splash".to_string();
-        let next_view = cx.with_vm(|vm| {
-            let script_mod = ScriptMod {
-                cargo_manifest_path: env!("CARGO_MANIFEST_DIR").to_string(),
-                module_path: "r7_makepad_panel::hot_panel".to_string(),
-                file,
-                line: 0,
-                column: 0,
-                code: String::new(),
-                values: vec![],
-            };
-            let value = vm.eval_with_append_source(script_mod, &code, NIL.into());
-            let errors = vm.take_errors();
-            if value.is_err() || !errors.is_empty() {
-                log!("panel evaluation failed: {:?}", errors);
-                None
-            } else {
-                Some(View::script_from_value(vm, value))
+        match Self::eval_panel_view(cx, "panel.splash", &code) {
+            Ok(view) => {
+                self.body.set(value);
+                self.view = view;
+                self.host_error = None;
+                // Eval apply does not keep type-default / PREFIX walk+flow on the
+                // replaced View (Fit parent + Fill child = 0; default flow Right
+                // puts shell:Fill next to status:Fill). Set them on the instance.
+                self.apply_host_layout();
+                // The initial placeholder has no useful draw area yet. Redrawing only
+                // this widget can therefore miss the first frame after replacement.
+                cx.redraw_all();
+                log!("panel view installed: {} bytes", value.len());
             }
-        });
-
-        if let Some(view) = next_view {
-            self.body.set(value);
-            self.view = view;
-            // The initial placeholder has no useful draw area yet. Redrawing only
-            // this widget can therefore miss the first frame after replacement.
-            cx.redraw_all();
-            log!("panel view installed: {} bytes", value.len());
+            Err(error) => self.install_panel_error(cx, &error),
         }
     }
 }
 
 impl HotPanel {
+    fn apply_host_layout(&mut self) {
+        self.view.walk = Walk::fill();
+        self.view.layout.flow = Flow::Down;
+    }
+
+    fn eval_panel_view(cx: &mut Cx, file: &str, code: &str) -> Result<View, String> {
+        cx.with_vm(|vm| {
+            let script_mod = ScriptMod {
+                cargo_manifest_path: env!("CARGO_MANIFEST_DIR").to_string(),
+                module_path: "r7_makepad_panel::hot_panel".to_string(),
+                file: file.to_string(),
+                line: 0,
+                column: 0,
+                code: String::new(),
+                values: vec![],
+            };
+            let value = vm.eval_with_append_source(script_mod, code, NIL.into());
+            let errors = vm.take_errors();
+            if value.is_err() || !errors.is_empty() {
+                return Err(format_panel_eval_errors(&errors));
+            }
+            if value.as_object().is_none() {
+                return Err("空の View になった".to_string());
+            }
+            let view = View::script_from_value(vm, value);
+            if !view_has_children(&view) {
+                return Err("空の View になった".to_string());
+            }
+            Ok(view)
+        })
+    }
+
+    fn install_panel_error(&mut self, cx: &mut Cx, text: &str) {
+        if self.host_error.as_deref() == Some(text) {
+            return;
+        }
+        let has_error_label = !self
+            .view
+            .child_by_path(ids!(panel_error))
+            .as_label()
+            .is_empty();
+        if !has_error_label {
+            match Self::eval_panel_view(cx, "panel_error.splash", PANEL_ERROR_SOURCE) {
+                Ok(view) => self.view = view,
+                Err(_) => {}
+            }
+        }
+        self.apply_host_layout();
+        self.view
+            .child_by_path(ids!(panel_error))
+            .as_label()
+            .set_text(cx, text);
+        self.host_error = Some(text.to_string());
+        self.body.set("");
+        cx.redraw_all();
+    }
+
+    fn dock(&self) -> DockRef {
+        self.view.child_by_path(ids!(dock)).as_dock()
+    }
+
     fn set_stage_texture(&mut self, cx: &mut Cx, texture: Texture) -> bool {
-        let stage_image = self.view.child_by_path(ids!(stage_frame)).as_image();
+        let stage_image = self
+            .dock()
+            .item(id!(stage))
+            .child_by_path(ids!(stage_frame))
+            .as_image();
         let found = !stage_image.is_empty();
         stage_image.set_texture(cx, Some(texture));
         found
     }
 
+    fn set_stage_error(&self, cx: &mut Cx, text: &str) {
+        self.dock()
+            .item(id!(stage))
+            .child_by_path(ids!(stage_error))
+            .as_label()
+            .set_text(cx, text);
+    }
+
     fn timeline_ref(&self) -> WidgetRef {
-        self.view.child_by_path(ids!(timeline_surface))
+        self.dock()
+            .item(id!(timeline))
+            .child_by_path(ids!(timeline_surface))
     }
 
     fn play_ref(&self) -> WidgetRef {
-        self.view.child_by_path(ids!(play_toggle))
+        self.dock()
+            .item(id!(timeline))
+            .child_by_path(ids!(play_toggle))
     }
 
     fn set_timeline_model(&mut self, cx: &mut Cx, model: TimelineModel) -> bool {
@@ -383,6 +550,10 @@ impl HotPanel {
             .child_by_path(ids!(status))
             .as_label()
             .set_text(cx, text);
+    }
+
+    fn last_install_ok(&self) -> bool {
+        self.host_error.is_none() && !self.body.as_ref().is_empty()
     }
 }
 
@@ -412,32 +583,77 @@ pub struct App {
 
 impl App {
     fn install_stage_frame(&mut self, cx: &mut Cx) {
+        match self.try_present_shared(cx) {
+            SharedPresentResult::Shown => self.set_stage_error(cx, ""),
+            SharedPresentResult::CreateFailed => self.set_stage_error(cx, "共有面が作れなかった"),
+            SharedPresentResult::WriteFailed => self.set_stage_error(cx, "書けなかった"),
+        }
+    }
+
+    fn try_present_shared(&mut self, cx: &mut Cx) -> SharedPresentResult {
         let Some(backend) = self.backend.as_mut() else {
-            return;
+            return SharedPresentResult::CreateFailed;
         };
-        let Some((width, height, rgba)) = backend.frame_rgba() else {
-            log!("Stage bridge: backend produced no frame");
-            return;
+        let Some(composition) = backend.doc.view().composition().ok().flatten() else {
+            return SharedPresentResult::CreateFailed;
         };
-        let Ok(image) = ImageBuffer::new(rgba, width as usize, height as usize) else {
-            log!("Stage bridge: invalid RGBA frame {}x{}", width, height);
-            return;
+        let desc = SharedSurfaceDesc::from_comp(composition.width, composition.height);
+        let recreate = backend.present.needs_recreate(desc) || backend.stage_gpu.is_none();
+        if recreate {
+            let (texture, handle) = cx.create_presentable_texture(
+                desc.width,
+                desc.height,
+                SharedPresentablePixel::Rgba8Srgb,
+            );
+            let handle = match handle {
+                makepad_widgets::SharedOsHandle::IoSurfaceId(id) => SharedOsHandle::IoSurfaceId(id),
+                makepad_widgets::SharedOsHandle::DxgiSharedHandle(v) => {
+                    SharedOsHandle::DxgiSharedHandle(v)
+                }
+                makepad_widgets::SharedOsHandle::DmaBufFd(fd) => SharedOsHandle::DmaBufFd(fd),
+            };
+            let Some(present) = StagePresent::shared(desc, handle) else {
+                return SharedPresentResult::CreateFailed;
+            };
+            let Some(gpu) =
+                stage_import::import_presentable(backend.engine.gpu_device(), desc, handle)
+            else {
+                return SharedPresentResult::CreateFailed;
+            };
+            backend.stage_texture = Some(texture);
+            backend.stage_gpu = Some(gpu);
+            backend.present = present;
+        }
+        let Some(gpu) = backend.stage_gpu.as_ref() else {
+            return SharedPresentResult::CreateFailed;
         };
-        let texture = image.into_new_texture(cx);
-        // Enter the runtime host first; the startup tree cannot index descendants
-        // that did not exist until panel.splash was evaluated.
+        let Ok(t) = RationalTime::try_from_frame(backend.session.playhead, composition.fps) else {
+            return SharedPresentResult::WriteFailed;
+        };
+        if backend
+            .engine
+            .render_frame_into(&backend.doc.view(), t, gpu)
+            .is_err()
+        {
+            return SharedPresentResult::WriteFailed;
+        }
+        if let Some(texture) = backend.stage_texture.clone() {
+            let panel = self.ui.widget(cx, ids!(panel_host));
+            let _ = panel
+                .borrow_mut::<HotPanel>()
+                .map(|mut panel| panel.set_stage_texture(cx, texture))
+                .unwrap_or(false);
+        }
+        self.ui.widget(cx, ids!(panel_host)).redraw(cx);
+        SharedPresentResult::Shown
+    }
+
+    fn set_stage_error(&self, cx: &mut Cx, text: &str) {
         let panel = self.ui.widget(cx, ids!(panel_host));
-        let image_found = panel
-            .borrow_mut::<HotPanel>()
-            .map(|mut panel| panel.set_stage_texture(cx, texture))
-            .unwrap_or(false);
+        if let Some(panel) = panel.borrow::<HotPanel>() {
+            panel.set_stage_error(cx, text);
+        }
         panel.redraw(cx);
-        log!(
-            "Stage bridge: installed latest re_renderer frame {}x{} image_found={}",
-            width,
-            height,
-            image_found
-        );
     }
 
     fn request_stage_frame(&mut self, cx: &mut Cx) {
@@ -447,6 +663,7 @@ impl App {
     }
 
     fn install_timeline_model(&mut self, cx: &mut Cx) {
+        let started = Instant::now();
         let Some(model) = self.backend.as_ref().map(BackendBridge::timeline_model) else {
             return;
         };
@@ -456,8 +673,9 @@ impl App {
             .map(|mut panel| panel.set_timeline_model(cx, model))
             .unwrap_or(false);
         log!(
-            "Timeline bridge: model installed timeline_found={}",
-            timeline_found
+            "PERF timeline_projection elapsed_us={} timeline_found={}",
+            started.elapsed().as_micros(),
+            timeline_found,
         );
     }
 
@@ -502,33 +720,55 @@ impl App {
         self.request_stage_frame(cx);
     }
 
+    fn show_panel_error(&self, cx: &mut Cx, text: &str) {
+        if let Some(mut panel) = self
+            .ui
+            .widget(cx, ids!(panel_host))
+            .borrow_mut::<HotPanel>()
+        {
+            panel.install_panel_error(cx, text);
+        }
+    }
+
     fn load_panel(&mut self, cx: &mut Cx) {
         let Ok(metadata) = fs::metadata(&self.panel_path) else {
-            log!("panel file missing: {:?}", self.panel_path);
+            self.show_panel_error(cx, "panel.splash が無い");
             return;
         };
         let Ok(modified) = metadata.modified() else {
+            self.show_panel_error(cx, "panel.splash の更新時刻が取れない");
             return;
         };
         let signature = (modified, metadata.len());
         if self.panel_signature == Some(signature) {
             return;
         }
-        if self.pending_signature != Some(signature) {
+        // First install is immediate so Dock leaves exist before the first present.
+        // Later reloads keep the two-tick debounce so a half-written splash is not applied.
+        if self.panel_signature.is_some() && self.pending_signature != Some(signature) {
             self.pending_signature = Some(signature);
             return;
         }
 
         match fs::read_to_string(&self.panel_path) {
             Ok(source) => {
-                self.ui.widget(cx, ids!(panel_host)).set_text(cx, &source);
+                let panel = self.ui.widget(cx, ids!(panel_host));
+                panel.set_text(cx, &source);
                 self.panel_signature = Some(signature);
                 self.pending_signature = None;
-                self.install_timeline_model(cx);
-                self.request_stage_frame(cx);
-                log!("reloaded {:?}", self.panel_path);
+                let ok = panel
+                    .borrow::<HotPanel>()
+                    .map(|panel| panel.last_install_ok())
+                    .unwrap_or(false);
+                if ok {
+                    self.install_timeline_model(cx);
+                    self.request_stage_frame(cx);
+                    log!("reloaded {:?}", self.panel_path);
+                }
             }
-            Err(error) => log!("panel read failed: {:?}", error),
+            Err(error) => {
+                self.show_panel_error(cx, &format!("panel.splash を読めない: {error}"));
+            }
         }
     }
 }
@@ -612,6 +852,13 @@ impl MatchEvent for App {
 impl AppMain for App {
     fn script_mod(vm: &mut ScriptVm) -> ScriptValue {
         crate::makepad_widgets::script_mod(vm);
+        crate::browser_surface::script_mod(vm);
+        crate::stage_chrome::script_mod(vm);
+        crate::inspector_surface::script_mod(vm);
+        crate::export_surface::script_mod(vm);
+        crate::settings_surface::script_mod(vm);
+        crate::timeline_surface::script_mod(vm);
+        crate::chrome::script_mod(vm);
         self::script_mod(vm)
     }
 
@@ -626,12 +873,19 @@ mod backend_tests {
     use super::*;
 
     #[test]
-    fn scrub_action_reaches_shell_session() {
+    fn stage_present_starts_as_named_cpu_fallback() {
+        let backend = BackendBridge::new_fixture();
+        assert_eq!(backend.present, StagePresent::FallbackCpu);
+        assert!(!backend.present.is_zero_copy());
+    }
+
+    #[test]
+    fn scrub_action_reaches_session() {
         let mut backend = BackendBridge::new_fixture();
         let update = backend.apply_timeline_action(&TimelineSurfaceAction::Scrub(600));
 
         assert!(matches!(update, TimelineUpdate::Stage(_)));
-        assert_eq!(backend.shell.session().playhead, 600);
+        assert_eq!(backend.session.playhead, 600);
     }
 
     #[test]
@@ -650,6 +904,18 @@ mod backend_tests {
 
         assert!(matches!(update, TimelineUpdate::ModelAndStage(_)));
         assert_eq!(backend.timeline_model().lanes[0].id, layer_id);
+    }
+
+    #[test]
+    fn panel_eval_failure_is_a_visible_sentence() {
+        assert_eq!(
+            format_panel_eval_errors(&[]),
+            "panel.splash を評価できない"
+        );
+        assert_eq!(
+            format_panel_eval_errors(&["kind ChromeGallery is not registered".into()]),
+            "panel.splash: kind ChromeGallery is not registered"
+        );
     }
 
     #[test]

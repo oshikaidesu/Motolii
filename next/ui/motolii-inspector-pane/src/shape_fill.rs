@@ -174,21 +174,21 @@ pub fn shape_fill_section(
             .id(shape_fill_input_id(row.index))
             .on_input(move |text| Message::ShapeFillInput(field, text))
             .on_submit(Message::ShapeFillSubmit(field))
-            .size(dims.body_text)
+            .size(dims.theme().text.body)
             .width(Length::Fill)
             .padding(value_cell_padding(dims))
             .style(move |_theme, status| name_input_style(dims, colors, status));
-        let gradient = button(text("Gradient").size(dims.caption_text))
+        let gradient = button(text("Gradient").size(dims.theme().text.caption))
             .on_press(Message::ShapeFillGradient(row.index))
-            .padding([dims.spacing_xs, dims.spacing_s]);
+            .padding([dims.theme().space.xs, dims.theme().space.s]);
         rows = rows.push(bordered_row(
             row_widget![
-                text(format!("{}", row.index + 1)).size(dims.caption_text),
+                text(format!("{}", row.index + 1)).size(dims.theme().text.caption),
                 swatch,
                 input,
                 gradient,
             ]
-            .spacing(dims.spacing_xs)
+            .spacing(dims.theme().space.xs)
             .align_y(iced::alignment::Vertical::Center)
             .into(),
             dims,
@@ -218,7 +218,7 @@ fn shape_fill_swatch(
                 b: rgba[2] as f32,
                 a: rgba[3] as f32,
             })),
-            border: iced::Border { color: colors.border_default, width: dims.border_width, radius: 0.0.into() },
+            border: iced::Border { color: colors.border_default, width: dims.theme().stroke.hairline, radius: 0.0.into() },
             ..Default::default()
         });
     button(chip)

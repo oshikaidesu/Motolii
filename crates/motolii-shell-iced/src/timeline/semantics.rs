@@ -1049,10 +1049,16 @@ mod tests {
         let span = (2.0, 5.0);
         let one = 1.0 / 30.0;
         let left = clamped_trim(TrimEdge::In, span, 16.0, fps, 10.0);
-        assert!((left - (5.0 - one)).abs() < 1e-4, "入り点は出し点の1コマ手前まで: {left}");
+        assert!(
+            (left - (5.0 - one)).abs() < 1e-4,
+            "入り点は出し点の1コマ手前まで: {left}"
+        );
         assert_eq!(clamped_trim(TrimEdge::In, span, 16.0, fps, -3.0), 0.0);
         let right = clamped_trim(TrimEdge::Out, span, 16.0, fps, 1.0);
-        assert!((right - (2.0 + one)).abs() < 1e-4, "出し点は入り点の1コマ後ろまで: {right}");
+        assert!(
+            (right - (2.0 + one)).abs() < 1e-4,
+            "出し点は入り点の1コマ後ろまで: {right}"
+        );
         assert_eq!(clamped_trim(TrimEdge::Out, span, 16.0, fps, 99.0), 16.0);
     }
 }

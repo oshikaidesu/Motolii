@@ -11,6 +11,7 @@ members = [
     "core/motolii-eval",
     "core/motolii-store",
     "core/motolii-testkit",
+    "core/motolii-fixture",
     "engine/motolii-audio",
     "engine/motolii-compositor",
     "engine/motolii-engine",
@@ -29,6 +30,7 @@ members = [
     "ui/motolii-settings-pane",
     "ui/motolii-taffy",
     "ui/motolii-tokens-rs",
+    "ui/motolii-presentation-config",
     "ui/motolii-verbs",
     "ui/motolii-shell-state",
     "ui/motolii-timeline-pane",
@@ -58,22 +60,22 @@ unreachable_pub = "warn"
 # ---------------------------------------------------------------------------
 # rerun fork(store のみ。viewer 層は引かない)
 # ---------------------------------------------------------------------------
-# rev は fork `motolii/s2-append-to-store` tip(856f597c = camera seat 483b8559 の
-# 直上に `ViewBuilder::main_target()` accessor を1本足したコミット、裁定161 BL1b)。乖離台帳は
+# rev は fork `motolii/m3-device-caps` tip(346a0b3 = pin 7cca401 の直上に
+# `ViewBuilder::new_with_external_resolved` を1本足したコミット、裁定256)。乖離台帳は
 # ../docs/reviews/2026-08-18-rerun-fork-seam-ledger.md。
 #
 # **ここに re_view_spatial / re_ui / re_viewer_context を足さないこと** —
 # それらは egui を引き、front が iced だけであるという軸が壊れる。
-re_chunk = { git = "https://github.com/oshikaidesu/rerun", rev = "7cca401e6b1de652ab36bcf1652745986ca22cb3" }
-re_chunk_store = { git = "https://github.com/oshikaidesu/rerun", rev = "7cca401e6b1de652ab36bcf1652745986ca22cb3" }
-re_entity_db = { git = "https://github.com/oshikaidesu/rerun", rev = "7cca401e6b1de652ab36bcf1652745986ca22cb3" }
-re_log_types = { git = "https://github.com/oshikaidesu/rerun", rev = "7cca401e6b1de652ab36bcf1652745986ca22cb3" }
-re_query = { git = "https://github.com/oshikaidesu/rerun", rev = "7cca401e6b1de652ab36bcf1652745986ca22cb3" }
-re_types_core = { git = "https://github.com/oshikaidesu/rerun", rev = "7cca401e6b1de652ab36bcf1652745986ca22cb3" }
-re_log_encoding = { git = "https://github.com/oshikaidesu/rerun", rev = "7cca401e6b1de652ab36bcf1652745986ca22cb3", features = ["encoder", "decoder"] }
-re_build_info = { git = "https://github.com/oshikaidesu/rerun", rev = "7cca401e6b1de652ab36bcf1652745986ca22cb3" }
-re_byte_size = { git = "https://github.com/oshikaidesu/rerun", rev = "7cca401e6b1de652ab36bcf1652745986ca22cb3" }
-re_renderer = { git = "https://github.com/oshikaidesu/rerun", rev = "7cca401e6b1de652ab36bcf1652745986ca22cb3", default-features = false }
+re_chunk = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14" }
+re_chunk_store = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14" }
+re_entity_db = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14" }
+re_log_types = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14" }
+re_query = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14" }
+re_types_core = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14" }
+re_log_encoding = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14", features = ["encoder", "decoder"] }
+re_build_info = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14" }
+re_byte_size = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14" }
+re_renderer = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14", default-features = false }
 
 # 版は rerun の workspace に合わせる。ずれると `IsoTransform` / `Vec3` が別型になる。
 wgpu = "29.0"
@@ -116,6 +118,7 @@ rfd = "0.15"
 motolii-core = { path = "core/motolii-core" }
 motolii-eval = { path = "core/motolii-eval" }
 motolii-store = { path = "core/motolii-store" }
+motolii-fixture = { path = "core/motolii-fixture" }
 motolii-testkit = { path = "core/motolii-testkit" }
 # 実時間再生 第2切片(A2、2026-08-21): `motolii-shell` が `PlaybackSession`
 # (device/producer 結線 + `PlaybackClock`)を叩いて Space Play/Pause を結線する。
@@ -129,6 +132,7 @@ motolii-vector = { path = "engine/motolii-vector" }
 # `notify`/`serde`/`serde_json` のみ)。`motolii-shell` は `pub use` で `tokens`
 # path 互換を保つ(docs/reviews/2026-08-21-pane-split-survey.md §2.2/§6 切片1)。
 motolii-tokens-rs = { path = "ui/motolii-tokens-rs" }
+motolii-presentation-config = { path = "ui/motolii-presentation-config" }
 # 裁定186: SVG アイコン基盤(Material Symbols vendoring + iced svg widget の
 # 包み)。iced の "svg" feature はこの crate の Cargo.toml だけが点す。
 motolii-icons = { path = "ui/motolii-icons" }

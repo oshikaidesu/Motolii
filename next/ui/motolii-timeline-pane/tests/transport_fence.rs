@@ -208,16 +208,16 @@ fn the_transport_tokens_live_in_the_dimensions_json() {
 fn s1_the_button_tread_is_larger_than_its_glyph() {
     let dims = Dimensions::default();
     assert!(
-        dims.timeline_transport_button_width > dims.body_text,
+        dims.timeline_transport_button_width > dims.theme().text.body,
         "踏面幅がグリフ字寸以下: {} <= {}",
         dims.timeline_transport_button_width,
-        dims.body_text
+        dims.theme().text.body
     );
     assert!(
-        dims.timeline_transport_height > dims.body_text,
+        dims.timeline_transport_height > dims.theme().text.body,
         "帯高(=踏面高)がグリフ字寸以下: {} <= {}",
         dims.timeline_transport_height,
-        dims.body_text
+        dims.theme().text.body
     );
 }
 

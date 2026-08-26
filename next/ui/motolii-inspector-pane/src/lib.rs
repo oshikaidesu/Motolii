@@ -1,4 +1,4 @@
-//! wraps: iced — Inspector pane(選択レイヤの属性・transform の読み書き、drag-to-scrub)。書き込みは Intent 経由のみ。
+//! wraps: iced (frozen host, not product front) — Inspector pane(選択レイヤの属性・transform の読み書き、drag-to-scrub)。書き込みは Intent 経由のみ。
 //! Inspector pane(第1波: Transform行 + Attrs行)。
 //!
 //! **視覚正本は `docs/mocks-ui/public/inspector-library.html` + `.css` そのもの**
@@ -121,6 +121,7 @@ mod attrs;
 mod audio;
 mod bulk;
 mod chrome;
+mod device;
 // 色エディタ(2026-08-22 発注)。crate 本体の `Message`/`view` へはまだ結線
 // していない自己完結モジュール(`motolii-settings-pane::sections` 第1切片と
 // 同じ「供覧」の形、`color.rs` 冒頭 doc 参照)——この `pub mod color;` の1行
@@ -145,10 +146,17 @@ mod transform;
 
 pub use attrs::{next_blend_mode, percent_to_speed_ratio, speed_percent, SUPPORTED_BLEND_MODES};
 pub use chrome::{cycle_inspector_label_color, next_label_color, property_row_css, row_band_style};
+pub use device::{
+    device_for, device_for_provider, device_registry, parameter_for_provider,
+    parameters_for_provider, CollapseState, DeviceCapabilities, DeviceId, DeviceVisibility,
+    InspectorDevice, InspectorHostState, ParameterCapabilities, ParameterDescriptor, ParameterKind,
+    ProjectionReadBoundary, AUDIO_DEVICE, ATTRS_DEVICE,
+    EFFECTS_DEVICE, GLOW_DEVICE, MASK_DEVICE, SHAPE_DEVICE, TEXT_DEVICE, TRANSFORM_DEVICE,
+};
 pub use effects::{
     effects_with_moved_down, effects_with_moved_up, effects_with_removed,
     move_inspector_effect_down, move_inspector_effect_up, plugin_display_name, plugin_params,
-    remove_inspector_effect, toggle_inspector_effect_bypass, GlowParam, GLOW_PLUGIN_ID,
+    remove_inspector_effect, toggle_inspector_effect_bypass, GLOW_PLUGIN_ID,
 };
 pub use link::{
     clear_inspector_link, commit_inspector_link, LinkRowProjection, LinkSourceCandidate,
@@ -596,10 +604,10 @@ pub fn view_with_content_editor<'a>(
 fn empty_state(dims: Dimensions, colors: Colors) -> Element<'static, Message> {
     container(
         iced_text("選択なし — layer を選ぶと Transform / Attrs が並ぶ")
-            .size(dims.caption_text)
+            .size(dims.theme().text.caption)
             .color(colors.text_muted),
     )
-    .padding(dims.spacing_m)
+    .padding(dims.theme().space.m)
     .into()
 }
 
@@ -638,10 +646,10 @@ fn selected_body<'a>(
             rows = rows.push(
                 container(
                     iced_text("選択中に編集できる TEXT レイヤーがありません")
-                        .size(dims.caption_text)
+                        .size(dims.theme().text.caption)
                         .color(colors.text_muted),
                 )
-                .padding(dims.spacing_m),
+                .padding(dims.theme().space.m),
             );
         }
         rows = rows.push(hint_row(dims, colors));
@@ -730,14 +738,14 @@ fn multi_selection_band(
     };
     container(column![
         iced_text(format!("{} layers selected", selection.selection_count))
-            .size(dims.body_text)
+            .size(dims.theme().text.body)
             .font(TextWeight::Semibold.font())
             .color(colors.text_primary),
         iced_text(text_summary)
-            .size(dims.caption_text)
+            .size(dims.theme().text.caption)
             .color(Ink::Secondary.resolve(&colors)),
     ])
-    .padding([dims.spacing_s, dims.spacing_m])
+    .padding([dims.theme().space.s, dims.theme().space.m])
     .into()
 }
 
@@ -777,7 +785,7 @@ fn ident_band(
     let name_field = text_input(placeholder, name_text)
         .on_input(Message::NameInput)
         .on_submit(Message::NameSubmit)
-        .size(dims.body_text)
+        .size(dims.theme().text.body)
         .font(TextWeight::Semibold.font())
         .padding(name_field_padding(dims))
         .style(move |_theme, status| name_input_style(dims, colors, status));
@@ -785,7 +793,7 @@ fn ident_band(
     // mock `.ident s{color:var(--ink2)}` — 旧実装は ink3(`text_muted`)を
     // 誤用していた(2026-08-21 更正)。
     let subtitle = iced_text(selection.kind)
-        .size(dims.caption_text)
+        .size(dims.theme().text.caption)
         .color(Ink::Secondary.resolve(&colors));
 
     let identity = column![name_field, subtitle]
@@ -796,7 +804,7 @@ fn ident_band(
         mute_glyph(dims, colors, selection.attrs.hidden),
         reserved_glyph(dims),
     ]
-    .spacing(dims.spacing_xs)
+    .spacing(dims.theme().space.xs)
     .align_y(iced::alignment::Vertical::Center);
 
     container(
@@ -805,17 +813,17 @@ fn ident_band(
             identity,
             glyphs
         ]
-        .spacing(dims.spacing_s)
+        .spacing(dims.theme().space.s)
         .align_y(iced::alignment::Vertical::Center),
     )
-    .padding([dims.spacing_s, dims.spacing_m])
+    .padding([dims.theme().space.s, dims.theme().space.m])
     .style(move |_theme| container::Style {
         // 線化 D5(裁定179 文法1): `surface_raised` の面が `surface_panel`
         // pane 地から明度1段浮く — 輪郭線は透明化(幅だけ残す=幾何不変)。
         background: Some(iced::Background::Color(colors.surface_raised)),
         border: iced::Border {
             color: iced::Color::TRANSPARENT,
-            width: dims.border_width,
+            width: dims.theme().stroke.hairline,
             radius: 0.0.into(),
         },
         ..container::Style::default()

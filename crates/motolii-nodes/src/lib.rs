@@ -1380,7 +1380,10 @@ mod tests {
         let left = (1.0 - fit_w) / 2.0;
         // 嵌め込み左端→src u=0、右端→u=1、中央→中央。上下はフルなのでv恒等。
         let (u, v) = map_uv(m, left as f32, 0.5);
-        assert!(u.abs() < 1e-5 && (v - 0.5).abs() < 1e-6, "left edge: {u} {v}");
+        assert!(
+            u.abs() < 1e-5 && (v - 0.5).abs() < 1e-6,
+            "left edge: {u} {v}"
+        );
         let (u, _) = map_uv(m, (left + fit_w) as f32, 0.5);
         assert!((u - 1.0).abs() < 1e-5, "right edge: {u}");
         let (u, v) = map_uv(m, 0.5, 0.5);
@@ -1397,7 +1400,10 @@ mod tests {
         let fit_h = 81.0 / 256.0;
         let top = (1.0 - fit_h) / 2.0;
         let (u, v) = map_uv(m, 0.5, top as f32);
-        assert!(v.abs() < 1e-5 && (u - 0.5).abs() < 1e-6, "top edge: {u} {v}");
+        assert!(
+            v.abs() < 1e-5 && (u - 0.5).abs() < 1e-6,
+            "top edge: {u} {v}"
+        );
         let (_, v) = map_uv(m, 0.5, (top + fit_h) as f32);
         assert!((v - 1.0).abs() < 1e-5, "bottom edge: {v}");
         let (_, v) = map_uv(m, 0.5, 0.05);

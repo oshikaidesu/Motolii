@@ -1,6 +1,43 @@
 {
   "$comment": "寸法トークンの機械可読正本(裁定117)。値は Ableton Live 12 実測から写す — ここで発明しない(Inspector 関連のキーだけは視覚正本 next/reference/mocks/ui-scale-and-z.html から転記、各 _note に明記)。実測に無い値は近縁値から導出し、各キーの `_note_*` に出典・根拠を書く(コメントはJSONに書けないため)。debug ビルドはこのファイルを直接読み、notify で変更を検知して再読込する。release は include_str! で埋め込み、file I/O は行わない。raw 値の直書きは禁止 — 全 pane は `motolii_shell::tokens::Tokens` 経由でここを読む。",
 
+  "components": {
+    "browser": {
+      "grid_columns": 2,
+      "card_width_row_height_ratio": 6.0,
+      "thumb_aspect_w": 16.0,
+      "thumb_aspect_h": 9.0,
+      "filter_chip_corner_radius_row_height_ratio": 0.4,
+      "panel_height_row_height_ratio": 14.0
+    },
+    "_note_browser": "Browser-library 視覚正本のカード骨格。列数・カード幅/行高・16:9 thumb・filter角丸比・pane高比を同じ名前空間に置き、Rust側のローカル定数を正本にしない。",
+    "settings": {
+      "checkerboard_tile_target_pt": 8.0
+    },
+    "_note_settings": "AE実機準拠の市松タイル目標寸。ui_scaleに追随する視認用の長さで、書き出しデータではない。",
+    "stage": {
+      "grid_divisions": 9,
+      "action_safe_inset": 0.05,
+      "title_safe_inset": 0.10,
+      "grid_ink_factor": 0.4545454545,
+      "fit_to_selection_margin": 0.9
+    },
+    "_note_stage": "Stage-semantics 視覚正本の方眼9分割・5/10% safe・ink減量(0.10/0.22)・選択fit余白。比率/係数はui_scaleを掛けない。",
+    "timeline": {
+      "graph_plot_padding": 16.0,
+      "graph_handle_hit": 12.0,
+      "graph_grid_line_width": 1.0,
+      "graph_curve_line_width": 2.0,
+      "graph_control_line_width": 1.0,
+      "graph_handle_radius": 5.0,
+      "key_diamond_size": 8.0,
+      "key_hit": 12.0,
+      "target_cell_ratio": 0.52,
+      "viewport_default_size": 100.0
+    },
+    "_note_timeline": "Timeline/Graph Editor の視覚寸法とセル比率。graph/key/viewportの画面上の長さはui_scaleへ追随し、target_cell_ratioは比率なので追随しない。"
+  },
+
   "row_height": 20,
   "_note_row_height": "Ableton Arrangement トラック行高の実測値そのもの(20)。裁定117以来の既存値",
 
@@ -33,6 +70,12 @@
 
   "border_width": 1.0,
   "_note_border_width": "ui-visual-language の規約『フラット・細罫線』= 1px hairline。実測というより意匠規約そのものの値(発明ではなく既定の視覚言語)。`Dimensions::scaled` はこの値へ ui_scale を掛けない(mock `--line: 1px` が `--s` の calc から独立している=『拡大しない』ことの出典どおり)",
+
+  "interactive_target_min": 24,
+  "_note_interactive_target_min": "Google/Material系の操作対象契約。アイコンの視覚サイズとは分け、押せる面の短辺を24px以上にする。デスクトップの密度を壊さず、view mode/icon rail/glyphの共通最小値として機械検査する",
+
+  "focus_indicator_width": 2,
+  "_note_focus_indicator_width": "Google Developers Accessibilityの可視状態契約を実装するフォーカス境界幅。通常のhairline(border_width)と分け、入力がFocusedになった時だけ2pxへ上げる。色だけに状態を預けないための幾何的な差分",
 
   "panel_header_height": 29,
   "_note_panel_header_height": "実測表『Browser ツールバー』の実測値(29)を転用。Shell 全体の header(Undo/Redo/+Layer 帯)専用 — Inspector 自身のタイトル帯(ptitle)は inspector_section_header_height を使う(mock の --section が両方に効くのと同じ理由)",
@@ -70,8 +113,14 @@
   "timeline_transport_gap": 2,
   "_note_timeline_transport_gap": "ボタン間・タイムコードとの間隔。裁定167 の容器余白梯子の下段 0.075×基準寸(帯高30)= 2.25 → px 最近傍丸め 2(lane_bar::sibling_gap_px と同式・同段 — 兄弟要素間 gap の既存段を借用、独自の中間値を発明しない)",
 
-  "ui_scale": 1.00,
-  "_note_ui_scale": "mock --s 相当の UI 拡大率(1.00 基準、0.01刻み)。適用点は Dimensions::scaled の1箇所だけ(Shell::dims が呼ぶ)。仮の置き場 — Workspace 永続機構がまだ無いため、暫定的にこの JSON トークンファイルへ置く(発注書の指示どおり)。Workspace 実装後はそちらへ移す",
+  "graph_editor_plot_height": 180,
+  "_note_graph_editor_plot_height": "Graph Editor のプロット面の高さ。既存実装 graph_editor.rs の Length::Fixed(180.0) を共通寸法正本へ移したもの。Graph Editor は Timeline の詳細表示であり、UI scale の対象にする",
+
+  "graph_control_label_width": 20,
+  "_note_graph_control_label_width": "Graph Editor の x1/y1/x2/y2 ラベル列幅。既存実装 graph_editor.rs の Length::Fixed(20.0) を共通寸法正本へ移したもの。値入力欄(inspector_value_width)とは意味が違うため別キー",
+
+  "ui_scale": 1.18,
+  "_note_ui_scale": "空間優先の初期値(1.18)。ui_scale は Dimensions::scaled の1箇所だけで全寸法・文字へ適用し、面や線を増やさずに画面の呼吸を18%広げる。利用者裁定『見やすさは空間9割』を機械的に再現するための現在値。適用点は Shell::dims、Workspace 永続機構ができるまではこのJSONが正本",
 
   "browser_tab_bar_height": 26,
   "_note_browser_tab_bar_height": "Browser pane のタブ帯(Media/Effects/Create/Panels)の高さ。視覚正本 next/reference/mocks/browser-library.html の `.libraryTabs{height:26px}`(html内css:103-108)実測そのもの。row_height(20)比 1.3。タブ文字は既存 micro_text(mock `.libraryTabs button{font-size:8px}`)、タブ帯下の罫線は既存 border_width を使うため新キーはこの高さと下記 underline の2つだけ(裁定165『形は比率で定数化・分母明記』を JSON 正本側で満たす — 2026-08-22 利用者裁定『デザイン値の外出し徹底』)",

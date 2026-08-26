@@ -81,7 +81,10 @@ mod tests {
     /// 既存バリアントの表現は変わっていない(旧文書のバイト列を動かさない)。
     #[test]
     fn existing_variants_keep_their_representation() {
-        assert_eq!(serde_json::to_string(&DocValue::F64(1.5)).unwrap(), r#"{"F64":1.5}"#);
+        assert_eq!(
+            serde_json::to_string(&DocValue::F64(1.5)).unwrap(),
+            r#"{"F64":1.5}"#
+        );
         assert_eq!(
             serde_json::to_string(&DocValue::Vec2([0.0, 1.0])).unwrap(),
             r#"{"Vec2":[0.0,1.0]}"#

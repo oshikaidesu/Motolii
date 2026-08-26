@@ -10,7 +10,7 @@ use crate::schema::{
 use crate::{AssetId, Document, LayerId};
 
 use super::locate::{
-    envelope_of, ensure_layer_names_match_item, find_item_location, find_items_vec,
+    ensure_layer_names_match_item, envelope_of, find_item_location, find_items_vec,
     find_items_vec_mut, layer_names_for_item,
 };
 use super::{Command, CommandError, ParentLocator};
@@ -65,12 +65,9 @@ pub fn prepare_place_asset_clip(
     asset_id: AssetId,
     start: RationalTime,
 ) -> Result<Command, CommandError> {
-    let asset = doc
-        .assets
-        .get(asset_id)
-        .ok_or(CommandError::Validate(
-            crate::validate::DocumentError::UnknownAssetId { id: asset_id.get() },
-        ))?;
+    let asset = doc.assets.get(asset_id).ok_or(CommandError::Validate(
+        crate::validate::DocumentError::UnknownAssetId { id: asset_id.get() },
+    ))?;
     let (video, audio) =
         if asset.asset_type.starts_with("video/") || asset.asset_type.starts_with("image/") {
             (Some(VideoComponent::ordinal(0)), Vec::new())
@@ -88,7 +85,8 @@ pub fn prepare_place_asset_clip(
 
     // composition end - start(正確な有理数演算、i128で桁溢れ検査)。
     let end = doc.composition.duration;
-    let num = (end.num() as i128) * (start.den() as i128) - (start.num() as i128) * (end.den() as i128);
+    let num =
+        (end.num() as i128) * (start.den() as i128) - (start.num() as i128) * (end.den() as i128);
     let den = (end.den() as i128) * (start.den() as i128);
     if num <= 0 {
         return Err(CommandError::PlacementOutsideComposition);
@@ -104,7 +102,10 @@ pub fn prepare_place_asset_clip(
         None => remaining,
     };
 
-    let track = doc.tracks.first().ok_or(CommandError::NoTrackForPlacement)?;
+    let track = doc
+        .tracks
+        .first()
+        .ok_or(CommandError::NoTrackForPlacement)?;
     let parent = ParentLocator::Track(track.id);
     let index = track.items.len();
 
@@ -233,10 +234,7 @@ pub fn prepare_set_layer_name(
 ///
 /// この関数はツリーも台帳も変更しない(適用は`apply_command`側)。
 /// 同名の`Ok(None)`は無い — 「消す対象がある」なら必ず変化する。
-pub fn prepare_remove_track_item(
-    doc: &Document,
-    target: LayerId,
-) -> Result<Command, CommandError> {
+pub fn prepare_remove_track_item(doc: &Document, target: LayerId) -> Result<Command, CommandError> {
     let (parent, index, item) =
         find_item_location(doc, target).ok_or(CommandError::LayerNotFound(target.get()))?;
     let layer_names = layer_names_for_item(doc, item)?;

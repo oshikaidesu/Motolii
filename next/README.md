@@ -1,7 +1,9 @@
 # Motolii(リセット後)
 
-MV 制作のためのモーショングラフィック指向コンポジットツール。
-**構造としては、rerun store + re_renderer + iced + FFmpeg の薄いラッパーである。**
+制作者が自分や作品の hero を立ち上げ、次の一歩へ進む動機を生むためのモーション／動画制作ツール。
+一般的な動画ソフトの操作は製品の同一性ではなく、壊してはいけない基礎床である。
+**構造としては、rerun store + re_renderer + Makepad + FFmpeg の薄いラッパーである。**
+iced の view/widget は凍結ホストであり、製品 front ではない(裁定251/252)。
 
 裁定の経緯は [../docs/reviews/2026-08-20-reset-to-one-axis.md](../docs/reviews/2026-08-20-reset-to-one-axis.md)。
 
@@ -11,7 +13,7 @@ MV 制作のためのモーショングラフィック指向コンポジット�
 |---|---|
 | Document(identity・履歴・undo) | **rerun store**(`re_entity_db` / `re_chunk_store`)。undo = `edit` timeline の時間移動 |
 | 合成・GPU | **`re_renderer`** |
-| front | **iced のみ**。pane は store への query の投影であり、独自の状態を持たない |
+| front | **Makepad**(`probes/r7-makepad-panel`)。pane は store への query の投影であり、独自の状態を持たない。iced view は凍結ホスト(裁定251/252) |
 | 素材 IO | **FFmpeg** |
 | Motolii が持つもの | AE の意味(component 定義)、評価器(comp 時間 → 値)、製品 policy、拡張の口1本 |
 
@@ -53,7 +55,8 @@ MV 制作のためのモーショングラフィック指向コンポジット�
 | `probes/r2-view-projection` | `owns:` | 毎フレーム投影が予算に収まるか |
 | `probes/r3-pointcloud` | `owns:` | 実データの PLY 点群が point_cloud renderer で撮れ、カメラ移動で視差が出るか(D12) |
 
-`shell/`(iced)は骨が立っている(store 投影+Session のみ。2026-08-20 実機起動済み)。
+`shell/motolii-shell` は凍結 iced アセンブラであり、製品核ではない(裁定253)。
+意味は store / session / engine。製品 front は `probes/r7-makepad-panel`。
 
 ## 旧ステージの理想文書
 
@@ -109,6 +112,12 @@ Lottie は Bodymovin が After Effects のデータ模型を吐いた物なの�
 この数値は外部製品の事実ではなく、Motoliiの優先順位である。外部資料は `maps` の採否を
 支え、PageRank は `fanout` の判断を補助するが、どちらも重みそのものを決めない。
 
+この重みは機能の大きさではなく、**解決する問題の深さ**で読む。`truth_safety` は喪失・誤出力・
+無反応を防ぐ問題、`core_edit`/`render_export` は素材から結果までの制作ループ、`fanout` は
+複数の下流へ波及する意味、`frequency`/`portability` は繰り返しや受け渡しの摩擦、
+`convenience` は「あれば快適」な補助である。convenienceだけの粒は製品の主張にせず、
+P0〜P2の問題が閉じた後へ送る。
+
 コンポーネントの切り分けは、**独立した意味・状態遷移・失敗方針・検収結果**を1単位とする。
 別の undo/recovery 方針、別 owner、別の観測結果を持つなら分ける。単独では利用者に意味が
 見えないUI部品や補助関数は、意味コンポーネントに数えず内部実装に留める。
@@ -125,6 +134,28 @@ Lottie は Bodymovin が After Effects のデータ模型を吐いた物なの�
 閉じる。componentだけを先回りして増やさない。前半で複数stepに効く基盤を作り、後半ほど
 新規実装量を減らす。ただし後半の表現・再リンク・受け渡しは、量が少なくても意味と検収が
 重くなりうるため、5粒の赤を残したまま完了とはしない。
+
+現在のUI基盤の段階ゲートは
+[reference/FOUNDATION-GATE.md](reference/FOUNDATION-GATE.md)に固定している。人による検収で
+共通の意味文法が不足している間は`FOUNDATION_SERIAL`であり、並列コンポーネント作成は
+`PARALLEL_COMPONENTS=LOCKED`とする。stepの静通や`plan_waves.py`の分割候補だけでは、
+このロックを解除しない。
+段階状態は`reference/foundation/phase.json`から機械的に読み、
+`python3 scripts/check_foundation_phase.py`で検査する。
+
+外部製品の「普通」を候補収集とブラックボックス検収へ分ける方法は
+[reference/UX-CONVENTIONS.md](reference/UX-CONVENTIONS.md) に固定している。初期値のように
+外部資料が答えていない問いは、人の勘で埋めず `ORACLE_GAP` として残す。
+色・コントラスト・固定寸法の一括検査は `python3 scripts/check_ui_readability.py
+"$(git rev-parse --show-toplevel)"` で行う。値は `motolii-dark.json`、
+`readability.json`、`dimensions.json` のJSON正本から読む。
+
+実窓の動作別スクリーンショットと機械採点は
+[reference/UI-OBSERVATION.md](reference/UI-OBSERVATION.md) が正本である。
+`ui-observation-scenarios.json` の `operation → argv → reference/delta` を増やし、
+`python3 scripts/capture_ui_scenarios.py "$(git rev-parse --show-toplevel)"` を回す。
+`--screenshot` のオフスクリーン画像は実窓証拠に数えず、PID の実ウィンドウを
+`screencapture -l` で撮った画像だけを `source=real-window` として採点する。
 
 ## 並列レーンへの発注テンプレート
 

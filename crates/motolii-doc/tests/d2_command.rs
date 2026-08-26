@@ -2649,10 +2649,14 @@ fn removing_a_group_takes_its_children_and_undo_puts_them_back() {
         .prepare_remove_track_item(group_layer)
         .expect("prepare remove");
     let gesture = writer.begin_gesture();
-    writer.apply_command(gesture, command).expect("apply remove");
+    writer
+        .apply_command(gesture, command)
+        .expect("apply remove");
 
     let after = writer.snapshot();
-    writer.validate().expect("post-remove document must validate");
+    writer
+        .validate()
+        .expect("post-remove document must validate");
     assert_eq!(after.tracks[0].items.len(), 1, "Group が1つ外れた");
     assert!(
         !after.layers.contains(group_layer)
@@ -2703,7 +2707,9 @@ fn removing_the_first_of_two_clips_leaves_the_second_addressable() {
 
     let command = writer.prepare_remove_track_item(second).expect("prepare");
     let gesture = writer.begin_gesture();
-    writer.apply_command(gesture, command).expect("apply second");
+    writer
+        .apply_command(gesture, command)
+        .expect("apply second");
     assert!(writer.snapshot().tracks[0].items.is_empty());
 
     assert!(
@@ -2760,7 +2766,9 @@ fn an_empty_group_can_be_added_and_filled_by_reparenting() {
             .prepare_reparent_clip(layer, ParentLocator::Group(group_layer), index, None)
             .expect("prepare reparent")
             .expect("command");
-        writer.apply_command(gesture, command).expect("apply reparent");
+        writer
+            .apply_command(gesture, command)
+            .expect("apply reparent");
     }
 
     writer.validate().expect("空でなくなったGroupは検証を通る");
@@ -2802,7 +2810,9 @@ fn renaming_a_layer_changes_only_the_ledger_entry() {
     writer.apply_command(gesture, command).expect("apply");
 
     let after = writer.snapshot();
-    writer.validate().expect("post-rename document must validate");
+    writer
+        .validate()
+        .expect("post-rename document must validate");
     assert_eq!(after.layers.display_name(f.layer), Some("renamed"));
     assert_eq!(after.tracks, tracks_before, "**ツリーは1バイトも動かない**");
     assert_eq!(
@@ -2945,7 +2955,10 @@ fn dragging_a_locator_merges_into_one_step_that_undoes_to_the_start() {
             .expect("変化がある");
         writer.apply_command(gesture, command).expect("apply");
     }
-    assert_eq!(writer.snapshot().locators[0].t, RationalTime::try_new(6, 1).unwrap());
+    assert_eq!(
+        writer.snapshot().locators[0].t,
+        RationalTime::try_new(6, 1).unwrap()
+    );
     assert_eq!(writer.undo_len(), undo_before + 1, "1 gesture = 1 Undo");
 
     writer.undo().expect("undo");

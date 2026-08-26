@@ -11,9 +11,7 @@
 
 mod common;
 
-use motolii_shell_iced::stage_island::{
-    self, StageIsland, RERUN_MIN_MAX_BIND_GROUPS,
-};
+use motolii_shell_iced::stage_island::{self, StageIsland, RERUN_MIN_MAX_BIND_GROUPS};
 
 fn snapshot_island() {
     let island = StageIsland {
@@ -22,15 +20,16 @@ fn snapshot_island() {
         playhead: 0.0,
         grab_probe: None,
     };
-    let mut ui: iced_test::Simulator<'_, motolii_shell_iced::Message> = iced_test::Simulator::with_size(
-        iced_test::core::Settings::default(),
-        iced::Size::new(160.0, 120.0),
-        iced::Element::from(
-            iced::widget::shader(island)
-                .width(iced::Fill)
-                .height(iced::Fill),
-        ),
-    );
+    let mut ui: iced_test::Simulator<'_, motolii_shell_iced::Message> =
+        iced_test::Simulator::with_size(
+            iced_test::core::Settings::default(),
+            iced::Size::new(160.0, 120.0),
+            iced::Element::from(
+                iced::widget::shader(island)
+                    .width(iced::Fill)
+                    .height(iced::Fill),
+            ),
+        );
     let _ = ui
         .snapshot(&iced::Theme::Dark)
         .expect("headless snapshot が撮れる");

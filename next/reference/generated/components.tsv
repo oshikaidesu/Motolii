@@ -103,6 +103,15 @@ io.folder_import_expansion	semantic	core_edit	4		meaning	is_supported_import_fil
 io.folder_import_expansion	semantic	core_edit	4		evaluation	append_supported_files	緑	実装コードに実在	next/shell/motolii-shell/src/file_dialogs.rs:96
 io.folder_import_expansion	semantic	core_edit	4		render	AdmitPaths	緑	実装コードに実在	next/shell/motolii-shell/src/file_dialogs.rs:96
 io.folder_import_expansion	semantic	core_edit	4		observable	folder_expansion_recurses_in_sorted_order_and_filters_media	緑	実装コードに実在	next/shell/motolii-shell/src/file_dialogs.rs:96
+presentation.config	semantic	core_edit	4		entry	PresentationFileChanged	緑	実装コードに実在	next/ui/motolii-presentation-config/src/lib.rs:16
+presentation.config	semantic	core_edit	4		entry	parse	緑	実装コードに実在	next/ui/motolii-presentation-config/src/lib.rs:16
+presentation.config	semantic	core_edit	4		entry	reload_from_path	緑	実装コードに実在	next/ui/motolii-presentation-config/src/lib.rs:16
+presentation.config	semantic	core_edit	4		meaning	reload_from_json	緑	実装コードに実在	next/ui/motolii-presentation-config/src/lib.rs:16
+presentation.config	semantic	core_edit	4		meaning	LoadError	緑	実装コードに実在	next/ui/motolii-presentation-config/src/lib.rs:16
+presentation.config	semantic	core_edit	4		evaluation	bundled_config_is_valid	緑	実装コードに実在	next/ui/motolii-presentation-config/src/lib.rs:16
+presentation.config	semantic	core_edit	4		evaluation	last_good_keeps_the_previous_value_after_a_bad_reload	緑	実装コードに実在	next/ui/motolii-presentation-config/src/lib.rs:16
+presentation.config	semantic	core_edit	4		render	PresentationConfig	緑	実装コードに実在	next/ui/motolii-presentation-config/src/lib.rs:16
+presentation.config	semantic	core_edit	4		observable	last_good_keeps_the_previous_value_after_a_bad_reload	緑	実装コードに実在	next/ui/motolii-presentation-config/src/lib.rs:16
 shell.collect_project_files	semantic	core_edit	4		entry	CollectFilesRequested	緑	実装コードに実在	next/shell/motolii-shell/src/document_io.rs:76
 shell.collect_project_files	semantic	core_edit	4		entry	collect_project_files	緑	実装コードに実在	next/shell/motolii-shell/src/document_io.rs:76
 shell.collect_project_files	semantic	core_edit	4		meaning	CollectFilesPathChosen	緑	実装コードに実在	next/shell/motolii-shell/src/document_io.rs:76
@@ -202,6 +211,18 @@ shell.workspace_layout_persistence	semantic	core_edit	4		evaluation	known_hole_r
 shell.workspace_layout_persistence	semantic	core_edit	4		render	WorkspaceSnapshot	緑	実装コードに実在	next/ui/motolii-shell-state/src/layout.rs:160
 shell.workspace_layout_persistence	semantic	core_edit	4		render	visible_layout	緑	実装コードに実在	next/ui/motolii-shell-state/src/layout.rs:160
 shell.workspace_layout_persistence	semantic	core_edit	4		observable	known_hole_regression_swap_and_resize_survive_a_hide_show_round_trip	緑	実装コードに実在	next/ui/motolii-shell-state/src/layout.rs:160
+stage.gizmo_transform	semantic	core_edit	4		entry	GizmoDrag	緑	実装コードに実在	next/ui/motolii-stage-pane/src/gizmo.rs:54
+stage.gizmo_transform	semantic	core_edit	4		entry	GizmoOverlay	緑	実装コードに実在	next/ui/motolii-stage-pane/src/gizmo.rs:54
+stage.gizmo_transform	semantic	core_edit	4		entry	gizmo_target	緑	実装コードに実在	next/ui/motolii-stage-pane/src/gizmo.rs:54
+stage.gizmo_transform	semantic	core_edit	4		meaning	GizmoPhase	緑	実装コードに実在	next/ui/motolii-stage-pane/src/gizmo.rs:54
+stage.gizmo_transform	semantic	core_edit	4		meaning	GizmoProperty	緑	実装コードに実在	next/ui/motolii-stage-pane/src/gizmo.rs:54
+stage.gizmo_transform	semantic	core_edit	4		meaning	GizmoValue	緑	実装コードに実在	next/ui/motolii-stage-pane/src/gizmo.rs:54
+stage.gizmo_transform	semantic	core_edit	4		evaluation	gizmo_hit_test	緑	実装コードに実在	next/ui/motolii-stage-pane/src/gizmo.rs:54
+stage.gizmo_transform	semantic	core_edit	4		evaluation	GizmoDragState	緑	実装コードに実在	next/ui/motolii-stage-pane/src/gizmo.rs:54
+stage.gizmo_transform	semantic	core_edit	4		evaluation	gizmo_target_reads_the_layers_transform_values	緑	実装コードに実在	next/ui/motolii-stage-pane/src/gizmo.rs:54
+stage.gizmo_transform	semantic	core_edit	4		render	draw	緑	実装コードに実在	next/ui/motolii-stage-pane/src/gizmo.rs:54
+stage.gizmo_transform	semantic	core_edit	4		render	mouse_interaction	緑	実装コードに実在	next/ui/motolii-stage-pane/src/gizmo.rs:54
+stage.gizmo_transform	semantic	core_edit	4		observable	gizmo_move_writes_a_transient_and_commit_lands_one_undoable_set_track	緑	実装コードに実在	next/ui/motolii-stage-pane/src/gizmo.rs:54
 stage.mask_path_edit	semantic	core_edit	4		entry	MaskPathEditTarget	緑	実装コードに実在	next/ui/motolii-stage-pane/src/mask_path_edit.rs:18
 stage.mask_path_edit	semantic	core_edit	4		entry	MaskPathEditOverlay	緑	実装コードに実在	next/ui/motolii-stage-pane/src/mask_path_edit.rs:18
 stage.mask_path_edit	semantic	core_edit	4		meaning	MoveVertex	緑	実装コードに実在	next/ui/motolii-stage-pane/src/mask_path_edit.rs:18
@@ -226,6 +247,7 @@ stage.shape_tool	semantic	core_edit	4		meaning	Create	緑	実装コードに実�
 stage.shape_tool	semantic	core_edit	4		meaning	CreatePen	緑	実装コードに実在	next/ui/motolii-stage-pane/src/shape_tool.rs:17
 stage.shape_tool	semantic	core_edit	4		evaluation	comp_from_screen	緑	実装コードに実在	next/ui/motolii-stage-pane/src/shape_tool.rs:17
 stage.shape_tool	semantic	core_edit	4		evaluation	screen_from_comp	緑	実装コードに実在	next/ui/motolii-stage-pane/src/shape_tool.rs:17
+stage.shape_tool	semantic	core_edit	4		evaluation	selection_overlays_follow_active_shape_tool	緑	実装コードに実在	next/ui/motolii-stage-pane/src/shape_tool.rs:17
 stage.shape_tool	semantic	core_edit	4		render	toolbar	緑	実装コードに実在	next/ui/motolii-stage-pane/src/shape_tool.rs:17
 stage.shape_tool	semantic	core_edit	4		render	preview	緑	実装コードに実在	next/ui/motolii-stage-pane/src/shape_tool.rs:17
 stage.shape_tool	semantic	core_edit	4		observable	shape_tool_draws_shape	緑	実装コードに実在	next/ui/motolii-stage-pane/src/shape_tool.rs:17
@@ -237,19 +259,24 @@ timeline.easing_shortcuts	semantic	core_edit	4		evaluation	EASY_EASE_IN	緑	実�
 timeline.easing_shortcuts	semantic	core_edit	4		evaluation	EASY_EASE_OUT	緑	実装コードに実在	next/shell/motolii-shell/src/input.rs:463
 timeline.easing_shortcuts	semantic	core_edit	4		render	resolve_navigation_key	緑	実装コードに実在	next/shell/motolii-shell/src/input.rs:463
 timeline.easing_shortcuts	semantic	core_edit	4		observable	easing_shortcuts_select_the_three_bezier_presets	緑	実装コードに実在	next/shell/motolii-shell/src/input.rs:463
-timeline.graph_editor	semantic	core_edit	4		entry	project	緑	実装コードに実在	next/ui/motolii-timeline-pane/src/graph_editor.rs:16
-timeline.graph_editor	semantic	core_edit	4		entry	update_control	緑	実装コードに実在	next/ui/motolii-timeline-pane/src/graph_editor.rs:16
-timeline.graph_editor	semantic	core_edit	4		entry	commit_graph_editor	緑	実装コードに実在	next/ui/motolii-timeline-pane/src/graph_editor.rs:16
-timeline.graph_editor	semantic	core_edit	4		meaning	GraphControlInput	緑	実装コードに実在	next/ui/motolii-timeline-pane/src/graph_editor.rs:16
-timeline.graph_editor	semantic	core_edit	4		meaning	GraphHandleDragged	緑	実装コードに実在	next/ui/motolii-timeline-pane/src/graph_editor.rs:16
-timeline.graph_editor	semantic	core_edit	4		meaning	GraphHandleReleased	緑	実装コードに実在	next/ui/motolii-timeline-pane/src/graph_editor.rs:16
-timeline.graph_editor	semantic	core_edit	4		evaluation	parse_control	緑	実装コードに実在	next/ui/motolii-timeline-pane/src/graph_editor.rs:16
-timeline.graph_editor	semantic	core_edit	4		evaluation	bezier_point	緑	実装コードに実在	next/ui/motolii-timeline-pane/src/graph_editor.rs:16
-timeline.graph_editor	semantic	core_edit	4		evaluation	committing_graph_control_inputs_writes_bezier	緑	実装コードに実在	next/ui/motolii-timeline-pane/src/graph_editor.rs:16
-timeline.graph_editor	semantic	core_edit	4		render	view	緑	実装コードに実在	next/ui/motolii-timeline-pane/src/graph_editor.rs:16
-timeline.graph_editor	semantic	core_edit	4		render	GraphCanvas	緑	実装コードに実在	next/ui/motolii-timeline-pane/src/graph_editor.rs:16
-timeline.graph_editor	semantic	core_edit	4		observable	graph_handle_drag_updates_the_control_point	緑	実装コードに実在	next/ui/motolii-timeline-pane/src/graph_editor.rs:16
-timeline.graph_editor	semantic	core_edit	4		observable	committing_graph_control_inputs_writes_bezier	緑	実装コードに実在	next/ui/motolii-timeline-pane/src/graph_editor.rs:16
+timeline.graph_editor	semantic	core_edit	4	519	entry	project	緑	実装コードに実在	next/ui/motolii-timeline-pane/src/graph_editor.rs:19
+timeline.graph_editor	semantic	core_edit	4	519	entry	detail_tab	緑	実装コードに実在	next/ui/motolii-timeline-pane/src/graph_editor.rs:19
+timeline.graph_editor	semantic	core_edit	4	519	entry	detail_header	緑	実装コードに実在	next/ui/motolii-timeline-pane/src/graph_editor.rs:19
+timeline.graph_editor	semantic	core_edit	4	519	entry	view	緑	実装コードに実在	next/ui/motolii-timeline-pane/src/graph_editor.rs:19
+timeline.graph_editor	semantic	core_edit	4	519	entry	update_control	緑	実装コードに実在	next/ui/motolii-timeline-pane/src/graph_editor.rs:19
+timeline.graph_editor	semantic	core_edit	4	519	entry	commit_graph_editor	緑	実装コードに実在	next/ui/motolii-timeline-pane/src/graph_editor.rs:19
+timeline.graph_editor	semantic	core_edit	4	519	meaning	GraphControlInput	緑	実装コードに実在	next/ui/motolii-timeline-pane/src/graph_editor.rs:19
+timeline.graph_editor	semantic	core_edit	4	519	meaning	GraphHandleDragged	緑	実装コードに実在	next/ui/motolii-timeline-pane/src/graph_editor.rs:19
+timeline.graph_editor	semantic	core_edit	4	519	meaning	GraphHandleReleased	緑	実装コードに実在	next/ui/motolii-timeline-pane/src/graph_editor.rs:19
+timeline.graph_editor	semantic	core_edit	4	519	evaluation	parse_control	緑	実装コードに実在	next/ui/motolii-timeline-pane/src/graph_editor.rs:19
+timeline.graph_editor	semantic	core_edit	4	519	evaluation	bezier_point	緑	実装コードに実在	next/ui/motolii-timeline-pane/src/graph_editor.rs:19
+timeline.graph_editor	semantic	core_edit	4	519	evaluation	committing_graph_control_inputs_writes_bezier	緑	実装コードに実在	next/ui/motolii-timeline-pane/src/graph_editor.rs:19
+timeline.graph_editor	semantic	core_edit	4	519	render	detail_header	緑	実装コードに実在	next/ui/motolii-timeline-pane/src/graph_editor.rs:19
+timeline.graph_editor	semantic	core_edit	4	519	render	view	緑	実装コードに実在	next/ui/motolii-timeline-pane/src/graph_editor.rs:19
+timeline.graph_editor	semantic	core_edit	4	519	render	GraphCanvas	緑	実装コードに実在	next/ui/motolii-timeline-pane/src/graph_editor.rs:19
+timeline.graph_editor	semantic	core_edit	4	519	observable	detail_tab_keeps_timeline_body_visible	緑	実装コードに実在	next/ui/motolii-timeline-pane/src/graph_editor.rs:19
+timeline.graph_editor	semantic	core_edit	4	519	observable	graph_handle_drag_updates_the_control_point	緑	実装コードに実在	next/ui/motolii-timeline-pane/src/graph_editor.rs:19
+timeline.graph_editor	semantic	core_edit	4	519	observable	committing_graph_control_inputs_writes_bezier	緑	実装コードに実在	next/ui/motolii-timeline-pane/src/graph_editor.rs:19
 timeline.marker_panel	semantic	core_edit	4	1014	entry	MarkerMessage	緑	実装コードに実在	next/ui/motolii-timeline-pane/src/markers.rs:62
 timeline.marker_panel	semantic	core_edit	4	1014	entry	marker_panel	緑	実装コードに実在	next/ui/motolii-timeline-pane/src/markers.rs:62
 timeline.marker_panel	semantic	core_edit	4	1014	meaning	Marker	緑	実装コードに実在	next/ui/motolii-timeline-pane/src/markers.rs:62

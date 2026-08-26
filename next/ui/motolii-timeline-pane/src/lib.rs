@@ -1,4 +1,4 @@
-//! wraps: iced — Timeline pane(投影・hit・ジェスチャ・レーンバー・キー行)。書き込みは Intent 経由のみ、Document の写しを持たない。
+//! wraps: iced (frozen host, not product front) — Timeline pane(投影・hit・ジェスチャ・レーンバー・キー行)。書き込みは Intent 経由のみ、Document の写しを持たない。
 //! Timeline pane crate(裁定160 切片7、pane split survey
 //! `docs/reviews/2026-08-21-pane-split-survey.md` §6 切片7)。
 //!
@@ -89,7 +89,8 @@ pub use projection::{audio_rows, AudioRowProjection};
 /// これらを cross-crate で読む必要がある — 分割前は同一クレート内の
 /// `pub(crate)` で足りていたが、crate 境界を跨ぐには `pub` が要る。
 pub use projection::{
-    frame_to_x, layer_row_top, selected_row_index, tick_steps, time_band_segment_frames,
+    frame_to_x, layer_row_top, selected_row_index, tick_steps, tick_steps_with_target,
+    time_band_segment_frames, time_band_segment_frames_with_target,
 };
 /// 裁定172 §1/§2 の比率(ruler 高・bar 縦 inset/角丸・目盛り長)— 上と同じ理由
 /// (`motolii-shell::screenshot` の cross-crate 参照)で `pub` にした。**この
@@ -445,7 +446,8 @@ impl TimelinePane {
         // `canvas::Program` へ転送しない(fork 実測、`viewport_canvas` モジュール
         // doc の「探索範囲」節)。差し替えは `canvas(self)` → `ViewportCanvas::new(self)`
         // の1行のみ、`.width()`/`.height()`/`.into()` の形は不変。
-        let field = viewport_canvas::ViewportCanvas::new(self)
+        let default_size = self.dims.components.timeline.viewport_default_size;
+        let field = viewport_canvas::ViewportCanvas::new_with_size(self, default_size)
             .width(Length::Fill)
             .height(Length::Fixed(rows_height));
         let body = iced::widget::scrollable(
@@ -458,9 +460,14 @@ impl TimelinePane {
     }
 
     /// [`Self::view`] の上に transport 帯(map 1041-1045・1138、
-    /// [`transport`] モジュール doc)を積んだ版。shell の統合(下部 Play バー
-    /// 撤去と同時)はこの `view_with_transport()` へ呼び出し1行を差し替える
-    /// だけ(supervisor、RETURN の結線一覧)。
+    /// [`transport`] モジュール doc)を積み、Timeline body の下に Detail View
+    /// を置いた版。Graph Editor はこの Detail View のタブで開くため、Timeline
+    /// 本体を置き換えない。shell の統合(下部 Play バー撤去と同時)はこの
+    /// `view_with_transport()` へ呼び出し1行を差し替えるだけ。
+    ///
+    /// マーカー一覧は優先順位の見直しにより、現在の画面には mount しない。
+    /// マーカーの意味・ルーラ上の locator・keymap は残し、一覧の再表示は
+    /// 後続の UI 判断で戻せるよう描画部品を保持する。
     ///
     /// **既知の逸脱(縦スクロール発注 RETURN 参照)**: `view()` の内部構造
     /// (`row![rail, field]` 単体 → `column![header, scrollable(...)]`)を
@@ -473,12 +480,12 @@ impl TimelinePane {
     /// write-set 外、RETURN で報告)。
     pub fn view_with_transport(self) -> Element<'static, Message> {
         let band = transport::view(&self);
-        let graph = self.graph_editor_open.then(|| graph_editor::view(&self));
-        let markers = markers::marker_panel(&self);
+        let detail_header = graph_editor::detail_header(&self);
+        let detail = self.graph_editor_open.then(|| graph_editor::view(&self));
         let body = self.view();
-        match graph {
-            Some(graph) => iced::widget::column![band, graph, markers, body].into(),
-            None => iced::widget::column![band, markers, body].into(),
+        match detail {
+            Some(detail) => iced::widget::column![band, body, detail_header, detail].into(),
+            None => iced::widget::column![band, body, detail_header].into(),
         }
     }
 }
@@ -734,6 +741,10 @@ mod scroll_tests {
         for count in [0, 1, 80] {
             let pane = pane_with_rows(count).with_playing(true);
             let _band_and_body = pane.view_with_transport();
+        }
+        for count in [0, 1, 80] {
+            let pane = pane_with_rows(count).with_graph_editor(true, [None, None, None, None]);
+            let _timeline_with_detail = pane.view_with_transport();
         }
     }
 }

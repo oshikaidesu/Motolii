@@ -59,8 +59,14 @@ pub fn attach_surface_interactive(
     primary: Option<motolii_doc::LayerId>,
 ) -> Option<TimelineInput> {
     let input = TimelineInput::default();
-    attach_surface_with_input(blitz_document, document, projection, primary, Some(input.clone()))
-        .then_some(input)
+    attach_surface_with_input(
+        blitz_document,
+        document,
+        projection,
+        primary,
+        Some(input.clone()),
+    )
+    .then_some(input)
 }
 
 fn attach_surface_with_input(

@@ -24,9 +24,9 @@ pub use context::{
 };
 pub use contract::{
     validate_node_desc, value_matches_type, value_type_name, DomainError, ElementType, F64Domain,
-    MigrationOp,
-    MigrationPlanError, MigrationStep, NodeDesc, ParamDef, PluginCatalog, PluginCatalogBuilder,
-    PluginContract, PluginContractError, PluginError, PluginId, PluginKind, ValueType,
+    MigrationOp, MigrationPlanError, MigrationStep, NodeDesc, ParamDef, PluginCatalog,
+    PluginCatalogBuilder, PluginContract, PluginContractError, PluginError, PluginId, PluginKind,
+    ValueType,
 };
 pub use params::ResolvedParams;
 pub use registry::{DynPlugin, PluginRegistry, PluginRuntime, PluginRuntimeError};

@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
-use lyon_path::{Path as LyonPath, math::point};
+use lyon_path::{math::point, Path as LyonPath};
 use lyon_tessellation::{
+    geometry_builder::{simple_builder, VertexBuffers},
     FillOptions, FillTessellator, StrokeOptions, StrokeTessellator,
-    geometry_builder::{VertexBuffers, simple_builder},
 };
 use motolii_doc::pathgeom::{Contour, Path, Point, Vertex};
 use re_chunk::Chunk;

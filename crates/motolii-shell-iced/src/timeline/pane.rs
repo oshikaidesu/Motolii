@@ -533,48 +533,48 @@ impl TimelinePane {
                     return;
                 }
                 match zone {
-                GrabZone::Body => {
-                    // Cmd+クリックが**選択を外した**場合、掴んだ物はもう選択に
-                    // 居ない。ここでドラッグを始めると「外したはずの clip を
-                    // 掴んだつもりで、残りの選択が動く」という嘘になるので始めない
-                    // (spike と同じ判断)。
-                    if !ctx.selected.contains(layer) {
-                        self.drag = None;
-                        return;
+                    GrabZone::Body => {
+                        // Cmd+クリックが**選択を外した**場合、掴んだ物はもう選択に
+                        // 居ない。ここでドラッグを始めると「外したはずの clip を
+                        // 掴んだつもりで、残りの選択が動く」という嘘になるので始めない
+                        // (spike と同じ判断)。
+                        if !ctx.selected.contains(layer) {
+                            self.drag = None;
+                            return;
+                        }
+                        let targets = move_targets(&ctx.document, &ctx.selected);
+                        if targets.is_empty() {
+                            self.drag = None;
+                            return;
+                        }
+                        self.drag = Some(TimelineDrag::Move {
+                            grabbed: *layer,
+                            grab_at: *at_seconds,
+                            targets,
+                            preview_delta: 0.0,
+                        });
                     }
-                    let targets = move_targets(&ctx.document, &ctx.selected);
-                    if targets.is_empty() {
-                        self.drag = None;
-                        return;
+                    GrabZone::Edge(edge) => {
+                        let Some((start, end, is_group)) =
+                            super::semantics::bar_span(&ctx.document, *layer)
+                        else {
+                            return;
+                        };
+                        if is_group {
+                            // hit test は Group に端を出さないが、防波堤をここにも置く。
+                            return;
+                        }
+                        let preview = match edge {
+                            TrimEdge::In => start,
+                            TrimEdge::Out => end,
+                        };
+                        self.drag = Some(TimelineDrag::Trim {
+                            layer: *layer,
+                            edge: *edge,
+                            span: (start, end),
+                            preview,
+                        });
                     }
-                    self.drag = Some(TimelineDrag::Move {
-                        grabbed: *layer,
-                        grab_at: *at_seconds,
-                        targets,
-                        preview_delta: 0.0,
-                    });
-                }
-                GrabZone::Edge(edge) => {
-                    let Some((start, end, is_group)) =
-                        super::semantics::bar_span(&ctx.document, *layer)
-                    else {
-                        return;
-                    };
-                    if is_group {
-                        // hit test は Group に端を出さないが、防波堤をここにも置く。
-                        return;
-                    }
-                    let preview = match edge {
-                        TrimEdge::In => start,
-                        TrimEdge::Out => end,
-                    };
-                    self.drag = Some(TimelineDrag::Trim {
-                        layer: *layer,
-                        edge: *edge,
-                        span: (start, end),
-                        preview,
-                    });
-                }
                 }
             }
             TimelineMsg::ScrubStarted { at_seconds } => {
@@ -794,7 +794,8 @@ fn key_entry_matches(
 /// 格子に載らない playhead はキーを打てない」判断)。
 fn frame_snapped_time(ctx: &TimelineCtx) -> Option<RationalTime> {
     let fps = ctx.fps();
-    let raw = RationalTime::try_new((f64::from(ctx.playhead) * 1000.0).round() as i64, 1000).ok()?;
+    let raw =
+        RationalTime::try_new((f64::from(ctx.playhead) * 1000.0).round() as i64, 1000).ok()?;
     let frame = raw.try_to_frame_round(fps).ok()?;
     RationalTime::try_from_frame(frame, fps).ok()
 }

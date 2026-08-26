@@ -308,7 +308,8 @@ impl BlitzShellApp {
             Some(seat) => {
                 let path = seat.path().to_path_buf();
                 let revision = seat.editor().revision();
-                if self.seated.as_deref() != Some(path.as_path()) || revision != self.seated_revision
+                if self.seated.as_deref() != Some(path.as_path())
+                    || revision != self.seated_revision
                 {
                     let snapshot = seat.snapshot();
                     seat_stage_documents(&mut self.tree, &snapshot);
@@ -594,11 +595,7 @@ impl BlitzShellApp {
             egui::CentralPanel::default().show(ui, |ui| {
                 ui.vertical_centered(|ui| {
                     ui.add_space(ui.available_height() * 0.32);
-                    ui.label(
-                        egui::RichText::new("Motolii")
-                            .size(34.0)
-                            .strong(),
-                    );
+                    ui.label(egui::RichText::new("Motolii").size(34.0).strong());
                     ui.add_space(6.0);
                     ui.label("Make one 3\u{2013}5 minute music video.");
                     ui.add_space(24.0);

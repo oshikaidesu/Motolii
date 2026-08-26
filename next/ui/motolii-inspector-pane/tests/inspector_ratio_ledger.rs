@@ -35,7 +35,7 @@
 //! (1) `inspector-library.css` 実測の `body_text 相当 / row_height 相当`
 //! (`.propertyName span` 11px / `.propertyRow` min-height 25px)= 0.44 は
 //! 裁定168 の帯(0.42±0.05)の**内**。
-//! (2) 現行実装の `Dimensions::default().body_text / .inspector_row_height`
+//! (2) 現行実装の `Dimensions::default().theme().text.body / .inspector_row_height`
 //! も **同じ 0.44**(`inspector_row_height` を I-tokens で 25 へ再転写した
 //! ため)— 同じ帯の**内**(`lib.rs` の
 //! `inspector_character_size_ratio_is_locked_within_the_charter_168_band`
@@ -46,7 +46,7 @@
 use motolii_tokens_rs::Dimensions;
 
 /// `next/reference/mocks/inspector-library.css:375-382` `.propertyName span`
-/// — 値行ラベル文字(`dims.body_text` の実装対応)。**I-tokens(2026-08-22)**:
+/// — 値行ラベル文字(`dims.theme().text.body` の実装対応)。**I-tokens(2026-08-22)**:
 /// 出典パスを旧 `docs/mocks-ui/public/inspector-library.css` から転写正本
 /// (`next/reference/mocks/`、利用者合格 v3.1)へ更新 — 値・行番号とも寸法は
 /// 逐語移植(無改変)なので数値そのものは不変。
@@ -109,12 +109,12 @@ fn mock_property_row_character_size_ratio_is_within_the_charter_168_band() {
 #[test]
 fn implementation_character_size_ratio_now_matches_the_mock_measured_ratio() {
     let dims = Dimensions::default();
-    let impl_ratio = dims.body_text / dims.inspector_row_height;
+    let impl_ratio = dims.theme().text.body / dims.inspector_row_height;
     let mock_ratio = MOCK_PROPERTY_NAME_FONT_PX / MOCK_PROPERTY_ROW_HEIGHT_PX;
 
     assert_eq!(
         impl_ratio, 0.44,
-        "dims.body_text/dims.inspector_row_height が動いた — I-tokens の \
+        "dims.theme().text.body/dims.inspector_row_height が動いた — I-tokens の \
          再転写値(0.44)から動いたなら、このテスト・`lib.rs` の同型 pin・台帳を \
          三箇所とも更新すること"
     );
@@ -222,9 +222,9 @@ fn value_cell_font_and_row_height_are_unrelated_to_the_0_6em_horizontal_inset_fo
     // `single_row_horizontal_inset` は `body_text` だけを見る式(裁定168)
     // — `caption_text`/モックの value 文字(9px)は式の入力にならないことを
     // 明示するだけの薄い pin(式自体は `lib.rs` が private のためここから
-    // 直接は呼べない — `dims.body_text` が式の唯一の入力であることを
+    // 直接は呼べない — `dims.theme().text.body` が式の唯一の入力であることを
     // ドキュメントとして固定する)。
-    assert_eq!(dims.body_text, 11.0);
+    assert_eq!(dims.theme().text.body, 11.0);
     assert_eq!(MOCK_VALUE_CELL_FONT_PX, 9.0);
-    assert_ne!(dims.body_text, MOCK_VALUE_CELL_FONT_PX);
+    assert_ne!(dims.theme().text.body, MOCK_VALUE_CELL_FONT_PX);
 }

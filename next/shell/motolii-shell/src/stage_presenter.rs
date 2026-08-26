@@ -138,12 +138,17 @@ pub(crate) fn build_stage_presenter_rgba(
     resolution_cap: stage::PreviewResolutionCap,
     colors: Colors,
     ui_scale: f32,
+    checkerboard_tile_target_pt: f32,
 ) -> (u32, u32, Vec<u8>) {
     let (presenter_width, presenter_height, mut presenter_rgba) =
         stage_presenter_rgba(width, height, full_rgba, resolution_cap);
     if checkerboard {
         let effective_scale = stage::effective_preview_scale(1.0, resolution_cap);
-        let tile_px = settings_pane::checkerboard_tile_px(ui_scale, effective_scale);
+        let tile_px = settings_pane::checkerboard_tile_px_with_target(
+            ui_scale,
+            effective_scale,
+            checkerboard_tile_target_pt,
+        );
         settings_pane::composite_checkerboard_with_tile_px(
             presenter_width,
             presenter_height,

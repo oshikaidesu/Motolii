@@ -317,7 +317,7 @@ const EXCLUSIONS: &[Exclusion] = &[
     Exclusion {
         file: "chrome.rs",
         identifier: "fn value_cell_height",
-        reason: "(dims.inspector_row_height - dims.spacing_s).max(1.0) — 物理1px床(裁定142除外1)。\
+        reason: "(dims.inspector_row_height - dims.theme().space.s).max(1.0) — 物理1px床(裁定142除外1)。\
                  1.0はゼロ/負幅セルを防ぐ最小可視化の床であって独立した意匠値ではない \
                  (この柵は0/1リテラルを一般免除しているので実際には走査へ引っかからないが、\
                  除外(1)の実例としてここに記録する)。",
@@ -325,7 +325,7 @@ const EXCLUSIONS: &[Exclusion] = &[
     Exclusion {
         file: "chrome.rs",
         identifier: "fn glyph_height",
-        reason: "(dims.inspector_row_height - dims.spacing_xs).max(1.0) — 同上(Key/M/S glyph 列の床)。",
+        reason: "(dims.inspector_row_height - dims.theme().space.xs).max(1.0) — 同上(Key/M/S glyph 列の床)。",
     },
 ];
 
@@ -367,9 +367,9 @@ mod fence_self_tests {
 
     #[test]
     fn bare_numeric_literals_skips_identifier_digits_and_field_access() {
-        assert_eq!(bare_numeric_literals("dims.spacing_m"), Vec::<String>::new());
+        assert_eq!(bare_numeric_literals("dims.theme().space.m"), Vec::<String>::new());
         assert_eq!(bare_numeric_literals("w: f32,"), Vec::<String>::new());
-        assert_eq!(bare_numeric_literals(".padding(dims.spacing_m)"), Vec::<String>::new());
+        assert_eq!(bare_numeric_literals(".padding(dims.theme().space.m)"), Vec::<String>::new());
         assert_eq!(bare_numeric_literals(".padding(12.5)"), vec!["12.5".to_owned()]);
         assert_eq!(bare_numeric_literals("width_px.max(1.0)"), vec!["1.0".to_owned()]);
     }
@@ -411,7 +411,7 @@ mod fence_self_tests {
 
     #[test]
     fn a_token_derived_padding_is_not_caught() {
-        let synthetic = ".padding([0.0, dims.spacing_m])\n";
+        let synthetic = ".padding([0.0, dims.theme().space.m])\n";
         assert!(scan_text("synthetic.rs", synthetic).is_empty());
     }
 
@@ -425,7 +425,7 @@ mod fence_self_tests {
 
     #[test]
     fn a_token_derived_border_width_is_not_caught() {
-        let synthetic = "border: iced::Border {\n    color: colors.border_default,\n    width: dims.border_width,\n    radius: 0.0.into(),\n},\n";
+        let synthetic = "border: iced::Border {\n    color: colors.border_default,\n    width: dims.theme().stroke.hairline,\n    radius: 0.0.into(),\n},\n";
         assert!(scan_text("synthetic.rs", synthetic).is_empty());
     }
 

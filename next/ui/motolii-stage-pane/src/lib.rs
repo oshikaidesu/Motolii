@@ -228,7 +228,7 @@ fn state_band_item(
 ) -> Element<'static> {
     let muted = Ink::Muted.resolve(&colors);
     let raised = Ink::Secondary.resolve(&colors);
-    button(text(label).size(dims.body_text))
+    button(text(label).size(dims.theme().text.body))
         .on_press(message)
         .padding(0.0)
         .style(move |_theme, status| {
@@ -296,8 +296,8 @@ pub fn state_band_view(
     ));
 
     row(items)
-        .spacing(dims.spacing_m)
-        .padding([dims.spacing_xs, dims.spacing_m])
+        .spacing(dims.theme().space.m)
+        .padding([dims.theme().space.xs, dims.theme().space.m])
         .align_y(iced::alignment::Vertical::Center)
         .into()
 }
@@ -666,7 +666,7 @@ impl canvas::Program<Message> for StageOverlay {
             &path,
             canvas::Stroke::default()
                 .with_color(self.colors.action_active)
-                .with_width(self.dims.border_width * 1.5),
+                .with_width(self.dims.theme().stroke.hairline * 1.5),
         );
         vec![frame.into_geometry()]
     }

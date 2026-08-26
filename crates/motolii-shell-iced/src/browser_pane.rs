@@ -107,7 +107,9 @@
 //! 出すので**移植していない**(egui の raw painter が持たない retained-mode
 //! layout の恩恵)。
 
-use iced::widget::{button, column, container, mouse_area, row, scrollable, space, text, text_input};
+use iced::widget::{
+    button, column, container, mouse_area, row, scrollable, space, text, text_input,
+};
 use iced::{Center, Color, Element, Fill};
 
 use crate::browser::{BrowserCard, BrowserPane, BrowserRail, BrowserViewMode};
@@ -540,17 +542,18 @@ pub fn browser_pane(shell: &Shell) -> Element<'_, Message> {
         );
     }
     panel = panel.push(
-        row![sidebar(pane), hairline_v(colors::SIDEBAR_BORDER), catalog(pane, &cards)]
-            .height(Fill),
+        row![
+            sidebar(pane),
+            hairline_v(colors::SIDEBAR_BORDER),
+            catalog(pane, &cards)
+        ]
+        .height(Fill),
     );
     panel = panel.push(hairline_h(colors::TRAY_BORDER));
     panel = panel.push(selection_tray(&tray_line, tray_meta.as_deref()));
 
     os_file_drop_zone(
-        container(panel)
-            .style(panel_style)
-            .height(Fill)
-            .into(),
+        container(panel).style(panel_style).height(Fill).into(),
         shell.is_seated(),
         |event| Message::BrowserDropHover(matches!(event, DropEvent::HoverEnter)),
     )
@@ -560,9 +563,7 @@ pub fn browser_pane(shell: &Shell) -> Element<'_, Message> {
 fn header(pane: &BrowserPane) -> Element<'static, Message> {
     container(
         row![
-            text(HEADER)
-                .size(font_size::HEADER_TITLE)
-                .font(bold_font()),
+            text(HEADER).size(font_size::HEADER_TITLE).font(bold_font()),
             space().width(Fill),
             text(pane.library_root_name())
                 .size(font_size::HEADER_SPAN)
@@ -593,15 +594,13 @@ fn toolbar(pane: &BrowserPane) -> Element<'static, Message> {
         .style(search_style)
         .on_input(Message::BrowserQueryChanged);
 
-    let filters = button(
-        text(FILTERS_TOGGLE)
-            .size(font_size::TOOLBAR_BUTTON)
-            .color(if shelf_open {
-                colors::CHIP_SELECTED_FG
-            } else {
-                colors::CONTROL_FG
-            }),
-    )
+    let filters = button(text(FILTERS_TOGGLE).size(font_size::TOOLBAR_BUTTON).color(
+        if shelf_open {
+            colors::CHIP_SELECTED_FG
+        } else {
+            colors::CONTROL_FG
+        },
+    ))
     .padding([0, dims::TOOLBAR_BUTTON_PAD_X as u16])
     .height(dims::CONTROL_H)
     .style(move |_theme, status| toggle_button_style(status, shelf_open))
@@ -647,15 +646,11 @@ fn sidebar(pane: &BrowserPane) -> Element<'static, Message> {
                 }),
                 ..container::Style::default()
             });
-        let label_button = button(
-            text(label)
-                .size(font_size::ROW)
-                .color(if selected {
-                    colors::ROW_SELECTED_FG
-                } else {
-                    colors::ROW_FG
-                }),
-        )
+        let label_button = button(text(label).size(font_size::ROW).color(if selected {
+            colors::ROW_SELECTED_FG
+        } else {
+            colors::ROW_FG
+        }))
         .padding([0, dims::ROW_PAD_X as u16])
         .width(Fill)
         .height(dims::ROW_H)
@@ -665,9 +660,7 @@ fn sidebar(pane: &BrowserPane) -> Element<'static, Message> {
     }
 
     container(scrollable(list))
-        .padding(
-            iced::padding::top(dims::SIDEBAR_PAD_TOP).bottom(dims::SIDEBAR_PAD_BOTTOM),
-        )
+        .padding(iced::padding::top(dims::SIDEBAR_PAD_TOP).bottom(dims::SIDEBAR_PAD_BOTTOM))
         .width(dims::sidebar_width(PANE_W))
         .height(Fill)
         .style(sidebar_style)
@@ -675,11 +668,15 @@ fn sidebar(pane: &BrowserPane) -> Element<'static, Message> {
 }
 
 fn sidebar_heading(title: &'static str) -> Element<'static, Message> {
-    container(text(title).size(font_size::SIDEBAR_H2).color(colors::SIDEBAR_H2_FG))
-        .padding(iced::padding::left(dims::ROW_PAD_X).top(6.0))
-        .width(Fill)
-        .height(dims::SIDEBAR_H2_H)
-        .into()
+    container(
+        text(title)
+            .size(font_size::SIDEBAR_H2)
+            .color(colors::SIDEBAR_H2_FG),
+    )
+    .padding(iced::padding::left(dims::ROW_PAD_X).top(6.0))
+    .width(Fill)
+    .height(dims::SIDEBAR_H2_H)
+    .into()
 }
 
 /// `.catalog`(header / filter shelf / result summary / grid)。
@@ -705,8 +702,12 @@ fn catalog(pane: &BrowserPane, cards: &[BrowserCard]) -> Element<'static, Messag
 fn catalog_header(pane: &BrowserPane) -> Element<'static, Message> {
     let (title, path) = catalog_title(pane);
     let title_col = column![
-        text(title).size(font_size::CATALOG_TITLE).color(colors::CATALOG_TITLE_FG),
-        text(path).size(font_size::CATALOG_PATH).color(colors::CATALOG_PATH_FG),
+        text(title)
+            .size(font_size::CATALOG_TITLE)
+            .color(colors::CATALOG_TITLE_FG),
+        text(path)
+            .size(font_size::CATALOG_PATH)
+            .color(colors::CATALOG_PATH_FG),
     ]
     .width(Fill);
 
@@ -718,15 +719,11 @@ fn catalog_header(pane: &BrowserPane) -> Element<'static, Message> {
     ] {
         let pressed = pane.view() == mode;
         modes = modes.push(
-            button(
-                text(glyph)
-                    .size(font_size::VIEW_BUTTON)
-                    .color(if pressed {
-                        colors::VIEW_PRESSED_FG
-                    } else {
-                        colors::CONTROL_FG
-                    }),
-            )
+            button(text(glyph).size(font_size::VIEW_BUTTON).color(if pressed {
+                colors::VIEW_PRESSED_FG
+            } else {
+                colors::CONTROL_FG
+            }))
             .padding(0)
             .width(dims::VIEW_BUTTON_W)
             .height(dims::CONTROL_H)
@@ -750,9 +747,18 @@ fn catalog_header(pane: &BrowserPane) -> Element<'static, Message> {
 /// browser-library.html:222-223 titles(source rail の名乗り)。
 fn catalog_title(pane: &BrowserPane) -> (String, String) {
     match pane.rail() {
-        BrowserRail::AllMedia => (RAIL_ALL.to_owned(), format!("Library \u{b7} {}", pane.library_root_name())),
-        BrowserRail::Project => (RAIL_PROJECT.to_owned(), "Library \u{b7} this project".to_owned()),
-        BrowserRail::Recent => (RAIL_RECENT.to_owned(), "Library \u{b7} newest first".to_owned()),
+        BrowserRail::AllMedia => (
+            RAIL_ALL.to_owned(),
+            format!("Library \u{b7} {}", pane.library_root_name()),
+        ),
+        BrowserRail::Project => (
+            RAIL_PROJECT.to_owned(),
+            "Library \u{b7} this project".to_owned(),
+        ),
+        BrowserRail::Recent => (
+            RAIL_RECENT.to_owned(),
+            "Library \u{b7} newest first".to_owned(),
+        ),
     }
 }
 
@@ -771,15 +777,11 @@ fn filter_shelf(pane: &BrowserPane) -> Element<'static, Message> {
     ] {
         let selected = pane.kind_filter() == Some(kind);
         row = row.push(
-            button(
-                text(label)
-                    .size(font_size::CHIP)
-                    .color(if selected {
-                        colors::CHIP_SELECTED_FG
-                    } else {
-                        colors::CHIP_FG
-                    }),
-            )
+            button(text(label).size(font_size::CHIP).color(if selected {
+                colors::CHIP_SELECTED_FG
+            } else {
+                colors::CHIP_FG
+            }))
             .padding([dims::CHIP_PAD_Y as u16, dims::CHIP_PAD_X as u16])
             .height(dims::CHIP_MIN_H)
             .style(move |_theme, status| chip_style(status, selected))
@@ -789,15 +791,19 @@ fn filter_shelf(pane: &BrowserPane) -> Element<'static, Message> {
 
     row = row.push(space().width(Fill));
     row = row.push(
-        button(text(CLEAR_FILTER).size(font_size::CHIP).color(colors::CLEAR_FG))
-            .padding(0)
-            .style(|_theme, _status| button::Style {
-                background: None,
-                border: iced::Border::default(),
-                text_color: colors::CLEAR_FG,
-                ..button::Style::default()
-            })
-            .on_press(Message::BrowserFiltersCleared),
+        button(
+            text(CLEAR_FILTER)
+                .size(font_size::CHIP)
+                .color(colors::CLEAR_FG),
+        )
+        .padding(0)
+        .style(|_theme, _status| button::Style {
+            background: None,
+            border: iced::Border::default(),
+            text_color: colors::CLEAR_FG,
+            ..button::Style::default()
+        })
+        .on_press(Message::BrowserFiltersCleared),
     );
 
     container(row)
@@ -885,13 +891,15 @@ fn empty_line(pane: &BrowserPane) -> String {
 /// `columns` は呼び手([`grid`])が既に知っている列数をそのまま渡す —
 /// [`dims::thumb_height`] は iced が実行時に読めない「幅から高さを導く」css の
 /// `aspect-ratio` 計算を、既知の pane 幅 + 列数から前もって解く。
-fn browser_card(card: BrowserCard, view: BrowserViewMode, columns: usize) -> Element<'static, Message> {
+fn browser_card(
+    card: BrowserCard,
+    view: BrowserViewMode,
+    columns: usize,
+) -> Element<'static, Message> {
     let selected = card.selected;
     let thumb_h = match view {
         BrowserViewMode::List => dims::LIST_THUMB_W / dims::THUMB_ASPECT,
-        BrowserViewMode::Grid | BrowserViewMode::Thumbnails => {
-            dims::thumb_height(PANE_W, columns)
-        }
+        BrowserViewMode::Grid | BrowserViewMode::Thumbnails => dims::thumb_height(PANE_W, columns),
     };
     let thumb = browser_thumb(&card, selected, thumb_h);
 
@@ -1283,11 +1291,23 @@ fn row_button_style(status: button::Status, selected: bool) -> button::Style {
 /// css:168 の写し)。
 fn toggle_button_style(status: button::Status, pressed: bool) -> button::Style {
     let (bg, border, fg) = if pressed {
-        (colors::VIEW_PRESSED_BG, colors::ACCENT, colors::VIEW_PRESSED_FG)
+        (
+            colors::VIEW_PRESSED_BG,
+            colors::ACCENT,
+            colors::VIEW_PRESSED_FG,
+        )
     } else if matches!(status, button::Status::Hovered | button::Status::Pressed) {
-        (colors::CONTROL_BG, colors::THUMB_HOVER_BORDER, colors::CONTROL_FG)
+        (
+            colors::CONTROL_BG,
+            colors::THUMB_HOVER_BORDER,
+            colors::CONTROL_FG,
+        )
     } else {
-        (colors::CONTROL_BG, colors::CONTROL_BORDER, colors::CONTROL_FG)
+        (
+            colors::CONTROL_BG,
+            colors::CONTROL_BORDER,
+            colors::CONTROL_FG,
+        )
     };
     button::Style {
         background: Some(bg.into()),
@@ -1304,7 +1324,11 @@ fn toggle_button_style(status: button::Status, pressed: bool) -> button::Style {
 /// filter chip(browser-library.css:188-201)。
 fn chip_style(status: button::Status, selected: bool) -> button::Style {
     let (bg, border, fg) = if selected {
-        (colors::CHIP_SELECTED_BG, colors::ACCENT, colors::CHIP_SELECTED_FG)
+        (
+            colors::CHIP_SELECTED_BG,
+            colors::ACCENT,
+            colors::CHIP_SELECTED_FG,
+        )
     } else if matches!(status, button::Status::Hovered | button::Status::Pressed) {
         (colors::CHIP_BG, colors::THUMB_HOVER_BORDER, colors::CHIP_FG)
     } else {
@@ -1377,7 +1401,10 @@ mod tests {
     fn a_narrow_pane_hands_the_sidebar_width_back_to_the_catalog() {
         assert_eq!(dims::sidebar_width(900.0), dims::SIDEBAR_W);
         assert_eq!(dims::sidebar_width(PANE_W), dims::SIDEBAR_W_NARROW);
-        assert!(PANE_W <= dims::NARROW_BREAKPOINT_W, "既定 pane 幅は narrow 側");
+        assert!(
+            PANE_W <= dims::NARROW_BREAKPOINT_W,
+            "既定 pane 幅は narrow 側"
+        );
     }
 
     /// html:94-97 / css:218,269,273 の3態。

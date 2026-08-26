@@ -21,7 +21,7 @@ weight = "core_edit"
 maps = []
 entry = ["ShapeTool", "ShapeToolOverlay"]
 meaning = ["Select", "Create", "CreatePen"]
-evaluation = ["comp_from_screen", "screen_from_comp"]
+evaluation = ["comp_from_screen", "screen_from_comp", "selection_overlays_follow_active_shape_tool"]
 render = ["toolbar", "preview"]
 observable = ["shape_tool_draws_shape"]
 */
@@ -49,6 +49,13 @@ impl ShapeTool {
     fn draws_drag(self) -> bool {
         matches!(self, Self::Rectangle | Self::Ellipse)
     }
+
+    /// Select だけが既存レイヤーの選択系 overlay(Gizmo/Path/Mask)を有効にする。
+    /// 作成工具と変形工具を同じ Stage 面へ同時に残すと、入力が状態依存で
+    /// 奪われるため、この判定を Shell 側で個別に複製しない。
+    pub fn allows_selection_overlays(self) -> bool {
+        matches!(self, Self::Select)
+    }
 }
 
 /// shape tool の選択/確定事象。親は `Create`/`CreatePen` を Document へ写す。
@@ -72,8 +79,8 @@ pub fn toolbar(tool: ShapeTool, dims: Dimensions, colors: Colors) -> iced::Eleme
         tool_button(ShapeTool::Ellipse, tool, dims, colors),
         tool_button(ShapeTool::Pen, tool, dims, colors),
     ])
-    .spacing(dims.spacing_xs)
-    .padding([dims.spacing_xs, dims.spacing_m])
+    .spacing(dims.theme().space.xs)
+    .padding([dims.theme().space.xs, dims.theme().space.m])
     .into()
 }
 
@@ -84,9 +91,9 @@ fn tool_button(
     colors: Colors,
 ) -> iced::Element<'static, Message> {
     let active = value == current;
-    button(text(value.label()).size(dims.body_text))
+    button(text(value.label()).size(dims.theme().text.body))
         .on_press(Message::Select(value))
-        .padding([dims.spacing_xs, dims.spacing_m])
+        .padding([dims.theme().space.xs, dims.theme().space.m])
         .style(move |_theme, status| {
             let hovered = matches!(status, button::Status::Hovered | button::Status::Pressed);
             let background = if active {
@@ -314,7 +321,7 @@ impl canvas::Program<Message> for ShapeToolOverlay {
                     &path,
                     canvas::Stroke::default()
                         .with_color(accent)
-                        .with_width(self.dims.border_width),
+                        .with_width(self.dims.theme().stroke.hairline),
                 );
             }
         }
@@ -335,7 +342,7 @@ impl canvas::Program<Message> for ShapeToolOverlay {
                 &path,
                 canvas::Stroke::default()
                     .with_color(accent)
-                    .with_width(self.dims.border_width),
+                    .with_width(self.dims.theme().stroke.hairline),
             );
             for point in &state.pen_points {
                 let point = screen_from_comp.transform_point2(Vec2::new(point[0], point[1]));
@@ -381,5 +388,13 @@ mod tests {
         assert!(ShapeTool::Rectangle.draws_drag());
         assert!(ShapeTool::Ellipse.draws_drag());
         assert!(!ShapeTool::Pen.draws_drag());
+    }
+
+    #[test]
+    fn selection_overlays_follow_active_shape_tool() {
+        assert!(ShapeTool::Select.allows_selection_overlays());
+        assert!(!ShapeTool::Rectangle.allows_selection_overlays());
+        assert!(!ShapeTool::Ellipse.allows_selection_overlays());
+        assert!(!ShapeTool::Pen.allows_selection_overlays());
     }
 }

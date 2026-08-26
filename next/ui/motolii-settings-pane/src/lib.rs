@@ -1,4 +1,4 @@
-//! wraps: iced — Settings pane(背景/ui_scale)+pane 横断 chrome。書き込みは Intent 経由のみ。
+//! wraps: iced (frozen host, not product front) — Settings pane(背景/ui_scale)+pane 横断 chrome。書き込みは Intent 経由のみ。
 //! Settings パネル(タスク#18: Stage 背景色・ui_scale)。ヘッダの歯車
 //! ボタン(`Message::ToggleSettingsPanel`)でトグルする。
 //!
@@ -274,9 +274,8 @@ pub fn commit_ui_scale(tokens: &mut Tokens, draft: &mut Option<String>) -> Resul
 /// comp 画素空間固定・`ui_scale` を掛けない「物理px床」扱い)から置き換え —
 /// 罫線と違い、市松タイルは視認合図なので他の UI 密度と同じく `ui_scale` に
 /// 追随させる([`checkerboard_tile_px`] 参照)。
-const CHECKERBOARD_TILE_TARGET_PT: f32 = 8.0;
-
-/// [`CHECKERBOARD_TILE_TARGET_PT`] を実際のタイル px へ変換する純関数
+/// `Dimensions::components.settings.checkerboard_tile_target_pt` を実際の
+/// タイル px へ変換する純関数
 /// (市松v2 ORACLE (b))。
 ///
 /// - `ui_scale`: 他の UI 密度と同じ拡大率。市松タイルは視認合図であって
@@ -287,16 +286,33 @@ const CHECKERBOARD_TILE_TARGET_PT: f32 = 8.0;
 ///   sync アップロード予算内へ縮める `stage_auto_scale`×解像度上限の合成値。
 ///   縮小されていなければ 1.0)。**タイルはこの逆数で膨らませる** —
 ///   縮小後の handle 内でタイルが小さくなっても、表示空間(画面に引き伸ばして
-///   出す時点)では常に `CHECKERBOARD_TILE_TARGET_PT` に見えるようにする
+///   出す時点)では常に JSON 正本の目標寸に見えるようにする
 ///   補正(根因1「comp 画素空間固定のタイルが Auto 縮小後にさらに痩せる」の
 ///   直接の修正対象)。
 ///
 /// `effective_scale <= 0.0` は呼び出し元([`stage::effective_preview_scale`]、
 /// 常に正)からは来ない想定だが、防波堤として `1.0` 扱いにする(縮小なし)。
 pub fn checkerboard_tile_px(ui_scale: f32, effective_scale: f64) -> u32 {
+    checkerboard_tile_px_with_target(
+        ui_scale,
+        effective_scale,
+        Dimensions::default()
+            .components
+            .settings
+            .checkerboard_tile_target_pt,
+    )
+}
+
+/// 市松タイルの目標寸をトークン読込側から受け取る版。表示を組む Shell は
+/// `Dimensions::components.settings` を渡し、旧純関数入口は既定値の互換口とする。
+pub fn checkerboard_tile_px_with_target(
+    ui_scale: f32,
+    effective_scale: f64,
+    target_pt: f32,
+) -> u32 {
     let scale = if effective_scale > 0.0 { effective_scale } else { 1.0 };
-    let target_pt = f64::from(CHECKERBOARD_TILE_TARGET_PT * ui_scale.max(0.0));
-    (target_pt / scale).round().max(1.0) as u32
+    let target = f64::from(target_pt * ui_scale.max(0.0));
+    (target / scale).round().max(1.0) as u32
 }
 
 /// Stage 画像の下に敷く市松。**フレームの実 rgba(engine の premultiplied alpha
@@ -391,10 +407,10 @@ pub fn view(
     let body: Element<'static, Message> = match composition {
         None => container(
             text("comp が無い — 背景を編集できない")
-                .size(dims.caption_text)
+                .size(dims.theme().text.caption)
                 .color(colors.text_muted),
         )
-        .padding([0.0, dims.spacing_m])
+        .padding([0.0, dims.theme().space.m])
         .into(),
         Some(composition) => {
             // 各行を hairline で区切る(裁定139「面色の塗り分けで区切っている
@@ -445,7 +461,7 @@ pub(crate) fn hairline_bottom<Message: 'static>(
         .style(move |_theme| container::Style {
             border: iced::Border {
                 color: iced::Color::TRANSPARENT,
-                width: dims.border_width,
+                width: dims.theme().stroke.hairline,
                 radius: 0.0.into(),
             },
             ..container::Style::default()
@@ -472,15 +488,15 @@ pub(crate) fn background_row(
 
     row![
         text("Background")
-            .size(dims.body_text)
+            .size(dims.theme().text.body)
             .color(colors.text_primary)
             .width(Length::Fill),
-        row(cells).spacing(dims.spacing_xs),
+        row(cells).spacing(dims.theme().space.xs),
     ]
-    .spacing(dims.spacing_xs)
+    .spacing(dims.theme().space.xs)
     .height(Length::Fixed(dims.inspector_row_height))
     .align_y(iced::alignment::Vertical::Center)
-    .padding([0.0, dims.spacing_m])
+    .padding([0.0, dims.theme().space.m])
     .into()
 }
 
@@ -505,7 +521,7 @@ fn channel_cell(
         // 参照)。
         mouse_area(
             text(channel.label())
-                .size(dims.caption_text)
+                .size(dims.theme().text.caption)
                 .color(colors.text_muted)
                 .align_x(iced::alignment::Horizontal::Center)
                 .width(Length::Fixed(dims.inspector_value_width))
@@ -520,7 +536,7 @@ fn channel_cell(
         text_input("", displayed)
             .on_input(move |text| Message::BackgroundChannelInput(channel, text))
             .on_submit(Message::BackgroundChannelSubmit(channel))
-            .size(dims.body_text)
+            .size(dims.theme().text.body)
             .width(Length::Fixed(dims.inspector_value_width))
             .padding(0.0)
             .align_x(iced::alignment::Horizontal::Center)
@@ -539,8 +555,8 @@ pub(crate) fn preset_row(dims: Dimensions, colors: Colors) -> Element<'static, M
         // 必須経路ではない — `BackgroundPreset::Transparent` の doc 参照)。
         preset_button("Transparent", BackgroundPreset::Transparent, dims, colors),
     ]
-    .spacing(dims.spacing_xs)
-    .padding([0.0, dims.spacing_m])
+    .spacing(dims.theme().space.xs)
+    .padding([0.0, dims.theme().space.m])
     .into()
 }
 
@@ -550,7 +566,7 @@ fn preset_button(
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
-    button(text(label).size(dims.caption_text))
+    button(text(label).size(dims.theme().text.caption))
         .on_press(Message::BackgroundPreset(preset))
         .style(move |_theme, status| button_style(dims, colors, status))
         .into()
@@ -572,7 +588,7 @@ pub(crate) fn ui_scale_row(
 
     row![
         text("UI Scale (%)")
-            .size(dims.body_text)
+            .size(dims.theme().text.body)
             .color(colors.text_primary)
             .width(Length::Fill),
         // 裁定170 M01: channel_cell と同じ理由(fork の text_input が
@@ -581,16 +597,16 @@ pub(crate) fn ui_scale_row(
         text_input("", displayed)
             .on_input(Message::UiScaleInput)
             .on_submit(Message::UiScaleSubmit)
-            .size(dims.body_text)
+            .size(dims.theme().text.body)
             .width(Length::Fixed(dims.inspector_value_width))
             .padding(0.0)
             .align_x(iced::alignment::Horizontal::Center)
             .style(move |_theme, status| value_input_style(dims, colors, status)),
     ]
-    .spacing(dims.spacing_xs)
+    .spacing(dims.theme().space.xs)
     .height(Length::Fixed(dims.inspector_row_height))
     .align_y(iced::alignment::Vertical::Center)
-    .padding([0.0, dims.spacing_m])
+    .padding([0.0, dims.theme().space.m])
     .into()
 }
 
@@ -601,10 +617,10 @@ pub(crate) fn hint_row(
 ) -> Element<'static, Message> {
     container(
         text(message)
-            .size(dims.caption_text)
+            .size(dims.theme().text.caption)
             .color(colors.text_muted),
     )
-    .padding([dims.spacing_xs, dims.spacing_m])
+    .padding([dims.theme().space.xs, dims.theme().space.m])
     .into()
 }
 
@@ -729,9 +745,17 @@ mod tests {
             let tile_px = checkerboard_tile_px(1.0, effective_scale);
             let displayed_pt = tile_px as f64 * effective_scale;
             assert!(
-                (displayed_pt - f64::from(CHECKERBOARD_TILE_TARGET_PT)).abs() <= 1.0,
+                (displayed_pt
+                    - f64::from(
+                        Dimensions::default()
+                            .components
+                            .settings
+                            .checkerboard_tile_target_pt,
+                    ))
+                    .abs()
+                    <= 1.0,
                 "effective_scale={effective_scale}: tile_px={tile_px} → 表示 {displayed_pt}pt \
-                 が目標 {CHECKERBOARD_TILE_TARGET_PT}pt(±1px)から外れている"
+                 が目標値(±1px)から外れている"
             );
         }
     }

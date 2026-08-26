@@ -553,7 +553,7 @@ fn text_section_rows_reuse_the_existing_row_geometry_contract() {
     let dims = Dimensions::default();
     let style = row_band_style(dims);
     assert_eq!(
-        style.border.width, dims.border_width,
+        style.border.width, dims.theme().stroke.hairline,
         "TEXT section が依拠する行 border 幅が既存トークンから動いた(幾何不変違反)"
     );
     assert_eq!(

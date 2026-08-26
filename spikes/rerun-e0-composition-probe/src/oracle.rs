@@ -69,11 +69,7 @@ impl Frame {
             return None;
         }
         let index = ((y as u32 * self.width + x as u32) * 4) as usize;
-        Some([
-            self.rgba[index],
-            self.rgba[index + 1],
-            self.rgba[index + 2],
-        ])
+        Some([self.rgba[index], self.rgba[index + 1], self.rgba[index + 2]])
     }
 
     /// 1点だけ見ると縁や補間に当たる。3x3 の多数決で読む。

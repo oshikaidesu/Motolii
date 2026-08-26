@@ -29,7 +29,7 @@ pub(crate) fn rail_view(scope: RailScope, dims: Dimensions, colors: Colors) -> E
                 option == scope,
                 Message::SelectScope(option),
                 Length::Fill,
-                [dims.spacing_xs, dims.spacing_m],
+                [dims.theme().space.xs, dims.theme().space.m],
                 0.0,
                 dims,
                 colors,
@@ -51,7 +51,7 @@ pub(crate) fn preview_rail_view(
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
-    let row_padding = [dims.spacing_xs, dims.spacing_m];
+    let row_padding = [dims.theme().space.xs, dims.theme().space.m];
     let mut rows: Vec<Element<'static, Message>> = vec![labeled_button(
         tab.all_label(),
         scope == PreviewScope::All,
@@ -90,7 +90,7 @@ pub fn panel_container_style(dims: Dimensions, colors: Colors) -> container::Sty
         background: Some(iced::Background::Color(colors.surface_panel)),
         border: iced::Border {
             color: iced::Color::TRANSPARENT,
-            width: dims.border_width,
+            width: dims.theme().stroke.hairline,
             radius: 0.0.into(),
         },
         ..container::Style::default()
@@ -106,8 +106,8 @@ fn rail_container(
 ) -> Element<'static, Message> {
     container(
         column(rows)
-            .spacing(dims.spacing_xs)
-            .padding([dims.spacing_xs, 0.0]),
+            .spacing(dims.theme().space.xs)
+            .padding([dims.theme().space.xs, 0.0]),
     )
     .width(Length::FillPortion(1))
     .style(move |_theme| panel_container_style(dims, colors))
@@ -137,7 +137,7 @@ pub(crate) fn catalog_view(
     // (`browser-library.css:225-226`)— `caption_text`(9)ではなく
     // `micro_text`(8)。
     let summary = text(format!("Results {}", filtered.len()))
-        .size(dims.micro_text)
+        .size(dims.theme().text.micro)
         .color(colors.text_muted);
 
     let grid = card_grid_view(
@@ -165,7 +165,7 @@ pub(crate) fn catalog_container(
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
-    container(content.spacing(dims.spacing_xs).padding(dims.spacing_m))
+    container(content.spacing(dims.theme().space.xs).padding(dims.theme().space.m))
         .width(Length::FillPortion(4))
         .style(move |_theme| {
             if drop_hover {
@@ -189,7 +189,7 @@ pub fn drop_target_style(dims: Dimensions, colors: Colors) -> container::Style {
         background: Some(iced::Background::Color(colors.surface_hover)),
         border: iced::Border {
             color: colors.focus,
-            width: dims.border_width * 2.0,
+            width: dims.theme().stroke.hairline * 2.0,
             radius: 0.0.into(),
         },
         ..container::Style::default()

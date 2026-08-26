@@ -29,7 +29,7 @@ fn drop_target_matches_the_pane_grid_hovered_region_grammar() {
     );
     assert_eq!(
         style.border.width,
-        dims.border_width * 2.0,
+        dims.theme().stroke.hairline * 2.0,
         "drop 縁の太さが border_width×2 でない(強調線の既存導出との乖離)"
     );
     assert_eq!(style.border.radius, 0.0.into(), "drop 縁に角丸が生えた");

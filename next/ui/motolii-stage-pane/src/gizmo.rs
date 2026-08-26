@@ -51,6 +51,18 @@
 
 use glam::Affine2;
 
+/* motolii-component
+id = "stage.gizmo_transform"
+kind = "semantic"
+weight = "core_edit"
+maps = []
+entry = ["GizmoDrag", "GizmoOverlay", "gizmo_target"]
+meaning = ["GizmoPhase", "GizmoProperty", "GizmoValue"]
+evaluation = ["gizmo_hit_test", "GizmoDragState", "gizmo_target_reads_the_layers_transform_values"]
+render = ["draw", "mouse_interaction"]
+observable = ["gizmo_move_writes_a_transient_and_commit_lands_one_undoable_set_track"]
+*/
+
 /// scale 解の分母(`handle - anchor` の成分、レイヤーローカル px)がこれ未満なら
 /// その軸は解けない(anchor がハンドルの線上にある)— 開始時の scale を保つ。
 const SOLVE_EPS: f32 = 1e-3;

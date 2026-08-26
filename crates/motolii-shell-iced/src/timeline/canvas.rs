@@ -23,22 +23,21 @@ use motolii_ui::timeline_editor::TrimEdge;
 use motolii_ui::timeline_rows::{rows, RowKind, TimelineFoldState, TimelineRow};
 
 use super::keys;
+use super::palette;
+use super::palette::{
+    BG, CELL, DIM, HEAD_BG, INK, OVERVIEW_BG, RULE, SELECTED, TRACK_A, TRACK_B, TRIM_BAND, WAVE,
+};
 use super::pane::{GrabZone, TimelineDrag, TimelineMsg};
 use super::semantics::{
     bar_span, flag_button_rect_y, frame_step, hit_test, item_mute_solo, movable_clips,
     mute_button_x, play_pause_button_rect, row_effective_lock, row_fold_arrow_x, row_has_keys,
     row_indent, row_lock_button_x, row_name_right_edge, row_name_x, row_own_lock,
-    row_params_toggle_x, row_swatch_x, ruler_step_seconds, snap_candidates, snapped,
-    solo_button_x, to_start_button_rect, BarZone, PaneGeometry, TimelineHit, OVERVIEW_H, ROW_H,
-    RULER_H,
+    row_params_toggle_x, row_swatch_x, ruler_step_seconds, snap_candidates, snapped, solo_button_x,
+    to_start_button_rect, BarZone, PaneGeometry, TimelineHit, OVERVIEW_H, ROW_H, RULER_H,
 };
 use super::structure::{
     draw_fold_arrow, draw_lock_button, draw_params_toggle, draw_rename_box, is_double_click,
     truncate_name,
-};
-use super::palette;
-use super::palette::{
-    BG, CELL, DIM, HEAD_BG, INK, OVERVIEW_BG, RULE, SELECTED, TRACK_A, TRACK_B, TRIM_BAND, WAVE,
 };
 use super::waveform::WaveformBandState;
 use crate::message::Message;
@@ -127,9 +126,8 @@ impl canvas::Program<Message> for TimelineProgram<'_> {
         let geometry = self.geometry(bounds, &scene.document);
         let view = pane.view;
 
-        let publish = |msg: TimelineMsg| {
-            Some(canvas::Action::publish(Message::Timeline(msg)).and_capture())
-        };
+        let publish =
+            |msg: TimelineMsg| Some(canvas::Action::publish(Message::Timeline(msg)).and_capture());
 
         match event {
             // ── 押した ────────────────────────────────────────────────
@@ -157,9 +155,7 @@ impl canvas::Program<Message> for TimelineProgram<'_> {
                     return Some(canvas::Action::publish(Message::ToStartPressed).and_capture());
                 }
                 if matches!(hit, TimelineHit::PlayPause) {
-                    return Some(
-                        canvas::Action::publish(Message::TogglePlayPressed).and_capture(),
-                    );
+                    return Some(canvas::Action::publish(Message::TogglePlayPressed).and_capture());
                 }
                 let msg = match hit {
                     TimelineHit::Overview { at_seconds } => {
@@ -170,12 +166,14 @@ impl canvas::Program<Message> for TimelineProgram<'_> {
                         TimelineMsg::FlagPressed { layer, flag }
                     }
                     TimelineHit::LockButton { layer } => TimelineMsg::LockPressed { layer },
-                    TimelineHit::FoldArrow { layer } => {
-                        TimelineMsg::FoldToggled { layer, params: false }
-                    }
-                    TimelineHit::ParamsToggle { layer } => {
-                        TimelineMsg::FoldToggled { layer, params: true }
-                    }
+                    TimelineHit::FoldArrow { layer } => TimelineMsg::FoldToggled {
+                        layer,
+                        params: false,
+                    },
+                    TimelineHit::ParamsToggle { layer } => TimelineMsg::FoldToggled {
+                        layer,
+                        params: true,
+                    },
                     // Rail: 二重クリックは rename の入口(egui 版に前例は無い —
                     // 2026-08-19 構造操作レーンの新規判断。RETURN 参照)。
                     TimelineHit::Rail { layer } => {
@@ -211,9 +209,9 @@ impl canvas::Program<Message> for TimelineProgram<'_> {
                     }
                     TimelineHit::Empty => TimelineMsg::EmptyPressed { additive },
                     // 上の2つの早期 return が already handled — ここへは来ない。
-                    TimelineHit::ToStart | TimelineHit::PlayPause => unreachable!(
-                        "ToStart/PlayPause return early above, before this match"
-                    ),
+                    TimelineHit::ToStart | TimelineHit::PlayPause => {
+                        unreachable!("ToStart/PlayPause return early above, before this match")
+                    }
                 };
                 publish(msg)
             }
@@ -347,7 +345,9 @@ impl canvas::Program<Message> for TimelineProgram<'_> {
                         }
                         // command / control 併用の文字は近道キーの側(コピペ等)
                         // かもしれないので、そのまま文字入力にはしない。
-                        Key::Character(character) if !modifiers.command() && !modifiers.control() => {
+                        Key::Character(character)
+                            if !modifiers.command() && !modifiers.control() =>
+                        {
                             let mut buffer = pane
                                 .renaming
                                 .as_ref()
@@ -384,7 +384,9 @@ impl canvas::Program<Message> for TimelineProgram<'_> {
                     // Enter: 単独選択の行の rename を始める(egui 版 `timeline_editor`
                     // の Enter 分岐と同じ意味 — 二重クリックとは別のもう1つの入口)。
                     Key::Named(Named::Enter) if scene.selected.len() == 1 => {
-                        TimelineMsg::RenameStarted { layer: scene.selected[0] }
+                        TimelineMsg::RenameStarted {
+                            layer: scene.selected[0],
+                        }
                     }
                     Key::Character(character)
                         if modifiers.command() && character.eq_ignore_ascii_case("z") =>
@@ -543,7 +545,12 @@ impl canvas::Program<Message> for TimelineProgram<'_> {
                     width: name_max_w,
                     height: ROW_H - 4.0,
                 };
-                draw_rename_box(&mut frame, name_rect, &truncate_name(buffer, name_max_w), tokens);
+                draw_rename_box(
+                    &mut frame,
+                    name_rect,
+                    &truncate_name(buffer, name_max_w),
+                    tokens,
+                );
             } else {
                 frame.fill_text(Text {
                     content: truncate_name(&name, name_max_w),
@@ -557,7 +564,14 @@ impl canvas::Program<Message> for TimelineProgram<'_> {
             // 子の開閉(▶)。has_children の行だけ。
             if row.has_children {
                 let (ax0, ax1) = row_fold_arrow_x(indent);
-                draw_fold_arrow(&mut frame, ax0, ax1, y + ROW_H * 0.5, row.children_open, DIM);
+                draw_fold_arrow(
+                    &mut frame,
+                    ax0,
+                    ax1,
+                    y + ROW_H * 0.5,
+                    row.children_open,
+                    DIM,
+                );
             }
             // param 行の開閉(◇/◆)。キーを持つ行だけ。
             if has_keys {
@@ -684,7 +698,9 @@ impl canvas::Program<Message> for TimelineProgram<'_> {
                         }) if targets.iter().any(|(l, _, _)| *l == child) => *preview_delta,
                         _ => 0.0,
                     };
-                    let cx0 = geometry.time_to_x(view, cs + offset).max(geometry.track_left());
+                    let cx0 = geometry
+                        .time_to_x(view, cs + offset)
+                        .max(geometry.track_left());
                     let cx1 = geometry.time_to_x(view, ce + offset).min(size.width);
                     if cx1 - cx0 > 0.5 {
                         frame.fill_rectangle(
@@ -776,11 +792,7 @@ impl canvas::Program<Message> for TimelineProgram<'_> {
             let cy = (y0 + y1) * 0.5;
             if scene.playing {
                 for dx in [-4.0, 1.0] {
-                    frame.fill_rectangle(
-                        Point::new(cx + dx, cy - 5.0),
-                        Size::new(3.0, 10.0),
-                        tint,
-                    );
+                    frame.fill_rectangle(Point::new(cx + dx, cy - 5.0), Size::new(3.0, 10.0), tint);
                 }
             } else {
                 let head = Path::new(|p| {
@@ -956,7 +968,11 @@ impl canvas::Program<Message> for TimelineProgram<'_> {
             frame.fill_rectangle(
                 Point::new(geometry.track_left(), mid),
                 Size::new(geometry.track_w(), 1.0),
-                Color::from_rgb(0x3a as f32 / 255.0, 0x3a as f32 / 255.0, 0x3a as f32 / 255.0),
+                Color::from_rgb(
+                    0x3a as f32 / 255.0,
+                    0x3a as f32 / 255.0,
+                    0x3a as f32 / 255.0,
+                ),
             );
             match self.shell.waveform_state() {
                 WaveformBandState::Ready(peaks) => {
@@ -1171,7 +1187,11 @@ fn draw_flag_button(
         (
             accent,
             Color { a: 0.18, ..accent },
-            if label == "S" { accent } else { tokens.text_primary },
+            if label == "S" {
+                accent
+            } else {
+                tokens.text_primary
+            },
         )
     } else if hovered {
         (

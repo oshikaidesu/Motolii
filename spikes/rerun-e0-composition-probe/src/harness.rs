@@ -206,9 +206,13 @@ impl Offscreen {
                 label: Some("e0 offscreen encoder"),
             });
         // `prepare` = `ViewBuilder::draw`。シーン本体はここで描かれる。
-        let user_buffers =
-            self.renderer
-                .update_buffers(&self.device, &self.queue, &mut encoder, &paint_jobs, &screen_descriptor);
+        let user_buffers = self.renderer.update_buffers(
+            &self.device,
+            &self.queue,
+            &mut encoder,
+            &paint_jobs,
+            &screen_descriptor,
+        );
         {
             let mut pass = encoder
                 .begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -232,8 +236,11 @@ impl Offscreen {
             self.renderer
                 .render(&mut pass, &paint_jobs, &screen_descriptor);
         }
-        self.queue
-            .submit(user_buffers.into_iter().chain(std::iter::once(encoder.finish())));
+        self.queue.submit(
+            user_buffers
+                .into_iter()
+                .chain(std::iter::once(encoder.finish())),
+        );
 
         for id in &full_output.textures_delta.free {
             self.renderer.free_texture(id);

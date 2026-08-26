@@ -83,7 +83,10 @@ mod properties;
 mod tree;
 
 pub use audio::{audio_rows, AudioRowProjection};
-pub use geometry::{frame_at_x, frame_to_x, tick_steps, time_band_segment_frames};
+pub use geometry::{
+    frame_at_x, frame_to_x, tick_steps, tick_steps_with_target, time_band_segment_frames,
+    time_band_segment_frames_with_target,
+};
 pub(crate) use preview::{apply_clip_preview, apply_key_preview};
 pub use properties::{
     key_order, layer_row_top, property_rows, selected_row_index, PropertyKeyProjection,

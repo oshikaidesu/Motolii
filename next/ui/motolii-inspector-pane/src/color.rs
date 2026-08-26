@@ -384,18 +384,18 @@ pub fn color_row(
     let content = row_widget![
         color_swatch(rgba, target, dims),
         text(target.label())
-            .size(dims.body_text)
+            .size(dims.theme().text.body)
             .color(colors.text_primary)
             .width(Length::Fill),
-        row_widget(cells).spacing(dims.spacing_xs),
+        row_widget(cells).spacing(dims.theme().space.xs),
     ]
-    .spacing(dims.spacing_xs)
+    .spacing(dims.theme().space.xs)
     .align_y(iced::alignment::Vertical::Center);
 
     container(content)
         .width(Length::Fill)
         .height(Length::Fixed(dims.inspector_row_height))
-        .padding([0.0, dims.spacing_m])
+        .padding([0.0, dims.theme().space.m])
         .align_y(iced::alignment::Vertical::Center)
         .style(move |_theme| crate::chrome::row_band_style(dims))
         .into()
@@ -423,7 +423,7 @@ fn channel_cell(
         // 発明しない — crate doc「意匠」節どおり)。
         mouse_area(
             text(channel.label())
-                .size(dims.caption_text)
+                .size(dims.theme().text.caption)
                 .color(colors.text_muted)
                 .align_x(iced::alignment::Horizontal::Center)
                 .width(Length::Fixed(dims.inspector_value_width))
@@ -433,7 +433,7 @@ fn channel_cell(
         .into()
     } else {
         text(channel.label())
-            .size(dims.caption_text)
+            .size(dims.theme().text.caption)
             .color(colors.text_muted)
             .align_x(iced::alignment::Horizontal::Center)
             .width(Length::Fixed(dims.inspector_value_width))
@@ -448,7 +448,7 @@ fn channel_cell(
             .id(channel_input_id(target, channel))
             .on_input(move |text| Message::ChannelInput(target, channel, text))
             .on_submit(Message::ChannelSubmit(target, channel))
-            .size(dims.body_text)
+            .size(dims.theme().text.body)
             .width(Length::Fixed(dims.inspector_value_width))
             .padding(0.0)
             .align_x(iced::alignment::Horizontal::Center)
@@ -482,7 +482,7 @@ fn color_swatch(rgba: [f64; 4], target: ColorTarget, dims: Dimensions) -> Elemen
                 // 裁定179: 常時輪郭なし(これは選択状態を持たない見本なので、
                 // `label_color_chip` の hover 縁すら要らない — 常に透明)。
                 color: iced::Color::TRANSPARENT,
-                width: dims.border_width,
+                width: dims.theme().stroke.hairline,
                 radius: 0.0.into(),
             },
             ..container::Style::default()

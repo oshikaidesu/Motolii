@@ -114,7 +114,10 @@ fn cmd_s_saves_and_the_band_drops_the_unsaved_mark() {
     );
 
     let mut after = iced_test::simulator(view(&shell));
-    assert!(after.find(name).is_ok(), "保存後の帯が project 名を出さない");
+    assert!(
+        after.find(name).is_ok(),
+        "保存後の帯が project 名を出さない"
+    );
     assert!(
         after.find(view::unsaved_label(name).as_str()).is_err(),
         "保存したのに ● が残っている"

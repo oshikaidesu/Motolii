@@ -21,7 +21,7 @@ const ALL_STATUSES: [button::Status; 4] = [
 ];
 
 /// **本命(D5)**: ボタンの border は全 status で透明 — 幅は
-/// `dims.border_width` のまま(幾何不変: レイアウトに効く値を変えず、色だけ
+/// `dims.theme().stroke.hairline` のまま(幾何不変: レイアウトに効く値を変えず、色だけ
 /// 落とす — 透明 border 方式)。
 #[test]
 fn button_border_is_transparent_in_every_status_but_keeps_its_width() {
@@ -35,8 +35,8 @@ fn button_border_is_transparent_in_every_status_but_keeps_its_width() {
             style.border.color
         );
         assert_eq!(
-            style.border.width, dims.border_width,
-            "button({status:?})の border 幅が dims.border_width から動いた(幾何不変違反)"
+            style.border.width, dims.theme().stroke.hairline,
+            "button({status:?})の border 幅が dims.theme().stroke.hairline から動いた(幾何不変違反)"
         );
     }
 }
@@ -74,7 +74,7 @@ fn button_faces_keep_the_one_step_luminance_grammar() {
 }
 
 /// **本命(D5)**: pane 容器は `surface_panel` の面+透明 border(幅は
-/// `dims.border_width` のまま=幾何不変)。容器の輪郭は app 地からの明度1段が
+/// `dims.theme().stroke.hairline` のまま=幾何不変)。容器の輪郭は app 地からの明度1段が
 /// 担う(`panel_container_style` doc 参照)。
 #[test]
 fn panel_container_has_a_panel_face_and_a_transparent_border() {
@@ -92,8 +92,8 @@ fn panel_container_has_a_panel_face_and_a_transparent_border() {
         style.border.color
     );
     assert_eq!(
-        style.border.width, dims.border_width,
-        "容器の border 幅が dims.border_width から動いた(幾何不変違反)"
+        style.border.width, dims.theme().stroke.hairline,
+        "容器の border 幅が dims.theme().stroke.hairline から動いた(幾何不変違反)"
     );
     assert_eq!(style.border.radius, 0.0.into(), "容器の角丸が動いた(幾何不変違反)");
 }

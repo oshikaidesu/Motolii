@@ -24,7 +24,13 @@ const FPS: Fps = match Fps::try_new(12, 1) {
 
 /// 単色ソース動画をnative解像度WxHで作る。
 fn make_solid_video(path: &Path, width: u32, height: u32, rgba: [u8; 4]) {
-    let desc = FrameDesc::packed(width, height, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, false);
+    let desc = FrameDesc::packed(
+        width,
+        height,
+        PixelFormat::Rgba8Unorm,
+        ColorSpace::Srgb,
+        false,
+    );
     let mut enc = Encoder::open(path, &desc, FPS, true).unwrap();
     let mut frame = vec![0u8; desc.data_size()];
     for px in frame.chunks_exact_mut(4) {

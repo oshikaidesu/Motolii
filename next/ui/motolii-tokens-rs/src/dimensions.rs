@@ -3,11 +3,157 @@
 
 use std::path::{Path, PathBuf};
 
+/// Pane固有の視覚定数。共通の余白・文字・罫線(`Dimensions`直下)と混ぜず、
+/// 各コンポーネントの責任内で調整できるようJSONでも名前空間を分ける。
+///
+/// ここに入る値は「見た目・踏面・表示密度」を決める値だけである。フレーム数、
+/// 入力検証幅、波形計算量のような意味・処理ポリシーは入れない。
+#[derive(Clone, Copy, Debug, PartialEq, serde::Deserialize)]
+#[serde(default)]
+pub struct ComponentValues {
+    pub browser: BrowserValues,
+    pub settings: SettingsValues,
+    pub stage: StageValues,
+    pub timeline: TimelineValues,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, serde::Deserialize)]
+#[serde(default)]
+pub struct BrowserValues {
+    pub grid_columns: usize,
+    pub card_width_row_height_ratio: f32,
+    pub thumb_aspect_w: f32,
+    pub thumb_aspect_h: f32,
+    pub filter_chip_corner_radius_row_height_ratio: f32,
+    pub panel_height_row_height_ratio: f32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, serde::Deserialize)]
+#[serde(default)]
+pub struct SettingsValues {
+    pub checkerboard_tile_target_pt: f32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, serde::Deserialize)]
+#[serde(default)]
+pub struct StageValues {
+    pub grid_divisions: u32,
+    pub action_safe_inset: f32,
+    pub title_safe_inset: f32,
+    pub grid_ink_factor: f32,
+    pub fit_to_selection_margin: f32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, serde::Deserialize)]
+#[serde(default)]
+pub struct TimelineValues {
+    pub graph_plot_padding: f32,
+    pub graph_handle_hit: f32,
+    pub graph_grid_line_width: f32,
+    pub graph_curve_line_width: f32,
+    pub graph_control_line_width: f32,
+    pub graph_handle_radius: f32,
+    pub key_diamond_size: f32,
+    pub key_hit: f32,
+    pub target_cell_ratio: f32,
+    pub viewport_default_size: f32,
+}
+
+impl Default for ComponentValues {
+    fn default() -> Self {
+        Self {
+            browser: BrowserValues::default(),
+            settings: SettingsValues::default(),
+            stage: StageValues::default(),
+            timeline: TimelineValues::default(),
+        }
+    }
+}
+
+impl Default for BrowserValues {
+    fn default() -> Self {
+        Self {
+            grid_columns: 2,
+            card_width_row_height_ratio: 6.0,
+            thumb_aspect_w: 16.0,
+            thumb_aspect_h: 9.0,
+            filter_chip_corner_radius_row_height_ratio: 0.4,
+            panel_height_row_height_ratio: 14.0,
+        }
+    }
+}
+
+impl Default for SettingsValues {
+    fn default() -> Self {
+        Self {
+            checkerboard_tile_target_pt: 8.0,
+        }
+    }
+}
+
+impl Default for StageValues {
+    fn default() -> Self {
+        Self {
+            grid_divisions: 9,
+            action_safe_inset: 0.05,
+            title_safe_inset: 0.10,
+            grid_ink_factor: 0.10 / 0.22,
+            fit_to_selection_margin: 0.9,
+        }
+    }
+}
+
+impl Default for TimelineValues {
+    fn default() -> Self {
+        Self {
+            graph_plot_padding: 16.0,
+            graph_handle_hit: 12.0,
+            graph_grid_line_width: 1.0,
+            graph_curve_line_width: 2.0,
+            graph_control_line_width: 1.0,
+            graph_handle_radius: 5.0,
+            key_diamond_size: 8.0,
+            key_hit: 12.0,
+            target_cell_ratio: 0.52,
+            viewport_default_size: 100.0,
+        }
+    }
+}
+
+impl ComponentValues {
+    /// UI scale が意味を持つのは画面上の長さだけ。比率・分割数・ink係数は
+    /// スケールしないため、ここで component ごとに明示する。
+    pub fn scaled(self, ui_scale: f32) -> Self {
+        let s = ui_scale;
+        Self {
+            browser: self.browser,
+            settings: SettingsValues {
+                checkerboard_tile_target_pt: self.settings.checkerboard_tile_target_pt * s,
+            },
+            stage: self.stage,
+            timeline: TimelineValues {
+                graph_plot_padding: self.timeline.graph_plot_padding * s,
+                graph_handle_hit: self.timeline.graph_handle_hit * s,
+                graph_grid_line_width: self.timeline.graph_grid_line_width * s,
+                graph_curve_line_width: self.timeline.graph_curve_line_width * s,
+                graph_control_line_width: self.timeline.graph_control_line_width * s,
+                graph_handle_radius: self.timeline.graph_handle_radius * s,
+                key_diamond_size: self.timeline.key_diamond_size * s,
+                key_hit: self.timeline.key_hit * s,
+                ..self.timeline
+            },
+        }
+    }
+}
+
 /// 寸法トークン。**Ableton 実測**(`docs/reviews/2026-08-19-ableton-density-measurements.md`)。
 /// 実測に無い値の導出根拠は `tokens/dimensions.json` の `_note_*` キーに書く
 /// (JSON はコメントを持てないため)。
 #[derive(Clone, Copy, Debug, PartialEq, serde::Deserialize)]
 pub struct Dimensions {
+    /// Pane固有の視覚定数。共通寸法を肥大化させず、JSON内でも責任を分ける。
+    #[serde(default)]
+    pub components: ComponentValues,
     /// Timeline の行高。
     pub row_height: f32,
     /// transport/Control 帯の高さ。
@@ -49,6 +195,13 @@ pub struct Dimensions {
     /// (`Dimensions::scaled` 参照 — mock `--line: 1px` が `--s` の calc から独立して
     /// いる=「拡大しない」ことの直接の出典)。
     pub border_width: f32,
+    /// Google/Material系の操作対象契約。小さなアイコンでも押下面はこの最小寸法を
+    /// 下回らない。画面密度ではなく「見つけて触れる」ための共通値。
+    #[serde(default = "default_interactive_target_min")]
+    pub interactive_target_min: f32,
+    /// フォーカス中の入力境界。通常の罫線とは別の、機械検査できる可視状態の幅。
+    #[serde(default = "default_focus_indicator_width")]
+    pub focus_indicator_width: f32,
     /// panel header 帯の高さ。Shell 全体の header(Undo/Redo/+Layer 帯)専用 —
     /// Ableton 実測(`docs/reviews/2026-08-19-ableton-density-measurements.md`)。
     /// Inspector 自身のタイトル帯は `inspector_section_header_height` を使う
@@ -127,6 +280,13 @@ pub struct Dimensions {
     /// `0.075×帯高30 = 2.25 → 2`(`lane_bar::sibling_gap_px` と同式・同段)。
     #[serde(default = "default_timeline_transport_gap")]
     pub timeline_transport_gap: f32,
+    /// Graph Editor のプロット面の高さ。Graph Editor固有の固定寸法を
+    /// paneコードへ直書きせず、他の画面寸法と同じJSON経路へ置く。
+    #[serde(default = "default_graph_editor_plot_height")]
+    pub graph_editor_plot_height: f32,
+    /// Graph Editor の制御値ラベル列の幅。
+    #[serde(default = "default_graph_control_label_width")]
+    pub graph_control_label_width: f32,
     /// mock `--s` 相当の UI 拡大率(1.00 基準、0.01 刻み)。**適用点は
     /// [`Dimensions::scaled`] の1箇所だけ** — 個々の pane はここを直接読まず、
     /// [`crate::Shell::dims`] が返す「掛け算済みの」`Dimensions` を読む。
@@ -154,7 +314,7 @@ pub struct Dimensions {
     /// 視覚正本 `browser-library.css:306` `.libraryBrowser[data-view="list"]
     /// .libraryThumb{width:46px;flex:0 0 46px}` 実測(`_note_browser_list_
     /// thumb_width` 参照)。高さは呼び手側(`motolii-browser-pane`)が既存の
-    /// `THUMB_ASPECT_W`/`THUMB_ASPECT_H`(16/9)をこの幅へ適用して逆算する —
+    /// Browser component token の thumb aspect(16/9)をこの幅へ適用して逆算する —
     /// 専用の高さキーは起こさない。
     #[serde(default = "default_browser_list_thumb_width")]
     pub browser_list_thumb_width: f32,
@@ -192,6 +352,14 @@ fn default_inspector_glyph_width() -> f32 {
     26.0
 }
 
+fn default_interactive_target_min() -> f32 {
+    24.0
+}
+
+fn default_focus_indicator_width() -> f32 {
+    2.0
+}
+
 fn default_pane_header_height() -> f32 {
     18.0
 }
@@ -216,8 +384,16 @@ fn default_timeline_transport_gap() -> f32 {
     2.0
 }
 
+fn default_graph_editor_plot_height() -> f32 {
+    180.0
+}
+
+fn default_graph_control_label_width() -> f32 {
+    20.0
+}
+
 fn default_ui_scale() -> f32 {
-    1.0
+    1.18
 }
 
 fn default_browser_tab_bar_height() -> f32 {
@@ -263,6 +439,7 @@ impl Default for Dimensions {
         // dimensions.json の `_note_*` と同じ導出根拠) — 正本が2つに増えるわけでは
         // なく、正本を読めなかった時だけ使う既定値。
         Self {
+            components: ComponentValues::default(),
             row_height: 20.0,
             transport_band: 30.0,
             title_text: 12.0,
@@ -274,6 +451,8 @@ impl Default for Dimensions {
             spacing_m: 8.0,
             spacing_l: 12.0,
             border_width: 1.0,
+            interactive_target_min: 24.0,
+            focus_indicator_width: 2.0,
             panel_header_height: 29.0,
             inspector_panel_width: 496.0,
             inspector_row_height: 25.0,
@@ -286,7 +465,9 @@ impl Default for Dimensions {
             timeline_transport_height: 30.0,
             timeline_transport_button_width: 30.0,
             timeline_transport_gap: 2.0,
-            ui_scale: 1.0,
+            graph_editor_plot_height: 180.0,
+            graph_control_label_width: 20.0,
+            ui_scale: 1.18,
             browser_tab_bar_height: 26.0,
             browser_tab_underline: 2.0,
             browser_list_thumb_width: 46.0,
@@ -328,6 +509,7 @@ impl Dimensions {
     pub fn scaled(&self, ui_scale: f32) -> Self {
         let s = ui_scale;
         Self {
+            components: self.components.scaled(s),
             row_height: self.row_height * s,
             transport_band: self.transport_band * s,
             title_text: self.title_text * s,
@@ -339,6 +521,8 @@ impl Dimensions {
             spacing_m: self.spacing_m * s,
             spacing_l: self.spacing_l * s,
             border_width: self.border_width.max(1.0),
+            interactive_target_min: self.interactive_target_min * s,
+            focus_indicator_width: self.focus_indicator_width * s,
             panel_header_height: self.panel_header_height * s,
             inspector_panel_width: self.inspector_panel_width * s,
             inspector_row_height: self.inspector_row_height * s,
@@ -354,6 +538,8 @@ impl Dimensions {
             timeline_transport_height: self.timeline_transport_height * s,
             timeline_transport_button_width: self.timeline_transport_button_width * s,
             timeline_transport_gap: self.timeline_transport_gap * s,
+            graph_editor_plot_height: self.graph_editor_plot_height * s,
+            graph_control_label_width: self.graph_control_label_width * s,
             menubar_menu_width: self.menubar_menu_width * s,
             menubar_corner_radius: self.menubar_corner_radius * s,
             gizmo_handle_size: self.gizmo_handle_size * s,
@@ -415,6 +601,14 @@ mod ui_scale_tests {
             scaled.inspector_glyph_width,
             dims.inspector_glyph_width * 1.5
         );
+        assert_eq!(
+            scaled.graph_editor_plot_height,
+            dims.graph_editor_plot_height * 1.5
+        );
+        assert_eq!(
+            scaled.graph_control_label_width,
+            dims.graph_control_label_width * 1.5
+        );
     }
 
     /// **罫線だけ物理1px床(クランプ)**: mock `--line: 1px` は `--s` の calc から
@@ -451,4 +645,3 @@ mod ui_scale_tests {
         assert_eq!(Dimensions::default().inspector_section_header_height, 26.0);
     }
 }
-

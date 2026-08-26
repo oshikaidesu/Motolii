@@ -59,6 +59,7 @@ use iced::advanced::{mouse, renderer, Widget};
 use iced::widget::canvas;
 use iced::advanced::Shell;
 use iced::{Element, Event, Length, Rectangle, Size, Vector};
+use motolii_tokens_rs::Dimensions;
 
 use std::marker::PhantomData;
 
@@ -103,12 +104,17 @@ where
     P: ViewportProgram<Message, Theme, Renderer>,
     Renderer: geometry::Renderer,
 {
-    const DEFAULT_SIZE: f32 = 100.0;
-
     pub(crate) fn new(program: P) -> Self {
+        Self::new_with_size(
+            program,
+            Dimensions::default().components.timeline.viewport_default_size,
+        )
+    }
+
+    pub(crate) fn new_with_size(program: P, default_size: f32) -> Self {
         Self {
-            width: Length::Fixed(Self::DEFAULT_SIZE),
-            height: Length::Fixed(Self::DEFAULT_SIZE),
+            width: Length::Fixed(default_size),
+            height: Length::Fixed(default_size),
             program,
             message_: PhantomData,
             theme_: PhantomData,

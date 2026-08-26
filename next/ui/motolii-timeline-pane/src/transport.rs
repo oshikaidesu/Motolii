@@ -192,36 +192,30 @@ pub(crate) fn view(pane: &TimelinePane) -> Element<'static, Message> {
     // ループトグル(B21)。瞬間の押し口5つとは別の束(状態の器)なので、
     // Timecode と同じ「兄弟 gap より1段広い既存段」で区切る(線を引かない —
     // 裁定179)。
-    children.push(Space::new().width(Length::Fixed(dims.spacing_m)).into());
+    children.push(Space::new().width(Length::Fixed(dims.theme().space.m)).into());
     children.push(transport_button(spec.loop_button, dims, colors));
-    children.push(Space::new().width(Length::Fixed(dims.spacing_m)).into());
+    children.push(Space::new().width(Length::Fixed(dims.theme().space.m)).into());
     for spec_button in spec.keyframe_buttons {
         children.push(transport_button(spec_button, dims, colors));
     }
-    children.push(
-        button(text("Graph").size(dims.caption_text))
-            .on_press(Message::ToggleGraphEditor)
-            .padding([0.0, dims.spacing_xs])
-            .into(),
-    );
     // Timecode(1138)。同じく `spacing_m` で「別の束」であることを示す。
-    children.push(Space::new().width(Length::Fixed(dims.spacing_m)).into());
+    children.push(Space::new().width(Length::Fixed(dims.theme().space.m)).into());
     children.push(
         text_input("frame", spec.frames)
             .on_input(Message::FrameInput)
             .on_submit(Message::FrameCommit)
-            .size(dims.body_text)
+            .size(dims.theme().text.body)
             .font(iced::Font::MONOSPACE)
             .width(Length::Fixed(dims.inspector_value_width))
-            .padding([0.0, dims.spacing_xs])
+            .padding([0.0, dims.theme().space.xs])
             .into(),
     );
     children.push(unit_glyph("f", dims, colors));
     if let Some(seconds) = spec.seconds {
-        children.push(Space::new().width(Length::Fixed(dims.spacing_s)).into());
+        children.push(Space::new().width(Length::Fixed(dims.theme().space.s)).into());
         children.push(
             text(seconds)
-                .size(dims.body_text)
+                .size(dims.theme().text.body)
                 .font(iced::Font::MONOSPACE)
                 .color(colors.text_primary)
                 .into(),
@@ -233,7 +227,7 @@ pub(crate) fn view(pane: &TimelinePane) -> Element<'static, Message> {
         row(children)
             .spacing(dims.timeline_transport_gap)
             .align_y(iced::alignment::Vertical::Center)
-            .padding([0.0, dims.spacing_s]),
+            .padding([0.0, dims.theme().space.s]),
     )
     .width(Length::Fill)
     .height(Length::Fixed(dims.timeline_transport_height))
@@ -250,7 +244,7 @@ pub(crate) fn view(pane: &TimelinePane) -> Element<'static, Message> {
 /// Timecode の単位グリフ(f/s)。数字ではないので等幅にしない(発注書
 /// 「等幅は数字部のみ許可」)。ink は数字よりさらに1段静か。
 fn unit_glyph(unit: &'static str, dims: Dimensions, colors: Colors) -> Element<'static, Message> {
-    text(unit).size(dims.caption_text).color(colors.text_muted).into()
+    text(unit).size(dims.theme().text.caption).color(colors.text_muted).into()
 }
 
 /// transport の1ボタン。常時輪郭なし・hover で面が浮く(裁定179)。踏面は
@@ -275,7 +269,7 @@ fn transport_button(
     let idle_ink = if spec.active { colors.action_active } else { colors.text_secondary };
     let glyph = motolii_icons::icon(
         spec.icon,
-        frame_px_for_glyph_px(dims.body_text),
+        frame_px_for_glyph_px(dims.theme().text.body),
         idle_ink,
     );
     button(

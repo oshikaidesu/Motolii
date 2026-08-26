@@ -163,10 +163,10 @@ pub enum Message {
     // ---- Stage 重なり(第3切片 — map B44 184/292/293・正典 §8.1
     //      ReorderLayerUp/Down(+ToEnd))----
     /// 選択 layer(複数は block)の Stage 合成順(`meta.order`)を動かす。
-    /// **Timeline 行の縦位置は動かない**([`crate::stacking`] モジュール doc —
-    /// 行位置は LayerId 昇順で order の投影ではない)。`Intent::SetOrder` を
-    /// 1回の `apply_all` で束ねる(**1操作 = 1 undo**)。空選択・ロック層は
-    /// 理由つき拒否(M13)。
+    /// 現行 Iced 行は LayerId 順のため縦位置を変えないが、lane drag を提供する
+    /// 外部 projection は `meta.order` の前面→背面をそのまま上→下へ写す
+    /// ([`crate::stacking`] モジュール doc)。`Intent::SetOrder` を1回の
+    /// `apply_all` で束ねる(**1操作 = 1 undo**)。空選択・ロック層は理由つき拒否(M13)。
     RestackLayer(StackDirection),
 
     // ---- レイヤー名の inline rename(第3切片 — map B02 785・正典 §6
@@ -358,7 +358,7 @@ use keys::{
     select_all_visible_keys, set_key_interp, toggle_keyframe_at_playhead,
 };
 use key_drag::nudge_keyframe;
-use misc::{commit_frame_input, comp_duration, jump_to_clip_edit, jump_to_keyframe, restack_layers};
+use misc::{commit_frame_input, commit_graph_editor, comp_duration, jump_to_clip_edit, jump_to_keyframe, restack_layers};
 
 /// Easy Ease(map 485/488): AE の既定 influence 33% を cubic-bezier へ写した
 /// プリセット。**区間モデルの注記**(拘束7(a)の構造差 — 逸脱理由): store の
@@ -800,7 +800,7 @@ impl PaneState {
                 self.graph_drafts[control.index()] = Some(text);
                 None
             }
-            Message::GraphCommit => self.commit_graph_editor(doc, session),
+            Message::GraphCommit => commit_graph_editor(self, doc, session),
             Message::GraphHandleGrabbed(control) => {
                 self.graph_drag = Some(control);
                 None
@@ -828,7 +828,7 @@ impl PaneState {
             Message::GraphHandleReleased(control) => {
                 self.graph_drag = None;
                 let _ = control;
-                self.commit_graph_editor(doc, session)
+                commit_graph_editor(self, doc, session)
             }
             Message::GraphHandleCancelled => {
                 self.cancel_graph_interaction();

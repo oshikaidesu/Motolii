@@ -2,6 +2,9 @@
 
 `scripts/plan_waves.py` が生成。**手で編集しない。**
 
+- 段階ゲート: current_stage=design_profile_v0 mode=serial parallel_components=locked
+- 並列許可: LOCKED
+
 原理: **意味componentのwrite-setが交わらない作業項目は同時に走れる**。
 `//! responsibility: wire` を持つShell rootは意味レーンから除外し、
 最後に1本のWIRE結線で接続する。これで結線の共有と意味の所有を混ぜない。

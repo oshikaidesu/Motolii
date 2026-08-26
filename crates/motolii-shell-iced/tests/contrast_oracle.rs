@@ -112,12 +112,37 @@ const BORDER_MIN: f64 = 3.0;
 fn primary_and_secondary_text_meet_normal_text_minimum() {
     let t = Tokens::DARK;
     let pairs: [(&str, Color, &str, Color); 6] = [
-        ("text_primary", t.text_primary, "surface_raised", t.surface_raised),
-        ("text_primary", t.text_primary, "surface_hover", t.surface_hover),
-        ("text_primary", t.text_primary, "surface_panel", t.surface_panel),
+        (
+            "text_primary",
+            t.text_primary,
+            "surface_raised",
+            t.surface_raised,
+        ),
+        (
+            "text_primary",
+            t.text_primary,
+            "surface_hover",
+            t.surface_hover,
+        ),
+        (
+            "text_primary",
+            t.text_primary,
+            "surface_panel",
+            t.surface_panel,
+        ),
         ("text_primary", t.text_primary, "surface_app", t.surface_app),
-        ("text_secondary", t.text_secondary, "surface_app", t.surface_app),
-        ("text_secondary", t.text_secondary, "surface_panel", t.surface_panel),
+        (
+            "text_secondary",
+            t.text_secondary,
+            "surface_app",
+            t.surface_app,
+        ),
+        (
+            "text_secondary",
+            t.text_secondary,
+            "surface_panel",
+            t.surface_panel,
+        ),
     ];
     for (text_name, text_color, surface_name, surface_color) in pairs {
         let ratio = contrast_ratio(text_color, surface_color);
@@ -134,7 +159,12 @@ fn muted_text_meets_the_borrowed_large_text_minimum() {
     let t = Tokens::DARK;
     let pairs: [(&str, Color, &str, Color); 3] = [
         ("text_muted", t.text_muted, "surface_app", t.surface_app),
-        ("text_muted", t.text_muted, "surface_raised", t.surface_raised),
+        (
+            "text_muted",
+            t.text_muted,
+            "surface_raised",
+            t.surface_raised,
+        ),
         ("text_muted", t.text_muted, "surface_panel", t.surface_panel),
     ];
     for (text_name, text_color, surface_name, surface_color) in pairs {

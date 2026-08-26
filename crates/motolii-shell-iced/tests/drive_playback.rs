@@ -19,7 +19,9 @@ use std::path::PathBuf;
 
 use common::drain;
 use iced::keyboard::key::Named;
-use motolii_shell_iced::timeline::semantics::{play_pause_button_rect, to_start_button_rect, PaneGeometry};
+use motolii_shell_iced::timeline::semantics::{
+    play_pause_button_rect, to_start_button_rect, PaneGeometry,
+};
 use motolii_shell_iced::{view, Message, Outcome, ScriptedPrompts, Shell};
 use motolii_ui::blitz_shell::UiIntent;
 use motolii_ui::timeline_editor::lab_fixture;
@@ -152,7 +154,10 @@ fn clicking_the_play_pause_button_toggles_playing() {
 
     assert!(!shell.timeline_playing());
     click_at(&mut shell, at);
-    assert!(shell.timeline_playing(), "play ボタンを押しても再生が始まらない");
+    assert!(
+        shell.timeline_playing(),
+        "play ボタンを押しても再生が始まらない"
+    );
 
     click_at(&mut shell, at);
     assert!(!shell.timeline_playing(), "もう一度押しても一時停止しない");

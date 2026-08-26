@@ -80,6 +80,9 @@ fn the_store_lives_beside_the_other_user_settings() {
         palettes.parent(),
         "user 設定層は1つ(新しい置き場を作らない)"
     );
-    assert_eq!(last.file_name(), Some(Path::new(LAST_PROJECT_FILE_NAME).as_os_str()));
+    assert_eq!(
+        last.file_name(),
+        Some(Path::new(LAST_PROJECT_FILE_NAME).as_os_str())
+    );
     assert_eq!(LAST_PROJECT_VERSION, 1);
 }

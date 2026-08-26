@@ -51,7 +51,9 @@ fn admit_video(writer: &mut DocumentWriter, duration: Option<RationalTime>) -> A
     let admit = writer.prepare_admit_asset(draft).unwrap();
     let id = admit.asset().id;
     let gesture = writer.begin_gesture();
-    writer.apply_prepared_asset_admission(gesture, admit).unwrap();
+    writer
+        .apply_prepared_asset_admission(gesture, admit)
+        .unwrap();
     id
 }
 

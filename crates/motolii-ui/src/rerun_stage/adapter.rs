@@ -8,8 +8,8 @@ use glam::EulerRot;
 use re_chunk::Chunk;
 use re_log_types::{EntityPath, TimePoint};
 use transform_gizmo::{
-    Gizmo,
     math::{DQuat, DVec3},
+    Gizmo,
 };
 
 use crate::stage_app_geometry::{AppStageGeometry, AppStageTransformEdit};
@@ -168,7 +168,9 @@ impl EmbeddedSpatialStage {
     /// callback が黙って何も描かずに戻る(絵が出ない)。
     /// Rerun 自身の eframe 版も同じ場所へ入れている
     /// (`re_viewer/src/lib.rs` `customize_eframe_and_setup_renderer`)。
-    pub(crate) fn new_in_host(render_state: &eframe::egui_wgpu::RenderState) -> Result<Self, String> {
+    pub(crate) fn new_in_host(
+        render_state: &eframe::egui_wgpu::RenderState,
+    ) -> Result<Self, String> {
         {
             let mut renderer = render_state.renderer.write();
             if renderer
@@ -446,7 +448,9 @@ impl EmbeddedSpatialStage {
             ) {
                 // 消し損ねると**消えた layer の板が残り続ける**。絵だけ見ても
                 // 「消したのに残っている」としか分からないので言う。
-                self.note_failure(format!("消した layer の板を Stage から取り除けない: {old_id}"));
+                self.note_failure(format!(
+                    "消した layer の板を Stage から取り除けない: {old_id}"
+                ));
             }
         }
 
@@ -514,11 +518,9 @@ impl EmbeddedSpatialStage {
             .callback_resources
             .remove::<re_renderer::RenderContext>()
         else {
-            return Err(
-                "Rerun render context がホストの callback_resources に無い\
+            return Err("Rerun render context がホストの callback_resources に無い\
                  (new_in_host を通していない)"
-                    .to_string(),
-            );
+                .to_string());
         };
 
         // 絵は `show` より先に載せる。同じフレームの中で幾何(fill の隠し)まで
@@ -1019,7 +1021,10 @@ mod tests {
         assert!(stage.set_composition_aspect(comp_aspect));
         assert!(stage.fit_view(1000, 1000));
 
-        let camera = stage.spatial_stage.camera().expect("document camera が無い");
+        let camera = stage
+            .spatial_stage
+            .camera()
+            .expect("document camera が無い");
         assert_head_on(&camera, "正方の面");
 
         let half_visible_h = half_visible_height(&camera);
@@ -1045,7 +1050,10 @@ mod tests {
                 EmbeddedSpatialStage::with_own_egui(None).expect("自前 egui 無しの Stage を作る");
             assert!(stage.set_composition_aspect(comp_aspect));
             assert!(stage.fit_view(viewport.0, viewport.1));
-            let camera = stage.spatial_stage.camera().expect("document camera が無い");
+            let camera = stage
+                .spatial_stage
+                .camera()
+                .expect("document camera が無い");
             camera.position[2] - camera.look_target[2]
         };
 
@@ -1064,12 +1072,18 @@ mod tests {
             EmbeddedSpatialStage::with_own_egui(None).expect("自前 egui 無しの Stage を作る");
         assert!(stage.set_composition_aspect(16.0 / 9.0));
         assert!(stage.fit_view(1600, 900));
-        let before = stage.spatial_stage.camera().expect("document camera が無い");
+        let before = stage
+            .spatial_stage
+            .camera()
+            .expect("document camera が無い");
 
         for _ in 0..8 {
             assert!(stage.set_composition_aspect(16.0 / 9.0));
         }
-        let after = stage.spatial_stage.camera().expect("document camera が無い");
+        let after = stage
+            .spatial_stage
+            .camera()
+            .expect("document camera が無い");
         assert_eq!(before, after, "同じ形を伝え直しただけでカメラが動いた");
     }
 
@@ -1078,14 +1092,20 @@ mod tests {
     fn a_broken_composition_shape_is_refused() {
         let mut stage =
             EmbeddedSpatialStage::with_own_egui(None).expect("自前 egui 無しの Stage を作る");
-        let before = stage.spatial_stage.camera().expect("document camera が無い");
+        let before = stage
+            .spatial_stage
+            .camera()
+            .expect("document camera が無い");
         for broken in [0.0, -1.0, f32::NAN, f32::INFINITY] {
             assert!(
                 !stage.set_composition_aspect(broken),
                 "縦横比 {broken} を受け取ってしまった"
             );
         }
-        let after = stage.spatial_stage.camera().expect("document camera が無い");
+        let after = stage
+            .spatial_stage
+            .camera()
+            .expect("document camera が無い");
         assert_eq!(before, after, "壊れた縦横比でカメラが動いた");
     }
 

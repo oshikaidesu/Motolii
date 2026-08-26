@@ -186,7 +186,10 @@ mod tests {
         // 変えても keyed が false である限り同じ色が返る(このAPIは param
         // を引数に取らないので、シグネチャ自体がそれを保証するが、将来
         // 引数が増えた事故に備えて明示しておく)。
-        assert_ne!(t.text_secondary, t.action_active, "対比が無いと次のテストが空証明になる");
+        assert_ne!(
+            t.text_secondary, t.action_active,
+            "対比が無いと次のテストが空証明になる"
+        );
     }
 
     #[test]

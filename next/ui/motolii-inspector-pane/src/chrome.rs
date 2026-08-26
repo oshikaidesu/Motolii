@@ -79,7 +79,7 @@ pub fn row_band_style(dims: Dimensions) -> container::Style {
     container::Style {
         border: iced::Border {
             color: iced::Color::TRANSPARENT,
-            width: dims.border_width,
+            width: dims.theme().stroke.hairline,
             radius: 0.0.into(),
         },
         ..container::Style::default()
@@ -111,7 +111,7 @@ pub(crate) fn bordered_row_sized<'a>(
     container(content)
         .width(Length::Fill)
         .height(Length::Fixed(height))
-        .padding([0.0, dims.spacing_m])
+        .padding([0.0, dims.theme().space.m])
         .align_y(iced::alignment::Vertical::Center)
         .style(move |_theme| row_band_style(dims))
         .into()
@@ -172,7 +172,7 @@ fn label_chip_style(
         text_color: colors.text_primary,
         border: iced::Border {
             color: border_color,
-            width: dims.border_width,
+            width: dims.theme().stroke.hairline,
             radius: 0.0.into(),
         },
         ..button::Style::default()
@@ -186,7 +186,7 @@ pub(crate) fn column_header_row(dims: Dimensions, colors: Colors) -> Element<'st
     let value_width = Length::Fixed(dims.inspector_value_width);
     let axis = |label: &'static str| {
         text(label)
-            .size(dims.caption_text)
+            .size(dims.theme().text.caption)
             .color(colors.text_muted)
             .width(value_width)
             .align_x(iced::alignment::Horizontal::Center)
@@ -194,17 +194,17 @@ pub(crate) fn column_header_row(dims: Dimensions, colors: Colors) -> Element<'st
 
     let content = row_widget![
         text("Property")
-            .size(dims.caption_text)
+            .size(dims.theme().text.caption)
             .color(colors.text_muted)
             .width(Length::Fill),
-        row_widget![axis("X"), axis("Y"), axis("Z")].spacing(dims.spacing_xs),
+        row_widget![axis("X"), axis("Y"), axis("Z")].spacing(dims.theme().space.xs),
         text("Key")
-            .size(dims.caption_text)
+            .size(dims.theme().text.caption)
             .color(colors.action_active)
             .width(Length::Fixed(dims.inspector_glyph_width))
             .align_x(iced::alignment::Horizontal::Center),
     ]
-    .spacing(dims.spacing_xs)
+    .spacing(dims.theme().space.xs)
     .align_y(iced::alignment::Vertical::Center);
 
     // mock `.cols{border-bottom:var(--line) solid #1a1a1a}` は線化 D5
@@ -240,7 +240,7 @@ pub(crate) fn column_header_row(dims: Dimensions, colors: Colors) -> Element<'st
 // 木全体への無条件後処理)。既存の柵(shell 側、書き換え禁止)
 // `inspector_pixel_fence.rs::the_grid_shape_is_preserved_at_150_percent_scale`
 // は `EPS_EXACT=0.05` という極めて厳しい許容で `dims.inspector_value_width ×
-// (dims.inspector_row_height - dims.spacing_s)`(= 96×31.5 ちょうど)を要求する
+// (dims.inspector_row_height - dims.theme().space.s)`(= 96×31.5 ちょうど)を要求する
 // ため、`TaffyBox` 経由の値セルはこの柵を必ず落とす — `motolii-taffy` 側に
 // rounding を無効化する口が無い(`TaffyBox::new` は `taffy::Style` 1個しか
 // 受けない)以上、**この crate 単独では解けない**。
@@ -263,15 +263,15 @@ pub(crate) fn column_header_row(dims: Dimensions, colors: Colors) -> Element<'st
 // rounded_to_the_nearest_pixel`/`ui_scale_fence.rs`/`inspector_pixel_fence.rs`
 // が実際に踏む2値、settings-pane の `comp_cells_row_css` と同じフラット化)。
 pub fn property_row_css(dims: Dimensions) -> String {
-    // `bordered_row` の `.padding([0.0, dims.spacing_m])`(左右)を差し引いた
+    // `bordered_row` の `.padding([0.0, dims.theme().space.m])`(左右)を差し引いた
     // あとの中身幅。
-    let content_width = dims.inspector_panel_width - 2.0 * dims.spacing_m;
+    let content_width = dims.inspector_panel_width - 2.0 * dims.theme().space.m;
     format!(
         "display:grid; width:{content_width}px; height:{height}px; grid-template-columns:minmax(132px,1fr) repeat(3,{value}px) {glyph}px; align-items:center; gap:0 {gap}px;",
         height = dims.inspector_row_height,
         value = dims.inspector_value_width,
         glyph = dims.inspector_glyph_width,
-        gap = dims.spacing_xs,
+        gap = dims.theme().space.xs,
     )
 }
 
@@ -308,7 +308,7 @@ pub(crate) fn value_cell(
                         .id(field_input_id(field))
                         .on_input(move |text| Message::FieldInput(field, text))
                         .on_submit(Message::FieldSubmit(field))
-                        .size(dims.body_text)
+                        .size(dims.theme().text.body)
                         .width(Length::Fill)
                         // 縦0を維持(柵で発見した実修正 — `text_input` の既定 padding
                         // `iced_widget::text_input::DEFAULT_PADDING` = 5px 全辺が固定高
@@ -384,7 +384,7 @@ fn draggable_value_cell(
 ) -> Element<'static, Message> {
     mouse_area(hover_value_box(
         text(displayed)
-            .size(dims.body_text)
+            .size(dims.theme().text.body)
             .color(value_color)
             .align_x(iced::alignment::Horizontal::Center)
             .align_y(iced::alignment::Vertical::Center)
@@ -594,12 +594,12 @@ impl Widget<Message, iced::Theme, iced::Renderer> for HoverValueBox {
 /// `spacing_s`(既定4)と同じ値 — スケール済みの `spacing_s` を使うことで
 /// `ui_scale` を再度掛け直さずに済む(適用点は `Dimensions::scaled` の1箇所だけ)。
 fn value_cell_height(dims: Dimensions) -> f32 {
-    (dims.inspector_row_height - dims.spacing_s).max(1.0)
+    (dims.inspector_row_height - dims.theme().space.s).max(1.0)
 }
 
 /// 単行の横余白(裁定168): `0.6em`(`em` = その文字の size)の px 最近傍丸め。
-/// 値セル/名前欄はどちらも `dims.body_text` サイズの文字を持つので、`em` は
-/// `dims.body_text` を使う。
+/// 値セル/名前欄はどちらも `dims.theme().text.body` サイズの文字を持つので、`em` は
+/// `dims.theme().text.body` を使う。
 pub(crate) fn single_row_horizontal_inset(text_size: f32) -> f32 {
     (text_size * 0.6).round()
 }
@@ -610,14 +610,14 @@ pub(crate) fn single_row_horizontal_inset(text_size: f32) -> f32 {
 /// 裁定168(「文字の余白」)は単行の横余白を `0.6em` と定めたので、そちらへ
 /// 差し替える(セル幅自体は変えない、38px のまま — 内側の呼吸だけが広がる)。
 pub(crate) fn value_cell_padding(dims: Dimensions) -> iced::Padding {
-    iced::Padding::from([0.0, single_row_horizontal_inset(dims.body_text)])
+    iced::Padding::from([0.0, single_row_horizontal_inset(dims.theme().text.body)])
 }
 
 /// ident 帯の名前欄(`.ident b`)の横内余白。[`value_cell_padding`] と同じ
 /// 理由・同じ式を使う(裁定139 は `value_cell`/`name_field` を並記している —
 /// 2箇所で別の値を発明しない、裁定168 適用後もこの対称は保つ)。
 pub(crate) fn name_field_padding(dims: Dimensions) -> iced::Padding {
-    iced::Padding::from([0.0, single_row_horizontal_inset(dims.body_text)])
+    iced::Padding::from([0.0, single_row_horizontal_inset(dims.theme().text.body)])
 }
 
 /// pick_list 共通配色(`text.rs::font_family_row` が最初に建てた意匠を
@@ -644,7 +644,7 @@ pub(crate) fn pick_list_style(
         background: iced::Background::Color(background),
         border: iced::Border {
             color: colors.border_default,
-            width: dims.border_width,
+            width: dims.theme().stroke.hairline,
             radius: 0.0.into(),
         },
     }
@@ -666,7 +666,7 @@ fn boxed_value(
 ) -> Element<'static, Message> {
     container(
         text(content)
-            .size(dims.body_text)
+            .size(dims.theme().text.body)
             .color(color)
             .align_x(iced::alignment::Horizontal::Center)
             .align_y(iced::alignment::Vertical::Center),
@@ -698,10 +698,11 @@ pub(crate) fn blank_value_cell(dims: Dimensions, _colors: Colors) -> Element<'st
         .into()
 }
 
-/// Key/M/S glyph 列の高さ。mock `.glyph { height: calc(var(--row) - 2*var(--s)*1px) }`
-/// の `2` は `spacing_xs`(既定2)と同じ値。
+/// Key/M/S glyph 列の高さ。mockの窪み(`spacing_xs`)を残しつつ、押下面は
+/// `interactive_target_min`を下回らない。
 pub(crate) fn glyph_height(dims: Dimensions) -> f32 {
-    (dims.inspector_row_height - dims.spacing_xs).max(1.0)
+    // 見た目の窪みは残しつつ、押下面の短辺は共通の操作対象床を下回らない。
+    (dims.inspector_row_height - dims.theme().space.xs).max(dims.theme().target.minimum)
 }
 
 /// **M glyph — 結線済み**(supervisor 訂正、2026-08-20)。`LayerAttrs.hidden` を
@@ -710,7 +711,7 @@ pub(crate) fn glyph_height(dims: Dimensions) -> f32 {
 pub(crate) fn mute_glyph(dims: Dimensions, colors: Colors, hidden: bool) -> Element<'static, Message> {
     button(
         text("M")
-            .size(dims.caption_text)
+            .size(dims.theme().text.caption)
             .font(TextWeight::Bold.font())
             .align_x(iced::alignment::Horizontal::Center)
             .align_y(iced::alignment::Vertical::Center),
@@ -761,7 +762,7 @@ pub(crate) fn key_glyph_for_state(
     };
     button(
         text(glyph)
-            .size(dims.caption_text)
+            .size(dims.theme().text.caption)
             .align_x(iced::alignment::Horizontal::Center)
             .align_y(iced::alignment::Vertical::Center),
     )
@@ -818,7 +819,7 @@ pub(crate) fn glyph_button_style(
         (
             iced::Border {
                 color: colors.action_active,
-                width: dims.border_width,
+                width: dims.theme().stroke.hairline,
                 radius: 0.0.into(),
             },
             colors.action_active,
@@ -870,7 +871,7 @@ pub(crate) fn value_box_style(dims: Dimensions, colors: Colors, status: ValueBox
             background: Some(iced::Background::Color(colors.surface_hover)),
             border: iced::Border {
                 color: colors.border_default,
-                width: dims.border_width,
+                width: dims.theme().stroke.hairline,
                 radius: 0.0.into(),
             },
             ..container::Style::default()
@@ -918,7 +919,11 @@ pub(crate) fn name_input_style(
         background: iced::Background::Color(background),
         border: iced::Border {
             color: border_color,
-            width: dims.border_width,
+            width: if matches!(status, text_input::Status::Focused { .. }) {
+                dims.theme().stroke.focus
+            } else {
+                dims.theme().stroke.hairline
+            },
             radius: 0.0.into(),
         },
         // 裁定170 M01: fork(0.15.0-dev)で `icon` フィールドが消えた。
@@ -941,19 +946,18 @@ pub(crate) fn hint_row(dims: Dimensions, colors: Colors) -> Element<'static, Mes
     // 幾何不変)。注記は ink 段(`text_muted`)と間隔だけで区別する。
     container(
         text("drag to scrub · click to type · Esc to cancel")
-            .size(dims.caption_text)
+            .size(dims.theme().text.caption)
             .color(colors.text_muted),
     )
     .width(Length::Fill)
-    .padding([dims.spacing_xs, dims.spacing_m])
+    .padding([dims.theme().space.xs, dims.theme().space.m])
     .style(move |_theme| container::Style {
         border: iced::Border {
             color: iced::Color::TRANSPARENT,
-            width: dims.border_width,
+            width: dims.theme().stroke.hairline,
             radius: 0.0.into(),
         },
         ..container::Style::default()
     })
     .into()
 }
-

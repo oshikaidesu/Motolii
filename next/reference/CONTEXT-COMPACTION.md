@@ -9,6 +9,15 @@
 
 > **step が需要を決め、component が依存を閉じ、静的検査が現在地を決める。Cargo は最後に一度だけ使う。**
 
+## 製品目的の固定(2026-08-25)
+
+Motolii は一般的な動画ソフトの縮小版ではない。**制作者が自分や作品の hero を立ち上げ、次の一歩へ進む
+動機を生む動画ソフト**である。一般的な NLE の条件は開く・編集する・再生する・保存する・書き出すための
+基礎床であり、製品の同一性ではない。再開後に機能の数へ目的を戻さず、実装判断は「結果を見て hero が生まれ、
+制作を続けられるか」で読む。さらに各台帳粒は、解決対象を P0 信頼・安全 / P1 制作ループ /
+P2 hero 表現 / P3 摩擦削減 / P4 便利に分類する。P3/P4を製品の本質として誇張しない。
+決定録の正本は [裁定242](../DECISIONS.md)、[裁定243](../DECISIONS.md)、[裁定244](../DECISIONS.md) である。
+
 ## 圧縮を検知した直後に戻る場所
 
 1. 正本が `next/` であることを確認する。
@@ -19,6 +28,7 @@
 MOTOLII_REPO="$(git rev-parse --show-toplevel)"
 python3 scripts/plan_steps.py "$MOTOLII_REPO"
 python3 scripts/plan_backlog.py "$MOTOLII_REPO"
+python3 scripts/check_foundation_phase.py "$MOTOLII_REPO"
 python3 scripts/plan_waves.py "$MOTOLII_REPO"
 python3 scripts/derive_entries.py "$MOTOLII_REPO"
 python3 scripts/derive_components.py "$MOTOLII_REPO"
@@ -26,10 +36,38 @@ python3 scripts/check_evidence.py "$MOTOLII_REPO"
 python3 scripts/check_coherence.py "$MOTOLII_REPO"
 python3 scripts/check_responsibility.py "$MOTOLII_REPO"
 python3 scripts/rehearse_parallel.py "$MOTOLII_REPO"
+python3 scripts/derive_design_values.py "$MOTOLII_REPO" --write
+python3 scripts/derive_design_values.py "$MOTOLII_REPO" --check
 ```
 
 コードを変更した後だけ、必要に応じて `bash scripts/gen-inventory.sh` を実行する。生成物は
 手で編集しない。
+
+UIの寸法・文字サイズ・余白・境界・操作面を変更した場合は、`design-values.tsv` の赤を
+先に確認する。ここで拾うのはUI sinkの数値だけであり、フレーム数・時間・作品データの
+数値は対象外である。raw literalの反映先が決まったらJSON正本へ移し、Rust側は
+`dims.*`/`dims.components.*`/`colors.*`を読む。検証幅・波形サンプリング・オフスクリーン
+器具の値は `GREEN_POLICY` として台帳に残し、共通寸法へ混ぜない。名前を機械的に決められない
+値を勘でtoken化せず、赤のままコンポーネントの依存として扱う。
+
+共通のUI値はTailwind-likeなutility APIから読む。`dims.theme().space.*`、
+`dims.theme().text.*`、`dims.theme().size.*`、`dims.theme().stroke.*`、
+`dims.theme().target.*`が共通の読み口で、pane固有の比率・幾何だけを
+`dims.components.*`に置く。utilityは値の正本ではなく、JSON正本を名前付きに束ねるAPIである。
+新しいpaneコードでDimensionsの共通フィールドへ直接触れず、utilityかcomponent契約のどちらか
+を選び、`derive_design_values.py` の `utility_ref`/`component_ref` を緑にする。
+
+## 現在の基盤ゲート
+
+この再開ルートで最初に読む現在の段階は
+[FOUNDATION-GATE.md](FOUNDATION-GATE.md)である。現在は
+`FOUNDATION_SERIAL / PARALLEL_COMPONENTS=LOCKED`であり、`plan_waves.py`が候補を出しても
+並列コンポーネント作成を開始しない。Design Profile v0とCORE-M0の実窓検収を閉じ、
+同文書の解禁条件を満たした時だけ`PARALLEL_COMPONENTS=UNLOCKED`へ進む。
+
+製品 front は Makepad(`next/probes/r7-makepad-panel`)。
+意味は `motolii-store` / `motolii-shell-state` / `motolii-engine`。
+`motolii-shell` は凍結 iced アセンブラであり、製品経路として再開しない(裁定253)。
 
 ## まず確認する実装コンセプト
 

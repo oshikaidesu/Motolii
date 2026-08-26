@@ -77,7 +77,7 @@ pub(crate) fn media_card_preview(
     let key = CardKey::Media(asset_id);
     let face = container(body)
         .width(card_width)
-        .padding(dims.spacing_xs)
+        .padding(dims.theme().space.xs)
         .style(move |_theme| media_card_face(dims, colors, selected, recent, hovered));
 
     mouse_area(face)
@@ -115,7 +115,7 @@ pub(crate) fn media_card_face(
         background,
         border: iced::Border {
             color: border_color,
-            width: dims.border_width,
+            width: dims.theme().stroke.hairline,
             radius: 0.0.into(),
         },
         ..container::Style::default()
@@ -151,6 +151,6 @@ mod tests {
             Some(iced::Background::Color(colors.state_selected))
         );
         assert_eq!(style.border.color, colors.focus);
-        assert_eq!(style.border.width, dims.border_width);
+        assert_eq!(style.border.width, dims.theme().stroke.hairline);
     }
 }
