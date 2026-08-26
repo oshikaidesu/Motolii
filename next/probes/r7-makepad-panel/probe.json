@@ -1,47 +1,22 @@
 {
-    "kind": "product_front",
-    "id": "r7-makepad-panel",
-    "status": "shared_unwired_fallback",
-    "positioning": "product_front_makepad_iced_host_frozen",
-  "scope": [
-    "Browser",
-    "Stage",
-    "Inspector",
-    "Timeline"
-  ],
+  "kind": "host_candidate",
+  "id": "r7-makepad-panel",
+  "status": "interaction_slice_under_acceptance",
+  "positioning": "formal_candidate_to_replace_iced_host",
+  "scope": ["Browser", "Stage", "Inspector", "Timeline"],
   "implementation": {
     "script": "panel.splash",
     "host": "src/main.rs",
     "host_widget": "HotPanel",
     "hot_reload_interval_ms": 120,
-    "product_state_owner": "motolii-store / motolii-shell-state / motolii-engine",
-    "frozen_iced_assembler": "motolii-shell (not in product front dependency graph)",
-    "elm_bridge": "TimelineSurface action -> App::handle_actions -> BackendBridge -> Document::apply_all / Session -> disposable projection -> redraw",
-    "stage_bridge": "通常経路は Shared。失敗はエラー画面。FallbackCpu は通常表示に使わない。",
-    "stage_frame_source": "通常経路は Shared。失敗はエラー画面。FallbackCpu は通常表示に使わない。",
-    "stage_contract_types": "src/stage_surface.rs (SharedPixelFormat / SharedSurfaceDesc / SharedOsHandle / StageSurfaceSlot / StagePresent)",
-    "stage_fork_ledger": "../../../docs/reviews/2026-08-26-stage-zero-copy-makepad-fork-seam.md",
+    "product_state_owner": "motolii-shell::Shell",
+    "elm_bridge": "TimelineSurface action -> App::handle_actions -> BackendBridge -> Shell::update(Message) -> disposable projection -> redraw",
+    "stage_bridge": "Shell::update -> Shell::frame_rgba -> Makepad Image texture",
+    "stage_frame_source": "Document -> StoreView -> Engine -> re_renderer CPU RGBA readback",
     "makepad_model_ownership": false,
-    "makepad_transient_state": [
-      "active_gesture",
-      "horizontal_time_viewport"
-    ],
+    "makepad_transient_state": ["active_gesture", "horizontal_time_viewport"],
     "async_boundary": "current timeline messages are synchronous; Iced Task and Subscription require a dedicated runtime bridge before broader feature delegation",
-    "resource_strategy": "main_vm_script_mod_with_manifest_path",
-    "stage_contract_target": "Document -> StoreView -> Engine -> re_renderer draws directly into a presentable shared Surface -> Makepad displays the Surface handle. No CPU readback, no CPU re-upload, no per-frame Texture recreation, no GPU blit from a final Texture into the shared surface.",
-    "stage_contract_forbidden_in_normal_path": [
-      "cpu_readback",
-      "cpu_reupload",
-      "per_frame_texture_recreation",
-      "gpu_blit_into_shared_surface"
-    ],
-    "stage_contract_fallback_only": [
-      "screenshot",
-      "export",
-      "unsupported_environment"
-    ],
-    "stage_contract_known_boundary": "re_renderer output is RGBA8 sRGB; Makepad IOSurface is fixed BGRA8 linear. Sharing as-is gives colour corruption or a wgpu validation error. Requires a format-specifiable IOSurface API in the Makepad fork.",
-    "acceptance_oracle": "The playhead is deliberately NOT decoupled from Stage. Its stutter is the mirror that proves zero-copy is not yet reached (裁定251). Decoupling it to smooth the line is a second, approximate display path forbidden by skills/outcome-rendering-gate. Pass condition: the playhead moves smoothly during scrub."
+    "resource_strategy": "main_vm_script_mod_with_manifest_path"
   },
   "visual_language": {
     "icon_source": "resources/icons/*.svg",
@@ -96,10 +71,7 @@
       "ruler_tick_rule": "motolii_timeline_pane::tick_steps_with_target recalculated from horizontal visible frame span",
       "ruler_draw_order": "foreground_after_clips_and_body_grid",
       "playhead_frame": 900,
-      "keyframe_times": [
-        510,
-        570
-      ],
+      "keyframe_times": [510, 570],
       "fixture_projection": "all_layers_sorted_front_to_back_from_LayerMeta.order",
       "selected_layer": "サビ歌詞",
       "selected_layer_visibility_at_playhead": "off_frame",
@@ -107,7 +79,7 @@
       "transport_adopted": false
     },
     "timeline_interaction_contract": {
-      "playhead_drag": "Scrub(frame) -> Session.playhead -> try_present_shared or Stage error and TimelineModel",
+      "playhead_drag": "Scrub(frame) -> Shell::update(Message::ScrubTo) -> Session.playhead -> frame_rgba and TimelineModel",
       "lane_drag": "Restack(layer,target_from_front) -> Select(layer) -> RestackLayer(ToIndexFromBack) -> Intent::SetOrder apply_all -> Stage and lane projection",
       "lane_order_owner": "Document LayerMeta.order",
       "lane_order_orientation": "timeline_top_is_stage_front",
@@ -163,18 +135,6 @@
     "real_window_screenshot": "evidence/makepad-panel.png",
     "density_iteration_02": "evidence/makepad-panel-iteration-02.png",
     "line_grammar_iteration": "evidence/makepad-panel-line-grammar.png",
-    "acceptance": "cargo run --locked --manifest-path next/probes/r7-makepad-panel/Cargo.toml opens the panel and editing panel.splash reloads it",
-    "timing_measurement": "NEVER measure frame timing on target/debug. Use --profile preview (release-equivalent opt + incremental). The 2026-08-25 measurement (Stage median 57.654ms, ImageBuffer::new 46.578ms, readback 10.344ms) was taken on a debug binary and is INVALID: 46.578ms for an 8.3MB zero-fill is ~180MB/s, i.e. unoptimised byte-wise zeroing, which release lowers to memset (<1ms). Re-measure before claiming any dominant cost. See AGENTS.md \"実窓を見る時\".",
-    "test_coverage_gap": "通常経路は Shared。失敗はエラー画面。FallbackCpu は通常表示に使わない。"
-  },
-  "ruling": "next/DECISIONS.md 裁定251/252/255/256/257. Product front is Makepad. Zero-copy cut is three rooms (Host / Makepad fork / r7). Read 裁定256 ledger before touching Stage or either fork.",
-  "open_work": {
-    "order": "通常経路は Shared。失敗はエラー画面。FallbackCpu は通常表示に使わない。pins not bumped.",
-    "steps": [
-      "push Makepad SharedPresentable + create_presentable_texture and bump r7 pin",
-      "push rerun ViewBuilder::new_with_external_resolved and bump next pin",
-      "retire FallbackCpu from unsupported-env only after Shared is confirmed in the real window"
-    ],
-    "unresolved_number": "裁定44 measured readback at 1.7ms/1080p (a quarter of that at preview resolution). Transport cost alone does not explain the observed stutter. 裁定166 removed a per-frame texture recreation for the same symptom on the iced side and this probe reintroduced it. If stutter persists after true zero-copy, the mirror is showing something else."
+    "acceptance": "cargo run --locked --manifest-path next/probes/r7-makepad-panel/Cargo.toml opens the panel and editing panel.splash reloads it"
   }
 }

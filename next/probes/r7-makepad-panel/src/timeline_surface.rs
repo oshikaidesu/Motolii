@@ -1,36 +1,25 @@
 use makepad_widgets::*;
-use motolii_timeline_pane as timeline_pane;
+use motolii_shell::timeline_pane;
 use motolii_store::Fps;
 
 use crate::gesture_input::{GestureDevice, GesturePhase, GestureSample};
-
-script_mod! {
-    use mod.prelude.widgets.*
-    use mod.widgets.*
-
-    mod.widgets.TimelineSurfaceBase = #(TimelineSurface::register_widget(vm))
-    mod.widgets.TimelineSurface = set_type_default() do mod.widgets.TimelineSurfaceBase{
-        width: Fill
-        height: Fill
-        draw_bg +: {color: #x2e2e2e}
-        draw_item +: {color: #c5c5c5}
-        draw_text +: {
-            color: #c5c5c5
-            text_style: theme.font_code{font_size: 8}
-        }
-    }
-}
 #[cfg(test)]
 use makepad_widgets::makepad_platform::event::ScrollPhase;
 
 const RULER_HEIGHT: f64 = 22.0;
 const RAIL_WIDTH: f64 = 150.0;
-/// Icebook T05 Track Ledger 「24px 行高を基準」
-/// (`docs/reviews/2026-08-25-icebook-panel-drafts/timeline.md`).
-const LANE_HEIGHT: f64 = 24.0;
 const PROPERTY_ROW_HEIGHT: f64 = 18.0;
-const CLIP_TITLE_HEIGHT: f64 = 8.0;
 const MIN_VISIBLE_SPAN_SECONDS: f64 = 2.0;
+
+fn fitted_lane_height(total_height: f64, lane_count: usize, property_count: usize) -> f64 {
+    let body_height = (total_height - RULER_HEIGHT).max(1.0);
+    let properties_height = property_count as f64 * PROPERTY_ROW_HEIGHT;
+    if lane_count == 0 {
+        body_height
+    } else {
+        ((body_height - properties_height).max(lane_count as f64) / lane_count as f64).max(1.0)
+    }
+}
 
 #[derive(Clone, Debug, Default)]
 pub struct TimelineLane {
@@ -279,8 +268,8 @@ impl TimelineScrollGesture {
             ScrollMode::Pan => {
                 // A horizontal trackpad gesture pans naturally. Shift converts a
                 // vertical wheel into the same horizontal operation. Unmodified
-                // vertical input is reserved for lane scrolling; fixed-height
-                // lanes do not stretch, and this surface does not scroll Y.
+                // vertical input is reserved for lane scrolling; fitted lanes
+                // currently have no vertical overflow, so it chains/no-ops.
                 let delta = match axis {
                     ScrollAxis::Horizontal => sample.translation[0],
                     ScrollAxis::Vertical if sample.modifiers.shift => sample.translation[1],
@@ -513,8 +502,19 @@ impl TimelineSurface {
         )
     }
 
+    fn property_count_for_visible_lanes(&self) -> usize {
+        self.property_lanes
+            .iter()
+            .filter(|property| self.lanes.iter().any(|lane| lane.id == property.layer_id))
+            .count()
+    }
+
     fn lane_height(&self) -> f64 {
-        LANE_HEIGHT
+        fitted_lane_height(
+            self.rect.size.y,
+            self.lanes.len(),
+            self.property_count_for_visible_lanes(),
+        )
     }
 
     fn visual_rows(&self) -> Vec<VisualRow> {
@@ -674,57 +674,44 @@ impl TimelineSurface {
     }
 
     fn lane_color(index: usize) -> Vec4f {
-        // Sampled from the Live Dark Arrangement screenshot (not remembered).
-        // cyan #0fb9ac / blue #8ac5fd / pink #fd94a5 / yellow #f7f57e /
-        // green #21ffa8 / red #fe3636 / mustard #ca972a
-        const COLORS: [[f32; 4]; 7] = [
-            [0.059, 0.725, 0.675, 1.0],
-            [0.541, 0.773, 0.992, 1.0],
-            [0.992, 0.580, 0.647, 1.0],
-            [0.969, 0.961, 0.494, 1.0],
-            [0.129, 1.000, 0.659, 1.0],
-            [0.996, 0.212, 0.212, 1.0],
-            [0.792, 0.592, 0.165, 1.0],
+        const COLORS: [[f32; 4]; 12] = [
+            [0.92, 0.92, 0.88, 1.0],
+            [0.71, 0.55, 0.47, 1.0],
+            [0.47, 0.59, 0.67, 1.0],
+            [0.82, 0.78, 0.92, 1.0],
+            [0.63, 0.47, 0.59, 1.0],
+            [0.92, 0.78, 0.59, 1.0],
+            [0.86, 0.35, 0.35, 1.0],
+            [0.35, 0.71, 0.67, 1.0],
+            [0.55, 0.43, 0.67, 1.0],
+            [0.29, 0.35, 0.51, 1.0],
+            [0.78, 0.78, 0.78, 1.0],
+            [0.55, 0.55, 0.51, 1.0],
         ];
         let color = COLORS[index % COLORS.len()];
         vec4(color[0], color[1], color[2], color[3])
     }
 
-    fn darken(color: Vec4f, amount: f32) -> Vec4f {
-        vec4(color.x * amount, color.y * amount, color.z * amount, 1.0)
-    }
-
     fn draw_lane(&mut self, cx: &mut Cx2d, lane: &TimelineLane, row: VisualRow, zebra: bool) {
-        let rail_bg = if lane.selected {
-            vec4(0.239, 0.239, 0.239, 1.0)
-        } else {
-            vec4(0.310, 0.310, 0.310, 1.0)
-        };
-        let time_bg = if lane.selected {
-            vec4(0.239, 0.239, 0.239, 1.0)
+        let bg = if lane.selected {
+            vec4(0.34, 0.31, 0.28, 1.0)
         } else if zebra {
-            vec4(0.200, 0.200, 0.200, 1.0)
+            vec4(0.205, 0.205, 0.205, 1.0)
         } else {
-            vec4(0.180, 0.180, 0.180, 1.0)
+            vec4(0.225, 0.225, 0.225, 1.0)
         };
         self.draw_rect(
             cx,
             Rect {
                 pos: dvec2(self.rect.pos.x, row.y),
-                size: dvec2(RAIL_WIDTH, row.height),
+                size: dvec2(self.rect.size.x, row.height),
             },
-            rail_bg,
-        );
-        self.draw_rect(
-            cx,
-            Rect {
-                pos: dvec2(self.rect.pos.x + RAIL_WIDTH, row.y),
-                size: dvec2((self.rect.size.x - RAIL_WIDTH).max(1.0), row.height),
-            },
-            time_bg,
+            bg,
         );
 
         let color = Self::lane_color(lane.label_color);
+        // Sticky-note tab: full lane height, left aligned. It labels the row
+        // without adding a second, misleading 8x8 "content height" signal.
         self.draw_rect(
             cx,
             Rect {
@@ -740,14 +727,14 @@ impl TimelineSurface {
             dvec2(self.rect.pos.x + 9.0, text_y),
             &lane.name,
             if lane.selected {
-                vec4(0.933, 0.933, 0.933, 1.0)
+                vec4(0.93, 0.91, 0.84, 1.0)
             } else {
-                vec4(0.655, 0.655, 0.655, 1.0)
+                vec4(0.72, 0.72, 0.72, 1.0)
             },
-            8.0,
+            7.8,
         );
 
-        let control_h = (row.height - 6.0).clamp(8.0, 12.0);
+        let control_h = (row.height - 4.0).clamp(8.0, 13.0);
         let control_y = row.y + (row.height - control_h) * 0.5;
         let control_x = self.rect.pos.x + RAIL_WIDTH - 45.0;
         for (index, (label, active)) in [("M", lane.hidden), ("S", lane.solo), ("L", lane.locked)]
@@ -762,19 +749,19 @@ impl TimelineSurface {
                     size: dvec2(12.0, control_h),
                 },
                 if active {
-                    vec4(0.792, 0.592, 0.165, 1.0)
+                    vec4(0.66, 0.53, 0.33, 1.0)
                 } else {
-                    vec4(0.180, 0.180, 0.180, 1.0)
+                    vec4(0.16, 0.16, 0.16, 1.0)
                 },
             );
             self.draw_label(
                 cx,
-                dvec2(x + 3.0, control_y + ((control_h - 7.0) * 0.5).max(0.0)),
+                dvec2(x + 3.2, control_y + ((control_h - 7.0) * 0.5).max(0.0)),
                 label,
                 if active {
-                    vec4(0.12, 0.10, 0.06, 1.0)
+                    vec4(0.95, 0.92, 0.84, 1.0)
                 } else {
-                    vec4(0.655, 0.655, 0.655, 1.0)
+                    vec4(0.55, 0.55, 0.55, 1.0)
                 },
                 6.4,
             );
@@ -789,34 +776,16 @@ impl TimelineSurface {
         if right > left {
             let x0 = self.x_at_frame(left);
             let x1 = self.x_at_frame(right);
-            let clip_w = (x1 - x0).max(1.0);
-            let clip_h = (row.height - 1.0).max(1.0);
-            let title_h = CLIP_TITLE_HEIGHT.min(clip_h);
             self.draw_rect(
                 cx,
                 Rect {
                     pos: dvec2(x0, row.y),
-                    size: dvec2(clip_w, clip_h),
+                    // One separator pixel is the only vertical gap. The clip
+                    // otherwise fits the lane instead of floating inside it.
+                    size: dvec2((x1 - x0).max(1.0), (row.height - 1.0).max(1.0)),
                 },
                 color,
             );
-            self.draw_rect(
-                cx,
-                Rect {
-                    pos: dvec2(x0, row.y),
-                    size: dvec2(clip_w, title_h),
-                },
-                Self::darken(color, 0.72),
-            );
-            if clip_w > 10.0 {
-                self.draw_label(
-                    cx,
-                    dvec2(x0 + 3.0, row.y + ((title_h - 7.0) * 0.5).max(0.0)),
-                    &lane.name,
-                    vec4(0.10, 0.10, 0.10, 1.0),
-                    7.0,
-                );
-            }
         }
     }
 
@@ -827,13 +796,13 @@ impl TimelineSurface {
                 pos: dvec2(self.rect.pos.x, row.y),
                 size: dvec2(self.rect.size.x, row.height),
             },
-            vec4(0.165, 0.165, 0.165, 1.0),
+            vec4(0.18, 0.18, 0.18, 1.0),
         );
         self.draw_label(
             cx,
             dvec2(self.rect.pos.x + 20.0, row.y + (row.height - 8.0) * 0.5),
             &property.name,
-            vec4(0.655, 0.655, 0.655, 1.0),
+            vec4(0.57, 0.57, 0.57, 1.0),
             7.2,
         );
         let key_color = self
@@ -841,7 +810,7 @@ impl TimelineSurface {
             .iter()
             .find(|lane| lane.id == property.layer_id)
             .map(|lane| Self::lane_color(lane.label_color))
-            .unwrap_or_else(|| vec4(0.792, 0.592, 0.165, 1.0));
+            .unwrap_or_else(|| vec4(0.92, 0.78, 0.59, 1.0));
         let key_size = 8.0;
         let key_y = row.y + (row.height - key_size) * 0.5;
         for &frame in &property.keys {
@@ -878,9 +847,9 @@ impl TimelineSurface {
                     size: dvec2(1.0, (self.rect.size.y - RULER_HEIGHT).max(1.0)),
                 },
                 if is_major {
-                    vec4(0.122, 0.122, 0.122, 1.0)
+                    vec4(0.05, 0.05, 0.05, 0.38)
                 } else {
-                    vec4(0.145, 0.145, 0.145, 1.0)
+                    vec4(0.02, 0.02, 0.02, 0.20)
                 },
             );
             frame = frame.saturating_add(minor.max(1));
@@ -895,7 +864,7 @@ impl TimelineSurface {
                 pos: self.rect.pos,
                 size: dvec2(self.rect.size.x, RULER_HEIGHT),
             },
-            vec4(0.239, 0.239, 0.239, 1.0),
+            vec4(0.245, 0.245, 0.245, 1.0),
         );
         self.draw_rect(
             cx,
@@ -903,16 +872,16 @@ impl TimelineSurface {
                 pos: dvec2(self.rect.pos.x + RAIL_WIDTH - 1.0, self.rect.pos.y),
                 size: dvec2(1.0, self.rect.size.y),
             },
-            vec4(0.122, 0.122, 0.122, 1.0),
+            vec4(0.10, 0.10, 0.10, 1.0),
         );
 
         let zoom_percent = (self.duration_frames as f64 / self.view_span.max(1.0) * 100.0).round();
         self.draw_label(
             cx,
-            dvec2(self.rect.pos.x + 9.0, self.rect.pos.y + 6.0),
+            dvec2(self.rect.pos.x + 9.0, self.rect.pos.y + 5.0),
             &format!("TIME  {zoom_percent:.0}%"),
-            vec4(0.773, 0.773, 0.773, 1.0),
-            7.0,
+            vec4(0.50, 0.50, 0.50, 1.0),
+            7.3,
         );
 
         let first_minor = (self.view_start / minor as f64).ceil() as i64 * minor;
@@ -928,9 +897,9 @@ impl TimelineSurface {
                     size: dvec2(1.0, tick_height),
                 },
                 if is_major {
-                    vec4(0.773, 0.773, 0.773, 1.0)
+                    vec4(0.47, 0.47, 0.47, 1.0)
                 } else {
-                    vec4(0.416, 0.416, 0.416, 1.0)
+                    vec4(0.12, 0.12, 0.12, 0.55)
                 },
             );
             if is_major {
@@ -942,10 +911,10 @@ impl TimelineSurface {
                 };
                 self.draw_label(
                     cx,
-                    dvec2(x + 2.0, self.rect.pos.y + 2.0),
+                    dvec2(x + 2.0, self.rect.pos.y + 1.0),
                     &label,
-                    vec4(0.773, 0.773, 0.773, 1.0),
-                    6.5,
+                    vec4(0.55, 0.55, 0.55, 1.0),
+                    7.0,
                 );
             }
             frame = frame.saturating_add(minor.max(1));
@@ -961,9 +930,17 @@ impl TimelineSurface {
                 cx,
                 Rect {
                     pos: dvec2(playhead_x, self.rect.pos.y),
-                    size: dvec2(1.0, self.rect.size.y),
+                    size: dvec2(1.5, self.rect.size.y),
                 },
-                vec4(0.902, 0.604, 0.153, 1.0),
+                vec4(0.85, 0.71, 0.45, 1.0),
+            );
+            self.draw_rect(
+                cx,
+                Rect {
+                    pos: dvec2(playhead_x - 3.0, self.rect.pos.y),
+                    size: dvec2(7.0, 7.0),
+                },
+                vec4(0.85, 0.71, 0.45, 1.0),
             );
         }
 
@@ -984,7 +961,7 @@ impl TimelineSurface {
                         pos: dvec2(self.rect.pos.x, row.y),
                         size: dvec2(self.rect.size.x, 2.0),
                     },
-                    vec4(0.902, 0.604, 0.153, 1.0),
+                    vec4(0.85, 0.71, 0.45, 1.0),
                 );
             }
         }
@@ -1064,7 +1041,7 @@ impl Widget for TimelineSurface {
                     pos: dvec2(self.rect.pos.x, row.y + row.height - 1.0),
                     size: dvec2(self.rect.size.x, 1.0),
                 },
-                vec4(0.122, 0.122, 0.122, 1.0),
+                vec4(0.13, 0.13, 0.13, 1.0),
             );
         }
 
@@ -1079,13 +1056,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn lane_height_is_fixed_and_does_not_fill_the_pane() {
-        assert_eq!(LANE_HEIGHT, 24.0);
-        let occupied = LANE_HEIGHT * 15.0 + PROPERTY_ROW_HEIGHT + RULER_HEIGHT;
-        assert!(
-            occupied > 300.0,
-            "fixed 24px lanes must not compress to fill a short pane"
-        );
+    fn lane_height_fits_all_lanes_and_keeps_property_height_fixed() {
+        let occupied = fitted_lane_height(300.0, 15, 1) * 15.0 + PROPERTY_ROW_HEIGHT + RULER_HEIGHT;
+        assert!((occupied - 300.0).abs() < 0.001);
     }
 
     #[test]

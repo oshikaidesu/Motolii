@@ -1,9 +1,8 @@
 # R7 Makepad panel probe
 
-これは製品 front の Makepad ホストです(裁定251/252)。
-意味の正本は`motolii-store` / `motolii-shell-state` / `motolii-engine`。
-`motolii-shell`は凍結icedアセンブラであり、製品核ではありません(裁定253)。
-旧世界のモックを正本にしません。standalone workspace なのは next/ への折り込みが未了なだけです。
+これは Makepad を Iced に代わる正式ホスト候補として検証する独立実装です。
+まだ製品ホストへの採用決定ではありませんが、視覚だけの使い捨てprobeには限定しません。
+意味と状態は既存の`motolii-shell`へ委託し、旧世界のモックを正本にしません。
 
 ## 正本
 
@@ -24,16 +23,15 @@ Timeline 下の Play / frame / slider は意味論モック内の導出案であ
 リポジトリのルートから実行します。
 
 ```bash
-cargo run --locked --manifest-path next/probes/r7-makepad-panel/Cargo.toml -- --hot
+cargo run --locked --manifest-path next/probes/r7-makepad-panel/Cargo.toml
 ```
-
-Chrome の付け替え: 上で起動し、`src/chrome/gallery.rs` か `src/chrome/mod.rs` / `src/chrome/parts/*.rs` を保存すると窓が更新される。
 
 ウィンドウ起動後に `panel.splash` を編集すると、ホストが 120ms 間隔で変更を検知し、
 `HotPanel` がメイン VM 内で面だけを再評価します。Stage は
-`motolii-fixture::build` と共有面（`create_presentable_texture` → import → `render_into`）へ接続します。Makepad側はDocumentを
+`motolii-shell::Shell::new_fixture → frame_rgba()` を通して既存の
+Document / Store / Engine / re_renderer 合成結果へ接続します。Makepad側はDocumentを
 所有せず、`TimelineSurface action → App::handle_actions → BackendBridge →
-Document::apply_all / Session` へ書きます。playhead dragはSession時刻、
+Shell::update(Message)` の一箇所から既存のElm核へ委託します。playhead dragはSession時刻、
 lane dragはDocumentの`LayerMeta.order`へ入り、StageとTimelineが同じ正本から再投影されます。
 横pan/zoomだけは表示窓なのでMakepadの一時状態ですが、縦方向のscaleは持ちません。二本指の
 horizontal scrollはtime pan、Option-scrollはpointer anchorを保つtime zoom、Shift-wheelは
@@ -42,7 +40,9 @@ horizontal panです。trackpadのaxisと動詞はgesture開始後に固定し�
 macOS pinchはscaleだけをTimeline policyがtime zoomとして解釈します。
 Browser / Inspector の操作と Export はまだ接続していません。
 
-同期timeline操作は `Document` / `Session` へ直接書く。iced `Task` は製品 front に無い。
+`Shell::update` が返すIced `Task<Message>`は、今回の同期timeline操作では仕事を持ちません。
+ファイル・非同期・Subscriptionまで外部UIから委託する場合は、Taskを捨てずに駆動する専用
+runtime bridgeを先に作ります。各WidgetからShellを直接呼ぶ経路は増やしません。
 
 `Splash` の標準ローダーはサンドボックス化されたモジュールで `mod.res` を取り除くため、
 外部 SVG を `crate_resource("self://resources/icons/...")` から安定して参照できません。
@@ -53,7 +53,8 @@ SVG リソース解決とホットリロードを同じ面で成立させてい�
 Makepad は [oshikaidesu/makepad](https://github.com/oshikaidesu/makepad/tree/motolii-magnify) の
 git revisionへ固定しています。fork差分は意味を持たないgesture transformイベントとplatform producer
 だけに限定し、Timeline固有の判断は`gesture_input.rs`より下流へ置きます。候補の依存を製品 workspace
-へ混ぜないため、この probe 自体も standalone workspace のままにします。製品 front は `motolii-shell` を引きません。
+へ混ぜないため、この probe 自体も standalone workspace のままにします。Stage bridgeは
+逆向きに既存の `motolii-shell` を path dependency として読むだけです。
 
 ## Ableton比較ループ
 
@@ -81,13 +82,5 @@ SVGだけを更新します。
 - 実窓の基準画像は [evidence/makepad-panel.png](evidence/makepad-panel.png)
 - 密度パスの画像は [evidence/makepad-panel-iteration-02.png](evidence/makepad-panel-iteration-02.png)
 
-利用者裁定(2026-08-26、裁定251/254): Makepadが製品 front。意味は store / session / engine。
-`motolii-shell`は凍結icedアセンブラであり、製品 front の依存グラフに入らない。
-
-## Stage ゼロコピー
-
-切り方の正本は
-[Stage ゼロコピー Makepad fork 台帳](../../../docs/reviews/2026-08-26-stage-zero-copy-makepad-fork-seam.md)
-(裁定256)。Host / Makepad fork / r7 の3室。既存 `SharedBGRAu8` は触らない。
-
-通常経路は Shared。失敗はエラー画面。FallbackCpu は通常表示に使わない。
+利用者裁定(2026-08-26): MakepadはIcedに代わる正式ホスト候補です。意味と状態の正本は
+`motolii-shell`のままで、Makepadは外部View/Input adapterとして候補評価を進めます。
