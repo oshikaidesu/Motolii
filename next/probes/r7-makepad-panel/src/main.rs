@@ -1,3 +1,10 @@
+//! wraps: makepad_widgets の app host。面は `script_mod!` の宣言、再読込は makepad の
+//! live reload(`--hot`)、窓の駆動は `--remote`。**ここに再読込機構を書き足さない。**
+//! かつて `HotPanel` + `panel.splash` + 120ms タイマーで自前に作られており、makepad が
+//! `Event::LiveEdit` で `script_mod!` を再実行すると面が空に戻る欠陥になっていた
+//! (2026-08-27 撤去)。作り足すなら `wraps:` を `owns:` へ書き換えること — それが
+//! 「上流に無い」という主張であり、`check.sh` の一覧に出て初めてレビューできる。
+
 pub use makepad_widgets;
 
 use makepad_widgets::*;

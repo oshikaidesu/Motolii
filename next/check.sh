@@ -11,7 +11,9 @@ set -u
 cd "$(dirname "$0")"
 fail=0
 
-roots="$(find . \( -name 'lib.rs' -o -name 'main.rs' \) -not -path './target/*' | sort)"
+# `-not -path '*/target/*'` は入れ子の target(probe 配下など)も外す。これが無いと
+# ビルド成果物を歩いて数分かかり、柵が「重いから誰も走らせない」= 静かに死ぬ。
+roots="$(find . -type d -name target -prune -o \( -name 'lib.rs' -o -name 'main.rs' \) -print | sort)"
 
 while IFS= read -r f; do
   [ -z "$f" ] && continue
@@ -32,7 +34,7 @@ while IFS= read -r f; do
   [ -z "$claim" ] && continue
   found=1
   dir="$(dirname "$f")"
-  lines="$(find "$dir" -name '*.rs' -exec cat {} + | wc -l | tr -d ' ')"
+  lines="$(find "$dir" -type d -name target -prune -o -name '*.rs' -exec cat {} + | wc -l | tr -d ' ')"
   owns_total=$((owns_total + lines))
   printf '%7s行  %s\n          %s\n' "$lines" "${f#./}" "$(echo "$claim" | sed 's|^\s*//! owns: ||')"
 done <<< "$roots"
@@ -50,7 +52,7 @@ echo '  上がった時は「上流に無い物を作った」か「使わない
 # `core/motolii-testkit/tests/owns_justification_fence.rs`(cargo test で実行)。
 echo
 echo "=== owns: 根拠 token(裁定215 — (a)/(b)/(c)/(d) の内訳、fail は柵本体側)==="
-owns_files="$(find . -name '*.rs' -not -path './target/*' -exec grep -l -E '^\s*//! owns:' {} + 2>/dev/null | sort)"
+owns_files="$(find . -type d -name target -prune -o -name '*.rs' -exec grep -l -E '^\s*//! owns:' {} + 2>/dev/null | sort)"
 a=0; b=0; c=0; d=0; none=0; excluded=0
 while IFS= read -r f; do
   [ -z "$f" ] && continue
