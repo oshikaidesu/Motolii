@@ -1,5 +1,8 @@
 //! owns: shell 横断の共有状態型(Session/KeySelector/KeySelectionOp)。pane crate と assembler の共通の親 — 循環回避のための leaf。
-//! front だけが持つ共有状態の正本。裁定160 切片6(pane split survey
+//! front だけが持つ共有状態の正本。**プレビューカメラ(第三者視点でアクションカメラの
+//! 画角と動きを外から見るカメラ)が来るならここが持ち主**(裁定260)。Document 側の
+//! `camera.center`/`camera.zoom`/`camera.roll` はアクションカメラであって、
+//! 流用すると視点移動が undo に積まれる。裁定160 切片6(pane split survey
 //! `docs/reviews/2026-08-21-pane-split-survey.md` §2.3)で `motolii-shell` 内の
 //! `state.rs` モジュールへ移設し、切片7(timeline-pane crate 抽出)で
 //! この crate へさらに抽出した — `motolii-timeline-pane`(pane crate)は

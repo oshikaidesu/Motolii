@@ -178,6 +178,12 @@ pub mod property {
 
     /// カメラの property(裁定113/115、裁定116 で実装)。`layer` ではなく `/composition`
     /// entity へ書く(`PropertyId::camera` が別の component 名前空間を作る)。
+    ///
+    /// **ここに在るのはアクションカメラ**(作品を切り取ってレンダリングするカメラ)であり、
+    /// keyframe を持つ作品の一部である。**第三者視点のプレビューカメラをこれで動かさない**
+    /// (裁定260) — 視点移動が undo に積まれる。プレビューカメラは表示窓の状態なので
+    /// `motolii-shell-state` が持つ。Timeline の横 pan/zoom を Makepad の一時状態と
+    /// したのと同じ理由。
     /// comp 中心からのパン量(ピクセル)。既定 [0,0](パン無し)。
     pub const CAMERA_CENTER: &str = "camera.center";
     /// 既定 1.0(zoom 無し)。
