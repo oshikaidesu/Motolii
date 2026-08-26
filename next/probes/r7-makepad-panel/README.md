@@ -66,6 +66,25 @@ SVGだけを更新します。
 - 低スペックLLMの「Abletonと判別しにくいか」は視覚の煙検知として使う。合否は実窓の操作・意味・Document接続で決める。
 - 公式画面の画像はリポジトリへ複製せず、上記URLを参照元として記録する。
 
+## 目盛り(全パネル共通)
+
+寸法・字・線・面の値は `src/tokens.rs` の `mod.tokens` にだけ在ります。Tailwind と同じ考えで、
+値は数直線から選ぶものであってその場で書くものではありません(`14` と `13` が並ぶ理由を
+後から誰も説明できないため)。`space` / `text` / `size` / `rule` / `face` / `ink` の6族。
+
+`mod.tokens.scale` が唯一の可変値で、寸法系は全部これに掛かります。よって **UI 全体を
+1% 刻みで拡縮できます** — `Cmd -` / `Cmd +` で 1%、`Shift` 併用で 10%、`Cmd 0` で 100%。
+scale は Rust の atomic に在り、`script_mod!` の式へ焼き込まれるので、変更後は
+`cx.request_live_edit()` で焼き直します(makepad が iOS の safe-area inset に使う経路と同じ)。
+
+窓の `dpi_override` でも同じ絵は作れますが、実行時に差し替えると `--remote` の grab が
+Metal のアサーションで落ちます(drawable と grab テクスチャの寸法不一致、2026-08-27 実測)。
+検証手段を壊さない方を採りました。
+
+現在トークンに載っているのは `main.rs` の骨格と Browser です。Stage / Inspector / Export /
+Settings / Timeline はまだ数値が直書きで、拡縮に追随しません。Dock の pane 幅は利用者が
+掴んで動かす物なので、意図的に scale へ追随させていません。
+
 ## 検収
 
 - `cargo run` が実窓を開き、Browser・Stage・Inspector・Timeline が同じ面に表示される

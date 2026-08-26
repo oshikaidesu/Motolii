@@ -53,6 +53,8 @@ macro_rules! browser_rail_ids {
 
 const RAIL_ALL_MEDIA: usize = 3;
 
+
+
 const RAIL_HEADS: [&str; 10] = [
     "Favorite",
     "B-roll",
@@ -74,17 +76,17 @@ script_mod! {
     // This is a Makepad proof surface, not a second product state owner.
 
     let IconButton = ButtonFlatterIcon{
-        width: 24
-        height: 22
-        icon_walk: Walk{width: 13 height: 13}
+        width: mod.tokens.size.menu
+        height: mod.tokens.size.bar
+        icon_walk: Walk{width: mod.tokens.size.icon height: mod.tokens.size.icon}
         padding: Inset{left: 0 right: 0}
         draw_icon +: {color: #xb7b7b7}
     }
 
     let IconFlatButton = ButtonFlatIcon{
-        width: 24
-        height: 22
-        icon_walk: Walk{width: 13 height: 13}
+        width: mod.tokens.size.menu
+        height: mod.tokens.size.bar
+        icon_walk: Walk{width: mod.tokens.size.icon height: mod.tokens.size.icon}
         padding: Inset{left: 0 right: 0}
         draw_icon +: {color: #xcfcfcf}
     }
@@ -123,19 +125,19 @@ script_mod! {
     // A line is reserved for a change in interaction owner or coordinate system.
     // Related controls use spacing and fill state instead of decorative outlines.
     let PaneDivider = SolidView{
-        width: 1
+        width: mod.tokens.rule.size
         height: Fill
         show_bg: true
         new_batch: true
-        draw_bg.color: #x1d1d1d
+        draw_bg.color: mod.tokens.rule.surface
     }
 
     let SurfaceDivider = SolidView{
         width: Fill
-        height: 1
+        height: mod.tokens.rule.size
         show_bg: true
         new_batch: true
-        draw_bg.color: #x1d1d1d
+        draw_bg.color: mod.tokens.rule.surface
     }
 
     let TimeField = SolidView{
@@ -291,16 +293,16 @@ script_mod! {
         flow: Down
         transport := SolidView{
             width: Fill
-            height: 24
+            height: mod.tokens.size.transport
             flow: Right
             align: Align{x: 0.5 y: 0.5}
             show_bg: true
             new_batch: true
             draw_bg.color: #x3d3d3d
             play_toggle := ButtonFlatIcon{
-                width: 26
-                height: 20
-                icon_walk: Walk{width: 12 height: 12}
+                width: 26.0 * mod.tokens.scale
+                height: mod.tokens.size.status
+                icon_walk: Walk{width: mod.tokens.size.icon height: mod.tokens.size.icon}
                 padding: Inset{left: 0 right: 0}
                 draw_bg.color: #4f4f4f
                 draw_bg.border_size: 0.0
@@ -330,36 +332,36 @@ script_mod! {
 
             chrome := SolidView{
                 width: Fill
-                height: 32
+                height: mod.tokens.size.chrome
                 flow: Right
                 align: Align{y: 0.5}
-                padding: Inset{left: 10 right: 10}
+                padding: Inset{left: mod.tokens.space.s5 right: mod.tokens.space.s5}
                 show_bg: true
                 new_batch: true
                 draw_bg +: { color: #x242424 }
 
                 brand := SolidView{
-                    width: 74
-                    height: 24
+                    width: Fit
+                    height: mod.tokens.size.menu
                     flow: Right
                     align: Align{y: 0.5}
-                    spacing: 5
-                    mark := Icon{width: 17 height: 17 icon_walk: Walk{width: 17 height: 17} draw_icon +: {svg: crate_resource("self://resources/icons/motolii.svg") color: #xd8d8d8}}
-                    name := Label{text: "MOTOLII" width: Fill draw_text.color: #xd8d8d8 draw_text.text_style: theme.font_bold{font_size: 10}}
+                    spacing: mod.tokens.space.s3
+                    mark := Icon{width: mod.tokens.size.icon_lg height: mod.tokens.size.icon_lg icon_walk: Walk{width: mod.tokens.size.icon_lg height: mod.tokens.size.icon_lg} draw_icon +: {svg: crate_resource("self://resources/icons/motolii.svg") color: #xd8d8d8}}
+                    name := Label{text: "MOTOLII" width: Fit padding: Inset{right: mod.tokens.space.s3} draw_text.color: #xd8d8d8 draw_text.text_style: theme.font_bold{font_size: mod.tokens.text.lg}}
                 }
-                file := ButtonFlatter{text: "File" width: 42 height: 24 draw_text.color: #xb7b7b7 draw_text.text_style: theme.font_regular{font_size: 9}}
-                edit := ButtonFlatter{text: "Edit" width: 42 height: 24 draw_text.color: #xb7b7b7 draw_text.text_style: theme.font_regular{font_size: 9}}
-                layer := ButtonFlatter{text: "Layer" width: 50 height: 24 draw_text.color: #xb7b7b7 draw_text.text_style: theme.font_regular{font_size: 9}}
-                view := ButtonFlatter{text: "View" width: 42 height: 24 draw_text.color: #xb7b7b7 draw_text.text_style: theme.font_regular{font_size: 9}}
+                file := ButtonFlatter{text: "File" width: 42.0 * mod.tokens.scale height: mod.tokens.size.menu draw_text.color: #xb7b7b7 draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.md}}
+                edit := ButtonFlatter{text: "Edit" width: 42.0 * mod.tokens.scale height: mod.tokens.size.menu draw_text.color: #xb7b7b7 draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.md}}
+                layer := ButtonFlatter{text: "Layer" width: 50.0 * mod.tokens.scale height: mod.tokens.size.menu draw_text.color: #xb7b7b7 draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.md}}
+                view := ButtonFlatter{text: "View" width: 42.0 * mod.tokens.scale height: mod.tokens.size.menu draw_text.color: #xb7b7b7 draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.md}}
                 spacer := SolidView{width: Fill height: 1}
                 project := Label{
                     text: "Untitled / Motion Study"
                     width: Fit
                     draw_text.color: #xa0a0a0
-                    draw_text.text_style: theme.font_code{font_size: 9}
+                    draw_text.text_style: theme.font_code{font_size: mod.tokens.text.md}
                 }
-                browser_toggle := IconButton{width: 26 draw_icon +: {svg: crate_resource("self://resources/icons/panels.svg")} on_click: || { ui.status.set_text("Browser panel") }}
-                settings := IconButton{width: 26 draw_icon +: {svg: crate_resource("self://resources/icons/filter.svg")} on_click: || { ui.status.set_text("Settings") }}
+                browser_toggle := IconButton{width: 26.0 * mod.tokens.scale draw_icon +: {svg: crate_resource("self://resources/icons/panels.svg")} on_click: || { ui.status.set_text("Browser panel") }}
+                settings := IconButton{width: 26.0 * mod.tokens.scale draw_icon +: {svg: crate_resource("self://resources/icons/filter.svg")} on_click: || { ui.status.set_text("Settings") }}
             }
 
             chrome_surface_divider := SurfaceDivider{}
@@ -370,21 +372,21 @@ script_mod! {
 
                 root := DockSplitter{
                     axis: SplitterAxis.Vertical
-                    align: SplitterAlign.FromB(300.0)
+                    align: SplitterAlign.FromB(mod.tokens.size.pane)
                     a: @top_split
                     b: @timeline_tabs
                 }
 
                 top_split := DockSplitter{
                     axis: SplitterAxis.Horizontal
-                    align: SplitterAlign.FromA(300.0)
+                    align: SplitterAlign.FromA(mod.tokens.size.pane)
                     a: @browser_tabs
                     b: @center_split
                 }
 
                 center_split := DockSplitter{
                     axis: SplitterAxis.Horizontal
-                    align: SplitterAlign.FromB(300.0)
+                    align: SplitterAlign.FromB(mod.tokens.size.pane)
                     a: @stage_tabs
                     b: @inspector_tabs
                 }
@@ -469,10 +471,10 @@ script_mod! {
             status := Label{
                 text: "READY  ·  RERUN STAGE  ·  FRAME 900 / 1800"
                 width: Fill
-                height: 20
-                padding: Inset{left: 10}
+                height: mod.tokens.size.status
+                padding: Inset{left: mod.tokens.space.s5}
                 draw_text.color: #x747879
-                draw_text.text_style: theme.font_code{font_size: 8}
+                draw_text.text_style: theme.font_code{font_size: mod.tokens.text.sm}
             }
 
                     }
@@ -775,6 +777,12 @@ pub struct App {
     browser_tab: usize,
     #[rust]
     browser_rail: usize,
+    /// UI 全体の拡縮(%)。100 が等倍。
+    #[rust(100)]
+    ui_scale_percent: i32,
+    /// 状態行の文言。live edit は widget を宣言状態へ戻すので、ここが正本。
+    #[rust]
+    status_text: String,
     #[rust]
     stage_next_frame: NextFrame,
     /// 直前の室判定。変化したときだけ1行ログを出すため。
@@ -979,11 +987,36 @@ impl App {
         self.set_catalog_head(cx, RAIL_HEADS[self.browser_rail]);
     }
 
-    fn set_status(&self, cx: &mut Cx, status: &str) {
+    /// UI 全体の拡縮。寸法トークンが1箇所に集まっているので、倍率もここ1つで済む。
+    ///
+    /// 窓の `dpi_override` でも同じ絵は作れるが、実行時に差し替えると `--remote` の
+    /// grab が Metal のアサーションで落ちる(drawable と grab テクスチャの寸法不一致、
+    /// 実測 2026-08-27)。検証手段を壊さない方を採る。
+    fn set_ui_scale(&mut self, cx: &mut Cx, percent: i32) {
+        let percent = tokens::set_ui_scale_percent(percent);
+        if percent == self.ui_scale_percent {
+            return;
+        }
+        self.ui_scale_percent = percent;
+        // トークンは `script_mod!` の式へ焼き込まれている。焼き直しは live edit の仕事
+        // (makepad が iOS の safe-area inset に使っているのと同じ経路)。
+        cx.request_live_edit();
+        self.set_status(cx, &format!("UI SCALE  ·  {percent}%"));
+    }
+
+    fn set_status(&mut self, cx: &mut Cx, status: &str) {
+        self.status_text = status.to_string();
+        self.project_status(cx);
+    }
+
+    fn project_status(&self, cx: &mut Cx) {
+        if self.status_text.is_empty() {
+            return;
+        }
         self.ui
             .widget(cx, ids!(panel.status))
             .as_label()
-            .set_text(cx, status);
+            .set_text(cx, &self.status_text);
     }
 
     fn timeline_ref(&self, cx: &mut Cx) -> WidgetRef {
@@ -1088,6 +1121,24 @@ impl MatchEvent for App {
     }
 
     fn handle_key_down(&mut self, cx: &mut Cx, event: &KeyEvent) {
+        if event.modifiers.logo || event.modifiers.control {
+            let step = if event.modifiers.shift { 10 } else { 1 };
+            match event.key_code {
+                KeyCode::Equals => {
+                    self.set_ui_scale(cx, self.ui_scale_percent + step);
+                    return;
+                }
+                KeyCode::Minus => {
+                    self.set_ui_scale(cx, self.ui_scale_percent - step);
+                    return;
+                }
+                KeyCode::Key0 => {
+                    self.set_ui_scale(cx, 100);
+                    return;
+                }
+                _ => {}
+            }
+        }
         if event.key_code == KeyCode::Space && !event.is_repeat {
             self.toggle_playback(cx);
         }
@@ -1122,6 +1173,7 @@ impl AppMain for App {
         // 選択は App が持っているので、投影し直すのはこちらの責任。
         if matches!(event, Event::LiveEdit) {
             self.apply_browser_selection(cx);
+            self.project_status(cx);
         }
         self.match_event(cx, event);
         self.ui.handle_event(cx, event, &mut Scope::empty());

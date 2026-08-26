@@ -21,7 +21,7 @@ script_mod! {
         height: 16
         icon_walk: Walk{width: 11 height: 11}
         padding: Inset{left: 0 right: 0}
-        draw_icon +: {color: #xa0a0a0}
+        draw_icon +: {color: mod.tokens.ink.glyph}
     }
 
     // tab — 「N のうち1つ」は makepad の radio。選択は `active`(instance)。
@@ -29,8 +29,8 @@ script_mod! {
     // instance の hover/down/active から shader で作る(実測 2026-08-27)。
     let TabIcon = RadioButtonTabFlat{
         width: Fill
-        height: 22
-        icon_walk: Walk{width: 12 height: 12}
+        height: mod.tokens.size.bar
+        icon_walk: Walk{width: mod.tokens.size.icon height: mod.tokens.size.icon}
         label_walk: Walk{width: 0 height: 0}
         padding: Inset{left: 0 right: 0}
         align: Align{x: 0.5 y: 0.5}
@@ -44,7 +44,7 @@ script_mod! {
             pixel: fn() {
                 let sdf = Sdf2d.viewport(self.pos * self.rect_size)
                 let sunk = max(self.active, self.down)
-                let face = #x3d3d3d.mix(#x4a4a4a, self.hover).mix(#x333333, sunk)
+                let face = mod.tokens.face.bar.mix(#x4a4a4a, self.hover).mix(#x333333, sunk)
                 sdf.rect(0.0, 0.0, self.rect_size.x, self.rect_size.y)
                 sdf.fill(face)
                 // 押し込みは縁で語る: 上が暗く、下が明るい。枠線では囲まない
@@ -55,17 +55,17 @@ script_mod! {
                 return sdf.result
             }
         }
-        draw_icon +: {color: #xa0a0a0}
+        draw_icon +: {color: mod.tokens.ink.glyph}
     }
 
     // rail 行 — 低く詰める(16)。選択は押し込まれた面で語る(文字色は反転しない)
     let RailRow = RadioButtonTabFlat{
         width: Fill
-        height: 21
-        icon_walk: Walk{width: 12 height: 12}
-        label_walk: Walk{width: Fill height: Fit margin: Inset{left: 8}}
+        height: mod.tokens.size.row
+        icon_walk: Walk{width: mod.tokens.size.icon height: mod.tokens.size.icon}
+        label_walk: Walk{width: Fill height: Fit margin: Inset{left: mod.tokens.space.s4}}
         align: Align{x: 0.0 y: 0.5}
-        padding: Inset{left: 10 right: 10}
+        padding: Inset{left: mod.tokens.space.s5 right: mod.tokens.space.s5}
         // 反応は即時。ふんわり遷移は「押した感じ」を殺す(利用者裁定 2026-08-27)
         animator.hover.off.from.all: Forward{duration: 0.0}
         animator.hover.on.from.all: Forward{duration: 0.0}
@@ -76,7 +76,7 @@ script_mod! {
             pixel: fn() {
                 let sdf = Sdf2d.viewport(self.pos * self.rect_size)
                 let sunk = max(self.active, self.down)
-                let face = #x4f4f4f.mix(#x5c5c5c, self.hover).mix(#x444444, sunk)
+                let face = mod.tokens.face.panel.mix(#x5c5c5c, self.hover).mix(#x444444, sunk)
                 sdf.rect(0.0, 0.0, self.rect_size.x, self.rect_size.y)
                 sdf.fill(face)
                 // 押し込みは縁で語る: 上が暗く、下が明るい。枠線では囲まない
@@ -87,29 +87,29 @@ script_mod! {
                 return sdf.result
             }
         }
-        draw_icon +: {color: #xa0a0a0}
-        draw_text.color: #xe4e4e4
-        draw_text.text_style: theme.font_regular{font_size: 8.75 line_spacing: 1.0 top_drop: 0.0}
+        draw_icon +: {color: mod.tokens.ink.glyph}
+        draw_text.color: mod.tokens.ink.strong
+        draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.base line_spacing: 1.0 top_drop: 0.0}
     }
 
     // 節見出し — Collections / Library / Places。薄字、上に群間の余白
     let RailCap = Label{
         width: Fill
-        height: 20
-        padding: Inset{left: 10 top: 7}
-        draw_text.color: #x9d9d9d
-        draw_text.text_style: theme.font_regular{font_size: 8 line_spacing: 1.0 top_drop: 0.0}
+        height: mod.tokens.size.cap
+        padding: Inset{left: mod.tokens.space.s5 top: mod.tokens.space.s3}
+        draw_text.color: mod.tokens.ink.muted
+        draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.sm line_spacing: 1.0 top_drop: 0.0}
     }
 
     // 群の境は線で引く(利用者裁定 2026-08-27)。面の明度差が既に境になっている
     // tab strip 直下だけは引かない — 二重の境は境でなくなる
     let RailRule = SolidView{
         width: Fill
-        height: mod.tokens.rules.size
-        margin: Inset{top: 6}
+        height: mod.tokens.rule.size
+        margin: Inset{top: mod.tokens.space.s3}
         show_bg: true
         new_batch: true
-        draw_bg.color: mod.tokens.rules.owner
+        draw_bg.color: mod.tokens.rule.owner
     }
 
     // 有効フィルタ chip — 選択の言語（ベタ #6b8d96 + 濃字 #133342、角丸なし）。
@@ -117,7 +117,7 @@ script_mod! {
     // eval されるため参照でなく値で置く（未登録名の参照は葉が落ちる）
     let FilterChip = SolidView{
         width: Fit
-        height: 16
+        height: mod.tokens.size.chip
         align: Align{y: 0.5}
         show_bg: true
         new_batch: true
@@ -127,44 +127,44 @@ script_mod! {
             height: Fit
             padding: Inset{left: 4 right: 4}
             draw_text.color: #x133342
-            draw_text.text_style: theme.font_regular{font_size: 8 line_spacing: 1.0 top_drop: 0.0}
+            draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.sm line_spacing: 1.0 top_drop: 0.0}
         }
     }
 
     // ファイル行 — Live 右リストの1行。低く詰める、ベタ、角丸なし
     let FileRow = ButtonFlat{
         width: Fill
-        height: 21
-        icon_walk: Walk{width: 12 height: 12}
-        spacing: 8
+        height: mod.tokens.size.row
+        icon_walk: Walk{width: mod.tokens.size.icon height: mod.tokens.size.icon}
+        spacing: mod.tokens.space.s4
         align: Align{x: 0.0 y: 0.5}
-        padding: Inset{left: 10 right: 10}
-        draw_bg.color: #x4f4f4f
+        padding: Inset{left: mod.tokens.space.s5 right: mod.tokens.space.s5}
+        draw_bg.color: mod.tokens.face.panel
         draw_bg.color_hover: #x5c5c5c
         draw_bg.color_down: #x2d2d2d
         draw_bg.border_size: 0.0
         draw_bg.border_radius: 0.0
-        draw_icon +: {color: #xa0a0a0}
-        draw_text.color: #xd8d8d8
-        draw_text.text_style: theme.font_regular{font_size: 8.75 line_spacing: 1.0 top_drop: 0.0}
+        draw_icon +: {color: mod.tokens.ink.glyph}
+        draw_text.color: mod.tokens.ink.body
+        draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.base line_spacing: 1.0 top_drop: 0.0}
     }
 
     // rail とリストの境 — 画像実測 #343434 の縦 1px
     let PaneDivider = SolidView{
-        width: mod.tokens.rules.size
+        width: mod.tokens.rule.size
         height: Fill
         show_bg: true
         new_batch: true
-        draw_bg.color: mod.tokens.rules.pane
+        draw_bg.color: mod.tokens.rule.pane
     }
 
     // 継ぎ目 — 横 1px 暗線（枠線で囲まない）
     let SeamRule = SolidView{
         width: Fill
-        height: mod.tokens.rules.size
+        height: mod.tokens.rule.size
         show_bg: true
         new_batch: true
-        draw_bg.color: mod.tokens.rules.seam
+        draw_bg.color: mod.tokens.rule.seam
     }
 
     fn select_asset(name, file, kind){
@@ -180,24 +180,24 @@ script_mod! {
         flow: Down
         show_bg: true
         new_batch: true
-        draw_bg.color: #x4f4f4f
+        draw_bg.color: mod.tokens.face.panel
 
-        browser_head := SolidView{width: Fill height: 22 flow: Right align: Align{y: 0.5} padding: Inset{left: 8 right: 8} show_bg: true new_batch: true draw_bg.color: #x3d3d3d
-            title := Label{text: "Browser" width: Fill draw_text.color: #xd0d0d0 draw_text.text_style: theme.font_regular{font_size: 10 line_spacing: 1.0 top_drop: 0.0}}
-            local := Label{text: "LOCAL" width: Fit draw_text.color: #x757575 draw_text.text_style: theme.font_regular{font_size: 7 line_spacing: 1.0 top_drop: 0.0}}
+        browser_head := SolidView{width: Fill height: 22 flow: Right align: Align{y: 0.5} padding: Inset{left: 8 right: 8} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.bar
+            title := Label{text: "Browser" width: Fill draw_text.color: #xd0d0d0 draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.lg line_spacing: 1.0 top_drop: 0.0}}
+            local := Label{text: "LOCAL" width: Fit draw_text.color: mod.tokens.ink.faint draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.xs line_spacing: 1.0 top_drop: 0.0}}
         }
         head_rule := SeamRule{}
-        browser_toolbar := SolidView{width: Fill height: 25 flow: Right spacing: 4 align: Align{y: 0.5} padding: Inset{left: 4 right: 4} show_bg: true new_batch: true draw_bg.color: #x4f4f4f
+        browser_toolbar := SolidView{width: Fill height: mod.tokens.size.toolbar flow: Right spacing: mod.tokens.space.s2 align: Align{y: 0.5} padding: Inset{left: 4 right: 4} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.panel
             back := IconButton{width: 18 draw_icon +: {svg: crate_resource("self://resources/icons/back.svg")}}
             forward := IconButton{width: 18 draw_icon +: {svg: crate_resource("self://resources/icons/forward.svg")}}
-            search := SolidView{width: Fill height: 17 flow: Right spacing: 2 align: Align{y: 0.5} padding: Inset{left: 4 right: 4} show_bg: true new_batch: true draw_bg.color: #x282828
+            search := SolidView{width: Fill height: mod.tokens.size.field flow: Right spacing: mod.tokens.space.s1 align: Align{y: 0.5} padding: Inset{left: 4 right: 4} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.sunk
                 search_glyph := IconButton{width: 15 draw_icon +: {svg: crate_resource("self://resources/icons/search.svg") color: #x909090}}
-                search_hint := Label{text: "Search (Cmd + F)" width: Fill draw_text.color: #x909090 draw_text.text_style: theme.font_regular{font_size: 8 line_spacing: 1.0 top_drop: 0.0}}
+                search_hint := Label{text: "Search (Cmd + F)" width: Fill draw_text.color: #x909090 draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.sm line_spacing: 1.0 top_drop: 0.0}}
             }
             filters := IconButton{width: 22 draw_icon +: {svg: crate_resource("self://resources/icons/filter.svg")}}
             tags := IconButton{width: 22 draw_icon +: {svg: crate_resource("self://resources/icons/tag.svg")}}
         }
-        tabs := SolidView{width: Fill height: 22 flow: Right show_bg: true new_batch: true draw_bg.color: #x3d3d3d
+        tabs := SolidView{width: Fill height: 22 flow: Right show_bg: true new_batch: true draw_bg.color: mod.tokens.face.bar
             media := TabIcon{draw_icon +: {svg: crate_resource("self://resources/icons/media.svg")}}
             effects := TabIcon{draw_icon +: {svg: crate_resource("self://resources/icons/effects.svg")}}
             create := TabIcon{draw_icon +: {svg: crate_resource("self://resources/icons/create.svg")}}
@@ -205,7 +205,7 @@ script_mod! {
         }
 
         browser_body := SolidView{width: Fill height: Fill flow: Right
-            rail := SolidView{width: 132 height: Fill flow: Down padding: Inset{bottom: 2} show_bg: true new_batch: true draw_bg.color: #x4f4f4f
+            rail := SolidView{width: mod.tokens.size.rail height: Fill flow: Down padding: Inset{bottom: 2} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.panel
                 collections := RailCap{text: "Collections"}
                 favorite := RailRow{text: "Favorite" draw_icon +: {svg: crate_resource("self://resources/icons/star.svg") color: #xf20813}}
                 broll := RailRow{text: "B-roll" draw_icon +: {svg: crate_resource("self://resources/icons/video.svg") color: #x4db7bd}}
@@ -224,23 +224,23 @@ script_mod! {
                 add_folder := RailRow{text: "Add Folder..." draw_icon +: {svg: crate_resource("self://resources/icons/create.svg") color: #x909090} draw_text.color: #x909090}
             }
             browser_owner_divider := PaneDivider{}
-            catalog := SolidView{width: Fill height: Fill flow: Down show_bg: true new_batch: true draw_bg.color: #x4f4f4f
-                catalog_head_row := SolidView{width: Fill height: 18 flow: Right spacing: 4 align: Align{y: 0.5} padding: Inset{left: 6 right: 2} show_bg: true new_batch: true draw_bg.color: #x606060
-                    catalog_head := Label{text: "All media" width: Fill draw_text.color: #xe4e4e4 draw_text.text_style: theme.font_regular{font_size: 8 line_spacing: 1.0 top_drop: 0.0}}
-                    catalog_status := Label{text: "" width: Fit draw_text.color: #x9d9d9d draw_text.text_style: theme.font_regular{font_size: 8 line_spacing: 1.0 top_drop: 0.0}}
+            catalog := SolidView{width: Fill height: Fill flow: Down show_bg: true new_batch: true draw_bg.color: mod.tokens.face.panel
+                catalog_head_row := SolidView{width: Fill height: mod.tokens.size.row_tight flow: Right spacing: mod.tokens.space.s2 align: Align{y: 0.5} padding: Inset{left: 6 right: 2} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.head
+                    catalog_head := Label{text: "All media" width: Fill draw_text.color: mod.tokens.ink.strong draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.sm line_spacing: 1.0 top_drop: 0.0}}
+                    catalog_status := Label{text: "" width: Fit draw_text.color: mod.tokens.ink.muted draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.sm line_spacing: 1.0 top_drop: 0.0}}
                     view_modes := View{width: Fit height: 16 flow: Right align: Align{y: 0.5}
                         mode_thumb := IconButton{width: 18 draw_icon +: {svg: crate_resource("self://resources/icons/media.svg")}}
-                        mode_grid := IconButton{width: 18 draw_icon +: {svg: crate_resource("self://resources/icons/grid.svg") color: #xe4e4e4}}
+                        mode_grid := IconButton{width: 18 draw_icon +: {svg: crate_resource("self://resources/icons/grid.svg") color: mod.tokens.ink.strong}}
                         mode_list := IconButton{width: 18 draw_icon +: {svg: crate_resource("self://resources/icons/list.svg")}}
                     }
                 }
-                filter_shelf := SolidView{width: Fill height: 20 flow: Right spacing: 2 align: Align{y: 0.5} padding: Inset{left: 4 right: 4} show_bg: true new_batch: true draw_bg.color: #x4f4f4f
+                filter_shelf := SolidView{width: Fill height: mod.tokens.size.cap flow: Right spacing: mod.tokens.space.s1 align: Align{y: 0.5} padding: Inset{left: 4 right: 4} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.panel
                     filter_label := IconButton{width: 18 draw_icon +: {svg: crate_resource("self://resources/icons/filter.svg")}}
                     video_chip := FilterChip{label.text: "Video"}
                     broll_chip := FilterChip{label.text: "B-roll"}
                     clear_chip := IconButton{width: 18 draw_icon +: {svg: crate_resource("self://resources/icons/clear.svg")}}
                 }
-                result_list := SolidView{width: Fill height: Fill flow: Down padding: Inset{top: 5 bottom: 5} show_bg: true new_batch: true draw_bg.color: #x4f4f4f
+                result_list := SolidView{width: Fill height: Fill flow: Down padding: Inset{top: 5 bottom: 5} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.panel
                     clip := FileRow{text: "clip.mp4" draw_icon +: {svg: crate_resource("self://resources/icons/video.svg")} on_click: || select_asset("Starter Clip", "clip.mp4", "video · B-roll")}
                     mark := FileRow{text: "mark.svg" draw_icon +: {svg: crate_resource("self://resources/icons/motolii.svg")} on_click: || select_asset("Starter Mark", "mark.svg", "image · Brand")}
                     still := FileRow{text: "still.png" draw_icon +: {svg: crate_resource("self://resources/icons/image.svg")} on_click: || select_asset("Starter Still", "still.png", "image · B-roll")}
@@ -249,10 +249,10 @@ script_mod! {
                     motion_clip := FileRow{text: "grain.mp4" draw_icon +: {svg: crate_resource("self://resources/icons/video.svg")} on_click: || select_asset("Motion Grain", "grain.mp4", "video · Motion assets")}
                 }
                 selection_rule := SeamRule{}
-                selection := SolidView{width: Fill height: 20 flow: Right spacing: 4 align: Align{y: 0.5} padding: Inset{left: 6 right: 4} show_bg: true new_batch: true draw_bg.color: #x3d3d3d
+                selection := SolidView{width: Fill height: mod.tokens.size.cap flow: Right spacing: mod.tokens.space.s2 align: Align{y: 0.5} padding: Inset{left: 6 right: 4} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.bar
                     selection_dot := SolidView{width: 5 height: 5 show_bg: true new_batch: true draw_bg.color: #x6b8d96}
-                    selection_name := Label{text: "clip.mp4" width: Fit draw_text.color: #xe4e4e4 draw_text.text_style: theme.font_regular{font_size: 8 line_spacing: 1.0 top_drop: 0.0}}
-                    selection_type := Label{text: "video · B-roll" width: Fill draw_text.color: #x9d9d9d draw_text.text_style: theme.font_regular{font_size: 8 line_spacing: 1.0 top_drop: 0.0}}
+                    selection_name := Label{text: "clip.mp4" width: Fit draw_text.color: mod.tokens.ink.strong draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.sm line_spacing: 1.0 top_drop: 0.0}}
+                    selection_type := Label{text: "video · B-roll" width: Fill draw_text.color: mod.tokens.ink.muted draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.sm line_spacing: 1.0 top_drop: 0.0}}
                     clear_selection := IconButton{width: 18 draw_icon +: {svg: crate_resource("self://resources/icons/clear.svg")}}
                 }
             }
