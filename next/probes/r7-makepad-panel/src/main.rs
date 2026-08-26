@@ -5,9 +5,7 @@ use motolii_engine::Engine;
 use motolii_shell_state::Session;
 use motolii_store::{Document, Intent, LayerId, RationalTime};
 use motolii_timeline_pane::{self as timeline_pane, stacking::restacked, StackDirection};
-use std::fs;
-use std::path::PathBuf;
-use std::time::{Instant, SystemTime};
+use std::time::Instant;
 
 mod browser_surface;
 mod chrome;
@@ -30,16 +28,249 @@ script_mod! {
     use mod.prelude.widgets.*
     use mod.widgets.*
 
-    mod.widgets.HotPanelBase = #(HotPanel::register_widget(vm))
-    mod.widgets.HotPanel = set_type_default() do mod.widgets.HotPanelBase{
+    // Source: Motolii next/reference/mocks/*.html (visual/semantic contract only).
+    // This is a Makepad proof surface, not a second product state owner.
+
+    let IconButton = ButtonFlatterIcon{
+        width: 24
+        height: 22
+        icon_walk: Walk{width: 13 height: 13}
+        padding: Inset{left: 0 right: 0}
+        draw_icon +: {color: #xb7b7b7}
+    }
+
+    let IconFlatButton = ButtonFlatIcon{
+        width: 24
+        height: 22
+        icon_walk: Walk{width: 13 height: 13}
+        padding: Inset{left: 0 right: 0}
+        draw_icon +: {color: #xcfcfcf}
+    }
+
+    let RailToggle = ButtonFlat{
+        width: 12
+        height: 12
+        margin: 0
+        padding: 0
+        spacing: 0
+        align: Center
+        label_walk: Walk{width: Fill height: Fill}
+        draw_bg.color: #x4a4a4a
+        draw_bg.border_size: 0.0
+        draw_bg.border_radius: 2.0
+        draw_text.color: #x757575
+        draw_text.text_style: theme.font_regular{font_size: 6 line_spacing: 1.0 top_drop: 0.0}
+    }
+
+    let TimelineLabel = Label{
+        width: Fit
+        height: Fit
+        padding: 0
+        draw_text.color: #xcfcfcf
+        draw_text.text_style: theme.font_regular{font_size: 8.25 line_spacing: 1.0 top_drop: 0.0}
+    }
+
+    let TimelineKeyLabel = Label{
+        width: Fill
+        height: Fit
+        padding: 0
+        draw_text.color: #x757575
+        draw_text.text_style: theme.font_regular{font_size: 7.5 line_spacing: 1.0 top_drop: 0.0}
+    }
+
+    // A line is reserved for a change in interaction owner or coordinate system.
+    // Related controls use spacing and fill state instead of decorative outlines.
+    let PaneDivider = SolidView{
+        width: 1
+        height: Fill
+        show_bg: true
+        new_batch: true
+        draw_bg.color: #x1d1d1d
+    }
+
+    let SurfaceDivider = SolidView{
+        width: Fill
+        height: 1
+        show_bg: true
+        new_batch: true
+        draw_bg.color: #x1d1d1d
+    }
+
+    let TimeField = SolidView{
+        width: 810
+        height: Fill
+        flow: Overlay
+        align: Align{y: 0.5}
+        show_bg: true
+        draw_bg.color: #x363636
+        band_1 := SolidView{width: 67.5 height: Fill margin: Inset{left: 67.5} draw_bg.color: #xFFFFFF09}
+        band_2 := SolidView{width: 67.5 height: Fill margin: Inset{left: 202.5} draw_bg.color: #xFFFFFF09}
+        band_3 := SolidView{width: 67.5 height: Fill margin: Inset{left: 337.5} draw_bg.color: #xFFFFFF09}
+        band_4 := SolidView{width: 67.5 height: Fill margin: Inset{left: 472.5} draw_bg.color: #xFFFFFF09}
+        band_5 := SolidView{width: 67.5 height: Fill margin: Inset{left: 607.5} draw_bg.color: #xFFFFFF09}
+        band_6 := SolidView{width: 67.5 height: Fill margin: Inset{left: 742.5} draw_bg.color: #xFFFFFF09}
+        grid_01 := SolidView{width: 1 height: Fill margin: Inset{left: 13.5} draw_bg.color: #x0000002e}
+        grid_02 := SolidView{width: 1 height: Fill margin: Inset{left: 27} draw_bg.color: #x0000002e}
+        grid_03 := SolidView{width: 1 height: Fill margin: Inset{left: 40.5} draw_bg.color: #x0000002e}
+        grid_04 := SolidView{width: 1 height: Fill margin: Inset{left: 54} draw_bg.color: #x0000002e}
+        grid_05 := SolidView{width: 1 height: Fill margin: Inset{left: 67.5} draw_bg.color: #x0000004d}
+        grid_06 := SolidView{width: 1 height: Fill margin: Inset{left: 81} draw_bg.color: #x0000002e}
+        grid_07 := SolidView{width: 1 height: Fill margin: Inset{left: 94.5} draw_bg.color: #x0000002e}
+        grid_08 := SolidView{width: 1 height: Fill margin: Inset{left: 108} draw_bg.color: #x0000002e}
+        grid_09 := SolidView{width: 1 height: Fill margin: Inset{left: 121.5} draw_bg.color: #x0000002e}
+        grid_10 := SolidView{width: 1 height: Fill margin: Inset{left: 135} draw_bg.color: #x0000004d}
+        grid_11 := SolidView{width: 1 height: Fill margin: Inset{left: 148.5} draw_bg.color: #x0000002e}
+        grid_12 := SolidView{width: 1 height: Fill margin: Inset{left: 162} draw_bg.color: #x0000002e}
+        grid_13 := SolidView{width: 1 height: Fill margin: Inset{left: 175.5} draw_bg.color: #x0000002e}
+        grid_14 := SolidView{width: 1 height: Fill margin: Inset{left: 189} draw_bg.color: #x0000002e}
+        grid_15 := SolidView{width: 1 height: Fill margin: Inset{left: 202.5} draw_bg.color: #x0000004d}
+        grid_16 := SolidView{width: 1 height: Fill margin: Inset{left: 216} draw_bg.color: #x0000002e}
+        grid_17 := SolidView{width: 1 height: Fill margin: Inset{left: 229.5} draw_bg.color: #x0000002e}
+        grid_18 := SolidView{width: 1 height: Fill margin: Inset{left: 243} draw_bg.color: #x0000002e}
+        grid_19 := SolidView{width: 1 height: Fill margin: Inset{left: 256.5} draw_bg.color: #x0000002e}
+        grid_20 := SolidView{width: 1 height: Fill margin: Inset{left: 270} draw_bg.color: #x0000004d}
+        grid_21 := SolidView{width: 1 height: Fill margin: Inset{left: 283.5} draw_bg.color: #x0000002e}
+        grid_22 := SolidView{width: 1 height: Fill margin: Inset{left: 297} draw_bg.color: #x0000002e}
+        grid_23 := SolidView{width: 1 height: Fill margin: Inset{left: 310.5} draw_bg.color: #x0000002e}
+        grid_24 := SolidView{width: 1 height: Fill margin: Inset{left: 324} draw_bg.color: #x0000002e}
+        grid_25 := SolidView{width: 1 height: Fill margin: Inset{left: 337.5} draw_bg.color: #x0000004d}
+        grid_26 := SolidView{width: 1 height: Fill margin: Inset{left: 351} draw_bg.color: #x0000002e}
+        grid_27 := SolidView{width: 1 height: Fill margin: Inset{left: 364.5} draw_bg.color: #x0000002e}
+        grid_28 := SolidView{width: 1 height: Fill margin: Inset{left: 378} draw_bg.color: #x0000002e}
+        grid_29 := SolidView{width: 1 height: Fill margin: Inset{left: 391.5} draw_bg.color: #x0000002e}
+        grid_30 := SolidView{width: 1 height: Fill margin: Inset{left: 405} draw_bg.color: #x0000004d}
+        grid_31 := SolidView{width: 1 height: Fill margin: Inset{left: 418.5} draw_bg.color: #x0000002e}
+        grid_32 := SolidView{width: 1 height: Fill margin: Inset{left: 432} draw_bg.color: #x0000002e}
+        grid_33 := SolidView{width: 1 height: Fill margin: Inset{left: 445.5} draw_bg.color: #x0000002e}
+        grid_34 := SolidView{width: 1 height: Fill margin: Inset{left: 459} draw_bg.color: #x0000002e}
+        grid_35 := SolidView{width: 1 height: Fill margin: Inset{left: 472.5} draw_bg.color: #x0000004d}
+        grid_36 := SolidView{width: 1 height: Fill margin: Inset{left: 486} draw_bg.color: #x0000002e}
+        grid_37 := SolidView{width: 1 height: Fill margin: Inset{left: 499.5} draw_bg.color: #x0000002e}
+        grid_38 := SolidView{width: 1 height: Fill margin: Inset{left: 513} draw_bg.color: #x0000002e}
+        grid_39 := SolidView{width: 1 height: Fill margin: Inset{left: 526.5} draw_bg.color: #x0000002e}
+        grid_40 := SolidView{width: 1 height: Fill margin: Inset{left: 540} draw_bg.color: #x0000004d}
+        grid_41 := SolidView{width: 1 height: Fill margin: Inset{left: 553.5} draw_bg.color: #x0000002e}
+        grid_42 := SolidView{width: 1 height: Fill margin: Inset{left: 567} draw_bg.color: #x0000002e}
+        grid_43 := SolidView{width: 1 height: Fill margin: Inset{left: 580.5} draw_bg.color: #x0000002e}
+        grid_44 := SolidView{width: 1 height: Fill margin: Inset{left: 594} draw_bg.color: #x0000002e}
+        grid_45 := SolidView{width: 1 height: Fill margin: Inset{left: 607.5} draw_bg.color: #x0000004d}
+        grid_46 := SolidView{width: 1 height: Fill margin: Inset{left: 621} draw_bg.color: #x0000002e}
+        grid_47 := SolidView{width: 1 height: Fill margin: Inset{left: 634.5} draw_bg.color: #x0000002e}
+        grid_48 := SolidView{width: 1 height: Fill margin: Inset{left: 648} draw_bg.color: #x0000002e}
+        grid_49 := SolidView{width: 1 height: Fill margin: Inset{left: 661.5} draw_bg.color: #x0000002e}
+        grid_50 := SolidView{width: 1 height: Fill margin: Inset{left: 675} draw_bg.color: #x0000004d}
+        grid_51 := SolidView{width: 1 height: Fill margin: Inset{left: 688.5} draw_bg.color: #x0000002e}
+        grid_52 := SolidView{width: 1 height: Fill margin: Inset{left: 702} draw_bg.color: #x0000002e}
+        grid_53 := SolidView{width: 1 height: Fill margin: Inset{left: 715.5} draw_bg.color: #x0000002e}
+        grid_54 := SolidView{width: 1 height: Fill margin: Inset{left: 729} draw_bg.color: #x0000002e}
+        grid_55 := SolidView{width: 1 height: Fill margin: Inset{left: 742.5} draw_bg.color: #x0000004d}
+        grid_56 := SolidView{width: 1 height: Fill margin: Inset{left: 756} draw_bg.color: #x0000002e}
+        grid_57 := SolidView{width: 1 height: Fill margin: Inset{left: 769.5} draw_bg.color: #x0000002e}
+        grid_58 := SolidView{width: 1 height: Fill margin: Inset{left: 783} draw_bg.color: #x0000002e}
+        grid_59 := SolidView{width: 1 height: Fill margin: Inset{left: 796.5} draw_bg.color: #x0000002e}
+    }
+
+    let TimelineRow = SolidView{
+        width: Fill
+        height: 26
+        flow: Overlay
+        show_bg: true
+        new_batch: true
+        draw_bg.color: #x363636
+        content := View{width: Fill height: Fill flow: Right}
+        rail_divider := PaneDivider{margin: Inset{left: 149}}
+        separator := SolidView{width: Fill height: 1 margin: Inset{top: 25} draw_bg.color: #x00000038}
+    }
+
+    let TimelineKeyRow = SolidView{
+        width: Fill
+        height: 18
+        flow: Overlay
+        show_bg: true
+        new_batch: true
+        draw_bg.color: #x363636
+        content := View{width: Fill height: Fill flow: Right}
+        rail_divider := PaneDivider{margin: Inset{left: 149}}
+        separator := SolidView{width: Fill height: 1 margin: Inset{top: 17} draw_bg.color: #x00000038}
+    }
+
+    let ZebraTimeField = TimeField{
+        draw_bg.color: #xFFFFFF0d
+    }
+
+    let SelectedTimeField = TimeField{
+        draw_bg.color: #x565048
+    }
+
+    let KeyTimeField = TimeField{
+        draw_bg.color: #x303030
+    }
+
+    // Studio: kinds are Fill Views, then `Kind := Kind {}` on the Dock instance.
+    let BrowserPane = View{
+        width: Fill
+        height: Fill
+        browser_surface := BrowserSurface{}
+    }
+
+    let StagePane = View{
+        width: Fill
+        height: Fill
+        stage_chrome := StageChrome{}
+    }
+
+    let InspectorPane = View{
+        width: Fill
+        height: Fill
+        inspector_surface := InspectorSurface{}
+    }
+
+    let ExportPane = View{
+        width: Fill
+        height: Fill
+        export_surface := ExportSurface{}
+    }
+
+    let SettingsPane = View{
+        width: Fill
+        height: Fill
+        settings_surface := SettingsSurface{}
+    }
+
+    let ChromePane = View{
+        width: Fill
+        height: Fill
+        chrome_gallery := ChromeGallery{}
+    }
+
+    let TimelinePane = View{
         width: Fill
         height: Fill
         flow: Down
-        show_bg: true
-        new_batch: true
-        draw_bg.color: #x1c1c1c
-        panel_error := Label{width: Fill height: Fill align: Align{x: 0.5 y: 0.5} text: "" draw_text.color: #xe8c48a draw_text.text_style: theme.font_code{font_size: 10}}
+        transport := SolidView{
+            width: Fill
+            height: 24
+            flow: Right
+            align: Align{x: 0.5 y: 0.5}
+            show_bg: true
+            new_batch: true
+            draw_bg.color: #x3d3d3d
+            play_toggle := ButtonFlatIcon{
+                width: 26
+                height: 20
+                icon_walk: Walk{width: 12 height: 12}
+                padding: Inset{left: 0 right: 0}
+                draw_bg.color: #4f4f4f
+                draw_bg.border_size: 0.0
+                draw_icon +: {svg: crate_resource("self://resources/icons/play.svg") color: #xd8b574}
+            }
+        }
+        timeline_surface := TimelineSurface{
+            width: Fill
+            height: Fill
+        }
     }
+
 
     startup() do #(App::script_component(vm)){
         ui: Root{
@@ -47,37 +278,166 @@ script_mod! {
                 window.inner_size: vec2(1440, 900)
                 window.title: "Motolii Makepad Panel"
                 body +: {
-                    panel_host := mod.widgets.HotPanel{
-                        width: Fill
-                        height: Fill
-                        flow: Down
+                    panel := SolidView{
+        width: Fill
+        height: Fill
+        flow: Down
+        show_bg: true
+        new_batch: true
+        draw_bg.color: #x282828
+
+            chrome := SolidView{
+                width: Fill
+                height: 32
+                flow: Right
+                align: Align{y: 0.5}
+                padding: Inset{left: 10 right: 10}
+                show_bg: true
+                new_batch: true
+                draw_bg +: { color: #x242424 }
+
+                brand := SolidView{
+                    width: 74
+                    height: 24
+                    flow: Right
+                    align: Align{y: 0.5}
+                    spacing: 5
+                    mark := Icon{width: 17 height: 17 icon_walk: Walk{width: 17 height: 17} draw_icon +: {svg: crate_resource("self://resources/icons/motolii.svg") color: #xd8d8d8}}
+                    name := Label{text: "MOTOLII" width: Fill draw_text.color: #xd8d8d8 draw_text.text_style: theme.font_bold{font_size: 10}}
+                }
+                file := ButtonFlatter{text: "File" width: 42 height: 24 draw_text.color: #xb7b7b7 draw_text.text_style: theme.font_regular{font_size: 9}}
+                edit := ButtonFlatter{text: "Edit" width: 42 height: 24 draw_text.color: #xb7b7b7 draw_text.text_style: theme.font_regular{font_size: 9}}
+                layer := ButtonFlatter{text: "Layer" width: 50 height: 24 draw_text.color: #xb7b7b7 draw_text.text_style: theme.font_regular{font_size: 9}}
+                view := ButtonFlatter{text: "View" width: 42 height: 24 draw_text.color: #xb7b7b7 draw_text.text_style: theme.font_regular{font_size: 9}}
+                spacer := SolidView{width: Fill height: 1}
+                project := Label{
+                    text: "Untitled / Motion Study"
+                    width: Fit
+                    draw_text.color: #xa0a0a0
+                    draw_text.text_style: theme.font_code{font_size: 9}
+                }
+                browser_toggle := IconButton{width: 26 draw_icon +: {svg: crate_resource("self://resources/icons/panels.svg")} on_click: || { ui.status.set_text("Browser panel") }}
+                settings := IconButton{width: 26 draw_icon +: {svg: crate_resource("self://resources/icons/filter.svg")} on_click: || { ui.status.set_text("Settings") }}
+            }
+
+            chrome_surface_divider := SurfaceDivider{}
+
+            dock := DockFlat{
+                width: Fill
+                height: Fill
+
+                root := DockSplitter{
+                    axis: SplitterAxis.Vertical
+                    align: SplitterAlign.FromB(300.0)
+                    a: @top_split
+                    b: @timeline_tabs
+                }
+
+                top_split := DockSplitter{
+                    axis: SplitterAxis.Horizontal
+                    align: SplitterAlign.FromA(300.0)
+                    a: @browser_tabs
+                    b: @center_split
+                }
+
+                center_split := DockSplitter{
+                    axis: SplitterAxis.Horizontal
+                    align: SplitterAlign.FromB(300.0)
+                    a: @stage_tabs
+                    b: @inspector_tabs
+                }
+
+                browser_tabs := DockTabs{
+                    tabs: [@browser]
+                    selected: 0
+                    closable: false
+                }
+
+                stage_tabs := DockTabs{
+                    tabs: [@stage]
+                    selected: 0
+                    closable: false
+                }
+
+                inspector_tabs := DockTabs{
+                    tabs: [@inspector @export @settings @chrome_tab]
+                    selected: 3
+                    closable: false
+                }
+
+                timeline_tabs := DockTabs{
+                    tabs: [@timeline]
+                    selected: 0
+                    closable: false
+                }
+
+                browser := DockTab{
+                    name: "Browser"
+                    template: @PermanentTab
+                    kind: @BrowserPane
+                }
+
+                stage := DockTab{
+                    name: "Stage"
+                    template: @PermanentTab
+                    kind: @StagePane
+                }
+
+                inspector := DockTab{
+                    name: "Inspector"
+                    template: @PermanentTab
+                    kind: @InspectorPane
+                }
+
+                export := DockTab{
+                    name: "Export"
+                    template: @PermanentTab
+                    kind: @ExportPane
+                }
+
+                settings := DockTab{
+                    name: "Settings"
+                    template: @PermanentTab
+                    kind: @SettingsPane
+                }
+
+                chrome_tab := DockTab{
+                    name: "Chrome"
+                    template: @PermanentTab
+                    kind: @ChromePane
+                }
+
+                timeline := DockTab{
+                    name: "Timeline"
+                    template: @PermanentTab
+                    kind: @TimelinePane
+                }
+
+                BrowserPane := BrowserPane{}
+                StagePane := StagePane{}
+                InspectorPane := InspectorPane{}
+                ExportPane := ExportPane{}
+                SettingsPane := SettingsPane{}
+                ChromePane := ChromePane{}
+                TimelinePane := TimelinePane{}
+            }
+
+            status_surface_divider := SurfaceDivider{}
+
+            status := Label{
+                text: "READY  ·  RERUN STAGE  ·  FRAME 900 / 1800"
+                width: Fill
+                height: 20
+                padding: Inset{left: 10}
+                draw_text.color: #x747879
+                draw_text.text_style: theme.font_code{font_size: 8}
+            }
+
                     }
                 }
             }
         }
     }
-}
-
-const HOT_PANEL_PREFIX: &str =
-    "use mod.prelude.widgets.*\nuse mod.widgets.*\nView{width:Fill height:Fill flow:Down, ";
-
-const PANEL_ERROR_SOURCE: &str = concat!(
-    "use mod.prelude.widgets.*\nuse mod.widgets.*\n",
-    "SolidView{width:Fill height:Fill flow:Down show_bg:true new_batch:true draw_bg.color:#x1c1c1c ",
-    "panel_error := Label{width:Fill height:Fill align:Align{x:0.5 y:0.5} text:\"\" ",
-    "draw_text.color:#xe8c48a draw_text.text_style:theme.font_code{font_size:10}}}",
-);
-
-fn format_panel_eval_errors(errors: &[String]) -> String {
-    match errors.first() {
-        Some(first) if errors.len() == 1 => format!("panel.splash: {first}"),
-        Some(first) => format!("panel.splash: {first} （+{}）", errors.len() - 1),
-        None => "panel.splash を評価できない".to_string(),
-    }
-}
-
-fn view_has_children(view: &View) -> bool {
-    !view.children.is_empty()
 }
 
 /// Makepad view adapter. Writes go to Document / Session; pixels come from Engine.
@@ -362,221 +722,10 @@ impl BackendBridge {
     }
 }
 
-#[derive(Script, ScriptHook, WidgetRegister)]
-pub struct HotPanel {
-    #[uid]
-    uid: WidgetUid,
-    #[source]
-    source: ScriptObjectRef,
-    #[deref]
-    view: View,
-    #[live]
-    body: ArcStringMut,
-    #[rust]
-    host_error: Option<String>,
-}
-
-impl WidgetNode for HotPanel {
-    fn widget_uid(&self) -> WidgetUid {
-        self.uid
-    }
-
-    fn children(&self, visit: &mut dyn FnMut(LiveId, WidgetRef)) {
-        self.view.children(visit);
-    }
-
-    fn walk(&mut self, cx: &mut Cx) -> Walk {
-        self.view.walk(cx)
-    }
-
-    fn area(&self) -> Area {
-        self.view.area()
-    }
-
-    fn redraw(&mut self, cx: &mut Cx) {
-        self.view.redraw(cx);
-    }
-}
-
-impl Widget for HotPanel {
-    fn handle_event(&mut self, cx: &mut Cx, event: &Event, scope: &mut Scope) {
-        self.view.handle_event(cx, event, scope);
-    }
-
-    fn draw_walk(&mut self, cx: &mut Cx2d, scope: &mut Scope, walk: Walk) -> DrawStep {
-        self.view.draw_walk(cx, scope, walk)
-    }
-
-    fn text(&self) -> String {
-        self.body.as_ref().to_string()
-    }
-
-    fn set_text(&mut self, cx: &mut Cx, value: &str) {
-        if self.body.as_ref() == value && self.host_error.is_none() {
-            log!("panel source unchanged; keeping installed view");
-            return;
-        }
-
-        let code = format!("{}{}", HOT_PANEL_PREFIX, value);
-        match Self::eval_panel_view(cx, "panel.splash", &code) {
-            Ok(view) => {
-                self.body.set(value);
-                self.view = view;
-                self.host_error = None;
-                // Eval apply does not keep type-default / PREFIX walk+flow on the
-                // replaced View (Fit parent + Fill child = 0; default flow Right
-                // puts shell:Fill next to status:Fill). Set them on the instance.
-                self.apply_host_layout();
-                // The initial placeholder has no useful draw area yet. Redrawing only
-                // this widget can therefore miss the first frame after replacement.
-                cx.redraw_all();
-                log!("panel view installed: {} bytes", value.len());
-            }
-            Err(error) => self.install_panel_error(cx, &error),
-        }
-    }
-}
-
-impl HotPanel {
-    fn apply_host_layout(&mut self) {
-        self.view.walk = Walk::fill();
-        self.view.layout.flow = Flow::Down;
-    }
-
-    fn eval_panel_view(cx: &mut Cx, file: &str, code: &str) -> Result<View, String> {
-        cx.with_vm(|vm| {
-            let script_mod = ScriptMod {
-                cargo_manifest_path: env!("CARGO_MANIFEST_DIR").to_string(),
-                module_path: "r7_makepad_panel::hot_panel".to_string(),
-                file: file.to_string(),
-                line: 0,
-                column: 0,
-                code: String::new(),
-                values: vec![],
-            };
-            let value = vm.eval_with_append_source(script_mod, code, NIL.into());
-            let errors = vm.take_errors();
-            if value.is_err() || !errors.is_empty() {
-                return Err(format_panel_eval_errors(&errors));
-            }
-            if value.as_object().is_none() {
-                return Err("空の View になった".to_string());
-            }
-            let view = View::script_from_value(vm, value);
-            if !view_has_children(&view) {
-                return Err("空の View になった".to_string());
-            }
-            Ok(view)
-        })
-    }
-
-    fn install_panel_error(&mut self, cx: &mut Cx, text: &str) {
-        if self.host_error.as_deref() == Some(text) {
-            return;
-        }
-        let has_error_label = !self
-            .view
-            .child_by_path(ids!(panel_error))
-            .as_label()
-            .is_empty();
-        if !has_error_label {
-            match Self::eval_panel_view(cx, "panel_error.splash", PANEL_ERROR_SOURCE) {
-                Ok(view) => self.view = view,
-                Err(_) => {}
-            }
-        }
-        self.apply_host_layout();
-        self.view
-            .child_by_path(ids!(panel_error))
-            .as_label()
-            .set_text(cx, text);
-        self.host_error = Some(text.to_string());
-        self.body.set("");
-        cx.redraw_all();
-    }
-
-    fn dock(&self) -> DockRef {
-        self.view.child_by_path(ids!(dock)).as_dock()
-    }
-
-    /// Stage の Image へ共有面を束ね、**表示側が答えた寸法**を返す。
-    ///
-    /// `None` = Image が無い(継ぎ目の配線ミス)。`Some(None)` = Image はあるが
-    /// 面が寸法を答えない(窓の葉の穴 — 0×0 の quad になり黒く見える)。
-    fn set_stage_texture(
-        &mut self,
-        cx: &mut Cx,
-        texture: Texture,
-    ) -> Option<Option<(u32, u32)>> {
-        let stage_image = self
-            .dock()
-            .item(id!(stage))
-            .child_by_path(ids!(stage_frame))
-            .as_image();
-        if stage_image.is_empty() {
-            return None;
-        }
-        let displayed = texture
-            .get_format(cx)
-            .vec_width_height()
-            .map(|(width, height)| (width as u32, height as u32));
-        stage_image.set_texture(cx, Some(texture));
-        Some(displayed)
-    }
-
-    fn set_stage_error(&self, cx: &mut Cx, text: &str) {
-        self.dock()
-            .item(id!(stage))
-            .child_by_path(ids!(stage_error))
-            .as_label()
-            .set_text(cx, text);
-    }
-
-    fn timeline_ref(&self) -> WidgetRef {
-        self.dock()
-            .item(id!(timeline))
-            .child_by_path(ids!(timeline_surface))
-    }
-
-    fn play_ref(&self) -> WidgetRef {
-        self.dock()
-            .item(id!(timeline))
-            .child_by_path(ids!(play_toggle))
-    }
-
-    fn set_timeline_model(&mut self, cx: &mut Cx, model: TimelineModel) -> bool {
-        let timeline = self.timeline_ref();
-        let found = !timeline.is_empty();
-        if let Some(mut timeline) = timeline.borrow_mut::<TimelineSurface>() {
-            timeline.set_model(cx, model);
-        }
-        found
-    }
-
-    fn set_status(&self, cx: &mut Cx, text: &str) {
-        self.view
-            .child_by_path(ids!(status))
-            .as_label()
-            .set_text(cx, text);
-    }
-
-    fn last_install_ok(&self) -> bool {
-        self.host_error.is_none() && !self.body.as_ref().is_empty()
-    }
-}
-
 #[derive(Script, ScriptHook)]
 pub struct App {
     #[live]
     ui: WidgetRef,
-    #[rust]
-    panel_path: PathBuf,
-    #[rust]
-    panel_signature: Option<(SystemTime, u64)>,
-    #[rust]
-    pending_signature: Option<(SystemTime, u64)>,
-    #[rust]
-    panel_timer: Timer,
     #[rust]
     playback_timer: Timer,
     #[rust]
@@ -664,24 +813,39 @@ impl App {
         let Some(texture) = backend.stage_texture.clone() else {
             return StageVerdict::stalled(StageRoom::Seam, "no shared Texture is held");
         };
-        let panel = self.ui.widget(cx, ids!(panel_host));
-        let Some(displayed) = panel
-            .borrow_mut::<HotPanel>()
-            .and_then(|mut panel| panel.set_stage_texture(cx, texture))
-        else {
+        let stage_image = self.stage_image(cx);
+        if stage_image.is_empty() {
             return StageVerdict::stalled(StageRoom::Seam, "the Stage Image is not in the panel");
-        };
-        panel.redraw(cx);
+        }
+        // 「表示側が答えた寸法」を持って帰る。書けたことは見えたことではない。
+        let displayed = texture
+            .get_format(cx)
+            .vec_width_height()
+            .map(|(width, height)| (width as u32, height as u32));
+        stage_image.set_texture(cx, Some(texture));
+        cx.redraw_all();
         // 「書けた」で終わらせない。出たかどうかは表示寸法が答える。
         stage_surface::check_shown(present, desc, displayed)
     }
 
+    fn dock(&self, cx: &mut Cx) -> DockRef {
+        self.ui.widget(cx, ids!(panel.dock)).as_dock()
+    }
+
+    fn stage_image(&self, cx: &mut Cx) -> ImageRef {
+        self.dock(cx)
+            .item(id!(stage))
+            .child_by_path(ids!(stage_frame))
+            .as_image()
+    }
+
     fn set_stage_error(&self, cx: &mut Cx, text: &str) {
-        let panel = self.ui.widget(cx, ids!(panel_host));
-        if let Some(panel) = panel.borrow::<HotPanel>() {
-            panel.set_stage_error(cx, text);
-        }
-        panel.redraw(cx);
+        self.dock(cx)
+            .item(id!(stage))
+            .child_by_path(ids!(stage_error))
+            .as_label()
+            .set_text(cx, text);
+        cx.redraw_all();
     }
 
     fn request_stage_frame(&mut self, cx: &mut Cx) {
@@ -695,11 +859,11 @@ impl App {
         let Some(model) = self.backend.as_ref().map(BackendBridge::timeline_model) else {
             return;
         };
-        let panel = self.ui.widget(cx, ids!(panel_host));
-        let timeline_found = panel
-            .borrow_mut::<HotPanel>()
-            .map(|mut panel| panel.set_timeline_model(cx, model))
-            .unwrap_or(false);
+        let timeline = self.timeline_ref(cx);
+        let timeline_found = !timeline.is_empty();
+        if let Some(mut timeline) = timeline.borrow_mut::<TimelineSurface>() {
+            timeline.set_model(cx, model);
+        }
         log!(
             "PERF timeline_projection elapsed_us={} timeline_found={}",
             started.elapsed().as_micros(),
@@ -708,26 +872,29 @@ impl App {
     }
 
     fn set_status(&self, cx: &mut Cx, status: &str) {
-        let panel = self.ui.widget(cx, ids!(panel_host));
-        if let Some(panel) = panel.borrow::<HotPanel>() {
-            panel.set_status(cx, status);
-        };
+        self.ui
+            .widget(cx, ids!(panel.status))
+            .as_label()
+            .set_text(cx, status);
+    }
+
+    fn timeline_ref(&self, cx: &mut Cx) -> WidgetRef {
+        self.dock(cx)
+            .item(id!(timeline))
+            .child_by_path(ids!(timeline_surface))
     }
 
     fn timeline_uid(&self, cx: &mut Cx) -> Option<WidgetUid> {
-        let panel = self.ui.widget(cx, ids!(panel_host));
-        panel.borrow::<HotPanel>().and_then(|panel| {
-            let timeline = panel.timeline_ref();
-            (!timeline.is_empty()).then(|| timeline.widget_uid())
-        })
+        let timeline = self.timeline_ref(cx);
+        (!timeline.is_empty()).then(|| timeline.widget_uid())
     }
 
     fn play_uid(&self, cx: &mut Cx) -> Option<WidgetUid> {
-        let panel = self.ui.widget(cx, ids!(panel_host));
-        panel.borrow::<HotPanel>().and_then(|panel| {
-            let play = panel.play_ref();
-            (!play.is_empty()).then(|| play.widget_uid())
-        })
+        let play = self
+            .dock(cx)
+            .item(id!(timeline))
+            .child_by_path(ids!(play_toggle));
+        (!play.is_empty()).then(|| play.widget_uid())
     }
 
     fn toggle_playback(&mut self, cx: &mut Cx) {
@@ -748,66 +915,14 @@ impl App {
         self.request_stage_frame(cx);
     }
 
-    fn show_panel_error(&self, cx: &mut Cx, text: &str) {
-        if let Some(mut panel) = self
-            .ui
-            .widget(cx, ids!(panel_host))
-            .borrow_mut::<HotPanel>()
-        {
-            panel.install_panel_error(cx, text);
-        }
-    }
-
-    fn load_panel(&mut self, cx: &mut Cx) {
-        let Ok(metadata) = fs::metadata(&self.panel_path) else {
-            self.show_panel_error(cx, "panel.splash が無い");
-            return;
-        };
-        let Ok(modified) = metadata.modified() else {
-            self.show_panel_error(cx, "panel.splash の更新時刻が取れない");
-            return;
-        };
-        let signature = (modified, metadata.len());
-        if self.panel_signature == Some(signature) {
-            return;
-        }
-        // First install is immediate so Dock leaves exist before the first present.
-        // Later reloads keep the two-tick debounce so a half-written splash is not applied.
-        if self.panel_signature.is_some() && self.pending_signature != Some(signature) {
-            self.pending_signature = Some(signature);
-            return;
-        }
-
-        match fs::read_to_string(&self.panel_path) {
-            Ok(source) => {
-                let panel = self.ui.widget(cx, ids!(panel_host));
-                panel.set_text(cx, &source);
-                self.panel_signature = Some(signature);
-                self.pending_signature = None;
-                let ok = panel
-                    .borrow::<HotPanel>()
-                    .map(|panel| panel.last_install_ok())
-                    .unwrap_or(false);
-                if ok {
-                    self.install_timeline_model(cx);
-                    self.request_stage_frame(cx);
-                    log!("reloaded {:?}", self.panel_path);
-                }
-            }
-            Err(error) => {
-                self.show_panel_error(cx, &format!("panel.splash を読めない: {error}"));
-            }
-        }
-    }
 }
 
 impl MatchEvent for App {
     fn handle_startup(&mut self, cx: &mut Cx) {
         self.backend = Some(BackendBridge::new_fixture());
-        self.panel_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("panel.splash");
-        self.panel_timer = cx.start_interval(0.12);
         self.playback_timer = cx.start_interval(1.0 / 60.0);
-        self.load_panel(cx);
+        self.install_timeline_model(cx);
+        self.request_stage_frame(cx);
     }
 
     fn handle_actions(&mut self, cx: &mut Cx, actions: &Actions) {
@@ -849,9 +964,6 @@ impl MatchEvent for App {
     }
 
     fn handle_timer(&mut self, cx: &mut Cx, event: &TimerEvent) {
-        if self.panel_timer.is_timer(event).is_some() {
-            self.load_panel(cx);
-        }
         if self.playback_timer.is_timer(event).is_some()
             && self
                 .backend
@@ -934,18 +1046,6 @@ mod backend_tests {
 
         assert!(matches!(update, TimelineUpdate::ModelAndStage(_)));
         assert_eq!(backend.timeline_model().lanes[0].id, layer_id);
-    }
-
-    #[test]
-    fn panel_eval_failure_is_a_visible_sentence() {
-        assert_eq!(
-            format_panel_eval_errors(&[]),
-            "panel.splash を評価できない"
-        );
-        assert_eq!(
-            format_panel_eval_errors(&["kind ChromeGallery is not registered".into()]),
-            "panel.splash: kind ChromeGallery is not registered"
-        );
     }
 
     #[test]

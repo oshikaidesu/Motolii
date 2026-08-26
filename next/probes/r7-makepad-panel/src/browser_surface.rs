@@ -55,6 +55,43 @@ script_mod! {
         draw_text.text_style: theme.font_regular{font_size: 8 line_spacing: 1.0 top_drop: 0.0}
     }
 
+    // 選択済み rail 行 — ベタ塗り+濃字。`ButtonFlat.draw_bg.color` は uniform で
+    // draw call 共有のため兄弟ごとに変えられない(実測 2026-08-27)。面は instance 色を
+    // 持つ SolidView が塗り、当たりだけ透明 Button が受ける
+    let RailRowOn = SolidView{
+        width: Fill
+        height: 16
+        show_bg: true
+        new_batch: true
+        draw_bg.color: #x6b8d96
+        label := ButtonFlatter{
+            width: Fill
+            height: Fill
+            icon_walk: Walk{width: 11 height: 11}
+            align: Align{x: 0.0 y: 0.5}
+            padding: Inset{left: 8 right: 8}
+            draw_icon +: {color: #x133342}
+            draw_text.color: #x133342
+            draw_text.text_style: theme.font_regular{font_size: 8 line_spacing: 1.0 top_drop: 0.0}
+        }
+    }
+
+    // 選択済み tab — 同じ理由で同じ形
+    let TabIconOn = SolidView{
+        width: Fill
+        height: 22
+        show_bg: true
+        new_batch: true
+        draw_bg.color: #x6b8d96
+        label := ButtonFlatterIcon{
+            width: Fill
+            height: Fill
+            icon_walk: Walk{width: 12 height: 12}
+            padding: Inset{left: 0 right: 0}
+            draw_icon +: {color: #x133342}
+        }
+    }
+
     // 節見出し — Collections / Library / Places。薄字、上に群間の余白
     let RailCap = Label{
         width: Fill
@@ -67,17 +104,20 @@ script_mod! {
     // 有効フィルタ chip — 選択の言語（ベタ #6b8d96 + 濃字 #133342、角丸なし）。
     // `chrome/parts/nav.rs` の ChromeChipOn と同一サンプル値。本 mod は chrome より先に
     // eval されるため参照でなく値で置く（未登録名の参照は葉が落ちる）
-    let FilterChip = ButtonFlat{
+    let FilterChip = SolidView{
         width: Fit
-        height: 15
-        padding: Inset{left: 4 right: 4 top: 2 bottom: 2}
+        height: 16
+        align: Align{y: 0.5}
+        show_bg: true
+        new_batch: true
         draw_bg.color: #x6b8d96
-        draw_bg.color_hover: #x6b8d96
-        draw_bg.color_down: #x6b8d96
-        draw_bg.border_size: 0.0
-        draw_bg.border_radius: 0.0
-        draw_text.color: #x133342
-        draw_text.text_style: theme.font_regular{font_size: 8 line_spacing: 1.0 top_drop: 0.0}
+        label := ButtonFlatter{
+            width: Fit
+            height: Fit
+            padding: Inset{left: 4 right: 4}
+            draw_text.color: #x133342
+            draw_text.text_style: theme.font_regular{font_size: 8 line_spacing: 1.0 top_drop: 0.0}
+        }
     }
 
     // ファイル行 — Live 右リストの1行。低く詰める、ベタ、角丸なし
@@ -146,7 +186,7 @@ script_mod! {
             tags := IconButton{width: 22 draw_icon +: {svg: crate_resource("self://resources/icons/tag.svg")}}
         }
         tabs := SolidView{width: Fill height: 22 flow: Right show_bg: true new_batch: true draw_bg.color: #x3d3d3d
-            media := TabIcon{draw_bg.color: #x6b8d96 draw_bg.color_hover: #x6b8d96 draw_bg.color_down: #x6b8d96 draw_icon +: {svg: crate_resource("self://resources/icons/media.svg") color: #x133342} on_click: || { ui.browser_body.catalog.catalog_head.set_text("All media"); ui.browser_body.catalog.catalog_status.set_text("") }}
+            media := TabIconOn{label.draw_icon.svg: crate_resource("self://resources/icons/media.svg") label.on_click: || { ui.browser_body.catalog.catalog_head.set_text("All media"); ui.browser_body.catalog.catalog_status.set_text("") }}
             effects := TabIcon{draw_icon +: {svg: crate_resource("self://resources/icons/effects.svg")} on_click: || { ui.browser_body.catalog.catalog_head.set_text("All effects"); ui.browser_body.catalog.catalog_status.set_text("") }}
             create := TabIcon{draw_icon +: {svg: crate_resource("self://resources/icons/create.svg")} on_click: || { ui.browser_body.catalog.catalog_head.set_text("All create"); ui.browser_body.catalog.catalog_status.set_text("") }}
             panels := TabIcon{draw_icon +: {svg: crate_resource("self://resources/icons/panels.svg")} on_click: || { ui.browser_body.catalog.catalog_head.set_text("All panels"); ui.browser_body.catalog.catalog_status.set_text("") }}
@@ -159,7 +199,7 @@ script_mod! {
                 broll := RailRow{text: "B-roll" draw_icon +: {svg: crate_resource("self://resources/icons/video.svg") color: #x4db7bd}}
                 brand := RailRow{text: "Brand" draw_icon +: {svg: crate_resource("self://resources/icons/tag.svg") color: #xa676c5}}
                 library := RailCap{text: "Library"}
-                all_media := RailRow{text: "All media" draw_bg.color: #x6b8d96 draw_bg.color_hover: #x6b8d96 draw_bg.color_down: #x6b8d96 draw_icon +: {svg: crate_resource("self://resources/icons/media.svg") color: #x133342} draw_text.color: #x133342 on_click: || { ui.browser_body.catalog.catalog_status.set_text("") }}
+                all_media := RailRowOn{label.text: "All media" label.draw_icon.svg: crate_resource("self://resources/icons/media.svg") label.on_click: || { ui.browser_body.catalog.catalog_status.set_text("") }}
                 video := RailRow{text: "Video" draw_icon +: {svg: crate_resource("self://resources/icons/video.svg")}}
                 images := RailRow{text: "Images" draw_icon +: {svg: crate_resource("self://resources/icons/image.svg")}}
                 audio := RailRow{text: "Audio" draw_icon +: {svg: crate_resource("self://resources/icons/audio.svg")}}
@@ -182,8 +222,8 @@ script_mod! {
                 }
                 filter_shelf := SolidView{width: Fill height: 20 flow: Right spacing: 2 align: Align{y: 0.5} padding: Inset{left: 4 right: 4} show_bg: true new_batch: true draw_bg.color: #x4f4f4f
                     filter_label := IconButton{width: 18 draw_icon +: {svg: crate_resource("self://resources/icons/filter.svg")}}
-                    video_chip := FilterChip{text: "Video"}
-                    broll_chip := FilterChip{text: "B-roll"}
+                    video_chip := FilterChip{label.text: "Video"}
+                    broll_chip := FilterChip{label.text: "B-roll"}
                     clear_chip := IconButton{width: 18 draw_icon +: {svg: crate_resource("self://resources/icons/clear.svg")}}
                 }
                 result_list := SolidView{width: Fill height: Fill flow: Down padding: Inset{top: 1 bottom: 1} show_bg: true new_batch: true draw_bg.color: #x4f4f4f

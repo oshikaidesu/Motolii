@@ -9,8 +9,7 @@
 
 - 構造・状態・余白: `next/reference/mocks/` の現行モック
 - 寸法: `next/ui/motolii-tokens-rs/tokens/dimensions.json`
-- 実装面: `panel.splash`
-- 再読込ホスト: `src/main.rs` の `HotPanel`
+- 実装面: `src/main.rs` の `script_mod!`(面の骨格)と `src/*_surface.rs`(各パネル)
 - 機械可読な結線: `probe.json`
 
 現在の面は Browser | Stage | Inspector | Timeline です。Browser の 26/30/26px、
@@ -27,10 +26,12 @@ Timeline 下の Play / frame / slider は意味論モック内の導出案であ
 cargo run --locked --manifest-path next/probes/r7-makepad-panel/Cargo.toml -- --hot
 ```
 
-Chrome の付け替え: 上で起動し、`src/chrome/gallery.rs` か `src/chrome/mod.rs` / `src/chrome/parts/*.rs` を保存すると窓が更新される。
-
-ウィンドウ起動後に `panel.splash` を編集すると、ホストが 120ms 間隔で変更を検知し、
-`HotPanel` がメイン VM 内で面だけを再評価します。Stage は
+`--hot` は makepad 本体の live reload です。`script_mod!` を持つ `src/*.rs` を保存すると、
+再ビルドなしで窓が更新されます(`browser_surface.rs` / `chrome/*.rs` / `main.rs` すべて)。
+自前の再読込ホストは持ちません。かつて `HotPanel` + `panel.splash` で二重に実装しており、
+**どのパネルの .rs を触っても窓が空白になる**欠陥の原因になっていたため撤去しました
+(裁定なし・2026-08-27 実測)。makepad は FileChange で `script_mod!` を再実行し
+`Event::LiveEdit` を投げるので、面を宣言で持つ限りこれだけで足ります。Stage は
 `motolii-fixture::build` と共有面（`create_presentable_texture` → import → `render_into`）へ接続します。Makepad側はDocumentを
 所有せず、`TimelineSurface action → App::handle_actions → BackendBridge →
 Document::apply_all / Session` へ書きます。playhead dragはSession時刻、
@@ -44,11 +45,10 @@ Browser / Inspector の操作と Export はまだ接続していません。
 
 同期timeline操作は `Document` / `Session` へ直接書く。iced `Task` は製品 front に無い。
 
-`Splash` の標準ローダーはサンドボックス化されたモジュールで `mod.res` を取り除くため、
-外部 SVG を `crate_resource("self://resources/icons/...")` から安定して参照できません。
-この probe では `HotPanel` が probe 自身の manifest path を持つ `ScriptMod` を作り、
-SVG リソース解決とホットリロードを同じ面で成立させています。SVG は
-`resources/icons/` に集約し、regular / bold / code のフォント役割を `panel.splash` に明示しています。
+SVG は `resources/icons/` に集約し、`crate_resource("self://resources/icons/...")` で参照します。
+面が `script_mod!` に宣言で載っているので、リソース解決は makepad の通常経路です
+(かつて必要だった `ScriptMod` の手組みは `HotPanel` ごと不要になりました)。
+regular / bold / code のフォント役割は `src/main.rs` の `script_mod!` に明示しています。
 
 Makepad は [oshikaidesu/makepad](https://github.com/oshikaidesu/makepad/tree/motolii-magnify) の
 git revisionへ固定しています。fork差分は意味を持たないgesture transformイベントとplatform producer
@@ -58,7 +58,7 @@ git revisionへ固定しています。fork差分は意味を持たないgesture
 ## Ableton比較ループ
 
 Abletonから借りるのはArrangementの外観ではなく、transport・時間面・色付きの対象列・
-密度・選択結果の即時性です。各反映でAbleton公式資料と実窓を見比べ、`panel.splash` と
+密度・選択結果の即時性です。各反映でAbleton公式資料と実窓を見比べ、`script_mod!` と
 SVGだけを更新します。
 
 - 参照: [Live](https://www.ableton.com/en/live/)、[Live Concepts](https://www.ableton.com/en/live-manual/12/live-concepts/)、[First Steps / Info View](https://www.ableton.com/en/live-manual/12/first-steps/)
@@ -76,7 +76,7 @@ SVGだけを更新します。
 - 斜めtrackpad入力のaxisがgesture中に変わらず、OS momentumが次のtouchで停止する
 - macOS pinchでpointer anchorを保つtime zoomが連続動作する
 - Windows/Linuxはnative producer着地までAlt/Option-scroll fallbackを使う
-- `panel.splash` の文字または寸法を編集し、再起動なしで表示が更新される
+- `src/*_surface.rs` の文字または寸法を編集し、再ビルド・再起動なしで表示が更新される
 - Browser / Stage / Inspector / Timeline の操作記号が SVG アイコンで表示され、補助説明ラベルは空にできる
 - 実窓の基準画像は [evidence/makepad-panel.png](evidence/makepad-panel.png)
 - 密度パスの画像は [evidence/makepad-panel-iteration-02.png](evidence/makepad-panel-iteration-02.png)
