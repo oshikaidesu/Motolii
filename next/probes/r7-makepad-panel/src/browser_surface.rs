@@ -182,11 +182,6 @@ script_mod! {
         new_batch: true
         draw_bg.color: mod.tokens.face.panel
 
-        browser_head := SolidView{width: Fill height: 22 flow: Right align: Align{y: 0.5} padding: Inset{left: 8 right: 8} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.bar
-            title := Label{text: "Browser" width: Fill draw_text.color: #xd0d0d0 draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.lg line_spacing: 1.0 top_drop: 0.0}}
-            local := Label{text: "LOCAL" width: Fit draw_text.color: mod.tokens.ink.faint draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.xs line_spacing: 1.0 top_drop: 0.0}}
-        }
-        head_rule := SeamRule{}
         browser_toolbar := SolidView{width: Fill height: mod.tokens.size.toolbar flow: Right spacing: mod.tokens.space.s2 align: Align{y: 0.5} padding: Inset{left: 4 right: 4} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.panel
             back := IconButton{width: 18 draw_icon +: {svg: crate_resource("self://resources/icons/back.svg")}}
             forward := IconButton{width: 18 draw_icon +: {svg: crate_resource("self://resources/icons/forward.svg")}}
@@ -196,6 +191,7 @@ script_mod! {
             }
             filters := IconButton{width: 22 draw_icon +: {svg: crate_resource("self://resources/icons/filter.svg")}}
             tags := IconButton{width: 22 draw_icon +: {svg: crate_resource("self://resources/icons/tag.svg")}}
+            local := Label{text: "LOCAL" width: Fit padding: Inset{left: mod.tokens.space.s2} draw_text.color: mod.tokens.ink.faint draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.xs line_spacing: 1.0 top_drop: 0.0}}
         }
         tabs := SolidView{width: Fill height: 22 flow: Right show_bg: true new_batch: true draw_bg.color: mod.tokens.face.bar
             media := TabIcon{draw_icon +: {svg: crate_resource("self://resources/icons/media.svg")}}

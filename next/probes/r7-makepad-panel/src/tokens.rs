@@ -75,6 +75,8 @@ script_mod! {
         status: 20.0 * s
         menu: 24.0 * s
         transport: 24.0 * s
+        // dock のタブ行。makepad 側に 25pt の下限がある(`max(theme.tab_flat_height, 25.)`)
+        tab_bar: 25.0 * s
     }
 
     // 境の線。太さは1つしか無い。色は「何の境か」で分ける —

@@ -369,6 +369,9 @@ script_mod! {
             dock := DockFlat{
                 width: Fill
                 height: Fill
+                // 既定の 33pt は、この密度の中では帯だけが太い。タブは掴む所なので
+                // 消さずに詰める(makepad 側の下限は 25pt)
+                tab_bar: TabBarFlat{height: mod.tokens.size.tab_bar}
 
                 root := DockSplitter{
                     axis: SplitterAxis.Vertical
