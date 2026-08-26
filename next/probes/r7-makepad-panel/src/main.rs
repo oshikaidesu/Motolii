@@ -398,24 +398,28 @@ script_mod! {
                     tabs: [@browser]
                     selected: 0
                     closable: false
+                    float_tab_bar: true
                 }
 
                 stage_tabs := DockTabs{
                     tabs: [@stage]
                     selected: 0
                     closable: false
+                    float_tab_bar: true
                 }
 
                 inspector_tabs := DockTabs{
                     tabs: [@inspector @export @settings @chrome_tab]
                     selected: 3
                     closable: false
+                    float_tab_bar: true
                 }
 
                 timeline_tabs := DockTabs{
                     tabs: [@timeline]
                     selected: 0
                     closable: false
+                    float_tab_bar: true
                 }
 
                 browser := DockTab{
@@ -783,6 +787,9 @@ pub struct App {
     /// UI 全体の拡縮(%)。100 が等倍。
     #[rust(100)]
     ui_scale_percent: i32,
+    /// いま明かしている浮くタブ行。開いた後の保持判定に使う。
+    #[rust]
+    revealed_bar: Option<LiveId>,
     /// 状態行の文言。live edit は widget を宣言状態へ戻すので、ここが正本。
     #[rust]
     status_text: String,
@@ -995,6 +1002,39 @@ impl App {
     /// 窓の `dpi_override` でも同じ絵は作れるが、実行時に差し替えると `--remote` の
     /// grab が Metal のアサーションで落ちる(drawable と grab テクスチャの寸法不一致、
     /// 実測 2026-08-27)。検証手段を壊さない方を採る。
+    /// 浮くタブ行を明かす判断。**機構は Dock、判断はここ**(fork 差分に製品の判断を
+    /// 入れない — gesture fork と同じ切り方)。
+    ///
+    /// 開く引き金はセルの左上の隅だけにする。帯の全幅を引き金にすると、上端の操作へ
+    /// 手を伸ばしただけで開いてしまう。開いた後は帯の全幅で保持する — でないと
+    /// タブへ向かって右へ動いた瞬間に閉じる。
+    fn reveal_tab_bars_under(&mut self, cx: &mut Cx, abs: Vec2d) {
+        let dock = self.dock(cx);
+        let bar = 25.0 * tokens::ui_scale();
+        let corner = 140.0 * tokens::ui_scale();
+        for (id, cell) in dock.floating_tab_bar_cells() {
+            let open_zone = Rect {
+                pos: cell.pos,
+                size: dvec2(corner.min(cell.size.x), bar),
+            };
+            let hold_zone = Rect {
+                pos: cell.pos,
+                size: dvec2(cell.size.x, bar),
+            };
+            let shown = if self.revealed_bar == Some(id) {
+                hold_zone.contains(abs)
+            } else {
+                open_zone.contains(abs)
+            };
+            dock.set_tab_bar_revealed(cx, id, shown);
+            if shown {
+                self.revealed_bar = Some(id);
+            } else if self.revealed_bar == Some(id) {
+                self.revealed_bar = None;
+            }
+        }
+    }
+
     fn set_ui_scale(&mut self, cx: &mut Cx, percent: i32) {
         let percent = tokens::set_ui_scale_percent(percent);
         if percent == self.ui_scale_percent {
@@ -1174,6 +1214,10 @@ impl AppMain for App {
     fn handle_event(&mut self, cx: &mut Cx, event: &Event) {
         // hot reload は `script_mod!` を再実行して widget を宣言状態へ戻す。
         // 選択は App が持っているので、投影し直すのはこちらの責任。
+        if let Event::MouseMove(move_event) = event {
+            let abs = move_event.abs;
+            self.reveal_tab_bars_under(cx, abs);
+        }
         if matches!(event, Event::LiveEdit) {
             self.apply_browser_selection(cx);
             self.project_status(cx);

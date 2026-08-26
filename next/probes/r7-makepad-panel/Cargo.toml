@@ -24,3 +24,7 @@ motolii-timeline-pane = { path = "../../ui/motolii-timeline-pane" }
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6.3"
 objc2-metal = { version = "0.3.2", default-features = false, features = ["std", "MTLTexture", "MTLDevice"] }
+
+# 開発中の fork をローカル checkout から引く。push 後は rev を上げてこの節を外す。
+[patch."https://github.com/oshikaidesu/makepad.git"]
+makepad-widgets = { path = "/Users/member_ottoto/rust_ae/makepad-motolii/widgets" }

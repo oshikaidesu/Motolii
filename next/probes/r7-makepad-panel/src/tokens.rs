@@ -77,6 +77,8 @@ script_mod! {
         transport: 24.0 * s
         // dock のタブ行。makepad 側に 25pt の下限がある(`max(theme.tab_flat_height, 25.)`)
         tab_bar: 25.0 * s
+        // 浮くタブ行を「開く」隅の大きさ。開いた後は帯の全幅で保持する(hysteresis)
+        tab_reveal: 140.0 * s
     }
 
     // 境の線。太さは1つしか無い。色は「何の境か」で分ける —
