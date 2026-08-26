@@ -15,7 +15,7 @@ dependencies = [
 [[package]]
 name = "ab_glyph_rasterizer"
 version = "0.1.8"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 
 [[package]]
 name = "ab_glyph_rasterizer"
@@ -75,28 +75,6 @@ name = "allocator-api2"
 version = "0.2.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
-
-[[package]]
-name = "alsa"
-version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "812947049edcd670a82cd5c73c3661d2e58468577ba8489de58e1a73c04cbd5d"
-dependencies = [
- "alsa-sys",
- "bitflags 2.13.1",
- "cfg-if 1.0.4 (registry+https://github.com/rust-lang/crates.io-index)",
- "libc",
-]
-
-[[package]]
-name = "alsa-sys"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ad7569085a265dd3f607ebecce7458eaab2132a84393534c95b18dcbc3f31e04"
-dependencies = [
- "libc",
- "pkg-config 0.3.34",
-]
 
 [[package]]
 name = "android-activity"
@@ -200,7 +178,7 @@ checksum = "76a2e8124351fda1ef8aaaa3bbd7ebbcb486bbcd4225aca0aa0d84bb2db8fecb"
 [[package]]
 name = "arrayvec"
 version = "0.7.6"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 
 [[package]]
 name = "arrayvec"
@@ -438,31 +416,9 @@ dependencies = [
 [[package]]
 name = "ash"
 version = "0.38.0+1.3.281"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 dependencies = [
- "libloading 0.8.9 (git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad)",
-]
-
-[[package]]
-name = "ashpd"
-version = "0.11.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d2f3f79755c74fd155000314eb349864caa787c6592eace6c6882dad873d9c39"
-dependencies = [
- "async-fs",
- "async-net",
- "enumflags2",
- "futures-channel",
- "futures-util",
- "rand 0.9.5",
- "raw-window-handle",
- "serde",
- "serde_repr",
- "url",
- "wayland-backend 0.3.17",
- "wayland-client 0.31.15",
- "wayland-protocols 0.32.13",
- "zbus",
+ "libloading 0.8.9 (git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c)",
 ]
 
 [[package]]
@@ -510,17 +466,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "async-fs"
-version = "2.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8034a681df4aed8b8edbd7fbe472401ecf009251c8b40556b304567052e294c5"
-dependencies = [
- "async-lock",
- "blocking",
- "futures-lite",
-]
-
-[[package]]
 name = "async-io"
 version = "2.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -547,17 +492,6 @@ dependencies = [
  "event-listener",
  "event-listener-strategy",
  "pin-project-lite",
-]
-
-[[package]]
-name = "async-net"
-version = "2.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b948000fad4873c1c9339d60f2623323a0cfd3816e5181033c6a5cb68b2accf7"
-dependencies = [
- "async-io",
- "blocking",
- "futures-lite",
 ]
 
 [[package]]
@@ -736,7 +670,7 @@ checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 [[package]]
 name = "bit-set"
 version = "0.8.0"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 dependencies = [
  "bit-vec 0.8.0",
 ]
@@ -753,7 +687,7 @@ dependencies = [
 [[package]]
 name = "bit-vec"
 version = "0.8.0"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 
 [[package]]
 name = "bit-vec"
@@ -779,7 +713,7 @@ checksum = "bef38d45163c2f1dde094a7dfd33ccf595c92905c8f8f4fdc18d06fb1037718a"
 [[package]]
 name = "bitflags"
 version = "2.10.0"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 
 [[package]]
 name = "bitflags"
@@ -866,7 +800,7 @@ checksum = "7575182f7272186991736b70173b0ea045398f984bf5ebbb3804736ce1330c9d"
 [[package]]
 name = "bytemuck"
 version = "1.25.0"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 
 [[package]]
 name = "bytemuck"
@@ -897,7 +831,7 @@ checksum = "1fd0f2584146f6f2ef48085050886acf353beff7305ebd1ae69500e27c67f64b"
 [[package]]
 name = "byteorder"
 version = "1.5.0"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 
 [[package]]
 name = "byteorder-lite"
@@ -1011,12 +945,12 @@ checksum = "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801"
 [[package]]
 name = "cfg-if"
 version = "1.0.4"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 
 [[package]]
 name = "cfg_aliases"
 version = "0.2.1"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 
 [[package]]
 name = "cfg_aliases"
@@ -1185,20 +1119,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "coreaudio-rs"
-version = "0.14.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7d5d7dca3ebcf65a035582c9ad4385371a9d9ee6537474d2a278f4e1e475bb58"
-dependencies = [
- "bitflags 2.13.1",
- "libc",
- "objc2-audio-toolbox",
- "objc2-core-audio",
- "objc2-core-audio-types",
- "objc2-core-foundation",
-]
-
-[[package]]
 name = "cosmic-text"
 version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1220,36 +1140,6 @@ dependencies = [
  "unicode-linebreak 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "unicode-script 0.5.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "unicode-segmentation 1.13.3",
-]
-
-[[package]]
-name = "cpal"
-version = "0.18.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6f02e8d0327b42d3e2e4ab2119af397344eb9fc54a34bf0ddeaa1277af8681f1"
-dependencies = [
- "alsa",
- "block2 0.6.2",
- "coreaudio-rs",
- "dasp_sample",
- "jni",
- "js-sys",
- "libc",
- "mach2",
- "ndk",
- "ndk-context",
- "num-derive",
- "num-traits 0.2.19",
- "objc2 0.6.4",
- "objc2-audio-toolbox",
- "objc2-avf-audio",
- "objc2-core-audio",
- "objc2-core-audio-types",
- "objc2-core-foundation",
- "objc2-foundation 0.3.2",
- "web-sys",
- "windows 0.62.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "windows-core 0.62.2 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -1367,7 +1257,7 @@ checksum = "460fbee9c2c2f33933d720630a6a0bac33ba7053db5344fac858d4b8952d77d5"
 [[package]]
 name = "crunchy"
 version = "0.2.4"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 
 [[package]]
 name = "cryoglyph"
@@ -1389,17 +1279,6 @@ checksum = "78c8292055d1c1df0cce5d180393dc8cce0abec0a7102adb6c7b1eef6016d60a"
 dependencies = [
  "generic-array",
  "typenum",
-]
-
-[[package]]
-name = "cssparser"
-version = "0.37.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8c9cdaae01d5ed7882b04d795e7f752f46ff52d2fa3b50a20d28c464510bba98"
-dependencies = [
- "dtoa-short",
- "itoa",
- "smallvec 1.15.2",
 ]
 
 [[package]]
@@ -1471,12 +1350,6 @@ dependencies = [
  "quote",
  "syn 2.0.119",
 ]
-
-[[package]]
-name = "dasp_sample"
-version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0c87e182de0887fd5361989c677c4e8f5000cd9491d6d563161a8f3a5519fc7f"
 
 [[package]]
 name = "data-url"
@@ -1581,27 +1454,12 @@ checksum = "75b325c5dbd37f80359721ad39aca5a29fb04c89279657cffdda8736d0c0b9d2"
 [[package]]
 name = "downcast-rs"
 version = "1.2.1"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 
 [[package]]
 name = "dpi"
 version = "0.1.1"
 source = "git+https://github.com/iced-rs/winit.git?rev=05b8ff17a06562f0a10bb46e6eaacbe2a95cb5ed#05b8ff17a06562f0a10bb46e6eaacbe2a95cb5ed"
-
-[[package]]
-name = "dtoa"
-version = "1.0.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4c3cf4824e2d5f025c7b531afcb2325364084a16806f6d47fbc1f5fbd9960590"
-
-[[package]]
-name = "dtoa-short"
-version = "0.3.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cd1511a7b6a56299bd043a9c167a6d2bfb37bf84a6dfceaba651168adfb43c87"
-dependencies = [
- "dtoa",
-]
 
 [[package]]
 name = "dtor"
@@ -1714,7 +1572,7 @@ checksum = "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f"
 [[package]]
 name = "equivalent"
 version = "1.0.2"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 
 [[package]]
 name = "errno"
@@ -1787,12 +1645,6 @@ dependencies = [
  "smallvec 1.15.2",
  "zune-inflate",
 ]
-
-[[package]]
-name = "extended"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "af9673d8203fcb076b19dfd17e38b3d4ae9f44959416ea532ce72415a6020365"
 
 [[package]]
 name = "fastrand"
@@ -1902,7 +1754,7 @@ checksum = "77ce24cb58228fbb8aa041425bb1050850ac19177686ea6e0f41a70416f56fdb"
 [[package]]
 name = "foldhash"
 version = "0.2.0"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 
 [[package]]
 name = "font-types"
@@ -2100,9 +1952,9 @@ dependencies = [
 [[package]]
 name = "fxhash"
 version = "0.2.1"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 dependencies = [
- "byteorder 1.5.0 (git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad)",
+ "byteorder 1.5.0 (git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c)",
 ]
 
 [[package]]
@@ -2350,9 +2202,9 @@ dependencies = [
 [[package]]
 name = "hashbrown"
 version = "0.16.1"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 dependencies = [
- "foldhash 0.2.0 (git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad)",
+ "foldhash 0.2.0 (git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c)",
 ]
 
 [[package]]
@@ -2394,7 +2246,7 @@ checksum = "dfa686283ad6dd069f105e5ab091b04c62850d3e4cf5d67debad1933f55023df"
 [[package]]
 name = "hexf-parse"
 version = "0.2.1"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 
 [[package]]
 name = "hilog-sys"
@@ -2872,10 +2724,10 @@ checksum = "d9f1a0777d972970f204fdf8ef319f1f4f8459131636d7e3c96c5d59570d0fa6"
 [[package]]
 name = "indexmap"
 version = "2.13.0"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 dependencies = [
- "equivalent 1.0.2 (git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad)",
- "hashbrown 0.16.1 (git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad)",
+ "equivalent 1.0.2 (git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c)",
+ "hashbrown 0.16.1 (git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c)",
 ]
 
 [[package]]
@@ -3244,10 +3096,10 @@ dependencies = [
 [[package]]
 name = "libloading"
 version = "0.8.9"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 dependencies = [
- "cfg-if 1.0.4 (git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad)",
- "windows-link 0.2.1 (git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad)",
+ "cfg-if 1.0.4 (git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c)",
+ "windows-link 0.2.1 (git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c)",
 ]
 
 [[package]]
@@ -3320,7 +3172,7 @@ dependencies = [
 [[package]]
 name = "log"
 version = "0.4.29"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 
 [[package]]
 name = "log"
@@ -3424,12 +3276,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "mach2"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dae608c151f68243f2b000364e1f7b186d9c29845f7d2d85bd31b9ad77ad552b"
-
-[[package]]
 name = "makepad-android-state"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3441,7 +3287,7 @@ dependencies = [
 [[package]]
 name = "makepad-apple-sys"
 version = "1.0.0"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 dependencies = [
  "makepad-objc-sys",
 ]
@@ -3449,12 +3295,12 @@ dependencies = [
 [[package]]
 name = "makepad-byteorder-lite"
 version = "0.1.0"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 
 [[package]]
 name = "makepad-derive-wasm-bridge"
 version = "1.0.0"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 dependencies = [
  "makepad-micro-proc-macro",
 ]
@@ -3462,7 +3308,7 @@ dependencies = [
 [[package]]
 name = "makepad-derive-widget"
 version = "2.0.0"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 dependencies = [
  "makepad-live-id",
  "makepad-micro-proc-macro",
@@ -3471,7 +3317,7 @@ dependencies = [
 [[package]]
 name = "makepad-draw"
 version = "2.0.0"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 dependencies = [
  "ab_glyph_rasterizer 0.1.8",
  "fxhash",
@@ -3487,15 +3333,15 @@ dependencies = [
  "makepad-zune-qoi",
  "rustybuzz",
  "sdfer",
- "unicode-bidi 0.3.18 (git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad)",
- "unicode-linebreak 0.1.5 (git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad)",
+ "unicode-bidi 0.3.18 (git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c)",
+ "unicode-linebreak 0.1.5 (git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c)",
  "unicode-segmentation 1.12.0",
 ]
 
 [[package]]
 name = "makepad-error-log"
 version = "1.0.0"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 dependencies = [
  "makepad-micro-serde",
 ]
@@ -3503,38 +3349,38 @@ dependencies = [
 [[package]]
 name = "makepad-fast-inflate"
 version = "0.1.0"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 
 [[package]]
 name = "makepad-filesystem-watcher"
 version = "0.1.0"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 
 [[package]]
 name = "makepad-futures"
 version = "1.0.0"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 
 [[package]]
 name = "makepad-futures-legacy"
 version = "1.0.0"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 
 [[package]]
 name = "makepad-gif"
 version = "0.1.0"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 dependencies = [
- "weezl 0.1.12 (git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad)",
+ "weezl 0.1.12 (git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c)",
 ]
 
 [[package]]
 name = "makepad-half"
 version = "2.7.1"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 dependencies = [
- "cfg-if 1.0.4 (git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad)",
- "crunchy 0.2.4 (git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad)",
+ "cfg-if 1.0.4 (git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c)",
+ "crunchy 0.2.4 (git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c)",
  "num-traits 0.2.20",
  "zerocopy 0.8.39",
 ]
@@ -3542,7 +3388,7 @@ dependencies = [
 [[package]]
 name = "makepad-html"
 version = "1.0.0"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 dependencies = [
  "makepad-live-id",
 ]
@@ -3556,7 +3402,7 @@ checksum = "9775cbec5fa0647500c3e5de7c850280a88335d1d2d770e5aa2332b801ba7064"
 [[package]]
 name = "makepad-latex-math"
 version = "0.1.0"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 dependencies = [
  "ttf-parser 0.24.1",
 ]
@@ -3564,7 +3410,7 @@ dependencies = [
 [[package]]
 name = "makepad-live-id"
 version = "1.0.0"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 dependencies = [
  "makepad-live-id-macros",
 ]
@@ -3572,7 +3418,7 @@ dependencies = [
 [[package]]
 name = "makepad-live-id-macros"
 version = "1.0.0"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 dependencies = [
  "makepad-micro-proc-macro",
 ]
@@ -3580,7 +3426,7 @@ dependencies = [
 [[package]]
 name = "makepad-live-reload-core"
 version = "0.1.0"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 dependencies = [
  "makepad-filesystem-watcher",
 ]
@@ -3588,7 +3434,7 @@ dependencies = [
 [[package]]
 name = "makepad-math"
 version = "1.0.0"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 dependencies = [
  "makepad-micro-serde",
 ]
@@ -3596,12 +3442,12 @@ dependencies = [
 [[package]]
 name = "makepad-micro-proc-macro"
 version = "1.0.0"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 
 [[package]]
 name = "makepad-micro-serde"
 version = "1.0.0"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 dependencies = [
  "makepad-live-id",
  "makepad-micro-serde-derive",
@@ -3610,7 +3456,7 @@ dependencies = [
 [[package]]
 name = "makepad-micro-serde-derive"
 version = "1.0.0"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 dependencies = [
  "makepad-micro-proc-macro",
 ]
@@ -3618,7 +3464,7 @@ dependencies = [
 [[package]]
 name = "makepad-network"
 version = "1.0.0"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 dependencies = [
  "makepad-apple-sys",
  "makepad-error-log",
@@ -3626,20 +3472,20 @@ dependencies = [
  "makepad-live-id",
  "makepad-micro-serde",
  "makepad-script",
- "windows 0.62.2 (git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad)",
+ "windows 0.62.2 (git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c)",
 ]
 
 [[package]]
 name = "makepad-objc-sys"
 version = "1.0.0"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 
 [[package]]
 name = "makepad-platform"
 version = "2.0.0"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 dependencies = [
- "ash 0.38.0+1.3.281 (git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad)",
+ "ash 0.38.0+1.3.281 (git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c)",
  "bitflags 2.10.0",
  "ctrlc",
  "hilog-sys",
@@ -3667,20 +3513,20 @@ dependencies = [
  "wayland-client 0.31.12",
  "wayland-egl",
  "wayland-protocols 0.32.10",
- "windows 0.62.2 (git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad)",
- "windows-core 0.62.2 (git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad)",
+ "windows 0.62.2 (git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c)",
+ "windows-core 0.62.2 (git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c)",
  "windows-targets 0.52.6",
 ]
 
 [[package]]
 name = "makepad-regex"
 version = "0.1.0"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 
 [[package]]
 name = "makepad-script"
 version = "1.0.0"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 dependencies = [
  "makepad-error-log",
  "makepad-html",
@@ -3694,7 +3540,7 @@ dependencies = [
 [[package]]
 name = "makepad-script-derive"
 version = "1.0.0"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 dependencies = [
  "makepad-micro-proc-macro",
 ]
@@ -3702,7 +3548,7 @@ dependencies = [
 [[package]]
 name = "makepad-script-std"
 version = "1.0.0"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 dependencies = [
  "makepad-network",
  "makepad-script",
@@ -3711,12 +3557,12 @@ dependencies = [
 [[package]]
 name = "makepad-shared-bytes"
 version = "1.0.0"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 
 [[package]]
 name = "makepad-studio-protocol"
 version = "0.1.0"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 dependencies = [
  "bitflags 2.10.0",
  "makepad-error-log",
@@ -3728,7 +3574,7 @@ dependencies = [
 [[package]]
 name = "makepad-svg"
 version = "1.0.0"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 dependencies = [
  "makepad-html",
  "makepad-live-id",
@@ -3737,7 +3583,7 @@ dependencies = [
 [[package]]
 name = "makepad-tsdf"
 version = "0.1.0"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 dependencies = [
  "makepad-math",
  "makepad-micro-serde",
@@ -3746,17 +3592,17 @@ dependencies = [
 [[package]]
 name = "makepad-video"
 version = "1.0.0"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 dependencies = [
  "makepad-apple-sys",
  "makepad-objc-sys",
- "windows 0.62.2 (git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad)",
+ "windows 0.62.2 (git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c)",
 ]
 
 [[package]]
 name = "makepad-wasm-bridge"
 version = "1.0.0"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 dependencies = [
  "makepad-derive-wasm-bridge",
  "makepad-live-id",
@@ -3765,7 +3611,7 @@ dependencies = [
 [[package]]
 name = "makepad-webp"
 version = "0.2.4"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 dependencies = [
  "makepad-byteorder-lite",
 ]
@@ -3773,7 +3619,7 @@ dependencies = [
 [[package]]
 name = "makepad-widgets"
 version = "2.0.0"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 dependencies = [
  "makepad-derive-widget",
  "makepad-draw",
@@ -3787,7 +3633,7 @@ dependencies = [
 [[package]]
 name = "makepad-zune-bmp"
 version = "0.5.2"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 dependencies = [
  "log 0.4.34",
  "makepad-zune-core",
@@ -3796,7 +3642,7 @@ dependencies = [
 [[package]]
 name = "makepad-zune-core"
 version = "0.5.1"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 dependencies = [
  "log 0.4.34",
 ]
@@ -3804,7 +3650,7 @@ dependencies = [
 [[package]]
 name = "makepad-zune-inflate"
 version = "0.2.54"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 dependencies = [
  "simd-adler32 0.3.9",
 ]
@@ -3812,7 +3658,7 @@ dependencies = [
 [[package]]
 name = "makepad-zune-jpeg"
 version = "0.5.15"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 dependencies = [
  "makepad-zune-core",
 ]
@@ -3820,7 +3666,7 @@ dependencies = [
 [[package]]
 name = "makepad-zune-png"
 version = "0.5.2"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 dependencies = [
  "makepad-fast-inflate",
  "makepad-zune-core",
@@ -3830,7 +3676,7 @@ dependencies = [
 [[package]]
 name = "makepad-zune-qoi"
 version = "0.5.2"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 dependencies = [
  "makepad-zune-core",
 ]
@@ -3867,7 +3713,7 @@ dependencies = [
 [[package]]
 name = "memchr"
 version = "2.7.6"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 
 [[package]]
 name = "memchr"
@@ -3934,31 +3780,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "motolii-audio"
-version = "0.1.0"
-dependencies = [
- "cpal",
- "motolii-core",
- "motolii-eval",
- "motolii-store",
- "rtrb",
- "rubato",
- "symphonia",
- "thiserror 2.0.20",
-]
-
-[[package]]
-name = "motolii-browser-pane"
-version = "0.1.0"
-dependencies = [
- "iced",
- "motolii-icons",
- "motolii-store",
- "motolii-taffy",
- "motolii-tokens-rs",
-]
-
-[[package]]
 name = "motolii-compositor"
 version = "0.1.0"
 dependencies = [
@@ -4004,31 +3825,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "motolii-export"
-version = "0.1.0"
-dependencies = [
- "image",
- "motolii-core",
- "motolii-engine",
- "motolii-media",
- "motolii-store",
- "motolii-vector",
- "serde_json",
- "thiserror 2.0.20",
-]
-
-[[package]]
-name = "motolii-export-pane"
-version = "0.1.0"
-dependencies = [
- "iced",
- "motolii-icons",
- "motolii-settings-pane",
- "motolii-store",
- "motolii-tokens-rs",
-]
-
-[[package]]
 name = "motolii-fixture"
 version = "0.1.0"
 dependencies = [
@@ -4037,31 +3833,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "motolii-font-catalog"
-version = "0.1.0"
-dependencies = [
- "fontdb",
-]
-
-[[package]]
 name = "motolii-icons"
 version = "0.1.0"
 dependencies = [
  "iced",
-]
-
-[[package]]
-name = "motolii-inspector-pane"
-version = "0.1.0"
-dependencies = [
- "iced",
- "motolii-core",
- "motolii-font-catalog",
- "motolii-settings-pane",
- "motolii-shell-state",
- "motolii-store",
- "motolii-tokens-rs",
- "motolii-vector",
 ]
 
 [[package]]
@@ -4076,82 +3851,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "motolii-menubar"
-version = "0.1.0"
-dependencies = [
- "iced",
- "iced_core",
- "motolii-tokens-rs",
-]
-
-[[package]]
-name = "motolii-presentation-config"
-version = "0.1.0"
-dependencies = [
- "iced",
- "notify",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "motolii-settings-pane"
-version = "0.1.0"
-dependencies = [
- "iced",
- "motolii-store",
- "motolii-taffy",
- "motolii-tokens-rs",
-]
-
-[[package]]
-name = "motolii-shell"
-version = "0.1.0"
-dependencies = [
- "iced",
- "image",
- "motolii-audio",
- "motolii-browser-pane",
- "motolii-core",
- "motolii-engine",
- "motolii-export",
- "motolii-export-pane",
- "motolii-fixture",
- "motolii-icons",
- "motolii-inspector-pane",
- "motolii-media",
- "motolii-menubar",
- "motolii-presentation-config",
- "motolii-settings-pane",
- "motolii-shell-state",
- "motolii-stage-pane",
- "motolii-store",
- "motolii-timeline-pane",
- "motolii-tokens-rs",
- "motolii-vector",
- "rfd",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "motolii-shell-state"
 version = "0.1.0"
 dependencies = [
  "motolii-store",
  "serde",
-]
-
-[[package]]
-name = "motolii-stage-pane"
-version = "0.1.0"
-dependencies = [
- "glam 0.30.10",
- "iced",
- "motolii-core",
- "motolii-engine",
- "motolii-store",
- "motolii-tokens-rs",
 ]
 
 [[package]]
@@ -4176,14 +3880,6 @@ dependencies = [
  "serde_json",
  "sha2",
  "thiserror 2.0.20",
-]
-
-[[package]]
-name = "motolii-taffy"
-version = "0.1.0"
-dependencies = [
- "iced_core",
- "taffy",
 ]
 
 [[package]]
@@ -4277,21 +3973,21 @@ checksum = "13d2233c9842d08cfe13f9eac96e207ca6a2ea10b80259ebe8ad0268be27d2af"
 [[package]]
 name = "naga"
 version = "27.0.3"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 dependencies = [
  "arrayvec 0.7.6",
  "bit-set 0.8.0",
  "bitflags 2.13.1",
- "cfg-if 1.0.4 (git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad)",
+ "cfg-if 1.0.4 (git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c)",
  "cfg_aliases 0.2.1",
- "hashbrown 0.16.1 (git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad)",
- "hexf-parse 0.2.1 (git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad)",
+ "hashbrown 0.16.1 (git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c)",
+ "hexf-parse 0.2.1 (git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c)",
  "indexmap 2.13.0",
  "makepad-error-log",
  "makepad-half",
  "num-traits 0.2.20",
  "once_cell 1.21.3",
- "rustc-hash 1.1.0 (git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad)",
+ "rustc-hash 1.1.0 (git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c)",
  "spirv 0.3.0+sdk-1.3.268.0",
  "thiserror 2.0.18",
  "unicode-ident",
@@ -4588,7 +4284,7 @@ dependencies = [
 [[package]]
 name = "num-traits"
 version = "0.2.20"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 
 [[package]]
 name = "num_enum"
@@ -4675,32 +4371,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "objc2-audio-toolbox"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6948501a91121d6399b79abaa33a8aa4ea7857fe019f341b8c23ad6e81b79b08"
-dependencies = [
- "bitflags 2.13.1",
- "libc",
- "objc2 0.6.4",
- "objc2-core-audio",
- "objc2-core-audio-types",
- "objc2-core-foundation",
- "objc2-foundation 0.3.2",
-]
-
-[[package]]
-name = "objc2-avf-audio"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "13a380031deed8e99db00065c45937da434ca987c034e13b87e4441f9e4090be"
-dependencies = [
- "bitflags 2.13.1",
- "objc2 0.6.4",
- "objc2-foundation 0.3.2",
-]
-
-[[package]]
 name = "objc2-cloud-kit"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4736,29 +4406,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "objc2-core-audio"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e1eebcea8b0dbff5f7c8504f3107c68fc061a3eb44932051c8cf8a68d969c3b2"
-dependencies = [
- "dispatch2",
- "objc2 0.6.4",
- "objc2-core-audio-types",
- "objc2-core-foundation",
- "objc2-foundation 0.3.2",
-]
-
-[[package]]
-name = "objc2-core-audio-types"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5a89f2ec274a0cf4a32642b2991e8b351a404d290da87bb6a9a9d8632490bd1c"
-dependencies = [
- "bitflags 2.13.1",
- "objc2 0.6.4",
-]
-
-[[package]]
 name = "objc2-core-data"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4788,9 +4435,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2a180dd8642fa45cdb7dd721cd4c11b1cadd4929ce112ebd8b9f5803cc79d536"
 dependencies = [
  "bitflags 2.13.1",
- "block2 0.6.2",
  "dispatch2",
- "libc",
  "objc2 0.6.4",
 ]
 
@@ -5035,7 +4680,7 @@ checksum = "8d380ab6c951261a0e44306245bc960b3b3367f099a7da7156bd1a3cacaf783c"
 [[package]]
 name = "once_cell"
 version = "1.21.3"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 
 [[package]]
 name = "once_cell"
@@ -5292,7 +4937,7 @@ dependencies = [
 [[package]]
 name = "pkg-config"
 version = "0.3.32"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 
 [[package]]
 name = "pkg-config"
@@ -5413,15 +5058,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e8cf8e6a8aa66ce33f63993ffc4ea4271eb5b0530a9002db8455ea6050c77bfa"
 
 [[package]]
-name = "primal-check"
-version = "0.3.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc0d895b311e3af9902528fbb8f928688abbd95872819320517cc24ca6b2bd08"
-dependencies = [
- "num-integer",
-]
-
-[[package]]
 name = "proc-macro-crate"
 version = "3.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5507,11 +5143,11 @@ dependencies = [
 [[package]]
 name = "pulldown-cmark"
 version = "0.12.2"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 dependencies = [
  "bitflags 2.10.0",
  "memchr 2.7.6",
- "unicase 2.9.0 (git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad)",
+ "unicase 2.9.0 (git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c)",
 ]
 
 [[package]]
@@ -5625,8 +5261,14 @@ name = "r7-makepad-panel"
 version = "0.1.0"
 dependencies = [
  "makepad-widgets",
- "motolii-shell",
+ "motolii-engine",
+ "motolii-fixture",
+ "motolii-shell-state",
  "motolii-store",
+ "motolii-timeline-pane",
+ "objc2 0.6.4",
+ "objc2-metal 0.3.2",
+ "wgpu",
 ]
 
 [[package]]
@@ -6466,15 +6108,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "realfft"
-version = "3.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f821338fddb99d089116342c46e9f1fbf3828dba077674613e734e01d6ea8677"
-dependencies = [
- "rustfft",
-]
-
-[[package]]
 name = "reborrow"
 version = "0.5.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6573,30 +6206,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rfd"
-version = "0.15.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ef2bee61e6cffa4635c72d7d81a84294e28f0930db0ddcb0f66d10244674ebed"
-dependencies = [
- "ashpd",
- "block2 0.6.2",
- "dispatch2",
- "js-sys",
- "log 0.4.34",
- "objc2 0.6.4",
- "objc2-app-kit 0.3.2",
- "objc2-core-foundation",
- "objc2-foundation 0.3.2",
- "pollster",
- "raw-window-handle",
- "urlencoding",
- "wasm-bindgen",
- "wasm-bindgen-futures",
- "web-sys",
- "windows-sys 0.59.0",
-]
-
-[[package]]
 name = "rgb"
 version = "0.8.53"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6612,24 +6221,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6c20b6793b5c2fa6553b250154b78d6d0db37e72700ae35fad9387a46f487c97"
 
 [[package]]
-name = "rtrb"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9278fb35b3e730abe136e9b395b5b81b96d06b9f5478a50f0c8430a2237b22de"
-
-[[package]]
-name = "rubato"
-version = "0.16.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5258099699851cfd0082aeb645feb9c084d9a5e1f1b8d5372086b989fc5e56a1"
-dependencies = [
- "num-complex",
- "num-integer",
- "num-traits 0.2.19",
- "realfft",
-]
-
-[[package]]
 name = "rustc-hash"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6638,7 +6229,7 @@ checksum = "08d43f7aa6b08d49f382cde6a7982047c3426db949b1424bc4b7ec9ae12c6ce2"
 [[package]]
 name = "rustc-hash"
 version = "1.1.0"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 
 [[package]]
 name = "rustc-hash"
@@ -6653,20 +6244,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cfcb3a22ef46e85b45de6ee7e79d063319ebb6594faafcf1c225ea92ab6e9b92"
 dependencies = [
  "semver",
-]
-
-[[package]]
-name = "rustfft"
-version = "6.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "21db5f9893e91f41798c88680037dba611ca6674703c1a18601b01a72c8adb89"
-dependencies = [
- "num-complex",
- "num-integer",
- "num-traits 0.2.19",
- "primal-check",
- "strength_reduce",
- "transpose",
 ]
 
 [[package]]
@@ -6704,7 +6281,7 @@ checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
 [[package]]
 name = "rustybuzz"
 version = "0.18.0"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 dependencies = [
  "bitflags 2.10.0",
  "bytemuck 1.25.0",
@@ -6714,7 +6291,7 @@ dependencies = [
  "unicode-bidi-mirroring",
  "unicode-ccc",
  "unicode-properties",
- "unicode-script 0.5.8 (git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad)",
+ "unicode-script 0.5.8 (git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c)",
 ]
 
 [[package]]
@@ -6747,7 +6324,7 @@ checksum = "e1cf6437eb19a8f4a6cc0f7dca544973b0b78843adbfeb3683d1a94a0024a294"
 [[package]]
 name = "scoped-tls"
 version = "1.0.1"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 
 [[package]]
 name = "scopeguard"
@@ -6801,7 +6378,7 @@ checksum = "8028ded836a0d9fabdfa4d713389b76a2098b5153f50a135c8faed7e3a3d5ae2"
 [[package]]
 name = "sdfer"
 version = "0.2.1"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 
 [[package]]
 name = "self_cell"
@@ -6918,7 +6495,7 @@ dependencies = [
 [[package]]
 name = "simd-adler32"
 version = "0.3.9"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 
 [[package]]
 name = "simd-adler32"
@@ -7005,7 +6582,7 @@ dependencies = [
 [[package]]
 name = "smallvec"
 version = "1.15.1"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 
 [[package]]
 name = "smallvec"
@@ -7097,7 +6674,7 @@ dependencies = [
 [[package]]
 name = "spirv"
 version = "0.3.0+sdk-1.3.268.0"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 dependencies = [
  "bitflags 2.13.1",
 ]
@@ -7122,12 +6699,6 @@ name = "static_assertions"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
-
-[[package]]
-name = "strength_reduce"
-version = "0.2.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fe895eb47f22e2ddd4dabc02bce419d2e643c8e3b585c78158b349195bc24d82"
 
 [[package]]
 name = "strict-num"
@@ -7188,167 +6759,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "symphonia"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a7edef6a96b696d4e0cab5ee9ebb7ca155ed95f30a6b45bbb8b97d2727f02424"
-dependencies = [
- "lazy_static",
- "symphonia-bundle-flac",
- "symphonia-bundle-mp3",
- "symphonia-codec-aac",
- "symphonia-codec-alac",
- "symphonia-codec-pcm",
- "symphonia-codec-vorbis",
- "symphonia-core",
- "symphonia-format-isomp4",
- "symphonia-format-ogg",
- "symphonia-format-riff",
- "symphonia-metadata",
-]
-
-[[package]]
-name = "symphonia-bundle-flac"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6405d5c34ff6f8f7ca08a4101efe66d21e180f7322ef9359900a0e55698a7892"
-dependencies = [
- "log 0.4.34",
- "symphonia-common",
- "symphonia-core",
- "symphonia-metadata",
-]
-
-[[package]]
-name = "symphonia-bundle-mp3"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "98ea5ffc8716bff677dfb3b01b420c7b758de901a72b8c330bf2040ab74b4add"
-dependencies = [
- "lazy_static",
- "log 0.4.34",
- "symphonia-core",
-]
-
-[[package]]
-name = "symphonia-codec-aac"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f5bf8e39552d34a3c4c98333370e62f48c92456d2e814f273b5c3ad7c4a5f45c"
-dependencies = [
- "lazy_static",
- "log 0.4.34",
- "symphonia-common",
- "symphonia-core",
-]
-
-[[package]]
-name = "symphonia-codec-alac"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "920a78f96f3cf62932d0c497959c0cc2100ef36b03c7ca1417b260f432a482d8"
-dependencies = [
- "log 0.4.34",
- "symphonia-common",
- "symphonia-core",
-]
-
-[[package]]
-name = "symphonia-codec-pcm"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e04ba75686acbe43542fdd374571195f0530c0b7785ca25cc6840e9c6c4b6eea"
-dependencies = [
- "log 0.4.34",
- "symphonia-core",
-]
-
-[[package]]
-name = "symphonia-codec-vorbis"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "73d90b4fcf796137cc683c538282804ff9629f8ad9dbfd881fcbba331ac4e986"
-dependencies = [
- "log 0.4.34",
- "symphonia-common",
- "symphonia-core",
-]
-
-[[package]]
-name = "symphonia-common"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2acc3fcc18ec9b8cdd48614e259c4cf0d27b71d41e5d9b120b42c5adab12d7c4"
-dependencies = [
- "log 0.4.34",
- "symphonia-core",
- "symphonia-metadata",
-]
-
-[[package]]
-name = "symphonia-core"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "01c412864d599d4750d0c3d684d7e093ec05e5309681ef5252cc1096a437f6e0"
-dependencies = [
- "bitflags 2.13.1",
- "bytemuck 1.25.2",
- "lazy_static",
- "log 0.4.34",
- "num-complex",
- "smallvec 1.15.2",
-]
-
-[[package]]
-name = "symphonia-format-isomp4"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0e681a70e1870d34e02abf1dbc51e4267c3f1827801474e8870be8c689fc4dc3"
-dependencies = [
- "log 0.4.34",
- "symphonia-common",
- "symphonia-core",
- "symphonia-metadata",
-]
-
-[[package]]
-name = "symphonia-format-ogg"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0b5495e7f7e3c7035328d82b6d6e377eef289bb0c4105bdeb557fc93a833f994"
-dependencies = [
- "log 0.4.34",
- "symphonia-common",
- "symphonia-core",
- "symphonia-metadata",
-]
-
-[[package]]
-name = "symphonia-format-riff"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1ff70929083a8c1a5f6cd7c904b6071c7914ad04739b510c2f7239dfc9b7dabe"
-dependencies = [
- "extended",
- "log 0.4.34",
- "symphonia-core",
- "symphonia-metadata",
-]
-
-[[package]]
-name = "symphonia-metadata"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "83713a97705d77bdef7cdbc0768fd6e5a54e4cd7e48d60a806ae85639e2c87c6"
-dependencies = [
- "lazy_static",
- "log 0.4.34",
- "regex-lite",
- "smallvec 1.15.2",
- "symphonia-core",
-]
-
-[[package]]
 name = "syn"
 version = "2.0.119"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7397,19 +6807,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "taffy"
-version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c034e05f6ee85a12daa63863c2245797715075c70649947aa0da54f3f2ab1d0f"
-dependencies = [
- "arrayvec 0.7.8",
- "cssparser",
- "serde",
- "slotmap",
- "smallvec 1.15.2",
-]
-
-[[package]]
 name = "tap"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7449,7 +6846,7 @@ dependencies = [
 [[package]]
 name = "thiserror"
 version = "2.0.18"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 dependencies = [
  "thiserror-impl 2.0.18",
 ]
@@ -7477,7 +6874,7 @@ dependencies = [
 [[package]]
 name = "thiserror-impl"
 version = "2.0.18"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 dependencies = [
  "makepad-micro-proc-macro",
 ]
@@ -7821,16 +7218,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "transpose"
-version = "0.2.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1ad61aed86bc3faea4300c7aee358b4c6d0c8d6ccc36524c96e4c92ccf26e77e"
-dependencies = [
- "num-integer",
- "strength_reduce",
-]
-
-[[package]]
 name = "tree_magic_mini"
 version = "3.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7850,7 +7237,7 @@ checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 [[package]]
 name = "ttf-parser"
 version = "0.24.1"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 
 [[package]]
 name = "ttf-parser"
@@ -7902,7 +7289,7 @@ checksum = "dbc4bc3a9f746d862c45cb89d705aa10f187bb96c76001afab07a0d35ce60142"
 [[package]]
 name = "unicase"
 version = "2.9.0"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 
 [[package]]
 name = "unicode-bidi"
@@ -7913,17 +7300,17 @@ checksum = "5c1cb5db39152898a79168971543b1cb5020dff7fe43c8dc468b0885f5e29df5"
 [[package]]
 name = "unicode-bidi"
 version = "0.3.18"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 
 [[package]]
 name = "unicode-bidi-mirroring"
 version = "0.3.0"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 
 [[package]]
 name = "unicode-ccc"
 version = "0.3.0"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 
 [[package]]
 name = "unicode-ident"
@@ -7940,12 +7327,12 @@ checksum = "3b09c83c3c29d37506a3e260c08c03743a6bb66a9cd432c6934ab501a190571f"
 [[package]]
 name = "unicode-linebreak"
 version = "0.1.5"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 
 [[package]]
 name = "unicode-properties"
 version = "0.1.4"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 
 [[package]]
 name = "unicode-script"
@@ -7956,12 +7343,12 @@ checksum = "383ad40bb927465ec0ce7720e033cb4ca06912855fc35db31b5755d0de75b1ee"
 [[package]]
 name = "unicode-script"
 version = "0.5.8"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 
 [[package]]
 name = "unicode-segmentation"
 version = "1.12.0"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 
 [[package]]
 name = "unicode-segmentation"
@@ -7993,12 +7380,6 @@ dependencies = [
  "serde",
  "serde_derive",
 ]
-
-[[package]]
-name = "urlencoding"
-version = "2.1.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "daf8dba3b7eb870caf1ddeed7bc9d2a049f3cfdfae7cb521b087cc33ae4c49da"
 
 [[package]]
 name = "usvg"
@@ -8179,11 +7560,11 @@ dependencies = [
 [[package]]
 name = "wayland-backend"
 version = "0.3.12"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 dependencies = [
- "downcast-rs 1.2.1 (git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad)",
+ "downcast-rs 1.2.1 (git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c)",
  "libc",
- "scoped-tls 1.0.1 (git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad)",
+ "scoped-tls 1.0.1 (git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c)",
  "smallvec 1.15.2",
  "wayland-sys 0.31.8",
 ]
@@ -8205,7 +7586,7 @@ dependencies = [
 [[package]]
 name = "wayland-client"
 version = "0.31.12"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 dependencies = [
  "bitflags 2.13.1",
  "libc",
@@ -8249,7 +7630,7 @@ dependencies = [
 [[package]]
 name = "wayland-egl"
 version = "0.32.9"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 dependencies = [
  "wayland-backend 0.3.12",
  "wayland-sys 0.31.8",
@@ -8258,7 +7639,7 @@ dependencies = [
 [[package]]
 name = "wayland-protocols"
 version = "0.32.10"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 dependencies = [
  "bitflags 2.13.1",
  "wayland-backend 0.3.12",
@@ -8317,7 +7698,7 @@ dependencies = [
 [[package]]
 name = "wayland-sys"
 version = "0.31.8"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 dependencies = [
  "log 0.4.29",
  "pkg-config 0.3.32",
@@ -8364,7 +7745,7 @@ checksum = "a28ac98ddc8b9274cb41bb4d9d4d5c425b6020c50c46f25559911905610b4a88"
 [[package]]
 name = "weezl"
 version = "0.1.12"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 
 [[package]]
 name = "wgpu"
@@ -8590,11 +7971,11 @@ dependencies = [
 [[package]]
 name = "windows"
 version = "0.62.2"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 dependencies = [
- "windows-collections 0.3.2 (git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad)",
- "windows-core 0.62.2 (git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad)",
- "windows-future 0.3.2 (git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad)",
+ "windows-collections 0.3.2 (git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c)",
+ "windows-core 0.62.2 (git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c)",
+ "windows-future 0.3.2 (git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c)",
 ]
 
 [[package]]
@@ -8609,9 +7990,9 @@ dependencies = [
 [[package]]
 name = "windows-collections"
 version = "0.3.2"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 dependencies = [
- "windows-core 0.62.2 (git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad)",
+ "windows-core 0.62.2 (git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c)",
 ]
 
 [[package]]
@@ -8630,11 +8011,11 @@ dependencies = [
 [[package]]
 name = "windows-core"
 version = "0.62.2"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 dependencies = [
- "windows-link 0.2.1 (git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad)",
- "windows-result 0.4.1 (git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad)",
- "windows-strings 0.5.1 (git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad)",
+ "windows-link 0.2.1 (git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c)",
+ "windows-result 0.4.1 (git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c)",
+ "windows-strings 0.5.1 (git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c)",
 ]
 
 [[package]]
@@ -8651,9 +8032,9 @@ dependencies = [
 [[package]]
 name = "windows-future"
 version = "0.3.2"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 dependencies = [
- "windows-core 0.62.2 (git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad)",
+ "windows-core 0.62.2 (git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c)",
 ]
 
 [[package]]
@@ -8687,7 +8068,7 @@ checksum = "f0805222e57f7521d6a62e36fa9163bc891acd422f971defe97d64e70d0a4fe5"
 [[package]]
 name = "windows-link"
 version = "0.2.1"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 
 [[package]]
 name = "windows-numerics"
@@ -8711,9 +8092,9 @@ dependencies = [
 [[package]]
 name = "windows-result"
 version = "0.4.1"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 dependencies = [
- "windows-link 0.2.1 (git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad)",
+ "windows-link 0.2.1 (git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c)",
 ]
 
 [[package]]
@@ -8728,9 +8109,9 @@ dependencies = [
 [[package]]
 name = "windows-strings"
 version = "0.5.1"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 dependencies = [
- "windows-link 0.2.1 (git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad)",
+ "windows-link 0.2.1 (git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c)",
 ]
 
 [[package]]
@@ -9196,7 +8577,7 @@ dependencies = [
 [[package]]
 name = "zerocopy"
 version = "0.8.39"
-source = "git+https://github.com/oshikaidesu/makepad.git?rev=81946efe3379556acd32d1a9479a7ebb1035dcad#81946efe3379556acd32d1a9479a7ebb1035dcad"
+source = "git+https://github.com/oshikaidesu/makepad.git?rev=142e2dc0defd48e1f44e9cf9d99ada94c72f204c#142e2dc0defd48e1f44e9cf9d99ada94c72f204c"
 
 [[package]]
 name = "zerocopy"
@@ -9322,7 +8703,6 @@ dependencies = [
  "endi",
  "enumflags2",
  "serde",
- "url",
  "winnow",
  "zcheapstr",
  "zvariant_derive",

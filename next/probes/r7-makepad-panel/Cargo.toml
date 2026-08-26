@@ -4,20 +4,23 @@ version = "0.1.0"
 edition = "2021"
 publish = false
 
-# Makepad IS now the selected front-end route (裁定251, 2026-08-26), which
-# overturns 裁定5 ("front は iced のみ"). This crate is still a standalone
-# workspace only because folding it into next/ has not been done yet -- that
-# is pending work, no longer a gate. Do not re-derive the front-end question
-# here; read next/DECISIONS.md 裁定251 first.
+# Product front (裁定251/254). Overturns 裁定5 ("front は iced のみ").
+# Standalone workspace only because folding into next/ is pending -- not a gate.
+# Do not depend on motolii-shell. Meaning owners are store / session / engine.
 [workspace]
 
 [dependencies]
 # Pin the thin gesture-event fork used by this host. The fork owns platform
 # observations only; Motolii policy stays behind src/gesture_input.rs.
-makepad-widgets = { git = "https://github.com/oshikaidesu/makepad.git", rev = "81946efe3379556acd32d1a9479a7ebb1035dcad" }
-
-# Elm bridge. `motolii-shell` remains the owner of Document + Session + Engine;
-# Makepad dispatches public Messages and reads disposable projections/RGBA only.
-motolii-shell = { path = "../../shell/motolii-shell" }
-# IDs/Fps are value types crossing that bridge; no Document write API is used.
+makepad-widgets = { git = "https://github.com/oshikaidesu/makepad.git", rev = "142e2dc0defd48e1f44e9cf9d99ada94c72f204c" }
+wgpu = "29.0.4"
 motolii-store = { path = "../../core/motolii-store" }
+motolii-shell-state = { path = "../../ui/motolii-shell-state" }
+motolii-engine = { path = "../../engine/motolii-engine" }
+motolii-fixture = { path = "../../core/motolii-fixture" }
+# Projection + restack math only. iced view is not used.
+motolii-timeline-pane = { path = "../../ui/motolii-timeline-pane" }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6.3"
+objc2-metal = { version = "0.3.2", default-features = false, features = ["std", "MTLTexture", "MTLDevice"] }

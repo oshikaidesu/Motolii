@@ -1,19 +1,6 @@
 // Source: Motolii next/reference/mocks/*.html (visual/semantic contract only).
 // This is a Makepad proof surface, not a second product state owner.
 
-let playing = false
-let current_view = "Camera"
-let current_detail = "Timeline"
-let current_tab = "Media"
-let selected_asset = "Starter Clip"
-
-fn select_asset(name, file, kind){
-    selected_asset = name
-    ui.shell.top.browser.browser_body.catalog.selection.selection_name.set_text(file)
-    ui.shell.top.browser.browser_body.catalog.selection.selection_type.set_text(kind)
-    ui.shell.status.set_text("Selected Browser item: " + name)
-}
-
 let IconButton = ButtonFlatterIcon{
     width: 24
     height: 22
@@ -189,6 +176,71 @@ let KeyTimeField = TimeField{
     draw_bg.color: #x303030
 }
 
+// Studio: kinds are Fill Views, then `Kind := Kind {}` on the Dock instance.
+let BrowserPane = View{
+    width: Fill
+    height: Fill
+    browser_surface := BrowserSurface{}
+}
+
+let StagePane = View{
+    width: Fill
+    height: Fill
+    stage_chrome := StageChrome{}
+}
+
+let InspectorPane = View{
+    width: Fill
+    height: Fill
+    inspector_surface := InspectorSurface{}
+}
+
+let ExportPane = View{
+    width: Fill
+    height: Fill
+    export_surface := ExportSurface{}
+}
+
+let SettingsPane = View{
+    width: Fill
+    height: Fill
+    settings_surface := SettingsSurface{}
+}
+
+let ChromePane = View{
+    width: Fill
+    height: Fill
+    chrome_gallery := ChromeGallery{}
+}
+
+let TimelinePane = View{
+    width: Fill
+    height: Fill
+    flow: Down
+    transport := SolidView{
+        width: Fill
+        height: 24
+        flow: Right
+        align: Align{x: 0.5 y: 0.5}
+        show_bg: true
+        new_batch: true
+        draw_bg.color: #x3d3d3d
+        play_toggle := ButtonFlatIcon{
+            width: 26
+            height: 20
+            icon_walk: Walk{width: 12 height: 12}
+            padding: Inset{left: 0 right: 0}
+            draw_bg.color: #4f4f4f
+            draw_bg.border_size: 0.0
+            draw_icon +: {svg: crate_resource("self://resources/icons/play.svg") color: #xd8b574}
+        }
+    }
+    timeline_surface := TimelineSurface{
+        width: Fill
+        height: Fill
+    }
+}
+
 width: Fill
 height: Fill
 flow: Down
@@ -226,273 +278,110 @@ draw_bg.color: #x282828
             draw_text.color: #xa0a0a0
             draw_text.text_style: theme.font_code{font_size: 9}
         }
-        browser_toggle := IconButton{width: 26 draw_icon +: {svg: crate_resource("self://resources/icons/panels.svg")} on_click: || { ui.shell.status.set_text("Browser panel") }}
-        settings := IconButton{width: 26 draw_icon +: {svg: crate_resource("self://resources/icons/filter.svg")} on_click: || { ui.shell.status.set_text("Settings") }}
+        browser_toggle := IconButton{width: 26 draw_icon +: {svg: crate_resource("self://resources/icons/panels.svg")} on_click: || { ui.status.set_text("Browser panel") }}
+        settings := IconButton{width: 26 draw_icon +: {svg: crate_resource("self://resources/icons/filter.svg")} on_click: || { ui.status.set_text("Settings") }}
     }
 
     chrome_surface_divider := SurfaceDivider{}
 
-    shell := SolidView{
+    dock := DockFlat{
         width: Fill
         height: Fill
-        flow: Down
 
-        top := SolidView{
-            width: Fill
-            height: Fill
-            flow: Right
-
-            browser := SolidView{
-                width: 300
-                height: Fill
-                flow: Down
-                show_bg: true
-                new_batch: true
-                draw_bg.color: #x363636
-
-                browser_head := SolidView{width: Fill height: 26 flow: Right align: Align{y: 0.5} padding: Inset{left: 8 right: 8} show_bg: true new_batch: true draw_bg.color: #x2f2f2f
-                    title := Label{text: "Browser" width: Fill draw_text.color: #xcfcfcf draw_text.text_style: theme.font_bold{font_size: 11}}
-                    local := Label{text: "LOCAL" width: Fit draw_text.color: #x757575 draw_text.text_style: theme.font_bold{font_size: 8}}
-                }
-                browser_toolbar := SolidView{width: Fill height: 30 flow: Right spacing: 2 align: Align{y: 0.5} padding: Inset{left: 4 right: 4} show_bg: true new_batch: true draw_bg.color: #x363636
-                    back := IconButton{width: 20 draw_icon +: {svg: crate_resource("self://resources/icons/back.svg")}}
-                    forward := IconButton{width: 20 draw_icon +: {svg: crate_resource("self://resources/icons/forward.svg")}}
-                    search := IconFlatButton{width: Fill height: 21 draw_bg.color: #x3e3e3e draw_bg.border_size: 1.0 draw_icon +: {svg: crate_resource("self://resources/icons/search.svg") color: #x85898a}}
-                    filters := IconButton{width: 28 height: 21 draw_icon +: {svg: crate_resource("self://resources/icons/filter.svg")} on_click: || { ui.shell.status.set_text("Browser toolbar: filters") }}
-                    tags := IconButton{width: 28 height: 21 draw_icon +: {svg: crate_resource("self://resources/icons/tag.svg")} on_click: || { ui.shell.status.set_text("Browser toolbar: tags") }}
-                }
-                tabs := SolidView{width: Fill height: 26 flow: Right show_bg: true new_batch: true draw_bg.color: #x363636
-                    media := IconFlatButton{width: Fill height: 26 draw_bg.color: #x282828 draw_bg.color_hover: #x3e3e3e draw_bg.border_size: 0.0 draw_icon +: {svg: crate_resource("self://resources/icons/media.svg")} on_click: || { current_tab = "Media"; ui.shell.top.browser.browser_body.catalog.catalog_head.set_text("All media"); ui.shell.top.browser.browser_body.catalog.catalog_status.set_text(""); ui.shell.status.set_text("Browser: Media") }}
-                    effects := IconButton{width: Fill height: 26 draw_icon +: {svg: crate_resource("self://resources/icons/effects.svg")} on_click: || { current_tab = "Effects"; ui.shell.top.browser.browser_body.catalog.catalog_head.set_text("All effects"); ui.shell.top.browser.browser_body.catalog.catalog_status.set_text(""); ui.shell.status.set_text("Browser: Effects") }}
-                    create := IconButton{width: Fill height: 26 draw_icon +: {svg: crate_resource("self://resources/icons/create.svg")} on_click: || { current_tab = "Create"; ui.shell.top.browser.browser_body.catalog.catalog_head.set_text("All create"); ui.shell.top.browser.browser_body.catalog.catalog_status.set_text(""); ui.shell.status.set_text("Browser: Create") }}
-                    panels := IconButton{width: Fill height: 26 draw_icon +: {svg: crate_resource("self://resources/icons/panels.svg")} on_click: || { current_tab = "Panels"; ui.shell.top.browser.browser_body.catalog.catalog_head.set_text("All panels"); ui.shell.top.browser.browser_body.catalog.catalog_status.set_text(""); ui.shell.status.set_text("Browser: Panels") }}
-                }
-
-                browser_body := SolidView{width: Fill height: Fill flow: Right
-                    rail := SolidView{width: 112 height: Fill flow: Down padding: Inset{top: 2 bottom: 6} show_bg: true new_batch: true draw_bg.color: #x363636
-                        collections := Label{text: "COLLECTIONS" width: Fill height: 16 padding: Inset{left: 8} draw_text.color: #x757575 draw_text.text_style: theme.font_bold{font_size: 7.5}}
-                        favorite := ButtonFlatter{text: "Favorite" width: Fill height: 19 icon_walk: Walk{width: 12 height: 12} draw_icon +: {svg: crate_resource("self://resources/icons/star.svg") color: #xc89a40} draw_text.color: #xc89a40 draw_text.text_style: theme.font_regular{font_size: 8.5} on_click: || { ui.shell.status.set_text("Browser collection: Favorite") }}
-                        broll := ButtonFlatter{text: "B-roll" width: Fill height: 19 icon_walk: Walk{width: 12 height: 12} draw_icon +: {svg: crate_resource("self://resources/icons/video.svg") color: #x4db7bd} draw_text.color: #x4db7bd draw_text.text_style: theme.font_regular{font_size: 8.5} on_click: || { ui.shell.status.set_text("Browser collection: B-roll") }}
-                        brand := ButtonFlatter{text: "Brand" width: Fill height: 19 icon_walk: Walk{width: 12 height: 12} draw_icon +: {svg: crate_resource("self://resources/icons/tag.svg") color: #xa676c5} draw_text.color: #xa676c5 draw_text.text_style: theme.font_regular{font_size: 8.5} on_click: || { ui.shell.status.set_text("Browser collection: Brand") }}
-                        library := Label{text: "LIBRARY" width: Fill height: 16 padding: Inset{left: 8} draw_text.color: #x757575 draw_text.text_style: theme.font_bold{font_size: 7.5}}
-                        all_media := ButtonFlat{text: "All media" width: Fill height: 19 icon_walk: Walk{width: 12 height: 12} draw_icon +: {svg: crate_resource("self://resources/icons/media.svg")} draw_bg.color: #x4a4a4a draw_bg.border_size: 0.0 draw_bg.border_radius: 0.0 draw_text.color: #xcfcfcf draw_text.text_style: theme.font_regular{font_size: 8.5} on_click: || { ui.shell.top.browser.browser_body.catalog.catalog_status.set_text(""); ui.shell.status.set_text("Browser: All media") }}
-                        video := ButtonFlatter{text: "Video" width: Fill height: 19 icon_walk: Walk{width: 12 height: 12} draw_icon +: {svg: crate_resource("self://resources/icons/video.svg")} draw_text.color: #xb7b7b7 draw_text.text_style: theme.font_regular{font_size: 8.5} on_click: || { ui.shell.top.browser.browser_body.catalog.catalog_status.set_text(""); ui.shell.status.set_text("Browser filter: Video") }}
-                        images := ButtonFlatter{text: "Images" width: Fill height: 19 icon_walk: Walk{width: 12 height: 12} draw_icon +: {svg: crate_resource("self://resources/icons/image.svg")} draw_text.color: #xb7b7b7 draw_text.text_style: theme.font_regular{font_size: 8.5} on_click: || { ui.shell.top.browser.browser_body.catalog.catalog_status.set_text(""); ui.shell.status.set_text("Browser filter: Images") }}
-                        audio := ButtonFlatter{text: "Audio" width: Fill height: 19 icon_walk: Walk{width: 12 height: 12} draw_icon +: {svg: crate_resource("self://resources/icons/audio.svg")} draw_text.color: #xb7b7b7 draw_text.text_style: theme.font_regular{font_size: 8.5} on_click: || { ui.shell.top.browser.browser_body.catalog.catalog_status.set_text(""); ui.shell.status.set_text("Browser filter: Audio") }}
-                        places := Label{text: "PLACES" width: Fill height: 16 padding: Inset{left: 8} draw_text.color: #x757575 draw_text.text_style: theme.font_bold{font_size: 7.5}}
-                        starter := ButtonFlatter{text: "Starter Media" width: Fill height: 19 icon_walk: Walk{width: 12 height: 12} draw_icon +: {svg: crate_resource("self://resources/icons/folder.svg")} draw_text.color: #xb7b7b7 draw_text.text_style: theme.font_regular{font_size: 8.5} on_click: || { ui.shell.status.set_text("Browser source: Starter Media") }}
-                        project_assets := ButtonFlatter{text: "Project assets" width: Fill height: 19 icon_walk: Walk{width: 12 height: 12} draw_icon +: {svg: crate_resource("self://resources/icons/project.svg")} draw_text.color: #xb7b7b7 draw_text.text_style: theme.font_regular{font_size: 8.5} on_click: || { ui.shell.status.set_text("Browser source: Project assets") }}
-                        motion_assets := ButtonFlatter{text: "Motion assets" width: Fill height: 19 icon_walk: Walk{width: 12 height: 12} draw_icon +: {svg: crate_resource("self://resources/icons/folder.svg")} draw_text.color: #xb7b7b7 draw_text.text_style: theme.font_regular{font_size: 8.5} on_click: || { ui.shell.status.set_text("Browser source: Motion assets") }}
-                        add_folder := ButtonFlatter{text: "Add folder" width: Fill height: 19 icon_walk: Walk{width: 12 height: 12} draw_icon +: {svg: crate_resource("self://resources/icons/create.svg")} draw_text.color: #x767a7c draw_text.text_style: theme.font_regular{font_size: 8.5} on_click: || { ui.shell.status.set_text("Browser source: Add folder") }}
-                    }
-                    browser_owner_divider := PaneDivider{}
-                    catalog := SolidView{width: Fill height: Fill flow: Down show_bg: true new_batch: true draw_bg.color: #x363636
-                        catalog_head_row := SolidView{width: Fill height: 31 flow: Right align: Align{y: 0.5} padding: Inset{left: 6 right: 6} show_bg: true new_batch: true draw_bg.color: #x363636
-                            catalog_copy := SolidView{width: Fill height: 25 flow: Down
-                                catalog_head := Label{text: "All media" width: Fill height: 14 draw_text.color: #xcfcfcf draw_text.text_style: theme.font_bold{font_size: 9}}
-                                catalog_status := Label{text: "" width: Fill height: 11 draw_text.color: #x808487 draw_text.text_style: theme.font_regular{font_size: 8}}
-                            }
-                            view_modes := SolidView{width: 70 height: 22 flow: Right align: Align{y: 0.5}
-                                mode_thumb := IconButton{width: 22 height: 21 draw_icon +: {svg: crate_resource("self://resources/icons/media.svg")} on_click: || { ui.shell.status.set_text("Browser view: thumbnails") }}
-                            mode_grid := IconFlatButton{width: 22 height: 21 draw_bg.color: #x38362c draw_bg.border_size: 0.0 draw_bg.border_radius: 0.0 draw_icon +: {svg: crate_resource("self://resources/icons/grid.svg") color: #xe5cf9b} on_click: || { ui.shell.status.set_text("Browser view: grid") }}
-                                mode_list := IconButton{width: 22 height: 21 draw_icon +: {svg: crate_resource("self://resources/icons/list.svg")} on_click: || { ui.shell.status.set_text("Browser view: list") }}
-                            }
-                        }
-                        filter_shelf := SolidView{width: Fill height: 24 flow: Right spacing: 2 align: Align{y: 0.5} padding: Inset{left: 4 right: 4} show_bg: true new_batch: true draw_bg.color: #x363636
-                            filter_label := IconButton{width: 20 height: 20 draw_icon +: {svg: crate_resource("self://resources/icons/filter.svg") color: #x757575}}
-                            video_chip := ButtonFlat{text: "Video" width: 42 height: 17 draw_bg.color: #x464646 draw_bg.border_size: 0.0 draw_bg.border_radius: 8.0 draw_text.color: #xc9ccca draw_text.text_style: theme.font_regular{font_size: 8} on_click: || { ui.shell.status.set_text("Browser filter chip: Video") }}
-                            broll_chip := ButtonFlat{text: "B-roll" width: 46 height: 17 draw_bg.color: #x464646 draw_bg.border_size: 0.0 draw_bg.border_radius: 8.0 draw_text.color: #xc9ccca draw_text.text_style: theme.font_regular{font_size: 8} on_click: || { ui.shell.status.set_text("Browser filter chip: B-roll") }}
-                            clear_chip := IconButton{width: 20 height: 17 draw_icon +: {svg: crate_resource("self://resources/icons/clear.svg")} on_click: || { ui.shell.status.set_text("Browser filters cleared") }}
-                        }
-                        result_grid := SolidView{width: Fill height: Fill flow: Down padding: Inset{left: 1 right: 1 bottom: 3} show_bg: true new_batch: true draw_bg.color: #x363636
-                            cards_a := SolidView{width: Fill height: 76 flow: Right
-                                clip_card := SolidView{width: Fill height: 76 flow: Down padding: Inset{left: 2 right: 2 top: 2 bottom: 2}
-                                    clip := IconFlatButton{width: Fill height: 48 icon_walk: Walk{width: 18 height: 18} draw_bg.color: #x5d7899 draw_bg.border_size: 1.0 draw_icon +: {svg: crate_resource("self://resources/icons/video.svg")} on_click: || select_asset("Starter Clip", "clip.mp4", "video · B-roll")}
-                                    clip_name := Label{text: "clip.mp4" width: Fill height: 12 draw_text.color: #xcfcfcf draw_text.text_style: theme.font_regular{font_size: 8}}
-                                    clip_meta := Label{text: "video · B-roll" width: Fill height: 10 draw_text.color: #x9ea2a3 draw_text.text_style: theme.font_code{font_size: 7.5}}
-                                }
-                                mark_card := SolidView{width: Fill height: 76 flow: Down padding: Inset{left: 2 right: 2 top: 2 bottom: 2}
-                                    mark := IconFlatButton{width: Fill height: 48 icon_walk: Walk{width: 18 height: 18} draw_bg.color: #x746398 draw_bg.border_size: 1.0 draw_icon +: {svg: crate_resource("self://resources/icons/motolii.svg")} on_click: || select_asset("Starter Mark", "mark.svg", "image · Brand")}
-                                    mark_name := Label{text: "mark.svg" width: Fill height: 12 draw_text.color: #xcfcfcf draw_text.text_style: theme.font_regular{font_size: 8}}
-                                    mark_meta := Label{text: "image · Brand" width: Fill height: 10 draw_text.color: #x9ea2a3 draw_text.text_style: theme.font_code{font_size: 7.5}}
-                                }
-                            }
-                            cards_b := SolidView{width: Fill height: 76 flow: Right
-                                still_card := SolidView{width: Fill height: 76 flow: Down padding: Inset{left: 2 right: 2 top: 2 bottom: 2}
-                                    still := IconFlatButton{width: Fill height: 48 icon_walk: Walk{width: 18 height: 18} draw_bg.color: #x88704e draw_bg.border_size: 1.0 draw_icon +: {svg: crate_resource("self://resources/icons/image.svg")} on_click: || select_asset("Starter Still", "still.png", "image · B-roll")}
-                                    still_name := Label{text: "still.png" width: Fill height: 12 draw_text.color: #xcfcfcf draw_text.text_style: theme.font_regular{font_size: 8}}
-                                    still_meta := Label{text: "image · B-roll" width: Fill height: 10 draw_text.color: #x9ea2a3 draw_text.text_style: theme.font_code{font_size: 7.5}}
-                                }
-                                tone_card := SolidView{width: Fill height: 76 flow: Down padding: Inset{left: 2 right: 2 top: 2 bottom: 2}
-                                    tone := IconFlatButton{width: Fill height: 48 icon_walk: Walk{width: 18 height: 18} draw_bg.color: #x557f6d draw_bg.border_size: 1.0 draw_icon +: {svg: crate_resource("self://resources/icons/audio.svg")} on_click: || select_asset("Starter Tone", "tone.wav", "audio · WAV")}
-                                    tone_name := Label{text: "tone.wav" width: Fill height: 12 draw_text.color: #xcfcfcf draw_text.text_style: theme.font_regular{font_size: 8}}
-                                    tone_meta := Label{text: "audio · WAV" width: Fill height: 10 draw_text.color: #x9ea2a3 draw_text.text_style: theme.font_code{font_size: 7.5}}
-                                }
-                            }
-                            cards_c := SolidView{width: Fill height: 76 flow: Right
-                                project_card := SolidView{width: Fill height: 76 flow: Down padding: Inset{left: 2 right: 2 top: 2 bottom: 2}
-                                    project_clip := IconFlatButton{width: Fill height: 48 icon_walk: Walk{width: 18 height: 18} draw_bg.color: #x875459 draw_bg.border_size: 1.0 draw_icon +: {svg: crate_resource("self://resources/icons/project.svg")} on_click: || select_asset("Project Intro", "intro.mp4", "video · Project assets")}
-                                    project_name := Label{text: "intro.mp4" width: Fill height: 12 draw_text.color: #xcfcfcf draw_text.text_style: theme.font_regular{font_size: 8}}
-                                    project_meta := Label{text: "video · Project assets" width: Fill height: 10 draw_text.color: #x9ea2a3 draw_text.text_style: theme.font_code{font_size: 7.5}}
-                                }
-                                motion_card := SolidView{width: Fill height: 76 flow: Down padding: Inset{left: 2 right: 2 top: 2 bottom: 2}
-                                    motion_clip := IconFlatButton{width: Fill height: 48 icon_walk: Walk{width: 18 height: 18} draw_bg.color: #x546a75 draw_bg.border_size: 1.0 draw_icon +: {svg: crate_resource("self://resources/icons/video.svg")} on_click: || select_asset("Motion Grain", "grain.mp4", "video · Motion assets")}
-                                    motion_name := Label{text: "grain.mp4" width: Fill height: 12 draw_text.color: #xcfcfcf draw_text.text_style: theme.font_regular{font_size: 8}}
-                                    motion_meta := Label{text: "video · Motion assets" width: Fill height: 10 draw_text.color: #x9ea2a3 draw_text.text_style: theme.font_code{font_size: 7.5}}
-                                }
-                            }
-                        }
-                        selection := SolidView{width: Fill height: 27 flow: Right align: Align{y: 0.5} padding: Inset{left: 6 right: 6} show_bg: true new_batch: true draw_bg.color: #x282828
-                            selection_dot := SolidView{width: 5 height: 5 draw_bg.color: #xd8b574}
-                            selection_name := Label{text: "clip.mp4" width: Fit draw_text.color: #xcfcfcf draw_text.text_style: theme.font_regular{font_size: 8}}
-                            selection_type := Label{text: "video · B-roll" width: Fill height: 12 draw_text.color: #x83888a draw_text.text_style: theme.font_code{font_size: 8}}
-                            clear_selection := IconButton{width: 20 height: 18 draw_icon +: {svg: crate_resource("self://resources/icons/clear.svg") color: #xc7b66c} on_click: || { ui.shell.status.set_text("Browser selection cleared") }}
-                        }
-                    }
-                }
-            }
-
-            browser_stage_divider := PaneDivider{}
-
-            stage := SolidView{
-                width: Fill
-                height: Fill
-                flow: Down
-                show_bg: true
-                new_batch: true
-                draw_bg.color: #x1c1c1c
-                stage_head := SolidView{width: Fill height: 26 flow: Right spacing: 6 align: Align{y: 0.5} padding: Inset{left: 8 right: 8} show_bg: true new_batch: true draw_bg.color: #x2f2f2f
-                    stage_title := Label{text: "STAGE" width: 44 draw_text.color: #x9b9b9b draw_text.text_style: theme.font_bold{font_size: 8}}
-                    live_dot := SolidView{width: 5 height: 5 draw_bg.color: #x5ab4aa draw_bg.border_radius: 2.5}
-                    live_source := Label{text: "RERUN" width: 42 draw_text.color: #x8eaaa7 draw_text.text_style: theme.font_code{font_size: 8}}
-                    camera := IconFlatButton{width: 28 height: 20 draw_bg.color: #x1c1c1c draw_bg.border_size: 0.0 icon_walk: Walk{width: 13 height: 13} draw_icon +: {svg: crate_resource("self://resources/icons/camera.svg") color: #xd8b574} on_click: || { current_view = "Camera"; ui.shell.top.stage.stage_mode.set_text("CAMERA"); ui.shell.status.set_text("Stage view: Camera") }}
-                    user := IconButton{width: 28 height: 20 icon_walk: Walk{width: 13 height: 13} draw_icon +: {svg: crate_resource("self://resources/icons/user_view.svg")} on_click: || { current_view = "User View"; ui.shell.top.stage.stage_mode.set_text("USER VIEW"); ui.shell.status.set_text("Stage view: User View") }}
-                    stage_spacer := SolidView{width: Fill height: 1}
-                    tool_select := IconFlatButton{width: 30 height: 20 draw_bg.color: #x4a4a4a draw_bg.border_size: 0.0 icon_walk: Walk{width: 13 height: 13} draw_icon +: {svg: crate_resource("self://resources/icons/select.svg") color: #xd8b574}}
-                    tool_shape := IconButton{width: 30 height: 20 icon_walk: Walk{width: 13 height: 13} draw_icon +: {svg: crate_resource("self://resources/icons/shape.svg")} on_click: || { ui.shell.status.set_text("Stage tool: Shape") }}
-                    tool_pen := IconButton{width: 30 height: 20 icon_walk: Walk{width: 13 height: 13} draw_icon +: {svg: crate_resource("self://resources/icons/pen.svg")} on_click: || { ui.shell.status.set_text("Stage tool: Pen") }}
-                }
-                stage_void := SolidView{width: Fill height: Fill flow: Down align: Align{x: 0.5 y: 0.5} padding: Inset{left: 8 right: 8 top: 8 bottom: 8} show_bg: true new_batch: true draw_bg.color: #x181818
-                    comp_frame := SolidView{width: 722 height: 407 padding: 1 show_bg: true new_batch: true draw_bg.color: #x454545
-                        comp := SolidView{width: 720 height: 405 flow: Overlay show_bg: true new_batch: true draw_bg.color: #x000000
-                            stage_frame := Image{width: Fill height: Fill fit: Smallest}
-                        }
-                    }
-                }
-                stage_band := SolidView{width: Fill height: 24 flow: Right spacing: 8 align: Align{y: 0.5} padding: Inset{left: 8 right: 8} show_bg: true new_batch: true draw_bg.color: #x2f2f2f
-                    stage_mode := Label{text: "CAMERA" width: 48 draw_text.color: #xa0a0a0 draw_text.text_style: theme.font_code{font_size: 8}}
-                    resolution := Label{text: "1920 × 1080" width: 76 draw_text.color: #x7f8384 draw_text.text_style: theme.font_code{font_size: 8}}
-                    frame_rate := Label{text: "30 fps" width: 42 draw_text.color: #x7f8384 draw_text.text_style: theme.font_code{font_size: 8}}
-                    off_frame_dot := SolidView{width: 4 height: 4 draw_bg.color: #xc08b58 draw_bg.border_radius: 2.0}
-                    selection_state := Label{text: "CHORUS LYRICS · OFF FRAME" width: Fit draw_text.color: #xa88969 draw_text.text_style: theme.font_code{font_size: 8}}
-                    stage_band_spacer := SolidView{width: Fill height: 1}
-                    zoom := Label{text: "62%" width: 30 draw_text.color: #xa0a0a0 draw_text.text_style: theme.font_code{font_size: 8}}
-                    check := IconButton{width: 22 height: 18 icon_walk: Walk{width: 12 height: 12} draw_icon +: {svg: crate_resource("self://resources/icons/checker.svg")} on_click: || { ui.shell.status.set_text("Stage: transparency grid toggled") }}
-                    safe := IconButton{width: 22 height: 18 icon_walk: Walk{width: 12 height: 12} draw_icon +: {svg: crate_resource("self://resources/icons/safe.svg")} on_click: || { ui.shell.status.set_text("Stage: safe areas toggled") }}
-                }
-            }
-
-            stage_inspector_divider := PaneDivider{}
-
-            inspector := SolidView{
-                width: 300
-                height: Fill
-                flow: Down
-                show_bg: true
-                new_batch: true
-                draw_bg.color: #x363636
-                inspector_head := SolidView{width: Fill height: 26 flow: Right spacing: 6 align: Align{y: 0.5} padding: Inset{left: 8 right: 8} show_bg: true new_batch: true draw_bg.color: #x2f2f2f
-                    accent_dot := SolidView{width: 5 height: 5 draw_bg.color: #x8eb086 draw_bg.border_radius: 2.5}
-                    title := Label{text: "Inspector" width: Fill draw_text.color: #xb8b8b8 draw_text.text_style: theme.font_bold{font_size: 11}}
-                    context := Label{text: "Layer 7 · Solid" width: Fit draw_text.color: #x757575 draw_text.text_style: theme.font_code{font_size: 8}}
-                }
-                modes := SolidView{width: Fill height: 28 flow: Right show_bg: true new_batch: true draw_bg.color: #x363636
-                    effect := ButtonFlat{text: "Effect" width: Fill height: 28 icon_walk: Walk{width: 12 height: 12} draw_icon +: {svg: crate_resource("self://resources/icons/effects.svg") color: #xd8b574} draw_bg.color: #x242424 draw_bg.border_size: 0.0 draw_bg.border_radius: 0.0 draw_text.color: #xb8b8b8 draw_text.text_style: theme.font_bold{font_size: 8}}
-                    layer_mode := ButtonFlatter{text: "Custom" width: Fill height: 28 icon_walk: Walk{width: 12 height: 12} draw_icon +: {svg: crate_resource("self://resources/icons/shape.svg") color: #x757575} draw_text.color: #x757575 draw_text.text_style: theme.font_regular{font_size: 8} on_click: || { ui.shell.status.set_text("Inspector mode: Custom") }}
-                }
-                selection := SolidView{width: Fill height: 46 flow: Right align: Align{y: 0.5} padding: Inset{left: 8 right: 8} show_bg: true new_batch: true draw_bg.color: #x3e3e3e
-                    glyph := Icon{width: 27 height: 20 icon_walk: Walk{width: 16 height: 16} draw_icon +: {svg: crate_resource("self://resources/icons/shape.svg") color: #x242424} draw_bg +: {color: #xd8c97f}}
-                    selection_copy := SolidView{width: Fill height: 32 flow: Down padding: Inset{left: 8}
-                        selection_name := Label{text: "Chorus Lyrics" width: Fill height: 15 draw_text.color: #xb8b8b8 draw_text.text_style: theme.font_bold{font_size: 10}}
-                        selection_type := Label{text: "Solid · selected · off frame" width: Fill height: 13 draw_text.color: #xa88969 draw_text.text_style: theme.font_code{font_size: 8}}
-                    }
-                    mute := IconButton{width: 22 height: 21 icon_walk: Walk{width: 12 height: 12} draw_icon +: {svg: crate_resource("self://resources/icons/mute.svg") color: #x757575} on_click: || { ui.shell.status.set_text("Inspector: mute toggled") }}
-                    solo := IconFlatButton{width: 22 height: 21 draw_bg.color: #x443d2e draw_bg.border_size: 0.0 draw_bg.border_radius: 0.0 icon_walk: Walk{width: 12 height: 12} draw_icon +: {svg: crate_resource("self://resources/icons/solo.svg") color: #xd8b574} on_click: || { ui.shell.status.set_text("Inspector: solo toggled") }}
-                }
-                transform_section := SolidView{width: Fill height: 26 flow: Right margin: Inset{top: 4} align: Align{y: 0.5} padding: Inset{left: 8 right: 8} show_bg: true new_batch: true draw_bg.color: #x2f2f2f
-                    section := Label{text: "TRANSFORM" width: Fill draw_text.color: #x8c8c8c draw_text.text_style: theme.font_bold{font_size: 7.5}}
-                    section_count := Label{text: "1 PROP · 2 KEYS" width: Fit draw_text.color: #x757575 draw_text.text_style: theme.font_code{font_size: 8}}
-                }
-                columns := SolidView{width: Fill height: 21 flow: Right align: Align{y: 0.5} padding: Inset{left: 8 right: 8} show_bg: true new_batch: true draw_bg.color: #x303030
-                    c0 := Label{text: "PROPERTY" width: Fill draw_text.color: #x757575 draw_text.text_style: theme.font_bold{font_size: 7.5}}
-                    cx := Label{text: "X" width: 42 draw_text.color: #x757575 draw_text.text_style: theme.font_code{font_size: 8}}
-                    cy := Label{text: "Y" width: 42 draw_text.color: #x757575 draw_text.text_style: theme.font_code{font_size: 8}}
-                    cz := Label{text: "Z" width: 42 draw_text.color: #x757575 draw_text.text_style: theme.font_code{font_size: 8}}
-                    ck := Icon{width: 26 height: 18 icon_walk: Walk{width: 10 height: 10} draw_icon +: {svg: crate_resource("self://resources/icons/keyframe.svg") color: #xd8b574}}
-                }
-                property_rows := SolidView{width: Fill height: Fill flow: Down
-                    position_row := SolidView{width: Fill height: 25 flow: Right align: Align{y: 0.5} show_bg: true new_batch: true draw_bg.color: #x363636
-                        indicator := SolidView{width: 3 height: 8 draw_bg.color: #x78b5b0}
-                        label := Label{text: "Position" width: Fill padding: Inset{left: 8} draw_text.color: #xb8b8b8 draw_text.text_style: theme.font_regular{font_size: 10}}
-                        x := ButtonFlat{text: "960" width: 42 height: 21 draw_bg.color: #x242424 draw_bg.border_size: 0.0 draw_bg.border_radius: 0.0 draw_text.color: #xd8b574 draw_text.text_style: theme.font_code{font_size: 9} on_click: || { ui.shell.status.set_text("Inspector: Position X") }}
-                        y := ButtonFlat{text: "540" width: 42 height: 21 draw_bg.color: #x242424 draw_bg.border_size: 0.0 draw_bg.border_radius: 0.0 draw_text.color: #xd8b574 draw_text.text_style: theme.font_code{font_size: 9} on_click: || { ui.shell.status.set_text("Inspector: Position Y") }}
-                        z := ButtonFlat{text: "0" width: 42 height: 21 draw_bg.color: #x242424 draw_bg.border_size: 0.0 draw_bg.border_radius: 0.0 draw_text.color: #x8c8c8c draw_text.text_style: theme.font_code{font_size: 9} on_click: || { ui.shell.status.set_text("Inspector: Position Z") }}
-                        key := IconButton{width: 26 height: 21 icon_walk: Walk{width: 11 height: 11} draw_icon +: {svg: crate_resource("self://resources/icons/keyframe.svg") color: #xd8b574} on_click: || { ui.shell.status.set_text("Inspector: Position key") }}
-                    }
-                    scale_row := SolidView{width: Fill height: 25 flow: Right align: Align{y: 0.5} show_bg: true new_batch: true draw_bg.color: #x363636
-                        indicator := SolidView{width: 3 height: 8 draw_bg.color: #x8eb086}
-                        label := Label{text: "Scale" width: Fill padding: Inset{left: 8} draw_text.color: #xb8b8b8 draw_text.text_style: theme.font_regular{font_size: 10}}
-                        x := ButtonFlat{text: "1.000" width: 42 height: 21 draw_bg.color: #x242424 draw_bg.border_size: 0.0 draw_bg.border_radius: 0.0 draw_text.color: #xb8b8b8 draw_text.text_style: theme.font_code{font_size: 9} on_click: || { ui.shell.status.set_text("Inspector: Scale X") }}
-                        y := ButtonFlat{text: "1.000" width: 42 height: 21 draw_bg.color: #x242424 draw_bg.border_size: 0.0 draw_bg.border_radius: 0.0 draw_text.color: #xb8b8b8 draw_text.text_style: theme.font_code{font_size: 9} on_click: || { ui.shell.status.set_text("Inspector: Scale Y") }}
-                        z := ButtonFlat{text: "1.000" width: 42 height: 21 draw_bg.color: #x242424 draw_bg.border_size: 0.0 draw_bg.border_radius: 0.0 draw_text.color: #x8c8c8c draw_text.text_style: theme.font_code{font_size: 9} on_click: || { ui.shell.status.set_text("Inspector: Scale Z") }}
-                        key := IconButton{width: 26 height: 21 icon_walk: Walk{width: 11 height: 11} draw_icon +: {svg: crate_resource("self://resources/icons/keyframe.svg") color: #x676767}}
-                    }
-                    rotation_row := SolidView{width: Fill height: 25 flow: Right align: Align{y: 0.5} show_bg: true new_batch: true draw_bg.color: #x363636
-                        indicator := SolidView{width: 3 height: 8 draw_bg.color: #xd8b574}
-                        label := Label{text: "Rotation" width: Fill padding: Inset{left: 8} draw_text.color: #xb8b8b8 draw_text.text_style: theme.font_regular{font_size: 10}}
-                        x := ButtonFlat{text: "0°" width: 42 height: 21 draw_bg.color: #x242424 draw_bg.border_size: 0.0 draw_bg.border_radius: 0.0 draw_text.color: #xb8b8b8 draw_text.text_style: theme.font_code{font_size: 9} on_click: || { ui.shell.status.set_text("Inspector: Rotation X") }}
-                        y := ButtonFlat{text: "0°" width: 42 height: 21 draw_bg.color: #x242424 draw_bg.border_size: 0.0 draw_bg.border_radius: 0.0 draw_text.color: #xb8b8b8 draw_text.text_style: theme.font_code{font_size: 9} on_click: || { ui.shell.status.set_text("Inspector: Rotation Y") }}
-                        z := ButtonFlat{text: "0°" width: 42 height: 21 draw_bg.color: #x242424 draw_bg.border_size: 0.0 draw_bg.border_radius: 0.0 draw_text.color: #x8c8c8c draw_text.text_style: theme.font_code{font_size: 9} on_click: || { ui.shell.status.set_text("Inspector: Rotation Z") }}
-                        key := IconButton{width: 26 height: 21 icon_walk: Walk{width: 11 height: 11} draw_icon +: {svg: crate_resource("self://resources/icons/keyframe.svg") color: #x676767}}
-                    }
-                    opacity_row := SolidView{width: Fill height: 25 flow: Right align: Align{y: 0.5} show_bg: true new_batch: true draw_bg.color: #x363636
-                        indicator := SolidView{width: 3 height: 8 draw_bg.color: #x8c8c8c}
-                        label := Label{text: "Opacity" width: Fill padding: Inset{left: 8} draw_text.color: #xb8b8b8 draw_text.text_style: theme.font_regular{font_size: 10}}
-                        value := ButtonFlat{text: "100%" width: 42 height: 21 draw_bg.color: #x242424 draw_bg.border_size: 0.0 draw_bg.border_radius: 0.0 draw_text.color: #xb8b8b8 draw_text.text_style: theme.font_code{font_size: 9} on_click: || { ui.shell.status.set_text("Inspector: Opacity") }}
-                        key := IconButton{width: 26 height: 21 icon_walk: Walk{width: 11 height: 11} draw_icon +: {svg: crate_resource("self://resources/icons/keyframe.svg") color: #xaaa0d0} on_click: || { ui.shell.status.set_text("Inspector: keyframe armed") }}
-                    }
-                    blend_row := SolidView{width: Fill height: 25 flow: Right align: Align{y: 0.5} show_bg: true new_batch: true draw_bg.color: #x363636
-                        indicator := SolidView{width: 3 height: 8 draw_bg.color: #xd8b574}
-                        label := Label{text: "Blend" width: Fill padding: Inset{left: 8} draw_text.color: #xb8b8b8 draw_text.text_style: theme.font_regular{font_size: 10}}
-                        value := ButtonFlat{text: "Normal" width: 84 height: 21 draw_bg.color: #x242424 draw_bg.border_size: 0.0 draw_bg.border_radius: 0.0 draw_text.color: #xb8b8b8 draw_text.text_style: theme.font_code{font_size: 9} on_click: || { ui.shell.status.set_text("Inspector: Blend mode") }}
-                        key := IconButton{width: 26 height: 21 icon_walk: Walk{width: 11 height: 11} draw_icon +: {svg: crate_resource("self://resources/icons/keyframe.svg") color: #x676767}}
-                    }
-                }
-            }
+        root := DockSplitter{
+            axis: SplitterAxis.Vertical
+            align: SplitterAlign.FromB(300.0)
+            a: @top_split
+            b: @timeline_tabs
         }
 
-        top_timeline_divider := SurfaceDivider{}
-
-        timeline := View{
-            width: Fill
-            height: 300
-            flow: Down
-            transport := SolidView{
-                width: Fill height: 24 flow: Right align: Align{x: 0.5 y: 0.5}
-                show_bg: true draw_bg.color: #x292929
-                play_toggle := ButtonFlat{
-                    text: "PLAY / PAUSE"
-                    width: 78 height: 20
-                    draw_bg.color: #x444444
-                    draw_text.color: #xd8b574
-                    draw_text.text_style: theme.font_code{font_size: 9}
-                }
-            }
-            timeline_surface := TimelineSurface{
-                width: Fill
-                height: Fill
-            }
+        top_split := DockSplitter{
+            axis: SplitterAxis.Horizontal
+            align: SplitterAlign.FromA(300.0)
+            a: @browser_tabs
+            b: @center_split
         }
+
+        center_split := DockSplitter{
+            axis: SplitterAxis.Horizontal
+            align: SplitterAlign.FromB(300.0)
+            a: @stage_tabs
+            b: @inspector_tabs
+        }
+
+        browser_tabs := DockTabs{
+            tabs: [@browser]
+            selected: 0
+            closable: false
+        }
+
+        stage_tabs := DockTabs{
+            tabs: [@stage]
+            selected: 0
+            closable: false
+        }
+
+        inspector_tabs := DockTabs{
+            tabs: [@inspector @export @settings @chrome_tab]
+            selected: 3
+            closable: false
+        }
+
+        timeline_tabs := DockTabs{
+            tabs: [@timeline]
+            selected: 0
+            closable: false
+        }
+
+        browser := DockTab{
+            name: "Browser"
+            template: @PermanentTab
+            kind: @BrowserPane
+        }
+
+        stage := DockTab{
+            name: "Stage"
+            template: @PermanentTab
+            kind: @StagePane
+        }
+
+        inspector := DockTab{
+            name: "Inspector"
+            template: @PermanentTab
+            kind: @InspectorPane
+        }
+
+        export := DockTab{
+            name: "Export"
+            template: @PermanentTab
+            kind: @ExportPane
+        }
+
+        settings := DockTab{
+            name: "Settings"
+            template: @PermanentTab
+            kind: @SettingsPane
+        }
+
+        chrome_tab := DockTab{
+            name: "Chrome"
+            template: @PermanentTab
+            kind: @ChromePane
+        }
+
+        timeline := DockTab{
+            name: "Timeline"
+            template: @PermanentTab
+            kind: @TimelinePane
+        }
+
+        BrowserPane := BrowserPane{}
+        StagePane := StagePane{}
+        InspectorPane := InspectorPane{}
+        ExportPane := ExportPane{}
+        SettingsPane := SettingsPane{}
+        ChromePane := ChromePane{}
+        TimelinePane := TimelinePane{}
     }
 
     status_surface_divider := SurfaceDivider{}

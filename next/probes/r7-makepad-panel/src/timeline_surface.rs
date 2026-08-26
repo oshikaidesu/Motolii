@@ -1,8 +1,25 @@
 use makepad_widgets::*;
-use motolii_shell::timeline_pane;
+use motolii_timeline_pane as timeline_pane;
 use motolii_store::Fps;
 
 use crate::gesture_input::{GestureDevice, GesturePhase, GestureSample};
+
+script_mod! {
+    use mod.prelude.widgets.*
+    use mod.widgets.*
+
+    mod.widgets.TimelineSurfaceBase = #(TimelineSurface::register_widget(vm))
+    mod.widgets.TimelineSurface = set_type_default() do mod.widgets.TimelineSurfaceBase{
+        width: Fill
+        height: Fill
+        draw_bg +: {color: #x2e2e2e}
+        draw_item +: {color: #c5c5c5}
+        draw_text +: {
+            color: #c5c5c5
+            text_style: theme.font_code{font_size: 8}
+        }
+    }
+}
 #[cfg(test)]
 use makepad_widgets::makepad_platform::event::ScrollPhase;
 
@@ -268,8 +285,8 @@ impl TimelineScrollGesture {
             ScrollMode::Pan => {
                 // A horizontal trackpad gesture pans naturally. Shift converts a
                 // vertical wheel into the same horizontal operation. Unmodified
-                // vertical input is reserved for lane scrolling; fitted lanes
-                // currently have no vertical overflow, so it chains/no-ops.
+                // vertical input is reserved for lane scrolling; fixed-height
+                // lanes do not stretch, and this surface does not scroll Y.
                 let delta = match axis {
                     ScrollAxis::Horizontal => sample.translation[0],
                     ScrollAxis::Vertical if sample.modifiers.shift => sample.translation[1],
