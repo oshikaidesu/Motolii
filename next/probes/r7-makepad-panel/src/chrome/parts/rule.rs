@@ -1,8 +1,11 @@
 //! ホスト向け公開型: ChromeRule
 //!
-//! 出典: Material Design Structure https://m1.material.io/layout/structure.html
-//! 線。Document を持たない。二次領域はまず余白。必要なときだけ 1px。
-//! 色・寸法: `ui-scale-and-z.html` 候補B `--line`（物理 1px）と r7 `panel.splash` `#x1d1d1d`。
+//! 出典: 利用者添付の Live Dark 実画面
+//!   `assets/image-cf39df4e-cc7d-4299-9900-56934306be7e.png`（1024×554 から画素採取）
+//! 形の言語（画像から目測）: 区切りは 1px の暗線か面の明度差だけ。太い枠線を描かない。
+//! まず余白と明度差、必要なときだけこの 1px。
+//! 色（画像サンプル）: トラック区切り・パネル継ぎ目 #2d2d2d。
+//! 別名は代入。`set_type_default()` は使わない。`ScrollYView` は書かない。
 use makepad_widgets::*;
 
 script_mod! {
@@ -15,6 +18,6 @@ script_mod! {
         height: 1
         show_bg: true
         new_batch: true
-        draw_bg.color: #x1d1d1d
+        draw_bg.color: #x2d2d2d
     }
 }

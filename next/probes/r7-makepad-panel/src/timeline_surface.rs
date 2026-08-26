@@ -12,10 +12,10 @@ script_mod! {
     mod.widgets.TimelineSurface = set_type_default() do mod.widgets.TimelineSurfaceBase{
         width: Fill
         height: Fill
-        draw_bg +: {color: #a5a5a5}
-        draw_item +: {color: #x2a2a2a}
+        draw_bg +: {color: #x2e2e2e}
+        draw_item +: {color: #c5c5c5}
         draw_text +: {
-            color: #x2a2a2a
+            color: #c5c5c5
             text_style: theme.font_code{font_size: 8}
         }
     }
@@ -29,7 +29,7 @@ const RAIL_WIDTH: f64 = 150.0;
 /// (`docs/reviews/2026-08-25-icebook-panel-drafts/timeline.md`).
 const LANE_HEIGHT: f64 = 24.0;
 const PROPERTY_ROW_HEIGHT: f64 = 18.0;
-const CLIP_INSET_Y: f64 = 2.0;
+const CLIP_TITLE_HEIGHT: f64 = 8.0;
 const MIN_VISIBLE_SPAN_SECONDS: f64 = 2.0;
 
 #[derive(Clone, Debug, Default)]
@@ -674,45 +674,57 @@ impl TimelineSurface {
     }
 
     fn lane_color(index: usize) -> Vec4f {
-        // Ableton clip assignment: orange / yellow / pink / cyan, then close variants.
-        const COLORS: [[f32; 4]; 12] = [
-            [1.00, 0.55, 0.20, 1.0],
-            [1.00, 0.85, 0.29, 1.0],
-            [1.00, 0.48, 0.72, 1.0],
-            [0.23, 0.83, 0.83, 1.0],
-            [1.00, 0.42, 0.29, 1.0],
-            [0.91, 0.88, 0.29, 1.0],
-            [0.91, 0.35, 0.61, 1.0],
-            [0.29, 0.78, 0.91, 1.0],
-            [0.91, 0.41, 0.13, 1.0],
-            [0.94, 0.75, 0.19, 1.0],
-            [0.94, 0.56, 0.66, 1.0],
-            [0.16, 0.72, 0.66, 1.0],
+        // Sampled from the Live Dark Arrangement screenshot (not remembered).
+        // cyan #0fb9ac / blue #8ac5fd / pink #fd94a5 / yellow #f7f57e /
+        // green #21ffa8 / red #fe3636 / mustard #ca972a
+        const COLORS: [[f32; 4]; 7] = [
+            [0.059, 0.725, 0.675, 1.0],
+            [0.541, 0.773, 0.992, 1.0],
+            [0.992, 0.580, 0.647, 1.0],
+            [0.969, 0.961, 0.494, 1.0],
+            [0.129, 1.000, 0.659, 1.0],
+            [0.996, 0.212, 0.212, 1.0],
+            [0.792, 0.592, 0.165, 1.0],
         ];
         let color = COLORS[index % COLORS.len()];
         vec4(color[0], color[1], color[2], color[3])
     }
 
+    fn darken(color: Vec4f, amount: f32) -> Vec4f {
+        vec4(color.x * amount, color.y * amount, color.z * amount, 1.0)
+    }
+
     fn draw_lane(&mut self, cx: &mut Cx2d, lane: &TimelineLane, row: VisualRow, zebra: bool) {
-        let bg = if lane.selected {
-            vec4(0.56, 0.56, 0.56, 1.0)
-        } else if zebra {
-            vec4(0.604, 0.604, 0.604, 1.0)
+        let rail_bg = if lane.selected {
+            vec4(0.239, 0.239, 0.239, 1.0)
         } else {
-            vec4(0.647, 0.647, 0.647, 1.0)
+            vec4(0.310, 0.310, 0.310, 1.0)
+        };
+        let time_bg = if lane.selected {
+            vec4(0.239, 0.239, 0.239, 1.0)
+        } else if zebra {
+            vec4(0.200, 0.200, 0.200, 1.0)
+        } else {
+            vec4(0.180, 0.180, 0.180, 1.0)
         };
         self.draw_rect(
             cx,
             Rect {
                 pos: dvec2(self.rect.pos.x, row.y),
-                size: dvec2(self.rect.size.x, row.height),
+                size: dvec2(RAIL_WIDTH, row.height),
             },
-            bg,
+            rail_bg,
+        );
+        self.draw_rect(
+            cx,
+            Rect {
+                pos: dvec2(self.rect.pos.x + RAIL_WIDTH, row.y),
+                size: dvec2((self.rect.size.x - RAIL_WIDTH).max(1.0), row.height),
+            },
+            time_bg,
         );
 
         let color = Self::lane_color(lane.label_color);
-        // Sticky-note tab: full lane height, left aligned. It labels the row
-        // without adding a second, misleading 8x8 "content height" signal.
         self.draw_rect(
             cx,
             Rect {
@@ -728,9 +740,9 @@ impl TimelineSurface {
             dvec2(self.rect.pos.x + 9.0, text_y),
             &lane.name,
             if lane.selected {
-                vec4(0.10, 0.10, 0.10, 1.0)
+                vec4(0.933, 0.933, 0.933, 1.0)
             } else {
-                vec4(0.16, 0.16, 0.16, 1.0)
+                vec4(0.655, 0.655, 0.655, 1.0)
             },
             8.0,
         );
@@ -750,9 +762,9 @@ impl TimelineSurface {
                     size: dvec2(12.0, control_h),
                 },
                 if active {
-                    vec4(0.79, 0.64, 0.29, 1.0)
+                    vec4(0.792, 0.592, 0.165, 1.0)
                 } else {
-                    vec4(0.43, 0.43, 0.43, 1.0)
+                    vec4(0.180, 0.180, 0.180, 1.0)
                 },
             );
             self.draw_label(
@@ -762,7 +774,7 @@ impl TimelineSurface {
                 if active {
                     vec4(0.12, 0.10, 0.06, 1.0)
                 } else {
-                    vec4(0.86, 0.86, 0.86, 1.0)
+                    vec4(0.655, 0.655, 0.655, 1.0)
                 },
                 6.4,
             );
@@ -777,17 +789,34 @@ impl TimelineSurface {
         if right > left {
             let x0 = self.x_at_frame(left);
             let x1 = self.x_at_frame(right);
+            let clip_w = (x1 - x0).max(1.0);
+            let clip_h = (row.height - 1.0).max(1.0);
+            let title_h = CLIP_TITLE_HEIGHT.min(clip_h);
             self.draw_rect(
                 cx,
                 Rect {
-                    pos: dvec2(x0, row.y + CLIP_INSET_Y),
-                    size: dvec2(
-                        (x1 - x0).max(1.0),
-                        (row.height - CLIP_INSET_Y * 2.0 - 1.0).max(1.0),
-                    ),
+                    pos: dvec2(x0, row.y),
+                    size: dvec2(clip_w, clip_h),
                 },
                 color,
             );
+            self.draw_rect(
+                cx,
+                Rect {
+                    pos: dvec2(x0, row.y),
+                    size: dvec2(clip_w, title_h),
+                },
+                Self::darken(color, 0.72),
+            );
+            if clip_w > 10.0 {
+                self.draw_label(
+                    cx,
+                    dvec2(x0 + 3.0, row.y + ((title_h - 7.0) * 0.5).max(0.0)),
+                    &lane.name,
+                    vec4(0.10, 0.10, 0.10, 1.0),
+                    7.0,
+                );
+            }
         }
     }
 
@@ -798,13 +827,13 @@ impl TimelineSurface {
                 pos: dvec2(self.rect.pos.x, row.y),
                 size: dvec2(self.rect.size.x, row.height),
             },
-            vec4(0.557, 0.557, 0.557, 1.0),
+            vec4(0.165, 0.165, 0.165, 1.0),
         );
         self.draw_label(
             cx,
             dvec2(self.rect.pos.x + 20.0, row.y + (row.height - 8.0) * 0.5),
             &property.name,
-            vec4(0.22, 0.22, 0.22, 1.0),
+            vec4(0.655, 0.655, 0.655, 1.0),
             7.2,
         );
         let key_color = self
@@ -812,7 +841,7 @@ impl TimelineSurface {
             .iter()
             .find(|lane| lane.id == property.layer_id)
             .map(|lane| Self::lane_color(lane.label_color))
-            .unwrap_or_else(|| vec4(0.92, 0.78, 0.59, 1.0));
+            .unwrap_or_else(|| vec4(0.792, 0.592, 0.165, 1.0));
         let key_size = 8.0;
         let key_y = row.y + (row.height - key_size) * 0.5;
         for &frame in &property.keys {
@@ -849,9 +878,9 @@ impl TimelineSurface {
                     size: dvec2(1.0, (self.rect.size.y - RULER_HEIGHT).max(1.0)),
                 },
                 if is_major {
-                    vec4(0.0, 0.0, 0.0, 0.22)
+                    vec4(0.122, 0.122, 0.122, 1.0)
                 } else {
-                    vec4(0.0, 0.0, 0.0, 0.10)
+                    vec4(0.145, 0.145, 0.145, 1.0)
                 },
             );
             frame = frame.saturating_add(minor.max(1));
@@ -866,7 +895,7 @@ impl TimelineSurface {
                 pos: self.rect.pos,
                 size: dvec2(self.rect.size.x, RULER_HEIGHT),
             },
-            vec4(0.506, 0.506, 0.506, 1.0),
+            vec4(0.239, 0.239, 0.239, 1.0),
         );
         self.draw_rect(
             cx,
@@ -874,16 +903,16 @@ impl TimelineSurface {
                 pos: dvec2(self.rect.pos.x + RAIL_WIDTH - 1.0, self.rect.pos.y),
                 size: dvec2(1.0, self.rect.size.y),
             },
-            vec4(0.35, 0.35, 0.35, 1.0),
+            vec4(0.122, 0.122, 0.122, 1.0),
         );
 
         let zoom_percent = (self.duration_frames as f64 / self.view_span.max(1.0) * 100.0).round();
         self.draw_label(
             cx,
-            dvec2(self.rect.pos.x + 9.0, self.rect.pos.y + 5.0),
+            dvec2(self.rect.pos.x + 9.0, self.rect.pos.y + 6.0),
             &format!("TIME  {zoom_percent:.0}%"),
-            vec4(0.16, 0.16, 0.16, 1.0),
-            7.3,
+            vec4(0.773, 0.773, 0.773, 1.0),
+            7.0,
         );
 
         let first_minor = (self.view_start / minor as f64).ceil() as i64 * minor;
@@ -899,9 +928,9 @@ impl TimelineSurface {
                     size: dvec2(1.0, tick_height),
                 },
                 if is_major {
-                    vec4(0.18, 0.18, 0.18, 1.0)
+                    vec4(0.773, 0.773, 0.773, 1.0)
                 } else {
-                    vec4(0.18, 0.18, 0.18, 0.45)
+                    vec4(0.416, 0.416, 0.416, 1.0)
                 },
             );
             if is_major {
@@ -913,10 +942,10 @@ impl TimelineSurface {
                 };
                 self.draw_label(
                     cx,
-                    dvec2(x + 2.0, self.rect.pos.y + 1.0),
+                    dvec2(x + 2.0, self.rect.pos.y + 2.0),
                     &label,
-                    vec4(0.14, 0.14, 0.14, 1.0),
-                    7.0,
+                    vec4(0.773, 0.773, 0.773, 1.0),
+                    6.5,
                 );
             }
             frame = frame.saturating_add(minor.max(1));
@@ -932,17 +961,9 @@ impl TimelineSurface {
                 cx,
                 Rect {
                     pos: dvec2(playhead_x, self.rect.pos.y),
-                    size: dvec2(1.5, self.rect.size.y),
+                    size: dvec2(1.0, self.rect.size.y),
                 },
-                vec4(0.85, 0.71, 0.45, 1.0),
-            );
-            self.draw_rect(
-                cx,
-                Rect {
-                    pos: dvec2(playhead_x - 3.0, self.rect.pos.y),
-                    size: dvec2(7.0, 7.0),
-                },
-                vec4(0.85, 0.71, 0.45, 1.0),
+                vec4(0.902, 0.604, 0.153, 1.0),
             );
         }
 
@@ -963,7 +984,7 @@ impl TimelineSurface {
                         pos: dvec2(self.rect.pos.x, row.y),
                         size: dvec2(self.rect.size.x, 2.0),
                     },
-                    vec4(0.85, 0.71, 0.45, 1.0),
+                    vec4(0.902, 0.604, 0.153, 1.0),
                 );
             }
         }
@@ -1043,7 +1064,7 @@ impl Widget for TimelineSurface {
                     pos: dvec2(self.rect.pos.x, row.y + row.height - 1.0),
                     size: dvec2(self.rect.size.x, 1.0),
                 },
-                vec4(0.42, 0.42, 0.42, 1.0),
+                vec4(0.122, 0.122, 0.122, 1.0),
             );
         }
 

@@ -224,13 +224,13 @@ let TimelinePane = View{
         align: Align{x: 0.5 y: 0.5}
         show_bg: true
         new_batch: true
-        draw_bg.color: #818181
+        draw_bg.color: #x3d3d3d
         play_toggle := ButtonFlat{
             text: "PLAY / PAUSE"
             width: 78
             height: 20
-            draw_bg.color: #6e6e6e
-            draw_text.color: #x1a1a1a
+            draw_bg.color: #4f4f4f
+            draw_text.color: #c5c5c5
             draw_text.text_style: theme.font_code{font_size: 9}
         }
     }

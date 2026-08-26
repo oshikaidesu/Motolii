@@ -30,9 +30,7 @@ script_mod! {
         width: Fill
         height: 18
         align: Align{x: 0.0 y: 0.5}
-        padding: Inset{left: 8 right: 8}
-        cursor: MouseCursor.Hand
-        text: "Instruments"
+        padding: Inset{left: 8 right: 8}        text: "Instruments"
         draw_bg.color: #xa5a5a5
         draw_bg.color_hover: #xbdbdbd
         draw_bg.color_down: #x818181
@@ -47,9 +45,7 @@ script_mod! {
         width: Fill
         height: 18
         align: Align{x: 0.0 y: 0.5}
-        padding: Inset{left: 8 right: 8}
-        cursor: MouseCursor.Hand
-        text: "Sounds"
+        padding: Inset{left: 8 right: 8}        text: "Sounds"
         draw_bg.color: #xacc5ca
         draw_bg.color_hover: #xacc5ca
         draw_bg.color_down: #x818181
@@ -63,9 +59,7 @@ script_mod! {
         width: Fit
         height: 16
         padding: Inset{left: 8 right: 8}
-        align: Center
-        cursor: MouseCursor.Hand
-        text: "Analog"
+        align: Center        text: "Analog"
         draw_bg.color: #x818181
         draw_bg.color_hover: #xbdbdbd
         draw_bg.color_down: #x818181
@@ -80,9 +74,7 @@ script_mod! {
         width: Fit
         height: 16
         padding: Inset{left: 8 right: 8}
-        align: Center
-        cursor: MouseCursor.Hand
-        text: "Pad"
+        align: Center        text: "Pad"
         draw_bg.color: #xe3b43e
         draw_bg.color_hover: #xe3b43e
         draw_bg.color_down: #x818181

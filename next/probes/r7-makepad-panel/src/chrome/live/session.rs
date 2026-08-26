@@ -18,9 +18,7 @@ script_mod! {
         width: 16
         height: 18
         padding: 0
-        align: Center
-        cursor: MouseCursor.Hand
-        text: ">"
+        align: Center        text: ">"
         draw_bg.color: #x00000000
         draw_bg.color_hover: #xbdbdbd
         draw_bg.color_down: #x818181
@@ -34,9 +32,7 @@ script_mod! {
         width: 16
         height: 18
         padding: 0
-        align: Center
-        cursor: MouseCursor.Hand
-        text: ""
+        align: Center        text: ""
         draw_bg.color: #x00000000
         draw_bg.color_hover: #xbdbdbd
         draw_bg.color_down: #x818181
@@ -122,9 +118,7 @@ script_mod! {
         width: 20
         height: 20
         padding: 0
-        align: Center
-        cursor: MouseCursor.Hand
-        text: ">"
+        align: Center        text: ">"
         draw_bg.color: #xa5a5a5
         draw_bg.color_hover: #xbdbdbd
         draw_bg.color_down: #x818181

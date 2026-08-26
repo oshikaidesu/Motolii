@@ -90,9 +90,7 @@ script_mod! {
         width: 16
         height: 14
         padding: 0
-        align: Center
-        cursor: MouseCursor.Hand
-        text: "8"
+        align: Center        text: "8"
         draw_bg.color: #xe9be3c
         draw_bg.color_hover: #xe9be3c
         draw_bg.color_down: #x818181
@@ -106,9 +104,7 @@ script_mod! {
         width: 16
         height: 14
         padding: 0
-        align: Center
-        cursor: MouseCursor.Hand
-        text: "S"
+        align: Center        text: "S"
         draw_bg.color: #x9aa8f1
         draw_bg.color_hover: #x9aa8f1
         draw_bg.color_down: #x818181
@@ -123,9 +119,7 @@ script_mod! {
         width: 16
         height: 14
         padding: 0
-        align: Center
-        cursor: MouseCursor.Hand
-        text: ""
+        align: Center        text: ""
         draw_bg.color: #x818181
         draw_bg.color_hover: #xbdbdbd
         draw_bg.color_down: #x131313

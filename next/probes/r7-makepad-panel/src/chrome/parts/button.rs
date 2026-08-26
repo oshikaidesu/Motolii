@@ -1,9 +1,12 @@
 //! ホスト向け公開型: ChromeIcon / ChromeGhost
-//! 出典: Material 3 Icon buttons — https://m3.material.io/components/icon-buttons/overview
+//! 出典: 利用者添付の Live 12 Dark 実画面
+//!   `assets/image-cf39df4e-cc7d-4299-9900-56934306be7e.png`（1024×554 から画素実測）
+//! 形: 完全な矩形のベタ面。角丸・枠線・影を作らない。状態は面色の切替だけ。
+//! 色（画像サンプル）: ボタン面 #3d3d3d / hover は行地 #4f4f4f / 押下は窪み #282828
+//!   明グリフ #efefef（上バー再生三角）/ 二次グリフ #a0a0a0
 //! アイコン踏面だけ。文字の `ChromeButton`・錠の `ChromeLock` は置かない。
 //! 技能の `ButtonFlatIcon` / `ButtonFlatterIcon` を載せる。iced は置かない。
 //! ScrollYView は書かない（eval 白紙）。
-//! 色・寸法: chrome 既存（raised #x3e3e3e / hover #x464646 / インク #xb7b7b7 / 踏面 24 / グリフ 13）。
 use makepad_widgets::*;
 
 script_mod! {
@@ -17,16 +20,14 @@ script_mod! {
         padding: 0
         margin: 0.
         spacing: 0
-        align: Center
-        cursor: MouseCursor.Hand
-        text: ""
+        align: Center        text: ""
         icon_walk: Walk{width: 13 height: 13}
-        draw_bg.color: #x3e3e3e
-        draw_bg.color_hover: #x464646
-        draw_bg.color_down: #x242424
+        draw_bg.color: #x3d3d3d
+        draw_bg.color_hover: #x4f4f4f
+        draw_bg.color_down: #x282828
         draw_bg.border_size: 0.0
         draw_bg.border_radius: 0.0
-        draw_icon +: {color: #xb7b7b7}
+        draw_icon +: {color: #xefefef}
     }
 
     // ghost — ButtonFlatterIcon。面は無し。key / mute の二次グリフ
@@ -36,15 +37,13 @@ script_mod! {
         padding: 0
         margin: 0.
         spacing: 0
-        align: Center
-        cursor: MouseCursor.Hand
-        text: ""
+        align: Center        text: ""
         icon_walk: Walk{width: 13 height: 13}
         draw_bg.color: #x00000000
-        draw_bg.color_hover: #x464646
-        draw_bg.color_down: #x242424
+        draw_bg.color_hover: #x3d3d3d
+        draw_bg.color_down: #x282828
         draw_bg.border_size: 0.0
         draw_bg.border_radius: 0.0
-        draw_icon +: {color: #xb7b7b7}
+        draw_icon +: {color: #xa0a0a0}
     }
 }

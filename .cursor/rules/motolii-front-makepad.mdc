@@ -30,9 +30,13 @@ Stage ゼロコピーの受入面は mac / win / linux(裁定255)。継ぎ目は
 Chrome / splash: `ScrollYView` 禁止（eval 白紙）。未登録 `Chrome*` を splash に書くな（葉が落ちる）。
 Chrome の実験は `--hot`。登録してから葉へ `ChromeGallery{}` だけ。未登録 kind を splash に足すな。
 Dock 葉は動いている `View` / `SolidView` / `Label` / `ButtonFlat` だけ直載せ。
-`set_type_default()` を `SolidView` / `View` / `Label` / `ButtonFlat` など Makepad 基底に使うな。別名は代入だけ（切り分けで通った `ChromeFaceAlias` 型）。破ると全面灰色・エラー無し（植物状態）。受理しない。
+**「公式のものを書き換えるのは烏滸がましいと知れ」**(2026-08-26 利用者裁定)。Makepad 公式(基底 widget・その型既定・上流ソース・テーマ既定)は**読むだけ**。書いてよいのは自分の名前空間だけ: `Chrome*` / `Live*` の代入別名・自前ファイル・自前 splash 葉。
+- `set_type_default()` は自作 `register_widget` 直後の自 Base のみ(公式 DSL 技能の形)。`SolidView` / `View` / `Label` / `ButtonFlat` 等の基底に使うな — 今日 `set_type_default() do SolidView` で全面灰色を2回出した(エラー無し・植物状態)。別名は代入だけ
+- 違反は機械検査 `chrome_does_not_set_type_default_on_makepad_bases` が赤(src 全体への拡大は別レーン実装中。重複実装するな)
+- 色: hex の部品直書きを増やさない(公式 theme 技能 golden rule「production の色・余白は `theme.*` 参照」)。Ableton 実測色は自前パレット1箇所(`mod` 配下の自トークン)に定義し全部品が参照。`mod.theme` / `mod.themes.*` は書き換えない — 許されるのは選択だけで、r7 は既定 dark 選択済み
 
 灰色無エラーは受理しない（植物状態）。失敗の見た目は面のエラー文言。窓の背景色のまま・ログだけ・EXIT=0 を成功にしない。
+並列保存の一時灰色は仕様ではなく「登録より参照が先に保存された」見た目。新 kind は登録ファイルを先に保存、参照側を後に保存。
 - HotPanel は作る時点と差し替え後の両方で Fill + `flow: Down` を apply する。定数だけの死文を残すな
 - splash eval 失敗 / 未登録 kind / 空 View を「view installed」にしない。失敗ならその葉または窓に文言
 - 差し替え後は `cx.redraw_all()`。局所 redraw だけを成功にするな

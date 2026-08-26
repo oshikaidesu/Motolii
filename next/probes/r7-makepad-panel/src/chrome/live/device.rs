@@ -18,9 +18,7 @@ script_mod! {
         width: 12
         height: 12
         padding: 0
-        text: ""
-        cursor: MouseCursor.Hand
-        draw_bg.color: #xe9be3c
+        text: ""        draw_bg.color: #xe9be3c
         draw_bg.color_hover: #xe9be3c
         draw_bg.color_down: #x131313
         draw_bg.border_size: 0.0
@@ -32,9 +30,7 @@ script_mod! {
         width: 14
         height: 14
         padding: 0
-        align: Center
-        cursor: MouseCursor.Hand
-        text: "v"
+        align: Center        text: "v"
         draw_bg.color: #x00000000
         draw_bg.color_hover: #x131313
         draw_bg.border_size: 0.0
@@ -104,9 +100,7 @@ script_mod! {
         max: 1.0
         default: 0.45
         precision: 2
-        text: "Param"
-        cursor: MouseCursor.Hand
-        draw_bg.color: #x131313
+        text: "Param"        draw_bg.color: #x131313
         draw_bg.color_hover: #x131313
         draw_bg.color_focus: #x131313
         draw_bg.color_drag: #x131313
@@ -155,9 +149,7 @@ script_mod! {
         width: Fit
         height: 16
         padding: Inset{left: 8 right: 8}
-        align: Center
-        cursor: MouseCursor.Hand
-        text: "Osc 2"
+        align: Center        text: "Osc 2"
         draw_bg.color: #x131313
         draw_bg.color_hover: #x131313
         draw_bg.color_down: #x131313
@@ -171,9 +163,7 @@ script_mod! {
         width: Fit
         height: 16
         padding: Inset{left: 8 right: 8}
-        align: Center
-        cursor: MouseCursor.Hand
-        text: "Osc 1"
+        align: Center        text: "Osc 1"
         draw_bg.color: #x818181
         draw_bg.color_hover: #x818181
         draw_bg.color_down: #x131313

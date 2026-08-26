@@ -852,13 +852,15 @@ impl MatchEvent for App {
 impl AppMain for App {
     fn script_mod(vm: &mut ScriptVm) -> ScriptValue {
         crate::makepad_widgets::script_mod(vm);
+        // Widget modules register before the UI modules that import them (DSL 正史)。
+        // chrome (parts / gallery 含む) が先、surface 群が後。
+        crate::chrome::script_mod(vm);
         crate::browser_surface::script_mod(vm);
         crate::stage_chrome::script_mod(vm);
         crate::inspector_surface::script_mod(vm);
         crate::export_surface::script_mod(vm);
         crate::settings_surface::script_mod(vm);
         crate::timeline_surface::script_mod(vm);
-        crate::chrome::script_mod(vm);
         self::script_mod(vm)
     }
 

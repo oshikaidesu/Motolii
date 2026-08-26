@@ -18,9 +18,7 @@ script_mod! {
         width: Fit
         height: 18
         padding: Inset{left: 6 right: 6}
-        align: Center
-        cursor: MouseCursor.Hand
-        text: "Link"
+        align: Center        text: "Link"
         draw_bg.color: #x00000000
         draw_bg.color_hover: #x818181
         draw_bg.color_down: #x131313
@@ -34,9 +32,7 @@ script_mod! {
         width: Fit
         height: 16
         padding: Inset{left: 8 right: 8}
-        align: Center
-        cursor: MouseCursor.Hand
-        text: "Tap"
+        align: Center        text: "Tap"
         draw_bg.color: #xa5a5a5
         draw_bg.color_hover: #xbdbdbd
         draw_bg.color_down: #x818181
@@ -111,9 +107,7 @@ script_mod! {
         width: 22
         height: 22
         padding: 0
-        align: Center
-        cursor: MouseCursor.Hand
-        text: ">"
+        align: Center        text: ">"
         draw_bg.color: #x00000000
         draw_bg.color_hover: #x818181
         draw_bg.color_down: #x131313
@@ -127,9 +121,7 @@ script_mod! {
         width: 22
         height: 22
         padding: 0
-        align: Center
-        cursor: MouseCursor.Hand
-        text: ""
+        align: Center        text: ""
         draw_bg.color: #x00000000
         draw_bg.color_hover: #x818181
         draw_bg.color_down: #x131313
@@ -149,9 +141,7 @@ script_mod! {
         width: 22
         height: 22
         padding: 0
-        align: Center
-        cursor: MouseCursor.Hand
-        text: ""
+        align: Center        text: ""
         draw_bg.color: #x00000000
         draw_bg.color_hover: #x818181
         draw_bg.color_down: #x131313
