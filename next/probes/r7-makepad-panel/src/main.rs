@@ -19,7 +19,7 @@ mod stage_chrome;
 mod stage_import;
 mod stage_surface;
 mod timeline_surface;
-use stage_surface::{SharedOsHandle, SharedSurfaceDesc, StagePresent};
+use stage_surface::{SharedOsHandle, SharedSurfaceDesc, StagePresent, StageRoom, StageVerdict};
 use timeline_surface::{
     TimelineLane, TimelineModel, TimelinePropertyLane, TimelineSurface, TimelineSurfaceAction,
 };
@@ -99,12 +99,6 @@ enum TimelineUpdate {
     Stage(String),
     ModelAndStage(String),
     Status(String),
-}
-
-enum SharedPresentResult {
-    Shown,
-    CreateFailed,
-    WriteFailed,
 }
 
 /// A one-slot mailbox for expensive projections. Producers may run at pointer
@@ -505,15 +499,29 @@ impl HotPanel {
         self.view.child_by_path(ids!(dock)).as_dock()
     }
 
-    fn set_stage_texture(&mut self, cx: &mut Cx, texture: Texture) -> bool {
+    /// Stage の Image へ共有面を束ね、**表示側が答えた寸法**を返す。
+    ///
+    /// `None` = Image が無い(継ぎ目の配線ミス)。`Some(None)` = Image はあるが
+    /// 面が寸法を答えない(窓の葉の穴 — 0×0 の quad になり黒く見える)。
+    fn set_stage_texture(
+        &mut self,
+        cx: &mut Cx,
+        texture: Texture,
+    ) -> Option<Option<(u32, u32)>> {
         let stage_image = self
             .dock()
             .item(id!(stage))
             .child_by_path(ids!(stage_frame))
             .as_image();
-        let found = !stage_image.is_empty();
+        if stage_image.is_empty() {
+            return None;
+        }
+        let displayed = texture
+            .get_format(cx)
+            .vec_width_height()
+            .map(|(width, height)| (width as u32, height as u32));
         stage_image.set_texture(cx, Some(texture));
-        found
+        Some(displayed)
     }
 
     fn set_stage_error(&self, cx: &mut Cx, text: &str) {
@@ -573,6 +581,9 @@ pub struct App {
     playback_timer: Timer,
     #[rust]
     stage_next_frame: NextFrame,
+    /// 直前の室判定。変化したときだけ1行ログを出すため。
+    #[rust]
+    stage_verdict: Option<StageVerdict>,
     #[rust]
     stage_request: LatestFrameRequest,
     /// The existing product shell remains the sole Document/Engine owner. This
@@ -583,19 +594,31 @@ pub struct App {
 
 impl App {
     fn install_stage_frame(&mut self, cx: &mut Cx) {
-        match self.try_present_shared(cx) {
-            SharedPresentResult::Shown => self.set_stage_error(cx, ""),
-            SharedPresentResult::CreateFailed => self.set_stage_error(cx, "共有面が作れなかった"),
-            SharedPresentResult::WriteFailed => self.set_stage_error(cx, "書けなかった"),
+        let verdict = self.try_present_shared(cx);
+        self.set_stage_error(cx, &verdict.message());
+        // 室が変わったときだけ1行。黒い Stage を見たらこの行だけ読めばよい。
+        if self.stage_verdict != Some(verdict) {
+            self.stage_verdict = Some(verdict);
+            match verdict {
+                StageVerdict::Shown => log!("STAGE room=- zero_copy=true shown"),
+                StageVerdict::Stalled { room, reason } => {
+                    log!(
+                        "STAGE room={} owner={} reason={}",
+                        room.tag(),
+                        room.owner(),
+                        reason
+                    )
+                }
+            }
         }
     }
 
-    fn try_present_shared(&mut self, cx: &mut Cx) -> SharedPresentResult {
+    fn try_present_shared(&mut self, cx: &mut Cx) -> StageVerdict {
         let Some(backend) = self.backend.as_mut() else {
-            return SharedPresentResult::CreateFailed;
+            return StageVerdict::stalled(StageRoom::Seam, "backend is not up yet");
         };
         let Some(composition) = backend.doc.view().composition().ok().flatten() else {
-            return SharedPresentResult::CreateFailed;
+            return StageVerdict::stalled(StageRoom::Host, "composition is unreadable");
         };
         let desc = SharedSurfaceDesc::from_comp(composition.width, composition.height);
         let recreate = backend.present.needs_recreate(desc) || backend.stage_gpu.is_none();
@@ -613,39 +636,44 @@ impl App {
                 makepad_widgets::SharedOsHandle::DmaBufFd(fd) => SharedOsHandle::DmaBufFd(fd),
             };
             let Some(present) = StagePresent::shared(desc, handle) else {
-                return SharedPresentResult::CreateFailed;
+                return StageVerdict::stalled(StageRoom::Leaf, "the shared surface handle is unusable");
             };
             let Some(gpu) =
                 stage_import::import_presentable(backend.engine.gpu_device(), desc, handle)
             else {
-                return SharedPresentResult::CreateFailed;
+                return StageVerdict::stalled(StageRoom::Seam, "cannot import the shared surface into wgpu");
             };
             backend.stage_texture = Some(texture);
             backend.stage_gpu = Some(gpu);
             backend.present = present;
         }
         let Some(gpu) = backend.stage_gpu.as_ref() else {
-            return SharedPresentResult::CreateFailed;
+            return StageVerdict::stalled(StageRoom::Seam, "no shared surface is held");
         };
         let Ok(t) = RationalTime::try_from_frame(backend.session.playhead, composition.fps) else {
-            return SharedPresentResult::WriteFailed;
+            return StageVerdict::stalled(StageRoom::Host, "playhead does not map to a time");
         };
         if backend
             .engine
             .render_frame_into(&backend.doc.view(), t, gpu)
             .is_err()
         {
-            return SharedPresentResult::WriteFailed;
+            return StageVerdict::stalled(StageRoom::Host, "writing into the shared surface failed");
         }
-        if let Some(texture) = backend.stage_texture.clone() {
-            let panel = self.ui.widget(cx, ids!(panel_host));
-            let _ = panel
-                .borrow_mut::<HotPanel>()
-                .map(|mut panel| panel.set_stage_texture(cx, texture))
-                .unwrap_or(false);
-        }
-        self.ui.widget(cx, ids!(panel_host)).redraw(cx);
-        SharedPresentResult::Shown
+        let present = backend.present;
+        let Some(texture) = backend.stage_texture.clone() else {
+            return StageVerdict::stalled(StageRoom::Seam, "no shared Texture is held");
+        };
+        let panel = self.ui.widget(cx, ids!(panel_host));
+        let Some(displayed) = panel
+            .borrow_mut::<HotPanel>()
+            .and_then(|mut panel| panel.set_stage_texture(cx, texture))
+        else {
+            return StageVerdict::stalled(StageRoom::Seam, "the Stage Image is not in the panel");
+        };
+        panel.redraw(cx);
+        // 「書けた」で終わらせない。出たかどうかは表示寸法が答える。
+        stage_surface::check_shown(present, desc, displayed)
     }
 
     fn set_stage_error(&self, cx: &mut Cx, text: &str) {

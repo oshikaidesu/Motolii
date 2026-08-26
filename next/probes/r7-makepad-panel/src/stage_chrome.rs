@@ -68,7 +68,7 @@ script_mod! {
                     // min_width/min_height: SharedPresentable textures have no
                     // vec_width_height(), so Image falls back to these (default 0
                     // = zero-sized quad = invisible stage).
-                    stage_frame := Image{width: Fill height: Fill fit: ImageFit.Smallest min_width: 1920 min_height: 1080}
+                    stage_frame := Image{width: Fill height: Fill fit: ImageFit.Smallest}
                     stage_error := Label{width: Fill height: Fill align: Align{x: 0.5 y: 0.5} text: "" draw_text.color: #xc49a38 draw_text.text_style: theme.font_code{font_size: 10}}
                 }
             }

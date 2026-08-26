@@ -76,6 +76,12 @@ fallback だけ: screenshot / export / 非対応環境。
    - win: DXGI shared handle。既存 `update_shared_texture` に format 引数を足すのではなく、新関数
    - linux: dma-buf。既存 GL `update_shared_texture` と同型の新関数
 3. `SharedOsHandle` は整数 ID / HANDLE / fd だけ。wgpu 型を Makepad に入れない
+4. `TextureFormat::vec_width_height()` へ `SharedPresentable` の腕を1本
+   (`platform/src/texture.rs`、rev `447dcc3c`)
+   - 共有面の**寸法を答えるのは葉の責任**。`as_alloc` は同じ width/height を既に持つ
+   - これが無いと `Image` が 0×0 の quad を描き、3室とも "ok" のまま画だけが出ない
+     (2026-08-26 に実測。Stage 黒画面の第2の根因)
+   - OS 非依存ファイルなので mac / win / linux で1度に効く
 
 **採らなかった切り方:**
 
@@ -109,6 +115,23 @@ ViewBuilder::new_with_external_resolved(ctx, config, id, texture)
 
 `motolii-compositor::Compositor::render_into` はこの口が着くまで
 presentable 検査だけを公開する。blit で先に通さない。
+
+## 4.5 どの室で止まったかを1行で読む
+
+r7 は present 1回ごとに室を名指す(`stage_surface.rs` の `StageRoom` / `StageVerdict`)。
+
+```
+STAGE room=leaf owner=makepad fork reason=the shared surface reports no size (drawn 0x0)
+```
+
+`Shown` は「書けた」ではなく「**出た**」を意味する — `check_shown` が
+`is_zero_copy` と「表示側が答えた寸法 == 共有面の寸法」を見る。
+2026-08-26 の黒画面は3室とも成功を返していたので、この検査が無い限り
+全コードを読む以外に室を絞る方法が無かった。win / linux の import を足すときも、
+先に読むのはこの1行であってコードではない。
+
+Stage 上の文言は ASCII に限る — Makepad の既定フォントに CJK グリフが無く、
+日本語は `.notdef` で静かに潰れる(同日実測)。
 
 ## 5. OS 対応表
 

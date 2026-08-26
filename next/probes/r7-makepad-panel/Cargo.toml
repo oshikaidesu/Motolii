@@ -12,7 +12,7 @@ publish = false
 [dependencies]
 # Pin the thin gesture-event fork used by this host. The fork owns platform
 # observations only; Motolii policy stays behind src/gesture_input.rs.
-makepad-widgets = { git = "https://github.com/oshikaidesu/makepad.git", rev = "142e2dc0defd48e1f44e9cf9d99ada94c72f204c" }
+makepad-widgets = { git = "https://github.com/oshikaidesu/makepad.git", rev = "447dcc3ce2896cc5deec44e013009ef5855caa7f" }
 wgpu = "29.0.4"
 motolii-store = { path = "../../core/motolii-store" }
 motolii-shell-state = { path = "../../ui/motolii-shell-state" }

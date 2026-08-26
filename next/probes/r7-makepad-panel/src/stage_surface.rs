@@ -92,6 +92,88 @@ impl StagePresent {
     }
 }
 
+/// 画が出ないときに最初に読む1行 — どの室で止まったか(裁定256の3室)。
+///
+/// この enum があるので、Stage が黒いときに全部のコードを読む必要はない。
+/// 室が分かれば、次に開くファイルは1つに決まる。
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum StageRoom {
+    /// 絵の意味・format・1枚を持つ側(`motolii-engine` / `motolii-compositor`)。
+    Host,
+    /// 共有面を確保して同じ handle を表示する側(Makepad fork)。
+    Leaf,
+    /// サイズ変化時だけ結ぶ側(この probe の `stage_import` / `main`)。
+    Seam,
+}
+
+impl StageRoom {
+    /// ログ用の室名。`STAGE room=leaf ...` の形で1行に出す。
+    pub fn tag(self) -> &'static str {
+        match self {
+            Self::Host => "host",
+            Self::Leaf => "leaf",
+            Self::Seam => "seam",
+        }
+    }
+
+    /// その室の持ち主。責任の所在をログと Stage 上の文言で名指しする。
+    pub fn owner(self) -> &'static str {
+        match self {
+            Self::Host => "engine/compositor",
+            Self::Leaf => "makepad fork",
+            Self::Seam => "r7 stage_import",
+        }
+    }
+}
+
+/// present 1回の判定。`Shown` は「書けた」ではなく「**出た**」を意味する。
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum StageVerdict {
+    Shown,
+    Stalled {
+        room: StageRoom,
+        reason: &'static str,
+    },
+}
+
+impl StageVerdict {
+    pub fn stalled(room: StageRoom, reason: &'static str) -> Self {
+        Self::Stalled { room, reason }
+    }
+
+    /// Stage 上に出す文言。室と持ち主を必ず含める。
+    pub fn message(self) -> String {
+        match self {
+            Self::Shown => String::new(),
+            Self::Stalled { room, reason } => {
+                format!("{reason}\n[{}] {}", room.tag(), room.owner())
+            }
+        }
+    }
+}
+
+/// 通常経路が本当にゼロコピーで、かつ**表示側が同じ寸法を答えた**かを見る。
+///
+/// ここが今まで欠けていた検査だった: 面が作れて compositor が書いても、
+/// 表示側が寸法を答えられなければ 0×0 の quad になり、3室とも "ok" のまま
+/// 画だけが出ない。寸法を答えるのは共有面を確保した室(`Leaf`)の責任。
+pub fn check_shown(
+    present: StagePresent,
+    desc: SharedSurfaceDesc,
+    displayed: Option<(u32, u32)>,
+) -> StageVerdict {
+    if !present.is_zero_copy() {
+        return StageVerdict::stalled(StageRoom::Seam, "the normal path is not a shared surface");
+    }
+    match displayed {
+        None => StageVerdict::stalled(StageRoom::Leaf, "the shared surface reports no size (drawn 0x0)"),
+        Some((width, height)) if !desc.matches_size(width, height) => {
+            StageVerdict::stalled(StageRoom::Leaf, "displayed size differs from the shared surface")
+        }
+        Some(_) => StageVerdict::Shown,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -135,5 +217,47 @@ mod tests {
             SharedOsHandle::IoSurfaceId(0),
         )
         .is_none());
+    }
+
+    #[test]
+    fn a_surface_that_reports_no_size_names_the_leaf() {
+        let desc = SharedSurfaceDesc::from_comp(1920, 1080);
+        let present =
+            StagePresent::shared(desc, SharedOsHandle::IoSurfaceId(7)).expect("usable handle");
+        // 面は作れて書けている。それでも出ないのは寸法を答えない室の責任。
+        assert_eq!(
+            check_shown(present, desc, None),
+            StageVerdict::stalled(StageRoom::Leaf, "the shared surface reports no size (drawn 0x0)")
+        );
+        assert_eq!(check_shown(present, desc, Some((1920, 1080))), StageVerdict::Shown);
+    }
+
+    #[test]
+    fn a_stale_display_size_is_not_shown() {
+        let desc = SharedSurfaceDesc::from_comp(1280, 720);
+        let present =
+            StagePresent::shared(desc, SharedOsHandle::IoSurfaceId(7)).expect("usable handle");
+        // comp が変わったのに表示側が前の寸法のまま = リサイズ追随の破れ。
+        match check_shown(present, desc, Some((1920, 1080))) {
+            StageVerdict::Stalled { room, .. } => assert_eq!(room, StageRoom::Leaf),
+            StageVerdict::Shown => panic!("寸法違いを Shown にしてはいけない"),
+        }
+    }
+
+    #[test]
+    fn the_cpu_fallback_is_never_reported_as_shown() {
+        let desc = SharedSurfaceDesc::from_comp(64, 64);
+        match check_shown(StagePresent::FallbackCpu, desc, Some((64, 64))) {
+            StageVerdict::Stalled { room, .. } => assert_eq!(room, StageRoom::Seam),
+            StageVerdict::Shown => panic!("fallback は通常経路の合格にならない"),
+        }
+    }
+
+    #[test]
+    fn every_room_names_its_owner() {
+        for room in [StageRoom::Host, StageRoom::Leaf, StageRoom::Seam] {
+            assert!(!room.tag().is_empty());
+            assert!(!room.owner().is_empty());
+        }
     }
 }
