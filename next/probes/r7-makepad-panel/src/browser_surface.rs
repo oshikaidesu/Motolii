@@ -24,81 +24,92 @@ script_mod! {
         draw_icon +: {color: #xa0a0a0}
     }
 
-    // tab — ベタ面のみで状態を語る。角丸・枠線なし
-    let TabIcon = ButtonFlatIcon{
+    // tab — 「N のうち1つ」は makepad の radio。選択は `active`(instance)。
+    // 面の色は uniform(draw call 共有)なので個体ごとに効かない。よって面は
+    // instance の hover/down/active から shader で作る(実測 2026-08-27)。
+    let TabIcon = RadioButtonTabFlat{
         width: Fill
         height: 22
         icon_walk: Walk{width: 12 height: 12}
+        label_walk: Walk{width: 0 height: 0}
         padding: Inset{left: 0 right: 0}
-        draw_bg.color: #x3d3d3d
-        draw_bg.color_hover: #x4f4f4f
-        draw_bg.color_down: #x2d2d2d
-        draw_bg.border_size: 0.0
-        draw_bg.border_radius: 0.0
+        align: Align{x: 0.5 y: 0.5}
+        // 反応は即時。ふんわり遷移は「押した感じ」を殺す(利用者裁定 2026-08-27)
+        animator.hover.off.from.all: Forward{duration: 0.0}
+        animator.hover.on.from.all: Forward{duration: 0.0}
+        animator.hover.down.from.all: Forward{duration: 0.0}
+        animator.active.off.from.all: Forward{duration: 0.0}
+        animator.active.on.from.all: Forward{duration: 0.0}
+        draw_bg +: {
+            pixel: fn() {
+                let sdf = Sdf2d.viewport(self.pos * self.rect_size)
+                let sunk = max(self.active, self.down)
+                let face = #x3d3d3d.mix(#x4a4a4a, self.hover).mix(#x333333, sunk)
+                sdf.rect(0.0, 0.0, self.rect_size.x, self.rect_size.y)
+                sdf.fill(face)
+                // 押し込みは縁で語る: 上が暗く、下が明るい。枠線では囲まない
+                sdf.rect(0.0, 0.0, self.rect_size.x, 1.0)
+                sdf.fill(face.mix(#x272727, sunk))
+                sdf.rect(0.0, self.rect_size.y - 1.0, self.rect_size.x, 1.0)
+                sdf.fill(face.mix(#x5a5a5a, sunk))
+                return sdf.result
+            }
+        }
         draw_icon +: {color: #xa0a0a0}
     }
 
-    // rail 行 — 低く詰める（16）。ベタ、hover は明度差だけ
-    let RailRow = ButtonFlat{
+    // rail 行 — 低く詰める(16)。選択は押し込まれた面で語る(文字色は反転しない)
+    let RailRow = RadioButtonTabFlat{
         width: Fill
-        height: 16
-        icon_walk: Walk{width: 11 height: 11}
+        height: 21
+        icon_walk: Walk{width: 12 height: 12}
+        label_walk: Walk{width: Fill height: Fit margin: Inset{left: 8}}
         align: Align{x: 0.0 y: 0.5}
-        padding: Inset{left: 8 right: 8}
-        draw_bg.color: #x4f4f4f
-        draw_bg.color_hover: #x5c5c5c
-        draw_bg.color_down: #x2d2d2d
-        draw_bg.border_size: 0.0
-        draw_bg.border_radius: 0.0
+        padding: Inset{left: 10 right: 10}
+        // 反応は即時。ふんわり遷移は「押した感じ」を殺す(利用者裁定 2026-08-27)
+        animator.hover.off.from.all: Forward{duration: 0.0}
+        animator.hover.on.from.all: Forward{duration: 0.0}
+        animator.hover.down.from.all: Forward{duration: 0.0}
+        animator.active.off.from.all: Forward{duration: 0.0}
+        animator.active.on.from.all: Forward{duration: 0.0}
+        draw_bg +: {
+            pixel: fn() {
+                let sdf = Sdf2d.viewport(self.pos * self.rect_size)
+                let sunk = max(self.active, self.down)
+                let face = #x4f4f4f.mix(#x5c5c5c, self.hover).mix(#x444444, sunk)
+                sdf.rect(0.0, 0.0, self.rect_size.x, self.rect_size.y)
+                sdf.fill(face)
+                // 押し込みは縁で語る: 上が暗く、下が明るい。枠線では囲まない
+                sdf.rect(0.0, 0.0, self.rect_size.x, 1.0)
+                sdf.fill(face.mix(#x313131, sunk))
+                sdf.rect(0.0, self.rect_size.y - 1.0, self.rect_size.x, 1.0)
+                sdf.fill(face.mix(#x616161, sunk))
+                return sdf.result
+            }
+        }
         draw_icon +: {color: #xa0a0a0}
         draw_text.color: #xe4e4e4
-        draw_text.text_style: theme.font_regular{font_size: 8 line_spacing: 1.0 top_drop: 0.0}
-    }
-
-    // 選択済み rail 行 — ベタ塗り+濃字。`ButtonFlat.draw_bg.color` は uniform で
-    // draw call 共有のため兄弟ごとに変えられない(実測 2026-08-27)。面は instance 色を
-    // 持つ SolidView が塗り、当たりだけ透明 Button が受ける
-    let RailRowOn = SolidView{
-        width: Fill
-        height: 16
-        show_bg: true
-        new_batch: true
-        draw_bg.color: #x6b8d96
-        label := ButtonFlatter{
-            width: Fill
-            height: Fill
-            icon_walk: Walk{width: 11 height: 11}
-            align: Align{x: 0.0 y: 0.5}
-            padding: Inset{left: 8 right: 8}
-            draw_icon +: {color: #x133342}
-            draw_text.color: #x133342
-            draw_text.text_style: theme.font_regular{font_size: 8 line_spacing: 1.0 top_drop: 0.0}
-        }
-    }
-
-    // 選択済み tab — 同じ理由で同じ形
-    let TabIconOn = SolidView{
-        width: Fill
-        height: 22
-        show_bg: true
-        new_batch: true
-        draw_bg.color: #x6b8d96
-        label := ButtonFlatterIcon{
-            width: Fill
-            height: Fill
-            icon_walk: Walk{width: 12 height: 12}
-            padding: Inset{left: 0 right: 0}
-            draw_icon +: {color: #x133342}
-        }
+        draw_text.text_style: theme.font_regular{font_size: 8.75 line_spacing: 1.0 top_drop: 0.0}
     }
 
     // 節見出し — Collections / Library / Places。薄字、上に群間の余白
     let RailCap = Label{
         width: Fill
-        height: 18
-        padding: Inset{left: 8 top: 7}
+        height: 20
+        padding: Inset{left: 10 top: 7}
         draw_text.color: #x9d9d9d
         draw_text.text_style: theme.font_regular{font_size: 8 line_spacing: 1.0 top_drop: 0.0}
+    }
+
+    // 群の境は線で引く(利用者裁定 2026-08-27)。面の明度差が既に境になっている
+    // tab strip 直下だけは引かない — 二重の境は境でなくなる
+    let RailRule = SolidView{
+        width: Fill
+        height: mod.tokens.rules.size
+        margin: Inset{top: 6}
+        show_bg: true
+        new_batch: true
+        draw_bg.color: mod.tokens.rules.owner
     }
 
     // 有効フィルタ chip — 選択の言語（ベタ #6b8d96 + 濃字 #133342、角丸なし）。
@@ -123,10 +134,11 @@ script_mod! {
     // ファイル行 — Live 右リストの1行。低く詰める、ベタ、角丸なし
     let FileRow = ButtonFlat{
         width: Fill
-        height: 16
-        icon_walk: Walk{width: 11 height: 11}
+        height: 21
+        icon_walk: Walk{width: 12 height: 12}
+        spacing: 8
         align: Align{x: 0.0 y: 0.5}
-        padding: Inset{left: 6 right: 8}
+        padding: Inset{left: 10 right: 10}
         draw_bg.color: #x4f4f4f
         draw_bg.color_hover: #x5c5c5c
         draw_bg.color_down: #x2d2d2d
@@ -134,25 +146,25 @@ script_mod! {
         draw_bg.border_radius: 0.0
         draw_icon +: {color: #xa0a0a0}
         draw_text.color: #xd8d8d8
-        draw_text.text_style: theme.font_regular{font_size: 8 line_spacing: 1.0 top_drop: 0.0}
+        draw_text.text_style: theme.font_regular{font_size: 8.75 line_spacing: 1.0 top_drop: 0.0}
     }
 
     // rail とリストの境 — 画像実測 #343434 の縦 1px
     let PaneDivider = SolidView{
-        width: 1
+        width: mod.tokens.rules.size
         height: Fill
         show_bg: true
         new_batch: true
-        draw_bg.color: #x343434
+        draw_bg.color: mod.tokens.rules.pane
     }
 
     // 継ぎ目 — 横 1px 暗線（枠線で囲まない）
     let SeamRule = SolidView{
         width: Fill
-        height: 1
+        height: mod.tokens.rules.size
         show_bg: true
         new_batch: true
-        draw_bg.color: #x2d2d2d
+        draw_bg.color: mod.tokens.rules.seam
     }
 
     fn select_asset(name, file, kind){
@@ -186,23 +198,25 @@ script_mod! {
             tags := IconButton{width: 22 draw_icon +: {svg: crate_resource("self://resources/icons/tag.svg")}}
         }
         tabs := SolidView{width: Fill height: 22 flow: Right show_bg: true new_batch: true draw_bg.color: #x3d3d3d
-            media := TabIconOn{label.draw_icon.svg: crate_resource("self://resources/icons/media.svg") label.on_click: || { ui.browser_body.catalog.catalog_head.set_text("All media"); ui.browser_body.catalog.catalog_status.set_text("") }}
-            effects := TabIcon{draw_icon +: {svg: crate_resource("self://resources/icons/effects.svg")} on_click: || { ui.browser_body.catalog.catalog_head.set_text("All effects"); ui.browser_body.catalog.catalog_status.set_text("") }}
-            create := TabIcon{draw_icon +: {svg: crate_resource("self://resources/icons/create.svg")} on_click: || { ui.browser_body.catalog.catalog_head.set_text("All create"); ui.browser_body.catalog.catalog_status.set_text("") }}
-            panels := TabIcon{draw_icon +: {svg: crate_resource("self://resources/icons/panels.svg")} on_click: || { ui.browser_body.catalog.catalog_head.set_text("All panels"); ui.browser_body.catalog.catalog_status.set_text("") }}
+            media := TabIcon{draw_icon +: {svg: crate_resource("self://resources/icons/media.svg")}}
+            effects := TabIcon{draw_icon +: {svg: crate_resource("self://resources/icons/effects.svg")}}
+            create := TabIcon{draw_icon +: {svg: crate_resource("self://resources/icons/create.svg")}}
+            panels := TabIcon{draw_icon +: {svg: crate_resource("self://resources/icons/panels.svg")}}
         }
 
         browser_body := SolidView{width: Fill height: Fill flow: Right
-            rail := SolidView{width: 112 height: Fill flow: Down padding: Inset{bottom: 2} show_bg: true new_batch: true draw_bg.color: #x4f4f4f
+            rail := SolidView{width: 132 height: Fill flow: Down padding: Inset{bottom: 2} show_bg: true new_batch: true draw_bg.color: #x4f4f4f
                 collections := RailCap{text: "Collections"}
                 favorite := RailRow{text: "Favorite" draw_icon +: {svg: crate_resource("self://resources/icons/star.svg") color: #xf20813}}
                 broll := RailRow{text: "B-roll" draw_icon +: {svg: crate_resource("self://resources/icons/video.svg") color: #x4db7bd}}
                 brand := RailRow{text: "Brand" draw_icon +: {svg: crate_resource("self://resources/icons/tag.svg") color: #xa676c5}}
+                library_rule := RailRule{}
                 library := RailCap{text: "Library"}
-                all_media := RailRowOn{label.text: "All media" label.draw_icon.svg: crate_resource("self://resources/icons/media.svg") label.on_click: || { ui.browser_body.catalog.catalog_status.set_text("") }}
+                all_media := RailRow{text: "All media" draw_icon +: {svg: crate_resource("self://resources/icons/media.svg")}}
                 video := RailRow{text: "Video" draw_icon +: {svg: crate_resource("self://resources/icons/video.svg")}}
                 images := RailRow{text: "Images" draw_icon +: {svg: crate_resource("self://resources/icons/image.svg")}}
                 audio := RailRow{text: "Audio" draw_icon +: {svg: crate_resource("self://resources/icons/audio.svg")}}
+                places_rule := RailRule{}
                 places := RailCap{text: "Places"}
                 starter := RailRow{text: "Starter Media" draw_icon +: {svg: crate_resource("self://resources/icons/folder.svg")}}
                 project_assets := RailRow{text: "Project assets" draw_icon +: {svg: crate_resource("self://resources/icons/project.svg")}}
@@ -226,7 +240,7 @@ script_mod! {
                     broll_chip := FilterChip{label.text: "B-roll"}
                     clear_chip := IconButton{width: 18 draw_icon +: {svg: crate_resource("self://resources/icons/clear.svg")}}
                 }
-                result_list := SolidView{width: Fill height: Fill flow: Down padding: Inset{top: 1 bottom: 1} show_bg: true new_batch: true draw_bg.color: #x4f4f4f
+                result_list := SolidView{width: Fill height: Fill flow: Down padding: Inset{top: 5 bottom: 5} show_bg: true new_batch: true draw_bg.color: #x4f4f4f
                     clip := FileRow{text: "clip.mp4" draw_icon +: {svg: crate_resource("self://resources/icons/video.svg")} on_click: || select_asset("Starter Clip", "clip.mp4", "video · B-roll")}
                     mark := FileRow{text: "mark.svg" draw_icon +: {svg: crate_resource("self://resources/icons/motolii.svg")} on_click: || select_asset("Starter Mark", "mark.svg", "image · Brand")}
                     still := FileRow{text: "still.png" draw_icon +: {svg: crate_resource("self://resources/icons/image.svg")} on_click: || select_asset("Starter Still", "still.png", "image · B-roll")}

@@ -15,6 +15,7 @@ use motolii_timeline_pane::{self as timeline_pane, stacking::restacked, StackDir
 use std::time::Instant;
 
 mod browser_surface;
+mod tokens;
 mod chrome;
 mod export_surface;
 mod gesture_input;
@@ -30,6 +31,40 @@ use timeline_surface::{
 };
 
 app_main!(App);
+
+/// `browser_radio_groups` の `ids_array!` と同じ並び。索引が意味を運ぶので離さない。
+/// `rail` の radio group。並びは `RAIL_HEADS` と対。`add_folder` は選択ではなく操作なので入れない。
+macro_rules! browser_rail_ids {
+    () => {
+        ids_array!(
+            browser_surface.browser_body.rail.favorite,
+            browser_surface.browser_body.rail.broll,
+            browser_surface.browser_body.rail.brand,
+            browser_surface.browser_body.rail.all_media,
+            browser_surface.browser_body.rail.video,
+            browser_surface.browser_body.rail.images,
+            browser_surface.browser_body.rail.audio,
+            browser_surface.browser_body.rail.starter,
+            browser_surface.browser_body.rail.project_assets,
+            browser_surface.browser_body.rail.motion_assets
+        )
+    };
+}
+
+const RAIL_ALL_MEDIA: usize = 3;
+
+const RAIL_HEADS: [&str; 10] = [
+    "Favorite",
+    "B-roll",
+    "Brand",
+    "All media",
+    "Video",
+    "Images",
+    "Audio",
+    "Starter Media",
+    "Project assets",
+    "Motion assets",
+];
 
 script_mod! {
     use mod.prelude.widgets.*
@@ -735,6 +770,11 @@ pub struct App {
     ui: WidgetRef,
     #[rust]
     playback_timer: Timer,
+    /// Browser の選択。widget の animator ではなくここが正本。
+    #[rust]
+    browser_tab: usize,
+    #[rust]
+    browser_rail: usize,
     #[rust]
     stage_next_frame: NextFrame,
     /// 直前の室判定。変化したときだけ1行ログを出すため。
@@ -878,6 +918,67 @@ impl App {
         );
     }
 
+    fn browser(&self, cx: &mut Cx) -> WidgetRef {
+        self.dock(cx).item(id!(browser))
+    }
+
+    /// Browser の「N のうち1つ」は makepad の radio group が持つ。排他と選択移動は
+    /// `RadioButtonSet::selected` の担当で、色をこちらで塗り替えない
+    /// (`active` は instance、`draw_bg.color*` は group 共有の uniform)。
+    fn browser_radio_groups(&mut self, cx: &mut Cx, actions: &Actions) {
+        let browser = self.browser(cx);
+        browser
+            .radio_button_set(
+                cx,
+                ids_array!(
+                    browser_surface.tabs.media,
+                    browser_surface.tabs.effects,
+                    browser_surface.tabs.create,
+                    browser_surface.tabs.panels
+                ),
+            )
+            .selected(cx, actions)
+            .map(|index| self.browser_tab = index);
+        if let Some(index) = browser
+            .radio_button_set(cx, browser_rail_ids!())
+            .selected(cx, actions)
+        {
+            self.browser_rail = index;
+            self.set_catalog_head(cx, RAIL_HEADS[index]);
+        }
+    }
+
+    /// リストの見出しは選択の結果であって、行が自分で書きに行く物ではない。
+    fn set_catalog_head(&self, cx: &mut Cx, text: &str) {
+        self.browser(cx)
+            .widget(cx, ids!(browser_surface.browser_body.catalog.catalog_head))
+            .as_label()
+            .set_text(cx, text);
+    }
+
+    /// 選択は App が持つ。widget は投影であって正本ではない — `script_mod!` の
+    /// 再実行(hot reload)は animator を宣言状態へ戻すので、そのたび投影し直す。
+    fn apply_browser_selection(&self, cx: &mut Cx) {
+        let browser = self.browser(cx);
+        let tabs = browser.radio_button_set(
+            cx,
+            ids_array!(
+                browser_surface.tabs.media,
+                browser_surface.tabs.effects,
+                browser_surface.tabs.create,
+                browser_surface.tabs.panels
+            ),
+        );
+        for (index, item) in tabs.iter().enumerate() {
+            item.set_active(cx, index == self.browser_tab, Animate::No);
+        }
+        let rail = browser.radio_button_set(cx, browser_rail_ids!());
+        for (index, item) in rail.iter().enumerate() {
+            item.set_active(cx, index == self.browser_rail, Animate::No);
+        }
+        self.set_catalog_head(cx, RAIL_HEADS[self.browser_rail]);
+    }
+
     fn set_status(&self, cx: &mut Cx, status: &str) {
         self.ui
             .widget(cx, ids!(panel.status))
@@ -930,9 +1031,12 @@ impl MatchEvent for App {
         self.playback_timer = cx.start_interval(1.0 / 60.0);
         self.install_timeline_model(cx);
         self.request_stage_frame(cx);
+        self.browser_rail = RAIL_ALL_MEDIA;
+        self.apply_browser_selection(cx);
     }
 
     fn handle_actions(&mut self, cx: &mut Cx, actions: &Actions) {
+        self.browser_radio_groups(cx, actions);
         if let Some(uid) = self.play_uid(cx) {
             if actions
                 .filter_widget_actions(uid)
@@ -999,6 +1103,8 @@ impl MatchEvent for App {
 impl AppMain for App {
     fn script_mod(vm: &mut ScriptVm) -> ScriptValue {
         crate::makepad_widgets::script_mod(vm);
+        // 目盛りは誰よりも先。surface はこれを引く。
+        crate::tokens::script_mod(vm);
         // Widget modules register before the UI modules that import them (DSL 正史)。
         // chrome (parts / gallery 含む) が先、surface 群が後。
         crate::chrome::script_mod(vm);
@@ -1012,6 +1118,11 @@ impl AppMain for App {
     }
 
     fn handle_event(&mut self, cx: &mut Cx, event: &Event) {
+        // hot reload は `script_mod!` を再実行して widget を宣言状態へ戻す。
+        // 選択は App が持っているので、投影し直すのはこちらの責任。
+        if matches!(event, Event::LiveEdit) {
+            self.apply_browser_selection(cx);
+        }
         self.match_event(cx, event);
         self.ui.handle_event(cx, event, &mut Scope::empty());
     }
