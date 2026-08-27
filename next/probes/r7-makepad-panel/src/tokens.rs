@@ -66,6 +66,9 @@ script_mod! {
         bar: 22.0 * s
         toolbar: 26.0 * s
         cap: 18.0 * s
+        // 入力欄を持つ行は一覧行より高い。同じ row を使い回すと欄が潰れる
+        form_row: 24.0 * s
+        well: 18.0 * s
         chip: 16.0 * s
         field: 17.0 * s
         icon_sm: 11.0 * s

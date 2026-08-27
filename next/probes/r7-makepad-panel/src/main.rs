@@ -79,46 +79,7 @@ script_mod! {
         draw_icon +: {color: mod.tokens.ink.body}
     }
 
-    let RailToggle = ButtonFlat{
-        width: 12
-        height: 12
-        margin: 0
-        padding: 0
-        spacing: 0
-        align: Center
-        label_walk: Walk{width: Fill height: Fill}
-        draw_bg.color: mod.tokens.face.hover
-        draw_bg.border_size: 0.0
-        draw_text.color: mod.tokens.ink.faint
-        draw_text.text_style: theme.font_regular{font_size: 6 line_spacing: 1.0 top_drop: 0.0}
-    }
-
-    let TimelineLabel = Label{
-        width: Fit
-        height: Fit
-        padding: 0
-        draw_text.color: mod.tokens.ink.body
-        draw_text.text_style: theme.font_regular{font_size: 8.25 line_spacing: 1.0 top_drop: 0.0}
-    }
-
-    let TimelineKeyLabel = Label{
-        width: Fill
-        height: Fit
-        padding: 0
-        draw_text.color: mod.tokens.ink.faint
-        draw_text.text_style: theme.font_regular{font_size: 7.5 line_spacing: 1.0 top_drop: 0.0}
-    }
-
-    // A line is reserved for a change in interaction owner or coordinate system.
-    // Related controls use spacing and fill state instead of decorative outlines.
-    let PaneDivider = SolidView{
-        width: mod.tokens.rule.size
-        height: Fill
-        show_bg: true
-        new_batch: true
-        draw_bg.color: mod.tokens.rule.surface
-    }
-
+    // 窓の大きな面の境。chrome と dock、dock と status の間に引く
     let SurfaceDivider = SolidView{
         width: Fill
         height: mod.tokens.rule.size
@@ -127,115 +88,9 @@ script_mod! {
         draw_bg.color: mod.tokens.rule.surface
     }
 
-    let TimeField = SolidView{
-        width: 810
-        height: Fill
-        flow: Overlay
-        align: Align{y: 0.5}
-        show_bg: true
-        draw_bg.color: mod.tokens.face.panel
-        band_1 := SolidView{width: 67.5 height: Fill margin: Inset{left: 67.5} draw_bg.color: #xFFFFFF09}
-        band_2 := SolidView{width: 67.5 height: Fill margin: Inset{left: 202.5} draw_bg.color: #xFFFFFF09}
-        band_3 := SolidView{width: 67.5 height: Fill margin: Inset{left: 337.5} draw_bg.color: #xFFFFFF09}
-        band_4 := SolidView{width: 67.5 height: Fill margin: Inset{left: 472.5} draw_bg.color: #xFFFFFF09}
-        band_5 := SolidView{width: 67.5 height: Fill margin: Inset{left: 607.5} draw_bg.color: #xFFFFFF09}
-        band_6 := SolidView{width: 67.5 height: Fill margin: Inset{left: 742.5} draw_bg.color: #xFFFFFF09}
-        grid_01 := SolidView{width: 1 height: Fill margin: Inset{left: 13.5} draw_bg.color: #x0000002e}
-        grid_02 := SolidView{width: 1 height: Fill margin: Inset{left: 27} draw_bg.color: #x0000002e}
-        grid_03 := SolidView{width: 1 height: Fill margin: Inset{left: 40.5} draw_bg.color: #x0000002e}
-        grid_04 := SolidView{width: 1 height: Fill margin: Inset{left: 54} draw_bg.color: #x0000002e}
-        grid_05 := SolidView{width: 1 height: Fill margin: Inset{left: 67.5} draw_bg.color: #x0000004d}
-        grid_06 := SolidView{width: 1 height: Fill margin: Inset{left: 81} draw_bg.color: #x0000002e}
-        grid_07 := SolidView{width: 1 height: Fill margin: Inset{left: 94.5} draw_bg.color: #x0000002e}
-        grid_08 := SolidView{width: 1 height: Fill margin: Inset{left: 108} draw_bg.color: #x0000002e}
-        grid_09 := SolidView{width: 1 height: Fill margin: Inset{left: 121.5} draw_bg.color: #x0000002e}
-        grid_10 := SolidView{width: 1 height: Fill margin: Inset{left: 135} draw_bg.color: #x0000004d}
-        grid_11 := SolidView{width: 1 height: Fill margin: Inset{left: 148.5} draw_bg.color: #x0000002e}
-        grid_12 := SolidView{width: 1 height: Fill margin: Inset{left: 162} draw_bg.color: #x0000002e}
-        grid_13 := SolidView{width: 1 height: Fill margin: Inset{left: 175.5} draw_bg.color: #x0000002e}
-        grid_14 := SolidView{width: 1 height: Fill margin: Inset{left: 189} draw_bg.color: #x0000002e}
-        grid_15 := SolidView{width: 1 height: Fill margin: Inset{left: 202.5} draw_bg.color: #x0000004d}
-        grid_16 := SolidView{width: 1 height: Fill margin: Inset{left: 216} draw_bg.color: #x0000002e}
-        grid_17 := SolidView{width: 1 height: Fill margin: Inset{left: 229.5} draw_bg.color: #x0000002e}
-        grid_18 := SolidView{width: 1 height: Fill margin: Inset{left: 243} draw_bg.color: #x0000002e}
-        grid_19 := SolidView{width: 1 height: Fill margin: Inset{left: 256.5} draw_bg.color: #x0000002e}
-        grid_20 := SolidView{width: 1 height: Fill margin: Inset{left: 270} draw_bg.color: #x0000004d}
-        grid_21 := SolidView{width: 1 height: Fill margin: Inset{left: 283.5} draw_bg.color: #x0000002e}
-        grid_22 := SolidView{width: 1 height: Fill margin: Inset{left: 297} draw_bg.color: #x0000002e}
-        grid_23 := SolidView{width: 1 height: Fill margin: Inset{left: 310.5} draw_bg.color: #x0000002e}
-        grid_24 := SolidView{width: 1 height: Fill margin: Inset{left: 324} draw_bg.color: #x0000002e}
-        grid_25 := SolidView{width: 1 height: Fill margin: Inset{left: 337.5} draw_bg.color: #x0000004d}
-        grid_26 := SolidView{width: 1 height: Fill margin: Inset{left: 351} draw_bg.color: #x0000002e}
-        grid_27 := SolidView{width: 1 height: Fill margin: Inset{left: 364.5} draw_bg.color: #x0000002e}
-        grid_28 := SolidView{width: 1 height: Fill margin: Inset{left: 378} draw_bg.color: #x0000002e}
-        grid_29 := SolidView{width: 1 height: Fill margin: Inset{left: 391.5} draw_bg.color: #x0000002e}
-        grid_30 := SolidView{width: 1 height: Fill margin: Inset{left: 405} draw_bg.color: #x0000004d}
-        grid_31 := SolidView{width: 1 height: Fill margin: Inset{left: 418.5} draw_bg.color: #x0000002e}
-        grid_32 := SolidView{width: 1 height: Fill margin: Inset{left: 432} draw_bg.color: #x0000002e}
-        grid_33 := SolidView{width: 1 height: Fill margin: Inset{left: 445.5} draw_bg.color: #x0000002e}
-        grid_34 := SolidView{width: 1 height: Fill margin: Inset{left: 459} draw_bg.color: #x0000002e}
-        grid_35 := SolidView{width: 1 height: Fill margin: Inset{left: 472.5} draw_bg.color: #x0000004d}
-        grid_36 := SolidView{width: 1 height: Fill margin: Inset{left: 486} draw_bg.color: #x0000002e}
-        grid_37 := SolidView{width: 1 height: Fill margin: Inset{left: 499.5} draw_bg.color: #x0000002e}
-        grid_38 := SolidView{width: 1 height: Fill margin: Inset{left: 513} draw_bg.color: #x0000002e}
-        grid_39 := SolidView{width: 1 height: Fill margin: Inset{left: 526.5} draw_bg.color: #x0000002e}
-        grid_40 := SolidView{width: 1 height: Fill margin: Inset{left: 540} draw_bg.color: #x0000004d}
-        grid_41 := SolidView{width: 1 height: Fill margin: Inset{left: 553.5} draw_bg.color: #x0000002e}
-        grid_42 := SolidView{width: 1 height: Fill margin: Inset{left: 567} draw_bg.color: #x0000002e}
-        grid_43 := SolidView{width: 1 height: Fill margin: Inset{left: 580.5} draw_bg.color: #x0000002e}
-        grid_44 := SolidView{width: 1 height: Fill margin: Inset{left: 594} draw_bg.color: #x0000002e}
-        grid_45 := SolidView{width: 1 height: Fill margin: Inset{left: 607.5} draw_bg.color: #x0000004d}
-        grid_46 := SolidView{width: 1 height: Fill margin: Inset{left: 621} draw_bg.color: #x0000002e}
-        grid_47 := SolidView{width: 1 height: Fill margin: Inset{left: 634.5} draw_bg.color: #x0000002e}
-        grid_48 := SolidView{width: 1 height: Fill margin: Inset{left: 648} draw_bg.color: #x0000002e}
-        grid_49 := SolidView{width: 1 height: Fill margin: Inset{left: 661.5} draw_bg.color: #x0000002e}
-        grid_50 := SolidView{width: 1 height: Fill margin: Inset{left: 675} draw_bg.color: #x0000004d}
-        grid_51 := SolidView{width: 1 height: Fill margin: Inset{left: 688.5} draw_bg.color: #x0000002e}
-        grid_52 := SolidView{width: 1 height: Fill margin: Inset{left: 702} draw_bg.color: #x0000002e}
-        grid_53 := SolidView{width: 1 height: Fill margin: Inset{left: 715.5} draw_bg.color: #x0000002e}
-        grid_54 := SolidView{width: 1 height: Fill margin: Inset{left: 729} draw_bg.color: #x0000002e}
-        grid_55 := SolidView{width: 1 height: Fill margin: Inset{left: 742.5} draw_bg.color: #x0000004d}
-        grid_56 := SolidView{width: 1 height: Fill margin: Inset{left: 756} draw_bg.color: #x0000002e}
-        grid_57 := SolidView{width: 1 height: Fill margin: Inset{left: 769.5} draw_bg.color: #x0000002e}
-        grid_58 := SolidView{width: 1 height: Fill margin: Inset{left: 783} draw_bg.color: #x0000002e}
-        grid_59 := SolidView{width: 1 height: Fill margin: Inset{left: 796.5} draw_bg.color: #x0000002e}
-    }
-
-    let TimelineRow = SolidView{
-        width: Fill
-        height: 26
-        flow: Overlay
-        show_bg: true
-        new_batch: true
-        draw_bg.color: mod.tokens.face.panel
-        content := View{width: Fill height: Fill flow: Right}
-        rail_divider := PaneDivider{margin: Inset{left: 149}}
-        separator := SolidView{width: Fill height: 1 margin: Inset{top: 25} draw_bg.color: #x00000038}
-    }
-
-    let TimelineKeyRow = SolidView{
-        width: Fill
-        height: 18
-        flow: Overlay
-        show_bg: true
-        new_batch: true
-        draw_bg.color: mod.tokens.face.panel
-        content := View{width: Fill height: Fill flow: Right}
-        rail_divider := PaneDivider{margin: Inset{left: 149}}
-        separator := SolidView{width: Fill height: 1 margin: Inset{top: 17} draw_bg.color: #x00000038}
-    }
-
-    let ZebraTimeField = TimeField{
-        draw_bg.color: #xFFFFFF0d
-    }
-
-    let SelectedTimeField = TimeField{
-        draw_bg.color: mod.tokens.sel.standby
-    }
-
-    let KeyTimeField = TimeField{
-        draw_bg.color: mod.tokens.face.area
-    }
+    // Timeline の面(TimeField / TimelineRow / RailToggle 等)はここから撤去した。
+    // 描画は `timeline_surface.rs` の Rust 側へ移っており、この宣言群は誰も参照して
+    // いなかった — 同じ意味の正本が2つあると、片方だけ直して食い違う。
 
     // Studio: kinds are Fill Views, then `Kind := Kind {}` on the Dock instance.
     let BrowserPane = View{

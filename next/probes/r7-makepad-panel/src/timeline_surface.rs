@@ -26,6 +26,11 @@ script_mod! {
         band_alpha: 0.030
         tick_fade_from: 9.0
         tick_fade_to: 18.0
+        // playhead = ACCENT 1.5x(canon: timeline-semantics.html S5b) — グリッド線の
+        // 通常太さ(1.0)に対する倍率と、pane 内で唯一許されるヒーローの最大コントラスト色。
+        // どちらも --hot で振れる値なので Rust const ではなくここに置く。
+        playhead_width_scale: 1.5
+        playhead_color: #(vec4(0.85, 0.71, 0.45, 1.0))
     }
 }
 #[cfg(test)]
@@ -33,6 +38,10 @@ use makepad_widgets::makepad_platform::event::ScrollPhase;
 
 const PROPERTY_ROW_HEIGHT: f64 = 18.0;
 const MIN_VISIBLE_SPAN_SECONDS: f64 = 2.0;
+// draw_grid_and_ruler の縦線が引いている実太さ(そこは弄らない指示なので定数だけ
+// ここへ写して playhead_width_scale の掛け算元にする)。canon: 「playhead = ACCENT 1.5x」
+// の 1.5x はこの通常グリッド線太さに対する倍率。
+const GRID_LINE_WIDTH: f64 = 1.0;
 
 fn fitted_lane_height(
     total_height: f64,
@@ -474,6 +483,13 @@ pub struct TimelineSurface {
     tick_fade_from: f64,
     #[live(18.0)]
     tick_fade_to: f64,
+    // playhead = ACCENT 1.5x(canon: timeline-semantics.html S5b)。通常のグリッド線
+    // 太さ(GRID_LINE_WIDTH)に掛ける倍率と、pane 内で唯一許されるヒーローの最大
+    // コントラスト色。dragging 中のレーンバーもこの色を借りる(同じ ACCENT なので)。
+    #[live(1.5)]
+    playhead_width_scale: f64,
+    #[live(vec4(0.85, 0.71, 0.45, 1.0))]
+    playhead_color: Vec4f,
 
     #[rust]
     rect: Rect,
@@ -748,6 +764,17 @@ impl TimelineSurface {
         vec4(color[0], color[1], color[2], color[3])
     }
 
+    // bar の差し色は3段の優先順位(canon: timeline-semantics.html)。
+    // hidden → muted / dragging → ACCENT が label_color 自体より優先される
+    // ("dragging=ACCENT・hidden=muted が優先" の順に読む: hidden が最優先)。
+    // muted は tokens.rs の ink.muted(#x757575)を焼き直した値 — この描画関数
+    // 一式はまだトークン参照ではなく Vec4 定数で組んであるので、既存の並びに合わせる。
+    const MUTED_LABEL_COLOR: Vec4f = vec4(0.459, 0.459, 0.459, 1.0);
+
+    fn is_dragging_lane(&self, lane_id: u64) -> bool {
+        matches!(self.drag, TimelineGesture::Lane { layer_id, .. } if layer_id == lane_id)
+    }
+
     fn draw_lane(&mut self, cx: &mut Cx2d, lane: &TimelineLane, row: VisualRow, zebra: bool) {
         let bg = if lane.selected {
             vec4(0.34, 0.31, 0.28, 1.0)
@@ -765,7 +792,16 @@ impl TimelineSurface {
             bg,
         );
 
-        let color = Self::lane_color(lane.label_color);
+        // 優先順位は hidden が最優先、次に dragging、既定が label_color。
+        // ("dragging=ACCENT・hidden=muted が優先" — 両方立つことは無いが、
+        // 順番が hidden を先に書いている通りに倒す)
+        let color = if lane.hidden {
+            Self::MUTED_LABEL_COLOR
+        } else if self.is_dragging_lane(lane.id) {
+            self.playhead_color
+        } else {
+            Self::lane_color(lane.label_color)
+        };
         // Sticky-note tab: full lane height, left aligned. It labels the row
         // without adding a second, misleading 8x8 "content height" signal.
         self.draw_rect(
@@ -1036,13 +1072,16 @@ impl TimelineSurface {
         let playhead_x = self.x_at_frame(self.playhead as f64);
         if playhead_x >= time.pos.x && playhead_x <= time.pos.x + time.size.x {
             self.draw_item.new_draw_call(cx);
+            // playhead = ACCENT 1.5x(canon: timeline-semantics.html S5b)。
+            // 通常グリッド線太さ(GRID_LINE_WIDTH)の倍率も色も --hot で振れる。
+            let playhead_width = GRID_LINE_WIDTH * self.playhead_width_scale;
             self.draw_rect(
                 cx,
                 Rect {
                     pos: dvec2(playhead_x, self.rect.pos.y),
-                    size: dvec2(1.5, self.rect.size.y),
+                    size: dvec2(playhead_width, self.rect.size.y),
                 },
-                vec4(0.85, 0.71, 0.45, 1.0),
+                self.playhead_color,
             );
             self.draw_rect(
                 cx,
@@ -1050,7 +1089,7 @@ impl TimelineSurface {
                     pos: dvec2(playhead_x - 3.0, self.rect.pos.y),
                     size: dvec2(7.0, 7.0),
                 },
-                vec4(0.85, 0.71, 0.45, 1.0),
+                self.playhead_color,
             );
         }
 

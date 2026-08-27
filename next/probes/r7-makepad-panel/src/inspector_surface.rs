@@ -85,8 +85,8 @@ script_mod! {
             fx_bar := SolidView{width: 3 height: Fill show_bg: true new_batch: true draw_bg.color: mod.tokens.accent.record}
             fx_name := Label{text: "TURBULENT DISPLACE" width: Fill padding: Inset{left: mod.tokens.space.s3} draw_text.color: mod.tokens.ink.body draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.sm line_spacing: 1.0 top_drop: 0.0}}
             fx_params := Label{text: "8 params" width: Fit padding: Inset{right: mod.tokens.space.s3} draw_text.color: mod.tokens.ink.faint draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.xs line_spacing: 1.0 top_drop: 0.0}}
-            fx_on := SolidView{width: 24 height: 15 margin: Inset{right: mod.tokens.space.s3} align: Align{x: 0.5 y: 0.5} show_bg: true new_batch: true draw_bg.color: mod.tokens.accent.on
-                on_label := Label{text: "ON" width: Fit height: Fill draw_text.color: mod.tokens.ink.on_fill draw_text.text_style: theme.font_bold{font_size: mod.tokens.text.xs line_spacing: 1.0 top_drop: 0.0}}
+            fx_on := SolidView{width: 26 height: mod.tokens.size.chip margin: Inset{right: mod.tokens.space.s3} align: Align{x: 0.5 y: 0.5} show_bg: true new_batch: true draw_bg.color: mod.tokens.accent.on
+                on_label := Label{text: "ON" width: Fit height: Fit draw_text.color: mod.tokens.ink.on_fill draw_text.text_style: theme.font_bold{font_size: mod.tokens.text.xs line_spacing: 1.0 top_drop: 0.0}}
             }
         }
         row_amount := PropertyRow{type_bar.draw_bg.color: mod.tokens.accent.alt name.text: "Amount" vx.text: "42.0" vy.text: "" vz.text: "" keyed.text: "◇" keyed.draw_text.color: mod.tokens.ink.faint}
