@@ -27,6 +27,11 @@ const RULER_HEIGHT: f64 = 22.0;
 const RAIL_WIDTH: f64 = 150.0;
 const PROPERTY_ROW_HEIGHT: f64 = 18.0;
 const MIN_VISIBLE_SPAN_SECONDS: f64 = 2.0;
+// レーン高が実測 ~15pt まで潰れると比率(0.52)通りの間隔でも ~7pt になり、
+// 実機Ableton(68pt行→21pt間隔)が読める密度から外れて単なるノイズになる。
+// 比率そのものはスケール不変で正しいので変えず、tick_steps へ渡す行高だけ
+// この物理下限で持ち上げる — ここが唯一 px 絶対値を許す場所(可読性の床)。
+const TICK_ROW_FLOOR: f64 = 40.0;
 
 fn fitted_lane_height(total_height: f64, lane_count: usize, property_count: usize) -> f64 {
     let body_height = (total_height - RULER_HEIGHT).max(1.0);
@@ -162,7 +167,10 @@ impl TimelineViewport {
             fps,
             self.visible_frames.round().max(1.0) as i64,
             self.time_width as f32,
-            lane_height.max(1.0) as f32,
+            // 行高そのものを床上げする。比率(0.52)は変えずに、比率の分母を
+            // 可読な最小値まで持ち上げるだけなので、床より上のズームでは
+            // 従来通り比率駆動のまま。
+            lane_height.max(TICK_ROW_FLOOR).max(1.0) as f32,
         )
     }
 }
@@ -901,6 +909,11 @@ impl TimelineSurface {
             .viewport()
             .tick_steps(self.fps_num, self.fps_den, lane_height);
         self.draw_time_bands(cx, minor, major);
+        // マイナー刻みの実ピクセル間隔。tick_steps は行高の床上げで「選ぶ刻み」を
+        // 間引くだけなので、ズームでその刻みの画面幅がまだ狭い一瞬が残る —
+        // そこをハードカットではなくフェードで埋めて「ポップ」させない。
+        let minor_px = minor as f64 * (self.time_rect().size.x / self.view_span.max(1.0));
+        let minor_fade = ((minor_px - 9.0) / (18.0 - 9.0)).clamp(0.0, 1.0);
         let first_minor = (self.view_start / minor as f64).ceil() as i64 * minor;
         let last = (self.view_start + self.view_span).ceil() as i64;
         let mut frame = first_minor;
@@ -916,7 +929,7 @@ impl TimelineSurface {
                 if is_major {
                     vec4(0.05, 0.05, 0.05, 0.38)
                 } else {
-                    vec4(0.02, 0.02, 0.02, 0.20)
+                    vec4(0.02, 0.02, 0.02, (0.20 * minor_fade) as f32)
                 },
             );
             frame = frame.saturating_add(minor.max(1));
@@ -966,7 +979,7 @@ impl TimelineSurface {
                 if is_major {
                     vec4(0.47, 0.47, 0.47, 1.0)
                 } else {
-                    vec4(0.12, 0.12, 0.12, 0.55)
+                    vec4(0.12, 0.12, 0.12, (0.55 * minor_fade) as f32)
                 },
             );
             if is_major {
