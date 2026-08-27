@@ -53,7 +53,7 @@ python3 scripts/derive_icebook_panel_stories.py "$(git rev-parse --show-toplevel
 | **外部資料** | **意味の正本**。4製品(AE/Premiere/Resolve/CapCut)・Lottie 地図・Rive・各社公式ドキュメント | — |
 | **機械** | **現在地**(上の4コマンド)と**赤/緑**(柵・型) | — |
 | **この repo の文書** | **仮説**。機械と食い違ったら**機械が正しい** | 権威ではない |
-| **製品 front** | **Makepad**(`next/probes/r7-makepad-panel`)。裁定251/252 | **`motolii-shell` crate**（凍結 iced アセンブラ）。view/update とも製品 interface ではない |
+| **製品 front** | **Makepad**(`app/motolii`)。裁定251/252、2026-08-27 に `next/probes/r7-makepad-panel` から移設 | **`motolii-shell` crate**（凍結 iced アセンブラ）。view/update とも製品 interface ではない |
 
 **利用者の指示は「目的」であって「事実」ではない。** 前提が外れていると思ったら、
 **確かめてから進む**(止まらない)。確かめ方は上の4コマンドか `grep` で足りる。
@@ -167,10 +167,10 @@ cargo test --manifest-path "$(git rev-parse --show-toplevel)/next/Cargo.toml" --
 
 ### UI修正はホットリロード運転(2026-08-27 利用者指示 — 「毎回ビルド」の根治)
 
-r7 の UI 調整で**変更ごとに `cargo build`→再起動をしない**。窓はセッションで1回だけ起動:
+front の UI 調整で**変更ごとに `cargo build`→再起動をしない**。窓はセッションで1回だけ起動:
 
 ```bash
-cargo run --locked --manifest-path next/probes/r7-makepad-panel/Cargo.toml -- --hot --remote > /tmp/r7.log 2>&1 &
+cargo run --locked --manifest-path app/Cargo.toml -p motolii -- --hot --remote > /tmp/motolii.log 2>&1 &
 ```
 
 - `--hot` は makepad 本体の live reload: `script_mod!` を持つ `src/*.rs` の保存が
@@ -183,6 +183,24 @@ cargo run --locked --manifest-path next/probes/r7-makepad-panel/Cargo.toml -- --
 - 変更前に makepad skills を読む: makepad-2.0-design-judgment → 該当 compliance skill
 - `--remote` 運転の正本は `~/rust_ae/makepad-motolii/AGENTS.md`。利用者の窓には触らない・
   自分が開けた窓は終わったら落とす
+
+### 製品は `app/` に居る(2026-08-27 裁定 — probe 身分の是正)
+
+`app/` は Motolii の**三代目**。前史は `crates/`(egui/iced 初代)と `next/`(iced 二代目)で、
+どちらも「いつ来たか」で名付けたため次が来るたび名前が嘘になった。`app/` は「何であるか」で
+名乗る — front が Makepad から替わっても製品は製品。
+
+- **front を `probes/` へ戻さない。** Makepad front は裁定251/252 で製品になったのに身分が
+  probe のまま残り、独立 workspace で CI の視界の外にあった。27本のテストが一度も CI で
+  走らず、UX 欠陥27件が緑のまま通過した。誰も規律を外そうと決めていない —
+  **probe には規律がそもそも適用されない**、それだけが原因だった
+- **`app/Cargo.toml` の members は明示。** 空の `[workspace]` にしない。crate が増えるのは
+  誰かが1行書いた時だけ、という状態が「混合しない」の実体
+- **意味の正本(store / shell-state / engine / fixture)は `next/` のまま引く。** 背骨は
+  iced の時代の物ではなく 21 crate が読む共有資産で、front の持ち物ではない
+- **`[patch]` と `default-features` は workspace root にしか効かない。** メンバーの
+  Cargo.toml へ書くと cargo は黙って無視する。移設時にこれで fork ではなく古い git rev を
+  引き、`floating_tab_bar_cells` が「無いメソッド」になった。**効く場所は1つ**
 
 ### 実窓を見る時(2026-08-25 実測 — computer-use 迂回の根治)
 

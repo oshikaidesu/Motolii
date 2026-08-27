@@ -1,0 +1,37 @@
+[package]
+name = "motolii"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish = false
+
+# 製品 front(裁定251/254 — 裁定5「front は iced のみ」を覆した)。
+#
+# 旧名 `r7-makepad-panel`、旧所在 `next/probes/`。probe として生まれ、製品に
+# なっても身分だけ probe のまま残っていたのを 2026-08-27 に是正した。空の
+# `[workspace]` で独立していたのも同じ話 — あれは workspace に属さないための
+# 逃げ口で、結果として CI がこの crate を一度も見なかった。今は `app/` の
+# workspace の一員である。
+#
+# 意味の正本は store / shell-state / engine。`motolii-shell`(凍結された iced
+# アセンブラ)は引かない。
+[dependencies]
+# platform observation だけを持つ薄い fork。Motolii の方針は src/gesture_input.rs
+# の後ろに置く(fork へ方針を持ち込まない)。
+makepad-widgets = { git = "https://github.com/oshikaidesu/makepad.git", rev = "447dcc3ce2896cc5deec44e013009ef5855caa7f" }
+wgpu = "29.0.4"
+motolii-store.workspace = true
+motolii-shell-state.workspace = true
+motolii-engine.workspace = true
+motolii-fixture.workspace = true
+# 投影と積み替えの計算だけ。iced view 層(`motolii-timeline-pane`)は front から
+# 一度も呼ばれていないので、計算だけを切り出したこちらを引く。
+motolii-timeline-projection.workspace = true
+
+# ゼロコピー(裁定251)の実体 — 共有 Surface へ直接描く経路。ここは非交渉。
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6.3"
+objc2-metal = { version = "0.3.2", default-features = false, features = ["std", "MTLTexture", "MTLDevice"] }
+
+[lints]
+workspace = true

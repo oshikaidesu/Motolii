@@ -28,5 +28,17 @@ jobs:
       - name: 台帳の柵(owns 根拠・軸台帳の規約・入口の判定・証拠の実在)
         run: |
           cargo test --manifest-path next/Cargo.toml -p motolii-testkit --locked
+      # 製品 front の投影計算(2026-08-27)。iced も wgpu も makepad も引かないので
+      # 上の「重い CI は無いより悪い」に触れない — 冷ビルド実測 39秒。
+      #
+      # **`app` 本体(`-p motolii`)はまだここに居ない。** 理由は重さではなく、
+      # `app/Cargo.toml` の `[patch]` が `/Users/member_ottoto/rust_ae/makepad-motolii`
+      # というローカル checkout を指していること — CI に存在しないので原理的に
+      # 解決できない。入れる条件は1つ、**fork を push して rev を上げ、patch 節を
+      # 外す**(`app/Cargo.toml` 自身がそう書いてある)。それが済めば macOS runner
+      # の job を足す(objc2-metal のため ubuntu では組めない)。
+      - name: 製品 front の投影計算
+        run: |
+          cargo test --manifest-path app/Cargo.toml -p motolii-timeline-projection --locked
       - name: docs の索引整合
         run: bash scripts/check-docs.sh

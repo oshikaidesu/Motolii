@@ -1,0 +1,55 @@
+# Motolii の**製品**。三代目にして、初めて probe ではない場所に立っている。
+#
+# 前史: `crates/`(egui / iced-shell 初代)と `next/`(iced 二代目)。どちらも
+# 「いつ来たか」で名付けられているので、次が来るたびに名前が嘘になった —
+# `next/README.md` の「front は iced のみ」を裁定251 が覆したのがその実例。
+# ここは「何であるか」で名乗る。front が Makepad から替わっても、製品は製品。
+#
+# **なぜ probes/ から出したか**(2026-08-27 利用者裁定): Makepad front は
+# 裁定251/252 で製品になったのに、身分は probe のまま残った — 独立 workspace で
+# CI の視界の外、27本のテストが一度も CI で走らない。誰も規律を外そうと決めて
+# いない。probe には規律が**そもそも適用されない**からで、パスが `probes/` で
+# ある限り次の担当も同じ扱いをする。決定は下されたのに帰結が実行されていない
+# 状態を、ここで終わらせる。
+#
+# **members は明示する。** 空の `[workspace]`(r7 が使っていた逃げ口)にしない —
+# crate が増えるのは誰かが1行書いた時だけ、という状態を保つのが「今後も混合
+# しない」の実体である。意味の正本(store / engine / shell-state / fixture)は
+# `next/` に居るまま引く: 背骨は iced の時代の物ではなく、21 crate が読む
+# プロジェクトの共有資産であって、front の持ち物ではない。
+[workspace]
+resolver = "2"
+members = [
+    "motolii",
+    "ui/motolii-timeline-projection",
+]
+
+[workspace.package]
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+[workspace.lints.rust]
+# `next/` と同じ2段構え — unreachable_pub で pub(crate) へ絞り、dead_code に
+# 呼び手ゼロを自動検出させる(2026-08-23 裁定)。
+unreachable_pub = "warn"
+
+[workspace.dependencies]
+# 意味の正本。ここは front の持ち物ではないので `next/` を指す。
+motolii-store = { path = "../next/core/motolii-store" }
+motolii-shell-state = { path = "../next/ui/motolii-shell-state" }
+motolii-engine = { path = "../next/engine/motolii-engine" }
+motolii-fixture = { path = "../next/core/motolii-fixture" }
+# 値だけ。`iced::Theme`/`Font` への変換 adapter は feature の後ろ(裁定251以降
+# それは view adapter であって token の意味ではない)。
+motolii-tokens-rs = { path = "../next/ui/motolii-tokens-rs", default-features = false }
+# front 側の純計算(投影と積み替え)。絵を持たないので柱に依らない。
+motolii-timeline-projection = { path = "ui/motolii-timeline-projection" }
+
+# 開発中の fork をローカル checkout から引く。push 後は rev を上げてこの節を外す。
+#
+# **workspace root にしか書けない。** メンバーの Cargo.toml に置くと cargo は
+# 黙って無視し、git rev の方を引く — 移設時にこれで `floating_tab_bar_cells`
+# が「無いメソッド」になった。同じ罠が `default-features` にもある(メンバー側の
+# 指定は workspace 宣言に負ける)。効く場所は1つ、と覚える。
+[patch."https://github.com/oshikaidesu/makepad.git"]
+makepad-widgets = { path = "/Users/member_ottoto/rust_ae/makepad-motolii/widgets" }
