@@ -99,6 +99,15 @@
 
 ## タイムライン・編集の意味
 
+- **BPM グリッドは持つが、モデル上の置き場は LFO 拡張と同じ束で決める**(利用者裁定 2026-08-28):
+  hero「BPM グリッドへ手で合わせる」の直訳で、タイムラインは映像でなく**音楽のタイムライン**
+  (CANON)。4.7 試験: AE 利用者はビートに置くために秒↔フレーム換算や式で回避してきた —
+  やりたかったのは「拍に置く」。**ただし v1 では作らない** — hero 動線はロケータ+耳
+  (聞きながら置いて印を打つ)で成立する。BPM が本領を発揮するのは**音同期の自動制御**
+  (ParamDriver / DAW の tempo-synced LFO 相当)で、モデル上の置き場はその拡張と同時に決める。
+  乗り物は Lottie の車体(marker `cm` / meta の慣習)で行ける見込みがあり、**新 component を
+  先に切らない**(総監督が同日「Composition の静的値」と裁定しかけたのを利用者が訂正 —
+  拡張側の設計を先取りで縛るため)。テンポ変化(tempo map)も同じ束。先例 = Ableton
 - **Timeline 土台は AE 型の絶対時間・自由配置** — gapless packing 前提の trim family
   (ripple / roll / slip / slide / insert / overwrite / lift / extract / sync lock)は**採らない**。
   自由配置の上に個別追加すると既存 move/trim gesture と機構的に衝突する(**漏れではなく設計上の除外**)

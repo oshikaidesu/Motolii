@@ -18,6 +18,25 @@
 **バックはほぼ完成していて、front が呼んでいないだけ。** 2026-08-28 朝の時点で
 `Intent` の接続はゼロだった — 9本は昨夜から今朝で繋がった分である。
 
+## 動線 = 製品の最小コア(2026-08-28 利用者裁定)
+
+**「普通に使えるようになる」までが最小コア。** その動線は4駅で、責任は駅ごとに区分けする:
+
+| 駅 | 持ち主(write-set の家) | 口 |
+|---|---|---|
+| 1. ブラウザで取り込む | `browser_surface.rs` | `AdmitAsset` → `SetSource` |
+| 2. タイムラインに出る | `timeline_surface.rs` + projection | 投影(読み)+ `SetTiming`/`SetOrder` |
+| 3. インスペクターでいじる | `inspector_surface.rs` | `SetAttrs` ほか property 系 |
+| 4. 書き出す | `export_surface.rs` | `export_still`(動線分。全10口は S6) |
+
+`main.rs` は**薄い配電盤**であって駅ではない。駅の処理を main.rs に書くと区分けが漏れる
+(実測: 2026-08-28 の4レーン統合で3本が main.rs 衝突。区分けの漏れはマージ痛として請求される)。
+
+**動線オラクル**: 素材 drop → レイヤーが出る → Inspector で1値変更が絵に映る →
+`export_still` のファイルが実在する。`--remote` 窓で毎検収時に通す。
+**「駅が在る」と「駅が繋がっている」は別**(実測: export は surface も進捗バーも在るのに
+口10本が全部未接続だった)。在るかどうかではなく、この一本が通るかで数える。
+
 ## タスク表 — hero への距離順
 
 hero = 実測の点群と、外で描いたベクタと、音が、同じタイムラインで出会う MV。
@@ -42,6 +61,7 @@ hero = 実測の点群と、外で描いたベクタと、音が、同じタイ�
 | S8 | **comp 設定**(尺・fps・解像度) | `Intent::SetComposition` |
 | S9 | **テキスト** | `Intent::SetTextDocument` |
 | S10 | **シェイプの編集** | `Intent::SetShapes` + `motolii-vector`(34本未接続。trim-path / repeater / rounded-corners / pucker-bloat / zig-zag / offset-path / twist) |
+| S10c | **点群の縦スライス**(小さい .ply 1個が場面に出る) | 棚は既に迎え入れ済み(`Asset.asset_type` は opaque、`pointcloud.octree.v1` が asset.rs:109 に例示済み)。**engine 側の読み・描きが0件**。委託先: 読み込み=rerun の loader 資産、描画=re_renderer の point cloud renderer(本業)。自作は繋ぎだけ。LOD/streaming(1億点)は縦スライスの後 |
 
 ### 第3波 — あると良い
 
@@ -55,6 +75,7 @@ hero = 実測の点群と、外で描いたベクタと、音が、同じタイ�
 | S16 | マット合成 | `Engine::apply_matte` |
 | S17 | キャッシュの状態を見る | `Engine::cached_frame_count` ほか2本 |
 | S18 | Session の残り | `motolii-shell-state` 38本 |
+| S19 | **BPM グリッド**(小節線・ビートスナップ) | **口が無い — 語彙ごと無い**(実測: store 全体で bpm/tempo/beat 0件)。利用者裁定(2026-08-28): **LFO 自動制御(ParamDriver)の拡張と同じ束**なのでモデル上の置き場はその時に決める。乗り物は Lottie の車体(marker/meta の慣習)で行ける見込み — 新 component を先に切らない。v1 の hero 動線は S5 ロケータ+耳(聞きながら置いて印を打つ)で成立する。先例=Ableton |
 
 ## 走行中(2026-08-28 朝、workflow `wf_6462b31d-d22`)
 

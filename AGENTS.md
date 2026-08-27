@@ -137,6 +137,15 @@ cargo でしか出ないのは **(a) 網羅性**(`match` の腕・enum にバリ
 - レーン開始前に常駐プロセス(fileWatcher 等)を確認する(ビルド計測の汚染源、実測2例)
 - cargo を**背景実行にしない**(subagent が自停止する既知事故)
 
+### ビルドは1箇所・差分・区切りで(2026-08-28 利用者裁定 — 裁定189/233 の強化)
+
+- **ビルドの家はリポ根の main checkout ただ1つ。** worktree ではビルドしない(check/test 含む)。
+  レーンは差分を返すだけ、worktree に `target/` を育てない(220GB 事件の根治)
+- **worktree 完了次第 main へ取り込み、リポ根で差分ビルド** — 事前 gate にしない(2026-08-10
+  マージ段差全廃)。落ちたら fix-forward
+- **毎回は焼かない。区切りで焼く**(波の着地・実窓検分・push の手前)。差分ビルドで最低限軽く
+- 検収の実窓(release / `--hot --remote`)も同じ1箇所から起動する
+
 ### 検収の3段(2026-08-22 実測 — [静的検収調査](docs/reviews/2026-08-22-static-acceptance-survey.md))
 
 - 実測定数(next/ 22crate・`-j 4`): `cargo check --workspace` = **warm 1.4s / cold 50s**。フル `cargo test --workspace --locked --no-fail-fast` = **warm 100s / cold 607s**。壁時計はキャッシュ状態で6倍動くので**実行時間を合否の物差しにしない** — 段の使い分け(機会)で裁く
