@@ -10,7 +10,10 @@ pub use makepad_widgets;
 use makepad_widgets::*;
 use motolii_engine::{Engine, ObservationCamera};
 use motolii_shell_state::Session;
-use motolii_store::{Document, Intent, LayerAttrsPatch, LayerId, LayerTiming, RationalTime};
+use motolii_store::{
+    AssetId, Document, Intent, LayerAttrsPatch, LayerId, LayerMeta, LayerSource, LayerTiming,
+    RationalTime,
+};
 use motolii_timeline_projection::{self as timeline_pane, stacking::restacked, StackDirection};
 use std::time::Instant;
 
@@ -27,6 +30,7 @@ mod stage_chrome;
 mod stage_import;
 mod stage_surface;
 mod timeline_surface;
+use browser_surface::{AssetKind, BrowserAsset, BrowserEditAction, BrowserSurface};
 use fx_stack::{FxStack, FxStackAction, FxStackModel, FxWrite};
 use stage_chrome::{StageChrome, StageChromeAction, StageViewCamera};
 use stage_surface::{SharedOsHandle, SharedSurfaceDesc, StagePresent, StageRoom, StageVerdict};
@@ -797,6 +801,152 @@ impl BackendBridge {
         self.status.clone().expect("just set")
     }
 
+    /// Browser の棚(`Composition:assets`、裁定162 の bin-first 台帳)の投影。
+    ///
+    /// **front はカタログを持たない。** 以前 `browser_surface.rs` が持っていた
+    /// 「手書き8件」は、取り込んだ物が Browser に現れない原因そのものだった
+    /// (台帳「素材の配置は3本足りない」)。ここが唯一の出所である。
+    ///
+    /// `●`(= 配置済み)は**layer 側から導く** — 台帳に「置いたかどうか」を書き足すと、
+    /// 同じ事実の家が2つになる。指紋(`content_hash`)が一致すれば同じ素材、
+    /// 無ければ実体パスで見る(`LayerSource::Media.fingerprint` は任意)。
+    fn browser_catalog(&self) -> Vec<BrowserAsset> {
+        let store = self.doc.view();
+        let placed: Vec<(Option<String>, String)> = store
+            .layers()
+            .into_iter()
+            .filter_map(|id| store.meta(id).ok().flatten())
+            .filter_map(|meta| match meta.source {
+                LayerSource::Media { path, fingerprint } => Some((fingerprint, path)),
+                _ => None,
+            })
+            .collect();
+        store
+            .assets()
+            .unwrap_or_default()
+            .into_iter()
+            .map(|asset| BrowserAsset {
+                id: asset.id.get(),
+                // 一覧に出すのは拡張子まで含んだファイル名。`Asset::name` は stem なので
+                // 「同じ名前の mp4 と wav」が同じ字面になる。
+                name: asset
+                    .file_name
+                    .clone()
+                    .unwrap_or_else(|| asset.name.clone()),
+                kind: AssetKind::from_asset_type(&asset.asset_type),
+                placed: placed.iter().any(|(fingerprint, path)| {
+                    fingerprint.as_deref() == Some(asset.content_hash.as_str())
+                        || Some(path.as_str()) == asset.path_absolute.as_deref()
+                }),
+                // store にタグの語彙がまだ無い。**発明しない**(`BrowserAsset::tags` の doc)。
+                tags: Vec::new(),
+            })
+            .collect()
+    }
+
+    /// 棚 → タイムライン。カードの double-click([`BrowserEditAction::PlaceAsset`])の受け口。
+    ///
+    /// `set_clip_timing_from_timeline` の5手と同じ形で、動詞が新規配置なので
+    /// `Intent::AddLayer` + `Intent::SetMeta` + `Intent::SetAttrs` の3本になる。
+    /// **`SetSource` ではない** — `SetSource` は既存 `meta` を読んで書き換える口で、
+    /// `meta` を持たない生まれたての layer には使えない(`Intent::SetMeta` の doc)。
+    /// 3本は1回の `apply_all` = **1ジェスチャ = 1 undo**。
+    ///
+    /// ## 意図が名指していない物は既定で埋める(裁定271)
+    ///
+    /// double-click が言っているのは「これを使いたい」だけなので、置き場所は道具が決める:
+    /// - **いつ**: playhead。聞きながら置く道具なので、手が居る場所が既定
+    /// - **どこ**: 最前面(`order = max + 1`)。Timeline の一番上 = Stage の一番手前
+    /// - **どれだけ**: [`LayerTiming::place`] = min(素材の尺, comp の残り)。
+    ///   **この規則は store が持っている**(「shell に書かせない」— M4)ので写さない。
+    ///   尺を持たない素材(静止画)は comp の残り全部 = AE の新規レイヤーと同じ
+    ///
+    /// ## 尺は engine に聞く
+    ///
+    /// front は `motolii-media` を直接引かない。`Engine::media_duration` は
+    /// `probe_container` 経由なので **audio-only も答える**(裁定274 (3))。
+    /// `RationalTime` のまま受けて comp の fps で丸めるので、素材 fps と comp fps が
+    /// 食い違っても尺がずれない(`media_frames` は素材ネイティブ fps 単位なので使わない)。
+    fn place_asset_from_browser(&mut self, asset_id: u64) -> String {
+        let store = self.doc.view();
+        let Some(asset) = store.asset(AssetId::from_raw(asset_id)).ok().flatten() else {
+            return format!("Browser: asset {asset_id} は棚に無い");
+        };
+        let Some(composition) = store.composition().ok().flatten() else {
+            return "Browser: comp が無い".to_owned();
+        };
+        let layer = LayerId(store.next_layer_id());
+        let front = store
+            .layers()
+            .into_iter()
+            .filter_map(|id| store.meta(id).ok().flatten().map(|meta| meta.order))
+            .max();
+        drop(store);
+
+        // 実体を指さない素材(生成系)は、まだ layer にできない。黙って空の layer を
+        // 作らず、理由を言って何も書かない。
+        let Some(path) = asset.path_absolute.clone() else {
+            return format!("Browser: {} は実体のパスを持たない", asset.name);
+        };
+        let source_frames = self
+            .engine
+            .media_duration(&path)
+            .and_then(|duration| duration.try_to_frame_round(composition.fps).ok())
+            .filter(|frames| *frames > 0);
+        let timing = LayerTiming::place(
+            self.session.playhead,
+            source_frames,
+            composition.duration_frames,
+        );
+        // comp の終端に playhead が居ると尺が 0 になる。尺ゼロの layer は
+        // 置けたのに見えない = 「効いたように見えて黙って戻る」なので、書かない。
+        if timing.duration <= 0 {
+            return format!(
+                "Browser: playhead が comp の終端({})に居るので置けない",
+                composition.duration_frames
+            );
+        }
+        let order = front.map_or(0, |order| order.saturating_add(1));
+
+        let intents = vec![
+            Intent::AddLayer(layer),
+            Intent::SetMeta {
+                layer,
+                meta: LayerMeta {
+                    source: LayerSource::Media {
+                        path,
+                        fingerprint: Some(asset.content_hash.clone()),
+                    },
+                    order,
+                    timing,
+                },
+            },
+            Intent::SetAttrs {
+                layer,
+                patch: LayerAttrsPatch {
+                    name: Some(asset.name.clone()),
+                    ..Default::default()
+                },
+            },
+        ];
+        if let Err(error) = self.doc.apply_all(intents) {
+            return format!("素材を置けない: {error}");
+        }
+        self.frame = None;
+        // 置いた物を選ぶ。**意図の直接の産物**なので裁定271 に反しない
+        // (AE / Premiere も新規レイヤーを選択状態にする)。Inspector が
+        // 「今どれの話をしているか」を持てるのはここだけ。
+        self.session.selection = Some(layer);
+        self.session.selected_layers = vec![layer];
+        self.status = Some(format!(
+            "Browser: {} placed  ·  {}..{}",
+            asset.name,
+            timing.start,
+            timing.start + timing.duration
+        ));
+        self.status.clone().expect("just set")
+    }
+
     /// screenshot / export など明示 fallback 専用。通常の playhead / 再生からは呼ばない。
     fn frame_rgba(&mut self) -> Option<(u32, u32, &[u8])> {
         if self.frame.is_none() {
@@ -1163,6 +1313,33 @@ impl App {
         self.dock(cx).item(id!(browser))
     }
 
+    fn browser_surface_ref(&self, cx: &mut Cx) -> WidgetRef {
+        self.browser(cx).child_by_path(ids!(browser_surface))
+    }
+
+    /// 棚の投影を widget へ流す(`install_timeline_model` と同じ形)。
+    /// **hot reload 後も呼ぶ** — `script_mod!` の再実行は widget を宣言状態へ戻すので、
+    /// 呼ばないとカードが消えたまま黙る。
+    fn install_browser_catalog(&mut self, cx: &mut Cx) {
+        let Some(catalog) = self.backend.as_ref().map(BackendBridge::browser_catalog) else {
+            return;
+        };
+        let items = catalog.len();
+        let browser = self.browser_surface_ref(cx);
+        let browser_found = !browser.is_empty();
+        if let Some(mut surface) = browser.borrow_mut::<BrowserSurface>() {
+            surface.set_catalog(cx, catalog);
+        };
+        // 棚が空に見えた時、原因が「台帳が空」か「widget に届いていない」かを
+        // `/log` の1行で分ける(黙って空にしない)。
+        log!("PERF browser_catalog items={items} browser_found={browser_found}");
+    }
+
+    fn browser_surface_uid(&self, cx: &mut Cx) -> Option<WidgetUid> {
+        let browser = self.browser_surface_ref(cx);
+        (!browser.is_empty()).then(|| browser.widget_uid())
+    }
+
     /// Browser の「N のうち1つ」は makepad の radio group が持つ。排他と選択移動は
     /// `RadioButtonSet::selected` の担当で、色をこちらで塗り替えない
     /// (`active` は instance、`draw_bg.color*` は group 共有の uniform)。
@@ -1395,6 +1572,7 @@ impl MatchEvent for App {
         self.playback_timer = cx.start_interval(1.0 / 60.0);
         self.install_timeline_model(cx);
         self.install_fx_model(cx);
+        self.install_browser_catalog(cx);
         self.request_stage_frame(cx);
         self.browser_rail = RAIL_ALL_MEDIA;
         self.apply_browser_selection(cx);
@@ -1417,6 +1595,28 @@ impl MatchEvent for App {
             .clicked(actions)
         {
             self.open_settings(cx);
+        }
+        // 棚 → タイムライン(カードの double-click)。書いた後は3つとも引き直す —
+        // タイムラインに行が増え、Stage の絵が変わり、棚の ● が点く。
+        if let Some(uid) = self.browser_surface_uid(cx) {
+            let browser_edits: Vec<BrowserEditAction> =
+                actions.filter_widget_actions_cast(uid).collect();
+            for action in browser_edits {
+                let BrowserEditAction::PlaceAsset { asset } = action else {
+                    continue;
+                };
+                let Some(status) = self
+                    .backend
+                    .as_mut()
+                    .map(|backend| backend.place_asset_from_browser(asset))
+                else {
+                    continue;
+                };
+                self.install_timeline_model(cx);
+                self.install_browser_catalog(cx);
+                self.request_stage_frame(cx);
+                self.set_status(cx, &status);
+            }
         }
         if let Some(uid) = self.play_uid(cx) {
             if actions
@@ -1581,6 +1781,7 @@ impl AppMain for App {
         }
         if matches!(event, Event::LiveEdit) {
             self.apply_browser_selection(cx);
+            self.install_browser_catalog(cx);
             self.project_status(cx);
         }
         self.match_event(cx, event);

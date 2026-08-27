@@ -19,10 +19,11 @@
 //! - **並びは件数と幅が決める**: `card_grid` は `FlatList`（`flow: Right{wrap: true}`）。
 //!   列数は turtle の折返しが幅から出す。入り切らなければ `ScrollBars` が縦へ送る。
 //!   カードは `catalog` の1行に1つ、`FlatList` の template から作る
-//! - **カタログは front ローカル**: 出所は本来 `motolii-store` の `Composition:assets`
-//!   (`AssetTable`) だが、その読み手（`BackendBridge`）を持つのは `App`（`main.rs`）で、
-//!   本レーンの write-set の外。store の型を発明せず、front の投影型
-//!   [`BrowserAsset`] を置いて既定値に旧8件を入れてある。結線は WIRE 1本の仕事
+//! - **カタログは store の棚の投影**(2026-08-28 結線): 正本は `motolii-store` の
+//!   `Composition:assets`(`AssetTable`、裁定162 の bin-first 台帳)。読み手は
+//!   `BackendBridge`(`main.rs`)で、そこが [`BrowserAsset`] を組んで
+//!   [`BrowserSurface::set_catalog`] へ渡す。**この widget は自分の一覧を持たない** —
+//!   `TimelineSurface::set_model` と同じ「投影される側」の形
 //! - **フィルタは1つの状態から導く**: rail = 置き場所（radio group が正本、`App` と
 //!   同じ actions を読む）/ 検索語と tag = この widget が持つ。件数見出し・
 //!   `Kind:` / `Tags:` の文言・`Clear` の出没は全部そこからの投影で、別に持たない
@@ -38,6 +39,18 @@
 //! それは本レーンの write-set の外。`stage_import.rs` は名前が近いが**共有 GPU 面
 //! (IOSurface)の取り込み**であって素材とは別室で、そこへ同居させると
 //! `app/` が付け直した「名前が何であるかを言う」規律(AGENTS.md)を壊す。
+//!
+//! ## 棚 → タイムライン は **double-click**(2026-08-28、意図論=裁定271)
+//!
+//! カードを叩く人が求めているのは「**これを使いたい**」であって「ここへ置きたい」
+//! ではない。drag は着地点(どの行・どのフレーム)の精密な指定という**別の意図**を
+//! 含むので、最短の動詞にならない。よって [`BrowserEditAction::PlaceAsset`] は
+//! double-click で出る。着地点は意図が名指していないので shell が既定
+//! (playhead / 最前面 / `LayerTiming::place`)で埋める。
+//!
+//! **single click は何もしない。** 押した感じ(hover の面と Hand カーソル)は出すが、
+//! 選択という身分が Browser にまだ無いので、選択の見た目だけ作って何も起きない
+//! 方を避けた(裁定(a)「効いたように見えてから黙って戻る」はできないより悪い)。
 use makepad_widgets::*;
 use motolii_shell_state::Session;
 use motolii_store::{
@@ -142,16 +155,40 @@ script_mod! {
     }
 
     // 素材カード — Browser のヒーロー(正本: browser-semantics.html、旧 124×84 の縮約)。
-    // ● = 配置済み(bin-first の可視化)。drag=配置は未配線。
+    // ● = 配置済み(bin-first の可視化)。**double-click = 置く**(mod doc 参照)。
     // ● は「席」と「点」を分ける: 席は常に 5×5 を占め、点だけ出没する。
     // 色を透明へ差し替える旧手だと、値が uniform 側へ落ちた瞬間に全カードが道連れになる
-    let AssetCard = View{
+    //
+    // hover は **animator が `draw_bg.color` を差し替える**形(`chrome/parts/fold.rs`
+    // と同じ)。`draw_bg +:` へ instance を足すと GPU layout はコンパイル時なので
+    // "cannot push to frozen vec" で eval ごと落ちる。`SolidView` の `draw_bg.color` は
+    // instance(`widgets/src/view_ui.rs`)なので animator が個体ごとに動かせる。
+    // `down` 群は置かない — 無い群への `animator_play` は no-op。
+    // **`cursor` が hit の引き金**: View が hit を拾う条件は
+    // `cursor.is_some() || animator.is_defined`(`widgets/src/view.rs`)で、
+    // 拾った FingerDown は `ViewAction::FingerDown`(`tap_count` 付き)として出る。
+    let AssetCard = SolidView{
         width: 76
         height: 58
         flow: Down
         show_bg: true
         new_batch: true
+        cursor: MouseCursor.Hand
         draw_bg.color: mod.tokens.face.area
+        animator: Animator{
+            hover: {
+                default: @off
+                off: AnimatorState{
+                    from: {all: Forward{duration: 0.0}}
+                    apply: {draw_bg: {color: mod.tokens.face.area}}
+                }
+                on: AnimatorState{
+                    cursor: MouseCursor.Hand
+                    from: {all: Forward{duration: 0.0}}
+                    apply: {draw_bg: {color: mod.tokens.face.hover}}
+                }
+            }
+        }
         thumb := View{width: Fill height: Fill flow: Down align: Align{x: 0.5 y: 0.5}
             glyph := Icon{width: mod.tokens.size.icon_lg + mod.tokens.space.s2 height: mod.tokens.size.icon_lg + mod.tokens.space.s2 align: Align{x: 0.5 y: 0.5} icon_walk: Walk{width: mod.tokens.size.icon_lg height: mod.tokens.size.icon_lg} draw_icon +: {color: mod.tokens.ink.faint}}
         }
@@ -360,19 +397,34 @@ script_mod! {
                 shelf_rule := SeamRule{}
                 // ヒーロー = カード grid。並びは件数と幅が決める — 列は turtle の折返し、
                 // 溢れは ScrollBars。カードは catalog の1行から作る(手書きの列は無い)。
-                // drag=配置 / double-click は未決 — 動詞は配線しない(Q0: 押せそうで押せない物を作らない)
+                // 動詞は double-click = 置く(mod doc の意図論)。
                 card_grid := FlatList{width: Fill height: Fill flow: Right{wrap: true} padding: mod.tokens.space.s3 spacing: mod.tokens.space.s3 wrap_spacing: mod.tokens.space.s3
                     CardVideo := AssetCard{thumb.glyph.draw_icon.svg: crate_resource("self://resources/icons/video.svg")}
                     CardImage := AssetCard{thumb.glyph.draw_icon.svg: crate_resource("self://resources/icons/image.svg")}
                     CardAudio := AssetCard{thumb.glyph.draw_icon.svg: crate_resource("self://resources/icons/audio.svg")}
-                    // 台帳の `asset_type` が video/image/audio のどれでもない時の札。
-                    // 種を知らない素材へ video の絵を貼ると、一覧が嘘をつく
+                    // 種を1つに決められない素材(点群など)。video の絵を借りると嘘になる
                     CardOther := AssetCard{thumb.glyph.draw_icon.svg: crate_resource("self://resources/icons/media.svg")}
                     CardEmpty := AssetEmpty{}
                 }
             }
         }
     }
+}
+
+/// Browser がもう1本だけ持つ、**編集意図**の口
+/// (`TimelineEditAction` と同じ形 — widget は意図だけを言い、書くのは shell)。
+///
+/// **shell 側の受け口**: `main.rs` の `BackendBridge::place_asset_from_browser`。
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum BrowserEditAction {
+    #[default]
+    None,
+    /// カードの double-click = 「**これを使いたい**」。
+    ///
+    /// 運ぶのは `AssetId` の生値**だけ**。どの行へ・どのフレームへ置くかは
+    /// この意図が名指していないので、shell が既定(playhead / 最前面 /
+    /// `LayerTiming::place`)で埋める(裁定271: 操作は意図が名指した物だけを変える)。
+    PlaceAsset { asset: u64 },
 }
 
 /// 素材の種。カードの絵は種で決まるので、種ごとに template を1枚持つ
@@ -383,12 +435,24 @@ pub(crate) enum AssetKind {
     Video,
     Image,
     Audio,
-    /// 台帳の `asset_type` が3種のどれでもない素材。**種を騙らない** — 知らない物を
-    /// Video に寄せると、rail `Video` の一覧が実際とずれる。
+    /// 上の3つのどれとも言えない素材(点群・生成系など)。**video の絵を借りない** —
+    /// 借りた瞬間、rail `Video` の絞り込みと絵が食い違う。
     Other,
 }
 
 impl AssetKind {
+    /// `Asset::asset_type`(opaque な type 文字列、例 `video/mp4` / `image/png` /
+    /// `pointcloud.octree.v1`)から種を読む。**store の語彙をここで発明しない** —
+    /// 読むのは mime の主型だけで、知らない物は [`AssetKind::Other`] へ落とす。
+    pub(crate) fn from_asset_type(asset_type: &str) -> Self {
+        match asset_type.split('/').next().unwrap_or_default() {
+            "video" => Self::Video,
+            "image" => Self::Image,
+            "audio" => Self::Audio,
+            _ => Self::Other,
+        }
+    }
+
     fn template(self) -> LiveId {
         match self {
             AssetKind::Video => live_id!(CardVideo),
@@ -397,71 +461,28 @@ impl AssetKind {
             AssetKind::Other => live_id!(CardOther),
         }
     }
-
-    /// 台帳の opaque `asset_type`(`video/mp4` 等)から種を読む。正本は
-    /// `motolii_store::Asset::asset_type` で、ここは絵を選ぶだけの投影。
-    fn from_asset_type(asset_type: &str) -> Self {
-        match asset_type.split('/').next().unwrap_or("") {
-            "video" => Self::Video,
-            "image" => Self::Image,
-            "audio" => Self::Audio,
-            _ => Self::Other,
-        }
-    }
 }
 
 /// 一覧の1行。**front の投影型であって保存形ではない。**
 ///
-/// 正本は `motolii-store` の `Composition:assets`(`AssetTable` / `Asset`)。ただし
-/// その読み手 `BackendBridge` を持つのは `App`(`main.rs`)で、本レーンの write-set の
-/// 外にある。store 側へ新しい型を足す理由も無い(`Asset` に必要な欄は既に在る)ので、
-/// ここは「一覧が読む形」だけを置き、既定値に旧8件を入れてある。
+/// 正本は `motolii-store` の `Composition:assets`(`AssetTable` / `Asset`、裁定162)。
+/// 組み立てるのは `BackendBridge::browser_catalog`(`main.rs`)で、この widget は
+/// 受け取った物を絞って描くだけ。store 側へ新しい型は足していない
+/// (`Asset` に必要な欄は既に在る)。
 #[derive(Clone, Debug)]
 pub(crate) struct BrowserAsset {
+    /// `AssetId` の生値。**double-click が運ぶ唯一の名前**であり、
+    /// `FlatList` の entry id もこれから作る(絞り込みで並びが変わっても
+    /// 同じ素材が同じ widget を使い続ける)。
+    pub(crate) id: u64,
     pub(crate) name: String,
     pub(crate) kind: AssetKind,
-    /// タイムラインへ既に置いてあるか(bin-first の可視化 = カード右下の ●)。
+    /// この素材を指す layer がタイムラインに居るか(bin-first の可視化 = カード右下の ●)。
     pub(crate) placed: bool,
-    /// この project へ取り込み済みか(rail `Project`)。
-    pub(crate) in_project: bool,
-    /// 直近に触った物か(rail `Recent`)。
-    pub(crate) recent: bool,
+    /// タグ束。**store にタグの語彙がまだ無いので今は常に空** — 空である限り
+    /// toolbar のタグ glyph は席ごと畳む(押せて何も起きない物を作らない)。
+    /// `Collections`(Favorite / Brand)が起草されたらここへ入る。
     pub(crate) tags: Vec<String>,
-}
-
-impl BrowserAsset {
-    fn new(
-        name: &str,
-        kind: AssetKind,
-        placed: bool,
-        in_project: bool,
-        recent: bool,
-        tags: &[&str],
-    ) -> Self {
-        Self {
-            name: name.to_string(),
-            kind,
-            placed,
-            in_project,
-            recent,
-            tags: tags.iter().map(|tag| (*tag).to_string()).collect(),
-        }
-    }
-}
-
-/// 旧「直書き8枚」と同じ中身。**手書きの列ではなく行として**持つ。
-/// store 結線が来たらこの関数の呼び出しが差し替わるだけで、以下は動かない。
-fn demo_catalog() -> Vec<BrowserAsset> {
-    vec![
-        BrowserAsset::new("intro_take2.mp4", AssetKind::Video, true, true, true, &["footage"]),
-        BrowserAsset::new("logo.png", AssetKind::Image, true, true, false, &["brand"]),
-        BrowserAsset::new("bass_drop.wav", AssetKind::Audio, false, true, true, &["sfx"]),
-        BrowserAsset::new("cutaway_b.mp4", AssetKind::Video, false, true, false, &["footage"]),
-        BrowserAsset::new("texture_grain.png", AssetKind::Image, true, false, false, &["texture"]),
-        BrowserAsset::new("vo_line3.wav", AssetKind::Audio, false, true, true, &["voice"]),
-        BrowserAsset::new("ending_loop.mp4", AssetKind::Video, false, false, false, &["footage"]),
-        BrowserAsset::new("title_bg.png", AssetKind::Image, false, false, true, &["brand"]),
-    ]
 }
 
 /// rail = 置き場所。**radio group が正本**(`main.rs` の `browser_rail_ids!` と同じ並び)
@@ -492,14 +513,20 @@ impl BrowserScope {
         Self::RAIL_ORDER.get(index).copied().unwrap_or_default()
     }
 
-    fn accepts(self, asset: &BrowserAsset) -> bool {
+    /// `session_floor` = この窓が開いた時点で台帳に居なかった最初の `AssetId`
+    /// ([`BrowserSurface::session_floor`])。`Recent` はそこから導く。
+    fn accepts(self, asset: &BrowserAsset, session_floor: u64) -> bool {
         match self {
             Self::AllMedia => true,
             Self::Video => asset.kind == AssetKind::Video,
             Self::Images => asset.kind == AssetKind::Image,
             Self::Audio => asset.kind == AssetKind::Audio,
-            Self::Project => asset.in_project,
-            Self::Recent => asset.recent,
+            // **台帳に居る = この project に入っている**(裁定162 の台帳は Document 所有)。
+            // 今は `All media` と同じ集合になるが、これは嘘ではなく事実の一致である。
+            Self::Project => true,
+            // `Asset` に時刻は無い。だが `AssetId` は admit 順の単調増加なので、
+            // 「この窓が開いた後に admit された物」は id だけで言える。**発明ではない。**
+            Self::Recent => asset.id >= session_floor,
         }
     }
 
@@ -515,8 +542,18 @@ impl BrowserScope {
     }
 }
 
-/// 空一覧の面に使う entry id。カードは catalog の索引 +1 を使うので 0 は空く。
+/// 空一覧の面に使う entry id。カードは `AssetId + 1` を使うので 0 は空く。
 const EMPTY_ENTRY: LiveId = LiveId(0);
+
+/// `AssetId` の生値 ⇄ `FlatList` の entry id。`AssetId` は 0 から始まるので
+/// [`EMPTY_ENTRY`] と衝突しないよう1つずらす。**この2つは互いの逆**。
+fn entry_of(asset_id: u64) -> LiveId {
+    LiveId(asset_id.wrapping_add(1))
+}
+
+fn asset_of(entry: LiveId) -> Option<u64> {
+    (entry != EMPTY_ENTRY).then(|| entry.0.wrapping_sub(1))
+}
 
 #[derive(Script, ScriptHook, WidgetRegister)]
 pub struct BrowserSurface {
@@ -527,8 +564,15 @@ pub struct BrowserSurface {
     #[deref]
     view: View,
     /// 一覧の中身。宣言側にカードは1枚も無い — 全部ここから出る。
-    #[rust(demo_catalog())]
+    /// **正本は store の `Composition:assets`**、ここはその投影
+    /// ([`BrowserSurface::set_catalog`] が入れる)。
+    #[rust]
     catalog: Vec<BrowserAsset>,
+    /// この窓が開いた時点で台帳に**居なかった**最初の `AssetId`。`Recent` の境目。
+    /// 最初の投影で決まり、以後動かない(admit は単調増加なので、これより上は
+    /// 全部「この窓が開いた後に入ってきた物」)。
+    #[rust]
+    session_floor: Option<u64>,
     #[rust]
     scope: BrowserScope,
     /// 検索欄の中身。`TextInputFlat` が正本だが、絞り込みは毎フレーム読むのでここへ写す。
@@ -550,6 +594,29 @@ impl BrowserSurface {
     /// **`main.rs` に受け口(WIRE-2、報告の NOT_DONE 参照)が着地したら `true` へ。**
     #[allow(dead_code)]
     const IMPORT_WIRED: bool = false;
+
+    /// store の棚を投影する(`TimelineSurface::set_model` と同じ口)。
+    ///
+    /// **絞り込みの状態(rail / 検索語 / tag)は持ち越す** — 取り込みや配置のたびに
+    /// 絞りが解けたら、利用者が名指していない物が動くことになる(裁定271)。
+    pub fn set_catalog(&mut self, cx: &mut Cx, catalog: Vec<BrowserAsset>) {
+        // `Recent` の境目は最初の投影で決まる。開いた時に既に居た物は Recent ではない。
+        if self.session_floor.is_none() {
+            self.session_floor = Some(
+                catalog
+                    .iter()
+                    .map(|asset| asset.id)
+                    .max()
+                    .map_or(0, |max| max.saturating_add(1)),
+            );
+        }
+        self.catalog = catalog;
+        self.view.redraw(cx);
+    }
+
+    fn session_floor(&self) -> u64 {
+        self.session_floor.unwrap_or(u64::MAX)
+    }
 
     /// catalog に実在する tag を辞書順で1周する環。UI が発明した語彙を持たない。
     fn tag_cycle(&self) -> Vec<String> {
@@ -585,10 +652,11 @@ impl BrowserSurface {
     /// 見えている行の索引。**rail・検索語・tag の3つだけ**から出る。
     fn visible_rows(&self) -> Vec<usize> {
         let needle = self.query.trim().to_lowercase();
+        let floor = self.session_floor();
         self.catalog
             .iter()
             .enumerate()
-            .filter(|(_, asset)| self.scope.accepts(asset))
+            .filter(|(_, asset)| self.scope.accepts(asset, floor))
             .filter(|(_, asset)| needle.is_empty() || asset.name.to_lowercase().contains(&needle))
             .filter(|(_, asset)| match &self.tag {
                 None => true,
@@ -752,7 +820,37 @@ impl Widget for BrowserSurface {
             }
         }
 
+        // 棚 → タイムライン。カードの double-click だけが動詞
+        // (single click は何も名指していない — mod doc の意図論)。
+        //
+        // `FlatList` は item の action を `group_widget_actions` で自分の uid の下へ
+        // 束ねるので、どのカードが鳴ったかは `items_with_actions` が entry id で返す。
+        // uid の台帳をこちらで持たない(持つと描画順と食い違う二重帳簿になる)。
+        let grid = self
+            .view
+            .widget(cx, ids!(browser_body.catalog.card_grid))
+            .as_flat_list();
+        let mut place: Option<u64> = None;
+        for (entry, item) in grid.items_with_actions(&actions) {
+            let Some(asset) = asset_of(entry) else {
+                continue;
+            };
+            // **ちょうど 2**。`>= 2` にすると3連打で3回目の down がもう1枚置く
+            // (`tap_count` は 1,2,3,… と数え上がる)。
+            let double = actions
+                .filter_widget_actions(item.widget_uid())
+                .any(|action| {
+                    matches!(action.cast::<ViewAction>(), ViewAction::FingerDown(fe) if fe.tap_count == 2)
+                });
+            if double {
+                place = Some(asset);
+            }
+        }
+
         cx.extend_actions(actions);
+        if let Some(asset) = place {
+            cx.widget_action(self.uid, BrowserEditAction::PlaceAsset { asset });
+        }
         if dirty {
             self.view.redraw(cx);
         }
@@ -779,9 +877,10 @@ impl Widget for BrowserSurface {
                 let Some(asset) = self.catalog.get(row) else {
                     continue;
                 };
-                // entry id は catalog の索引に紐づける — 絞り込みで並びが変わっても
-                // 同じ素材が同じ widget(= 同じ template)を使い続ける。
-                let entry = LiveId(row as u64 + 1);
+                // entry id は `AssetId` に紐づける — 絞り込みや取り込みで並びが
+                // 変わっても同じ素材が同じ widget(= 同じ template)を使い続け、
+                // double-click の受け口(`items_with_actions`)がそのまま素材を名指せる。
+                let entry = entry_of(asset.id);
                 let Some(item) = list.item(cx, entry, asset.kind.template()) else {
                     continue;
                 };
