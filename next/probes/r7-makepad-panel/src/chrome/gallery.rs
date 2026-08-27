@@ -45,9 +45,10 @@ script_mod! {
 
             rule_cap := ChromeInkMicro{text: "RULE / ROW"}
             ChromeRule{}
+            // 行高 16(Ableton 実測)に踏面 24 の ChromeButton は入らない。
+            // 入れると潰れて文字が切れるので、ボタンは下の BUTTON 節で見せる
             row_sample := ChromeRow{
                 ChromeInk{text: "Row label"}
-                ChromeButton{text: "Action" height: 20}
             }
 
             button_cap := ChromeInkMicro{text: "BUTTON"}

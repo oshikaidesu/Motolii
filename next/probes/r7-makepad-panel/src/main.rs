@@ -76,18 +76,20 @@ script_mod! {
     // This is a Makepad proof surface, not a second product state owner.
 
     let IconButton = ButtonFlatterIcon{
+        margin: 0
         width: mod.tokens.size.menu
         height: mod.tokens.size.bar
         icon_walk: Walk{width: mod.tokens.size.icon height: mod.tokens.size.icon}
-        padding: Inset{left: 0 right: 0}
+        padding: 0
         draw_icon +: {color: #xb7b7b7}
     }
 
     let IconFlatButton = ButtonFlatIcon{
+        margin: 0
         width: mod.tokens.size.menu
         height: mod.tokens.size.bar
         icon_walk: Walk{width: mod.tokens.size.icon height: mod.tokens.size.icon}
-        padding: Inset{left: 0 right: 0}
+        padding: 0
         draw_icon +: {color: #xcfcfcf}
     }
 

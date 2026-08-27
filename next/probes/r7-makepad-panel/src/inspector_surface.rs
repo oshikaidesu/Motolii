@@ -30,10 +30,11 @@ script_mod! {
 
     // 裸のキー打鍵 — 面の上のアイコンだけ。地は塗らない
     let InspectorKey = ButtonFlatterIcon{
+        margin: 0
         width: 26
         height: 16
         icon_walk: Walk{width: 11 height: 11}
-        padding: Inset{left: 0 right: 0}
+        padding: 0
         draw_icon +: {color: #x2e2e2e}
     }
 

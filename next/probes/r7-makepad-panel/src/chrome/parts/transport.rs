@@ -31,6 +31,7 @@ script_mod! {
     // panel.splash と同じ let 束縛で持ち、登録は代入だけにする。
     // play — 停止中の顔。主 glyph 白 #f0f0f0。踏面は透明、hover でフラット矩形（角丸0）
     let PlayT = ButtonFlatterIcon{
+        margin: 0
         width: 30
         height: 30
         padding: 0
@@ -89,6 +90,7 @@ script_mod! {
 
     // 先頭 — S0。副 glyph #b5b5b5（上バーの +・draw ボタンと同格）。first.svg
     let ToStartT = ButtonFlatterIcon{
+        margin: 0
         width: 30
         height: 30
         padding: 0
@@ -107,6 +109,7 @@ script_mod! {
 
     // 1コマ戻 — S0。Play の大三角と混ぜない（step_back.svg）
     let StepBackT = ButtonFlatterIcon{
+        margin: 0
         width: 30
         height: 30
         padding: 0
@@ -125,6 +128,7 @@ script_mod! {
 
     // 1コマ進 — S0。step_forward.svg
     let StepForwardT = ButtonFlatterIcon{
+        margin: 0
         width: 30
         height: 30
         padding: 0
@@ -143,6 +147,7 @@ script_mod! {
 
     // 末尾 — S0。last.svg
     let ToEndT = ButtonFlatterIcon{
+        margin: 0
         width: 30
         height: 30
         padding: 0
@@ -161,6 +166,7 @@ script_mod! {
 
     // loop — 状態の器。on はホストが draw_icon.color を accent へ。帯は持たない（T10）
     let LoopT = ButtonFlatterIcon{
+        margin: 0
         width: 30
         height: 30
         padding: 0

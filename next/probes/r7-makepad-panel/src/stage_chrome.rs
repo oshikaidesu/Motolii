@@ -10,20 +10,22 @@ script_mod! {
     use mod.widgets.*
 
     let IconButton = ButtonFlatterIcon{
+        margin: 0
         width: 24
         height: 22
         icon_walk: Walk{width: 13 height: 13}
-        padding: Inset{left: 0 right: 0}
+        padding: 0
         draw_bg.border_size: 0.0
         draw_bg.border_radius: 0.0
         draw_icon +: {color: #xababab}
     }
 
     let IconFlatButton = ButtonFlatIcon{
+        margin: 0
         width: 24
         height: 22
         icon_walk: Walk{width: 13 height: 13}
-        padding: Inset{left: 0 right: 0}
+        padding: 0
         draw_bg.border_size: 0.0
         draw_bg.border_radius: 0.0
         draw_icon +: {color: #xdddddd}

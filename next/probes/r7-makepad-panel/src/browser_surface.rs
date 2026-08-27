@@ -17,10 +17,11 @@ script_mod! {
 
     // 素通しグリフ — 面を持たない。角丸・枠線なし
     let IconButton = ButtonFlatterIcon{
+        margin: 0
         width: 24
         height: 16
         icon_walk: Walk{width: 11 height: 11}
-        padding: Inset{left: 0 right: 0}
+        padding: 0
         draw_icon +: {color: mod.tokens.ink.glyph}
     }
 
