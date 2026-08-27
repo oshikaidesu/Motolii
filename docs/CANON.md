@@ -1,88 +1,153 @@
-# 正本索引(CANON)
+# 正本(CANON) — 何を作ろうとしているか
 
-このリポジトリは長期間の設計探索で資産が世代交代を繰り返しており、**同じ主題を指すファイルが複数存在する**(旧HTMLモック、旧crateモジュール、旧実行地図)。それ自体は悪くないが、docsのどこにも「今どれが正本か」を1枚で集約した場所が無く、外部LLMレーンや新規セッションが旧版を正本と誤認して発注・実装する事故が実際に起きた(2026-08-18/19、[経緯](#誤読の実例と訂正)参照)。
+この文書は**索引ではない**。2026-08-27 までのこのファイルは「今どのファイルが正本か」の
+一覧だったが、その役目は世界の分断(裁定270)が構造で引き取った — **`app/` に在る物が
+生きている物で、`crates/` `next/` `spikes/` は歴史**である。ファイルの新旧はディレクトリが
+答えるようになったので、ここには**腐りにくい物だけ**を置く。
 
-**このファイルの役割は索引だけ**。各行の詳細・理由・経緯は正本自身、またはリンク先のreview/decision文書を読む。ここに新しい設計判断を書かない。
+書き方の規律: **モデルの時間で書く。** UI は3世代死んだ(egui/WebView/Slint → RN+rust-skia →
+iced → Makepad)。道具の固有名を書いた行から順に腐る。ここに道具の名が出るのは、
+それが道具ではなく**世界の形**である時だけ。
 
-各行に**最終更新(git logの日付)**を入れる。古さが一目でわかることを目的とする。
+## なぜこの文書があるか
 
-## 視覚(見た目)の正本 — 面ごと
+利用者は長く、自分の欲しい物をあえて言わずにいた。特化したソフトになるのを避けるためで、
+判断としては筋が通っていた。しかし**意見を出さないことは中立ではなく、空白を作ること**だった。
+そして空白は、実装側の幾何学で埋まる — 2026-08-27 の監査が見つけた欠陥は、ほぼ全部が
+その形をしている(業界の慣習がある場所に自前の法則、既にある物の隣に自作の再実装)。
 
-| 面 | 正本 | 最終更新 | 備考 |
-|---|---|---|---|
-| Inspector | `docs/mocks-ui/public/inspector-library.html` + 同名`.css` | 2026-08-16 | `crates/motolii-ui/src/inspector_panel/theme.rs`が冒頭で「全部`inspector-library.css`の写し」と自己宣言。fallback値は`docs/mocks-ui/src/tokens/mock-candidates.css`の実値と一致確認済み |
-| Browser | `docs/mocks-ui/public/browser-library.html` + 同名`.css` | 2026-08-16 | `crates/motolii-ui/src/lib.rs`の`browser_panel`docコメントが同ファイルを正本と明記 |
-| Timeline | `crates/motolii-ui/src/timeline_editor/`(egui実装そのもの) | 実装2026-08-18 / 裁定2026-08-19 | **他の面と逆方向**: 2026-08-19利用者裁定「タイムラインに関してはegui版が最も機能を詰めれていて優れている、UIも」により、Timelineの再現目標は`docs/mocks-ui/public/timeline-library.html`(2026-08-16、副参照へ降格)ではなく**egui実装自身**になった。iced側(`crates/motolii-shell-iced/src/timeline/`)がこの実装へ追いつく途上(下記) |
-| chrome(titlebar / splitter / modal / extension panel) | `ui/motolii-rn/src/productStyles.ts` + `chrome.tsx` + `panels/{registry.tsx,AssetTaggingPanel.tsx}` | 2026-08-11〜13 | `crates/motolii-ui/src/chrome_blitz/theme.rs`が同ファイル群を「写し」と自己宣言。**`chrome-library.html`という名のファイルは`docs/mocks-ui/public/`に存在しない**(Inspector/Browserと違い、chromeの正本はReact Native側のTypeScriptソースであってHTML/CSSモックではない) |
+具体的な意思は範囲を狭めない。**背骨になる。** Ableton は Robert Henke が自分のライブの
+ために、Blender は Ton Roosendaal が自分のスタジオのために作った。狭くはならなかった。
+広さは後から他人が足す — そのための口が [Vism 体系](#motolii-が自作する範囲)である。
 
-RN由来のBrowserモックが別にもう1つある: `docs/mocks-ui/public/rn-browser-161c7ccd.html`(2026-08-16、`ui/motolii-rn/src/Browser.tsx`固定commit`161c7ccd`からの投影専用・Host/Document/intent/drag/persistence非接続)。上表の`browser-library.html`と役割が異なる(こちらは視覚回帰の投影専用、上表は製品egui実装が直接写す対象)。
+## 憲法
 
-**2026-08-19 利用者裁定 — 面ごとに「手本」が違う(取り違え注意)**:
+規則ではない。**これに反する設計は、動いていても無効**である。
 
-- **Browser / Inspector**: 正本は上表の HTML/CSS **そのもの**。**egui 実装(`browser_panel` / `inspector_panel`)は手本にしない** — 利用者の判断で「egui 変換が上手くできなかった部分」。定数が css と一致していることと、構造・階層が設計の意図どおりであることは別問題。iced 側は **HTML から意図(section 階層・class の意味・行の内部構造・状態の表現)を解析して**作る。egui から拾ってよいのは**振る舞いの結線と意味関数**だけ
-- **Timeline**: 逆。**egui 実装が正本**(2026-08-19 裁定「egui 版が最も機能を詰めれていて優れている、UI も」)。`timeline-library.html` は副参照
+### 1. 世界はすべて `re_renderer` の上に在る
 
-器具: `motolii-css-metrics`(`motolii_ui::css_metrics::extract()`)が HTML/CSS の計算済み値を吐く。写経せず器具の値を根拠にする。**罠**: `<link>` は解決されない(inline 要)/ 帯・アクセントバーは `::before`/`::after` = `AnonymousBlock` なので Element だけ歩くと消える / JS 依存の初期状態は再現されない。
+点群も、動画も、ベクタも、テキストも、同じ一つのシーンの住人である。**溝を作らない。**
 
-## Timeline engineの実装
+溝を作ると After Effects の二の舞になる。AE で 2D レイヤーと 3D レイヤーを混ぜると、
+そこでレンダリングがグループに分割される。3D の間に 2D を1枚挟むと空間が切断され、
+利用者はプリコンポで回避策を覚える。**あれはレンダ経路が2本あることの代償**であって、
+機能の不足ではない。経路が1本なら、その代償を払う理由が無い。
 
-| 実体 | 最終更新 | 状態 |
-|---|---|---|
-| `crates/motolii-ui/src/timeline_editor/`(`mod.rs` 8,186行 + `audio_seat.rs` + `import_seat.rs` + `waveform_band.rs`、計**9,059行**) | 2026-08-18 | **正本**。`crates/motolii-ui/src/lib.rs`のdocコメント「egui Timelineエディタ(旧labの本体)」。`blitz_shell`のTimeline paneと`examples/timeline_egui_lab.rs`の薄殻が同じ実装を呼ぶ(`grep -rn timeline_editor crates/motolii-ui/src/blitz_shell/`で配線確認可) |
-| `crates/motolii-ui/src/timeline_skia_raster.rs` | 2026-08-16 | **死蔵**。`lib.rs`に`#[cfg(target_os = "macos")] mod timeline_skia_raster;`とだけ宣言され、他のどこからも参照されていない(2026-08-16に一度は製品正本と裁定されたが、同日中にegui再選定で上書きされた経緯は[decision-index.md](decision-index.md)のTimeline行を参照) |
-| `crates/motolii-shell-iced/src/timeline/`(semantics / pane / canvas / waveform) | 2026-08-19 | **現行製品route**。egui版を視覚・機能参照としてicedへ移植する。個別能力の現在値と残余は[egui Timeline能力台帳](reviews/2026-08-19-egui-timeline-capability-ledger.md)で確認し、日付付きhandoffの欠落一覧を現在値にしない |
+だから「ベクタだけ別のラスタライザで絵にしてから合流する」は無効である。動いていても
+無効である。これは教義ではなく Motolii の存在理由そのものなので、
+「動いている実装を教義のために壊さない」は**ここには適用されない**(2026-08-27 裁定)。
 
-**`crates/motolii-ui/src/timeline_egui.rs`という名のファイルは存在しない**(旧`timeline_egui/`961行は2026-08-16に削除。原文は`git show f209da9d^:crates/motolii-ui/src/timeline_egui/mod.rs`)。この名前で発注されたレーンが「移植元が無い」と誤報告した実例が[2026-08-18セッション引き継ぎ](reviews/2026-08-18-session-handoff-iced-four-pane-campaign.md#追記3--視覚第2ラウンド着地と次の本題2026-08-19-朝)にある。
+### 2. 2D と 3D を分けない。世界は一つ、カメラは一つ
 
-## token
+2D object は同じ正準 XYZ 世界の `z=0` 平面に居る(裁定 planar v1 camera、
+[M2](specs/M2-document-model.md))。**モードの切り替えが存在しない。**
 
-| ファイル | 最終更新 | 役割 |
-|---|---|---|
-| `ui/motolii-tokens/sources/motolii-dark.json` | 2026-07-29 | **手書きの正本**。DTCG形式(`$schema: designtokens.org/schemas/2025.10`) |
-| `ui/motolii-tokens/generated/tokens.css` / `tokens.rs` | 2026-07-29 | `motolii-ui-token-gen`が`motolii-dark.json`から機械生成。ファイル冒頭に`DO NOT EDIT`。Rust/egui adapterと下記`accepted-route-product-tokens.css`が直接参照する対象 |
-| `docs/mocks-ui/src/tokens/mock-candidates.css` | 2026-07-31 | `--mock-candidate-*`。HTMLモックから移した**比較用候補値であり製品tokenではない**。component/adapterから直接参照禁止(ファイル冒頭に明記)。現時点では生成tokenと数値が一致することを確認済みだが、それは検証結果であって正本の理由ではない |
-| `docs/mocks-ui/src/tokens/accepted-route-product-tokens.css` | (mock-candidates.cssと同時期) | `generated/tokens.css`を`@import`し、mocks-ui側の`--bg`/`--panel`等の変数名へ再マップする橋。採択route(`#plugin-browser-candidate`)がこれを使う |
+- **幾何は空間** — カメラは本物なので視差も出る
+- **合成順序はレイヤー順** — 深度テストで前後を決めるのではない。だから順序は**視点に依存せず**、
+  カメラが回ってもレイヤーの前後は入れ替わらない
+- **真の深度遮蔽は opt-in** — Host が持つ「depth 参加境界」から([M5](specs/M5-3d-and-post.md))
 
-一行でまとめると: **`motolii-dark.json`(手書き)→ 生成 →`generated/tokens.css`(Rust/egui・採択routeが読む)**。`mock-candidates.css`は別系統(HTMLモック由来の比較値)で、混同しないこと。
+z=0 に複数が同居してちらつかないことは実測で確認済み(M5-PATH2D-P0)。この一次証拠が
+無ければ「2D は z=0」は嘘になり、結局「2D モード」という逃げが要る。
 
-## 製品shell
+### 3. ゼロコピーは非交渉
 
-| shell | crate / bin | 最終更新 | 現在地 |
-|---|---|---|---|
-| iced | `crates/motolii-shell-iced`、bin `motolii-shell-iced` | 2026-08-19 | **現行製品host / 新規機能target**。M-0〜M-4で4 pane、Stage島、`UiIntent` gateway、drive/replay oracleが統合済み。未実装能力や視覚残余があるため製品完成を意味しない |
-| egui | `crates/motolii-ui`(`blitz_shell`モジュール)、bin `motolii-blitz-shell` | 2026-08-19 | **legacy/reference**。Timelineの参照実装、Rerun Stage島の内部実装、比較・回帰器具として残る。明示依頼なしに製品機能を追加したりfallback先にしない |
+合成器が表示可能な共有 Surface へ直接描き、front は handle を表示するだけ(裁定251)。
+通常経路で CPU readback・再アップロード・毎フレーム Texture 再生成・最終 Texture からの
+GPU blit を禁じる。fallback は screenshot / export / 非対応環境のみ。
 
-2026-08-19にhost authorityをicedへ切り替えた。既定bin名やlauncherに機械的な残余があっても、それはauthorityをeguiへ戻さない。「Motolii Studioを起動」等の要求への応答は[ui-artifact-terminology.md](ui-artifact-terminology.md)の起動ルールと本表を併用する。
+**理由は性能ではない。** MV は音が主で絵が従である。BPM グリッドに手で合わせる作業は、
+聞きながら置く作業なので、**プレイヘッドが音とずれた瞬間に作業そのものが成立しない**。
+だからプレイヘッドのカクつきは症状ではなく**合否そのもの**であり、Stage から切り離さない。
 
-## 撮影器具 — それぞれ何を撮るか
+### 4. レイヤーは UI であって、存在論ではない
 
-| 器具 | 撮る対象 | 備考 |
-|---|---|---|
-| `motolii-blitz-dump`(bin, `motolii-ui`) | 個別Blitzパネル(`timeline`/`browser`/`dock`/`chrome-export`/`chrome-settings`/`chrome-panels`/`chrome-parts`)をHTML→PNGへ直描き | 組み立て済みのshell窓ではない。`cargo run -p motolii-ui --bin motolii-blitz-dump -- <対象> <出力先>` |
-| `motolii-inspector-blitz-dump`(bin, `motolii-ui`) | `inspector_blitz`が出すHTMLだけをPNG化する小道具(C7判定材料) | Inspector単体、offscreen |
-| `motolii-blitz-shell --screenshot`(bin, `motolii-ui`) | **egui製品shell窓の実撮り** | `cargo run -p motolii-ui --bin motolii-blitz-shell -- --screenshot out.png [frames]` |
-| `motolii-shell-iced --screenshot`(bin, `motolii-shell-iced`) | **iced製品shell窓の実撮り** | 2026-08-18夜に追加(「以後の視覚検収の常設器具」)。`--screenshot <out> [frames]`。**frames=25では非同期評価が間に合わずStageが空に見える実測あり。120を使うこと**([出典](reviews/2026-08-18-session-handoff-iced-four-pane-campaign.md#追記2--修復の検証結果2026-08-19-未明supervisorが実窓で確認)) |
-| Playwright(`docs/mocks-ui/scripts/*.mjs`: `reference-capture.mjs`、`current-route-capture.mjs`等) | **CSSモック自体**(`inspector/browser/timeline-library.html`等)のPNG化・回帰証跡生成 | Rust側の製品shellは撮らない。`reference-output/`・`current-route-output/`の`generations/`へ出力し`CURRENT`ファイルが最新世代を指す |
+AE は「読める操作面」を30年かけて作った。その資産は本物で、Nuke も Blender も越えられて
+いない。同時に AE は**最終的に全部が平面の画素になる**世界に閉じている。
 
-2026-08-18深夜に使われた`capture-design-reference.mjs`はscratchpad上のアドホックスクリプトで、**リポジトリにはコミットされていない**(`docs/mocks-ui/scripts/`には存在しない、恒久器具ではないので注意)。
+Motolii は**前者を取り、後者を捨てる**。レイヤーは深さで並んだリストの正直な一つの窓であって、
+深いモデルを隠す仮面ではない。だからレイヤー UI は妥協ではなく、**たまたま正しかった**。
 
-## 誤読の実例と訂正(このレーンで対応した分)
+この賭けは**レイヤー UI が実際に強い場合にしか成立しない**。掴めない・選べない・スクロール
+できないレイヤー UI は、賭けの前提を満たしていない
+([欠陥台帳](reviews/2026-08-27-layer-ui-parity-defects.md))。
 
-| 誤読の実害 | 場所 | 訂正 |
-|---|---|---|
-| 「視覚構成の基準は高密度メインUIモック(m3-main-ui-v1)」が旧版を指したまま残っていたため、supervisorが旧版を再現目標として発注した | `docs/ui-visual-language.md:7` | 訂正注記+取り消し線を追加。現行正本(上表)を指すよう修正。該当html/pngは`docs/archive/m3-main-ui-early-mocks/`へ移動 |
-| `timeline_egui.rs`が正本として台帳・メモリに書かれていたが、そのファイルは存在しない(2026-08-16削除)。この名前で発注されたレーンが「移植元が存在しない」と誤報告した | `docs/decision-index.md`、`docs/ui-friction-ledger.md`、`docs/blitz-port-order-capsules.md`(C1〜C3) | `blitz-port-order-capsules.md`のC1〜C3capsuleに失効注記(このcapsuleは発注不可)。`ui-friction-ledger.md`にパス訂正の脚注。`decision-index.md`は各エントリが既に自己訂正の連鎖(撤回→撤去済み)を持っていたため無変更 |
-| `motolii_ui_shell`(2026-08-16撤去済み)を現在の起動先として書いていた | `docs/ui-reference-map.md`、`docs/ui-artifact-terminology.md` | 各ファイル冒頭に既知の陳腐化バナーを追加。現行shellは本ファイルの上表を見よと明記 |
-| `docs/m3-rn-runtime-execution-map.md`・`docs/implementation-ledger.md`が個別ファイル名(`rn_product_host.rs`等、いずれも撤去済み)を現在の実装場所であるかのように列挙 | 同上2ファイル | 冒頭に現在地バナーを追加。本文の個別ファイル名は歴史記録として残す(全面書き換えはしない) |
+### 5. モデルは Lottie
 
-上記以外にも、`docs/`配下の"アクティブな作業台帳"(`m3-parallel-implementation-map.md`、`m3-executable-dispatch-map.md`、`decision-index.md`本体、`docs/reviews/**`)には、実在しないファイルパスへの言及が多数残っている(スキャン結果は本レーンの作業報告を参照)。これらは日付付きの**履歴記録**であり(このリポジトリの規律「棄却物も歴史証拠として残す」に従う)、個別に全数訂正すると本文の大部分を書き換えることになるため、このレーンでは**現在も読まれる可能性が高い入口文書**(上記4件)だけを訂正した。個別の古いファイル名に迷ったら、まずこのCANON.mdで現在の実体を確認すること。
+Lottie は Bodymovin が AE のデータ模型を吐いた物 — **AE の保存方式を外に出した正本**である。
+`.aep` の肥大を避ける鍵(Document にはレシピだけを入れ、ピクセルは再生成可能なキャッシュへ
+追い出す)が、最初から形式の側に入っている。
 
-## アーカイブ
+上流スキーマとの距離は機械で測る(`app/reference/lottie-coverage.tsv`、
+`app/core/motolii-store/tests/lottie_coverage.rs`)。**この表の「未判定」は、AE の意味のうち
+Motolii がまだ向き合っていない量**である。2026-08-27 時点: 採用済 230 / 不採用 327 /
+該当なし 172 / **未判定 0**。
 
-世代交代が確定した資産は`docs/archive/`へ移した(削除はしない)。内容と移動理由は[docs/archive/README.md](archive/README.md)を見よ。**移動を検討したが対象外と判断したもの**(ビルド時依存があるファイル、decision台帳が「移動しない」と明記した回帰証拠など)も同READMEに記録してある。
+## hero — 決め手
 
-## 今後の再発防止(提案・強制しない)
+**範囲ではなく決め手である。** 「自分の欲しい物だけ作る」ではない。二つの設計が同じくらい
+妥当に見えた時、**どちらがこの MV に近いかで決める**。設計の8割は両方に共通していて、
+残りの分岐でだけ hero が働く。
 
-- **CANON.mdを触る条件**: 上記いずれかの行が指す正本ファイルが移動・世代交代・撤去された時、またはこのレーンのようにgrepで「誤読の実害」が実測された時
-- **正本が動いた時にすること**(推奨する3手順): (1) 移動先ファイルの先頭docコメントに出所を書く(このリポジトリの既存慣行そのもの。`inspector_panel/theme.rs`等が実例) (2) このファイルの該当行と最終更新日を更新する (3) `grep -rn <旧パス> docs/`で参照が残っていないか確認し、残っていれば「歴史記録として残す/訂正する」を個別判断する(全部消す必要は無い)
-- **恒久化の判断は利用者に委ねる**: このCANON.mdの維持を`scripts/check-docs.sh`のような機械チェックへ昇格するかどうかは、このレーンでは提案しない(「Fableの役割は回収であって仕組み化ではない」)
+> **実測の点群**(スキャン・フォトグラメトリ)と、**外で描いたベクタ**と、**音**が、
+> 同じタイムラインで出会う MV。**BPM グリッドへ手で合わせて**作る。
+> それを **AE を知っている人**が、指の記憶を壊さずに作れる。
+
+分岐で迷ったら聞く問いは「どちらが汎用的か」ではない。**「どちらがこの MV に近いか」**である。
+
+### この hero が決めていること
+
+| | 決まること |
+|---|---|
+| 点群は**実測を持ち込む** | 最初の縦スライスは import。生成でも映像からの深度推定でもない。大きなファイルなので LOD / streaming が先に要る |
+| **BPM グリッドへ手で合わせる** | タイムラインは映像のタイムラインではなく**音楽のタイムライン**。波形・小節線・ビートスナップ。タイムコード主体ではない |
+| ベクタは**外で描いて持ち込む** | パス編集 UI(ペン・ベジェ)は v1 に要らない。代わりに**輸入の忠実さ**が全て |
+| 基準は **AE を知っている人** | 合否は「指の記憶を壊さないこと」。掴む・選ぶ・スクロールする・打つ・ドラッグする |
+| 将来: **音がパラメータを駆動** | ParamDriver / DataTrack の口は塞がない。ただし v1 の完成条件ではない |
+
+### 一番難しい所
+
+**実測点群 + ゼロコピー + 音との同期**の同居。スキャンした点群は1億点になることがあり、
+タイムラインに乗せられる物の中で最重量級である。それを音とずらさずにスクラブする。
+
+ここが本当の工学になる。ただし `re_renderer` は**大きなデータを時間付きで止まらずに見る**
+のが本業なので、勝てる見込みのある戦い方である。
+
+## Motolii が自作する範囲
+
+三本柱はどれも**既にある大陸**である。ビューと時間軸は Rerun(開いたビュワー、entity ごとの
+時系列なので点群も 2D も同じ時間に乗る)、編集の語彙は Lottie、UI は Makepad。素材 IO は FFmpeg。
+
+**自作すべきは3つだけ:**
+
+1. **Vism 体系** — 持ち運べる映像表現の単位と、その継ぎ目。音の世界で VST が果たした位置。
+   「AE か Blender か」の二択を「どのホストでも動く表現の単位がある」に変える
+2. **レイヤー UI** — Rerun に無い編集体系。区間イージング、掴む・選ぶ・並べ替える
+3. **意味の管理** — 単一 writer・Undo・identity・時間
+
+**それ以外は繋ぐ。** そして「繋げるだけ」は実装側が繰り返し拡大解釈する所なので、
+**新しい型・trait・モジュールを定義する瞬間に「これを既にやっている物は何か」を答える**。
+答えられないなら、まだ探していない。
+
+現在 owns しているが正当性が未検証の物: `motolii-vector` のパス演算子7種
+(trim-path / repeater / rounded-corners / pucker-bloat / zig-zag / offset-path / twist)。
+crate 自身が `OWNS-JUSTIFICATION(D): 立証不足` と申告しており、借り先候補(`kurbo` /
+`lyon_algorithms` / Lottie を直接扱う Rust 実装)を具体的に検討した記録が無い。
+**幾何の計算は残る**(Lottie の意味論そのものなので)が、借りられる見込みは開いている。
+
+## 今どこに居るか(2026-08-27)
+
+- **モデル層は AE と向き合い終わっている** — Lottie 網羅表の未判定 0。3世代の UI 交代を
+  生き延びたのはこの層である
+- **UI 層は probe から出たばかり** — 21件の基本欠落。掴めない・選べない・打てない
+- **憲法1に反する箇所が1つ稼働中** — ベクタが `tiny-skia` でラスタライズされ、
+  RGBA テクスチャとして合流している(`motolii-vector::render` → `motolii-engine/texture.rs`)。
+  正しい道は文書に既にある(「Bezier を許容誤差テッセレーションした標準 `Mesh3D` として
+  同 store へ記録する」)。テキストとマスクも同じ経路の住人なので一緒に動く
+
+## 関連
+
+- [注意の失敗と、世界の分断](reviews/2026-08-27-attention-failures-and-the-partition.md) — 裁定270
+- [レイヤー UI の当たり前が欠けている箇所](reviews/2026-08-27-layer-ui-parity-defects.md) — 21件
+- [決定逆引き台帳](decision-index.md) — 主題から裁定を引く
+- [AGENTS.md](../AGENTS.md) — 運転の正本(製品は `app/` に居る・ホットリロード運転)
