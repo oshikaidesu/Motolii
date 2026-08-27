@@ -66,6 +66,19 @@ script_mod! {
 
     // 1行ツリー — 行高 20。面の明度差だけで示す（#3d3d3d → hover #4f4f4f）。
     // indent 幅を深さに、fold_button を葉で隠す
+    //
+    // hover は **animator が `draw_bg.color` を差し替える**形で入れる(台帳 E3)。
+    // 以前ここが落ちた原因は判っている: `draw_bg +:` へ `hover: instance(0.0)` を
+    // 足したこと。GPU の layout はコンパイル時なので instance の追加は
+    // "cannot push to frozen vec" で eval ごと落ちる(makepad-2.0-troubleshooting
+    // Pitfall #34)。そして足せていない instance を `self.hover` と読んだのが
+    // 「self 不在」の正体。**だから shader は触らない。**
+    // `SolidView` の `draw_bg.color` は instance(`widgets/src/view_ui.rs`)なので
+    // animator が直接動かせる。View が hit を拾う条件は
+    // `cursor.is_some() || animator.is_defined`(`widgets/src/view.rs`)。
+    // `down` 群は置かない — 無い群への `animator_play` は None を返す no-op
+    // (`widgets/src/animator.rs` Animator::play)。
+    // 反応は即時(利用者裁定 2026-08-27)。text が消えないよう new_batch は必須
     mod.widgets.ChromeTreeRow = SolidView{
         width: Fill
         height: 20
@@ -75,9 +88,22 @@ script_mod! {
         spacing: 4
         show_bg: true
         new_batch: true
-        // 見た目だけの段階。hover の shader merge と animator は eval を落とした
-        // (frozen vec / self 不在の実測)ため置かない。面はベタ #3d3d3d
+        cursor: MouseCursor.Hand
         draw_bg.color: #x3d3d3d
+        animator: Animator{
+            hover: {
+                default: @off
+                off: AnimatorState{
+                    from: {all: Forward{duration: 0.0}}
+                    apply: {draw_bg: {color: #x3d3d3d}}
+                }
+                on: AnimatorState{
+                    cursor: MouseCursor.Hand
+                    from: {all: Forward{duration: 0.0}}
+                    apply: {draw_bg: {color: #x4f4f4f}}
+                }
+            }
+        }
         indent := View{width: 0 height: Fill}
         fold_button := DisclosureT{}
         title := ChromeInk{text: "Node"}

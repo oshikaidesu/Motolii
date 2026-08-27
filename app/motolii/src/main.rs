@@ -205,8 +205,13 @@ script_mod! {
                     draw_text.color: mod.tokens.ink.glyph
                     draw_text.text_style: theme.font_code{font_size: mod.tokens.text.md}
                 }
-                browser_toggle := IconButton{width: 26.0 * mod.tokens.scale draw_icon +: {svg: crate_resource("self://resources/icons/panels.svg")} on_click: || { ui.status.set_text("Browser panel") }}
-                settings := IconButton{width: 26.0 * mod.tokens.scale draw_icon +: {svg: crate_resource("self://resources/icons/filter.svg")} on_click: || { ui.status.set_text("Settings") }}
+                // アイコンの言っている事をそのまま行う2本。splash の `on_click` からは
+                // 届かない — Dock に `script_call` の口が無いのでタブ選択も splitter も
+                // script 側から呼べず、状態行へ文言を書くだけの「見た目のボタン」に
+                // なっていた。押下は Rust 側(`App::handle_actions`)で受ける
+                // (`toggle_playback` / `radio_button_set` と同じ経路)
+                browser_toggle := IconButton{width: 26.0 * mod.tokens.scale draw_icon +: {svg: crate_resource("self://resources/icons/panels.svg")}}
+                settings := IconButton{width: 26.0 * mod.tokens.scale draw_icon +: {svg: crate_resource("self://resources/icons/filter.svg")}}
             }
 
             chrome_surface_divider := SurfaceDivider{}
@@ -728,6 +733,13 @@ pub struct App {
     /// いま明かしている浮くタブ行。開いた後の保持判定に使う。
     #[rust]
     revealed_bar: Option<LiveId>,
+    /// Browser 面が畳まれているか。面の幅の正本は Dock の splitter align で、
+    /// ここは「どちら向きに押すか」だけを持つ。
+    #[rust]
+    browser_collapsed: bool,
+    /// 畳む直前の Browser 面の幅。戻す先が無いと畳みは片道になる。
+    #[rust]
+    browser_restore_width: f64,
     /// 状態行の文言。live edit は widget を宣言状態へ戻すので、ここが正本。
     #[rust]
     status_text: String,
@@ -1011,6 +1023,59 @@ impl App {
         (!play.is_empty()).then(|| play.widget_uid())
     }
 
+    /// パネル切替(panels.svg)。Browser 面を畳む/戻す。
+    ///
+    /// 面の幅の正本は Dock の splitter align 1つで、こちらは畳む前の幅だけ覚える。
+    /// `FromA(0.0)` は掴み棒だけを残して A 側を潰す — 帯ごと消さないので、
+    /// 畳んだ後もドラッグで戻せる(押した物が消えて戻せない、を作らない)。
+    fn toggle_browser_panel(&mut self, cx: &mut Cx) {
+        let dock = self.dock(cx);
+        if self.browser_collapsed {
+            // 畳む前が既に 0 幅だったなら宣言の既定へ戻す(そうしないと戻らない)
+            let width = if self.browser_restore_width > 1.0 {
+                self.browser_restore_width
+            } else {
+                300.0 * tokens::ui_scale()
+            };
+            dock.set_splitter_align(cx, id!(top_split), SplitterAlign::FromA(width), true);
+            self.browser_collapsed = false;
+            self.set_status(cx, "BROWSER  ·  SHOWN");
+        } else {
+            self.browser_restore_width = dock.splitter_position(id!(top_split)).unwrap_or(0.0);
+            dock.set_splitter_align(cx, id!(top_split), SplitterAlign::FromA(0.0), true);
+            self.browser_collapsed = true;
+            self.set_status(cx, "BROWSER  ·  HIDDEN");
+        }
+    }
+
+    /// 設定(filter.svg)。`SettingsPane` は inspector 側のタブとして既に居るので、
+    /// 開くとは「そのタブを選ぶ」こと。新しい面を作らない。
+    fn open_settings(&mut self, cx: &mut Cx) {
+        self.dock(cx).select_tab(cx, id!(settings));
+        self.set_status(cx, "SETTINGS");
+    }
+
+    /// いま文字を打っている最中か。
+    ///
+    /// 欄を名指ししない — 面は他レーンが増やし続けるので、木を辿って
+    /// 「キーフォーカスを持つ `TextInput` が居るか」だけを聞く。名指しにすると
+    /// 欄が増えるたびにここが古くなり、Space が再生へ抜ける穴が戻る。
+    fn text_entry_has_focus(&self, cx: &Cx) -> bool {
+        fn focused_text_input(cx: &Cx, node: &WidgetRef) -> bool {
+            if node.borrow::<TextInput>().is_some() && node.key_focus(cx) {
+                return true;
+            }
+            let mut found = false;
+            node.children(&mut |_id, child| {
+                if !found {
+                    found = focused_text_input(cx, &child);
+                }
+            });
+            found
+        }
+        focused_text_input(cx, &self.ui)
+    }
+
     fn toggle_playback(&mut self, cx: &mut Cx) {
         let playing = self
             .backend
@@ -1043,6 +1108,22 @@ impl MatchEvent for App {
 
     fn handle_actions(&mut self, cx: &mut Cx, actions: &Actions) {
         self.browser_radio_groups(cx, actions);
+        if self
+            .ui
+            .widget(cx, ids!(panel.chrome.browser_toggle))
+            .as_button()
+            .clicked(actions)
+        {
+            self.toggle_browser_panel(cx);
+        }
+        if self
+            .ui
+            .widget(cx, ids!(panel.chrome.settings))
+            .as_button()
+            .clicked(actions)
+        {
+            self.open_settings(cx);
+        }
         if let Some(uid) = self.play_uid(cx) {
             if actions
                 .filter_widget_actions(uid)
@@ -1094,6 +1175,12 @@ impl MatchEvent for App {
     }
 
     fn handle_key_down(&mut self, cx: &mut Cx, event: &KeyEvent) {
+        // `MatchEvent` は `ui.handle_event` より先に来る。フォーカスのある欄より先に
+        // ここが Space を食べると、名前を打っている最中に再生が始まる。
+        // 文字を打っている間は窓のショートカットを名乗らない — 手前の欄が持ち主。
+        if self.text_entry_has_focus(cx) {
+            return;
+        }
         if event.modifiers.logo || event.modifiers.control {
             let step = if event.modifiers.shift { 10 } else { 1 };
             match event.key_code {

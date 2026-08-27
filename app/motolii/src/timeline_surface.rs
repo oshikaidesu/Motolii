@@ -24,6 +24,12 @@ script_mod! {
         // だけで、Rust の const は再ビルドしないと変わらない。
         ruler_height: 22.0
         rail_width: 150.0
+        // 行高は**利用者の持ち物**であってペイン高の従属変数ではない(欠陥 B1)。
+        // 26.0 は canon のモック実測値(target_cell_ratio 0.52 = 13.5px/26px の分母)。
+        // 入り切らない分はレーンの縦スクロールで見る(欠陥 A3)。
+        lane_row_height: 26.0
+        // クリップ両端のトリム掴み代。この幅の中だけが EwResize を名乗ってよい。
+        trim_handle_width: 6.0
         tick_row_floor: 40.0
         band_alpha: 0.030
         tick_fade_from: 9.0
@@ -46,21 +52,6 @@ const MIN_VISIBLE_SPAN_SECONDS: f64 = 2.0;
 // ここへ写して playhead_width_scale の掛け算元にする)。canon: 「playhead = ACCENT 1.5x」
 // の 1.5x はこの通常グリッド線太さに対する倍率。
 const GRID_LINE_WIDTH: f64 = 1.0;
-
-fn fitted_lane_height(
-    total_height: f64,
-    lane_count: usize,
-    property_count: usize,
-    ruler_height: f64,
-) -> f64 {
-    let body_height = (total_height - ruler_height).max(1.0);
-    let properties_height = property_count as f64 * PROPERTY_ROW_HEIGHT;
-    if lane_count == 0 {
-        body_height
-    } else {
-        ((body_height - properties_height).max(lane_count as f64) / lane_count as f64).max(1.0)
-    }
-}
 
 #[derive(Clone, Debug, Default)]
 pub struct TimelineLane {
@@ -125,6 +116,39 @@ pub enum TimelineSurfaceAction {
     ToggleLaneFlag { layer_id: u64, flag: LaneFlag },
 }
 
+/// Timeline がもう1本だけ持つ、**編集意図**の口。
+///
+/// なぜ [`TimelineSurfaceAction`] へ variant を足さないか: あちらは shell
+/// (`main.rs` の `apply_timeline_action`)が**網羅 match** で受けている。variant を
+/// 足すと shell 側のファイルを同時に書き換えなければ型が通らず、レーン境界
+/// (write-set)を跨ぐ。迂回でごまかすより「自分の境界に素直な口を1本足す」方を
+/// 採った(裁定: 迂回より wrapper)。`filter_widget_actions_cast` は型が違う
+/// action を `Default`(= `None`)へ落とすので、shell は今のまま無害に素通りする。
+///
+/// **shell 側の受け口(未配線・EVIDENCE_GAP)**:
+/// - [`TimelineEditAction::Select`] → `session.selection` / `session.selected_layers`
+/// - [`TimelineEditAction::SetClipTiming`] → 現在の `LayerMeta.timing` を読み、
+///   `start`/`duration` だけ差し替えて `Intent::SetTiming { layer, timing }`
+///   (`Intent::SetOrder` を使う restack と同じ形。新しい書き込み経路ではない)
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum TimelineEditAction {
+    #[default]
+    None,
+    /// 行/クリップのクリック選択。`layer_id: None` は空所クリックによる全解除。
+    /// `additive` は shift/⌘ 併用(トグル追加)。
+    Select {
+        layer_id: Option<u64>,
+        additive: bool,
+    },
+    /// トリム/移動の確定。**1ジェスチャ = 1つ**しか出ない(= 1 undo)ので、
+    /// restack と同じく `FingerUp` でだけ発火する。
+    SetClipTiming {
+        layer_id: u64,
+        start: i64,
+        duration: i64,
+    },
+}
+
 type TimelineInputAction = TimelineSurfaceAction;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -162,6 +186,12 @@ impl TimelineViewport {
         (self.view_start + fraction * self.visible_frames)
             .round()
             .clamp(0.0, self.duration_frames.saturating_sub(1) as f64) as i64
+    }
+
+    /// トリム/移動の差分に使う**未クランプ**の連続フレーム。掴んだ点から今の点への
+    /// 差だけが欲しいので、画面外へ出た瞬間に 0..duration へ丸めると差が消えてしまう。
+    fn frames_at_x(&self, x: f64) -> f64 {
+        self.view_start + (x - self.rail_width) / self.time_width * self.visible_frames
     }
 
     fn zoom_at(&self, x: f64, scroll_y: f64, scroll_x: f64) -> Option<Self> {
@@ -211,6 +241,43 @@ impl TimelineViewport {
     }
 }
 
+/// クリップのどちら端を掴んだか。`None`(= [`PointerTarget::Clip`] の `edge` が
+/// `None`)は本体を掴んだ = 尺を変えずに移動。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ClipEdge {
+    Start,
+    End,
+}
+
+/// ポインタが今どこに居るかの**唯一の答え**。カーソル(A2)と FingerDown(A1/A5)が
+/// 同じ関数を読むことで、「伸縮できない所で EwResize」のような嘘が構造的に作れない。
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum PointerTarget {
+    /// ルーラー帯。スクラブできるのはここだけ。
+    Ruler,
+    /// プロパティ行の開閉三角(B2)。
+    Fold { layer_id: u64 },
+    /// M/S/L グリフ。
+    Flag { layer_id: u64, flag: LaneFlag },
+    /// レール(名前側)。選択 + 並べ替えドラッグ。
+    Rail {
+        layer_id: u64,
+        from_front: usize,
+        /// 行上端から掴んだ点までの距離。掴んだ行を指に付いてこさせる(A4)ため。
+        grab_offset: f64,
+    },
+    /// クリップの棒。`edge` が `Some` ならトリム、`None` なら移動。
+    Clip {
+        layer_id: u64,
+        lane_index: usize,
+        edge: Option<ClipEdge>,
+        start: i64,
+        duration: i64,
+    },
+    /// 何も無い所。クリックは選択の解除。
+    Empty,
+}
+
 #[derive(Clone, Copy, Debug, Default)]
 enum TimelineGesture {
     #[default]
@@ -220,6 +287,17 @@ enum TimelineGesture {
         layer_id: u64,
         from_front: usize,
         target_from_front: usize,
+        grab_offset: f64,
+        pointer_y: f64,
+    },
+    Clip {
+        layer_id: u64,
+        lane_index: usize,
+        edge: Option<ClipEdge>,
+        origin_frame: f64,
+        origin_start: i64,
+        origin_duration: i64,
+        changed: bool,
     },
 }
 
@@ -238,6 +316,8 @@ enum ScrollMode {
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum TimelineScrollAction {
     PanPixels(f64),
+    /// 無修飾の縦入力(A3)。時間軸ではなくレーンの縦スクロール。
+    ScrollLanes(f64),
     Zoom { delta: f64, precise: bool },
 }
 
@@ -329,16 +409,20 @@ impl TimelineScrollGesture {
                 })
             }
             ScrollMode::Pan => {
-                // A horizontal trackpad gesture pans naturally. Shift converts a
+                // A horizontal trackpad gesture pans time. Shift converts a
                 // vertical wheel into the same horizontal operation. Unmodified
-                // vertical input is reserved for lane scrolling; fixed-height
-                // lanes do not stretch, and this surface does not scroll Y.
-                let delta = match axis {
-                    ScrollAxis::Horizontal => sample.translation[0],
-                    ScrollAxis::Vertical if sample.modifiers.shift => sample.translation[1],
-                    ScrollAxis::Vertical => 0.0,
-                };
-                (delta.abs() > f64::EPSILON).then_some(TimelineScrollAction::PanPixels(delta))
+                // vertical input scrolls the lane column — 行高が固定になった
+                // (B1)ので入り切らない行が出る、その分をここで見る(A3)。
+                match axis {
+                    ScrollAxis::Horizontal => (sample.translation[0].abs() > f64::EPSILON)
+                        .then_some(TimelineScrollAction::PanPixels(sample.translation[0])),
+                    ScrollAxis::Vertical if sample.modifiers.shift => {
+                        (sample.translation[1].abs() > f64::EPSILON)
+                            .then_some(TimelineScrollAction::PanPixels(sample.translation[1]))
+                    }
+                    ScrollAxis::Vertical => (sample.translation[1].abs() > f64::EPSILON)
+                        .then_some(TimelineScrollAction::ScrollLanes(sample.translation[1])),
+                }
             }
         };
 
@@ -386,24 +470,55 @@ impl TimelineScrollGesture {
 }
 
 impl TimelineGesture {
-    fn pointer_down(
+    /// 掴む。**どこを掴んだかの判定は [`TimelineSurface::pointer_target`] が済ませて
+    /// いる** — ここは「その場所ならどのジェスチャか」だけを決める純関数。
+    fn begin(
         &mut self,
         viewport: &TimelineViewport,
         position: DVec2,
-        lane: Option<(u64, usize)>,
+        target: PointerTarget,
     ) -> Option<TimelineInputAction> {
-        if position.x >= viewport.rail_width {
-            *self = Self::Playhead;
-            Some(TimelineInputAction::Scrub(viewport.frame_at_x(position.x)))
-        } else if let Some((layer_id, from_front)) = lane {
-            *self = Self::Lane {
+        match target {
+            PointerTarget::Ruler => {
+                *self = Self::Playhead;
+                Some(TimelineInputAction::Scrub(viewport.frame_at_x(position.x)))
+            }
+            PointerTarget::Rail {
                 layer_id,
                 from_front,
-                target_from_front: from_front,
-            };
-            None
-        } else {
-            None
+                grab_offset,
+            } => {
+                *self = Self::Lane {
+                    layer_id,
+                    from_front,
+                    target_from_front: from_front,
+                    grab_offset,
+                    pointer_y: position.y,
+                };
+                None
+            }
+            PointerTarget::Clip {
+                layer_id,
+                lane_index,
+                edge,
+                start,
+                duration,
+            } => {
+                *self = Self::Clip {
+                    layer_id,
+                    lane_index,
+                    edge,
+                    origin_frame: viewport.frames_at_x(position.x),
+                    origin_start: start,
+                    origin_duration: duration,
+                    changed: false,
+                };
+                None
+            }
+            PointerTarget::Fold { .. } | PointerTarget::Flag { .. } | PointerTarget::Empty => {
+                *self = Self::None;
+                None
+            }
         }
     }
 
@@ -422,6 +537,8 @@ impl TimelineGesture {
         if let Self::Lane {
             layer_id,
             from_front,
+            grab_offset,
+            pointer_y,
             ..
         } = *self
         {
@@ -429,9 +546,67 @@ impl TimelineGesture {
                 layer_id,
                 from_front,
                 target_from_front,
+                grab_offset,
+                pointer_y,
             };
         }
         None
+    }
+
+    /// 掴んだ行を指に付いてこさせる(A4)ための現在位置。
+    fn track_pointer_y(&mut self, y: f64) {
+        if let Self::Lane { pointer_y, .. } = self {
+            *pointer_y = y;
+        }
+    }
+
+    /// ドラッグ中のクリップの新しい `(start, duration)`。**純関数** — 掴んだ時の
+    /// 値と、掴んだ点からのフレーム差だけで決まる(累積誤差が入らない)。
+    fn clip_timing_at(
+        &self,
+        viewport: &TimelineViewport,
+        x: f64,
+        duration_frames: i64,
+    ) -> Option<(usize, u64, i64, i64)> {
+        let Self::Clip {
+            layer_id,
+            lane_index,
+            edge,
+            origin_frame,
+            origin_start,
+            origin_duration,
+            ..
+        } = *self
+        else {
+            return None;
+        };
+        let delta = (viewport.frames_at_x(x) - origin_frame).round() as i64;
+        let total = duration_frames.max(1);
+        let (start, duration) = match edge {
+            // 本体を掴んだ = 尺は変えずに comp 上を移動する。
+            None => {
+                let max_start = (total - origin_duration).max(0);
+                ((origin_start + delta).clamp(0, max_start), origin_duration)
+            }
+            // 頭を掴んだ = 終端(start + duration)を固定したまま頭を動かす。
+            Some(ClipEdge::Start) => {
+                let end = origin_start + origin_duration;
+                let start = (origin_start + delta).clamp(0, end - 1);
+                (start, end - start)
+            }
+            // 尻を掴んだ = 頭を固定したまま尺を伸縮する。
+            Some(ClipEdge::End) => {
+                let duration = (origin_duration + delta).clamp(1, (total - origin_start).max(1));
+                (origin_start, duration)
+            }
+        };
+        Some((lane_index, layer_id, start, duration))
+    }
+
+    fn mark_clip_changed(&mut self) {
+        if let Self::Clip { changed, .. } = self {
+            *changed = true;
+        }
     }
 
     fn pointer_up(&mut self) -> Option<TimelineInputAction> {
@@ -440,14 +615,27 @@ impl TimelineGesture {
                 layer_id,
                 from_front,
                 target_from_front,
+                ..
             } if from_front != target_from_front => Some(TimelineInputAction::Restack {
                 layer_id,
                 target_from_front,
             }),
             _ => None,
         };
-        *self = Self::None;
         action
+    }
+
+    /// トリム/移動の確定に要る「どのレーンが変わったか」。`FingerUp` で1回だけ読む。
+    fn committed_clip(&self) -> Option<(usize, u64)> {
+        match *self {
+            Self::Clip {
+                layer_id,
+                lane_index,
+                changed: true,
+                ..
+            } => Some((lane_index, layer_id)),
+            _ => None,
+        }
     }
 }
 
@@ -489,6 +677,15 @@ pub struct TimelineSurface {
     ruler_height: f64,
     #[live(150.0)]
     rail_width: f64,
+    /// 行高(欠陥 B1)。**ペイン高から独立した固定値** — 以前は
+    /// `body_height / lane_count` で、ペインのリサイズがタイムライン全体の
+    /// 画像ズームになっていた。入り切らない分は縦スクロール(A3)で見る。
+    #[live(26.0)]
+    lane_row_height: f64,
+    /// クリップ両端のトリム掴み代(A1)。カーソルが EwResize を名乗ってよい
+    /// 範囲もこの幅と同じ(A2 — 伸縮できる所だけ)。
+    #[live(6.0)]
+    trim_handle_width: f64,
     // レーン高が実測 ~15pt まで潰れると比率(0.52)通りの間隔でも ~7pt になり、
     // 実機Ableton(68pt行→21pt間隔)が読める密度から外れて単なるノイズになる。
     // 比率そのものはスケール不変で正しいので変えず、tick_steps へ渡す行高だけ
@@ -500,6 +697,11 @@ pub struct TimelineSurface {
     #[live(9.0)]
     tick_fade_from: f64,
     /// 字は比率で導出する(裁定271)。行の中身の帯/行高 = 0.53、書体係数 1.1。
+    ///
+    /// **行高が固定になっても比率は残す**(B1 の直しで消さない): 裁定271 が禁じたのは
+    /// 「字を絶対 pt で置くこと」であって、比率そのものではない。変わったのは分母で、
+    /// `lane_row_height` は**利用者が選ぶ持ち物**になった — 行高を上げれば字も一緒に
+    /// 上がるという関係は保ったまま、ペイン高という他人の都合からは切れている。
     #[live(0.53)]
     type_ratio: f64,
     #[live(1.1)]
@@ -533,6 +735,14 @@ pub struct TimelineSurface {
     view_start: f64,
     #[rust]
     view_span: f64,
+    /// レーン列の縦スクロール量(px, 下向き正)。**倍率ではない** — 行高は
+    /// `lane_row_height` 固定で、ここは見る窓の位置だけを動かす(A3)。
+    #[rust]
+    scroll_y: f64,
+    /// プロパティ行を畳んでいるレーン(B2)。Document には無い**見え方だけの状態**
+    /// なので widget が持って良い(選択やトリムのように store の真実ではない)。
+    #[rust]
+    collapsed_lanes: Vec<u64>,
     #[rust]
     drag: TimelineGesture,
     #[rust]
@@ -540,6 +750,26 @@ pub struct TimelineSurface {
 }
 
 impl TimelineSurface {
+    /// A1: トリムの当たり判定・純関数・プレビュー描画は全部実装済みだが、
+    /// `TimelineEditAction::SetClipTiming` は `session`/`document` の store まで
+    /// 届いていない(WIRE-1、`docs/reviews/2026-08-27-layer-ui-parity-defects.md`
+    /// §4)。掴めて伸びて見えるのに、次の `install_timeline_model` で黙って元へ
+    /// 戻る — 「効いたように見えてから黙って戻る」は「掴めない」より悪いという
+    /// 裁定(a)(2026-08-28 統合)により、配線されるまでこの出口(当たり判定・
+    /// EwResize カーソル・明るい帯)だけを塞ぐ。WIRE-1 が着地したら `true` へ。
+    #[allow(dead_code)]
+    const TRIM_HANDLE_WIRED: bool = false;
+
+    /// A5: `TimelineEditAction::Select` を出すところまでは配線済みだが、選択の
+    /// 正本は `session.selection` であり、そこからこの widget へ投影して
+    /// 戻す経路が無い(WIRE-1 と同根)。ローカルで `lane.selected` を倒すと
+    /// クリックした瞬間だけ選択に見え、次のモデル再設置で静かに消える —
+    /// 裁定(a)によりこの出口(選択ハイライトの見た目)だけを塞ぐ。action は
+    /// 出し続ける(配線側の受け口が先に来ても困らないように)。WIRE-1 が
+    /// 着地し、投影が戻るようになったら `true` へ。
+    #[allow(dead_code)]
+    const SELECTION_WIRED: bool = false;
+
     pub fn set_model(&mut self, cx: &mut Cx, model: TimelineModel) {
         let first_model = self.duration_frames <= 0 || self.view_span <= 0.0;
         self.lanes = model.lanes;
@@ -560,6 +790,7 @@ impl TimelineSurface {
                 .clamp(self.min_view_span(), self.duration_frames as f64);
             self.clamp_view_start();
         }
+        self.clamp_scroll_y();
         self.redraw(cx);
     }
 
@@ -585,6 +816,19 @@ impl TimelineSurface {
         }
     }
 
+    /// ルーラーより下、行が住む帯。縦スクロールの窓でもある。
+    fn body_top(&self) -> f64 {
+        self.rect.pos.y + self.ruler_height
+    }
+
+    fn body_bottom(&self) -> f64 {
+        self.rect.pos.y + self.rect.size.y
+    }
+
+    fn body_height(&self) -> f64 {
+        (self.body_bottom() - self.body_top()).max(0.0)
+    }
+
     fn viewport(&self) -> TimelineViewport {
         let time = self.time_rect();
         TimelineViewport::new(
@@ -596,26 +840,52 @@ impl TimelineSurface {
         )
     }
 
-    fn property_count_for_visible_lanes(&self) -> usize {
+    fn is_collapsed(&self, layer_id: u64) -> bool {
+        self.collapsed_lanes.contains(&layer_id)
+    }
+
+    fn property_count_for_lane(&self, layer_id: u64) -> usize {
         self.property_lanes
             .iter()
-            .filter(|property| self.lanes.iter().any(|lane| lane.id == property.layer_id))
+            .filter(|property| property.layer_id == layer_id)
             .count()
     }
 
     fn lane_height(&self) -> f64 {
-        fitted_lane_height(
-            self.rect.size.y,
-            self.lanes.len(),
-            self.property_count_for_visible_lanes(),
-            self.ruler_height,
-        )
+        // 行高はペイン高の従属変数ではない(B1)。下限だけは、字も M/S/L も
+        // 潰れて意味を失う手前で止める。
+        self.lane_row_height.max(10.0)
+    }
+
+    /// 全行を積み上げた高さ。ペインより高ければその差が縦スクロールの幅になる。
+    fn content_height(&self) -> f64 {
+        let lane_height = self.lane_height();
+        self.lanes
+            .iter()
+            .map(|lane| {
+                lane_height
+                    + if self.is_collapsed(lane.id) {
+                        0.0
+                    } else {
+                        self.property_count_for_lane(lane.id) as f64 * PROPERTY_ROW_HEIGHT
+                    }
+            })
+            .sum()
+    }
+
+    fn max_scroll_y(&self) -> f64 {
+        (self.content_height() - self.body_height()).max(0.0)
+    }
+
+    fn clamp_scroll_y(&mut self) {
+        let max = self.max_scroll_y();
+        self.scroll_y = self.scroll_y.clamp(0.0, max);
     }
 
     fn visual_rows(&self) -> Vec<VisualRow> {
         let mut rows = Vec::with_capacity(self.lanes.len() + self.property_lanes.len());
         let lane_height = self.lane_height();
-        let mut y = self.rect.pos.y + self.ruler_height;
+        let mut y = self.body_top() - self.scroll_y;
         for (lane_index, lane) in self.lanes.iter().enumerate() {
             rows.push(VisualRow {
                 kind: VisualRowKind::Lane(lane_index),
@@ -623,6 +893,9 @@ impl TimelineSurface {
                 height: lane_height,
             });
             y += lane_height;
+            if self.is_collapsed(lane.id) {
+                continue;
+            }
             for (property_index, property) in self.property_lanes.iter().enumerate() {
                 if property.layer_id == lane.id {
                     rows.push(VisualRow {
@@ -637,16 +910,14 @@ impl TimelineSurface {
         rows
     }
 
-    fn lane_at_y(&self, abs_y: f64) -> Option<(u64, usize)> {
-        self.visual_rows().into_iter().find_map(|row| {
-            if abs_y < row.y || abs_y >= row.y + row.height {
-                return None;
-            }
-            match row.kind {
-                VisualRowKind::Lane(index) => Some((self.lanes[index].id, index)),
-                VisualRowKind::Property(_) => None,
-            }
-        })
+    fn row_is_visible(&self, row: VisualRow) -> bool {
+        row.y + row.height > self.body_top() && row.y < self.body_bottom()
+    }
+
+    /// 上下どちらにも欠けていない行だけ。字はここが真の時だけ描く — 半分だけ
+    /// 見えている行に字を出すと、ルーラーの下から切れた字が生えて読めない。
+    fn row_is_whole(&self, row: VisualRow) -> bool {
+        row.y >= self.body_top() - 0.5 && row.y + row.height <= self.body_bottom() + 0.5
     }
 
     fn drop_index_at_y(&self, abs_y: f64) -> usize {
@@ -681,6 +952,10 @@ impl TimelineSurface {
             self.redraw(cx);
         }
         cx.widget_action(self.uid, TimelineSurfaceAction::Scrub(frame));
+    }
+
+    fn emit_edit_action(&mut self, cx: &mut Cx, action: TimelineEditAction) {
+        cx.widget_action(self.uid, action);
     }
 
     fn zoom_at(&mut self, cx: &mut Cx, scroll: f64, abs_x: f64) -> bool {
@@ -730,9 +1005,29 @@ impl TimelineSurface {
         true
     }
 
+    /// レーン列の縦スクロール(A3)。**方向は横パンと同じ約束**にしてある —
+    /// `pan_time_by_pixels` が正の translation で「見る窓を先へ」動かすので、
+    /// 縦も正の translation で「見る窓を下へ」動かす。
+    fn scroll_lanes_by_pixels(&mut self, cx: &mut Cx, pixels: f64) -> bool {
+        if self.max_scroll_y() <= 0.0 {
+            return false;
+        }
+        let old = self.scroll_y;
+        self.scroll_y = self.scroll_y + pixels;
+        self.clamp_scroll_y();
+        if (self.scroll_y - old).abs() <= f64::EPSILON {
+            return false;
+        }
+        self.redraw(cx);
+        true
+    }
+
     fn apply_gesture_sample(&mut self, cx: &mut Cx, sample: GestureSample) {
         let applied = match self.scroll_gesture.update_sample(sample) {
             Some(TimelineScrollAction::PanPixels(pixels)) => self.pan_time_by_pixels(cx, pixels),
+            Some(TimelineScrollAction::ScrollLanes(pixels)) => {
+                self.scroll_lanes_by_pixels(cx, pixels)
+            }
             Some(TimelineScrollAction::Zoom { delta, precise }) => self.zoom_at(
                 cx,
                 Self::normalized_zoom_delta(delta, precise),
@@ -744,14 +1039,185 @@ impl TimelineSurface {
             .reject_owner_if_unapplied(sample.phase, applied);
     }
 
-    fn set_hover_cursor(&self, cx: &mut Cx, abs: DVec2) {
-        if abs.x >= self.time_rect().pos.x {
-            cx.set_cursor(MouseCursor::EwResize);
-        } else if self.lane_at_y(abs.y).is_some() {
-            cx.set_cursor(MouseCursor::Grab);
-        } else {
-            cx.set_cursor(MouseCursor::Default);
+    fn point_in(rect: Rect, abs: DVec2) -> bool {
+        abs.x >= rect.pos.x
+            && abs.x < rect.pos.x + rect.size.x
+            && abs.y >= rect.pos.y
+            && abs.y < rect.pos.y + rect.size.y
+    }
+
+    /// プロパティ行の開閉三角(B2)。プロパティを持たないレーンには出さない —
+    /// 押しても何も起きない三角は、押せない物を押せるように見せる嘘になる。
+    fn fold_rect(&self, row: VisualRow, layer_id: u64) -> Option<Rect> {
+        if self.property_count_for_lane(layer_id) == 0 {
+            return None;
         }
+        let size = (row.height * 0.42).clamp(7.0, 11.0);
+        Some(Rect {
+            pos: dvec2(
+                self.rect.pos.x + 6.0,
+                row.y + ((row.height - size) * 0.5).max(0.0),
+            ),
+            size: dvec2(size, size),
+        })
+    }
+
+    /// レーン名の左端。三角がある行では三角の分だけ右へ寄せる。
+    fn name_x(&self, layer_id: u64) -> f64 {
+        self.rect.pos.x
+            + if self.property_count_for_lane(layer_id) == 0 {
+                9.0
+            } else {
+                20.0
+            }
+    }
+
+    /// クリップの棒に乗っているか、乗っているならどこか。**掴み代は棒幅の 1/3 を
+    /// 超えない** — 短いクリップで両端の掴み代が中央で出会うと、本体が掴めなくなる。
+    fn clip_target(&self, lane_index: usize, abs: DVec2) -> Option<PointerTarget> {
+        let lane = self.lanes.get(lane_index)?;
+        if lane.duration <= 0 {
+            return None;
+        }
+        let x0 = self.x_at_frame(lane.start as f64);
+        let x1 = self.x_at_frame((lane.start + lane.duration) as f64);
+        if x1 <= x0 || abs.x < x0 || abs.x >= x1 {
+            return None;
+        }
+        let handle = self.trim_handle_width.min((x1 - x0) / 3.0).max(1.0);
+        // 裁定(a): store 未配線の間は当たり判定そのものを出さない(Self::TRIM_HANDLE_WIRED)。
+        let edge = if !Self::TRIM_HANDLE_WIRED {
+            None
+        } else if abs.x < x0 + handle {
+            Some(ClipEdge::Start)
+        } else if abs.x >= x1 - handle {
+            Some(ClipEdge::End)
+        } else {
+            None
+        };
+        Some(PointerTarget::Clip {
+            layer_id: lane.id,
+            lane_index,
+            edge,
+            start: lane.start,
+            duration: lane.duration,
+        })
+    }
+
+    /// **カーソルもクリックもここだけを読む**。1つの関数が答えを持つので、
+    /// 「伸縮できない所で EwResize が出る」(A2)ような食い違いが起こせない。
+    fn pointer_target(&self, abs: DVec2) -> PointerTarget {
+        let rail_right = self.rect.pos.x + self.rail_width;
+        if abs.y < self.body_top() {
+            // ルーラー帯。スクラブできるのは時間側だけで、レール側の見出しは何でもない。
+            return if abs.x >= rail_right {
+                PointerTarget::Ruler
+            } else {
+                PointerTarget::Empty
+            };
+        }
+        for row in self.visual_rows() {
+            if abs.y < row.y || abs.y >= row.y + row.height {
+                continue;
+            }
+            let VisualRowKind::Lane(lane_index) = row.kind else {
+                // プロパティ行はまだ掴む物が無い(キー選択は別の欠陥)。
+                return PointerTarget::Empty;
+            };
+            let Some(lane) = self.lanes.get(lane_index) else {
+                return PointerTarget::Empty;
+            };
+            if abs.x < rail_right {
+                if let Some(fold) = self.fold_rect(row, lane.id) {
+                    if Self::point_in(fold, abs) {
+                        return PointerTarget::Fold { layer_id: lane.id };
+                    }
+                }
+                let rects = Self::lane_toggle_rects(self.rail_width, self.rect.pos.x, row);
+                if let Some(flag) = Self::flag_at_point(&rects, abs) {
+                    return PointerTarget::Flag {
+                        layer_id: lane.id,
+                        flag,
+                    };
+                }
+                return PointerTarget::Rail {
+                    layer_id: lane.id,
+                    from_front: lane_index,
+                    grab_offset: abs.y - row.y,
+                };
+            }
+            return self
+                .clip_target(lane_index, abs)
+                .unwrap_or(PointerTarget::Empty);
+        }
+        PointerTarget::Empty
+    }
+
+    /// **伸縮できる所だけが EwResize**(A2)。それ以外は掴める物なら Grab、
+    /// 押せる物なら Hand、何も無ければ既定。
+    fn set_hover_cursor(&self, cx: &mut Cx, abs: DVec2) {
+        let cursor = match self.pointer_target(abs) {
+            PointerTarget::Ruler => MouseCursor::EwResize,
+            PointerTarget::Clip { edge: Some(_), .. } => MouseCursor::EwResize,
+            PointerTarget::Clip { edge: None, .. } => MouseCursor::Grab,
+            PointerTarget::Rail { .. } => MouseCursor::Grab,
+            PointerTarget::Fold { .. } | PointerTarget::Flag { .. } => MouseCursor::Hand,
+            PointerTarget::Empty => MouseCursor::Default,
+        };
+        cx.set_cursor(cursor);
+    }
+
+    /// クリック選択(A5)。`TimelineLane.selected` は描画側が既に読んでいるので、
+    /// ここで倒せば窓の色がその場で変わる。同時に意図を外へも出す — 選択の正本は
+    /// shell の `Session` なので、widget 側は先に見せているだけ。
+    fn select_lane(&mut self, cx: &mut Cx, layer_id: Option<u64>, additive: bool) {
+        // 裁定(a): 選択の正本は session.selection で、そこからこの widget へ
+        // 投影して戻す経路が無い間は、色だけ変わって次のモデル再設置で消える
+        // 「消える虚報」になる。配線(WIRE-1)されるまで見た目は倒さない。
+        // action だけは出し続ける — 受け口が先に来ても困らないように。
+        if Self::SELECTION_WIRED {
+            let mut changed = false;
+            for lane in self.lanes.iter_mut() {
+                let next = match layer_id {
+                    Some(id) if lane.id == id => {
+                        if additive {
+                            !lane.selected
+                        } else {
+                            true
+                        }
+                    }
+                    _ => {
+                        if additive {
+                            lane.selected
+                        } else {
+                            false
+                        }
+                    }
+                };
+                if lane.selected != next {
+                    lane.selected = next;
+                    changed = true;
+                }
+            }
+            if changed {
+                self.redraw(cx);
+            }
+        }
+        self.emit_edit_action(cx, TimelineEditAction::Select { layer_id, additive });
+    }
+
+    fn toggle_fold(&mut self, cx: &mut Cx, layer_id: u64) {
+        if let Some(index) = self
+            .collapsed_lanes
+            .iter()
+            .position(|collapsed| *collapsed == layer_id)
+        {
+            self.collapsed_lanes.remove(index);
+        } else {
+            self.collapsed_lanes.push(layer_id);
+        }
+        self.clamp_scroll_y();
+        self.redraw(cx);
     }
 
     fn draw_rect(&mut self, cx: &mut Cx2d, rect: Rect, color: Vec4f) {
@@ -760,6 +1226,26 @@ impl TimelineSurface {
         }
         self.draw_item.color = color;
         self.draw_item.draw_abs(cx, rect);
+    }
+
+    /// 行の物はルーラーとペイン下端で切る。縦スクロールが入った以上、行は窓から
+    /// はみ出しうる — はみ出た分をそのまま描くと隣のペインへ漏れる。
+    fn draw_body_rect(&mut self, cx: &mut Cx2d, rect: Rect, color: Vec4f) {
+        let top = self.body_top();
+        let bottom = self.body_bottom();
+        let y0 = rect.pos.y.max(top);
+        let y1 = (rect.pos.y + rect.size.y).min(bottom);
+        if y1 <= y0 {
+            return;
+        }
+        self.draw_rect(
+            cx,
+            Rect {
+                pos: dvec2(rect.pos.x, y0),
+                size: dvec2(rect.size.x, y1 - y0),
+            },
+            color,
+        );
     }
 
     fn draw_label(&mut self, cx: &mut Cx2d, pos: DVec2, text: &str, color: Vec4f, size: f32) {
@@ -799,7 +1285,7 @@ impl TimelineSurface {
     }
 
     // M/S/L の当たり判定は描画と同じ数字でなければクリックが少しずつズレていく。
-    // 描画側(draw_lane)とヒットテスト側(lane_flag_at)の両方がここを呼ぶことで、
+    // 描画側(draw_lane)とヒットテスト側(pointer_target)の両方がここを呼ぶことで、
     // control_h/control_y/control_x/15.0 ストライド/12.0 幅を手で二重に書かない。
     // self を取らない associated fn にしてあるのは、Widget インスタンスを
     // 起こさずにテストできるようにするため(このファイルの他のテストも
@@ -822,34 +1308,13 @@ impl TimelineSurface {
     // これも純関数(index 0..3 と LaneFlag の対応が生まれる唯一の場所)。
     fn flag_at_point(rects: &[Rect; 3], abs: DVec2) -> Option<LaneFlag> {
         for (index, rect) in rects.iter().enumerate() {
-            let inside = abs.x >= rect.pos.x
-                && abs.x < rect.pos.x + rect.size.x
-                && abs.y >= rect.pos.y
-                && abs.y < rect.pos.y + rect.size.y;
-            if inside {
+            if Self::point_in(*rect, abs) {
                 return Some(match index {
                     0 => LaneFlag::Hidden,
                     1 => LaneFlag::Solo,
                     _ => LaneFlag::Locked,
                 });
             }
-        }
-        None
-    }
-
-    // 現在のレーン行の M/S/L グリフのどれかに abs が乗っているかを返す。
-    // FingerDown はこれを self.drag.pointer_down(...) より先に呼ぶ — グリフは
-    // 直接操作(canon 1:0:0:0)であって Restack ドラッグの起点ではないため。
-    fn lane_flag_at(&self, abs: DVec2) -> Option<(u64, LaneFlag)> {
-        for row in self.visual_rows() {
-            let VisualRowKind::Lane(index) = row.kind else {
-                continue;
-            };
-            if abs.y < row.y || abs.y >= row.y + row.height {
-                continue;
-            }
-            let rects = Self::lane_toggle_rects(self.rail_width, self.rect.pos.x, row);
-            return Self::flag_at_point(&rects, abs).map(|flag| (self.lanes[index].id, flag));
         }
         None
     }
@@ -862,7 +1327,7 @@ impl TimelineSurface {
         } else {
             vec4(0.225, 0.225, 0.225, 1.0)
         };
-        self.draw_rect(
+        self.draw_body_rect(
             cx,
             Rect {
                 pos: dvec2(self.rect.pos.x, row.y),
@@ -883,7 +1348,7 @@ impl TimelineSurface {
         };
         // Sticky-note tab: full lane height, left aligned. It labels the row
         // without adding a second, misleading 8x8 "content height" signal.
-        self.draw_rect(
+        self.draw_body_rect(
             cx,
             Rect {
                 pos: dvec2(self.rect.pos.x, row.y),
@@ -892,12 +1357,28 @@ impl TimelineSurface {
             color,
         );
 
+        let whole = self.row_is_whole(row);
+
+        // 開閉三角(B2)。プロパティを持つ行にだけ出る。
+        if let Some(fold) = self.fold_rect(row, lane.id) {
+            if whole {
+                let collapsed = self.is_collapsed(lane.id);
+                self.draw_label(
+                    cx,
+                    dvec2(fold.pos.x, fold.pos.y - 1.0),
+                    if collapsed { "▶" } else { "▼" },
+                    vec4(0.62, 0.62, 0.62, 1.0),
+                    (fold.size.y * 0.8) as f32,
+                );
+            }
+        }
+
         // レーン名の大きさは行高から導出(比率の原則を字にも適用 — 裁定271)。
-        // レーン高は本数で毎フレーム変わるので、固定 pt だと詰まった時に溢れる
+        // 行高は固定になったが、比率の関係は残す(`type_ratio` の doc を参照)。
         let name_size = (row.height * self.type_ratio / self.ink_k).clamp(6.0, 11.0);
         let text_y = row.y + ((row.height - name_size) * 0.5).max(0.0);
         // 名前は M/S/L の手前で止める。長い名は切って「…」— 走らせて衝突させない
-        let name_x = self.rect.pos.x + 9.0;
+        let name_x = self.name_x(lane.id);
         let controls_left = Self::lane_toggle_rects(self.rail_width, self.rect.pos.x, row)[0].pos.x;
         let name_budget = ((controls_left - 4.0 - name_x) / (name_size * 0.58)).max(1.0) as usize;
         let display_name: String = if lane.name.chars().count() > name_budget {
@@ -907,17 +1388,19 @@ impl TimelineSurface {
         } else {
             lane.name.clone()
         };
-        self.draw_label(
-            cx,
-            dvec2(name_x, text_y),
-            &display_name,
-            if lane.selected {
-                vec4(0.93, 0.91, 0.84, 1.0)
-            } else {
-                vec4(0.72, 0.72, 0.72, 1.0)
-            },
-            name_size as f32,
-        );
+        if whole {
+            self.draw_label(
+                cx,
+                dvec2(name_x, text_y),
+                &display_name,
+                if lane.selected {
+                    vec4(0.93, 0.91, 0.84, 1.0)
+                } else {
+                    vec4(0.72, 0.72, 0.72, 1.0)
+                },
+                name_size as f32,
+            );
+        }
 
         // Live の文法: on のトグルは意味色のベタ + 暗インク(極性反転)。
         // activator=琥珀 #ffad56 / solo=シアン #03c3d5 (.ask ChosenDefault/ChosenAlternative)。
@@ -935,7 +1418,7 @@ impl TimelineSurface {
             .enumerate()
         {
             let rect = toggle_rects[index];
-            self.draw_rect(
+            self.draw_body_rect(
                 cx,
                 rect,
                 if active {
@@ -944,22 +1427,23 @@ impl TimelineSurface {
                     vec4(0.118, 0.118, 0.118, 1.0)
                 },
             );
-            self.draw_label(
-                cx,
-                dvec2(
-                    rect.pos.x + 3.2,
-                    rect.pos.y + ((rect.size.y - 7.0) * 0.5).max(0.0),
-                ),
-                label,
-                if active {
-                    vec4(0.027, 0.027, 0.027, 1.0)
-                } else {
-                    vec4(0.55, 0.55, 0.55, 1.0)
-                },
-                6.4,
-            );
+            if whole {
+                self.draw_label(
+                    cx,
+                    dvec2(
+                        rect.pos.x + 3.2,
+                        rect.pos.y + ((rect.size.y - 7.0) * 0.5).max(0.0),
+                    ),
+                    label,
+                    if active {
+                        vec4(0.027, 0.027, 0.027, 1.0)
+                    } else {
+                        vec4(0.55, 0.55, 0.55, 1.0)
+                    },
+                    6.4,
+                );
+            }
         }
-
     }
 
     /// クリップの棒だけ。**格子より後**に描く(Live の層: 地 → 格子 → クリップ)。
@@ -980,7 +1464,7 @@ impl TimelineSurface {
         if right > left {
             let x0 = self.x_at_frame(left);
             let x1 = self.x_at_frame(right);
-            self.draw_rect(
+            self.draw_body_rect(
                 cx,
                 Rect {
                     pos: dvec2(x0, row.y),
@@ -990,11 +1474,43 @@ impl TimelineSurface {
                 },
                 color,
             );
+            // トリム掴み代を「見える物」にする(A1/A2)。掴める幅と同じ幅を
+            // 少し明るく置くだけ — 別部品ではないので色相は増やさない。
+            // 裁定(a): store 未配線の間は帯そのものを描かない(Self::TRIM_HANDLE_WIRED)。
+            if Self::TRIM_HANDLE_WIRED {
+                let handle = self.trim_handle_width.min((x1 - x0) / 3.0).max(1.0);
+                let grip = vec4(
+                    (color.x * 0.55 + 0.45).min(1.0),
+                    (color.y * 0.55 + 0.45).min(1.0),
+                    (color.z * 0.55 + 0.45).min(1.0),
+                    1.0,
+                );
+                if clip_start >= visible_start {
+                    self.draw_body_rect(
+                        cx,
+                        Rect {
+                            pos: dvec2(x0, row.y),
+                            size: dvec2(handle, (row.height - 1.0).max(1.0)),
+                        },
+                        grip,
+                    );
+                }
+                if clip_end <= visible_end {
+                    self.draw_body_rect(
+                        cx,
+                        Rect {
+                            pos: dvec2(x1 - handle, row.y),
+                            size: dvec2(handle, (row.height - 1.0).max(1.0)),
+                        },
+                        grip,
+                    );
+                }
+            }
         }
     }
 
     fn draw_property(&mut self, cx: &mut Cx2d, property: &TimelinePropertyLane, row: VisualRow) {
-        self.draw_rect(
+        self.draw_body_rect(
             cx,
             Rect {
                 pos: dvec2(self.rect.pos.x, row.y),
@@ -1002,13 +1518,15 @@ impl TimelineSurface {
             },
             vec4(0.18, 0.18, 0.18, 1.0),
         );
-        self.draw_label(
-            cx,
-            dvec2(self.rect.pos.x + 20.0, row.y + (row.height - 8.0) * 0.5),
-            &property.name,
-            vec4(0.57, 0.57, 0.57, 1.0),
-            7.2,
-        );
+        if self.row_is_whole(row) {
+            self.draw_label(
+                cx,
+                dvec2(self.rect.pos.x + 30.0, row.y + (row.height - 8.0) * 0.5),
+                &property.name,
+                vec4(0.57, 0.57, 0.57, 1.0),
+                7.2,
+            );
+        }
     }
 
     /// キーの菱形だけ。クリップと同じ層(格子より上)。
@@ -1027,7 +1545,7 @@ impl TimelineSurface {
                 continue;
             }
             let x = self.x_at_frame(frame) - key_size * 0.5;
-            self.draw_rect(
+            self.draw_body_rect(
                 cx,
                 Rect {
                     pos: dvec2(x, key_y),
@@ -1047,8 +1565,8 @@ impl TimelineSurface {
         let step = major.max(minor).max(1);
         let rail_x = self.rect.pos.x + self.rail_width;
         let right_x = self.rect.pos.x + self.rect.size.x;
-        let top_y = self.rect.pos.y + self.ruler_height;
-        let bottom_y = self.rect.pos.y + self.rect.size.y;
+        let top_y = self.body_top();
+        let bottom_y = self.body_bottom();
         let body_height = (bottom_y - top_y).max(0.0);
         if right_x <= rail_x || body_height <= 0.0 {
             return;
@@ -1099,8 +1617,8 @@ impl TimelineSurface {
             self.draw_rect(
                 cx,
                 Rect {
-                    pos: dvec2(x, self.rect.pos.y + self.ruler_height),
-                    size: dvec2(1.0, (self.rect.size.y - self.ruler_height).max(1.0)),
+                    pos: dvec2(x, self.body_top()),
+                    size: dvec2(1.0, self.body_height().max(1.0)),
                 },
                 if is_major {
                     vec4(0.05, 0.05, 0.05, 0.38)
@@ -1119,7 +1637,6 @@ impl TimelineSurface {
         let minor_px = minor as f64 * (self.time_rect().size.x / self.view_span.max(1.0));
         let minor_fade = ((minor_px - self.tick_fade_from) / (self.tick_fade_to - self.tick_fade_from))
             .clamp(0.0, 1.0);
-        let first_minor = (self.view_start / minor as f64).ceil() as i64 * minor;
         let last = (self.view_start + self.view_span).ceil() as i64;
 
         // Ruler is deliberately emitted in a fresh foreground draw call after
@@ -1188,6 +1705,24 @@ impl TimelineSurface {
         }
     }
 
+    /// 掴んだ行が指に付いてくる(A4)。挿入先の線だけでは「掴んだ物が静止したまま
+    /// ドラッグする」ことになり、掴んだ実感が無い。
+    fn floating_lane_row(&self) -> Option<(usize, f64)> {
+        let TimelineGesture::Lane {
+            layer_id,
+            grab_offset,
+            pointer_y,
+            ..
+        } = self.drag
+        else {
+            return None;
+        };
+        let lane_index = self.lanes.iter().position(|lane| lane.id == layer_id)?;
+        let height = self.lane_height();
+        let y = (pointer_y - grab_offset).clamp(self.body_top(), (self.body_bottom() - height).max(self.body_top()));
+        Some((lane_index, y))
+    }
+
     fn draw_playhead_and_drop_target(&mut self, cx: &mut Cx2d) {
         let time = self.time_rect();
         let playhead_x = self.x_at_frame(self.playhead as f64);
@@ -1225,7 +1760,7 @@ impl TimelineSurface {
                 .nth(target_from_front)
             {
                 self.draw_item.new_draw_call(cx);
-                self.draw_rect(
+                self.draw_body_rect(
                     cx,
                     Rect {
                         pos: dvec2(self.rect.pos.x, row.y),
@@ -1242,24 +1777,54 @@ impl Widget for TimelineSurface {
     fn handle_event(&mut self, cx: &mut Cx, event: &Event, _scope: &mut Scope) {
         match event.hits_with_capture_overload(cx, self.draw_bg.area(), true) {
             Hit::FingerDown(fe) if fe.is_primary_hit() => {
-                // M/S/L はレールグリフへの直接操作(canon 1:0:0:0)。ドラッグの
-                // pointer_down より先に判定しないと、グリフ上のクリックが
-                // Restack ドラッグとして拾われてしまう。
-                if let Some((layer_id, flag)) = self.lane_flag_at(fe.abs) {
-                    self.emit_input_action(
-                        cx,
-                        TimelineSurfaceAction::ToggleLaneFlag { layer_id, flag },
-                    );
-                    return;
+                let target = self.pointer_target(fe.abs);
+                match target {
+                    // M/S/L はレールグリフへの直接操作(canon 1:0:0:0)。ドラッグの
+                    // 起点にはしない。
+                    PointerTarget::Flag { layer_id, flag } => {
+                        self.emit_input_action(
+                            cx,
+                            TimelineSurfaceAction::ToggleLaneFlag { layer_id, flag },
+                        );
+                        return;
+                    }
+                    // 開閉三角も直接操作。畳むのは見え方だけなので Document へは行かない。
+                    PointerTarget::Fold { layer_id } => {
+                        self.toggle_fold(cx, layer_id);
+                        return;
+                    }
+                    _ => {}
                 }
+
+                // 選択(A5)。追加選択は shift/⌘(どちらも「今の選択に足す」の
+                // 慣用で、片方だけ効くと迷う)。
+                let additive = fe.modifiers.shift || fe.modifiers.logo;
+                match target {
+                    PointerTarget::Rail { layer_id, .. }
+                    | PointerTarget::Clip { layer_id, .. } => {
+                        self.select_lane(cx, Some(layer_id), additive)
+                    }
+                    PointerTarget::Empty => self.select_lane(cx, None, additive),
+                    _ => {}
+                }
+
                 let viewport = self.viewport();
-                let lane = self.lane_at_y(fe.abs.y);
-                let action = self.drag.pointer_down(&viewport, fe.abs, lane);
-                if matches!(self.drag, TimelineGesture::Playhead) {
-                    cx.set_cursor(MouseCursor::EwResize);
-                } else if matches!(self.drag, TimelineGesture::Lane { .. }) {
-                    cx.set_cursor(MouseCursor::Grabbing);
-                    self.redraw(cx);
+                let action = self.drag.begin(&viewport, fe.abs, target);
+                match self.drag {
+                    TimelineGesture::Playhead => cx.set_cursor(MouseCursor::EwResize),
+                    TimelineGesture::Lane { .. } => {
+                        cx.set_cursor(MouseCursor::Grabbing);
+                        self.redraw(cx);
+                    }
+                    TimelineGesture::Clip { edge, .. } => {
+                        cx.set_cursor(if edge.is_some() {
+                            MouseCursor::EwResize
+                        } else {
+                            MouseCursor::Grabbing
+                        });
+                        self.redraw(cx);
+                    }
+                    TimelineGesture::None => {}
                 }
                 if let Some(action) = action {
                     self.emit_input_action(cx, action);
@@ -1272,13 +1837,49 @@ impl Widget for TimelineSurface {
                 } else if matches!(self.drag, TimelineGesture::Lane { .. }) {
                     let target_from_front = self.drop_index_at_y(fe.abs.y);
                     self.drag.move_lane_target(target_from_front);
+                    self.drag.track_pointer_y(fe.abs.y);
                     self.redraw(cx);
+                } else if let Some((lane_index, _, start, duration)) =
+                    self.drag.clip_timing_at(&viewport, fe.abs.x, self.duration_frames)
+                {
+                    // 窓に「今の形」を先に見せる。確定(= 意図を外へ出す)は
+                    // FingerUp の1回だけなので、途中経過が undo を汚さない。
+                    let moved = match self.lanes.get_mut(lane_index) {
+                        Some(lane) if lane.start != start || lane.duration != duration => {
+                            lane.start = start;
+                            lane.duration = duration;
+                            true
+                        }
+                        _ => false,
+                    };
+                    if moved {
+                        self.drag.mark_clip_changed();
+                        self.redraw(cx);
+                    }
                 }
             }
             Hit::FingerUp(_) => {
                 if let Some(action) = self.drag.pointer_up() {
                     self.emit_input_action(cx, action);
                 }
+                // トリム/移動は1ジェスチャ = 1つの意図(= 1 undo)。restack と同じ形。
+                if let Some((lane_index, layer_id)) = self.drag.committed_clip() {
+                    let timing = self
+                        .lanes
+                        .get(lane_index)
+                        .map(|lane| (lane.start, lane.duration));
+                    if let Some((start, duration)) = timing {
+                        self.emit_edit_action(
+                            cx,
+                            TimelineEditAction::SetClipTiming {
+                                layer_id,
+                                start,
+                                duration,
+                            },
+                        );
+                    }
+                }
+                self.drag = TimelineGesture::None;
                 cx.set_cursor(MouseCursor::Default);
                 self.redraw(cx);
             }
@@ -1298,26 +1899,38 @@ impl Widget for TimelineSurface {
 
     fn draw_walk(&mut self, cx: &mut Cx2d, _scope: &mut Scope, walk: Walk) -> DrawStep {
         self.rect = cx.walk_turtle(walk);
+        self.clamp_scroll_y();
         self.draw_bg.draw_abs(cx, self.rect);
         self.draw_item.new_draw_call(cx);
 
-        // 層(Live の積み): レーン地/rail → 格子(帯+縦線) → クリップ/キー → ルーラー。
-        // 格子をクリップの上に乗せると全体が網をかけたように濁る。
+        // 層(Live の積み): レーン地/rail → 格子(帯+縦線) → クリップ/キー →
+        // 掴んで浮いている行 → ルーラー。格子をクリップの上に乗せると全体が
+        // 網をかけたように濁る。
         let lanes = self.lanes.clone();
         let properties = self.property_lanes.clone();
         let rows = self.visual_rows();
+        let floating = self.floating_lane_row();
         let mut lane_number = 0usize;
         for row in rows.iter().copied() {
+            let is_floating = matches!(
+                (row.kind, floating),
+                (VisualRowKind::Lane(index), Some((floating_index, _))) if index == floating_index
+            );
+            if matches!(row.kind, VisualRowKind::Lane(_)) {
+                lane_number += 1;
+            }
+            if is_floating || !self.row_is_visible(row) {
+                continue;
+            }
             match row.kind {
                 VisualRowKind::Lane(index) => {
-                    self.draw_lane(cx, &lanes[index], row, lane_number % 2 == 1);
-                    lane_number += 1;
+                    self.draw_lane(cx, &lanes[index], row, (lane_number - 1) % 2 == 1);
                 }
                 VisualRowKind::Property(index) => {
                     self.draw_property(cx, &properties[index], row);
                 }
             }
-            self.draw_rect(
+            self.draw_body_rect(
                 cx,
                 Rect {
                     pos: dvec2(self.rect.pos.x, row.y + row.height - 1.0),
@@ -1329,11 +1942,33 @@ impl Widget for TimelineSurface {
 
         self.draw_time_field_background(cx, self.lane_height());
         for row in rows.iter().copied() {
+            let is_floating = matches!(
+                (row.kind, floating),
+                (VisualRowKind::Lane(index), Some((floating_index, _))) if index == floating_index
+            );
+            if is_floating || !self.row_is_visible(row) {
+                continue;
+            }
             match row.kind {
                 VisualRowKind::Lane(index) => self.draw_lane_clip(cx, &lanes[index], row),
                 VisualRowKind::Property(index) => self.draw_property_keys(cx, &properties[index], row),
             }
         }
+
+        // 掴んだ行は最後に、指の位置で描く(A4)。
+        if let Some((lane_index, y)) = floating {
+            if let Some(lane) = lanes.get(lane_index) {
+                let row = VisualRow {
+                    kind: VisualRowKind::Lane(lane_index),
+                    y,
+                    height: self.lane_height(),
+                };
+                self.draw_item.new_draw_call(cx);
+                self.draw_lane(cx, lane, row, false);
+                self.draw_lane_clip(cx, lane, row);
+            }
+        }
+
         self.draw_grid_and_ruler(cx, self.lane_height());
         self.draw_playhead_and_drop_target(cx);
         DrawStep::done()
@@ -1345,20 +1980,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn lane_height_fits_all_lanes_and_keeps_property_height_fixed() {
-        let ruler_height = 22.0;
-        let occupied =
-            fitted_lane_height(300.0, 15, 1, ruler_height) * 15.0 + PROPERTY_ROW_HEIGHT + ruler_height;
-        assert!((occupied - 300.0).abs() < 0.001);
-    }
-
-    #[test]
     fn playhead_drag_maps_pointer_motion_to_scrub_actions() {
         let viewport = TimelineViewport::new(100.0, 900.0, 0.0, 1_800.0, 1_800);
         let mut gesture = TimelineGesture::default();
 
         assert_eq!(
-            gesture.pointer_down(&viewport, dvec2(550.0, 10.0), None),
+            gesture.begin(&viewport, dvec2(550.0, 10.0), PointerTarget::Ruler),
             Some(TimelineInputAction::Scrub(900))
         );
         assert_eq!(
@@ -1373,7 +2000,15 @@ mod tests {
         let mut gesture = TimelineGesture::default();
 
         assert_eq!(
-            gesture.pointer_down(&viewport, dvec2(40.0, 40.0), Some((7, 2))),
+            gesture.begin(
+                &viewport,
+                dvec2(40.0, 40.0),
+                PointerTarget::Rail {
+                    layer_id: 7,
+                    from_front: 2,
+                    grab_offset: 4.0,
+                }
+            ),
             None
         );
         assert_eq!(gesture.move_lane_target(9), None);
@@ -1507,11 +2142,11 @@ mod tests {
     }
 
     #[test]
-    fn vertical_wheel_only_pans_time_while_shift_is_held() {
+    fn vertical_wheel_scrolls_lanes_and_only_pans_time_with_shift() {
         let mut gesture = TimelineScrollGesture::default();
         assert_eq!(
             gesture.update(dvec2(0.0, 12.0), ScrollPhase::None, KeyModifiers::default()),
-            None
+            Some(TimelineScrollAction::ScrollLanes(12.0))
         );
 
         let mut shift = KeyModifiers::default();

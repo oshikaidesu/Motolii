@@ -13,6 +13,12 @@ script_mod! {
     use mod.prelude.widgets.*
     use mod.widgets.*
 
+    // 表示倍率の既定(%)。**帯の倍率はこの1つからしか作られない** —
+    // 以前は宣言の "62%"、タブ切替が書く "USER VIEW · 62%"、⌂ が書く "100%" の
+    // 3箇所が独立していて、⌂ を押すと片方だけ古いまま残った。
+    // 値はここ、文字はここからの式、以後の書き換えは `StageChrome::zoom_percent`。
+    let stage_zoom_percent = 62
+
     let IconButton = ButtonFlatterIcon{
         margin: 0
         width: 24
@@ -105,6 +111,7 @@ script_mod! {
 
     mod.widgets.StageChromeBase = #(StageChrome::register_widget(vm))
     mod.widgets.StageChrome = set_type_default() do mod.widgets.StageChromeBase{
+        zoom_percent: stage_zoom_percent
         width: Fill
         height: Fill
         flow: Down
@@ -154,7 +161,8 @@ script_mod! {
                 live_dot := SolidView{width: 5 height: 5 margin: Inset{right: mod.tokens.space.s1} draw_bg.color: mod.tokens.accent.on}
                 live_source := InkLabel{text: "RERUN" width: Fit draw_text.color: mod.tokens.ink.body draw_text.text_style: theme.font_code{font_size: mod.tokens.text.xs}}
             }
-            // 視点依存の情報だけ(canon: User View 中は倍率+⌂)。Camera 中は空 = タブと同じ語を繰り返さない
+            // 視点依存の情報だけ(canon: User View 中は倍率+⌂)。Camera 中は空 = タブと同じ語を繰り返さない。
+            // **倍率はここに書かない** — 倍率の居場所は zoom_well 1箇所(F3)
             stage_mode := InkLabel{text: "" width: Fit padding: Inset{left: mod.tokens.space.s2} draw_text.color: mod.tokens.ink.muted draw_text.text_style: theme.font_code{font_size: mod.tokens.text.xs}}
             resolution_well := ValueWell{
                 resolution := InkLabel{text: "1920 × 1080" width: 76 draw_text.color: mod.tokens.ink.strong draw_text.text_style: theme.font_code{font_size: 8}}
@@ -167,11 +175,14 @@ script_mod! {
             stage_band_spacer := SolidView{width: Fill height: mod.tokens.rule.size}
             // User View 中はここに倍率+⌂ 復帰(canon: 「User View 中はここに倍率+⌂ 復帰」)
             zoom_well := ValueWell{
-                zoom := InkLabel{text: "62%" width: 30 draw_text.color: mod.tokens.ink.strong draw_text.text_style: theme.font_code{font_size: 8}}
+                zoom := InkLabel{text: "" + stage_zoom_percent + "%" width: 30 draw_text.color: mod.tokens.ink.strong draw_text.text_style: theme.font_code{font_size: 8}}
             }
             // ⌂ = home/auto 復帰。svg 資産が無いので字形ボタン。押せば動く実の操作にする
-            // (Q0: 触れそうで触れない物を作らない)
-            home_zoom := GlyphButton{text: "⌂" on_click: || { ui.zoom.set_text("100%") }}
+            // (Q0: 触れそうで触れない物を作らない)。
+            // splash の on_click で `ui.zoom.set_text` を書くと「文字を書く」が操作の
+            // 本体になり、状態が文字列側へ逃げる。押下は Rust 側で受けて
+            // `zoom_percent` を動かし、文字はそこから作り直す(F3)
+            home_zoom := GlyphButton{text: "⌂"}
         }
     }
 }
@@ -188,6 +199,29 @@ pub struct StageChrome {
     // active は instance でありスクリプト側の宣言的な既定選択が無いため
     #[rust]
     tabs_selected_once: bool,
+    /// 表示倍率(%)。**帯の倍率表示の唯一の持ち主**。既定は宣言の
+    /// `stage_zoom_percent`(裁定269: 調整する値は script_mod! 側)。
+    #[live]
+    zoom_percent: u32,
+    /// 視点タブの選択。0 = Camera / 1 = User View。帯の視点名はここから導出する。
+    #[rust]
+    stage_view: usize,
+}
+
+impl StageChrome {
+    /// 帯の文字はすべてここで作る。持っているのは `stage_view` と `zoom_percent` の
+    /// 2つだけで、`stage_mode` も `zoom` もその投影 — どちらかへ直接文字を書く道を
+    /// 残すと、Home を押しても片方だけ古いまま残る(F3 の再発)。
+    fn project_band(&self, cx: &mut Cx) {
+        self.view
+            .widget(cx, ids!(stage_band.stage_mode))
+            .as_label()
+            .set_text(cx, if self.stage_view == 0 { "" } else { "USER VIEW" });
+        self.view
+            .widget(cx, ids!(stage_band.zoom_well.zoom))
+            .as_label()
+            .set_text(cx, &format!("{}%", self.zoom_percent));
+    }
 }
 
 impl WidgetNode for StageChrome {
@@ -218,21 +252,34 @@ impl Widget for StageChrome {
         // 担当 — main.rs の browser_radio_groups と同型だが、ここは StageChrome の中だけで
         // 完結させる(main.rs には stage_tabs の存在すら要らない)
         let actions = cx.capture_actions(|cx| self.view.handle_event(cx, event, scope));
+        let mut band_dirty = false;
         if let Some(index) = self
             .view
             .radio_button_set(cx, ids_array!(stage_tabs.camera_tab, stage_tabs.user_tab))
             .selected(cx, &actions)
         {
             // 帯の視点名はタブ選択の結果。splash の `on_click` は RadioButton に無いので
-            // (Browser の TabIcon で踏んだのと同じ)、識別は Rust 側が書く
-            self.view
-                .widget(cx, ids!(stage_band.stage_mode))
-                .as_label()
-                .set_text(cx, if index == 0 { "" } else { "USER VIEW · 62%" });
+            // (Browser の TabIcon で踏んだのと同じ)、識別は Rust 側が書く。
+            // 書くのは**状態**で、文字はこの後の `project_band` が作る
+            self.stage_view = index;
+            band_dirty = true;
+        }
+
+        // ⌂ = home/auto 復帰。倍率という1つの状態を動かすだけで、文字には触らない
+        if self
+            .view
+            .widget(cx, ids!(stage_band.home_zoom))
+            .as_button()
+            .clicked(&actions)
+        {
+            self.zoom_percent = 100;
+            band_dirty = true;
         }
 
         if !self.tabs_selected_once {
             self.tabs_selected_once = true;
+            // 宣言側の文字はまだ既定のままなので、状態からの投影を一度通す
+            band_dirty = true;
             // 既定は Camera(canon: 上縁タブ=視点の identity。書き出しと同一のカメラ視点が既定)
             if let Some(camera_tab) = self
                 .view
@@ -242,6 +289,10 @@ impl Widget for StageChrome {
             {
                 camera_tab.set_active(cx, true, Animate::No);
             }
+        }
+
+        if band_dirty {
+            self.project_band(cx);
         }
     }
 

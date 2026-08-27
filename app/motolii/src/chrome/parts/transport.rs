@@ -19,7 +19,8 @@
 //!   針の実線は半透明黒の重なりで単色が採れないため最暗中立 #1d1d1d を採用。
 //!   この閉集合の外へ新色を置かない。
 //! 形の言語: glyph は小さい単色（三角・矩形・円）。面はフラット、角丸なし、
-//!   枠線なし、影なし。timecode は窪み矩形に明数字。再生ヘッドは 1px 縦線（頭なし）。
+//!   枠線なし、影なし。timecode は窪み矩形に明数字の**1欄**(`position`)。
+//!   再生ヘッドは 1px 縦線（頭なし）。
 //! 寸法: `timeline_transport` 節（帯高30・踏面30・gap2）を維持。
 use makepad_widgets::*;
 
@@ -184,41 +185,45 @@ script_mod! {
     mod.widgets.ChromeLoop = LoopT
 
     // timecode — Live の位置表示(17.1.1)。窪み矩形 #282828 に明数字 #b8b8b8 / 等幅。
-    // 枠線なし角丸なし。バー上に直に載る seconds は明数字、単位 f/s は静インクで一段小さく
+    // 枠線なし角丸なし。
+    // **位置は1個の値なので、欄も1個**(2026-08-27 台帳 E2)。frames を欄・seconds を
+    // 表示専用の ChromeInk に割ると、同じ1つの位置の片側だけが編集できる嘘になる。
+    // 書式は文字列そのものが語る(AE `0:00:02:14` / Live `17.1.1`)ので、単位の添字は
+    // 置かない。**どの書式を書くか・読んだ文字列をどう解くかはホストの持ち物** —
+    // 部品は「位置を1つ受け取り、1つ返す」だけを約束する。
+    // 数字以外(`:` `.`)を含むため `is_numeric_only` は立てない。
     let TimecodeT = View{
         width: Fit
         height: Fit
         flow: Right
         align: Align{y: 0.5}
-        spacing: 2
         new_batch: true
-        frames := TextInputFlat{
-            width: 64
+        position := TextInputFlat{
+            width: 96
             height: 20
             text: "0"
             empty_text: "0"
-            is_numeric_only: true
+            is_numeric_only: false
+            // hover / focus も窪み色へ固定する(TextInputFlat の既定は theme の
+            // inset 色へ飛ぶ)。ChromeSearch と同値 — 同じ shader を共有する
+            // ので、違う値を置くと draw call ごとにどちらかが負ける
             draw_bg.color: #x282828
+            draw_bg.color_hover: #x282828
+            draw_bg.color_focus: #x282828
+            draw_bg.color_down: #x282828
+            draw_bg.color_empty: #x282828
+            draw_bg.color_disabled: #x3d3d3d
             draw_bg.border_size: 0.0
             draw_bg.border_radius: 0.0
             draw_text.color: #xb8b8b8
+            draw_text.color_hover: #xb8b8b8
+            draw_text.color_focus: #xd4d4d4
+            draw_text.color_down: #xb8b8b8
+            draw_text.color_disabled: #x8f8f8f
+            draw_text.color_empty: #x919191
+            draw_text.color_empty_hover: #x919191
+            draw_text.color_empty_focus: #x919191
             draw_text.text_style: theme.font_code{font_size: 11}
-        }
-        unit_f := ChromeInk{
-            text: "f"
-            draw_text.color: #x919191
-            draw_text.text_style: theme.font_regular{font_size: 9}
-        }
-        seconds := ChromeInk{
-            text: "0.00"
-            margin: Inset{left: 4}
-            draw_text.color: #xb8b8b8
-            draw_text.text_style: theme.font_code{font_size: 11}
-        }
-        unit_s := ChromeInk{
-            text: "s"
-            draw_text.color: #x919191
-            draw_text.text_style: theme.font_regular{font_size: 9}
         }
     }
     mod.widgets.ChromeTimecode = TimecodeT

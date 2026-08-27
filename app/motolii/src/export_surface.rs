@@ -14,6 +14,14 @@ script_mod! {
     use mod.prelude.widgets.*
     use mod.widgets.*
 
+    // 進捗の正本はこの2つの数だけ。読取(`0 / 300 (0%)`)も塗り幅も、ここから式で導く。
+    // 以前は塗りが 120px の固定値で、読取が "(0%)" と言っている横で溝が3分の1埋まって
+    // いた — 値がダミーであることと、式が嘘であることは別の話。配線時に差し替えるのは
+    // この2行で、下の宣言は触らなくてよい(値はダミー・出典なし)。
+    let export_done_frames = 0
+    let export_total_frames = 300
+    let export_percent = 100 * export_done_frames / export_total_frames
+
     mod.widgets.ExportSurfaceBase = #(ExportSurface::register_widget(vm))
     mod.widgets.ExportSurface = set_type_default() do mod.widgets.ExportSurfaceBase{
         width: Fill
@@ -60,17 +68,20 @@ script_mod! {
         }
         destination_rule := SolidView{width: Fill height: mod.tokens.rule.size show_bg: true draw_bg.color: mod.tokens.rule.seam}
 
-        // 進捗読取 — `0 / 300 (0%)`（ChromeProgressReadout の並びを手本、値はダミー・出典なし）
+        // 進捗読取 — `0 / 300 (0%)`（ChromeProgressReadout の並びを手本）。文字は式で作る
         progress_row := SolidView{width: Fill height: mod.tokens.size.form_row flow: Right align: Align{y: 0.5} padding: Inset{left: mod.tokens.space.s4 right: mod.tokens.space.s4} spacing: 2 show_bg: true new_batch: true draw_bg.color: mod.tokens.face.panel
             progress_label := InkLabel{text: "Progress" width: Fill draw_text.color: mod.tokens.ink.body draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.lg}}
-            done := InkLabel{text: "0" width: Fit draw_text.color: mod.tokens.ink.body draw_text.text_style: theme.font_code{font_size: mod.tokens.text.md}}
+            done := InkLabel{text: "" + export_done_frames width: Fit draw_text.color: mod.tokens.ink.body draw_text.text_style: theme.font_code{font_size: mod.tokens.text.md}}
             sep := InkLabel{text: "/" width: Fit draw_text.color: mod.tokens.ink.muted draw_text.text_style: theme.font_code{font_size: mod.tokens.text.md}}
-            total := InkLabel{text: "300" width: Fit draw_text.color: mod.tokens.ink.body draw_text.text_style: theme.font_code{font_size: mod.tokens.text.md}}
-            pct := InkLabel{text: "(0%)" width: Fit draw_text.color: mod.tokens.ink.muted draw_text.text_style: theme.font_code{font_size: mod.tokens.text.md}}
+            total := InkLabel{text: "" + export_total_frames width: Fit draw_text.color: mod.tokens.ink.body draw_text.text_style: theme.font_code{font_size: mod.tokens.text.md}}
+            pct := InkLabel{text: "(" + export_percent + "%)" width: Fit draw_text.color: mod.tokens.ink.muted draw_text.text_style: theme.font_code{font_size: mod.tokens.text.md}}
         }
-        // 細い溝 + 明るい塗り。塗り幅 120 はダミー（出典なし）
+        // 細い溝 + 明るい塗り。塗り幅は進捗比そのもの: `Fill{weight}` は兄弟間の相対配分
+        // なので、済み:残り = done:(total-done) と書けば溝の幅に依らず比が保たれる。
+        // 定数 px を置くと読取と食い違う(それが直前の欠陥だった)
         progress_track := SolidView{width: Fill height: 3 flow: Right margin: Inset{left: 8 right: 8 bottom: 8} show_bg: true draw_bg.color: mod.tokens.face.display
-            progress_fill := SolidView{width: 120 height: Fill show_bg: true draw_bg.color: mod.tokens.accent.on}
+            progress_fill := SolidView{width: Fill{weight: export_done_frames} height: Fill show_bg: true draw_bg.color: mod.tokens.accent.on}
+            progress_rest := View{width: Fill{weight: export_total_frames - export_done_frames} height: Fill}
         }
 
         // 空域 — 面のまま中央に薄字だけ（Drop Audio Effects Here 調）

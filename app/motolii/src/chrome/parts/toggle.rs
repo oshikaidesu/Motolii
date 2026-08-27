@@ -8,7 +8,8 @@
 //!   Toggle 活性 = 上バー / Device「RMS」の活性橙 #xe89b3f（(157,445) 付近）
 //!   Lock 押下 = ソロ「S」の青 #x2b7ad0（(969,177) 付近）
 //! checkbox / toggle / lock。Document を持たない。
-//! 技能の `CheckBoxFlat` / `ToggleFlat` / `ButtonFlatIcon` を載せる。iced は置かない。
+//! 3つとも**状態を持つ**部品 — 押している間だけの `color_down` に状態を預けない。
+//! 技能の `CheckBoxFlat` / `ToggleFlat` を載せる。iced は置かない。
 //! ScrollYView は書かない（eval 白紙）。
 use makepad_widgets::*;
 
@@ -80,20 +81,42 @@ script_mod! {
         draw_text.text_style: theme.font_regular{font_size: 11}
     }
 
-    // lock — ButtonFlatIcon + 既存 lock.svg。押下保持はソロ青面。踏面 24、グリフ 13
-    mod.widgets.ChromeLock = ButtonFlatIcon{
+    // lock — 錠は**掛かっているか**であって、押している間の事ではない
+    // (2026-08-27 台帳 E4)。ButtonFlatIcon の `color_down` はマウスを押している
+    // 間だけの状態なので、離した瞬間に錠が外れて見えていた。
+    // CheckBoxFlat の `active`(instance)へ載せ替える — makepad は「入っている」を
+    // 色ではなく active で表す設計で、hot reload で宣言状態へ戻っても
+    // ホストが `active` を投影し直せる。初期値は `ChromeLock{active: true}`。
+    // 箱と印は描かず、面は 24 の矩形1枚。CheckBoxFlat の pixel を上書きするので
+    // ChromeCheck とは別 shader になり、uniform(draw call 共有)も衝突しない
+    // (memory `makepad-surface-colors-are-uniform`, 2026-08-27 実測)。
+    // 掛かった面はソロ青 #x2b7ad0、その上の hover は同じ青の明度違い #x488ed7。
+    // 反応は即時 — ふんわり遷移は「押した感じ」を殺す(利用者裁定 2026-08-27)
+    mod.widgets.ChromeLock = CheckBoxFlat{
         width: 24
         height: 24
         padding: 0
         margin: 0.
         spacing: 0
         align: Center        text: ""
+        label_walk: Walk{width: 0 height: 0}
         icon_walk: Walk{width: 13 height: 13}
-        draw_bg.color: #x3d3d3d
-        draw_bg.color_hover: #x4f4f4f
-        draw_bg.color_down: #x2b7ad0
-        draw_bg.border_size: 0.0
-        draw_bg.border_radius: 0.0
+        animator.hover.off.from.all: Forward{duration: 0.0}
+        animator.hover.on.from.all: Forward{duration: 0.0}
+        animator.hover.down.from.all: Forward{duration: 0.0}
+        animator.active.off.from.all: Forward{duration: 0.0}
+        animator.active.on.from.all: Forward{duration: 0.0}
+        draw_bg +: {
+            pixel: fn() {
+                let sdf = Sdf2d.viewport(self.pos * self.rect_size)
+                let open = mix(#x3d3d3d, #x4f4f4f, self.hover)
+                let held = mix(#x2b7ad0, #x488ed7, self.hover)
+                let face = mix(mix(open, held, self.active), #x323232, self.disabled)
+                sdf.rect(0.0, 0.0, self.rect_size.x, self.rect_size.y)
+                sdf.fill(face)
+                return sdf.result
+            }
+        }
         draw_icon +: {svg: crate_resource("self://resources/icons/lock.svg") color: #xefefef}
     }
 }
