@@ -90,6 +90,16 @@ pub struct TimelineModel {
     pub fps_den: i64,
 }
 
+// M/S/L はレールグリフへの直接操作(canon: timeline-semantics.html
+// 「M/S/L | b | rail glyph 直接 | 1:0:0:0」)。3値をどれか1つ選ぶだけで
+// 意味が閉じているので bool 3枚より enum の方が取り違えが起きない。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LaneFlag {
+    Hidden,
+    Solo,
+    Locked,
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub enum TimelineSurfaceAction {
     #[default]
@@ -105,6 +115,10 @@ pub enum TimelineSurfaceAction {
         start_frame: i64,
         visible_frames: i64,
     },
+    /// レールグリフ(M/S/L)の直接クリック。値そのものではなく「トグルしろ」
+    /// という意図だけを運ぶ — 現在値は Document/TimelineModel 側の真実なので
+    /// ここで反転後の値を計算して持たせると二重管理になる。
+    ToggleLaneFlag { layer_id: u64, flag: LaneFlag },
 }
 
 type TimelineInputAction = TimelineSurfaceAction;
@@ -775,6 +789,62 @@ impl TimelineSurface {
         matches!(self.drag, TimelineGesture::Lane { layer_id, .. } if layer_id == lane_id)
     }
 
+    // M/S/L の当たり判定は描画と同じ数字でなければクリックが少しずつズレていく。
+    // 描画側(draw_lane)とヒットテスト側(lane_flag_at)の両方がここを呼ぶことで、
+    // control_h/control_y/control_x/15.0 ストライド/12.0 幅を手で二重に書かない。
+    // self を取らない associated fn にしてあるのは、Widget インスタンスを
+    // 起こさずにテストできるようにするため(このファイルの他のテストも
+    // TimelineGesture/TimelineViewport という「純関数の側」だけを見ている)。
+    fn lane_toggle_rects(rail_width: f64, origin_x: f64, row: VisualRow) -> [Rect; 3] {
+        let control_h = (row.height - 4.0).clamp(8.0, 13.0);
+        let control_y = row.y + (row.height - control_h) * 0.5;
+        let control_x = origin_x + rail_width - 45.0;
+        let mut rects = [Rect::default(); 3];
+        for (index, rect) in rects.iter_mut().enumerate() {
+            *rect = Rect {
+                pos: dvec2(control_x + index as f64 * 15.0, control_y),
+                size: dvec2(12.0, control_h),
+            };
+        }
+        rects
+    }
+
+    // [`Self::lane_toggle_rects`] のどれかに abs が乗っているかだけを見る、
+    // これも純関数(index 0..3 と LaneFlag の対応が生まれる唯一の場所)。
+    fn flag_at_point(rects: &[Rect; 3], abs: DVec2) -> Option<LaneFlag> {
+        for (index, rect) in rects.iter().enumerate() {
+            let inside = abs.x >= rect.pos.x
+                && abs.x < rect.pos.x + rect.size.x
+                && abs.y >= rect.pos.y
+                && abs.y < rect.pos.y + rect.size.y;
+            if inside {
+                return Some(match index {
+                    0 => LaneFlag::Hidden,
+                    1 => LaneFlag::Solo,
+                    _ => LaneFlag::Locked,
+                });
+            }
+        }
+        None
+    }
+
+    // 現在のレーン行の M/S/L グリフのどれかに abs が乗っているかを返す。
+    // FingerDown はこれを self.drag.pointer_down(...) より先に呼ぶ — グリフは
+    // 直接操作(canon 1:0:0:0)であって Restack ドラッグの起点ではないため。
+    fn lane_flag_at(&self, abs: DVec2) -> Option<(u64, LaneFlag)> {
+        for row in self.visual_rows() {
+            let VisualRowKind::Lane(index) = row.kind else {
+                continue;
+            };
+            if abs.y < row.y || abs.y >= row.y + row.height {
+                continue;
+            }
+            let rects = Self::lane_toggle_rects(self.rail_width, self.rect.pos.x, row);
+            return Self::flag_at_point(&rects, abs).map(|flag| (self.lanes[index].id, flag));
+        }
+        None
+    }
+
     fn draw_lane(&mut self, cx: &mut Cx2d, lane: &TimelineLane, row: VisualRow, zebra: bool) {
         let bg = if lane.selected {
             vec4(0.34, 0.31, 0.28, 1.0)
@@ -826,9 +896,6 @@ impl TimelineSurface {
             7.8,
         );
 
-        let control_h = (row.height - 4.0).clamp(8.0, 13.0);
-        let control_y = row.y + (row.height - control_h) * 0.5;
-        let control_x = self.rect.pos.x + self.rail_width - 45.0;
         // Live の文法: on のトグルは意味色のベタ + 暗インク(極性反転)。
         // activator=琥珀 #ffad56 / solo=シアン #03c3d5 (.ask ChosenDefault/ChosenAlternative)。
         // lock は Live に無い操作なので無彩の明面で「掴めない」を言う。
@@ -837,17 +904,17 @@ impl TimelineSurface {
             vec4(0.012, 0.765, 0.835, 1.0),
             vec4(0.569, 0.569, 0.569, 1.0),
         ];
+        // 描画とヒットテストが同じ数字を見るように lane_toggle_rects を経由する
+        // (このコメント直上のトグル配色以外、幾何は一切ここに手で書かない)。
+        let toggle_rects = Self::lane_toggle_rects(self.rail_width, self.rect.pos.x, row);
         for (index, (label, active)) in [("M", lane.hidden), ("S", lane.solo), ("L", lane.locked)]
             .into_iter()
             .enumerate()
         {
-            let x = control_x + index as f64 * 15.0;
+            let rect = toggle_rects[index];
             self.draw_rect(
                 cx,
-                Rect {
-                    pos: dvec2(x, control_y),
-                    size: dvec2(12.0, control_h),
-                },
+                rect,
                 if active {
                     TOGGLE_ON[index]
                 } else {
@@ -856,7 +923,10 @@ impl TimelineSurface {
             );
             self.draw_label(
                 cx,
-                dvec2(x + 3.2, control_y + ((control_h - 7.0) * 0.5).max(0.0)),
+                dvec2(
+                    rect.pos.x + 3.2,
+                    rect.pos.y + ((rect.size.y - 7.0) * 0.5).max(0.0),
+                ),
                 label,
                 if active {
                     vec4(0.027, 0.027, 0.027, 1.0)
@@ -1121,6 +1191,16 @@ impl Widget for TimelineSurface {
     fn handle_event(&mut self, cx: &mut Cx, event: &Event, _scope: &mut Scope) {
         match event.hits_with_capture_overload(cx, self.draw_bg.area(), true) {
             Hit::FingerDown(fe) if fe.is_primary_hit() => {
+                // M/S/L はレールグリフへの直接操作(canon 1:0:0:0)。ドラッグの
+                // pointer_down より先に判定しないと、グリフ上のクリックが
+                // Restack ドラッグとして拾われてしまう。
+                if let Some((layer_id, flag)) = self.lane_flag_at(fe.abs) {
+                    self.emit_input_action(
+                        cx,
+                        TimelineSurfaceAction::ToggleLaneFlag { layer_id, flag },
+                    );
+                    return;
+                }
                 let viewport = self.viewport();
                 let lane = self.lane_at_y(fe.abs.y);
                 let action = self.drag.pointer_down(&viewport, fe.abs, lane);
@@ -1244,6 +1324,27 @@ mod tests {
                 target_from_front: 9,
             })
         );
+    }
+
+    #[test]
+    fn lane_toggle_click_hits_m_and_misses_outside_all_three() {
+        let row = VisualRow {
+            kind: VisualRowKind::Lane(0),
+            y: 100.0,
+            height: 20.0,
+        };
+        let rects = TimelineSurface::lane_toggle_rects(150.0, 0.0, row);
+
+        let inside_m = dvec2(rects[0].pos.x + 1.0, rects[0].pos.y + 1.0);
+        assert_eq!(
+            TimelineSurface::flag_at_point(&rects, inside_m),
+            Some(LaneFlag::Hidden)
+        );
+
+        // rail_width=150・origin_x=0 なので M/S/L は x=105..150 に収まる。x=10
+        // はどのトグルより手前で、3つとも外している。
+        let outside_all = dvec2(10.0, row.y + 1.0);
+        assert_eq!(TimelineSurface::flag_at_point(&rects, outside_all), None);
     }
 
     #[test]

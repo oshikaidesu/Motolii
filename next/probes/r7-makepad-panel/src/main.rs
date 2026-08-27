@@ -10,7 +10,7 @@ pub use makepad_widgets;
 use makepad_widgets::*;
 use motolii_engine::Engine;
 use motolii_shell_state::Session;
-use motolii_store::{Document, Intent, LayerId, RationalTime};
+use motolii_store::{Document, Intent, LayerAttrsPatch, LayerId, RationalTime};
 use motolii_timeline_pane::{self as timeline_pane, stacking::restacked, StackDirection};
 use std::time::Instant;
 
@@ -28,7 +28,8 @@ mod stage_surface;
 mod timeline_surface;
 use stage_surface::{SharedOsHandle, SharedSurfaceDesc, StagePresent, StageRoom, StageVerdict};
 use timeline_surface::{
-    TimelineLane, TimelineModel, TimelinePropertyLane, TimelineSurface, TimelineSurfaceAction,
+    LaneFlag, TimelineLane, TimelineModel, TimelinePropertyLane, TimelineSurface,
+    TimelineSurfaceAction,
 };
 
 app_main!(App);
@@ -566,6 +567,40 @@ impl BackendBridge {
         self.status.clone().expect("just set")
     }
 
+    /// レールグリフ(M/S/L)のクリック。3属性とも `motolii_store::LayerAttrsPatch`
+    /// (hidden/solo/locked)に本物の書き口 `Intent::SetAttrs` が既にあるので、
+    /// M/S/L のどれも Document へ書く — `TimelineModel` だけをその場でいじる
+    /// フェイクは要らない(発注の「本物の口が無ければ捏造しない」の逆側:
+    /// 本物があるのに使わない方が不自然)。
+    fn toggle_lane_flag_from_timeline(&mut self, layer_id: u64, flag: LaneFlag) -> String {
+        let layer = LayerId(layer_id);
+        let store = self.doc.view();
+        let Some(attrs) = store.attrs(layer).ok().flatten() else {
+            return format!("Timeline: layer {layer_id} no longer exists");
+        };
+        drop(store);
+
+        let (label, next, mut patch) = match flag {
+            LaneFlag::Hidden => ("HIDDEN", !attrs.hidden, LayerAttrsPatch::default()),
+            LaneFlag::Solo => ("SOLO", !attrs.solo, LayerAttrsPatch::default()),
+            LaneFlag::Locked => ("LOCKED", !attrs.locked, LayerAttrsPatch::default()),
+        };
+        match flag {
+            LaneFlag::Hidden => patch.hidden = Some(next),
+            LaneFlag::Solo => patch.solo = Some(next),
+            LaneFlag::Locked => patch.locked = Some(next),
+        }
+        if let Err(error) = self.doc.apply_all([Intent::SetAttrs { layer, patch }]) {
+            return format!("{label} を書けない: {error}");
+        }
+        self.frame = None;
+        self.status = Some(format!(
+            "Timeline: layer {layer_id} {label} {}",
+            if next { "ON" } else { "OFF" }
+        ));
+        self.status.clone().expect("just set")
+    }
+
     /// screenshot / export など明示 fallback 専用。通常の playhead / 再生からは呼ばない。
     fn frame_rgba(&mut self) -> Option<(u32, u32, &[u8])> {
         if self.frame.is_none() {
@@ -627,6 +662,9 @@ impl BackendBridge {
             } => TimelineUpdate::Status(format!(
                 "TIME ZOOM  ·  X ONLY  ·  START {start_frame}  ·  SPAN {visible_frames}F"
             )),
+            TimelineSurfaceAction::ToggleLaneFlag { layer_id, flag } => TimelineUpdate::ModelAndStage(
+                self.toggle_lane_flag_from_timeline(layer_id, flag),
+            ),
         }
     }
 }

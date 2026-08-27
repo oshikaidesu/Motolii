@@ -117,8 +117,8 @@ script_mod! {
         // RadioButtonSet::selected で持つ(main.rs の browser_radio_groups と同型、
         // ここでは StageChrome 内で完結させて main.rs には漏らさない)
         stage_tabs := SolidView{width: Fill height: mod.tokens.size.bar flow: Right show_bg: true new_batch: true draw_bg.color: mod.tokens.face.bar
-            camera_tab := ViewTab{text: "Camera" draw_icon +: {svg: crate_resource("self://resources/icons/camera.svg")} on_click: || { ui.stage_mode.set_text("CAMERA") }}
-            user_tab := ViewTab{text: "User View" draw_icon +: {svg: crate_resource("self://resources/icons/user_view.svg")} on_click: || { ui.stage_mode.set_text("USER VIEW") }}
+            camera_tab := ViewTab{text: "Camera" draw_icon +: {svg: crate_resource("self://resources/icons/camera.svg")}}
+            user_tab := ViewTab{text: "User View" draw_icon +: {svg: crate_resource("self://resources/icons/user_view.svg")}}
             tabs_spacer := SolidView{width: Fill height: mod.tokens.rule.size}
         }
         tabs_edge := SolidView{width: Fill height: mod.tokens.rule.size show_bg: true new_batch: true draw_bg.color: mod.tokens.face.down}
@@ -222,9 +222,18 @@ impl Widget for StageChrome {
         // 担当 — main.rs の browser_radio_groups と同型だが、ここは StageChrome の中だけで
         // 完結させる(main.rs には stage_tabs の存在すら要らない)
         let actions = cx.capture_actions(|cx| self.view.handle_event(cx, event, scope));
-        self.view
+        if let Some(index) = self
+            .view
             .radio_button_set(cx, ids_array!(stage_tabs.camera_tab, stage_tabs.user_tab))
-            .selected(cx, &actions);
+            .selected(cx, &actions)
+        {
+            // 帯の視点名はタブ選択の結果。splash の `on_click` は RadioButton に無いので
+            // (Browser の TabIcon で踏んだのと同じ)、識別は Rust 側が書く
+            self.view
+                .widget(cx, ids!(stage_band.stage_mode))
+                .as_label()
+                .set_text(cx, if index == 0 { "CAMERA" } else { "USER VIEW" });
+        }
 
         if !self.tabs_selected_once {
             self.tabs_selected_once = true;
