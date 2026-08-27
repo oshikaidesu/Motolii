@@ -89,6 +89,30 @@ commit し、担当の作業を巻き込んだ。押し済みなので履歴は�
   `chrome/gallery.rs:76` の `ChromeStepper{value.text: "24"}` は「24」と「0」が並んで見える
   (1行で直る、未修正)
 
+## 素材の配置 — 「どこを参照するか」に当たり前の解がある
+
+**道具が推測しない。利用者が足す。** 分からないのが当然であって、既定を発明する所ではない
+(2026-08-28 利用者指摘)。
+
+**先例は全部同じ形**: Ableton の `Places`(`Add Folder...` で足す)、Premiere の Media Browser、
+Resolve の Media Storage、Blender のブックマーク。どれも **(a) 利用者が登録した場所** と
+**(b) このプロジェクトに実際に入っている物** の2本立てで、**どこを見るかをソフトが決めない**。
+
+そして **Motolii の Browser は既にこの構造を持っている**(`browser_surface.rs:299-316`):
+
+```
+Collections   Favorite / Brand              ← タグ束(予約地)
+Library       All media / Video / Images / Audio / Project / Recent
+Places        Starter Media / Project assets / Motion assets / Add Folder...
+```
+
+`Add Folder...` と `Project assets` は `RailRowReserved` — **意味だけ先に置いて機能は保留**、
+と明示されている。**構造は正しく、配線されていないだけ。** 新しい概念を作らず、この行に
+機能を付ける。
+
+一発で開く経路(メニュー/ボタン → native file dialog)は `Places` とは別に要る。
+両方あるのが普通(Ableton も「ドラッグして足す」と「ブラウズ」の両方を持つ)。
+
 ## 決まっている事(読む順)
 
 1. [CANON](../CANON.md) — 憲法5条・何のために作るか・hero・自作の範囲
