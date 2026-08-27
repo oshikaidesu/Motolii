@@ -8,7 +8,7 @@
 pub use makepad_widgets;
 
 use makepad_widgets::*;
-use motolii_engine::Engine;
+use motolii_engine::{Engine, ObservationCamera};
 use motolii_shell_state::Session;
 use motolii_store::{Document, Intent, LayerAttrsPatch, LayerId, LayerTiming, RationalTime};
 use motolii_timeline_projection::{self as timeline_pane, stacking::restacked, StackDirection};
@@ -28,6 +28,7 @@ mod stage_import;
 mod stage_surface;
 mod timeline_surface;
 use fx_stack::{FxStack, FxStackAction, FxStackModel, FxWrite};
+use stage_chrome::{StageChrome, StageChromeAction, StageViewCamera};
 use stage_surface::{SharedOsHandle, SharedSurfaceDesc, StagePresent, StageRoom, StageVerdict};
 use timeline_surface::{
     ClipEdge, LaneFlag, TimelineEditAction, TimelineLane, TimelineModel, TimelinePropertyLane,
@@ -971,6 +972,9 @@ impl App {
     }
 
     fn try_present_shared(&mut self, cx: &mut Cx) -> StageVerdict {
+        // 観測視点は front ローカル状態(store には無い)。`backend` を可変で借りる
+        // **前**に読む — 借用の順序であって、意味の順序ではない。
+        let view_camera = self.stage_view_camera(cx);
         let Some(backend) = self.backend.as_mut() else {
             return StageVerdict::stalled(StageRoom::Seam, "backend is not up yet");
         };
@@ -1010,11 +1014,31 @@ impl App {
         let Ok(t) = RationalTime::try_from_frame(backend.session.playhead, composition.fps) else {
             return StageVerdict::stalled(StageRoom::Host, "playhead does not map to a time");
         };
-        if backend
-            .engine
-            .render_frame_into(&backend.doc.view(), t, gpu)
-            .is_err()
-        {
+        // **カメラ分離の継ぎ目はこの1箇所**(裁定157)。
+        //   Camera タブ = 出力カメラ(`view.resolve_camera(t)`)= 書き出しと同じ絵。
+        //   User View タブ = 観測カメラ。engine の別入口を通り、Document を1文字も
+        //   触らないので、どれだけ見回しても `render_frame`(export の経路)が
+        //   作る絵は変わらない。
+        // world 画素への換算はここでしかできない — comp の寸法を知っているのは
+        // store 側で、面(StageChrome)は比しか持っていない。
+        let observation = view_camera.map(|view| ObservationCamera {
+            pan: [
+                (view.pan_fraction[0] * composition.width as f64) as f32,
+                (view.pan_fraction[1] * composition.height as f64) as f32,
+            ],
+            zoom: view.zoom as f32,
+        });
+        let written = match observation {
+            Some(observation) => backend.engine.render_frame_into_with_view_camera(
+                &backend.doc.view(),
+                t,
+                gpu,
+                &observation,
+                true,
+            ),
+            None => backend.engine.render_frame_into(&backend.doc.view(), t, gpu),
+        };
+        if written.is_err() {
             return StageVerdict::stalled(StageRoom::Host, "writing into the shared surface failed");
         }
         let present = backend.present;
@@ -1259,6 +1283,26 @@ impl App {
             .child_by_path(ids!(timeline_surface))
     }
 
+    fn stage_chrome_ref(&self, cx: &mut Cx) -> WidgetRef {
+        self.dock(cx)
+            .item(id!(stage))
+            .child_by_path(ids!(stage_chrome))
+    }
+
+    fn stage_chrome_uid(&self, cx: &mut Cx) -> Option<WidgetUid> {
+        let chrome = self.stage_chrome_ref(cx);
+        (!chrome.is_empty()).then(|| chrome.widget_uid())
+    }
+
+    /// User View の観測視点。**Camera タブなら `None`** — 出力カメラは front が
+    /// 持たないので、渡す物が無いのが正しい状態(裁定157)。
+    /// 視点の持ち主は StageChrome 1つで、ここは写しを持たない(2つ持つと片方が古くなる)。
+    fn stage_view_camera(&self, cx: &mut Cx) -> Option<StageViewCamera> {
+        self.stage_chrome_ref(cx)
+            .borrow::<StageChrome>()
+            .and_then(|chrome| chrome.view_camera())
+    }
+
     fn timeline_uid(&self, cx: &mut Cx) -> Option<WidgetUid> {
         let timeline = self.timeline_ref(cx);
         (!timeline.is_empty()).then(|| timeline.widget_uid())
@@ -1404,6 +1448,17 @@ impl MatchEvent for App {
                 if !write.status.is_empty() {
                     self.set_status(cx, &write.status);
                 }
+            }
+        }
+
+        // 視点が動いたら Stage を描き直す。**Document は触らない** — 見回しは
+        // 意味を変えないので `install_timeline_model` も undo も通らない(裁定157/271)。
+        if let Some(uid) = self.stage_chrome_uid(cx) {
+            if actions
+                .filter_widget_actions_cast::<StageChromeAction>(uid)
+                .any(|action| matches!(action, StageChromeAction::ViewChanged))
+            {
+                self.request_stage_frame(cx);
             }
         }
 
