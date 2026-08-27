@@ -19,7 +19,7 @@ script_mod! {
         flow: Down
         show_bg: true
         new_batch: true
-        draw_bg.color: #x4f4f4f
+        draw_bg.color: mod.tokens.face.panel
 
         // 頭帯 — Live device title bar 調（#646464 帯 + 暗字 + 橙の角形活性点）
         settings_head := SolidView{width: Fill height: 26 flow: Right spacing: 6 align: Align{y: 0.5} padding: Inset{left: 8 right: 8} show_bg: true new_batch: true draw_bg.color: #x646464
@@ -30,62 +30,62 @@ script_mod! {
 
         // 以下の欄値はダミー（出典なし）。意味書きは波1
         project_band := SolidView{width: Fill height: 18 flow: Right align: Align{y: 0.5} padding: Inset{left: 8 right: 8} show_bg: true new_batch: true draw_bg.color: #x383838
-            project_head := Label{text: "PROJECT" width: Fill draw_text.color: #x919191 draw_text.text_style: theme.font_bold{font_size: 8 line_spacing: 1.0 top_drop: 0.0}}
+            project_head := Label{text: "PROJECT" width: Fill draw_text.color: mod.tokens.ink.muted draw_text.text_style: theme.font_bold{font_size: 8 line_spacing: 1.0 top_drop: 0.0}}
         }
-        frame_rate_row := SolidView{width: Fill height: 24 flow: Right align: Align{y: 0.5} padding: Inset{left: 8 right: 8} show_bg: true new_batch: true draw_bg.color: #x4f4f4f
-            label := Label{text: "Frame Rate" width: Fill draw_text.color: #xcccccc draw_text.text_style: theme.font_regular{font_size: 10 line_spacing: 1.0 top_drop: 0.0}}
+        frame_rate_row := SolidView{width: Fill height: 24 flow: Right align: Align{y: 0.5} padding: Inset{left: 8 right: 8} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.panel
+            label := Label{text: "Frame Rate" width: Fill draw_text.color: mod.tokens.ink.body draw_text.text_style: theme.font_regular{font_size: 10 line_spacing: 1.0 top_drop: 0.0}}
             well := SolidView{width: 104 height: 18 flow: Right align: Align{x: 1.0 y: 0.5} padding: Inset{left: 6 right: 6} show_bg: true new_batch: true draw_bg.color: #x141414
-                value := Label{text: "60 fps" width: Fit draw_text.color: #xcccccc draw_text.text_style: theme.font_code{font_size: 9 line_spacing: 1.0 top_drop: 0.0}}
+                value := Label{text: "60 fps" width: Fit draw_text.color: mod.tokens.ink.body draw_text.text_style: theme.font_code{font_size: 9 line_spacing: 1.0 top_drop: 0.0}}
             }
         }
         frame_rate_rule := SolidView{width: Fill height: 1 show_bg: true draw_bg.color: #x1e1e1e}
-        resolution_row := SolidView{width: Fill height: 24 flow: Right align: Align{y: 0.5} padding: Inset{left: 8 right: 8} show_bg: true new_batch: true draw_bg.color: #x4f4f4f
-            label := Label{text: "Resolution" width: Fill draw_text.color: #xcccccc draw_text.text_style: theme.font_regular{font_size: 10 line_spacing: 1.0 top_drop: 0.0}}
+        resolution_row := SolidView{width: Fill height: 24 flow: Right align: Align{y: 0.5} padding: Inset{left: 8 right: 8} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.panel
+            label := Label{text: "Resolution" width: Fill draw_text.color: mod.tokens.ink.body draw_text.text_style: theme.font_regular{font_size: 10 line_spacing: 1.0 top_drop: 0.0}}
             well := SolidView{width: 104 height: 18 flow: Right align: Align{x: 1.0 y: 0.5} padding: Inset{left: 6 right: 6} show_bg: true new_batch: true draw_bg.color: #x141414
-                value := Label{text: "1920 × 1080" width: Fit draw_text.color: #xcccccc draw_text.text_style: theme.font_code{font_size: 9 line_spacing: 1.0 top_drop: 0.0}}
+                value := Label{text: "1920 × 1080" width: Fit draw_text.color: mod.tokens.ink.body draw_text.text_style: theme.font_code{font_size: 9 line_spacing: 1.0 top_drop: 0.0}}
             }
         }
         resolution_rule := SolidView{width: Fill height: 1 show_bg: true draw_bg.color: #x1e1e1e}
-        duration_row := SolidView{width: Fill height: 24 flow: Right align: Align{y: 0.5} padding: Inset{left: 8 right: 8} show_bg: true new_batch: true draw_bg.color: #x4f4f4f
-            label := Label{text: "Duration" width: Fill draw_text.color: #xcccccc draw_text.text_style: theme.font_regular{font_size: 10 line_spacing: 1.0 top_drop: 0.0}}
+        duration_row := SolidView{width: Fill height: 24 flow: Right align: Align{y: 0.5} padding: Inset{left: 8 right: 8} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.panel
+            label := Label{text: "Duration" width: Fill draw_text.color: mod.tokens.ink.body draw_text.text_style: theme.font_regular{font_size: 10 line_spacing: 1.0 top_drop: 0.0}}
             well := SolidView{width: 104 height: 18 flow: Right align: Align{x: 1.0 y: 0.5} padding: Inset{left: 6 right: 6} show_bg: true new_batch: true draw_bg.color: #x141414
-                value := Label{text: "300 F" width: Fit draw_text.color: #xcccccc draw_text.text_style: theme.font_code{font_size: 9 line_spacing: 1.0 top_drop: 0.0}}
+                value := Label{text: "300 F" width: Fit draw_text.color: mod.tokens.ink.body draw_text.text_style: theme.font_code{font_size: 9 line_spacing: 1.0 top_drop: 0.0}}
             }
         }
         duration_rule := SolidView{width: Fill height: 1 show_bg: true draw_bg.color: #x1e1e1e}
 
         session_band := SolidView{width: Fill height: 18 flow: Right align: Align{y: 0.5} padding: Inset{left: 8 right: 8} show_bg: true new_batch: true draw_bg.color: #x383838
-            session_head := Label{text: "SESSION" width: Fill draw_text.color: #x919191 draw_text.text_style: theme.font_bold{font_size: 8 line_spacing: 1.0 top_drop: 0.0}}
+            session_head := Label{text: "SESSION" width: Fill draw_text.color: mod.tokens.ink.muted draw_text.text_style: theme.font_bold{font_size: 8 line_spacing: 1.0 top_drop: 0.0}}
         }
-        autosave_row := SolidView{width: Fill height: 24 flow: Right align: Align{y: 0.5} padding: Inset{left: 8 right: 8} show_bg: true new_batch: true draw_bg.color: #x4f4f4f
-            label := Label{text: "Autosave" width: Fill draw_text.color: #xcccccc draw_text.text_style: theme.font_regular{font_size: 10 line_spacing: 1.0 top_drop: 0.0}}
+        autosave_row := SolidView{width: Fill height: 24 flow: Right align: Align{y: 0.5} padding: Inset{left: 8 right: 8} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.panel
+            label := Label{text: "Autosave" width: Fill draw_text.color: mod.tokens.ink.body draw_text.text_style: theme.font_regular{font_size: 10 line_spacing: 1.0 top_drop: 0.0}}
             well := SolidView{width: 104 height: 18 flow: Right align: Align{x: 1.0 y: 0.5} padding: Inset{left: 6 right: 6} show_bg: true new_batch: true draw_bg.color: #x141414
-                value := Label{text: "On" width: Fit draw_text.color: #xcccccc draw_text.text_style: theme.font_code{font_size: 9 line_spacing: 1.0 top_drop: 0.0}}
+                value := Label{text: "On" width: Fit draw_text.color: mod.tokens.ink.body draw_text.text_style: theme.font_code{font_size: 9 line_spacing: 1.0 top_drop: 0.0}}
             }
         }
         autosave_rule := SolidView{width: Fill height: 1 show_bg: true draw_bg.color: #x1e1e1e}
-        undo_row := SolidView{width: Fill height: 24 flow: Right align: Align{y: 0.5} padding: Inset{left: 8 right: 8} show_bg: true new_batch: true draw_bg.color: #x4f4f4f
-            label := Label{text: "Undo Depth" width: Fill draw_text.color: #xcccccc draw_text.text_style: theme.font_regular{font_size: 10 line_spacing: 1.0 top_drop: 0.0}}
+        undo_row := SolidView{width: Fill height: 24 flow: Right align: Align{y: 0.5} padding: Inset{left: 8 right: 8} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.panel
+            label := Label{text: "Undo Depth" width: Fill draw_text.color: mod.tokens.ink.body draw_text.text_style: theme.font_regular{font_size: 10 line_spacing: 1.0 top_drop: 0.0}}
             well := SolidView{width: 104 height: 18 flow: Right align: Align{x: 1.0 y: 0.5} padding: Inset{left: 6 right: 6} show_bg: true new_batch: true draw_bg.color: #x141414
-                value := Label{text: "200" width: Fit draw_text.color: #xcccccc draw_text.text_style: theme.font_code{font_size: 9 line_spacing: 1.0 top_drop: 0.0}}
+                value := Label{text: "200" width: Fit draw_text.color: mod.tokens.ink.body draw_text.text_style: theme.font_code{font_size: 9 line_spacing: 1.0 top_drop: 0.0}}
             }
         }
         undo_rule := SolidView{width: Fill height: 1 show_bg: true draw_bg.color: #x1e1e1e}
 
         appearance_band := SolidView{width: Fill height: 18 flow: Right align: Align{y: 0.5} padding: Inset{left: 8 right: 8} show_bg: true new_batch: true draw_bg.color: #x383838
-            appearance_head := Label{text: "APPEARANCE" width: Fill draw_text.color: #x919191 draw_text.text_style: theme.font_bold{font_size: 8 line_spacing: 1.0 top_drop: 0.0}}
+            appearance_head := Label{text: "APPEARANCE" width: Fill draw_text.color: mod.tokens.ink.muted draw_text.text_style: theme.font_bold{font_size: 8 line_spacing: 1.0 top_drop: 0.0}}
         }
-        theme_row := SolidView{width: Fill height: 24 flow: Right align: Align{y: 0.5} padding: Inset{left: 8 right: 8} show_bg: true new_batch: true draw_bg.color: #x4f4f4f
-            label := Label{text: "Theme" width: Fill draw_text.color: #xcccccc draw_text.text_style: theme.font_regular{font_size: 10 line_spacing: 1.0 top_drop: 0.0}}
+        theme_row := SolidView{width: Fill height: 24 flow: Right align: Align{y: 0.5} padding: Inset{left: 8 right: 8} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.panel
+            label := Label{text: "Theme" width: Fill draw_text.color: mod.tokens.ink.body draw_text.text_style: theme.font_regular{font_size: 10 line_spacing: 1.0 top_drop: 0.0}}
             well := SolidView{width: 104 height: 18 flow: Right align: Align{x: 1.0 y: 0.5} padding: Inset{left: 6 right: 6} show_bg: true new_batch: true draw_bg.color: #x141414
-                value := Label{text: "Live Dark" width: Fit draw_text.color: #xcccccc draw_text.text_style: theme.font_code{font_size: 9 line_spacing: 1.0 top_drop: 0.0}}
+                value := Label{text: "Live Dark" width: Fit draw_text.color: mod.tokens.ink.body draw_text.text_style: theme.font_code{font_size: 9 line_spacing: 1.0 top_drop: 0.0}}
             }
         }
         theme_rule := SolidView{width: Fill height: 1 show_bg: true draw_bg.color: #x1e1e1e}
-        scale_row := SolidView{width: Fill height: 24 flow: Right align: Align{y: 0.5} padding: Inset{left: 8 right: 8} show_bg: true new_batch: true draw_bg.color: #x4f4f4f
-            label := Label{text: "UI Scale" width: Fill draw_text.color: #xcccccc draw_text.text_style: theme.font_regular{font_size: 10 line_spacing: 1.0 top_drop: 0.0}}
+        scale_row := SolidView{width: Fill height: 24 flow: Right align: Align{y: 0.5} padding: Inset{left: 8 right: 8} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.panel
+            label := Label{text: "UI Scale" width: Fill draw_text.color: mod.tokens.ink.body draw_text.text_style: theme.font_regular{font_size: 10 line_spacing: 1.0 top_drop: 0.0}}
             well := SolidView{width: 104 height: 18 flow: Right align: Align{x: 1.0 y: 0.5} padding: Inset{left: 6 right: 6} show_bg: true new_batch: true draw_bg.color: #x141414
-                value := Label{text: "100 %" width: Fit draw_text.color: #xcccccc draw_text.text_style: theme.font_code{font_size: 9 line_spacing: 1.0 top_drop: 0.0}}
+                value := Label{text: "100 %" width: Fit draw_text.color: mod.tokens.ink.body draw_text.text_style: theme.font_code{font_size: 9 line_spacing: 1.0 top_drop: 0.0}}
             }
         }
         scale_rule := SolidView{width: Fill height: 1 show_bg: true draw_bg.color: #x1e1e1e}

@@ -59,11 +59,13 @@ script_mod! {
 
     // 寸法 — 行の高さと帯の高さ。ここが UI の密度そのもの
     let size = {
-        row: 21.0 * s
-        row_tight: 18.0 * s
+        // Live 実機の計量(2026-08-27): rail 行ピッチ 15.0pt / 文字 cap 8.0pt(比 1.88)。
+        // 行の太さでなく比が手触りを決める
+        row: 15.0 * s
+        row_tight: 14.0 * s
         bar: 22.0 * s
         toolbar: 26.0 * s
-        cap: 20.0 * s
+        cap: 18.0 * s
         chip: 16.0 * s
         field: 17.0 * s
         icon_sm: 11.0 * s
@@ -82,33 +84,61 @@ script_mod! {
     }
 
     // 境の線。太さは1つしか無い。色は「何の境か」で分ける —
-    // 線は操作の持ち主か座標系が変わる所にだけ引く
+    // 線は操作の持ち主か座標系が変わる所にだけ引く。
+    // Ableton の線は両方の面より暗い(ControlContrastFrame #111111)。盛り上げ線は無い
     let rule = {
         size: 1.0
-        owner: #x434343
-        seam: #x2d2d2d
-        pane: #x343434
-        surface: #x1d1d1d
+        owner: #x4a4a4a
+        seam: #x1c1c1c
+        pane: #x1c1c1c
+        surface: #x111111
     }
 
-    // 面 — 明るさの段。暗い方が奥
+    // 面 — 深さは影ではなく明度で作る。**暗いほど奥**。
+    // 出典: Live 12 Beta `Default Dark Neutral Medium.ask`(実機、2026-08-27 抽出)
+    //   Desktop #2a2a2a / SurfaceBackground #363636 / SurfaceArea #242424 /
+    //   SurfaceHighlight #464646 / ControlBackground #1e1e1e / DisplayBackground #181818
     let face = {
-        sunk: #x282828
-        bar: #x3d3d3d
-        panel: #x4f4f4f
-        head: #x606060
-        hover: #x5c5c5c
-        down: #x2d2d2d
-        pressed: #x444444
+        desktop: #x2a2a2a
+        panel: #x363636
+        bar: #x2f2f2f
+        area: #x242424
+        well: #x1e1e1e
+        display: #x181818
+        raised: #x464646
+        head: #x464646
+        sunk: #x242424
+        hover: #x404040
+        down: #x1e1e1e
+        pressed: #x2e2e2e
     }
 
-    // 字と記号
+    // 字と記号 — Ableton のインクは3段(ControlForeground #b5b5b5 /
+    // TextDisabled #757575 / 白は稀)。明るい面の上だけ #070707
     let ink = {
-        strong: #xe4e4e4
-        body: #xd8d8d8
-        muted: #x9d9d9d
-        faint: #x757575
-        glyph: #xa0a0a0
+        strong: #xd0d0d0
+        body: #xb5b5b5
+        muted: #x757575
+        faint: #x5d5d5d
+        glyph: #xb5b5b5
+        on_fill: #x070707
+    }
+
+    // 選択は色ではなく**極性反転** — 明るい面 + 暗いインク。
+    // フォーカス外は脱彩して沈む(StandbySelectionBackground)。
+    // 出典: .ask SelectionBackground #b0ddeb / Standby #637e86 / Foreground #070707
+    let sel = {
+        focus: #xb0ddeb
+        standby: #x637e86
+        ink: #x070707
+    }
+
+    // 「on」は琥珀1色(.ask ViewCheckControlEnabledOn / ChosenDefault /
+    // TransportProgress = #ffad56)。record 赤・alt シアンは意味を持つ時だけ
+    let accent = {
+        on: #xffad56
+        record: #xff5559
+        alt: #x03c3d5
     }
 
     mod.tokens = {
@@ -119,5 +149,7 @@ script_mod! {
         rule: rule
         face: face
         ink: ink
+        sel: sel
+        accent: accent
     }
 }

@@ -15,6 +15,7 @@ use motolii_timeline_pane::{self as timeline_pane, stacking::restacked, StackDir
 use std::time::Instant;
 
 mod browser_surface;
+mod theme_flat;
 mod tokens;
 mod chrome;
 mod export_surface;
@@ -37,36 +38,21 @@ app_main!(App);
 macro_rules! browser_rail_ids {
     () => {
         ids_array!(
-            browser_surface.browser_body.rail.favorite,
-            browser_surface.browser_body.rail.broll,
-            browser_surface.browser_body.rail.brand,
             browser_surface.browser_body.rail.all_media,
             browser_surface.browser_body.rail.video,
             browser_surface.browser_body.rail.images,
             browser_surface.browser_body.rail.audio,
-            browser_surface.browser_body.rail.starter,
-            browser_surface.browser_body.rail.project_assets,
-            browser_surface.browser_body.rail.motion_assets
+            browser_surface.browser_body.rail.project,
+            browser_surface.browser_body.rail.recent
         )
     };
 }
 
-const RAIL_ALL_MEDIA: usize = 3;
+const RAIL_ALL_MEDIA: usize = 0;
 
 
 
-const RAIL_HEADS: [&str; 10] = [
-    "Favorite",
-    "B-roll",
-    "Brand",
-    "All media",
-    "Video",
-    "Images",
-    "Audio",
-    "Starter Media",
-    "Project assets",
-    "Motion assets",
-];
+const RAIL_HEADS: [&str; 6] = ["All media", "Video", "Images", "Audio", "Project", "Recent"];
 
 script_mod! {
     use mod.prelude.widgets.*
@@ -81,7 +67,7 @@ script_mod! {
         height: mod.tokens.size.bar
         icon_walk: Walk{width: mod.tokens.size.icon height: mod.tokens.size.icon}
         padding: 0
-        draw_icon +: {color: #xb7b7b7}
+        draw_icon +: {color: mod.tokens.ink.body}
     }
 
     let IconFlatButton = ButtonFlatIcon{
@@ -90,7 +76,7 @@ script_mod! {
         height: mod.tokens.size.bar
         icon_walk: Walk{width: mod.tokens.size.icon height: mod.tokens.size.icon}
         padding: 0
-        draw_icon +: {color: #xcfcfcf}
+        draw_icon +: {color: mod.tokens.ink.body}
     }
 
     let RailToggle = ButtonFlat{
@@ -101,10 +87,9 @@ script_mod! {
         spacing: 0
         align: Center
         label_walk: Walk{width: Fill height: Fill}
-        draw_bg.color: #x4a4a4a
+        draw_bg.color: mod.tokens.face.hover
         draw_bg.border_size: 0.0
-        draw_bg.border_radius: 2.0
-        draw_text.color: #x757575
+        draw_text.color: mod.tokens.ink.faint
         draw_text.text_style: theme.font_regular{font_size: 6 line_spacing: 1.0 top_drop: 0.0}
     }
 
@@ -112,7 +97,7 @@ script_mod! {
         width: Fit
         height: Fit
         padding: 0
-        draw_text.color: #xcfcfcf
+        draw_text.color: mod.tokens.ink.body
         draw_text.text_style: theme.font_regular{font_size: 8.25 line_spacing: 1.0 top_drop: 0.0}
     }
 
@@ -120,7 +105,7 @@ script_mod! {
         width: Fill
         height: Fit
         padding: 0
-        draw_text.color: #x757575
+        draw_text.color: mod.tokens.ink.faint
         draw_text.text_style: theme.font_regular{font_size: 7.5 line_spacing: 1.0 top_drop: 0.0}
     }
 
@@ -148,7 +133,7 @@ script_mod! {
         flow: Overlay
         align: Align{y: 0.5}
         show_bg: true
-        draw_bg.color: #x363636
+        draw_bg.color: mod.tokens.face.panel
         band_1 := SolidView{width: 67.5 height: Fill margin: Inset{left: 67.5} draw_bg.color: #xFFFFFF09}
         band_2 := SolidView{width: 67.5 height: Fill margin: Inset{left: 202.5} draw_bg.color: #xFFFFFF09}
         band_3 := SolidView{width: 67.5 height: Fill margin: Inset{left: 337.5} draw_bg.color: #xFFFFFF09}
@@ -222,7 +207,7 @@ script_mod! {
         flow: Overlay
         show_bg: true
         new_batch: true
-        draw_bg.color: #x363636
+        draw_bg.color: mod.tokens.face.panel
         content := View{width: Fill height: Fill flow: Right}
         rail_divider := PaneDivider{margin: Inset{left: 149}}
         separator := SolidView{width: Fill height: 1 margin: Inset{top: 25} draw_bg.color: #x00000038}
@@ -234,7 +219,7 @@ script_mod! {
         flow: Overlay
         show_bg: true
         new_batch: true
-        draw_bg.color: #x363636
+        draw_bg.color: mod.tokens.face.panel
         content := View{width: Fill height: Fill flow: Right}
         rail_divider := PaneDivider{margin: Inset{left: 149}}
         separator := SolidView{width: Fill height: 1 margin: Inset{top: 17} draw_bg.color: #x00000038}
@@ -245,11 +230,11 @@ script_mod! {
     }
 
     let SelectedTimeField = TimeField{
-        draw_bg.color: #x565048
+        draw_bg.color: mod.tokens.sel.standby
     }
 
     let KeyTimeField = TimeField{
-        draw_bg.color: #x303030
+        draw_bg.color: mod.tokens.face.area
     }
 
     // Studio: kinds are Fill Views, then `Kind := Kind {}` on the Dock instance.
@@ -300,7 +285,7 @@ script_mod! {
             align: Align{x: 0.5 y: 0.5}
             show_bg: true
             new_batch: true
-            draw_bg.color: #x3d3d3d
+            draw_bg.color: mod.tokens.face.panel
             play_toggle := ButtonFlatIcon{
                 width: 26.0 * mod.tokens.scale
                 height: mod.tokens.size.status
@@ -308,7 +293,7 @@ script_mod! {
                 padding: Inset{left: 0 right: 0}
                 draw_bg.color: #4f4f4f
                 draw_bg.border_size: 0.0
-                draw_icon +: {svg: crate_resource("self://resources/icons/play.svg") color: #xd8b574}
+                draw_icon +: {svg: crate_resource("self://resources/icons/play.svg") color: mod.tokens.accent.on}
             }
         }
         timeline_surface := TimelineSurface{
@@ -330,7 +315,7 @@ script_mod! {
         flow: Down
         show_bg: true
         new_batch: true
-        draw_bg.color: #x282828
+        draw_bg.color: mod.tokens.face.well
 
             chrome := SolidView{
                 width: Fill
@@ -340,7 +325,7 @@ script_mod! {
                 padding: Inset{left: mod.tokens.space.s5 right: mod.tokens.space.s5}
                 show_bg: true
                 new_batch: true
-                draw_bg +: { color: #x242424 }
+                draw_bg +: { color: mod.tokens.face.area }
 
                 brand := SolidView{
                     width: Fit
@@ -348,18 +333,18 @@ script_mod! {
                     flow: Right
                     align: Align{y: 0.5}
                     spacing: mod.tokens.space.s3
-                    mark := Icon{width: mod.tokens.size.icon_lg height: mod.tokens.size.icon_lg icon_walk: Walk{width: mod.tokens.size.icon_lg height: mod.tokens.size.icon_lg} draw_icon +: {svg: crate_resource("self://resources/icons/motolii.svg") color: #xd8d8d8}}
-                    name := Label{text: "MOTOLII" width: Fit padding: Inset{right: mod.tokens.space.s3} draw_text.color: #xd8d8d8 draw_text.text_style: theme.font_bold{font_size: mod.tokens.text.lg}}
+                    mark := Icon{width: mod.tokens.size.icon_lg height: mod.tokens.size.icon_lg icon_walk: Walk{width: mod.tokens.size.icon_lg height: mod.tokens.size.icon_lg} draw_icon +: {svg: crate_resource("self://resources/icons/motolii.svg") color: mod.tokens.ink.body}}
+                    name := Label{text: "MOTOLII" width: Fit padding: Inset{right: mod.tokens.space.s3} draw_text.color: mod.tokens.ink.body draw_text.text_style: theme.font_bold{font_size: mod.tokens.text.lg}}
                 }
-                file := ButtonFlatter{text: "File" width: 42.0 * mod.tokens.scale height: mod.tokens.size.menu draw_text.color: #xb7b7b7 draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.md}}
-                edit := ButtonFlatter{text: "Edit" width: 42.0 * mod.tokens.scale height: mod.tokens.size.menu draw_text.color: #xb7b7b7 draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.md}}
-                layer := ButtonFlatter{text: "Layer" width: 50.0 * mod.tokens.scale height: mod.tokens.size.menu draw_text.color: #xb7b7b7 draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.md}}
-                view := ButtonFlatter{text: "View" width: 42.0 * mod.tokens.scale height: mod.tokens.size.menu draw_text.color: #xb7b7b7 draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.md}}
+                file := ButtonFlatter{text: "File" width: 42.0 * mod.tokens.scale height: mod.tokens.size.menu draw_text.color: mod.tokens.ink.body draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.md}}
+                edit := ButtonFlatter{text: "Edit" width: 42.0 * mod.tokens.scale height: mod.tokens.size.menu draw_text.color: mod.tokens.ink.body draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.md}}
+                layer := ButtonFlatter{text: "Layer" width: 50.0 * mod.tokens.scale height: mod.tokens.size.menu draw_text.color: mod.tokens.ink.body draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.md}}
+                view := ButtonFlatter{text: "View" width: 42.0 * mod.tokens.scale height: mod.tokens.size.menu draw_text.color: mod.tokens.ink.body draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.md}}
                 spacer := SolidView{width: Fill height: 1}
                 project := Label{
                     text: "Untitled / Motion Study"
                     width: Fit
-                    draw_text.color: #xa0a0a0
+                    draw_text.color: mod.tokens.ink.glyph
                     draw_text.text_style: theme.font_code{font_size: mod.tokens.text.md}
                 }
                 browser_toggle := IconButton{width: 26.0 * mod.tokens.scale draw_icon +: {svg: crate_resource("self://resources/icons/panels.svg")} on_click: || { ui.status.set_text("Browser panel") }}
@@ -371,6 +356,8 @@ script_mod! {
             dock := DockFlat{
                 width: Fill
                 height: Fill
+                // makepad の丸角オーバーレイは makepad の顔。Ableton は直角
+                round_corner.border_radius: 0.0
                 // 既定の 33pt は、この密度の中では帯だけが太い。タブは掴む所なので
                 // 消さずに詰める(makepad 側の下限は 25pt)
                 tab_bar: TabBarFlat{
@@ -496,7 +483,7 @@ script_mod! {
                 width: Fill
                 height: mod.tokens.size.status
                 padding: Inset{left: mod.tokens.space.s5}
-                draw_text.color: #x747879
+                draw_text.color: mod.tokens.ink.faint
                 draw_text.text_style: theme.font_code{font_size: mod.tokens.text.sm}
             }
 
@@ -1213,7 +1200,14 @@ impl MatchEvent for App {
 
 impl AppMain for App {
     fn script_mod(vm: &mut ScriptVm) -> ScriptValue {
-        crate::makepad_widgets::script_mod(vm);
+        // Ableton の identity は palette ではなく形の文法にある(18テーマ同梱 =
+        // 色を全部差し替えても Ableton に見える、が証拠)。テーマ横断で不変なのは:
+        // 矩形のみ・角丸ゼロ・ベベルゼロ・影ゼロ、分離は 1px の暗線と明度段。
+        // makepad の既定(corner_radius 2.5 / beveling 0.75)はその全部に反するので、
+        // widget が theme.* を読む**前**に根を書き換える。現場の数百箇所を触らない。
+        crate::makepad_widgets::theme_mod(vm);
+        crate::theme_flat::script_mod(vm);
+        crate::makepad_widgets::widgets_mod(vm);
         // 目盛りは誰よりも先。surface はこれを引く。
         crate::tokens::script_mod(vm);
         // Widget modules register before the UI modules that import them (DSL 正史)。

@@ -754,6 +754,14 @@ impl TimelineSurface {
         let control_h = (row.height - 4.0).clamp(8.0, 13.0);
         let control_y = row.y + (row.height - control_h) * 0.5;
         let control_x = self.rect.pos.x + RAIL_WIDTH - 45.0;
+        // Live の文法: on のトグルは意味色のベタ + 暗インク(極性反転)。
+        // activator=琥珀 #ffad56 / solo=シアン #03c3d5 (.ask ChosenDefault/ChosenAlternative)。
+        // lock は Live に無い操作なので無彩の明面で「掴めない」を言う。
+        const TOGGLE_ON: [Vec4; 3] = [
+            vec4(1.0, 0.678, 0.337, 1.0),
+            vec4(0.012, 0.765, 0.835, 1.0),
+            vec4(0.569, 0.569, 0.569, 1.0),
+        ];
         for (index, (label, active)) in [("M", lane.hidden), ("S", lane.solo), ("L", lane.locked)]
             .into_iter()
             .enumerate()
@@ -766,9 +774,9 @@ impl TimelineSurface {
                     size: dvec2(12.0, control_h),
                 },
                 if active {
-                    vec4(0.66, 0.53, 0.33, 1.0)
+                    TOGGLE_ON[index]
                 } else {
-                    vec4(0.16, 0.16, 0.16, 1.0)
+                    vec4(0.118, 0.118, 0.118, 1.0)
                 },
             );
             self.draw_label(
@@ -776,7 +784,7 @@ impl TimelineSurface {
                 dvec2(x + 3.2, control_y + ((control_h - 7.0) * 0.5).max(0.0)),
                 label,
                 if active {
-                    vec4(0.95, 0.92, 0.84, 1.0)
+                    vec4(0.027, 0.027, 0.027, 1.0)
                 } else {
                     vec4(0.55, 0.55, 0.55, 1.0)
                 },

@@ -45,14 +45,14 @@ script_mod! {
             pixel: fn() {
                 let sdf = Sdf2d.viewport(self.pos * self.rect_size)
                 let sunk = max(self.active, self.down)
-                let face = mod.tokens.face.bar.mix(#x4a4a4a, self.hover).mix(#x333333, sunk)
+                let face = mod.tokens.face.bar.mix(mod.tokens.face.hover, self.hover).mix(mod.tokens.face.pressed, sunk)
                 sdf.rect(0.0, 0.0, self.rect_size.x, self.rect_size.y)
                 sdf.fill(face)
                 // 押し込みは縁で語る: 上が暗く、下が明るい。枠線では囲まない
                 sdf.rect(0.0, 0.0, self.rect_size.x, 1.0)
-                sdf.fill(face.mix(#x272727, sunk))
+                sdf.fill(face.mix(mod.tokens.face.area, sunk))
                 sdf.rect(0.0, self.rect_size.y - 1.0, self.rect_size.x, 1.0)
-                sdf.fill(face.mix(#x5a5a5a, sunk))
+                sdf.fill(face.mix(mod.tokens.face.raised, sunk))
                 return sdf.result
             }
         }
@@ -77,20 +77,51 @@ script_mod! {
             pixel: fn() {
                 let sdf = Sdf2d.viewport(self.pos * self.rect_size)
                 let sunk = max(self.active, self.down)
-                let face = mod.tokens.face.panel.mix(#x5c5c5c, self.hover).mix(#x444444, sunk)
+                let face = mod.tokens.face.panel.mix(mod.tokens.face.hover, self.hover).mix(mod.tokens.face.pressed, sunk)
                 sdf.rect(0.0, 0.0, self.rect_size.x, self.rect_size.y)
                 sdf.fill(face)
                 // 押し込みは縁で語る: 上が暗く、下が明るい。枠線では囲まない
                 sdf.rect(0.0, 0.0, self.rect_size.x, 1.0)
-                sdf.fill(face.mix(#x313131, sunk))
+                sdf.fill(face.mix(mod.tokens.face.area, sunk))
                 sdf.rect(0.0, self.rect_size.y - 1.0, self.rect_size.x, 1.0)
-                sdf.fill(face.mix(#x616161, sunk))
+                sdf.fill(face.mix(mod.tokens.face.raised, sunk))
                 return sdf.result
             }
         }
         draw_icon +: {color: mod.tokens.ink.glyph}
         draw_text.color: mod.tokens.ink.strong
-        draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.base line_spacing: 1.0 top_drop: 0.0}
+        draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.sm line_spacing: 1.0 top_drop: 0.0}
+    }
+
+    // 予約地の rail 行 — モックの慣習で半透明(意味が起草されるまで操作は無い)。
+    // radio に入れない: 押せそうで押せない物を作らない(Q0)
+    let RailRowReserved = View{
+        width: Fill
+        height: mod.tokens.size.row
+        flow: Right
+        align: Align{x: 0.0 y: 0.5}
+        padding: Inset{left: mod.tokens.space.s5 right: mod.tokens.space.s5}
+        spacing: mod.tokens.space.s4
+        glyph := Icon{width: mod.tokens.size.icon_sm height: mod.tokens.size.icon_sm icon_walk: Walk{width: mod.tokens.size.icon_sm height: mod.tokens.size.icon_sm} draw_icon +: {color: mod.tokens.ink.faint}}
+        label := Label{width: Fill draw_text.color: mod.tokens.ink.faint draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.sm line_spacing: 1.0 top_drop: 0.0}}
+    }
+
+    // 素材カード — Browser のヒーロー(正本: browser-semantics.html、旧 124×84 の縮約)。
+    // ● = 配置済み(bin-first の可視化)。drag=配置は未配線
+    let AssetCard = View{
+        width: 76
+        height: 58
+        flow: Down
+        show_bg: true
+        new_batch: true
+        draw_bg.color: mod.tokens.face.area
+        thumb := View{width: Fill height: Fill flow: Down align: Align{x: 0.5 y: 0.5}
+            glyph := Icon{width: mod.tokens.size.icon_lg height: mod.tokens.size.icon_lg icon_walk: Walk{width: mod.tokens.size.icon_lg height: mod.tokens.size.icon_lg} draw_icon +: {color: mod.tokens.ink.faint}}
+        }
+        meta := SolidView{width: Fill height: mod.tokens.size.row_tight flow: Right align: Align{y: 0.5} padding: Inset{left: mod.tokens.space.s2 right: mod.tokens.space.s2} spacing: mod.tokens.space.s1 show_bg: true new_batch: true draw_bg.color: mod.tokens.face.well
+            name := Label{width: Fill draw_text.color: mod.tokens.ink.body draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.xs line_spacing: 1.0 top_drop: 0.0}}
+            placed := SolidView{width: 5 height: 5 show_bg: true new_batch: true draw_bg.color: mod.tokens.accent.on}
+        }
     }
 
     // 節見出し — Collections / Library / Places。薄字、上に群間の余白
@@ -122,12 +153,12 @@ script_mod! {
         align: Align{y: 0.5}
         show_bg: true
         new_batch: true
-        draw_bg.color: #x6b8d96
+        draw_bg.color: mod.tokens.sel.standby
         label := ButtonFlatter{
             width: Fit
             height: Fit
             padding: Inset{left: 4 right: 4}
-            draw_text.color: #x133342
+            draw_text.color: mod.tokens.sel.ink
             draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.sm line_spacing: 1.0 top_drop: 0.0}
         }
     }
@@ -141,13 +172,13 @@ script_mod! {
         align: Align{x: 0.0 y: 0.5}
         padding: Inset{left: mod.tokens.space.s5 right: mod.tokens.space.s5}
         draw_bg.color: mod.tokens.face.panel
-        draw_bg.color_hover: #x5c5c5c
-        draw_bg.color_down: #x2d2d2d
+        draw_bg.color_hover: mod.tokens.face.hover
+        draw_bg.color_down: mod.tokens.face.down
         draw_bg.border_size: 0.0
         draw_bg.border_radius: 0.0
         draw_icon +: {color: mod.tokens.ink.glyph}
         draw_text.color: mod.tokens.ink.body
-        draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.base line_spacing: 1.0 top_drop: 0.0}
+        draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.sm line_spacing: 1.0 top_drop: 0.0}
     }
 
     // rail とリストの境 — 画像実測 #343434 の縦 1px
@@ -168,12 +199,6 @@ script_mod! {
         draw_bg.color: mod.tokens.rule.seam
     }
 
-    fn select_asset(name, file, kind){
-        ui.browser_body.catalog.selection.selection_name.set_text(file)
-        ui.browser_body.catalog.selection.selection_type.set_text(kind)
-        name
-    }
-
     mod.widgets.BrowserSurfaceBase = #(BrowserSurface::register_widget(vm))
     mod.widgets.BrowserSurface = set_type_default() do mod.widgets.BrowserSurfaceBase{
         width: Fill
@@ -187,8 +212,8 @@ script_mod! {
             back := IconButton{width: 18 draw_icon +: {svg: crate_resource("self://resources/icons/back.svg")}}
             forward := IconButton{width: 18 draw_icon +: {svg: crate_resource("self://resources/icons/forward.svg")}}
             search := SolidView{width: Fill height: mod.tokens.size.field flow: Right spacing: mod.tokens.space.s1 align: Align{y: 0.5} padding: Inset{left: 4 right: 4} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.sunk
-                search_glyph := IconButton{width: 15 draw_icon +: {svg: crate_resource("self://resources/icons/search.svg") color: #x909090}}
-                search_hint := Label{text: "Search (Cmd + F)" width: Fill draw_text.color: #x909090 draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.sm line_spacing: 1.0 top_drop: 0.0}}
+                search_glyph := IconButton{width: 15 draw_icon +: {svg: crate_resource("self://resources/icons/search.svg") color: mod.tokens.ink.muted}}
+                search_hint := Label{text: "Search (Cmd + F)" width: Fill draw_text.color: mod.tokens.ink.muted draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.sm line_spacing: 1.0 top_drop: 0.0}}
             }
             filters := IconButton{width: 22 draw_icon +: {svg: crate_resource("self://resources/icons/filter.svg")}}
             tags := IconButton{width: 22 draw_icon +: {svg: crate_resource("self://resources/icons/tag.svg")}}
@@ -203,22 +228,24 @@ script_mod! {
 
         browser_body := SolidView{width: Fill height: Fill flow: Right
             rail := SolidView{width: mod.tokens.size.rail height: Fill flow: Down padding: Inset{bottom: 2} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.panel
+                // Collections は予約地(タグ束、map D)。半透明で意味だけ predoc
                 collections := RailCap{text: "Collections"}
-                favorite := RailRow{text: "Favorite" draw_icon +: {svg: crate_resource("self://resources/icons/star.svg") color: #xf20813}}
-                broll := RailRow{text: "B-roll" draw_icon +: {svg: crate_resource("self://resources/icons/video.svg") color: #x4db7bd}}
-                brand := RailRow{text: "Brand" draw_icon +: {svg: crate_resource("self://resources/icons/tag.svg") color: #xa676c5}}
+                favorite := RailRowReserved{label.text: "Favorite" glyph.draw_icon.svg: crate_resource("self://resources/icons/star.svg")}
+                brand := RailRowReserved{label.text: "Brand" glyph.draw_icon.svg: crate_resource("self://resources/icons/tag.svg")}
                 library_rule := RailRule{}
                 library := RailCap{text: "Library"}
                 all_media := RailRow{text: "All media" draw_icon +: {svg: crate_resource("self://resources/icons/media.svg")}}
                 video := RailRow{text: "Video" draw_icon +: {svg: crate_resource("self://resources/icons/video.svg")}}
                 images := RailRow{text: "Images" draw_icon +: {svg: crate_resource("self://resources/icons/image.svg")}}
                 audio := RailRow{text: "Audio" draw_icon +: {svg: crate_resource("self://resources/icons/audio.svg")}}
+                project := RailRow{text: "Project" draw_icon +: {svg: crate_resource("self://resources/icons/project.svg")}}
+                recent := RailRow{text: "Recent" draw_icon +: {svg: crate_resource("self://resources/icons/loop.svg")}}
                 places_rule := RailRule{}
                 places := RailCap{text: "Places"}
-                starter := RailRow{text: "Starter Media" draw_icon +: {svg: crate_resource("self://resources/icons/folder.svg")}}
-                project_assets := RailRow{text: "Project assets" draw_icon +: {svg: crate_resource("self://resources/icons/project.svg")}}
-                motion_assets := RailRow{text: "Motion assets" draw_icon +: {svg: crate_resource("self://resources/icons/folder.svg")}}
-                add_folder := RailRow{text: "Add Folder..." draw_icon +: {svg: crate_resource("self://resources/icons/create.svg") color: #x909090} draw_text.color: #x909090}
+                starter := RailRowReserved{label.text: "Starter Media" glyph.draw_icon.svg: crate_resource("self://resources/icons/folder.svg")}
+                project_assets := RailRowReserved{label.text: "Project assets" glyph.draw_icon.svg: crate_resource("self://resources/icons/project.svg")}
+                motion_assets := RailRowReserved{label.text: "Motion assets" glyph.draw_icon.svg: crate_resource("self://resources/icons/folder.svg")}
+                add_folder := RailRowReserved{label.text: "Add Folder..." glyph.draw_icon.svg: crate_resource("self://resources/icons/create.svg")}
             }
             browser_owner_divider := PaneDivider{}
             catalog := SolidView{width: Fill height: Fill flow: Down show_bg: true new_batch: true draw_bg.color: mod.tokens.face.panel
@@ -231,26 +258,29 @@ script_mod! {
                         mode_list := IconButton{width: 18 draw_icon +: {svg: crate_resource("self://resources/icons/list.svg")}}
                     }
                 }
-                filter_shelf := SolidView{width: Fill height: mod.tokens.size.cap flow: Right spacing: mod.tokens.space.s1 align: Align{y: 0.5} padding: Inset{left: 4 right: 4} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.panel
-                    filter_label := IconButton{width: 18 draw_icon +: {svg: crate_resource("self://resources/icons/filter.svg")}}
-                    video_chip := FilterChip{label.text: "Video"}
-                    broll_chip := FilterChip{label.text: "B-roll"}
-                    clear_chip := IconButton{width: 18 draw_icon +: {svg: crate_resource("self://resources/icons/clear.svg")}}
+                // filter shelf — 正本: 「結果 8 件 種別: すべて タグ: —」。chip は正本に無い
+                filter_shelf := SolidView{width: Fill height: mod.tokens.size.row_tight flow: Right spacing: mod.tokens.space.s3 align: Align{y: 0.5} padding: Inset{left: mod.tokens.space.s3 right: mod.tokens.space.s3} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.panel
+                    result_count := Label{text: "結果 8 件" width: Fit draw_text.color: mod.tokens.ink.body draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.xs line_spacing: 1.0 top_drop: 0.0}}
+                    kind_filter := Label{text: "種別: すべて" width: Fit draw_text.color: mod.tokens.ink.muted draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.xs line_spacing: 1.0 top_drop: 0.0}}
+                    tag_filter := Label{text: "タグ: —" width: Fill draw_text.color: mod.tokens.ink.muted draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.xs line_spacing: 1.0 top_drop: 0.0}}
+                    clear_filters := Label{text: "Clear" width: Fit draw_text.color: mod.tokens.ink.faint draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.xs line_spacing: 1.0 top_drop: 0.0}}
                 }
-                result_list := SolidView{width: Fill height: Fill flow: Down padding: Inset{top: 5 bottom: 5} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.panel
-                    clip := FileRow{text: "clip.mp4" draw_icon +: {svg: crate_resource("self://resources/icons/video.svg")} on_click: || select_asset("Starter Clip", "clip.mp4", "video · B-roll")}
-                    mark := FileRow{text: "mark.svg" draw_icon +: {svg: crate_resource("self://resources/icons/motolii.svg")} on_click: || select_asset("Starter Mark", "mark.svg", "image · Brand")}
-                    still := FileRow{text: "still.png" draw_icon +: {svg: crate_resource("self://resources/icons/image.svg")} on_click: || select_asset("Starter Still", "still.png", "image · B-roll")}
-                    tone := FileRow{text: "tone.wav" draw_icon +: {svg: crate_resource("self://resources/icons/audio.svg")} on_click: || select_asset("Starter Tone", "tone.wav", "audio · WAV")}
-                    project_clip := FileRow{text: "intro.mp4" draw_icon +: {svg: crate_resource("self://resources/icons/project.svg")} on_click: || select_asset("Project Intro", "intro.mp4", "video · Project assets")}
-                    motion_clip := FileRow{text: "grain.mp4" draw_icon +: {svg: crate_resource("self://resources/icons/video.svg")} on_click: || select_asset("Motion Grain", "grain.mp4", "video · Motion assets")}
-                }
-                selection_rule := SeamRule{}
-                selection := SolidView{width: Fill height: mod.tokens.size.cap flow: Right spacing: mod.tokens.space.s2 align: Align{y: 0.5} padding: Inset{left: 6 right: 4} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.bar
-                    selection_dot := SolidView{width: 5 height: 5 show_bg: true new_batch: true draw_bg.color: #x6b8d96}
-                    selection_name := Label{text: "clip.mp4" width: Fit draw_text.color: mod.tokens.ink.strong draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.sm line_spacing: 1.0 top_drop: 0.0}}
-                    selection_type := Label{text: "video · B-roll" width: Fill draw_text.color: mod.tokens.ink.muted draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.sm line_spacing: 1.0 top_drop: 0.0}}
-                    clear_selection := IconButton{width: 18 draw_icon +: {svg: crate_resource("self://resources/icons/clear.svg")}}
+                shelf_rule := SeamRule{}
+                // ヒーロー = カード grid(正本の8件)。● = 配置済み(bin-first)。
+                // drag=配置 / double-click は未決 — 動詞は配線しない(Q0: 押せそうで押せない物を作らない)
+                card_grid := SolidView{width: Fill height: Fill flow: Right padding: mod.tokens.space.s3 spacing: mod.tokens.space.s3 show_bg: true new_batch: true draw_bg.color: mod.tokens.face.panel
+                    col_a := View{width: Fit height: Fit flow: Down spacing: mod.tokens.space.s3
+                        card_1 := AssetCard{meta.name.text: "intro_take2.mp4" thumb.glyph.draw_icon.svg: crate_resource("self://resources/icons/video.svg")}
+                        card_3 := AssetCard{meta.name.text: "bass_drop.wav" meta.placed.draw_bg.color: #x00000000 thumb.glyph.draw_icon.svg: crate_resource("self://resources/icons/audio.svg")}
+                        card_5 := AssetCard{meta.name.text: "texture_grain.png" thumb.glyph.draw_icon.svg: crate_resource("self://resources/icons/image.svg")}
+                        card_7 := AssetCard{meta.name.text: "ending_loop.mp4" meta.placed.draw_bg.color: #x00000000 thumb.glyph.draw_icon.svg: crate_resource("self://resources/icons/video.svg")}
+                    }
+                    col_b := View{width: Fit height: Fit flow: Down spacing: mod.tokens.space.s3
+                        card_2 := AssetCard{meta.name.text: "logo.png" thumb.glyph.draw_icon.svg: crate_resource("self://resources/icons/image.svg")}
+                        card_4 := AssetCard{meta.name.text: "cutaway_b.mp4" meta.placed.draw_bg.color: #x00000000 thumb.glyph.draw_icon.svg: crate_resource("self://resources/icons/video.svg")}
+                        card_6 := AssetCard{meta.name.text: "vo_line3.wav" meta.placed.draw_bg.color: #x00000000 thumb.glyph.draw_icon.svg: crate_resource("self://resources/icons/audio.svg")}
+                        card_8 := AssetCard{meta.name.text: "title_bg.png" meta.placed.draw_bg.color: #x00000000 thumb.glyph.draw_icon.svg: crate_resource("self://resources/icons/image.svg")}
+                    }
                 }
             }
         }
