@@ -19,6 +19,7 @@ mod theme_flat;
 mod tokens;
 mod chrome;
 mod export_surface;
+mod fx_stack;
 mod gesture_input;
 mod inspector_surface;
 mod settings_surface;
@@ -26,6 +27,7 @@ mod stage_chrome;
 mod stage_import;
 mod stage_surface;
 mod timeline_surface;
+use fx_stack::{FxStack, FxStackAction, FxStackModel, FxWrite};
 use stage_surface::{SharedOsHandle, SharedSurfaceDesc, StagePresent, StageRoom, StageVerdict};
 use timeline_surface::{
     ClipEdge, LaneFlag, TimelineEditAction, TimelineLane, TimelineModel, TimelinePropertyLane,
@@ -108,10 +110,18 @@ script_mod! {
         stage_chrome := StageChrome{}
     }
 
+    // FX STACK は `InspectorSurface` の中ではなく**その下の兄弟**として置く。
+    // `FxStack` の param 欄は `ScrubValue`(`inspector_surface.rs` が登録する型)を
+    // 使うので、`fx_stack` の script_mod は inspector より**後**に走らねばならず、
+    // その順序では `InspectorSurface` の宣言の中から `FxStack` を名指せない
+    // (未登録名の参照は葉が落ちる)。ここは全 mod の登録後に評価されるので、
+    // 両方が揃っている唯一の場所である。
     let InspectorPane = View{
         width: Fill
         height: Fill
-        inspector_surface := InspectorSurface{}
+        flow: Down
+        inspector_surface := InspectorSurface{height: Fit}
+        fx_stack := FxStack{}
     }
 
     let ExportPane = View{
@@ -878,6 +888,25 @@ impl BackendBridge {
             ),
         }
     }
+
+    /// 選択レイヤーの効果スタックの投影(`timeline_model` と同じ身分 — 読むだけ)。
+    fn fx_model(&self) -> FxStackModel {
+        fx_stack::model_for(&self.doc.view(), &self.session)
+    }
+
+    /// FX の編集意図を Document へ写す。**書く手順は `fx_stack::apply` が持つ** —
+    /// `restack_from_timeline` 等と同じで、ここは投影の引き直しを決める側に
+    /// 何が変わったかを返すだけ。
+    fn apply_fx_action(&mut self, action: &FxStackAction) -> FxWrite {
+        let write = fx_stack::apply(&mut self.doc, &self.session, action);
+        if write.wrote {
+            // 絵が変わったので Stage のキャッシュを捨てる
+            // (`toggle_lane_flag_from_timeline` の `self.frame = None` と同じ)。
+            self.frame = None;
+            self.status = Some(write.status.clone());
+        }
+        write
+    }
 }
 
 #[derive(Script, ScriptHook)]
@@ -1040,16 +1069,22 @@ impl App {
         match update {
             TimelineUpdate::None => {}
             TimelineUpdate::Stage(status) => {
+                // param の値は時刻の関数。プレイヘッドが動いたら FX の欄も引き直す。
+                self.install_fx_model(cx);
                 self.request_stage_frame(cx);
                 self.set_status(cx, &status);
             }
             TimelineUpdate::ModelAndStage(status) => {
                 self.install_timeline_model(cx);
+                self.install_fx_model(cx);
                 self.request_stage_frame(cx);
                 self.set_status(cx, &status);
             }
+            // 選択が動いた。FX STACK は**選択レイヤーの**効果を映すので、
+            // 絵が変わらなくても面は引き直す。
             TimelineUpdate::Model(status) => {
                 self.install_timeline_model(cx);
+                self.install_fx_model(cx);
                 self.set_status(cx, &status);
             }
             TimelineUpdate::Status(status) => {
@@ -1073,6 +1108,31 @@ impl App {
             started.elapsed().as_micros(),
             timeline_found,
         );
+    }
+
+    /// FX の面。Inspector 面の**兄弟**として `InspectorPane` に居る
+    /// (置き場所の理由は `InspectorPane` の宣言のコメント参照)。
+    fn fx_ref(&self, cx: &mut Cx) -> WidgetRef {
+        self.dock(cx)
+            .item(id!(inspector))
+            .child_by_path(ids!(fx_stack))
+    }
+
+    fn fx_uid(&self, cx: &mut Cx) -> Option<WidgetUid> {
+        let fx = self.fx_ref(cx);
+        (!fx.is_empty()).then(|| fx.widget_uid())
+    }
+
+    /// `install_timeline_model` と同じ形。選択・プレイヘッド・Document のどれが
+    /// 動いても、効果の面は Document から引き直す(面は正本を持たない)。
+    fn install_fx_model(&mut self, cx: &mut Cx) {
+        let Some(model) = self.backend.as_ref().map(BackendBridge::fx_model) else {
+            return;
+        };
+        let fx = self.fx_ref(cx);
+        if let Some(mut inner) = fx.borrow_mut::<FxStack>() {
+            inner.set_model(cx, model);
+        };
     }
 
     fn browser(&self, cx: &mut Cx) -> WidgetRef {
@@ -1290,6 +1350,7 @@ impl MatchEvent for App {
         self.backend = Some(BackendBridge::new_fixture());
         self.playback_timer = cx.start_interval(1.0 / 60.0);
         self.install_timeline_model(cx);
+        self.install_fx_model(cx);
         self.request_stage_frame(cx);
         self.browser_rail = RAIL_ALL_MEDIA;
         self.apply_browser_selection(cx);
@@ -1321,6 +1382,31 @@ impl MatchEvent for App {
                 self.toggle_playback(cx);
             }
         }
+        // FX の編集意図。Timeline と同じ流儀(uid で絞って1つずつ Document へ写す)。
+        // `filter_widget_actions_cast` は型の合わない action を `Default`(= `None`)へ
+        // 落とすので、その `None` は素通しする。
+        if let Some(uid) = self.fx_uid(cx) {
+            let fx_actions: Vec<FxStackAction> = actions.filter_widget_actions_cast(uid).collect();
+            for action in fx_actions {
+                if matches!(action, FxStackAction::None) {
+                    continue;
+                }
+                let Some(backend) = self.backend.as_mut() else {
+                    continue;
+                };
+                let write = backend.apply_fx_action(&action);
+                if write.wrote {
+                    // 効果の param track は Timeline の property 行にも出る。
+                    self.install_timeline_model(cx);
+                    self.request_stage_frame(cx);
+                }
+                self.install_fx_model(cx);
+                if !write.status.is_empty() {
+                    self.set_status(cx, &write.status);
+                }
+            }
+        }
+
         let Some(uid) = self.timeline_uid(cx) else {
             return;
         };
@@ -1358,6 +1444,7 @@ impl MatchEvent for App {
                 .unwrap_or(false)
         {
             self.install_timeline_model(cx);
+            self.install_fx_model(cx);
             self.request_stage_frame(cx);
         }
     }
@@ -1417,6 +1504,8 @@ impl AppMain for App {
         crate::browser_surface::script_mod(vm);
         crate::stage_chrome::script_mod(vm);
         crate::inspector_surface::script_mod(vm);
+        // FX の param 欄は inspector が登録する `ScrubValue` なので、必ずその後。
+        crate::fx_stack::script_mod(vm);
         crate::export_surface::script_mod(vm);
         crate::settings_surface::script_mod(vm);
         crate::timeline_surface::script_mod(vm);

@@ -13,11 +13,25 @@
 //! ON は `CheckBoxFlat` の活性状態そのもの。開閉状態を自前で持たない —
 //! makepad の機構を自前で作り直さない(2026-08-27 の教訓)。
 //!
-//! **ホストとの継ぎ目**: 値の確定は [`ScrubValueAction`] として widget action に
-//! 出る。`prop`(例 `"position.x"`)が「何が動いたか」を運ぶだけで、どのレイヤーか
-//! は言わない — 選択は `main.rs` の `session` が持っている真実だからで、
-//! `Intent::SetAttrs` へ写すのはホストの仕事。ここは Document を持たない。
+//! **ホストとの継ぎ目**: 値の確定・キーの打ち消し・区間の緩急は、どれも
+//! [`InspectorSurfaceAction`] という**1つの型**で、`InspectorSurface` 自身の uid から
+//! 出る(`TimelineSurfaceAction` と同じ形 — ホストは
+//! `actions.filter_widget_actions_cast(inspector_uid)` を1本回すだけで済む)。
+//! `prop`(例 `"position.x"` / `"position"`)が「何が動いたか」を運ぶだけで、
+//! どのレイヤーかは言わない — 選択は `main.rs` の `session` が持っている真実だから。
+//! ここは Document を持たない。
+//!
+//! **`prop` は store の `PropertyId` ではなく、この面の表示 id である。** 写像は
+//! ホストが行う: 同じ「Position」でも Document が split-position(`position.x` /
+//! `position.y` の別 track)を使っているか vec 1本(`position`)かは**書類ごとに違う**
+//! ので、静的な宣言に焼けない。front が写像を持つと、書類によって嘘になる。
+//!
+//! **投影が来るまで、キーと緩急の口は現れない**([`KeyEase`])。store の今を知らない
+//! まま「打った」「緩めた」と見せると、効いたように見えてから黙って戻る —
+//! 裁定(a)により、それは「できない」より悪い。だから配線の有無を `const` の
+//! スイッチではなく**投影が来たかどうか**そのもので決める(切り替え忘れが起きない)。
 use makepad_widgets::*;
+use motolii_store::Interp;
 
 script_mod! {
     use mod.prelude.widgets.*
@@ -105,6 +119,86 @@ script_mod! {
         body: View{width: Fill height: Fit flow: Down new_batch: true}
     }
 
+    // ◆ の口 — 「この時刻に、この値」を打つ/消す。`fx_stack.rs` の `FxOnChip` と
+    // 同じ CheckBoxFlat の
+    // 活性そのもの(自前の状態を持たない)。印は箱ではなく **字の菱形**なので、
+    // 箱の mark は全部透明にして、面と字だけで状態を言う
+    let KeyDot = CheckBoxFlat{
+        width: 18
+        height: mod.tokens.size.chip
+        padding: 0
+        margin: 0
+        align: Align{x: 0.5 y: 0.5}
+        text: "◇"
+        active: false
+        label_walk: Walk{width: Fit height: Fit margin: 0.}
+        draw_bg.size: 18.0
+        draw_bg.border_size: 0.0
+        draw_bg.border_radius: 0.0
+        draw_bg.color: #x00000000
+        draw_bg.color_hover: mod.tokens.face.hover
+        draw_bg.color_down: mod.tokens.face.down
+        draw_bg.color_active: #x00000000
+        draw_bg.color_focus: mod.tokens.face.hover
+        draw_bg.color_disabled: #x00000000
+        draw_bg.mark_color: #x00000000
+        draw_bg.mark_color_hover: #x00000000
+        draw_bg.mark_color_down: #x00000000
+        draw_bg.mark_color_active: #x00000000
+        draw_bg.mark_color_active_hover: #x00000000
+        draw_bg.mark_color_focus: #x00000000
+        draw_bg.mark_color_disabled: #x00000000
+        draw_text.color: mod.tokens.ink.faint
+        draw_text.color_hover: mod.tokens.ink.body
+        draw_text.color_down: mod.tokens.ink.faint
+        draw_text.color_active: mod.tokens.accent.on
+        draw_text.color_focus: mod.tokens.ink.body
+        draw_text.color_disabled: mod.tokens.ink.faint
+        draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.sm}
+    }
+
+    // 区間の緩急 — 押すたび LINEAR → EASE → HOLD と巡る。**語が状態を運ぶ**
+    // (FX の ON と同じ規律: 色覚に預けない)。掴めるハンドルとグラフエディタは
+    // 次の波で、ここは「選べる型」だけ
+    let EaseCycle = ButtonFlat{
+        width: Fill
+        height: mod.tokens.size.chip
+        margin: Inset{right: mod.tokens.space.s2}
+        padding: Inset{left: mod.tokens.space.s2 right: mod.tokens.space.s2}
+        align: Align{x: 1.0 y: 0.5}
+        text: "LINEAR"
+        draw_bg.color: mod.tokens.face.well
+        draw_bg.color_hover: mod.tokens.face.hover
+        draw_bg.color_down: mod.tokens.face.down
+        draw_bg.border_size: 0.0
+        draw_bg.border_radius: 0.0
+        draw_text.color: mod.tokens.ink.muted
+        draw_text.color_hover: mod.tokens.ink.strong
+        draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.xs}
+    }
+
+    // property 行の右端。**投影が来るまでは `mark`(読むだけの ◆/◇)しか描かない** —
+    // store の今を知らないまま打てるように見せない(Q0/裁定(a))
+    mod.widgets.KeyEaseBase = #(KeyEase::register_widget(vm))
+    mod.widgets.KeyEase = set_type_default() do mod.widgets.KeyEaseBase{
+        width: Fill
+        height: Fill
+        flow: Right
+        align: Align{y: 0.5}
+        padding: Inset{right: mod.tokens.space.s4}
+        // 面は持たない。行の地がそのまま透ける
+        draw_bg.color: #x00000000
+        // 行の表示 id(`"position"` / `"opacity"`)。空なら誰も配線していない印
+        prop: ""
+        mark: InkLabel{width: Fill align: Align{x: 1.0} draw_text.color: mod.tokens.accent.on draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.sm}}
+        key: KeyDot{}
+        ease: EaseCycle{}
+    }
+    // `use mod.widgets.*`(この節の先頭)は**この節より前に登録された物**しか
+    // 掴んでいない。同じ節の中で足した型は完全修飾で引き直す — `ValueCell` が
+    // `mod.widgets.ScrubValue` を引いているのと同じ理由
+    let KeyEaseCell = mod.widgets.KeyEase
+
     // property 行 — 分母 25px(inspector-ratio-ledger 実測基準)。
     // 左 3px = 値型の色。◆=keyed / ◇=非 keyed。値3列は等幅
     let PropertyRow = SolidView{
@@ -120,7 +214,7 @@ script_mod! {
         vx := ValueCell{}
         vy := ValueCell{}
         vz := ValueCell{}
-        keyed := InkLabel{width: Fill align: Align{x: 1.0} padding: Inset{right: mod.tokens.space.s4} draw_text.color: mod.tokens.accent.on draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.sm}}
+        keyed := KeyEaseCell{}
     }
 
     // 値が1つしか無い property。空の欄を並べない — 欄に見える物は必ず触れる
@@ -136,7 +230,7 @@ script_mod! {
         name := InkLabel{width: 64 padding: Inset{left: mod.tokens.space.s3} draw_text.color: mod.tokens.ink.body draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.sm}}
         vx := ValueCell{}
         pad_yz := View{width: 104 height: Fill}
-        keyed := InkLabel{width: Fill align: Align{x: 1.0} padding: Inset{right: mod.tokens.space.s4} draw_text.color: mod.tokens.accent.on draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.sm}}
+        keyed := KeyEaseCell{}
     }
 
     // 数でない値(色の 16 進)。scrub もタイプもできないので **欄に見せない** —
@@ -153,45 +247,12 @@ script_mod! {
         name := InkLabel{width: 64 padding: Inset{left: mod.tokens.space.s3} draw_text.color: mod.tokens.ink.body draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.sm}}
         vx := InkLabel{width: 52 draw_text.color: mod.tokens.ink.body draw_text.text_style: theme.font_code{font_size: mod.tokens.text.sm}}
         pad_yz := View{width: 104 height: Fill}
-        keyed := InkLabel{width: Fill align: Align{x: 1.0} padding: Inset{right: mod.tokens.space.s4} draw_text.color: mod.tokens.accent.on draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.sm}}
+        keyed := KeyEaseCell{}
     }
 
-    // FX の ON — CheckBoxFlat の箱を欄いっぱいまで広げた物(size >= 欄の寸法だと
-    // 箱が欄を埋め、印を透明にすれば「琥珀のチップ」そのものになる)。
-    // 状態は色だけでなく **語** も変える(ON / OFF)ので、色覚に預けない
-    let FxPower = CheckBoxFlat{
-        width: 26
-        height: mod.tokens.size.chip
-        padding: 0
-        margin: Inset{right: mod.tokens.space.s3}
-        align: Align{x: 0.5 y: 0.5}
-        text: "ON"
-        active: true
-        label_walk: Walk{width: Fit height: Fit margin: 0.}
-        draw_bg.size: 26.0
-        draw_bg.border_size: 0.0
-        draw_bg.border_radius: 0.0
-        draw_bg.color: mod.tokens.face.well
-        draw_bg.color_hover: mod.tokens.face.hover
-        draw_bg.color_down: mod.tokens.face.down
-        draw_bg.color_active: mod.tokens.accent.on
-        draw_bg.color_focus: mod.tokens.face.hover
-        draw_bg.color_disabled: mod.tokens.face.well
-        draw_bg.mark_color: #x00000000
-        draw_bg.mark_color_hover: #x00000000
-        draw_bg.mark_color_down: #x00000000
-        draw_bg.mark_color_active: #x00000000
-        draw_bg.mark_color_active_hover: #x00000000
-        draw_bg.mark_color_focus: #x00000000
-        draw_bg.mark_color_disabled: #x00000000
-        draw_text.color: mod.tokens.ink.muted
-        draw_text.color_hover: mod.tokens.ink.body
-        draw_text.color_down: mod.tokens.ink.muted
-        draw_text.color_active: mod.tokens.ink.on_fill
-        draw_text.color_focus: mod.tokens.ink.body
-        draw_text.color_disabled: mod.tokens.ink.faint
-        draw_text.text_style: theme.font_bold{font_size: mod.tokens.text.xs}
-    }
+    // FX の ON バッジはここから出た(2026-08-28、FX レーン)。効果の面は
+    // `fx_stack.rs` の `FxStack` が持っており、その中の `FxOnChip` が同じ物の
+    // **唯一の家**である — 同じ意味の宣言を2箇所に置かない。
 
     mod.widgets.InspectorSurfaceBase = #(InspectorSurface::register_widget(vm))
     mod.widgets.InspectorSurface = set_type_default() do mod.widgets.InspectorSurfaceBase{
@@ -228,7 +289,8 @@ script_mod! {
                     vx.value: 0.125 vx.precision: 3 vx.step: 0.001 vx.prop: "position.x"
                     vy.value: -0.075 vy.precision: 3 vy.step: 0.001 vy.prop: "position.y"
                     vz.value: 0.0 vz.precision: 3 vz.step: 0.001 vz.prop: "position.z"
-                    keyed.text: "◆"
+                    keyed.prop: "position"
+                    keyed.mark.text: "◆"
                 }
                 row_rotation := PropertyRow{
                     type_bar.draw_bg.color: mod.tokens.accent.alt
@@ -236,7 +298,8 @@ script_mod! {
                     vx.value: 0.0 vx.precision: 1 vx.step: 0.25 vx.suffix: "°" vx.prop: "rotation.x"
                     vy.value: 0.0 vy.precision: 1 vy.step: 0.25 vy.suffix: "°" vy.prop: "rotation.y"
                     vz.value: 24.0 vz.precision: 1 vz.step: 0.25 vz.suffix: "°" vz.prop: "rotation.z"
-                    keyed.text: "◆"
+                    keyed.prop: "rotation"
+                    keyed.mark.text: "◆"
                 }
                 row_scale := PropertyRow{
                     type_bar.draw_bg.color: mod.tokens.accent.alt
@@ -244,8 +307,9 @@ script_mod! {
                     vx.value: 1.0 vx.precision: 3 vx.step: 0.005 vx.prop: "scale.x"
                     vy.value: 1.0 vy.precision: 3 vy.step: 0.005 vy.prop: "scale.y"
                     vz.value: 1.0 vz.precision: 3 vz.step: 0.005 vz.prop: "scale.z"
-                    keyed.text: "◇"
-                    keyed.draw_text.color: mod.tokens.ink.faint
+                    keyed.prop: "scale"
+                    keyed.mark.text: "◇"
+                    keyed.mark.draw_text.color: mod.tokens.ink.faint
                 }
             }
         }
@@ -258,75 +322,35 @@ script_mod! {
                     type_bar.draw_bg.color: #xd8c97f
                     name.text: "Fill"
                     vx.text: "#D8C97F"
-                    keyed.text: "◇"
-                    keyed.draw_text.color: mod.tokens.ink.faint
+                    // `keyed.prop` を書かない = この行の◆は読むだけ。色に写る
+                    // store の property がまだ無いので、宛先の無い意図を出さない
+                    // (2026-08-28 の統合裁定。`prop` が空 = 誰も配線していない印)
+                    keyed.mark.text: "◇"
+                    keyed.mark.draw_text.color: mod.tokens.ink.faint
                 }
                 row_opacity := PropertyRowOne{
                     type_bar.draw_bg.color: mod.tokens.accent.on
                     name.text: "Opacity"
                     vx.value: 100.0 vx.precision: 0 vx.step: 0.5 vx.min: 0.0 vx.max: 100.0 vx.suffix: "%" vx.prop: "opacity"
-                    keyed.text: "◆"
+                    keyed.prop: "opacity"
+                    keyed.mark.text: "◆"
                 }
             }
         }
 
-        fx_stack := Section{
-            header.name.text: "FX STACK"
-            header.count.text: "1 effect"
-            body +: {
-                // effect 行 — 選択は行の地、証は色付き左端(裁定: ○ボタン/FXバッジは置かない)
-                fx_row := SolidView{width: Fill height: 25 flow: Right align: Align{y: 0.5} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.panel
-                    fx_bar := SolidView{width: 3 height: Fill show_bg: true new_batch: true draw_bg.color: mod.tokens.accent.record}
-                    fx_name := InkLabel{text: "TURBULENT DISPLACE" width: Fill padding: Inset{left: mod.tokens.space.s3} draw_text.color: mod.tokens.ink.body draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.sm}}
-                    fx_params := InkLabel{text: "8 params" width: Fit padding: Inset{right: mod.tokens.space.s3} draw_text.color: mod.tokens.ink.faint draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.xs}}
-                    fx_on := FxPower{}
-                }
-                row_amount := PropertyRowOne{
-                    type_bar.draw_bg.color: mod.tokens.accent.alt
-                    name.text: "Amount"
-                    vx.value: 42.0 vx.precision: 1 vx.step: 0.1 vx.prop: "fx.turbulent_displace.amount"
-                    keyed.text: "◇"
-                    keyed.draw_text.color: mod.tokens.ink.faint
-                }
-            }
-        }
+        // FX STACK と ADVANCED の2節はここに直書きされていたが、**中身が実在しな
+        // かった**(2026-08-28、FX レーンで撤去)。`TURBULENT DISPLACE` という
+        // plugin は無く、`8 params` も `Amount`/`Size`/`Offset`/`Complexity`/
+        // `Evolution` も、engine の `translate_effect_passes` が一つも知らない
+        // (写せる `plugin_id` は `"motolii.glow"` 1本だけ)。触れそうで触れない物は
+        // 不合格(Q0)なので、実在する効果だけを出す `FxStack`(`fx_stack.rs`)へ
+        // 置き換えた。差し込み口は `main.rs` の `InspectorPane` にある。
 
-        advanced := Section{
-            header.name.text: "ADVANCED"
-            header.count.text: "4 parameters"
-            body +: {
-                row_size := PropertyRowOne{
-                    type_bar.draw_bg.color: mod.tokens.accent.alt
-                    name.text: "Size"
-                    vx.value: 62.0 vx.precision: 1 vx.step: 0.1 vx.prop: "fx.turbulent_displace.size"
-                    keyed.text: "◇"
-                    keyed.draw_text.color: mod.tokens.ink.faint
-                }
-                row_offset := PropertyRowOne{
-                    type_bar.draw_bg.color: mod.tokens.accent.alt
-                    name.text: "Offset"
-                    vx.value: 0.0 vx.precision: 1 vx.step: 0.5 vx.prop: "fx.turbulent_displace.offset"
-                    keyed.text: "◇"
-                    keyed.draw_text.color: mod.tokens.ink.faint
-                }
-                row_complexity := PropertyRowOne{
-                    type_bar.draw_bg.color: mod.tokens.accent.alt
-                    name.text: "Complexity"
-                    vx.value: 2.0 vx.precision: 1 vx.step: 0.05 vx.min: 1.0 vx.max: 10.0 vx.prop: "fx.turbulent_displace.complexity"
-                    keyed.text: "◇"
-                    keyed.draw_text.color: mod.tokens.ink.faint
-                }
-                row_evolution := PropertyRowOne{
-                    type_bar.draw_bg.color: mod.tokens.accent.alt
-                    name.text: "Evolution"
-                    vx.value: 0.0 vx.precision: 1 vx.step: 0.5 vx.suffix: "°" vx.prop: "fx.turbulent_displace.evolution"
-                    keyed.text: "◇"
-                    keyed.draw_text.color: mod.tokens.ink.faint
-                }
-            }
-        }
-
-        body_fill := View{width: Fill height: Fill}
+        // ここに `body_fill := View{width: Fill height: Fill}` が居た。**Fit の turtle の
+        // 中に Fill の子は置けない** — 残り高さが決まらないので `move_align_list` が
+        // `dy = NaN` で assert に落ち、窓が起動直後に死ぬ(2026-08-28 の統合で実測)。
+        // この面は `main.rs` の `InspectorPane` で `height: Fit` に置かれ、余りは
+        // 下の兄弟 `FxStack{height: Fill}` が取る。押し下げる詰め物はもう要らない。
 
         footer_rule := InspectorRule{}
         hint_row := SolidView{width: Fill height: 18 flow: Right align: Align{y: 0.5} padding: Inset{left: mod.tokens.space.s4} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.bar
@@ -337,6 +361,50 @@ script_mod! {
 
 /// クリックとドラッグを分ける遊び(px)。これ未満の移動は「押して離した」= タイプ入口。
 const CLICK_SLOP_PX: f64 = 2.0;
+
+/// AE の Easy Ease(既定 influence 33%)を cubic-bezier へ写した値。
+///
+/// **AE parity の審判は利用者ではなく Lottie**(裁定272)。keyframe の
+/// `o`(Out Tangent)と `i`(In Tangent)は `easing-handle`(x,y ∈ [0,1])で、
+/// store の [`Interp::Bezier`] の `x1,y1` がそのまま `o`、`x2,y2` が `i` である
+/// (`app/reference/lottie.schema.json` の `base-keyframe`)。つまり **AE の Easy Ease が
+/// 何なのかはこの4数に外出しされている**。
+///
+/// 同じ4数は二代目 UI(`next/ui/motolii-timeline-pane/src/write/mod.rs` の `EASY_EASE`)に
+/// 既に居る。**正しい家は front ではなく `motolii-eval`**(意味の層)だが、生きている側に
+/// まだ無いので当面ここが写しを持つ。写しが2つある状態なので FINDING に上げてある。
+const EASY_EASE: Interp = Interp::Bezier {
+    x1: 0.333,
+    y1: 0.0,
+    x2: 0.667,
+    y2: 1.0,
+};
+
+/// 区間の緩急の名前。**語が状態を運ぶ** — 色覚に預けない(FX の ON と同じ規律)。
+fn interp_label(interp: Interp) -> &'static str {
+    match interp {
+        Interp::Hold => "HOLD",
+        Interp::Linear => "LINEAR",
+        found if found == EASY_EASE => "EASE",
+        // 名前の付いていない曲線。グラフエディタが来るまで front は形を作れないので、
+        // 「これは EASE でも LINEAR でもない」とだけ言う(嘘の名前を付けない)
+        Interp::Bezier { .. } => "BEZIER",
+    }
+}
+
+/// 押すたびに巡る順。LINEAR → EASE → HOLD → LINEAR。
+///
+/// **名前の無い Bezier は LINEAR へ落とす。** 押した人に次が読めない状態を作らない
+/// ためで、曲線そのものを front が編集できるようになる(掴めるハンドル/グラフ
+/// エディタ)のは次の波。
+fn next_interp(interp: Interp) -> Interp {
+    match interp {
+        Interp::Linear => EASY_EASE,
+        found if found == EASY_EASE => Interp::Hold,
+        Interp::Hold => Interp::Linear,
+        Interp::Bezier { .. } => Interp::Linear,
+    }
+}
 
 /// 値セルが外へ出す唯一の口。`prop` は「何が動いたか」の名前だけを運ぶ —
 /// **どのレイヤーか**は言わない。選択は `main.rs` の `session` が持つ真実で、
@@ -624,6 +692,189 @@ impl Widget for ScrubValue {
     }
 }
 
+/// property 行の右端が外へ出す口。`prop` は**行の**表示 id(`"position"`)で、
+/// 値セルの `prop`(`"position.x"`)より1段浅い — キーと緩急は track ごとに1組で、
+/// 成分ごとには無いから(store の `KeyframeTrack` がそう出来ている)。
+#[derive(Clone, Debug, Default)]
+pub enum KeyEaseAction {
+    #[default]
+    None,
+    /// playhead にキーを打つ(`keyed: true`)/ 消す(`false`)。
+    ToggleKey { prop: String, keyed: bool },
+    /// playhead を含む区間の緩急を変える。
+    SetInterp { prop: String, interp: Interp },
+}
+
+/// property 行の右端。**投影が来るまでは読むだけの ◆/◇ しか描かない。**
+///
+/// キーを打つ口と区間の緩急の口は、ホストが [`InspectorSurface::set_property_keys`] で
+/// **store の今を1度でも押し込んだ行にだけ**現れる。これは横着ではなく Q0 そのもの —
+/// store の今を知らないまま「打った」「緩めた」と見せると、効いたように見えてから
+/// 黙って戻る。裁定(a)により、それは「できない」より悪い。
+///
+/// **`const ..._WIRED` を置かないのは意図的**(A1/A5 の先例との違い)。配線の有無を
+/// 人が切り替えるスイッチにすると、切り替え忘れが「実装はあるのに死んでいる」を作る。
+/// 投影が来たかどうかそのものを条件にすれば、ホストが1本繋いだ瞬間に自動で本物になる。
+///
+/// 緩急の口はさらに `interp` が来た行だけ(= キーが2つ以上あって区間が実在する行だけ)。
+/// キーが1つも無い property に「区間の緩急」は無いので、出したら嘘になる。
+#[derive(Script, ScriptHook, Widget)]
+pub struct KeyEase {
+    #[uid]
+    uid: WidgetUid,
+    #[source]
+    source: ScriptObjectRef,
+    #[walk]
+    walk: Walk,
+    #[layout]
+    layout: Layout,
+
+    /// 面は持たない(透明)。`#[redraw]` の area の持ち主としてだけ居る。
+    #[redraw]
+    #[live]
+    draw_bg: DrawColor,
+    /// 投影が来る前の、読むだけの ◆/◇。
+    #[live]
+    mark: Label,
+    /// 打つ/消す。活性そのものが「キーが在る」。
+    #[live]
+    key: CheckBox,
+    /// 区間の緩急。押すたび LINEAR → EASE → HOLD と巡る。
+    #[live]
+    ease: Button,
+
+    /// 行の表示 id。空なら誰も配線していない印(値セルの `prop` と同じ規約)。
+    #[live]
+    prop: String,
+
+    /// ホストが1度でも投影したか。**これが配線の有無そのもの。**
+    #[rust]
+    projected: bool,
+    #[rust]
+    keyed: bool,
+    /// playhead を含む区間の緩急。区間が無ければ `None`(= 緩急の口を出さない)。
+    #[rust]
+    interp: Option<Interp>,
+}
+
+impl KeyEase {
+    /// ホストが store から読んだ「この track の今」を押し込む口。
+    /// **呼ばれた瞬間からこの行は本物になる**(それまでは読むだけ)。
+    fn set_state(&mut self, cx: &mut Cx, keyed: bool, interp: Option<Interp>) {
+        self.projected = true;
+        self.keyed = keyed;
+        self.interp = interp;
+        self.key.set_active(cx, keyed, Animate::No);
+        self.key.set_text(cx, if keyed { "◆" } else { "◇" });
+        if let Some(interp) = interp {
+            self.ease.set_text(cx, interp_label(interp));
+        }
+        self.redraw(cx);
+    }
+}
+
+impl Widget for KeyEase {
+    fn handle_event(&mut self, cx: &mut Cx, event: &Event, scope: &mut Scope) {
+        // 投影が来ていない行は描いてもいないので当たり判定も無い。子へ配らない。
+        if !self.projected {
+            return;
+        }
+        let has_segment = self.interp.is_some();
+        for action in cx.capture_actions(|cx| {
+            self.key.handle_event(cx, event, scope);
+            if has_segment {
+                self.ease.handle_event(cx, event, scope);
+            }
+        }) {
+            if let CheckBoxAction::Change(keyed) = action.as_widget_action().cast() {
+                // 見た目は倒したままにする。ホストが書いて投影を返すので、
+                // 次の `set_state` が store の答えで上書きする(倒しっぱなしにしない)。
+                self.keyed = keyed;
+                self.key.set_text(cx, if keyed { "◆" } else { "◇" });
+                self.redraw(cx);
+                cx.widget_action(
+                    self.uid,
+                    KeyEaseAction::ToggleKey {
+                        prop: self.prop.clone(),
+                        keyed,
+                    },
+                );
+            }
+            if let ButtonAction::Clicked(_) = action.as_widget_action().cast() {
+                if let Some(current) = self.interp {
+                    let next = next_interp(current);
+                    self.interp = Some(next);
+                    self.ease.set_text(cx, interp_label(next));
+                    self.redraw(cx);
+                    cx.widget_action(
+                        self.uid,
+                        KeyEaseAction::SetInterp {
+                            prop: self.prop.clone(),
+                            interp: next,
+                        },
+                    );
+                }
+            }
+        }
+    }
+
+    fn draw_walk(&mut self, cx: &mut Cx2d, scope: &mut Scope, walk: Walk) -> DrawStep {
+        self.draw_bg.begin(cx, walk, self.layout);
+        if self.projected {
+            // 緩急が先(Fill)、◆ が右端。行の右端に菱形が来る並びは投影前と同じ
+            if self.interp.is_some() {
+                let inner = self.ease.walk(cx);
+                let _ = self.ease.draw_walk(cx, scope, inner);
+            }
+            let inner = self.key.walk(cx);
+            let _ = self.key.draw_walk(cx, scope, inner);
+        } else {
+            let inner = self.mark.walk(cx);
+            let _ = self.mark.draw_walk(cx, scope, inner);
+        }
+        self.draw_bg.end(cx);
+        DrawStep::done()
+    }
+
+    /// `--remote` の `/snap` から状態が読めるように、見えている物をそのまま返す。
+    fn text(&self) -> String {
+        if !self.projected {
+            return self.mark.text();
+        }
+        match self.interp {
+            Some(interp) => format!(
+                "{} {}",
+                if self.keyed { "◆" } else { "◇" },
+                interp_label(interp)
+            ),
+            None => if self.keyed { "◆" } else { "◇" }.to_owned(),
+        }
+    }
+}
+
+/// Inspector が外へ出す唯一の口。**どのレイヤーかは言わない** — 選択は `main.rs` の
+/// `session` が持つ真実で、`prop` を store の `PropertyId` へ写すのもホストの仕事。
+///
+/// 子(`ScrubValue` / `KeyEase`)の action をここで1つの型へまとめ直しているのは、
+/// `TimelineSurfaceAction` と同じ形にするため — ホストは
+/// `actions.filter_widget_actions_cast(inspector_uid)` を1本回すだけでよく、
+/// 欄が増えるたびにホストが uid を数え直す必要が無い。
+#[derive(Clone, Debug, Default)]
+pub enum InspectorSurfaceAction {
+    #[default]
+    None,
+    /// 値の確定。**1ジェスチャ = 1回 = 1 undo。** ドラッグ途中の
+    /// [`ScrubValueAction::Changed`] はここへ上げない(プレビューは欄の中の話)。
+    SetValue { prop: String, value: f64 },
+    /// playhead にキーを打つ/消す。**「この時刻に、この値」だけを名指す** —
+    /// グループの尺もレイヤーの尺もキーを縛らない(裁定272。store の `value_at` も
+    /// 既に `LayerTiming` を参照しない)。
+    ToggleKey { prop: String, keyed: bool },
+    /// playhead を含む区間の緩急。値は store の [`Interp`] そのもの
+    /// (front に第二の緩急の語彙を作らない)。
+    SetInterp { prop: String, interp: Interp },
+}
+
 #[derive(Script, ScriptHook, WidgetRegister)]
 pub struct InspectorSurface {
     #[uid]
@@ -634,13 +885,104 @@ pub struct InspectorSurface {
     view: View,
 }
 
+impl InspectorSurface {
+    /// 面の中の widget を全部たどる。**欄を名指ししない** — 行は他レーンが増やし
+    /// 続けるので、名指しにすると増えるたびここが古くなる(`main.rs` の
+    /// `text_entry_has_focus` が同じ理由で同じ形をしている)。
+    fn each_widget(&self, visit: &mut dyn FnMut(&WidgetRef)) {
+        fn walk(node: &WidgetRef, visit: &mut dyn FnMut(&WidgetRef)) {
+            visit(node);
+            node.children(&mut |_id, child| walk(&child, visit));
+        }
+        self.view.children(&mut |_id, child| walk(&child, visit));
+    }
+
+    /// store から読んだ値を欄へ戻す口。`prop` は値セルの表示 id(`"position.x"`)。
+    ///
+    /// **ホストは書いた後これを呼ぶ。** 欄が持っているのは「見せていた形」であって
+    /// 正本ではないので、書けた値と欄の値が食い違ったまま残らないようにする
+    /// (`main.rs` の5手の1「今の値を store から読む」の裏返し)。
+    pub fn set_property_value(&mut self, cx: &mut Cx, prop: &str, value: f64) {
+        let mut cells = Vec::new();
+        self.each_widget(&mut |node| {
+            if node
+                .borrow::<ScrubValue>()
+                .is_some_and(|cell| cell.prop == prop)
+            {
+                cells.push(node.clone());
+            }
+        });
+        for node in cells {
+            if let Some(mut cell) = node.borrow_mut::<ScrubValue>() {
+                cell.set_value(cx, value);
+            }
+        }
+    }
+
+    /// この track の playhead での今を押し込む口。`prop` は**行の**表示 id
+    /// (`"position"`)。`keyed` = playhead にキーが在るか、`interp` = playhead を
+    /// 含む区間の緩急(区間が無ければ `None`)。
+    ///
+    /// **この呼び出しが「配線されている」の定義そのもの。** 呼ばれるまで、その行の
+    /// キーの口も緩急の口も現れない(Q0 — store へ届かない物を触れるように見せない)。
+    pub fn set_property_keys(
+        &mut self,
+        cx: &mut Cx,
+        prop: &str,
+        keyed: bool,
+        interp: Option<Interp>,
+    ) {
+        let mut cells = Vec::new();
+        self.each_widget(&mut |node| {
+            if node
+                .borrow::<KeyEase>()
+                .is_some_and(|cell| cell.prop == prop)
+            {
+                cells.push(node.clone());
+            }
+        });
+        for node in cells {
+            if let Some(mut cell) = node.borrow_mut::<KeyEase>() {
+                cell.set_state(cx, keyed, interp);
+            }
+        }
+    }
+}
+
 impl WidgetMatchEvent for InspectorSurface {
     fn handle_actions(&mut self, cx: &mut Cx, actions: &Actions, _scope: &mut Scope) {
-        // FX の ON は語も変える — 消えた琥珀を色だけで読ませない
-        if let Some(active) = self.view.check_box(cx, ids!(fx_on)).changed(actions) {
-            let chip = self.view.widget(cx, ids!(fx_on));
-            chip.set_text(cx, if active { "ON" } else { "OFF" });
-            chip.redraw(cx);
+        // FX の ON バッジの世話はここから出た(2026-08-28 の統合)。効果の面は
+        // `fx_stack.rs` の `FxStack` が丸ごと持っており、ON の語(ON/OFF)も
+        // そちらの `draw_walk` が model から入れる。ここに残すと、存在しない
+        // `ids!(fx_on)` を毎回引きにいく死んだ枝になる。
+
+        // 子の action を1つの型へまとめ直して面の uid から出す。ホストが読むのは
+        // ここだけ(`TimelineSurfaceAction` と同じ形)。**`prop` が空の物は落とす** —
+        // 空は「誰も配線していない印」なので、外へ出すと宛先の無い意図になる。
+        let mut out = Vec::new();
+        for action in actions {
+            let widget_action = action.as_widget_action();
+            if let ScrubValueAction::Committed { prop, value } = widget_action.cast() {
+                if !prop.is_empty() {
+                    out.push(InspectorSurfaceAction::SetValue { prop, value });
+                }
+            }
+            match widget_action.cast() {
+                KeyEaseAction::ToggleKey { prop, keyed } => {
+                    if !prop.is_empty() {
+                        out.push(InspectorSurfaceAction::ToggleKey { prop, keyed });
+                    }
+                }
+                KeyEaseAction::SetInterp { prop, interp } => {
+                    if !prop.is_empty() {
+                        out.push(InspectorSurfaceAction::SetInterp { prop, interp });
+                    }
+                }
+                KeyEaseAction::None => {}
+            }
+        }
+        for action in out {
+            cx.widget_action(self.uid, action);
         }
     }
 }

@@ -27,6 +27,14 @@ motolii-fixture.workspace = true
 # 投影と積み替えの計算だけ。iced view 層(`motolii-timeline-pane`)は front から
 # 一度も呼ばれていないので、計算だけを切り出したこちらを引く。
 motolii-timeline-projection.workspace = true
+# 素材の口(発注順序2「素材の配置」、`src/browser_surface.rs` の「素材の口」節)。
+# 開いた file の寸法・尺・fps は probe に聞く — front は decoder を書かない。
+motolii-media.workspace = true
+# native file dialog(裁定176、File 束)。**自前のファイルブラウザを作らない。**
+# 旧 workspace の `next/Cargo.toml` が既に同じ版を引いていたので、新しい選定では
+# なく先例の踏襲。`rfd::` を直接書くのは `browser_surface.rs` の1関数
+# (`pick_media_path`)だけ — grep 1本で境界を確認できる、を旧 `RfdDialogs` から引く。
+rfd = "0.15"
 
 # ゼロコピー(裁定251)の実体 — 共有 Surface へ直接描く経路。ここは非交渉。
 [target.'cfg(target_os = "macos")'.dependencies]

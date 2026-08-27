@@ -26,7 +26,25 @@
 //! - **フィルタは1つの状態から導く**: rail = 置き場所（radio group が正本、`App` と
 //!   同じ actions を読む）/ 検索語と tag = この widget が持つ。件数見出し・
 //!   `Kind:` / `Tags:` の文言・`Clear` の出没は全部そこからの投影で、別に持たない
+//!
+//! ## 素材の口(2026-08-28、発注順序2「素材の配置」)
+//!
+//! ファイルを開く経路はこの面に居る。**ここに file browser を作らない** — 選ぶのは
+//! OS の dialog(`rfd`、裁定176 で既に採った物)、調べるのは `motolii-media` の
+//! probe、置くのは `motolii-store` の `Intent`。front が持つのは「どの口をどの順に
+//! 呼ぶか」だけで、判断も計算も既にある物の中に在る。
+//!
+//! 別ファイルを作らなかった理由: 新しい module は `main.rs` の `mod` 宣言を要求し、
+//! それは本レーンの write-set の外。`stage_import.rs` は名前が近いが**共有 GPU 面
+//! (IOSurface)の取り込み**であって素材とは別室で、そこへ同居させると
+//! `app/` が付け直した「名前が何であるかを言う」規律(AGENTS.md)を壊す。
 use makepad_widgets::*;
+use motolii_shell_state::Session;
+use motolii_store::{
+    AssetDraft, Document, Intent, LayerId, LayerMeta, LayerSource, LayerTiming,
+    SourceFingerprintV1,
+};
+use std::path::{Path, PathBuf};
 
 script_mod! {
     use mod.prelude.widgets.*
@@ -253,6 +271,10 @@ script_mod! {
         browser_toolbar := SolidView{width: Fill height: mod.tokens.size.toolbar flow: Right spacing: mod.tokens.space.s2 align: Align{y: 0.5} padding: Inset{left: 4 right: 4} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.panel
             back := IconButton{width: 18 draw_icon +: {svg: crate_resource("self://resources/icons/back.svg")}}
             forward := IconButton{width: 18 draw_icon +: {svg: crate_resource("self://resources/icons/forward.svg")}}
+            // 素材の口。Browser の動詞はこれ1つなので、絞り込みの道具
+            // (filters/tags)ではなく前進の道具(back/forward)の隣に置く。
+            // 配線が来るまでは席ごと畳む(`BrowserSurface::IMPORT_WIRED`)
+            import := IconButton{width: 22 draw_icon +: {svg: crate_resource("self://resources/icons/create.svg") color: mod.tokens.ink.strong}}
             search := SolidView{width: Fill height: mod.tokens.size.field flow: Right spacing: mod.tokens.space.s1 align: Align{y: 0.5} padding: Inset{left: 4 right: 4} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.sunk
                 search_glyph := IconButton{width: 15 draw_icon +: {svg: crate_resource("self://resources/icons/search.svg") color: mod.tokens.ink.muted}}
                 // 本物の入力欄。窪みの面は親の SolidView が既に塗っているので、
@@ -343,6 +365,9 @@ script_mod! {
                     CardVideo := AssetCard{thumb.glyph.draw_icon.svg: crate_resource("self://resources/icons/video.svg")}
                     CardImage := AssetCard{thumb.glyph.draw_icon.svg: crate_resource("self://resources/icons/image.svg")}
                     CardAudio := AssetCard{thumb.glyph.draw_icon.svg: crate_resource("self://resources/icons/audio.svg")}
+                    // 台帳の `asset_type` が video/image/audio のどれでもない時の札。
+                    // 種を知らない素材へ video の絵を貼ると、一覧が嘘をつく
+                    CardOther := AssetCard{thumb.glyph.draw_icon.svg: crate_resource("self://resources/icons/media.svg")}
                     CardEmpty := AssetEmpty{}
                 }
             }
@@ -358,6 +383,9 @@ pub(crate) enum AssetKind {
     Video,
     Image,
     Audio,
+    /// 台帳の `asset_type` が3種のどれでもない素材。**種を騙らない** — 知らない物を
+    /// Video に寄せると、rail `Video` の一覧が実際とずれる。
+    Other,
 }
 
 impl AssetKind {
@@ -366,6 +394,18 @@ impl AssetKind {
             AssetKind::Video => live_id!(CardVideo),
             AssetKind::Image => live_id!(CardImage),
             AssetKind::Audio => live_id!(CardAudio),
+            AssetKind::Other => live_id!(CardOther),
+        }
+    }
+
+    /// 台帳の opaque `asset_type`(`video/mp4` 等)から種を読む。正本は
+    /// `motolii_store::Asset::asset_type` で、ここは絵を選ぶだけの投影。
+    fn from_asset_type(asset_type: &str) -> Self {
+        match asset_type.split('/').next().unwrap_or("") {
+            "video" => Self::Video,
+            "image" => Self::Image,
+            "audio" => Self::Audio,
+            _ => Self::Other,
         }
     }
 }
@@ -500,6 +540,17 @@ pub struct BrowserSurface {
 }
 
 impl BrowserSurface {
+    /// 素材の口が `main.rs` の受け口(`browser_surface::handle_import_actions`)へ
+    /// 繋がっているか。**繋がるまで Import の席ごと畳む。**
+    ///
+    /// 押せば OS の dialog は開き、probe も走るが、`Intent` を受け取る者が居なければ
+    /// Document は変わらない — 「効いたように見えてから黙って戻る」は「できない」より
+    /// 悪い(2026-08-28 裁定(a)、`TimelineSurface::TRIM_HANDLE_WIRED` と同じ扱い)。
+    ///
+    /// **`main.rs` に受け口(WIRE-2、報告の NOT_DONE 参照)が着地したら `true` へ。**
+    #[allow(dead_code)]
+    const IMPORT_WIRED: bool = false;
+
     /// catalog に実在する tag を辞書順で1周する環。UI が発明した語彙を持たない。
     fn tag_cycle(&self) -> Vec<String> {
         let mut tags: Vec<String> = self
@@ -547,6 +598,19 @@ impl BrowserSurface {
             .collect()
     }
 
+    /// 一覧を差し替える。**catalog の正本は Document の台帳**で、この widget は
+    /// 投影を持つだけ([`install_catalog`] が唯一の書き手)。
+    pub(crate) fn set_catalog(&mut self, cx: &mut Cx, catalog: Vec<BrowserAsset>) {
+        self.catalog = catalog;
+        // 絞り込みが今の一覧に無い tag を指したまま残ると、0件の理由が読めなくなる
+        if let Some(tag) = self.tag.clone() {
+            if !self.catalog.iter().any(|asset| asset.tags.contains(&tag)) {
+                self.tag = None;
+            }
+        }
+        self.view.redraw(cx);
+    }
+
     /// 見出しと shelf は状態の投影。描く前に合わせるので、宣言側の文言は繋ぎでよい。
     fn project_shelf(&self, cx: &mut Cx, shown: usize) {
         let count = match shown {
@@ -570,6 +634,16 @@ impl BrowserSurface {
         self.view
             .button(cx, ids!(browser_body.catalog.filter_shelf.clear_filters))
             .set_visible(cx, self.clearable());
+        // tag グリフは「一覧に在る tag を1周する」道具。環が空の一覧
+        // (= 台帳から来た実データ。tag をまだ誰も付けていない)では、押しても
+        // 何も起きない物になる — 押せそうで押せない物を作らない(Q0)
+        self.view
+            .button(cx, ids!(browser_toolbar.tags))
+            .set_visible(cx, !self.tag_cycle().is_empty());
+        // 素材の口。store へ届かない間は席ごと畳む(`Self::IMPORT_WIRED` の doc)
+        self.view
+            .button(cx, ids!(browser_toolbar.import))
+            .set_visible(cx, Self::IMPORT_WIRED);
     }
 
     /// 空一覧の文言。「何も無い」と「絞り込んだ結果ゼロ」を混同しない。
@@ -665,6 +739,19 @@ impl Widget for BrowserSurface {
             dirty = true;
         }
 
+        // 素材の口。**この widget は Document を持たない** — 選ぶ(OS dialog)まで
+        // をここで行い、置く判断は意図の action として外へ出す
+        // (`TimelineSurface` が編集意図を出すのと同じ形)。
+        if self
+            .view
+            .button(cx, ids!(browser_toolbar.import))
+            .clicked(&actions)
+        {
+            if let Some(path) = pick_media_path() {
+                cx.widget_action(self.uid, BrowserSurfaceAction::ImportMedia(path));
+            }
+        }
+
         cx.extend_actions(actions);
         if dirty {
             self.view.redraw(cx);
@@ -707,4 +794,276 @@ impl Widget for BrowserSurface {
 
         DrawStep::done()
     }
+}
+
+// ============================================================================
+// 素材の口 — ファイルを開いて、この comp に置く
+//
+// 通す道: 選ぶ(`rfd`)→ 調べる(`motolii_media::probe` + `SourceFingerprintV1`)
+// → 記帳して置く(`Intent::AdmitAsset` + `AddLayer` + `SetMeta`)→ 見える
+// (Timeline のレーンも Stage の絵も Document から導出されるので、置いた時点で出る)。
+//
+// **判断はこの節に閉じる。** `main.rs` 側が要るのは呼び出し2本だけで、置き方の規則
+// (尺・重ね順・記帳)を shell へ書き写さない — 書き写すと面ごとに違う置き方が生まれる
+// (`LayerTiming::place` の doc「この規則を shell に書かせない」)。
+// ============================================================================
+
+/// dialog が受け取る拡張子。**種別判定の正本ではない** — 台帳の `asset_type` は
+/// [`asset_type_for`] が決め、ここは「開ける物だけを見せる」ための一覧。
+///
+/// 出所は `next/shell/motolii-shell/src/file_dialogs.rs`(裁定176 の File 束)の
+/// 3本の一覧。あちらは歴史(`next/`)なので依存としては引けず、値だけ引き写す。
+///
+/// **音声は v1 に入れない。** `motolii_media::probe` は先頭 video stream を要求する
+/// (`probe.rs:163`)ので audio-only は必ず `Err` になり、開けない物を dialog に
+/// 並べることになる。音を持ち込む道は別の裁定が要る(報告の EVIDENCE_GAP)。
+const IMPORT_EXTENSIONS: &[&str] = &[
+    "mp4", "mov", "mkv", "webm", "avi", "m4v", "jpg", "jpeg", "png", "gif", "webp", "bmp",
+];
+
+/// 素材の口が運ぶ意図。**値ではなく意図**(どの path を使いたいか)だけを運ぶ —
+/// 置き方(尺・重ね順)の計算は Document を読める側([`place_media`])の仕事で、
+/// widget 側で先に計算すると同じ規則が2箇所に住む。
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) enum BrowserSurfaceAction {
+    #[default]
+    None,
+    /// 利用者が選んだ1本。v1 は1ファイルずつ(複数選択・フォルダは後)。
+    ImportMedia(PathBuf),
+}
+
+/// OS の file dialog。**自前のファイルブラウザを作らない**(裁定176、
+/// wraps > 移植 > スクラッチ)。
+///
+/// 同期版を使う: dialog が開いている間 makepad のイベントループは止まる(native
+/// dialog は本来モーダル)。iced 二代目は `Task::perform` という執行者を持っていた
+/// ので非同期版へ移したが、makepad 側に同じ物が無いところへ channel + 毎フレーム
+/// poll を自作すると「繋げるだけ」が機構になる。止まるのは **OS の dialog が前に
+/// 居る間だけ**で、利用者から見れば普通の挙動。
+fn pick_media_path() -> Option<PathBuf> {
+    rfd::FileDialog::new()
+        .set_title("Import Media")
+        .add_filter("Media", IMPORT_EXTENSIONS)
+        .pick_file()
+}
+
+/// 台帳の opaque `asset_type`。拡張子からの粗い推定で、精度はこの切片の非目標
+/// (`next/shell/motolii-shell/src/assets.rs::guess_asset_type` と同じ割り切り)。
+fn asset_type_for(path: &Path) -> String {
+    let ext = path
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    match ext.as_str() {
+        "mp4" | "mov" | "mkv" | "webm" | "avi" | "m4v" => format!("video/{ext}"),
+        "jpg" | "jpeg" => "image/jpeg".to_owned(),
+        "png" | "gif" | "webp" | "bmp" | "svg" => format!("image/{ext}"),
+        "wav" | "mp3" | "aac" | "flac" | "ogg" | "m4a" => format!("audio/{ext}"),
+        "" => "application/octet-stream".to_owned(),
+        other => format!("application/{other}"),
+    }
+}
+
+/// 表示用の短い名前。path 全体を状態行へ出すと、長い path で他が読めなくなる。
+fn file_label(path: &Path) -> String {
+    path.file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_else(|| path.to_string_lossy().into_owned())
+}
+
+/// 内容の指紋(ファイル IO)。probe とは独立 — 記帳は「読めるか」だけを見る。
+fn fingerprint(path: &Path) -> Result<SourceFingerprintV1, String> {
+    let file = std::fs::File::open(path).map_err(|error| error.to_string())?;
+    SourceFingerprintV1::from_reader(file).map_err(|error| error.to_string())
+}
+
+/// 選んだ1本を**台帳へ記帳し、そのまま comp へ置く**。
+///
+/// 意図論(裁定271): 利用者が file を開く時に求めているのは「**この素材を使いたい**」
+/// であって、置き場所やレイヤー順を名指してはいない。だから開いた時点で使える状態
+/// — playhead の位置に、素材の実尺で、一番手前に — にする。「取り込んだので配置して
+/// ください」で止めるのは、意図を半分しか叶えていない。
+///
+/// **名指していない物は変えない**: playhead は動かさない。既存レイヤーの順序も
+/// 触らない(新しい layer が最大 order + 1 を取るだけ)。
+///
+/// 置き方の規則は全部 store の物を呼ぶだけ:
+/// - 尺は [`LayerTiming::place`](= `min(素材の尺, comp の残り)`)
+/// - 静止画は「尺が分からない物」として `None` を渡す。probe は静止画へ
+///   `nb_frames = Some(1)` を返すが、それは demuxer が置いた作り値であって絵の尺では
+///   ない(`probe.rs:376`)。1 フレームの layer を置くのは、probe の実装詳細を
+///   利用者の作業へ漏らすことになる
+/// - 記帳の重複統合は `AssetTable::admit`(同じ content_hash は台帳を増やさない)
+///
+/// 1本 = **1 undo**(`apply_all` 1回)。記帳と配置を別の undo にしない。
+pub(crate) fn place_media(
+    doc: &mut Document,
+    session: &mut Session,
+    path: &Path,
+) -> Result<String, String> {
+    let label = file_label(path);
+    let store = doc.view();
+    let composition = store
+        .composition()
+        .map_err(|error| format!("IMPORT FAILED  ·  {label}  ·  {error}"))?
+        .ok_or_else(|| format!("IMPORT FAILED  ·  {label}  ·  no composition yet"))?;
+    let layer = LayerId(store.next_layer_id());
+    // 一番手前 = 既存の最大 order の1つ上(Timeline は order 降順で並べる)。
+    let order = store
+        .layers()
+        .into_iter()
+        .filter_map(|id| store.meta(id).ok().flatten().map(|meta| meta.order))
+        .max()
+        .map(|max| max.saturating_add(1))
+        .unwrap_or(0);
+    drop(store);
+
+    let asset_type = asset_type_for(path);
+    let info = motolii_media::probe(path)
+        .map_err(|error| format!("IMPORT FAILED  ·  {label}  ·  {error}"))?;
+    let still = AssetKind::from_asset_type(&asset_type) == AssetKind::Image;
+    let source_frames = if still { None } else { info.nb_frames };
+    let timing = LayerTiming::place(session.playhead, source_frames, composition.duration_frames);
+
+    let mut intents = Vec::new();
+    // 記帳は「指紋が読めたか」だけを見る。読めなくても配置は続ける
+    // (bin-first: 取り込みと配置は別の判断 — 裁定162)。
+    let content_hash = match fingerprint(path) {
+        Ok(source) => {
+            let mut draft = AssetDraft::from_probed_source(asset_type, &source, path, None);
+            draft.duration = info.duration;
+            intents.push(Intent::AdmitAsset { draft });
+            Some(source.content_hash())
+        }
+        Err(_) => None,
+    };
+    intents.push(Intent::AddLayer(layer));
+    // 新規配置は `SetMeta` 1本。`SetSource`/`SetOrder`/`SetTiming` は**既存の meta を
+    // 読んで1フィールドだけ書き換える口**で、meta の無い layer には使えない
+    // (`document/apply.rs:151` が理由つきで拒む)。
+    intents.push(Intent::SetMeta {
+        layer,
+        meta: LayerMeta {
+            source: LayerSource::Media {
+                path: path.to_string_lossy().into_owned(),
+                fingerprint: content_hash,
+            },
+            order,
+            timing,
+        },
+    });
+
+    doc.apply_all(intents)
+        .map_err(|error| format!("IMPORT FAILED  ·  {label}  ·  {error}"))?;
+
+    // 置いた物が選ばれている(AE と同じ)。Inspector はこの選択を読む。
+    session.selection = Some(layer);
+    session.selected_layers = vec![layer];
+
+    Ok(format!(
+        "IMPORT  ·  {label}  ·  {}×{}  ·  {} frames from {}",
+        info.width, info.height, timing.duration, timing.start
+    ))
+}
+
+/// 台帳(`Composition:assets`)から一覧を作る。**一覧の正本は台帳**(裁定162)で、
+/// [`demo_catalog`] は誰も台帳を渡してこない間の繋ぎ。
+///
+/// `placed`(カード右下の ●)は「この素材を指す layer が居るか」の実測 — 台帳と
+/// layer を突き合わせて毎回導出する(別に持つと必ずずれる)。
+fn catalog_from_document(doc: &Document) -> Vec<BrowserAsset> {
+    let store = doc.view();
+    let placed_paths: Vec<String> = store
+        .layers()
+        .into_iter()
+        .filter_map(|id| store.meta(id).ok().flatten())
+        .filter_map(|meta| match meta.source {
+            LayerSource::Media { path, .. } => Some(path),
+            _ => None,
+        })
+        .collect();
+    store
+        .assets()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|asset| {
+            let placed = asset
+                .path_absolute
+                .as_ref()
+                .is_some_and(|path| placed_paths.iter().any(|used| used == path));
+            BrowserAsset {
+                name: asset.file_name.clone().unwrap_or_else(|| asset.name.clone()),
+                kind: AssetKind::from_asset_type(&asset.asset_type),
+                placed,
+                // 台帳に載っている = この project の素材。rail `Project` の意味そのもの
+                in_project: true,
+                // 直近に触った物の記録は Document にも Session にも無い。無い物を
+                // 推測で埋めない — rail `Recent` は空を空と言う
+                recent: false,
+                // 台帳に tag 欄が無い(`motolii_store::Asset`)。front で発明すると
+                // 保存で消えるので、空のまま渡す
+                tags: Vec::new(),
+            }
+        })
+        .collect()
+}
+
+/// 一覧を Document の台帳へ合わせる。`main.rs` は起動時・`Event::LiveEdit`・
+/// 取り込み後にこれを呼ぶ(live edit は widget を宣言状態へ戻すので、投影し直すのは
+/// 呼び手の責任 — `apply_browser_selection` と同じ形)。
+#[allow(dead_code)]
+pub(crate) fn install_catalog(cx: &mut Cx, browser: &WidgetRef, doc: &Document) {
+    let catalog = catalog_from_document(doc);
+    let surface = browser.child_by_path(ids!(browser_surface));
+    if let Some(mut surface) = surface.borrow_mut::<BrowserSurface>() {
+        surface.set_catalog(cx, catalog);
+    };
+}
+
+/// 素材の口の受け口。**`main.rs` の `handle_actions` から1本だけ呼ぶ。**
+///
+/// `browser` は Dock の `browser` タブの中身(`main.rs::browser`)。戻り値は状態行の
+/// 文言で、`None` は「この action 群に取り込みは無かった」。
+///
+/// ```ignore
+/// // main.rs: App::handle_actions の中
+/// let browser = self.browser(cx);
+/// if let Some(backend) = self.backend.as_mut() {
+///     if let Some(status) = browser_surface::handle_import_actions(
+///         cx, &browser, actions, &mut backend.doc, &mut backend.session,
+///     ) {
+///         backend.frame = None;
+///         self.install_timeline_model(cx);
+///         self.request_stage_frame(cx);
+///         self.set_status(cx, &status);
+///     }
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) fn handle_import_actions(
+    cx: &mut Cx,
+    browser: &WidgetRef,
+    actions: &Actions,
+    doc: &mut Document,
+    session: &mut Session,
+) -> Option<String> {
+    let surface = browser.child_by_path(ids!(browser_surface));
+    if surface.is_empty() {
+        return None;
+    }
+    let uid = surface.widget_uid();
+    let mut status = None;
+    for action in actions.filter_widget_actions_cast::<BrowserSurfaceAction>(uid) {
+        let BrowserSurfaceAction::ImportMedia(path) = action else {
+            continue;
+        };
+        // 失敗も状態行へ出す。**黙って落とさない** — 落ちた物が何も言わずに消えると、
+        // 利用者は「開いたのに何も起きない」としか分からない。
+        status = Some(place_media(doc, session, &path).unwrap_or_else(|reason| reason));
+    }
+    if status.is_some() {
+        install_catalog(cx, browser, doc);
+    }
+    status
 }
