@@ -46,9 +46,31 @@ fi
 # 4. root tombstone と docs/**/*.md のローカルmdリンクが実在すること
 # (#fragmentは除去して判定)。必読入口のリンク切れもdocsと同じ失敗にする。
 python3 - "$ROOT" <<'PY'
-import os, re, sys
+import os, re, subprocess, sys
 root = sys.argv[1]
 docs = os.path.join(root, 'docs')
+
+# リンク先は**git が追跡しているか**で判定する。ディスクにあるかではない。
+# 2026-08-27 の分断以降、作業ツリーは sparse-checkout で `app/` などだけを
+# 実体化する — 歴史側(`next/` `crates/` `spikes/`)は追跡されたまま手元に無い。
+# 実在確認をディスクに聞くと、その状態で歴史へのリンクが全部「切れている」と
+# 誤判定される。**追跡されているファイルへのリンクは、手元に実体が無くても有効**。
+try:
+    tracked = frozenset(subprocess.run(
+        ['git', '-C', root, 'ls-files'],
+        capture_output=True, text=True, check=True,
+    ).stdout.splitlines())
+except (subprocess.CalledProcessError, FileNotFoundError):
+    tracked = frozenset()
+
+def link_exists(resolved: str) -> bool:
+    if os.path.exists(resolved):
+        return True
+    rel = os.path.relpath(resolved, root)
+    if rel.startswith('..'):
+        return False
+    # dir へのリンク(末尾スラッシュ無し)も追跡ファイルの接頭辞として拾う
+    return rel in tracked or any(t.startswith(rel + '/') for t in tracked)
 # npm ci/build/test:visual で docs 配下に現れる生成物・依存 dir へは降下しない
 SKIP_DIR_NAMES = frozenset({
     "node_modules", "dist", "test-results", "playwright-report",
@@ -70,7 +92,7 @@ for path in paths:
         if not target:
             continue
         resolved = os.path.normpath(os.path.join(os.path.dirname(path), target))
-        if not os.path.exists(resolved):
+        if not link_exists(resolved):
             rel = os.path.relpath(path, root)
             print(f"NG: リンク切れ {rel} -> {target}")
             fail = True
