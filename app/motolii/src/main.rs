@@ -10,7 +10,7 @@ pub use makepad_widgets;
 use makepad_widgets::*;
 use motolii_engine::Engine;
 use motolii_shell_state::Session;
-use motolii_store::{Document, Intent, LayerAttrsPatch, LayerId, RationalTime};
+use motolii_store::{Document, Intent, LayerAttrsPatch, LayerId, LayerTiming, RationalTime};
 use motolii_timeline_projection::{self as timeline_pane, stacking::restacked, StackDirection};
 use std::time::Instant;
 
@@ -28,8 +28,8 @@ mod stage_surface;
 mod timeline_surface;
 use stage_surface::{SharedOsHandle, SharedSurfaceDesc, StagePresent, StageRoom, StageVerdict};
 use timeline_surface::{
-    LaneFlag, TimelineLane, TimelineModel, TimelinePropertyLane, TimelineSurface,
-    TimelineSurfaceAction,
+    ClipEdge, LaneFlag, TimelineEditAction, TimelineLane, TimelineModel, TimelinePropertyLane,
+    TimelineSurface, TimelineSurfaceAction,
 };
 
 app_main!(App);
@@ -415,6 +415,11 @@ enum TimelineUpdate {
     None,
     Stage(String),
     ModelAndStage(String),
+    /// Timeline の投影だけを引き直す。**Stage は触らない** — 選択のように
+    /// 絵を変えない操作で毎回 Stage を焼き直すのは、意図が名指していない物を
+    /// 一緒に動かすこと(裁定271)。`render_frame` は `Session` を受け取らないので
+    /// 選択は絵に写らない = 焼き直す理由が無い。
+    Model(String),
     Status(String),
 }
 
@@ -648,6 +653,139 @@ impl BackendBridge {
         self.status.clone().expect("just set")
     }
 
+    /// # front から store へ書く時はこの形(2026-08-28、WIRE-1)
+    ///
+    /// トリム/移動の確定。`restack_from_timeline` / `toggle_lane_flag_from_timeline` と
+    /// **同じ5手**で、動詞が `Intent::SetTiming` に変わるだけである。残りの動詞
+    /// (`SetTrack` / `SetEffects` / `SetSource`)もこの形へ写す:
+    ///
+    /// 1. **今の値を store から読む**(`self.doc.view()` → `meta`/`attrs`/`track`)。
+    ///    widget が持っている値は「見せていた形」であって正本ではない。読めなければ
+    ///    layer はもう居ないので、書かずに理由を返す。
+    /// 2. **`drop(store)`**。`view()` は借用なので、持ったまま `apply_all` は書けない。
+    /// 3. **読んだ値の、意図が名指したフィールドだけを差し替える**。丸ごと組み直すと
+    ///    名指していない物(ここでは `speed`)が黙って既定へ戻る。`Intent::SetMeta` を
+    ///    使わず `SetTiming` を使うのはこのため(`SetMeta` の doc 参照)。
+    /// 4. **`self.doc.apply_all([intent])` — 1ジェスチャ = 1呼び出し = 1 undo。**
+    ///    ドラッグ中の途中経過は widget の中だけで動き、ここへは来ない。
+    /// 5. **`self.frame = None`**(絵が変わったので Stage のキャッシュを捨てる)+
+    ///    `status` を返す。呼び手は `TimelineUpdate` で投影の引き直しを決める。
+    ///
+    /// ## `source_in` を動かす場所
+    ///
+    /// 頭(`ClipEdge::Start`)を切った時だけ `source_in` が `start` と一緒に動く。
+    /// Lottie の `st`(Start Time)は `st = start - source_in` としてこの2つに
+    /// 分解されている(`app/reference/lottie-coverage.tsv`: `layers/layer/st` →
+    /// 「代数的に等価な LayerTiming.source_in」)。頭を切っても素材はずれない
+    /// ということは **`st` が動かない**ということで、`start` が動いた分 `source_in`
+    /// も動く。丸ごと移動(`edge: None`)は逆に `st` ごと動くので `source_in` は
+    /// そのまま、尻(`ClipEdge::End`)は `start` が動かないのでどちらも動かない。
+    ///
+    /// ## まだ無い壁(EVIDENCE_GAP)
+    ///
+    /// `LayerSource::Media` には上限がある(`source_in + duration × speed ≦ 素材の
+    /// 総フレーム数`、裁定272)。**その総フレーム数は Document に無い** — 「大きさは
+    /// probe が決めるので Document は持たない」(`LayerSource::Media` の doc)。
+    /// `motolii-engine` は `probes: HashMap<String, MediaInfo>` を持っているが private で、
+    /// front から聞く口が無い。だから Media の壁だけがここに無い。`Solid`/`Null`/
+    /// `Shape`/`Text` は上限が無い(裁定272)ので、この経路は今そのまま本物である。
+    fn set_clip_timing_from_timeline(
+        &mut self,
+        layer_id: u64,
+        start: i64,
+        duration: i64,
+        edge: Option<ClipEdge>,
+    ) -> String {
+        let layer = LayerId(layer_id);
+        let store = self.doc.view();
+        let Some(meta) = store.meta(layer).ok().flatten() else {
+            return format!("Timeline: layer {layer_id} no longer exists");
+        };
+        drop(store);
+
+        let current = meta.timing;
+        let start = start.max(0);
+        let duration = duration.max(1);
+        let source_in = match edge {
+            // 頭を切る = 素材の頭出しが一緒に動く(`st` を保つ)。
+            Some(ClipEdge::Start) => current.source_in + (start - current.start),
+            // 尻を切る / 丸ごと動かす = 頭出しはそのまま。
+            Some(ClipEdge::End) | None => current.source_in,
+        };
+        let timing = LayerTiming {
+            start,
+            duration,
+            source_in,
+            // 速度はトリムの意図が名指していない。タイムストレッチは別の動詞。
+            speed: current.speed,
+        };
+        if timing == current {
+            return format!("Timeline: layer {layer_id} timing unchanged");
+        }
+        if let Err(error) = self.doc.apply_all([Intent::SetTiming { layer, timing }]) {
+            return format!("尺を書けない: {error}");
+        }
+        self.frame = None;
+        let verb = match edge {
+            Some(ClipEdge::Start) => "TRIM IN",
+            Some(ClipEdge::End) => "TRIM OUT",
+            None => "MOVE",
+        };
+        self.status = Some(format!(
+            "Timeline: layer {layer_id} {verb}  ·  {start}..{}",
+            start + duration
+        ));
+        self.status.clone().expect("just set")
+    }
+
+    /// 選択(A5)。行き先が `Document` ではなく `Session` なだけで、上の5手と同じ形
+    /// (読む → 名指した物だけ差し替える → 投影を引き直す)。**Undo に乗らない** —
+    /// 選択は Document に乗らない身分だから(`Session.selected_layers` の doc)。
+    ///
+    /// `layer_id: None` は**必ず全解除**。「修飾キー付きの空所クリックは何もしない」
+    /// という判断はここではなく `apply_timeline_edit` にある — あちらが意図を読む
+    /// 側で、こちらは名指された物を書く側。
+    fn select_from_timeline(&mut self, layer_id: Option<u64>, additive: bool) -> String {
+        let Some(layer_id) = layer_id else {
+            self.session.selection = None;
+            self.session.selected_layers.clear();
+            self.status = Some("Timeline: selection cleared".to_owned());
+            return self.status.clone().expect("just set");
+        };
+        let layer = LayerId(layer_id);
+        let store = self.doc.view();
+        let exists = store.meta(layer).ok().flatten().is_some();
+        drop(store);
+        if !exists {
+            return format!("Timeline: layer {layer_id} no longer exists");
+        }
+
+        if additive {
+            if let Some(index) = self
+                .session
+                .selected_layers
+                .iter()
+                .position(|selected| *selected == layer)
+            {
+                self.session.selected_layers.remove(index);
+                if self.session.selection == Some(layer) {
+                    self.session.selection = self.session.selected_layers.last().copied();
+                }
+            } else {
+                self.session.selected_layers.push(layer);
+                self.session.selection = Some(layer);
+            }
+        } else {
+            self.session.selection = Some(layer);
+            self.session.selected_layers = vec![layer];
+        }
+        self.status = Some(format!(
+            "Timeline: {} layer(s) selected",
+            self.session.selected_layers.len()
+        ));
+        self.status.clone().expect("just set")
+    }
+
     /// screenshot / export など明示 fallback 専用。通常の playhead / 再生からは呼ばない。
     fn frame_rgba(&mut self) -> Option<(u32, u32, &[u8])> {
         if self.frame.is_none() {
@@ -711,6 +849,32 @@ impl BackendBridge {
             )),
             TimelineSurfaceAction::ToggleLaneFlag { layer_id, flag } => TimelineUpdate::ModelAndStage(
                 self.toggle_lane_flag_from_timeline(layer_id, flag),
+            ),
+        }
+    }
+
+    /// Timeline の**編集意図**の受け口([`TimelineEditAction`])。`apply_timeline_action`
+    /// (スクラブ・ズーム・並べ替え)と口を分けているのは widget 側の都合ではなく、
+    /// こちらが `Document`/`Session` を書く動詞だけを集めているから。
+    fn apply_timeline_edit(&mut self, action: &TimelineEditAction) -> TimelineUpdate {
+        match *action {
+            TimelineEditAction::None => TimelineUpdate::None,
+            // 修飾キー付きの空所クリックは何も名指していない。既存の選択を奪わない
+            // (裁定271: 操作は意図が名指した物だけを変える)。
+            TimelineEditAction::Select {
+                layer_id: None,
+                additive: true,
+            } => TimelineUpdate::None,
+            TimelineEditAction::Select { layer_id, additive } => {
+                TimelineUpdate::Model(self.select_from_timeline(layer_id, additive))
+            }
+            TimelineEditAction::SetClipTiming {
+                layer_id,
+                start,
+                duration,
+                edge,
+            } => TimelineUpdate::ModelAndStage(
+                self.set_clip_timing_from_timeline(layer_id, start, duration, edge),
             ),
         }
     }
@@ -866,6 +1030,31 @@ impl App {
     fn request_stage_frame(&mut self, cx: &mut Cx) {
         if !self.stage_request.request() {
             self.stage_next_frame = cx.new_next_frame();
+        }
+    }
+
+    /// `TimelineUpdate` → 窓の引き直し。**書いた側ではなくここが「何を引き直すか」を
+    /// 決める** — `BackendBridge` は store を書いて何が変わったかを言うだけで、
+    /// 面の都合を知らない。動詞が増えても触るのはこの1箇所。
+    fn apply_timeline_update(&mut self, cx: &mut Cx, update: TimelineUpdate) {
+        match update {
+            TimelineUpdate::None => {}
+            TimelineUpdate::Stage(status) => {
+                self.request_stage_frame(cx);
+                self.set_status(cx, &status);
+            }
+            TimelineUpdate::ModelAndStage(status) => {
+                self.install_timeline_model(cx);
+                self.request_stage_frame(cx);
+                self.set_status(cx, &status);
+            }
+            TimelineUpdate::Model(status) => {
+                self.install_timeline_model(cx);
+                self.set_status(cx, &status);
+            }
+            TimelineUpdate::Status(status) => {
+                self.set_status(cx, &status);
+            }
         }
     }
 
@@ -1135,7 +1324,12 @@ impl MatchEvent for App {
         let Some(uid) = self.timeline_uid(cx) else {
             return;
         };
+        // Timeline は2種の action を同じ uid から出す(入力と編集意図)。
+        // `filter_widget_actions_cast` は型の合わない action を `Default`(= `None`)へ
+        // 落とすので、それぞれの型で1回ずつ拾って、片方の `None` は素通りさせる。
         let timeline_actions: Vec<TimelineSurfaceAction> =
+            actions.filter_widget_actions_cast(uid).collect();
+        let edit_actions: Vec<TimelineEditAction> =
             actions.filter_widget_actions_cast(uid).collect();
         for action in timeline_actions {
             let update = self
@@ -1143,21 +1337,15 @@ impl MatchEvent for App {
                 .as_mut()
                 .map(|backend| backend.apply_timeline_action(&action))
                 .unwrap_or(TimelineUpdate::None);
-            match update {
-                TimelineUpdate::None => {}
-                TimelineUpdate::Stage(status) => {
-                    self.request_stage_frame(cx);
-                    self.set_status(cx, &status);
-                }
-                TimelineUpdate::ModelAndStage(status) => {
-                    self.install_timeline_model(cx);
-                    self.request_stage_frame(cx);
-                    self.set_status(cx, &status);
-                }
-                TimelineUpdate::Status(status) => {
-                    self.set_status(cx, &status);
-                }
-            }
+            self.apply_timeline_update(cx, update);
+        }
+        for action in edit_actions {
+            let update = self
+                .backend
+                .as_mut()
+                .map(|backend| backend.apply_timeline_edit(&action))
+                .unwrap_or(TimelineUpdate::None);
+            self.apply_timeline_update(cx, update);
         }
     }
 

@@ -123,12 +123,13 @@ pub enum TimelineSurfaceAction {
 /// 足すと shell 側のファイルを同時に書き換えなければ型が通らず、レーン境界
 /// (write-set)を跨ぐ。迂回でごまかすより「自分の境界に素直な口を1本足す」方を
 /// 採った(裁定: 迂回より wrapper)。`filter_widget_actions_cast` は型が違う
-/// action を `Default`(= `None`)へ落とすので、shell は今のまま無害に素通りする。
+/// action を `Default`(= `None`)へ落とすので、shell は同じ uid をこの型でもう一度
+/// 拾うだけでよく、片方の型の `None` は互いに無害に素通りする。
 ///
-/// **shell 側の受け口(未配線・EVIDENCE_GAP)**:
+/// **shell 側の受け口**(`main.rs` の `BackendBridge::apply_timeline_edit`、2026-08-28 配線):
 /// - [`TimelineEditAction::Select`] → `session.selection` / `session.selected_layers`
 /// - [`TimelineEditAction::SetClipTiming`] → 現在の `LayerMeta.timing` を読み、
-///   `start`/`duration` だけ差し替えて `Intent::SetTiming { layer, timing }`
+///   `start`/`duration`/`source_in` を差し替えて `Intent::SetTiming { layer, timing }`
 ///   (`Intent::SetOrder` を使う restack と同じ形。新しい書き込み経路ではない)
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub enum TimelineEditAction {
@@ -146,6 +147,10 @@ pub enum TimelineEditAction {
         layer_id: u64,
         start: i64,
         duration: i64,
+        /// 掴んだ端 = **利用者が何をしたつもりか**。`None` は本体を掴んだ移動。
+        /// shell はこれを見て素材の頭出し(`LayerTiming.source_in`)を動かすか
+        /// 決める — 頭を切っても素材はずれない、丸ごと動かせば素材も一緒に動く。
+        edge: Option<ClipEdge>,
     },
 }
 
@@ -243,8 +248,14 @@ impl TimelineViewport {
 
 /// クリップのどちら端を掴んだか。`None`(= [`PointerTarget::Clip`] の `edge` が
 /// `None`)は本体を掴んだ = 尺を変えずに移動。
+///
+/// **`pub` なのは [`TimelineEditAction::SetClipTiming`] が運ぶから** — shell は
+/// `(start, duration)` の差分から「頭を切ったのか丸ごと動かしたのか」を推理できない
+/// (どちらも `start` が動く)。推理させると、素材の頭出し(`source_in`)を
+/// 動かすべき時とそうでない時を取り違える。**掴んだ端は widget だけが知っている
+/// 事実なので、意図として運ぶ**(裁定271: 動詞は意図を語る)。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum ClipEdge {
+pub enum ClipEdge {
     Start,
     End,
 }
@@ -265,6 +276,7 @@ enum PointerTarget {
         from_front: usize,
         /// 行上端から掴んだ点までの距離。掴んだ行を指に付いてこさせる(A4)ため。
         grab_offset: f64,
+        locked: bool,
     },
     /// クリップの棒。`edge` が `Some` ならトリム、`None` なら移動。
     Clip {
@@ -273,6 +285,7 @@ enum PointerTarget {
         edge: Option<ClipEdge>,
         start: i64,
         duration: i64,
+        locked: bool,
     },
     /// 何も無い所。クリックは選択の解除。
     Empty,
@@ -483,10 +496,19 @@ impl TimelineGesture {
                 *self = Self::Playhead;
                 Some(TimelineInputAction::Scrub(viewport.frame_at_x(position.x)))
             }
+            // LOCKED は掴めない。store が `SetTiming`/`SetOrder` を拒む
+            // (`check_not_locked`)ので、ここで掴ませると「動いて見えてから戻る」
+            // になる。選択は上の `select_lane` が先に済ませているので、
+            // 錠のかかった行もクリックで選べる(L を押して外せる)。
+            PointerTarget::Rail { locked: true, .. } | PointerTarget::Clip { locked: true, .. } => {
+                *self = Self::None;
+                None
+            }
             PointerTarget::Rail {
                 layer_id,
                 from_front,
                 grab_offset,
+                ..
             } => {
                 *self = Self::Lane {
                     layer_id,
@@ -503,6 +525,7 @@ impl TimelineGesture {
                 edge,
                 start,
                 duration,
+                ..
             } => {
                 *self = Self::Clip {
                     layer_id,
@@ -625,15 +648,18 @@ impl TimelineGesture {
         action
     }
 
-    /// トリム/移動の確定に要る「どのレーンが変わったか」。`FingerUp` で1回だけ読む。
-    fn committed_clip(&self) -> Option<(usize, u64)> {
+    /// トリム/移動の確定に要る「どのレーンを、どう掴んで変えたか」。`FingerUp` で
+    /// 1回だけ読む。`edge` まで返すのは、shell が `(start, duration)` の差分から
+    /// 掴んだ端を推理できないから([`ClipEdge`] の doc)。
+    fn committed_clip(&self) -> Option<(usize, u64, Option<ClipEdge>)> {
         match *self {
             Self::Clip {
                 layer_id,
                 lane_index,
+                edge,
                 changed: true,
                 ..
-            } => Some((lane_index, layer_id)),
+            } => Some((lane_index, layer_id, edge)),
             _ => None,
         }
     }
@@ -750,25 +776,13 @@ pub struct TimelineSurface {
 }
 
 impl TimelineSurface {
-    /// A1: トリムの当たり判定・純関数・プレビュー描画は全部実装済みだが、
-    /// `TimelineEditAction::SetClipTiming` は `session`/`document` の store まで
-    /// 届いていない(WIRE-1、`docs/reviews/2026-08-27-layer-ui-parity-defects.md`
-    /// §4)。掴めて伸びて見えるのに、次の `install_timeline_model` で黙って元へ
-    /// 戻る — 「効いたように見えてから黙って戻る」は「掴めない」より悪いという
-    /// 裁定(a)(2026-08-28 統合)により、配線されるまでこの出口(当たり判定・
-    /// EwResize カーソル・明るい帯)だけを塞ぐ。WIRE-1 が着地したら `true` へ。
-    #[allow(dead_code)]
-    const TRIM_HANDLE_WIRED: bool = false;
-
-    /// A5: `TimelineEditAction::Select` を出すところまでは配線済みだが、選択の
-    /// 正本は `session.selection` であり、そこからこの widget へ投影して
-    /// 戻す経路が無い(WIRE-1 と同根)。ローカルで `lane.selected` を倒すと
-    /// クリックした瞬間だけ選択に見え、次のモデル再設置で静かに消える —
-    /// 裁定(a)によりこの出口(選択ハイライトの見た目)だけを塞ぐ。action は
-    /// 出し続ける(配線側の受け口が先に来ても困らないように)。WIRE-1 が
-    /// 着地し、投影が戻るようになったら `true` へ。
-    #[allow(dead_code)]
-    const SELECTION_WIRED: bool = false;
+    // A1/A5(WIRE-1、2026-08-28 着地): ここには `TRIM_HANDLE_WIRED` /
+    // `SELECTION_WIRED` という2つの塞ぎ栓があった。トリムも選択も widget の中では
+    // 完成していたのに store へ届かず、次の `install_timeline_model` で黙って元へ
+    // 戻る「消える虚報」だったので、出口(当たり判定・カーソル・帯・ハイライト)
+    // だけを閉じてあった。`main.rs` の `apply_timeline_edit` が両方を受けるように
+    // なったので栓を抜いた。**塞ぎ栓を残さない** — `= true` の定数は、次に読む者に
+    // 「まだ半分嘘かもしれない」と思わせる。
 
     pub fn set_model(&mut self, cx: &mut Cx, model: TimelineModel) {
         let first_model = self.duration_frames <= 0 || self.view_span <= 0.0;
@@ -1085,10 +1099,7 @@ impl TimelineSurface {
             return None;
         }
         let handle = self.trim_handle_width.min((x1 - x0) / 3.0).max(1.0);
-        // 裁定(a): store 未配線の間は当たり判定そのものを出さない(Self::TRIM_HANDLE_WIRED)。
-        let edge = if !Self::TRIM_HANDLE_WIRED {
-            None
-        } else if abs.x < x0 + handle {
+        let edge = if abs.x < x0 + handle {
             Some(ClipEdge::Start)
         } else if abs.x >= x1 - handle {
             Some(ClipEdge::End)
@@ -1101,6 +1112,7 @@ impl TimelineSurface {
             edge,
             start: lane.start,
             duration: lane.duration,
+            locked: lane.locked,
         })
     }
 
@@ -1144,6 +1156,7 @@ impl TimelineSurface {
                     layer_id: lane.id,
                     from_front: lane_index,
                     grab_offset: abs.y - row.y,
+                    locked: lane.locked,
                 };
             }
             return self
@@ -1155,9 +1168,17 @@ impl TimelineSurface {
 
     /// **伸縮できる所だけが EwResize**(A2)。それ以外は掴める物なら Grab、
     /// 押せる物なら Hand、何も無ければ既定。
+    ///
+    /// **LOCKED の行はここで `NotAllowed`**。store は locked な layer への
+    /// `SetTiming`/`SetOrder` を拒む(`check_not_locked`)ので、掴ませてしまうと
+    /// 伸びて見えてから次の投影で戻る = 一度嘘をつくことになる。壁は掴む前、
+    /// 指がそこへ乗った瞬間に出す(Q0)。錠は M/S/L の L で外せるので行き止まりではない。
     fn set_hover_cursor(&self, cx: &mut Cx, abs: DVec2) {
         let cursor = match self.pointer_target(abs) {
             PointerTarget::Ruler => MouseCursor::EwResize,
+            PointerTarget::Clip { locked: true, .. } | PointerTarget::Rail { locked: true, .. } => {
+                MouseCursor::NotAllowed
+            }
             PointerTarget::Clip { edge: Some(_), .. } => MouseCursor::EwResize,
             PointerTarget::Clip { edge: None, .. } => MouseCursor::Grab,
             PointerTarget::Rail { .. } => MouseCursor::Grab,
@@ -1171,37 +1192,36 @@ impl TimelineSurface {
     /// ここで倒せば窓の色がその場で変わる。同時に意図を外へも出す — 選択の正本は
     /// shell の `Session` なので、widget 側は先に見せているだけ。
     fn select_lane(&mut self, cx: &mut Cx, layer_id: Option<u64>, additive: bool) {
-        // 裁定(a): 選択の正本は session.selection で、そこからこの widget へ
-        // 投影して戻す経路が無い間は、色だけ変わって次のモデル再設置で消える
-        // 「消える虚報」になる。配線(WIRE-1)されるまで見た目は倒さない。
-        // action だけは出し続ける — 受け口が先に来ても困らないように。
-        if Self::SELECTION_WIRED {
-            let mut changed = false;
-            for lane in self.lanes.iter_mut() {
-                let next = match layer_id {
-                    Some(id) if lane.id == id => {
-                        if additive {
-                            !lane.selected
-                        } else {
-                            true
-                        }
+        // 先に見せてから意図を出す。正本は `session.selection` で、そこから
+        // `timeline_pane::rows` → `TimelineLane.selected` として同じフレームのうちに
+        // 戻ってくる(shell が `TimelineUpdate::Model` で `set_model` を呼ぶ)。
+        // ここで倒すのは「戻ってくるまでの1フレームを詰める」ためだけで、
+        // 食い違ったら次の `set_model` が store の答えで上書きする。
+        let mut changed = false;
+        for lane in self.lanes.iter_mut() {
+            let next = match layer_id {
+                Some(id) if lane.id == id => {
+                    if additive {
+                        !lane.selected
+                    } else {
+                        true
                     }
-                    _ => {
-                        if additive {
-                            lane.selected
-                        } else {
-                            false
-                        }
-                    }
-                };
-                if lane.selected != next {
-                    lane.selected = next;
-                    changed = true;
                 }
+                _ => {
+                    if additive {
+                        lane.selected
+                    } else {
+                        false
+                    }
+                }
+            };
+            if lane.selected != next {
+                lane.selected = next;
+                changed = true;
             }
-            if changed {
-                self.redraw(cx);
-            }
+        }
+        if changed {
+            self.redraw(cx);
         }
         self.emit_edit_action(cx, TimelineEditAction::Select { layer_id, additive });
     }
@@ -1476,35 +1496,32 @@ impl TimelineSurface {
             );
             // トリム掴み代を「見える物」にする(A1/A2)。掴める幅と同じ幅を
             // 少し明るく置くだけ — 別部品ではないので色相は増やさない。
-            // 裁定(a): store 未配線の間は帯そのものを描かない(Self::TRIM_HANDLE_WIRED)。
-            if Self::TRIM_HANDLE_WIRED {
-                let handle = self.trim_handle_width.min((x1 - x0) / 3.0).max(1.0);
-                let grip = vec4(
-                    (color.x * 0.55 + 0.45).min(1.0),
-                    (color.y * 0.55 + 0.45).min(1.0),
-                    (color.z * 0.55 + 0.45).min(1.0),
-                    1.0,
+            let handle = self.trim_handle_width.min((x1 - x0) / 3.0).max(1.0);
+            let grip = vec4(
+                (color.x * 0.55 + 0.45).min(1.0),
+                (color.y * 0.55 + 0.45).min(1.0),
+                (color.z * 0.55 + 0.45).min(1.0),
+                1.0,
+            );
+            if clip_start >= visible_start {
+                self.draw_body_rect(
+                    cx,
+                    Rect {
+                        pos: dvec2(x0, row.y),
+                        size: dvec2(handle, (row.height - 1.0).max(1.0)),
+                    },
+                    grip,
                 );
-                if clip_start >= visible_start {
-                    self.draw_body_rect(
-                        cx,
-                        Rect {
-                            pos: dvec2(x0, row.y),
-                            size: dvec2(handle, (row.height - 1.0).max(1.0)),
-                        },
-                        grip,
-                    );
-                }
-                if clip_end <= visible_end {
-                    self.draw_body_rect(
-                        cx,
-                        Rect {
-                            pos: dvec2(x1 - handle, row.y),
-                            size: dvec2(handle, (row.height - 1.0).max(1.0)),
-                        },
-                        grip,
-                    );
-                }
+            }
+            if clip_end <= visible_end {
+                self.draw_body_rect(
+                    cx,
+                    Rect {
+                        pos: dvec2(x1 - handle, row.y),
+                        size: dvec2(handle, (row.height - 1.0).max(1.0)),
+                    },
+                    grip,
+                );
             }
         }
     }
@@ -1863,7 +1880,7 @@ impl Widget for TimelineSurface {
                     self.emit_input_action(cx, action);
                 }
                 // トリム/移動は1ジェスチャ = 1つの意図(= 1 undo)。restack と同じ形。
-                if let Some((lane_index, layer_id)) = self.drag.committed_clip() {
+                if let Some((lane_index, layer_id, edge)) = self.drag.committed_clip() {
                     let timing = self
                         .lanes
                         .get(lane_index)
@@ -1875,6 +1892,7 @@ impl Widget for TimelineSurface {
                                 layer_id,
                                 start,
                                 duration,
+                                edge,
                             },
                         );
                     }
@@ -2007,6 +2025,7 @@ mod tests {
                     layer_id: 7,
                     from_front: 2,
                     grab_offset: 4.0,
+                    locked: false,
                 }
             ),
             None
