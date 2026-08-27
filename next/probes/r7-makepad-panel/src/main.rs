@@ -373,10 +373,11 @@ script_mod! {
                 // 消さずに詰める(makepad 側の下限は 25pt)
                 tab_bar: TabBarFlat{
                     height: mod.tokens.size.tab_bar
-                    // 既定の `draw_fill` は `color_2: #0000` へグラデーションするので、
-                    // 中身の上に浮かせると下の文字が薄く抜ける。両端を同じ面色にして潰す
-                    draw_fill.color: mod.tokens.face.bar
-                    draw_fill.color_2: mod.tokens.face.bar
+                    // 帯の面は完全に透明。浮くのはタブの札だけで、下の chrome は読めたまま。
+                    // 既定は `color_2: #0000` へのグラデーションで、下の文字が中途半端に
+                    // 抜ける — 一番読みにくい状態なので、不透明か透明かに振り切る。
+                    // ドロップ判定は幾何(`is_over_tab_bar`)なので見えなくても効く
+                    draw_bg.color: #x00000000
                     // 既定の tab は帯より高く(36 > 25)、下がはみ出て切れる。
                     // align.y は元から中央なので、直すのは箱の高さ
                     PermanentTab := TabFlat{
