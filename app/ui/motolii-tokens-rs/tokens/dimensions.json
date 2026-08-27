@@ -1,0 +1,151 @@
+{
+  "$comment": "寸法トークンの機械可読正本(裁定117)。値は Ableton Live 12 実測から写す — ここで発明しない(Inspector 関連のキーだけは視覚正本 next/reference/mocks/ui-scale-and-z.html から転記、各 _note に明記)。実測に無い値は近縁値から導出し、各キーの `_note_*` に出典・根拠を書く(コメントはJSONに書けないため)。debug ビルドはこのファイルを直接読み、notify で変更を検知して再読込する。release は include_str! で埋め込み、file I/O は行わない。raw 値の直書きは禁止 — 全 pane は `motolii_shell::tokens::Tokens` 経由でここを読む。",
+
+  "components": {
+    "browser": {
+      "grid_columns": 2,
+      "card_width_row_height_ratio": 6.0,
+      "thumb_aspect_w": 16.0,
+      "thumb_aspect_h": 9.0,
+      "filter_chip_corner_radius_row_height_ratio": 0.4,
+      "panel_height_row_height_ratio": 14.0
+    },
+    "_note_browser": "Browser-library 視覚正本のカード骨格。列数・カード幅/行高・16:9 thumb・filter角丸比・pane高比を同じ名前空間に置き、Rust側のローカル定数を正本にしない。",
+    "settings": {
+      "checkerboard_tile_target_pt": 8.0
+    },
+    "_note_settings": "AE実機準拠の市松タイル目標寸。ui_scaleに追随する視認用の長さで、書き出しデータではない。",
+    "stage": {
+      "grid_divisions": 9,
+      "action_safe_inset": 0.05,
+      "title_safe_inset": 0.10,
+      "grid_ink_factor": 0.4545454545,
+      "fit_to_selection_margin": 0.9
+    },
+    "_note_stage": "Stage-semantics 視覚正本の方眼9分割・5/10% safe・ink減量(0.10/0.22)・選択fit余白。比率/係数はui_scaleを掛けない。",
+    "timeline": {
+      "graph_plot_padding": 16.0,
+      "graph_handle_hit": 12.0,
+      "graph_grid_line_width": 1.0,
+      "graph_curve_line_width": 2.0,
+      "graph_control_line_width": 1.0,
+      "graph_handle_radius": 5.0,
+      "key_diamond_size": 8.0,
+      "key_hit": 12.0,
+      "target_cell_ratio": 0.52,
+      "viewport_default_size": 100.0
+    },
+    "_note_timeline": "Timeline/Graph Editor の視覚寸法とセル比率。graph/key/viewportの画面上の長さはui_scaleへ追随し、target_cell_ratioは比率なので追随しない。"
+  },
+
+  "row_height": 20,
+  "_note_row_height": "Ableton Arrangement トラック行高の実測値そのもの(20)。裁定117以来の既存値",
+
+  "transport_band": 30,
+  "_note_transport_band": "Ableton Control Bar 帯の実測値そのもの(30)。裁定117以来の既存値",
+
+  "title_text": 12,
+  "_note_title_text": "視覚正本 next/reference/mocks/ui-scale-and-z.html の正典バンド {8,9,11,12} の最大段(--t-title)。Inspector の ptitle(パネルタイトル)が使う。旧値15(Ableton本文帯からの導出値)から2026-08-20に更新",
+
+  "body_text": 11,
+  "_note_body_text": "同 mock の --t-base。Inspector の property 行(ラベル・値とも)が使う。旧値13から更新",
+
+  "caption_text": 9,
+  "_note_caption_text": "同 mock の --t-dense。Inspector の section 見出し・column header・hint・glyph が使う。旧 small_text から改名(型スケール語彙 title/body/caption/micro への統一、2026-08-20)。値は旧11から更新",
+
+  "micro_text": 8,
+  "_note_micro_text": "同 mock の --t-micro(正典バンド最小段)。現時点でどの pane からも未消費 — バンド4段のうち予約されているだけの段。旧値9から更新",
+
+  "spacing_xs": 2,
+  "_note_spacing_xs": "既存コード(timeline_pane.rs の bar 縦インセット `row_top + 2.0` / ルーラー目盛りラベルの縦オフセット `x, 0.0` 系)で既に使われていた値を採番しただけ — 新規発明ではなく現状追認。**同値が視覚正本 ui-scale-and-z.html の --sp1(2)とも一致**(2026-08-21確認): Inspector の grid gap(X/Y/Z/Key の間隔)と glyph 高の窪み(`row - spacing_xs` = `.glyph{height:calc(row - 2*s*1px)}`)の出典も兼ねる(inspector_pane.rs、tests/inspector_pixel_fence.rs)",
+
+  "spacing_s": 4,
+  "_note_spacing_s": "既存コード(timeline_pane.rs の bar 高さインセット `row_height - 4.0` / ラベルの横オフセット `start_x + 4.0`)の既存慣用値を採番。**同値が視覚正本 ui-scale-and-z.html の --sp2(4)とも一致**(2026-08-21確認): Inspector の ident 帯 padding(縦)と値セル高の窪み(`row - spacing_s` = `.prow .v{height:calc(row - 4*s*1px)}`)の出典も兼ねる",
+
+  "spacing_m": 8,
+  "_note_spacing_m": "既存コード(lib.rs の `column![...].spacing(8)`)の既存慣用値を採番。**同値が視覚正本 ui-scale-and-z.html の --sp4(8)とも一致**(2026-08-21確認): Inspector の ident/cols/prow/sec/hint 帯の左右 padding の出典も兼ねる。mock の --sp3(6、`.ptitle` の icon-to-text gap)に対応する token は無い — 現実装は icon/em バッジを描かないので消費先が無く未採番(tests/inspector_pixel_fence.rs 冒頭に明記)",
+
+  "spacing_l": 12,
+  "_note_spacing_l": "既存コード(lib.rs の `column![...].padding(12)`)の既存慣用値を採番",
+
+  "border_width": 1.0,
+  "_note_border_width": "ui-visual-language の規約『フラット・細罫線』= 1px hairline。実測というより意匠規約そのものの値(発明ではなく既定の視覚言語)。`Dimensions::scaled` はこの値へ ui_scale を掛けない(mock `--line: 1px` が `--s` の calc から独立している=『拡大しない』ことの出典どおり)",
+
+  "interactive_target_min": 24,
+  "_note_interactive_target_min": "Google/Material系の操作対象契約。アイコンの視覚サイズとは分け、押せる面の短辺を24px以上にする。デスクトップの密度を壊さず、view mode/icon rail/glyphの共通最小値として機械検査する",
+
+  "focus_indicator_width": 2,
+  "_note_focus_indicator_width": "Google Developers Accessibilityの可視状態契約を実装するフォーカス境界幅。通常のhairline(border_width)と分け、入力がFocusedになった時だけ2pxへ上げる。色だけに状態を預けないための幾何的な差分",
+
+  "panel_header_height": 29,
+  "_note_panel_header_height": "実測表『Browser ツールバー』の実測値(29)を転用。Shell 全体の header(Undo/Redo/+Layer 帯)専用 — Inspector 自身のタイトル帯(ptitle)は inspector_section_header_height を使う(mock の --section が両方に効くのと同じ理由)",
+
+  "pane_header_height": 18,
+  "_note_pane_header_height": "pane_grid の題帯(各 pane 上端の pane 名入り drag ハンドル、2026-08-22 題帯レーン)の帯高。導出: 帯内文字は正典バンド {8,9,11,12} の最小段 micro_text(8、ui-scale-and-z.html --t-micro — 本キーが最初の消費者)を使い、裁定168 の文字/帯 比率帯(0.42±0.05)から 8/18=0.444 で逆算(inspector_row_height の 11/25=0.44 と同じ導出形 — 独自比の発明ではない)。帯の左右 padding は spacing_m(--sp4、ident/cols 帯の左右 padding と同段)を消費するので専用キーは起こさない",
+
+  "inspector_panel_width": 496,
+  "_note_inspector_panel_width": "I-tokens(2026-08-22): 出典を next/reference/mocks/inspector-library.html v3.1(利用者合格・転写正本統一)の `.inspectorShell{width:min(100%,496px)}` へ更新。値そのものは旧 docs/mocks-ui/public/inspector-library.css から不変(496) — I-ratio 台帳が発見した二重モック構造(row_height/value_width/glyph_width だけ ui-scale-and-z.html 由来、panel_width だけ inspector-library 由来)を、4値とも同じ mock(inspector-library v3.1)へ揃えて解消(裁定172 §3 の後続裁定)。300 への変更は不採用として確定(v3.1 は 496 のまま利用者合格)",
+
+  "inspector_row_height": 25,
+  "_note_inspector_row_height": "I-tokens(2026-08-22): 視覚正本を ui-scale-and-z.html から next/reference/mocks/inspector-library.html v3.1 へ統一。`.propertyRow{min-height:25px}`(inspector-library.css)= 25。旧値20(ui-scale-and-z.html `--row` 由来)は二重モック構造の片割れだったため撤去 — I-ratio 台帳(2026-08-22-inspector-ratio-ledger.md)の FINDING「body_text(11)/row_height 比 0.55 は inspector-library 実測 0.44 とも裁定168 帯(0.42±0.05)とも不一致」をこの書き換えで根治(11/25=0.44 は帯の内)",
+
+  "inspector_section_header_height": 26,
+  "_note_inspector_section_header_height": "inspector-library.css `.tableSection h2{height:26px}`(ptitle 相当)と ui-scale-and-z.html `--section` の両方が26で一致していたため値は不変。出典は I-tokens により inspector-library.html v3.1 へ統一(2026-08-22)",
+
+  "inspector_value_width": 64,
+  "_note_inspector_value_width": "I-tokens(2026-08-22): 視覚正本を inspector-library.html v3.1 へ統一。`grid-template-columns: minmax(132px,1fr) repeat(3,64px) 26px` の 64px 段(X/Y/Z 値セル1つぶんの幅)。旧値38(ui-scale-and-z.html `--pane:300` 前提の別モック由来、300px pane 正規化でのみ旧値と辻褄が合っていた=I-ratio 台帳 §3.1)は撤去。inspector_panel_width(496)と同じ mock 由来になったことで二重モック構造が解消",
+
+  "inspector_glyph_width": 26,
+  "_note_inspector_glyph_width": "I-tokens(2026-08-22): 視覚正本を inspector-library.html v3.1 へ統一。同 grid-template-columns 末尾の 26px 段(Key 列幅)。旧値18(ui-scale-and-z.html `--hit` 由来)は撤去。Key 列自体は空のまま(Q0: keyframe UI 未実装、列幅の予約だけ) — Timeline レーンバーの M/S/L glyph は T-rail(裁定172 §2)で既にこの token の借用をやめ独自比率(`glyph_size_px`)へ転写済みなので、この値変更は Timeline 側に影響しない",
+
+  "timeline_lane_bar_width": 150,
+  "_note_timeline_lane_bar_width": "視覚正本 ui-scale-and-z.html の `.thead{width:calc(150 * var(--s) * 1px)}`(Timeline の行ヘッダ列=レーンバー幅、裁定147)。M/S/L glyph 自体の幅は新トークンを増やさず inspector_glyph_width(--hit)を使い回す",
+
+  "timeline_param_row_height": 16.67,
+  "_note_timeline_param_row_height": "property 行(キー行、第2波T3)の行高。mock(ui-scale-and-z.html)に対応する段が無いので新設(裁定117の『mock/tokens に無ければ dimensions.json へ新ロール』どおり) — 出典は egui版 timeline_editor(crates/motolii-ui/src/timeline_editor/mod.rs)の ROW_H=24/PROP_H=20 比(0.8333…)を、この移植の row_height(20)へ適用した値(20 * 20/24 ≈ 16.67)。裁定150(意味論借用が既定)と同じ発想を寸法へも延長 — 独自の比を発明しない",
+
+  "timeline_transport_height": 30,
+  "_note_timeline_transport_height": "timeline_transport 節(発注 2026-08-22: Timeline pane 上端の transport 帯)。値は transport_band(Ableton Control Bar 実測30)と同源 — 帯の意味(transport)が同一なので同じ実測を写す。別キーにするのは朝の合否で pane 内 transport だけを独立に直せるようにするため(shell 下部帯の撤去後は transport_band 自体が退役候補)",
+
+  "timeline_transport_button_width": 30,
+  "_note_timeline_transport_button_width": "ボタン踏面の幅。高さは帯高いっぱい(S1: 踏面はグリフより大きく)なので、幅は高さと同値の正方形踏面 = 1.0×帯高。裁定167 の梯子は容器余白の梯子で踏面の段を持たないため、中間比を発明せず基準寸そのもの(帯高)を採る — rail の M/S/L 正方形チップ(glyph_size_px、1辺=基準寸×比)と同型の「正方形踏面」",
+
+  "timeline_transport_gap": 2,
+  "_note_timeline_transport_gap": "ボタン間・タイムコードとの間隔。裁定167 の容器余白梯子の下段 0.075×基準寸(帯高30)= 2.25 → px 最近傍丸め 2(lane_bar::sibling_gap_px と同式・同段 — 兄弟要素間 gap の既存段を借用、独自の中間値を発明しない)",
+
+  "graph_editor_plot_height": 180,
+  "_note_graph_editor_plot_height": "Graph Editor のプロット面の高さ。既存実装 graph_editor.rs の Length::Fixed(180.0) を共通寸法正本へ移したもの。Graph Editor は Timeline の詳細表示であり、UI scale の対象にする",
+
+  "graph_control_label_width": 20,
+  "_note_graph_control_label_width": "Graph Editor の x1/y1/x2/y2 ラベル列幅。既存実装 graph_editor.rs の Length::Fixed(20.0) を共通寸法正本へ移したもの。値入力欄(inspector_value_width)とは意味が違うため別キー",
+
+  "ui_scale": 1.18,
+  "_note_ui_scale": "空間優先の初期値(1.18)。ui_scale は Dimensions::scaled の1箇所だけで全寸法・文字へ適用し、面や線を増やさずに画面の呼吸を18%広げる。利用者裁定『見やすさは空間9割』を機械的に再現するための現在値。適用点は Shell::dims、Workspace 永続機構ができるまではこのJSONが正本",
+
+  "browser_tab_bar_height": 26,
+  "_note_browser_tab_bar_height": "Browser pane のタブ帯(Media/Effects/Create/Panels)の高さ。視覚正本 next/reference/mocks/browser-library.html の `.libraryTabs{height:26px}`(html内css:103-108)実測そのもの。row_height(20)比 1.3。タブ文字は既存 micro_text(mock `.libraryTabs button{font-size:8px}`)、タブ帯下の罫線は既存 border_width を使うため新キーはこの高さと下記 underline の2つだけ(裁定165『形は比率で定数化・分母明記』を JSON 正本側で満たす — 2026-08-22 利用者裁定『デザイン値の外出し徹底』)",
+
+  "browser_tab_underline": 2,
+  "_note_browser_tab_underline": "Browser タブ帯の active タブ下線の太さ。視覚正本 browser-library.html の `.libraryTabs button{border-bottom:2px solid transparent}` / `[aria-selected=true]{border-bottom-color:#d8b574}` 実測そのもの(2)。色は tokens の action_active ロール(mock #d8b574 と同役)。spacing_xs(2)と同値だが意味は『選択状態の縁』であって余白ではないため別キー(spacing の段を縁の太さへ転用しない)",
+
+  "browser_list_thumb_width": 46,
+  "_note_browser_list_thumb_width": "Browser 第5切片(List 表示の水平カード)。視覚正本 browser-library.css:306 `.libraryBrowser[data-view=\"list\"] .libraryThumb{width:46px;flex:0 0 46px}` 実測そのもの(46)。row_height(20)比 2.3。高さは THUMB_ASPECT_W/H(16/9、`motolii-browser-pane` 側の既存比)をこの幅へ適用して逆算する(専用の高さキーは起こさない — grid モードの thumb と同じ縦横比を保つ)。cardCopy 側の左 padding(css:307 `.cardCopy{padding-left:4px}`)は spacing_s(4)と同値なので新キーは起こさず流用する(裁定178 デザイン値の外出し徹底 — browser-pane の Rust 側に直書きしない)",
+
+  "menubar_menu_width": 192,
+  "_note_menubar_menu_width": "menubar 節(MB-2 上書き裁定 2026-08-22、iced_aw menu の vendoring 移植 — motolii-menubar crate)。開いた menu 面の幅。新規実測は無い — 既存 shell menu.rs の算術合成 inspector_value_width * 3.0(64×3=192、'Deselect All'+'Cmd+Shift+A' が1行に収まる幅)をそのまま採番しただけ(発明ではなく現状追認)",
+
+  "menubar_corner_radius": 4,
+  "_note_menubar_corner_radius": "menubar 節。枠の文法(裁定179)『開いた menu の面は明度1段+角丸』の角丸半径。実測正本(Ableton 実測・mock)に対応段が無いので spacing_s(4)と同値を採る — 新しい寸法段を発明しない(timeline_param_row_height と同じ近縁値導出の方針)",
+
+  "gizmo_handle_size": 8,
+  "_note_gizmo_handle_size": "gizmo 節(Stage ギズモ第1弾発注 2026-08-22、裁定124: 見た目=先例の慣習形)。bbox の8ハンドル(正方形)の1辺と回転ハンドル(円)の直径。AE/Figma の selection handle 実寸帯(6〜8px)の上端 — S1『踏面はグリフより大きく』側へ寄せた。spacing_m(8)と同値だが意味は『掴む踏面』であって余白ではないため別キー(browser_tab_underline と同じ『同値別キー』の判断)。screen 固定寸 — ズームしてもハンドルの実寸は変えない(Figma/Canva と同じ)",
+
+  "gizmo_hit_radius": 8,
+  "_note_gizmo_hit_radius": "gizmo 節。ハンドル命中の半径(中心からの screen px)。gizmo_handle_size と同値 — 見た目の正方形(半辺4)より半径で4px 広い遊びを持たせ、Q0『見えている物は必ず触れる』を判定側の余白で保証する(見た目より狭い判定を作らない)",
+
+  "gizmo_rotate_offset": 16,
+  "_note_gizmo_rotate_offset": "gizmo 節。回転ハンドル(stem つき小円、Canva/PowerPoint/Google Slides の慣習形)の、上辺中点から外側への距離。gizmo_handle_size×2 — 上辺の Top ハンドル(hit 半径8)と判定が重ならない最小段(8+8)で、独自の中間値を発明しない(算術合成 menubar_menu_width と同じ流儀)",
+
+  "gizmo_anchor_radius": 4,
+  "_note_gizmo_anchor_radius": "gizmo 節。anchor 表示(⊕ = 円+十字、AE のアンカーポイントの慣習形)の円半径。十字はこの2倍径。gizmo_handle_size の半分 — bbox ハンドルより一段小さい視覚重量(anchor は変形の不動点であって bbox の縁ではない)。第2切片(B22 波 2026-08-22)で drag 対象になった(AE pan-behind 型: anchor 変更+position 補償)— 命中は gizmo_hit_radius(8)を使い、見た目(4)より広い判定+hover の Crosshair カーソルで Q0『見えている物は必ず触れる』を保つ(第1切片の『表示のみ』注記はこの切片で失効)"
+}

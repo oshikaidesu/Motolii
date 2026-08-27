@@ -1,27 +1,45 @@
-# Motolii の**製品**。三代目にして、初めて probe ではない場所に立っている。
+# Motolii の**製品**。生きている物はすべてここに居る。
 #
-# 前史: `crates/`(egui / iced-shell 初代)と `next/`(iced 二代目)。どちらも
-# 「いつ来たか」で名付けられているので、次が来るたびに名前が嘘になった —
-# `next/README.md` の「front は iced のみ」を裁定251 が覆したのがその実例。
-# ここは「何であるか」で名乗る。front が Makepad から替わっても、製品は製品。
+# 前史は `crates/`(egui/iced 初代)と `next/`(iced 二代目)。どちらも「いつ来たか」で
+# 名付けたので、次が来るたび名前が嘘になった — `next/README.md` の「front は iced のみ」を
+# 裁定251 が覆したのがその実例。`app/` は「何であるか」で名乗る。front が Makepad から
+# 替わっても、製品は製品である。
 #
-# **なぜ probes/ から出したか**(2026-08-27 利用者裁定): Makepad front は
-# 裁定251/252 で製品になったのに、身分は probe のまま残った — 独立 workspace で
-# CI の視界の外、27本のテストが一度も CI で走らない。誰も規律を外そうと決めて
-# いない。probe には規律が**そもそも適用されない**からで、パスが `probes/` で
-# ある限り次の担当も同じ扱いをする。決定は下されたのに帰結が実行されていない
-# 状態を、ここで終わらせる。
+# **なぜ世界ごと分けたか**(2026-08-27 利用者裁定): リポが大きくなりすぎ、注意を引く物が
+# 多すぎた。その日のうちに実際に起きた事故が3つ —
+#   (1) 220GB の死んだ target を warm cache だと思って4本コピーしかけた
+#   (2) `git add -A` が新 workspace の生成物 17,615 個を commit へ入れた
+#   (3) 製品 front が `probes/` に居たまま CI の視界の外で27件の UX 欠陥を通した
+# どれも「見えている物が多すぎる」という一つの原因から出ている。**作業する = `app/` に
+# 居る**、という状態にすれば、grep も `git add -A` もビルドも生きたコードしか見ない。
 #
-# **members は明示する。** 空の `[workspace]`(r7 が使っていた逃げ口)にしない —
-# crate が増えるのは誰かが1行書いた時だけ、という状態を保つのが「今後も混合
-# しない」の実体である。意味の正本(store / engine / shell-state / fixture)は
-# `next/` に居るまま引く: 背骨は iced の時代の物ではなく、21 crate が読む
-# プロジェクトの共有資産であって、front の持ち物ではない。
+# ここに**無い**物は、定義により歴史である:
+#   `next/`   二代目 iced の UI 層(shell / panes / icons / menubar / keymap / verbs /
+#             css-metrics / font-catalog / presentation-config)と probe r0-r6
+#   `crates/` 初代(egui + iced shell)
+#   `spikes/` 使い捨ての実験
+# 消していない。**引かないだけ**である(裁定: 棄却物はリポから消さない)。
+#
+# **members は明示する。** 空の `[workspace]`(旧 r7 の逃げ口)にしない — crate が増えるのは
+# 誰かがここへ1行書いた時だけ、という状態が「二度と混合しない」の実体。
 [workspace]
 resolver = "2"
 members = [
     "motolii",
+    "core/motolii-core",
+    "core/motolii-eval",
+    "core/motolii-store",
+    "core/motolii-fixture",
+    "core/motolii-testkit",
+    "engine/motolii-audio",
+    "engine/motolii-compositor",
+    "engine/motolii-engine",
+    "engine/motolii-export",
+    "engine/motolii-media",
+    "engine/motolii-vector",
+    "ui/motolii-shell-state",
     "ui/motolii-timeline-projection",
+    "ui/motolii-tokens-rs",
 ]
 
 [workspace.package]
@@ -29,27 +47,86 @@ edition = "2021"
 license = "MIT OR Apache-2.0"
 
 [workspace.lints.rust]
-# `next/` と同じ2段構え — unreachable_pub で pub(crate) へ絞り、dead_code に
-# 呼び手ゼロを自動検出させる(2026-08-23 裁定)。
+# 「呼び手ゼロ」をコンパイラに検出させる2段構え(2026-08-23 裁定):
+#   (1) unreachable_pub で「crate 外から到達不能なのに pub」を pub(crate) へ落とす
+#   (2) 既定で走る dead_code が、pub(crate) になった物の呼び手ゼロを自動で警告する
 unreachable_pub = "warn"
 
 [workspace.dependencies]
-# 意味の正本。ここは front の持ち物ではないので `next/` を指す。
-motolii-store = { path = "../next/core/motolii-store" }
-motolii-shell-state = { path = "../next/ui/motolii-shell-state" }
-motolii-engine = { path = "../next/engine/motolii-engine" }
-motolii-fixture = { path = "../next/core/motolii-fixture" }
-# 値だけ。`iced::Theme`/`Font` への変換 adapter は feature の後ろ(裁定251以降
-# それは view adapter であって token の意味ではない)。
-motolii-tokens-rs = { path = "../next/ui/motolii-tokens-rs", default-features = false }
+# ---------------------------------------------------------------------------
+# 柱2: Rerun(store のみ。viewer 層は引かない)
+# ---------------------------------------------------------------------------
+# rev は fork `motolii/m3-device-caps` tip(裁定256)。乖離台帳は
+# ../docs/reviews/2026-08-18-rerun-fork-seam-ledger.md。
+#
+# **ここに re_view_spatial / re_ui / re_viewer_context を足さないこと** —
+# それらは egui を引き、front が1つであるという軸が壊れる。
+re_chunk = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14" }
+re_chunk_store = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14" }
+re_entity_db = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14" }
+re_log_types = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14" }
+re_query = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14" }
+re_types_core = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14" }
+re_log_encoding = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14", features = ["encoder", "decoder"] }
+re_build_info = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14" }
+re_byte_size = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14" }
+re_renderer = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14", default-features = false }
+
+# 版は rerun の workspace に合わせる。ずれると `IsoTransform` / `Vec3` が別型になる。
+wgpu = "29.0"
+glam = "0.30.10"
+macaw = "0.30.0"
+pollster = "0.4"
+
+arrow = { version = "58.3", default-features = false }
+
+# ---------------------------------------------------------------------------
+# Motolii 自身
+# ---------------------------------------------------------------------------
+motolii-core = { path = "core/motolii-core" }
+motolii-eval = { path = "core/motolii-eval" }
+motolii-store = { path = "core/motolii-store" }
+motolii-fixture = { path = "core/motolii-fixture" }
+motolii-testkit = { path = "core/motolii-testkit" }
+motolii-audio = { path = "engine/motolii-audio" }
+motolii-compositor = { path = "engine/motolii-compositor" }
+motolii-engine = { path = "engine/motolii-engine" }
+motolii-export = { path = "engine/motolii-export" }
+motolii-media = { path = "engine/motolii-media" }
+motolii-vector = { path = "engine/motolii-vector" }
+motolii-shell-state = { path = "ui/motolii-shell-state" }
 # front 側の純計算(投影と積み替え)。絵を持たないので柱に依らない。
 motolii-timeline-projection = { path = "ui/motolii-timeline-projection" }
+# 既定は「値だけ」。`iced::Theme`/`Font` への変換 adapter は feature の後ろ — 裁定251 以降
+# それは view adapter であって token の意味ではない。
+# **workspace 宣言が既定 on だとメンバー側の `default-features = false` は無視される**
+# (cargo の仕様)。既定を切る側はここに書くのが唯一効く場所。
+motolii-tokens-rs = { path = "ui/motolii-tokens-rs", default-features = false }
+
+# ---------------------------------------------------------------------------
+# 外部
+# ---------------------------------------------------------------------------
+image = { version = "0.25", default-features = false, features = ["png"] }
+serde = { version = "1", features = ["derive"] }
+sha2 = "0.10"
+thiserror = "2"
+proptest = "1"
+serde_json = "1"
+
+[profile.dev]
+debug = "line-tables-only"
+
+# 実窓の計測用(release 同等 opt + incremental)。debug バイナリで時間を測ると
+# 支配項が偽装される(2026-08-25 実測)。
+[profile.preview]
+inherits = "release"
+incremental = true
+debug = "line-tables-only"
 
 # 開発中の fork をローカル checkout から引く。push 後は rev を上げてこの節を外す。
 #
-# **workspace root にしか書けない。** メンバーの Cargo.toml に置くと cargo は
-# 黙って無視し、git rev の方を引く — 移設時にこれで `floating_tab_bar_cells`
-# が「無いメソッド」になった。同じ罠が `default-features` にもある(メンバー側の
-# 指定は workspace 宣言に負ける)。効く場所は1つ、と覚える。
+# **workspace root にしか書けない。** メンバーの Cargo.toml に置くと cargo は黙って無視し、
+# git rev の方を引く — 移設時にこれで `floating_tab_bar_cells` が「無いメソッド」になった。
+# 同じ罠が `default-features` にもある。**効く場所は1つ**、と覚える。
 [patch."https://github.com/oshikaidesu/makepad.git"]
 makepad-widgets = { path = "/Users/member_ottoto/rust_ae/makepad-motolii/widgets" }

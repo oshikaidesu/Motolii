@@ -25,20 +25,26 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: next
-      - name: 台帳の柵(owns 根拠・軸台帳の規約・入口の判定・証拠の実在)
-        run: |
-          cargo test --manifest-path next/Cargo.toml -p motolii-testkit --locked
-      # 製品 front の投影計算(2026-08-27)。iced も wgpu も makepad も引かないので
-      # 上の「重い CI は無いより悪い」に触れない — 冷ビルド実測 39秒。
+      # 台帳の柵(`motolii-testkit` の *_fence)は 2026-08-27 に撤去した。あれは
+      # **バックとフロントの段差**を見張る仕掛けで、front が iced だった頃は
+      # 表示と意味が食い違い得たから要った。裁定251 以降その段差が構造で消えて
+      # いる — front は共有 Surface へ直接描き(ゼロコピー)、宣言はそのまま
+      # 動いている UI(ホットリロード)で、`--remote` で実際に叩いて見られる。
+      # 守る物が無いのに立っていた証拠に、今日ファイルを動かしただけで3本とも
+      # 落ちた。製品の正しさは1ミリも動いていないのに。
       #
-      # **`app` 本体(`-p motolii`)はまだここに居ない。** 理由は重さではなく、
-      # `app/Cargo.toml` の `[patch]` が `/Users/member_ottoto/rust_ae/makepad-motolii`
+      # **残すのは「窓を叩いても見えない嘘」だけ**(9ファイル): 保存の往復・
+      # ドキュメント整合・時間とフレームの演算・ゼロコピーが CPU フォールバックへ
+      # 落ちていないこと(絵は同じに見えるので目で判別できない)。
+      # 見れば分かる物は窓で見る。足りなければホットリロードで何度でも足せる。
+      - name: 見えない嘘(投影計算・フレーム演算)
+        run: |
+          cargo test --manifest-path app/Cargo.toml -p motolii-timeline-projection -p motolii-core --locked
+      # **`app` 本体(`-p motolii`)と GPU 経路はまだここに居ない。** 理由は重さでは
+      # なく、`app/Cargo.toml` の `[patch]` が `/Users/member_ottoto/rust_ae/makepad-motolii`
       # というローカル checkout を指していること — CI に存在しないので原理的に
       # 解決できない。入れる条件は1つ、**fork を push して rev を上げ、patch 節を
-      # 外す**(`app/Cargo.toml` 自身がそう書いてある)。それが済めば macOS runner
-      # の job を足す(objc2-metal のため ubuntu では組めない)。
-      - name: 製品 front の投影計算
-        run: |
-          cargo test --manifest-path app/Cargo.toml -p motolii-timeline-projection --locked
+      # 外す**。それが済めば macOS runner の job を足す(objc2-metal と実 GPU の
+      # ため ubuntu では組めない)。
       - name: docs の索引整合
         run: bash scripts/check-docs.sh

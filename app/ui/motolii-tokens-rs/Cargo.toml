@@ -1,0 +1,20 @@
+[package]
+name = "motolii-tokens-rs"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+
+# デザイン値(DTCG 正本の寸法・スケール・パレット長)。**view の型を持たない。**
+#
+# 裁定160 切片1 で `motolii-shell/src/tokens.rs` から抽出した leaf crate。当時は
+# `iced::Color`/`Font`/`Subscription` への変換も同居していたが、裁定251 で front が
+# Makepad になった以降それは view adapter であって token の意味ではない。
+# 2026-08-27 の世界分断で、変換側(`colors.rs` / `style.rs` / `tokens.rs` / `watch.rs`)は
+# 凍結された二代目 `next/ui/motolii-tokens-rs` に原形のまま残した。
+# **消していない — 生きた世界が引かないだけである。**
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true
