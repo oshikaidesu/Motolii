@@ -118,8 +118,8 @@ script_mod! {
         thumb := View{width: Fill height: Fill flow: Down align: Align{x: 0.5 y: 0.5}
             glyph := Icon{width: mod.tokens.size.icon_lg + mod.tokens.space.s2 height: mod.tokens.size.icon_lg + mod.tokens.space.s2 align: Align{x: 0.5 y: 0.5} icon_walk: Walk{width: mod.tokens.size.icon_lg height: mod.tokens.size.icon_lg} draw_icon +: {color: mod.tokens.ink.faint}}
         }
-        meta := SolidView{width: Fill height: mod.tokens.size.row_tight flow: Right align: Align{y: 0.5} padding: Inset{left: mod.tokens.space.s2 right: mod.tokens.space.s2} spacing: mod.tokens.space.s1 show_bg: true new_batch: true draw_bg.color: mod.tokens.face.well
-            name := Label{width: Fill draw_text.color: mod.tokens.ink.body draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.xs line_spacing: 1.0 top_drop: 0.0}}
+        meta := SolidView{width: Fill height: mod.tokens.size.row_tight flow: Right align: Align{y: 0.5} padding: Inset{left: mod.tokens.space.s2 right: mod.tokens.space.s2} spacing: mod.tokens.space.s2 show_bg: true new_batch: true draw_bg.color: mod.tokens.face.well
+            name := Label{width: Fill margin: Inset{right: mod.tokens.space.s1} draw_text.color: mod.tokens.ink.body draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.xs line_spacing: 1.0 top_drop: 0.0}}
             placed := SolidView{width: 5 height: 5 show_bg: true new_batch: true draw_bg.color: mod.tokens.accent.on}
         }
     }
@@ -249,21 +249,20 @@ script_mod! {
             }
             browser_owner_divider := PaneDivider{}
             catalog := SolidView{width: Fill height: Fill flow: Down show_bg: true new_batch: true draw_bg.color: mod.tokens.face.panel
-                catalog_head_row := SolidView{width: Fill height: mod.tokens.size.row_tight flow: Right spacing: mod.tokens.space.s2 align: Align{y: 0.5} padding: Inset{left: 6 right: 2} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.head
-                    catalog_head := Label{text: "All media" width: Fill draw_text.color: mod.tokens.ink.strong draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.sm line_spacing: 1.0 top_drop: 0.0}}
-                    catalog_status := Label{text: "" width: Fit draw_text.color: mod.tokens.ink.muted draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.sm line_spacing: 1.0 top_drop: 0.0}}
-                    view_modes := View{width: Fit height: 16 flow: Right align: Align{y: 0.5}
+                catalog_head_row := SolidView{width: Fill height: mod.tokens.size.cap flow: Right spacing: mod.tokens.space.s2 align: Align{y: 0.5} padding: Inset{left: 6 right: 2} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.head
+                    catalog_head := Label{text: "Name" width: Fill draw_text.color: mod.tokens.ink.muted draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.xs}}
+                    result_count := Label{text: "8 items" width: Fit padding: Inset{right: mod.tokens.space.s2} draw_text.color: mod.tokens.ink.muted draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.xs}}
+                    view_modes := View{width: Fit height: Fit flow: Right align: Align{y: 0.5}
                         mode_thumb := IconButton{width: 18 draw_icon +: {svg: crate_resource("self://resources/icons/media.svg")}}
                         mode_grid := IconButton{width: 18 draw_icon +: {svg: crate_resource("self://resources/icons/grid.svg") color: mod.tokens.ink.strong}}
                         mode_list := IconButton{width: 18 draw_icon +: {svg: crate_resource("self://resources/icons/list.svg")}}
                     }
                 }
-                // filter shelf — 正本: 「結果 8 件 種別: すべて タグ: —」。chip は正本に無い
-                filter_shelf := SolidView{width: Fill height: mod.tokens.size.row_tight flow: Right spacing: mod.tokens.space.s3 align: Align{y: 0.5} padding: Inset{left: mod.tokens.space.s3 right: mod.tokens.space.s3} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.panel
-                    result_count := Label{text: "結果 8 件" width: Fit draw_text.color: mod.tokens.ink.body draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.xs line_spacing: 1.0 top_drop: 0.0}}
-                    kind_filter := Label{text: "種別: すべて" width: Fit draw_text.color: mod.tokens.ink.muted draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.xs line_spacing: 1.0 top_drop: 0.0}}
-                    tag_filter := Label{text: "タグ: —" width: Fill draw_text.color: mod.tokens.ink.muted draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.xs line_spacing: 1.0 top_drop: 0.0}}
-                    clear_filters := Label{text: "Clear" width: Fit draw_text.color: mod.tokens.ink.faint draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.xs line_spacing: 1.0 top_drop: 0.0}}
+                // filter shelf — filter だけを言う(件数は見出しへ移した)。UI 文字は英語
+                filter_shelf := SolidView{width: Fill height: mod.tokens.size.cap flow: Right spacing: mod.tokens.space.s4 align: Align{y: 0.5} padding: Inset{left: mod.tokens.space.s3 right: mod.tokens.space.s3} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.panel
+                    kind_filter := Label{text: "Kind: All" width: Fit draw_text.color: mod.tokens.ink.muted draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.xs}}
+                    tag_filter := Label{text: "Tags: —" width: Fill draw_text.color: mod.tokens.ink.muted draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.xs}}
+                    clear_filters := Label{text: "Clear" width: Fit draw_text.color: mod.tokens.ink.faint draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.xs}}
                 }
                 shelf_rule := SeamRule{}
                 // ヒーロー = カード grid(正本の8件)。● = 配置済み(bin-first)。

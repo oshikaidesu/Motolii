@@ -53,7 +53,6 @@ const RAIL_ALL_MEDIA: usize = 0;
 
 
 
-const RAIL_HEADS: [&str; 6] = ["All media", "Video", "Images", "Audio", "Project", "Recent"];
 
 script_mod! {
     use mod.prelude.widgets.*
@@ -858,17 +857,9 @@ impl App {
             .selected(cx, actions)
         {
             self.browser_rail = index;
-            self.set_catalog_head(cx, RAIL_HEADS[index]);
         }
     }
 
-    /// リストの見出しは選択の結果であって、行が自分で書きに行く物ではない。
-    fn set_catalog_head(&self, cx: &mut Cx, text: &str) {
-        self.browser(cx)
-            .widget(cx, ids!(browser_surface.browser_body.catalog.catalog_head))
-            .as_label()
-            .set_text(cx, text);
-    }
 
     /// 選択は App が持つ。widget は投影であって正本ではない — `script_mod!` の
     /// 再実行(hot reload)は animator を宣言状態へ戻すので、そのたび投影し直す。
@@ -890,7 +881,6 @@ impl App {
         for (index, item) in rail.iter().enumerate() {
             item.set_active(cx, index == self.browser_rail, Animate::No);
         }
-        self.set_catalog_head(cx, RAIL_HEADS[self.browser_rail]);
     }
 
     /// UI 全体の拡縮。寸法トークンが1箇所に集まっているので、倍率もここ1つで済む。
@@ -1121,6 +1111,11 @@ impl AppMain for App {
         if let Event::MouseMove(move_event) = event {
             let abs = move_event.abs;
             self.reveal_tab_bars_under(cx, abs);
+        }
+        // 窓の外へ出たら浮きタブを畳む。MouseMove は窓内でしか来ないので、
+        // 出しっぱなしで固まるのはここを聞いていない時だけ
+        if matches!(event, Event::MouseLeave(_)) {
+            self.reveal_tab_bars_under(cx, dvec2(-1.0e6, -1.0e6));
         }
         if matches!(event, Event::LiveEdit) {
             self.apply_browser_selection(cx);

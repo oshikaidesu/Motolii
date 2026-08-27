@@ -91,7 +91,9 @@ script_mod! {
     let ink_k = 1.1
     let body_pt = size.row * type_ratio / ink_k
     let text = {
-        xs: body_pt * 0.85
+        // caption 級には床を置く(7.5)。比率導出だけだと 6pt 台まで落ちて、
+        // 「小さい字に薄インクを使わない」(裁定270)を自分で破る
+        xs: max(body_pt * 0.85, 7.5)
         sm: body_pt
         base: body_pt
         md: body_pt * 0.95

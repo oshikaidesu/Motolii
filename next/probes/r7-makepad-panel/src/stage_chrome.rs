@@ -120,18 +120,11 @@ script_mod! {
             camera_tab := ViewTab{text: "Camera" draw_icon +: {svg: crate_resource("self://resources/icons/camera.svg")}}
             user_tab := ViewTab{text: "User View" draw_icon +: {svg: crate_resource("self://resources/icons/user_view.svg")}}
             tabs_spacer := SolidView{width: Fill height: mod.tokens.rule.size}
-        }
-        tabs_edge := SolidView{width: Fill height: mod.tokens.rule.size show_bg: true new_batch: true draw_bg.color: mod.tokens.face.down}
-        stage_head := SolidView{width: Fill height: 26 flow: Right spacing: 6 align: Align{y: 0.5} padding: Inset{left: 8 right: 8} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.panel
-            stage_title := Label{text: "STAGE" width: 44 draw_text.color: mod.tokens.ink.strong draw_text.text_style: theme.font_bold{font_size: 8}}
-            live_dot := SolidView{width: 5 height: 5 draw_bg.color: mod.tokens.accent.on}
-            live_source := Label{text: "RERUN" width: 42 draw_text.color: mod.tokens.ink.body draw_text.text_style: theme.font_code{font_size: 8}}
-            stage_spacer := SolidView{width: Fill height: 1}
             tool_select := IconFlatButton{width: 30 height: 20 draw_bg.color: mod.tokens.face.well icon_walk: Walk{width: 13 height: 13} draw_icon +: {svg: crate_resource("self://resources/icons/select.svg") color: mod.tokens.accent.on}}
             tool_shape := IconButton{width: 30 height: 20 icon_walk: Walk{width: 13 height: 13} draw_icon +: {svg: crate_resource("self://resources/icons/shape.svg")}}
             tool_pen := IconButton{width: 30 height: 20 icon_walk: Walk{width: 13 height: 13} draw_icon +: {svg: crate_resource("self://resources/icons/pen.svg")}}
         }
-        head_edge := SolidView{width: Fill height: mod.tokens.rule.size show_bg: true new_batch: true draw_bg.color: mod.tokens.face.down}
+        tabs_edge := SolidView{width: Fill height: mod.tokens.rule.size show_bg: true new_batch: true draw_bg.color: mod.tokens.face.down}
         // letterbox = カメラ外の暗幕(canon: 「letterbox = カメラ外の暗幕」)。
         // Camera 視点では comp 枠線を引かない(canon S0: AE/Resolve 無枠)。
         // 旧 comp_frame(1px 縁の入れ子)は撤去 — 枠を描かずに letterbox が comp に直に接する
@@ -157,9 +150,12 @@ script_mod! {
             // (canon: 「予約地: 方眼シート束... + Safe areas。入口は帯のアイコン(View 系)」)。
             // browser_surface.rs の RailRowReserved と同じ扱い: 薄字(ink.faint)・on_click なし
             reserved_view := IconButton{width: mod.tokens.size.bar height: mod.tokens.size.well icon_walk: Walk{width: 12 height: 12} draw_icon +: {svg: crate_resource("self://resources/icons/safe.svg") color: mod.tokens.ink.faint}}
-            mode_well := ValueWell{
-                stage_mode := Label{text: "CAMERA" width: 48 draw_text.color: mod.tokens.ink.strong draw_text.text_style: theme.font_code{font_size: 8}}
+            source_well := ValueWell{
+                live_dot := SolidView{width: 5 height: 5 margin: Inset{right: mod.tokens.space.s1} draw_bg.color: mod.tokens.accent.on}
+                live_source := Label{text: "RERUN" width: Fit draw_text.color: mod.tokens.ink.body draw_text.text_style: theme.font_code{font_size: mod.tokens.text.xs line_spacing: 1.0 top_drop: 0.0}}
             }
+            // 視点依存の情報だけ(canon: User View 中は倍率+⌂)。Camera 中は空 = タブと同じ語を繰り返さない
+            stage_mode := Label{text: "" width: Fit padding: Inset{left: mod.tokens.space.s2} draw_text.color: mod.tokens.ink.muted draw_text.text_style: theme.font_code{font_size: mod.tokens.text.xs line_spacing: 1.0 top_drop: 0.0}}
             resolution_well := ValueWell{
                 resolution := Label{text: "1920 × 1080" width: 76 draw_text.color: mod.tokens.ink.strong draw_text.text_style: theme.font_code{font_size: 8}}
             }
@@ -232,7 +228,7 @@ impl Widget for StageChrome {
             self.view
                 .widget(cx, ids!(stage_band.stage_mode))
                 .as_label()
-                .set_text(cx, if index == 0 { "CAMERA" } else { "USER VIEW" });
+                .set_text(cx, if index == 0 { "" } else { "USER VIEW · 62%" });
         }
 
         if !self.tabs_selected_once {

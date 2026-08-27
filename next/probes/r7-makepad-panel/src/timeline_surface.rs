@@ -896,10 +896,21 @@ impl TimelineSurface {
         // レーン高は本数で毎フレーム変わるので、固定 pt だと詰まった時に溢れる
         let name_size = (row.height * self.type_ratio / self.ink_k).clamp(6.0, 11.0);
         let text_y = row.y + ((row.height - name_size) * 0.5).max(0.0);
+        // 名前は M/S/L の手前で止める。長い名は切って「…」— 走らせて衝突させない
+        let name_x = self.rect.pos.x + 9.0;
+        let controls_left = Self::lane_toggle_rects(self.rail_width, self.rect.pos.x, row)[0].pos.x;
+        let name_budget = ((controls_left - 4.0 - name_x) / (name_size * 0.58)).max(1.0) as usize;
+        let display_name: String = if lane.name.chars().count() > name_budget {
+            let mut cut: String = lane.name.chars().take(name_budget.saturating_sub(1)).collect();
+            cut.push('…');
+            cut
+        } else {
+            lane.name.clone()
+        };
         self.draw_label(
             cx,
-            dvec2(self.rect.pos.x + 9.0, text_y),
-            &lane.name,
+            dvec2(name_x, text_y),
+            &display_name,
             if lane.selected {
                 vec4(0.93, 0.91, 0.84, 1.0)
             } else {
