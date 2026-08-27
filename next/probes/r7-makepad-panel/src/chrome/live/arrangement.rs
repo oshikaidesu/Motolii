@@ -23,21 +23,21 @@ script_mod! {
         show_bg: true
         new_batch: true
         draw_bg.color: #x818181
-        m43 := Label{
+        m43 := InkLabel{
             width: Fit
             height: Fit
             text: "43"
             draw_text.color: #xd0ced1
             draw_text.text_style: theme.font_regular{font_size: 9}
         }
-        m49 := Label{
+        m49 := InkLabel{
             width: Fit
             height: Fit
             text: "49"
             draw_text.color: #xd0ced1
             draw_text.text_style: theme.font_regular{font_size: 9}
         }
-        m57 := Label{
+        m57 := InkLabel{
             width: Fit
             height: Fit
             text: "57"
@@ -55,7 +55,7 @@ script_mod! {
         show_bg: true
         new_batch: true
         draw_bg.color: #xfba477
-        title := Label{
+        title := InkLabel{
             width: Fill
             height: Fit
             text: "Pads"

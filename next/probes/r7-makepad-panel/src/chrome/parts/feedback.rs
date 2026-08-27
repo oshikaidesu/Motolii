@@ -37,14 +37,14 @@ script_mod! {
         show_bg: true
         new_batch: true
         draw_bg.color: #x4f4f4f
-        headline := Label{
+        headline := InkLabel{
             width: Fit
             height: Fit
             text: "Nothing selected"
             draw_text.color: #xb8b8b8
             draw_text.text_style: theme.font_regular{font_size: 12}
         }
-        hint := Label{
+        hint := InkLabel{
             width: Fit
             height: Fit
             text: "Select a layer to edit."
@@ -69,7 +69,7 @@ script_mod! {
             show_bg: true
             new_batch: true
             draw_bg.color: #x282828
-            label := Label{
+            label := InkLabel{
                 width: Fit
                 height: Fit
                 text: "Tooltip"
@@ -88,7 +88,7 @@ script_mod! {
         show_bg: true
         new_batch: true
         draw_bg.color: #x282828
-        label := Label{
+        label := InkLabel{
             width: Fit
             height: Fit
             text: "BADGE"

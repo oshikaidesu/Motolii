@@ -93,7 +93,7 @@ script_mod! {
         show_bg: true
         new_batch: true
         draw_bg.color: #xa5a5a5
-        title := Label{
+        title := InkLabel{
             width: Fill
             height: Fit
             text: "Analog Slow Sweep Pad.adv"
@@ -112,7 +112,7 @@ script_mod! {
         show_bg: true
         new_batch: true
         draw_bg.color: #xacc5ca
-        title := Label{
+        title := InkLabel{
             width: Fill
             height: Fit
             text: "Drifting Ambient Pad.adv"
@@ -139,7 +139,7 @@ script_mod! {
             new_batch: true
             draw_bg.color: #xe3b43e
         }
-        title := Label{
+        title := InkLabel{
             width: Fill
             height: Fit
             text: "Favorites"

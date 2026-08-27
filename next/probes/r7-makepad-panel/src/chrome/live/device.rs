@@ -51,7 +51,7 @@ script_mod! {
         draw_bg.color: #x242424
         fold := LiveFold{}
         activator := LiveDeviceActivator{}
-        title := Label{
+        title := InkLabel{
             width: Fill
             height: Fit
             text: "Drifting Ambient Pad"
@@ -84,7 +84,7 @@ script_mod! {
                 draw_bg.color: #xe3b43e
             }
         }
-        caption := Label{
+        caption := InkLabel{
             width: Fit
             height: Fit
             text: "Tone"
@@ -136,7 +136,7 @@ script_mod! {
                 draw_bg.color: #x4dd37c
             }
         }
-        caption := Label{
+        caption := InkLabel{
             width: Fit
             height: Fit
             text: "Dry/Wet"

@@ -54,7 +54,7 @@ script_mod! {
             draw_text.color_disabled: #x8f8f8f
             draw_text.text_style: theme.font_regular{font_size: 11}
         }
-        value := Label{
+        value := InkLabel{
             width: Fit
             height: Fit
             padding: Inset{left: 8 right: 8}

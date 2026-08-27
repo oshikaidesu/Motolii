@@ -259,7 +259,7 @@ script_mod! {
         flow: Right
         align: Align{y: 0.5}
         spacing: 2
-        value := Label{
+        value := InkLabel{
             width: Fit
             height: Fit
             text: "14%"

@@ -137,7 +137,7 @@ script_mod! {
         show_bg: true
         new_batch: true
         draw_bg.color: #xfba477
-        title := Label{
+        title := InkLabel{
             width: Fill
             height: Fit
             text: "Pads"

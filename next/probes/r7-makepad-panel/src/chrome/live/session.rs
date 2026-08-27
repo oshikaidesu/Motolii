@@ -70,7 +70,7 @@ script_mod! {
         new_batch: true
         draw_bg.color: #xfba477
         launch := LiveClipLaunch{}
-        name := Label{
+        name := InkLabel{
             width: Fill
             height: Fit
             text: "Clip"
@@ -93,7 +93,7 @@ script_mod! {
             text: ">"
             draw_text.color: #x24e8a6
         }
-        name := Label{
+        name := InkLabel{
             width: Fill
             height: Fit
             text: "Clip"
@@ -156,7 +156,7 @@ script_mod! {
             new_batch: true
             draw_bg.color: #xfba477
         }
-        title := Label{
+        title := InkLabel{
             width: Fill
             height: Fit
             text: "Clip"

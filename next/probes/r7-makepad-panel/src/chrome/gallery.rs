@@ -16,9 +16,9 @@ script_mod! {
         new_batch: true
         draw_bg.color: #x363636
 
-        gallery_error := Label{width: Fill height: Fit padding: 8 text: "" draw_text.color: #xe8c48a draw_text.text_style: theme.font_code{font_size: 10}}
+        gallery_error := InkLabel{width: Fill height: Fit padding: 8 text: "" draw_text.color: #xe8c48a draw_text.text_style: theme.font_code{font_size: 10}}
         chrome_head := SolidView{width: Fill height: 26 flow: Right align: Align{y: 0.5} padding: Inset{left: 8 right: 8} show_bg: true new_batch: true draw_bg.color: #x2f2f2f
-            title := Label{text: "Chrome" width: Fill draw_text.color: #xcfcfcf draw_text.text_style: theme.font_bold{font_size: 11}}
+            title := InkLabel{text: "Chrome" width: Fill draw_text.color: #xcfcfcf draw_text.text_style: theme.font_bold{font_size: 11}}
         }
         chrome_body := View{
             width: Fill
