@@ -110,6 +110,9 @@ script_mod! {
         seam: #x1c1c1c
         pane: #x1c1c1c
         surface: #x111111
+        // パネルの接地の縁。Live 実測: 境界 = 暗い溝(≈desktop) + 次のパネル側の
+        // 明るい 1px(≈#adaeae)。板が机に載って縁が光る、が Ableton の深さの言語
+        rim: #x9c9c9c
     }
 
     // 面 — 深さは影ではなく明度で作る。**暗いほど奥**。

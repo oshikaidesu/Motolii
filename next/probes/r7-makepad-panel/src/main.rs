@@ -79,13 +79,16 @@ script_mod! {
         draw_icon +: {color: mod.tokens.ink.body}
     }
 
-    // 窓の大きな面の境。chrome と dock、dock と status の間に引く
+    // 窓の大きな面の境も同じ接地の文法: 暗い溝 + 次の面の上縁の光(Live 実測)
     let SurfaceDivider = SolidView{
         width: Fill
-        height: mod.tokens.rule.size
+        height: mod.tokens.space.s2
+        flow: Down
         show_bg: true
         new_batch: true
-        draw_bg.color: mod.tokens.rule.surface
+        draw_bg.color: mod.tokens.face.desktop
+        fill := View{width: Fill height: Fill}
+        rim := SolidView{width: Fill height: mod.tokens.rule.size show_bg: true new_batch: true draw_bg.color: mod.tokens.rule.rim}
     }
 
     // Timeline の面(TimeField / TimelineRow / RailToggle 等)はここから撤去した。
@@ -211,6 +214,46 @@ script_mod! {
             dock := DockFlat{
                 width: Fill
                 height: Fill
+                // 境界は「同値の面の間の暗線」ではなく「暗い溝 + 次のパネルの縁の光」
+                // (Live 実測: 面 #3e3f3c → 溝 ~5pt #2b2b29 → 明縁 1-2px #adaeae → 面)。
+                // 溝の深さと縁のハイライトが板を接地させる — 暗線だけだと浮いて見える
+                splitter: Splitter{
+                    draw_bg +: {
+                        color_bg: mod.tokens.face.desktop
+                        pixel: fn() {
+                            let sdf = Sdf2d.viewport(self.pos * self.rect_size)
+                            sdf.clear(self.color_bg)
+                            // 明縁は「後ろ側」= 次のパネルの先頭端。is_vertical>0.5 は
+                            // 縦棒(列を割る = 横方向の splitter)なので rect_size.x が
+                            // 細い側 — 縁は右端(次パネルの左端)に立てる。
+                            // else は横棒(行を割る)で rect_size.y が細い側 — 縁は下端。
+                            // (以前はこの2本が入れ替わっており、縁が細い辺の外へ
+                            // 落ちて可視スキャン線に一切かからなかった — それが
+                            // 「override が効いていない」ように見えた本当の原因)
+                            // SDF のアンチエイリアスは幅1の矩形だと両端のぼかしが
+                            // 中央で重なり、塗りが半分以下しか乗らない(実測:
+                            // #2a2a2a→#9c9c9c のはずが #525252 止まりだった)。
+                            // 縁だけ aa を締めてハードエッジに近づける
+                            sdf.aa = sdf.aa * 4.0
+                            if self.is_vertical > 0.5 {
+                                sdf.rect(self.rect_size.x - 1.0, 0.0, 1.0, self.rect_size.y)
+                            } else {
+                                sdf.rect(0.0, self.rect_size.y - 1.0, self.rect_size.x, 1.0)
+                            }
+                            // rule.rim #x9c9c9c。shader 本体は mod.* を解決できないので
+                            // リテラルで持つ(値の正本は tokens 側)
+                            sdf.fill(vec4(0.612, 0.612, 0.612, 1.0))
+                            sdf.aa = sdf.aa * 0.25
+                            // 掴みの棒は既定のまま(hover まで不可視)
+                            if self.is_vertical > 0.5 {
+                                sdf.box(self.splitter_pad, self.rect_size.y * 0.5 - self.bar_size * 0.5, self.rect_size.x - 2.0 * self.splitter_pad, self.bar_size, self.border_radius)
+                            } else {
+                                sdf.box(self.rect_size.x * 0.5 - self.bar_size * 0.5, self.splitter_pad, self.bar_size, self.rect_size.y - 2.0 * self.splitter_pad, self.border_radius)
+                            }
+                            return sdf.fill_keep(mix(self.color, mix(self.color_hover, self.color_drag, self.drag), self.hover))
+                        }
+                    }
+                }
                 // makepad の丸角オーバーレイは makepad の顔。Ableton は直角
                 round_corner.border_radius: 0.0
                 // 既定の 33pt は、この密度の中では帯だけが太い。タブは掴む所なので
@@ -256,28 +299,28 @@ script_mod! {
                     tabs: [@browser]
                     selected: 0
                     closable: false
-                    float_tab_bar: true
+                    float_tab_bar: false
                 }
 
                 stage_tabs := DockTabs{
                     tabs: [@stage]
                     selected: 0
                     closable: false
-                    float_tab_bar: true
+                    float_tab_bar: false
                 }
 
                 inspector_tabs := DockTabs{
                     tabs: [@inspector @export @settings @chrome_tab]
                     selected: 0
                     closable: false
-                    float_tab_bar: true
+                    float_tab_bar: false
                 }
 
                 timeline_tabs := DockTabs{
                     tabs: [@timeline]
                     selected: 0
                     closable: false
-                    float_tab_bar: true
+                    float_tab_bar: false
                 }
 
                 browser := DockTab{

@@ -101,11 +101,11 @@ script_mod! {
         default: 0.45
         precision: 2
         text: "Param"        draw_bg.color: #x131313
-        draw_bg.color_hover: #x131313
-        draw_bg.color_focus: #x131313
-        draw_bg.color_drag: #x131313
+        draw_bg.color_hover: #x282828
+        draw_bg.color_focus: #x282828
+        draw_bg.color_drag: #x3d3d3d
         draw_bg.val_color: #xacc5ca
-        draw_bg.val_color_hover: #xacc5ca
+        draw_bg.val_color_hover: #xb8d1d6
         draw_bg.handle_color: #xa5a5a5
         draw_bg.border_size: 0.0
         draw_bg.border_radius: 0.0
@@ -151,8 +151,8 @@ script_mod! {
         padding: Inset{left: 8 right: 8}
         align: Center        text: "Osc 2"
         draw_bg.color: #x131313
-        draw_bg.color_hover: #x131313
-        draw_bg.color_down: #x131313
+        draw_bg.color_hover: #x282828
+        draw_bg.color_down: #x3d3d3d
         draw_bg.border_size: 0.0
         draw_bg.border_radius: 0.0
         draw_text.color: #xa5a5a5

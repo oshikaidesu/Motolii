@@ -165,6 +165,25 @@ cargo build --manifest-path "$(git rev-parse --show-toplevel)/next/Cargo.toml" -
 cargo test --manifest-path "$(git rev-parse --show-toplevel)/next/Cargo.toml" --release -p motolii-store --test document edit_storm_with_the_real_track_type
 ```
 
+### UI修正はホットリロード運転(2026-08-27 利用者指示 — 「毎回ビルド」の根治)
+
+r7 の UI 調整で**変更ごとに `cargo build`→再起動をしない**。窓はセッションで1回だけ起動:
+
+```bash
+cargo run --locked --manifest-path next/probes/r7-makepad-panel/Cargo.toml -- --hot --remote > /tmp/r7.log 2>&1 &
+```
+
+- `--hot` は makepad 本体の live reload: `script_mod!` を持つ `src/*.rs` の保存が
+  再ビルド無しで窓に届く(`*_surface.rs` / `chrome/*.rs` / `main.rs` すべて)。
+  以後のループは「保存 → `--remote` の `/g` `/snap` で確認」だけ
+- `--hot` と `--remote` は独立の引数チェック(platform/live_reload.rs)なので併用可。
+  リポ根から起動する(リソースパス解決)
+- `--hot` は Rust の `const` に届かない。繰り返し詰める視覚定数は `#[live]` フィールド+
+  宣言に置く(r7 README「調整する値は script_mod! に置く(裁定269)」)
+- 変更前に makepad skills を読む: makepad-2.0-design-judgment → 該当 compliance skill
+- `--remote` 運転の正本は `~/rust_ae/makepad-motolii/AGENTS.md`。利用者の窓には触らない・
+  自分が開けた窓は終わったら落とす
+
 ### 実窓を見る時(2026-08-25 実測 — computer-use 迂回の根治)
 
 - **Makepad の窓は macOS のアクセシビリティに応答しない**。computer-use の `get_app_state` はタイムアウトする。`.app` ラッパーへ包み直しても変わらない(2026-08-25 に両方実測)。**AX が返らないのは実装の欠陥ではなく Makepad の性質**なので、ここから原因調査を始めない

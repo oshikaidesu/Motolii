@@ -960,6 +960,17 @@ impl TimelineSurface {
             );
         }
 
+    }
+
+    /// クリップの棒だけ。**格子より後**に描く(Live の層: 地 → 格子 → クリップ)。
+    fn draw_lane_clip(&mut self, cx: &mut Cx2d, lane: &TimelineLane, row: VisualRow) {
+        let color = if lane.hidden {
+            Self::MUTED_LABEL_COLOR
+        } else if self.is_dragging_lane(lane.id) {
+            self.playhead_color
+        } else {
+            Self::lane_color(lane.label_color)
+        };
         let visible_start = self.view_start;
         let visible_end = self.view_start + self.view_span;
         let clip_start = lane.start as f64;
@@ -998,6 +1009,10 @@ impl TimelineSurface {
             vec4(0.57, 0.57, 0.57, 1.0),
             7.2,
         );
+    }
+
+    /// キーの菱形だけ。クリップと同じ層(格子より上)。
+    fn draw_property_keys(&mut self, cx: &mut Cx2d, property: &TimelinePropertyLane, row: VisualRow) {
         let key_color = self
             .lanes
             .iter()
@@ -1062,7 +1077,9 @@ impl TimelineSurface {
         }
     }
 
-    fn draw_grid_and_ruler(&mut self, cx: &mut Cx2d, lane_height: f64) {
+    /// 時間場の背景(帯 + 縦線)。**クリップより先**に描く — Live は格子を
+    /// クリップの下に敷く。上に乗せると全部が網をかけたように濁る。
+    fn draw_time_field_background(&mut self, cx: &mut Cx2d, lane_height: f64) {
         let (minor, major) = self
             .viewport()
             .tick_steps(self.fps_num, self.fps_den, lane_height, self.tick_row_floor);
@@ -1093,6 +1110,17 @@ impl TimelineSurface {
             );
             frame = frame.saturating_add(minor.max(1));
         }
+    }
+
+    fn draw_grid_and_ruler(&mut self, cx: &mut Cx2d, lane_height: f64) {
+        let (minor, major) = self
+            .viewport()
+            .tick_steps(self.fps_num, self.fps_den, lane_height, self.tick_row_floor);
+        let minor_px = minor as f64 * (self.time_rect().size.x / self.view_span.max(1.0));
+        let minor_fade = ((minor_px - self.tick_fade_from) / (self.tick_fade_to - self.tick_fade_from))
+            .clamp(0.0, 1.0);
+        let first_minor = (self.view_start / minor as f64).ceil() as i64 * minor;
+        let last = (self.view_start + self.view_span).ceil() as i64;
 
         // Ruler is deliberately emitted in a fresh foreground draw call after
         // clips and body grid, so bars can never overwrite its ticks again.
@@ -1273,11 +1301,13 @@ impl Widget for TimelineSurface {
         self.draw_bg.draw_abs(cx, self.rect);
         self.draw_item.new_draw_call(cx);
 
+        // 層(Live の積み): レーン地/rail → 格子(帯+縦線) → クリップ/キー → ルーラー。
+        // 格子をクリップの上に乗せると全体が網をかけたように濁る。
         let lanes = self.lanes.clone();
         let properties = self.property_lanes.clone();
         let rows = self.visual_rows();
         let mut lane_number = 0usize;
-        for row in rows {
+        for row in rows.iter().copied() {
             match row.kind {
                 VisualRowKind::Lane(index) => {
                     self.draw_lane(cx, &lanes[index], row, lane_number % 2 == 1);
@@ -1297,6 +1327,13 @@ impl Widget for TimelineSurface {
             );
         }
 
+        self.draw_time_field_background(cx, self.lane_height());
+        for row in rows.iter().copied() {
+            match row.kind {
+                VisualRowKind::Lane(index) => self.draw_lane_clip(cx, &lanes[index], row),
+                VisualRowKind::Property(index) => self.draw_property_keys(cx, &properties[index], row),
+            }
+        }
         self.draw_grid_and_ruler(cx, self.lane_height());
         self.draw_playhead_and_drop_target(cx);
         DrawStep::done()
