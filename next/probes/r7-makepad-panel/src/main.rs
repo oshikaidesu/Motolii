@@ -413,7 +413,7 @@ script_mod! {
 
                 inspector_tabs := DockTabs{
                     tabs: [@inspector @export @settings @chrome_tab]
-                    selected: 3
+                    selected: 0
                     closable: false
                     float_tab_bar: true
                 }

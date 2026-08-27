@@ -102,7 +102,7 @@ script_mod! {
         align: Align{x: 0.0 y: 0.5}
         padding: Inset{left: mod.tokens.space.s5 right: mod.tokens.space.s5}
         spacing: mod.tokens.space.s4
-        glyph := Icon{width: mod.tokens.size.icon_sm height: mod.tokens.size.icon_sm icon_walk: Walk{width: mod.tokens.size.icon_sm height: mod.tokens.size.icon_sm} draw_icon +: {color: mod.tokens.ink.faint}}
+        glyph := Icon{width: mod.tokens.size.icon height: mod.tokens.size.icon align: Align{x: 0.5 y: 0.5} icon_walk: Walk{width: 10.0 height: 10.0} draw_icon +: {color: mod.tokens.ink.faint}}
         label := Label{width: Fill draw_text.color: mod.tokens.ink.faint draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.sm line_spacing: 1.0 top_drop: 0.0}}
     }
 
@@ -116,7 +116,7 @@ script_mod! {
         new_batch: true
         draw_bg.color: mod.tokens.face.area
         thumb := View{width: Fill height: Fill flow: Down align: Align{x: 0.5 y: 0.5}
-            glyph := Icon{width: mod.tokens.size.icon_lg height: mod.tokens.size.icon_lg icon_walk: Walk{width: mod.tokens.size.icon_lg height: mod.tokens.size.icon_lg} draw_icon +: {color: mod.tokens.ink.faint}}
+            glyph := Icon{width: mod.tokens.size.icon_lg + mod.tokens.space.s2 height: mod.tokens.size.icon_lg + mod.tokens.space.s2 align: Align{x: 0.5 y: 0.5} icon_walk: Walk{width: mod.tokens.size.icon_lg height: mod.tokens.size.icon_lg} draw_icon +: {color: mod.tokens.ink.faint}}
         }
         meta := SolidView{width: Fill height: mod.tokens.size.row_tight flow: Right align: Align{y: 0.5} padding: Inset{left: mod.tokens.space.s2 right: mod.tokens.space.s2} spacing: mod.tokens.space.s1 show_bg: true new_batch: true draw_bg.color: mod.tokens.face.well
             name := Label{width: Fill draw_text.color: mod.tokens.ink.body draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.xs line_spacing: 1.0 top_drop: 0.0}}

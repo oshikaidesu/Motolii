@@ -1,54 +1,48 @@
-//! Inspector パネル枠。property / key の意味書きは波1。iced は引かない。
-//! 見た目: Ableton Live 12 Dark 実画面の Device 域（Channel EQ / Compressor）から実測サンプル。
-//! 面 mod.tokens.face.panel / 窪み #x141414 / 帯 #x646464 / 選択帯 #x8dc9d9 / 墨 #x171717 /
-//! 値シアン #x73acb3 / 線シアン #x8dc9d9 / 橙 mod.tokens.accent.on / ボタン mod.tokens.face.raised+#xe3e3e5 /
-//! 指針 #xd6d0d4 / 境界 mod.tokens.rule.seam。
-//! 形: 窪み矩形は枠線なし・角丸ゼロ。区切りは 1px 線。ヘッダは低い帯。
-//! メーターは暗面に高彩度線1本。ノブは平坦な円 + 細い指針線（立体感なし）。
+//! Inspector パネル。**構造の正本は `next/reference/mocks/inspector-semantics.html`**
+//! (第4号、propertyRow 25px = 比率の分母、inspector-ratio-ledger 実測基準)。
+//! 第一波(M01)の実線分だけを描く: selection summary / 列見出し / TRANSFORM /
+//! APPEARANCE / FX STACK の行 / footer ヒント。mode tabs・extension tabs・notes は
+//! Q0 スコープ外(I-ratio 台帳)。左 3px = 値型の色。◆=keyed。
+//! 皮は Ableton の形文法(裁定267): 平坦・角丸ゼロ・1px 線・琥珀 on。
 use makepad_widgets::*;
 
 script_mod! {
     use mod.prelude.widgets.*
     use mod.widgets.*
 
-    // 1px 区切り線 — Device 境界の実測 mod.tokens.rule.seam
-    let InspectorRule = SolidView{width: Fill height: 1 show_bg: true new_batch: true draw_bg.color: mod.tokens.rule.seam}
+    let InspectorRule = SolidView{width: Fill height: mod.tokens.rule.size show_bg: true new_batch: true draw_bg.color: mod.tokens.rule.seam}
 
-    // 窪み数値欄 — 枠線なし・角丸ゼロ・シアン明字（Thresh 欄の実測）
-    let InspectorField = ButtonFlat{
-        width: 42
-        height: 16
-        padding: 0
-        draw_bg.color: #x141414
-        draw_bg.color_hover: mod.tokens.rule.seam
-        draw_bg.color_down: #x141414
-        draw_bg.border_size: 0.0
-        draw_bg.border_radius: 0.0
-        draw_text.color: #x73acb3
-        draw_text.text_style: theme.font_code{font_size: 9}
-    }
-
-    // 裸のキー打鍵 — 面の上のアイコンだけ。地は塗らない
-    let InspectorKey = ButtonFlatterIcon{
-        margin: 0
-        width: 26
-        height: 16
-        icon_walk: Walk{width: 11 height: 11}
-        padding: 0
-        draw_icon +: {color: #x2e2e2e}
-    }
-
-    // 平坦ノブ — 暗円 + 細い指針線。縁も影も置かない
-    let InspectorKnob = SolidView{
-        width: 24
-        height: 24
-        flow: Down
-        align: Align{x: 0.5 y: 0.0}
-        padding: Inset{top: 2}
+    // 節見出し — 「TRANSFORM 3 · 2 keyed」。左が名、右が計数(薄)
+    let SectionCap = SolidView{
+        width: Fill
+        height: 18
+        flow: Right
+        align: Align{y: 0.5}
+        padding: Inset{left: mod.tokens.space.s4 right: mod.tokens.space.s4}
         show_bg: true
-        draw_bg.color: #x141414
-        draw_bg.border_radius: 12.0
-        pointer := SolidView{width: 2 height: 8 show_bg: true draw_bg.color: #xd6d0d4}
+        new_batch: true
+        draw_bg.color: mod.tokens.face.area
+        fold := Label{text: "▼" width: Fit padding: Inset{right: mod.tokens.space.s2} draw_text.color: mod.tokens.ink.faint draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.xs line_spacing: 1.0 top_drop: 0.0}}
+        name := Label{width: Fill draw_text.color: mod.tokens.ink.muted draw_text.text_style: theme.font_bold{font_size: mod.tokens.text.xs line_spacing: 1.0 top_drop: 0.0}}
+        count := Label{width: Fit draw_text.color: mod.tokens.ink.faint draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.xs line_spacing: 1.0 top_drop: 0.0}}
+    }
+
+    // property 行 — 分母 25px(inspector-ratio-ledger 実測基準)。
+    // 左 3px = 値型の色。◆=keyed / ◇=非 keyed。値3列は等幅
+    let PropertyRow = SolidView{
+        width: Fill
+        height: 25
+        flow: Right
+        align: Align{y: 0.5}
+        show_bg: true
+        new_batch: true
+        draw_bg.color: mod.tokens.face.panel
+        type_bar := SolidView{width: 3 height: Fill show_bg: true new_batch: true draw_bg.color: mod.tokens.ink.faint}
+        name := Label{width: 64 padding: Inset{left: mod.tokens.space.s3} draw_text.color: mod.tokens.ink.body draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.sm line_spacing: 1.0 top_drop: 0.0}}
+        vx := Label{width: 52 draw_text.color: mod.tokens.ink.strong draw_text.text_style: theme.font_code{font_size: mod.tokens.text.sm line_spacing: 1.0 top_drop: 0.0}}
+        vy := Label{width: 52 draw_text.color: mod.tokens.ink.strong draw_text.text_style: theme.font_code{font_size: mod.tokens.text.sm line_spacing: 1.0 top_drop: 0.0}}
+        vz := Label{width: 52 draw_text.color: mod.tokens.ink.strong draw_text.text_style: theme.font_code{font_size: mod.tokens.text.sm line_spacing: 1.0 top_drop: 0.0}}
+        keyed := Label{width: Fill align: Align{x: 1.0} padding: Inset{right: mod.tokens.space.s4} draw_text.color: mod.tokens.accent.on draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.sm line_spacing: 1.0 top_drop: 0.0}}
     }
 
     mod.widgets.InspectorSurfaceBase = #(InspectorSurface::register_widget(vm))
@@ -60,94 +54,49 @@ script_mod! {
         new_batch: true
         draw_bg.color: mod.tokens.face.panel
 
-        // 頭 = 選択中 Device のタイトル帯（シアン地・墨字・橙 LED）
-        inspector_head := SolidView{width: Fill height: 20 flow: Right spacing: 6 align: Align{y: 0.5} padding: Inset{left: 6 right: 8} show_bg: true new_batch: true draw_bg.color: #x8dc9d9
-            accent_dot := SolidView{width: 7 height: 7 show_bg: true draw_bg.color: mod.tokens.accent.on draw_bg.border_radius: 3.5}
-            title := Label{text: "Inspector" width: Fill draw_text.color: #x171717 draw_text.text_style: theme.font_bold{font_size: 10}}
-            context := Label{text: "Layer 7 · Solid" width: Fit draw_text.color: #x171717 draw_text.text_style: theme.font_code{font_size: 8}}
+        // selection summary — 46/25 = 1.84(inspector-ratio-ledger の実測比。モック表示の 40 は概形)
+        summary := SolidView{width: Fill height: 46 flow: Down padding: Inset{left: mod.tokens.space.s4 right: mod.tokens.space.s4 top: mod.tokens.space.s2} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.panel
+            sel_name := Label{text: "Rectangle" width: Fill height: Fit draw_text.color: mod.tokens.ink.strong draw_text.text_style: theme.font_bold{font_size: mod.tokens.text.lg line_spacing: 1.0 top_drop: 0.0}}
+            sel_kind := Label{text: "Shape layer · 3D transform · 2 keys" width: Fill height: Fit padding: Inset{top: mod.tokens.space.s1} draw_text.color: mod.tokens.ink.muted draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.xs line_spacing: 1.0 top_drop: 0.0}}
         }
-        head_rule := InspectorRule{}
+        summary_rule := InspectorRule{}
 
-        // モード切替 = Peak/RMS 型セグメント。オンは橙+墨字、オフは mod.tokens.face.raised+明字。隙間 1px が線
-        modes := SolidView{width: Fill height: 22 flow: Right spacing: 1 show_bg: true new_batch: true draw_bg.color: mod.tokens.rule.seam
-            effect := ButtonFlat{text: "Effect" width: Fill height: 22 icon_walk: Walk{width: 11 height: 11} draw_icon +: {svg: crate_resource("self://resources/icons/effects.svg") color: #x171717} draw_bg.color: mod.tokens.accent.on draw_bg.color_hover: #xd8a160 draw_bg.color_down: #xbf8d4e draw_bg.border_size: 0.0 draw_bg.border_radius: 0.0 draw_text.color: #x171717 draw_text.text_style: theme.font_bold{font_size: 8}}
-            layer_mode := ButtonFlat{text: "Custom" width: Fill height: 22 icon_walk: Walk{width: 11 height: 11} draw_icon +: {svg: crate_resource("self://resources/icons/shape.svg") color: #xe3e3e5} draw_bg.color: mod.tokens.face.raised draw_bg.color_hover: #x424242 draw_bg.color_down: #x141414 draw_bg.border_size: 0.0 draw_bg.border_radius: 0.0 draw_text.color: #xe3e3e5 draw_text.text_style: theme.font_regular{font_size: 8}}
+        // 列見出し 21/25
+        col_head := SolidView{width: Fill height: 21 flow: Right align: Align{y: 0.5} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.panel
+            pad := View{width: 3 height: Fill}
+            c_prop := Label{text: "Property" width: 64 padding: Inset{left: mod.tokens.space.s3} draw_text.color: mod.tokens.ink.faint draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.xs line_spacing: 1.0 top_drop: 0.0}}
+            c_x := Label{text: "X" width: 52 draw_text.color: mod.tokens.ink.faint draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.xs line_spacing: 1.0 top_drop: 0.0}}
+            c_y := Label{text: "Y" width: 52 draw_text.color: mod.tokens.ink.faint draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.xs line_spacing: 1.0 top_drop: 0.0}}
+            c_z := Label{text: "Z" width: 52 draw_text.color: mod.tokens.ink.faint draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.xs line_spacing: 1.0 top_drop: 0.0}}
         }
-        modes_rule := InspectorRule{}
 
-        // 選択 = 面の上に窪み表示欄。名はシアン、種別は琥珀（kHz 表示の実測）
-        selection := SolidView{width: Fill height: 40 flow: Right spacing: 6 align: Align{y: 0.5} padding: Inset{left: 6 right: 6} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.panel
-            glyph := Icon{width: 20 height: 20 icon_walk: Walk{width: 13 height: 13} draw_icon +: {svg: crate_resource("self://resources/icons/shape.svg") color: #x171717} draw_bg +: {color: mod.tokens.accent.on}}
-            selection_copy := SolidView{width: Fill height: 28 flow: Down align: Align{y: 0.5} padding: Inset{left: 6} show_bg: true new_batch: true draw_bg.color: #x141414
-                selection_name := Label{text: "Chorus Lyrics" width: Fill height: 13 draw_text.color: #x73acb3 draw_text.text_style: theme.font_bold{font_size: 9}}
-                selection_type := Label{text: "Solid · selected · off frame" width: Fill height: 11 draw_text.color: #xbda37e draw_text.text_style: theme.font_code{font_size: 7.5}}
-            }
-            mute := ButtonFlatIcon{width: 20 height: 20 padding: 0 icon_walk: Walk{width: 11 height: 11} draw_bg.color: mod.tokens.face.raised draw_bg.color_hover: #x424242 draw_bg.color_down: #x141414 draw_bg.border_size: 0.0 draw_bg.border_radius: 0.0 draw_icon +: {svg: crate_resource("self://resources/icons/mute.svg") color: #xe3e3e5}}
-            solo := ButtonFlatIcon{width: 20 height: 20 padding: 0 icon_walk: Walk{width: 11 height: 11} draw_bg.color: mod.tokens.accent.on draw_bg.color_hover: #xd8a160 draw_bg.color_down: #xbf8d4e draw_bg.border_size: 0.0 draw_bg.border_radius: 0.0 draw_icon +: {svg: crate_resource("self://resources/icons/solo.svg") color: #x171717}}
-        }
-        selection_rule := InspectorRule{}
+        transform_cap := SectionCap{name.text: "TRANSFORM" count.text: "3 · 2 keyed"}
+        row_position := PropertyRow{type_bar.draw_bg.color: mod.tokens.accent.alt name.text: "Position" vx.text: "0.125" vy.text: "-0.075" vz.text: "0.000" keyed.text: "◆"}
+        row_rotation := PropertyRow{type_bar.draw_bg.color: mod.tokens.accent.alt name.text: "Rotation" vx.text: "0.0" vy.text: "0.0" vz.text: "24.0°" keyed.text: "◆"}
+        row_scale := PropertyRow{type_bar.draw_bg.color: mod.tokens.accent.alt name.text: "Scale" vx.text: "1.000" vy.text: "1.000" vz.text: "1.000" keyed.text: "◇" keyed.draw_text.color: mod.tokens.ink.faint}
 
-        // メーター = 暗面に高彩度シアン線1本（EQ カーブ / GR 線の言語）
-        meter := SolidView{width: Fill height: 26 flow: Down padding: Inset{top: 12 bottom: 2} show_bg: true new_batch: true draw_bg.color: #x141414
-            meter_line := SolidView{width: Fill height: 1 show_bg: true draw_bg.color: #x8dc9d9}
-            meter_caption := View{width: Fill height: Fit align: Align{x: 1.0} padding: Inset{right: 6}
-                meter_value := Label{text: "0.00 dB" width: Fit draw_text.color: #x679299 draw_text.text_style: theme.font_code{font_size: 7.5}}
-            }
-        }
-        meter_rule := InspectorRule{}
+        appearance_cap := SectionCap{name.text: "APPEARANCE" count.text: "2 · 1 keyed"}
+        row_fill := PropertyRow{type_bar.draw_bg.color: #xd8c97f name.text: "Fill" vx.text: "#D8C97F" vy.text: "" vz.text: "" keyed.text: "◇" keyed.draw_text.color: mod.tokens.ink.faint}
+        row_opacity := PropertyRow{type_bar.draw_bg.color: mod.tokens.accent.on name.text: "Opacity" vx.text: "100%" vy.text: "" vz.text: "" keyed.text: "◆"}
 
-        // 見出し = 低い帯（未選択タイトル帯の実測 #x646464・墨字）
-        transform_section := SolidView{width: Fill height: 17 flow: Right align: Align{y: 0.5} padding: Inset{left: 8 right: 8} show_bg: true new_batch: true draw_bg.color: #x646464
-            section := Label{text: "TRANSFORM" width: Fill draw_text.color: #x171717 draw_text.text_style: theme.font_bold{font_size: 7.5}}
-            section_count := Label{text: "1 PROP · 2 KEYS" width: Fit draw_text.color: #x171717 draw_text.text_style: theme.font_code{font_size: 7.5}}
+        fx_cap := SectionCap{name.text: "FX STACK" count.text: "1 effect"}
+        // effect 行 — 選択は行の地、証は色付き左端(裁定: ○ボタン/FXバッジは置かない)
+        fx_row := SolidView{width: Fill height: 25 flow: Right align: Align{y: 0.5} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.panel
+            fx_bar := SolidView{width: 3 height: Fill show_bg: true new_batch: true draw_bg.color: mod.tokens.accent.record}
+            fx_name := Label{text: "TURBULENT DISPLACE" width: Fill padding: Inset{left: mod.tokens.space.s3} draw_text.color: mod.tokens.ink.body draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.sm line_spacing: 1.0 top_drop: 0.0}}
+            fx_params := Label{text: "8 params" width: Fit padding: Inset{right: mod.tokens.space.s3} draw_text.color: mod.tokens.ink.faint draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.xs line_spacing: 1.0 top_drop: 0.0}}
+            fx_on := SolidView{width: 24 height: 15 margin: Inset{right: mod.tokens.space.s3} align: Align{x: 0.5 y: 0.5} show_bg: true new_batch: true draw_bg.color: mod.tokens.accent.on
+                on_label := Label{text: "ON" width: Fit height: Fill draw_text.color: mod.tokens.ink.on_fill draw_text.text_style: theme.font_bold{font_size: mod.tokens.text.xs line_spacing: 1.0 top_drop: 0.0}}
+            }
         }
-        columns := SolidView{width: Fill height: 15 flow: Right spacing: 3 align: Align{y: 0.5} padding: Inset{left: 8 right: 8} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.panel
-            c0 := Label{text: "PROPERTY" width: Fill draw_text.color: #x2e2e2e draw_text.text_style: theme.font_bold{font_size: 7}}
-            cx := Label{text: "X" width: 42 draw_text.color: #x2e2e2e draw_text.text_style: theme.font_code{font_size: 7.5}}
-            cy := Label{text: "Y" width: 42 draw_text.color: #x2e2e2e draw_text.text_style: theme.font_code{font_size: 7.5}}
-            cz := Label{text: "Z" width: 42 draw_text.color: #x2e2e2e draw_text.text_style: theme.font_code{font_size: 7.5}}
-            ck := Icon{width: 26 height: 14 icon_walk: Walk{width: 10 height: 10} draw_icon +: {svg: crate_resource("self://resources/icons/keyframe.svg") color: #x2e2e2e}}
-        }
-        columns_rule := InspectorRule{}
+        row_amount := PropertyRow{type_bar.draw_bg.color: mod.tokens.accent.alt name.text: "Amount" vx.text: "42.0" vy.text: "" vz.text: "" keyed.text: "◇" keyed.draw_text.color: mod.tokens.ink.faint}
+        advanced_cap := SectionCap{fold.text: "▶" name.text: "ADVANCED" count.text: "4 parameters"}
 
-        // 行 = 面に墨ラベル + 窪み欄の並び。色棒・枠線・角丸は置かない
-        property_rows := SolidView{width: Fill height: Fill flow: Down show_bg: true new_batch: true draw_bg.color: mod.tokens.face.panel
-            position_row := SolidView{width: Fill height: 22 flow: Right spacing: 3 align: Align{y: 0.5} padding: Inset{left: 8 right: 8} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.panel
-                label := Label{text: "Position" width: Fill draw_text.color: #x171717 draw_text.text_style: theme.font_regular{font_size: 9.5}}
-                x := InspectorField{text: "960"}
-                y := InspectorField{text: "540"}
-                z := InspectorField{text: "0" draw_text.color: #x679299}
-                key := InspectorKey{draw_icon +: {color: mod.tokens.accent.on}}
-            }
-            scale_row := SolidView{width: Fill height: 22 flow: Right spacing: 3 align: Align{y: 0.5} padding: Inset{left: 8 right: 8} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.panel
-                label := Label{text: "Scale" width: Fill draw_text.color: #x171717 draw_text.text_style: theme.font_regular{font_size: 9.5}}
-                x := InspectorField{text: "1.000"}
-                y := InspectorField{text: "1.000"}
-                z := InspectorField{text: "1.000" draw_text.color: #x679299}
-                key := InspectorKey{}
-            }
-            rotation_row := SolidView{width: Fill height: 22 flow: Right spacing: 3 align: Align{y: 0.5} padding: Inset{left: 8 right: 8} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.panel
-                label := Label{text: "Rotation" width: Fill draw_text.color: #x171717 draw_text.text_style: theme.font_regular{font_size: 9.5}}
-                x := InspectorField{text: "0°"}
-                y := InspectorField{text: "0°"}
-                z := InspectorField{text: "0°" draw_text.color: #x679299}
-                key := InspectorKey{}
-            }
-        }
-        knob_rule := InspectorRule{}
+        body_fill := View{width: Fill height: Fill}
 
-        // 底 = Low/Mid/High/Output 型のノブ帯。縦 1px 線で区画
-        knob_strip := SolidView{width: Fill height: 56 flow: Right show_bg: true new_batch: true draw_bg.color: mod.tokens.face.panel
-            opacity_group := View{width: Fill height: Fill flow: Down spacing: 2 align: Align{x: 0.5 y: 0.0} padding: Inset{top: 4}
-                opacity_label := Label{text: "Opacity" width: Fit draw_text.color: #x171717 draw_text.text_style: theme.font_bold{font_size: 8}}
-                opacity_knob := InspectorKnob{}
-                opacity_value := Label{text: "100 %" width: Fit draw_text.color: #x171717 draw_text.text_style: theme.font_code{font_size: 8}}
-            }
-            knob_divider := SolidView{width: 1 height: Fill show_bg: true draw_bg.color: mod.tokens.rule.seam}
-            blend_group := View{width: Fill height: Fill flow: Down spacing: 4 align: Align{x: 0.5 y: 0.0} padding: Inset{top: 4}
-                blend_label := Label{text: "Blend" width: Fit draw_text.color: #x171717 draw_text.text_style: theme.font_bold{font_size: 8}}
-                blend_value := InspectorField{text: "Normal" width: 84}
-            }
+        footer_rule := InspectorRule{}
+        hint_row := SolidView{width: Fill height: 18 flow: Right align: Align{y: 0.5} padding: Inset{left: mod.tokens.space.s4} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.bar
+            hint := Label{text: "drag to scrub · click to type · Esc to cancel" width: Fill draw_text.color: mod.tokens.ink.faint draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.xs line_spacing: 1.0 top_drop: 0.0}}
         }
     }
 }
