@@ -13,6 +13,76 @@
 [裁定273](../decision-index.md)(自分の MV を作る)であり、優先順位の根は
 **「自分が1本作るのに要る物が先」**。
 
+## 夜のあいだに何が変わったか(2026-08-28 未明)
+
+**タイムラインのクリップが本当に掴めるようになった。本体 main に入っており、いま起動すれば触れる。**
+端を掴んで伸ばす・丸ごとずらす・行をクリックして選ぶ。錠のかかった行は**掴む前に**カーソルが
+「不可」に変わるので、伸ばしてから黙って戻る嘘が出ない。1ジェスチャ = 1 undo。
+
+| 第一目標 | 判定 | 状態 |
+|---|---|---|
+| (土台)トリム・移動・選択 | **PASS** | **本体 main に統合済み・今すぐ触れる** |
+| エフェクトの適用 | **PASS** | **統合待ち**。実在する GLOW を積む/切る/振るが store と絵に届くのをヘッドレスで実測済み |
+| 素材の配置 | **PARTIAL** | 中身は出来ている。`IMPORT_WIRED = false` と main.rs の受け口10行が未着地で**窓から到達できない** |
+| xyz の駆動 | **STOPPED** | Inspector 側の口は出来た。store へ届く半分が main.rs 側 |
+| 区間イージング | **STOPPED** | GUI の型(◆ と LINEAR/EASE/HOLD)は出来ている |
+| カメラ分離 | **STOPPED** | **実装ゼロ**。engine に camera を差し込む口が無く front だけでは原理的に組めない |
+
+**FX STACK の `TURBULENT DISPLACE` は engine が一つも知らない名前だった**(6欄がドラッグできて
+どこにも届いていなかった)。撤去して実在する GLOW に置き換えてある。
+
+**カメラの STOPPED は失敗ではない。** 担当は canon(`stage-semantics.html` v5)を読んで
+「Stage の絵を画面上で拡大縮小するビューア倍率」という近道が **canon 違反**だと突き止め、
+実装せずに返した。write-set が front 3ファイルに切られている限り必ず手が伸びる場所なので、
+先に潰したのは大きい。
+
+## ★ 次の一手 — engine に front 向けの口を立てる
+
+**3レーンが独立に同じ場所で止まった。** ここを1本開ければ、止まっている物のうち2つが動く。
+
+| 誰が | 何が要るか |
+|---|---|
+| トリム | `Engine::media_frames(&self, path) -> Option<i64>` — Media の尺の壁(裁定272) |
+| 素材の配置 | 同じ probe キャッシュ |
+| カメラ | `Engine::render_frame_into_with_view_camera(view, t, target, &ObservationCamera, include_background)` — **約15行、既存 `render_frame_into` の複製**。camera は `layers_from_resolved` と `compositor.render_into` の**両方**へ通す(片方だけだと絵が壊れる) |
+| エフェクト | 「どの plugin_id が描けるか」と param 名・既定値。いまは `translate.rs` に private で front は**写し**を持っている |
+
+**engine の write-set を握る単独レーンを1本立てるのが正解。** front レーンの再発注はその後。
+
+## 統合の手順(順序が決まっている)
+
+4つの worktree は基底 `151d9da1` で、土台の main.rs 変更を持っていない。全部が
+`App::handle_actions` を触るので**当てる順序を固定する**:
+
+```
+本体 main(土台=済) → effect → material → keyframe
+```
+
+- **実衝突が1件**: `inspector_surface.rs` で **effect が丸ごと削除する行**(`fx_stack` /
+  `advanced` / `FxPower`)に **keyframe が5行書き足している**。
+  **解決は「effect の削除が勝つ」で決まり** — `turbulent_displace` は engine に存在しない
+  名前なので、そこへ prop を付ける意味が無い。`keyed.prop: "fill"` も写像先が無いので落とす
+- `ScrubValue` の Rust 実装と TRANSFORM/APPEARANCE の行宣言は**両レーンとも触っていない = 安全**
+- **`crate::fx_stack::script_mod(vm)` は inspector の直後**でなければ `ScrubValue` を引けない
+  (機構の制約であって好みではない)。FX ブロックは timeline の早期 return より前
+- material だけが `motolii-media` と `rfd = "0.15"` を足す(`app/Cargo.lock` も動く)
+
+## 裁定待ち(あなたの判断が要る)
+
+1. **engine の口**(上記★)— これが最重要
+2. **Group の timing は独立した値か、子からの導出か。** 裁定272 は「中身に従う」と言うが
+   その規則の実装がモデルのどこにも無い。front で書くと同じ規則の家が2つになる
+3. **音声の取り込み。** `motolii_media::probe` は先頭 video stream を要求するので
+   **audio-only は必ず失敗する**。一方 `motolii-audio` は `LayerSource::Media` を soundtrack の
+   候補として読んでいる。「front から音を持ち込む時、尺を何から取るか」「front は
+   `motolii-audio` を引くか」。**hero が MV である以上、必ず要る**
+4. **区間イージングの対象は誰か。** 二代目 UI は**選択されたキー**、今回のレーンは
+   **playhead の直前のキー**。どちらも筋は通るが別物で、放置すると同じ操作に選択モデルが2つ並ぶ
+5. **`rotation.x`/`rotation.y` と `scale.x/y/z` に store の property が無い。**
+   Inspector は3欄ずつ見せているが配線先が存在しない。欄を消すのは簡単だが、それは
+   **「3D 回転を諦める」という意味の決定**になる
+6. **User View の初期倍率**(等倍 / fit / 現行62%)
+
 ## いま何が在って、何が無いか
 
 **背骨は端から端まで通っている** — 作り物のドキュメント → `motolii-engine` →
