@@ -28,21 +28,21 @@ script_mod! {
             height: Fit
             text: "43"
             draw_text.color: #xd0ced1
-            draw_text.text_style: theme.font_regular{font_size: 9 line_spacing: 1.0 top_drop: 0.0}
+            draw_text.text_style: theme.font_regular{font_size: 9}
         }
         m49 := Label{
             width: Fit
             height: Fit
             text: "49"
             draw_text.color: #xd0ced1
-            draw_text.text_style: theme.font_regular{font_size: 9 line_spacing: 1.0 top_drop: 0.0}
+            draw_text.text_style: theme.font_regular{font_size: 9}
         }
         m57 := Label{
             width: Fit
             height: Fit
             text: "57"
             draw_text.color: #xd0ced1
-            draw_text.text_style: theme.font_regular{font_size: 9 line_spacing: 1.0 top_drop: 0.0}
+            draw_text.text_style: theme.font_regular{font_size: 9}
         }
     }
 
@@ -60,7 +60,7 @@ script_mod! {
             height: Fit
             text: "Pads"
             draw_text.color: #x131313
-            draw_text.text_style: theme.font_regular{font_size: 9 line_spacing: 1.0 top_drop: 0.0}
+            draw_text.text_style: theme.font_regular{font_size: 9}
         }
     }
 

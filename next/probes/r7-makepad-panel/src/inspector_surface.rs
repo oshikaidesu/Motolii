@@ -22,9 +22,9 @@ script_mod! {
         show_bg: true
         new_batch: true
         draw_bg.color: mod.tokens.face.area
-        fold := Label{text: "▼" width: Fit padding: Inset{right: mod.tokens.space.s2} draw_text.color: mod.tokens.ink.faint draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.xs line_spacing: 1.0 top_drop: 0.0}}
-        name := Label{width: Fill draw_text.color: mod.tokens.ink.muted draw_text.text_style: theme.font_bold{font_size: mod.tokens.text.xs line_spacing: 1.0 top_drop: 0.0}}
-        count := Label{width: Fit draw_text.color: mod.tokens.ink.faint draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.xs line_spacing: 1.0 top_drop: 0.0}}
+        fold := InkLabel{text: "▼" width: Fit padding: Inset{right: mod.tokens.space.s2} draw_text.color: mod.tokens.ink.faint draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.xs}}
+        name := InkLabel{width: Fill draw_text.color: mod.tokens.ink.muted draw_text.text_style: theme.font_bold{font_size: mod.tokens.text.xs}}
+        count := InkLabel{width: Fit draw_text.color: mod.tokens.ink.faint draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.xs}}
     }
 
     // property 行 — 分母 25px(inspector-ratio-ledger 実測基準)。
@@ -38,11 +38,11 @@ script_mod! {
         new_batch: true
         draw_bg.color: mod.tokens.face.panel
         type_bar := SolidView{width: 3 height: Fill show_bg: true new_batch: true draw_bg.color: mod.tokens.ink.faint}
-        name := Label{width: 64 padding: Inset{left: mod.tokens.space.s3} draw_text.color: mod.tokens.ink.body draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.sm line_spacing: 1.0 top_drop: 0.0}}
-        vx := Label{width: 52 draw_text.color: mod.tokens.ink.strong draw_text.text_style: theme.font_code{font_size: mod.tokens.text.sm line_spacing: 1.0 top_drop: 0.0}}
-        vy := Label{width: 52 draw_text.color: mod.tokens.ink.strong draw_text.text_style: theme.font_code{font_size: mod.tokens.text.sm line_spacing: 1.0 top_drop: 0.0}}
-        vz := Label{width: 52 draw_text.color: mod.tokens.ink.strong draw_text.text_style: theme.font_code{font_size: mod.tokens.text.sm line_spacing: 1.0 top_drop: 0.0}}
-        keyed := Label{width: Fill align: Align{x: 1.0} padding: Inset{right: mod.tokens.space.s4} draw_text.color: mod.tokens.accent.on draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.sm line_spacing: 1.0 top_drop: 0.0}}
+        name := InkLabel{width: 64 padding: Inset{left: mod.tokens.space.s3} draw_text.color: mod.tokens.ink.body draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.sm}}
+        vx := InkLabel{width: 52 draw_text.color: mod.tokens.ink.strong draw_text.text_style: theme.font_code{font_size: mod.tokens.text.sm}}
+        vy := InkLabel{width: 52 draw_text.color: mod.tokens.ink.strong draw_text.text_style: theme.font_code{font_size: mod.tokens.text.sm}}
+        vz := InkLabel{width: 52 draw_text.color: mod.tokens.ink.strong draw_text.text_style: theme.font_code{font_size: mod.tokens.text.sm}}
+        keyed := InkLabel{width: Fill align: Align{x: 1.0} padding: Inset{right: mod.tokens.space.s4} draw_text.color: mod.tokens.accent.on draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.sm}}
     }
 
     mod.widgets.InspectorSurfaceBase = #(InspectorSurface::register_widget(vm))
@@ -56,18 +56,18 @@ script_mod! {
 
         // selection summary — 46/25 = 1.84(inspector-ratio-ledger の実測比。モック表示の 40 は概形)
         summary := SolidView{width: Fill height: 46 flow: Down padding: Inset{left: mod.tokens.space.s4 right: mod.tokens.space.s4 top: mod.tokens.space.s2} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.panel
-            sel_name := Label{text: "Rectangle" width: Fill height: Fit draw_text.color: mod.tokens.ink.strong draw_text.text_style: theme.font_bold{font_size: mod.tokens.text.lg line_spacing: 1.0 top_drop: 0.0}}
-            sel_kind := Label{text: "Shape layer · 3D transform · 2 keys" width: Fill height: Fit padding: Inset{top: mod.tokens.space.s1} draw_text.color: mod.tokens.ink.muted draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.xs line_spacing: 1.0 top_drop: 0.0}}
+            sel_name := InkLabel{text: "Rectangle" width: Fill height: Fit draw_text.color: mod.tokens.ink.strong draw_text.text_style: theme.font_bold{font_size: mod.tokens.text.lg}}
+            sel_kind := InkLabel{text: "Shape layer · 3D transform · 2 keys" width: Fill height: Fit padding: Inset{top: mod.tokens.space.s1} draw_text.color: mod.tokens.ink.muted draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.xs}}
         }
         summary_rule := InspectorRule{}
 
         // 列見出し 21/25
         col_head := SolidView{width: Fill height: 21 flow: Right align: Align{y: 0.5} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.panel
             pad := View{width: 3 height: Fill}
-            c_prop := Label{text: "Property" width: 64 padding: Inset{left: mod.tokens.space.s3} draw_text.color: mod.tokens.ink.faint draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.xs line_spacing: 1.0 top_drop: 0.0}}
-            c_x := Label{text: "X" width: 52 draw_text.color: mod.tokens.ink.faint draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.xs line_spacing: 1.0 top_drop: 0.0}}
-            c_y := Label{text: "Y" width: 52 draw_text.color: mod.tokens.ink.faint draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.xs line_spacing: 1.0 top_drop: 0.0}}
-            c_z := Label{text: "Z" width: 52 draw_text.color: mod.tokens.ink.faint draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.xs line_spacing: 1.0 top_drop: 0.0}}
+            c_prop := InkLabel{text: "Property" width: 64 padding: Inset{left: mod.tokens.space.s3} draw_text.color: mod.tokens.ink.faint draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.xs}}
+            c_x := InkLabel{text: "X" width: 52 draw_text.color: mod.tokens.ink.faint draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.xs}}
+            c_y := InkLabel{text: "Y" width: 52 draw_text.color: mod.tokens.ink.faint draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.xs}}
+            c_z := InkLabel{text: "Z" width: 52 draw_text.color: mod.tokens.ink.faint draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.xs}}
         }
 
         transform_cap := SectionCap{name.text: "TRANSFORM" count.text: "3 · 2 keyed"}
@@ -83,10 +83,10 @@ script_mod! {
         // effect 行 — 選択は行の地、証は色付き左端(裁定: ○ボタン/FXバッジは置かない)
         fx_row := SolidView{width: Fill height: 25 flow: Right align: Align{y: 0.5} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.panel
             fx_bar := SolidView{width: 3 height: Fill show_bg: true new_batch: true draw_bg.color: mod.tokens.accent.record}
-            fx_name := Label{text: "TURBULENT DISPLACE" width: Fill padding: Inset{left: mod.tokens.space.s3} draw_text.color: mod.tokens.ink.body draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.sm line_spacing: 1.0 top_drop: 0.0}}
-            fx_params := Label{text: "8 params" width: Fit padding: Inset{right: mod.tokens.space.s3} draw_text.color: mod.tokens.ink.faint draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.xs line_spacing: 1.0 top_drop: 0.0}}
+            fx_name := InkLabel{text: "TURBULENT DISPLACE" width: Fill padding: Inset{left: mod.tokens.space.s3} draw_text.color: mod.tokens.ink.body draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.sm}}
+            fx_params := InkLabel{text: "8 params" width: Fit padding: Inset{right: mod.tokens.space.s3} draw_text.color: mod.tokens.ink.faint draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.xs}}
             fx_on := SolidView{width: 26 height: mod.tokens.size.chip margin: Inset{right: mod.tokens.space.s3} align: Align{x: 0.5 y: 0.5} show_bg: true new_batch: true draw_bg.color: mod.tokens.accent.on
-                on_label := Label{text: "ON" width: Fit height: Fit draw_text.color: mod.tokens.ink.on_fill draw_text.text_style: theme.font_bold{font_size: mod.tokens.text.xs line_spacing: 1.0 top_drop: 0.0}}
+                on_label := InkLabel{text: "ON" width: Fit height: Fit draw_text.color: mod.tokens.ink.on_fill draw_text.text_style: theme.font_bold{font_size: mod.tokens.text.xs}}
             }
         }
         row_amount := PropertyRow{type_bar.draw_bg.color: mod.tokens.accent.alt name.text: "Amount" vx.text: "42.0" vy.text: "" vz.text: "" keyed.text: "◇" keyed.draw_text.color: mod.tokens.ink.faint}
@@ -96,7 +96,7 @@ script_mod! {
 
         footer_rule := InspectorRule{}
         hint_row := SolidView{width: Fill height: 18 flow: Right align: Align{y: 0.5} padding: Inset{left: mod.tokens.space.s4} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.bar
-            hint := Label{text: "drag to scrub · click to type · Esc to cancel" width: Fill draw_text.color: mod.tokens.ink.faint draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.xs line_spacing: 1.0 top_drop: 0.0}}
+            hint := InkLabel{text: "drag to scrub · click to type · Esc to cancel" width: Fill draw_text.color: mod.tokens.ink.faint draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.xs}}
         }
     }
 }

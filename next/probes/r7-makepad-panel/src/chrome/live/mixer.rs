@@ -97,7 +97,7 @@ script_mod! {
         draw_bg.border_size: 0.0
         draw_bg.border_radius: 2.0
         draw_text.color: #x131313
-        draw_text.text_style: theme.font_regular{font_size: 8 line_spacing: 1.0 top_drop: 0.0}
+        draw_text.text_style: theme.font_regular{font_size: 8}
     }
 
     mod.widgets.LiveSolo = ButtonFlat{
@@ -111,7 +111,7 @@ script_mod! {
         draw_bg.border_size: 0.0
         draw_bg.border_radius: 7.0
         draw_text.color: #x131313
-        draw_text.text_style: theme.font_regular{font_size: 8 line_spacing: 1.0 top_drop: 0.0}
+        draw_text.text_style: theme.font_regular{font_size: 8}
     }
 
     // この1枚のミキサーに Arm は見えない。型は残す。赤は画像に無いので灰円
@@ -142,7 +142,7 @@ script_mod! {
             height: Fit
             text: "Pads"
             draw_text.color: #x131313
-            draw_text.text_style: theme.font_regular{font_size: 8 line_spacing: 1.0 top_drop: 0.0}
+            draw_text.text_style: theme.font_regular{font_size: 8}
         }
     }
 

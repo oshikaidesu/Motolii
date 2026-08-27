@@ -55,7 +55,7 @@ script_mod! {
         draw_text.color_focus: #xc9c9c9
         draw_text.color_drag: #xc9c9c9
         draw_text.color_disabled: #x8f8f8f
-        draw_text.text_style: theme.font_regular{font_size: 11 line_spacing: 1.0 top_drop: 0.0}
+        draw_text.text_style: theme.font_regular{font_size: 11}
         text_input.draw_text.color: #xd4d4d4
         text_input.draw_text.color_hover: #xd4d4d4
         text_input.draw_text.color_focus: #xd4d4d4

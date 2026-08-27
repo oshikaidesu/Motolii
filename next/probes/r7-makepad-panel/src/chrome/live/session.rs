@@ -25,7 +25,7 @@ script_mod! {
         draw_bg.border_size: 0.0
         draw_bg.border_radius: 0.0
         draw_text.color: #x131313
-        draw_text.text_style: theme.font_regular{font_size: 10 line_spacing: 1.0 top_drop: 0.0}
+        draw_text.text_style: theme.font_regular{font_size: 10}
     }
 
     mod.widgets.LiveClipStop = ButtonFlatter{
@@ -75,7 +75,7 @@ script_mod! {
             height: Fit
             text: "Clip"
             draw_text.color: #x131313
-            draw_text.text_style: theme.font_regular{font_size: 10 line_spacing: 1.0 top_drop: 0.0}
+            draw_text.text_style: theme.font_regular{font_size: 10}
         }
     }
 
@@ -98,7 +98,7 @@ script_mod! {
             height: Fit
             text: "Clip"
             draw_text.color: #x131313
-            draw_text.text_style: theme.font_regular{font_size: 10 line_spacing: 1.0 top_drop: 0.0}
+            draw_text.text_style: theme.font_regular{font_size: 10}
         }
     }
 
@@ -125,7 +125,7 @@ script_mod! {
         draw_bg.border_size: 0.0
         draw_bg.border_radius: 0.0
         draw_text.color: #x818181
-        draw_text.text_style: theme.font_regular{font_size: 10 line_spacing: 1.0 top_drop: 0.0}
+        draw_text.text_style: theme.font_regular{font_size: 10}
     }
 
     mod.widgets.LiveClipTitleBar = SolidView{
@@ -161,7 +161,7 @@ script_mod! {
             height: Fit
             text: "Clip"
             draw_text.color: #xa5a5a5
-            draw_text.text_style: theme.font_regular{font_size: 11 line_spacing: 1.0 top_drop: 0.0}
+            draw_text.text_style: theme.font_regular{font_size: 11}
         }
     }
 }

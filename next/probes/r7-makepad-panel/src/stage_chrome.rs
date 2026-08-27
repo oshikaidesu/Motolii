@@ -100,7 +100,7 @@ script_mod! {
         draw_text.color_active: mod.tokens.ink.strong
         draw_text.color_hover: mod.tokens.ink.strong
         draw_text.color_down: mod.tokens.ink.strong
-        draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.sm line_spacing: 1.0 top_drop: 0.0}
+        draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.sm}
     }
 
     mod.widgets.StageChromeBase = #(StageChrome::register_widget(vm))
@@ -136,7 +136,7 @@ script_mod! {
                 // #x000000 = 映像の無信号黒。letterbox の面トークンとは別物(絶対黒)なので
                 // トークン化しない
                 stage_frame := Image{width: Fill height: Fill fit: ImageFit.Smallest}
-                stage_error := Label{width: Fill height: Fill align: Align{x: 0.5 y: 0.5} text: "" draw_text.color: mod.tokens.accent.on draw_text.text_style: theme.font_code{font_size: mod.tokens.text.md}}
+                stage_error := InkLabel{width: Fill height: Fill align: Align{x: 0.5 y: 0.5} text: "" draw_text.color: mod.tokens.accent.on draw_text.text_style: theme.font_code{font_size: mod.tokens.text.md}}
             }
         }
         band_edge := SolidView{width: Fill height: mod.tokens.rule.size show_bg: true new_batch: true draw_bg.color: mod.tokens.face.down}
@@ -152,22 +152,22 @@ script_mod! {
             reserved_view := IconButton{width: mod.tokens.size.bar height: mod.tokens.size.well icon_walk: Walk{width: 12 height: 12} draw_icon +: {svg: crate_resource("self://resources/icons/safe.svg") color: mod.tokens.ink.faint}}
             source_well := ValueWell{
                 live_dot := SolidView{width: 5 height: 5 margin: Inset{right: mod.tokens.space.s1} draw_bg.color: mod.tokens.accent.on}
-                live_source := Label{text: "RERUN" width: Fit draw_text.color: mod.tokens.ink.body draw_text.text_style: theme.font_code{font_size: mod.tokens.text.xs line_spacing: 1.0 top_drop: 0.0}}
+                live_source := InkLabel{text: "RERUN" width: Fit draw_text.color: mod.tokens.ink.body draw_text.text_style: theme.font_code{font_size: mod.tokens.text.xs}}
             }
             // 視点依存の情報だけ(canon: User View 中は倍率+⌂)。Camera 中は空 = タブと同じ語を繰り返さない
-            stage_mode := Label{text: "" width: Fit padding: Inset{left: mod.tokens.space.s2} draw_text.color: mod.tokens.ink.muted draw_text.text_style: theme.font_code{font_size: mod.tokens.text.xs line_spacing: 1.0 top_drop: 0.0}}
+            stage_mode := InkLabel{text: "" width: Fit padding: Inset{left: mod.tokens.space.s2} draw_text.color: mod.tokens.ink.muted draw_text.text_style: theme.font_code{font_size: mod.tokens.text.xs}}
             resolution_well := ValueWell{
-                resolution := Label{text: "1920 × 1080" width: 76 draw_text.color: mod.tokens.ink.strong draw_text.text_style: theme.font_code{font_size: 8}}
+                resolution := InkLabel{text: "1920 × 1080" width: 76 draw_text.color: mod.tokens.ink.strong draw_text.text_style: theme.font_code{font_size: 8}}
             }
             frame_rate_well := ValueWell{
-                frame_rate := Label{text: "30 fps" width: 42 draw_text.color: mod.tokens.ink.strong draw_text.text_style: theme.font_code{font_size: 8}}
+                frame_rate := InkLabel{text: "30 fps" width: 42 draw_text.color: mod.tokens.ink.strong draw_text.text_style: theme.font_code{font_size: 8}}
             }
             off_frame_dot := SolidView{width: mod.tokens.space.s2 height: mod.tokens.space.s2 draw_bg.color: mod.tokens.accent.on}
-            selection_state := Label{text: "CHORUS LYRICS · OFF FRAME" width: Fit draw_text.color: mod.tokens.ink.body draw_text.text_style: theme.font_code{font_size: 8}}
+            selection_state := InkLabel{text: "CHORUS LYRICS · OFF FRAME" width: Fit draw_text.color: mod.tokens.ink.body draw_text.text_style: theme.font_code{font_size: 8}}
             stage_band_spacer := SolidView{width: Fill height: mod.tokens.rule.size}
             // User View 中はここに倍率+⌂ 復帰(canon: 「User View 中はここに倍率+⌂ 復帰」)
             zoom_well := ValueWell{
-                zoom := Label{text: "62%" width: 30 draw_text.color: mod.tokens.ink.strong draw_text.text_style: theme.font_code{font_size: 8}}
+                zoom := InkLabel{text: "62%" width: 30 draw_text.color: mod.tokens.ink.strong draw_text.text_style: theme.font_code{font_size: 8}}
             }
             // ⌂ = home/auto 復帰。svg 資産が無いので字形ボタン。押せば動く実の操作にする
             // (Q0: 触れそうで触れない物を作らない)

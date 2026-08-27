@@ -202,23 +202,23 @@ script_mod! {
             draw_bg.border_size: 0.0
             draw_bg.border_radius: 0.0
             draw_text.color: #xb8b8b8
-            draw_text.text_style: theme.font_code{font_size: 11 line_spacing: 1.0 top_drop: 0.0}
+            draw_text.text_style: theme.font_code{font_size: 11}
         }
         unit_f := ChromeInk{
             text: "f"
             draw_text.color: #x919191
-            draw_text.text_style: theme.font_regular{font_size: 9 line_spacing: 1.0 top_drop: 0.0}
+            draw_text.text_style: theme.font_regular{font_size: 9}
         }
         seconds := ChromeInk{
             text: "0.00"
             margin: Inset{left: 4}
             draw_text.color: #xb8b8b8
-            draw_text.text_style: theme.font_code{font_size: 11 line_spacing: 1.0 top_drop: 0.0}
+            draw_text.text_style: theme.font_code{font_size: 11}
         }
         unit_s := ChromeInk{
             text: "s"
             draw_text.color: #x919191
-            draw_text.text_style: theme.font_regular{font_size: 9 line_spacing: 1.0 top_drop: 0.0}
+            draw_text.text_style: theme.font_regular{font_size: 9}
         }
     }
     mod.widgets.ChromeTimecode = TimecodeT

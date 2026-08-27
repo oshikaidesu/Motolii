@@ -43,6 +43,6 @@ script_mod! {
         draw_text.color_empty: #x8f8f8f
         draw_text.color_empty_hover: #x8f8f8f
         draw_text.color_empty_focus: #x8f8f8f
-        draw_text.text_style: theme.font_regular{font_size: 11 line_spacing: 1.0 top_drop: 0.0}
+        draw_text.text_style: theme.font_regular{font_size: 11}
     }
 }

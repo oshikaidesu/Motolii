@@ -24,7 +24,7 @@ script_mod! {
         height: Fit
         padding: 0
         draw_text.color: #xc1c1c1
-        draw_text.text_style: theme.font_regular{font_size: 10 line_spacing: 1.0 top_drop: 0.0}
+        draw_text.text_style: theme.font_regular{font_size: 10}
     }
 
     // 見出し — Live device タイトル帯の字。本文との差は僅か（1.1 倍）
@@ -33,7 +33,7 @@ script_mod! {
         height: Fit
         padding: 0
         draw_text.color: #xd0d0d0
-        draw_text.text_style: theme.font_regular{font_size: 11 line_spacing: 1.0 top_drop: 0.0}
+        draw_text.text_style: theme.font_regular{font_size: 11}
     }
 
     // 注 — Live 節見出し（Categories / Places）。本文の 0.8 倍
@@ -42,7 +42,7 @@ script_mod! {
         height: Fit
         padding: 0
         draw_text.color: #x9d9d9d
-        draw_text.text_style: theme.font_regular{font_size: 8 line_spacing: 1.0 top_drop: 0.0}
+        draw_text.text_style: theme.font_regular{font_size: 8}
     }
 
     // 微 — Live mixer の極小数値・空域の案内字
@@ -51,6 +51,6 @@ script_mod! {
         height: Fit
         padding: 0
         draw_text.color: #x757575
-        draw_text.text_style: theme.font_regular{font_size: 7 line_spacing: 1.0 top_drop: 0.0}
+        draw_text.text_style: theme.font_regular{font_size: 7}
     }
 }

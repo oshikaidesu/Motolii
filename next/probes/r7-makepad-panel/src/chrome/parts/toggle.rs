@@ -45,7 +45,7 @@ script_mod! {
         draw_text.color_active: #xefefef
         draw_text.color_focus: #xefefef
         draw_text.color_disabled: #x505050
-        draw_text.text_style: theme.font_regular{font_size: 11 line_spacing: 1.0 top_drop: 0.0}
+        draw_text.text_style: theme.font_regular{font_size: 11}
     }
 
     // toggle — ToggleFlat。槽は窪み #282828、活性で橙面 + 濃摘み。枠線ゼロ
@@ -77,7 +77,7 @@ script_mod! {
         draw_text.color_active: #xefefef
         draw_text.color_focus: #xefefef
         draw_text.color_disabled: #x505050
-        draw_text.text_style: theme.font_regular{font_size: 11 line_spacing: 1.0 top_drop: 0.0}
+        draw_text.text_style: theme.font_regular{font_size: 11}
     }
 
     // lock — ButtonFlatIcon + 既存 lock.svg。押下保持はソロ青面。踏面 24、グリフ 13

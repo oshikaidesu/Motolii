@@ -42,14 +42,14 @@ script_mod! {
             height: Fit
             text: "Nothing selected"
             draw_text.color: #xb8b8b8
-            draw_text.text_style: theme.font_regular{font_size: 12 line_spacing: 1.0 top_drop: 0.0}
+            draw_text.text_style: theme.font_regular{font_size: 12}
         }
         hint := Label{
             width: Fit
             height: Fit
             text: "Select a layer to edit."
             draw_text.color: #x919191
-            draw_text.text_style: theme.font_regular{font_size: 9 line_spacing: 1.0 top_drop: 0.0}
+            draw_text.text_style: theme.font_regular{font_size: 9}
         }
     }
 
@@ -74,7 +74,7 @@ script_mod! {
                 height: Fit
                 text: "Tooltip"
                 draw_text.color: #xb8b8b8
-                draw_text.text_style: theme.font_regular{font_size: 9 line_spacing: 1.0 top_drop: 0.0}
+                draw_text.text_style: theme.font_regular{font_size: 9}
             }
         }
     }
@@ -93,7 +93,7 @@ script_mod! {
             height: Fit
             text: "BADGE"
             draw_text.color: #xb8b8b8
-            draw_text.text_style: theme.font_bold{font_size: 8 line_spacing: 1.0 top_drop: 0.0}
+            draw_text.text_style: theme.font_bold{font_size: 8}
         }
     }
 
@@ -108,22 +108,22 @@ script_mod! {
         done := ChromeInk{
             text: "0"
             draw_text.color: #xb8b8b8
-            draw_text.text_style: theme.font_code{font_size: 11 line_spacing: 1.0 top_drop: 0.0}
+            draw_text.text_style: theme.font_code{font_size: 11}
         }
         sep := ChromeInk{
             text: "/"
             draw_text.color: #x919191
-            draw_text.text_style: theme.font_code{font_size: 11 line_spacing: 1.0 top_drop: 0.0}
+            draw_text.text_style: theme.font_code{font_size: 11}
         }
         total := ChromeInk{
             text: "0"
             draw_text.color: #xb8b8b8
-            draw_text.text_style: theme.font_code{font_size: 11 line_spacing: 1.0 top_drop: 0.0}
+            draw_text.text_style: theme.font_code{font_size: 11}
         }
         pct := ChromeInk{
             text: "(0%)"
             draw_text.color: #x919191
-            draw_text.text_style: theme.font_code{font_size: 11 line_spacing: 1.0 top_drop: 0.0}
+            draw_text.text_style: theme.font_code{font_size: 11}
         }
     }
 
@@ -142,7 +142,7 @@ script_mod! {
         label := ChromeInk{
             text: "Ready"
             draw_text.color: #xb8b8b8
-            draw_text.text_style: theme.font_regular{font_size: 9 line_spacing: 1.0 top_drop: 0.0}
+            draw_text.text_style: theme.font_regular{font_size: 9}
         }
     }
 }

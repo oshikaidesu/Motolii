@@ -159,6 +159,13 @@ script_mod! {
         alt: #x03c3d5
     }
 
+    // 固定行高の中に置く裸のインク。theme 自身が H1 で `padding: 0.` とするのと同型の
+    // 派生役割(全域上書きはしない)。理由: Label の padding は実装上 margin へ変換され
+    // (`with_add_padding`)、Fit 行が抱き込む前提の設計 — makepad の正典は
+    // `caption_bar := SolidView{height: Fit, ...}` で行側が Fit。固定行に既定 Label を
+    // 置くと align 後に top margin 分だけ沈む(実測 Δ+1.5〜+2.8pt、「下にめり込む」の根)
+    mod.widgets.InkLabel = mod.widgets.Label{padding: 0.}
+
     mod.tokens = {
         scale: s
         space: space

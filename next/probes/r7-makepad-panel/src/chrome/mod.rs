@@ -27,7 +27,7 @@ mod button {
             draw_bg.border_size: 0.0
             draw_bg.border_radius: 0.0
             draw_text.color: #xb8b8b8
-            draw_text.text_style: theme.font_regular{font_size: 11 line_spacing: 1.0 top_drop: 0.0}
+            draw_text.text_style: theme.font_regular{font_size: 11}
         }
     }
 }

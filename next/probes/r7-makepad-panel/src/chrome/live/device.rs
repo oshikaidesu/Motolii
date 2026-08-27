@@ -36,7 +36,7 @@ script_mod! {
         draw_bg.border_size: 0.0
         draw_bg.border_radius: 0.0
         draw_text.color: #xa5a5a5
-        draw_text.text_style: theme.font_regular{font_size: 9 line_spacing: 1.0 top_drop: 0.0}
+        draw_text.text_style: theme.font_regular{font_size: 9}
     }
 
     mod.widgets.LiveDeviceTitleBar = SolidView{
@@ -56,7 +56,7 @@ script_mod! {
             height: Fit
             text: "Drifting Ambient Pad"
             draw_text.color: #xa5a5a5
-            draw_text.text_style: theme.font_regular{font_size: 10 line_spacing: 1.0 top_drop: 0.0}
+            draw_text.text_style: theme.font_regular{font_size: 10}
         }
     }
 
@@ -89,7 +89,7 @@ script_mod! {
             height: Fit
             text: "Tone"
             draw_text.color: #xa5a5a5
-            draw_text.text_style: theme.font_regular{font_size: 8 line_spacing: 1.0 top_drop: 0.0}
+            draw_text.text_style: theme.font_regular{font_size: 8}
         }
     }
 
@@ -110,7 +110,7 @@ script_mod! {
         draw_bg.border_size: 0.0
         draw_bg.border_radius: 0.0
         draw_text.color: #xa5a5a5
-        draw_text.text_style: theme.font_regular{font_size: 8 line_spacing: 1.0 top_drop: 0.0}
+        draw_text.text_style: theme.font_regular{font_size: 8}
     }
 
     // Dry/Wet 縦スライダ
@@ -141,7 +141,7 @@ script_mod! {
             height: Fit
             text: "Dry/Wet"
             draw_text.color: #xa5a5a5
-            draw_text.text_style: theme.font_regular{font_size: 8 line_spacing: 1.0 top_drop: 0.0}
+            draw_text.text_style: theme.font_regular{font_size: 8}
         }
     }
 
@@ -156,7 +156,7 @@ script_mod! {
         draw_bg.border_size: 0.0
         draw_bg.border_radius: 0.0
         draw_text.color: #xa5a5a5
-        draw_text.text_style: theme.font_regular{font_size: 8 line_spacing: 1.0 top_drop: 0.0}
+        draw_text.text_style: theme.font_regular{font_size: 8}
     }
 
     mod.widgets.LiveSegmentButtonOn = ButtonFlat{
@@ -170,7 +170,7 @@ script_mod! {
         draw_bg.border_size: 0.0
         draw_bg.border_radius: 0.0
         draw_text.color: #xa5a5a5
-        draw_text.text_style: theme.font_regular{font_size: 8 line_spacing: 1.0 top_drop: 0.0}
+        draw_text.text_style: theme.font_regular{font_size: 8}
     }
 
     // 波形面 — 黄の横線。詳細波形は描かない

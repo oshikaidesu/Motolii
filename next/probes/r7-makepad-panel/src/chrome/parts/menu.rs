@@ -45,7 +45,7 @@ script_mod! {
         draw_bg.border_radius: 0.0
         draw_text.color: #xe4e4e4
         draw_text.color_disabled: #xa0a0a0
-        draw_text.text_style: theme.font_regular{font_size: 11 line_spacing: 1.0 top_drop: 0.0}
+        draw_text.text_style: theme.font_regular{font_size: 11}
     }
 
     // 注 — shortcut / muted。副次字
@@ -55,7 +55,7 @@ script_mod! {
         height: Fit
         padding: 0
         draw_text.color: #xa0a0a0
-        draw_text.text_style: theme.font_regular{font_size: 9 line_spacing: 1.0 top_drop: 0.0}
+        draw_text.text_style: theme.font_regular{font_size: 9}
     }
     mod.widgets.ChromeMenuHint = MenuHintT
 
@@ -80,7 +80,7 @@ script_mod! {
         draw_bg.border_size: 0.0
         draw_bg.border_radius: 0.0
         draw_text.color: #xe4e4e4
-        draw_text.text_style: theme.font_regular{font_size: 11 line_spacing: 1.0 top_drop: 0.0}
+        draw_text.text_style: theme.font_regular{font_size: 11}
     }
 
     // 葉 — 動詞 + 右寄せ shortcut。ChromeMenuItem の面、ChromeMenuHint を再利用
@@ -120,7 +120,7 @@ script_mod! {
         draw_bg.border_radius: 0.0
         draw_bg.arrow_color: #xa0a0a0
         draw_text.color: #xf2f2f2
-        draw_text.text_style: theme.font_regular{font_size: 11 line_spacing: 1.0 top_drop: 0.0}
+        draw_text.text_style: theme.font_regular{font_size: 11}
         popup_menu: PopupMenuFlat{
             width: 192
             height: Fit
@@ -145,7 +145,7 @@ script_mod! {
                 draw_text.color_hover: #xe4e4e4
                 draw_text.color_active: #x133342
                 draw_text.color_disabled: #xa0a0a0
-                draw_text.text_style: theme.font_regular{font_size: 11 line_spacing: 1.0 top_drop: 0.0}
+                draw_text.text_style: theme.font_regular{font_size: 11}
             }
         }
     }

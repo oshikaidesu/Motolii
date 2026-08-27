@@ -189,14 +189,14 @@ script_mod! {
                     align: Align{y: 0.5}
                     spacing: mod.tokens.space.s3
                     mark := Icon{width: mod.tokens.size.icon_lg height: mod.tokens.size.icon_lg icon_walk: Walk{width: mod.tokens.size.icon_lg height: mod.tokens.size.icon_lg} draw_icon +: {svg: crate_resource("self://resources/icons/motolii.svg") color: mod.tokens.ink.body}}
-                    name := Label{text: "MOTOLII" width: Fit padding: Inset{right: mod.tokens.space.s3} draw_text.color: mod.tokens.ink.body draw_text.text_style: theme.font_bold{font_size: mod.tokens.text.lg}}
+                    name := InkLabel{text: "MOTOLII" width: Fit padding: Inset{right: mod.tokens.space.s3} draw_text.color: mod.tokens.ink.body draw_text.text_style: theme.font_bold{font_size: mod.tokens.text.lg}}
                 }
                 file := ButtonFlatter{text: "File" width: 42.0 * mod.tokens.scale height: mod.tokens.size.menu draw_text.color: mod.tokens.ink.body draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.md}}
                 edit := ButtonFlatter{text: "Edit" width: 42.0 * mod.tokens.scale height: mod.tokens.size.menu draw_text.color: mod.tokens.ink.body draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.md}}
                 layer := ButtonFlatter{text: "Layer" width: 50.0 * mod.tokens.scale height: mod.tokens.size.menu draw_text.color: mod.tokens.ink.body draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.md}}
                 view := ButtonFlatter{text: "View" width: 42.0 * mod.tokens.scale height: mod.tokens.size.menu draw_text.color: mod.tokens.ink.body draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.md}}
                 spacer := SolidView{width: Fill height: 1}
-                project := Label{
+                project := InkLabel{
                     text: "Untitled / Motion Study"
                     width: Fit
                     draw_text.color: mod.tokens.ink.glyph
@@ -333,7 +333,7 @@ script_mod! {
 
             status_surface_divider := SurfaceDivider{}
 
-            status := Label{
+            status := InkLabel{
                 text: "READY  ·  RERUN STAGE  ·  FRAME 900 / 1800"
                 width: Fill
                 height: mod.tokens.size.status

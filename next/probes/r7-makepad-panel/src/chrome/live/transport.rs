@@ -25,7 +25,7 @@ script_mod! {
         draw_bg.border_size: 0.0
         draw_bg.border_radius: 0.0
         draw_text.color: #xa5a5a5
-        draw_text.text_style: theme.font_regular{font_size: 10 line_spacing: 1.0 top_drop: 0.0}
+        draw_text.text_style: theme.font_regular{font_size: 10}
     }
 
     mod.widgets.LiveTap = ButtonFlat{
@@ -39,7 +39,7 @@ script_mod! {
         draw_bg.border_size: 0.0
         draw_bg.border_radius: 3.0
         draw_text.color: #x818181
-        draw_text.text_style: theme.font_regular{font_size: 9 line_spacing: 1.0 top_drop: 0.0}
+        draw_text.text_style: theme.font_regular{font_size: 9}
     }
 
     mod.widgets.LiveTempo = View{
@@ -58,7 +58,7 @@ script_mod! {
             draw_bg.border_size: 0.0
             draw_bg.border_radius: 0.0
             draw_text.color: #xa5a5a5
-            draw_text.text_style: theme.font_code{font_size: 11 line_spacing: 1.0 top_drop: 0.0}
+            draw_text.text_style: theme.font_code{font_size: 11}
         }
     }
 
@@ -77,7 +77,7 @@ script_mod! {
             draw_bg.border_size: 0.0
             draw_bg.border_radius: 0.0
             draw_text.color: #xa5a5a5
-            draw_text.text_style: theme.font_code{font_size: 11 line_spacing: 1.0 top_drop: 0.0}
+            draw_text.text_style: theme.font_code{font_size: 11}
         }
         den := TextInputFlat{
             width: 18
@@ -88,7 +88,7 @@ script_mod! {
             draw_bg.border_size: 0.0
             draw_bg.border_radius: 0.0
             draw_text.color: #xa5a5a5
-            draw_text.text_style: theme.font_code{font_size: 11 line_spacing: 1.0 top_drop: 0.0}
+            draw_text.text_style: theme.font_code{font_size: 11}
         }
     }
 
@@ -114,7 +114,7 @@ script_mod! {
         draw_bg.border_size: 0.0
         draw_bg.border_radius: 0.0
         draw_text.color: #x24e8a6
-        draw_text.text_style: theme.font_regular{font_size: 12 line_spacing: 1.0 top_drop: 0.0}
+        draw_text.text_style: theme.font_regular{font_size: 12}
     }
 
     mod.widgets.LiveStop = ButtonFlatter{
@@ -172,7 +172,7 @@ script_mod! {
             draw_bg.border_size: 0.0
             draw_bg.border_radius: 0.0
             draw_text.color: #xa5a5a5
-            draw_text.text_style: theme.font_code{font_size: 11 line_spacing: 1.0 top_drop: 0.0}
+            draw_text.text_style: theme.font_code{font_size: 11}
         }
         beats := TextInputFlat{
             width: 16
@@ -183,7 +183,7 @@ script_mod! {
             draw_bg.border_size: 0.0
             draw_bg.border_radius: 0.0
             draw_text.color: #xa5a5a5
-            draw_text.text_style: theme.font_code{font_size: 11 line_spacing: 1.0 top_drop: 0.0}
+            draw_text.text_style: theme.font_code{font_size: 11}
         }
         sixteenths := TextInputFlat{
             width: 16
@@ -194,7 +194,7 @@ script_mod! {
             draw_bg.border_size: 0.0
             draw_bg.border_radius: 0.0
             draw_text.color: #xa5a5a5
-            draw_text.text_style: theme.font_code{font_size: 11 line_spacing: 1.0 top_drop: 0.0}
+            draw_text.text_style: theme.font_code{font_size: 11}
         }
     }
 
@@ -213,7 +213,7 @@ script_mod! {
         draw_bg.border_radius: 0.0
         draw_bg.arrow_color: #xa5a5a5
         draw_text.color: #xa5a5a5
-        draw_text.text_style: theme.font_regular{font_size: 9 line_spacing: 1.0 top_drop: 0.0}
+        draw_text.text_style: theme.font_regular{font_size: 9}
         popup_menu: PopupMenuFlat{
             width: 88
             height: Fit
@@ -235,7 +235,7 @@ script_mod! {
                 draw_text.color: #xa5a5a5
                 draw_text.color_hover: #x818181
                 draw_text.color_active: #x818181
-                draw_text.text_style: theme.font_regular{font_size: 9 line_spacing: 1.0 top_drop: 0.0}
+                draw_text.text_style: theme.font_regular{font_size: 9}
             }
         }
     }
@@ -250,7 +250,7 @@ script_mod! {
         draw_bg.border_size: 0.0
         draw_bg.border_radius: 0.0
         draw_text.color: #xa5a5a5
-        draw_text.text_style: theme.font_regular{font_size: 8 line_spacing: 1.0 top_drop: 0.0}
+        draw_text.text_style: theme.font_regular{font_size: 8}
     }
 
     mod.widgets.LiveCpu = View{
@@ -264,7 +264,7 @@ script_mod! {
             height: Fit
             text: "14%"
             draw_text.color: #xa5a5a5
-            draw_text.text_style: theme.font_regular{font_size: 8 line_spacing: 1.0 top_drop: 0.0}
+            draw_text.text_style: theme.font_regular{font_size: 8}
         }
     }
 

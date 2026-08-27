@@ -85,7 +85,7 @@ script_mod! {
         height: Fit
         padding: 0
         draw_text.color: #xa5a5a5
-        draw_text.text_style: theme.font_regular{font_size: 11 line_spacing: 1.0 top_drop: 0.0}
+        draw_text.text_style: theme.font_regular{font_size: 11}
     }
 
     // パネル上の文字
@@ -94,7 +94,7 @@ script_mod! {
         height: Fit
         padding: 0
         draw_text.color: #x818181
-        draw_text.text_style: theme.font_regular{font_size: 11 line_spacing: 1.0 top_drop: 0.0}
+        draw_text.text_style: theme.font_regular{font_size: 11}
     }
 
     mod.widgets.LiveInkDisabled = Label{
@@ -102,6 +102,6 @@ script_mod! {
         height: Fit
         padding: 0
         draw_text.color: #x818181
-        draw_text.text_style: theme.font_regular{font_size: 9 line_spacing: 1.0 top_drop: 0.0}
+        draw_text.text_style: theme.font_regular{font_size: 9}
     }
 }

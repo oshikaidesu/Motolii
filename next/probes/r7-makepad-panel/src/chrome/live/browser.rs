@@ -23,7 +23,7 @@ script_mod! {
         draw_bg.border_size: 0.0
         draw_bg.border_radius: 0.0
         draw_text.color: #xa5a5a5
-        draw_text.text_style: theme.font_regular{font_size: 11 line_spacing: 1.0 top_drop: 0.0}
+        draw_text.text_style: theme.font_regular{font_size: 11}
     }
 
     mod.widgets.LiveBrowserLabel = ButtonFlat{
@@ -37,7 +37,7 @@ script_mod! {
         draw_bg.border_size: 0.0
         draw_bg.border_radius: 0.0
         draw_text.color: #x818181
-        draw_text.text_style: theme.font_regular{font_size: 11 line_spacing: 1.0 top_drop: 0.0}
+        draw_text.text_style: theme.font_regular{font_size: 11}
     }
 
     // Sounds 選択
@@ -52,7 +52,7 @@ script_mod! {
         draw_bg.border_size: 0.0
         draw_bg.border_radius: 0.0
         draw_text.color: #x818181
-        draw_text.text_style: theme.font_regular{font_size: 11 line_spacing: 1.0 top_drop: 0.0}
+        draw_text.text_style: theme.font_regular{font_size: 11}
     }
 
     mod.widgets.LiveFilterTag = ButtonFlat{
@@ -66,7 +66,7 @@ script_mod! {
         draw_bg.border_size: 0.0
         draw_bg.border_radius: 3.0
         draw_text.color: #xa5a5a5
-        draw_text.text_style: theme.font_regular{font_size: 9 line_spacing: 1.0 top_drop: 0.0}
+        draw_text.text_style: theme.font_regular{font_size: 9}
     }
 
     // Pad / Evolving
@@ -81,7 +81,7 @@ script_mod! {
         draw_bg.border_size: 0.0
         draw_bg.border_radius: 3.0
         draw_text.color: #x131313
-        draw_text.text_style: theme.font_regular{font_size: 9 line_spacing: 1.0 top_drop: 0.0}
+        draw_text.text_style: theme.font_regular{font_size: 9}
     }
 
     mod.widgets.LiveBrowserItem = SolidView{
@@ -98,7 +98,7 @@ script_mod! {
             height: Fit
             text: "Analog Slow Sweep Pad.adv"
             draw_text.color: #x818181
-            draw_text.text_style: theme.font_regular{font_size: 10 line_spacing: 1.0 top_drop: 0.0}
+            draw_text.text_style: theme.font_regular{font_size: 10}
         }
     }
 
@@ -117,7 +117,7 @@ script_mod! {
             height: Fit
             text: "Drifting Ambient Pad.adv"
             draw_text.color: #x818181
-            draw_text.text_style: theme.font_regular{font_size: 10 line_spacing: 1.0 top_drop: 0.0}
+            draw_text.text_style: theme.font_regular{font_size: 10}
         }
     }
 
@@ -144,7 +144,7 @@ script_mod! {
             height: Fit
             text: "Favorites"
             draw_text.color: #x818181
-            draw_text.text_style: theme.font_regular{font_size: 11 line_spacing: 1.0 top_drop: 0.0}
+            draw_text.text_style: theme.font_regular{font_size: 11}
         }
     }
 }

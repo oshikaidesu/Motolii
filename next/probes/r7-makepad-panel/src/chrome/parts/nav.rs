@@ -37,7 +37,7 @@ script_mod! {
         draw_bg.border_size: 0.0
         draw_bg.border_radius: 0.0
         draw_text.color: #xa0a0a0
-        draw_text.text_style: theme.font_regular{font_size: 8 line_spacing: 1.0 top_drop: 0.0}
+        draw_text.text_style: theme.font_regular{font_size: 8}
     }
 
     // tab on — 選択はベタの色面+濃字。mark も同色（行全体を一枚に塗る。下線を立てない）
@@ -55,7 +55,7 @@ script_mod! {
             draw_bg.border_size: 0.0
             draw_bg.border_radius: 0.0
             draw_text.color: #x133342
-            draw_text.text_style: theme.font_regular{font_size: 8 line_spacing: 1.0 top_drop: 0.0}
+            draw_text.text_style: theme.font_regular{font_size: 8}
         }
         mark := SolidView{
             width: Fill
@@ -76,7 +76,7 @@ script_mod! {
         draw_bg.border_size: 0.0
         draw_bg.border_radius: 0.0
         draw_text.color: #xa0a0a0
-        draw_text.text_style: theme.font_regular{font_size: 8 line_spacing: 1.0 top_drop: 0.0}
+        draw_text.text_style: theme.font_regular{font_size: 8}
     }
 
     // chip on — 選択ハイライトのベタ塗り+濃字。縁を引かない
@@ -89,7 +89,7 @@ script_mod! {
         draw_bg.border_size: 0.0
         draw_bg.border_radius: 0.0
         draw_text.color: #x133342
-        draw_text.text_style: theme.font_regular{font_size: 8 line_spacing: 1.0 top_drop: 0.0}
+        draw_text.text_style: theme.font_regular{font_size: 8}
     }
 
     // chip strip — パネル面
@@ -128,7 +128,7 @@ script_mod! {
         draw_bg.border_size: 0.0
         draw_bg.border_radius: 0.0
         draw_text.color: #xe4e4e4
-        draw_text.text_style: theme.font_regular{font_size: 8 line_spacing: 1.0 top_drop: 0.0}
+        draw_text.text_style: theme.font_regular{font_size: 8}
     }
 
     // rail 行 on — User Library 行。行全体をハイライトでベタ塗り+濃字。
@@ -155,7 +155,7 @@ script_mod! {
             draw_bg.border_size: 0.0
             draw_bg.border_radius: 0.0
             draw_text.color: #x133342
-            draw_text.text_style: theme.font_regular{font_size: 8 line_spacing: 1.0 top_drop: 0.0}
+            draw_text.text_style: theme.font_regular{font_size: 8}
         }
     }
 }
