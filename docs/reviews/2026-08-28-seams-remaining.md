@@ -81,7 +81,7 @@ hero = 実測の点群と、外で描いたベクタと、音が、同じタイ�
 | S16 | マット合成 | `Engine::apply_matte` |
 | S17 | キャッシュの状態を見る | `Engine::cached_frame_count` ほか2本 |
 | S18 | Session の残り | `motolii-shell-state` 38本 |
-| S20 | **Stage 直接操作**(掴む=ギズモ) | 利用者裁定(2026-08-28)「普通に使う分には必要」。2階建て: (1) **AE 式ボックスハンドル**(8角+回転) — 平面レイヤーの指の記憶はこれで、3D 軸ではない。土台=rerun の GPU picking(`re_view_spatial/picking.rs` 一式、instance 単位読み戻し)+ `re_renderer` line overlay(同一 ViewBuilder=第二表示経路を作らない)+ `Intent::SetAttrs` (2) **3D 軸ギズモ** — 借用先確定: `transform-gizmo` crate(MIT/Apache、renderer 非依存 — `Gizmo::draw` が viewport 座標の頂点を返す、mint/glam 互換)。rerun 本体に編集ギズモは無い(実測: "gizmo" は原点軸表示1箇所のみ)。**前提 = 選択の真実が Stage へ流れること**(S5b の線の続き) |
+| S20 | **Stage 直接操作**(掴む=ギズモ) | 利用者裁定(2026-08-28)「普通に使う分には必要」「3D は 2D の下位互換なのでそのまま持って来ていい」。**操作系は1つ**(憲法2: モードの切り替えを作らない — 平面用/空間用の2階建て案は総監督が出し利用者が却下)。借用先確定: `transform-gizmo` crate(MIT/Apache、renderer 非依存 — `Gizmo::draw` が viewport 座標の頂点を返す、mint/glam 互換)。z=0 のレイヤーは退化ケースとして同じギズモで掴む。土台=rerun の GPU picking(`re_view_spatial/picking.rs` 一式、instance 単位読み戻し)+ `re_renderer` line overlay(同一 ViewBuilder=第二表示経路を作らない)+ `Intent::SetAttrs`。rerun 本体に編集ギズモは無い(実測: "gizmo" は原点軸表示1箇所のみ)。未決はハンドルの皮(AE 箱型か軸矢印か)だけで、同一操作系の上の見た目 — 窓の UX 合否で決める。**前提 = 選択の真実が Stage へ流れること**(S5b の線の続き) |
 | S19 | **BPM グリッド**(小節線・ビートスナップ) | **口が無い — 語彙ごと無い**(実測: store 全体で bpm/tempo/beat 0件)。利用者裁定(2026-08-28): **LFO 自動制御(ParamDriver)の拡張と同じ束**なのでモデル上の置き場はその時に決める。乗り物は Lottie の車体(marker/meta の慣習)で行ける見込み — 新 component を先に切らない。v1 の hero 動線は S5 ロケータ+耳(聞きながら置いて印を打つ)で成立する。先例=Ableton |
 
 ## 着地済み(2026-08-28、統合 `7856cb65`)
