@@ -77,7 +77,26 @@
    候補として読んでいる。「front から音を持ち込む時、尺を何から取るか」「front は
    `motolii-audio` を引くか」。**hero が MV である以上、必ず要る**
 4. **区間イージングの対象は誰か。** 二代目 UI は**選択されたキー**、今回のレーンは
-   **playhead の直前のキー**。どちらも筋は通るが別物で、放置すると同じ操作に選択モデルが2つ並ぶ
+   **playhead の直前のキー**。裁定274 で慣習(**選択されたキー** — AE の F9・Premiere・Resolve)
+   を採ったが、これは Lottie が黙っている所なので利用者は覆せる。
+
+   **※ 中身は既に決まっている**(2026-07-10 決定、`concept.md:188-192`)。
+   エージェントが「LINEAR / EASE / HOLD」で止まったのは**この決定に到達していなかった**から:
+
+   - **データモデルは既に一致** — `motolii-eval` の `Interp::Bezier{x1,y1,x2,y2}` は
+     「区間の正規化位置 u∈[0,1) に対する連続イージング」= CSS `cubic-bezier()` = Flow = AM と
+     **同一表現**。**fps・解像度に非依存**。UI はこの4値を編集する**薄いポップアップで足り、
+     スキーマ変更は不要**
+   - **AM 式の高度イージング型を採用** — 動きの"性格"(バウンス・バネ・段階移動)は式や
+     ParamDriver ではなく**区間の補間タイプ**として持つ。Cubic Bezier に加え
+     **Bounce / Elastic / Steps / Elastic Steps**、オーバーシュートはトグル。
+     実装は `Interp` への variant 追加(`Elastic{amplitude,period}` /
+     `Bounce{bounces,decay}` / `Steps{count,..}`)で、どれも「u∈[0,1]→値」の純関数
+     = **評価器の約束を崩さない追加的スキーマ変更**。
+     **AE では `valueAtTime` の物理シミュ式が必須だった領域を GUI の選択肢へ畳み込む**のが狙い
+   - **混同禁止**: Graph View は時間方向の値グラフエディタ、Interval Easing Editor は
+     1区間の正規化 time remap、空間モーションパスは位置の 2D 経路。
+     **三者を同じ curve state・座標・操作面へ統合しない**
 5. **`rotation.x`/`rotation.y` と `scale.x/y/z` に store の property が無い。**
    Inspector は3欄ずつ見せているが配線先が存在しない。欄を消すのは簡単だが、それは
    **「3D 回転を諦める」という意味の決定**になる
