@@ -82,7 +82,7 @@ mod preview;
 mod properties;
 mod tree;
 
-pub use audio::{audio_rows, AudioRowProjection};
+pub use audio::{audio_rows, waveform_bucket_range, AudioRowProjection, WAVEFORM_BUCKETS};
 pub use geometry::{
     frame_at_x, frame_to_x, tick_steps, tick_steps_with_target, time_band_segment_frames,
     time_band_segment_frames_with_target,

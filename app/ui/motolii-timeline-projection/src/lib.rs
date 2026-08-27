@@ -14,7 +14,8 @@ pub mod stacking;
 pub use projection::{
     audio_rows, frame_at_x, frame_to_x, key_order, layer_row_top, property_rows, rows,
     selected_row_index, tick_steps, tick_steps_with_target, time_band_segment_frames,
-    time_band_segment_frames_with_target, AudioRowProjection, KeySelectionOp, KeySelector,
-    PropertyKeyProjection, PropertyRowProjection, RowProjection,
+    time_band_segment_frames_with_target, waveform_bucket_range, AudioRowProjection,
+    KeySelectionOp, KeySelector, PropertyKeyProjection, PropertyRowProjection, RowProjection,
+    WAVEFORM_BUCKETS,
 };
 pub use stacking::StackDirection;

@@ -64,6 +64,14 @@ pub struct TimelineLane {
     pub start: i64,
     pub duration: i64,
     pub selected: bool,
+    /// この**クリップが見せている区間**の波形 (min, max)。空 = 音が無い(または
+    /// まだ読めていない)ので何も描かない。
+    ///
+    /// **既に切り出された物が来る**(素材の全長ではない)。トリム・タイムストレッチ
+    /// の写像は `motolii_timeline_projection::waveform_bucket_range` が持っていて、
+    /// ここは「クリップの左端から右端までを、この配列の先頭から末尾までへ均等に
+    /// 割り当てる」しか知らない。**同じ写像を2箇所に住まわせない。**
+    pub waveform: Vec<(f32, f32)>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -1494,6 +1502,7 @@ impl TimelineSurface {
                 },
                 color,
             );
+            self.draw_lane_waveform(cx, lane, row, color, x0, x1, left, right);
             // トリム掴み代を「見える物」にする(A1/A2)。掴める幅と同じ幅を
             // 少し明るく置くだけ — 別部品ではないので色相は増やさない。
             let handle = self.trim_handle_width.min((x1 - x0) / 3.0).max(1.0);
@@ -1523,6 +1532,67 @@ impl TimelineSurface {
                     grip,
                 );
             }
+        }
+    }
+
+    /// クリップの中に波形を描く。**別部品ではない** — 色相を増やさず、クリップの
+    /// 色をそのまま暗くしただけの物を重ねる(Ableton も波形はクリップ色の濃淡)。
+    ///
+    /// hero が MV である以上、BPM グリッドへ手で合わせる作業は「聞きながら置く」
+    /// 作業で、その前段として**まず波の形が見えている**ことが要る。
+    ///
+    /// `visible_left`/`visible_right` は画面に出ているフレーム範囲(クリップの
+    /// 一部が視野の外にある時に効く)。`lane.waveform` はクリップ全体ぶんなので、
+    /// 「クリップ内の相対位置」で添字を引く。
+    #[allow(clippy::too_many_arguments)]
+    fn draw_lane_waveform(
+        &mut self,
+        cx: &mut Cx2d,
+        lane: &TimelineLane,
+        row: VisualRow,
+        color: Vec4f,
+        x0: f64,
+        x1: f64,
+        visible_left: f64,
+        visible_right: f64,
+    ) {
+        let peaks = &lane.waveform;
+        if peaks.is_empty() || lane.duration <= 0 || x1 - x0 < 2.0 {
+            return;
+        }
+        let body_height = (row.height - 1.0).max(1.0);
+        // 上下2pxは空ける — 波形がレーンの境界線に触れると、隣の行と繋がって見える。
+        let half = (body_height * 0.5 - 2.0).max(1.0);
+        let mid = row.y + body_height * 0.5;
+        let wave = vec4(color.x * 0.30, color.y * 0.30, color.z * 0.30, 1.0);
+
+        let duration = lane.duration as f64;
+        let clip_start = lane.start as f64;
+        let left_fraction = ((visible_left - clip_start) / duration).clamp(0.0, 1.0);
+        let right_fraction = ((visible_right - clip_start) / duration).clamp(0.0, 1.0);
+        let span = right_fraction - left_fraction;
+        if span <= 0.0 {
+            return;
+        }
+        // 2px 刻み。1px にしても目には同じで、描画インスタンスだけ倍になる。
+        const COLUMN_WIDTH: f64 = 2.0;
+        let columns = (((x1 - x0) / COLUMN_WIDTH).floor() as usize).max(1);
+        for column in 0..columns {
+            let fraction = left_fraction + span * (column as f64 + 0.5) / columns as f64;
+            let index = ((fraction * peaks.len() as f64) as usize).min(peaks.len() - 1);
+            let (min, max) = peaks[index];
+            let top = mid - f64::from(max).clamp(0.0, 1.0) * half;
+            let bottom = mid - f64::from(min).clamp(-1.0, 0.0) * half;
+            self.draw_body_rect(
+                cx,
+                Rect {
+                    pos: dvec2(x0 + column as f64 * COLUMN_WIDTH, top),
+                    // 無音でも1pxの中心線は残す — 「音は在るが今は静か」と
+                    // 「そもそも波形が無い」を見分けられなくなるため。
+                    size: dvec2(COLUMN_WIDTH - 1.0, (bottom - top).max(1.0)),
+                },
+                wave,
+            );
         }
     }
 

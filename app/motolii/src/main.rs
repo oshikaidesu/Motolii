@@ -11,10 +11,15 @@ use makepad_widgets::*;
 use motolii_engine::{Engine, ObservationCamera};
 use motolii_shell_state::Session;
 use motolii_store::{
-    AssetId, Document, Intent, LayerAttrsPatch, LayerId, LayerMeta, LayerSource, LayerTiming,
-    RationalTime,
+    AssetDraft, AssetId, Document, Intent, LayerAttrsPatch, LayerId, LayerMeta, LayerSource,
+    LayerTiming, RationalTime, SourceFingerprintV1,
 };
-use motolii_timeline_projection::{self as timeline_pane, stacking::restacked, StackDirection};
+use motolii_timeline_projection::{
+    self as timeline_pane, stacking::restacked, waveform_bucket_range, StackDirection,
+    WAVEFORM_BUCKETS,
+};
+use std::collections::HashMap;
+use std::path::Path;
 use std::time::Instant;
 
 mod browser_surface;
@@ -57,6 +62,11 @@ macro_rules! browser_rail_ids {
 }
 
 const RAIL_ALL_MEDIA: usize = 0;
+
+/// ドロップを音として引き受ける拡張子。**一覧の出所は
+/// `browser_surface::asset_type_for` の audio 枝**(同じ6つ)— 新しい表を
+/// 発明せず、既に台帳が `audio/*` と呼んでいる物にそのまま揃える。
+const AUDIO_EXTENSIONS: &[&str] = &["wav", "mp3", "aac", "flac", "ogg", "m4a"];
 
 
 
@@ -424,6 +434,17 @@ struct BackendBridge {
     present: StagePresent,
     stage_texture: Option<Texture>,
     stage_gpu: Option<wgpu::Texture>,
+    /// path → 素材の全長ぶんの波形 (min, max)。**取り込みの1回だけ**埋める。
+    /// `motolii_media::waveform_peaks` は ffmpeg を素材の端から端まで走らせる I/O
+    /// なので、投影(`timeline_model`、ズーム・スクラブのたびに走る)からは絶対に
+    /// 呼ばない — 憲法3「プレイヘッドのカクつきは合否そのもの」。
+    ///
+    /// **空の Vec は「音が無い」の記録**でもある(静止画・音無し動画)。もう一度
+    /// 聞き直さないために、失敗も空として憶えておく。
+    waveforms: HashMap<String, Vec<(f32, f32)>>,
+    /// path → 素材の総尺を comp の fps で数えたフレーム数。波形をトリム窓へ
+    /// 切り出す時の分母(`waveform_bucket_range`)。
+    source_frames: HashMap<String, i64>,
 }
 
 enum TimelineUpdate {
@@ -475,6 +496,8 @@ impl BackendBridge {
             present: StagePresent::FallbackCpu,
             stage_texture: None,
             stage_gpu: None,
+            waveforms: HashMap::new(),
+            source_frames: HashMap::new(),
         }
     }
 
@@ -524,9 +547,33 @@ impl BackendBridge {
         });
         drop(store);
 
+        // 音のある行だけ、**クリップが見せている区間**の波形を切り出して渡す。
+        // 切り出しの規則(`source_in`/`speed` からバケット範囲へ)は projection が
+        // 持っている — front で書き直すと同じ規則の家が2つになる。
+        // ここは HashMap を引くだけで I/O をしない(`waveforms` の doc 参照)。
+        let mut waveforms: HashMap<u64, Vec<(f32, f32)>> = HashMap::new();
+        for audio in timeline_pane::audio_rows(&self.doc.view()) {
+            if !audio.may_have_audio {
+                continue;
+            }
+            let Some(path) = audio.source_path.as_deref() else {
+                continue;
+            };
+            let (Some(peaks), Some(&total)) =
+                (self.waveforms.get(path), self.source_frames.get(path))
+            else {
+                continue;
+            };
+            let Some(range) = waveform_bucket_range(&audio.timing, total, peaks.len()) else {
+                continue;
+            };
+            waveforms.insert(audio.layer.0, peaks[range].to_vec());
+        }
+
         let lanes = rows
             .into_iter()
             .map(|row| TimelineLane {
+                waveform: waveforms.remove(&row.id.0).unwrap_or_default(),
                 id: row.id.0,
                 name: Self::display_name(&row.name),
                 hidden: row.hidden,
@@ -572,6 +619,138 @@ impl BackendBridge {
             fps_num,
             fps_den,
         }
+    }
+
+    /// 落ちてきた1本を**サウンドトラックとして**この comp へ入れる
+    /// (2026-08-18 裁定: 音声ファイルのドロップは offset 0 / gain 1.0)。
+    ///
+    /// **なぜ `browser_surface::place_media` を呼ばないか**: あちらは
+    /// `motolii_media::probe`(先頭 video stream を要求する)で尺を取るので、
+    /// audio-only ファイルでは必ず失敗する。音の尺は engine の口
+    /// (`Engine::media_duration` = `probe_container` 経由、裁定274 (3) の修正)
+    /// から取る。front は `motolii-audio` を直接引かない(裁定276)。
+    ///
+    /// **意図論(裁定271)**: 音を落とす人が求めているのは「この曲に合わせて作る」で
+    /// あって、置き場所を名指してはいない。だから頭から・全長で・一番手前に置く。
+    /// **名指していない物は変えない** — playhead も、comp の尺も、既存レイヤーの
+    /// 順序も触らない。
+    ///
+    /// gain 1.0 は `property::LEVEL` の track を**置かないこと**で表す(裁定20:
+    /// track が無ければ静止値)。値を書くと「1.0 というキーを打った」という別の
+    /// 意味になる。
+    ///
+    /// 記帳(`AdmitAsset`)と配置(`AddLayer`+`SetMeta`)で **1 undo**。
+    fn admit_soundtrack(&mut self, path: &Path) -> Result<String, String> {
+        let label = path
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_else(|| path.to_string_lossy().into_owned());
+        let failed = |reason: &str| format!("AUDIO FAILED  ·  {label}  ·  {reason}");
+
+        let store = self.doc.view();
+        let composition = store
+            .composition()
+            .map_err(|error| failed(&error.to_string()))?
+            .ok_or_else(|| failed("no composition yet"))?;
+        let layer = LayerId(store.next_layer_id());
+        let order = store
+            .layers()
+            .into_iter()
+            .filter_map(|id| store.meta(id).ok().flatten().map(|meta| meta.order))
+            .max()
+            .map(|max| max.saturating_add(1))
+            .unwrap_or(0);
+        drop(store);
+
+        let path_string = path.to_string_lossy().into_owned();
+        let duration = self
+            .engine
+            .media_duration(&path_string)
+            .ok_or_else(|| failed("cannot read its duration"))?;
+        let source_frames = duration
+            .try_to_frame_round(composition.fps)
+            .map_err(|error| failed(&error.to_string()))?;
+        // 頭から・素材の全長(comp の残りで頭打ち、`LayerTiming::place` の規則)。
+        let timing = LayerTiming::place(0, Some(source_frames), composition.duration_frames);
+
+        let mut intents = Vec::new();
+        let content_hash = match std::fs::File::open(path)
+            .map_err(|error| error.to_string())
+            .and_then(|file| SourceFingerprintV1::from_reader(file).map_err(|e| e.to_string()))
+        {
+            Ok(fingerprint) => {
+                let extension = path
+                    .extension()
+                    .and_then(|ext| ext.to_str())
+                    .unwrap_or("")
+                    .to_ascii_lowercase();
+                let mut draft = AssetDraft::from_probed_source(
+                    format!("audio/{extension}"),
+                    &fingerprint,
+                    path,
+                    None,
+                );
+                draft.duration = Some(duration);
+                intents.push(Intent::AdmitAsset { draft });
+                Some(fingerprint.content_hash())
+            }
+            // 指紋が読めなくても配置は続ける(bin-first: 記帳と配置は別の判断、
+            // 裁定162)。`browser_surface::place_media` と同じ割り切り。
+            Err(_) => None,
+        };
+        intents.push(Intent::AddLayer(layer));
+        intents.push(Intent::SetMeta {
+            layer,
+            meta: LayerMeta {
+                source: LayerSource::Media {
+                    path: path_string.clone(),
+                    fingerprint: content_hash,
+                },
+                order,
+                timing,
+            },
+        });
+        // 名前を付ける。既定は空文字なので、付けないと Timeline に**名前の無い行**
+        // が生える(どれが自分の曲か読めない = Q0)。AE も取り込んだ物はファイル名で
+        // 並ぶ。同じ `apply_all` の中なので undo は1回のまま。
+        intents.push(Intent::SetAttrs {
+            layer,
+            patch: LayerAttrsPatch {
+                name: Some(
+                    path.file_stem()
+                        .map(|stem| stem.to_string_lossy().into_owned())
+                        .unwrap_or_else(|| label.clone()),
+                ),
+                ..Default::default()
+            },
+        });
+        self.doc
+            .apply_all(intents)
+            .map_err(|error| failed(&error.to_string()))?;
+
+        // 波形はここで**1回だけ**取る。失敗(音声 stream が無い)も空として憶える
+        // — 憶えないと投影のたびに ffmpeg を叩き直す。
+        let peaks = motolii_media::waveform_peaks(path, WAVEFORM_BUCKETS).unwrap_or_default();
+        let silent = peaks.is_empty();
+        self.waveforms.insert(path_string.clone(), peaks);
+        self.source_frames.insert(path_string, source_frames);
+
+        self.session.selection = Some(layer);
+        self.session.selected_layers = vec![layer];
+
+        let seconds = duration.as_seconds_f64();
+        // 素材が comp より長ければ**そう言う**。黙って切ると、切れた側は
+        // 「読み込めていない」ようにしか見えない(comp の尺を勝手に伸ばすのは
+        // 利用者が名指していない変更なので、しない)。
+        let clipped = if source_frames > timing.duration {
+            format!("  ·  clipped to the comp ({} of {source_frames} frames)", timing.duration)
+        } else {
+            String::new()
+        };
+        let wave = if silent { "  ·  no audio stream" } else { "" };
+        Ok(format!(
+            "SOUNDTRACK  ·  {label}  ·  {seconds:.2}s from frame 0{clipped}{wave}"
+        ))
     }
 
     fn scrub_to(&mut self, frame: i64) {
@@ -1546,6 +1725,74 @@ impl App {
         focused_text_input(cx, &self.ui)
     }
 
+    /// 窓へ落ちてきたファイル。**音だけを引き受ける**(2026-08-18 裁定の
+    /// 「音声ファイルのドロップ」)。
+    ///
+    /// **Q0**: 動画・画像は引き受けない — その道(`browser_surface::place_media`)は
+    /// まだ窓から到達できる形になっていないので、ここで半分だけ配線すると
+    /// 「棚を素通りする2本目の入口」が生える。引き受けないことを**状態行で言う**:
+    /// 黙って落とすと、利用者からは「落としたのに何も起きない」としか見えない。
+    fn handle_file_drop(&mut self, cx: &mut Cx, items: &[DragItem]) -> bool {
+        // 音を先に片付ける。音と動画が一緒に落ちてきた時、状態行に残るべきなのは
+        // 「入った物」であって「入らなかった物」ではない。
+        let mut status: Option<String> = None;
+        for item in items.iter().filter(|item| Self::is_audio_drag_item(item)) {
+            let DragItem::FilePath { path, .. } = item else {
+                continue;
+            };
+            let Some(backend) = self.backend.as_mut() else {
+                continue;
+            };
+            status = Some(
+                backend
+                    .admit_soundtrack(Path::new(path))
+                    .unwrap_or_else(|reason| reason),
+            );
+            backend.frame = None;
+        }
+        let Some(status) = status else {
+            // 何も入らなかった。**外から来たファイル**なら、黙って落とさずに
+            // 理由を言う(落としたのに何も起きない、が一番読めない)。窓の中の
+            // ドラッグ(Dock のタブ = `internal_id` を持つ)には触らない —
+            // ここで `handled` を立てるとタブの並べ替えを横取りする。
+            let outsider = items.iter().find_map(|item| match item {
+                DragItem::FilePath {
+                    path,
+                    internal_id: None,
+                } if !path.is_empty() => Path::new(path)
+                    .file_name()
+                    .map(|name| name.to_string_lossy().into_owned()),
+                _ => None,
+            });
+            if let Some(label) = outsider {
+                self.set_status(cx, &format!("DROP  ·  {label}  ·  only audio can be dropped yet"));
+            }
+            // 受け取っていないので `handled` は立てない。
+            return false;
+        };
+        self.install_timeline_model(cx);
+        self.request_stage_frame(cx);
+        self.set_status(cx, &status);
+        true
+    }
+
+    /// 引き受ける気があるか(拡張子だけで決める)。`Event::Drag` は指が窓の上を
+    /// 動くたびに来るので、ここでは**ファイルを開かない**。
+    ///
+    /// `internal_id` を持つ物は窓の中のドラッグ(Dock のタブ)なので対象外 —
+    /// 素材の取り込みと、面の並べ替えは別の話。
+    fn is_audio_drag_item(item: &DragItem) -> bool {
+        let DragItem::FilePath { path, internal_id: None } = item else {
+            return false;
+        };
+        let extension = Path::new(path)
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .unwrap_or("")
+            .to_ascii_lowercase();
+        AUDIO_EXTENSIONS.contains(&extension.as_str())
+    }
+
     fn toggle_playback(&mut self, cx: &mut Cx) {
         let playing = self
             .backend
@@ -1783,6 +2030,23 @@ impl AppMain for App {
             self.apply_browser_selection(cx);
             self.install_browser_catalog(cx);
             self.project_status(cx);
+        }
+        // ドロップは**2段**。`Event::Drag` へ `Copy` と答えないと macOS の
+        // `draggingEntered:` が `NSDragOperation::None` を返し、`Event::Drop` は
+        // そもそも来ない(カーソルは「不可」のまま指が離せない)。受け取る気が
+        // あることを先に言う — Q0「触れそうで触れない物を作らない」がここに効く。
+        if let Event::Drag(drag_event) = event {
+            if drag_event.items.iter().any(Self::is_audio_drag_item) {
+                *drag_event.response.lock().unwrap() = DragResponse::Copy;
+            }
+        }
+        if let Event::Drop(drop_event) = event {
+            if self.handle_file_drop(cx, &drop_event.items) {
+                // `performDragOperation:` はこの値をそのまま OS へ返す。false の
+                // ままだと、取り込みは成功しているのにファイルが元の場所へ
+                // 弾かれて戻るアニメーションが出る(効いたのに効かなく見える)。
+                *drop_event.handled.lock().unwrap() = true;
+            }
         }
         self.match_event(cx, event);
         self.ui.handle_event(cx, event, &mut Scope::empty());
