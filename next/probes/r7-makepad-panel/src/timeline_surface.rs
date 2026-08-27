@@ -155,12 +155,14 @@ impl TimelineViewport {
 
     fn tick_steps(&self, fps_num: i64, fps_den: i64, lane_height: f64) -> (i64, i64) {
         let fps = Fps::try_new(fps_num.max(1), fps_den.max(1)).ok();
-        timeline_pane::tick_steps_with_target(
+        // 目標セル比率は JSON 正本(`target_cell_ratio` = 0.52、モック実測
+        // 13.5px/26px)。ここで数値を手打ちすると「形は比率で定数化する」
+        // 裁定を r7 だけが破る — 5.0 を渡していたのは 10 倍の取り違えだった。
+        timeline_pane::tick_steps(
             fps,
             self.visible_frames.round().max(1.0) as i64,
             self.time_width as f32,
             lane_height.max(1.0) as f32,
-            5.0,
         )
     }
 }
@@ -855,10 +857,50 @@ impl TimelineSurface {
         }
     }
 
+    // 面(band)と線(line)は同じ時間軸を「頻度」で分業する。線は全ティックに立つ細かい
+    // リズムで、面はメジャー刻みだけを周期にした粗いリズム。粗いリズムを先に敷いておかないと
+    // 線が透けて見えるべき下地がなくなるので、この帯は線より先に描く。
+    fn draw_time_bands(&mut self, cx: &mut Cx2d, minor: i64, major: i64) {
+        // 帯の周期はメジャー刻みだが、メジャーがマイナーを下回る異常値では周期が潰れて
+        // 無限ループになりかねないので、マイナーを下限として使う。
+        let step = major.max(minor).max(1);
+        let rail_x = self.rect.pos.x + RAIL_WIDTH;
+        let right_x = self.rect.pos.x + self.rect.size.x;
+        let top_y = self.rect.pos.y + RULER_HEIGHT;
+        let bottom_y = self.rect.pos.y + self.rect.size.y;
+        let body_height = (bottom_y - top_y).max(0.0);
+        if right_x <= rail_x || body_height <= 0.0 {
+            return;
+        }
+        let first_major = (self.view_start / step as f64).floor() as i64 * step;
+        let last = (self.view_start + self.view_span).ceil() as i64;
+        let mut frame = first_major;
+        while frame <= last {
+            // 周期の偶奇だけで「点灯」区間を決める。view_start に依存させないことで、
+            // スクロールしても同じメジャー区間が同じ位相のまま光り続ける。
+            if frame.div_euclid(step).rem_euclid(2) == 0 {
+                let x0 = self.x_at_frame(frame as f64).max(rail_x);
+                let x1 = self.x_at_frame((frame + step) as f64).min(right_x);
+                if x1 > x0 {
+                    self.draw_rect(
+                        cx,
+                        Rect {
+                            pos: dvec2(x0, top_y),
+                            size: dvec2(x1 - x0, body_height),
+                        },
+                        vec4(1.0, 1.0, 1.0, 0.030),
+                    );
+                }
+            }
+            frame = frame.saturating_add(step);
+        }
+    }
+
     fn draw_grid_and_ruler(&mut self, cx: &mut Cx2d, lane_height: f64) {
         let (minor, major) = self
             .viewport()
             .tick_steps(self.fps_num, self.fps_den, lane_height);
+        self.draw_time_bands(cx, minor, major);
         let first_minor = (self.view_start / minor as f64).ceil() as i64 * minor;
         let last = (self.view_start + self.view_span).ceil() as i64;
         let mut frame = first_minor;
