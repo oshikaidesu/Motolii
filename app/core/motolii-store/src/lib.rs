@@ -311,8 +311,19 @@ impl Composition {
 /// 上流に相当物は無い。rerun の `AbsoluteTimeRange` は store の時間範囲であって
 /// 「素材のどこを使うか」を持たないので、これは Motolii の意味である。
 ///
-/// 単位はフレーム。comp の fps で数える(`RationalTime` を持たないのは、
-/// 配置が fps に紐づく整数だからで、時刻へ写す時は正準口を通る)。
+/// 単位はフレーム(`RationalTime` を持たないのは、配置が fps に紐づく整数だからで、
+/// 時刻へ写す時は正準口を通る)。
+///
+/// **ただし全部が comp の fps ではない。** `start` と `duration` は comp のフレーム、
+/// `source_in` は**素材の**フレーム(フィールド doc のとおり「素材の何フレーム目から
+/// 使うか」)。両者を繋ぐのが `speed` で、「comp が1フレーム進む間に素材が何フレーム
+/// 進むか」の比 — つまり **fps 整合はここが担う**。comp 30fps / 素材 24fps なら
+/// `speed = 0.8` が等速である。
+///
+/// 素材のフレーム番号は `source_in + (comp_frame - start) × speed`。
+/// Media の尺の壁(裁定272)も同じ単位で立つ:
+/// `source_in + duration × speed ≦ 素材の総フレーム数`
+/// (`Engine::media_frames` が返す数。素材ネイティブのフレーム数)。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct LayerTiming {
     /// comp 上の開始フレーム。
