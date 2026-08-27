@@ -72,6 +72,19 @@ Motolii は**前者を取り、後者を捨てる**。レイヤーは深さで�
 できないレイヤー UI は、賭けの前提を満たしていない
 ([欠陥台帳](reviews/2026-08-27-layer-ui-parity-defects.md))。
 
+### 4.5 Inspector が見せるのは Lottie の語彙であって、renderer のパラメータではない
+
+モデルが Lottie である以上、**利用者が触る物は意味**(位置・不透明度・trim path・エフェクト)
+であって**機構**(MSAA・alpha channel usage・render config)ではない。
+
+`re_renderer` に触れる場所に居ると、そこにある値を全部 Inspector へ出したくなる。
+**やらない。** 出した瞬間に Inspector は実装の制御盤になり、AE の操作面という資産を捨てて
+Blender/Nuke の側へ滑る。
+
+**機械で判定できる**: **Lottie で表現できない物は Inspector に出さない。**
+出しても保存で消えるので、利用者から見れば嘘になる。迷ったら
+`app/reference/lottie.schema.json` を引く。
+
 ### 5. モデルは Lottie
 
 Lottie は Bodymovin が AE のデータ模型を吐いた物 — **AE の保存方式を外に出した正本**である。
@@ -145,6 +158,17 @@ Motolii がまだ向き合っていない量**である。2026-08-27 時点: 採
 **それ以外は繋ぐ。** そして「繋げるだけ」は実装側が繰り返し拡大解釈する所なので、
 **新しい型・trait・モジュールを定義する瞬間に「これを既にやっている物は何か」を答える**。
 答えられないなら、まだ探していない。
+
+**詰まったら `re_renderer` の中を読む。** 手元にソースが在る:
+
+```
+~/.cargo/git/checkouts/rerun-bdb1f1ac6277bf7e/7cca401/crates/viewer/re_renderer
+```
+
+「無いから作る」の前に、**在るかどうかを実際に見る**。2026-08-27 の実例 —
+初代は `PipelineCache`/`trait Composite`/`trait LayerSource` でレンダパイプラインを丸ごと
+自作していたが、`re_renderer` が既にその仕事をしていた。作らずに済んでいた物を、
+文書だけが作る予定のまま持っていた。
 
 現在 owns しているが正当性が未検証の物: `motolii-vector` のパス演算子7種
 (trim-path / repeater / rounded-corners / pucker-bloat / zig-zag / offset-path / twist)。
