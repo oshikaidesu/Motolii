@@ -164,9 +164,15 @@ fn time_to_frame(ctx: &Ctx<'_, '_>, t: RationalTime) -> Result<f64, LottieExport
     Ok(t.try_to_frame_round(ctx.fps)? as f64)
 }
 
-fn interp_easing(interp: motolii_store::Interp) -> Option<(serde_json::Value, serde_json::Value)> {
+/// `None` = Lottie の離散キー(`h:1`)。`Some` = `o`/`i` の接線対。
+///
+/// `Bounce` / `Elastic` / `Steps` はここで **失敗する** — 理由は
+/// [`LottieExportError::UnrepresentableEasing`] に書いてある(黙って近似しない)。
+fn interp_easing(
+    interp: motolii_store::Interp,
+) -> Result<Option<(serde_json::Value, serde_json::Value)>, LottieExportError> {
     use motolii_store::Interp;
-    match interp {
+    Ok(match interp {
         Interp::Hold => None,
         Interp::Linear => Some((
             serde_json::json!({ "x": [0.0], "y": [0.0] }),
@@ -176,7 +182,10 @@ fn interp_easing(interp: motolii_store::Interp) -> Option<(serde_json::Value, se
             serde_json::json!({ "x": [x1], "y": [y1] }),
             serde_json::json!({ "x": [x2], "y": [y2] }),
         )),
-    }
+        Interp::Bounce { .. } | Interp::Elastic { .. } | Interp::Steps { .. } => {
+            return Err(LottieExportError::UnrepresentableEasing(interp.kind()))
+        }
+    })
 }
 
 /// `bounds`(スケール後の単位)が `Some` なら、書く各値をその場で検査し、
@@ -220,7 +229,7 @@ pub(crate) fn encode_scalar_track(
             "s": [scaled],
         });
         if i + 1 < keys.len() {
-            match interp_easing(key.interp) {
+            match interp_easing(key.interp)? {
                 None => obj["h"] = serde_json::json!(1),
                 Some((o, in_)) => {
                     obj["o"] = o;
@@ -266,7 +275,7 @@ fn encode_vector_track(
             }
         }
         if i + 1 < keys.len() {
-            match interp_easing(key.interp) {
+            match interp_easing(key.interp)? {
                 None => obj["h"] = serde_json::json!(1),
                 Some((o, in_)) => {
                     obj["o"] = o;
@@ -304,7 +313,7 @@ fn encode_bezier_track(
             "s": [bezier_to_json(p)],
         });
         if i + 1 < keys.len() {
-            match interp_easing(key.interp) {
+            match interp_easing(key.interp)? {
                 None => obj["h"] = serde_json::json!(1),
                 Some((o, in_)) => {
                     obj["o"] = o;
@@ -464,7 +473,7 @@ fn encode_color_track(
             "s": [c[0], c[1], c[2]],
         });
         if i + 1 < keys.len() {
-            match interp_easing(key.interp) {
+            match interp_easing(key.interp)? {
                 None => obj["h"] = serde_json::json!(1),
                 Some((o, in_)) => {
                     obj["o"] = o;

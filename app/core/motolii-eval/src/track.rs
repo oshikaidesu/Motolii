@@ -27,9 +27,30 @@ pub enum TrackError {
     },
     #[error("keyframes must be sorted by strictly increasing time without duplicates")]
     UnsortedOrDuplicateKeys,
+    /// パラメトリック補間型のパラメータが定義域の外(`Bezier` は専用の
+    /// [`TrackError::InvalidBezier`] が既にある)。
+    #[error("補間パラメータが定義域の外: {0}")]
+    InvalidInterp(String),
+    /// 区間の分割(キーの割り込み)が同型2本で表せない補間型。
+    /// **Bezier だけが de Casteljau で割れる** — Bounce/Elastic/Steps は
+    /// 「半分のバウンス」が同じ族の中に居ないので、近似で埋めずに断る
+    /// (`motolii-store` の速度積算が Bezier 区間で `Err` を返すのと同じ規律)。
+    #[error("{kind} 区間は分割できない — u→値の純関数を同型2本へ割る規則が無い")]
+    UnsplittableInterp { kind: &'static str },
 }
 
 /// キーフレーム区間(このキーから次のキーまで)の補間方法。
+///
+/// **どの variant も「区間の正規化位置 u∈[0,1] → 進み具合」の純関数**
+/// ([`Interp::ease`])であって、fps・解像度・区間の実長のどれにも依存しない。
+/// だから CSS の `cubic-bezier()`・Flow・Alight Motion と同じ表現になり、
+/// UI はこの数値を編集するだけで済む。
+///
+/// `Bounce` / `Elastic` / `Steps` は **AE が式(`valueAtTime` の物理シミュ)を
+/// 要求した領域を、GUI の選択肢へ畳んだ物**(2026-07-10 決定、`docs/concept.md`、
+/// 先例 Alight Motion)。逐次状態を持たない閉形式なので、`render_frame(t)` が
+/// 純関数であるという約束(スクラブ・区間キャッシュ・並列書き出しの全部が
+/// 乗っている約束)を崩さない。
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum Interp {
     /// 次のキーまで値を保持
@@ -42,10 +63,67 @@ pub enum Interp {
         x2: f64,
         y2: f64,
     },
+    /// 解析反射のバウンス。`bounces` = 着地後に跳ね返る回数、
+    /// `decay`∈[0,1] = 1回ごとに残る跳ね上がりの高さの比。
+    /// 値は [0,1] に収まる(行き過ぎない — 跳ねるのは戻る側)。
+    Bounce { bounces: u32, decay: f64 },
+    /// 減衰正弦のバネ。`amplitude` = 最初の行き過ぎの強さ(1 で行き過ぎ最小)、
+    /// `period` = 揺れの周期。**y は [0,1] の外へ出る**(オーバーシュート)。
+    Elastic { amplitude: f64, period: f64 },
+    /// 段階移動。`count` = 段数。
+    Steps { count: u32 },
 }
 
 impl Interp {
+    /// [`Interp::Bounce`] の跳ね回数の上限。[`Interp::ease`] の走査を有界に
+    /// するための構造的な制限であって好みではない([`KeyframeTrack::validate`]
+    /// はこれを超える値を拒む)。
+    pub const MAX_BOUNCES: u32 = 32;
+
+    /// 区間の正規化位置 `u`∈[0,1] → **正規化された進み具合**。
+    ///
+    /// **イージングの唯一の家**。[`KeyframeTrack::eval`] も、front の曲線
+    /// プレビューもここを呼ぶ — 同じ規則の家を2つ作らないため(front が
+    /// 曲線を描き直すと、見えている絵と評価される動きが黙ってずれる)。
+    ///
+    /// `x1`/`x2` は [`crate::bezier::cubic_bezier_ease`] の定義域
+    /// ([0,1])へ丸めてから渡す。[`KeyframeTrack::validate`] が既にこの範囲を
+    /// 強制しているので track 経由では起きないが、**編集中の値**(まだ track に
+    /// 入っていない、UI が握っている途中の4値)がそのまま来る口でもあるため。
+    pub fn ease(&self, u: f64) -> f64 {
+        match *self {
+            Interp::Hold => 0.0,
+            Interp::Linear => u.clamp(0.0, 1.0),
+            Interp::Bezier { x1, y1, x2, y2 } => {
+                cubic_bezier_ease(x1.clamp(0.0, 1.0), y1, x2.clamp(0.0, 1.0), y2, u)
+            }
+            Interp::Bounce { bounces, decay } => bounce_ease(bounces, decay, u),
+            Interp::Elastic { amplitude, period } => elastic_ease(amplitude, period, u),
+            Interp::Steps { count } => steps_ease(count, u),
+        }
+    }
+
+    /// エラー文と UI の見出しが同じ語を使うための名前。
+    pub fn kind(&self) -> &'static str {
+        match self {
+            Interp::Hold => "Hold",
+            Interp::Linear => "Linear",
+            Interp::Bezier { .. } => "Bezier",
+            Interp::Bounce { .. } => "Bounce",
+            Interp::Elastic { .. } => "Elastic",
+            Interp::Steps { .. } => "Steps",
+        }
+    }
+
     pub fn split_at(&self, progress: f64) -> Result<(Interp, Interp), TrackError> {
+        // パラメトリック型は progress によらず割れない。progress の検査より先に
+        // 断る — 「0.5 なら割れるかもしれない」と読める余地を残さない。
+        if matches!(
+            self,
+            Interp::Bounce { .. } | Interp::Elastic { .. } | Interp::Steps { .. }
+        ) {
+            return Err(TrackError::UnsplittableInterp { kind: self.kind() });
+        }
         if !progress.is_finite() || !(0.0..=1.0).contains(&progress) {
             if let Interp::Bezier { x1, y1, x2, y2 } = *self {
                 return Err(TrackError::UnrepresentableBezierSplit {
@@ -80,6 +158,9 @@ impl Interp {
         match *self {
             Interp::Hold => Ok((Interp::Hold, Interp::Hold)),
             Interp::Linear => Ok((Interp::Linear, Interp::Linear)),
+            Interp::Bounce { .. } | Interp::Elastic { .. } | Interp::Steps { .. } => {
+                Err(TrackError::UnsplittableInterp { kind: self.kind() })
+            }
             Interp::Bezier { x1, y1, x2, y2 } => {
                 let s = solve_curve_x(x1, x2, progress);
                 if !s.is_finite() || !(0.0..=1.0).contains(&s) {
@@ -186,6 +267,107 @@ impl Interp {
     }
 }
 
+/// 解析反射のバウンス。**逐次積分をしない**(2026-07-10「馬鹿正直に
+/// シミュレートしない」)— 自由落下の閉形式をそのまま使う: 跳ね上がる高さは
+/// 1回ごとに `decay` 倍、その滞空時間は `sqrt(decay)` 倍(h ∝ t² だから)。
+/// 前フレームの状態を持たないので `u` の純関数のままで、スクラブしても
+/// 逆再生しても同じ絵になる。
+///
+/// 形: `[0, 1)` の落下(加速)で 1 に着地し、以後 `bounces` 回、幅と高さが
+/// 幾何級数で縮む放物線で 1 へ戻る。値は [0,1] を出ない。
+fn bounce_ease(bounces: u32, decay: f64, u: f64) -> f64 {
+    if !u.is_finite() || u <= 0.0 {
+        return 0.0;
+    }
+    if u >= 1.0 {
+        return 1.0;
+    }
+    let decay = if decay.is_finite() {
+        decay.clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    let n = bounces.min(Interp::MAX_BOUNCES);
+    let ratio = decay.sqrt();
+
+    // 区間幅は 落下=1、k 回目の跳ね返り=ratio^k。合計で割って u を「区間何本目の
+    // どこか」へ戻す(区間の実長には触れない — ここは正規化の中だけの話)。
+    let mut total = 1.0;
+    let mut width = 1.0;
+    for _ in 0..n {
+        width *= ratio;
+        total += width;
+    }
+    let x = u * total;
+    if x < 1.0 {
+        // 落下。加速して 1(=着地)へ。
+        return x * x;
+    }
+
+    let mut start = 1.0;
+    let mut width = 1.0;
+    let mut height = 1.0;
+    for _ in 0..n {
+        width *= ratio;
+        height *= decay;
+        if width <= 0.0 {
+            break;
+        }
+        if x < start + width {
+            let local = (x - start) / width;
+            // 両端 1(接地)、中央 1-height(跳ねた高さ)の放物線。
+            return 1.0 - height * 4.0 * local * (1.0 - local);
+        }
+        start += width;
+    }
+    1.0
+}
+
+/// 減衰正弦のバネ。Penner の `easeOutElastic` — CSS には無いが Flow /
+/// Alight Motion / 主要トゥイーンライブラリが共通で使っている式で、ここでも
+/// 数学は借りる(自作しない)。
+///
+/// `amplitude` が 1 未満の時は Penner の実装どおり 1 として扱う: `y(0)=0` を
+/// 満たす位相 `s = period/2π · asin(1/amplitude)` は振幅 1 未満では実数に
+/// ならないので、この帯は表現できない(UI 側の下限も 1)。
+fn elastic_ease(amplitude: f64, period: f64, u: f64) -> f64 {
+    if !u.is_finite() || u <= 0.0 {
+        return 0.0;
+    }
+    if u >= 1.0 {
+        return 1.0;
+    }
+    let period = if period.is_finite() && period > 0.0 {
+        period
+    } else {
+        0.3
+    };
+    let (amplitude, phase) = if !amplitude.is_finite() || amplitude.abs() < 1.0 {
+        (1.0, period / 4.0)
+    } else {
+        (
+            amplitude,
+            period / std::f64::consts::TAU * (1.0 / amplitude).asin(),
+        )
+    };
+    amplitude * (-10.0 * u).exp2() * ((u - phase) * std::f64::consts::TAU / period).sin() + 1.0
+}
+
+/// 段階移動。CSS `steps(count, jump-end)` と同じ意味 — 各段の頭の値を保ち、
+/// 段の終わりで飛ぶ。`count == 1` は区間の頭を保って端で飛ぶ形になり、
+/// [`Interp::Hold`] と同じ絵になる(別の名前で同じ物を持たないための注記で
+/// あって、Hold を置き換えるものではない — Hold は Lottie の `h:1`)。
+fn steps_ease(count: u32, u: f64) -> f64 {
+    if !u.is_finite() || u <= 0.0 {
+        return 0.0;
+    }
+    if u >= 1.0 {
+        return 1.0;
+    }
+    let count = count.max(1) as f64;
+    (u * count).floor() / count
+}
+
 fn is_valid_bezier_control(interp: Interp) -> bool {
     if let Interp::Bezier { x1, y1, x2, y2 } = interp {
         [x1, y1, x2, y2].iter().all(|v| v.is_finite())
@@ -286,14 +468,44 @@ impl KeyframeTrack {
             }
         }
         for key in &self.keys {
-            if let Interp::Bezier { x1, y1, x2, y2 } = key.interp {
-                // y1/y2 も有限必須(x は範囲検査で NaN を弾けるが y は素通しだった — D1h)
-                if ![x1, y1, x2, y2].iter().all(|v| v.is_finite()) {
-                    return Err(TrackError::InvalidBezier { x1, x2 });
+            match key.interp {
+                Interp::Bezier { x1, y1, x2, y2 } => {
+                    // y1/y2 も有限必須(x は範囲検査で NaN を弾けるが y は素通しだった — D1h)
+                    if ![x1, y1, x2, y2].iter().all(|v| v.is_finite()) {
+                        return Err(TrackError::InvalidBezier { x1, x2 });
+                    }
+                    if !(0.0..=1.0).contains(&x1) || !(0.0..=1.0).contains(&x2) {
+                        return Err(TrackError::InvalidBezier { x1, x2 });
+                    }
                 }
-                if !(0.0..=1.0).contains(&x1) || !(0.0..=1.0).contains(&x2) {
-                    return Err(TrackError::InvalidBezier { x1, x2 });
+                Interp::Bounce { bounces, decay } => {
+                    if !decay.is_finite()
+                        || !(0.0..=1.0).contains(&decay)
+                        || bounces > Interp::MAX_BOUNCES
+                    {
+                        return Err(TrackError::InvalidInterp(format!(
+                            "Bounce{{bounces: {bounces}, decay: {decay}}} — decay は [0,1]、\
+                             bounces は {} 以下",
+                            Interp::MAX_BOUNCES
+                        )));
+                    }
                 }
+                Interp::Elastic { amplitude, period } => {
+                    if !amplitude.is_finite() || !period.is_finite() || period <= 0.0 {
+                        return Err(TrackError::InvalidInterp(format!(
+                            "Elastic{{amplitude: {amplitude}, period: {period}}} — period は正、\
+                             どちらも有限"
+                        )));
+                    }
+                }
+                Interp::Steps { count } => {
+                    if count == 0 {
+                        return Err(TrackError::InvalidInterp(
+                            "Steps{count: 0} — 段数は 1 以上".to_owned(),
+                        ));
+                    }
+                }
+                Interp::Hold | Interp::Linear => {}
             }
         }
         Ok(())
@@ -318,14 +530,14 @@ impl KeyframeTrack {
             Err(i) => i - 1,
         };
         let (a, b) = (&keys[i], &keys[i + 1]);
-        match a.interp {
-            Interp::Hold => a.value.clone(),
-            Interp::Linear => interpolate_value(a, b, segment_u(a.t, b.t, t)),
-            Interp::Bezier { x1, y1, x2, y2 } => {
-                let u = cubic_bezier_ease(x1, y1, x2, y2, segment_u(a.t, b.t, t));
-                interpolate_value(a, b, u)
-            }
+        // Hold だけは `u` を計算しない。`Interp::ease` は 0.0 を返すので値としては
+        // 同じだが、`interpolate_value` を通すと Vec2 の空間ベジェ経路へ入ってしまう
+        // (Lottie の `h:1` は離散的に飛ぶ = 曲線を辿らない、という不変量を守る)。
+        if let Interp::Hold = a.interp {
+            return a.value.clone();
         }
+        let u = a.interp.ease(segment_u(a.t, b.t, t));
+        interpolate_value(a, b, u)
     }
 }
 
@@ -618,6 +830,124 @@ mod tests {
             linear, eased,
             "イージングを変えても同じ点になっている(速さが形と独立していない)"
         );
+    }
+
+    /// **窓で見えない不変量なのでここで固定する**(裁定270 の例外 —
+    /// 曲線の端点が 0/1 に着いているかは、front のプレビューを目で見ても
+    /// 1px 未満の話なので判定できない)。区間の端で値が飛ぶと、キーの上で
+    /// 絵がガクッと動く。
+    #[test]
+    fn every_interp_starts_at_zero_and_ends_at_one() {
+        let cases = [
+            Interp::Linear,
+            Interp::Bezier {
+                x1: 0.42,
+                y1: 0.0,
+                x2: 0.58,
+                y2: 1.0,
+            },
+            Interp::Bounce {
+                bounces: 3,
+                decay: 0.5,
+            },
+            Interp::Elastic {
+                amplitude: 1.0,
+                period: 0.3,
+            },
+            Interp::Steps { count: 5 },
+        ];
+        for interp in cases {
+            assert!(
+                interp.ease(0.0).abs() < 1e-9,
+                "{} が 0 から始まっていない: {}",
+                interp.kind(),
+                interp.ease(0.0)
+            );
+            assert!(
+                (interp.ease(1.0) - 1.0).abs() < 1e-9,
+                "{} が 1 で終わっていない: {}",
+                interp.kind(),
+                interp.ease(1.0)
+            );
+        }
+    }
+
+    /// バウンスは**区間の継ぎ目で飛ばない**(落下→跳ね返り→跳ね返りの
+    /// 幾何級数が、幅と高さの両方でつながっていること)。ここが切れていると
+    /// 「跳ねる」ではなく「ワープする」動きになる。
+    #[test]
+    fn bounce_is_continuous_across_its_segments() {
+        let interp = Interp::Bounce {
+            bounces: 4,
+            decay: 0.4,
+        };
+        let mut prev = interp.ease(0.0);
+        for i in 1..=2000 {
+            let y = interp.ease(i as f64 / 2000.0);
+            assert!(
+                (y - prev).abs() < 0.02,
+                "u={} で跳んでいる: {prev} → {y}",
+                i as f64 / 2000.0
+            );
+            assert!(
+                (-1e-9..=1.0 + 1e-9).contains(&y),
+                "バウンスが [0,1] を出た: {y}"
+            );
+            prev = y;
+        }
+    }
+
+    /// バネは **1 を越える**(オーバーシュート)。越えないなら amplitude が
+    /// 効いていないということで、Bezier と見分けが付かなくなる。
+    #[test]
+    fn elastic_overshoots_past_one() {
+        let interp = Interp::Elastic {
+            amplitude: 1.0,
+            period: 0.3,
+        };
+        let peak = (1..100)
+            .map(|i| interp.ease(i as f64 / 100.0))
+            .fold(f64::NEG_INFINITY, f64::max);
+        assert!(peak > 1.0, "行き過ぎていない: peak={peak}");
+    }
+
+    /// 段階移動は段の中で**動かない**。
+    #[test]
+    fn steps_holds_inside_each_step() {
+        let interp = Interp::Steps { count: 4 };
+        assert!((interp.ease(0.10) - 0.0).abs() < 1e-12);
+        assert!((interp.ease(0.24) - 0.0).abs() < 1e-12);
+        assert!((interp.ease(0.26) - 0.25).abs() < 1e-12);
+        assert!((interp.ease(0.51) - 0.5).abs() < 1e-12);
+    }
+
+    /// 壊れたパラメータは track に入れない(`ease` が黙って丸めるのは
+    /// **編集中の値**への防御であって、保存される値への許可ではない)。
+    #[test]
+    fn validate_rejects_out_of_domain_parametric_interps() {
+        for interp in [
+            Interp::Bounce {
+                bounces: 1,
+                decay: 1.5,
+            },
+            Interp::Elastic {
+                amplitude: 1.0,
+                period: 0.0,
+            },
+            Interp::Steps { count: 0 },
+        ] {
+            let track = KeyframeTrack {
+                keys: vec![
+                    key(RationalTime::ZERO, 0.0, interp),
+                    key(RationalTime::from_seconds(1), 1.0, Interp::Linear),
+                ],
+            };
+            assert!(
+                matches!(track.validate(), Err(TrackError::InvalidInterp(_))),
+                "{:?} が通ってしまった",
+                interp
+            );
+        }
     }
 
     /// `spatial` フィールドが無い旧 JSON も読める(`#[serde(default)]`)。

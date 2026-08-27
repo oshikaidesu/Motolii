@@ -524,11 +524,18 @@ fn accumulate_speed_offset(
                 let sum_u = count * (u_lo + u_hi_last) / 2.0;
                 total += va * count + (vb - va) * sum_u;
             }
-            Interp::Bezier { .. } => {
+            // Bezier と、パラメトリック補間型(Bounce/Elastic/Steps)。どれも
+            // 「区間内の積分」の閉形式をここで新たに決めることになるので、同じ
+            // 規律で断る — 黙って近似しない。
+            other @ (Interp::Bezier { .. }
+            | Interp::Bounce { .. }
+            | Interp::Elastic { .. }
+            | Interp::Steps { .. }) => {
                 return Err(StoreError::Property(format!(
-                    "{} の Bezier 補間区間は積算未対応(発注の検収条件は Hold のみ、\
+                    "{} の {} 補間区間は積算未対応(発注の検収条件は Hold のみ、\
                      黙って近似しない — 対応するなら別発注で判断すること)",
-                    crate::property::SPEED
+                    crate::property::SPEED,
+                    other.kind()
                 )));
             }
         }

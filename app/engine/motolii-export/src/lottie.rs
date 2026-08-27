@@ -98,6 +98,21 @@ pub enum LottieExportError {
     NoComposition,
     #[error("property `{0}` の値の型が期待と違う: {1:?}")]
     TypeMismatch(String, Value),
+    /// Lottie が持っていない補間型(`Bounce` / `Elastic` / `Steps`)。
+    ///
+    /// **黙って焼かない。** Lottie のキーが持てるのはベジェの接線
+    /// (`i`/`o`)と離散フラグ(`h`)だけで、パラメトリックなバウンス/バネ/
+    /// 段階移動はどれにも当たらない。ベジェへ近似すれば書けはするが、
+    /// それは**不可逆な劣化を無告知で行う**ことであり、`unsupported` へ
+    /// 積んで「無損失で書けた」の証拠を汚すのとも意味が違う
+    /// (どちらが正しいかは利用者の裁定待ち)。決まるまでは失敗する —
+    /// `motolii-store` の速度積算が Bezier 区間で `Err` を返し
+    /// 「黙って近似しない」と書いてあるのと同じ規律。
+    #[error(
+        "補間型 `{0}` は Lottie に写せない(ベジェへ焼くか拡張として持つかが未決 —\
+         `docs/reviews/2026-08-28-current-position.md` の裁定待ち)"
+    )]
+    UnrepresentableEasing(&'static str),
 }
 
 /// [`export_lottie`] の結果。`unsupported` が空なら、この Document の採用済語彙は
