@@ -34,6 +34,7 @@ members = [
     "ui/motolii-verbs",
     "ui/motolii-shell-state",
     "ui/motolii-timeline-pane",
+    "ui/motolii-timeline-projection",
     "ui/motolii-stage-pane",
     "probes/r0-store-edit",
     "probes/r1-frame-throughput",
@@ -131,7 +132,11 @@ motolii-vector = { path = "engine/motolii-vector" }
 # 裁定160 切片1: `motolii-shell/src/tokens.rs` を抽出した leaf crate(依存ゼロ、
 # `notify`/`serde`/`serde_json` のみ)。`motolii-shell` は `pub use` で `tokens`
 # path 互換を保つ(docs/reviews/2026-08-21-pane-split-survey.md §2.2/§6 切片1)。
-motolii-tokens-rs = { path = "ui/motolii-tokens-rs" }
+# 既定は「値だけ」。`iced::Theme`/`Font`/`Subscription` への変換 adapter が要る
+# 側(凍結された iced assembler)は `features = ["iced"]` を自分で足す。
+# workspace 宣言が既定 on だとメンバー側の `default-features = false` は
+# 無視される(cargo の仕様)ので、既定を切る側はここに書くのが唯一効く場所。
+motolii-tokens-rs = { path = "ui/motolii-tokens-rs", default-features = false }
 motolii-presentation-config = { path = "ui/motolii-presentation-config" }
 # 裁定186: SVG アイコン基盤(Material Symbols vendoring + iced svg widget の
 # 包み)。iced の "svg" feature はこの crate の Cargo.toml だけが点す。
@@ -157,6 +162,7 @@ motolii-shell-state = { path = "ui/motolii-shell-state" }
 # 裁定160 切片7: `motolii-shell/src/timeline/` + 対応する write ロジックを
 # 抽出した pane crate(docs/reviews/2026-08-21-pane-split-survey.md §6 切片7)。
 motolii-timeline-pane = { path = "ui/motolii-timeline-pane" }
+motolii-timeline-projection = { path = "ui/motolii-timeline-projection" }
 # 裁定160 切片8: `motolii-shell/src/inspector_pane.rs` を抽出した pane crate
 # (`motolii-tokens-rs`/`motolii-store`/`motolii-core`/`motolii-settings-pane`
 # ——最後は chrome 共有ヘルパ用、pane split survey §2.4 —— に依存、pane 同士は

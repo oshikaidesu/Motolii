@@ -97,7 +97,7 @@ pub fn tick_steps(
         duration_frames,
         clip_width,
         row_height,
-        crate::tokens::Dimensions::default()
+        motolii_tokens_rs::Dimensions::default()
             .components
             .timeline
             .target_cell_ratio,
@@ -163,7 +163,7 @@ pub fn time_band_segment_frames(
         duration_frames,
         clip_width,
         row_height,
-        crate::tokens::Dimensions::default()
+        motolii_tokens_rs::Dimensions::default()
             .components
             .timeline
             .target_cell_ratio,
@@ -190,7 +190,7 @@ pub fn time_band_segment_frames_with_target(
 #[cfg(test)]
 mod tick_tests {
     use super::*;
-    use crate::tokens::Dimensions;
+    use motolii_tokens_rs::Dimensions;
 
     fn target_cell_ratio() -> f32 {
         Dimensions::default().components.timeline.target_cell_ratio

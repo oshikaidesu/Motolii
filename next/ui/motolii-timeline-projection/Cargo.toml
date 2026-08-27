@@ -1,0 +1,23 @@
+[package]
+name = "motolii-timeline-projection"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+
+# Timeline の**投影と積み替えの計算だけ**。描画も widget も持たない。
+#
+# 由来: `motolii-timeline-pane` から切り出した(裁定251 で front が Makepad に
+# なり、pane の iced view 層は front から一度も呼ばれないため)。ここに残るのは
+# 元から iced を1行も触っていなかった `projection/` と `stacking.rs` で、
+# **柱に依らない**: Makepad front も、凍結された iced assembler も同じ数を読む。
+#
+# 依存を増やさないこと自体が、この crate の存在理由である。
+[dependencies]
+motolii-store.workspace = true
+motolii-shell-state.workspace = true
+# 目盛りの `target_cell_ratio` など DTCG 正本の寸法のみ。色は引かないので
+# view adapter(`iced` feature)は切ってある — 値を2箇所に持たないための依存。
+motolii-tokens-rs = { workspace = true, default-features = false }
+
+[lints]
+workspace = true

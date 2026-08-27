@@ -11,7 +11,7 @@ use makepad_widgets::*;
 use motolii_engine::Engine;
 use motolii_shell_state::Session;
 use motolii_store::{Document, Intent, LayerAttrsPatch, LayerId, RationalTime};
-use motolii_timeline_pane::{self as timeline_pane, stacking::restacked, StackDirection};
+use motolii_timeline_projection::{self as timeline_pane, stacking::restacked, StackDirection};
 use std::time::Instant;
 
 mod browser_surface;

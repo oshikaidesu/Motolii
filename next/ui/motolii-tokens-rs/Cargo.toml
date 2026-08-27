@@ -4,8 +4,15 @@ version = "0.1.0"
 edition.workspace = true
 license.workspace = true
 
+# 裁定251(front = Makepad)以降、iced は view adapter 専用。既定 on なので
+# 既存の iced 側利用者は無変更、Makepad front は `default-features = false` で
+# 値だけを引く。
+[features]
+default = ["iced"]
+iced = ["dep:iced", "dep:notify"]
+
 [dependencies]
-iced.workspace = true
+iced = { workspace = true, optional = true }
 serde.workspace = true
 serde_json.workspace = true
 # デザイン値の外出し(裁定117)。debug ビルドの `watch_subscription` だけが
@@ -13,7 +20,7 @@ serde_json.workspace = true
 # dependency への昇格として扱う(発注書の「新依存は notify の direct 昇格のみ可」)。
 # `motolii-shell` から本 crate へ抽出(裁定160 切片1)された、旧 tokens.rs と
 # 同じ依存宣言。
-notify = "8"
+notify = { version = "8", optional = true }
 
 [lints]
 workspace = true

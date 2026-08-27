@@ -1,5 +1,5 @@
 use makepad_widgets::*;
-use motolii_timeline_pane as timeline_pane;
+use motolii_timeline_projection as timeline_pane;
 use motolii_store::Fps;
 
 use crate::gesture_input::{GestureDevice, GesturePhase, GestureSample};

@@ -29,20 +29,34 @@
 //! - [`mod tokens`]: `Tokens`(起動時の読み込み一式)と `ui_scale` の書き戻し。
 //! - [`mod watch`]: トークンファイルの変更監視 `Subscription` とデバウンス。
 
+// 裁定251 で front が Makepad になった以降、`iced::Color`/`Font`/`Subscription`
+// へ変換する層は view adapter であって token の意味ではない。値(`Dimensions`・
+// パレット長)は柱に依らず読めるよう常時 compile し、adapter だけ feature の
+// 後ろへ置く。既定は on なので iced 側の既存利用者は無変更。
+#[cfg(feature = "iced")]
 mod colors;
 mod dimensions;
+mod palette;
+#[cfg(feature = "iced")]
 mod style;
 mod theme;
+#[cfg(feature = "iced")]
 mod tokens;
+#[cfg(feature = "iced")]
 mod watch;
 
-pub use colors::{theme_from_colors, Colors, LABEL_PALETTE_LEN};
+#[cfg(feature = "iced")]
+pub use colors::{theme_from_colors, Colors};
 pub use dimensions::{
     BrowserValues, ComponentValues, Dimensions, SettingsValues, StageValues, TimelineValues,
 };
+pub use palette::LABEL_PALETTE_LEN;
+#[cfg(feature = "iced")]
 pub use style::{Ink, TextWeight};
 pub use theme::{
     SizeScale, SpaceScale, StrokeScale, TargetScale, TextScale, UiTheme,
 };
+#[cfg(feature = "iced")]
 pub use tokens::{replace_ui_scale, save_ui_scale, write_ui_scale_to_path, Tokens};
+#[cfg(feature = "iced")]
 pub use watch::watch_subscription;

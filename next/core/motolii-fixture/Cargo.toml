@@ -6,7 +6,7 @@ license.workspace = true
 
 [dependencies]
 motolii-store.workspace = true
-motolii-tokens-rs.workspace = true
+motolii-tokens-rs = { workspace = true, default-features = false }
 
 [lints]
 workspace = true

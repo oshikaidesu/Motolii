@@ -18,8 +18,10 @@ motolii-store = { path = "../../core/motolii-store" }
 motolii-shell-state = { path = "../../ui/motolii-shell-state" }
 motolii-engine = { path = "../../engine/motolii-engine" }
 motolii-fixture = { path = "../../core/motolii-fixture" }
-# Projection + restack math only. iced view is not used.
-motolii-timeline-pane = { path = "../../ui/motolii-timeline-pane" }
+# Projection + restack math only. 裁定251 で front が Makepad になった以降、
+# `motolii-timeline-pane` の iced view 層は一度も呼ばれていない — その計算だけを
+# 切り出した crate へ差し替えた(iced 14 crate + 推移閉包がここで落ちる)。
+motolii-timeline-projection = { path = "../../ui/motolii-timeline-projection" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6.3"

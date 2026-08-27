@@ -33,14 +33,14 @@ use std::collections::{HashMap, HashSet};
 
 use motolii_store::{Fps, LayerId, LayerSource, LayerTiming, PropertyId, StoreView};
 
-use crate::state::Session;
+use motolii_shell_state::Session;
 
 /// `KeySelector`/`KeySelectionOp` は裁定160 切片6 で `crate::state` へ移設済み
 /// (pane split survey §2.3: `Session ⇄ timeline` の型循環解消 — `state` は
 /// leaf、`timeline` はそこへ依存する片方向)。`pub use` は `timeline::mod` の
 /// `pub use projection::{..., KeySelectionOp, KeySelector, ...}` を無改修で
 /// 保つための re-export(型 alias で外部参照を壊さない手口)。
-pub use crate::state::{KeySelectionOp, KeySelector};
+pub use motolii_shell_state::{KeySelectionOp, KeySelector};
 
 /// 1層分の読み取り投影。**Document の写しではなく、1度描くための使い捨て値**。
 #[derive(Clone, Debug, PartialEq)]

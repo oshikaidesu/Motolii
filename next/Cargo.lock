@@ -4037,6 +4037,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "motolii-timeline-projection"
+version = "0.1.0"
+dependencies = [
+ "motolii-shell-state",
+ "motolii-store",
+ "motolii-tokens-rs",
+]
+
+[[package]]
 name = "motolii-tokens-rs"
 version = "0.1.0"
 dependencies = [

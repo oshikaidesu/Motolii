@@ -109,10 +109,9 @@ pub struct Colors {
     pub label_palette: [Color; LABEL_PALETTE_LEN],
 }
 
-/// [`Colors::label_palette`] の長さ。生成時の決定論自動割当(`motolii_shell` の
-/// `LayerId % LABEL_PALETTE_LEN`)と、表示側の index 境界チェックの両方が
-/// この定数を参照する(値を2箇所に持たない)。
-pub const LABEL_PALETTE_LEN: usize = 12;
+/// [`Colors::label_palette`] の長さ。実体は [`crate::palette`] — 色を持たない
+/// 事実なので、iced feature を切っても読める側に置いてある。
+pub use crate::palette::LABEL_PALETTE_LEN;
 
 /// [`Colors::label_palette`] の固定値。HSL→RGB で 12色、hue は 0° から 30° 刻み
 /// (`i * 30.0`、昇順)。
