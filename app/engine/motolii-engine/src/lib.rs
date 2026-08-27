@@ -42,11 +42,14 @@ use motolii_compositor::GpuTexture2D;
 use motolii_compositor::{Compositor, CompositorError};
 use motolii_core::ResolvedCamera;
 
+use motolii_media::ContainerInfo;
 use motolii_media::MediaError;
 use motolii_media::MediaInfo;
 use motolii_store::{LayerSource, Matte, RationalTime, StoreView};
 
 use crate::texture::{ShapeCacheKey, TextCacheKey};
+
+pub use crate::translate::{known_effects, EffectDescriptor, EffectParamDescriptor};
 
 #[derive(Debug, thiserror::Error)]
 pub enum EngineError {
@@ -215,6 +218,17 @@ pub struct Engine {
     /// 発注 RETURN 参照)。理由を UI の帯へ実際に出すには `motolii-shell` 側が
     /// 毎フレームこれを読んで `self.status` 等へ書く配線が別途要る。
     layer_failures: Vec<String>,
+    /// パス → `probe_container` 結果。[`Self::media_frames`]/[`Self::media_duration`]
+    /// が使う——`probes`(上記、video専用 `MediaInfo`、texture 生成の hot path)とは
+    /// **別のキャッシュ**。理由: `motolii_media::probe`(`probes` を埋める方)は
+    /// 先頭 video stream を要求し、audio-only ファイルで必ず `Err` になる
+    /// (裁定274「仕様の穴ではなくバグ」)。`probe_container` は video の有無を
+    /// 問わず成功する(container 内の全 stream を列挙するだけ)ので、こちらを
+    /// 総フレーム数/尺の問い合わせの正本にする。
+    containers: HashMap<String, ContainerInfo>,
+    /// `probe_container` に失敗した path → 理由。`failed_probes` と対称
+    /// (壊れた素材で毎回 ffprobe を起動し直さないため)。
+    failed_containers: HashMap<String, String>,
 }
 
 impl Engine {
@@ -229,6 +243,8 @@ impl Engine {
             shape_textures: HashMap::new(),
             failed_probes: HashMap::new(),
             layer_failures: Vec::new(),
+            containers: HashMap::new(),
+            failed_containers: HashMap::new(),
         })
     }
 
@@ -256,6 +272,8 @@ impl Engine {
             shape_textures: HashMap::new(),
             failed_probes: HashMap::new(),
             layer_failures: Vec::new(),
+            containers: HashMap::new(),
+            failed_containers: HashMap::new(),
         })
     }
 
@@ -374,5 +392,67 @@ impl Engine {
     /// `cached_text_texture_count` と同じ形の窓口。
     pub fn cached_shape_texture_count(&self) -> usize {
         self.shape_textures.len()
+    }
+
+    /// 素材の総フレーム数(トリムの壁、裁定272:
+    /// `source_in + duration × speed ≦ 総フレーム数`)。front から聞く口が無かった
+    /// (`probes` が private だった)ので、これがその口——`docs/reviews/2026-08-28-current-position.md`
+    /// 「★ 次の一手」の #1。
+    ///
+    /// **単位は素材ネイティブの fps で数えたフレーム番号**——`crate::texture` の
+    /// `LayerSource::Media` 分岐が `info.nb_frames` をそのまま `LayerTiming::source_frame`
+    /// の出力と比較している既存の実装(`texture.rs` 参照)と同じ単位にわざと揃えた。
+    /// comp fps と素材 fps が食い違う場合にこの比較が厳密に正しいかは、この関数を
+    /// 足す前から存在する別論点(EVIDENCE_GAP、報告に記載)。
+    ///
+    /// video stream を持たない素材(audio-only)は `None`——フレーム数という概念が
+    /// そもそも無い(裁定274: これはバグではない。尺は [`Self::media_duration`] で取る)。
+    /// probe に失敗した場合(壊れている/存在しない)も `None`。
+    pub fn media_frames(&mut self, path: &str) -> Option<i64> {
+        self.container_probe(path)?
+            .video_streams
+            .first()
+            .and_then(|stream| stream.nb_frames)
+    }
+
+    /// 素材の総尺。video/audio を問わず、container が持っていれば返す
+    /// (`ContainerInfo::duration` は format level で決まり、audio-only でも入る——
+    /// `motolii_media::probe_container` の doc 参照)。
+    ///
+    /// **既知バグの修正**(裁定274 (3)): `motolii_media::probe`(video専用、`probes`
+    /// キャッシュが使う方)は先頭 video stream を要求するので audio-only ファイルを
+    /// 開くと必ず `Err` になる。ここでは代わりに `probe_container` を使う——video の
+    /// 有無を問わず container 内の全 stream を列挙するだけなので、audio-only でも
+    /// 成功する。soundtrack として貼る音声ファイル(2026-08-18 裁定)の尺はここから取る。
+    pub fn media_duration(&mut self, path: &str) -> Option<motolii_core::RationalTime> {
+        self.container_probe(path)?.duration
+    }
+
+    /// [`Self::media_frames`]/[`Self::media_duration`] の共有キャッシュ経路。
+    /// `probes`(video decode 用、`texture.rs` の doc 参照)と同じ理由でキャッシュする
+    /// ——ffprobe はプロセス起動なので、front が壁の判定のたびに毎回叩かない。
+    ///
+    /// **`probes` とは別プロセス起動になる**(video ファイルは `probe()`/`probe_container()`
+    /// を1回ずつ、計2回 ffprobe を叩く)——video decode の hot path(`texture.rs`、
+    /// 毎フレーム呼ばれ得る)と、素材取り込み時に一度だけ聞かれるこの口とで、
+    /// 更新のタイミングも呼び手も違うため、キャッシュを共有すると片方の呼び出し順に
+    /// もう片方が引きずられる。ファイルごとに一度きりのコストなので今は分けたままにする。
+    fn container_probe(&mut self, path: &str) -> Option<ContainerInfo> {
+        if let Some(info) = self.containers.get(path) {
+            return Some(info.clone());
+        }
+        if self.failed_containers.contains_key(path) {
+            return None;
+        }
+        match motolii_media::probe_container(path) {
+            Ok(info) => {
+                self.containers.insert(path.to_string(), info.clone());
+                Some(info)
+            }
+            Err(err) => {
+                self.failed_containers.insert(path.to_string(), err.to_string());
+                None
+            }
+        }
     }
 }

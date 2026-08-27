@@ -209,6 +209,59 @@ const GLOW_DEFAULT_THRESHOLD: f64 = 1.0;
 const GLOW_DEFAULT_INTENSITY: f64 = 0.75;
 const GLOW_DEFAULT_RADIUS: f64 = 1.0;
 
+/// front 向けの effect 在庫(公開口 #3、`docs/reviews/2026-08-28-current-position.md`
+/// 「★ 次の一手」)。**この一覧の外の plugin_id は engine が描けない**——2026-08-27 の
+/// `TURBULENT_DISPLACE` 事故(engine が一つも知らない名前を FX STACK が出していた)の
+/// 再発防止。front はここを読むだけにし、写しを持たない。
+///
+/// `known_effects()` に載っている plugin_id は必ず `translate_effect_passes` が
+/// 実際に pass を積める集合と一致する——`known_effects_are_exactly_what_translate_effect_passes_accepts`
+/// が両者の食い違いを縛る。
+pub struct EffectDescriptor {
+    pub plugin_id: &'static str,
+    pub params: &'static [EffectParamDescriptor],
+}
+
+/// 1個の named param。
+pub struct EffectParamDescriptor {
+    pub name: &'static str,
+    pub default: f64,
+    /// **engine 側のシェーダ/合成コードに宣言された範囲が無ければ `None`**——
+    /// 無い範囲を発明しない(Q0)。今のところ glow の3paramはどれも範囲を宣言
+    /// していない(`motolii-compositor::effects::glow` 参照、shader は clamp しない)。
+    pub range: Option<(f64, f64)>,
+}
+
+const GLOW_PARAMS: &[EffectParamDescriptor] = &[
+    EffectParamDescriptor {
+        name: "threshold",
+        default: GLOW_DEFAULT_THRESHOLD,
+        range: None,
+    },
+    EffectParamDescriptor {
+        name: "intensity",
+        default: GLOW_DEFAULT_INTENSITY,
+        range: None,
+    },
+    EffectParamDescriptor {
+        name: "radius",
+        default: GLOW_DEFAULT_RADIUS,
+        range: None,
+    },
+];
+
+const KNOWN_EFFECTS: &[EffectDescriptor] = &[EffectDescriptor {
+    plugin_id: "motolii.glow",
+    params: GLOW_PARAMS,
+}];
+
+/// 現在 engine が実際に描ける effect の一覧(`plugin_id` + named param の名前・既定値・
+/// 範囲)。**この関数が唯一の正本**——front の FX STACK・パラメータパネルはここを
+/// 読むだけにし、`translate.rs` の写しを front 側に持たせない。
+pub fn known_effects() -> &'static [EffectDescriptor] {
+    KNOWN_EFFECTS
+}
+
 /// `"motolii.glow"` の named param map(`effect.{id}.param.{name}` track が実在する分
 /// だけ、裁定153 S1 `ResolvedEffect::params`)を `EffectPass::Glow` へ写す。
 /// track の無い param は proof の既定値(上記定数)。**値はあるが型が `Value::F64`
@@ -259,5 +312,42 @@ mod translate_effect_passes_tests {
             },
         ];
         assert_eq!(translate_effect_passes(&effects), Vec::new());
+    }
+}
+
+#[cfg(test)]
+mod known_effects_tests {
+    use super::{known_effects, translate_effect_passes};
+    use motolii_store::ResolvedEffect;
+
+    /// **虚報防止**(Q0、2026-08-27 の `TURBULENT_DISPLACE` 事故の再発防止)。
+    /// `known_effects()` に載っている plugin_id は、param を1つも渡さなくても
+    /// `translate_effect_passes` が必ず1本 pass を積める(= 実際に描ける)。
+    /// 「窓を叩いても見えない嘘」の一種——この一覧が engine の描画能力と食い違うと、
+    /// front はここを読むだけで存在しない effect を見せてしまう。
+    #[test]
+    fn known_effects_are_all_actually_drawable() {
+        for descriptor in known_effects() {
+            let effect = ResolvedEffect {
+                plugin_id: descriptor.plugin_id.to_owned(),
+                params: vec![],
+            };
+            assert_eq!(
+                translate_effect_passes(&[effect]).len(),
+                1,
+                "known_effects() says {} is drawable but translate_effect_passes skipped it",
+                descriptor.plugin_id,
+            );
+        }
+    }
+
+    /// 逆方向の固定: 今 engine が描けるのは glow 1本だけという事実そのものを縛る
+    /// (`translate_effect_passes` の doc「対応している plugin_id は
+    /// "motolii.glow" 1本だけ」と同じ主張を `known_effects()` 側からも固定する)。
+    #[test]
+    fn known_effects_is_exactly_glow_today() {
+        assert_eq!(known_effects().len(), 1);
+        assert_eq!(known_effects()[0].plugin_id, "motolii.glow");
+        assert_eq!(known_effects()[0].params.len(), 3);
     }
 }

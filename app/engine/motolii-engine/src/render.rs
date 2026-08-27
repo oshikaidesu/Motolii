@@ -208,6 +208,13 @@ impl Engine {
     /// **`shape_documents` は2026-08-22(シェイプが画に出るようにする発注)で
     /// 新設**——`text_documents` と同型(`Self::texture_for_resolved`/
     /// `collect_shape_documents` の doc 参照)。
+    ///
+    /// **`include_background`**(2026-08-28、観測視点 zero-copy 口の追加で新設)——
+    /// `render_with_camera_override` の同名引数と同じ意味(市松「AE型の透明可視化
+    /// モード」用、裁定141 と同型の入力差分)。既存の2呼び手
+    /// ([`Self::render_resolved_to_texture_with_shapes`]/[`Self::render_frame_into`])
+    /// はどちらも常に `true` を渡すので挙動は1文字も変わらない——`false` を渡すのは
+    /// [`Self::render_frame_into_with_view_camera`] だけ。
     fn layers_from_resolved(
         &mut self,
         comp: CompSpec,
@@ -217,32 +224,36 @@ impl Engine {
         resolved: &[ResolvedLayer],
         text_documents: &HashMap<LayerId, TextDocument>,
         shape_documents: &HashMap<LayerId, Vec<ShapeNode>>,
+        include_background: bool,
     ) -> Result<Vec<LayerWithPasses>, EngineError> {
         // A05隔離、`render_with_camera_override` と同じ規律(モジュール doc 参照)。
         self.layer_failures.clear();
         let mut layers: Vec<LayerWithPasses> = Vec::with_capacity(resolved.len() + 1);
 
-        let (background_texture, _) = self.texture_for(
-            &LayerSource::Solid {
-                rgba: to_u8_rgba(background),
-                width: 1,
-                height: 1,
-            },
-            0,
-        )?;
-        layers.push(LayerWithPasses {
-            layer: Layer {
-                texture: background_texture.expect("LayerSource::Solid は常に texture を返す"),
-                size: [comp.width as f32, comp.height as f32],
-                placement: LayerPlacement {
-                    order: BACKGROUND_ORDER,
-                    ..Default::default()
+        if include_background {
+            let (background_texture, _) = self.texture_for(
+                &LayerSource::Solid {
+                    rgba: to_u8_rgba(background),
+                    width: 1,
+                    height: 1,
                 },
-                pinned: true,
-                blend_mode: motolii_compositor::BlendMode::Normal,
-            },
-            passes: vec![],
-        });
+                0,
+            )?;
+            layers.push(LayerWithPasses {
+                layer: Layer {
+                    texture: background_texture
+                        .expect("LayerSource::Solid は常に texture を返す"),
+                    size: [comp.width as f32, comp.height as f32],
+                    placement: LayerPlacement {
+                        order: BACKGROUND_ORDER,
+                        ..Default::default()
+                    },
+                    pinned: true,
+                    blend_mode: motolii_compositor::BlendMode::Normal,
+                },
+                passes: vec![],
+            });
+        }
 
         // `render_with_camera_override` と同型の matte 索引(モジュール doc 参照)。
         let by_id: HashMap<LayerId, &ResolvedLayer> =
@@ -384,6 +395,7 @@ impl Engine {
             resolved,
             text_documents,
             shape_documents,
+            true,
         )?;
         Ok(self.compositor.render_to_texture(comp, camera, &layers)?)
     }
@@ -466,6 +478,58 @@ impl Engine {
             &resolved,
             &text_documents,
             &shape_documents,
+            true,
+        )?;
+        Ok(self.compositor.render_into(target, comp, camera, &layers)?)
+    }
+
+    /// 観測視点(裁定157)の zero-copy 版——[`Self::render_frame_into`]の**層構築を
+    /// 完全に複製**し、camera だけ Document のレンダリングカメラ(`view.resolve_camera(t)`)
+    /// ではなく `observation`(`crate::ObservationCamera`)から組む
+    /// (`Self::render_frame_with_view_camera` が CPU 経路で裁定157 にやったのと同型)。
+    ///
+    /// **camera は `layers_from_resolved`(matte 合成に使う)と `compositor.render_into`
+    /// (最終描画に使う)の両方へ通す**——片方だけ観測視点にして片方を Document
+    /// カメラのままにすると、matte とレイヤー本体が違うカメラで計算されて絵が壊れる
+    /// (`docs/reviews/2026-08-28-current-position.md` が指す「昨夜の担当が調べて
+    /// 書いている」箇所と同じ注意点)。
+    ///
+    /// **出力カメラは動かさない**——[`Self::render_frame`]/[`Self::render_frame_into`]
+    /// (export・通常 preview が呼ぶ経路)はこの関数を一切知らないので、User View を
+    /// どれだけ見回しても書き出される絵・通常 Stage 表示は変わらない。それが
+    /// カメラ分離の意味そのもの(裁定157)。
+    ///
+    /// `include_background` は市松モード用(裁定141、`render_with_camera_override` の
+    /// 同名引数と同じ意味)——観測視点で見回している間も市松 ON なら背景を敷かない絵を
+    /// 見せられるように、CPU 経路と対称に持たせてある。
+    pub fn render_frame_into_with_view_camera(
+        &mut self,
+        view: &StoreView<'_>,
+        t: RationalTime,
+        target: &wgpu::Texture,
+        observation: &crate::ObservationCamera,
+        include_background: bool,
+    ) -> Result<(), EngineError> {
+        let composition = view
+            .composition()
+            .map_err(|e| EngineError::Store(e.to_string()))?
+            .ok_or(EngineError::NoComposition)?;
+        let comp = composition.spec();
+        let camera = observation.as_resolved_camera();
+        let resolved = view
+            .resolved_layers(t)
+            .map_err(|e| EngineError::Store(e.to_string()))?;
+        let text_documents = collect_text_documents(view, &resolved, t)?;
+        let shape_documents = collect_shape_documents(view, &resolved)?;
+        let layers = self.layers_from_resolved(
+            comp,
+            composition.background,
+            camera,
+            t,
+            &resolved,
+            &text_documents,
+            &shape_documents,
+            include_background,
         )?;
         Ok(self.compositor.render_into(target, comp, camera, &layers)?)
     }
