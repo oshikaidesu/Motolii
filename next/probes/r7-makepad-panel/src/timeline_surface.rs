@@ -18,23 +18,29 @@ script_mod! {
             color: #c5c5c5
             text_style: theme.font_code{font_size: 8}
         }
+        // 見た目の調整値はここに出しておく — --hot が拾えるのは script_mod!
+        // だけで、Rust の const は再ビルドしないと変わらない。
+        ruler_height: 22.0
+        rail_width: 150.0
+        tick_row_floor: 40.0
+        band_alpha: 0.030
+        tick_fade_from: 9.0
+        tick_fade_to: 18.0
     }
 }
 #[cfg(test)]
 use makepad_widgets::makepad_platform::event::ScrollPhase;
 
-const RULER_HEIGHT: f64 = 22.0;
-const RAIL_WIDTH: f64 = 150.0;
 const PROPERTY_ROW_HEIGHT: f64 = 18.0;
 const MIN_VISIBLE_SPAN_SECONDS: f64 = 2.0;
-// レーン高が実測 ~15pt まで潰れると比率(0.52)通りの間隔でも ~7pt になり、
-// 実機Ableton(68pt行→21pt間隔)が読める密度から外れて単なるノイズになる。
-// 比率そのものはスケール不変で正しいので変えず、tick_steps へ渡す行高だけ
-// この物理下限で持ち上げる — ここが唯一 px 絶対値を許す場所(可読性の床)。
-const TICK_ROW_FLOOR: f64 = 40.0;
 
-fn fitted_lane_height(total_height: f64, lane_count: usize, property_count: usize) -> f64 {
-    let body_height = (total_height - RULER_HEIGHT).max(1.0);
+fn fitted_lane_height(
+    total_height: f64,
+    lane_count: usize,
+    property_count: usize,
+    ruler_height: f64,
+) -> f64 {
+    let body_height = (total_height - ruler_height).max(1.0);
     let properties_height = property_count as f64 * PROPERTY_ROW_HEIGHT;
     if lane_count == 0 {
         body_height
@@ -158,7 +164,10 @@ impl TimelineViewport {
         })
     }
 
-    fn tick_steps(&self, fps_num: i64, fps_den: i64, lane_height: f64) -> (i64, i64) {
+    // tick_row_floor は TimelineSurface 側の #[live] 値(--hot で調整する対象)。
+    // TimelineViewport は TimelineSurface を持たないので、self 経由では読めず
+    // 呼び出し側から渡してもらう。
+    fn tick_steps(&self, fps_num: i64, fps_den: i64, lane_height: f64, tick_row_floor: f64) -> (i64, i64) {
         let fps = Fps::try_new(fps_num.max(1), fps_den.max(1)).ok();
         // 目標セル比率は JSON 正本(`target_cell_ratio` = 0.52、モック実測
         // 13.5px/26px)。ここで数値を手打ちすると「形は比率で定数化する」
@@ -170,7 +179,7 @@ impl TimelineViewport {
             // 行高そのものを床上げする。比率(0.52)は変えずに、比率の分母を
             // 可読な最小値まで持ち上げるだけなので、床より上のズームでは
             // 従来通り比率駆動のまま。
-            lane_height.max(TICK_ROW_FLOOR).max(1.0) as f32,
+            lane_height.max(tick_row_floor).max(1.0) as f32,
         )
     }
 }
@@ -447,6 +456,25 @@ pub struct TimelineSurface {
     #[live]
     draw_text: DrawText,
 
+    // 見た目のチューニング値。const だと --hot で拾えず再ビルドが要るので、
+    // script_mod! の type-default から埋まる #[live] フィールドとして持つ。
+    #[live(22.0)]
+    ruler_height: f64,
+    #[live(150.0)]
+    rail_width: f64,
+    // レーン高が実測 ~15pt まで潰れると比率(0.52)通りの間隔でも ~7pt になり、
+    // 実機Ableton(68pt行→21pt間隔)が読める密度から外れて単なるノイズになる。
+    // 比率そのものはスケール不変で正しいので変えず、tick_steps へ渡す行高だけ
+    // この物理下限で持ち上げる — ここが唯一 px 絶対値を許す場所(可読性の床)。
+    #[live(40.0)]
+    tick_row_floor: f64,
+    #[live(0.030)]
+    band_alpha: f64,
+    #[live(9.0)]
+    tick_fade_from: f64,
+    #[live(18.0)]
+    tick_fade_to: f64,
+
     #[rust]
     rect: Rect,
     #[rust]
@@ -513,8 +541,8 @@ impl TimelineSurface {
 
     fn time_rect(&self) -> Rect {
         Rect {
-            pos: dvec2(self.rect.pos.x + RAIL_WIDTH, self.rect.pos.y),
-            size: dvec2((self.rect.size.x - RAIL_WIDTH).max(1.0), self.rect.size.y),
+            pos: dvec2(self.rect.pos.x + self.rail_width, self.rect.pos.y),
+            size: dvec2((self.rect.size.x - self.rail_width).max(1.0), self.rect.size.y),
         }
     }
 
@@ -541,13 +569,14 @@ impl TimelineSurface {
             self.rect.size.y,
             self.lanes.len(),
             self.property_count_for_visible_lanes(),
+            self.ruler_height,
         )
     }
 
     fn visual_rows(&self) -> Vec<VisualRow> {
         let mut rows = Vec::with_capacity(self.lanes.len() + self.property_lanes.len());
         let lane_height = self.lane_height();
-        let mut y = self.rect.pos.y + RULER_HEIGHT;
+        let mut y = self.rect.pos.y + self.ruler_height;
         for (lane_index, lane) in self.lanes.iter().enumerate() {
             rows.push(VisualRow {
                 kind: VisualRowKind::Lane(lane_index),
@@ -763,7 +792,7 @@ impl TimelineSurface {
 
         let control_h = (row.height - 4.0).clamp(8.0, 13.0);
         let control_y = row.y + (row.height - control_h) * 0.5;
-        let control_x = self.rect.pos.x + RAIL_WIDTH - 45.0;
+        let control_x = self.rect.pos.x + self.rail_width - 45.0;
         // Live の文法: on のトグルは意味色のベタ + 暗インク(極性反転)。
         // activator=琥珀 #ffad56 / solo=シアン #03c3d5 (.ask ChosenDefault/ChosenAlternative)。
         // lock は Live に無い操作なので無彩の明面で「掴めない」を言う。
@@ -872,9 +901,9 @@ impl TimelineSurface {
         // 帯の周期はメジャー刻みだが、メジャーがマイナーを下回る異常値では周期が潰れて
         // 無限ループになりかねないので、マイナーを下限として使う。
         let step = major.max(minor).max(1);
-        let rail_x = self.rect.pos.x + RAIL_WIDTH;
+        let rail_x = self.rect.pos.x + self.rail_width;
         let right_x = self.rect.pos.x + self.rect.size.x;
-        let top_y = self.rect.pos.y + RULER_HEIGHT;
+        let top_y = self.rect.pos.y + self.ruler_height;
         let bottom_y = self.rect.pos.y + self.rect.size.y;
         let body_height = (bottom_y - top_y).max(0.0);
         if right_x <= rail_x || body_height <= 0.0 {
@@ -896,7 +925,7 @@ impl TimelineSurface {
                             pos: dvec2(x0, top_y),
                             size: dvec2(x1 - x0, body_height),
                         },
-                        vec4(1.0, 1.0, 1.0, 0.030),
+                        vec4(1.0, 1.0, 1.0, self.band_alpha as f32),
                     );
                 }
             }
@@ -907,13 +936,14 @@ impl TimelineSurface {
     fn draw_grid_and_ruler(&mut self, cx: &mut Cx2d, lane_height: f64) {
         let (minor, major) = self
             .viewport()
-            .tick_steps(self.fps_num, self.fps_den, lane_height);
+            .tick_steps(self.fps_num, self.fps_den, lane_height, self.tick_row_floor);
         self.draw_time_bands(cx, minor, major);
         // マイナー刻みの実ピクセル間隔。tick_steps は行高の床上げで「選ぶ刻み」を
         // 間引くだけなので、ズームでその刻みの画面幅がまだ狭い一瞬が残る —
         // そこをハードカットではなくフェードで埋めて「ポップ」させない。
         let minor_px = minor as f64 * (self.time_rect().size.x / self.view_span.max(1.0));
-        let minor_fade = ((minor_px - 9.0) / (18.0 - 9.0)).clamp(0.0, 1.0);
+        let minor_fade = ((minor_px - self.tick_fade_from) / (self.tick_fade_to - self.tick_fade_from))
+            .clamp(0.0, 1.0);
         let first_minor = (self.view_start / minor as f64).ceil() as i64 * minor;
         let last = (self.view_start + self.view_span).ceil() as i64;
         let mut frame = first_minor;
@@ -923,8 +953,8 @@ impl TimelineSurface {
             self.draw_rect(
                 cx,
                 Rect {
-                    pos: dvec2(x, self.rect.pos.y + RULER_HEIGHT),
-                    size: dvec2(1.0, (self.rect.size.y - RULER_HEIGHT).max(1.0)),
+                    pos: dvec2(x, self.rect.pos.y + self.ruler_height),
+                    size: dvec2(1.0, (self.rect.size.y - self.ruler_height).max(1.0)),
                 },
                 if is_major {
                     vec4(0.05, 0.05, 0.05, 0.38)
@@ -942,14 +972,14 @@ impl TimelineSurface {
             cx,
             Rect {
                 pos: self.rect.pos,
-                size: dvec2(self.rect.size.x, RULER_HEIGHT),
+                size: dvec2(self.rect.size.x, self.ruler_height),
             },
             vec4(0.245, 0.245, 0.245, 1.0),
         );
         self.draw_rect(
             cx,
             Rect {
-                pos: dvec2(self.rect.pos.x + RAIL_WIDTH - 1.0, self.rect.pos.y),
+                pos: dvec2(self.rect.pos.x + self.rail_width - 1.0, self.rect.pos.y),
                 size: dvec2(1.0, self.rect.size.y),
             },
             vec4(0.10, 0.10, 0.10, 1.0),
@@ -973,7 +1003,7 @@ impl TimelineSurface {
             self.draw_rect(
                 cx,
                 Rect {
-                    pos: dvec2(x, self.rect.pos.y + RULER_HEIGHT - tick_height),
+                    pos: dvec2(x, self.rect.pos.y + self.ruler_height - tick_height),
                     size: dvec2(1.0, tick_height),
                 },
                 if is_major {
@@ -1137,7 +1167,9 @@ mod tests {
 
     #[test]
     fn lane_height_fits_all_lanes_and_keeps_property_height_fixed() {
-        let occupied = fitted_lane_height(300.0, 15, 1) * 15.0 + PROPERTY_ROW_HEIGHT + RULER_HEIGHT;
+        let ruler_height = 22.0;
+        let occupied =
+            fitted_lane_height(300.0, 15, 1, ruler_height) * 15.0 + PROPERTY_ROW_HEIGHT + ruler_height;
         assert!((occupied - 300.0).abs() < 0.001);
     }
 
@@ -1178,12 +1210,12 @@ mod tests {
     #[test]
     fn wheel_zoom_is_horizontal_only_and_recomputes_tick_density() {
         let viewport = TimelineViewport::new(150.0, 900.0, 0.0, 1_800.0, 1_800);
-        let before = viewport.tick_steps(30, 1, 18.0);
+        let before = viewport.tick_steps(30, 1, 18.0, 40.0);
         let mut zoomed = viewport;
         for _ in 0..3 {
             zoomed = zoomed.zoom_at(450.0, 240.0, 0.0).expect("wheel zoom");
         }
-        let after = zoomed.tick_steps(30, 1, 18.0);
+        let after = zoomed.tick_steps(30, 1, 18.0, 40.0);
 
         assert!(zoomed.visible_frames < viewport.visible_frames);
         assert_eq!(zoomed.vertical_scale, 1.0);

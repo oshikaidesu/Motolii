@@ -66,6 +66,17 @@ SVGだけを更新します。
 - 低スペックLLMの「Abletonと判別しにくいか」は視覚の煙検知として使う。合否は実窓の操作・意味・Document接続で決める。
 - 公式画面の画像はリポジトリへ複製せず、上記URLを参照元として記録する。
 
+## 調整する値は `script_mod!` に置く(裁定269)
+
+`--hot` が届くのは `script_mod!` ブロックだけで、Rust の `const` には届きません
+(makepad-2.0-splash skill の明記)。よって**繰り返し詰める視覚定数は Rust の const に
+置かず、widget の `#[live]` フィールドにして `set_type_default()` の宣言から流し込みます**。
+compiled 経路では `#[live]` が型既定から埋まるので、宣言を書き換えるだけで窓に届きます。
+
+Timeline がその形です — `ruler_height` / `rail_width` / `tick_row_floor` / `band_alpha` /
+`tick_fade_from` / `tick_fade_to` は `mod.widgets.TimelineSurface` の宣言に在ります。
+実証: `tick_row_floor` を 40→68 にすると**再ビルド無しで**線間隔が 21pt→43pt へ動きます。
+
 ## タブ行(裁定265)
 
 各パネルのタブ行は**レイアウトの高さを取りません**。セルの左上に触れた時だけ、中身の上へ
