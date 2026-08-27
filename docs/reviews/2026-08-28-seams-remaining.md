@@ -46,11 +46,17 @@ hero = 実測の点群と、外で描いたベクタと、音が、同じタイ�
 
 | # | やること | 使う口 | なぜ今か |
 |---|---|---|---|
-| S1 | **棚の資産をレイヤーへ割り当てる** | `Intent::SetSource` | `AdmitAsset` は繋がったのに `SetSource` が未接続 = **棚に入れた物をレイヤーにできない**。インポートの切れている線そのもの |
-| S2 | **音が鳴る・波形が出る** | `motolii-audio`(`AudioProgram` / `MixProducer` / `PlaybackSession`)、`Engine::media_duration` | BPM グリッドへ**手で合わせる**とは聞きながら置くこと。鳴らなければ何も置けない。**73本の口が丸ごと未接続** |
 | S3 | **素材が読めない時に理由が出る** | `Engine::layer_failures` | engine は失敗を溜めているのに front が読まない。**失敗が見えないのは失敗するより悪い**(窓を叩いても見えない嘘) |
 | S4 | **レイヤーを消せる** | `Intent::RemoveLayer` | 今できない。編集の基本動詞 |
 | S5 | **マーカー / ロケータ** | `Intent::SetMarkers` | BPM グリッドに印を置く。MV では必須 |
+| S5b | **選択が Inspector に映る** | Inspector への selection 投影(`main.rs` → `inspector_surface`) | 2026-08-28 実窓検分: レーン選択は動く(「1 layer(s) selected」)のに Inspector は Rectangle 表示のまま = **動線の駅3が結線されていない**。FX STACK だけが選択を読む |
+
+**消えた行**(2026-08-28 統合 `7856cb65` で着地、実窓で確認):
+- ~~S1 棚→レイヤー~~ — カード double-click(`PlaceAsset` → `AddLayer`+`SetMeta`+`SetAttrs`)で
+  playhead/最前面に立つ。実窓で glow_default が立ち ● バッジ・status 行まで確認。
+  **`SetSource` 自体は依然未接続**(既存レイヤーの繋ぎ直し = S13 の隣)
+- ~~S2 の入口~~ — 音声 drop → frame 0 にレイヤー+波形形状(wf-5)。**鳴らす方(再生
+  transport / `PlaybackSession`)は未接続のまま S2 として残る**(表の数字 73 は変わらず)
 
 ### 第2波 — 1本を仕上げるのに要る
 
@@ -77,12 +83,15 @@ hero = 実測の点群と、外で描いたベクタと、音が、同じタイ�
 | S18 | Session の残り | `motolii-shell-state` 38本 |
 | S19 | **BPM グリッド**(小節線・ビートスナップ) | **口が無い — 語彙ごと無い**(実測: store 全体で bpm/tempo/beat 0件)。利用者裁定(2026-08-28): **LFO 自動制御(ParamDriver)の拡張と同じ束**なのでモデル上の置き場はその時に決める。乗り物は Lottie の車体(marker/meta の慣習)で行ける見込み — 新 component を先に切らない。v1 の hero 動線は S5 ロケータ+耳(聞きながら置いて印を打つ)で成立する。先例=Ableton |
 
-## 走行中(2026-08-28 朝、workflow `wf_6462b31d-d22`)
+## 着地済み(2026-08-28、統合 `7856cb65`)
 
-統合1本 + 4レーン: **棚**(S1 を含む)/ **カメラ**(`render_frame_into_with_view_camera`)/
-**区間イージング**(AM 式)/ **音**(S2 の入口)。
+workflow `wf_6462b31d-d22` の4レーンを main へ cherry-pick で統合(統合レーンは中断されたため
+supervisor が引き取り)。**棚**(→S1 消し)/ **カメラ** / **区間イージング**(モデル層のみ —
+`Interp::Bounce/Elastic/Steps` と `Interp::ease`。**INTERVAL EASING の選択板は統合で落とした**、
+main 側の統一 action 設計が新しいため。front 入口は次の波)/ **音**(→S2 の入口消し)。
 
-返ったらこの表を数え直す。**繋いだ行は消す。**
+門: check 緑・テスト42本全緑・実窓で駅1→2 通過(カード double-click → レーン成立)。
+発見: 駅3未結線(→S5b)、import の WIRE-2 は畳まれたまま(`IMPORT_WIRED=false`)。
 
 ## この表の使い方
 
