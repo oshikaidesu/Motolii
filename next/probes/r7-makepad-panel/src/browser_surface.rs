@@ -31,7 +31,7 @@ script_mod! {
     let TabIcon = RadioButtonTabFlat{
         width: Fill
         height: mod.tokens.size.bar
-        icon_walk: Walk{width: mod.tokens.size.icon height: mod.tokens.size.icon}
+        icon_walk: Walk{width: mod.tokens.size.row_glyph height: mod.tokens.size.row_glyph}
         label_walk: Walk{width: 0 height: 0}
         padding: Inset{left: 0 right: 0}
         align: Align{x: 0.5 y: 0.5}
@@ -63,7 +63,7 @@ script_mod! {
     let RailRow = RadioButtonTabFlat{
         width: Fill
         height: mod.tokens.size.row
-        icon_walk: Walk{width: mod.tokens.size.icon height: mod.tokens.size.icon}
+        icon_walk: Walk{width: mod.tokens.size.row_glyph height: mod.tokens.size.row_glyph}
         label_walk: Walk{width: Fill height: Fit margin: Inset{left: mod.tokens.space.s4}}
         align: Align{x: 0.0 y: 0.5}
         padding: Inset{left: mod.tokens.space.s5 right: mod.tokens.space.s5}
@@ -102,7 +102,7 @@ script_mod! {
         align: Align{x: 0.0 y: 0.5}
         padding: Inset{left: mod.tokens.space.s5 right: mod.tokens.space.s5}
         spacing: mod.tokens.space.s4
-        glyph := Icon{width: mod.tokens.size.icon height: mod.tokens.size.icon align: Align{x: 0.5 y: 0.5} icon_walk: Walk{width: 10.0 height: 10.0} draw_icon +: {color: mod.tokens.ink.faint}}
+        glyph := Icon{width: mod.tokens.size.icon height: mod.tokens.size.icon align: Align{x: 0.5 y: 0.5} icon_walk: Walk{width: mod.tokens.size.row_glyph height: mod.tokens.size.row_glyph} draw_icon +: {color: mod.tokens.ink.faint}}
         label := Label{width: Fill draw_text.color: mod.tokens.ink.faint draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.sm line_spacing: 1.0 top_drop: 0.0}}
     }
 
@@ -167,7 +167,7 @@ script_mod! {
     let FileRow = ButtonFlat{
         width: Fill
         height: mod.tokens.size.row
-        icon_walk: Walk{width: mod.tokens.size.icon height: mod.tokens.size.icon}
+        icon_walk: Walk{width: mod.tokens.size.row_glyph height: mod.tokens.size.row_glyph}
         spacing: mod.tokens.space.s4
         align: Align{x: 0.0 y: 0.5}
         padding: Inset{left: mod.tokens.space.s5 right: mod.tokens.space.s5}

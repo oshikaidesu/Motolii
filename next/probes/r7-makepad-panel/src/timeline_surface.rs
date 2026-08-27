@@ -28,6 +28,8 @@ script_mod! {
         band_alpha: 0.030
         tick_fade_from: 9.0
         tick_fade_to: 18.0
+        type_ratio: 0.53
+        ink_k: 1.1
         // playhead = ACCENT 1.5x(canon: timeline-semantics.html S5b) — グリッド線の
         // 通常太さ(1.0)に対する倍率と、pane 内で唯一許されるヒーローの最大コントラスト色。
         // どちらも --hot で振れる値なので Rust const ではなくここに置く。
@@ -497,6 +499,11 @@ pub struct TimelineSurface {
     band_alpha: f64,
     #[live(9.0)]
     tick_fade_from: f64,
+    /// 字は比率で導出する(裁定271)。行の中身の帯/行高 = 0.53、書体係数 1.1。
+    #[live(0.53)]
+    type_ratio: f64,
+    #[live(1.1)]
+    ink_k: f64,
     #[live(18.0)]
     tick_fade_to: f64,
     // playhead = ACCENT 1.5x(canon: timeline-semantics.html S5b)。通常のグリッド線
@@ -885,7 +892,10 @@ impl TimelineSurface {
             color,
         );
 
-        let text_y = row.y + ((row.height - 9.0) * 0.5).max(0.0);
+        // レーン名の大きさは行高から導出(比率の原則を字にも適用 — 裁定271)。
+        // レーン高は本数で毎フレーム変わるので、固定 pt だと詰まった時に溢れる
+        let name_size = (row.height * self.type_ratio / self.ink_k).clamp(6.0, 11.0);
+        let text_y = row.y + ((row.height - name_size) * 0.5).max(0.0);
         self.draw_label(
             cx,
             dvec2(self.rect.pos.x + 9.0, text_y),
@@ -895,7 +905,7 @@ impl TimelineSurface {
             } else {
                 vec4(0.72, 0.72, 0.72, 1.0)
             },
-            9.2,
+            name_size as f32,
         );
 
         // Live の文法: on のトグルは意味色のベタ + 暗インク(極性反転)。
