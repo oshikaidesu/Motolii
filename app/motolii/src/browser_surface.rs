@@ -595,11 +595,14 @@ impl BrowserSurface {
     #[allow(dead_code)]
     const IMPORT_WIRED: bool = false;
 
-    /// store の棚を投影する(`TimelineSurface::set_model` と同じ口)。
+    /// store の棚を投影する(`TimelineSurface::set_model` と同じ口)。catalog の正本は
+    /// Document の台帳で、この widget は投影を持つだけ。
     ///
     /// **絞り込みの状態(rail / 検索語 / tag)は持ち越す** — 取り込みや配置のたびに
-    /// 絞りが解けたら、利用者が名指していない物が動くことになる(裁定271)。
-    pub fn set_catalog(&mut self, cx: &mut Cx, catalog: Vec<BrowserAsset>) {
+    /// 絞りが解けたら、利用者が名指していない物が動くことになる(裁定271)。ただし
+    /// 今の一覧に無い tag を指したまま残ると0件の理由が読めなくなるので、
+    /// 実在しなくなった tag だけは畳む。
+    pub(crate) fn set_catalog(&mut self, cx: &mut Cx, catalog: Vec<BrowserAsset>) {
         // `Recent` の境目は最初の投影で決まる。開いた時に既に居た物は Recent ではない。
         if self.session_floor.is_none() {
             self.session_floor = Some(
@@ -611,6 +614,11 @@ impl BrowserSurface {
             );
         }
         self.catalog = catalog;
+        if let Some(tag) = self.tag.clone() {
+            if !self.catalog.iter().any(|asset| asset.tags.contains(&tag)) {
+                self.tag = None;
+            }
+        }
         self.view.redraw(cx);
     }
 
@@ -664,19 +672,6 @@ impl BrowserSurface {
             })
             .map(|(index, _)| index)
             .collect()
-    }
-
-    /// 一覧を差し替える。**catalog の正本は Document の台帳**で、この widget は
-    /// 投影を持つだけ([`install_catalog`] が唯一の書き手)。
-    pub(crate) fn set_catalog(&mut self, cx: &mut Cx, catalog: Vec<BrowserAsset>) {
-        self.catalog = catalog;
-        // 絞り込みが今の一覧に無い tag を指したまま残ると、0件の理由が読めなくなる
-        if let Some(tag) = self.tag.clone() {
-            if !self.catalog.iter().any(|asset| asset.tags.contains(&tag)) {
-                self.tag = None;
-            }
-        }
-        self.view.redraw(cx);
     }
 
     /// 見出しと shelf は状態の投影。描く前に合わせるので、宣言側の文言は繋ぎでよい。
@@ -1091,15 +1086,14 @@ fn catalog_from_document(doc: &Document) -> Vec<BrowserAsset> {
                 .path_absolute
                 .as_ref()
                 .is_some_and(|path| placed_paths.iter().any(|used| used == path));
+            // NOTE(統合 2026-08-28): 一覧の正本 builder は `main.rs::browser_catalog`
+            // (指紋一致で ● を導く)。ここは import 直後の再投影だけが使う休眠経路で、
+            // WIRE-2 が着地したら正本へ畳むこと。
             BrowserAsset {
+                id: asset.id.get(),
                 name: asset.file_name.clone().unwrap_or_else(|| asset.name.clone()),
                 kind: AssetKind::from_asset_type(&asset.asset_type),
                 placed,
-                // 台帳に載っている = この project の素材。rail `Project` の意味そのもの
-                in_project: true,
-                // 直近に触った物の記録は Document にも Session にも無い。無い物を
-                // 推測で埋めない — rail `Recent` は空を空と言う
-                recent: false,
                 // 台帳に tag 欄が無い(`motolii_store::Asset`)。front で発明すると
                 // 保存で消えるので、空のまま渡す
                 tags: Vec::new(),

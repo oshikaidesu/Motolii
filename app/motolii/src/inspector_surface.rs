@@ -389,6 +389,11 @@ fn interp_label(interp: Interp) -> &'static str {
         // 名前の付いていない曲線。グラフエディタが来るまで front は形を作れないので、
         // 「これは EASE でも LINEAR でもない」とだけ言う(嘘の名前を付けない)
         Interp::Bezier { .. } => "BEZIER",
+        // パラメトリック補間型(2026-08-28、`Interp::ease` が意味の家)。名前は
+        // 読めるが、front からの入口はまだ無い(INTERVAL EASING の板は次の波)
+        Interp::Bounce { .. } => "BOUNCE",
+        Interp::Elastic { .. } => "ELASTIC",
+        Interp::Steps { .. } => "STEPS",
     }
 }
 
@@ -403,6 +408,9 @@ fn next_interp(interp: Interp) -> Interp {
         found if found == EASY_EASE => Interp::Hold,
         Interp::Hold => Interp::Linear,
         Interp::Bezier { .. } => Interp::Linear,
+        // パラメトリック型も名前の無い Bezier と同じ扱いで LINEAR へ戻す —
+        // 押した人に次が読める。型の選択板(wf-4 の INTERVAL EASING)は次の波
+        Interp::Bounce { .. } | Interp::Elastic { .. } | Interp::Steps { .. } => Interp::Linear,
     }
 }
 
