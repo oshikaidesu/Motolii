@@ -41,6 +41,9 @@ script_mod! {
         // どちらも --hot で振れる値なので Rust const ではなくここに置く。
         playhead_width_scale: 1.5
         playhead_color: #(vec4(0.85, 0.71, 0.45, 1.0))
+        // ロケータ(発注 S5)。色は tokens の accent 系1色 — 新しい色の族を発明しない
+        // (`mod.tokens.accent.on`、`stage_error` 等が同じ琥珀を使っている)。
+        marker_color: mod.tokens.accent.on
     }
 }
 #[cfg(test)]
@@ -81,12 +84,24 @@ pub struct TimelinePropertyLane {
     pub keys: Vec<i64>,
 }
 
+/// ルーラーのロケータ1枚(発注 S5)。**`motolii_store::Marker` の写しではない** —
+/// `TimelineLane`/`TimelinePropertyLane` と同じ、widget が要る分だけの投影。
+/// 名前・尺(範囲ロケータ)はこの波の非目標なので運ばない — 運ぶ物を増やすと
+/// 「まだ無い機能の器だけ先に生える」(Q0 の裏側)。**宣言順が身分**
+/// (`marker.rs` の doc: マーカーに安定 id は無い)なので、`main.rs` の
+/// `TimelineEditAction::RemoveMarker` はこの Vec の index で名指す。
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct TimelineMarker {
+    pub frame: i64,
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct TimelineModel {
     /// Front-to-back. The backend derives this from `LayerMeta.order`; the widget
     /// never owns a second persistent ordering model.
     pub lanes: Vec<TimelineLane>,
     pub property_lanes: Vec<TimelinePropertyLane>,
+    pub markers: Vec<TimelineMarker>,
     pub duration_frames: i64,
     pub playhead: i64,
     pub fps_num: i64,
@@ -160,6 +175,13 @@ pub enum TimelineEditAction {
         /// 決める — 頭を切っても素材はずれない、丸ごと動かせば素材も一緒に動く。
         edge: Option<ClipEdge>,
     },
+    /// ルーラーの空所を右クリック(発注 S5)。**その時刻へ、既定値のロケータを1つ**
+    /// 置く(name="" / duration=0)。値を発明しない — 改名 UI は次の波。
+    AddMarker { frame: i64 },
+    /// 既存ロケータの上を右クリック(発注 S5)。**置けるのに消せないのは Q0 違反**
+    /// なので、置く口と同じルーラーに消す口も要る。`index` は `TimelineModel.markers`
+    /// の宣言順(マーカーに安定 id は無い、`TimelineMarker` の doc 参照)。
+    RemoveMarker { index: usize },
 }
 
 type TimelineInputAction = TimelineSurfaceAction;
@@ -274,6 +296,11 @@ pub enum ClipEdge {
 enum PointerTarget {
     /// ルーラー帯。スクラブできるのはここだけ。
     Ruler,
+    /// 既存ロケータの上(発注 S5)。`Ruler` の特殊形 — 左クリックは同じスクラブ
+    /// (その時刻へ跳ぶ、`frame` は marker の生の値なので x→frame の丸め誤差が乗らない)、
+    /// 右クリックだけ挙動が分かれる(消す)。`index` は `TimelineModel.markers` の
+    /// 宣言順(`TimelineMarker` の doc 参照)。
+    Marker { index: usize, frame: i64 },
     /// プロパティ行の開閉三角(B2)。
     Fold { layer_id: u64 },
     /// M/S/L グリフ。
@@ -503,6 +530,13 @@ impl TimelineGesture {
             PointerTarget::Ruler => {
                 *self = Self::Playhead;
                 Some(TimelineInputAction::Scrub(viewport.frame_at_x(position.x)))
+            }
+            // ロケータの左クリック = playhead がその時刻へ跳ぶ(発注 S5)。`frame` は
+            // marker が持っている生の値をそのまま使う — x から引き直すと丸め誤差が
+            // 乗る余地がある。
+            PointerTarget::Marker { frame, .. } => {
+                *self = Self::Playhead;
+                Some(TimelineInputAction::Scrub(frame))
             }
             // LOCKED は掴めない。store が `SetTiming`/`SetOrder` を拒む
             // (`check_not_locked`)ので、ここで掴ませると「動いて見えてから戻る」
@@ -749,6 +783,12 @@ pub struct TimelineSurface {
     playhead_width_scale: f64,
     #[live(vec4(0.85, 0.71, 0.45, 1.0))]
     playhead_color: Vec4f,
+    /// ロケータの色(発注 S5)。script_mod 側は `mod.tokens.accent.on` を渡す
+    /// (琥珀1色、新しい色の族を発明しない) — この Rust リテラルはその16進の
+    /// 素直な写しで、DSL が載る前の一瞬だけ使われる fallback(`playhead_color` と
+    /// 同じ扱い)。
+    #[live(vec4(1.0, 0.678, 0.337, 1.0))]
+    marker_color: Vec4f,
 
     #[rust]
     rect: Rect,
@@ -756,6 +796,10 @@ pub struct TimelineSurface {
     lanes: Vec<TimelineLane>,
     #[rust]
     property_lanes: Vec<TimelinePropertyLane>,
+    /// ルーラーのロケータ(発注 S5)。`lanes`/`property_lanes` と同じ身分 — 正本は
+    /// Document で、ここは `set_model` が押し込む投影。
+    #[rust]
+    markers: Vec<TimelineMarker>,
     #[rust]
     duration_frames: i64,
     #[rust]
@@ -796,6 +840,7 @@ impl TimelineSurface {
         let first_model = self.duration_frames <= 0 || self.view_span <= 0.0;
         self.lanes = model.lanes;
         self.property_lanes = model.property_lanes;
+        self.markers = model.markers;
         self.duration_frames = model.duration_frames.max(1);
         self.playhead = model
             .playhead
@@ -1124,17 +1169,30 @@ impl TimelineSurface {
         })
     }
 
+    /// ロケータの当たり判定(発注 S5)。**形は統一**(裁定2026-08-08)なので掴み代も
+    /// 1つ — 種類ごとに広さを変えない。`x_at_frame` の逆(`frame_at_x`)を使わないのは
+    /// `PointerTarget::Marker` が生の `frame` を運びたいから(`begin` の doc 参照)。
+    fn marker_at(&self, abs_x: f64) -> Option<(usize, i64)> {
+        const HIT_HALF_WIDTH: f64 = 4.0;
+        self.markers.iter().enumerate().find_map(|(index, marker)| {
+            let x = self.x_at_frame(marker.frame as f64);
+            ((abs_x - x).abs() <= HIT_HALF_WIDTH).then_some((index, marker.frame))
+        })
+    }
+
     /// **カーソルもクリックもここだけを読む**。1つの関数が答えを持つので、
     /// 「伸縮できない所で EwResize が出る」(A2)ような食い違いが起こせない。
     fn pointer_target(&self, abs: DVec2) -> PointerTarget {
         let rail_right = self.rect.pos.x + self.rail_width;
         if abs.y < self.body_top() {
             // ルーラー帯。スクラブできるのは時間側だけで、レール側の見出しは何でもない。
-            return if abs.x >= rail_right {
-                PointerTarget::Ruler
-            } else {
-                PointerTarget::Empty
-            };
+            if abs.x >= rail_right {
+                if let Some((index, frame)) = self.marker_at(abs.x) {
+                    return PointerTarget::Marker { index, frame };
+                }
+                return PointerTarget::Ruler;
+            }
+            return PointerTarget::Empty;
         }
         for row in self.visual_rows() {
             if abs.y < row.y || abs.y >= row.y + row.height {
@@ -1183,7 +1241,7 @@ impl TimelineSurface {
     /// 指がそこへ乗った瞬間に出す(Q0)。錠は M/S/L の L で外せるので行き止まりではない。
     fn set_hover_cursor(&self, cx: &mut Cx, abs: DVec2) {
         let cursor = match self.pointer_target(abs) {
-            PointerTarget::Ruler => MouseCursor::EwResize,
+            PointerTarget::Ruler | PointerTarget::Marker { .. } => MouseCursor::EwResize,
             PointerTarget::Clip { locked: true, .. } | PointerTarget::Rail { locked: true, .. } => {
                 MouseCursor::NotAllowed
             }
@@ -1792,6 +1850,32 @@ impl TimelineSurface {
         }
     }
 
+    /// ロケータの目盛り(発注 S5)。**形は統一**(裁定2026-08-08) — 全マーカーが
+    /// 同じ旗を使う、種類ごとの形は無い(範囲ロケータは次の波、非目標)。
+    /// 色は `marker_color`(= `mod.tokens.accent.on`、script_mod 側の doc 参照)。
+    fn draw_markers(&mut self, cx: &mut Cx2d) {
+        if self.markers.is_empty() {
+            return;
+        }
+        let time = self.time_rect();
+        let markers = self.markers.clone();
+        self.draw_item.new_draw_call(cx);
+        for marker in &markers {
+            let x = self.x_at_frame(marker.frame as f64);
+            if x < time.pos.x - 1.5 || x > time.pos.x + time.size.x + 1.5 {
+                continue;
+            }
+            self.draw_rect(
+                cx,
+                Rect {
+                    pos: dvec2(x - 1.5, self.rect.pos.y + self.ruler_height - 6.0),
+                    size: dvec2(3.0, 6.0),
+                },
+                self.marker_color,
+            );
+        }
+    }
+
     /// 掴んだ行が指に付いてくる(A4)。挿入先の線だけでは「掴んだ物が静止したまま
     /// ドラッグする」ことになり、掴んだ実感が無い。
     fn floating_lane_row(&self) -> Option<(usize, f64)> {
@@ -1915,6 +1999,26 @@ impl Widget for TimelineSurface {
                 }
                 if let Some(action) = action {
                     self.emit_input_action(cx, action);
+                }
+            }
+            // ルーラーの右クリック(発注 S5)。空所なら置く、既存ロケータの上なら
+            // 消す — 同じ帯の同じボタンが両方の意図を持つ(置ける所でしか消えない、
+            // 消せる所でしか置けない、が Q0 の裏側)。ドラッグは起こさない
+            // (`self.drag` はここでは触らない、1クリック = 1意図)。
+            Hit::FingerDown(fe)
+                if fe
+                    .mouse_button()
+                    .is_some_and(|button| button.is_secondary()) =>
+            {
+                match self.pointer_target(fe.abs) {
+                    PointerTarget::Marker { index, .. } => {
+                        self.emit_edit_action(cx, TimelineEditAction::RemoveMarker { index });
+                    }
+                    PointerTarget::Ruler => {
+                        let frame = self.viewport().frame_at_x(fe.abs.x);
+                        self.emit_edit_action(cx, TimelineEditAction::AddMarker { frame });
+                    }
+                    _ => {}
                 }
             }
             Hit::FingerMove(fe) => {
@@ -2058,6 +2162,7 @@ impl Widget for TimelineSurface {
         }
 
         self.draw_grid_and_ruler(cx, self.lane_height());
+        self.draw_markers(cx);
         self.draw_playhead_and_drop_target(cx);
         DrawStep::done()
     }

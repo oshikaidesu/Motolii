@@ -927,6 +927,22 @@ impl InspectorSurface {
         }
     }
 
+    /// selection summary(ヘッダの名前+種別)の投影口(発注 S5b)。**選択は
+    /// `main.rs` の `session` が持つ真実**(モジュール doc 参照) — ここは押し込まれた
+    /// 文字列をそのまま2つのラベルへ流すだけで、選択が何かを解釈しない。
+    /// 選択が無い時に何を表示するかは呼び手(host)が決める("Select a layer to
+    /// inspect" 等) — ここは器であって語彙の家ではない。
+    pub fn set_selection_summary(&mut self, cx: &mut Cx, name: &str, kind: &str) {
+        self.view
+            .widget(cx, ids!(summary.sel_name))
+            .as_label()
+            .set_text(cx, name);
+        self.view
+            .widget(cx, ids!(summary.sel_kind))
+            .as_label()
+            .set_text(cx, kind);
+    }
+
     /// この track の playhead での今を押し込む口。`prop` は**行の**表示 id
     /// (`"position"`)。`keyed` = playhead にキーが在るか、`interp` = playhead を
     /// 含む区間の緩急(区間が無ければ `None`)。

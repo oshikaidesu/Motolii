@@ -12,7 +12,7 @@ use motolii_engine::{Engine, ObservationCamera};
 use motolii_shell_state::Session;
 use motolii_store::{
     AssetDraft, AssetId, Document, Intent, LayerAttrsPatch, LayerId, LayerMeta, LayerSource,
-    LayerTiming, RationalTime, SourceFingerprintV1,
+    LayerTiming, Marker, RationalTime, SourceFingerprintV1,
 };
 use motolii_timeline_projection::{
     self as timeline_pane, stacking::restacked, waveform_bucket_range, StackDirection,
@@ -37,11 +37,12 @@ mod stage_surface;
 mod timeline_surface;
 use browser_surface::{AssetKind, BrowserAsset, BrowserEditAction, BrowserSurface};
 use fx_stack::{FxStack, FxStackAction, FxStackModel, FxWrite};
+use inspector_surface::InspectorSurface;
 use stage_chrome::{StageChrome, StageChromeAction, StageViewCamera};
 use stage_surface::{SharedOsHandle, SharedSurfaceDesc, StagePresent, StageRoom, StageVerdict};
 use timeline_surface::{
-    ClipEdge, LaneFlag, TimelineEditAction, TimelineLane, TimelineModel, TimelinePropertyLane,
-    TimelineSurface, TimelineSurfaceAction,
+    ClipEdge, LaneFlag, TimelineEditAction, TimelineLane, TimelineMarker, TimelineModel,
+    TimelinePropertyLane, TimelineSurface, TimelineSurfaceAction,
 };
 
 app_main!(App);
@@ -602,6 +603,7 @@ impl BackendBridge {
         .collect();
         let composition = self.doc.view().composition().ok().flatten();
         let (duration_frames, fps_num, fps_den) = composition
+            .as_ref()
             .map(|composition| {
                 (
                     composition.duration_frames,
@@ -611,9 +613,30 @@ impl BackendBridge {
             })
             .unwrap_or((1, 30, 1));
 
+        // ロケータ(発注 S5)。**宣言順のまま**投影する — `TimelineMarker` に安定 id は
+        // 無いので、index が身分そのもの(`TimelineMarker` の doc 参照)。frame へ
+        // 変換できない(fps が壊れている)マーカーは黙って落とす代わりに描かない —
+        // それでも index がずれると `RemoveMarker` が別の marker を消してしまうので、
+        // 変換に失敗した物は捨てず frame=0 として繋ぎ止める(消せなくなるより安全)。
+        let markers = composition
+            .as_ref()
+            .map(|composition| {
+                self.doc
+                    .view()
+                    .markers()
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|marker| TimelineMarker {
+                        frame: marker.time.try_to_frame_round(composition.fps).unwrap_or(0),
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+
         TimelineModel {
             lanes,
             property_lanes,
+            markers,
             duration_frames,
             playhead: self.session.playhead,
             fps_num,
@@ -980,6 +1003,114 @@ impl BackendBridge {
         self.status.clone().expect("just set")
     }
 
+    /// ルーラーの右クリック(空所)。**その時刻へ、既定値のロケータを1つ**置く
+    /// (発注 S5)。名前("")と尺(単発 = 0)は発明しない — Lottie の `cm`/`dr` の
+    /// 既定と同じ。`SetMarkers` は丸ごと差し替え型(`document.rs` の doc)なので、
+    /// 今の一覧を読んでから1件足して書き戻す(`SetMasks`/`AddMask` と同じ read-modify-write)。
+    fn add_marker_from_timeline(&mut self, frame: i64) -> String {
+        let store = self.doc.view();
+        let Some(composition) = store.composition().ok().flatten() else {
+            return "ロケータを書けない: composition is unreadable".to_owned();
+        };
+        let mut markers = store.markers().unwrap_or_default();
+        drop(store);
+        let Ok(time) = RationalTime::try_from_frame(frame.max(0), composition.fps) else {
+            return format!("ロケータを書けない: frame {frame} does not map to a time");
+        };
+        markers.push(Marker {
+            name: String::new(),
+            time,
+            duration: RationalTime::ZERO,
+        });
+        if let Err(error) = self.doc.apply_all([Intent::SetMarkers { markers }]) {
+            return format!("ロケータを書けない: {error}");
+        }
+        self.status = Some(format!("Timeline: marker placed at frame {frame}"));
+        self.status.clone().expect("just set")
+    }
+
+    /// 既存ロケータの上の右クリック。**そのロケータを消す**(発注 S5、置けるのに
+    /// 消せないのは Q0 違反)。`index` は widget が持つ `TimelineModel.markers` の
+    /// 宣言順そのもの — `TimelineMarker` に安定 id が無いので、これが唯一の名指し方
+    /// (`marker.rs` の doc)。
+    fn remove_marker_from_timeline(&mut self, index: usize) -> String {
+        let store = self.doc.view();
+        let mut markers = store.markers().unwrap_or_default();
+        drop(store);
+        if index >= markers.len() {
+            return "Timeline: marker no longer exists".to_owned();
+        }
+        markers.remove(index);
+        if let Err(error) = self.doc.apply_all([Intent::SetMarkers { markers }]) {
+            return format!("ロケータを書けない: {error}");
+        }
+        self.status = Some("Timeline: marker removed".to_owned());
+        self.status.clone().expect("just set")
+    }
+
+    /// Delete/Backspace(発注 S4)。選択された全レイヤーを**1回の `apply_all`**で
+    /// 消す(= 1 undo)。削除は tombstone なので undo で戻せる(`Intent::RemoveLayer`
+    /// の doc)。locked/frozen な層が混ざっていれば `apply_all` は原子的に失敗する
+    /// (`Document::apply_all` の doc「バッチ全体を無かったことにする」)ので、
+    /// 一部だけ消えて残りが残るという半端な結果にはならない。
+    fn remove_selected_layers(&mut self) -> String {
+        let layers = self.session.selected_layers.clone();
+        if layers.is_empty() {
+            return "Timeline: nothing selected to delete".to_owned();
+        }
+        let intents: Vec<Intent> = layers.iter().copied().map(Intent::RemoveLayer).collect();
+        if let Err(error) = self.doc.apply_all(intents) {
+            // 無反応ゼロ — locked/frozen を消そうとしたら理由が見える。
+            return format!("削除を書けない: {error}");
+        }
+        self.frame = None;
+        let count = layers.len();
+        // 消えた層は選択からも外す(削除された物を選び続けさせない)。
+        self.session.selection = None;
+        self.session.selected_layers.clear();
+        self.status = Some(format!("Timeline: {count} layer(s) deleted"));
+        self.status.clone().expect("just set")
+    }
+
+    /// selection summary の投影(発注 S5b)。Inspector ヘッダの「名前+種別」だけ運ぶ —
+    /// `inspector_surface::InspectorSurface::set_selection_summary` の**既存の口**で
+    /// 運べる範囲だけ(TRANSFORM の値投影は口が無いので次の波、非目標)。
+    fn selection_summary(&self) -> (String, String) {
+        let Some(layer) = self.session.selection else {
+            return (
+                "No Selection".to_owned(),
+                "Select a layer to inspect".to_owned(),
+            );
+        };
+        let store = self.doc.view();
+        let Some(meta) = store.meta(layer).ok().flatten() else {
+            return (
+                "No Selection".to_owned(),
+                "Select a layer to inspect".to_owned(),
+            );
+        };
+        let attrs = store.attrs(layer).ok().flatten().unwrap_or_default();
+        let name = if attrs.name.is_empty() {
+            format!("Layer {}", layer.0)
+        } else {
+            attrs.name
+        };
+        (name, Self::layer_kind_label(&meta.source).to_owned())
+    }
+
+    /// `LayerSource` の人が読む種別名。捏造ではなく `LayerSource` の6 variant を
+    /// そのまま名付けているだけ(新しい語彙を発明しない)。
+    fn layer_kind_label(source: &LayerSource) -> &'static str {
+        match source {
+            LayerSource::Solid { .. } => "Solid layer",
+            LayerSource::Media { .. } => "Media layer",
+            LayerSource::Null => "Null layer",
+            LayerSource::Shape => "Shape layer",
+            LayerSource::Text => "Text layer",
+            LayerSource::Group => "Group",
+        }
+    }
+
     /// Browser の棚(`Composition:assets`、裁定162 の bin-first 台帳)の投影。
     ///
     /// **front はカタログを持たない。** 以前 `browser_surface.rs` が持っていた
@@ -1216,6 +1347,14 @@ impl BackendBridge {
             } => TimelineUpdate::ModelAndStage(
                 self.set_clip_timing_from_timeline(layer_id, start, duration, edge),
             ),
+            // マーカーは絵を変えない(comp の合成に加わらない metadata)ので、選択と
+            // 同じく Stage は焼き直さない(裁定271)。
+            TimelineEditAction::AddMarker { frame } => {
+                TimelineUpdate::Model(self.add_marker_from_timeline(frame))
+            }
+            TimelineEditAction::RemoveMarker { index } => {
+                TimelineUpdate::Model(self.remove_marker_from_timeline(index))
+            }
         }
     }
 
@@ -1367,6 +1506,11 @@ impl App {
             ),
             None => backend.engine.render_frame_into(&backend.doc.view(), t, gpu),
         };
+        // A05 隔離の読み出し口(発注 S3)。**frame を引いた後に読む、この1本だけ** —
+        // engine の文字列をそのまま持ち帰る(意味を発明しない)。`written` の成否とは
+        // 別の話(層ごとの隔離は render 呼び出し自体は成功させたまま起きる)なので、
+        // 早期リターンの前に読んでおく。
+        let layer_failures: Vec<String> = backend.engine.layer_failures().to_vec();
         if written.is_err() {
             return StageVerdict::stalled(StageRoom::Host, "writing into the shared surface failed");
         }
@@ -1378,6 +1522,9 @@ impl App {
         if stage_image.is_empty() {
             return StageVerdict::stalled(StageRoom::Seam, "the Stage Image is not in the panel");
         }
+        // Stage chrome の常設帯へ渡す(裁定済みの置き場所)。加工せず列挙するのは
+        // `StageChrome::set_failures` の仕事。
+        self.set_stage_failures(cx, &layer_failures);
         // 「表示側が答えた寸法」を持って帰る。書けたことは見えたことではない。
         let displayed = texture
             .get_format(cx)
@@ -1409,6 +1556,15 @@ impl App {
         cx.redraw_all();
     }
 
+    /// A05 隔離の読み出し口を Stage chrome の常設帯へ渡す(発注 S3)。**この1本だけ**
+    /// が `Engine::layer_failures()` の読み手 — 加工は `StageChrome::set_failures`
+    /// (空なら帯ごと隠す、非空なら engine の文字列をそのまま列挙)。
+    fn set_stage_failures(&self, cx: &mut Cx, failures: &[String]) {
+        if let Some(mut chrome) = self.stage_chrome_ref(cx).borrow_mut::<StageChrome>() {
+            chrome.set_failures(cx, failures);
+        }
+    }
+
     fn request_stage_frame(&mut self, cx: &mut Cx) {
         if !self.stage_request.request() {
             self.stage_next_frame = cx.new_next_frame();
@@ -1424,20 +1580,24 @@ impl App {
             TimelineUpdate::Stage(status) => {
                 // param の値は時刻の関数。プレイヘッドが動いたら FX の欄も引き直す。
                 self.install_fx_model(cx);
+                self.install_inspector_selection(cx);
                 self.request_stage_frame(cx);
                 self.set_status(cx, &status);
             }
             TimelineUpdate::ModelAndStage(status) => {
                 self.install_timeline_model(cx);
                 self.install_fx_model(cx);
+                self.install_inspector_selection(cx);
                 self.request_stage_frame(cx);
                 self.set_status(cx, &status);
             }
             // 選択が動いた。FX STACK は**選択レイヤーの**効果を映すので、
-            // 絵が変わらなくても面は引き直す。
+            // 絵が変わらなくても面は引き直す。Inspector のヘッダ(発注 S5b)も同じ理由で
+            // ここに揃える — 選択は Document を書かないので `Model` 以外の枝を通らない。
             TimelineUpdate::Model(status) => {
                 self.install_timeline_model(cx);
                 self.install_fx_model(cx);
+                self.install_inspector_selection(cx);
                 self.set_status(cx, &status);
             }
             TimelineUpdate::Status(status) => {
@@ -1485,6 +1645,27 @@ impl App {
         let fx = self.fx_ref(cx);
         if let Some(mut inner) = fx.borrow_mut::<FxStack>() {
             inner.set_model(cx, model);
+        };
+    }
+
+    /// Inspector 面の `InspectorSurface`(`InspectorPane` の中、`fx_stack` の兄弟)。
+    fn inspector_ref(&self, cx: &mut Cx) -> WidgetRef {
+        self.dock(cx)
+            .item(id!(inspector))
+            .child_by_path(ids!(inspector_surface))
+    }
+
+    /// 選択の投影を Inspector ヘッダへ押し込む(発注 S5b)。**FX STACK が既に選択を
+    /// 読んでいる経路(`install_fx_model`)と同じ形** — 呼ぶ場所も同じにして揃える。
+    /// 選択が無ければ `InspectorSurface::set_selection_summary` がその状態を
+    /// 正直に映す("No Selection" / "Select a layer to inspect")。
+    fn install_inspector_selection(&mut self, cx: &mut Cx) {
+        let Some((name, kind)) = self.backend.as_ref().map(BackendBridge::selection_summary) else {
+            return;
+        };
+        let inspector = self.inspector_ref(cx);
+        if let Some(mut surface) = inspector.borrow_mut::<InspectorSurface>() {
+            surface.set_selection_summary(cx, &name, &kind);
         };
     }
 
@@ -1811,6 +1992,21 @@ impl App {
         self.request_stage_frame(cx);
     }
 
+    /// Delete/Backspace(発注 S4)。`toggle_playback` と同じ形の直接キー操作 —
+    /// TimelineSurface を経由しないので `TimelineUpdate` は経由せず、ここで
+    /// 投影を引き直す。選択も変わるので Inspector(発注 S5b)も一緒に引き直す。
+    fn delete_selected_layers(&mut self, cx: &mut Cx) {
+        let Some(backend) = self.backend.as_mut() else {
+            return;
+        };
+        let status = backend.remove_selected_layers();
+        self.set_status(cx, &status);
+        self.install_timeline_model(cx);
+        self.install_fx_model(cx);
+        self.install_inspector_selection(cx);
+        self.request_stage_frame(cx);
+    }
+
 }
 
 impl MatchEvent for App {
@@ -1819,6 +2015,7 @@ impl MatchEvent for App {
         self.playback_timer = cx.start_interval(1.0 / 60.0);
         self.install_timeline_model(cx);
         self.install_fx_model(cx);
+        self.install_inspector_selection(cx);
         self.install_browser_catalog(cx);
         self.request_stage_frame(cx);
         self.browser_rail = RAIL_ALL_MEDIA;
@@ -1892,6 +2089,7 @@ impl MatchEvent for App {
                     self.request_stage_frame(cx);
                 }
                 self.install_fx_model(cx);
+                self.install_inspector_selection(cx);
                 if !write.status.is_empty() {
                     self.set_status(cx, &write.status);
                 }
@@ -1947,6 +2145,7 @@ impl MatchEvent for App {
         {
             self.install_timeline_model(cx);
             self.install_fx_model(cx);
+            self.install_inspector_selection(cx);
             self.request_stage_frame(cx);
         }
     }
@@ -1978,6 +2177,11 @@ impl MatchEvent for App {
         }
         if event.key_code == KeyCode::Space && !event.is_repeat {
             self.toggle_playback(cx);
+        }
+        // レイヤー削除(発注 S4)。Delete と Backspace の両方を受ける — キーボードの
+        // 種類で片方しか無い機種があるので、どちらも同じ意図として通す。
+        if matches!(event.key_code, KeyCode::Delete | KeyCode::Backspace) && !event.is_repeat {
+            self.delete_selected_layers(cx);
         }
     }
 

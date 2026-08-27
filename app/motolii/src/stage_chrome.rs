@@ -201,6 +201,14 @@ script_mod! {
             // `zoom_percent` を動かし、文字はそこから作り直す(F3)
             home_zoom := GlyphButton{text: "⌂"}
         }
+        failures_edge := SolidView{width: Fill height: mod.tokens.rule.size show_bg: true new_batch: true draw_bg.color: mod.tokens.face.down}
+        // A05 隔離の読み出し口の常設帯(発注 S3、`Engine::layer_failures`)。**空なら
+        // 帯ごと隠れる**(`set_failures` が `visible` を倒す — invisible な View は
+        // 層の footprint を持たないので、隠れると帯そのものが無かったことになる)。
+        // hover やメニューの奥に隠さない(Ableton 可視性原理) — 常設の帯で言う。
+        failures_band := SolidView{width: Fill height: mod.tokens.size.status flow: Right align: Align{y: 0.5} padding: Inset{left: 8 right: 8} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.panel visible: false
+            failures_text := InkLabel{text: "" width: Fill draw_text.color: mod.tokens.accent.on draw_text.text_style: theme.font_code{font_size: mod.tokens.text.xs}}
+        }
     }
 }
 
@@ -399,6 +407,36 @@ impl StageChrome {
 
     fn zoom_percent(&self) -> u32 {
         (self.view_camera.zoom * 100.0).round().max(1.0) as u32
+    }
+
+    /// A05 隔離の読み出し口の投影(発注 S3)。継ぎ目(main.rs)が frame を引いた
+    /// 後に `Engine::layer_failures()` をそのまま渡す唯一の口。
+    ///
+    /// **`failures` が空なら帯ごと隠す**(裁定済みの置き場所)。非空なら engine が
+    /// 溜めた文字列を**加工せず**列挙する — 意味を作らない、要約もしない。
+    /// 件数が多い時だけ、読める分量に収めるため先頭数件 + 残り件数を足す
+    /// (足すのは「あと何件」という数だけで、個々の文字列は変えない)。
+    pub fn set_failures(&mut self, cx: &mut Cx, failures: &[String]) {
+        const SHOWN_LIMIT: usize = 3;
+        let band = self.view.widget(cx, ids!(failures_band));
+        band.set_visible(cx, !failures.is_empty());
+        if failures.is_empty() {
+            return;
+        }
+        let mut text = failures
+            .iter()
+            .take(SHOWN_LIMIT)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("  ·  ");
+        let hidden = failures.len().saturating_sub(SHOWN_LIMIT);
+        if hidden > 0 {
+            text.push_str(&format!("  ·  +{hidden} more"));
+        }
+        self.view
+            .widget(cx, ids!(failures_band.failures_text))
+            .as_label()
+            .set_text(cx, &text);
     }
 
     /// 帯の文字はすべてここで作る。持っているのは `stage_view` と `view_camera` の
