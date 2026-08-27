@@ -178,6 +178,36 @@ commit し、担当の作業を巻き込んだ。押し済みなので履歴は�
   `chrome/gallery.rs:76` の `ChromeStepper{value.text: "24"}` は「24」と「0」が並んで見える
   (1行で直る、未修正)
 
+## 素材の配置は3本足りない — 棚を素通りしている
+
+**インポートは2段でなければいけない。**
+
+```
+1. AdmitAsset          → 資産が Document の棚へ入る → Browser に出る
+2. AddLayer + SetSource → 棚からタイムラインへ置く
+```
+
+昨夜のレーンが作ったのは「ファイル → いきなりレイヤー」の**1本だけ**で、棚を素通りしている。
+それだと**取り込んだ物が Browser に現れず、同じ素材を使うたびに開き直す**ことになる。
+
+**モデルは揃っている**。`AssetId` / `Asset` / `AssetDraft` / `Intent::AdmitAsset` /
+`RemoveAsset` / `RelinkAsset`、**Document 所有**(裁定162)。
+そして `browser_surface.rs:22` が自分で書いている:
+
+> **カタログは front ローカル**: 出所は本来 `motolii-store` の `Composition:assets`
+
+**棚は在る。Browser が読んでいないだけ。**
+
+| 足りない物 | 状態 |
+|---|---|
+| ファイル → **棚**(`AdmitAsset`)→ Browser に出る | レーンは admit したが **Browser が `Composition:assets` を読んでいない**ので見えない |
+| **棚 → タイムライン**(drag / double-click) | **未配線**。`browser_surface.rs:341` が「drag=配置 / double-click は未決 — **動詞は配線しない(Q0: 押せそうで押せない物を作らない)**」と明記 |
+| **Places → フォルダの中を見る** | `RailRowReserved` = 予約地(下記) |
+
+`browser_surface.rs:127` に **`bin-first`** と書いてある — 「まず棚へ入れて、そこから置く」という
+NLE の標準の流れを最初から想定していた。**動詞を意図的に配線していない**のは Q0 を守った結果で、
+設計の欠落ではない。**次のレーンは棚の側から繋ぐ。**
+
 ## 素材の配置 — 「どこを参照するか」に当たり前の解がある
 
 **道具が推測しない。利用者が足す。** 分からないのが当然であって、既定を発明する所ではない
