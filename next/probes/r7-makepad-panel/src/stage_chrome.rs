@@ -143,7 +143,7 @@ script_mod! {
                 // #x000000 = 映像の無信号黒。letterbox の面トークンとは別物(絶対黒)なので
                 // トークン化しない
                 stage_frame := Image{width: Fill height: Fill fit: ImageFit.Smallest}
-                stage_error := Label{width: Fill height: Fill align: Align{x: 0.5 y: 0.5} text: "" draw_text.color: mod.tokens.accent.on draw_text.text_style: theme.font_code{font_size: mod.tokens.text.lg}}
+                stage_error := Label{width: Fill height: Fill align: Align{x: 0.5 y: 0.5} text: "" draw_text.color: mod.tokens.accent.on draw_text.text_style: theme.font_code{font_size: mod.tokens.text.md}}
             }
         }
         band_edge := SolidView{width: Fill height: mod.tokens.rule.size show_bg: true new_batch: true draw_bg.color: mod.tokens.face.down}

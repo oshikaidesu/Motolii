@@ -16,7 +16,9 @@ script_mod! {
         draw_item +: {color: #c5c5c5}
         draw_text +: {
             color: #c5c5c5
-            text_style: theme.font_code{font_size: 8}
+            // 名前(レーン名)もこの draw_text が描く。等幅は値専用(tokens の規則)なので
+            // regular。ルーラーの数字は値だが、Live もルーラーは UI 書体で刻む
+            text_style: theme.font_regular{font_size: 9}
         }
         // 見た目の調整値はここに出しておく — --hot が拾えるのは script_mod!
         // だけで、Rust の const は再ビルドしないと変わらない。
@@ -893,7 +895,7 @@ impl TimelineSurface {
             } else {
                 vec4(0.72, 0.72, 0.72, 1.0)
             },
-            7.8,
+            9.2,
         );
 
         // Live の文法: on のトグルは意味色のベタ + 暗インク(極性反転)。
