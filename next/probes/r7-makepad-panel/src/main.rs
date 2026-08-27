@@ -371,7 +371,16 @@ script_mod! {
                 height: Fill
                 // 既定の 33pt は、この密度の中では帯だけが太い。タブは掴む所なので
                 // 消さずに詰める(makepad 側の下限は 25pt)
-                tab_bar: TabBarFlat{height: mod.tokens.size.tab_bar}
+                tab_bar: TabBarFlat{
+                    height: mod.tokens.size.tab_bar
+                    // 既定の tab は帯より高く(36 > 25)、下がはみ出て切れる。
+                    // align.y は元から中央なので、直すのは箱の高さ
+                    PermanentTab := TabFlat{
+                        height: mod.tokens.size.tab_bar
+                        padding: Inset{left: mod.tokens.space.s5 right: mod.tokens.space.s5}
+                        draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.sm}
+                    }
+                }
 
                 root := DockSplitter{
                     axis: SplitterAxis.Vertical
@@ -1017,9 +1026,10 @@ impl App {
                 pos: cell.pos,
                 size: dvec2(corner.min(cell.size.x), bar),
             };
+            // 帯はセルの**上**に生えるので、保持ゾーンは境界をまたぐ
             let hold_zone = Rect {
-                pos: cell.pos,
-                size: dvec2(cell.size.x, bar),
+                pos: dvec2(cell.pos.x, cell.pos.y - bar),
+                size: dvec2(cell.size.x, bar * 2.0),
             };
             let shown = if self.revealed_bar == Some(id) {
                 hold_zone.contains(abs)
