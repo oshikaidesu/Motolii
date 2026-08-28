@@ -43,7 +43,7 @@ mod stage_surface;
 mod timeline_surface;
 use browser_surface::{AssetKind, BrowserAsset, BrowserEditAction, BrowserSurface};
 use fx_stack::{FxStack, FxStackAction, FxStackModel, FxWrite};
-use inspector_surface::InspectorSurface;
+use inspector_surface::{InspectorSurface, InspectorSurfaceAction};
 use settings_surface::{SettingsSurface, SettingsSurfaceAction};
 use stage_chrome::{GizmoCommit, GizmoTarget, StageChrome, StageChromeAction, StageViewCamera};
 use stage_surface::{SharedOsHandle, SharedSurfaceDesc, StagePresent, StageRoom, StageVerdict};
@@ -508,6 +508,36 @@ fn write_gizmo_component(
         layer,
         property,
         track,
+    })
+}
+
+/// Inspector の行id(`"position"`/`"rotation"`/`"opacity"`)を書く先の `PropertyId` へ写す。
+/// **vec 形が既定**(裁定61) — position の split(x/y 別 track)は値セルの成分ごとの話で、
+/// 行いっぺんの ToggleKey/SetInterp は `write_gizmo_component` と同じ vec 側へ書く
+/// (この app がドラッグで実際に作る唯一の形)。値セルの投影(split 判定込み)は
+/// まだ口が無い("TRANSFORM の値投影は口が無いので次の波" — `selection_summary` の doc)。
+fn inspector_row_property(prop: &str) -> Option<&'static str> {
+    match prop {
+        "position" => Some(property::POSITION),
+        "rotation" => Some(property::ROTATION),
+        "scale" => Some(property::SCALE),
+        "opacity" => Some(property::OPACITY),
+        _ => None,
+    }
+}
+
+/// `track` の中で `t` を含む区間の開始キー index。区間が無ければ `None`
+/// (`KeyframeTrack::eval` と同じ二分探索 — 「keys[i].interp が keys[i]→keys[i+1] を
+/// 決める」という同じ規約を読み書き両方で使う)。
+fn segment_start_index(track: &KeyframeTrack, t: RationalTime) -> Option<usize> {
+    let keys = track.keys();
+    let last = keys.len().checked_sub(1)?;
+    if last == 0 || t < keys[0].t || t >= keys[last].t {
+        return None;
+    }
+    Some(match keys.binary_search_by(|k| k.t.cmp(&t)) {
+        Ok(i) => i,
+        Err(i) => i - 1,
     })
 }
 
@@ -1335,6 +1365,147 @@ impl BackendBridge {
         format!("Stage: layer {} {label}", commit.layer.0)
     }
 
+    /// Inspector の `SetInterp` を Document へ書く(wf4 INTERVAL EASING 板)。
+    /// **playhead を含む区間だけ**を差し替える — キーの時刻・値は動かさない
+    /// (`KeyframeTrack::eval` の「keys[i].interp が keys[i]→keys[i+1] を決める」規約)。
+    fn apply_inspector_interp(&mut self, prop: &str, interp: Interp) -> String {
+        let Some(property_name) = inspector_row_property(prop) else {
+            return format!("Inspector: unwired property {prop}");
+        };
+        let Some(layer) = self.session.selection else {
+            return "Inspector: no layer selected".to_owned();
+        };
+        let store = self.doc.view();
+        let Some(composition) = store.composition().ok().flatten() else {
+            return "Inspector: the composition is unreadable".to_owned();
+        };
+        let Ok(property) = PropertyId::new(property_name) else {
+            return "Inspector: bad property id".to_owned();
+        };
+        let Ok(t) = RationalTime::try_from_frame(self.session.playhead.max(0), composition.fps)
+        else {
+            return "Inspector: the playhead does not map to a time".to_owned();
+        };
+        let track = store.track(layer, &property).ok().flatten().unwrap_or_default();
+        let Some(index) = segment_start_index(&track, t) else {
+            return format!("Inspector: {prop} has no segment at the playhead");
+        };
+        let mut keys = track.keys().to_vec();
+        keys[index].interp = interp;
+        let Ok(track) = KeyframeTrack::try_from_keys(keys) else {
+            return "Inspector: interp write failed validation".to_owned();
+        };
+        drop(store);
+        if let Err(error) = self.doc.apply_all([Intent::SetTrack {
+            layer,
+            property,
+            track,
+        }]) {
+            return format!("Inspector: interp write failed: {error}");
+        }
+        format!("Inspector: layer {} {prop} interp", layer.0)
+    }
+
+    /// Inspector の ◆/◇ を Document へ書く。**`write_gizmo_component` と同じ
+    /// 「AE の指の規約」**(`fx_stack.rs::apply` の doc): キーが無い property は時刻0に
+    /// Hold で静止値、キーがある property はプレイヘッドへ直前の interp を写して打つ。
+    /// 値は `StoreView::value_at` が読む「今の評価値」— 打つ瞬間に絵が動かない。
+    fn apply_inspector_toggle_key(&mut self, prop: &str, keyed: bool) -> String {
+        let Some(property_name) = inspector_row_property(prop) else {
+            return format!("Inspector: unwired property {prop}");
+        };
+        let Some(layer) = self.session.selection else {
+            return "Inspector: no layer selected".to_owned();
+        };
+        let store = self.doc.view();
+        let Some(composition) = store.composition().ok().flatten() else {
+            return "Inspector: the composition is unreadable".to_owned();
+        };
+        let Ok(property) = PropertyId::new(property_name) else {
+            return "Inspector: bad property id".to_owned();
+        };
+        let Ok(t) = RationalTime::try_from_frame(self.session.playhead.max(0), composition.fps)
+        else {
+            return "Inspector: the playhead does not map to a time".to_owned();
+        };
+        let mut track = store.track(layer, &property).ok().flatten().unwrap_or_default();
+        let track = if keyed {
+            // track が無い property は `value_at` が `None` を返す(裁定20 の
+            // 「静止値」は 0 キーの track の話で、track 自体が無い時の既定は
+            // 呼び手が持つ — `resolve.rs` の `scalar(name, default)` と同じ形)。
+            let value = store.value_at(layer, &property, t).ok().flatten().unwrap_or(
+                match property_name {
+                    p if p == property::SCALE => Value::Vec2([1.0, 1.0]),
+                    p if p == property::POSITION => Value::Vec2([0.0, 0.0]),
+                    p if p == property::OPACITY => Value::F64(1.0),
+                    _ => Value::F64(0.0),
+                },
+            );
+            let interp = track
+                .keys()
+                .iter()
+                .rev()
+                .find(|key| key.t <= t)
+                .or_else(|| track.keys().first())
+                .map(|key| key.interp)
+                .unwrap_or(Interp::Hold);
+            track.insert(Keyframe {
+                t,
+                value,
+                interp,
+                spatial: None,
+            });
+            track
+        } else {
+            let keys: Vec<_> = track.keys().iter().filter(|key| key.t != t).cloned().collect();
+            match KeyframeTrack::try_from_keys(keys) {
+                Ok(next) => next,
+                Err(_) => return "Inspector: key removal failed validation".to_owned(),
+            }
+        };
+        drop(store);
+        if let Err(error) = self.doc.apply_all([Intent::SetTrack {
+            layer,
+            property,
+            track,
+        }]) {
+            return format!("Inspector: key write failed: {error}");
+        }
+        format!("Inspector: layer {} {prop} key", layer.0)
+    }
+
+    /// [`InspectorSurface::set_property_keys`] へ押し込む3行ぶんの今
+    /// (keyed / playhead を含む区間の interp)。`selection_summary` と同じ形
+    /// (Document を読むだけ、面には触らない)。
+    fn inspector_key_states(&self) -> Vec<(&'static str, bool, Option<Interp>)> {
+        let mut states = Vec::new();
+        let Some(layer) = self.session.selection else {
+            return states;
+        };
+        let store = self.doc.view();
+        let Some(composition) = store.composition().ok().flatten() else {
+            return states;
+        };
+        let Ok(t) = RationalTime::try_from_frame(self.session.playhead.max(0), composition.fps)
+        else {
+            return states;
+        };
+        for prop in ["position", "rotation", "scale", "opacity"] {
+            let property_name = inspector_row_property(prop).expect("listed above");
+            let Ok(property) = PropertyId::new(property_name) else {
+                continue;
+            };
+            let Some(track) = store.track(layer, &property).ok().flatten() else {
+                states.push((prop, false, None));
+                continue;
+            };
+            let keyed = track.keys().iter().any(|key| key.t == t);
+            let interp = segment_start_index(&track, t).map(|i| track.keys()[i].interp);
+            states.push((prop, keyed, interp));
+        }
+        states
+    }
+
     /// `LayerSource` の人が読む種別名。捏造ではなく `LayerSource` の6 variant を
     /// そのまま名付けているだけ(新しい語彙を発明しない)。
     fn layer_kind_label(source: &LayerSource) -> &'static str {
@@ -1998,17 +2169,33 @@ impl App {
             .child_by_path(ids!(inspector_surface))
     }
 
+    fn inspector_uid(&self, cx: &mut Cx) -> Option<WidgetUid> {
+        let inspector = self.inspector_ref(cx);
+        (!inspector.is_empty()).then(|| inspector.widget_uid())
+    }
+
     /// 選択の投影を Inspector ヘッダへ押し込む(発注 S5b)。**FX STACK が既に選択を
     /// 読んでいる経路(`install_fx_model`)と同じ形** — 呼ぶ場所も同じにして揃える。
     /// 選択が無ければ `InspectorSurface::set_selection_summary` がその状態を
     /// 正直に映す("No Selection" / "Select a layer to inspect")。
+    ///
+    /// **KeyEase への投影もここで一緒に行う**(wf4 easing 板)。選択と playhead の
+    /// どちらが動いてもこの関数を通るので、呼び場所を増やさずに済む。
     fn install_inspector_selection(&mut self, cx: &mut Cx) {
         let Some((name, kind)) = self.backend.as_ref().map(BackendBridge::selection_summary) else {
             return;
         };
+        let key_states = self
+            .backend
+            .as_ref()
+            .map(BackendBridge::inspector_key_states)
+            .unwrap_or_default();
         let inspector = self.inspector_ref(cx);
         if let Some(mut surface) = inspector.borrow_mut::<InspectorSurface>() {
             surface.set_selection_summary(cx, &name, &kind);
+            for (prop, keyed, interp) in key_states {
+                surface.set_property_keys(cx, prop, keyed, interp);
+            }
         };
     }
 
@@ -2534,6 +2721,34 @@ impl MatchEvent for App {
                 if !write.status.is_empty() {
                     self.set_status(cx, &write.status);
                 }
+            }
+        }
+
+        // Inspector の ◆/緩急(wf4 INTERVAL EASING 板)。FX の action ループと同じ形
+        // (uid で絞って1つずつ Document へ写し、書けたら選択の投影をやり直す —
+        // `install_inspector_selection` が KeyEase への投影も一緒に持っている)。
+        if let Some(uid) = self.inspector_uid(cx) {
+            let inspector_actions: Vec<InspectorSurfaceAction> =
+                actions.filter_widget_actions_cast(uid).collect();
+            for action in inspector_actions {
+                let Some(backend) = self.backend.as_mut() else {
+                    continue;
+                };
+                let status = match action {
+                    InspectorSurfaceAction::None | InspectorSurfaceAction::SetValue { .. } => {
+                        continue;
+                    }
+                    InspectorSurfaceAction::ToggleKey { prop, keyed } => {
+                        backend.apply_inspector_toggle_key(&prop, keyed)
+                    }
+                    InspectorSurfaceAction::SetInterp { prop, interp } => {
+                        backend.apply_inspector_interp(&prop, interp)
+                    }
+                };
+                self.install_inspector_selection(cx);
+                self.install_timeline_model(cx);
+                self.request_stage_frame(cx);
+                self.set_status(cx, &status);
             }
         }
 

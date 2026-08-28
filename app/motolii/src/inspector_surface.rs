@@ -30,6 +30,8 @@
 //! まま「打った」「緩めた」と見せると、効いたように見えてから黙って戻る —
 //! 裁定(a)により、それは「できない」より悪い。だから配線の有無を `const` の
 //! スイッチではなく**投影が来たかどうか**そのもので決める(切り替え忘れが起きない)。
+use std::collections::HashMap;
+
 use makepad_widgets::*;
 use motolii_store::Interp;
 
@@ -157,10 +159,10 @@ script_mod! {
         draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.sm}
     }
 
-    // 区間の緩急 — 押すたび LINEAR → EASE → HOLD と巡る。**語が状態を運ぶ**
-    // (FX の ON と同じ規律: 色覚に預けない)。掴めるハンドルとグラフエディタは
-    // 次の波で、ここは「選べる型」だけ
-    let EaseCycle = ButtonFlat{
+    // 区間の緩急 — 押すと INTERVAL EASING 板を開き、この行を名指す(Flow/Alight
+    // Motion 様式、裁定「6型が見える板が正」)。**語が状態を運ぶ**(FX の ON と同じ
+    // 規律)。巡回はしない — 型を選ぶのは板の6チップの仕事
+    let EaseOpen = ButtonFlat{
         width: Fill
         height: mod.tokens.size.chip
         margin: Inset{right: mod.tokens.space.s2}
@@ -177,6 +179,58 @@ script_mod! {
         draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.xs}
     }
 
+    // イージング型の札。**6つとも常に見えている**(隠れていないから読める —
+    // 可視性原理)。選ばれている1つだけが左端 3px の琥珀を出す。この panel が
+    // 既に使っている「左端が値型を語る」文法をそのまま状態に転用する。
+    // 面の色を Rust から差し替えないのは makepad の都合 — Button/CheckBox の
+    // 面の色は uniform で個体ごとに効かない(2026-08-27 実測)。`visible` は
+    // 個体ごとに効くので、印の出し入れで状態を語る
+    let EasingChip = SolidView{
+        width: Fill
+        height: mod.tokens.size.chip
+        flow: Right
+        align: Align{y: 0.5}
+        cursor: MouseCursor.Hand
+        margin: Inset{right: mod.tokens.space.s1}
+        show_bg: true
+        new_batch: true
+        draw_bg.color: mod.tokens.face.well
+        // 印は**幅を予約した枠の中**で出し入れする。枠なしで visible を振ると
+        // 選ぶたびに札の文字が 3px ずれる(makepad の非表示は場所も取らない)
+        on_slot := View{width: 3 height: Fill
+            on := SolidView{width: Fill height: Fill visible: false show_bg: true new_batch: true draw_bg.color: mod.tokens.accent.on}
+        }
+        cap := InkLabel{width: Fill padding: Inset{left: mod.tokens.space.s2} draw_text.color: mod.tokens.ink.body draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.xs}}
+    }
+
+    // 型ごとに意味も範囲も変わる値の欄。見出しは Rust から入れる —
+    // X1 と DECAY と BOUNCES を1つの宣言では書けない
+    let EasingParam = View{
+        width: Fill
+        height: Fill
+        flow: Down
+        visible: false
+        margin: Inset{right: mod.tokens.space.s1}
+        cap := InkLabel{text: "" width: Fill height: Fit draw_text.color: mod.tokens.ink.faint draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.xs}}
+        val := ValueCell{width: Fill height: mod.tokens.size.field margin: Inset{top: 2.0}}
+    }
+
+    mod.widgets.EasingCurveBase = #(EasingCurve::register_widget(vm))
+    mod.widgets.EasingCurve = set_type_default() do mod.widgets.EasingCurveBase{
+        width: Fill
+        height: 84
+        margin: Inset{left: mod.tokens.space.s4 right: mod.tokens.space.s4 bottom: mod.tokens.space.s2}
+        stroke: 1.5
+        samples: 96
+        // 表示(display)の窪み — 値そのものを見せる面(Ableton の DisplayBackground)
+        draw_bg +: {color: mod.tokens.face.display}
+        draw_grid +: {color: mod.tokens.rule.owner}
+        draw_curve +: {color: mod.tokens.accent.on}
+    }
+    // `use mod.widgets.*`(この節の先頭)はこの節より前に登録された物しか掴んで
+    // いない — `ValueCell`/`KeyEaseCell` と同じ理由で完全修飾を引き直す
+    let EasingCurve = mod.widgets.EasingCurve
+
     // property 行の右端。**投影が来るまでは `mark`(読むだけの ◆/◇)しか描かない** —
     // store の今を知らないまま打てるように見せない(Q0/裁定(a))
     mod.widgets.KeyEaseBase = #(KeyEase::register_widget(vm))
@@ -192,7 +246,7 @@ script_mod! {
         prop: ""
         mark: InkLabel{width: Fill align: Align{x: 1.0} draw_text.color: mod.tokens.accent.on draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.sm}}
         key: KeyDot{}
-        ease: EaseCycle{}
+        ease: EaseOpen{}
     }
     // `use mod.widgets.*`(この節の先頭)は**この節より前に登録された物**しか
     // 掴んでいない。同じ節の中で足した型は完全修飾で引き直す — `ValueCell` が
@@ -338,6 +392,65 @@ script_mod! {
             }
         }
 
+        // 区間イージング(wf4、Flow / Alight Motion 様式)— **1区間の正規化 time
+        // remap だけ**を扱う面。Graph View(時間方向の値グラフ)でも空間モーション
+        // パス(位置の 2D 経路)でもない(2026-07-10 決定、`docs/concept.md`)。
+        //
+        // 既定は非表示 — **どの区間かを名指す前に開いていると、何を編集して
+        // いるのか言えない板**になる(Q0)。EASE を押した行の名が見出しに出る
+        easing := SolidView{
+            width: Fill
+            height: Fit
+            flow: Down
+            visible: false
+            show_bg: true
+            new_batch: true
+            draw_bg.color: mod.tokens.face.panel
+
+            easing_rule := InspectorRule{}
+            easing_cap := SolidView{width: Fill height: 18 flow: Right align: Align{y: 0.5}
+                padding: Inset{left: mod.tokens.space.s4 right: mod.tokens.space.s4}
+                show_bg: true new_batch: true draw_bg.color: mod.tokens.face.area
+                easing_name := InkLabel{text: "INTERVAL EASING" width: Fill draw_text.color: mod.tokens.ink.muted draw_text.text_style: theme.font_bold{font_size: mod.tokens.text.xs}}
+                easing_target := InkLabel{text: "" width: Fit draw_text.color: mod.tokens.ink.faint draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.xs}}
+            }
+
+            easing_types_a := SolidView{width: Fill height: mod.tokens.size.form_row flow: Right align: Align{y: 0.5}
+                padding: Inset{left: mod.tokens.space.s4 right: mod.tokens.space.s3}
+                show_bg: true new_batch: true draw_bg.color: mod.tokens.face.panel
+                chip_linear := EasingChip{cap.text: "Linear"}
+                chip_bezier := EasingChip{cap.text: "Bezier"}
+                chip_hold := EasingChip{cap.text: "Hold"}
+            }
+            // 下段の3つが、AE では式(`valueAtTime` の物理シミュ)が要った領域。
+            // 動きの"性格"を区間の補間型として持つ(2026-07-10、先例 Alight Motion)
+            easing_types_b := SolidView{width: Fill height: mod.tokens.size.form_row flow: Right align: Align{y: 0.5}
+                padding: Inset{left: mod.tokens.space.s4 right: mod.tokens.space.s3}
+                show_bg: true new_batch: true draw_bg.color: mod.tokens.face.panel
+                chip_bounce := EasingChip{cap.text: "Bounce"}
+                chip_elastic := EasingChip{cap.text: "Elastic"}
+                chip_steps := EasingChip{cap.text: "Steps"}
+            }
+
+            easing_curve := EasingCurve{}
+
+            easing_params := SolidView{width: Fill height: 34 flow: Right
+                padding: Inset{left: mod.tokens.space.s4 right: mod.tokens.space.s3 bottom: mod.tokens.space.s2}
+                show_bg: true new_batch: true draw_bg.color: mod.tokens.face.panel
+                ep0 := EasingParam{}
+                ep1 := EasingParam{}
+                ep2 := EasingParam{}
+                ep3 := EasingParam{}
+            }
+
+            // この板が何であるかを言う1行。**fps に依らない**のがこの表現の要点で、
+            // それが読めないと Graph View と取り違える
+            easing_note := SolidView{width: Fill height: 16 flow: Right align: Align{y: 0.5}
+                padding: Inset{left: mod.tokens.space.s4} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.panel
+                note := InkLabel{text: "one interval · 0→1 normalized · fps-independent" width: Fill draw_text.color: mod.tokens.ink.faint draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.xs}}
+            }
+        }
+
         // FX STACK と ADVANCED の2節はここに直書きされていたが、**中身が実在しな
         // かった**(2026-08-28、FX レーンで撤去)。`TURBULENT DISPLACE` という
         // plugin は無く、`8 params` も `Amount`/`Size`/`Offset`/`Complexity`/
@@ -389,28 +502,11 @@ fn interp_label(interp: Interp) -> &'static str {
         // 名前の付いていない曲線。グラフエディタが来るまで front は形を作れないので、
         // 「これは EASE でも LINEAR でもない」とだけ言う(嘘の名前を付けない)
         Interp::Bezier { .. } => "BEZIER",
-        // パラメトリック補間型(2026-08-28、`Interp::ease` が意味の家)。名前は
-        // 読めるが、front からの入口はまだ無い(INTERVAL EASING の板は次の波)
+        // パラメトリック補間型(2026-08-28、`Interp::ease` が意味の家)。型は
+        // INTERVAL EASING 板(wf4)の6チップから選べる。
         Interp::Bounce { .. } => "BOUNCE",
         Interp::Elastic { .. } => "ELASTIC",
         Interp::Steps { .. } => "STEPS",
-    }
-}
-
-/// 押すたびに巡る順。LINEAR → EASE → HOLD → LINEAR。
-///
-/// **名前の無い Bezier は LINEAR へ落とす。** 押した人に次が読めない状態を作らない
-/// ためで、曲線そのものを front が編集できるようになる(掴めるハンドル/グラフ
-/// エディタ)のは次の波。
-fn next_interp(interp: Interp) -> Interp {
-    match interp {
-        Interp::Linear => EASY_EASE,
-        found if found == EASY_EASE => Interp::Hold,
-        Interp::Hold => Interp::Linear,
-        Interp::Bezier { .. } => Interp::Linear,
-        // パラメトリック型も名前の無い Bezier と同じ扱いで LINEAR へ戻す —
-        // 押した人に次が読める。型の選択板(wf-4 の INTERVAL EASING)は次の波
-        Interp::Bounce { .. } | Interp::Elastic { .. } | Interp::Steps { .. } => Interp::Linear,
     }
 }
 
@@ -425,6 +521,19 @@ pub enum ScrubValueAction {
     Changed { prop: String, value: f64 },
     /// 確定値。1ジェスチャにつき1回だけ出る(= 1 undo 相当)。
     Committed { prop: String, value: f64 },
+}
+
+/// [`ScrubValue::configure`] に渡す1欄分の目盛り。**新しい抽象ではなく、
+/// 既に `ScrubValue` が `#[live]` で持っている6つの値の束**(引数が6本並ぶのを
+/// 避けるためだけの記録)。
+#[derive(Clone, Copy, Debug)]
+pub struct ScrubSpec<'a> {
+    pub prop: &'a str,
+    pub value: f64,
+    pub min: f64,
+    pub max: f64,
+    pub step: f64,
+    pub precision: usize,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -575,6 +684,29 @@ impl ScrubValue {
         self.emit(cx, true);
     }
 
+    /// 目盛りごと**実行時に**入れ替える口。区間イージングの値は型が変わるたびに
+    /// 意味も範囲も変わる(`X1` は [0,1]、`DECAY` も [0,1] だが桁が違い、
+    /// `BOUNCES` は整数)ので、宣言側で行ごとに固定できない唯一の欄になる。
+    ///
+    /// **掴んでいる最中とタイプ中は何もしない** — 指の下の値を外から書き換えると
+    /// 「効いたように見えてから黙って戻る」が起きる。
+    pub fn configure(&mut self, cx: &mut Cx, spec: ScrubSpec<'_>) {
+        if self.drag.is_some() || self.editing {
+            return;
+        }
+        self.prop.clear();
+        self.prop.push_str(spec.prop);
+        self.suffix.clear();
+        self.min = spec.min;
+        self.max = spec.max;
+        self.step = spec.step;
+        self.precision = spec.precision;
+        self.value = self.clamped(spec.value);
+        self.origin = self.value;
+        self.sync_display(cx);
+        self.redraw(cx);
+    }
+
     /// ドラッグを Esc で捨てる。掴む前の値へ戻して確定を1回出す。
     fn cancel_drag(&mut self, cx: &mut Cx) {
         self.drag = None;
@@ -700,6 +832,230 @@ impl Widget for ScrubValue {
     }
 }
 
+// ---------------------------------------------------------------------------
+// 区間イージング(wf4、2026-07-10 決定 `docs/concept.md`、先例 Alight Motion)
+// ---------------------------------------------------------------------------
+
+/// 型を選び直した時の入り口の値。**空の型を渡して利用者に数字を発明させない** —
+/// どれも先例の既定(Bezier は CSS `ease-in-out`、Elastic は Penner の
+/// `a=1, p=0.3`)。
+const EASE_BEZIER: Interp = Interp::Bezier {
+    x1: 0.42,
+    y1: 0.0,
+    x2: 0.58,
+    y2: 1.0,
+};
+const EASE_BOUNCE: Interp = Interp::Bounce {
+    bounces: 3,
+    decay: 0.45,
+};
+const EASE_ELASTIC: Interp = Interp::Elastic {
+    amplitude: 1.0,
+    period: 0.3,
+};
+const EASE_STEPS: Interp = Interp::Steps { count: 4 };
+
+/// 欄の `prop` に付ける印。ホスト(`main.rs`)が property の名前と取り違えない
+/// ように、property 名には現れない接頭辞にしてある。
+const EASING_PARAM_PREFIX: &str = "easing.p";
+
+/// いま選ばれている型が持つ、編集できる値の並び。**型が変わると本数も意味も
+/// 変わる**ので、宣言側ではなくここが正本になる。
+fn easing_params(interp: Interp) -> Vec<(&'static str, ScrubSpec<'static>)> {
+    // y は [0,1] の外へ出てよい(オーバーシュート = 行き過ぎ)。x は
+    // `cubic_bezier_ease` が単調性のために [0,1] を要求する。
+    let bezier_y = (-4.0, 5.0);
+    match interp {
+        Interp::Hold | Interp::Linear => Vec::new(),
+        Interp::Bezier { x1, y1, x2, y2 } => vec![
+            ("X1", scrub(x1, 0.0, 1.0, 0.004, 3)),
+            ("Y1", scrub(y1, bezier_y.0, bezier_y.1, 0.004, 3)),
+            ("X2", scrub(x2, 0.0, 1.0, 0.004, 3)),
+            ("Y2", scrub(y2, bezier_y.0, bezier_y.1, 0.004, 3)),
+        ],
+        Interp::Bounce { bounces, decay } => vec![
+            (
+                "BOUNCES",
+                scrub(bounces as f64, 0.0, Interp::MAX_BOUNCES as f64, 0.05, 0),
+            ),
+            ("DECAY", scrub(decay, 0.0, 1.0, 0.004, 3)),
+        ],
+        Interp::Elastic { amplitude, period } => vec![
+            // 振幅 1 未満は表現できない(`Interp::Elastic` の doc 参照)ので
+            // 欄の下限もそこに置く — 触れるのに何も起きない帯を作らない
+            ("AMPLITUDE", scrub(amplitude, 1.0, 8.0, 0.01, 2)),
+            ("PERIOD", scrub(period, 0.05, 2.0, 0.004, 3)),
+        ],
+        Interp::Steps { count } => vec![("STEPS", scrub(count as f64, 1.0, 64.0, 0.05, 0))],
+    }
+}
+
+fn scrub(value: f64, min: f64, max: f64, step: f64, precision: usize) -> ScrubSpec<'static> {
+    ScrubSpec {
+        prop: "",
+        value,
+        min,
+        max,
+        step,
+        precision,
+    }
+}
+
+/// [`easing_params`] の `index` 番目を `value` にした型を返す。並びは
+/// [`easing_params`] と同じ順(片方だけ足すと欄と値がずれるので、必ず対で直す)。
+fn easing_with_param(interp: Interp, index: usize, value: f64) -> Interp {
+    match (interp, index) {
+        (Interp::Bezier { y1, x2, y2, .. }, 0) => Interp::Bezier {
+            x1: value.clamp(0.0, 1.0),
+            y1,
+            x2,
+            y2,
+        },
+        (Interp::Bezier { x1, x2, y2, .. }, 1) => Interp::Bezier { x1, y1: value, x2, y2 },
+        (Interp::Bezier { x1, y1, y2, .. }, 2) => Interp::Bezier {
+            x1,
+            y1,
+            x2: value.clamp(0.0, 1.0),
+            y2,
+        },
+        (Interp::Bezier { x1, y1, x2, .. }, 3) => Interp::Bezier { x1, y1, x2, y2: value },
+        (Interp::Bounce { decay, .. }, 0) => Interp::Bounce {
+            bounces: value.round().clamp(0.0, Interp::MAX_BOUNCES as f64) as u32,
+            decay,
+        },
+        (Interp::Bounce { bounces, .. }, 1) => Interp::Bounce {
+            bounces,
+            decay: value.clamp(0.0, 1.0),
+        },
+        (Interp::Elastic { period, .. }, 0) => Interp::Elastic {
+            amplitude: value,
+            period,
+        },
+        (Interp::Elastic { amplitude, .. }, 1) => Interp::Elastic {
+            amplitude,
+            period: value.max(f64::MIN_POSITIVE),
+        },
+        (Interp::Steps { .. }, 0) => Interp::Steps {
+            count: value.round().max(1.0) as u32,
+        },
+        (other, _) => other,
+    }
+}
+
+/// 1区間の正規化イージングを、そのまま絵にする板。
+///
+/// **評価器と同じ関数を呼ぶ**([`Interp::ease`])。front が曲線を描き直すと
+/// 「見えている絵」と「実際に動く物」が黙ってずれるので、規則の家を2つ作らない。
+///
+/// 縦は自動で伸縮する — `Elastic` は 1 を越える(行き過ぎ)ので、[0,1] 固定だと
+/// バネの山が画面の外へ出て「バネに見えない」。0 と 1 の高さ(= 前後のキーの値
+/// そのもの)には線を引き、どこから先が行き過ぎかを読めるようにする。
+#[derive(Script, ScriptHook, Widget)]
+pub struct EasingCurve {
+    #[uid]
+    uid: WidgetUid,
+    #[source]
+    source: ScriptObjectRef,
+    #[walk]
+    walk: Walk,
+
+    #[redraw]
+    #[live]
+    draw_bg: DrawColor,
+    #[live]
+    draw_grid: DrawColor,
+    #[live]
+    draw_curve: DrawColor,
+
+    /// 曲線の最小の太さ(px)。
+    #[live(1.5)]
+    stroke: f64,
+    /// 標本数。上げるほど滑らかになる。`Steps` の段は標本数に関係なく出る
+    /// (段の縦線は隣り合う標本の差として描かれるため)。
+    #[live(96)]
+    samples: usize,
+
+    /// `None` = まだ何も入っていない(= Linear と同じ絵)。
+    #[rust]
+    interp: Option<Interp>,
+}
+
+impl EasingCurve {
+    pub fn set_interp(&mut self, cx: &mut Cx, interp: Interp) {
+        if self.interp != Some(interp) {
+            self.interp = Some(interp);
+            self.redraw(cx);
+        }
+    }
+}
+
+impl Widget for EasingCurve {
+    fn handle_event(&mut self, _cx: &mut Cx, _event: &Event, _scope: &mut Scope) {}
+
+    fn draw_walk(&mut self, cx: &mut Cx2d, _scope: &mut Scope, walk: Walk) -> DrawStep {
+        let rect = cx.walk_turtle(walk);
+        self.draw_bg.draw_abs(cx, rect);
+        if rect.size.x <= 4.0 || rect.size.y <= 4.0 {
+            return DrawStep::done();
+        }
+
+        let interp = self.interp.unwrap_or(Interp::Linear);
+        let count = self.samples.clamp(8, 512);
+        let mut ys = Vec::with_capacity(count + 1);
+        // 端の 0/1 は常に見せる — 行き過ぎの量は「1 からどれだけ」なので、
+        // 1 が画面の中に無いと読めない。
+        let (mut lo, mut hi) = (0.0f64, 1.0f64);
+        for i in 0..=count {
+            let y = interp.ease(i as f64 / count as f64);
+            let y = if y.is_finite() { y } else { 0.0 };
+            lo = lo.min(y);
+            hi = hi.max(y);
+            ys.push(y);
+        }
+        let pad = ((hi - lo) * 0.08).max(0.02);
+        let (lo, hi) = (lo - pad, hi + pad);
+        let span = (hi - lo).max(1e-6);
+
+        let inset = 2.0;
+        let x0 = rect.pos.x + inset;
+        let width = (rect.size.x - inset * 2.0).max(1.0);
+        let y0 = rect.pos.y + inset;
+        let height = (rect.size.y - inset * 2.0).max(1.0);
+        let to_y = |v: f64| y0 + (hi - v) / span * height;
+
+        self.draw_grid.new_draw_call(cx);
+        for v in [0.0, 1.0] {
+            self.draw_grid.draw_abs(
+                cx,
+                Rect {
+                    pos: dvec2(x0, to_y(v)),
+                    size: dvec2(width, 1.0),
+                },
+            );
+        }
+
+        self.draw_curve.new_draw_call(cx);
+        let column = (width / count as f64).max(1.0);
+        for i in 0..count {
+            let a = to_y(ys[i]);
+            let b = to_y(ys[i + 1]);
+            self.draw_curve.draw_abs(
+                cx,
+                Rect {
+                    pos: dvec2(x0 + width * i as f64 / count as f64, a.min(b)),
+                    size: dvec2(column, (a - b).abs().max(self.stroke)),
+                },
+            );
+        }
+        DrawStep::done()
+    }
+}
+
+/// 「押して、その上で離した」= クリック。外へ滑らせて離した物は取り消し。
+fn released_over(view: &ViewRef, actions: &Actions) -> bool {
+    view.finger_up(actions).is_some_and(|fe| fe.is_over)
+}
+
 /// property 行の右端が外へ出す口。`prop` は**行の**表示 id(`"position"`)で、
 /// 値セルの `prop`(`"position.x"`)より1段浅い — キーと緩急は track ごとに1組で、
 /// 成分ごとには無いから(store の `KeyframeTrack` がそう出来ている)。
@@ -709,8 +1065,10 @@ pub enum KeyEaseAction {
     None,
     /// playhead にキーを打つ(`keyed: true`)/ 消す(`false`)。
     ToggleKey { prop: String, keyed: bool },
-    /// playhead を含む区間の緩急を変える。
-    SetInterp { prop: String, interp: Interp },
+    /// EASE を押した。INTERVAL EASING 板をこの行で開く(front ローカル — 板の
+    /// 開閉は host の Document を触らない)。板が実際に緩急を変えたら
+    /// [`InspectorSurfaceAction::SetInterp`] がそこから直接出る。
+    OpenEasing { prop: String },
 }
 
 /// property 行の右端。**投影が来るまでは読むだけの ◆/◇ しか描かない。**
@@ -809,16 +1167,11 @@ impl Widget for KeyEase {
                 );
             }
             if let ButtonAction::Clicked(_) = action.as_widget_action().cast() {
-                if let Some(current) = self.interp {
-                    let next = next_interp(current);
-                    self.interp = Some(next);
-                    self.ease.set_text(cx, interp_label(next));
-                    self.redraw(cx);
+                if self.interp.is_some() {
                     cx.widget_action(
                         self.uid,
-                        KeyEaseAction::SetInterp {
+                        KeyEaseAction::OpenEasing {
                             prop: self.prop.clone(),
-                            interp: next,
                         },
                     );
                 }
@@ -891,6 +1244,15 @@ pub struct InspectorSurface {
     source: ScriptObjectRef,
     #[deref]
     view: View,
+
+    /// いま INTERVAL EASING 板が開いている行の表示 id。空 = 板を閉じている。
+    #[rust]
+    easing_prop: String,
+    /// 行ごとの区間イージング。**`set_property_keys` が投影で埋める** — front
+    /// ローカルの写しであって store の正本ではない(`ScrubValue::value` が
+    /// 投影を待つのと同じ状態)。
+    #[rust]
+    easing: HashMap<String, Interp>,
 }
 
 impl InspectorSurface {
@@ -970,6 +1332,133 @@ impl InspectorSurface {
                 cell.set_state(cx, keyed, interp);
             }
         }
+        // INTERVAL EASING 板の投影もここに乗る(呼び場所を増やさない) — `interp`
+        // が来た行だけ板の写しを更新し、その行がいま開いていれば絵も引き直す。
+        if let Some(interp) = interp {
+            self.easing.insert(prop.to_owned(), interp);
+            if self.easing_prop == prop {
+                self.refresh_easing(cx);
+            }
+        }
+    }
+
+    fn current_easing(&self) -> Interp {
+        self.easing
+            .get(&self.easing_prop)
+            .copied()
+            .unwrap_or(Interp::Linear)
+    }
+
+    /// EASE を押した行の区間を開く。**見出しにその property の名を出す** —
+    /// 何を編集しているか言えない板にしないため(Q0)。
+    fn open_easing(&mut self, cx: &mut Cx, prop: &str) {
+        self.easing_prop = prop.to_owned();
+        self.view.view(cx, ids!(easing)).set_visible(cx, true);
+        self.view
+            .label(cx, ids!(easing_target))
+            .set_text(cx, &prop.to_uppercase());
+        self.refresh_easing(cx);
+    }
+
+    /// 型を差し替える。**同じ型を押し直しても値は捨てない** — 押すたびに
+    /// 手で詰めた4値が既定へ戻るのは「効いたように見えてから黙って戻る」側。
+    fn pick_easing_kind(&mut self, cx: &mut Cx, interp: Interp) {
+        if self.easing_prop.is_empty() || self.current_easing().kind() == interp.kind() {
+            return;
+        }
+        self.easing.insert(self.easing_prop.clone(), interp);
+        self.refresh_easing(cx);
+        self.emit_easing(cx);
+    }
+
+    fn apply_easing_param(&mut self, cx: &mut Cx, index: usize, value: f64, committed: bool) {
+        if self.easing_prop.is_empty() {
+            return;
+        }
+        let next = easing_with_param(self.current_easing(), index, value);
+        self.easing.insert(self.easing_prop.clone(), next);
+        // 掴んでいる最中は曲線だけ動かす。欄を書き戻すのは確定した時だけ
+        // (指の下の値を外から書き換えない — `ScrubValue::configure` の約束)。
+        if let Some(mut curve) = self
+            .view
+            .widget(cx, ids!(easing_curve))
+            .borrow_mut::<EasingCurve>()
+        {
+            curve.set_interp(cx, next);
+        }
+        if committed {
+            self.refresh_easing(cx);
+            self.emit_easing(cx);
+        }
+    }
+
+    /// 板が確定した緩急を host へ渡す唯一の口。**store へ書けるのは host だけ**
+    /// (Inspector は Document を持たない) — `InspectorSurfaceAction::SetInterp` を
+    /// 直接この面の uid から出す(`KeyEase::ToggleKey` と同じ経路)。
+    fn emit_easing(&self, cx: &mut Cx) {
+        if self.easing_prop.is_empty() {
+            return;
+        }
+        cx.widget_action(
+            self.uid,
+            InspectorSurfaceAction::SetInterp {
+                prop: self.easing_prop.clone(),
+                interp: self.current_easing(),
+            },
+        );
+    }
+
+    /// 板の全部を、いまの型から描き直す。
+    fn refresh_easing(&mut self, cx: &mut Cx) {
+        let interp = self.current_easing();
+        let kind = interp.kind();
+        for (chip, name) in [
+            (ids!(chip_linear.on), "Linear"),
+            (ids!(chip_bezier.on), "Bezier"),
+            (ids!(chip_hold.on), "Hold"),
+            (ids!(chip_bounce.on), "Bounce"),
+            (ids!(chip_elastic.on), "Elastic"),
+            (ids!(chip_steps.on), "Steps"),
+        ] {
+            self.view.view(cx, chip).set_visible(cx, kind == name);
+        }
+
+        if let Some(mut curve) = self
+            .view
+            .widget(cx, ids!(easing_curve))
+            .borrow_mut::<EasingCurve>()
+        {
+            curve.set_interp(cx, interp);
+        }
+
+        let params = easing_params(interp);
+        let columns: [(&[LiveId], &[LiveId], &[LiveId]); 4] = [
+            (ids!(ep0), ids!(ep0.cap), ids!(ep0.val)),
+            (ids!(ep1), ids!(ep1.cap), ids!(ep1.val)),
+            (ids!(ep2), ids!(ep2.cap), ids!(ep2.val)),
+            (ids!(ep3), ids!(ep3.cap), ids!(ep3.val)),
+        ];
+        for (index, (col, cap, val)) in columns.into_iter().enumerate() {
+            let Some((caption, spec)) = params.get(index) else {
+                // 使わない欄は**消す**。空の欄を残すと「打てるのに何も起きない」
+                // 物が並ぶ(Q0)
+                self.view.view(cx, col).set_visible(cx, false);
+                continue;
+            };
+            self.view.view(cx, col).set_visible(cx, true);
+            self.view.label(cx, cap).set_text(cx, caption);
+            let prop = format!("{EASING_PARAM_PREFIX}{index}");
+            if let Some(mut cell) = self.view.widget(cx, val).borrow_mut::<ScrubValue>() {
+                cell.configure(
+                    cx,
+                    ScrubSpec {
+                        prop: &prop,
+                        ..*spec
+                    },
+                );
+            }
+        }
+        self.view.redraw(cx);
     }
 }
 
@@ -986,10 +1475,29 @@ impl WidgetMatchEvent for InspectorSurface {
         let mut out = Vec::new();
         for action in actions {
             let widget_action = action.as_widget_action();
-            if let ScrubValueAction::Committed { prop, value } = widget_action.cast() {
-                if !prop.is_empty() {
-                    out.push(InspectorSurfaceAction::SetValue { prop, value });
+            // 値セルの確定。`easing.p{n}` 接頭辞は INTERVAL EASING 板の4欄自身
+            // (`EASING_PARAM_PREFIX` の doc)— host の SetValue へは出さず、板の
+            // 中で完結させる(板が確定した緩急は `emit_easing` が別途出す)。
+            match widget_action.cast::<ScrubValueAction>() {
+                ScrubValueAction::Changed { prop, value } => {
+                    if let Some(index) = prop
+                        .strip_prefix(EASING_PARAM_PREFIX)
+                        .and_then(|rest| rest.parse::<usize>().ok())
+                    {
+                        self.apply_easing_param(cx, index, value, false);
+                    }
                 }
+                ScrubValueAction::Committed { prop, value } => {
+                    if let Some(index) = prop
+                        .strip_prefix(EASING_PARAM_PREFIX)
+                        .and_then(|rest| rest.parse::<usize>().ok())
+                    {
+                        self.apply_easing_param(cx, index, value, true);
+                    } else if !prop.is_empty() {
+                        out.push(InspectorSurfaceAction::SetValue { prop, value });
+                    }
+                }
+                ScrubValueAction::None => {}
             }
             match widget_action.cast() {
                 KeyEaseAction::ToggleKey { prop, keyed } => {
@@ -997,14 +1505,32 @@ impl WidgetMatchEvent for InspectorSurface {
                         out.push(InspectorSurfaceAction::ToggleKey { prop, keyed });
                     }
                 }
-                KeyEaseAction::SetInterp { prop, interp } => {
+                // 板の開閉は front ローカル(host へ出さない) — `open_easing` が
+                // 見出しへ行の名を出し、板を開く。
+                KeyEaseAction::OpenEasing { prop } => {
                     if !prop.is_empty() {
-                        out.push(InspectorSurfaceAction::SetInterp { prop, interp });
+                        self.open_easing(cx, &prop);
                     }
                 }
                 KeyEaseAction::None => {}
             }
         }
+
+        // 6型チップ。**押した瞬間に確定**(値セルと違いドラッグで途中経過を
+        // 見せる物ではない)。`emit_easing` が host への SetInterp を出す。
+        for (chip, interp) in [
+            (ids!(chip_linear), Interp::Linear),
+            (ids!(chip_bezier), EASE_BEZIER),
+            (ids!(chip_hold), Interp::Hold),
+            (ids!(chip_bounce), EASE_BOUNCE),
+            (ids!(chip_elastic), EASE_ELASTIC),
+            (ids!(chip_steps), EASE_STEPS),
+        ] {
+            if released_over(&self.view.view(cx, chip), actions) {
+                self.pick_easing_kind(cx, interp);
+            }
+        }
+
         for action in out {
             cx.widget_action(self.uid, action);
         }
