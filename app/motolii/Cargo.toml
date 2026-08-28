@@ -36,6 +36,18 @@ motolii-media.workspace = true
 # なく先例の踏襲。`rfd::` を直接書くのは `browser_surface.rs` の1関数
 # (`pick_media_path`)だけ — grep 1本で境界を確認できる、を旧 `RfdDialogs` から引く。
 rfd = "0.15"
+# Stage ギズモ(S20)。renderer 非依存、viewport 座標の頂点列を返すだけの薄い借用先
+# — 描画基盤は自作しない(`src/stage_chrome.rs` の `DrawGizmoTriangle` が Makepad
+# 側で頂点を敷くだけ)。glam は 0.30 系(workspace と一致、transform-gizmo 自身も
+# `glam = { version = "0.30", features = ["mint"] }` を引く)なので、
+# `transform_gizmo::math::DMat4` 等の再輸出をそのまま使い、glam を直接引かない。
+transform-gizmo = "0.5"
+# pick 室(TARGET5)の当たり判定だけに使う — `motolii_store::ResolvedLayer.placement.transform`
+# が `glam::Affine2` を公開フィールドとして返す(motolii-store 自身の Cargo.toml が
+# 同じ理由で直接依存に昇格させた物と同じ版)ので、その値へ `transform_point2` を呼ぶために
+# workspace の版をそのまま引く。**transform-gizmo 側の `gmath`(独自の glam の写し)とは
+# 別物** — stage_chrome.rs はこちらを引かず、境界を混ぜない。
+glam.workspace = true
 
 # ゼロコピー(裁定251)の実体 — 共有 Surface へ直接描く経路。ここは非交渉。
 [target.'cfg(target_os = "macos")'.dependencies]

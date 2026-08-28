@@ -15,8 +15,9 @@ use motolii_audio::{AudioProgram, PcmCache, PlaybackSession};
 use motolii_engine::{Engine, ObservationCamera};
 use motolii_shell_state::Session;
 use motolii_store::{
-    AssetDraft, AssetId, Document, Fps, Intent, LayerAttrsPatch, LayerId, LayerMeta, LayerSource,
-    LayerTiming, Marker, RationalTime, SourceFingerprintV1,
+    property, AssetDraft, AssetId, Document, Fps, Interp, Intent, Keyframe, KeyframeTrack,
+    LayerAttrsPatch, LayerId, LayerMeta, LayerSource, LayerTiming, Marker, PropertyId,
+    RationalTime, SourceFingerprintV1, StoreView, Value,
 };
 use motolii_timeline_projection::{
     self as timeline_pane, stacking::restacked, waveform_bucket_range, StackDirection,
@@ -44,7 +45,7 @@ use browser_surface::{AssetKind, BrowserAsset, BrowserEditAction, BrowserSurface
 use fx_stack::{FxStack, FxStackAction, FxStackModel, FxWrite};
 use inspector_surface::InspectorSurface;
 use settings_surface::{SettingsSurface, SettingsSurfaceAction};
-use stage_chrome::{StageChrome, StageChromeAction, StageViewCamera};
+use stage_chrome::{GizmoCommit, GizmoTarget, StageChrome, StageChromeAction, StageViewCamera};
 use stage_surface::{SharedOsHandle, SharedSurfaceDesc, StagePresent, StageRoom, StageVerdict};
 use timeline_surface::{
     ClipEdge, LaneFlag, TimelineEditAction, TimelineLane, TimelineMarker, TimelineModel,
@@ -461,6 +462,113 @@ struct BackendBridge {
     /// 再生の開始/停止のたびに `AudioProgram` を組み直しても、同じ素材の decode を
     /// 使い回す(`program.rs` の doc が指す `caches` そのもの)。
     audio_pcm_cache: HashMap<(String, u32), Arc<PcmCache>>,
+}
+
+/// Stage ギズモ(S20 TARGET4)の書き手。「AE の指の規約」
+/// (`fx_stack.rs::apply` の doc — キーが無い property は時刻0に Hold で静止値、
+/// キーがある property はプレイヘッドへ直前の interp を写して打つ)をそのまま踏襲する
+/// 自由関数 — `BackendBridge::apply_gizmo_commit` から成分ごとに1回呼ぶ。
+fn write_gizmo_component(
+    store: &StoreView<'_>,
+    layer: LayerId,
+    fps: Fps,
+    playhead: i64,
+    property_name: &str,
+    value: Value,
+) -> Result<Intent, String> {
+    let property = PropertyId::new(property_name).map_err(|error| error.to_string())?;
+    let Ok(t0) = RationalTime::try_from_frame(0, fps) else {
+        return Err("Stage: frame 0 does not map to a time".to_owned());
+    };
+    let mut track = store.track(layer, &property).ok().flatten().unwrap_or_default();
+    let (t, interp) = if track.keys().is_empty() {
+        (t0, Interp::Hold)
+    } else {
+        let Ok(t) = RationalTime::try_from_frame(playhead.max(0), fps) else {
+            return Err("Stage: the playhead does not map to a time".to_owned());
+        };
+        // 直前のキーから写す。区間イージングを勝手に発明しない(`fx_stack.rs` と同じ規約)。
+        let interp = track
+            .keys()
+            .iter()
+            .rev()
+            .find(|key| key.t <= t)
+            .or_else(|| track.keys().first())
+            .map(|key| key.interp)
+            .unwrap_or(Interp::Hold);
+        (t, interp)
+    };
+    track.insert(Keyframe {
+        t,
+        value,
+        interp,
+        spatial: None,
+    });
+    Ok(Intent::SetTrack {
+        layer,
+        property,
+        track,
+    })
+}
+
+/// Stage の空きクリックの当たり判定(S20 TARGET5、室の名前固定 — 口を変えずに
+/// 中身だけ深められる)。**v1実装**: 寸法が分かるレイヤー
+/// (`resolved.declared_size != [0,0]` — `motolii_store::LayerSource::declared_size`
+/// が `Some` を返すのは実質 Solid のみ、Media は engine の probe を要するので
+/// front からは `[0,0]` にしか見えない、Null/Shape/Text/Group はそもそも寸法という
+/// 概念を持たない)の矩形(`declared_size` × `placement.transform`)を全走査して、
+/// 当たった中で重ね順(`order`)が最も手前の物を返す。GPU instance picking への
+/// 深化はこの関数の中身を差し替えるだけで、呼び手(`StageChromeAction::StagePicked`
+/// の受け手)は変えなくてよい。
+fn stage_pick(store: &StoreView<'_>, t: RationalTime, comp_point: [f32; 2]) -> Option<LayerId> {
+    let point = glam::Vec2::new(comp_point[0], comp_point[1]);
+    let mut best: Option<(LayerId, i16)> = None;
+    for layer in store.layers() {
+        let Ok(Some(resolved)) = store.resolve(layer, t) else {
+            continue;
+        };
+        let [w, h] = resolved.declared_size;
+        if w <= 0.0 || h <= 0.0 {
+            continue;
+        }
+        let transform = resolved.placement.transform;
+        let corners = [
+            transform.transform_point2(glam::Vec2::new(0.0, 0.0)),
+            transform.transform_point2(glam::Vec2::new(w, 0.0)),
+            transform.transform_point2(glam::Vec2::new(w, h)),
+            transform.transform_point2(glam::Vec2::new(0.0, h)),
+        ];
+        if !point_in_quad(point, corners) {
+            continue;
+        }
+        let order = resolved.placement.order;
+        if best.map(|(_, best_order)| order > best_order).unwrap_or(true) {
+            best = Some((layer, order));
+        }
+    }
+    best.map(|(layer, _)| layer)
+}
+
+/// 点が(任意の巻き順の)凸四角形の内側にあるか。全4辺の符号付き面積が同符号
+/// (または0)なら内側 — `stage_chrome.rs` の三角形塗りつぶし判定(barycentric の
+/// 符号)と同じ手口を辺の数だけ増やしただけ。
+fn point_in_quad(p: glam::Vec2, corners: [glam::Vec2; 4]) -> bool {
+    let mut sign = 0.0_f32;
+    for i in 0..4 {
+        let a = corners[i];
+        let b = corners[(i + 1) % 4];
+        let edge = b - a;
+        let to_point = p - a;
+        let cross = edge.x * to_point.y - edge.y * to_point.x;
+        if cross.abs() > f32::EPSILON {
+            if sign == 0.0 {
+                sign = cross.signum();
+            } else if cross.signum() != sign {
+                return false;
+            }
+        }
+    }
+    true
 }
 
 enum TimelineUpdate {
@@ -1126,6 +1234,107 @@ impl BackendBridge {
         (name, Self::layer_kind_label(&meta.source).to_owned())
     }
 
+    /// comp の寸法。選択の有無によらず — pick(TARGET5)が comp 空間の点を作るのに要る。
+    fn gizmo_comp_dims(&self) -> Option<(f32, f32)> {
+        let store = self.doc.view();
+        let composition = store.composition().ok().flatten()?;
+        Some((composition.width as f32, composition.height as f32))
+    }
+
+    /// 選択レイヤーの world transform(ギズモの対象、S20 TARGET2)。**新しい計算を
+    /// しない** — `StoreView::resolve` は合成器と同じ経路
+    /// (`ResolvedLayer.placement.transform`)なので、その値をそのまま渡す。hidden/
+    /// timing 外/comp 無し/decompose 失敗のいずれかで `None`(ギズモは出ない —
+    /// AE で見えない層を掴めないのと同じ)。skew が乗っていると
+    /// `to_scale_angle_translation` の分解は近似になる(EVIDENCE_GAP)。
+    fn gizmo_target(&self) -> Option<GizmoTarget> {
+        let layer = self.session.selection?;
+        let store = self.doc.view();
+        let composition = store.composition().ok().flatten()?;
+        let t = RationalTime::try_from_frame(self.session.playhead, composition.fps).ok()?;
+        let resolved = store.resolve(layer, t).ok().flatten()?;
+        let (scale, angle_radians, translation) =
+            resolved.placement.transform.to_scale_angle_translation();
+        Some(GizmoTarget {
+            layer,
+            translation: [translation.x, translation.y],
+            rotation_degrees: angle_radians.to_degrees(),
+            scale: [scale.x, scale.y],
+        })
+    }
+
+    /// ドラッグを離した結果を Document へ書く(S20 TARGET4)。触った成分だけ
+    /// (`GizmoCommit` の `Some`)を1つの property track として書く — 1回のドラッグは
+    /// 1種類のハンドルしか動かさないので、`apply_all` に積む intent は常に1個 = 1 undo。
+    fn apply_gizmo_commit(&mut self, commit: &GizmoCommit) -> String {
+        let store = self.doc.view();
+        if !store.has_layer(commit.layer) {
+            return format!("Stage: layer {} no longer exists", commit.layer.0);
+        }
+        let Some(composition) = store.composition().ok().flatten() else {
+            return "Stage: the composition is unreadable".to_owned();
+        };
+        let fps = composition.fps;
+        let playhead = self.session.playhead;
+
+        let mut intent = None;
+        let mut label = "";
+        if let Some(translation) = commit.translation {
+            match write_gizmo_component(
+                &store,
+                commit.layer,
+                fps,
+                playhead,
+                property::POSITION,
+                Value::Vec2([translation[0] as f64, translation[1] as f64]),
+            ) {
+                Ok(built) => {
+                    intent = Some(built);
+                    label = "position";
+                }
+                Err(error) => return error,
+            }
+        } else if let Some(rotation) = commit.rotation_degrees {
+            match write_gizmo_component(
+                &store,
+                commit.layer,
+                fps,
+                playhead,
+                property::ROTATION,
+                Value::F64(rotation as f64),
+            ) {
+                Ok(built) => {
+                    intent = Some(built);
+                    label = "rotation";
+                }
+                Err(error) => return error,
+            }
+        } else if let Some(scale) = commit.scale {
+            match write_gizmo_component(
+                &store,
+                commit.layer,
+                fps,
+                playhead,
+                property::SCALE,
+                Value::Vec2([scale[0] as f64, scale[1] as f64]),
+            ) {
+                Ok(built) => {
+                    intent = Some(built);
+                    label = "scale";
+                }
+                Err(error) => return error,
+            }
+        }
+        drop(store);
+        let Some(intent) = intent else {
+            return String::new();
+        };
+        if let Err(error) = self.doc.apply_all([intent]) {
+            return format!("Stage: gizmo write failed: {error}");
+        }
+        format!("Stage: layer {} {label}", commit.layer.0)
+    }
+
     /// `LayerSource` の人が読む種別名。捏造ではなく `LayerSource` の6 variant を
     /// そのまま名付けているだけ(新しい語彙を発明しない)。
     fn layer_kind_label(source: &LayerSource) -> &'static str {
@@ -1711,6 +1920,7 @@ impl App {
                 // param の値は時刻の関数。プレイヘッドが動いたら FX の欄も引き直す。
                 self.install_fx_model(cx);
                 self.install_inspector_selection(cx);
+                self.install_stage_gizmo(cx);
                 self.request_stage_frame(cx);
                 self.set_status(cx, &status);
             }
@@ -1718,16 +1928,19 @@ impl App {
                 self.install_timeline_model(cx);
                 self.install_fx_model(cx);
                 self.install_inspector_selection(cx);
+                self.install_stage_gizmo(cx);
                 self.request_stage_frame(cx);
                 self.set_status(cx, &status);
             }
             // 選択が動いた。FX STACK は**選択レイヤーの**効果を映すので、
             // 絵が変わらなくても面は引き直す。Inspector のヘッダ(発注 S5b)も同じ理由で
             // ここに揃える — 選択は Document を書かないので `Model` 以外の枝を通らない。
+            // Stage ギズモ(S20)も選択が動くたび引き直す(同じ理由)。
             TimelineUpdate::Model(status) => {
                 self.install_timeline_model(cx);
                 self.install_fx_model(cx);
                 self.install_inspector_selection(cx);
+                self.install_stage_gizmo(cx);
                 self.set_status(cx, &status);
             }
             TimelineUpdate::Status(status) => {
@@ -1797,6 +2010,41 @@ impl App {
         if let Some(mut surface) = inspector.borrow_mut::<InspectorSurface>() {
             surface.set_selection_summary(cx, &name, &kind);
         };
+    }
+
+    /// 選択レイヤーの world transform を StageChrome へ渡す(ギズモの対象、S20)。
+    /// StageChrome は Document を持たないので、ここが唯一の継ぎ目
+    /// (`install_inspector_selection`/`set_stage_failures` と同じ形)。
+    fn install_stage_gizmo(&mut self, cx: &mut Cx) {
+        let Some(backend) = self.backend.as_ref() else {
+            return;
+        };
+        let comp_dims = backend.gizmo_comp_dims();
+        let target = backend.gizmo_target();
+        if let Some(mut chrome) = self.stage_chrome_ref(cx).borrow_mut::<StageChrome>() {
+            chrome.set_stage_gizmo(cx, comp_dims, target);
+        }
+    }
+
+    /// Stage の空きクリック(S20 TARGET5)。当たり判定(`stage_pick`)は Document を
+    /// 読むだけなのでここで行う — StageChrome から運ばれるのは comp 空間の点だけ。
+    /// 当たれば選択、外せば解除(`select_from_timeline` の `layer_id: None` 規約が
+    /// そのまま「必ず全解除」を担う)。
+    fn apply_stage_pick(&mut self, cx: &mut Cx, comp_point: [f32; 2], additive: bool) {
+        let Some(backend) = self.backend.as_mut() else {
+            return;
+        };
+        let store = backend.doc.view();
+        let Some(composition) = store.composition().ok().flatten() else {
+            return;
+        };
+        let Ok(t) = RationalTime::try_from_frame(backend.session.playhead, composition.fps) else {
+            return;
+        };
+        let picked = stage_pick(&store, t, comp_point).map(|layer| layer.0);
+        drop(store);
+        let status = backend.select_from_timeline(picked, additive);
+        self.apply_timeline_update(cx, TimelineUpdate::Model(status));
     }
 
     fn browser(&self, cx: &mut Cx) -> WidgetRef {
@@ -2171,6 +2419,7 @@ impl App {
         self.install_timeline_model(cx);
         self.install_fx_model(cx);
         self.install_inspector_selection(cx);
+        self.install_stage_gizmo(cx);
         self.request_stage_frame(cx);
     }
 
@@ -2183,6 +2432,7 @@ impl MatchEvent for App {
         self.install_timeline_model(cx);
         self.install_fx_model(cx);
         self.install_inspector_selection(cx);
+        self.install_stage_gizmo(cx);
         self.install_browser_catalog(cx);
         self.install_settings(cx);
         self.request_stage_frame(cx);
@@ -2280,6 +2530,7 @@ impl MatchEvent for App {
                 }
                 self.install_fx_model(cx);
                 self.install_inspector_selection(cx);
+                self.install_stage_gizmo(cx);
                 if !write.status.is_empty() {
                     self.set_status(cx, &write.status);
                 }
@@ -2312,14 +2563,52 @@ impl MatchEvent for App {
             }
         }
 
-        // 視点が動いたら Stage を描き直す。**Document は触らない** — 見回しは
-        // 意味を変えないので `install_timeline_model` も undo も通らない(裁定157/271)。
+        // Stage chrome の action(視点変更・ギズモ確定・pick、S20)。3種とも同じ
+        // uid から出るので1回だけ集めて種類ごとに分ける(FX の action ループと同じ形)。
         if let Some(uid) = self.stage_chrome_uid(cx) {
-            if actions
-                .filter_widget_actions_cast::<StageChromeAction>(uid)
-                .any(|action| matches!(action, StageChromeAction::ViewChanged))
-            {
-                self.request_stage_frame(cx);
+            let stage_actions: Vec<StageChromeAction> =
+                actions.filter_widget_actions_cast(uid).collect();
+            for action in stage_actions {
+                match action {
+                    StageChromeAction::None => {}
+                    // 視点が動いたら Stage を描き直す。**Document は触らない** —
+                    // 見回しは意味を変えないので `install_timeline_model` も undo も
+                    // 通らない(裁定157/271)。
+                    StageChromeAction::ViewChanged => {
+                        self.request_stage_frame(cx);
+                    }
+                    // ギズモのドラッグが確定した(S20 TARGET4)。値は
+                    // `take_gizmo_commit` から1回だけ取り出す — action 自体は運ばない。
+                    StageChromeAction::GizmoCommitted => {
+                        let commit = self
+                            .stage_chrome_ref(cx)
+                            .borrow_mut::<StageChrome>()
+                            .and_then(|mut chrome| chrome.take_gizmo_commit());
+                        let Some(commit) = commit else {
+                            continue;
+                        };
+                        let status = self
+                            .backend
+                            .as_mut()
+                            .map(|backend| backend.apply_gizmo_commit(&commit))
+                            .unwrap_or_default();
+                        if status.is_empty() {
+                            continue;
+                        }
+                        self.install_timeline_model(cx);
+                        self.install_stage_gizmo(cx);
+                        self.request_stage_frame(cx);
+                        self.set_status(cx, &status);
+                    }
+                    // 空きクリック(S20 TARGET5)。当たり判定は Document を読む
+                    // main.rs の仕事 — StageChrome は comp 空間の点しか運ばない。
+                    StageChromeAction::StagePicked {
+                        comp_point,
+                        additive,
+                    } => {
+                        self.apply_stage_pick(cx, comp_point, additive);
+                    }
+                }
             }
         }
 
@@ -2371,6 +2660,7 @@ impl MatchEvent for App {
             self.install_timeline_model(cx);
             self.install_fx_model(cx);
             self.install_inspector_selection(cx);
+            self.install_stage_gizmo(cx);
             self.request_stage_frame(cx);
         }
     }

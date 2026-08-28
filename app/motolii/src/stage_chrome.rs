@@ -11,6 +11,15 @@
 //! main.rs(継ぎ目)の仕事。
 use crate::gesture_input::{GestureDevice, GesturePhase, GestureSample};
 use makepad_widgets::*;
+use motolii_store::LayerId;
+// Stage ギズモ(S20)。借用先(supervisor 確定) — renderer 非依存、viewport 座標の
+// 頂点列を返すだけ。`gmath` は glam の再輸出(transform-gizmo 自身の glam、workspace の
+// glam とは別の写しなので、境界を跨ぐ時は薄い helper 関数だけを通す — 新しい数学型は作らない)。
+// `TransformPivotPoint` だけ prelude に無いので `config` から直接引く(確認済み: 出典 =
+// github.com/urholaukkarinen/transform-gizmo 0.5.0 タグの `crates/transform-gizmo/src/prelude.rs`)。
+use transform_gizmo::config::TransformPivotPoint;
+use transform_gizmo::math as gmath;
+use transform_gizmo::{Gizmo, GizmoConfig, GizmoInteraction, GizmoMode, GizmoOrientation, GizmoResult};
 
 // 正本: Ableton Live 12 Dark 実画面（2026-08-26 添付）からのサンプル値。記憶で埋めない。
 //   バー #3d3d3d / 面 #4f4f4f / 縁1px #2d2d2d / 窪み #282828
@@ -120,6 +129,38 @@ script_mod! {
         draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.sm}
     }
 
+    // Stage ギズモ(S20)。`transform-gizmo` の `Gizmo::draw()` が返す頂点列
+    // (viewport 座標、三角形の羅列)を敷くための最小 shader。「既にやっている物」の
+    // 継ぎ目 — `widgets/src/chart.rs` の `DrawChartSegment`(このリポジトリが引く
+    // makepad fork に実在する、instance に生の座標を持たせて pixel shader で判定する型)
+    // と同じ手口。三角形内外判定は符号付き面積(barycentric の符号)— 巻き順を問わない。
+    set_type_default() do #(DrawGizmoTriangle::script_shader(vm)){
+        ..mod.draw.DrawQuad
+        pixel: fn() {
+            let p = self.pos * self.rect_size
+            let a = self.tri_v0
+            let b = self.tri_v1
+            let c = self.tri_v2
+            let d1 = (p.x - b.x) * (a.y - b.y) - (a.x - b.x) * (p.y - b.y)
+            let d2 = (p.x - c.x) * (b.y - c.y) - (b.x - c.x) * (p.y - c.y)
+            let d3 = (p.x - a.x) * (c.y - a.y) - (c.x - a.x) * (p.y - a.y)
+            let has_neg = d1 < 0.0 || d2 < 0.0 || d3 < 0.0
+            let has_pos = d1 > 0.0 || d2 > 0.0 || d3 > 0.0
+            if has_neg && has_pos {
+                return #0000
+            }
+            return Pal.premul(self.tri_color)
+        }
+    }
+
+    // ギズモの overlay(UI chrome — scene 内容ではない、共有 Surface へは触らない)。
+    // 頂点は StageChrome が絶対 window 画素で計算し、ここは draw_abs で敷くだけ。
+    mod.widgets.StageGizmoOverlayBase = #(StageGizmoOverlay::register_widget(vm))
+    mod.widgets.StageGizmoOverlay = set_type_default() do mod.widgets.StageGizmoOverlayBase{
+        width: Fill
+        height: Fill
+    }
+
     mod.widgets.StageChromeBase = #(StageChrome::register_widget(vm))
     mod.widgets.StageChrome = set_type_default() do mod.widgets.StageChromeBase{
         // 見回しの手触り。--hot が拾えるのは script_mod! だけで、Rust の const は
@@ -161,6 +202,8 @@ script_mod! {
                 // トークン化しない
                 stage_frame := Image{width: Fill height: Fill fit: ImageFit.Smallest}
                 stage_error := InkLabel{width: Fill height: Fill align: Align{x: 0.5 y: 0.5} text: "" draw_text.color: mod.tokens.accent.on draw_text.text_style: theme.font_code{font_size: mod.tokens.text.md}}
+                // ギズモ overlay(S20)。同じ Overlay flow の最上段 — comp の絵の上に敷く。
+                stage_gizmo := StageGizmoOverlay{}
             }
         }
         band_edge := SolidView{width: Fill height: mod.tokens.rule.size show_bg: true new_batch: true draw_bg.color: mod.tokens.face.down}
@@ -212,6 +255,84 @@ script_mod! {
     }
 }
 
+/// ギズモの三角形1枚ぶんの shader(`transform_gizmo::GizmoDrawData` の頂点列を
+/// 敷くための最小型)。`v0`/`v1`/`v2` は **描く先の `draw_abs` rect に対する相対座標**
+/// (`widgets/src/chart.rs::DrawChartSegment` の `seg_a`/`seg_b` と同じ約束 — `DrawQuad`
+/// の pixel shader は `self.pos * self.rect_size` で rect ローカルの画素位置しか
+/// 持たないため)。
+#[derive(Script, ScriptHook, Debug)]
+#[repr(C)]
+pub struct DrawGizmoTriangle {
+    #[deref]
+    draw_super: DrawQuad,
+    #[live]
+    pub tri_v0: Vec2f,
+    #[live]
+    pub tri_v1: Vec2f,
+    #[live]
+    pub tri_v2: Vec2f,
+    #[live]
+    pub tri_color: Vec4f,
+}
+
+/// 描く直前の形に均した1三角形(絶対 window 画素の外接矩形 + rect ローカルの頂点)。
+/// `GizmoDrawData` の色は頂点ごとだが、`DrawGizmoTriangle` は面1枚に1色しか持てない
+/// ので、頂点0の色を面の色として使う(近似 — 皮の詰めは後回し、EVIDENCE_GAP 参照)。
+#[derive(Clone, Copy, Debug)]
+struct GizmoScreenTriangle {
+    bounds: Rect,
+    v0: Vec2f,
+    v1: Vec2f,
+    v2: Vec2f,
+    color: Vec4f,
+}
+
+/// ギズモの overlay。UI chrome であって scene 内容ではない — 共有 Surface へは触らず、
+/// StageChrome が絶対 window 画素で計算した三角形を並べて敷くだけの葉ノード。
+/// `widgets/src/perf_graph.rs::PerfGraph` と同型の最小 custom-draw widget
+/// (`#[derive(Widget)]` が `WidgetNode` を作るので手で書かない)。
+#[derive(Script, ScriptHook, Widget)]
+pub struct StageGizmoOverlay {
+    #[uid]
+    uid: WidgetUid,
+    #[source]
+    source: ScriptObjectRef,
+    #[walk]
+    walk: Walk,
+    #[layout]
+    layout: Layout,
+    #[redraw]
+    #[live]
+    draw_tri: DrawGizmoTriangle,
+    #[rust]
+    triangles: Vec<GizmoScreenTriangle>,
+}
+
+impl StageGizmoOverlay {
+    fn set_triangles(&mut self, cx: &mut Cx, triangles: Vec<GizmoScreenTriangle>) {
+        self.triangles = triangles;
+        self.redraw(cx);
+    }
+}
+
+impl Widget for StageGizmoOverlay {
+    fn handle_event(&mut self, _cx: &mut Cx, _event: &Event, _scope: &mut Scope) {}
+
+    fn draw_walk(&mut self, cx: &mut Cx2d, _scope: &mut Scope, walk: Walk) -> DrawStep {
+        // 三角形はすべて絶対座標(`draw_abs`)で敷くので turtle の戻り矩形は使わないが、
+        // 親レイアウトへの占有は必要(`PerfGraph::draw_walk` と同じ形)。
+        let _ = cx.walk_turtle(walk);
+        for tri in &self.triangles {
+            self.draw_tri.tri_v0 = tri.v0;
+            self.draw_tri.tri_v1 = tri.v1;
+            self.draw_tri.tri_v2 = tri.v2;
+            self.draw_tri.tri_color = tri.color;
+            self.draw_tri.draw_abs(cx, tri.bounds);
+        }
+        DrawStep::done()
+    }
+}
+
 /// User View の観測視点。**Document へ書かない**(裁定272 — 出力カメラではない)。
 ///
 /// 単位は **comp の寸法に対する比**。`motolii_engine::ObservationCamera` は world
@@ -239,17 +360,54 @@ impl Default for StageViewCamera {
     }
 }
 
+/// 選択レイヤーの world transform(ギズモの対象)。**main.rs が Document から
+/// 解決して押し込む** — StageChrome は Document を持たない(module doc 冒頭)ので、
+/// これが唯一の継ぎ目(`StageChrome::set_failures` と同じ形)。
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct GizmoTarget {
+    pub layer: LayerId,
+    /// comp 空間(world、`ResolvedLayer.placement.transform` と同じ単位)の並進、画素。
+    pub translation: [f32; 2],
+    /// 度・時計回り(`property::ROTATION` と同じ約束)。
+    pub rotation_degrees: f32,
+    pub scale: [f32; 2],
+}
+
+/// ドラッグを離した結果、Document へ書くべき値。**触った成分だけ `Some`** —
+/// 1回のドラッグは translate/rotate/scale のうち1種類のハンドルしか動かさない
+/// (canon: 「離した時に `Intent::SetTrack` 1発」)。main.rs が Document を持つので、
+/// 実際に書くのは main.rs の仕事 — StageChrome はここまでしか運ばない。
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct GizmoCommit {
+    pub layer: LayerId,
+    pub translation: Option<[f32; 2]>,
+    pub rotation_degrees: Option<f32>,
+    pub scale: Option<[f32; 2]>,
+}
+
 /// Stage 面が外へ出す唯一の意図。**視点が変わった**とだけ言い、絵を描き直すかどうかは
 /// 継ぎ目(main.rs)が決める(timeline の `TimelineSurfaceAction` と同型)。
 ///
 /// タブの切替も観測カメラの移動も同じ1本で運ぶ — どちらも「Stage に出る絵が変わった」
 /// という同じ帰結しか持たないので、口を2本にすると呼び手が同じ処理を2回書くことになる。
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+// f32 を運ぶ variant(`StagePicked`)を足したので `Eq` は落とす(f32 は `Eq` を
+// 持たない) — 既存の読み手は `matches!`/`PartialEq` しか使っていない。
+#[derive(Clone, Debug, Default, PartialEq)]
 pub enum StageChromeAction {
     #[default]
     None,
     /// 視点(タブ or 観測カメラ)が変わった。Stage の絵を描き直す必要がある。
     ViewChanged,
+    /// ギズモのドラッグが確定した(release)。`take_gizmo_commit` で1回だけ取り出す —
+    /// action 自体は「何かが確定した」の通知だけで、値は運ばない(`set_failures` と
+    /// 同じ「通知は action・値は getter」の分離)。
+    GizmoCommitted,
+    /// 空きクリック(ギズモの上ではない、`comp` 板の上)。当たり判定は Document を
+    /// 持つ main.rs の仕事(`stage_pick` 室) — ここは comp 空間の点を運ぶだけ。
+    StagePicked {
+        comp_point: [f32; 2],
+        additive: bool,
+    },
 }
 
 /// 掴んで見回している最中の指。**1本だけ**(観測視点に多点は要らない)。
@@ -391,6 +549,26 @@ pub struct StageChrome {
     view_zoom_min: f64,
     #[live(32.0)]
     view_zoom_max: f64,
+    // --- Stage ギズモ(S20) ---
+    /// comp の寸法。**選択の有無によらず**毎フレーム main.rs から渡す —
+    /// pick(TARGET5)は選択が無くても comp 空間の点を作れる必要があるため、
+    /// `gizmo_target` にだけ乗せると空きクリックの入口が塞がる。
+    #[rust]
+    comp_dims: Option<(f32, f32)>,
+    /// main.rs が押し込んだ「今どのレイヤーを、どこに描くか」。`set_stage_gizmo` の
+    /// 唯一の書き手。
+    #[rust]
+    gizmo_target: Option<GizmoTarget>,
+    /// `transform-gizmo` 本体。`Gizmo: Default` なので `#[rust]` フィールドとして持てる。
+    #[rust]
+    gizmo: Gizmo,
+    /// ドラッグ中だけ true。**この間だけ**カメラの pan/zoom(`handle_view_gestures`)を
+    /// 同じイベントで動かさない(TARGET6)。
+    #[rust]
+    gizmo_drag_active: bool,
+    /// release で1回だけ積む書き込み予約。`take_gizmo_commit` が取り出すと空になる。
+    #[rust]
+    gizmo_pending_commit: Option<GizmoCommit>,
 }
 
 impl StageChrome {
@@ -597,6 +775,381 @@ impl StageChrome {
             None => {}
         }
     }
+
+    // --- Stage ギズモ(S20) ---
+
+    /// main.rs → StageChrome の唯一の継ぎ目(`set_failures` と同じ形)。`comp_dims`
+    /// は選択の有無によらず毎回渡す — pick(TARGET5)は選択が無くても comp 空間の
+    /// 点を作れる必要があるので、`gizmo_target` にだけ乗せると空きクリックの
+    /// 入口が塞がる。
+    pub fn set_stage_gizmo(
+        &mut self,
+        cx: &mut Cx,
+        comp_dims: Option<(f32, f32)>,
+        target: Option<GizmoTarget>,
+    ) {
+        self.comp_dims = comp_dims;
+        // 選択が別レイヤーへ変わった/消えたら、進行中のドラッグは意味を失う
+        // (transform-gizmo 側の drag 状態と食い違うより、素直に打ち切る方が安全)。
+        if target.map(|t| t.layer) != self.gizmo_target.map(|t| t.layer) {
+            self.gizmo_drag_active = false;
+        }
+        self.gizmo_target = target;
+        self.refresh_gizmo(cx);
+    }
+
+    /// 直近の commit を1回だけ取り出す。main.rs が Document へ書いた後は空になる。
+    pub fn take_gizmo_commit(&mut self) -> Option<GizmoCommit> {
+        self.gizmo_pending_commit.take()
+    }
+
+    /// pan/zoom から成る正射影 view+proj(3D 数学の退化ケース、canon 冒頭)。
+    /// Camera タブでは出力カメラを front が知らないので恒等を使う近似
+    /// (EVIDENCE_GAP: Document のカメラに pan/zoom/roll があるとズレる)。
+    ///
+    /// 導出は新しい約束を作っていない — `comp_area` の「板いっぱいに comp が
+    /// 映っている」前提のまま、`pan_by_pixels`/`zoom_by` が既に定義している
+    /// 画面⇄comp-fraction の写像を clip 空間へ写しただけ。screen 側の実寸は
+    /// `GizmoConfig::viewport` が別に持つので、ここは正規化した比だけを組む。
+    fn gizmo_camera_matrices(&self, comp_width: f32, comp_height: f32) -> (gmath::DMat4, gmath::DMat4) {
+        let cam = if self.is_user_view() {
+            self.view_camera
+        } else {
+            StageViewCamera::default()
+        };
+        let cw = comp_width.max(1.0) as f64;
+        let ch = comp_height.max(1.0) as f64;
+        let zoom = cam.zoom.max(1e-6);
+        let scale_x = 2.0 * zoom / cw;
+        let scale_y = -2.0 * zoom / ch;
+        let offset_x = -zoom * (1.0 + 2.0 * cam.pan_fraction[0]);
+        let offset_y = zoom * (1.0 + 2.0 * cam.pan_fraction[1]);
+        let projection = gmath::DMat4::from_cols(
+            gmath::DVec4::new(scale_x, 0.0, 0.0, 0.0),
+            gmath::DVec4::new(0.0, scale_y, 0.0, 0.0),
+            gmath::DVec4::new(0.0, 0.0, 1.0, 0.0),
+            gmath::DVec4::new(offset_x, offset_y, 0.0, 1.0),
+        );
+        (gmath::DMat4::IDENTITY, projection)
+    }
+
+    /// 画面画素 → comp 空間の点(pick 室の入力作り)。`gizmo_camera_matrices` と
+    /// 対になる逆写像 — `zoom_by` が既に定義した `u`/`under_pointer` の関係をそのまま使う。
+    fn screen_to_comp_point(
+        &self,
+        screen: [f64; 2],
+        rect: Rect,
+        comp_width: f32,
+        comp_height: f32,
+    ) -> [f32; 2] {
+        let cam = if self.is_user_view() {
+            self.view_camera
+        } else {
+            StageViewCamera::default()
+        };
+        let zoom = cam.zoom.max(1e-6);
+        let u = [
+            (screen[0] - rect.pos.x - rect.size.x * 0.5) / rect.size.x,
+            (screen[1] - rect.pos.y - rect.size.y * 0.5) / rect.size.y,
+        ];
+        let fx = cam.pan_fraction[0] + u[0] / zoom;
+        let fy = cam.pan_fraction[1] + u[1] / zoom;
+        [
+            ((fx + 0.5) * comp_width as f64) as f32,
+            ((fy + 0.5) * comp_height as f64) as f32,
+        ]
+    }
+
+    fn gizmo_config(&self, rect: Rect, comp_width: f32, comp_height: f32) -> GizmoConfig {
+        let viewport = gmath::Rect::from_min_size(
+            gmath::Pos2::new(rect.pos.x as f32, rect.pos.y as f32),
+            gmath::Vec2::new(rect.size.x as f32, rect.size.y as f32),
+        );
+        let (view, projection) = self.gizmo_camera_matrices(comp_width, comp_height);
+        GizmoConfig {
+            view_matrix: view.into(),
+            projection_matrix: projection.into(),
+            viewport,
+            // z=0 の退化ケース(canon 冒頭)。Z 軸に沿う/View 相対のモードは平坦な
+            // 世界では意味を持たないので外す — TranslateXY と RotateZ が AE の
+            // 「2D レイヤーを掴む」に対応する(view=identity で world Z がそのまま
+            // カメラの前方軸になるので、RotateZ が画面内の回転になる)。
+            modes: GizmoMode::TranslateX
+                | GizmoMode::TranslateY
+                | GizmoMode::TranslateXY
+                | GizmoMode::RotateZ
+                | GizmoMode::ScaleX
+                | GizmoMode::ScaleY
+                | GizmoMode::ScaleUniform,
+            orientation: GizmoOrientation::Global,
+            pivot_point: TransformPivotPoint::MedianPoint,
+            ..Default::default()
+        }
+    }
+
+    fn idle_interaction() -> GizmoInteraction {
+        GizmoInteraction {
+            cursor_pos: (0.0, 0.0),
+            hovered: false,
+            drag_started: false,
+            dragging: false,
+        }
+    }
+
+    fn gizmo_transform(target: GizmoTarget) -> gmath::Transform {
+        gmath::Transform::from_scale_rotation_translation(
+            gmath::DVec3::new(target.scale[0] as f64, target.scale[1] as f64, 1.0),
+            gmath::DQuat::from_rotation_z((target.rotation_degrees as f64).to_radians()),
+            gmath::DVec3::new(target.translation[0] as f64, target.translation[1] as f64, 0.0),
+        )
+    }
+
+    /// `Gizmo::update` が返した絶対 Transform → `GizmoTarget` の形へ戻す。
+    /// `gizmo_config` は RotateZ しか許可していないので、抽出した回転軸は
+    /// 常にほぼ ±Z のはず — 符号だけ見て度数へ畳む。
+    fn target_from_gizmo_transform(base: GizmoTarget, t: gmath::Transform) -> GizmoTarget {
+        let translation = gmath::DVec3::from(t.translation);
+        let scale = gmath::DVec3::from(t.scale);
+        let rotation = gmath::DQuat::from(t.rotation);
+        let (axis, angle) = rotation.to_axis_angle();
+        let signed_angle = if axis.z < 0.0 { -angle } else { angle };
+        GizmoTarget {
+            layer: base.layer,
+            translation: [translation.x as f32, translation.y as f32],
+            rotation_degrees: signed_angle.to_degrees() as f32,
+            scale: [scale.x as f32, scale.y as f32],
+        }
+    }
+
+    /// `GizmoResult` の種類だけを見て、触った成分だけ運ぶ `GizmoCommit` を作る
+    /// (canon: 「離した時に `Intent::SetTrack` 1発」)。
+    fn gizmo_commit_for(layer: LayerId, live: GizmoTarget, result: GizmoResult) -> Option<GizmoCommit> {
+        Some(match result {
+            GizmoResult::Translation { .. } => GizmoCommit {
+                layer,
+                translation: Some(live.translation),
+                rotation_degrees: None,
+                scale: None,
+            },
+            GizmoResult::Rotation { .. } => GizmoCommit {
+                layer,
+                translation: None,
+                rotation_degrees: Some(live.rotation_degrees),
+                scale: None,
+            },
+            GizmoResult::Scale { .. } => GizmoCommit {
+                layer,
+                translation: None,
+                rotation_degrees: None,
+                scale: Some(live.scale),
+            },
+            // Arcball は `gizmo_config` の modes に入れていないので理論上出ない。
+            // 出た場合は書かない(未対応の枝を黙って握りつぶすのではなく、
+            // そもそも到達しない枝として明示する)。
+            GizmoResult::Arcball { .. } => return None,
+        })
+    }
+
+    fn set_overlay_triangles(&mut self, cx: &mut Cx, triangles: Vec<GizmoScreenTriangle>) {
+        if let Some(mut overlay) = self
+            .view
+            .widget(cx, ids!(stage_void.comp.stage_gizmo))
+            .borrow_mut::<StageGizmoOverlay>()
+        {
+            overlay.set_triangles(cx, triangles);
+        }
+    }
+
+    /// `Gizmo::draw()` の頂点(viewport 座標、絶対 window 画素)を overlay の
+    /// 三角形列へ均す。色は頂点0のものを面色として使う(`GizmoScreenTriangle` doc 参照)。
+    fn push_gizmo_draw(&mut self, cx: &mut Cx) {
+        let data = self.gizmo.draw();
+        let mut triangles = Vec::with_capacity(data.indices.len() / 3);
+        for face in data.indices.chunks_exact(3) {
+            let (i0, i1, i2) = (face[0] as usize, face[1] as usize, face[2] as usize);
+            let (Some(p0), Some(p1), Some(p2), Some(c0)) = (
+                data.vertices.get(i0),
+                data.vertices.get(i1),
+                data.vertices.get(i2),
+                data.colors.get(i0),
+            ) else {
+                continue;
+            };
+            let min_x = p0[0].min(p1[0]).min(p2[0]) - 1.0;
+            let min_y = p0[1].min(p1[1]).min(p2[1]) - 1.0;
+            let max_x = p0[0].max(p1[0]).max(p2[0]) + 1.0;
+            let max_y = p0[1].max(p1[1]).max(p2[1]) + 1.0;
+            let bounds = Rect {
+                pos: dvec2(min_x as f64, min_y as f64),
+                size: dvec2((max_x - min_x) as f64, (max_y - min_y) as f64),
+            };
+            triangles.push(GizmoScreenTriangle {
+                bounds,
+                v0: vec2(p0[0] - min_x, p0[1] - min_y),
+                v1: vec2(p1[0] - min_x, p1[1] - min_y),
+                v2: vec2(p2[0] - min_x, p2[1] - min_y),
+                color: vec4(c0[0], c0[1], c0[2], c0[3]),
+            });
+        }
+        self.set_overlay_triangles(cx, triangles);
+    }
+
+    /// ギズモの内部状態(位置・回転・拡大)を現在の target/camera へ合わせ、絵を
+    /// 引き直す。**ドラッグ中は何もしない** — 位置の追随は `apply_gizmo_interaction`
+    /// の専任で、ここが横から `update()` を呼ぶと transform-gizmo 内部の
+    /// `active_subgizmo_id` が idle 扱いで消えてしまう(出典: crate 本体
+    /// `Gizmo::update` — `interaction.dragging == false` の間 active subgizmo を
+    /// 終える分岐がある)。
+    fn refresh_gizmo(&mut self, cx: &mut Cx) {
+        if self.gizmo_drag_active {
+            return;
+        }
+        let (Some((comp_width, comp_height)), Some(target)) = (self.comp_dims, self.gizmo_target) else {
+            self.set_overlay_triangles(cx, Vec::new());
+            return;
+        };
+        let area = self.comp_area(cx);
+        if area == Area::Empty {
+            return;
+        }
+        let rect = area.rect(cx);
+        if rect.size.x <= 0.0 || rect.size.y <= 0.0 {
+            return;
+        }
+        // `self.gizmo.update_config(self.gizmo_config(...))` は書けない —
+        // `self.gizmo_config` は `&self` 全体を借りるので、`self.gizmo` への
+        // `&mut` と同時に取れない(借用チェッカ)。先に値を作ってから渡す。
+        let config = self.gizmo_config(rect, comp_width, comp_height);
+        self.gizmo.update_config(config);
+        let targets = [Self::gizmo_transform(target)];
+        let _ = self.gizmo.update(Self::idle_interaction(), &targets);
+        self.push_gizmo_draw(cx);
+    }
+
+    /// `update()` を1回呼び、結果を見た目だけ追随させる。**Document へは書かない**
+    /// (canon: ドラッグ中はギズモ自身が追随して見せるだけ)。`releasing` の時だけ
+    /// commit を積む — 毎フレーム SetTrack は禁止。
+    fn apply_gizmo_interaction(
+        &mut self,
+        cx: &mut Cx,
+        base: GizmoTarget,
+        interaction: GizmoInteraction,
+        releasing: bool,
+    ) {
+        let targets = [Self::gizmo_transform(base)];
+        if let Some((result, updated)) = self.gizmo.update(interaction, &targets) {
+            if let Some(t) = updated.first().copied() {
+                let live = Self::target_from_gizmo_transform(base, t);
+                if releasing {
+                    self.gizmo_pending_commit = Self::gizmo_commit_for(base.layer, live, result);
+                    if self.gizmo_pending_commit.is_some() {
+                        cx.widget_action(self.uid, StageChromeAction::GizmoCommitted);
+                    }
+                }
+            }
+        }
+        self.push_gizmo_draw(cx);
+    }
+
+    /// ギズモの掴み + 空きクリックの pick(TARGET5/6)。**戻り値 = このイベントを
+    /// ギズモが消費したか** — true ならカメラの pan/zoom は同じイベントで動かさない
+    /// (`Widget::handle_event` 側の優先順位)。pick 自体は戻り値に含めない — User
+    /// View での空きクリックがパンの開始を兼ねるのは妨げない(選択が変わるのと
+    /// 見回しが始まるのは独立な帰結なので、同じ指の1回のイベントが両方を運んでよい)。
+    fn handle_gizmo_and_pick(&mut self, cx: &mut Cx, event: &Event) -> bool {
+        let area = self.comp_area(cx);
+        if area == Area::Empty {
+            return false;
+        }
+        let rect = area.rect(cx);
+        if rect.size.x <= 0.0 || rect.size.y <= 0.0 {
+            return false;
+        }
+
+        match event.hits(cx, area) {
+            Hit::FingerDown(fe) if fe.is_primary_hit() => {
+                let cursor = (fe.abs.x as f32, fe.abs.y as f32);
+                let gizmo_ready = match (self.comp_dims, self.gizmo_target) {
+                    (Some((cw, ch)), Some(_)) => {
+                        // 借用の順序に注意(`refresh_gizmo` と同じ理由): 先に値を
+                        // 作ってから `self.gizmo` へ渡す。
+                        let config = self.gizmo_config(rect, cw, ch);
+                        self.gizmo.update_config(config);
+                        true
+                    }
+                    _ => false,
+                };
+                if gizmo_ready && self.gizmo.pick_preview(cursor) {
+                    self.gizmo_drag_active = true;
+                    let base = self.gizmo_target.expect("gizmo_ready implies Some");
+                    self.apply_gizmo_interaction(
+                        cx,
+                        base,
+                        GizmoInteraction {
+                            cursor_pos: cursor,
+                            hovered: true,
+                            drag_started: true,
+                            dragging: true,
+                        },
+                        false,
+                    );
+                    true
+                } else {
+                    // 空きクリック(ギズモの上ではない) — pick 室へ、値だけ運ぶ。
+                    if let Some((comp_width, comp_height)) = self.comp_dims {
+                        let comp_point = self.screen_to_comp_point(
+                            [fe.abs.x, fe.abs.y],
+                            rect,
+                            comp_width,
+                            comp_height,
+                        );
+                        cx.widget_action(
+                            self.uid,
+                            StageChromeAction::StagePicked {
+                                comp_point,
+                                additive: fe.modifiers.shift,
+                            },
+                        );
+                    }
+                    false
+                }
+            }
+            Hit::FingerMove(fe) if self.gizmo_drag_active => {
+                if let Some(base) = self.gizmo_target {
+                    self.apply_gizmo_interaction(
+                        cx,
+                        base,
+                        GizmoInteraction {
+                            cursor_pos: (fe.abs.x as f32, fe.abs.y as f32),
+                            hovered: true,
+                            drag_started: false,
+                            dragging: true,
+                        },
+                        false,
+                    );
+                }
+                true
+            }
+            Hit::FingerUp(fe) if self.gizmo_drag_active => {
+                self.gizmo_drag_active = false;
+                if let Some(base) = self.gizmo_target {
+                    self.apply_gizmo_interaction(
+                        cx,
+                        base,
+                        GizmoInteraction {
+                            cursor_pos: (fe.abs.x as f32, fe.abs.y as f32),
+                            hovered: fe.is_over,
+                            drag_started: false,
+                            dragging: false,
+                        },
+                        true,
+                    );
+                }
+                true
+            }
+            _ => false,
+        }
+    }
 }
 
 impl WidgetNode for StageChrome {
@@ -662,11 +1215,17 @@ impl Widget for StageChrome {
             band_dirty = true;
         }
 
+        // ギズモの掴み + 空きクリックの pick(S20)。カメラより先に見る — ギズモが
+        // 掴んでいる間は同じイベントでカメラの pan/zoom を動かさない(TARGET6)。
+        let gizmo_claimed = self.handle_gizmo_and_pick(cx, event);
+
         // 見回し(User View のみ)。タブ・⌂ の後に置く — 同じイベントで両方が
         // 動くことは無いが、状態の持ち主が1つである順序を読める形にしておく
-        if self.handle_view_gestures(cx, event) {
+        if !gizmo_claimed && self.handle_view_gestures(cx, event) {
             view_changed = true;
             band_dirty = true;
+            // カメラが動いたのでギズモの画面位置も引き直す(TARGET2: 追随)。
+            self.refresh_gizmo(cx);
         }
 
         // live edit は宣言側の文字を既定へ戻す。状態は `#[rust]` なので残っており、
