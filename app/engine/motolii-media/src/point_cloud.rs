@@ -85,3 +85,50 @@ pub fn load_point_cloud(path: &Path) -> Result<PointCloudData, PointCloudError> 
 
     Ok(PointCloudData { positions, colors })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write as _;
+
+    const ASCII_PLY: &str = "ply\n\
+format ascii 1.0\n\
+element vertex 3\n\
+property float x\n\
+property float y\n\
+property float z\n\
+property uchar red\n\
+property uchar green\n\
+property uchar blue\n\
+end_header\n\
+0 0 0 255 0 0\n\
+1 0 0 0 255 0\n\
+0 1 0 0 0 255\n";
+
+    #[test]
+    fn extension_recognition_delegates_to_re_importer() {
+        assert!(is_point_cloud_extension("ply"));
+        assert!(is_point_cloud_extension("PLY"));
+        assert!(!is_point_cloud_extension("mp4"));
+        assert!(!is_point_cloud_extension("glb"));
+        // Motolii が独自に持っていない列挙 — re_importer の定数そのものを検査する。
+        assert_eq!(POINT_CLOUD_EXTENSIONS, re_importer::SUPPORTED_POINT_CLOUD_EXTENSIONS);
+    }
+
+    #[test]
+    fn load_point_cloud_reads_positions_and_colors_from_a_real_ply_file() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("three_points.ply");
+        std::fs::File::create(&path)
+            .and_then(|mut f| f.write_all(ASCII_PLY.as_bytes()))
+            .expect("write fixture ply");
+
+        let data = load_point_cloud(&path).expect("load_point_cloud");
+        assert_eq!(data.point_count(), 3);
+        assert_eq!(data.positions, vec![[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]);
+        assert_eq!(
+            data.colors,
+            vec![[255, 0, 0, 255], [0, 255, 0, 255], [0, 0, 255, 255]]
+        );
+    }
+}
