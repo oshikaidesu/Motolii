@@ -2,6 +2,34 @@
 
 **この文書は現在地であって歴史ではない。** 進んだら書き換える。次のセッションはここから読む。
 
+## 追記(2026-08-28 午後 — 新監督引き継ぎ時点、機械で再確認)
+
+この文書が書かれた後に多くが着地済み。**下の「★ 次の一手」は既に終わっている**
+(`4015886d` engine: open front-facing seams — `media_frames`/`render_frame_with_view_camera`/
+効果カタログ、この文書より後の commit)。同様に `TRIM_HANDLE_WIRED`/`SELECTION_WIRED`/
+`IMPORT_WIRED` の塞ぎ栓は全部撤去済み(`timeline_surface.rs:831` のコメントが撤去の記録、
+`browser_surface.rs` に `AdmitAsset`/`PlaceAsset` 結線済み)。ギズモ・区間イージング板も
+`aa4a32bc`/`6145a05f` で着地。**この文書の「駅1→2→3→4」表と「★次の一手」は鵜呑みにしない
+— 次のセッションはまず `git log --oneline -25` と実窓で現在地を再検証すること**
+(このセッションでの実測、docs より git log が正)。
+
+**訂正(2026-08-28 夜、レーン検収後)**: Export パネルの Still ボタンで `/g`/`/snap` が
+タイムアウトし `SIGKILL` が要った現象は、**バグではなかった**。実測(`sample` によるスタック
+採取)で確定した原因: `export_surface.rs` の `pick_still_path()` が `StartStill` action を
+出す**前に**、`ExportSurface::handle_event` の中で `rfd::FileDialog::save_file()` →
+`-[NSSavePanel runModal]` を**同期的に**呼んでいた。つまりクリック直後に本物のネイティブ
+保存ダイアログが開いてメインスレッドがそこで止まっていただけ——`--remote` の HTTP ブリッジは
+AppKit のモーダルへ経路を持たないので `/g`/`/snap` が届かず、"ハング" に見えた。
+**普通のデスクトップアプリとして正しい挙動**(保存ダイアログは同期モーダルが標準)であり、
+人間が実窓で触る分には何も壊れていない。GPU device 競合の仮説(`self.engine` を UI スレッド上で
+同期 `render_frame` する経路)は誤りだったが、**潜在的な危険は実在した**ので防御的に修正済み:
+`start_still_export` が動画書き出しと同じ形(別スレッド+独立 `Engine::new()`)へ揃えた
+(`main.rs` 773行〜、commit `e4acc8b7`、main へ統合済み)。回帰試験
+`motolii-export/tests/still_off_thread.rs` を追加、静止画書き出しが実際に PNG を吐くことを
+初めて機械的に確認した。**残課題(裁定不要、優先度低)**: `pick_still_path`/`pick_export_path`
+を `rfd::AsyncFileDialog` へ替えれば `--remote` の自動検証もダイアログを跨げるようになるが、
+今のままでも人間の実使用には支障が無い。
+
 ## 第一目標
 
 **GUI だけで、普通の編集の輪が回ること**(2026-08-27 利用者裁定)。
