@@ -344,6 +344,21 @@ fn build_layer(
             out["ty"] = serde_json::json!(5);
             out["t"] = build_text_data(ctx, layer, unsupported)?;
         }
+        LayerSource::PointCloud { path, .. } => {
+            // Lottie は 3D 点群という概念自体を持たない(ベクタ/ラスタのみ)——
+            // `Group` が Null(`ty: 3`)へ寄せるのと同じ形で書くが、こちらは
+            // 「絵を持たない印」ではなく本来絵を持つ layer が欠落するので、
+            // `Group` と違い明示的に `unsupported` へ積む(黙って空にしない)。
+            out["ty"] = serde_json::json!(3);
+            unsupported.push(UnsupportedForLottie {
+                layer: Some(layer),
+                category: "point-cloud",
+                detail: format!(
+                    "点群 layer({path})に対応する Lottie layer type が無いため \
+                     Null layer(`ty: 3`)として書いた——絵は出ない"
+                ),
+            });
+        }
     }
 
     Ok(out)

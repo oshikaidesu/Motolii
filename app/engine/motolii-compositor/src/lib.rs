@@ -103,6 +103,7 @@ mod device;
 mod effects;
 mod headless;
 mod matte;
+mod point_cloud;
 mod presentable;
 mod render_basic;
 mod render_effects;

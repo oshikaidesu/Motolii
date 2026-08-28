@@ -8,7 +8,7 @@ use std::collections::HashMap;
 
 use motolii_compositor::GpuTexture2D;
 use motolii_core::CompSpec;
-use motolii_media::{probe, read_frame_at};
+use motolii_media::{load_point_cloud, probe, read_frame_at};
 use motolii_store::{
     LayerId, LayerSource, RationalTime, ResolvedLayer, ShapeNode, StoreView, TextDocument,
 };
@@ -57,6 +57,8 @@ impl Engine {
             self.text_texture_for(view, layer.id, t, comp)
         } else if layer.source == LayerSource::Shape {
             self.shape_texture_for(view, layer.id, comp)
+        } else if let LayerSource::PointCloud { path, .. } = &layer.source {
+            self.point_cloud_texture_for(path, comp)
         } else {
             self.texture_for(&layer.source, layer.source_frame)
         }
@@ -87,6 +89,8 @@ impl Engine {
                 .map(Vec::as_slice)
                 .unwrap_or(&[]);
             self.shape_texture_from_shapes(shapes, layer.id, comp)
+        } else if let LayerSource::PointCloud { path, .. } = &layer.source {
+            self.point_cloud_texture_for(path, comp)
         } else {
             self.texture_for(&layer.source, layer.source_frame)
         }
@@ -249,6 +253,79 @@ impl Engine {
         Ok((Some(texture), [raster.width as f32, raster.height as f32]))
     }
 
+    /// `LayerSource::PointCloud` の texture 化。`text_texture_from_document`/
+    /// `shape_texture_from_shapes` と同型 — canvas は comp 全域に固定し、板が
+    /// そのまま comp を覆う(3D点群を「comp を覆うレンダリング済みビュー」として
+    /// 平面合成に混ぜる。板の上で 3D カメラを手で振れる機能はこの切片の非目標)。
+    ///
+    /// **A05 隔離**(`LayerSource::Media` 枝と同じ規律): 読み込み/GPU描画の失敗は
+    /// この layer だけへ閉じる——`self.layer_failures` へ積み、呼び出し元へは
+    /// `Err` を伝播しない(comp 全体の合成を道連れにしない)。
+    fn point_cloud_texture_for(
+        &mut self,
+        path: &str,
+        comp: CompSpec,
+    ) -> Result<(Option<GpuTexture2D>, [f32; 2]), EngineError> {
+        let natural = [comp.width as f32, comp.height as f32];
+
+        let data = match self.point_clouds.get(path) {
+            Some(data) => Some(data.clone()),
+            None => match self.failed_point_clouds.get(path) {
+                Some(reason) => {
+                    self.layer_failures.push(reason.clone());
+                    None
+                }
+                None => match load_point_cloud(std::path::Path::new(path)) {
+                    Ok(data) => {
+                        self.point_clouds.insert(path.to_owned(), data.clone());
+                        Some(data)
+                    }
+                    Err(err) => {
+                        let reason = format!("点群を読めない: {path}: {err}");
+                        self.failed_point_clouds
+                            .insert(path.to_owned(), reason.clone());
+                        self.layer_failures.push(reason);
+                        None
+                    }
+                },
+            },
+        };
+        let Some(data) = data else {
+            return Ok((None, natural));
+        };
+        if data.positions.is_empty() {
+            // ply は読めたが点が1つも無い——描く物が無い(Q0: 実データの無い状態を
+            // あるように見せない、`rasterize_text_document`/`rasterize_shapes` の
+            // 「空なら None」と同じ扱い)。
+            return Ok((None, natural));
+        }
+
+        // **render 結果は (path, comp解像度) で鍵を作る**——`TextCacheKey`/
+        // `ShapeCacheKey` が canvas 寸法を鍵へ含めるのと同じ理由(comp resize で
+        // 古い解像度の texture を出さない)。点群自体は静的(時刻非依存)なので
+        // `frames`(`(path, frame)`)と違いフレーム番号は要らない。
+        let key = (path.to_owned(), comp.width, comp.height);
+        if let Some(texture) = self.point_cloud_textures.get(&key) {
+            return Ok((Some(texture.clone()), natural));
+        }
+
+        let texture = match self.compositor.render_point_cloud_to_texture(
+            &data.positions,
+            &data.colors,
+            comp.width,
+            comp.height,
+        ) {
+            Ok(texture) => texture,
+            Err(err) => {
+                self.layer_failures
+                    .push(format!("点群を描けない: {path}: {err}"));
+                return Ok((None, natural));
+            }
+        };
+        self.point_cloud_textures.insert(key, texture.clone());
+        Ok((Some(texture), natural))
+    }
+
     pub(crate) fn texture_for(
         &mut self,
         source: &LayerSource,
@@ -394,7 +471,11 @@ impl Engine {
             // (このモジュール内には現状無い)向けの安全側の既定値として残す
             // (2026-08-22、シェイプが画に出るようにする発注で `Shape` も `Text` と
             // 同じ扱いへ揃えた)。
-            LayerSource::Text | LayerSource::Shape => Ok((None, [0.0, 0.0])),
+            // **`PointCloud` もここでは呼べない**(comp 解像度が要る——`point_cloud_texture_for`
+            // の doc 参照)。`Text`/`Shape` と同じ理由・同じ安全側の既定値。
+            LayerSource::Text | LayerSource::Shape | LayerSource::PointCloud { .. } => {
+                Ok((None, [0.0, 0.0]))
+            }
             // null layer は元々絵を持たず(裁定どおり)、`Group`(裁定173)も同じく
             // 絵を持たない——Group は「子を持てる」という印だけの layer で、合成は
             // 世界合成(`motolii-store::view::world_affine`)が親 transform として

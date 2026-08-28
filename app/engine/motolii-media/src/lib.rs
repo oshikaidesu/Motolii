@@ -33,6 +33,7 @@
 mod decode;
 mod encode;
 mod mux;
+mod point_cloud;
 mod probe;
 mod preview;
 mod waveform;
@@ -46,6 +47,10 @@ pub use mux::{
     audio_codec_allows_stream_copy, choose_audio_encode_mode, mux_mixed_pcm, mux_soundtrack,
     probe_audio, write_f32le_wav_stereo_48k, AudioEncodeMode, AudioStreamInfo, MixedPcmMuxReport,
     MixedPcmMuxRequest, SoundtrackMuxReport, SoundtrackMuxRequest,
+};
+pub use point_cloud::{
+    is_point_cloud_extension, load_point_cloud, PointCloudData, PointCloudError,
+    POINT_CLOUD_EXTENSIONS,
 };
 pub use probe::{
     probe, probe_container, require_supported_audio, select_audio_stream, select_video_stream,

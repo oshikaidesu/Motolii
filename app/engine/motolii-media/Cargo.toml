@@ -10,6 +10,12 @@ motolii-store.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+# 点群(`.ply` 等)の import。拡張子の正本は `re_importer`、パーサは
+# `re_sdk_types::archetypes::Points3D::from_file_contents`(`point_cloud.rs` 参照)——
+# どちらも Rerun 側の実装をそのまま呼ぶだけで、motolii はパーサを書かない。
+re_importer.workspace = true
+re_sdk_types.workspace = true
+re_types_core.workspace = true
 
 [dev-dependencies]
 motolii-testkit.workspace = true

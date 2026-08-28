@@ -71,6 +71,14 @@ re_log_encoding = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3
 re_build_info = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14" }
 re_byte_size = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14" }
 re_renderer = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14", default-features = false }
+# 素材 import の拡張子registry(`SUPPORTED_*_EXTENSIONS`/`Importer` trait)。
+# `.ply` 等どの拡張子をどの importer が受けるかは、この crate が正本 — motolii は
+# 独自の拡張子表を持たない(store layer のみ、pillar 冒頭の禁則と同じ理由で
+# viewer 層は引かない)。
+re_importer = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14", default-features = false }
+# `re_importer` が内部で使う archetype 型(`Points3D` 等)。`.ply` パーサ自体は
+# ここが持つ(`archetypes::points3d_ext`、`ply-rs-bw` 経由) — motolii は書かない。
+re_sdk_types = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14", default-features = false }
 
 # 版は rerun の workspace に合わせる。ずれると `IsoTransform` / `Vec3` が別型になる。
 wgpu = "29.0"

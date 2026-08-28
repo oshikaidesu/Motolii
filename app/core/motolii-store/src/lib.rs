@@ -218,6 +218,18 @@ pub enum LayerSource {
         path: String,
         fingerprint: Option<String>,
     },
+    /// 実測点群(`.ply` 等)。**`Media` と別 variant にした理由**: `Media` の decode
+    /// (`motolii-media` の ffmpeg サイドカー、YUV フレーム)と点群の読み口
+    /// (`motolii-media::point_cloud`、Rerun `Points3D` archetype 経由)は中身が
+    /// 全く別のパイプラインで、1つの match 腕へ両方詰めると Media 自身の分岐が
+    /// 太る。`Text`/`Shape` が Media と別 variant なのと同じ判断 —
+    /// 「同じ機構を通る物だけ同じ variant」であって「素材ならなんでも Media」ではない。
+    ///
+    /// 大きさは `Media` と同じく Document は持たない(engine が読んで決める)。
+    PointCloud {
+        path: String,
+        fingerprint: Option<String>,
+    },
     /// 絵を持たず transform だけ持つ(AE の Null Object)。親子の受け皿
     /// (`layers/null-layer/ty`、layer-meta 束)。
     Null,
@@ -255,7 +267,12 @@ impl LayerSource {
     pub fn declared_size(&self) -> Option<[f32; 2]> {
         match self {
             Self::Solid { width, height, .. } => Some([*width as f32, *height as f32]),
-            Self::Media { .. } | Self::Null | Self::Shape | Self::Text | Self::Group => None,
+            Self::Media { .. }
+            | Self::PointCloud { .. }
+            | Self::Null
+            | Self::Shape
+            | Self::Text
+            | Self::Group => None,
         }
     }
 }

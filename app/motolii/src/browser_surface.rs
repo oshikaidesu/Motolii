@@ -921,9 +921,16 @@ pub(crate) enum BrowserSurfaceAction {
 /// poll を自作すると「繋げるだけ」が機構になる。止まるのは **OS の dialog が前に
 /// 居る間だけ**で、利用者から見れば普通の挙動。
 fn pick_media_path() -> Option<PathBuf> {
+    // `IMPORT_EXTENSIONS` は Motolii 自身の一覧(ffmpeg が処理する動画/静止画)。
+    // 点群だけは足さない——`motolii_media::POINT_CLOUD_EXTENSIONS` の正本は
+    // `re_importer::SUPPORTED_POINT_CLOUD_EXTENSIONS`(Rerun の import registry)で、
+    // Motolii はそれをそのまま引く。将来 Rerun が対応拡張子を増やしても、
+    // ここは無改造でそれを拾う(「入れ物をその都度作る」をやめる、が本発注の核)。
+    let mut extensions: Vec<&str> = IMPORT_EXTENSIONS.to_vec();
+    extensions.extend(motolii_media::POINT_CLOUD_EXTENSIONS.iter().copied());
     rfd::FileDialog::new()
         .set_title("Import Media")
-        .add_filter("Media", IMPORT_EXTENSIONS)
+        .add_filter("Media", &extensions)
         .pick_file()
 }
 
@@ -935,6 +942,11 @@ fn asset_type_for(path: &Path) -> String {
         .and_then(|ext| ext.to_str())
         .unwrap_or("")
         .to_ascii_lowercase();
+    // 点群かどうかは re_importer の registry が決める(`is_point_cloud_extension`)
+    // ——Motolii 独自の拡張子表(下の `match`)へ足さない。
+    if motolii_media::is_point_cloud_extension(&ext) {
+        return format!("pointcloud/{ext}");
+    }
     match ext.as_str() {
         "mp4" | "mov" | "mkv" | "webm" | "avi" | "m4v" => format!("video/{ext}"),
         "jpg" | "jpeg" => "image/jpeg".to_owned(),
@@ -999,6 +1011,61 @@ pub(crate) fn place_media(
         .unwrap_or(0);
     drop(store);
 
+    let ext = path
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+
+    // **点群はここで分岐する**(`is_point_cloud_extension` = re_importer の registry)。
+    // Media(ffmpeg probe/decode)とは中身が全く別のパイプラインなので、下の Media
+    // 経路へ無理に押し込まない(`LayerSource::PointCloud` の doc と同じ理由)——
+    // ただし「1本 = 1 undo」「記帳の重複統合」「置いた物を選択する」の3つの規則は
+    // 両経路とも共有する。
+    if motolii_media::is_point_cloud_extension(&ext) {
+        let asset_type = asset_type_for(path);
+        let data = motolii_media::load_point_cloud(path)
+            .map_err(|error| format!("IMPORT FAILED  ·  {label}  ·  {error}"))?;
+        // 点群は静止画と同じく「尺を持たない」——`None` を渡す(静止画コメント
+        // 「probe の実装詳細を利用者の作業へ漏らさない」と同じ判断)。
+        let timing = LayerTiming::place(session.playhead, None, composition.duration_frames);
+
+        let mut intents = Vec::new();
+        let content_hash = match fingerprint(path) {
+            Ok(source) => {
+                let draft = AssetDraft::from_probed_source(asset_type, &source, path, None);
+                intents.push(Intent::AdmitAsset { draft });
+                Some(source.content_hash())
+            }
+            Err(_) => None,
+        };
+        intents.push(Intent::AddLayer(layer));
+        intents.push(Intent::SetMeta {
+            layer,
+            meta: LayerMeta {
+                source: LayerSource::PointCloud {
+                    path: path.to_string_lossy().into_owned(),
+                    fingerprint: content_hash,
+                },
+                order,
+                timing,
+            },
+        });
+
+        doc.apply_all(intents)
+            .map_err(|error| format!("IMPORT FAILED  ·  {label}  ·  {error}"))?;
+
+        session.selection = Some(layer);
+        session.selected_layers = vec![layer];
+
+        return Ok(format!(
+            "IMPORT  ·  {label}  ·  {} points  ·  {} frames from {}",
+            data.point_count(),
+            timing.duration,
+            timing.start
+        ));
+    }
+
     let asset_type = asset_type_for(path);
     let info = motolii_media::probe(path)
         .map_err(|error| format!("IMPORT FAILED  ·  {label}  ·  {error}"))?;
@@ -1059,7 +1126,7 @@ fn catalog_from_document(doc: &Document) -> Vec<BrowserAsset> {
         .into_iter()
         .filter_map(|id| store.meta(id).ok().flatten())
         .filter_map(|meta| match meta.source {
-            LayerSource::Media { path, .. } => Some(path),
+            LayerSource::Media { path, .. } | LayerSource::PointCloud { path, .. } => Some(path),
             _ => None,
         })
         .collect();

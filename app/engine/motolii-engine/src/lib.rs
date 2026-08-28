@@ -45,6 +45,7 @@ use motolii_core::ResolvedCamera;
 use motolii_media::ContainerInfo;
 use motolii_media::MediaError;
 use motolii_media::MediaInfo;
+use motolii_media::PointCloudData;
 use motolii_store::{LayerSource, Matte, RationalTime, StoreView};
 
 use crate::texture::{ShapeCacheKey, TextCacheKey};
@@ -229,6 +230,15 @@ pub struct Engine {
     /// `probe_container` に失敗した path → 理由。`failed_probes` と対称
     /// (壊れた素材で毎回 ffprobe を起動し直さないため)。
     failed_containers: HashMap<String, String>,
+    /// パス → 点群の幾何(`motolii_media::load_point_cloud` 結果)。`probes` と対称
+    /// (parse は毎フレーム回さない)——`point_cloud_texture_for` 参照。
+    point_clouds: HashMap<String, PointCloudData>,
+    /// 点群の読み込みに失敗した path → 理由。`failed_probes` と対称。
+    failed_point_clouds: HashMap<String, String>,
+    /// (パス, comp幅, comp高さ) → GPU texture。点群は時刻非依存(`frames` と違い
+    /// フレーム番号を鍵に含めない)——comp resize でだけ再描画する
+    /// (`point_cloud_texture_for` の鍵の doc 参照)。
+    point_cloud_textures: HashMap<(String, u32, u32), GpuTexture2D>,
 }
 
 impl Engine {
@@ -245,6 +255,9 @@ impl Engine {
             layer_failures: Vec::new(),
             containers: HashMap::new(),
             failed_containers: HashMap::new(),
+            point_clouds: HashMap::new(),
+            failed_point_clouds: HashMap::new(),
+            point_cloud_textures: HashMap::new(),
         })
     }
 
@@ -274,6 +287,9 @@ impl Engine {
             layer_failures: Vec::new(),
             containers: HashMap::new(),
             failed_containers: HashMap::new(),
+            point_clouds: HashMap::new(),
+            failed_point_clouds: HashMap::new(),
+            point_cloud_textures: HashMap::new(),
         })
     }
 
