@@ -3122,6 +3122,7 @@ impl MatchEvent for App {
                         if status.is_empty() {
                             continue;
                         }
+                        self.install_inspector_selection(cx);
                         self.install_timeline_model(cx);
                         self.install_stage_gizmo(cx);
                         self.request_stage_frame(cx);
