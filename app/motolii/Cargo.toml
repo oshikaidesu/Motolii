@@ -33,9 +33,13 @@ motolii-timeline-projection.workspace = true
 motolii-media.workspace = true
 # native file dialog(裁定176、File 束)。**自前のファイルブラウザを作らない。**
 # 旧 workspace の `next/Cargo.toml` が既に同じ版を引いていたので、新しい選定では
-# なく先例の踏襲。`rfd::` を直接書くのは `browser_surface.rs` の1関数
-# (`pick_media_path`)だけ — grep 1本で境界を確認できる、を旧 `RfdDialogs` から引く。
+# なく先例の踏襲。`rfd::` を直接書くのは `browser_surface.rs`(`pick_media_path`)と
+# `export_surface.rs`(`pick_export_path`/`pick_still_path`)だけ — grep 1本で
+# 境界を確認できる、を旧 `RfdDialogs` から引く。
 rfd = "0.15"
+# 書き出し(S6)。範囲 export・進捗・中断・静止画はここが持つ(`front` はスレッドと
+# 出力先だけ足す)。
+motolii-export.workspace = true
 # Stage ギズモ(S20)。renderer 非依存、viewport 座標の頂点列を返すだけの薄い借用先
 # — 描画基盤は自作しない(`src/stage_chrome.rs` の `DrawGizmoTriangle` が Makepad
 # 側で頂点を敷くだけ)。glam は 0.30 系(workspace と一致、transform-gizmo 自身も

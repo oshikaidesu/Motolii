@@ -13,6 +13,10 @@ use makepad_widgets::*;
 // 話 — front が `AudioProgram`/`PlaybackSession` を直接引くのはここだけ。
 use motolii_audio::{AudioProgram, PcmCache, PlaybackSession};
 use motolii_engine::{Engine, ObservationCamera};
+// 書き出し(S6)。worker thread は Document のスナップショットを persist 往復
+// (`Document::save`/`Document::load`)で渡す — `EntityDb` は `testing` feature
+// 抜きでは `Clone` できないので、既存の save/load(自動保存が使う経路)を借りる。
+use motolii_export::{Cancel, ExportError, ExportJob, ExportReport};
 use motolii_shell_state::Session;
 use motolii_store::{
     property, AssetDraft, AssetId, Document, Fps, Interp, Intent, Keyframe, KeyframeTrack,
@@ -24,8 +28,8 @@ use motolii_timeline_projection::{
     WAVEFORM_BUCKETS,
 };
 use std::collections::HashMap;
-use std::path::Path;
-use std::sync::Arc;
+use std::path::{Path, PathBuf};
+use std::sync::{mpsc, Arc};
 use std::time::Instant;
 
 mod browser_surface;
@@ -462,6 +466,41 @@ struct BackendBridge {
     /// 再生の開始/停止のたびに `AudioProgram` を組み直しても、同じ素材の decode を
     /// 使い回す(`program.rs` の doc が指す `caches` そのもの)。
     audio_pcm_cache: HashMap<(String, u32), Arc<PcmCache>>,
+    /// 実行中の書き出し(S6)。`Some` は「worker thread が走っている」の記録
+    /// そのもの — 同時に2本走らせない(`start_export` が `is_some()` で断る)。
+    export_job: Option<ExportJobHandle>,
+}
+
+/// worker thread へ渡す進捗・結果。1フレーム書くたび `Progress`、終われば
+/// `Done`/`Failed`/`Cancelled` が1回だけ来る(`motolii_export` の `on_progress`/
+/// 戻り値の形をそのまま写す)。
+enum ExportUpdate {
+    Progress { done: i64, total: i64 },
+    Done { out_path: PathBuf, frames: i64 },
+    Failed(String),
+    Cancelled,
+}
+
+/// 実行中の書き出しの受け口。`cancel` は UI スレッドから押す(`Cancel::cancel`)、
+/// `rx` は `BackendBridge::poll_export` が毎 tick 空になるまで読む。
+struct ExportJobHandle {
+    rx: mpsc::Receiver<ExportUpdate>,
+    cancel: Cancel,
+}
+
+/// [`BackendBridge::poll_export`] が host(`App`)へ返す、今 tick で起きたこと。
+/// `progress` は最新値だけ(同じ tick に複数フレームぶん届いても最後の1つで足りる
+/// — 読取・塗り幅は「今どこまで進んだか」であって履歴ではない)。
+#[derive(Default)]
+struct ExportPollResult {
+    progress: Option<(i64, i64)>,
+    terminal: Option<ExportTerminal>,
+}
+
+enum ExportTerminal {
+    Done { out_path: PathBuf, frames: i64 },
+    Failed(String),
+    Cancelled,
 }
 
 /// Stage ギズモ(S20 TARGET4)の書き手。「AE の指の規約」
@@ -654,7 +693,143 @@ impl BackendBridge {
             source_frames: HashMap::new(),
             audio_session: None,
             audio_pcm_cache: HashMap::new(),
+            export_job: None,
         }
+    }
+
+    /// 動画書き出しを worker thread で開始する(S6)。**この `BackendBridge` の
+    /// `Engine`/`Document` はここでは動かさない** — worker は自分専用の `Engine`
+    /// (`Engine::new()`)と、`Document::save`/`load` の persist 往復で作った自分
+    /// 専用の `Document` を持つ。UI スレッドは `self.doc`/`self.engine` を編集・
+    /// preview へ使い続けられる(裁定の理由: `EntityDb` は `testing` feature 抜きで
+    /// `Clone` できないので、共有ではなく複製で渡す)。
+    fn start_export(&mut self, out_path: PathBuf) -> Result<(), String> {
+        if self.export_job.is_some() {
+            return Err("すでに書き出し中".to_string());
+        }
+        let tmp = std::env::temp_dir().join(format!("motolii-export-{}.rrd", std::process::id()));
+        self.doc.save(&tmp).map_err(|e| e.to_string())?;
+
+        let cancel = Cancel::new();
+        let cancel_for_thread = cancel.clone();
+        let (tx, rx) = mpsc::channel();
+
+        std::thread::spawn(move || {
+            let doc = match Document::load(&tmp) {
+                Ok(doc) => doc,
+                Err(e) => {
+                    let _ = tx.send(ExportUpdate::Failed(e.to_string()));
+                    return;
+                }
+            };
+            let _ = std::fs::remove_file(&tmp);
+
+            let mut engine = match Engine::new() {
+                Ok(engine) => engine,
+                Err(e) => {
+                    let _ = tx.send(ExportUpdate::Failed(e.to_string()));
+                    return;
+                }
+            };
+            let view = doc.view();
+            let job = ExportJob {
+                out_path,
+                qp0: false,
+            };
+            let result = motolii_export::export_with_progress(
+                &mut engine,
+                &view,
+                &job,
+                &cancel_for_thread,
+                |p| {
+                    let _ = tx.send(ExportUpdate::Progress {
+                        done: p.frames_done,
+                        total: p.frames_total,
+                    });
+                },
+            );
+            match result {
+                Ok(ExportReport {
+                    out_path,
+                    frames_written,
+                }) => {
+                    let _ = tx.send(ExportUpdate::Done {
+                        out_path,
+                        frames: frames_written,
+                    });
+                }
+                Err(ExportError::Cancelled) => {
+                    let _ = tx.send(ExportUpdate::Cancelled);
+                }
+                Err(e) => {
+                    let _ = tx.send(ExportUpdate::Failed(e.to_string()));
+                }
+            }
+        });
+
+        self.export_job = Some(ExportJobHandle { rx, cancel });
+        Ok(())
+    }
+
+    /// 静止画は動画ほど重くないので worker を立てない — UI スレッドで
+    /// `self.engine`/`self.doc` をそのまま使う(preview と同じ経路、`export_still`
+    /// の doc 参照)。
+    fn export_still_now(&mut self, out_path: &Path) -> String {
+        let frame = self.session.playhead;
+        let view = self.doc.view();
+        match motolii_export::export_still(&mut self.engine, &view, frame, out_path) {
+            Ok(report) => format!("STILL  ·  DONE  ·  {}", report.out_path.display()),
+            Err(e) => format!("STILL  ·  FAILED  ·  {e}"),
+        }
+    }
+
+    /// 実行中の書き出しへ中断を送る。実行中が無ければ何もしない(host は「押せる
+    /// けど中身が無い」を気にしなくてよい — `Cancel::cancel` は次のフレーム境界で
+    /// 効く、`motolii-export` の doc 参照)。
+    fn cancel_export(&mut self) {
+        if let Some(job) = &self.export_job {
+            job.cancel.cancel();
+        }
+    }
+
+    /// 毎 tick 呼ばれる。届いている `ExportUpdate` を全部飲み込み、進捗は最後の値
+    /// だけ、終端(`Done`/`Failed`/`Cancelled`)が来たら job を畳んで host へ渡す。
+    fn poll_export(&mut self) -> Option<ExportPollResult> {
+        let job = self.export_job.as_ref()?;
+        let mut out = ExportPollResult::default();
+        loop {
+            match job.rx.try_recv() {
+                Ok(ExportUpdate::Progress { done, total }) => {
+                    out.progress = Some((done, total));
+                }
+                Ok(ExportUpdate::Done { out_path, frames }) => {
+                    out.terminal = Some(ExportTerminal::Done { out_path, frames });
+                }
+                Ok(ExportUpdate::Failed(reason)) => {
+                    out.terminal = Some(ExportTerminal::Failed(reason));
+                }
+                Ok(ExportUpdate::Cancelled) => {
+                    out.terminal = Some(ExportTerminal::Cancelled);
+                }
+                Err(mpsc::TryRecvError::Empty) => break,
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    // worker が返事なしに落ちた(panic 等)。無言の停止のままにしない。
+                    if out.terminal.is_none() {
+                        out.terminal = Some(ExportTerminal::Failed(
+                            "worker thread が応答なく終了した".to_string(),
+                        ));
+                    }
+                    break;
+                }
+            }
+        }
+        if out.terminal.is_some() {
+            self.export_job = None;
+        }
+        if out.progress.is_none() && out.terminal.is_none() {
+            return None;
+        }
+        Some(out)
     }
 
     fn display_name(name: &str) -> String {
@@ -2265,6 +2440,48 @@ impl App {
         (!browser.is_empty()).then(|| browser.widget_uid())
     }
 
+    fn export_surface_ref(&self, cx: &mut Cx) -> WidgetRef {
+        self.dock(cx)
+            .item(id!(export))
+            .child_by_path(ids!(export_surface))
+    }
+
+    fn export_surface_uid(&self, cx: &mut Cx) -> Option<WidgetUid> {
+        let export = self.export_surface_ref(cx);
+        (!export.is_empty()).then(|| export.widget_uid())
+    }
+
+    /// worker thread の進捗・結果を widget へ投影する(`handle_timer` から毎 tick)。
+    /// `install_timeline_model` 等と同じ形 — Document ではなく `BackendBridge` の
+    /// export state を読む点だけが違う。
+    fn poll_export(&mut self, cx: &mut Cx) {
+        let Some(result) = self.backend.as_mut().and_then(BackendBridge::poll_export) else {
+            return;
+        };
+        let export_ref = self.export_surface_ref(cx);
+        if export_ref.is_empty() {
+            return;
+        }
+        if let Some((done, total)) = result.progress {
+            if let Some(mut surface) = export_ref.borrow_mut::<export_surface::ExportSurface>() {
+                surface.set_progress(cx, done, total);
+            }
+        }
+        if let Some(terminal) = result.terminal {
+            let status = match terminal {
+                ExportTerminal::Done { out_path, frames } => {
+                    format!("EXPORT  ·  DONE  ·  {frames}f  ·  {}", out_path.display())
+                }
+                ExportTerminal::Failed(reason) => format!("EXPORT  ·  FAILED  ·  {reason}"),
+                ExportTerminal::Cancelled => "EXPORT  ·  CANCELLED".to_string(),
+            };
+            if let Some(mut surface) = export_ref.borrow_mut::<export_surface::ExportSurface>() {
+                surface.set_export_status(cx, &status);
+            }
+            self.set_status(cx, &status);
+        }
+    }
+
     /// Settings タブ(`inspector_tabs` の兄弟、`main.rs` 宣言の `settings := DockTab{}`)
     /// の中身。`fx_ref`/`inspector_ref` と同じ形 — Dock のタブ id で辿る。
     fn settings_ref(&self, cx: &mut Cx) -> WidgetRef {
@@ -2689,6 +2906,50 @@ impl MatchEvent for App {
             self.request_stage_frame(cx);
             self.set_status(cx, &status);
         }
+        // 書き出しの動詞(S6)。「選ぶ」は `export_surface.rs` が済ませてある —
+        // ここは「回す」判断だけ(Engine/Document を持つのはこちら側)。
+        if let Some(uid) = self.export_surface_uid(cx) {
+            let export_actions: Vec<export_surface::ExportSurfaceAction> =
+                actions.filter_widget_actions_cast(uid).collect();
+            for action in export_actions {
+                match action {
+                    export_surface::ExportSurfaceAction::StartExport(path) => {
+                        let outcome = self
+                            .backend
+                            .as_mut()
+                            .map(|backend| backend.start_export(path.clone()));
+                        let status = match outcome {
+                            Some(Ok(())) => format!("EXPORT  ·  STARTED  ·  {}", path.display()),
+                            Some(Err(reason)) => format!("EXPORT  ·  FAILED  ·  {reason}"),
+                            None => "EXPORT  ·  FAILED  ·  backend is not up yet".to_string(),
+                        };
+                        let export_ref = self.export_surface_ref(cx);
+                        if let Some(mut surface) =
+                            export_ref.borrow_mut::<export_surface::ExportSurface>()
+                        {
+                            surface.set_destination(cx, &path.display().to_string());
+                        }
+                        self.set_status(cx, &status);
+                    }
+                    export_surface::ExportSurfaceAction::StartStill(path) => {
+                        let status = self
+                            .backend
+                            .as_mut()
+                            .map(|backend| backend.export_still_now(&path))
+                            .unwrap_or_else(|| {
+                                "STILL  ·  FAILED  ·  backend is not up yet".to_string()
+                            });
+                        self.set_status(cx, &status);
+                    }
+                    export_surface::ExportSurfaceAction::Cancel => {
+                        if let Some(backend) = self.backend.as_mut() {
+                            backend.cancel_export();
+                        }
+                    }
+                    export_surface::ExportSurfaceAction::None => {}
+                }
+            }
+        }
         if let Some(uid) = self.play_uid(cx) {
             if actions
                 .filter_widget_actions(uid)
@@ -2859,6 +3120,9 @@ impl MatchEvent for App {
         if self.playback_timer.is_timer(event).is_none() {
             return;
         }
+        // 書き出しの進捗(S6)。再生の有無と無関係に毎 tick 見る — 同じ 60Hz
+        // timer に相乗りする(新しい timer を立てない)。
+        self.poll_export(cx);
         let was_playing = self.backend.as_ref().map(|backend| backend.playing).unwrap_or(false);
         let changed = self
             .backend

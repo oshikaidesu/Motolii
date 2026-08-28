@@ -871,19 +871,26 @@ impl StageChrome {
             projection_matrix: projection.into(),
             viewport,
             // z=0 の退化ケース(canon 冒頭)。view=identity(world Z がカメラの前方軸)
-            // なので RotateZ は画面内回転として成立するが、TranslateXY は不成立 —
-            // その平面の法線は世界 X 軸で、ray はどの screen 点でも常に (0,0,1) 方向
-            // (この camera の退化形)なので ray·normal が恒常的に 0 になり、
-            // `ray_to_plane_origin` が永遠に外れる(pick_preview 実測で確認)。
-            // TranslateView は法線が -view_forward = 世界 Z(= ray と同じ軸)なので
-            // 同じ camera の下で成立する — 自由並進(TranslateXY の代わり)はこちらを使う。
+            // なので TranslateXY は不成立 — その平面の法線は世界 X 軸で、ray はどの
+            // screen 点でも常に (0,0,1) 方向(この camera の退化形)なので ray·normal
+            // が恒常的に 0 になり、`ray_to_plane_origin` が永遠に外れる(pick_preview
+            // 実測で確認)。TranslateView は法線が -view_forward = 世界 Z(= ray と同じ
+            // 軸)なので同じ camera の下で成立する — 自由並進はこちらを使う。
+            // RotateZ も plane 自体は当たる(法線が world Z で ray と同軸)が、pick の
+            // 角度判定(`RotationSubGizmo::pick_preview`, direction != View の枝)は
+            // `config.view_forward()` を基準に取る式で、この camera では
+            // view_forward == 法線なので offset(常に法線と直交)との内積が恒常的に 0 —
+            // 角度が不定になり `picked` が常に false(描画はされるが絶対に掴めない)。
+            // RotateView は同じ direction=View の枝で tangent 基準の別式を使うため
+            // この退化を踏まない(upstream `subgizmo/rotation.rs` 実測)。ScaleUniform は
+            // upstream 側が RotateView と排他にしている(`Gizmo::add_rotation` 隣接コード)
+            // ので modes からも外す。
             modes: GizmoMode::TranslateX
                 | GizmoMode::TranslateY
                 | GizmoMode::TranslateView
-                | GizmoMode::RotateZ
+                | GizmoMode::RotateView
                 | GizmoMode::ScaleX
-                | GizmoMode::ScaleY
-                | GizmoMode::ScaleUniform,
+                | GizmoMode::ScaleY,
             orientation: GizmoOrientation::Global,
             pivot_point: TransformPivotPoint::MedianPoint,
             ..Default::default()
@@ -912,8 +919,9 @@ impl StageChrome {
     }
 
     /// `Gizmo::update` が返した絶対 Transform → `GizmoTarget` の形へ戻す。
-    /// `gizmo_config` は RotateZ しか許可していないので、抽出した回転軸は
-    /// 常にほぼ ±Z のはず — 符号だけ見て度数へ畳む。
+    /// `gizmo_config` は回転モードを RotateView(view=identity のこの camera では
+    /// 実質 Z 軸周りのリング)しか許可していないので、抽出した回転軸は常にほぼ
+    /// ±Z のはず — 符号だけ見て度数へ畳む。
     fn target_from_gizmo_transform(base: GizmoTarget, t: gmath::Transform) -> GizmoTarget {
         let translation = gmath::DVec3::from(t.translation);
         let scale = gmath::DVec3::from(t.scale);
@@ -971,6 +979,22 @@ impl StageChrome {
     /// 三角形列へ均す。色は頂点0のものを面色として使う(`GizmoScreenTriangle` doc 参照)。
     fn push_gizmo_draw(&mut self, cx: &mut Cx) {
         let data = self.gizmo.draw();
+        if !data.vertices.is_empty() {
+            let mut by_color: std::collections::HashMap<(u32, u32, u32), (f32, f32, f32, f32, usize)> =
+                std::collections::HashMap::new();
+            for (v, c) in data.vertices.iter().zip(data.colors.iter()) {
+                let key = ((c[0] * 255.0) as u32, (c[1] * 255.0) as u32, (c[2] * 255.0) as u32);
+                let e = by_color.entry(key).or_insert((f32::MAX, f32::MAX, f32::MIN, f32::MIN, 0));
+                e.0 = e.0.min(v[0]);
+                e.1 = e.1.min(v[1]);
+                e.2 = e.2.max(v[0]);
+                e.3 = e.3.max(v[1]);
+                e.4 += 1;
+            }
+            for (color, (min_x, min_y, max_x, max_y, n)) in &by_color {
+                log!("GIZMO_DEBUG color={color:?} bounds min=({min_x},{min_y}) max=({max_x},{max_y}) n={n}");
+            }
+        }
         let mut triangles = Vec::with_capacity(data.indices.len() / 3);
         for face in data.indices.chunks_exact(3) {
             let (i0, i1, i2) = (face[0] as usize, face[1] as usize, face[2] as usize);

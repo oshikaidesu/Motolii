@@ -3096,6 +3096,7 @@ dependencies = [
  "makepad-widgets",
  "motolii-audio",
  "motolii-engine",
+ "motolii-export",
  "motolii-fixture",
  "motolii-media",
  "motolii-shell-state",
