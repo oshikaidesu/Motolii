@@ -477,6 +477,7 @@ struct BackendBridge {
 enum ExportUpdate {
     Progress { done: i64, total: i64 },
     Done { out_path: PathBuf, frames: i64 },
+    StillDone { out_path: PathBuf },
     Failed(String),
     Cancelled,
 }
@@ -499,6 +500,7 @@ struct ExportPollResult {
 
 enum ExportTerminal {
     Done { out_path: PathBuf, frames: i64 },
+    StillDone { out_path: PathBuf },
     Failed(String),
     Cancelled,
 }
@@ -771,16 +773,57 @@ impl BackendBridge {
         Ok(())
     }
 
-    /// 静止画は動画ほど重くないので worker を立てない — UI スレッドで
-    /// `self.engine`/`self.doc` をそのまま使う(preview と同じ経路、`export_still`
-    /// の doc 参照)。
-    fn export_still_now(&mut self, out_path: &Path) -> String {
-        let frame = self.session.playhead;
-        let view = self.doc.view();
-        match motolii_export::export_still(&mut self.engine, &view, frame, out_path) {
-            Ok(report) => format!("STILL  ·  DONE  ·  {}", report.out_path.display()),
-            Err(e) => format!("STILL  ·  FAILED  ·  {e}"),
+    /// 静止画を worker thread で書き出す(`start_export` と同じ形・同じ理由 —
+    /// `export_still` は preview/動画と同じ `Engine::render_frame` 経路を通り、
+    /// その内部で `device.poll(wait_indefinitely())` を呼ぶ。UI スレッドの
+    /// `self.engine` は Stage の共有 Surface 描画に毎フレーム使われている
+    /// (`stage_import::import_presentable` 参照)ので、UI スレッド上で同期に呼ぶと
+    /// Stage の描画と export 側の GPU 待ちが競合する余地が残る。動画書き出しと
+    /// 同じ受け口(`export_job`/`ExportUpdate`)に相乗りする — 同時に2本走らせない
+    /// 制約も動画とそのまま共有できる。
+    fn start_still_export(&mut self, out_path: PathBuf) -> Result<(), String> {
+        if self.export_job.is_some() {
+            return Err("すでに書き出し中".to_string());
         }
+        let frame = self.session.playhead;
+        let tmp = std::env::temp_dir().join(format!("motolii-still-{}.rrd", std::process::id()));
+        self.doc.save(&tmp).map_err(|e| e.to_string())?;
+
+        let cancel = Cancel::new();
+        let (tx, rx) = mpsc::channel();
+
+        std::thread::spawn(move || {
+            let doc = match Document::load(&tmp) {
+                Ok(doc) => doc,
+                Err(e) => {
+                    let _ = tx.send(ExportUpdate::Failed(e.to_string()));
+                    return;
+                }
+            };
+            let _ = std::fs::remove_file(&tmp);
+
+            let mut engine = match Engine::new() {
+                Ok(engine) => engine,
+                Err(e) => {
+                    let _ = tx.send(ExportUpdate::Failed(e.to_string()));
+                    return;
+                }
+            };
+            let view = doc.view();
+            match motolii_export::export_still(&mut engine, &view, frame, &out_path) {
+                Ok(report) => {
+                    let _ = tx.send(ExportUpdate::StillDone {
+                        out_path: report.out_path,
+                    });
+                }
+                Err(e) => {
+                    let _ = tx.send(ExportUpdate::Failed(e.to_string()));
+                }
+            }
+        });
+
+        self.export_job = Some(ExportJobHandle { rx, cancel });
+        Ok(())
     }
 
     /// 実行中の書き出しへ中断を送る。実行中が無ければ何もしない(host は「押せる
@@ -804,6 +847,9 @@ impl BackendBridge {
                 }
                 Ok(ExportUpdate::Done { out_path, frames }) => {
                     out.terminal = Some(ExportTerminal::Done { out_path, frames });
+                }
+                Ok(ExportUpdate::StillDone { out_path }) => {
+                    out.terminal = Some(ExportTerminal::StillDone { out_path });
                 }
                 Ok(ExportUpdate::Failed(reason)) => {
                     out.terminal = Some(ExportTerminal::Failed(reason));
@@ -2472,6 +2518,9 @@ impl App {
                 ExportTerminal::Done { out_path, frames } => {
                     format!("EXPORT  ·  DONE  ·  {frames}f  ·  {}", out_path.display())
                 }
+                ExportTerminal::StillDone { out_path } => {
+                    format!("STILL  ·  DONE  ·  {}", out_path.display())
+                }
                 ExportTerminal::Failed(reason) => format!("EXPORT  ·  FAILED  ·  {reason}"),
                 ExportTerminal::Cancelled => "EXPORT  ·  CANCELLED".to_string(),
             };
@@ -2932,13 +2981,15 @@ impl MatchEvent for App {
                         self.set_status(cx, &status);
                     }
                     export_surface::ExportSurfaceAction::StartStill(path) => {
-                        let status = self
+                        let outcome = self
                             .backend
                             .as_mut()
-                            .map(|backend| backend.export_still_now(&path))
-                            .unwrap_or_else(|| {
-                                "STILL  ·  FAILED  ·  backend is not up yet".to_string()
-                            });
+                            .map(|backend| backend.start_still_export(path.clone()));
+                        let status = match outcome {
+                            Some(Ok(())) => format!("STILL  ·  STARTED  ·  {}", path.display()),
+                            Some(Err(reason)) => format!("STILL  ·  FAILED  ·  {reason}"),
+                            None => "STILL  ·  FAILED  ·  backend is not up yet".to_string(),
+                        };
                         self.set_status(cx, &status);
                     }
                     export_surface::ExportSurfaceAction::Cancel => {
