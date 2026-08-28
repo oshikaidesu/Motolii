@@ -203,7 +203,7 @@ script_mod! {
                 stage_frame := Image{width: Fill height: Fill fit: ImageFit.Smallest}
                 stage_error := InkLabel{width: Fill height: Fill align: Align{x: 0.5 y: 0.5} text: "" draw_text.color: mod.tokens.accent.on draw_text.text_style: theme.font_code{font_size: mod.tokens.text.md}}
                 // ギズモ overlay(S20)。同じ Overlay flow の最上段 — comp の絵の上に敷く。
-                stage_gizmo := StageGizmoOverlay{}
+                stage_gizmo := mod.widgets.StageGizmoOverlay{}
             }
         }
         band_edge := SolidView{width: Fill height: mod.tokens.rule.size show_bg: true new_batch: true draw_bg.color: mod.tokens.face.down}
