@@ -555,8 +555,9 @@ fn write_gizmo_component(
 /// Inspector の行id(`"position"`/`"rotation"`/`"opacity"`)を書く先の `PropertyId` へ写す。
 /// **vec 形が既定**(裁定61) — position の split(x/y 別 track)は値セルの成分ごとの話で、
 /// 行いっぺんの ToggleKey/SetInterp は `write_gizmo_component` と同じ vec 側へ書く
-/// (この app がドラッグで実際に作る唯一の形)。値セルの投影(split 判定込み)は
-/// まだ口が無い("TRANSFORM の値投影は口が無いので次の波" — `selection_summary` の doc)。
+/// (この app がドラッグで実際に作る唯一の形)。split track が実際に在る場合の値セル
+/// 投影(どちらの track を読むかの判定)はまだ無い — `install_inspector_selection` が
+/// 押し込むのは resolve 済みの world transform 1本。
 fn inspector_row_property(prop: &str) -> Option<&'static str> {
     match prop {
         "position" => Some(property::POSITION),
@@ -1461,7 +1462,8 @@ impl BackendBridge {
 
     /// selection summary の投影(発注 S5b)。Inspector ヘッダの「名前+種別」だけ運ぶ —
     /// `inspector_surface::InspectorSurface::set_selection_summary` の**既存の口**で
-    /// 運べる範囲だけ(TRANSFORM の値投影は口が無いので次の波、非目標)。
+    /// 運べる範囲だけ。TRANSFORM の値投影は `install_inspector_selection` が
+    /// `gizmo_target` を使って別に行う。
     fn selection_summary(&self) -> (String, String) {
         let Some(layer) = self.session.selection else {
             return (
@@ -2402,6 +2404,12 @@ impl App {
     ///
     /// **KeyEase への投影もここで一緒に行う**(wf4 easing 板)。選択と playhead の
     /// どちらが動いてもこの関数を通るので、呼び場所を増やさずに済む。
+    ///
+    /// **TRANSFORM の値セルも同じ場所で押し込む**(`gizmo_target` が既に world
+    /// transform を持っているので新しい計算はしない — `install_settings` が
+    /// `composition` の値を `ScrubValue::set_value` へ流すのと同じ形)。z 側の
+    /// x/y(`position.z`/`rotation.x`/`rotation.y`)は Document に対応する track が
+    /// 無いので触らない(`inspector_row_property` の doc と同じ非目標線引き)。
     fn install_inspector_selection(&mut self, cx: &mut Cx) {
         let Some((name, kind)) = self.backend.as_ref().map(BackendBridge::selection_summary) else {
             return;
@@ -2411,11 +2419,19 @@ impl App {
             .as_ref()
             .map(BackendBridge::inspector_key_states)
             .unwrap_or_default();
+        let target = self.backend.as_ref().and_then(BackendBridge::gizmo_target);
         let inspector = self.inspector_ref(cx);
         if let Some(mut surface) = inspector.borrow_mut::<InspectorSurface>() {
             surface.set_selection_summary(cx, &name, &kind);
             for (prop, keyed, interp) in key_states {
                 surface.set_property_keys(cx, prop, keyed, interp);
+            }
+            if let Some(target) = target {
+                surface.set_property_value(cx, "position.x", target.translation[0] as f64);
+                surface.set_property_value(cx, "position.y", target.translation[1] as f64);
+                surface.set_property_value(cx, "rotation.z", target.rotation_degrees as f64);
+                surface.set_property_value(cx, "scale.x", target.scale[0] as f64);
+                surface.set_property_value(cx, "scale.y", target.scale[1] as f64);
             }
         };
     }
