@@ -870,13 +870,16 @@ impl StageChrome {
             view_matrix: view.into(),
             projection_matrix: projection.into(),
             viewport,
-            // z=0 の退化ケース(canon 冒頭)。Z 軸に沿う/View 相対のモードは平坦な
-            // 世界では意味を持たないので外す — TranslateXY と RotateZ が AE の
-            // 「2D レイヤーを掴む」に対応する(view=identity で world Z がそのまま
-            // カメラの前方軸になるので、RotateZ が画面内の回転になる)。
+            // z=0 の退化ケース(canon 冒頭)。view=identity(world Z がカメラの前方軸)
+            // なので RotateZ は画面内回転として成立するが、TranslateXY は不成立 —
+            // その平面の法線は世界 X 軸で、ray はどの screen 点でも常に (0,0,1) 方向
+            // (この camera の退化形)なので ray·normal が恒常的に 0 になり、
+            // `ray_to_plane_origin` が永遠に外れる(pick_preview 実測で確認)。
+            // TranslateView は法線が -view_forward = 世界 Z(= ray と同じ軸)なので
+            // 同じ camera の下で成立する — 自由並進(TranslateXY の代わり)はこちらを使う。
             modes: GizmoMode::TranslateX
                 | GizmoMode::TranslateY
-                | GizmoMode::TranslateXY
+                | GizmoMode::TranslateView
                 | GizmoMode::RotateZ
                 | GizmoMode::ScaleX
                 | GizmoMode::ScaleY
@@ -890,7 +893,11 @@ impl StageChrome {
     fn idle_interaction() -> GizmoInteraction {
         GizmoInteraction {
             cursor_pos: (0.0, 0.0),
-            hovered: false,
+            // `hovered: false` starves every non-drag subgizmo of `pick()`, which is the
+            // only place `transform-gizmo` sets `opacity` — so translate/scale handles
+            // (gated by opacity in their draw fn) never rendered (upstream
+            // `subgizmo/common.rs::draw_arrow`/`draw_plane`, `gizmo.rs::update`).
+            hovered: true,
             drag_started: false,
             dragging: false,
         }
