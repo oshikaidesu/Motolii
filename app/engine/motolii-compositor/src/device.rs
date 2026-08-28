@@ -51,6 +51,12 @@ impl Compositor {
             .map_err(|e| CompositorError::Context(e.to_string()))?;
 
         let glow_pipelines = effects::GlowPipelines::new(&ctx.device);
+        let isf_bloom = effects::IsfProgram::compile(
+            &ctx.device,
+            effects::BLOOM_SOURCE,
+            effects::ISF_TARGET_FORMAT,
+        )
+        .map_err(|e| CompositorError::Isf(e.to_string()))?;
         let blend_pipelines = blend::SeparableBlendPipelines::new(&ctx.device);
         let matte_pipelines = matte::MattePipelines::new(&ctx.device);
 
@@ -60,6 +66,7 @@ impl Compositor {
             next_effect_key: 1,
             effect_scratch: effects::EffectScratch::default(),
             glow_pipelines,
+            isf_bloom,
             blend_pipelines,
             matte_pipelines,
             sequential_submits: 0,

@@ -1,5 +1,12 @@
 //! layer 単位オフスクリーンパスの枠(裁定153 S2、2026-08-21)。S4(2026-08-21)で
 //! 内蔵 vism 第1号 [`EffectPass::Glow`] を追加(`glow` サブモジュール参照)。
+//! 2026-08-29、第2号 [`EffectPass::Isf`] を追加(`isf` サブモジュール参照)——
+//! `docs/vism-package-concept.md` §11 の stop-line 条件8(複数の実 plugin で
+//! 公開境界をコード実証する)の evidence probe。**Glow と同じ形の Rust enum
+//! variant(専用 struct・専用 param 名)を2つ並べても「境界が一般化するか」の
+//! 証拠にならない**という supervisor 裁定を受け、`Isf` は Glow を模倣せず
+//! ISF(Interactive Shader Format)の JSON manifest + GLSL を実際に読む——
+//! 詳細・GLSL→WGSL 変換で崩れた/崩れなかった所は `isf` モジュール doc。
 //!
 //! [`EffectPass`] は compositor ローカルの**closed enum**(裁定13: trait はまだ
 //! 作らない — [`crate::BlendMode`] と同じ形)。[`EffectPass::Identity`] は
@@ -8,23 +15,31 @@
 //! [`EffectPass::Glow`] が最初の実 effect(裁定153 の切片割り、
 //! `docs/reviews/2026-08-21-effect-seam-survey.md` 4節)。
 //!
-//! [`EffectScratch`] は中間 texture の再利用プール。**pipeline は `glow` サブモジュールが
-//! 持つ**(S2 時点では Identity しか無く pipeline 不要だった、S4 で Glow が最初の
-//! shader pass を持ち込んだ)。texture は `(幅, 高さ, フォーマット)` をキーに使い回し、
-//! **フレームをまたいで毎回作り直さない**(M5 proof `GlowFixture` の Host 所有パターンと
+//! [`EffectScratch`] は中間 texture の再利用プール。**pipeline は `glow`/`isf`
+//! サブモジュールが持つ**(S2 時点では Identity しか無く pipeline 不要だった、
+//! S4 で Glow が最初の shader pass を持ち込んだ)。texture は
+//! `(幅, 高さ, フォーマット)` をキーに使い回し、**フレームをまたいで毎回
+//! 作り直さない**(M5 proof `GlowFixture` の Host 所有パターンと
 //! 同じ動機 — `spikes/m5-known-implementation/M5-R0/src/glow.rs` `new()` が
 //! texture/pipeline を一括生成して `render()` では再生成しないのと同型)。
 
 use std::collections::HashMap;
 
 mod glow;
+pub(crate) mod isf;
 
 pub(crate) use glow::{GlowPipelines, GLOW_INTERMEDIATE_FORMAT};
+pub use isf::{IsfInput, IsfInputType, IsfManifest};
+pub(crate) use isf::{IsfProgram, BLOOM_SOURCE, ISF_TARGET_FORMAT};
 
 /// layer に適用する GPU pass の記述。**f32 param を持つので `Eq` は導出できない**
 /// (`PartialEq` のみ — 既存の呼び手は `assert_eq!`/`PartialEq` 比較しか使っていない、
-/// `HashMap`/`HashSet` のキーには使われていない)。
-#[derive(Clone, Copy, Debug, PartialEq)]
+/// `HashMap`/`HashSet` のキーには使われていない)。`Isf` が `Vec<(String, f32)>` を
+/// 運ぶため **`Copy` も導出できない**(`Glow`/`Identity` だけなら Copy だったが、
+/// enum 全体の性質は一番大きい variant に揃う——呼び手はどこも `Copy` に依存して
+/// いなかった、`render_effects.rs`/`presentable.rs` はどれも `&EffectPass` 越しの
+/// 参照か `Clone` で足りている)。
+#[derive(Clone, Debug, PartialEq)]
 pub enum EffectPass {
     /// 恒等 pass。入力と出力が画素単位で一致する。
     Identity,
@@ -40,6 +55,15 @@ pub enum EffectPass {
         /// 5-tap blur のタップ間隔(texel)。`1.0` が proof の固定オフセット
         /// (1texel・2texel)と厳密に一致する。
         radius: f32,
+    },
+    /// **内蔵 vism 第2号**——`Glow` と違い、この variant 自身は param を1つも
+    /// 名指さない(`isf` サブモジュール doc 参照、「境界の名は ISF」)。実体は
+    /// `effects::isf::IsfProgram`(1本だけ、`bloom.fs` — 実在する ISF
+    /// ファイルの JSON `INPUTS` を汎用に読んで pipeline を組む)。`params` は
+    /// `(name, value)` の対の列で、`IsfProgram::record` が manifest の名前と
+    /// 突き合わせる——ここにも「threshold」という文字列は現れない。
+    Isf {
+        params: Vec<(String, f32)>,
     },
 }
 
@@ -66,6 +90,43 @@ impl EffectPass {
                 let step = radius.round().max(1.0) as u32;
                 step * 2
             }
+            // **0 は近似、`Glow` と違って正しい値を計算できない**——`bloom.fs`
+            // (`effects::isf` モジュール doc)は Glow と同じ理由(blur の到達距離)で
+            // 本当は非 0 の padding が要るが、その距離は manifest の `radius` という
+            // *named* param の値に依存する。`EffectPass::Glow` は `radius` を
+            // 型付き field として直接持つので `padding()` がそれを読めるが、
+            // `EffectPass::Isf` は `params: Vec<(String, f32)>` しか持たない
+            // (どの param が空間的な reach を左右するかは manifest ごとに違う、
+            // `isf` モジュール doc 冒頭の「ここにも名前を書かない」規律そのもの)。
+            // ここで `radius` という名前を特別扱いすると、まさに避けたかった
+            // 「Glow の語彙をこの enum に埋め込む」ことになる——padding=0 は
+            // 「bloom は layer 自身の矩形の外へは滲まない(縁で clip される)」という
+            // 正直な機能制限として選んだ(sampler の `ClampToEdge` が範囲外読みを
+            // 安全にはするので、絵が壊れるわけではない——広がらないだけ)。
+            // ISF 採否の判断材料: 汎用 pass が空間的 reach を正しく申告するには
+            // (a) 「この param 名が reach を決める」という manifest 外の知識を
+            // どこかへ持つ(結局また特化に戻る)か、(b) manifest の `MAX` から
+            // 最悪ケースを保守的に確保するかのどちらかが要る——今回はどちらも
+            // 実装していない。
+            EffectPass::Isf { .. } => 0,
+        }
+    }
+
+    /// この pass が scratch texture へ求める format。`None` なら layer 自身の
+    /// 元 format をそのまま使う(`Identity` — 画素単位の copy なので変換不要)。
+    /// `Some` は「この pass は自分専用の固定 format へ描く」——
+    /// `effects::glow::GLOW_INTERMEDIATE_FORMAT`(HDR ヘッドルームが要る)、
+    /// `effects::isf::ISF_TARGET_FORMAT`(layer の実際の format に揃えた固定値、
+    /// `isf` モジュール doc 参照)がそれぞれ自分の値を持つ——**`render_effects.rs`
+    /// 側は「Glow かどうか」を名指さない**(旧 `has_glow` の一般化。2本目の
+    /// 実 effect を足して初めて、この一般化が要ることが分かった——1本しか無い
+    /// うちは `if is_glow` で足りてしまい、それが「境界」なのか「Glow の都合」
+    /// なのか区別がつかなかった)。
+    pub(crate) fn intermediate_format(&self) -> Option<wgpu::TextureFormat> {
+        match self {
+            EffectPass::Identity => None,
+            EffectPass::Glow { .. } => Some(GLOW_INTERMEDIATE_FORMAT),
+            EffectPass::Isf { .. } => Some(ISF_TARGET_FORMAT),
         }
     }
 }

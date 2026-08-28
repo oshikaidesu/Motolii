@@ -253,6 +253,27 @@ pub use headless::{HeadlessError, HeadlessGpu};
 /// layer 単位オフスクリーンパスの枠(裁定153 S2)。`effects` モジュール doc 参照。
 pub use effects::EffectPass;
 
+/// ISF manifest の型(`effects::isf` モジュール doc 参照)。front/engine 側が
+/// `EffectPass::Isf` の param カタログを**手書きした後で**この manifest と
+/// 突き合わせて drift を検査できるように公開する(`motolii-engine::translate`
+/// 側の cross-check test 参照——2026-08-27 の `TURBULENT_DISPLACE` 事故と同種の
+/// 「front/engine が実体と食い違う」を、今回は compile-time ではなく test-time で
+/// 検査する形)。
+pub use effects::{IsfInput, IsfInputType, IsfManifest};
+
+/// `BLOOM_SOURCE` を1回だけ parse した結果。**GPU device は要らない**
+/// (manifest の JSON 解析だけなら device 非依存——`effects::isf::IsfProgram::compile`
+/// が device を要るのは GLSL→WGSL コンパイル+pipeline 構築の方であって、
+/// manifest 自体はどちらも同じ `parse_isf_source` を呼ぶ)。
+pub fn isf_bloom_manifest() -> &'static IsfManifest {
+    static MANIFEST: std::sync::OnceLock<IsfManifest> = std::sync::OnceLock::new();
+    MANIFEST.get_or_init(|| {
+        effects::isf::parse_isf_source(effects::BLOOM_SOURCE)
+            .expect("bloom.fs はビルドに埋め込まれた定数——parse 失敗はここのバグ")
+            .0
+    })
+}
+
 /// track matte の重ね方(BL4、AE/Lottie の4値)。`matte` モジュール doc 参照。
 pub use matte::MatteMode;
 
@@ -322,6 +343,11 @@ pub enum CompositorError {
     ReadbackMissing,
     #[error("effect pass のオフスクリーン往復に失敗した: {0}")]
     Effect(String),
+    /// [`Compositor::with_device`] が `effects::isf::IsfProgram::compile` を
+    /// 呼ぶ時だけ発生しうる(ISF の JSON ヘッダが読めない/naga が GLSL を
+    /// 解析・検証・WGSL 書き出しできない、`effects::isf::IsfError` 参照)。
+    #[error("ISF effect の読み込みに失敗した: {0}")]
+    Isf(String),
     /// [`Compositor::render`]/[`Compositor::render_with_timing`] が分離可能 blend
     /// ([`separable_mode_index`] が `Some` を返す mode)を渡された時(モジュール doc
     /// 「分離可能 blend」節参照)。黙って `Normal` へ近似しない。
@@ -372,6 +398,12 @@ pub struct Compositor {
     /// (`effects::glow` モジュール doc 参照)。他の pass 種別が増えても
     /// pipeline はサイズ非依存なので、layer やフレームをまたいで作り直さない。
     pub(crate) glow_pipelines: effects::GlowPipelines,
+    /// 内蔵 vism 第2号(`EffectPass::Isf`、`effects::isf` モジュール doc 参照)。
+    /// `glow_pipelines` と同じ規律 — 初回生成して以後使い回す。今のところ
+    /// `effects::BLOOM_SOURCE` 1本だけを持つ(複数 ISF ファイルを同時に
+    /// 持たせるなら `HashMap<PluginId, IsfProgram>` 化が要るが、今回は「1本を
+    /// 実際に通す」が scope——`isf` モジュール doc「意図的に配線していない物」)。
+    pub(crate) isf_bloom: effects::IsfProgram,
     /// 分離可能+非分離 blend(BL3/BL4)の shader pipeline。`glow_pipelines` と同じ規律 —
     /// 初回生成して以後使い回す(`blend` モジュール doc 参照)。
     pub(crate) blend_pipelines: blend::SeparableBlendPipelines,

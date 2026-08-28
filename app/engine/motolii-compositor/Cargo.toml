@@ -8,8 +8,14 @@ license.workspace = true
 glam.workspace = true
 motolii-core.workspace = true
 macaw.workspace = true
+# ISF(Interactive Shader Format)の GLSL を WGSL へ変換する経路(`effects::isf`
+# モジュール doc 参照)。`re_renderer`/`wgpu` が既に naga 29.0.4 を引いているので
+# バージョンだけ揃える(型は WGSL テキストの `String` としてしか外へ出さないので、
+# 版がぴったり一致していなくても実害は無いが、揃えておけば依存グラフの重複を防げる)。
+naga = { version = "29.0", default-features = false, features = ["glsl-in", "wgsl-out"] }
 pollster.workspace = true
 re_renderer.workspace = true
+serde_json.workspace = true
 thiserror.workspace = true
 wgpu.workspace = true
 

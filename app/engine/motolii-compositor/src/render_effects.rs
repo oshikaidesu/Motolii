@@ -44,15 +44,14 @@ impl Compositor {
             let padded_width = width + 2 * padding;
             let padded_height = height + 2 * padding;
 
-            let has_glow = lwp
+            // `EffectPass::intermediate_format` の一般化(module doc「`render_effects.rs`
+            // 側は「Glow かどうか」を名指さない」)——`Isf` を足す前はここが
+            // `has_glow` という Glow 専用の bool だった。
+            let format = lwp
                 .passes
                 .iter()
-                .any(|pass| matches!(pass, EffectPass::Glow { .. }));
-            let format = if has_glow {
-                effects::GLOW_INTERMEDIATE_FORMAT
-            } else {
-                lwp.layer.texture.format()
-            };
+                .find_map(EffectPass::intermediate_format)
+                .unwrap_or_else(|| lwp.layer.texture.format());
 
             let src_handle = lwp.layer.texture.handle();
             let src = self
@@ -205,6 +204,24 @@ impl Compositor {
                             effects::GLOW_INTERMEDIATE_FORMAT,
                             blur_ping,
                         ));
+                    }
+                    EffectPass::Isf { params } => {
+                        // padding=0 なので padded_width/height == width/height
+                        // (`EffectPass::padding` 参照)——Glow と違い、layer 自身の
+                        // texture を直接読める(前段用の padded コピーが要らない)。
+                        // これが「単一パスは Glow の5パス構造を持ち込まなくて良い」
+                        // ことの直接の帰結(発注書の狙いそのもの)。
+                        let src_view = src.texture.create_view(&Default::default());
+                        let dst_view = scratch.create_view(&Default::default());
+                        self.isf_bloom.record(
+                            &self.ctx.device,
+                            &self.ctx.queue,
+                            encoder,
+                            &src_view,
+                            &dst_view,
+                            params,
+                            [width as f32, height as f32],
+                        );
                     }
                 }
             }
