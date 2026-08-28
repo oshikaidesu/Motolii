@@ -1629,6 +1629,69 @@ impl BackendBridge {
         format!("Inspector: layer {} {prop} interp", layer.0)
     }
 
+    /// Inspector の値セル(`vx`/`vy`/`vz`)の確定を Document へ書く。**成分1つだけ**の
+    /// 確定なので、他成分は今の評価値をそのまま保って組み直す(`write_gizmo_component`
+    /// が組む `Value::Vec2` と同じ形 — 実際そこへそのまま渡す。書き手を増やさない)。
+    /// `prop` は `"position.x"` 形。z 軸・`rotation.x`/`rotation.y` は
+    /// `install_inspector_selection` がまだ投影しない列と同じ境界でまだ配線していない。
+    fn apply_inspector_set_value(&mut self, prop: &str, value: f64) -> String {
+        let (row, axis) = match prop.split_once('.') {
+            Some((row, axis)) => (row, Some(axis)),
+            None => (prop, None),
+        };
+        let Some(property_name) = inspector_row_property(row) else {
+            return format!("Inspector: unwired property {prop}");
+        };
+        let Some(layer) = self.session.selection else {
+            return "Inspector: no layer selected".to_owned();
+        };
+        let store = self.doc.view();
+        let Some(composition) = store.composition().ok().flatten() else {
+            return "Inspector: the composition is unreadable".to_owned();
+        };
+        let Ok(property) = PropertyId::new(property_name) else {
+            return "Inspector: bad property id".to_owned();
+        };
+        let Ok(t) = RationalTime::try_from_frame(self.session.playhead.max(0), composition.fps)
+        else {
+            return "Inspector: the playhead does not map to a time".to_owned();
+        };
+        let current = store.value_at(layer, &property, t).ok().flatten().unwrap_or(
+            match property_name {
+                p if p == property::SCALE => Value::Vec2([1.0, 1.0]),
+                p if p == property::POSITION => Value::Vec2([0.0, 0.0]),
+                p if p == property::OPACITY => Value::F64(1.0),
+                _ => Value::F64(0.0),
+            },
+        );
+        let merged = match (current, axis) {
+            (Value::Vec2([_, y]), Some("x")) => Value::Vec2([value, y]),
+            (Value::Vec2([x, _]), Some("y")) => Value::Vec2([x, value]),
+            (Value::F64(_), None) => Value::F64(value),
+            (Value::F64(_), Some("z")) => Value::F64(value),
+            _ => return format!("Inspector: {prop} is not a wired 2D component"),
+        };
+        let built = write_gizmo_component(
+            &store,
+            layer,
+            composition.fps,
+            self.session.playhead,
+            property_name,
+            merged,
+        );
+        drop(store);
+        match built {
+            Ok(intent) => {
+                if let Err(error) = self.doc.apply_all([intent]) {
+                    format!("Inspector: value write failed: {error}")
+                } else {
+                    format!("Inspector: layer {} {prop} value", layer.0)
+                }
+            }
+            Err(error) => error,
+        }
+    }
+
     /// Inspector の ◆/◇ を Document へ書く。**`write_gizmo_component` と同じ
     /// 「AE の指の規約」**(`fx_stack.rs::apply` の doc): キーが無い property は時刻0に
     /// Hold で静止値、キーがある property はプレイヘッドへ直前の interp を写して打つ。
@@ -3063,8 +3126,11 @@ impl MatchEvent for App {
                     continue;
                 };
                 let status = match action {
-                    InspectorSurfaceAction::None | InspectorSurfaceAction::SetValue { .. } => {
+                    InspectorSurfaceAction::None => {
                         continue;
+                    }
+                    InspectorSurfaceAction::SetValue { prop, value } => {
+                        backend.apply_inspector_set_value(&prop, value)
                     }
                     InspectorSurfaceAction::ToggleKey { prop, keyed } => {
                         backend.apply_inspector_toggle_key(&prop, keyed)
