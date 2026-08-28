@@ -216,6 +216,11 @@ fn seed_value(plugin_id: &str, param: &EffectParamDescriptor) -> f64 {
     match (plugin_id, param.name) {
         ("motolii.glow", "threshold") => 0.35,
         ("motolii.glow", "intensity") => 1.5,
+        // `motolii.isf_bloom`(ISF 由来の第2号、`motolii_compositor::effects::isf`
+        // モジュール doc 参照)も同じ理由——既定 `threshold=1.0` は 8bit SDR の層
+        // では bright-pass が起動しない。
+        ("motolii.isf_bloom", "threshold") => 0.35,
+        ("motolii.isf_bloom", "intensity") => 1.5,
         _ => param.default,
     }
 }

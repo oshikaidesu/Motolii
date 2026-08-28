@@ -166,11 +166,13 @@ mod translate_matte_mode_tests {
 ///
 /// **未知 plugin_id は `Err` にしない。無音で skip する**(pass を1本も積まない)。
 /// 理由 — `motolii_compositor::EffectPass` は今のところ `Identity`(絵を変えない pass、
-/// 枠の正しさを固定するためだけの variant)と `Glow`(裁定153 S4、最初の実 shader pass)
-/// しか持たない(`motolii_compositor::effects` モジュール doc 参照)。つまり
-/// **「対応している」plugin_id は `"motolii.glow"` 1本だけ**で、それ以外は全て未知
-/// である。`translate_blend_mode` のように未知を `Err` で fail-closed にすると、
-/// 対応外の effect を1つでも積んだ layer が一律描画不能になる — それは
+/// 枠の正しさを固定するためだけの variant)・`Glow`(裁定153 S4、最初の実 shader
+/// pass)・`Isf`(2026-08-29、`docs/vism-package-concept.md` §11 条件8 の evidence
+/// probe、`motolii_compositor::effects::isf` モジュール doc 参照)しか持たない
+/// (`motolii_compositor::effects` モジュール doc 参照)。つまり**「対応している」
+/// plugin_id は `"motolii.glow"`/`"motolii.isf_bloom"` の2本だけ**で、それ以外は
+/// 全て未知である。`translate_blend_mode` のように未知を `Err` で fail-closed に
+/// すると、対応外の effect を1つでも積んだ layer が一律描画不能になる — それは
 /// 「壊れているのではなくまだ描けない」という effect の実情に反する。
 /// blend mode(16値のうち対応外があれば明確に壊れている)と effect
 /// (対応する pass がまだ一部しか実装されていないのが今の常態)とでは
@@ -183,6 +185,15 @@ mod translate_matte_mode_tests {
 /// 積まない**(EXACT TARGET #2 — パニックしない。fail-closed だが `Err` にはしない、
 /// この layer の他の effect や layer 自体は普通に描ける)。
 ///
+/// **`"motolii.isf_bloom"` → `EffectPass::Isf` の腕は `translate_glow_params` と
+/// 違い、個別の param 名を1つも書かない**——`ResolvedEffect.params` のうち
+/// `Value::F64` である物をそのまま `(name, value)` へ詰め替えるだけ
+/// (`translate_isf_params` 参照)。名前と既定値の対応は
+/// `motolii_compositor::IsfProgram::record` 側(manifest 由来)が持つので、
+/// ここで二重に持たない——`ISF_BLOOM_PARAMS`(front 向けカタログ)だけが手書きで、
+/// それも `known_effects_isf_bloom_catalog_matches_the_generic_manifest` が
+/// 実体の manifest と食い違っていないか毎回検査する。
+///
 /// パニックしない: `effects` が空でも、全 plugin_id が未知でも、param の型が
 /// 壊れていても、ここは常に正常終了する。
 pub(crate) fn translate_effect_passes(
@@ -192,11 +203,29 @@ pub(crate) fn translate_effect_passes(
         .iter()
         .filter_map(|effect| match effect.plugin_id.as_str() {
             "motolii.glow" => translate_glow_params(&effect.params),
+            "motolii.isf_bloom" => Some(translate_isf_params(&effect.params)),
             // それ以外の plugin_id はまだ対応する pass が無い。無音で skip する
             // (= pass を積まない、`translate_blend_mode` とは非対称——上のdoc参照)。
             _ => None,
         })
         .collect()
+}
+
+/// `"motolii.isf_bloom"` の named param map を `EffectPass::Isf` へ写す。
+/// **`translate_glow_params` と違い、"threshold" も "intensity" も名指さない**
+/// (module doc「境界の名は ISF」節)——`Value::F64` である param をそのまま
+/// 名前つきで渡すだけで、名前と既定値の対応・型検査は
+/// `motolii_compositor::IsfProgram::record`(manifest 由来)側が担う。
+fn translate_isf_params(params: &[(String, motolii_store::Value)]) -> motolii_compositor::EffectPass {
+    motolii_compositor::EffectPass::Isf {
+        params: params
+            .iter()
+            .filter_map(|(name, value)| match value {
+                motolii_store::Value::F64(v) => Some((name.clone(), *v as f32)),
+                _ => None,
+            })
+            .collect(),
+    }
 }
 
 /// proof(`spikes/m5-known-implementation/M5-R0/src/glow.rs`)の既定値。
@@ -250,10 +279,42 @@ const GLOW_PARAMS: &[EffectParamDescriptor] = &[
     },
 ];
 
-const KNOWN_EFFECTS: &[EffectDescriptor] = &[EffectDescriptor {
-    plugin_id: "motolii.glow",
-    params: GLOW_PARAMS,
-}];
+/// `"motolii.isf_bloom"` の3param。**手書き**(supervisor の timebox 指示で
+/// 認められた fallback——`docs/vism-package-concept.md` §11 の evidence probe と
+/// しては、front カタログを manifest から都度動的に生成する所まではやらず、この
+/// 定数を手で書いた。ただし手書きが実体(`bloom.fs` の `INPUTS`)と黙って
+/// ずれないよう、`known_effects_isf_bloom_catalog_matches_the_generic_manifest`
+/// が `motolii_compositor::isf_bloom_manifest()` と突き合わせる——2026-08-27 の
+/// `TURBULENT_DISPLACE` 事故(front が engine の知らない名前を持っていた)と同種の
+/// drift を、今回は compile-time 一本化ではなく test-time cross-check で防ぐ)。
+const ISF_BLOOM_PARAMS: &[EffectParamDescriptor] = &[
+    EffectParamDescriptor {
+        name: "threshold",
+        default: 1.0,
+        range: Some((0.0, 4.0)),
+    },
+    EffectParamDescriptor {
+        name: "intensity",
+        default: 0.75,
+        range: Some((0.0, 4.0)),
+    },
+    EffectParamDescriptor {
+        name: "radius",
+        default: 1.0,
+        range: Some((1.0, 8.0)),
+    },
+];
+
+const KNOWN_EFFECTS: &[EffectDescriptor] = &[
+    EffectDescriptor {
+        plugin_id: "motolii.glow",
+        params: GLOW_PARAMS,
+    },
+    EffectDescriptor {
+        plugin_id: "motolii.isf_bloom",
+        params: ISF_BLOOM_PARAMS,
+    },
+];
 
 /// 現在 engine が実際に描ける effect の一覧(`plugin_id` + named param の名前・既定値・
 /// 範囲)。**この関数が唯一の正本**——front の FX STACK・パラメータパネルはここを
@@ -341,13 +402,50 @@ mod known_effects_tests {
         }
     }
 
-    /// 逆方向の固定: 今 engine が描けるのは glow 1本だけという事実そのものを縛る
-    /// (`translate_effect_passes` の doc「対応している plugin_id は
-    /// "motolii.glow" 1本だけ」と同じ主張を `known_effects()` 側からも固定する)。
+    /// 逆方向の固定: 今 engine が描けるのは glow/isf_bloom の2本だけという事実
+    /// そのものを縛る(`translate_effect_passes` の doc と同じ主張を
+    /// `known_effects()` 側からも固定する)。
     #[test]
-    fn known_effects_is_exactly_glow_today() {
-        assert_eq!(known_effects().len(), 1);
+    fn known_effects_is_exactly_glow_and_isf_bloom_today() {
+        assert_eq!(known_effects().len(), 2);
         assert_eq!(known_effects()[0].plugin_id, "motolii.glow");
         assert_eq!(known_effects()[0].params.len(), 3);
+        assert_eq!(known_effects()[1].plugin_id, "motolii.isf_bloom");
+        assert_eq!(known_effects()[1].params.len(), 3);
+    }
+
+    /// `ISF_BLOOM_PARAMS`(手書き、supervisor timebox fallback——module doc
+    /// 参照)が、実際に GPU pipeline を組む側の manifest
+    /// (`motolii_compositor::isf_bloom_manifest()`、`bloom.fs` の `INPUTS` を
+    /// 汎用に読んだ実体)と食い違っていないかを毎回検査する。ここが赤くなったら
+    /// `bloom.fs` の `INPUTS` を変えたのに `ISF_BLOOM_PARAMS` を直し忘れている
+    /// ——2026-08-27 の `TURBULENT_DISPLACE` 事故と同じ形の drift を、
+    /// compile-time の一本化ではなく test-time の cross-check で塞ぐ。
+    #[test]
+    fn known_effects_isf_bloom_catalog_matches_the_generic_manifest() {
+        let hand_written = known_effects()
+            .iter()
+            .find(|descriptor| descriptor.plugin_id == "motolii.isf_bloom")
+            .expect("motolii.isf_bloom is in the catalog");
+        let manifest = motolii_compositor::isf_bloom_manifest();
+        let generic: Vec<_> = manifest.param_inputs().collect();
+
+        assert_eq!(
+            hand_written.params.len(),
+            generic.len(),
+            "ISF_BLOOM_PARAMS と bloom.fs の INPUTS で param 数が食い違っている"
+        );
+        for param in hand_written.params {
+            let from_manifest = generic
+                .iter()
+                .find(|input| input.name == param.name)
+                .unwrap_or_else(|| panic!("bloom.fs の INPUTS に `{}` が無い", param.name));
+            assert_eq!(
+                param.default,
+                f64::from(from_manifest.default[0]),
+                "`{}` の既定値が ISF_BLOOM_PARAMS と bloom.fs の INPUTS で食い違っている",
+                param.name
+            );
+        }
     }
 }

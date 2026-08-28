@@ -455,8 +455,9 @@ script_mod! {
         // かった**(2026-08-28、FX レーンで撤去)。`TURBULENT DISPLACE` という
         // plugin は無く、`8 params` も `Amount`/`Size`/`Offset`/`Complexity`/
         // `Evolution` も、engine の `translate_effect_passes` が一つも知らない
-        // (写せる `plugin_id` は `"motolii.glow"` 1本だけ)。触れそうで触れない物は
-        // 不合格(Q0)なので、実在する効果だけを出す `FxStack`(`fx_stack.rs`)へ
+        // (写せる `plugin_id` は `known_effects()` に載っている分だけ——2026-08-29
+        // 時点で `"motolii.glow"`/`"motolii.isf_bloom"` の2本)。触れそうで触れない
+        // 物は不合格(Q0)なので、実在する効果だけを出す `FxStack`(`fx_stack.rs`)へ
         // 置き換えた。差し込み口は `main.rs` の `InspectorPane` にある。
 
         // ここに `body_fill := View{width: Fill height: Fill}` が居た。**Fit の turtle の
