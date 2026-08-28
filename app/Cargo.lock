@@ -3021,6 +3021,7 @@ name = "motolii"
 version = "0.1.0"
 dependencies = [
  "makepad-widgets",
+ "motolii-audio",
  "motolii-engine",
  "motolii-fixture",
  "motolii-media",
