@@ -310,7 +310,8 @@ script_mod! {
             forward := IconButton{width: 18 draw_icon +: {svg: crate_resource("self://resources/icons/forward.svg")}}
             // 素材の口。Browser の動詞はこれ1つなので、絞り込みの道具
             // (filters/tags)ではなく前進の道具(back/forward)の隣に置く。
-            // 配線が来るまでは席ごと畳む(`BrowserSurface::IMPORT_WIRED`)
+            // `main.rs::handle_actions` が `handle_import_actions` を呼ぶ(WIRE-2、
+            // 2026-08-28 着地)。
             import := IconButton{width: 22 draw_icon +: {svg: crate_resource("self://resources/icons/create.svg") color: mod.tokens.ink.strong}}
             search := SolidView{width: Fill height: mod.tokens.size.field flow: Right spacing: mod.tokens.space.s1 align: Align{y: 0.5} padding: Inset{left: 4 right: 4} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.sunk
                 search_glyph := IconButton{width: 15 draw_icon +: {svg: crate_resource("self://resources/icons/search.svg") color: mod.tokens.ink.muted}}
@@ -584,17 +585,6 @@ pub struct BrowserSurface {
 }
 
 impl BrowserSurface {
-    /// 素材の口が `main.rs` の受け口(`browser_surface::handle_import_actions`)へ
-    /// 繋がっているか。**繋がるまで Import の席ごと畳む。**
-    ///
-    /// 押せば OS の dialog は開き、probe も走るが、`Intent` を受け取る者が居なければ
-    /// Document は変わらない — 「効いたように見えてから黙って戻る」は「できない」より
-    /// 悪い(2026-08-28 裁定(a)、`TimelineSurface::TRIM_HANDLE_WIRED` と同じ扱い)。
-    ///
-    /// **`main.rs` に受け口(WIRE-2、報告の NOT_DONE 参照)が着地したら `true` へ。**
-    #[allow(dead_code)]
-    const IMPORT_WIRED: bool = false;
-
     /// store の棚を投影する(`TimelineSurface::set_model` と同じ口)。catalog の正本は
     /// Document の台帳で、この widget は投影を持つだけ。
     ///
@@ -703,10 +693,6 @@ impl BrowserSurface {
         self.view
             .button(cx, ids!(browser_toolbar.tags))
             .set_visible(cx, !self.tag_cycle().is_empty());
-        // 素材の口。store へ届かない間は席ごと畳む(`Self::IMPORT_WIRED` の doc)
-        self.view
-            .button(cx, ids!(browser_toolbar.import))
-            .set_visible(cx, Self::IMPORT_WIRED);
     }
 
     /// 空一覧の文言。「何も無い」と「絞り込んだ結果ゼロ」を混同しない。
@@ -1105,7 +1091,6 @@ fn catalog_from_document(doc: &Document) -> Vec<BrowserAsset> {
 /// 一覧を Document の台帳へ合わせる。`main.rs` は起動時・`Event::LiveEdit`・
 /// 取り込み後にこれを呼ぶ(live edit は widget を宣言状態へ戻すので、投影し直すのは
 /// 呼び手の責任 — `apply_browser_selection` と同じ形)。
-#[allow(dead_code)]
 pub(crate) fn install_catalog(cx: &mut Cx, browser: &WidgetRef, doc: &Document) {
     let catalog = catalog_from_document(doc);
     let surface = browser.child_by_path(ids!(browser_surface));
@@ -1114,26 +1099,14 @@ pub(crate) fn install_catalog(cx: &mut Cx, browser: &WidgetRef, doc: &Document) 
     };
 }
 
-/// 素材の口の受け口。**`main.rs` の `handle_actions` から1本だけ呼ぶ。**
+/// 素材の口の受け口。**`main.rs::App::handle_actions` から呼ぶ唯一の場所**
+/// (WIRE-2、2026-08-28 着地)。
 ///
 /// `browser` は Dock の `browser` タブの中身(`main.rs::browser`)。戻り値は状態行の
-/// 文言で、`None` は「この action 群に取り込みは無かった」。
-///
-/// ```ignore
-/// // main.rs: App::handle_actions の中
-/// let browser = self.browser(cx);
-/// if let Some(backend) = self.backend.as_mut() {
-///     if let Some(status) = browser_surface::handle_import_actions(
-///         cx, &browser, actions, &mut backend.doc, &mut backend.session,
-///     ) {
-///         backend.frame = None;
-///         self.install_timeline_model(cx);
-///         self.request_stage_frame(cx);
-///         self.set_status(cx, &status);
-///     }
-/// }
-/// ```
-#[allow(dead_code)]
+/// 文言で、`None` は「この action 群に取り込みは無かった」。呼び手は書けた後に
+/// `install_timeline_model`/`install_browser_catalog`/`request_stage_frame` を
+/// 引き直す(`backend.frame = None` も併せて — この関数は `Document`/`Session` しか
+/// 受け取らないので、front 側のフレームキャッシュは呼び手が落とす)。
 pub(crate) fn handle_import_actions(
     cx: &mut Cx,
     browser: &WidgetRef,
