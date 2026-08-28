@@ -1140,7 +1140,11 @@ impl StageChrome {
                             cursor_pos: (fe.abs.x as f32, fe.abs.y as f32),
                             hovered: fe.is_over,
                             drag_started: false,
-                            dragging: false,
+                            // release の1回は dragging: true で渡す — Gizmo::update は
+                            // dragging: false の呼び出しでは active subgizmo を終えて
+                            // None を返す(結果を計算する前に)。ここを false にすると
+                            // 最後の commit だけが常に握りつぶされる。
+                            dragging: true,
                         },
                         true,
                     );
