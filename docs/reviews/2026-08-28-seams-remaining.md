@@ -58,8 +58,13 @@ hero = 実測の点群と、外で描いたベクタと、音が、同じタイ�
 - ~~S1 棚→レイヤー~~ — カード double-click(`PlaceAsset` → `AddLayer`+`SetMeta`+`SetAttrs`)で
   playhead/最前面に立つ。実窓で glow_default が立ち ● バッジ・status 行まで確認。
   **`SetSource` 自体は依然未接続**(既存レイヤーの繋ぎ直し = S13 の隣)
-- ~~S2 の入口~~ — 音声 drop → frame 0 にレイヤー+波形形状(wf-5)。**鳴らす方(再生
-  transport / `PlaybackSession`)は未接続のまま S2 として残る**(表の数字 73 は変わらず)
+- ~~S2 の入口~~ — 音声 drop → frame 0 にレイヤー+波形形状(wf-5)
+- ~~S2 再生の背骨~~ — Space/transport が `AudioProgram::from_view` → `PlaybackSession` を
+  開き、**再生中の playhead は音声クロックから導出**(wall timer は再描画の口実のみ。
+  P07-C1D の写し)。scrub は `session.seek`、comp 末尾で自動停止(実窓: frame 1799 で
+  PAUSED)、デバイス不在は status に理由を出して無音継続。tick では seek しない
+  (ring の再基底化は音を割る)。**残るのは実音の耳確認**(headless では検証不能)と
+  meter/gain/pan UI 等の残り口
 
 ### 第2波 — 1本を仕上げるのに要る
 
