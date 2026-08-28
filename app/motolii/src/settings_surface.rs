@@ -45,7 +45,8 @@ script_mod! {
         head_rule := SolidView{width: Fill height: mod.tokens.rule.size show_bg: true draw_bg.color: mod.tokens.rule.seam}
 
         // PROJECT の3行(Frame Rate / Resolution / Duration)は Composition の投影
-        // (`SettingsSurface::set_composition`)。SESSION / APPEARANCE は波1のダミーのまま
+        // (`SettingsSurface::set_composition`)。SESSION と APPEARANCE の Theme は
+        // 波1のダミーのまま(UI Scale だけ `set_ui_scale` で本物)
         project_band := SolidView{width: Fill height: mod.tokens.size.row_tight flow: Right align: Align{y: 0.5} padding: Inset{left: mod.tokens.space.s4 right: mod.tokens.space.s4} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.area
             project_head := InkLabel{text: "PROJECT" width: Fill draw_text.color: mod.tokens.ink.muted draw_text.text_style: theme.font_bold{font_size: mod.tokens.text.sm}}
         }
