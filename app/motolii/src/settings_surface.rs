@@ -15,8 +15,10 @@
 //! `main.rs::install_settings`、書き込みの意図は [`SettingsSurfaceAction`] で
 //! 外へ出すだけ(`BrowserEditAction`/`FxStackAction` と同じ形)。
 //!
-//! SESSION / APPEARANCE 帯(Autosave / Undo Depth / Theme / UI Scale)は
+//! SESSION 帯(Autosave / Undo Depth)と APPEARANCE 帯の Theme は
 //! まだ見た目用ダミー(出典なし) — store 側にこれらの設定を持つ場所がまだ無い。
+//! **UI Scale だけは本物** — 正本は `App::ui_scale_percent`(`main.rs::set_ui_scale`
+//! が唯一の書き手)で、`SettingsSurface::set_ui_scale` がその投影。
 //! Chrome* 部品は参照しない（main.rs の読み込み順で本 mod が chrome より先）。
 use crate::inspector_surface::{ScrubValue, ScrubValueAction};
 use makepad_widgets::*;
@@ -170,6 +172,17 @@ impl SettingsSurface {
             cell.set_value(cx, composition.duration_frames as f64);
         }
         self.view.redraw(cx);
+    }
+
+    /// APPEARANCE 帯の UI Scale 欄(`main.rs::set_ui_scale` が唯一の書き手 —
+    /// `⌘+`/`⌘-`/`⌘0` を押すたびここも一緒に引き直す)。SESSION/APPEARANCE の
+    /// 残り(Autosave/Undo Depth/Theme)はまだ store に置き場が無い波1のダミーの
+    /// ままだが、UI Scale は既に `App::ui_scale_percent` が正本を持っている。
+    pub fn set_ui_scale(&mut self, cx: &mut Cx, percent: i32) {
+        self.view
+            .widget(cx, ids!(scale_row.well.value))
+            .as_label()
+            .set_text(cx, &format!("{percent} %"));
     }
 }
 

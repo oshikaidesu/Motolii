@@ -810,6 +810,36 @@ impl StageChrome {
         self.gizmo_pending_commit.take()
     }
 
+    /// 状態帯の解像度/fps(`set_stage_gizmo` と同じ形 — main.rs が Document から
+    /// 読んだ今をそのまま渡す)。**値そのものが意味の物なので文字のまま**
+    /// (帯の言葉のうち、この2つだけがアイコンではない — 帯冒頭の canon 注記)。
+    pub fn set_composition_readout(&mut self, cx: &mut Cx, width: u32, height: u32, fps: f64) {
+        self.view
+            .widget(cx, ids!(stage_band.resolution_well.resolution))
+            .as_label()
+            .set_text(cx, &format!("{width} × {height}"));
+        self.view
+            .widget(cx, ids!(stage_band.frame_rate_well.frame_rate))
+            .as_label()
+            .set_text(cx, &format!("{} fps", fps.round() as i64));
+    }
+
+    /// 状態帯の選択の今 — 選択レイヤーの名前と、今のプレイヘッドで実際に描かれて
+    /// いるか(`on_frame` は `gizmo_target` と同じ resolve の成否 — hidden/timing外/
+    /// comp無し/decompose失敗はどれも「描かれていない」に畳む)。選択が無ければ
+    /// `on_frame: None` で名前だけ言う(Inspector の selection summary と同じ言い回し)。
+    pub fn set_selection_state(&mut self, cx: &mut Cx, name: &str, on_frame: Option<bool>) {
+        let text = match on_frame {
+            Some(true) => format!("{name} · ON FRAME"),
+            Some(false) => format!("{name} · OFF FRAME"),
+            None => name.to_owned(),
+        };
+        self.view
+            .widget(cx, ids!(stage_band.selection_state))
+            .as_label()
+            .set_text(cx, &text);
+    }
+
     /// pan/zoom から成る正射影 view+proj(3D 数学の退化ケース、canon 冒頭)。
     /// Camera タブでは出力カメラを front が知らないので恒等を使う近似
     /// (EVIDENCE_GAP: Document のカメラに pan/zoom/roll があるとズレる)。

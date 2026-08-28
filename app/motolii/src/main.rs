@@ -1494,6 +1494,13 @@ impl BackendBridge {
         Some((composition.width as f32, composition.height as f32))
     }
 
+    /// Stage 状態帯の解像度/fps(`StageChrome::set_composition_readout` の唯一の出所)。
+    fn composition_readout(&self) -> Option<(u32, u32, f64)> {
+        let store = self.doc.view();
+        let composition = store.composition().ok().flatten()?;
+        Some((composition.width, composition.height, composition.fps.as_f64()))
+    }
+
     /// 選択レイヤーの world transform(ギズモの対象、S20 TARGET2)。**新しい計算を
     /// しない** — `StoreView::resolve` は合成器と同じ経路
     /// (`ResolvedLayer.placement.transform`)なので、その値をそのまま渡す。hidden/
@@ -1514,6 +1521,17 @@ impl BackendBridge {
             rotation_degrees: angle_radians.to_degrees(),
             scale: [scale.x, scale.y],
         })
+    }
+
+    /// 選択が今のプレイヘッドで実際に描かれているか。`gizmo_target` と同じ
+    /// resolve(hidden/timing外/comp無し/decompose失敗はどれも「描かれていない」)。
+    /// 選択が無ければ `None`(Stage 状態帯は名前だけ言う、`set_selection_state` 参照)。
+    fn selection_on_frame(&self) -> Option<bool> {
+        let layer = self.session.selection?;
+        let store = self.doc.view();
+        let composition = store.composition().ok().flatten()?;
+        let t = RationalTime::try_from_frame(self.session.playhead, composition.fps).ok()?;
+        Some(store.resolve(layer, t).ok().flatten().is_some())
     }
 
     /// ドラッグを離した結果を Document へ書く(S20 TARGET4)。触った成分だけ
@@ -2509,8 +2527,15 @@ impl App {
         };
         let comp_dims = backend.gizmo_comp_dims();
         let target = backend.gizmo_target();
+        let (name, _) = backend.selection_summary();
+        let on_frame = backend.selection_on_frame();
+        let readout = backend.composition_readout();
         if let Some(mut chrome) = self.stage_chrome_ref(cx).borrow_mut::<StageChrome>() {
             chrome.set_stage_gizmo(cx, comp_dims, target);
+            chrome.set_selection_state(cx, &name, on_frame);
+            if let Some((width, height, fps)) = readout {
+                chrome.set_composition_readout(cx, width, height, fps);
+            }
         }
     }
 
@@ -2629,6 +2654,10 @@ impl App {
     /// と同じ理由)。タブが選ばれる前でも安全に no-op する(`SettingsSurface` が
     /// 見つからなければ `borrow_mut` が `None` を返すだけ)。
     fn install_settings(&mut self, cx: &mut Cx) {
+        let settings = self.settings_ref(cx);
+        if let Some(mut surface) = settings.borrow_mut::<SettingsSurface>() {
+            surface.set_ui_scale(cx, self.ui_scale_percent);
+        }
         let Some(composition) = self
             .backend
             .as_ref()
@@ -2636,7 +2665,6 @@ impl App {
         else {
             return;
         };
-        let settings = self.settings_ref(cx);
         if let Some(mut surface) = settings.borrow_mut::<SettingsSurface>() {
             surface.set_composition(cx, &composition);
         };
@@ -2739,6 +2767,10 @@ impl App {
         // (makepad が iOS の safe-area inset に使っているのと同じ経路)。
         cx.request_live_edit();
         self.set_status(cx, &format!("UI SCALE  ·  {percent}%"));
+        let settings = self.settings_ref(cx);
+        if let Some(mut surface) = settings.borrow_mut::<SettingsSurface>() {
+            surface.set_ui_scale(cx, percent);
+        };
     }
 
     fn set_status(&mut self, cx: &mut Cx, status: &str) {
@@ -3364,6 +3396,12 @@ impl AppMain for App {
             self.install_browser_catalog(cx);
             self.install_settings(cx);
             self.project_status(cx);
+            // `script_mod!` の再実行は Inspector/Stage も宣言値へ戻す
+            // (`install_browser_catalog` の doc と同じ理由 — count/選択summary/
+            // 解像度/fps/selection_state がここを漏れると、次の実イベントまで
+            // hot reload 直後だけダミー文字列に見える)。
+            self.install_inspector_selection(cx);
+            self.install_stage_gizmo(cx);
         }
         // ドロップは**2段**。`Event::Drag` へ `Copy` と答えないと macOS の
         // `draggingEntered:` が `NSDragOperation::None` を返し、`Event::Drop` は
