@@ -1341,6 +1341,41 @@ impl InspectorSurface {
                 self.refresh_easing(cx);
             }
         }
+        self.refresh_section_counts(cx);
+    }
+
+    /// props のうち、実際に playhead で keyed な行の数(`set_property_keys` が
+    /// 各 `KeyEase` 行へ書いた `keyed` の集計)。
+    fn keyed_count(&self, props: &[&str]) -> usize {
+        let mut count = 0;
+        self.each_widget(&mut |node| {
+            if let Some(cell) = node.borrow::<KeyEase>() {
+                if cell.projected && cell.keyed && props.contains(&cell.prop.as_str()) {
+                    count += 1;
+                }
+            }
+        });
+        count
+    }
+
+    /// TRANSFORM/APPEARANCE 見出しの「N · M keyed」を実データへ合わせる。
+    /// N(行数)は宣言そのもの(構造なので変わらない — 分母は `PropertyRow` の
+    /// 個数)。M だけが store の今に依るので、`set_property_keys` のたび引き直す。
+    fn refresh_section_counts(&mut self, cx: &mut Cx) {
+        // `FoldHeader::children()` forwards straight to `self.header.children()`
+        // (derive_widget.rs `find_fields` codegen) — it does not expose "header"
+        // itself as a path segment, so `count` resolves directly under the
+        // Section's own name, not `<section>.header.count`.
+        let transform_keyed = self.keyed_count(&["position", "rotation", "scale"]);
+        self.view
+            .widget(cx, ids!(transform.count))
+            .as_label()
+            .set_text(cx, &format!("3 · {transform_keyed} keyed"));
+        let appearance_keyed = self.keyed_count(&["opacity"]);
+        self.view
+            .widget(cx, ids!(appearance.count))
+            .as_label()
+            .set_text(cx, &format!("2 · {appearance_keyed} keyed"));
     }
 
     fn current_easing(&self) -> Interp {
