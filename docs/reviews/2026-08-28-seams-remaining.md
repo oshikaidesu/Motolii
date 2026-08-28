@@ -46,12 +46,15 @@ hero = 実測の点群と、外で描いたベクタと、音が、同じタイ�
 
 | # | やること | 使う口 | なぜ今か |
 |---|---|---|---|
-| S3 | **素材が読めない時に理由が出る** | `Engine::layer_failures` | engine は失敗を溜めているのに front が読まない。**失敗が見えないのは失敗するより悪い**(窓を叩いても見えない嘘) |
-| S4 | **レイヤーを消せる** | `Intent::RemoveLayer` | 今できない。編集の基本動詞 |
-| S5 | **マーカー / ロケータ** | `Intent::SetMarkers` | BPM グリッドに印を置く。MV では必須 |
-| S5b | **選択が Inspector に映る** | Inspector への selection 投影(`main.rs` → `inspector_surface`) | 2026-08-28 実窓検分: レーン選択は動く(「1 layer(s) selected」)のに Inspector は Rectangle 表示のまま = **動線の駅3が結線されていない**。FX STACK だけが選択を読む |
+| S4' | **Delete の実キー合否** | (結線済み) | `f7a17703` で `Intent::RemoveLayer` は Delete/Backspace に結線され check/test 緑。ただし**実窓合否が取れていない** — `--remote` の `/k` は app レベルの key handler に届かない(既存の Cmd+scale も同様に無反応。器具の限界、fork AGENTS.md に記録)。**実キーボードでの確認待ち**。効かなければ key focus 経路の欠陥 |
 
-**消えた行**(2026-08-28 統合 `7856cb65` で着地、実窓で確認):
+**消えた行**(2026-08-28 統合 `7856cb65` / 第1波 `f7a17703` で着地、実窓で確認):
+- ~~S3 失敗の可視化~~ — `layer_failures` → Stage chrome の失敗帯(空なら沈黙、これが正常系)
+- ~~S4 レイヤー削除~~ — 結線は完了、実キー合否のみ S4' として残す(上表)
+- ~~S5 ロケータ~~ — 実窓で3動詞とも確認: 右クリックで置く(「marker placed at frame 758」)・
+  左クリックで playhead が跳び Stage も追随・もう一度右クリックで消える。fixture の
+  マーカー3枚も描かれる
+- ~~S5b 選択→Inspector~~ — 実窓で確認: Credits 選択でヘッダが「クレジット · Solid layer」
 - ~~S1 棚→レイヤー~~ — カード double-click(`PlaceAsset` → `AddLayer`+`SetMeta`+`SetAttrs`)で
   playhead/最前面に立つ。実窓で glow_default が立ち ● バッジ・status 行まで確認。
   **`SetSource` 自体は依然未接続**(既存レイヤーの繋ぎ直し = S13 の隣)
