@@ -1858,7 +1858,7 @@ impl App {
         let settings = self.settings_ref(cx);
         if let Some(mut surface) = settings.borrow_mut::<SettingsSurface>() {
             surface.set_composition(cx, &composition);
-        }
+        };
     }
 
     /// Browser の「N のうち1つ」は makepad の radio group が持つ。排他と選択移動は
