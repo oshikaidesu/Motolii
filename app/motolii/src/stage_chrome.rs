@@ -566,6 +566,12 @@ pub struct StageChrome {
     /// 同じイベントで動かさない(TARGET6)。
     #[rust]
     gizmo_drag_active: bool,
+    /// ドラッグ中の最新値。`transform-gizmo` の translation/rotation は前フレームからの
+    /// 差分(`GizmoResult::delta`)を渡した `targets` へ足す形なので、次フレームは
+    /// この最新値を渡さないと最後の1フレーム分の差分しか反映されない
+    /// (`Gizmo::update` doc の使用例が示す「毎フレーム結果を書き戻す」形)。
+    #[rust]
+    gizmo_drag_live: Option<GizmoTarget>,
     /// release で1回だけ積む書き込み予約。`take_gizmo_commit` が取り出すと空になる。
     #[rust]
     gizmo_pending_commit: Option<GizmoCommit>,
@@ -793,6 +799,7 @@ impl StageChrome {
         // (transform-gizmo 側の drag 状態と食い違うより、素直に打ち切る方が安全)。
         if target.map(|t| t.layer) != self.gizmo_target.map(|t| t.layer) {
             self.gizmo_drag_active = false;
+            self.gizmo_drag_live = None;
         }
         self.gizmo_target = target;
         self.refresh_gizmo(cx);
@@ -1071,6 +1078,7 @@ impl StageChrome {
         if let Some((result, updated)) = self.gizmo.update(interaction, &targets) {
             if let Some(t) = updated.first().copied() {
                 let live = Self::target_from_gizmo_transform(base, t);
+                self.gizmo_drag_live = Some(live);
                 if releasing {
                     self.gizmo_pending_commit = Self::gizmo_commit_for(base.layer, live, result);
                     if self.gizmo_pending_commit.is_some() {
@@ -1112,6 +1120,7 @@ impl StageChrome {
                 };
                 if gizmo_ready && self.gizmo.pick_preview(cursor) {
                     self.gizmo_drag_active = true;
+                    self.gizmo_drag_live = None;
                     let base = self.gizmo_target.expect("gizmo_ready implies Some");
                     self.apply_gizmo_interaction(
                         cx,
@@ -1146,7 +1155,7 @@ impl StageChrome {
                 }
             }
             Hit::FingerMove(fe) if self.gizmo_drag_active => {
-                if let Some(base) = self.gizmo_target {
+                if let Some(base) = self.gizmo_drag_live.or(self.gizmo_target) {
                     self.apply_gizmo_interaction(
                         cx,
                         base,
@@ -1163,7 +1172,7 @@ impl StageChrome {
             }
             Hit::FingerUp(fe) if self.gizmo_drag_active => {
                 self.gizmo_drag_active = false;
-                if let Some(base) = self.gizmo_target {
+                if let Some(base) = self.gizmo_drag_live.or(self.gizmo_target) {
                     self.apply_gizmo_interaction(
                         cx,
                         base,
@@ -1180,6 +1189,7 @@ impl StageChrome {
                         true,
                     );
                 }
+                self.gizmo_drag_live = None;
                 true
             }
             _ => false,
