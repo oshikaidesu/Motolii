@@ -2,42 +2,28 @@
 use crate::*;
 
 impl Compositor {
-    /// **layer 単位オフスクリーンパスの入口**(裁定153 S2、2026-08-21)。
+    /// [`Self::render_with_effects`]/[`Self::render_to_texture`]/
+    /// `Compositor::render_into`(`presentable.rs`、共有面へ直接書く口)が共有する
+    /// step 1 の核(2026-08-28 一本化)——layer ごとに `passes` を適用した「合成へ
+    /// 渡す実効 texture」を作る。3箇所に同じ手順を複製すると `render_into` が
+    /// effect を無視していたのに誰も気づけなかった穴が再発するので、ここへ集めた。
     ///
-    /// [`Self::render`]/[`Self::render_with_timing`] は**無改造のまま** — `motolii-engine`
-    /// は今もそちらへ裸の `Layer` を渡しており(並走レーン、この crate の外)、
-    /// この関数を新設するだけならその経路を一切変えない。effect を持たせたい呼び手は
-    /// [`Layer`] を [`LayerWithPasses`] で包んでここへ渡す。
-    ///
-    /// **分岐はここ、layer 1枚ごと**: `passes` が空なら元の `layer.texture` を
-    /// そのまま合成へ渡す(オフスクリーンを一切作らない — コスト増ゼロ)。非空なら
-    /// [`effects::EffectScratch`] から中間 texture を借り、`passes` を順に適用してから
-    /// その結果を合成へ渡す。texture(と、将来 pipeline が増えた時のそれ)は
-    /// `Compositor` が所有し**フレームをまたいで再利用**する(毎フレーム作り直さない
-    /// — `effects` モジュール doc の M5 proof 参照)。
-    ///
-    /// **第二 render パス禁止(裁定15/18)との関係**: `Compositor::render`/`render_frame`
-    /// の呼び出し回数はこの関数を通っても増えない。増えるのは同じ `RenderContext`・
-    /// 同じ `queue.submit` 呼び出しへ同乗する追加の `copy_texture_to_texture` コマンドで
-    /// あって、別の合成器や別の描画エントリではない — `render_frame_without_background`
-    /// (裁定141)が「第二経路ではなく同一合成器への入力差分」と整理したのと同じ論法。
-    pub fn render_with_effects(
+    /// 返す `checked_out` は呼び手が**自分の合成が完全に終わってから**
+    /// `self.effect_scratch.release` へ返すこと——scratch は合成の入力
+    /// (`effective_textures`)が指す実体なので、合成の最中に手放すと壊れる。
+    pub(crate) fn effective_layer_textures(
         &mut self,
-        comp: CompSpec,
-        camera: ResolvedCamera,
         layers: &[LayerWithPasses],
-    ) -> Result<Vec<u8>, CompositorError> {
-        // 1) layer ごとに「合成へ渡す実効 texture」を決める。pass が空な layer は
-        //    `GpuTexture2D::clone()`(Arc clone 相当)だけで、新規 GPU texture を作らない。
+    ) -> Result<
+        (
+            Vec<GpuTexture2D>,
+            Vec<u32>,
+            Vec<(u32, u32, wgpu::TextureFormat, wgpu::Texture)>,
+        ),
+        CompositorError,
+    > {
         let mut effective_textures: Vec<GpuTexture2D> = Vec::with_capacity(layers.len());
-        // **既知の穴の根治**(`next/reference/KNOWN.md`「effect pass は layer 自身の
-        // テクスチャ境界内のみで計算」): layer ごとの出力拡張量(texel、上下左右均等、
-        // `EffectPass::padding` 参照)。pass が空 or 全 pass が padding 0(Identity の
-        // み)なら 0 のまま——2) の quad 組み立てはこの値が 0 だと従来と完全に同じ
-        // 幾何になる。
         let mut effective_paddings: Vec<u32> = Vec::with_capacity(layers.len());
-        // GPU が読み終わってからプールへ返すための控え(読み終わり前に返すと、次の
-        // `acquire` が使用中の texture を上書きしてしまう)。
         let mut checked_out: Vec<(u32, u32, wgpu::TextureFormat, wgpu::Texture)> = Vec::new();
         let mut copy_encoder: Option<wgpu::CommandEncoder> = None;
 
@@ -49,10 +35,6 @@ impl Compositor {
             }
 
             let [width, height] = lwp.layer.texture.width_height();
-            // layer 単位で1つの padded canvas サイズへ揃える(複数 pass が居ても
-            // scratch は1枚——既存の「各 pass は常に元の layer.texture を読んで
-            // scratch へ書く」構造(下のループ)はそのまま、canvas サイズだけ最大の
-            // 要求へ合わせる)。
             let padding = lwp
                 .passes
                 .iter()
@@ -62,10 +44,6 @@ impl Compositor {
             let padded_width = width + 2 * padding;
             let padded_height = height + 2 * padding;
 
-            // Glow を含む layer は中間・出力とも常に `Rgba16Float`(裁定153 S4、
-            // `effects::glow` モジュール doc 参照 — bright-pass の閾値判定と加算合成が
-            // 1.0 を超える値を扱う必要があるため、layer 本体の元 format とは独立)。
-            // Identity だけの layer は従来どおり元 format のまま(既存試験の期待を壊さない)。
             let has_glow = lwp
                 .passes
                 .iter()
@@ -92,17 +70,12 @@ impl Compositor {
                 self.ctx
                     .device
                     .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                        label: Some("motolii-compositor-effect-pass"),
+                        label: Some("motolii-compositor-effective-layer-textures"),
                     })
             });
 
             for pass in &lwp.passes {
                 match pass {
-                    // 恒等 pass。画素単位の copy がそのまま「絵を変えない」を満たす。
-                    // padding は常に 0(`EffectPass::padding` 参照)なので
-                    // `padded_width == width` — 中央 (padding, padding) へ置いても
-                    // 実質 (0, 0) のままで従来と同じ絵になる(同じ layer に padding>0
-                    // の別 pass が同居する場合に備えて、座標系を1本化しておく)。
                     EffectPass::Identity => {
                         encoder.copy_texture_to_texture(
                             wgpu::TexelCopyTextureInfo {
@@ -128,18 +101,6 @@ impl Compositor {
                             },
                         );
                     }
-                    // 内蔵 vism 第1号(裁定153 S4)。bright-pass→水平blur→垂直blur→
-                    // 加算合成の5パスを同じ encoder へ積む(`effects::glow` 参照)。
-                    //
-                    // **padding(既知の穴の根治)**: source をそのまま bright-pass へ
-                    // 渡さず、まず「layer 実寸+両側 padding」の透明な padded canvas
-                    // (`padded_source`)を用意し、実 layer を中央 (padding, padding)
-                    // へ copy してから5パスを回す。`blur_at`(glow.rs の WGSL)の
-                    // clamp は `textureDimensions(input_a)`(=呼ばれた pass の入力
-                    // texture の実サイズ)由来なので、bright/blur/composite 全パスの
-                    // 入出力を padded canvas サイズに揃えれば、clamp が padded canvas
-                    // の縁で効くようになる——layer 実寸の縁で足踏みしていた従来の
-                    // 穴が無くなり、blur が実際に周囲の透明領域へ滲み出す。
                     EffectPass::Glow {
                         threshold,
                         intensity,
@@ -152,14 +113,12 @@ impl Compositor {
                             lwp.layer.texture.format(),
                         );
                         let padded_source_view = padded_source.create_view(&Default::default());
-                        // padding 領域を透明へ clear する——scratch プールの
-                        // 使い回しで前フレームの残骸を引きずると、`blur_at` の
-                        // clamp が縁で拾う値が汚れる(draw なしの render pass、
-                        // `draw_pass` の clear と同じ書き方)。
                         {
                             let _clear_pass =
                                 encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                                    label: Some("motolii-compositor-glow-padded-source-clear"),
+                                    label: Some(
+                                        "motolii-compositor-glow-padded-source-clear",
+                                    ),
                                     color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                                         view: &padded_source_view,
                                         depth_slice: None,
@@ -263,15 +222,6 @@ impl Compositor {
             checked_out.push((padded_width, padded_height, format, scratch));
         }
 
-        // 2) 通常合成——逐次 accumulator 経路([`Self::accumulate_sequential`]、BL3で
-        //    分離可能 blend 対応へ拡張、`crate` module doc「分離可能 blend」節)。
-        //    使う texture だけが「元の layer.texture」から「上で決めた実効 texture」に
-        //    変わる(padding 込みの quad 拡張は `SequentialInput::local_min`/
-        //    `local_size` へそのまま持ち込む——`render_with_timing` 旧経路と同じ計算)。
-        //
-        // effect pass の copy(あれば)を、逐次経路が実効 texture を読み始める前に
-        // 確定させる——旧実装は「最終合成と同じ submit へ同乗」させていたが、逐次経路は
-        // 複数回に分けて submit する(layer 毎)ので、先に1回 flush して依存を切る。
         if let Some(encoder) = copy_encoder.take() {
             self.ctx.before_submit();
             self.ctx.queue.submit([encoder.finish()]);
@@ -282,6 +232,44 @@ impl Compositor {
                 .map_err(|e| CompositorError::Draw(e.to_string()))?;
         }
 
+        Ok((effective_textures, effective_paddings, checked_out))
+    }
+
+    /// **layer 単位オフスクリーンパスの入口**(裁定153 S2、2026-08-21)。
+    ///
+    /// [`Self::render`]/[`Self::render_with_timing`] は**無改造のまま** — `motolii-engine`
+    /// は今もそちらへ裸の `Layer` を渡しており(並走レーン、この crate の外)、
+    /// この関数を新設するだけならその経路を一切変えない。effect を持たせたい呼び手は
+    /// [`Layer`] を [`LayerWithPasses`] で包んでここへ渡す。
+    ///
+    /// **分岐はここ、layer 1枚ごと**: `passes` が空なら元の `layer.texture` を
+    /// そのまま合成へ渡す(オフスクリーンを一切作らない — コスト増ゼロ)。非空なら
+    /// [`effects::EffectScratch`] から中間 texture を借り、`passes` を順に適用してから
+    /// その結果を合成へ渡す。texture(と、将来 pipeline が増えた時のそれ)は
+    /// `Compositor` が所有し**フレームをまたいで再利用**する(毎フレーム作り直さない
+    /// — `effects` モジュール doc の M5 proof 参照)。
+    ///
+    /// **第二 render パス禁止(裁定15/18)との関係**: `Compositor::render`/`render_frame`
+    /// の呼び出し回数はこの関数を通っても増えない。増えるのは同じ `RenderContext`・
+    /// 同じ `queue.submit` 呼び出しへ同乗する追加の `copy_texture_to_texture` コマンドで
+    /// あって、別の合成器や別の描画エントリではない — `render_frame_without_background`
+    /// (裁定141)が「第二経路ではなく同一合成器への入力差分」と整理したのと同じ論法。
+    pub fn render_with_effects(
+        &mut self,
+        comp: CompSpec,
+        camera: ResolvedCamera,
+        layers: &[LayerWithPasses],
+    ) -> Result<Vec<u8>, CompositorError> {
+        // 1) layer ごとに「合成へ渡す実効 texture」を決める(`Self::effective_layer_textures`
+        //    が [`Self::render_to_texture`]/`Compositor::render_into` と共有する核)。
+        let (effective_textures, effective_paddings, checked_out) =
+            self.effective_layer_textures(layers)?;
+
+        // 2) 通常合成——逐次 accumulator 経路([`Self::accumulate_sequential`]、BL3で
+        //    分離可能 blend 対応へ拡張、`crate` module doc「分離可能 blend」節)。
+        //    使う texture だけが「元の layer.texture」から「上で決めた実効 texture」に
+        //    変わる(padding 込みの quad 拡張は `SequentialInput::local_min`/
+        //    `local_size` へそのまま持ち込む——`render_with_timing` 旧経路と同じ計算)。
         let inputs: Vec<SequentialInput<'_>> = layers
             .iter()
             .zip(effective_textures.iter())
@@ -397,234 +385,15 @@ impl Compositor {
         camera: ResolvedCamera,
         layers: &[LayerWithPasses],
     ) -> Result<(wgpu::Texture, wgpu::TextureView), CompositorError> {
-        // 1) layer ごとに「合成へ渡す実効 texture」を決める。
-        // [`Self::render_with_effects`] の step 1 と**同じ構造**——唯一の違いは
-        // release を `device.poll` を挟まずに行うこと(上のモジュール doc
-        // 「effect pass の scratch」参照、根拠は同一 queue の submission 順)。
-        let mut effective_textures: Vec<GpuTexture2D> = Vec::with_capacity(layers.len());
-        let mut effective_paddings: Vec<u32> = Vec::with_capacity(layers.len());
-        // `render_with_effects` の `checked_out` と同型: submit 後に
-        // `effect_scratch.release` へ返すための (幅, 高さ, format, texture) の控え。
-        let mut checked_out: Vec<(u32, u32, wgpu::TextureFormat, wgpu::Texture)> = Vec::new();
-        let mut copy_encoder: Option<wgpu::CommandEncoder> = None;
-
-        for lwp in layers {
-            if lwp.passes.is_empty() {
-                effective_textures.push(lwp.layer.texture.clone());
-                effective_paddings.push(0);
-                continue;
-            }
-
-            let [width, height] = lwp.layer.texture.width_height();
-            let padding = lwp
-                .passes
-                .iter()
-                .map(EffectPass::padding)
-                .max()
-                .unwrap_or(0);
-            let padded_width = width + 2 * padding;
-            let padded_height = height + 2 * padding;
-
-            let has_glow = lwp
-                .passes
-                .iter()
-                .any(|pass| matches!(pass, EffectPass::Glow { .. }));
-            let format = if has_glow {
-                effects::GLOW_INTERMEDIATE_FORMAT
-            } else {
-                lwp.layer.texture.format()
-            };
-
-            let src_handle = lwp.layer.texture.handle();
-            let src = self
-                .ctx
-                .gpu_resources
-                .textures
-                .get_from_handle(src_handle)
-                .map_err(|e| CompositorError::Effect(e.to_string()))?;
-
-            let scratch =
-                self.effect_scratch
-                    .acquire(&self.ctx.device, padded_width, padded_height, format);
-
-            let encoder = copy_encoder.get_or_insert_with(|| {
-                self.ctx
-                    .device
-                    .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                        label: Some("motolii-compositor-effect-pass-zero-copy"),
-                    })
-            });
-
-            for pass in &lwp.passes {
-                match pass {
-                    EffectPass::Identity => {
-                        encoder.copy_texture_to_texture(
-                            wgpu::TexelCopyTextureInfo {
-                                texture: &src.texture,
-                                mip_level: 0,
-                                origin: wgpu::Origin3d::ZERO,
-                                aspect: wgpu::TextureAspect::All,
-                            },
-                            wgpu::TexelCopyTextureInfo {
-                                texture: &scratch,
-                                mip_level: 0,
-                                origin: wgpu::Origin3d {
-                                    x: padding,
-                                    y: padding,
-                                    z: 0,
-                                },
-                                aspect: wgpu::TextureAspect::All,
-                            },
-                            wgpu::Extent3d {
-                                width,
-                                height,
-                                depth_or_array_layers: 1,
-                            },
-                        );
-                    }
-                    EffectPass::Glow {
-                        threshold,
-                        intensity,
-                        radius,
-                    } => {
-                        let padded_source = self.effect_scratch.acquire(
-                            &self.ctx.device,
-                            padded_width,
-                            padded_height,
-                            lwp.layer.texture.format(),
-                        );
-                        let padded_source_view = padded_source.create_view(&Default::default());
-                        {
-                            let _clear_pass =
-                                encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                                    label: Some(
-                                        "motolii-compositor-glow-padded-source-clear-zero-copy",
-                                    ),
-                                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                                        view: &padded_source_view,
-                                        depth_slice: None,
-                                        resolve_target: None,
-                                        ops: wgpu::Operations {
-                                            load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
-                                            store: wgpu::StoreOp::Store,
-                                        },
-                                    })],
-                                    depth_stencil_attachment: None,
-                                    timestamp_writes: None,
-                                    occlusion_query_set: None,
-                                    multiview_mask: None,
-                                });
-                        }
-                        encoder.copy_texture_to_texture(
-                            wgpu::TexelCopyTextureInfo {
-                                texture: &src.texture,
-                                mip_level: 0,
-                                origin: wgpu::Origin3d::ZERO,
-                                aspect: wgpu::TextureAspect::All,
-                            },
-                            wgpu::TexelCopyTextureInfo {
-                                texture: &padded_source,
-                                mip_level: 0,
-                                origin: wgpu::Origin3d {
-                                    x: padding,
-                                    y: padding,
-                                    z: 0,
-                                },
-                                aspect: wgpu::TextureAspect::All,
-                            },
-                            wgpu::Extent3d {
-                                width,
-                                height,
-                                depth_or_array_layers: 1,
-                            },
-                        );
-
-                        let bloom = self.effect_scratch.acquire(
-                            &self.ctx.device,
-                            padded_width,
-                            padded_height,
-                            effects::GLOW_INTERMEDIATE_FORMAT,
-                        );
-                        let blur_ping = self.effect_scratch.acquire(
-                            &self.ctx.device,
-                            padded_width,
-                            padded_height,
-                            effects::GLOW_INTERMEDIATE_FORMAT,
-                        );
-                        let bloom_view = bloom.create_view(&Default::default());
-                        let blur_ping_view = blur_ping.create_view(&Default::default());
-                        let dst_view = scratch.create_view(&Default::default());
-
-                        self.glow_pipelines.record(
-                            &self.ctx.device,
-                            &self.ctx.queue,
-                            encoder,
-                            &padded_source_view,
-                            &bloom_view,
-                            &blur_ping_view,
-                            &dst_view,
-                            *threshold,
-                            *intensity,
-                            *radius,
-                        );
-
-                        checked_out.push((
-                            padded_width,
-                            padded_height,
-                            lwp.layer.texture.format(),
-                            padded_source,
-                        ));
-                        checked_out.push((
-                            padded_width,
-                            padded_height,
-                            effects::GLOW_INTERMEDIATE_FORMAT,
-                            bloom,
-                        ));
-                        checked_out.push((
-                            padded_width,
-                            padded_height,
-                            effects::GLOW_INTERMEDIATE_FORMAT,
-                            blur_ping,
-                        ));
-                    }
-                }
-            }
-
-            self.next_effect_key += 1;
-            let key = self.next_effect_key;
-            let imported = self
-                .ctx
-                .texture_manager_2d
-                .import_gpu_premultiplied(key, &self.ctx, &scratch)
-                .map_err(|e| CompositorError::Effect(e.to_string()))?;
-
-            effective_textures.push(imported);
-            effective_paddings.push(padding);
-            checked_out.push((padded_width, padded_height, format, scratch));
-        }
+        // 1) layer ごとに「合成へ渡す実効 texture」を決める
+        //    (`Self::effective_layer_textures` が [`Self::render_with_effects`]/
+        //    `Compositor::render_into` と共有する核)。
+        let (effective_textures, effective_paddings, checked_out) =
+            self.effective_layer_textures(layers)?;
 
         // 2) 通常合成。[`Self::render_with_effects`] の step 2 と同じ
         //    `accumulate_sequential` 経由の組み立て(`crate` module doc「分離可能
         //    blend」節)。
-        //
-        // **この関数だけの注意**: 元の実装は「readback をしない」ことを活かして
-        // `device.poll` を一度も呼ばず、GPU キューへの submit 順序だけで
-        // 正しさを保証していた(モジュール doc「順序保証」節)。分離可能 blend の
-        // 逐次経路は layer 毎に新しい `ViewBuilder`(fork の per-frame 資源プール)を
-        // 作る必要があり、そのために `accumulate_sequential` 内部で layer 毎に
-        // `begin_frame`/`poll` を挟む(`render_sequential` 旧実装からの既存規律、
-        // 単一 ViewBuilder では起きなかった同期点が増える——GPU 高速路の
-        // パイプライン化を部分的に失うトレードオフ、FINDING 参照)。
-        if let Some(encoder) = copy_encoder.take() {
-            self.ctx.before_submit();
-            self.ctx.queue.submit([encoder.finish()]);
-            self.ctx.begin_frame();
-            self.ctx
-                .device
-                .poll(wgpu::PollType::wait_indefinitely())
-                .map_err(|e| CompositorError::Draw(e.to_string()))?;
-        }
-
         let inputs: Vec<SequentialInput<'_>> = layers
             .iter()
             .zip(effective_textures.iter())
