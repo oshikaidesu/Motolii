@@ -15,7 +15,7 @@ use motolii_audio::{AudioProgram, PcmCache, PlaybackSession};
 use motolii_engine::{Engine, ObservationCamera};
 use motolii_shell_state::Session;
 use motolii_store::{
-    AssetDraft, AssetId, Document, Intent, LayerAttrsPatch, LayerId, LayerMeta, LayerSource,
+    AssetDraft, AssetId, Document, Fps, Intent, LayerAttrsPatch, LayerId, LayerMeta, LayerSource,
     LayerTiming, Marker, RationalTime, SourceFingerprintV1,
 };
 use motolii_timeline_projection::{
@@ -43,6 +43,7 @@ mod timeline_surface;
 use browser_surface::{AssetKind, BrowserAsset, BrowserEditAction, BrowserSurface};
 use fx_stack::{FxStack, FxStackAction, FxStackModel, FxWrite};
 use inspector_surface::InspectorSurface;
+use settings_surface::{SettingsSurface, SettingsSurfaceAction};
 use stage_chrome::{StageChrome, StageChromeAction, StageViewCamera};
 use stage_surface::{SharedOsHandle, SharedSurfaceDesc, StagePresent, StageRoom, StageVerdict};
 use timeline_surface::{
@@ -1284,6 +1285,35 @@ impl BackendBridge {
         self.status.clone().expect("just set")
     }
 
+    /// Settings 面の確定値([`SettingsSurfaceAction::SetField`])を `Intent::SetComposition`
+    /// へ書く(S8)。**丸ごと差し替え型**なので、今の `Composition` を読んで名指された
+    /// 1欄だけ書き換える(裁定271: 名指していない欄は既定へ戻さない)。
+    ///
+    /// `field` は `ScrubValue::prop` からそのまま来た名前(`"fps"`/`"width"`/
+    /// `"height"`/`"duration"`)。書き先の対応表はここ1箇所にしか無い。
+    fn apply_settings_action(&mut self, field: &str, value: f64) -> String {
+        let store = self.doc.view();
+        let Some(mut composition) = store.composition().ok().flatten() else {
+            return "SETTINGS  ·  no composition yet".to_owned();
+        };
+        drop(store);
+        match field {
+            "fps" => match Fps::try_new(value.round() as i64, 1) {
+                Ok(fps) => composition.fps = fps,
+                Err(error) => return format!("SETTINGS FAILED  ·  Frame Rate  ·  {error}"),
+            },
+            "width" => composition.width = value.round() as u32,
+            "height" => composition.height = value.round() as u32,
+            "duration" => composition.duration_frames = value.round() as i64,
+            other => return format!("SETTINGS  ·  unknown field {other}"),
+        }
+        if let Err(error) = self.doc.apply(Intent::SetComposition(composition)) {
+            return format!("SETTINGS FAILED  ·  {field}  ·  {error}");
+        }
+        self.frame = None;
+        format!("SETTINGS  ·  {field} = {value:.0}")
+    }
+
     /// screenshot / export など明示 fallback 専用。通常の playhead / 再生からは呼ばない。
     fn frame_rgba(&mut self) -> Option<(u32, u32, &[u8])> {
         if self.frame.is_none() {
@@ -1800,6 +1830,37 @@ impl App {
         (!browser.is_empty()).then(|| browser.widget_uid())
     }
 
+    /// Settings タブ(`inspector_tabs` の兄弟、`main.rs` 宣言の `settings := DockTab{}`)
+    /// の中身。`fx_ref`/`inspector_ref` と同じ形 — Dock のタブ id で辿る。
+    fn settings_ref(&self, cx: &mut Cx) -> WidgetRef {
+        self.dock(cx)
+            .item(id!(settings))
+            .child_by_path(ids!(settings_surface))
+    }
+
+    fn settings_uid(&self, cx: &mut Cx) -> Option<WidgetUid> {
+        let settings = self.settings_ref(cx);
+        (!settings.is_empty()).then(|| settings.widget_uid())
+    }
+
+    /// comp 設定の投影(S8、`install_fx_model` と同じ形)。**hot reload 後も呼ぶ** —
+    /// `script_mod!` の再実行は widget を宣言値へ戻す(`install_browser_catalog` の doc
+    /// と同じ理由)。タブが選ばれる前でも安全に no-op する(`SettingsSurface` が
+    /// 見つからなければ `borrow_mut` が `None` を返すだけ)。
+    fn install_settings(&mut self, cx: &mut Cx) {
+        let Some(composition) = self
+            .backend
+            .as_ref()
+            .and_then(|backend| backend.doc.view().composition().ok().flatten())
+        else {
+            return;
+        };
+        let settings = self.settings_ref(cx);
+        if let Some(mut surface) = settings.borrow_mut::<SettingsSurface>() {
+            surface.set_composition(cx, &composition);
+        }
+    }
+
     /// Browser の「N のうち1つ」は makepad の radio group が持つ。排他と選択移動は
     /// `RadioButtonSet::selected` の担当で、色をこちらで塗り替えない
     /// (`active` は instance、`draw_bg.color*` は group 共有の uniform)。
@@ -1982,6 +2043,9 @@ impl App {
     /// 開くとは「そのタブを選ぶ」こと。新しい面を作らない。
     fn open_settings(&mut self, cx: &mut Cx) {
         self.dock(cx).select_tab(cx, id!(settings));
+        // タブが今初めて実体化した場合の保険。Dock がタブ内容を先に持っていても
+        // 後で持っていても、ここで一度合わせておけば黙って古い値のまま出ない。
+        self.install_settings(cx);
         self.set_status(cx, "SETTINGS");
     }
 
@@ -2120,6 +2184,7 @@ impl MatchEvent for App {
         self.install_fx_model(cx);
         self.install_inspector_selection(cx);
         self.install_browser_catalog(cx);
+        self.install_settings(cx);
         self.request_stage_frame(cx);
         self.browser_rail = RAIL_ALL_MEDIA;
         self.apply_browser_selection(cx);
@@ -2165,6 +2230,28 @@ impl MatchEvent for App {
                 self.set_status(cx, &status);
             }
         }
+        // 素材の口(WIRE-2)。`browser_surface::handle_import_actions` が唯一の受け口 —
+        // Import ボタンの意図(`BrowserSurfaceAction::ImportMedia`)をここで doc へ書く。
+        // 失敗理由も含めて戻り値をそのまま状態行へ流す(黙って落とさない)。
+        let browser = self.browser(cx);
+        let import_status = self.backend.as_mut().and_then(|backend| {
+            browser_surface::handle_import_actions(
+                cx,
+                &browser,
+                actions,
+                &mut backend.doc,
+                &mut backend.session,
+            )
+        });
+        if let Some(status) = import_status {
+            if let Some(backend) = self.backend.as_mut() {
+                backend.frame = None;
+            }
+            self.install_timeline_model(cx);
+            self.install_browser_catalog(cx);
+            self.request_stage_frame(cx);
+            self.set_status(cx, &status);
+        }
         if let Some(uid) = self.play_uid(cx) {
             if actions
                 .filter_widget_actions(uid)
@@ -2196,6 +2283,32 @@ impl MatchEvent for App {
                 if !write.status.is_empty() {
                     self.set_status(cx, &write.status);
                 }
+            }
+        }
+
+        // comp 設定(S8)。SettingsSurface が出す確定値
+        // ([`SettingsSurfaceAction::SetField`])を `Intent::SetComposition` へ書く。
+        // fps/尺が動けば Timeline の目盛りと再生範囲も、寸法が動けば共有 surface も
+        // 付いてくるので、書けた時は Timeline の投影と Stage をまとめて引き直す
+        // (FX の書き込みと同じ形)。
+        if let Some(uid) = self.settings_uid(cx) {
+            let settings_actions: Vec<SettingsSurfaceAction> =
+                actions.filter_widget_actions_cast(uid).collect();
+            for action in settings_actions {
+                let SettingsSurfaceAction::SetField { field, value } = action else {
+                    continue;
+                };
+                let Some(status) = self
+                    .backend
+                    .as_mut()
+                    .map(|backend| backend.apply_settings_action(field, value))
+                else {
+                    continue;
+                };
+                self.install_timeline_model(cx);
+                self.install_settings(cx);
+                self.request_stage_frame(cx);
+                self.set_status(cx, &status);
             }
         }
 
@@ -2345,6 +2458,7 @@ impl AppMain for App {
         if matches!(event, Event::LiveEdit) {
             self.apply_browser_selection(cx);
             self.install_browser_catalog(cx);
+            self.install_settings(cx);
             self.project_status(cx);
         }
         // ドロップは**2段**。`Event::Drag` へ `Copy` と答えないと macOS の
