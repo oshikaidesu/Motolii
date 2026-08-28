@@ -25,7 +25,7 @@ Motolii is an open, inspectable, plugin-extensible compositor focused on making 
 
 The project does not depend on a new compositing invention. Keyframes, easing, typed parameter links, render graphs, GPU textures, command-based editing, selective caches, 2D/3D projection, and plugins are all known techniques. The work is to compose them into a small, explicit, replaceable system without making historical workarounds part of the product model.
 
-Pre-1.0, under active development. The core is usable from the CLI, and the desktop runtime seat is now established; the normal desktop creation route is still being connected and is not yet product-complete.
+Pre-1.0, under active development. The live product is the desktop app in `app/` — a Makepad front over a mostly-finished document/engine back end — and the normal desktop creation route is being connected seam by seam; it is not yet product-complete.
 
 ## Why Motolii
 
@@ -86,7 +86,7 @@ The value is in the composition of these parts, the removal of accidental comple
 
 ## A small core is a long-term capability
 
-Motolii uses Rust, wgpu, WGSL, iced, Rerun Spatial Viewer, and ffmpeg today. Those are implementation choices, not project-file semantics or articles of faith.
+Motolii today is Rust on three pillars — [Makepad](https://github.com/makepad/makepad) for the UI, [Rerun](https://rerun.io) (wgpu + WGSL underneath) as the view and spatial engine, and Lottie as the document vocabulary — with ffmpeg for media IO. Those are implementation choices, not project-file semantics or articles of faith.
 
 ```mermaid
 flowchart LR
@@ -182,11 +182,11 @@ Heavy asset creation, character rigging, simulation authoring, grading, and spec
 | M0 | Complete | GPU/UI, decode, and rational-time risks measured |
 | M1 | Complete and internally frozen | Video → typed animation → GPU composite → mp4 vertical slice |
 | M2 | Foundation reclosed; narrow follow-ups pending | Document model, validation, commands/Undo, audio transport/mux, masks, portability |
-| M3 | `next/` iced host active; editing verbs live | The current product host is `next/shell/motolii-shell` (iced): Timeline with lane bar, clip move/trim, keyframe editing/retiming and live drag preview; Inspector with drag-to-scrub; Settings; an app-internal clipboard; and a machine-checked "normal video editor" capability ledger (`next/reference/normal-map.tsv`, 1,551 items, zero unjudged) driving the remaining UI work |
+| M3 | `app/` Makepad host active; editing verbs relanding seam by seam | The product host is `app/motolii` (Makepad): Browser shelf with double-click placement, Timeline with selection/move/trim and locators, Inspector with drag-to-scrub and selection following, layer deletion, view/render camera split. The back end is largely complete and the remaining work is connecting its seams (`docs/reviews/2026-08-28-seams-remaining.md`); the "normal video editor" capability ledger (`next/reference/normal-map.tsv`) remains the meaning canon |
 | M4 | Partial foundations on main | Test-only K0 contract, ResourceLedger, and canonical recipe/artifact codec are present; cache, proxy, and bake runtime remain incomplete |
 | M5 | Stage island + first effect + camera split live | Rerun Spatial Viewer remains the adopted spatial subsystem. The effect seam is open end-to-end — the first built-in effect (`motolii.glow`, an AE-style halo) travels store → engine → GPU → picture under golden tests — and observation (viewport) and render cameras are separated with export structurally isolated from the view camera |
 
-The M1 demo above is generated through the real export path and protected by automated tests. Current product work lives in the `next/` workspace (a 2026-08-20 reset around a Lottie-derived semantic map): `next/shell/motolii-shell` is the iced product host and new-feature target, backed by a single-writer Document store with transient-overlay previews, a design-token system enforced by mechanical fences, and an operation-grammar canon (`next/reference/timeline-grammar.md`) reverse-derived from AE/Godot/Blender/Unity/Unreal and the Lottie-era editors. Everything under `crates/` (including `motolii-shell-iced` and the egui `motolii-blitz-shell`) is legacy/reference; `ui/motolii-rn/src` remains only as a migration reference. This is not proof of product completeness: the capability ledger (`next/reference/normal-map.tsv`) currently counts 92 capabilities landed, 1,195 planned, and 264 rejected with recorded reasons.
+The M1 demo above is generated through the real export path and protected by automated tests. Current product work lives in the `app/` workspace (a 2026-08-27 partition: what is alive lives in `app/`, history stays out of the build): `app/motolii` is the Makepad product host, backed by a single-writer Document store (`app/core/motolii-store`) whose vocabulary is machine-checked against the Lottie schema (`app/reference/`, zero unjudged rows), an evaluation core, and an engine that renders every layer kind into one `re_renderer` scene. `next/` holds the meaning canon (the Lottie-derived semantic map and the operation-grammar canon `next/reference/timeline-grammar.md`, reverse-derived from AE/Godot/Blender/Unity/Unreal and the Lottie-era editors) plus the retired iced host; everything under `crates/` is earlier history. None of this is proof of product completeness: the front end is reconnecting to a mostly-finished back end, and the open seams are counted one by one in `docs/reviews/2026-08-28-seams-remaining.md`.
 
 Current milestone truth and task dependencies live in the [`implementation ledger`](docs/implementation-ledger.md) and under [`docs/specs/`](docs/specs/); this README intentionally stays at project level and does not assign a speculative completion percentage.
 
@@ -195,13 +195,14 @@ Current milestone truth and task dependencies live in the [`implementation ledge
 | Layer | Current choice |
 |---|---|
 | Language | Rust |
-| Render core | [wgpu](https://github.com/gfx-rs/wgpu) + WGSL, GPU-resident textures |
-| Vector rendering | Vello/usvg boundary |
-| UI | iced shell/panels (`next/shell/motolii-shell`) as the current product host, with a wrapped Rerun Spatial Viewer Stage island; `crates/` (egui, `motolii-shell-iced`) is legacy/reference, and React Native sources are migration references rather than the product host |
+| Render core | [Rerun](https://rerun.io)'s `re_renderer` ([wgpu](https://github.com/gfx-rs/wgpu) + WGSL), one scene for every layer kind, GPU-resident textures |
+| Document vocabulary | Lottie — coverage measured mechanically against the upstream schema (`app/reference/`) |
+| Vector | `motolii-vector` (Lottie shape semantics; the current rasterizer is transitional — the constitutional path is tessellated meshes in the same `re_renderer` scene) |
+| UI | Makepad (`app/motolii`); the Stage is a shared GPU surface the compositor draws into directly (zero-copy, non-negotiable) |
 | Decode / encode | ffmpeg sidecar process, raw tagged frames at the boundary |
-| Project model | serde data, stable IDs, typed validation, command edits |
+| Project model | serde data, stable IDs, typed validation, single-writer intent edits |
 | Verification | Rust tests, property tests, semantic and image goldens |
-| Structure | Cargo workspace (`crates/motolii-*`) |
+| Structure | Cargo workspace (`app/`) |
 
 See [`docs/performance-model.md`](docs/performance-model.md) for the memory-bandwidth model, [`docs/concept.md`](docs/concept.md) for the project definition and current decision ledger, and [`docs/interaction-simplicity-model.md`](docs/interaction-simplicity-model.md) for how direct, tool, and advanced interactions converge on the same meaning.
 
@@ -232,21 +233,20 @@ Requirements:
 - Vulkan, Metal, or DX12 graphics support. CI also exercises software Vulkan/lavapipe.
 
 ```sh
-# Local portable profile: docs, then Rust fmt/clippy/locked workspace tests.
-./scripts/validate.sh local
+# Run the desktop app (the live product; add `-- --hot` for live-reloaded UI work).
+cargo run --locked --manifest-path app/Cargo.toml -p motolii
 
-# Run the repository lanes required by the task contract.
-./scripts/validate.sh --list
+# The Rust lane for the live workspace.
+cargo test --locked --manifest-path app/Cargo.toml --workspace
 
-# Render a project to mp4.
-cargo run -p motolii-cli -- export-project path/to/project.json
+# Docs-consistency fences.
+./scripts/check-docs.sh
 ```
 
-`cargo test --locked --workspace` remains the Rust lane. React, policy, product E2E,
-platform, hardware, and human gates are separate and must be named by each task's
-`PRIMARY_ORACLE / REPO_LANES / EXTERNAL_GATES`.
-`./scripts/test-local.sh` is the equivalent local profile wrapper after
-`scripts/setup-local-deps.sh` has provided the ffmpeg environment.
+`./scripts/validate.sh` and the legacy workspace at the repository root still
+exercise the historical (`crates/`, `next/`) worlds; the live product and its
+tests are entirely under `app/`.
+`scripts/setup-local-deps.sh` provides the ffmpeg environment.
 
 ## Contributing
 
@@ -275,4 +275,4 @@ at your option.
 
 Unless explicitly stated otherwise, contributions submitted for inclusion are dual-licensed under the same terms.
 
-Third-party dependencies retain their own licenses. egui and ffmpeg have separate distribution considerations; see [`docs/references.md`](docs/references.md) and verify applicable terms before release.
+Third-party dependencies retain their own licenses. ffmpeg has separate distribution considerations; see [`docs/references.md`](docs/references.md) and verify applicable terms before release.
