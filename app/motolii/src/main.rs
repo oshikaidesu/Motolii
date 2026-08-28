@@ -1792,7 +1792,7 @@ impl BackendBridge {
         states
     }
 
-    /// `LayerSource` の人が読む種別名。捏造ではなく `LayerSource` の6 variant を
+    /// `LayerSource` の人が読む種別名。捏造ではなく `LayerSource` の各 variant を
     /// そのまま名付けているだけ(新しい語彙を発明しない)。
     fn layer_kind_label(source: &LayerSource) -> &'static str {
         match source {
@@ -1802,6 +1802,7 @@ impl BackendBridge {
             LayerSource::Shape => "Shape layer",
             LayerSource::Text => "Text layer",
             LayerSource::Group => "Group",
+            LayerSource::PointCloud { .. } => "Point cloud layer",
         }
     }
 
