@@ -23,6 +23,7 @@ wgpu = "29.0.4"
 motolii-store.workspace = true
 motolii-shell-state.workspace = true
 motolii-engine.workspace = true
+motolii-audio.workspace = true
 motolii-fixture.workspace = true
 # 投影と積み替えの計算だけ。iced view 層(`motolii-timeline-pane`)は front から
 # 一度も呼ばれていないので、計算だけを切り出したこちらを引く。

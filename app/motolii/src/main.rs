@@ -8,6 +8,10 @@
 pub use makepad_widgets;
 
 use makepad_widgets::*;
+// 再生の背骨(発注 S2)。裁定276は duration probing(`admit_soundtrack`、
+// `Engine::media_duration` 経由)限定のスコープで、再生セッションの結線とは別の
+// 話 — front が `AudioProgram`/`PlaybackSession` を直接引くのはここだけ。
+use motolii_audio::{AudioProgram, PcmCache, PlaybackSession};
 use motolii_engine::{Engine, ObservationCamera};
 use motolii_shell_state::Session;
 use motolii_store::{
@@ -20,6 +24,7 @@ use motolii_timeline_projection::{
 };
 use std::collections::HashMap;
 use std::path::Path;
+use std::sync::Arc;
 use std::time::Instant;
 
 mod browser_surface;
@@ -446,6 +451,15 @@ struct BackendBridge {
     /// path → 素材の総尺を comp の fps で数えたフレーム数。波形をトリム窓へ
     /// 切り出す時の分母(`waveform_bucket_range`)。
     source_frames: HashMap<String, i64>,
+    /// 実デバイス再生セッション(発注 S2)。`playing` かつデバイスが開けた時だけ
+    /// `Some` — 再生中の playhead の正はこの `clock()`(P07-C1D・憲法3)。`None`
+    /// のまま再生することもある(TARGET 6: デバイス不可・comp 無しでの
+    /// 静かな劣化、`start_audio_session` 参照)。Drop でストリームが閉じる。
+    audio_session: Option<PlaybackSession>,
+    /// `AudioProgram::from_view` が要る `(識別キー, ordinal) → 正準PCM` キャッシュ。
+    /// 再生の開始/停止のたびに `AudioProgram` を組み直しても、同じ素材の decode を
+    /// 使い回す(`program.rs` の doc が指す `caches` そのもの)。
+    audio_pcm_cache: HashMap<(String, u32), Arc<PcmCache>>,
 }
 
 enum TimelineUpdate {
@@ -499,6 +513,8 @@ impl BackendBridge {
             stage_gpu: None,
             waveforms: HashMap::new(),
             source_frames: HashMap::new(),
+            audio_session: None,
+            audio_pcm_cache: HashMap::new(),
         }
     }
 
@@ -779,6 +795,17 @@ impl BackendBridge {
     fn scrub_to(&mut self, frame: i64) {
         let started = Instant::now();
         self.session.playhead = frame.max(0);
+        // 再生中の seek(TARGET 4)。論理位置(`PlaybackClock`)は常に即時反映、
+        // 実デバイスへの追従は `MixProducer` 側の既知の制約(`session.rs` doc の
+        // `seek` 節参照)。
+        if let Some(session) = self.audio_session.as_mut() {
+            if let Some(composition) = self.doc.view().composition().ok().flatten() {
+                if let Ok(at) = RationalTime::try_from_frame(self.session.playhead, composition.fps)
+                {
+                    session.seek(at);
+                }
+            }
+        }
         self.frame = None;
         log!(
             "PERF store_scrub frame={} elapsed_us={}",
@@ -1270,9 +1297,63 @@ impl BackendBridge {
             .map(|(width, height, rgba)| (*width, *height, rgba.as_slice()))
     }
 
-    fn toggle_playback(&mut self) -> bool {
+    /// 再生開始(TARGET 1)。`Document` の view から `AudioProgram::from_view` で
+    /// program を組み、現在の playhead 時刻で `PlaybackSession::open_default` を
+    /// 開く。**panic しない**(TARGET 6) — 失敗理由は `String` で返すだけで、
+    /// `audio_session` は `None` のまま(呼び出し側は timer 駆動へ黙って劣化する)。
+    fn start_audio_session(&mut self) -> Result<(), String> {
+        let Some(composition) = self
+            .doc
+            .view()
+            .composition()
+            .map_err(|error| error.to_string())?
+        else {
+            // comp が無い Document: 音声 program を組む対象が無い。旧
+            // `playback_tick` の「何もしない」と同じ扱いで、エラーではない。
+            return Ok(());
+        };
+        let at = RationalTime::try_from_frame(self.session.playhead, composition.fps)
+            .map_err(|error| error.to_string())?;
+        let program = {
+            let view = self.doc.view();
+            AudioProgram::from_view(&view, &mut self.audio_pcm_cache)
+                .map_err(|error| error.to_string())?
+        };
+        let session = PlaybackSession::open_default(Arc::new(program), at)
+            .map_err(|error| error.to_string())?;
+        self.audio_session = Some(session);
+        Ok(())
+    }
+
+    /// 再生停止(TARGET 3)。session を閉じる前に clock の最終位置を playhead へ
+    /// 写す — `PlaybackClock` が停止直前まで再生位置の正なので(P07-C1D・憲法3)、
+    /// これが無いと直近の 60fps timer tick と実デバイス供給の間の端数が失われる。
+    /// session を drop すると stream/producer スレッドが閉じる(`session.rs` doc)。
+    fn stop_audio_session(&mut self) {
+        let Some(session) = self.audio_session.take() else {
+            return;
+        };
+        let Some(composition) = self.doc.view().composition().ok().flatten() else {
+            return;
+        };
+        if let Ok(position) = session.clock().position() {
+            if let Ok(frame) = position.try_to_frame_round(composition.fps) {
+                self.session.playhead = frame.max(0);
+            }
+        }
+    }
+
+    /// 返り値: (再生中か, 音声デバイスが開けなかった理由)。理由が `Some` でも
+    /// 再生自体は続ける(TARGET 6: 静かな劣化) — front はこれを状態行へ出すだけ。
+    fn toggle_playback(&mut self) -> (bool, Option<String>) {
         self.playing = !self.playing;
-        self.playing
+        if self.playing {
+            let issue = self.start_audio_session().err();
+            (true, issue)
+        } else {
+            self.stop_audio_session();
+            (false, None)
+        }
     }
 
     fn playback_tick(&mut self) -> bool {
@@ -1280,16 +1361,35 @@ impl BackendBridge {
             return false;
         }
         let started = Instant::now();
-        let duration = self
-            .doc
-            .view()
-            .composition()
-            .ok()
-            .flatten()
-            .map(|composition| composition.duration_frames)
-            .unwrap_or(1)
-            .max(1);
-        self.session.playhead = (self.session.playhead + 1) % duration;
+        let Some(composition) = self.doc.view().composition().ok().flatten() else {
+            return false;
+        };
+        let duration = composition.duration_frames.max(1);
+
+        // 再生中の playhead は音声クロックから導出する(P07-C1D・憲法3)。
+        // `audio_session` が無い(デバイス不可・comp 無し等)場合だけ、従来どおり
+        // timer 駆動で1フレームずつ進める(TARGET 6 の静かな劣化)。
+        let next_frame = match self.audio_session.as_ref() {
+            Some(session) => match session.clock().position() {
+                Ok(position) => position
+                    .try_to_frame_round(composition.fps)
+                    .unwrap_or(self.session.playhead)
+                    .max(0),
+                Err(_) => self.session.playhead,
+            },
+            None => self.session.playhead + 1,
+        };
+
+        if next_frame >= duration {
+            // comp 末尾で停止(TARGET 5) — ループしない。
+            self.playing = false;
+            self.stop_audio_session();
+            self.session.playhead = duration.saturating_sub(1).max(0);
+            self.frame = None;
+            return true;
+        }
+
+        self.session.playhead = next_frame;
         self.frame = None;
         log!(
             "PERF store_playback frame={} elapsed_us={}",
@@ -1975,19 +2075,22 @@ impl App {
     }
 
     fn toggle_playback(&mut self, cx: &mut Cx) {
-        let playing = self
+        let (playing, audio_issue) = self
             .backend
             .as_mut()
             .map(BackendBridge::toggle_playback)
-            .unwrap_or(false);
-        self.set_status(
-            cx,
-            if playing {
-                "PLAYING  ·  SPACE TO PAUSE"
-            } else {
-                "PAUSED"
-            },
-        );
+            .unwrap_or((false, None));
+        let status = if playing {
+            match audio_issue {
+                // TARGET 6: デバイスが開けない環境でも再生自体は止めない —
+                // 理由だけ状態行へ出す(憲法3の許容型、静かな劣化)。
+                Some(reason) => format!("PLAYING  ·  NO AUDIO DEVICE  ·  {reason}"),
+                None => "PLAYING  ·  SPACE TO PAUSE".to_string(),
+            }
+        } else {
+            "PAUSED".to_string()
+        };
+        self.set_status(cx, &status);
         self.install_timeline_model(cx);
         self.request_stage_frame(cx);
     }
@@ -2136,13 +2239,22 @@ impl MatchEvent for App {
     }
 
     fn handle_timer(&mut self, cx: &mut Cx, event: &TimerEvent) {
-        if self.playback_timer.is_timer(event).is_some()
-            && self
-                .backend
-                .as_mut()
-                .map(BackendBridge::playback_tick)
-                .unwrap_or(false)
-        {
+        if self.playback_timer.is_timer(event).is_none() {
+            return;
+        }
+        let was_playing = self.backend.as_ref().map(|backend| backend.playing).unwrap_or(false);
+        let changed = self
+            .backend
+            .as_mut()
+            .map(BackendBridge::playback_tick)
+            .unwrap_or(false);
+        if changed {
+            let still_playing = self.backend.as_ref().map(|backend| backend.playing).unwrap_or(false);
+            if was_playing && !still_playing {
+                // comp 末尾での自然停止(TARGET 5)。状態行を PLAYING のまま
+                // 残さない — `toggle_playback` が Space で止めた時と同じ表示。
+                self.set_status(cx, "PAUSED");
+            }
             self.install_timeline_model(cx);
             self.install_fx_model(cx);
             self.install_inspector_selection(cx);
