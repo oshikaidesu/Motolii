@@ -20,6 +20,13 @@ impl Compositor {
     }
 
     /// 共有面へ直接書く口(裁定256)。検査失敗では内部状態を変えない。
+    ///
+    /// **effect pass を適用してから描く**(2026-08-28 修理)——[`Self::render_with_effects`]/
+    /// [`Self::render_to_texture`]と同じく `layers[i].passes` を
+    /// `Self::effective_layer_textures` へ通し、その実効 texture(と、pass が出力を
+    /// 拡張した分の padding)を rect へ使う。**この関数だけが `lwp.layer.texture` を
+    /// そのまま描いていた**ため、共有面(Makepad の zero-copy Stage)は effect を
+    /// 一切反映していなかった——export/CPU 読み戻し経路(上記2つ)は元から正しかった。
     pub fn render_into(
         &mut self,
         target: &wgpu::Texture,
@@ -28,6 +35,13 @@ impl Compositor {
         layers: &[LayerWithPasses],
     ) -> Result<(), CompositorError> {
         check_presentable_target(target, comp)?;
+
+        // layer ごとに「合成へ渡す実効 texture」を決める(`render_effects.rs` の
+        // `Self::effective_layer_textures` が3経路で共有する核)。`checked_out` は
+        // この関数の合成が終わってから(下の poll の後)プールへ返す——
+        // `render_with_effects`/`render_to_texture` と同じ返却タイミング。
+        let (effective_textures, effective_paddings, checked_out) =
+            self.effective_layer_textures(layers)?;
 
         let projection = motolii_core::camera_projection(comp, camera);
         let pinned_cancel = motolii_core::camera_screen_from_world_z0(comp, camera).inverse();
@@ -39,7 +53,7 @@ impl Compositor {
         self.ctx.begin_frame();
 
         let mut rects: Vec<TexturedRect> = Vec::with_capacity(layers.len());
-        for lwp in layers {
+        for ((lwp, texture), &padding) in layers.iter().zip(&effective_textures).zip(&effective_paddings) {
             let layer = &lwp.layer;
             let (transform, z) = if layer.pinned {
                 (pinned_cancel * layer.placement.transform, 0.0)
@@ -50,18 +64,23 @@ impl Compositor {
                 crate::BlendMode::Add => 0.0,
                 _ => layer.placement.opacity,
             };
+            // pass が出力を拡張した分(texel、`EffectPass::padding`)だけ quad を
+            // local 空間で広げる——`render_with_effects`/`render_to_texture` が
+            // `SequentialInput::local_min`/`local_size` でやっているのと同じ計算
+            // (padding=0 なら従来と完全に同じ幾何)。
+            let pad = padding as f32;
             rects.push(TexturedRect {
                 top_left_corner_position: to_point3(
-                    transform.transform_point2(glam::Vec2::ZERO),
+                    transform.transform_point2(glam::Vec2::new(-pad, -pad)),
                     z,
                 ),
                 extent_u: to_vector3(
-                    transform.transform_vector2(glam::Vec2::new(layer.size[0], 0.0)),
+                    transform.transform_vector2(glam::Vec2::new(layer.size[0] + 2.0 * pad, 0.0)),
                 ),
                 extent_v: to_vector3(
-                    transform.transform_vector2(glam::Vec2::new(0.0, layer.size[1])),
+                    transform.transform_vector2(glam::Vec2::new(0.0, layer.size[1] + 2.0 * pad)),
                 ),
-                colormapped_texture: ColormappedTexture::from_unorm_rgba(layer.texture.clone()),
+                colormapped_texture: ColormappedTexture::from_unorm_rgba(texture.clone()),
                 options: RectangleOptions {
                     multiplicative_tint: Rgba::from_rgba_premultiplied(
                         layer.placement.opacity,
@@ -103,6 +122,14 @@ impl Compositor {
             .device
             .poll(wgpu::PollType::wait_indefinitely())
             .map_err(|e| CompositorError::Draw(e.to_string()))?;
+
+        // scratch をプールへ返す——この合成(上の poll)が終わった後なので、
+        // `render_with_effects`/`render_to_texture` と同じ返却タイミング
+        // (`effective_layer_textures` の doc 参照)。
+        for (width, height, format, scratch_texture) in checked_out {
+            self.effect_scratch
+                .release(width, height, format, scratch_texture);
+        }
         Ok(())
     }
 }
