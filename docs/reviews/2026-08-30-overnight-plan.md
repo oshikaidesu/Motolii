@@ -54,8 +54,10 @@
    `LayerTiming{start,duration,source_in,speed}` を2本へ割り、既存の `SetTiming`/`AddLayer`/
    `SetMeta`/`SetTrack`/`SetEffects` を並べるだけ。約30行。`LayerAttrs → LayerAttrsPatch` の
    変換口だけ無いので手で組む
-2. **色と縁を Inspector に出す** — Solid の `rgba`、Text の fill/stroke。
-   `Value::Color` は既に `lerp` を持つのでキーフレームも効くはず。**swatch は作らない**
+2. **色と縁を触れるようにする** — Solid の `rgba`、Text の fill/stroke。
+   入口は **Browser**(利用者裁定)。一覧は「この作品で使われている色」で、
+   **固定標準 swatch は作らない**。Inspector 側にも行を出してよい。
+   **キーフレームは効かない**(上の測定)。効かせようとするな — 意味の追加になる
 3. **ギズモの拡縮/回転ハンドル** — 四隅=Scale、辺=片軸、枠の外=Rotation。
    書き先は既存の property、経路は今日通した transient overlay + `write_key` と同じ。
    **新しい機構を作らない**。Shift=等比/軸拘束、Alt=中心基準まで着けば上出来
