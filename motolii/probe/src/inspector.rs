@@ -41,6 +41,7 @@ struct ValueDrag {
     axis: usize,
     start_x: f64,
     start_value: Value,
+    last_dx: f64,
 }
 
 /// `SetTrack`本体。trackが無ければ`at_zero`(静的値)、あれば`t`(playhead)へ書く。
@@ -87,7 +88,6 @@ fn prop_row(
             let property = p.property.unwrap();
             let vec2 = p.vec2;
             let start_value = p.value.clone();
-            let doc_up = doc.clone();
             rsx!(span {
                 class: "{class}",
                 onmousedown: move |evt| {
@@ -99,26 +99,8 @@ fn prop_row(
                         axis: i,
                         start_x: x,
                         start_value: start_value.clone(),
+                        last_dx: 0.0,
                     });
-                },
-                onmouseup: move |evt| {
-                    let Some(d) = drag.write().take() else { return };
-                    if d.layer != layer || d.property != property || d.axis != i {
-                        return;
-                    }
-                    let x = evt.data().client_coordinates().x;
-                    let dx = x - d.start_x;
-                    let new_value = nudge(&d.start_value, d.vec2, d.axis, dx * increment(d.property));
-                    match write_key(&doc_up, layer, property, new_value.clone(), t, true) {
-                        Ok(_) => {
-                            println!(
-                                "PROBE room=write verdict=value-scrub layer={:?} prop={} axis={} dx={:.1} new={:?}",
-                                layer, property, i, dx, new_value
-                            );
-                            *revision.write() += 1;
-                        }
-                        Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
-                    }
                 },
                 "{c}"
             })
@@ -156,9 +138,9 @@ pub fn inspector_panel(
     doc: &Arc<Mutex<Document>>,
     selection: Option<LayerId>,
     clock: &Clock,
-    revision: Signal<u32>,
+    mut revision: Signal<u32>,
 ) -> Element {
-    let drag = use_signal(|| Option::<ValueDrag>::None);
+    let mut drag = use_signal(|| Option::<ValueDrag>::None);
     let _ = revision(); // Document書き換え後の再描画をここで購読する(値そのものは使わない)
 
     let empty = InspectorData {
@@ -185,8 +167,42 @@ pub fn inspector_panel(
         .map(|p| prop_row(p, selection.unwrap_or(LayerId(0)), t, doc, drag, revision));
     let fx_label = if inspector.has_effects { "" } else { "No shared FX" };
 
+    let doc_move = doc.clone();
     rsx!(
-        div { id: "inspector",
+        div {
+            id: "inspector",
+            onmousemove: move |evt| {
+                // パネルの外で離したmouseupはここに来ない。
+                if evt.data().held_buttons().is_empty() {
+                    *drag.write() = None;
+                    return;
+                }
+                let Some(state) = drag.write().as_mut().map(|d| {
+                    let x = evt.data().client_coordinates().x;
+                    let dx = x - d.start_x;
+                    let changed = dx != d.last_dx;
+                    d.last_dx = dx;
+                    (changed, d.layer, d.property, d.vec2, d.axis, d.start_value.clone(), dx)
+                }) else { return };
+                let (changed, layer, property, vec2, axis, start_value, dx) = state;
+                if !changed {
+                    return;
+                }
+                let new_value = nudge(&start_value, vec2, axis, dx * increment(property));
+                match write_key(&doc_move, layer, property, new_value.clone(), t, true) {
+                    Ok(_) => {
+                        println!(
+                            "PROBE room=write verdict=value-scrub layer={:?} prop={} axis={} dx={:.1} new={:?}",
+                            layer, property, axis, dx, new_value
+                        );
+                        *revision.write() += 1;
+                    }
+                    Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
+                }
+            },
+            onmouseup: move |_| {
+                *drag.write() = None;
+            },
             div { class: "ptitle",
                 span { class: "way", style: "background:var(--way-inspector);" }
                 "Inspector"

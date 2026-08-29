@@ -6,7 +6,7 @@ use crate::tokens;
 use anyrender::{PaintRef, PaintScene, ResourceId};
 use blitz_traits::events::UiEvent;
 use dioxus_native::prelude::{Signal, WritableExt};
-use motolii_store::{property, Document, Intent, Keyframe, KeyframeTrack, LayerId, LayerSource, PropertyId, RationalTime, Value};
+use motolii_store::{property, Document, Intent, Keyframe, KeyframeTrack, LayerId, LayerSource, PropertyId, RationalTime, StoreView, Value};
 use blitz_dom::node::ComputedStyles;
 use blitz_dom::Widget;
 use motolii_engine::Engine;
@@ -45,6 +45,8 @@ struct GizmoDrag {
     grab: (f64, f64),
     /// ドラッグ開始時のposition値。
     orig: (f64, f64),
+    /// 直近のPointerMoveのcomp座標。枠の追随に使う。
+    live: (f64, f64),
 }
 
 pub struct StageWidget {
@@ -98,20 +100,10 @@ impl StageWidget {
         RationalTime::try_new((t_sec * 3000.0) as i64, 3000).unwrap_or(RationalTime::ZERO)
     }
 
-    /// 選択層のcomp座標での枠(x, y, w, h)。第一波はSolidの実寸、それ以外は仮の200x200。
     fn selection_box(&self, layer: LayerId) -> Option<(f64, f64, f64, f64)> {
         let doc = self.doc.lock().unwrap();
         let view = doc.view();
-        let position_prop = PropertyId::new(property::POSITION).ok()?;
-        let (x, y) = match view.value_at(layer, &position_prop, self.current_rt()).ok().flatten() {
-            Some(Value::Vec2([x, y])) => (x, y),
-            _ => (0.0, 0.0),
-        };
-        let (w, h) = match view.meta(layer).ok().flatten().map(|m| m.source) {
-            Some(LayerSource::Solid { width, height, .. }) => (width as f64, height as f64),
-            _ => (200.0, 200.0),
-        };
-        Some((x, y, w, h))
+        selection_box_in(&view, layer, self.current_rt())
     }
 
     /// 既存trackが無い層だけ書ける(第一波の裁定)。
@@ -123,6 +115,26 @@ impl StageWidget {
         };
         doc.view().track(layer, &position_prop).ok().flatten().is_some()
     }
+}
+
+/// 選択層のcomp座標での枠(x, y, w, h)。timelineのbandが無い時刻ではNone(裁定どおり)。
+fn selection_box_in(view: &StoreView<'_>, layer: LayerId, rt: RationalTime) -> Option<(f64, f64, f64, f64)> {
+    let meta = view.meta(layer).ok().flatten()?;
+    let fps = view.composition().ok().flatten()?.fps;
+    let frame = rt.try_to_frame_floor(fps).ok()?;
+    if !meta.timing.covers(frame) {
+        return None;
+    }
+    let position_prop = PropertyId::new(property::POSITION).ok()?;
+    let (x, y) = match view.value_at(layer, &position_prop, rt).ok().flatten() {
+        Some(Value::Vec2([x, y])) => (x, y),
+        _ => (0.0, 0.0),
+    };
+    let (w, h) = match meta.source {
+        LayerSource::Solid { width, height, .. } => (width as f64, height as f64),
+        _ => (200.0, 200.0),
+    };
+    Some((x, y, w, h))
 }
 
 fn create_target(device: &wgpu::Device, width: u32, height: u32) -> wgpu::Texture {
@@ -181,10 +193,14 @@ impl Widget for StageWidget {
                 let Some((bx, by, bw, bh)) = self.selection_box(layer) else { return };
                 let (cx, cy) = self.fit.to_comp(p.element.x as f64, p.element.y as f64);
                 if cx >= bx && cx <= bx + bw && cy >= by && cy <= by + bh {
-                    self.drag = Some(GizmoDrag { layer, grab: (cx, cy), orig: (bx, by) });
+                    self.drag = Some(GizmoDrag { layer, grab: (cx, cy), orig: (bx, by), live: (cx, cy) });
                 }
             }
-            UiEvent::PointerMove(_) => {}
+            UiEvent::PointerMove(p) => {
+                if let Some(drag) = self.drag.as_mut() {
+                    drag.live = self.fit.to_comp(p.element.x as f64, p.element.y as f64);
+                }
+            }
             UiEvent::PointerUp(p) => {
                 let Some(drag) = self.drag.take() else { return };
                 let (cx, cy) = self.fit.to_comp(p.element.x as f64, p.element.y as f64);
@@ -282,19 +298,15 @@ impl Widget for StageWidget {
             return scene;
         }
 
-        // S18: 選択層の枠(comp座標)。viewを落とす前に読む。
+        // S18: 選択層の枠(comp座標)。viewを落とす前に読む。ドラッグ中は指の位置を反映する。
         let selected_box = self.selection.get().and_then(|layer| {
-            let position_prop = PropertyId::new(property::POSITION).ok()?;
-            let (x, y) = match view.value_at(layer, &position_prop, rt).ok().flatten() {
-                Some(Value::Vec2([x, y])) => (x, y),
-                _ => (0.0, 0.0),
-            };
-            let (w, h) = match view.meta(layer).ok().flatten().map(|m| m.source) {
-                Some(LayerSource::Solid { width, height, .. }) => (width as f64, height as f64),
-                // Text/Shapeの正確な境界は評価が要る — 第一波はcomp中央の仮枠。
-                _ => (200.0, 200.0),
-            };
-            Some((x, y, w, h))
+            let base = selection_box_in(&view, layer, rt)?;
+            Some(match &self.drag {
+                Some(drag) if drag.layer == layer => {
+                    (drag.orig.0 + (drag.live.0 - drag.grab.0), drag.orig.1 + (drag.live.1 - drag.grab.1), base.2, base.3)
+                }
+                _ => base,
+            })
         });
 
         drop(view);
