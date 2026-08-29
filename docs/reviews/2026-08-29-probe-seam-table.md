@@ -13,7 +13,7 @@
 |---|---|---|---|---|---|
 | S1 | `stage_widget.rs`(TestTriangle撤去) | `motolii_engine::Engine::with_device` + `render_frame_to_texture`(app/engine/motolii-engine/src/render.rs:424) | probeの共有device/queueでEngineを建て、Clock時刻の`view`を渡してtexture受取→既存のResource表示経路へ | 矩形合成の自作・`rectangles.rs`直叩き・`render_frame`(Vec\<u8\> readback)経路の流用。合成器は既にある | 10分 |
 | S2 | 層クリック=選択(timeline_widget/層ヘッダ) | `motolii-shell-state`(app/ui)の`Session`/`KeySelector` | probeの選択状態をSessionへ寄せ、Inspector identが読む | 独自selection構造体の新設 | 10分 |
-| S3 | M/S/L点灯(現chromeローカルHashSet) | `Intent::SetAttrs{hidden,solo,locked}`(motolii-store) | M=hidden/S=solo/L=locked 1:1。書きはIntent channel1本(単一書き手の柵) | Documentフィールド直書き・点灯だけの飾りのまま放置 | 10分 |
+| S3 | ~~M/S/L点灯~~ **済**(Document実値+SetAttrs) | `Intent::SetAttrs{hidden,solo,locked}`(motolii-store) | M=hidden/S=solo/L=locked 1:1。書きはIntent channel1本(単一書き手の柵) | Documentフィールド直書き・点灯だけの飾りのまま放置 | 10分 |
 | S4 | Inspector値(起動時固定→追随) | `StoreView::value_at`(使用中の口) | 選択層+Clock時刻で毎フレーム再読 | 値キャッシュ層の自作 | 5分 |
 | S5 | Inspector値セルのdragスクラブ | motolii-storeのproperty書きIntent(document.rsの既存variantを写す) | drag量→値→Intent apply→再読。hint行「Drag to scrub」を本物に | 補間・clamp・undoの自作(全部store側にある) | 10分 |
 | S6 | Timeline行モデル(CanvasRow自作中) | `motolii-timeline-projection`(app/ui)+`TimelineFoldState` | 行の投影(グループ畳み含む)を既製projectionへ差し替え | CanvasRowへのグループ/畳み機能の増築 | 10分 |
@@ -61,7 +61,7 @@
 | S14 | Browser(Media)へのD&D/読み込み | store `AssetLedger::admit`+`AssetDraft::from_probed_source`(asset.rs:169)+Engine::media_duration(裁定276: frontはengine越し) | ファイル→admit→Media一覧 | probe/デコーダ自作・motolii-audio直依存 | 10分 |
 | S15 | Browser→Timelineの配置gesture | `Intent::AddLayer`+`SetMeta{source: Media,…}`+`LayerTiming::place`(store lib.rs:381) | 素材→層1本 | 配置規則の発明(placeが既にある) | 10分 |
 | S16 | Browser Createタブ(Text/Rectangle/Solid) | Text=fixtureレーンで実証済みのIntent列 / Shape=**在庫調査中**(view.shapes→engineのshape texture)。**2Dシェイプはパス前提**(2026-08-29利用者裁定: 四角=4頂点の閉パス。パラメトリック矩形を別型で持たない — Lottieに近い側を採る。`Value::Path`の頂点補間とも整合) | Createの行クリック→層が生まれ選択される | Shape描画の自作・矩形プリミティブ型の新設 | Text 10分/Shape 調査待ち |
-| S17 | Timelineルーラーのスクラブ | probe `Clock`(seek口を1本足す)+timeline_widgetのPointerDown(ルーラー域) | クリック/ドラッグ=Clock.seek | 第二のclock・transport状態の複製 | 10分 |
+| S17 | ~~ルーラースクラブ~~ **済**(Clock::seek) | probe `Clock`(seek口を1本足す)+timeline_widgetのPointerDown(ルーラー域) | クリック/ドラッグ=Clock.seek | 第二のclock・transport状態の複製 | 10分 |
 
 ## 責任分割(モジュール地図)
 

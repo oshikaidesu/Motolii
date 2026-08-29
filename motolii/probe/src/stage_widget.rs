@@ -165,12 +165,15 @@ impl Widget for StageWidget {
         let (cw, ch) = (target.width() as f64, target.height() as f64);
         let s = (w / cw).min(h / ch);
         let (fw, fh) = (cw * s, ch * s);
+        let (fx, fy) = ((w - fw) * 0.5, (h - fh) * 0.5);
+        // brush空間はtexture画素のまま — fit矩形へは brush_transform で写す。
+        // 矩形だけ縮めるとcompを等倍で覗く穴になる。
         scene.fill(
             Fill::NonZero,
             Affine::IDENTITY,
             PaintRef::Resource(ImageBrush { image: handle, sampler: ImageSampler::default() }),
-            None,
-            &Rect::from_origin_size(((w - fw) * 0.5, (h - fh) * 0.5), (fw, fh)),
+            Some(Affine::translate((fx, fy)) * Affine::scale(s)),
+            &Rect::from_origin_size((fx, fy), (fw, fh)),
         );
         scene
     }
