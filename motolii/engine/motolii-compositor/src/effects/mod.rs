@@ -27,10 +27,12 @@ use std::collections::HashMap;
 
 mod glow;
 pub(crate) mod isf;
+mod wgsl_fragment;
 
 pub(crate) use glow::{GlowPipelines, GLOW_INTERMEDIATE_FORMAT};
 pub use isf::{IsfInput, IsfInputType, IsfManifest};
 pub(crate) use isf::{IsfProgram, BLOOM_SOURCE, ISF_TARGET_FORMAT};
+pub(crate) use wgsl_fragment::{WgslFragmentProgram, GRADIENT_SOURCE, GRADIENT_TARGET_FORMAT};
 
 /// layer に適用する GPU pass の記述。**f32 param を持つので `Eq` は導出できない**
 /// (`PartialEq` のみ — 既存の呼び手は `assert_eq!`/`PartialEq` 比較しか使っていない、
@@ -65,6 +67,9 @@ pub enum EffectPass {
     Isf {
         params: Vec<(String, f32)>,
     },
+    /// 内蔵 vism 第3号。uniform も texture も読まない WGSL フラグメント1本
+    /// (`wgsl_fragment` サブモジュール参照)。param を1つも持たない。
+    Gradient,
 }
 
 impl EffectPass {
@@ -109,6 +114,7 @@ impl EffectPass {
             // 最悪ケースを保守的に確保するかのどちらかが要る——今回はどちらも
             // 実装していない。
             EffectPass::Isf { .. } => 0,
+            EffectPass::Gradient => 0,
         }
     }
 
@@ -127,6 +133,7 @@ impl EffectPass {
             EffectPass::Identity => None,
             EffectPass::Glow { .. } => Some(GLOW_INTERMEDIATE_FORMAT),
             EffectPass::Isf { .. } => Some(ISF_TARGET_FORMAT),
+            EffectPass::Gradient => Some(GRADIENT_TARGET_FORMAT),
         }
     }
 }

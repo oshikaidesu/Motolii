@@ -222,6 +222,10 @@ impl Compositor {
                             [width as f32, height as f32],
                         );
                     }
+                    EffectPass::Gradient => {
+                        let dst_view = scratch.create_view(&Default::default());
+                        self.wgsl_gradient.record(&self.ctx, encoder, &dst_view);
+                    }
                 }
             }
 

@@ -368,6 +368,15 @@ pub fn build() -> Fixture {
         track: glow_intensity,
     });
 
+    // タイトルロゴ: 内蔵 vism 第3号 Gradient(param 無し)を積む。
+    intents.push(Intent::SetEffects {
+        layer: logo_id,
+        effects: vec![EffectInstance {
+            id: EffectId(1),
+            plugin_id: "motolii.gradient".to_owned(),
+        }],
+    });
+
     // Browser の media タブへ映る仮素材(2026-08-22 題帯レーン — 発注書
     // 「fixture 仮データ」)。drop 記帳 B1(`Shell::admit`)と同じ経路 —
     // `SourceFingerprintV1::from_reader` → `AssetDraft::from_probed_source` →

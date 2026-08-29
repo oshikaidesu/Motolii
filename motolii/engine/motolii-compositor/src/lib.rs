@@ -404,6 +404,9 @@ pub struct Compositor {
     /// 持たせるなら `HashMap<PluginId, IsfProgram>` 化が要るが、今回は「1本を
     /// 実際に通す」が scope——`isf` モジュール doc「意図的に配線していない物」)。
     pub(crate) isf_bloom: effects::IsfProgram,
+    /// 内蔵 vism 第3号(`EffectPass::Gradient`、`effects::wgsl_fragment` モジュール
+    /// doc 参照)。`isf_bloom` と同じ規律 — 初回生成して以後使い回す。
+    pub(crate) wgsl_gradient: effects::WgslFragmentProgram,
     /// 分離可能+非分離 blend(BL3/BL4)の shader pipeline。`glow_pipelines` と同じ規律 —
     /// 初回生成して以後使い回す(`blend` モジュール doc 参照)。
     pub(crate) blend_pipelines: blend::SeparableBlendPipelines,
