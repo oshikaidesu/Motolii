@@ -1,9 +1,9 @@
 use std::any::Any;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use dioxus_native::prelude::*;
 use dioxus_native::CustomWidgetAttr;
-use motolii_store::{property, Document, KeyframeTrack, PropertyId, Value};
+use motolii_store::{property, Document, PropertyId, Value};
 
 mod playback;
 mod stage_widget;
@@ -28,7 +28,9 @@ fn main() {
     // re_rendererは共有deviceのuncaptured-errorハンドラを乗っ取りre_logへ流す。
     // ロガー未初期化だとwgpu検証エラーが無音で消えるので必ず先に立てる。
     re_log::setup_logging();
-    let config: Vec<Box<dyn Any>> = vec![];
+    let config: Vec<Box<dyn Any>> = vec![Box::new(
+        dioxus_native::WindowAttributes::default().with_title("Motolii"),
+    )];
     dioxus_native::launch_cfg(app, Vec::new(), config);
 }
 
@@ -119,10 +121,6 @@ struct Loaded {
     doc: Document,
     ui: UiData,
     duration_sec: f64,
-    /// サビ歌詞 position(Bezierイージング入り)。Stageのカメラを駆動する。
-    sabi_position: Option<KeyframeTrack>,
-    /// タイトルロゴ opacity。Stageのカメラ距離を駆動する。
-    logo_opacity: Option<KeyframeTrack>,
 }
 
 fn load_fixture() -> Loaded {
@@ -130,24 +128,8 @@ fn load_fixture() -> Loaded {
     let view = fx.doc.view();
 
     let mut layer_rows = Vec::new();
-    let mut sabi_position = None;
-    let mut logo_opacity = None;
     for layer in view.layers() {
         let attrs = view.attrs(layer).ok().flatten().unwrap_or_default();
-        if attrs.name == "サビ歌詞" {
-            if let Ok(Some(track)) =
-                view.track(layer, &PropertyId::new(property::POSITION).unwrap())
-            {
-                sabi_position = Some(track);
-            }
-        }
-        if attrs.name == "タイトルロゴ" {
-            if let Ok(Some(track)) =
-                view.track(layer, &PropertyId::new(property::OPACITY).unwrap())
-            {
-                logo_opacity = Some(track);
-            }
-        }
         let color = attrs
             .label_color
             .map(|ix| LABEL_PALETTE[ix as usize % LABEL_PALETTE.len()])
@@ -260,8 +242,6 @@ fn load_fixture() -> Loaded {
         doc: fx.doc,
         ui: UiData { layer_rows, assets, comp_line, inspector, status: fx.status },
         duration_sec: 60.0,
-        sabi_position,
-        logo_opacity,
     }
 }
 
@@ -315,16 +295,17 @@ fn app() -> Element {
     let mut scale_pct = use_signal(|| 100u32);
 
     let (clock, ui_scale, timeline_attr, stage_attr, loaded) = use_hook(|| {
-        let Loaded { doc, ui, duration_sec, sabi_position, logo_opacity } = load_fixture();
+        let Loaded { doc, ui, duration_sec } = load_fixture();
         let clock = Arc::new(Clock::new(duration_sec));
         let ui_scale = Arc::new(UiScale::new(100));
+        let doc = Arc::new(Mutex::new(doc));
 
-        let canvas_rows = canvas_rows_from_doc(&doc);
+        let canvas_rows = canvas_rows_from_doc(&doc.lock().unwrap());
         let timeline = TimelineWidget::new(canvas_rows)
             .with_clock(clock.clone())
             .with_scale(ui_scale.clone())
-            .with_document(doc, canvas_rows_from_doc);
-        let stage = StageWidget::new(clock.clone(), sabi_position, logo_opacity);
+            .with_document(doc.clone(), canvas_rows_from_doc);
+        let stage = StageWidget::new(clock.clone(), doc.clone());
         (
             clock,
             ui_scale,

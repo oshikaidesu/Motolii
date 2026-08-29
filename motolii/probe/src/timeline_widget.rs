@@ -1,5 +1,5 @@
 use std::sync::mpsc::{channel, Receiver, Sender};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use crate::playback::Clock;
 use crate::tokens::{self, UiScale};
@@ -62,7 +62,7 @@ pub struct TimelineWidget {
     selected: Option<(usize, usize)>,
     clock: Option<Arc<Clock>>,
     scale: Option<Arc<UiScale>>,
-    doc: Option<Document>,
+    doc: Option<Arc<Mutex<Document>>>,
     extractor: Option<fn(&Document) -> Vec<CanvasRow>>,
     drag: Option<DragState>,
 }
@@ -107,7 +107,7 @@ impl TimelineWidget {
     /// 書き戻し先のDocumentと、apply後に行を読み直す抽出関数。
     pub fn with_document(
         mut self,
-        doc: Document,
+        doc: Arc<Mutex<Document>>,
         extractor: fn(&Document) -> Vec<CanvasRow>,
     ) -> Self {
         self.doc = Some(doc);
@@ -229,7 +229,7 @@ impl Widget for TimelineWidget {
                     let orig = layer.and_then(|l| {
                         self.doc
                             .as_ref()
-                            .and_then(|d| d.view().meta(l).ok().flatten())
+                            .and_then(|d| d.lock().unwrap().view().meta(l).ok().flatten())
                             .map(|m| m.timing)
                     });
                     if let (Some(layer), Some(orig)) = (layer, orig) {
@@ -246,9 +246,10 @@ impl Widget for TimelineWidget {
             }
             UiEvent::PointerUp(_) => {
                 if let Some(drag) = self.drag.take() {
-                    let (Some(doc), Some(extractor)) = (self.doc.as_mut(), self.extractor) else {
+                    let (Some(doc), Some(extractor)) = (self.doc.as_ref(), self.extractor) else {
                         return;
                     };
+                    let mut doc = doc.lock().unwrap();
                     let new_start =
                         ((drag.orig.start as f64 + drag.delta_sec * DOC_FPS).round() as i64).max(0);
                     let timing = LayerTiming { start: new_start, ..drag.orig };
@@ -258,7 +259,7 @@ impl Widget for TimelineWidget {
                                 "PROBE room=write verdict=applied SetTiming start {}->{}",
                                 drag.orig.start, new_start
                             );
-                            self.rows = extractor(doc);
+                            self.rows = extractor(&doc);
                         }
                         Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
                     }

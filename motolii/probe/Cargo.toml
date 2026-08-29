@@ -25,3 +25,4 @@ glam = "0.30"
 # 実ドキュメント(--fixtureのMV風Document)と製品と同じ補間コード。自作の写経はしない。
 motolii-fixture = { path = "../../app/core/motolii-fixture" }
 motolii-store = { path = "../../app/core/motolii-store" }
+motolii-engine = { path = "../../app/engine/motolii-engine" }
