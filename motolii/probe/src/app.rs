@@ -81,6 +81,8 @@ pub fn app() -> Element {
         style { {css} }
         div {
             id: "app",
+            tabindex: "0",
+            autofocus: "true",
             style: "grid-template-rows: var(--section) 1fr 8px {th}px calc(20 * var(--s) * 1px);",
             onmousemove: move |evt| {
                 if let Some(d) = drag.read().as_ref() {
@@ -113,6 +115,7 @@ pub fn app() -> Element {
                 let mut attrs_state = attrs_state;
                 let mut revision = revision;
                 move |evt| {
+                    println!("PROBE room=input verdict=keydown key={:?}", evt.key());
                     if text_editing() {
                         return;
                     }

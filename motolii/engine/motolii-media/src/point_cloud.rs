@@ -30,6 +30,13 @@ pub fn is_point_cloud_extension(extension: &str) -> bool {
     re_importer::SUPPORTED_POINT_CLOUD_EXTENSIONS.contains(&extension.as_str())
 }
 
+/// この拡張子(先頭 `.` 無し、大小文字を問わない)を Rerun の組み込み importer の
+/// どれかが読めるか。形式ごとの一覧はここに持たず `re_importer::is_supported_file_extension`
+/// (`SUPPORTED_*_EXTENSIONS` 群を横断する)へそのまま委ねる。
+pub fn is_rerun_importable_extension(extension: &str) -> bool {
+    re_importer::is_supported_file_extension(&extension.to_ascii_lowercase())
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum PointCloudError {
     #[error("読めない: {0}")]
@@ -113,6 +120,15 @@ end_header\n\
         assert!(!is_point_cloud_extension("glb"));
         // Motolii が独自に持っていない列挙 — re_importer の定数そのものを検査する。
         assert_eq!(POINT_CLOUD_EXTENSIONS, re_importer::SUPPORTED_POINT_CLOUD_EXTENSIONS);
+    }
+
+    #[test]
+    fn rerun_importable_extension_covers_all_registered_formats_not_just_point_clouds() {
+        assert!(is_rerun_importable_extension("ply")); // point cloud
+        assert!(is_rerun_importable_extension("PNG")); // image
+        assert!(is_rerun_importable_extension("glb")); // mesh
+        assert!(is_rerun_importable_extension("rrd")); // rerun native
+        assert!(!is_rerun_importable_extension("exe"));
     }
 
     #[test]

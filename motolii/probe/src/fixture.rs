@@ -244,6 +244,10 @@ pub fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: RationalTime
         Some(Value::F64(v)) => v,
         _ => 0.0,
     };
+    let pos_z = match value_of(property::POSITION_Z) {
+        Some(Value::F64(v)) => v,
+        _ => 0.0,
+    };
 
     let sel_attrs = view.attrs(layer).ok().flatten().unwrap_or_default();
     let key_count: usize = [property::POSITION, property::OPACITY]
@@ -360,7 +364,7 @@ pub fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: RationalTime
             },
             PropRow {
                 label: "Position",
-                cells: [px, py, f(0.0)],
+                cells: [px, py, f1(pos_z)],
                 dims: [false, false, true],
                 keyed: keyed(property::POSITION),
                 property: Some(property::POSITION.to_owned()),

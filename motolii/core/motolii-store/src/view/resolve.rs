@@ -732,4 +732,72 @@ mod tests {
             "B(と A)が2人目の子 C2 のために再計算されてしまっている(メモ化が効いていない)"
         );
     }
+
+    /// `position.z` を書いた層は `resolved_layers` の `placement.z` にそのまま出る。
+    /// 書かない層は `LayerPlacement::default()` どおり 0.0。x/y の解決は変わらない。
+    #[test]
+    fn position_z_track_resolves_into_placement_z() {
+        use crate::{Interp, Keyframe, KeyframeTrack};
+
+        let mut doc = Document::new();
+        doc.apply(Intent::SetComposition(Composition {
+            width: 64,
+            height: 64,
+            fps: Fps::try_new(30, 1).unwrap(),
+            duration_frames: 300,
+            background: Composition::default_background(),
+        }))
+        .unwrap();
+
+        let (with_z, without_z) = (LayerId(1), LayerId(2));
+        place(&mut doc, with_z, None);
+        place(&mut doc, without_z, None);
+
+        let mut z_track = KeyframeTrack::new();
+        z_track.insert(Keyframe {
+            t: t(0),
+            value: Value::F64(42.0),
+            interp: Interp::Hold,
+            spatial: None,
+        });
+        let mut xy_track = KeyframeTrack::new();
+        xy_track.insert(Keyframe {
+            t: t(0),
+            value: Value::Vec2([10.0, 20.0]),
+            interp: Interp::Hold,
+            spatial: None,
+        });
+        doc.apply_all([
+            Intent::SetTrack {
+                layer: with_z,
+                property: PropertyId::new(property::POSITION_Z).unwrap(),
+                track: z_track,
+            },
+            Intent::SetTrack {
+                layer: with_z,
+                property: PropertyId::new(property::POSITION).unwrap(),
+                track: xy_track,
+            },
+        ])
+        .unwrap();
+
+        let view = doc.view();
+        let layers = view.resolved_layers(t(0)).unwrap();
+        let placement_of = |id: LayerId| {
+            layers
+                .iter()
+                .find(|l| l.id == id)
+                .unwrap()
+                .placement
+        };
+
+        assert_eq!(placement_of(with_z).z, 42.0, "position.z を書いた層に出ていない");
+        assert_eq!(
+            placement_of(without_z).z,
+            0.0,
+            "書いていない層は LayerPlacement::default() どおり 0.0 のはず"
+        );
+        let (tx, ty) = placement_of(with_z).transform.translation.into();
+        assert_eq!((tx, ty), (10.0, 20.0), "z を足しても x/y の解決が変わってはいけない");
+    }
 }
