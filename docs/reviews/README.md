@@ -32,6 +32,10 @@
 
 | ファイル | 表題 |
 |---|---|
+| [2026-08-29-parallel-lane-build-mechanisms.md](2026-08-29-parallel-lane-build-mechanisms.md) | **並列レーンがビルドしてよい仕組みの現在地**(観察)。家内=warm targetのCoWクローン、コミュニティ=worktrunk(cacheコピーhook)、上流=cargo cross-workspace cache(2026 project goal、年内nightly予定)。再入場トリガー付き |
+| [2026-08-29-rerun-parts-catalog-survey.md](2026-08-29-rerun-parts-catalog-survey.md) | **Rerun部品目録調査**(観察)。Motoliiは`re_renderer`(自フォーク)の上に建つ事実の再確認。ライブ経路に`device.poll(wait_indefinitely())`等の同期待ちが6箇所実測、`re_tf`/`re_quota_channel`/`re_backoff`が委託候補。`Document`は既に`re_chunk_store`の上に建っており、Lottieは最初からストレージモデルではなかったと判明 |
+| [2026-08-29-probe-seam-table.md](2026-08-29-probe-seam-table.md) | **probe皮の縫い目表**(運転台帳)。皮→在庫の繋ぎ12本(S1〜S12)を室名1行+自作禁止事項+粒で固定。発注はこの表の行を引用、並列は波3本のwrite-set割り |
+| [2026-08-29-frontend-choice-reopened-comparison.md](2026-08-29-frontend-choice-reopened-comparison.md) | **front-end選定の再比較**(比較中、結論なし)。初期4候補比較→GitHub新顔探索→Rerun front層を全crate機械検査した結果、`re_renderer`以外にegui非依存で流用できる層はRerun側に無いと判明。利用者はegui不採用・D&D起因の境界レス必須を裁定し、`re_renderer`がfrontへ要求する最小契約(wgpu Device共有+外部texture or 直接render pass差込)だけを満たす自作の薄いfront-endという第5の方向が浮上 |
 | [2026-08-26-makepad-skills-assignment.md](2026-08-26-makepad-skills-assignment.md) | **Makepad 2.0 技能の割り振り**(決定)。ディスクは3本。残り11本の入手先は ZhangHanDong/makepad-skills。未導入領域は始めない |
 | [2026-08-26-makepad-dock-panel-waves.md](2026-08-26-makepad-dock-panel-waves.md) | **Makepad Dock に面を載せる波**(決定)。既存 `Dock` に Browser / Stage 枠 / Inspector / Timeline / Export / Settings / Chrome。自前ドック禁止。ゼロコピー完了まで波0禁止 |
 | [2026-08-26-stage-zero-copy-makepad-fork-seam.md](2026-08-26-stage-zero-copy-makepad-fork-seam.md) | **Stage ゼロコピーの Makepad fork 切り方**(決定)。Host / Makepad / r7 の3室。既存 `SharedBGRAu8` は触らず `SharedPresentable` を足す。rerun は `ViewBuilder::new_with_external_resolved`。blit 禁止 |

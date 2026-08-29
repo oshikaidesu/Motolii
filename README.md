@@ -25,7 +25,7 @@ Motolii is an open, inspectable, plugin-extensible compositor focused on making 
 
 The project does not depend on a new compositing invention. Keyframes, easing, typed parameter links, render graphs, GPU textures, command-based editing, selective caches, 2D/3D projection, and plugins are all known techniques. The work is to compose them into a small, explicit, replaceable system without making historical workarounds part of the product model.
 
-Pre-1.0, under active development. The live product is the desktop app in `app/` — a Makepad front over a mostly-finished document/engine back end — and the normal desktop creation route is being connected seam by seam; it is not yet product-complete.
+Pre-1.0, under active development. The living world is `motolii/`: an HTML-engine front ([Dioxus Native / Blitz](https://github.com/DioxusLabs/blitz)) that shares one GPU device with Rerun's renderer — no WebView, no OS surface bridge — over a document/engine model that already lives on Rerun's data store. Earlier worlds (`app/`, `next/`, `crates/`) remain in-tree as history. The one-page entry point for contributors and agents is [motolii/AGENTS.md](motolii/AGENTS.md).
 
 ## Why Motolii
 

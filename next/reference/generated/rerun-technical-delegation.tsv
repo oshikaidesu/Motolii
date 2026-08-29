@@ -1,0 +1,48 @@
+# Lottie採用済み項目(app/reference/lottie-coverage.tsv)のうち layers/effects/effect-values/composition から、
+# Rerunフォーク(oshikaidesu/rerun)側への技術委託可否を判定した台帳。
+# 判定は「GPU/アルゴリズム的な再発明の余地があるか」だけを見る。純粋なDocumentデータ項目(数値・フラグ)は
+# 技術委託の対象外(そもそも技術ではない)なので route=対象外 とする。
+# 生成: 2026-08-29、docs/reviews/2026-08-29-rerun-parts-catalog-survey.md §6 の続き(手動監査、機械生成ではない)
+group	object	field	title	route	delegate	evidence	note
+composition	animation	fr	Framerate	対象外			純粋なDocumentメタデータ
+composition	animation	h	Height	対象外			純粋なDocumentメタデータ
+composition	animation	markers	Markers	対象外			純粋なDocumentメタデータ
+composition	animation	op	Out Point	対象外			純粋なDocumentメタデータ
+composition	animation	slots	Slots	対象外			純粋なDocumentメタデータ
+composition	animation	w	Width	対象外			純粋なDocumentメタデータ
+composition	composition	layers	Layers	対象外			純粋なDocumentメタデータ(配列そのもの)
+effect-values	angle	v	Value	対象外			スカラー値、補間はmotolii-eval側(裁定271台帳と同一問題)
+effect-values	checkbox	v	Value	対象外			真偽値
+effect-values	color	v	Value	対象外			色値、補間はmotolii-eval側
+effect-values	drop-down	v	Value	対象外			enum値
+effect-values	layer	v	Value	対象外			レイヤー参照ID
+effect-values	point	v	Value	対象外			座標値、補間はmotolii-eval側
+effect-values	slider	v	Value	対象外			スカラー値
+effects	effect	ef	Effect Values	対象外			上のeffect-valuesを束ねる配列
+effects	effect	en	Enabled	対象外			真偽値
+effects	effect	ty	Type	未監査	re_renderer(ISFパス)	app/engine/motolii-compositor/src/effects/isf/	ISF実行自体は2026-08-29までにre_renderer経由で配線済み(motolii.isf_bloom)。プール(EffectScratch)がGpuTexturePool委託候補として別途未監査(§2参照)
+layers	audio-layer	ty	Type	対象外			enum判別子
+layers	audio-settings	lv	Level	対象外			スカラー値(音量)
+layers	image-layer	ty	Type	対象外			enum判別子
+layers	layer	hd	Hidden	対象外			真偽値
+layers	layer	ip	In Point	対象外			タイムライン上のトリム(AE編集体系そのもの、Rerunにtrim概念なし)
+layers	layer	op	Out Point	対象外			同上
+layers	layer	parent	Parent Index	委託不可(確定)	自作継続	crates/store/re_tf/src/transform_forest.rs, Cargo.toml	2026-08-29確認済み。re_tfは階層参照が文字列(entity path)ベース、Motoliiの`LayerId`ポインタ参照と構造が異なる。かつ`re_chunk_store`/`re_entity_db`依存が全実装に染み渡り単体利用不可
+layers	layer	sr	Time Stretch	対象外			AE編集体系(時間伸縮)、Rerunに対応概念なし
+layers	layer	st	Start Time	対象外			同上
+layers	layer	ty	Type	対象外			enum判別子
+layers	null-layer	ty	Type	対象外			enum判別子
+layers	precomposition-layer	tm	Time Remap	対象外			AE編集体系(時間再マップ)、motolii-eval側の問題でRerun非対応領域
+layers	shape-layer	shapes	Shapes	対象外			ベクタ形状、motolii-vector(tiny-skia)の領域。re_rendererは2Dベクタパス塗りを持たない(要再確認だが今回スコープ外)
+layers	shape-layer	ty	Type	対象外			enum判別子
+layers	solid-layer	sc	Color	対象外			単色値
+layers	solid-layer	sh	Height	対象外			スカラー値
+layers	solid-layer	sw	Width	対象外			スカラー値
+layers	solid-layer	ty	Type	対象外			enum判別子
+layers	text-layer	t	Data	委託不可(確定)	自作継続	app/engine/motolii-vector/src/text.rs, app/engine/motolii-engine/src/text.rs	2026-08-29確認済み。仮説(Makepad経由)は誤り——実際はcosmic-text+swashでシェイピング→輪郭化→motolii-vectorのCPUラスタライザでpremultiplied RGBA8化。re_rendererにtext/font/glyph依存は皆無(grep0件)、委託先が存在しないため自作継続は正当
+layers	text-layer	ty	Type	対象外			enum判別子
+layers	visual-layer	ao	Auto Orient	該当なし(未実装同士)		app/core/motolii-store/src/attrs.rs:175,233,319	2026-08-29確認済み。Motolii側はフラグの保存/読み出しのみで実際の向き計算は未実装(lottie-coverage.tsv:270に自己申告あり)。Rerun側にもauto_orient/look_at相当は無し(grep0件)。両者とも未実装なので委託判断そのものが未発生
+layers	visual-layer	bm	Blend Mode	委託不可(確定)	自作継続	app/engine/motolii-compositor/src/blend.rs	2026-08-29確認済み。re_rendererはPREMULTIPLIED_ALPHA_BLENDING固定機能blendのみでモード別blendを持たない。blend.rs独自WGSL実装は正当
+layers	visual-layer	ef	Effects	対象外			上のeffectsを束ねる配列(実行はeffects.effect.ty側で判定)
+layers	visual-layer	ks	Transform	委託不可(確定)	自作継続	crates/store/re_tf/src/{convert.rs,transform_resolution_cache/}	2026-08-29確認済み。re_tfは3D限定(Transform3D前提、2D+skew型が無い)かつキーフレーム補間を持たない(latest-at離散値取得のみ、lerp/slerp 0件)。Rerunは「離散ログ値のlatest-at」、Motoliiは「キーフレーム間の連続補間」で問題設定自体が違う。app/core/motolii-core/src/frame.rs + app/core/motolii-store/src/view/resolve/transform.rsの自作継続が正当
+layers	visual-layer	masksProperties	Masks	委託不可(確定)	自作継続	app/core/motolii-store/src/mask.rs, app/engine/motolii-engine/src/mask.rs	2026-08-29確認済み。実体は`matte.rs`(track matte、別機能)ではなくmask.rs——MaskMode(Add/Subtract/Intersect等)の畳み込みをmotolii-vectorのCPUラスタライザで行う。re_rendererのstencil系コードは全て`OutlineMaskProcessor`(selection outline用jump-flooding)で、任意ベクタパスによる切り抜きとは無関係。委託先が存在しないため自作継続は正当

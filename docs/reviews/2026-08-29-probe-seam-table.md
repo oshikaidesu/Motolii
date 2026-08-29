@@ -62,7 +62,9 @@
 | S15 | Browser→Timelineの配置gesture | `Intent::AddLayer`+`SetMeta{source: Media,…}`+`LayerTiming::place`(store lib.rs:381) | 素材→層1本 | 配置規則の発明(placeが既にある) | 10分 |
 | S16 | Browser Createタブ(Text/Rectangle/Solid) | Text=fixtureレーンで実証済みのIntent列 / Shape=**在庫調査中**(view.shapes→engineのshape texture)。**2Dシェイプはパス前提**(2026-08-29利用者裁定: 四角=4頂点の閉パス。パラメトリック矩形を別型で持たない — Lottieに近い側を採る。`Value::Path`の頂点補間とも整合) | Createの行クリック→層が生まれ選択される | Shape描画の自作・矩形プリミティブ型の新設 | Text 10分/Shape 調査待ち |
 | S17 | ~~ルーラースクラブ~~ **済**(Clock::seek) | probe `Clock`(seek口を1本足す)+timeline_widgetのPointerDown(ルーラー域) | クリック/ドラッグ=Clock.seek | 第二のclock・transport状態の複製 | 10分 |
-| S18 | Stageギズモ(選択層の枠+ドラッグ移動) | session選択+`view.value_at(POSITION)`+storeのproperty書きIntent(S5と同じ口)。fit逆変換=stage_widgetのs/fx/fy。**委託調査済(2026-08-29)**: 既製2Dケージcrateは無い — 対話規則はGraphite(Apache-2.0)のtransformation_cageを式移植の先例正本に、3D将来はtransform-gizmo(renderer非依存)をWATCH。**第一波はmoveのみ**(枠+ドラッグ移動。scale/rotationハンドルは第二波) | 選択層の枠を合成の上に描き、ドラッグ→position書き | transform演算の自作(evalが正)・第二のヒットテスト体系・3Dギズモ語彙の持ち込み | 15分×2(枠/ドラッグ) |
+| S18 | Stageギズモ(選択層の枠+ドラッグ移動) | session選択+`view.value_at(POSITION)`+`Intent::SetTrack`(document.rs:36、property書きの唯一の口)。fit逆変換=stage_widgetのs/fx/fy。**委託調査済(2026-08-29)**: 既製2Dケージcrateは無い — 対話規則はGraphite(Apache-2.0)のtransformation_cageを式移植の先例正本に、3Dはtransform-gizmo(renderer非依存)をWATCH。波: **第一波=moveのみ** / **第二波=Stageヘッダのギズモモード切替(ケージ/3D軸)+3D軸ギズモ**(transform-gizmo core委託を最初に試す)/ 第三波=ケージのscale/rotationハンドル。**2D/3Dの境目を作らない**(2026-08-29利用者裁定: 空間は最初から3D — z=0は中身の現在地でありモードではない。ケージと3D軸は同じtransformへの2つの持ち手、裁定274と同根) | 選択層の枠を合成の上に描き、ドラッグ→position書き | transform演算の自作(evalが正)・第二のヒットテスト体系・3Dギズモ語彙の2Dへの持ち込み | 15分×2(枠/ドラッグ) |
+| S2b | canvasのクリップバンドクリック=選択 | `session::Selection`+timeline_widget PointerDown(band_hit済み)。chromeミラー同期は#app入力ハンドラで`selection.get()`比較 | バンド/行クリック→選択→Inspector追随 | 第二の選択状態 | 10分 |
+| S4b | Inspector行をDocument実項目から動的に組む | `view.properties(layer)`(view.rs:142)+text_document/shapes読み口 | 層が実際に持つ項目が行になる(テキスト=内容行、シェイプ=シェイプ項目) | 固定行リストの温存・property名の直書き写し | 15分 |
 
 ## Browserの意味構造(2026-08-29利用者)
 

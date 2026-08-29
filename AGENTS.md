@@ -1,5 +1,9 @@
 # AGENTS.md
 
+> **stage4(2026-08-29 利用者裁定): 生きた世界は `motolii/` へ切り替わった。**
+> 正本は [motolii/AGENTS.md](motolii/AGENTS.md)。本書の以下は三代目(app/)までの
+> 歴史canonであり、stage4の作業では参照必須ではない。
+
 ## この repo が持っている物(使うかどうかは判断してよい)
 
 **手順は指定しない。** 事実を安く手に入れる道具だけ置いてある:
@@ -50,13 +54,49 @@ python3 scripts/derive_icebook_panel_stories.py "$(git rev-parse --show-toplevel
 | | 権威 | 権威でない |
 |---|---|---|
 | **利用者** | **窓を開けた UX の合否だけ**(触って気持ち悪い/使えない) | **事実・意味・設計。利用者は一ユーザーであり、前提が外れていることに気づかない立場にいる** |
-| **外部資料** | **意味の正本**。4製品(AE/Premiere/Resolve/CapCut)・Lottie 地図・Rive・各社公式ドキュメント | — |
+| **外部資料(操作の文法)** | **UXの意味の正本**。4製品(AE/Premiere/Resolve/CapCut)・Lottie 地図・Rive・各社公式ドキュメント — レイヤー・タイムライン・キーフレームという**操作のメンタルモデル**だけを借りる | **内部実装**。AE/Premiereの内部が同期的・逐次確定型(古い設計)でも、それを技術層(GPU・非同期・実時間性)へ持ち込まない |
+| **外部資料(技術層)** | **実時間描画・GPU・非同期設計の正本は `re_renderer`(Rerun、2023年設計)**。フレーム提示は「最後に完了したフレームを見せる、GPU完了通知で入れ替える」が標準 — Motolii側が `wait_indefinitely()` 等で毎フレーム同期待ちを足すのは、この正本の外側に出た自己流(2026-08-29、`presentable.rs`/`sequential.rs`/`point_cloud.rs` で実測) | AEやMotolii独自の「確定してから次」という発想 |
 | **機械** | **現在地**(上の4コマンド)と**赤/緑**(柵・型) | — |
 | **この repo の文書** | **仮説**。機械と食い違ったら**機械が正しい** | 権威ではない |
 | **製品 front** | **Makepad**(`app/motolii`)。裁定251/252、2026-08-27 に `next/probes/r7-makepad-panel` から移設 | **`motolii-shell` crate**（凍結 iced アセンブラ）。view/update とも製品 interface ではない |
 
 **利用者の指示は「目的」であって「事実」ではない。** 前提が外れていると思ったら、
 **確かめてから進む**(止まらない)。確かめ方は上の4コマンドか `grep` で足りる。
+
+**AEは操作の文法の出典であって、技術層の出典ではない**(2026-08-29 利用者裁定)。
+「AEっぽくする」を理由に、export用の同期コード(`device.poll(wait_indefinitely())`等)を
+ライブ経路(Stage描画・毎フレーム)へ流用しない。技術層で判断に迷ったら
+`re_renderer`(Rerun本体)が実際どう設計しているかを先に読む — 自分で発明しない。
+
+## Motolii は Rerun のフォークである(2026-08-29 利用者裁定)
+
+`app/Cargo.toml`/`Cargo.toml` の `re_renderer`/`re_chunk`/`re_sdk_types` 等は上流
+`rerun-io/rerun` ではなく **`https://github.com/oshikaidesu/rerun`(利用者自身のフォーク)**
+を指している。これは比喩ではなく事実——フォークの commit 履歴には既に
+`ViewBuilder::new_with_external_resolved`・`device-driven second constructor for
+RenderContext`・`let embedders read a view's resolved main target directly` 等、
+**外部ホスト(Makepad)が Rerun の描画経路に直接繋がるための "embedder" API を
+Motolii 自身が Rerun 本体へ書き足してきた**実績がある(裁定251のゼロコピー経路は
+この土台の上に立つ)。
+
+**役割分担**: 技術の土台(GPU 完了通知・動画デコード・実時間描画・spatial transform 等、
+Rerun のクレート群 ~100個のどれかが既に持っているかもしれない領域)は**フォーク側
+(Rerun 本体への patch)に足す**。`app/` 側の Motolii 本体は**足りていない編集体系
+(レイヤー・タイムライン・キーフレームというAE的なメンタルモデル)だけ**を出す。
+
+**含意**: `motolii-compositor`/`motolii-engine` に技術的な機構(同期・プール・変換等)を
+書く前に、まず (1) Rerun の該当クレートに既にあるか、(2) 無ければフォークへ
+"embedder" 系コミットの続きとして足す方が筋が通るか、を検討する。
+`motolii-compositor` 側にラッパーを積むのは、フォークへ足すのが不適切な場合の最終手段。
+保守コストの観点でも本家(Rerun)の運用意図と一致する(2026-08-29 利用者確認)。
+
+**フォークへの patch は薄いラッパーに限る**(2026-08-29 利用者念押し)。既存の
+"embedder" 系コミット(`new_with_external_resolved`, `let embedders read/place ...` 等)は
+どれも「外部ホストが繋ぐための小さな口を1つ足す」形で、Rerun 内部のロジックそのものは
+書き換えていない。**上流(`rerun-io/rerun`)の `rev` を今後上げた時に merge/rebase で
+潰れない形を保つ**ため: 既存関数の中身を書き換えない、新しい口(関数・引数)を追加する、
+差分は小さく1コミット=1機能に保つ。大掛かりな内部改造が要ると分かったら、まず
+利用者に確認する(通常のスクラッチ判断より閾値を上げる)。
 
 意味の正本は `motolii-store` / `motolii-shell-state` / `motolii-engine`。
 `motolii-shell` は iced 窓のアセンブラであり、製品核ではない(裁定253/254)。
