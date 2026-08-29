@@ -414,8 +414,12 @@ impl Widget for StageWidget {
                 drop(view);
                 drop(doc);
                 if let Some((_, layer)) = hit {
-                    self.selection.set(Some(layer));
-                    self.selected_mirror.set(Some(layer));
+                    if p.mods.contains(Modifiers::META) {
+                        self.selection.toggle(layer);
+                    } else {
+                        self.selection.set(Some(layer));
+                    }
+                    self.selected_mirror.set(self.selection.get());
                 }
             }
             UiEvent::PointerMove(p) => {
@@ -558,11 +562,18 @@ impl Widget for StageWidget {
 
         // viewを落とす前に読む。ドラッグ中の追随はtransient overlayがvalue_atへ
         // 優先して乗るので担う — ここに専用の分岐は要らない。
-        let selected_box = self
-            .selection
-            .get()
+        let primary_layer = self.selection.get();
+        let selected_box = primary_layer
             .and_then(|layer| selection_geom_in(&active.engine, &view, layer, rt))
             .map(|geom| (geom.box_, geom.position, geom.rotation));
+        let secondary_boxes: Vec<_> = self
+            .selection
+            .all()
+            .into_iter()
+            .filter(|l| Some(*l) != primary_layer)
+            .filter_map(|l| selection_geom_in(&active.engine, &view, l, rt))
+            .map(|geom| geom.box_)
+            .collect();
 
         drop(view);
         drop(doc);
@@ -590,6 +601,22 @@ impl Widget for StageWidget {
         // handle_eventはelement座標(論理px)で来るので、逆変換もその単位で揃える。
         let k = if scale > 0.0 { scale } else { 1.0 };
         self.fit = Fit { s: s / k, fx: fx / k, fy: fy / k };
+
+        // 主選択以外の枠 — ハンドルもギズモも無い、細い縁だけ。
+        for (bx, by, bw, bh) in &secondary_boxes {
+            let (x0, y0) = (fx + bx * s, fy + by * s);
+            let (x1, y1) = (fx + (bx + bw) * s, fy + (by + bh) * s);
+            let th = 1.0;
+            let edges = [
+                Rect::from_origin_size((x0, y0), (x1 - x0, th)),
+                Rect::from_origin_size((x0, y1 - th), (x1 - x0, th)),
+                Rect::from_origin_size((x0, y0), (th, y1 - y0)),
+                Rect::from_origin_size((x1 - th, y0), (th, y1 - y0)),
+            ];
+            for edge in &edges {
+                scene.fill(Fill::NonZero, Affine::IDENTITY, PaintRef::Solid(c(tokens::ACCENT)), None, edge);
+            }
+        }
 
         if let Some(((bx, by, bw, bh), position, rotation)) = selected_box {
             let (x0, y0) = (fx + bx * s, fy + by * s);

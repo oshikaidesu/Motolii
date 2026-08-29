@@ -111,6 +111,7 @@ pub fn app() -> Element {
                 let timeline_tx = timeline_tx.clone();
                 let mut layer_rows = layer_rows;
                 let mut attrs_state = attrs_state;
+                let mut revision = revision;
                 move |evt| {
                     if text_editing() {
                         return;
@@ -156,6 +157,16 @@ pub fn app() -> Element {
                         Intent::Deselect => {
                             selection.set(None);
                             selected.set(None);
+                        }
+                        Intent::SelectAll => {
+                            let layers = doc.lock().unwrap().view().layers();
+                            for layer in layers {
+                                if !selection.contains(layer) {
+                                    selection.toggle(layer);
+                                }
+                            }
+                            selected.set(selection.get());
+                            *revision.write() += 1;
                         }
                     }
                 }

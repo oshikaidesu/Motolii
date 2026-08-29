@@ -26,9 +26,12 @@ pub fn timeline_shell(
         let layer = row.layer;
         let doc = doc.clone();
         let selection = selection.clone();
-        let is_selected = selected() == Some(layer);
-        let lsurface_style = if is_selected {
+        let is_primary = selected() == Some(layer);
+        let is_secondary = !is_primary && selection.contains(layer);
+        let lsurface_style = if is_primary {
             format!("background:{};box-shadow:inset 0 0 0 2px var(--way-inspector);", row.color)
+        } else if is_secondary {
+            format!("background:{};box-shadow:inset 0 0 0 1px var(--way-inspector);", row.color)
         } else {
             format!("background:{};", row.color)
         };
@@ -69,9 +72,13 @@ pub fn timeline_shell(
                 span {
                     class: "lsurface",
                     style: "{lsurface_style}",
-                    onclick: move |_| {
-                        selection.set(Some(layer));
-                        selected.set(Some(layer));
+                    onclick: move |evt| {
+                        if evt.modifiers().meta() {
+                            selection.toggle(layer);
+                        } else {
+                            selection.set(Some(layer));
+                        }
+                        selected.set(selection.get());
                     },
                     "{row.name}"
                 }

@@ -399,8 +399,14 @@ impl Widget for TimelineWidget {
                     if let (Some(selection), Some(mirror)) =
                         (self.selection.as_ref(), self.selected_mirror.as_mut())
                     {
-                        selection.set(layer);
-                        mirror.set(layer);
+                        if p.mods.contains(Modifiers::META) {
+                            if let Some(l) = layer {
+                                selection.toggle(l);
+                            }
+                        } else {
+                            selection.set(layer);
+                        }
+                        mirror.set(selection.get());
                     }
                     let orig = layer.and_then(|l| {
                         self.doc
@@ -562,6 +568,8 @@ impl Widget for TimelineWidget {
         }
         fill_rect(&mut s, Rect::new(0.0, ruler_h - hairline, w, ruler_h), c_hair);
 
+        let primary_layer = self.selection.as_ref().and_then(|s| s.get());
+
         let hover_row = self
             .cursor
             .map(|(_, cy)| ((cy - RULER_H * self.sfac() + self.scroll_y) / (ROW_H * self.sfac())).floor())
@@ -617,6 +625,16 @@ impl Widget for TimelineWidget {
                         ),
                         c(row.color[0], row.color[1], row.color[2]),
                     );
+                    let selected = row
+                        .layer
+                        .map(|l| Some(l) == primary_layer || self.selection.as_ref().is_some_and(|s| s.contains(l)))
+                        .unwrap_or(false);
+                    if selected {
+                        let is_primary = row.layer.map(|l| Some(l) == primary_layer).unwrap_or(false);
+                        let bw = if is_primary { 2.0 * hairline } else { hairline };
+                        fill_rect(&mut s, Rect::new(x0, top, x1, top + bw), c_accent);
+                        fill_rect(&mut s, Rect::new(x0, y + row_h - hairline - bw, x1, y + row_h - hairline), c_accent);
+                    }
                 }
             }
             if mid < ruler_h {
