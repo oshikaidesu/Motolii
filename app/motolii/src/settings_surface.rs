@@ -112,6 +112,76 @@ script_mod! {
         }
         scale_rule := SolidView{width: Fill height: mod.tokens.rule.size show_bg: true draw_bg.color: mod.tokens.rule.seam}
 
+        // TIMELINE 帯 — timeline_surface.rs の #[live] 数値をここから直接動かす
+        // (利用者裁定: いちいち口頭で指示するより自分で触って決めたい)。
+        // 色系(レーンパレット・M/S/L意味色)はまだ #[live] 化していないので出さない。
+        timeline_band := SolidView{width: Fill height: mod.tokens.size.row_tight flow: Right align: Align{y: 0.5} padding: Inset{left: mod.tokens.space.s4 right: mod.tokens.space.s4} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.area
+            timeline_head := InkLabel{text: "TIMELINE" width: Fill draw_text.color: mod.tokens.ink.muted draw_text.text_style: theme.font_bold{font_size: mod.tokens.text.sm}}
+        }
+        row_height_row := SolidView{width: Fill height: mod.tokens.size.form_row flow: Right align: Align{y: 0.5} padding: Inset{left: mod.tokens.space.s4 right: mod.tokens.space.s4} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.panel
+            label := InkLabel{text: "Row Height" width: Fill draw_text.color: mod.tokens.ink.body draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.lg}}
+            well := SolidView{width: 104 height: mod.tokens.size.row_tight flow: Right align: Align{x: 1.0 y: 0.5} padding: Inset{left: mod.tokens.space.s3 right: mod.tokens.space.s3} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.display
+                value := ScrubValue{width: Fill step: 1.0 precision: 0 min: 14.0 max: 60.0 value: 26.0 suffix: " px" prop: "timeline_row_height"}
+            }
+        }
+        row_height_rule := SolidView{width: Fill height: mod.tokens.rule.size show_bg: true draw_bg.color: mod.tokens.rule.seam}
+        rail_width_row := SolidView{width: Fill height: mod.tokens.size.form_row flow: Right align: Align{y: 0.5} padding: Inset{left: mod.tokens.space.s4 right: mod.tokens.space.s4} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.panel
+            label := InkLabel{text: "Rail Width" width: Fill draw_text.color: mod.tokens.ink.body draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.lg}}
+            well := SolidView{width: 104 height: mod.tokens.size.row_tight flow: Right align: Align{x: 1.0 y: 0.5} padding: Inset{left: mod.tokens.space.s3 right: mod.tokens.space.s3} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.display
+                value := ScrubValue{width: Fill step: 1.0 precision: 0 min: 60.0 max: 400.0 value: 150.0 suffix: " px" prop: "timeline_rail_width"}
+            }
+        }
+        rail_width_rule := SolidView{width: Fill height: mod.tokens.rule.size show_bg: true draw_bg.color: mod.tokens.rule.seam}
+        ruler_height_row := SolidView{width: Fill height: mod.tokens.size.form_row flow: Right align: Align{y: 0.5} padding: Inset{left: mod.tokens.space.s4 right: mod.tokens.space.s4} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.panel
+            label := InkLabel{text: "Ruler Height" width: Fill draw_text.color: mod.tokens.ink.body draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.lg}}
+            well := SolidView{width: 104 height: mod.tokens.size.row_tight flow: Right align: Align{x: 1.0 y: 0.5} padding: Inset{left: mod.tokens.space.s3 right: mod.tokens.space.s3} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.display
+                value := ScrubValue{width: Fill step: 1.0 precision: 0 min: 12.0 max: 60.0 value: 22.0 suffix: " px" prop: "timeline_ruler_height"}
+            }
+        }
+        ruler_height_rule := SolidView{width: Fill height: mod.tokens.rule.size show_bg: true draw_bg.color: mod.tokens.rule.seam}
+        trim_handle_row := SolidView{width: Fill height: mod.tokens.size.form_row flow: Right align: Align{y: 0.5} padding: Inset{left: mod.tokens.space.s4 right: mod.tokens.space.s4} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.panel
+            label := InkLabel{text: "Trim Handle" width: Fill draw_text.color: mod.tokens.ink.body draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.lg}}
+            well := SolidView{width: 104 height: mod.tokens.size.row_tight flow: Right align: Align{x: 1.0 y: 0.5} padding: Inset{left: mod.tokens.space.s3 right: mod.tokens.space.s3} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.display
+                value := ScrubValue{width: Fill step: 0.5 precision: 1 min: 2.0 max: 20.0 value: 6.0 suffix: " px" prop: "timeline_trim_handle_width"}
+            }
+        }
+        trim_handle_rule := SolidView{width: Fill height: mod.tokens.rule.size show_bg: true draw_bg.color: mod.tokens.rule.seam}
+        tick_floor_row := SolidView{width: Fill height: mod.tokens.size.form_row flow: Right align: Align{y: 0.5} padding: Inset{left: mod.tokens.space.s4 right: mod.tokens.space.s4} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.panel
+            label := InkLabel{text: "Tick Floor" width: Fill draw_text.color: mod.tokens.ink.body draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.lg}}
+            well := SolidView{width: 104 height: mod.tokens.size.row_tight flow: Right align: Align{x: 1.0 y: 0.5} padding: Inset{left: mod.tokens.space.s3 right: mod.tokens.space.s3} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.display
+                value := ScrubValue{width: Fill step: 1.0 precision: 0 min: 10.0 max: 100.0 value: 40.0 suffix: " px" prop: "timeline_tick_row_floor"}
+            }
+        }
+        tick_floor_rule := SolidView{width: Fill height: mod.tokens.rule.size show_bg: true draw_bg.color: mod.tokens.rule.seam}
+        band_alpha_row := SolidView{width: Fill height: mod.tokens.size.form_row flow: Right align: Align{y: 0.5} padding: Inset{left: mod.tokens.space.s4 right: mod.tokens.space.s4} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.panel
+            label := InkLabel{text: "Zebra Alpha" width: Fill draw_text.color: mod.tokens.ink.body draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.lg}}
+            well := SolidView{width: 104 height: mod.tokens.size.row_tight flow: Right align: Align{x: 1.0 y: 0.5} padding: Inset{left: mod.tokens.space.s3 right: mod.tokens.space.s3} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.display
+                value := ScrubValue{width: Fill step: 0.005 precision: 3 min: 0.0 max: 0.2 value: 0.030 prop: "timeline_band_alpha"}
+            }
+        }
+        band_alpha_rule := SolidView{width: Fill height: mod.tokens.rule.size show_bg: true draw_bg.color: mod.tokens.rule.seam}
+        tick_fade_from_row := SolidView{width: Fill height: mod.tokens.size.form_row flow: Right align: Align{y: 0.5} padding: Inset{left: mod.tokens.space.s4 right: mod.tokens.space.s4} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.panel
+            label := InkLabel{text: "Fade From" width: Fill draw_text.color: mod.tokens.ink.body draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.lg}}
+            well := SolidView{width: 104 height: mod.tokens.size.row_tight flow: Right align: Align{x: 1.0 y: 0.5} padding: Inset{left: mod.tokens.space.s3 right: mod.tokens.space.s3} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.display
+                value := ScrubValue{width: Fill step: 0.5 precision: 1 min: 0.0 max: 30.0 value: 9.0 prop: "timeline_tick_fade_from"}
+            }
+        }
+        tick_fade_from_rule := SolidView{width: Fill height: mod.tokens.rule.size show_bg: true draw_bg.color: mod.tokens.rule.seam}
+        tick_fade_to_row := SolidView{width: Fill height: mod.tokens.size.form_row flow: Right align: Align{y: 0.5} padding: Inset{left: mod.tokens.space.s4 right: mod.tokens.space.s4} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.panel
+            label := InkLabel{text: "Fade To" width: Fill draw_text.color: mod.tokens.ink.body draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.lg}}
+            well := SolidView{width: 104 height: mod.tokens.size.row_tight flow: Right align: Align{x: 1.0 y: 0.5} padding: Inset{left: mod.tokens.space.s3 right: mod.tokens.space.s3} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.display
+                value := ScrubValue{width: Fill step: 0.5 precision: 1 min: 0.0 max: 40.0 value: 18.0 prop: "timeline_tick_fade_to"}
+            }
+        }
+        tick_fade_to_rule := SolidView{width: Fill height: mod.tokens.rule.size show_bg: true draw_bg.color: mod.tokens.rule.seam}
+        playhead_scale_row := SolidView{width: Fill height: mod.tokens.size.form_row flow: Right align: Align{y: 0.5} padding: Inset{left: mod.tokens.space.s4 right: mod.tokens.space.s4} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.panel
+            label := InkLabel{text: "Playhead Scale" width: Fill draw_text.color: mod.tokens.ink.body draw_text.text_style: theme.font_regular{font_size: mod.tokens.text.lg}}
+            well := SolidView{width: 104 height: mod.tokens.size.row_tight flow: Right align: Align{x: 1.0 y: 0.5} padding: Inset{left: mod.tokens.space.s3 right: mod.tokens.space.s3} show_bg: true new_batch: true draw_bg.color: mod.tokens.face.display
+                value := ScrubValue{width: Fill step: 0.1 precision: 1 min: 0.5 max: 4.0 value: 1.5 suffix: "x" prop: "timeline_playhead_scale"}
+            }
+        }
+        playhead_scale_rule := SolidView{width: Fill height: mod.tokens.rule.size show_bg: true draw_bg.color: mod.tokens.rule.seam}
+
         // 残余は素の面（#4f4f4f）。枠・影・角丸は置かない
         settings_fill := View{width: Fill height: Fill}
     }
@@ -185,6 +255,30 @@ impl SettingsSurface {
             .as_label()
             .set_text(cx, &format!("{percent} %"));
     }
+
+    /// TIMELINE 帯の9欄。正本は `TimelineSurface` 自身の `#[live]` フィールド —
+    /// ここは常にそこから読んで映すだけ(`set_composition` と同じ形)。
+    pub fn set_timeline_tuning(&mut self, cx: &mut Cx, get: impl Fn(&str) -> Option<f64>) {
+        macro_rules! project {
+            ($path:expr, $field:expr) => {
+                if let Some(value) = get($field) {
+                    if let Some(mut cell) = self.view.widget(cx, $path).borrow_mut::<ScrubValue>() {
+                        cell.set_value(cx, value);
+                    }
+                }
+            };
+        }
+        project!(ids!(row_height_row.well.value), "timeline_row_height");
+        project!(ids!(rail_width_row.well.value), "timeline_rail_width");
+        project!(ids!(ruler_height_row.well.value), "timeline_ruler_height");
+        project!(ids!(trim_handle_row.well.value), "timeline_trim_handle_width");
+        project!(ids!(tick_floor_row.well.value), "timeline_tick_row_floor");
+        project!(ids!(band_alpha_row.well.value), "timeline_band_alpha");
+        project!(ids!(tick_fade_from_row.well.value), "timeline_tick_fade_from");
+        project!(ids!(tick_fade_to_row.well.value), "timeline_tick_fade_to");
+        project!(ids!(playhead_scale_row.well.value), "timeline_playhead_scale");
+        self.view.redraw(cx);
+    }
 }
 
 impl WidgetNode for SettingsSurface {
@@ -243,6 +337,31 @@ impl Widget for SettingsSurface {
                 cx.widget_action(self.uid, SettingsSurfaceAction::SetField { field: "duration", value });
             }
         }
+
+        // TIMELINE 帯の9欄。field 名がそのまま TimelineSurface::set_tuning_value の
+        // キーになる(main.rs の作法と同じ — 対応表はそこ1箇所)。
+        macro_rules! capture_tuning {
+            ($path:expr, $field:expr) => {
+                let cell = self.view.widget(cx, $path);
+                for action in actions.filter_widget_actions(cell.widget_uid()) {
+                    if let ScrubValueAction::Committed { value, .. } = action.cast() {
+                        cx.widget_action(
+                            self.uid,
+                            SettingsSurfaceAction::SetField { field: $field, value },
+                        );
+                    }
+                }
+            };
+        }
+        capture_tuning!(ids!(row_height_row.well.value), "timeline_row_height");
+        capture_tuning!(ids!(rail_width_row.well.value), "timeline_rail_width");
+        capture_tuning!(ids!(ruler_height_row.well.value), "timeline_ruler_height");
+        capture_tuning!(ids!(trim_handle_row.well.value), "timeline_trim_handle_width");
+        capture_tuning!(ids!(tick_floor_row.well.value), "timeline_tick_row_floor");
+        capture_tuning!(ids!(band_alpha_row.well.value), "timeline_band_alpha");
+        capture_tuning!(ids!(tick_fade_from_row.well.value), "timeline_tick_fade_from");
+        capture_tuning!(ids!(tick_fade_to_row.well.value), "timeline_tick_fade_to");
+        capture_tuning!(ids!(playhead_scale_row.well.value), "timeline_playhead_scale");
 
         cx.extend_actions(actions);
     }

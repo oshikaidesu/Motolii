@@ -2658,6 +2658,12 @@ impl App {
         if let Some(mut surface) = settings.borrow_mut::<SettingsSurface>() {
             surface.set_ui_scale(cx, self.ui_scale_percent);
         }
+        let timeline = self.timeline_ref(cx);
+        if let Some(timeline_surface) = timeline.borrow::<TimelineSurface>() {
+            if let Some(mut surface) = settings.borrow_mut::<SettingsSurface>() {
+                surface.set_timeline_tuning(cx, |field| timeline_surface.tuning_value(field));
+            }
+        }
         let Some(composition) = self
             .backend
             .as_ref()
@@ -3191,6 +3197,17 @@ impl MatchEvent for App {
                 let SettingsSurfaceAction::SetField { field, value } = action else {
                     continue;
                 };
+                // timeline_* は comp ではなく TimelineSurface 自身の見た目チューニング値
+                // (Document を持たない — 発注: 利用者が自分で触って決めるパネル)。
+                if field.starts_with("timeline_") {
+                    let timeline = self.timeline_ref(cx);
+                    if let Some(mut surface) = timeline.borrow_mut::<TimelineSurface>() {
+                        if surface.set_tuning_value(cx, field, value) {
+                            self.set_status(cx, &format!("TIMELINE  ·  {field} = {value:.3}"));
+                        }
+                    }
+                    continue;
+                }
                 let Some(status) = self
                     .backend
                     .as_mut()

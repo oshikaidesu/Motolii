@@ -18,7 +18,9 @@ script_mod! {
             color: #c5c5c5
             // 名前(レーン名)もこの draw_text が描く。等幅は値専用(tokens の規則)なので
             // regular。ルーラーの数字は値だが、Live もルーラーは UI 書体で刻む
-            text_style: theme.font_regular{font_size: 9}
+            // font_size はここでは死んでいる既定値 — draw_label が呼ぶたびに
+            // text_xs/text_sm/text_md で上書きする。tokens.text と揃える。
+            text_style: theme.font_regular{font_size: mod.tokens.text.md}
         }
         // 見た目の調整値はここに出しておく — --hot が拾えるのは script_mod!
         // だけで、Rust の const は再ビルドしないと変わらない。
@@ -36,6 +38,11 @@ script_mod! {
         tick_fade_to: 18.0
         type_ratio: 0.53
         ink_k: 1.1
+        // このペインだけ独自の生数値で字を置いていた(利用者指摘「バラバラ」)。
+        // 他7パネルと同じく mod.tokens.text.* に揃える
+        text_xs: mod.tokens.text.xs
+        text_sm: mod.tokens.text.sm
+        text_md: mod.tokens.text.md
         // playhead = ACCENT 1.5x(canon: timeline-semantics.html S5b) — グリッド線の
         // 通常太さ(1.0)に対する倍率と、pane 内で唯一許されるヒーローの最大コントラスト色。
         // どちらも --hot で振れる値なので Rust const ではなくここに置く。
@@ -774,6 +781,13 @@ pub struct TimelineSurface {
     type_ratio: f64,
     #[live(1.1)]
     ink_k: f64,
+    // mod.tokens.text.* の写し(裸の生数値をこのペインから追放 — 利用者指摘「バラバラ」)。
+    #[live(7.5)]
+    text_xs: f64,
+    #[live(7.23)]
+    text_sm: f64,
+    #[live(6.87)]
+    text_md: f64,
     #[live(18.0)]
     tick_fade_to: f64,
     // playhead = ACCENT 1.5x(canon: timeline-semantics.html S5b)。通常のグリッド線
@@ -859,6 +873,40 @@ impl TimelineSurface {
         }
         self.clamp_scroll_y();
         self.redraw(cx);
+    }
+
+    /// 見た目チューニング値の読み書き(Settings の TIMELINE 帯から)。
+    /// 名は `SettingsSurfaceAction::SetField` の `field` とそのまま対応する。
+    pub fn tuning_value(&self, field: &str) -> Option<f64> {
+        Some(match field {
+            "timeline_row_height" => self.lane_row_height,
+            "timeline_rail_width" => self.rail_width,
+            "timeline_ruler_height" => self.ruler_height,
+            "timeline_trim_handle_width" => self.trim_handle_width,
+            "timeline_tick_row_floor" => self.tick_row_floor,
+            "timeline_band_alpha" => self.band_alpha,
+            "timeline_tick_fade_from" => self.tick_fade_from,
+            "timeline_tick_fade_to" => self.tick_fade_to,
+            "timeline_playhead_scale" => self.playhead_width_scale,
+            _ => return None,
+        })
+    }
+
+    pub fn set_tuning_value(&mut self, cx: &mut Cx, field: &str, value: f64) -> bool {
+        match field {
+            "timeline_row_height" => self.lane_row_height = value,
+            "timeline_rail_width" => self.rail_width = value,
+            "timeline_ruler_height" => self.ruler_height = value,
+            "timeline_trim_handle_width" => self.trim_handle_width = value,
+            "timeline_tick_row_floor" => self.tick_row_floor = value,
+            "timeline_band_alpha" => self.band_alpha = value,
+            "timeline_tick_fade_from" => self.tick_fade_from = value,
+            "timeline_tick_fade_to" => self.tick_fade_to = value,
+            "timeline_playhead_scale" => self.playhead_width_scale = value,
+            _ => return false,
+        }
+        self.redraw(cx);
+        true
     }
 
     fn fps(&self) -> f64 {
@@ -1518,7 +1566,7 @@ impl TimelineSurface {
                     cx,
                     dvec2(
                         rect.pos.x + 3.2,
-                        rect.pos.y + ((rect.size.y - 7.0) * 0.5).max(0.0),
+                        rect.pos.y + ((rect.size.y - self.text_xs) * 0.5).max(0.0),
                     ),
                     label,
                     if active {
@@ -1526,7 +1574,7 @@ impl TimelineSurface {
                     } else {
                         vec4(0.55, 0.55, 0.55, 1.0)
                     },
-                    6.4,
+                    self.text_xs as f32,
                 );
             }
         }
@@ -1669,7 +1717,7 @@ impl TimelineSurface {
                 dvec2(self.rect.pos.x + 30.0, row.y + (row.height - 8.0) * 0.5),
                 &property.name,
                 vec4(0.57, 0.57, 0.57, 1.0),
-                7.2,
+                self.text_sm as f32,
             );
         }
     }
@@ -1810,7 +1858,7 @@ impl TimelineSurface {
             dvec2(self.rect.pos.x + 9.0, self.rect.pos.y + 5.0),
             &format!("TIME  {zoom_percent:.0}%"),
             vec4(0.50, 0.50, 0.50, 1.0),
-            7.3,
+            self.text_sm as f32,
         );
 
         let first_minor = (self.view_start / minor as f64).ceil() as i64 * minor;
@@ -1843,7 +1891,7 @@ impl TimelineSurface {
                     dvec2(x + 2.0, self.rect.pos.y + 1.0),
                     &label,
                     vec4(0.55, 0.55, 0.55, 1.0),
-                    7.0,
+                    self.text_md as f32,
                 );
             }
             frame = frame.saturating_add(minor.max(1));

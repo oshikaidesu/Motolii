@@ -16,14 +16,14 @@ wgpu = "29"
 peniko = "0.6"
 bytemuck = { version = "1", features = ["derive"] }
 
-# app/ と同一pin(346a0b3)のMotoliiフォーク。Stage相当の接続の本丸。
+# 同一pin(346a0b3)のMotoliiフォーク。Stage相当の接続の本丸。
 re_renderer = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14", default-features = false }
 re_log = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14", features = ["setup"] }
 macaw = "0.30"
 glam = "0.30"
 
 # 実ドキュメント(--fixtureのMV風Document)と製品と同じ補間コード。自作の写経はしない。
-motolii-fixture = { path = "../../app/core/motolii-fixture" }
-motolii-store = { path = "../../app/core/motolii-store" }
-motolii-engine = { path = "../../app/engine/motolii-engine" }
-motolii-vector = { path = "../../app/engine/motolii-vector" }
+motolii-fixture = { path = "../core/motolii-fixture" }
+motolii-store = { path = "../core/motolii-store" }
+motolii-engine = { path = "../engine/motolii-engine" }
+motolii-vector = { path = "../engine/motolii-vector" }

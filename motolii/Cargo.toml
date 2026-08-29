@@ -3,7 +3,71 @@
 # members は明示 — 逃げ口を塞ぐ。
 [workspace]
 resolver = "2"
-members = ["probe"]
+members = [
+    "probe",
+    "core/motolii-core",
+    "core/motolii-eval",
+    "core/motolii-store",
+    "core/motolii-fixture",
+    "core/motolii-testkit",
+    "ui/motolii-tokens-rs",
+    "engine/motolii-audio",
+    "engine/motolii-compositor",
+    "engine/motolii-engine",
+    "engine/motolii-export",
+    "engine/motolii-media",
+    "engine/motolii-vector",
+]
+
+[workspace.package]
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+[workspace.lints.rust]
+unreachable_pub = "warn"
+
+[workspace.dependencies]
+re_chunk = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14" }
+re_chunk_store = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14" }
+re_entity_db = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14" }
+re_log_types = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14" }
+re_query = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14" }
+re_types_core = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14" }
+re_log_encoding = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14", features = ["encoder", "decoder"] }
+re_build_info = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14" }
+re_byte_size = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14" }
+re_renderer = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14", default-features = false }
+re_importer = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14", default-features = false }
+re_sdk_types = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14", default-features = false }
+
+wgpu = "29.0"
+glam = "0.30.10"
+macaw = "0.30.0"
+pollster = "0.4"
+
+arrow = { version = "58.3", default-features = false }
+
+motolii-core = { path = "core/motolii-core" }
+motolii-eval = { path = "core/motolii-eval" }
+motolii-store = { path = "core/motolii-store" }
+motolii-fixture = { path = "core/motolii-fixture" }
+motolii-testkit = { path = "core/motolii-testkit" }
+motolii-audio = { path = "engine/motolii-audio" }
+motolii-compositor = { path = "engine/motolii-compositor" }
+motolii-engine = { path = "engine/motolii-engine" }
+motolii-export = { path = "engine/motolii-export" }
+motolii-media = { path = "engine/motolii-media" }
+motolii-vector = { path = "engine/motolii-vector" }
+# app/ui/ に残る leaf crate(裁定: ui/*3本は app/に残す)。motolii-fixture が
+# ラベル配色定数(LABEL_PALETTE_LEN)を借りるためだけに引く — view 型は持たない。
+motolii-tokens-rs = { path = "ui/motolii-tokens-rs", default-features = false }
+
+image = { version = "0.25", default-features = false, features = ["png"] }
+serde = { version = "1", features = ["derive"] }
+sha2 = "0.10"
+thiserror = "2"
+proptest = "1"
+serde_json = "1"
 
 # profile は workspace root でしか効かない(member 側に書いても無視される)。
 # 16GB機: debug情報を削り、依存(stylo/vello/rerun)だけ最適化して窓を実用速度にする。

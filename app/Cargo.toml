@@ -26,20 +26,8 @@
 resolver = "2"
 members = [
     "motolii",
-    "core/motolii-core",
-    "core/motolii-eval",
-    "core/motolii-store",
-    "core/motolii-fixture",
-    "core/motolii-testkit",
-    "engine/motolii-audio",
-    "engine/motolii-compositor",
-    "engine/motolii-engine",
-    "engine/motolii-export",
-    "engine/motolii-media",
-    "engine/motolii-vector",
     "ui/motolii-shell-state",
     "ui/motolii-timeline-projection",
-    "ui/motolii-tokens-rs",
 ]
 
 [workspace.package]
