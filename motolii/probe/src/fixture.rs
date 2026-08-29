@@ -18,7 +18,10 @@ pub fn canvas_rows_from_doc(doc: &Document) -> Vec<CanvasRow> {
         .filter_map(|p| PropertyId::new(p).ok())
         .collect();
 
-    view.layers()
+    let mut layers = view.layers();
+    layers.sort_by_key(|l| std::cmp::Reverse(view.meta(*l).ok().flatten().map(|m| m.order).unwrap_or(0)));
+
+    layers
         .into_iter()
         .map(|layer| {
             let (start, duration) = view
@@ -103,8 +106,11 @@ pub fn load_fixture() -> Loaded {
     let fx = motolii_fixture::build();
     let view = fx.doc.view();
 
+    let mut layers = view.layers();
+    layers.sort_by_key(|l| std::cmp::Reverse(view.meta(*l).ok().flatten().map(|m| m.order).unwrap_or(0)));
+
     let mut layer_rows = Vec::new();
-    for layer in view.layers() {
+    for layer in layers {
         let attrs = view.attrs(layer).ok().flatten().unwrap_or_default();
         let color = attrs
             .label_color

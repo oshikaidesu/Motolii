@@ -7,14 +7,16 @@
 //! (`LayerAttrs.name`)なので地図の制約を受けない — 歌詞風+素材風の混在は
 //! MV 制作の実態を模す fixture の意匠であって、store 側の語彙拡張ではない。
 //!
-//! 15層・timing をずらした配置・マーカー3個・数層に position/opacity キー・
+//! 16層・timing をずらした配置・マーカー3個・数層に position/opacity キー・
 //! 1層選択済み・playhead を中盤へ、は発注書そのものの受入条件(このモジュールの
 //! テストが検分する)。
 
 use motolii_store::{
-    property, AssetDraft, Composition, Document, EffectId, EffectInstance, Fps, Intent, Interp,
-    Keyframe, KeyframeTrack, LayerAttrsPatch, LayerId, LayerMeta, LayerSource, LayerTiming,
-    Marker, PropertyId, RationalTime, SourceFingerprintV1, Speed, Value,
+    property, AssetDraft, Composition, ContentKeyframe, ContentTrack, Document, EffectId,
+    EffectInstance, Fps, FontRef, Intent, Interp, Keyframe, KeyframeTrack, LayerAttrsPatch,
+    LayerId, LayerMeta, LayerSource, LayerTiming, Marker, PropertyId, RationalTime,
+    SourceFingerprintV1, Speed, TextAlignmentOptions, TextDocument, TextDocumentStyle,
+    TextJustify, TextStyleId, Value,
 };
 
 /// fixture が組み立てた結果。`Shell::new_fixture` が `Document`/`Session`/status へ写す。
@@ -47,7 +49,7 @@ struct LayerSpec {
     rgba: [u8; 4],
 }
 
-/// 15本。歌詞風(「サビ歌詞」等)+素材風(「Bロール」「ロゴ」等)の混在で、
+/// 15本(+テキストレイヤー1本)。歌詞風(「サビ歌詞」等)+素材風(「Bロール」「ロゴ」等)の混在で、
 /// MV 制作の途中に見える名詞集合にしてある(名前は自由文字列 — 地図の制約対象外)。
 /// timing は意図的にずらし、重なりも作る(ボーカル映像が終始敷かれた上に
 /// 歌詞・カット・トランジションが積む、という実編集の形)。
@@ -390,6 +392,71 @@ pub fn build() -> Fixture {
         intents.push(Intent::AdmitAsset { draft });
     }
 
+    // テキストレイヤー1本(16本目)。既存15層には触らない。timing は波形
+    // ビジュアライザと同区間 — 既定 playhead(900frame)が可視区間に入る。
+    let text_id = LayerId(16);
+    intents.push(Intent::AddLayer(text_id));
+    intents.push(Intent::SetMeta {
+        layer: text_id,
+        meta: LayerMeta {
+            source: LayerSource::Text,
+            order: 15,
+            timing: LayerTiming {
+                start: 810,
+                duration: 990,
+                source_in: 0,
+                speed: Speed::NORMAL,
+            },
+        },
+    });
+    intents.push(Intent::SetAttrs {
+        layer: text_id,
+        patch: LayerAttrsPatch {
+            name: Some("歌詞テキスト".to_owned()),
+            label_color: Some(Some(
+                (text_id.0 % motolii_tokens_rs::LABEL_PALETTE_LEN as u64) as u8,
+            )),
+            ..Default::default()
+        },
+    });
+    intents.push(Intent::SetTextDocument {
+        layer: text_id,
+        document: TextDocument {
+            content: {
+                let mut track = ContentTrack::new();
+                track.insert(ContentKeyframe {
+                    t: t(0),
+                    content: "文字が画素になる".to_owned(),
+                });
+                track
+            },
+            justify: TextJustify::Center,
+            wrap_size: None,
+            styles: vec![TextDocumentStyle {
+                id: TextStyleId(0),
+                font: FontRef {
+                    path: "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc".to_owned(),
+                    fingerprint: None,
+                    family: "Hiragino Sans".to_owned(),
+                    style: "W3".to_owned(),
+                },
+                size: 96.0,
+                fill: [1.0, 1.0, 1.0, 1.0],
+                line_height: None,
+                tracking: 0.0,
+                stroke_color: None,
+                stroke_width: 0.0,
+                stroke_over_fill: false,
+                axes: Vec::new(),
+                features: Vec::new(),
+            }],
+            slot_id: None,
+            ranges: Vec::new(),
+            alignment: TextAlignmentOptions::default(),
+            runs: Vec::new(),
+        },
+    });
+
     doc.apply_all(intents).expect("fixture を1操作として置ける");
 
     // 親子例(G1、裁定174 の H2 実証用): 「グリッチトランジション」の parent を
@@ -418,6 +485,6 @@ pub fn build() -> Fixture {
         doc,
         selected: sabi_id,
         playhead: DURATION_FRAMES / 2,
-        status: "fixture: layer 15 · marker 3 · keyframe済み 3層".to_owned(),
+        status: "fixture: layer 16 · marker 3 · keyframe済み 3層".to_owned(),
     }
 }
