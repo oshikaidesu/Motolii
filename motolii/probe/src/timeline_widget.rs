@@ -2,8 +2,10 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 
 use crate::playback::Clock;
+use crate::session::Selection;
 use crate::tokens::{self, UiScale};
 use anyrender::{PaintRef, PaintScene};
+use dioxus_native::prelude::{Signal, WritableExt};
 use motolii_store::{Document, Intent, LayerId, LayerTiming};
 use blitz_dom::node::ComputedStyles;
 use blitz_dom::Widget;
@@ -66,6 +68,8 @@ pub struct TimelineWidget {
     extractor: Option<fn(&Document) -> Vec<CanvasRow>>,
     drag: Option<DragState>,
     scrubbing: bool,
+    selection: Option<Selection>,
+    selected_mirror: Option<Signal<Option<LayerId>>>,
 }
 
 impl TimelineWidget {
@@ -86,7 +90,16 @@ impl TimelineWidget {
             extractor: None,
             drag: None,
             scrubbing: false,
+            selection: None,
+            selected_mirror: None,
         }
+    }
+
+    /// 層選択の唯一の真実と、chrome側再描画のためのミラーSignal。
+    pub fn with_selection(mut self, selection: Selection, mirror: Signal<Option<LayerId>>) -> Self {
+        self.selection = Some(selection);
+        self.selected_mirror = Some(mirror);
+        self
     }
 
     /// 60秒docが初期表示で収まるようzoomも引いておく。
@@ -240,6 +253,12 @@ impl Widget for TimelineWidget {
                     self.selected = if self.selected == hit { None } else { hit };
                 } else if let Some(row_ix) = self.band_hit(x, y) {
                     let layer = self.rows[row_ix].layer;
+                    if let (Some(selection), Some(mirror)) =
+                        (self.selection.as_ref(), self.selected_mirror.as_mut())
+                    {
+                        selection.set(layer);
+                        mirror.set(layer);
+                    }
                     let orig = layer.and_then(|l| {
                         self.doc
                             .as_ref()
