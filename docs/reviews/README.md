@@ -32,6 +32,7 @@
 
 | ファイル | 表題 |
 |---|---|
+| [2026-08-30-invariant-ledger.md](2026-08-30-invariant-ledger.md) | **「普通」の深い層は不変量で測る**(運転台帳)。ギャップ地図(触れるか)と品質バー(1操作が正しく応えるか)が取りこぼす層 — 編集した後に関係が壊れていないか。機械で測れる(Document水準のproperty test)。実測: 層を動かすとキーフレームが置き去り・キー時刻を変えられない・複数選択できない |
 | [2026-08-30-overnight-plan.md](2026-08-30-overnight-plan.md) | **夜間自走の台本**(運転台帳)。柵5本と順番7つ。利用者が名指しした欠落(色・縁・ギズモの拡縮回転・ベジェ)はどれもモデルに在庫がありUIだけ無い。Splitは新しいIntentが要らないと仮コードで測定済み。裁定115・多段パス・グループUIは触らない |
 | [2026-08-29-vgpu-vism-viability.md](2026-08-29-vgpu-vism-viability.md) | **vgpu(vercel-labs)とVism構想**(観察)。シェーダ+宣言された型付き入力という形はISF/vgpu/Vismで同じ — 駆動側(マウス/keyframe/DataTrack)はホストの都合であって単位の側の違いではない。nagaが既に直接依存でGLSL/WGSL両方の入口になる。停止線9本の軸は「境界の実在性」と「作品の持続性」の2本。**最大の発見: エフェクトの描画がre_rendererの外に自前パスとして建っている**(既知の同型事故の4つ目) |
 | [2026-08-29-s5-s18-acceptance.md](2026-08-29-s5-s18-acceptance.md) | **S5(キー打刻・値スクラブ)/S18(ギズモ第一波)の検収**(観察)。窓を実操作して通った5点と破れ5点。追記に、編集中の状態はDocumentの`set_transient`/`clear_transient`/`display_revision`に既にあった実測(仮コードで確認して破棄)と、テキスト入力が片肺だった原因(`blitz-dom`の`autofocus`がCargo featureで既定off) |
