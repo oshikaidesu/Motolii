@@ -34,11 +34,10 @@ pub fn app() -> Element {
     let mut inspector_w = use_signal(|| 270.0f64);
     let mut timeline_h = use_signal(|| 300.0f64);
     let mut drag = use_signal(|| Option::<DragSplit>::None);
-    let msl = use_signal(std::collections::HashSet::<(usize, u8)>::new);
 
     let mut scale_pct = use_signal(|| 100u32);
 
-    let (clock, ui_scale, timeline_attr, stage_attr, loaded) = use_hook(|| {
+    let (clock, ui_scale, timeline_attr, stage_attr, loaded, doc) = use_hook(|| {
         let Loaded { doc, ui, duration_sec } = load_fixture();
         let session = Session::new(doc, duration_sec);
         let Session { doc, clock, scale: ui_scale } = session;
@@ -55,7 +54,12 @@ pub fn app() -> Element {
             CustomWidgetAttr::new(timeline),
             CustomWidgetAttr::new(stage),
             Arc::new(ui),
+            doc,
         )
+    });
+
+    let attrs_state = use_signal(|| {
+        loaded.layer_rows.iter().map(|r| (r.hidden, r.solo, r.locked)).collect::<Vec<_>>()
     });
 
     let bw = browser_w();
@@ -179,7 +183,7 @@ pub fn app() -> Element {
                 },
             }
 
-            {timeline_shell(clock.clone(), playing, msl, &loaded.layer_rows, timeline_attr)}
+            {timeline_shell(clock.clone(), playing, doc.clone(), attrs_state, &loaded.layer_rows, timeline_attr)}
 
             div { id: "status", "{loaded.status}" }
         }

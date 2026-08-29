@@ -65,6 +65,7 @@ pub struct TimelineWidget {
     doc: Option<Arc<Mutex<Document>>>,
     extractor: Option<fn(&Document) -> Vec<CanvasRow>>,
     drag: Option<DragState>,
+    scrubbing: bool,
 }
 
 impl TimelineWidget {
@@ -84,6 +85,7 @@ impl TimelineWidget {
             doc: None,
             extractor: None,
             drag: None,
+            scrubbing: false,
         }
     }
 
@@ -208,7 +210,11 @@ impl Widget for TimelineWidget {
             UiEvent::PointerMove(p) => {
                 let (x, y) = (p.element.x as f64, p.element.y as f64);
                 self.cursor = Some((x, y));
-                if let Some(drag) = &mut self.drag {
+                if self.scrubbing {
+                    if let Some(clock) = &self.clock {
+                        clock.seek(self.scroll_sec + x / self.pps);
+                    }
+                } else if let Some(drag) = &mut self.drag {
                     drag.delta_sec = (self.scroll_sec + x / self.pps) - drag.grab_sec;
                 } else {
                     self.hovered = self.hit_test(x, y);
@@ -216,8 +222,16 @@ impl Widget for TimelineWidget {
             }
             UiEvent::PointerDown(p) => {
                 let (x, y) = (p.element.x as f64, p.element.y as f64);
-                let hit = self.hit_test(x, y);
                 let t = self.scroll_sec + x / self.pps;
+                if y < RULER_H * self.sfac() {
+                    println!("PROBE room=input down t={:.3}s el=({:.0},{:.0}) hit=ruler-seek", t, x, y);
+                    self.scrubbing = true;
+                    if let Some(clock) = &self.clock {
+                        clock.seek(t);
+                    }
+                    return;
+                }
+                let hit = self.hit_test(x, y);
                 println!(
                     "PROBE room=input down t={:.3}s el=({:.0},{:.0}) hit={:?}",
                     t, x, y, hit
@@ -245,6 +259,7 @@ impl Widget for TimelineWidget {
                 }
             }
             UiEvent::PointerUp(_) => {
+                self.scrubbing = false;
                 if let Some(drag) = self.drag.take() {
                     let (Some(doc), Some(extractor)) = (self.doc.as_ref(), self.extractor) else {
                         return;

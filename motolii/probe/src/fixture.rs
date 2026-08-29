@@ -1,4 +1,4 @@
-use motolii_store::{property, Document, PropertyId, Value};
+use motolii_store::{property, Document, LayerId, PropertyId, Value};
 
 use crate::timeline_widget::CanvasRow;
 
@@ -62,8 +62,38 @@ pub fn label_rgb(ix: u8) -> [u8; 3] {
 }
 
 pub struct LayerRow {
+    pub layer: LayerId,
     pub name: String,
     pub color: &'static str,
+    pub hidden: bool,
+    pub solo: bool,
+    pub locked: bool,
+}
+
+/// Documentから層行を読む。M/S/Lクリック後の再読みにも同じ関数を使う。
+pub fn layer_rows_from_doc(doc: &Document) -> Vec<LayerRow> {
+    let view = doc.view();
+    let mut layers = view.layers();
+    layers.sort_by_key(|l| std::cmp::Reverse(view.meta(*l).ok().flatten().map(|m| m.order).unwrap_or(0)));
+
+    layers
+        .into_iter()
+        .map(|layer| {
+            let attrs = view.attrs(layer).ok().flatten().unwrap_or_default();
+            let color = attrs
+                .label_color
+                .map(|ix| LABEL_PALETTE[ix as usize % LABEL_PALETTE.len()])
+                .unwrap_or("#8c8c8c");
+            LayerRow {
+                layer,
+                name: attrs.name,
+                color,
+                hidden: attrs.hidden,
+                solo: attrs.solo,
+                locked: attrs.locked,
+            }
+        })
+        .collect()
 }
 
 pub struct AssetRow {
@@ -106,18 +136,7 @@ pub fn load_fixture() -> Loaded {
     let fx = motolii_fixture::build();
     let view = fx.doc.view();
 
-    let mut layers = view.layers();
-    layers.sort_by_key(|l| std::cmp::Reverse(view.meta(*l).ok().flatten().map(|m| m.order).unwrap_or(0)));
-
-    let mut layer_rows = Vec::new();
-    for layer in layers {
-        let attrs = view.attrs(layer).ok().flatten().unwrap_or_default();
-        let color = attrs
-            .label_color
-            .map(|ix| LABEL_PALETTE[ix as usize % LABEL_PALETTE.len()])
-            .unwrap_or("#8c8c8c");
-        layer_rows.push(LayerRow { name: attrs.name, color });
-    }
+    let layer_rows = layer_rows_from_doc(&fx.doc);
 
     let assets = view
         .assets()

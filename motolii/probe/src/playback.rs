@@ -34,6 +34,12 @@ impl Clock {
         }
     }
 
+    pub fn seek(&self, sec: f64) {
+        let mut anchor = self.anchor.lock().unwrap();
+        anchor.0 = Instant::now();
+        anchor.1 = sec.clamp(0.0, self.duration);
+    }
+
     pub fn now_sec(&self) -> f64 {
         let anchor = self.anchor.lock().unwrap();
         if self.playing.load(Ordering::Relaxed) {

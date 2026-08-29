@@ -1,29 +1,49 @@
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use dioxus_native::prelude::*;
 use dioxus_native::CustomWidgetAttr;
 
 use crate::fixture::{fmt_timecode, LayerRow};
 use crate::playback::Clock;
+use motolii_store::{Document, Intent, LayerAttrsPatch};
 
 pub fn timeline_shell(
     clock: Arc<Clock>,
     mut playing: Signal<bool>,
-    mut msl: Signal<std::collections::HashSet<(usize, u8)>>,
+    doc: Arc<Mutex<Document>>,
+    mut attrs: Signal<Vec<(bool, bool, bool)>>,
     layer_rows_data: &[LayerRow],
     timeline_attr: CustomWidgetAttr,
 ) -> Element {
     let layer_rows = layer_rows_data.iter().enumerate().map(|(i, row)| {
+        let layer = row.layer;
+        let doc = doc.clone();
         let glyph = |bit: u8, label: &'static str| {
-            let lit = msl.read().contains(&(i, bit));
+            let (hidden, solo, locked) = attrs.read()[i];
+            let lit = match bit {
+                0 => hidden,
+                1 => solo,
+                _ => locked,
+            };
             let class = if lit { "glyph lit" } else { "glyph" };
+            let doc = doc.clone();
             rsx!(
                 span {
                     class: "{class}",
                     onclick: move |_| {
-                        let mut set = msl.write();
-                        if !set.remove(&(i, bit)) {
-                            set.insert((i, bit));
+                        let patch = match bit {
+                            0 => LayerAttrsPatch { hidden: Some(!hidden), ..Default::default() },
+                            1 => LayerAttrsPatch { solo: Some(!solo), ..Default::default() },
+                            _ => LayerAttrsPatch { locked: Some(!locked), ..Default::default() },
+                        };
+                        let mut doc = doc.lock().unwrap();
+                        match doc.apply(Intent::SetAttrs { layer, patch }) {
+                            Ok(_) => {
+                                let a = doc.view().attrs(layer).ok().flatten().unwrap_or_default();
+                                attrs.write()[i] = (a.hidden, a.solo, a.locked);
+                                println!("PROBE room=write verdict=applied SetAttrs bit={bit}");
+                            }
+                            Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
                         }
                     },
                     "{label}"
