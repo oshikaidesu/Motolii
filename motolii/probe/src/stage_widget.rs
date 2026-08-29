@@ -45,8 +45,6 @@ struct GizmoDrag {
     grab: (f64, f64),
     /// ドラッグ開始時のposition値。
     orig: (f64, f64),
-    /// 直近のPointerMoveのcomp座標。枠の追随に使う。
-    live: (f64, f64),
 }
 
 pub struct StageWidget {
@@ -106,15 +104,6 @@ impl StageWidget {
         selection_box_in(&view, layer, self.current_rt())
     }
 
-    /// 既存trackが無い層だけ書ける(第一波の裁定)。
-    fn has_position_track(&self, layer: LayerId) -> bool {
-        let doc = self.doc.lock().unwrap();
-        let position_prop = match PropertyId::new(property::POSITION) {
-            Ok(p) => p,
-            Err(_) => return true,
-        };
-        doc.view().track(layer, &position_prop).ok().flatten().is_some()
-    }
 }
 
 /// 選択層のcomp座標での枠(x, y, w, h)。timelineのbandが無い時刻ではNone(裁定どおり)。
@@ -193,33 +182,37 @@ impl Widget for StageWidget {
                 let Some((bx, by, bw, bh)) = self.selection_box(layer) else { return };
                 let (cx, cy) = self.fit.to_comp(p.element.x as f64, p.element.y as f64);
                 if cx >= bx && cx <= bx + bw && cy >= by && cy <= by + bh {
-                    self.drag = Some(GizmoDrag { layer, grab: (cx, cy), orig: (bx, by), live: (cx, cy) });
+                    self.drag = Some(GizmoDrag { layer, grab: (cx, cy), orig: (bx, by) });
                 }
             }
             UiEvent::PointerMove(p) => {
-                if let Some(drag) = self.drag.as_mut() {
-                    drag.live = self.fit.to_comp(p.element.x as f64, p.element.y as f64);
-                }
-            }
-            UiEvent::PointerUp(p) => {
-                let Some(drag) = self.drag.take() else { return };
+                let Some(drag) = self.drag.as_ref() else { return };
+                let Ok(position_prop) = PropertyId::new(property::POSITION) else { return };
                 let (cx, cy) = self.fit.to_comp(p.element.x as f64, p.element.y as f64);
                 let (dx, dy) = (cx - drag.grab.0, cy - drag.grab.1);
                 let (new_x, new_y) = (drag.orig.0 + dx, drag.orig.1 + dy);
-                if self.has_position_track(drag.layer) {
-                    println!("PROBE room=write verdict=gizmo-move-skipped-keyed layer={:?}", drag.layer);
-                    return;
-                }
+                let mut doc = self.doc.lock().unwrap();
+                doc.set_transient(drag.layer, position_prop, Value::Vec2([new_x, new_y]));
+            }
+            UiEvent::PointerUp(p) => {
+                let Some(drag) = self.drag.take() else { return };
                 let Ok(position_prop) = PropertyId::new(property::POSITION) else { return };
-                let mut track = KeyframeTrack::new();
+                let (cx, cy) = self.fit.to_comp(p.element.x as f64, p.element.y as f64);
+                let (dx, dy) = (cx - drag.grab.0, cy - drag.grab.1);
+                let (new_x, new_y) = (drag.orig.0 + dx, drag.orig.1 + dy);
+                let rt = self.current_rt();
+                let mut doc = self.doc.lock().unwrap();
+                let existing = doc.view().track(drag.layer, &position_prop).ok().flatten();
+                let is_new = existing.as_ref().map(|tr| tr.keys().is_empty()).unwrap_or(true);
+                let mut track = existing.unwrap_or_else(KeyframeTrack::new);
+                let key_t = if is_new { RationalTime::ZERO } else { rt };
                 track.insert(Keyframe {
-                    t: RationalTime::ZERO,
+                    t: key_t,
                     value: Value::Vec2([new_x, new_y]),
                     interp: motolii_store::Interp::Linear,
                     spatial: None,
                 });
-                let mut doc = self.doc.lock().unwrap();
-                match doc.apply(Intent::SetTrack { layer: drag.layer, property: position_prop, track }) {
+                match doc.apply(Intent::SetTrack { layer: drag.layer, property: position_prop.clone(), track }) {
                     Ok(_) => {
                         *self.revision.write() += 1;
                         println!(
@@ -229,6 +222,7 @@ impl Widget for StageWidget {
                     }
                     Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
                 }
+                doc.clear_transient(drag.layer, &position_prop);
             }
             _ => {}
         }
@@ -298,16 +292,9 @@ impl Widget for StageWidget {
             return scene;
         }
 
-        // S18: 選択層の枠(comp座標)。viewを落とす前に読む。ドラッグ中は指の位置を反映する。
-        let selected_box = self.selection.get().and_then(|layer| {
-            let base = selection_box_in(&view, layer, rt)?;
-            Some(match &self.drag {
-                Some(drag) if drag.layer == layer => {
-                    (drag.orig.0 + (drag.live.0 - drag.grab.0), drag.orig.1 + (drag.live.1 - drag.grab.1), base.2, base.3)
-                }
-                _ => base,
-            })
-        });
+        // viewを落とす前に読む。ドラッグ中の追随はtransient overlayがvalue_atへ
+        // 優先して乗るので担う — ここに専用の分岐は要らない。
+        let selected_box = self.selection.get().and_then(|layer| selection_box_in(&view, layer, rt));
 
         drop(view);
         drop(doc);

@@ -523,6 +523,20 @@ body {
     background: transparent;
 }
 
+.prow.content-row .v.content {
+    grid-column: 2 / span 3;
+    justify-content: flex-start;
+    text-align: left;
+    padding: 0 var(--sp2);
+}
+
+.prow.content-row input.v.content {
+    border: none;
+    outline: none;
+    font: inherit;
+    color: inherit;
+}
+
 .hint {
     margin-top: auto;
     padding: var(--sp1) var(--sp4);

@@ -5,8 +5,8 @@ use dioxus_native::prelude::*;
 use crate::fixture::{inspector_data_from_doc, InspectorData, PropRow};
 use crate::playback::Clock;
 use motolii_store::{
-    property, Document, Intent, Interp, Keyframe, KeyframeTrack, LayerId, PropertyId,
-    RationalTime, Value,
+    property, ContentKeyframe, Document, Intent, Interp, Keyframe, KeyframeTrack, LayerId,
+    PropertyId, RationalTime, Value,
 };
 
 /// 1pxあたりの値の増分。仮既定 — 実測ベースの調整は次段。
@@ -63,6 +63,37 @@ fn write_key(
     let key_t = if is_new && at_zero_if_new { RationalTime::ZERO } else { t };
     track.insert(Keyframe { t: key_t, value, interp: Interp::Linear, spatial: None });
     doc.apply(Intent::SetTrack { layer, property: prop, track })
+}
+
+/// 離された瞬間に1回だけ呼ぶこと — `apply`が1発なので1ドラッグ=1 undo になる。
+fn commit_drag(doc: &Arc<Mutex<Document>>, d: &ValueDrag, t: RationalTime) {
+    if let Ok(prop) = PropertyId::new(d.property) {
+        doc.lock().unwrap().clear_transient(d.layer, &prop);
+    }
+    if d.last_dx == 0.0 {
+        return;
+    }
+    let new_value = nudge(&d.start_value, d.vec2, d.axis, d.last_dx * increment(d.property));
+    if let Err(e) = write_key(doc, d.layer, d.property, new_value, t, true) {
+        println!("PROBE room=write verdict=apply-error {e}");
+    }
+}
+
+/// text-layerのcontentだけを差し替える。トラック無し(新規)なら`RationalTime::ZERO`、
+/// あればplayheadの`t`(数値スクラブと同じ書き先の法、`write_key`と対称)。
+fn write_content(
+    doc: &Arc<Mutex<Document>>,
+    layer: LayerId,
+    t: RationalTime,
+    content: String,
+) -> Result<(), motolii_store::StoreError> {
+    let mut doc = doc.lock().unwrap();
+    let Some(mut document) = doc.view().text_document(layer)? else {
+        return Ok(());
+    };
+    let key_t = if document.content.keys().is_empty() { RationalTime::ZERO } else { t };
+    document.content.insert(ContentKeyframe { t: key_t, content });
+    doc.apply(Intent::SetTextDocument { layer, document })
 }
 
 fn prop_row(
@@ -134,6 +165,66 @@ fn prop_row(
     )
 }
 
+/// 下書き文字列が`editing: Signal`に居るのは、transient overlayが持てるのが
+/// `motolii_eval::Value`だけだから。
+fn content_row(
+    p: &PropRow,
+    layer: LayerId,
+    t: RationalTime,
+    doc: &Arc<Mutex<Document>>,
+    mut editing: Signal<Option<String>>,
+    mut revision: Signal<u32>,
+) -> Element {
+    let key_class = if p.keyed { "glyph on" } else { "glyph" };
+    let key_glyph = if p.keyed { "◆" } else { "◇" };
+    if let Some(draft) = editing.read().clone() {
+        let doc_commit = doc.clone();
+        return rsx!(
+            div { class: "prow content-row",
+                span { class: "n", "{p.label}" }
+                input {
+                    class: "v content",
+                    value: "{draft}",
+                    autofocus: "true",
+                    oninput: move |evt| *editing.write() = Some(evt.value()),
+                    onkeydown: move |evt| match evt.key() {
+                        Key::Enter => {
+                            evt.prevent_default();
+                            if let Some(text) = editing.write().take() {
+                                match write_content(&doc_commit, layer, t, text) {
+                                    Ok(_) => {
+                                        println!("PROBE room=write verdict=content-commit layer={:?} t={:?}", layer, t);
+                                        *revision.write() += 1;
+                                    }
+                                    Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
+                                }
+                            }
+                        }
+                        Key::Escape => {
+                            evt.prevent_default();
+                            *editing.write() = None;
+                        }
+                        _ => {}
+                    },
+                }
+                span { class: "{key_class}", "{key_glyph}" }
+            }
+        );
+    }
+    let current = p.cells[2].clone();
+    rsx!(
+        div { class: "prow content-row",
+            span { class: "n", "{p.label}" }
+            span {
+                class: "v content",
+                ondoubleclick: move |_| *editing.write() = Some(current.clone()),
+                "{p.cells[2]}"
+            }
+            span { class: "{key_class}", "{key_glyph}" }
+        }
+    )
+}
+
 pub fn inspector_panel(
     doc: &Arc<Mutex<Document>>,
     selection: Option<LayerId>,
@@ -141,6 +232,7 @@ pub fn inspector_panel(
     mut revision: Signal<u32>,
 ) -> Element {
     let mut drag = use_signal(|| Option::<ValueDrag>::None);
+    let editing = use_signal(|| Option::<String>::None);
     let _ = revision(); // Document書き換え後の再描画をここで購読する(値そのものは使わない)
 
     let empty = InspectorData {
@@ -161,7 +253,7 @@ pub fn inspector_panel(
     let text_rows = inspector
         .text
         .iter()
-        .map(|p| prop_row(p, selection.unwrap_or(LayerId(0)), t, doc, drag, revision));
+        .map(|p| content_row(p, selection.unwrap_or(LayerId(0)), t, doc, editing, revision));
     let transform_rows = inspector
         .transform
         .iter()
@@ -173,13 +265,17 @@ pub fn inspector_panel(
     let fx_label = if inspector.has_effects { "" } else { "No shared FX" };
 
     let doc_move = doc.clone();
+    let doc_up = doc.clone();
     rsx!(
         div {
             id: "inspector",
             onmousemove: move |evt| {
                 // パネルの外で離したmouseupはここに来ない。
                 if evt.data().held_buttons().is_empty() {
-                    *drag.write() = None;
+                    if let Some(d) = drag.write().take() {
+                        commit_drag(&doc_move, &d, t);
+                        *revision.write() += 1;
+                    }
                     return;
                 }
                 let Some(state) = drag.write().as_mut().map(|d| {
@@ -194,19 +290,20 @@ pub fn inspector_panel(
                     return;
                 }
                 let new_value = nudge(&start_value, vec2, axis, dx * increment(property));
-                match write_key(&doc_move, layer, property, new_value.clone(), t, true) {
-                    Ok(_) => {
-                        println!(
-                            "PROBE room=write verdict=value-scrub layer={:?} prop={} axis={} dx={:.1} new={:?}",
-                            layer, property, axis, dx, new_value
-                        );
-                        *revision.write() += 1;
-                    }
-                    Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
+                if let Ok(prop) = PropertyId::new(property) {
+                    doc_move.lock().unwrap().set_transient(layer, prop, new_value.clone());
+                    println!(
+                        "PROBE room=write verdict=value-scrub layer={:?} prop={} axis={} dx={:.1} new={:?}",
+                        layer, property, axis, dx, new_value
+                    );
+                    *revision.write() += 1;
                 }
             },
             onmouseup: move |_| {
-                *drag.write() = None;
+                if let Some(d) = drag.write().take() {
+                    commit_drag(&doc_up, &d, t);
+                    *revision.write() += 1;
+                }
             },
             div { class: "ptitle",
                 span { class: "way", style: "background:var(--way-inspector);" }
