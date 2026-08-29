@@ -27,3 +27,33 @@
 
 - 選択枠の矩形計算が `selection_box()` と `paint()` 内に同じ形で二重にある
 - `current_rt()` の `3000` が `paint()` の時刻経路と別立て
+
+## 追記: transient overlay の実測(仮コードで確認、コードは破棄)
+
+`Document` は編集中の状態の置き場を既に持っている
+(`app/core/motolii-store/src/document.rs:631-690`)。
+
+- `set_transient(layer, property, value)` — edit timeline に触れないので履歴が汚れない
+- `clear_transient` / `clear_all_transients` — キャンセルはこれだけ
+- `display_revision()` — overlay 込みの再描画検出。front は `revision()` ではなくこちらを見る
+
+ギズモのドラッグをこの上に載せ替える仮コードを書いて窓で確かめた結果:
+
+- **絵も枠も一緒にドラッグ追随した。** `StoreView::value_at` が overlay を track より
+  優先して読むので、front 側で追随を書く必要が無い
+- **`GizmoDrag.live` フィールドと `paint()` のドラッグ分岐が丸ごと不要になった**(正味マイナス)
+- `has_position_track` の skip 裁定を撤去し、書きの法を `inspector.rs` の `write_key` と
+  同じ(track が空なら t=0、あればプレイヘッド)に揃えたところ、**連続で3回掴み直して
+  移動できた**。第一波の skip 裁定は窓で使えないことが出たので撤去(利用者裁定)
+- 1ジェスチャ = `apply` 1回 + `clear_transient`
+
+## 追記: テキスト入力が片肺だった原因
+
+`blitz-dom` の `autofocus` は **Cargo feature で既定 off**(`blitz-dom/Cargo.toml:31`、
+`default` に無い)。`probe/Cargo.toml` が `default-features = false` なので
+`input { autofocus: true }` は黙って無視されていた。focus が無いと `KeyDown` は
+document root へ配送される(`blitz-dom/src/events/driver.rs:196-200`)ので、
+**ダブルクリック直後に打てない・Enter も Escape も効かない**の3症状が全部これ1つ。
+
+窓での実測: 文字入力そのものは動く(2回目のクリックで focus が付いた後に
+`文字が画X素になる` と挿入された)。feature を足す修正は未検証のまま破棄した。
