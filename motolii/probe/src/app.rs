@@ -53,7 +53,7 @@ pub fn app() -> Element {
             .with_selection(selection.clone(), selected)
             .with_scroll_mirror(timeline_scroll_y);
         let timeline_tx = timeline.sender();
-        let stage = StageWidget::new(clock.clone(), doc.clone(), selection.clone(), revision);
+        let stage = StageWidget::new(clock.clone(), doc.clone(), selection.clone(), selected, revision);
         (
             clock,
             ui_scale,

@@ -69,6 +69,7 @@ pub struct StageWidget {
     clock: Arc<Clock>,
     doc: Arc<Mutex<Document>>,
     selection: Selection,
+    selected_mirror: Signal<Option<LayerId>>,
     fit: Fit,
     drag: Option<GizmoDrag>,
     revision: Signal<u32>,
@@ -95,6 +96,7 @@ impl StageWidget {
         clock: Arc<Clock>,
         doc: Arc<Mutex<Document>>,
         selection: Selection,
+        selected_mirror: Signal<Option<LayerId>>,
         revision: Signal<u32>,
     ) -> Self {
         Self {
@@ -103,6 +105,7 @@ impl StageWidget {
             clock,
             doc,
             selection,
+            selected_mirror,
             fit: Fit::default(),
             drag: None,
             revision,
@@ -338,52 +341,82 @@ impl Widget for StageWidget {
     fn handle_event(&mut self, event: &UiEvent) {
         match event {
             UiEvent::PointerDown(p) => {
-                let Some(layer) = self.selection.get() else { return };
-                let Some(geom) = self.selection_geom(layer) else { return };
                 let (cx, cy) = self.fit.to_comp(p.element.x as f64, p.element.y as f64);
-                // 見えている位置(回転済み)で掴めるように、どのハンドルかの判定だけ
-                // box_と同じ未回転(local)座標系で行う——カーソルをposition中心に逆回転。
-                // ドラッグ開始後の計算(grab/cur)は従来どおり生comp座標のまま。
-                let (lx, ly) = rotate_around(geom.position, -geom.rotation, (cx, cy));
-                let (bx, by, bw, bh) = geom.box_;
-                let (x0, y0, x1, y1) = (bx, by, bx + bw, by + bh);
-                let tol = 8.0 / self.fit.s.max(1e-6);
-                let near = |px: f64, py: f64| (lx - px).abs() <= tol && (ly - py).abs() <= tol;
-                let corners = [(x0, y0, false, false), (x1, y0, true, false), (x0, y1, false, true), (x1, y1, true, true)];
-                let mut mode = corners
-                    .into_iter()
-                    .find(|&(px, py, ..)| near(px, py))
-                    .map(|(_, _, sx, sy)| GizmoMode::ScaleCorner { sx, sy });
-                if mode.is_none() {
-                    let edges = [
-                        ((x0 + x1) * 0.5, y0, GizmoMode::ScaleEdge { axis_x: false, positive: false }),
-                        ((x0 + x1) * 0.5, y1, GizmoMode::ScaleEdge { axis_x: false, positive: true }),
-                        (x0, (y0 + y1) * 0.5, GizmoMode::ScaleEdge { axis_x: true, positive: false }),
-                        (x1, (y0 + y1) * 0.5, GizmoMode::ScaleEdge { axis_x: true, positive: true }),
-                    ];
-                    mode = edges.into_iter().find(|&(px, py, _)| near(px, py)).map(|(_, _, m)| m);
-                }
-                if mode.is_none() {
-                    if lx >= bx && lx <= bx + bw && ly >= by && ly <= by + bh {
-                        mode = Some(GizmoMode::Move);
-                    } else {
-                        let margin = 24.0 / self.fit.s.max(1e-6);
-                        if lx >= bx - margin && lx <= bx + bw + margin && ly >= by - margin && ly <= by + bh + margin {
-                            mode = Some(GizmoMode::Rotate);
+                if let Some(layer) = self.selection.get() {
+                    if let Some(geom) = self.selection_geom(layer) {
+                        // 見えている位置(回転済み)で掴めるように、どのハンドルかの判定だけ
+                        // box_と同じ未回転(local)座標系で行う——カーソルをposition中心に逆回転。
+                        // ドラッグ開始後の計算(grab/cur)は従来どおり生comp座標のまま。
+                        let (lx, ly) = rotate_around(geom.position, -geom.rotation, (cx, cy));
+                        let (bx, by, bw, bh) = geom.box_;
+                        let (x0, y0, x1, y1) = (bx, by, bx + bw, by + bh);
+                        let tol = 8.0 / self.fit.s.max(1e-6);
+                        let near = |px: f64, py: f64| (lx - px).abs() <= tol && (ly - py).abs() <= tol;
+                        let corners = [(x0, y0, false, false), (x1, y0, true, false), (x0, y1, false, true), (x1, y1, true, true)];
+                        let mut mode = corners
+                            .into_iter()
+                            .find(|&(px, py, ..)| near(px, py))
+                            .map(|(_, _, sx, sy)| GizmoMode::ScaleCorner { sx, sy });
+                        if mode.is_none() {
+                            let edges = [
+                                ((x0 + x1) * 0.5, y0, GizmoMode::ScaleEdge { axis_x: false, positive: false }),
+                                ((x0 + x1) * 0.5, y1, GizmoMode::ScaleEdge { axis_x: false, positive: true }),
+                                (x0, (y0 + y1) * 0.5, GizmoMode::ScaleEdge { axis_x: true, positive: false }),
+                                (x1, (y0 + y1) * 0.5, GizmoMode::ScaleEdge { axis_x: true, positive: true }),
+                            ];
+                            mode = edges.into_iter().find(|&(px, py, _)| near(px, py)).map(|(_, _, m)| m);
+                        }
+                        if mode.is_none() {
+                            if lx >= bx && lx <= bx + bw && ly >= by && ly <= by + bh {
+                                mode = Some(GizmoMode::Move);
+                            } else {
+                                let margin = 24.0 / self.fit.s.max(1e-6);
+                                if lx >= bx - margin && lx <= bx + bw + margin && ly >= by - margin && ly <= by + bh + margin {
+                                    mode = Some(GizmoMode::Rotate);
+                                }
+                            }
+                        }
+                        if let Some(mode) = mode {
+                            self.drag = Some(GizmoDrag {
+                                layer,
+                                mode,
+                                grab: (cx, cy),
+                                orig_position: geom.position,
+                                orig_rotation: geom.rotation,
+                                anchor: geom.anchor,
+                                natural: geom.natural,
+                                orig_box: geom.box_,
+                            });
+                            return;
                         }
                     }
                 }
-                let Some(mode) = mode else { return };
-                self.drag = Some(GizmoDrag {
-                    layer,
-                    mode,
-                    grab: (cx, cy),
-                    orig_position: geom.position,
-                    orig_rotation: geom.rotation,
-                    anchor: geom.anchor,
-                    natural: geom.natural,
-                    orig_box: geom.box_,
-                });
+                // ハンドルに当たらなかった——キャンバス上の層を直接拾う。手前(order大)が勝つ。
+                // 何も当たらなければ選択はそのまま(Timelineの空白クリックと同じ文法)。
+                let State::Active(active) = &self.state else { return };
+                let doc = self.doc.lock().unwrap();
+                let view = doc.view();
+                let rt = self.current_rt();
+                let Ok(layers) = view.resolved_layers(rt) else { return };
+                let mut hit: Option<(i16, LayerId)> = None;
+                for layer in &layers {
+                    let Some(geom) = selection_geom_in(&active.engine, &view, layer.id, rt) else { continue };
+                    let (bx, by, bw, bh) = geom.box_;
+                    let (lx, ly) = rotate_around(geom.position, -geom.rotation, (cx, cy));
+                    if lx < bx || lx > bx + bw || ly < by || ly > by + bh {
+                        continue;
+                    }
+                    let order = layer.placement.order;
+                    if hit.map(|(o, _)| order > o).unwrap_or(true) {
+                        hit = Some((order, layer.id));
+                    }
+                }
+                drop(view);
+                drop(doc);
+                if let Some((_, layer)) = hit {
+                    self.selection.set(Some(layer));
+                    self.selected_mirror.set(Some(layer));
+                }
             }
             UiEvent::PointerMove(p) => {
                 let Some(drag) = self.drag.as_ref() else { return };
