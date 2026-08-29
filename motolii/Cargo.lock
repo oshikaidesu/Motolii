@@ -3504,6 +3504,7 @@ dependencies = [
  "motolii-core",
  "naga",
  "pollster",
+ "re_build_tools",
  "re_renderer",
  "serde_json",
  "thiserror 2.0.20",
