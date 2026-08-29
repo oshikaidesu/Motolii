@@ -52,7 +52,7 @@ impl Compositor {
 
         let glow_pipelines = effects::GlowPipelines::new(&ctx.device);
         let isf_bloom = effects::IsfProgram::compile(
-            &ctx.device,
+            &ctx,
             effects::BLOOM_SOURCE,
             effects::ISF_TARGET_FORMAT,
         )

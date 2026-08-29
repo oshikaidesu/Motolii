@@ -214,8 +214,7 @@ impl Compositor {
                         let src_view = src.texture.create_view(&Default::default());
                         let dst_view = scratch.create_view(&Default::default());
                         self.isf_bloom.record(
-                            &self.ctx.device,
-                            &self.ctx.queue,
+                            &self.ctx,
                             encoder,
                             &src_view,
                             &dst_view,
