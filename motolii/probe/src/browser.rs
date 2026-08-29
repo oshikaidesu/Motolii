@@ -512,3 +512,103 @@ pub fn browser_panel(
         }
     )
 }
+
+#[cfg(test)]
+mod spawn_diagnosis {
+    use super::*;
+    use motolii_engine::Engine;
+
+    fn gpu() -> (wgpu::Device, wgpu::Queue) {
+        let instance = wgpu::Instance::default();
+        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))
+            .expect("adapter");
+        pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default())).expect("device")
+    }
+
+    fn readback(device: &wgpu::Device, queue: &wgpu::Queue, engine: &mut Engine, doc: &Document, t: RationalTime, w: u32, h: u32) -> Vec<u8> {
+        let target = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("spawn_diagnosis target"),
+            size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_SRC,
+            view_formats: &[],
+        });
+        engine.render_frame_into(&doc.view(), t, &target).expect("render_frame_into");
+
+        let bytes_per_row = (4 * w).div_ceil(256) * 256;
+        let buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("spawn_diagnosis readback"),
+            size: (bytes_per_row * h) as u64,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
+        encoder.copy_texture_to_buffer(
+            target.as_image_copy(),
+            wgpu::TexelCopyBufferInfo {
+                buffer: &buffer,
+                layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(bytes_per_row), rows_per_image: Some(h) },
+            },
+            wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+        );
+        queue.submit(Some(encoder.finish()));
+        let slice = buffer.slice(..);
+        slice.map_async(wgpu::MapMode::Read, |_| {});
+        device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
+        let data = slice.get_mapped_range().to_vec();
+        drop(data.clone());
+        buffer.unmap();
+        let mut out = Vec::with_capacity((4 * w * h) as usize);
+        for row in 0..h {
+            let start = (row * bytes_per_row) as usize;
+            out.extend_from_slice(&data[start..start + (4 * w) as usize]);
+        }
+        out
+    }
+
+    /// 一番効く切り分け: fixture 済み Document に spawn_layer と同じ Intent 列を流し、
+    /// render_frame_into を層を足す前後で呼んで画素を比べる。窓と同じ再現が取れるか確認。
+    #[test]
+    fn spawn_on_fixture_doc_changes_pixels() {
+        let fx = motolii_fixture::build();
+        let mut doc = fx.doc;
+        let comp = doc.view().composition().unwrap().unwrap();
+        let (w, h) = (comp.width, comp.height);
+        let t = RationalTime::try_new(fx.playhead, 30).unwrap();
+
+        let (device, queue) = gpu();
+        let mut engine = Engine::with_device(device.clone(), queue.clone()).unwrap();
+
+        // 窓を模す: スクラブで何十フレームも render_frame_into を先に回してから足す
+        // (同じ Engine の使い回しでキャッシュが腐るかを見る)。
+        for f in (0..fx.playhead).step_by(30) {
+            let _ = readback(&device, &queue, &mut engine, &doc, RationalTime::try_new(f, 30).unwrap(), w, h);
+        }
+        let before = readback(&device, &queue, &mut engine, &doc, t, w, h);
+
+        let layer = LayerId(doc.view().next_layer_id());
+        let order = doc
+            .view()
+            .layers()
+            .iter()
+            .filter_map(|l| doc.view().meta(*l).ok().flatten().map(|m| m.order))
+            .max()
+            .map(|m| m.saturating_add(1))
+            .unwrap_or(0);
+        println!("DIAG next_layer_id={} order={} playhead={}", layer.0, order, fx.playhead);
+        let intents = new_layer_intents(layer, order, fx.playhead, comp.duration_frames, NewKind::Rectangle);
+        doc.apply_all(intents).expect("apply_all");
+
+        let resolved = doc.view().resolved_layers(t).expect("resolved_layers");
+        println!("DIAG resolved_layers count={} ids={:?}", resolved.len(), resolved.iter().map(|l| l.id.0).collect::<Vec<_>>());
+        assert!(resolved.iter().any(|l| l.id == layer), "new layer must be in resolved_layers");
+
+        let after = readback(&device, &queue, &mut engine, &doc, t, w, h);
+        let diff = before.iter().zip(after.iter()).filter(|(a, b)| a != b).count();
+        println!("DIAG changed_bytes={diff}");
+        assert!(diff > 0, "pixels must change after spawning a new layer");
+    }
+}

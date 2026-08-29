@@ -1686,6 +1686,7 @@ dependencies = [
  "motolii-store",
  "motolii-vector",
  "peniko",
+ "pollster",
  "re_log",
  "re_renderer",
  "wgpu",

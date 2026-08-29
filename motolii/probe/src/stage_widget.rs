@@ -517,6 +517,7 @@ impl Widget for StageWidget {
         let t_sec = self.clock.now_sec();
         let rt = RationalTime::try_new((t_sec * 3000.0) as i64, 3000).unwrap_or(RationalTime::ZERO);
 
+
         if let Err(e) = active.engine.render_frame_into(&view, rt, &target) {
             println!("PROBE room=stage verdict=render-error {e}");
             return scene;

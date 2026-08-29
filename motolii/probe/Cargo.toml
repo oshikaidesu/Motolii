@@ -28,3 +28,6 @@ motolii-fixture = { path = "../core/motolii-fixture" }
 motolii-store = { path = "../core/motolii-store" }
 motolii-engine = { path = "../engine/motolii-engine" }
 motolii-vector = { path = "../engine/motolii-vector" }
+
+[dev-dependencies]
+pollster = "0.4"
