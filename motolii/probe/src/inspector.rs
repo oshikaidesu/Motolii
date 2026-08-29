@@ -70,7 +70,7 @@ fn prop_row(
     t: RationalTime,
     doc: &Arc<Mutex<Document>>,
     mut drag: Signal<Option<ValueDrag>>,
-    mut tick: Signal<u32>,
+    mut revision: Signal<u32>,
 ) -> Element {
     let cells = p.cells.iter().zip(p.dims).enumerate().map(|(i, (c, dim))| {
         let class = if c.is_empty() {
@@ -115,7 +115,7 @@ fn prop_row(
                                 "PROBE room=write verdict=value-scrub layer={:?} prop={} axis={} dx={:.1} new={:?}",
                                 layer, property, i, dx, new_value
                             );
-                            *tick.write() += 1;
+                            *revision.write() += 1;
                         }
                         Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
                     }
@@ -134,7 +134,7 @@ fn prop_row(
         move |_| match write_key(&doc, layer, property, value.clone(), t, false) {
             Ok(_) => {
                 println!("PROBE room=write verdict=key-added layer={:?} prop={} t={:?}", layer, property, t);
-                *tick.write() += 1;
+                *revision.write() += 1;
             }
             Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
         }
@@ -156,10 +156,10 @@ pub fn inspector_panel(
     doc: &Arc<Mutex<Document>>,
     selection: Option<LayerId>,
     clock: &Clock,
+    revision: Signal<u32>,
 ) -> Element {
     let drag = use_signal(|| Option::<ValueDrag>::None);
-    let tick = use_signal(|| 0u32);
-    let _ = tick(); // apply()後の再描画をここで購読する(値そのものは使わない)
+    let _ = revision(); // Document書き換え後の再描画をここで購読する(値そのものは使わない)
 
     let empty = InspectorData {
         ident_name: "No selection".to_string(),
@@ -178,11 +178,11 @@ pub fn inspector_panel(
     let transform_rows = inspector
         .transform
         .iter()
-        .map(|p| prop_row(p, selection.unwrap_or(LayerId(0)), t, doc, drag, tick));
+        .map(|p| prop_row(p, selection.unwrap_or(LayerId(0)), t, doc, drag, revision));
     let appearance_rows = inspector
         .appearance
         .iter()
-        .map(|p| prop_row(p, selection.unwrap_or(LayerId(0)), t, doc, drag, tick));
+        .map(|p| prop_row(p, selection.unwrap_or(LayerId(0)), t, doc, drag, revision));
     let fx_label = if inspector.has_effects { "" } else { "No shared FX" };
 
     rsx!(

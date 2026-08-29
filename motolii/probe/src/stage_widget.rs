@@ -5,6 +5,7 @@ use crate::session::Selection;
 use crate::tokens;
 use anyrender::{PaintRef, PaintScene, ResourceId};
 use blitz_traits::events::UiEvent;
+use dioxus_native::prelude::{Signal, WritableExt};
 use motolii_store::{property, Document, Intent, Keyframe, KeyframeTrack, LayerId, LayerSource, PropertyId, RationalTime, Value};
 use blitz_dom::node::ComputedStyles;
 use blitz_dom::Widget;
@@ -54,6 +55,7 @@ pub struct StageWidget {
     selection: Selection,
     fit: Fit,
     drag: Option<GizmoDrag>,
+    revision: Signal<u32>,
 }
 
 enum State {
@@ -73,7 +75,12 @@ struct TexAndHandle {
 }
 
 impl StageWidget {
-    pub fn new(clock: Arc<Clock>, doc: Arc<Mutex<Document>>, selection: Selection) -> Self {
+    pub fn new(
+        clock: Arc<Clock>,
+        doc: Arc<Mutex<Document>>,
+        selection: Selection,
+        revision: Signal<u32>,
+    ) -> Self {
         Self {
             state: State::Suspended,
             frames: 0,
@@ -82,6 +89,7 @@ impl StageWidget {
             selection,
             fit: Fit::default(),
             drag: None,
+            revision,
         }
     }
 
@@ -196,10 +204,13 @@ impl Widget for StageWidget {
                 });
                 let mut doc = self.doc.lock().unwrap();
                 match doc.apply(Intent::SetTrack { layer: drag.layer, property: position_prop, track }) {
-                    Ok(_) => println!(
+                    Ok(_) => {
+                        *self.revision.write() += 1;
+                        println!(
                         "PROBE room=write verdict=gizmo-move layer={:?} ({:.1},{:.1})->({:.1},{:.1})",
-                        drag.layer, drag.orig.0, drag.orig.1, new_x, new_y
-                    ),
+                            drag.layer, drag.orig.0, drag.orig.1, new_x, new_y
+                        );
+                    }
                     Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
                 }
             }

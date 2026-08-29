@@ -36,6 +36,7 @@ pub fn app() -> Element {
     let mut drag = use_signal(|| Option::<DragSplit>::None);
 
     let mut scale_pct = use_signal(|| 100u32);
+    let revision = use_signal(|| 0u32);
 
     let (clock, ui_scale, timeline_attr, timeline_tx, stage_attr, loaded, doc, selection) = use_hook(|| {
         let Loaded { doc, ui, duration_sec } = load_fixture();
@@ -48,7 +49,7 @@ pub fn app() -> Element {
             .with_scale(ui_scale.clone())
             .with_document(doc.clone(), fixture::canvas_rows_from_doc);
         let timeline_tx = timeline.sender();
-        let stage = StageWidget::new(clock.clone(), doc.clone(), selection.clone());
+        let stage = StageWidget::new(clock.clone(), doc.clone(), selection.clone(), revision);
         (
             clock,
             ui_scale,
@@ -173,7 +174,7 @@ pub fn app() -> Element {
                     },
                 }
 
-                {inspector_panel(&doc, selected(), &clock)}
+                {inspector_panel(&doc, selected(), &clock, revision)}
             }
 
             div {
