@@ -65,9 +65,17 @@
    (宣言の範囲 0.0〜4.0 を無視)。今日見つけた綻び
 5. **ベジェを Browser の Create から** — `PathSource::Bezier` で層を作る。
    S16(Text/Rectangle が生まれる口)と同じ形
-6. **反射の通し検分** — `docs/ui-inherited-grammar-gap.md` の Tier 1 を台本に窓を実操作。
+6. **キーマップを表にして、設定で変えられるようにする**(利用者要望 2026-08-30
+   「Config変えれるショートカットキーもほしい」)。
+   **監督の読み**: キーバインドは**意図に結ぶ**(機構名ではなく「割る」「複製」等の意図名 —
+   裁定174「UI動詞は意図を語り機構を語らない」)。表は**データ**にして差し替え可能にする。
+   **朝に読みが違っていたら直す。**
+   最初に載せるのは `ui-inherited-grammar-gap.md` の Tier 1 で「既存の器で即撃てる」物だけ:
+   ←/→ frame step(Shiftで10)・Home/End・Esc(選択解除/gesture cancel)・
+   Cmd+D 複製・Cmd+K split(上の1番)。**器が無い物は載せない**
+7. **反射の通し検分** — `docs/ui-inherited-grammar-gap.md` の Tier 1 を台本に窓を実操作。
    直すのは配線だけの物に限る
-7. **`vello_encoding config.rs:185` の減算オーバーフロー** — 仕切りを引きすぎると落ちる。
+8. **`vello_encoding config.rs:185` の減算オーバーフロー** — 仕切りを引きすぎると落ちる。
    再現条件の特定まで
 
 ## 触らない(利用者の裁定待ち)
