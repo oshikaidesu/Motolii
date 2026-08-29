@@ -37,10 +37,10 @@ pub fn app() -> Element {
 
     let mut scale_pct = use_signal(|| 100u32);
 
-    let (clock, ui_scale, timeline_attr, timeline_tx, stage_attr, loaded, doc) = use_hook(|| {
+    let (clock, ui_scale, timeline_attr, timeline_tx, stage_attr, loaded, doc, _selection) = use_hook(|| {
         let Loaded { doc, ui, duration_sec } = load_fixture();
         let session = Session::new(doc, duration_sec);
-        let Session { doc, clock, scale: ui_scale } = session;
+        let Session { doc, clock, scale: ui_scale, selection } = session;
 
         let canvas_rows = fixture::canvas_rows_from_doc(&doc.lock().unwrap());
         let timeline = TimelineWidget::new(canvas_rows)
@@ -57,6 +57,7 @@ pub fn app() -> Element {
             CustomWidgetAttr::new(stage),
             Arc::new(ui),
             doc,
+            selection,
         )
     });
 

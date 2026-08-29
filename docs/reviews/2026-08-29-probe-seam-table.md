@@ -62,6 +62,15 @@
 | S15 | Browser→Timelineの配置gesture | `Intent::AddLayer`+`SetMeta{source: Media,…}`+`LayerTiming::place`(store lib.rs:381) | 素材→層1本 | 配置規則の発明(placeが既にある) | 10分 |
 | S16 | Browser Createタブ(Text/Rectangle/Solid) | Text=fixtureレーンで実証済みのIntent列 / Shape=**在庫調査中**(view.shapes→engineのshape texture)。**2Dシェイプはパス前提**(2026-08-29利用者裁定: 四角=4頂点の閉パス。パラメトリック矩形を別型で持たない — Lottieに近い側を採る。`Value::Path`の頂点補間とも整合) | Createの行クリック→層が生まれ選択される | Shape描画の自作・矩形プリミティブ型の新設 | Text 10分/Shape 調査待ち |
 | S17 | ~~ルーラースクラブ~~ **済**(Clock::seek) | probe `Clock`(seek口を1本足す)+timeline_widgetのPointerDown(ルーラー域) | クリック/ドラッグ=Clock.seek | 第二のclock・transport状態の複製 | 10分 |
+| S18 | Stageギズモ(選択層の枠+ドラッグ移動) | session選択+`view.value_at(POSITION)`+storeのproperty書きIntent(S5と同じ口)。fit逆変換=stage_widgetのs/fx/fy。**委託調査済(2026-08-29)**: 既製2Dケージcrateは無い — 対話規則はGraphite(Apache-2.0)のtransformation_cageを式移植の先例正本に、3D将来はtransform-gizmo(renderer非依存)をWATCH。**第一波はmoveのみ**(枠+ドラッグ移動。scale/rotationハンドルは第二波) | 選択層の枠を合成の上に描き、ドラッグ→position書き | transform演算の自作(evalが正)・第二のヒットテスト体系・3Dギズモ語彙の持ち込み | 15分×2(枠/ドラッグ) |
+
+## Browserの意味構造(2026-08-29利用者)
+
+ゾーンごとの意図: **タブ=どの世界の話か**(Media=素材/Effects=効果/Create=無から生む) /
+**サイドバー=どう絞るか**(種類・タグ・場所) / **メイン=実物を見て選ぶ(常にサムネ付き結果)** /
+フッター=選択1件への小操作。**この文法はタブが変わっても崩れない** — Createも
+「作れる物のカード」がメインに並ぶ(行リストは文法違反)。Effectsのカードの正本は
+`Engine::known_effects()`(裁定276: 一覧に出る名前=実際に描ける集合)。
 
 ## 責任分割(モジュール地図)
 

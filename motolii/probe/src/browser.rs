@@ -193,32 +193,45 @@ pub fn browser_panel(
                 div { class: "bwork",
                     div { class: "bside",
                         div { class: "sh", "CREATE" }
-                        div {
-                            class: "srow",
-                            onclick: {
-                                let doc = doc.clone();
-                                let clock = clock.clone();
-                                let timeline_tx = timeline_tx.clone();
-                                move |_| spawn_layer(&doc, &clock, layer_rows, attrs_state, &timeline_tx, NewKind::Text, "text")
-                            },
-                            "Text"
-                        }
-                        div {
-                            class: "srow",
-                            onclick: {
-                                let doc = doc.clone();
-                                let clock = clock.clone();
-                                let timeline_tx = timeline_tx.clone();
-                                move |_| spawn_layer(&doc, &clock, layer_rows, attrs_state, &timeline_tx, NewKind::Rectangle, "rectangle")
-                            },
-                            "Rectangle"
-                        }
+                        div { class: "srow on", "All" }
+                        div { class: "srow", "Text" }
+                        div { class: "srow", "Shape" }
                     }
                     div { class: "bresults",
                         div { class: "rhead",
                             div {
                                 b { "Create" }
                                 span { class: "sub", "Adds a new layer to the composition" }
+                            }
+                        }
+                        div { class: "tgrid",
+                            div {
+                                class: "tcard",
+                                onclick: {
+                                    let doc = doc.clone();
+                                    let clock = clock.clone();
+                                    let timeline_tx = timeline_tx.clone();
+                                    move |_| spawn_layer(&doc, &clock, layer_rows, attrs_state, &timeline_tx, NewKind::Text, "text")
+                                },
+                                div { class: "thumb", style: "background:#222; display:flex; align-items:center; justify-content:center;",
+                                    span { style: "color:#fff; font-size:32px;", "あ" }
+                                }
+                                span { class: "tname", "Text" }
+                                span { class: "tmeta", "text layer" }
+                            }
+                            div {
+                                class: "tcard",
+                                onclick: {
+                                    let doc = doc.clone();
+                                    let clock = clock.clone();
+                                    let timeline_tx = timeline_tx.clone();
+                                    move |_| spawn_layer(&doc, &clock, layer_rows, attrs_state, &timeline_tx, NewKind::Rectangle, "rectangle")
+                                },
+                                div { class: "thumb", style: "background:#222; display:flex; align-items:center; justify-content:center;",
+                                    div { style: "width:40%; height:40%; background:#fff;" }
+                                }
+                                span { class: "tname", "Rectangle" }
+                                span { class: "tmeta", "path shape" }
                             }
                         }
                     }
