@@ -226,6 +226,10 @@ impl Compositor {
                         let dst_view = scratch.create_view(&Default::default());
                         self.wgsl_gradient.record(&self.ctx, encoder, &dst_view);
                     }
+                    EffectPass::TriLed => {
+                        let dst_view = scratch.create_view(&Default::default());
+                        self.wgsl_tri_led.record(&self.ctx, encoder, &dst_view);
+                    }
                 }
             }
 

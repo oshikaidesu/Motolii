@@ -351,6 +351,16 @@ body {
     display: flex;
     flex-direction: column;
     background: var(--panel);
+    border: var(--line) solid transparent;
+}
+
+.tcard.on {
+    border-color: var(--accent);
+}
+
+.tcard.disabled {
+    opacity: 0.4;
+    pointer-events: none;
 }
 
 .thumb {

@@ -407,6 +407,8 @@ pub struct Compositor {
     /// 内蔵 vism 第3号(`EffectPass::Gradient`、`effects::wgsl_fragment` モジュール
     /// doc 参照)。`isf_bloom` と同じ規律 — 初回生成して以後使い回す。
     pub(crate) wgsl_gradient: effects::WgslFragmentProgram,
+    /// 内蔵 vism 第4号(`EffectPass::TriLed`)。`wgsl_gradient` と同じ規律。
+    pub(crate) wgsl_tri_led: effects::WgslFragmentProgram,
     /// 分離可能+非分離 blend(BL3/BL4)の shader pipeline。`glow_pipelines` と同じ規律 —
     /// 初回生成して以後使い回す(`blend` モジュール doc 参照)。
     pub(crate) blend_pipelines: blend::SeparableBlendPipelines,

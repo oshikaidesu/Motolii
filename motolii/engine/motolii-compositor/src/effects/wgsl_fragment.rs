@@ -27,6 +27,12 @@ pub(crate) const GRADIENT_SOURCE: &str = include_str!("shaders/gradient.wgsl");
 
 pub(crate) const GRADIENT_TARGET_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 
+/// vgpu(vercel-labs)の Triangle LED Hero を1パスへ畳んだもの(`shaders/tri_led.wgsl`
+/// doc 参照)。`GRADIENT_SOURCE` と同じ形——`fs_main` は uniform も texture も読まない。
+pub(crate) const TRI_LED_SOURCE: &str = include_str!("shaders/tri_led.wgsl");
+
+pub(crate) const TRI_LED_TARGET_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
+
 /// GPU に建った1本の WGSL フラグメント program。`effects::isf::IsfProgram` と
 /// 同じ「初回生成して以後使い回す」規律——texture/uniform を持たないので
 /// `record` は bind group を1つも作らない。
@@ -37,6 +43,10 @@ pub(crate) struct WgslFragmentProgram {
 impl WgslFragmentProgram {
     pub(crate) fn compile(
         ctx: &RenderContext,
+        // shader ごとの仮想パス/label を分けるための一意名(`"gradient"`/`"tri_led"`)。
+        // 同じ名前を2つの program に使うと `MemFileSystem`/pipeline キャッシュが
+        // 内容ではなくパスでキャッシュするため、片方が他方を上書きしてしまう。
+        name: &str,
         #[cfg_attr(load_shaders_from_disk, allow(unused_variables))] wgsl_source: &str,
         output_format: wgpu::TextureFormat,
     ) -> Self {
@@ -48,14 +58,14 @@ impl WgslFragmentProgram {
         #[cfg(load_shaders_from_disk)]
         let path = {
             let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-            let abs_path = manifest_dir.join("src/effects/shaders/gradient.wgsl");
+            let abs_path = manifest_dir.join(format!("src/effects/shaders/{name}.wgsl"));
             let resolver = new_recommended_file_resolver();
             FileServer::get_mut(|fs| fs.watch(&resolver, &abs_path, false))
-                .expect("gradient.wgsl exists next to wgsl_fragment.rs")
+                .expect("{name}.wgsl exists next to wgsl_fragment.rs")
         };
         #[cfg(not(load_shaders_from_disk))]
         let path = {
-            let path = PathBuf::from("motolii-compositor/wgsl-fragment/module.wgsl");
+            let path = PathBuf::from(format!("motolii-compositor/wgsl-fragment/{name}.wgsl"));
             get_filesystem()
                 .create_file(&path, wgsl_source.to_owned().into())
                 .expect("wgsl fragment source is valid utf8");
@@ -65,7 +75,7 @@ impl WgslFragmentProgram {
         let shader_handle = ctx.gpu_resources.shader_modules.get_or_create(
             ctx,
             &ShaderModuleDesc {
-                label: "motolii-compositor-wgsl-fragment".into(),
+                label: format!("motolii-compositor-wgsl-fragment-{name}").into(),
                 source: path,
                 extra_workaround_replacements: Vec::new(),
             },
@@ -74,7 +84,7 @@ impl WgslFragmentProgram {
         let pipeline_layout = ctx.gpu_resources.pipeline_layouts.get_or_create(
             ctx,
             &PipelineLayoutDesc {
-                label: "motolii-compositor-wgsl-fragment-pipeline-layout".into(),
+                label: format!("motolii-compositor-wgsl-fragment-{name}-pipeline-layout").into(),
                 // texture も uniform も読まない shader なので bind group layout は無い。
                 entries: vec![],
             },
@@ -83,7 +93,7 @@ impl WgslFragmentProgram {
         let pipeline = ctx.gpu_resources.render_pipelines.get_or_create(
             ctx,
             &RenderPipelineDesc {
-                label: "motolii-compositor-wgsl-fragment-pipeline".into(),
+                label: format!("motolii-compositor-wgsl-fragment-{name}-pipeline").into(),
                 pipeline_layout,
                 vertex_entrypoint: "vs_main".to_owned(),
                 vertex_handle: shader_handle,

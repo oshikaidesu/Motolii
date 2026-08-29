@@ -169,6 +169,7 @@ pub fn build() -> Fixture {
     let mut waveform_id = None;
     let mut dance_id = None;
     let mut glitch_id = None;
+    let mut second_verse_id = None;
 
     for (index, spec) in LAYERS.iter().enumerate() {
         let id = LayerId((index + 1) as u64);
@@ -212,6 +213,7 @@ pub fn build() -> Fixture {
             "波形ビジュアライザ" => waveform_id = Some(id),
             "ダンスカット" => dance_id = Some(id),
             "グリッチトランジション" => glitch_id = Some(id),
+            "2番Aメロ歌詞" => second_verse_id = Some(id),
             _ => {}
         }
     }
@@ -374,6 +376,19 @@ pub fn build() -> Fixture {
         effects: vec![EffectInstance {
             id: EffectId(1),
             plugin_id: "motolii.gradient".to_owned(),
+        }],
+    });
+
+    // 2番Aメロ歌詞: 内蔵 vism 第4号 TriLed(param 無し)を積む。波形ビジュアライザ
+    // (Glow 済み)のすぐ下、playhead 既定位置(900frame)で表示区間 [810,1050) に
+    // 収まる——タイムライン最上行に近い層(gradient を付けたタイトルロゴは
+    // 最下行寄りで奥に隠れていた反省、TARGET 5 参照)。
+    let second_verse_id = second_verse_id.expect("2番Aメロ歌詞 layer がある");
+    intents.push(Intent::SetEffects {
+        layer: second_verse_id,
+        effects: vec![EffectInstance {
+            id: EffectId(2),
+            plugin_id: "motolii.tri_led".to_owned(),
         }],
     });
 

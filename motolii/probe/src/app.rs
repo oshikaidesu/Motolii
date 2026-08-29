@@ -137,7 +137,7 @@ pub fn app() -> Element {
                 id: "main",
                 style: "grid-template-columns: {bw}px 8px 1fr 8px {iw}px;",
 
-                {browser_panel(&loaded, doc.clone(), clock.clone(), layer_rows, attrs_state, timeline_tx.clone())}
+                {browser_panel(&loaded, doc.clone(), clock.clone(), layer_rows, attrs_state, timeline_tx.clone(), selected, revision)}
 
                 div {
                     class: "vgrip",

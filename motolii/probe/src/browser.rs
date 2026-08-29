@@ -4,9 +4,10 @@ use std::sync::{Arc, Mutex};
 use dioxus_native::prelude::*;
 
 use motolii_store::{
-    ContentKeyframe, ContentTrack, Document, FontRef, Intent, LayerAttrsPatch, LayerId, LayerMeta,
-    LayerSource, LayerTiming, PathSource, RationalTime, Shape, ShapeNode, TextAlignmentOptions,
-    TextDocument, TextDocumentStyle, TextJustify, TextStyleId, VectorPoint,
+    ContentKeyframe, ContentTrack, Document, EffectId, EffectInstance, FontRef, Intent,
+    LayerAttrsPatch, LayerId, LayerMeta, LayerSource, LayerTiming, PathSource, RationalTime,
+    Shape, ShapeNode, TextAlignmentOptions, TextDocument, TextDocumentStyle, TextJustify,
+    TextStyleId, VectorPoint,
 };
 use motolii_vector::{Brush, Fill, FillRule, Rgb};
 
@@ -146,6 +147,21 @@ fn spawn_layer(
     }
 }
 
+fn add_effect(doc: &Arc<Mutex<Document>>, layer: LayerId, plugin_id: &str, mut revision: Signal<u32>) {
+    let mut d = doc.lock().unwrap();
+    let mut effects = d.view().effects(layer).unwrap_or_default();
+    let next_id = effects.iter().map(|e| e.id.0).max().map(|m| m + 1).unwrap_or(0);
+    effects.push(EffectInstance { id: EffectId(next_id), plugin_id: plugin_id.to_owned() });
+    match d.apply(Intent::SetEffects { layer, effects }) {
+        Ok(_) => {
+            drop(d);
+            *revision.write() += 1;
+            println!("PROBE room=write verdict=effect-added layer={} plugin={plugin_id}", layer.0);
+        }
+        Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
+    }
+}
+
 pub fn browser_panel(
     ui: &UiData,
     doc: Arc<Mutex<Document>>,
@@ -153,6 +169,8 @@ pub fn browser_panel(
     layer_rows: Signal<Vec<LayerRow>>,
     attrs_state: Signal<Vec<(bool, bool, bool)>>,
     timeline_tx: Sender<TimelineMsg>,
+    selected: Signal<Option<LayerId>>,
+    revision: Signal<u32>,
 ) -> Element {
     let mut tab = use_signal(|| 0u8);
     let tab_class = move |n: u8| if tab() == n { "btab on" } else { "btab" };
@@ -189,7 +207,57 @@ pub fn browser_panel(
                 span { class: "{tab_class(2)}", onclick: move |_| tab.set(2), "Create" }
                 span { class: "{tab_class(3)}", onclick: move |_| tab.set(3), "Panels" }
             }
-            if tab() == 2 {
+            if tab() == 1 {
+                {
+                    let layer = selected();
+                    let attached: Vec<String> = layer
+                        .and_then(|l| doc.lock().unwrap().view().effects(l).ok())
+                        .unwrap_or_default()
+                        .into_iter()
+                        .map(|e| e.plugin_id)
+                        .collect();
+                    let cards = motolii_engine::known_effects().iter().map(|desc| {
+                        let plugin_id = desc.plugin_id.to_owned();
+                        let is_on = attached.contains(&plugin_id);
+                        let card_class = if is_on { "tcard on" } else if layer.is_none() { "tcard disabled" } else { "tcard" };
+                        let onclick = layer.map(|l| {
+                            let doc = doc.clone();
+                            let plugin_id = plugin_id.clone();
+                            move |_| add_effect(&doc, l, &plugin_id, revision)
+                        });
+                        rsx!(
+                            div {
+                                class: "{card_class}",
+                                onclick: move |evt| { if let Some(f) = &onclick { f(evt) } },
+                                div { class: "thumb", style: "background:#222; display:flex; align-items:center; justify-content:center;",
+                                    span { style: "color:#fff; font-size:20px;", "ƒ" }
+                                }
+                                span { class: "tname", "{plugin_id}" }
+                                span { class: "tmeta", if is_on { "attached" } else { "effect" } }
+                            }
+                        )
+                    });
+                    rsx!(
+                        div { class: "bwork",
+                            div { class: "bside",
+                                div { class: "sh", "EFFECTS" }
+                                div { class: "srow on", "All" }
+                            }
+                            div { class: "bresults",
+                                div { class: "rhead",
+                                    div {
+                                        b { "Effects" }
+                                        span { class: "sub",
+                                            if layer.is_some() { "Click to add to the selected layer" } else { "Select a layer first" }
+                                        }
+                                    }
+                                }
+                                div { class: "tgrid", {cards} }
+                            }
+                        }
+                    )
+                }
+            } else if tab() == 2 {
                 div { class: "bwork",
                     div { class: "bside",
                         div { class: "sh", "CREATE" }

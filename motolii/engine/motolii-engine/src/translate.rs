@@ -205,6 +205,7 @@ pub(crate) fn translate_effect_passes(
             "motolii.glow" => translate_glow_params(&effect.params),
             "motolii.isf_bloom" => Some(translate_isf_params(&effect.params)),
             "motolii.gradient" => Some(motolii_compositor::EffectPass::Gradient),
+            "motolii.tri_led" => Some(motolii_compositor::EffectPass::TriLed),
             // それ以外の plugin_id はまだ対応する pass が無い。無音で skip する
             // (= pass を積まない、`translate_blend_mode` とは非対称——上のdoc参照)。
             _ => None,
@@ -319,6 +320,10 @@ const KNOWN_EFFECTS: &[EffectDescriptor] = &[
         plugin_id: "motolii.gradient",
         params: &[],
     },
+    EffectDescriptor {
+        plugin_id: "motolii.tri_led",
+        params: &[],
+    },
 ];
 
 /// 現在 engine が実際に描ける effect の一覧(`plugin_id` + named param の名前・既定値・
@@ -407,18 +412,20 @@ mod known_effects_tests {
         }
     }
 
-    /// 逆方向の固定: 今 engine が描けるのは glow/isf_bloom/gradient の3本だけという
-    /// 事実そのものを縛る(`translate_effect_passes` の doc と同じ主張を
-    /// `known_effects()` 側からも固定する)。
+    /// 逆方向の固定: 今 engine が描けるのは glow/isf_bloom/gradient/tri_led の
+    /// 4本だけという事実そのものを縛る(`translate_effect_passes` の doc と同じ
+    /// 主張を `known_effects()` 側からも固定する)。
     #[test]
-    fn known_effects_is_exactly_glow_and_isf_bloom_and_gradient_today() {
-        assert_eq!(known_effects().len(), 3);
+    fn known_effects_is_exactly_glow_and_isf_bloom_and_gradient_and_tri_led_today() {
+        assert_eq!(known_effects().len(), 4);
         assert_eq!(known_effects()[0].plugin_id, "motolii.glow");
         assert_eq!(known_effects()[0].params.len(), 3);
         assert_eq!(known_effects()[1].plugin_id, "motolii.isf_bloom");
         assert_eq!(known_effects()[1].params.len(), 3);
         assert_eq!(known_effects()[2].plugin_id, "motolii.gradient");
         assert_eq!(known_effects()[2].params.len(), 0);
+        assert_eq!(known_effects()[3].plugin_id, "motolii.tri_led");
+        assert_eq!(known_effects()[3].params.len(), 0);
     }
 
     /// `ISF_BLOOM_PARAMS`(手書き、supervisor timebox fallback——module doc

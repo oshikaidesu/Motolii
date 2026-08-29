@@ -59,8 +59,15 @@ impl Compositor {
         .map_err(|e| CompositorError::Isf(e.to_string()))?;
         let wgsl_gradient = effects::WgslFragmentProgram::compile(
             &ctx,
+            "gradient",
             effects::GRADIENT_SOURCE,
             effects::GRADIENT_TARGET_FORMAT,
+        );
+        let wgsl_tri_led = effects::WgslFragmentProgram::compile(
+            &ctx,
+            "tri_led",
+            effects::TRI_LED_SOURCE,
+            effects::TRI_LED_TARGET_FORMAT,
         );
         let blend_pipelines = blend::SeparableBlendPipelines::new(&ctx.device);
         let matte_pipelines = matte::MattePipelines::new(&ctx.device);
@@ -73,6 +80,7 @@ impl Compositor {
             glow_pipelines,
             isf_bloom,
             wgsl_gradient,
+            wgsl_tri_led,
             blend_pipelines,
             matte_pipelines,
             sequential_submits: 0,

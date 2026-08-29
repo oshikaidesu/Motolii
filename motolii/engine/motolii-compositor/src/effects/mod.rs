@@ -32,7 +32,10 @@ mod wgsl_fragment;
 pub(crate) use glow::{GlowPipelines, GLOW_INTERMEDIATE_FORMAT};
 pub use isf::{IsfInput, IsfInputType, IsfManifest};
 pub(crate) use isf::{IsfProgram, BLOOM_SOURCE, ISF_TARGET_FORMAT};
-pub(crate) use wgsl_fragment::{WgslFragmentProgram, GRADIENT_SOURCE, GRADIENT_TARGET_FORMAT};
+pub(crate) use wgsl_fragment::{
+    WgslFragmentProgram, GRADIENT_SOURCE, GRADIENT_TARGET_FORMAT, TRI_LED_SOURCE,
+    TRI_LED_TARGET_FORMAT,
+};
 
 /// layer に適用する GPU pass の記述。**f32 param を持つので `Eq` は導出できない**
 /// (`PartialEq` のみ — 既存の呼び手は `assert_eq!`/`PartialEq` 比較しか使っていない、
@@ -70,6 +73,10 @@ pub enum EffectPass {
     /// 内蔵 vism 第3号。uniform も texture も読まない WGSL フラグメント1本
     /// (`wgsl_fragment` サブモジュール参照)。param を1つも持たない。
     Gradient,
+    /// 内蔵 vism 第4号。vgpu(vercel-labs)の Triangle LED Hero を1パスへ畳んだ
+    /// WGSL フラグメント(`wgsl_fragment` サブモジュール、`shaders/tri_led.wgsl`
+    /// 参照)。`Gradient` と同じく uniform も texture も読まず、param を持たない。
+    TriLed,
 }
 
 impl EffectPass {
@@ -115,6 +122,7 @@ impl EffectPass {
             // 実装していない。
             EffectPass::Isf { .. } => 0,
             EffectPass::Gradient => 0,
+            EffectPass::TriLed => 0,
         }
     }
 
@@ -134,6 +142,7 @@ impl EffectPass {
             EffectPass::Glow { .. } => Some(GLOW_INTERMEDIATE_FORMAT),
             EffectPass::Isf { .. } => Some(ISF_TARGET_FORMAT),
             EffectPass::Gradient => Some(GRADIENT_TARGET_FORMAT),
+            EffectPass::TriLed => Some(TRI_LED_TARGET_FORMAT),
         }
     }
 }
