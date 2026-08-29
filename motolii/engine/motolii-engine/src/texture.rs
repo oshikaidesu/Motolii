@@ -13,6 +13,7 @@ use motolii_store::{
     LayerId, LayerSource, RationalTime, ResolvedLayer, ShapeNode, StoreView, TextDocument,
 };
 
+use crate::render::layer_size;
 use crate::{shape, text, Engine, EngineError};
 
 impl Engine {
@@ -62,6 +63,46 @@ impl Engine {
         } else {
             self.texture_for(&layer.source, layer.source_frame)
         }
+    }
+
+    /// 板のローカル矩形サイズ(`declared_size`と実寸`natural`を`layer_size`で
+    /// 突き合わせた `[w, h]`)。**キャッシュに焼けている texture の実寸だけを見る**
+    /// ——ここで新たに rasterize/upload はしない。cache miss は `None`
+    /// (通常描画が次に回ればキャッシュへ入り、選択枠が1フレーム遅れるだけ)。
+    /// `front` が layer の種類(`LayerSource`)で分岐しないための唯一の口。
+    pub fn selected_layer_size(
+        &self,
+        view: &StoreView<'_>,
+        layer_id: LayerId,
+        t: RationalTime,
+    ) -> Option<[f32; 2]> {
+        let composition = view.composition().ok().flatten()?;
+        let comp = composition.spec();
+        let resolved = view.resolved_layers(t).ok()?;
+        let layer = resolved.iter().find(|l| l.id == layer_id)?;
+
+        let natural = match &layer.source {
+            LayerSource::Text => {
+                let document = view.resolved_text_document(layer_id, t).ok().flatten()?;
+                let key = TextCacheKey::new(layer_id, &document, t, comp.width, comp.height);
+                self.text_textures.get(&key)?.width_height().map(|v| v as f32)
+            }
+            LayerSource::Shape => {
+                let shapes = view.shapes(layer_id).ok()?;
+                let canvas = motolii_vector::Canvas::centered(comp.width, comp.height);
+                let key = ShapeCacheKey::new(layer_id, &shapes, canvas.width, canvas.height);
+                self.shape_textures.get(&key)?.width_height().map(|v| v as f32)
+            }
+            LayerSource::PointCloud { .. } | LayerSource::Null | LayerSource::Group => {
+                [comp.width as f32, comp.height as f32]
+            }
+            LayerSource::Solid { width, height, .. } => [*width as f32, *height as f32],
+            LayerSource::Media { path, .. } => {
+                let info = self.probes.get(path)?;
+                [info.width as f32, info.height as f32]
+            }
+        };
+        Some(layer_size(layer, natural))
     }
 
     /// [`Self::texture_for_layer`]の zero-copy 版(2026-08-22、ゼロコピー経路にも

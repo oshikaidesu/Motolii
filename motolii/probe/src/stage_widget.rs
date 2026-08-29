@@ -6,7 +6,7 @@ use crate::tokens;
 use anyrender::{PaintRef, PaintScene, ResourceId};
 use blitz_traits::events::UiEvent;
 use dioxus_native::prelude::{Signal, WritableExt};
-use motolii_store::{property, Document, Intent, Keyframe, KeyframeTrack, LayerId, LayerSource, PropertyId, RationalTime, StoreView, Value};
+use motolii_store::{property, Document, Intent, Keyframe, KeyframeTrack, LayerId, PropertyId, RationalTime, StoreView, Value};
 use blitz_dom::node::ComputedStyles;
 use blitz_dom::Widget;
 use motolii_engine::Engine;
@@ -99,15 +99,25 @@ impl StageWidget {
     }
 
     fn selection_box(&self, layer: LayerId) -> Option<(f64, f64, f64, f64)> {
+        let State::Active(active) = &self.state else {
+            return None;
+        };
         let doc = self.doc.lock().unwrap();
         let view = doc.view();
-        selection_box_in(&view, layer, self.current_rt())
+        selection_box_in(&active.engine, &view, layer, self.current_rt())
     }
 
 }
 
 /// 選択層のcomp座標での枠(x, y, w, h)。timelineのbandが無い時刻ではNone(裁定どおり)。
-fn selection_box_in(view: &StoreView<'_>, layer: LayerId, rt: RationalTime) -> Option<(f64, f64, f64, f64)> {
+/// 板のサイズは`Engine::selected_layer_size`任せ——front は layer の種類
+/// (`LayerSource`)を知らない。
+fn selection_box_in(
+    engine: &Engine,
+    view: &StoreView<'_>,
+    layer: LayerId,
+    rt: RationalTime,
+) -> Option<(f64, f64, f64, f64)> {
     let meta = view.meta(layer).ok().flatten()?;
     let fps = view.composition().ok().flatten()?.fps;
     let frame = rt.try_to_frame_floor(fps).ok()?;
@@ -119,11 +129,8 @@ fn selection_box_in(view: &StoreView<'_>, layer: LayerId, rt: RationalTime) -> O
         Some(Value::Vec2([x, y])) => (x, y),
         _ => (0.0, 0.0),
     };
-    let (w, h) = match meta.source {
-        LayerSource::Solid { width, height, .. } => (width as f64, height as f64),
-        _ => (200.0, 200.0),
-    };
-    Some((x, y, w, h))
+    let [w, h] = engine.selected_layer_size(view, layer, rt)?;
+    Some((x, y, w as f64, h as f64))
 }
 
 fn create_target(device: &wgpu::Device, width: u32, height: u32) -> wgpu::Texture {
@@ -294,7 +301,10 @@ impl Widget for StageWidget {
 
         // viewを落とす前に読む。ドラッグ中の追随はtransient overlayがvalue_atへ
         // 優先して乗るので担う — ここに専用の分岐は要らない。
-        let selected_box = self.selection.get().and_then(|layer| selection_box_in(&view, layer, rt));
+        let selected_box = self
+            .selection
+            .get()
+            .and_then(|layer| selection_box_in(&active.engine, &view, layer, rt));
 
         drop(view);
         drop(doc);

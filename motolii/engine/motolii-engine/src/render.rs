@@ -613,7 +613,7 @@ fn collect_shape_documents(
 /// **大きさは transform の scale で動く**ので、ここは「板のローカル矩形」を決めている
 /// だけ(裁定59)。`render_with_camera_override` の本体・matte 元の両方で使う共通式
 /// (以前は2箇所に手書きで複製されていた)。
-fn layer_size(layer: &ResolvedLayer, natural: [f32; 2]) -> [f32; 2] {
+pub(crate) fn layer_size(layer: &ResolvedLayer, natural: [f32; 2]) -> [f32; 2] {
     [
         if layer.declared_size[0] > 0.0 {
             layer.declared_size[0]
