@@ -7,6 +7,10 @@
 
 1. **技術層 = Rerunフォークの部品。** 作る前に在庫を引く。自作してよいのは
    **編集の意味**だけ。再発明は罪。
+   線引き: **GPU資源(pipeline・shader・layout・texture)の所有はre_rendererのプールへ返す。
+   パスの連鎖の組み方はMotoliiが持つ**(連鎖の器はre_rendererに無く、エフェクトスタックの
+   順序は編集の意味)。`Renderer` traitはビューに描かれる物のための拡張点で、
+   scratch texture間のblitには着せない。
 2. **意味 = Lottieが審判。** 保存される物が何かはLottieに聞く。
    Lottieが黙る所と意図的に離れる所だけが利用者裁定。
    **ただし操作の体系はAEが出典で、Lottieに聞く問いではない**(下記)。
