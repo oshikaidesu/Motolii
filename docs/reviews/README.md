@@ -32,6 +32,7 @@
 
 | ファイル | 表題 |
 |---|---|
+| [2026-08-29-s5-s18-acceptance.md](2026-08-29-s5-s18-acceptance.md) | **S5(キー打刻・値スクラブ)/S18(ギズモ第一波)の検収**(観察)。窓を実操作して通った5点と破れ5点。追記に、編集中の状態はDocumentの`set_transient`/`clear_transient`/`display_revision`に既にあった実測(仮コードで確認して破棄)と、テキスト入力が片肺だった原因(`blitz-dom`の`autofocus`がCargo featureで既定off) |
 | [2026-08-29-parallel-lane-build-mechanisms.md](2026-08-29-parallel-lane-build-mechanisms.md) | **並列レーンがビルドしてよい仕組みの現在地**(観察)。家内=warm targetのCoWクローン、コミュニティ=worktrunk(cacheコピーhook)、上流=cargo cross-workspace cache(2026 project goal、年内nightly予定)。再入場トリガー付き |
 | [2026-08-29-rerun-parts-catalog-survey.md](2026-08-29-rerun-parts-catalog-survey.md) | **Rerun部品目録調査**(観察)。Motoliiは`re_renderer`(自フォーク)の上に建つ事実の再確認。ライブ経路に`device.poll(wait_indefinitely())`等の同期待ちが6箇所実測、`re_tf`/`re_quota_channel`/`re_backoff`が委託候補。`Document`は既に`re_chunk_store`の上に建っており、Lottieは最初からストレージモデルではなかったと判明 |
 | [2026-08-29-probe-seam-table.md](2026-08-29-probe-seam-table.md) | **probe皮の縫い目表**(運転台帳)。皮→在庫の繋ぎ12本(S1〜S12)を室名1行+自作禁止事項+粒で固定。発注はこの表の行を引用、並列は波3本のwrite-set割り |
