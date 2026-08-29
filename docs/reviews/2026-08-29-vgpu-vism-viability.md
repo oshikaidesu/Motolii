@@ -92,3 +92,42 @@ vgpu に無いのは時刻・keyframe・配布単位・ホスト契約 — Motol
 **マニフェスト駆動化を先にやると、憲法違反の経路を綺麗にするだけになる。**
 居場所を直すのが先。調査中(`re_renderer::Renderer` を外部クレートが実装できるか、
 実行時 WGSL 文字列からパイプラインを作れるか、中間 texture の器が在るか)。
+
+## 追記: re_renderer の在庫(調査レーン、pin 済み checkout を直接読んだ)
+
+checkout: `~/.cargo/git/checkouts/rerun-bdb1f1ac6277bf7e/7cca401/crates/viewer/re_renderer/src/`
+
+| 必要なもの | 在庫 | 場所 |
+|---|---|---|
+| 外部クレートが描画に参加する | **あり・特権なし** | `Renderer`(`renderer/mod.rs:165`)+ `queue_draw`。登録は `Renderers::get_or_create::<R>()`(`context.rs:186`)が遅延・公開。**レジストリ一覧も組み込み種別の enum も無い** |
+| パイプラインの生成と使い回し | **あり** | `ctx.gpu_resources.render_pipelines.get_or_create`。手本は `renderer/rectangles.rs:627-805` |
+| 実行時 WGSL からシェーダを作る | **あり** | `ShaderModuleDesc::source` は `PathBuf` だが `MemFileSystem::create_file`(`file_system.rs:149`)が既定の panic を上書きして `files.insert` する。仮想FS経由は re_renderer 自身が用意した経路であって迂回ではない |
+| 中間 texture の確保 | **あり(素の割り当て)** | `GpuTexturePool::alloc`(`wgpu_resources/texture_pool.rs:119`)、`import`(`:157`) |
+| 多段パスの連鎖 | **無い** | `Renderer::draw` は1パス1ターゲット。連鎖は呼び手が組む — **エフェクトスタックの順序は Motolii の「編集の意味」なので、憲法上ここは自作してよい唯一の場所** |
+
+**外部実装が組み込みと構造的に同一**である点は、Vism の軸A(境界の実在性・first-party 特権なし)が
+**上流側で既に満たされている**ことを意味する。
+
+### ISF 引っ越しの距離(確定)
+
+- 捨てる: 自前 `wgpu::RenderPipeline`(`effects/isf/mod.rs:436`)・`device.create_render_pipeline`(`:535`)・
+  `encoder.begin_render_pass`(`:669`)
+- 残る: `compile_glsl_to_wgsl`(`:416-428`、既に naga)・`IsfManifest`/`IsfInput`/`IsfInputType`(`:172,222,232`)・
+  `parse_isf_source`(`:283`)
+
+**残る側は全部「WGSL 文字列を作る」仕事で wgpu 資源に触っていない。**ISF の本体は最初から
+正しい場所に在って、描画の周りだけが外に出ていた。
+
+### 宛先は既にある
+
+`point_cloud.rs:71` が `ViewBuilder::new` を呼んでおり、`sequential.rs` に
+「layer 単体を自分の `ViewBuilder` へ描き `main_target()` を取る」型が確立済み。
+**点群は既に正しい側に居て、エフェクトだけがその型から外れていた。**
+
+### 順序(利用者裁定)
+
+1. ISF を `re_renderer::Renderer` へ引っ越す(発注済み)
+2. マニフェスト駆動の口(`KNOWN_EFFECTS` のコンパイル時定数をやめる)
+3. WGSL で2本目(vgpu 側の資産)。ISF(GLSL)と2系統で境界の癒着を反証する
+
+`glow.rs` は Rust 直書きのまま残す — 特権で通っている物との差を見るための反例。
