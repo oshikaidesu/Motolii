@@ -48,7 +48,7 @@ pub fn app() -> Element {
             .with_scale(ui_scale.clone())
             .with_document(doc.clone(), fixture::canvas_rows_from_doc);
         let timeline_tx = timeline.sender();
-        let stage = StageWidget::new(clock.clone(), doc.clone());
+        let stage = StageWidget::new(clock.clone(), doc.clone(), selection.clone());
         (
             clock,
             ui_scale,

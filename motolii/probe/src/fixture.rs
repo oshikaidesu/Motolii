@@ -109,6 +109,12 @@ pub struct PropRow {
     pub cells: [String; 3],
     pub dims: [bool; 3],
     pub keyed: bool,
+    /// SetTrackの宛先。Noneなら編集不可(EFFECTS等のダミー行)。
+    pub property: Option<&'static str>,
+    /// trueならcells[0]/[1]がVec2のx/y(cells[2]は飾り)。falseならcells[2]が唯一の値。
+    pub vec2: bool,
+    /// cellsを組んだ生の値。ドラッグ開始点・キー打刻の両方がここから読む。
+    pub value: Value,
 }
 
 pub struct InspectorData {
@@ -149,13 +155,27 @@ pub fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: RationalTime
 
     // comp px級の値は38px幅セルに3桁小数が収まらないので1桁へ落とす。
     let f1 = |v: f64| format!("{v:.1}");
-    let (px, py) = match value_of(property::POSITION) {
-        Some(Value::Vec2([x, y])) => (f1(x), f1(y)),
-        _ => (f1(0.0), f1(0.0)),
+    let (pos_x, pos_y) = match value_of(property::POSITION) {
+        Some(Value::Vec2([x, y])) => (x, y),
+        _ => (0.0, 0.0),
     };
-    let opacity = match value_of(property::OPACITY) {
-        Some(Value::F64(v)) => f(v),
-        _ => f(1.0),
+    let (px, py) = (f1(pos_x), f1(pos_y));
+    let opacity_v = match value_of(property::OPACITY) {
+        Some(Value::F64(v)) => v,
+        _ => 1.0,
+    };
+    let opacity = f(opacity_v);
+    let (scale_x, scale_y) = match value_of(property::SCALE) {
+        Some(Value::Vec2([x, y])) => (x, y),
+        _ => (1.0, 1.0),
+    };
+    let (anchor_x, anchor_y) = match value_of(property::ANCHOR) {
+        Some(Value::Vec2([x, y])) => (x, y),
+        _ => (0.0, 0.0),
+    };
+    let rotation_v = match value_of(property::ROTATION) {
+        Some(Value::F64(v)) => v,
+        _ => 0.0,
     };
 
     let sel_attrs = view.attrs(layer).ok().flatten().unwrap_or_default();
@@ -186,24 +206,36 @@ pub fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: RationalTime
                 cells: [px, py, f(0.0)],
                 dims: [false, false, true],
                 keyed: keyed(property::POSITION),
+                property: Some(property::POSITION),
+                vec2: true,
+                value: Value::Vec2([pos_x, pos_y]),
             },
             PropRow {
                 label: "Scale",
-                cells: [f(1.0), f(1.0), f(1.0)],
+                cells: [f(scale_x), f(scale_y), f(1.0)],
                 dims: [false, false, true],
                 keyed: keyed(property::SCALE),
+                property: Some(property::SCALE),
+                vec2: true,
+                value: Value::Vec2([scale_x, scale_y]),
             },
             PropRow {
                 label: "Anchor",
-                cells: [f(0.0), f(0.0), f(0.0)],
+                cells: [f(anchor_x), f(anchor_y), f(0.0)],
                 dims: [false, false, true],
                 keyed: keyed(property::ANCHOR),
+                property: Some(property::ANCHOR),
+                vec2: true,
+                value: Value::Vec2([anchor_x, anchor_y]),
             },
             PropRow {
                 label: "Rotation",
-                cells: [String::new(), String::new(), f(0.0)],
+                cells: [String::new(), String::new(), f(rotation_v)],
                 dims: [false, false, true],
                 keyed: keyed(property::ROTATION),
+                property: Some(property::ROTATION),
+                vec2: false,
+                value: Value::F64(rotation_v),
             },
         ],
         appearance: vec![PropRow {
@@ -211,6 +243,9 @@ pub fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: RationalTime
             cells: [String::new(), String::new(), opacity],
             dims: [false, false, false],
             keyed: keyed(property::OPACITY),
+            property: Some(property::OPACITY),
+            vec2: false,
+            value: Value::F64(opacity_v),
         }],
         has_effects,
     }

@@ -1,20 +1,59 @@
 use std::sync::{Arc, Mutex};
 
 use crate::playback::Clock;
+use crate::session::Selection;
+use crate::tokens;
 use anyrender::{PaintRef, PaintScene, ResourceId};
-use motolii_store::{Document, RationalTime};
+use blitz_traits::events::UiEvent;
+use motolii_store::{property, Document, Intent, Keyframe, KeyframeTrack, LayerId, LayerSource, PropertyId, RationalTime, Value};
 use blitz_dom::node::ComputedStyles;
 use blitz_dom::Widget;
 use motolii_engine::Engine;
 use peniko::kurbo::{Affine, Rect};
-use peniko::{Fill, ImageBrush, ImageSampler};
+use peniko::{Color, Fill, ImageBrush, ImageSampler};
 use wgpu_context::DeviceHandle;
+
+fn c(rgb: [u8; 3]) -> Color {
+    Color::from_rgb8(rgb[0], rgb[1], rgb[2])
+}
+
+/// texture画素→表示pxの変換。paintが毎フレーム更新し、handle_eventが逆変換に使う。
+/// 論理px単位(deviceで計算した値を`k`で割って揃える) — eventの座標系がこちら側。
+#[derive(Clone, Copy)]
+struct Fit {
+    s: f64,
+    fx: f64,
+    fy: f64,
+}
+
+impl Default for Fit {
+    fn default() -> Self {
+        Self { s: 1.0, fx: 0.0, fy: 0.0 }
+    }
+}
+
+impl Fit {
+    fn to_comp(&self, x: f64, y: f64) -> (f64, f64) {
+        ((x - self.fx) / self.s, (y - self.fy) / self.s)
+    }
+}
+
+struct GizmoDrag {
+    layer: LayerId,
+    /// ドラッグ開始点のcomp座標。
+    grab: (f64, f64),
+    /// ドラッグ開始時のposition値。
+    orig: (f64, f64),
+}
 
 pub struct StageWidget {
     state: State,
     frames: u64,
     clock: Arc<Clock>,
     doc: Arc<Mutex<Document>>,
+    selection: Selection,
+    fit: Fit,
+    drag: Option<GizmoDrag>,
 }
 
 enum State {
@@ -34,8 +73,47 @@ struct TexAndHandle {
 }
 
 impl StageWidget {
-    pub fn new(clock: Arc<Clock>, doc: Arc<Mutex<Document>>) -> Self {
-        Self { state: State::Suspended, frames: 0, clock, doc }
+    pub fn new(clock: Arc<Clock>, doc: Arc<Mutex<Document>>, selection: Selection) -> Self {
+        Self {
+            state: State::Suspended,
+            frames: 0,
+            clock,
+            doc,
+            selection,
+            fit: Fit::default(),
+            drag: None,
+        }
+    }
+
+    fn current_rt(&self) -> RationalTime {
+        let t_sec = self.clock.now_sec();
+        RationalTime::try_new((t_sec * 3000.0) as i64, 3000).unwrap_or(RationalTime::ZERO)
+    }
+
+    /// 選択層のcomp座標での枠(x, y, w, h)。第一波はSolidの実寸、それ以外は仮の200x200。
+    fn selection_box(&self, layer: LayerId) -> Option<(f64, f64, f64, f64)> {
+        let doc = self.doc.lock().unwrap();
+        let view = doc.view();
+        let position_prop = PropertyId::new(property::POSITION).ok()?;
+        let (x, y) = match view.value_at(layer, &position_prop, self.current_rt()).ok().flatten() {
+            Some(Value::Vec2([x, y])) => (x, y),
+            _ => (0.0, 0.0),
+        };
+        let (w, h) = match view.meta(layer).ok().flatten().map(|m| m.source) {
+            Some(LayerSource::Solid { width, height, .. }) => (width as f64, height as f64),
+            _ => (200.0, 200.0),
+        };
+        Some((x, y, w, h))
+    }
+
+    /// 既存trackが無い層だけ書ける(第一波の裁定)。
+    fn has_position_track(&self, layer: LayerId) -> bool {
+        let doc = self.doc.lock().unwrap();
+        let position_prop = match PropertyId::new(property::POSITION) {
+            Ok(p) => p,
+            Err(_) => return true,
+        };
+        doc.view().track(layer, &position_prop).ok().flatten().is_some()
     }
 }
 
@@ -88,7 +166,46 @@ impl Widget for StageWidget {
         true
     }
 
-    fn handle_event(&mut self, _event: &blitz_traits::events::UiEvent) {}
+    fn handle_event(&mut self, event: &UiEvent) {
+        match event {
+            UiEvent::PointerDown(p) => {
+                let Some(layer) = self.selection.get() else { return };
+                let Some((bx, by, bw, bh)) = self.selection_box(layer) else { return };
+                let (cx, cy) = self.fit.to_comp(p.element.x as f64, p.element.y as f64);
+                if cx >= bx && cx <= bx + bw && cy >= by && cy <= by + bh {
+                    self.drag = Some(GizmoDrag { layer, grab: (cx, cy), orig: (bx, by) });
+                }
+            }
+            UiEvent::PointerMove(_) => {}
+            UiEvent::PointerUp(p) => {
+                let Some(drag) = self.drag.take() else { return };
+                let (cx, cy) = self.fit.to_comp(p.element.x as f64, p.element.y as f64);
+                let (dx, dy) = (cx - drag.grab.0, cy - drag.grab.1);
+                let (new_x, new_y) = (drag.orig.0 + dx, drag.orig.1 + dy);
+                if self.has_position_track(drag.layer) {
+                    println!("PROBE room=write verdict=gizmo-move-skipped-keyed layer={:?}", drag.layer);
+                    return;
+                }
+                let Ok(position_prop) = PropertyId::new(property::POSITION) else { return };
+                let mut track = KeyframeTrack::new();
+                track.insert(Keyframe {
+                    t: RationalTime::ZERO,
+                    value: Value::Vec2([new_x, new_y]),
+                    interp: motolii_store::Interp::Linear,
+                    spatial: None,
+                });
+                let mut doc = self.doc.lock().unwrap();
+                match doc.apply(Intent::SetTrack { layer: drag.layer, property: position_prop, track }) {
+                    Ok(_) => println!(
+                        "PROBE room=write verdict=gizmo-move layer={:?} ({:.1},{:.1})->({:.1},{:.1})",
+                        drag.layer, drag.orig.0, drag.orig.1, new_x, new_y
+                    ),
+                    Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
+                }
+            }
+            _ => {}
+        }
+    }
 
     fn paint(
         &mut self,
@@ -96,7 +213,7 @@ impl Widget for StageWidget {
         _styles: &ComputedStyles,
         width: u32,
         height: u32,
-        _scale: f64,
+        scale: f64,
     ) -> anyrender::Scene {
         let mut scene = anyrender::Scene::new();
         self.frames += 1;
@@ -153,6 +270,22 @@ impl Widget for StageWidget {
             println!("PROBE room=stage verdict=render-error {e}");
             return scene;
         }
+
+        // S18: 選択層の枠(comp座標)。viewを落とす前に読む。
+        let selected_box = self.selection.get().and_then(|layer| {
+            let position_prop = PropertyId::new(property::POSITION).ok()?;
+            let (x, y) = match view.value_at(layer, &position_prop, rt).ok().flatten() {
+                Some(Value::Vec2([x, y])) => (x, y),
+                _ => (0.0, 0.0),
+            };
+            let (w, h) = match view.meta(layer).ok().flatten().map(|m| m.source) {
+                Some(LayerSource::Solid { width, height, .. }) => (width as f64, height as f64),
+                // Text/Shapeの正確な境界は評価が要る — 第一波はcomp中央の仮枠。
+                _ => (200.0, 200.0),
+            };
+            Some((x, y, w, h))
+        });
+
         drop(view);
         drop(doc);
         if first {
@@ -175,6 +308,31 @@ impl Widget for StageWidget {
             Some(Affine::translate((fx, fy)) * Affine::scale(s)),
             &Rect::from_origin_size((fx, fy), (fw, fh)),
         );
+
+        // handle_eventはelement座標(論理px)で来るので、逆変換もその単位で揃える。
+        let k = if scale > 0.0 { scale } else { 1.0 };
+        self.fit = Fit { s: s / k, fx: fx / k, fy: fy / k };
+
+        if let Some((bx, by, bw, bh)) = selected_box {
+            let (x0, y0) = (fx + bx * s, fy + by * s);
+            let (x1, y1) = (fx + (bx + bw) * s, fy + (by + bh) * s);
+            let th = 1.5;
+            let edges = [
+                Rect::from_origin_size((x0, y0), (x1 - x0, th)),
+                Rect::from_origin_size((x0, y1 - th), (x1 - x0, th)),
+                Rect::from_origin_size((x0, y0), (th, y1 - y0)),
+                Rect::from_origin_size((x1 - th, y0), (th, y1 - y0)),
+            ];
+            for edge in &edges {
+                scene.fill(Fill::NonZero, Affine::IDENTITY, PaintRef::Solid(c(tokens::ACCENT)), None, edge);
+            }
+            let hs = 6.0;
+            for (cx, cy) in [(x0, y0), (x1, y0), (x0, y1), (x1, y1)] {
+                let handle_rect = Rect::from_origin_size((cx - hs * 0.5, cy - hs * 0.5), (hs, hs));
+                scene.fill(Fill::NonZero, Affine::IDENTITY, PaintRef::Solid(c(tokens::ACCENT)), None, &handle_rect);
+            }
+        }
+
         scene
     }
 }
