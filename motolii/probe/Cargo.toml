@@ -1,0 +1,27 @@
+[package]
+name = "dioxus-native-probe"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+# vello固定 — vello-hybridはウィンドウ移動中に前フレームの残像が出る
+dioxus-native = { git = "https://github.com/DioxusLabs/blitz", rev = "64eb27853aa2672486b7edf825fb044be78c9db3", default-features = false, features = ["prelude", "system-fonts", "vello", "complex-scripts", "hot-reload"] }
+blitz-dom = { git = "https://github.com/DioxusLabs/blitz", rev = "64eb27853aa2672486b7edf825fb044be78c9db3", default-features = false, features = ["custom-widget"] }
+blitz-paint = { git = "https://github.com/DioxusLabs/blitz", rev = "64eb27853aa2672486b7edf825fb044be78c9db3", default-features = false, features = ["custom-widget"] }
+blitz-traits = { git = "https://github.com/DioxusLabs/blitz", rev = "64eb27853aa2672486b7edf825fb044be78c9db3", default-features = false }
+anyrender = "0.13"
+wgpu_context = "0.9"
+wgpu = "29"
+peniko = "0.6"
+bytemuck = { version = "1", features = ["derive"] }
+
+# app/ と同一pin(346a0b3)のMotoliiフォーク。Stage相当の接続の本丸。
+re_renderer = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14", default-features = false }
+re_log = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14", features = ["setup"] }
+macaw = "0.30"
+glam = "0.30"
+
+# 実ドキュメント(--fixtureのMV風Document)と製品と同じ補間コード。自作の写経はしない。
+motolii-fixture = { path = "../../app/core/motolii-fixture" }
+motolii-store = { path = "../../app/core/motolii-store" }

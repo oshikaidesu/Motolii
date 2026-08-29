@@ -1,0 +1,15 @@
+# 四代目世界のworkspace root。ビルドの家はここ1つ(worktreeでビルドしない、
+# レーンは差分を返す。旧世界 app/ next/ crates/ はビルドしない)。
+# members は明示 — 逃げ口を塞ぐ。
+[workspace]
+resolver = "2"
+members = ["probe"]
+
+# profile は workspace root でしか効かない(member 側に書いても無視される)。
+# 16GB機: debug情報を削り、依存(stylo/vello/rerun)だけ最適化して窓を実用速度にする。
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+opt-level = 2
+debug = false

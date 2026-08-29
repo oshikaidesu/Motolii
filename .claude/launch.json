@@ -6,6 +6,12 @@
       "runtimeExecutable": "python3",
       "runtimeArgs": ["-m", "http.server", "8931", "--directory", "docs/mocks"],
       "port": 8931
+    },
+    {
+      "name": "mocks-ui",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "docs/mocks-ui", "run", "dev", "--", "--port", "5199", "--strictPort"],
+      "port": 5199
     }
   ],
   "autoVerify": false
