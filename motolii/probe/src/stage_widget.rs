@@ -6,7 +6,8 @@ use crate::tokens;
 use anyrender::{PaintRef, PaintScene, ResourceId};
 use blitz_traits::events::UiEvent;
 use dioxus_native::prelude::{Signal, WritableExt};
-use motolii_store::{property, Document, Intent, Keyframe, KeyframeTrack, LayerId, PropertyId, RationalTime, StoreView, Value};
+use keyboard_types::Modifiers;
+use motolii_store::{property, Document, Intent, Interp, Keyframe, KeyframeTrack, LayerId, PropertyId, RationalTime, StoreView, Value};
 use blitz_dom::node::ComputedStyles;
 use blitz_dom::Widget;
 use motolii_engine::Engine;
@@ -39,12 +40,27 @@ impl Fit {
     }
 }
 
+/// どのハンドルを掴んだか。`bool`は「箱のmax側(x1/y1)を掴んだか」。
+#[derive(Clone, Copy, Debug)]
+enum GizmoMode {
+    Move,
+    ScaleCorner { sx: bool, sy: bool },
+    ScaleEdge { axis_x: bool, positive: bool },
+    Rotate,
+}
+
 struct GizmoDrag {
     layer: LayerId,
+    mode: GizmoMode,
     /// ドラッグ開始点のcomp座標。
     grab: (f64, f64),
-    /// ドラッグ開始時のposition値。
-    orig: (f64, f64),
+    orig_position: (f64, f64),
+    orig_rotation: f64,
+    anchor: (f64, f64),
+    /// pre-scale local size(`selection_geom_in`参照)。
+    natural: (f64, f64),
+    /// ドラッグ開始時の箱(comp座標、回転無視——表示と同じ簡略化)。
+    orig_box: (f64, f64, f64, f64),
 }
 
 pub struct StageWidget {
@@ -98,39 +114,169 @@ impl StageWidget {
         RationalTime::try_new((t_sec * 3000.0) as i64, 3000).unwrap_or(RationalTime::ZERO)
     }
 
-    fn selection_box(&self, layer: LayerId) -> Option<(f64, f64, f64, f64)> {
+    fn selection_geom(&self, layer: LayerId) -> Option<SelGeom> {
         let State::Active(active) = &self.state else {
             return None;
         };
         let doc = self.doc.lock().unwrap();
         let view = doc.view();
-        selection_box_in(&active.engine, &view, layer, self.current_rt())
+        selection_geom_in(&active.engine, &view, layer, self.current_rt())
     }
 
 }
 
-/// 選択層のcomp座標での枠(x, y, w, h)。timelineのbandが無い時刻ではNone(裁定どおり)。
-/// 板のサイズは`Engine::selected_layer_size`任せ——front は layer の種類
-/// (`LayerSource`)を知らない。
-fn selection_box_in(
+/// 選択層の位置/anchor/scale/rotation とcomp座標での箱(x, y, w, h)。
+/// 箱は回転を無視した軸並行(表示の簡略化と同じ)——
+/// world = position + scale*(local - anchor) から角を出すだけ(裁定58のaffineの逆)。
+struct SelGeom {
+    position: (f64, f64),
+    anchor: (f64, f64),
+    rotation: f64,
+    /// pre-scale local size。板のサイズは`Engine::selected_layer_size`任せ
+    /// ——front は layer の種類(`LayerSource`)を知らない。
+    natural: (f64, f64),
+    box_: (f64, f64, f64, f64),
+}
+
+fn vec2_at(view: &StoreView<'_>, layer: LayerId, name: &str, rt: RationalTime, default: (f64, f64)) -> (f64, f64) {
+    let Ok(prop) = PropertyId::new(name) else { return default };
+    match view.value_at(layer, &prop, rt).ok().flatten() {
+        Some(Value::Vec2([x, y])) => (x, y),
+        _ => default,
+    }
+}
+
+fn f64_at(view: &StoreView<'_>, layer: LayerId, name: &str, rt: RationalTime, default: f64) -> f64 {
+    let Ok(prop) = PropertyId::new(name) else { return default };
+    match view.value_at(layer, &prop, rt).ok().flatten() {
+        Some(Value::F64(v)) => v,
+        _ => default,
+    }
+}
+
+/// timelineのbandが無い時刻ではNone(裁定どおり)。
+fn selection_geom_in(
     engine: &Engine,
     view: &StoreView<'_>,
     layer: LayerId,
     rt: RationalTime,
-) -> Option<(f64, f64, f64, f64)> {
+) -> Option<SelGeom> {
     let meta = view.meta(layer).ok().flatten()?;
     let fps = view.composition().ok().flatten()?.fps;
     let frame = rt.try_to_frame_floor(fps).ok()?;
     if !meta.timing.covers(frame) {
         return None;
     }
-    let position_prop = PropertyId::new(property::POSITION).ok()?;
-    let (x, y) = match view.value_at(layer, &position_prop, rt).ok().flatten() {
-        Some(Value::Vec2([x, y])) => (x, y),
-        _ => (0.0, 0.0),
-    };
-    let [w, h] = engine.selected_layer_size(view, layer, rt)?;
-    Some((x, y, w as f64, h as f64))
+    let position = vec2_at(view, layer, property::POSITION, rt, (0.0, 0.0));
+    let anchor = vec2_at(view, layer, property::ANCHOR, rt, (0.0, 0.0));
+    let scale = vec2_at(view, layer, property::SCALE, rt, (1.0, 1.0));
+    let rotation = f64_at(view, layer, property::ROTATION, rt, 0.0);
+    let [w0, h0] = engine.selected_layer_size(view, layer, rt)?;
+    let natural = (w0 as f64, h0 as f64);
+    let box_ = (
+        position.0 - scale.0 * anchor.0,
+        position.1 - scale.1 * anchor.1,
+        scale.0 * natural.0,
+        scale.1 * natural.1,
+    );
+    Some(SelGeom { position, anchor, rotation, natural, box_ })
+}
+
+/// 掴んだハンドルに応じて新しい`(scale, position)`を出す。固定点は対角(Alt=中心)。
+/// Shift=等比(比率固定)。1ジェスチャで1回だけ呼ばれ、結果はtransient/確定の両方に使う。
+fn compute_scale(
+    orig_box: (f64, f64, f64, f64),
+    natural: (f64, f64),
+    anchor: (f64, f64),
+    mode: GizmoMode,
+    cur: (f64, f64),
+    shift: bool,
+    alt: bool,
+) -> ((f64, f64), (f64, f64)) {
+    let (bx, by, bw, bh) = orig_box;
+    let (x0, y0, x1, y1) = (bx, by, bx + bw, by + bh);
+    let (cx, cy) = cur;
+    let (mut nx0, mut ny0, mut nx1, mut ny1) = (x0, y0, x1, y1);
+    match mode {
+        GizmoMode::ScaleCorner { sx, sy } => {
+            if sx { nx1 = cx } else { nx0 = cx }
+            if sy { ny1 = cy } else { ny0 = cy }
+            if alt {
+                let (ccx, ccy) = ((x0 + x1) * 0.5, (y0 + y1) * 0.5);
+                let (hx, hy) = ((cx - ccx).abs(), (cy - ccy).abs());
+                (nx0, nx1) = (ccx - hx, ccx + hx);
+                (ny0, ny1) = (ccy - hy, ccy + hy);
+            }
+            if shift {
+                let (fx, fy) = if alt {
+                    ((x0 + x1) * 0.5, (y0 + y1) * 0.5)
+                } else {
+                    (if sx { x0 } else { x1 }, if sy { y0 } else { y1 })
+                };
+                let orig_w = (x1 - x0).abs().max(1e-6);
+                let orig_h = (y1 - y0).abs().max(1e-6);
+                let w = (nx1 - nx0).abs();
+                let h = (ny1 - ny0).abs();
+                let k = (w / orig_w).max(h / orig_h);
+                let (new_w, new_h) = (orig_w * k, orig_h * k);
+                if alt {
+                    (nx0, nx1) = (fx - new_w * 0.5, fx + new_w * 0.5);
+                    (ny0, ny1) = (fy - new_h * 0.5, fy + new_h * 0.5);
+                } else {
+                    if sx { nx1 = fx + new_w } else { nx0 = fx - new_w }
+                    if sy { ny1 = fy + new_h } else { ny0 = fy - new_h }
+                }
+            }
+        }
+        GizmoMode::ScaleEdge { axis_x, positive } => {
+            if axis_x {
+                if positive { nx1 = cx } else { nx0 = cx }
+                if alt {
+                    let ccx = (x0 + x1) * 0.5;
+                    let hx = (cx - ccx).abs();
+                    (nx0, nx1) = (ccx - hx, ccx + hx);
+                }
+            } else {
+                if positive { ny1 = cy } else { ny0 = cy }
+                if alt {
+                    let ccy = (y0 + y1) * 0.5;
+                    let hy = (cy - ccy).abs();
+                    (ny0, ny1) = (ccy - hy, ccy + hy);
+                }
+            }
+        }
+        GizmoMode::Move | GizmoMode::Rotate => {}
+    }
+    let (nbx, nby) = (nx0.min(nx1), ny0.min(ny1));
+    let (nbw, nbh) = ((nx1 - nx0).abs().max(0.01), (ny1 - ny0).abs().max(0.01));
+    let scale = (nbw / natural.0.max(0.01), nbh / natural.1.max(0.01));
+    let position = (nbx + scale.0 * anchor.0, nby + scale.1 * anchor.1);
+    (scale, position)
+}
+
+/// 回転の中心はanchorのworld座標——`world(anchor_local) = position`
+/// (裁定58の affine で local=anchorを代入すると anchor 項が打ち消し合う)なので、
+/// anchor値そのものを読まずに`position`を使ってよい。Shift=15度刻みへスナップ。
+fn compute_rotation(center: (f64, f64), grab: (f64, f64), cur: (f64, f64), orig_rotation: f64, shift: bool) -> f64 {
+    let ang0 = (grab.1 - center.1).atan2(grab.0 - center.0);
+    let ang1 = (cur.1 - center.1).atan2(cur.0 - center.0);
+    let mut r = orig_rotation + (ang1 - ang0).to_degrees();
+    if shift {
+        r = (r / 15.0).round() * 15.0;
+    }
+    r
+}
+
+/// `SetTrack`用のIntent。track が無ければ`RationalTime::ZERO`(静的値)、
+/// あれば`t`(プレイヘッド)——`write_key`(`inspector.rs`)と同じ法。
+fn track_intent(doc: &Document, layer: LayerId, name: &str, value: Value, t: RationalTime) -> Option<Intent> {
+    let prop = PropertyId::new(name).ok()?;
+    let existing = doc.view().track(layer, &prop).ok().flatten();
+    let is_new = existing.as_ref().map(|tr| tr.keys().is_empty()).unwrap_or(true);
+    let mut track = existing.unwrap_or_else(KeyframeTrack::new);
+    let key_t = if is_new { RationalTime::ZERO } else { t };
+    track.insert(Keyframe { t: key_t, value, interp: Interp::Linear, spatial: None });
+    Some(Intent::SetTrack { layer, property: prop, track })
 }
 
 fn create_target(device: &wgpu::Device, width: u32, height: u32) -> wgpu::Texture {
@@ -186,50 +332,116 @@ impl Widget for StageWidget {
         match event {
             UiEvent::PointerDown(p) => {
                 let Some(layer) = self.selection.get() else { return };
-                let Some((bx, by, bw, bh)) = self.selection_box(layer) else { return };
+                let Some(geom) = self.selection_geom(layer) else { return };
                 let (cx, cy) = self.fit.to_comp(p.element.x as f64, p.element.y as f64);
-                if cx >= bx && cx <= bx + bw && cy >= by && cy <= by + bh {
-                    self.drag = Some(GizmoDrag { layer, grab: (cx, cy), orig: (bx, by) });
+                let (bx, by, bw, bh) = geom.box_;
+                let (x0, y0, x1, y1) = (bx, by, bx + bw, by + bh);
+                let tol = 8.0 / self.fit.s.max(1e-6);
+                let near = |px: f64, py: f64| (cx - px).abs() <= tol && (cy - py).abs() <= tol;
+                let corners = [(x0, y0, false, false), (x1, y0, true, false), (x0, y1, false, true), (x1, y1, true, true)];
+                let mut mode = corners
+                    .into_iter()
+                    .find(|&(px, py, ..)| near(px, py))
+                    .map(|(_, _, sx, sy)| GizmoMode::ScaleCorner { sx, sy });
+                if mode.is_none() {
+                    let edges = [
+                        ((x0 + x1) * 0.5, y0, GizmoMode::ScaleEdge { axis_x: false, positive: false }),
+                        ((x0 + x1) * 0.5, y1, GizmoMode::ScaleEdge { axis_x: false, positive: true }),
+                        (x0, (y0 + y1) * 0.5, GizmoMode::ScaleEdge { axis_x: true, positive: false }),
+                        (x1, (y0 + y1) * 0.5, GizmoMode::ScaleEdge { axis_x: true, positive: true }),
+                    ];
+                    mode = edges.into_iter().find(|&(px, py, _)| near(px, py)).map(|(_, _, m)| m);
                 }
+                if mode.is_none() {
+                    if cx >= bx && cx <= bx + bw && cy >= by && cy <= by + bh {
+                        mode = Some(GizmoMode::Move);
+                    } else {
+                        let margin = 24.0 / self.fit.s.max(1e-6);
+                        if cx >= bx - margin && cx <= bx + bw + margin && cy >= by - margin && cy <= by + bh + margin {
+                            mode = Some(GizmoMode::Rotate);
+                        }
+                    }
+                }
+                let Some(mode) = mode else { return };
+                self.drag = Some(GizmoDrag {
+                    layer,
+                    mode,
+                    grab: (cx, cy),
+                    orig_position: geom.position,
+                    orig_rotation: geom.rotation,
+                    anchor: geom.anchor,
+                    natural: geom.natural,
+                    orig_box: geom.box_,
+                });
             }
             UiEvent::PointerMove(p) => {
                 let Some(drag) = self.drag.as_ref() else { return };
-                let Ok(position_prop) = PropertyId::new(property::POSITION) else { return };
                 let (cx, cy) = self.fit.to_comp(p.element.x as f64, p.element.y as f64);
-                let (dx, dy) = (cx - drag.grab.0, cy - drag.grab.1);
-                let (new_x, new_y) = (drag.orig.0 + dx, drag.orig.1 + dy);
+                let shift = p.mods.contains(Modifiers::SHIFT);
+                let alt = p.mods.contains(Modifiers::ALT);
                 let mut doc = self.doc.lock().unwrap();
-                doc.set_transient(drag.layer, position_prop, Value::Vec2([new_x, new_y]));
+                match drag.mode {
+                    GizmoMode::Move => {
+                        let Ok(position_prop) = PropertyId::new(property::POSITION) else { return };
+                        let (dx, dy) = (cx - drag.grab.0, cy - drag.grab.1);
+                        let new_pos = (drag.orig_position.0 + dx, drag.orig_position.1 + dy);
+                        doc.set_transient(drag.layer, position_prop, Value::Vec2([new_pos.0, new_pos.1]));
+                    }
+                    GizmoMode::ScaleCorner { .. } | GizmoMode::ScaleEdge { .. } => {
+                        let Ok(scale_prop) = PropertyId::new(property::SCALE) else { return };
+                        let Ok(position_prop) = PropertyId::new(property::POSITION) else { return };
+                        let (new_scale, new_pos) =
+                            compute_scale(drag.orig_box, drag.natural, drag.anchor, drag.mode, (cx, cy), shift, alt);
+                        doc.set_transient(drag.layer, scale_prop, Value::Vec2([new_scale.0, new_scale.1]));
+                        doc.set_transient(drag.layer, position_prop, Value::Vec2([new_pos.0, new_pos.1]));
+                    }
+                    GizmoMode::Rotate => {
+                        let Ok(rotation_prop) = PropertyId::new(property::ROTATION) else { return };
+                        let r = compute_rotation(drag.orig_position, drag.grab, (cx, cy), drag.orig_rotation, shift);
+                        doc.set_transient(drag.layer, rotation_prop, Value::F64(r));
+                    }
+                }
             }
             UiEvent::PointerUp(p) => {
                 let Some(drag) = self.drag.take() else { return };
-                let Ok(position_prop) = PropertyId::new(property::POSITION) else { return };
                 let (cx, cy) = self.fit.to_comp(p.element.x as f64, p.element.y as f64);
-                let (dx, dy) = (cx - drag.grab.0, cy - drag.grab.1);
-                let (new_x, new_y) = (drag.orig.0 + dx, drag.orig.1 + dy);
+                let shift = p.mods.contains(Modifiers::SHIFT);
+                let alt = p.mods.contains(Modifiers::ALT);
                 let rt = self.current_rt();
                 let mut doc = self.doc.lock().unwrap();
-                let existing = doc.view().track(drag.layer, &position_prop).ok().flatten();
-                let is_new = existing.as_ref().map(|tr| tr.keys().is_empty()).unwrap_or(true);
-                let mut track = existing.unwrap_or_else(KeyframeTrack::new);
-                let key_t = if is_new { RationalTime::ZERO } else { rt };
-                track.insert(Keyframe {
-                    t: key_t,
-                    value: Value::Vec2([new_x, new_y]),
-                    interp: motolii_store::Interp::Linear,
-                    spatial: None,
-                });
-                match doc.apply(Intent::SetTrack { layer: drag.layer, property: position_prop.clone(), track }) {
+                let mut intents = Vec::new();
+                let touched: &[&str] = match drag.mode {
+                    GizmoMode::Move => {
+                        let (dx, dy) = (cx - drag.grab.0, cy - drag.grab.1);
+                        let new_pos = (drag.orig_position.0 + dx, drag.orig_position.1 + dy);
+                        intents.extend(track_intent(&doc, drag.layer, property::POSITION, Value::Vec2([new_pos.0, new_pos.1]), rt));
+                        &[property::POSITION]
+                    }
+                    GizmoMode::ScaleCorner { .. } | GizmoMode::ScaleEdge { .. } => {
+                        let (new_scale, new_pos) =
+                            compute_scale(drag.orig_box, drag.natural, drag.anchor, drag.mode, (cx, cy), shift, alt);
+                        intents.extend(track_intent(&doc, drag.layer, property::SCALE, Value::Vec2([new_scale.0, new_scale.1]), rt));
+                        intents.extend(track_intent(&doc, drag.layer, property::POSITION, Value::Vec2([new_pos.0, new_pos.1]), rt));
+                        &[property::SCALE, property::POSITION]
+                    }
+                    GizmoMode::Rotate => {
+                        let r = compute_rotation(drag.orig_position, drag.grab, (cx, cy), drag.orig_rotation, shift);
+                        intents.extend(track_intent(&doc, drag.layer, property::ROTATION, Value::F64(r), rt));
+                        &[property::ROTATION]
+                    }
+                };
+                match doc.apply_all(intents) {
                     Ok(_) => {
                         *self.revision.write() += 1;
-                        println!(
-                        "PROBE room=write verdict=gizmo-move layer={:?} ({:.1},{:.1})->({:.1},{:.1})",
-                            drag.layer, drag.orig.0, drag.orig.1, new_x, new_y
-                        );
+                        println!("PROBE room=write verdict=gizmo-{:?} layer={:?}", drag.mode, drag.layer);
                     }
                     Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
                 }
-                doc.clear_transient(drag.layer, &position_prop);
+                for name in touched {
+                    if let Ok(prop) = PropertyId::new(name) {
+                        doc.clear_transient(drag.layer, &prop);
+                    }
+                }
             }
             _ => {}
         }
@@ -304,7 +516,8 @@ impl Widget for StageWidget {
         let selected_box = self
             .selection
             .get()
-            .and_then(|layer| selection_box_in(&active.engine, &view, layer, rt));
+            .and_then(|layer| selection_geom_in(&active.engine, &view, layer, rt))
+            .map(|geom| geom.box_);
 
         drop(view);
         drop(doc);
@@ -347,7 +560,12 @@ impl Widget for StageWidget {
                 scene.fill(Fill::NonZero, Affine::IDENTITY, PaintRef::Solid(c(tokens::ACCENT)), None, edge);
             }
             let hs = 6.0;
-            for (cx, cy) in [(x0, y0), (x1, y0), (x0, y1), (x1, y1)] {
+            let handles = [
+                (x0, y0), (x1, y0), (x0, y1), (x1, y1),
+                ((x0 + x1) * 0.5, y0), ((x0 + x1) * 0.5, y1),
+                (x0, (y0 + y1) * 0.5), (x1, (y0 + y1) * 0.5),
+            ];
+            for (cx, cy) in handles {
                 let handle_rect = Rect::from_origin_size((cx - hs * 0.5, cy - hs * 0.5), (hs, hs));
                 scene.fill(Fill::NonZero, Affine::IDENTITY, PaintRef::Solid(c(tokens::ACCENT)), None, &handle_rect);
             }
