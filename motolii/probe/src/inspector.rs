@@ -242,6 +242,7 @@ pub fn inspector_panel(
         transform: Vec::new(),
         effects: Vec::new(),
         has_effects: false,
+        colors: Vec::new(),
     };
     let t = RationalTime::try_new((clock.now_sec() * 3000.0) as i64, 3000).unwrap_or(RationalTime::ZERO);
     let data = match selection {
@@ -330,6 +331,21 @@ pub fn inspector_panel(
             if !inspector.text.is_empty() {
                 div { class: "sec", "TEXT" }
                 {text_rows}
+            }
+            if !inspector.colors.is_empty() {
+                div { class: "sec", "COLOR" }
+                for (label , hex) in inspector.colors.iter() {
+                    div { class: "prow",
+                        span { class: "n", "{label}" }
+                        span { class: "v swatch",
+                            span { class: "dot", style: "background:{hex};" }
+                            "{hex}"
+                        }
+                        span { class: "v blank", "" }
+                        span { class: "v blank", "" }
+                        span { class: "glyph", "◇" }
+                    }
+                }
             }
             div { class: "sec", "TRANSFORM" }
             {transform_rows}

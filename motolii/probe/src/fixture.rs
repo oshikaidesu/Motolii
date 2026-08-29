@@ -1,4 +1,4 @@
-use motolii_store::{property, Document, LayerId, LayerSource, PropertyId, RationalTime, StoreView, Value};
+use motolii_store::{property, Document, LayerId, LayerSource, PropertyId, RationalTime, ShapeNode, StoreView, Value};
 
 use motolii_engine::known_effects;
 
@@ -99,6 +99,66 @@ pub fn layer_rows_from_doc(doc: &Document) -> Vec<LayerRow> {
         .collect()
 }
 
+/// この作品で使われている色1つ。標準パレットではなく、層を走査して集めた実測値。
+pub struct ColorSwatch {
+    pub hex: String,
+    pub rgba: [u8; 4],
+}
+
+fn hex_of(rgba: [u8; 4]) -> String {
+    format!("#{:02x}{:02x}{:02x}", rgba[0], rgba[1], rgba[2])
+}
+
+fn push_swatch(seen: &mut std::collections::BTreeSet<[u8; 4]>, out: &mut Vec<ColorSwatch>, rgba: [u8; 4]) {
+    if seen.insert(rgba) {
+        out.push(ColorSwatch { hex: hex_of(rgba), rgba });
+    }
+}
+
+fn shape_fill_colors(node: &ShapeNode, seen: &mut std::collections::BTreeSet<[u8; 4]>, out: &mut Vec<ColorSwatch>) {
+    match node {
+        ShapeNode::Leaf(shape) => {
+            if let Some(fill) = &shape.fill {
+                if let motolii_vector::Brush::Solid(rgb) = &fill.brush {
+                    push_swatch(seen, out, [(rgb.r * 255.0) as u8, (rgb.g * 255.0) as u8, (rgb.b * 255.0) as u8, 255]);
+                }
+            }
+        }
+        ShapeNode::Group(group) => {
+            for child in &group.children {
+                shape_fill_colors(child, seen, out);
+            }
+        }
+    }
+}
+
+/// 作品全体を走査して使われている色を集める。固定標準パレットは作らない(裁定済み)。
+pub fn used_colors_from_doc(doc: &Document) -> Vec<ColorSwatch> {
+    let view = doc.view();
+    let mut seen = std::collections::BTreeSet::new();
+    let mut out = Vec::new();
+    for layer in view.layers() {
+        if let Some(LayerSource::Solid { rgba, .. }) = view.meta(layer).ok().flatten().map(|m| m.source) {
+            push_swatch(&mut seen, &mut out, rgba);
+        }
+        if let Ok(Some(text)) = view.text_document(layer) {
+            for style in &text.styles {
+                let f = style.fill;
+                push_swatch(&mut seen, &mut out, [(f[0] * 255.0) as u8, (f[1] * 255.0) as u8, (f[2] * 255.0) as u8, (f[3] * 255.0) as u8]);
+                if let Some(s) = style.stroke_color {
+                    push_swatch(&mut seen, &mut out, [(s[0] * 255.0) as u8, (s[1] * 255.0) as u8, (s[2] * 255.0) as u8, (s[3] * 255.0) as u8]);
+                }
+            }
+        }
+        if let Ok(shapes) = view.shapes(layer) {
+            for node in &shapes {
+                shape_fill_colors(node, &mut seen, &mut out);
+            }
+        }
+    }
+    out
+}
+
 pub struct AssetRow {
     pub name: String,
     pub kind: String,
@@ -126,6 +186,8 @@ pub struct InspectorData {
     pub transform: Vec<PropRow>,
     pub effects: Vec<PropRow>,
     pub has_effects: bool,
+    /// (ラベル, "#rrggbb")。property=Noneで読み取り専用 — 編集の入口はBrowserのColorsタブ。
+    pub colors: Vec<(&'static str, String)>,
 }
 
 pub struct UiData {
@@ -249,6 +311,37 @@ pub fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: RationalTime
         _ => Vec::new(),
     };
 
+    // 色は素材側の静的値であってproperty(track)ではないので、行はここで別に組む。
+    // property=None=読み取り専用 — 編集の入口はBrowserのColorsタブ(裁定済み)。
+    let mut colors: Vec<(&'static str, String)> = Vec::new();
+    match view.meta(layer).ok().flatten().map(|m| m.source) {
+        Some(LayerSource::Solid { rgba, .. }) => colors.push(("Color", hex_of(rgba))),
+        Some(LayerSource::Text) => {
+            if let Ok(Some(doc)) = view.text_document(layer) {
+                if let Some(style) = doc.styles.first() {
+                    let f = style.fill;
+                    colors.push(("Fill", hex_of([(f[0] * 255.0) as u8, (f[1] * 255.0) as u8, (f[2] * 255.0) as u8, (f[3] * 255.0) as u8])));
+                    if let Some(s) = style.stroke_color {
+                        colors.push(("Stroke", hex_of([(s[0] * 255.0) as u8, (s[1] * 255.0) as u8, (s[2] * 255.0) as u8, (s[3] * 255.0) as u8])));
+                    }
+                }
+            }
+        }
+        Some(LayerSource::Shape) => {
+            if let Ok(shapes) = view.shapes(layer) {
+                let mut seen = std::collections::BTreeSet::new();
+                let mut swatches = Vec::new();
+                for node in &shapes {
+                    shape_fill_colors(node, &mut seen, &mut swatches);
+                }
+                if let Some(sw) = swatches.into_iter().next() {
+                    colors.push(("Fill", sw.hex));
+                }
+            }
+        }
+        _ => {}
+    }
+
     // AEの層Transform並び: Anchor Point → Position → Scale → Rotation → Opacity。
     let transform = vec![
             PropRow {
@@ -301,6 +394,7 @@ pub fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: RationalTime
     InspectorData {
         ident_name: sel_attrs.name,
         ident_sub: format!("{source_name} · {key_count} keys"),
+        colors,
         text,
         transform,
         effects,

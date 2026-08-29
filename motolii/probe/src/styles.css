@@ -533,6 +533,13 @@ body {
     background: transparent;
 }
 
+.prow .v.swatch {
+    justify-content: flex-start;
+    gap: var(--sp2);
+    padding: 0 var(--sp2);
+}
+
+
 .prow.content-row .v.content {
     grid-column: 2 / span 3;
     justify-content: flex-start;

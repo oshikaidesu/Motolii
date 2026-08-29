@@ -11,6 +11,8 @@ use motolii_store::{
 };
 use motolii_vector::{Brush, Fill, FillRule, Rgb};
 
+use crate::fixture::ColorSwatch;
+
 use crate::fixture::{self, LayerRow, UiData};
 use crate::playback::Clock;
 use crate::timeline_widget::TimelineMsg;
@@ -162,6 +164,65 @@ fn add_effect(doc: &Arc<Mutex<Document>>, layer: LayerId, plugin_id: &str, mut r
     }
 }
 
+fn set_shape_fill_color(node: &mut ShapeNode, brush: Brush) {
+    match node {
+        ShapeNode::Leaf(shape) => {
+            if let Some(fill) = shape.fill.as_mut() {
+                fill.brush = brush;
+            }
+        }
+        ShapeNode::Group(group) => {
+            for child in group.children.iter_mut() {
+                set_shape_fill_color(child, brush.clone());
+            }
+        }
+    }
+}
+
+/// 選択層の色を書き換える。書き口は素材ごとに違う(裁定済み) —
+/// Solidは`SetSource`、Textは`SetTextDocument`のfill、Shapeは`SetShapes`のfill brush。
+fn apply_layer_color(doc: &Arc<Mutex<Document>>, layer: LayerId, rgba: [u8; 4], mut revision: Signal<u32>) {
+    let mut d = doc.lock().unwrap();
+    let source = d.view().meta(layer).ok().flatten().map(|m| m.source);
+    let intent = match source {
+        Some(LayerSource::Solid { width, height, .. }) => {
+            Some(Intent::SetSource { layer, source: LayerSource::Solid { rgba, width, height } })
+        }
+        Some(LayerSource::Text) => d.view().text_document(layer).ok().flatten().map(|mut document| {
+            let fill = [rgba[0] as f64 / 255.0, rgba[1] as f64 / 255.0, rgba[2] as f64 / 255.0, rgba[3] as f64 / 255.0];
+            for style in document.styles.iter_mut() {
+                style.fill = fill;
+            }
+            Intent::SetTextDocument { layer, document }
+        }),
+        Some(LayerSource::Shape) => {
+            let mut shapes = d.view().shapes(layer).unwrap_or_default();
+            if shapes.is_empty() {
+                None
+            } else {
+                let brush = Brush::Solid(Rgb { r: rgba[0] as f64 / 255.0, g: rgba[1] as f64 / 255.0, b: rgba[2] as f64 / 255.0 });
+                for node in shapes.iter_mut() {
+                    set_shape_fill_color(node, brush.clone());
+                }
+                Some(Intent::SetShapes { layer, shapes })
+            }
+        }
+        _ => None,
+    };
+    let Some(intent) = intent else {
+        println!("PROBE room=write verdict=color-skip layer={} reason=unsupported-source", layer.0);
+        return;
+    };
+    match d.apply(intent) {
+        Ok(_) => {
+            drop(d);
+            *revision.write() += 1;
+            println!("PROBE room=write verdict=color-applied layer={}", layer.0);
+        }
+        Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
+    }
+}
+
 pub fn browser_panel(
     ui: &UiData,
     doc: Arc<Mutex<Document>>,
@@ -206,8 +267,53 @@ pub fn browser_panel(
                 span { class: "{tab_class(1)}", onclick: move |_| tab.set(1), "Effects" }
                 span { class: "{tab_class(2)}", onclick: move |_| tab.set(2), "Create" }
                 span { class: "{tab_class(3)}", onclick: move |_| tab.set(3), "Panels" }
+                span { class: "{tab_class(4)}", onclick: move |_| tab.set(4), "Colors" }
             }
-            if tab() == 1 {
+            if tab() == 4 {
+                {
+                    let layer = selected();
+                    let swatches = fixture::used_colors_from_doc(&doc.lock().unwrap());
+                    let has_swatches = !swatches.is_empty();
+                    let cards = swatches.into_iter().map(|ColorSwatch { hex, rgba }| {
+                        let card_class = if layer.is_none() { "tcard disabled" } else { "tcard" };
+                        let onclick = layer.map(|l| {
+                            let doc = doc.clone();
+                            move |_| apply_layer_color(&doc, l, rgba, revision)
+                        });
+                        rsx!(
+                            div {
+                                class: "{card_class}",
+                                onclick: move |evt| { if let Some(f) = &onclick { f(evt) } },
+                                div { class: "thumb", style: "background:{hex};" }
+                                span { class: "tname", "{hex}" }
+                            }
+                        )
+                    });
+                    rsx!(
+                        div { class: "bwork",
+                            div { class: "bside",
+                                div { class: "sh", "COLORS" }
+                                div { class: "srow on", "Used in this composition" }
+                            }
+                            div { class: "bresults",
+                                div { class: "rhead",
+                                    div {
+                                        b { "Colors" }
+                                        span { class: "sub",
+                                            if layer.is_some() { "Click to apply to the selected layer" } else { "Select a layer first" }
+                                        }
+                                    }
+                                }
+                                if has_swatches {
+                                    div { class: "tgrid", {cards} }
+                                } else {
+                                    div { class: "rcount", "No colors used yet" }
+                                }
+                            }
+                        }
+                    )
+                }
+            } else if tab() == 1 {
                 {
                     let layer = selected();
                     let attached: Vec<String> = layer
