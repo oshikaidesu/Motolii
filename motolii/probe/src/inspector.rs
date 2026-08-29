@@ -146,6 +146,7 @@ pub fn inspector_panel(
     let empty = InspectorData {
         ident_name: "No selection".to_string(),
         ident_sub: String::new(),
+        text: Vec::new(),
         transform: Vec::new(),
         appearance: Vec::new(),
         has_effects: false,
@@ -157,6 +158,10 @@ pub fn inspector_panel(
     };
     let inspector = &data;
 
+    let text_rows = inspector
+        .text
+        .iter()
+        .map(|p| prop_row(p, selection.unwrap_or(LayerId(0)), t, doc, drag, revision));
     let transform_rows = inspector
         .transform
         .iter()
@@ -224,6 +229,10 @@ pub fn inspector_panel(
                 span { "Y" }
                 span { "Z" }
                 span { class: "k", "Key" }
+            }
+            if !inspector.text.is_empty() {
+                div { class: "sec", "TEXT" }
+                {text_rows}
             }
             div { class: "sec", "TRANSFORM" }
             {transform_rows}
