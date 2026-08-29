@@ -222,7 +222,10 @@ impl IsfInputType {
 
 /// `INPUTS` 配列の1要素。**このファイルは "threshold" も "intensity" も
 /// 知らない**——`NAME`/`TYPE`/`DEFAULT`/`MIN`/`MAX` という ISF spec のキー名しか
-/// 見ない(module doc 冒頭)。
+/// 見ない(module doc 冒頭)。`MAPS` は ISF spec には無い拡張(Vism 独自の
+/// 語彙、1 param が複数の内部値を駆動する対応表)——ISF 側の `.fs` には
+/// 現れないので `Option`。展開(1 param → 複数 const)はまだやらない、ここでは
+/// 素通しするだけ。
 #[derive(Clone, Debug)]
 pub struct IsfInput {
     pub name: String,
@@ -231,6 +234,7 @@ pub struct IsfInput {
     pub default: [f32; 4],
     pub min: Option<[f32; 4]>,
     pub max: Option<[f32; 4]>,
+    pub maps: Option<serde_json::Value>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -316,12 +320,14 @@ pub(crate) fn parse_isf_source(source: &str) -> Result<(IsfManifest, String), Is
             let default = read_components(entry.get("DEFAULT"));
             let min = entry.get("MIN").map(|v| read_components(Some(v)));
             let max = entry.get("MAX").map(|v| read_components(Some(v)));
+            let maps = entry.get("MAPS").cloned();
             inputs.push(IsfInput {
                 name: name.to_owned(),
                 ty,
                 default,
                 min,
                 max,
+                maps,
             });
         }
     }

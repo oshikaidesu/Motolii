@@ -38,6 +38,7 @@ pub fn app() -> Element {
     let mut scale_pct = use_signal(|| 100u32);
     let revision = use_signal(|| 0u32);
     let selected = use_signal(|| None);
+    let timeline_scroll_y = use_signal(|| 0.0f64);
 
     let (clock, ui_scale, timeline_attr, timeline_tx, stage_attr, loaded, doc, selection) = use_hook(|| {
         let Loaded { doc, ui, duration_sec } = load_fixture();
@@ -49,7 +50,8 @@ pub fn app() -> Element {
             .with_clock(clock.clone())
             .with_scale(ui_scale.clone())
             .with_document(doc.clone(), fixture::canvas_rows_from_doc)
-            .with_selection(selection.clone(), selected);
+            .with_selection(selection.clone(), selected)
+            .with_scroll_mirror(timeline_scroll_y);
         let timeline_tx = timeline.sender();
         let stage = StageWidget::new(clock.clone(), doc.clone(), selection.clone(), revision);
         (
@@ -189,7 +191,7 @@ pub fn app() -> Element {
                 },
             }
 
-            {timeline_shell(clock.clone(), playing, doc.clone(), attrs_state, &layer_rows.read(), timeline_attr, selection.clone(), selected)}
+            {timeline_shell(clock.clone(), playing, doc.clone(), attrs_state, &layer_rows.read(), timeline_attr, selection.clone(), selected, timeline_scroll_y, timeline_tx.clone())}
 
             div { id: "status", "{loaded.status}" }
         }

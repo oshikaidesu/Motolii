@@ -36,7 +36,7 @@ fn nudge(value: &Value, vec2: bool, axis: usize, delta: f64) -> Value {
 #[derive(Clone)]
 struct ValueDrag {
     layer: LayerId,
-    property: &'static str,
+    property: String,
     vec2: bool,
     axis: usize,
     start_x: f64,
@@ -48,7 +48,7 @@ struct ValueDrag {
 fn write_key(
     doc: &Arc<Mutex<Document>>,
     layer: LayerId,
-    property: &'static str,
+    property: &str,
     value: Value,
     t: RationalTime,
     at_zero_if_new: bool,
@@ -67,14 +67,14 @@ fn write_key(
 
 /// 離された瞬間に1回だけ呼ぶこと — `apply`が1発なので1ドラッグ=1 undo になる。
 fn commit_drag(doc: &Arc<Mutex<Document>>, d: &ValueDrag, t: RationalTime) {
-    if let Ok(prop) = PropertyId::new(d.property) {
+    if let Ok(prop) = PropertyId::new(&d.property) {
         doc.lock().unwrap().clear_transient(d.layer, &prop);
     }
     if d.last_dx == 0.0 {
         return;
     }
-    let new_value = nudge(&d.start_value, d.vec2, d.axis, d.last_dx * increment(d.property));
-    if let Err(e) = write_key(doc, d.layer, d.property, new_value, t, true) {
+    let new_value = nudge(&d.start_value, d.vec2, d.axis, d.last_dx * increment(&d.property));
+    if let Err(e) = write_key(doc, d.layer, &d.property, new_value, t, true) {
         println!("PROBE room=write verdict=apply-error {e}");
     }
 }
@@ -116,7 +116,7 @@ fn prop_row(
             && !c.is_empty()
             && if p.vec2 { i < 2 } else { i == 2 };
         if editable {
-            let property = p.property.unwrap();
+            let property = p.property.clone().unwrap();
             let vec2 = p.vec2;
             let start_value = p.value.clone();
             rsx!(span {
@@ -125,7 +125,7 @@ fn prop_row(
                     let x = evt.data().client_coordinates().x;
                     *drag.write() = Some(ValueDrag {
                         layer,
-                        property,
+                        property: property.clone(),
                         vec2,
                         axis: i,
                         start_x: x,
@@ -141,10 +141,10 @@ fn prop_row(
     });
     let key_class = if p.keyed { "glyph on" } else { "glyph" };
     let key_glyph = if p.keyed { "◆" } else { "◇" };
-    let key_click = p.property.map(|property| {
+    let key_click = p.property.clone().map(|property| {
         let value = p.value.clone();
         let doc = doc.clone();
-        move |_| match write_key(&doc, layer, property, value.clone(), t, false) {
+        move |_| match write_key(&doc, layer, &property, value.clone(), t, false) {
             Ok(_) => {
                 println!("PROBE room=write verdict=key-added layer={:?} prop={} t={:?}", layer, property, t);
                 *revision.write() += 1;
@@ -240,6 +240,7 @@ pub fn inspector_panel(
         ident_sub: String::new(),
         text: Vec::new(),
         transform: Vec::new(),
+        effects: Vec::new(),
         has_effects: false,
     };
     let t = RationalTime::try_new((clock.now_sec() * 3000.0) as i64, 3000).unwrap_or(RationalTime::ZERO);
@@ -255,6 +256,10 @@ pub fn inspector_panel(
         .map(|p| content_row(p, selection.unwrap_or(LayerId(0)), t, doc, editing, revision));
     let transform_rows = inspector
         .transform
+        .iter()
+        .map(|p| prop_row(p, selection.unwrap_or(LayerId(0)), t, doc, drag, revision));
+    let effect_rows = inspector
+        .effects
         .iter()
         .map(|p| prop_row(p, selection.unwrap_or(LayerId(0)), t, doc, drag, revision));
     let fx_label = if inspector.has_effects { "" } else { "No shared FX" };
@@ -278,14 +283,14 @@ pub fn inspector_panel(
                     let dx = x - d.start_x;
                     let changed = dx != d.last_dx;
                     d.last_dx = dx;
-                    (changed, d.layer, d.property, d.vec2, d.axis, d.start_value.clone(), dx)
+                    (changed, d.layer, d.property.clone(), d.vec2, d.axis, d.start_value.clone(), dx)
                 }) else { return };
                 let (changed, layer, property, vec2, axis, start_value, dx) = state;
                 if !changed {
                     return;
                 }
-                let new_value = nudge(&start_value, vec2, axis, dx * increment(property));
-                if let Ok(prop) = PropertyId::new(property) {
+                let new_value = nudge(&start_value, vec2, axis, dx * increment(&property));
+                if let Ok(prop) = PropertyId::new(&property) {
                     doc_move.lock().unwrap().set_transient(layer, prop, new_value.clone());
                     println!(
                         "PROBE room=write verdict=value-scrub layer={:?} prop={} axis={} dx={:.1} new={:?}",
@@ -329,12 +334,16 @@ pub fn inspector_panel(
             div { class: "sec", "TRANSFORM" }
             {transform_rows}
             div { class: "sec", "EFFECTS" }
-            div { class: "prow",
-                span { class: "n empty", "{fx_label}" }
-                span { class: "v blank", "" }
-                span { class: "v blank", "" }
-                span { class: "v blank", "" }
-                span { "" }
+            if inspector.effects.is_empty() {
+                div { class: "prow",
+                    span { class: "n empty", "{fx_label}" }
+                    span { class: "v blank", "" }
+                    span { class: "v blank", "" }
+                    span { class: "v blank", "" }
+                    span { "" }
+                }
+            } else {
+                {effect_rows}
             }
             div { class: "hint", "Drag to scrub · double-click to type · Esc to cancel" }
         }

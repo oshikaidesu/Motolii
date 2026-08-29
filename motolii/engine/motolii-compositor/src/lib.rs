@@ -274,6 +274,20 @@ pub fn isf_bloom_manifest() -> &'static IsfManifest {
     })
 }
 
+/// `TRI_LED_SOURCE` 先頭の `/*{ ... }*/` を1回だけ parse した結果。**同じ
+/// `parse_isf_source` を再利用**(WGSL のブロックコメントも ISF の `/*{ ... }*/`
+/// ヘッダと同じ字面——naga の WGSL frontend は先頭コメントの中身に関わらず
+/// 読み飛ばす)——`isf_bloom_manifest` と同型、`INPUTS[].MAPS` は今のところ
+/// 素通しされるだけで展開はしない。
+pub fn tri_led_manifest() -> &'static IsfManifest {
+    static MANIFEST: std::sync::OnceLock<IsfManifest> = std::sync::OnceLock::new();
+    MANIFEST.get_or_init(|| {
+        effects::isf::parse_isf_source(effects::TRI_LED_SOURCE)
+            .expect("tri_led.wgsl はビルドに埋め込まれた定数——parse 失敗はここのバグ")
+            .0
+    })
+}
+
 /// track matte の重ね方(BL4、AE/Lottie の4値)。`matte` モジュール doc 参照。
 pub use matte::MatteMode;
 

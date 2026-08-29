@@ -281,56 +281,58 @@ const GLOW_PARAMS: &[EffectParamDescriptor] = &[
     },
 ];
 
-/// `"motolii.isf_bloom"` の3param。**手書き**(supervisor の timebox 指示で
-/// 認められた fallback——`docs/vism-package-concept.md` §11 の evidence probe と
-/// しては、front カタログを manifest から都度動的に生成する所まではやらず、この
-/// 定数を手で書いた。ただし手書きが実体(`bloom.fs` の `INPUTS`)と黙って
-/// ずれないよう、`known_effects_isf_bloom_catalog_matches_the_generic_manifest`
-/// が `motolii_compositor::isf_bloom_manifest()` と突き合わせる——2026-08-27 の
-/// `TURBULENT_DISPLACE` 事故(front が engine の知らない名前を持っていた)と同種の
-/// drift を、今回は compile-time 一本化ではなく test-time cross-check で防ぐ)。
-const ISF_BLOOM_PARAMS: &[EffectParamDescriptor] = &[
-    EffectParamDescriptor {
-        name: "threshold",
-        default: 1.0,
-        range: Some((0.0, 4.0)),
-    },
-    EffectParamDescriptor {
-        name: "intensity",
-        default: 0.75,
-        range: Some((0.0, 4.0)),
-    },
-    EffectParamDescriptor {
-        name: "radius",
-        default: 1.0,
-        range: Some((1.0, 8.0)),
-    },
-];
-
-const KNOWN_EFFECTS: &[EffectDescriptor] = &[
-    EffectDescriptor {
-        plugin_id: "motolii.glow",
-        params: GLOW_PARAMS,
-    },
-    EffectDescriptor {
-        plugin_id: "motolii.isf_bloom",
-        params: ISF_BLOOM_PARAMS,
-    },
-    EffectDescriptor {
-        plugin_id: "motolii.gradient",
-        params: &[],
-    },
-    EffectDescriptor {
-        plugin_id: "motolii.tri_led",
-        params: &[],
-    },
-];
+/// `motolii_compositor::IsfManifest` の param 入力を `EffectParamDescriptor` へ写す
+/// (`bloom.fs`/`tri_led.wgsl` の両方が同じ形の `/*{ ... }*/` ヘッダを持つので、
+/// この1関数を両方が呼ぶ——ISF 側の手書き catalog はもう要らない、manifest 自身が
+/// 正本)。名前は manifest 由来の `String` なので `Box::leak` で `'static` 化する
+/// (`known_effects()` は process 寿命で1回だけ組む、`OnceLock` キャッシュと同じ形)。
+fn params_from_manifest(manifest: &motolii_compositor::IsfManifest) -> &'static [EffectParamDescriptor] {
+    let params: Vec<EffectParamDescriptor> = manifest
+        .param_inputs()
+        .map(|input| EffectParamDescriptor {
+            name: Box::leak(input.name.clone().into_boxed_str()),
+            default: f64::from(input.default[0]),
+            // 範囲は MIN と MAX が両方揃っている時だけ——無い範囲を発明しない(Q0)。
+            range: input
+                .min
+                .zip(input.max)
+                .map(|(min, max)| (f64::from(min[0]), f64::from(max[0]))),
+        })
+        .collect();
+    Box::leak(params.into_boxed_slice())
+}
 
 /// 現在 engine が実際に描ける effect の一覧(`plugin_id` + named param の名前・既定値・
 /// 範囲)。**この関数が唯一の正本**——front の FX STACK・パラメータパネルはここを
 /// 読むだけにし、`translate.rs` の写しを front 側に持たせない。
+///
+/// `isf_bloom`/`tri_led` の param は**手書きしない**——`bloom.fs`/`tri_led.wgsl`
+/// 先頭の `/*{ ... }*/` ヘッダ(`motolii_compositor::isf_bloom_manifest`/
+/// `tri_led_manifest`)から都度組む。2026-08-27 の `TURBULENT_DISPLACE` 事故
+/// (front が engine の知らない名前を持っていた)の再発は、手書き表と実体を
+/// 突き合わせる test ではなく、そもそも手書き表を無くすことで防ぐ。
 pub fn known_effects() -> &'static [EffectDescriptor] {
-    KNOWN_EFFECTS
+    static KNOWN: std::sync::OnceLock<Vec<EffectDescriptor>> = std::sync::OnceLock::new();
+    KNOWN.get_or_init(|| {
+        vec![
+            EffectDescriptor {
+                plugin_id: "motolii.glow",
+                params: GLOW_PARAMS,
+            },
+            EffectDescriptor {
+                plugin_id: "motolii.isf_bloom",
+                params: params_from_manifest(motolii_compositor::isf_bloom_manifest()),
+            },
+            EffectDescriptor {
+                plugin_id: "motolii.gradient",
+                params: &[],
+            },
+            EffectDescriptor {
+                plugin_id: "motolii.tri_led",
+                params: params_from_manifest(motolii_compositor::tri_led_manifest()),
+            },
+        ]
+    })
 }
 
 /// `"motolii.glow"` の named param map(`effect.{id}.param.{name}` track が実在する分
@@ -425,7 +427,7 @@ mod known_effects_tests {
         assert_eq!(known_effects()[2].plugin_id, "motolii.gradient");
         assert_eq!(known_effects()[2].params.len(), 0);
         assert_eq!(known_effects()[3].plugin_id, "motolii.tri_led");
-        assert_eq!(known_effects()[3].params.len(), 0);
+        assert_eq!(known_effects()[3].params.len(), 1);
     }
 
     /// `ISF_BLOOM_PARAMS`(手書き、supervisor timebox fallback——module doc

@@ -1,5 +1,7 @@
 use motolii_store::{property, Document, LayerId, LayerSource, PropertyId, RationalTime, StoreView, Value};
 
+use motolii_engine::known_effects;
+
 use crate::timeline_widget::CanvasRow;
 
 const FPS: f64 = 30.0;
@@ -110,7 +112,7 @@ pub struct PropRow {
     pub dims: [bool; 3],
     pub keyed: bool,
     /// SetTrackの宛先。Noneなら編集不可(EFFECTS等のダミー行)。
-    pub property: Option<&'static str>,
+    pub property: Option<String>,
     /// trueならcells[0]/[1]がVec2のx/y(cells[2]は飾り)。falseならcells[2]が唯一の値。
     pub vec2: bool,
     /// cellsを組んだ生の値。ドラッグ開始点・キー打刻の両方がここから読む。
@@ -122,6 +124,7 @@ pub struct InspectorData {
     pub ident_sub: String,
     pub text: Vec<PropRow>,
     pub transform: Vec<PropRow>,
+    pub effects: Vec<PropRow>,
     pub has_effects: bool,
 }
 
@@ -185,7 +188,41 @@ pub fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: RationalTime
         .filter_map(|p| view.track(layer, &p).ok().flatten())
         .map(|tr| tr.keys().len())
         .sum();
-    let has_effects = !view.effects(layer).unwrap_or_default().is_empty();
+    let attached_effects = view.effects(layer).unwrap_or_default();
+    let has_effects = !attached_effects.is_empty();
+    // 層に付いている effect ごとに、known_effects() の宣言(名前・既定値・範囲)で
+    // Inspector 行を組む。宣言に無い plugin_id(known_effects() の外)は無視——
+    // 「無い範囲を発明しない」(Q0)と同じ fail-closed。
+    let effects: Vec<PropRow> = attached_effects
+        .into_iter()
+        .flat_map(|instance| {
+            let params = known_effects()
+                .iter()
+                .find(|d| d.plugin_id == instance.plugin_id)
+                .map(|d| d.params)
+                .unwrap_or(&[]);
+            params
+                .iter()
+                .filter_map(move |param| {
+                    let prop = PropertyId::effect_param(instance.id, param.name).ok()?;
+                    let keyed = view.track(layer, &prop).ok().flatten().is_some();
+                    let v = match view.value_at(layer, &prop, t).ok().flatten() {
+                        Some(Value::F64(v)) => v,
+                        _ => param.default,
+                    };
+                    Some(PropRow {
+                        label: param.name,
+                        cells: [String::new(), String::new(), f(v)],
+                        dims: [false, false, false],
+                        keyed,
+                        property: Some(prop.name().to_owned()),
+                        vec2: false,
+                        value: Value::F64(v),
+                    })
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect();
     let source_name = match view.meta(layer).ok().flatten().map(|m| m.source) {
         Some(LayerSource::Solid { .. }) => "solid",
         Some(LayerSource::Media { .. }) => "media",
@@ -219,7 +256,7 @@ pub fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: RationalTime
                 cells: [f(anchor_x), f(anchor_y), f(0.0)],
                 dims: [false, false, true],
                 keyed: keyed(property::ANCHOR),
-                property: Some(property::ANCHOR),
+                property: Some(property::ANCHOR.to_owned()),
                 vec2: true,
                 value: Value::Vec2([anchor_x, anchor_y]),
             },
@@ -228,7 +265,7 @@ pub fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: RationalTime
                 cells: [px, py, f(0.0)],
                 dims: [false, false, true],
                 keyed: keyed(property::POSITION),
-                property: Some(property::POSITION),
+                property: Some(property::POSITION.to_owned()),
                 vec2: true,
                 value: Value::Vec2([pos_x, pos_y]),
             },
@@ -237,7 +274,7 @@ pub fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: RationalTime
                 cells: [f(scale_x), f(scale_y), f(1.0)],
                 dims: [false, false, true],
                 keyed: keyed(property::SCALE),
-                property: Some(property::SCALE),
+                property: Some(property::SCALE.to_owned()),
                 vec2: true,
                 value: Value::Vec2([scale_x, scale_y]),
             },
@@ -246,7 +283,7 @@ pub fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: RationalTime
                 cells: [String::new(), String::new(), f(rotation_v)],
                 dims: [false, false, true],
                 keyed: keyed(property::ROTATION),
-                property: Some(property::ROTATION),
+                property: Some(property::ROTATION.to_owned()),
                 vec2: false,
                 value: Value::F64(rotation_v),
             },
@@ -255,7 +292,7 @@ pub fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: RationalTime
                 cells: [String::new(), String::new(), opacity],
                 dims: [false, false, false],
                 keyed: keyed(property::OPACITY),
-                property: Some(property::OPACITY),
+                property: Some(property::OPACITY.to_owned()),
                 vec2: false,
                 value: Value::F64(opacity_v),
             },
@@ -266,6 +303,7 @@ pub fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: RationalTime
         ident_sub: format!("{source_name} · {key_count} keys"),
         text,
         transform,
+        effects,
         has_effects,
     }
 }

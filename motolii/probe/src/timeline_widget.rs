@@ -49,6 +49,7 @@ struct DragState {
 
 pub enum TimelineMsg {
     SetRows(Vec<CanvasRow>),
+    ScrollBy(f64),
 }
 
 pub struct TimelineWidget {
@@ -75,6 +76,7 @@ pub struct TimelineWidget {
     scrubbing: bool,
     selection: Option<Selection>,
     selected_mirror: Option<Signal<Option<LayerId>>>,
+    scroll_y_mirror: Option<Signal<f64>>,
 }
 
 impl TimelineWidget {
@@ -99,6 +101,7 @@ impl TimelineWidget {
             scrubbing: false,
             selection: None,
             selected_mirror: None,
+            scroll_y_mirror: None,
         }
     }
 
@@ -106,6 +109,12 @@ impl TimelineWidget {
     pub fn with_selection(mut self, selection: Selection, mirror: Signal<Option<LayerId>>) -> Self {
         self.selection = Some(selection);
         self.selected_mirror = Some(mirror);
+        self
+    }
+
+    /// scroll_yの唯一の真実(self)と、layers列再描画のためのミラーSignal。
+    pub fn with_scroll_mirror(mut self, mirror: Signal<f64>) -> Self {
+        self.scroll_y_mirror = Some(mirror);
         self
     }
 
@@ -143,6 +152,13 @@ impl TimelineWidget {
         let content_h = self.rows.len() as f64 * rowh;
         let avail_h = (self.viewport_h - RULER_H * self.sfac()).max(0.0);
         (content_h - avail_h).max(0.0)
+    }
+
+    fn set_scroll_y(&mut self, y: f64) {
+        self.scroll_y = y.clamp(0.0, self.max_scroll_y());
+        if let Some(mirror) = &mut self.scroll_y_mirror {
+            mirror.set(self.scroll_y);
+        }
     }
 
     fn band_hit(&self, x: f64, y: f64) -> Option<usize> {
@@ -187,6 +203,7 @@ impl TimelineWidget {
         while let Ok(msg) = self.rx.try_recv() {
             match msg {
                 TimelineMsg::SetRows(rows) => self.rows = rows,
+                TimelineMsg::ScrollBy(dy) => self.set_scroll_y(self.scroll_y + dy),
             }
         }
     }
@@ -232,7 +249,7 @@ impl Widget for TimelineWidget {
                     // カーソル下の時刻を動かさない: scroll = t_cursor - x/pps
                     self.scroll_sec = (cursor_sec - cursor_x / new_pps).max(0.0);
                 } else {
-                    self.scroll_y = (self.scroll_y + dy).clamp(0.0, self.max_scroll_y());
+                    self.set_scroll_y(self.scroll_y + dy);
                 }
                 self.scroll_sec = (self.scroll_sec - dx / self.pps).max(0.0);
                 if let Some((cx, cy)) = self.cursor {
@@ -342,7 +359,7 @@ impl Widget for TimelineWidget {
         let ruler_h = RULER_H * self.sfac() * k;
         let row_h = ROW_H * self.sfac() * k;
         self.viewport_h = h / k;
-        self.scroll_y = self.scroll_y.clamp(0.0, self.max_scroll_y());
+        self.set_scroll_y(self.scroll_y);
         let scroll_y = self.scroll_y * k;
         let pps = self.pps * k;
         let scroll = self.scroll_sec;

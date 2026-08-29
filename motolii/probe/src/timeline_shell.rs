@@ -1,3 +1,4 @@
+use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
 
 use dioxus_native::prelude::*;
@@ -6,6 +7,7 @@ use dioxus_native::CustomWidgetAttr;
 use crate::fixture::{fmt_timecode, LayerRow};
 use crate::playback::Clock;
 use crate::session::Selection;
+use crate::timeline_widget::TimelineMsg;
 use motolii_store::{Document, Intent, LayerAttrsPatch, LayerId};
 
 pub fn timeline_shell(
@@ -17,6 +19,8 @@ pub fn timeline_shell(
     timeline_attr: CustomWidgetAttr,
     selection: Selection,
     mut selected: Signal<Option<LayerId>>,
+    scroll_y: Signal<f64>,
+    timeline_tx: Sender<TimelineMsg>,
 ) -> Element {
     let layer_rows = layer_rows_data.iter().enumerate().map(|(i, row)| {
         let layer = row.layer;
@@ -101,9 +105,17 @@ pub fn timeline_shell(
                 em { "{layer_count} rows · 30fps · 60s" }
             }
             div { id: "timeline",
-                div { id: "layers",
+                div {
+                    id: "layers",
+                    onwheel: move |evt| {
+                        let dy = evt.data().delta().strip_units().y;
+                        let _ = timeline_tx.send(TimelineMsg::ScrollBy(dy));
+                    },
                     div { class: "lhead", "OBJECT" }
-                    {layer_rows}
+                    div {
+                        style: "transform: translateY(-{scroll_y()}px);",
+                        {layer_rows}
+                    }
                 }
                 object { "data": timeline_attr }
             }
