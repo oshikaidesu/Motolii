@@ -9,7 +9,7 @@ use motolii_store::{
     Shape, ShapeNode, TextAlignmentOptions, TextDocument, TextDocumentStyle, TextJustify,
     TextStyleId, VectorPoint,
 };
-use motolii_vector::{Brush, Fill, FillRule, Rgb};
+use motolii_vector::{Brush, Contour, Fill, FillRule, Rgb, Vertex};
 
 use crate::fixture::ColorSwatch;
 
@@ -23,6 +23,7 @@ const FPS: f64 = 30.0;
 enum NewKind {
     Text,
     Rectangle,
+    Bezier,
 }
 
 fn new_layer_intents(layer: LayerId, order: i16, playhead: i64, duration_frames: i64, kind: NewKind) -> Vec<Intent> {
@@ -54,6 +55,53 @@ fn new_layer_intents(layer: LayerId, order: i16, playhead: i64, duration_frames:
                         hidden: false,
                     }),
                     stroke: None,
+                })],
+            },
+        ],
+        NewKind::Bezier => vec![
+            Intent::AddLayer(layer),
+            Intent::SetMeta {
+                layer,
+                meta: LayerMeta {
+                    source: LayerSource::Shape,
+                    order,
+                    timing: LayerTiming::place(playhead, None, duration_frames),
+                },
+            },
+            Intent::SetAttrs {
+                layer,
+                patch: LayerAttrsPatch { name: Some("Bezier".to_owned()), label_color, ..Default::default() },
+            },
+            Intent::SetShapes {
+                layer,
+                shapes: vec![ShapeNode::Leaf(Shape {
+                    source: PathSource::Bezier(vec![Contour {
+                        closed: false,
+                        vertices: vec![
+                            Vertex {
+                                point: VectorPoint { x: -150.0, y: 0.0 },
+                                in_tangent: VectorPoint { x: 0.0, y: 0.0 },
+                                out_tangent: VectorPoint { x: 100.0, y: -150.0 },
+                            },
+                            Vertex {
+                                point: VectorPoint { x: 150.0, y: 0.0 },
+                                in_tangent: VectorPoint { x: -100.0, y: 150.0 },
+                                out_tangent: VectorPoint { x: 0.0, y: 0.0 },
+                            },
+                        ],
+                    }]),
+                    ops: Vec::new(),
+                    fill: None,
+                    stroke: Some(motolii_vector::Stroke {
+                        brush: Brush::Solid(Rgb { r: 1.0, g: 1.0, b: 1.0 }),
+                        width: 6.0,
+                        cap: motolii_vector::LineCap::Round,
+                        join: motolii_vector::LineJoin::Round,
+                        miter_limit: 4.0,
+                        opacity: 1.0,
+                        hidden: false,
+                        dash: None,
+                    }),
                 })],
             },
         ],
@@ -405,6 +453,20 @@ pub fn browser_panel(
                                     div { style: "width:40%; height:40%; background:#fff;" }
                                 }
                                 span { class: "tname", "Rectangle" }
+                                span { class: "tmeta", "path shape" }
+                            }
+                            div {
+                                class: "tcard",
+                                onclick: {
+                                    let doc = doc.clone();
+                                    let clock = clock.clone();
+                                    let timeline_tx = timeline_tx.clone();
+                                    move |_| spawn_layer(&doc, &clock, layer_rows, attrs_state, &timeline_tx, NewKind::Bezier, "bezier")
+                                },
+                                div { class: "thumb", style: "background:#222; display:flex; align-items:center; justify-content:center;",
+                                    span { style: "color:#fff; font-size:32px;", "〜" }
+                                }
+                                span { class: "tname", "Bezier" }
                                 span { class: "tmeta", "path shape" }
                             }
                         }
