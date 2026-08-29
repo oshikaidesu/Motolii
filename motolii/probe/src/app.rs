@@ -9,7 +9,7 @@ use crate::inspector::inspector_panel;
 use crate::session::Session;
 use crate::stage_widget::StageWidget;
 use crate::timeline_shell::timeline_shell;
-use crate::timeline_widget::TimelineWidget;
+use crate::timeline_widget::{split_layer, TimelineMsg, TimelineWidget};
 use crate::fixture;
 use crate::tokens;
 
@@ -104,7 +104,45 @@ pub fn app() -> Element {
                 span { class: "appname", "Motolii" }
                 span { class: "menu", "File" }
                 span { class: "menu", "Edit" }
-                span { class: "menu", "Layer" }
+                span {
+                    class: "menu",
+                    onclick: {
+                        let doc = doc.clone();
+                        let clock = clock.clone();
+                        let timeline_tx = timeline_tx.clone();
+                        let mut layer_rows = layer_rows;
+                        let mut attrs_state = attrs_state;
+                        move |_| {
+                            let Some(layer) = selected() else {
+                                println!("PROBE room=write verdict=split-noop reason=no-selection");
+                                return;
+                            };
+                            // Split — プレイヘッドで選択層を2本に割る。30fps は
+                            // timeline_shell/timeline_widget の既存表示と同じ既定値。
+                            let comp_frame = (clock.now_sec() * 30.0).round() as i64;
+                            match split_layer(&doc, layer, comp_frame) {
+                                Some(tail) => {
+                                    let snapshot = doc.lock().unwrap();
+                                    let rows = fixture::layer_rows_from_doc(&snapshot);
+                                    let canvas = fixture::canvas_rows_from_doc(&snapshot);
+                                    drop(snapshot);
+                                    attrs_state.set(
+                                        rows.iter().map(|r| (r.hidden, r.solo, r.locked)).collect(),
+                                    );
+                                    layer_rows.set(rows);
+                                    let _ = timeline_tx.send(TimelineMsg::SetRows(canvas));
+                                    println!(
+                                        "PROBE room=write verdict=applied Split layer={layer:?} tail={tail:?} comp_frame={comp_frame}"
+                                    );
+                                }
+                                None => println!(
+                                    "PROBE room=write verdict=split-noop layer={layer:?} comp_frame={comp_frame}"
+                                ),
+                            }
+                        }
+                    },
+                    "Layer"
+                }
                 span { class: "menu", "Effect" }
                 span { class: "menu", "View" }
                 span { class: "menu", "Help" }

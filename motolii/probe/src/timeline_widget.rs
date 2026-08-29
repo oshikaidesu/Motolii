@@ -6,7 +6,7 @@ use crate::session::Selection;
 use crate::tokens::{self, UiScale};
 use anyrender::{PaintRef, PaintScene};
 use dioxus_native::prelude::{Signal, WritableExt};
-use motolii_store::{Document, Intent, LayerId, LayerTiming};
+use motolii_store::{Document, Intent, LayerAttrs, LayerAttrsPatch, LayerId, LayerMeta, LayerTiming};
 use blitz_dom::node::ComputedStyles;
 use blitz_dom::Widget;
 use blitz_traits::events::{BlitzWheelDelta, UiEvent};
@@ -207,6 +207,71 @@ impl TimelineWidget {
             }
         }
     }
+}
+
+fn attrs_to_patch(a: &LayerAttrs) -> LayerAttrsPatch {
+    LayerAttrsPatch {
+        hidden: Some(a.hidden),
+        parent: Some(a.parent),
+        blend_mode: Some(a.blend_mode.clone()),
+        matte: Some(a.matte.clone()),
+        name: Some(a.name.clone()),
+        auto_orient: Some(a.auto_orient),
+        pinned: Some(a.pinned),
+        solo: Some(a.solo),
+        locked: Some(a.locked),
+        label_color: Some(a.label_color),
+    }
+}
+
+/// 選択層を `comp_frame` で2本へ割る(Split)。頭は `layer` のまま尺が縮み、尻は
+/// 新しい layer になる。`layer` の timing が `comp_frame` を覆っていなければ何もしない
+/// (押しても割れないと分かる = Q3 の拒否の報酬、呼び手が戻り値で判定する)。
+/// `apply_all` 1回 = 1 undo(`Document::group_layers` と同じ形)。
+pub fn split_layer(doc: &Arc<Mutex<Document>>, layer: LayerId, comp_frame: i64) -> Option<LayerId> {
+    let mut doc = doc.lock().unwrap();
+    let view = doc.view();
+    let meta = view.meta(layer).ok().flatten()?;
+    if !meta.timing.covers(comp_frame) {
+        return None;
+    }
+    let head_dur = comp_frame - meta.timing.start;
+    if head_dur <= 0 {
+        return None;
+    }
+
+    let tail = LayerId(view.next_layer_id());
+    let head_timing = LayerTiming { duration: head_dur, ..meta.timing };
+    let tail_timing = LayerTiming {
+        start: comp_frame,
+        duration: meta.timing.duration - head_dur,
+        source_in: meta.timing.source_in + head_dur,
+        ..meta.timing
+    };
+
+    let attrs = view.attrs(layer).ok().flatten().unwrap_or_default();
+    let effects = view.effects(layer).unwrap_or_default();
+    let tracks: Vec<_> = view
+        .properties(layer)
+        .into_iter()
+        .filter_map(|p| view.track(layer, &p).ok().flatten().map(|t| (p, t)))
+        .collect();
+
+    let mut intents = vec![
+        Intent::SetTiming { layer, timing: head_timing },
+        Intent::AddLayer(tail),
+        Intent::SetMeta { layer: tail, meta: LayerMeta { timing: tail_timing, ..meta } },
+        Intent::SetAttrs { layer: tail, patch: attrs_to_patch(&attrs) },
+    ];
+    if !effects.is_empty() {
+        intents.push(Intent::SetEffects { layer: tail, effects });
+    }
+    for (property, track) in tracks {
+        intents.push(Intent::SetTrack { layer: tail, property, track });
+    }
+
+    doc.apply_all(intents).ok()?;
+    Some(tail)
 }
 
 fn fill_rect(s: &mut anyrender::Scene, r: Rect, color: Color) {
