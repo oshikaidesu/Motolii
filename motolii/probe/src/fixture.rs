@@ -1,4 +1,4 @@
-use motolii_store::{property, Document, LayerId, PropertyId, Value};
+use motolii_store::{property, Document, LayerId, LayerSource, PropertyId, RationalTime, StoreView, Value};
 
 use crate::timeline_widget::CanvasRow;
 
@@ -123,7 +123,6 @@ pub struct UiData {
     pub layer_rows: Vec<LayerRow>,
     pub assets: Vec<AssetRow>,
     pub comp_line: String,
-    pub inspector: InspectorData,
     pub status: String,
 }
 
@@ -131,6 +130,90 @@ pub struct Loaded {
     pub doc: Document,
     pub ui: UiData,
     pub duration_sec: f64,
+}
+
+/// 選択層+comp時刻の断面をInspector表示用に読む。S2+S4の繋ぎ先(session::Selectionが選ぶlayer)。
+pub fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: RationalTime) -> InspectorData {
+    let value_of = |prop: &str| {
+        PropertyId::new(prop)
+            .ok()
+            .and_then(|p| view.value_at(layer, &p, t).ok().flatten())
+    };
+    let keyed = |prop: &str| {
+        PropertyId::new(prop)
+            .ok()
+            .and_then(|p| view.track(layer, &p).ok().flatten())
+            .is_some()
+    };
+    let f = |v: f64| format!("{v:.3}");
+
+    // comp px級の値は38px幅セルに3桁小数が収まらないので1桁へ落とす。
+    let f1 = |v: f64| format!("{v:.1}");
+    let (px, py) = match value_of(property::POSITION) {
+        Some(Value::Vec2([x, y])) => (f1(x), f1(y)),
+        _ => (f1(0.0), f1(0.0)),
+    };
+    let opacity = match value_of(property::OPACITY) {
+        Some(Value::F64(v)) => f(v),
+        _ => f(1.0),
+    };
+
+    let sel_attrs = view.attrs(layer).ok().flatten().unwrap_or_default();
+    let key_count: usize = [property::POSITION, property::OPACITY]
+        .iter()
+        .filter_map(|p| PropertyId::new(p).ok())
+        .filter_map(|p| view.track(layer, &p).ok().flatten())
+        .map(|tr| tr.keys().len())
+        .sum();
+    let has_effects = !view.effects(layer).unwrap_or_default().is_empty();
+    let source_name = match view.meta(layer).ok().flatten().map(|m| m.source) {
+        Some(LayerSource::Solid { .. }) => "solid",
+        Some(LayerSource::Media { .. }) => "media",
+        Some(LayerSource::PointCloud { .. }) => "point cloud",
+        Some(LayerSource::Null) => "null",
+        Some(LayerSource::Shape) => "shape",
+        Some(LayerSource::Text) => "text",
+        Some(LayerSource::Group) => "group",
+        None => "solid",
+    };
+
+    InspectorData {
+        ident_name: sel_attrs.name,
+        ident_sub: format!("{source_name} · {key_count} keys"),
+        transform: vec![
+            PropRow {
+                label: "Position",
+                cells: [px, py, f(0.0)],
+                dims: [false, false, true],
+                keyed: keyed(property::POSITION),
+            },
+            PropRow {
+                label: "Scale",
+                cells: [f(1.0), f(1.0), f(1.0)],
+                dims: [false, false, true],
+                keyed: keyed(property::SCALE),
+            },
+            PropRow {
+                label: "Anchor",
+                cells: [f(0.0), f(0.0), f(0.0)],
+                dims: [false, false, true],
+                keyed: keyed(property::ANCHOR),
+            },
+            PropRow {
+                label: "Rotation",
+                cells: [String::new(), String::new(), f(0.0)],
+                dims: [false, false, true],
+                keyed: keyed(property::ROTATION),
+            },
+        ],
+        appearance: vec![PropRow {
+            label: "Opacity",
+            cells: [String::new(), String::new(), opacity],
+            dims: [false, false, false],
+            keyed: keyed(property::OPACITY),
+        }],
+        has_effects,
+    }
 }
 
 pub fn load_fixture() -> Loaded {
@@ -166,83 +249,11 @@ pub fn load_fixture() -> Loaded {
         })
         .unwrap_or_default();
 
-    let t = motolii_store::RationalTime::try_new(fx.playhead, 30)
-        .unwrap_or(motolii_store::RationalTime::ZERO);
-    let value_of = |prop: &str| {
-        PropertyId::new(prop)
-            .ok()
-            .and_then(|p| view.value_at(fx.selected, &p, t).ok().flatten())
-    };
-    let keyed = |prop: &str| {
-        PropertyId::new(prop)
-            .ok()
-            .and_then(|p| view.track(fx.selected, &p).ok().flatten())
-            .is_some()
-    };
-    let f = |v: f64| format!("{v:.3}");
-
-    // comp px級の値は38px幅セルに3桁小数が収まらないので1桁へ落とす。
-    let f1 = |v: f64| format!("{v:.1}");
-    let (px, py) = match value_of(property::POSITION) {
-        Some(Value::Vec2([x, y])) => (f1(x), f1(y)),
-        _ => (f1(0.0), f1(0.0)),
-    };
-    let opacity = match value_of(property::OPACITY) {
-        Some(Value::F64(v)) => f(v),
-        _ => f(1.0),
-    };
-
-    let sel_attrs = view.attrs(fx.selected).ok().flatten().unwrap_or_default();
-    let key_count: usize = [property::POSITION, property::OPACITY]
-        .iter()
-        .filter_map(|p| PropertyId::new(p).ok())
-        .filter_map(|p| view.track(fx.selected, &p).ok().flatten())
-        .map(|tr| tr.keys().len())
-        .sum();
-    let has_effects = !view.effects(fx.selected).unwrap_or_default().is_empty();
-
-    let inspector = InspectorData {
-        ident_name: sel_attrs.name,
-        ident_sub: format!("solid · {key_count} keys"),
-        transform: vec![
-            PropRow {
-                label: "Position",
-                cells: [px, py, f(0.0)],
-                dims: [false, false, true],
-                keyed: keyed(property::POSITION),
-            },
-            PropRow {
-                label: "Scale",
-                cells: [f(1.0), f(1.0), f(1.0)],
-                dims: [false, false, true],
-                keyed: keyed(property::SCALE),
-            },
-            PropRow {
-                label: "Anchor",
-                cells: [f(0.0), f(0.0), f(0.0)],
-                dims: [false, false, true],
-                keyed: keyed(property::ANCHOR),
-            },
-            PropRow {
-                label: "Rotation",
-                cells: [String::new(), String::new(), f(0.0)],
-                dims: [false, false, true],
-                keyed: keyed(property::ROTATION),
-            },
-        ],
-        appearance: vec![PropRow {
-            label: "Opacity",
-            cells: [String::new(), String::new(), opacity],
-            dims: [false, false, false],
-            keyed: keyed(property::OPACITY),
-        }],
-        has_effects,
-    };
     drop(view);
 
     Loaded {
         doc: fx.doc,
-        ui: UiData { layer_rows, assets, comp_line, inspector, status: fx.status },
+        ui: UiData { layer_rows, assets, comp_line, status: fx.status },
         duration_sec: 60.0,
     }
 }

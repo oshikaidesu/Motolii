@@ -5,7 +5,8 @@ use dioxus_native::CustomWidgetAttr;
 
 use crate::fixture::{fmt_timecode, LayerRow};
 use crate::playback::Clock;
-use motolii_store::{Document, Intent, LayerAttrsPatch};
+use crate::session::Selection;
+use motolii_store::{Document, Intent, LayerAttrsPatch, LayerId};
 
 pub fn timeline_shell(
     clock: Arc<Clock>,
@@ -14,10 +15,19 @@ pub fn timeline_shell(
     mut attrs: Signal<Vec<(bool, bool, bool)>>,
     layer_rows_data: &[LayerRow],
     timeline_attr: CustomWidgetAttr,
+    selection: Selection,
+    mut selected: Signal<Option<LayerId>>,
 ) -> Element {
     let layer_rows = layer_rows_data.iter().enumerate().map(|(i, row)| {
         let layer = row.layer;
         let doc = doc.clone();
+        let selection = selection.clone();
+        let is_selected = selected() == Some(layer);
+        let lsurface_style = if is_selected {
+            format!("background:{};box-shadow:inset 0 0 0 2px var(--way-inspector);", row.color)
+        } else {
+            format!("background:{};", row.color)
+        };
         let glyph = |bit: u8, label: &'static str| {
             let (hidden, solo, locked) = attrs.read()[i];
             let lit = match bit {
@@ -52,7 +62,15 @@ pub fn timeline_shell(
         };
         rsx!(
             div { class: "lrow",
-                span { class: "lsurface", style: "background:{row.color};", "{row.name}" }
+                span {
+                    class: "lsurface",
+                    style: "{lsurface_style}",
+                    onclick: move |_| {
+                        selection.set(Some(layer));
+                        selected.set(Some(layer));
+                    },
+                    "{row.name}"
+                }
                 div { class: "lctrl",
                     {glyph(0, "M")}
                     {glyph(1, "S")}

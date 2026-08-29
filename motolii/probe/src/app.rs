@@ -37,7 +37,7 @@ pub fn app() -> Element {
 
     let mut scale_pct = use_signal(|| 100u32);
 
-    let (clock, ui_scale, timeline_attr, timeline_tx, stage_attr, loaded, doc, _selection) = use_hook(|| {
+    let (clock, ui_scale, timeline_attr, timeline_tx, stage_attr, loaded, doc, selection) = use_hook(|| {
         let Loaded { doc, ui, duration_sec } = load_fixture();
         let session = Session::new(doc, duration_sec);
         let Session { doc, clock, scale: ui_scale, selection } = session;
@@ -61,6 +61,7 @@ pub fn app() -> Element {
         )
     });
 
+    let selected = use_signal(|| selection.get());
     let layer_rows = use_signal(|| loaded.layer_rows.clone());
     let attrs_state = use_signal(|| {
         loaded.layer_rows.iter().map(|r| (r.hidden, r.solo, r.locked)).collect::<Vec<_>>()
@@ -172,7 +173,7 @@ pub fn app() -> Element {
                     },
                 }
 
-                {inspector_panel(&loaded.inspector)}
+                {inspector_panel(&doc, selected(), &clock)}
             }
 
             div {
@@ -187,7 +188,7 @@ pub fn app() -> Element {
                 },
             }
 
-            {timeline_shell(clock.clone(), playing, doc.clone(), attrs_state, &layer_rows.read(), timeline_attr)}
+            {timeline_shell(clock.clone(), playing, doc.clone(), attrs_state, &layer_rows.read(), timeline_attr, selection.clone(), selected)}
 
             div { id: "status", "{loaded.status}" }
         }
