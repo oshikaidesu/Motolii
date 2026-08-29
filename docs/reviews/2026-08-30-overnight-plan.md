@@ -29,6 +29,24 @@
 | **ベジェ** | `Value::Path`、`PathSource::Bezier`、`motolii_vector::ShapeNode` |
 
 既決事項: **固定標準 swatch は作らない**(`motolii-deltas.md`「しない」節)。
+利用者「色とかは一覧で見たいからここもブラウザで選択できるようにすべきやね」— **Browser が入口**。
+ただし一覧は「**この作品で使われている色**」であって出荷時の標準パレットではない(上の既決事項と両立させる)。
+
+### 仮コードで測った結果(色)
+
+**色は property ではなく素材側の静的値。**書き口が対象ごとに違う:
+
+| 対象 | 書き口 | キーフレーム |
+|---|---|---|
+| Solid の色 | `Intent::SetSource{ source: LayerSource::Solid{rgba,..} }` | **不可** |
+| Text の fill / stroke | `Intent::SetTextDocument`(`TextDocumentStyle::{fill,stroke_color,stroke_width}`) | **不可**(組版は静止、`content` だけ時間変化) |
+| Shape の fill / stroke | `Intent::SetShapes`(`motolii_vector::{Fill,Stroke}`) | **不可** |
+
+`property::` に色系の定数は**1つも無い**。`Value::Color` は在るのに property として使われていない。
+
+- **色を変える UI は今すぐ作れる**(3つとも書き口がある)
+- **色をキーフレームで動かすのは意味の追加**になる。柵1(意味を触らない)に当たるので**夜間には入れない**。
+  必要なら `FINDING` に書いて朝の裁定を待つ
 
 ## 順番(上から。着いた所で止まる)
 
