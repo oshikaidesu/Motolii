@@ -1,0 +1,6 @@
+# re_renderer のシェーダをディスクから読ませ、FileServer(notify 監視 + 毎フレームの
+# collect)でホットリロードを効かせる。re_build_tools はこの env var で
+# Environment::DeveloperInWorkspace と判定し、debug かつ非wasm の時だけ
+# load_shaders_from_disk cfg を立てる(re_renderer/build.rs)。
+[env]
+IS_IN_RERUN_WORKSPACE = "1"
