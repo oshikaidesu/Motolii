@@ -473,19 +473,36 @@ impl IsfProgram {
         let fragment_wgsl = compile_glsl_to_wgsl(&fragment_glsl, naga::ShaderStage::Fragment)?;
         let vertex_wgsl = compile_glsl_to_wgsl(VERTEX_SOURCE, naga::ShaderStage::Vertex)?;
 
-        // `ShaderModuleDesc::source` は `PathBuf`(ファイル参照)——WGSL は実行時に
-        // GLSL から生成したテキストなので、`get_filesystem()`(この native ビルドでは
-        // `MemFileSystem`、`file_system.rs` 参照)へ仮想パスとして書き込んでから
-        // 参照する。これが `ctx.gpu_resources.shader_modules` プールの唯一の入力経路
+        // `ShaderModuleDesc::source` は `PathBuf`(ファイル参照)で、これが
+        // `ctx.gpu_resources.shader_modules` プールの唯一の入力経路
         // (`resolver` フィールドは `pub(crate)` で外部 crate から触れない)。
-        let vertex_path = PathBuf::from("motolii-compositor/isf/vertex.wgsl");
-        let fragment_path = PathBuf::from("motolii-compositor/isf/fragment.wgsl");
-        get_filesystem()
-            .create_file(&vertex_path, vertex_wgsl.into())
-            .map_err(|e| IsfError::WgslWrite(e.to_string()))?;
-        get_filesystem()
-            .create_file(&fragment_path, fragment_wgsl.into())
-            .map_err(|e| IsfError::WgslWrite(e.to_string()))?;
+        // WGSL は実行時に GLSL から生成したテキストなので、書き込んでから参照する。
+        // `OsFileSystem` は `create_file` を実装せず panic するので、ディスクモードでは
+        // 実ファイルへ落とす(`file_system.rs:26-31`)。
+        #[cfg(load_shaders_from_disk)]
+        let (vertex_path, fragment_path) = {
+            let dir = std::env::temp_dir().join("motolii-isf-wgsl");
+            std::fs::create_dir_all(&dir).map_err(|e| IsfError::WgslWrite(e.to_string()))?;
+            let vertex_path = dir.join("vertex.wgsl");
+            let fragment_path = dir.join("fragment.wgsl");
+            std::fs::write(&vertex_path, vertex_wgsl.as_bytes())
+                .map_err(|e| IsfError::WgslWrite(e.to_string()))?;
+            std::fs::write(&fragment_path, fragment_wgsl.as_bytes())
+                .map_err(|e| IsfError::WgslWrite(e.to_string()))?;
+            (vertex_path, fragment_path)
+        };
+        #[cfg(not(load_shaders_from_disk))]
+        let (vertex_path, fragment_path) = {
+            let vertex_path = PathBuf::from("motolii-compositor/isf/vertex.wgsl");
+            let fragment_path = PathBuf::from("motolii-compositor/isf/fragment.wgsl");
+            get_filesystem()
+                .create_file(&vertex_path, vertex_wgsl.into())
+                .map_err(|e| IsfError::WgslWrite(e.to_string()))?;
+            get_filesystem()
+                .create_file(&fragment_path, fragment_wgsl.into())
+                .map_err(|e| IsfError::WgslWrite(e.to_string()))?;
+            (vertex_path, fragment_path)
+        };
 
         let vertex_handle = ctx.gpu_resources.shader_modules.get_or_create(
             ctx,
