@@ -10,6 +10,7 @@ dioxus-native = { git = "https://github.com/DioxusLabs/blitz", rev = "64eb27853a
 blitz-dom = { git = "https://github.com/DioxusLabs/blitz", rev = "64eb27853aa2672486b7edf825fb044be78c9db3", default-features = false, features = ["custom-widget", "autofocus"] }
 blitz-paint = { git = "https://github.com/DioxusLabs/blitz", rev = "64eb27853aa2672486b7edf825fb044be78c9db3", default-features = false, features = ["custom-widget"] }
 blitz-traits = { git = "https://github.com/DioxusLabs/blitz", rev = "64eb27853aa2672486b7edf825fb044be78c9db3", default-features = false }
+keyboard-types = "0.7"
 anyrender = "0.13"
 wgpu_context = "0.9"
 wgpu = "29"

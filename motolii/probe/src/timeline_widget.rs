@@ -10,6 +10,7 @@ use motolii_store::{Document, Intent, LayerId, LayerTiming};
 use blitz_dom::node::ComputedStyles;
 use blitz_dom::Widget;
 use blitz_traits::events::{BlitzWheelDelta, UiEvent};
+use keyboard_types::Modifiers;
 use peniko::kurbo::{Affine, Point, Rect, Size};
 use peniko::{Color, Fill};
 
@@ -58,6 +59,10 @@ pub struct TimelineWidget {
     pps: f64,
     /// 表示窓の左端が指す秒。
     scroll_sec: f64,
+    /// 表示窓の上端が指すpx(sfacスケール済、rows描画と同じ単位)。
+    scroll_y: f64,
+    /// 直近paintの表示窓高さ(sfacスケール済)。スクロール上限の計算に使う。
+    viewport_h: f64,
     /// 要素ローカルの論理px。
     cursor: Option<(f64, f64)>,
     hovered: Option<(usize, usize)>,
@@ -81,6 +86,8 @@ impl TimelineWidget {
             rows,
             pps: PX_PER_SEC,
             scroll_sec: 0.0,
+            scroll_y: 0.0,
+            viewport_h: 0.0,
             cursor: None,
             hovered: None,
             selected: None,
@@ -130,8 +137,16 @@ impl TimelineWidget {
         self
     }
 
+    /// rowsの縦スクロールが動ける上限(sfacスケール済px)。0行やviewportが未知なら0。
+    fn max_scroll_y(&self) -> f64 {
+        let rowh = ROW_H * self.sfac();
+        let content_h = self.rows.len() as f64 * rowh;
+        let avail_h = (self.viewport_h - RULER_H * self.sfac()).max(0.0);
+        (content_h - avail_h).max(0.0)
+    }
+
     fn band_hit(&self, x: f64, y: f64) -> Option<usize> {
-        let row_ix = ((y - RULER_H * self.sfac()) / (ROW_H * self.sfac())).floor();
+        let row_ix = ((y - RULER_H * self.sfac() + self.scroll_y) / (ROW_H * self.sfac())).floor();
         if row_ix < 0.0 {
             return None;
         }
@@ -144,13 +159,13 @@ impl TimelineWidget {
 
     fn hit_test(&self, x: f64, y: f64) -> Option<(usize, usize)> {
         let (rh, rowh) = (RULER_H * self.sfac(), ROW_H * self.sfac());
-        let row_ix = ((y - rh) / rowh).floor();
+        let row_ix = ((y - rh + self.scroll_y) / rowh).floor();
         if row_ix < 0.0 {
             return None;
         }
         let row_ix = row_ix as usize;
         let row = self.rows.get(row_ix)?;
-        let mid_y = rh + row_ix as f64 * rowh + rowh * 0.5;
+        let mid_y = rh + row_ix as f64 * rowh + rowh * 0.5 - self.scroll_y;
         if (y - mid_y).abs() > 8.0 {
             return None;
         }
@@ -209,13 +224,17 @@ impl Widget for TimelineWidget {
                     BlitzWheelDelta::Pixels(x, y) => (x, y),
                     BlitzWheelDelta::Lines(x, y) => (x * 20.0, y * 20.0),
                 };
-                let cursor_x = wheel.element.x as f64;
-                let cursor_sec = self.scroll_sec + cursor_x / self.pps;
-                let new_pps = (self.pps * (1.0 - dy * 0.002)).clamp(MIN_PPS, MAX_PPS);
-                self.pps = new_pps;
-                // カーソル下の時刻を動かさない: scroll = t_cursor - x/pps
-                self.scroll_sec = (cursor_sec - cursor_x / new_pps).max(0.0);
-                self.scroll_sec = (self.scroll_sec - dx / new_pps).max(0.0);
+                if wheel.mods.contains(Modifiers::CONTROL) {
+                    let cursor_x = wheel.element.x as f64;
+                    let cursor_sec = self.scroll_sec + cursor_x / self.pps;
+                    let new_pps = (self.pps * (1.0 - dy * 0.002)).clamp(MIN_PPS, MAX_PPS);
+                    self.pps = new_pps;
+                    // カーソル下の時刻を動かさない: scroll = t_cursor - x/pps
+                    self.scroll_sec = (cursor_sec - cursor_x / new_pps).max(0.0);
+                } else {
+                    self.scroll_y = (self.scroll_y + dy).clamp(0.0, self.max_scroll_y());
+                }
+                self.scroll_sec = (self.scroll_sec - dx / self.pps).max(0.0);
                 if let Some((cx, cy)) = self.cursor {
                     self.hovered = self.hit_test(cx, cy);
                 }
@@ -322,6 +341,9 @@ impl Widget for TimelineWidget {
         let k = scale;
         let ruler_h = RULER_H * self.sfac() * k;
         let row_h = ROW_H * self.sfac() * k;
+        self.viewport_h = h / k;
+        self.scroll_y = self.scroll_y.clamp(0.0, self.max_scroll_y());
+        let scroll_y = self.scroll_y * k;
         let pps = self.pps * k;
         let scroll = self.scroll_sec;
         let x_of = |t: f64| (t - scroll) * pps;
@@ -363,14 +385,17 @@ impl Widget for TimelineWidget {
 
         let hover_row = self
             .cursor
-            .map(|(_, cy)| ((cy - RULER_H * self.sfac()) / (ROW_H * self.sfac())).floor())
+            .map(|(_, cy)| ((cy - RULER_H * self.sfac() + self.scroll_y) / (ROW_H * self.sfac())).floor())
             .filter(|r| *r >= 0.0)
             .map(|r| r as usize);
 
         for (i, row) in self.rows.iter().enumerate() {
-            let y = ruler_h + i as f64 * row_h;
+            let y = ruler_h + i as f64 * row_h - scroll_y;
             if y >= h {
                 break;
+            }
+            if y + row_h <= ruler_h {
+                continue;
             }
             let mid = y + row_h * 0.5;
             // ドラッグ中の行の帯だけtransientにずらす。Documentはreleaseまで触らない。
@@ -380,13 +405,14 @@ impl Widget for TimelineWidget {
                 _ => 0.0,
             };
 
+            let top = y.max(ruler_h);
             if row.is_group {
-                fill_rect(&mut s, Rect::new(0.0, y, w, y + row_h), c_panel);
+                fill_rect(&mut s, Rect::new(0.0, top, w, y + row_h), c_panel);
             }
             if hover_row == Some(i) {
                 fill_rect(
                     &mut s,
-                    Rect::new(0.0, y, w, y + row_h),
+                    Rect::new(0.0, top, w, y + row_h),
                     Color::from_rgba8(0xff, 0xff, 0xff, 0x0a),
                 );
             }
@@ -397,18 +423,21 @@ impl Widget for TimelineWidget {
                 let x0 = x_of(a + shift).max(0.0);
                 let x1 = x_of(b + shift).min(w);
                 if x1 > x0 {
-                    fill_rect(&mut s, Rect::new(x0, y, x1, y + row_h - hairline), c_hair);
+                    fill_rect(&mut s, Rect::new(x0, top, x1, y + row_h - hairline), c_hair);
                     fill_rect(
                         &mut s,
                         Rect::new(
                             x0 + hairline,
-                            y + hairline,
+                            top.max(y + hairline),
                             x1 - hairline,
                             y + row_h - 2.0 * hairline,
                         ),
                         c(row.color[0], row.color[1], row.color[2]),
                     );
                 }
+            }
+            if mid < ruler_h {
+                continue;
             }
             for kf in &row.agg {
                 let x = x_of(*kf);

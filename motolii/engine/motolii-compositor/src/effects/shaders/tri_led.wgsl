@@ -1,3 +1,13 @@
+/*{
+  "INPUTS": [
+    { "NAME": "glow", "TYPE": "float", "DEFAULT": 0.5, "MIN": 0.0, "MAX": 1.0,
+      "MAPS": [
+        { "CONST": "FALLOFF_K", "EXPR": "mix(120.0, 20.0, glow)" },
+        { "CONST": "AMBIENT", "EXPR": "mix(0.0, 0.08, glow)" }
+      ]
+    }
+  ]
+}*/
 // vgpu(vercel-labs)`triangle-led-front` の1パス版。元は2パス(led-emitters が
 // LED を texture へ描き、direct-triangle-raycast が textureLoad で読む)+ uniform
 // Config——ここでは Config の値を const へ焼き、texture read を辺上の LED 位置から

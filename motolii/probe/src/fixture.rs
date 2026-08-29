@@ -122,7 +122,6 @@ pub struct InspectorData {
     pub ident_sub: String,
     pub text: Vec<PropRow>,
     pub transform: Vec<PropRow>,
-    pub appearance: Vec<PropRow>,
     pub has_effects: bool,
 }
 
@@ -179,9 +178,6 @@ pub fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: RationalTime
         _ => 0.0,
     };
 
-    let owned = view.properties(layer);
-    let has_prop = |name: &str| owned.iter().any(|p| p.name() == name);
-
     let sel_attrs = view.attrs(layer).ok().flatten().unwrap_or_default();
     let key_count: usize = [property::POSITION, property::OPACITY]
         .iter()
@@ -216,7 +212,17 @@ pub fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: RationalTime
         _ => Vec::new(),
     };
 
-    let transform_all = vec![
+    // AEの層Transform並び: Anchor Point → Position → Scale → Rotation → Opacity。
+    let transform = vec![
+            PropRow {
+                label: "Anchor",
+                cells: [f(anchor_x), f(anchor_y), f(0.0)],
+                dims: [false, false, true],
+                keyed: keyed(property::ANCHOR),
+                property: Some(property::ANCHOR),
+                vec2: true,
+                value: Value::Vec2([anchor_x, anchor_y]),
+            },
             PropRow {
                 label: "Position",
                 cells: [px, py, f(0.0)],
@@ -236,15 +242,6 @@ pub fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: RationalTime
                 value: Value::Vec2([scale_x, scale_y]),
             },
             PropRow {
-                label: "Anchor",
-                cells: [f(anchor_x), f(anchor_y), f(0.0)],
-                dims: [false, false, true],
-                keyed: keyed(property::ANCHOR),
-                property: Some(property::ANCHOR),
-                vec2: true,
-                value: Value::Vec2([anchor_x, anchor_y]),
-            },
-            PropRow {
                 label: "Rotation",
                 cells: [String::new(), String::new(), f(rotation_v)],
                 dims: [false, false, true],
@@ -253,27 +250,22 @@ pub fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: RationalTime
                 vec2: false,
                 value: Value::F64(rotation_v),
             },
+            PropRow {
+                label: "Opacity",
+                cells: [String::new(), String::new(), opacity],
+                dims: [false, false, false],
+                keyed: keyed(property::OPACITY),
+                property: Some(property::OPACITY),
+                vec2: false,
+                value: Value::F64(opacity_v),
+            },
     ];
-    let appearance_all = vec![PropRow {
-        label: "Opacity",
-        cells: [String::new(), String::new(), opacity],
-        dims: [false, false, false],
-        keyed: keyed(property::OPACITY),
-        property: Some(property::OPACITY),
-        vec2: false,
-        value: Value::F64(opacity_v),
-    }];
-    // property: None は編集不可の行(EFFECTS流儀)なので絞り込みの対象外。
-    let has_row = |row: &PropRow| row.property.map(has_prop).unwrap_or(true);
-    let transform = transform_all.into_iter().filter(has_row).collect();
-    let appearance = appearance_all.into_iter().filter(has_row).collect();
 
     InspectorData {
         ident_name: sel_attrs.name,
         ident_sub: format!("{source_name} · {key_count} keys"),
         text,
         transform,
-        appearance,
         has_effects,
     }
 }

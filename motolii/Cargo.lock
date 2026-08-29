@@ -1679,6 +1679,7 @@ dependencies = [
  "bytemuck",
  "dioxus-native",
  "glam",
+ "keyboard-types 0.7.0",
  "macaw",
  "motolii-engine",
  "motolii-fixture",

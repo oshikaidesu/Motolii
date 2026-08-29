@@ -240,7 +240,6 @@ pub fn inspector_panel(
         ident_sub: String::new(),
         text: Vec::new(),
         transform: Vec::new(),
-        appearance: Vec::new(),
         has_effects: false,
     };
     let t = RationalTime::try_new((clock.now_sec() * 3000.0) as i64, 3000).unwrap_or(RationalTime::ZERO);
@@ -256,10 +255,6 @@ pub fn inspector_panel(
         .map(|p| content_row(p, selection.unwrap_or(LayerId(0)), t, doc, editing, revision));
     let transform_rows = inspector
         .transform
-        .iter()
-        .map(|p| prop_row(p, selection.unwrap_or(LayerId(0)), t, doc, drag, revision));
-    let appearance_rows = inspector
-        .appearance
         .iter()
         .map(|p| prop_row(p, selection.unwrap_or(LayerId(0)), t, doc, drag, revision));
     let fx_label = if inspector.has_effects { "" } else { "No shared FX" };
@@ -333,8 +328,6 @@ pub fn inspector_panel(
             }
             div { class: "sec", "TRANSFORM" }
             {transform_rows}
-            div { class: "sec", "APPEARANCE" }
-            {appearance_rows}
             div { class: "sec", "EFFECTS" }
             div { class: "prow",
                 span { class: "n empty", "{fx_label}" }
