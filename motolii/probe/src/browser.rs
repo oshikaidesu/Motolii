@@ -168,6 +168,7 @@ fn spawn_layer(
     timeline_tx: &Sender<TimelineMsg>,
     kind: NewKind,
     label: &'static str,
+    mut revision: Signal<u32>,
 ) {
     let mut d = doc.lock().unwrap();
     let layer = LayerId(d.view().next_layer_id());
@@ -191,6 +192,7 @@ fn spawn_layer(
             *layer_rows.write() = rows;
             *attrs_state.write() = attrs_vec;
             timeline_tx.send(TimelineMsg::SetRows(canvas_rows)).ok();
+            *revision.write() += 1;
             println!("PROBE room=write verdict=created kind={label} layer={}", layer.0);
         }
         Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
@@ -433,7 +435,7 @@ pub fn browser_panel(
                                     let doc = doc.clone();
                                     let clock = clock.clone();
                                     let timeline_tx = timeline_tx.clone();
-                                    move |_| spawn_layer(&doc, &clock, layer_rows, attrs_state, &timeline_tx, NewKind::Text, "text")
+                                    move |_| spawn_layer(&doc, &clock, layer_rows, attrs_state, &timeline_tx, NewKind::Text, "text", revision)
                                 },
                                 div { class: "thumb", style: "background:#222; display:flex; align-items:center; justify-content:center;",
                                     span { style: "color:#fff; font-size:32px;", "あ" }
@@ -447,7 +449,7 @@ pub fn browser_panel(
                                     let doc = doc.clone();
                                     let clock = clock.clone();
                                     let timeline_tx = timeline_tx.clone();
-                                    move |_| spawn_layer(&doc, &clock, layer_rows, attrs_state, &timeline_tx, NewKind::Rectangle, "rectangle")
+                                    move |_| spawn_layer(&doc, &clock, layer_rows, attrs_state, &timeline_tx, NewKind::Rectangle, "rectangle", revision)
                                 },
                                 div { class: "thumb", style: "background:#222; display:flex; align-items:center; justify-content:center;",
                                     div { style: "width:40%; height:40%; background:#fff;" }
@@ -461,7 +463,7 @@ pub fn browser_panel(
                                     let doc = doc.clone();
                                     let clock = clock.clone();
                                     let timeline_tx = timeline_tx.clone();
-                                    move |_| spawn_layer(&doc, &clock, layer_rows, attrs_state, &timeline_tx, NewKind::Bezier, "bezier")
+                                    move |_| spawn_layer(&doc, &clock, layer_rows, attrs_state, &timeline_tx, NewKind::Bezier, "bezier", revision)
                                 },
                                 div { class: "thumb", style: "background:#222; display:flex; align-items:center; justify-content:center;",
                                     span { style: "color:#fff; font-size:32px;", "〜" }
