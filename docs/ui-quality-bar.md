@@ -26,6 +26,23 @@
 | Browser MEDIA | 5000件のダミーasset・railフィルタ | fixture(import未実装) |
 | Browser EFFECTS | railのCOLLECTIONS/TAGS/PACKS | 死にtext |
 
+### Q0b. 触れる物は全て編集可能(2026-08-30利用者裁定)
+
+**Q0の一段強い形。**「触れそうな物は必ず機能する」だけでなく、**触れる物は編集できる**。
+読み取り専用の値を製品面に並べない — 見えているのに変えられないのは、
+利用者に「ここは触っても無駄」を覚えさせる負債。
+
+表示専用でよいのは**導出値**(行数・尺の合計など、元を変えれば従うもの)だけ。
+元の値そのものが出ているなら、その場で編集できること。
+
+制定時点の違反:
+| 場所 | 違反 |
+|---|---|
+| Inspector COLOR行 | 読み取り専用(編集の入口をBrowser側に置いた設計。**その場で打てるべき**) |
+| Inspector Z列 | 全行に `0.000` が出るが編集不可。**`property::` に `position.z` が無い**ので意味の追加が要る(裁定待ち) |
+| Inspector 識別行 | 層名が出ているが rename できない |
+| Inspector EFFECTS | param は触れるが、**エフェクト自体を外す/無効にできない** |
+
 ### Q1. 一貫した操作文法
 
 click=選択、drag=移動、端drag=trim、release=確定、cancel=復元、double-click=生成/適用、Delete=選択物の削除、Cmd+Z/Shift+Cmd+Z=undo/redo。同じ見た目の物は面をまたいで同じ文法で動く(Timeline/Stage/Inspector/Browser)。
