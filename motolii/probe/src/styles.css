@@ -676,3 +676,30 @@ body {
     font-size: var(--t-dense);
     color: var(--ink3);
 }
+
+.vgrip { cursor: col-resize; }
+.hgrip { cursor: row-resize; }
+
+.menu,
+.btab,
+.tcard:not(.disabled),
+.glyph,
+.zbtn,
+.hbtn,
+.tbtn,
+.srow {
+    cursor: pointer;
+}
+
+.prow .v:not(.blank):not(.swatch) {
+    cursor: ew-resize;
+}
+
+.prow.content-row input.v.content {
+    cursor: text;
+}
+
+.disabled,
+.tcard.disabled {
+    cursor: default;
+}

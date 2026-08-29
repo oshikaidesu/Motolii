@@ -6,6 +6,7 @@ use dioxus_native::CustomWidgetAttr;
 use crate::browser::browser_panel;
 use crate::fixture::{load_fixture, Loaded};
 use crate::inspector::inspector_panel;
+use crate::keymap::{lookup, Intent};
 use crate::session::Session;
 use crate::stage_widget::StageWidget;
 use crate::timeline_shell::timeline_shell;
@@ -37,8 +38,9 @@ pub fn app() -> Element {
 
     let mut scale_pct = use_signal(|| 100u32);
     let revision = use_signal(|| 0u32);
-    let selected = use_signal(|| None);
+    let mut selected = use_signal(|| None);
     let timeline_scroll_y = use_signal(|| 0.0f64);
+    let mut text_editing = use_signal(|| false);
 
     let (clock, ui_scale, timeline_attr, timeline_tx, stage_attr, loaded, doc, selection) = use_hook(|| {
         let Loaded { doc, ui, duration_sec } = load_fixture();
@@ -99,26 +101,31 @@ pub fn app() -> Element {
             onmouseup: move |_| {
                 *drag.write() = None;
             },
-
-            div { id: "menubar",
-                span { class: "appname", "Motolii" }
-                span { class: "menu", "File" }
-                span { class: "menu", "Edit" }
-                span {
-                    class: "menu",
-                    onclick: {
-                        let doc = doc.clone();
-                        let clock = clock.clone();
-                        let timeline_tx = timeline_tx.clone();
-                        let mut layer_rows = layer_rows;
-                        let mut attrs_state = attrs_state;
-                        move |_| {
+            // フォーカス下降/離脱をルートで受け、テキスト編集中はキーマップを止める(Q9)。
+            onfocusin: move |_| *text_editing.write() = true,
+            onfocusout: move |_| *text_editing.write() = false,
+            onkeydown: {
+                let doc = doc.clone();
+                let clock = clock.clone();
+                let selection = selection.clone();
+                let timeline_tx = timeline_tx.clone();
+                let mut layer_rows = layer_rows;
+                let mut attrs_state = attrs_state;
+                move |evt| {
+                    if text_editing() {
+                        return;
+                    }
+                    let modifiers = evt.modifiers();
+                    let Some(intent) = lookup(&evt.key(), modifiers.meta(), modifiers.shift()) else {
+                        return;
+                    };
+                    evt.prevent_default();
+                    match intent {
+                        Intent::Split => {
                             let Some(layer) = selected() else {
                                 println!("PROBE room=write verdict=split-noop reason=no-selection");
                                 return;
                             };
-                            // Split — プレイヘッドで選択層を2本に割る。30fps は
-                            // timeline_shell/timeline_widget の既存表示と同じ既定値。
                             let comp_frame = (clock.now_sec() * 30.0).round() as i64;
                             match split_layer(&doc, layer, comp_frame) {
                                 Some(tail) => {
@@ -140,9 +147,25 @@ pub fn app() -> Element {
                                 ),
                             }
                         }
-                    },
-                    "Layer"
+                        Intent::StepFrame(delta) => {
+                            let frame = (clock.now_sec() * 30.0).round() as i64 + delta;
+                            clock.seek(frame as f64 / 30.0);
+                        }
+                        Intent::Home => clock.seek(0.0),
+                        Intent::End => clock.seek(clock.duration),
+                        Intent::Deselect => {
+                            selection.set(None);
+                            selected.set(None);
+                        }
+                    }
                 }
+            },
+
+            div { id: "menubar",
+                span { class: "appname", "Motolii" }
+                span { class: "menu", "File" }
+                span { class: "menu", "Edit" }
+                span { class: "menu", "Layer" }
                 span { class: "menu", "Effect" }
                 span { class: "menu", "View" }
                 span { class: "menu", "Help" }

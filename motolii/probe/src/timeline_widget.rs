@@ -6,7 +6,10 @@ use crate::session::Selection;
 use crate::tokens::{self, UiScale};
 use anyrender::{PaintRef, PaintScene};
 use dioxus_native::prelude::{Signal, WritableExt};
-use motolii_store::{Document, Intent, LayerAttrs, LayerAttrsPatch, LayerId, LayerMeta, LayerTiming};
+use motolii_store::{
+    Document, Fps, Intent, KeyframeTrack, LayerAttrs, LayerAttrsPatch, LayerId, LayerMeta,
+    LayerTiming, RationalTime, StoreError,
+};
 use blitz_dom::node::ComputedStyles;
 use blitz_dom::Widget;
 use blitz_traits::events::{BlitzWheelDelta, UiEvent};
@@ -39,12 +42,51 @@ pub struct CanvasRow {
     pub color: [u8; 3],
 }
 
+#[derive(Clone, Copy, PartialEq)]
+enum DragMode {
+    Move,
+    TrimStart,
+    TrimEnd,
+}
+
 struct DragState {
     row: usize,
     layer: LayerId,
     orig: LayerTiming,
     grab_sec: f64,
     delta_sec: f64,
+    mode: DragMode,
+}
+
+/// 表示px基準の端当たり判定幅(hit_testの6px/8pxと同じ生値、sfac倍しない)。
+const EDGE_GRAB_PX: f64 = 6.0;
+
+/// Move で帯をずらした量だけ、その層の全 property track のキー時刻を同じ量ずらす
+/// `SetTrack` intent 群を作る。キー時刻は comp 絶対(`start` はローカル)なので、
+/// 帯だけ動かすとアニメーションが元の時刻に取り残される。
+fn keyframe_shift_intents(
+    doc: &Document,
+    layer: LayerId,
+    delta_frames: i64,
+) -> Result<Vec<Intent>, StoreError> {
+    let view = doc.view();
+    let fps = Fps::try_new(DOC_FPS as i64, 1).map_err(|e| StoreError::Property(e.to_string()))?;
+    let shift =
+        RationalTime::try_from_frame(delta_frames, fps).map_err(|e| StoreError::Property(e.to_string()))?;
+    let mut intents = Vec::new();
+    for property in view.properties(layer) {
+        let Some(track) = view.track(layer, &property)? else {
+            continue;
+        };
+        let mut shifted = KeyframeTrack::new();
+        for key in track.keys() {
+            let mut key = key.clone();
+            key.t = key.t.try_add(shift).map_err(|e| StoreError::Property(e.to_string()))?;
+            shifted.insert(key);
+        }
+        intents.push(Intent::SetTrack { layer, property, track: shifted });
+    }
+    Ok(intents)
 }
 
 pub enum TimelineMsg {
@@ -367,6 +409,20 @@ impl Widget for TimelineWidget {
                             .map(|m| m.timing)
                     });
                     if let (Some(layer), Some(orig)) = (layer, orig) {
+                        let mode = match self.rows[row_ix].span {
+                            Some((a, b)) => {
+                                let xa = (a - self.scroll_sec) * self.pps;
+                                let xb = (b - self.scroll_sec) * self.pps;
+                                if (x - xa).abs() <= EDGE_GRAB_PX {
+                                    DragMode::TrimStart
+                                } else if (x - xb).abs() <= EDGE_GRAB_PX {
+                                    DragMode::TrimEnd
+                                } else {
+                                    DragMode::Move
+                                }
+                            }
+                            None => DragMode::Move,
+                        };
                         println!("PROBE room=write drag-start row={row_ix} start={}", orig.start);
                         self.drag = Some(DragState {
                             row: row_ix,
@@ -374,6 +430,7 @@ impl Widget for TimelineWidget {
                             orig,
                             grab_sec: t,
                             delta_sec: 0.0,
+                            mode,
                         });
                     }
                 }
@@ -385,14 +442,54 @@ impl Widget for TimelineWidget {
                         return;
                     };
                     let mut doc = doc.lock().unwrap();
-                    let new_start =
-                        ((drag.orig.start as f64 + drag.delta_sec * DOC_FPS).round() as i64).max(0);
-                    let timing = LayerTiming { start: new_start, ..drag.orig };
-                    match doc.apply(Intent::SetTiming { layer: drag.layer, timing }) {
+                    let raw_delta = (drag.delta_sec * DOC_FPS).round() as i64;
+                    let timing = match drag.mode {
+                        DragMode::Move => {
+                            let new_start = (drag.orig.start + raw_delta).max(0);
+                            LayerTiming { start: new_start, ..drag.orig }
+                        }
+                        DragMode::TrimStart => {
+                            // 頭を右へ削る(delta>0) = 素材の入りが進む: source_inも同じだけ動く。
+                            let min_delta = -(drag.orig.start.min(drag.orig.source_in));
+                            let max_delta = drag.orig.duration - 1;
+                            let delta = raw_delta.clamp(min_delta, max_delta);
+                            LayerTiming {
+                                start: drag.orig.start + delta,
+                                duration: drag.orig.duration - delta,
+                                source_in: drag.orig.source_in + delta,
+                                ..drag.orig
+                            }
+                        }
+                        DragMode::TrimEnd => {
+                            let min_delta = -(drag.orig.duration - 1);
+                            let delta = raw_delta.max(min_delta);
+                            LayerTiming { duration: drag.orig.duration + delta, ..drag.orig }
+                        }
+                    };
+                    let mut intents = vec![Intent::SetTiming { layer: drag.layer, timing }];
+                    if drag.mode == DragMode::Move {
+                        let applied_delta = timing.start - drag.orig.start;
+                        if applied_delta != 0 {
+                            match keyframe_shift_intents(&doc, drag.layer, applied_delta) {
+                                Ok(more) => intents.extend(more),
+                                Err(e) => {
+                                    println!("PROBE room=write verdict=apply-error {e}");
+                                    return;
+                                }
+                            }
+                        }
+                    }
+                    match doc.apply_all(intents) {
                         Ok(_) => {
                             println!(
-                                "PROBE room=write verdict=applied SetTiming start {}->{}",
-                                drag.orig.start, new_start
+                                "PROBE room=write verdict=applied SetTiming mode={} start {}->{} dur {}->{}",
+                                match drag.mode {
+                                    DragMode::Move => "move",
+                                    DragMode::TrimStart => "trim-start",
+                                    DragMode::TrimEnd => "trim-end",
+                                },
+                                drag.orig.start, timing.start,
+                                drag.orig.duration, timing.duration
                             );
                             self.rows = extractor(&doc);
                         }
@@ -482,9 +579,13 @@ impl Widget for TimelineWidget {
             let mid = y + row_h * 0.5;
             // ドラッグ中の行の帯だけtransientにずらす。Documentはreleaseまで触らない。
             // キーはずらさない — キーフレームの時刻はcomp絶対で、timingに従わない。
-            let shift = match &self.drag {
-                Some(d) if d.row == i => d.delta_sec,
-                _ => 0.0,
+            let (shift_a, shift_b) = match &self.drag {
+                Some(d) if d.row == i => match d.mode {
+                    DragMode::Move => (d.delta_sec, d.delta_sec),
+                    DragMode::TrimStart => (d.delta_sec, 0.0),
+                    DragMode::TrimEnd => (0.0, d.delta_sec),
+                },
+                _ => (0.0, 0.0),
             };
 
             let top = y.max(ruler_h);
@@ -502,8 +603,8 @@ impl Widget for TimelineWidget {
 
             // sceneはelement境界でクリップされない — 全図形をローカル0..w/0..hへ自前で抑える。
             if let Some((a, b)) = row.span {
-                let x0 = x_of(a + shift).max(0.0);
-                let x1 = x_of(b + shift).min(w);
+                let x0 = x_of(a + shift_a).max(0.0);
+                let x1 = x_of(b + shift_b).min(w);
                 if x1 > x0 {
                     fill_rect(&mut s, Rect::new(x0, top, x1, y + row_h - hairline), c_hair);
                     fill_rect(
@@ -567,5 +668,70 @@ impl Widget for TimelineWidget {
         }
 
         s
+    }
+}
+
+#[cfg(test)]
+mod keyframe_shift_tests {
+    use super::*;
+    use motolii_store::{Composition, Interp, Keyframe, LayerSource, PropertyId, Value};
+
+    /// 帯(Move)を動かした量だけ、そのレイヤーのキーフレーム時刻も追従する不変量。
+    /// 動かす前に comp フレーム `t` にあったキーは、動かした後 `t + delta` にある。
+    #[test]
+    fn move_shifts_keyframes_by_the_same_delta() {
+        let mut doc = Document::new();
+        doc.apply(Intent::SetComposition(Composition {
+            width: 64,
+            height: 64,
+            fps: Fps::try_new(30, 1).unwrap(),
+            duration_frames: 300,
+            background: [0.0, 0.0, 0.0, 1.0],
+        }))
+        .unwrap();
+
+        let layer = LayerId(1);
+        doc.apply_all([
+            Intent::AddLayer(layer),
+            Intent::SetMeta {
+                layer,
+                meta: LayerMeta {
+                    source: LayerSource::Solid { rgba: [255, 0, 0, 255], width: 64, height: 64 },
+                    order: 0,
+                    timing: LayerTiming { start: 10, duration: 50, source_in: 0, ..Default::default() },
+                },
+            },
+        ])
+        .unwrap();
+
+        let property = PropertyId::new("opacity").unwrap();
+        let mut track = KeyframeTrack::new();
+        track.insert(Keyframe {
+            t: RationalTime::try_from_frame(15, Fps::try_new(30, 1).unwrap()).unwrap(),
+            value: Value::F64(1.0),
+            interp: Interp::Linear,
+            spatial: None,
+        });
+        doc.apply(Intent::SetTrack { layer, property: property.clone(), track }).unwrap();
+
+        // 帯を start=10 -> 40 へ動かす(delta = +30 フレーム)。
+        let orig = doc.view().track(layer, &property).unwrap().unwrap();
+        let orig_key_t = orig.keys()[0].t;
+        let delta_frames = 30;
+
+        let mut intents =
+            vec![Intent::SetTiming { layer, timing: LayerTiming { start: 40, duration: 50, source_in: 0, ..Default::default() } }];
+        intents.extend(keyframe_shift_intents(&doc, layer, delta_frames).unwrap());
+        doc.apply_all(intents).unwrap();
+
+        let shifted = doc.view().track(layer, &property).unwrap().unwrap();
+        let expect = orig_key_t
+            .try_add(RationalTime::try_from_frame(delta_frames, Fps::try_new(30, 1).unwrap()).unwrap())
+            .unwrap();
+        assert_eq!(
+            shifted.keys()[0].t,
+            expect,
+            "帯を動かした量だけキーフレームが追従していない(親を動かしたら子も追従、が破れている)"
+        );
     }
 }

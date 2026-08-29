@@ -4,6 +4,7 @@ mod app;
 mod browser;
 mod fixture;
 mod inspector;
+mod keymap;
 mod playback;
 mod session;
 mod stage_widget;
