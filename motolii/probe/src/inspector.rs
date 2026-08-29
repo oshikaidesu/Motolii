@@ -9,8 +9,14 @@ use motolii_store::{
     PropertyId, RationalTime, Value,
 };
 
-/// 1pxあたりの値の増分。仮既定 — 実測ベースの調整は次段。
-fn increment(property: &str) -> f64 {
+/// 全幅を横断するドラッグ距離。300pxは手首を大きく振らずに掃ける実用値。
+const RANGE_SPAN_PX: f64 = 300.0;
+
+/// 1pxあたりの値の増分。宣言済みrangeがあれば全幅/300pxへ正規化(Transform行はNoneのまま既存表)。
+fn increment(property: &str, range: Option<(f64, f64)>) -> f64 {
+    if let Some((min, max)) = range {
+        return (max - min) / RANGE_SPAN_PX;
+    }
     match property {
         p if p == property::SCALE => 0.005,
         p if p == property::ROTATION => 0.5,
@@ -19,15 +25,21 @@ fn increment(property: &str) -> f64 {
     }
 }
 
-/// axisの成分を`delta`だけ動かした新しい値。vec2でない行はaxisを無視する。
-fn nudge(value: &Value, vec2: bool, axis: usize, delta: f64) -> Value {
+/// axisの成分を`delta`だけ動かした新しい値。vec2でない行はaxisを無視する。rangeがあればclamp。
+fn nudge(value: &Value, vec2: bool, axis: usize, delta: f64, range: Option<(f64, f64)>) -> Value {
     match (vec2, value) {
         (true, Value::Vec2([x, y])) => {
             let mut v = [*x, *y];
             v[axis] += delta;
             Value::Vec2(v)
         }
-        (false, Value::F64(v)) => Value::F64(v + delta),
+        (false, Value::F64(v)) => {
+            let v = v + delta;
+            Value::F64(match range {
+                Some((min, max)) => v.clamp(min, max),
+                None => v,
+            })
+        }
         _ => value.clone(),
     }
 }
@@ -41,6 +53,7 @@ struct ValueDrag {
     axis: usize,
     start_x: f64,
     start_value: Value,
+    range: Option<(f64, f64)>,
     last_dx: f64,
 }
 
@@ -73,7 +86,7 @@ fn commit_drag(doc: &Arc<Mutex<Document>>, d: &ValueDrag, t: RationalTime) {
     if d.last_dx == 0.0 {
         return;
     }
-    let new_value = nudge(&d.start_value, d.vec2, d.axis, d.last_dx * increment(&d.property));
+    let new_value = nudge(&d.start_value, d.vec2, d.axis, d.last_dx * increment(&d.property, d.range), d.range);
     if let Err(e) = write_key(doc, d.layer, &d.property, new_value, t, true) {
         println!("PROBE room=write verdict=apply-error {e}");
     }
@@ -119,6 +132,7 @@ fn prop_row(
             let property = p.property.clone().unwrap();
             let vec2 = p.vec2;
             let start_value = p.value.clone();
+            let range = p.range;
             rsx!(span {
                 class: "{class}",
                 onmousedown: move |evt| {
@@ -130,6 +144,7 @@ fn prop_row(
                         axis: i,
                         start_x: x,
                         start_value: start_value.clone(),
+                        range,
                         last_dx: 0.0,
                     });
                 },
@@ -284,13 +299,13 @@ pub fn inspector_panel(
                     let dx = x - d.start_x;
                     let changed = dx != d.last_dx;
                     d.last_dx = dx;
-                    (changed, d.layer, d.property.clone(), d.vec2, d.axis, d.start_value.clone(), dx)
+                    (changed, d.layer, d.property.clone(), d.vec2, d.axis, d.start_value.clone(), d.range, dx)
                 }) else { return };
-                let (changed, layer, property, vec2, axis, start_value, dx) = state;
+                let (changed, layer, property, vec2, axis, start_value, range, dx) = state;
                 if !changed {
                     return;
                 }
-                let new_value = nudge(&start_value, vec2, axis, dx * increment(&property));
+                let new_value = nudge(&start_value, vec2, axis, dx * increment(&property, range), range);
                 if let Ok(prop) = PropertyId::new(&property) {
                     doc_move.lock().unwrap().set_transient(layer, prop, new_value.clone());
                     println!(

@@ -177,6 +177,8 @@ pub struct PropRow {
     pub vec2: bool,
     /// cellsを組んだ生の値。ドラッグ開始点・キー打刻の両方がここから読む。
     pub value: Value,
+    /// 宣言された範囲(engine側 EffectParamDescriptor::range)。無ければドラッグは無限。
+    pub range: Option<(f64, f64)>,
 }
 
 pub struct InspectorData {
@@ -280,6 +282,7 @@ pub fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: RationalTime
                         property: Some(prop.name().to_owned()),
                         vec2: false,
                         value: Value::F64(v),
+                        range: param.range,
                     })
                 })
                 .collect::<Vec<_>>()
@@ -307,6 +310,7 @@ pub fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: RationalTime
             property: None,
             vec2: false,
             value: Value::F64(0.0),
+            range: None,
         }],
         _ => Vec::new(),
     };
@@ -352,6 +356,7 @@ pub fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: RationalTime
                 property: Some(property::ANCHOR.to_owned()),
                 vec2: true,
                 value: Value::Vec2([anchor_x, anchor_y]),
+                range: None,
             },
             PropRow {
                 label: "Position",
@@ -361,6 +366,7 @@ pub fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: RationalTime
                 property: Some(property::POSITION.to_owned()),
                 vec2: true,
                 value: Value::Vec2([pos_x, pos_y]),
+                range: None,
             },
             PropRow {
                 label: "Scale",
@@ -370,6 +376,7 @@ pub fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: RationalTime
                 property: Some(property::SCALE.to_owned()),
                 vec2: true,
                 value: Value::Vec2([scale_x, scale_y]),
+                range: None,
             },
             PropRow {
                 label: "Rotation",
@@ -379,6 +386,7 @@ pub fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: RationalTime
                 property: Some(property::ROTATION.to_owned()),
                 vec2: false,
                 value: Value::F64(rotation_v),
+                range: None,
             },
             PropRow {
                 label: "Opacity",
@@ -388,6 +396,7 @@ pub fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: RationalTime
                 property: Some(property::OPACITY.to_owned()),
                 vec2: false,
                 value: Value::F64(opacity_v),
+                range: None,
             },
     ];
 

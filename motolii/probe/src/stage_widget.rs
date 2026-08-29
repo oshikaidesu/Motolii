@@ -257,6 +257,13 @@ fn compute_scale(
 /// 回転の中心はanchorのworld座標——`world(anchor_local) = position`
 /// (裁定58の affine で local=anchorを代入すると anchor 項が打ち消し合う)なので、
 /// anchor値そのものを読まずに`position`を使ってよい。Shift=15度刻みへスナップ。
+fn rotate_around(center: (f64, f64), angle_deg: f64, p: (f64, f64)) -> (f64, f64) {
+    let a = angle_deg.to_radians();
+    let (dx, dy) = (p.0 - center.0, p.1 - center.1);
+    let (s, c) = a.sin_cos();
+    (center.0 + dx * c - dy * s, center.1 + dx * s + dy * c)
+}
+
 fn compute_rotation(center: (f64, f64), grab: (f64, f64), cur: (f64, f64), orig_rotation: f64, shift: bool) -> f64 {
     let ang0 = (grab.1 - center.1).atan2(grab.0 - center.0);
     let ang1 = (cur.1 - center.1).atan2(cur.0 - center.0);
@@ -334,10 +341,14 @@ impl Widget for StageWidget {
                 let Some(layer) = self.selection.get() else { return };
                 let Some(geom) = self.selection_geom(layer) else { return };
                 let (cx, cy) = self.fit.to_comp(p.element.x as f64, p.element.y as f64);
+                // 見えている位置(回転済み)で掴めるように、どのハンドルかの判定だけ
+                // box_と同じ未回転(local)座標系で行う——カーソルをposition中心に逆回転。
+                // ドラッグ開始後の計算(grab/cur)は従来どおり生comp座標のまま。
+                let (lx, ly) = rotate_around(geom.position, -geom.rotation, (cx, cy));
                 let (bx, by, bw, bh) = geom.box_;
                 let (x0, y0, x1, y1) = (bx, by, bx + bw, by + bh);
                 let tol = 8.0 / self.fit.s.max(1e-6);
-                let near = |px: f64, py: f64| (cx - px).abs() <= tol && (cy - py).abs() <= tol;
+                let near = |px: f64, py: f64| (lx - px).abs() <= tol && (ly - py).abs() <= tol;
                 let corners = [(x0, y0, false, false), (x1, y0, true, false), (x0, y1, false, true), (x1, y1, true, true)];
                 let mut mode = corners
                     .into_iter()
@@ -353,11 +364,11 @@ impl Widget for StageWidget {
                     mode = edges.into_iter().find(|&(px, py, _)| near(px, py)).map(|(_, _, m)| m);
                 }
                 if mode.is_none() {
-                    if cx >= bx && cx <= bx + bw && cy >= by && cy <= by + bh {
+                    if lx >= bx && lx <= bx + bw && ly >= by && ly <= by + bh {
                         mode = Some(GizmoMode::Move);
                     } else {
                         let margin = 24.0 / self.fit.s.max(1e-6);
-                        if cx >= bx - margin && cx <= bx + bw + margin && cy >= by - margin && cy <= by + bh + margin {
+                        if lx >= bx - margin && lx <= bx + bw + margin && ly >= by - margin && ly <= by + bh + margin {
                             mode = Some(GizmoMode::Rotate);
                         }
                     }
@@ -517,7 +528,7 @@ impl Widget for StageWidget {
             .selection
             .get()
             .and_then(|layer| selection_geom_in(&active.engine, &view, layer, rt))
-            .map(|geom| geom.box_);
+            .map(|geom| (geom.box_, geom.position, geom.rotation));
 
         drop(view);
         drop(doc);
@@ -546,9 +557,15 @@ impl Widget for StageWidget {
         let k = if scale > 0.0 { scale } else { 1.0 };
         self.fit = Fit { s: s / k, fx: fx / k, fy: fy / k };
 
-        if let Some((bx, by, bw, bh)) = selected_box {
+        if let Some(((bx, by, bw, bh), position, rotation)) = selected_box {
             let (x0, y0) = (fx + bx * s, fy + by * s);
             let (x1, y1) = (fx + (bx + bw) * s, fy + (by + bh) * s);
+            // 回転はcomp/display両方でposition中心・同じ角度(等方scaleなので角度は不変)。
+            // 枠の絵と当たり判定はともにpaint/PointerDownでこの中心を使う。
+            let pivot = (fx + position.0 * s, fy + position.1 * s);
+            let rot = Affine::translate(pivot)
+                * Affine::rotate(rotation.to_radians())
+                * Affine::translate((-pivot.0, -pivot.1));
             let th = 1.5;
             let edges = [
                 Rect::from_origin_size((x0, y0), (x1 - x0, th)),
@@ -557,7 +574,7 @@ impl Widget for StageWidget {
                 Rect::from_origin_size((x1 - th, y0), (th, y1 - y0)),
             ];
             for edge in &edges {
-                scene.fill(Fill::NonZero, Affine::IDENTITY, PaintRef::Solid(c(tokens::ACCENT)), None, edge);
+                scene.fill(Fill::NonZero, rot, PaintRef::Solid(c(tokens::ACCENT)), None, edge);
             }
             let hs = 6.0;
             let handles = [
@@ -567,7 +584,7 @@ impl Widget for StageWidget {
             ];
             for (cx, cy) in handles {
                 let handle_rect = Rect::from_origin_size((cx - hs * 0.5, cy - hs * 0.5), (hs, hs));
-                scene.fill(Fill::NonZero, Affine::IDENTITY, PaintRef::Solid(c(tokens::ACCENT)), None, &handle_rect);
+                scene.fill(Fill::NonZero, rot, PaintRef::Solid(c(tokens::ACCENT)), None, &handle_rect);
             }
         }
 
