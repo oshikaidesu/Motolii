@@ -37,7 +37,7 @@ pub fn app() -> Element {
 
     let mut scale_pct = use_signal(|| 100u32);
 
-    let (clock, ui_scale, timeline_attr, stage_attr, loaded, doc) = use_hook(|| {
+    let (clock, ui_scale, timeline_attr, timeline_tx, stage_attr, loaded, doc) = use_hook(|| {
         let Loaded { doc, ui, duration_sec } = load_fixture();
         let session = Session::new(doc, duration_sec);
         let Session { doc, clock, scale: ui_scale } = session;
@@ -47,17 +47,20 @@ pub fn app() -> Element {
             .with_clock(clock.clone())
             .with_scale(ui_scale.clone())
             .with_document(doc.clone(), fixture::canvas_rows_from_doc);
+        let timeline_tx = timeline.sender();
         let stage = StageWidget::new(clock.clone(), doc.clone());
         (
             clock,
             ui_scale,
             CustomWidgetAttr::new(timeline),
+            timeline_tx,
             CustomWidgetAttr::new(stage),
             Arc::new(ui),
             doc,
         )
     });
 
+    let layer_rows = use_signal(|| loaded.layer_rows.clone());
     let attrs_state = use_signal(|| {
         loaded.layer_rows.iter().map(|r| (r.hidden, r.solo, r.locked)).collect::<Vec<_>>()
     });
@@ -131,7 +134,7 @@ pub fn app() -> Element {
                 id: "main",
                 style: "grid-template-columns: {bw}px 8px 1fr 8px {iw}px;",
 
-                {browser_panel(&loaded)}
+                {browser_panel(&loaded, doc.clone(), clock.clone(), layer_rows, attrs_state, timeline_tx.clone())}
 
                 div {
                     class: "vgrip",
@@ -183,7 +186,7 @@ pub fn app() -> Element {
                 },
             }
 
-            {timeline_shell(clock.clone(), playing, doc.clone(), attrs_state, &loaded.layer_rows, timeline_attr)}
+            {timeline_shell(clock.clone(), playing, doc.clone(), attrs_state, &layer_rows.read(), timeline_attr)}
 
             div { id: "status", "{loaded.status}" }
         }

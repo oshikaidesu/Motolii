@@ -1596,6 +1596,7 @@ dependencies = [
  "motolii-engine",
  "motolii-fixture",
  "motolii-store",
+ "motolii-vector",
  "peniko",
  "re_log",
  "re_renderer",

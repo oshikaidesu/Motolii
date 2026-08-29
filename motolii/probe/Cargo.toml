@@ -26,3 +26,4 @@ glam = "0.30"
 motolii-fixture = { path = "../../app/core/motolii-fixture" }
 motolii-store = { path = "../../app/core/motolii-store" }
 motolii-engine = { path = "../../app/engine/motolii-engine" }
+motolii-vector = { path = "../../app/engine/motolii-vector" }

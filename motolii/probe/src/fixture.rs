@@ -61,6 +61,7 @@ pub fn label_rgb(ix: u8) -> [u8; 3] {
     [(v >> 16) as u8, (v >> 8) as u8, v as u8]
 }
 
+#[derive(Clone)]
 pub struct LayerRow {
     pub layer: LayerId,
     pub name: String,
