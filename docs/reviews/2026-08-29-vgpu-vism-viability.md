@@ -131,3 +131,38 @@ checkout: `~/.cargo/git/checkouts/rerun-bdb1f1ac6277bf7e/7cca401/crates/viewer/r
 3. WGSL で2本目(vgpu 側の資産)。ISF(GLSL)と2系統で境界の癒着を反証する
 
 `glow.rs` は Rust 直書きのまま残す — 特権で通っている物との差を見るための反例。
+
+## 追記: paramの宣言は誰が持つか(3者で違う)
+
+利用者の問い「Inspectorにパラメータとして何を表示させたいか、vgpuではどうやっていた?
+動的値はどこで設定していた?」を実測で辿った結果。
+
+**vgpuでは動的値はシェーダではなくホスト側のTypeScriptにある。**
+`apps/docs/examples/triangle-led-front/settings.ts:62-85`:
+
+```ts
+export interface SceneTunables {
+  ledIntensity: number; brightnessMin: number;
+  brightnessMinDark: number; brightnessMax: number;
+}
+export const TUNABLE_DEFAULTS = {
+  ledIntensity: 1, brightnessMin: 0.09, brightnessMinDark: 0.05, brightnessMax: 1,
+} as const;
+```
+
+これがホストで `Config` uniform(`vec4f` × 5)へ詰められ、シェーダは `cfg.params` で受ける。
+**シェーダはstructの形だけを宣言し、名前・既定値・範囲はホストが持つ。**
+
+| | 名前と型 | 既定値・範囲 |
+|---|---|---|
+| ISF | `.fs` の `INPUTS` JSON | **同じJSON**(`default`/`min`/`max`) |
+| vgpu | WGSL の struct | **ホストのTS**(`TUNABLE_DEFAULTS`) |
+| Motolii | `EffectParamDescriptor` | **同じ構造体**(手書き) |
+
+**帰結**: WGSL単体からはInspectorを組めない。nagaでstructを読めば名前と型は取れるが、
+既定値も範囲も入っていない。`EffectParamDescriptor.range` のdocが言う
+「engine側に宣言された範囲が無ければ `None` — 無い範囲を発明しない(Q0)」がそのまま効き、
+**WGSL由来のparamは `range: None` で入るのが正しい**。
+
+既定値の宣言はシェーダの隣に要る。これがISFの `INPUTS` に相当し、**`.vism` が最終的に
+持つもの**。マニフェスト駆動の口(次の一手)は、この宣言の置き場を決める仕事でもある。
