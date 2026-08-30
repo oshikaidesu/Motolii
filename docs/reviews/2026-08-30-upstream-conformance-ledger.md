@@ -81,19 +81,44 @@ P/a (a=226/255) = 0.5540 → srgb → 0.7699 → ×a → 0.6824 → 174 = 実測
 **正しいのは export 側**(8bit の premultiplied sRGB の標準は `srgb(straight) × a`)。
 Stage 側は linear の値を sRGB フォーマットの面へ書いた副産物で、規約ではない。
 
-## 9件
+## 12件(当日の着地)
 
 | | 件 | 状態 |
 |---|---|---|
-| 1 | premultiplied な texture を `SeparateAlpha` で渡していた | **修正済み**(`tests/premultiplied.rs`) |
-| 2 | 逐次合成の accumulator が今も z=0 の全面板 | 未着手。**背景板と違い仕事が有る**(run 間で合成結果を運ぶ)ので削除では済まない |
-| 3 | `render_into` が blend mode を黙って `Normal` に落としていた | **構造は修正済み**。色の残差は9番へ |
-| 4 | fork pool の texture を `ViewBuilder` を落としてから持ち出す | 未着手(推測。`finalize_texture` と `point_cloud.rs`) |
-| 5 | 全画面三角形 VS を5箇所で自作 | 未着手。上流に `screen_triangle_vertex_shader`(`renderer/mod.rs:222`)。**`&RenderContext` が要るので `device.rs` を家に入れないと着地しない** |
-| 6 | `EffectScratch` が上流 `GpuTexturePool` の作り直し | 未着手。実害は無く維持コストのみ |
-| 7 | `begin_frame` を1描画で数回進めている | 未着手。単独では低リスク、4番の増幅器 |
-| 8 | `depth_offset` を z 跨ぎで重ね順として信頼 | 未着手。**上流が既に裁定どおり**なので、assert と run 分割を外すだけ |
-| 9 | export と Stage で premultiplied sRGB の規約が違う | 未着手。**背骨(preview = export)** |
+| 1 | premultiplied な texture を `SeparateAlpha` で渡していた | **閉** |
+| 2 | 逐次合成の accumulator が z=0 の全面板 | **閉** — 全層より奥の平面へ置く |
+| 3 | `render_into` が blend mode を黙って `Normal` に落としていた | **閉** — export と同じ `accumulate_sequential` を通る |
+| 4 | pool の texture を握らずに外へ出していた | **閉** — accumulator と点群を自前 texture へ。罠が構造ごと消えた |
+| 5 | 全画面三角形 VS を5箇所で自作 | **部分**(`blend`/`matte` は上流の頂点段へ)。残りは12番へ畳む |
+| 6 | `EffectScratch` が上流 `GpuTexturePool` の作り直し | 未着手 |
+| 7 | `begin_frame` を1描画で数回進めている | **閉(欠陥ではない)** — 下記 |
+| 8 | `depth_offset` を z 跨ぎで重ね順として信頼 | **閉** — 上流が既に裁定どおり。前提を語る記述を直した |
+| 9 | export と Stage で premultiplied sRGB の規約が違う | **閉** — Stage も `composite.wgsl` を通る |
+| 10 | `render_basic.rs` の旧・固定式経路が死蔵 | 未着手。engine から呼ばれていないのに保守対象で、色の修正が片肺になる |
+| 11 | submit ごとの `poll(wait_indefinitely)` | 未着手。層が増えるほど直列に GPU を待つ。55層コスト(B1)の主因候補 |
+| 12 | `blend`/`matte` が Vism の口を通っていない | 未着手。**5番の本体** |
+
+## 7番は欠陥ではなかった
+
+`RenderContext::begin_frame` は cpu→gpu の staging buffer を回収する口で、
+**1合成で複数回 submit する以上その回数だけ要る**。外して測ったら絵が壊れた。
+調査の見立て(「1フレーム1回の前提を破っている」)が逆だった。
+残る問題は回数ではなく `poll(wait_indefinitely)` の方 → 11番。
+
+## 12番: blend mode は特別ではない(利用者指摘)
+
+`blend.rs`/`matte.rs` は「2枚の texture を読む全画面フラグメント」で、
+ISF/`wgsl_fragment`(Vism の口)は「1枚読む全画面フラグメント」。**違いは枚数だけ。**
+にもかかわらず前者は生の `create_render_pipeline` と自前の `two_texture_layout`
+(2箇所に同じ物)を持ち、後者は上流の pipeline pool を通っている。
+
+Vism の口に backdrop を読める形を足せば、17の blend mode も4つの matte も
+**ただの Vism** になり、`blend.rs` の器は消える。`vgpu` 文書の軸A(境界の実在性)は
+ここで実証される — 外から来た Vism が blend と同じ口で backdrop を読めるなら、
+first-party だけの抜け道が無い。
+
+**式は Motolii の物(裁定67 の17モード + W3C Compositing)、器は上流の物。**
+「上流に無いから自分で持つ」で止めて、器まで自前にしていたのが見落とし。
 
 ## 9番について
 
@@ -102,6 +127,24 @@ Stage 側は linear の値を sRGB フォーマットの面へ書いた副産物
 が今まで通っていたのは、CPU 側と GPU 側が**互いに打ち消し合う形で両方間違っていた**から
 (1番の二重掛けが誤差を埋めていた)。片方を正しくしたので表に出た。
 **赤が増えたのは後退ではなく、嘘だった緑が正直になった状態。**
+
+## 上流に blend mode は無い(検証済み)
+
+`crates/{build,store,top,utils,viewer}` 全文検索で `blend_mode`/`BlendMode`/
+`HardLight`/`SoftLight`/`ColorDodge` は**0件**。全 renderer が
+`BlendState::PREMULTIPLIED_ALPHA_BLENDING` 一択。公式ドキュメント側で
+「blending/compositing」と呼ばれている物は `DrawOrder`・`DrawPhase::Transparent`・
+`ViewBuilder::composite` で、**どれも今日借りた技術層**であって合成モードではない。
+
+Rerun は可視化ツールなので、レイヤーを Multiply で重ねる欲求が無い。**再調査しないこと。**
+
+## premultiplied は「素通し」を要求できない
+
+8bit のガンマ空間 premultiplied は GPU の sRGB 復号と交換できないので、
+`[128,128,128,128]` を入れて同じバイトが出ることは原理的に無い(上流も同じ制約)。
+当日いちど「素通し」を期待値に焼いたテストを書いて自分で混乱した。
+縛るべきは **preview == export**(`tests/preview_equals_export.rs`)であって
+バイト素通しではない。
 
 ## 監督の失敗(繰り返さないため)
 
@@ -112,3 +155,7 @@ Stage 側は linear の値を sRGB フォーマットの面へ書いた副産物
    を要求するのに `device.rs` を非目標にしたので、レーンは原理的に着地できず止まった
 3. **窓を見てもらう時に起動条件を渡さなかった。**`MOTOLII_TESTDATA` 未設定で Browser が
    空になるのを「素材が消えた」と誤診しかけた(正本は `motolii/AGENTS.md`「窓の起動条件」)
+4. **調査の結論をそのまま期待値へ焼いた**(規律1違反)。1番は「確度が最も高い」と
+   報告されたが片側だけの話で、検算せずにテストへ書いた
+5. **上流に無い物を見つけると、器まで自前でよいと考えた**(12番)。式が自分の物でも
+   器は上流に在る
