@@ -8,6 +8,7 @@ mod keymap;
 mod playback;
 mod session;
 mod stage_widget;
+mod thumbnail;
 mod timeline_shell;
 mod timeline_widget;
 mod tokens;

@@ -243,7 +243,7 @@ body {
     border-right: var(--line) solid var(--dark);
     display: flex;
     flex-direction: column;
-    overflow: hidden;
+    overflow-y: auto;
     padding-bottom: var(--sp3);
 }
 
@@ -343,7 +343,7 @@ body {
     grid-template-columns: 1fr 1fr;
     gap: var(--line);
     padding: var(--line);
-    overflow: hidden;
+    overflow-y: auto;
     align-content: start;
 }
 
@@ -365,6 +365,8 @@ body {
 
 .thumb {
     height: calc(40 * var(--s) * 1px);
+    width: 100%;
+    object-fit: cover;
 }
 
 .tname {

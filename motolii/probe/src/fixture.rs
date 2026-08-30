@@ -164,6 +164,7 @@ pub struct AssetRow {
     pub kind: String,
     pub thumb: &'static str,
     pub family: AssetFamily,
+    pub path: Option<String>,
 }
 
 /// 拡張子の区分の正本は`re_importer`の`SUPPORTED_*_EXTENSIONS`。
@@ -516,6 +517,7 @@ pub fn load_fixture() -> Loaded {
         .enumerate()
         .map(|(i, a)| AssetRow {
             family: asset_family(&a.asset_type),
+            path: a.path_absolute,
             name: a.name,
             kind: a.asset_type,
             thumb: ["#6f8fb5", "#8f7fb8", "#6fb58a", "#b59a6f"][i % 4],

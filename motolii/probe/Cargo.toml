@@ -6,7 +6,9 @@ publish = false
 
 [dependencies]
 # vello固定 — vello-hybridはウィンドウ移動中に前フレームの残像が出る
-dioxus-native = { git = "https://github.com/DioxusLabs/blitz", rev = "64eb27853aa2672486b7edf825fb044be78c9db3", default-features = false, features = ["prelude", "system-fonts", "vello", "complex-scripts", "hot-reload"] }
+# net: 画像の取得担当(blitz-net)がこのfeatureでしか入らない。無いとimgは
+# file:// も data: も静かに空になる(fetchエラーも出ない)。
+dioxus-native = { git = "https://github.com/DioxusLabs/blitz", rev = "64eb27853aa2672486b7edf825fb044be78c9db3", default-features = false, features = ["prelude", "system-fonts", "vello", "complex-scripts", "hot-reload", "net"] }
 blitz-dom = { git = "https://github.com/DioxusLabs/blitz", rev = "64eb27853aa2672486b7edf825fb044be78c9db3", default-features = false, features = ["custom-widget", "autofocus"] }
 blitz-paint = { git = "https://github.com/DioxusLabs/blitz", rev = "64eb27853aa2672486b7edf825fb044be78c9db3", default-features = false, features = ["custom-widget"] }
 blitz-traits = { git = "https://github.com/DioxusLabs/blitz", rev = "64eb27853aa2672486b7edf825fb044be78c9db3", default-features = false }
@@ -29,6 +31,8 @@ motolii-store = { path = "../core/motolii-store" }
 motolii-engine = { path = "../engine/motolii-engine" }
 motolii-vector = { path = "../engine/motolii-vector" }
 motolii-media = { path = "../engine/motolii-media" }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+base64 = "0.22"
 
 [dev-dependencies]
 pollster = "0.4"

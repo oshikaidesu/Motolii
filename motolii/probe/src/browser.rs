@@ -309,9 +309,17 @@ pub fn browser_panel(
     let rail_label = rail().map_or("All media", |f| f.label());
 
     let asset_cards = shown.iter().map(|a| {
+        let preview = (a.family == fixture::AssetFamily::TwoD)
+            .then(|| a.path.as_deref())
+            .flatten()
+            .and_then(crate::thumbnail::image_data_uri);
         rsx!(
             div { class: "tcard",
-                div { class: "thumb", style: "background:{a.thumb};" }
+                if let Some(src) = preview {
+                    img { class: "thumb", src: "{src}" }
+                } else {
+                    div { class: "thumb", style: "background:{a.thumb};" }
+                }
                 span { class: "tname", "{a.name}" }
                 span { class: "tmeta", "{a.kind}" }
             }
