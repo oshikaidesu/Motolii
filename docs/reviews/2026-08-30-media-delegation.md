@@ -50,3 +50,34 @@
 最初に引いた境目「Rerun はビューアなので出力を持たない」は**間違った軸**だった。
 正しい問いは「**保守責務を自分が持つか**」で、答えは常に「持たない道を探す」。
 ffmpeg を `Command::new` で叩く自前コードは、それが読む側か書く側かに関係なくスクラッチ。
+
+## 復号ストリームの鍵(踏んだ罠)
+
+`re_renderer::video::Video::frame_at` は `VideoPlayerStreamId` を取る。**この粒度を間違えると
+どちらの方向でも壊れる。**
+
+| 鍵 | 症状 |
+|---|---|
+| **path 単位** | 同じ動画を**別の時刻**で使う層が1つのデコーダを共有し、毎フレーム別々の時刻を要求 → シークのたびに前のキーフレームまで戻って復号し直し、**止まる** |
+| **層単位**(現行) | 時刻をずらしても止まらない。ただし**ストリーム1本 = デコーダ1本** |
+
+上流の doc が規則を書いている(`re_video/src/player/mod.rs`):
+
+> `time_track_salt` refers to a unique identifier for **a certain way to play through time**.
+> For things following the given entity & component at the play head, use `AT_TIME_CURSOR_SALT`.
+
+**鍵は「表示場所」ではなく「時間の辿り方」。**厳密には `(start, source_in, speed)` が同じ層は
+共有すべきだが、**`ResolvedLayer` は `source_frame` しか持たない**(時間の写像は engine から
+意図的に隠されている、「engine はもう時間の計算をしない」)。層単位はその近似で、
+**同じ辿り方の層が無駄にデコーダを持つ**点だけが厳密解と違う。穴を開けてまで厳密化していない。
+
+**H.264 のデコードは ffmpeg CLI 越し**(`re_video` の feature: `## Decode H.264 using ffmpeg over CLI`。
+ネイティブは AV1 のみ)。ストリームを増やすほど重くなる構造なので、
+重さを疑う時は `pgrep -c ffmpeg` で数える。
+
+## 監督の観測ミス(3度目)
+
+利用者が「止まる・重い」と報告した窓は、**修正が入る12分前に起動したプロセス**だった。
+`stat` でバイナリの mtime、`ps -o lstart` で起動時刻を突き合わせて1分で判明。
+[窓は切り取る前に全体を撮る](2026-08-30-overnight-plan.md)の同型 —
+**症状を聞いたら、まず「それは今のコードか」を確かめる。**
