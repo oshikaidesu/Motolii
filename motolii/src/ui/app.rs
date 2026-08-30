@@ -4,6 +4,7 @@ use dioxus_native::prelude::*;
 use dioxus_native::CustomWidgetAttr;
 
 use crate::ui::browser::browser_panel;
+use crate::ui::dock::{Dock, Panel, Zone};
 use crate::ui::fixture::{load_fixture, Loaded};
 use crate::ui::inspector::inspector_panel;
 use crate::ui::keymap::{lookup, Intent};
@@ -35,7 +36,9 @@ pub fn app() -> Element {
     let mut inspector_w = use_signal(|| 270.0f64);
     let mut timeline_h = use_signal(|| 300.0f64);
     let mut drag = use_signal(|| Option::<DragSplit>::None);
-    let panel_tab = use_signal(|| 0u8);
+    let mut dock = use_signal(Dock::default);
+    let mut tab_drag = use_signal(|| Option::<Panel>::None);
+    let mut view_open = use_signal(|| false);
 
     let mut scale_pct = use_signal(|| 100u32);
     let revision = use_signal(|| 0u32);
@@ -81,13 +84,73 @@ pub fn app() -> Element {
     let th = timeline_h();
     let css = format!("{}{}", tokens::css_root(scale_pct()), STYLES);
 
+    let d = dock();
+    let px = |on: bool, v: f64| if on { format!("{v}px") } else { "0px".to_string() };
+    let left_w = px(!d.panels(Zone::Left).is_empty(), bw);
+    let right_w = px(!d.panels(Zone::Right).is_empty(), iw);
+    let grip_l = px(!d.panels(Zone::Left).is_empty(), 8.0);
+    let grip_r = px(!d.panels(Zone::Right).is_empty(), 8.0);
+    let bottom_h = px(!d.panels(Zone::Bottom).is_empty(), th);
+    let grip_b = px(!d.panels(Zone::Bottom).is_empty(), 8.0);
+
+    let body = |panel: Panel| -> Element {
+        match panel {
+            Panel::Browser => browser_panel(&loaded, doc.clone(), clock.clone(), layer_rows, attrs_state, timeline_tx.clone(), selected, revision),
+            Panel::Stage => rsx!(
+                div { id: "stagecol",
+                    div { id: "stagehead",
+                        span { class: "way", style: "background:var(--way-stage);" }
+                        "Stage"
+                        em { "{loaded.comp_line}" }
+                    }
+                    div { id: "stage",
+                        object { "data": stage_attr.clone() }
+                    }
+                }
+            ),
+            Panel::Inspector => inspector_panel(&doc, selected(), &clock, revision, text_editing),
+            Panel::Utility => crate::ui::utility::utility_panel(&doc, selected(), &selected_size, &gizmo_3d, &clock, revision),
+            Panel::Timeline => timeline_shell(clock.clone(), playing, doc.clone(), attrs_state, &layer_rows.read(), layer_rows, timeline_attr.clone(), selection.clone(), selected, timeline_scroll_y, timeline_tx.clone(), renaming, revision),
+        }
+    };
+
+    let zone_view = |zone: Zone| -> Element {
+        let d = dock();
+        let panels = d.panels(zone).to_vec();
+        let dropping = tab_drag().is_some();
+        let strip_class = if dropping { "ptabs drop" } else { "ptabs" };
+        rsx!(
+            div {
+                class: if panels.is_empty() { "zone empty" } else { "zone" },
+                onmouseup: move |_| {
+                    if let Some(panel) = tab_drag.write().take() {
+                        dock.write().place(panel, zone);
+                    }
+                },
+                div { class: "{strip_class}",
+                    for panel in panels.iter().copied() {
+                        span {
+                            class: if d.is_active(zone, panel) { "ptab on" } else { "ptab" },
+                            onmousedown: move |_| *tab_drag.write() = Some(panel),
+                            onclick: move |_| dock.write().set_active(zone, panel),
+                            "{panel}"
+                        }
+                    }
+                }
+                if let Some(panel) = d.active(zone) {
+                    div { class: "zbody", {body(panel)} }
+                }
+            }
+        )
+    };
+
     rsx!(
         style { {css} }
         div {
             id: "app",
             tabindex: "0",
             autofocus: "true",
-            style: "grid-template-rows: var(--section) 1fr 8px {th}px calc(20 * var(--s) * 1px);",
+            style: "grid-template-rows: var(--section) 1fr {grip_b} {bottom_h} calc(20 * var(--s) * 1px);",
             onmousemove: move |evt| {
                 if let Some(d) = drag.read().as_ref() {
                     let p = evt.data().client_coordinates();
@@ -106,6 +169,7 @@ pub fn app() -> Element {
             },
             onmouseup: move |_| {
                 *drag.write() = None;
+                *tab_drag.write() = None;
             },
             onkeydown: {
                 let doc = doc.clone();
@@ -362,7 +426,29 @@ pub fn app() -> Element {
                 span { class: "menu", "Edit" }
                 span { class: "menu", "Layer" }
                 span { class: "menu", "Effect" }
-                span { class: "menu", "View" }
+                span {
+                    class: if view_open() { "menu on" } else { "menu" },
+                    onclick: move |_| {
+                        let open = view_open();
+                        view_open.set(!open);
+                    },
+                    "View"
+                    if view_open() {
+                        div { class: "vmenu",
+                            for panel in Panel::ALL {
+                                span {
+                                    class: if d.is_visible(panel) { "vitem on" } else { "vitem" },
+                                    onclick: move |evt| {
+                                        evt.stop_propagation();
+                                        dock.write().toggle(panel);
+                                    },
+                                    if d.is_visible(panel) { "✓ " } else { "  " }
+                                    "{panel}"
+                                }
+                            }
+                        }
+                    }
+                }
                 span { class: "menu", "Help" }
                 div { class: "zoomctl",
                     span {
@@ -393,10 +479,9 @@ pub fn app() -> Element {
 
             div {
                 id: "main",
-                style: "grid-template-columns: {bw}px 8px 1fr 8px {iw}px;",
+                style: "grid-template-columns: {left_w} {grip_l} 1fr {grip_r} {right_w};",
 
-                {browser_panel(&loaded, doc.clone(), clock.clone(), layer_rows, attrs_state, timeline_tx.clone(), selected, revision)}
-
+                {zone_view(Zone::Left)}
                 div {
                     class: "vgrip",
                     onmousedown: move |evt| {
@@ -408,18 +493,7 @@ pub fn app() -> Element {
                         });
                     },
                 }
-
-                div { id: "stagecol",
-                    div { id: "stagehead",
-                        span { class: "way", style: "background:var(--way-stage);" }
-                        "Stage"
-                        em { "{loaded.comp_line}" }
-                    }
-                    div { id: "stage",
-                        object { "data": stage_attr }
-                    }
-                }
-
+                {zone_view(Zone::Center)}
                 div {
                     class: "vgrip",
                     onmousedown: move |evt| {
@@ -431,12 +505,7 @@ pub fn app() -> Element {
                         });
                     },
                 }
-
-                if panel_tab() == 0 {
-                    {inspector_panel(&doc, selected(), &clock, revision, text_editing, panel_tab)}
-                } else {
-                    {crate::ui::utility::utility_panel(&doc, selected(), &selected_size, &gizmo_3d, &clock, panel_tab, revision)}
-                }
+                {zone_view(Zone::Right)}
             }
 
             div {
@@ -451,7 +520,7 @@ pub fn app() -> Element {
                 },
             }
 
-            {timeline_shell(clock.clone(), playing, doc.clone(), attrs_state, &layer_rows.read(), layer_rows, timeline_attr, selection.clone(), selected, timeline_scroll_y, timeline_tx.clone(), renaming, revision)}
+            {zone_view(Zone::Bottom)}
 
             div { id: "status", "{loaded.status}" }
         }

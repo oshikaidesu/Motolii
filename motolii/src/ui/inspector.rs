@@ -311,7 +311,6 @@ pub(super) fn inspector_panel(
     clock: &Clock,
     mut revision: Signal<u32>,
     editing: Signal<Option<String>>,
-    tab: Signal<u8>,
 ) -> Element {
     let mut drag = use_signal(|| Option::<ValueDrag>::None);
     let mut blend_open = use_signal(|| false);
@@ -450,7 +449,6 @@ pub(super) fn inspector_panel(
                     *revision.write() += 1;
                 }
             },
-            {crate::ui::utility::panel_tabs(tab, 0)}
             div { class: "ident",
                 div {
                     b { "{inspector.ident_name}" }

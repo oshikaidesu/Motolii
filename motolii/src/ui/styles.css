@@ -457,6 +457,60 @@ body {
     color: var(--ink);
 }
 
+.menu.on {
+    color: var(--ink);
+    background: var(--raised);
+}
+
+.vmenu {
+    position: absolute;
+    margin-top: calc(14 * var(--s) * 1px);
+    display: flex;
+    flex-direction: column;
+    background: var(--raised);
+    border: var(--line) solid var(--dark);
+    z-index: 10;
+}
+
+.vitem {
+    padding: var(--sp1) var(--sp3);
+    color: var(--ink2);
+    white-space: nowrap;
+}
+
+.vitem.on {
+    color: var(--ink);
+}
+
+.zone {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--panel);
+}
+
+.zone.empty {
+    background: var(--app);
+}
+
+.zbody {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.zbody > * {
+    flex: 1;
+    min-height: 0;
+}
+
+.ptabs.drop {
+    background: var(--raised);
+    border-bottom-color: var(--accent);
+}
+
 .ptabs {
     display: flex;
     gap: 0;

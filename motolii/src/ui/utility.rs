@@ -9,16 +9,6 @@ use crate::doc::store::{
 };
 use crate::ui::playback::Clock;
 
-pub(super) fn panel_tabs(mut tab: Signal<u8>, current: u8) -> Element {
-    let cls = |n: u8| if current == n { "ptab on" } else { "ptab" };
-    rsx!(
-        div { class: "ptabs",
-            span { class: cls(0), onclick: move |_| *tab.write() = 0, "Inspector" }
-            span { class: cls(1), onclick: move |_| *tab.write() = 1, "Utility" }
-        }
-    )
-}
-
 fn vec2_at(doc: &Document, layer: LayerId, name: &str, t: RationalTime, fallback: (f64, f64)) -> (f64, f64) {
     let view = doc.view();
     let Ok(prop) = PropertyId::new(name) else {
@@ -77,7 +67,6 @@ pub(super) fn utility_panel(
     selected_size: &Arc<Mutex<Option<[f32; 2]>>>,
     gizmo_3d: &Arc<std::sync::atomic::AtomicBool>,
     clock: &Clock,
-    tab: Signal<u8>,
     mut revision: Signal<u32>,
 ) -> Element {
     let _ = revision();
@@ -100,7 +89,6 @@ pub(super) fn utility_panel(
 
     rsx!(
         div { id: "inspector",
-            {panel_tabs(tab, 1)}
             div { class: "sec", "ANCHOR" }
             if let (Some(layer), Some(size)) = (selection, size) {
                 div { class: "anchorgrid",
