@@ -31,21 +31,27 @@
 | Shift+Z / fit | 作品全体をfit表示、`Cmd+=`/`Cmd+-` zoom | view機構既存。keymap+Fitボタン接続(Q0 inventoryと同件) |
 | 数値のdrag-scrub | InspectorのX/Y等をラベルdragで増減 | DialParameter既存(fixtureで実証済み)。実データ行へ流用 |
 | Home/End | playheadを先頭/末尾へ | `set_time`既存 |
+| 層の頭/尻へ跳ぶ | 選択層の in/out へplayheadが飛ぶ | 尺は`placement`に在る。操作`Intent`追加のみ |
+| 前/次のキーへ跳ぶ | キーの在る時刻へplayheadが飛ぶ | キー時刻は読める。操作`Intent`追加のみ |
+| 層の頭/尻を現在時刻へ揃える | playhead位置でtrimする | `DragMode::Trim*`既存。打鍵の口のみ |
+| 層のrename | 層名を打ち替える | **rename自体が無い**(Q0b違反) |
+| undo/redo の打鍵 | `Cmd+Z`/`Shift+Cmd+Z` | 機構は在る。打鍵が未接続 |
 
 ## Tier 0 — 最深の反射(campaign級。名前を付けて計画する)
 
 | 反射 | 中身 | 依存 |
 |---|---|---|
-| **Space = 再生/停止** | 編集ソフトの反射の頂点。JKLシャトル・timecode実表示・playhead追従スクロール・再生中のStage連続評価が一族 | playback spine(PlaybackSession接続、audio clock)。transport一式のQ0違反もここで解消 |
+| **Space = 再生/停止**(打鍵は2026-08-30着地。JKLシャトル・playhead追従スクロール・再生中のStage連続評価は未着) | 編集ソフトの反射の頂点 | playback spine(PlaybackSession接続、audio clock)。transport一式のQ0違反もここで解消 |
 | **右クリック menu** | 文脈操作の普遍的な逃げ道(削除・複製・rename…) | context menu基盤(ObjC)。中身はTier 1/2の再掲で良い |
 
 ## Tier 2 — D2/モデルのgrainが要る反射(仕様粒→実装の二段)
 
 | 反射 | 欠け | 備考 |
 |---|---|---|
-| **Split at playhead**(Cmd+K/razor) | D2にSplitコマンド不在(実測) | SetPositionKeyTime/Remove対で確立した鏡映playbookで新設可 |
+| **属性の絞り込み**(述語) | 層あたりの「今出ている属性」がtimelineに無い — **器ごと不在** | 表示状態でありDocumentを変えない。`U`/`UU`/`SS`相当(キーか式を持つ/既定から変わった/選択中)。1属性=1文字は[deltas](motolii-deltas.md)で不採用 |
+| ~~**Split at playhead**~~ | 着地済(2026-08-30) | |
 | Rename(名前double-click) | renameコマンド不在(R2地図でも既知) | layer_names台帳は存在 |
-| 複数選択(Shift+click/marquee) | selection modelがsingle primary | U2h系譜と整合させる仕様粒 |
+| ~~複数選択~~ | 着地済(2026-08-30、`Selection`は`Vec<LayerId>`で末尾が primary) | |
 | Copy/Paste | コマンド不在 | duplicate既存が下敷き |
 | I/O点・work area | range概念が未設計 | 台帳の「Preview Range/Loop/Trim比較中」row参照 |
 | M/S(mute/solo)直クリック | layer mute/soloのD2コマンド不在(実測) | 旧「object bar read-only」は2026-08-12裁定で撤回済み |
@@ -53,6 +59,31 @@
 ## (旧Tier 3は消滅 — 2026-08-12利用者裁定)
 
 旧台帳のUX決定は[実機以前UX決定の降格](reviews/2026-08-12-pre-handson-ux-decision-demotion.md)により仮説へ降格済み。M/S直クリックは正当な反射として**Tier 2へ移動**(layer mute/soloのD2コマンドが不在のため仕様粒→実装の二段)。
+
+## 打鍵は preset であって共通集合ではない(2026-08-30 一次資料で測定)
+
+**土台=打鍵の交差集合、という取り方が成り立たない。**分割の打鍵は
+Premiere=`Cmd+K` / Resolve=`Cmd+B`(または`Cmd+\`) / Final Cut=`Cmd+B` / AE=`Cmd+Shift+D` で
+**共通打鍵が存在しない**。Resolve自身が Premiere/Final Cut 7/Avid の配置を
+**preset として読み込める** — 業界が共通打鍵を決めずに preset で解いている。
+
+**だから土台は「どのソフトにも在る*操作*」の名簿で、打鍵は preset。**
+本書が数えるのは操作であって打鍵ではない。
+
+### 同じ文字が世界をまたぐと別の意味になる
+
+初期presetをどちら寄りにするかの分岐は、実質この3行:
+
+| 文字 | AE | 一般NLE(Premiere/Resolve/FCP) |
+|---|---|---|
+| `I`/`O` | 選択層の頭/尻へ**跳ぶ** | in/out点を**打つ**(mark) |
+| `J`/`K` | 時間ルーラー上の前/次の項目へ跳ぶ | `J`/`K`/`L`=**シャトル**(逆再生/停止/再生) |
+| 分割 | `Cmd+Shift+D` | `Cmd+K`(Pr) / `Cmd+B`(Resolve, FCP) |
+
+`J`/`K`/`L`のシャトルはNLEで最も普遍的な手癖の一つで、AEはそこに別の意味を置いている。
+**AEをそのまま土台に据えるとこの層を丸ごと失う。**
+
+測定の経緯と一次資料は[打鍵の逆算](reviews/2026-08-30-ae-shortcut-backsolve.md)。
 
 ## App全域の反射(2026-08-12追補 — 利用者裁定「刻まれた文脈は今回の実装外にも及ぶ。UIが見えた今こそ全てのUXを正しくする責任がある」)
 
