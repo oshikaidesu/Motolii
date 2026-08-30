@@ -705,3 +705,10 @@ body {
 .tcard.disabled {
     cursor: default;
 }
+
+/* 基本トランスフォームより下だけが流れる — 上固定で動線を失わせない */
+.iscroll {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+}

@@ -346,6 +346,9 @@ pub fn inspector_panel(
                 span { "Z" }
                 span { class: "k", "Key" }
             }
+            div { class: "sec", "TRANSFORM" }
+            {transform_rows}
+            div { class: "iscroll",
             if !inspector.text.is_empty() {
                 div { class: "sec", "TEXT" }
                 {text_rows}
@@ -365,8 +368,6 @@ pub fn inspector_panel(
                     }
                 }
             }
-            div { class: "sec", "TRANSFORM" }
-            {transform_rows}
             div { class: "sec", "EFFECTS" }
             if inspector.effects.is_empty() {
                 div { class: "prow",
@@ -378,6 +379,7 @@ pub fn inspector_panel(
                 }
             } else {
                 {effect_rows}
+            }
             }
             div { class: "hint", "Drag to scrub · double-click to type · Esc to cancel" }
         }
