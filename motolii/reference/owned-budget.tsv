@@ -1,0 +1,18 @@
+# Motolii が**自前で持っている技術の機構**の在庫と天井。
+#
+# 憲法「作ってよいのは編集の意味とエフェクトのデータだけ。技術は rerun の部品」を、
+# 文ではなく数で見張る。**天井を超えても、下回っても落ちる** — 数はいつも現実と一致する。
+#
+# 超えた = 自前を増やした。直すには天井を自分で書き換えて commit するしかない(履歴に残る)。
+# 下回った = 減らしたのに天井が古い。下げる commit を書く(これが仕事の成果)。
+#
+# 数えるのは**機構の種類ごと**。合計1つにしない — まとめて「減った」と言えてしまうので。
+# 行数では数えない — 圧縮する力が働くだけで、自前が減らないから。
+#
+# pattern	budget	note
+create_render_pipeline	2	上流は RenderPipelineDesc のプールを持つ(effects/vism.rs が通っている口)。残り: matte・glow
+create_compute_pipeline	0	まだ1つも持っていない。増やす前に上流を探すこと
+create_shader_module	2	上流は ShaderModuleDesc + FileServer。生で作るのは matte・glow だけ
+device.create_bind_group_layout	5	上流は BindGroupLayoutDesc のプール。Vism の口はそちらを通る
+begin_render_pass	5	上流の Renderer trait は**パスを渡される**。自分で開くのは登録していない証拠
+naga::front	2	シェーダ言語のパーサ。ISF(GLSL)の入口だけ
