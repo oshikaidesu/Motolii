@@ -98,14 +98,10 @@ pub fn app() -> Element {
             Panel::Browser => browser_panel(&loaded, doc.clone(), clock.clone(), layer_rows, attrs_state, timeline_tx.clone(), selected, revision),
             Panel::Stage => rsx!(
                 div { id: "stagecol",
-                    div { id: "stagehead",
-                        span { class: "way", style: "background:var(--way-stage);" }
-                        "Stage"
-                        em { "{loaded.comp_line}" }
-                    }
                     div { id: "stage",
                         object { "data": stage_attr.clone() }
                     }
+                    div { id: "stagefoot", "{loaded.comp_line}" }
                 }
             ),
             Panel::Inspector => inspector_panel(&doc, selected(), &clock, revision, text_editing),
@@ -131,6 +127,7 @@ pub fn app() -> Element {
                     for panel in panels.iter().copied() {
                         span {
                             class: if d.is_active(zone, panel) { "ptab on" } else { "ptab" },
+                            style: if d.is_active(zone, panel) { format!("border-bottom-color: {};", panel.way()) } else { String::new() },
                             onmousedown: move |_| *tab_drag.write() = Some(panel),
                             onclick: move |_| dock.write().set_active(zone, panel),
                             "{panel}"

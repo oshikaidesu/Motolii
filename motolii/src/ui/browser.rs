@@ -439,11 +439,6 @@ pub(super) fn browser_panel(
 
     rsx!(
         div { id: "browser",
-            div { class: "ptitle",
-                span { class: "way", style: "background:var(--way-browser);" }
-                "Browser"
-                em { "LOCAL LIBRARY" }
-            }
             div { class: "btoolbar",
                 span { class: "hbtn", "‹" }
                 span { class: "hbtn", "›" }

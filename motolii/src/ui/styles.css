@@ -111,29 +111,6 @@ body {
     border-bottom: var(--line) solid var(--dark);
 }
 
-.ptitle {
-    height: var(--section);
-    flex: 0 0 auto;
-    display: flex;
-    align-items: center;
-    gap: var(--sp3);
-    padding: 0 var(--sp4);
-    font-size: var(--t-title);
-    border-bottom: var(--line) solid var(--dark);
-}
-
-.way {
-    width: calc(3 * var(--s) * 1px);
-    height: calc(12 * var(--s) * 1px);
-}
-
-.ptitle em {
-    margin-left: auto;
-    font-size: var(--t-dense);
-    color: var(--ink3);
-    font-style: normal;
-}
-
 .glyph {
     display: inline-flex;
     align-items: center;
@@ -416,26 +393,20 @@ body {
 
 #stagecol {
     display: grid;
-    grid-template-rows: var(--section) 1fr;
+    grid-template-rows: 1fr var(--section);
     background: var(--app);
     overflow: hidden;
 }
 
-#stagehead {
+#stagefoot {
     background: var(--panel);
-    border-bottom: var(--line) solid var(--dark);
+    border-top: var(--line) solid var(--dark);
     display: flex;
     align-items: center;
-    gap: var(--sp3);
+    justify-content: flex-end;
     padding: 0 var(--sp4);
-    font-size: var(--t-title);
-}
-
-#stagehead em {
-    margin-left: auto;
     font-size: var(--t-dense);
     color: var(--ink3);
-    font-style: normal;
 }
 
 #stage {
@@ -512,22 +483,30 @@ body {
 }
 
 .ptabs {
+    height: var(--section);
     display: flex;
+    align-items: stretch;
     gap: 0;
-    border-bottom: 1px solid var(--border);
+    background: var(--app);
+    border-bottom: var(--line) solid var(--dark);
     flex: 0 0 auto;
 }
 
 .ptab {
-    padding: var(--sp1) var(--sp2);
-    color: var(--ink2);
+    display: flex;
+    align-items: center;
+    padding: 0 var(--sp4);
+    color: var(--ink3);
+    background: var(--panel);
+    border-right: var(--line) solid var(--dark);
     border-bottom: 2px solid transparent;
-    cursor: default;
+    font-size: var(--t-title);
+    cursor: grab;
 }
 
 .ptab.on {
     color: var(--ink);
-    border-bottom-color: var(--way-inspector);
+    background: var(--raised);
 }
 
 .anchorgrid {

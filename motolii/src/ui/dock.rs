@@ -18,6 +18,16 @@ impl Panel {
         Panel::Timeline,
     ];
 
+    /// 部屋ごとの色。帯を畳んだので、これはタブが引き継ぐ。
+    pub(super) fn way(self) -> &'static str {
+        match self {
+            Panel::Browser => "var(--way-browser)",
+            Panel::Stage => "var(--way-stage)",
+            Panel::Inspector | Panel::Utility => "var(--way-inspector)",
+            Panel::Timeline => "var(--way-timeline)",
+        }
+    }
+
     pub(super) fn label(self) -> &'static str {
         match self {
             Panel::Browser => "Browser",
