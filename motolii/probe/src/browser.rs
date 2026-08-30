@@ -19,16 +19,33 @@ use crate::timeline_widget::TimelineMsg;
 
 const FPS: f64 = 30.0;
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 enum NewKind {
     Text,
     Rectangle,
     Bezier,
+    /// 台帳の素材を層にする。動画も静止画も同じ`LayerSource::Media`を通る。
+    Media { path: String, name: String },
 }
 
 fn new_layer_intents(layer: LayerId, order: i16, playhead: i64, duration_frames: i64, kind: NewKind) -> Vec<Intent> {
     let label_color = Some(Some((layer.0 % fixture::LABEL_PALETTE.len() as u64) as u8));
     match kind {
+        NewKind::Media { path, name } => vec![
+            Intent::AddLayer(layer),
+            Intent::SetMeta {
+                layer,
+                meta: LayerMeta {
+                    source: LayerSource::Media { path, fingerprint: None },
+                    order,
+                    timing: LayerTiming::place(playhead, None, duration_frames),
+                },
+            },
+            Intent::SetAttrs {
+                layer,
+                patch: LayerAttrsPatch { name: Some(name), label_color, ..Default::default() },
+            },
+        ],
         NewKind::Rectangle => vec![
             Intent::AddLayer(layer),
             Intent::SetMeta {
@@ -310,8 +327,28 @@ pub fn browser_panel(
 
     let asset_cards = shown.iter().map(|a| {
         let preview = a.preview.as_deref();
+        let place = a.path.clone().map(|path| {
+            let name = a.name.clone();
+            let doc = doc.clone();
+            let clock = clock.clone();
+            let timeline_tx = timeline_tx.clone();
+            move |_| {
+                spawn_layer(
+                    &doc,
+                    &clock,
+                    layer_rows,
+                    attrs_state,
+                    &timeline_tx,
+                    NewKind::Media { path: path.clone(), name: name.clone() },
+                    "media",
+                    revision,
+                );
+            }
+        });
         rsx!(
-            div { class: "tcard",
+            div {
+                class: "tcard",
+                onclick: move |evt| { if let Some(f) = &place { f(evt) } },
                 if let Some(src) = preview {
                     img { class: "thumb", src: "{src}" }
                 } else {
