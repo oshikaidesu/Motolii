@@ -286,7 +286,29 @@ pub fn browser_panel(
     let mut tab = use_signal(|| 0u8);
     let tab_class = move |n: u8| if tab() == n { "btab on" } else { "btab" };
 
-    let asset_cards = ui.assets.iter().map(|a| {
+    let mut rail = use_signal(|| Option::<fixture::AssetFamily>::None);
+    let rail_class = move |f: Option<fixture::AssetFamily>| {
+        if rail() == f {
+            "srow on"
+        } else {
+            "srow"
+        }
+    };
+    // 空のレール行を作らない
+    let families = {
+        let mut f: Vec<_> = ui.assets.iter().map(|a| a.family).collect();
+        f.sort();
+        f.dedup();
+        f
+    };
+    let shown: Vec<_> = ui
+        .assets
+        .iter()
+        .filter(|a| rail().is_none_or(|f| a.family == f))
+        .collect();
+    let rail_label = rail().map_or("All media", |f| f.label());
+
+    let asset_cards = shown.iter().map(|a| {
         rsx!(
             div { class: "tcard",
                 div { class: "thumb", style: "background:{a.thumb};" }
@@ -295,8 +317,8 @@ pub fn browser_panel(
             }
         )
     });
-    let first_asset = ui.assets.first().map(|a| a.name.clone()).unwrap_or_default();
-    let asset_count = ui.assets.len();
+    let first_asset = shown.first().map(|a| a.name.clone()).unwrap_or_default();
+    let asset_count = shown.len();
 
     rsx!(
         div { id: "browser",
@@ -478,17 +500,25 @@ pub fn browser_panel(
                 div { class: "bwork",
                     div { class: "bside",
                         div { class: "sh", "LIBRARY" }
-                        div { class: "srow on", "All media" }
-                        div { class: "srow", "Video" }
-                        div { class: "srow", "Images" }
-                        div { class: "srow", "Audio" }
+                        div {
+                            class: "{rail_class(None)}",
+                            onclick: move |_| rail.set(None),
+                            "All media"
+                        }
+                        {families.iter().copied().map(|f| rsx!(
+                            div {
+                                class: "{rail_class(Some(f))}",
+                                onclick: move |_| rail.set(Some(f)),
+                                "{f.label()}"
+                            }
+                        ))}
                         div { class: "sh", "PLACES" }
                         div { class: "srow", "Comp 1" }
                     }
                     div { class: "bresults",
                         div { class: "rhead",
                             div {
-                                b { "All media" }
+                                b { "{rail_label}" }
                                 span { class: "sub", "Library · fixture" }
                             }
                             div { class: "sp",

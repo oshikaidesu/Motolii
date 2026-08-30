@@ -163,6 +163,49 @@ pub struct AssetRow {
     pub name: String,
     pub kind: String,
     pub thumb: &'static str,
+    pub family: AssetFamily,
+}
+
+/// 拡張子の区分の正本は`re_importer`の`SUPPORTED_*_EXTENSIONS`。
+/// coreは`asset_type`を解釈しないのでこの畳み込みはfrontが持つ。
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+pub enum AssetFamily {
+    Video,
+    TwoD,
+    ThreeD,
+    Audio,
+    Data,
+    Other,
+}
+
+impl AssetFamily {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Video => "Video",
+            Self::TwoD => "2D",
+            Self::ThreeD => "3D",
+            Self::Audio => "Audio",
+            Self::Data => "Data",
+            Self::Other => "Other",
+        }
+    }
+}
+
+pub fn asset_family(asset_type: &str) -> AssetFamily {
+    let t = asset_type.to_ascii_lowercase();
+    if t.starts_with("video/") {
+        AssetFamily::Video
+    } else if t.starts_with("audio/") {
+        AssetFamily::Audio
+    } else if t.starts_with("image/") {
+        AssetFamily::TwoD
+    } else if t.starts_with("pointcloud") || t.starts_with("model/") || t.starts_with("mesh") {
+        AssetFamily::ThreeD
+    } else if t.starts_with("application/") || t.starts_with("text/") || t.starts_with("rerun") {
+        AssetFamily::Data
+    } else {
+        AssetFamily::Other
+    }
 }
 
 /// Inspector 1行。cells[i]が空文字のセルは地なし(モックの空白セルと同じ)。
@@ -427,6 +470,7 @@ pub fn load_fixture() -> Loaded {
         .into_iter()
         .enumerate()
         .map(|(i, a)| AssetRow {
+            family: asset_family(&a.asset_type),
             name: a.name,
             kind: a.asset_type,
             thumb: ["#6f8fb5", "#8f7fb8", "#6fb58a", "#b59a6f"][i % 4],
@@ -460,4 +504,27 @@ pub fn load_fixture() -> Loaded {
 pub fn fmt_timecode(sec: f64) -> String {
     let f = (sec * FPS).round() as i64;
     format!("{}:{:02}:{:02}", f / 1800, (f / 30) % 60, f % 30)
+}
+
+#[cfg(test)]
+mod asset_family_folding {
+    use super::{asset_family, AssetFamily};
+
+    #[test]
+    fn point_clouds_and_meshes_are_one_family() {
+        assert_eq!(asset_family("pointcloud.octree.v1"), AssetFamily::ThreeD);
+        assert_eq!(asset_family("model/gltf-binary"), AssetFamily::ThreeD);
+    }
+
+    #[test]
+    fn images_are_2d_and_video_is_its_own() {
+        assert_eq!(asset_family("image/png"), AssetFamily::TwoD);
+        assert_eq!(asset_family("image/svg+xml"), AssetFamily::TwoD);
+        assert_eq!(asset_family("video/mp4"), AssetFamily::Video);
+    }
+
+    #[test]
+    fn unknown_types_fall_through_instead_of_getting_their_own_box() {
+        assert_eq!(asset_family("wat/unknown"), AssetFamily::Other);
+    }
 }
