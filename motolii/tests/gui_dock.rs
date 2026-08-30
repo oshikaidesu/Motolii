@@ -73,6 +73,11 @@ impl Gui {
             .collect()
     }
 
+    /// 自前で描く widget が今いくつ生きているか。
+    fn drawing_panels(&self) -> usize {
+        self.doc.inner().custom_widget_node_ids().len()
+    }
+
     fn center_of(&mut self, selector: &str, nth: usize) -> (f32, f32) {
         let nodes = self
             .doc
@@ -107,8 +112,10 @@ impl Gui {
     }
 
     fn settle(&mut self) {
-        self.doc.poll(None);
-        self.doc.inner_mut().resolve(0.0);
+        for _ in 0..4 {
+            self.doc.poll(None);
+            self.doc.inner_mut().resolve(0.0);
+        }
     }
 
     fn press(&mut self, x: f32, y: f32) {
@@ -265,5 +272,33 @@ fn moving_a_panel_after_hiding_another_ones_body_survives() {
     assert!(
         strips.last().expect("下の置き場").contains(&"Colors".to_string()),
         "Colors が下の置き場へ移っていない: {strips:?}"
+    );
+}
+
+/// 盤面(Stage・Timeline)は自前で描く widget を持つ。置き場を移すと要素が
+/// 作り直されるので、移した先で widget が付いていないと絵が止まる。
+#[test]
+fn a_panel_that_draws_itself_still_draws_after_being_moved() {
+    let mut gui = Gui::open();
+    let before = gui.drawing_panels();
+    assert_eq!(before, 2, "Stage と Timeline が自前で描いているはず: {before}");
+
+    let tabs = gui.texts(".ptab");
+    let at = |name: &str| tabs.iter().position(|t| t == name).unwrap_or_else(|| panic!("{name} タブ"));
+    // 左へ移す。タイムラインが選ばれたままの置き場へ入れると、選ばれなかった方は
+    // そもそも描かれないので、数が減るのが正しくなってしまう。
+    let from = gui.center_of(".ptab", at("Stage"));
+    let to = gui.center_of(".ptab", at("Media"));
+    gui.drag(from, to);
+
+    let strips = gui.zone_tabs();
+    assert!(
+        strips[0].contains(&"Stage".to_string()),
+        "そもそも移っていない: {strips:?}"
+    );
+    assert_eq!(
+        gui.drawing_panels(),
+        2,
+        "移した先で widget が付いていない(CustomWidgetAttr は一度しか中身を渡せない): {strips:?}"
     );
 }

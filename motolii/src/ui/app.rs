@@ -30,6 +30,73 @@ struct DragSplit {
     orig: f64,
 }
 
+/// ウィジェットはコンポーネントの中で作る。置き場を移すと要素が作り直されるので、
+/// `CustomWidgetAttr` を app と共有すると2枚目が空になる(中身は一度しか渡せない)。
+#[component]
+fn StagePanel(
+    session: Session,
+    selected: Signal<Option<crate::doc::store::LayerId>>,
+    revision: Signal<u32>,
+    comp_line: String,
+) -> Element {
+    let attr = use_hook(|| {
+        CustomWidgetAttr::new(StageWidget::new(
+            session.clock.clone(),
+            session.doc.clone(),
+            session.selection.clone(),
+            selected,
+            revision,
+            session.selected_size.clone(),
+            session.gizmo_3d.clone(),
+        ))
+    });
+    rsx!(
+        div { id: "stagecol",
+            div { id: "stage",
+                object { "data": attr }
+            }
+            div { id: "stagefoot", "{comp_line}" }
+        }
+    )
+}
+
+#[component]
+#[allow(clippy::too_many_arguments)]
+fn TimelinePanel(
+    session: Session,
+    layer_rows: Signal<Vec<fixture::LayerRow>>,
+    attrs_state: Signal<Vec<(bool, bool, bool)>>,
+    selected: Signal<Option<crate::doc::store::LayerId>>,
+    scroll_y: Signal<f64>,
+    renaming: Signal<Option<(crate::doc::store::LayerId, String)>>,
+    revision: Signal<u32>,
+) -> Element {
+    let attr = use_hook(|| {
+        let rows = fixture::canvas_rows_from_doc(&session.doc.lock().unwrap());
+        CustomWidgetAttr::new(
+            TimelineWidget::new(rows, session.timeline_rx.clone())
+                .with_clock(session.clock.clone())
+                .with_scale(session.scale.clone())
+                .with_document(session.doc.clone(), fixture::canvas_rows_from_doc)
+                .with_selection(session.selection.clone(), selected)
+                .with_scroll_mirror(scroll_y),
+        )
+    });
+    timeline_shell(
+        session.doc.clone(),
+        attrs_state,
+        &layer_rows.read(),
+        layer_rows,
+        attr,
+        session.selection.clone(),
+        selected,
+        scroll_y,
+        session.timeline_tx.clone(),
+        renaming,
+        revision,
+    )
+}
+
 pub fn app() -> Element {
     let mut playing = use_signal(|| false);
     let mut browser_w = use_signal(|| 300.0f64);
@@ -53,33 +120,19 @@ pub fn app() -> Element {
     let text_editing = use_signal(|| Option::<String>::None);
     let renaming = use_signal(|| Option::<(crate::doc::store::LayerId, String)>::None);
 
-    let (clock, ui_scale, timeline_attr, timeline_tx, stage_attr, loaded, doc, selection, selected_size, gizmo_3d) = use_hook(|| {
+    let (session, loaded) = use_hook(|| {
         let Loaded { doc, ui, duration_sec } = load_fixture();
-        let session = Session::new(doc, duration_sec);
-        let Session { doc, clock, scale: ui_scale, selection, selected_size, gizmo_3d } = session;
-
-        let canvas_rows = fixture::canvas_rows_from_doc(&doc.lock().unwrap());
-        let timeline = TimelineWidget::new(canvas_rows)
-            .with_clock(clock.clone())
-            .with_scale(ui_scale.clone())
-            .with_document(doc.clone(), fixture::canvas_rows_from_doc)
-            .with_selection(selection.clone(), selected)
-            .with_scroll_mirror(timeline_scroll_y);
-        let timeline_tx = timeline.sender();
-        let stage = StageWidget::new(clock.clone(), doc.clone(), selection.clone(), selected, revision, selected_size.clone(), gizmo_3d.clone());
-        (
-            clock,
-            ui_scale,
-            CustomWidgetAttr::new(timeline),
-            timeline_tx,
-            CustomWidgetAttr::new(stage),
-            Arc::new(ui),
-            doc,
-            selection,
-            selected_size,
-            gizmo_3d,
-        )
+        (Session::new(doc, duration_sec), Arc::new(ui))
     });
+    let session = session.clone();
+    let timeline_tx = session.timeline_tx.clone();
+    let doc = session.doc.clone();
+    let clock = session.clock.clone();
+    let ui_scale = session.scale.clone();
+    let selection = session.selection.clone();
+    let selected_size = session.selected_size.clone();
+    let gizmo_3d = session.gizmo_3d.clone();
+
     let layer_rows = use_signal(|| loaded.layer_rows.clone());
     let attrs_state = use_signal(|| {
         loaded.layer_rows.iter().map(|r| (r.hidden, r.solo, r.locked)).collect::<Vec<_>>()
@@ -102,17 +155,23 @@ pub fn app() -> Element {
     let body = |panel: Panel| -> Element {
         match panel {
             Panel::Media | Panel::Effects | Panel::Create | Panel::Colors => browser_panel(&loaded, doc.clone(), clock.clone(), layer_rows, attrs_state, timeline_tx.clone(), selected, revision, panel, browser_rail),
-            Panel::Stage => rsx!(
-                div { id: "stagecol",
-                    div { id: "stage",
-                        object { "data": stage_attr.clone() }
-                    }
-                    div { id: "stagefoot", "{loaded.comp_line}" }
-                }
-            ),
+            Panel::Stage => rsx!(StagePanel {
+                session: session.clone(),
+                selected,
+                revision,
+                comp_line: loaded.comp_line.clone(),
+            }),
             Panel::Inspector => inspector_panel(&doc, selected(), &clock, revision, text_editing, inspector_drag, blend_open, parent_open),
             Panel::Utility => crate::ui::utility::utility_panel(&doc, selected(), &selected_size, &gizmo_3d, &clock, revision),
-            Panel::Timeline => timeline_shell(doc.clone(), attrs_state, &layer_rows.read(), layer_rows, timeline_attr.clone(), selection.clone(), selected, timeline_scroll_y, timeline_tx.clone(), renaming, revision),
+            Panel::Timeline => rsx!(TimelinePanel {
+                session: session.clone(),
+                layer_rows,
+                attrs_state,
+                selected,
+                scroll_y: timeline_scroll_y,
+                renaming,
+                revision,
+            }),
         }
     };
 
@@ -134,8 +193,10 @@ pub fn app() -> Element {
                         span {
                             class: if d.is_active(zone, panel) { "ptab on" } else { "ptab" },
                             style: if d.is_active(zone, panel) { format!("border-bottom-color: {};", panel.way()) } else { String::new() },
-                            onmousedown: move |_| *tab_drag.write() = Some(panel),
-                            onclick: move |_| dock.write().set_active(zone, panel),
+                            onmousedown: move |_| {
+                                *tab_drag.write() = Some(panel);
+                                dock.write().set_active(zone, panel);
+                            },
                             "{panel}"
                         }
                     }

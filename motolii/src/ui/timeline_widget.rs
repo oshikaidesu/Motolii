@@ -1,4 +1,5 @@
-use std::sync::mpsc::{channel, Receiver, Sender};
+use std::rc::Rc;
+use std::sync::mpsc::Receiver;
 use std::sync::{Arc, Mutex};
 
 use crate::ui::playback::Clock;
@@ -177,8 +178,7 @@ pub(super) enum TimelineMsg {
 }
 
 pub(super) struct TimelineWidget {
-    tx: Sender<TimelineMsg>,
-    rx: Receiver<TimelineMsg>,
+    rx: Rc<Receiver<TimelineMsg>>,
     rows: Vec<CanvasRow>,
     markers: Vec<f64>,
     pps: f64,
@@ -200,10 +200,8 @@ pub(super) struct TimelineWidget {
 }
 
 impl TimelineWidget {
-    pub(super) fn new(rows: Vec<CanvasRow>) -> Self {
-        let (tx, rx) = channel();
+    pub(super) fn new(rows: Vec<CanvasRow>, rx: Rc<Receiver<TimelineMsg>>) -> Self {
         Self {
-            tx,
             rx,
             rows,
             markers: Vec::new(),
@@ -340,10 +338,6 @@ impl TimelineWidget {
             }
         }
         best.map(|(ki, _)| (row_ix, ki))
-    }
-
-    pub(super) fn sender(&self) -> Sender<TimelineMsg> {
-        self.tx.clone()
     }
 
     fn process_messages(&mut self) {
