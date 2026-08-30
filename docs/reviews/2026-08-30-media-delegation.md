@@ -81,3 +81,48 @@ ffmpeg を `Command::new` で叩く自前コードは、それが読む側か書
 `stat` でバイナリの mtime、`ps -o lstart` で起動時刻を突き合わせて1分で判明。
 [窓は切り取る前に全体を撮る](2026-08-30-overnight-plan.md)の同型 —
 **症状を聞いたら、まず「それは今のコードか」を確かめる。**
+
+## 委譲が止まる場所 — `probe.rs`(実測後の訂正)
+
+**当初「`probe.rs` は `re_video::demux` へ委譲できる」と書いたが、誤り。**
+
+値そのものは重なる(`coded_dimensions`=width/height、`duration()`、`num_samples()`=nb_frames)。
+**しかし覆う範囲が違う。**
+
+`probe()` は先頭 video stream を要求するので **audio-only ファイルで必ず失敗する**(裁定274)。
+そのため `probe_container` が別に在り、video の有無を問わず container 内の全 stream を
+列挙して `media_frames`/`media_duration` の正本になっている
+(`motolii-engine/src/lib.rs:209` の `containers`、回帰テストは
+`engine/motolii-engine/tests/media_frames.rs`)。
+
+**`re_video` は動画専用なのでこの役目を代われない。**`probe.rs` は残す。
+
+### 実際に発注して確かめた(差分は破棄)
+
+`MediaInfo` の4フィールドだけ `re_video` から取るレーンを出したところ、
+**648行 → 726行に増えた**。`ContainerInfo` を非目標に切ったせいで ffprobe の解析が居座り、
+**同じ値の出所が2つになっただけ**で ffprobe の起動回数も行数も減らなかった(Q5違反)。
+発注の家の切り方の失敗(`motolii-dispatch` §2.5、同日3度目)。
+
+### 副産物(残す価値のある実測)
+
+`nb_frames / fps` で尺を導出すると **ffprobe の値と一致しない**。
+実素材(sample.mp4)で 1440/24 = 60.0s に対し ffprobe は 60.095s。
+edit list / タイムスタンプの不整合で、バグではなく素材の実態。
+尺が要る時は**サンプルの提示時刻から計算した値**を使う
+(`VideoDataDescription::duration()` はそれをやっている)。
+
+## 委譲の最終状態
+
+| ファイル | 行数 | 結末 |
+|---|---|---|
+| `decode.rs` | 281 | **削除**(`re_renderer::video` へ) |
+| `preview.rs` | 130 | **削除**(decode に依存した二世代前の島) |
+| `waveform.rs` | 523 | **削除**(未配線。必要なら `symphonia`) |
+| `mux.rs` | 476 | **削除**(未配線。必要なら `ffmpeg-sidecar`) |
+| `probe.rs` | 648 | **残す** — audio-only を覆うため上流に相手が居ない |
+| `encode.rs` | 222 | 残(書き出し。`ffmpeg-sidecar` 候補、未着手) |
+| `point_cloud.rs` | 207 | 残(`re_importer` 候補、未着手) |
+
+2673 → 1251行。**削れたのは「上流に在る物」と「繋がっていない物」で、
+残ったのは「上流に無い役目を持つ物」。**
