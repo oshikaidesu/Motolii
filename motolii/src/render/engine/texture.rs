@@ -340,10 +340,13 @@ impl Engine {
                         .push(format!("動画にタイムスケールが無い: {path}"));
                     return Ok((None, natural));
                 };
-                let video_time = re_video::Time::from_secs(
-                    frame as f64 / info.fps.as_f64(),
-                    timescale,
-                );
+                // frame → 時刻は正準口を通す(浮動小数の割り算で写さない)。
+                // `re_video::Time::from_secs` が秒の f64 を要求するので、
+                // 有理数で写してから最後に一度だけ f64 にする。
+                let secs = crate::doc::core::RationalTime::try_from_frame(frame, info.fps)
+                    .map_err(|e| crate::render::engine::EngineError::Time(e.to_string()))?
+                    .as_seconds_f64();
+                let video_time = re_video::Time::from_secs(secs, timescale);
                 let stream_id = re_video::player::VideoPlayerStreamId(layer_stream_id(layer, path));
                 let source = re_video::player::VideoSliceSource(bytes);
                 let output = video.frame_at(

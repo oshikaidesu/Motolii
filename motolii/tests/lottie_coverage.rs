@@ -5,7 +5,7 @@ use std::path::PathBuf;
 const STATUSES: &[&str] = &["採用済", "採用予定", "不採用", "未判定", "該当なし"];
 
 fn reference_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../reference")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("reference")
 }
 
 fn own_props(node: &serde_json::Value, out: &mut Vec<(String, String)>) {
@@ -232,7 +232,7 @@ fn kebab(name: &str) -> String {
 
 #[test]
 fn adopted_rows_point_at_real_code() {
-    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let mut sources = String::new();
     collect_sources(&root, &mut sources);
     assert!(!sources.is_empty(), "走査対象のコードが無い");

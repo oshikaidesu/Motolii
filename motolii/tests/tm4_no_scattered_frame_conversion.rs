@@ -34,7 +34,7 @@ fn is_allowed(path: &Path) -> bool {
 
 #[test]
 fn workspace_has_no_scattered_time_to_frame_f64_paths() {
-    let workspace = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let workspace = Path::new(env!("CARGO_MANIFEST_DIR"));
     let mut files = Vec::new();
     collect_rs_files(&workspace, &mut files);
     assert!(
@@ -46,6 +46,10 @@ fn workspace_has_no_scattered_time_to_frame_f64_paths() {
     let mut violations = Vec::new();
     for path in files {
         if is_allowed(&path) {
+            continue;
+        }
+        // 禁止パターンの文字列そのものを持つ番人自身は数えない。
+        if path.file_name().and_then(|n| n.to_str()) == Some("tm4_no_scattered_frame_conversion.rs") {
             continue;
         }
         let Ok(text) = std::fs::read_to_string(&path) else {
