@@ -28,6 +28,12 @@ pub(crate) enum IsfError {
     Validate(String),
     #[error("naga が WGSL を書き出せない: {0}")]
     WgslWrite(String),
+    #[error(
+        "PERSISTENT なバッファは採らない(裁定 2026-07-23: StatefulFilter 拒否)。\
+         Motolii は任意の時刻へ飛べるので、フレームを跨ぐ持ち越しは絵を操作の履歴の\
+         関数にしてしまう。時間を跨ぐ表現は TemporalFootprint(窓の宣言)側で受ける"
+    )]
+    PersistentBuffer,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -80,10 +86,29 @@ pub struct IsfInput {
     pub maps: Option<serde_json::Value>,
 }
 
+/// ISF の `PASSES` の1つ。**1フレーム内の中間ターゲットだけ**を採る。
+///
+/// `PERSISTENT`(フレームを跨いで持ち越すバッファ)は**採らない** — 裁定
+/// 2026-07-23「前 frame を plugin へ隠す StatefulFilter は拒否する」。Motolii の時間は
+/// 任意の t へ飛べるので、持ち越しは絵を操作の履歴の関数にしてしまう(スクラブで
+/// 壊れる・Preview と Export が一致しない・ゴールデンが再現しない)。時間を跨ぐ表現は
+/// 予約済みの `TemporalFootprint`(窓を宣言して Host が解決する)側で受ける。
+///
+/// `WIDTH`/`HEIGHT` の式も採っていない(DDMathParser 相当の式評価器を持つことになる)。
+/// 中間ターゲットは常に描画サイズ。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct IsfPass {
+    /// 後続のパスから**この名前で読める**。最後のパスは省略でき、呼び手の出力へ描く。
+    pub target: Option<String>,
+    /// 32bit float の中間(蓄積・HDR)。
+    pub float: bool,
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct IsfManifest {
     pub description: Option<String>,
     pub inputs: Vec<IsfInput>,
+    pub passes: Vec<IsfPass>,
 }
 
 impl IsfManifest {
@@ -140,7 +165,35 @@ pub(crate) fn parse_isf_source(source: &str) -> Result<(IsfManifest, String), Is
             });
         }
     }
-    Ok((IsfManifest { description, inputs }, body))
+    let mut passes = Vec::new();
+    if let Some(array) = value.get("PASSES").and_then(|v| v.as_array()) {
+        for entry in array {
+            let truthy = |key: &str| {
+                entry
+                    .get(key)
+                    .map(|v| v.as_bool().unwrap_or(v.as_i64().unwrap_or(0) != 0))
+                    .unwrap_or(false)
+            };
+            if truthy("PERSISTENT") {
+                return Err(IsfError::PersistentBuffer);
+            }
+            passes.push(IsfPass {
+                target: entry
+                    .get("TARGET")
+                    .and_then(|v| v.as_str())
+                    .map(str::to_owned),
+                float: truthy("FLOAT"),
+            });
+        }
+    }
+    Ok((
+        IsfManifest {
+            description,
+            inputs,
+            passes,
+        },
+        body,
+    ))
 }
 
 fn read_components(value: Option<&serde_json::Value>) -> [f32; 4] {
@@ -335,6 +388,36 @@ mod tests {
 
         assert!(body.contains("void main()"));
         assert!(body.contains("IMG_THIS_PIXEL(inputImage)"));
+    }
+
+    #[test]
+    fn reads_passes_and_refuses_persistent_buffers() {
+        let with_passes = r#"/*{
+  "INPUTS": [],
+  "PASSES": [
+    { "TARGET": "bright", "FLOAT": true },
+    { }
+  ]
+}*/
+void main() {}"#;
+        let (manifest, _) = parse_isf_source(with_passes).expect("PASSES を読める");
+        assert_eq!(manifest.passes.len(), 2);
+        assert_eq!(manifest.passes[0].target.as_deref(), Some("bright"));
+        assert!(manifest.passes[0].float);
+        assert_eq!(manifest.passes[1].target, None);
+
+        let persistent = r#"/*{
+  "INPUTS": [],
+  "PASSES": [ { "TARGET": "acc", "PERSISTENT": true } ]
+}*/
+void main() {}"#;
+        assert!(
+            matches!(
+                parse_isf_source(persistent),
+                Err(IsfError::PersistentBuffer)
+            ),
+            "PERSISTENT は受け付けない(StatefulFilter 拒否)"
+        );
     }
 
     #[test]
