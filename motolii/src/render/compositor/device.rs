@@ -25,7 +25,12 @@ impl Compositor {
         let ctx = RenderContext::new_from_device(device, queue, output_format, config_provider)
             .map_err(|e| CompositorError::Context(e.to_string()))?;
 
-        let glow_pipelines = effects::GlowPipelines::new(&ctx.device);
+        let glow_vism = effects::WgslFragmentProgram::compile(
+            &ctx,
+            "glow",
+            effects::GLOW_SOURCE,
+            effects::FLOAT_TARGET_FORMAT,
+        );
         let isf_bloom = effects::IsfProgram::compile(
             &ctx,
             effects::BLOOM_SOURCE,
@@ -64,7 +69,7 @@ impl Compositor {
             next_readback: 1,
             next_effect_key: 1,
             effect_scratch: effects::EffectScratch::default(),
-            glow_pipelines,
+            glow_vism,
             isf_bloom,
             wgsl_gradient,
             wgsl_tri_led,

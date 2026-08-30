@@ -1,16 +1,15 @@
 
 use std::collections::HashMap;
 
-mod glow;
 pub(crate) mod isf;
-mod vism;
+pub(crate) mod vism;
 mod wgsl_fragment;
 
-pub(crate) use glow::{GlowPipelines, GLOW_INTERMEDIATE_FORMAT};
 pub use isf::{IsfInput, IsfInputType, IsfManifest};
+pub(crate) use vism::FLOAT_TARGET_FORMAT;
 pub(crate) use isf::{IsfProgram, BLOOM_SOURCE, ISF_TARGET_FORMAT};
 pub(crate) use wgsl_fragment::{
-    WgslFragmentProgram, BLEND_SOURCE, MATTE_SOURCE, GRADIENT_SOURCE, GRADIENT_TARGET_FORMAT, TRI_LED_SOURCE,
+    WgslFragmentProgram, BLEND_SOURCE, GLOW_SOURCE, MATTE_SOURCE, GRADIENT_SOURCE, GRADIENT_TARGET_FORMAT, TRI_LED_SOURCE,
     TRI_LED_TARGET_FORMAT, VELLO_BLEND_PRELUDE,
 };
 
@@ -46,7 +45,7 @@ impl EffectPass {
     pub(crate) fn intermediate_format(&self) -> Option<wgpu::TextureFormat> {
         match self {
             EffectPass::Identity => None,
-            EffectPass::Glow { .. } => Some(GLOW_INTERMEDIATE_FORMAT),
+            EffectPass::Glow { .. } => Some(FLOAT_TARGET_FORMAT),
             EffectPass::Isf { .. } => Some(ISF_TARGET_FORMAT),
             EffectPass::Gradient => Some(GRADIENT_TARGET_FORMAT),
             EffectPass::TriLed => Some(TRI_LED_TARGET_FORMAT),

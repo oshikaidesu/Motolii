@@ -230,7 +230,8 @@ pub struct Compositor {
     pub(crate) next_readback: u64,
     pub(crate) next_effect_key: u64,
     pub(crate) effect_scratch: effects::EffectScratch,
-    pub(crate) glow_pipelines: effects::GlowPipelines,
+    /// 明部を広げて足す Vism(vism/glow.wgsl、4段。段は PASSES が宣言する)。
+    pub(crate) glow_vism: effects::WgslFragmentProgram,
     pub(crate) isf_bloom: effects::IsfProgram,
     pub(crate) wgsl_gradient: effects::WgslFragmentProgram,
     pub(crate) wgsl_tri_led: effects::WgslFragmentProgram,

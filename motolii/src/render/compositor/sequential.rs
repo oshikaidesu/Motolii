@@ -161,12 +161,15 @@ impl Compositor {
                                 },
                             )
                         });
-                        self.blend_vism.record_over(
-                            &self.ctx,
+                        let Self { ctx, blend_vism, effect_scratch, .. } = self;
+                        blend_vism.record_over(
+                            ctx,
                             encoder,
+                            effect_scratch,
                             &[&dst_view, &src_view],
                             &out_view,
                             &[("mode".to_owned(), mode_index as f32)],
+                            [comp.width as f32, comp.height as f32],
                         );
 
                         self.next_effect_key += 1;
@@ -675,12 +678,15 @@ impl Compositor {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("motolii-compositor-matte-pass-encoder"),
             });
-        self.matte_vism.record_over(
-            &self.ctx,
+        let Self { ctx, matte_vism, effect_scratch, .. } = self;
+        matte_vism.record_over(
+            ctx,
             &mut encoder,
+            effect_scratch,
             &[&layer_view, &matte_view],
             &out_view,
             &[("mode".to_owned(), matte::matte_mode_index(mode) as f32)],
+            [comp.width as f32, comp.height as f32],
         );
         self.pending.push(encoder.finish());
 

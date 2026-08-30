@@ -346,17 +346,26 @@ impl IsfProgram {
         })
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn record(
         &self,
         ctx: &RenderContext,
         encoder: &mut wgpu::CommandEncoder,
+        scratch: &mut super::EffectScratch,
         source_view: &wgpu::TextureView,
         dst_view: &wgpu::TextureView,
         params: &[(String, f32)],
         render_size: [f32; 2],
     ) {
-        self.inner
-            .record(ctx, encoder, &[source_view], dst_view, params, render_size);
+        self.inner.record(
+            ctx,
+            encoder,
+            scratch,
+            &[source_view],
+            dst_view,
+            params,
+            render_size,
+        );
     }
 }
 

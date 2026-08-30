@@ -2,6 +2,40 @@
 use crate::render::compositor::*;
 
 impl Compositor {
+    // `&mut EffectScratch` と Vism を同時に触るための分割借用。self をまとめて
+    // 借りると衝突するので、必要な場所だけ field ごとに分ける。
+    fn record_isf(
+        &mut self,
+        encoder: &mut wgpu::CommandEncoder,
+        src_view: &wgpu::TextureView,
+        dst_view: &wgpu::TextureView,
+        params: &[(String, f32)],
+        render_size: [f32; 2],
+    ) {
+        let Self { ctx, isf_bloom, effect_scratch, .. } = self;
+        isf_bloom.record(ctx, encoder, effect_scratch, src_view, dst_view, params, render_size);
+    }
+
+    fn record_gradient(
+        &mut self,
+        encoder: &mut wgpu::CommandEncoder,
+        dst_view: &wgpu::TextureView,
+        render_size: [f32; 2],
+    ) {
+        let Self { ctx, wgsl_gradient, effect_scratch, .. } = self;
+        wgsl_gradient.record(ctx, encoder, effect_scratch, dst_view, render_size);
+    }
+
+    fn record_tri_led(
+        &mut self,
+        encoder: &mut wgpu::CommandEncoder,
+        dst_view: &wgpu::TextureView,
+        render_size: [f32; 2],
+    ) {
+        let Self { ctx, wgsl_tri_led, effect_scratch, .. } = self;
+        wgsl_tri_led.record(ctx, encoder, effect_scratch, dst_view, render_size);
+    }
+
     pub(crate) fn effective_layer_textures(
         &mut self,
         layers: &[LayerWithPasses],
@@ -145,59 +179,32 @@ impl Compositor {
                             },
                         );
 
-                        let bloom = self.effect_scratch.acquire(
-                            &self.ctx.device,
-                            padded_width,
-                            padded_height,
-                            effects::GLOW_INTERMEDIATE_FORMAT,
-                        );
-                        let blur_ping = self.effect_scratch.acquire(
-                            &self.ctx.device,
-                            padded_width,
-                            padded_height,
-                            effects::GLOW_INTERMEDIATE_FORMAT,
-                        );
-                        let bloom_view = bloom.create_view(&Default::default());
-                        let blur_ping_view = blur_ping.create_view(&Default::default());
                         let dst_view = scratch.create_view(&Default::default());
-
-                        self.glow_pipelines.record(
-                            &self.ctx.device,
-                            &self.ctx.queue,
+                        let Self { ctx, glow_vism, effect_scratch, .. } = self;
+                        glow_vism.record_over(
+                            ctx,
                             encoder,
-                            &padded_source_view,
-                            &bloom_view,
-                            &blur_ping_view,
+                            effect_scratch,
+                            &[&padded_source_view],
                             &dst_view,
-                            *threshold,
-                            *intensity,
-                            *radius,
+                            &[
+                                ("threshold".to_owned(), *threshold),
+                                ("intensity".to_owned(), *intensity),
+                                ("radius".to_owned(), *radius),
+                            ],
+                            [padded_width as f32, padded_height as f32],
                         );
-
-                        checked_out.push((
+                        effect_scratch.release(
                             padded_width,
                             padded_height,
                             lwp.layer.texture.format(),
                             padded_source,
-                        ));
-                        checked_out.push((
-                            padded_width,
-                            padded_height,
-                            effects::GLOW_INTERMEDIATE_FORMAT,
-                            bloom,
-                        ));
-                        checked_out.push((
-                            padded_width,
-                            padded_height,
-                            effects::GLOW_INTERMEDIATE_FORMAT,
-                            blur_ping,
-                        ));
+                        );
                     }
                     EffectPass::Isf { params } => {
                         let src_view = src.texture.create_view(&Default::default());
                         let dst_view = scratch.create_view(&Default::default());
-                        self.isf_bloom.record(
-                            &self.ctx,
+                        self.record_isf(
                             encoder,
                             &src_view,
                             &dst_view,
@@ -207,11 +214,11 @@ impl Compositor {
                     }
                     EffectPass::Gradient => {
                         let dst_view = scratch.create_view(&Default::default());
-                        self.wgsl_gradient.record(&self.ctx, encoder, &dst_view);
+                        self.record_gradient(encoder, &dst_view, [width as f32, height as f32]);
                     }
                     EffectPass::TriLed => {
                         let dst_view = scratch.create_view(&Default::default());
-                        self.wgsl_tri_led.record(&self.ctx, encoder, &dst_view);
+                        self.record_tri_led(encoder, &dst_view, [width as f32, height as f32]);
                     }
                 }
             }

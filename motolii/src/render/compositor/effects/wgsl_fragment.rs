@@ -26,6 +26,8 @@ pub(crate) const BLEND_SOURCE: &str = include_str!("../../../../vism/blend.wgsl"
 
 pub(crate) const MATTE_SOURCE: &str = include_str!("../../../../vism/matte.wgsl");
 
+pub(crate) const GLOW_SOURCE: &str = include_str!("../../../../vism/glow.wgsl");
+
 /// 借りた式(`reference/vello-blend.wgsl`、vello_shaders 0.10.0 原文)。
 /// W3C Compositing の 16 mix + 13 compose がここに在る。Motolii は式を持たない。
 pub(crate) const VELLO_BLEND_PRELUDE: &str = include_str!("../../../../reference/vello-blend.wgsl");
@@ -114,21 +116,34 @@ impl WgslFragmentProgram {
         &self,
         ctx: &RenderContext,
         encoder: &mut wgpu::CommandEncoder,
+        scratch: &mut super::EffectScratch,
         dst_view: &wgpu::TextureView,
+        render_size: [f32; 2],
     ) {
-        self.inner.record(ctx, encoder, &[], dst_view, &[], [0.0, 0.0]);
+        self.inner
+            .record(ctx, encoder, scratch, &[], dst_view, &[], render_size);
     }
 
     /// 宣言した image 入力へ順に texture を渡して描く。
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn record_over(
         &self,
         ctx: &RenderContext,
         encoder: &mut wgpu::CommandEncoder,
+        scratch: &mut super::EffectScratch,
         sources: &[&wgpu::TextureView],
         dst_view: &wgpu::TextureView,
         params: &[(String, f32)],
+        render_size: [f32; 2],
     ) {
-        self.inner
-            .record(ctx, encoder, sources, dst_view, params, [0.0, 0.0]);
+        self.inner.record(
+            ctx,
+            encoder,
+            scratch,
+            sources,
+            dst_view,
+            params,
+            render_size,
+        );
     }
 }
