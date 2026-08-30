@@ -6,6 +6,14 @@
     box-sizing: border-box;
 }
 
+/* 既定の user-select:auto はテキストノード上のドラッグを選択へ奪う
+   (blitz-dom events/pointer.rs の DragMode::Selecting)。ラベルの上から
+   始めたスクラブが効かなくなるので、UI 面では選択させない。
+   input は blitz が別経路で扱うので影響を受けない。 */
+* {
+    user-select: none;
+}
+
 html {
     background: var(--app);
     color: var(--ink);
