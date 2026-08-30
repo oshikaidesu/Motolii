@@ -28,19 +28,20 @@ fn doc_with_comp() -> Document {
     doc
 }
 
-fn place_solid(doc: &mut Document, layer: LayerId, rgba: [u8; 4], order: i16) {
+fn place_rect(doc: &mut Document, layer: LayerId, rgba: [u8; 4], order: i16) {
     doc.apply(Intent::AddLayer(layer)).unwrap();
     doc.apply(Intent::SetMeta {
         layer,
         meta: LayerMeta {
-            source: LayerSource::Solid {
-                rgba,
-                width: W,
-                height: H,
-            },
+            source: LayerSource::Shape,
             order,
             timing: LayerTiming::place(0, None, 100_000),
         },
+    })
+    .unwrap();
+    doc.apply(Intent::SetShapes {
+        layer,
+        shapes: vec![motolii::doc::store::rect_shape(rgba, [W as f32, H as f32])],
     })
     .unwrap();
 }
@@ -327,8 +328,8 @@ fn max_abs_diff(a: &[u8], b: &[u8]) -> u8 {
 fn matte_zero_copy_matches_cpu_export_within_tolerance() {
     let mut doc = doc_with_comp();
     let (base, top) = (LayerId(1), LayerId(2));
-    place_solid(&mut doc, base, [0, 0, 255, 128], 0);
-    place_solid(&mut doc, top, [255, 0, 0, 255], 1);
+    place_rect(&mut doc, base, [0, 0, 255, 128], 0);
+    place_rect(&mut doc, top, [255, 0, 0, 255], 1);
     doc.apply(Intent::SetAttrs {
         layer: top,
         patch: LayerAttrsPatch {
@@ -378,8 +379,8 @@ fn all_four_matte_modes_render_through_zero_copy_path() {
     ] {
         let mut doc = doc_with_comp();
         let (base, top) = (LayerId(1), LayerId(2));
-        place_solid(&mut doc, base, [200, 200, 200, 200], 0);
-        place_solid(&mut doc, top, [255, 0, 0, 255], 1);
+        place_rect(&mut doc, base, [200, 200, 200, 200], 0);
+        place_rect(&mut doc, top, [255, 0, 0, 255], 1);
         doc.apply(Intent::SetAttrs {
             layer: top,
             patch: LayerAttrsPatch {

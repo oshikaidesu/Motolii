@@ -149,11 +149,7 @@ pub fn build() -> Fixture {
         intents.push(Intent::SetMeta {
             layer: id,
             meta: LayerMeta {
-                source: LayerSource::Solid {
-                    rgba: spec.rgba,
-                    width: 320,
-                    height: 180,
-                },
+                source: LayerSource::Shape,
                 order: index as i16,
                 timing: LayerTiming {
                     start: spec.start,
@@ -162,6 +158,34 @@ pub fn build() -> Fixture {
                     speed: Speed::NORMAL,
                 },
             },
+        });
+        intents.push(Intent::SetShapes {
+            layer: id,
+            shapes: vec![crate::doc::store::rect_shape(spec.rgba, [320.0, 180.0])],
+        });
+        let mut anchor = KeyframeTrack::new();
+        anchor.insert(Keyframe {
+            t: RationalTime::ZERO,
+            value: Value::Vec2([160.0, 90.0]),
+            interp: Interp::Linear,
+            spatial: None,
+        });
+        intents.push(Intent::SetTrack {
+            layer: id,
+            property: PropertyId::new(property::ANCHOR).expect("anchor は予約語ではない"),
+            track: anchor,
+        });
+        let mut position = KeyframeTrack::new();
+        position.insert(Keyframe {
+            t: RationalTime::ZERO,
+            value: Value::Vec2([160.0, 90.0]),
+            interp: Interp::Linear,
+            spatial: None,
+        });
+        intents.push(Intent::SetTrack {
+            layer: id,
+            property: PropertyId::new(property::POSITION).expect("position は予約語ではない"),
+            track: position,
         });
         intents.push(Intent::SetAttrs {
             layer: id,
@@ -242,7 +266,7 @@ pub fn build() -> Fixture {
     let mut sabi_position = KeyframeTrack::new();
     sabi_position.insert(Keyframe {
         t: t(510),
-        value: Value::Vec2([960.0, 760.0]),
+        value: Value::Vec2([1120.0, 850.0]),
         interp: Interp::Bezier {
             x1: 0.25,
             y1: 0.1,
@@ -253,7 +277,7 @@ pub fn build() -> Fixture {
     });
     sabi_position.insert(Keyframe {
         t: t(570),
-        value: Value::Vec2([960.0, 540.0]),
+        value: Value::Vec2([1120.0, 630.0]),
         interp: Interp::Linear,
         spatial: None,
     });

@@ -50,6 +50,13 @@ fn emit_contour(b: &mut PathBuilder, c: &Contour, origin: Point) {
     }
 }
 
+/// tiny-skia に測らせる(自前の bbox は持たない)。
+pub(crate) fn path_bounds(path: &Path) -> Option<[f64; 4]> {
+    let built = to_tiny_skia(path, Point { x: 0.0, y: 0.0 })?;
+    let b = built.compute_tight_bounds()?;
+    Some([b.left() as f64, b.top() as f64, b.right() as f64, b.bottom() as f64])
+}
+
 fn color_of(c: crate::render::vector::Rgb, alpha: f64) -> tiny_skia::Color {
     tiny_skia::Color::from_rgba(
         clamp01(c.r) as f32,

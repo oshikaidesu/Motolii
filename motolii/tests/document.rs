@@ -175,11 +175,7 @@ fn apply_all_rolls_back_even_when_the_batch_writes_multiple_components() {
     let layer = LayerId(1);
 
     let meta = motolii::doc::store::LayerMeta {
-        source: motolii::doc::store::LayerSource::Solid {
-            rgba: [1, 2, 3, 255],
-            width: 4,
-            height: 4,
-        },
+        source: motolii::doc::store::LayerSource::Shape,
         order: 0,
         timing: motolii::doc::store::LayerTiming::place(0, None, 300),
     };

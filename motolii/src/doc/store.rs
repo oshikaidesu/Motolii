@@ -36,6 +36,44 @@ pub use crate::render::vector::{
     ShapeOp,
 };
 
+/// 単色の四角。AE の平面(Solid)に当たる物は、専用の型ではなくこれで作る。
+///
+/// 矩形の左上が層の原点に来る(`PathSource::Rectangle` は原点中心なので、
+/// 群の transform で半分ずらす)。
+pub fn rect_shape(rgba: [u8; 4], size: [f32; 2]) -> ShapeNode {
+    use crate::render::vector::{Brush, Fill, FillRule, RepeaterTransform, Rgb, ShapeGroup};
+    let leaf = ShapeNode::Leaf(Shape {
+        source: PathSource::Rectangle {
+            size: VectorPoint {
+                x: size[0] as f64,
+                y: size[1] as f64,
+            },
+        },
+        ops: Vec::new(),
+        fill: Some(Fill {
+            brush: Brush::Solid(Rgb {
+                r: rgba[0] as f64 / 255.0,
+                g: rgba[1] as f64 / 255.0,
+                b: rgba[2] as f64 / 255.0,
+            }),
+            rule: FillRule::NonZero,
+            opacity: rgba[3] as f64 / 255.0,
+            hidden: false,
+        }),
+        stroke: None,
+    });
+    ShapeNode::Group(ShapeGroup {
+        transform: RepeaterTransform {
+            position: VectorPoint {
+                x: size[0] as f64 * 0.5,
+                y: size[1] as f64 * 0.5,
+            },
+            ..RepeaterTransform::IDENTITY
+        },
+        children: vec![leaf],
+    })
+}
+
 pub const EDIT_TIMELINE: &str = "edit";
 
 #[derive(Debug, thiserror::Error)]
@@ -91,11 +129,6 @@ pub mod property {
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum LayerSource {
-    Solid {
-        rgba: [u8; 4],
-        width: u32,
-        height: u32,
-    },
     #[serde(alias = "Media", alias = "PointCloud")]
     File {
         path: String,
@@ -110,7 +143,6 @@ pub enum LayerSource {
 impl LayerSource {
     pub fn declared_size(&self) -> Option<[f32; 2]> {
         match self {
-            Self::Solid { width, height, .. } => Some([*width as f32, *height as f32]),
             Self::File { .. }
             | Self::Null
             | Self::Shape

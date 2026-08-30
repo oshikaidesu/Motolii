@@ -64,6 +64,25 @@ fn transform_path(path: &Path, m: &Affine) -> Path {
         .collect()
 }
 
+/// 形が占める範囲(vector 座標。ストロークの太さを含む)。空なら `None`。
+pub fn content_bounds(nodes: &[ShapeNode]) -> Result<Option<[f64; 4]>, VectorError> {
+    let mut acc: Option<[f64; 4]> = None;
+    for shape in flatten(nodes)? {
+        let grow = shape.stroke.as_ref().map_or(0.0, |s| s.width * 0.5);
+        for instance in crate::render::vector::resolve(&shape)? {
+            let Some(b) = crate::render::vector::raster::path_bounds(&instance.path) else {
+                continue;
+            };
+            let b = [b[0] - grow, b[1] - grow, b[2] + grow, b[3] + grow];
+            acc = Some(match acc {
+                None => b,
+                Some(a) => [a[0].min(b[0]), a[1].min(b[1]), a[2].max(b[2]), a[3].max(b[3])],
+            });
+        }
+    }
+    Ok(acc)
+}
+
 pub fn render_tree(nodes: &[ShapeNode], canvas: &Canvas) -> Result<crate::render::vector::Raster, VectorError> {
     let mut pixmap = crate::render::vector::raster::new_pixmap(canvas)?;
     let origin = crate::render::vector::Point {

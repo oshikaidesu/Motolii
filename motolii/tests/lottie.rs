@@ -58,17 +58,13 @@ fn hold_track(pairs: &[(i64, f64)]) -> KeyframeTrack {
 }
 
 #[test]
-fn composition_and_solid_layer_export_with_no_unsupported_items() {
+fn composition_and_shape_layer_export_with_no_unsupported_items() {
     let mut doc = base_document();
     let layer = LayerId(1);
     add_layer(
         &mut doc,
         layer,
-        LayerSource::Solid {
-            rgba: [255, 0, 128, 255],
-            width: 16,
-            height: 16,
-        },
+        LayerSource::Shape,
     );
 
     let out = export_lottie(&doc.view()).unwrap();
@@ -88,10 +84,7 @@ fn composition_and_solid_layer_export_with_no_unsupported_items() {
     let layers = json["layers"].as_array().unwrap();
     assert_eq!(layers.len(), 1);
     let l0 = &layers[0];
-    assert_eq!(l0["ty"], 1, "solid layer は ty=1");
-    assert_eq!(l0["sw"], 16);
-    assert_eq!(l0["sh"], 16);
-    assert_eq!(l0["sc"], "#FF0080");
+    assert_eq!(l0["ty"], 4, "shape layer は ty=4");
     assert_eq!(l0["ind"], 1);
     assert_eq!(l0["ip"], 0.0);
     assert_eq!(l0["op"], FRAMES as f64);
@@ -271,7 +264,7 @@ fn matte_expands_into_explicit_tt_tp_td_fields() {
     add_layer(
         &mut doc,
         source_layer,
-        LayerSource::Solid { rgba: [255, 255, 255, 255], width: 8, height: 8 },
+        LayerSource::Shape,
     );
     add_layer(&mut doc, target_layer, LayerSource::Null);
 

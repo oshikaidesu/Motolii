@@ -48,6 +48,21 @@ fn lit(property_name: &str, value: f64) -> (usize, usize) {
     (with, without)
 }
 
+/// 縁が反アリアスされた層は、背景の有無で数画素ぶん揺れる。刺したいのは
+/// 「背景が層を消していない」なので、消失(板1枚 = 数万画素)より十分小さい
+/// 揺れは許す。
+fn not_erased(with: usize, without: usize, label: &str) {
+    let diff = with.abs_diff(without);
+    assert!(
+        with > 0 && without > 0,
+        "{label}: 絵が消えた(with={with} without={without})"
+    );
+    assert!(
+        diff * 100 < with,
+        "{label}: 背景の有無で層の見え方が変わる(with={with} without={without})"
+    );
+}
+
 #[test]
 fn tilt_changes_the_picture_without_erasing_it() {
     let (flat, _) = lit(property::ROTATION_X, 0.0);
@@ -55,8 +70,8 @@ fn tilt_changes_the_picture_without_erasing_it() {
     let (t20, t20_nobg) = lit(property::ROTATION_X, 20.0);
 
     assert_ne!(flat, t2, "2° 傾けても絵が変わらない: 傾きが描画へ届いていない");
-    assert_eq!(t2, t2_nobg, "2°: 背景の有無で層の見え方が変わる");
-    assert_eq!(t20, t20_nobg, "20°: 背景の有無で層の見え方が変わる");
+    not_erased(t2, t2_nobg, "2°");
+    not_erased(t20, t20_nobg, "20°");
 }
 
 #[test]
@@ -64,7 +79,6 @@ fn depth_does_not_erase_the_picture() {
     let (near, near_nobg) = lit(property::POSITION_Z, -200.0);
     let (far, far_nobg) = lit(property::POSITION_Z, 200.0);
 
-    assert!(near > 0 && far > 0, "z を動かすと絵が消える");
-    assert_eq!(near, near_nobg, "手前へ: 背景の有無で層の見え方が変わる");
-    assert_eq!(far, far_nobg, "奥へ: 背景の有無で層の見え方が変わる");
+    not_erased(near, near_nobg, "手前へ");
+    not_erased(far, far_nobg, "奥へ");
 }

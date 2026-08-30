@@ -264,11 +264,7 @@ mod tests {
     #[test]
     fn non_media_does_not_project_to_soundtrack_input() {
         let meta = LayerMeta {
-            source: LayerSource::Solid {
-                rgba: [0, 0, 0, 255],
-                width: 64,
-                height: 64,
-            },
+            source: LayerSource::Shape,
             order: 0,
             timing: LayerTiming::default(),
         };

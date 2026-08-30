@@ -52,11 +52,7 @@ fn authored() -> Document {
             Intent::SetMeta {
                 layer,
                 meta: LayerMeta {
-                    source: LayerSource::Solid {
-                        rgba: [10 * i as u8, 20, 30, 255],
-                        width: 640,
-                        height: 360,
-                    },
+                    source: LayerSource::Shape,
                     order: i as i16,
                     timing: LayerTiming {
                         start: i as i64 * 30,

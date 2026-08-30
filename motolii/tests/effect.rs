@@ -35,11 +35,7 @@ fn doc_with_layer() -> (Document, LayerId) {
         Intent::SetMeta {
             layer,
             meta: LayerMeta {
-                source: LayerSource::Solid {
-                    rgba: [255, 0, 0, 255],
-                    width: 64,
-                    height: 64,
-                },
+                source: LayerSource::Shape,
                 order: 0,
                 timing: LayerTiming::place(0, None, 300),
             },

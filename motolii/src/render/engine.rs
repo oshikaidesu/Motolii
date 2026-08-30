@@ -17,7 +17,7 @@ use crate::render::media::ContainerInfo;
 use crate::render::media::MediaError;
 use crate::render::media::MediaInfo;
 use crate::render::media::PointCloudData;
-use crate::doc::store::{LayerSource, Matte, RationalTime, StoreView};
+use crate::doc::store::{Matte, RationalTime, StoreView};
 
 use crate::render::engine::texture::{ShapeCacheKey, TextCacheKey};
 
@@ -72,7 +72,6 @@ impl ObservationCamera {
 
 pub struct Engine {
     compositor: Compositor,
-    textures: HashMap<LayerSource, GpuTexture2D>,
     probes: HashMap<String, MediaInfo>,
     text_textures: HashMap<TextCacheKey, GpuTexture2D>,
     shape_textures: HashMap<ShapeCacheKey, GpuTexture2D>,
@@ -82,7 +81,6 @@ pub struct Engine {
     failed_containers: HashMap<String, String>,
     point_clouds: HashMap<String, PointCloudData>,
     failed_point_clouds: HashMap<String, String>,
-    point_cloud_textures: HashMap<(String, u32, u32), GpuTexture2D>,
     videos: HashMap<String, (Vec<u8>, re_renderer::video::Video)>,
     video_last_texture: HashMap<u64, GpuTexture2D>,
 }
@@ -91,7 +89,6 @@ impl Engine {
     pub fn new() -> Result<Self, EngineError> {
         Ok(Self {
             compositor: Compositor::headless()?,
-            textures: HashMap::new(),
             probes: HashMap::new(),
             text_textures: HashMap::new(),
             shape_textures: HashMap::new(),
@@ -101,7 +98,6 @@ impl Engine {
             failed_containers: HashMap::new(),
             point_clouds: HashMap::new(),
             failed_point_clouds: HashMap::new(),
-            point_cloud_textures: HashMap::new(),
             videos: HashMap::new(),
             video_last_texture: HashMap::new(),
         })
@@ -114,7 +110,6 @@ impl Engine {
     pub fn with_device(device: wgpu::Device, queue: wgpu::Queue) -> Result<Self, EngineError> {
         Ok(Self {
             compositor: Compositor::with_device_using_headless_defaults(device, queue)?,
-            textures: HashMap::new(),
             probes: HashMap::new(),
             text_textures: HashMap::new(),
             shape_textures: HashMap::new(),
@@ -124,7 +119,6 @@ impl Engine {
             failed_containers: HashMap::new(),
             point_clouds: HashMap::new(),
             failed_point_clouds: HashMap::new(),
-            point_cloud_textures: HashMap::new(),
             videos: HashMap::new(),
             video_last_texture: HashMap::new(),
         })

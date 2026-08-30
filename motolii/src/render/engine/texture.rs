@@ -2,7 +2,7 @@
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 
-use crate::render::compositor::GpuTexture2D;
+use crate::render::compositor::LayerContent;
 use crate::doc::core::CompSpec;
 use crate::render::media::{is_point_cloud_path, load_point_cloud, probe};
 use crate::doc::store::{
@@ -26,14 +26,14 @@ impl Engine {
         layer: &ResolvedLayer,
         t: RationalTime,
         comp: CompSpec,
-    ) -> Result<(Option<GpuTexture2D>, [f32; 2]), EngineError> {
+    ) -> Result<(Option<LayerContent>, [f32; 2]), EngineError> {
         if layer.source == LayerSource::Text {
             self.text_texture_for(view, layer.id, t, comp)
         } else if layer.source == LayerSource::Shape {
-            self.shape_texture_for(view, layer.id, comp)
+            self.shape_texture_for(view, layer.id)
         } else if let LayerSource::File { path, .. } = &layer.source {
             if is_point_cloud_path(path) {
-                self.point_cloud_texture_for(path, comp)
+                self.point_cloud_content_for(path, comp)
             } else {
                 let path = path.clone();
                 self.media_texture_for(&path, layer.source_frame, layer.id)
@@ -62,14 +62,13 @@ impl Engine {
             }
             LayerSource::Shape => {
                 let shapes = view.shapes(layer_id).ok()?;
-                let canvas = crate::render::vector::Canvas::centered(comp.width, comp.height);
+                let canvas = content_canvas(&shapes).ok().flatten()?;
                 let key = ShapeCacheKey::new(layer_id, &shapes, canvas.width, canvas.height);
                 self.shape_textures.get(&key)?.width_height().map(|v| v as f32)
             }
             LayerSource::Null | LayerSource::Group => {
                 [comp.width as f32, comp.height as f32]
             }
-            LayerSource::Solid { width, height, .. } => [*width as f32, *height as f32],
             LayerSource::File { path, .. } => {
                 if is_point_cloud_path(path) {
                     [comp.width as f32, comp.height as f32]
@@ -89,7 +88,7 @@ impl Engine {
         shape_documents: &HashMap<LayerId, Vec<ShapeNode>>,
         t: RationalTime,
         comp: CompSpec,
-    ) -> Result<(Option<GpuTexture2D>, [f32; 2]), EngineError> {
+    ) -> Result<(Option<LayerContent>, [f32; 2]), EngineError> {
         if layer.source == LayerSource::Text {
             self.text_texture_from_document(text_documents.get(&layer.id), layer.id, t, comp)
         } else if layer.source == LayerSource::Shape {
@@ -97,10 +96,10 @@ impl Engine {
                 .get(&layer.id)
                 .map(Vec::as_slice)
                 .unwrap_or(&[]);
-            self.shape_texture_from_shapes(shapes, layer.id, comp)
+            self.shape_texture_from_shapes(shapes, layer.id)
         } else if let LayerSource::File { path, .. } = &layer.source {
             if is_point_cloud_path(path) {
-                self.point_cloud_texture_for(path, comp)
+                self.point_cloud_content_for(path, comp)
             } else {
                 let path = path.clone();
                 self.media_texture_for(&path, layer.source_frame, layer.id)
@@ -116,7 +115,7 @@ impl Engine {
         layer_id: LayerId,
         t: RationalTime,
         comp: CompSpec,
-    ) -> Result<(Option<GpuTexture2D>, [f32; 2]), EngineError> {
+    ) -> Result<(Option<LayerContent>, [f32; 2]), EngineError> {
         let document = view
             .resolved_text_document(layer_id, t)
             .map_err(|e| EngineError::Store(e.to_string()))?;
@@ -129,7 +128,7 @@ impl Engine {
         layer_id: LayerId,
         t: RationalTime,
         comp: CompSpec,
-    ) -> Result<(Option<GpuTexture2D>, [f32; 2]), EngineError> {
+    ) -> Result<(Option<LayerContent>, [f32; 2]), EngineError> {
         let Some(document) = document else {
             return Ok((None, [0.0, 0.0]));
         };
@@ -144,7 +143,7 @@ impl Engine {
         let key = TextCacheKey::new(layer_id, document, t, canvas.width, canvas.height);
         if let Some(texture) = self.text_textures.get(&key) {
             return Ok((
-                Some(texture.clone()),
+                Some(LayerContent::Texture(texture.clone())),
                 [canvas.width as f32, canvas.height as f32],
             ));
         }
@@ -160,37 +159,37 @@ impl Engine {
             raster.height,
         )?;
         self.text_textures.insert(key, texture.clone());
-        Ok((Some(texture), [raster.width as f32, raster.height as f32]))
+        Ok((Some(LayerContent::Texture(texture)), [raster.width as f32, raster.height as f32]))
     }
 
     fn shape_texture_for(
         &mut self,
         view: &StoreView<'_>,
         layer_id: LayerId,
-        comp: CompSpec,
-    ) -> Result<(Option<GpuTexture2D>, [f32; 2]), EngineError> {
+    ) -> Result<(Option<LayerContent>, [f32; 2]), EngineError> {
         let shapes = view
             .shapes(layer_id)
             .map_err(|e| EngineError::Store(e.to_string()))?;
-        self.shape_texture_from_shapes(&shapes, layer_id, comp)
+        self.shape_texture_from_shapes(&shapes, layer_id)
     }
 
     fn shape_texture_from_shapes(
         &mut self,
         shapes: &[ShapeNode],
         layer_id: LayerId,
-        comp: CompSpec,
-    ) -> Result<(Option<GpuTexture2D>, [f32; 2]), EngineError> {
+    ) -> Result<(Option<LayerContent>, [f32; 2]), EngineError> {
         if shapes.is_empty() {
             return Ok((None, [0.0, 0.0]));
         }
 
-        let canvas = crate::render::vector::Canvas::centered(comp.width, comp.height);
+        let Some(canvas) = content_canvas(shapes)? else {
+            return Ok((None, [0.0, 0.0]));
+        };
 
         let key = ShapeCacheKey::new(layer_id, shapes, canvas.width, canvas.height);
         if let Some(texture) = self.shape_textures.get(&key) {
             return Ok((
-                Some(texture.clone()),
+                Some(LayerContent::Texture(texture.clone())),
                 [canvas.width as f32, canvas.height as f32],
             ));
         }
@@ -206,14 +205,14 @@ impl Engine {
             raster.height,
         )?;
         self.shape_textures.insert(key, texture.clone());
-        Ok((Some(texture), [raster.width as f32, raster.height as f32]))
+        Ok((Some(LayerContent::Texture(texture)), [raster.width as f32, raster.height as f32]))
     }
 
-    fn point_cloud_texture_for(
+    fn point_cloud_content_for(
         &mut self,
         path: &str,
         comp: CompSpec,
-    ) -> Result<(Option<GpuTexture2D>, [f32; 2]), EngineError> {
+    ) -> Result<(Option<LayerContent>, [f32; 2]), EngineError> {
         let natural = [comp.width as f32, comp.height as f32];
 
         let data = match self.point_clouds.get(path) {
@@ -245,26 +244,15 @@ impl Engine {
             return Ok((None, natural));
         }
 
-        let key = (path.to_owned(), comp.width, comp.height);
-        if let Some(texture) = self.point_cloud_textures.get(&key) {
-            return Ok((Some(texture.clone()), natural));
-        }
-
-        let texture = match self.compositor.render_point_cloud_to_texture(
-            &data.positions,
-            &data.colors,
-            comp.width,
-            comp.height,
-        ) {
-            Ok(texture) => texture,
-            Err(err) => {
-                self.layer_failures
-                    .push(format!("点群を描けない: {path}: {err}"));
-                return Ok((None, natural));
-            }
-        };
-        self.point_cloud_textures.insert(key, texture.clone());
-        Ok((Some(texture), natural))
+        // 焼かない(裁定 2026-08-30)。点のまま run の view へ渡り、深度で板と刺さり合う。
+        Ok((
+            Some(LayerContent::Cloud {
+                positions: std::sync::Arc::new(data.positions.clone()),
+                colors: std::sync::Arc::new(data.colors.clone()),
+                point_size: DEFAULT_POINT_SIZE,
+            }),
+            natural,
+        ))
     }
 
     fn media_texture_for(
@@ -272,7 +260,7 @@ impl Engine {
         path: &str,
         frame: i64,
         layer: LayerId,
-    ) -> Result<(Option<GpuTexture2D>, [f32; 2]), EngineError> {
+    ) -> Result<(Option<LayerContent>, [f32; 2]), EngineError> {
                 let info = match self.probes.get(path) {
                     Some(info) => Some(info.clone()),
                     None => match self.failed_probes.get(path) {
@@ -362,9 +350,15 @@ impl Engine {
                 match output.output.and_then(|frame_texture| frame_texture.texture) {
                     Some(texture) => {
                         self.video_last_texture.insert(stream_id.0, texture.clone());
-                        Ok((Some(texture), natural))
+                        Ok((Some(LayerContent::Texture(texture)), natural))
                     }
-                    None => Ok((self.video_last_texture.get(&stream_id.0).cloned(), natural)),
+                    None => Ok((
+                        self.video_last_texture
+                            .get(&stream_id.0)
+                            .cloned()
+                            .map(LayerContent::Texture),
+                        natural,
+                    )),
                 }
                 }
 
@@ -372,30 +366,8 @@ impl Engine {
         &mut self,
         source: &LayerSource,
         _source_frame: i64,
-    ) -> Result<(Option<GpuTexture2D>, [f32; 2]), EngineError> {
+    ) -> Result<(Option<LayerContent>, [f32; 2]), EngineError> {
         match source {
-            LayerSource::Solid {
-                rgba,
-                width,
-                height,
-            } => {
-                let natural = [*width as f32, *height as f32];
-                if let Some(texture) = self.textures.get(source) {
-                    return Ok((Some(texture.clone()), natural));
-                }
-                let pixels: Vec<u8> = rgba
-                    .iter()
-                    .copied()
-                    .cycle()
-                    .take((width * height * 4) as usize)
-                    .collect();
-                let texture = self
-                    .compositor
-                    .upload_rgba("solid", &pixels, *width, *height)?;
-                self.textures.insert(source.clone(), texture.clone());
-                Ok((Some(texture), natural))
-            }
-
             LayerSource::Text | LayerSource::Shape | LayerSource::File { .. } => {
                 Ok((None, [0.0, 0.0]))
             }
@@ -456,3 +428,27 @@ impl ShapeCacheKey {
         }
     }
 }
+
+/// 形が占める範囲だけの canvas。層の箱が中身に吸い付く。
+/// 反アリアスのはみ出しを1画素見込む。
+fn content_canvas(
+    shapes: &[ShapeNode],
+) -> Result<Option<crate::render::vector::Canvas>, EngineError> {
+    const AA: f64 = 1.0;
+    let Some(b) = crate::render::vector::content_bounds(shapes)? else {
+        return Ok(None);
+    };
+    let min_x = (b[0] - AA).floor();
+    let min_y = (b[1] - AA).floor();
+    let max_x = (b[2] + AA).ceil();
+    let max_y = (b[3] + AA).ceil();
+    Ok(Some(crate::render::vector::Canvas {
+        width: ((max_x - min_x) as i64).max(1) as u32,
+        height: ((max_y - min_y) as i64).max(1) as u32,
+        origin_x: -min_x as i32,
+        origin_y: -min_y as i32,
+    }))
+}
+
+/// 点の直径(comp のピクセル)。層の属性になるまでの既定値。
+const DEFAULT_POINT_SIZE: f32 = 2.0;

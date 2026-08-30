@@ -13,7 +13,7 @@ pub mod text;
 use serde::{Deserialize, Serialize};
 
 pub use geom::{Contour, Path, Point, Vertex};
-pub use group::{flatten, render_tree, ShapeGroup, ShapeNode};
+pub use group::{content_bounds, flatten, render_tree, ShapeGroup, ShapeNode};
 
 use geom::{ellipse, polystar, rect};
 use ops::Instance;

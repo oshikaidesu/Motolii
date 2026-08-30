@@ -216,23 +216,6 @@ fn build_layer(
     }
 
     match &meta.source {
-        LayerSource::Solid { rgba, width, height } => {
-            out["ty"] = serde_json::json!(1);
-            out["sw"] = serde_json::json!(width);
-            out["sh"] = serde_json::json!(height);
-            out["sc"] = serde_json::json!(rgb_hex(rgba));
-            if rgba[3] != 255 {
-                unsupported.push(UnsupportedForLottie {
-                    layer: Some(layer),
-                    category: "solid-alpha",
-                    detail: format!(
-                        "solid の alpha={} だが Lottie の solid-layer(`sc`)は \
-                         `#RRGGBB` のみで alpha を運べない — 不透明として書いた",
-                        rgba[3]
-                    ),
-                });
-            }
-        }
         LayerSource::File { path, .. } if is_point_cloud_path(path) => {
             out["ty"] = serde_json::json!(3);
             unsupported.push(UnsupportedForLottie {
@@ -344,9 +327,6 @@ fn check_audio_settings_unsupported(
     Ok(())
 }
 
-fn rgb_hex(rgba: &[u8; 4]) -> String {
-    format!("#{:02X}{:02X}{:02X}", rgba[0], rgba[1], rgba[2])
-}
 
 fn build_media_asset(
     layer: LayerId,

@@ -18,11 +18,7 @@ fn doc_with_comp(duration_frames: i64) -> Document {
 }
 
 fn solid() -> LayerSource {
-    LayerSource::Solid {
-        rgba: [255, 0, 0, 255],
-        width: 64,
-        height: 64,
-    }
+    LayerSource::Shape
 }
 
 fn t(frame: i64) -> RationalTime {

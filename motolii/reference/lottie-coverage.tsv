@@ -258,10 +258,10 @@ layers	shape-layer	@extends	layers/visual-layer	該当なし	継承元			lottie
 layers	shape-layer	shapes	Shapes	採用済	図形の列を layer が持つ形は採る。中身の語彙は shapes 群の判断 — `motolii-vector::Shape`(shape-1/2/3 が既に決めた正本、裁定10)を作り直さず `Vec<Shape>` をそのまま `Layer:shapes` component に乗せる(`serde` を追加しただけ)	SetShapes	layer-meta	lottie
 layers	shape-layer	ty	Type	採用済	ベクタ生成物。LayerSource の variant として足す。パスラスタライザはテキストで結局要る。`LayerSource::Shape`(unit variant — texture cache のキーである `LayerSource` は `Eq`+`Hash` が要るため、`f64` を含む図形本体は同居できない。中身は `shapes` 行の component が持つ)	LayerSource::Shape	layer-meta	lottie
 layers	solid-layer	@extends	layers/visual-layer	該当なし	継承元			lottie
-layers	solid-layer	sc	Color	採用済	LayerSource::Solid.rgba	rgba: [u8; 4]		lottie
-layers	solid-layer	sh	Height	採用済	LayerSource::Solid.height。単色は素材が無いので Document が寸法を持つ	height: u32		lottie
-layers	solid-layer	sw	Width	採用済	LayerSource::Solid.width	width: u32		lottie
-layers	solid-layer	ty	Type	採用済	LayerSource::Solid	Solid {		lottie
+layers	solid-layer	sc	Color	採用済	塗りの色。平面は専用の型を持たず、矩形シェイプ+塗りで表す	rect_shape		lottie
+layers	solid-layer	sh	Height	採用済	矩形の高さ。単色は素材が無いので Document が寸法を持つ	rect_shape		lottie
+layers	solid-layer	sw	Width	採用済	矩形の幅	rect_shape		lottie
+layers	solid-layer	ty	Type	採用済	読み込みは矩形シェイプ(ty=4)へ写す。書き出しも solid-layer は出さない	rect_shape		lottie
 layers	text-layer	@extends	layers/visual-layer	該当なし	継承元			lottie
 layers	text-layer	t	Data	採用済	テキストの中身。語彙は text 群の判断 — layer-meta が土台を敷いた `Layer:text` component は、text 束第1切片で content track・スタイル既定値・フォント参照を持つ形(`TextDocument`)へ広がった(裁定112(k) の後継)。範囲ごとの複数行(runs)はまだ持たない(次切片)	SetTextDocument	layer-meta	lottie
 layers	text-layer	ty	Type	採用済	LayerSource の variant として足す(裁定19)。`LayerSource::Text`(unit variant、shape-layer/ty と同じ理由で中身を持たない)	LayerSource::Text	layer-meta	lottie
