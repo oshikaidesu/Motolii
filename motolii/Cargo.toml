@@ -4,7 +4,7 @@
 [workspace]
 resolver = "2"
 members = [
-    "probe",
+    "app",
     "core/motolii-core",
     "core/motolii-eval",
     "core/motolii-store",

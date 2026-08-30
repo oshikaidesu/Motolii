@@ -1,5 +1,5 @@
 [package]
-name = "dioxus-native-probe"
+name = "motolii"
 version = "0.0.0"
 edition = "2021"
 publish = false

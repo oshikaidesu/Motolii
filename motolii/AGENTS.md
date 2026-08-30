@@ -67,6 +67,17 @@ CapCut/AviUtl の交差集合)で、**AEの体系はその上に乗る** — AE�
   その時点の道具はdocs/reviews/の日付付き文書を引く
 - profileと`[patch]`はworkspace rootでしか効かない
 
+## 窓の起動条件
+
+`target/debug/motolii`。**環境変数で入力が変わるので、窓を見てもらう時は
+起動条件ごと渡す**(渡し忘れて「素材が消えた」と誤診した前科がある)。
+
+- `MOTOLII_TESTDATA=<dir>` — 素材台帳へ入れるディレクトリ。**未設定だと Browser は空**
+  (`app/src/fixture.rs` の `admit_testdata` が即 return する)。Browser へ入れる操作は
+  まだ無いので、実素材を見るにはこれしか無い。既定の置き場は `~/rust_ae/motolii-testdata/`
+  (リポには入れない — fixture に新規バイナリを増やさない)
+- `MOTOLII_TILT=<度>` — fixture の全層に `rotation.x` を打つ。素材は要らない
+
 ## 意味の正本(世界の外、共有地)
 
 docs/はrepo直下にあり世界に属さない。編集の意味はここから引く:
