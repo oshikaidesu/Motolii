@@ -28,11 +28,7 @@ pub(crate) enum IsfError {
     Validate(String),
     #[error("naga が WGSL を書き出せない: {0}")]
     WgslWrite(String),
-    #[error(
-        "PERSISTENT なバッファは採らない(裁定 2026-07-23: StatefulFilter 拒否)。\
-         Motolii は任意の時刻へ飛べるので、フレームを跨ぐ持ち越しは絵を操作の履歴の\
-         関数にしてしまう。時間を跨ぐ表現は TemporalFootprint(窓の宣言)側で受ける"
-    )]
+    #[error("PERSISTENT なバッファは採らない(任意の時刻へ飛べるので、持ち越すと絵が操作の履歴に依存する)")]
     PersistentBuffer,
 }
 
@@ -86,16 +82,8 @@ pub struct IsfInput {
     pub maps: Option<serde_json::Value>,
 }
 
-/// ISF の `PASSES` の1つ。**1フレーム内の中間ターゲットだけ**を採る。
-///
-/// `PERSISTENT`(フレームを跨いで持ち越すバッファ)は**採らない** — 裁定
-/// 2026-07-23「前 frame を plugin へ隠す StatefulFilter は拒否する」。Motolii の時間は
-/// 任意の t へ飛べるので、持ち越しは絵を操作の履歴の関数にしてしまう(スクラブで
-/// 壊れる・Preview と Export が一致しない・ゴールデンが再現しない)。時間を跨ぐ表現は
-/// 予約済みの `TemporalFootprint`(窓を宣言して Host が解決する)側で受ける。
-///
-/// `WIDTH`/`HEIGHT` の式も採っていない(DDMathParser 相当の式評価器を持つことになる)。
-/// 中間ターゲットは常に描画サイズ。
+/// ISF `PASSES` の1つ。`PERSISTENT` は拒否し、`WIDTH`/`HEIGHT` の式は読まない
+/// (中間ターゲットは常に描画サイズ)。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct IsfPass {
     /// 後続のパスから**この名前で読める**。最後のパスは省略でき、呼び手の出力へ描く。

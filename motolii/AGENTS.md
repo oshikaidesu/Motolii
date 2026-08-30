@@ -9,7 +9,7 @@
 - 編集状態は Document が持つ。書き込みは Intent 経由のみ
 - 見た目の合否は利用者が窓で決める。cargo の緑は合格ではない
 - 決めたことの記録は `../docs/decision-index.md` を主題で grep。
-  コードの現状はコードとテストが正本 — 文書に書かない
+  コードの現状は文書に書かない。**理由をコードに書かない** — 腐るし読めなくなる
 - cargo は `motolii/` の中から回す
 
 窓: `target/debug/motolii`。`MOTOLII_TESTDATA=<素材dir>` で Browser に素材が入る。

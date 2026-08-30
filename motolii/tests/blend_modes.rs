@@ -1,9 +1,6 @@
-//! 借りた式(reference/vello-blend.wgsl)が、Motolii の BlendMode と
-//! **正しい番号で**繋がっていることを見張る。
-//!
-//! 白と黒だけを使う — Multiply/Screen/Darken/Lighten/Difference の答えは
-//! この組では**色空間に依らず厳密**なので、線形かガンマかを判定に持ち込まずに
-//! 「どのモードが選ばれたか」だけを刺せる。番号が1つずれれば落ちる。
+//! 借りた式(reference/vello-blend.wgsl)と BlendMode が正しい番号で繋がっていること。
+//! 白と黒だけを使う — この組の答えは色空間に依らないので、線形かガンマかを
+//! 判定に持ち込まずにモードの取り違えだけを刺せる。
 
 use motolii::render::compositor::{
     BlendMode, CompSpec, Compositor, HeadlessGpu, Layer, LayerPlacement, ResolvedCamera,

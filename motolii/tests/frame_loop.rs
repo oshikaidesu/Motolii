@@ -1,9 +1,4 @@
-//! 同じ絵を何百フレームも描き続けても壊れないこと。
-//!
-//! 窓が**誰も触っていないのに5秒で落ちた**(2026-08-30)。ログには
-//! `Buffer binding 1 range 201326592 exceeds max_*_buffer_binding_size limit 134217728`
-//! が119回。操作ではなく**時間**で壊れている = フレームを跨いで何かが積み上がっている。
-//! 1フレームだけ描くテストでは絶対に捕まらないので、ここで回し続ける。
+//! フレームを跨いで GPU 側が積み上がらないこと。1フレームだけ描く試験では捕まらない。
 
 use motolii::render::compositor::{
     BlendMode, CompSpec, Compositor, HeadlessGpu, Layer, LayerPlacement, ResolvedCamera,
@@ -65,8 +60,7 @@ fn hundreds_of_frames_do_not_grow_the_gpu_state() {
     }
 }
 
-/// 窓と同じ経路(engine → render_frame_into)で回す。層の texture を毎フレーム
-/// 作り直す所や、上流の texture manager の世代交代はここにしか無い。
+/// 窓と同じ経路。texture の作り直しと世代交代はここにしか無い。
 #[test]
 fn hundreds_of_frames_through_the_window_path_do_not_grow() {
     use motolii::doc::store::RationalTime;
@@ -87,7 +81,7 @@ fn hundreds_of_frames_through_the_window_path_do_not_grow() {
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT
             | wgpu::TextureUsages::TEXTURE_BINDING
             | wgpu::TextureUsages::COPY_SRC,
-        // 窓(ui/stage_widget.rs の create_target)と同じ宣言にする
+        // ui/stage_widget.rs の create_target と同じ宣言でないと試験にならない
         view_formats: &[wgpu::TextureFormat::Rgba8Unorm],
     });
 

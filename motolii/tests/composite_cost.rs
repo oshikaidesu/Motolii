@@ -1,9 +1,4 @@
-//! 重ねるソフトとしての器の形を見張る。**時間ではなく回数**を測る。
-//!
-//! 層ごとに submit して `poll(wait_indefinitely)` していた頃は、blend mode を
-//! 使った層1枚につき GPU を2回止めていた(55層なら110回)。全面テクスチャも
-//! 層ごとに新品を確保していた(1080p で 8.29MB × 110 = 912MB/フレーム)。
-//! どちらも層数に比例する — 重ねるほど遅くなる形だった。
+//! 合成の submit 回数が層数に比例しないこと。時間ではなく回数を測る。
 
 use motolii::render::compositor::{
     BlendMode, CompSpec, Compositor, HeadlessGpu, Layer, LayerPlacement, MatteMode, ResolvedCamera,
@@ -78,7 +73,7 @@ fn a_normal_stack_costs_the_same_as_a_blended_stack() {
     );
 }
 
-/// 上の2本が「どちらも0」で通ってしまわないための足場(眠る番人を作らない)。
+/// 上の2本が「どちらも0」で通らないための足場。
 #[test]
 fn the_counter_actually_counts() {
     let submits = submits_for(16, BlendMode::Multiply);
@@ -88,8 +83,6 @@ fn the_counter_actually_counts() {
     );
 }
 
-/// matte も同じ形だった — 1枚につき3回(層の canvas・matte の canvas・matte パス)
-/// GPU を止めていた。
 #[test]
 fn matte_layers_do_not_cost_a_submit_each() {
     let count_for = |n: usize| -> u64 {
