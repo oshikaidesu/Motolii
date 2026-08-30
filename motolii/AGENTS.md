@@ -1,5 +1,7 @@
 # Motolii — rerun を AE にするソフト
 
+**失敗はテストへ。この文書と記憶は、足すとき同じ行数を消す。**
+
 作ってよいのは**編集の意味**(Document・レイヤー・キーフレーム・合成モード・
 エフェクトの口)だけ。技術(GPU・デコード・描画・色)は rerun フォークの部品を使う。
 上流に「無い」と思ったら、作る前に探し方を変える(別名・機能・feature 一覧)。
@@ -10,5 +12,4 @@
   コードの現状はコードとテストが正本 — 文書に書かない
 - cargo は `motolii/` の中から回す
 
-窓: `target/debug/motolii`。`MOTOLII_TESTDATA=<素材dir>` で Browser に素材が入る
-(未設定だと空)。
+窓: `target/debug/motolii`。`MOTOLII_TESTDATA=<素材dir>` で Browser に素材が入る。
