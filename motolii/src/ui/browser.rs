@@ -271,6 +271,21 @@ fn spawn_layer(
     }
 }
 
+fn replace_source(
+    doc: &Arc<Mutex<Document>>,
+    layer: LayerId,
+    path: String,
+    mut revision: Signal<u32>,
+) {
+    let mut d = doc.lock().unwrap();
+    let source = crate::doc::store::LayerSource::File { path, fingerprint: None };
+    let applied = d.apply(Intent::SetSource { layer, source }).is_ok();
+    drop(d);
+    if applied {
+        *revision.write() += 1;
+    }
+}
+
 fn add_effect(doc: &Arc<Mutex<Document>>, layer: LayerId, plugin_id: &str, mut revision: Signal<u32>) {
     let mut d = doc.lock().unwrap();
     let mut effects = d.view().effects(layer).unwrap_or_default();
@@ -381,7 +396,13 @@ pub(super) fn browser_panel(
             let doc = doc.clone();
             let clock = clock.clone();
             let timeline_tx = timeline_tx.clone();
-            move |_| {
+            move |evt: Event<MouseData>| {
+                if evt.modifiers().alt() {
+                    if let Some(layer) = selected() {
+                        replace_source(&doc, layer, path.clone(), revision);
+                        return;
+                    }
+                }
                 spawn_layer(
                     &doc,
                     &clock,
@@ -408,6 +429,11 @@ pub(super) fn browser_panel(
             }
         )
     });
+    let footer_hint = if selected().is_some() {
+        "⌥click で選択中の層を差し替え"
+    } else {
+        "Edit tags"
+    };
     let first_asset = shown.first().map(|a| a.name.clone()).unwrap_or_default();
     let asset_count = shown.len();
 
@@ -625,7 +651,7 @@ pub(super) fn browser_panel(
                         div { class: "bfoot",
                             span { class: "dot", style: "background:var(--accent);" }
                             "{first_asset}"
-                            em { "Edit tags" }
+                            em { "{footer_hint}" }
                         }
                     }
                 }
