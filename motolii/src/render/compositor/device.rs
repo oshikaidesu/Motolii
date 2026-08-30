@@ -51,7 +51,13 @@ impl Compositor {
             effects::BLEND_SOURCE,
             crate::render::compositor::BLEND_TARGET_FORMAT,
         );
-        let matte_pipelines = matte::MattePipelines::new(&ctx);
+        let matte_vism = effects::WgslFragmentProgram::compile_with_prelude(
+            &ctx,
+            "matte",
+            effects::VELLO_BLEND_PRELUDE,
+            effects::MATTE_SOURCE,
+            crate::render::compositor::BLEND_TARGET_FORMAT,
+        );
 
         Ok(Self {
             ctx,
@@ -63,7 +69,7 @@ impl Compositor {
             wgsl_gradient,
             wgsl_tri_led,
             blend_vism,
-            matte_pipelines,
+            matte_vism,
             sequential_submits: 0,
             pending: Vec::new(),
         })

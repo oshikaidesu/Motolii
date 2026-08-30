@@ -675,14 +675,12 @@ impl Compositor {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("motolii-compositor-matte-pass-encoder"),
             });
-        self.matte_pipelines.record(
-            &self.ctx.device,
-            &self.ctx.queue,
+        self.matte_vism.record_over(
+            &self.ctx,
             &mut encoder,
-            &layer_view,
-            &matte_view,
+            &[&layer_view, &matte_view],
             &out_view,
-            matte::matte_mode_index(mode),
+            &[("mode".to_owned(), matte::matte_mode_index(mode) as f32)],
         );
         self.pending.push(encoder.finish());
 

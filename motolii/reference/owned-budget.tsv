@@ -10,9 +10,9 @@
 # 行数では数えない — 圧縮する力が働くだけで、自前が減らないから。
 #
 # pattern	budget	note
-create_render_pipeline	2	上流は RenderPipelineDesc のプールを持つ(effects/vism.rs が通っている口)。残り: matte・glow
+create_render_pipeline	1	上流は RenderPipelineDesc のプールを持つ(effects/vism.rs が通っている口)。残り: glow のみ
 create_compute_pipeline	0	まだ1つも持っていない。増やす前に上流を探すこと
-create_shader_module	2	上流は ShaderModuleDesc + FileServer。生で作るのは matte・glow だけ
-device.create_bind_group_layout	5	上流は BindGroupLayoutDesc のプール。Vism の口はそちらを通る
-begin_render_pass	5	上流の Renderer trait は**パスを渡される**。自分で開くのは登録していない証拠
+create_shader_module	1	上流は ShaderModuleDesc + FileServer。生で作るのは glow だけ
+device.create_bind_group_layout	3	上流は BindGroupLayoutDesc のプール。Vism の口はそちらを通る
+begin_render_pass	4	上流の Renderer trait は**パスを渡される**。自分で開くのは登録していない証拠
 naga::front	2	シェーダ言語のパーサ。ISF(GLSL)の入口だけ

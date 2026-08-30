@@ -236,7 +236,8 @@ pub struct Compositor {
     pub(crate) wgsl_tri_led: effects::WgslFragmentProgram,
     /// 層と背景を混ぜる Vism(vism/blend.wgsl + 借りた式)。
     pub(crate) blend_vism: effects::WgslFragmentProgram,
-    pub(crate) matte_pipelines: matte::MattePipelines,
+    /// 層をマットで切る Vism(vism/matte.wgsl + 借りた svg_lum)。
+    pub(crate) matte_vism: effects::WgslFragmentProgram,
     pub(crate) sequential_submits: u64,
     /// フレーム中に記録したパスの束。層ごとに submit せず、読み戻しが要る所まで貯める。
     pub(crate) pending: Vec<wgpu::CommandBuffer>,

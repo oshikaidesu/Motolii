@@ -24,6 +24,8 @@ pub(crate) const TRI_LED_TARGET_FORMAT: wgpu::TextureFormat = wgpu::TextureForma
 
 pub(crate) const BLEND_SOURCE: &str = include_str!("../../../../vism/blend.wgsl");
 
+pub(crate) const MATTE_SOURCE: &str = include_str!("../../../../vism/matte.wgsl");
+
 /// 借りた式(`reference/vello-blend.wgsl`、vello_shaders 0.10.0 原文)。
 /// W3C Compositing の 16 mix + 13 compose がここに在る。Motolii は式を持たない。
 pub(crate) const VELLO_BLEND_PRELUDE: &str = include_str!("../../../../reference/vello-blend.wgsl");
