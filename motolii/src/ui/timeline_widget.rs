@@ -167,12 +167,14 @@ pub(super) fn edge_to_frame(
 pub(super) enum TimelineMsg {
     SetRows(Vec<CanvasRow>),
     ScrollBy(f64),
+    SetMarkers(Vec<f64>),
 }
 
 pub(super) struct TimelineWidget {
     tx: Sender<TimelineMsg>,
     rx: Receiver<TimelineMsg>,
     rows: Vec<CanvasRow>,
+    markers: Vec<f64>,
     pps: f64,
     scroll_sec: f64,
     scroll_y: f64,
@@ -198,6 +200,7 @@ impl TimelineWidget {
             tx,
             rx,
             rows,
+            markers: Vec::new(),
             pps: PX_PER_SEC,
             scroll_sec: 0.0,
             scroll_y: 0.0,
@@ -342,6 +345,7 @@ impl TimelineWidget {
             match msg {
                 TimelineMsg::SetRows(rows) => self.rows = rows,
                 TimelineMsg::ScrollBy(dy) => self.set_scroll_y(self.scroll_y + dy),
+                TimelineMsg::SetMarkers(markers) => self.markers = markers,
             }
         }
     }
@@ -682,6 +686,7 @@ impl Widget for TimelineWidget {
         let c_panel = t3(tokens::SURFACE_PANEL);
         let c_hair = t3(tokens::LINE_DARK);
         let c_bd = t3(tokens::BORDER);
+        let c_marker = t3(tokens::ACCENT);
         let c_text = t3(tokens::INK);
         let c_dim = t3(tokens::INK2);
         let c_accent = t3(tokens::ACCENT);
@@ -707,6 +712,16 @@ impl Widget for TimelineWidget {
                 if (0.0..=w).contains(&x) {
                     fill_rect(&mut s, Rect::new(x, ruler_h * 0.5, x + hairline, ruler_h), c_bd);
                 }
+            }
+        }
+        for &sec in &self.markers {
+            let x = x_of(sec);
+            if (0.0..=w).contains(&x) {
+                fill_rect(
+                    &mut s,
+                    Rect::new(x - 3.0, ruler_h * 0.15, x + 3.0, ruler_h * 0.55),
+                    c_marker,
+                );
             }
         }
         fill_rect(&mut s, Rect::new(0.0, ruler_h - hairline, w, ruler_h), c_hair);

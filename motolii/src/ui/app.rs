@@ -158,6 +158,61 @@ pub fn app() -> Element {
                             let frame = (clock.now_sec() * 30.0).round() as i64 + delta;
                             clock.seek(frame as f64 / 30.0);
                         }
+                        Intent::ToggleMarker => {
+                            let sec = clock.now_sec();
+                            let mut d = doc.lock().unwrap();
+                            let mut markers = d.view().markers().unwrap_or_default();
+                            let hit = markers
+                                .iter()
+                                .position(|m| (m.time.as_seconds_f64() - sec).abs() < 0.5 / 30.0);
+                            match hit {
+                                Some(i) => {
+                                    markers.remove(i);
+                                }
+                                None => {
+                                    let frame = (sec * 30.0).round() as i64;
+                                    let Ok(time) = crate::doc::store::RationalTime::try_new(frame, 30) else {
+                                        return;
+                                    };
+                                    markers.push(crate::doc::store::Marker {
+                                        name: format!("{}", markers.len() + 1),
+                                        time,
+                                        duration: crate::doc::store::RationalTime::ZERO,
+                                    });
+                                    markers.sort_by(|a, b| {
+                                        a.time.as_seconds_f64().total_cmp(&b.time.as_seconds_f64())
+                                    });
+                                }
+                            }
+                            let applied = d
+                                .apply(crate::doc::store::Intent::SetMarkers {
+                                    markers: markers.clone(),
+                                })
+                                .is_ok();
+                            drop(d);
+                            if applied {
+                                let secs = markers.iter().map(|m| m.time.as_seconds_f64()).collect();
+                                let _ = timeline_tx.send(TimelineMsg::SetMarkers(secs));
+                                *revision.write() += 1;
+                            }
+                        }
+                        Intent::JumpMarker(dir) => {
+                            let sec = clock.now_sec();
+                            let d = doc.lock().unwrap();
+                            let markers = d.view().markers().unwrap_or_default();
+                            drop(d);
+                            let mut times: Vec<f64> =
+                                markers.iter().map(|m| m.time.as_seconds_f64()).collect();
+                            times.sort_by(f64::total_cmp);
+                            let next = if dir < 0 {
+                                times.into_iter().rev().find(|t| *t < sec - 1e-6)
+                            } else {
+                                times.into_iter().find(|t| *t > sec + 1e-6)
+                            };
+                            if let Some(t) = next {
+                                clock.seek(t);
+                            }
+                        }
                         Intent::Home => clock.seek(0.0),
                         Intent::End => clock.seek(clock.duration),
                         Intent::Deselect => {
