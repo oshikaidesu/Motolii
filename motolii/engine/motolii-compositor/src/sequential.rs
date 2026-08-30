@@ -91,11 +91,14 @@ impl Compositor {
         inputs: &[SequentialInput<'_>],
         background_color: [f32; 4],
     ) -> Result<Option<(AccumulatorBacking, GpuTexture2D)>, CompositorError> {
-        // run-batching は「inputs の並び=重ね順=depth_offset 非減少」に依存する
-        // (run の background rect を `run[0].depth_offset - 1` に敷く前提と、逐次
-        // 累積の順序そのもの)。現状の唯一の発生源は `order: id.0 as i16`
-        // なので常に成立するが、store の `SetOrder` が
+        // 逐次累積は inputs の並びを重ね順として消費する。現状の唯一の発生源は
+        // `order: id.0 as i16` なので常に成立するが、store の `SetOrder` が
         // UI へ配線された時に黙って崩れないよう、ここで縛る。
+        //
+        // **`depth_offset` は順位そのものではない** — 上流はカメラからの距離を
+        // 一次キーにし、`depth_offset` は同一平面クラスタ内の同点処理にしか効かない
+        // (`re_renderer` の `plane_clustering`)。全層 z=0 ならレイヤー順、z を
+        // 動かした層は奥行き順になる。
         debug_assert!(
             inputs
                 .windows(2)
@@ -267,13 +270,27 @@ impl Compositor {
             if let Some((_, imported)) = &background {
                 // 「run 先頭の layer より1小さい」だけ——`background_rect` doc の
                 // 「極端値を使わない」節参照(過去に `i16::MIN` で外周1px欠落を
-                // 引いた)。run 内の後続 layer は必ずそれより大きい depth_offset を
-                // 持つ(関数 doc「run-batching」節)ので、この1回で sort 順は保たれる。
+                // 引いた)。板が奥に居ることを保証するのは `depth_offset` ではなく
+                // `plane_z` の方。
+                let plane_z = crate::accumulator_plane_z(
+                    comp,
+                    camera,
+                    run.iter().map(|i| {
+                        let (transform, z) = if i.pinned {
+                            (pinned_cancel * i.transform, 0.0)
+                        } else {
+                            (i.transform, i.z)
+                        };
+                        let c = transform.transform_point2(i.local_min + i.local_size * 0.5);
+                        glam::vec3(c.x, c.y, z)
+                    }),
+                );
                 rects.push(background_rect(
                     comp,
-                    pinned_cancel,
+                    camera,
                     imported.clone(),
                     run[0].depth_offset.saturating_sub(1),
+                    plane_z,
                 ));
             }
 
@@ -417,7 +434,8 @@ impl Compositor {
         if let Some((_, imported)) = &background {
             // ここは常に単独 rect(sort 順の懸念は無い)——`background_rect` doc の
             // 「極端値を使わない」節に沿って、小さい定数値を渡す。
-            final_rects.push(background_rect(comp, pinned_cancel, imported.clone(), -1));
+            // 板1枚だけなので並べ替えの相手が居ない — 画面に張り付く z=0 のままでよい。
+            final_rects.push(background_rect(comp, camera, imported.clone(), -1, 0.0));
         }
 
         let final_draw_data = RectangleDrawData::new(&self.ctx, &final_rects)
@@ -503,7 +521,8 @@ impl Compositor {
 
         let mut final_rects: Vec<TexturedRect> = Vec::with_capacity(1);
         if let Some((_, imported)) = &background {
-            final_rects.push(background_rect(comp, pinned_cancel, imported.clone(), -1));
+            // 板1枚だけなので並べ替えの相手が居ない — 画面に張り付く z=0 のままでよい。
+            final_rects.push(background_rect(comp, camera, imported.clone(), -1, 0.0));
         }
         let draw_data = RectangleDrawData::new(&self.ctx, &final_rects)
             .map_err(|e| CompositorError::Rectangles(e.to_string()))?;

@@ -248,6 +248,23 @@ pub(crate) fn tilt(rotation_x: f32, rotation_y: f32) -> glam::Quat {
         * glam::Quat::from_rotation_x(rotation_x.to_radians())
 }
 
+/// accumulator の板を置く平面。**どの層の中心よりもカメラから遠い z** を返す。
+///
+/// 上流の並べ替えはカメラからのユークリッド距離なので、光軸から離れた層は z が
+/// 小さくても距離では遠くなりうる。z だけを比べても足りない。
+pub(crate) fn accumulator_plane_z(
+    comp: CompSpec,
+    camera: motolii_core::ResolvedCamera,
+    centers: impl Iterator<Item = glam::Vec3>,
+) -> f32 {
+    let projection = motolii_core::camera_projection(comp, camera);
+    let base = motolii_core::distance_from_camera(comp, 0.0);
+    let farthest = centers
+        .map(|c| (c - projection.eye).length())
+        .fold(base, f32::max);
+    farthest - base + 1.0
+}
+
 /// 板の四隅。傾きは板の中心を軸にかける。
 pub(crate) fn tilted_corners(
     transform: glam::Affine2,
@@ -569,27 +586,27 @@ pub(crate) fn sequential_target_config(
     }
 }
 
-/// [`Compositor::accumulate_sequential`]/[`Compositor::finalize_readback`]/
-/// [`Compositor::finalize_texture`]の「背景 rect」: 直前までの逐次合成結果を、
-/// 画面に張り付く板として画面いっぱいに敷く。`pinned` layer が使っているのと
-/// **同じ** `pinned_cancel` 変換を、full-canvas な矩形
-/// (`(0,0)-(comp.width,comp.height)`)に適用するだけ——新しい幾何は無い。
+/// 直前までの逐次合成結果を、画面いっぱいの板として敷く。
 ///
-/// `depth_offset` は呼び手が決める(BL3 で `i16::MIN` 固定から変更——理由は下記)。
+/// **`plane_z` は「この run のどの層よりもカメラから遠い」平面**
+/// ([`accumulator_plane_z`])。上流は矩形をカメラからの距離で並べるので、z を持つ層が
+/// この板より遠いと板に上塗りされる。板は世界の物ではなく「下に在る絵」なので、
+/// 常に最も奥に居なければならない。
+///
+/// 画面を覆う幾何は `plane_z` の平面に対する逆写像から組む — 透視投影でも
+/// その平面上では写像はアフィンなので、full-canvas 矩形が画面ちょうどに戻る。
 fn background_rect(
     comp: CompSpec,
-    pinned_cancel: glam::Affine2,
+    camera: motolii_core::ResolvedCamera,
     imported: GpuTexture2D,
     depth_offset: i16,
+    plane_z: f32,
 ) -> TexturedRect {
+    let cancel = motolii_core::camera_screen_from_world_at_z(comp, camera, plane_z).inverse();
     TexturedRect {
-        top_left_corner_position: to_point3(pinned_cancel.transform_point2(glam::Vec2::ZERO), 0.0),
-        extent_u: to_vector3(
-            pinned_cancel.transform_vector2(glam::Vec2::new(comp.width as f32, 0.0)),
-        ),
-        extent_v: to_vector3(
-            pinned_cancel.transform_vector2(glam::Vec2::new(0.0, comp.height as f32)),
-        ),
+        top_left_corner_position: to_point3(cancel.transform_point2(glam::Vec2::ZERO), plane_z),
+        extent_u: to_vector3(cancel.transform_vector2(glam::Vec2::new(comp.width as f32, 0.0))),
+        extent_v: to_vector3(cancel.transform_vector2(glam::Vec2::new(0.0, comp.height as f32))),
         colormapped_texture: premultiplied_texture(imported),
         options: RectangleOptions {
             // 素通し(tint なし)。
