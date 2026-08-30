@@ -286,6 +286,25 @@ fn content_row(
     )
 }
 
+fn descends_from(view: &crate::doc::store::StoreView<'_>, layer: LayerId, ancestor: LayerId) -> bool {
+    let mut cur = Some(layer);
+    for _ in 0..64 {
+        let Some(l) = cur else { return false };
+        if l == ancestor {
+            return true;
+        }
+        cur = view.attrs(l).ok().flatten().and_then(|a| a.parent);
+    }
+    false
+}
+
+fn set_parent(doc: &Arc<Mutex<Document>>, layer: LayerId, parent: Option<LayerId>) {
+    let patch = LayerAttrsPatch { parent: Some(parent), ..Default::default() };
+    if let Err(e) = doc.lock().unwrap().apply(Intent::SetAttrs { layer, patch }) {
+        println!("PROBE room=write verdict=apply-error {e}");
+    }
+}
+
 pub(super) fn inspector_panel(
     doc: &Arc<Mutex<Document>>,
     selection: Option<LayerId>,
@@ -296,6 +315,7 @@ pub(super) fn inspector_panel(
 ) -> Element {
     let mut drag = use_signal(|| Option::<ValueDrag>::None);
     let mut blend_open = use_signal(|| false);
+    let mut parent_open = use_signal(|| false);
     let _ = revision(); // Document書き換え後の再描画をここで購読する(値そのものは使わない)
 
     let empty = InspectorData {
@@ -339,6 +359,56 @@ pub(super) fn inspector_panel(
         })
         .collect();
     let fx_label = if inspector.has_effects { "" } else { "No shared FX" };
+
+    let candidates: Vec<(LayerId, String)> = match selection {
+        Some(layer) => {
+            let d = doc.lock().unwrap();
+            let view = d.view();
+            view.layers()
+                .into_iter()
+                .filter(|l| *l != layer && !descends_from(&view, *l, layer))
+                .map(|l| {
+                    let name = view.attrs(l).ok().flatten().map(|a| a.name).unwrap_or_default();
+                    (l, name)
+                })
+                .collect()
+        }
+        None => Vec::new(),
+    };
+    let parent_label = match selection {
+        Some(layer) => {
+            let d = doc.lock().unwrap();
+            let view = d.view();
+            view.attrs(layer)
+                .ok()
+                .flatten()
+                .and_then(|a| a.parent)
+                .and_then(|p| view.attrs(p).ok().flatten().map(|a| a.name))
+                .unwrap_or_else(|| "なし".to_string())
+        }
+        None => "なし".to_string(),
+    };
+    let has_children = match selection {
+        Some(layer) => {
+            let d = doc.lock().unwrap();
+            let view = d.view();
+            view.layers().into_iter().any(|l| {
+                view.attrs(l).ok().flatten().and_then(|a| a.parent) == Some(layer)
+            })
+        }
+        None => false,
+    };
+    let frozen = match selection {
+        Some(layer) => doc
+            .lock()
+            .unwrap()
+            .view()
+            .attrs(layer)
+            .ok()
+            .flatten()
+            .is_some_and(|a| a.frozen),
+        None => false,
+    };
 
     let doc_move = doc.clone();
     let doc_up = doc.clone();
@@ -437,6 +507,72 @@ pub(super) fn inspector_panel(
                             span { class: "n", "" }
                             span { class: "v content", "{label}" }
                         }
+                    }
+                }
+            }
+            if let Some(layer) = selection {
+                div { class: "sec", "PARENT" }
+                div { class: "prow",
+                    span { class: "n", "親" }
+                    span {
+                        class: "v content",
+                        onclick: move |_| {
+                            let open = *parent_open.read();
+                            *parent_open.write() = !open;
+                        },
+                        "{parent_label}"
+                    }
+                    span { class: "glyph", "◇" }
+                }
+                if parent_open() {
+                    div {
+                        class: "prow blend-pick",
+                        onclick: {
+                            let doc = doc.clone();
+                            move |_| {
+                                set_parent(&doc, layer, None);
+                                *parent_open.write() = false;
+                                *revision.write() += 1;
+                            }
+                        },
+                        span { class: "n", "" }
+                        span { class: "v content", "なし" }
+                    }
+                    for (candidate , name) in candidates.iter().cloned() {
+                        div {
+                            class: "prow blend-pick",
+                            onclick: {
+                                let doc = doc.clone();
+                                move |_| {
+                                    set_parent(&doc, layer, Some(candidate));
+                                    *parent_open.write() = false;
+                                    *revision.write() += 1;
+                                }
+                            },
+                            span { class: "n", "" }
+                            span { class: "v content", "{name}" }
+                        }
+                    }
+                }
+                if has_children {
+                    div {
+                        class: "prow",
+                        onclick: {
+                            let doc = doc.clone();
+                            move |_| {
+                                let intent = if frozen {
+                                    Intent::Unfreeze { group: layer }
+                                } else {
+                                    Intent::Freeze { group: layer }
+                                };
+                                match doc.lock().unwrap().apply(intent) {
+                                    Ok(_) => *revision.write() += 1,
+                                    Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
+                                }
+                            }
+                        },
+                        span { class: "n", "束" }
+                        span { class: "v content", if frozen { "解く" } else { "凍らせる" } }
                     }
                 }
             }
