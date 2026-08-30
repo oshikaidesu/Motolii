@@ -245,9 +245,9 @@ pub fn inspector_panel(
     selection: Option<LayerId>,
     clock: &Clock,
     mut revision: Signal<u32>,
+    editing: Signal<Option<String>>,
 ) -> Element {
     let mut drag = use_signal(|| Option::<ValueDrag>::None);
-    let editing = use_signal(|| Option::<String>::None);
     let _ = revision(); // Document書き換え後の再描画をここで購読する(値そのものは使わない)
 
     let empty = InspectorData {

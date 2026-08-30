@@ -30,7 +30,7 @@ struct DragSplit {
 }
 
 pub fn app() -> Element {
-    let playing = use_signal(|| false);
+    let mut playing = use_signal(|| false);
     let mut browser_w = use_signal(|| 300.0f64);
     let mut inspector_w = use_signal(|| 270.0f64);
     let mut timeline_h = use_signal(|| 300.0f64);
@@ -40,7 +40,7 @@ pub fn app() -> Element {
     let revision = use_signal(|| 0u32);
     let mut selected = use_signal(|| None);
     let timeline_scroll_y = use_signal(|| 0.0f64);
-    let mut text_editing = use_signal(|| false);
+    let text_editing = use_signal(|| Option::<String>::None);
 
     let (clock, ui_scale, timeline_attr, timeline_tx, stage_attr, loaded, doc, selection) = use_hook(|| {
         let Loaded { doc, ui, duration_sec } = load_fixture();
@@ -103,9 +103,6 @@ pub fn app() -> Element {
             onmouseup: move |_| {
                 *drag.write() = None;
             },
-            // フォーカス下降/離脱をルートで受け、テキスト編集中はキーマップを止める(Q9)。
-            onfocusin: move |_| *text_editing.write() = true,
-            onfocusout: move |_| *text_editing.write() = false,
             onkeydown: {
                 let doc = doc.clone();
                 let clock = clock.clone();
@@ -116,13 +113,16 @@ pub fn app() -> Element {
                 let mut revision = revision;
                 move |evt| {
                     println!("PROBE room=input verdict=keydown key={:?}", evt.key());
-                    if text_editing() {
+                    if text_editing.read().is_some() {
+                        println!("PROBE room=input verdict=text-editing key={:?}", evt.key());
                         return;
                     }
                     let modifiers = evt.modifiers();
                     let Some(intent) = lookup(&evt.key(), modifiers.meta(), modifiers.shift()) else {
+                        println!("PROBE room=input verdict=no-binding key={:?}", evt.key());
                         return;
                     };
+                    println!("PROBE room=input verdict=intent key={:?}", evt.key());
                     evt.prevent_default();
                     match intent {
                         Intent::Split => {
@@ -160,6 +160,10 @@ pub fn app() -> Element {
                         Intent::Deselect => {
                             selection.set(None);
                             selected.set(None);
+                        }
+                        Intent::PlayPause => {
+                            clock.toggle();
+                            playing.set(clock.playing());
                         }
                         Intent::SelectAll => {
                             let layers = doc.lock().unwrap().view().layers();
@@ -251,7 +255,7 @@ pub fn app() -> Element {
                     },
                 }
 
-                {inspector_panel(&doc, selected(), &clock, revision)}
+                {inspector_panel(&doc, selected(), &clock, revision, text_editing)}
             }
 
             div {
