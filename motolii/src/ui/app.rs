@@ -120,7 +120,7 @@ pub fn app() -> Element {
                         return;
                     }
                     let modifiers = evt.modifiers();
-                    let Some(intent) = lookup(&evt.key(), modifiers.meta(), modifiers.shift()) else {
+                    let Some(intent) = lookup(&evt.key(), modifiers.meta(), modifiers.shift(), modifiers.alt()) else {
                         println!("PROBE room=input verdict=no-binding key={:?}", evt.key());
                         return;
                     };
@@ -166,6 +166,108 @@ pub fn app() -> Element {
                         Intent::PlayPause => {
                             clock.toggle();
                             playing.set(clock.playing());
+                        }
+                        Intent::Undo | Intent::Redo => {
+                            let mut d = doc.lock().unwrap();
+                            let moved = if matches!(intent, Intent::Undo) { d.undo() } else { d.redo() };
+                            let rows = fixture::layer_rows_from_doc(&d);
+                            let canvas = fixture::canvas_rows_from_doc(&d);
+                            drop(d);
+                            if moved {
+                                attrs_state.set(rows.iter().map(|r| (r.hidden, r.solo, r.locked)).collect());
+                                layer_rows.set(rows);
+                                let _ = timeline_tx.send(TimelineMsg::SetRows(canvas));
+                                *revision.write() += 1;
+                            }
+                            println!("PROBE room=write verdict=history moved={moved}");
+                        }
+                        Intent::DeleteLayer => {
+                            let targets = selection.all();
+                            if targets.is_empty() {
+                                println!("PROBE room=write verdict=delete-noop reason=no-selection");
+                                return;
+                            }
+                            let mut d = doc.lock().unwrap();
+                            let intents: Vec<_> = targets
+                                .iter()
+                                .map(|l| crate::doc::store::Intent::RemoveLayer(*l))
+                                .collect();
+                            let applied = d.apply_all(intents).is_ok();
+                            let rows = fixture::layer_rows_from_doc(&d);
+                            let canvas = fixture::canvas_rows_from_doc(&d);
+                            drop(d);
+                            if applied {
+                                selection.set(None);
+                                selected.set(None);
+                                attrs_state.set(rows.iter().map(|r| (r.hidden, r.solo, r.locked)).collect());
+                                layer_rows.set(rows);
+                                let _ = timeline_tx.send(TimelineMsg::SetRows(canvas));
+                                *revision.write() += 1;
+                            }
+                            println!("PROBE room=write verdict=applied RemoveLayer n={} ok={applied}", targets.len());
+                        }
+                        Intent::Reorder(delta) => {
+                            let Some(layer) = selected() else { return };
+                            let mut d = doc.lock().unwrap();
+                            let current = d.view().meta(layer).ok().flatten().map(|m| m.order).unwrap_or(0);
+                            let applied = d
+                                .apply(crate::doc::store::Intent::SetOrder {
+                                    layer,
+                                    order: current.saturating_add(delta),
+                                })
+                                .is_ok();
+                            let rows = fixture::layer_rows_from_doc(&d);
+                            let canvas = fixture::canvas_rows_from_doc(&d);
+                            drop(d);
+                            if applied {
+                                attrs_state.set(rows.iter().map(|r| (r.hidden, r.solo, r.locked)).collect());
+                                layer_rows.set(rows);
+                                let _ = timeline_tx.send(TimelineMsg::SetRows(canvas));
+                                *revision.write() += 1;
+                            }
+                            println!("PROBE room=write verdict=applied SetOrder layer={layer:?} {current}->{} ok={applied}", current.saturating_add(delta));
+                        }
+                        Intent::SnapEdgeToPlayhead(tail) | Intent::TrimToPlayhead(tail) => {
+                            let trim = matches!(intent, Intent::TrimToPlayhead(_));
+                            let Some(layer) = selected() else { return };
+                            let frame = (clock.now_sec() * 30.0).round() as i64;
+                            let mut d = doc.lock().unwrap();
+                            let Some(orig) = d.view().meta(layer).ok().flatten().map(|m| m.timing) else {
+                                return;
+                            };
+                            let timing = crate::ui::timeline_widget::edge_to_frame(orig, frame, tail, trim);
+                            let applied = d
+                                .apply(crate::doc::store::Intent::SetTiming { layer, timing })
+                                .is_ok();
+                            let rows = fixture::layer_rows_from_doc(&d);
+                            let canvas = fixture::canvas_rows_from_doc(&d);
+                            drop(d);
+                            if applied {
+                                attrs_state.set(rows.iter().map(|r| (r.hidden, r.solo, r.locked)).collect());
+                                layer_rows.set(rows);
+                                let _ = timeline_tx.send(TimelineMsg::SetRows(canvas));
+                                *revision.write() += 1;
+                            }
+                            println!(
+                                "PROBE room=write verdict=applied {} tail={tail} start {}->{} dur {}->{}",
+                                if trim { "TrimToPlayhead" } else { "SnapEdgeToPlayhead" },
+                                orig.start, timing.start, orig.duration, timing.duration
+                            );
+                        }
+                        Intent::SelectStep(delta) => {
+                            let d = doc.lock().unwrap();
+                            let rows = fixture::layer_rows_from_doc(&d);
+                            drop(d);
+                            if rows.is_empty() {
+                                return;
+                            }
+                            let current = selected()
+                                .and_then(|l| rows.iter().position(|r| r.layer == l))
+                                .unwrap_or(0) as i32;
+                            let next = (current + delta).clamp(0, rows.len() as i32 - 1) as usize;
+                            selection.set(Some(rows[next].layer));
+                            selected.set(Some(rows[next].layer));
+                            *revision.write() += 1;
                         }
                         Intent::SelectAll => {
                             let layers = doc.lock().unwrap().view().layers();

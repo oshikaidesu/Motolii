@@ -44,6 +44,8 @@ enum DragMode {
     Move,
     TrimStart,
     TrimEnd,
+    /// 菱形そのものを掴んで時間を動かす。
+    Key { at_sec: f64 },
 }
 
 struct DragState {
@@ -56,6 +58,8 @@ struct DragState {
 }
 
 const EDGE_GRAB_PX: f64 = 6.0;
+/// 掴んだ物が吸い付く距離。手が止まらない感触はここで決まる。
+const SNAP_PX: f64 = 8.0;
 
 fn keyframe_shift_intents(
     doc: &Document,
@@ -80,6 +84,84 @@ fn keyframe_shift_intents(
         intents.push(Intent::SetTrack { layer, property, track: shifted });
     }
     Ok(intents)
+}
+
+/// `at_frame` にあるキーだけを `delta_frames` ずらす。層の行に見えている菱形は
+/// 複数のトラックの同じ時刻を束ねているので、束ごと動かす(AE と同じ)。
+fn keyframe_move_intents(
+    doc: &Document,
+    layer: LayerId,
+    at_frame: i64,
+    delta_frames: i64,
+) -> Result<Vec<Intent>, StoreError> {
+    let view = doc.view();
+    let fps = Fps::try_new(DOC_FPS as i64, 1).map_err(|e| StoreError::Property(e.to_string()))?;
+    let shift =
+        RationalTime::try_from_frame(delta_frames, fps).map_err(|e| StoreError::Property(e.to_string()))?;
+    let mut intents = Vec::new();
+    for property in view.properties(layer) {
+        let Some(track) = view.track(layer, &property)? else {
+            continue;
+        };
+        let mut touched = false;
+        let mut moved = KeyframeTrack::new();
+        for key in track.keys() {
+            let mut key = key.clone();
+            let frame = key
+                .t
+                .try_to_frame_round(fps)
+                .map_err(|e| StoreError::Property(e.to_string()))?;
+            if frame == at_frame {
+                key.t = key.t.try_add(shift).map_err(|e| StoreError::Property(e.to_string()))?;
+                touched = true;
+            }
+            moved.insert(key);
+        }
+        if touched {
+            intents.push(Intent::SetTrack { layer, property, track: moved });
+        }
+    }
+    Ok(intents)
+}
+
+/// 層の端を `frame` へ。`tail` で頭/尻、`trim` で「切り落とす」か「丸ごと動かす」か。
+/// 動かす場合は素材の中身がずれないよう source_in も一緒に動く。
+pub(super) fn edge_to_frame(
+    orig: LayerTiming,
+    frame: i64,
+    tail: bool,
+    trim: bool,
+) -> LayerTiming {
+    match (tail, trim) {
+        // 尻を切る: 現在時刻までの長さにする
+        (true, true) => LayerTiming {
+            duration: (frame - orig.start).max(1),
+            ..orig
+        },
+        // 頭を切る: 中身を保ったまま入り口を移す
+        (false, true) => {
+            let delta = (frame - orig.start).clamp(
+                -(orig.start.min(orig.source_in)),
+                orig.duration - 1,
+            );
+            LayerTiming {
+                start: orig.start + delta,
+                duration: orig.duration - delta,
+                source_in: orig.source_in + delta,
+                ..orig
+            }
+        }
+        // 尻を現在時刻へ: 長さを保ったまま丸ごと動かす
+        (true, false) => LayerTiming {
+            start: (frame - orig.duration).max(0),
+            ..orig
+        },
+        // 頭を現在時刻へ: 同上
+        (false, false) => LayerTiming {
+            start: frame.max(0),
+            ..orig
+        },
+    }
 }
 
 pub(super) enum TimelineMsg {
@@ -182,6 +264,38 @@ impl TimelineWidget {
         self.scroll_y = y.clamp(0.0, self.max_scroll_y());
         if let Some(mirror) = &mut self.scroll_y_mirror {
             mirror.set(self.scroll_y);
+        }
+    }
+
+    /// 掴んでいる時刻の吸い付き先(再生位置・comp の頭・各層の端)。
+    fn snap_targets(&self) -> Vec<f64> {
+        let mut out = vec![0.0];
+        if let Some(clock) = &self.clock {
+            out.push(clock.now_sec());
+        }
+        for row in &self.rows {
+            if let Some((a, b)) = row.span {
+                out.push(a);
+                out.push(b);
+            }
+        }
+        out
+    }
+
+    /// `moving_sec + delta` を近くの吸い付き先へ寄せた delta を返す。
+    fn snapped_delta(&self, moving_sec: f64, delta: f64) -> f64 {
+        let threshold = SNAP_PX / self.pps;
+        let landed = moving_sec + delta;
+        let mut best: Option<(f64, f64)> = None;
+        for target in self.snap_targets() {
+            let d = (target - landed).abs();
+            if d <= threshold && best.map(|(bd, _)| d < bd).unwrap_or(true) {
+                best = Some((d, target));
+            }
+        }
+        match best {
+            Some((_, target)) => target - moving_sec,
+            None => delta,
         }
     }
 
@@ -347,8 +461,21 @@ impl Widget for TimelineWidget {
                     if let Some(clock) = &self.clock {
                         clock.seek(self.scroll_sec + x / self.pps);
                     }
-                } else if let Some(drag) = &mut self.drag {
-                    drag.delta_sec = (self.scroll_sec + x / self.pps) - drag.grab_sec;
+                } else if self.drag.is_some() {
+                    let raw = (self.scroll_sec + x / self.pps)
+                        - self.drag.as_ref().expect("直前に確認した").grab_sec;
+                    let moving = match self.drag.as_ref().expect("同上").mode {
+                        DragMode::Key { at_sec } => at_sec,
+                        DragMode::TrimEnd => {
+                            let d = self.drag.as_ref().expect("同上");
+                            (d.orig.start + d.orig.duration) as f64 / DOC_FPS
+                        }
+                        _ => self.drag.as_ref().expect("同上").orig.start as f64 / DOC_FPS,
+                    };
+                    let snapped = self.snapped_delta(moving, raw);
+                    if let Some(drag) = &mut self.drag {
+                        drag.delta_sec = snapped;
+                    }
                 } else {
                     self.hovered = self.hit_test(x, y);
                 }
@@ -369,8 +496,27 @@ impl Widget for TimelineWidget {
                     "PROBE room=input down t={:.3}s el=({:.0},{:.0}) hit={:?}",
                     t, x, y, hit
                 );
-                if hit.is_some() {
-                    self.selected = if self.selected == hit { None } else { hit };
+                if let Some((row_ix, key_ix)) = hit {
+                    self.selected = Some((row_ix, key_ix));
+                    if let (Some(layer), Some(at_sec)) = (
+                        self.rows[row_ix].layer,
+                        self.rows[row_ix].keys.get(key_ix).copied(),
+                    ) {
+                        let orig = self
+                            .doc
+                            .as_ref()
+                            .and_then(|d| d.lock().unwrap().view().meta(layer).ok().flatten())
+                            .map(|m| m.timing)
+                            .unwrap_or_default();
+                        self.drag = Some(DragState {
+                            row: row_ix,
+                            layer,
+                            orig,
+                            grab_sec: t,
+                            delta_sec: 0.0,
+                            mode: DragMode::Key { at_sec },
+                        });
+                    }
                 } else if let Some(row_ix) = self.band_hit(x, y) {
                     let layer = self.rows[row_ix].layer;
                     if let (Some(selection), Some(mirror)) =
@@ -426,6 +572,25 @@ impl Widget for TimelineWidget {
                     };
                     let mut doc = doc.lock().unwrap();
                     let raw_delta = (drag.delta_sec * DOC_FPS).round() as i64;
+                    if let DragMode::Key { at_sec } = drag.mode {
+                        let at_frame = (at_sec * DOC_FPS).round() as i64;
+                        if raw_delta != 0 {
+                            match keyframe_move_intents(&doc, drag.layer, at_frame, raw_delta) {
+                                Ok(intents) => match doc.apply_all(intents) {
+                                    Ok(_) => {
+                                        println!(
+                                            "PROBE room=write verdict=applied MoveKey layer={:?} frame {}->{}",
+                                            drag.layer, at_frame, at_frame + raw_delta
+                                        );
+                                        self.rows = extractor(&doc);
+                                    }
+                                    Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
+                                },
+                                Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
+                            }
+                        }
+                        return;
+                    }
                     let timing = match drag.mode {
                         DragMode::Move => {
                             let new_start = (drag.orig.start + raw_delta).max(0);
@@ -447,6 +612,7 @@ impl Widget for TimelineWidget {
                             let delta = raw_delta.max(min_delta);
                             LayerTiming { duration: drag.orig.duration + delta, ..drag.orig }
                         }
+                        DragMode::Key { .. } => unreachable!("上で返している"),
                     };
                     let mut intents = vec![Intent::SetTiming { layer: drag.layer, timing }];
                     if drag.mode == DragMode::Move {
@@ -469,6 +635,7 @@ impl Widget for TimelineWidget {
                                     DragMode::Move => "move",
                                     DragMode::TrimStart => "trim-start",
                                     DragMode::TrimEnd => "trim-end",
+                                    DragMode::Key { .. } => unreachable!("上で返している"),
                                 },
                                 drag.orig.start, timing.start,
                                 drag.orig.duration, timing.duration
@@ -566,6 +733,7 @@ impl Widget for TimelineWidget {
                     DragMode::Move => (d.delta_sec, d.delta_sec),
                     DragMode::TrimStart => (d.delta_sec, 0.0),
                     DragMode::TrimEnd => (0.0, d.delta_sec),
+                    DragMode::Key { .. } => (0.0, 0.0),
                 },
                 _ => (0.0, 0.0),
             };
@@ -620,8 +788,19 @@ impl Widget for TimelineWidget {
                 }
                 diamond(&mut s, Point::new(x, mid), 5.0 * k, c_dim);
             }
+            let key_shift = match &self.drag {
+                Some(d) if d.row == i => match d.mode {
+                    DragMode::Key { at_sec } => Some((at_sec, d.delta_sec)),
+                    _ => None,
+                },
+                _ => None,
+            };
             for (ki, kf) in row.keys.iter().enumerate() {
-                let center = Point::new(x_of(*kf), mid);
+                let dragged = key_shift
+                    .filter(|(at, _)| (at - *kf).abs() < 0.5 / DOC_FPS)
+                    .map(|(_, delta)| delta)
+                    .unwrap_or(0.0);
+                let center = Point::new(x_of(*kf + dragged), mid);
                 if center.x < 0.0 || center.x > w {
                     continue;
                 }
@@ -643,6 +822,15 @@ impl Widget for TimelineWidget {
             .as_ref()
             .map(|c| c.now_sec())
             .unwrap_or(PLAYHEAD_SEC);
+        // 再生位置が視界から出たら追いかける。掴んでいる間は動かさない。
+        if self.drag.is_none() && !self.scrubbing {
+            let visible = w / pps;
+            let left = scroll;
+            let right = scroll + visible;
+            if playhead_sec < left || playhead_sec > right - visible * 0.1 {
+                self.scroll_sec = (playhead_sec - visible * 0.1).max(0.0);
+            }
+        }
         let px = x_of(playhead_sec);
         if (0.0..=w).contains(&px) {
             fill_rect(&mut s, Rect::new(px - hairline * 0.5, 0.0, px + hairline * 0.5, h), c_accent);
@@ -721,5 +909,51 @@ mod keyframe_shift_tests {
             expect,
             "帯を動かした量だけキーフレームが追従していない(親を動かしたら子も追従、が破れている)"
         );
+    }
+}
+
+#[cfg(test)]
+mod edge_tests {
+    use super::*;
+
+    fn t(start: i64, duration: i64, source_in: i64) -> LayerTiming {
+        LayerTiming { start, duration, source_in, ..Default::default() }
+    }
+
+    #[test]
+    fn head_to_playhead_moves_without_changing_length() {
+        let out = edge_to_frame(t(10, 50, 0), 30, false, false);
+        assert_eq!((out.start, out.duration, out.source_in), (30, 50, 0));
+    }
+
+    #[test]
+    fn tail_to_playhead_puts_the_end_at_the_playhead() {
+        let out = edge_to_frame(t(10, 50, 0), 100, true, false);
+        assert_eq!((out.start + out.duration, out.duration), (100, 50));
+    }
+
+    #[test]
+    fn tail_to_playhead_never_walks_off_the_front() {
+        // 長さより手前で尻を合わせようとしても、頭は 0 で止まる
+        let out = edge_to_frame(t(10, 50, 0), 30, true, false);
+        assert_eq!(out.start, 0);
+    }
+
+    #[test]
+    fn trimming_the_head_keeps_the_material_still() {
+        let out = edge_to_frame(t(10, 50, 5), 20, false, true);
+        assert_eq!((out.start, out.duration, out.source_in), (20, 40, 15));
+    }
+
+    #[test]
+    fn trimming_the_tail_shortens_to_the_playhead() {
+        let out = edge_to_frame(t(10, 50, 0), 30, true, true);
+        assert_eq!((out.start, out.duration), (10, 20));
+    }
+
+    #[test]
+    fn trimming_never_produces_an_empty_layer() {
+        let out = edge_to_frame(t(10, 50, 0), 5, true, true);
+        assert!(out.duration >= 1, "長さが 0 以下になった: {out:?}");
     }
 }
