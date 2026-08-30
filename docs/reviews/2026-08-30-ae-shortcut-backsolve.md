@@ -1,53 +1,91 @@
-# AEショートカットからの逆算 — 手癖層の在庫測定
+# 打鍵からの逆算 — AEと一般NLEの一次資料突き合わせ
 
 - 日付: 2026-08-30
-- 契機: キーが窓に届くようになった(`dee9c68d`)。**ショートカットは定義上「教わらずに押す」層**なので、
-  AGENTS.mdの篩の「引き継ぐ側」がそのまま名簿になっている一次資料として使える
-- 位置づけ: **測定であって裁定ではない。** 在庫台帳([ui-inherited-grammar-gap.md](../ui-inherited-grammar-gap.md))の
-  Tier 1が一般編集ソフト層で埋まっているのに対し、本書は**その上のAE層**を測る
+- 契機: キーが窓に届くようになった(`dee9c68d`)
+- 一次資料: Adobe公式(AE [ショートカット一覧](https://helpx.adobe.com/after-effects/desktop/get-started/keyboard-shortcuts/keyboard-shortcuts-reference.html)・
+  [層の属性](https://helpx.adobe.com/au/after-effects/desktop/work-with-layers/layer-properties/layer-properties.html)・
+  [キーフレーム操作](https://helpx.adobe.com/after-effects/desktop/animate-in-after-effects/animation-keyframes/setting-selecting-deleting-keyframes.html)、
+  Premiere [既定ショートカット](https://helpx.adobe.com/premiere/desktop/get-started/keyboard-shortcuts/default-keyboard-shortcuts.html))、
+  Resolveは公式表を直接取れず二次資料
+- 位置づけ: **測定であって裁定ではない。** 既定の打鍵は決めない(config化が利用者裁定で先行している)
 
-## 二層のどちらに属するか
+## 初版(同日・記憶から作成)の誤り
 
-台帳Tier 1(矢印・Esc・Cmd+D・fit)は**土台**=一般編集ソフトの交差集合。
-本書が測るのは**上の層**。同じ操作に両層の打鍵が在る場合、**土台を既定にしてAEを別名に足す**
-(利用者が既に出している方針: 入口を発明するよりショートカットを足す方が安い)。
+1. **「`Cmd+K`は一般編集ソフトの共通打鍵」は測定でなく思い込みだった。**
+   実際は Premiere=`Cmd+K` / Resolve=`Cmd+B`(または`Cmd+\`) / Final Cut=`Cmd+B` / AE=`Cmd+Shift+D` で、
+   **分割に共通打鍵は存在しない**
+2. **`P`/`S`/`R`/`T`/`A`と`U`を1項目にまとめていた。** 公式の定義では別物(下記)
 
-最初の実例: **Split**。既定は`Cmd+K`(Premiere/Resolve/CapCut共通)、AEの`Cmd+Shift+D`は別名。
-どちらを消すかではない。
+## 二層の測り方が変わる
 
-## 測定 — AE手癖層 × 現状
+Resolveは**Premiere/Final Cut 7/Avidの打鍵配置をpresetとして読み込める**。
+業界自身が「共通の打鍵」を決めずに**preset**で解いている。つまり:
 
-現状の打鍵は`motolii/probe/src/keymap.rs`の10本。操作意図の`Intent`は7つ
-(`Split`/`StepFrame`/`Home`/`End`/`Deselect`/`SelectAll`/`PlayPause`)。
+**土台=打鍵の交差集合ではない。土台は「どのソフトにも在る*操作*」で、打鍵はpreset。**
 
-| AE打鍵 | 意味 | 篩 | 現状 |
-|---|---|---|---|
-| `P`/`S`/`R`/`T`/`A` | その属性だけをtimelineに出す | 引き継ぐ(最も強い手癖) | **概念ごと無い**。層あたりの「開いている属性」がtimelineに存在しない |
-| `U` | キーが打たれた属性を全部出す | 引き継ぐ | 同上。`U`は上の集合の導出形なので同じ器に乗る |
-| `Shift`+上記 | 出す集合に足す | 引き継ぐ | 同上 |
-| `I`/`O` | 選択層の頭/尻へ跳ぶ | 引き継ぐ | 尺は`placement`に在る。`Intent`追加のみ |
-| `J`/`K` | 前/次のキーへ跳ぶ | 引き継ぐ | keyの時刻は読める。`Intent`追加のみ |
-| `[`/`]` | 層の頭/尻を現在時刻へ揃える | 引き継ぐ | trim機構は既存(`DragMode::Trim*`)。打鍵の口のみ |
-| `Alt`+`[`/`]` | 現在時刻で切り詰める | 引き継ぐ | 同上 |
-| `Cmd+D` | 複製 | 引き継ぐ | `duplicate_track_item`が既存(台帳L28) |
-| `Cmd+Shift+D` | 分割 | 引き継ぐ(別名として) | `Intent::Split`在り。別名を足すだけ |
-| `Enter`(層名上) | rename | 引き継ぐ | **rename自体が無い**(Q0b違反として既出) |
-| `Cmd+Z`/`Shift+Cmd+Z` | undo/redo | 引き継ぐ | 機構は在る。打鍵は未接続(利用者がレーンを止めた経緯あり) |
-| `N`/`B` | work area | **保留** | MV制作の背骨に要るか未測。利用者裁定待ち |
-| `Cmd+Shift+C` | precompose | **引き継がない** | AGENTS.mdで名指しの除外 |
-| `Cmd+Y` | 平面(solid)生成 | 保留 | Createの口は既に在る。AEの語彙をそのまま置くかは意味の話 |
+これは利用者の既決(ハードコードせずconfigで差し替える)と同じ形であり、
+初版の「交差集合から既定を導く」という方針は成り立たない。
+
+## 衝突 — 同じ文字が世界をまたぐと別の意味になる
+
+**逆算の最大の収穫はここ。** 既定を1つに決められない実証。
+
+| 文字 | AE | 一般NLE(Premiere/Resolve/FCP) |
+|---|---|---|
+| `I`/`O` | 選択層の頭/尻へ**跳ぶ** | in/out点を**打つ**(mark) |
+| `J`/`K` | 時間ルーラー上の前/次の項目へ跳ぶ(キー・マーカー・作業領域端) | `J`/`K`/`L`=**シャトル**(逆再生/停止/再生) |
+| 分割 | `Cmd+Shift+D` | `Cmd+K`(Pr) / `Cmd+B`(Resolve, FCP) |
+
+`J`/`K`/`L`のシャトルはNLEで最も普遍的な手癖の一つで、AEはそこに別の意味を置いている。
+**AEをそのまま土台にすると、この層を丸ごと失う。**
+
+## 属性を出す — 述語は引き継ぎ、文字と属性の1対1は引き継がない
+
+公式の定義:
+
+| 打鍵 | 公式名 | 出る物 |
+|---|---|---|
+| `P`/`S`/`R`/`T`/`A` | — | その属性(Position/Scale/Rotation/Opacity/Anchor Point) |
+| `U` | Reveal Animating Properties | **キーまたは式を持つ**属性 |
+| `UU` | Reveal Modified Properties | **既定値から変わった**属性 |
+| `SS` | — | **選択中**の属性 |
+| `Shift`+上記 | — | 出ている集合へ**足す** |
+
+`U`/`UU`/`SS`は**属性を名指さない述語**で、属性が何個増えても効く。
+`P`/`S`/`R`/`T`/`A`は**1属性=1文字**で、AEが変形属性を固定5個に凍らせているから成り立っている。
+
+**Motoliiではvismのエフェクトが任意の宣言済みパラメータを持つので、1対1方式は最初の1本目で破綻する。**
+篩はこの項目を割る: **述語は引き継ぐ、1対1は引き継がない。**
+`U`/`UU`/`SS`はAnimationメニューに項目があり、打鍵だけの隠し機能ではない(発見可能性も満たす)。
+
+## Motoliiの現状との差
+
+現状の打鍵は`motolii/probe/src/keymap.rs`の10本、操作意図の`Intent`は7つ。
+
+| 操作 | 現状 |
+|---|---|
+| 属性の絞り込み(述語) | **器ごと無い。** 層あたりの「今出ている属性」がtimelineに存在しない |
+| 層の頭/尻へ跳ぶ | 尺は`placement`に在る。`Intent`追加のみ |
+| 前/次のキーへ跳ぶ | キー時刻は読める。`Intent`追加のみ |
+| 頭/尻を現在時刻へ揃える | trim機構は既存(`DragMode::Trim*`)。打鍵の口のみ |
+| 複製 | `duplicate_track_item`が既存(在庫台帳L28) |
+| rename | **無い**(Q0b違反として既出) |
+| undo/redo | 機構は在る。打鍵は未接続 |
+| シャトル(`J`/`K`/`L`) | 無い。**再生がついさっき通ったばかり**なので次の層 |
 
 ## 見えたこと
 
-1. **最も強い手癖(`P`/`S`/`R`/`T`/`A`/`U`)だけが、器ごと無い。** 残りは全部
-   「既存の器へ`Intent`と打鍵を足す」で届く。しかもこの器は**Documentを変えない表示状態**
-   (どの属性を開いているか)なので、意味の裁定を待たずに作れる
-2. **`Intent`追加で済む物が多い**のは、keymap側の`Intent`が*操作の意図*で、
-   Document側の`Intent`(編集の意味)と分かれているから。跳ぶ/開くは後者を一切増やさない
-3. **打鍵が無い機能より、機能が無い打鍵の方が少ない。** 逆算の主な収穫は
-   「入口の不足」であって「能力の不足」ではなかった
+1. **器ごと無いのは属性の絞り込み1つだけ。** 残りは既存の器へ`Intent`と打鍵を足せば届く。
+   しかもこの器は**Documentを変えない表示状態**なので、意味の裁定を待たずに作れる
+2. **逆算で出たのは「入口の不足」であって「能力の不足」ではない**
+3. **既定を1つに決める作業は、preset方式を採る限り不要**。決めるべきは*操作の名簿*の方
 
-## 非目標
+## 保留(利用者裁定)
 
-本書は打鍵表を確定しない。**config化される前提**(利用者裁定)なので、
-ここに書いた既定は初期値の候補であって固定ではない。
+- `N`/`B`(作業領域)がMV制作の背骨に要るか
+- `Cmd+Y`(平面生成)— Createの口は既に在り、AEの語彙を置くかは意味の話
+- 初期presetをAE寄りにするか一般NLE寄りにするか(衝突表の3行が具体的な分岐)
+
+## 篩で落とした物
+
+`Cmd+Shift+C`(precompose)— AGENTS.mdで名指しの除外。
