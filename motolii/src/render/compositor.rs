@@ -8,7 +8,6 @@ use re_renderer::view_builder::{
 };
 use re_renderer::{RenderContext, Rgba};
 
-mod blend;
 mod device;
 mod effects;
 mod headless;
@@ -41,49 +40,34 @@ pub enum BlendMode {
     Luminosity,
 }
 
-fn separable_mode_index(mode: BlendMode) -> Option<u32> {
-    match mode {
-        BlendMode::Normal | BlendMode::Add => None,
-        BlendMode::Multiply => Some(0),
-        BlendMode::Screen => Some(1),
-        BlendMode::Overlay => Some(2),
-        BlendMode::Darken => Some(3),
-        BlendMode::Lighten => Some(4),
-        BlendMode::ColorDodge => Some(5),
-        BlendMode::ColorBurn => Some(6),
-        BlendMode::HardLight => Some(7),
-        BlendMode::SoftLight => Some(8),
-        BlendMode::Difference => Some(9),
-        BlendMode::Exclusion => Some(10),
-        BlendMode::Hue | BlendMode::Saturation | BlendMode::Color | BlendMode::Luminosity => None,
-    }
+/// 層の合成に使う、上流(`reference/vello-blend.wgsl`)の番号体系。
+/// `(mix << 8) | compose` で、compose は常に `COMPOSE_SRC_OVER`(=3)。
+/// Normal と Add は固定ブレンド段で届くのでここへは来ない。
+fn vello_blend_mode(mode: BlendMode) -> Option<u32> {
+    const SRC_OVER: u32 = 3;
+    let mix = match mode {
+        BlendMode::Normal | BlendMode::Add => return None,
+        BlendMode::Multiply => 1,
+        BlendMode::Screen => 2,
+        BlendMode::Overlay => 3,
+        BlendMode::Darken => 4,
+        BlendMode::Lighten => 5,
+        BlendMode::ColorDodge => 6,
+        BlendMode::ColorBurn => 7,
+        BlendMode::HardLight => 8,
+        BlendMode::SoftLight => 9,
+        BlendMode::Difference => 10,
+        BlendMode::Exclusion => 11,
+        BlendMode::Hue => 12,
+        BlendMode::Saturation => 13,
+        BlendMode::Color => 14,
+        BlendMode::Luminosity => 15,
+    };
+    Some((mix << 8) | SRC_OVER)
 }
 
-fn nonseparable_mode_index(mode: BlendMode) -> Option<u32> {
-    match mode {
-        BlendMode::Normal
-        | BlendMode::Add
-        | BlendMode::Multiply
-        | BlendMode::Screen
-        | BlendMode::Overlay
-        | BlendMode::Darken
-        | BlendMode::Lighten
-        | BlendMode::ColorDodge
-        | BlendMode::ColorBurn
-        | BlendMode::HardLight
-        | BlendMode::SoftLight
-        | BlendMode::Difference
-        | BlendMode::Exclusion => None,
-        BlendMode::Hue => Some(11),
-        BlendMode::Saturation => Some(12),
-        BlendMode::Color => Some(13),
-        BlendMode::Luminosity => Some(14),
-    }
-}
-
-fn two_texture_pass_mode_index(mode: BlendMode) -> Option<u32> {
-    separable_mode_index(mode).or_else(|| nonseparable_mode_index(mode))
-}
+/// 合成の中間テクスチャの形式(累算器・blend/matte の出力)。
+pub(crate) const BLEND_TARGET_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
 
 fn fixed_function_tint_alpha(mode: BlendMode, opacity: f32) -> Result<f32, CompositorError> {
     match mode {
@@ -250,7 +234,8 @@ pub struct Compositor {
     pub(crate) isf_bloom: effects::IsfProgram,
     pub(crate) wgsl_gradient: effects::WgslFragmentProgram,
     pub(crate) wgsl_tri_led: effects::WgslFragmentProgram,
-    pub(crate) blend_pipelines: blend::SeparableBlendPipelines,
+    /// 層と背景を混ぜる Vism(vism/blend.wgsl + 借りた式)。
+    pub(crate) blend_vism: effects::WgslFragmentProgram,
     pub(crate) matte_pipelines: matte::MattePipelines,
     pub(crate) sequential_submits: u64,
     /// フレーム中に記録したパスの束。層ごとに submit せず、読み戻しが要る所まで貯める。

@@ -65,7 +65,7 @@ impl Compositor {
         while idx < inputs.len() {
             let input = &inputs[idx];
 
-            if let Some(mode_index) = two_texture_pass_mode_index(input.blend_mode) {
+            if let Some(mode_index) = vello_blend_mode(input.blend_mode) {
                 let (transform, z, rx, ry) = if input.pinned {
                     (pinned_cancel * input.transform, 0.0, 0.0, 0.0)
                 } else {
@@ -161,14 +161,12 @@ impl Compositor {
                                 },
                             )
                         });
-                        self.blend_pipelines.record(
-                            &self.ctx.device,
-                            &self.ctx.queue,
+                        self.blend_vism.record_over(
+                            &self.ctx,
                             encoder,
-                            &dst_view,
-                            &src_view,
+                            &[&dst_view, &src_view],
                             &out_view,
-                            mode_index,
+                            &[("mode".to_owned(), mode_index as f32)],
                         );
 
                         self.next_effect_key += 1;
@@ -190,7 +188,7 @@ impl Compositor {
             }
 
             let run_start = idx;
-            while idx < inputs.len() && two_texture_pass_mode_index(inputs[idx].blend_mode).is_none() {
+            while idx < inputs.len() && vello_blend_mode(inputs[idx].blend_mode).is_none() {
                 idx += 1;
             }
             let run = &inputs[run_start..idx];
@@ -237,7 +235,7 @@ impl Compositor {
                     BlendMode::Normal => input.opacity,
                     BlendMode::Add => 0.0,
                     _ => unreachable!(
-                        "two_texture_pass_mode_index が None を返した blend_mode のみ run に入る"
+                        "vello_blend_mode が None を返した blend_mode のみ run に入る"
                     ),
                 };
                 rects.push(TexturedRect {
@@ -326,7 +324,7 @@ impl Compositor {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: blend::SEPARABLE_BLEND_TARGET_FORMAT,
+            format: crate::render::compositor::BLEND_TARGET_FORMAT,
             usage: wgpu::TextureUsages::TEXTURE_BINDING
                 | wgpu::TextureUsages::RENDER_ATTACHMENT
                 | wgpu::TextureUsages::COPY_SRC

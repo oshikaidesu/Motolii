@@ -10,8 +10,8 @@ pub(crate) use glow::{GlowPipelines, GLOW_INTERMEDIATE_FORMAT};
 pub use isf::{IsfInput, IsfInputType, IsfManifest};
 pub(crate) use isf::{IsfProgram, BLOOM_SOURCE, ISF_TARGET_FORMAT};
 pub(crate) use wgsl_fragment::{
-    WgslFragmentProgram, GRADIENT_SOURCE, GRADIENT_TARGET_FORMAT, TRI_LED_SOURCE,
-    TRI_LED_TARGET_FORMAT,
+    WgslFragmentProgram, BLEND_SOURCE, GRADIENT_SOURCE, GRADIENT_TARGET_FORMAT, TRI_LED_SOURCE,
+    TRI_LED_TARGET_FORMAT, VELLO_BLEND_PRELUDE,
 };
 
 #[derive(Clone, Debug, PartialEq)]

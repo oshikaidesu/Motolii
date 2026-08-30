@@ -37,6 +37,30 @@ pub(crate) fn orders(manifest: &IsfManifest) -> (Vec<usize>, Vec<usize>) {
     (images, params)
 }
 
+/// ホットリロード付きビルドでは、生成した WGSL を**実ファイル**として置く必要がある
+/// (上流の resolver がディスクから読む)。中身で名前を決め、書き込みは一時ファイル
+/// →rename で原子的に行う。**固定の1枚へ書くと、複数の Compositor を同時に作った時に
+/// 半端な中身を読んでしまう**(テストが並列で走ると実際に起きた)。
+#[cfg(load_shaders_from_disk)]
+pub(crate) fn stage_source_on_disk(name: &str, text: &str) -> PathBuf {
+    use std::hash::{Hash as _, Hasher as _};
+
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    text.hash(&mut hasher);
+    let stamp = hasher.finish();
+
+    let dir = std::env::temp_dir().join("motolii-vism-wgsl");
+    std::fs::create_dir_all(&dir).expect("temp dir を作れる");
+    let path = dir.join(format!("{name}-{stamp:016x}.wgsl"));
+    if !path.exists() {
+        let tmp = dir.join(format!("{name}-{stamp:016x}.{}.tmp", std::process::id()));
+        std::fs::write(&tmp, text).expect("temp へ書ける");
+        // rename は同一ディレクトリなら原子的。読み手が半端な中身を見ない
+        let _ = std::fs::rename(&tmp, &path);
+    }
+    path
+}
+
 /// 言語ごとの入口が用意する物 — 上流のファイルシステムに載った WGSL の場所と入口名。
 pub(crate) struct ShaderStageSource {
     pub(crate) path: PathBuf,

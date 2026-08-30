@@ -1,5 +1,5 @@
 
-pub(crate) const MATTE_TARGET_FORMAT: wgpu::TextureFormat = crate::render::compositor::blend::SEPARABLE_BLEND_TARGET_FORMAT;
+pub(crate) const MATTE_TARGET_FORMAT: wgpu::TextureFormat = crate::render::compositor::BLEND_TARGET_FORMAT;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MatteMode {

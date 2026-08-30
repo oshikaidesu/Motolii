@@ -44,7 +44,13 @@ impl Compositor {
             effects::TRI_LED_SOURCE,
             effects::TRI_LED_TARGET_FORMAT,
         );
-        let blend_pipelines = blend::SeparableBlendPipelines::new(&ctx);
+        let blend_vism = effects::WgslFragmentProgram::compile_with_prelude(
+            &ctx,
+            "blend",
+            effects::VELLO_BLEND_PRELUDE,
+            effects::BLEND_SOURCE,
+            crate::render::compositor::BLEND_TARGET_FORMAT,
+        );
         let matte_pipelines = matte::MattePipelines::new(&ctx);
 
         Ok(Self {
@@ -56,7 +62,7 @@ impl Compositor {
             isf_bloom,
             wgsl_gradient,
             wgsl_tri_led,
-            blend_pipelines,
+            blend_vism,
             matte_pipelines,
             sequential_submits: 0,
             pending: Vec::new(),

@@ -258,17 +258,10 @@ impl IsfProgram {
 
         // 生成した WGSL は上流のファイルシステムへ載せる(ホットリロード時だけ実ファイル)。
         #[cfg(load_shaders_from_disk)]
-        let (vertex_path, fragment_path) = {
-            let dir = std::env::temp_dir().join("motolii-isf-wgsl");
-            std::fs::create_dir_all(&dir).map_err(|e| IsfError::WgslWrite(e.to_string()))?;
-            let vertex_path = dir.join("vertex.wgsl");
-            let fragment_path = dir.join("fragment.wgsl");
-            std::fs::write(&vertex_path, vertex_wgsl.as_bytes())
-                .map_err(|e| IsfError::WgslWrite(e.to_string()))?;
-            std::fs::write(&fragment_path, fragment_wgsl.as_bytes())
-                .map_err(|e| IsfError::WgslWrite(e.to_string()))?;
-            (vertex_path, fragment_path)
-        };
+        let (vertex_path, fragment_path) = (
+            super::vism::stage_source_on_disk("isf-vertex", &vertex_wgsl),
+            super::vism::stage_source_on_disk("isf-fragment", &fragment_wgsl),
+        );
         #[cfg(not(load_shaders_from_disk))]
         let (vertex_path, fragment_path) = {
             let vertex_path = PathBuf::from("motolii-vism/isf/vertex.wgsl");
