@@ -1,0 +1,69 @@
+# # Project Configuration
+#
+# Project configuration lets teams share repository-specific settings — hooks, dev server URLs, and other defaults. The file lives in `.config/wt.toml` and is typically checked into version control.
+#
+# To create a starter file with commented-out examples, run `wt config create --project`.
+#
+# ## Hooks
+#
+# Project hooks apply to this repository only. See `wt hook` (https://worktrunk.dev/hook/) for hook types, execution order, and examples.
+#
+# pre-start = "npm ci"
+# post-start = "npm run dev"
+# pre-merge = "npm test"
+#
+# ## Dev server URL
+#
+# URL column in `wt list` (dimmed when port not listening):
+#
+# [list]
+# url = "http://localhost:{{ branch | hash_port }}"
+#
+# ## Forge platform
+#
+# The forge is read from the remote's hostname: any host carrying `github`, `gitlab`, or `gitea` anywhere in it, plus the Azure DevOps service domains. Name the forge explicitly for a host carrying none of those, such as a Forgejo instance at `forge.example.com`:
+#
+# [forge]
+# platform = "github"  # or "gitlab", "gitea" (experimental), "azure-devops" (experimental)
+# hostname = "github.example.com"  # Example: API host (GHE / self-hosted GitLab)
+#
+# When many repositories share one self-hosted host, name it once in user config with a pattern-keyed `[projects]` entry (https://worktrunk.dev/config/#user-project-specific-settings) instead of repeating this block in each repo. A repository's own `[forge]` still wins, field by field.
+#
+# ## Commit-message append [experimental]
+#
+# `template-append` adds project-wide conventions to the LLM commit and squash prompts, shared so every teammate's LLM sees the same style guide:
+#
+# [commit.generation]
+# template-append = """
+# - Use conventional commits (feat:, fix:, docs:, …)
+# - Reference the relevant issue ID in the body
+# """
+#
+# The first time the fragment is used (and whenever it changes), `wt` prompts the user to approve it — the same one-shot gate as project-defined hooks. Only `template-append` is honored from the project file; the LLM command and the main prompt template stay in user config (https://worktrunk.dev/config/), since they describe per-developer environment (which CLI is installed, which agent the developer prefers). How the fragment renders: the LLM commits guide (https://worktrunk.dev/llm-commits/#appending-to-the-prompt).
+#
+# ## Copy-ignored excludes
+#
+# Additional excludes for `wt step copy-ignored`:
+#
+# [step.copy-ignored]
+# exclude = [".cache/", ".turbo/"]
+#
+# Built-in excludes (VCS metadata and tool-state directories) always apply; the `wt step copy-ignored` docs (https://worktrunk.dev/step/#wt-step-copy-ignored) list them. User config and project config exclusions are combined.
+#
+# ## Aliases
+#
+# Command templates that run as `wt <name>`. See the Extending Worktrunk guide (https://worktrunk.dev/extending/#aliases) for usage and flags.
+#
+# [aliases]
+# deploy = "make deploy BRANCH={{ branch }}"
+# url = "echo http://localhost:{{ branch | hash_port }}"
+#
+# Aliases defined here are shared with teammates. For personal aliases, use the user config (https://worktrunk.dev/config/#aliases) `[aliases]` section instead.
+
+# レーンの冷ビルド禁止(motolii/AGENTS.md「ビルドの不変量」)への回答:
+# 新worktreeへwarm cacheをreflink(CoW、実コピー無し)で複製してから始める。
+# 旧世界のtargetと過去レーンの残骸は運ばない。
+pre-start = "wt step copy-ignored"
+
+[step.copy-ignored]
+exclude = ["app/target/", "next/target/", ".claude/"]

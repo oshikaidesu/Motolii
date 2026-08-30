@@ -12,12 +12,12 @@ assets	all-assets	@extends	assets/image	該当なし	継承元			lottie
 assets	all-assets	@extends	assets/data-source	該当なし	継承元			lottie
 assets	all-assets	@extends	assets/sound	該当なし	継承元			lottie
 assets	asset	@extends	helpers/visual-object	該当なし	継承元			lottie
-assets	asset	id	ID	不採用	素材は layer が直に持つ(LayerSource::Media の path + fingerprint)。表+refId の間接参照は1枚 JSON を自己完結させる配信フォーマットの都合で、編集器では layer/表の二重帳簿になる			lottie
+assets	asset	id	ID	不採用	素材は layer が直に持つ(LayerSource::File の path + fingerprint)。表+refId の間接参照は1枚 JSON を自己完結させる配信フォーマットの都合で、編集器では layer/表の二重帳簿になる			lottie
 assets	data-source	@extends	assets/file-asset	該当なし	継承元			lottie
 assets	data-source	t	Type	不採用	外部 JSON でデータ駆動する再生フォーマットの機能。外から値を注ぐ口は型付き link で持つ			lottie
 assets	file-asset	@extends	assets/asset	該当なし	継承元			lottie
 assets	file-asset	e	Embedded	不採用	素材の base64 埋め込み。1枚で配るための物。Motolii は FFmpeg でファイルを読み project file に素材を抱えない			lottie
-assets	file-asset	p	File Name	採用済	LayerSource::Media.path。ただし asset 表の中ではなく layer が直に持つ	LayerSource::Media		lottie
+assets	file-asset	p	File Name	採用済	LayerSource::File.path。ただし asset 表の中ではなく layer が直に持つ	LayerSource::File		lottie
 assets	file-asset	u	File Path	不採用	パスは1本で持つ。名前とディレクトリに割ると片方だけ書き換えた「開けないパス」が作れる			lottie
 assets	image	@extends	assets/file-asset	該当なし	継承元			lottie
 assets	image	@extends	helpers/slottable-object	該当なし	継承元			lottie
@@ -36,7 +36,7 @@ composition	animation	chars	Characters	不採用	グリフを図形に焼いた�
 composition	animation	comps	Extra Compositions	不採用	参照されないプリコンポの置き場。プリコンポ自体が除外(GOALS)			lottie
 composition	animation	ddd	Threedimensional	不採用	3D			lottie
 composition	animation	fonts	Fonts	不採用	document にフォント表を建てない。指定はテキストレイヤが直に持つ			lottie
-composition	animation	fr	Framerate	採用済	Composition.fps。**有理数で持つ**(Lottie の f64 は 30000/1001 を表せない。裁定64)	pub fps: motolii_core::Fps		lottie
+composition	animation	fr	Framerate	採用済	Composition.fps。**有理数で持つ**(Lottie の f64 は 30000/1001 を表せない。裁定64)	pub fps: crate::doc::core::Fps,		lottie
 composition	animation	h	Height	採用済	Composition.height	pub height: u32		lottie
 composition	animation	ip	In Point	不採用	作業領域は view の関心であって document の関心ではない(裁定64)			lottie
 composition	animation	markers	Markers	採用済	ロケータに写る。marker 束が実装済み(裁定111) — component・読み書き・永続化まで完了しており、layer-meta 束は状態と evidence の書き換えだけ	Intent::SetMarkers	layer-meta	lottie
@@ -195,7 +195,7 @@ helpers	mask	mode	Mode	採用済	constants/mask-mode。前のマスクとの重�
 helpers	mask	o	Opacity	採用済	マスクの不透明度。1.0 基準(パーセントを採らない)。動くので property track 側 `mask.{id}.opacity`	pub fn mask_opacity	mask	lottie
 helpers	mask	pt	Shape	採用済	マスク形状 = values/bezier のトラック(`Value::Path`)。名前は `mask.{id}.shape` で**添字ではなく id** — 添字だと1枚消した時に形状が別のマスクへ付き直す(裁定65 と同型)	pub fn mask_shape	mask	lottie
 helpers	mask	x	Expand	不採用	マスクの膨張/収縮はパスのオフセット演算。要る日に effect として足す			lottie
-helpers	slot	p	Property Value	採用済	スロットが差し込む値。KeyframeTrack をそのまま使う(裁定92の平坦トラックと同じ形、スロット専用の値表現を新設しない)	pub track: motolii_eval::KeyframeTrack,	slot	lottie
+helpers	slot	p	Property Value	採用済	スロットが差し込む値。KeyframeTrack をそのまま使う(裁定92の平坦トラックと同じ形、スロット専用の値表現を新設しない)	pub track: crate::doc::eval::KeyframeTrack,	slot	lottie
 helpers	slottable-object	sid	Slot Id	採用済	スロット参照の識別子。SlotId は Lottie 実物どおり文字列(mask/effect の連番 id とは別物)。TextDocument::slot_id と同じ型	pub struct SlotId(pub String);	slot	lottie
 helpers	transform	a	Anchor Point	採用済	anchor。行列の中心	pub const ANCHOR		lottie
 helpers	transform	o	Opacity	採用済	opacity。ただし行列の外(裁定62)	pub const OPACITY		lottie
@@ -223,7 +223,7 @@ layers	all-layers	@extends	layers/unknown-layer	該当なし	継承元			lottie
 layers	audio-layer	@extends	layers/layer	該当なし	継承元			lottie
 layers	audio-layer	au	Audio Settings	不採用	音量を専用の入れ子に畳む形は採らない。level は普通の property track として持つ			lottie
 layers	audio-layer	refId	Sound Id	不採用	asset 表への間接参照。素材は layer が直に持つ			lottie
-layers	audio-layer	ty	Type	採用済	音声だけの素材も LayerSource::Media を通る(裁定28)。鳴るかどうかは probe が決める	LayerSource::Media		lottie
+layers	audio-layer	ty	Type	採用済	音声だけの素材も LayerSource::File を通る(裁定28)。鳴るかどうかは probe が決める	LayerSource::File		lottie
 layers	audio-settings	lv	Level	採用済	clip の音量(gain)。GOALS 標準。普通の property track として持つ(専用 component ではなく `property::LEVEL`)	pub const LEVEL: &str = "level";	layer-meta	lottie
 layers	camera-layer	@extends	layers/layer	該当なし	継承元			lottie
 layers	camera-layer	ks	Transform	不採用	3D カメラの transform。3D 系は不採用(裁定65)			lottie
@@ -234,7 +234,7 @@ layers	data-layer	refId	Data source Id	不採用	外部 JSON を差し込むデ�
 layers	data-layer	ty	Type	不採用	同上			lottie
 layers	image-layer	@extends	layers/visual-layer	該当なし	継承元			lottie
 layers	image-layer	refId	Reference Id	不採用	asset 表への間接参照。素材は layer が直に持つ			lottie
-layers	image-layer	ty	Type	採用済	静止画も LayerSource::Media(動画と同じ variant、裁定28)	LayerSource::Media		lottie
+layers	image-layer	ty	Type	採用済	静止画も LayerSource::File(動画と同じ variant、裁定28)	LayerSource::File		lottie
 layers	layer	@extends	helpers/visual-object	該当なし	継承元			lottie
 layers	layer	ddd	Threedimensional	不採用	3D 系は不採用(裁定65)			lottie
 layers	layer	hd	Hidden	採用済	行の表示/非表示(GOALS 標準の mute)。tombstone の present(削除)とは別物。`LayerAttrs`(`meta` とは別 component)に置き、hidden な layer は resolve が None を返す(present とは別に「今フレームは描かない」を作れる)	pub hidden: bool	layer-meta	lottie
@@ -594,7 +594,7 @@ text	font	fPath	Path	採用済	フォント実体の在処。素材と同じ pat
 text	font	fStyle	Font Style	採用済	face 選択キー	pub style: String	text	lottie
 text	font	fWeight	Weight	不採用	fStyle と同じことを言う二重帳簿。可変フォントでは wght 軸が正本			lottie
 text	font	origin	Origin	不採用	web ローダの都合。ローカル以外を持たない			lottie
-text	font-list	list	List	採用済	document 単位のフォント表。ただし**素材と同じ置き場に載せる** — 第二の素材台帳を作らない	font-list は第二の素材台帳を作らない	text	lottie
+text	font-list	list	List	採用済	document 単位のフォント表。ただし**素材と同じ置き場に載せる** — 第二の素材台帳を作らない	pub font: FontRef,	text	lottie
 text	text-alignment-options	a	Alignment	採用済	グループ内アンカーのオフセット。**意味は採り既定だけ変える** — 既定=字面中心	pub anchor_offset: [f32; 2]	text	lottie
 text	text-alignment-options	g	Grouping	採用済	Characters/Word/Line/All。text-model §6 の未決がここで埋まる	pub grouping: TextGrouping	text	lottie
 text	text-data	a	Ranges	採用済	アニメーターの列。MV タイポグラフィの核心	pub ranges: Vec<TextRange>	text	lottie
@@ -663,11 +663,11 @@ values	gradient		Gradient	不採用	色停止と透明度停止を1本の float 
 values	hexcolor		Hex Color	不採用	色の正本は Value::Color。文字列表現をもう1つ持つと2つの書き方ができる			lottie
 values	int-boolean		Integer Boolean	不採用	JSON に bool があるのに 0/1 で持つのは Lottie の都合。Rust は bool			lottie
 values	vector		Vector	採用済	Value::Vec2/Vec3。長さは型が持つ	Vec2([f64; 2])		lottie
-text	text	alignValue	Align	採用済	水平揃え。Lottie `text-document j` が正本。Rive も animates を持たない = 静止設定という点まで一致	Rive text.alignValue	text	rive
+text	text	alignValue	Align	採用済	水平揃え。Lottie `text-document j` が正本。Rive も animates を持たない = 静止設定という点まで一致	pub justify: TextJustify,	text	rive
 text	text	sizingValue	Sizing	不採用	fixed/autoWidth/autoHeight。同じ分岐を `sz`(折返し幅)の有無で既に持つので列挙を別に置くと正本が2つ			rive
 text	text	overflowValue	Overflow	不採用	visible/hidden/clipped/ellipsis/fit。組版器に5分岐を増やす(軸4)。`fit` だけは歌詞で効くので行組段の option として後日			rive
-text	text	width	Width	採用済	折返し幅。Lottie `text-document sz` の第1成分が正本。箱幅を動かすと毎フレーム行分割なので v1 は静止	Rive text.width	text	rive
-text	text	height	Height	採用済	同上、`sz` の第2成分	Rive text.height	text	rive
+text	text	width	Width	採用済	折返し幅。Lottie `text-document sz` の第1成分が正本。箱幅を動かすと毎フレーム行分割なので v1 は静止	pub wrap_size: Option<[f32; 2]>,	text	rive
+text	text	height	Height	採用済	同上、`sz` の第2成分	pub wrap_size: Option<[f32; 2]>,	text	rive
 text	text	highlightTextRuns	Highlight Text Runs	不採用	ランを色付き下線で見せる編集器の表示トグル。`runtime: false` が「保存する設計値ではない」と機械で言っている			rive
 text	text	originX	Origin X	不採用	テキスト箱の正規化アンカー。層の anchor と二重帳簿(`text-document ps` を落としたのと同じ理由)			rive
 text	text	originY	Origin Y	不採用	同上			rive
