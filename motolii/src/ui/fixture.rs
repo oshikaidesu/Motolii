@@ -6,12 +6,12 @@ use crate::ui::timeline_widget::CanvasRow;
 
 const FPS: f64 = 30.0;
 
-pub const LABEL_PALETTE: [&str; 12] = [
+pub(super) const LABEL_PALETTE: [&str; 12] = [
     "#d96b6b", "#d9985a", "#d9c95a", "#a3d95a", "#5ad98c", "#5ac6c6",
     "#5a96d9", "#7d7dd9", "#a86bd9", "#d96bbc", "#9a9a9a", "#cba97a",
 ];
 
-pub fn canvas_rows_from_doc(doc: &Document) -> Vec<CanvasRow> {
+pub(super) fn canvas_rows_from_doc(doc: &Document) -> Vec<CanvasRow> {
     let view = doc.view();
     let props: Vec<PropertyId> = [property::OPACITY, property::POSITION]
         .iter()
@@ -55,14 +55,14 @@ pub fn canvas_rows_from_doc(doc: &Document) -> Vec<CanvasRow> {
         .collect()
 }
 
-pub fn label_rgb(ix: u8) -> [u8; 3] {
+pub(super) fn label_rgb(ix: u8) -> [u8; 3] {
     let hex = LABEL_PALETTE[ix as usize % LABEL_PALETTE.len()];
     let v = u32::from_str_radix(&hex[1..], 16).unwrap_or(0x8c8c8c);
     [(v >> 16) as u8, (v >> 8) as u8, v as u8]
 }
 
 #[derive(Clone)]
-pub struct LayerRow {
+pub(super) struct LayerRow {
     pub layer: LayerId,
     pub name: String,
     pub color: &'static str,
@@ -71,7 +71,7 @@ pub struct LayerRow {
     pub locked: bool,
 }
 
-pub fn layer_rows_from_doc(doc: &Document) -> Vec<LayerRow> {
+pub(super) fn layer_rows_from_doc(doc: &Document) -> Vec<LayerRow> {
     let view = doc.view();
     let mut layers = view.layers();
     layers.sort_by_key(|l| std::cmp::Reverse(view.meta(*l).ok().flatten().map(|m| m.order).unwrap_or(0)));
@@ -96,7 +96,7 @@ pub fn layer_rows_from_doc(doc: &Document) -> Vec<LayerRow> {
         .collect()
 }
 
-pub struct ColorSwatch {
+pub(super) struct ColorSwatch {
     pub hex: String,
     pub rgba: [u8; 4],
 }
@@ -128,7 +128,7 @@ fn shape_fill_colors(node: &ShapeNode, seen: &mut std::collections::BTreeSet<[u8
     }
 }
 
-pub fn used_colors_from_doc(doc: &Document) -> Vec<ColorSwatch> {
+pub(super) fn used_colors_from_doc(doc: &Document) -> Vec<ColorSwatch> {
     let view = doc.view();
     let mut seen = std::collections::BTreeSet::new();
     let mut out = Vec::new();
@@ -154,7 +154,7 @@ pub fn used_colors_from_doc(doc: &Document) -> Vec<ColorSwatch> {
     out
 }
 
-pub struct AssetRow {
+pub(super) struct AssetRow {
     pub name: String,
     pub kind: String,
     pub thumb: &'static str,
@@ -164,7 +164,7 @@ pub struct AssetRow {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
-pub enum AssetFamily {
+pub(super) enum AssetFamily {
     Video,
     TwoD,
     ThreeD,
@@ -174,7 +174,7 @@ pub enum AssetFamily {
 }
 
 impl AssetFamily {
-    pub fn label(self) -> &'static str {
+    pub(super) fn label(self) -> &'static str {
         match self {
             Self::Video => "Video",
             Self::TwoD => "2D",
@@ -186,7 +186,7 @@ impl AssetFamily {
     }
 }
 
-pub fn asset_family(asset_type: &str) -> AssetFamily {
+pub(super) fn asset_family(asset_type: &str) -> AssetFamily {
     let t = asset_type.to_ascii_lowercase();
     if t.starts_with("video/") {
         AssetFamily::Video
@@ -203,7 +203,7 @@ pub fn asset_family(asset_type: &str) -> AssetFamily {
     }
 }
 
-pub struct PropRow {
+pub(super) struct PropRow {
     pub label: &'static str,
     pub cells: [String; 3],
     pub dims: [bool; 3],
@@ -215,7 +215,7 @@ pub struct PropRow {
     pub axis: [Option<(String, Value)>; 3],
 }
 
-pub struct InspectorData {
+pub(super) struct InspectorData {
     pub ident_name: String,
     pub ident_sub: String,
     pub text: Vec<PropRow>,
@@ -225,20 +225,20 @@ pub struct InspectorData {
     pub colors: Vec<(&'static str, String)>,
 }
 
-pub struct UiData {
+pub(super) struct UiData {
     pub layer_rows: Vec<LayerRow>,
     pub assets: Vec<AssetRow>,
     pub comp_line: String,
     pub status: String,
 }
 
-pub struct Loaded {
+pub(super) struct Loaded {
     pub doc: Document,
     pub ui: UiData,
     pub duration_sec: f64,
 }
 
-pub fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: RationalTime) -> InspectorData {
+pub(super) fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: RationalTime) -> InspectorData {
     let value_of = |prop: &str| {
         PropertyId::new(prop)
             .ok()
@@ -508,7 +508,7 @@ fn admit_testdata(doc: &mut crate::doc::store::Document) {
     }
 }
 
-pub fn load_fixture() -> Loaded {
+pub(super) fn load_fixture() -> Loaded {
     let mut fx = crate::doc::fixture::build();
     admit_testdata(&mut fx.doc);
     if let Some(deg) = std::env::var("MOTOLII_TILT").ok().and_then(|v| v.parse::<f64>().ok()) {
@@ -582,7 +582,7 @@ pub fn load_fixture() -> Loaded {
     }
 }
 
-pub fn fmt_timecode(sec: f64) -> String {
+pub(super) fn fmt_timecode(sec: f64) -> String {
     let f = (sec * FPS).round() as i64;
     format!("{}:{:02}:{:02}", f / 1800, (f / 30) % 60, f % 30)
 }

@@ -1,9 +1,8 @@
 
-use std::path::PathBuf;
 
 use re_renderer::{
-    BindGroupLayoutDesc, FileSystem as _, GpuBindGroupLayoutHandle, GpuRenderPipelineHandle,
-    PipelineLayoutDesc, RenderContext, RenderPipelineDesc, ShaderModuleDesc, get_filesystem,
+    BindGroupLayoutDesc, GpuBindGroupLayoutHandle, GpuRenderPipelineHandle,
+    PipelineLayoutDesc, RenderContext, RenderPipelineDesc, ShaderModuleDesc,
 };
 
 pub(crate) const BLOOM_SOURCE: &str = include_str!("../../../../../vism/bloom.fs");

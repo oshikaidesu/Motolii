@@ -232,7 +232,7 @@ fn content_row(
     )
 }
 
-pub fn inspector_panel(
+pub(super) fn inspector_panel(
     doc: &Arc<Mutex<Document>>,
     selection: Option<LayerId>,
     clock: &Clock,

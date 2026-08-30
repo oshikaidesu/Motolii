@@ -371,7 +371,7 @@ impl Engine {
     pub(crate) fn texture_for(
         &mut self,
         source: &LayerSource,
-        source_frame: i64,
+        _source_frame: i64,
     ) -> Result<(Option<GpuTexture2D>, [f32; 2]), EngineError> {
         match source {
             LayerSource::Solid {

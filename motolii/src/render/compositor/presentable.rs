@@ -1,10 +1,7 @@
 
-use re_renderer::renderer::{ColormappedTexture, RectangleDrawData, RectangleOptions, TexturedRect};
-use re_renderer::view_builder::ViewBuilder;
-use re_renderer::{Rgba, ViewBuilderId};
 
 use crate::render::compositor::{
-    sequential_target_config, to_point3, to_vector3, CompSpec, Compositor, CompositorError,
+    CompSpec, Compositor, CompositorError,
     LayerWithPasses, ResolvedCamera,
 };
 

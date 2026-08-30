@@ -10,7 +10,7 @@ use crate::ui::session::Selection;
 use crate::ui::timeline_widget::TimelineMsg;
 use crate::doc::store::{Document, Intent, LayerAttrsPatch, LayerId};
 
-pub fn timeline_shell(
+pub(super) fn timeline_shell(
     clock: Arc<Clock>,
     mut playing: Signal<bool>,
     doc: Arc<Mutex<Document>>,

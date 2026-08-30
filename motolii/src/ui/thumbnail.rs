@@ -2,7 +2,7 @@ use base64::Engine as _;
 
 const MAX_EDGE: u32 = 160;
 
-pub fn image_data_uri(path: &str) -> Option<String> {
+pub(super) fn image_data_uri(path: &str) -> Option<String> {
     let image = image::ImageReader::open(path).ok()?.decode().ok()?;
     encode(image.thumbnail(MAX_EDGE, MAX_EDGE))
 }
@@ -18,7 +18,7 @@ fn encode_png_bytes(png: Vec<u8>) -> String {
     format!("data:image/png;base64,{body}")
 }
 
-pub fn video_data_uri(path: &str) -> Option<String> {
+pub(super) fn video_data_uri(path: &str) -> Option<String> {
     use std::io::Read as _;
 
     let scale = format!("scale={MAX_EDGE}:{MAX_EDGE}:force_original_aspect_ratio=decrease");

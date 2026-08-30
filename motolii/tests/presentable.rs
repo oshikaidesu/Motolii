@@ -293,7 +293,7 @@ fn render_into_draws_tilted_plates() {
         .upload_rgba("white", &vec![255u8; 8 * 8 * 4], 8, 8)
         .expect("upload_rgba");
 
-    let mut count = |compositor: &mut Compositor, deg: f32| {
+    let count = |compositor: &mut Compositor, deg: f32| {
         let target = readable_presentable(&device);
         compositor
             .render_into(
@@ -334,7 +334,7 @@ fn tilt_survives_a_pinned_background() {
         .upload_rgba("bg", &blue, W, H)
         .expect("upload_rgba bg");
 
-    let mut white_pixels = |compositor: &mut Compositor, deg: f32| {
+    let white_pixels = |compositor: &mut Compositor, deg: f32| {
         let target = readable_presentable(&device);
         let background = Layer {
             texture: bg.clone(),

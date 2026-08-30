@@ -6,14 +6,14 @@ use crate::ui::playback::Clock;
 use crate::ui::tokens::UiScale;
 
 #[derive(Clone, Default)]
-pub struct Selection(Arc<Mutex<Vec<LayerId>>>);
+pub(super) struct Selection(Arc<Mutex<Vec<LayerId>>>);
 
 impl Selection {
-    pub fn get(&self) -> Option<LayerId> {
+    pub(super) fn get(&self) -> Option<LayerId> {
         self.0.lock().unwrap().last().copied()
     }
 
-    pub fn set(&self, layer: Option<LayerId>) {
+    pub(super) fn set(&self, layer: Option<LayerId>) {
         let mut v = self.0.lock().unwrap();
         v.clear();
         if let Some(l) = layer {
@@ -21,15 +21,15 @@ impl Selection {
         }
     }
 
-    pub fn all(&self) -> Vec<LayerId> {
+    pub(super) fn all(&self) -> Vec<LayerId> {
         self.0.lock().unwrap().clone()
     }
 
-    pub fn contains(&self, layer: LayerId) -> bool {
+    pub(super) fn contains(&self, layer: LayerId) -> bool {
         self.0.lock().unwrap().contains(&layer)
     }
 
-    pub fn toggle(&self, layer: LayerId) {
+    pub(super) fn toggle(&self, layer: LayerId) {
         let mut v = self.0.lock().unwrap();
         match v.iter().position(|l| *l == layer) {
             Some(i) => {
@@ -40,7 +40,7 @@ impl Selection {
     }
 }
 
-pub struct Session {
+pub(super) struct Session {
     pub doc: Arc<Mutex<Document>>,
     pub clock: Arc<Clock>,
     pub scale: Arc<UiScale>,
@@ -48,7 +48,7 @@ pub struct Session {
 }
 
 impl Session {
-    pub fn new(doc: Document, duration_sec: f64) -> Self {
+    pub(super) fn new(doc: Document, duration_sec: f64) -> Self {
         Self {
             doc: Arc::new(Mutex::new(doc)),
             clock: Arc::new(Clock::new(duration_sec)),

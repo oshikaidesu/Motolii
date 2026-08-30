@@ -6,7 +6,7 @@ use re_renderer::renderer::{
 use re_renderer::view_builder::{
     BlendWithBackground, Projection, RenderMode, TargetConfiguration,
 };
-use re_renderer::{GpuTexture, RenderContext, Rgba};
+use re_renderer::{RenderContext, Rgba};
 
 mod blend;
 mod device;
@@ -257,7 +257,7 @@ pub struct Compositor {
 
 type AccumulatorBacking = wgpu::Texture;
 
-struct SequentialInput<'a> {
+pub(crate) struct SequentialInput<'a> {
     texture: &'a GpuTexture2D,
     local_min: glam::Vec2,
     local_size: glam::Vec2,

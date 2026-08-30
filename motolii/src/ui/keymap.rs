@@ -1,7 +1,7 @@
 use dioxus_native::prelude::Key;
 
 #[derive(Clone, Copy)]
-pub enum Intent {
+pub(super) enum Intent {
     Split,
     StepFrame(i64),
     Home,
@@ -41,7 +41,7 @@ const BINDINGS: &[Binding] = &[
     Binding { key: KeySpec::Char(' '), cmd: false, shift: false, intent: Intent::PlayPause },
 ];
 
-pub fn lookup(key: &Key, cmd: bool, shift: bool) -> Option<Intent> {
+pub(super) fn lookup(key: &Key, cmd: bool, shift: bool) -> Option<Intent> {
     let spec = match key {
         Key::Character(c) if c.len() == 1 => KeySpec::Char(c.chars().next()?.to_ascii_lowercase()),
         Key::ArrowLeft => KeySpec::ArrowLeft,

@@ -30,7 +30,7 @@ fn c(r: u8, g: u8, b: u8) -> Color {
 }
 
 #[derive(Clone)]
-pub struct CanvasRow {
+pub(super) struct CanvasRow {
     pub is_group: bool,
     pub keys: Vec<f64>,
     pub span: Option<(f64, f64)>,
@@ -82,12 +82,12 @@ fn keyframe_shift_intents(
     Ok(intents)
 }
 
-pub enum TimelineMsg {
+pub(super) enum TimelineMsg {
     SetRows(Vec<CanvasRow>),
     ScrollBy(f64),
 }
 
-pub struct TimelineWidget {
+pub(super) struct TimelineWidget {
     tx: Sender<TimelineMsg>,
     rx: Receiver<TimelineMsg>,
     rows: Vec<CanvasRow>,
@@ -110,7 +110,7 @@ pub struct TimelineWidget {
 }
 
 impl TimelineWidget {
-    pub fn new(rows: Vec<CanvasRow>) -> Self {
+    pub(super) fn new(rows: Vec<CanvasRow>) -> Self {
         let (tx, rx) = channel();
         Self {
             tx,
@@ -135,24 +135,24 @@ impl TimelineWidget {
         }
     }
 
-    pub fn with_selection(mut self, selection: Selection, mirror: Signal<Option<LayerId>>) -> Self {
+    pub(super) fn with_selection(mut self, selection: Selection, mirror: Signal<Option<LayerId>>) -> Self {
         self.selection = Some(selection);
         self.selected_mirror = Some(mirror);
         self
     }
 
-    pub fn with_scroll_mirror(mut self, mirror: Signal<f64>) -> Self {
+    pub(super) fn with_scroll_mirror(mut self, mirror: Signal<f64>) -> Self {
         self.scroll_y_mirror = Some(mirror);
         self
     }
 
-    pub fn with_clock(mut self, clock: Arc<Clock>) -> Self {
+    pub(super) fn with_clock(mut self, clock: Arc<Clock>) -> Self {
         self.clock = Some(clock);
         self.pps = 20.0;
         self
     }
 
-    pub fn with_scale(mut self, scale: Arc<UiScale>) -> Self {
+    pub(super) fn with_scale(mut self, scale: Arc<UiScale>) -> Self {
         self.scale = Some(scale);
         self
     }
@@ -161,7 +161,7 @@ impl TimelineWidget {
         self.scale.as_ref().map(|s| s.factor()).unwrap_or(1.0)
     }
 
-    pub fn with_document(
+    pub(super) fn with_document(
         mut self,
         doc: Arc<Mutex<Document>>,
         extractor: fn(&Document) -> Vec<CanvasRow>,
@@ -219,7 +219,7 @@ impl TimelineWidget {
         best.map(|(ki, _)| (row_ix, ki))
     }
 
-    pub fn sender(&self) -> Sender<TimelineMsg> {
+    pub(super) fn sender(&self) -> Sender<TimelineMsg> {
         self.tx.clone()
     }
 
@@ -248,7 +248,7 @@ fn attrs_to_patch(a: &LayerAttrs) -> LayerAttrsPatch {
     }
 }
 
-pub fn split_layer(doc: &Arc<Mutex<Document>>, layer: LayerId, comp_frame: i64) -> Option<LayerId> {
+pub(super) fn split_layer(doc: &Arc<Mutex<Document>>, layer: LayerId, comp_frame: i64) -> Option<LayerId> {
     let mut doc = doc.lock().unwrap();
     let view = doc.view();
     let meta = view.meta(layer).ok().flatten()?;

@@ -1,5 +1,5 @@
 use re_renderer::renderer::{
-    ColormappedTexture, RectangleDrawData, RectangleOptions,
+    RectangleDrawData, RectangleOptions,
     TexturedRect,
 };
 use re_renderer::view_builder::ViewBuilder;
@@ -319,7 +319,7 @@ impl Compositor {
         background_color: [f32; 4],
     ) -> Result<Vec<u8>, CompositorError> {
         let projection = crate::doc::core::camera_projection(comp, camera);
-        let pinned_cancel = crate::doc::core::camera_screen_from_world_z0(comp, camera).inverse();
+        let _pinned_cancel = crate::doc::core::camera_screen_from_world_z0(comp, camera).inverse();
         let view_from_world = macaw::IsoTransform::from_rotation_translation(
             projection.rotation,
             -(projection.rotation * projection.eye),
@@ -395,7 +395,7 @@ impl Compositor {
         background_color: [f32; 4],
     ) -> Result<(), CompositorError> {
         let projection = crate::doc::core::camera_projection(comp, camera);
-        let pinned_cancel = crate::doc::core::camera_screen_from_world_z0(comp, camera).inverse();
+        let _pinned_cancel = crate::doc::core::camera_screen_from_world_z0(comp, camera).inverse();
         let view_from_world = macaw::IsoTransform::from_rotation_translation(
             projection.rotation,
             -(projection.rotation * projection.eye),

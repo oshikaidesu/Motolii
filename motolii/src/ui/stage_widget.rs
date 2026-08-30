@@ -57,7 +57,7 @@ struct GizmoDrag {
     orig_box: (f64, f64, f64, f64),
 }
 
-pub struct StageWidget {
+pub(super) struct StageWidget {
     state: State,
     frames: u64,
     clock: Arc<Clock>,
@@ -86,7 +86,7 @@ struct TexAndHandle {
 }
 
 impl StageWidget {
-    pub fn new(
+    pub(super) fn new(
         clock: Arc<Clock>,
         doc: Arc<Mutex<Document>>,
         selection: Selection,

@@ -5,13 +5,13 @@
 use std::path::{Path, PathBuf};
 
 #[derive(Debug)]
-pub enum ToolStatus {
+pub(crate) enum ToolStatus {
     Ok,
     NotInstalled,
     Failed(String),
 }
 
-pub fn tool_status(bin: &str) -> ToolStatus {
+pub(crate) fn tool_status(bin: &str) -> ToolStatus {
     match std::process::Command::new(bin).arg("-version").output() {
         Ok(out) if out.status.success() => ToolStatus::Ok,
         Ok(out) => {
@@ -34,7 +34,7 @@ fn deps_required() -> bool {
         .unwrap_or(false)
 }
 
-pub fn unavailable_dep(dep: &str, detail: &str) -> bool {
+pub(crate) fn unavailable_dep(dep: &str, detail: &str) -> bool {
     if deps_required() {
         panic!("MOTOLII_REQUIRE_DEPS=1 だが {dep} が使えない: {detail}");
     }
@@ -42,7 +42,7 @@ pub fn unavailable_dep(dep: &str, detail: &str) -> bool {
     false
 }
 
-pub fn ffmpeg_or_skip() -> bool {
+pub(crate) fn ffmpeg_or_skip() -> bool {
     for bin in ["ffmpeg", "ffprobe"] {
         match tool_status(bin) {
             ToolStatus::Ok => {}
@@ -55,32 +55,32 @@ pub fn ffmpeg_or_skip() -> bool {
     true
 }
 
-pub fn tmp_dir(tag: &str) -> PathBuf {
+pub(crate) fn tmp_dir(tag: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("motolii-{tag}-{}", std::process::id()));
     std::fs::create_dir_all(&dir).expect("tmp_dir: create_dir_all");
     dir
 }
 
-pub mod cpu_reference {
-    pub fn expected_luma(gray: u8) -> i32 {
+pub(crate) mod cpu_reference {
+    pub(crate) fn expected_luma(gray: u8) -> i32 {
         (16.0 + 219.0 * gray as f64 / 255.0).round() as i32
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct RgbaImageDesc {
+pub(crate) struct RgbaImageDesc {
     pub width: u32,
     pub height: u32,
 }
 
 impl RgbaImageDesc {
-    pub fn byte_len(self) -> usize {
+    pub(crate) fn byte_len(self) -> usize {
         self.width as usize * self.height as usize * 4
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct ImageDiffStats {
+pub(crate) struct ImageDiffStats {
     pub max_abs_diff: u8,
     pub mean_abs_diff: f64,
     pub differing_bytes: usize,
@@ -88,13 +88,13 @@ pub struct ImageDiffStats {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct ImageDiff {
+pub(crate) struct ImageDiff {
     pub stats: ImageDiffStats,
     pub diff_rgba: Vec<u8>,
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum TestkitError {
+pub(crate) enum TestkitError {
     #[error("{label}: image size mismatch: actual={actual} expected={expected}")]
     SizeMismatch {
         label: String,
@@ -115,14 +115,14 @@ pub enum TestkitError {
     },
 }
 
-pub mod tol {
-    pub const EXACT: u8 = 0;
+pub(crate) mod tol {
+    pub(crate) const EXACT: u8 = 0;
 
-    pub const GPU_RASTER: u8 = 1;
+    pub(crate) const GPU_RASTER: u8 = 1;
 
-    pub const GPU_RASTER_MEAN: f64 = 0.5;
+    pub(crate) const GPU_RASTER_MEAN: f64 = 0.5;
 
-    pub fn mean_limit(max_tol: u8) -> f64 {
+    pub(crate) fn mean_limit(max_tol: u8) -> f64 {
         match max_tol {
             EXACT => 0.0,
             GPU_RASTER => GPU_RASTER_MEAN,
@@ -133,7 +133,7 @@ pub mod tol {
     }
 }
 
-pub fn compare_rgba_labeled(
+pub(crate) fn compare_rgba_labeled(
     label: &str,
     desc: RgbaImageDesc,
     actual: &[u8],
@@ -176,7 +176,7 @@ pub fn compare_rgba_labeled(
     })
 }
 
-pub fn save_rgba_png_labeled(
+pub(crate) fn save_rgba_png_labeled(
     path: impl AsRef<Path>,
     label: &str,
     desc: RgbaImageDesc,
@@ -205,7 +205,7 @@ pub fn save_rgba_png_labeled(
     })
 }
 
-pub fn assert_rgba_matches_golden_file(
+pub(crate) fn assert_rgba_matches_golden_file(
     path: impl AsRef<Path>,
     label: &str,
     desc: RgbaImageDesc,

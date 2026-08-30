@@ -2,14 +2,14 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::Instant;
 
-pub struct Clock {
+pub(super) struct Clock {
     playing: AtomicBool,
     anchor: Mutex<(Instant, f64)>,
     pub duration: f64,
 }
 
 impl Clock {
-    pub fn new(duration: f64) -> Self {
+    pub(super) fn new(duration: f64) -> Self {
         Self {
             playing: AtomicBool::new(false),
             anchor: Mutex::new((Instant::now(), 0.0)),
@@ -17,11 +17,11 @@ impl Clock {
         }
     }
 
-    pub fn playing(&self) -> bool {
+    pub(super) fn playing(&self) -> bool {
         self.playing.load(Ordering::Relaxed)
     }
 
-    pub fn toggle(&self) {
+    pub(super) fn toggle(&self) {
         let mut anchor = self.anchor.lock().unwrap();
         let now = Instant::now();
         if self.playing.swap(false, Ordering::Relaxed) {
@@ -33,13 +33,13 @@ impl Clock {
         }
     }
 
-    pub fn seek(&self, sec: f64) {
+    pub(super) fn seek(&self, sec: f64) {
         let mut anchor = self.anchor.lock().unwrap();
         anchor.0 = Instant::now();
         anchor.1 = sec.clamp(0.0, self.duration);
     }
 
-    pub fn now_sec(&self) -> f64 {
+    pub(super) fn now_sec(&self) -> f64 {
         let anchor = self.anchor.lock().unwrap();
         if self.playing.load(Ordering::Relaxed) {
             (anchor.1 + anchor.0.elapsed().as_secs_f64()) % self.duration

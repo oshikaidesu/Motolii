@@ -287,7 +287,7 @@ fn apply_layer_color(doc: &Arc<Mutex<Document>>, layer: LayerId, rgba: [u8; 4], 
     }
 }
 
-pub fn browser_panel(
+pub(super) fn browser_panel(
     ui: &UiData,
     doc: Arc<Mutex<Document>>,
     clock: Arc<Clock>,
