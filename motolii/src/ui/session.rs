@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-use motolii_store::{Document, LayerId};
+use crate::doc::store::{Document, LayerId};
 
 use crate::ui::playback::Clock;
 use crate::ui::tokens::UiScale;

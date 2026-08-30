@@ -1,4 +1,4 @@
-use motolii_store::{property, Document, LayerId, LayerSource, PropertyId, RationalTime, ShapeNode, StoreView, Value};
+use crate::doc::store::{property, Document, LayerId, LayerSource, PropertyId, RationalTime, ShapeNode, StoreView, Value};
 
 use crate::render::engine::known_effects;
 
@@ -115,7 +115,7 @@ fn shape_fill_colors(node: &ShapeNode, seen: &mut std::collections::BTreeSet<[u8
     match node {
         ShapeNode::Leaf(shape) => {
             if let Some(fill) = &shape.fill {
-                if let motolii_vector::Brush::Solid(rgb) = &fill.brush {
+                if let crate::render::vector::Brush::Solid(rgb) = &fill.brush {
                     push_swatch(seen, out, [(rgb.r * 255.0) as u8, (rgb.g * 255.0) as u8, (rgb.b * 255.0) as u8, 255]);
                 }
             }
@@ -466,7 +466,7 @@ pub fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: RationalTime
     }
 }
 
-fn admit_testdata(doc: &mut motolii_store::Document) {
+fn admit_testdata(doc: &mut crate::doc::store::Document) {
     let Some(dir) = std::env::var_os("MOTOLII_TESTDATA") else {
         return;
     };
@@ -486,10 +486,10 @@ fn admit_testdata(doc: &mut motolii_store::Document) {
         let Ok(reader) = std::fs::File::open(&path) else {
             continue;
         };
-        let Ok(fingerprint) = motolii_store::SourceFingerprintV1::from_reader(reader) else {
+        let Ok(fingerprint) = crate::doc::store::SourceFingerprintV1::from_reader(reader) else {
             continue;
         };
-        drafts.push(motolii_store::AssetDraft::from_probed_source(
+        drafts.push(crate::doc::store::AssetDraft::from_probed_source(
             asset_type,
             &fingerprint,
             &path,
@@ -501,7 +501,7 @@ fn admit_testdata(doc: &mut motolii_store::Document) {
     }
     let intents: Vec<_> = drafts
         .into_iter()
-        .map(|draft| motolii_store::Intent::AdmitAsset { draft })
+        .map(|draft| crate::doc::store::Intent::AdmitAsset { draft })
         .collect();
     if let Err(e) = doc.apply_all(intents) {
         println!("PROBE room=browser verdict=admit-error {e}");
@@ -516,16 +516,16 @@ pub fn load_fixture() -> Loaded {
         let intents: Vec<_> = layers
             .iter()
             .filter_map(|l| {
-                let mut track = motolii_store::KeyframeTrack::new();
-                track.insert(motolii_store::Keyframe {
-                    t: motolii_store::RationalTime::ZERO,
-                    value: motolii_store::Value::F64(deg),
-                    interp: motolii_store::Interp::Linear,
+                let mut track = crate::doc::store::KeyframeTrack::new();
+                track.insert(crate::doc::store::Keyframe {
+                    t: crate::doc::store::RationalTime::ZERO,
+                    value: crate::doc::store::Value::F64(deg),
+                    interp: crate::doc::store::Interp::Linear,
                     spatial: None,
                 });
-                motolii_store::PropertyId::new(motolii_store::property::ROTATION_X)
+                crate::doc::store::PropertyId::new(crate::doc::store::property::ROTATION_X)
                     .ok()
-                    .map(|property| motolii_store::Intent::SetTrack { layer: *l, property, track })
+                    .map(|property| crate::doc::store::Intent::SetTrack { layer: *l, property, track })
             })
             .collect();
         match fx.doc.apply_all(intents) {

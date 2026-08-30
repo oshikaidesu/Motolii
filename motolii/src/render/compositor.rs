@@ -108,11 +108,11 @@ pub(crate) fn tilt(rotation_x: f32, rotation_y: f32) -> glam::Quat {
 
 pub(crate) fn accumulator_plane_z(
     comp: CompSpec,
-    camera: motolii_core::ResolvedCamera,
+    camera: crate::doc::core::ResolvedCamera,
     centers: impl Iterator<Item = glam::Vec3>,
 ) -> f32 {
-    let projection = motolii_core::camera_projection(comp, camera);
-    let base = motolii_core::distance_from_camera(comp, 0.0);
+    let projection = crate::doc::core::camera_projection(comp, camera);
+    let base = crate::doc::core::distance_from_camera(comp, 0.0);
     let farthest = centers
         .map(|c| (c - projection.eye).length())
         .fold(base, f32::max);
@@ -183,7 +183,7 @@ pub use presentable::{check_presentable_target, PRESENTABLE_FORMAT};
 
 pub use re_renderer::resource_managers::GpuTexture2D;
 
-pub use motolii_core::{CompSpec, LayerPlacement, ResolvedCamera};
+pub use crate::doc::core::{CompSpec, LayerPlacement, ResolvedCamera};
 
 #[derive(Clone)]
 pub struct Layer {
@@ -275,7 +275,7 @@ pub(crate) fn sequential_target_config(
     name: &'static str,
     comp: CompSpec,
     view_from_world: macaw::IsoTransform,
-    projection: motolii_core::CameraProjection,
+    projection: crate::doc::core::CameraProjection,
 ) -> TargetConfiguration {
     TargetConfiguration {
         name: name.into(),
@@ -295,12 +295,12 @@ pub(crate) fn sequential_target_config(
 
 fn background_rect(
     comp: CompSpec,
-    camera: motolii_core::ResolvedCamera,
+    camera: crate::doc::core::ResolvedCamera,
     imported: GpuTexture2D,
     depth_offset: i16,
     plane_z: f32,
 ) -> TexturedRect {
-    let cancel = motolii_core::camera_screen_from_world_at_z(comp, camera, plane_z).inverse();
+    let cancel = crate::doc::core::camera_screen_from_world_at_z(comp, camera, plane_z).inverse();
     TexturedRect {
         top_left_corner_position: to_point3(cancel.transform_point2(glam::Vec2::ZERO), plane_z),
         extent_u: to_vector3(cancel.transform_vector2(glam::Vec2::new(comp.width as f32, 0.0))),

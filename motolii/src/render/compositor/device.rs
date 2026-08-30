@@ -104,18 +104,18 @@ impl Compositor {
         data: &[u8],
         width: u32,
         height: u32,
-        color: motolii_core::ColorSpace,
+        color: crate::doc::core::ColorSpace,
     ) -> Result<GpuTexture2D, CompositorError> {
         use re_renderer::resource_managers::{
             SourceImageDataFormat, YuvMatrixCoefficients, YuvPixelLayout, YuvRange,
         };
 
         let (coefficients, range) = match color {
-            motolii_core::ColorSpace::Rec709Limited => {
+            crate::doc::core::ColorSpace::Rec709Limited => {
                 (YuvMatrixCoefficients::Bt709, YuvRange::Limited)
             }
-            motolii_core::ColorSpace::Rec709Full => (YuvMatrixCoefficients::Bt709, YuvRange::Full),
-            motolii_core::ColorSpace::Rec601Limited => {
+            crate::doc::core::ColorSpace::Rec709Full => (YuvMatrixCoefficients::Bt709, YuvRange::Full),
+            crate::doc::core::ColorSpace::Rec601Limited => {
                 (YuvMatrixCoefficients::Bt601, YuvRange::Limited)
             }
             other => {

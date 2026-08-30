@@ -29,8 +29,8 @@ impl Compositor {
         let mut timing = RenderTiming::default();
         let build_start = std::time::Instant::now();
 
-        let projection = motolii_core::camera_projection(comp, camera);
-        let pinned_cancel = motolii_core::camera_screen_from_world_z0(comp, camera).inverse();
+        let projection = crate::doc::core::camera_projection(comp, camera);
+        let pinned_cancel = crate::doc::core::camera_screen_from_world_z0(comp, camera).inverse();
 
         let rects: Vec<TexturedRect> = layers
             .iter()

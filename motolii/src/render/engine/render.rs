@@ -2,8 +2,8 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::render::compositor::{Layer, LayerWithPasses};
-use motolii_core::{CompSpec, ResolvedCamera};
-use motolii_store::{
+use crate::doc::core::{CompSpec, ResolvedCamera};
+use crate::doc::store::{
     LayerId, LayerSource, RationalTime, ResolvedLayer, ShapeNode, StoreView, TextDocument,
 };
 
@@ -326,7 +326,7 @@ impl Engine {
         camera: ResolvedCamera,
         target: &Layer,
         matte_source: &Layer,
-        mode: motolii_store::MatteMode,
+        mode: crate::doc::store::MatteMode,
     ) -> Result<Layer, EngineError> {
         Ok(self.compositor.matte_layer(
             comp,

@@ -1,3 +1,7 @@
+#[cfg(test)]
+#[path = "../../../tests/testkit/mod.rs"]
+mod testkit;
+
 
 use std::fs::File;
 use std::path::Path;
@@ -126,7 +130,7 @@ mod tests {
 
     #[test]
     fn corrupt_input_is_typed_error_not_panic() {
-        let dir = motolii_testkit::tmp_dir("motolii-audio-decode-corrupt");
+        let dir = testkit::tmp_dir("motolii-audio-decode-corrupt");
         let path = dir.join("not-audio.bin");
         std::fs::write(&path, b"this is not an audio file at all, just plain bytes")
             .expect("write garbage file");

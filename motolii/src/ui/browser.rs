@@ -3,13 +3,13 @@ use std::sync::{Arc, Mutex};
 
 use dioxus_native::prelude::*;
 
-use motolii_store::{
+use crate::doc::store::{
     ContentKeyframe, ContentTrack, Document, EffectId, EffectInstance, FontRef, Intent,
     LayerAttrsPatch, LayerId, LayerMeta, LayerSource, LayerTiming, PathSource, RationalTime,
     Shape, ShapeNode, TextAlignmentOptions, TextDocument, TextDocumentStyle, TextJustify,
     TextStyleId, VectorPoint,
 };
-use motolii_vector::{Brush, Contour, Fill, FillRule, Rgb, Vertex};
+use crate::render::vector::{Brush, Contour, Fill, FillRule, Rgb, Vertex};
 
 use crate::ui::fixture::ColorSwatch;
 
@@ -108,11 +108,11 @@ fn new_layer_intents(layer: LayerId, order: i16, playhead: i64, duration_frames:
                     }]),
                     ops: Vec::new(),
                     fill: None,
-                    stroke: Some(motolii_vector::Stroke {
+                    stroke: Some(crate::render::vector::Stroke {
                         brush: Brush::Solid(Rgb { r: 1.0, g: 1.0, b: 1.0 }),
                         width: 6.0,
-                        cap: motolii_vector::LineCap::Round,
-                        join: motolii_vector::LineJoin::Round,
+                        cap: crate::render::vector::LineCap::Round,
+                        join: crate::render::vector::LineJoin::Round,
                         miter_limit: 4.0,
                         opacity: 1.0,
                         hidden: false,

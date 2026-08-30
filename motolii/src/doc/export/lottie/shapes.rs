@@ -1,6 +1,6 @@
 
-use motolii_store::{RepeaterTransform, Shape as VecShape, ShapeGroup, ShapeNode};
-use motolii_vector::{Brush, Contour, Dash, Fill, OpKind, PathSource, StarType, Stroke};
+use crate::doc::store::{RepeaterTransform, Shape as VecShape, ShapeGroup, ShapeNode};
+use crate::render::vector::{Brush, Contour, Dash, Fill, OpKind, PathSource, StarType, Stroke};
 
 use super::enums::{
     composite_to_int, fill_rule_to_int, gradient_type_to_int, line_cap_to_int, line_join_to_int,
@@ -238,7 +238,7 @@ fn static_vec3(v: [f64; 3]) -> serde_json::Value {
     serde_json::json!({ "a": 0, "k": [v[0], v[1], v[2]] })
 }
 
-fn gradient_colors_json(stops: &[motolii_vector::GradientStop]) -> serde_json::Value {
+fn gradient_colors_json(stops: &[crate::render::vector::GradientStop]) -> serde_json::Value {
     let mut flat = Vec::with_capacity(stops.len() * 4);
     for stop in stops {
         flat.push(stop.offset);

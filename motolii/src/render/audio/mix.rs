@@ -1,8 +1,8 @@
 
 use std::sync::Arc;
 
-use motolii_core::RationalTime;
-use motolii_eval::{KeyframeTrack, Value};
+use crate::doc::core::RationalTime;
+use crate::doc::eval::{KeyframeTrack, Value};
 
 use crate::render::audio::cache::PcmCache;
 use crate::render::audio::convert::{canonical_format, CANONICAL_CHANNELS, CANONICAL_SAMPLE_RATE};
@@ -306,7 +306,7 @@ mod tests {
     use super::*;
     use crate::render::audio::convert::to_canonical;
     use crate::render::audio::meter::MeterSnapshot;
-    use motolii_eval::{Interp, Keyframe};
+    use crate::doc::eval::{Interp, Keyframe};
 
     fn stereo_cache(samples: Vec<f32>) -> Arc<PcmCache> {
         Arc::new(PcmCache::from_interleaved(samples, canonical_format()).expect("valid"))

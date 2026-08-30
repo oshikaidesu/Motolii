@@ -1,10 +1,10 @@
-use motolii_store::{MaskMode, MatteMode, TextJustify};
-use motolii_vector::{
+use crate::doc::store::{MaskMode, MatteMode, TextJustify};
+use crate::render::vector::{
     Composite, FillRule, GradientType, LineCap, LineJoin, PointType, StarType, TrimMultiple,
 };
 
-pub(crate) fn blend_mode_to_int(mode: motolii_store::BlendMode) -> i64 {
-    use motolii_store::BlendMode::*;
+pub(crate) fn blend_mode_to_int(mode: crate::doc::store::BlendMode) -> i64 {
+    use crate::doc::store::BlendMode::*;
     match mode {
         Normal => 0,
         Multiply => 1,

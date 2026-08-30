@@ -4,10 +4,10 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-use motolii_core::{FrameDesc, PixelFormat, RationalTime};
+use crate::doc::core::{FrameDesc, PixelFormat, RationalTime};
 use crate::render::engine::{Engine, EngineError};
 use crate::render::media::{Encoder, MediaError};
-use motolii_store::StoreView;
+use crate::doc::store::StoreView;
 
 mod lottie;
 pub use lottie::{export_lottie, LottieExport, LottieExportError, UnsupportedForLottie};
@@ -129,7 +129,7 @@ pub fn export_range_with_progress(
         comp.width,
         comp.height,
         PixelFormat::Rgba8Unorm,
-        motolii_core::ColorSpace::Srgb,
+        crate::doc::core::ColorSpace::Srgb,
         true,
     )
     .map_err(|e| ExportError::Desc(e.to_string()))?;

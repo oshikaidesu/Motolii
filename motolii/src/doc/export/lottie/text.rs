@@ -1,5 +1,5 @@
-use motolii_core::RationalTime;
-use motolii_store::{LayerId, TextDocument};
+use crate::doc::core::RationalTime;
+use crate::doc::store::{LayerId, TextDocument};
 
 use super::enums::text_justify_to_int;
 use super::{Ctx, LottieExportError, UnsupportedForLottie};
@@ -108,7 +108,7 @@ fn default_text_document_json(content: &str) -> serde_json::Value {
 
 fn text_document_json(
     document: &TextDocument,
-    style: Option<&motolii_store::TextDocumentStyle>,
+    style: Option<&crate::doc::store::TextDocumentStyle>,
     content: &str,
 ) -> serde_json::Value {
     let mut obj = default_text_document_json(content);

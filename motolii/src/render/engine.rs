@@ -11,13 +11,13 @@ mod translate;
 
 use crate::render::compositor::GpuTexture2D;
 use crate::render::compositor::{Compositor, CompositorError};
-use motolii_core::ResolvedCamera;
+use crate::doc::core::ResolvedCamera;
 
 use crate::render::media::ContainerInfo;
 use crate::render::media::MediaError;
 use crate::render::media::MediaInfo;
 use crate::render::media::PointCloudData;
-use motolii_store::{LayerSource, Matte, RationalTime, StoreView};
+use crate::doc::store::{LayerSource, Matte, RationalTime, StoreView};
 
 use crate::render::engine::texture::{ShapeCacheKey, TextCacheKey};
 
@@ -36,13 +36,13 @@ pub enum EngineError {
     #[error("comp の設定が Document に無い(解像度も fps も決まっていない)")]
     NoComposition,
     #[error("blend mode {0:?} はまだ合成器が対応していない(Normal のみ対応。fork 改造候補)")]
-    UnsupportedBlendMode(motolii_store::BlendMode),
+    UnsupportedBlendMode(crate::doc::store::BlendMode),
     #[error("matte はまだ engine が絵から除外しつつ消費する経路に繋がっていない({0:?})")]
     UnsupportedMatte(Matte),
     #[error(transparent)]
     Text(#[from] crate::render::engine::text::TextRenderError),
     #[error(transparent)]
-    Shape(#[from] motolii_vector::VectorError),
+    Shape(#[from] crate::render::vector::VectorError),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -187,7 +187,7 @@ impl Engine {
             .and_then(|stream| stream.nb_frames)
     }
 
-    pub fn media_duration(&mut self, path: &str) -> Option<motolii_core::RationalTime> {
+    pub fn media_duration(&mut self, path: &str) -> Option<crate::doc::core::RationalTime> {
         self.container_probe(path)?.duration
     }
 

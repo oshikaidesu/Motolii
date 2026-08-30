@@ -1,31 +1,31 @@
 
-use motolii_store::{MaskMode, Path as EvalPath, ResolvedMask};
-use motolii_vector::coverage::{self, Coverage};
-use motolii_vector::{
+use crate::doc::store::{MaskMode, Path as EvalPath, ResolvedMask};
+use crate::render::vector::coverage::{self, Coverage};
+use crate::render::vector::{
     Brush, Canvas, Fill, FillRule, LineJoin, OpKind, PathSource, Raster, Rgb, Shape, ShapeOp,
     VectorError,
 };
 
-fn eval_path_to_vector_path(path: &EvalPath) -> motolii_vector::Path {
+fn eval_path_to_vector_path(path: &EvalPath) -> crate::render::vector::Path {
     let vertices = path
         .vertices
         .iter()
-        .map(|v| motolii_vector::Vertex {
-            point: motolii_vector::Point {
+        .map(|v| crate::render::vector::Vertex {
+            point: crate::render::vector::Point {
                 x: v.point[0],
                 y: v.point[1],
             },
-            in_tangent: motolii_vector::Point {
+            in_tangent: crate::render::vector::Point {
                 x: v.in_tangent[0],
                 y: v.in_tangent[1],
             },
-            out_tangent: motolii_vector::Point {
+            out_tangent: crate::render::vector::Point {
                 x: v.out_tangent[0],
                 y: v.out_tangent[1],
             },
         })
         .collect();
-    vec![motolii_vector::Contour {
+    vec![crate::render::vector::Contour {
         vertices,
         closed: path.closed,
     }]
@@ -57,7 +57,7 @@ pub fn rasterize_mask_coverage(
         }),
         stroke: None,
     };
-    motolii_vector::render(&shape, canvas)
+    crate::render::vector::render(&shape, canvas)
 }
 
 #[derive(Debug, thiserror::Error)]

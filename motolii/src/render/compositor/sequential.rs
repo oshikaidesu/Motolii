@@ -29,8 +29,8 @@ impl Compositor {
                 .all(|w| w[0].depth_offset <= w[1].depth_offset),
             "accumulate_sequential: inputs は depth_offset 非減少(=重ね順)で渡すこと"
         );
-        let projection = motolii_core::camera_projection(comp, camera);
-        let pinned_cancel = motolii_core::camera_screen_from_world_z0(comp, camera).inverse();
+        let projection = crate::doc::core::camera_projection(comp, camera);
+        let pinned_cancel = crate::doc::core::camera_screen_from_world_z0(comp, camera).inverse();
         let view_from_world = macaw::IsoTransform::from_rotation_translation(
             projection.rotation,
             -(projection.rotation * projection.eye),
@@ -318,8 +318,8 @@ impl Compositor {
         background: Option<(AccumulatorBacking, GpuTexture2D)>,
         background_color: [f32; 4],
     ) -> Result<Vec<u8>, CompositorError> {
-        let projection = motolii_core::camera_projection(comp, camera);
-        let pinned_cancel = motolii_core::camera_screen_from_world_z0(comp, camera).inverse();
+        let projection = crate::doc::core::camera_projection(comp, camera);
+        let pinned_cancel = crate::doc::core::camera_screen_from_world_z0(comp, camera).inverse();
         let view_from_world = macaw::IsoTransform::from_rotation_translation(
             projection.rotation,
             -(projection.rotation * projection.eye),
@@ -394,8 +394,8 @@ impl Compositor {
         background: Option<(AccumulatorBacking, GpuTexture2D)>,
         background_color: [f32; 4],
     ) -> Result<(), CompositorError> {
-        let projection = motolii_core::camera_projection(comp, camera);
-        let pinned_cancel = motolii_core::camera_screen_from_world_z0(comp, camera).inverse();
+        let projection = crate::doc::core::camera_projection(comp, camera);
+        let pinned_cancel = crate::doc::core::camera_screen_from_world_z0(comp, camera).inverse();
         let view_from_world = macaw::IsoTransform::from_rotation_translation(
             projection.rotation,
             -(projection.rotation * projection.eye),
@@ -489,7 +489,7 @@ impl Compositor {
                 Ok((texture, view))
             }
             None => {
-                let projection = motolii_core::camera_projection(comp, camera);
+                let projection = crate::doc::core::camera_projection(comp, camera);
                 let view_from_world = macaw::IsoTransform::from_rotation_translation(
                     projection.rotation,
                     -(projection.rotation * projection.eye),
@@ -554,7 +554,7 @@ impl Compositor {
     fn render_layer_to_canvas(
         &mut self,
         comp: CompSpec,
-        projection: motolii_core::CameraProjection,
+        projection: crate::doc::core::CameraProjection,
         view_from_world: macaw::IsoTransform,
         pinned_cancel: glam::Affine2,
         layer: &Layer,
@@ -627,8 +627,8 @@ impl Compositor {
         matte_source: &Layer,
         mode: MatteMode,
     ) -> Result<Layer, CompositorError> {
-        let projection = motolii_core::camera_projection(comp, camera);
-        let pinned_cancel = motolii_core::camera_screen_from_world_z0(comp, camera).inverse();
+        let projection = crate::doc::core::camera_projection(comp, camera);
+        let pinned_cancel = crate::doc::core::camera_screen_from_world_z0(comp, camera).inverse();
         let view_from_world = macaw::IsoTransform::from_rotation_translation(
             projection.rotation,
             -(projection.rotation * projection.eye),

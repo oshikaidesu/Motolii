@@ -1,8 +1,12 @@
+#[cfg(test)]
+#[path = "../../../tests/testkit/mod.rs"]
+mod testkit;
+
 use std::io::Write;
 use std::path::Path;
 use std::process::{Child, ChildStdin, Command, Stdio};
 
-use motolii_core::{Fps, FrameDesc, PixelFormat};
+use crate::doc::core::{Fps, FrameDesc, PixelFormat};
 
 use crate::render::media::{read_child_stderr, MediaError, Result};
 
@@ -104,7 +108,7 @@ impl Drop for Encoder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use motolii_core::ColorSpace;
+    use crate::doc::core::ColorSpace;
     use std::sync::mpsc;
     use std::time::Duration;
 
@@ -122,7 +126,7 @@ mod tests {
 
     #[test]
     fn encoder_rejects_wrong_frame_size() {
-        if !motolii_testkit::ffmpeg_or_skip() {
+        if !testkit::ffmpeg_or_skip() {
             return;
         }
         let desc = FrameDesc::packed(8, 8, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, false);

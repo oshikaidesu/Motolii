@@ -2,7 +2,7 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
-use motolii_core::{Fps, RationalTime, RationalTimeError};
+use crate::doc::core::{Fps, RationalTime, RationalTimeError};
 
 #[inline]
 pub fn perceptual_sample_frames(supplied_frames: u64, device_wait_frames: u64) -> u64 {

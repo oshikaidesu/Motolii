@@ -1,11 +1,11 @@
 
 use motolii::render::compositor::HeadlessGpu;
 use motolii::render::engine::Engine;
-use motolii_store::{
+use motolii::doc::store::{
     Composition, Document, Fps, Intent, LayerId, LayerMeta, LayerSource, LayerTiming, RationalTime,
     Shape, ShapeNode,
 };
-use motolii_vector::{Brush, Fill, FillRule, PathSource, Point as VPoint, Rgb};
+use motolii::render::vector::{Brush, Fill, FillRule, PathSource, Point as VPoint, Rgb};
 
 const W: u32 = 64;
 const H: u32 = 64;

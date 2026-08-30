@@ -1,7 +1,7 @@
 
-use motolii_store::{RationalTime, TextDocument, TextDocumentStyle, TextJustify as StoreJustify};
-use motolii_vector::text::{shape_text, GlyphFont, TextFeature, TextJustify, TextLayout, TextShapeError};
-use motolii_vector::{Brush, Canvas, Fill, FillRule, PathSource, Raster, Rgb, Shape, Stroke, VectorError};
+use crate::doc::store::{RationalTime, TextDocument, TextDocumentStyle, TextJustify as StoreJustify};
+use crate::render::vector::text::{shape_text, GlyphFont, TextFeature, TextJustify, TextLayout, TextShapeError};
+use crate::render::vector::{Brush, Canvas, Fill, FillRule, PathSource, Raster, Rgb, Shape, Stroke, VectorError};
 
 #[derive(Debug, thiserror::Error)]
 pub enum TextRenderError {
@@ -94,13 +94,13 @@ pub fn rasterize_text_document(
         fill,
         stroke,
     };
-    Ok(Some(motolii_vector::render(&shape, canvas)?))
+    Ok(Some(crate::render::vector::render(&shape, canvas)?))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use motolii_store::{
+    use crate::doc::store::{
         ContentKeyframe, ContentTrack, FontRef, Fps, TextAlignmentOptions, TextDocumentStyle,
         TextStyleId,
     };

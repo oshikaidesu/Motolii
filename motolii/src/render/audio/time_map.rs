@@ -1,5 +1,5 @@
 
-use motolii_core::{RationalTime, RationalTimeError};
+use crate::doc::core::{RationalTime, RationalTimeError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum TimeMapError {

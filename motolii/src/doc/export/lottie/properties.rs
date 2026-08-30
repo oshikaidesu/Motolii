@@ -1,6 +1,6 @@
 
-use motolii_core::RationalTime;
-use motolii_store::{
+use crate::doc::core::RationalTime;
+use crate::doc::store::{
     LayerId, Mask, Marker, Path as BezierPath, PropertyBase, PropertyId, PropertySource, Slot,
     SlotId, Value,
 };
@@ -67,7 +67,7 @@ fn bezier_property(
 enum Resolved {
     None,
     SlotRef(String),
-    Track(motolii_store::KeyframeTrack),
+    Track(crate::doc::store::KeyframeTrack),
 }
 
 fn resolve(
@@ -99,9 +99,9 @@ pub(crate) fn bake_property(
     ctx: &Ctx<'_, '_>,
     layer: LayerId,
     property: &PropertyId,
-) -> Result<motolii_store::KeyframeTrack, LottieExportError> {
-    use motolii_store::{Interp, Keyframe};
-    let mut track = motolii_store::KeyframeTrack::new();
+) -> Result<crate::doc::store::KeyframeTrack, LottieExportError> {
+    use crate::doc::store::{Interp, Keyframe};
+    let mut track = crate::doc::store::KeyframeTrack::new();
     let mut last: Option<Value> = None;
     for frame in 0..ctx.duration_frames.max(1) {
         let t = RationalTime::try_from_frame(frame, ctx.fps)?;
@@ -133,9 +133,9 @@ fn time_to_frame(ctx: &Ctx<'_, '_>, t: RationalTime) -> Result<f64, LottieExport
 }
 
 fn interp_easing(
-    interp: motolii_store::Interp,
+    interp: crate::doc::store::Interp,
 ) -> Result<Option<(serde_json::Value, serde_json::Value)>, LottieExportError> {
-    use motolii_store::Interp;
+    use crate::doc::store::Interp;
     Ok(match interp {
         Interp::Hold => None,
         Interp::Linear => Some((
@@ -156,7 +156,7 @@ pub(crate) fn encode_scalar_track(
     ctx: &Ctx<'_, '_>,
     layer: Option<LayerId>,
     name: &str,
-    track: &motolii_store::KeyframeTrack,
+    track: &crate::doc::store::KeyframeTrack,
     scale: f64,
     bounds: Option<(f64, f64)>,
     unsupported: &mut Vec<UnsupportedForLottie>,
@@ -205,7 +205,7 @@ pub(crate) fn encode_scalar_track(
 fn encode_vector_track(
     ctx: &Ctx<'_, '_>,
     name: &str,
-    track: &motolii_store::KeyframeTrack,
+    track: &crate::doc::store::KeyframeTrack,
     scale: f64,
     with_spatial: bool,
 ) -> Result<serde_json::Value, LottieExportError> {
@@ -251,7 +251,7 @@ fn encode_vector_track(
 fn encode_bezier_track(
     ctx: &Ctx<'_, '_>,
     name: &str,
-    track: &motolii_store::KeyframeTrack,
+    track: &crate::doc::store::KeyframeTrack,
 ) -> Result<serde_json::Value, LottieExportError> {
     let keys = track.keys();
     if keys.len() <= 1 {
@@ -387,7 +387,7 @@ fn encode_color_track(
     ctx: &Ctx<'_, '_>,
     layer: Option<LayerId>,
     name: &str,
-    track: &motolii_store::KeyframeTrack,
+    track: &crate::doc::store::KeyframeTrack,
     unsupported: &mut Vec<UnsupportedForLottie>,
 ) -> Result<serde_json::Value, LottieExportError> {
     const UNIT: (f64, f64) = (0.0, 1.0);

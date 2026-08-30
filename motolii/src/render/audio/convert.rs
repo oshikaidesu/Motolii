@@ -13,8 +13,8 @@ pub fn canonical_format() -> PcmFormat {
     }
 }
 
-pub fn time_to_canonical_frames(t: motolii_core::RationalTime) -> u64 {
-    if t <= motolii_core::RationalTime::ZERO {
+pub fn time_to_canonical_frames(t: crate::doc::core::RationalTime) -> u64 {
+    if t <= crate::doc::core::RationalTime::ZERO {
         return 0;
     }
     let num = t.num().max(0) as u128;

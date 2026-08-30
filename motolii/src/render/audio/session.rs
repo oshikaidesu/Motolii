@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use cpal::traits::HostTrait;
 
-use motolii_core::RationalTime;
+use crate::doc::core::RationalTime;
 
 use crate::render::audio::clock::{DeviceWaitLatency, PlaybackClock, PlaybackCounters};
 use crate::render::audio::convert::{canonical_format, time_to_canonical_frames};

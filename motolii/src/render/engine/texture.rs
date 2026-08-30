@@ -3,9 +3,9 @@ use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 
 use crate::render::compositor::GpuTexture2D;
-use motolii_core::CompSpec;
+use crate::doc::core::CompSpec;
 use crate::render::media::{is_point_cloud_path, load_point_cloud, probe};
-use motolii_store::{
+use crate::doc::store::{
     LayerId, LayerSource, RationalTime, ResolvedLayer, ShapeNode, StoreView, TextDocument,
 };
 
@@ -62,7 +62,7 @@ impl Engine {
             }
             LayerSource::Shape => {
                 let shapes = view.shapes(layer_id).ok()?;
-                let canvas = motolii_vector::Canvas::centered(comp.width, comp.height);
+                let canvas = crate::render::vector::Canvas::centered(comp.width, comp.height);
                 let key = ShapeCacheKey::new(layer_id, &shapes, canvas.width, canvas.height);
                 self.shape_textures.get(&key)?.width_height().map(|v| v as f32)
             }
@@ -134,7 +134,7 @@ impl Engine {
             return Ok((None, [0.0, 0.0]));
         };
 
-        let canvas = motolii_vector::Canvas {
+        let canvas = crate::render::vector::Canvas {
             width: comp.width,
             height: comp.height,
             origin_x: 0,
@@ -185,7 +185,7 @@ impl Engine {
             return Ok((None, [0.0, 0.0]));
         }
 
-        let canvas = motolii_vector::Canvas::centered(comp.width, comp.height);
+        let canvas = crate::render::vector::Canvas::centered(comp.width, comp.height);
 
         let key = ShapeCacheKey::new(layer_id, shapes, canvas.width, canvas.height);
         if let Some(texture) = self.shape_textures.get(&key) {

@@ -1,6 +1,6 @@
 
-use motolii_store::ShapeNode;
-use motolii_vector::{Canvas, Raster, VectorError};
+use crate::doc::store::ShapeNode;
+use crate::render::vector::{Canvas, Raster, VectorError};
 
 pub fn rasterize_shapes(
     shapes: &[ShapeNode],
@@ -9,13 +9,13 @@ pub fn rasterize_shapes(
     if shapes.is_empty() {
         return Ok(None);
     }
-    Ok(Some(motolii_vector::render_tree(shapes, canvas)?))
+    Ok(Some(crate::render::vector::render_tree(shapes, canvas)?))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use motolii_vector::{Brush, Fill, FillRule, PathSource, Point, Rgb, Shape, Stroke};
+    use crate::render::vector::{Brush, Fill, FillRule, PathSource, Point, Rgb, Shape, Stroke};
 
     fn canvas(w: u32, h: u32) -> Canvas {
         Canvas::centered(w, h)

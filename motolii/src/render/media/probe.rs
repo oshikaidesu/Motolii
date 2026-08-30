@@ -3,7 +3,7 @@ use std::process::Command;
 
 use serde::Deserialize;
 
-use motolii_core::{ColorSpace, Fps, RationalTime};
+use crate::doc::core::{ColorSpace, Fps, RationalTime};
 
 use crate::render::media::{MediaError, Result};
 

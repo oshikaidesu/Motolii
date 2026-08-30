@@ -1,6 +1,6 @@
 
 use motolii::render::engine::Engine;
-use motolii_store::{
+use motolii::doc::store::{
     property, Document, Intent, Interp, Keyframe, KeyframeTrack, PropertyId, RationalTime, Value,
 };
 

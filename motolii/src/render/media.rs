@@ -26,7 +26,7 @@ pub enum MediaError {
     #[error("probe failed: {0}")]
     Probe(String),
     #[error(transparent)]
-    Fingerprint(#[from] motolii_store::SourceFingerprintError),
+    Fingerprint(#[from] crate::doc::store::SourceFingerprintError),
     #[error("media stream not found: kind={kind}, ordinal={ordinal}")]
     StreamNotFound { kind: MediaStreamKind, ordinal: u32 },
     #[error("unsupported audio codec `{codec}` (audio ordinal {ordinal})")]
@@ -34,15 +34,15 @@ pub enum MediaError {
     #[error("unsupported audio channel layout `{layout}` (audio ordinal {ordinal})")]
     UnsupportedChannelLayout { ordinal: u32, layout: String },
     #[error(transparent)]
-    RationalTime(#[from] motolii_core::RationalTimeError),
+    RationalTime(#[from] crate::doc::core::RationalTimeError),
     #[error("invalid start frame: {0}")]
     InvalidStartFrame(i64),
     #[error("soundtrack start_offset must be >= 0, got {0:?}")]
-    InvalidStartOffset(motolii_core::RationalTime),
+    InvalidStartOffset(crate::doc::core::RationalTime),
     #[error("soundtrack master_gain must be finite and in [0, 1], got {0}")]
     InvalidMasterGain(f64),
     #[error("encoder expects RGBA input, got {0:?}")]
-    UnsupportedEncoderFormat(motolii_core::PixelFormat),
+    UnsupportedEncoderFormat(crate::doc::core::PixelFormat),
     #[error("frame size mismatch: expected {expected} bytes, got {got}")]
     FrameSizeMismatch { expected: usize, got: usize },
     #[error("ffmpeg failed: {0}")]

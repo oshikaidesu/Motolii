@@ -4,3 +4,4 @@ pub mod audio;
 pub mod compositor;
 pub mod engine;
 pub mod media;
+pub mod vector;

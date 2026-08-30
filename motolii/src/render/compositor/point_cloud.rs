@@ -7,7 +7,7 @@ use re_renderer::{Color32, PointCloudBuilder, Rgba, Size, ViewBuilderId};
 
 use crate::render::compositor::{Compositor, CompositorError, GpuTexture2D};
 
-const POINT_CLOUD_VERTICAL_FOV_DEGREES: f32 = motolii_core::CAMERA_BASE_VERTICAL_FOV_DEGREES;
+const POINT_CLOUD_VERTICAL_FOV_DEGREES: f32 = crate::doc::core::CAMERA_BASE_VERTICAL_FOV_DEGREES;
 
 impl Compositor {
     pub fn render_point_cloud_to_texture(
@@ -56,7 +56,7 @@ impl Compositor {
                 view_from_world,
                 projection_from_view: Projection::Perspective {
                     vertical_fov: half_fov * 2.0,
-                    near_plane_distance: motolii_core::NEAR_PLANE,
+                    near_plane_distance: crate::doc::core::NEAR_PLANE,
                     aspect_ratio: width as f32 / height as f32,
                 },
                 pixels_per_point: 1.0,

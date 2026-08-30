@@ -6,7 +6,7 @@ use crate::ui::session::Selection;
 use crate::ui::tokens::{self, UiScale};
 use anyrender::{PaintRef, PaintScene};
 use dioxus_native::prelude::{Signal, WritableExt};
-use motolii_store::{
+use crate::doc::store::{
     Document, Fps, Intent, KeyframeTrack, LayerAttrs, LayerAttrsPatch, LayerId, LayerMeta,
     LayerTiming, RationalTime, StoreError,
 };
@@ -665,7 +665,7 @@ impl Widget for TimelineWidget {
 #[cfg(test)]
 mod keyframe_shift_tests {
     use super::*;
-    use motolii_store::{Composition, Interp, Keyframe, LayerSource, PropertyId, Value};
+    use crate::doc::store::{Composition, Interp, Keyframe, LayerSource, PropertyId, Value};
 
     #[test]
     fn move_shifts_keyframes_by_the_same_delta() {

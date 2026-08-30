@@ -1,3 +1,4 @@
+mod testkit;
 
 use std::process::Command;
 
@@ -47,10 +48,10 @@ fn make_tiny_video(path: &std::path::Path, frames: u32, fps: u32) {
 
 #[test]
 fn audio_only_file_has_no_frame_count_but_has_a_real_duration() {
-    if !motolii_testkit::ffmpeg_or_skip() {
+    if !testkit::ffmpeg_or_skip() {
         return;
     }
-    let dir = motolii_testkit::tmp_dir("engine-media-frames-audio-only");
+    let dir = testkit::tmp_dir("engine-media-frames-audio-only");
     let audio = dir.join("voice.m4a");
     make_sine_audio(&audio, 2.0);
 
@@ -74,10 +75,10 @@ fn audio_only_file_has_no_frame_count_but_has_a_real_duration() {
 
 #[test]
 fn video_file_reports_its_native_frame_count() {
-    if !motolii_testkit::ffmpeg_or_skip() {
+    if !testkit::ffmpeg_or_skip() {
         return;
     }
-    let dir = motolii_testkit::tmp_dir("engine-media-frames-video");
+    let dir = testkit::tmp_dir("engine-media-frames-video");
     let video = dir.join("clip.mp4");
     make_tiny_video(&video, 10, 5);
 

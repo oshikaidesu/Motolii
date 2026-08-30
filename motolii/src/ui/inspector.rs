@@ -4,7 +4,7 @@ use dioxus_native::prelude::*;
 
 use crate::ui::fixture::{inspector_data_from_doc, InspectorData, PropRow};
 use crate::ui::playback::Clock;
-use motolii_store::{
+use crate::doc::store::{
     property, ContentKeyframe, Document, Intent, Interp, Keyframe, KeyframeTrack, LayerId,
     PropertyId, RationalTime, Value,
 };
@@ -60,7 +60,7 @@ fn write_key(
     value: Value,
     t: RationalTime,
     at_zero_if_new: bool,
-) -> Result<(), motolii_store::StoreError> {
+) -> Result<(), crate::doc::store::StoreError> {
     let Ok(prop) = PropertyId::new(property) else {
         return Ok(());
     };
@@ -91,7 +91,7 @@ fn write_content(
     layer: LayerId,
     t: RationalTime,
     content: String,
-) -> Result<(), motolii_store::StoreError> {
+) -> Result<(), crate::doc::store::StoreError> {
     let mut doc = doc.lock().unwrap();
     let Some(mut document) = doc.view().text_document(layer)? else {
         return Ok(());

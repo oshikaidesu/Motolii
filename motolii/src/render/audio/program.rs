@@ -15,9 +15,9 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 
-use motolii_core::RationalTime;
-use motolii_eval::Value;
-use motolii_store::{property, LayerId, LayerSource, PropertyId, StoreView};
+use crate::doc::core::RationalTime;
+use crate::doc::eval::Value;
+use crate::doc::store::{property, LayerId, LayerSource, PropertyId, StoreView};
 
 use crate::render::audio::cache::PcmCache;
 use crate::render::audio::convert::{to_canonical, CANONICAL_SAMPLE_RATE};
@@ -41,7 +41,7 @@ struct SoundtrackInput {
 }
 
 fn project_soundtrack_input(
-    meta: &motolii_store::LayerMeta,
+    meta: &crate::doc::store::LayerMeta,
     hidden: bool,
 ) -> Option<SoundtrackInput> {
     if hidden {
@@ -117,7 +117,7 @@ impl AudioProgram {
 fn layer_mix_source(
     view: &StoreView<'_>,
     layer: LayerId,
-    fps: motolii_core::Fps,
+    fps: crate::doc::core::Fps,
     caches: &mut HashMap<(String, u32), Arc<PcmCache>>,
 ) -> Result<Option<MixSource>> {
     let Some(meta) = view.meta(layer)? else {
@@ -222,7 +222,7 @@ pub fn program_from_sources(
 
 #[cfg(test)]
 mod tests {
-    use motolii_store::{LayerMeta, LayerSource, LayerTiming};
+    use crate::doc::store::{LayerMeta, LayerSource, LayerTiming};
 
     use super::project_soundtrack_input;
 

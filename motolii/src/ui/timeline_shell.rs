@@ -8,7 +8,7 @@ use crate::ui::fixture::{fmt_timecode, LayerRow};
 use crate::ui::playback::Clock;
 use crate::ui::session::Selection;
 use crate::ui::timeline_widget::TimelineMsg;
-use motolii_store::{Document, Intent, LayerAttrsPatch, LayerId};
+use crate::doc::store::{Document, Intent, LayerAttrsPatch, LayerId};
 
 pub fn timeline_shell(
     clock: Arc<Clock>,

@@ -1,7 +1,7 @@
 
 use motolii::render::compositor::HeadlessGpu;
 use motolii::render::engine::Engine;
-use motolii_store::{
+use motolii::doc::store::{
     Composition, ContentKeyframe, ContentTrack, Document, Fps, FontRef, Intent, LayerAttrsPatch,
     LayerId, LayerMeta, LayerSource, LayerTiming, Matte, MatteMode, RationalTime,
     TextAlignmentOptions, TextDocument, TextDocumentStyle, TextJustify, TextStyleId,

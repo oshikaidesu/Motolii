@@ -2,10 +2,10 @@
 use crate::render::engine::EngineError;
 
 pub(crate) fn translate_blend_mode(
-    mode: motolii_store::BlendMode,
+    mode: crate::doc::store::BlendMode,
 ) -> Result<crate::render::compositor::BlendMode, EngineError> {
     use crate::render::compositor::BlendMode as Dst;
-    use motolii_store::BlendMode as Src;
+    use crate::doc::store::BlendMode as Src;
     match mode {
         Src::Normal => Ok(Dst::Normal),
         Src::Add => Ok(Dst::Add),
@@ -28,10 +28,10 @@ pub(crate) fn translate_blend_mode(
 }
 
 pub(crate) fn translate_matte_mode(
-    mode: motolii_store::MatteMode,
+    mode: crate::doc::store::MatteMode,
 ) -> crate::render::compositor::MatteMode {
     use crate::render::compositor::MatteMode as Dst;
-    use motolii_store::MatteMode as Src;
+    use crate::doc::store::MatteMode as Src;
     match mode {
         Src::Alpha => Dst::Alpha,
         Src::InvertedAlpha => Dst::InvertedAlpha,
@@ -47,7 +47,7 @@ mod translate_blend_mode_tests {
     #[test]
     fn add_is_accepted() {
         assert_eq!(
-            translate_blend_mode(motolii_store::BlendMode::Add).unwrap(),
+            translate_blend_mode(crate::doc::store::BlendMode::Add).unwrap(),
             crate::render::compositor::BlendMode::Add
         );
     }
@@ -55,11 +55,11 @@ mod translate_blend_mode_tests {
     #[test]
     fn separable_modes_are_accepted() {
         assert_eq!(
-            translate_blend_mode(motolii_store::BlendMode::Multiply).unwrap(),
+            translate_blend_mode(crate::doc::store::BlendMode::Multiply).unwrap(),
             crate::render::compositor::BlendMode::Multiply
         );
         assert_eq!(
-            translate_blend_mode(motolii_store::BlendMode::SoftLight).unwrap(),
+            translate_blend_mode(crate::doc::store::BlendMode::SoftLight).unwrap(),
             crate::render::compositor::BlendMode::SoftLight
         );
     }
@@ -67,19 +67,19 @@ mod translate_blend_mode_tests {
     #[test]
     fn nonseparable_modes_are_accepted() {
         assert_eq!(
-            translate_blend_mode(motolii_store::BlendMode::Hue).unwrap(),
+            translate_blend_mode(crate::doc::store::BlendMode::Hue).unwrap(),
             crate::render::compositor::BlendMode::Hue
         );
         assert_eq!(
-            translate_blend_mode(motolii_store::BlendMode::Saturation).unwrap(),
+            translate_blend_mode(crate::doc::store::BlendMode::Saturation).unwrap(),
             crate::render::compositor::BlendMode::Saturation
         );
         assert_eq!(
-            translate_blend_mode(motolii_store::BlendMode::Color).unwrap(),
+            translate_blend_mode(crate::doc::store::BlendMode::Color).unwrap(),
             crate::render::compositor::BlendMode::Color
         );
         assert_eq!(
-            translate_blend_mode(motolii_store::BlendMode::Luminosity).unwrap(),
+            translate_blend_mode(crate::doc::store::BlendMode::Luminosity).unwrap(),
             crate::render::compositor::BlendMode::Luminosity
         );
     }
@@ -92,26 +92,26 @@ mod translate_matte_mode_tests {
     #[test]
     fn all_four_matte_modes_translate_one_to_one() {
         assert_eq!(
-            translate_matte_mode(motolii_store::MatteMode::Alpha),
+            translate_matte_mode(crate::doc::store::MatteMode::Alpha),
             crate::render::compositor::MatteMode::Alpha
         );
         assert_eq!(
-            translate_matte_mode(motolii_store::MatteMode::InvertedAlpha),
+            translate_matte_mode(crate::doc::store::MatteMode::InvertedAlpha),
             crate::render::compositor::MatteMode::InvertedAlpha
         );
         assert_eq!(
-            translate_matte_mode(motolii_store::MatteMode::Luma),
+            translate_matte_mode(crate::doc::store::MatteMode::Luma),
             crate::render::compositor::MatteMode::Luma
         );
         assert_eq!(
-            translate_matte_mode(motolii_store::MatteMode::InvertedLuma),
+            translate_matte_mode(crate::doc::store::MatteMode::InvertedLuma),
             crate::render::compositor::MatteMode::InvertedLuma
         );
     }
 }
 
 pub(crate) fn translate_effect_passes(
-    effects: &[motolii_store::ResolvedEffect],
+    effects: &[crate::doc::store::ResolvedEffect],
 ) -> Vec<crate::render::compositor::EffectPass> {
     effects
         .iter()
@@ -125,12 +125,12 @@ pub(crate) fn translate_effect_passes(
         .collect()
 }
 
-fn translate_isf_params(params: &[(String, motolii_store::Value)]) -> crate::render::compositor::EffectPass {
+fn translate_isf_params(params: &[(String, crate::doc::store::Value)]) -> crate::render::compositor::EffectPass {
     crate::render::compositor::EffectPass::Isf {
         params: params
             .iter()
             .filter_map(|(name, value)| match value {
-                motolii_store::Value::F64(v) => Some((name.clone(), *v as f32)),
+                crate::doc::store::Value::F64(v) => Some((name.clone(), *v as f32)),
                 _ => None,
             })
             .collect(),
@@ -209,10 +209,10 @@ pub fn known_effects() -> &'static [EffectDescriptor] {
     })
 }
 
-fn translate_glow_params(params: &[(String, motolii_store::Value)]) -> Option<crate::render::compositor::EffectPass> {
+fn translate_glow_params(params: &[(String, crate::doc::store::Value)]) -> Option<crate::render::compositor::EffectPass> {
     let find = |name: &str, default: f64| -> Option<f64> {
         match params.iter().find(|(param_name, _)| param_name == name) {
-            Some((_, motolii_store::Value::F64(v))) => Some(*v),
+            Some((_, crate::doc::store::Value::F64(v))) => Some(*v),
             Some(_other_type) => None,
             None => Some(default),
         }
@@ -230,7 +230,7 @@ fn translate_glow_params(params: &[(String, motolii_store::Value)]) -> Option<cr
 #[cfg(test)]
 mod translate_effect_passes_tests {
     use super::translate_effect_passes;
-    use motolii_store::ResolvedEffect;
+    use crate::doc::store::ResolvedEffect;
 
     #[test]
     fn no_effects_yields_no_passes() {
@@ -256,7 +256,7 @@ mod translate_effect_passes_tests {
 #[cfg(test)]
 mod known_effects_tests {
     use super::{known_effects, translate_effect_passes};
-    use motolii_store::ResolvedEffect;
+    use crate::doc::store::ResolvedEffect;
 
     #[test]
     fn known_effects_are_all_actually_drawable() {

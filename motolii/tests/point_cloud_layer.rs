@@ -1,6 +1,6 @@
 
 use motolii::render::engine::Engine;
-use motolii_store::{
+use motolii::doc::store::{
     Composition, Document, Fps, Intent, LayerId, LayerMeta, LayerSource, LayerTiming, RationalTime,
 };
 

@@ -7,7 +7,7 @@ use anyrender::{PaintRef, PaintScene, ResourceId};
 use blitz_traits::events::UiEvent;
 use dioxus_native::prelude::{Signal, WritableExt};
 use keyboard_types::Modifiers;
-use motolii_store::{property, Document, Intent, Interp, Keyframe, KeyframeTrack, LayerId, PropertyId, RationalTime, StoreView, Value};
+use crate::doc::store::{property, Document, Intent, Interp, Keyframe, KeyframeTrack, LayerId, PropertyId, RationalTime, StoreView, Value};
 use blitz_dom::node::ComputedStyles;
 use blitz_dom::Widget;
 use crate::render::engine::Engine;

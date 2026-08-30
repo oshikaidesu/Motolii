@@ -1,14 +1,14 @@
 
-use motolii_core::{Fps, RationalTime};
+use motolii::doc::core::{Fps, RationalTime};
 use motolii::doc::export::export_lottie;
-use motolii_store::{
+use motolii::doc::store::{
     property, Composition, ContentTrack, Document, EffectId, EffectInstance, FontRef, Intent,
     Interp, Keyframe, KeyframeTrack, LayerAttrsPatch, LayerId, LayerMeta, LayerSource,
     LayerTiming, Mask, MaskId, MaskMode, Matte, MatteMode, Path, PathVertex, PropertyId,
     PropertyLink, ShapeNode, SlotId, TextAlignmentOptions, TextDocument, TextDocumentStyle,
     TextJustify, TextStyleId, Value,
 };
-use motolii_vector::{Brush, Fill, FillRule, PathSource, Rgb, Shape as VecShape};
+use motolii::render::vector::{Brush, Fill, FillRule, PathSource, Rgb, Shape as VecShape};
 
 const W: u32 = 64;
 const H: u32 = 48;
@@ -353,7 +353,7 @@ fn shape_layer_exports_fill_and_geometry() {
     let layer = LayerId(1);
     add_layer(&mut doc, layer, LayerSource::Shape);
 
-    let mut shape = VecShape::new(PathSource::Ellipse { size: motolii_vector::Point { x: 20.0, y: 20.0 } });
+    let mut shape = VecShape::new(PathSource::Ellipse { size: motolii::render::vector::Point { x: 20.0, y: 20.0 } });
     shape.fill = Some(Fill {
         brush: Brush::Solid(Rgb { r: 1.0, g: 0.0, b: 0.0 }),
         rule: FillRule::NonZero,
@@ -430,7 +430,7 @@ fn slot_referenced_property_exports_as_sid_reference() {
     add_layer(&mut doc, layer, LayerSource::Null);
 
     doc.apply(Intent::SetSlots {
-        slots: vec![motolii_store::Slot {
+        slots: vec![motolii::doc::store::Slot {
             id: SlotId("primary_opacity".to_owned()),
             track: hold_track(&[(0, 0.75)]),
         }],

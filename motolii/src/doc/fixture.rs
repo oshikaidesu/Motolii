@@ -1,5 +1,5 @@
 
-use motolii_store::{
+use crate::doc::store::{
     property, AssetDraft, Composition, ContentKeyframe, ContentTrack, Document, EffectId,
     EffectInstance, Fps, FontRef, Intent, Interp, Keyframe, KeyframeTrack, LayerAttrsPatch,
     LayerId, LayerMeta, LayerSource, LayerTiming, Marker, PropertyId, RationalTime,

@@ -50,7 +50,7 @@ pub enum AudioError {
     StreamNotFound { ordinal: u32 },
 
     #[error("store read failed: {0}")]
-    Store(#[from] motolii_store::StoreError),
+    Store(#[from] crate::doc::store::StoreError),
 
     #[error("no default audio output device available")]
     NoOutputDevice,
@@ -71,7 +71,7 @@ pub enum AudioError {
     ProducerSpawn(std::io::Error),
 
     #[error(transparent)]
-    Time(#[from] motolii_core::RationalTimeError),
+    Time(#[from] crate::doc::core::RationalTimeError),
 }
 
 pub type Result<T> = std::result::Result<T, AudioError>;
