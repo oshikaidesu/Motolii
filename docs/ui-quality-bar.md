@@ -39,7 +39,7 @@
 | 場所 | 違反 |
 |---|---|
 | Inspector COLOR行 | 読み取り専用(編集の入口をBrowser側に置いた設計。**その場で打てるべき**) |
-| Inspector Z列 | 全行に `0.000` が出るが編集不可。**`property::` に `position.z` が無い**ので意味の追加が要る(裁定待ち) |
+| ~~Inspector Z列~~ | 解消(2026-08-30)。`POSITION_Z` は裁定113/116で既に在り、欠けていたのは書き口だけだった |
 | Inspector 識別行 | 層名が出ているが rename できない |
 | Inspector EFFECTS | param は触れるが、**エフェクト自体を外す/無効にできない** |
 
