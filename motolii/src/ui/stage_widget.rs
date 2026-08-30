@@ -479,6 +479,11 @@ impl Widget for StageWidget {
         let mut scene = anyrender::Scene::new();
         self.frames += 1;
         let first = self.frames == 1;
+        // 面が 0 の時は描かない(timeline_widget と同じ)。ここを通すと下の
+        // `s = (w/cw).min(h/ch)` が 0 になり、退化した Affine で vello を回すことになる。
+        if width == 0 || height == 0 {
+            return scene;
+        }
         let State::Active(active) = &mut self.state else {
             if first {
                 println!("PROBE room=stage verdict=paint-while-suspended");

@@ -15,4 +15,5 @@ create_compute_pipeline	0	まだ1つも持っていない。増やす前に上�
 create_shader_module	0	**ゼロ**。シェーダは全部上流の ShaderModuleDesc + FileServer 経由
 device.create_bind_group_layout	0	**ゼロ**。上流は BindGroupLayoutDesc のプール。Vism の口はそちらを通る
 begin_render_pass	3	上流の Renderer trait は**パスを渡される**。自分で開くのは登録していない証拠
+poll(wgpu::PollType::wait_indefinitely	4	**読み戻す所だけ**(finalize_readback・render_basic・point_cloud・browser のテスト)。窓の経路で毎フレーム待つと、共有 device の blitz/vello が壊れて窓ごと落ちる — 5〜30秒で vello がバッファを4倍(192MiB)に育て、この機の上限128MiBを超える(2026-08-30 実測)
 naga::front	2	シェーダ言語のパーサ。ISF(GLSL)の入口だけ

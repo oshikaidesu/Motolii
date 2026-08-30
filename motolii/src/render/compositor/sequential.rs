@@ -16,7 +16,6 @@ impl Compositor {
         self.sequential_submits
     }
 
-    /// 貯めたパスを**一度に** submit する。層ごとに GPU を止めない。
     pub(crate) fn flush_pending(&mut self) {
         if self.pending.is_empty() {
             return;
@@ -51,14 +50,10 @@ impl Compositor {
 
         let mut background: Option<(AccumulatorBacking, GpuTexture2D)> = None;
 
-        // 合成の全パスを1つの束へ記録し、**最後に一度だけ** submit する。
-        // 層ごとの submit + poll(wait_indefinitely) は、層が増えるほど GPU を直列に
-        // 止めていた(55層すべて blend mode なら同期110回)。GPU は1回の submit の中で
-        // 記録順に実行し、テクスチャの読み書きの間には自動で barrier が入る。
+        // 層ごとに submit しない — 同期の回数が層数に比例する。
         let mut batch: Vec<wgpu::CommandBuffer> = Vec::new();
         let mut blend_encoder: Option<wgpu::CommandEncoder> = None;
-        // 役目を終えた全面テクスチャは捨てずにここへ戻し、次のパスの出力に使い回す
-        // (ping-pong)。**submit までは生かしておく必要がある**ので、置き場所も兼ねる。
+        // submit までは生かしておく必要がある(記録済みのコマンドが参照する)。
         let mut spare: Vec<AccumulatorBacking> = Vec::new();
 
         let mut idx = 0;
@@ -180,7 +175,6 @@ impl Compositor {
                             .import_gpu_premultiplied(key, &self.ctx, &out_texture)
                             .map_err(|e| CompositorError::Effect(e.to_string()))?;
                         background = Some((out_texture, imported));
-                        // この2枚はもう誰も読まない。次のパスの出力へ回す
                         spare.push(backing);
                         spare.push(layer_canvas);
                     }
@@ -310,7 +304,6 @@ impl Compositor {
             batch.push(encoder.finish());
         }
         self.pending.append(&mut batch);
-        // spare はここで落ちるが、記録済みのコマンドが参照している間は wgpu が実体を保つ。
         drop(spare);
 
         Ok(background)
@@ -489,10 +482,7 @@ impl Compositor {
         }
         self.pending.push(encoder.finish());
         self.flush_pending();
-        self.ctx
-            .device
-            .poll(wgpu::PollType::wait_indefinitely())
-            .map_err(|e| CompositorError::Draw(e.to_string()))?;
+        // ここで poll しない — 共有 device を毎フレーム止めると blitz/vello が壊れる。
         Ok(())
     }
 
@@ -503,8 +493,7 @@ impl Compositor {
         background: Option<(AccumulatorBacking, GpuTexture2D)>,
         background_color: [f32; 4],
     ) -> Result<(wgpu::Texture, wgpu::TextureView), CompositorError> {
-        // 呼び手はこのテクスチャを直に使う。貯めたパスをここで出しておかないと
-        // 中身がまだ書かれていない。
+        // 呼び手が中身を使うので、ここで出す。
         self.flush_pending();
         match background {
             Some((backing, _imported)) => {
