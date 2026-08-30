@@ -125,13 +125,16 @@ fn prop_row(
         } else {
             "v"
         };
-        let editable = p.property.is_some()
-            && !c.is_empty()
-            && if p.vec2 { i < 2 } else { i == 2 };
-        if editable {
-            let property = p.property.clone().unwrap();
-            let vec2 = p.vec2;
-            let start_value = p.value.clone();
+        // cells[2]に独立propertyがある行(Positionのz)は、そのpropertyへ単独で書く。
+        let target = match (i, &p.z) {
+            (2, Some((property, value))) => Some((property.clone(), value.clone(), false)),
+            _ if !c.is_empty() && (if p.vec2 { i < 2 } else { i == 2 }) => p
+                .property
+                .clone()
+                .map(|property| (property, p.value.clone(), p.vec2)),
+            _ => None,
+        };
+        if let Some((property, start_value, vec2)) = target {
             let range = p.range;
             rsx!(span {
                 class: "{class}",

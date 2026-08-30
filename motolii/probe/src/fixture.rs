@@ -225,6 +225,8 @@ pub struct PropRow {
     pub value: Value,
     /// 宣言された範囲(engine側 EffectParamDescriptor::range)。無ければドラッグは無限。
     pub range: Option<(f64, f64)>,
+    /// cells[2]が独立したpropertyを持つ行(Positionのz)。Noneならcells[2]は飾り。
+    pub z: Option<(String, Value)>,
 }
 
 pub struct InspectorData {
@@ -333,6 +335,7 @@ pub fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: RationalTime
                         vec2: false,
                         value: Value::F64(v),
                         range: param.range,
+                        z: None,
                     })
                 })
                 .collect::<Vec<_>>()
@@ -361,6 +364,7 @@ pub fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: RationalTime
             vec2: false,
             value: Value::F64(0.0),
             range: None,
+            z: None,
         }],
         _ => Vec::new(),
     };
@@ -407,16 +411,18 @@ pub fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: RationalTime
                 vec2: true,
                 value: Value::Vec2([anchor_x, anchor_y]),
                 range: None,
+                z: None,
             },
             PropRow {
                 label: "Position",
                 cells: [px, py, f1(pos_z)],
-                dims: [false, false, true],
+                dims: [false, false, false],
                 keyed: keyed(property::POSITION),
                 property: Some(property::POSITION.to_owned()),
                 vec2: true,
                 value: Value::Vec2([pos_x, pos_y]),
                 range: None,
+                z: Some((property::POSITION_Z.to_owned(), Value::F64(pos_z))),
             },
             PropRow {
                 label: "Scale",
@@ -427,6 +433,7 @@ pub fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: RationalTime
                 vec2: true,
                 value: Value::Vec2([scale_x, scale_y]),
                 range: None,
+                z: None,
             },
             PropRow {
                 label: "Rotation",
@@ -437,6 +444,7 @@ pub fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: RationalTime
                 vec2: false,
                 value: Value::F64(rotation_v),
                 range: None,
+                z: None,
             },
             PropRow {
                 label: "Opacity",
@@ -447,6 +455,7 @@ pub fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: RationalTime
                 vec2: false,
                 value: Value::F64(opacity_v),
                 range: None,
+                z: None,
             },
     ];
 
