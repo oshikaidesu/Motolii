@@ -1,5 +1,9 @@
 # 外部LLM発注の観測・実行・可変配分runbook
 
+> **歴史(降格 2026-08-30)**: 三代目までのコード状態を写した散文。現在の実装を語らない。
+> 裁定は [decision-index](decision-index.md) から、現状はコードとテストから引く。
+
+
 日付: 2026-08-07（2026-08-13 Grok 4.6へ更新）
 状態: **運用正本／CLI snapshotは起動前更新**
 対象: Motoliiの外部LLM相談、調査、発注、施工、correction、review

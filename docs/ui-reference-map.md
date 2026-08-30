@@ -1,5 +1,9 @@
 # M3 UI参照地図
 
+> **歴史(降格 2026-08-30)**: 三代目までのコード状態を写した散文。現在の実装を語らない。
+> 裁定は [decision-index](decision-index.md) から、現状はコードとテストから引く。
+
+
 更新日: 2026-08-07
 
 > **既知の陳腐化(2026-08-19追記)**: 本書が指す`motolii_ui_shell`は2026-08-16に撤去済み(3,338行、[Web窓とRN製品面の畳み込み](reviews/2026-08-16-web-window-and-rn-product-fold.md))で、現在実行できるのは`motolii-blitz-shell`(egui、bin)と`motolii-shell-iced`(iced、bin、2026-08-18着手の移行先)。本書の下記記述はこの撤去より前のもので、`motolii_ui_shell`への言及は**歴史的事実の記録**として残し削除しないが、現在の起動先としては使えない。現行の正本一覧は[docs/CANON.md](CANON.md)、経緯は[docs/README.mdのM3現在地](README.md)を見よ。

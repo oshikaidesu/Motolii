@@ -1,5 +1,9 @@
 # M5 既知実装採択・検証地図
 
+> **歴史(降格 2026-08-30)**: 三代目までのコード状態を写した散文。現在の実装を語らない。
+> 裁定は [decision-index](decision-index.md) から、現状はコードとテストから引く。
+
+
 状態: **Rerun Spatial Viewer採択へ再締結／private検証済み／製品runtime未接続**（2026-08-10）
 
 固定Rerun commitの実コード再監査により、importer、scene、renderer、camera、depth、pickingを

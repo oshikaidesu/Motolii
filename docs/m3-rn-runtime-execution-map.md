@@ -1,5 +1,9 @@
 # M3 RN runtime 実行地図
 
+> **歴史(降格 2026-08-30)**: 三代目までのコード状態を写した散文。現在の実装を語らない。
+> 裁定は [decision-index](decision-index.md) から、現状はコードとテストから引く。
+
+
 状態: **現行dispatch地図 / R0-ACCEPT DONE / R1 READY-RECHECK**（2026-08-09）
 
 > **現在地(2026-08-19追記)**: 本書がR0/R1の施工nodeとして挙げる個別ファイル(`rn_product_host.rs`、`product_runtime.rs`、`document_edit_runtime.rs`等)の多くは、その後のRN製品面撤去(2026-08-16)・`document_edit_runtime`削除(2026-08-17)を経て**現物が存在しない**。本書は2026-08-09時点のdispatch記録として保持するが、現在の実装配置は[docs/CANON.md](CANON.md)、現在地の要約は[docs/README.mdのM3現在地](README.md)を見よ。

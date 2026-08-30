@@ -1,5 +1,9 @@
 # UI runtime責任境界
 
+> **歴史(降格 2026-08-30)**: 三代目までのコード状態を写した散文。現在の実装を語らない。
+> 裁定は [decision-index](decision-index.md) から、現状はコードとテストから引く。
+
+
 状態: **React Native製品shell + Rerun Spatial Viewer Stage + rust-skia Timeline／overlay**（2026-08-11）
 
 > 2026-08-14追補: Timelineに限り、rust-skia／CanvasKit／Motolii eguiを製品engineとする読みは[Rerun相乗り先・意味源・日常ループ座席](reviews/2026-08-14-rerun-body-skin-meaning-decision.md)により撤回。行き先はRerun Time Panel。layer／clip／key意味はDocument／D2。この切り方をStage／Inspector／Browserへ広げない。

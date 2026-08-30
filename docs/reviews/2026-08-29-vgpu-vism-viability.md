@@ -166,3 +166,51 @@ export const TUNABLE_DEFAULTS = {
 
 既定値の宣言はシェーダの隣に要る。これがISFの `INPUTS` に相当し、**`.vism` が最終的に
 持つもの**。マニフェスト駆動の口(次の一手)は、この宣言の置き場を決める仕事でもある。
+
+## 追記: 宣言の置き場と語彙(2026-08-29 利用者裁定)
+
+- **宣言はシェーダの中に埋める。**別ファイルのマニフェストにしない。
+  理由: シェーダのホットリロードが**そのまま宣言のホットリロードになる**(監視の自作が要らない)。
+  ISF が既にその形(`.fs` 先頭コメントの `INPUTS` JSON、`parse_isf_source` が解析済み)
+- **語彙は ISF の `INPUTS` を拡張する**(Vism 独自の別語彙を作らない)。パーサが1本で済み、
+  ISF 資産もそのまま食える
+- **param はマクロ的でよい。**1つの露出 param が複数の内部値を駆動する形を**作者が決める**。
+  uniform struct の機械的な射影ではない(利用者: 「2変数を統一したものをだしたりとか、
+  そういうのが普通に起こるのでユーザが決めれるようにするとベスト」)
+
+### 実測(調査レーン)
+
+- **WGSL のコメントに JSON を置ける。**naga の WGSL frontend は先頭の `/*{ ... }*/` を
+  中身に関わらず読み飛ばす(波括弧・文字列を含む JSON ヘッダ + `//` 混在で `parse_str` 成功)
+- **ISF の語彙ではマクロが書けない。**`IsfInput` は `NAME`/`TYPE`/`DEFAULT`/`MIN`/`MAX` の5キー、
+  `IsfInputType` は `image`/`float`/`bool`/`point2D`/`color` の5種
+  (`motolii/engine/motolii-compositor/src/effects/isf/mod.rs:184,217-231,283`)。
+  **1 param = 1 内部変数の直射影**しか表現できず、ISF spec 自体にも無い
+- 足りないのは「**複数ターゲット名 + 各ターゲットへの式**」
+
+### 書き方(実物が `effects/shaders/tri_led.wgsl` の先頭にある)
+
+```wgsl
+/*{
+  "INPUTS": [
+    { "NAME": "glow", "TYPE": "float", "DEFAULT": 0.5, "MIN": 0.0, "MAX": 1.0,
+      "MAPS": [
+        { "CONST": "FALLOFF_K", "EXPR": "mix(120.0, 20.0, glow)" },
+        { "CONST": "AMBIENT",   "EXPR": "mix(0.0, 0.08, glow)" }
+      ]
+    }
+  ]
+}*/
+```
+
+### ホットリロードの壁は2箇所
+
+1. **`known_effects()` が `&'static [EffectDescriptor]` を返す設計そのもの**
+   (`motolii/engine/motolii-engine/src/translate.rs:322`)。シェーダを読み直しても Rust 側の
+   定数は変わらない。`ISF_BLOOM_PARAMS` ですら「手書き + test-time cross-check」と
+   コメントが明言している(`translate.rs:284-289`)
+2. シェーダ本体の `include_str!` によるコンパイル時固定。実行時読み込みの経路は
+   ISF が既に持っている(`effects/isf/mod.rs:471-486`)ので倣える
+
+**次の一手は1番を壊すこと。**それが済めば、宣言・ホットリロード・Inspector の param が
+一本道で繋がる。

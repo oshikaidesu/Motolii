@@ -1,5 +1,9 @@
 # 現行Motolii UIとRerunの対応表
 
+> **歴史(降格 2026-08-30)**: 三代目までのコード状態を写した散文。現在の実装を語らない。
+> 裁定は [decision-index](decision-index.md) から、現状はコードとテストから引く。
+
+
 状態: **現行コード対応表／新規製品意味を作らない**（2026-08-11、`ui/motolii-rn/` Build B002）
 
 この表は、現在画面にあるものを起点に「Rerunのどの機構を使うか」「Motoliiに何を残すか」「今どこまで接続済みか」を一枚で確認するための地図である。製品構造の正本は[UI runtime責任境界](ui-runtime-architecture.md)、Stage接続の正本は[Stage Heroとprojection root決定](reviews/2026-08-11-m3-m5-stage-hero-projection-root-decision.md)と[Rerun Spatial Viewer採択再締結](reviews/2026-08-10-m5-rerun-spatial-viewer-adoption-reclosure-decision.md)が所有する。本表はそれらから新しい意味や実装順を増やさない。

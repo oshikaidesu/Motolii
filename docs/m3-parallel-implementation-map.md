@@ -1,5 +1,9 @@
 # M3 既知技術採択・並列実装地図
 
+> **歴史(降格 2026-08-30)**: 三代目までのコード状態を写した散文。現在の実装を語らない。
+> 裁定は [decision-index](decision-index.md) から、現状はコードとテストから引く。
+
+
 状態: **旧runtimeの実装検索・oracle地図 / 新規dispatch authorityではない**（2026-08-07）
 
 2026-08-07に標準UI runtimeをReact Native + rust-skia + wgpuへ再基線化した。現行の実装waveと`DO`は[M3仕様](specs/M3-ui-integration.md)と[implementation ledger](implementation-ledger.md)を正とする。本書の12親・33子は、旧routeで成立したowner、semantic contract、oracle、未閉鎖gapを検索するために保持する。`React/Vite/winit/wry`、direct-wgpu/Vello、WebView等の旧供給routeを新製品runtimeへそのままdispatchしない。

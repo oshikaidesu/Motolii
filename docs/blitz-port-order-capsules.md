@@ -1,5 +1,9 @@
 # Blitz移植の発注capsule
 
+> **歴史(降格 2026-08-30)**: 三代目までのコード状態を写した散文。現在の実装を語らない。
+> 裁定は [decision-index](decision-index.md) から、現状はコードとテストから引く。
+
+
 [Blitz移行起案](reviews/2026-08-15-blitz-ui-runtime-adoption-proposal.md)が**採択された場合**に
 外部実装へ渡すためのclosed order capsule集。形式は[AGENTS.md](../AGENTS.md)の
 `BASE / AUTHORITY / CURRENT STATE / OWNER / EXACT TARGET / ALLOWLIST / READ SET / ORACLES / NON-GOALS / RETURN`。
