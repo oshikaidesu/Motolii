@@ -28,6 +28,7 @@ motolii-fixture = { path = "../core/motolii-fixture" }
 motolii-store = { path = "../core/motolii-store" }
 motolii-engine = { path = "../engine/motolii-engine" }
 motolii-vector = { path = "../engine/motolii-vector" }
+motolii-media = { path = "../engine/motolii-media" }
 
 [dev-dependencies]
 pollster = "0.4"

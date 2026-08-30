@@ -458,8 +458,53 @@ pub fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: RationalTime
     }
 }
 
+/// `MOTOLII_TESTDATA` のディレクトリから、rerunが読める物を素材台帳へ入れる。
+/// 実素材で面を見るための器具で、fixtureと同じ`Intent::AdmitAsset`経路を通る。
+fn admit_testdata(doc: &mut motolii_store::Document) {
+    let Some(dir) = std::env::var_os("MOTOLII_TESTDATA") else {
+        return;
+    };
+    let Ok(entries) = std::fs::read_dir(std::path::PathBuf::from(dir)) else {
+        return;
+    };
+    let mut drafts = Vec::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let Some(asset_type) = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .and_then(motolii_media::asset_type_for_extension)
+        else {
+            continue;
+        };
+        let Ok(reader) = std::fs::File::open(&path) else {
+            continue;
+        };
+        let Ok(fingerprint) = motolii_store::SourceFingerprintV1::from_reader(reader) else {
+            continue;
+        };
+        drafts.push(motolii_store::AssetDraft::from_probed_source(
+            asset_type,
+            &fingerprint,
+            &path,
+            None,
+        ));
+    }
+    if drafts.is_empty() {
+        return;
+    }
+    let intents: Vec<_> = drafts
+        .into_iter()
+        .map(|draft| motolii_store::Intent::AdmitAsset { draft })
+        .collect();
+    if let Err(e) = doc.apply_all(intents) {
+        println!("PROBE room=browser verdict=admit-error {e}");
+    }
+}
+
 pub fn load_fixture() -> Loaded {
-    let fx = motolii_fixture::build();
+    let mut fx = motolii_fixture::build();
+    admit_testdata(&mut fx.doc);
     let view = fx.doc.view();
 
     let layer_rows = layer_rows_from_doc(&fx.doc);
