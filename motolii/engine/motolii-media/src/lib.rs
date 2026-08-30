@@ -49,7 +49,7 @@ pub use mux::{
     MixedPcmMuxRequest, SoundtrackMuxReport, SoundtrackMuxRequest,
 };
 pub use point_cloud::{
-    is_point_cloud_extension, is_rerun_importable_extension, load_point_cloud, PointCloudData,
+    asset_type_for_extension, is_point_cloud_extension, is_rerun_importable_extension, load_point_cloud, PointCloudData,
     PointCloudError, POINT_CLOUD_EXTENSIONS,
 };
 pub use probe::{

@@ -37,6 +37,26 @@ pub fn is_rerun_importable_extension(extension: &str) -> bool {
     re_importer::is_supported_file_extension(&extension.to_ascii_lowercase())
 }
 
+/// 拡張子から素材台帳の `asset_type` を決める。区分の正本は
+/// `re_importer::SUPPORTED_*_EXTENSIONS`。読めない拡張子は `None`。
+pub fn asset_type_for_extension(extension: &str) -> Option<String> {
+    let e = extension.to_ascii_lowercase();
+    let e = e.as_str();
+    if re_importer::SUPPORTED_VIDEO_EXTENSIONS.contains(&e) {
+        Some(format!("video/{e}"))
+    } else if re_importer::SUPPORTED_IMAGE_EXTENSIONS.contains(&e) {
+        Some(format!("image/{e}"))
+    } else if re_importer::SUPPORTED_POINT_CLOUD_EXTENSIONS.contains(&e) {
+        Some(format!("pointcloud.{e}"))
+    } else if re_importer::SUPPORTED_MESH_EXTENSIONS.contains(&e) {
+        Some(format!("model/{e}"))
+    } else if re_importer::is_supported_file_extension(e) {
+        Some(format!("application/{e}"))
+    } else {
+        None
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum PointCloudError {
     #[error("読めない: {0}")]
@@ -146,5 +166,42 @@ end_header\n\
             data.colors,
             vec![[255, 0, 0, 255], [0, 255, 0, 255], [0, 0, 255, 255]]
         );
+    }
+}
+
+/// 実ファイルを通す検分。`MOTOLII_TESTDATA` にディレクトリを渡した時だけ走る
+/// (リポにバイナリを置かないため)。
+#[cfg(test)]
+mod real_files {
+    use super::{asset_type_for_extension, is_rerun_importable_extension, load_point_cloud};
+
+    fn testdata() -> Option<std::path::PathBuf> {
+        std::env::var_os("MOTOLII_TESTDATA").map(std::path::PathBuf::from)
+    }
+
+    #[test]
+    fn every_fetched_sample_is_importable_and_gets_an_asset_type() {
+        let Some(dir) = testdata() else { return };
+        let expected = [
+            ("Box.glb", "model/glb"),
+            ("Duck.glb", "model/glb"),
+            ("dolphins.ply", "pointcloud.ply"),
+            ("test.png", "image/png"),
+            ("sample.mp4", "video/mp4"),
+        ];
+        for (file, asset_type) in expected {
+            let path = dir.join(file);
+            assert!(path.exists(), "{file} が無い");
+            let ext = path.extension().unwrap().to_str().unwrap();
+            assert!(is_rerun_importable_extension(ext), "{file} を読めない");
+            assert_eq!(asset_type_for_extension(ext).as_deref(), Some(asset_type));
+        }
+    }
+
+    #[test]
+    fn a_real_ply_loads_its_points() {
+        let Some(dir) = testdata() else { return };
+        let data = load_point_cloud(&dir.join("dolphins.ply")).expect("ply");
+        assert_eq!(data.positions.len(), 855);
     }
 }
