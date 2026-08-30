@@ -43,7 +43,7 @@ pub(super) fn timeline_shell(
             format!("background:{};", row.color)
         };
         let glyph = |bit: u8, label: &'static str| {
-            let (hidden, solo, locked) = attrs.read()[i];
+            let (hidden, solo, locked) = attrs.read().get(i).copied().unwrap_or_default();
             let lit = match bit {
                 0 => hidden,
                 1 => solo,
@@ -97,6 +97,7 @@ pub(super) fn timeline_shell(
                             let rows = crate::ui::fixture::layer_rows_from_doc(&d);
                             let canvas = crate::ui::fixture::canvas_rows_from_doc(&d);
                             drop(d);
+                            attrs.set(rows.iter().map(|r| (r.hidden, r.solo, r.locked)).collect());
                             layer_rows_sig.set(rows);
                             let _ = timeline_tx.send(TimelineMsg::SetRows(canvas));
                             *revision.write() += 1;
