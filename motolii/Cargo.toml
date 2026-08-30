@@ -38,8 +38,14 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg"]
 base64 = "0.22"
 ffmpeg-sidecar = "2.5"
 
+motolii-core.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
 [dev-dependencies]
 pollster = "0.4"
+motolii-compositor.workspace = true
+motolii-testkit.workspace = true
 
 [workspace]
 resolver = "2"
@@ -53,7 +59,6 @@ members = [
     "engine/motolii-audio",
     "engine/motolii-compositor",
     "engine/motolii-engine",
-    "engine/motolii-export",
     "engine/motolii-media",
     "engine/motolii-vector",
 ]
@@ -96,7 +101,6 @@ motolii-testkit = { path = "core/motolii-testkit" }
 motolii-audio = { path = "engine/motolii-audio" }
 motolii-compositor = { path = "engine/motolii-compositor" }
 motolii-engine = { path = "engine/motolii-engine" }
-motolii-export = { path = "engine/motolii-export" }
 motolii-media = { path = "engine/motolii-media" }
 motolii-vector = { path = "engine/motolii-vector" }
 # app/ui/ に残る leaf crate(裁定: ui/*3本は app/に残す)。motolii-fixture が

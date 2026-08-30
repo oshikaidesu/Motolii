@@ -3593,15 +3593,20 @@ dependencies = [
  "image",
  "keyboard-types 0.7.0",
  "macaw",
+ "motolii-compositor",
+ "motolii-core",
  "motolii-engine",
  "motolii-fixture",
  "motolii-media",
  "motolii-store",
+ "motolii-testkit",
  "motolii-vector",
  "peniko",
  "pollster",
  "re_log",
  "re_renderer",
+ "serde_json",
+ "thiserror 2.0.20",
  "wgpu",
  "wgpu_context",
 ]
@@ -3673,22 +3678,6 @@ version = "0.1.0"
 dependencies = [
  "motolii-core",
  "serde",
- "serde_json",
- "thiserror 2.0.20",
-]
-
-[[package]]
-name = "motolii-export"
-version = "0.1.0"
-dependencies = [
- "image",
- "motolii-compositor",
- "motolii-core",
- "motolii-engine",
- "motolii-media",
- "motolii-store",
- "motolii-testkit",
- "motolii-vector",
  "serde_json",
  "thiserror 2.0.20",
 ]

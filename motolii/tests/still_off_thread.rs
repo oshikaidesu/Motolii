@@ -1,5 +1,5 @@
 use motolii_engine::Engine;
-use motolii_export::export_still;
+use motolii::doc::export::export_still;
 use motolii_store::{Composition, Document, Fps, Intent};
 use std::sync::mpsc;
 use std::time::Duration;

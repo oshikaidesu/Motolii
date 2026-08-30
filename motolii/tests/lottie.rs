@@ -1,6 +1,6 @@
 
 use motolii_core::{Fps, RationalTime};
-use motolii_export::export_lottie;
+use motolii::doc::export::export_lottie;
 use motolii_store::{
     property, Composition, ContentTrack, Document, EffectId, EffectInstance, FontRef, Intent,
     Interp, Keyframe, KeyframeTrack, LayerAttrsPatch, LayerId, LayerMeta, LayerSource,
