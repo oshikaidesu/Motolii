@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use motolii_core::{FrameDesc, PixelFormat, RationalTime};
 use crate::render::engine::{Engine, EngineError};
-use motolii_media::{Encoder, MediaError};
+use crate::render::media::{Encoder, MediaError};
 use motolii_store::StoreView;
 
 mod lottie;

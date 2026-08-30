@@ -639,7 +639,7 @@ mod spawn_diagnosis {
 
     #[test]
     fn spawn_on_fixture_doc_changes_pixels() {
-        let fx = motolii_fixture::build();
+        let fx = crate::doc::fixture::build();
         let mut doc = fx.doc;
         let comp = doc.view().composition().unwrap().unwrap();
         let (w, h) = (comp.width, comp.height);

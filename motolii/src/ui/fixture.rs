@@ -332,7 +332,7 @@ pub fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: RationalTime
     let source_name = match view.meta(layer).ok().flatten().map(|m| m.source) {
         Some(LayerSource::Solid { .. }) => "solid",
         Some(LayerSource::File { path, .. }) => {
-            if motolii_media::is_point_cloud_path(&path) {
+            if crate::render::media::is_point_cloud_path(&path) {
                 "point cloud"
             } else {
                 "media"
@@ -479,7 +479,7 @@ fn admit_testdata(doc: &mut motolii_store::Document) {
         let Some(asset_type) = path
             .extension()
             .and_then(|e| e.to_str())
-            .and_then(motolii_media::asset_type_for_extension)
+            .and_then(crate::render::media::asset_type_for_extension)
         else {
             continue;
         };
@@ -509,7 +509,7 @@ fn admit_testdata(doc: &mut motolii_store::Document) {
 }
 
 pub fn load_fixture() -> Loaded {
-    let mut fx = motolii_fixture::build();
+    let mut fx = crate::doc::fixture::build();
     admit_testdata(&mut fx.doc);
     if let Some(deg) = std::env::var("MOTOLII_TILT").ok().and_then(|v| v.parse::<f64>().ok()) {
         let layers = fx.doc.view().layers();

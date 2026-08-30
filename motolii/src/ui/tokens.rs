@@ -93,3 +93,6 @@ pub fn css_root(percent: u32) -> String {
         wt = hex(WAY_TIMELINE),
     )
 }
+
+/// ラベル配色の枚数。DTCG 正本(`next/ui/motolii-tokens-rs`)由来の唯一の生きた値。
+pub const LABEL_PALETTE_LEN: usize = 12;

@@ -4,7 +4,7 @@ use std::process::{Child, ChildStdin, Command, Stdio};
 
 use motolii_core::{Fps, FrameDesc, PixelFormat};
 
-use crate::{read_child_stderr, MediaError, Result};
+use crate::render::media::{read_child_stderr, MediaError, Result};
 
 pub struct Encoder {
     child: Child,

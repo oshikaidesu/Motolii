@@ -3594,8 +3594,6 @@ dependencies = [
  "keyboard-types 0.7.0",
  "macaw",
  "motolii-core",
- "motolii-fixture",
- "motolii-media",
  "motolii-store",
  "motolii-testkit",
  "motolii-vector",
@@ -3603,10 +3601,15 @@ dependencies = [
  "peniko",
  "pollster",
  "re_build_tools",
+ "re_importer",
  "re_log",
  "re_renderer",
+ "re_sdk_types",
+ "re_types_core",
  "re_video",
+ "serde",
  "serde_json",
+ "tempfile",
  "thiserror 2.0.20",
  "wgpu",
  "wgpu_context",
@@ -3650,30 +3653,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "motolii-fixture"
-version = "0.1.0"
-dependencies = [
- "motolii-store",
- "motolii-tokens-rs",
-]
-
-[[package]]
-name = "motolii-media"
-version = "0.1.0"
-dependencies = [
- "motolii-core",
- "motolii-store",
- "motolii-testkit",
- "re_importer",
- "re_sdk_types",
- "re_types_core",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 2.0.20",
-]
-
-[[package]]
 name = "motolii-store"
 version = "0.1.0"
 dependencies = [
@@ -3704,14 +3683,6 @@ version = "0.1.0"
 dependencies = [
  "image",
  "thiserror 2.0.20",
-]
-
-[[package]]
-name = "motolii-tokens-rs"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
 ]
 
 [[package]]

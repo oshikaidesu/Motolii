@@ -30,10 +30,8 @@ macaw = "0.30"
 glam = "0.30"
 
 # 実ドキュメント(--fixtureのMV風Document)と製品と同じ補間コード。自作の写経はしない。
-motolii-fixture = { path = "core/motolii-fixture" }
 motolii-store = { path = "core/motolii-store" }
 motolii-vector = { path = "engine/motolii-vector" }
-motolii-media = { path = "engine/motolii-media" }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 base64 = "0.22"
 ffmpeg-sidecar = "2.5"
@@ -42,6 +40,10 @@ motolii-core.workspace = true
 re_video.workspace = true
 naga = { version = "29.0", default-features = false, features = ["glsl-in", "wgsl-out"] }
 pollster.workspace = true
+re_importer.workspace = true
+re_sdk_types.workspace = true
+re_types_core.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 
@@ -49,6 +51,7 @@ thiserror.workspace = true
 re_build_tools.workspace = true
 
 [dev-dependencies]
+tempfile = "3"
 motolii-testkit.workspace = true
 
 [workspace]
@@ -57,11 +60,8 @@ members = [
     "core/motolii-core",
     "core/motolii-eval",
     "core/motolii-store",
-    "core/motolii-fixture",
     "core/motolii-testkit",
-    "ui/motolii-tokens-rs",
     "engine/motolii-audio",
-    "engine/motolii-media",
     "engine/motolii-vector",
 ]
 
@@ -98,14 +98,10 @@ arrow = { version = "58.3", default-features = false }
 motolii-core = { path = "core/motolii-core" }
 motolii-eval = { path = "core/motolii-eval" }
 motolii-store = { path = "core/motolii-store" }
-motolii-fixture = { path = "core/motolii-fixture" }
 motolii-testkit = { path = "core/motolii-testkit" }
 motolii-audio = { path = "engine/motolii-audio" }
 motolii-media = { path = "engine/motolii-media" }
 motolii-vector = { path = "engine/motolii-vector" }
-# app/ui/ に残る leaf crate(裁定: ui/*3本は app/に残す)。motolii-fixture が
-# ラベル配色定数(LABEL_PALETTE_LEN)を借りるためだけに引く — view 型は持たない。
-motolii-tokens-rs = { path = "ui/motolii-tokens-rs", default-features = false }
 
 image = { version = "0.25", default-features = false, features = ["png"] }
 serde = { version = "1", features = ["derive"] }

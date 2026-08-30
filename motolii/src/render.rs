@@ -2,3 +2,4 @@
 // GPU・デコード・描画・色は上流の部品 — ここで作らない。
 pub mod compositor;
 pub mod engine;
+pub mod media;

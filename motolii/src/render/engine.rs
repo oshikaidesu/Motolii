@@ -13,10 +13,10 @@ use crate::render::compositor::GpuTexture2D;
 use crate::render::compositor::{Compositor, CompositorError};
 use motolii_core::ResolvedCamera;
 
-use motolii_media::ContainerInfo;
-use motolii_media::MediaError;
-use motolii_media::MediaInfo;
-use motolii_media::PointCloudData;
+use crate::render::media::ContainerInfo;
+use crate::render::media::MediaError;
+use crate::render::media::MediaInfo;
+use crate::render::media::PointCloudData;
 use motolii_store::{LayerSource, Matte, RationalTime, StoreView};
 
 use crate::render::engine::texture::{ShapeCacheKey, TextCacheKey};
@@ -198,7 +198,7 @@ impl Engine {
         if self.failed_containers.contains_key(path) {
             return None;
         }
-        match motolii_media::probe_container(path) {
+        match crate::render::media::probe_container(path) {
             Ok(info) => {
                 self.containers.insert(path.to_string(), info.clone());
                 Some(info)

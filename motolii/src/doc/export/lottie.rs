@@ -2,7 +2,7 @@
 use std::collections::HashSet;
 
 use motolii_core::{Fps, RationalTimeError};
-use motolii_media::is_point_cloud_path;
+use crate::render::media::is_point_cloud_path;
 use motolii_store::{
     property, EffectInstance, LayerAttrs, LayerId, LayerMeta, LayerSource, PropertyId, StoreError,
     StoreView, Value,

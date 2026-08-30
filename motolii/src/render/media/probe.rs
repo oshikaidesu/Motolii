@@ -5,7 +5,7 @@ use serde::Deserialize;
 
 use motolii_core::{ColorSpace, Fps, RationalTime};
 
-use crate::{MediaError, Result};
+use crate::render::media::{MediaError, Result};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct MediaInfo {

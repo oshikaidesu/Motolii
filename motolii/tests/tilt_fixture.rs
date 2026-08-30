@@ -27,7 +27,7 @@ fn seed(doc: &mut Document, name: &str, deg: f64) {
 }
 
 fn lit(property_name: &str, value: f64) -> (usize, usize) {
-    let mut fx = motolii_fixture::build();
+    let mut fx = motolii::doc::fixture::build();
     if value != 0.0 {
         seed(&mut fx.doc, property_name, value);
     }

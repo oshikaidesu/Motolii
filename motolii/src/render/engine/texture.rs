@@ -4,7 +4,7 @@ use std::hash::{Hash, Hasher};
 
 use crate::render::compositor::GpuTexture2D;
 use motolii_core::CompSpec;
-use motolii_media::{is_point_cloud_path, load_point_cloud, probe};
+use crate::render::media::{is_point_cloud_path, load_point_cloud, probe};
 use motolii_store::{
     LayerId, LayerSource, RationalTime, ResolvedLayer, ShapeNode, StoreView, TextDocument,
 };

@@ -167,7 +167,7 @@ pub fn build() -> Fixture {
             layer: id,
             patch: LayerAttrsPatch {
                 name: Some(spec.name.to_owned()),
-                label_color: Some(Some((id.0 % motolii_tokens_rs::LABEL_PALETTE_LEN as u64) as u8)),
+                label_color: Some(Some((id.0 % crate::ui::tokens::LABEL_PALETTE_LEN as u64) as u8)),
                 ..Default::default()
             },
         });
@@ -374,7 +374,7 @@ pub fn build() -> Fixture {
         patch: LayerAttrsPatch {
             name: Some("歌詞テキスト".to_owned()),
             label_color: Some(Some(
-                (text_id.0 % motolii_tokens_rs::LABEL_PALETTE_LEN as u64) as u8,
+                (text_id.0 % crate::ui::tokens::LABEL_PALETTE_LEN as u64) as u8,
             )),
             ..Default::default()
         },
