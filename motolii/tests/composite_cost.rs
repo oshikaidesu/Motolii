@@ -6,7 +6,7 @@
 //! どちらも層数に比例する — 重ねるほど遅くなる形だった。
 
 use motolii::render::compositor::{
-    BlendMode, CompSpec, Compositor, HeadlessGpu, Layer, LayerPlacement, ResolvedCamera,
+    BlendMode, CompSpec, Compositor, HeadlessGpu, Layer, LayerPlacement, MatteMode, ResolvedCamera,
 };
 
 const W: u32 = 320;
@@ -85,5 +85,38 @@ fn the_counter_actually_counts() {
     assert_eq!(
         submits, 1,
         "16層の合成が1回の submit で終わっていない(0なら計器が死んでいる): {submits}"
+    );
+}
+
+/// matte も同じ形だった — 1枚につき3回(層の canvas・matte の canvas・matte パス)
+/// GPU を止めていた。
+#[test]
+fn matte_layers_do_not_cost_a_submit_each() {
+    let count_for = |n: usize| -> u64 {
+        let mut c = compositor();
+        let comp = CompSpec { width: W, height: H };
+        let ls = layers(&mut c, n * 2, BlendMode::Normal);
+        let before = c.sequential_submits();
+        let matted: Vec<Layer> = (0..n)
+            .map(|i| {
+                c.matte_layer(
+                    comp,
+                    ResolvedCamera::default(),
+                    &ls[i * 2],
+                    &ls[i * 2 + 1],
+                    MatteMode::Alpha,
+                )
+                .expect("matte_layer")
+            })
+            .collect();
+        c.render_sequential(comp, ResolvedCamera::default(), &matted, [0.0, 0.0, 0.0, 1.0])
+            .expect("render_sequential");
+        c.sequential_submits() - before
+    };
+    let few = count_for(1);
+    let many = count_for(8);
+    assert_eq!(
+        few, many,
+        "matte の枚数で submit 回数が変わっている: 1枚={few} 8枚={many}"
     );
 }

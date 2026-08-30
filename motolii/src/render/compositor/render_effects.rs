@@ -230,14 +230,10 @@ impl Compositor {
         }
 
         if let Some(encoder) = copy_encoder.take() {
-            self.ctx.before_submit();
-            self.ctx.queue.submit([encoder.finish()]);
-            self.ctx.begin_frame();
-            self.ctx
-                .device
-                .poll(wgpu::PollType::wait_indefinitely())
-                .map_err(|e| CompositorError::Draw(e.to_string()))?;
+            self.pending.push(encoder.finish());
         }
+        // 効果の出力を次段が読むので、ここで一度だけ出す(層ごとには止めない)。
+        self.flush_pending();
 
         Ok((effective_textures, effective_paddings, checked_out))
     }

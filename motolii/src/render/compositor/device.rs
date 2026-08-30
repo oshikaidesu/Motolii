@@ -59,6 +59,7 @@ impl Compositor {
             blend_pipelines,
             matte_pipelines,
             sequential_submits: 0,
+            pending: Vec::new(),
         })
     }
 

@@ -16,6 +16,19 @@ impl Compositor {
         self.sequential_submits
     }
 
+    /// 貯めたパスを**一度に** submit する。層ごとに GPU を止めない。
+    pub(crate) fn flush_pending(&mut self) {
+        if self.pending.is_empty() {
+            return;
+        }
+        self.ctx.before_submit();
+        let batch: Vec<wgpu::CommandBuffer> = self.pending.drain(..).collect();
+        self.ctx.queue.submit(batch);
+        self.sequential_submits += 1;
+        // staging buffer の回収は submit の**後**に一度だけ。
+        self.ctx.begin_frame();
+    }
+
     pub(crate) fn accumulate_sequential(
         &mut self,
         comp: CompSpec,
@@ -295,15 +308,8 @@ impl Compositor {
         if let Some(encoder) = blend_encoder.take() {
             batch.push(encoder.finish());
         }
-        if !batch.is_empty() {
-            self.ctx.before_submit();
-            self.ctx.queue.submit(batch);
-            self.sequential_submits += 1;
-            // staging buffer の回収は submit の**後**に一度だけ。
-            self.ctx.begin_frame();
-        }
-        // spare の生存はここまで — submit 済みのコマンドが参照している間は
-        // wgpu が実体を保つ。
+        self.pending.append(&mut batch);
+        // spare はここで落ちるが、記録済みのコマンドが参照している間は wgpu が実体を保つ。
         drop(spare);
 
         Ok(background)
@@ -381,10 +387,8 @@ impl Compositor {
             .draw(&self.ctx, clear)
             .map_err(|e| CompositorError::Draw(e.to_string()))?;
 
-        self.ctx.before_submit();
-        self.ctx.queue.submit([command_buffer]);
-
-        self.ctx.begin_frame();
+        self.pending.push(command_buffer);
+        self.flush_pending();
         self.ctx
             .device
             .poll(wgpu::PollType::wait_indefinitely())
@@ -451,8 +455,7 @@ impl Compositor {
         let command_buffer = view_builder
             .draw(&self.ctx, clear)
             .map_err(|e| CompositorError::Draw(e.to_string()))?;
-        self.ctx.before_submit();
-        self.ctx.queue.submit([command_buffer]);
+        self.pending.push(command_buffer);
 
         let target_view = target.create_view(&wgpu::TextureViewDescriptor {
             format: Some(self.ctx.output_format_color()),
@@ -483,9 +486,8 @@ impl Compositor {
             });
             view_builder.composite(&self.ctx, &mut pass);
         }
-        self.ctx.before_submit();
-        self.ctx.queue.submit([encoder.finish()]);
-        self.ctx.begin_frame();
+        self.pending.push(encoder.finish());
+        self.flush_pending();
         self.ctx
             .device
             .poll(wgpu::PollType::wait_indefinitely())
@@ -500,6 +502,9 @@ impl Compositor {
         background: Option<(AccumulatorBacking, GpuTexture2D)>,
         background_color: [f32; 4],
     ) -> Result<(wgpu::Texture, wgpu::TextureView), CompositorError> {
+        // 呼び手はこのテクスチャを直に使う。貯めたパスをここで出しておかないと
+        // 中身がまだ書かれていない。
+        self.flush_pending();
         match background {
             Some((backing, _imported)) => {
                 let texture = backing.clone();
@@ -532,8 +537,8 @@ impl Compositor {
                 let command_buffer = view_builder
                     .draw(&self.ctx, crate::render::compositor::clear_color(background_color))
                     .map_err(|e| CompositorError::Draw(e.to_string()))?;
-                self.ctx.before_submit();
-                self.ctx.queue.submit([command_buffer]);
+                self.pending.push(command_buffer);
+                self.flush_pending();
 
                 let view = texture.create_view(&Default::default());
                 Ok((texture, view))
@@ -578,8 +583,6 @@ impl Compositor {
         layer: &Layer,
         label: &'static str,
     ) -> Result<GpuTexture, CompositorError> {
-        self.ctx.begin_frame();
-
         let (transform, z) = if layer.pinned {
             (pinned_cancel * layer.placement.transform, 0.0)
         } else {
@@ -626,13 +629,7 @@ impl Compositor {
             .draw(&self.ctx, Rgba::TRANSPARENT)
             .map_err(|e| CompositorError::Draw(e.to_string()))?;
 
-        self.ctx.before_submit();
-        self.ctx.queue.submit([command_buffer]);
-        self.ctx.begin_frame();
-        self.ctx
-            .device
-            .poll(wgpu::PollType::wait_indefinitely())
-            .map_err(|e| CompositorError::Draw(e.to_string()))?;
+        self.pending.push(command_buffer);
 
         Ok(view_builder.main_target().clone())
     }
@@ -689,13 +686,7 @@ impl Compositor {
             &out_view,
             matte::matte_mode_index(mode),
         );
-        self.ctx.before_submit();
-        self.ctx.queue.submit([encoder.finish()]);
-        self.ctx.begin_frame();
-        self.ctx
-            .device
-            .poll(wgpu::PollType::wait_indefinitely())
-            .map_err(|e| CompositorError::Draw(e.to_string()))?;
+        self.pending.push(encoder.finish());
 
         self.next_effect_key += 1;
         let key = self.next_effect_key;

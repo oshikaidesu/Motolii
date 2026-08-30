@@ -253,6 +253,8 @@ pub struct Compositor {
     pub(crate) blend_pipelines: blend::SeparableBlendPipelines,
     pub(crate) matte_pipelines: matte::MattePipelines,
     pub(crate) sequential_submits: u64,
+    /// フレーム中に記録したパスの束。層ごとに submit せず、読み戻しが要る所まで貯める。
+    pub(crate) pending: Vec<wgpu::CommandBuffer>,
 }
 
 type AccumulatorBacking = wgpu::Texture;
