@@ -1,5 +1,5 @@
 
-use motolii_compositor::{
+use motolii::render::compositor::{
     BlendMode, CompSpec, Compositor, HeadlessGpu, Layer, LayerPlacement, LayerWithPasses,
     ResolvedCamera, PRESENTABLE_FORMAT,
 };
@@ -82,7 +82,7 @@ fn render_into_matches_render_with_effects_for_separable_blends() {
     for mode in [BlendMode::Normal, BlendMode::Add, BlendMode::Multiply, BlendMode::Screen, BlendMode::Difference] {
         let ls = layers(&mut c, mode);
         let cpu = c
-            .render_with_effects(comp(), ResolvedCamera::default(), &ls, motolii_compositor::NO_BACKGROUND)
+            .render_with_effects(comp(), ResolvedCamera::default(), &ls, motolii::render::compositor::NO_BACKGROUND)
             .expect("render_with_effects")[..4]
             .to_vec();
 
@@ -96,7 +96,7 @@ fn render_into_matches_render_with_effects_for_separable_blends() {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
             view_formats: &[wgpu::TextureFormat::Rgba8Unorm],
         });
-        c.render_into(&target, comp(), ResolvedCamera::default(), &ls, motolii_compositor::NO_BACKGROUND)
+        c.render_into(&target, comp(), ResolvedCamera::default(), &ls, motolii::render::compositor::NO_BACKGROUND)
             .expect("render_into");
         let gpu = readback(&device, &queue, &target);
 

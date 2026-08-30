@@ -9,8 +9,8 @@ mod render;
 mod texture;
 mod translate;
 
-use motolii_compositor::GpuTexture2D;
-use motolii_compositor::{Compositor, CompositorError};
+use crate::render::compositor::GpuTexture2D;
+use crate::render::compositor::{Compositor, CompositorError};
 use motolii_core::ResolvedCamera;
 
 use motolii_media::ContainerInfo;

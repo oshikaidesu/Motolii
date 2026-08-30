@@ -1,5 +1,5 @@
 
-use motolii_compositor::{
+use motolii::render::compositor::{
     BlendMode, CompSpec, Compositor, EffectPass, HeadlessGpu, Layer, LayerPlacement,
     LayerWithPasses, ResolvedCamera, PRESENTABLE_FORMAT,
 };
@@ -86,7 +86,7 @@ fn readback_rgba(device: &wgpu::Device, queue: &wgpu::Queue, texture: &wgpu::Tex
     out
 }
 
-fn small_layer(texture: motolii_compositor::GpuTexture2D) -> Layer {
+fn small_layer(texture: motolii::render::compositor::GpuTexture2D) -> Layer {
     Layer {
         texture,
         size: [8.0, 8.0],
@@ -122,7 +122,7 @@ fn render_into_applies_isf_effect_passes() {
             comp(),
             ResolvedCamera::default(),
             &[LayerWithPasses { layer: small_layer(source.clone()), passes: vec![] }],
-            motolii_compositor::NO_BACKGROUND,
+            motolii::render::compositor::NO_BACKGROUND,
         )
         .expect("render_into without passes");
     let bytes_without = readback_rgba(&device, &queue, &target_without);
@@ -143,7 +143,7 @@ fn render_into_applies_isf_effect_passes() {
                     ],
                 }],
             }],
-            motolii_compositor::NO_BACKGROUND,
+            motolii::render::compositor::NO_BACKGROUND,
         )
         .expect("render_into with an Isf pass");
     let bytes_with = readback_rgba(&device, &queue, &target_with);

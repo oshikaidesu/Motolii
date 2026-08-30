@@ -1,5 +1,5 @@
 
-use crate::*;
+use crate::render::compositor::*;
 
 impl Compositor {
     pub(crate) fn effective_layer_textures(

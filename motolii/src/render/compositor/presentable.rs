@@ -3,7 +3,7 @@ use re_renderer::renderer::{ColormappedTexture, RectangleDrawData, RectangleOpti
 use re_renderer::view_builder::ViewBuilder;
 use re_renderer::{Rgba, ViewBuilderId};
 
-use crate::{
+use crate::render::compositor::{
     sequential_target_config, to_point3, to_vector3, CompSpec, Compositor, CompositorError,
     LayerWithPasses, ResolvedCamera,
 };
@@ -30,7 +30,7 @@ impl Compositor {
         let (effective_textures, effective_paddings, checked_out) =
             self.effective_layer_textures(layers)?;
 
-        let inputs = crate::render_effects::sequential_inputs(
+        let inputs = crate::render::compositor::render_effects::sequential_inputs(
             layers,
             &effective_textures,
             &effective_paddings,

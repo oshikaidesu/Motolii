@@ -3,6 +3,7 @@
 # members は明示 — 逃げ口を塞ぐ。
 [package]
 name = "motolii"
+build = "build.rs"
 version = "0.0.0"
 edition = "2021"
 publish = false
@@ -38,13 +39,16 @@ base64 = "0.22"
 ffmpeg-sidecar = "2.5"
 
 motolii-core.workspace = true
-motolii-compositor.workspace = true
 re_video.workspace = true
+naga = { version = "29.0", default-features = false, features = ["glsl-in", "wgsl-out"] }
+pollster.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 
+[build-dependencies]
+re_build_tools.workspace = true
+
 [dev-dependencies]
-pollster = "0.4"
 motolii-testkit.workspace = true
 
 [workspace]
@@ -57,7 +61,6 @@ members = [
     "core/motolii-testkit",
     "ui/motolii-tokens-rs",
     "engine/motolii-audio",
-    "engine/motolii-compositor",
     "engine/motolii-media",
     "engine/motolii-vector",
 ]
@@ -98,7 +101,6 @@ motolii-store = { path = "core/motolii-store" }
 motolii-fixture = { path = "core/motolii-fixture" }
 motolii-testkit = { path = "core/motolii-testkit" }
 motolii-audio = { path = "engine/motolii-audio" }
-motolii-compositor = { path = "engine/motolii-compositor" }
 motolii-media = { path = "engine/motolii-media" }
 motolii-vector = { path = "engine/motolii-vector" }
 # app/ui/ に残る leaf crate(裁定: ui/*3本は app/に残す)。motolii-fixture が

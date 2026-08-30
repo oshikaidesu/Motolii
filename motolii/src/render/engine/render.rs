@@ -1,7 +1,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use motolii_compositor::{Layer, LayerWithPasses};
+use crate::render::compositor::{Layer, LayerWithPasses};
 use motolii_core::{CompSpec, ResolvedCamera};
 use motolii_store::{
     LayerId, LayerSource, RationalTime, ResolvedLayer, ShapeNode, StoreView, TextDocument,
@@ -97,7 +97,7 @@ impl Engine {
         let background_color = if include_background {
             composition.background
         } else {
-            motolii_compositor::NO_BACKGROUND
+            crate::render::compositor::NO_BACKGROUND
         };
         Ok(self
             .compositor
@@ -313,7 +313,7 @@ impl Engine {
         let background_color = if include_background {
             composition.background
         } else {
-            motolii_compositor::NO_BACKGROUND
+            crate::render::compositor::NO_BACKGROUND
         };
         Ok(self
             .compositor

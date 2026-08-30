@@ -1,5 +1,5 @@
 
-use motolii_compositor::{
+use motolii::render::compositor::{
     check_presentable_target, BlendMode, CompSpec, Compositor, CompositorError, EffectPass,
     HeadlessGpu, Layer, LayerPlacement, LayerWithPasses, ResolvedCamera, PRESENTABLE_FORMAT,
 };
@@ -105,7 +105,7 @@ fn readback_rgba(device: &wgpu::Device, queue: &wgpu::Queue, texture: &wgpu::Tex
     out
 }
 
-fn small_layer(texture: motolii_compositor::GpuTexture2D) -> Layer {
+fn small_layer(texture: motolii::render::compositor::GpuTexture2D) -> Layer {
     Layer {
         texture,
         size: [8.0, 8.0],
@@ -147,7 +147,7 @@ fn render_into_applies_effect_passes() {
                 layer: small_layer(white.clone()),
                 passes: vec![],
             }],
-            motolii_compositor::NO_BACKGROUND,
+            motolii::render::compositor::NO_BACKGROUND,
         )
         .expect("render_into without passes");
     let bytes_without = readback_rgba(&device, &queue, &target_without);
@@ -166,7 +166,7 @@ fn render_into_applies_effect_passes() {
                     radius: 1.0,
                 }],
             }],
-            motolii_compositor::NO_BACKGROUND,
+            motolii::render::compositor::NO_BACKGROUND,
         )
         .expect("render_into with a Glow pass");
     let bytes_with = readback_rgba(&device, &queue, &target_with);
@@ -276,11 +276,11 @@ fn render_into_writes_the_external_target() {
     let (mut compositor, device) = with_device();
     let target = presentable(&device);
     compositor
-        .render_into(&target, comp(), ResolvedCamera::default(), &[] as &[LayerWithPasses], motolii_compositor::NO_BACKGROUND)
+        .render_into(&target, comp(), ResolvedCamera::default(), &[] as &[LayerWithPasses], motolii::render::compositor::NO_BACKGROUND)
         .expect("external resolved へ直接書く");
 }
 
-fn tilted_layer(texture: motolii_compositor::GpuTexture2D, deg: f32) -> Layer {
+fn tilted_layer(texture: motolii::render::compositor::GpuTexture2D, deg: f32) -> Layer {
     let mut layer = small_layer(texture);
     layer.placement.rotation_x = deg;
     layer
@@ -304,7 +304,7 @@ fn render_into_draws_tilted_plates() {
                     layer: tilted_layer(white.clone(), deg),
                     passes: vec![],
                 }],
-                motolii_compositor::NO_BACKGROUND,
+                motolii::render::compositor::NO_BACKGROUND,
             )
             .expect("render_into");
         readback_rgba(&device, &queue, &target)
@@ -355,7 +355,7 @@ fn tilt_survives_a_pinned_background() {
                     LayerWithPasses { layer: background, passes: vec![] },
                     LayerWithPasses { layer: tilted_layer(white.clone(), deg), passes: vec![] },
                 ],
-                motolii_compositor::NO_BACKGROUND,
+                motolii::render::compositor::NO_BACKGROUND,
             )
             .expect("render_into");
         readback_rgba(&device, &queue, &target)

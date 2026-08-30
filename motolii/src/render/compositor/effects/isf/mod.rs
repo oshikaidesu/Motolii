@@ -6,7 +6,7 @@ use re_renderer::{
     PipelineLayoutDesc, RenderContext, RenderPipelineDesc, ShaderModuleDesc, get_filesystem,
 };
 
-pub(crate) const BLOOM_SOURCE: &str = include_str!("bloom.fs");
+pub(crate) const BLOOM_SOURCE: &str = include_str!("../../../../../vism/bloom.fs");
 
 pub(crate) const ISF_TARGET_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 

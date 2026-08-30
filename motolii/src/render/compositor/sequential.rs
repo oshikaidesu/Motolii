@@ -5,7 +5,7 @@ use re_renderer::renderer::{
 use re_renderer::view_builder::ViewBuilder;
 use re_renderer::{GpuTexture, Rgba, ScreenshotProcessor, ViewBuilderId};
 
-use crate::*;
+use crate::render::compositor::*;
 
 impl Compositor {
     pub fn effect_passes_created_textures(&self) -> u64 {
@@ -50,7 +50,7 @@ impl Compositor {
                 } else {
                     (input.transform, input.z, input.rotation_x, input.rotation_y)
                 };
-                let (corner, extent_u, extent_v) = crate::tilted_corners(
+                let (corner, extent_u, extent_v) = crate::render::compositor::tilted_corners(
                     transform,
                     input.local_min,
                     input.local_size,
@@ -63,7 +63,7 @@ impl Compositor {
                     top_left_corner_position: corner,
                     extent_u,
                     extent_v,
-                    colormapped_texture: crate::premultiplied_texture(input.texture.clone()),
+                    colormapped_texture: crate::render::compositor::premultiplied_texture(input.texture.clone()),
                     options: RectangleOptions {
                         multiplicative_tint: Rgba::from_rgba_premultiplied(
                             input.opacity,
@@ -95,7 +95,7 @@ impl Compositor {
 
                 solo_view_builder.queue_draw(&self.ctx, draw_data);
                 let clear = if background.is_none() {
-                    crate::clear_color(background_color)
+                    crate::render::compositor::clear_color(background_color)
                 } else {
                     Rgba::TRANSPARENT
                 };
@@ -180,7 +180,7 @@ impl Compositor {
 
             let mut rects: Vec<TexturedRect> = Vec::with_capacity(run.len() + 1);
             if let Some((_, imported)) = &background {
-                let plane_z = crate::accumulator_plane_z(
+                let plane_z = crate::render::compositor::accumulator_plane_z(
                     comp,
                     camera,
                     run.iter().map(|i| {
@@ -208,7 +208,7 @@ impl Compositor {
                 } else {
                     (input.transform, input.z, input.rotation_x, input.rotation_y)
                 };
-                let (corner, extent_u, extent_v) = crate::tilted_corners(
+                let (corner, extent_u, extent_v) = crate::render::compositor::tilted_corners(
                     transform,
                     input.local_min,
                     input.local_size,
@@ -227,7 +227,7 @@ impl Compositor {
                     top_left_corner_position: corner,
                     extent_u,
                     extent_v,
-                    colormapped_texture: crate::premultiplied_texture(input.texture.clone()),
+                    colormapped_texture: crate::render::compositor::premultiplied_texture(input.texture.clone()),
                     options: RectangleOptions {
                         multiplicative_tint: Rgba::from_rgba_premultiplied(
                             input.opacity,
@@ -261,7 +261,7 @@ impl Compositor {
 
             view_builder.queue_draw(&self.ctx, draw_data);
             let clear = if background.is_none() {
-                crate::clear_color(background_color)
+                crate::render::compositor::clear_color(background_color)
             } else {
                 Rgba::TRANSPARENT
             };
@@ -357,7 +357,7 @@ impl Compositor {
         let clear = if background.is_some() {
             Rgba::TRANSPARENT
         } else {
-            crate::clear_color(background_color)
+            crate::render::compositor::clear_color(background_color)
         };
         let command_buffer = final_view_builder
             .draw(&self.ctx, clear)
@@ -428,7 +428,7 @@ impl Compositor {
         let clear = if background.is_some() {
             Rgba::TRANSPARENT
         } else {
-            crate::clear_color(background_color)
+            crate::render::compositor::clear_color(background_color)
         };
         let command_buffer = view_builder
             .draw(&self.ctx, clear)
@@ -512,7 +512,7 @@ impl Compositor {
                 self.next_readback += 1;
                 view_builder.queue_draw(&self.ctx, draw_data);
                 let command_buffer = view_builder
-                    .draw(&self.ctx, crate::clear_color(background_color))
+                    .draw(&self.ctx, crate::render::compositor::clear_color(background_color))
                     .map_err(|e| CompositorError::Draw(e.to_string()))?;
                 self.ctx.before_submit();
                 self.ctx.queue.submit([command_buffer]);
@@ -568,7 +568,7 @@ impl Compositor {
             (layer.placement.transform, layer.placement.z)
         };
 
-        let tilt = crate::tilt(layer.placement.rotation_x, layer.placement.rotation_y);
+        let tilt = crate::render::compositor::tilt(layer.placement.rotation_x, layer.placement.rotation_y);
         let u = tilt * to_vector3(transform.transform_vector2(glam::Vec2::new(layer.size[0], 0.0)));
         let v = tilt * to_vector3(transform.transform_vector2(glam::Vec2::new(0.0, layer.size[1])));
         let center = to_point3(
@@ -580,7 +580,7 @@ impl Compositor {
             top_left_corner_position: center - (u + v) * 0.5,
             extent_u: u,
             extent_v: v,
-            colormapped_texture: crate::premultiplied_texture(layer.texture.clone()),
+            colormapped_texture: crate::render::compositor::premultiplied_texture(layer.texture.clone()),
             options: RectangleOptions {
                 multiplicative_tint: Rgba::from_rgba_premultiplied(
                     layer.placement.opacity,

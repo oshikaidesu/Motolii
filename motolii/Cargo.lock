@@ -3593,15 +3593,16 @@ dependencies = [
  "image",
  "keyboard-types 0.7.0",
  "macaw",
- "motolii-compositor",
  "motolii-core",
  "motolii-fixture",
  "motolii-media",
  "motolii-store",
  "motolii-testkit",
  "motolii-vector",
+ "naga",
  "peniko",
  "pollster",
+ "re_build_tools",
  "re_log",
  "re_renderer",
  "re_video",
@@ -3625,22 +3626,6 @@ dependencies = [
  "serde_json",
  "symphonia",
  "thiserror 2.0.20",
-]
-
-[[package]]
-name = "motolii-compositor"
-version = "0.1.0"
-dependencies = [
- "glam",
- "macaw",
- "motolii-core",
- "naga",
- "pollster",
- "re_build_tools",
- "re_renderer",
- "serde_json",
- "thiserror 2.0.20",
- "wgpu",
 ]
 
 [[package]]

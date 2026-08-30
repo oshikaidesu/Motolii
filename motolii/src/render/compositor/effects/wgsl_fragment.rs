@@ -7,11 +7,11 @@ use re_renderer::{FileServer, new_recommended_file_resolver};
 #[cfg(not(load_shaders_from_disk))]
 use re_renderer::{FileSystem as _, get_filesystem};
 
-pub(crate) const GRADIENT_SOURCE: &str = include_str!("shaders/gradient.wgsl");
+pub(crate) const GRADIENT_SOURCE: &str = include_str!("../../../../vism/gradient.wgsl");
 
 pub(crate) const GRADIENT_TARGET_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 
-pub(crate) const TRI_LED_SOURCE: &str = include_str!("shaders/tri_led.wgsl");
+pub(crate) const TRI_LED_SOURCE: &str = include_str!("../../../../vism/tri_led.wgsl");
 
 pub(crate) const TRI_LED_TARGET_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 
@@ -29,10 +29,10 @@ impl WgslFragmentProgram {
         #[cfg(load_shaders_from_disk)]
         let path = {
             let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-            let abs_path = manifest_dir.join(format!("src/effects/shaders/{name}.wgsl"));
+            let abs_path = manifest_dir.join(format!("vism/{name}.wgsl"));
             let resolver = new_recommended_file_resolver();
             FileServer::get_mut(|fs| fs.watch(&resolver, &abs_path, false))
-                .expect("{name}.wgsl exists next to wgsl_fragment.rs")
+                .expect("{name}.wgsl は vism/ に在る")
         };
         #[cfg(not(load_shaders_from_disk))]
         let path = {

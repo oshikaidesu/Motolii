@@ -1,7 +1,7 @@
 use re_renderer::resource_managers::ImageDataDesc;
 use re_renderer::RenderContext;
 
-use crate::*;
+use crate::render::compositor::*;
 
 impl Compositor {
     pub fn headless() -> Result<Self, CompositorError> {

@@ -1,5 +1,5 @@
 
-use motolii_compositor::HeadlessGpu;
+use motolii::render::compositor::HeadlessGpu;
 use motolii::render::engine::Engine;
 use motolii_store::{
     Composition, Document, Fps, Intent, LayerId, LayerMeta, LayerSource, LayerTiming, RationalTime,

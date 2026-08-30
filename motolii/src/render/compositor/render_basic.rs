@@ -7,7 +7,7 @@ use re_renderer::view_builder::{
 };
 use re_renderer::Rgba;
 
-use crate::*;
+use crate::render::compositor::*;
 
 impl Compositor {
     pub fn render(
@@ -52,7 +52,7 @@ impl Compositor {
                     extent_v: to_vector3(
                         transform.transform_vector2(glam::Vec2::new(0.0, layer.size[1])),
                     ),
-                    colormapped_texture: crate::premultiplied_texture(
+                    colormapped_texture: crate::render::compositor::premultiplied_texture(
                         layer.texture.clone(),
                     ),
                     options: RectangleOptions {

@@ -5,7 +5,7 @@ use re_renderer::view_builder::{
 };
 use re_renderer::{Color32, PointCloudBuilder, Rgba, Size, ViewBuilderId};
 
-use crate::{Compositor, CompositorError, GpuTexture2D};
+use crate::render::compositor::{Compositor, CompositorError, GpuTexture2D};
 
 const POINT_CLOUD_VERTICAL_FOV_DEGREES: f32 = motolii_core::CAMERA_BASE_VERTICAL_FOV_DEGREES;
 

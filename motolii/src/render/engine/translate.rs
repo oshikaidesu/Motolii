@@ -3,8 +3,8 @@ use crate::render::engine::EngineError;
 
 pub(crate) fn translate_blend_mode(
     mode: motolii_store::BlendMode,
-) -> Result<motolii_compositor::BlendMode, EngineError> {
-    use motolii_compositor::BlendMode as Dst;
+) -> Result<crate::render::compositor::BlendMode, EngineError> {
+    use crate::render::compositor::BlendMode as Dst;
     use motolii_store::BlendMode as Src;
     match mode {
         Src::Normal => Ok(Dst::Normal),
@@ -29,8 +29,8 @@ pub(crate) fn translate_blend_mode(
 
 pub(crate) fn translate_matte_mode(
     mode: motolii_store::MatteMode,
-) -> motolii_compositor::MatteMode {
-    use motolii_compositor::MatteMode as Dst;
+) -> crate::render::compositor::MatteMode {
+    use crate::render::compositor::MatteMode as Dst;
     use motolii_store::MatteMode as Src;
     match mode {
         Src::Alpha => Dst::Alpha,
@@ -48,7 +48,7 @@ mod translate_blend_mode_tests {
     fn add_is_accepted() {
         assert_eq!(
             translate_blend_mode(motolii_store::BlendMode::Add).unwrap(),
-            motolii_compositor::BlendMode::Add
+            crate::render::compositor::BlendMode::Add
         );
     }
 
@@ -56,11 +56,11 @@ mod translate_blend_mode_tests {
     fn separable_modes_are_accepted() {
         assert_eq!(
             translate_blend_mode(motolii_store::BlendMode::Multiply).unwrap(),
-            motolii_compositor::BlendMode::Multiply
+            crate::render::compositor::BlendMode::Multiply
         );
         assert_eq!(
             translate_blend_mode(motolii_store::BlendMode::SoftLight).unwrap(),
-            motolii_compositor::BlendMode::SoftLight
+            crate::render::compositor::BlendMode::SoftLight
         );
     }
 
@@ -68,19 +68,19 @@ mod translate_blend_mode_tests {
     fn nonseparable_modes_are_accepted() {
         assert_eq!(
             translate_blend_mode(motolii_store::BlendMode::Hue).unwrap(),
-            motolii_compositor::BlendMode::Hue
+            crate::render::compositor::BlendMode::Hue
         );
         assert_eq!(
             translate_blend_mode(motolii_store::BlendMode::Saturation).unwrap(),
-            motolii_compositor::BlendMode::Saturation
+            crate::render::compositor::BlendMode::Saturation
         );
         assert_eq!(
             translate_blend_mode(motolii_store::BlendMode::Color).unwrap(),
-            motolii_compositor::BlendMode::Color
+            crate::render::compositor::BlendMode::Color
         );
         assert_eq!(
             translate_blend_mode(motolii_store::BlendMode::Luminosity).unwrap(),
-            motolii_compositor::BlendMode::Luminosity
+            crate::render::compositor::BlendMode::Luminosity
         );
     }
 }
@@ -93,40 +93,40 @@ mod translate_matte_mode_tests {
     fn all_four_matte_modes_translate_one_to_one() {
         assert_eq!(
             translate_matte_mode(motolii_store::MatteMode::Alpha),
-            motolii_compositor::MatteMode::Alpha
+            crate::render::compositor::MatteMode::Alpha
         );
         assert_eq!(
             translate_matte_mode(motolii_store::MatteMode::InvertedAlpha),
-            motolii_compositor::MatteMode::InvertedAlpha
+            crate::render::compositor::MatteMode::InvertedAlpha
         );
         assert_eq!(
             translate_matte_mode(motolii_store::MatteMode::Luma),
-            motolii_compositor::MatteMode::Luma
+            crate::render::compositor::MatteMode::Luma
         );
         assert_eq!(
             translate_matte_mode(motolii_store::MatteMode::InvertedLuma),
-            motolii_compositor::MatteMode::InvertedLuma
+            crate::render::compositor::MatteMode::InvertedLuma
         );
     }
 }
 
 pub(crate) fn translate_effect_passes(
     effects: &[motolii_store::ResolvedEffect],
-) -> Vec<motolii_compositor::EffectPass> {
+) -> Vec<crate::render::compositor::EffectPass> {
     effects
         .iter()
         .filter_map(|effect| match effect.plugin_id.as_str() {
             "motolii.glow" => translate_glow_params(&effect.params),
             "motolii.isf_bloom" => Some(translate_isf_params(&effect.params)),
-            "motolii.gradient" => Some(motolii_compositor::EffectPass::Gradient),
-            "motolii.tri_led" => Some(motolii_compositor::EffectPass::TriLed),
+            "motolii.gradient" => Some(crate::render::compositor::EffectPass::Gradient),
+            "motolii.tri_led" => Some(crate::render::compositor::EffectPass::TriLed),
             _ => None,
         })
         .collect()
 }
 
-fn translate_isf_params(params: &[(String, motolii_store::Value)]) -> motolii_compositor::EffectPass {
-    motolii_compositor::EffectPass::Isf {
+fn translate_isf_params(params: &[(String, motolii_store::Value)]) -> crate::render::compositor::EffectPass {
+    crate::render::compositor::EffectPass::Isf {
         params: params
             .iter()
             .filter_map(|(name, value)| match value {
@@ -170,7 +170,7 @@ const GLOW_PARAMS: &[EffectParamDescriptor] = &[
     },
 ];
 
-fn params_from_manifest(manifest: &motolii_compositor::IsfManifest) -> &'static [EffectParamDescriptor] {
+fn params_from_manifest(manifest: &crate::render::compositor::IsfManifest) -> &'static [EffectParamDescriptor] {
     let params: Vec<EffectParamDescriptor> = manifest
         .param_inputs()
         .map(|input| EffectParamDescriptor {
@@ -195,7 +195,7 @@ pub fn known_effects() -> &'static [EffectDescriptor] {
             },
             EffectDescriptor {
                 plugin_id: "motolii.isf_bloom",
-                params: params_from_manifest(motolii_compositor::isf_bloom_manifest()),
+                params: params_from_manifest(crate::render::compositor::isf_bloom_manifest()),
             },
             EffectDescriptor {
                 plugin_id: "motolii.gradient",
@@ -203,13 +203,13 @@ pub fn known_effects() -> &'static [EffectDescriptor] {
             },
             EffectDescriptor {
                 plugin_id: "motolii.tri_led",
-                params: params_from_manifest(motolii_compositor::tri_led_manifest()),
+                params: params_from_manifest(crate::render::compositor::tri_led_manifest()),
             },
         ]
     })
 }
 
-fn translate_glow_params(params: &[(String, motolii_store::Value)]) -> Option<motolii_compositor::EffectPass> {
+fn translate_glow_params(params: &[(String, motolii_store::Value)]) -> Option<crate::render::compositor::EffectPass> {
     let find = |name: &str, default: f64| -> Option<f64> {
         match params.iter().find(|(param_name, _)| param_name == name) {
             Some((_, motolii_store::Value::F64(v))) => Some(*v),
@@ -220,7 +220,7 @@ fn translate_glow_params(params: &[(String, motolii_store::Value)]) -> Option<mo
     let threshold = find("threshold", GLOW_DEFAULT_THRESHOLD)?;
     let intensity = find("intensity", GLOW_DEFAULT_INTENSITY)?;
     let radius = find("radius", GLOW_DEFAULT_RADIUS)?;
-    Some(motolii_compositor::EffectPass::Glow {
+    Some(crate::render::compositor::EffectPass::Glow {
         threshold: threshold as f32,
         intensity: intensity as f32,
         radius: radius as f32,
@@ -293,7 +293,7 @@ mod known_effects_tests {
             .iter()
             .find(|descriptor| descriptor.plugin_id == "motolii.isf_bloom")
             .expect("motolii.isf_bloom is in the catalog");
-        let manifest = motolii_compositor::isf_bloom_manifest();
+        let manifest = crate::render::compositor::isf_bloom_manifest();
         let generic: Vec<_> = manifest.param_inputs().collect();
 
         assert_eq!(
