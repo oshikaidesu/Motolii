@@ -94,8 +94,7 @@ fn ply_point_cloud_renders_visible_pixels_through_render_frame() {
     assert!(
         non_background > 0,
         "点群の画素が1つも出ていない(re_importer 経由の parse → \
-         PointCloudData → Compositor::render_point_cloud_to_texture → 合成、\
-         のどこかで途切れている疑い)"
+         PointCloudData → run の view へ積む、のどこかで途切れている)"
     );
 
     let failures = engine.layer_failures();

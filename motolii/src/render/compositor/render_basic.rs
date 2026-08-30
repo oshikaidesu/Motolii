@@ -53,7 +53,13 @@ impl Compositor {
                         transform.transform_vector2(glam::Vec2::new(0.0, layer.size[1])),
                     ),
                     colormapped_texture: crate::render::compositor::premultiplied_texture(
-                        layer.texture.clone(),
+                        layer
+                            .content
+                            .texture()
+                            .ok_or_else(|| {
+                                CompositorError::Draw("3D の素材はこの経路では描かない".into())
+                            })?
+                            .clone(),
                     ),
                     options: RectangleOptions {
                         multiplicative_tint: Rgba::from_rgba_premultiplied(

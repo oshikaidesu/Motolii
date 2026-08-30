@@ -171,7 +171,7 @@ pub use crate::doc::core::{CompSpec, LayerPlacement, ResolvedCamera};
 
 #[derive(Clone)]
 pub struct Layer {
-    pub texture: GpuTexture2D,
+    pub content: LayerContent,
     pub size: [f32; 2],
     pub placement: LayerPlacement,
     pub pinned: bool,
@@ -246,8 +246,40 @@ pub struct Compositor {
 
 type AccumulatorBacking = wgpu::Texture;
 
+/// 層が持つ中身。3D の素材はテクスチャにならず、点のまま run へ渡る。
+#[derive(Clone)]
+pub enum LayerContent {
+    Texture(GpuTexture2D),
+    Cloud {
+        positions: std::sync::Arc<Vec<[f32; 3]>>,
+        colors: std::sync::Arc<Vec<[u8; 4]>>,
+        /// 点の直径(comp のピクセル)。
+        point_size: f32,
+    },
+}
+
+impl LayerContent {
+    pub fn texture(&self) -> Option<&GpuTexture2D> {
+        match self {
+            Self::Texture(t) => Some(t),
+            Self::Cloud { .. } => None,
+        }
+    }
+}
+
+/// 層が run へ差し出す物。板は矩形、3D の素材は**上流の draw data のまま**積む
+/// (焼かない。深度で刺さり合う)。
+pub(crate) enum SequentialContent<'a> {
+    Rect(&'a GpuTexture2D),
+    Cloud {
+        positions: &'a [[f32; 3]],
+        colors: &'a [[u8; 4]],
+        point_size: f32,
+    },
+}
+
 pub(crate) struct SequentialInput<'a> {
-    texture: &'a GpuTexture2D,
+    content: SequentialContent<'a>,
     local_min: glam::Vec2,
     local_size: glam::Vec2,
     transform: glam::Affine2,

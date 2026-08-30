@@ -41,25 +41,32 @@ impl Compositor {
         layers: &[LayerWithPasses],
     ) -> Result<
         (
-            Vec<GpuTexture2D>,
+            Vec<LayerContent>,
             Vec<u32>,
             Vec<(u32, u32, wgpu::TextureFormat, wgpu::Texture)>,
         ),
         CompositorError,
     > {
-        let mut effective_textures: Vec<GpuTexture2D> = Vec::with_capacity(layers.len());
+        let mut effective_textures: Vec<LayerContent> = Vec::with_capacity(layers.len());
         let mut effective_paddings: Vec<u32> = Vec::with_capacity(layers.len());
         let mut checked_out: Vec<(u32, u32, wgpu::TextureFormat, wgpu::Texture)> = Vec::new();
         let mut copy_encoder: Option<wgpu::CommandEncoder> = None;
 
         for lwp in layers {
+            // 3D の素材は焼かない(裁定 2026-08-30)。エフェクトはテクスチャの上でしか
+            // 動かないので、掛かっていても素通しする。
+            let Some(layer_texture) = lwp.layer.content.texture().cloned() else {
+                effective_textures.push(lwp.layer.content.clone());
+                effective_paddings.push(0);
+                continue;
+            };
             if lwp.passes.is_empty() {
-                effective_textures.push(lwp.layer.texture.clone());
+                effective_textures.push(LayerContent::Texture(layer_texture));
                 effective_paddings.push(0);
                 continue;
             }
 
-            let [width, height] = lwp.layer.texture.width_height();
+            let [width, height] = layer_texture.width_height();
             let padding = lwp
                 .passes
                 .iter()
@@ -73,9 +80,9 @@ impl Compositor {
                 .passes
                 .iter()
                 .find_map(EffectPass::intermediate_format)
-                .unwrap_or_else(|| lwp.layer.texture.format());
+                .unwrap_or_else(|| layer_texture.format());
 
-            let src_handle = lwp.layer.texture.handle();
+            let src_handle = layer_texture.handle();
             let src = self
                 .ctx
                 .gpu_resources
@@ -131,7 +138,7 @@ impl Compositor {
                             &self.ctx.device,
                             padded_width,
                             padded_height,
-                            lwp.layer.texture.format(),
+                            layer_texture.format(),
                         );
                         let padded_source_view = padded_source.create_view(&Default::default());
                         {
@@ -197,7 +204,7 @@ impl Compositor {
                         effect_scratch.release(
                             padded_width,
                             padded_height,
-                            lwp.layer.texture.format(),
+                            layer_texture.format(),
                             padded_source,
                         );
                     }
@@ -231,7 +238,7 @@ impl Compositor {
                 .import_gpu_premultiplied(key, &self.ctx, &scratch)
                 .map_err(|e| CompositorError::Effect(e.to_string()))?;
 
-            effective_textures.push(imported);
+            effective_textures.push(LayerContent::Texture(imported));
             effective_paddings.push(padding);
             checked_out.push((padded_width, padded_height, format, scratch));
         }
@@ -294,18 +301,23 @@ impl Compositor {
 
 pub(crate) fn sequential_inputs<'a>(
     layers: &'a [LayerWithPasses],
-    effective_textures: &'a [GpuTexture2D],
+    effective_textures: &'a [LayerContent],
     effective_paddings: &[u32],
 ) -> Vec<SequentialInput<'a>> {
     layers
         .iter()
         .zip(effective_textures.iter())
         .zip(effective_paddings.iter())
-        .map(|((lwp, texture), &padding)| {
+        .map(|((lwp, content), &padding)| {
             let layer = &lwp.layer;
             let pad = padding as f32;
             SequentialInput {
-                texture,
+                content: match content {
+                    LayerContent::Texture(t) => SequentialContent::Rect(t),
+                    LayerContent::Cloud { positions, colors, point_size } => {
+                        SequentialContent::Cloud { positions, colors, point_size: *point_size }
+                    }
+                },
                 local_min: glam::Vec2::new(-pad, -pad),
                 local_size: glam::Vec2::new(layer.size[0] + 2.0 * pad, layer.size[1] + 2.0 * pad),
                 transform: layer.placement.transform,

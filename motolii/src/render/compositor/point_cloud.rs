@@ -1,111 +1,54 @@
 
 use re_renderer::renderer::PointCloudBatchFlags;
-use re_renderer::view_builder::{
-    BlendWithBackground, Projection, RenderMode, TargetConfiguration, ViewBuilder,
-};
-use re_renderer::{Color32, PointCloudBuilder, Rgba, Size, ViewBuilderId};
+use re_renderer::{Color32, PointCloudBuilder, Size};
 
-use crate::render::compositor::{Compositor, CompositorError, GpuTexture2D};
-
-const POINT_CLOUD_VERTICAL_FOV_DEGREES: f32 = crate::doc::core::CAMERA_BASE_VERTICAL_FOV_DEGREES;
+use crate::render::compositor::{Compositor, CompositorError};
 
 impl Compositor {
-    pub fn render_point_cloud_to_texture(
+    /// 層の変形を `world_from_obj` に載せた点群の draw data。**焼かない** —
+    /// 呼び手が板と同じ view へ積む(裁定 2026-08-30「3D は既定で空間に居る」)。
+    pub(crate) fn point_cloud_draw_data(
         &mut self,
         positions: &[[f32; 3]],
         colors: &[[u8; 4]],
-        width: u32,
-        height: u32,
-    ) -> Result<GpuTexture2D, CompositorError> {
-        let positions: Vec<glam::Vec3> = positions.iter().copied().map(glam::Vec3::from).collect();
+        point_size: f32,
+        transform: glam::Affine2,
+        z: f32,
+        opacity: f32,
+    ) -> Result<re_renderer::renderer::PointCloudDrawData, CompositorError> {
+        let points: Vec<glam::Vec3> = positions.iter().copied().map(glam::Vec3::from).collect();
+        let alpha = (opacity.clamp(0.0, 1.0) * 255.0).round() as u8;
         let colors: Vec<Color32> = colors
             .iter()
-            .map(|c| Color32::from_rgba_unmultiplied(c[0], c[1], c[2], c[3]))
+            .map(|c| {
+                Color32::from_rgba_unmultiplied(
+                    c[0],
+                    c[1],
+                    c[2],
+                    ((c[3] as u16 * alpha as u16) / 255) as u8,
+                )
+            })
             .collect();
 
-        let (center, radius) = bounding_sphere(&positions);
-        let half_fov = (POINT_CLOUD_VERTICAL_FOV_DEGREES * 0.5).to_radians();
-        let distance = (radius.max(1e-3) * 1.2) / half_fov.tan();
-        let eye = center + glam::Vec3::new(0.0, 0.0, distance);
-        let view_from_world = macaw::IsoTransform::look_at_rh(eye, center, glam::Vec3::Y)
-            .ok_or_else(|| {
-                CompositorError::View("点群カメラを組めない(eye/target が縮退)".into())
-            })?;
+        let m = transform.matrix2;
+        let t = transform.translation;
+        let world_from_obj = glam::Affine3A::from_cols(
+            glam::Vec3A::new(m.x_axis.x, m.x_axis.y, 0.0),
+            glam::Vec3A::new(m.y_axis.x, m.y_axis.y, 0.0),
+            glam::Vec3A::new(0.0, 0.0, 1.0),
+            glam::Vec3A::new(t.x, t.y, z),
+        );
 
-        self.ctx.begin_frame();
-
-        let radii = vec![Size::new_ui_points(1.5); positions.len()];
-        let picking_ids = vec![Default::default(); positions.len()];
+        let radii = vec![Size::new_scene_units(point_size.max(1e-4)); points.len()];
+        let picking_ids = vec![Default::default(); points.len()];
         let mut builder = PointCloudBuilder::new(&self.ctx);
         builder
             .batch("motolii-point-cloud")
-            .world_from_obj(glam::Affine3A::IDENTITY)
-            .add_points_slow(&positions, &radii, &colors, &picking_ids)
+            .world_from_obj(world_from_obj)
+            .add_points_slow(&points, &radii, &colors, &picking_ids)
             .flags(PointCloudBatchFlags::FLAG_ENABLE_SHADING);
-        let draw_data = builder
+        builder
             .into_draw_data()
-            .map_err(|e| CompositorError::Draw(e.to_string()))?;
-
-        let owned = self.create_blend_scratch_texture(width, height);
-        let mut view_builder = ViewBuilder::new_with_external_resolved(
-            &self.ctx,
-            TargetConfiguration {
-                name: "motolii-point-cloud".into(),
-                render_mode: RenderMode::Deterministic,
-                resolution_in_pixel: [width, height],
-                view_from_world,
-                projection_from_view: Projection::Perspective {
-                    vertical_fov: half_fov * 2.0,
-                    near_plane_distance: crate::doc::core::NEAR_PLANE,
-                    aspect_ratio: width as f32 / height as f32,
-                },
-                pixels_per_point: 1.0,
-                blend_with_background: BlendWithBackground::Premultiplied,
-                ..Default::default()
-            },
-            ViewBuilderId::new(self.next_readback),
-            &owned,
-        )
-        .map_err(|e| CompositorError::View(e.to_string()))?;
-        self.next_readback += 1;
-
-        view_builder.queue_draw(&self.ctx, draw_data);
-        let command_buffer = view_builder
-            .draw(&self.ctx, Rgba::TRANSPARENT)
-            .map_err(|e| CompositorError::Draw(e.to_string()))?;
-
-        self.ctx.before_submit();
-        self.ctx.queue.submit([command_buffer]);
-        self.sequential_submits += 1;
-        self.ctx.begin_frame();
-        self.ctx
-            .device
-            .poll(wgpu::PollType::wait_indefinitely())
-            .map_err(|e| CompositorError::Draw(e.to_string()))?;
-
-        self.next_effect_key += 1;
-        let key = self.next_effect_key;
-        self.ctx
-            .texture_manager_2d
-            .import_gpu_premultiplied(key, &self.ctx, &owned)
-            .map_err(|e| CompositorError::Effect(e.to_string()))
+            .map_err(|e| CompositorError::Draw(e.to_string()))
     }
-}
-
-fn bounding_sphere(positions: &[glam::Vec3]) -> (glam::Vec3, f32) {
-    if positions.is_empty() {
-        return (glam::Vec3::ZERO, 1.0);
-    }
-    let mut min = positions[0];
-    let mut max = positions[0];
-    for &p in &positions[1..] {
-        min = min.min(p);
-        max = max.max(p);
-    }
-    let center = (min + max) * 0.5;
-    let radius = positions
-        .iter()
-        .map(|&p| (p - center).length())
-        .fold(0.0_f32, f32::max);
-    (center, radius)
 }

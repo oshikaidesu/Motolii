@@ -53,12 +53,12 @@ impl Engine {
             let blend_mode = translate_blend_mode(layer.blend_mode)?;
             let passes = translate_effect_passes(&layer.effects);
 
-            let (texture, natural) = self.texture_for_layer(view, layer, t, comp)?;
-            let Some(texture) = texture else {
+            let (content, natural) = self.texture_for_layer(view, layer, t, comp)?;
+            let Some(content) = content else {
                 continue;
             };
             let built = Layer {
-                texture,
+                content,
                 size: layer_size(layer, natural),
                 placement: layer.placement,
                 pinned: layer.pinned,
@@ -71,14 +71,14 @@ impl Engine {
                     let Some(source) = by_id.get(&matte.layer).copied() else {
                         continue;
                     };
-                    let (source_texture, source_natural) =
+                    let (source_content, source_natural) =
                         self.texture_for_layer(view, source, t, comp)?;
-                    let Some(source_texture) = source_texture else {
+                    let Some(source_content) = source_content else {
                         continue;
                     };
                     let source_blend = translate_blend_mode(source.blend_mode)?;
                     let source_layer = Layer {
-                        texture: source_texture,
+                        content: source_content,
                         size: layer_size(source, source_natural),
                         placement: source.placement,
                         pinned: source.pinned,
@@ -131,13 +131,13 @@ impl Engine {
             let blend_mode = translate_blend_mode(layer.blend_mode)?;
             let passes = translate_effect_passes(&layer.effects);
 
-            let (texture, natural) =
+            let (content, natural) =
                 self.texture_for_resolved(layer, text_documents, shape_documents, t, comp)?;
-            let Some(texture) = texture else {
+            let Some(content) = content else {
                 continue;
             };
             let built = Layer {
-                texture,
+                content,
                 size: layer_size(layer, natural),
                 placement: layer.placement,
                 pinned: layer.pinned,
@@ -150,19 +150,19 @@ impl Engine {
                     let Some(source) = by_id.get(&matte.layer).copied() else {
                         continue;
                     };
-                    let (source_texture, source_natural) = self.texture_for_resolved(
+                    let (source_content, source_natural) = self.texture_for_resolved(
                         source,
                         text_documents,
                         shape_documents,
                         t,
                         comp,
                     )?;
-                    let Some(source_texture) = source_texture else {
+                    let Some(source_content) = source_content else {
                         continue;
                     };
                     let source_blend = translate_blend_mode(source.blend_mode)?;
                     let source_layer = Layer {
-                        texture: source_texture,
+                        content: source_content,
                         size: layer_size(source, source_natural),
                         placement: source.placement,
                         pinned: source.pinned,

@@ -57,6 +57,35 @@ impl PointCloudData {
     pub fn point_count(&self) -> usize {
         self.positions.len()
     }
+
+    /// 点群を囲む球(中心と半径)。層を作る時の初期倍率に使う。
+    pub fn bounding_sphere(&self) -> ([f32; 3], f32) {
+        if self.positions.is_empty() {
+            return ([0.0; 3], 0.0);
+        }
+        let mut lo = self.positions[0];
+        let mut hi = self.positions[0];
+        for p in &self.positions {
+            for i in 0..3 {
+                lo[i] = lo[i].min(p[i]);
+                hi[i] = hi[i].max(p[i]);
+            }
+        }
+        let center = [
+            (lo[0] + hi[0]) * 0.5,
+            (lo[1] + hi[1]) * 0.5,
+            (lo[2] + hi[2]) * 0.5,
+        ];
+        let radius = self
+            .positions
+            .iter()
+            .map(|p| {
+                let d = [p[0] - center[0], p[1] - center[1], p[2] - center[2]];
+                (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt()
+            })
+            .fold(0.0f32, f32::max);
+        (center, radius)
+    }
 }
 
 pub fn load_point_cloud(path: &Path) -> Result<PointCloudData, PointCloudError> {

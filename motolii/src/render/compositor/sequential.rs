@@ -60,7 +60,11 @@ impl Compositor {
         while idx < inputs.len() {
             let input = &inputs[idx];
 
-            if let Some(mode_index) = vello_blend_mode(input.blend_mode) {
+            let is_rect = matches!(
+                input.content,
+                crate::render::compositor::SequentialContent::Rect(_)
+            );
+            if let Some(mode_index) = vello_blend_mode(input.blend_mode).filter(|_| is_rect) {
                 let (transform, z, rx, ry) = if input.pinned {
                     (pinned_cancel * input.transform, 0.0, 0.0, 0.0)
                 } else {
@@ -79,7 +83,12 @@ impl Compositor {
                     top_left_corner_position: corner,
                     extent_u,
                     extent_v,
-                    colormapped_texture: crate::render::compositor::premultiplied_texture(input.texture.clone()),
+                    colormapped_texture: crate::render::compositor::premultiplied_texture(
+                        match input.content {
+                            crate::render::compositor::SequentialContent::Rect(t) => t.clone(),
+                            _ => unreachable!("焼く経路へ来るのは矩形だけ"),
+                        },
+                    ),
                     options: RectangleOptions {
                         multiplicative_tint: Rgba::from_rgba_premultiplied(
                             input.opacity,
@@ -214,12 +223,29 @@ impl Compositor {
                 ));
             }
 
+            let mut clouds: Vec<re_renderer::renderer::PointCloudDrawData> = Vec::new();
             for input in run {
                 let (transform, z, rx, ry) = if input.pinned {
                     (pinned_cancel * input.transform, 0.0, 0.0, 0.0)
                 } else {
                     (input.transform, input.z, input.rotation_x, input.rotation_y)
                 };
+                if let crate::render::compositor::SequentialContent::Cloud {
+                    positions,
+                    colors,
+                    point_size,
+                } = input.content
+                {
+                    clouds.push(self.point_cloud_draw_data(
+                        positions,
+                        colors,
+                        point_size,
+                        transform,
+                        z,
+                        input.opacity,
+                    )?);
+                    continue;
+                }
                 let (corner, extent_u, extent_v) = crate::render::compositor::tilted_corners(
                     transform,
                     input.local_min,
@@ -239,7 +265,12 @@ impl Compositor {
                     top_left_corner_position: corner,
                     extent_u,
                     extent_v,
-                    colormapped_texture: crate::render::compositor::premultiplied_texture(input.texture.clone()),
+                    colormapped_texture: crate::render::compositor::premultiplied_texture(
+                        match input.content {
+                            crate::render::compositor::SequentialContent::Rect(t) => t.clone(),
+                            _ => unreachable!("点群は上で continue している"),
+                        },
+                    ),
                     options: RectangleOptions {
                         multiplicative_tint: Rgba::from_rgba_premultiplied(
                             input.opacity,
@@ -274,6 +305,9 @@ impl Compositor {
             self.next_readback += 1;
 
             view_builder.queue_draw(&self.ctx, draw_data);
+            for cloud in clouds {
+                view_builder.queue_draw(&self.ctx, cloud);
+            }
             let clear = if background.is_none() {
                 crate::render::compositor::clear_color(background_color)
             } else {
@@ -546,7 +580,20 @@ impl Compositor {
         let inputs: Vec<SequentialInput<'_>> = layers
             .iter()
             .map(|layer| SequentialInput {
-                texture: &layer.texture,
+                content: match &layer.content {
+                    crate::render::compositor::LayerContent::Texture(t) => {
+                        crate::render::compositor::SequentialContent::Rect(t)
+                    }
+                    crate::render::compositor::LayerContent::Cloud {
+                        positions,
+                        colors,
+                        point_size,
+                    } => crate::render::compositor::SequentialContent::Cloud {
+                        positions,
+                        colors,
+                        point_size: *point_size,
+                    },
+                },
                 local_min: glam::Vec2::ZERO,
                 local_size: glam::Vec2::new(layer.size[0], layer.size[1]),
                 transform: layer.placement.transform,
@@ -591,7 +638,17 @@ impl Compositor {
             top_left_corner_position: center - (u + v) * 0.5,
             extent_u: u,
             extent_v: v,
-            colormapped_texture: crate::render::compositor::premultiplied_texture(layer.texture.clone()),
+            colormapped_texture: crate::render::compositor::premultiplied_texture(
+                layer
+                    .content
+                    .texture()
+                    .ok_or_else(|| {
+                        CompositorError::Draw(
+                            "3D の素材は matte の対象にできない(平面に収めてから)".into(),
+                        )
+                    })?
+                    .clone(),
+            ),
             options: RectangleOptions {
                 multiplicative_tint: Rgba::from_rgba_premultiplied(
                     layer.placement.opacity,
@@ -688,7 +745,7 @@ impl Compositor {
             .map_err(|e| CompositorError::Effect(e.to_string()))?;
 
         Ok(Layer {
-            texture: imported,
+            content: crate::render::compositor::LayerContent::Texture(imported),
             size: [comp.width as f32, comp.height as f32],
             placement: LayerPlacement {
                 transform: glam::Affine2::IDENTITY,
