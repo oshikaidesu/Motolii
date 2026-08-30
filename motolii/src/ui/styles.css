@@ -674,14 +674,14 @@ body {
 
 #timelineshell {
     display: grid;
-    grid-template-rows: var(--section) 1fr;
+    grid-template-rows: 1fr;
     background: var(--app);
     overflow: hidden;
 }
 
-#tp {
-    background: var(--panel);
-    border-bottom: var(--line) solid var(--dark);
+.ptools {
+    flex: 1;
+    min-width: 0;
     display: flex;
     align-items: center;
     gap: var(--sp4);
@@ -707,7 +707,7 @@ body {
     font-variant-numeric: tabular-nums;
 }
 
-#tp em {
+.ptools em {
     margin-left: auto;
     font-size: var(--t-dense);
     color: var(--ink3);

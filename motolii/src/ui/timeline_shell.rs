@@ -10,10 +10,34 @@ use crate::ui::session::Selection;
 use crate::ui::timeline_widget::TimelineMsg;
 use crate::doc::store::{Document, Intent, LayerAttrsPatch, LayerId};
 
-#[allow(clippy::too_many_arguments)]
-pub(super) fn timeline_shell(
+/// 再生の道具。タブの帯の右へ乗る(帯を2段にしないため)。
+pub(super) fn transport(
     clock: Arc<Clock>,
     mut playing: Signal<bool>,
+    layer_count: usize,
+) -> Element {
+    let timecode = fmt_timecode(clock.now_sec());
+    rsx!(
+        div { class: "ptools",
+            button {
+                id: "play",
+                onclick: {
+                    let clock = clock.clone();
+                    move |_| {
+                        clock.toggle();
+                        *playing.write() = clock.playing();
+                    }
+                },
+                if playing() { "■" } else { "▶" }
+            }
+            span { class: "tc", "{timecode}" }
+            em { "{layer_count} rows · 30fps · 60s" }
+        }
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) fn timeline_shell(
     doc: Arc<Mutex<Document>>,
     mut attrs: Signal<Vec<(bool, bool, bool)>>,
     layer_rows_data: &[LayerRow],
@@ -161,26 +185,8 @@ pub(super) fn timeline_shell(
         )
     });
 
-    let timecode = fmt_timecode(clock.now_sec());
-    let layer_count = layer_rows_data.len();
-
     rsx!(
         div { id: "timelineshell",
-            div { id: "tp",
-                button {
-                    id: "play",
-                    onclick: {
-                        let clock = clock.clone();
-                        move |_| {
-                            clock.toggle();
-                            *playing.write() = clock.playing();
-                        }
-                    },
-                    if playing() { "■" } else { "▶" }
-                }
-                span { class: "tc", "{timecode}" }
-                em { "{layer_count} rows · 30fps · 60s" }
-            }
             div { id: "timeline",
                 div {
                     id: "layers",

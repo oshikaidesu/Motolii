@@ -106,7 +106,7 @@ pub fn app() -> Element {
             ),
             Panel::Inspector => inspector_panel(&doc, selected(), &clock, revision, text_editing),
             Panel::Utility => crate::ui::utility::utility_panel(&doc, selected(), &selected_size, &gizmo_3d, &clock, revision),
-            Panel::Timeline => timeline_shell(clock.clone(), playing, doc.clone(), attrs_state, &layer_rows.read(), layer_rows, timeline_attr.clone(), selection.clone(), selected, timeline_scroll_y, timeline_tx.clone(), renaming, revision),
+            Panel::Timeline => timeline_shell(doc.clone(), attrs_state, &layer_rows.read(), layer_rows, timeline_attr.clone(), selection.clone(), selected, timeline_scroll_y, timeline_tx.clone(), renaming, revision),
         }
     };
 
@@ -132,6 +132,9 @@ pub fn app() -> Element {
                             onclick: move |_| dock.write().set_active(zone, panel),
                             "{panel}"
                         }
+                    }
+                    if d.active(zone) == Some(Panel::Timeline) {
+                        {crate::ui::timeline_shell::transport(clock.clone(), playing, layer_rows.read().len())}
                     }
                 }
                 if let Some(panel) = d.active(zone) {
