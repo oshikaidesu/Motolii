@@ -11,50 +11,6 @@ pub(super) const LABEL_PALETTE: [&str; 12] = [
     "#5a96d9", "#7d7dd9", "#a86bd9", "#d96bbc", "#9a9a9a", "#cba97a",
 ];
 
-pub(super) fn canvas_rows_from_doc(doc: &Document) -> Vec<CanvasRow> {
-    let view = doc.view();
-    let props: Vec<PropertyId> = [property::OPACITY, property::POSITION]
-        .iter()
-        .filter_map(|p| PropertyId::new(p).ok())
-        .collect();
-
-    let mut layers = view.layers();
-    layers.sort_by_key(|l| std::cmp::Reverse(view.meta(*l).ok().flatten().map(|m| m.order).unwrap_or(0)));
-
-    layers
-        .into_iter()
-        .map(|layer| {
-            let (start, duration) = view
-                .meta(layer)
-                .ok()
-                .flatten()
-                .map(|m| (m.timing.start, m.timing.duration))
-                .unwrap_or((0, 0));
-            let color_ix = view
-                .attrs(layer)
-                .ok()
-                .flatten()
-                .and_then(|a| a.label_color)
-                .unwrap_or(10);
-            let mut keys = Vec::new();
-            for prop in &props {
-                if let Ok(Some(track)) = view.track(layer, prop) {
-                    keys.extend(track.keys().iter().map(|k| k.t.as_seconds_f64()));
-                }
-            }
-            keys.sort_by(|a, b| a.partial_cmp(b).unwrap());
-            CanvasRow {
-                is_group: false,
-                keys,
-                span: Some((start as f64 / FPS, (start + duration) as f64 / FPS)),
-                agg: Vec::new(),
-                layer: Some(layer),
-                color: label_rgb(color_ix),
-            }
-        })
-        .collect()
-}
-
 pub(super) fn label_rgb(ix: u8) -> [u8; 3] {
     let hex = LABEL_PALETTE[ix as usize % LABEL_PALETTE.len()];
     let v = u32::from_str_radix(&hex[1..], 16).unwrap_or(0x8c8c8c);
@@ -69,28 +25,161 @@ pub(super) struct LayerRow {
     pub hidden: bool,
     pub solo: bool,
     pub locked: bool,
+    /// 属性の行なら属性名。層そのものの行なら None。
+    pub prop: Option<String>,
+    pub expanded: bool,
+}
+
+const TRANSFORM_PROPS: &[&str] = &[
+    property::ANCHOR,
+    property::POSITION,
+    property::SCALE,
+    property::ROTATION,
+    property::OPACITY,
+];
+
+#[derive(Default)]
+struct TimelineView {
+    expanded: std::collections::BTreeSet<LayerId>,
+    keyed_only: bool,
+}
+
+fn timeline_view() -> &'static std::sync::Mutex<TimelineView> {
+    static V: std::sync::OnceLock<std::sync::Mutex<TimelineView>> = std::sync::OnceLock::new();
+    V.get_or_init(|| std::sync::Mutex::new(TimelineView::default()))
+}
+
+pub(super) fn toggle_expanded(layer: LayerId) {
+    let mut v = timeline_view().lock().unwrap();
+    if !v.expanded.remove(&layer) {
+        v.expanded.insert(layer);
+    }
+}
+
+pub(super) fn expand(layer: LayerId) {
+    timeline_view().lock().unwrap().expanded.insert(layer);
+}
+
+pub(super) fn toggle_keyed_only() {
+    let mut v = timeline_view().lock().unwrap();
+    v.keyed_only = !v.keyed_only;
+}
+
+pub(super) fn keyed_only() -> bool {
+    timeline_view().lock().unwrap().keyed_only
+}
+
+/// 画面に出る行の並び。左の名前列と右の帯は必ずこれを通す(ずれると別物になる)。
+fn rows_of(doc: &Document) -> Vec<(LayerId, Option<PropertyId>)> {
+    let view = doc.view();
+    let v = timeline_view().lock().unwrap();
+    let mut layers = view.layers();
+    layers.sort_by_key(|l| std::cmp::Reverse(view.meta(*l).ok().flatten().map(|m| m.order).unwrap_or(0)));
+    let mut out = Vec::new();
+    for layer in layers {
+        out.push((layer, None));
+        if !v.expanded.contains(&layer) {
+            continue;
+        }
+        for name in TRANSFORM_PROPS {
+            let Ok(property) = PropertyId::new(name) else {
+                continue;
+            };
+            let keyed = matches!(view.track(layer, &property), Ok(Some(t)) if !t.keys().is_empty());
+            if v.keyed_only && !keyed {
+                continue;
+            }
+            out.push((layer, Some(property)));
+        }
+    }
+    out
+}
+
+pub(super) fn canvas_rows_from_doc(doc: &Document) -> Vec<CanvasRow> {
+    let view = doc.view();
+    let agg_props: Vec<PropertyId> = [property::OPACITY, property::POSITION]
+        .iter()
+        .filter_map(|p| PropertyId::new(p).ok())
+        .collect();
+
+    rows_of(doc)
+        .into_iter()
+        .map(|(layer, prop)| {
+            let color_ix = view
+                .attrs(layer)
+                .ok()
+                .flatten()
+                .and_then(|a| a.label_color)
+                .unwrap_or(10);
+            match prop {
+                None => {
+                    let (start, duration) = view
+                        .meta(layer)
+                        .ok()
+                        .flatten()
+                        .map(|m| (m.timing.start, m.timing.duration))
+                        .unwrap_or((0, 0));
+                    let mut keys = Vec::new();
+                    for property in &agg_props {
+                        if let Ok(Some(track)) = view.track(layer, property) {
+                            keys.extend(track.keys().iter().map(|k| k.t.as_seconds_f64()));
+                        }
+                    }
+                    CanvasRow {
+                        is_group: false,
+                        keys,
+                        span: Some((start as f64 / FPS, (start + duration) as f64 / FPS)),
+                        agg: Vec::new(),
+                        layer: Some(layer),
+                        prop: None,
+                        color: label_rgb(color_ix),
+                    }
+                }
+                Some(property) => {
+                    let keys = view
+                        .track(layer, &property)
+                        .ok()
+                        .flatten()
+                        .map(|t| t.keys().iter().map(|k| k.t.as_seconds_f64()).collect())
+                        .unwrap_or_default();
+                    CanvasRow {
+                        is_group: false,
+                        keys,
+                        span: None,
+                        agg: Vec::new(),
+                        layer: Some(layer),
+                        prop: Some(property),
+                        color: label_rgb(color_ix),
+                    }
+                }
+            }
+        })
+        .collect()
 }
 
 pub(super) fn layer_rows_from_doc(doc: &Document) -> Vec<LayerRow> {
     let view = doc.view();
-    let mut layers = view.layers();
-    layers.sort_by_key(|l| std::cmp::Reverse(view.meta(*l).ok().flatten().map(|m| m.order).unwrap_or(0)));
-
-    layers
+    rows_of(doc)
         .into_iter()
-        .map(|layer| {
+        .map(|(layer, prop)| {
             let attrs = view.attrs(layer).ok().flatten().unwrap_or_default();
             let color = attrs
                 .label_color
                 .map(|ix| LABEL_PALETTE[ix as usize % LABEL_PALETTE.len()])
                 .unwrap_or("#8c8c8c");
+            let expanded = timeline_view().lock().unwrap().expanded.contains(&layer);
             LayerRow {
                 layer,
-                name: attrs.name,
+                name: match &prop {
+                    Some(p) => p.name().to_string(),
+                    None => attrs.name,
+                },
                 color,
                 hidden: attrs.hidden,
                 solo: attrs.solo,
                 locked: attrs.locked,
+                prop: prop.map(|p| p.name().to_string()),
+                expanded,
             }
         })
         .collect()
@@ -604,5 +693,61 @@ mod asset_family_folding {
     #[test]
     fn unknown_types_fall_through_instead_of_getting_their_own_box() {
         assert_eq!(asset_family("wat/unknown"), AssetFamily::Other);
+    }
+}
+
+#[cfg(test)]
+mod row_tests {
+    use super::*;
+    use crate::doc::store::{Composition, Fps, Intent, LayerMeta, LayerTiming};
+
+    fn doc_with_layers(n: u32) -> Document {
+        let mut doc = Document::new();
+        doc.apply(Intent::SetComposition(Composition {
+            width: 64,
+            height: 64,
+            fps: Fps::try_new(30, 1).unwrap(),
+            duration_frames: 300,
+            background: [0.0, 0.0, 0.0, 1.0],
+        }))
+        .unwrap();
+        for i in 0..n {
+            let layer = LayerId(i as u64 + 1);
+            doc.apply_all([
+                Intent::AddLayer(layer),
+                Intent::SetMeta {
+                    layer,
+                    meta: LayerMeta {
+                        source: LayerSource::Shape,
+                        order: i as i16,
+                        timing: LayerTiming::place(0, None, 100),
+                    },
+                },
+            ])
+            .unwrap();
+        }
+        doc
+    }
+
+    #[test]
+    fn the_name_column_and_the_band_column_describe_the_same_rows() {
+        let doc = doc_with_layers(3);
+        toggle_expanded(LayerId(2));
+
+        let names = layer_rows_from_doc(&doc);
+        let bands = canvas_rows_from_doc(&doc);
+
+        assert_eq!(names.len(), bands.len(), "左右の行数がずれている");
+        for (name, band) in names.iter().zip(&bands) {
+            assert_eq!(Some(name.layer), band.layer);
+            assert_eq!(name.prop.is_some(), band.prop.is_some());
+        }
+        assert!(
+            names.iter().any(|r| r.prop.is_some()),
+            "開いた層の属性行が1つも出ていない"
+        );
+
+        toggle_expanded(LayerId(2));
+        assert!(layer_rows_from_doc(&doc).iter().all(|r| r.prop.is_none()));
     }
 }

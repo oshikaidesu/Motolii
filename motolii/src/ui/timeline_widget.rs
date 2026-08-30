@@ -36,6 +36,7 @@ pub(super) struct CanvasRow {
     pub span: Option<(f64, f64)>,
     pub agg: Vec<f64>,
     pub layer: Option<LayerId>,
+    pub prop: Option<crate::doc::store::PropertyId>,
     pub color: [u8; 3],
 }
 
@@ -51,6 +52,7 @@ enum DragMode {
 struct DragState {
     row: usize,
     layer: LayerId,
+    prop: Option<crate::doc::store::PropertyId>,
     orig: LayerTiming,
     grab_sec: f64,
     delta_sec: f64,
@@ -91,6 +93,7 @@ fn keyframe_shift_intents(
 fn keyframe_move_intents(
     doc: &Document,
     layer: LayerId,
+    only: Option<&crate::doc::store::PropertyId>,
     at_frame: i64,
     delta_frames: i64,
 ) -> Result<Vec<Intent>, StoreError> {
@@ -100,6 +103,9 @@ fn keyframe_move_intents(
         RationalTime::try_from_frame(delta_frames, fps).map_err(|e| StoreError::Property(e.to_string()))?;
     let mut intents = Vec::new();
     for property in view.properties(layer) {
+        if only.is_some_and(|p| *p != property) {
+            continue;
+        }
         let Some(track) = view.track(layer, &property)? else {
             continue;
         };
@@ -515,6 +521,7 @@ impl Widget for TimelineWidget {
                         self.drag = Some(DragState {
                             row: row_ix,
                             layer,
+                            prop: self.rows[row_ix].prop.clone(),
                             orig,
                             grab_sec: t,
                             delta_sec: 0.0,
@@ -560,6 +567,7 @@ impl Widget for TimelineWidget {
                         self.drag = Some(DragState {
                             row: row_ix,
                             layer,
+                            prop: None,
                             orig,
                             grab_sec: t,
                             delta_sec: 0.0,
@@ -579,7 +587,7 @@ impl Widget for TimelineWidget {
                     if let DragMode::Key { at_sec } = drag.mode {
                         let at_frame = (at_sec * DOC_FPS).round() as i64;
                         if raw_delta != 0 {
-                            match keyframe_move_intents(&doc, drag.layer, at_frame, raw_delta) {
+                            match keyframe_move_intents(&doc, drag.layer, drag.prop.as_ref(), at_frame, raw_delta) {
                                 Ok(intents) => match doc.apply_all(intents) {
                                     Ok(_) => {
                                         println!(

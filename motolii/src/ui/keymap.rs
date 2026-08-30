@@ -24,6 +24,8 @@ pub(super) enum Intent {
     ToggleMarker,
     /// 前(-1)/次(+1)のマーカーへ跳ぶ。
     JumpMarker(i32),
+    /// キーを持つ属性だけに絞る / 戻す。
+    ToggleKeyedOnly,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -68,7 +70,9 @@ const BINDINGS: &[Binding] = &[
     Binding { key: KeySpec::Char('['), cmd: false, shift: false, alt: true, intent: Intent::TrimToPlayhead(false) },
     Binding { key: KeySpec::Char(']'), cmd: false, shift: false, alt: true, intent: Intent::TrimToPlayhead(true) },
     Binding { key: KeySpec::ArrowUp, cmd: false, shift: false, alt: false, intent: Intent::SelectStep(-1) },
+    Binding { key: KeySpec::Char('u'), cmd: false, shift: false, alt: false, intent: Intent::ToggleKeyedOnly },
     Binding { key: KeySpec::Char('*'), cmd: false, shift: false, alt: false, intent: Intent::ToggleMarker },
+    Binding { key: KeySpec::Char('u'), cmd: false, shift: false, alt: false, intent: Intent::ToggleKeyedOnly },
     Binding { key: KeySpec::Char('*'), cmd: false, shift: true, alt: false, intent: Intent::ToggleMarker },
     Binding { key: KeySpec::ArrowLeft, cmd: true, shift: false, alt: false, intent: Intent::JumpMarker(-1) },
     Binding { key: KeySpec::ArrowRight, cmd: true, shift: false, alt: false, intent: Intent::JumpMarker(1) },

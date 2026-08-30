@@ -729,6 +729,26 @@ body {
     text-overflow: ellipsis;
 }
 
+.twirl {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: calc(12 * var(--s) * 1px);
+    color: var(--ink3);
+    background: var(--panel);
+}
+
+.lprop {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    padding: 0 var(--sp2) 0 calc(18 * var(--s) * 1px);
+    color: var(--ink2);
+    background: var(--panel);
+    overflow: hidden;
+    white-space: nowrap;
+}
+
 .lctrl {
     display: flex;
     align-items: center;

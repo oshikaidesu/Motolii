@@ -17,6 +17,7 @@ pub(super) fn timeline_shell(
     doc: Arc<Mutex<Document>>,
     mut attrs: Signal<Vec<(bool, bool, bool)>>,
     layer_rows_data: &[LayerRow],
+    layer_rows_sig: Signal<Vec<LayerRow>>,
     timeline_attr: CustomWidgetAttr,
     selection: Selection,
     mut selected: Signal<Option<LayerId>>,
@@ -28,6 +29,9 @@ pub(super) fn timeline_shell(
     let layer_rows = layer_rows_data.iter().enumerate().map(|(i, row)| {
         let layer = row.layer;
         let doc = doc.clone();
+        let doc_twirl = doc.clone();
+        let timeline_tx_row = timeline_tx.clone();
+        let mut layer_rows_sig = layer_rows_sig;
         let selection = selection.clone();
         let is_primary = selected() == Some(layer);
         let is_secondary = !is_primary && selection.contains(layer);
@@ -70,10 +74,36 @@ pub(super) fn timeline_shell(
                 }
             )
         };
+        if let Some(name) = row.prop.clone() {
+            return rsx!(
+                div { class: "lrow",
+                    span { class: "lprop", "{name}" }
+                }
+            );
+        }
+        let expanded = row.expanded;
         let editing_name = renaming().filter(|(l, _)| *l == layer).map(|(_, n)| n);
         let doc_rename = doc.clone();
         rsx!(
             div { class: "lrow",
+                span {
+                    class: "twirl",
+                    onclick: {
+                        let timeline_tx = timeline_tx_row.clone();
+                        let doc = doc_twirl.clone();
+                        move |_| {
+                            crate::ui::fixture::toggle_expanded(layer);
+                            let d = doc.lock().unwrap();
+                            let rows = crate::ui::fixture::layer_rows_from_doc(&d);
+                            let canvas = crate::ui::fixture::canvas_rows_from_doc(&d);
+                            drop(d);
+                            layer_rows_sig.set(rows);
+                            let _ = timeline_tx.send(TimelineMsg::SetRows(canvas));
+                            *revision.write() += 1;
+                        }
+                    },
+                    if expanded { "▾" } else { "▸" }
+                }
                 if let Some(draft) = editing_name {
                     input {
                         class: "lsurface",

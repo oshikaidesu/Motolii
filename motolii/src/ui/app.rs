@@ -158,6 +158,22 @@ pub fn app() -> Element {
                             let frame = (clock.now_sec() * 30.0).round() as i64 + delta;
                             clock.seek(frame as f64 / 30.0);
                         }
+                        Intent::ToggleKeyedOnly => {
+                            fixture::toggle_keyed_only();
+                            if fixture::keyed_only() {
+                                if let Some(layer) = selected() {
+                                    fixture::expand(layer);
+                                }
+                            }
+                            let d = doc.lock().unwrap();
+                            let rows = fixture::layer_rows_from_doc(&d);
+                            let canvas = fixture::canvas_rows_from_doc(&d);
+                            drop(d);
+                            attrs_state.set(rows.iter().map(|r| (r.hidden, r.solo, r.locked)).collect());
+                            layer_rows.set(rows);
+                            let _ = timeline_tx.send(TimelineMsg::SetRows(canvas));
+                            *revision.write() += 1;
+                        }
                         Intent::ToggleMarker => {
                             let sec = clock.now_sec();
                             let mut d = doc.lock().unwrap();
@@ -434,7 +450,7 @@ pub fn app() -> Element {
                 },
             }
 
-            {timeline_shell(clock.clone(), playing, doc.clone(), attrs_state, &layer_rows.read(), timeline_attr, selection.clone(), selected, timeline_scroll_y, timeline_tx.clone(), renaming, revision)}
+            {timeline_shell(clock.clone(), playing, doc.clone(), attrs_state, &layer_rows.read(), layer_rows, timeline_attr, selection.clone(), selected, timeline_scroll_y, timeline_tx.clone(), renaming, revision)}
 
             div { id: "status", "{loaded.status}" }
         }
