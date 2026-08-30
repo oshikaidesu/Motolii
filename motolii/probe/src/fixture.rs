@@ -225,8 +225,9 @@ pub struct PropRow {
     pub value: Value,
     /// 宣言された範囲(engine側 EffectParamDescriptor::range)。無ければドラッグは無限。
     pub range: Option<(f64, f64)>,
-    /// cells[2]が独立したpropertyを持つ行(Positionのz)。Noneならcells[2]は飾り。
-    pub z: Option<(String, Value)>,
+    /// 欄ごとに独立したpropertyを持つ行(Positionのz、Rotationのx/y/z)。
+    /// Noneの欄は`property`+`vec2`の既定の割り当てに従う。
+    pub axis: [Option<(String, Value)>; 3],
 }
 
 pub struct InspectorData {
@@ -292,6 +293,14 @@ pub fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: RationalTime
         Some(Value::F64(v)) => v,
         _ => 0.0,
     };
+    let rot_x = match value_of(property::ROTATION_X) {
+        Some(Value::F64(v)) => v,
+        _ => 0.0,
+    };
+    let rot_y = match value_of(property::ROTATION_Y) {
+        Some(Value::F64(v)) => v,
+        _ => 0.0,
+    };
     let pos_z = match value_of(property::POSITION_Z) {
         Some(Value::F64(v)) => v,
         _ => 0.0,
@@ -335,7 +344,7 @@ pub fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: RationalTime
                         vec2: false,
                         value: Value::F64(v),
                         range: param.range,
-                        z: None,
+                        axis: [None, None, None],
                     })
                 })
                 .collect::<Vec<_>>()
@@ -364,7 +373,7 @@ pub fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: RationalTime
             vec2: false,
             value: Value::F64(0.0),
             range: None,
-            z: None,
+            axis: [None, None, None],
         }],
         _ => Vec::new(),
     };
@@ -411,7 +420,7 @@ pub fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: RationalTime
                 vec2: true,
                 value: Value::Vec2([anchor_x, anchor_y]),
                 range: None,
-                z: None,
+                axis: [None, None, None],
             },
             PropRow {
                 label: "Position",
@@ -422,7 +431,11 @@ pub fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: RationalTime
                 vec2: true,
                 value: Value::Vec2([pos_x, pos_y]),
                 range: None,
-                z: Some((property::POSITION_Z.to_owned(), Value::F64(pos_z))),
+                axis: [
+                    None,
+                    None,
+                    Some((property::POSITION_Z.to_owned(), Value::F64(pos_z))),
+                ],
             },
             PropRow {
                 label: "Scale",
@@ -433,18 +446,22 @@ pub fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: RationalTime
                 vec2: true,
                 value: Value::Vec2([scale_x, scale_y]),
                 range: None,
-                z: None,
+                axis: [None, None, None],
             },
             PropRow {
                 label: "Rotation",
-                cells: [String::new(), String::new(), f(rotation_v)],
-                dims: [false, false, true],
+                cells: [f(rot_x), f(rot_y), f(rotation_v)],
+                dims: [false, false, false],
                 keyed: keyed(property::ROTATION),
                 property: Some(property::ROTATION.to_owned()),
                 vec2: false,
                 value: Value::F64(rotation_v),
                 range: None,
-                z: None,
+                axis: [
+                    Some((property::ROTATION_X.to_owned(), Value::F64(rot_x))),
+                    Some((property::ROTATION_Y.to_owned(), Value::F64(rot_y))),
+                    None,
+                ],
             },
             PropRow {
                 label: "Opacity",
@@ -455,7 +472,7 @@ pub fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: RationalTime
                 vec2: false,
                 value: Value::F64(opacity_v),
                 range: None,
-                z: None,
+                axis: [None, None, None],
             },
     ];
 

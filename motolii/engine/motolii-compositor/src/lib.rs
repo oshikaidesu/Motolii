@@ -236,10 +236,16 @@ pub(crate) fn to_point3(v: glam::Vec2, z: f32) -> glam::Vec3 {
     glam::vec3(v.x, v.y, z)
 }
 
-/// 板の**辺ベクトル**(`extent_u`/`extent_v`)。板は自分の z 平面に対して常に平行
-/// (裁定115: 姿勢の表現はまだ開けない)なので、方向ベクトルの z 成分は常に 0。
+/// 板の**辺ベクトル**(`extent_u`/`extent_v`)。傾いていない板の辺は z 成分を持たない。
 pub(crate) fn to_vector3(v: glam::Vec2) -> glam::Vec3 {
     glam::vec3(v.x, v.y, 0.0)
+}
+
+/// 板を x/y 軸まわりに傾ける回転(度)。`transform` の回転は z 軸まわりなので、
+/// 傾きだけをここで足す。**z 軸成分を持たない** — 二重に回さないため。
+pub(crate) fn tilt(rotation_x: f32, rotation_y: f32) -> glam::Quat {
+    glam::Quat::from_rotation_y(rotation_y.to_radians())
+        * glam::Quat::from_rotation_x(rotation_x.to_radians())
 }
 
 /// `HeadlessGpu` を公開しているのは、`Compositor` が持たない描画(点群など)を

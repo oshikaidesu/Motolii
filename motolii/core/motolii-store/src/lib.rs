@@ -175,6 +175,10 @@ pub mod property {
     /// (split-position 束、裁定111(b))の隣に同じ流儀で置く。単位は `position` と同じ
     /// world = ピクセル。AE と同じ符号(大きいほどカメラから遠い)。
     pub const POSITION_Z: &str = "position.z";
+    /// 板を傾ける回転(度)。`rotation` が z 軸まわりで、この2つがその隣。
+    /// `position.z` と同じ流儀で `Affine2` の外に置く — 板の姿勢は2Dの写像では表せない。
+    pub const ROTATION_X: &str = "rotation.x";
+    pub const ROTATION_Y: &str = "rotation.y";
 
     /// カメラの property(裁定113/115、裁定116 で実装)。`layer` ではなく `/composition`
     /// entity へ書く(`PropertyId::camera` が別の component 名前空間を作る)。

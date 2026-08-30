@@ -376,9 +376,12 @@ pub struct LayerPlacement {
     pub opacity: f32,
     /// `position.z`(裁定113/116)。**世界は1つ・全員 z=0 既定**。単位はピクセルと同じ
     /// world 単位。AE と同じ符号(大きいほどカメラから遠ざかる、奥)。
-    /// `transform`(`Affine2`)は2D のままなので、奥行きはこのフィールドが別に持つ —
-    /// 板は常に自分の z 平面に対して平行(裁定115: 姿勢の表現はまだ開けない)。
+    /// `transform`(`Affine2`)は z 軸まわりの回転しか表せないので、奥行きと傾きは
+    /// このフィールドと `rotation_x`/`rotation_y` が別に持つ。
     pub z: f32,
+    /// 板を傾ける回転(度)。`transform` の回転は z 軸まわりで、この2つはその外。
+    pub rotation_x: f32,
+    pub rotation_y: f32,
 }
 
 impl Default for LayerPlacement {
@@ -388,6 +391,8 @@ impl Default for LayerPlacement {
             order: 0,
             opacity: 1.0,
             z: 0.0,
+            rotation_x: 0.0,
+            rotation_y: 0.0,
         }
     }
 }

@@ -576,14 +576,19 @@ impl Compositor {
             (layer.placement.transform, layer.placement.z)
         };
 
+        // 板の中心を軸にして傾ける。四隅は傾き後の辺ベクトルから組み直す。
+        let tilt = crate::tilt(layer.placement.rotation_x, layer.placement.rotation_y);
+        let u = tilt * to_vector3(transform.transform_vector2(glam::Vec2::new(layer.size[0], 0.0)));
+        let v = tilt * to_vector3(transform.transform_vector2(glam::Vec2::new(0.0, layer.size[1])));
+        let center = to_point3(
+            transform.transform_point2(glam::Vec2::new(layer.size[0], layer.size[1]) * 0.5),
+            z,
+        );
+
         let rect = TexturedRect {
-            top_left_corner_position: to_point3(transform.transform_point2(glam::Vec2::ZERO), z),
-            extent_u: to_vector3(
-                transform.transform_vector2(glam::Vec2::new(layer.size[0], 0.0)),
-            ),
-            extent_v: to_vector3(
-                transform.transform_vector2(glam::Vec2::new(0.0, layer.size[1])),
-            ),
+            top_left_corner_position: center - (u + v) * 0.5,
+            extent_u: u,
+            extent_v: v,
             colormapped_texture: ColormappedTexture::from_unorm_rgba(layer.texture.clone()),
             options: RectangleOptions {
                 multiplicative_tint: Rgba::from_rgba_premultiplied(
@@ -721,6 +726,8 @@ impl Compositor {
                 opacity: 1.0,
                 order: layer.placement.order,
                 z: 0.0,
+                rotation_x: 0.0,
+                rotation_y: 0.0,
             },
             pinned: true,
             blend_mode: layer.blend_mode,

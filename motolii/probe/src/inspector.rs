@@ -125,14 +125,14 @@ fn prop_row(
         } else {
             "v"
         };
-        // cells[2]に独立propertyがある行(Positionのz)は、そのpropertyへ単独で書く。
-        let target = match (i, &p.z) {
-            (2, Some((property, value))) => Some((property.clone(), value.clone(), false)),
-            _ if !c.is_empty() && (if p.vec2 { i < 2 } else { i == 2 }) => p
+        // 欄が自分のpropertyを持つならそれへ単独で書く。持たない欄はvec2/スカラの既定へ。
+        let target = match &p.axis[i] {
+            Some((property, value)) => Some((property.clone(), value.clone(), false)),
+            None if !c.is_empty() && (if p.vec2 { i < 2 } else { i == 2 }) => p
                 .property
                 .clone()
                 .map(|property| (property, p.value.clone(), p.vec2)),
-            _ => None,
+            None => None,
         };
         if let Some((property, start_value, vec2)) = target {
             let range = p.range;
