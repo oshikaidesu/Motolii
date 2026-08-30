@@ -44,10 +44,10 @@ pub fn app() -> Element {
     let text_editing = use_signal(|| Option::<String>::None);
     let renaming = use_signal(|| Option::<(crate::doc::store::LayerId, String)>::None);
 
-    let (clock, ui_scale, timeline_attr, timeline_tx, stage_attr, loaded, doc, selection, selected_size) = use_hook(|| {
+    let (clock, ui_scale, timeline_attr, timeline_tx, stage_attr, loaded, doc, selection, selected_size, gizmo_3d) = use_hook(|| {
         let Loaded { doc, ui, duration_sec } = load_fixture();
         let session = Session::new(doc, duration_sec);
-        let Session { doc, clock, scale: ui_scale, selection, selected_size } = session;
+        let Session { doc, clock, scale: ui_scale, selection, selected_size, gizmo_3d } = session;
 
         let canvas_rows = fixture::canvas_rows_from_doc(&doc.lock().unwrap());
         let timeline = TimelineWidget::new(canvas_rows)
@@ -57,7 +57,7 @@ pub fn app() -> Element {
             .with_selection(selection.clone(), selected)
             .with_scroll_mirror(timeline_scroll_y);
         let timeline_tx = timeline.sender();
-        let stage = StageWidget::new(clock.clone(), doc.clone(), selection.clone(), selected, revision, selected_size.clone());
+        let stage = StageWidget::new(clock.clone(), doc.clone(), selection.clone(), selected, revision, selected_size.clone(), gizmo_3d.clone());
         (
             clock,
             ui_scale,
@@ -68,6 +68,7 @@ pub fn app() -> Element {
             doc,
             selection,
             selected_size,
+            gizmo_3d,
         )
     });
     let layer_rows = use_signal(|| loaded.layer_rows.clone());
@@ -434,7 +435,7 @@ pub fn app() -> Element {
                 if panel_tab() == 0 {
                     {inspector_panel(&doc, selected(), &clock, revision, text_editing, panel_tab)}
                 } else {
-                    {crate::ui::utility::utility_panel(&doc, selected(), &selected_size, &clock, panel_tab, revision)}
+                    {crate::ui::utility::utility_panel(&doc, selected(), &selected_size, &gizmo_3d, &clock, panel_tab, revision)}
                 }
             }
 

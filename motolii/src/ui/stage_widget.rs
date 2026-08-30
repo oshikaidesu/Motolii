@@ -44,6 +44,10 @@ enum GizmoMode {
     ScaleCorner { sx: bool, sy: bool },
     ScaleEdge { axis_x: bool, positive: bool },
     Rotate,
+    /// 3D: 横で rotation.y、縦で rotation.x を回す。
+    Orbit,
+    /// 3D: 縦で position.z を動かす。
+    Depth,
 }
 
 struct CameraDrag {
@@ -57,6 +61,8 @@ struct GizmoDrag {
     grab: (f64, f64),
     orig_position: (f64, f64),
     orig_rotation: f64,
+    orig_rotation_xy: (f64, f64),
+    orig_z: f64,
     anchor: (f64, f64),
     natural: (f64, f64),
     orig_box: (f64, f64, f64, f64),
@@ -75,6 +81,7 @@ pub(super) struct StageWidget {
     camera_drag: Option<CameraDrag>,
     revision: Signal<u32>,
     selected_size: Arc<Mutex<Option<[f32; 2]>>>,
+    gizmo_3d: Arc<std::sync::atomic::AtomicBool>,
 }
 
 enum State {
@@ -107,6 +114,30 @@ impl StageWidget {
         }
     }
 
+    fn layer_f64(&self, layer: LayerId, name: &str) -> f64 {
+        let rt = self.current_rt();
+        let doc = self.doc.lock().unwrap();
+        let view = doc.view();
+        match PropertyId::new(name)
+            .ok()
+            .and_then(|p| view.value_at(layer, &p, rt).ok().flatten())
+        {
+            Some(Value::F64(v)) => v,
+            _ => 0.0,
+        }
+    }
+
+    fn rotation_xy(&self, layer: LayerId) -> (f64, f64) {
+        (
+            self.layer_f64(layer, property::ROTATION_X),
+            self.layer_f64(layer, property::ROTATION_Y),
+        )
+    }
+
+    fn depth(&self, layer: LayerId) -> f64 {
+        self.layer_f64(layer, property::POSITION_Z)
+    }
+
     fn write_camera(&self, name: &str, value: Value, rt: RationalTime, commit: bool) {
         let Ok(property) = PropertyId::new(name) else { return };
         let mut doc = self.doc.lock().unwrap();
@@ -136,6 +167,7 @@ impl StageWidget {
         selected_mirror: Signal<Option<LayerId>>,
         revision: Signal<u32>,
         selected_size: Arc<Mutex<Option<[f32; 2]>>>,
+        gizmo_3d: Arc<std::sync::atomic::AtomicBool>,
     ) -> Self {
         Self {
             state: State::Suspended,
@@ -149,6 +181,7 @@ impl StageWidget {
             camera_drag: None,
             revision,
             selected_size,
+            gizmo_3d,
         }
     }
 
@@ -280,13 +313,21 @@ fn compute_scale(
                 }
             }
         }
-        GizmoMode::Move | GizmoMode::Rotate => {}
+        GizmoMode::Move | GizmoMode::Rotate | GizmoMode::Orbit | GizmoMode::Depth => {}
     }
     let (nbx, nby) = (nx0.min(nx1), ny0.min(ny1));
     let (nbw, nbh) = ((nx1 - nx0).abs().max(0.01), (ny1 - ny0).abs().max(0.01));
     let scale = (nbw / natural.0.max(0.01), nbh / natural.1.max(0.01));
     let position = (nbx + scale.0 * anchor.0, nby + scale.1 * anchor.1);
     (scale, position)
+}
+
+/// 画面の1pxを0.5°に読む。掴んだ板が指の動きに素直に付いてくる速さ。
+fn orbit_angles(orig: (f64, f64), grab: (f64, f64), now: (f64, f64)) -> (f64, f64) {
+    (
+        orig.0 - (now.1 - grab.1) * 0.5,
+        orig.1 + (now.0 - grab.0) * 0.5,
+    )
 }
 
 fn rotate_around(center: (f64, f64), angle_deg: f64, p: (f64, f64)) -> (f64, f64) {
@@ -410,9 +451,18 @@ impl Widget for StageWidget {
                             ];
                             mode = edges.into_iter().find(|&(px, py, _)| near(px, py)).map(|(_, _, m)| m);
                         }
+                        let three_d = self.gizmo_3d.load(std::sync::atomic::Ordering::Relaxed);
                         if mode.is_none() {
                             if lx >= bx && lx <= bx + bw && ly >= by && ly <= by + bh {
-                                mode = Some(GizmoMode::Move);
+                                mode = Some(if three_d {
+                                    if p.mods.contains(Modifiers::ALT) {
+                                        GizmoMode::Depth
+                                    } else {
+                                        GizmoMode::Orbit
+                                    }
+                                } else {
+                                    GizmoMode::Move
+                                });
                             } else {
                                 let margin = 24.0 / self.fit.s.max(1e-6);
                                 if lx >= bx - margin && lx <= bx + bw + margin && ly >= by - margin && ly <= by + bh + margin {
@@ -427,6 +477,8 @@ impl Widget for StageWidget {
                                 grab: (cx, cy),
                                 orig_position: geom.position,
                                 orig_rotation: geom.rotation,
+                                orig_rotation_xy: self.rotation_xy(layer),
+                                orig_z: self.depth(layer),
                                 anchor: geom.anchor,
                                 natural: geom.natural,
                                 orig_box: geom.box_,
@@ -508,6 +560,19 @@ impl Widget for StageWidget {
                         let r = compute_rotation(drag.orig_position, drag.grab, (cx, cy), drag.orig_rotation, shift);
                         doc.set_transient(drag.layer, rotation_prop, Value::F64(r));
                     }
+                    GizmoMode::Orbit => {
+                        let (rx, ry) = orbit_angles(drag.orig_rotation_xy, drag.grab, (cx, cy));
+                        if let Ok(prop) = PropertyId::new(property::ROTATION_X) {
+                            doc.set_transient(drag.layer, prop, Value::F64(rx));
+                        }
+                        if let Ok(prop) = PropertyId::new(property::ROTATION_Y) {
+                            doc.set_transient(drag.layer, prop, Value::F64(ry));
+                        }
+                    }
+                    GizmoMode::Depth => {
+                        let Ok(prop) = PropertyId::new(property::POSITION_Z) else { return };
+                        doc.set_transient(drag.layer, prop, Value::F64(drag.orig_z + (cy - drag.grab.1)));
+                    }
                 }
             }
             UiEvent::PointerUp(p) => {
@@ -547,6 +612,17 @@ impl Widget for StageWidget {
                         let r = compute_rotation(drag.orig_position, drag.grab, (cx, cy), drag.orig_rotation, shift);
                         intents.extend(track_intent(&doc, drag.layer, property::ROTATION, Value::F64(r), rt));
                         &[property::ROTATION]
+                    }
+                    GizmoMode::Orbit => {
+                        let (rx, ry) = orbit_angles(drag.orig_rotation_xy, drag.grab, (cx, cy));
+                        intents.extend(track_intent(&doc, drag.layer, property::ROTATION_X, Value::F64(rx), rt));
+                        intents.extend(track_intent(&doc, drag.layer, property::ROTATION_Y, Value::F64(ry), rt));
+                        &[property::ROTATION_X, property::ROTATION_Y]
+                    }
+                    GizmoMode::Depth => {
+                        let z = drag.orig_z + (cy - drag.grab.1);
+                        intents.extend(track_intent(&doc, drag.layer, property::POSITION_Z, Value::F64(z), rt));
+                        &[property::POSITION_Z]
                     }
                 };
                 match doc.apply_all(intents) {
@@ -733,5 +809,22 @@ impl Widget for StageWidget {
         }
 
         scene
+    }
+}
+
+#[cfg(test)]
+mod orbit_tests {
+    use super::orbit_angles;
+
+    #[test]
+    fn dragging_right_turns_the_plate_to_face_right_and_down_tips_it_back() {
+        let (rx, ry) = orbit_angles((0.0, 0.0), (100.0, 100.0), (120.0, 140.0));
+        assert!(ry > 0.0, "右へ引いたのに rotation.y が正にならない");
+        assert!(rx < 0.0, "下へ引いたのに rotation.x が負にならない");
+    }
+
+    #[test]
+    fn no_movement_keeps_the_original_angles() {
+        assert_eq!(orbit_angles((12.0, -5.0), (7.0, 7.0), (7.0, 7.0)), (12.0, -5.0));
     }
 }

@@ -48,6 +48,8 @@ pub(super) struct Session {
     /// 選択中の層の箱の大きさ。Stage が毎フレーム書き、ユーティリティが読む
     /// (箱は engine が形/文字から測るので、Document だけでは出せない)。
     pub selected_size: Arc<Mutex<Option<[f32; 2]>>>,
+    /// Stage のギズモが 3D(向きと奥行き)を掴む側に居るか。
+    pub gizmo_3d: Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl Session {
@@ -58,6 +60,7 @@ impl Session {
             scale: Arc::new(UiScale::new(100)),
             selection: Selection::default(),
             selected_size: Arc::new(Mutex::new(None)),
+            gizmo_3d: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         }
     }
 }

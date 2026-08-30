@@ -1,3 +1,4 @@
+use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 
 use dioxus_native::prelude::*;
@@ -74,6 +75,7 @@ pub(super) fn utility_panel(
     doc: &Arc<Mutex<Document>>,
     selection: Option<LayerId>,
     selected_size: &Arc<Mutex<Option<[f32; 2]>>>,
+    gizmo_3d: &Arc<std::sync::atomic::AtomicBool>,
     clock: &Clock,
     tab: Signal<u8>,
     mut revision: Signal<u32>,
@@ -82,6 +84,7 @@ pub(super) fn utility_panel(
     let t = RationalTime::try_new((clock.now_sec() * 3000.0) as i64, 3000)
         .unwrap_or(RationalTime::ZERO);
     let size = *selected_size.lock().unwrap();
+    let three_d = gizmo_3d.load(Ordering::Relaxed);
 
     let spots: [(&str, f64, f64); 9] = [
         ("左上", 0.0, 0.0),
@@ -117,6 +120,35 @@ pub(super) fn utility_panel(
                 }
             } else {
                 div { class: "prow", span { class: "n empty", "層を選ぶ" } }
+            }
+            div { class: "sec", "GIZMO" }
+            div { class: "prow",
+                span { class: "n", "掴む物" }
+                span {
+                    class: if three_d { "v" } else { "v content" },
+                    onclick: {
+                        let gizmo_3d = gizmo_3d.clone();
+                        move |_| {
+                            gizmo_3d.store(false, Ordering::Relaxed);
+                            *revision.write() += 1;
+                        }
+                    },
+                    "平面"
+                }
+                span {
+                    class: if three_d { "v content" } else { "v" },
+                    onclick: {
+                        let gizmo_3d = gizmo_3d.clone();
+                        move |_| {
+                            gizmo_3d.store(true, Ordering::Relaxed);
+                            *revision.write() += 1;
+                        }
+                    },
+                    "立体"
+                }
+            }
+            if three_d {
+                div { class: "prow", span { class: "n empty", "ドラッグで向き・⌥ドラッグで奥行き" } }
             }
         }
     )
