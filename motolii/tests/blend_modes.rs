@@ -2,7 +2,7 @@
 //! 白と黒だけを使う — この組の答えは色空間に依らないので、線形かガンマかを
 //! 判定に持ち込まずにモードの取り違えだけを刺せる。
 
-use motolii::render::compositor::{
+use motolii::render::compositor::{LayerContent, 
     BlendMode, CompSpec, Compositor, HeadlessGpu, Layer, LayerPlacement, ResolvedCamera,
 };
 
@@ -30,7 +30,7 @@ fn blended(c: &mut Compositor, backdrop: u8, source: u8, mode: BlendMode) -> [u8
     let under = make(c, "under", backdrop);
     let over = make(c, "over", source);
     let place = |tex, order: i16, blend| Layer {
-        texture: tex,
+        content: LayerContent::Texture(tex),
         size: [W as f32, H as f32],
         placement: LayerPlacement {
             transform: LayerPlacement::from_transform(

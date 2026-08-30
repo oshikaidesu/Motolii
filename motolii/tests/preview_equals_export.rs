@@ -1,5 +1,5 @@
 
-use motolii::render::compositor::{
+use motolii::render::compositor::{LayerContent, 
     BlendMode, CompSpec, Compositor, HeadlessGpu, Layer, LayerPlacement, LayerWithPasses,
     ResolvedCamera, PRESENTABLE_FORMAT,
 };
@@ -20,7 +20,7 @@ fn layers(c: &mut Compositor, mode: BlendMode) -> Vec<LayerWithPasses> {
         .expect("over");
     let place = |texture, order, blend_mode| LayerWithPasses {
         layer: Layer {
-            texture,
+            content: LayerContent::Texture(texture),
             size: [W as f32, H as f32],
             placement: LayerPlacement { order, ..LayerPlacement::default() },
             pinned: false,

@@ -444,6 +444,44 @@ body {
     overflow: hidden;
 }
 
+.ptabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid var(--border);
+    flex: 0 0 auto;
+}
+
+.ptab {
+    padding: var(--sp1) var(--sp2);
+    color: var(--ink2);
+    border-bottom: 2px solid transparent;
+    cursor: default;
+}
+
+.ptab.on {
+    color: var(--ink);
+    border-bottom-color: var(--way-inspector);
+}
+
+.anchorgrid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: var(--sp1);
+    padding: var(--sp2);
+}
+
+.aspot {
+    text-align: center;
+    padding: var(--sp1) 0;
+    border: 1px solid var(--border);
+    color: var(--ink2);
+}
+
+.aspot:hover {
+    color: var(--ink);
+    border-color: var(--way-inspector);
+}
+
 #inspector {
     background: var(--panel);
     display: flex;

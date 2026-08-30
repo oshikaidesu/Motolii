@@ -1,6 +1,6 @@
 //! 合成の submit 回数が層数に比例しないこと。時間ではなく回数を測る。
 
-use motolii::render::compositor::{
+use motolii::render::compositor::{LayerContent, 
     BlendMode, CompSpec, Compositor, HeadlessGpu, Layer, LayerPlacement, MatteMode, ResolvedCamera,
 };
 
@@ -19,7 +19,7 @@ fn layers(c: &mut Compositor, count: usize, blend: BlendMode) -> Vec<Layer> {
         .expect("upload");
     (0..count)
         .map(|i| Layer {
-            texture: tex.clone(),
+            content: LayerContent::Texture(tex.clone()),
             size: [64.0, 64.0],
             placement: LayerPlacement {
                 transform: LayerPlacement::from_transform(

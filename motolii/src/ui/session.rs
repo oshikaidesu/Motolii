@@ -45,6 +45,9 @@ pub(super) struct Session {
     pub clock: Arc<Clock>,
     pub scale: Arc<UiScale>,
     pub selection: Selection,
+    /// 選択中の層の箱の大きさ。Stage が毎フレーム書き、ユーティリティが読む
+    /// (箱は engine が形/文字から測るので、Document だけでは出せない)。
+    pub selected_size: Arc<Mutex<Option<[f32; 2]>>>,
 }
 
 impl Session {
@@ -54,6 +57,7 @@ impl Session {
             clock: Arc::new(Clock::new(duration_sec)),
             scale: Arc::new(UiScale::new(100)),
             selection: Selection::default(),
+            selected_size: Arc::new(Mutex::new(None)),
         }
     }
 }

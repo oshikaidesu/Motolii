@@ -1,5 +1,5 @@
 
-use motolii::render::compositor::{
+use motolii::render::compositor::{LayerContent, 
     BlendMode, CompSpec, Compositor, EffectPass, HeadlessGpu, Layer, LayerPlacement,
     LayerWithPasses, ResolvedCamera,
 };
@@ -17,7 +17,7 @@ fn comp() -> CompSpec {
 
 fn one_layer(texture: motolii::render::compositor::GpuTexture2D) -> Layer {
     Layer {
-        texture,
+        content: LayerContent::Texture(texture),
         size: [W as f32, H as f32],
         placement: LayerPlacement {
             transform: LayerPlacement::from_transform([0.0, 0.0], [0.0, 0.0], [1.0, 1.0], 0.0, 0.0, 0.0),

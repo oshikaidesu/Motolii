@@ -1,5 +1,5 @@
 
-use motolii::render::compositor::{
+use motolii::render::compositor::{LayerContent, 
     BlendMode, CompSpec, Compositor, EffectPass, HeadlessGpu, Layer, LayerPlacement,
     LayerWithPasses, ResolvedCamera, PRESENTABLE_FORMAT,
 };
@@ -88,7 +88,7 @@ fn readback_rgba(device: &wgpu::Device, queue: &wgpu::Queue, texture: &wgpu::Tex
 
 fn small_layer(texture: motolii::render::compositor::GpuTexture2D) -> Layer {
     Layer {
-        texture,
+        content: LayerContent::Texture(texture),
         size: [8.0, 8.0],
         placement: LayerPlacement {
             transform: LayerPlacement::from_transform([0.0, 0.0], [28.0, 28.0], [1.0, 1.0], 0.0, 0.0, 0.0),

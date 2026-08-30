@@ -1,7 +1,7 @@
 //! Vism の多段(ISF `PASSES`)が順番どおりに全部走っていること。
 //! 「出力が変わったか」では段落ちを捕まえられないので、滲みの向きと量を刺す。
 
-use motolii::render::compositor::{
+use motolii::render::compositor::{LayerContent, 
     BlendMode, CompSpec, Compositor, EffectPass, HeadlessGpu, Layer, LayerPlacement,
     LayerWithPasses, ResolvedCamera,
 };
@@ -22,7 +22,7 @@ fn render(c: &mut Compositor, passes: Vec<EffectPass>) -> Vec<u8> {
         .upload_rgba("box", &vec![255u8; (BOX * BOX * 4) as usize], BOX, BOX)
         .expect("upload");
     let layer = Layer {
-        texture: tex,
+        content: LayerContent::Texture(tex),
         size: [BOX as f32, BOX as f32],
         placement: LayerPlacement {
             transform: LayerPlacement::from_transform(

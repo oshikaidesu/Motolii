@@ -1,6 +1,6 @@
 //! フレームを跨いで GPU 側が積み上がらないこと。1フレームだけ描く試験では捕まらない。
 
-use motolii::render::compositor::{
+use motolii::render::compositor::{LayerContent, 
     BlendMode, CompSpec, Compositor, HeadlessGpu, Layer, LayerPlacement, ResolvedCamera,
 };
 
@@ -13,7 +13,7 @@ fn layer(c: &mut Compositor, name: &str, blend: BlendMode, order: i16) -> Layer 
         .upload_rgba(name, &vec![200u8; (64 * 64 * 4) as usize], 64, 64)
         .expect("upload");
     Layer {
-        texture: tex,
+        content: LayerContent::Texture(tex),
         size: [64.0, 64.0],
         placement: LayerPlacement {
             transform: LayerPlacement::from_transform(

@@ -35,6 +35,7 @@ pub fn app() -> Element {
     let mut inspector_w = use_signal(|| 270.0f64);
     let mut timeline_h = use_signal(|| 300.0f64);
     let mut drag = use_signal(|| Option::<DragSplit>::None);
+    let panel_tab = use_signal(|| 0u8);
 
     let mut scale_pct = use_signal(|| 100u32);
     let revision = use_signal(|| 0u32);
@@ -42,10 +43,10 @@ pub fn app() -> Element {
     let timeline_scroll_y = use_signal(|| 0.0f64);
     let text_editing = use_signal(|| Option::<String>::None);
 
-    let (clock, ui_scale, timeline_attr, timeline_tx, stage_attr, loaded, doc, selection) = use_hook(|| {
+    let (clock, ui_scale, timeline_attr, timeline_tx, stage_attr, loaded, doc, selection, selected_size) = use_hook(|| {
         let Loaded { doc, ui, duration_sec } = load_fixture();
         let session = Session::new(doc, duration_sec);
-        let Session { doc, clock, scale: ui_scale, selection } = session;
+        let Session { doc, clock, scale: ui_scale, selection, selected_size } = session;
 
         let canvas_rows = fixture::canvas_rows_from_doc(&doc.lock().unwrap());
         let timeline = TimelineWidget::new(canvas_rows)
@@ -55,7 +56,7 @@ pub fn app() -> Element {
             .with_selection(selection.clone(), selected)
             .with_scroll_mirror(timeline_scroll_y);
         let timeline_tx = timeline.sender();
-        let stage = StageWidget::new(clock.clone(), doc.clone(), selection.clone(), selected, revision);
+        let stage = StageWidget::new(clock.clone(), doc.clone(), selection.clone(), selected, revision, selected_size.clone());
         (
             clock,
             ui_scale,
@@ -65,6 +66,7 @@ pub fn app() -> Element {
             Arc::new(ui),
             doc,
             selection,
+            selected_size,
         )
     });
     let layer_rows = use_signal(|| loaded.layer_rows.clone());
@@ -255,7 +257,11 @@ pub fn app() -> Element {
                     },
                 }
 
-                {inspector_panel(&doc, selected(), &clock, revision, text_editing)}
+                if panel_tab() == 0 {
+                    {inspector_panel(&doc, selected(), &clock, revision, text_editing, panel_tab)}
+                } else {
+                    {crate::ui::utility::utility_panel(&doc, selected(), &selected_size, &clock, panel_tab, revision)}
+                }
             }
 
             div {

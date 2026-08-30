@@ -67,6 +67,7 @@ pub(super) struct StageWidget {
     fit: Fit,
     drag: Option<GizmoDrag>,
     revision: Signal<u32>,
+    selected_size: Arc<Mutex<Option<[f32; 2]>>>,
 }
 
 enum State {
@@ -86,12 +87,14 @@ struct TexAndHandle {
 }
 
 impl StageWidget {
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn new(
         clock: Arc<Clock>,
         doc: Arc<Mutex<Document>>,
         selection: Selection,
         selected_mirror: Signal<Option<LayerId>>,
         revision: Signal<u32>,
+        selected_size: Arc<Mutex<Option<[f32; 2]>>>,
     ) -> Self {
         Self {
             state: State::Suspended,
@@ -103,6 +106,7 @@ impl StageWidget {
             fit: Fit::default(),
             drag: None,
             revision,
+            selected_size,
         }
     }
 
@@ -538,8 +542,11 @@ impl Widget for StageWidget {
         }
 
         let primary_layer = self.selection.get();
-        let selected_box = primary_layer
-            .and_then(|layer| selection_geom_in(&active.engine, &view, layer, rt))
+        let primary_geom =
+            primary_layer.and_then(|layer| selection_geom_in(&active.engine, &view, layer, rt));
+        *self.selected_size.lock().unwrap() =
+            primary_geom.as_ref().map(|g| [g.natural.0 as f32, g.natural.1 as f32]);
+        let selected_box = primary_geom
             .map(|geom| (geom.box_, geom.position, geom.rotation));
         let secondary_boxes: Vec<_> = self
             .selection
@@ -586,6 +593,19 @@ impl Widget for StageWidget {
             ];
             for edge in &edges {
                 scene.fill(Fill::NonZero, Affine::IDENTITY, PaintRef::Solid(c(tokens::ACCENT)), None, edge);
+            }
+        }
+
+        if let Some(((_, _, _, _), position, _)) = selected_box {
+            // アンカー(回転と拡大の支点)。今まで描いていなかったので位置が見えなかった。
+            let (ax, ay) = (fx + position.0 * s, fy + position.1 * s);
+            let arm = 6.0;
+            let th = 1.0;
+            for edge in [
+                Rect::from_origin_size((ax - arm, ay - th * 0.5), (arm * 2.0, th)),
+                Rect::from_origin_size((ax - th * 0.5, ay - arm), (th, arm * 2.0)),
+            ] {
+                scene.fill(Fill::NonZero, Affine::IDENTITY, PaintRef::Solid(c(tokens::ACCENT)), None, &edge);
             }
         }
 

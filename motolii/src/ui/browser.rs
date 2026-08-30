@@ -4,8 +4,9 @@ use std::sync::{Arc, Mutex};
 use dioxus_native::prelude::*;
 
 use crate::doc::store::{
-    ContentKeyframe, ContentTrack, Document, EffectId, EffectInstance, FontRef, Intent,
-    LayerAttrsPatch, LayerId, LayerMeta, LayerSource, LayerTiming, PathSource, RationalTime,
+    property, ContentKeyframe, ContentTrack, Document, EffectId, EffectInstance, FontRef, Intent,
+    Interp, Keyframe, KeyframeTrack, LayerAttrsPatch, LayerId, LayerMeta, LayerSource, LayerTiming,
+    PathSource, PropertyId, RationalTime, Value,
     Shape, ShapeNode, TextAlignmentOptions, TextDocument, TextDocumentStyle, TextJustify,
     TextStyleId, VectorPoint,
 };
@@ -27,24 +28,72 @@ enum NewKind {
     Media { path: String, name: String },
 }
 
-fn new_layer_intents(layer: LayerId, order: i16, playhead: i64, duration_frames: i64, kind: NewKind) -> Vec<Intent> {
+/// 点群のファイル座標を comp のピクセルへ橋渡しする初期値。囲む球が画角の
+/// 6割に収まる倍率と、中心が comp の中心に来る位置を**一度だけ**書く。
+/// 以後は利用者の物(キーフレームも打てる)。
+fn point_cloud_fit_intents(layer: LayerId, path: &str, comp: (f64, f64)) -> Vec<Intent> {
+    let Ok(data) = crate::render::media::load_point_cloud(std::path::Path::new(path)) else {
+        return Vec::new();
+    };
+    let (center, radius) = data.bounding_sphere();
+    if radius <= 0.0 {
+        return Vec::new();
+    }
+    let fit = (comp.1 * 0.6) / (radius as f64 * 2.0);
+    let constant = |value: Value| {
+        let mut track = KeyframeTrack::new();
+        track.insert(Keyframe {
+            t: RationalTime::ZERO,
+            value,
+            interp: Interp::Linear,
+            spatial: None,
+        });
+        track
+    };
+    vec![
+        Intent::SetTrack {
+            layer,
+            property: PropertyId::new(property::SCALE).expect("scale"),
+            track: constant(Value::Vec2([fit, fit])),
+        },
+        Intent::SetTrack {
+            layer,
+            property: PropertyId::new(property::POSITION).expect("position"),
+            track: constant(Value::Vec2([
+                comp.0 * 0.5 - center[0] as f64 * fit,
+                comp.1 * 0.5 - center[1] as f64 * fit,
+            ])),
+        },
+    ]
+}
+
+fn new_layer_intents(layer: LayerId, order: i16, playhead: i64, duration_frames: i64, comp: (f64, f64), kind: NewKind) -> Vec<Intent> {
     let label_color = Some(Some((layer.0 % fixture::LABEL_PALETTE.len() as u64) as u8));
     match kind {
-        NewKind::Media { path, name } => vec![
-            Intent::AddLayer(layer),
-            Intent::SetMeta {
-                layer,
-                meta: LayerMeta {
-                    source: LayerSource::File { path, fingerprint: None },
-                    order,
-                    timing: LayerTiming::place(playhead, None, duration_frames),
+        NewKind::Media { path, name } => {
+            let fit = if crate::render::media::is_point_cloud_path(&path) {
+                point_cloud_fit_intents(layer, &path, comp)
+            } else {
+                Vec::new()
+            };
+            let mut out = vec![
+                Intent::AddLayer(layer),
+                Intent::SetMeta {
+                    layer,
+                    meta: LayerMeta {
+                        source: LayerSource::File { path, fingerprint: None },
+                        order,
+                        timing: LayerTiming::place(playhead, None, duration_frames),
+                    },
                 },
-            },
-            Intent::SetAttrs {
-                layer,
-                patch: LayerAttrsPatch { name: Some(name), label_color, ..Default::default() },
-            },
-        ],
+                Intent::SetAttrs {
+                    layer,
+                    patch: LayerAttrsPatch { name: Some(name), label_color, ..Default::default() },
+                },
+            ];
+            out.extend(fit);
+            out
+        }
         NewKind::Rectangle => vec![
             Intent::AddLayer(layer),
             Intent::SetMeta {
@@ -198,7 +247,14 @@ fn spawn_layer(
         .unwrap_or(0);
     let playhead = (clock.now_sec() * FPS) as i64;
     let duration_frames = d.view().composition().ok().flatten().map(|c| c.duration_frames).unwrap_or(1800);
-    let intents = new_layer_intents(layer, order, playhead, duration_frames, kind);
+    let comp_size = d
+        .view()
+        .composition()
+        .ok()
+        .flatten()
+        .map(|c| (c.width as f64, c.height as f64))
+        .unwrap_or((1920.0, 1080.0));
+    let intents = new_layer_intents(layer, order, playhead, duration_frames, comp_size, kind);
     match d.apply_all(intents) {
         Ok(_) => {
             let rows = fixture::layer_rows_from_doc(&d);
@@ -249,9 +305,6 @@ fn apply_layer_color(doc: &Arc<Mutex<Document>>, layer: LayerId, rgba: [u8; 4], 
     let mut d = doc.lock().unwrap();
     let source = d.view().meta(layer).ok().flatten().map(|m| m.source);
     let intent = match source {
-        Some(LayerSource::Solid { width, height, .. }) => {
-            Some(Intent::SetSource { layer, source: LayerSource::Solid { rgba, width, height } })
-        }
         Some(LayerSource::Text) => d.view().text_document(layer).ok().flatten().map(|mut document| {
             let fill = [rgba[0] as f64 / 255.0, rgba[1] as f64 / 255.0, rgba[2] as f64 / 255.0, rgba[3] as f64 / 255.0];
             for style in document.styles.iter_mut() {
@@ -663,7 +716,7 @@ mod spawn_diagnosis {
             .map(|m| m.saturating_add(1))
             .unwrap_or(0);
         println!("DIAG next_layer_id={} order={} playhead={}", layer.0, order, fx.playhead);
-        let intents = new_layer_intents(layer, order, fx.playhead, comp.duration_frames, NewKind::Rectangle);
+        let intents = new_layer_intents(layer, order, fx.playhead, comp.duration_frames, (comp.width as f64, comp.height as f64), NewKind::Rectangle);
         doc.apply_all(intents).expect("apply_all");
 
         let resolved = doc.view().resolved_layers(t).expect("resolved_layers");

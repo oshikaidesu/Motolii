@@ -133,9 +133,6 @@ pub(super) fn used_colors_from_doc(doc: &Document) -> Vec<ColorSwatch> {
     let mut seen = std::collections::BTreeSet::new();
     let mut out = Vec::new();
     for layer in view.layers() {
-        if let Some(LayerSource::Solid { rgba, .. }) = view.meta(layer).ok().flatten().map(|m| m.source) {
-            push_swatch(&mut seen, &mut out, rgba);
-        }
         if let Ok(Some(text)) = view.text_document(layer) {
             for style in &text.styles {
                 let f = style.fill;
@@ -269,10 +266,6 @@ pub(super) fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: Ratio
         Some(Value::Vec2([x, y])) => (x, y),
         _ => (1.0, 1.0),
     };
-    let (anchor_x, anchor_y) = match value_of(property::ANCHOR) {
-        Some(Value::Vec2([x, y])) => (x, y),
-        _ => (0.0, 0.0),
-    };
     let rotation_v = match value_of(property::ROTATION) {
         Some(Value::F64(v)) => v,
         _ => 0.0,
@@ -332,7 +325,6 @@ pub(super) fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: Ratio
         })
         .collect();
     let source_name = match view.meta(layer).ok().flatten().map(|m| m.source) {
-        Some(LayerSource::Solid { .. }) => "solid",
         Some(LayerSource::File { path, .. }) => {
             if crate::render::media::is_point_cloud_path(&path) {
                 "point cloud"
@@ -364,7 +356,6 @@ pub(super) fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: Ratio
 
     let mut colors: Vec<(&'static str, String)> = Vec::new();
     match view.meta(layer).ok().flatten().map(|m| m.source) {
-        Some(LayerSource::Solid { rgba, .. }) => colors.push(("Color", hex_of(rgba))),
         Some(LayerSource::Text) => {
             if let Ok(Some(doc)) = view.text_document(layer) {
                 if let Some(style) = doc.styles.first() {
@@ -392,17 +383,6 @@ pub(super) fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: Ratio
     }
 
     let transform = vec![
-            PropRow {
-                label: "Anchor",
-                cells: [f(anchor_x), f(anchor_y), f(0.0)],
-                dims: [false, false, true],
-                keyed: keyed(property::ANCHOR),
-                property: Some(property::ANCHOR.to_owned()),
-                vec2: true,
-                value: Value::Vec2([anchor_x, anchor_y]),
-                range: None,
-                axis: [None, None, None],
-            },
             PropRow {
                 label: "Position",
                 cells: [px, py, f1(pos_z)],

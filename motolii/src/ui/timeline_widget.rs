@@ -685,7 +685,7 @@ mod keyframe_shift_tests {
             Intent::SetMeta {
                 layer,
                 meta: LayerMeta {
-                    source: LayerSource::Solid { rgba: [255, 0, 0, 255], width: 64, height: 64 },
+                    source: LayerSource::Shape,
                     order: 0,
                     timing: LayerTiming { start: 10, duration: 50, source_in: 0, ..Default::default() },
                 },

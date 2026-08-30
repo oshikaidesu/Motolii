@@ -1,5 +1,5 @@
 
-use motolii::render::compositor::{
+use motolii::render::compositor::{LayerContent, 
     check_presentable_target, BlendMode, CompSpec, Compositor, CompositorError, EffectPass,
     HeadlessGpu, Layer, LayerPlacement, LayerWithPasses, ResolvedCamera, PRESENTABLE_FORMAT,
 };
@@ -107,7 +107,7 @@ fn readback_rgba(device: &wgpu::Device, queue: &wgpu::Queue, texture: &wgpu::Tex
 
 fn small_layer(texture: motolii::render::compositor::GpuTexture2D) -> Layer {
     Layer {
-        texture,
+        content: LayerContent::Texture(texture),
         size: [8.0, 8.0],
         placement: LayerPlacement {
             transform: LayerPlacement::from_transform(
@@ -337,7 +337,7 @@ fn tilt_survives_a_pinned_background() {
     let white_pixels = |compositor: &mut Compositor, deg: f32| {
         let target = readable_presentable(&device);
         let background = Layer {
-            texture: bg.clone(),
+            content: LayerContent::Texture(bg.clone()),
             size: [W as f32, H as f32],
             placement: LayerPlacement {
                 order: -1,

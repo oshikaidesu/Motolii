@@ -1,5 +1,5 @@
 
-use motolii::render::compositor::{
+use motolii::render::compositor::{LayerContent, 
     BlendMode, CompSpec, Compositor, HeadlessGpu, Layer, LayerPlacement, ResolvedCamera,
 };
 
@@ -25,7 +25,7 @@ fn a_layer_with_depth_survives_the_accumulator_across_runs() {
         .expect("white");
 
     let place = |tex: motolii::render::compositor::GpuTexture2D, order: i16, z: f32, blend| Layer {
-        texture: tex,
+        content: LayerContent::Texture(tex),
         size: [200.0, 120.0],
         placement: LayerPlacement {
             transform: LayerPlacement::from_transform(
