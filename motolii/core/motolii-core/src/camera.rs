@@ -51,6 +51,13 @@ impl Default for ResolvedCamera {
 /// 「インパクト重視」(裁定115)なので、遠近感がほぼ出ない極端な望遠は避けた。
 pub const CAMERA_BASE_VERTICAL_FOV_DEGREES: f32 = 55.0;
 
+/// near plane。`re_renderer` の3Dビュー(`Eye::PERSPECTIVE_NEAR_PLANE`)と同じ値。
+///
+/// comp の大きさに比例させない — 逆Z+無限遠 far の投影は near が小さいほど
+/// 精度が良く(z_ndc = near/distance が f32 の密な側へ寄る)、比例させると
+/// カメラへ寄せた層が comp の大きさ次第でクリップされる。
+pub const NEAR_PLANE: f32 = 0.01;
+
 /// GPU へ渡す形(view の位置・向き、投影のパラメータ)。
 #[derive(Clone, Copy, Debug)]
 pub struct CameraProjection {
@@ -74,9 +81,8 @@ fn base_distance(comp: CompSpec) -> f32 {
 }
 
 /// world の z 平面(`LayerPlacement::z`)からカメラまでの距離。**AE と同じ符号** —
-/// z が大きいほど遠い。z が `-base_distance(comp)` に近づく/超えるとカメラの
-/// near plane を割り込む(**既知の限界**、裁定に自由変数が無いための帰結。近すぎる/
-/// 背後に回った層は再クリップされるかカメラの裏に出る。未対応)。
+/// z が大きいほど遠い。距離が `NEAR_PLANE` を下回った層はクリップされる
+/// (カメラの裏へ回った層も同じ)。
 pub fn distance_from_camera(comp: CompSpec, z: f32) -> f32 {
     base_distance(comp) + z
 }
@@ -154,9 +160,7 @@ pub fn camera_projection(comp: CompSpec, camera: ResolvedCamera) -> CameraProjec
         rotation,
         vertical_fov_radians,
         aspect_ratio: comp.width as f32 / comp.height as f32,
-        // near は distance よりだいぶ手前に置く。z を大きく手前(カメラに近い側)へ
-        // 動かした層が near を割り込むとクリップされる(前段の doc 参照、既知の限界)。
-        near_plane_distance: (distance * 1e-3).max(1e-3),
+        near_plane_distance: NEAR_PLANE,
     }
 }
 

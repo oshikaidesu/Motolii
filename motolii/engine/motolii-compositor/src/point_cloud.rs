@@ -77,7 +77,7 @@ impl Compositor {
                 view_from_world,
                 projection_from_view: Projection::Perspective {
                     vertical_fov: half_fov * 2.0,
-                    near_plane_distance: (distance * 0.01).max(0.001),
+                    near_plane_distance: motolii_core::NEAR_PLANE,
                     aspect_ratio: width as f32 / height as f32,
                 },
                 pixels_per_point: 1.0,
