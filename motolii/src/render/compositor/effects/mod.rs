@@ -3,6 +3,7 @@ use std::collections::HashMap;
 
 mod glow;
 pub(crate) mod isf;
+mod vism;
 mod wgsl_fragment;
 
 pub(crate) use glow::{GlowPipelines, GLOW_INTERMEDIATE_FORMAT};

@@ -1,11 +1,18 @@
+//! WGSL の入口 — `vism/*.wgsl` をそのまま上流のプールへ載せる。
+//!
+//! ISF(GLSL)との違いは**言語だけ**。マニフェスト(先頭の `/*{ ... }*/`)の読み手も
+//! 束縛の作り手も同じで、プログラム本体は [`VismProgram`]。
 
 use std::path::PathBuf;
 
-use re_renderer::{GpuRenderPipelineHandle, PipelineLayoutDesc, RenderContext, RenderPipelineDesc, ShaderModuleDesc};
 #[cfg(load_shaders_from_disk)]
-use re_renderer::{FileServer, new_recommended_file_resolver};
+use re_renderer::{new_recommended_file_resolver, FileServer};
 #[cfg(not(load_shaders_from_disk))]
-use re_renderer::{FileSystem as _, get_filesystem};
+use re_renderer::{get_filesystem, FileSystem as _};
+use re_renderer::RenderContext;
+
+use super::isf::parse_isf_source;
+use super::vism::{ShaderStageSource, VismProgram};
 
 pub(crate) const GRADIENT_SOURCE: &str = include_str!("../../../../vism/gradient.wgsl");
 
@@ -16,7 +23,7 @@ pub(crate) const TRI_LED_SOURCE: &str = include_str!("../../../../vism/tri_led.w
 pub(crate) const TRI_LED_TARGET_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 
 pub(crate) struct WgslFragmentProgram {
-    pipeline: GpuRenderPipelineHandle,
+    inner: VismProgram,
 }
 
 impl WgslFragmentProgram {
@@ -26,6 +33,11 @@ impl WgslFragmentProgram {
         #[cfg_attr(load_shaders_from_disk, allow(unused_variables))] wgsl_source: &str,
         output_format: wgpu::TextureFormat,
     ) -> Self {
+        // マニフェストは任意。持たない .wgsl は入力ゼロの Vism として扱う。
+        let manifest = parse_isf_source(wgsl_source)
+            .map(|(manifest, _body)| manifest)
+            .unwrap_or_default();
+
         #[cfg(load_shaders_from_disk)]
         let path = {
             let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -36,54 +48,29 @@ impl WgslFragmentProgram {
         };
         #[cfg(not(load_shaders_from_disk))]
         let path = {
-            let path = PathBuf::from(format!("motolii-compositor/wgsl-fragment/{name}.wgsl"));
+            let path = PathBuf::from(format!("motolii-vism/{name}.wgsl"));
             get_filesystem()
                 .create_file(&path, wgsl_source.to_owned().into())
-                .expect("wgsl fragment source is valid utf8");
+                .expect("vism の .wgsl が utf8 である");
             path
         };
 
-        let shader_handle = ctx.gpu_resources.shader_modules.get_or_create(
-            ctx,
-            &ShaderModuleDesc {
-                label: format!("motolii-compositor-wgsl-fragment-{name}").into(),
-                source: path,
-                extra_workaround_replacements: Vec::new(),
-            },
-        );
-
-        let pipeline_layout = ctx.gpu_resources.pipeline_layouts.get_or_create(
-            ctx,
-            &PipelineLayoutDesc {
-                label: format!("motolii-compositor-wgsl-fragment-{name}-pipeline-layout").into(),
-                entries: vec![],
-            },
-        );
-
-        let pipeline = ctx.gpu_resources.render_pipelines.get_or_create(
-            ctx,
-            &RenderPipelineDesc {
-                label: format!("motolii-compositor-wgsl-fragment-{name}-pipeline").into(),
-                pipeline_layout,
-                vertex_entrypoint: "vs_main".to_owned(),
-                vertex_handle: shader_handle,
-                fragment_entrypoint: "fs_main".to_owned(),
-                fragment_handle: shader_handle,
-                vertex_buffers: Default::default(),
-                render_targets: re_renderer::external::smallvec::smallvec![Some(
-                    wgpu::ColorTargetState {
-                        format: output_format,
-                        blend: None,
-                        write_mask: wgpu::ColorWrites::ALL,
-                    }
-                )],
-                primitive: wgpu::PrimitiveState::default(),
-                depth_stencil: None,
-                multisample: wgpu::MultisampleState::default(),
-            },
-        );
-
-        Self { pipeline }
+        Self {
+            inner: VismProgram::new(
+                ctx,
+                &format!("motolii-vism-{name}"),
+                manifest,
+                ShaderStageSource {
+                    path: path.clone(),
+                    entry_point: "vs_main".to_owned(),
+                },
+                ShaderStageSource {
+                    path,
+                    entry_point: "fs_main".to_owned(),
+                },
+                output_format,
+            ),
+        }
     }
 
     pub(crate) fn record(
@@ -92,28 +79,6 @@ impl WgslFragmentProgram {
         encoder: &mut wgpu::CommandEncoder,
         dst_view: &wgpu::TextureView,
     ) {
-        let render_pipelines = ctx.gpu_resources.render_pipelines.resources();
-        let pipeline = render_pipelines
-            .get(self.pipeline)
-            .expect("wgsl fragment pipeline");
-
-        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("motolii-compositor-wgsl-fragment-pass"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: dst_view,
-                depth_slice: None,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
-                    store: wgpu::StoreOp::Store,
-                },
-            })],
-            depth_stencil_attachment: None,
-            timestamp_writes: None,
-            occlusion_query_set: None,
-            multiview_mask: None,
-        });
-        pass.set_pipeline(pipeline);
-        pass.draw(0..3, 0..1);
+        self.inner.record(ctx, encoder, &[], dst_view, &[], [0.0, 0.0]);
     }
 }

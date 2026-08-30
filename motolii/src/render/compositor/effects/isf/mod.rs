@@ -1,9 +1,13 @@
 
 
-use re_renderer::{
-    BindGroupLayoutDesc, GpuBindGroupLayoutHandle, GpuRenderPipelineHandle,
-    PipelineLayoutDesc, RenderContext, RenderPipelineDesc, ShaderModuleDesc,
-};
+#[cfg(not(load_shaders_from_disk))]
+use std::path::PathBuf;
+
+#[cfg(not(load_shaders_from_disk))]
+use re_renderer::{get_filesystem, FileSystem as _};
+use re_renderer::RenderContext;
+
+use super::vism::{ShaderStageSource, VismProgram};
 
 pub(crate) const BLOOM_SOURCE: &str = include_str!("../../../../../vism/bloom.fs");
 
@@ -92,26 +96,7 @@ impl IsfManifest {
     }
 }
 
-fn assign_bindings(manifest: &IsfManifest) -> (Vec<usize>, Vec<usize>) {
-    let mut images = Vec::new();
-    let mut params = Vec::new();
-    for (index, input) in manifest.inputs.iter().enumerate() {
-        if input.ty == IsfInputType::Image {
-            images.push(index);
-        } else {
-            params.push(index);
-        }
-    }
-    (images, params)
-}
 
-fn image_texture_binding(image_index_in_order: usize) -> u32 {
-    (image_index_in_order * 2) as u32
-}
-
-fn render_size_binding(param_order: &[usize]) -> u32 {
-    param_order.len() as u32
-}
 
 pub(crate) fn parse_isf_source(source: &str) -> Result<(IsfManifest, String), IsfError> {
     let trimmed = source.trim_start();
@@ -199,7 +184,7 @@ fn wrap_fragment_source(
 
     for (order_index, &index) in image_order.iter().enumerate() {
         let input = &manifest.inputs[index];
-        let tex_binding = image_texture_binding(order_index);
+        let tex_binding = super::vism::image_texture_binding(order_index);
         let samp_binding = tex_binding + 1;
         out.push_str(&format!(
             "layout(set = 0, binding = {tex_binding}) uniform texture2D {name}__tex;\n",
@@ -225,7 +210,7 @@ fn wrap_fragment_source(
     }
     out.push_str(&format!(
         "layout(set = 1, binding = {binding}) uniform RenderInfo {{ vec2 RENDERSIZE; }};\n\n",
-        binding = render_size_binding(param_order)
+        binding = super::vism::render_size_binding(param_order.len())
     ));
 
     out.push_str("#define IMG_THIS_PIXEL(image) texture(image, isf_FragNormCoord)\n");
@@ -251,14 +236,10 @@ fn compile_glsl_to_wgsl(source: &str, stage: naga::ShaderStage) -> Result<String
         .map_err(|e| IsfError::WgslWrite(e.to_string()))
 }
 
+/// ISF の入口 — GLSL の本体を naga で WGSL へ写し、束縛はマニフェストへ委ねる。
+/// プログラム本体は `super::vism::VismProgram`(WGSL の入口と同じ物)。
 pub(crate) struct IsfProgram {
-    manifest: IsfManifest,
-    pipeline: GpuRenderPipelineHandle,
-    texture_layout: GpuBindGroupLayoutHandle,
-    params_layout: GpuBindGroupLayoutHandle,
-    sampler: wgpu::Sampler,
-    image_order: Vec<usize>,
-    param_order: Vec<usize>,
+    inner: VismProgram,
 }
 
 impl IsfProgram {
@@ -267,14 +248,15 @@ impl IsfProgram {
         isf_source: &str,
         output_format: wgpu::TextureFormat,
     ) -> Result<Self, IsfError> {
-        let device = &ctx.device;
         let (manifest, filter_body) = parse_isf_source(isf_source)?;
-        let (image_order, param_order) = assign_bindings(&manifest);
+        let (image_order, param_order) = super::vism::orders(&manifest);
 
-        let fragment_glsl = wrap_fragment_source(&manifest, &image_order, &param_order, &filter_body);
+        let fragment_glsl =
+            wrap_fragment_source(&manifest, &image_order, &param_order, &filter_body);
         let fragment_wgsl = compile_glsl_to_wgsl(&fragment_glsl, naga::ShaderStage::Fragment)?;
         let vertex_wgsl = compile_glsl_to_wgsl(VERTEX_SOURCE, naga::ShaderStage::Vertex)?;
 
+        // 生成した WGSL は上流のファイルシステムへ載せる(ホットリロード時だけ実ファイル)。
         #[cfg(load_shaders_from_disk)]
         let (vertex_path, fragment_path) = {
             let dir = std::env::temp_dir().join("motolii-isf-wgsl");
@@ -289,8 +271,8 @@ impl IsfProgram {
         };
         #[cfg(not(load_shaders_from_disk))]
         let (vertex_path, fragment_path) = {
-            let vertex_path = PathBuf::from("motolii-compositor/isf/vertex.wgsl");
-            let fragment_path = PathBuf::from("motolii-compositor/isf/fragment.wgsl");
+            let vertex_path = PathBuf::from("motolii-vism/isf/vertex.wgsl");
+            let fragment_path = PathBuf::from("motolii-vism/isf/fragment.wgsl");
             get_filesystem()
                 .create_file(&vertex_path, vertex_wgsl.into())
                 .map_err(|e| IsfError::WgslWrite(e.to_string()))?;
@@ -300,129 +282,21 @@ impl IsfProgram {
             (vertex_path, fragment_path)
         };
 
-        let vertex_handle = ctx.gpu_resources.shader_modules.get_or_create(
-            ctx,
-            &ShaderModuleDesc {
-                label: "motolii-compositor-isf-vertex".into(),
-                source: vertex_path,
-                extra_workaround_replacements: Vec::new(),
-            },
-        );
-        let fragment_handle = ctx.gpu_resources.shader_modules.get_or_create(
-            ctx,
-            &ShaderModuleDesc {
-                label: "motolii-compositor-isf-fragment".into(),
-                source: fragment_path,
-                extra_workaround_replacements: Vec::new(),
-            },
-        );
-
-        let mut texture_entries: Vec<wgpu::BindGroupLayoutEntry> = Vec::with_capacity(image_order.len() * 2);
-        for order_index in 0..image_order.len() {
-            let tex_binding = image_texture_binding(order_index);
-            texture_entries.push(wgpu::BindGroupLayoutEntry {
-                binding: tex_binding,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Texture {
-                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                    view_dimension: wgpu::TextureViewDimension::D2,
-                    multisampled: false,
-                },
-                count: None,
-            });
-            texture_entries.push(wgpu::BindGroupLayoutEntry {
-                binding: tex_binding + 1,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                count: None,
-            });
-        }
-        let texture_layout = ctx.gpu_resources.bind_group_layouts.get_or_create(
-            device,
-            &BindGroupLayoutDesc {
-                label: "motolii-compositor-isf-texture-layout".into(),
-                entries: texture_entries,
-            },
-        );
-
-        let mut param_entries: Vec<wgpu::BindGroupLayoutEntry> = (0..param_order.len() as u32)
-            .map(|binding| wgpu::BindGroupLayoutEntry {
-                binding,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            })
-            .collect();
-        param_entries.push(wgpu::BindGroupLayoutEntry {
-            binding: render_size_binding(&param_order),
-            visibility: wgpu::ShaderStages::FRAGMENT,
-            ty: wgpu::BindingType::Buffer {
-                ty: wgpu::BufferBindingType::Uniform,
-                has_dynamic_offset: false,
-                min_binding_size: None,
-            },
-            count: None,
-        });
-        let params_layout = ctx.gpu_resources.bind_group_layouts.get_or_create(
-            device,
-            &BindGroupLayoutDesc {
-                label: "motolii-compositor-isf-params-layout".into(),
-                entries: param_entries,
-            },
-        );
-
-        let pipeline_layout = ctx.gpu_resources.pipeline_layouts.get_or_create(
-            ctx,
-            &PipelineLayoutDesc {
-                label: "motolii-compositor-isf-pipeline-layout".into(),
-                entries: vec![texture_layout, params_layout],
-            },
-        );
-
-        let pipeline = ctx.gpu_resources.render_pipelines.get_or_create(
-            ctx,
-            &RenderPipelineDesc {
-                label: "motolii-compositor-isf-pipeline".into(),
-                pipeline_layout,
-                vertex_entrypoint: "main".to_owned(),
-                vertex_handle,
-                fragment_entrypoint: "main".to_owned(),
-                fragment_handle,
-                vertex_buffers: Default::default(),
-                render_targets: re_renderer::external::smallvec::smallvec![Some(wgpu::ColorTargetState {
-                    format: output_format,
-                    blend: None,
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-                primitive: wgpu::PrimitiveState::default(),
-                depth_stencil: None,
-                multisample: wgpu::MultisampleState::default(),
-            },
-        );
-
-        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-            label: Some("motolii-compositor-isf-sampler"),
-            address_mode_u: wgpu::AddressMode::ClampToEdge,
-            address_mode_v: wgpu::AddressMode::ClampToEdge,
-            address_mode_w: wgpu::AddressMode::ClampToEdge,
-            mag_filter: wgpu::FilterMode::Nearest,
-            min_filter: wgpu::FilterMode::Nearest,
-            mipmap_filter: wgpu::MipmapFilterMode::Nearest,
-            ..Default::default()
-        });
-
         Ok(Self {
-            manifest,
-            pipeline,
-            texture_layout,
-            params_layout,
-            sampler,
-            image_order,
-            param_order,
+            inner: VismProgram::new(
+                ctx,
+                "motolii-vism-isf",
+                manifest,
+                ShaderStageSource {
+                    path: vertex_path,
+                    entry_point: "main".to_owned(),
+                },
+                ShaderStageSource {
+                    path: fragment_path,
+                    entry_point: "main".to_owned(),
+                },
+                output_format,
+            ),
         })
     }
 
@@ -435,106 +309,8 @@ impl IsfProgram {
         params: &[(String, f32)],
         render_size: [f32; 2],
     ) {
-        let device = &ctx.device;
-        let queue = &ctx.queue;
-        let bind_group_layouts = ctx.gpu_resources.bind_group_layouts.resources();
-        let texture_layout = bind_group_layouts
-            .get(self.texture_layout)
-            .expect("isf texture bind group layout");
-        let params_layout = bind_group_layouts
-            .get(self.params_layout)
-            .expect("isf params bind group layout");
-
-        let mut texture_entries: Vec<wgpu::BindGroupEntry> = Vec::with_capacity(self.image_order.len() * 2);
-        for order_index in 0..self.image_order.len() {
-            let tex_binding = image_texture_binding(order_index);
-            texture_entries.push(wgpu::BindGroupEntry {
-                binding: tex_binding,
-                resource: wgpu::BindingResource::TextureView(source_view),
-            });
-            texture_entries.push(wgpu::BindGroupEntry {
-                binding: tex_binding + 1,
-                resource: wgpu::BindingResource::Sampler(&self.sampler),
-            });
-        }
-        let texture_bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("motolii-compositor-isf-texture-bind"),
-            layout: texture_layout,
-            entries: &texture_entries,
-        });
-
-        let mut buffers: Vec<wgpu::Buffer> = Vec::with_capacity(self.param_order.len() + 1);
-        for &index in &self.param_order {
-            let input = &self.manifest.inputs[index];
-            let count = input.ty.component_count().max(1);
-            let mut components = input.default;
-            if let Some((_, value)) = params.iter().find(|(name, _)| name == &input.name) {
-                components[0] = *value;
-            }
-            let mut bytes = vec![0u8; count * 4];
-            for i in 0..count {
-                bytes[i * 4..i * 4 + 4].copy_from_slice(&components[i].to_le_bytes());
-            }
-            let buffer = device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("motolii-compositor-isf-param"),
-                size: bytes.len() as u64,
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-                mapped_at_creation: false,
-            });
-            queue.write_buffer(&buffer, 0, &bytes);
-            buffers.push(buffer);
-        }
-        let render_info_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("motolii-compositor-isf-render-info"),
-            size: 8,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-        let mut render_info_bytes = [0u8; 8];
-        render_info_bytes[0..4].copy_from_slice(&render_size[0].to_le_bytes());
-        render_info_bytes[4..8].copy_from_slice(&render_size[1].to_le_bytes());
-        queue.write_buffer(&render_info_buffer, 0, &render_info_bytes);
-        buffers.push(render_info_buffer);
-
-        let param_entries: Vec<wgpu::BindGroupEntry> = buffers
-            .iter()
-            .enumerate()
-            .map(|(binding, buffer)| wgpu::BindGroupEntry {
-                binding: binding as u32,
-                resource: buffer.as_entire_binding(),
-            })
-            .collect();
-        let params_bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("motolii-compositor-isf-params-bind"),
-            layout: params_layout,
-            entries: &param_entries,
-        });
-
-        let render_pipelines = ctx.gpu_resources.render_pipelines.resources();
-        let pipeline = render_pipelines
-            .get(self.pipeline)
-            .expect("isf render pipeline");
-
-        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("motolii-compositor-isf-pass"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: dst_view,
-                depth_slice: None,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
-                    store: wgpu::StoreOp::Store,
-                },
-            })],
-            depth_stencil_attachment: None,
-            timestamp_writes: None,
-            occlusion_query_set: None,
-            multiview_mask: None,
-        });
-        pass.set_pipeline(pipeline);
-        pass.set_bind_group(0, &texture_bind, &[]);
-        pass.set_bind_group(1, &params_bind, &[]);
-        pass.draw(0..3, 0..1);
+        self.inner
+            .record(ctx, encoder, &[source_view], dst_view, params, render_size);
     }
 }
 
@@ -571,7 +347,7 @@ mod tests {
     #[test]
     fn compiles_the_wrapped_fragment_source_to_wgsl() {
         let (manifest, body) = parse_isf_source(BLOOM_SOURCE).expect("parse");
-        let (image_order, param_order) = assign_bindings(&manifest);
+        let (image_order, param_order) = crate::render::compositor::effects::vism::orders(&manifest);
         let glsl = wrap_fragment_source(&manifest, &image_order, &param_order, &body);
         let wgsl = compile_glsl_to_wgsl(&glsl, naga::ShaderStage::Fragment)
             .expect("naga: GLSL -> WGSL (fragment)");
