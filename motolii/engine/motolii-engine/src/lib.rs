@@ -232,7 +232,7 @@ pub struct Engine {
     /// パス → 直近に `frame_at` が返した texture。デコードは非同期なので
     /// `frame_at` が `None`(まだ来ていない)を返すことがある — その時は
     /// 画面を空にせず、ここに残る前フレームの texture を使う。
-    video_last_texture: HashMap<String, GpuTexture2D>,
+    video_last_texture: HashMap<u64, GpuTexture2D>,
 }
 
 impl Engine {

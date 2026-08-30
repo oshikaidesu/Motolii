@@ -17,9 +17,11 @@ use motolii_store::{
 use crate::render::layer_size;
 use crate::{shape, text, Engine, EngineError};
 
-/// path ごとに安定な `VideoPlayerStreamId`。1 path = 1 デコーダ。
-fn path_stream_id(path: &str) -> u64 {
+/// 層ごとに独立した復号ストリーム。**同じ動画を別の時刻で使う層が同じ id を
+/// 共有すると、1つのデコーダが毎フレーム別々の時刻を要求されてシークで詰まる。**
+fn layer_stream_id(layer: LayerId, path: &str) -> u64 {
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    layer.0.hash(&mut hasher);
     path.hash(&mut hasher);
     hasher.finish()
 }
@@ -47,6 +49,9 @@ impl Engine {
             self.shape_texture_for(view, layer.id, comp)
         } else if let LayerSource::PointCloud { path, .. } = &layer.source {
             self.point_cloud_texture_for(path, comp)
+        } else if let LayerSource::Media { path, .. } = &layer.source {
+            let path = path.clone();
+            self.media_texture_for(&path, layer.source_frame, layer.id)
         } else {
             self.texture_for(&layer.source, layer.source_frame)
         }
@@ -119,6 +124,9 @@ impl Engine {
             self.shape_texture_from_shapes(shapes, layer.id, comp)
         } else if let LayerSource::PointCloud { path, .. } = &layer.source {
             self.point_cloud_texture_for(path, comp)
+        } else if let LayerSource::Media { path, .. } = &layer.source {
+            let path = path.clone();
+            self.media_texture_for(&path, layer.source_frame, layer.id)
         } else {
             self.texture_for(&layer.source, layer.source_frame)
         }
@@ -354,34 +362,13 @@ impl Engine {
         Ok((Some(texture), natural))
     }
 
-    pub(crate) fn texture_for(
+
+    fn media_texture_for(
         &mut self,
-        source: &LayerSource,
-        source_frame: i64,
+        path: &str,
+        frame: i64,
+        layer: LayerId,
     ) -> Result<(Option<GpuTexture2D>, [f32; 2]), EngineError> {
-        match source {
-            LayerSource::Solid {
-                rgba,
-                width,
-                height,
-            } => {
-                let natural = [*width as f32, *height as f32];
-                if let Some(texture) = self.textures.get(source) {
-                    return Ok((Some(texture.clone()), natural));
-                }
-                let pixels: Vec<u8> = rgba
-                    .iter()
-                    .copied()
-                    .cycle()
-                    .take((width * height * 4) as usize)
-                    .collect();
-                let texture = self
-                    .compositor
-                    .upload_rgba("solid", &pixels, *width, *height)?;
-                self.textures.insert(source.clone(), texture.clone());
-                Ok((Some(texture), natural))
-            }
-            LayerSource::Media { path, .. } => {
                 // **A05隔離(`next/reference/axis/A05-missing.tsv`)**: この枝の
                 // 直上コメント(旧版)は「ここで Err を返すとフレーム全体が出なく
                 // なるので、この layer だけ落とす」と約束していたが、実装は
@@ -422,13 +409,13 @@ impl Engine {
                         }
                         None => match probe(path) {
                             Ok(info) => {
-                                self.probes.insert(path.clone(), info.clone());
+                                self.probes.insert(path.to_owned(), info.clone());
                                 Some(info)
                             }
                             Err(err) => {
                                 let reason =
                                     format!("素材を読めない(probe失敗): {path}: {err}");
-                                self.failed_probes.insert(path.clone(), reason.clone());
+                                self.failed_probes.insert(path.to_owned(), reason.clone());
                                 self.layer_failures.push(reason);
                                 None
                             }
@@ -445,7 +432,7 @@ impl Engine {
                 // **時間の計算はしない**。comp 時刻 → 素材フレームの写像は Document が
                 // 持つ(`LayerTiming::source_frame`)。engine が別の写像を持つと
                 // 時刻の正本が2本になる(2026-08-20 の敵対的レビューで一度やった失敗)。
-                let frame = source_frame;
+                
 
                 // 素材の外は描かない(フリーズフレーム禁止、M4)。ここで Err を返すと
                 // フレーム全体が出なくなるので、この layer だけ落とす。
@@ -476,11 +463,11 @@ impl Engine {
                         }
                     };
                     let video = re_renderer::video::Video::load(
-                        path.clone(),
+                        path.to_owned(),
                         descr,
                         re_video::DecodeSettings::default(),
                     );
-                    self.videos.insert(path.clone(), (bytes, video));
+                    self.videos.insert(path.to_owned(), (bytes, video));
                 }
                 let (bytes, video) = self.videos.get(path).expect("直前に insert した");
 
@@ -493,7 +480,7 @@ impl Engine {
                     frame as f64 / info.fps.as_f64(),
                     timescale,
                 );
-                let stream_id = re_video::player::VideoPlayerStreamId(path_stream_id(path));
+                let stream_id = re_video::player::VideoPlayerStreamId(layer_stream_id(layer, path));
                 let source = re_video::player::VideoSliceSource(bytes);
                 let output = video.frame_at(
                     self.compositor.render_context(),
@@ -507,14 +494,42 @@ impl Engine {
                 }
                 match output.output.and_then(|frame_texture| frame_texture.texture) {
                     Some(texture) => {
-                        self.video_last_texture
-                            .insert(path.clone(), texture.clone());
+                        self.video_last_texture.insert(stream_id.0, texture.clone());
                         Ok((Some(texture), natural))
                     }
                     // 非同期デコード中(まだ来ていない) — 画面を空にせず前フレームを保つ。
-                    None => Ok((self.video_last_texture.get(path).cloned(), natural)),
+                    None => Ok((self.video_last_texture.get(&stream_id.0).cloned(), natural)),
                 }
+                }
+
+    pub(crate) fn texture_for(
+        &mut self,
+        source: &LayerSource,
+        source_frame: i64,
+    ) -> Result<(Option<GpuTexture2D>, [f32; 2]), EngineError> {
+        match source {
+            LayerSource::Solid {
+                rgba,
+                width,
+                height,
+            } => {
+                let natural = [*width as f32, *height as f32];
+                if let Some(texture) = self.textures.get(source) {
+                    return Ok((Some(texture.clone()), natural));
+                }
+                let pixels: Vec<u8> = rgba
+                    .iter()
+                    .copied()
+                    .cycle()
+                    .take((width * height * 4) as usize)
+                    .collect();
+                let texture = self
+                    .compositor
+                    .upload_rgba("solid", &pixels, *width, *height)?;
+                self.textures.insert(source.clone(), texture.clone());
+                Ok((Some(texture), natural))
             }
+
             // **`Text`/`Shape` はここでは呼べない**(`&LayerSource`/`source_frame`
             // しか受け取らない口なので、それぞれ `TextDocument`/`Vec<ShapeNode>` へ
             // 辿り着けない)——`render_with_camera_override`/`layers_from_resolved`
@@ -527,7 +542,10 @@ impl Engine {
             // 同じ扱いへ揃えた)。
             // **`PointCloud` もここでは呼べない**(comp 解像度が要る——`point_cloud_texture_for`
             // の doc 参照)。`Text`/`Shape` と同じ理由・同じ安全側の既定値。
-            LayerSource::Text | LayerSource::Shape | LayerSource::PointCloud { .. } => {
+            LayerSource::Text
+            | LayerSource::Shape
+            | LayerSource::PointCloud { .. }
+            | LayerSource::Media { .. } => {
                 Ok((None, [0.0, 0.0]))
             }
             // null layer は元々絵を持たず(裁定どおり)、`Group`(裁定173)も同じく
