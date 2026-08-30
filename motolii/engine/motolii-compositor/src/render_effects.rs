@@ -295,39 +295,7 @@ impl Compositor {
         //    使う texture だけが「元の layer.texture」から「上で決めた実効 texture」に
         //    変わる(padding 込みの quad 拡張は `SequentialInput::local_min`/
         //    `local_size` へそのまま持ち込む——`render_with_timing` 旧経路と同じ計算)。
-        let inputs: Vec<SequentialInput<'_>> = layers
-            .iter()
-            .zip(effective_textures.iter())
-            .zip(effective_paddings.iter())
-            .map(|((lwp, texture), &padding)| {
-                let layer = &lwp.layer;
-                // **既知の穴の根治**: pass が出力を拡張した分(`padding`、texel、
-                // `EffectPass::padding` 参照)だけ quad を local 空間で広げる——
-                // `LayerPlacement::transform` 自体は一切変えず、この rect の
-                // 組み立てだけが「実 texture が layer 実寸より大きい」事実を吸収
-                // する(transform は affine なので、広げた local 矩形にそのまま
-                // 掛ければ回転/拡大/skew があっても正しく追従する)。padding=0
-                // (pass 無し/Identity のみ)なら local_min=(0,0)・local_size=
-                // layer.size のまま、従来と完全に同じ幾何になる。
-                let pad = padding as f32;
-                SequentialInput {
-                    texture,
-                    local_min: glam::Vec2::new(-pad, -pad),
-                    local_size: glam::Vec2::new(
-                        layer.size[0] + 2.0 * pad,
-                        layer.size[1] + 2.0 * pad,
-                    ),
-                    transform: layer.placement.transform,
-                    z: layer.placement.z,
-                    rotation_x: layer.placement.rotation_x,
-                    rotation_y: layer.placement.rotation_y,
-                    pinned: layer.pinned,
-                    opacity: layer.placement.opacity,
-                    depth_offset: layer.placement.order,
-                    blend_mode: layer.blend_mode,
-                }
-            })
-            .collect();
+        let inputs = sequential_inputs(layers, &effective_textures, &effective_paddings);
 
         let background = self.accumulate_sequential(comp, camera, &inputs, background_color)?;
         let frame = self.finalize_readback(comp, camera, background, background_color)?;
@@ -422,31 +390,7 @@ impl Compositor {
         // 2) 通常合成。[`Self::render_with_effects`] の step 2 と同じ
         //    `accumulate_sequential` 経由の組み立て(`crate` module doc「分離可能
         //    blend」節)。
-        let inputs: Vec<SequentialInput<'_>> = layers
-            .iter()
-            .zip(effective_textures.iter())
-            .zip(effective_paddings.iter())
-            .map(|((lwp, texture), &padding)| {
-                let layer = &lwp.layer;
-                let pad = padding as f32;
-                SequentialInput {
-                    texture,
-                    local_min: glam::Vec2::new(-pad, -pad),
-                    local_size: glam::Vec2::new(
-                        layer.size[0] + 2.0 * pad,
-                        layer.size[1] + 2.0 * pad,
-                    ),
-                    transform: layer.placement.transform,
-                    z: layer.placement.z,
-                    rotation_x: layer.placement.rotation_x,
-                    rotation_y: layer.placement.rotation_y,
-                    pinned: layer.pinned,
-                    opacity: layer.placement.opacity,
-                    depth_offset: layer.placement.order,
-                    blend_mode: layer.blend_mode,
-                }
-            })
-            .collect();
+        let inputs = sequential_inputs(layers, &effective_textures, &effective_paddings);
 
         let background = self.accumulate_sequential(comp, camera, &inputs, background_color)?;
         let (texture, view) = self.finalize_texture(comp, camera, background, background_color)?;
@@ -463,4 +407,37 @@ impl Compositor {
         Ok((texture, view))
     }
 
+}
+
+/// `LayerWithPasses` + 実効 texture/padding を [`SequentialInput`] へ詰め替える。
+///
+/// `padding` は pass が出力を広げた texel 数。`LayerPlacement::transform` は変えず、
+/// local 矩形だけを広げて吸収する(transform は affine なので回転/拡大/skew に追従する)。
+pub(crate) fn sequential_inputs<'a>(
+    layers: &'a [LayerWithPasses],
+    effective_textures: &'a [GpuTexture2D],
+    effective_paddings: &[u32],
+) -> Vec<SequentialInput<'a>> {
+    layers
+        .iter()
+        .zip(effective_textures.iter())
+        .zip(effective_paddings.iter())
+        .map(|((lwp, texture), &padding)| {
+            let layer = &lwp.layer;
+            let pad = padding as f32;
+            SequentialInput {
+                texture,
+                local_min: glam::Vec2::new(-pad, -pad),
+                local_size: glam::Vec2::new(layer.size[0] + 2.0 * pad, layer.size[1] + 2.0 * pad),
+                transform: layer.placement.transform,
+                z: layer.placement.z,
+                rotation_x: layer.placement.rotation_x,
+                rotation_y: layer.placement.rotation_y,
+                pinned: layer.pinned,
+                opacity: layer.placement.opacity,
+                depth_offset: layer.placement.order,
+                blend_mode: layer.blend_mode,
+            }
+        })
+        .collect()
 }

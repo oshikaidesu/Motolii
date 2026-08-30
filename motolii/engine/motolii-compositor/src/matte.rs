@@ -38,24 +38,9 @@
 //!
 //! ## 出力の alpha 規約(premultiplied ではなく straight)
 //!
-//! matte を消費した結果は「straight 色は変えず、alpha だけ coverage で縮める」
-//! ——`layer`(premultiplied)から straight 色を復元し(`straight = layer.rgb /
-//! layer.a`)、`out = vec4(straight, layer.a · coverage)` を書く。
-//!
-//! **なぜ premultiplied のまま返さないか**: [`crate::Compositor::matte_layer`] は
-//! 結果を普通の `Layer` として返し、呼び手はそれを他の `Layer` と同じ配列へ混ぜて
-//! [`crate::Compositor::render_sequential`] 等へ渡す——**この一般経路は
-//! `ColormappedTexture::from_unorm_rgba` の既定(`TextureAlpha::SeparateAlpha`、
-//! 「まだ alpha を掛けていない straight color」という前提で使用時に掛け直す)を
-//! 前提に `Layer.texture` を読む**(`crate` の `background_rect` が「accumulator は
-//! 既に premultiplied なのでこの既定は使えない」と明示的に迂回しているのが、
-//! この既定の存在そのものの証拠)。ここで premultiplied のまま返すと、一般経路が
-//! **もう一度** alpha を掛けてしまい(`straight·(α·c)` のつもりが `(α·c)·(α·c)` に
-//! なる二重適用)、coverage が実際より暗く/透明になる事故になる——**数式としての
-//! matte 適用は premultiplied 表現(rgb/alpha を同じスカラーで縮める)と straight
-//! 表現(rgb 不変・alpha だけ縮める)は数学的に同じ結果**(`layer = straight·α` を
-//! 代入すれば一致することが確かめられる)なので、ここでは「一般経路が期待する方の
-//! 表現で書く」という表現形式の選択であって、別の計算をしているわけではない。
+//! matte を消費した結果は premultiplied のまま返す——`layer` の rgb と alpha を
+//! 同じ coverage で縮める。呼び手はこれを普通の `Layer` として他と混ぜて渡し、
+//! 一般経路は [`crate::premultiplied_texture`] で読む。
 //!
 //! ## gamma 空間
 //!
@@ -296,15 +281,8 @@ fn matte_fs(@builtin(position) p: vec4<f32>) -> @location(0) vec4<f32> {
 
   let c = clamp(coverage(params.mode, matte), 0.0, 1.0);
 
-  // 出力は straight(SeparateAlpha)——モジュール doc「出力の alpha 規約」参照。
-  // `layer` は premultiplied(solo canvas)なので、まず straight 色へ戻してから
-  // alpha だけ coverage で縮める(straight 色そのものは matte で変わらない)。
-  var straight_rgb = vec3<f32>(0.0);
-  if (layer.a > 0.0) {
-    straight_rgb = layer.rgb / layer.a;
-  }
-  let out_a = clamp(layer.a * c, 0.0, 1.0);
-
-  return vec4<f32>(clamp(straight_rgb, vec3<f32>(0.0), vec3<f32>(1.0)), out_a);
+  // 出力は premultiplied。`layer` も premultiplied なので rgb と alpha を
+  // 同じ coverage で縮めるだけでよい(straight 色は matte で変わらない)。
+  return clamp(layer * c, vec4<f32>(0.0), vec4<f32>(1.0));
 }
 "#;

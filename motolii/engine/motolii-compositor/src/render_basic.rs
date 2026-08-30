@@ -66,7 +66,7 @@ impl Compositor {
                     extent_v: to_vector3(
                         transform.transform_vector2(glam::Vec2::new(0.0, layer.size[1])),
                     ),
-                    colormapped_texture: re_renderer::renderer::ColormappedTexture::from_unorm_rgba(
+                    colormapped_texture: crate::premultiplied_texture(
                         layer.texture.clone(),
                     ),
                     options: RectangleOptions {

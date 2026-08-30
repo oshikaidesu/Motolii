@@ -264,6 +264,29 @@ pub(crate) fn tilted_corners(
     (center - (u + v) * 0.5, u, v)
 }
 
+/// premultiplied な texture を矩形へ渡す形。
+///
+/// `ColormappedTexture::from_unorm_rgba` は `SeparateAlpha`(使用時に alpha を掛け直す)
+/// なので、premultiplied な texture に使うと二重に掛かる。
+///
+/// **合成器へ入る texture は premultiplied か不透明のどちらかしか無い** —
+/// text/shape のラスタは premultiplied(`premultiplied_rgba8`)、動画/solid/YUV は
+/// 不透明(a=1 なのでどちらの規約でも同値)。straight な texture が入ってきたら
+/// この前提が崩れる。
+pub(crate) fn premultiplied_texture(texture: GpuTexture2D) -> ColormappedTexture {
+    ColormappedTexture {
+        // sRGB texture は GPU が読み込み時に復号する。非sRGB(`upload_rgba` の
+        // `Rgba8Unorm`)だけ shader 側で復号する — `from_unorm_rgba` と同じ判定。
+        decode_srgb: !texture.format().is_srgb(),
+        texture,
+        range: [0.0, 1.0],
+        gamma: 1.0,
+        texture_alpha: TextureAlpha::AlreadyPremultiplied,
+        color_mapper: ColorMapper::OffRGB,
+        shader_decoding: None,
+    }
+}
+
 /// comp 背景色(sRGB 符号化 0..1)を描画パスの clear 色へ写す。
 ///
 /// 背景は世界に置いた板ではない。上流は矩形をカメラからの距離で並べ替え
@@ -567,19 +590,7 @@ fn background_rect(
         extent_v: to_vector3(
             pinned_cancel.transform_vector2(glam::Vec2::new(0.0, comp.height as f32)),
         ),
-        colormapped_texture: ColormappedTexture {
-            texture: imported,
-            range: [0.0, 1.0],
-            // main_target は既に `Rgba8UnormSrgb`——GPU が読み込み時に自動 decode する。
-            // ここで software decode も重ねると二重補正になる(module doc 参照)。
-            decode_srgb: false,
-            // accumulator は既に premultiplied alpha——`from_unorm_rgba` の既定
-            // `SeparateAlpha`(もう一度 alpha を掛ける)は使えない。
-            texture_alpha: TextureAlpha::AlreadyPremultiplied,
-            gamma: 1.0,
-            color_mapper: ColorMapper::OffRGB,
-            shader_decoding: None,
-        },
+        colormapped_texture: premultiplied_texture(imported),
         options: RectangleOptions {
             // 素通し(tint なし)。
             multiplicative_tint: Rgba::from_rgba_premultiplied(1.0, 1.0, 1.0, 1.0),

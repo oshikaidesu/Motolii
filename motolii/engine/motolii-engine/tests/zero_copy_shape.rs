@@ -188,7 +188,8 @@ fn blit_and_readback(
         dimension: wgpu::TextureDimension::D2,
         format: wgpu::TextureFormat::Rgba8UnormSrgb,
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
-        view_formats: &[],
+        // finalize_into は composite を通すため同じメモリを Rgba8Unorm として見直す。
+        view_formats: &[wgpu::TextureFormat::Rgba8Unorm],
     });
     let readable_view = readable.create_view(&wgpu::TextureViewDescriptor::default());
     let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {

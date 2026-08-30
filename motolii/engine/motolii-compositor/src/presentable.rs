@@ -48,91 +48,16 @@ impl Compositor {
         let (effective_textures, effective_paddings, checked_out) =
             self.effective_layer_textures(layers)?;
 
-        let projection = motolii_core::camera_projection(comp, camera);
-        let pinned_cancel = motolii_core::camera_screen_from_world_z0(comp, camera).inverse();
-        let view_from_world = macaw::IsoTransform::from_rotation_translation(
-            projection.rotation,
-            -(projection.rotation * projection.eye),
+        // 合成は `render_with_effects`(export)と**同じ** `accumulate_sequential` を通す。
+        // ここで独自に rect を組むと分離可能 blend が落ちる(Stage だけ Normal に
+        // 見えて書き出すと別の絵になる)。
+        let inputs = crate::render_effects::sequential_inputs(
+            layers,
+            &effective_textures,
+            &effective_paddings,
         );
-
-        self.ctx.begin_frame();
-
-        let mut rects: Vec<TexturedRect> = Vec::with_capacity(layers.len());
-        for ((lwp, texture), &padding) in layers.iter().zip(&effective_textures).zip(&effective_paddings) {
-            let layer = &lwp.layer;
-            let (transform, z, rx, ry) = if layer.pinned {
-                (pinned_cancel * layer.placement.transform, 0.0, 0.0, 0.0)
-            } else {
-                (
-                    layer.placement.transform,
-                    layer.placement.z,
-                    layer.placement.rotation_x,
-                    layer.placement.rotation_y,
-                )
-            };
-            let a = match layer.blend_mode {
-                crate::BlendMode::Add => 0.0,
-                _ => layer.placement.opacity,
-            };
-            // pass が出力を拡張した分(texel、`EffectPass::padding`)だけ quad を
-            // local 空間で広げる——`render_with_effects`/`render_to_texture` が
-            // `SequentialInput::local_min`/`local_size` でやっているのと同じ計算
-            // (padding=0 なら従来と完全に同じ幾何)。
-            let pad = padding as f32;
-            let (corner, extent_u, extent_v) = crate::tilted_corners(
-                transform,
-                glam::Vec2::new(-pad, -pad),
-                glam::Vec2::new(layer.size[0] + 2.0 * pad, layer.size[1] + 2.0 * pad),
-                z,
-                rx,
-                ry,
-            );
-            rects.push(TexturedRect {
-                top_left_corner_position: corner,
-                extent_u,
-                extent_v,
-                colormapped_texture: ColormappedTexture::from_unorm_rgba(texture.clone()),
-                options: RectangleOptions {
-                    multiplicative_tint: Rgba::from_rgba_premultiplied(
-                        layer.placement.opacity,
-                        layer.placement.opacity,
-                        layer.placement.opacity,
-                        a,
-                    ),
-                    depth_offset: layer.placement.order,
-                    ..Default::default()
-                },
-            });
-        }
-
-        let draw_data = RectangleDrawData::new(&self.ctx, &rects)
-            .map_err(|e| CompositorError::Rectangles(e.to_string()))?;
-
-        let mut view_builder = ViewBuilder::new_with_external_resolved(
-            &self.ctx,
-            sequential_target_config(
-                "motolii-comp-presentable",
-                comp,
-                view_from_world,
-                projection,
-            ),
-            ViewBuilderId::new(self.next_readback),
-            target,
-        )
-        .map_err(|e| CompositorError::View(e.to_string()))?;
-        self.next_readback += 1;
-
-        view_builder.queue_draw(&self.ctx, draw_data);
-        let command_buffer = view_builder
-            .draw(&self.ctx, crate::clear_color(background_color))
-            .map_err(|e| CompositorError::Draw(e.to_string()))?;
-        self.ctx.before_submit();
-        self.ctx.queue.submit([command_buffer]);
-        self.ctx.begin_frame();
-        self.ctx
-            .device
-            .poll(wgpu::PollType::wait_indefinitely())
-            .map_err(|e| CompositorError::Draw(e.to_string()))?;
+        let background = self.accumulate_sequential(comp, camera, &inputs, background_color)?;
+        self.finalize_into(target, comp, camera, background, background_color)?;
 
         // scratch をプールへ返す——この合成(上の poll)が終わった後なので、
         // `render_with_effects`/`render_to_texture` と同じ返却タイミング

@@ -303,7 +303,8 @@ fn create_target(device: &wgpu::Device, width: u32, height: u32) -> wgpu::Textur
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT
             | wgpu::TextureUsages::TEXTURE_BINDING
             | wgpu::TextureUsages::COPY_SRC,
-        view_formats: &[],
+        // finalize_into は composite を通すため同じメモリを Rgba8Unorm として見直す。
+        view_formats: &[wgpu::TextureFormat::Rgba8Unorm],
     })
 }
 

@@ -137,7 +137,7 @@ impl Compositor {
                     top_left_corner_position: corner,
                     extent_u,
                     extent_v,
-                    colormapped_texture: ColormappedTexture::from_unorm_rgba(input.texture.clone()),
+                    colormapped_texture: crate::premultiplied_texture(input.texture.clone()),
                     options: RectangleOptions {
                         multiplicative_tint: Rgba::from_rgba_premultiplied(
                             input.opacity,
@@ -305,7 +305,7 @@ impl Compositor {
                     top_left_corner_position: corner,
                     extent_u,
                     extent_v,
-                    colormapped_texture: ColormappedTexture::from_unorm_rgba(input.texture.clone()),
+                    colormapped_texture: crate::premultiplied_texture(input.texture.clone()),
                     options: RectangleOptions {
                         multiplicative_tint: Rgba::from_rgba_premultiplied(
                             input.opacity,
@@ -477,6 +477,104 @@ impl Compositor {
         out.ok_or(CompositorError::ReadbackMissing)
     }
 
+    /// [`Self::accumulate_sequential`]の結果を、呼び手が持つ共有面へ出す。
+    ///
+    /// 最終段は上流の `ViewBuilder::composite`(`composite.wgsl`)を通す —
+    /// export 経路(`finalize_readback` の `ScreenshotProcessor`)と**同じ式**で
+    /// premultiplied sRGB を書くため。ここを迂回すると preview と export の色がずれる。
+    ///
+    /// `target` は `Rgba8UnormSrgb` だが composite は自前でガンマ符号化するので、
+    /// 同じメモリを `Rgba8Unorm` として見直す(呼び手が `view_formats` に
+    /// 宣言しておくこと — [`crate::PRESENTABLE_FORMAT`] の doc 参照)。
+    pub(crate) fn finalize_into(
+        &mut self,
+        target: &wgpu::Texture,
+        comp: CompSpec,
+        camera: ResolvedCamera,
+        background: Option<(AccumulatorBacking, GpuTexture2D)>,
+        background_color: [f32; 4],
+    ) -> Result<(), CompositorError> {
+        let projection = motolii_core::camera_projection(comp, camera);
+        let pinned_cancel = motolii_core::camera_screen_from_world_z0(comp, camera).inverse();
+        let view_from_world = macaw::IsoTransform::from_rotation_translation(
+            projection.rotation,
+            -(projection.rotation * projection.eye),
+        );
+
+        let mut final_rects: Vec<TexturedRect> = Vec::with_capacity(1);
+        if let Some((_, imported)) = &background {
+            final_rects.push(background_rect(comp, pinned_cancel, imported.clone(), -1));
+        }
+        let draw_data = RectangleDrawData::new(&self.ctx, &final_rects)
+            .map_err(|e| CompositorError::Rectangles(e.to_string()))?;
+
+        let mut view_builder = {
+            let mut vb = ViewBuilder::new(
+                &self.ctx,
+                sequential_target_config(
+                    "motolii-comp-finalize-into",
+                    comp,
+                    view_from_world,
+                    projection,
+                ),
+                ViewBuilderId::new(self.next_readback),
+            )
+            .map_err(|e| CompositorError::View(e.to_string()))?;
+            self.next_readback += 1;
+            vb.queue_draw(&self.ctx, draw_data);
+            vb
+        };
+
+        let clear = if background.is_some() {
+            Rgba::TRANSPARENT
+        } else {
+            crate::clear_color(background_color)
+        };
+        let command_buffer = view_builder
+            .draw(&self.ctx, clear)
+            .map_err(|e| CompositorError::Draw(e.to_string()))?;
+        self.ctx.before_submit();
+        self.ctx.queue.submit([command_buffer]);
+
+        let target_view = target.create_view(&wgpu::TextureViewDescriptor {
+            format: Some(self.ctx.output_format_color()),
+            ..Default::default()
+        });
+        let mut encoder = self
+            .ctx
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("motolii-comp-composite-into"),
+            });
+        {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("motolii-comp-composite-into-pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &target_view,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            view_builder.composite(&self.ctx, &mut pass);
+        }
+        self.ctx.before_submit();
+        self.ctx.queue.submit([encoder.finish()]);
+        self.ctx.begin_frame();
+        self.ctx
+            .device
+            .poll(wgpu::PollType::wait_indefinitely())
+            .map_err(|e| CompositorError::Draw(e.to_string()))?;
+        Ok(())
+    }
+
     /// [`Self::accumulate_sequential`]の結果を CPU 読み戻しせずそのまま返す
     /// (`Self::render_to_texture` 専用)。**`background_rect` を経由する追加
     /// `ViewBuilder` を挟まない**——accumulator の main_target 自身が既に最終画な
@@ -615,7 +713,7 @@ impl Compositor {
             top_left_corner_position: center - (u + v) * 0.5,
             extent_u: u,
             extent_v: v,
-            colormapped_texture: ColormappedTexture::from_unorm_rgba(layer.texture.clone()),
+            colormapped_texture: crate::premultiplied_texture(layer.texture.clone()),
             options: RectangleOptions {
                 multiplicative_tint: Rgba::from_rgba_premultiplied(
                     layer.placement.opacity,
