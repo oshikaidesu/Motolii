@@ -1,5 +1,5 @@
 
-use crate::clock::PlaybackCounters;
+use crate::render::audio::clock::PlaybackCounters;
 
 pub fn fill_or_silence(
     consumer: &mut rtrb::Consumer<f32>,

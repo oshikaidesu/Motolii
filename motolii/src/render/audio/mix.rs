@@ -4,11 +4,11 @@ use std::sync::Arc;
 use motolii_core::RationalTime;
 use motolii_eval::{KeyframeTrack, Value};
 
-use crate::cache::PcmCache;
-use crate::convert::{canonical_format, CANONICAL_CHANNELS, CANONICAL_SAMPLE_RATE};
-use crate::error::{AudioError, Result};
-use crate::meter::AudioMeter;
-use crate::time_map::TimeMap;
+use crate::render::audio::cache::PcmCache;
+use crate::render::audio::convert::{canonical_format, CANONICAL_CHANNELS, CANONICAL_SAMPLE_RATE};
+use crate::render::audio::error::{AudioError, Result};
+use crate::render::audio::meter::AudioMeter;
+use crate::render::audio::time_map::TimeMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum AudioOutOfRange {
@@ -304,8 +304,8 @@ fn lerp_stereo(pcm: &PcmCache, pos: f64) -> (f64, f64) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::convert::to_canonical;
-    use crate::meter::MeterSnapshot;
+    use crate::render::audio::convert::to_canonical;
+    use crate::render::audio::meter::MeterSnapshot;
     use motolii_eval::{Interp, Keyframe};
 
     fn stereo_cache(samples: Vec<f32>) -> Arc<PcmCache> {
@@ -421,7 +421,7 @@ mod tests {
     fn mono_44100_and_stereo_48000_mix() {
         let mono_441 = PcmCache::from_interleaved(
             vec![0.2; 441], // 0.01s @ 44100
-            crate::cache::PcmFormat {
+            crate::render::audio::cache::PcmFormat {
                 channels: 1,
                 sample_rate: 44_100,
             },

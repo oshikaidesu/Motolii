@@ -1,7 +1,7 @@
 
-use crate::cache::{PcmCache, PcmFormat};
-use crate::error::{AudioError, Result};
-use crate::resample::FixedRatioResampler;
+use crate::render::audio::cache::{PcmCache, PcmFormat};
+use crate::render::audio::error::{AudioError, Result};
+use crate::render::audio::resample::FixedRatioResampler;
 
 pub const CANONICAL_SAMPLE_RATE: u32 = 48_000;
 pub const CANONICAL_CHANNELS: u16 = 2;

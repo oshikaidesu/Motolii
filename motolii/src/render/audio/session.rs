@@ -5,12 +5,12 @@ use cpal::traits::HostTrait;
 
 use motolii_core::RationalTime;
 
-use crate::clock::{DeviceWaitLatency, PlaybackClock, PlaybackCounters};
-use crate::convert::{canonical_format, time_to_canonical_frames};
-use crate::device::{negotiate_output, NegotiatedOutput, OutputStream};
-use crate::error::{AudioError, Result};
-use crate::producer::MixProducer;
-use crate::program::AudioProgram;
+use crate::render::audio::clock::{DeviceWaitLatency, PlaybackClock, PlaybackCounters};
+use crate::render::audio::convert::{canonical_format, time_to_canonical_frames};
+use crate::render::audio::device::{negotiate_output, NegotiatedOutput, OutputStream};
+use crate::render::audio::error::{AudioError, Result};
+use crate::render::audio::producer::MixProducer;
+use crate::render::audio::program::AudioProgram;
 
 const RING_CAPACITY_FRAMES: usize = 4_096;
 

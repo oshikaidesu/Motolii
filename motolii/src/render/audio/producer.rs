@@ -4,10 +4,10 @@ use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
-use crate::convert::{time_to_canonical_frames, CANONICAL_CHANNELS, CANONICAL_SAMPLE_RATE};
-use crate::error::{AudioError, Result};
-use crate::program::AudioProgram;
-use crate::resample::FixedRatioResampler;
+use crate::render::audio::convert::{time_to_canonical_frames, CANONICAL_CHANNELS, CANONICAL_SAMPLE_RATE};
+use crate::render::audio::error::{AudioError, Result};
+use crate::render::audio::program::AudioProgram;
+use crate::render::audio::resample::FixedRatioResampler;
 
 const POLL_INTERVAL: Duration = Duration::from_millis(1);
 

@@ -3587,6 +3587,7 @@ dependencies = [
  "blitz-paint",
  "blitz-traits",
  "bytemuck",
+ "cpal",
  "dioxus-native",
  "ffmpeg-sidecar",
  "glam",
@@ -3594,6 +3595,7 @@ dependencies = [
  "keyboard-types 0.7.0",
  "macaw",
  "motolii-core",
+ "motolii-eval",
  "motolii-store",
  "motolii-testkit",
  "motolii-vector",
@@ -3607,28 +3609,15 @@ dependencies = [
  "re_sdk_types",
  "re_types_core",
  "re_video",
+ "rtrb",
+ "rubato",
  "serde",
  "serde_json",
+ "symphonia",
  "tempfile",
  "thiserror 2.0.20",
  "wgpu",
  "wgpu_context",
-]
-
-[[package]]
-name = "motolii-audio"
-version = "0.1.0"
-dependencies = [
- "cpal",
- "motolii-core",
- "motolii-eval",
- "motolii-store",
- "motolii-testkit",
- "rtrb",
- "rubato",
- "serde_json",
- "symphonia",
- "thiserror 2.0.20",
 ]
 
 [[package]]

@@ -10,8 +10,8 @@ use symphonia::core::formats::FormatOptions;
 use symphonia::core::io::MediaSourceStream;
 use symphonia::core::meta::MetadataOptions;
 
-use crate::cache::{PcmCache, PcmFormat};
-use crate::error::{AudioError, Result};
+use crate::render::audio::cache::{PcmCache, PcmFormat};
+use crate::render::audio::error::{AudioError, Result};
 
 pub const MAX_SAMPLES: u64 = 48_000 * 60 * 60 * 4;
 

@@ -44,6 +44,11 @@ re_importer.workspace = true
 re_sdk_types.workspace = true
 re_types_core.workspace = true
 serde.workspace = true
+motolii-eval.workspace = true
+symphonia = { version = "0.6", default-features = false, features = ["aac", "aiff", "alac", "flac", "isomp4", "mp1", "mp2", "mp3", "ogg", "pcm", "vorbis", "wav"] }
+rubato = "0.16"
+cpal = "0.18"
+rtrb = "0.4"
 serde_json.workspace = true
 thiserror.workspace = true
 
@@ -61,7 +66,6 @@ members = [
     "core/motolii-eval",
     "core/motolii-store",
     "core/motolii-testkit",
-    "engine/motolii-audio",
     "engine/motolii-vector",
 ]
 
@@ -99,7 +103,6 @@ motolii-core = { path = "core/motolii-core" }
 motolii-eval = { path = "core/motolii-eval" }
 motolii-store = { path = "core/motolii-store" }
 motolii-testkit = { path = "core/motolii-testkit" }
-motolii-audio = { path = "engine/motolii-audio" }
 motolii-media = { path = "engine/motolii-media" }
 motolii-vector = { path = "engine/motolii-vector" }
 

@@ -19,13 +19,13 @@ use motolii_core::RationalTime;
 use motolii_eval::Value;
 use motolii_store::{property, LayerId, LayerSource, PropertyId, StoreView};
 
-use crate::cache::PcmCache;
-use crate::convert::{to_canonical, CANONICAL_SAMPLE_RATE};
-use crate::decode::decode_file_audio_ordinal;
-use crate::error::{AudioError, Result};
-use crate::meter::AudioMeter;
-use crate::mix::{mix_audio, AudioOutOfRange, FadeCurve, FadeSpec, MixReport, MixSource};
-use crate::time_map::TimeMap;
+use crate::render::audio::cache::PcmCache;
+use crate::render::audio::convert::{to_canonical, CANONICAL_SAMPLE_RATE};
+use crate::render::audio::decode::decode_file_audio_ordinal;
+use crate::render::audio::error::{AudioError, Result};
+use crate::render::audio::meter::AudioMeter;
+use crate::render::audio::mix::{mix_audio, AudioOutOfRange, FadeCurve, FadeSpec, MixReport, MixSource};
+use crate::render::audio::time_map::TimeMap;
 
 #[derive(Debug, Clone)]
 pub struct AudioProgram {

@@ -1,5 +1,5 @@
 
-use crate::error::{AudioError, Result};
+use crate::render::audio::error::{AudioError, Result};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PcmFormat {

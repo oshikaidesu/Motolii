@@ -4,10 +4,10 @@ use std::sync::Arc;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{SampleFormat, Stream, SupportedStreamConfig};
 
-use crate::cache::PcmFormat;
-use crate::clock::{DeviceWaitLatency, PlaybackCounters};
-use crate::error::{AudioError, Result};
-use crate::ring::fill_or_silence;
+use crate::render::audio::cache::PcmFormat;
+use crate::render::audio::clock::{DeviceWaitLatency, PlaybackCounters};
+use crate::render::audio::error::{AudioError, Result};
+use crate::render::audio::ring::fill_or_silence;
 
 #[derive(Debug, Clone)]
 pub struct NegotiatedOutput {

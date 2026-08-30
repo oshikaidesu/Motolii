@@ -1,7 +1,7 @@
 
 use rubato::{FftFixedIn, Resampler};
 
-use crate::error::{AudioError, Result};
+use crate::render::audio::error::{AudioError, Result};
 
 const CHUNK_FRAMES: usize = 1024;
 
