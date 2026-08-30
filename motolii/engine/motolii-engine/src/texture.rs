@@ -5,10 +5,11 @@
 //! `texture_for_layer` 呼び出し。
 
 use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 
 use motolii_compositor::GpuTexture2D;
 use motolii_core::CompSpec;
-use motolii_media::{load_point_cloud, probe, read_frame_at};
+use motolii_media::{load_point_cloud, probe};
 use motolii_store::{
     LayerId, LayerSource, RationalTime, ResolvedLayer, ShapeNode, StoreView, TextDocument,
 };
@@ -16,28 +17,14 @@ use motolii_store::{
 use crate::render::layer_size;
 use crate::{shape, text, Engine, EngineError};
 
+/// path ごとに安定な `VideoPlayerStreamId`。1 path = 1 デコーダ。
+fn path_stream_id(path: &str) -> u64 {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    path.hash(&mut hasher);
+    hasher.finish()
+}
+
 impl Engine {
-    fn remember_frame(&mut self, key: (String, i64), texture: GpuTexture2D) {
-        if self.frames.insert(key.clone(), texture).is_none() {
-            self.frame_order.push_back(key);
-        } else {
-            self.touch_frame(&key);
-        }
-        while self.frame_order.len() > Self::FRAME_CACHE_LIMIT {
-            if let Some(oldest) = self.frame_order.pop_front() {
-                self.frames.remove(&oldest);
-            }
-        }
-    }
-
-    /// 触った物を末尾へ回す(= 捨てるのは最後に触ってから最も古い物)。
-    fn touch_frame(&mut self, key: &(String, i64)) {
-        if let Some(at) = self.frame_order.iter().position(|k| k == key) {
-            let key = self.frame_order.remove(at).expect("position が指した要素");
-            self.frame_order.push_back(key);
-        }
-    }
-
     /// `layer.source` を texture 化する共通口。**`Text` だけ特別扱い** —
     /// `texture_for`(下記)は `&LayerSource`/`source_frame` しか受け取らず、
     /// `LayerSource::Text` はコンテンツを持たない印(unit variant)なのでどの layer の
@@ -467,40 +454,66 @@ impl Engine {
                     return Ok((None, natural));
                 }
 
-                let key = (path.clone(), frame);
-                if let Some(texture) = self.frames.get(&key) {
-                    let texture = texture.clone();
-                    self.touch_frame(&key);
-                    return Ok((Some(texture), natural));
+                if !self.videos.contains_key(path) {
+                    let bytes = match std::fs::read(path) {
+                        Ok(bytes) => bytes,
+                        Err(err) => {
+                            self.layer_failures
+                                .push(format!("素材を読めない(read失敗): {path}: {err}"));
+                            return Ok((None, natural));
+                        }
+                    };
+                    let descr = match re_video::VideoDataDescription::load_from_bytes(
+                        &bytes,
+                        "video/mp4",
+                        path,
+                    ) {
+                        Ok(descr) => descr,
+                        Err(err) => {
+                            self.layer_failures
+                                .push(format!("動画を読めない(decode失敗): {path}: {err}"));
+                            return Ok((None, natural));
+                        }
+                    };
+                    let video = re_renderer::video::Video::load(
+                        path.clone(),
+                        descr,
+                        re_video::DecodeSettings::default(),
+                    );
+                    self.videos.insert(path.clone(), (bytes, video));
                 }
+                let (bytes, video) = self.videos.get(path).expect("直前に insert した");
 
-                // decode 失敗も同じ理由で局所化する(probe は通ったが、この特定の
-                // フレームだけ読めない場合もある——コンテナは開けてもフレーム個別の
-                // 破損等)。probe と違って path 単位でキャッシュしない:失敗するのは
-                // このフレーム番号だけかもしれない(隣のフレームは読めるかもしれない)
-                // ので、`(path, frame)` ごとに ffmpeg を起動し直す既存の律速構造
-                // (`frames`/コメント参照)をそのまま踏襲する——decode 失敗のたびに
-                // 再試行し続けることになるが、これは元から「フレームごとに reader を
-                // 開き直している」現状の暫定実装と同じコスト構造であり、この隔離
-                // 修正が新しく生む負荷ではない。
-                let cpu = match read_frame_at(path, &info, frame) {
-                    Ok(cpu) => cpu,
-                    Err(err) => {
-                        self.layer_failures.push(format!(
-                            "フレームを読めない(decode失敗): {path} frame={frame}: {err}"
-                        ));
-                        return Ok((None, natural));
-                    }
+                let Some(timescale) = video.data_descr().timescale else {
+                    self.layer_failures
+                        .push(format!("動画にタイムスケールが無い: {path}"));
+                    return Ok((None, natural));
                 };
-                let texture = self.compositor.upload_yuv420p(
-                    "media",
-                    &cpu.data,
-                    info.width,
-                    info.height,
-                    info.color_space,
-                )?;
-                self.remember_frame(key, texture.clone());
-                Ok((Some(texture), natural))
+                let video_time = re_video::Time::from_secs(
+                    frame as f64 / info.fps.as_f64(),
+                    timescale,
+                );
+                let stream_id = re_video::player::VideoPlayerStreamId(path_stream_id(path));
+                let source = re_video::player::VideoSliceSource(bytes);
+                let output = video.frame_at(
+                    self.compositor.render_context(),
+                    stream_id,
+                    video_time,
+                    &source,
+                );
+                if let Some(err) = output.error {
+                    self.layer_failures
+                        .push(format!("フレームを読めない(decode失敗): {path} frame={frame}: {err}"));
+                }
+                match output.output.and_then(|frame_texture| frame_texture.texture) {
+                    Some(texture) => {
+                        self.video_last_texture
+                            .insert(path.clone(), texture.clone());
+                        Ok((Some(texture), natural))
+                    }
+                    // 非同期デコード中(まだ来ていない) — 画面を空にせず前フレームを保つ。
+                    None => Ok((self.video_last_texture.get(path).cloned(), natural)),
+                }
             }
             // **`Text`/`Shape` はここでは呼べない**(`&LayerSource`/`source_frame`
             // しか受け取らない口なので、それぞれ `TextDocument`/`Vec<ShapeNode>` へ

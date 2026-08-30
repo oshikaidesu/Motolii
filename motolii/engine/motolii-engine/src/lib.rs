@@ -15,7 +15,7 @@
 //! この crate 自身は意味を持たない。Document の意味は `motolii-store`、
 //! 補間は `motolii-eval`、描画は `re_renderer` にある。ここは繋ぐだけ。
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 
 pub mod mask;
 /// `Vec<ShapeNode>` → `motolii-vector::render_tree` → RGBA8(発注「シェイプが画に
@@ -174,23 +174,10 @@ impl ObservationCamera {
 pub struct Engine {
     compositor: Compositor,
     /// 素材 → GPU texture。同じ素材を毎フレーム上げ直さない。
-    /// **静止した素材だけ**が入る(実素材は時刻ごとに絵が違うので下の `frames` へ)。
+    /// **静止した素材だけ**が入る(実素材は時刻ごとに絵が違うので `videos`/`video_last_texture` へ)。
     textures: HashMap<LayerSource, GpuTexture2D>,
     /// パス → probe 結果。probe は ffprobe のプロセス起動なので毎フレームは回さない。
     probes: HashMap<String, MediaInfo>,
-    /// (パス, フレーム番号)→ GPU texture。**上限つき**。
-    ///
-    /// 上限が要る理由: 3〜5分の MV は 1080p30 で 5,400〜9,000フレームある。
-    /// 溜め込むと 1フレーム 3MB(YUV420)× 9,000 = 約 27GB になり、書き出しが
-    /// メモリで死ぬ。順次走査で要るのは直近の数枚だけなので、それを超えたら古い順に捨てる。
-    /// (試験 `long_export_does_not_accumulate_frames` がこの上限を守らせる)
-    ///
-    /// **暫定**: フレームごとに reader を開き直している。書き出しのような順次走査では
-    /// これは無駄で、本来は1本の reader を進めるべき。UI が付いて「どう走査するか」が
-    /// 決まってから直す(先に最適化すると、決まっていない走査順に合わせた形になる)。
-    frames: HashMap<(String, i64), GpuTexture2D>,
-    /// `frames` の投入順。古い順に捨てるためだけに持つ。
-    frame_order: VecDeque<(String, i64)>,
     /// text layer → GPU texture。**`textures`(`LayerSource` 鍵)を再利用しない**
     /// ([`TextCacheKey`] の doc 参照——`LayerSource::Text` は中身を持たない unit
     /// variant なので、複数の text layer がそのまま使うと1つの鍵に衝突する)。
@@ -235,10 +222,17 @@ pub struct Engine {
     point_clouds: HashMap<String, PointCloudData>,
     /// 点群の読み込みに失敗した path → 理由。`failed_probes` と対称。
     failed_point_clouds: HashMap<String, String>,
-    /// (パス, comp幅, comp高さ) → GPU texture。点群は時刻非依存(`frames` と違い
+    /// (パス, comp幅, comp高さ) → GPU texture。点群は時刻非依存(動画と違い
     /// フレーム番号を鍵に含めない)——comp resize でだけ再描画する
     /// (`point_cloud_texture_for` の鍵の doc 参照)。
     point_cloud_textures: HashMap<(String, u32, u32), GpuTexture2D>,
+    /// パス → (素材バイト列, re_renderer デコーダ)。`Video::frame_at` は
+    /// `&dyn GetVideoSource` にバイト列を要求するので、デコーダと一緒に保持する。
+    videos: HashMap<String, (Vec<u8>, re_renderer::video::Video)>,
+    /// パス → 直近に `frame_at` が返した texture。デコードは非同期なので
+    /// `frame_at` が `None`(まだ来ていない)を返すことがある — その時は
+    /// 画面を空にせず、ここに残る前フレームの texture を使う。
+    video_last_texture: HashMap<String, GpuTexture2D>,
 }
 
 impl Engine {
@@ -247,8 +241,6 @@ impl Engine {
             compositor: Compositor::headless()?,
             textures: HashMap::new(),
             probes: HashMap::new(),
-            frames: HashMap::new(),
-            frame_order: VecDeque::new(),
             text_textures: HashMap::new(),
             shape_textures: HashMap::new(),
             failed_probes: HashMap::new(),
@@ -258,6 +250,8 @@ impl Engine {
             point_clouds: HashMap::new(),
             failed_point_clouds: HashMap::new(),
             point_cloud_textures: HashMap::new(),
+            videos: HashMap::new(),
+            video_last_texture: HashMap::new(),
         })
     }
 
@@ -266,7 +260,7 @@ impl Engine {
     /// [`Self::new`](headless)は無改造。実体は
     /// `Compositor::with_device_using_headless_defaults`(`headless()` と同じ
     /// format/config、モジュール doc 参照)の薄いラッパーで、decode/upload
-    /// キャッシュ(`textures`/`probes`/`frames`/`frame_order`)は**この Engine
+    /// キャッシュ(`textures`/`probes`/`videos`)は**この Engine
     /// インスタンス自身が新しく持つ**——呼び出し側(`motolii-shell` の presenter
     /// Pipeline)が `Engine::new()` の headless インスタンスと取り違えて共有する
     /// ことはない(構造的に別インスタンス)。
@@ -279,8 +273,6 @@ impl Engine {
             compositor: Compositor::with_device_using_headless_defaults(device, queue)?,
             textures: HashMap::new(),
             probes: HashMap::new(),
-            frames: HashMap::new(),
-            frame_order: VecDeque::new(),
             text_textures: HashMap::new(),
             shape_textures: HashMap::new(),
             failed_probes: HashMap::new(),
@@ -290,6 +282,8 @@ impl Engine {
             point_clouds: HashMap::new(),
             failed_point_clouds: HashMap::new(),
             point_cloud_textures: HashMap::new(),
+            videos: HashMap::new(),
+            video_last_texture: HashMap::new(),
         })
     }
 
@@ -384,17 +378,9 @@ impl Engine {
     ///
     /// texture が `None` = **この時刻にこの layer は無い**(素材の外)。
     /// エラーではないので、フレーム全体を落とさずにこの layer だけ描かない。
-    /// 抱えるフレーム数の上限。
-    ///
-    /// 大きさの根拠は「直近の数枚」ではなく **同時に描ける media layer の枚数**である。
-    /// これより小さいと、layer 数がこれを超えた瞬間に毎フレーム全 evict になり
-    /// **1フレームあたり layer 数ぶんの ffmpeg 起動**が走る。捨てる順も FIFO では
-    /// 「最初に描く layer から捨てる」= 最悪順になるので、**最後に触った物を残す**。
-    pub const FRAME_CACHE_LIMIT: usize = 64;
-
-    /// 実測用。抱えているフレーム数。
+    /// 実測用。直近フレームを保持している動画 path の数。
     pub fn cached_frame_count(&self) -> usize {
-        self.frames.len()
+        self.video_last_texture.len()
     }
 
     /// 実測用。抱えている text texture の枚数([`TextCacheKey`] 鍵の数)——

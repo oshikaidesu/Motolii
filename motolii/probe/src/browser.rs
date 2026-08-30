@@ -309,10 +309,7 @@ pub fn browser_panel(
     let rail_label = rail().map_or("All media", |f| f.label());
 
     let asset_cards = shown.iter().map(|a| {
-        let preview = (a.family == fixture::AssetFamily::TwoD)
-            .then(|| a.path.as_deref())
-            .flatten()
-            .and_then(crate::thumbnail::image_data_uri);
+        let preview = a.preview.as_deref();
         rsx!(
             div { class: "tcard",
                 if let Some(src) = preview {

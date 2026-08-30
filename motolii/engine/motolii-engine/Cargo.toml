@@ -10,6 +10,8 @@ motolii-core.workspace = true
 motolii-media.workspace = true
 motolii-store.workspace = true
 motolii-vector.workspace = true
+re_renderer.workspace = true
+re_video.workspace = true
 thiserror.workspace = true
 # テキスト texture のキャッシュ鍵(裁定190 切片3、`TextCacheKey` 参照)を作るためだけに
 # 使う。新規の外部依存ではない — `motolii-store` が内部で既に使っている

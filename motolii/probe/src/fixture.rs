@@ -165,6 +165,8 @@ pub struct AssetRow {
     pub thumb: &'static str,
     pub family: AssetFamily,
     pub path: Option<String>,
+    /// 素材の実画。ffmpeg起動やデコードを伴うので**台帳を読む時に1回だけ**作る。
+    pub preview: Option<String>,
 }
 
 /// 拡張子の区分の正本は`re_importer`の`SUPPORTED_*_EXTENSIONS`。
@@ -517,6 +519,13 @@ pub fn load_fixture() -> Loaded {
         .enumerate()
         .map(|(i, a)| AssetRow {
             family: asset_family(&a.asset_type),
+            preview: a.path_absolute.as_deref().and_then(|path| {
+                match asset_family(&a.asset_type) {
+                    AssetFamily::TwoD => crate::thumbnail::image_data_uri(path),
+                    AssetFamily::Video => crate::thumbnail::video_data_uri(path),
+                    _ => None,
+                }
+            }),
             path: a.path_absolute,
             name: a.name,
             kind: a.asset_type,

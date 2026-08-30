@@ -33,6 +33,7 @@ motolii-vector = { path = "../engine/motolii-vector" }
 motolii-media = { path = "../engine/motolii-media" }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 base64 = "0.22"
+ffmpeg-sidecar = "2.5"
 
 [dev-dependencies]
 pollster = "0.4"

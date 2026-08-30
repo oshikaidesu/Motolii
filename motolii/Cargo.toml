@@ -38,6 +38,7 @@ re_build_info = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba
 re_build_tools = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14" }
 re_byte_size = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14" }
 re_renderer = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14", default-features = false }
+re_video = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14" }
 re_importer = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14", default-features = false }
 re_sdk_types = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14", default-features = false }
 

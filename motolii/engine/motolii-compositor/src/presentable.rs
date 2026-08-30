@@ -19,6 +19,10 @@ impl Compositor {
         &self.ctx.device
     }
 
+    pub fn render_context(&self) -> &re_renderer::RenderContext {
+        &self.ctx
+    }
+
     /// 共有面へ直接書く口(裁定256)。検査失敗では内部状態を変えない。
     ///
     /// **effect pass を適用してから描く**(2026-08-28 修理)——[`Self::render_with_effects`]/
