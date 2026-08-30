@@ -4,6 +4,7 @@ pub mod app;
 mod browser;
 mod dock;
 mod fixture;
+pub mod host;
 mod inspector;
 mod keymap;
 mod playback;

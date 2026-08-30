@@ -15,6 +15,8 @@ dioxus-native = { git = "https://github.com/DioxusLabs/blitz", rev = "64eb27853a
 blitz-dom = { git = "https://github.com/DioxusLabs/blitz", rev = "64eb27853aa2672486b7edf825fb044be78c9db3", default-features = false, features = ["custom-widget", "autofocus"] }
 blitz-paint = { git = "https://github.com/DioxusLabs/blitz", rev = "64eb27853aa2672486b7edf825fb044be78c9db3", default-features = false, features = ["custom-widget"] }
 blitz-traits = { git = "https://github.com/DioxusLabs/blitz", rev = "64eb27853aa2672486b7edf825fb044be78c9db3", default-features = false }
+# 窓を2枚以上開けるのは shell の仕事。dioxus-native の launch_cfg は1枚しか作らない
+blitz-shell = { git = "https://github.com/DioxusLabs/blitz", rev = "64eb27853aa2672486b7edf825fb044be78c9db3", default-features = false, features = ["data-uri", "custom-widget"] }
 keyboard-types = "0.7"
 anyrender = "0.13"
 wgpu_context = "0.9"
