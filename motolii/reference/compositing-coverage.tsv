@@ -1,0 +1,37 @@
+# W3C Compositing and Blending Level 1 の全語彙と、Motolii がそれをどう扱うかの地図。
+# 骨は reference/vello-blend.wgsl(上流そのまま)の const MIX_* / COMPOSE_* から機械生成する。
+# 幹は W3C、運び手は vello — lottie.schema.json が Bodymovin 経由で AE の意味を運ぶのと同じ関係。
+# 状態: 採用済 / 採用予定 / 不採用 / 未判定 / 該当なし
+# 採用済 の行は evidence 列に**コード中に実在する識別子**を持つ。試験が grep して確かめるので自己申告にならない。
+group	object	field	title	status	note	evidence	unit	source
+mix	normal		通常。backdrop をそのまま残す	採用済	上流の固定ブレンド段(PREMULTIPLIED_ALPHA_BLENDING)に tint alpha を渡すだけで届く	BlendMode::Normal		w3c-compositing
+mix	multiply		乗算	採用済	blend.rs の2テクスチャパス(自前 pipeline)。工事で Vism の口へ移る	BlendMode::Multiply		w3c-compositing
+mix	screen		スクリーン	採用済	同上	BlendMode::Screen		w3c-compositing
+mix	overlay		オーバーレイ	採用済	同上	BlendMode::Overlay		w3c-compositing
+mix	darken		比較(暗)	採用済	同上	BlendMode::Darken		w3c-compositing
+mix	lighten		比較(明)	採用済	同上	BlendMode::Lighten		w3c-compositing
+mix	color-dodge		覆い焼き(カラー)	採用済	同上	BlendMode::ColorDodge		w3c-compositing
+mix	color-burn		焼き込み(カラー)	採用済	同上	BlendMode::ColorBurn		w3c-compositing
+mix	hard-light		ハードライト	採用済	同上	BlendMode::HardLight		w3c-compositing
+mix	soft-light		ソフトライト	採用済	同上	BlendMode::SoftLight		w3c-compositing
+mix	difference		差の絶対値	採用済	同上	BlendMode::Difference		w3c-compositing
+mix	exclusion		除外	採用済	同上	BlendMode::Exclusion		w3c-compositing
+mix	hue		色相(非分離)	採用済	同上。RGB を跨ぐので nonseparable_blend 側	BlendMode::Hue		w3c-compositing
+mix	saturation		彩度(非分離)	採用済	同上	BlendMode::Saturation		w3c-compositing
+mix	color		カラー(非分離)	採用済	同上	BlendMode::Color		w3c-compositing
+mix	luminosity		輝度(非分離)	採用済	同上	BlendMode::Luminosity		w3c-compositing
+mix	clip		vello 固有のクリップ経路(MIX_CLIP=128)	該当なし	W3C の mix mode ではない。vello がクリップを同じ番号空間に載せているだけ			w3c-compositing
+compose	clear		描画先を消す	未判定				w3c-compositing
+compose	copy		backdrop を無視して src で置き換える	未判定				w3c-compositing
+compose	dest		src を捨てて backdrop を残す	未判定				w3c-compositing
+compose	src-over		src を backdrop の上に(既定)	採用済	層の合成の既定。上流の固定ブレンド段そのもの	fixed_function_tint_alpha		w3c-compositing
+compose	dest-over		backdrop を src の上に	未判定				w3c-compositing
+compose	src-in		backdrop の不透明部だけに src を残す	採用済	層の blend としてではなく **matte 経由でのみ**届く(matte 層の alpha で src を切る)	MatteMode::Alpha		w3c-compositing
+compose	dest-in		src の不透明部だけに backdrop を残す	未判定				w3c-compositing
+compose	src-out		backdrop の透明部だけに src を残す	採用済	同じく **matte 経由でのみ**(反転 alpha matte)	MatteMode::InvertedAlpha		w3c-compositing
+compose	dest-out		src の透明部だけに backdrop を残す	未判定				w3c-compositing
+compose	src-atop		src を backdrop の形の内側に重ねる	未判定				w3c-compositing
+compose	dest-atop		backdrop を src の形の内側に重ねる	未判定				w3c-compositing
+compose	xor		重なっていない所だけ残す	未判定				w3c-compositing
+compose	plus		加算(飽和)	採用済	**Motolii は BlendMode の一員として持っているが、W3C では compose 軸**。tint alpha=0 で dst 係数を 1 にする固定機能の技。Normal と Add だけが並んでいる歪みの正体	BlendMode::Add		w3c-compositing
+compose	plus-lighter		premultiplied 前提の加算	未判定				w3c-compositing
