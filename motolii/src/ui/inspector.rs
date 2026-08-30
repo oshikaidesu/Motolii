@@ -84,7 +84,7 @@ fn nudge(value: &Value, vec2: bool, axis: usize, delta: f64, range: Option<(f64,
 }
 
 #[derive(Clone)]
-struct ValueDrag {
+pub(super) struct ValueDrag {
     layer: LayerId,
     property: String,
     vec2: bool,
@@ -311,10 +311,11 @@ pub(super) fn inspector_panel(
     clock: &Clock,
     mut revision: Signal<u32>,
     editing: Signal<Option<String>>,
+    drag: Signal<Option<ValueDrag>>,
+    mut blend_open: Signal<bool>,
+    mut parent_open: Signal<bool>,
 ) -> Element {
-    let mut drag = use_signal(|| Option::<ValueDrag>::None);
-    let mut blend_open = use_signal(|| false);
-    let mut parent_open = use_signal(|| false);
+    let mut drag = drag;
     let _ = revision(); // Document書き換え後の再描画をここで購読する(値そのものは使わない)
 
     let empty = InspectorData {

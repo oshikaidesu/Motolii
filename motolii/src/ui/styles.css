@@ -192,29 +192,6 @@ body {
     font-size: var(--t-micro);
 }
 
-.btabs {
-    height: calc(22 * var(--s) * 1px);
-    flex: 0 0 auto;
-    display: flex;
-    border-bottom: var(--line) solid var(--bd);
-}
-
-.btab {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--ink2);
-    font-size: var(--t-dense);
-    border-bottom: calc(2 * var(--s) * 1px) solid transparent;
-}
-
-.btab.on {
-    border-bottom-color: var(--accent);
-    background: var(--app);
-    color: var(--ink);
-}
-
 .bwork {
     min-height: 0;
     flex: 1;

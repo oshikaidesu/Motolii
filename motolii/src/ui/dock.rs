@@ -2,7 +2,10 @@ use std::fmt;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(super) enum Panel {
-    Browser,
+    Media,
+    Effects,
+    Create,
+    Colors,
     Stage,
     Inspector,
     Utility,
@@ -10,8 +13,11 @@ pub(super) enum Panel {
 }
 
 impl Panel {
-    pub(super) const ALL: [Panel; 5] = [
-        Panel::Browser,
+    pub(super) const ALL: [Panel; 8] = [
+        Panel::Media,
+        Panel::Effects,
+        Panel::Create,
+        Panel::Colors,
         Panel::Stage,
         Panel::Inspector,
         Panel::Utility,
@@ -21,7 +27,7 @@ impl Panel {
     /// 部屋ごとの色。帯を畳んだので、これはタブが引き継ぐ。
     pub(super) fn way(self) -> &'static str {
         match self {
-            Panel::Browser => "var(--way-browser)",
+            Panel::Media | Panel::Effects | Panel::Create | Panel::Colors => "var(--way-browser)",
             Panel::Stage => "var(--way-stage)",
             Panel::Inspector | Panel::Utility => "var(--way-inspector)",
             Panel::Timeline => "var(--way-timeline)",
@@ -30,7 +36,10 @@ impl Panel {
 
     pub(super) fn label(self) -> &'static str {
         match self {
-            Panel::Browser => "Browser",
+            Panel::Media => "Media",
+            Panel::Effects => "Effects",
+            Panel::Create => "Create",
+            Panel::Colors => "Colors",
             Panel::Stage => "Stage",
             Panel::Inspector => "Inspector",
             Panel::Utility => "Utility",
@@ -78,7 +87,7 @@ impl Default for Dock {
     fn default() -> Self {
         Self {
             zones: [
-                vec![Panel::Browser],
+                vec![Panel::Media, Panel::Effects, Panel::Create, Panel::Colors],
                 vec![Panel::Stage],
                 vec![Panel::Inspector, Panel::Utility],
                 vec![Panel::Timeline],
@@ -155,7 +164,7 @@ impl Dock {
 
 fn default_zone(panel: Panel) -> Zone {
     match panel {
-        Panel::Browser => Zone::Left,
+        Panel::Media | Panel::Effects | Panel::Create | Panel::Colors => Zone::Left,
         Panel::Stage => Zone::Center,
         Panel::Inspector | Panel::Utility => Zone::Right,
         Panel::Timeline => Zone::Bottom,

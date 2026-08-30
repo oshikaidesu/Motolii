@@ -39,6 +39,12 @@ pub fn app() -> Element {
     let mut dock = use_signal(Dock::default);
     let mut tab_drag = use_signal(|| Option::<Panel>::None);
     let mut view_open = use_signal(|| false);
+    // パネルの関数は条件付きで呼ばれるので、hook はここでしか作らない
+    // (パネル側で作ると、出ているパネルが変わった時に枠が入れ替わって落ちる)。
+    let browser_rail = use_signal(|| Option::<fixture::AssetFamily>::None);
+    let inspector_drag = use_signal(|| Option::<crate::ui::inspector::ValueDrag>::None);
+    let blend_open = use_signal(|| false);
+    let parent_open = use_signal(|| false);
 
     let mut scale_pct = use_signal(|| 100u32);
     let revision = use_signal(|| 0u32);
@@ -95,7 +101,7 @@ pub fn app() -> Element {
 
     let body = |panel: Panel| -> Element {
         match panel {
-            Panel::Browser => browser_panel(&loaded, doc.clone(), clock.clone(), layer_rows, attrs_state, timeline_tx.clone(), selected, revision),
+            Panel::Media | Panel::Effects | Panel::Create | Panel::Colors => browser_panel(&loaded, doc.clone(), clock.clone(), layer_rows, attrs_state, timeline_tx.clone(), selected, revision, panel, browser_rail),
             Panel::Stage => rsx!(
                 div { id: "stagecol",
                     div { id: "stage",
@@ -104,7 +110,7 @@ pub fn app() -> Element {
                     div { id: "stagefoot", "{loaded.comp_line}" }
                 }
             ),
-            Panel::Inspector => inspector_panel(&doc, selected(), &clock, revision, text_editing),
+            Panel::Inspector => inspector_panel(&doc, selected(), &clock, revision, text_editing, inspector_drag, blend_open, parent_open),
             Panel::Utility => crate::ui::utility::utility_panel(&doc, selected(), &selected_size, &gizmo_3d, &clock, revision),
             Panel::Timeline => timeline_shell(doc.clone(), attrs_state, &layer_rows.read(), layer_rows, timeline_attr.clone(), selection.clone(), selected, timeline_scroll_y, timeline_tx.clone(), renaming, revision),
         }

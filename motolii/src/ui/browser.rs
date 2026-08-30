@@ -14,6 +14,7 @@ use crate::render::vector::{Brush, Contour, Fill, FillRule, Rgb, Vertex};
 
 use crate::ui::fixture::ColorSwatch;
 
+use crate::ui::dock::Panel;
 use crate::ui::fixture::{self, LayerRow, UiData};
 use crate::ui::playback::Clock;
 use crate::ui::timeline_widget::TimelineMsg;
@@ -364,11 +365,9 @@ pub(super) fn browser_panel(
     timeline_tx: Sender<TimelineMsg>,
     selected: Signal<Option<LayerId>>,
     revision: Signal<u32>,
+    panel: Panel,
+    mut rail: Signal<Option<fixture::AssetFamily>>,
 ) -> Element {
-    let mut tab = use_signal(|| 0u8);
-    let tab_class = move |n: u8| if tab() == n { "btab on" } else { "btab" };
-
-    let mut rail = use_signal(|| Option::<fixture::AssetFamily>::None);
     let rail_class = move |f: Option<fixture::AssetFamily>| {
         if rail() == f {
             "srow on"
@@ -446,14 +445,7 @@ pub(super) fn browser_panel(
                 span { class: "tbtn", "Filters" }
                 span { class: "tbtn", "Tags" }
             }
-            div { class: "btabs",
-                span { class: "{tab_class(0)}", onclick: move |_| tab.set(0), "Media" }
-                span { class: "{tab_class(1)}", onclick: move |_| tab.set(1), "Effects" }
-                span { class: "{tab_class(2)}", onclick: move |_| tab.set(2), "Create" }
-                span { class: "{tab_class(3)}", onclick: move |_| tab.set(3), "Panels" }
-                span { class: "{tab_class(4)}", onclick: move |_| tab.set(4), "Colors" }
-            }
-            if tab() == 4 {
+            if panel == Panel::Colors {
                 {
                     let layer = selected();
                     let swatches = fixture::used_colors_from_doc(&doc.lock().unwrap());
@@ -497,7 +489,7 @@ pub(super) fn browser_panel(
                         }
                     )
                 }
-            } else if tab() == 1 {
+            } else if panel == Panel::Effects {
                 {
                     let layer = selected();
                     let attached: Vec<String> = layer
@@ -547,7 +539,7 @@ pub(super) fn browser_panel(
                         }
                     )
                 }
-            } else if tab() == 2 {
+            } else if panel == Panel::Create {
                 div { class: "bwork",
                     div { class: "bside",
                         div { class: "sh", "CREATE" }
