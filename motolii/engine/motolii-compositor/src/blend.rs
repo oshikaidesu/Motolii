@@ -86,7 +86,8 @@ pub(crate) struct SeparableBlendPipelines {
 impl SeparableBlendPipelines {
     /// **初回生成して以後使い回す**(`effects::GlowPipelines::new` と同じ規律 —
     /// `Compositor::with_device` が1回だけ呼ぶ)。
-    pub(crate) fn new(device: &wgpu::Device) -> Self {
+    pub(crate) fn new(ctx: &re_renderer::RenderContext) -> Self {
+        let device = &ctx.device;
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("motolii-compositor-blend-shader"),
             source: wgpu::ShaderSource::Wgsl(SHADER.into()),
@@ -117,12 +118,18 @@ impl SeparableBlendPipelines {
             immediate_size: 0,
         });
 
+        // 全画面三角形の頂点段は上流の物を使う(`re_renderer::renderer::
+        // screen_triangle_vertex_shader`)。entry point は `main`。
+        let vs_handle = re_renderer::renderer::screen_triangle_vertex_shader(ctx);
+        let shader_modules = ctx.gpu_resources.shader_modules.resources();
+        let screen_triangle_vs = shader_modules.get(vs_handle).expect("上流の頂点シェーダ");
+
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("motolii-compositor-blend-pipeline"),
             layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
-                module: &shader,
-                entry_point: Some("vs_main"),
+                module: screen_triangle_vs,
+                entry_point: Some("main"),
                 buffers: &[],
                 compilation_options: Default::default(),
             },
@@ -235,7 +242,7 @@ fn texture_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {
     }
 }
 
-/// `effects::glow` の `SHADER` と同じ形(fullscreen triangle `vs_main` + 1 fragment)。
+/// fragment だけ。頂点段は上流の `screen_triangle_vertex_shader`。
 /// `params.mode` の値は [`crate::two_texture_pass_mode_index`] の返り値と1対1
 /// (0=Multiply〜10=Exclusion は [`crate::separable_mode_index`]、11=Hue〜14=Luminosity
 /// は [`crate::nonseparable_mode_index`]、モジュール doc「数式の出典」「非分離4種」
@@ -251,12 +258,6 @@ struct BlendParams {
 @group(0) @binding(0) var dst_tex: texture_2d<f32>;
 @group(0) @binding(1) var src_tex: texture_2d<f32>;
 @group(1) @binding(0) var<uniform> params: BlendParams;
-
-@vertex
-fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
-  let positions = array<vec2<f32>, 3>(vec2<f32>(-1.0, -1.0), vec2<f32>(3.0, -1.0), vec2<f32>(-1.0, 3.0));
-  return vec4<f32>(positions[index], 0.0, 1.0);
-}
 
 fn blend_channel(mode: u32, cb: f32, cs: f32) -> f32 {
   if (mode == 0u) {

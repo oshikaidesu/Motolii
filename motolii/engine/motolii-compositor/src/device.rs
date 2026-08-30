@@ -69,8 +69,8 @@ impl Compositor {
             effects::TRI_LED_SOURCE,
             effects::TRI_LED_TARGET_FORMAT,
         );
-        let blend_pipelines = blend::SeparableBlendPipelines::new(&ctx.device);
-        let matte_pipelines = matte::MattePipelines::new(&ctx.device);
+        let blend_pipelines = blend::SeparableBlendPipelines::new(&ctx);
+        let matte_pipelines = matte::MattePipelines::new(&ctx);
 
         Ok(Self {
             ctx,
