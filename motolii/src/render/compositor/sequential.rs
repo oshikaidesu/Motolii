@@ -38,13 +38,21 @@ impl Compositor {
 
         let mut background: Option<(AccumulatorBacking, GpuTexture2D)> = None;
 
+        // 合成の全パスを1つの束へ記録し、**最後に一度だけ** submit する。
+        // 層ごとの submit + poll(wait_indefinitely) は、層が増えるほど GPU を直列に
+        // 止めていた(55層すべて blend mode なら同期110回)。GPU は1回の submit の中で
+        // 記録順に実行し、テクスチャの読み書きの間には自動で barrier が入る。
+        let mut batch: Vec<wgpu::CommandBuffer> = Vec::new();
+        let mut blend_encoder: Option<wgpu::CommandEncoder> = None;
+        // 役目を終えた全面テクスチャは捨てずにここへ戻し、次のパスの出力に使い回す
+        // (ping-pong)。**submit までは生かしておく必要がある**ので、置き場所も兼ねる。
+        let mut spare: Vec<AccumulatorBacking> = Vec::new();
+
         let mut idx = 0;
         while idx < inputs.len() {
             let input = &inputs[idx];
 
             if let Some(mode_index) = two_texture_pass_mode_index(input.blend_mode) {
-                self.ctx.begin_frame();
-
                 let (transform, z, rx, ry) = if input.pinned {
                     (pinned_cancel * input.transform, 0.0, 0.0, 0.0)
                 } else {
@@ -78,7 +86,9 @@ impl Compositor {
                 let draw_data = RectangleDrawData::new(&self.ctx, &[solo_rect])
                     .map_err(|e| CompositorError::Rectangles(e.to_string()))?;
 
-                let solo_owned = self.create_blend_scratch_texture(comp.width, comp.height);
+                let solo_owned = spare
+                    .pop()
+                    .unwrap_or_else(|| self.create_blend_scratch_texture(comp.width, comp.height));
                 let mut solo_view_builder = ViewBuilder::new_with_external_resolved(
                     &self.ctx,
                     sequential_target_config(
@@ -103,14 +113,10 @@ impl Compositor {
                     .draw(&self.ctx, clear)
                     .map_err(|e| CompositorError::Draw(e.to_string()))?;
 
-                self.ctx.before_submit();
-                self.ctx.queue.submit([command_buffer]);
-                self.sequential_submits += 1;
-                self.ctx.begin_frame();
-                self.ctx
-                    .device
-                    .poll(wgpu::PollType::wait_indefinitely())
-                    .map_err(|e| CompositorError::Draw(e.to_string()))?;
+                if let Some(encoder) = blend_encoder.take() {
+                    batch.push(encoder.finish());
+                }
+                batch.push(command_buffer);
 
                 let layer_canvas = solo_owned;
 
@@ -128,32 +134,29 @@ impl Compositor {
                     Some((backing, _)) => {
                         let dst_view = backing.create_view(&Default::default());
                         let src_view = layer_canvas.create_view(&Default::default());
-                        let out_texture =
-                            self.create_blend_scratch_texture(comp.width, comp.height);
+                        let out_texture = spare
+                            .pop()
+                            .unwrap_or_else(|| {
+                                self.create_blend_scratch_texture(comp.width, comp.height)
+                            });
                         let out_view = out_texture.create_view(&Default::default());
 
-                        let mut encoder = self.ctx.device.create_command_encoder(
-                            &wgpu::CommandEncoderDescriptor {
-                                label: Some("motolii-compositor-blend-pass-encoder"),
-                            },
-                        );
+                        let encoder = blend_encoder.get_or_insert_with(|| {
+                            self.ctx.device.create_command_encoder(
+                                &wgpu::CommandEncoderDescriptor {
+                                    label: Some("motolii-compositor-blend-pass-encoder"),
+                                },
+                            )
+                        });
                         self.blend_pipelines.record(
                             &self.ctx.device,
                             &self.ctx.queue,
-                            &mut encoder,
+                            encoder,
                             &dst_view,
                             &src_view,
                             &out_view,
                             mode_index,
                         );
-                        self.ctx.before_submit();
-                        self.ctx.queue.submit([encoder.finish()]);
-                        self.sequential_submits += 1;
-                        self.ctx.begin_frame();
-                        self.ctx
-                            .device
-                            .poll(wgpu::PollType::wait_indefinitely())
-                            .map_err(|e| CompositorError::Draw(e.to_string()))?;
 
                         self.next_effect_key += 1;
                         let key = self.next_effect_key;
@@ -163,14 +166,15 @@ impl Compositor {
                             .import_gpu_premultiplied(key, &self.ctx, &out_texture)
                             .map_err(|e| CompositorError::Effect(e.to_string()))?;
                         background = Some((out_texture, imported));
+                        // この2枚はもう誰も読まない。次のパスの出力へ回す
+                        spare.push(backing);
+                        spare.push(layer_canvas);
                     }
                 }
 
                 idx += 1;
                 continue;
             }
-
-            self.ctx.begin_frame();
 
             let run_start = idx;
             while idx < inputs.len() && two_texture_pass_mode_index(inputs[idx].blend_mode).is_none() {
@@ -244,7 +248,9 @@ impl Compositor {
             let draw_data = RectangleDrawData::new(&self.ctx, &rects)
                 .map_err(|e| CompositorError::Rectangles(e.to_string()))?;
 
-            let run_owned = self.create_blend_scratch_texture(comp.width, comp.height);
+            let run_owned = spare
+                .pop()
+                .unwrap_or_else(|| self.create_blend_scratch_texture(comp.width, comp.height));
             let mut view_builder = ViewBuilder::new_with_external_resolved(
                 &self.ctx,
                 sequential_target_config(
@@ -269,14 +275,10 @@ impl Compositor {
                 .draw(&self.ctx, clear)
                 .map_err(|e| CompositorError::Draw(e.to_string()))?;
 
-            self.ctx.before_submit();
-            self.ctx.queue.submit([command_buffer]);
-            self.sequential_submits += 1;
-            self.ctx.begin_frame();
-            self.ctx
-                .device
-                .poll(wgpu::PollType::wait_indefinitely())
-                .map_err(|e| CompositorError::Draw(e.to_string()))?;
+            if let Some(encoder) = blend_encoder.take() {
+                batch.push(encoder.finish());
+            }
+            batch.push(command_buffer);
 
             self.next_effect_key += 1;
             let key = self.next_effect_key;
@@ -285,8 +287,24 @@ impl Compositor {
                 .texture_manager_2d
                 .import_gpu_premultiplied(key, &self.ctx, &run_owned)
                 .map_err(|e| CompositorError::Effect(e.to_string()))?;
-            background = Some((run_owned, imported));
+            if let Some((old, _)) = background.replace((run_owned, imported)) {
+                spare.push(old);
+            }
         }
+
+        if let Some(encoder) = blend_encoder.take() {
+            batch.push(encoder.finish());
+        }
+        if !batch.is_empty() {
+            self.ctx.before_submit();
+            self.ctx.queue.submit(batch);
+            self.sequential_submits += 1;
+            // staging buffer の回収は submit の**後**に一度だけ。
+            self.ctx.begin_frame();
+        }
+        // spare の生存はここまで — submit 済みのコマンドが参照している間は
+        // wgpu が実体を保つ。
+        drop(spare);
 
         Ok(background)
     }
