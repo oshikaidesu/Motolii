@@ -25,6 +25,7 @@ wgpu.workspace = true
 
 [dev-dependencies]
 motolii-testkit.workspace = true
+motolii-fixture.workspace = true
 
 [lints]
 workspace = true

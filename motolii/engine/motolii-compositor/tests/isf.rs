@@ -104,6 +104,8 @@ fn small_layer(texture: motolii_compositor::GpuTexture2D) -> Layer {
             order: 0,
             opacity: 1.0,
             z: 0.0,
+            rotation_x: 0.0,
+            rotation_y: 0.0,
         },
         pinned: false,
         blend_mode: BlendMode::Normal,
@@ -139,6 +141,7 @@ fn render_into_applies_isf_effect_passes() {
             comp(),
             ResolvedCamera::default(),
             &[LayerWithPasses { layer: small_layer(source.clone()), passes: vec![] }],
+            motolii_compositor::NO_BACKGROUND,
         )
         .expect("render_into without passes");
     let bytes_without = readback_rgba(&device, &queue, &target_without);
@@ -162,6 +165,7 @@ fn render_into_applies_isf_effect_passes() {
                     ],
                 }],
             }],
+            motolii_compositor::NO_BACKGROUND,
         )
         .expect("render_into with an Isf pass");
     let bytes_with = readback_rgba(&device, &queue, &target_with);

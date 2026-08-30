@@ -264,6 +264,23 @@ pub(crate) fn tilted_corners(
     (center - (u + v) * 0.5, u, v)
 }
 
+/// comp 背景色(sRGB 符号化 0..1)を描画パスの clear 色へ写す。
+///
+/// 背景は世界に置いた板ではない。上流は矩形をカメラからの距離で並べ替え
+/// (`re_renderer::renderer::DrawDataDrawable::from_world_position`)、`depth_offset`
+/// は同一平面クラスタ内の同点処理にしか効かないので、板として置くと z を持った層が
+/// 光軸から離れた瞬間に背景より「遠い」と判定されて上塗りされる。
+///
+/// u8 を経由するのは、背景を1x1 の `Rgba8UnormSrgb` texture として敷いていた頃と
+/// 同じ量子化を通すため。
+pub fn clear_color(background: [f32; 4]) -> Rgba {
+    let q = |c: f32| (c * 255.0).round().clamp(0.0, 255.0) as u8;
+    Rgba::from_srgba_unmultiplied(q(background[0]), q(background[1]), q(background[2]), q(background[3]))
+}
+
+/// 背景を敷かない。市松(透明可視化)モードが渡す値。
+pub const NO_BACKGROUND: [f32; 4] = [0.0, 0.0, 0.0, 0.0];
+
 /// `HeadlessGpu` を公開しているのは、`Compositor` が持たない描画(点群など)を
 /// probe が組み立てたい時に、adapter/device の起こし方だけはここの物を使わせるため
 /// (module doc の警告どおり、自前で limits を書くと rerun shader の床とずれた時に

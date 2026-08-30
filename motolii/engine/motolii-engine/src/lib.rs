@@ -105,33 +105,6 @@ pub enum EngineError {
     Shape(#[from] motolii_vector::VectorError),
 }
 
-/// 背景 layer の `LayerPlacement::order`(= `re_renderer::DepthOffset`、`i16`)。
-///
-/// **`i16::MIN` を使ってはいけない**(2026-08-21 実測・真因)。`order` は
-/// `motolii-compositor::render_with_timing` で `RectangleOptions::depth_offset` へ
-/// そのまま渡り、上流 shader `depth_offset.wgsl` の `apply_depth_offset` が
-/// `w_scale = 1.0 - f32eps * offset`(`f32eps = 2^-23`)で clip 空間の `w` を
-/// スケールする。これは NDC 座標(= `x_proj / w_proj`)を原点へ向けて一様に縮める —
-/// `order` の絶対値が大きいほど、板が画面中心へわずかに縮む。
-///
-/// 縮み幅は近似的に `half_dimension_px * f32eps * |offset|`(画素)。
-/// `order = i16::MIN`(32768)・640x360 comp(横の半幅 320px)では
-/// `320 * 2^-23 * 32768 = 1.25px` — 0.5px を超えるので**外周ちょうど1画素幅**が
-/// ラスタライズから漏れる(ピクセル中心 0.5 が板の左端 1.25 より内側に入ってしまい
-/// カバーされない。右端・上端・下端も対称に同じだけ縮むので四辺とも同様)。
-/// これが 640x360 comp で外周 1996 画素(`2*(640+360)-4`)が alpha=0 になっていた
-/// 直接の機序 —「comp 実内容と無関係」「非乱数的」「厳密に外周1周ぶん」という
-/// 観測はすべてこの一様スケールで説明がつく(回帰試験:
-/// `tests/background.rs::opaque_background_leaves_no_transparent_border_pixels`)。
-///
-/// 背景 layer に要る性質は「実 layer より必ず奥」だけで、`i16` の理論最小値である
-/// 必要はない。実 layer の `order` は今のところ `LayerId` 由来の小さい非負整数
-/// (`motolii-shell::Message::AddLayer`/`admit` の `order: id.0 as i16` が唯一の
-/// 発生源)なので、`-1` で十分かつ厳密に安全 — このスケール式での縮みは
-/// `half_dimension_px * f32eps * 1` で、8K(半幅 3840px)でも `3840 * 2^-23 ≈ 0.00046px`
-/// と機械精度未満(0.5px 閾値の千倍以上小さい)。
-pub(crate) const BACKGROUND_ORDER: i16 = -1;
-
 /// 観測視点(裁定157) — 作業用の見る位置。**Document には乗らない** —
 /// `Composition.camera`(裁定113/115/116、`view.resolve_camera` が読むレンダリング
 /// カメラ)とは別物で、意味を持たない純表示状態(縫い目調査
@@ -321,15 +294,13 @@ impl Engine {
         &self.layer_failures
     }
 
-    /// 市松「AE型の透明可視化モード」専用の入力(裁定141)。[`Self::render_frame`]と
-    /// **同じ合成器・同じ層**を使い、`Composition.background` の pinned layer だけを
-    /// 省く — 第二 render パスではなく、同一合成器への入力差分として実装してある
-    /// (裁定141「同一合成器へ『背景を敷かない』入力を渡す可視化モードと整理する」)。
+    /// 市松「AE型の透明可視化モード」専用の入口。[`Self::render_frame`]と**同じ
+    /// 合成器・同じ層**を使い、`Composition.background` の代わりに
+    /// `motolii_compositor::NO_BACKGROUND` を clear 色として渡すだけ。
     ///
-    /// **export はこの口を使わない**。背景 layer が無い分、層に覆われていない画素は
-    /// 合成器の clear 色(`motolii-compositor::render_with_timing` が渡す
-    /// `Rgba::TRANSPARENT`、`blend_with_background: Premultiplied` で alpha も
-    /// 素通しになる)がそのまま出る — つまり alpha=0(回帰試験:
+    /// **export はこの口を使わない**。層に覆われていない画素は透明な clear 色が
+    /// そのまま出る(`blend_with_background: Premultiplied` で alpha も素通しになる)
+    /// — つまり alpha=0(回帰試験:
     /// `tests/background.rs::render_frame_without_background_leaves_uncovered_pixels_transparent`)。
     pub fn render_frame_without_background(
         &mut self,

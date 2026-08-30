@@ -5,18 +5,6 @@
 
 use crate::EngineError;
 
-/// `Composition::background`([f32;4]・0.0〜1.0)を素材アップロードが取る 8bit RGBA
-/// へ写す。`round` で丸める(`as u8` の単純切り捨てだと 1.0 が 254 に落ちて
-/// 「不透明のつもりが微妙に透ける」事故になる)。
-pub(crate) fn to_u8_rgba(c: [f32; 4]) -> [u8; 4] {
-    [
-        (c[0] * 255.0).round().clamp(0.0, 255.0) as u8,
-        (c[1] * 255.0).round().clamp(0.0, 255.0) as u8,
-        (c[2] * 255.0).round().clamp(0.0, 255.0) as u8,
-        (c[3] * 255.0).round().clamp(0.0, 255.0) as u8,
-    ]
-}
-
 /// `motolii_store::BlendMode`(Document の17値、裁定67 + BL2 の `Add`)を
 /// `motolii_compositor::BlendMode`(合成器が表現できる分だけ、`motolii-compositor`
 /// のモジュール doc 参照)へ写す。

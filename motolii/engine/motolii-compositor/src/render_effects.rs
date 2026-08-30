@@ -283,6 +283,7 @@ impl Compositor {
         comp: CompSpec,
         camera: ResolvedCamera,
         layers: &[LayerWithPasses],
+        background_color: [f32; 4],
     ) -> Result<Vec<u8>, CompositorError> {
         // 1) layer ごとに「合成へ渡す実効 texture」を決める(`Self::effective_layer_textures`
         //    が [`Self::render_to_texture`]/`Compositor::render_into` と共有する核)。
@@ -328,8 +329,8 @@ impl Compositor {
             })
             .collect();
 
-        let background = self.accumulate_sequential(comp, camera, &inputs)?;
-        let frame = self.finalize_readback(comp, camera, background)?;
+        let background = self.accumulate_sequential(comp, camera, &inputs, background_color)?;
+        let frame = self.finalize_readback(comp, camera, background, background_color)?;
 
         // GPU が読み終わった後なので、scratch をプールへ返して次フレームで使い回す
         // (毎フレーム作り直さない)。
@@ -410,6 +411,7 @@ impl Compositor {
         comp: CompSpec,
         camera: ResolvedCamera,
         layers: &[LayerWithPasses],
+        background_color: [f32; 4],
     ) -> Result<(wgpu::Texture, wgpu::TextureView), CompositorError> {
         // 1) layer ごとに「合成へ渡す実効 texture」を決める
         //    (`Self::effective_layer_textures` が [`Self::render_with_effects`]/
@@ -446,8 +448,8 @@ impl Compositor {
             })
             .collect();
 
-        let background = self.accumulate_sequential(comp, camera, &inputs)?;
-        let (texture, view) = self.finalize_texture(comp, camera, background)?;
+        let background = self.accumulate_sequential(comp, camera, &inputs, background_color)?;
+        let (texture, view) = self.finalize_texture(comp, camera, background, background_color)?;
 
         // scratch をプールへ返す(2026-08-22 修理、RB 調査発見3番)。
         // [`Self::finalize_texture`] が最終 submit を済ませた後なので、同一 queue の

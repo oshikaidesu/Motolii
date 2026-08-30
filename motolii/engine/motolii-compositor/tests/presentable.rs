@@ -129,6 +129,8 @@ fn small_layer(texture: motolii_compositor::GpuTexture2D) -> Layer {
             order: 0,
             opacity: 1.0,
             z: 0.0,
+            rotation_x: 0.0,
+            rotation_y: 0.0,
         },
         pinned: false,
         blend_mode: BlendMode::Normal,
@@ -160,6 +162,7 @@ fn render_into_applies_effect_passes() {
                 layer: small_layer(white.clone()),
                 passes: vec![],
             }],
+            motolii_compositor::NO_BACKGROUND,
         )
         .expect("render_into without passes");
     let bytes_without = readback_rgba(&device, &queue, &target_without);
@@ -178,6 +181,7 @@ fn render_into_applies_effect_passes() {
                     radius: 1.0,
                 }],
             }],
+            motolii_compositor::NO_BACKGROUND,
         )
         .expect("render_into with a Glow pass");
     let bytes_with = readback_rgba(&device, &queue, &target_with);
@@ -287,7 +291,7 @@ fn render_into_writes_the_external_target() {
     let (mut compositor, device) = with_device();
     let target = presentable(&device);
     compositor
-        .render_into(&target, comp(), ResolvedCamera::default(), &[] as &[LayerWithPasses])
+        .render_into(&target, comp(), ResolvedCamera::default(), &[] as &[LayerWithPasses], motolii_compositor::NO_BACKGROUND)
         .expect("external resolved へ直接書く");
 }
 
@@ -296,3 +300,97 @@ fn render_into_writes_the_external_target() {
 // いたので、片方は必ず落ちる。待ちの番人の方が古く、裁定256 で fork に
 // `ViewBuilder::new_with_external_resolved` が着いた時点で前提が消えていた
 // (2026-08-27 撤去)。
+
+fn tilted_layer(texture: motolii_compositor::GpuTexture2D, deg: f32) -> Layer {
+    let mut layer = small_layer(texture);
+    layer.placement.rotation_x = deg;
+    layer
+}
+
+/// 傾き 0 以外で板が丸ごと消える(2026-08-30 宿題G)の在処を合成器の外へ押し出す
+/// オラクル。85° は板がほぼ真横を向いた状態。
+#[test]
+fn render_into_draws_tilted_plates() {
+    let (mut compositor, device, queue) = with_device_and_queue();
+    let white = compositor
+        .upload_rgba("white", &vec![255u8; 8 * 8 * 4], 8, 8)
+        .expect("upload_rgba");
+
+    let mut count = |compositor: &mut Compositor, deg: f32| {
+        let target = readable_presentable(&device);
+        compositor
+            .render_into(
+                &target,
+                comp(),
+                ResolvedCamera::default(),
+                &[LayerWithPasses {
+                    layer: tilted_layer(white.clone(), deg),
+                    passes: vec![],
+                }],
+                motolii_compositor::NO_BACKGROUND,
+            )
+            .expect("render_into");
+        readback_rgba(&device, &queue, &target)
+            .chunks(4)
+            .filter(|p| p[3] > 0)
+            .count()
+    };
+
+    let flat = count(&mut compositor, 0.0);
+    let tilted = count(&mut compositor, 60.0);
+    assert!(flat > 0 && tilted > 0, "flat={flat} tilted={tilted}");
+    assert!(tilted < flat, "60° 傾けても縮まない: flat={flat} tilted={tilted}");
+}
+
+/// 傾いた板と、その下の pinned な全面背景。深度書き込みが同一パスなので、
+/// 傾けた側が背景に負けて消えないことを縛る。
+#[test]
+fn tilt_survives_a_pinned_background() {
+    let (mut compositor, device, queue) = with_device_and_queue();
+    let white = compositor
+        .upload_rgba("white", &vec![255u8; 8 * 8 * 4], 8, 8)
+        .expect("upload_rgba");
+    let mut blue = vec![0u8; (W * H * 4) as usize];
+    for p in blue.chunks_mut(4) {
+        p[2] = 255;
+        p[3] = 255;
+    }
+    let bg = compositor
+        .upload_rgba("bg", &blue, W, H)
+        .expect("upload_rgba bg");
+
+    let mut white_pixels = |compositor: &mut Compositor, deg: f32| {
+        let target = readable_presentable(&device);
+        let background = Layer {
+            texture: bg.clone(),
+            size: [W as f32, H as f32],
+            placement: LayerPlacement {
+                order: -1,
+                ..LayerPlacement::default()
+            },
+            pinned: true,
+            blend_mode: BlendMode::Normal,
+        };
+        compositor
+            .render_into(
+                &target,
+                comp(),
+                ResolvedCamera::default(),
+                &[
+                    LayerWithPasses { layer: background, passes: vec![] },
+                    LayerWithPasses { layer: tilted_layer(white.clone(), deg), passes: vec![] },
+                ],
+                motolii_compositor::NO_BACKGROUND,
+            )
+            .expect("render_into");
+        readback_rgba(&device, &queue, &target)
+            .chunks(4)
+            .filter(|p| p[0] > 128 && p[1] > 128)
+            .count()
+    };
+
+    let flat = white_pixels(&mut compositor, 0.0);
+    let tilted = white_pixels(&mut compositor, 20.0);
+    assert!(flat > 0, "傾き 0 で板が出ていない");
+    assert!(tilted * 2 > flat, "傾けた板が背景に負けて消えた: flat={flat} tilted={tilted}");
+}

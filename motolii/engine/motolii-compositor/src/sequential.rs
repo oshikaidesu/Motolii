@@ -89,11 +89,12 @@ impl Compositor {
         comp: CompSpec,
         camera: ResolvedCamera,
         inputs: &[SequentialInput<'_>],
+        background_color: [f32; 4],
     ) -> Result<Option<(AccumulatorBacking, GpuTexture2D)>, CompositorError> {
         // run-batching は「inputs の並び=重ね順=depth_offset 非減少」に依存する
         // (run の background rect を `run[0].depth_offset - 1` に敷く前提と、逐次
         // 累積の順序そのもの)。現状の唯一の発生源は `order: id.0 as i16`
-        // (BACKGROUND_ORDER doc 参照)なので常に成立するが、store の `SetOrder` が
+        // なので常に成立するが、store の `SetOrder` が
         // UI へ配線された時に黙って崩れないよう、ここで縛る。
         debug_assert!(
             inputs
@@ -165,8 +166,15 @@ impl Compositor {
                 self.next_readback += 1;
 
                 solo_view_builder.queue_draw(&self.ctx, draw_data);
+                // accumulator の1枚目だけが背景色を敷く。2枚目以降は直前の
+                // accumulator と blend パスで混ざるので透明で始める。
+                let clear = if background.is_none() {
+                    crate::clear_color(background_color)
+                } else {
+                    Rgba::TRANSPARENT
+                };
                 let command_buffer = solo_view_builder
-                    .draw(&self.ctx, Rgba::TRANSPARENT)
+                    .draw(&self.ctx, clear)
                     .map_err(|e| CompositorError::Draw(e.to_string()))?;
 
                 self.ctx.before_submit();
@@ -328,8 +336,13 @@ impl Compositor {
             self.next_readback += 1;
 
             view_builder.queue_draw(&self.ctx, draw_data);
+            let clear = if background.is_none() {
+                crate::clear_color(background_color)
+            } else {
+                Rgba::TRANSPARENT
+            };
             let command_buffer = view_builder
-                .draw(&self.ctx, Rgba::TRANSPARENT)
+                .draw(&self.ctx, clear)
                 .map_err(|e| CompositorError::Draw(e.to_string()))?;
 
             self.ctx.before_submit();
@@ -391,6 +404,7 @@ impl Compositor {
         comp: CompSpec,
         camera: ResolvedCamera,
         background: Option<(AccumulatorBacking, GpuTexture2D)>,
+        background_color: [f32; 4],
     ) -> Result<Vec<u8>, CompositorError> {
         let projection = motolii_core::camera_projection(comp, camera);
         let pinned_cancel = motolii_core::camera_screen_from_world_z0(comp, camera).inverse();
@@ -430,8 +444,14 @@ impl Compositor {
             .schedule_screenshot(&self.ctx, identifier, ())
             .map_err(|e| CompositorError::View(e.to_string()))?;
 
+        // accumulator が有る時は背景色を既にその中に敷いてある。
+        let clear = if background.is_some() {
+            Rgba::TRANSPARENT
+        } else {
+            crate::clear_color(background_color)
+        };
         let command_buffer = final_view_builder
-            .draw(&self.ctx, Rgba::TRANSPARENT)
+            .draw(&self.ctx, clear)
             .map_err(|e| CompositorError::Draw(e.to_string()))?;
 
         self.ctx.before_submit();
@@ -470,6 +490,7 @@ impl Compositor {
         comp: CompSpec,
         camera: ResolvedCamera,
         background: Option<(AccumulatorBacking, GpuTexture2D)>,
+        background_color: [f32; 4],
     ) -> Result<(wgpu::Texture, wgpu::TextureView), CompositorError> {
         match background {
             Some((backing, _imported)) => {
@@ -499,7 +520,7 @@ impl Compositor {
                 self.next_readback += 1;
                 view_builder.queue_draw(&self.ctx, draw_data);
                 let command_buffer = view_builder
-                    .draw(&self.ctx, Rgba::TRANSPARENT)
+                    .draw(&self.ctx, crate::clear_color(background_color))
                     .map_err(|e| CompositorError::Draw(e.to_string()))?;
                 self.ctx.before_submit();
                 self.ctx.queue.submit([command_buffer]);
@@ -528,6 +549,7 @@ impl Compositor {
         comp: CompSpec,
         camera: ResolvedCamera,
         layers: &[Layer],
+        background_color: [f32; 4],
     ) -> Result<Vec<u8>, CompositorError> {
         let inputs: Vec<SequentialInput<'_>> = layers
             .iter()
@@ -546,8 +568,8 @@ impl Compositor {
             })
             .collect();
 
-        let background = self.accumulate_sequential(comp, camera, &inputs)?;
-        self.finalize_readback(comp, camera, background)
+        let background = self.accumulate_sequential(comp, camera, &inputs, background_color)?;
+        self.finalize_readback(comp, camera, background, background_color)
     }
 
     /// [`Self::matte_layer`]/[`Self::accumulate_sequential`]の分離可能 blend「solo」

@@ -6,16 +6,16 @@
 
 use std::collections::{HashMap, HashSet};
 
-use motolii_compositor::{Layer, LayerPlacement, LayerWithPasses};
+use motolii_compositor::{Layer, LayerWithPasses};
 use motolii_core::{CompSpec, ResolvedCamera};
 use motolii_store::{
     LayerId, LayerSource, RationalTime, ResolvedLayer, ShapeNode, StoreView, TextDocument,
 };
 
 use crate::translate::{
-    to_u8_rgba, translate_blend_mode, translate_effect_passes, translate_matte_mode,
+    translate_blend_mode, translate_effect_passes, translate_matte_mode,
 };
-use crate::{Engine, EngineError, BACKGROUND_ORDER};
+use crate::{Engine, EngineError};
 
 impl Engine {
     pub(crate) fn render_with_camera_override(
@@ -51,52 +51,9 @@ impl Engine {
         // S2 の注意書きどおり)。`passes` が空な layer は `render_with_effects` 内部で
         // オフスクリーンを一切作らず元の texture をそのまま使う従来コストの分岐を通るので
         // (`motolii-compositor` のモジュール doc/`tests/effects.rs` 参照)、effect を
-        // 持たない layer(今のところ背景 layer を含め全部——`translate_effect_passes` は
-        // 2026-08-21 時点で常に空を返す)はここを経由しても速度もアロケーションも変わらない。
+        // 持たない layer はここを経由しても速度もアロケーションも変わらない。
         let mut layers: Vec<LayerWithPasses> = Vec::with_capacity(resolved.len() + 1);
 
-        if include_background {
-            // comp の背景色(`Composition::background`、利用者要望: 黒だと気分が上がらない)。
-            // **`motolii-compositor` の clear 色は変えない**(compositor は書き込み禁止の
-            // 並列レーンが触っている最中)。代わりに comp 全域を覆う不透明の layer を
-            // どの実 layer よりも奥(`order = BACKGROUND_ORDER`、定数の doc 参照 —
-            // `i16::MIN` は depth_offset の shader 側スケールで外周1px を欠落させる
-            // ので使わない)に足す — pinned layer(裁定113、カメラの pan/zoom を受けず
-            // 画面に張り付く機構)を流用すれば、camera がどこを向いていても render
-            // target をちょうど覆う「クリア色」として働く。
-            // 既定値([0,0,0,1] 不透明黒)は旧 clear 色と同じ見た目になるので、
-            // 既存テストの期待画素は変わらない(合成器の実測: `TRANSPARENT` clear は
-            // 読み戻すと不透明黒になる — `motolii-compositor` の
-            // `default_camera_all_z0_matches_orthographic_pixel_mapping` 参照)。
-            // export は必ずこの分岐を通る([`Self::render_frame`] からしか
-            // `include_background = false` は選ばれない)ので、背景も書き出しに乗る。
-            let (background_texture, _) = self.texture_for(
-                &LayerSource::Solid {
-                    rgba: to_u8_rgba(composition.background),
-                    // 1x1 で足りる — 単色は quad の `size` で comp 全域まで引き伸ばすので、
-                    // texture 自体の解像度は意味を持たない。
-                    width: 1,
-                    height: 1,
-                },
-                0,
-            )?;
-            // 背景 layer には pass を積まない(S3 EXACT TARGET 3) — 背景は engine が
-            // ここで直接組み立てる単色 pinned layer であって `ResolvedLayer` を経由しない
-            // ので、そもそも effect スタックを持ち得ない。`passes: vec![]` で明示する。
-            layers.push(LayerWithPasses {
-                layer: Layer {
-                    texture: background_texture.expect("LayerSource::Solid は常に texture を返す"),
-                    size: [comp.width as f32, comp.height as f32],
-                    placement: LayerPlacement {
-                        order: BACKGROUND_ORDER,
-                        ..Default::default()
-                    },
-                    pinned: true,
-                    blend_mode: motolii_compositor::BlendMode::Normal,
-                },
-                passes: vec![],
-            });
-        }
 
         // BL4/切片3: `matte.layer` を突き合わせるための索引(`ResolvedLayer.id` が
         // 運ばれるようになったので作れる、`EngineError::UnsupportedMatte` の doc 参照)。
@@ -172,7 +129,14 @@ impl Engine {
             });
         }
 
-        Ok(self.compositor.render_with_effects(comp, camera, &layers)?)
+        let background_color = if include_background {
+            composition.background
+        } else {
+            motolii_compositor::NO_BACKGROUND
+        };
+        Ok(self
+            .compositor
+            .render_with_effects(comp, camera, &layers, background_color)?)
     }
 
     /// **裁定171 v2(M4)**: [`Self::render_with_camera_override`]の層構築
@@ -209,51 +173,19 @@ impl Engine {
     /// 新設**——`text_documents` と同型(`Self::texture_for_resolved`/
     /// `collect_shape_documents` の doc 参照)。
     ///
-    /// **`include_background`**(2026-08-28、観測視点 zero-copy 口の追加で新設)——
-    /// `render_with_camera_override` の同名引数と同じ意味(市松「AE型の透明可視化
-    /// モード」用、裁定141 と同型の入力差分)。既存の2呼び手
-    /// ([`Self::render_resolved_to_texture_with_shapes`]/[`Self::render_frame_into`])
-    /// はどちらも常に `true` を渡すので挙動は1文字も変わらない——`false` を渡すのは
-    /// [`Self::render_frame_into_with_view_camera`] だけ。
     fn layers_from_resolved(
         &mut self,
         comp: CompSpec,
-        background: [f32; 4],
         camera: ResolvedCamera,
         t: RationalTime,
         resolved: &[ResolvedLayer],
         text_documents: &HashMap<LayerId, TextDocument>,
         shape_documents: &HashMap<LayerId, Vec<ShapeNode>>,
-        include_background: bool,
     ) -> Result<Vec<LayerWithPasses>, EngineError> {
         // A05隔離、`render_with_camera_override` と同じ規律(モジュール doc 参照)。
         self.layer_failures.clear();
         let mut layers: Vec<LayerWithPasses> = Vec::with_capacity(resolved.len() + 1);
 
-        if include_background {
-            let (background_texture, _) = self.texture_for(
-                &LayerSource::Solid {
-                    rgba: to_u8_rgba(background),
-                    width: 1,
-                    height: 1,
-                },
-                0,
-            )?;
-            layers.push(LayerWithPasses {
-                layer: Layer {
-                    texture: background_texture
-                        .expect("LayerSource::Solid は常に texture を返す"),
-                    size: [comp.width as f32, comp.height as f32],
-                    placement: LayerPlacement {
-                        order: BACKGROUND_ORDER,
-                        ..Default::default()
-                    },
-                    pinned: true,
-                    blend_mode: motolii_compositor::BlendMode::Normal,
-                },
-                passes: vec![],
-            });
-        }
 
         // `render_with_camera_override` と同型の matte 索引(モジュール doc 参照)。
         let by_id: HashMap<LayerId, &ResolvedLayer> =
@@ -387,17 +319,11 @@ impl Engine {
         text_documents: &HashMap<LayerId, TextDocument>,
         shape_documents: &HashMap<LayerId, Vec<ShapeNode>>,
     ) -> Result<(wgpu::Texture, wgpu::TextureView), EngineError> {
-        let layers = self.layers_from_resolved(
-            comp,
-            background,
-            camera,
-            t,
-            resolved,
-            text_documents,
-            shape_documents,
-            true,
-        )?;
-        Ok(self.compositor.render_to_texture(comp, camera, &layers)?)
+        let layers =
+            self.layers_from_resolved(comp, camera, t, resolved, text_documents, shape_documents)?;
+        Ok(self
+            .compositor
+            .render_to_texture(comp, camera, &layers, background)?)
     }
 
     /// [`Self::render_resolved_to_texture`]の `&StoreView<'_>` 版
@@ -472,15 +398,19 @@ impl Engine {
         let shape_documents = collect_shape_documents(view, &resolved)?;
         let layers = self.layers_from_resolved(
             comp,
-            composition.background,
             camera,
             t,
             &resolved,
             &text_documents,
             &shape_documents,
-            true,
         )?;
-        Ok(self.compositor.render_into(target, comp, camera, &layers)?)
+        Ok(self.compositor.render_into(
+            target,
+            comp,
+            camera,
+            &layers,
+            composition.background,
+        )?)
     }
 
     /// 観測視点(裁定157)の zero-copy 版——[`Self::render_frame_into`]の**層構築を
@@ -523,15 +453,20 @@ impl Engine {
         let shape_documents = collect_shape_documents(view, &resolved)?;
         let layers = self.layers_from_resolved(
             comp,
-            composition.background,
             camera,
             t,
             &resolved,
             &text_documents,
             &shape_documents,
-            include_background,
         )?;
-        Ok(self.compositor.render_into(target, comp, camera, &layers)?)
+        let background_color = if include_background {
+            composition.background
+        } else {
+            motolii_compositor::NO_BACKGROUND
+        };
+        Ok(self
+            .compositor
+            .render_into(target, comp, camera, &layers, background_color)?)
     }
 
     /// **BL4 track matte 消費**。`target`(matte を持つ本体、既に texture が乗った

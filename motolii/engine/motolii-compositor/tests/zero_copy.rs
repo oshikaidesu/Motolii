@@ -53,6 +53,8 @@ fn one_layer(texture: motolii_compositor::GpuTexture2D) -> Layer {
             order: 0,
             opacity: 1.0,
             z: 0.0,
+            rotation_x: 0.0,
+            rotation_y: 0.0,
         },
         pinned: false,
         blend_mode: BlendMode::Normal,
@@ -282,6 +284,7 @@ fn render_to_texture_matches_render_with_timing_for_an_opaque_solid_layer() {
                 layer: one_layer(red),
                 passes: vec![],
             }],
+            motolii_compositor::NO_BACKGROUND,
         )
         .unwrap();
 
@@ -318,6 +321,7 @@ fn render_to_texture_is_deterministic_across_repeated_calls() {
                 layer: one_layer(red.clone()),
                 passes: vec![],
             }],
+            motolii_compositor::NO_BACKGROUND,
         )
         .unwrap();
     let bytes_a = blit_and_readback(&device, &queue, &view_a, W, H);
@@ -330,6 +334,7 @@ fn render_to_texture_is_deterministic_across_repeated_calls() {
                 layer: one_layer(red),
                 passes: vec![],
             }],
+            motolii_compositor::NO_BACKGROUND,
         )
         .unwrap();
     let bytes_b = blit_and_readback(&device, &queue, &view_b, W, H);
@@ -366,6 +371,7 @@ fn render_to_texture_reuses_scratch_texture_across_frames() {
                 layer: one_layer(red.clone()),
                 passes: vec![EffectPass::Identity],
             }],
+            motolii_compositor::NO_BACKGROUND,
         )
         .unwrap();
     assert_eq!(
@@ -385,6 +391,7 @@ fn render_to_texture_reuses_scratch_texture_across_frames() {
                     layer: one_layer(red.clone()),
                     passes: vec![EffectPass::Identity],
                 }],
+                motolii_compositor::NO_BACKGROUND,
             )
             .unwrap();
     }
@@ -422,6 +429,7 @@ fn render_to_texture_reused_scratch_shows_the_new_frames_content_not_the_old_one
                 layer: one_layer(red),
                 passes: vec![EffectPass::Identity],
             }],
+            motolii_compositor::NO_BACKGROUND,
         )
         .unwrap();
     let bytes_a = blit_and_readback(&device, &queue, &view_a, W, H);
@@ -435,6 +443,7 @@ fn render_to_texture_reused_scratch_shows_the_new_frames_content_not_the_old_one
                 layer: one_layer(blue),
                 passes: vec![EffectPass::Identity],
             }],
+            motolii_compositor::NO_BACKGROUND,
         )
         .unwrap();
     let bytes_b = blit_and_readback(&device, &queue, &view_b, W, H);

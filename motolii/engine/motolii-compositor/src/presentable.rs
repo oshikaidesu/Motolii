@@ -37,6 +37,7 @@ impl Compositor {
         comp: CompSpec,
         camera: ResolvedCamera,
         layers: &[LayerWithPasses],
+        background_color: [f32; 4],
     ) -> Result<(), CompositorError> {
         check_presentable_target(target, comp)?;
 
@@ -123,7 +124,7 @@ impl Compositor {
 
         view_builder.queue_draw(&self.ctx, draw_data);
         let command_buffer = view_builder
-            .draw(&self.ctx, Rgba::TRANSPARENT)
+            .draw(&self.ctx, crate::clear_color(background_color))
             .map_err(|e| CompositorError::Draw(e.to_string()))?;
         self.ctx.before_submit();
         self.ctx.queue.submit([command_buffer]);
