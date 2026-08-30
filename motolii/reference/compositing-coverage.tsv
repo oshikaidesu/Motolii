@@ -1,6 +1,10 @@
 # W3C Compositing and Blending Level 1 の全語彙と、Motolii がそれをどう扱うかの地図。
 # 骨は reference/vello-blend.wgsl(上流そのまま)の const MIX_* / COMPOSE_* から機械生成する。
 # 幹は W3C、運び手は vello — lottie.schema.json が Bodymovin 経由で AE の意味を運ぶのと同じ関係。
+# **合成は線形光で行う**(裁定 2026-08-30)。中間テクスチャが sRGB 形式なので読む時に
+# 復号され、17モード全部が線形値の上で走る。AE の既定(ガンマ)とは絵が違う。
+# 戻したくなった時の切り替えは1箇所 — 同じメモリを Rgba8Unorm のビューで読む。
+# Lum() の係数(0.3/0.59/0.11)は空間ではなく**モードの定義**の一部なので、線形でもこのまま。
 # 状態: 採用済 / 採用予定 / 不採用 / 未判定 / 該当なし
 # 採用済 の行は evidence 列に**コード中に実在する識別子**を持つ。試験が grep して確かめるので自己申告にならない。
 group	object	field	title	status	note	evidence	unit	source
