@@ -117,24 +117,25 @@ impl Compositor {
             if let Some(mode_index) = two_texture_pass_mode_index(input.blend_mode) {
                 self.ctx.begin_frame();
 
-                let (transform, z) = if input.pinned {
-                    (pinned_cancel * input.transform, 0.0)
+                let (transform, z, rx, ry) = if input.pinned {
+                    (pinned_cancel * input.transform, 0.0, 0.0, 0.0)
                 } else {
-                    (input.transform, input.z)
+                    (input.transform, input.z, input.rotation_x, input.rotation_y)
                 };
+                let (corner, extent_u, extent_v) = crate::tilted_corners(
+                    transform,
+                    input.local_min,
+                    input.local_size,
+                    z,
+                    rx,
+                    ry,
+                );
 
                 // --- 分離可能 blend: layer 単体をまず自分の main_target へ描く ---
                 let solo_rect = TexturedRect {
-                    top_left_corner_position: to_point3(
-                        transform.transform_point2(input.local_min),
-                        z,
-                    ),
-                    extent_u: to_vector3(
-                        transform.transform_vector2(glam::Vec2::new(input.local_size.x, 0.0)),
-                    ),
-                    extent_v: to_vector3(
-                        transform.transform_vector2(glam::Vec2::new(0.0, input.local_size.y)),
-                    ),
+                    top_left_corner_position: corner,
+                    extent_u,
+                    extent_v,
                     colormapped_texture: ColormappedTexture::from_unorm_rgba(input.texture.clone()),
                     options: RectangleOptions {
                         multiplicative_tint: Rgba::from_rgba_premultiplied(
@@ -269,11 +270,19 @@ impl Compositor {
             }
 
             for input in run {
-                let (transform, z) = if input.pinned {
-                    (pinned_cancel * input.transform, 0.0)
+                let (transform, z, rx, ry) = if input.pinned {
+                    (pinned_cancel * input.transform, 0.0, 0.0, 0.0)
                 } else {
-                    (input.transform, input.z)
+                    (input.transform, input.z, input.rotation_x, input.rotation_y)
                 };
+                let (corner, extent_u, extent_v) = crate::tilted_corners(
+                    transform,
+                    input.local_min,
+                    input.local_size,
+                    z,
+                    rx,
+                    ry,
+                );
                 let a = match input.blend_mode {
                     BlendMode::Normal => input.opacity,
                     BlendMode::Add => 0.0,
@@ -285,16 +294,9 @@ impl Compositor {
                     ),
                 };
                 rects.push(TexturedRect {
-                    top_left_corner_position: to_point3(
-                        transform.transform_point2(input.local_min),
-                        z,
-                    ),
-                    extent_u: to_vector3(
-                        transform.transform_vector2(glam::Vec2::new(input.local_size.x, 0.0)),
-                    ),
-                    extent_v: to_vector3(
-                        transform.transform_vector2(glam::Vec2::new(0.0, input.local_size.y)),
-                    ),
+                    top_left_corner_position: corner,
+                    extent_u,
+                    extent_v,
                     colormapped_texture: ColormappedTexture::from_unorm_rgba(input.texture.clone()),
                     options: RectangleOptions {
                         multiplicative_tint: Rgba::from_rgba_premultiplied(
@@ -535,6 +537,8 @@ impl Compositor {
                 local_size: glam::Vec2::new(layer.size[0], layer.size[1]),
                 transform: layer.placement.transform,
                 z: layer.placement.z,
+                rotation_x: layer.placement.rotation_x,
+                rotation_y: layer.placement.rotation_y,
                 pinned: layer.pinned,
                 opacity: layer.placement.opacity,
                 depth_offset: layer.placement.order,

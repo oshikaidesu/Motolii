@@ -248,6 +248,22 @@ pub(crate) fn tilt(rotation_x: f32, rotation_y: f32) -> glam::Quat {
         * glam::Quat::from_rotation_x(rotation_x.to_radians())
 }
 
+/// 板の四隅。傾きは板の中心を軸にかける。
+pub(crate) fn tilted_corners(
+    transform: glam::Affine2,
+    local_min: glam::Vec2,
+    local_size: glam::Vec2,
+    z: f32,
+    rotation_x: f32,
+    rotation_y: f32,
+) -> (glam::Vec3, glam::Vec3, glam::Vec3) {
+    let q = tilt(rotation_x, rotation_y);
+    let u = q * to_vector3(transform.transform_vector2(glam::Vec2::new(local_size.x, 0.0)));
+    let v = q * to_vector3(transform.transform_vector2(glam::Vec2::new(0.0, local_size.y)));
+    let center = to_point3(transform.transform_point2(local_min + local_size * 0.5), z);
+    (center - (u + v) * 0.5, u, v)
+}
+
 /// `HeadlessGpu` を公開しているのは、`Compositor` が持たない描画(点群など)を
 /// probe が組み立てたい時に、adapter/device の起こし方だけはここの物を使わせるため
 /// (module doc の警告どおり、自前で limits を書くと rerun shader の床とずれた時に
@@ -478,6 +494,9 @@ struct SequentialInput<'a> {
     transform: glam::Affine2,
     /// `LayerPlacement::z`(pinned なら無視され 0 になる)。
     z: f32,
+    /// `LayerPlacement::rotation_x`/`rotation_y`(pinned なら無視され 0 になる)。
+    rotation_x: f32,
+    rotation_y: f32,
     /// `LayerAttrs::pinned`(裁定113)。
     pinned: bool,
     opacity: f32,
