@@ -30,18 +30,15 @@
 //! YUV→RGB変換・色空間の解釈はffmpeg側に寄せ、motolii-gpu側の変換シェーダ実装(M1-T3)
 //! までの間もパイプライン全体をRGBAで一貫させる。
 
-mod decode;
 mod encode;
 mod mux;
 mod point_cloud;
 mod probe;
-mod preview;
 mod waveform;
 
 use std::io::Read;
 use std::process::Command;
 
-pub use decode::{read_frame_at, FrameReader, FrameReaderCancel, FrameReaderKillHandle};
 pub use encode::Encoder;
 pub use mux::{
     audio_codec_allows_stream_copy, choose_audio_encode_mode, mux_mixed_pcm, mux_soundtrack,
@@ -56,7 +53,6 @@ pub use probe::{
     probe, probe_container, require_supported_audio, select_audio_stream, select_video_stream,
     ContainerInfo, MediaInfo, MediaStreamKind, ProbedAudioStream, ProbedVideoStream,
 };
-pub use preview::{read_preview_frame, yuv420p_to_rgba, PreviewFrame};
 pub use waveform::{waveform_peaks, WAVEFORM_CACHE_CAP, WAVEFORM_SAMPLE_RATE};
 
 #[derive(Debug, thiserror::Error)]
