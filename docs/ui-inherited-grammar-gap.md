@@ -31,6 +31,7 @@
 | Shift+Z / fit | 作品全体をfit表示、`Cmd+=`/`Cmd+-` zoom | view機構既存。keymap+Fitボタン接続(Q0 inventoryと同件) |
 | 数値のdrag-scrub | InspectorのX/Y等をラベルdragで増減 | DialParameter既存(fixtureで実証済み)。実データ行へ流用 |
 | Home/End | playheadを先頭/末尾へ | `set_time`既存 |
+| **素材を入れる**(Browser) | ファイルを選ぶ/落とすと層になる | **入口がゼロ**(Browserのタブは COLORS/EFFECTS/CREATE、素材は`load_fixture()`から入っている)。判定は`is_rerun_importable_extension`が`re_importer`へ委譲して既存・test済だが**呼び出し側が無い** = 動詞写像の裁定でいう到達不能=未完 |
 | 層の頭/尻へ跳ぶ | 選択層の in/out へplayheadが飛ぶ | 尺は`placement`に在る。操作`Intent`追加のみ |
 | 前/次のキーへ跳ぶ | キーの在る時刻へplayheadが飛ぶ | キー時刻は読める。操作`Intent`追加のみ |
 | 層の頭/尻を現在時刻へ揃える | playhead位置でtrimする | `DragMode::Trim*`既存。打鍵の口のみ |
