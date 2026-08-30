@@ -72,7 +72,6 @@ const BINDINGS: &[Binding] = &[
     Binding { key: KeySpec::ArrowUp, cmd: false, shift: false, alt: false, intent: Intent::SelectStep(-1) },
     Binding { key: KeySpec::Char('u'), cmd: false, shift: false, alt: false, intent: Intent::ToggleKeyedOnly },
     Binding { key: KeySpec::Char('*'), cmd: false, shift: false, alt: false, intent: Intent::ToggleMarker },
-    Binding { key: KeySpec::Char('u'), cmd: false, shift: false, alt: false, intent: Intent::ToggleKeyedOnly },
     Binding { key: KeySpec::Char('*'), cmd: false, shift: true, alt: false, intent: Intent::ToggleMarker },
     Binding { key: KeySpec::ArrowLeft, cmd: true, shift: false, alt: false, intent: Intent::JumpMarker(-1) },
     Binding { key: KeySpec::ArrowRight, cmd: true, shift: false, alt: false, intent: Intent::JumpMarker(1) },
@@ -101,6 +100,18 @@ pub(super) fn lookup(key: &Key, cmd: bool, shift: bool, alt: bool) -> Option<Int
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn no_two_bindings_claim_the_same_stroke() {
+        for (i, a) in BINDINGS.iter().enumerate() {
+            for b in &BINDINGS[i + 1..] {
+                assert!(
+                    !(a.key == b.key && a.cmd == b.cmd && a.shift == b.shift && a.alt == b.alt),
+                    "同じ打鍵に2つの動詞が居る(先に並んだ方しか届かない)"
+                );
+            }
+        }
+    }
 
     #[test]
     fn cmd_a_is_select_all() {
