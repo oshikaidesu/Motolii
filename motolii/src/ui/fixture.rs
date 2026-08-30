@@ -217,6 +217,8 @@ pub(super) struct PropRow {
 
 pub(super) struct InspectorData {
     pub ident_name: String,
+    /// 層の合成モード。値は Document が持つ(表示用の写しをここへ運ぶだけ)。
+    pub blend: crate::doc::store::BlendMode,
     pub ident_sub: String,
     pub text: Vec<PropRow>,
     pub transform: Vec<PropRow>,
@@ -456,6 +458,7 @@ pub(super) fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: Ratio
     ];
 
     InspectorData {
+        blend: sel_attrs.blend_mode,
         ident_name: sel_attrs.name,
         ident_sub: format!("{source_name} · {key_count} keys"),
         colors,

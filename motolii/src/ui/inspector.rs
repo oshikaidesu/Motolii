@@ -5,9 +5,51 @@ use dioxus_native::prelude::*;
 use crate::ui::fixture::{inspector_data_from_doc, InspectorData, PropRow};
 use crate::ui::playback::Clock;
 use crate::doc::store::{
-    property, ContentKeyframe, Document, Intent, Interp, Keyframe, KeyframeTrack, LayerId,
-    PropertyId, RationalTime, Value,
+    property, BlendMode, ContentKeyframe, Document, Intent, Interp, Keyframe, KeyframeTrack,
+    LayerAttrsPatch, LayerId, PropertyId, RationalTime, Value,
 };
+
+/// 窓に並べる合成モード。**W3C Compositing の16 mix + `plus`(Add)**で、
+/// 順番は語彙の並び(reference/compositing-coverage.tsv と同じ)。
+const BLEND_MODES: &[(BlendMode, &str)] = &[
+    (BlendMode::Normal, "Normal"),
+    (BlendMode::Add, "Add"),
+    (BlendMode::Multiply, "Multiply"),
+    (BlendMode::Screen, "Screen"),
+    (BlendMode::Overlay, "Overlay"),
+    (BlendMode::Darken, "Darken"),
+    (BlendMode::Lighten, "Lighten"),
+    (BlendMode::ColorDodge, "Color Dodge"),
+    (BlendMode::ColorBurn, "Color Burn"),
+    (BlendMode::HardLight, "Hard Light"),
+    (BlendMode::SoftLight, "Soft Light"),
+    (BlendMode::Difference, "Difference"),
+    (BlendMode::Exclusion, "Exclusion"),
+    (BlendMode::Hue, "Hue"),
+    (BlendMode::Saturation, "Saturation"),
+    (BlendMode::Color, "Color"),
+    (BlendMode::Luminosity, "Luminosity"),
+];
+
+fn blend_label(mode: BlendMode) -> &'static str {
+    BLEND_MODES
+        .iter()
+        .find(|(m, _)| *m == mode)
+        .map(|(_, label)| *label)
+        .unwrap_or("Normal")
+}
+
+fn write_blend(
+    doc: &Arc<Mutex<Document>>,
+    layer: LayerId,
+    mode: BlendMode,
+) -> Result<(), crate::doc::store::StoreError> {
+    let patch = LayerAttrsPatch {
+        blend_mode: Some(mode),
+        ..Default::default()
+    };
+    doc.lock().unwrap().apply(Intent::SetAttrs { layer, patch })
+}
 
 const RANGE_SPAN_PX: f64 = 300.0;
 
@@ -240,9 +282,11 @@ pub(super) fn inspector_panel(
     editing: Signal<Option<String>>,
 ) -> Element {
     let mut drag = use_signal(|| Option::<ValueDrag>::None);
+    let mut blend_open = use_signal(|| false);
     let _ = revision(); // Document書き換え後の再描画をここで購読する(値そのものは使わない)
 
     let empty = InspectorData {
+        blend: BlendMode::Normal,
         ident_name: "No selection".to_string(),
         ident_sub: String::new(),
         text: Vec::new(),
@@ -337,6 +381,45 @@ pub(super) fn inspector_panel(
             div { class: "sec", "TRANSFORM" }
             {transform_rows}
             div { class: "iscroll",
+            if let Some(layer) = selection {
+                div { class: "sec", "BLEND" }
+                div { class: "prow",
+                    span { class: "n", "mode" }
+                    span {
+                        class: "v content",
+                        onclick: move |_| {
+                            let open = *blend_open.read();
+                            *blend_open.write() = !open;
+                        },
+                        "{blend_label(inspector.blend)}"
+                    }
+                    span { class: "glyph", "◇" }
+                }
+                if blend_open() {
+                    for (mode , label) in BLEND_MODES.iter().copied() {
+                        div {
+                            class: if mode == inspector.blend { "prow blend-pick on" } else { "prow blend-pick" },
+                            onclick: {
+                                let doc = doc.clone();
+                                move |_| {
+                                    match write_blend(&doc, layer, mode) {
+                                        Ok(_) => {
+                                            println!(
+                                                "PROBE room=write verdict=applied SetAttrs blend={label} layer={layer:?}"
+                                            );
+                                            *revision.write() += 1;
+                                        }
+                                        Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
+                                    }
+                                    *blend_open.write() = false;
+                                }
+                            },
+                            span { class: "n", "" }
+                            span { class: "v content", "{label}" }
+                        }
+                    }
+                }
+            }
             if !inspector.text.is_empty() {
                 div { class: "sec", "TEXT" }
                 {text_rows}
