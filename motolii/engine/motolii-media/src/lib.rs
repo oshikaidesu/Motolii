@@ -31,20 +31,13 @@
 //! までの間もパイプライン全体をRGBAで一貫させる。
 
 mod encode;
-mod mux;
 mod point_cloud;
 mod probe;
-mod waveform;
 
 use std::io::Read;
 use std::process::Command;
 
 pub use encode::Encoder;
-pub use mux::{
-    audio_codec_allows_stream_copy, choose_audio_encode_mode, mux_mixed_pcm, mux_soundtrack,
-    probe_audio, write_f32le_wav_stereo_48k, AudioEncodeMode, AudioStreamInfo, MixedPcmMuxReport,
-    MixedPcmMuxRequest, SoundtrackMuxReport, SoundtrackMuxRequest,
-};
 pub use point_cloud::{
     asset_type_for_extension, is_point_cloud_extension, is_rerun_importable_extension, load_point_cloud, PointCloudData,
     PointCloudError, POINT_CLOUD_EXTENSIONS,
@@ -53,7 +46,6 @@ pub use probe::{
     probe, probe_container, require_supported_audio, select_audio_stream, select_video_stream,
     ContainerInfo, MediaInfo, MediaStreamKind, ProbedAudioStream, ProbedVideoStream,
 };
-pub use waveform::{waveform_peaks, WAVEFORM_CACHE_CAP, WAVEFORM_SAMPLE_RATE};
 
 #[derive(Debug, thiserror::Error)]
 pub enum MediaError {
