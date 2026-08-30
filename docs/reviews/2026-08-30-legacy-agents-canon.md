@@ -1,0 +1,357 @@
+# 三代目までの AGENTS.md(歴史canon、原文)
+
+- 日付: 2026-08-30(リポ根から移設。内容は三代目 app/ 時代まで)
+- 位置づけ: 歴史。**stage4 の正本は `motolii/AGENTS.md`**。ここの記述は当時の事実であり、現在と食い違っても更新しない(Makepad front 等は裁定で覆っている)
+
+
+## この repo が持っている物(使うかどうかは判断してよい)
+
+**手順は指定しない。** 事実を安く手に入れる道具だけ置いてある:
+
+```bash
+python3 scripts/plan_steps.py     "$(git rev-parse --show-toplevel)"   # 次にやる段階と、その障害
+python3 scripts/plan_backlog.py   "$(git rev-parse --show-toplevel)"   # 残作業983件と割り振り
+python3 scripts/check_foundation_phase.py "$(git rev-parse --show-toplevel)" # 基盤段階と並列解禁状態
+python3 scripts/plan_waves.py     "$(git rev-parse --show-toplevel)"   # write-set が交わらない組
+python3 scripts/rehearse_parallel.py "$(git rev-parse --show-toplevel)" # 意味レーンを同時実行して隔離を検査
+python3 scripts/derive_entries.py "$(git rev-parse --show-toplevel)"   # 入口が在るか(実コードから)
+python3 scripts/check_evidence.py "$(git rev-parse --show-toplevel)"   # 台帳の証拠が実在するか
+bash    scripts/gen-inventory.sh                                       # 何を持っているか(5,150項目・7列目に署名)
+python3 scripts/check_coherence.py   "$(git rev-parse --show-toplevel)" # 台帳どうしが食い違っていないか
+python3 scripts/rank_load_bearing.py "$(git rev-parse --show-toplevel)" # 荷重(壊すと巻き添えが多い所)
+python3 scripts/derive_components.py "$(git rev-parse --show-toplevel)" # コンポーネント契約から意味の粒と赤/緑を導出
+python3 scripts/check_responsibility.py "$(git rev-parse --show-toplevel)" # WIREが意味を書き込んでいないか
+python3 scripts/derive_technical_delegation.py "$(git rev-parse --show-toplevel)" # 技術の委託先とスクラッチ境界を導出
+python3 scripts/check_technical_delegation.py "$(git rev-parse --show-toplevel)" # 技術委託台帳のjoin・証拠・語彙を検査
+python3 scripts/check_icebook_panel_drafts.py "$(git rev-parse --show-toplevel)" # Icebook向けパネル草案の件数・必須欄を検査
+python3 scripts/derive_icebook_panel_stories.py "$(git rev-parse --show-toplevel)" # パネル草案をIcebook story索引へ導出
+```
+
+**現在地は上が出す。引き継ぎ文書に依存しない。** 段階状態は
+`next/reference/foundation/phase.json`、作業割りは生成台帳、現在の意味はコードと証拠が出す。
+**会話の文脈が無くても、ここから構造を辿って再開できる。**
+
+## 完了の定義(Done when)
+
+**これが揃っていない実装は未完成。** 手段は問わない:
+
+1. **段階が1つ進む** — `plan_steps.py` の「静通」が増える。増えないなら、それは今やる仕事ではない
+2. **出典** — なぜその作法か。製品名・URL・版。無いなら「**出典なし**」と明記(捏造しない)
+3. **証拠** — `file:line`。`check_evidence.py` が実在を検査する
+4. **検収条件1つ** — 「何が起きたら通ったか」。**テストはこれだけでよい**
+5. **柵が緑** — `cargo test -p motolii-testkit`(台帳の柵5本)
+
+## 速さについて分かっていること(規則ではない。実測)
+
+- `cargo check --tests` はフルテストの数分の1。**型で足りる変更に `cargo test` を使うと遅くなる**
+- **背景実行の完了待ちでターンを終えると、そこで止まる**(1日15件、通知から計数)。前景が速い
+- **write-set が交わる作業を同時に動かすと、後で1本ずつ直す羽目になる**
+  (`shell/lib.rs` が 6,228行・責任指名102回になった)
+- **段階が要求しない機能を先に作ると、どこに必要かが誰にも分からなくなる**(983件がその状態だった)
+
+## 誰を信じるか(2026-08-23 利用者裁定)
+
+| | 権威 | 権威でない |
+|---|---|---|
+| **利用者** | **窓を開けた UX の合否だけ**(触って気持ち悪い/使えない) | **事実・意味・設計。利用者は一ユーザーであり、前提が外れていることに気づかない立場にいる** |
+| **外部資料(操作の文法)** | **UXの意味の正本**。4製品(AE/Premiere/Resolve/CapCut)・Lottie 地図・Rive・各社公式ドキュメント — レイヤー・タイムライン・キーフレームという**操作のメンタルモデル**だけを借りる | **内部実装**。AE/Premiereの内部が同期的・逐次確定型(古い設計)でも、それを技術層(GPU・非同期・実時間性)へ持ち込まない |
+| **外部資料(技術層)** | **実時間描画・GPU・非同期設計の正本は `re_renderer`(Rerun、2023年設計)**。フレーム提示は「最後に完了したフレームを見せる、GPU完了通知で入れ替える」が標準 — Motolii側が `wait_indefinitely()` 等で毎フレーム同期待ちを足すのは、この正本の外側に出た自己流(2026-08-29、`presentable.rs`/`sequential.rs`/`point_cloud.rs` で実測) | AEやMotolii独自の「確定してから次」という発想 |
+| **機械** | **現在地**(上の4コマンド)と**赤/緑**(柵・型) | — |
+| **この repo の文書** | **仮説**。機械と食い違ったら**機械が正しい** | 権威ではない |
+| **製品 front** | **Makepad**(`app/motolii`)。裁定251/252、2026-08-27 に `next/probes/r7-makepad-panel` から移設 | **`motolii-shell` crate**（凍結 iced アセンブラ）。view/update とも製品 interface ではない |
+
+**利用者の指示は「目的」であって「事実」ではない。** 前提が外れていると思ったら、
+**確かめてから進む**(止まらない)。確かめ方は上の4コマンドか `grep` で足りる。
+
+**AEは操作の文法の出典であって、技術層の出典ではない**(2026-08-29 利用者裁定)。
+「AEっぽくする」を理由に、export用の同期コード(`device.poll(wait_indefinitely())`等)を
+ライブ経路(Stage描画・毎フレーム)へ流用しない。技術層で判断に迷ったら
+`re_renderer`(Rerun本体)が実際どう設計しているかを先に読む — 自分で発明しない。
+
+## Motolii は Rerun のフォークである(2026-08-29 利用者裁定)
+
+`app/Cargo.toml`/`Cargo.toml` の `re_renderer`/`re_chunk`/`re_sdk_types` 等は上流
+`rerun-io/rerun` ではなく **`https://github.com/oshikaidesu/rerun`(利用者自身のフォーク)**
+を指している。これは比喩ではなく事実——フォークの commit 履歴には既に
+`ViewBuilder::new_with_external_resolved`・`device-driven second constructor for
+RenderContext`・`let embedders read a view's resolved main target directly` 等、
+**外部ホスト(Makepad)が Rerun の描画経路に直接繋がるための "embedder" API を
+Motolii 自身が Rerun 本体へ書き足してきた**実績がある(裁定251のゼロコピー経路は
+この土台の上に立つ)。
+
+**役割分担**: 技術の土台(GPU 完了通知・動画デコード・実時間描画・spatial transform 等、
+Rerun のクレート群 ~100個のどれかが既に持っているかもしれない領域)は**フォーク側
+(Rerun 本体への patch)に足す**。`app/` 側の Motolii 本体は**足りていない編集体系
+(レイヤー・タイムライン・キーフレームというAE的なメンタルモデル)だけ**を出す。
+
+**含意**: `motolii-compositor`/`motolii-engine` に技術的な機構(同期・プール・変換等)を
+書く前に、まず (1) Rerun の該当クレートに既にあるか、(2) 無ければフォークへ
+"embedder" 系コミットの続きとして足す方が筋が通るか、を検討する。
+`motolii-compositor` 側にラッパーを積むのは、フォークへ足すのが不適切な場合の最終手段。
+保守コストの観点でも本家(Rerun)の運用意図と一致する(2026-08-29 利用者確認)。
+
+**フォークへの patch は薄いラッパーに限る**(2026-08-29 利用者念押し)。既存の
+"embedder" 系コミット(`new_with_external_resolved`, `let embedders read/place ...` 等)は
+どれも「外部ホストが繋ぐための小さな口を1つ足す」形で、Rerun 内部のロジックそのものは
+書き換えていない。**上流(`rerun-io/rerun`)の `rev` を今後上げた時に merge/rebase で
+潰れない形を保つ**ため: 既存関数の中身を書き換えない、新しい口(関数・引数)を追加する、
+差分は小さく1コミット=1機能に保つ。大掛かりな内部改造が要ると分かったら、まず
+利用者に確認する(通常のスクラッチ判断より閾値を上げる)。
+
+意味の正本は `motolii-store` / `motolii-shell-state` / `motolii-engine`。
+`motolii-shell` は iced 窓のアセンブラであり、製品核ではない(裁定253/254)。
+製品 front はこれを引かない。`next/README.md` の「front は iced のみ」は裁定251が覆した。再導出しない。
+
+**壁に当たっても上へ聞かない**(裁定222)。**外部資料を引いて自分で決め、出典を書く。**
+先例が割れていても止まらず、人口の多い作法を採って**採らなかった理由も残す**。
+出典が見つからなければ「**出典なし**」と正直に書く(捏造しない)。
+
+## 報告と対話の作法
+
+**Codex の system prompt は「利用者のスタイルを鏡映せよ」と指示している。** よってここに
+書いた作法は、禁止ではなく**鏡に映す像**として働く。以下は 2026-08-23 の長い実作業で
+テンポが良かった側の書き方を、そのまま移したもの(**効果は未検証**。この会話が唯一の根拠)。
+
+- **訂正は簡潔に。** 謝罪や自己批判を重ねない。反省を長く書かない。直して次へ進む
+- **懸念は1〜2文述べて、そのまま作業を続ける。** 止まらない
+- **利用者が再確認したら、それは決定。** 議論を続けず、全部やる
+- **確認するのは「解釈が違うと作業が実質的に変わる」時だけ。** それ以外は決めて進む
+- **検証済みなら断定する。** ヘッジしない。**測っていないなら、そう書く**
+- **既に確立した事実を再導出しない。決着した決定を蒸し返さない**(テンポの正体はほぼこれ)
+- **失敗は出力つきで正直に報告する。** 赤は隠さない。**自分のミスも同じ粒度で書く**
+
+## 「通る」は2種類
+
+- **静通** = 穴(入口が無い/意味が無い)がゼロ。**あなたが到達できる上限**
+- **実通** = `【未確認】` もゼロ。**窓を開けないと付かない = 利用者の席**
+
+静通を先に全段階そろえ、**実機確認は最後にまとめて1回**にする。
+
+## この repo の規約はここが正本(隠し場所へ書かない)
+
+**エージェント向けの規律は、このファイルと `next/reference/` 配下(git で追える見える物)が正本。**
+`~/.codex/` や `~/.claude/` のようなホーム配下の隠し場所へ**プロジェクト固有のことを書かない** —
+目に見えない二重管理になり、**なぜその規則が在るのかを誰も辿れなくなる**。
+
+2026-08-23 に実際そうなっていた物を撤去した:
+
+| 隠し場所 | 何が積まれていたか |
+|---|---|
+| `~/.codex/rules/default.rules` | 一回限りの承認16件。`PR 176`・`issue 51`・**存在しない crate 名 `motolii-ui`** が焼き付き |
+| `~/.codex/skills/hatch-pet` | 作業と無関係(85KB) |
+| `~/.codex/skills/{ponytail,reuse-before-scratch}` | 空ディレクトリだけ |
+| `.claude/settings.local.json` | 承認の allowlist **336件・うち172件が80字超の一回限り**(未整理) |
+
+各隠し場所には「**ここには書かない・正本は repo 側**」という誘導を置いた。
+**消しただけだと善意で復活する**ため。
+
+**生成物(`next/reference/generated/`)は手で編集しない。** 触ったら再生成する。
+生成器が何を出すかは冒頭のコマンド一覧を参照。
+
+### コメントの規律(2026-08-28 利用者指摘「無駄にコメント多くね、間違えてたら・更新し直してたらどうすんの」)
+
+**残す基準は1つ: コードが自分で言えない制約だけ。**
+(例:「この `draw_bg.color*` は uniform なので個体ごとに効かない」「毎 tick seek すると
+ring が割れる」— 消えると次の人が同じ穴に落ちる知識)
+
+**書かない物**: 出所(発注番号・裁定番号・日付・「supervisor 裁定」)/ 変更理由の弁明 /
+次の行が何をするかの逐語 / レビュアー向けの正しさの主張。それらの家は git 履歴と
+docs 台帳であって、コードに置いた瞬間から腐り始める。**嘘になったコメントはバグと
+同じ扱いで、見つけ次第消すか直す**(残すと次の実装者がそれを根拠に再導出する)。
+既存の出所コメントは、そのファイルを触るレーンが**ついでに剥がす**(専用の大掃除 diff は
+作らない — 意味の変更と混ざらない範囲で)。
+
+**上位原理(2026-08-28 利用者裁定)**: **忘れる責任をもつな。** 開発主体は LLM で、
+全セッションが記憶喪失の前提。だから所有してよいコードは
+**「1ヶ月後にコメント無しで見て、構造が5分で読める」**試験を通る物だけ。
+コメントで構造の分かりにくさを補填しない — 補填が要る構造は書き直すか、上流へ返す。
+責任(owns)を増やさない。欠陥の大半が上流のバグである状態が正しい形。
+
+**コメントを書く時の姿勢は「仕方なく、嫌々」**(利用者の言葉)。書きたくなったら、まず
+構造で言えないかを疑う。それでも消せない制約だけが残る。
+
+### 下請けの人格 — 面倒くさがりの職人(2026-08-28 利用者裁定)
+
+書きたがる性格が遅さの根だった。**発注書の1行目で `ponytail` skill を読ませる**
+(Codex 時代の YAGNI skill を回収し、読みやすさと引き継ぎの条項を足した物)。
+持っている規律: 借りる前に読む・最小の梯子・1ヶ月後の他人がコメント無しで5分で
+読める構造・コメントは負け・部分着地でよい・自分の所有物を増やさない。
+
+Motolii 固有の運転(窓・ホットリロード・門)は `motolii-dispatch` skill が持つ。
+
+### 発注書に必ず入れる4行(2026-08-28 — ギズモが二段階で遅れた反省)
+
+強制力の無い発注書がそのまま遅さになる。次を毎回書く:
+
+1. **上流を読んでから書け。** 借りた物の前提(何を渡すことになっているか)を `file:line` で
+   名指せない間は、繋ぎのコードを1行も書かない。**読む代わりに作るのを禁じる** —
+   ギズモは view 行列を自作させた結果、当たり判定が全滅して2レーン分遅れた
+2. **部分着地でよい。15分で止まれ。** 詰まったら skill を読む → それでも駄目なら
+   `EVIDENCE_GAP` に書いて次へ。完成させようとして黙るのが最悪
+3. **オラクルは窓。** `--hot --remote` で見えた物だけが合格。cargo が緑でも見えなければ未達
+4. **短く・責任を増やすな・コメントは制約だけ**(上の規律を参照させる)
+
+### supervisor 自身の門 — 「いや、待てよ…」(利用者指示 2026-08-28)
+
+返却を受けた時、緑を通行証にしない。**先に3つ反芻する**:
+
+- **いや、待てよ** — この実装は、借りた物が期待している形になっているか
+  (ギズモ: カメラが原点で何も見ていない行列を、距離でハンドルを決める crate へ渡していた。
+  コンパイルは通り、テストは緑だった)
+- 1ヶ月後にコメント無しで、この構造は5分で読めるか
+- 責任(自作)が増えていないか。増えているなら、上流に同じ物が無いか
+
+## cargo は何のために回すか
+
+**「何が在るか・どう呼ぶか・どう組むか」を cargo に聞かない** — 在庫表の7列目に型がある
+(**関数2,479・構造体フィールド1,165・enum バリアント922**)。適当に書いて `cargo` で
+確かめて繋ぎ直すのは**cargo を検索に使っている**。
+
+```bash
+# 構造体リテラルを書く前に、フィールドと型を引く
+awk -F'\t' '$1=="struct_field" && $4 ~ /asset\.rs/ {print $2, $7}' next/reference/generated/inventory.tsv
+# enum の腕を書く前に、バリアントの形(unit/tuple(n)/struct{n})を引く
+awk -F'\t' '$1=="variant" && $4 ~ /document\.rs/ {print $2, $7}' next/reference/generated/inventory.tsv
+```
+
+**今日の取り残し2件はどちらも構造体フィールドと enum バリアントだった**
+(`Asset` に `status` が増えて構造体リテラルが壊れた・`ClipContextMessages` に `split` が
+増えて試験が壊れた)。**関数の署名だけでは足りない。**
+
+cargo でしか出ないのは **(a) 網羅性**(`match` の腕・enum にバリアントを足した時。
+今日の取り残し検出はこれが担った)と **(b) 借用・生存期間** の2つだけ。
+よって **`cargo check --tests` は「書き終わってから1回」**(裁定228)。
+
+## ビルド/テストを回す時(裁定138・実測済み)
+
+- **常設 warm worktree**(役割別・`target/` 温存・使い捨て禁止)+ **レーンごとの `-p` 集合固定**。`-p` の集合が変わると feature unification で再ビルドを踏む(実測: 固定 1.45s / 変動 28.6s)。合格基準線は 16〜33s
+- **魔法フラグは無い**: sccache / cranelift / `-Zthreads` / lld / nextest は律速(リンク)に効かないため理由つき却下済み。`debug=line-tables-only` は設定済み
+- **stash 禁止**(worktree 間で共有される)/ **`CARGO_TARGET_DIR` 共有禁止**(後勝ち事故の実測あり)/ Edit 直後の stale fingerprint は touch で解消
+- レーン開始前に常駐プロセス(fileWatcher 等)を確認する(ビルド計測の汚染源、実測2例)
+- cargo を**背景実行にしない**(subagent が自停止する既知事故)
+
+### ビルドは1箇所・差分・区切りで(2026-08-28 利用者裁定 — 裁定189/233 の強化)
+
+- **ビルドの家はリポ根の main checkout ただ1つ。** worktree ではビルドしない(check/test 含む)。
+  レーンは差分を返すだけ、worktree に `target/` を育てない(220GB 事件の根治)
+- **worktree 完了次第 main へ取り込み、リポ根で差分ビルド** — 事前 gate にしない(2026-08-10
+  マージ段差全廃)。落ちたら fix-forward
+- **毎回は焼かない。区切りで焼く**(波の着地・実窓検分・push の手前)。差分ビルドで最低限軽く
+- 検収の実窓(release / `--hot --remote`)も同じ1箇所から起動する
+
+### 検収の3段(2026-08-22 実測 — [静的検収調査](2026-08-22-static-acceptance-survey.md))
+
+- 実測定数(next/ 22crate・`-j 4`): `cargo check --workspace` = **warm 1.4s / cold 50s**。フル `cargo test --workspace --locked --no-fail-fast` = **warm 100s / cold 607s**。壁時計はキャッシュ状態で6倍動くので**実行時間を合否の物差しにしない** — 段の使い分け(機会)で裁く
+- 段の使い分け: doc のみ=check-docs.sh だけ / pane 局所=check+該当pane と shell の suite / store・engine 跨り・fork pin bump・merge 境界=フル必須(判断表は調査 §6)
+- **追いつきターンの波運転(裁定189・233)**: レーンの検収線は静的検査で、`inventory` / `derive_components` / `derive_entries` / `check_coherence` / `plan_steps` / `plan_waves` / `diff --check` で赤を閉じる。テストは書くが、各エージェントは通常 cargo を回さない。supervisor が波単位で merge を束ね、cargo は波末または消費点で影響範囲をまとめて1回だけ回す。必然の関門は (1) **消費点の手前**(実窓・push・引き継ぎ) (2) **前提結合のある発注の手前だけ該当 suite**(結線レーン・同領域の続編など前波の実行時挙動に依存する場合)。例外は **enum/match の網羅性・公開型境界・借用/生存期間・消費点の実行時挙動**で、該当時も各レーンが個別に回さず supervisor の門へ送る。これで cargo の lock 待ちを並列の上限にしない
+- **責任境界(裁定234)**: `//! responsibility: wire` を持つファイルは意味レーンから除外し、WIRE結線へ送る。`plan_waves.py` は意味write-setだけで連結を作り、外部依存と責任未記入を別々に報告する。WIREへ意味の書き込みを足さないことは `check_responsibility.py` が検査する
+- `-p` サブセットの素朴運用は warm フルより遅くなる(199s vs 100s — 上記「`-p` 集合固定」の再発見。**この節を読まずにビルド調査を始めるとこの再発見を繰り返す**)
+- 時間予算試験(storm・r2)は debug+並列で走らせる事自体が矛盾 — 合否確認は単独 or release で
+- **合否の exit code をパイプ越しに取らない**: `cargo … | tail` は合否を殺す(前任の check-docs 事故)。zsh では `$PIPESTATUS` は空(bash 綴り — zsh は `$pipestatus`)で「検証したつもり」になる(2026-08-22 に2回実測)。**リダイレクトで log へ落とし `$?` を直接見る**のが唯一安全
+
+### 頻出コマンド(コピペ用 — 記憶から組み立てない。2026-08-22: cd 位置の誤り5連発の根治)
+
+正本 workspace は `next/`(リポ根の Cargo.toml は旧 workspace で `motolii-shell` を含まない)。**`--manifest-path` で cwd 依存を消す** — 背景実行はシェルの cd 履歴に関わらずリポ根で走るため、cd 前置は事故源。パスは `$(git rev-parse --show-toplevel)` で**自分のいるツリーの根**に解決させる — レーンは自分の worktree・supervisor は main checkout と自動で正しく分かれ(絶対パス直書きだと worktree から main を誤ビルドする)、リポ移動にも生き残る。ハードコードは `next/` の1語のみ(構成が変われば本節を更新):
+
+```bash
+# フル関門(merge 前最終)— 合否は $? 直取り
+cargo test --manifest-path "$(git rev-parse --show-toplevel)/next/Cargo.toml" --workspace --locked --no-fail-fast -j 4 > /tmp/full.log 2>&1; echo "EXIT=$?"
+
+# fixture 窓のビルド(preview profile = release同等opt+incremental。初回のみ遅い)
+cargo build --manifest-path "$(git rev-parse --show-toplevel)/next/Cargo.toml" --profile preview -p motolii-shell -j 4
+
+# fixture 窓の起動(supervisor が main checkout から)
+"$(git rev-parse --show-toplevel)/next/target/preview/motolii-shell" --fixture
+
+# storm/r2 の無罪確認(負荷 flake — release 単独)
+cargo test --manifest-path "$(git rev-parse --show-toplevel)/next/Cargo.toml" --release -p motolii-store --test document edit_storm_with_the_real_track_type
+```
+
+### UI修正はホットリロード運転(2026-08-27 利用者指示 — 「毎回ビルド」の根治)
+
+front の UI 調整で**変更ごとに `cargo build`→再起動をしない**。窓はセッションで1回だけ起動:
+
+```bash
+cargo run --locked --manifest-path app/Cargo.toml -p motolii -- --hot --remote > /tmp/motolii.log 2>&1 &
+```
+
+- `--hot` は makepad 本体の live reload: `script_mod!` を持つ `src/*.rs` の保存が
+  再ビルド無しで窓に届く(`*_surface.rs` / `chrome/*.rs` / `main.rs` すべて)。
+  以後のループは「保存 → `--remote` の `/g` `/snap` で確認」だけ
+- `--hot` と `--remote` は独立の引数チェック(platform/live_reload.rs)なので併用可。
+  リポ根から起動する(リソースパス解決)
+- `--hot` は Rust の `const` に届かない。繰り返し詰める視覚定数は `#[live]` フィールド+
+  宣言に置く(r7 README「調整する値は script_mod! に置く(裁定269)」)
+- 変更前に makepad skills を読む: makepad-2.0-design-judgment → 該当 compliance skill
+- `--remote` 運転の正本は `~/rust_ae/makepad-motolii/AGENTS.md`。利用者の窓には触らない・
+  自分が開けた窓は終わったら落とす
+
+### 製品は `app/` に居る(2026-08-27 裁定 — probe 身分の是正)
+
+`app/` は Motolii の**三代目**。前史は `crates/`(egui/iced 初代)と `next/`(iced 二代目)で、
+どちらも「いつ来たか」で名付けたため次が来るたび名前が嘘になった。`app/` は「何であるか」で
+名乗る — front が Makepad から替わっても製品は製品。
+
+- **front を `probes/` へ戻さない。** Makepad front は裁定251/252 で製品になったのに身分が
+  probe のまま残り、独立 workspace で CI の視界の外にあった。27本のテストが一度も CI で
+  走らず、UX 欠陥27件が緑のまま通過した。誰も規律を外そうと決めていない —
+  **probe には規律がそもそも適用されない**、それだけが原因だった
+- **`app/Cargo.toml` の members は明示。** 空の `[workspace]` にしない。crate が増えるのは
+  誰かが1行書いた時だけ、という状態が「混合しない」の実体
+- **意味の正本(store / shell-state / engine / fixture)は `next/` のまま引く。** 背骨は
+  iced の時代の物ではなく 21 crate が読む共有資産で、front の持ち物ではない
+- **`[patch]` と `default-features` は workspace root にしか効かない。** メンバーの
+  Cargo.toml へ書くと cargo は黙って無視する。移設時にこれで fork ではなく古い git rev を
+  引き、`floating_tab_bar_cells` が「無いメソッド」になった。**効く場所は1つ**
+
+### 実窓を見る時(2026-08-25 実測 — computer-use 迂回の根治)
+
+- **Makepad の窓は macOS のアクセシビリティに応答しない**。computer-use の `get_app_state` はタイムアウトする。`.app` ラッパーへ包み直しても変わらない(2026-08-25 に両方実測)。**AX が返らないのは実装の欠陥ではなく Makepad の性質**なので、ここから原因調査を始めない
+- **全画面 `screencapture -x` を証拠にしない** — 窓が画面のどこにあるか読めず、利用者からは「見えない」。窓単体を撮る:
+
+```bash
+# 窓IDを引く(owner 名で絞る。プロセス名の一部を渡す)
+swift -e 'import CoreGraphics
+let info = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as! [[String: Any]]
+for w in info { let o = w[kCGWindowOwnerName as String] as? String ?? ""
+  if o.contains("r7-makepad") { print(o, w[kCGWindowNumber as String] ?? "") } }'
+
+# その窓だけを撮る
+screencapture -x -l <窓ID> /tmp/window.png
+```
+
+- **GUI の起動プロセスを待たない**: 窓は終了しないので `yield_time_ms` 付きの待ちは丸ごと空振りする(2026-08-25 に30秒×6回=3分を捨てた)。起動は投げっぱなしにし、存在確認は `pgrep -af`、結果確認は上のキャプチャで取る
+- **実窓で時間を測るなら debug バイナリを使わない**(2026-08-25 実測の失敗): `./target/debug/` のまま計測すると支配項が偽装される。実例 — `ImageBuffer::new`(1920×1080 RGBA = 8.3MB のゼロ埋め)が **46.578ms** と出て「CPU 画像経路が主因」と結論されたが、これは約180MB/s = 最適化なしの1バイトずつゼロ埋めの速度で、release では `memset` になり1ms未満。57.654ms の中央値のうち**81%が debug artifact の疑い**だった。「検収の3段」の『合否確認は単独 or release で』は実窓の計測にもそのまま効く。**窓の計測は `--profile preview` で取る**(release同等opt+incremental、この用途のために既に用意してある)
+- **計測値を根拠に構造判断へ進む前に、桁が物理的に妥当か1度問う**: 8MB のメモリ操作が数十msなら、それは処理コストではなくビルド設定を測っている
+
+- computer-use を触るのは**操作そのもの(ドラッグ・hover・押し分け)が検査対象の時だけ**。見た目の確認は上の2コマンドで足りるので、`computer-use/SKILL.md`(211行)を読む必要はない(2026-08-25 は1セッションで9回読み直し、圧縮5回の主因になった)
+
+### 既知の構造ギャップと改善ルート(未着手 — 変更時はここを更新)
+
+1. **レーン worktree が毎回 cold**: 裁定138 は「常設 warm worktree・使い捨て禁止」を定めるが、subagent の isolation:worktree は毎回新規作成= target 空。フル10分の正体。ルート: 役割別常設 worktree の再利用 or 発注時に main の target/ をコピーして持たせる(共有と違い書き戻らない)
+2. **nextest**: リンク律速には効かず却下(裁定138)だが、**別問題**(tier 分割を1回のビルドから filterset で切る・既知 flake 名指し retries)には適合(調査 §3)。0.9.143 導入済み。採否は利用者裁定待ち
+3. (完了済みの参考)shell test バイナリ統合 10本→2本はレーン A で着地済み(フルリンク 45.5s→18〜26s、[レーンボード](2026-08-21-lane-board.md))。`depth_offset` 極端値による外周1px縮みはレーン B と BL3 で**2度**出た同型バグ — 極端値を使わない(`background_rect` doc)
+
+正本: [ビルド速度の調査](2026-08-19-build-speed-investigation.md)・[静的検収調査](2026-08-22-static-acceptance-survey.md)・[next/DECISIONS.md](../../next/DECISIONS.md) 裁定138。レーン運用の実測則は [next/reference/KNOWN.md](../../next/reference/KNOWN.md) の「レーン運用」節。**ビルド/検収の知見はこのファイルと上記正本にだけ追記する(新文書を増やさない)。ビルド系の調査・発注をする前に必ずこの節を読ませる。**
+
+### glam の `inverse()` は自己アサートする — 呼ぶ前に `determinant()` を見る(2026-08-22 実測)
+
+ワークスペースのどこかの依存が glam の `debug-glam-assert`/`glam-assert` feature を
+有効化しており、feature unification で**全体に効いている**。その結果:
+
+`Mat2::inverse()`(`glam-0.30.10`)は**結果を返す前に** `glam_assert!(...is_finite())`
+で自己アサートする。つまり「`inverse()` を呼んでから `is_finite()` で後始末する」形の
+ガードは、**そのガードへ到達する前に panic する**。実害の例:
+Scale X = 0 のレイヤーで Stage の Anchor Point ハンドルを掴むと debug ビルドで落ちた
+(release では `is_finite()` ガードが機能して「偶然」動いていた — 潜在的な地雷)。
+
+**正しい形**: `determinant()` を先に見て、非有限または 0 なら `inverse()` を**呼ばない**。
+
+```rust
+let det = m.determinant();
+if !det.is_finite() || det == 0.0 { return fallback; }
+let inv = m.inverse();
+```
+
+`Mat2` から回転/せん断だけを取り出した行列(det=1 が保証される物)は例外だが、
+**保証の根拠をその場に書くこと**。
