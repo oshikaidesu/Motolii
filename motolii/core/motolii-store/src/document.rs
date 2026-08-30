@@ -218,7 +218,7 @@ pub enum Intent {
         draft: crate::AssetDraft,
     },
     /// 台帳から素材を取り除く。**この素材を指す layer が居るかは見ない**
-    /// (`LayerSource::Media` との参照統合は非目標、裁定162 の第一波)。
+    /// (`LayerSource::File` との参照統合は非目標、裁定162 の第一波)。
     RemoveAsset {
         asset: crate::AssetId,
     },

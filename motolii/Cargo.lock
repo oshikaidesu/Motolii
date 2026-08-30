@@ -1725,35 +1725,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "dioxus-native-probe"
-version = "0.0.0"
-dependencies = [
- "anyrender",
- "base64 0.22.1",
- "blitz-dom",
- "blitz-paint",
- "blitz-traits",
- "bytemuck",
- "dioxus-native",
- "ffmpeg-sidecar",
- "glam",
- "image",
- "keyboard-types 0.7.0",
- "macaw",
- "motolii-engine",
- "motolii-fixture",
- "motolii-media",
- "motolii-store",
- "motolii-vector",
- "peniko",
- "pollster",
- "re_log",
- "re_renderer",
- "wgpu",
- "wgpu_context",
-]
-
-[[package]]
 name = "dioxus-rsx"
 version = "0.7.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3607,6 +3578,35 @@ dependencies = [
 ]
 
 [[package]]
+name = "motolii"
+version = "0.0.0"
+dependencies = [
+ "anyrender",
+ "base64 0.22.1",
+ "blitz-dom",
+ "blitz-paint",
+ "blitz-traits",
+ "bytemuck",
+ "dioxus-native",
+ "ffmpeg-sidecar",
+ "glam",
+ "image",
+ "keyboard-types 0.7.0",
+ "macaw",
+ "motolii-engine",
+ "motolii-fixture",
+ "motolii-media",
+ "motolii-store",
+ "motolii-vector",
+ "peniko",
+ "pollster",
+ "re_log",
+ "re_renderer",
+ "wgpu",
+ "wgpu_context",
+]
+
+[[package]]
 name = "motolii-audio"
 version = "0.1.0"
 dependencies = [
@@ -3655,6 +3655,7 @@ version = "0.1.0"
 dependencies = [
  "motolii-compositor",
  "motolii-core",
+ "motolii-fixture",
  "motolii-media",
  "motolii-store",
  "motolii-testkit",

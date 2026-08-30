@@ -213,24 +213,14 @@ pub enum LayerSource {
         width: u32,
         height: u32,
     },
-    /// 実素材。**動画も静止画も同じ variant**を通す — 経路を分けると、
-    /// 片方だけ直る欠陥が生まれる(初回タッチ観察の再発防止)。
+    /// 実素材(動画・静止画・点群、すべて同じ variant)。種別は持たない —
+    /// どの読み手で開くかは上流の拡張子 registry(`motolii_media::asset_type_for_extension`
+    /// 等)が呼び手側でその場で判定する。
     ///
     /// 大きさは probe が決めるので Document は持たない。`fingerprint` はパスが
     /// 動いても同じ物だと言えるようにするための内容識別で、無くても描ける。
-    Media {
-        path: String,
-        fingerprint: Option<String>,
-    },
-    /// 実測点群(`.ply` 等)。**`Media` と別 variant にした理由**: `Media` の decode
-    /// (`motolii-media` の ffmpeg サイドカー、YUV フレーム)と点群の読み口
-    /// (`motolii-media::point_cloud`、Rerun `Points3D` archetype 経由)は中身が
-    /// 全く別のパイプラインで、1つの match 腕へ両方詰めると Media 自身の分岐が
-    /// 太る。`Text`/`Shape` が Media と別 variant なのと同じ判断 —
-    /// 「同じ機構を通る物だけ同じ variant」であって「素材ならなんでも Media」ではない。
-    ///
-    /// 大きさは `Media` と同じく Document は持たない(engine が読んで決める)。
-    PointCloud {
+    #[serde(alias = "Media", alias = "PointCloud")]
+    File {
         path: String,
         fingerprint: Option<String>,
     },
@@ -271,8 +261,7 @@ impl LayerSource {
     pub fn declared_size(&self) -> Option<[f32; 2]> {
         match self {
             Self::Solid { width, height, .. } => Some([*width as f32, *height as f32]),
-            Self::Media { .. }
-            | Self::PointCloud { .. }
+            Self::File { .. }
             | Self::Null
             | Self::Shape
             | Self::Text

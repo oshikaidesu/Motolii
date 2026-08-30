@@ -12,10 +12,10 @@
 //!
 //! **bin-first**(取り込んでから配置する、AE/Premiere/Resolve 共通のワークフロー)を
 //! Document が表現できるようにするための台帳(裁定162 の問い: 取り込んだが未配置の
-//! 素材の置き場が next の store に無かった)。[`crate::LayerSource::Media`](裁定79)は
+//! 素材の置き場が next の store に無かった)。[`crate::LayerSource::File`](裁定79)は
 //! 「配置済み layer が指す素材」であって、取り込んだが未配置の素材の置き場ではない —
 //! この2つは別の関心事であり、この切片(裁定162 の第一波)は台帳とその読み口までで、
-//! `LayerSource::Media` との参照統合はしない(後続裁定)。
+//! `LayerSource::File` との参照統合はしない(後続裁定)。
 
 use std::collections::BTreeMap;
 

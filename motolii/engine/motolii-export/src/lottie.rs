@@ -44,6 +44,7 @@
 use std::collections::HashSet;
 
 use motolii_core::{Fps, RationalTimeError};
+use motolii_media::is_point_cloud_path;
 use motolii_store::{
     property, EffectInstance, LayerAttrs, LayerId, LayerMeta, LayerSource, PropertyId, StoreError,
     StoreView, Value,
@@ -313,7 +314,22 @@ fn build_layer(
                 });
             }
         }
-        LayerSource::Media { path, .. } => {
+        LayerSource::File { path, .. } if is_point_cloud_path(path) => {
+            // Lottie は 3D 点群という概念自体を持たない(ベクタ/ラスタのみ)——
+            // `Group` が Null(`ty: 3`)へ寄せるのと同じ形で書くが、こちらは
+            // 「絵を持たない印」ではなく本来絵を持つ layer が欠落するので、
+            // `Group` と違い明示的に `unsupported` へ積む(黙って空にしない)。
+            out["ty"] = serde_json::json!(3);
+            unsupported.push(UnsupportedForLottie {
+                layer: Some(layer),
+                category: "point-cloud",
+                detail: format!(
+                    "点群 layer({path})に対応する Lottie layer type が無いため \
+                     Null layer(`ty: 3`)として書いた——絵は出ない"
+                ),
+            });
+        }
+        LayerSource::File { path, .. } => {
             let (ty, asset) = build_media_asset(layer, path, unsupported);
             let ref_id = asset["id"].as_str().unwrap().to_owned();
             assets.push(asset);
@@ -343,21 +359,6 @@ fn build_layer(
         LayerSource::Text => {
             out["ty"] = serde_json::json!(5);
             out["t"] = build_text_data(ctx, layer, unsupported)?;
-        }
-        LayerSource::PointCloud { path, .. } => {
-            // Lottie は 3D 点群という概念自体を持たない(ベクタ/ラスタのみ)——
-            // `Group` が Null(`ty: 3`)へ寄せるのと同じ形で書くが、こちらは
-            // 「絵を持たない印」ではなく本来絵を持つ layer が欠落するので、
-            // `Group` と違い明示的に `unsupported` へ積む(黙って空にしない)。
-            out["ty"] = serde_json::json!(3);
-            unsupported.push(UnsupportedForLottie {
-                layer: Some(layer),
-                category: "point-cloud",
-                detail: format!(
-                    "点群 layer({path})に対応する Lottie layer type が無いため \
-                     Null layer(`ty: 3`)として書いた——絵は出ない"
-                ),
-            });
         }
     }
 
@@ -449,8 +450,8 @@ fn rgb_hex(rgba: &[u8; 4]) -> String {
     format!("#{:02X}{:02X}{:02X}", rgba[0], rgba[1], rgba[2])
 }
 
-/// Media 由来の Lottie asset を1つ作る。ファイル種別は拡張子で当てるしかない
-/// (`LayerSource::Media` は image/video/audio を型で区別しない、地図の note どおり) —
+/// File(動画/画像)由来の Lottie asset を1つ作る。ファイル種別は拡張子で当てるしかない
+/// (`LayerSource::File` は image/video/audio を型で区別しない、地図の note どおり) —
 /// 未知の拡張子は image 扱いへフォールバックしつつ、判定できないことを報告する。
 fn build_media_asset(
     layer: LayerId,
@@ -477,7 +478,7 @@ fn build_media_asset(
                 category: "media-kind",
                 detail: format!(
                     "path `{path}` の拡張子 `{ext}` から image/video/audio を判定できない \
-                     (LayerSource::Media は種別を型で持たないので拡張子で当てるしかない) \
+                     (LayerSource::File は種別を型で持たないので拡張子で当てるしかない) \
                      — image-layer(ty=2)へ倒した"
                 ),
             });

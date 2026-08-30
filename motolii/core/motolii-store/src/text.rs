@@ -106,7 +106,7 @@ use crate::SlotId;
 pub struct FontRef {
     /// フォント実体の在処(`font fPath`)。
     pub path: String,
-    /// 内容識別。無くても描ける(`LayerSource::Media.fingerprint` と同じ理由)。
+    /// 内容識別。無くても描ける(`LayerSource::File.fingerprint` と同じ理由)。
     pub fingerprint: Option<String>,
     /// family 名(`font fFamily`)。実体解決のキー。
     pub family: String,

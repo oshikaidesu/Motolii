@@ -9,7 +9,7 @@
 //!   を持つ)から source を組んでいた。
 //! - 新 store には**この2つがどちらも無い**。「足りない口」として終了報告に書く —
 //!   ここでは実装しない(発注書の指示どおり)。この束が実際に組めるのは:
-//!   - `view.layers()` を舐め、`LayerSource::Media` を持つ layer ごとに、
+//!   - `view.layers()` を舐め、`LayerSource::File` を持つ layer ごとに、
 //!     **既定ordinal(0)の audio stream 1本だけ**を `MixSource` へ変換する
 //!   - gain は標準 property `level`(`property::LEVEL`)の `KeyframeTrack` を
 //!     そのまま渡す(track が無ければ裁定20により静止値1.0)
@@ -92,12 +92,12 @@ pub struct AudioProgram {
     composition_duration: RationalTime,
 }
 
-/// `LayerSource::Media` のうち、音声 program が読む候補を正準化した投影。
+/// `LayerSource::File` のうち、音声 program が読む候補を正準化した投影。
 ///
 /// store に audio 専用の `LayerSource` variant は作らない。動画・静止画・音声は
-/// すべて同じ `Media` を通り、実際に音声 stream があるかは decode 層が判定する。
-/// この投影が先に決めるのは「可視 Media layer は soundtrack program の入力候補で
-/// ある」「hidden または Media 以外は入力候補ではない」という境界だけである。
+/// すべて同じ `File` を通り、実際に音声 stream があるかは decode 層が判定する。
+/// この投影が先に決めるのは「可視 File layer は soundtrack program の入力候補で
+/// ある」「hidden または File 以外は入力候補ではない」という境界だけである。
 /// `layer_mix_source` はこの値を使って decode と `MixSource` への投影を続けるため、
 /// soundtrack の意味を Shell や store と重複所有しない。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -106,11 +106,11 @@ struct SoundtrackInput {
     cache_key: String,
 }
 
-/// 可視 Media layer を soundtrack program の入力候補へ投影する。
+/// 可視 File layer を soundtrack program の入力候補へ投影する。
 ///
 /// 音声を持たない動画・画像はここで誤って「音声あり」と断定しない。後段の
 /// `load_canonical_stream` が `NoAudioTrack`/`StreamNotFound` を局所的に候補外へ落とす
-///ことで、Media 一本化を保ったまま audio の有無を実データから決める。
+///ことで、File 一本化を保ったまま audio の有無を実データから決める。
 fn project_soundtrack_input(
     meta: &motolii_store::LayerMeta,
     hidden: bool,
@@ -118,7 +118,7 @@ fn project_soundtrack_input(
     if hidden {
         return None;
     }
-    let LayerSource::Media { path, fingerprint } = &meta.source else {
+    let LayerSource::File { path, fingerprint } = &meta.source else {
         return None;
     };
     Some(SoundtrackInput {
@@ -133,7 +133,7 @@ impl AudioProgram {
     /// 返す決定論的な並びにそのまま従う(同じ Document なら常に同じ順で mix する)。
     ///
     /// `caches` は `(識別キー, audio_ordinal) → 正準PcmCache`。識別キーは
-    /// `LayerSource::Media::fingerprint`(無ければ `path`)。
+    /// `LayerSource::File::fingerprint`(無ければ `path`)。
     pub fn from_view(
         view: &StoreView<'_>,
         caches: &mut HashMap<(String, u32), Arc<PcmCache>>,
@@ -330,7 +330,7 @@ mod tests {
 
     fn media_meta(path: &str, fingerprint: Option<&str>) -> LayerMeta {
         LayerMeta {
-            source: LayerSource::Media {
+            source: LayerSource::File {
                 path: path.to_owned(),
                 fingerprint: fingerprint.map(str::to_owned),
             },
@@ -342,7 +342,7 @@ mod tests {
     #[test]
     fn visible_media_projects_to_soundtrack_input_with_path_fallback() {
         let projected = project_soundtrack_input(&media_meta("voice.wav", None), false)
-            .expect("visible Media is a soundtrack input candidate");
+            .expect("visible File is a soundtrack input candidate");
 
         assert_eq!(projected.path, "voice.wav");
         assert_eq!(projected.cache_key, "voice.wav");
@@ -352,7 +352,7 @@ mod tests {
     fn fingerprint_is_the_soundtrack_cache_identity_when_present() {
         let projected =
             project_soundtrack_input(&media_meta("/moved/voice.wav", Some("sha256:voice")), false)
-                .expect("fingerprinted visible Media remains a soundtrack input candidate");
+                .expect("fingerprinted visible File remains a soundtrack input candidate");
 
         assert_eq!(projected.path, "/moved/voice.wav");
         assert_eq!(projected.cache_key, "sha256:voice");

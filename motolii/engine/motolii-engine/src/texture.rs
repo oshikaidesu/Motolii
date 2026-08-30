@@ -9,7 +9,7 @@ use std::hash::{Hash, Hasher};
 
 use motolii_compositor::GpuTexture2D;
 use motolii_core::CompSpec;
-use motolii_media::{load_point_cloud, probe};
+use motolii_media::{is_point_cloud_path, load_point_cloud, probe};
 use motolii_store::{
     LayerId, LayerSource, RationalTime, ResolvedLayer, ShapeNode, StoreView, TextDocument,
 };
@@ -47,11 +47,13 @@ impl Engine {
             self.text_texture_for(view, layer.id, t, comp)
         } else if layer.source == LayerSource::Shape {
             self.shape_texture_for(view, layer.id, comp)
-        } else if let LayerSource::PointCloud { path, .. } = &layer.source {
-            self.point_cloud_texture_for(path, comp)
-        } else if let LayerSource::Media { path, .. } = &layer.source {
-            let path = path.clone();
-            self.media_texture_for(&path, layer.source_frame, layer.id)
+        } else if let LayerSource::File { path, .. } = &layer.source {
+            if is_point_cloud_path(path) {
+                self.point_cloud_texture_for(path, comp)
+            } else {
+                let path = path.clone();
+                self.media_texture_for(&path, layer.source_frame, layer.id)
+            }
         } else {
             self.texture_for(&layer.source, layer.source_frame)
         }
@@ -85,13 +87,17 @@ impl Engine {
                 let key = ShapeCacheKey::new(layer_id, &shapes, canvas.width, canvas.height);
                 self.shape_textures.get(&key)?.width_height().map(|v| v as f32)
             }
-            LayerSource::PointCloud { .. } | LayerSource::Null | LayerSource::Group => {
+            LayerSource::Null | LayerSource::Group => {
                 [comp.width as f32, comp.height as f32]
             }
             LayerSource::Solid { width, height, .. } => [*width as f32, *height as f32],
-            LayerSource::Media { path, .. } => {
-                let info = self.probes.get(path)?;
-                [info.width as f32, info.height as f32]
+            LayerSource::File { path, .. } => {
+                if is_point_cloud_path(path) {
+                    [comp.width as f32, comp.height as f32]
+                } else {
+                    let info = self.probes.get(path)?;
+                    [info.width as f32, info.height as f32]
+                }
             }
         };
         Some(layer_size(layer, natural))
@@ -122,11 +128,13 @@ impl Engine {
                 .map(Vec::as_slice)
                 .unwrap_or(&[]);
             self.shape_texture_from_shapes(shapes, layer.id, comp)
-        } else if let LayerSource::PointCloud { path, .. } = &layer.source {
-            self.point_cloud_texture_for(path, comp)
-        } else if let LayerSource::Media { path, .. } = &layer.source {
-            let path = path.clone();
-            self.media_texture_for(&path, layer.source_frame, layer.id)
+        } else if let LayerSource::File { path, .. } = &layer.source {
+            if is_point_cloud_path(path) {
+                self.point_cloud_texture_for(path, comp)
+            } else {
+                let path = path.clone();
+                self.media_texture_for(&path, layer.source_frame, layer.id)
+            }
         } else {
             self.texture_for(&layer.source, layer.source_frame)
         }
@@ -289,12 +297,12 @@ impl Engine {
         Ok((Some(texture), [raster.width as f32, raster.height as f32]))
     }
 
-    /// `LayerSource::PointCloud` の texture 化。`text_texture_from_document`/
+    /// 点群として開いた `LayerSource::File` の texture 化。`text_texture_from_document`/
     /// `shape_texture_from_shapes` と同型 — canvas は comp 全域に固定し、板が
     /// そのまま comp を覆う(3D点群を「comp を覆うレンダリング済みビュー」として
     /// 平面合成に混ぜる。板の上で 3D カメラを手で振れる機能はこの切片の非目標)。
     ///
-    /// **A05 隔離**(`LayerSource::Media` 枝と同じ規律): 読み込み/GPU描画の失敗は
+    /// **A05 隔離**(動画/画像として開く枝と同じ規律): 読み込み/GPU描画の失敗は
     /// この layer だけへ閉じる——`self.layer_failures` へ積み、呼び出し元へは
     /// `Err` を伝播しない(comp 全体の合成を道連れにしない)。
     fn point_cloud_texture_for(
@@ -540,12 +548,10 @@ impl Engine {
             // (このモジュール内には現状無い)向けの安全側の既定値として残す
             // (2026-08-22、シェイプが画に出るようにする発注で `Shape` も `Text` と
             // 同じ扱いへ揃えた)。
-            // **`PointCloud` もここでは呼べない**(comp 解像度が要る——`point_cloud_texture_for`
-            // の doc 参照)。`Text`/`Shape` と同じ理由・同じ安全側の既定値。
-            LayerSource::Text
-            | LayerSource::Shape
-            | LayerSource::PointCloud { .. }
-            | LayerSource::Media { .. } => {
+            // 点群としての `File` もここでは呼べない(comp 解像度が要る——
+            // `point_cloud_texture_for` の doc 参照)。`Text`/`Shape` と同じ理由・
+            // 同じ安全側の既定値。
+            LayerSource::Text | LayerSource::Shape | LayerSource::File { .. } => {
                 Ok((None, [0.0, 0.0]))
             }
             // null layer は元々絵を持たず(裁定どおり)、`Group`(裁定173)も同じく

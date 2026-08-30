@@ -87,7 +87,7 @@ fn audio_only_file_has_no_frame_count_but_has_a_real_duration() {
 }
 
 /// video ファイルは今まで通り `nb_frames` が `media_frames` に届く
-/// (`crate::texture` の `LayerSource::Media` 分岐が同じ値を使っている、既存の使い方を
+/// (`crate::texture` の File 動画/画像 分岐が同じ値を使っている、既存の使い方を
 /// 壊していないことの確認)。
 #[test]
 fn video_file_reports_its_native_frame_count() {

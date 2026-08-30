@@ -352,8 +352,13 @@ pub fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: RationalTime
         .collect();
     let source_name = match view.meta(layer).ok().flatten().map(|m| m.source) {
         Some(LayerSource::Solid { .. }) => "solid",
-        Some(LayerSource::Media { .. }) => "media",
-        Some(LayerSource::PointCloud { .. }) => "point cloud",
+        Some(LayerSource::File { path, .. }) => {
+            if motolii_media::is_point_cloud_path(&path) {
+                "point cloud"
+            } else {
+                "media"
+            }
+        }
         Some(LayerSource::Null) => "null",
         Some(LayerSource::Shape) => "shape",
         Some(LayerSource::Text) => "text",

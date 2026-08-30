@@ -1,4 +1,4 @@
-//! **検収条件**(発注「点群 vertical slice」): `.ply` → `LayerSource::PointCloud` →
+//! **検収条件**(発注「点群 vertical slice」): `.ply` → `LayerSource::File` →
 //! `Engine::render_frame` が Stage の画素として実際に点群を描くこと。
 //! `zero_copy_shape.rs::rectangle_shape_zero_copy_matches_cpu_export_and_renders_visible_pixels`
 //! と同じ oracle の形(色つきピクセルの実測、パイプラインの終端で実測する)を
@@ -72,7 +72,7 @@ fn place_point_cloud_layer(doc: &mut Document, layer: LayerId, path: &std::path:
     doc.apply(Intent::SetMeta {
         layer,
         meta: LayerMeta {
-            source: LayerSource::PointCloud {
+            source: LayerSource::File {
                 path: path.to_string_lossy().into_owned(),
                 fingerprint: None,
             },
@@ -121,7 +121,7 @@ fn ply_point_cloud_renders_visible_pixels_through_render_frame() {
 }
 
 /// 存在しないパスは他の layer を巻き込まず、この layer だけ「描く物が無い」に
-/// 落ちること(`LayerSource::Media` の A05 隔離と同じ規律、`point_cloud_texture_for`
+/// 落ちること(動画/画像として開く枝の A05 隔離と同じ規律、`point_cloud_texture_for`
 /// の doc 参照)。
 #[test]
 fn missing_ply_isolates_to_this_layer_without_erroring_the_whole_frame() {

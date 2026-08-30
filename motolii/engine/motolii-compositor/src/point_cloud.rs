@@ -1,5 +1,5 @@
 //! wraps: `re_renderer::PointCloudBuilder`/`PointCloudDrawData` — 点群を1枚のオフスクリーン
-//! texture へ焼く(engine 側の `LayerSource::PointCloud` から呼ばれる)。
+//! texture へ焼く(engine 側の `LayerSource::File`(点群として開いた場合)から呼ばれる)。
 //!
 //! **新しい合成経路は作らない**: 出力は他の layer と同じ [`GpuTexture2D`] 1枚
 //! (`Compositor::render`/`render_with_timing` の `TexturedRect` としてそのまま混ざる)。

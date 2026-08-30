@@ -30,6 +30,15 @@ pub fn is_point_cloud_extension(extension: &str) -> bool {
     re_importer::SUPPORTED_POINT_CLOUD_EXTENSIONS.contains(&extension.as_str())
 }
 
+/// このパスの拡張子が点群か。[`is_point_cloud_extension`] のパス版 —
+/// `LayerSource::File` が種別を持たないので、呼び手はここで判定する。
+pub fn is_point_cloud_path(path: impl AsRef<Path>) -> bool {
+    path.as_ref()
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .is_some_and(is_point_cloud_extension)
+}
+
 /// この拡張子(先頭 `.` 無し、大小文字を問わない)を Rerun の組み込み importer の
 /// どれかが読めるか。形式ごとの一覧はここに持たず `re_importer::is_supported_file_extension`
 /// (`SUPPORTED_*_EXTENSIONS` 群を横断する)へそのまま委ねる。

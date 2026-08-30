@@ -24,7 +24,7 @@ enum NewKind {
     Text,
     Rectangle,
     Bezier,
-    /// 台帳の素材を層にする。動画も静止画も同じ`LayerSource::Media`を通る。
+    /// 台帳の素材を層にする。動画も静止画も点群も同じ`LayerSource::File`を通る。
     Media { path: String, name: String },
 }
 
@@ -36,7 +36,7 @@ fn new_layer_intents(layer: LayerId, order: i16, playhead: i64, duration_frames:
             Intent::SetMeta {
                 layer,
                 meta: LayerMeta {
-                    source: LayerSource::Media { path, fingerprint: None },
+                    source: LayerSource::File { path, fingerprint: None },
                     order,
                     timing: LayerTiming::place(playhead, None, duration_frames),
                 },
@@ -606,7 +606,8 @@ mod spawn_diagnosis {
             dimension: wgpu::TextureDimension::D2,
             format: wgpu::TextureFormat::Rgba8UnormSrgb,
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_SRC,
-            view_formats: &[],
+            // finalize_into は composite を通すため同じメモリを Rgba8Unorm として見直す。
+            view_formats: &[wgpu::TextureFormat::Rgba8Unorm],
         });
         engine.render_frame_into(&doc.view(), t, &target).expect("render_frame_into");
 

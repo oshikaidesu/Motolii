@@ -168,7 +168,7 @@ pub struct Engine {
     failed_probes: HashMap<String, String>,
     /// **A05(`next/reference/axis/A05-missing.tsv`)**: 直近の `render_frame`/
     /// `render_frame_to_texture` 系呼び出し1回ぶんで、`texture_for` の
-    /// `LayerSource::Media` 枝が probe/decode 失敗を隔離した layer の理由。
+    /// `LayerSource::File`(動画/画像)枝が probe/decode 失敗を隔離した layer の理由。
     ///
     /// 呼び出しのたび(`render_with_camera_override`/`layers_from_resolved` の
     /// 冒頭)に空へ戻す——「前フレームの理由を今のフレームのように見せない」
@@ -373,7 +373,7 @@ impl Engine {
     /// 「★ 次の一手」の #1。
     ///
     /// **単位は素材ネイティブの fps で数えたフレーム番号**——`crate::texture` の
-    /// `LayerSource::Media` 分岐が `info.nb_frames` をそのまま `LayerTiming::source_frame`
+    /// `LayerSource::File`(動画/画像)分岐が `info.nb_frames` をそのまま `LayerTiming::source_frame`
     /// の出力と比較している既存の実装(`texture.rs` 参照)と同じ単位にわざと揃えた。
     /// comp fps と素材 fps が食い違う場合にこの比較が厳密に正しいかは、この関数を
     /// 足す前から存在する別論点(EVIDENCE_GAP、報告に記載)。
