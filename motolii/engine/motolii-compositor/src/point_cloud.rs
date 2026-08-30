@@ -68,7 +68,10 @@ impl Compositor {
             .into_draw_data()
             .map_err(|e| CompositorError::Draw(e.to_string()))?;
 
-        let mut view_builder = ViewBuilder::new(
+        // pool が持つ main_target を import しない。pool は refcount が切れた資源を
+        // `destroy()` するので、import は元の texture が生きている保証を持たない。
+        let owned = self.create_blend_scratch_texture(width, height);
+        let mut view_builder = ViewBuilder::new_with_external_resolved(
             &self.ctx,
             TargetConfiguration {
                 name: "motolii-point-cloud".into(),
@@ -85,6 +88,7 @@ impl Compositor {
                 ..Default::default()
             },
             ViewBuilderId::new(self.next_readback),
+            &owned,
         )
         .map_err(|e| CompositorError::View(e.to_string()))?;
         self.next_readback += 1;
@@ -103,12 +107,11 @@ impl Compositor {
             .poll(wgpu::PollType::wait_indefinitely())
             .map_err(|e| CompositorError::Draw(e.to_string()))?;
 
-        let main_target = view_builder.main_target().clone();
         self.next_effect_key += 1;
         let key = self.next_effect_key;
         self.ctx
             .texture_manager_2d
-            .import_gpu_premultiplied(key, &self.ctx, &main_target.texture)
+            .import_gpu_premultiplied(key, &self.ctx, &owned)
             .map_err(|e| CompositorError::Effect(e.to_string()))
     }
 }

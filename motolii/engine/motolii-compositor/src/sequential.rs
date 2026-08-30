@@ -28,7 +28,7 @@ impl Compositor {
     /// その後 run-batching で BL3 merge(`118cdbf4`)の構造退行を根治)。
     ///
     /// layer を順に accumulator へ焼き込み、直前までの accumulator の裏付け
-    /// ([`AccumulatorBacking`]、fork pool の reclaim から守る Arc か、自前 scratch か)を
+    /// ([`AccumulatorBacking`])を
     /// 返す——CPU 読み戻しをするか([`Self::finalize_readback`])・GPU texture のまま
     /// 返すか([`Self::finalize_texture`])は呼び手が選ぶ(この関数自体はどちらもしない)。
     ///
@@ -74,16 +74,9 @@ impl Compositor {
     ///    ——`blend` モジュール doc が導出するとおり `αb=0` では `Co = αs·Cs` と数学的に
     ///    一致するので、混ぜる処理自体を省いてよい。
     ///
-    /// ## fork pool の罠(`AccumulatorBacking::Fork` にのみ効く)
-    ///
-    /// fork の `GpuTexturePool::begin_frame` は、通常(import ではない)texture の参照が
-    /// 尽きると reclaim 時に `res.texture.destroy()` を**明示的に**呼ぶ——import は
-    /// 「別の `wgpu::Texture` clone」を作るだけで、元の pool エントリの生存とは独立に
-    /// 守ってくれない。そのため `ViewBuilder::main_target().clone()` で `GpuTexture`
-    /// (Arc)を明示的に握り続け、次の run/layer の背景として使い終わる(= 次の submit を
-    /// poll で待ち終える)まで手放さない([`AccumulatorBacking::Fork`] 参照)。
-    /// [`AccumulatorBacking::Scratch`](blend pass の出力)はこのプールに属さない
-    /// 素の `wgpu::Texture` なので、この罠は無関係(Rust の所有権だけで足りる)。
+    /// submit のたびに `begin_frame` + poll を挟む。**外すと絵が壊れる** —
+    /// `RenderContext::begin_frame` は cpu→gpu の staging buffer を回収する口で、
+    /// 1合成で複数回 submit する以上その回数だけ要る。
     pub(crate) fn accumulate_sequential(
         &mut self,
         comp: CompSpec,
@@ -155,7 +148,8 @@ impl Compositor {
                 let draw_data = RectangleDrawData::new(&self.ctx, &[solo_rect])
                     .map_err(|e| CompositorError::Rectangles(e.to_string()))?;
 
-                let mut solo_view_builder = ViewBuilder::new(
+                let solo_owned = self.create_blend_scratch_texture(comp.width, comp.height);
+                let mut solo_view_builder = ViewBuilder::new_with_external_resolved(
                     &self.ctx,
                     sequential_target_config(
                         "motolii-comp-sequential-solo",
@@ -164,6 +158,7 @@ impl Compositor {
                         projection,
                     ),
                     ViewBuilderId::new(self.next_readback),
+                    &solo_owned,
                 )
                 .map_err(|e| CompositorError::View(e.to_string()))?;
                 self.next_readback += 1;
@@ -189,7 +184,7 @@ impl Compositor {
                     .poll(wgpu::PollType::wait_indefinitely())
                     .map_err(|e| CompositorError::Draw(e.to_string()))?;
 
-                let layer_canvas: GpuTexture = solo_view_builder.main_target().clone();
+                let layer_canvas = solo_owned;
 
                 match background.take() {
                     None => {
@@ -200,13 +195,13 @@ impl Compositor {
                         let imported = self
                             .ctx
                             .texture_manager_2d
-                            .import_gpu_premultiplied(key, &self.ctx, &layer_canvas.texture)
+                            .import_gpu_premultiplied(key, &self.ctx, &layer_canvas)
                             .map_err(|e| CompositorError::Effect(e.to_string()))?;
-                        background = Some((AccumulatorBacking::Fork(layer_canvas), imported));
+                        background = Some((layer_canvas, imported));
                     }
                     Some((backing, _)) => {
-                        let dst_view = backing.texture().create_view(&Default::default());
-                        let src_view = layer_canvas.default_view.clone();
+                        let dst_view = backing.create_view(&Default::default());
+                        let src_view = layer_canvas.create_view(&Default::default());
                         let out_texture =
                             self.create_blend_scratch_texture(comp.width, comp.height);
                         let out_view = out_texture.create_view(&Default::default());
@@ -241,10 +236,7 @@ impl Compositor {
                             .texture_manager_2d
                             .import_gpu_premultiplied(key, &self.ctx, &out_texture)
                             .map_err(|e| CompositorError::Effect(e.to_string()))?;
-                        background = Some((AccumulatorBacking::Scratch(out_texture), imported));
-                        // `backing`(直前の accumulator)はここで drop される——直前の
-                        // poll で GPU 読み取りは完了済みなので安全(fork pool の罠は
-                        // 関数 doc 参照、`Scratch` ならそもそも罠が無い)。
+                        background = Some((out_texture, imported));
                     }
                 }
 
@@ -339,7 +331,8 @@ impl Compositor {
             let draw_data = RectangleDrawData::new(&self.ctx, &rects)
                 .map_err(|e| CompositorError::Rectangles(e.to_string()))?;
 
-            let mut view_builder = ViewBuilder::new(
+            let run_owned = self.create_blend_scratch_texture(comp.width, comp.height);
+            let mut view_builder = ViewBuilder::new_with_external_resolved(
                 &self.ctx,
                 sequential_target_config(
                     "motolii-comp-sequential-run",
@@ -348,6 +341,7 @@ impl Compositor {
                     projection,
                 ),
                 ViewBuilderId::new(self.next_readback),
+                &run_owned,
             )
             .map_err(|e| CompositorError::View(e.to_string()))?;
             self.next_readback += 1;
@@ -371,15 +365,14 @@ impl Compositor {
                 .poll(wgpu::PollType::wait_indefinitely())
                 .map_err(|e| CompositorError::Draw(e.to_string()))?;
 
-            let held: GpuTexture = view_builder.main_target().clone();
             self.next_effect_key += 1;
             let key = self.next_effect_key;
             let imported = self
                 .ctx
                 .texture_manager_2d
-                .import_gpu_premultiplied(key, &self.ctx, &held.texture)
+                .import_gpu_premultiplied(key, &self.ctx, &run_owned)
                 .map_err(|e| CompositorError::Effect(e.to_string()))?;
-            background = Some((AccumulatorBacking::Fork(held), imported));
+            background = Some((run_owned, imported));
         }
 
         Ok(background)
@@ -388,11 +381,11 @@ impl Compositor {
     /// 2枚読みパスの出力先。分離可能/非分離 blend([`Self::accumulate_sequential`])と
     /// track matte([`Self::matte_layer`]、BL4)が共有する——どちらも「canvas サイズの
     /// premultiplied Rgba8UnormSrgb を1枚作って結果を書く」という同じ要求なので、
-    /// 名前(`blend`)は歴史的だが挙動はどちらの呼び手にも過不足ない。fork の
-    /// texture pool(`effect_scratch`)には**属さない**普通の `wgpu::Texture`——
-    /// [`Self::accumulate_sequential`] doc の「fork pool の罠」が無いので、素の
-    /// Rust 所有権(drop で破棄)だけで足りる。
-    fn create_blend_scratch_texture(&self, width: u32, height: u32) -> wgpu::Texture {
+    /// 名前(`blend`)は歴史的だが挙動はどちらの呼び手にも過不足ない。
+    ///
+    /// **texture pool に属さない**素の `wgpu::Texture`。pool は参照が尽きた資源を
+    /// `destroy()` するので、外へ渡す物や次のパスまで生かす物を pool から取らない。
+    pub(crate) fn create_blend_scratch_texture(&self, width: u32, height: u32) -> wgpu::Texture {
         self.ctx.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("motolii-compositor-blend-output"),
             size: wgpu::Extent3d {
@@ -611,7 +604,7 @@ impl Compositor {
     ) -> Result<(wgpu::Texture, wgpu::TextureView), CompositorError> {
         match background {
             Some((backing, _imported)) => {
-                let texture = backing.texture().clone();
+                let texture = backing.clone();
                 let view = texture.create_view(&Default::default());
                 Ok((texture, view))
             }
@@ -623,7 +616,10 @@ impl Compositor {
                 );
                 let draw_data = RectangleDrawData::new(&self.ctx, &[])
                     .map_err(|e| CompositorError::Rectangles(e.to_string()))?;
-                let mut view_builder = ViewBuilder::new(
+                // pool が持つ main_target を返さない。pool は refcount が切れた資源を
+                // `destroy()` するので、呼び手へ渡した後で無効になる。
+                let texture = self.create_blend_scratch_texture(comp.width, comp.height);
+                let mut view_builder = ViewBuilder::new_with_external_resolved(
                     &self.ctx,
                     sequential_target_config(
                         "motolii-comp-zero-copy-empty",
@@ -632,6 +628,7 @@ impl Compositor {
                         projection,
                     ),
                     ViewBuilderId::new(self.next_readback),
+                    &texture,
                 )
                 .map_err(|e| CompositorError::View(e.to_string()))?;
                 self.next_readback += 1;
@@ -642,10 +639,7 @@ impl Compositor {
                 self.ctx.before_submit();
                 self.ctx.queue.submit([command_buffer]);
 
-                let target = view_builder.main_target();
-                let texture = target.texture.clone();
-                let view = target.default_view.clone();
-                drop(view_builder);
+                let view = texture.create_view(&Default::default());
                 Ok((texture, view))
             }
         }

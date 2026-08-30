@@ -515,26 +515,10 @@ pub struct Compositor {
     pub(crate) sequential_submits: u64,
 }
 
-/// [`Compositor::accumulate_sequential`]が扱う「直前までの accumulator」の裏付け。
-/// **`Fork`**: `ViewBuilder::main_target()`(裁定161 fork accessor)由来——fork の
-/// texture pool の reclaim/destroy から実体を守るため、明示的に `GpuTexture`(Arc)を
-/// 握る(`Compositor::accumulate_sequential` doc「fork pool の罠」節参照)。
-/// **`Scratch`**: 分離可能 blend パスの出力(このファイルで直接
-/// `device.create_texture` した物、`Compositor::create_blend_scratch_texture`)。
-/// fork のプールに属さないので reclaim の心配はない——普通の Rust 所有権で足りる。
-enum AccumulatorBacking {
-    Fork(GpuTexture),
-    Scratch(wgpu::Texture),
-}
-
-impl AccumulatorBacking {
-    fn texture(&self) -> &wgpu::Texture {
-        match self {
-            Self::Fork(g) => &g.texture,
-            Self::Scratch(t) => t,
-        }
-    }
-}
+/// 逐次合成の accumulator が持つ texture。`Compositor::create_blend_scratch_texture`
+/// で自前に作った物なので、texture pool の reclaim/destroy とは無関係
+/// (普通の Rust 所有権で足りる)。
+type AccumulatorBacking = wgpu::Texture;
 
 /// [`Compositor::accumulate_sequential`]が受け取る、1 layer 分の入力。`Layer`
 /// (`Compositor::render_sequential`)と `LayerWithPasses`+実効 texture
