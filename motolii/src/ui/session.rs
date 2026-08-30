@@ -2,8 +2,8 @@ use std::sync::{Arc, Mutex};
 
 use motolii_store::{Document, LayerId};
 
-use crate::playback::Clock;
-use crate::tokens::UiScale;
+use crate::ui::playback::Clock;
+use crate::ui::tokens::UiScale;
 
 #[derive(Clone, Default)]
 pub struct Selection(Arc<Mutex<Vec<LayerId>>>);

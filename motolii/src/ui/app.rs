@@ -3,16 +3,16 @@ use std::sync::Arc;
 use dioxus_native::prelude::*;
 use dioxus_native::CustomWidgetAttr;
 
-use crate::browser::browser_panel;
-use crate::fixture::{load_fixture, Loaded};
-use crate::inspector::inspector_panel;
-use crate::keymap::{lookup, Intent};
-use crate::session::Session;
-use crate::stage_widget::StageWidget;
-use crate::timeline_shell::timeline_shell;
-use crate::timeline_widget::{split_layer, TimelineMsg, TimelineWidget};
-use crate::fixture;
-use crate::tokens;
+use crate::ui::browser::browser_panel;
+use crate::ui::fixture::{load_fixture, Loaded};
+use crate::ui::inspector::inspector_panel;
+use crate::ui::keymap::{lookup, Intent};
+use crate::ui::session::Session;
+use crate::ui::stage_widget::StageWidget;
+use crate::ui::timeline_shell::timeline_shell;
+use crate::ui::timeline_widget::{split_layer, TimelineMsg, TimelineWidget};
+use crate::ui::fixture;
+use crate::ui::tokens;
 
 static STYLES: &str = include_str!("styles.css");
 

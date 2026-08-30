@@ -1,9 +1,9 @@
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 
-use crate::playback::Clock;
-use crate::session::Selection;
-use crate::tokens::{self, UiScale};
+use crate::ui::playback::Clock;
+use crate::ui::session::Selection;
+use crate::ui::tokens::{self, UiScale};
 use anyrender::{PaintRef, PaintScene};
 use dioxus_native::prelude::{Signal, WritableExt};
 use motolii_store::{
@@ -21,8 +21,8 @@ const PX_PER_SEC: f64 = 60.0;
 const DOC_FPS: f64 = 30.0;
 const MIN_PPS: f64 = 8.0;
 const MAX_PPS: f64 = 600.0;
-const RULER_H: f64 = crate::tokens::ROW;
-const ROW_H: f64 = crate::tokens::ROW;
+const RULER_H: f64 = crate::ui::tokens::ROW;
+const ROW_H: f64 = crate::ui::tokens::ROW;
 const PLAYHEAD_SEC: f64 = 4.6;
 
 fn c(r: u8, g: u8, b: u8) -> Color {

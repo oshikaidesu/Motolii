@@ -1,8 +1,8 @@
 use std::sync::{Arc, Mutex};
 
-use crate::playback::Clock;
-use crate::session::Selection;
-use crate::tokens;
+use crate::ui::playback::Clock;
+use crate::ui::session::Selection;
+use crate::ui::tokens;
 use anyrender::{PaintRef, PaintScene, ResourceId};
 use blitz_traits::events::UiEvent;
 use dioxus_native::prelude::{Signal, WritableExt};

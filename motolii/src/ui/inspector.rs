@@ -2,8 +2,8 @@ use std::sync::{Arc, Mutex};
 
 use dioxus_native::prelude::*;
 
-use crate::fixture::{inspector_data_from_doc, InspectorData, PropRow};
-use crate::playback::Clock;
+use crate::ui::fixture::{inspector_data_from_doc, InspectorData, PropRow};
+use crate::ui::playback::Clock;
 use motolii_store::{
     property, ContentKeyframe, Document, Intent, Interp, Keyframe, KeyframeTrack, LayerId,
     PropertyId, RationalTime, Value,

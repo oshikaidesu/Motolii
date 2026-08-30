@@ -11,11 +11,11 @@ use motolii_store::{
 };
 use motolii_vector::{Brush, Contour, Fill, FillRule, Rgb, Vertex};
 
-use crate::fixture::ColorSwatch;
+use crate::ui::fixture::ColorSwatch;
 
-use crate::fixture::{self, LayerRow, UiData};
-use crate::playback::Clock;
-use crate::timeline_widget::TimelineMsg;
+use crate::ui::fixture::{self, LayerRow, UiData};
+use crate::ui::playback::Clock;
+use crate::ui::timeline_widget::TimelineMsg;
 
 const FPS: f64 = 30.0;
 

@@ -2,7 +2,7 @@ use motolii_store::{property, Document, LayerId, LayerSource, PropertyId, Ration
 
 use motolii_engine::known_effects;
 
-use crate::timeline_widget::CanvasRow;
+use crate::ui::timeline_widget::CanvasRow;
 
 const FPS: f64 = 30.0;
 
@@ -546,8 +546,8 @@ pub fn load_fixture() -> Loaded {
             family: asset_family(&a.asset_type),
             preview: a.path_absolute.as_deref().and_then(|path| {
                 match asset_family(&a.asset_type) {
-                    AssetFamily::TwoD => crate::thumbnail::image_data_uri(path),
-                    AssetFamily::Video => crate::thumbnail::video_data_uri(path),
+                    AssetFamily::TwoD => crate::ui::thumbnail::image_data_uri(path),
+                    AssetFamily::Video => crate::ui::thumbnail::video_data_uri(path),
                     _ => None,
                 }
             }),

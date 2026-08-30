@@ -4,10 +4,10 @@ use std::sync::{Arc, Mutex};
 use dioxus_native::prelude::*;
 use dioxus_native::CustomWidgetAttr;
 
-use crate::fixture::{fmt_timecode, LayerRow};
-use crate::playback::Clock;
-use crate::session::Selection;
-use crate::timeline_widget::TimelineMsg;
+use crate::ui::fixture::{fmt_timecode, LayerRow};
+use crate::ui::playback::Clock;
+use crate::ui::session::Selection;
+use crate::ui::timeline_widget::TimelineMsg;
 use motolii_store::{Document, Intent, LayerAttrsPatch, LayerId};
 
 pub fn timeline_shell(
