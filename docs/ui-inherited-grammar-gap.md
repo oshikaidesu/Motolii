@@ -32,7 +32,7 @@
 | 数値のdrag-scrub | InspectorのX/Y等をラベルdragで増減 | DialParameter既存(fixtureで実証済み)。実データ行へ流用 |
 | Home/End | playheadを先頭/末尾へ | `set_time`既存 |
 | **素材を入れる**(Browser Media) | ファイルを選ぶ/落とすと素材台帳に入る | 皮も台帳も書き口も既存 — Mediaタブは`view.assets()`を読み、`Intent::AdmitAsset`/`RemoveAsset`が在る(裁定162 bin-first)。判定`is_rerun_importable_extension`も`re_importer`へ委譲済。**欠けているのはファイルを受ける動作だけ** |
-| **素材を置く**(Browser Media) | カードを押す/落とすと層になる | `tcard`に`onclick`が無い(Q0違反)。層を生む口はCreateタブに既存 |
+| ~~**素材を置く**(Browser Media)~~ | 着地済(2026-08-30、窓で確認)。`NewKind::Media`がCreateと同じ出産経路に乗る |
 | 層の頭/尻へ跳ぶ | 選択層の in/out へplayheadが飛ぶ | 尺は`placement`に在る。操作`Intent`追加のみ |
 | 前/次のキーへ跳ぶ | キーの在る時刻へplayheadが飛ぶ | キー時刻は読める。操作`Intent`追加のみ |
 | 層の頭/尻を現在時刻へ揃える | playhead位置でtrimする | `DragMode::Trim*`既存。打鍵の口のみ |
@@ -43,7 +43,7 @@
 
 | 反射 | 中身 | 依存 |
 |---|---|---|
-| **Space = 再生/停止**(打鍵は2026-08-30着地。JKLシャトル・playhead追従スクロール・再生中のStage連続評価は未着) | 編集ソフトの反射の頂点 | playback spine(PlaybackSession接続、audio clock)。transport一式のQ0違反もここで解消 |
+| ~~**Space = 再生/停止**~~ | 着地済(2026-08-30、窓で実映像の再生を確認)。**JKLシャトル・playhead追従スクロールは未着** | playback spine(PlaybackSession接続、audio clock)。transport一式のQ0違反もここで解消 |
 | **右クリック menu** | 文脈操作の普遍的な逃げ道(削除・複製・rename…) | context menu基盤(ObjC)。中身はTier 1/2の再掲で良い |
 
 ## Tier 2 — D2/モデルのgrainが要る反射(仕様粒→実装の二段)
