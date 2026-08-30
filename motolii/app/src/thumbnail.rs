@@ -1,9 +1,7 @@
 use base64::Engine as _;
 
-/// サムネイルの一辺の上限。DOMへdata URIで埋めるので原寸は載せない。
 const MAX_EDGE: u32 = 160;
 
-/// 画像ファイルを縮小してPNGのdata URIにする。読めない物は `None`。
 pub fn image_data_uri(path: &str) -> Option<String> {
     let image = image::ImageReader::open(path).ok()?.decode().ok()?;
     encode(image.thumbnail(MAX_EDGE, MAX_EDGE))
@@ -20,7 +18,6 @@ fn encode_png_bytes(png: Vec<u8>) -> String {
     format!("data:image/png;base64,{body}")
 }
 
-/// 動画の最初のフレームを縮小してPNGのdata URIにする。`ffmpeg-sidecar` に頼る。
 pub fn video_data_uri(path: &str) -> Option<String> {
     use std::io::Read as _;
 

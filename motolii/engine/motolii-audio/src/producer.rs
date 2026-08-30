@@ -1,33 +1,3 @@
-//! owns: mixプロデューサスレッド(A2)。`AudioProgram::mix_audio`をバックグラウンド
-//! スレッドで実行し、mixed PCMを`rtrb`リングへ供給する。**音声コールバックは
-//! 絶対にこのスレッドをブロックしない**(callback側は`ring.rs::fill_or_silence`
-//! で読むだけ、KNOWN.md「音声」節: audio callback内でallocしない)。
-//!
-//! OWNS-JUSTIFICATION(A): `next/reference/KNOWN.md`「音声」の明記された規律
-//! (audio callback内でallocしない)から、mixをバックグラウンドスレッドへ
-//! 追い出す必然性が直接導かれる(裁定215 棚卸し 2026-08-23 #8)。
-//!
-//! 旧 `crates/motolii-audio/src/producer.rs::MixProducer` の移植 — **旧との
-//! 構造上の違い**:
-//! - リング型 → 旧の自前`RingProducer`(`push_frames`/`free_frames`を持つ)から
-//!   `rtrb::Producer<f32>`直叩きへ(A1の方針、`ring.rs` doc 参照)。push上限は
-//!   `Producer::slots()`(空きスロット数)から自分で数える([`push_frames`])
-//! - **seek対応**(旧`MixProducer`に無かった新規口): 発注書「再生中の scrub は
-//!   seek」を満たすため、走行中のスレッドへ`Arc<AtomicU64>`経由で目標
-//!   (正準サンプルフレーム)を送れる([`MixProducer::seek`])。反映は次ループ
-//!   先頭 — **リングに既に積んだ分はそのまま流れきる**(容量分だけ古い位置の
-//!   音が続く既知の制約。KNOWN参照、実機確認課題)
-//! - 終端到達を`finished`フラグ(`Arc<AtomicBool>`)で外部へ知らせる —
-//!   `Shell`側のtick処理はこれを見ずに`PlaybackClock::position()`とcomp尺の
-//!   比較だけで「終端で停止」を判定する(producer側はPCM供給を止めるだけでよい)
-//!
-//! **持ってこなかったもの**: 旧`AudioProducer`(decode-onlyの経路、
-//! `MixProducer`と別クラスだった)は無い — A2発注書はProgram/mix経路だけを
-//! 要求している。旧の「expected_device_frames」精密トリム(resample flush が
-//! 尺をぴったり超えないようにする計算)も簡略化した——このMVPは
-//! `MAX_FLUSH_CHUNKS`到達 or flush が空を返した時点で単純に打ち切る(数十msの
-//! 余剰無音が出うるが、Shell側の終端判定はclockの供給フレーム数で行うので
-//! 機能上の実害は無い)。
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
@@ -39,21 +9,14 @@ use crate::error::{AudioError, Result};
 use crate::program::AudioProgram;
 use crate::resample::FixedRatioResampler;
 
-/// リングが満杯、または供給側が追いつけない時の再試行間隔。
 const POLL_INTERVAL: Duration = Duration::from_millis(1);
 
-/// 1回のmix呼び出しで作る正準(48k)フレーム数(プロデューサ側alloc。
-/// callbackでは行わない)。
 const MIX_CHUNK_FRAMES: usize = 1_024;
 
-/// 終端フラッシュの安全弁(無限ループ防止)。
 const MAX_FLUSH_CHUNKS: usize = 8;
 
-/// `seek_to`の「保留seek無し」番兵値。正準フレーム数は`u64::MAX`まで届かない
-/// (5分ステレオ48kHzでも1.4e7程度)ので実用上衝突しない。
 const NO_SEEK: u64 = u64::MAX;
 
-/// `AudioProgram`をmixしてリングへ供給するプロデューサ(A2)。
 pub struct MixProducer {
     running: Arc<AtomicBool>,
     seek_to: Arc<AtomicU64>,
@@ -62,9 +25,6 @@ pub struct MixProducer {
 }
 
 impl MixProducer {
-    /// `start_frame`(正準48kサンプルフレーム — comp動画フレームではない、
-    /// `crate::convert::time_to_canonical_frames`で変換する)から
-    /// `device_sample_rate`向けに供給を始める。不一致時のみリサンプルを挿入する。
     pub fn spawn(
         program: Arc<AudioProgram>,
         producer: rtrb::Producer<f32>,
@@ -107,19 +67,14 @@ impl MixProducer {
         })
     }
 
-    /// 走行中に目標(正準48kサンプルフレーム)へ跳ぶ。次ループ先頭で反映される —
-    /// モジュールdoc「seek対応」参照。
     pub fn seek(&self, frame: u64) {
         self.seek_to.store(frame.min(NO_SEEK - 1), Ordering::Release);
     }
 
-    /// 終端まで供給し終えた(flush含む)か。
     pub fn finished(&self) -> bool {
         self.finished.load(Ordering::Acquire)
     }
 
-    /// 供給を止めてスレッドをjoinする(`?`早期returnで飛ばされないよう、
-    /// Dropからも同じ経路を呼ぶ — AGENTS.md「後始末を飛ばさない」)。
     pub fn stop(mut self) {
         self.shutdown();
     }
@@ -138,9 +93,6 @@ impl Drop for MixProducer {
     }
 }
 
-/// `producer`(rtrbの空きスロット数)に収まる分だけフレーム単位で押し込む。
-/// `fill_or_silence`のpop側と対称 — `slots()`が数えた範囲内なので`push`は
-/// 必ず成功する。
 fn push_frames(producer: &mut rtrb::Producer<f32>, samples: &[f32], channels: usize) -> usize {
     if channels == 0 || samples.is_empty() {
         return 0;
@@ -154,7 +106,6 @@ fn push_frames(producer: &mut rtrb::Producer<f32>, samples: &[f32], channels: us
     frames
 }
 
-/// source終端とDocument composition尺の大きい方(正準48kフレーム)。
 fn program_end_frame(program: &AudioProgram) -> u64 {
     let mut end = time_to_canonical_frames(program.composition_duration());
     for source in program.sources() {
@@ -183,8 +134,6 @@ fn producer_loop(
                 resampler.reset();
                 Some(resampler)
             }
-            // `negotiate_output`が既にデバイス対応レートへ絞っているので通常は
-            // 起きない。起きても黙って恒等パスへ倒す(M16: panicしない)。
             Err(_) => None,
         }
     } else {
@@ -199,7 +148,6 @@ fn producer_loop(
     let mut flush_chunks = 0usize;
 
     while running.load(Ordering::Acquire) {
-        // 走行中に来たseek要求(唯一の外部入力)を先頭で反映する。
         let seek = seek_to.swap(NO_SEEK, Ordering::AcqRel);
         if seek != NO_SEEK {
             playhead = seek.min(end_frame);
@@ -213,7 +161,6 @@ fn producer_loop(
             }
         }
 
-        // pending(直近のmix/resample結果で未送出分)を先に出す(部分pushに耐える)。
         if pending_off < pending.len() {
             let frames_left = (pending.len() - pending_off) / channels;
             if frames_left == 0 {
@@ -300,7 +247,6 @@ fn producer_loop(
 mod tests {
     use super::*;
 
-    /// pureヘルパの落とし穴柵: 空きスロットを超えて押し込まない。
     #[test]
     fn push_frames_stops_at_free_slots() {
         let (mut producer, _consumer) = rtrb::RingBuffer::<f32>::new(4); // 2 frames stereo

@@ -1,17 +1,10 @@
-//! AG-2: mix結果のchannel別sample peak / clip状態(Transient・lock-free)。
-//!
-//! Documentへ永続化しない。callback内allocation/I/O/lock待ちは行わない。
-//! 旧 `crates/motolii-audio/src/meter.rs` から無改造で移植。
 
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
-/// `abs(sample) > 1.0` をclipとする(oversampling true-peakは非目標)。
 pub const CLIP_THRESHOLD: f32 = 1.0;
 
-/// UI/診断向けの最新meter snapshot。
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct MeterSnapshot {
-    /// L/R の絶対値ピーク(直近観測窓、またはリセット後の累積 — `AudioMeter`の契約)。
     pub peak_l: f32,
     pub peak_r: f32,
     pub clipped: bool,
@@ -25,9 +18,6 @@ impl MeterSnapshot {
     };
 }
 
-/// mix中に更新し、別スレッドが`snapshot`で読むだけのmeter。
-///
-/// 原子操作のみ。Mutex無し。peak更新はCASで欠落を防ぐ。
 #[derive(Debug, Default)]
 pub struct AudioMeter {
     peak_l_bits: AtomicU32,
@@ -35,7 +25,6 @@ pub struct AudioMeter {
     clipped: AtomicBool,
 }
 
-/// 再生開始またはユーザー操作で明示的に消すまでclip表示を維持するUI用ラッチ。
 #[derive(Debug, Default)]
 pub struct ClipLatch {
     latched: AtomicBool,
@@ -66,7 +55,6 @@ impl AudioMeter {
         Self::default()
     }
 
-    /// mix結果ブロックを観測する。PCM値は変更しない(呼び出し側バッファは読み取り専用)。
     pub fn observe_interleaved_stereo(&self, samples: &[f32]) {
         debug_assert!(samples.len().is_multiple_of(2));
         let mut peak_l = 0.0f32;
@@ -100,7 +88,6 @@ impl AudioMeter {
         }
     }
 
-    /// UIの手動リセット用。ラッチ式CLIPも含めて消す。
     pub fn reset(&self) {
         self.peak_l_bits.store(0.0f32.to_bits(), Ordering::Relaxed);
         self.peak_r_bits.store(0.0f32.to_bits(), Ordering::Relaxed);

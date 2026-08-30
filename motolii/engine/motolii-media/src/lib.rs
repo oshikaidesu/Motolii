@@ -1,34 +1,3 @@
-//! owns: フレーム正確な seek 付き decode / probe / encode / mux。
-//!
-//! 上流の `re_video` は既に依存グラフに居る(`re_renderer` が非optional で引いている)が、
-//! 置き換えられない理由が4つある(裁定24):
-//!   1. コンテナが **MP4 のみ**。Motolii は mov / mkv / webm / 静止画も受ける
-//!   2. API が**再生指向**で「presentation time に一番近いフレーム」を返す。
-//!      書き出しは「フレーム N を必ず1枚」を要求するので契約が違う
-//!   3. バイト列を**全部メモリに載せる**前提。サイドカーのパイプとメモリモデルが違う
-//!   4. **encode / mux を持たない**(decode 専用)
-//! この4点が変わったら再裁定する。
-//!
-//! OWNS-JUSTIFICATION(B): 探索対象=上流 `re_video`(既に依存グラフに `re_renderer`
-//! 経由で存在) — 裁定24が上記4点の具体理由で名指しして却下し、再裁定条件まで
-//! 明記している(裁定215 棚卸し 2026-08-23 #14、32件中最も強い(b)の実例)。
-//!
-//! 旧 workspace `crates/motolii-media` からの移植(2026-08-20 リセット)。再実装ではない。
-//! **持ってこなかったもの**(軸4「保守をしたくない」):
-//! - `source_binding.rs` 202行 — `motolii-gpu` の `ResourceLedger`(予算 admission)に
-//!   丸ごと乗っており、別の関心事(裁定22)
-//! - `admission.rs` 111行 — 未使用で、doc が解体済みの `motolii-doc` / `motolii-ui` を
-//!   契約先として指していた。M2「理由つき skip」を結線する日に持ってくる
-//!
-//!
-//! 方針(落とし穴B-2対策): FFmpegはリンクせずサイドカーで叩く。
-//! - リンク・ライセンス問題を回避(LGPL/GPL・コーデック特許)
-//! - デコーダのクラッシュがプロセス境界で隔離される
-//! - rawvideoパイプなので入出力が決定的
-//!
-//! デコードは常に「RGBA・タイトパッキング」に正規化してから返す。
-//! YUV→RGB変換・色空間の解釈はffmpeg側に寄せ、motolii-gpu側の変換シェーダ実装(M1-T3)
-//! までの間もパイプライン全体をRGBAで一貫させる。
 
 mod encode;
 mod point_cloud;
@@ -86,7 +55,6 @@ pub type Result<T> = std::result::Result<T, MediaError>;
 
 const MAX_STDERR_BYTES: usize = 64 * 1024;
 
-/// 子プロセスのstderrをEOFまで読む。`wait()`前に呼びパイプ詰まりデッドロックを防ぐ。
 pub(crate) fn read_child_stderr(stderr: &mut impl Read) -> std::io::Result<String> {
     let mut out = Vec::new();
     let mut chunk = [0u8; 4096];
@@ -106,10 +74,6 @@ pub(crate) fn read_child_stderr(stderr: &mut impl Read) -> std::io::Result<Strin
     Ok(String::from_utf8_lossy(&out).into_owned())
 }
 
-/// ffmpeg/ffprobeがPATHにあるか。アプリ起動時チェック(CLI)用。
-/// **テストでは使わないこと** — テストのスキップ判定は
-/// `motolii_testkit::ffmpeg_or_skip`を通す(M2E-1: 手書きスキップは
-/// REQUIRE環境のスキップ禁止を迂回するため走査denyの対象)。
 pub fn tools_available() -> bool {
     let ok = |bin: &str| {
         Command::new(bin)
@@ -121,14 +85,8 @@ pub fn tools_available() -> bool {
     ok("ffmpeg") && ok("ffprobe")
 }
 
-/// 依存するffmpeg/ffprobeの最低メジャーバージョン。
-/// 根拠(レビュー指摘#5): side_data回転のJSON出力、scale=out_color_matrix、
-/// -display_rotation 等の挙動をこの版以降で確認している。
 pub const MIN_FFMPEG_MAJOR: u32 = 6;
 
-/// アプリ起動時に呼ぶ: ffmpeg/ffprobeの存在とバージョンを検証する。
-/// バージョン差による挙動ズレ(回転・色タグ)はサポート地獄になるため、
-/// 満たさない場合は起動段階で明確に失敗させる。
 pub fn verify_tool_versions() -> Result<(u32, u32)> {
     let major = |bin: &'static str| -> Result<u32> {
         let out = Command::new(bin).arg("-version").output().map_err(|e| {
@@ -139,10 +97,6 @@ pub fn verify_tool_versions() -> Result<(u32, u32)> {
             }
         })?;
         let text = String::from_utf8_lossy(&out.stdout);
-        // 例: "ffmpeg version 6.1.1-3ubuntu5" / "version n7.0" / "version N-113445-g..."
-        // (gitマスター) / まれに日付版。判定は false-negative に弱くしない(第3回
-        // レビュー#5): 明確に古いと分かる場合だけ弾き、判定不能・特殊ビルドは
-        // 警告して通す(起動を止めない)。
         let tok = text
             .split_whitespace()
             .nth(2)
@@ -151,7 +105,6 @@ pub fn verify_tool_versions() -> Result<(u32, u32)> {
         let digits: String = tok.chars().take_while(|c| c.is_ascii_digit()).collect();
         match digits.parse::<u32>() {
             Ok(major) if major >= 1000 => {
-                // 日付/ビルド番号系(gitマスター "N-123456" 等) → 判定不能として通す
                 eprintln!(
                     "warning: {bin} version '{tok}' looks like a snapshot build; \
                      assuming >= {MIN_FFMPEG_MAJOR}"

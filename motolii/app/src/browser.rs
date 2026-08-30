@@ -24,7 +24,6 @@ enum NewKind {
     Text,
     Rectangle,
     Bezier,
-    /// 台帳の素材を層にする。動画も静止画も点群も同じ`LayerSource::File`を通る。
     Media { path: String, name: String },
 }
 
@@ -246,8 +245,6 @@ fn set_shape_fill_color(node: &mut ShapeNode, brush: Brush) {
     }
 }
 
-/// 選択層の色を書き換える。書き口は素材ごとに違う(裁定済み) —
-/// Solidは`SetSource`、Textは`SetTextDocument`のfill、Shapeは`SetShapes`のfill brush。
 fn apply_layer_color(doc: &Arc<Mutex<Document>>, layer: LayerId, rgba: [u8; 4], mut revision: Signal<u32>) {
     let mut d = doc.lock().unwrap();
     let source = d.view().meta(layer).ok().flatten().map(|m| m.source);
@@ -311,7 +308,6 @@ pub fn browser_panel(
             "srow"
         }
     };
-    // 空のレール行を作らない
     let families = {
         let mut f: Vec<_> = ui.assets.iter().map(|a| a.family).collect();
         f.sort();
@@ -606,7 +602,6 @@ mod spawn_diagnosis {
             dimension: wgpu::TextureDimension::D2,
             format: wgpu::TextureFormat::Rgba8UnormSrgb,
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_SRC,
-            // finalize_into は composite を通すため同じメモリを Rgba8Unorm として見直す。
             view_formats: &[wgpu::TextureFormat::Rgba8Unorm],
         });
         engine.render_frame_into(&doc.view(), t, &target).expect("render_frame_into");
@@ -642,8 +637,6 @@ mod spawn_diagnosis {
         out
     }
 
-    /// 一番効く切り分け: fixture 済み Document に spawn_layer と同じ Intent 列を流し、
-    /// render_frame_into を層を足す前後で呼んで画素を比べる。窓と同じ再現が取れるか確認。
     #[test]
     fn spawn_on_fixture_doc_changes_pixels() {
         let fx = motolii_fixture::build();
@@ -655,8 +648,6 @@ mod spawn_diagnosis {
         let (device, queue) = gpu();
         let mut engine = Engine::with_device(device.clone(), queue.clone()).unwrap();
 
-        // 窓を模す: スクラブで何十フレームも render_frame_into を先に回してから足す
-        // (同じ Engine の使い回しでキャッシュが腐るかを見る)。
         for f in (0..fx.playhead).step_by(30) {
             let _ = readback(&device, &queue, &mut engine, &doc, RationalTime::try_new(f, 30).unwrap(), w, h);
         }

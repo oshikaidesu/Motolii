@@ -1,5 +1,3 @@
-//! 共有面経路(`render_into`、窓の Stage)と CPU 経路(`render_with_effects`、export)が
-//! 同じ絵になること。`render_into` が blend mode を黙って `Normal` へ落としていないか。
 
 use motolii_compositor::{
     BlendMode, CompSpec, Compositor, HeadlessGpu, Layer, LayerPlacement, LayerWithPasses,

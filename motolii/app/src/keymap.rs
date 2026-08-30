@@ -1,6 +1,5 @@
 use dioxus_native::prelude::Key;
 
-/// キー→意図の対応。機構名でなく意図名(裁定174)。
 #[derive(Clone, Copy)]
 pub enum Intent {
     Split,
@@ -42,7 +41,6 @@ const BINDINGS: &[Binding] = &[
     Binding { key: KeySpec::Char(' '), cmd: false, shift: false, intent: Intent::PlayPause },
 ];
 
-/// 表を引いて意図を返す。テキスト編集中に呼ぶかどうかは呼び出し側の責任。
 pub fn lookup(key: &Key, cmd: bool, shift: bool) -> Option<Intent> {
     let spec = match key {
         Key::Character(c) if c.len() == 1 => KeySpec::Char(c.chars().next()?.to_ascii_lowercase()),

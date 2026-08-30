@@ -4,23 +4,6 @@ use motolii_store::{LayerId, TextDocument};
 use super::enums::text_justify_to_int;
 use super::{Ctx, LottieExportError, UnsupportedForLottie};
 
-// ---------------------------------------------------------------------------
-// text(縮小スコープ——`text-document`/`font`/`animated-text-document` のみ。
-// アニメーター・複数スタイル行・variable font 軸は unsupported へ積む)
-// ---------------------------------------------------------------------------
-
-/// **D-1 修正(2026-08-23)**: 以前は `view.text_document(layer)`(静的値)を1回
-/// 引き、その1つの値から content track の各キー時刻だけ Lottie の `s`/`h` 列へ
-/// 展開していた——`text_style.{id}.*`/`text_justify` の track(A-1b 着地分)は
-/// 一度も読まれず、書き出しに乗らなかった(GOALS M15/D1 違反)。
-///
-/// **裁定206 の link 焼き込みと同じ作法**(`bake_property` 参照): comp の
-/// 全フレームを `StoreView::resolved_text_document`(engine の text 経路と
-/// 同じ1本、`motolii-engine::collect_text_documents` が通るのと同じ関数)で
-/// 再サンプリングし、書き出す JSON blob が変わった時だけ Hold キーフレームを
-/// 打つ。track が無い(既定値のまま)layer では全フレームで同じ blob になり、
-/// 1本しか残らないので `encode_scalar_track` 同様に `"a": 0` の静的形へ落ちる
-/// (下の `samples.len() <= 1` 分岐)——**旧来の静的 text と出力が変わらない**。
 pub(crate) fn build_text_data(
     ctx: &Ctx<'_, '_>,
     layer: LayerId,
@@ -71,8 +54,6 @@ pub(crate) fn build_text_data(
         }
     }
 
-    // 焼き込み本体(`bake_property` と同型)。`resolved_text_document` が
-    // Err を返したら(型不一致等)そのまま伝播する — 黙って静的値へ落とさない。
     let frame_count = ctx.duration_frames.max(1);
     let mut samples: Vec<(i64, serde_json::Value)> = Vec::new();
     let mut last: Option<serde_json::Value> = None;

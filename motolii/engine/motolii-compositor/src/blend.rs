@@ -1,79 +1,4 @@
-//! 分離可能(per-channel)blend 11 モード(BL3、裁定161 fork accessor の main_target
-//! 経路を使う2番目の実装、`effects::glow` と同じ「`motolii-compositor` 内へ新規 WGSL
-//! パイプラインを足す」手口——fork は無改造)。
-//!
-//! ## なぜ固定式(`RectangleOptions::multiplicative_tint`)で表現できないか
-//!
-//! [`crate::BlendMode::Normal`]/[`crate::BlendMode::Add`] は `out = src*Fa + dst*Fb`
-//! (係数だけが変わる Porter-Duff)なので `multiplicative_tint` 1個で足りたが、
-//! Multiply 以降は `out` が `src` と `dst` の**積・比・条件分岐**を要る——
-//! 固定機能 blend の「係数×src + 係数×dst」の外にある(`crate` module doc 旧節参照)。
-//! ここでは2枚の texture(dst=直前までの accumulator・src=layer 単体を描いた
-//! canvas)を読む fullscreen パスを1本足して解決する。
-//!
-//! ## 数式の出典: W3C Compositing and Blending Level 1
-//! (<https://www.w3.org/TR/compositing-1/>)の separable blend 関数(3.6節)+
-//! 一般合成式(3.5節)をそのまま実装する。straight(非 premultiplied)色 `Cb`(backdrop)・
-//! `Cs`(source)・alpha `αb`/`αs` について:
-//!
-//! ```text
-//! B(Cb, Cs)  ... モードごとの per-channel 関数(下記 WGSL 参照)
-//! Co = αs·(1-αb)·Cs + αs·αb·B(Cb,Cs) + (1-αs)·αb·Cb   (premultiplied 出力)
-//! αo = αs + αb·(1-αs)
-//! ```
-//!
-//! `αb=0`(まだ何も accumulator に無い)時は右辺の後ろ2項が消え `Co = αs·Cs` —
-//! 「1枚目は普通に描くだけ」という [`crate::Compositor::render_sequential`] 既存の
-//! 早期分岐と数学的に一致する(このモジュールは `background` が `Some` の時にしか
-//! 呼ばれない設計、呼び出し側 `crate::lib` 参照)。
-//!
-//! ## Soft Light の分岐について
-//!
-//! Photoshop の SoftLight とは **式が異なる**(W3C 版は `D(x)` に3次多項式+平方根の
-//! 滑らかな接続を使うが、Photoshop 版は `sqrt` のみ・分岐点も違う)。ここでは
-//! 発注書どおり **W3C 版を正**とする——Lottie/AE のドキュメント化された挙動が
-//! この式系列(CSS `mix-blend-mode`/SVG compositing と同じ出典)に従うため。
-//!
-//! ## 非分離4種(BL4、2026-08-22): Hue/Saturation/Color/Luminosity
-//!
-//! W3C Compositing and Blending Level 1、3.7節(Non-separable blend modes)の
-//! `SetLum`/`ClipColor`/`Sat`/`SetSat` 擬似コードそのまま。分離可能11種と違い、
-//! `B(Cb,Cs)` が RGB 3成分を**1単位**として扱う(per-channel な `blend_channel` には
-//! 分解できない)——そのため WGSL 側は `vec3<f32>` を返す `nonseparable_blend` を
-//! 別に持ち、`params.mode` が 11以上ならそちらへ分岐する(0〜10 は従来どおり
-//! `blend_channel` を3回呼ぶ per-channel 経路のまま、無改造)。**2枚読みの土台
-//! (bind group・params uniform・一般合成式)は分離可能と完全に共有する**——
-//! [`crate::two_texture_pass_mode_index`] が両者を同じ2枚読みパスへ振り分ける。
-//!
-//! `Lum(C) = 0.3·Cr + 0.59·Cg + 0.11·Cb`(spec の係数そのまま——[`crate::matte`]の
-//! Luma matte が使う Rec.709 係数とは**別の式・別出典**、混同しないこと)。
-//!
-//! `SetSat` の実装は spec の Cmax/Cmid/Cmin を明示的に並べ替える代わりに、
-//! `(C - Cmin) * s / (Cmax - Cmin)` という等価な線形写像を使う(`Cmin`→0・`Cmax`→`s`・
-//! `Cmid`→線形補間、という spec の3分岐をチャンネルごとに代入すると数学的に一致する
-//! ことが確かめられる——各種実装(例: Skia の HSL blend)が使う標準的な簡約)。
-//!
-//! `ClipColor` は spec と同じく `L`/`n`/`x` を**元の色から1回だけ**計算し、2つの
-//! if 分岐(`n<0`/`x>1`)は互いに独立にこの値を参照する(2つ目の分岐が1つ目の
-//! 分岐後の色を読むことはあっても、`L`/`x` 自体は再計算しない——spec の擬似コードの
-//! 逐次性をそのまま再現)。**既知の限界**: 色が完全に一様(r/g/b が全チャンネル同値)
-//! かつその値が範囲外(`< 0` または `> 1`)という極端な入力では `l - n = 0`/
-//! `x - l = 0` の0除算(`NaN`)が理論上あり得る——spec 自体がこのケースを特別扱いして
-//! いないので、ここでも追加のガードは入れない(SoftLight の「発注書どおり W3C 版を正
-//! とする」と同じ姿勢)。
-//!
-//! ## gamma 空間
-//!
-//! 入出力とも `ViewBuilder::MAIN_TARGET_COLOR_FORMAT`(`Rgba8UnormSrgb`)——
-//! `textureLoad`/render target への書き込みとも GPU が自動で sRGB decode/encode する
-//! (`crate` module doc の「色空間の注意」節と同じ前提)。ソフトウェアで2重に
-//! 変換しない。
 
-/// `textureLoad`/書き込みの出入力が乗る format。呼び出し側([`crate`]の
-/// `accumulate_sequential`)が新規に確保する scratch texture もこれに揃える——
-/// 直前までの accumulator([`re_renderer::view_builder::ViewBuilder::main_target`])と
-/// 同じ format でないと、次のイテレーションで再び `textureLoad` した時に
-/// 暗黙の decode が起きたり起きなかったりして数値が壊れる。
 pub(crate) const SEPARABLE_BLEND_TARGET_FORMAT: wgpu::TextureFormat =
     wgpu::TextureFormat::Rgba8UnormSrgb;
 
@@ -84,8 +9,6 @@ pub(crate) struct SeparableBlendPipelines {
 }
 
 impl SeparableBlendPipelines {
-    /// **初回生成して以後使い回す**(`effects::GlowPipelines::new` と同じ規律 —
-    /// `Compositor::with_device` が1回だけ呼ぶ)。
     pub(crate) fn new(ctx: &re_renderer::RenderContext) -> Self {
         let device = &ctx.device;
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -118,8 +41,6 @@ impl SeparableBlendPipelines {
             immediate_size: 0,
         });
 
-        // 全画面三角形の頂点段は上流の物を使う(`re_renderer::renderer::
-        // screen_triangle_vertex_shader`)。entry point は `main`。
         let vs_handle = re_renderer::renderer::screen_triangle_vertex_shader(ctx);
         let shader_modules = ctx.gpu_resources.shader_modules.resources();
         let screen_triangle_vs = shader_modules.get(vs_handle).expect("上流の頂点シェーダ");
@@ -157,10 +78,6 @@ impl SeparableBlendPipelines {
         }
     }
 
-    /// 1パスを `encoder` へ積む。`dst_view`=直前までの accumulator(backdrop)・
-    /// `src_view`=layer 単体を描いた canvas(source)・`out_view`=結果の書き込み先
-    /// (呼び手が確保した [`SEPARABLE_BLEND_TARGET_FORMAT`] の texture)。`mode` は
-    /// [`crate::separable_mode_index`] が返す index(WGSL 側の `switch` と対応)。
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn record(
         &self,
@@ -242,11 +159,6 @@ fn texture_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {
     }
 }
 
-/// fragment だけ。頂点段は上流の `screen_triangle_vertex_shader`。
-/// `params.mode` の値は [`crate::two_texture_pass_mode_index`] の返り値と1対1
-/// (0=Multiply〜10=Exclusion は [`crate::separable_mode_index`]、11=Hue〜14=Luminosity
-/// は [`crate::nonseparable_mode_index`]、モジュール doc「数式の出典」「非分離4種」
-/// 節参照)。
 const SHADER: &str = r#"
 struct BlendParams {
   mode: u32,
@@ -261,30 +173,24 @@ struct BlendParams {
 
 fn blend_channel(mode: u32, cb: f32, cs: f32) -> f32 {
   if (mode == 0u) {
-    // Multiply
     return cs * cb;
   }
   if (mode == 1u) {
-    // Screen
     return cs + cb - cs * cb;
   }
   if (mode == 2u) {
-    // Overlay = HardLight(Cb, Cs) との式は同じで backdrop/source の役が入れ替わる
     if (cb <= 0.5) {
       return 2.0 * cs * cb;
     }
     return 1.0 - 2.0 * (1.0 - cs) * (1.0 - cb);
   }
   if (mode == 3u) {
-    // Darken
     return min(cb, cs);
   }
   if (mode == 4u) {
-    // Lighten
     return max(cb, cs);
   }
   if (mode == 5u) {
-    // ColorDodge
     if (cb <= 0.0) {
       return 0.0;
     }
@@ -294,7 +200,6 @@ fn blend_channel(mode: u32, cb: f32, cs: f32) -> f32 {
     return min(1.0, cb / (1.0 - cs));
   }
   if (mode == 6u) {
-    // ColorBurn
     if (cb >= 1.0) {
       return 1.0;
     }
@@ -304,14 +209,12 @@ fn blend_channel(mode: u32, cb: f32, cs: f32) -> f32 {
     return 1.0 - min(1.0, (1.0 - cb) / cs);
   }
   if (mode == 7u) {
-    // HardLight
     if (cs <= 0.5) {
       return 2.0 * cs * cb;
     }
     return 1.0 - 2.0 * (1.0 - cs) * (1.0 - cb);
   }
   if (mode == 8u) {
-    // SoftLight(W3C 版、モジュール doc「Soft Light の分岐について」参照)
     if (cs <= 0.5) {
       return cb - (1.0 - 2.0 * cs) * cb * (1.0 - cb);
     }
@@ -324,21 +227,15 @@ fn blend_channel(mode: u32, cb: f32, cs: f32) -> f32 {
     return cb + (2.0 * cs - 1.0) * (d - cb);
   }
   if (mode == 9u) {
-    // Difference
     return abs(cb - cs);
   }
-  // Exclusion(mode == 10u、default もここへ落ちる)
   return cs + cb - 2.0 * cs * cb;
 }
-
-// --- 非分離4種(BL4、モジュール doc「非分離4種」節、W3C 3.7節そのまま) ---
 
 fn lum(c: vec3<f32>) -> f32 {
   return dot(c, vec3<f32>(0.3, 0.59, 0.11));
 }
 
-// spec の擬似コードどおり、L/n/x は元の色から1回だけ求め、2つの if 分岐は
-// (1つ目が適用済みかもしれない)`c` を読みつつも L/n/x 自体は再計算しない。
 fn clip_color(c_in: vec3<f32>) -> vec3<f32> {
   let l = lum(c_in);
   let n = min(min(c_in.r, c_in.g), c_in.b);
@@ -362,8 +259,6 @@ fn sat(c: vec3<f32>) -> f32 {
   return max(max(c.r, c.g), c.b) - min(min(c.r, c.g), c.b);
 }
 
-// spec の Cmax/Cmid/Cmin 並べ替えと数学的に等価な線形写像(モジュール doc「非分離
-// 4種」節参照)。
 fn set_sat(c: vec3<f32>, s: f32) -> vec3<f32> {
   let cmax = max(max(c.r, c.g), c.b);
   let cmin = min(min(c.r, c.g), c.b);
@@ -375,18 +270,14 @@ fn set_sat(c: vec3<f32>, s: f32) -> vec3<f32> {
 
 fn nonseparable_blend(mode: u32, cb: vec3<f32>, cs: vec3<f32>) -> vec3<f32> {
   if (mode == 11u) {
-    // Hue
     return set_lum(set_sat(cs, sat(cb)), lum(cb));
   }
   if (mode == 12u) {
-    // Saturation
     return set_lum(set_sat(cb, sat(cs)), lum(cb));
   }
   if (mode == 13u) {
-    // Color
     return set_lum(cs, lum(cb));
   }
-  // Luminosity(mode == 14u、default もここへ落ちる)
   return set_lum(cb, lum(cs));
 }
 
@@ -415,12 +306,9 @@ fn blend_fs(@builtin(position) p: vec4<f32>) -> @location(0) vec4<f32> {
       blend_channel(params.mode, cb.b, cs.b),
     );
   } else {
-    // 非分離4種(BL4)——RGB を1単位として扱う `B(Cb,Cs)`、per-channel には
-    // 分解できない(モジュール doc「非分離4種」節)。
     b = nonseparable_blend(params.mode, cb, cs);
   }
 
-  // W3C 一般合成式(モジュール doc 参照)。premultiplied 出力。
   let out_rgb = alpha_s * (1.0 - alpha_b) * cs + alpha_s * alpha_b * b + (1.0 - alpha_s) * alpha_b * cb;
   let out_a = alpha_s + alpha_b * (1.0 - alpha_s);
 

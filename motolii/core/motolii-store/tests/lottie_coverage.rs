@@ -1,16 +1,3 @@
-//! **Lottie の全語彙を地図にして、抜けを機械で出す。**
-//!
-//! 「作る瞬間に読む」方式は、読まなかった物が**構造的に見えない**。
-//! そこで上流のスキーマ(`app/reference/lottie.schema.json`、上流そのまま)を正本にして、
-//! 語彙を全部列挙した表(`lottie-coverage.tsv`)と突き合わせる。
-//!
-//! この試験が落ちる条件:
-//! - スキーマにあるのに表に無い(= **読み落とし**)
-//! - 表にあるのにスキーマに無い(= 古い行が残っている。上流更新で起きる)
-//! - 状態語が固定集合の外
-//!
-//! Lottie は Bodymovin が AE のデータ模型を吐いた物なので、**実質 OSS の AE 解析**である。
-//! よってこの表の「未判定」の数は、**AE の意味のうち Motolii がまだ向き合っていない量**に近い。
 
 use std::collections::BTreeSet;
 use std::path::PathBuf;
@@ -21,8 +8,6 @@ fn reference_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../reference")
 }
 
-/// 自分自身が定義する property だけ。`$ref` は解決せず `@extends` 行で見せる
-/// (解決すると基底の field が全派生型へ重複して、地図が読めなくなる)。
 fn own_props(node: &serde_json::Value, out: &mut Vec<(String, String)>) {
     let Some(map) = node.as_object() else {
         return;
@@ -66,7 +51,6 @@ fn refs_of(node: &serde_json::Value) -> Vec<String> {
     out
 }
 
-/// スキーマから語彙を導く。生成器と**同じ規則**でなければ意味がない。
 fn vocabulary_from_schema() -> BTreeSet<(String, String, String)> {
     let text = std::fs::read_to_string(reference_dir().join("lottie.schema.json"))
         .expect("lottie.schema.json が無い(上流から取ってきて reference/ へ置く)");
@@ -95,11 +79,8 @@ fn vocabulary_from_schema() -> BTreeSet<(String, String, String)> {
 struct Row {
     key: (String, String, String),
     status: String,
-    /// 採用済 の行が指す**コード中に実在する識別子**。自己申告にしないための欄。
     evidence: String,
-    /// 採用予定 の行が属する**発注単位**。
     unit: String,
-    /// どの上流スキーマ由来か(`lottie` / `rive`)。
     source: String,
 }
 
@@ -115,7 +96,6 @@ fn coverage_rows() -> Vec<Row> {
         assert!(cols.len() >= 5, "列が足りない行がある: {line}");
         let (group, object, field, title, status) =
             (cols[0], cols[1], cols[2], cols[3], cols[4]);
-        // `@extends` 行は field 欄が `@extends`、title 欄が継承元。
         let field = if field == "@extends" {
             format!("@extends:{title}")
         } else {
@@ -140,7 +120,6 @@ fn coverage_rows() -> Vec<Row> {
 fn the_map_covers_the_whole_schema() {
     let schema = vocabulary_from_schema();
     let rows = coverage_rows();
-    // Lottie スキーマとの照合なので、他の上流由来の行は対象外。
     let mapped: BTreeSet<_> = rows
         .iter()
         .filter(|r| r.source == "lottie")
@@ -174,11 +153,6 @@ fn the_map_covers_the_whole_schema() {
     );
 }
 
-/// **Rive の defs も同じ規則で照合する。**
-///
-/// `source=rive` の行は `reference/rive-text-defs/`(**固定 revision で vendor したもの**)と
-/// 突き合わせる。vendor せずに調査結果だけを表へ写すと、上流が動いた時に黙ってずれる —
-/// 実際、調査の初回(61 property)と2回目(65)で差が出ている。
 #[test]
 fn the_map_covers_the_rive_defs() {
     let dir = reference_dir().join("rive-text-defs");
@@ -190,7 +164,6 @@ fn the_map_covers_the_rive_defs() {
             let text = std::fs::read_to_string(&path).expect("def を読めない");
             let def: serde_json::Value = serde_json::from_str(&text).expect("def が JSON でない");
             let name = def["name"].as_str().expect("name が無い");
-            // `TextStyle` → `text-style`(地図の object 欄と同じ綴り)
             let object = kebab(name);
             match def.get("properties").and_then(|p| p.as_object()) {
                 Some(props) if !props.is_empty() => {
@@ -198,7 +171,6 @@ fn the_map_covers_the_rive_defs() {
                         defs.insert((object.clone(), field.clone()));
                     }
                 }
-                // property を持たないクラスは1行で表す(`@class` / `@abstract`)。
                 _ => {
                     defs.insert((object.clone(), String::new()));
                 }
@@ -247,7 +219,6 @@ fn the_map_covers_the_rive_defs() {
     );
 }
 
-/// `TextStyleAxis` → `text-style-axis`
 fn kebab(name: &str) -> String {
     let mut out = String::new();
     for (i, ch) in name.char_indices() {
@@ -259,10 +230,6 @@ fn kebab(name: &str) -> String {
     out
 }
 
-/// **「採用済」を自己申告にしない。**
-///
-/// 採用済 の行は evidence 欄に識別子を書き、それが `next/` のコードに実在することを確かめる。
-/// これが無いと「実装した」と書くだけで地図が埋まってしまい、地図が嘘をつく。
 #[test]
 fn adopted_rows_point_at_real_code() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
@@ -313,10 +280,6 @@ fn collect_sources(dir: &std::path::Path, out: &mut String) {
     }
 }
 
-/// **発注単位を地図から導く。**新しい台帳を作らない — 束は地図の見え方の1つにすぎない。
-///
-/// `採用予定` の行が持つ `unit` でまとめる。**完了条件は「その束の行が全部 採用済 になる」**で、
-/// 採用済 には evidence(コード中の識別子)が要るので、機械で判定できる。
 #[test]
 fn report_work_packages() {
     use std::collections::BTreeMap;
@@ -327,7 +290,6 @@ fn report_work_packages() {
             units.entry(row.unit.clone()).or_default().0 += 1;
         }
     }
-    // 同じ束の 採用済 も数えて進捗にする。
     for row in &rows {
         if row.status == "採用済" && !row.unit.is_empty() {
             units.entry(row.unit.clone()).or_default().1 += 1;
@@ -359,7 +321,6 @@ fn every_planned_row_has_a_work_package() {
     );
 }
 
-/// 地図の状態を毎回出す。**未判定の数が、まだ向き合っていない AE の意味の量**。
 #[test]
 fn report_coverage() {
     let rows = coverage_rows();

@@ -1,23 +1,13 @@
-//! 固定比リサンプル(D4-FU: デバイスレート≠素材レート時のみ)。
-//!
-//! アルゴリズム遅延は先頭 trim で吸収し、Transport 境界へ持ち出さない。
-//! 旧 `crates/motolii-audio/src/resample.rs` から無改造で移植(rubato の使い方に
-//! Document 型は関与しないので読み替えの対象が無い)。
 
 use rubato::{FftFixedIn, Resampler};
 
 use crate::error::{AudioError, Result};
 
-/// プロデューサが1回に rubato へ渡す固定入力チャンク長。
 const CHUNK_FRAMES: usize = 1024;
 
-/// 素材レート→デバイスレートの固定比リサンプラ。
-///
-/// レート一致時は作らない(恒等パス)。構築後はリング書き込み前のプロデューサ専用。
 pub struct FixedRatioResampler {
     inner: FftFixedIn<f32>,
     channels: usize,
-    /// まだ捨てるべき出力フレーム数(`output_delay`の残り)。
     frames_to_trim: usize,
     planar_in: Vec<Vec<f32>>,
     planar_out: Vec<Vec<f32>>,
@@ -25,7 +15,6 @@ pub struct FixedRatioResampler {
 }
 
 impl FixedRatioResampler {
-    /// `source_rate != device_rate` のときだけ成功する。一致時は呼び出し側が恒等パスを選ぶ。
     pub fn new(source_rate: u32, device_rate: u32, channels: u16) -> Result<Self> {
         if channels == 0 {
             return Err(AudioError::UnsupportedChannels { channels: 0 });
@@ -82,16 +71,12 @@ impl FixedRatioResampler {
         self.inner.output_delay()
     }
 
-    /// シーク/再起動時: 内部状態と先頭 trim を初期化する。
     pub fn reset(&mut self) {
         self.inner.reset();
         self.frames_to_trim = self.inner.output_delay();
         self.interleaved.clear();
     }
 
-    /// インターリーブ入力を1チャンク処理し、trim 後のインターリーブ出力を返す。
-    ///
-    /// `input` のフレーム数は `input_frames_next()` と一致している必要がある。
     pub fn process_interleaved(&mut self, input: &[f32]) -> Result<&[f32]> {
         let need = self.inner.input_frames_next();
         let frames = input.len() / self.channels;
@@ -109,7 +94,6 @@ impl FixedRatioResampler {
         self.interleave_trimmed()
     }
 
-    /// トラック終端など、必要フレーム未満の残りを流し込む。
     pub fn process_partial_interleaved(&mut self, input: &[f32]) -> Result<&[f32]> {
         if !input.len().is_multiple_of(self.channels) {
             return Err(AudioError::MisalignedSamples {
@@ -119,7 +103,6 @@ impl FixedRatioResampler {
         }
         let frames = input.len() / self.channels;
         self.deinterleave_into(input, frames);
-        // process_partial は可変長入力を受け、内部バッファを吐き出す。
         let out = self
             .inner
             .process_partial(Some(&self.planar_in), None)
@@ -130,7 +113,6 @@ impl FixedRatioResampler {
         self.interleave_trimmed()
     }
 
-    /// 無音/空入力で遅延分を吐き切る(終端フラッシュ)。
     pub fn flush_silence_chunk(&mut self) -> Result<&[f32]> {
         let empty: Option<&[Vec<f32>]> = None;
         let out = self
@@ -176,9 +158,6 @@ impl FixedRatioResampler {
     }
 }
 
-/// ソースフレーム番号をデバイス側フレーム番号へ写す(整数比の切り捨て)。
-///
-/// 完了条件のインパルス対応検査で、期待出力位置の正本にする。
 pub fn source_frame_to_device(source_frame: u64, source_rate: u32, device_rate: u32) -> u64 {
     if source_rate == 0 {
         return 0;

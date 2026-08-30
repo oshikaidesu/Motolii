@@ -1,20 +1,3 @@
-//! **発注(2026-08-22)「シェイプが画に出るようにする」の RETURN 要件3**: ゼロコピー
-//! 経路(`Engine::render_frame_to_texture` → `layers_from_resolved`)にも
-//! shape を通す——`tests/zero_copy_matte_text.rs` が text/matte で固定したのと
-//! 同じ形の oracle を shape に対して繰り返す(helper 関数は意図的に複製——
-//! `zero_copy_matte_text.rs`/`motolii-compositor/tests/zero_copy.rs` もそれぞれ
-//! 自前で持っており、この crate に共有 test-support module は無い)。
-//!
-//! ここで縛るのは2点:
-//! 1. **Preview(zero-copy GPU 経路)= Export(CPU readback 経路)**——同じ
-//!    Document/時刻から `render_frame`(CPU)と `render_frame_to_texture`(GPU)を
-//!    両方呼び、ピクセルへ落として比較する(許容 ±2/channel、
-//!    `zero_copy_matte_text.rs` と同じ理由の許容——shape も GPU の
-//!    テクスチャサンプリング/合成パスを経由する)。
-//! 2. zero-copy 経路で実際に shape の画素が出ること(`render_resolved_to_texture`
-//!    (shell が直接呼ぶ後方互換ラッパー、空の `shape_documents` 固定)ではなく
-//!    `render_frame_to_texture`/`render_resolved_to_texture_with_shapes` が
-//!    `shape_documents` を実際に運ぶことの確認)。
 
 use motolii_compositor::HeadlessGpu;
 use motolii_engine::Engine;
@@ -77,7 +60,6 @@ fn red_rect(size: f64) -> Shape {
     }
 }
 
-/// `zero_copy_matte_text.rs::gpu_engine` と同型。
 fn gpu_engine() -> (Engine, wgpu::Device, wgpu::Queue) {
     let HeadlessGpu {
         adapter,
@@ -117,9 +99,6 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 }
 "#;
 
-/// `zero_copy_matte_text.rs::blit_and_readback` と同型(main_target が
-/// `COPY_SRC` を持たないので、bind して sample → 自前の `COPY_SRC` texture へ
-/// blit してから読み戻す)。
 fn blit_and_readback(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
@@ -188,7 +167,6 @@ fn blit_and_readback(
         dimension: wgpu::TextureDimension::D2,
         format: wgpu::TextureFormat::Rgba8UnormSrgb,
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
-        // finalize_into は composite を通すため同じメモリを Rgba8Unorm として見直す。
         view_formats: &[wgpu::TextureFormat::Rgba8Unorm],
     });
     let readable_view = readable.create_view(&wgpu::TextureViewDescriptor::default());
@@ -300,7 +278,6 @@ fn blit_and_readback(
     out
 }
 
-/// `zero_copy_matte_text.rs::max_abs_diff` と同型。
 fn max_abs_diff(a: &[u8], b: &[u8]) -> u8 {
     assert_eq!(a.len(), b.len(), "比較対象のバッファ長が違う");
     a.iter()
@@ -310,9 +287,6 @@ fn max_abs_diff(a: &[u8], b: &[u8]) -> u8 {
         .unwrap_or(0)
 }
 
-/// **RETURN 要件3(両経路で shape が出る + 一致)**: `tests/shape_layer.rs::
-/// rectangle_shape_renders_visible_pixels_through_render_frame` と同じ document を、
-/// zero-copy 経路で描いても画素として出ること、かつ CPU 経路と同じ絵になること。
 #[test]
 fn rectangle_shape_zero_copy_matches_cpu_export_and_renders_visible_pixels() {
     let mut doc = doc_with_comp();
@@ -359,11 +333,6 @@ fn rectangle_shape_zero_copy_matches_cpu_export_and_renders_visible_pixels() {
     );
 }
 
-/// zero-copy 経路の後方互換ラッパー(`render_resolved_to_texture`、shell が直接
-/// 呼ぶシグネチャ固定)は shape_documents を持たない——空のままでも `Err` には
-/// ならず、単に shape を描かないだけであることを確かめる(shell を触らずに
-/// 後方互換性を保っていることの直接固定、`lib.rs` の
-/// `Engine::render_resolved_to_texture` doc 参照)。
 #[test]
 fn backward_compatible_wrapper_renders_nothing_for_shapes_but_does_not_error() {
     let mut doc = doc_with_comp();

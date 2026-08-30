@@ -1,8 +1,3 @@
-//! 傾き・`position.z` を持つ層が背景に埋もれないこと。
-//!
-//! 背景を comp 全域の板として世界に置くと、上流が矩形をカメラからの距離で並べ替える
-//! ため(`re_renderer` の `DrawDataDrawable::from_world_position`)、光軸から離れた層は
-//! z を持った瞬間に背景より遠いと判定されて上塗りされた。背景は clear 色になった。
 
 use motolii_engine::Engine;
 use motolii_store::{
@@ -31,7 +26,6 @@ fn seed(doc: &mut Document, name: &str, deg: f64) {
     doc.apply_all(intents).expect("track を打てる");
 }
 
-/// 背景の黒でない画素の数を、背景あり(`render_frame`)/なしで測る。
 fn lit(property_name: &str, value: f64) -> (usize, usize) {
     let mut fx = motolii_fixture::build();
     if value != 0.0 {
@@ -54,8 +48,6 @@ fn lit(property_name: &str, value: f64) -> (usize, usize) {
     (with, without)
 }
 
-/// 傾きが**効く**ことと、**絵が失われない**ことを同時に縛る。片方だけだと
-/// 「素通しで無視」と「丸ごと消失」を取り違える。
 #[test]
 fn tilt_changes_the_picture_without_erasing_it() {
     let (flat, _) = lit(property::ROTATION_X, 0.0);
@@ -67,7 +59,6 @@ fn tilt_changes_the_picture_without_erasing_it() {
     assert_eq!(t20, t20_nobg, "20°: 背景の有無で層の見え方が変わる");
 }
 
-/// `position.z` も同じ機序で消えていた。手前・奥のどちらへ動かしても残ること。
 #[test]
 fn depth_does_not_erase_the_picture() {
     let (near, near_nobg) = lit(property::POSITION_Z, -200.0);

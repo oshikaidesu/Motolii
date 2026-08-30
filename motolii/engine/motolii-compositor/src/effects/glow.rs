@@ -1,42 +1,4 @@
-//! 内蔵 vism 第1号: Glow(裁定153 S4、2026-08-21)。
-//!
-//! 移植元: `spikes/m5-known-implementation/M5-R0/src/glow.rs`(bright-pass→水平blur→
-//! 垂直blur→加算合成 の5パス、FP16 中間、Host 所有 texture/pipeline を使い回す構成)。
-//! **shader の数式・pass 構成は proof のまま移植** — 剥がしたのは fixture 依存だけ:
-//!
-//! 1. adapter/device を自前で起こさない(proof の `GlowFixture::new()` の instance 起こし
-//!    を削除)。`Compositor::headless()` が持つ device をそのまま使う。
-//! 2. `source_fs`(画面中央に固定矩形を焼くダミー)を削除。source は
-//!    「effect が付いた layer 自身の描画結果」(`src.default_view`、呼び手が持つ
-//!    実 texture のビュー)をそのまま bright-pass の入力にする — 中間コピーを作らない。
-//! 3. 固定 32×32 を削除。texture 生成は呼び手(`Compositor::render_with_effects`)が
-//!    渡す `width`/`height`(comp 実寸 or layer 実寸)から動的に行う。
-//! 4. readback(CPU 転送)を削除。最終 `output` は次の合成ステップへ GPU 上のまま渡す
-//!    (readback は export 時の最終フレーム1回だけ、既存の
-//!    `Compositor::render_with_timing` の経路)。
-//! 5. `threshold`(bright-pass 閾値)・`intensity`(composite の減衰率)・`radius`
-//!    (blur タップ間隔)をハードコードから uniform buffer 経由の param にした
-//!    (`GlowParams`、group(1) binding(0))。**5-tap の重み自体は proof のまま固定**
-//!    (`[0.0625, 0.25, 0.375, 0.25, 0.0625]`) — `radius` は5-tapの間隔(texel)を
-//!    スケールするだけで、tap数は増減しない(縫い目調査4節「未決」への回答:
-//!    5-tap 固定・間隔だけ可変)。`radius = 1.0` が proof の固定オフセット
-//!    (1texel・2texel)と厳密に一致する既定値。
-//!
-//! **中間 texture は常に `Rgba16Float`**(`GLOW_INTERMEDIATE_FORMAT`)。layer 本体の
-//! 元 format(`Rgba8Unorm` 等)とは独立 — bright-pass の閾値判定・加算合成が 1.0 を
-//! 超える値を扱える必要があるため(HDR ヘッドルーム、proof と同じ前提)。
-//! **新しい互換層は作らない**: `Rgba16Float` が render target として使えない環境の
-//! 扱いは proof と同じ(`device.create_texture`/`create_render_pipeline` が失敗すれば
-//! そのまま呼び手(`Compositor::render_with_effects`)の `Result` へ伝播する)。
-//!
-//! pipeline は `Compositor` 所有・**初回生成して以後使い回す**([`GlowPipelines::new`]
-//! を1回だけ呼ぶ、`Compositor::headless()` 参照)。bind group と param uniform buffer は
-//! layer のサイズ/値ごとに変わるので、[`GlowPipelines::record`] の呼び出しごとに作る
-//! (proof が texture/pipeline は使い回し・render() 呼び出しごとに command だけ積むのと
-//! 同じ役割分担 — bind group は texture の実体(scratch pool から借りた物)が毎回
-//! 変わり得るので使い回せない)。
 
-/// Glow の中間 texture の format。layer 本体の format とは独立(module doc 参照)。
 pub(crate) const GLOW_INTERMEDIATE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
 
 pub(crate) struct GlowPipelines {
@@ -50,9 +12,6 @@ pub(crate) struct GlowPipelines {
 }
 
 impl GlowPipelines {
-    /// **初回生成して以後使い回す**(module doc 参照)。texture サイズに依存しない
-    /// (pipeline はサイズ非依存、bind group だけがサイズ依存)ので、layer ごと・
-    /// フレームごとに作り直す理由が無い。
     pub(crate) fn new(device: &wgpu::Device) -> Self {
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("motolii-compositor-glow-shader"),
@@ -158,12 +117,6 @@ impl GlowPipelines {
         }
     }
 
-    /// 5パスを `encoder` へ積む(source→bright→blur-h→blur-v→composite、proof
-    /// `glow.rs:230-264` の順序どおり)。`source_view` は effect が付いた layer 自身の
-    /// 描画結果(呼び手所有、format 任意)。`bloom_view`/`blur_ping_view` は
-    /// [`GLOW_INTERMEDIATE_FORMAT`] の scratch texture(呼び手が
-    /// `EffectScratch::acquire` で確保済み)。`dst_view` も同じ format の scratch
-    /// (呼び手が確保・後で通常合成へ渡す)。
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn record(
         &self,
@@ -178,8 +131,6 @@ impl GlowPipelines {
         intensity: f32,
         radius: f32,
     ) {
-        // uniform buffer は layer ごと・呼び出しごとに値が変わるので使い回さない
-        // (pipeline/layout は使い回す、module doc の役割分担どおり)。
         let params_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("motolii-compositor-glow-params"),
             size: 16,
@@ -212,8 +163,6 @@ impl GlowPipelines {
             })
         };
 
-        // bright-pass: 実 layer の描画結果を直接読む(proof の `source_fs` 相当は削除
-        // 済み — module doc 2番)。
         let bright_bind = one_texture_bind_group("motolii-compositor-glow-bright-bind", source_view);
         draw_pass(
             encoder,
@@ -314,10 +263,6 @@ fn draw_pass(
     pass.draw(0..3, 0..1);
 }
 
-/// proof(`spikes/m5-known-implementation/M5-R0/src/glow.rs:384-436`)からそのまま移植。
-/// 変更点: `source_fs` を削除(module doc 2番)、`bright_fs`/`blur_at`/`composite_fs` が
-/// ハードコード定数の代わりに `GlowParams` uniform(group(1) binding(0))を読む
-/// (module doc 5番)。5-tap の重みと構造(横→縦の分離ガウシアン近似)は無改造。
 const SHADER: &str = r#"
 struct GlowParams {
   threshold: f32,
@@ -372,18 +317,6 @@ fn blur_vertical_fs(@builtin(position) p: vec4<f32>) -> @location(0) vec4<f32> {
 fn composite_fs(@builtin(position) p: vec4<f32>) -> @location(0) vec4<f32> {
   let source = textureLoad(input_a, vec2<i32>(p.xy), 0);
   let glow = textureLoad(input_b, vec2<i32>(p.xy), 0) * params.intensity;
-  // proof はここを clamp しない(readback が直接 half-float を読むので 1.0 超えを
-  // そのまま観測して確かめている、`glow.rs` テスト参照)。製品側はこの結果が
-  // 通常合成(`re_renderer::renderer::rectangle_fs.wgsl` の `decode_color`)へ
-  // 戻る — そこは `decode_srgb` 有効時に `[0,1]` を外れた値を「壊れたデータ」と
-  // 見なして `ERROR_RGBA`(マゼンタ)へ差し替える固定の検査を持っている
-  // (一次確認: 上流 `shader/rectangle_fs.wgsl` `decode_color`、
-  // `shader/types.wgsl` の `ERROR_RGBA = vec4f(1.0, 0.0, 1.0, 1.0)`)。
-  // 最終的な表示は SDR 8bit なので 1.0 超えを保持する意味も無い — ここで
-  // clamp して「1.0超えは白に飽和する」という、このリポジトリの他の加算合成
-  // (`tests/compose.rs::add_blend_saturates_to_white_when_the_linear_sum_exceeds_one`)
-  // と同じ規約に揃える(proof からの product 化差分、fixture 依存の剥がし漏れ
-  // だったので実装中に追加で剥がした — 縫い目調査 5節には無かった発見)。
   return clamp(
     vec4<f32>(source.rgb + glow.rgb, source.a + glow.a * (1.0 - source.a)),
     vec4<f32>(0.0),

@@ -1,11 +1,3 @@
-//! Document → Lottie JSON 書き出しの契約。
-//!
-//! 発注書の中心は「書けなかった物の一覧が空である」ことを検査できる形にすること
-//! ([`motolii_export::UnsupportedForLottie`])——このファイルの各試験は「採用済の
-//! この部分は書ける」ことを JSON の形で直接検査する(裁定189: 実行は任意、
-//! `cargo check --tests` が検収線)。読み込み側(`next/` に存在しない)を経由した
-//! 往復試験はできないので、JSON の形を schema(`app/reference/lottie.schema.json`)
-//! の理解に照らして直接見る。
 
 use motolii_core::{Fps, RationalTime};
 use motolii_export::export_lottie;
@@ -65,10 +57,6 @@ fn hold_track(pairs: &[(i64, f64)]) -> KeyframeTrack {
     track
 }
 
-// ---------------------------------------------------------------------------
-// composition + solid layer(基本の形)
-// ---------------------------------------------------------------------------
-
 #[test]
 fn composition_and_solid_layer_export_with_no_unsupported_items() {
     let mut doc = base_document();
@@ -108,7 +96,6 @@ fn composition_and_solid_layer_export_with_no_unsupported_items() {
     assert_eq!(l0["ip"], 0.0);
     assert_eq!(l0["op"], FRAMES as f64);
 
-    // track を1本も打っていない transform は静的既定値になる(裁定20)。
     assert_eq!(l0["ks"]["o"], serde_json::json!({"a": 0, "k": 100.0}));
     assert_eq!(l0["ks"]["a"], serde_json::json!({"a": 0, "k": [0.0, 0.0]}));
     assert_eq!(l0["ks"]["s"], serde_json::json!({"a": 0, "k": [100.0, 100.0]}));
@@ -142,10 +129,6 @@ fn animated_opacity_track_becomes_a_keyframed_lottie_property() {
     assert_eq!(keys[1]["s"], serde_json::json!([100.0]));
 }
 
-// ---------------------------------------------------------------------------
-// link(裁定206 の実地検証) — 焼けば普通の track と区別が付かない
-// ---------------------------------------------------------------------------
-
 #[test]
 fn property_link_bakes_into_a_normal_keyframed_property() {
     let mut doc = base_document();
@@ -175,7 +158,6 @@ fn property_link_bakes_into_a_normal_keyframed_property() {
     })
     .unwrap();
 
-    // 焼く前提の確認: `property_source` は Link のまま(track ではない)。
     let view = doc.view();
     match view
         .property_source(target_layer, &PropertyId::new(property::OPACITY).unwrap())
@@ -197,14 +179,12 @@ fn property_link_bakes_into_a_normal_keyframed_property() {
     let o = &target_json["ks"]["o"];
     assert_eq!(o["a"], 1, "link を焼いた結果はキーフレーム化された普通の property");
     let keys = o["k"].as_array().unwrap();
-    // 値が変わった時だけキーを打つ焼き方なので、frame0(0%)と frame5(100%)の2本。
     assert_eq!(keys.len(), 2, "焼いたキー列: {keys:?}");
     assert_eq!(keys[0]["t"], 0.0);
     assert_eq!(keys[0]["s"], serde_json::json!([0.0]));
     assert_eq!(keys[1]["t"], 5.0);
     assert_eq!(keys[1]["s"], serde_json::json!([100.0]));
 
-    // 焼いた値は source をそのままサンプルしたのと一致する(identity link なので)。
     for frame in [0i64, 3, 5, 10, FRAMES - 1] {
         let t = RationalTime::try_from_frame(frame, fps()).unwrap();
         let expected = view.value_at(source_layer, &PropertyId::new(property::OPACITY).unwrap(), t)
@@ -219,17 +199,6 @@ fn property_link_bakes_into_a_normal_keyframed_property() {
     }
 }
 
-// ---------------------------------------------------------------------------
-// 加算 modulator の範囲外検出(裁定213 の RETURN follow-up)
-// ---------------------------------------------------------------------------
-
-/// **store は clamp しない**(`slot.rs` doc「範囲外に出た時」)ので、base(0.8=80%)
-/// + modulator(定数 +0.5=50%、`motolii.link.linear` を scale=0 で恒等関数化した
-/// 「値を読まない定数 modulator」)= 1.3 = 130% が焼かれる。export 側は**黙って
-/// clamp せず**この事実を `UnsupportedForLottie`(category
-/// `"value-out-of-range"`)で報告しつつ、JSON には un-clamped の 130.0 を
-/// そのまま書く——裁定206 の基準(「無損失で書けるか」)を測る道具としての
-/// 価値を保つための判断(`report_out_of_range` doc 参照)。
 #[test]
 fn a_modulator_sum_beyond_the_lottie_range_is_reported_not_silently_clamped() {
     let mut doc = base_document();
@@ -244,12 +213,6 @@ fn a_modulator_sum_beyond_the_lottie_range_is_reported_not_silently_clamped() {
     })
     .unwrap();
 
-    // modulator の source は無関係な別 property(ROTATION)—— scale=0 で
-    // その値を無視し、offset=0.5 だけを恒常的に足す「定数 modulator」にする
-    // (`translate_link` の `motolii.link.linear` doc 参照)。**source は track を
-    // 持っていないと `value_at` が `None` を返し、modulator は寄与しない**
-    // (`view.rs::value_at_path_resolving_links` の「参照先に値が無ければ寄与
-    // しない」)ので、値そのものは使わなくても track だけは立てる必要がある。
     doc.apply(Intent::SetTrack {
         layer,
         property: PropertyId::new(property::ROTATION).unwrap(),
@@ -273,7 +236,6 @@ fn a_modulator_sum_beyond_the_lottie_range_is_reported_not_silently_clamped() {
     .unwrap();
 
     let view = doc.view();
-    // 焼く前提の確認: store 側の値は 0.8+0.5=1.3(clamp されていない)。
     assert_eq!(
         view.value_at(layer, &opacity, RationalTime::ZERO).unwrap(),
         Some(Value::F64(1.3)),
@@ -294,17 +256,12 @@ fn a_modulator_sum_beyond_the_lottie_range_is_reported_not_silently_clamped() {
         report.detail
     );
 
-    // **黙って clamp しない** — JSON には un-clamped の 130.0 がそのまま書かれる。
     let target_json = &out.json["layers"][0];
     assert_eq!(
         target_json["ks"]["o"]["k"], 130.0,
         "範囲外の値を勝手に clamp して書いている"
     );
 }
-
-// ---------------------------------------------------------------------------
-// matte(裁定66 → 裁定206 と同じ形: 内部は1フィールド、書き出しは tt/tp/td へ明示展開)
-// ---------------------------------------------------------------------------
 
 #[test]
 fn matte_expands_into_explicit_tt_tp_td_fields() {
@@ -340,10 +297,6 @@ fn matte_expands_into_explicit_tt_tp_td_fields() {
     assert_eq!(source_json["td"], 1, "matte の source 側は td:1");
     assert!(target_json.get("td").is_none(), "source でない側に td を立てない");
 }
-
-// ---------------------------------------------------------------------------
-// masks
-// ---------------------------------------------------------------------------
 
 #[test]
 fn mask_shape_and_opacity_export_as_bezier_and_scalar_properties() {
@@ -394,10 +347,6 @@ fn mask_shape_and_opacity_export_as_bezier_and_scalar_properties() {
     assert_eq!(pt["v"], serde_json::json!([[0.0, 0.0], [10.0, 0.0], [10.0, 10.0]]));
 }
 
-// ---------------------------------------------------------------------------
-// shapes(静的 — fill/stroke/trim を1つの group にまとめて書けているか)
-// ---------------------------------------------------------------------------
-
 #[test]
 fn shape_layer_exports_fill_and_geometry() {
     let mut doc = base_document();
@@ -430,10 +379,6 @@ fn shape_layer_exports_fill_and_geometry() {
     assert_eq!(fill["o"]["k"], 50.0, "0.5 → 50%");
 }
 
-// ---------------------------------------------------------------------------
-// unsupported の報告(黙って落とさない)
-// ---------------------------------------------------------------------------
-
 #[test]
 fn effect_instance_is_reported_as_unsupported_not_silently_dropped() {
     let mut doc = base_document();
@@ -453,8 +398,6 @@ fn effect_instance_is_reported_as_unsupported_not_silently_dropped() {
     assert_eq!(out.unsupported[0].category, "effect");
     assert_eq!(out.unsupported[0].layer, Some(layer));
     assert!(out.unsupported[0].detail.contains("motolii.glow"));
-    // JSON 自体は壊れずに出る(effect が無いことにして黙って落とすのではなく、
-    // layer 自体は書いた上で unsupported を別途報告する)。
     assert_eq!(out.json["layers"].as_array().unwrap().len(), 1);
 }
 
@@ -512,10 +455,6 @@ fn slot_referenced_property_exports_as_sid_reference() {
     );
 }
 
-// ---------------------------------------------------------------------------
-// text style track(D-1、2026-08-23) — Preview = Export の検収
-// ---------------------------------------------------------------------------
-
 fn default_text_style() -> TextDocumentStyle {
     TextDocumentStyle {
         id: TextStyleId(0),
@@ -545,14 +484,6 @@ fn base_text_document() -> TextDocument {
     }
 }
 
-/// **D-1 の検収の核心**: `StoreView::resolved_text_document`(engine の text
-/// 経路・`Shell::build_preview_snapshot` が読むのと**同じ1本の評価関数**)が
-/// ある時刻で返す `size` と、この Lottie 書き出しが同じ時刻に焼く `s` の値が
-/// 一致する——「同じ Document・同じ時刻で、engine の画とプレビュー/Lottie
-/// 出力が同じ値を見る」ことの機械的な証拠(発注 OUTCOME 1)。修正前は
-/// `export_lottie` が `view.text_document(layer)`(静的値、track を一切見ない)
-/// を呼んでいたため、ここは常に既定の `12.0` を書いていた(track で `48.0`
-/// に変えても書き出しへ反映されなかった)。
 #[test]
 fn text_style_size_track_is_baked_the_same_as_resolved_text_document() {
     let mut doc = base_document();
@@ -572,7 +503,6 @@ fn text_style_size_track_is_baked_the_same_as_resolved_text_document() {
     })
     .unwrap();
 
-    // engine/プレビューが実際に読む経路と同じ関数で、両方の時刻の期待値を取る。
     let at_frame_0 = RationalTime::try_from_frame(0, fps()).unwrap();
     let at_frame_10 = RationalTime::try_from_frame(10, fps()).unwrap();
     let expected_0 = doc

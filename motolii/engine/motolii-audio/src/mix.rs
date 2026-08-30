@@ -1,46 +1,3 @@
-//! AG-2: 決定論的 `mix_audio`。preview/export 同一意味の正準PCM境界。
-//!
-//! 旧 `crates/motolii-audio/src/mix.rs` からの移植。**型の読み替え**(発注書の指示):
-//! - `motolii_core::TimeMap` → この crate 自身の [`crate::TimeMap`](`time_map.rs`。
-//!   `next/core/motolii-core` はこの型を落としており、store の `LayerTiming` は
-//!   comp フレーム単位の整数写像なので mix のサンプル精度に使えない)
-//! - `motolii_doc::DocParam`(`Const`/`Keyframes` の2 variant)→
-//!   `Option<motolii_eval::KeyframeTrack>`。`None` = track が無い = 裁定20
-//!   「キーを打っていない property は静止値」を音声にもそのまま適用し、gain の
-//!   既定値 1.0 を返す。`Some(track)` は `track.eval(t)` を正本として使う
-//!   (旧版の `DocKeyframeTrack::eval` 委譲と同じ形)
-//! - `motolii_doc::AudioOutOfRange` → この crate が持つ [`AudioOutOfRange`](store に
-//!   同義の概念が無い。音声の範囲外挙動は engine 層の判断、という store 側の設計
-//!   (`ResolvedLayer::source_frame` のdocコメント参照)にそのまま従う)
-//!
-//! ## B42(音声内容整形束)の拡張 — 2026-08-22
-//!
-//! map の bundle B42(採用予定13行)のうち **mix 経路で表現できる意味だけ**を
-//! ここへ実装した(EQ/コンプ級のフィルタは vism 圏として見送り、AI解析系
-//! (Audio Enhancer/Vocal isolation)・素材追加系(Music/Sound effects)・
-//! マイク入力(Voiceover)・波形帯UI(Show Clip Gain Line)は audio engine の
-//! mix 経路そのものには意味が無いので対象外):
-//!
-//! - **gain/volume**(id11/27/28): 既存の `MixSource::gain` がそのままカバー
-//!   (変更なし)
-//! - **pan**(定位。map に直接の行は無いが発注書が明示指定): [`MixSource::pan`]
-//!   を新設。等パワー則 — **W3C Web Audio API `StereoPannerNode` の
-//!   panning algorithm をそのまま採用**(仕様:
-//!   <https://webaudio.github.io/web-audio-api/#stereopanner-algorithm>、
-//!   stereo入力パス。`apply_pan_stereo` docコメント参照)。線形balanceでなく
-//!   等パワー則を選んだ理由: 線形crossfadeは中央付近で知覚音量が下がる
-//!   (pan law問題)ことがオーディオ工学で広く知られており、等パワー則は
-//!   これを避ける業界標準(Pro Tools/Logic 等のbalance/pan既定則も同型)
-//! - **fade in/out**(id3/23 Apply/Batch Fade Settings): [`FadeSpec`]/
-//!   [`FadeCurve`] を新設。既定は等パワー(`EqualPower`) — 隣接クリップと
-//!   重なるクロスフェードで音量の谷を作らない古典的な理由がここでも成立する
-//! - **mute**(音側): 既存の `MixSource::enabled` がそのままカバー(裁定135の
-//!   「store 側にaudio専用muteが無い」問題はこの crate の外 — program.rs
-//!   doc参照。engine側の口は既にある)
-//! - **正規化**(id42 Loudness normalisation): [`normalize_gain_for_peak`]。
-//!   **真の LUFS(ITU-R BS.1770 K-weighting + gating)はエフェクト級のDSPで
-//!   vism 圏 — 見送り**。ここでは決定論的な peak-based 正規化のみを実装し、
-//!   既存の `gain` 経路(1個の定数gain)へ計算結果を乗せる薄い顔に留めた
 
 use std::sync::Arc;
 
@@ -53,36 +10,20 @@ use crate::error::{AudioError, Result};
 use crate::meter::AudioMeter;
 use crate::time_map::TimeMap;
 
-/// ソース採取が素材の実尺を外れたときの挙動。旧 `motolii_doc::AudioOutOfRange` と
-/// 同じ2値(store にはこの概念が無いので、この crate が持つ)。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum AudioOutOfRange {
-    /// 無音。
     #[default]
     Silence,
-    /// 素材の実尺で wrap する。
     Loop,
 }
 
-/// フェードの補間則(B42)。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum FadeCurve {
-    /// 直線(振幅を時間に対して線形に変化させる)。
     Linear,
-    /// 等パワー(`sin`/`cos`)。隣接クリップとのクロスフェードで音量の谷を
-    /// 作らない古典的な理由により既定に採る(`mod`docの選定理由参照)。
     #[default]
     EqualPower,
 }
 
-/// レイヤー単位のフェード仕様(B42、map id3/23)。
-///
-/// clip-local な相対 duration で持つ(絶対タイムライン時刻の `KeyframeTrack`
-/// ではない) — 「クリップの端から何秒」という指定はAE/Premiere/CapCut共通の
-/// 語彙で、`timeline_start`/`timeline_duration` が変わっても再計算不要なほうが
-/// 自然なため。`fade_in`/`fade_out` が `timeline_duration` を超える、または
-/// 両者が重なる場合でも [`fade_envelope`] が両方の区間で乗算し、0..=1 の範囲を
-/// 保つ(発注書「fade の境界」試験対応)。
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct FadeSpec {
     pub fade_in: RationalTime,
@@ -91,7 +32,6 @@ pub struct FadeSpec {
 }
 
 impl FadeSpec {
-    /// フェード無し(既定)。
     pub const NONE: FadeSpec = FadeSpec {
         fade_in: RationalTime::ZERO,
         fade_out: RationalTime::ZERO,
@@ -105,25 +45,14 @@ impl Default for FadeSpec {
     }
 }
 
-/// mixへ投入する1 source(正準48k stereo cache前提)。
 #[derive(Debug, Clone)]
 pub struct MixSource {
     pub pcm: Arc<PcmCache>,
-    /// タイムライン上の開始。
     pub timeline_start: RationalTime,
-    /// タイムライン上の尺(半開)。
     pub timeline_duration: RationalTime,
-    /// clip_local → source 時刻(varispeed含む)。
     pub time_map: TimeMap,
-    /// linear gain。`None` = track が無い(裁定20: 静止値 1.0)。`Some` は
-    /// `KeyframeTrack::eval` をそのまま使う。
     pub gain: Option<KeyframeTrack>,
-    /// stereo pan(定位、B42)。range -1.0(full left)..=1.0(full right)。
-    /// `None` = track が無い(裁定20と同型の既定 — 静止値 0.0 = 中央=無変化)。
-    /// `Some` の評価値は `apply_pan_stereo` へそのまま渡す前に -1..1へclampする
-    /// (`eval_pan_at` 参照 — 有限性だけ検査し、範囲外はエラーでなくclamp)。
     pub pan: Option<KeyframeTrack>,
-    /// フェード仕様(B42)。既定は無フェード([`FadeSpec::NONE`])。
     pub fade: FadeSpec,
     pub out_of_range: AudioOutOfRange,
     pub enabled: bool,
@@ -136,7 +65,6 @@ impl MixSource {
                 detail: "MixSource.pcm must be canonical 48kHz stereo",
             });
         }
-        // 先頭時刻で型だけ検査(track はあるのに数値でない、を拒む)。
         let _ = eval_gain_at(&self.gain, RationalTime::ZERO)?;
         let _ = eval_pan_at(&self.pan, RationalTime::ZERO)?;
         if self.timeline_duration <= RationalTime::ZERO {
@@ -146,21 +74,12 @@ impl MixSource {
     }
 }
 
-/// `mix_audio` の結果メタ(正規silenceとunderflowの区別用)。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct MixReport {
-    /// 出力フレーム数。
     pub frames: usize,
-    /// sourceが無くgap/silenceで埋めたフレーム数(正規silence。underflowではない)。
     pub silence_frames: usize,
 }
 
-/// 正準フレーム範囲 `[start_frame, start_frame + frame_count)` を mix する。
-///
-/// - 評価順は呼び出し側が並べた `sources` 順(soundtrack/layer の重ね順は
-///   呼び出し側=`program.rs` が決める)
-/// - 毎source clamp / normalize / limiter は行わない
-/// - `meter` を渡してもPCM結果は変わらない
 pub fn mix_audio(
     sources: &[MixSource],
     master_gain: f64,
@@ -211,7 +130,6 @@ pub fn mix_audio(
 
         left *= master_gain;
         right *= master_gain;
-        // 毎source / mix結果のclampはしない(AG-2 / metering契約)。
         let base = i * CANONICAL_CHANNELS as usize;
         out[base] = left as f32;
         out[base + 1] = right as f32;
@@ -231,7 +149,6 @@ pub fn mix_audio(
 }
 
 fn frame_to_time(frame: u64) -> Result<RationalTime> {
-    // frame / 48000。分母をレートに固定して肥大化を避ける。
     RationalTime::try_new(frame as i64, CANONICAL_SAMPLE_RATE as i64)
         .map_err(|_| AudioError::InvalidMixRange)
 }
@@ -244,7 +161,6 @@ fn local_for_gain(source: &MixSource, timeline_t: RationalTime) -> Result<Ration
 
 fn eval_gain_at(gain: &Option<KeyframeTrack>, t: RationalTime) -> Result<f64> {
     let raw = match gain {
-        // track が無い property は静止値(裁定20)。gain の既定は等倍。
         None => 1.0,
         Some(track) => match track.eval(t) {
             Value::F64(v) => v,
@@ -258,9 +174,6 @@ fn eval_gain_at(gain: &Option<KeyframeTrack>, t: RationalTime) -> Result<f64> {
     }
 }
 
-/// stereo pan(定位)を評価する。`None` = track無し = 静止値 0.0(裁定20と同型、
-/// 中央=無変化)。有限性だけ検査し、範囲外(-1..1超)はエラーでなく
-/// `apply_pan_stereo` 側でclampする(W3C仕様の挙動と同型)。
 fn eval_pan_at(pan: &Option<KeyframeTrack>, t: RationalTime) -> Result<f64> {
     let raw = match pan {
         None => 0.0,
@@ -276,28 +189,6 @@ fn eval_pan_at(pan: &Option<KeyframeTrack>, t: RationalTime) -> Result<f64> {
     }
 }
 
-/// stereo pan を1サンプルへ適用する。
-///
-/// **W3C Web Audio API `StereoPannerNode` の panning algorithm(stereo入力
-/// パス)をそのまま採用**(仕様: <https://webaudio.github.io/web-audio-api/#stereopanner-algorithm>、
-/// 2026-08-22時点の editor's draft、該当節「StereoPannerNode Panning」の
-/// アルゴリズム定義):
-///
-/// ```text
-/// x = pan <= 0 ? pan + 1 : pan
-/// gainL = cos(x * PI/2); gainR = sin(x * PI/2)
-/// pan <= 0: outputL = inputL + inputR*gainL; outputR = inputR*gainR
-/// pan >  0: outputL = inputL*gainL;          outputR = inputR + inputL*gainR
-/// ```
-///
-/// `pan=0` は恒等写像(gainL=0, gainR=1 → 元のL/Rがそのまま出る)。`pan=±1` は
-/// 両チャンネルの内容が片方へ合算される(hard left/right)。**等パワー則を
-/// 線形balanceより優先した理由**: 線形crossfadeは中央付近で知覚音量が
-/// 下がる(pan law問題)ことがオーディオ工学で広く知られており、等パワー則が
-/// これを避ける業界標準(Pro Tools/Logic 等のbalance/pan既定則も同型)。
-/// stereo入力に対する式は本アルゴリズムの定義どおり単純な「反対chへの
-/// crossfeed」であって、mono入力用の「2ch分岐」とは別物(仕様が両者を
-/// 明示的に書き分けている)。
 fn apply_pan_stereo(left: f64, right: f64, pan: f64) -> (f64, f64) {
     let pan = pan.clamp(-1.0, 1.0);
     let x = if pan <= 0.0 { pan + 1.0 } else { pan };
@@ -310,13 +201,6 @@ fn apply_pan_stereo(left: f64, right: f64, pan: f64) -> (f64, f64) {
     }
 }
 
-/// clip-local 時刻 `local`(`0 <= local < duration` の前提、範囲外は呼び出し側
-/// `sample_source` が既に弾いている)における fade envelope(0.0..=1.0)。
-///
-/// `fade_in`/`fade_out` は各々 `duration` を超えないよう内部でclampし、両者が
-/// 重なる場合は該当区間で両方のenvelopeを乗算する(オーバーラップしたfade
-/// handleは両方効く、というPremiere/Resolve等の一般的な挙動と同型 — 発注書
-/// 「fade の境界」試験対応)。
 fn fade_envelope(local: RationalTime, duration: RationalTime, fade: &FadeSpec) -> f64 {
     let mut envelope = 1.0;
 
@@ -334,7 +218,6 @@ fn fade_envelope(local: RationalTime, duration: RationalTime, fade: &FadeSpec) -
                 if let Ok(remaining) = duration.try_sub(local) {
                     envelope *= curve_value(ratio_unit(remaining, out_len), fade.curve);
                 } else {
-                    // durationを跨ぐ数値的異常(呼び出し前提が破れている) — 無音側へ倒す。
                     envelope = 0.0;
                 }
             }
@@ -344,9 +227,6 @@ fn fade_envelope(local: RationalTime, duration: RationalTime, fade: &FadeSpec) -
     envelope
 }
 
-/// `numerator / denominator` を `[0.0, 1.0]` へclampした比。`denominator <= 0`
-/// は呼び出し元(`fade_envelope`)が `.min(duration)` 済みなので実質起きないが、
-/// 型として保証されていないため防御的に1.0(=フェード済み)を返す。
 fn ratio_unit(numerator: RationalTime, denominator: RationalTime) -> f64 {
     if denominator <= RationalTime::ZERO {
         return 1.0;
@@ -361,16 +241,6 @@ fn curve_value(t: f64, curve: FadeCurve) -> f64 {
     }
 }
 
-/// map id42(Loudness normalisation)の薄い顔。**真の LUFS(ITU-R BS.1770
-/// K-weighting + gating)はエフェクト級のDSPで vism 圏 — 見送り**。ここでは
-/// 決定論的な peak-based 正規化のみ実装し、計算結果を既存の
-/// `MixSource::gain`(1個の定数 Hold keyframe)へ乗せる薄い顔として使う想定
-/// (この関数自体は `mix_audio` のコード経路を増やさない — 呼び出し側が
-/// オフラインで1回呼び、結果をgainへ書く)。
-///
-/// `target_peak` は線形振幅(dBFSではない。例: -1dBFS相当なら
-/// `10f64.powf(-1.0 / 20.0)`)。`pcm` が完全な無音(peak==0)の場合は
-/// `1.0`(無変換)を返す — 0除算/無限大gainを避ける。
 pub fn normalize_gain_for_peak(pcm: &PcmCache, target_peak: f64) -> Result<f64> {
     if !target_peak.is_finite() || target_peak < 0.0 {
         return Err(AudioError::InvalidGain { gain: target_peak });
@@ -403,7 +273,6 @@ fn sample_source(source: &MixSource, timeline_t: RationalTime) -> Result<Option<
     if src_frames <= 0.0 {
         return Ok(None);
     }
-    // seconds経由だと10分級でfloat丸めが乗るので、num*rate/denで直接フレーム位置へ。
     let mut pos =
         (source_t.num() as f64) * f64::from(CANONICAL_SAMPLE_RATE) / (source_t.den() as f64);
     if !(0.0..src_frames).contains(&pos) {
@@ -457,10 +326,6 @@ mod tests {
         }
     }
 
-    /// 旧 `DocParam::const_f64` に相当する「動かない gain」。定数値は `None`
-    /// (静止値=1.0)と衝突しないように、1本だけキーを持つ Hold track で表す
-    /// (裁定20 の「キーを打っていない=静止値」は 1.0 専用の近道であって、
-    /// 他の定数値まで `None` へ潰すと「1.0 以外の定数」を表現できなくなる)。
     fn const_gain(value: f64) -> Option<KeyframeTrack> {
         if value == 1.0 {
             return None;
@@ -475,9 +340,6 @@ mod tests {
         Some(track)
     }
 
-    /// pan用の定数track。gainと違い0.0を特別扱いしない(`None`と0.0は既に
-    /// 同じ意味 — 裁定20どおり「track無し=静止値」で、静止値がちょうど0.0
-    /// なので特別扱いする定数が無い)。
     fn const_track(value: f64) -> Option<KeyframeTrack> {
         let mut track = KeyframeTrack::new();
         track.insert(Keyframe {
@@ -491,7 +353,6 @@ mod tests {
 
     #[test]
     fn two_sources_sum_deterministically() {
-        // 1 frame: [0.25, 0.5] + [0.5, 0.25] = [0.75, 0.75]
         let a = stereo_cache(vec![0.25, 0.5]);
         let b = stereo_cache(vec![0.5, 0.25]);
         let (out, report) = mix_audio(
@@ -531,7 +392,6 @@ mod tests {
         let mut source = identity_source(a, 1.0);
         source.timeline_duration = RationalTime::try_new(4, CANONICAL_SAMPLE_RATE as i64).unwrap();
         source.out_of_range = AudioOutOfRange::Loop;
-        // speed 1, source frames 0,1,0,1
         let (out, _) = mix_audio(&[source], 1.0, 0, 4, None).unwrap();
         assert_eq!(&out[0..2], &[0.1, 0.2]);
         assert_eq!(&out[2..4], &[0.3, 0.4]);
@@ -601,20 +461,17 @@ mod tests {
         ];
         let frames = 480; // 0.01s @ 48k
         let (out, _) = mix_audio(&sources, 1.0, 0, frames, None).unwrap();
-        // mono 0.2→L=R + stereo 0.1/-0.1 ≈ 0.3 / 0.1 (resample誤差あり)
         assert!(out[0] > 0.25 && out[0] < 0.35);
         assert!(out[1] > 0.05 && out[1] < 0.15);
     }
 
     #[test]
     fn varispeed_doubles_source_advance() {
-        // 4 source frames of distinct L values.
         let pcm = stereo_cache(vec![0.0, 0.0, 0.25, 0.0, 0.5, 0.0, 0.75, 0.0]);
         let mut source = identity_source(pcm, 1.0);
         source.time_map = TimeMap::constant_speed(RationalTime::ZERO, 2, 1).unwrap();
         source.timeline_duration = RationalTime::try_new(2, CANONICAL_SAMPLE_RATE as i64).unwrap();
         let (out, _) = mix_audio(&[source], 1.0, 0, 2, None).unwrap();
-        // t=0 → source 0, t=1/48000 → source 2/48000 (speed 2)
         assert_eq!(out[0], 0.0);
         assert_eq!(out[2], 0.5);
     }
@@ -638,7 +495,6 @@ mod tests {
 
     #[test]
     fn ten_minute_timeline_frame_maps_without_drift() {
-        // 10分 = 28_800_000 frames @48k。全展開せず末尾付近の既知サンプル対応だけ審判する。
         let ten_min = 10u64 * 60 * u64::from(CANONICAL_SAMPLE_RATE);
         let pcm_frames = 64u64;
         let mut samples = Vec::with_capacity(pcm_frames as usize * 2);
@@ -674,7 +530,6 @@ mod tests {
 
     #[test]
     fn hold_gain_keyframes_follow_eval() {
-        // Hold区間の中点で線形補間(1.25)にならず 0.5 のまま — 正本evalと一致。
         let mut track = KeyframeTrack::new();
         track.insert(Keyframe {
             t: RationalTime::ZERO,
@@ -711,9 +566,6 @@ mod tests {
         assert!((out[1] as f64 - expected).abs() < 1e-6);
     }
 
-    /// 決定論(発注書の指示: 「決定論のテスト(同入力→byte一致)を先に」)。
-    /// 同じ入力を2回 mix しても byte 単位で一致する — preview/export が同じ関数を
-    /// 通る前提(GOALS M15)の音声側の土台。
     #[test]
     fn same_input_mixes_to_byte_identical_output() {
         let a = stereo_cache(
@@ -760,8 +612,6 @@ mod tests {
         assert_eq!(first_report, second_report);
     }
 
-    // ---- B42: gain の線形性 ----------------------------------------------
-
     #[test]
     fn gain_scales_output_linearly() {
         let a = stereo_cache(vec![0.4, -0.2]);
@@ -785,8 +635,6 @@ mod tests {
         .unwrap();
         assert_eq!(out, vec![0.5, 0.5]);
     }
-
-    // ---- B42: pan(等パワー則、W3C Web Audio StereoPannerNode 相当) --------
 
     #[test]
     fn pan_center_is_identity() {
@@ -831,11 +679,8 @@ mod tests {
 
     #[test]
     fn pan_none_track_defaults_to_center() {
-        // 裁定20と同型: track無し = 静止値(pan=0.0=中央=無変化)。
         assert_eq!(eval_pan_at(&None, RationalTime::ZERO).unwrap(), 0.0);
     }
-
-    // ---- B42: fade の境界 --------------------------------------------------
 
     #[test]
     fn linear_fade_in_ramps_from_zero_to_full() {
@@ -867,7 +712,6 @@ mod tests {
             curve: FadeCurve::Linear,
         };
         let (out, _) = mix_audio(&[source], 1.0, 0, 4, None).unwrap();
-        // remaining/out_len: frame0 -> 4/4=1.0, frame1 -> 3/4, frame2 -> 2/4, frame3 -> 1/4
         assert!((out[0] - 1.0).abs() < 1e-5, "frame0: {out:?}");
         assert!((out[2] - 0.75).abs() < 1e-5, "frame1: {out:?}");
         assert!((out[4] - 0.5).abs() < 1e-5, "frame2: {out:?}");
@@ -899,8 +743,6 @@ mod tests {
                 "envelope out of [0,1] at frame {i}: {envelope}"
             );
         }
-        // 両端(0とduration-1に最も近いフレーム)は最も暗い — 単調である必要はないが
-        // 中央がどちらの端よりも明るいことは保証されるべき(オーバーラップの意味)。
         let start = fade_envelope(RationalTime::ZERO, dur, &fade);
         let mid = fade_envelope(
             RationalTime::try_new(2, CANONICAL_SAMPLE_RATE as i64).unwrap(),
@@ -912,7 +754,6 @@ mod tests {
 
     #[test]
     fn fade_duration_exceeding_clip_length_is_clamped_not_rejected() {
-        // fade_in が clip 全長より長くても mix_audio が panic/errorしない(境界試験)。
         let pcm = stereo_cache([1.0, 1.0].repeat(2));
         let mut source = identity_source(pcm, 1.0);
         let dur = RationalTime::try_new(2, CANONICAL_SAMPLE_RATE as i64).unwrap();
@@ -927,8 +768,6 @@ mod tests {
         assert!(out[0].abs() < 1e-6, "先頭はほぼ無音のはず: {out:?}");
     }
 
-    /// 決定論(発注書「決定論(同入力→同出力の既存保証を維持)」): pan/fade を
-    /// 使っても `same_input_mixes_to_byte_identical_output` と同じ保証が壊れない。
     #[test]
     fn same_input_with_pan_and_fade_mixes_to_byte_identical_output() {
         let pcm = stereo_cache(
@@ -957,14 +796,11 @@ mod tests {
         assert_eq!(first, second, "pan/fade込みでも同一入力はbyte一致でなければならない");
         assert_eq!(first_report, second_report);
 
-        // gain==0 の場合と同型のガード: pan/fadeの評価はsourceを消費しない(&mut不要)。
         source.enabled = false;
         let (silent, report) = mix_audio(&[source], 1.0, 0, 32, None).unwrap();
         assert!(silent.iter().all(|&s| s == 0.0));
         assert_eq!(report.silence_frames, 32);
     }
-
-    // ---- B42: 正規化(peak-based、id42の薄い顔) -----------------------------
 
     #[test]
     fn normalize_gain_for_peak_computes_linear_scalar() {
@@ -989,9 +825,6 @@ mod tests {
 
     #[test]
     fn normalize_gain_applied_through_existing_gain_path_hits_target_peak() {
-        // 正規化gainを既存の `MixSource::gain`(Hold keyframe)へそのまま乗せて、
-        // mix結果のpeakがtarget_peakに一致することを確認する — 「既存gain経路を
-        // 増やさず薄い顔として通す」という設計の実証。
         let target_peak = 0.8_f64;
         let pcm = stereo_cache(vec![0.25f32, -0.25, 0.5, -0.5]); // |peak| = 0.5
         let gain_value = normalize_gain_for_peak(&pcm, target_peak).unwrap();

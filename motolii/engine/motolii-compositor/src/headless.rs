@@ -1,7 +1,3 @@
-//! 窓を持たない GPU。**instance / adapter / limits は全部上流の物を使う**。
-//!
-//! ここで自前の limits を書くと、rerun の shader が要求する床(`max_bind_groups` 等)と
-//! ずれた時に原因が分からなくなる。iced fork の seam 2 が同じ床の話だった。
 
 use re_renderer::device_caps::{self, DeviceCaps};
 

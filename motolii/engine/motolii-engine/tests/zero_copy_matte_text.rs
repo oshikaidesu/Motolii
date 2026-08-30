@@ -1,28 +1,3 @@
-//! **発注(2026-08-22)**: ゼロコピー経路(`Engine::render_frame_to_texture` →
-//! `layers_from_resolved`)にも matte とテキストを通す——`layers_from_resolved`
-//! は元々 `render_with_camera_override`(CPU readback 経路、`render_frame` が使う)
-//! の層構築をそのまま複製した private ヘルパーで、以前は matte を持つ layer に
-//! 出会うと即 `EngineError::UnsupportedMatte` を返し、`LayerSource::Text` は
-//! `texture_for`(text 分岐は常に `None`)を経由するので黙って何も描かなかった
-//! (`lib.rs` の `EngineError::UnsupportedMatte`/`layers_from_resolved` 旧 doc 参照)。
-//!
-//! ここで縛るのは3点(発注の RETURN 要件そのもの):
-//! 1. **Preview(zero-copy GPU 経路)= Export(CPU readback 経路)**——同じ
-//!    Document/時刻から `render_frame`(CPU)と `render_frame_to_texture`(GPU、
-//!    readback せず texture を返す)を両方呼び、GPU 側だけ
-//!    `motolii-compositor` の `tests/zero_copy.rs::blit_and_readback` と同じ手段
-//!    (bind して sample → 自前の `COPY_SRC` texture へ blit → CPU 読み戻し)で
-//!    ピクセルへ落として比較する。matte は GPU shader
-//!    (`motolii_compositor::matte::MattePipelines`)の浮動小数演算を経由するので
-//!    (`tests/zero_copy.rs` が単色 opaque solid で取れた「tolerance ゼロ」とは
-//!    違い)ここは**許容 ±2/channel**で比較する(発注文言「バイト一致(または
-//!    統制された許容)」の後者)。
-//! 2. matte 4種(Alpha/InvertedAlpha/Luma/InvertedLuma)がどれも zero-copy 経路で
-//!    `Err` にならず描ける(`tests/blend_matte.rs::all_four_matte_modes_are_
-//!    accepted_and_render` の zero-copy 版)。
-//! 3. 日本語テキストが zero-copy 経路で実際に画素として出る
-//!    (`tests/text_layer.rs::text_layer_renders_visible_pixels_through_render_
-//!    frame_japanese` の zero-copy 版)——かつ CPU 経路と同じ絵になる。
 
 use motolii_compositor::HeadlessGpu;
 use motolii_engine::Engine;
@@ -122,9 +97,6 @@ fn document_with(content: &str, style_row: TextDocumentStyle) -> TextDocument {
     }
 }
 
-/// `motolii-compositor` の `tests/zero_copy.rs::with_device_compositor` と同型
-/// (device/queue を共有する GPU 版 `Engine` を建てる——readback にも同じ
-/// device/queue が要る、`wgpu::Device`/`Queue` は clone 可能な薄いハンドル)。
 fn gpu_engine() -> (Engine, wgpu::Device, wgpu::Queue) {
     let HeadlessGpu {
         adapter,
@@ -165,11 +137,6 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 }
 "#;
 
-/// `motolii-compositor` の `tests/zero_copy.rs::blit_and_readback` と同型
-/// (main_target は `TEXTURE_BINDING` のみで `COPY_SRC` が無いので、
-/// `copy_texture_to_buffer` を直接は使えない——`motolii-shell` の presenter
-/// Pipeline と同じ手段(bind して sample)で `COPY_SRC` 付きの自前 texture へ
-/// blit してから読み戻す)。
 fn blit_and_readback(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
@@ -347,8 +314,6 @@ fn blit_and_readback(
     out
 }
 
-/// 全画素・全チャンネルの最大絶対差。「バイト一致(または統制された許容)」の
-/// 「許容」側をこれ1つの数値で表す。
 fn max_abs_diff(a: &[u8], b: &[u8]) -> u8 {
     assert_eq!(a.len(), b.len(), "比較対象のバッファ長が違う");
     a.iter()
@@ -358,11 +323,6 @@ fn max_abs_diff(a: &[u8], b: &[u8]) -> u8 {
         .unwrap_or(0)
 }
 
-/// **RETURN 要件1(Preview=Export)+ matte**: base(青、alpha=128、matte 元)+
-/// top(赤、alpha=255、`matte: Alpha`)という `tests/blend_matte.rs::matte_alpha_
-/// mode_is_accepted_and_scales_target_alpha` と同じ入力を、CPU 経路
-/// (`render_frame`)と zero-copy 経路(`render_frame_to_texture`)の両方で描き、
-/// 許容 ±2/channel でバイト一致することを確かめる。
 #[test]
 fn matte_zero_copy_matches_cpu_export_within_tolerance() {
     let mut doc = doc_with_comp();
@@ -399,8 +359,6 @@ fn matte_zero_copy_matches_cpu_export_within_tolerance() {
          (最大チャンネル差={diff}、許容は ±2)"
     );
 
-    // matte が実際に効いていることの確認(効いていなければ両経路とも
-    // ただの赤 [255,0,0,255] のままで、上の一致試験が無意味になる)。
     let center = ((H / 2 * W + W / 2) * 4) as usize;
     assert!(
         cpu_frame[center] < 250,
@@ -410,9 +368,6 @@ fn matte_zero_copy_matches_cpu_export_within_tolerance() {
     );
 }
 
-/// **RETURN 要件2(matte 4種)**: `tests/blend_matte.rs::all_four_matte_modes_
-/// are_accepted_and_render` の zero-copy 版——4モードとも `render_frame_to_texture`
-/// が `Err` を返さないことを確かめる。
 #[test]
 fn all_four_matte_modes_render_through_zero_copy_path() {
     for mode in [
@@ -443,10 +398,6 @@ fn all_four_matte_modes_render_through_zero_copy_path() {
     }
 }
 
-/// **RETURN 要件3(テキストの日本語)+ Preview=Export**: `tests/text_layer.rs::
-/// text_layer_renders_visible_pixels_through_render_frame_japanese` と同じ
-/// document を、zero-copy 経路で描いても画素として出ること、かつ CPU 経路と
-/// 同じ絵になることを確かめる。
 #[test]
 fn japanese_text_zero_copy_matches_cpu_export_and_renders_visible_pixels() {
     let mut doc = doc_with_comp();

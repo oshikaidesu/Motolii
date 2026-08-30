@@ -2,7 +2,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::Instant;
 
-/// Timeline/Stage両widgetが同じ時刻を読むための共有クロック。ループ再生。
 pub struct Clock {
     playing: AtomicBool,
     anchor: Mutex<(Instant, f64)>,

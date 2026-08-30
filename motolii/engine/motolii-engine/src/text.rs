@@ -1,42 +1,8 @@
-//! owns: `TextDocument`(store の意味)→ `motolii-vector::text` の輪郭 →
-//!       premultiplied RGBA8。裁定190 切片2 — [`rasterize_text_document`] がその実体。
-//!
-//! # `render_frame` からの結線(2026-08-22、切片3)
-//!
-//! BL4 で `ResolvedLayer`(`motolii-store`)に `id: LayerId` が足された
-//! (`motolii_store::ResolvedLayer::id` の doc 参照)ことで、以前このモジュールが
-//! 抱えていた壁——「`texture_for` は `&LayerSource`/`source_frame` しか受け取らず、
-//! `LayerSource::Text` はコンテンツを持たない印(unit variant)なので、どの layer の
-//! `TextDocument` を読むべきか決められない」——が塞がった。今は
-//! `Engine::text_texture_for`(`lib.rs`)が `StoreView::text_document(layer_id)` で
-//! 直接引き、この関数(`rasterize_text_document`)を呼んで
-//! `Compositor::upload_rgba` へ渡す——`texture_for` 自身は今も `Text` を扱えない
-//! ままだが(呼び手が `Engine::texture_for_layer` で手前に分岐する)、`render_frame`
-//! を含む主経路からは実際に呼ばれるようになった(`lib.rs` の `Engine::text_texture_for`/
-//! `TextCacheKey` の doc に鍵設計の理由を記す)。
-//!
-//! OWNS-JUSTIFICATION(A): 裁定190/BL4(`motolii_store::ResolvedLayer::id` 追加) —
-//! `texture_for` がTextコンテンツを持たないunit variantのため、どのlayerの
-//! `TextDocument` を読むべきか決められなかった具体的な穴を、決定番号つきで
-//! 塞いだ経緯を doc が追える(裁定215 棚卸し 2026-08-23 #13)。
-//!
-//! # 変換の要点
-//!
-//! - **既定行(`styles[0]`、裁定98)を読む** — `TextDocument::styles` の
-//!   rich-text 分割(`runs`)・range-selector/animator の適用は裁定191/probe の
-//!   gap どおり範囲外(次切片)。style 表が空なら描く物が無い(`Ok(None)`、
-//!   エラーではない — [`motolii_vector::text`] の「空文字列はエラーではない」と同じ形)。
-//! - **content は Hold 評価**(`ContentTrack::eval(t)`)—— `TextDocument` の中で
-//!   唯一時間変化するフィールド。
-//! - fill/stroke は `motolii_vector::Shape` の語彙へそのまま写す —
-//!   `mask.rs` が `ResolvedMask` → `Shape` を橋渡しするのと同じ形。
 
 use motolii_store::{RationalTime, TextDocument, TextDocumentStyle, TextJustify as StoreJustify};
 use motolii_vector::text::{shape_text, GlyphFont, TextFeature, TextJustify, TextLayout, TextShapeError};
 use motolii_vector::{Brush, Canvas, Fill, FillRule, PathSource, Raster, Rgb, Shape, Stroke, VectorError};
 
-/// [`rasterize_text_document`] が返しうる失敗。シェイピング側([`TextShapeError`])と
-/// ラスタライズ側([`VectorError`])の両方をここへ畳む(`mask.rs::MaskFoldError` と同型)。
 #[derive(Debug, thiserror::Error)]
 pub enum TextRenderError {
     #[error(transparent)]
@@ -77,9 +43,6 @@ fn to_layout(style: &TextDocumentStyle, justify: StoreJustify) -> TextLayout {
     }
 }
 
-/// `TextDocumentStyle` の fill/stroke を `motolii_vector::Shape` の語彙へ写す。
-/// `stroke_color` があっても `stroke_width <= 0.0` なら stroke は無い扱い
-/// (`0` 幅の線を描いても画素は出ないので、`None` と同じ結果を先に決めておく)。
 fn to_fill_stroke(style: &TextDocumentStyle) -> (Option<Fill>, Option<Stroke>) {
     let fill = Some(Fill {
         brush: Brush::Solid(Rgb {
@@ -107,16 +70,6 @@ fn to_fill_stroke(style: &TextDocumentStyle) -> (Option<Fill>, Option<Stroke>) {
     (fill, stroke)
 }
 
-/// `document` の**既定行**(裁定98、`styles.first()`)を時刻 `t` で評価し、`canvas` へ
-/// ラスタライズする。
-///
-/// `Ok(None)` になるのは2通り(どちらもエラーではない — 描く物が無いだけ):
-/// - `styles` が空(まだ一度もスタイルが設定されていない `TextDocument`)
-/// - `content.eval(t)` が空文字列(Hold の初期値、または利用者が意図的に空にした)
-///
-/// フォントが読めない/OpenType feature タグが不正なら [`TextRenderError::Shape`]、
-/// canvas が描けない大きさなら [`TextRenderError::Rasterize`] —
-/// どちらも黙って空の絵へ落とさない(裁定37、[`text`] module doc と同じ判断)。
 pub fn rasterize_text_document(
     document: &TextDocument,
     t: RationalTime,
@@ -225,7 +178,6 @@ mod tests {
             .expect("render")
             .expect("非空文字列は Some のはず");
         assert!(visible_pixels(&raster) > 2_000);
-        // fill 色(赤)が画素へ届いている。
         assert!(raster
             .premultiplied_rgba8
             .chunks_exact(4)
@@ -251,8 +203,6 @@ mod tests {
 
     #[test]
     fn line_height_from_style_moves_the_second_line_baseline() {
-        // lh が Shape の輪郭へ実際に反映されている証拠として、lh=200 で2行目が
-        // canvas の外(y>=200)へ落ちる = 1行目の可視画素だけが残ることを確かめる。
         let tall = document_with("A\nB", style(64.0, Some(400.0), 0.0, [1.0, 1.0, 1.0, 1.0]));
         let tight = document_with("A\nB", style(64.0, Some(70.0), 0.0, [1.0, 1.0, 1.0, 1.0]));
 
@@ -263,13 +213,9 @@ mod tests {
             .expect("render")
             .expect("非空");
 
-        // lh=400 は2行目が 128px の canvas をはみ出す一方、lh=70 なら同じ2文字が
-        // 480px 高の canvas に収まるので、後者の可視画素の方が多いはず
-        // (両方とも「A」「B」1文字ずつなので、収まりきる方が塗り面積が単調に多い)。
         assert!(visible_pixels(&tight_raster) > visible_pixels(&tall_raster));
     }
 
-    /// canvas 内で可視画素(alpha>0)を持つ最も下の行の index。無ければ `None`。
     fn max_visible_row(raster: &Raster) -> Option<u32> {
         (0..raster.height).rev().find(|&y| {
             let row_start = (y * raster.width * 4) as usize;
@@ -280,14 +226,6 @@ mod tests {
         })
     }
 
-    /// **S4 検収点**(#46 の穴塞ぎ、`next/reference/procedures/P1-lyric-mv.md`
-    /// §4 手順46): Content に `\n` を含む2行の document は、同じ canvas・
-    /// 同じ style で1行の document より下まで描画が伸びる——Inspector 側
-    /// (`text_editor`、`next/ui/motolii-inspector-pane/src/text.rs`
-    /// `content_row`)が Enter で改行を打てるようになったことで初めて
-    /// 利用者が実際に辿れる経路になった、その土台がここ(engine の \n 分割)
-    /// に既にあったことの証拠。`line_height_from_style_...` は lh の効果を
-    /// 見る試験、これは「1行 vs 2行そのもの」を直接比較する試験。
     #[test]
     fn two_line_content_reaches_further_down_the_canvas_than_one_line() {
         let one_line = document_with("A", style(64.0, None, 0.0, [1.0, 1.0, 1.0, 1.0]));

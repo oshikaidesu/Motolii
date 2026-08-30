@@ -1,4 +1,3 @@
-//! TM-4: 時刻→フレームの独自 f64 経路がクレート内に残っていないことを走査で固定する。
 
 use std::path::{Path, PathBuf};
 
@@ -35,8 +34,6 @@ fn is_allowed(path: &Path) -> bool {
 
 #[test]
 fn workspace_has_no_scattered_time_to_frame_f64_paths() {
-    // 2026-08-20 リセット: 旧 workspace は `<root>/crates` だけを走査していたが、
-    // 新 workspace は core/ probes/ (今後 engine/ shell/)へ分かれるので root ごと見る。
     let workspace = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let mut files = Vec::new();
     collect_rs_files(&workspace, &mut files);

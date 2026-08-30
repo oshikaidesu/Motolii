@@ -1,4 +1,3 @@
-//! Document の契約 — undo/redo が「時間の移動」だけで成立することを固定する。
 
 use std::time::Instant;
 
@@ -57,7 +56,6 @@ fn undo_and_redo_are_only_time_movement() {
     assert_eq!(doc.view().value_at(layer, &opacity, t(0)).unwrap(), None, "track を打つ前へ戻る");
     assert!(doc.view().has_layer(layer), "layer 追加はまだ生きている");
 
-    // redo は store から何も失われていないので、時間を進めるだけで戻る
     assert!(doc.redo());
     assert_eq!(doc.view().value_at(layer, &opacity, t(0)).unwrap(), Some(Value::F64(0.0)));
     assert!(doc.redo());
@@ -96,7 +94,6 @@ fn new_edit_after_undo_drops_the_redo_space() {
     assert!(doc.undo());
     assert!(doc.can_redo());
 
-    // 分岐した編集。ここで redo 空間が落ちる(rerun blueprint と同じ規則)。
     doc.apply(Intent::SetTrack {
         layer,
         property: opacity.clone(),
@@ -120,7 +117,6 @@ fn remove_layer_is_a_tombstone_not_a_delete() {
     doc.apply(Intent::RemoveLayer(layer)).unwrap();
     assert!(!doc.view().has_layer(layer));
 
-    // chunk を落としていないので、時間を戻すだけで復活する
     assert!(doc.undo());
     assert!(
         doc.view().has_layer(layer),
@@ -128,11 +124,6 @@ fn remove_layer_is_a_tombstone_not_a_delete() {
     );
 }
 
-/// 敵対的レビュー(2026-08-20)が実証した部分コミットの再現。修正前は `write` が
-/// intent ごとに即座に store へ確定していたので、`apply_all([正当, 不正])` は
-/// 「正当な分だけ確定し `head` も進んだまま `Err` を返す」という部分コミットに
-/// なっていた。**原子性**: `Err` の後は `view()` がバッチ前と完全に一致しなければ
-/// ならない(`has_layer` も `edit_head` も)。
 #[test]
 fn apply_all_is_atomic_the_valid_intent_does_not_stick_when_a_later_one_fails() {
     let mut doc = Document::new();
@@ -141,7 +132,6 @@ fn apply_all_is_atomic_the_valid_intent_does_not_stick_when_a_later_one_fails() 
 
     let result = doc.apply_all([
         Intent::AddLayer(layer),
-        // 同じ id の effect が2枚 — `write` が `Err` を返す(mask と同型の検査)。
         Intent::SetEffects {
             layer,
             effects: vec![
@@ -170,9 +160,6 @@ fn apply_all_is_atomic_the_valid_intent_does_not_stick_when_a_later_one_fails() 
     assert!(!doc.can_undo(), "確定していない batch が undo 履歴に残っている");
 }
 
-/// 複数の失敗パターンで同じ原子性が成り立つことを確かめる(`SetMeta` の新規配置専用の
-/// 柵、裁定108(c))— `AddLayer` + `SetMeta` の後にもう一度 `SetMeta` を同じバッチへ
-/// 混ぜると2つ目が `Err` になるが、1つ目の配置も含めてバッチ全体が無かったことになる。
 #[test]
 fn apply_all_rolls_back_even_when_the_batch_writes_multiple_components() {
     let mut doc = Document::new();
@@ -203,8 +190,6 @@ fn apply_all_rolls_back_even_when_the_batch_writes_multiple_components() {
             layer,
             meta: meta.clone(),
         },
-        // 同じバッチ内でもう一度 `SetMeta` — 直前の物と合わせて「既に meta を持つ」
-        // 判定に引っかかり `Err` になる。
         Intent::SetMeta { layer, meta },
     ]);
 
@@ -220,7 +205,6 @@ fn value_at_goes_through_the_ported_evaluator() {
     let layer = LayerId(1);
     let position = prop("position.x");
 
-    // ease-in-out。線形なら中点は 0.5 になるが、この bezier では下回る。
     doc.apply(Intent::AddLayer(layer)).unwrap();
     doc.apply(Intent::SetTrack {
         layer,
@@ -258,7 +242,6 @@ fn value_at_goes_through_the_ported_evaluator() {
     );
 }
 
-/// R0-1 を「実際に使う型」で再測する。JSON 符号化の代償を予算で縛る。
 #[test]
 fn edit_storm_with_the_real_track_type() {
     const KEYS: i64 = 300;

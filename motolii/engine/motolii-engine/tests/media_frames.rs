@@ -1,11 +1,3 @@
-//! **engine の口 #1/#4**(`docs/reviews/2026-08-28-current-position.md` 「★ 次の一手」):
-//! `Engine::media_frames`/`Engine::media_duration` が実ファイルに対して嘘を返さないこと。
-//!
-//! ここで縛るのは「窓を叩いても見えない嘘」1点だけ(裁定274 の対象そのもの):
-//! **audio-only ファイルを `media_frames`/`media_duration` に渡した時、黙って
-//! ズレた数を返さないこと**——`motolii_media::probe`(video専用)は先頭 video stream を
-//! 要求するので audio-only で必ず `Err` になる既知バグがあった。`Engine` 側は
-//! `probe_container` を使うので、これが再発していないことをここで固定する。
 
 use std::process::Command;
 
@@ -53,10 +45,6 @@ fn make_tiny_video(path: &std::path::Path, frames: u32, fps: u32) {
     assert!(status.success(), "video fixture failed");
 }
 
-/// **既知バグ(裁定274)の再発防止**: audio-only ファイルは `media_frames` では
-/// 「フレーム数という概念が無い」ので `None`(嘘の0や嘘のフレーム数を返さない)が、
-/// `media_duration` では実際の尺が返る——`probe()`(video専用)が失敗しても
-/// `probe_container` 経由でここまで通ることを実測で固定する。
 #[test]
 fn audio_only_file_has_no_frame_count_but_has_a_real_duration() {
     if !motolii_testkit::ffmpeg_or_skip() {
@@ -77,8 +65,6 @@ fn audio_only_file_has_no_frame_count_but_has_a_real_duration() {
     let duration = engine
         .media_duration(path)
         .expect("audio-only duration must be readable (this is exactly the bug decision 274 names)");
-    // 2秒指定でエンコードした素材。コンテナのオーバーヘッドで厳密に2.000ではない
-    // ことがあるので、狭い許容(±0.2秒)で実測値を確かめる。
     let seconds = duration.as_seconds_f64();
     assert!(
         (seconds - 2.0).abs() < 0.2,
@@ -86,9 +72,6 @@ fn audio_only_file_has_no_frame_count_but_has_a_real_duration() {
     );
 }
 
-/// video ファイルは今まで通り `nb_frames` が `media_frames` に届く
-/// (`crate::texture` の File 動画/画像 分岐が同じ値を使っている、既存の使い方を
-/// 壊していないことの確認)。
 #[test]
 fn video_file_reports_its_native_frame_count() {
     if !motolii_testkit::ffmpeg_or_skip() {
@@ -112,8 +95,6 @@ fn video_file_reports_its_native_frame_count() {
     );
 }
 
-/// probe が2回とも失敗する(存在しないパス)場合は両方 `None`——沈黙して「壊れて
-/// いない体」の数字を返さない。
 #[test]
 fn missing_file_yields_none_for_both() {
     let mut engine = Engine::new().expect("headless engine");

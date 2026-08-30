@@ -1,4 +1,3 @@
-//! `LayerSource::Media`/`PointCloud` を `File` へ畳んだ後も旧保存形式が読めること。
 
 use motolii_store::LayerSource;
 

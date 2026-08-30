@@ -1,32 +1,3 @@
-//! 裁定171 v2(M4、supervisor 裁定で ALLOWLIST 拡張)——
-//! [`Compositor::render_to_texture`]の直接オラクル。
-//!
-//! `motolii-shell` 側の統合試験(`playback_ticks_do_not_trigger_cpu_readback_
-//! after_warmup`)は「(CPU readback が)呼ばれない」ことしか縛れない——ここでは
-//! 「呼んだ結果が `render_with_timing`(readback 経路、既存4メソッドの1つ・
-//! 無改造)と同じ絵になる」ことを、この crate だけで(shell を経由せず)
-//! 直接確かめる。
-//!
-//! ## main_target を読み戻す手段(`copy_texture_to_buffer` は使えない)
-//!
-//! fork の `main_target_resolved` は `RENDER_ATTACHMENT | TEXTURE_BINDING`
-//! usage で確保される(`crates/viewer/re_renderer/src/view_builder.rs` 実測)
-//! ——`COPY_SRC` が無いので `copy_texture_to_buffer` は検証なしにゼロ埋め
-//! バッファを返す(実測、最初のドラフトはこれで red 偽陽性を踏んだ)。
-//! `motolii-shell` の presenter Pipeline が実際にやること(bind_group へ束ねて
-//! sample する、`TEXTURE_BINDING` は main_target が持っている)と**同じ手段**で
-//! 読み戻す——自前の Rgba8UnormSrgb+`COPY_SRC` texture へ fullscreen quad で
-//! blit してから、その texture を `copy_texture_to_buffer` する。
-//!
-//! ## 許容誤差ゼロで比較できる理由
-//!
-//! sRGB 転送関数は 0.0/1.0 の両端点で恒等(`srgb(0)=0`・`srgb(1)=1`)——
-//! 純粋な赤(`[255, 0, 0, 255]`、不透明)を敷けば、`main_target` の自動
-//! sRGB エンコード(GPU 書き込み時)も `composite.wgsl` の手動
-//! `srgb_from_linear`(readback 経路)も同じ端点を通るので、量子化誤差の
-//! 余地がない——`render_to_texture`(readback しない)と
-//! `render_with_timing`(readback する)の出力がバイト単位で一致するはず、
-//! という主張を tolerance なしで書ける。
 
 use motolii_compositor::{
     BlendMode, CompSpec, Compositor, EffectPass, HeadlessGpu, Layer, LayerPlacement,
@@ -61,11 +32,6 @@ fn one_layer(texture: motolii_compositor::GpuTexture2D) -> Layer {
     }
 }
 
-/// `tests/with_device.rs` の常設 oracle と同じ形(adapter の実物なしで
-/// `with_device` が pipeline を建てられることを構造で縛る)。device/queue の
-/// clone もついでに返す——`render_to_texture` が返す texture は compositor
-/// を建てた device の上にあるので、読み戻しにも**同じ** device/queue が
-/// 要る(`wgpu::Device`/`Queue` は clone 可能な薄いハンドル)。
 fn with_device_compositor() -> (Compositor, wgpu::Device, wgpu::Queue) {
     let HeadlessGpu { adapter, device, queue } = HeadlessGpu::new().expect("headless GPU");
     drop(adapter);
@@ -102,12 +68,6 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 }
 "#;
 
-/// `render_to_texture` の main_target(`TEXTURE_BINDING` のみ、`COPY_SRC`
-/// 無し)を、`motolii-shell` の presenter Pipeline と同じ手段(fullscreen quad
-/// で bind して sample する)で、`COPY_SRC` 付きの自前 texture へ blit して
-/// から CPU へ読み戻す。sRGB タグ付き texture 同士(main_target も出力先も
-/// `Rgba8UnormSrgb`)なので、GPU の自動 decode(sample 時)/encode(書き込み時)
-/// が打ち消し合い、中身の意味は変えない(モジュール doc 参照)。
 fn blit_and_readback(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
@@ -158,10 +118,6 @@ fn blit_and_readback(
         label: Some("zero_copy test blit shader"),
         source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(BLIT_WGSL)),
     });
-    // sRGB タグ付き・`COPY_SRC` 付き — main_target と同じ意味の texture だが、
-    // ここへ書き込む GPU は「自動 encode」する(main_target 自体が作られた時と
-    // 同じ機序)ので、`textureSample`(自動 decode)→ 素通し → 書き込み(自動
-    // encode)で意味は変わらない。
     let readable = device.create_texture(&wgpu::TextureDescriptor {
         label: Some("zero_copy test readable target"),
         size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
@@ -170,7 +126,6 @@ fn blit_and_readback(
         dimension: wgpu::TextureDimension::D2,
         format: wgpu::TextureFormat::Rgba8UnormSrgb,
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
-        // finalize_into は composite を通すため同じメモリを Rgba8Unorm として見直す。
         view_formats: &[wgpu::TextureFormat::Rgba8Unorm],
     });
     let readable_view = readable.create_view(&wgpu::TextureViewDescriptor::default());
@@ -261,11 +216,6 @@ fn blit_and_readback(
     out
 }
 
-/// **裁定171 v2 M4 の中心主張**: `render_to_texture`(readback しない)が
-/// `render_with_timing`(readback する、既存4メソッドの1つ・無改造)と
-/// バイト単位で同じ絵を返す——不透明な単色なので tolerance 無しで比較できる
-/// (モジュール doc 参照)。読み戻しは `motolii-shell` の presenter Pipeline と
-/// 同じ手段(sample、`blit_and_readback` doc 参照)を使う。
 #[test]
 fn render_to_texture_matches_render_with_timing_for_an_opaque_solid_layer() {
     let (mut compositor, device, queue) = with_device_compositor();
@@ -302,10 +252,6 @@ fn render_to_texture_matches_render_with_timing_for_an_opaque_solid_layer() {
     );
 }
 
-/// **裁定171 v2 M4 EXACT TARGET 2**: 内容が変わらなければ何度呼んでも同じ絵
-/// (世代ゲートは呼び出し側 — `motolii-shell` — の責務だが、`render_to_texture`
-/// 自身が呼び出しごとに違う絵を返す不安定な関数でないことは、この crate 単体
-/// でも縛れる)。
 #[test]
 fn render_to_texture_is_deterministic_across_repeated_calls() {
     let (mut compositor, device, queue) = with_device_compositor();
@@ -347,13 +293,6 @@ fn render_to_texture_is_deterministic_across_repeated_calls() {
     );
 }
 
-/// **RB 調査(`docs/reviews/2026-08-22-residual-bottleneck-survey.md` 発見3番)の
-/// 直接オラクル(red 先行)**: `render_to_texture` は `effect_scratch.acquire` を
-/// 呼ぶが一度も `.release` しない(修理前のモジュール doc が自認)ため、effect を
-/// 持つ layer が動くフレームは毎回新規 scratch texture を確保する。S2 の
-/// `identity_pass_reuses_the_scratch_texture_across_frames`(`tests/effects.rs`、
-/// `render_with_effects` に対する既存保証)と同水準の「確保回数は定数」を、
-/// GPU 直経路(zero-copy)にも要求する。
 #[test]
 fn render_to_texture_reuses_scratch_texture_across_frames() {
     let (mut compositor, _device, _queue) = with_device_compositor();
@@ -381,8 +320,6 @@ fn render_to_texture_reuses_scratch_texture_across_frames() {
         "pass を持つ layer は少なくとも1枚のオフスクリーンを新規生成するはず"
     );
 
-    // 連続 N フレーム(N=4)——確保回数が定数のままであることを縛る
-    // (修理前は poll なし再利用ができず、release されないので毎回+1 されて red)。
     for _ in 0..4 {
         let _next = compositor
             .render_to_texture(
@@ -405,12 +342,6 @@ fn render_to_texture_reuses_scratch_texture_across_frames() {
     );
 }
 
-/// **正しさの直接確認(修理の副作用チェック)**: scratch をフレームをまたいで
-/// 使い回すようになっても、前フレームの内容を引きずらない——Identity pass は
-/// 全画素を copy で上書きするので、色を変えた2フレーム目は前フレームの色を
-/// 見せないはず。poll なしの再利用が「同一 queue の submission 順で書いてから
-/// 読む」(裁定171 v2 §0-5 と同じ論法)を実際に守れているかの直接証拠——
-/// 同期が壊れていれば前フレームの色が透けて見えるか絵が乱れる。
 #[test]
 fn render_to_texture_reused_scratch_shows_the_new_frames_content_not_the_old_one() {
     let (mut compositor, device, queue) = with_device_compositor();

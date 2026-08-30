@@ -1,4 +1,3 @@
-//! 256bit相当の符号なし乗除。i128積が溢れる相対時刻×rateでも床添字を厳密に求める(S7)。
 
 use super::RationalTimeError;
 use std::cmp::Ordering;
@@ -77,7 +76,6 @@ impl U256 {
     }
 }
 
-/// `floor((num_abs * rate_num) / (d1 * d2 * d3))` と余り・約分後分母。すべて非負、分母因子 > 0。
 pub(crate) fn mul_div_floor_3den(
     num_abs: u128,
     rate_num: u128,
@@ -132,8 +130,6 @@ fn gcd(mut a: u128, mut b: u128) -> u128 {
     a
 }
 
-/// 256÷256 復元除算。S7の分母は i64 三因子 ≤ 2^189 なので、
-/// ループ不変条件 `rem < den` の下で `rem<<1` が 256bit を溢れることはない。
 fn u256_div_rem(numer: U256, den: U256) -> Result<(U256, U256), RationalTimeError> {
     if den == U256::ZERO {
         return Err(RationalTimeError::ZeroDenominator);
@@ -156,7 +152,6 @@ fn u256_div_rem(numer: U256, den: U256) -> Result<(U256, U256), RationalTimeErro
         if numer.bit(i) {
             rem.lo |= 1;
         }
-        // 商の上位溢れは最終的に i64 検査へ回す（ここでは 256bit 商を許容）
         quot = quot.shl1();
         if rem.cmp(den) != Ordering::Less {
             rem = rem.saturating_sub(den);
@@ -166,10 +161,6 @@ fn u256_div_rem(numer: U256, den: U256) -> Result<(U256, U256), RationalTimeErro
     Ok((quot, rem))
 }
 
-/// 余り / 分母 を f64 補間率へ。契約は半開区間 `[0, 1)`。
-///
-/// 巨大分母で `rem = den - 1` のとき両者が同じ f64 へ丸まり `1.0` になり得るため、
-/// その場合は `1.0` 未満の最大有限値へ落とす(次サンプルへの早着と debug_assert 発火を防ぐ)。
 pub(crate) fn rem_over_den_f64(rem: U256, den: U256) -> f64 {
     if rem == U256::ZERO {
         return 0.0;
@@ -185,12 +176,10 @@ pub(crate) fn rem_over_den_f64(rem: U256, den: U256) -> f64 {
     clamp_unit_interval_exclusive(raw)
 }
 
-/// 負時刻側の `1 - u` も同じ半開区間へ。
 pub(crate) fn complement_unit_interval(u: f64) -> f64 {
     clamp_unit_interval_exclusive(1.0 - u)
 }
 
-/// `[0, 1)` へ制限。`>= 1` は `1.0` 未満の最大 f64、負は `0.0`。
 pub(crate) fn clamp_unit_interval_exclusive(u: f64) -> f64 {
     if !u.is_finite() || u <= 0.0 {
         return 0.0;
@@ -198,12 +187,10 @@ pub(crate) fn clamp_unit_interval_exclusive(u: f64) -> f64 {
     if u < 1.0 {
         return u;
     }
-    // 1.0 未満の最大有限値(next_down(1.0))
     f64::from_bits(1.0f64.to_bits() - 1)
 }
 
 fn ldexp_u256(v: U256, shift: u32) -> f64 {
-    // 上位から有効ビットを f64 へ（概算で補間率には十分）
     if v.hi != 0 {
         let s = shift.min(v.hi.leading_zeros());
         let top = if s < 128 {
@@ -240,8 +227,6 @@ mod tests {
 
     #[test]
     fn mul_div_review_counterexample_near_zero() {
-        // D=i64::MAX, t=1000/D, start=1/(D-2), rate=(D-1)/D
-        // 実位置 ≈ 1e-16 → index 0。i128 中間積は溢れる。
         let d = i64::MAX as u128;
         let tn = 1000u128;
         let td = d;
@@ -257,7 +242,6 @@ mod tests {
 
     #[test]
     fn rem_over_den_never_reaches_one_for_den_minus_one() {
-        // 前提: 巨大 u128 では (MAX-1)/MAX が f64 で 1.0 に丸まる
         let den_lo = u128::MAX;
         let rem_lo = u128::MAX - 1;
         let raw = rem_lo as f64 / den_lo as f64;
@@ -270,7 +254,6 @@ mod tests {
         );
         assert_eq!(u, f64::from_bits(1.0f64.to_bits() - 1));
 
-        // 256bit 分母でも同様
         let den = U256 {
             hi: u128::MAX / 2,
             lo: u128::MAX,
@@ -285,7 +268,6 @@ mod tests {
 
     #[test]
     fn complement_unit_interval_stays_below_one() {
-        // u が 0 へ丸まった場合でも 1-u が 1.0 にならない
         let c = complement_unit_interval(0.0);
         assert!((0.0..1.0).contains(&c));
         assert_eq!(c, f64::from_bits(1.0f64.to_bits() - 1));

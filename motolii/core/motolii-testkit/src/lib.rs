@@ -1,34 +1,6 @@
-//! owns: 「外部ツールが無い環境ではスキップし、CI では落とす」という試験の方針。
-//!       上流にこの方針は無い(スキップの是非は製品の判断だから)。
-//!
-//! OWNS-JUSTIFICATION(C-TESTKIT): 試験器具 — 意見/借用判定の対象外(裁定215 は
-//! 実装差し替えの話であって、これは合否・スキップ方針を測る道具そのもの)。
-//! 「外部ツール無し環境はskip・CIは落とす」という方針が上流に無いことはこの
-//! doc 冒頭で既に確認済み(裁定215 棚卸し 2026-08-23 #4、別枠扱い)。
-//!
-//! 旧 workspace `crates/motolii-testkit`(8,106行)から**使う分だけ**を移した。
-//! 丸ごと移さないのは、旧 testkit が `motolii-plugin` に依存しており、拡張口が
-//! まだ無い(裁定13)ためである。
-//!
-//! 手書きの `if which_ffmpeg().is_none() { eprintln!("skip"); return; }` を各試験に
-//! 書かせないための口。**手書きスキップは方針を迂回する**ので、ここを通す。
-//!
-//! [`RgbaImageDesc`]/[`compare_rgba`]/[`tol`] は旧 crate の同名 API と**同じ形・
-//! 同じ許容差定数**(`tol::GPU_RASTER` = max 1・mean 0.5)を next/ 側へ移した物
-//! (旧 crate は `motolii-gpu`/`motolii-plugin` へ依存しており next/ から参照できない
-//! — 2026-08-20 裁定の workspace 分離)。[`assert_rgba_matches_golden_file`] は
-//! 参照 PNG をファイルとして持つ golden 用の口で、旧 crate には無かった形
-//! (旧 crate は CPU 参照実装を都度計算する形が正本、`golden/README.md` 参照)。
-//! 「無ければ初回に作り、意図した変更なら消して作り直す」規約は
-//! `crates/motolii-shell-iced/tests/snapshot_start_screen.rs`(`iced_test`の
-//! `Simulator::snapshot`/`matches_image`)がこのリポで既に持っている規約をそのまま
-//! 借用した(GPU 生 RGBA を扱うぶん、許容差の突き合わせだけ `tol` 経由で足した)。
 
 use std::path::{Path, PathBuf};
 
-
-/// 外部ツールの状態。「未導入」と「導入済みだが実行失敗」を区別する
-/// (区別しないと、壊れた ffmpeg を「無い」と誤診して静かに通してしまう)。
 #[derive(Debug)]
 pub enum ToolStatus {
     Ok,
@@ -53,7 +25,6 @@ pub fn tool_status(bin: &str) -> ToolStatus {
     }
 }
 
-/// CI では依存の欠落を**スキップさせない**。手元では黙って飛ばす。
 fn deps_required() -> bool {
     std::env::var("MOTOLII_REQUIRE_DEPS")
         .map(|v| v == "1")
@@ -68,7 +39,6 @@ pub fn unavailable_dep(dep: &str, detail: &str) -> bool {
     false
 }
 
-/// ffmpeg / ffprobe が両方使えるか。使えなければ試験をスキップする(戻り値 false)。
 pub fn ffmpeg_or_skip() -> bool {
     for bin in ["ffmpeg", "ffprobe"] {
         match tool_status(bin) {
@@ -88,19 +58,12 @@ pub fn tmp_dir(tag: &str) -> PathBuf {
     dir
 }
 
-/// CPU 側の正解。GPU/ffmpeg の結果をこれと突き合わせる。
 pub mod cpu_reference {
-    /// limited range(BT.601/709 共通)の Y 値。
     pub fn expected_luma(gray: u8) -> i32 {
         (16.0 + 219.0 * gray as f64 / 255.0).round() as i32
     }
 }
 
-// ---------------------------------------------------------------------------
-// image golden(旧 crates/motolii-testkit の compare_rgba/tol と同じ形・同じ許容差)
-// ---------------------------------------------------------------------------
-
-/// RGBA8 画像の寸法。`width*height*4` byte のバッファを指す(旧 crate と同じ形)。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RgbaImageDesc {
     pub width: u32,
@@ -124,7 +87,6 @@ pub struct ImageDiffStats {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ImageDiff {
     pub stats: ImageDiffStats,
-    /// 差分を可視化する RGBA。RGB に差分を白く入れ、A は 255 固定(旧 crate と同じ)。
     pub diff_rgba: Vec<u8>,
 }
 
@@ -150,22 +112,13 @@ pub enum TestkitError {
     },
 }
 
-/// ゴールデン比較の許容誤差定数(旧 `crates/motolii-testkit::tol` と同じ名前・
-/// 同じ値 — 発明しない)。
 pub mod tol {
-    /// ビット一致を要求する比較(CPU 参照同士・決定論パス)。
     pub const EXACT: u8 = 0;
 
-    /// lavapipe 等の GPU ラスタライズで ±1 が出うる比較。
     pub const GPU_RASTER: u8 = 1;
 
-    /// [`GPU_RASTER`] 使用時の `mean_abs_diff` 上限。
-    ///
-    /// max=1 だけ見ると「全画素が1ずれ」(mean≈1)の全体色ずれが合格してしまう。
-    /// 縁の疎な±1は mean≪1 なので、1未満の上限で全域ずれだけを落とす。
     pub const GPU_RASTER_MEAN: f64 = 0.5;
 
-    /// max 許容に対応する mean 上限。未知の max は定数外経路なので拒否する。
     pub fn mean_limit(max_tol: u8) -> f64 {
         match max_tol {
             EXACT => 0.0,
@@ -249,15 +202,6 @@ pub fn save_rgba_png_labeled(
     })
 }
 
-/// 参照 PNG をファイルとして持つ golden 比較。
-///
-/// **無ければ初回に作り、意図した変更なら消して作り直す**
-/// (`crates/motolii-shell-iced/tests/snapshot_start_screen.rs` の `iced_test`
-/// snapshot 規約をそのまま踏襲 — module doc 参照)。GPU 生 RGBA はデバイス間で
-/// 完全一致しないので、[`tol`] の許容差(`compare_rgba_labeled`)で突き合わせる。
-///
-/// 許容差を超えた場合は golden の隣に `<label>.actual.png`/`<label>.diff.png` を
-/// 書き出す(旧 crate の `write_golden_artifacts` と同じ役割 — 目視で差分を追える形)。
 pub fn assert_rgba_matches_golden_file(
     path: impl AsRef<Path>,
     label: &str,

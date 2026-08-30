@@ -3,12 +3,6 @@ use motolii_vector::{
     Composite, FillRule, GradientType, LineCap, LineJoin, PointType, StarType, TrimMultiple,
 };
 
-// ---------------------------------------------------------------------------
-// 定数の数値化(`next/reference/lottie.schema.json` の `$defs/constants/*` を
-// そのまま転記。裁定58/59/65/66/67 等が「発明の余地が無いのでそのまま採る」と
-// 言っている語彙なので、ここも値を発明しない)
-// ---------------------------------------------------------------------------
-
 pub(crate) fn blend_mode_to_int(mode: motolii_store::BlendMode) -> i64 {
     use motolii_store::BlendMode::*;
     match mode {

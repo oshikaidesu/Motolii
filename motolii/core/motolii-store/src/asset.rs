@@ -1,21 +1,3 @@
-//! Document 所有の素材台帳(裁定162: Browser の一覧の正本 = この台帳)。
-//!
-//! 旧 workspace `crates/motolii-doc/src/asset.rs:131-455` からの移植(2026-08-21)。
-//! 再実装ではない — `AssetId`/`AssetError`/`Asset`/`AssetDraft`/`AssetTable` を
-//! そのまま運ぶ。`SourceFingerprintV1`(内容の指紋、同ファイルの旧14-128行)は
-//! 既に `fingerprint.rs` へ移植済み(2026-08-20 リセット)なので、ここでは
-//! [`crate::SourceFingerprintV1`] を使う側として参照するだけで作り直さない。
-//!
-//! D1a はパス+type+content_hash のメタのみ。opaque ペイロード本体は Importer が作り
-//! GpuAssetCache が持つ(旧文書の注記そのまま — 意味は変わらない)。Document は
-//! 多重キーでファイル実体を指す。
-//!
-//! **bin-first**(取り込んでから配置する、AE/Premiere/Resolve 共通のワークフロー)を
-//! Document が表現できるようにするための台帳(裁定162 の問い: 取り込んだが未配置の
-//! 素材の置き場が next の store に無かった)。[`crate::LayerSource::File`](裁定79)は
-//! 「配置済み layer が指す素材」であって、取り込んだが未配置の素材の置き場ではない —
-//! この2つは別の関心事であり、この切片(裁定162 の第一波)は台帳とその読み口までで、
-//! `LayerSource::File` との参照統合はしない(後続裁定)。
 
 use std::collections::BTreeMap;
 
@@ -23,7 +5,6 @@ use motolii_core::RationalTime;
 use serde::de::{self, Deserialize, Deserializer};
 use serde::{Deserialize as DeserializeDerive, Serialize};
 
-/// アセットの恒久 ID。表示名は別フィールド。
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, DeserializeDerive,
 )]
@@ -60,26 +41,11 @@ pub enum AssetError {
     InvalidNext { next: u64, max_id: u64 },
 }
 
-/// 「いま参照できるかどうか」— **環境の事実であって作品の内容ではない**
-/// (A05: `next/reference/axis/A05-missing.tsv` の2行目、`next/reference/procedures/P3`
-/// 後半の「別マシンで開く」動線)。同じ project でも、開くマシン・その瞬間の
-/// ディスク状態によって変わりうる値なので **Document には入れない**(=このフィールドは
-/// `#[serde(skip)]` — 保存 JSON には一度も書かれない。既存 project ファイルは
-/// このフィールドの有無に関わらずバイト単位で不変)。`Asset::resolve_status` を
-/// 呼んだ側だけが更新する、読み込み直後は必ず [`AssetStatus::Unchecked`]。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AssetStatus {
-    /// `resolve_status` をまだ呼んでいない。または呼んでも判定しようがない
-    /// (パスを1つも持たない = ファイル実体を伴わない素材、生成系など)。
-    /// **「在る」と偽らない既定値**(判断が割れたら厳しい側へ — Present を既定にしない)。
     Unchecked,
-    /// 絶対 → 相対の順で解決に成功した。実際に使えたパスを保持する
-    /// (`/` 区切りへ正規化済み、[`Asset::normalize_path`] と同じ規約)。
     Present { resolved_path: String },
-    /// 絶対・相対のどちらの経路でも見つからなかった(`io::ErrorKind::NotFound`)。
     Missing,
-    /// パスは見えたが読めなかった(権限拒否・ループ・NotFound 以外の IO 種別)。
-    /// **理由を握りつぶさず持ち歩く**(黙って近似しない)。
     Unreadable { reason: String },
 }
 
@@ -101,14 +67,11 @@ render = ["AssetStatus", "AssetListItem"]
 observable = ["relinking_a_missing_asset_makes_it_present"]
 */
 
-/// パスは常に `/` 区切りへ正規化して保持する(クロス OS roundtrip)。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, DeserializeDerive)]
 pub struct Asset {
     pub id: AssetId,
     pub name: String,
-    /// opaque type 文字列(例: `video/mp4`, `image/svg+xml`, `pointcloud.octree.v1`)。
     pub asset_type: String,
-    /// 内容ハッシュ(ホストが計算。コアは解釈しない)。
     pub content_hash: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub path_absolute: Option<String>,
@@ -118,26 +81,16 @@ pub struct Asset {
     pub file_name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub size_bytes: Option<u64>,
-    /// 「いま参照できるか」の環境事実。**保存しない**([`AssetStatus`] doc 参照)。
-    /// 新規 [`Asset`] は常に `Unchecked` から始まり、[`Asset::resolve_status`] を
-    /// 呼んだ側だけが更新する。
     #[serde(skip)]
     pub status: AssetStatus,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub head_hash: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tail_hash: Option<String>,
-    /// 素材そのものの長さ(probe が測った container 総尺)。**分かる時だけ**入る —
-    /// 生成系・stream など尺を持たない素材は `None` のまま。
-    ///
-    /// **空なら書き出さない**ので、旧文書のバイト列は変わらず、旧 reader は未知キーとして
-    /// 往復する(ロケータ/`resolution` と同じ互換方針)。版も上げない。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub duration: Option<RationalTime>,
 }
 
-/// 新規 Asset を準備するための非永続 payload。`AssetId` は台帳(`AssetTable::admit`、
-/// `Intent::AdmitAsset` の書き口)が付与する。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AssetDraft {
     pub name: String,
@@ -149,23 +102,10 @@ pub struct AssetDraft {
     pub size_bytes: Option<u64>,
     pub head_hash: Option<String>,
     pub tail_hash: Option<String>,
-    /// probe が測った素材の総尺。既定 `None` — 呼び手(CLI import / GUI drop)が
-    /// `probe_admission_source` の値を入れる。
     pub duration: Option<RationalTime>,
 }
 
 impl AssetDraft {
-    /// probe 済み source の plain 値から新規 file-backed draft を組む(IO なし・純関数)。
-    ///
-    /// - `content_hash`/`size_bytes` は正準 `SourceFingerprintV1`
-    ///   (`motolii-source-v1:sha256:<64 lowercase hex>` + exact size)から写す
-    /// - `head_hash`/`tail_hash` は legacy hint(2026-08-08 serial-core 決定で
-    ///   identity authority から退役済み)であり、新規 admission では発行しない
-    /// - `name` は file stem、`file_name` は file name
-    /// - `path_project_relative` は `path_absolute` が `project_root` 配下の時だけ
-    ///   純粋な prefix 計算で入れる(ファイルコピー・実在確認はしない)
-    ///
-    /// probe 自体(ffprobe/hash IO)はホスト側が持つ。ここは plain 値のみ。
     pub fn from_probed_source(
         asset_type: impl Into<String>,
         fingerprint: &crate::SourceFingerprintV1,
@@ -193,8 +133,6 @@ impl AssetDraft {
             size_bytes: Some(fingerprint.size_bytes()),
             head_hash: None,
             tail_hash: None,
-            // 尺は plain 値の probe 結果であり、この純関数の入力には無い。
-            // 知っている呼び手(admission 経路)が後から入れる。
             duration: None,
         }
     }
@@ -224,20 +162,6 @@ impl Asset {
         path.replace('\\', "/")
     }
 
-    /// 「いま参照できるか」を実際に IO で確かめる(A05: パス解決の経路を1本に揃える)。
-    ///
-    /// 順序は**絶対 → 相対 → 失敗**([`AssetStatus`] doc・A05-missing.tsv の設計判断)。
-    /// `project_root` は `path_project_relative` の起点(通常は project file の
-    /// 置き場所)。どちらのパスも持たない asset(生成系など)は [`AssetStatus::Unchecked`]
-    /// を返す — 「無い」と「確かめようがない」を混同しない。
-    ///
-    /// 借用元: `std::fs::canonicalize`(標準ライブラリ、裁定215 (A) — 「上流に既にある」の
-    /// 最も単純な例。symlink 解決込みの実在確認を自前で書く理由がない)。
-    ///
-    /// **失敗を握りつぶさない**: `NotFound` は `Missing` として明示的に返し、それ以外の
-    /// `io::Error`(権限拒否・ループ等)は理由文字列ごと `Unreadable` として返す。
-    /// 呼び出し側が `Result` の代わりにこの enum を受け取る形なのは、「解決できない」
-    /// こと自体が異常系ではなく素材の状態そのものだから(`?` で伝播させたくない)。
     pub fn resolve_status(&self, project_root: Option<&std::path::Path>) -> AssetStatus {
         if self.path_absolute.is_none() && self.path_project_relative.is_none() {
             return AssetStatus::Unchecked;
@@ -251,7 +175,6 @@ impl Asset {
                     };
                 }
                 Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-                    // 絶対パスで見つからない → 相対パスへ倒す。
                 }
                 Err(err) => {
                     return AssetStatus::Unreadable {
@@ -282,7 +205,6 @@ impl Asset {
             }
         }
 
-        // 絶対パスが無かった/相対で解決できなかった、かつ他に試す経路が無い。
         AssetStatus::Missing
     }
 
@@ -296,15 +218,6 @@ impl Asset {
     }
 }
 
-/// アセット台帳。削除後も ID を再利用しない(`LayerId` と同型)。
-///
-/// **Document 所有**(裁定162)— `Intent::AdmitAsset`/`Intent::RemoveAsset` を通じて
-/// `Composition:assets` component へ丸ごと JSON で書く(`markers`/`slots` と同じ
-/// 「1 component = 1 表」の流儀、`components.rs::descriptor_assets` 参照)。
-/// undo/redo は edit timeline の latest-at 移動そのもの(`document.rs` の crate doc
-/// 参照)なので、この型自身は自前の履歴機構を持たない — `insert`/`restore` は
-/// 旧台帳(自前の undo を持っていた)の呼び出し口をそのまま残しているが、
-/// この crate の書き口(`Document::write`)が実際に使うのは `admit`/`remove` だけ。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct AssetTable {
     next: u64,
@@ -389,18 +302,14 @@ impl AssetTable {
         self.entries.get(&id)
     }
 
-    /// 全エントリを走査する(`AssetId` 昇順、`BTreeMap` の内部順そのまま)。
     pub fn iter(&self) -> impl Iterator<Item = &Asset> {
         self.entries.values()
     }
 
-    /// 次に採番される生値(エントリは作らない)。
     pub fn peek_next(&self) -> u64 {
         self.next
     }
 
-    /// `content_hash` が一致する既存 asset を探す(裁定162 の重複統合の下地 —
-    /// [`Self::admit`] が呼ぶ)。
     pub fn find_by_content_hash(&self, content_hash: &str) -> Option<AssetId> {
         self.entries
             .values()
@@ -408,15 +317,11 @@ impl AssetTable {
             .map(|asset| asset.id)
     }
 
-    /// `draft` を台帳へ迎え入れる。**同一 `content_hash` の draft は台帳を増やさず
-    /// 既存 id を返す**(裁定162: 「同じファイルをもう一度 import した」を2件目の
-    /// エントリにしない — 旧台帳がフィンガープリントで持っていた重複統合の意味)。
     pub fn admit(&mut self, draft: AssetDraft) -> Result<AssetId, AssetError> {
         if let Some(existing) = self.find_by_content_hash(&draft.content_hash) {
             return Ok(existing);
         }
         let id = AssetId(self.next);
-        // LayerIdTable と同型の二重防御(next 不変条件が破れた場合の安全網)。
         if self.entries.contains_key(&id) {
             return Err(AssetError::Duplicate { id: id.0 });
         }
@@ -427,7 +332,6 @@ impl AssetTable {
         Ok(id)
     }
 
-    /// 既存 ID で挿入。`id < next` は退役済みとして拒否(再利用禁止)。
     pub fn insert(&mut self, mut asset: Asset) -> Result<(), AssetError> {
         if self.entries.contains_key(&asset.id) {
             return Err(AssetError::Duplicate { id: asset.id.0 });
@@ -447,8 +351,6 @@ impl AssetTable {
         Ok(())
     }
 
-    /// Undo/Redo 用: 退役済み(`id < next`)でも同じ Asset を台帳へ戻す。
-    /// 通常の新規挿入には使わず、採番カウンタは巻き戻さない。
     pub fn restore(&mut self, mut asset: Asset) -> Result<(), AssetError> {
         if self.entries.contains_key(&asset.id) {
             return Err(AssetError::Duplicate { id: asset.id.0 });
@@ -462,15 +364,12 @@ impl AssetTable {
         Ok(())
     }
 
-    /// 削除。採番カウンタは戻さない(再利用禁止)。
     pub fn remove(&mut self, id: AssetId) -> Result<Asset, AssetError> {
         self.entries
             .remove(&id)
             .ok_or(AssetError::NotFound { id: id.0 })
     }
 
-    /// 欠損素材の実体 path だけを差し替える。ID・content hash・表示名は
-    /// そのままなので、layer の参照や undo の意味を別素材へ付け替えない。
     pub fn relink(
         &mut self,
         id: AssetId,
@@ -627,7 +526,6 @@ mod tests {
             })
             .unwrap();
         table.remove(id).unwrap();
-        // 新しい ID で多重キー付きを insert
         let id2 = AssetId::from_raw(1);
         table
             .insert(Asset {
@@ -653,8 +551,6 @@ mod tests {
         assert_eq!(a.path_project_relative.as_deref(), Some("media/intro.mp4"));
     }
 
-    /// 裁定162 の重複統合: 同一 `content_hash` の2度目の `admit` は台帳を増やさず、
-    /// 1度目と同じ id を返す。
     #[test]
     fn admit_deduplicates_by_content_hash() {
         let mut table = AssetTable::new();
@@ -676,8 +572,6 @@ mod tests {
         assert_eq!(table.len(), 1);
     }
 
-    /// テスト専用の使い捨てディレクトリ(`tempfile` crate を足さない — 標準ライブラリの
-    /// `env::temp_dir` + プロセス/時刻由来の一意名だけで足りる、裁定215 の「借りる」)。
     fn unique_scratch_dir(tag: &str) -> std::path::PathBuf {
         let nanos = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -797,7 +691,6 @@ mod tests {
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
-    /// 絶対パスが見つからない時だけ相対パスへ倒す(**絶対 → 相対 → 失敗**の順序)。
     #[test]
     fn resolve_status_falls_back_to_relative_path_when_absolute_is_gone() {
         let dir = unique_scratch_dir("relative");
@@ -806,7 +699,6 @@ mod tests {
         let canonical = std::fs::canonicalize(&file).unwrap();
 
         let asset = blank_asset(
-            // 絶対パスは存在しない場所を指す(取り込み後にファイルが動いた想定)。
             Some(
                 dir.join("moved-away")
                     .join("clip.mp4")
@@ -839,14 +731,10 @@ mod tests {
 
     #[test]
     fn resolve_status_missing_when_only_relative_given_but_no_project_root() {
-        // project_root が無い(=どこからの相対か分からない)なら試しようがない → Missing。
         let asset = blank_asset(None, Some("clip.mp4".into()));
         assert_eq!(asset.resolve_status(None), AssetStatus::Missing);
     }
 
-    /// **後方互換の柵**: `status` を持たない旧形式 JSON(このフィールドが存在しなかった
-    /// 頃に保存された project)がそのまま読める。`#[serde(skip)]` は無い入力を拒否せず
-    /// `Default`(`Unchecked`)で埋める。
     #[test]
     fn asset_deserializes_from_pre_status_field_json() {
         let legacy_json = r#"{
@@ -863,13 +751,10 @@ mod tests {
         assert_eq!(asset.id, AssetId::from_raw(7));
         assert_eq!(asset.status, AssetStatus::Unchecked);
 
-        // 書き戻しても `status` キーは決して現れない(バイト単位で旧形式のまま)。
         let rewritten = serde_json::to_value(&asset).unwrap();
         assert!(rewritten.get("status").is_none());
     }
 
-    /// `AssetTable` 全体の往復でも `status` は書き出されない — 既存 project の
-    /// バイト列を変えない、という `duration` フィールドと同じ互換方針の確認。
     #[test]
     fn asset_table_roundtrip_never_serializes_status() {
         let mut table = AssetTable::new();

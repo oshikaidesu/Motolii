@@ -1,4 +1,3 @@
-//! 保存と読込 — **形式は上流の `.rrd`**。自前形式を発明していない。
 
 use motolii_store::{
     AutoSaveConfig, Composition, Document, Fps, Interp, Intent, Keyframe, KeyframeTrack,
@@ -111,7 +110,6 @@ fn save_and_load_round_trips_the_whole_document() {
                 "track が往復しない({property:?})"
             );
         }
-        // 解決まで一致すること(bezier イージングも含めて)。
         for frame in [30, 45, 60, 90] {
             assert_eq!(
                 loaded.view().resolve(layer, t(frame)).unwrap(),
@@ -122,8 +120,6 @@ fn save_and_load_round_trips_the_whole_document() {
     }
 }
 
-/// `Composition::background`(黒だと気分が上がらない、利用者要望)専用の保存往復。
-/// 既定でない値を使い、シリアライズ漏れを検出する。
 #[test]
 fn composition_background_round_trips_through_save_and_load() {
     let mut doc = Document::new();
@@ -147,11 +143,6 @@ fn composition_background_round_trips_through_save_and_load() {
     );
 }
 
-/// 旧保存ファイル(`background` component が無い版)を模した JSON でも読める —
-/// `#[serde(default = "Composition::default_background")]` の後方互換確認。
-/// 実ファイルではなく JSON 直操作で確かめる: 現行の `Composition` を一度シリアライズし、
-/// `background` キーだけを取り除いてから読み戻す(旧 Fps の num/den 等、他フィールドの
-/// 形式をハードコードしないための遠回り)。
 #[test]
 fn composition_without_a_background_field_defaults_to_opaque_black() {
     let current = Composition {
@@ -176,11 +167,9 @@ fn composition_without_a_background_field_defaults_to_opaque_black() {
     );
 }
 
-/// **保存で履歴を畳む**。畳まないと project file が編集回数に比例して伸びる。
 #[test]
 fn saving_folds_the_edit_history() {
     let mut doc = authored();
-    // たくさん編集する
     for i in 0..200 {
         doc.apply(Intent::SetTiming {
             layer: LayerId(1),
@@ -217,7 +206,6 @@ fn saving_folds_the_edit_history() {
     );
 }
 
-/// レイヤー差し色(`label_color`、index 保存)が保存往復で消えない。
 #[test]
 fn label_color_round_trips_through_save_and_load() {
     let mut doc = authored();
@@ -241,9 +229,6 @@ fn label_color_round_trips_through_save_and_load() {
     );
 }
 
-/// 旧保存ファイル(`label_color` component が無い版)を模した JSON でも読める —
-/// `#[serde(default)]` の後方互換確認。`composition_without_a_background_field_
-/// defaults_to_opaque_black` と同じ手口(JSON からキーを取り除いてから読み戻す)。
 #[test]
 fn attrs_without_a_label_color_field_defaults_to_unassigned() {
     let current = motolii_store::LayerAttrs {
@@ -262,16 +247,10 @@ fn attrs_without_a_label_color_field_defaults_to_unassigned() {
     assert_eq!(loaded.label_color, None, "label_color 欠落時は未割当へ落ちるはず");
 }
 
-/// 旧保存ファイル(`Mask.mode` component が無い版、MK2 で `mode` を足す前)を模した
-/// JSON でも読める — `#[serde(default)]` の後方互換確認。
-/// `attrs_without_a_label_color_field_defaults_to_unassigned` と同じ手口
-/// (JSON からキーを取り除いてから読み戻す)。既定は `MaskMode::Add`
-/// (R9 発注の指定 — 手前の覆いに単純に足す、AE の新規マスクの既定モードと同型)。
 #[test]
 fn mask_without_a_mode_field_defaults_to_add() {
     let current = motolii_store::Mask {
         id: motolii_store::MaskId(1),
-        // Add 以外を仕込んでおく — テストが「たまたま Add だった」で通らないように。
         mode: motolii_store::MaskMode::Subtract,
         inverted: false,
     };
@@ -291,8 +270,6 @@ fn mask_without_a_mode_field_defaults_to_add() {
     );
 }
 
-// ---- 自動保存(発注: 自動保存機構、store 側の意味) ----
-
 fn timing_at(start: i64) -> LayerTiming {
     LayerTiming {
         start,
@@ -302,9 +279,6 @@ fn timing_at(start: i64) -> LayerTiming {
     }
 }
 
-/// **保存先が無い(一度も明示 Save していない新規 project)なら何もしない**
-/// (AE 先例: Auto-Save は保存済み project の隣にしか書けない)。dirty であっても
-/// `project_path` が `None` なら素通りする。
 #[test]
 fn auto_save_skips_when_there_is_no_project_path() {
     let mut doc = authored();
@@ -321,8 +295,6 @@ fn auto_save_skips_when_there_is_no_project_path() {
     assert!(result.is_none(), "project_path が無いのに自動保存が走った");
 }
 
-/// **dirty でなければ何もしない**(`since` == 現在の revision)。ディスクへ一切
-/// 触れない(auto-save ディレクトリすら作らない)ことまで確認する。
 #[test]
 fn auto_save_skips_when_not_dirty() {
     let doc = authored();
@@ -339,9 +311,6 @@ fn auto_save_skips_when_not_dirty() {
     );
 }
 
-/// **世代ローテーション上限**。`generations` を超えた古い世代は削除され、
-/// ディレクトリの中身は常に上限以下に保たれる。各世代の中身も正しく読める
-/// (最新の状態が正しく往復している)ことも確認する。
 #[test]
 fn auto_save_rotates_and_caps_at_generations() {
     let mut doc = authored();
@@ -384,7 +353,6 @@ fn auto_save_rotates_and_caps_at_generations() {
         "世代数上限(3)を超えて残っている: {remaining:?}"
     );
 
-    // 生き残っているのは新しい3世代(start=2,3,4)のはず — 最新の状態が消えていない。
     let mut starts: Vec<i64> = remaining
         .iter()
         .map(|p| Document::load(p).unwrap().view().meta(LayerId(1)).unwrap().unwrap().timing.start)
@@ -393,14 +361,6 @@ fn auto_save_rotates_and_caps_at_generations() {
     assert_eq!(starts, vec![2, 3, 4], "古い世代を消し損ねている/新しい世代を消してしまっている");
 }
 
-/// **atomic 書き込み**: 次に書くはずの世代の tmp スクラッチ位置に、クラッシュ痕を
-/// 模した残骸(ゴミバイト列)を仕込んでおいても、自動保存は正常に完了し、
-/// **既存の(直前に書いた)正本ファイルは無傷のまま**である。
-///
-/// tmp のファイル名は `Document::auto_save` の doc に明記した規約
-/// (`.{stem}.autosave-{seq}{ext}.tmp`)に基づく — 実装の内部詳細だが、この規約自体が
-/// atomic 書き込みの契約(rename 前は tmp、rename 後だけ正本を差し替える)なので
-/// ここで直接検証する。
 #[test]
 fn auto_save_survives_stray_tmp_debris_without_corrupting_the_prior_generation() {
     let mut doc = authored();
@@ -420,7 +380,6 @@ fn auto_save_survives_stray_tmp_debris_without_corrupting_the_prior_generation()
     let since1 = doc.revision();
     let first_bytes_before = std::fs::read(&first).unwrap();
 
-    // 2回目が使うはずの tmp 位置へ、クラッシュ痕(ゴミ)を仕込む。
     let dir = Document::auto_save_dir(&path);
     let stray_tmp = dir.join(".debris-project.autosave-2.motolii.tmp");
     std::fs::write(&stray_tmp, b"garbage left behind by a crashed auto-save").unwrap();
@@ -435,19 +394,16 @@ fn auto_save_survives_stray_tmp_debris_without_corrupting_the_prior_generation()
         .unwrap()
         .expect("2回目の自動保存が走らなかった(tmp 残骸に足を取られた)");
 
-    // 1世代目(正本)は巻き添えを食っていない。
     assert_eq!(
         std::fs::read(&first).unwrap(),
         first_bytes_before,
         "tmp 残骸のせいで既存の世代ファイルが変わった"
     );
-    // 2世代目はゴミではなく、ちゃんと今の状態が読める(tmp を rename で正しく差し替えた)。
     let loaded = Document::load(&second).expect("2世代目が読めない(tmp 残骸で壊れた)");
     assert_eq!(
         loaded.view().meta(LayerId(1)).unwrap().unwrap().timing.start,
         9
     );
-    // rename が起きたので、tmp の残骸はもう残っていない。
     assert!(
         !stray_tmp.exists(),
         "tmp が rename されずに残骸のまま残っている"

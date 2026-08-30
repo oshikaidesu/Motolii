@@ -1,7 +1,3 @@
-//! Lottie の shape 語彙の焼き込み — shape 幾何は今の Document ではキーフレーム化
-//! されないので、ここは全部静的 JSON を返す。`next/engine/motolii-export/src/lottie.rs`
-//! から移送(SP-7、2026-08-23、中身は変えていない——移送のみ)。呼び手は
-//! `super`(`build_layer`)。
 
 use motolii_store::{RepeaterTransform, Shape as VecShape, ShapeGroup, ShapeNode};
 use motolii_vector::{Brush, Contour, Dash, Fill, OpKind, PathSource, StarType, Stroke};
@@ -10,9 +6,6 @@ use super::enums::{
     composite_to_int, fill_rule_to_int, gradient_type_to_int, line_cap_to_int, line_join_to_int,
     point_type_to_int, star_type_to_int, trim_multiple_to_int,
 };
-// ---------------------------------------------------------------------------
-// shapes(静的——shape 幾何は今の Document ではキーフレーム化されない)
-// ---------------------------------------------------------------------------
 
 pub(crate) fn shape_node_to_json(node: &ShapeNode) -> serde_json::Value {
     match node {
@@ -59,14 +52,6 @@ fn static_vec2(v: [f64; 2]) -> serde_json::Value {
     serde_json::json!({ "a": 0, "k": [v[0], v[1]] })
 }
 
-/// `motolii_vector::PathSource` → Lottie shape item(複数個返る場合がある)。
-///
-/// **`PathSource::Bezier` だけが1個とは限らない** — `motolii_vector::Path` は
-/// `Vec<Contour>`(複数輪郭、`geom.rs` の型)であって `motolii_eval::Path`
-/// (mask 形状が使う単一輪郭)とは別の型。Lottie の `sh`(Path)は1輪郭しか運べないので、
-/// 複数輪郭は**同じ group 内に並ぶ複数の `sh` 要素**として書く——fill/stroke を1つだけ
-/// 後ろに続ければ、複数の `sh` に対して同じ塗りが乗る(AE の「1つの shape に複数
-/// サブパス」を Lottie が表す標準的な形)。
 fn path_source_to_json_items(source: &PathSource) -> Vec<serde_json::Value> {
     match source {
         PathSource::Bezier(contours) => contours
@@ -177,8 +162,6 @@ fn op_kind_to_json(kind: &OpKind) -> Option<serde_json::Value> {
     })
 }
 
-/// `repeater.tr`(`shapes/repeater-transform`)。単体 shape の恒等変換にも、
-/// `ShapeGroup::transform`/`OpKind::Repeater::transform` にも使う共通口。
 fn repeater_transform_shape_item(
     t: &RepeaterTransform,
     start_opacity: f64,
@@ -265,4 +248,3 @@ fn gradient_colors_json(stops: &[motolii_vector::GradientStop]) -> serde_json::V
     }
     serde_json::json!({ "p": stops.len(), "k": { "a": 0, "k": flat } })
 }
-

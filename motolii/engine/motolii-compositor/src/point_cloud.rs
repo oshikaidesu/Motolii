@@ -1,14 +1,3 @@
-//! wraps: `re_renderer::PointCloudBuilder`/`PointCloudDrawData` — 点群を1枚のオフスクリーン
-//! texture へ焼く(engine 側の `LayerSource::File`(点群として開いた場合)から呼ばれる)。
-//!
-//! **新しい合成経路は作らない**: 出力は他の layer と同じ [`GpuTexture2D`] 1枚
-//! (`Compositor::render`/`render_with_timing` の `TexturedRect` としてそのまま混ざる)。
-//! `sequential.rs` の「layer 単体を自分の `ViewBuilder` へ描き、`main_target()` を
-//! `texture_manager_2d.import_gpu_premultiplied` で読み戻す」手口をそのまま流用する
-//! (同じ device・同じ `RenderContext` — zero-copy、CPU 往復なし)。
-//!
-//! カメラは **bounding sphere オートフレーミングの固定視点**。手で振れる3Dカメラ・
-//! LOD/streaming はこの切片の非目標(`docs/reviews/2026-08-28-seams-remaining.md` S10c)。
 
 use re_renderer::renderer::PointCloudBatchFlags;
 use re_renderer::view_builder::{
@@ -18,14 +7,9 @@ use re_renderer::{Color32, PointCloudBuilder, Rgba, Size, ViewBuilderId};
 
 use crate::{Compositor, CompositorError, GpuTexture2D};
 
-/// `motolii_core::camera::CAMERA_BASE_VERTICAL_FOV_DEGREES` と同じ値 — comp の 2.5D
-/// カメラと画角の見え方を揃える(独自の画角定数を増やさない)。
 const POINT_CLOUD_VERTICAL_FOV_DEGREES: f32 = motolii_core::CAMERA_BASE_VERTICAL_FOV_DEGREES;
 
 impl Compositor {
-    /// 点群 (`positions`/`colors`、素材そのままの world 座標系) を `width`×`height`
-    /// の texture へ焼く。`colors` は `positions` より短くてよい(足りない分は
-    /// `PointCloudBatchBuilder::add_points` の既定 = 白)。
     pub fn render_point_cloud_to_texture(
         &mut self,
         positions: &[[f32; 3]],
@@ -41,8 +25,6 @@ impl Compositor {
 
         let (center, radius) = bounding_sphere(&positions);
         let half_fov = (POINT_CLOUD_VERTICAL_FOV_DEGREES * 0.5).to_radians();
-        // 半径0(点1つ・全点同座標)でも壊れないよう最小距離を敷く。1.2 は縁に
-        // ちょうど触れないための余白(自由なデザイン定数、出典なし)。
         let distance = (radius.max(1e-3) * 1.2) / half_fov.tan();
         let eye = center + glam::Vec3::new(0.0, 0.0, distance);
         let view_from_world = macaw::IsoTransform::look_at_rh(eye, center, glam::Vec3::Y)
@@ -52,10 +34,6 @@ impl Compositor {
 
         self.ctx.begin_frame();
 
-        // 固定 1.5 ui-point 半径(スクリーン空間、scene のスケールに関係なく一定の
-        // 見た目のドット)。scene 単位で決めると点群のスケールに応じて毎回別の
-        // 値を選ぶ必要が出る——ui-point 固定はそれを避ける自由なデザイン定数
-        // (出典なし)。
         let radii = vec![Size::new_ui_points(1.5); positions.len()];
         let picking_ids = vec![Default::default(); positions.len()];
         let mut builder = PointCloudBuilder::new(&self.ctx);
@@ -68,8 +46,6 @@ impl Compositor {
             .into_draw_data()
             .map_err(|e| CompositorError::Draw(e.to_string()))?;
 
-        // pool が持つ main_target を import しない。pool は refcount が切れた資源を
-        // `destroy()` するので、import は元の texture が生きている保証を持たない。
         let owned = self.create_blend_scratch_texture(width, height);
         let mut view_builder = ViewBuilder::new_with_external_resolved(
             &self.ctx,
@@ -116,8 +92,6 @@ impl Compositor {
     }
 }
 
-/// 中心と半径(全点を内包する最小の球、正確な最小包含球ではなく AABB 対角/2の近似で
-/// 十分——カメラの自動フレーミングにミリ精度は要らない)。
 fn bounding_sphere(positions: &[glam::Vec3]) -> (glam::Vec3, f32) {
     if positions.is_empty() {
         return (glam::Vec3::ZERO, 1.0);

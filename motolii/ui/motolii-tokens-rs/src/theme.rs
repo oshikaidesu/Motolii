@@ -1,13 +1,3 @@
-//! Tailwind-like utility access to the shared UI theme.
-//!
-//! `Dimensions` remains the deserialization boundary and JSON source of truth.
-//! This module is the public composition API for UI code: common values are
-//! selected by semantic namespace (`space`, `text`, `size`, `stroke`, and
-//! `target`) instead of by reaching into a component's numeric fields.
-//!
-//! Pane-specific ratios and geometry stay under `Dimensions::components`.
-//! Keeping those values out of this API is intentional: a Browser card ratio
-//! must not silently become a Timeline or Inspector convention.
 
 use crate::Dimensions;
 
@@ -36,8 +26,6 @@ pub struct TextScale {
     pub micro: f32,
 }
 
-/// Shared bands only. Inspector cells, graph controls, and transport buttons
-/// remain component-owned because their geometry is not a cross-pane scale.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SizeScale {
     pub row: f32,
@@ -58,11 +46,6 @@ pub struct TargetScale {
 }
 
 impl Dimensions {
-    /// Return the shared utility theme for this already-scaled dimensions set.
-    ///
-    /// `Shell::dims` is still the one and only `ui_scale` multiplication point;
-    /// this method only names and groups values. Calling it in a pane is cheap
-    /// because the result is a small `Copy` value.
     pub fn theme(&self) -> UiTheme {
         UiTheme {
             space: SpaceScale {

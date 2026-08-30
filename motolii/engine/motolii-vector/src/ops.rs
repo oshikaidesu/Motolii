@@ -1,25 +1,3 @@
-//! 演算子スタックの中身。**旧 `pathgeom.rs` からの移植**(裁定10)。
-//!
-//! `shape-1` で移植したのは3つ(`trim` / `repeater` / `round_corners`)。
-//! `shape-2`/`shape-3` でその続き4つ(`pucker_bloat` / `zigzag` / `offset` / `twist`)を
-//! 同じ file から取った。
-//!
-//! **`wiggle` だけは今日も取っていない**。移植元には実装があるが、Lottie の語彙に
-//! 対応する物が無く(地図に行が立たない)、`shape-2`/`shape-3` のどちらの束にも
-//! 属していない。使わない物を抱えると `check.sh` の `owns:` が自前実装の量を偽る
-//! (軸4)。加えて移植元の wiggle は seed 付きなので、裁定101(「seed 付き
-//! randomize には先例が1つも無い」)の設計が済むまでは持ってくる先が定まらない。
-//!
-//! 移植元との差は3箇所だけで、どれも意図がある:
-//!
-//! 1. `Path` が構造体から `Vec<Contour>` の別名になった(輪郭の列以外を持たないため)
-//! 2. **repeater が `Path` ではなく [`Instance`] の列を返す**。移植元は
-//!    「opacity は幾何に影響しないので合成側の責務」と書いて `so`/`eo` を捨てていたが、
-//!    **この crate が合成側**なので、捨て先がここになった。幾何(`affine_pow_real` 他)は
-//!    1行も変えていない。
-//! 3. `twist` の角度を**度**で受ける(裁定58「rotation は度のまま。人が読める」)。
-//!    移植元はラジアンで受けていたが、`repeater` の `rotation` を度にした時と同じ理由で
-//!    揃える — 同じ crate の中に角度の単位が2つあると、必ずどちらかを取り違える。
 
 use crate::geom::{
     arc_vertices, bezier_point, bezier_tangent, centroid_of, contour_polyline_samples, is_straight,
@@ -27,21 +5,11 @@ use crate::geom::{
 };
 use crate::{Composite, LineJoin, PointType, RepeaterTransform, TrimMultiple, VectorError};
 
-/// パス1つと、それに掛かる不透明度の重み。
-///
-/// repeater が `so`/`eo` を持つために要る — コピーごとに alpha が違うので、
-/// 「1枚のパス」では表せない。重みは合成時に fill/stroke の alpha へ掛かる。
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Instance {
     pub(crate) path: Path,
     pub(crate) opacity: f64,
 }
-
-// ---------------------------------------------------------------------------
-// rounded-corners(移植: round_corners_contour)
-// 各頂点(開路は両端を除く)を半径 radius の fillet へ置換する。
-// タンジェントハンドルは弧を cubic bezier 近似(90°ごと分割)して保持する。
-// ---------------------------------------------------------------------------
 
 pub(crate) fn round_corners_contour(c: &Contour, radius: f64) -> Contour {
     let n = c.vertices.len();
@@ -112,13 +80,6 @@ pub(crate) fn round_corners(path: &Path, radius: f64) -> Path {
         .collect()
 }
 
-// ---------------------------------------------------------------------------
-// pucker-bloat(移植: pucker_bloat_contour)
-// amount∈[-1,1]。0=恒等、+1=頂点が重心へ、-1=重心から距離2倍。
-// 接線は Lottie 同様に絶対ハンドル位置を重心から逆向きへ補間する。
-// 相対接線へ戻すと `(1 + amount) * tangent + 2 * amount * (vertex - centroid)` になる。
-// ---------------------------------------------------------------------------
-
 fn pucker_bloat_contour(c: &Contour, amount: f64) -> Contour {
     if c.vertices.len() <= 1 {
         return c.clone();
@@ -150,12 +111,6 @@ pub(crate) fn pucker_bloat(path: &Path, amount: f64) -> Path {
         .map(|c| pucker_bloat_contour(c, amount))
         .collect()
 }
-
-// ---------------------------------------------------------------------------
-// zig-zag(移植: zigzag_contour / build_point_type_vertices)
-// ベジエ弧長に沿って frequency*2 分割し、法線方向に交互に amplitude だけ変位する。
-// point_type=Corner → ゼロタンジェント、Smooth → 前後点方向の自動タンジェント。
-// ---------------------------------------------------------------------------
 
 fn zigzag_contour(c: &Contour, amplitude: f64, frequency: f64, point_type: PointType) -> Contour {
     if c.vertices.len() <= 1 {
@@ -253,13 +208,6 @@ pub(crate) fn zigzag(path: &Path, amplitude: f64, frequency: f64, point_type: Po
         .collect()
 }
 
-// ---------------------------------------------------------------------------
-// offset-path(移植: offset_contour / polygon_signed_area / points_close /
-//              line_intersection / join_corner)
-// **閉路限定**(地図の note「v1 は閉路限定」)。エッジを外向き法線方向に amount だけ
-// 平行移動し、`line_join` で角を結合する(Clipper2 offset 型)。自己交差の修復はしない。
-// ---------------------------------------------------------------------------
-
 fn offset_contour(
     c: &Contour,
     amount: f64,
@@ -348,9 +296,6 @@ fn line_intersection(p1: Point, p2: Point, p3: Point, p4: Point) -> Option<Point
     Some(p1.add(d1.scale(t)))
 }
 
-/// `prev_b`(前エッジの終点)と `cur_a`(現エッジの始点)の間隙を `line_join` で塞ぐ。
-/// Miter 成立時は交点1つが両者を置き換える(prev_b/cur_a どちらも残らない)。
-/// Bevel/Round、また Miter の `miter_limit` 超過フォールバックは prev_b/cur_a を両方残す。
 #[allow(clippy::too_many_arguments)]
 fn join_corner(
     out: &mut Vec<Point>,
@@ -376,7 +321,6 @@ fn join_corner(
                 return;
             }
         }
-        // 交点なし(平行)または miter_limit 超過: Clipper2 既定と同じく bevel へ縮退。
     }
     out.push(prev_b);
     if line_join == LineJoin::Round {
@@ -385,13 +329,6 @@ fn join_corner(
             let a0 = (prev_b.y - vertex.y).atan2(prev_b.x - vertex.x);
             let a1 = (cur_a.y - vertex.y).atan2(cur_a.x - vertex.x);
             let diff = normalize_angle(a1 - a0);
-            // **移植元の欠陥を1つ直してある。** 旧 `pathgeom.rs::join_corner` は
-            // `arc_vertices`(90°ごとに分割する cubic 近似)を呼び、その**内側の点だけ**を
-            // 積んでいた。ところが 90°以下の角では分割数が1、つまり頂点は2つしか出ず、
-            // 内側の点は**1つも無い** — `LineJoin::Round` が `Bevel` と完全に同じ画になる。
-            // 矩形の角(90°)を含む「ほとんどの角」がここに当たるので、round は事実上
-            // 効いていなかった。ここでは角度あたりの刻みで直に標本化して、
-            // 丸みが必ず1点以上出るようにする。
             const MAX_STEP: f64 = std::f64::consts::FRAC_PI_8;
             let steps = (diff.abs() / MAX_STEP).ceil().max(2.0) as usize;
             for i in 1..steps {
@@ -417,12 +354,6 @@ pub(crate) fn offset_path(
         .collect()
 }
 
-// ---------------------------------------------------------------------------
-// twist(移植: twist_contour)
-// 各輪郭内で中心からの最大距離を基準に自己正規化する減衰回転(AE Twist)。
-// 中心で最大角度、輪郭自身の外縁でゼロになる — 外部半径パラメータを持たない。
-// ---------------------------------------------------------------------------
-
 fn twist_contour(c: &Contour, degrees: f64, center: Point) -> Contour {
     if c.vertices.len() <= 1 {
         return c.clone();
@@ -435,7 +366,6 @@ fn twist_contour(c: &Contour, degrees: f64, center: Point) -> Contour {
     if max_r <= f64::EPSILON {
         return c.clone();
     }
-    // 移植元との唯一の差: 角度を度で受け、ここで1度だけラジアンへ落とす(裁定58)。
     let angle = degrees.to_radians();
     let vertices = c
         .vertices
@@ -463,17 +393,6 @@ pub(crate) fn twist(path: &Path, degrees: f64, center: Point) -> Path {
         .collect()
 }
 
-// ---------------------------------------------------------------------------
-// repeater(移植: Affine / build_affine / affine_pow_* / apply_matrix_to_contour)
-// M = T(position)·R(rotation)·S(scale)·T(-anchor) を k=index+offset 回合成適用する。
-// 整数 k は行列の反復合成、小数部は k,k+1 の行列を線形補間する
-// (2Dアフィンの真の実数冪 = Lie群指数写像は要求されていないため、簡略近似と明示する)。
-// ---------------------------------------------------------------------------
-
-/// 裁定173 H4: `group.rs` がシェイプ内グループの world 合成にそのまま再利用する
-/// (`pub(crate)` へ上げただけで、式は1行も変えていない)。フィールドは private の
-/// まま — 呼び手はメソッド(`apply`/`apply_vector`/`mul`)と `IDENTITY`/`build_affine`
-/// だけを使う。
 #[derive(Clone, Copy)]
 pub(crate) struct Affine {
     a: f64,
@@ -508,7 +427,6 @@ impl Affine {
         }
     }
 
-    /// self ∘ rhs (rhs を先に適用)。
     pub(crate) fn mul(&self, rhs: &Affine) -> Affine {
         Affine {
             a: self.a * rhs.a + self.c * rhs.b,
@@ -535,7 +453,6 @@ impl Affine {
         self.a * self.d - self.b * self.c
     }
 
-    /// 逆アフィン。特異(スケール≈0)なら None — 負整数冪の退避先。
     fn invert(&self) -> Option<Affine> {
         let det = self.det2();
         if det.abs() < f64::EPSILON {
@@ -553,13 +470,6 @@ impl Affine {
     }
 }
 
-/// 移植元との唯一の差: `rotation` を**度**で受ける(裁定58「rotation は度のまま」)。
-/// 行列を組む前にここで1度だけラジアンへ落とす。
-///
-/// `pub(crate)`: 裁定173 H4 の `group.rs` がシェイプ内グループの transform キー
-/// (`RepeaterTransform` をそのまま再利用、§ 型を新設しない)から world 合成用の
-/// 行列を組むのに、この関数をそのまま呼ぶ(repeater の「k=1回だけ」の特殊ケースが
-/// group の変換そのものなので、二重にアフィン代数を持たせない)。
 pub(crate) fn build_affine(t: &RepeaterTransform) -> Affine {
     let (s, c) = t.rotation.to_radians().sin_cos();
     let rs_a = c * t.scale.x;
@@ -589,8 +499,6 @@ fn affine_pow_int(m: &Affine, n: i64) -> Affine {
         }
         return result;
     }
-    // 負整数冪は逆行列で |n| 回合成。Lottie Repeater の負 offset がここに来る。
-    // スケール≈0で特異なら恒等 — 逆行列が発散するため幾何を打ち切る。
     let Some(inv) = m.invert() else {
         return Affine::IDENTITY;
     };
@@ -615,8 +523,6 @@ fn affine_pow_real(m: &Affine, k: f64) -> Affine {
     m_lo.lerp(&m_hi, frac)
 }
 
-/// `pub(crate)`: 裁定173 H4 の `group.rs::flatten` がグループの world 変換を
-/// 子 leaf の頂点へ焼き込むのにそのまま呼ぶ(repeater と同じ「行列を頂点へ適用」)。
 pub(crate) fn apply_matrix_to_contour(c: &Contour, m: &Affine) -> Contour {
     let vertices = c
         .vertices
@@ -633,11 +539,6 @@ pub(crate) fn apply_matrix_to_contour(c: &Contour, m: &Affine) -> Contour {
     }
 }
 
-/// コピーを作る。**移植元 `repeater_path` の対応形**で、違いは戻り値が
-/// `Path` ではなく [`Instance`] の列であること — `so`/`eo` を捨てずに運ぶため。
-///
-/// `composite` は**描く順**を決める。`Above` はコピー0が先(= 後の物が上に載る)で、
-/// これは移植元が輪郭を積んだ順と同じ。
 pub(crate) fn repeater(
     input: &[Instance],
     copies: f64,
@@ -658,7 +559,6 @@ pub(crate) fn repeater(
     };
     let mut out = Vec::with_capacity(input.len() * n as usize);
     for i in order {
-        // 端点を含む線形補間。コピーが1つだけなら start_opacity(0除算しない)。
         let weight = if n == 1 {
             start_opacity
         } else {
@@ -680,17 +580,6 @@ pub(crate) fn repeater(
     out
 }
 
-// ---------------------------------------------------------------------------
-// trim(移植)
-// 弧長パラメータ化(サンプリング近似)による幾何トリム。
-// Individually は輪郭を連結した1つの長さ空間として扱う。
-// ---------------------------------------------------------------------------
-
-/// De Casteljau 分割: `t` で [start,end] を(先頭・分割点・末尾)の3頂点に割る。
-///
-/// `pub(crate)`: `edit.rs::split_segment` が「既存の `values/bezier`(`v`/`i`/`o`)
-/// 上に点を足す」(形を変えない挿入)にそのまま使う——trim の分割式を2つ目の
-/// 実装として持たない。
 pub(crate) fn split_bezier(v0: &Vertex, v1: &Vertex, t: f64) -> (Vertex, Vertex, Vertex) {
     if is_straight(v0, v1) {
         let m = lerp_point(v0.point, v1.point, t);
@@ -741,7 +630,6 @@ pub(crate) fn split_bezier(v0: &Vertex, v1: &Vertex, t: f64) -> (Vertex, Vertex,
     )
 }
 
-/// `[t0,t1]`(0≤t0≤t1≤1)区間の部分曲線を取り出す。両端が 0/1 ならタンジェントを保つ。
 fn sub_bezier(v0: &Vertex, v1: &Vertex, t0: f64, t1: f64) -> (Vertex, Vertex) {
     if t0 <= 0.0 && t1 >= 1.0 {
         return (*v0, *v1);
@@ -798,8 +686,6 @@ fn wrap01(x: f64) -> f64 {
     r
 }
 
-/// (start,end,offset) から物理窓(0..1 に正規化した弧長分率、from≤to)を最大2つ導出する。
-/// **`offset` が「切り出し窓の回転」になるのはここ** — 窓が端を跨いだら2つに割れる。
 fn resolve_windows(start: f64, end: f64, offset: f64) -> Vec<(f64, f64)> {
     let s = start + offset;
     let mut e = end + offset;
@@ -819,7 +705,6 @@ fn resolve_windows(start: f64, end: f64, offset: f64) -> Vec<(f64, f64)> {
     }
 }
 
-/// 弧長 `[from,to]`(絶対長さ)に重なるセグメント群から新しい開いた輪郭群を切り出す。
 fn extract_window(segments: &[FlatSegment], from: f64, to: f64) -> Vec<Contour> {
     if to - from <= f64::EPSILON {
         return Vec::new();

@@ -34,11 +34,8 @@ pub struct CanvasRow {
     pub is_group: bool,
     pub keys: Vec<f64>,
     pub span: Option<(f64, f64)>,
-    /// 畳んだグループ行にだけ入る、子キーの集約表示。
     pub agg: Vec<f64>,
-    /// ドラッグ書き戻し(`Intent::SetTiming`)の宛先。fixture行のみSome。
     pub layer: Option<LayerId>,
-    /// レイヤー差し色。バンドの塗り。
     pub color: [u8; 3],
 }
 
@@ -58,12 +55,8 @@ struct DragState {
     mode: DragMode,
 }
 
-/// 表示px基準の端当たり判定幅(hit_testの6px/8pxと同じ生値、sfac倍しない)。
 const EDGE_GRAB_PX: f64 = 6.0;
 
-/// Move で帯をずらした量だけ、その層の全 property track のキー時刻を同じ量ずらす
-/// `SetTrack` intent 群を作る。キー時刻は comp 絶対(`start` はローカル)なので、
-/// 帯だけ動かすとアニメーションが元の時刻に取り残される。
 fn keyframe_shift_intents(
     doc: &Document,
     layer: LayerId,
@@ -98,15 +91,10 @@ pub struct TimelineWidget {
     tx: Sender<TimelineMsg>,
     rx: Receiver<TimelineMsg>,
     rows: Vec<CanvasRow>,
-    /// 論理px/秒。wheelでカーソルの時刻を固定点にzoomする。
     pps: f64,
-    /// 表示窓の左端が指す秒。
     scroll_sec: f64,
-    /// 表示窓の上端が指すpx(sfacスケール済、rows描画と同じ単位)。
     scroll_y: f64,
-    /// 直近paintの表示窓高さ(sfacスケール済)。スクロール上限の計算に使う。
     viewport_h: f64,
-    /// 要素ローカルの論理px。
     cursor: Option<(f64, f64)>,
     hovered: Option<(usize, usize)>,
     selected: Option<(usize, usize)>,
@@ -147,27 +135,23 @@ impl TimelineWidget {
         }
     }
 
-    /// 層選択の唯一の真実と、chrome側再描画のためのミラーSignal。
     pub fn with_selection(mut self, selection: Selection, mirror: Signal<Option<LayerId>>) -> Self {
         self.selection = Some(selection);
         self.selected_mirror = Some(mirror);
         self
     }
 
-    /// scroll_yの唯一の真実(self)と、layers列再描画のためのミラーSignal。
     pub fn with_scroll_mirror(mut self, mirror: Signal<f64>) -> Self {
         self.scroll_y_mirror = Some(mirror);
         self
     }
 
-    /// 60秒docが初期表示で収まるようzoomも引いておく。
     pub fn with_clock(mut self, clock: Arc<Clock>) -> Self {
         self.clock = Some(clock);
         self.pps = 20.0;
         self
     }
 
-    /// chrome側の--sと同じ値。行高・ルーラー高をこの倍率で描く。
     pub fn with_scale(mut self, scale: Arc<UiScale>) -> Self {
         self.scale = Some(scale);
         self
@@ -177,7 +161,6 @@ impl TimelineWidget {
         self.scale.as_ref().map(|s| s.factor()).unwrap_or(1.0)
     }
 
-    /// 書き戻し先のDocumentと、apply後に行を読み直す抽出関数。
     pub fn with_document(
         mut self,
         doc: Arc<Mutex<Document>>,
@@ -188,7 +171,6 @@ impl TimelineWidget {
         self
     }
 
-    /// rowsの縦スクロールが動ける上限(sfacスケール済px)。0行やviewportが未知なら0。
     fn max_scroll_y(&self) -> f64 {
         let rowh = ROW_H * self.sfac();
         let content_h = self.rows.len() as f64 * rowh;
@@ -266,10 +248,6 @@ fn attrs_to_patch(a: &LayerAttrs) -> LayerAttrsPatch {
     }
 }
 
-/// 選択層を `comp_frame` で2本へ割る(Split)。頭は `layer` のまま尺が縮み、尻は
-/// 新しい layer になる。`layer` の timing が `comp_frame` を覆っていなければ何もしない
-/// (押しても割れないと分かる = Q3 の拒否の報酬、呼び手が戻り値で判定する)。
-/// `apply_all` 1回 = 1 undo(`Document::group_layers` と同じ形)。
 pub fn split_layer(doc: &Arc<Mutex<Document>>, layer: LayerId, comp_frame: i64) -> Option<LayerId> {
     let mut doc = doc.lock().unwrap();
     let view = doc.view();
@@ -353,7 +331,6 @@ impl Widget for TimelineWidget {
                     let cursor_sec = self.scroll_sec + cursor_x / self.pps;
                     let new_pps = (self.pps * (1.0 - dy * 0.002)).clamp(MIN_PPS, MAX_PPS);
                     self.pps = new_pps;
-                    // カーソル下の時刻を動かさない: scroll = t_cursor - x/pps
                     self.scroll_sec = (cursor_sec - cursor_x / new_pps).max(0.0);
                 } else {
                     self.set_scroll_y(self.scroll_y + dy);
@@ -455,7 +432,6 @@ impl Widget for TimelineWidget {
                             LayerTiming { start: new_start, ..drag.orig }
                         }
                         DragMode::TrimStart => {
-                            // 頭を右へ削る(delta>0) = 素材の入りが進む: source_inも同じだけ動く。
                             let min_delta = -(drag.orig.start.min(drag.orig.source_in));
                             let max_delta = drag.orig.duration - 1;
                             let delta = raw_delta.clamp(min_delta, max_delta);
@@ -585,8 +561,6 @@ impl Widget for TimelineWidget {
                 continue;
             }
             let mid = y + row_h * 0.5;
-            // ドラッグ中の行の帯だけtransientにずらす。Documentはreleaseまで触らない。
-            // キーはずらさない — キーフレームの時刻はcomp絶対で、timingに従わない。
             let (shift_a, shift_b) = match &self.drag {
                 Some(d) if d.row == i => match d.mode {
                     DragMode::Move => (d.delta_sec, d.delta_sec),
@@ -609,7 +583,6 @@ impl Widget for TimelineWidget {
             }
             fill_rect(&mut s, Rect::new(0.0, y + row_h - hairline, w, y + row_h), c_rowline);
 
-            // sceneはelement境界でクリップされない — 全図形をローカル0..w/0..hへ自前で抑える。
             if let Some((a, b)) = row.span {
                 let x0 = x_of(a + shift_a).max(0.0);
                 let x1 = x_of(b + shift_b).min(w);
@@ -694,8 +667,6 @@ mod keyframe_shift_tests {
     use super::*;
     use motolii_store::{Composition, Interp, Keyframe, LayerSource, PropertyId, Value};
 
-    /// 帯(Move)を動かした量だけ、そのレイヤーのキーフレーム時刻も追従する不変量。
-    /// 動かす前に comp フレーム `t` にあったキーは、動かした後 `t + delta` にある。
     #[test]
     fn move_shifts_keyframes_by_the_same_delta() {
         let mut doc = Document::new();
@@ -732,7 +703,6 @@ mod keyframe_shift_tests {
         });
         doc.apply(Intent::SetTrack { layer, property: property.clone(), track }).unwrap();
 
-        // 帯を start=10 -> 40 へ動かす(delta = +30 フレーム)。
         let orig = doc.view().track(layer, &property).unwrap().unwrap();
         let orig_key_t = orig.keys()[0].t;
         let delta_frames = 30;

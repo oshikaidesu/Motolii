@@ -7,36 +7,24 @@ use motolii_core::{ColorSpace, Fps, RationalTime};
 
 use crate::{MediaError, Result};
 
-/// probeで得る映像ストリーム情報(v:0のみ。後方互換ラッパ用)。
-///
-/// width/heightは**表示上の寸法**(回転メタデータ適用後)。デコード(autorotate)の
-/// 出力寸法と一致する(レビュー指摘#4: スマホ縦動画対応)。
 #[derive(Debug, Clone, PartialEq)]
 pub struct MediaInfo {
     pub width: u32,
     pub height: u32,
     pub fps: Fps,
-    /// フレームグリッドにスナップした**総尺**(M2E-17)。
-    /// 区間は半開 `[0, duration)`。最終フレームのPTSではない。
     pub duration: Option<RationalTime>,
     pub nb_frames: Option<i64>,
-    /// 素材のYUV色空間タグ(タグ欠落時はHD慣習でRec709Limited)
     pub color_space: ColorSpace,
-    /// 回転メタデータ(度、反時計回り。ffprobe side_data準拠)
     pub rotation: i64,
 }
 
-/// container内の全stream列挙結果(AG-1)。
 #[derive(Debug, Clone, PartialEq)]
 pub struct ContainerInfo {
     pub video_streams: Vec<ProbedVideoStream>,
     pub audio_streams: Vec<ProbedAudioStream>,
-    /// format(container)levelの総尺。fpsを持たないのでframe gridへはsnapしない
-    /// (video streamの尺はstream側がsnap済みで持つ)。audio-only素材でも入る。
     pub duration: Option<RationalTime>,
 }
 
-/// kind内ordinal付きのvideo stream。
 #[derive(Debug, Clone, PartialEq)]
 pub struct ProbedVideoStream {
     pub ordinal: u32,
@@ -50,7 +38,6 @@ pub struct ProbedVideoStream {
     pub codec_name: Option<String>,
 }
 
-/// kind内ordinal付きのaudio stream。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProbedAudioStream {
     pub ordinal: u32,
@@ -134,12 +121,6 @@ struct FfprobeFormat {
     format_name: Option<String>,
 }
 
-/// この container は**静止画1枚**か(png/jpeg/webp…)。
-///
-/// ffmpegは静止画ファイルを「1枚だけ入った image pipe」として開く
-/// (`png_pipe` / `jpeg_pipe` / `webp_pipe` / 連番の `image2`)。動画 container と
-/// 見分けるのはこの format 名で、codec 名では見ない — MJPEG は本物の動画 container
-/// (`.avi`/`.mov`)にも入り得るため、そちらを静止画扱いにしないため。
 fn is_still_image_format(format_name: Option<&str>) -> bool {
     let Some(names) = format_name else {
         return false;
@@ -159,7 +140,6 @@ fn is_still_image_format(format_name: Option<&str>) -> bool {
     })
 }
 
-/// ffprobeで先頭映像ストリームを解析する(後方互換)。
 pub fn probe(path: impl AsRef<Path>) -> Result<MediaInfo> {
     let container = probe_container(path)?;
     let stream = container
@@ -177,9 +157,6 @@ pub fn probe(path: impl AsRef<Path>) -> Result<MediaInfo> {
     })
 }
 
-/// container内の全video/audio streamを列挙する(AG-1)。
-///
-/// ordinalは同じkindをcontainer順に0から数える。欠落時の自動fallbackはしない。
 pub fn probe_container(path: impl AsRef<Path>) -> Result<ContainerInfo> {
     let out = Command::new("ffprobe")
         .args([
@@ -217,7 +194,6 @@ pub fn probe_container(path: impl AsRef<Path>) -> Result<ContainerInfo> {
     for stream in &parsed.streams {
         match stream.codec_type.as_deref() {
             Some("video") => {
-                // album artはvideo ordinalに数えず、厳格検証にも載せない。
                 if stream.disposition.attached_pic != 0 {
                     continue;
                 }
@@ -237,8 +213,6 @@ pub fn probe_container(path: impl AsRef<Path>) -> Result<ContainerInfo> {
         }
     }
 
-    // 静止画に尺は無い。format levelに何か書いてあっても運ばない
-    // (place側の「長さ不明」= composition の残り、という既存の意味へ落とすため)。
     let duration = if still_image {
         None
     } else {
@@ -252,7 +226,6 @@ pub fn probe_container(path: impl AsRef<Path>) -> Result<ContainerInfo> {
     })
 }
 
-/// kind+ordinalでvideo streamを取得する。欠落はtyped error(別streamへfallbackしない)。
 pub fn select_video_stream(info: &ContainerInfo, ordinal: u32) -> Result<&ProbedVideoStream> {
     info.video_streams
         .iter()
@@ -263,7 +236,6 @@ pub fn select_video_stream(info: &ContainerInfo, ordinal: u32) -> Result<&Probed
         })
 }
 
-/// kind+ordinalでaudio streamを取得する。欠落はtyped error。
 pub fn select_audio_stream(info: &ContainerInfo, ordinal: u32) -> Result<&ProbedAudioStream> {
     info.audio_streams
         .iter()
@@ -274,7 +246,6 @@ pub fn select_audio_stream(info: &ContainerInfo, ordinal: u32) -> Result<&Probed
         })
 }
 
-/// AG-1で受理するaudio codec/layoutか。未対応はtyped error。
 pub fn require_supported_audio(stream: &ProbedAudioStream) -> Result<()> {
     if !audio_codec_supported(&stream.codec_name) {
         return Err(MediaError::UnsupportedAudioCodec {
@@ -342,7 +313,6 @@ fn parse_video_stream(
         _ => return Err(MediaError::Probe("missing dimensions".into())),
     };
 
-    // 非正方ピクセル(アナモルフィック)はv1スコープ外として明確に拒否する
     if let Some(sar) = stream.sample_aspect_ratio.as_deref() {
         if sar != "1:1" && sar != "0:1" && !sar.is_empty() {
             return Err(MediaError::Probe(format!(
@@ -371,8 +341,6 @@ fn parse_video_stream(
         .or(avg_fps)
         .ok_or_else(|| MediaError::Probe("missing frame rate".into()))?;
 
-    // 静止画は「尺の無い1フレーム」。fpsはdemuxerが置いた作り値(png_pipeなら25/1)で、
-    // 絵そのものには無い数なので、ここから先(composition)へは波及させない。
     let (duration, nb_frames) = if still_image {
         (None, Some(1))
     } else {
@@ -387,11 +355,6 @@ fn parse_video_stream(
     };
 
     let color_space = if still_image {
-        // 静止画の色タグは素材の**見え方**を決めない。motoliiのdecodeは必ず
-        // ffmpegのRGB→yuv420pを通り、その出力はBT.601 limitedである
-        // (2026-08-18実測: 赤PNG → Y=81 U=91 V=239。601 limitedの81/90/240に一致し、
-        // 709 limitedの63/102/240ではない)。ffprobeが返す 'gbr'(PNG)や
-        // 'bt470bg'+pc(JPEG)をそのまま解釈すると、実際に流れるYUVと食い違う。
         ColorSpace::Rec601Limited
     } else {
         map_color_space(stream.color_space.as_deref(), stream.color_range.as_deref())
@@ -431,7 +394,6 @@ fn parse_audio_stream(stream: &FfprobeStream, ordinal: u32) -> Result<ProbedAudi
     })
 }
 
-/// 4:2:0デコード前提のため偶数寸法のみ受理する。
 fn validate_even_dimensions(width: u32, height: u32) -> Result<()> {
     if width.is_multiple_of(2) && height.is_multiple_of(2) {
         Ok(())
@@ -444,7 +406,6 @@ fn validate_even_dimensions(width: u32, height: u32) -> Result<()> {
     }
 }
 
-/// r_frame_rate と avg_frame_rate が有意に食い違う場合はVFR疑いとして拒否する。
 fn reject_variable_frame_rate(r_fps: Option<Fps>, avg_fps: Option<Fps>) -> Result<()> {
     let (Some(r), Some(a)) = (r_fps, avg_fps) else {
         return Ok(());
@@ -472,7 +433,6 @@ fn fps_differ_significantly(a: Fps, b: Fps) -> bool {
     (a_f - b_f).abs() / a_f.max(b_f) > 0.005
 }
 
-/// ffprobeの色タグ→FrameDescの色空間。タグ欠落時はHD慣習(BT.709 limited)。
 fn map_color_space(
     space: Option<&str>,
     range: Option<&str>,
@@ -502,7 +462,6 @@ fn map_color_space(
     }
 }
 
-/// "30000/1001" 形式を解析。
 fn parse_fraction(s: &str) -> Option<Fps> {
     let (num, den) = s.split_once('/')?;
     let (num, den) = (num.parse::<i64>().ok()?, den.parse::<i64>().ok()?);
@@ -512,7 +471,6 @@ fn parse_fraction(s: &str) -> Option<Fps> {
     Fps::try_new(num, den).ok()
 }
 
-/// ffprobeの秒表記("2.000000")を、fpsグリッドにスナップしたRationalTimeへ。
 fn parse_duration_snapped(s: &str, fps: Fps) -> Option<RationalTime> {
     let t = RationalTime::try_from_decimal_str(s).ok()?;
     let frames = t.try_to_frame_round(fps).ok()?;
@@ -578,7 +536,6 @@ mod tests {
         assert!(is_still_image_format(Some("jpeg_pipe")));
         assert!(is_still_image_format(Some("webp_pipe")));
         assert!(is_still_image_format(Some("image2")));
-        // 動画containerは静止画扱いにしない(MJPEGの.avi/.movを巻き込まない)。
         assert!(!is_still_image_format(Some("mov,mp4,m4a,3gp,3g2,mj2")));
         assert!(!is_still_image_format(Some("matroska,webm")));
         assert!(!is_still_image_format(None));

@@ -6,13 +6,11 @@ use crate::timeline_widget::CanvasRow;
 
 const FPS: f64 = 30.0;
 
-/// LayerId % 12 → 差し色。長さはmotolii_tokens_rs::LABEL_PALETTE_LENと同じ12。
 pub const LABEL_PALETTE: [&str; 12] = [
     "#d96b6b", "#d9985a", "#d9c95a", "#a3d95a", "#5ad98c", "#5ac6c6",
     "#5a96d9", "#7d7dd9", "#a86bd9", "#d96bbc", "#9a9a9a", "#cba97a",
 ];
 
-/// Documentから行を読む。ドラッグcommit後の再読みにも同じ関数を使う。
 pub fn canvas_rows_from_doc(doc: &Document) -> Vec<CanvasRow> {
     let view = doc.view();
     let props: Vec<PropertyId> = [property::OPACITY, property::POSITION]
@@ -73,7 +71,6 @@ pub struct LayerRow {
     pub locked: bool,
 }
 
-/// Documentから層行を読む。M/S/Lクリック後の再読みにも同じ関数を使う。
 pub fn layer_rows_from_doc(doc: &Document) -> Vec<LayerRow> {
     let view = doc.view();
     let mut layers = view.layers();
@@ -99,7 +96,6 @@ pub fn layer_rows_from_doc(doc: &Document) -> Vec<LayerRow> {
         .collect()
 }
 
-/// この作品で使われている色1つ。標準パレットではなく、層を走査して集めた実測値。
 pub struct ColorSwatch {
     pub hex: String,
     pub rgba: [u8; 4],
@@ -132,7 +128,6 @@ fn shape_fill_colors(node: &ShapeNode, seen: &mut std::collections::BTreeSet<[u8
     }
 }
 
-/// 作品全体を走査して使われている色を集める。固定標準パレットは作らない(裁定済み)。
 pub fn used_colors_from_doc(doc: &Document) -> Vec<ColorSwatch> {
     let view = doc.view();
     let mut seen = std::collections::BTreeSet::new();
@@ -165,12 +160,9 @@ pub struct AssetRow {
     pub thumb: &'static str,
     pub family: AssetFamily,
     pub path: Option<String>,
-    /// 素材の実画。ffmpeg起動やデコードを伴うので**台帳を読む時に1回だけ**作る。
     pub preview: Option<String>,
 }
 
-/// 拡張子の区分の正本は`re_importer`の`SUPPORTED_*_EXTENSIONS`。
-/// coreは`asset_type`を解釈しないのでこの畳み込みはfrontが持つ。
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub enum AssetFamily {
     Video,
@@ -211,22 +203,15 @@ pub fn asset_family(asset_type: &str) -> AssetFamily {
     }
 }
 
-/// Inspector 1行。cells[i]が空文字のセルは地なし(モックの空白セルと同じ)。
 pub struct PropRow {
     pub label: &'static str,
     pub cells: [String; 3],
     pub dims: [bool; 3],
     pub keyed: bool,
-    /// SetTrackの宛先。Noneなら編集不可(EFFECTS等のダミー行)。
     pub property: Option<String>,
-    /// trueならcells[0]/[1]がVec2のx/y(cells[2]は飾り)。falseならcells[2]が唯一の値。
     pub vec2: bool,
-    /// cellsを組んだ生の値。ドラッグ開始点・キー打刻の両方がここから読む。
     pub value: Value,
-    /// 宣言された範囲(engine側 EffectParamDescriptor::range)。無ければドラッグは無限。
     pub range: Option<(f64, f64)>,
-    /// 欄ごとに独立したpropertyを持つ行(Positionのz、Rotationのx/y/z)。
-    /// Noneの欄は`property`+`vec2`の既定の割り当てに従う。
     pub axis: [Option<(String, Value)>; 3],
 }
 
@@ -237,7 +222,6 @@ pub struct InspectorData {
     pub transform: Vec<PropRow>,
     pub effects: Vec<PropRow>,
     pub has_effects: bool,
-    /// (ラベル, "#rrggbb")。property=Noneで読み取り専用 — 編集の入口はBrowserのColorsタブ。
     pub colors: Vec<(&'static str, String)>,
 }
 
@@ -254,7 +238,6 @@ pub struct Loaded {
     pub duration_sec: f64,
 }
 
-/// 選択層+comp時刻の断面をInspector表示用に読む。S2+S4の繋ぎ先(session::Selectionが選ぶlayer)。
 pub fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: RationalTime) -> InspectorData {
     let value_of = |prop: &str| {
         PropertyId::new(prop)
@@ -269,7 +252,6 @@ pub fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: RationalTime
     };
     let f = |v: f64| format!("{v:.3}");
 
-    // comp px級の値は38px幅セルに3桁小数が収まらないので1桁へ落とす。
     let f1 = |v: f64| format!("{v:.1}");
     let (pos_x, pos_y) = match value_of(property::POSITION) {
         Some(Value::Vec2([x, y])) => (x, y),
@@ -315,9 +297,6 @@ pub fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: RationalTime
         .sum();
     let attached_effects = view.effects(layer).unwrap_or_default();
     let has_effects = !attached_effects.is_empty();
-    // 層に付いている effect ごとに、known_effects() の宣言(名前・既定値・範囲)で
-    // Inspector 行を組む。宣言に無い plugin_id(known_effects() の外)は無視——
-    // 「無い範囲を発明しない」(Q0)と同じ fail-closed。
     let effects: Vec<PropRow> = attached_effects
         .into_iter()
         .flat_map(|instance| {
@@ -366,8 +345,6 @@ pub fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: RationalTime
         None => "solid",
     };
 
-    // TextDocumentのうちcontentだけが時間変化する(text.rs:462-466)。
-    // Ok(None)はまだ一度も書かれていない層 — text層でも起こりうる。
     let text = match view.text_document(layer) {
         Ok(Some(doc)) => vec![PropRow {
             label: "Content",
@@ -383,8 +360,6 @@ pub fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: RationalTime
         _ => Vec::new(),
     };
 
-    // 色は素材側の静的値であってproperty(track)ではないので、行はここで別に組む。
-    // property=None=読み取り専用 — 編集の入口はBrowserのColorsタブ(裁定済み)。
     let mut colors: Vec<(&'static str, String)> = Vec::new();
     match view.meta(layer).ok().flatten().map(|m| m.source) {
         Some(LayerSource::Solid { rgba, .. }) => colors.push(("Color", hex_of(rgba))),
@@ -414,7 +389,6 @@ pub fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: RationalTime
         _ => {}
     }
 
-    // AEの層Transform並び: Anchor Point → Position → Scale → Rotation → Opacity。
     let transform = vec![
             PropRow {
                 label: "Anchor",
@@ -492,8 +466,6 @@ pub fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: RationalTime
     }
 }
 
-/// `MOTOLII_TESTDATA` のディレクトリから、rerunが読める物を素材台帳へ入れる。
-/// 実素材で面を見るための器具で、fixtureと同じ`Intent::AdmitAsset`経路を通る。
 fn admit_testdata(doc: &mut motolii_store::Document) {
     let Some(dir) = std::env::var_os("MOTOLII_TESTDATA") else {
         return;

@@ -1,21 +1,12 @@
-//! 楽曲/stream 1本のインターリーブf32 PCM全展開キャッシュ(D4 + AG-2)。
-//!
-//! 旧 `crates/motolii-audio/src/cache.rs` から無改造で移植。この型は音声の内部表現
-//! そのものであって Document の型に依存しないので、読み替えの対象が無い。
 
 use crate::error::{AudioError, Result};
 
-/// PCMの形式(チャンネル数・サンプルレート)。stream単位で単一。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PcmFormat {
     pub channels: u16,
     pub sample_rate: u32,
 }
 
-/// stream 1本のインターリーブf32 PCM。デコード時に全展開してRAM保持する
-/// (5分ステレオ48kHzで≈110MB)。
-///
-/// source単位の「再生位置→サンプル」は本構造体の添字計算。複数sourceの加算は`mix`。
 #[derive(Debug, Clone)]
 pub struct PcmCache {
     samples: Vec<f32>,
@@ -24,8 +15,6 @@ pub struct PcmCache {
 }
 
 impl PcmCache {
-    /// インターリーブf32バッファから構築する。境界検査済みの`read_frames`/`frame_at`の
-    /// 前提(フレーム整合・非ゼロchannels/sample_rate)をここで確定する。
     pub fn from_interleaved(samples: Vec<f32>, format: PcmFormat) -> Result<Self> {
         if format.channels == 0 {
             return Err(AudioError::UnsupportedChannels { channels: 0 });
@@ -52,13 +41,10 @@ impl PcmCache {
         self.format
     }
 
-    /// 楽曲全体のフレーム数(1フレーム=全チャンネル分のサンプル1組)。
     pub fn frame_count(&self) -> u64 {
         self.frame_count
     }
 
-    /// `start_frame`から`frame_count`フレーム分のインターリーブサンプルを読む。
-    /// 範囲外は`AudioError::OutOfRange`(D4完了条件: 境界検査付きread)。
     pub fn read_frames(&self, start_frame: u64, frame_count: usize) -> Result<&[f32]> {
         let end_frame = start_frame
             .checked_add(frame_count as u64)
@@ -74,7 +60,6 @@ impl PcmCache {
         Ok(&self.samples[start..end])
     }
 
-    /// 単一フレーム(全チャンネルのサンプル)を読む。`read_frames(idx, 1)`の糖衣。
     pub fn frame_at(&self, frame_index: u64) -> Result<&[f32]> {
         self.read_frames(frame_index, 1)
     }

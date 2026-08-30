@@ -1,4 +1,3 @@
-//! 裁定256 — 共有面検査は通す。書き込みは blit で先に通さない。
 
 use motolii_compositor::{
     check_presentable_target, BlendMode, CompSpec, Compositor, CompositorError, EffectPass,
@@ -23,9 +22,6 @@ fn with_device() -> (Compositor, wgpu::Device) {
     (compositor, device)
 }
 
-/// `with_device` と同じだが、readback に要る `Queue` も持ち帰る
-/// (`render_into_applies_effect_passes` 専用 — 他の試験は書き込みの成否しか見ない
-/// ので `Queue` を要らない)。
 fn with_device_and_queue() -> (Compositor, wgpu::Device, wgpu::Queue) {
     let HeadlessGpu { adapter, device, queue } = HeadlessGpu::new().expect("headless GPU");
     drop(adapter);
@@ -35,9 +31,6 @@ fn with_device_and_queue() -> (Compositor, wgpu::Device, wgpu::Queue) {
     (compositor, device, queue)
 }
 
-/// `render_into` の target は呼び手が作る(=`RENDER_ATTACHMENT` に加えて
-/// `COPY_SRC` を足せる)ので、`render_to_texture` の main_target のような blit
-/// 迂回は要らない——`copy_texture_to_buffer` で直接読み戻す。
 fn readable_presentable(device: &wgpu::Device) -> wgpu::Texture {
     device.create_texture(&wgpu::TextureDescriptor {
         label: Some("render_into-effect-regression"),
@@ -51,7 +44,6 @@ fn readable_presentable(device: &wgpu::Device) -> wgpu::Texture {
         dimension: wgpu::TextureDimension::D2,
         format: PRESENTABLE_FORMAT,
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
-        // finalize_into は composite を通すため同じメモリを Rgba8Unorm として見直す。
         view_formats: &[wgpu::TextureFormat::Rgba8Unorm],
     })
 }
@@ -113,7 +105,6 @@ fn readback_rgba(device: &wgpu::Device, queue: &wgpu::Queue, texture: &wgpu::Tex
     out
 }
 
-/// 8x8 の layer を comp 中央 (28,28) へ、`passes` を積んで置く。
 fn small_layer(texture: motolii_compositor::GpuTexture2D) -> Layer {
     Layer {
         texture,
@@ -138,13 +129,6 @@ fn small_layer(texture: motolii_compositor::GpuTexture2D) -> Layer {
     }
 }
 
-/// **2026-08-28 の穴の直接オラクル**: `render_into` は元々 `lwp.passes` を一切
-/// 読まず `lwp.layer.texture` をそのまま描いていた——Inspector の FX STACK で
-/// GLOW を積んでも、`Intent::SetEffects` の書き込みも Inspector の投影も
-/// 正しく動くのに、Makepad の共有面(zero-copy Stage)には絵が一切反映されて
-/// いなかった(export/CPU 読み戻し経路は元から正しかった)。この試験は
-/// 「同じ layer に `EffectPass::Glow` を積むと `render_into` の出力が変わる」
-/// ことだけを縛る——変わらなければ、この穴が再発している。
 #[test]
 fn render_into_applies_effect_passes() {
     let (mut compositor, device, queue) = with_device_and_queue();
@@ -296,20 +280,12 @@ fn render_into_writes_the_external_target() {
         .expect("external resolved へ直接書く");
 }
 
-// `render_into_does_not_blit_before_external_resolved` はここに居た。すぐ上の
-// `render_into_writes_the_external_target` と**同じ呼び出しに正反対を要求**して
-// いたので、片方は必ず落ちる。待ちの番人の方が古く、裁定256 で fork に
-// `ViewBuilder::new_with_external_resolved` が着いた時点で前提が消えていた
-// (2026-08-27 撤去)。
-
 fn tilted_layer(texture: motolii_compositor::GpuTexture2D, deg: f32) -> Layer {
     let mut layer = small_layer(texture);
     layer.placement.rotation_x = deg;
     layer
 }
 
-/// 傾き 0 以外で板が丸ごと消える(2026-08-30 宿題G)の在処を合成器の外へ押し出す
-/// オラクル。85° は板がほぼ真横を向いた状態。
 #[test]
 fn render_into_draws_tilted_plates() {
     let (mut compositor, device, queue) = with_device_and_queue();
@@ -343,8 +319,6 @@ fn render_into_draws_tilted_plates() {
     assert!(tilted < flat, "60° 傾けても縮まない: flat={flat} tilted={tilted}");
 }
 
-/// 傾いた板と、その下の pinned な全面背景。深度書き込みが同一パスなので、
-/// 傾けた側が背景に負けて消えないことを縛る。
 #[test]
 fn tilt_survives_a_pinned_background() {
     let (mut compositor, device, queue) = with_device_and_queue();

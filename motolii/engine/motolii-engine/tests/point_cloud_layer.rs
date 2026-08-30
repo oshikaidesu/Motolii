@@ -1,9 +1,3 @@
-//! **検収条件**(発注「点群 vertical slice」): `.ply` → `LayerSource::File` →
-//! `Engine::render_frame` が Stage の画素として実際に点群を描くこと。
-//! `zero_copy_shape.rs::rectangle_shape_zero_copy_matches_cpu_export_and_renders_visible_pixels`
-//! と同じ oracle の形(色つきピクセルの実測、パイプラインの終端で実測する)を
-//! 点群へ適用する——手で作った `PointCloudData` を engine へ差し込むのではなく、
-//! 実 `.ply` ファイルを書いて `motolii_media::load_point_cloud` の入口から通す。
 
 use motolii_engine::Engine;
 use motolii_store::{
@@ -30,10 +24,6 @@ fn doc_with_comp() -> Document {
     doc
 }
 
-/// 実 `.ply`(ASCII)を一時ファイルへ書く——`ply-rs-bw`(Rerun の `.ply` パーサ、
-/// `re_sdk_types::archetypes::Points3D::from_file_contents` 経由)が実際に読む
-/// バイト列をこの試験でも通す。点は小さな球面上に散らし、色は白 —
-/// 「点群として認識される最小の実データ」を作るだけで、見た目の作品性は問わない。
 fn write_fixture_ply() -> std::path::PathBuf {
     let mut body = String::new();
     let n = 64;
@@ -97,9 +87,6 @@ fn ply_point_cloud_renders_visible_pixels_through_render_frame() {
 
     assert_eq!(frame.len(), (W * H * 4) as usize);
 
-    // comp background は不透明黒(`Composition::default_background` と同じ)——
-    // 点群が実際に描かれていれば、黒(R=G=B=0)ではない画素が生じるはず
-    // (白い点を白背景で塗っているので、非黒 = 点群由来と読める)。
     let non_background = frame
         .chunks_exact(4)
         .filter(|p| !(p[0] == 0 && p[1] == 0 && p[2] == 0))
@@ -120,9 +107,6 @@ fn ply_point_cloud_renders_visible_pixels_through_render_frame() {
     std::fs::remove_file(&ply_path).ok();
 }
 
-/// 存在しないパスは他の layer を巻き込まず、この layer だけ「描く物が無い」に
-/// 落ちること(動画/画像として開く枝の A05 隔離と同じ規律、`point_cloud_texture_for`
-/// の doc 参照)。
 #[test]
 fn missing_ply_isolates_to_this_layer_without_erroring_the_whole_frame() {
     let mut doc = doc_with_comp();

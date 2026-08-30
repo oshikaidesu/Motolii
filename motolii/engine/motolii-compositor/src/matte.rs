@@ -1,58 +1,6 @@
-//! track matte(BL4、AE 型 — 直上レイヤーを alpha/luma マットとして使う、
-//! `motolii_store::Matte`/`MatteMode` の4値と1対1)。
-//!
-//! [`blend`](crate::blend) と同じ手口(fork を触らず crate 内へ新規 WGSL パイプラインを
-//! 1本足す)——`layer`(matte を持つ本体)と `matte_source`(直上の matte 元)を
-//! それぞれ canvas 全体の premultiplied texture として描き終えた2枚を読み、
-//! `layer` の値を `matte_source` から導いた **coverage**(0〜1のスカラー)で
-//! スケールする(`crate::Compositor::matte_layer` が2枚の描画+この pass の呼び出しを
-//! 担う)。
-//!
-//! ## 4モードの式
-//!
-//! 入力の2枚 (`layer_tex`/`matte_tex`) はどちらも [`crate::blend`] と同じ
-//! premultiplied Rgba8UnormSrgb(`textureLoad` で GPU が自動 sRGB decode する)。
-//!
-//! - **Alpha**: `coverage = matte.a`(matte 元の alpha をそのまま使う——alpha は
-//!   premultiplication の影響を受けない)。
-//! - **InvertedAlpha**: `coverage = 1 - matte.a`。
-//! - **Luma**: `coverage = dot(matte.rgb, LUMA_WEIGHTS)`(matte 元の
-//!   **premultiplied** RGB に直接輝度係数を掛ける——unpremultiply しない)。
-//!   `matte.rgb = straight_rgb * matte.a` なので、線形性から
-//!   `dot(matte.rgb, w) = dot(straight_rgb, w) * matte.a` と数学的に一致する
-//!   ——「straight 輝度 × alpha」を求めたいときの標準的な近道であり、AE/Lottie 系
-//!   実装でも同じ簡約が使われる(alpha=0 の画素は自動的に coverage=0 になる —
-//!   透明領域は「見せない」が自然に成立する)。
-//! - **InvertedLuma**: `coverage = 1 - dot(matte.rgb, LUMA_WEIGHTS)`。
-//!   **既知の癖**(AE のドキュメント化された挙動と一致): alpha=0 の画素は
-//!   premultiplied RGB が `(0,0,0)` になるので Luma coverage は 0 になり、
-//!   InvertedLuma では逆に coverage が 1 になる——「透明な matte 領域が
-//!   invert luma matte では逆に完全露出になる」という AE ユーザーに広く知られた
-//!   挙動をそのまま再現する(黙って別の定義へ寄せない)。
-//!
-//! `LUMA_WEIGHTS`(Rec.709: 0.2126/0.7152/0.0722)は sRGB と同じ係数——ただし
-//! **AE の track matte luma の正確な係数は非公開**なので、業界標準の輝度係数を
-//! 明示的に選んだという設計判断であることを記す(発明ではなく選択。
-//! [`crate::blend`] の非分離 blend `Lum()`(W3C 3.7節の 0.3/0.59/0.11、NTSC 系)とは
-//! **別の式・別出典**——混同しないこと)。
-//!
-//! ## 出力の alpha 規約(premultiplied ではなく straight)
-//!
-//! matte を消費した結果は premultiplied のまま返す——`layer` の rgb と alpha を
-//! 同じ coverage で縮める。呼び手はこれを普通の `Layer` として他と混ぜて渡し、
-//! 一般経路は [`crate::premultiplied_texture`] で読む。
-//!
-//! ## gamma 空間
-//!
-//! [`crate::blend`] と同じ前提——入力2枚(`layer_tex`/`matte_tex`)・出力とも
-//! `Rgba8UnormSrgb`、GPU が自動で sRGB decode/encode する。ソフトウェアで2重に
-//! 変換しない。
 
 pub(crate) const MATTE_TARGET_FORMAT: wgpu::TextureFormat = crate::blend::SEPARABLE_BLEND_TARGET_FORMAT;
 
-/// track matte の重ね方(AE/Lottie の4値、`motolii_store::MatteMode` と1対1)。
-/// **この crate は store の語彙を知らない**(`motolii-engine` が変換する、
-/// `translate_blend_mode`/`translate_matte_mode` と同じ形)。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MatteMode {
     Alpha,
@@ -61,10 +9,6 @@ pub enum MatteMode {
     InvertedLuma,
 }
 
-/// [`MatteMode`] の WGSL `params.mode` index(`SHADER` の分岐と1対1)。
-///
-/// **`_` を使わない**(全 variant を列挙)——`separable_mode_index` と同じ
-/// fail-closed の形(将来 variant が増えたらここも更新を強制される)。
 pub(crate) fn matte_mode_index(mode: MatteMode) -> u32 {
     match mode {
         MatteMode::Alpha => 0,
@@ -81,9 +25,6 @@ pub(crate) struct MattePipelines {
 }
 
 impl MattePipelines {
-    /// **初回生成して以後使い回す**(`blend::SeparableBlendPipelines::new`/
-    /// `effects::GlowPipelines::new` と同じ規律 — `Compositor::with_device` が
-    /// 1回だけ呼ぶ)。
     pub(crate) fn new(ctx: &re_renderer::RenderContext) -> Self {
         let device = &ctx.device;
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -116,7 +57,6 @@ impl MattePipelines {
             immediate_size: 0,
         });
 
-        // 全画面三角形の頂点段は上流の物を使う。entry point は `main`。
         let vs_handle = re_renderer::renderer::screen_triangle_vertex_shader(ctx);
         let shader_modules = ctx.gpu_resources.shader_modules.resources();
         let screen_triangle_vs = shader_modules.get(vs_handle).expect("上流の頂点シェーダ");
@@ -154,10 +94,6 @@ impl MattePipelines {
         }
     }
 
-    /// 1パスを `encoder` へ積む。`layer_view`=matte を持つ本体(canvas 全体へ描き
-    /// 終えた premultiplied texture)・`matte_view`=matte 元(同じく canvas 全体)・
-    /// `out_view`=結果の書き込み先(呼び手が確保した [`MATTE_TARGET_FORMAT`] の
-    /// texture)。`mode` は [`matte_mode_index`] が返す index。
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn record(
         &self,
@@ -239,9 +175,6 @@ fn texture_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {
     }
 }
 
-/// fragment だけ。頂点段は上流の `screen_triangle_vertex_shader`。
-/// `params.mode` の値は [`matte_mode_index`] の返り値と1対1(モジュール doc
-/// 「4モードの式」参照)。
 const SHADER: &str = r#"
 struct MatteParams {
   mode: u32,
@@ -254,23 +187,18 @@ struct MatteParams {
 @group(0) @binding(1) var matte_tex: texture_2d<f32>;
 @group(1) @binding(0) var<uniform> params: MatteParams;
 
-// Rec.709(sRGB と同じ係数)——モジュール doc「4モードの式」参照。
 const LUMA_WEIGHTS: vec3<f32> = vec3<f32>(0.2126, 0.7152, 0.0722);
 
 fn coverage(mode: u32, matte: vec4<f32>) -> f32 {
   if (mode == 0u) {
-    // Alpha
     return matte.a;
   }
   if (mode == 1u) {
-    // InvertedAlpha
     return 1.0 - matte.a;
   }
   if (mode == 2u) {
-    // Luma(premultiplied rgb に直接——モジュール doc「4モードの式」参照)
     return dot(matte.rgb, LUMA_WEIGHTS);
   }
-  // InvertedLuma(mode == 3u、default もここへ落ちる)
   return 1.0 - dot(matte.rgb, LUMA_WEIGHTS);
 }
 
@@ -281,8 +209,6 @@ fn matte_fs(@builtin(position) p: vec4<f32>) -> @location(0) vec4<f32> {
 
   let c = clamp(coverage(params.mode, matte), 0.0, 1.0);
 
-  // 出力は premultiplied。`layer` も premultiplied なので rgb と alpha を
-  // 同じ coverage で縮めるだけでよい(straight 色は matte で変わらない)。
   return clamp(layer * c, vec4<f32>(0.0), vec4<f32>(1.0));
 }
 "#;

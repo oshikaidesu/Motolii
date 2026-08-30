@@ -19,8 +19,6 @@ fn c(rgb: [u8; 3]) -> Color {
     Color::from_rgb8(rgb[0], rgb[1], rgb[2])
 }
 
-/// texture画素→表示pxの変換。paintが毎フレーム更新し、handle_eventが逆変換に使う。
-/// 論理px単位(deviceで計算した値を`k`で割って揃える) — eventの座標系がこちら側。
 #[derive(Clone, Copy)]
 struct Fit {
     s: f64,
@@ -40,7 +38,6 @@ impl Fit {
     }
 }
 
-/// どのハンドルを掴んだか。`bool`は「箱のmax側(x1/y1)を掴んだか」。
 #[derive(Clone, Copy, Debug)]
 enum GizmoMode {
     Move,
@@ -52,14 +49,11 @@ enum GizmoMode {
 struct GizmoDrag {
     layer: LayerId,
     mode: GizmoMode,
-    /// ドラッグ開始点のcomp座標。
     grab: (f64, f64),
     orig_position: (f64, f64),
     orig_rotation: f64,
     anchor: (f64, f64),
-    /// pre-scale local size(`selection_geom_in`参照)。
     natural: (f64, f64),
-    /// ドラッグ開始時の箱(comp座標、回転無視——表示と同じ簡略化)。
     orig_box: (f64, f64, f64, f64),
 }
 
@@ -128,15 +122,10 @@ impl StageWidget {
 
 }
 
-/// 選択層の位置/anchor/scale/rotation とcomp座標での箱(x, y, w, h)。
-/// 箱は回転を無視した軸並行(表示の簡略化と同じ)——
-/// world = position + scale*(local - anchor) から角を出すだけ(裁定58のaffineの逆)。
 struct SelGeom {
     position: (f64, f64),
     anchor: (f64, f64),
     rotation: f64,
-    /// pre-scale local size。板のサイズは`Engine::selected_layer_size`任せ
-    /// ——front は layer の種類(`LayerSource`)を知らない。
     natural: (f64, f64),
     box_: (f64, f64, f64, f64),
 }
@@ -157,7 +146,6 @@ fn f64_at(view: &StoreView<'_>, layer: LayerId, name: &str, rt: RationalTime, de
     }
 }
 
-/// timelineのbandが無い時刻ではNone(裁定どおり)。
 fn selection_geom_in(
     engine: &Engine,
     view: &StoreView<'_>,
@@ -185,8 +173,6 @@ fn selection_geom_in(
     Some(SelGeom { position, anchor, rotation, natural, box_ })
 }
 
-/// 掴んだハンドルに応じて新しい`(scale, position)`を出す。固定点は対角(Alt=中心)。
-/// Shift=等比(比率固定)。1ジェスチャで1回だけ呼ばれ、結果はtransient/確定の両方に使う。
 fn compute_scale(
     orig_box: (f64, f64, f64, f64),
     natural: (f64, f64),
@@ -257,9 +243,6 @@ fn compute_scale(
     (scale, position)
 }
 
-/// 回転の中心はanchorのworld座標——`world(anchor_local) = position`
-/// (裁定58の affine で local=anchorを代入すると anchor 項が打ち消し合う)なので、
-/// anchor値そのものを読まずに`position`を使ってよい。Shift=15度刻みへスナップ。
 fn rotate_around(center: (f64, f64), angle_deg: f64, p: (f64, f64)) -> (f64, f64) {
     let a = angle_deg.to_radians();
     let (dx, dy) = (p.0 - center.0, p.1 - center.1);
@@ -277,8 +260,6 @@ fn compute_rotation(center: (f64, f64), grab: (f64, f64), cur: (f64, f64), orig_
     r
 }
 
-/// `SetTrack`用のIntent。track が無ければ`RationalTime::ZERO`(静的値)、
-/// あれば`t`(プレイヘッド)——`write_key`(`inspector.rs`)と同じ法。
 fn track_intent(doc: &Document, layer: LayerId, name: &str, value: Value, t: RationalTime) -> Option<Intent> {
     let prop = PropertyId::new(name).ok()?;
     let existing = doc.view().track(layer, &prop).ok().flatten();
@@ -296,14 +277,10 @@ fn create_target(device: &wgpu::Device, width: u32, height: u32) -> wgpu::Textur
         mip_level_count: 1,
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
-        // motolii-compositor::presentable::PRESENTABLE_FORMAT(render_frame_intoの
-        // check_presentable_targetが要求する format)と同じ Rgba8UnormSrgb。
         format: wgpu::TextureFormat::Rgba8UnormSrgb,
-        // COPY_SRC: anyrender_velloは登録textureをcopyで取り込む。無いとsubmit全体が検証エラーで落ちる。
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT
             | wgpu::TextureUsages::TEXTURE_BINDING
             | wgpu::TextureUsages::COPY_SRC,
-        // finalize_into は composite を通すため同じメモリを Rgba8Unorm として見直す。
         view_formats: &[wgpu::TextureFormat::Rgba8Unorm],
     })
 }
@@ -345,9 +322,6 @@ impl Widget for StageWidget {
                 let (cx, cy) = self.fit.to_comp(p.element.x as f64, p.element.y as f64);
                 if let Some(layer) = self.selection.get() {
                     if let Some(geom) = self.selection_geom(layer) {
-                        // 見えている位置(回転済み)で掴めるように、どのハンドルかの判定だけ
-                        // box_と同じ未回転(local)座標系で行う——カーソルをposition中心に逆回転。
-                        // ドラッグ開始後の計算(grab/cur)は従来どおり生comp座標のまま。
                         let (lx, ly) = rotate_around(geom.position, -geom.rotation, (cx, cy));
                         let (bx, by, bw, bh) = geom.box_;
                         let (x0, y0, x1, y1) = (bx, by, bx + bw, by + bh);
@@ -392,8 +366,6 @@ impl Widget for StageWidget {
                         }
                     }
                 }
-                // ハンドルに当たらなかった——キャンバス上の層を直接拾う。手前(order大)が勝つ。
-                // 何も当たらなければ選択はそのまま(Timelineの空白クリックと同じ文法)。
                 let State::Active(active) = &self.state else { return };
                 let doc = self.doc.lock().unwrap();
                 let view = doc.view();
@@ -555,14 +527,11 @@ impl Widget for StageWidget {
         let t_sec = self.clock.now_sec();
         let rt = RationalTime::try_new((t_sec * 3000.0) as i64, 3000).unwrap_or(RationalTime::ZERO);
 
-
         if let Err(e) = active.engine.render_frame_into(&view, rt, &target) {
             println!("PROBE room=stage verdict=render-error {e}");
             return scene;
         }
 
-        // viewを落とす前に読む。ドラッグ中の追随はtransient overlayがvalue_atへ
-        // 優先して乗るので担う — ここに専用の分岐は要らない。
         let primary_layer = self.selection.get();
         let selected_box = primary_layer
             .and_then(|layer| selection_geom_in(&active.engine, &view, layer, rt))
@@ -589,8 +558,6 @@ impl Widget for StageWidget {
         let s = (w / cw).min(h / ch);
         let (fw, fh) = (cw * s, ch * s);
         let (fx, fy) = ((w - fw) * 0.5, (h - fh) * 0.5);
-        // brush空間はtexture画素のまま — fit矩形へは brush_transform で写す。
-        // 矩形だけ縮めるとcompを等倍で覗く穴になる。
         scene.fill(
             Fill::NonZero,
             Affine::IDENTITY,
@@ -599,11 +566,9 @@ impl Widget for StageWidget {
             &Rect::from_origin_size((fx, fy), (fw, fh)),
         );
 
-        // handle_eventはelement座標(論理px)で来るので、逆変換もその単位で揃える。
         let k = if scale > 0.0 { scale } else { 1.0 };
         self.fit = Fit { s: s / k, fx: fx / k, fy: fy / k };
 
-        // 主選択以外の枠 — ハンドルもギズモも無い、細い縁だけ。
         for (bx, by, bw, bh) in &secondary_boxes {
             let (x0, y0) = (fx + bx * s, fy + by * s);
             let (x1, y1) = (fx + (bx + bw) * s, fy + (by + bh) * s);
@@ -622,8 +587,6 @@ impl Widget for StageWidget {
         if let Some(((bx, by, bw, bh), position, rotation)) = selected_box {
             let (x0, y0) = (fx + bx * s, fy + by * s);
             let (x1, y1) = (fx + (bx + bw) * s, fy + (by + bh) * s);
-            // 回転はcomp/display両方でposition中心・同じ角度(等方scaleなので角度は不変)。
-            // 枠の絵と当たり判定はともにpaint/PointerDownでこの中心を使う。
             let pivot = (fx + position.0 * s, fy + position.1 * s);
             let rot = Affine::translate(pivot)
                 * Affine::rotate(rotation.to_radians())

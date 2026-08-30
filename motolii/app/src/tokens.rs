@@ -1,5 +1,3 @@
-//! 意味トークンの正本。CSS(:root生成)とcustom paint(直参照)の両方がここを読む。
-//! 値の出所: next/reference/mocks/ui-scale-and-z.html(候補B)+ browser-library.css。
 
 use std::sync::atomic::{AtomicU32, Ordering};
 
@@ -37,7 +35,6 @@ pub fn hex(c: [u8; 3]) -> String {
     format!("#{:02x}{:02x}{:02x}", c[0], c[1], c[2])
 }
 
-/// UIスケール(%)。chromeは:rootの--s、canvasはpaint毎のfactor()で同じ値を読む。
 pub struct UiScale(AtomicU32);
 
 impl UiScale {
@@ -58,7 +55,6 @@ impl UiScale {
     }
 }
 
-/// 全寸法・全色を--sと意味変数で導出するための:root。styles.cssは変数参照のみを持つ。
 pub fn css_root(percent: u32) -> String {
     format!(
         ":root{{\

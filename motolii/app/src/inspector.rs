@@ -9,10 +9,8 @@ use motolii_store::{
     PropertyId, RationalTime, Value,
 };
 
-/// 全幅を横断するドラッグ距離。300pxは手首を大きく振らずに掃ける実用値。
 const RANGE_SPAN_PX: f64 = 300.0;
 
-/// 1pxあたりの値の増分。宣言済みrangeがあれば全幅/300pxへ正規化(Transform行はNoneのまま既存表)。
 fn increment(property: &str, range: Option<(f64, f64)>) -> f64 {
     if let Some((min, max)) = range {
         return (max - min) / RANGE_SPAN_PX;
@@ -25,7 +23,6 @@ fn increment(property: &str, range: Option<(f64, f64)>) -> f64 {
     }
 }
 
-/// axisの成分を`delta`だけ動かした新しい値。vec2でない行はaxisを無視する。rangeがあればclamp。
 fn nudge(value: &Value, vec2: bool, axis: usize, delta: f64, range: Option<(f64, f64)>) -> Value {
     match (vec2, value) {
         (true, Value::Vec2([x, y])) => {
@@ -44,7 +41,6 @@ fn nudge(value: &Value, vec2: bool, axis: usize, delta: f64, range: Option<(f64,
     }
 }
 
-/// 値セルの横drag。押した瞬間の値・位置だけ覚え、離した位置との差でSetTrackを1回書く。
 #[derive(Clone)]
 struct ValueDrag {
     layer: LayerId,
@@ -57,7 +53,6 @@ struct ValueDrag {
     last_dx: f64,
 }
 
-/// `SetTrack`本体。trackが無ければ`at_zero`(静的値)、あれば`t`(playhead)へ書く。
 fn write_key(
     doc: &Arc<Mutex<Document>>,
     layer: LayerId,
@@ -78,7 +73,6 @@ fn write_key(
     doc.apply(Intent::SetTrack { layer, property: prop, track })
 }
 
-/// 離された瞬間に1回だけ呼ぶこと — `apply`が1発なので1ドラッグ=1 undo になる。
 fn commit_drag(doc: &Arc<Mutex<Document>>, d: &ValueDrag, t: RationalTime) {
     if let Ok(prop) = PropertyId::new(&d.property) {
         doc.lock().unwrap().clear_transient(d.layer, &prop);
@@ -92,8 +86,6 @@ fn commit_drag(doc: &Arc<Mutex<Document>>, d: &ValueDrag, t: RationalTime) {
     }
 }
 
-/// text-layerのcontentだけを差し替える。トラック無し(新規)なら`RationalTime::ZERO`、
-/// あればplayheadの`t`(数値スクラブと同じ書き先の法、`write_key`と対称)。
 fn write_content(
     doc: &Arc<Mutex<Document>>,
     layer: LayerId,
@@ -125,7 +117,6 @@ fn prop_row(
         } else {
             "v"
         };
-        // 欄が自分のpropertyを持つならそれへ単独で書く。持たない欄はvec2/スカラの既定へ。
         let target = match &p.axis[i] {
             Some((property, value)) => Some((property.clone(), value.clone(), false)),
             None if !c.is_empty() && (if p.vec2 { i < 2 } else { i == 2 }) => p
@@ -183,8 +174,6 @@ fn prop_row(
     )
 }
 
-/// 下書き文字列が`editing: Signal`に居るのは、transient overlayが持てるのが
-/// `motolii_eval::Value`だけだから。
 fn content_row(
     p: &PropRow,
     layer: LayerId,
@@ -289,7 +278,6 @@ pub fn inspector_panel(
         div {
             id: "inspector",
             onmousemove: move |evt| {
-                // パネルの外で離したmouseupはここに来ない。
                 if evt.data().held_buttons().is_empty() {
                     if let Some(d) = drag.write().take() {
                         commit_drag(&doc_move, &d, t);

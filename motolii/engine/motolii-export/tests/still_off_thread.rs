@@ -1,13 +1,3 @@
-//! 回帰試験(`export_still_now` の UI スレッド固まり——`app/motolii/src/main.rs`
-//! `start_still_export` の doc 参照)。この試験は makepad の event loop を持たないので
-//! 実窓の相互待ち(Stage 描画と export の GPU 待ちの奪い合い)そのものは再現できない
-//! ——それは `--hot --remote` の実窓でしか確かめられない(呼び出し元の doc 参照)。
-//!
-//! ここで機械的に縛れるのはこれだけ: **`export_still` を呼んだスレッドは有限時間で
-//! 戻る**。`device.poll(wait_indefinitely())` の中身が壊れて本当に無限待ちへ戻ったら、
-//! この試験は(壁時計 timeout で)固まる代わりに落ちる。合わせて、`report.out_path` に
-//! 実物の PNG が書かれることも確認する——静止画書き出しが実測で一度も
-//! 確認されていなかった穴(呼び出し元 commit 参照)を埋める。
 use motolii_engine::Engine;
 use motolii_export::export_still;
 use motolii_store::{Composition, Document, Fps, Intent};
@@ -30,10 +20,6 @@ fn doc_with_comp() -> Document {
     doc
 }
 
-/// `start_still_export`(main.rs)が worker thread の中で組む形をそのまま写す:
-/// **自分専用の `Engine::new()`**——UI スレッドの Stage 描画が使う Engine とは
-/// 別インスタンス。ここでは呼び出し元スレッド自体が「UI スレッドに見立てた側」で、
-/// 別スレッドで export を回して timeout つきで受け取る。
 #[test]
 fn export_still_returns_within_timeout_and_writes_a_real_png() {
     let doc = doc_with_comp();

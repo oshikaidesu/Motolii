@@ -6,8 +6,6 @@ use motolii_core::{Fps, FrameDesc, PixelFormat};
 
 use crate::{read_child_stderr, MediaError, Result};
 
-/// RGBAフレーム列をffmpegサイドカーへパイプしてmp4(H.264)に書き出すエンコーダ。
-/// 書き出しループ(motolii-export)とテストの土台。
 pub struct Encoder {
     child: Child,
     stdin: Option<ChildStdin>,
@@ -15,13 +13,10 @@ pub struct Encoder {
 }
 
 impl Encoder {
-    /// 出力先とフレーム仕様を指定してエンコーダを開く。
-    /// `qp0`はほぼロスレス(検証・テスト用)。通常書き出しはfalse(crf 18)。
     pub fn open(out_path: impl AsRef<Path>, desc: &FrameDesc, fps: Fps, qp0: bool) -> Result<Self> {
         Self::open_with_command("ffmpeg", out_path, desc, fps, qp0)
     }
 
-    /// 実行ファイルパスを明示してエンコーダを開く(テスト用)。
     #[doc(hidden)]
     pub fn open_with_command(
         program: impl AsRef<Path>,
@@ -39,14 +34,10 @@ impl Encoder {
             .args(["-r", &format!("{}/{}", fps.num(), fps.den())])
             .args(["-i", "-", "-c:v", "libx264"]);
         if qp0 {
-            // 4:4:4 + qp0でクロマ劣化も抑える(ゴールデンテスト用)
             cmd.args(["-qp", "0", "-pix_fmt", "yuv444p"]);
         } else {
             cmd.args(["-crf", "18", "-pix_fmt", "yuv420p"]);
         }
-        // 出力の色タグを明示する(レビュー指摘#5): タグ無しRGB由来のmp4は
-        // プレイヤーごとに解釈が割れ「書き出したら色が違う」を生む。
-        // v1はBT.709 limited固定。RGB→YUVの変換行列自体もbt709を強制する。
         cmd.args([
             "-vf",
             "scale=out_color_matrix=bt709:out_range=tv",
@@ -89,7 +80,6 @@ impl Encoder {
         Ok(())
     }
 
-    /// stdinを閉じてffmpegの完了を待つ。必ず呼ぶこと(Dropは強制終了する)。
     pub fn finish(mut self) -> Result<()> {
         drop(self.stdin.take());
         let mut err = String::new();
@@ -181,7 +171,6 @@ mod tests {
         ));
         std::fs::create_dir_all(&dir).unwrap();
         let _cleanup = RemoveDirOnDrop(dir.clone());
-        // 実行直前に作ったファイルはLinux runnerでETXTBSYになり得るため固定fixtureを使う。
         let fake_ffmpeg = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("tests/fixtures/fake_ffmpeg_stderr_flood.sh");
         let fixture_metadata = std::fs::metadata(&fake_ffmpeg)

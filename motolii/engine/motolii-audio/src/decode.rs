@@ -1,11 +1,3 @@
-//! Symphonia decode → `PcmCache`(D4契約: 楽曲1本をインポート時に全展開)。
-//!
-//! 旧 `crates/motolii-audio/src/decode.rs` からの移植。**読み替えた箇所**: 旧版は
-//! `motolii_doc::ResourceLimits`(Document 全体の資源上限台帳)から `max_samples` を
-//! 注入していたが、`next/` にはその台帳が無い(store は Document の意味だけを持ち、
-//! decode 側の資源上限は engine 層の関心事)。ここでは decode 境界だけが要る
-//! `max_samples` 相当の定数をこの crate が自分で持つ(旧台帳の値をそのまま採用—
-//! 4時間 @48kHz)。台帳ごと持ってくると、この束が要らない他の限度まで抱え込む。
 
 use std::fs::File;
 use std::path::Path;
@@ -21,20 +13,12 @@ use symphonia::core::meta::MetadataOptions;
 use crate::cache::{PcmCache, PcmFormat};
 use crate::error::{AudioError, Result};
 
-/// decode1本あたりのサンプル数上限(D4)。旧 `ResourceLimits::production().max_samples`
-/// と同じ値(48kHz 4時間分)。
 pub const MAX_SAMPLES: u64 = 48_000 * 60 * 60 * 4;
 
-/// パスから楽曲1本をデコードし、インターリーブf32 PCM全展開キャッシュを作る。
-///
-/// コンテナ判定はSymphoniaのprobe(拡張子ヒント+マジックバイト)に委ねる。
-/// 複数音声トラックを含むファイルではデフォルトトラック1本のみを読む
-/// (`decode_file_audio_ordinal`でordinal指定)。
 pub fn decode_file(path: impl AsRef<Path>) -> Result<PcmCache> {
     decode_file_audio_ordinal(path, 0)
 }
 
-/// kind内audio ordinalを指定してデコードする(AG-2)。欠落は`StreamNotFound`。
 pub fn decode_file_audio_ordinal(path: impl AsRef<Path>, ordinal: u32) -> Result<PcmCache> {
     let path = path.as_ref();
     let file = File::open(path)?;
@@ -48,8 +32,6 @@ pub fn decode_file_audio_ordinal(path: impl AsRef<Path>, ordinal: u32) -> Result
     decode_stream_audio_ordinal(mss, &hint, ordinal)
 }
 
-/// `MediaSourceStream`から直接デコードする(テスト用: メモリ上のバイト列を
-/// ファイルに書かず直接渡せる)。
 pub fn decode_stream(mss: MediaSourceStream<'static>, hint: &Hint) -> Result<PcmCache> {
     decode_stream_audio_ordinal(mss, hint, 0)
 }

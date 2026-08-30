@@ -1,9 +1,3 @@
-//! Lottie の property/track 焼き込み — `scalar_property`/`vector_property`/
-//! `bezier_property`(出処の解決)・`bake_property`(link のサンプル焼き)・
-//! `encode_*_track`(キーフレーム列の JSON 化)・mask/marker/slot の JSON 化。
-//! `next/engine/motolii-export/src/lottie.rs` から移送(SP-7、2026-08-23、
-//! 中身は変えていない——移送のみ)。呼び手は `super`(`build_layer`/
-//! `export_lottie`)と `super::text`(`build_text_data`)。
 
 use motolii_core::RationalTime;
 use motolii_store::{
@@ -14,12 +8,6 @@ use motolii_store::{
 use super::enums::mask_mode_to_str;
 use super::{report_out_of_range, Ctx, LottieExportError, UnsupportedForLottie};
 
-/// property の出処(Track/Slot/Link)を Lottie の scalar-property JSON へ。
-/// `scale` は Lottie の慣習(opacity/scale は 0..100)への換算係数。`bounds` は
-/// **スケール後の単位**での Lottie 有効域(`Some` の property だけ検査する
-/// ——opacity 系のみ、rotation/skew/expansion 等は無制限)、外れたら
-/// [`report_out_of_range`] が `unsupported` へ積む(値はそのまま書く、
-/// 裁定213/`slot.rs` doc「範囲外に出た時」参照)。
 pub(crate) fn scalar_property(
     ctx: &Ctx<'_, '_>,
     layer: LayerId,
@@ -53,9 +41,6 @@ pub(crate) fn vector_property(
     }
 }
 
-/// mask/`p`(shape)専用。位置に spatial tangent(`ti`/`to`)が乗る唯一の property なので
-/// [`vector_property`] とは分けてある——実際には position のみが該当するが、mask 形状は
-/// bezier 専用口([`bezier_property`])を使うのでここは position 用の分岐そのまま。
 fn scalar_property_percent0_100(
     ctx: &Ctx<'_, '_>,
     layer: LayerId,
@@ -63,7 +48,6 @@ fn scalar_property_percent0_100(
     default: f64,
     unsupported: &mut Vec<UnsupportedForLottie>,
 ) -> Result<serde_json::Value, LottieExportError> {
-    // mask opacity も layer opacity と同じ有効域 0..100(% 換算後)。
     scalar_property(ctx, layer, name, 100.0, default, Some((0.0, 100.0)), unsupported)
 }
 
@@ -86,8 +70,6 @@ enum Resolved {
     Track(motolii_store::KeyframeTrack),
 }
 
-/// property の出処を読み、`Link` はその場で**焼く**(裁定206 の実地検証、モジュール
-/// doc 参照)。`Track`/`Slot` は素通し。
 fn resolve(
     ctx: &Ctx<'_, '_>,
     layer: LayerId,
@@ -97,9 +79,6 @@ fn resolve(
     let property = PropertyId::new(name)?;
     match ctx.view.property_source(layer, &property)? {
         None => Ok(Resolved::None),
-        // modulator が無ければ今までどおり base を素通しする(裁定213で
-        // `PropertySource` が enum から base+modulators の struct へ変わっただけで、
-        // base 無し・modulator 無しの組み合わせは元々作れない=旧 `None` 相当)。
         Some(PropertySource {
             base,
             modulators,
@@ -108,10 +87,6 @@ fn resolve(
             Some(PropertyBase::Track(track)) => Ok(Resolved::Track(track)),
             Some(PropertyBase::Slot(SlotId(id))) => Ok(Resolved::SlotRef(id)),
         },
-        // modulator が1本でもあれば(旧 `Link` 相当の base無し1本も、base+modulator
-        // の和も)その場で**焼く**(裁定206 の実地検証、モジュール doc 参照) ——
-        // 焼く経路は `StoreView::value_at` を直接サンプルするので、base の有無や
-        // modulator の本数を問わず同じ1本の経路で正しい。
         Some(_) => {
             let baked = bake_property(ctx, layer, &property)?;
             let _ = unsupported; // link は焼けるので unsupported に積まない(裁定206)
@@ -120,11 +95,6 @@ fn resolve(
     }
 }
 
-/// **link を焼く**——`StoreView::value_at`(link/slot 解決込みの評価器そのもの)を
-/// フレーム単位でサンプルし、値が変わった時だけ Hold キーフレームを打つ普通の
-/// `KeyframeTrack` を組み立てる。焼いた後は [`encode_scalar_track`] 等、Track と
-/// 全く同じ経路を通る——「焼けば KeyframeTrack と区別がつかない」という裁定206 の
-/// 主張をコードで実演する関数。
 pub(crate) fn bake_property(
     ctx: &Ctx<'_, '_>,
     layer: LayerId,
@@ -148,8 +118,6 @@ pub(crate) fn bake_property(
         }
     }
     if track.keys().is_empty() {
-        // 一度も値が取れなかった(link 先が終始無値) — 0.0 を1本だけ持たせて、
-        // 呼び手側の encode_* が空トラックの特別扱いを要らないようにする。
         track.insert(Keyframe {
             t: RationalTime::ZERO,
             value: Value::F64(0.0),
@@ -164,10 +132,6 @@ fn time_to_frame(ctx: &Ctx<'_, '_>, t: RationalTime) -> Result<f64, LottieExport
     Ok(t.try_to_frame_round(ctx.fps)? as f64)
 }
 
-/// `None` = Lottie の離散キー(`h:1`)。`Some` = `o`/`i` の接線対。
-///
-/// `Bounce` / `Elastic` / `Steps` はここで **失敗する** — 理由は
-/// [`LottieExportError::UnrepresentableEasing`] に書いてある(黙って近似しない)。
 fn interp_easing(
     interp: motolii_store::Interp,
 ) -> Result<Option<(serde_json::Value, serde_json::Value)>, LottieExportError> {
@@ -188,10 +152,6 @@ fn interp_easing(
     })
 }
 
-/// `bounds`(スケール後の単位)が `Some` なら、書く各値をその場で検査し、
-/// 外れていれば [`report_out_of_range`] へ積む(値そのものは clamp せず
-/// そのまま書く——`slot.rs` doc「範囲外に出た時」参照)。`layer` は
-/// `UnsupportedForLottie::layer`(comp 単位の呼び手 = slot は `None`)。
 pub(crate) fn encode_scalar_track(
     ctx: &Ctx<'_, '_>,
     layer: Option<LayerId>,
@@ -333,10 +293,6 @@ fn bezier_to_json(path: &BezierPath) -> serde_json::Value {
     serde_json::json!({ "c": path.closed, "v": v, "i": i, "o": o })
 }
 
-// ---------------------------------------------------------------------------
-// masks
-// ---------------------------------------------------------------------------
-
 pub(crate) fn build_masks(
     ctx: &Ctx<'_, '_>,
     layer: LayerId,
@@ -368,10 +324,6 @@ fn build_mask(
     }))
 }
 
-// ---------------------------------------------------------------------------
-// markers / slots
-// ---------------------------------------------------------------------------
-
 pub(crate) fn build_markers(ctx: &Ctx<'_, '_>) -> Result<Vec<serde_json::Value>, LottieExportError> {
     let mut out = Vec::new();
     for marker in ctx.view.markers()? {
@@ -388,10 +340,6 @@ fn marker_to_json(ctx: &Ctx<'_, '_>, marker: &Marker) -> Result<serde_json::Valu
     }))
 }
 
-/// comp の Slots 表。値の型が「静止/線形補間で意味を持つ」もの(F64/Vec2/Color/Path)
-/// だけを書く——Bool/Enum/LayerId 値のスロットは Lottie のスロット型に対応する
-/// 語彙が無い(スロットは property の**値**をそのまま差し替えるだけなので、値の型が
-/// Lottie property として書けない場合はスロット自体も書けない)。
 pub(crate) fn build_slots(
     ctx: &Ctx<'_, '_>,
     unsupported: &mut Vec<UnsupportedForLottie>,
@@ -435,9 +383,6 @@ fn slot_property_value(
     }
 }
 
-/// 色成分(r/g/b)は Lottie/`motolii_eval::Value::Color` とも「各成分
-/// 0.0–1.0」が有効域(`value.rs` の型 doc)——加算 modulator の和がそこを外れたら
-/// [`report_out_of_range`] へ積む(値はそのまま clamp せず書く)。
 fn encode_color_track(
     ctx: &Ctx<'_, '_>,
     layer: Option<LayerId>,

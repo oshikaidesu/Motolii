@@ -1,14 +1,9 @@
-//! AG-2: 内部mixの正準形式(48,000 Hz / stereo / interleaved f32)への変換。
-//!
-//! 旧 `crates/motolii-audio/src/convert.rs` から無改造で移植。
 
 use crate::cache::{PcmCache, PcmFormat};
 use crate::error::{AudioError, Result};
 use crate::resample::FixedRatioResampler;
 
-/// 内部mixの正準サンプルレート。
 pub const CANONICAL_SAMPLE_RATE: u32 = 48_000;
-/// 内部mixの正準チャンネル数(stereo)。
 pub const CANONICAL_CHANNELS: u16 = 2;
 
 pub fn canonical_format() -> PcmFormat {
@@ -18,11 +13,6 @@ pub fn canonical_format() -> PcmFormat {
     }
 }
 
-/// タイムライン時刻を正準(48kHz)サンプルフレーム数へ(旧
-/// `crates/motolii-audio/src/producer.rs::rational_to_canonical_frames` の移植)。
-/// A2 の `producer`/`session` モジュールが「動画フレーム(comp fps)ではなく
-/// 正準サンプルフレームで再生位置を持つ」契約(`mix_audio` の `start_frame` と
-/// 同じ単位)へ変換するのに使う。負の時刻は0(M16: panicしない、`saturating`側)。
 pub fn time_to_canonical_frames(t: motolii_core::RationalTime) -> u64 {
     if t <= motolii_core::RationalTime::ZERO {
         return 0;
@@ -32,9 +22,6 @@ pub fn time_to_canonical_frames(t: motolii_core::RationalTime) -> u64 {
     ((num * u128::from(CANONICAL_SAMPLE_RATE)) / den) as u64
 }
 
-/// 任意形式のPCMを正準48k stereoへ変換する(channel-map → 必要なら固定比resample)。
-///
-/// pan未対応のため mono→stereo は L=R 複製。3ch以上は拒否。
 pub fn to_canonical(cache: &PcmCache) -> Result<PcmCache> {
     let stereo = map_channels_to_stereo(cache)?;
     if stereo.format().sample_rate == CANONICAL_SAMPLE_RATE {

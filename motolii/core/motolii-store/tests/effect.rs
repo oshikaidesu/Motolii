@@ -1,19 +1,3 @@
-//! effect 発注単位(10行) — `effects/effect ef`/`en`/`ty` + `effect-values/*` 7行。
-//!
-//! ここで固定するのは:
-//! - `ty`(Type)は plugin id 文字列であって閉じた int registry ではない(裁定70)。
-//!   first-party と third-party が同じ列に同居できる
-//! - **`en`(Enabled)は裁定213でキーフレームへ移した** — `EffectInstance` はもう
-//!   `enabled` フィールドを持たず、`PropertyId::effect_enabled` の平坦 track
-//!   (`Value::Bool`、Hold 補間)で表す。無効化しても `SetEffects` の列からは
-//!   消えない(「消す」と「一時的に切る」は別物のまま)
-//! - param(`ef`)は Document が専用フィールドで持たず、`effect.{id}.param.{name}` と
-//!   いう平坦 `PropertyId` の `KeyframeTrack` にそのまま乗る(裁定72「新機構ゼロ」)。
-//!   track の有無が「この param を触っているか」を表す(裁定20 の応用)
-//! - param の型語彙(scalar/Bool/Enum/color/Vec2/LayerId、effect-values の catalog)は
-//!   `motolii_eval::Value` の既存/新設バリアントがそのまま担う
-//! - `resolve()` は effect stack を運ぶ(裁定153 S1)。**enabled な effect だけ**が
-//!   宣言順で並び、param は時刻 t で評価済み。disabled/track の無い param は現れない
 
 use motolii_store::{
     Composition, Document, EffectId, EffectInstance, Fps, Interp, Intent, Keyframe,
@@ -65,12 +49,6 @@ fn doc_with_layer() -> (Document, LayerId) {
     (doc, layer)
 }
 
-// ---------------------------------------------------------------------------
-// ty (Type) — plugin id 文字列
-// ---------------------------------------------------------------------------
-
-/// **`ty` は plugin id 文字列**(裁定70)であって閉じた int registry ではない —
-/// first-party / third-party が同じ列に同居できることの最小固定(D6)。
 #[test]
 fn effect_type_is_a_plugin_id_string_shared_by_first_and_third_party() {
     let (mut doc, layer) = doc_with_layer();
@@ -96,13 +74,6 @@ fn effect_type_is_a_plugin_id_string_shared_by_first_and_third_party() {
     );
 }
 
-// ---------------------------------------------------------------------------
-// en (Enabled) — 裁定213: キーフレーム可能な track へ。消さずに切る
-// ---------------------------------------------------------------------------
-
-/// **`en` は消さずに切る。** 無効化(= `effect.{id}.enabled` の track に
-/// `Value::Bool(false)` を書く)しても `SetEffects` の列からは消えない ——
-/// 列から取り除く(削除)とは別の操作、という既存の意図(裁定213 でも変えない)。
 #[test]
 fn disabling_an_effect_keeps_it_in_the_list() {
     let (mut doc, layer) = doc_with_layer();
@@ -132,8 +103,6 @@ fn disabling_an_effect_keeps_it_in_the_list() {
     );
 }
 
-/// **キーを打っていない = 既定で有効**(`mask_opacity` の「既定 1.0」と同じ判断) —
-/// effect を追加した直後は何もしなくても効いているはず、という利用者の直感。
 #[test]
 fn an_effect_with_no_enabled_track_defaults_to_enabled() {
     let (mut doc, layer) = doc_with_layer();
@@ -153,9 +122,6 @@ fn an_effect_with_no_enabled_track_defaults_to_enabled() {
     );
 }
 
-/// **`Value::Bool` の Hold 補間がそのまま on/off の意味になる** — 裁定213 の
-/// 核心。1本の track に複数キーを打てば、comp 時刻によって effect が
-/// 途中で切れたり戻ったりする(「一時的に切る」がキーフレーム可能になった)。
 #[test]
 fn enabling_and_disabling_can_be_keyframed_across_time() {
     let (mut doc, layer) = doc_with_layer();
@@ -206,13 +172,6 @@ fn enabling_and_disabling_can_be_keyframed_across_time() {
     );
 }
 
-// ---------------------------------------------------------------------------
-// ef (Effect Values) — param は平坦 PropertyId の KeyframeTrack
-// ---------------------------------------------------------------------------
-
-/// param は**専用フィールドを持たない** — track が無ければ、その param には
-/// 単に触っていない(裁定20 の応用)。`PropertyId` の構築自体は effect の存在を検査しない
-/// (`SetTrack` を投げる時点で store が普通に検証する、mask/text-range と同じ形)。
 #[test]
 fn a_param_with_no_track_is_simply_absent() {
     let (doc, layer) = doc_with_layer();
@@ -221,8 +180,6 @@ fn a_param_with_no_track_is_simply_absent() {
     assert_eq!(doc.view().value_at(layer, &radius, t(0)).unwrap(), None);
 }
 
-/// スライダー/角度パラメータ(effect-values/slider, effect-values/angle)は
-/// **F64 スカラー**。既存の scalar track とまったく同じ経路(新機構ゼロ、裁定72)。
 #[test]
 fn slider_and_angle_params_are_plain_scalar_tracks() {
     let (mut doc, layer) = doc_with_layer();
@@ -262,8 +219,6 @@ fn slider_and_angle_params_are_plain_scalar_tracks() {
     );
 }
 
-/// checkbox param(effect-values/checkbox)は **`Value::Bool`**。int-boolean を
-/// そのまま持たない(裁定78/96 と同じ理由をここでも守る — 旧 ValueType に無かった穴)。
 #[test]
 fn checkbox_param_is_bool_not_int_boolean() {
     let (mut doc, layer) = doc_with_layer();
@@ -290,7 +245,6 @@ fn checkbox_param_is_bool_not_int_boolean() {
     );
 }
 
-/// color param(effect-values/color)は `Value::Color`(M2E-13 と同じ RGBA straight-alpha)。
 #[test]
 fn color_param_round_trips() {
     let (mut doc, layer) = doc_with_layer();
@@ -317,7 +271,6 @@ fn color_param_round_trips() {
     );
 }
 
-/// point param(effect-values/point)は `Value::Vec2`。
 #[test]
 fn point_param_round_trips() {
     let (mut doc, layer) = doc_with_layer();
@@ -344,9 +297,6 @@ fn point_param_round_trips() {
     );
 }
 
-/// drop-down param(effect-values/drop-down)は `Value::Enum` — plugin が定義する
-/// 選択肢表への index。**中間状態は無意味なので Hold**(0.5 番目の選択肢は存在しない、
-/// `motolii_eval::Value` 側で保証済み — ここでは store 経路を通しても崩れないことを見る)。
 #[test]
 fn drop_down_param_is_an_enum_index_and_holds_between_keys() {
     let (mut doc, layer) = doc_with_layer();
@@ -392,8 +342,6 @@ fn drop_down_param_is_an_enum_index_and_holds_between_keys() {
     );
 }
 
-/// layer param(effect-values/layer)は **`Value::LayerId`** — Lottie の `ind`
-/// (挿入削除で崩れる index)ではなく安定 id を参照する(裁定65)。
 #[test]
 fn layer_param_references_a_stable_layer_id_not_an_index() {
     let (mut doc, layer) = doc_with_layer();
@@ -421,11 +369,6 @@ fn layer_param_references_a_stable_layer_id_not_an_index() {
     );
 }
 
-// ---------------------------------------------------------------------------
-// 横断: property 一覧・保存/読込・同一性検査
-// ---------------------------------------------------------------------------
-
-/// property 一覧は**store に聞く**(裁定57)。effect の param track もそこに並ぶ。
 #[test]
 fn effect_param_tracks_appear_in_the_property_list() {
     let (mut doc, layer) = doc_with_layer();
@@ -458,8 +401,6 @@ fn effect_param_tracks_appear_in_the_property_list() {
     );
 }
 
-/// **保存/読込を経ても effect の列(id・plugin id)と enabled track・param track が
-/// 全部残る**(裁定56 が畳む履歴の中で、新設フィールドが黙って消えないことの固定)。
 #[test]
 fn effects_and_their_tracks_survive_a_save_and_load_round_trip() {
     let (mut doc, layer) = doc_with_layer();
@@ -506,8 +447,6 @@ fn effects_and_their_tracks_survive_a_save_and_load_round_trip() {
     );
 }
 
-/// 同じ id の effect が2枚あると param track の持ち主が決まらない
-/// (mask と同型の検査。`enabled` が track へ移っても id の検査は変わらない)。
 #[test]
 fn duplicate_effect_ids_are_still_rejected() {
     let (mut doc, layer) = doc_with_layer();
@@ -527,13 +466,6 @@ fn duplicate_effect_ids_are_still_rejected() {
     assert!(result.is_err(), "同じ id の effect が2枚置けてしまっている");
 }
 
-// ---------------------------------------------------------------------------
-// resolve() が effect stack を運ぶ(裁定153 S1)
-// ---------------------------------------------------------------------------
-
-/// **effect を積んだ layer の resolve 結果に評価済み effect 列が現れる。**
-/// `resolve()` が `effects()`/param track を一度も読まなかった旧状態
-/// (2026-08-21 縫い目調査)の直接の固定。
 #[test]
 fn resolve_carries_the_enabled_effect_stack_with_evaluated_params() {
     let (mut doc, layer) = doc_with_layer();
@@ -568,9 +500,6 @@ fn resolve_carries_the_enabled_effect_stack_with_evaluated_params() {
     );
 }
 
-/// **disabled は現れない。** 列から消えていない(`en` は「消さずに切る」)ことは
-/// `effects()` 側で既に固定済みだが、resolve() の出力側は disabled をそもそも運ばない
-/// — hidden な layer が `resolve()` の外へ落ちるのと同じ形。
 #[test]
 fn resolve_does_not_carry_disabled_effects() {
     let (mut doc, layer) = doc_with_layer();
@@ -605,9 +534,6 @@ fn resolve_does_not_carry_disabled_effects() {
     assert_eq!(resolved.effects[0].plugin_id, "motolii.drop-shadow");
 }
 
-/// **param のキーフレームが時刻で効く。** 平坦 track の既存評価経路
-/// (`StoreView::value_at`)をそのまま再利用していることの固定 — 新しい評価器を
-/// 書いていれば補間の挙動がここでずれる。
 #[test]
 fn resolved_effect_params_interpolate_with_time() {
     let (mut doc, layer) = doc_with_layer();
@@ -657,8 +583,6 @@ fn resolved_effect_params_interpolate_with_time() {
     );
 }
 
-/// track の無い param は effect が有効でも運ばれない — store は plugin の param
-/// カタログを知らない(裁定70)ので、既定値を埋めるのは呼び手の役目。
 #[test]
 fn resolved_effect_omits_params_with_no_track() {
     let (mut doc, layer) = doc_with_layer();
@@ -680,7 +604,6 @@ fn resolved_effect_omits_params_with_no_track() {
     );
 }
 
-/// effect を持たない layer は空スタック。
 #[test]
 fn resolve_yields_an_empty_effect_stack_when_none_are_set() {
     let (doc, layer) = doc_with_layer();

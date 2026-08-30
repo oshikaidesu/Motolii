@@ -1,7 +1,3 @@
-//! run が複数に割れた時、accumulator の板が z を持つ層を上塗りしないこと。
-//!
-//! 上流は矩形をカメラからの距離で並べる。板を z=0 に置くと、光軸から離れた層は
-//! z が小さくても距離では板より遠くなり、板に消される。
 
 use motolii_compositor::{
     BlendMode, CompSpec, Compositor, HeadlessGpu, Layer, LayerPlacement, ResolvedCamera,
@@ -28,7 +24,6 @@ fn a_layer_with_depth_survives_the_accumulator_across_runs() {
         .upload_rgba("white", &vec![255u8; (200 * 120 * 4) as usize], 200, 120)
         .expect("white");
 
-    // 左上の隅(光軸から遠い)へ置く。ここが板との距離比べで負ける場所。
     let place = |tex: motolii_compositor::GpuTexture2D, order: i16, z: f32, blend| Layer {
         texture: tex,
         size: [200.0, 120.0],
@@ -47,7 +42,6 @@ fn a_layer_with_depth_survives_the_accumulator_across_runs() {
     };
 
     let white_pixels = |c: &mut Compositor, z: f32| {
-        // Multiply を挟んで run を割る(accumulator が実際に敷かれる状況を作る)。
         let layers = vec![
             place(grey.clone(), 0, 0.0, BlendMode::Normal),
             place(grey.clone(), 1, 0.0, BlendMode::Multiply),

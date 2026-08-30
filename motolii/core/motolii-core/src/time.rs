@@ -1,18 +1,8 @@
-//! 時刻→フレーム/シーク秒文字列の正準口(TM-4 / Issue #48)。
-//!
-//! クレート外で時刻をフレーム添字へ変換する場合は **`try_to_frame_floor` /
-//! `try_to_frame_round` のみ**を使う。ffmpeg `-ss` 用の秒文字列は
-//! **`format_ffmpeg_seek_before_frame` のみ**。f64×fps の独自丸めは禁止。
 
 use std::cmp::Ordering;
 
 use serde::{Deserialize, Deserializer, Serialize};
 
-/// 有理数タイムスタンプ。秒 = num/den。
-///
-/// 浮動小数の秒を使うとフレーム境界の丸めが蓄積してドリフトする(落とし穴B-1)ため、
-/// タイムライン上の時刻・長さは常にこの型で扱う。常に正規化(den > 0、既約)して保持する。
-/// 演算は`try_add`等のResult経路のみ(公開APIは入力起因でpanicしない — M2E-16)。
 #[derive(Debug, Clone, Copy, Serialize)]
 pub struct RationalTime {
     num: i64,
@@ -46,7 +36,6 @@ impl<'de> Deserialize<'de> for RationalTime {
 impl RationalTime {
     pub const ZERO: RationalTime = RationalTime { num: 0, den: 1 };
 
-    /// M2E-16: den==0拒否・符号正規化・既約化・0/x→0/1・オーバーフローはErr。
     pub fn try_new(num: i64, den: i64) -> Result<Self, RationalTimeError> {
         Self::try_reduce(num as i128, den as i128)
     }
@@ -63,17 +52,10 @@ impl RationalTime {
         self.den
     }
 
-    /// 表示・デバッグ用途のみ。比較や演算にはf64を使わないこと。
     pub fn as_seconds_f64(self) -> f64 {
         self.num as f64 / self.den as f64
     }
 
-    /// フレーム番号から時刻へ(frame / fps)。
-    /// フレーム番号 → その先頭時刻。**`try_to_frame_floor` の逆**。
-    ///
-    /// 2026-08-20: `motolii-export` がこれを使わず `try_new(frame * den, num)` を
-    /// 手で書いていた。**正準口が在るのに使われない**のが実際の失敗の形なので、
-    /// 見つけたら口を足すのではなく呼び出し側を直すこと。
     pub fn try_from_frame(frame: i64, fps: Fps) -> Result<Self, RationalTimeError> {
         let num = (frame as i128)
             .checked_mul(fps.den() as i128)
@@ -81,12 +63,10 @@ impl RationalTime {
         Self::try_reduce(num, fps.num() as i128)
     }
 
-    /// 時刻が属するフレーム番号(床関数)。負の時刻でも数学的な床を返す。
     pub fn try_to_frame_floor(self, fps: Fps) -> Result<i64, RationalTimeError> {
         Ok(self.try_to_sample_index(fps)?.0)
     }
 
-    /// 時刻に最も近いフレーム番号(有理数最近傍。半端はゼロから遠ざかる)。
     pub fn try_to_frame_round(self, fps: Fps) -> Result<i64, RationalTimeError> {
         let num = (self.num as i128)
             .checked_mul(fps.num() as i128)
@@ -97,8 +77,6 @@ impl RationalTime {
         round_rational_to_i64(num, den)
     }
 
-    /// 10進秒文字列(ffprobe等)を有理数へ。入力は表示用の近似であり、
-    /// フレーム境界の判定は [`Self::try_to_frame_round`] で行う。
     pub fn try_from_decimal_str(s: &str) -> Result<Self, RationalTimeError> {
         let s = s.trim();
         if s.is_empty() {
@@ -143,19 +121,10 @@ impl RationalTime {
         Self::try_reduce(num, den_pow)
     }
 
-    /// 等間隔サンプル添字の床と区間内補間率 `u ∈ [0,1)`。
-    ///
-    /// 添字は有理数の整数除算で求め、補間率のみ f64 にする(S7)。
-    /// `seconds_f64 * rate_f64` が境界で 14.999… になる誤りを避ける。
     pub fn try_to_sample_index(self, rate: Fps) -> Result<(i64, f64), RationalTimeError> {
-        // origin=0 の特殊化: (num/den)*(rn/rd)
         self.try_to_sample_index_since(Self::ZERO, rate)
     }
 
-    /// `self - origin` を中間`RationalTime`に落とさず rate 添字を求める(S7)。
-    ///
-    /// i128 中間積が溢れる場合も因数約分+256bit乗除で床を求める。
-    /// `Err(Overflow)` は商が i64 に収まらない場合のみ(末尾クランプしてよい巨大添字)。
     pub fn try_to_sample_index_since(
         self,
         origin: Self,
@@ -167,11 +136,9 @@ impl RationalTime {
         let od = origin.den as i128;
         let rn = rate.num() as i128;
         let rd = rate.den() as i128;
-        // dens は型不変条件で正
         if td <= 0 || od <= 0 || rd <= 0 || rn <= 0 {
             return Err(RationalTimeError::ZeroDenominator);
         }
-        // (t - origin) = (tn*od - on*td)/(td*od)、続けて × rate
         let left = tn.checked_mul(od).ok_or(RationalTimeError::Overflow)?;
         let right = on.checked_mul(td).ok_or(RationalTimeError::Overflow)?;
         let rel_num = left.checked_sub(right).ok_or(RationalTimeError::Overflow)?;
@@ -188,11 +155,9 @@ impl RationalTime {
             let q = i64::try_from(q_abs).map_err(|_| RationalTimeError::Overflow)?;
             Ok((q, u))
         } else if rem == crate::wide_div::U256::ZERO {
-            // ちょうど整数 → -q
             let q = i64::try_from(q_abs).map_err(|_| RationalTimeError::Overflow)?;
             Ok((-q, 0.0))
         } else {
-            // div_euclid: floor(負非整数) = -(q+1), 分数部 = 1 - u'
             let q = i64::try_from(q_abs + 1).map_err(|_| RationalTimeError::Overflow)?;
             let frac = crate::wide_div::complement_unit_interval(u);
             debug_assert!((0.0..1.0).contains(&frac));
@@ -253,7 +218,6 @@ impl RationalTime {
         if den == 0 {
             return Err(RationalTimeError::ZeroDenominator);
         }
-        // 負の分母は符号を分子へ移す(負の時刻そのものは正当)
         let (num, den) = if den < 0 { (-num, -den) } else { (num, den) };
         if num == 0 {
             return Ok(Self::ZERO);
@@ -267,8 +231,6 @@ impl RationalTime {
     }
 }
 
-/// フレームレート(num/den フレーム毎秒)。例: 30fps = 30/1、29.97fps = 30000/1001。
-/// 正値は型の不変条件(フィールドは非公開 — M2E-16)。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
 pub struct Fps {
     num: i64,
@@ -297,7 +259,6 @@ impl<'de> Deserialize<'de> for Fps {
 }
 
 impl Fps {
-    /// 正値かつ既約。`60/2` → `30/1`(D1g / M2E-16同型)。
     pub const fn try_new(num: i64, den: i64) -> Result<Self, FpsError> {
         if num <= 0 || den <= 0 {
             return Err(FpsError::NonPositive);
@@ -317,7 +278,6 @@ impl Fps {
         self.den
     }
 
-    /// 1フレームの長さ。Fpsの正値不変条件により常に成功する。
     pub fn frame_duration(self) -> RationalTime {
         match RationalTime::try_new(self.den, self.num) {
             Ok(t) => t,
@@ -330,9 +290,6 @@ impl Fps {
     }
 }
 
-/// ffmpeg `-ss` 用: 目的フレームの半フレーム手前の秒文字列(小数6桁)。
-///
-/// `frame > 0` のみ。境界の10進丸めがフレームをまたぐのを防ぐ(TM-4)。
 pub fn format_ffmpeg_seek_before_frame(frame: i64, fps: Fps) -> Result<String, RationalTimeError> {
     if frame <= 0 {
         return Err(RationalTimeError::Overflow);
@@ -363,7 +320,6 @@ fn round_rational_to_i64(num: i128, den: i128) -> Result<i64, RationalTimeError>
     let rounded_abs = if twice_rem < den_u {
         floor
     } else {
-        // ちょうど半分もゼロから遠ざかる(f64::round 同型)
         floor.checked_add(1).ok_or(RationalTimeError::Overflow)?
     };
     let signed = if neg {
@@ -392,7 +348,6 @@ fn gcd(mut a: u128, mut b: u128) -> u128 {
 
 impl PartialEq for RationalTime {
     fn eq(&self, other: &Self) -> bool {
-        // 常に既約・den>0で保持しているためフィールド比較でよい
         self.num == other.num && self.den == other.den
     }
 }
@@ -414,7 +369,6 @@ impl PartialOrd for RationalTime {
 
 impl Ord for RationalTime {
     fn cmp(&self, other: &Self) -> Ordering {
-        // 正規化済みi64同士の交差乗算はi128に収まる
         let lhs = self.num as i128 * other.den as i128;
         let rhs = other.num as i128 * self.den as i128;
         lhs.cmp(&rhs)
@@ -481,24 +435,20 @@ mod tests {
     #[test]
     fn sample_index_fraction_is_rational_remainder() {
         let rate = fps(10, 1);
-        // 0.55秒 × 10Hz = 5.5 → index 5, u = 0.5
         let (idx, u) = rt(55, 100).try_to_sample_index(rate).unwrap();
         assert_eq!(idx, 5);
         assert!((u - 0.5).abs() < 1e-15);
     }
 
-    /// S7 follow-up: 負時刻の補間率も常に [0,1)。
     #[test]
     fn sample_index_negative_fraction_stays_in_unit_interval() {
         let rate = fps(10, 1);
-        // -0.05秒 × 10Hz = -0.5 → floor -1, frac 0.5
         let (idx, u) = rt(-5, 100).try_to_sample_index(rate).unwrap();
         assert_eq!(idx, -1);
         assert!((u - 0.5).abs() < 1e-15);
         assert!((0.0..1.0).contains(&u));
     }
 
-    /// S7: f64秒×rate だと床が1つ前に落ちる境界でも有理数添字は正しい。
     #[test]
     fn sample_index_avoids_f64_underflow_at_ntsc_frame() {
         let rate = fps(30000, 1001);
@@ -515,13 +465,11 @@ mod tests {
         assert_eq!(u, 0.0);
     }
 
-    /// S7: try_sub が溢れる極値でも交差乗算で添字が求まる(f64へ退行しない)。
     #[test]
     fn sample_index_since_survives_i64_span() {
         let start = RationalTime::from_seconds(i64::MIN);
         let t = RationalTime::from_seconds(i64::MAX);
         assert!(t.try_sub(start).is_err(), "precondition: try_sub overflows");
-        // 相対秒は i64 に収まらないが、低い rate なら添字は i64 に収まる
         let rate = fps(1, 1_000_000_000);
         let (idx, u) = t.try_to_sample_index_since(start, rate).unwrap();
         let expected = ((i64::MAX as i128 - i64::MIN as i128) / 1_000_000_000) as i64;
@@ -529,14 +477,12 @@ mod tests {
         assert!((0.0..1.0).contains(&u));
     }
 
-    /// S7: i128 中間積溢れでも先頭近傍なら index 0(レビュー反例)。
     #[test]
     fn sample_index_since_near_zero_despite_i128_overflow() {
         let d = i64::MAX;
         let t = rt(1000, d);
         let start = rt(1, d - 2);
         let rate = fps(d - 1, d);
-        // 素朴な i128 交差乗算は溢れることを前提確認
         let tn = t.num() as i128;
         let td = t.den() as i128;
         let on = start.num() as i128;
@@ -561,7 +507,6 @@ mod tests {
         assert_eq!(rt(51, 3000).try_to_frame_round(rate).unwrap(), 1);
         assert_eq!(rt(-49, 3000).try_to_frame_round(rate).unwrap(), 0);
         assert_eq!(rt(-51, 3000).try_to_frame_round(rate).unwrap(), -1);
-        // ちょうど半フレームはゼロから遠ざかる
         assert_eq!(rt(1, 60).try_to_frame_round(rate).unwrap(), 1);
         assert_eq!(rt(-1, 60).try_to_frame_round(rate).unwrap(), -1);
     }

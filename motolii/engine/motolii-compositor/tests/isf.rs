@@ -1,10 +1,3 @@
-//! `EffectPass::Isf` の GPU 往復——ISF(JSON manifest + GLSL)→ naga → WGSL →
-//! wgpu pipeline が実際に device 上で建ち、`render_into`(zero-copy Stage が
-//! 通る口、`presentable.rs` `render_into_applies_effect_passes` と同じオラクル)
-//! を通して絵を実際に変えることを縛る。`effects::isf` の `#[cfg(test)]` 側は
-//! GLSL→WGSL のテキスト変換だけを見ており、実際の `wgpu::Device` 上での
-//! bind group layout/pipeline 構築の妥当性(texture/sampler の分離 binding が
-//! 本当に噛み合うか等)はここでしか確かめられない。
 
 use motolii_compositor::{
     BlendMode, CompSpec, Compositor, EffectPass, HeadlessGpu, Layer, LayerPlacement,
@@ -36,7 +29,6 @@ fn readable_presentable(device: &wgpu::Device) -> wgpu::Texture {
         dimension: wgpu::TextureDimension::D2,
         format: PRESENTABLE_FORMAT,
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
-        // finalize_into は composite を通すため同じメモリを Rgba8Unorm として見直す。
         view_formats: &[wgpu::TextureFormat::Rgba8Unorm],
     })
 }
@@ -94,8 +86,6 @@ fn readback_rgba(device: &wgpu::Device, queue: &wgpu::Queue, texture: &wgpu::Tex
     out
 }
 
-/// 8x8 の白い正方形を comp 中央 (28,28) へ置く——`presentable.rs` の
-/// `small_layer`/`render_into_applies_effect_passes` と同じ fixture 形。
 fn small_layer(texture: motolii_compositor::GpuTexture2D) -> Layer {
     Layer {
         texture,
@@ -113,20 +103,10 @@ fn small_layer(texture: motolii_compositor::GpuTexture2D) -> Layer {
     }
 }
 
-/// `EffectPass::Isf`(実体は `bloom.fs` — ISF の JSON manifest + GLSL を naga で
-/// WGSL 化した pipeline)が `render_into`(zero-copy Stage が通る口、
-/// `f3791d13` で直った物と同じ経路)を通して実際に絵を変えることを縛る——
-/// `presentable.rs` の `render_into_applies_effect_passes` と同型のオラクル、
-/// pass の種類が `Glow` ではなく `Isf` なだけ。
 #[test]
 fn render_into_applies_isf_effect_passes() {
     let (mut compositor, device, queue) = with_device_and_queue();
 
-    // 中間輝度の灰色——閾値抽出が「何も抜かない(真っ黒)」にも
-    // 「全部抜く(真っ白)」にもならない値(bloom.fs の既定 threshold=1.0 は
-    // 8bit SDR で輝度1.0を超えないと bright-pass が起動しないので、白より
-    // 十分明るい必要は無いが、真っ黒だと luminance=0 で contribution が
-    // 定義上0になり絵が変わらない——`0.9` 灰色ならどの既定値でも確実に動く)。
     let gray = vec![230u8, 230u8, 230u8, 255u8]
         .iter()
         .cloned()
@@ -155,9 +135,6 @@ fn render_into_applies_isf_effect_passes() {
             ResolvedCamera::default(),
             &[LayerWithPasses {
                 layer: small_layer(source),
-                // 既定値を大きく外した値で、確実に絵が変わることを縛る
-                // (threshold を下げて bright-pass を強く起動、intensity を
-                // 上げて加算成分を強調)。
                 passes: vec![EffectPass::Isf {
                     params: vec![
                         ("threshold".to_owned(), 0.1),

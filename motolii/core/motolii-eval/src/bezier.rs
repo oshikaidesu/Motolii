@@ -1,7 +1,3 @@
-/// CSSの`cubic-bezier(x1, y1, x2, y2)`と同じ定義のイージング曲線。
-/// 端点は(0,0)と(1,1)に固定。x∈[0,1]に対するyを返す。
-///
-/// x(s)は単調である必要があるため x1, x2 ∈ [0,1] を要求する(yは範囲外可 = オーバーシュート)。
 pub fn cubic_bezier_ease(x1: f64, y1: f64, x2: f64, y2: f64, x: f64) -> f64 {
     debug_assert!(
         (0.0..=1.0).contains(&x1) && (0.0..=1.0).contains(&x2),
@@ -17,9 +13,7 @@ pub fn cubic_bezier_ease(x1: f64, y1: f64, x2: f64, y2: f64, x: f64) -> f64 {
     sample(y1, y2, s)
 }
 
-/// ベジェの1成分 B(s) を計算(端点0,1固定形)。
 pub(super) fn sample(p1: f64, p2: f64, s: f64) -> f64 {
-    // B(s) = 3(1-s)^2 s p1 + 3(1-s) s^2 p2 + s^3
     let inv = 1.0 - s;
     3.0 * inv * inv * s * p1 + 3.0 * inv * s * s * p2 + s * s * s
 }
@@ -29,11 +23,9 @@ fn sample_derivative(p1: f64, p2: f64, s: f64) -> f64 {
     3.0 * inv * inv * p1 + 6.0 * inv * s * (p2 - p1) + 3.0 * s * s * (1.0 - p2)
 }
 
-/// x(s) = x を満たすsをNewton法+二分法フォールバックで解く。
 pub(super) fn solve_curve_x(x1: f64, x2: f64, x: f64) -> f64 {
     const EPS: f64 = 1e-7;
 
-    // Newton法(高速パス)
     let mut s = x;
     for _ in 0..8 {
         let err = sample(x1, x2, s) - x;
@@ -47,7 +39,6 @@ pub(super) fn solve_curve_x(x1: f64, x2: f64, x: f64) -> f64 {
         s -= err / d;
     }
 
-    // 二分法(確実パス)
     let (mut lo, mut hi) = (0.0f64, 1.0f64);
     s = x.clamp(lo, hi);
     while hi - lo > EPS {
@@ -90,14 +81,12 @@ mod tests {
             assert!(y >= prev, "not monotone at {i}");
             prev = y;
         }
-        // ease-in-outは前半で入力より下、後半で上
         assert!(f(0.25) < 0.25);
         assert!(f(0.75) > 0.75);
     }
 
     #[test]
     fn overshoot_allowed_in_y() {
-        // yが[0,1]を超えるカーブ(バウンス的)も解ける
         let y = cubic_bezier_ease(0.3, 1.5, 0.7, 1.5, 0.5);
         assert!(y > 1.0);
     }

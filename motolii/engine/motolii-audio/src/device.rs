@@ -1,23 +1,3 @@
-//! owns: cpal出力(A2: 実デバイスへ音を出す経路)。D4契約(旧 crate から継承):
-//! ここだけがハードウェアに触る。
-//!
-//! OWNS-JUSTIFICATION(A): `next/reference/KNOWN.md`「音声」D4契約(ハードウェアに
-//! 触るのはここだけ)の意図的な集約点。**ただし正直な記録**: 中身はcpalの薄い
-//! ラッパー(フォーマット交渉ロジックのみが自前)で `wraps:` 寄りの性質を持つ
-//! (裁定215 棚卸し 2026-08-23 §3・#7 で境界事例として記録済み。marker文言
-//! (`owns:`)自体は本発注では変更しない)。
-//!
-//! 旧 `crates/motolii-audio/src/device.rs` からの移植 — **型の読み替え**:
-//! - `RingConsumer`(自前SPSC、KNOWN.md「音声」節で再発明と判定済み)→
-//!   `rtrb::Consumer<f32>`(A1 の `ring.rs` doc 参照、上流 `rtrb` を直接使う)
-//! - `crate::ring::{fill_or_silence, PlaybackCounters}` → `crate::clock::
-//!   PlaybackCounters` + `crate::ring::fill_or_silence`(A1 で `clock.rs`/
-//!   `ring.rs` へ分離済み、`fill_or_silence` は `channels` を明示引数に取る形へ
-//!   変わっている — 呼び出し側でその差を埋める)
-//! - `crate::latency::DeviceWaitLatency` → `crate::clock::DeviceWaitLatency`
-//!
-//! **持ってこなかったもの**: `open_negotiated_with_latency`(D5 以前の過渡API、
-//! `open_negotiated_shared` 1本に統合済み)。
 
 use std::sync::Arc;
 
@@ -29,14 +9,10 @@ use crate::clock::{DeviceWaitLatency, PlaybackCounters};
 use crate::error::{AudioError, Result};
 use crate::ring::fill_or_silence;
 
-/// 素材形式に対して選んだデバイス出力形式(D4-FU、旧版から無改造)。
 #[derive(Debug, Clone)]
 pub struct NegotiatedOutput {
-    /// 素材(変換前PCM)の形式。
     pub source: PcmFormat,
-    /// デバイスへ開くサンプルレート。
     pub device_sample_rate: u32,
-    /// cpalが受理した具体config。
     pub(crate) config: SupportedStreamConfig,
 }
 
@@ -53,13 +29,11 @@ impl NegotiatedOutput {
     }
 }
 
-/// 再生中のcpal出力ストリーム。Dropでストリームを止める。
 pub struct OutputStream {
     stream: Stream,
 }
 
 impl OutputStream {
-    /// デフォルト出力デバイスへ`consumer`を繋いで再生を開始する。
     pub fn open_default(
         source: PcmFormat,
         consumer: rtrb::Consumer<f32>,
@@ -73,7 +47,6 @@ impl OutputStream {
         Self::open_on_device(&device, source, consumer, counters, device_wait)
     }
 
-    /// 指定デバイスへ`consumer`を繋いで再生を開始する(テスト/明示選択用)。
     pub fn open_on_device(
         device: &cpal::Device,
         source: PcmFormat,
@@ -87,10 +60,6 @@ impl OutputStream {
         Ok((stream, negotiated))
     }
 
-    /// `PlaybackCounters`/`DeviceWaitLatency`(A1の`PlaybackClock`と共有する)で
-    /// コールバックを組んで開く(A2本番経路)。callback内は
-    /// `update_from_output_callback`(型を読むだけ)+`fill_or_silence`
-    /// (`&mut Consumer`から読むだけ)のみ — alloc しない(KNOWN.md「音声」節)。
     pub fn open_negotiated_shared(
         device: &cpal::Device,
         negotiated: &NegotiatedOutput,
@@ -127,7 +96,6 @@ impl OutputStream {
     }
 }
 
-/// デバイスのサポート範囲から出力レートを交渉する(D4-FU、旧版から無改造)。
 pub fn negotiate_output(device: &cpal::Device, source: PcmFormat) -> Result<NegotiatedOutput> {
     if source.channels == 0 {
         return Err(AudioError::UnsupportedChannels {
@@ -157,9 +125,6 @@ pub fn negotiate_output(device: &cpal::Device, source: PcmFormat) -> Result<Nego
     })
 }
 
-/// サポート範囲リストからデバイス出力レートを選ぶ(ハードウェア無しの単体テスト用、
-/// 旧版から無改造 — この関数だけが「実デバイス経路はテスト不能でよい」の例外
-/// (pure、cpal の型だけを読む))。
 pub fn select_device_sample_rate(source_rate: u32, ranges: &[(u32, u32)]) -> Option<u32> {
     if source_rate == 0 || ranges.is_empty() {
         return None;
@@ -171,7 +136,6 @@ pub fn select_device_sample_rate(source_rate: u32, ranges: &[(u32, u32)]) -> Opt
         return Some(source_rate);
     }
 
-    // 素材非対応でも再生開始できるよう、定番レートを優先する。
     const PREFERRED: &[u32] = &[
         48_000, 44_100, 96_000, 88_200, 32_000, 22_050, 16_000, 8_000,
     ];
@@ -233,7 +197,6 @@ mod tests {
 
     #[test]
     fn select_falls_back_when_source_unsupported() {
-        // 素材44.1kのみ拒否、48kだけ持つデバイス。
         let ranges = [(48_000, 48_000)];
         assert_eq!(select_device_sample_rate(44_100, &ranges), Some(48_000));
     }

@@ -1,55 +1,7 @@
-//! owns: `Vec<motolii_vector::ShapeNode>`(store の意味、`Layer:shapes` component、
-//! `StoreView::shapes` が返す形)→ `motolii-vector::render_tree` → premultiplied
-//! RGBA8。`text.rs`(裁定190 切片2)と同じ形の橋渡しだが、shape は既に
-//! fill/stroke/ops まで確定した記述(`motolii_vector::Shape`/`ShapeNode`)なので、
-//! テキストのシェイピング(cosmic-text)に相当する段が要らない分、薄い。
-//!
-//! # なぜここが必要だったか(発注: シェイプが画に出るようにする)
-//!
-//! 土台(`motolii-vector` のパス演算子・`Shape`/`ShapeNode`/`Fill`/`Stroke`・
-//! [`motolii_vector::render_tree`])は shape-1/2/3・裁定173 H4 で既に揃っており、
-//! `mask.rs::rasterize_mask_coverage` がマスクのラスタライズで実証済みだった。
-//! それでも `motolii-engine::Engine::texture_for` の `LayerSource::Shape` 枝は
-//! 「まだ描画に繋いでいない」という注記付きで常に `(None, [0.0, 0.0])` を返して
-//! いた——ここはその「土台はあるが繋がっていない」穴を塞ぐ、`render_tree` を
-//! 呼ぶだけの薄いラッパー。呼び手は `lib.rs` の
-//! [`Engine::shape_texture_from_shapes`](../struct.Engine.html)。
-//!
-//! OWNS-JUSTIFICATION(B): 探索対象=`motolii-vector::render_tree`(汎用
-//! ラスタライザ) — Document側の型(`Layer:shapes` component・`StoreView::shapes`)
-//! を汎用レンダラが知りようがないため橋渡しが要ることは自明だが、意見としての
-//! 名指しはこの中では弱い(裁定215 棚卸し 2026-08-23 #12、正直に記録)。より強い
-//! 根拠が見つかれば置き換えること。
-//!
-//! # canvas は `Canvas::centered`(text とは逆の選択)
-//!
-//! `text.rs` は左上原点の canvas を使う(組版のペン位置がそのまま画素の位置を
-//! 決めるので、左上原点が自然)。shape は逆——パス源(`rect`/`ellipse`/
-//! `polystar`、`motolii_vector::geom` 参照)は**すべて局所原点 `(0,0)` を中心に
-//! 生成される**ので、`Canvas::centered` を使わないと既定(position track の無い)
-//! shape layer が comp の左上 1/4 だけに描かれてしまう(中心から負の座標へ伸びる
-//! 半分が canvas の外へ落ちる)。
-//!
-//! # 時刻(`t`)を取らない理由
-//!
-//! `motolii_vector::Shape`/`ShapeNode` は Hold/`KeyframeTrack` のような時間評価を
-//! 一切持たない静的な記述——`TextDocument::content`(Hold 評価、`text.rs`
-//! 参照)や mask の `PropertyId::mask_shape`(`Value::Path` の property track)と
-//! 違い、`StoreView::shapes(layer)` 自体が時刻を引数に取らない(`motolii-store`
-//! の `view.rs` 参照)。つまり shape の頂点が時間で動くとしたら、それは
-//! **shape 自身の記述が変わる**からではなく、**layer の transform
-//! (`ResolvedLayer.placement`、position/rotation/scale がキーフレーム可能)が
-//! 動く**からで、これは `render_with_camera_override`/`layers_from_resolved` が
-//! `Layer.placement` をそのまま持ち回る既存の経路がそのまま担う——ここで
-//! 新しい時間軸を作る必要は無い(`tests/shape_layer.rs::keyframed_position_
-//! moves_the_rendered_shape_over_time` が実測で固定する)。
 
 use motolii_store::ShapeNode;
 use motolii_vector::{Canvas, Raster, VectorError};
 
-/// `shapes` を `canvas` へラスタライズする。**空なら `Ok(None)`**(`SetShapes` が
-/// 一度も呼ばれていない、または空配列で明示的に差し替えられた——どちらもエラー
-/// ではない、`text::rasterize_text_document` の「描く物が無い」扱いと同じ形)。
 pub fn rasterize_shapes(
     shapes: &[ShapeNode],
     canvas: &Canvas,
@@ -113,7 +65,6 @@ mod tests {
             .expect("render")
             .expect("非空の shape 列は Some のはず");
         assert!(visible_pixels(&raster) > 1_000);
-        // fill 色(赤)が premultiplied のまま画素へ届いている。
         assert!(raster
             .premultiplied_rgba8
             .chunks_exact(4)
@@ -145,9 +96,6 @@ mod tests {
         assert!(visible_pixels(&raster) > 50);
     }
 
-    /// **中心 canvas の証拠**: 局所原点 `(0,0)` に置かれた矩形は、`Canvas::centered`
-    /// なら canvas 中央付近に画素を持つ——左上原点だったら見えるはずの
-    /// canvas 左上隅(0,0 近傍)には画素が無いことも合わせて確かめる。
     #[test]
     fn shape_is_centered_on_the_canvas_not_anchored_to_the_top_left() {
         let shape = filled_rect(

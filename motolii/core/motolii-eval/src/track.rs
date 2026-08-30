@@ -27,69 +27,30 @@ pub enum TrackError {
     },
     #[error("keyframes must be sorted by strictly increasing time without duplicates")]
     UnsortedOrDuplicateKeys,
-    /// パラメトリック補間型のパラメータが定義域の外(`Bezier` は専用の
-    /// [`TrackError::InvalidBezier`] が既にある)。
     #[error("補間パラメータが定義域の外: {0}")]
     InvalidInterp(String),
-    /// 区間の分割(キーの割り込み)が同型2本で表せない補間型。
-    /// **Bezier だけが de Casteljau で割れる** — Bounce/Elastic/Steps は
-    /// 「半分のバウンス」が同じ族の中に居ないので、近似で埋めずに断る
-    /// (`motolii-store` の速度積算が Bezier 区間で `Err` を返すのと同じ規律)。
     #[error("{kind} 区間は分割できない — u→値の純関数を同型2本へ割る規則が無い")]
     UnsplittableInterp { kind: &'static str },
 }
 
-/// キーフレーム区間(このキーから次のキーまで)の補間方法。
-///
-/// **どの variant も「区間の正規化位置 u∈[0,1] → 進み具合」の純関数**
-/// ([`Interp::ease`])であって、fps・解像度・区間の実長のどれにも依存しない。
-/// だから CSS の `cubic-bezier()`・Flow・Alight Motion と同じ表現になり、
-/// UI はこの数値を編集するだけで済む。
-///
-/// `Bounce` / `Elastic` / `Steps` は **AE が式(`valueAtTime` の物理シミュ)を
-/// 要求した領域を、GUI の選択肢へ畳んだ物**(2026-07-10 決定、`docs/concept.md`、
-/// 先例 Alight Motion)。逐次状態を持たない閉形式なので、`render_frame(t)` が
-/// 純関数であるという約束(スクラブ・区間キャッシュ・並列書き出しの全部が
-/// 乗っている約束)を崩さない。
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum Interp {
-    /// 次のキーまで値を保持
     Hold,
     Linear,
-    /// cubic-bezier(x1,y1,x2,y2)イージング(x1,x2∈[0,1])
     Bezier {
         x1: f64,
         y1: f64,
         x2: f64,
         y2: f64,
     },
-    /// 解析反射のバウンス。`bounces` = 着地後に跳ね返る回数、
-    /// `decay`∈[0,1] = 1回ごとに残る跳ね上がりの高さの比。
-    /// 値は [0,1] に収まる(行き過ぎない — 跳ねるのは戻る側)。
     Bounce { bounces: u32, decay: f64 },
-    /// 減衰正弦のバネ。`amplitude` = 最初の行き過ぎの強さ(1 で行き過ぎ最小)、
-    /// `period` = 揺れの周期。**y は [0,1] の外へ出る**(オーバーシュート)。
     Elastic { amplitude: f64, period: f64 },
-    /// 段階移動。`count` = 段数。
     Steps { count: u32 },
 }
 
 impl Interp {
-    /// [`Interp::Bounce`] の跳ね回数の上限。[`Interp::ease`] の走査を有界に
-    /// するための構造的な制限であって好みではない([`KeyframeTrack::validate`]
-    /// はこれを超える値を拒む)。
     pub const MAX_BOUNCES: u32 = 32;
 
-    /// 区間の正規化位置 `u`∈[0,1] → **正規化された進み具合**。
-    ///
-    /// **イージングの唯一の家**。[`KeyframeTrack::eval`] も、front の曲線
-    /// プレビューもここを呼ぶ — 同じ規則の家を2つ作らないため(front が
-    /// 曲線を描き直すと、見えている絵と評価される動きが黙ってずれる)。
-    ///
-    /// `x1`/`x2` は [`crate::bezier::cubic_bezier_ease`] の定義域
-    /// ([0,1])へ丸めてから渡す。[`KeyframeTrack::validate`] が既にこの範囲を
-    /// 強制しているので track 経由では起きないが、**編集中の値**(まだ track に
-    /// 入っていない、UI が握っている途中の4値)がそのまま来る口でもあるため。
     pub fn ease(&self, u: f64) -> f64 {
         match *self {
             Interp::Hold => 0.0,
@@ -103,7 +64,6 @@ impl Interp {
         }
     }
 
-    /// エラー文と UI の見出しが同じ語を使うための名前。
     pub fn kind(&self) -> &'static str {
         match self {
             Interp::Hold => "Hold",
@@ -116,8 +76,6 @@ impl Interp {
     }
 
     pub fn split_at(&self, progress: f64) -> Result<(Interp, Interp), TrackError> {
-        // パラメトリック型は progress によらず割れない。progress の検査より先に
-        // 断る — 「0.5 なら割れるかもしれない」と読める余地を残さない。
         if matches!(
             self,
             Interp::Bounce { .. } | Interp::Elastic { .. } | Interp::Steps { .. }
@@ -267,14 +225,6 @@ impl Interp {
     }
 }
 
-/// 解析反射のバウンス。**逐次積分をしない**(2026-07-10「馬鹿正直に
-/// シミュレートしない」)— 自由落下の閉形式をそのまま使う: 跳ね上がる高さは
-/// 1回ごとに `decay` 倍、その滞空時間は `sqrt(decay)` 倍(h ∝ t² だから)。
-/// 前フレームの状態を持たないので `u` の純関数のままで、スクラブしても
-/// 逆再生しても同じ絵になる。
-///
-/// 形: `[0, 1)` の落下(加速)で 1 に着地し、以後 `bounces` 回、幅と高さが
-/// 幾何級数で縮む放物線で 1 へ戻る。値は [0,1] を出ない。
 fn bounce_ease(bounces: u32, decay: f64, u: f64) -> f64 {
     if !u.is_finite() || u <= 0.0 {
         return 0.0;
@@ -290,8 +240,6 @@ fn bounce_ease(bounces: u32, decay: f64, u: f64) -> f64 {
     let n = bounces.min(Interp::MAX_BOUNCES);
     let ratio = decay.sqrt();
 
-    // 区間幅は 落下=1、k 回目の跳ね返り=ratio^k。合計で割って u を「区間何本目の
-    // どこか」へ戻す(区間の実長には触れない — ここは正規化の中だけの話)。
     let mut total = 1.0;
     let mut width = 1.0;
     for _ in 0..n {
@@ -300,7 +248,6 @@ fn bounce_ease(bounces: u32, decay: f64, u: f64) -> f64 {
     }
     let x = u * total;
     if x < 1.0 {
-        // 落下。加速して 1(=着地)へ。
         return x * x;
     }
 
@@ -315,7 +262,6 @@ fn bounce_ease(bounces: u32, decay: f64, u: f64) -> f64 {
         }
         if x < start + width {
             let local = (x - start) / width;
-            // 両端 1(接地)、中央 1-height(跳ねた高さ)の放物線。
             return 1.0 - height * 4.0 * local * (1.0 - local);
         }
         start += width;
@@ -323,13 +269,6 @@ fn bounce_ease(bounces: u32, decay: f64, u: f64) -> f64 {
     1.0
 }
 
-/// 減衰正弦のバネ。Penner の `easeOutElastic` — CSS には無いが Flow /
-/// Alight Motion / 主要トゥイーンライブラリが共通で使っている式で、ここでも
-/// 数学は借りる(自作しない)。
-///
-/// `amplitude` が 1 未満の時は Penner の実装どおり 1 として扱う: `y(0)=0` を
-/// 満たす位相 `s = period/2π · asin(1/amplitude)` は振幅 1 未満では実数に
-/// ならないので、この帯は表現できない(UI 側の下限も 1)。
 fn elastic_ease(amplitude: f64, period: f64, u: f64) -> f64 {
     if !u.is_finite() || u <= 0.0 {
         return 0.0;
@@ -353,10 +292,6 @@ fn elastic_ease(amplitude: f64, period: f64, u: f64) -> f64 {
     amplitude * (-10.0 * u).exp2() * ((u - phase) * std::f64::consts::TAU / period).sin() + 1.0
 }
 
-/// 段階移動。CSS `steps(count, jump-end)` と同じ意味 — 各段の頭の値を保ち、
-/// 段の終わりで飛ぶ。`count == 1` は区間の頭を保って端で飛ぶ形になり、
-/// [`Interp::Hold`] と同じ絵になる(別の名前で同じ物を持たないための注記で
-/// あって、Hold を置き換えるものではない — Hold は Lottie の `h:1`)。
 fn steps_ease(count: u32, u: f64) -> f64 {
     if !u.is_finite() || u <= 0.0 {
         return 0.0;
@@ -378,21 +313,9 @@ fn is_valid_bezier_control(interp: Interp) -> bool {
     }
 }
 
-/// 空間ベジェの接線(`position-keyframe ti`/`to`)。**Vec2 の position 系 track だけが
-/// 意味を持つ** — position が Vec2 単一 property なので入る余地ができた(裁定61 の
-/// 見込みどおり)。このキー自身の値からの相対オフセットという規約は
-/// [`crate::value::PathVertex`] の `in_tangent`/`out_tangent` とそろえてある(新しい
-/// 規約を作らない)。
-///
-/// **モーションパスの形**(位置が辿る曲線)を決めるだけで、**速さ**
-/// ([`Keyframe::interp`] のイージング)とは独立(Lottie/AE と同じ分離 — `ti`/`to` は
-/// 空間、`i`/`o` は時間)。描画は不要(地図の note どおり)なので、ここでは
-/// [`KeyframeTrack::eval`] が返す `Value::Vec2` の値そのものが曲線に沿うことだけを保証する。
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct SpatialTangent {
-    /// `to`(Value Out Tangent)。次のキーへ向かう側の接線。
     pub out_tangent: [f64; 2],
-    /// `ti`(Value In Tangent)。前のキーから来る側の接線。
     pub in_tangent: [f64; 2],
 }
 
@@ -401,16 +324,10 @@ pub struct Keyframe {
     pub t: RationalTime,
     pub value: Value,
     pub interp: Interp,
-    /// 空間ベジェの接線。`None` = 直線(補間は今までどおり [`Value::lerp`])。
-    /// 補間の**速さ**は `interp` が別に決める(上記 [`SpatialTangent`] のドキュメント参照)。
-    /// **`None` の時は JSON に出さない**(`skip_serializing_if`) — position 以外の
-    /// 大半の track はこのフィールドを一切使わないので、書かないと R2 の予算試験
-    /// (track を生で読む投影コスト)を巻き込まずに済む。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub spatial: Option<SpatialTangent>,
 }
 
-/// 時刻順にソートされたキーフレーム列。
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(try_from = "KeyframeTrackDe")]
 pub struct KeyframeTrack {
@@ -437,19 +354,12 @@ impl KeyframeTrack {
         Self::default()
     }
 
-    /// 生のキー列から検証込みで組む。`#[serde(try_from = "KeyframeTrackDe")]` が
-    /// 内部で行うのと同じ経路——`motolii-store::slot::PropertySource` の
-    /// カスタム `Deserialize`(裁定213 の性能修正、2026-08-23)が、`untagged` の
-    /// `Content` バッファリングを避けて `"keys"` フィールドを直接
-    /// `Vec<Keyframe>` として読んだ後、ここを呼んで検証込みで組み立て直す
-    /// ために公開した。
     pub fn try_from_keys(keys: Vec<Keyframe>) -> Result<Self, TrackError> {
         let track = Self { keys };
         track.validate()?;
         Ok(track)
     }
 
-    /// キーを挿入する。同時刻のキーが既にあれば置き換える。
     pub fn insert(&mut self, key: Keyframe) {
         match self.keys.binary_search_by(|k| k.t.cmp(&key.t)) {
             Ok(i) => self.keys[i] = key,
@@ -470,7 +380,6 @@ impl KeyframeTrack {
         for key in &self.keys {
             match key.interp {
                 Interp::Bezier { x1, y1, x2, y2 } => {
-                    // y1/y2 も有限必須(x は範囲検査で NaN を弾けるが y は素通しだった — D1h)
                     if ![x1, y1, x2, y2].iter().all(|v| v.is_finite()) {
                         return Err(TrackError::InvalidBezier { x1, x2 });
                     }
@@ -511,7 +420,6 @@ impl KeyframeTrack {
         Ok(())
     }
 
-    /// 時刻tでの値。範囲外は端の値でクランプ。キーが無い場合はF64(0.0)。
     pub fn eval(&self, t: RationalTime) -> Value {
         let keys = &self.keys;
         if keys.is_empty() {
@@ -524,15 +432,11 @@ impl KeyframeTrack {
         if t >= keys[last].t {
             return keys[last].value.clone();
         }
-        // keys[i].t <= t < keys[i+1].t となるiを探す
         let i = match keys.binary_search_by(|k| k.t.cmp(&t)) {
             Ok(i) => i,
             Err(i) => i - 1,
         };
         let (a, b) = (&keys[i], &keys[i + 1]);
-        // Hold だけは `u` を計算しない。`Interp::ease` は 0.0 を返すので値としては
-        // 同じだが、`interpolate_value` を通すと Vec2 の空間ベジェ経路へ入ってしまう
-        // (Lottie の `h:1` は離散的に飛ぶ = 曲線を辿らない、という不変量を守る)。
         if let Interp::Hold = a.interp {
             return a.value.clone();
         }
@@ -541,10 +445,6 @@ impl KeyframeTrack {
     }
 }
 
-/// `a` → `b` 区間の値。**空間タンジェントが片方でもあれば空間ベジェを通る**
-/// (`u` は呼び手が渡す — 時間の速さ [`Interp`] のイージング後の値で、ここでは
-/// 「どの経路を通るか」だけを決める、[`SpatialTangent`] のドキュメント参照)。
-/// 両方 `None`、または `Vec2` 同士でない組は今までどおり [`Value::lerp`]。
 fn interpolate_value(a: &Keyframe, b: &Keyframe, u: f64) -> Value {
     if let (Value::Vec2(p0), Value::Vec2(p3)) = (&a.value, &b.value) {
         if a.spatial.is_some() || b.spatial.is_some() {
@@ -562,8 +462,6 @@ fn interpolate_value(a: &Keyframe, b: &Keyframe, u: f64) -> Value {
     Value::lerp(&a.value, &b.value, u)
 }
 
-/// 一般形の3次ベジェ(端点固定の [`crate::bezier::sample`] とは別 —
-/// あちらは `y(0)=0, y(1)=1` のイージング専用で、こちらは4制御点そのものを補間する)。
 fn cubic_bezier_point(p0: [f64; 2], p1: [f64; 2], p2: [f64; 2], p3: [f64; 2], u: f64) -> [f64; 2] {
     let inv = 1.0 - u;
     std::array::from_fn(|i| {
@@ -574,8 +472,6 @@ fn cubic_bezier_point(p0: [f64; 2], p1: [f64; 2], p2: [f64; 2], p3: [f64; 2], u:
     })
 }
 
-/// 区間内正規化位置u ∈ [0,1)。区間端は有理数で厳密に扱い、u自体はf64でよい
-/// (uは1フレーム内の補間位置であり、蓄積しないためドリフトしない)。
 fn segment_u(a: RationalTime, b: RationalTime, t: RationalTime) -> f64 {
     let den = seconds_since(b, a);
     if den == 0.0 {
@@ -584,16 +480,12 @@ fn segment_u(a: RationalTime, b: RationalTime, t: RationalTime) -> f64 {
     seconds_since(t, a) / den
 }
 
-/// `t - origin` の秒。差分がi64 RationalTimeに収まれば厳密経路、溢れ時はf64秒差へフォールバック
-/// (評価値を0に握り潰さない — M2E-16 P1)。
 fn seconds_since(t: RationalTime, origin: RationalTime) -> f64 {
     match t.try_sub(origin) {
         Ok(rel) => rel.as_seconds_f64(),
         Err(_) => t.as_seconds_f64() - origin.as_seconds_f64(),
     }
 }
-
-
 
 #[cfg(test)]
 mod tests {
@@ -636,7 +528,6 @@ mod tests {
             30.0,
             Interp::Linear,
         ));
-        // フレーム12(=0.4秒)で値12.0
         let v = tr.eval(RationalTime::try_from_frame(12, fps).unwrap());
         assert!((v.as_f64().unwrap() - 12.0).abs() < 1e-9);
     }
@@ -670,7 +561,6 @@ mod tests {
         tr.insert(key(RationalTime::from_seconds(2), 100.0, Interp::Linear));
         let mid = tr.eval(RationalTime::from_seconds(1)).as_f64().unwrap();
         assert!((mid - 50.0).abs() < 1e-3);
-        // ease-in: 序盤は線形より遅い
         let early = tr
             .eval(RationalTime::try_new(1, 2).unwrap())
             .as_f64()
@@ -723,12 +613,6 @@ mod tests {
         assert_eq!(tr.eval(RationalTime::ZERO), Value::F64(5.0));
     }
 
-
-
-
-
-
-
     #[test]
     fn keyframe_linear_across_i64_span_does_not_collapse_to_zero() {
         let mut tr = KeyframeTrack::new();
@@ -742,7 +626,6 @@ mod tests {
             20.0,
             Interp::Linear,
         ));
-        // ゼロ近傍は区間のほぼ中央 → 15付近。差分Overflowを0.0に握り潰さないこと。
         let mid = tr.eval(RationalTime::ZERO).as_f64().unwrap();
         assert!(
             (mid - 15.0).abs() < 1.0,
@@ -763,8 +646,6 @@ mod tests {
         }
     }
 
-    /// 空間タンジェントが無ければ、position-keyframe 前と同じ直線補間(`Value::lerp`)。
-    /// **motion-path(裁定61)を足しても既存の Vec2 track の挙動を変えない**ことの固定。
     #[test]
     fn vec2_without_spatial_tangents_still_lerps_in_a_straight_line() {
         let mut tr = KeyframeTrack::new();
@@ -774,12 +655,9 @@ mod tests {
         assert_eq!(mid, Value::Vec2([50.0, 0.0]));
     }
 
-    /// **空間ベジェの形はタンジェントが決める** — 区間の中点(u=0.5)が直線の中点から
-    /// 外れることで、モーションパスが曲がっていることを固定する。
     #[test]
     fn spatial_tangent_bows_the_position_path_off_the_straight_line() {
         let mut tr = KeyframeTrack::new();
-        // 出タンジェントを+yへ大きく振る、入タンジェントは無し(0)。
         tr.insert(vec2_key(
             RationalTime::ZERO,
             [0.0, 0.0],
@@ -793,13 +671,9 @@ mod tests {
         let Value::Vec2([x, y]) = mid else {
             panic!("Vec2 が返らない");
         };
-        // 直線なら y=0 のまま。タンジェントが効いていれば y が持ち上がる。
         assert!(y > 10.0, "空間タンジェントが効いていない: mid={x},{y}");
     }
 
-    /// **速さ(`interp` のイージング)と形(空間タンジェント)は独立**。同じ空間タンジェント
-    /// でも、時間イージングを変えれば区間内の「どこまで進んだか」(u)が変わるので、
-    /// 曲線上の位置(点)も変わる — が、その点は常に同じ空間曲線の上に乗る。
     #[test]
     fn temporal_easing_moves_along_the_same_spatial_curve() {
         fn curve_with(interp: Interp) -> Value {
@@ -814,8 +688,6 @@ mod tests {
                 }),
             });
             tr.insert(vec2_key(RationalTime::from_seconds(1), [100.0, 0.0], None));
-            // 中点(u=0.5)は避ける — ease-in-out は対称カーブなので中点だけは
-            // 直線と偶然一致する(f(0.5)=0.5)。1/4点なら常にズレる。
             tr.eval(RationalTime::try_new(1, 4).unwrap())
         }
 
@@ -832,10 +704,6 @@ mod tests {
         );
     }
 
-    /// **窓で見えない不変量なのでここで固定する**(裁定270 の例外 —
-    /// 曲線の端点が 0/1 に着いているかは、front のプレビューを目で見ても
-    /// 1px 未満の話なので判定できない)。区間の端で値が飛ぶと、キーの上で
-    /// 絵がガクッと動く。
     #[test]
     fn every_interp_starts_at_zero_and_ends_at_one() {
         let cases = [
@@ -872,9 +740,6 @@ mod tests {
         }
     }
 
-    /// バウンスは**区間の継ぎ目で飛ばない**(落下→跳ね返り→跳ね返りの
-    /// 幾何級数が、幅と高さの両方でつながっていること)。ここが切れていると
-    /// 「跳ねる」ではなく「ワープする」動きになる。
     #[test]
     fn bounce_is_continuous_across_its_segments() {
         let interp = Interp::Bounce {
@@ -897,8 +762,6 @@ mod tests {
         }
     }
 
-    /// バネは **1 を越える**(オーバーシュート)。越えないなら amplitude が
-    /// 効いていないということで、Bezier と見分けが付かなくなる。
     #[test]
     fn elastic_overshoots_past_one() {
         let interp = Interp::Elastic {
@@ -911,7 +774,6 @@ mod tests {
         assert!(peak > 1.0, "行き過ぎていない: peak={peak}");
     }
 
-    /// 段階移動は段の中で**動かない**。
     #[test]
     fn steps_holds_inside_each_step() {
         let interp = Interp::Steps { count: 4 };
@@ -921,8 +783,6 @@ mod tests {
         assert!((interp.ease(0.51) - 0.5).abs() < 1e-12);
     }
 
-    /// 壊れたパラメータは track に入れない(`ease` が黙って丸めるのは
-    /// **編集中の値**への防御であって、保存される値への許可ではない)。
     #[test]
     fn validate_rejects_out_of_domain_parametric_interps() {
         for interp in [
@@ -950,7 +810,6 @@ mod tests {
         }
     }
 
-    /// `spatial` フィールドが無い旧 JSON も読める(`#[serde(default)]`)。
     #[test]
     fn keyframe_without_spatial_field_deserializes_as_none() {
         let json = r#"{"t":{"num":0,"den":1},"value":{"F64":0.0},"interp":"Linear"}"#;
@@ -958,11 +817,6 @@ mod tests {
         assert_eq!(key.spatial, None);
     }
 
-    /// **Hold は空間タンジェントより優先する。** Lottie の `h:1` キーは離散的に
-    /// 飛ぶだけで、`ti`/`to` が(壊れたデータ等で)同居していても曲線を辿らない
-    /// ―― [`interpolate_value`] は `u` を受け取って初めて空間ベジェへ分岐するが、
-    /// `Interp::Hold` の区間は `u` 自体を計算せず `a.value` をそのまま返す
-    /// ([`KeyframeTrack::eval`] の match 節)。この不変量を固定する。
     #[test]
     fn hold_ignores_spatial_tangent_even_if_present() {
         let mut tr = KeyframeTrack::new();
@@ -984,10 +838,6 @@ mod tests {
         );
     }
 
-    /// **成分ごとに別イージングは採らない**(地図 `properties/easing-handle/y` の
-    /// 裁定)という決定を、Vec2 以外の多成分値(`Value::Color`、4成分)でも固定する。
-    /// 全チャンネルへ同じ `u`(=`cubic_bezier_ease` が1回だけ計算した値)が
-    /// 一律に効くので、どのチャンネルも「差分 × 同じ u」の比を保つ。
     #[test]
     fn bezier_easing_applies_one_shared_u_to_every_color_channel() {
         let mut tr = KeyframeTrack::new();

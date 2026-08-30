@@ -1,5 +1,3 @@
-//! `re_renderer` の `load_shaders_from_disk` cfg は crate ごとに立てる必要がある
-//! (crate 単位の cargo cfg のため)。判定は `re_ui/build.rs` と同じ形。
 
 fn main() {
     use re_build_tools::Environment;
