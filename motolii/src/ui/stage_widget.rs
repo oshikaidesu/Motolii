@@ -10,7 +10,7 @@ use keyboard_types::Modifiers;
 use motolii_store::{property, Document, Intent, Interp, Keyframe, KeyframeTrack, LayerId, PropertyId, RationalTime, StoreView, Value};
 use blitz_dom::node::ComputedStyles;
 use blitz_dom::Widget;
-use motolii_engine::Engine;
+use crate::render::engine::Engine;
 use peniko::kurbo::{Affine, Rect};
 use peniko::{Color, Fill, ImageBrush, ImageSampler};
 use wgpu_context::DeviceHandle;

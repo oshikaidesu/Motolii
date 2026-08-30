@@ -3595,7 +3595,6 @@ dependencies = [
  "macaw",
  "motolii-compositor",
  "motolii-core",
- "motolii-engine",
  "motolii-fixture",
  "motolii-media",
  "motolii-store",
@@ -3605,6 +3604,7 @@ dependencies = [
  "pollster",
  "re_log",
  "re_renderer",
+ "re_video",
  "serde_json",
  "thiserror 2.0.20",
  "wgpu",
@@ -3652,24 +3652,6 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.20",
-]
-
-[[package]]
-name = "motolii-engine"
-version = "0.1.0"
-dependencies = [
- "motolii-compositor",
- "motolii-core",
- "motolii-fixture",
- "motolii-media",
- "motolii-store",
- "motolii-testkit",
- "motolii-vector",
- "re_renderer",
- "re_video",
- "serde_json",
- "thiserror 2.0.20",
- "wgpu",
 ]
 
 [[package]]

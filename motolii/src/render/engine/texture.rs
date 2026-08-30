@@ -9,8 +9,8 @@ use motolii_store::{
     LayerId, LayerSource, RationalTime, ResolvedLayer, ShapeNode, StoreView, TextDocument,
 };
 
-use crate::render::layer_size;
-use crate::{shape, text, Engine, EngineError};
+use crate::render::engine::render::layer_size;
+use crate::render::engine::{shape, text, Engine, EngineError};
 
 fn layer_stream_id(layer: LayerId, path: &str) -> u64 {
     let mut hasher = std::collections::hash_map::DefaultHasher::new();

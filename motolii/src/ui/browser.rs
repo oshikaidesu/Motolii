@@ -432,7 +432,7 @@ pub fn browser_panel(
                         .into_iter()
                         .map(|e| e.plugin_id)
                         .collect();
-                    let cards = motolii_engine::known_effects().iter().map(|desc| {
+                    let cards = crate::render::engine::known_effects().iter().map(|desc| {
                         let plugin_id = desc.plugin_id.to_owned();
                         let is_on = attached.contains(&plugin_id);
                         let card_class = if is_on { "tcard on" } else if layer.is_none() { "tcard disabled" } else { "tcard" };
@@ -584,7 +584,7 @@ pub fn browser_panel(
 #[cfg(test)]
 mod spawn_diagnosis {
     use super::*;
-    use motolii_engine::Engine;
+    use crate::render::engine::Engine;
 
     fn gpu() -> (wgpu::Device, wgpu::Queue) {
         let instance = wgpu::Instance::default();

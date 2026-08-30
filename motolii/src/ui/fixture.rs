@@ -1,6 +1,6 @@
 use motolii_store::{property, Document, LayerId, LayerSource, PropertyId, RationalTime, ShapeNode, StoreView, Value};
 
-use motolii_engine::known_effects;
+use crate::render::engine::known_effects;
 
 use crate::ui::timeline_widget::CanvasRow;
 

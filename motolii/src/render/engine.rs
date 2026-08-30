@@ -19,9 +19,9 @@ use motolii_media::MediaInfo;
 use motolii_media::PointCloudData;
 use motolii_store::{LayerSource, Matte, RationalTime, StoreView};
 
-use crate::texture::{ShapeCacheKey, TextCacheKey};
+use crate::render::engine::texture::{ShapeCacheKey, TextCacheKey};
 
-pub use crate::translate::{known_effects, EffectDescriptor, EffectParamDescriptor};
+pub use crate::render::engine::translate::{known_effects, EffectDescriptor, EffectParamDescriptor};
 
 #[derive(Debug, thiserror::Error)]
 pub enum EngineError {
@@ -40,7 +40,7 @@ pub enum EngineError {
     #[error("matte はまだ engine が絵から除外しつつ消費する経路に繋がっていない({0:?})")]
     UnsupportedMatte(Matte),
     #[error(transparent)]
-    Text(#[from] crate::text::TextRenderError),
+    Text(#[from] crate::render::engine::text::TextRenderError),
     #[error(transparent)]
     Shape(#[from] motolii_vector::VectorError),
 }

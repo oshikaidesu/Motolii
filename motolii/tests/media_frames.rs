@@ -1,7 +1,7 @@
 
 use std::process::Command;
 
-use motolii_engine::Engine;
+use motolii::render::engine::Engine;
 
 fn make_sine_audio(path: &std::path::Path, seconds: f64) {
     let status = Command::new("ffmpeg")

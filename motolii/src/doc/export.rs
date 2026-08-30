@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use motolii_core::{FrameDesc, PixelFormat, RationalTime};
-use motolii_engine::{Engine, EngineError};
+use crate::render::engine::{Engine, EngineError};
 use motolii_media::{Encoder, MediaError};
 use motolii_store::StoreView;
 

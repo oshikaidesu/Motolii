@@ -1,6 +1,6 @@
 
 use motolii_compositor::HeadlessGpu;
-use motolii_engine::Engine;
+use motolii::render::engine::Engine;
 use motolii_store::{
     Composition, ContentKeyframe, ContentTrack, Document, Fps, FontRef, Intent, LayerAttrsPatch,
     LayerId, LayerMeta, LayerSource, LayerTiming, Matte, MatteMode, RationalTime,

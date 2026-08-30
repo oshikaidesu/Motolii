@@ -1,5 +1,5 @@
 
-use crate::EngineError;
+use crate::render::engine::EngineError;
 
 pub(crate) fn translate_blend_mode(
     mode: motolii_store::BlendMode,

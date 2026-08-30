@@ -7,10 +7,10 @@ use motolii_store::{
     LayerId, LayerSource, RationalTime, ResolvedLayer, ShapeNode, StoreView, TextDocument,
 };
 
-use crate::translate::{
+use crate::render::engine::translate::{
     translate_blend_mode, translate_effect_passes, translate_matte_mode,
 };
-use crate::{Engine, EngineError};
+use crate::render::engine::{Engine, EngineError};
 
 impl Engine {
     pub(crate) fn render_with_camera_override(
@@ -288,7 +288,7 @@ impl Engine {
         view: &StoreView<'_>,
         t: RationalTime,
         target: &wgpu::Texture,
-        observation: &crate::ObservationCamera,
+        observation: &crate::render::engine::ObservationCamera,
         include_background: bool,
     ) -> Result<(), EngineError> {
         let composition = view
