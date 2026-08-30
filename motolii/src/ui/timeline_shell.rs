@@ -10,6 +10,7 @@ use crate::ui::session::Selection;
 use crate::ui::timeline_widget::TimelineMsg;
 use crate::doc::store::{Document, Intent, LayerAttrsPatch, LayerId};
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn timeline_shell(
     clock: Arc<Clock>,
     mut playing: Signal<bool>,
@@ -21,6 +22,8 @@ pub(super) fn timeline_shell(
     mut selected: Signal<Option<LayerId>>,
     scroll_y: Signal<f64>,
     timeline_tx: Sender<TimelineMsg>,
+    mut renaming: Signal<Option<(LayerId, String)>>,
+    mut revision: Signal<u32>,
 ) -> Element {
     let layer_rows = layer_rows_data.iter().enumerate().map(|(i, row)| {
         let layer = row.layer;
@@ -67,20 +70,56 @@ pub(super) fn timeline_shell(
                 }
             )
         };
+        let editing_name = renaming().filter(|(l, _)| *l == layer).map(|(_, n)| n);
+        let doc_rename = doc.clone();
         rsx!(
             div { class: "lrow",
-                span {
-                    class: "lsurface",
-                    style: "{lsurface_style}",
-                    onclick: move |evt| {
-                        if evt.modifiers().meta() {
-                            selection.toggle(layer);
-                        } else {
-                            selection.set(Some(layer));
-                        }
-                        selected.set(selection.get());
-                    },
-                    "{row.name}"
+                if let Some(draft) = editing_name {
+                    input {
+                        class: "lsurface",
+                        style: "{lsurface_style}",
+                        value: "{draft}",
+                        autofocus: "true",
+                        oninput: move |evt| *renaming.write() = Some((layer, evt.value())),
+                        onkeydown: move |evt| match evt.key() {
+                            Key::Enter => {
+                                evt.prevent_default();
+                                if let Some((layer, name)) = renaming.write().take() {
+                                    let patch = LayerAttrsPatch { name: Some(name.clone()), ..Default::default() };
+                                    match doc_rename.lock().unwrap().apply(Intent::SetAttrs { layer, patch }) {
+                                        Ok(_) => {
+                                            println!("PROBE room=write verdict=applied Rename layer={layer:?} name={name:?}");
+                                            *revision.write() += 1;
+                                        }
+                                        Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
+                                    }
+                                }
+                            }
+                            Key::Escape => {
+                                evt.prevent_default();
+                                *renaming.write() = None;
+                            }
+                            _ => {}
+                        },
+                    }
+                } else {
+                    span {
+                        class: "lsurface",
+                        style: "{lsurface_style}",
+                        onclick: move |evt| {
+                            if evt.modifiers().meta() {
+                                selection.toggle(layer);
+                            } else {
+                                selection.set(Some(layer));
+                            }
+                            selected.set(selection.get());
+                        },
+                        ondoubleclick: {
+                            let name = row.name.clone();
+                            move |_| *renaming.write() = Some((layer, name.clone()))
+                        },
+                        "{row.name}"
+                    }
                 }
                 div { class: "lctrl",
                     {glyph(0, "M")}

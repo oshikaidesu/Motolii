@@ -115,6 +115,18 @@ fn write_key(
     doc.apply(Intent::SetTrack { layer, property: prop, track })
 }
 
+/// エフェクトを層から外す。**param は触れるのに本体を外せない**という
+/// Q0b 違反(触れる物は全て編集可能)を閉じる。
+fn remove_effect(doc: &Arc<Mutex<Document>>, layer: LayerId, id: u32) {
+    let mut d = doc.lock().unwrap();
+    let mut effects = d.view().effects(layer).unwrap_or_default();
+    effects.retain(|e| e.id.0 != id);
+    match d.apply(Intent::SetEffects { layer, effects }) {
+        Ok(_) => println!("PROBE room=write verdict=applied RemoveEffect layer={layer:?} id={id}"),
+        Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
+    }
+}
+
 fn commit_drag(doc: &Arc<Mutex<Document>>, d: &ValueDrag, t: RationalTime) {
     if let Ok(prop) = PropertyId::new(&d.property) {
         doc.lock().unwrap().clear_transient(d.layer, &prop);
@@ -311,10 +323,21 @@ pub(super) fn inspector_panel(
         .transform
         .iter()
         .map(|p| prop_row(p, selection.unwrap_or(LayerId(0)), t, doc, drag, revision));
-    let effect_rows = inspector
+    let effect_blocks: Vec<_> = inspector
         .effects
         .iter()
-        .map(|p| prop_row(p, selection.unwrap_or(LayerId(0)), t, doc, drag, revision));
+        .map(|block| {
+            (
+                block.id,
+                block.plugin_id.clone(),
+                block
+                    .params
+                    .iter()
+                    .map(|p| prop_row(p, selection.unwrap_or(LayerId(0)), t, doc, drag, revision))
+                    .collect::<Vec<_>>(),
+            )
+        })
+        .collect();
     let fx_label = if inspector.has_effects { "" } else { "No shared FX" };
 
     let doc_move = doc.clone();
@@ -445,8 +468,24 @@ pub(super) fn inspector_panel(
                     span { class: "v blank", "" }
                     span { "" }
                 }
-            } else {
-                {effect_rows}
+            } else if let Some(layer) = selection {
+                for (id , plugin_id , rows) in effect_blocks.into_iter() {
+                    div { class: "prow fxhead",
+                        span { class: "n", "{plugin_id}" }
+                        span {
+                            class: "v fxdrop",
+                            onclick: {
+                                let doc = doc.clone();
+                                move |_| {
+                                    remove_effect(&doc, layer, id);
+                                    *revision.write() += 1;
+                                }
+                            },
+                            "×"
+                        }
+                    }
+                    {rows.into_iter()}
+                }
             }
             }
             div { class: "hint", "Drag to scrub · double-click to type · Esc to cancel" }

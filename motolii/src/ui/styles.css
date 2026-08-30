@@ -444,6 +444,19 @@ body {
     overflow: hidden;
 }
 
+.prow.fxhead .n {
+    color: var(--ink);
+}
+
+.v.fxdrop {
+    justify-content: center;
+    color: var(--ink2);
+}
+
+.v.fxdrop:hover {
+    color: var(--ink);
+}
+
 .ptabs {
     display: flex;
     gap: 0;

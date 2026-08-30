@@ -46,6 +46,11 @@ enum GizmoMode {
     Rotate,
 }
 
+struct CameraDrag {
+    grab: (f64, f64),
+    orig_center: (f64, f64),
+}
+
 struct GizmoDrag {
     layer: LayerId,
     mode: GizmoMode,
@@ -66,6 +71,8 @@ pub(super) struct StageWidget {
     selected_mirror: Signal<Option<LayerId>>,
     fit: Fit,
     drag: Option<GizmoDrag>,
+    /// 何も掴んでいない所からのドラッグ = カメラを動かす。
+    camera_drag: Option<CameraDrag>,
     revision: Signal<u32>,
     selected_size: Arc<Mutex<Option<[f32; 2]>>>,
 }
@@ -88,6 +95,40 @@ struct TexAndHandle {
 
 impl StageWidget {
     #[allow(clippy::too_many_arguments)]
+    fn camera_center(&self, rt: RationalTime) -> (f64, f64) {
+        let doc = self.doc.lock().unwrap();
+        let view = doc.view();
+        match PropertyId::new(property::CAMERA_CENTER)
+            .ok()
+            .and_then(|p| view.camera_value_at(&p, rt).ok().flatten())
+        {
+            Some(Value::Vec2([x, y])) => (x, y),
+            _ => (0.0, 0.0),
+        }
+    }
+
+    fn write_camera(&self, name: &str, value: Value, rt: RationalTime, commit: bool) {
+        let Ok(property) = PropertyId::new(name) else { return };
+        let mut doc = self.doc.lock().unwrap();
+        if !commit {
+            doc.set_camera_transient(property, value);
+            return;
+        }
+        doc.clear_camera_transient(&property);
+        let mut track = doc
+            .view()
+            .camera_track(&property)
+            .ok()
+            .flatten()
+            .unwrap_or_else(KeyframeTrack::new);
+        let t = track.keys().first().map(|k| k.t).unwrap_or(rt);
+        track.insert(Keyframe { t, value, interp: Interp::Linear, spatial: None });
+        match doc.apply(Intent::SetCameraTrack { property, track }) {
+            Ok(_) => println!("PROBE room=write verdict=applied SetCameraTrack {name}"),
+            Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
+        }
+    }
+
     pub(super) fn new(
         clock: Arc<Clock>,
         doc: Arc<Mutex<Document>>,
@@ -105,6 +146,7 @@ impl StageWidget {
             selected_mirror,
             fit: Fit::default(),
             drag: None,
+            camera_drag: None,
             revision,
             selected_size,
         }
@@ -322,6 +364,29 @@ impl Widget for StageWidget {
 
     fn handle_event(&mut self, event: &UiEvent) {
         match event {
+            UiEvent::Wheel(wheel) => {
+                let dy = match wheel.delta {
+                    blitz_traits::events::BlitzWheelDelta::Pixels(_, y) => y,
+                    blitz_traits::events::BlitzWheelDelta::Lines(_, y) => y * 20.0,
+                };
+                if dy == 0.0 {
+                    return;
+                }
+                let rt = self.current_rt();
+                let doc = self.doc.lock().unwrap();
+                let current = PropertyId::new(property::CAMERA_ZOOM)
+                    .ok()
+                    .and_then(|p| doc.view().camera_value_at(&p, rt).ok().flatten())
+                    .and_then(|v| match v {
+                        Value::F64(v) => Some(v),
+                        _ => None,
+                    })
+                    .unwrap_or(1.0);
+                drop(doc);
+                let next = (current * (1.0 - dy * 0.002)).clamp(0.05, 40.0);
+                self.write_camera(property::CAMERA_ZOOM, Value::F64(next), rt, true);
+                self.revision += 1;
+            }
             UiEvent::PointerDown(p) => {
                 let (cx, cy) = self.fit.to_comp(p.element.x as f64, p.element.y as f64);
                 if let Some(layer) = self.selection.get() {
@@ -390,16 +455,34 @@ impl Widget for StageWidget {
                 }
                 drop(view);
                 drop(doc);
-                if let Some((_, layer)) = hit {
-                    if p.mods.contains(Modifiers::META) {
-                        self.selection.toggle(layer);
-                    } else {
-                        self.selection.set(Some(layer));
+                match hit {
+                    Some((_, layer)) => {
+                        if p.mods.contains(Modifiers::META) {
+                            self.selection.toggle(layer);
+                        } else {
+                            self.selection.set(Some(layer));
+                        }
+                        self.selected_mirror.set(self.selection.get());
                     }
-                    self.selected_mirror.set(self.selection.get());
+                    None => {
+                        self.camera_drag = Some(CameraDrag {
+                            grab: (cx, cy),
+                            orig_center: self.camera_center(rt),
+                        });
+                    }
                 }
             }
             UiEvent::PointerMove(p) => {
+                if let Some(cam) = self.camera_drag.as_ref() {
+                    let (cx, cy) = self.fit.to_comp(p.element.x as f64, p.element.y as f64);
+                    let next = Value::Vec2([
+                        cam.orig_center.0 - (cx - cam.grab.0),
+                        cam.orig_center.1 - (cy - cam.grab.1),
+                    ]);
+                    self.write_camera(property::CAMERA_CENTER, next, self.current_rt(), false);
+                    self.revision += 1;
+                    return;
+                }
                 let Some(drag) = self.drag.as_ref() else { return };
                 let (cx, cy) = self.fit.to_comp(p.element.x as f64, p.element.y as f64);
                 let shift = p.mods.contains(Modifiers::SHIFT);
@@ -428,6 +511,17 @@ impl Widget for StageWidget {
                 }
             }
             UiEvent::PointerUp(p) => {
+                if let Some(cam) = self.camera_drag.take() {
+                    let (cx, cy) = self.fit.to_comp(p.element.x as f64, p.element.y as f64);
+                    let rt = self.current_rt();
+                    let next = Value::Vec2([
+                        cam.orig_center.0 - (cx - cam.grab.0),
+                        cam.orig_center.1 - (cy - cam.grab.1),
+                    ]);
+                    self.write_camera(property::CAMERA_CENTER, next, rt, true);
+                    self.revision += 1;
+                    return;
+                }
                 let Some(drag) = self.drag.take() else { return };
                 let (cx, cy) = self.fit.to_comp(p.element.x as f64, p.element.y as f64);
                 let shift = p.mods.contains(Modifiers::SHIFT);

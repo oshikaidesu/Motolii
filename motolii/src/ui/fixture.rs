@@ -212,6 +212,14 @@ pub(super) struct PropRow {
     pub axis: [Option<(String, Value)>; 3],
 }
 
+/// 1つのエフェクトと、その param 行。**エフェクト自体を外せる**ように、
+/// 名前と id を param と一緒に持つ。
+pub(super) struct EffectBlock {
+    pub id: u32,
+    pub plugin_id: String,
+    pub params: Vec<PropRow>,
+}
+
 pub(super) struct InspectorData {
     pub ident_name: String,
     /// 層の合成モード。値は Document が持つ(表示用の写しをここへ運ぶだけ)。
@@ -219,7 +227,7 @@ pub(super) struct InspectorData {
     pub ident_sub: String,
     pub text: Vec<PropRow>,
     pub transform: Vec<PropRow>,
-    pub effects: Vec<PropRow>,
+    pub effects: Vec<EffectBlock>,
     pub has_effects: bool,
     pub colors: Vec<(&'static str, String)>,
 }
@@ -292,18 +300,19 @@ pub(super) fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: Ratio
         .sum();
     let attached_effects = view.effects(layer).unwrap_or_default();
     let has_effects = !attached_effects.is_empty();
-    let effects: Vec<PropRow> = attached_effects
+    let effects: Vec<EffectBlock> = attached_effects
         .into_iter()
-        .flat_map(|instance| {
+        .map(|instance| {
             let params = known_effects()
                 .iter()
                 .find(|d| d.plugin_id == instance.plugin_id)
                 .map(|d| d.params)
                 .unwrap_or(&[]);
-            params
+            let id = instance.id;
+            let rows = params
                 .iter()
                 .filter_map(move |param| {
-                    let prop = PropertyId::effect_param(instance.id, param.name).ok()?;
+                    let prop = PropertyId::effect_param(id, param.name).ok()?;
                     let keyed = view.track(layer, &prop).ok().flatten().is_some();
                     let v = match view.value_at(layer, &prop, t).ok().flatten() {
                         Some(Value::F64(v)) => v,
@@ -321,7 +330,12 @@ pub(super) fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: Ratio
                         axis: [None, None, None],
                     })
                 })
-                .collect::<Vec<_>>()
+                .collect::<Vec<_>>();
+            EffectBlock {
+                id: instance.id.0,
+                plugin_id: instance.plugin_id,
+                params: rows,
+            }
         })
         .collect();
     let source_name = match view.meta(layer).ok().flatten().map(|m| m.source) {

@@ -42,6 +42,7 @@ pub fn app() -> Element {
     let mut selected = use_signal(|| None);
     let timeline_scroll_y = use_signal(|| 0.0f64);
     let text_editing = use_signal(|| Option::<String>::None);
+    let renaming = use_signal(|| Option::<(crate::doc::store::LayerId, String)>::None);
 
     let (clock, ui_scale, timeline_attr, timeline_tx, stage_attr, loaded, doc, selection, selected_size) = use_hook(|| {
         let Loaded { doc, ui, duration_sec } = load_fixture();
@@ -378,7 +379,7 @@ pub fn app() -> Element {
                 },
             }
 
-            {timeline_shell(clock.clone(), playing, doc.clone(), attrs_state, &layer_rows.read(), timeline_attr, selection.clone(), selected, timeline_scroll_y, timeline_tx.clone())}
+            {timeline_shell(clock.clone(), playing, doc.clone(), attrs_state, &layer_rows.read(), timeline_attr, selection.clone(), selected, timeline_scroll_y, timeline_tx.clone(), renaming, revision)}
 
             div { id: "status", "{loaded.status}" }
         }
