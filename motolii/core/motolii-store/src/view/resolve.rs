@@ -496,7 +496,7 @@ impl<'a> StoreView<'a> {
                 // 裁定113/116: 全員 z=0 既定。`position.x`/`position.y`(split-position)
                 // の隣に同じ流儀で置いた `position.z`。
                 z: scalar(property::POSITION_Z, 0.0)?,
-                rotation_x: scalar(property::ROTATION_X, 0.0)? as f32,
+                rotation_x: scalar(property::ROTATION_X, 0.0)?,
                 rotation_y: scalar(property::ROTATION_Y, 0.0)? as f32,
             },
             declared_size: size,
@@ -803,3 +803,4 @@ mod tests {
         assert_eq!((tx, ty), (10.0, 20.0), "z を足しても x/y の解決が変わってはいけない");
     }
 }
+

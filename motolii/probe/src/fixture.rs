@@ -534,6 +534,28 @@ fn admit_testdata(doc: &mut motolii_store::Document) {
 pub fn load_fixture() -> Loaded {
     let mut fx = motolii_fixture::build();
     admit_testdata(&mut fx.doc);
+    if let Some(deg) = std::env::var("MOTOLII_TILT").ok().and_then(|v| v.parse::<f64>().ok()) {
+        let layers = fx.doc.view().layers();
+        let intents: Vec<_> = layers
+            .iter()
+            .filter_map(|l| {
+                let mut track = motolii_store::KeyframeTrack::new();
+                track.insert(motolii_store::Keyframe {
+                    t: motolii_store::RationalTime::ZERO,
+                    value: motolii_store::Value::F64(deg),
+                    interp: motolii_store::Interp::Linear,
+                    spatial: None,
+                });
+                motolii_store::PropertyId::new(motolii_store::property::ROTATION_X)
+                    .ok()
+                    .map(|property| motolii_store::Intent::SetTrack { layer: *l, property, track })
+            })
+            .collect();
+        match fx.doc.apply_all(intents) {
+            Ok(_) => println!("PROBE room=stage verdict=tilt-seeded deg={deg} layers={}", layers.len()),
+            Err(e) => println!("PROBE room=stage verdict=tilt-seed-error {e}"),
+        }
+    }
     let view = fx.doc.view();
 
     let layer_rows = layer_rows_from_doc(&fx.doc);

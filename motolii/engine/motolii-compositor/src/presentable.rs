@@ -59,10 +59,15 @@ impl Compositor {
         let mut rects: Vec<TexturedRect> = Vec::with_capacity(layers.len());
         for ((lwp, texture), &padding) in layers.iter().zip(&effective_textures).zip(&effective_paddings) {
             let layer = &lwp.layer;
-            let (transform, z) = if layer.pinned {
-                (pinned_cancel * layer.placement.transform, 0.0)
+            let (transform, z, rx, ry) = if layer.pinned {
+                (pinned_cancel * layer.placement.transform, 0.0, 0.0, 0.0)
             } else {
-                (layer.placement.transform, layer.placement.z)
+                (
+                    layer.placement.transform,
+                    layer.placement.z,
+                    layer.placement.rotation_x,
+                    layer.placement.rotation_y,
+                )
             };
             let a = match layer.blend_mode {
                 crate::BlendMode::Add => 0.0,
@@ -73,17 +78,18 @@ impl Compositor {
             // `SequentialInput::local_min`/`local_size` でやっているのと同じ計算
             // (padding=0 なら従来と完全に同じ幾何)。
             let pad = padding as f32;
+            let (corner, extent_u, extent_v) = crate::tilted_corners(
+                transform,
+                glam::Vec2::new(-pad, -pad),
+                glam::Vec2::new(layer.size[0] + 2.0 * pad, layer.size[1] + 2.0 * pad),
+                z,
+                rx,
+                ry,
+            );
             rects.push(TexturedRect {
-                top_left_corner_position: to_point3(
-                    transform.transform_point2(glam::Vec2::new(-pad, -pad)),
-                    z,
-                ),
-                extent_u: to_vector3(
-                    transform.transform_vector2(glam::Vec2::new(layer.size[0] + 2.0 * pad, 0.0)),
-                ),
-                extent_v: to_vector3(
-                    transform.transform_vector2(glam::Vec2::new(0.0, layer.size[1] + 2.0 * pad)),
-                ),
+                top_left_corner_position: corner,
+                extent_u,
+                extent_v,
                 colormapped_texture: ColormappedTexture::from_unorm_rgba(texture.clone()),
                 options: RectangleOptions {
                     multiplicative_tint: Rgba::from_rgba_premultiplied(
