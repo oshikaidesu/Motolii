@@ -168,6 +168,9 @@ pub(super) struct StageWidget {
     view_camera: Arc<Mutex<crate::render::engine::ObservationCamera>>,
     rings: Arc<std::sync::atomic::AtomicBool>,
     frame_dim: Arc<std::sync::atomic::AtomicU32>,
+    /// Timeline へ「行を作り直せ」と伝える口。**Stage で打ったキーが
+    /// Timeline に出ない**のを塞ぐ。書いた者が知らせる、という既にある形。
+    timeline_tx: std::sync::mpsc::Sender<crate::ui::timeline_widget::TimelineMsg>,
     /// 最後に指が居た所(窓の点)。拡縮を**指の下**で行うために覚える。
     cursor: Option<(f64, f64)>,
     /// **出す物だけを映す。** 書き出しカメラで撮り、取っ手も枠も描かず、触れない。
@@ -207,6 +210,7 @@ impl StageWidget {
         view_camera: Arc<Mutex<crate::render::engine::ObservationCamera>>,
         rings: Arc<std::sync::atomic::AtomicBool>,
         frame_dim: Arc<std::sync::atomic::AtomicU32>,
+        timeline_tx: std::sync::mpsc::Sender<crate::ui::timeline_widget::TimelineMsg>,
         output_only: bool,
     ) -> Self {
         Self {
@@ -224,6 +228,7 @@ impl StageWidget {
             view_camera,
             rings,
             frame_dim,
+            timeline_tx,
             cursor: None,
             output_only,
         }
@@ -527,11 +532,14 @@ fn compute_rotation(center: (f64, f64), grab: (f64, f64), cur: (f64, f64), orig_
 
 fn track_intent(doc: &Document, layer: LayerId, name: &str, value: Value, t: RationalTime) -> Option<Intent> {
     let prop = PropertyId::new(name).ok()?;
-    let existing = doc.view().track(layer, &prop).ok().flatten();
-    let is_new = existing.as_ref().map(|tr| tr.keys().is_empty()).unwrap_or(true);
-    let mut track = existing.unwrap_or_else(KeyframeTrack::new);
-    let key_t = if is_new { RationalTime::ZERO } else { t };
-    track.insert(Keyframe { t: key_t, value, interp: Interp::Linear, spatial: None });
+    let mut track = doc
+        .view()
+        .track(layer, &prop)
+        .ok()
+        .flatten()
+        .unwrap_or_else(KeyframeTrack::new);
+    // **打たれるのは、いま居る時刻。**(2026-09-01)
+    track.insert(Keyframe { t, value, interp: Interp::Linear, spatial: None });
     Some(Intent::SetTrack { layer, property: prop, track })
 }
 
@@ -897,6 +905,10 @@ impl Widget for StageWidget {
                 };
                 match doc.apply_all(intents) {
                     Ok(_) => {
+                        let rows = crate::ui::fixture::canvas_rows_from_doc(&doc);
+                        let _ = self
+                            .timeline_tx
+                            .send(crate::ui::timeline_widget::TimelineMsg::SetRows(rows));
                         *self.revision.write() += 1;
                         println!("PROBE room=write verdict=gizmo-{:?} layer={:?}", drag.mode, drag.layer);
                     }

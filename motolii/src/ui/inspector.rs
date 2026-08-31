@@ -101,17 +101,20 @@ fn write_key(
     property: &str,
     value: Value,
     t: RationalTime,
-    at_zero_if_new: bool,
 ) -> Result<(), crate::doc::store::StoreError> {
     let Ok(prop) = PropertyId::new(property) else {
         return Ok(());
     };
     let mut doc = doc.lock().unwrap();
-    let existing = doc.view().track(layer, &prop).ok().flatten();
-    let is_new = existing.as_ref().map(|tr| tr.keys().is_empty()).unwrap_or(true);
-    let mut track = existing.unwrap_or_else(KeyframeTrack::new);
-    let key_t = if is_new && at_zero_if_new { RationalTime::ZERO } else { t };
-    track.insert(Keyframe { t: key_t, value, interp: Interp::Linear, spatial: None });
+    let mut track = doc
+        .view()
+        .track(layer, &prop)
+        .ok()
+        .flatten()
+        .unwrap_or_else(KeyframeTrack::new);
+    // **打たれるのは、いま居る時刻。** 1つ目だけ 0秒 へ寄せると、
+    // 動かした所と菱形の出る所が食い違い、利用者には壊れて見える。
+    track.insert(Keyframe { t, value, interp: Interp::Linear, spatial: None });
     doc.apply(Intent::SetTrack { layer, property: prop, track })
 }
 
@@ -135,7 +138,7 @@ fn commit_drag(doc: &Arc<Mutex<Document>>, d: &ValueDrag, t: RationalTime) {
         return;
     }
     let new_value = nudge(&d.start_value, d.vec2, d.axis, d.last_dx * increment(&d.property, d.range), d.range);
-    if let Err(e) = write_key(doc, d.layer, &d.property, new_value, t, true) {
+    if let Err(e) = write_key(doc, d.layer, &d.property, new_value, t) {
         println!("PROBE room=write verdict=apply-error {e}");
     }
 }
@@ -150,8 +153,7 @@ fn write_content(
     let Some(mut document) = doc.view().text_document(layer)? else {
         return Ok(());
     };
-    let key_t = if document.content.keys().is_empty() { RationalTime::ZERO } else { t };
-    document.content.insert(ContentKeyframe { t: key_t, content });
+    document.content.insert(ContentKeyframe { t, content });
     doc.apply(Intent::SetTextDocument { layer, document })
 }
 
@@ -207,7 +209,7 @@ fn prop_row(
     let key_click = p.property.clone().map(|property| {
         let value = p.value.clone();
         let doc = doc.clone();
-        move |_| match write_key(&doc, layer, &property, value.clone(), t, false) {
+        move |_| match write_key(&doc, layer, &property, value.clone(), t) {
             Ok(_) => {
                 println!("PROBE room=write verdict=key-added layer={:?} prop={} t={:?}", layer, property, t);
                 *revision.write() += 1;
@@ -314,9 +316,13 @@ pub(super) fn inspector_panel(
     drag: Signal<Option<ValueDrag>>,
     mut blend_open: Signal<bool>,
     mut parent_open: Signal<bool>,
+    playhead: Signal<f64>,
 ) -> Element {
     let mut drag = drag;
     let _ = revision(); // Document書き換え後の再描画をここで購読する(値そのものは使わない)
+    // 再生位置が動いた時も描き直す。**値は時刻で決まる**ので、
+    // ここを購読しないと絵だけ動いて数字が止まる。
+    let _ = playhead();
 
     let empty = InspectorData {
         blend: BlendMode::Normal,

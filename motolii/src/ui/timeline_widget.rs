@@ -199,6 +199,9 @@ pub(super) struct TimelineWidget {
     selection: Option<Selection>,
     selected_mirror: Option<Signal<Option<LayerId>>>,
     scroll_y_mirror: Option<Signal<f64>>,
+    /// 再生位置の鏡。`clock` は signal ではないので、これが無いと
+    /// 位置を動かしても値の欄が描き直されない。
+    playhead_mirror: Option<Signal<f64>>,
     selected_key: Option<Arc<Mutex<Vec<crate::ui::session::KeySel>>>>,
 }
 
@@ -225,6 +228,7 @@ impl TimelineWidget {
             selection: None,
             selected_mirror: None,
             scroll_y_mirror: None,
+            playhead_mirror: None,
             selected_key: None,
         }
     }
@@ -245,6 +249,11 @@ impl TimelineWidget {
 
     pub(super) fn with_scroll_mirror(mut self, mirror: Signal<f64>) -> Self {
         self.scroll_y_mirror = Some(mirror);
+        self
+    }
+
+    pub(super) fn with_playhead_mirror(mut self, mirror: Signal<f64>) -> Self {
+        self.playhead_mirror = Some(mirror);
         self
     }
 
@@ -821,6 +830,13 @@ impl Widget for TimelineWidget {
         scale: f64,
     ) -> anyrender::Scene {
         self.process_messages();
+        // 再生位置が動いたら、値を出している側へ知らせる。
+        if let (Some(clock), Some(mirror)) = (&self.clock, &mut self.playhead_mirror) {
+            let now = clock.now_sec();
+            if ((*mirror)() - now).abs() > 1e-6 {
+                mirror.set(now);
+            }
+        }
 
         let mut s = anyrender::Scene::new();
         if width == 0 || height == 0 {

@@ -41,11 +41,14 @@ struct Panes {
     echo: Signal<u32>,
     /// 窓の文字の大きさ(%)。設定を1枚へ集めるため Settings が触る。
     scale_pct: Signal<u32>,
+    /// 再生位置。値を出す側はこれを見て描き直す。
+    playhead: Signal<f64>,
 }
 
 fn panes_for(ui: &fixture::UiData) -> Panes {
     Panes {
         scale_pct: use_signal(|| 100),
+        playhead: use_signal(|| 0.0),
         layer_rows: use_signal(|| ui.layer_rows.clone()),
         attrs_state: use_signal(|| {
             ui.layer_rows.iter().map(|r| (r.hidden, r.solo, r.locked)).collect::<Vec<_>>()
@@ -108,6 +111,7 @@ fn panel_body(panel: Panel, session: &Session, ui: &fixture::UiData, p: Panes) -
             selected,
             revision: p.revision,
             editing: p.text_editing,
+            playhead: p.playhead,
         }),
         Panel::Utility => rsx!(UtilityPanel {
             session: session.clone(),
@@ -124,6 +128,7 @@ fn panel_body(panel: Panel, session: &Session, ui: &fixture::UiData, p: Panes) -
             attrs_state: p.attrs_state,
             selected: p.selected,
             scroll_y: p.scroll_y,
+            playhead: p.playhead,
             renaming: p.renaming,
             revision: p.revision,
         }),
@@ -176,6 +181,7 @@ fn InspectorPanel(
     selected: Option<crate::doc::store::LayerId>,
     revision: Signal<u32>,
     editing: Signal<Option<String>>,
+    playhead: Signal<f64>,
 ) -> Element {
     let drag = use_signal(|| None);
     let blend_open = use_signal(|| false);
@@ -189,6 +195,7 @@ fn InspectorPanel(
         drag,
         blend_open,
         parent_open,
+        playhead,
     )
 }
 
@@ -247,6 +254,7 @@ fn StagePanel(
             session.view_camera.clone(),
             session.rings.clone(),
             session.frame_dim.clone(),
+            session.timeline_tx.clone(),
             false,
         ))
     });
@@ -333,6 +341,7 @@ fn OutputPanel(session: Session) -> Element {
             session.view_camera.clone(),
             session.rings.clone(),
             session.frame_dim.clone(),
+            session.timeline_tx.clone(),
             true,
         ))
     });
@@ -353,6 +362,7 @@ fn TimelinePanel(
     attrs_state: Signal<Vec<(bool, bool, bool)>>,
     selected: Signal<Option<crate::doc::store::LayerId>>,
     scroll_y: Signal<f64>,
+    playhead: Signal<f64>,
     renaming: Signal<Option<(crate::doc::store::LayerId, String)>>,
     revision: Signal<u32>,
 ) -> Element {
@@ -365,6 +375,7 @@ fn TimelinePanel(
                 .with_document(session.doc.clone(), fixture::canvas_rows_from_doc)
                 .with_selection(session.selection.clone(), selected)
                 .with_scroll_mirror(scroll_y)
+                .with_playhead_mirror(playhead)
                 .with_key_mirror(session.selected_keys.clone()),
         )
     });
