@@ -140,6 +140,8 @@ pub(super) struct StageWidget {
     selected_size: Arc<Mutex<Option<[f32; 2]>>>,
     view_camera: Arc<Mutex<crate::render::engine::ObservationCamera>>,
     rings: Arc<std::sync::atomic::AtomicBool>,
+    /// 最後に指が居た所(窓の点)。拡縮を**指の下**で行うために覚える。
+    cursor: Option<(f64, f64)>,
 }
 
 enum State {
@@ -184,6 +186,7 @@ impl StageWidget {
             selected_size,
             view_camera,
             rings,
+            cursor: None,
         }
     }
 
@@ -538,8 +541,46 @@ impl Widget for StageWidget {
                 if dy == 0.0 {
                     return;
                 }
+                // **指の下を動かさない。** 中心を基準に拡げると、拡げるたびに
+                // 見たい物が画面の外へ逃げ、必ず動かし直す手間が付く。
+                //
+                // 補正は式で立てずに**実際の写像で解く**。拡大率を変えた写像で
+                // 指の下が世界のどこへ移ったかを測り、その差だけ視点を戻す。
+                // (単位の取り違えが起きない。)
+                let anchor = self.cursor.map(|(x, y)| ((x, y), self.fit.to_comp(x, y)));
                 let mut view = self.view_camera.lock().unwrap();
                 view.zoom = (view.zoom * (1.0 - dy as f32 * 0.002)).clamp(0.05, 40.0);
+
+                let refresh = |fit: &mut Fit, cam| {
+                    fit.camera = cam;
+                    fit.image_from_world =
+                        crate::doc::core::camera_screen_from_world_z0(fit.comp, cam);
+                };
+
+                if let Some(((px, py), w0)) = anchor {
+                    // 視点を 1 動かすと指の下の点がどれだけ動くかを**測って**から解く。
+                    // 軸ごとに向きが違う(絵の Y は世界の Y と逆)ので、符号は決め打ちしない。
+                    let pan = view.pan;
+                    let at = |dx: f32, dy: f32| {
+                        let mut cam = view.as_resolved_camera();
+                        cam.center = [pan[0] + dx, pan[1] + dy];
+                        let mut fit = self.fit;
+                        refresh(&mut fit, cam);
+                        fit.to_comp(px, py)
+                    };
+                    let base = at(0.0, 0.0);
+                    let slope_x = at(1.0, 0.0).0 - base.0;
+                    let slope_y = at(0.0, 1.0).1 - base.1;
+                    if slope_x.abs() > 1e-9 && slope_y.abs() > 1e-9 {
+                        view.pan = [
+                            pan[0] + ((w0.0 - base.0) / slope_x) as f32,
+                            pan[1] + ((w0.1 - base.1) / slope_y) as f32,
+                        ];
+                    }
+                }
+                let camera = view.as_resolved_camera();
+                drop(view);
+                refresh(&mut self.fit, camera);
             }
             UiEvent::PointerDown(p) => {
                 let (cx, cy) = self.fit.to_comp(p.element.x as f64, p.element.y as f64);
@@ -688,6 +729,7 @@ impl Widget for StageWidget {
                 }
             }
             UiEvent::PointerMove(p) => {
+                self.cursor = Some((p.element.x as f64, p.element.y as f64));
                 // 枠の外で離すと、離した事がここへ届かない。掴んだままの絵が残る。
                 if p.buttons.is_empty() && (self.drag.is_some() || self.camera_drag.is_some()) {
                     println!("PROBE room=input verdict=drag-dropped reason=release-not-seen");
