@@ -27,8 +27,7 @@ impl Gui {
     fn open() -> Self {
         let Loaded { doc, ui, duration_sec } = load_fixture();
         let mut vdom = VirtualDom::new(app);
-        vdom.insert_any_root_context(Box::new(Session::new(doc, duration_sec)));
-        vdom.insert_any_root_context(Box::new(std::sync::Arc::new(ui)));
+        vdom.insert_any_root_context(Box::new(Session::new(doc, duration_sec, ui)));
         vdom.insert_any_root_context(Box::new(crate::ui::host::Host::for_tests()));
         let mut doc = DioxusDocument::new(
             vdom,

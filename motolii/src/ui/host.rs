@@ -14,7 +14,7 @@ use blitz_shell::{BlitzApplication, View};
 use blitz_dom::DocumentConfig;
 
 use crate::ui::dock::Panel;
-use crate::ui::fixture::{load_fixture, Loaded, UiData};
+use crate::ui::fixture::{load_fixture, Loaded};
 use crate::ui::session::Session;
 
 /// 窓を1枚足してくれ、という頼み。窓の外(event loop)へ渡る。
@@ -29,6 +29,10 @@ pub(crate) struct Host {
     proxy: Option<BlitzShellProxy>,
     /// 別窓が閉じた時に本体へ知らせる線。本体が自分の runtime を包んで置く。
     on_close: std::rc::Rc<std::cell::RefCell<Option<std::rc::Rc<dyn Fn(Panel)>>>>,
+    /// 窓を起こす線。窓ごとに1本、自分の runtime を包んで置く。
+    /// 状態は全窓で1つなので、誰かが書いたら他の窓も描き直す必要がある。
+    wakers: std::rc::Rc<std::cell::RefCell<Vec<(u64, std::rc::Rc<dyn Fn()>)>>>,
+    next_id: std::rc::Rc<std::cell::Cell<u64>>,
 }
 
 impl PartialEq for Host {
@@ -38,6 +42,28 @@ impl PartialEq for Host {
 }
 
 impl Host {
+    /// この窓を起こす線を置く。返るのは自分の番号(自分は起こさないため)。
+    pub(crate) fn listen(&self, wake: impl Fn() + 'static) -> u64 {
+        let id = self.next_id.get() + 1;
+        self.next_id.set(id);
+        self.wakers.borrow_mut().push((id, std::rc::Rc::new(wake)));
+        id
+    }
+
+    /// 自分以外の窓を描き直させる。
+    pub(crate) fn wake_others(&self, me: u64) {
+        let wakers: Vec<_> = self
+            .wakers
+            .borrow()
+            .iter()
+            .filter(|(id, _)| *id != me)
+            .map(|(_, w)| w.clone())
+            .collect();
+        for wake in wakers {
+            wake();
+        }
+    }
+
     /// 別窓が閉じた時に呼ばれる物を置く。本体の窓だけが置く。
     pub(crate) fn on_close(&self, f: impl Fn(Panel) + 'static) {
         *self.on_close.borrow_mut() = Some(std::rc::Rc::new(f));
@@ -55,7 +81,13 @@ impl Host {
     pub(crate) fn for_tests() -> Self {
         let (tx, rx) = channel();
         std::mem::forget(rx);
-        Self { tx, proxy: None, on_close: Default::default() }
+        Self {
+            tx,
+            proxy: None,
+            on_close: Default::default(),
+            wakers: Default::default(),
+            next_id: Default::default(),
+        }
     }
 
     pub(crate) fn open(&self, panel: Panel) {
@@ -99,7 +131,6 @@ struct Windows {
     inner: BlitzApplication<DioxusNativeWindowRenderer>,
     asks: Receiver<Ask>,
     session: Session,
-    ui: std::sync::Arc<UiData>,
     host: Host,
     pending: Vec<(WindowConfig<DioxusNativeWindowRenderer>, Option<Panel>)>,
     /// どの窓がどのパネルの別窓か。閉じた時に本体へ返すのに要る。
@@ -155,7 +186,6 @@ impl Windows {
                     panel.label(),
                     vec![
                         Box::new(self.session.clone()),
-                        Box::new(self.ui.clone()),
                         Box::new(self.host.clone()),
                         Box::new(panel),
                     ],
@@ -217,17 +247,21 @@ pub fn launch(title: &str) {
     let (proxy, event_queue) = BlitzShellProxy::new(event_loop.create_proxy());
 
     let Loaded { doc, ui, duration_sec } = load_fixture();
-    let session = Session::new(doc, duration_sec);
-    let ui = std::sync::Arc::new(ui);
+    let session = Session::new(doc, duration_sec, ui);
     let (tx, asks) = channel();
-    let host = Host { tx, proxy: Some(proxy.clone()), on_close: Default::default() };
+    let host = Host {
+        tx,
+        proxy: Some(proxy.clone()),
+        on_close: Default::default(),
+        wakers: Default::default(),
+        next_id: Default::default(),
+    };
 
     let main = window(
         crate::ui::app::app,
         title,
         vec![
             Box::new(session.clone()),
-            Box::new(ui.clone()),
             Box::new(host.clone()),
         ],
     );
@@ -238,7 +272,6 @@ pub fn launch(title: &str) {
             inner,
             asks,
             session,
-            ui,
             host,
             pending: vec![(main, None)],
             detached: Default::default(),

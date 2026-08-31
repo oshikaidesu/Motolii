@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use dioxus_native::prelude::*;
 use dioxus_native::CustomWidgetAttr;
 
@@ -39,10 +37,8 @@ struct Panes {
     text_editing: Signal<Option<String>>,
     renaming: Signal<Option<(crate::doc::store::LayerId, String)>>,
     scroll_y: Signal<f64>,
-    browser_rail: Signal<Option<fixture::AssetFamily>>,
-    inspector_drag: Signal<Option<crate::ui::inspector::ValueDrag>>,
-    blend_open: Signal<bool>,
-    parent_open: Signal<bool>,
+    /// 他の窓が書いた時に上がる。状態は全窓で1つなので、これで描き直す。
+    echo: Signal<u32>,
 }
 
 fn panes_for(ui: &fixture::UiData) -> Panes {
@@ -56,52 +52,60 @@ fn panes_for(ui: &fixture::UiData) -> Panes {
         text_editing: use_signal(|| None),
         renaming: use_signal(|| None),
         scroll_y: use_signal(|| 0.0f64),
-        browser_rail: use_signal(|| None),
-        inspector_drag: use_signal(|| None),
-        blend_open: use_signal(|| false),
-        parent_open: use_signal(|| false),
+        echo: use_signal(|| 0u32),
     }
+}
+
+/// 窓をまたいだ描き直しを繋ぐ。自分が書いたら他の窓を起こし、他の窓に起こされたら
+/// 自分を描き直す。起こされた側は `echo` だけが動くので、起こし返しは起きない。
+fn wire_windows(host: &crate::ui::host::Host, panes: Panes) {
+    let me = use_hook(|| {
+        let runtime = dioxus_core::Runtime::current();
+        let scope = dioxus_core::current_scope_id();
+        let mut echo = panes.echo;
+        host.listen(move || {
+            runtime.in_scope(scope, move || *echo.write() += 1);
+        })
+    });
+    let host = host.clone();
+    use_effect(move || {
+        // 書き込みの合図。選択は revision を上げない経路なので別に見る。
+        let _ = (panes.revision)();
+        let _ = (panes.selected)();
+        host.wake_others(me);
+    });
 }
 
 /// パネル1枚の中身。窓が変わっても同じ物を出す。
 fn panel_body(panel: Panel, session: &Session, ui: &fixture::UiData, p: Panes) -> Element {
+    let _ = (p.echo)();
+    let selected = session.selection.get();
     match panel {
-        Panel::Media | Panel::Effects | Panel::Create | Panel::Colors => browser_panel(
-            ui,
-            session.doc.clone(),
-            session.clock.clone(),
-            p.layer_rows,
-            p.attrs_state,
-            session.timeline_tx.clone(),
-            p.selected,
-            p.revision,
+        Panel::Media | Panel::Effects | Panel::Create | Panel::Colors => rsx!(BrowserPanel {
+            session: session.clone(),
             panel,
-            p.browser_rail,
-        ),
+            layer_rows: p.layer_rows,
+            attrs_state: p.attrs_state,
+            selected: p.selected,
+            revision: p.revision,
+        }),
         Panel::Stage => rsx!(StagePanel {
             session: session.clone(),
             selected: p.selected,
             revision: p.revision,
             comp_line: ui.comp_line.clone(),
         }),
-        Panel::Inspector => inspector_panel(
-            &session.doc,
-            (p.selected)(),
-            &session.clock,
-            p.revision,
-            p.text_editing,
-            p.inspector_drag,
-            p.blend_open,
-            p.parent_open,
-        ),
-        Panel::Utility => crate::ui::utility::utility_panel(
-            &session.doc,
-            (p.selected)(),
-            &session.selected_size,
-            &session.gizmo_3d,
-            &session.clock,
-            p.revision,
-        ),
+        Panel::Inspector => rsx!(InspectorPanel {
+            session: session.clone(),
+            selected,
+            revision: p.revision,
+            editing: p.text_editing,
+        }),
+        Panel::Utility => rsx!(UtilityPanel {
+            session: session.clone(),
+            selected,
+            revision: p.revision,
+        }),
         Panel::Timeline => rsx!(TimelinePanel {
             session: session.clone(),
             layer_rows: p.layer_rows,
@@ -117,14 +121,78 @@ fn panel_body(panel: Panel, session: &Session, ui: &fixture::UiData, p: Panes) -
 /// 別窓。パネル1枚だけを出す。状態は窓をまたいで1つ(Session)。
 pub fn detached() -> Element {
     let session = use_hook(|| consume_context::<Session>());
-    let ui = use_hook(|| consume_context::<Arc<fixture::UiData>>());
+    let ui = session.ui.clone();
     let panel = use_hook(|| consume_context::<Panel>());
+    let host = use_hook(|| consume_context::<crate::ui::host::Host>());
     let panes = panes_for(&ui);
+    wire_windows(&host, panes);
     println!("PROBE room=detached verdict=render panel={panel}");
     let css = format!("{}{}", tokens::css_root(100), STYLES);
     rsx!(
         style { {css} }
         div { id: "detached", {panel_body(panel, &session, &ui, panes)} }
+    )
+}
+
+#[component]
+fn BrowserPanel(
+    session: Session,
+    panel: Panel,
+    layer_rows: Signal<Vec<fixture::LayerRow>>,
+    attrs_state: Signal<Vec<(bool, bool, bool)>>,
+    selected: Signal<Option<crate::doc::store::LayerId>>,
+    revision: Signal<u32>,
+) -> Element {
+    let rail = use_signal(|| Option::<fixture::AssetFamily>::None);
+    browser_panel(
+        &session.ui,
+        session.doc.clone(),
+        session.clock.clone(),
+        layer_rows,
+        attrs_state,
+        session.timeline_tx.clone(),
+        selected,
+        revision,
+        panel,
+        rail,
+    )
+}
+
+#[component]
+fn InspectorPanel(
+    session: Session,
+    selected: Option<crate::doc::store::LayerId>,
+    revision: Signal<u32>,
+    editing: Signal<Option<String>>,
+) -> Element {
+    let drag = use_signal(|| None);
+    let blend_open = use_signal(|| false);
+    let parent_open = use_signal(|| false);
+    inspector_panel(
+        &session.doc,
+        selected,
+        &session.clock,
+        revision,
+        editing,
+        drag,
+        blend_open,
+        parent_open,
+    )
+}
+
+#[component]
+fn UtilityPanel(
+    session: Session,
+    selected: Option<crate::doc::store::LayerId>,
+    revision: Signal<u32>,
+) -> Element {
+    crate::ui::utility::utility_panel(
+        &session.doc,
+        selected,
+        &session.selected_size,
+        &session.gizmo_3d,
+        &session.clock,
+        revision,
     )
 }
 
@@ -208,7 +276,7 @@ pub fn app() -> Element {
     let mut scale_pct = use_signal(|| 100u32);
 
     let session = use_hook(|| consume_context::<Session>()).clone();
-    let loaded = use_hook(|| consume_context::<Arc<fixture::UiData>>());
+    let loaded = session.ui.clone();
     let host = use_hook(|| consume_context::<crate::ui::host::Host>());
     // 別窓が閉じたら置き場へ戻す。別の窓からの合図なので、自分の runtime を包んで渡す。
     use_hook(|| {
@@ -220,13 +288,13 @@ pub fn app() -> Element {
         });
     });
     let panes = panes_for(&loaded);
+    wire_windows(&host, panes);
     let Panes {
         layer_rows,
         attrs_state,
         selected: selected_sig,
         revision,
         text_editing,
-        scroll_y: timeline_scroll_y,
         ..
     } = panes;
     let mut selected = selected_sig;
@@ -612,7 +680,7 @@ pub fn app() -> Element {
                     "View"
                     if view_open() {
                         div { class: "vmenu",
-                            for panel in Panel::ALL {
+                            for panel in Panel::all() {
                                 div { class: "vrow",
                                     span {
                                         class: if d.is_visible(panel) { "vitem on" } else { "vitem" },
@@ -732,9 +800,9 @@ mod detached_tests {
     fn open(panel: Panel) -> DioxusDocument {
         let Loaded { doc, ui, duration_sec } = load_fixture();
         let mut vdom = VirtualDom::new(detached);
-        vdom.insert_any_root_context(Box::new(Session::new(doc, duration_sec)));
-        vdom.insert_any_root_context(Box::new(Arc::new(ui)));
+        vdom.insert_any_root_context(Box::new(Session::new(doc, duration_sec, ui)));
         vdom.insert_any_root_context(Box::new(panel));
+        vdom.insert_any_root_context(Box::new(crate::ui::host::Host::for_tests()));
         let mut doc = DioxusDocument::new(
             vdom,
             DocumentConfig {

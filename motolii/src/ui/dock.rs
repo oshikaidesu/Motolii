@@ -1,7 +1,7 @@
 use std::fmt;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub(super) enum Panel {
+pub(crate) enum Panel {
     Media,
     Effects,
     Create,
@@ -12,39 +12,45 @@ pub(super) enum Panel {
     Timeline,
 }
 
+/// パネル1枚の素性。**足す時はここに1行足すだけ**。名前・色・既定の置き場は
+/// 全部ここから引く(散らすと足し忘れる)。中身は `app::panel_body`。
+struct Spec {
+    panel: Panel,
+    label: &'static str,
+    way: &'static str,
+    home: Zone,
+}
+
+const PANELS: &[Spec] = &[
+    Spec { panel: Panel::Media, label: "Media", way: "var(--way-browser)", home: Zone::Left },
+    Spec { panel: Panel::Effects, label: "Effects", way: "var(--way-browser)", home: Zone::Left },
+    Spec { panel: Panel::Create, label: "Create", way: "var(--way-browser)", home: Zone::Left },
+    Spec { panel: Panel::Colors, label: "Colors", way: "var(--way-browser)", home: Zone::Left },
+    Spec { panel: Panel::Stage, label: "Stage", way: "var(--way-stage)", home: Zone::Center },
+    Spec { panel: Panel::Inspector, label: "Inspector", way: "var(--way-inspector)", home: Zone::Right },
+    Spec { panel: Panel::Utility, label: "Utility", way: "var(--way-inspector)", home: Zone::Right },
+    Spec { panel: Panel::Timeline, label: "Timeline", way: "var(--way-timeline)", home: Zone::Bottom },
+];
+
 impl Panel {
-    pub(super) const ALL: [Panel; 8] = [
-        Panel::Media,
-        Panel::Effects,
-        Panel::Create,
-        Panel::Colors,
-        Panel::Stage,
-        Panel::Inspector,
-        Panel::Utility,
-        Panel::Timeline,
-    ];
+    fn spec(self) -> &'static Spec {
+        PANELS
+            .iter()
+            .find(|s| s.panel == self)
+            .expect("PANELS に載っていないパネル")
+    }
+
+    pub(super) fn all() -> impl Iterator<Item = Panel> {
+        PANELS.iter().map(|s| s.panel)
+    }
 
     /// 部屋ごとの色。帯を畳んだので、これはタブが引き継ぐ。
     pub(super) fn way(self) -> &'static str {
-        match self {
-            Panel::Media | Panel::Effects | Panel::Create | Panel::Colors => "var(--way-browser)",
-            Panel::Stage => "var(--way-stage)",
-            Panel::Inspector | Panel::Utility => "var(--way-inspector)",
-            Panel::Timeline => "var(--way-timeline)",
-        }
+        self.spec().way
     }
 
     pub(super) fn label(self) -> &'static str {
-        match self {
-            Panel::Media => "Media",
-            Panel::Effects => "Effects",
-            Panel::Create => "Create",
-            Panel::Colors => "Colors",
-            Panel::Stage => "Stage",
-            Panel::Inspector => "Inspector",
-            Panel::Utility => "Utility",
-            Panel::Timeline => "Timeline",
-        }
+        self.spec().label
     }
 }
 
@@ -87,16 +93,11 @@ pub(super) struct Dock {
 
 impl Default for Dock {
     fn default() -> Self {
-        Self {
-            zones: [
-                vec![Panel::Media, Panel::Effects, Panel::Create, Panel::Colors],
-                vec![Panel::Stage],
-                vec![Panel::Inspector, Panel::Utility],
-                vec![Panel::Timeline],
-            ],
-            active: [0; 4],
-            detached: Vec::new(),
+        let mut zones: [Vec<Panel>; 4] = Default::default();
+        for spec in PANELS {
+            zones[spec.home.ix()].push(spec.panel);
         }
+        Self { zones, active: [0; 4], detached: Vec::new() }
     }
 }
 
@@ -183,12 +184,7 @@ impl Dock {
 }
 
 fn default_zone(panel: Panel) -> Zone {
-    match panel {
-        Panel::Media | Panel::Effects | Panel::Create | Panel::Colors => Zone::Left,
-        Panel::Stage => Zone::Center,
-        Panel::Inspector | Panel::Utility => Zone::Right,
-        Panel::Timeline => Zone::Bottom,
-    }
+    panel.spec().home
 }
 
 #[cfg(test)]
@@ -268,7 +264,7 @@ mod tests {
     #[test]
     fn hiding_then_showing_puts_it_back_somewhere_reachable() {
         let mut dock = Dock::default();
-        for panel in Panel::ALL {
+        for panel in Panel::all() {
             dock.toggle(panel);
             assert!(!dock.is_visible(panel));
             dock.toggle(panel);

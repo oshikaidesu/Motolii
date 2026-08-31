@@ -56,6 +56,8 @@ pub(super) struct Session {
     /// 口は窓の側で持つ。
     pub timeline_tx: std::sync::mpsc::Sender<TimelineMsg>,
     pub timeline_rx: std::rc::Rc<std::sync::mpsc::Receiver<TimelineMsg>>,
+    /// 起動時に読んだ素材と見出し。動かないので窓が何枚でも1つ。
+    pub ui: Arc<crate::ui::fixture::UiData>,
 }
 
 /// 部品はどれも同じ物への取っ手なので、同じ Document を指していれば同じ session。
@@ -66,7 +68,7 @@ impl PartialEq for Session {
 }
 
 impl Session {
-    pub(super) fn new(doc: Document, duration_sec: f64) -> Self {
+    pub(super) fn new(doc: Document, duration_sec: f64, ui: crate::ui::fixture::UiData) -> Self {
         let (timeline_tx, timeline_rx) = std::sync::mpsc::channel();
         Self {
             doc: Arc::new(Mutex::new(doc)),
@@ -77,6 +79,7 @@ impl Session {
             gizmo_3d: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             timeline_tx,
             timeline_rx: std::rc::Rc::new(timeline_rx),
+            ui: Arc::new(ui),
         }
     }
 }
