@@ -95,6 +95,7 @@ fn panel_body(panel: Panel, session: &Session, ui: &fixture::UiData, p: Panes) -
             revision: p.revision,
             comp_line: ui.comp_line.clone(),
         }),
+        Panel::Output => rsx!(OutputPanel { session: session.clone() }),
         Panel::Inspector => rsx!(InspectorPanel {
             session: session.clone(),
             selected,
@@ -238,6 +239,7 @@ fn StagePanel(
             session.selected_size.clone(),
             session.view_camera.clone(),
             session.rings.clone(),
+            false,
         ))
     });
     let rings = session.rings.clone();
@@ -259,6 +261,32 @@ fn StagePanel(
                     "◎"
                 }
                 span { "{comp_line}" }
+            }
+        }
+    )
+}
+
+/// 出す物だけを映す窓。Stage が世界を見る場になった以上、
+/// **出力を確かめる場**が別に要る(枠を回した時、Stage では確かめようがない)。
+#[component]
+fn OutputPanel(session: Session) -> Element {
+    let attr = use_hook(|| {
+        CustomWidgetAttr::new(StageWidget::new(
+            session.clock.clone(),
+            session.doc.clone(),
+            session.selection.clone(),
+            Signal::new(None),
+            Signal::new(0),
+            session.selected_size.clone(),
+            session.view_camera.clone(),
+            session.rings.clone(),
+            true,
+        ))
+    });
+    rsx!(
+        div { id: "stagecol",
+            div { id: "stage",
+                object { "data": attr }
             }
         }
     )

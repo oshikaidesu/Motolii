@@ -7,6 +7,7 @@ pub(crate) enum Panel {
     Create,
     Colors,
     Stage,
+    Output,
     Inspector,
     Utility,
     Timeline,
@@ -28,6 +29,7 @@ const PANELS: &[Spec] = &[
     Spec { panel: Panel::Create, label: "Create", way: "var(--way-browser)", home: Zone::Left },
     Spec { panel: Panel::Colors, label: "Colors", way: "var(--way-browser)", home: Zone::Left },
     Spec { panel: Panel::Stage, label: "Stage", way: "var(--way-stage)", home: Zone::Center },
+    Spec { panel: Panel::Output, label: "Output", way: "var(--way-stage)", home: Zone::Center },
     Spec { panel: Panel::Inspector, label: "Inspector", way: "var(--way-inspector)", home: Zone::Right },
     Spec { panel: Panel::Utility, label: "Utility", way: "var(--way-inspector)", home: Zone::Right },
     Spec { panel: Panel::Timeline, label: "Timeline", way: "var(--way-timeline)", home: Zone::Bottom },
@@ -259,7 +261,9 @@ mod tests {
     #[test]
     fn an_empty_zone_has_nothing_selected() {
         let mut dock = Dock::default();
-        dock.hide(Panel::Stage);
+        for panel in dock.panels(Zone::Center).into_iter().copied().collect::<Vec<_>>() {
+            dock.hide(panel);
+        }
         assert!(dock.panels(Zone::Center).is_empty());
         assert_eq!(dock.active(Zone::Center), None);
     }

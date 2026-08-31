@@ -336,7 +336,7 @@ fn moving_a_panel_after_hiding_another_ones_body_survives() {
 fn a_panel_that_draws_itself_still_draws_after_being_moved() {
     let mut gui = Gui::open();
     let before = gui.drawing_panels();
-    assert_eq!(before, 2, "Stage と Timeline が自前で描いているはず: {before}");
+    assert_eq!(before, 2, "選ばれている Stage と Timeline が自前で描いているはず: {before}");
 
     let tabs = gui.texts(".ptab");
     let at = |name: &str| tabs.iter().position(|t| t == name).unwrap_or_else(|| panic!("{name} タブ"));
@@ -351,9 +351,10 @@ fn a_panel_that_draws_itself_still_draws_after_being_moved() {
         strips[0].contains(&"Stage".to_string()),
         "そもそも移っていない: {strips:?}"
     );
+    // Stage が抜けた中央では Output が選ばれるので、描く panel は3枚になる。
     assert_eq!(
         gui.drawing_panels(),
-        2,
+        3,
         "移した先で widget が付いていない(CustomWidgetAttr は一度しか中身を渡せない): {strips:?}"
     );
 }

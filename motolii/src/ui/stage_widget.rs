@@ -142,6 +142,9 @@ pub(super) struct StageWidget {
     rings: Arc<std::sync::atomic::AtomicBool>,
     /// 最後に指が居た所(窓の点)。拡縮を**指の下**で行うために覚える。
     cursor: Option<(f64, f64)>,
+    /// **出す物だけを映す。** 書き出しカメラで撮り、取っ手も枠も描かず、触れない。
+    /// Stage が世界を見る場になった以上、出力を確かめる場が別に要る。
+    output_only: bool,
 }
 
 enum State {
@@ -171,6 +174,7 @@ impl StageWidget {
         selected_size: Arc<Mutex<Option<[f32; 2]>>>,
         view_camera: Arc<Mutex<crate::render::engine::ObservationCamera>>,
         rings: Arc<std::sync::atomic::AtomicBool>,
+        output_only: bool,
     ) -> Self {
         Self {
             state: State::Suspended,
@@ -187,6 +191,7 @@ impl StageWidget {
             view_camera,
             rings,
             cursor: None,
+            output_only,
         }
     }
 
@@ -566,6 +571,10 @@ impl Widget for StageWidget {
     }
 
     fn handle_event(&mut self, event: &UiEvent) {
+        if self.output_only {
+            // 出力を映す窓。ここは**見るだけ**で、触っても何も起きない。
+            return;
+        }
         match event {
             UiEvent::Wheel(wheel) => {
                 let dy = match wheel.delta {
@@ -987,11 +996,20 @@ impl Widget for StageWidget {
         let rt = RationalTime::try_new((t_sec * 3000.0) as i64, 3000).unwrap_or(RationalTime::ZERO);
 
         // 見るのは視点カメラ、書き出しは Document のカメラ。同じ世界を通る。
-        let observation = *self.view_camera.lock().unwrap();
+        let observation = if self.output_only {
+            crate::render::engine::ObservationCamera::default()
+        } else {
+            *self.view_camera.lock().unwrap()
+        };
         let export_camera = view.resolve_camera(rt).unwrap_or_default();
-        if let Err(e) = active.engine.render_frame_into_with_view_camera(
-            &view, rt, &target, &observation, false,
-        ) {
+        let rendered = if self.output_only {
+            active.engine.render_frame_into(&view, rt, &target)
+        } else {
+            active
+                .engine
+                .render_frame_into_with_view_camera(&view, rt, &target, &observation, false)
+        };
+        if let Err(e) = rendered {
             println!("PROBE room=stage verdict=render-error {e}");
             return scene;
         }
@@ -1081,6 +1099,10 @@ impl Widget for StageWidget {
             Some(Affine::translate((fx, fy)) * Affine::scale(s)),
             &Rect::from_origin_size((fx, fy), (fw, fh)),
         );
+        if self.output_only {
+            // 出す物だけ。枠も取っ手も描かない。
+            return scene;
+        }
         scene.stroke(
             &peniko::kurbo::Stroke::new(1.0).with_dashes(0.0, [4.0, 4.0]),
             Affine::IDENTITY,
