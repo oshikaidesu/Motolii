@@ -916,6 +916,34 @@ impl Widget for TimelineWidget {
                 },
                 _ => None,
             };
+            // 選んだキーが隣り合っていたら、その間が区間。帯で示す。
+            {
+                let mut chosen: Vec<usize> = self
+                    .selected
+                    .iter()
+                    .filter(|(r, _)| *r == i)
+                    .map(|(_, k)| *k)
+                    .collect();
+                chosen.sort_unstable();
+                for pair in chosen.windows(2) {
+                    if pair[1] != pair[0] + 1 {
+                        continue;
+                    }
+                    let (Some(a), Some(b)) =
+                        (row.keys.get(pair[0]).copied(), row.keys.get(pair[1]).copied())
+                    else {
+                        continue;
+                    };
+                    let (xa, xb) = (x_of(a).max(0.0), x_of(b).min(w));
+                    if xb > xa {
+                        fill_rect(
+                            &mut s,
+                            Rect::new(xa, mid - 1.5 * k, xb, mid + 1.5 * k),
+                            c_accent,
+                        );
+                    }
+                }
+            }
             for (ki, kf) in row.keys.iter().enumerate() {
                 let dragged = key_shift
                     .filter(|(at, _)| (at - *kf).abs() < 0.5 / DOC_FPS)

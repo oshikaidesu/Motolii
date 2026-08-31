@@ -8,6 +8,7 @@ use blitz_traits::events::UiEvent;
 use peniko::kurbo::{Affine, BezPath, Circle, Point, Rect, Stroke};
 use peniko::{Color, Fill};
 
+use crate::ui::session::{KeySel, Session};
 use crate::ui::tokens;
 
 /// 区間のイージング。CSS の cubic-bezier と同じ4つ(両端は (0,0) と (1,1) で固定)。
@@ -18,16 +19,47 @@ pub(super) const LINEAR: Curve = [0.0, 0.0, 1.0, 1.0];
 const PAD: f64 = 24.0;
 const GRAB: f64 = 14.0;
 
-/// 曲線を掴んで曲げる盤。値は窓と共有(パネル側のボタンも同じ物を書く)。
+/// 曲線を掴んで曲げる盤。離した時にその形が区間へ乗る(押す手数を作らない)。
 pub(super) struct EaseWidget {
     curve: Arc<Mutex<Curve>>,
+    session: Session,
     size: (f64, f64),
     holding: Option<usize>,
+    /// 前に見ていた区間。変わったらその区間が持っている形を読み直す。
+    showing: Option<Vec<KeySel>>,
 }
 
 impl EaseWidget {
-    pub(super) fn new(curve: Arc<Mutex<Curve>>) -> Self {
-        Self { curve, size: (0.0, 0.0), holding: None }
+    pub(super) fn new(curve: Arc<Mutex<Curve>>, session: Session) -> Self {
+        Self { curve, session, size: (0.0, 0.0), holding: None, showing: None }
+    }
+
+    fn starts(&self) -> Vec<KeySel> {
+        crate::ui::ease::segments(&self.session.selected_keys.lock().unwrap())
+    }
+
+    /// 掴んでいる区間が変わったら、その区間が今持っている形を盤へ映す。
+    fn follow_selection(&mut self) {
+        let starts = self.starts();
+        if self.showing.as_ref() == Some(&starts) {
+            return;
+        }
+        if let Some(first) = starts.first() {
+            *self.curve.lock().unwrap() = crate::ui::ease::curve_of(&self.session, first);
+        }
+        self.showing = Some(starts);
+    }
+
+    fn commit(&self) {
+        let starts = self.starts();
+        if starts.is_empty() {
+            return;
+        }
+        let curve = *self.curve.lock().unwrap();
+        match crate::ui::ease::apply(&self.session, &starts, curve) {
+            Ok(n) => println!("PROBE room=write verdict=applied Ease tracks={n}"),
+            Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
+        }
     }
 
     /// 盤の中の位置(px)を曲線の値(0..1)へ。y は上が 1。
@@ -81,7 +113,12 @@ impl Widget for EaseWidget {
                 c[which * 2] = cx;
                 c[which * 2 + 1] = cy;
             }
-            UiEvent::PointerUp(_) => self.holding = None,
+            UiEvent::PointerUp(_) => {
+                if self.holding.take().is_some() {
+                    self.commit();
+                    self.showing = None;
+                }
+            }
             _ => {}
         }
     }
@@ -103,10 +140,15 @@ impl Widget for EaseWidget {
         self.size = (width as f64 / k, height as f64 / k);
         let at = Affine::scale(k);
 
+        if self.holding.is_none() {
+            self.follow_selection();
+        }
+        let live = !self.starts().is_empty();
+
         let t3 = |c: [u8; 3]| Color::from_rgb8(c[0], c[1], c[2]);
-        let ink = t3(tokens::INK);
+        let ink = if live { t3(tokens::INK) } else { t3(tokens::INK3) };
         let dim = t3(tokens::INK3);
-        let accent = t3(tokens::ACCENT);
+        let accent = if live { t3(tokens::ACCENT) } else { t3(tokens::INK3) };
 
         s.fill(
             Fill::NonZero,
@@ -150,6 +192,131 @@ impl Widget for EaseWidget {
                 None,
                 &Circle::new(handle, 5.0),
             );
+        }
+        s
+    }
+}
+
+/// よく使う形。Flow と同じで、名前ではなく**形そのもの**を並べる。
+pub(super) const PRESETS: &[Curve] = &[
+    LINEAR,
+    [0.42, 0.0, 1.0, 1.0],
+    [0.0, 0.0, 0.58, 1.0],
+    [0.42, 0.0, 0.58, 1.0],
+    [0.77, 0.0, 0.175, 1.0],
+    [0.165, 0.84, 0.44, 1.0],
+    [0.68, -0.55, 0.265, 1.55],
+    [0.175, 0.885, 0.32, 1.275],
+];
+
+const COLS: usize = 4;
+const CELL_PAD: f64 = 6.0;
+
+/// 形を並べた棚。押すとその形が盤と区間へ乗る。
+pub(super) struct PresetsWidget {
+    curve: Arc<Mutex<Curve>>,
+    session: Session,
+    size: (f64, f64),
+    hovered: Option<usize>,
+}
+
+impl PresetsWidget {
+    pub(super) fn new(curve: Arc<Mutex<Curve>>, session: Session) -> Self {
+        Self { curve, session, size: (0.0, 0.0), hovered: None }
+    }
+
+    fn cell(&self, i: usize) -> Rect {
+        let rows = PRESETS.len().div_ceil(COLS);
+        let w = self.size.0 / COLS as f64;
+        let h = self.size.1 / rows.max(1) as f64;
+        let (cx, cy) = (i % COLS, i / COLS);
+        Rect::new(cx as f64 * w, cy as f64 * h, (cx + 1) as f64 * w, (cy + 1) as f64 * h)
+    }
+
+    fn at(&self, x: f64, y: f64) -> Option<usize> {
+        (0..PRESETS.len()).find(|i| self.cell(*i).contains(Point::new(x, y)))
+    }
+}
+
+impl Widget for PresetsWidget {
+    fn connected(&mut self) {}
+    fn disconnected(&mut self) {}
+    fn can_create_surfaces(&mut self, _ctx: &mut dyn anyrender::RenderContext) {}
+    fn destroy_surfaces(&mut self) {}
+
+    fn requires_redraw(&self) -> bool {
+        true
+    }
+
+    fn handle_event(&mut self, event: &UiEvent) {
+        match event {
+            UiEvent::PointerMove(p) => {
+                self.hovered = self.at(p.element.x as f64, p.element.y as f64);
+            }
+            UiEvent::PointerDown(p) => {
+                let Some(i) = self.at(p.element.x as f64, p.element.y as f64) else {
+                    return;
+                };
+                *self.curve.lock().unwrap() = PRESETS[i];
+                let starts =
+                    crate::ui::ease::segments(&self.session.selected_keys.lock().unwrap());
+                if starts.is_empty() {
+                    return;
+                }
+                match crate::ui::ease::apply(&self.session, &starts, PRESETS[i]) {
+                    Ok(n) => println!("PROBE room=write verdict=applied Ease tracks={n}"),
+                    Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn paint(
+        &mut self,
+        _ctx: &mut dyn anyrender::RenderContext,
+        _styles: &ComputedStyles,
+        width: u32,
+        height: u32,
+        scale: f64,
+    ) -> anyrender::Scene {
+        let mut s = anyrender::Scene::new();
+        if width == 0 || height == 0 {
+            return s;
+        }
+        let k = scale.max(0.001);
+        self.size = (width as f64 / k, height as f64 / k);
+        let at = Affine::scale(k);
+
+        let t3 = |c: [u8; 3]| Color::from_rgb8(c[0], c[1], c[2]);
+        let current = *self.curve.lock().unwrap();
+
+        for (i, preset) in PRESETS.iter().enumerate() {
+            let cell = self.cell(i);
+            let chosen = preset
+                .iter()
+                .zip(current.iter())
+                .all(|(a, b)| (a - b).abs() < 1e-6);
+            let bg = if chosen {
+                t3(tokens::SURFACE_RAISED)
+            } else if self.hovered == Some(i) {
+                t3(tokens::SURFACE_HOVER)
+            } else {
+                t3(tokens::SURFACE_APP)
+            };
+            s.fill(Fill::NonZero, at, PaintRef::Solid(bg), None, &cell.inset(-0.5));
+
+            let box_ = cell.inset(-CELL_PAD);
+            let zero = Point::new(box_.x0, box_.y1);
+            let one = Point::new(box_.x1, box_.y0);
+            let ctrl = |cx: f64, cy: f64| {
+                Point::new(box_.x0 + cx * box_.width(), box_.y1 - cy * box_.height())
+            };
+            let mut curve = BezPath::new();
+            curve.move_to(zero);
+            curve.curve_to(ctrl(preset[0], preset[1]), ctrl(preset[2], preset[3]), one);
+            let ink = if chosen { t3(tokens::ACCENT) } else { t3(tokens::INK2) };
+            s.stroke(&Stroke::new(1.5 / k), at, PaintRef::Solid(ink), None, &curve);
         }
         s
     }

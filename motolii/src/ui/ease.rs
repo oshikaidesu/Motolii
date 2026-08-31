@@ -1,6 +1,4 @@
 
-use std::sync::{Arc, Mutex};
-
 use dioxus_native::prelude::*;
 
 use crate::doc::store::{Fps, Interp, Intent, KeyframeTrack, PropertyId, RationalTime};
@@ -9,22 +7,10 @@ use crate::ui::session::{KeySel, Session};
 
 const FPS: f64 = 30.0;
 
-/// よく使う形。名前は AE の言い方に寄せる。
-const PRESETS: &[(&str, Curve)] = &[
-    ("Linear", LINEAR),
-    ("Ease Out", [0.0, 0.0, 0.58, 1.0]),
-    ("Ease In", [0.42, 0.0, 1.0, 1.0]),
-    ("Ease In Out", [0.42, 0.0, 0.58, 1.0]),
-    ("Quart Out", [0.165, 0.84, 0.44, 1.0]),
-    ("Quart In Out", [0.77, 0.0, 0.175, 1.0]),
-    ("Back Out", [0.175, 0.885, 0.32, 1.275]),
-    ("Back In Out", [0.68, -0.55, 0.265, 1.55]),
-];
-
 /// 選んだキーから作る区間。同じ層・同じ属性で時刻が隣り合う2つが1区間。
 /// 1つしか選んでいない時は「そのキーから次まで」を区間とみなす。
 /// 区間の形は**始まりのキー**が持つ(評価がそう読む)。
-fn segments(keys: &[KeySel]) -> Vec<KeySel> {
+pub(super) fn segments(keys: &[KeySel]) -> Vec<KeySel> {
     let mut by_track: std::collections::BTreeMap<(u64, String), Vec<f64>> = Default::default();
     for key in keys {
         let track = (
@@ -49,7 +35,7 @@ fn segments(keys: &[KeySel]) -> Vec<KeySel> {
     out
 }
 
-fn apply(session: &Session, starts: &[KeySel], curve: Curve) -> Result<usize, String> {
+pub(super) fn apply(session: &Session, starts: &[KeySel], curve: Curve) -> Result<usize, String> {
     let mut doc = session.doc.lock().unwrap();
     let fps = Fps::try_new(FPS as i64, 1).map_err(|e| e.to_string())?;
 
@@ -100,65 +86,47 @@ fn apply(session: &Session, starts: &[KeySel], curve: Curve) -> Result<usize, St
     Ok(count)
 }
 
+/// 区間が今持っている形。無ければ直線。
+pub(super) fn curve_of(session: &Session, start: &KeySel) -> Curve {
+    let doc = session.doc.lock().unwrap();
+    let view = doc.view();
+    let Ok(fps) = Fps::try_new(FPS as i64, 1) else { return LINEAR };
+    let properties: Vec<PropertyId> = match &start.property {
+        Some(p) => vec![p.clone()],
+        None => view.properties(start.layer),
+    };
+    let at = ((start.at_sec * FPS).round()) as i64;
+    for property in properties {
+        let Ok(Some(track)) = view.track(start.layer, &property) else {
+            continue;
+        };
+        for key in track.keys() {
+            if key.t.try_to_frame_round(fps).ok() != Some(at) {
+                continue;
+            }
+            if let Interp::Bezier { x1, y1, x2, y2 } = key.interp {
+                return [x1, y1, x2, y2];
+            }
+            return LINEAR;
+        }
+    }
+    LINEAR
+}
+
+/// 文字を置かない。上が盤、下が形の棚。掴めば区間へ乗る。
 pub(super) fn ease_panel(
     session: &Session,
-    curve: Arc<Mutex<Curve>>,
-    attr: dioxus_native::CustomWidgetAttr,
-    mut revision: Signal<u32>,
+    editor: dioxus_native::CustomWidgetAttr,
+    presets: dioxus_native::CustomWidgetAttr,
+    revision: Signal<u32>,
 ) -> Element {
     let _ = revision();
-    let keys = session.selected_keys.lock().unwrap().clone();
-    let starts = segments(&keys);
-    let c = *curve.lock().unwrap();
-    let shown = format!("{:.2} {:.2} {:.2} {:.2}", c[0], c[1], c[2], c[3]);
-    let target = if starts.is_empty() {
-        "キーを選ぶ".to_string()
-    } else {
-        format!("{} 区間", starts.len())
-    };
-
+    let live = !segments(&session.selected_keys.lock().unwrap()).is_empty();
     rsx!(
         div { id: "ease",
-            div { class: "ecurve", object { "data": attr } }
-            div { class: "erow",
-                span { class: "n", "区間" }
-                span { class: "v content", "{target}" }
-            }
-            div { class: "erow",
-                span { class: "n", "曲線" }
-                span { class: "v content", "{shown}" }
-            }
-            div { class: "epresets",
-                for (name , preset) in PRESETS.iter().copied() {
-                    span {
-                        class: "epreset",
-                        onclick: {
-                            let curve = curve.clone();
-                            move |_| {
-                                *curve.lock().unwrap() = preset;
-                                *revision.write() += 1;
-                            }
-                        },
-                        "{name}"
-                    }
-                }
-            }
-            div {
-                class: if starts.is_empty() { "ebtn off" } else { "ebtn" },
-                onclick: {
-                    let session = session.clone();
-                    let curve = curve.clone();
-                    move |_| {
-                        let starts = segments(&session.selected_keys.lock().unwrap());
-                        let c = *curve.lock().unwrap();
-                        match apply(&session, &starts, c) {
-                            Ok(n) => println!("PROBE room=write verdict=applied Ease tracks={n}"),
-                            Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
-                        }
-                        *revision.write() += 1;
-                    }
-                },
-                "この区間へ当てる"
+            div { class: "ecurve", object { "data": editor } }
+            div { class: if live { "epresets" } else { "epresets off" },
+                object { "data": presets }
             }
         }
     )
