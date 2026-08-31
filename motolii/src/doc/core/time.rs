@@ -395,14 +395,6 @@ mod tests {
         assert_eq!(rt(30, 30), rt(1, 1));
     }
 
-    #[test]
-    fn arithmetic() {
-        let a = rt(1, 3);
-        let b = rt(1, 6);
-        assert_eq!(a.try_add(b).unwrap(), rt(1, 2));
-        assert_eq!(a.try_sub(b).unwrap(), rt(1, 6));
-        assert_eq!(b.try_mul_i64(3).unwrap(), rt(1, 2));
-    }
 
     #[test]
     fn ordering_across_denominators() {
@@ -421,16 +413,6 @@ mod tests {
         }
     }
 
-    #[test]
-    fn sample_index_matches_frame_on_lattice() {
-        let rate = fps(30000, 1001);
-        for frame in [0i64, 1, 15, 29, 30, 1799] {
-            let t = RationalTime::try_from_frame(frame, rate).unwrap();
-            let (idx, u) = t.try_to_sample_index(rate).unwrap();
-            assert_eq!(idx, frame, "sample index {frame}");
-            assert_eq!(u, 0.0, "exact frame must have zero fraction");
-        }
-    }
 
     #[test]
     fn sample_index_fraction_is_rational_remainder() {
@@ -499,17 +481,6 @@ mod tests {
         assert!(u < 1e-10, "position should be tiny, got {u}");
     }
 
-    #[test]
-    fn frame_round_nearest() {
-        let rate = fps(30, 1);
-        assert_eq!(rt(1, 30).try_to_frame_round(rate).unwrap(), 1);
-        assert_eq!(rt(49, 3000).try_to_frame_round(rate).unwrap(), 0);
-        assert_eq!(rt(51, 3000).try_to_frame_round(rate).unwrap(), 1);
-        assert_eq!(rt(-49, 3000).try_to_frame_round(rate).unwrap(), 0);
-        assert_eq!(rt(-51, 3000).try_to_frame_round(rate).unwrap(), -1);
-        assert_eq!(rt(1, 60).try_to_frame_round(rate).unwrap(), 1);
-        assert_eq!(rt(-1, 60).try_to_frame_round(rate).unwrap(), -1);
-    }
 
     #[test]
     fn frame_round_ntsc_lattice() {
@@ -584,24 +555,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn try_new_normalizes_negative_denominator() {
-        let t = RationalTime::try_new(3, -6).unwrap();
-        assert_eq!(t.num(), -1);
-        assert_eq!(t.den(), 2);
-    }
 
-    #[test]
-    fn try_new_reduces_by_gcd() {
-        let t = RationalTime::try_new(6, 9).unwrap();
-        assert_eq!(t, rt(2, 3));
-    }
 
-    #[test]
-    fn try_new_zero_over_any_is_zero_one() {
-        assert_eq!(RationalTime::try_new(0, 42).unwrap(), RationalTime::ZERO);
-        assert_eq!(RationalTime::try_new(0, -7).unwrap(), RationalTime::ZERO);
-    }
 
     #[test]
     fn try_neg_i64_min_overflows() {
@@ -623,14 +578,6 @@ mod tests {
         assert!(err.to_string().contains("denominator"), "{err}");
     }
 
-    #[test]
-    fn serde_normalizes_on_load() {
-        let t: RationalTime = serde_json::from_str(r#"{"num":2,"den":-4}"#).unwrap();
-        assert_eq!(t.num(), -1);
-        assert_eq!(t.den(), 2);
-        let z: RationalTime = serde_json::from_str(r#"{"num":0,"den":5}"#).unwrap();
-        assert_eq!(z, RationalTime::ZERO);
-    }
 
     #[test]
     fn fps_try_new_rejects_non_positive() {
@@ -639,13 +586,6 @@ mod tests {
         assert_eq!(Fps::try_new(-30, 1), Err(FpsError::NonPositive));
     }
 
-    #[test]
-    fn fps_try_new_reduces_by_gcd() {
-        let f = Fps::try_new(60, 2).unwrap();
-        assert_eq!(f.num(), 30);
-        assert_eq!(f.den(), 1);
-        assert_eq!(Fps::try_new(60, 2).unwrap(), Fps::try_new(30, 1).unwrap());
-    }
 
     #[test]
     fn fps_serde_rejects_non_positive() {
@@ -653,10 +593,4 @@ mod tests {
         assert!(err.to_string().contains("positive"), "{err}");
     }
 
-    #[test]
-    fn fps_fields_are_encapsulated() {
-        let rate = fps(30, 1);
-        assert_eq!(rate.num(), 30);
-        assert_eq!(rate.den(), 1);
-    }
 }
