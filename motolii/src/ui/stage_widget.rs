@@ -426,8 +426,10 @@ fn depth_handle(mx: f64, my: f64, scale: f64) -> (f64, f64) {
 }
 
 /// 向きの輪は**箱の外**に置く。中は動かすための場所なので明け渡す。
+/// 枠のすぐ外(24px)は画面に対して回す帯なので、輪はその先へ置く。
+/// 近すぎると、回す帯が輪に食われて掴めなくなる。
 fn ring_radii(bw: f64, bh: f64, scale: f64) -> (f64, f64) {
-    let m = 34.0 / scale.max(1e-6);
+    let m = 56.0 / scale.max(1e-6);
     (bw.abs() * 0.5 + m, bh.abs() * 0.5 + m)
 }
 
@@ -581,11 +583,20 @@ impl Widget for StageWidget {
                         // **箱の中は必ず動かす。** 輪が中を横切っても、そこは掴めない。
                         if rings && mode.is_none() && !inside {
                             let (ra, rb) = ring_radii(bw, bh, self.fit.s);
+                            // 輪までの距離は**中心から見た半径の差**で測る。
+                            // `(f-1)*min(a,b)` で近似すると、平たい楕円の短径側で
+                            // 距離を大きく見誤り、輪から遠い所まで輪として掴んでしまう。
                             let on = |a: f64, b: f64| {
-                                a > 1e-6 && b > 1e-6 && {
-                                    let f = (((lx - mx) / a).powi(2) + ((ly - my) / b).powi(2)).sqrt();
-                                    (f - 1.0).abs() * a.min(b) <= tol
+                                if a <= 1e-6 || b <= 1e-6 {
+                                    return false;
                                 }
+                                let (px, py) = (lx - mx, ly - my);
+                                let f = ((px / a).powi(2) + (py / b).powi(2)).sqrt();
+                                if f < 1e-9 {
+                                    return false;
+                                }
+                                let reach = (px * px + py * py).sqrt();
+                                (reach - reach / f).abs() <= tol
                             };
                             if on(ra, rb * RING_FLAT) {
                                 mode = Some(GizmoMode::Orbit { axis_x: false });
