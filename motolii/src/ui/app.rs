@@ -86,7 +86,7 @@ fn panel_body(panel: Panel, session: &Session, ui: &fixture::UiData, p: Panes) -
         }),
         Panel::Inspector => inspector_panel(
             &session.doc,
-            p.selected.peek().as_ref().copied(),
+            (p.selected)(),
             &session.clock,
             p.revision,
             p.text_editing,
@@ -96,7 +96,7 @@ fn panel_body(panel: Panel, session: &Session, ui: &fixture::UiData, p: Panes) -
         ),
         Panel::Utility => crate::ui::utility::utility_panel(
             &session.doc,
-            p.selected.peek().as_ref().copied(),
+            (p.selected)(),
             &session.selected_size,
             &session.gizmo_3d,
             &session.clock,
