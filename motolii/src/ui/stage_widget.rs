@@ -29,6 +29,24 @@ struct Fit {
     fy: f64,
     /// 世界 → 絵の中の画素。視点カメラが決める(上流の写像)。
     image_from_world: glam::Affine2,
+    /// 別の奥行きで写像を作り直すための材料。
+    comp: crate::doc::core::CompSpec,
+    camera: crate::doc::core::ResolvedCamera,
+}
+
+impl Fit {
+    /// **その奥行きの面**での写像。奥に在る物は小さく、位置もずれて見えるので、
+    /// 取っ手を絵の上に置くにはこちらを使う。
+    fn at_z(&self, z: f64) -> Fit {
+        Fit {
+            image_from_world: crate::doc::core::camera_screen_from_world_at_z(
+                self.comp,
+                self.camera,
+                z as f32,
+            ),
+            ..*self
+        }
+    }
 }
 
 impl Default for Fit {
@@ -38,6 +56,8 @@ impl Default for Fit {
             fx: 0.0,
             fy: 0.0,
             image_from_world: glam::Affine2::IDENTITY,
+            comp: crate::doc::core::CompSpec { width: 1, height: 1 },
+            camera: crate::doc::core::ResolvedCamera::default(),
         }
     }
 }
@@ -96,6 +116,9 @@ struct GizmoDrag {
     anchor: (f64, f64),
     natural: (f64, f64),
     orig_box: (f64, f64, f64, f64),
+    /// 掴んだ時の奥行き。掴んでいる間、写像はこの面に固定する
+    /// (奥行きを動かしている最中に写像まで動くと、指と絵が食い違う)。
+    fit_z: f64,
     /// 最後に**動かした**先。動かしていなければ None。
     /// 離した時の座標から差分を取り直すと、掴んでいる間に要素の座標系がずれた分だけ
     /// 勝手に動く。動かしていないなら1画素も動かさない。
@@ -264,6 +287,7 @@ impl StageWidget {
 }
 
 struct SelGeom {
+    z: f64,
     position: (f64, f64),
     anchor: (f64, f64),
     rotation: f64,
@@ -299,6 +323,7 @@ fn selection_geom_in(
     if !meta.timing.covers(frame) {
         return None;
     }
+    let z = f64_at(view, layer, property::POSITION_Z, rt, 0.0);
     let position = vec2_at(view, layer, property::POSITION, rt, (0.0, 0.0));
     let anchor = vec2_at(view, layer, property::ANCHOR, rt, (0.0, 0.0));
     let scale = vec2_at(view, layer, property::SCALE, rt, (1.0, 1.0));
@@ -311,7 +336,7 @@ fn selection_geom_in(
         scale.0 * natural.0,
         scale.1 * natural.1,
     );
-    Some(SelGeom { position, anchor, rotation, natural, box_ })
+    Some(SelGeom { z, position, anchor, rotation, natural, box_ })
 }
 
 fn compute_scale(
@@ -509,6 +534,8 @@ impl Widget for StageWidget {
                 let (cx, cy) = self.fit.to_comp(p.element.x as f64, p.element.y as f64);
                 if let Some(layer) = self.selection.get() {
                     if let Some(geom) = self.selection_geom(layer) {
+                        // 奥に在る層は絵が動いて見える。掴む判定もその面で行う。
+                        let (cx, cy) = self.fit.at_z(geom.z).to_comp(p.element.x as f64, p.element.y as f64);
                         let (lx, ly) = rotate_around(geom.position, -geom.rotation, (cx, cy));
                         let (bx, by, bw, bh) = geom.box_;
                         let (x0, y0, x1, y1) = (bx, by, bx + bw, by + bh);
@@ -560,6 +587,9 @@ impl Widget for StageWidget {
                                 }
                             }
                         }
+                        println!(
+                            "PROBE room=input verdict=gizmo-hit mode={mode:?} at=({lx:.0},{ly:.0})                              box=({bx:.0},{by:.0},{bw:.0},{bh:.0}) depth=({dx:.0},{dy:.0}) tol={tol:.0}"
+                        );
                         if let Some(mode) = mode {
                             self.drag = Some(GizmoDrag {
                                 layer,
@@ -572,6 +602,7 @@ impl Widget for StageWidget {
                                 anchor: geom.anchor,
                                 natural: geom.natural,
                                 orig_box: geom.box_,
+                                fit_z: geom.z,
                                 last: None,
                             });
                             return;
@@ -650,8 +681,10 @@ impl Widget for StageWidget {
                     return;
                 }
                 let (cx, cy) = {
+                    let z = self.drag.as_ref().map(|d| d.fit_z);
+                    let Some(z) = z else { return };
+                    let at = self.fit.at_z(z).to_comp(p.element.x as f64, p.element.y as f64);
                     let Some(drag) = self.drag.as_mut() else { return };
-                    let at = self.fit.to_comp(p.element.x as f64, p.element.y as f64);
                     drag.last = Some(at);
                     at
                 };
@@ -844,7 +877,7 @@ impl Widget for StageWidget {
         *self.selected_size.lock().unwrap() =
             primary_geom.as_ref().map(|g| [g.natural.0 as f32, g.natural.1 as f32]);
         let selected_box = primary_geom
-            .map(|geom| (geom.box_, geom.position, geom.rotation));
+            .map(|geom| (geom.box_, geom.position, geom.rotation, geom.z));
         let secondary_boxes: Vec<_> = self
             .selection
             .all()
@@ -869,26 +902,22 @@ impl Widget for StageWidget {
         let (fx, fy) = ((w - fw) * 0.5, (h - fh) * 0.5);
 
         let k = if scale > 0.0 { scale } else { 1.0 };
+        let comp = crate::doc::core::CompSpec {
+            width: target.width(),
+            height: target.height(),
+        };
+        let camera = observation.as_resolved_camera();
         self.fit = Fit {
             s: s / k,
             fx: fx / k,
             fy: fy / k,
-            image_from_world: crate::doc::core::camera_screen_from_world_z0(
-                crate::doc::core::CompSpec {
-                    width: target.width(),
-                    height: target.height(),
-                },
-                observation.as_resolved_camera(),
-            ),
+            image_from_world: crate::doc::core::camera_screen_from_world_z0(comp, camera),
+            comp,
+            camera,
         };
 
         // 描く時は物理 px、掴む時は論理 px。写像を2つ持つ。
-        let draw = Fit {
-            s,
-            fx,
-            fy,
-            image_from_world: self.fit.image_from_world,
-        };
+        let draw = Fit { s, fx, fy, ..self.fit };
 
         // 書き出しの枠。地色は枠の中だけに敷く(視界全体を塗ると枠の意味が消える)。
         let frame = {
@@ -952,7 +981,8 @@ impl Widget for StageWidget {
             }
         }
 
-        if let Some(((_, _, _, _), position, _)) = selected_box {
+        if let Some(((_, _, _, _), position, _, z)) = selected_box {
+            let draw = draw.at_z(z);
             // アンカー(回転と拡大の支点)。今まで描いていなかったので位置が見えなかった。
             let (ax, ay) = draw.to_screen(position.0, position.1);
             let arm = 6.0;
@@ -965,7 +995,8 @@ impl Widget for StageWidget {
             }
         }
 
-        if let Some(((bx, by, bw, bh), position, rotation)) = selected_box {
+        if let Some(((bx, by, bw, bh), position, rotation, z)) = selected_box {
+            let draw = draw.at_z(z);
             let (x0, y0) = draw.to_screen(bx, by);
             let (x1, y1) = draw.to_screen(bx + bw, by + bh);
             let pivot = draw.to_screen(position.0, position.1);
@@ -995,13 +1026,16 @@ impl Widget for StageWidget {
 
             if self.rings.load(std::sync::atomic::Ordering::Relaxed) {
             let (mx, my) = ((x0 + x1) * 0.5, (y0 + y1) * 0.5);
-            let (ra, rb) = ring_radii(x1 - x0, y1 - y0, 1.0);
+            // 描くのは物理 px、掴むのは論理 px。同じ長さになるよう倍率を戻す
+            // (ここを合わせないと、見えている点と掴める点が別の場所になる)。
+            let per_logical = draw.s / self.fit.s.max(1e-6);
+            let (ra, rb) = ring_radii(x1 - x0, y1 - y0, 1.0 / per_logical);
             let ring = peniko::kurbo::Stroke::new(1.0);
             for (a, b) in [(ra, rb * RING_FLAT), (ra * RING_FLAT, rb)] {
                 let e = peniko::kurbo::Ellipse::new((mx, my), (a.abs(), b.abs()), 0.0);
                 scene.stroke(&ring, rot, PaintRef::Solid(c(tokens::INK3)), None, &e);
             }
-            let (hx, hy) = depth_handle(mx, my, 1.0);
+            let (hx, hy) = depth_handle(mx, my, 1.0 / per_logical);
             let stem = peniko::kurbo::Line::new((mx, my), (hx, hy));
             scene.stroke(&ring, rot, PaintRef::Solid(c(tokens::INK3)), None, &stem);
             let dot = peniko::kurbo::Circle::new((hx, hy), 3.5);
