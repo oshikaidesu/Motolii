@@ -427,16 +427,21 @@ fn ring_radii(bw: f64, bh: f64, scale: f64) -> (f64, f64) {
     (bw.abs() * 0.5 + m, bh.abs() * 0.5 + m)
 }
 
-fn orbit_angles(orig: (f64, f64), grab: (f64, f64), now: (f64, f64)) -> (f64, f64) {
+/// 画面で 1px 引いたら何度回るか。**世界の単位で数えると、拡大率と作品の大きさで
+/// 同じ手つきの結果が変わる。** 指の動いた長さで決める。
+const ORBIT_DEGREES_PER_PIXEL: f64 = 0.5;
+
+fn orbit_angles(orig: (f64, f64), grab: (f64, f64), now: (f64, f64), scale: f64) -> (f64, f64) {
+    let k = ORBIT_DEGREES_PER_PIXEL * scale;
     (
-        orig.0 - (now.1 - grab.1) * 0.5,
-        orig.1 + (now.0 - grab.0) * 0.5,
+        orig.0 - (now.1 - grab.1) * k,
+        orig.1 + (now.0 - grab.0) * k,
     )
 }
 
 /// 掴んだ輪だけが回る。もう一方の軸は掴まれていないので据え置く。
-fn orbit_axis(orig: (f64, f64), grab: (f64, f64), now: (f64, f64), axis_x: bool) -> (f64, f64) {
-    let (rx, ry) = orbit_angles(orig, grab, now);
+fn orbit_axis(orig: (f64, f64), grab: (f64, f64), now: (f64, f64), axis_x: bool, scale: f64) -> (f64, f64) {
+    let (rx, ry) = orbit_angles(orig, grab, now, scale);
     if axis_x {
         (rx, orig.1)
     } else {
@@ -713,7 +718,7 @@ impl Widget for StageWidget {
                         doc.set_transient(drag.layer, rotation_prop, Value::F64(r));
                     }
                     GizmoMode::Orbit { axis_x } => {
-                        let (rx, ry) = orbit_axis(drag.orig_rotation_xy, drag.grab, (cx, cy), axis_x);
+                        let (rx, ry) = orbit_axis(drag.orig_rotation_xy, drag.grab, (cx, cy), axis_x, self.fit.s);
                         if let Ok(prop) = PropertyId::new(property::ROTATION_X) {
                             doc.set_transient(drag.layer, prop, Value::F64(rx));
                         }
@@ -769,7 +774,7 @@ impl Widget for StageWidget {
                         &[property::ROTATION]
                     }
                     GizmoMode::Orbit { axis_x } => {
-                        let (rx, ry) = orbit_axis(drag.orig_rotation_xy, drag.grab, (cx, cy), axis_x);
+                        let (rx, ry) = orbit_axis(drag.orig_rotation_xy, drag.grab, (cx, cy), axis_x, self.fit.s);
                         intents.extend(track_intent(&doc, drag.layer, property::ROTATION_X, Value::F64(rx), rt));
                         intents.extend(track_intent(&doc, drag.layer, property::ROTATION_Y, Value::F64(ry), rt));
                         &[property::ROTATION_X, property::ROTATION_Y]
@@ -1053,13 +1058,13 @@ mod orbit_tests {
 
     #[test]
     fn dragging_right_turns_the_plate_to_face_right_and_down_tips_it_back() {
-        let (rx, ry) = orbit_angles((0.0, 0.0), (100.0, 100.0), (120.0, 140.0));
+        let (rx, ry) = orbit_angles((0.0, 0.0), (100.0, 100.0), (120.0, 140.0), 1.0);
         assert!(ry > 0.0, "右へ引いたのに rotation.y が正にならない");
         assert!(rx < 0.0, "下へ引いたのに rotation.x が負にならない");
     }
 
     #[test]
     fn no_movement_keeps_the_original_angles() {
-        assert_eq!(orbit_angles((12.0, -5.0), (7.0, 7.0), (7.0, 7.0)), (12.0, -5.0));
+        assert_eq!(orbit_angles((12.0, -5.0), (7.0, 7.0), (7.0, 7.0), 1.0), (12.0, -5.0));
     }
 }
