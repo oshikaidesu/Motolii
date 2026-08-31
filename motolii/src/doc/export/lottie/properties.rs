@@ -86,6 +86,17 @@ fn resolve(
             None => Ok(Resolved::None),
             Some(PropertyBase::Track(track)) => Ok(Resolved::Track(track)),
             Some(PropertyBase::Slot(SlotId(id))) => Ok(Resolved::SlotRef(id)),
+            // 動かない値は、書き出す時だけ1つのキーとして出す。
+            Some(PropertyBase::Constant(value)) => {
+                let mut track = crate::doc::eval::KeyframeTrack::new();
+                track.insert(crate::doc::eval::Keyframe {
+                    t: crate::doc::core::RationalTime::ZERO,
+                    value,
+                    interp: crate::doc::eval::Interp::Linear,
+                    spatial: None,
+                });
+                Ok(Resolved::Track(track))
+            }
         },
         Some(_) => {
             let baked = bake_property(ctx, layer, &property)?;

@@ -29,12 +29,23 @@ pub struct PropertySource {
 pub enum PropertyBase {
     Track(crate::doc::eval::KeyframeTrack),
     Slot(SlotId),
+    /// 動かない値。**キーを持たずに値だけ在る**状態(AE の形)。
+    /// これが無いと、動かない値も1つのキーで表すしかなく、
+    /// 利用者が触っていないのに菱形が出る。
+    Constant(crate::doc::eval::Value),
 }
 
 impl PropertySource {
     pub fn track(track: crate::doc::eval::KeyframeTrack) -> Self {
         Self {
             base: Some(PropertyBase::Track(track)),
+            modulators: Vec::new(),
+        }
+    }
+
+    pub fn constant(value: crate::doc::eval::Value) -> Self {
+        Self {
+            base: Some(PropertyBase::Constant(value)),
             modulators: Vec::new(),
         }
     }
@@ -536,6 +547,26 @@ mod tests {
         assert!(
             serde_json::from_str::<PropertyLink>(json).is_err(),
             "予約語 `masks` を持つ PropertyLink が読めてしまっている"
+        );
+    }
+}
+
+#[cfg(test)]
+mod constant_tests {
+    use super::*;
+    use crate::doc::eval::Value;
+
+    /// 動かない値は、保存して読み直しても track と混ざらない。
+    /// `PropertyBase` は untagged なので、並びを崩すと静かに壊れる。
+    #[test]
+    fn a_constant_survives_the_round_trip_without_becoming_a_track() {
+        let source = PropertySource::constant(Value::Vec2([160.0, 90.0]));
+        let json = serde_json::to_string(&source).expect("書ける");
+        let back: PropertySource = serde_json::from_str(&json).expect("読める");
+        assert_eq!(back, source, "往復で形が変わった: {json}");
+        assert!(
+            matches!(back.base, Some(PropertyBase::Constant(_))),
+            "track か slot として読まれた: {json}"
         );
     }
 }

@@ -274,6 +274,23 @@ impl Document {
                     }],
                 )
             }
+            Intent::SetConstant {
+                layer,
+                property,
+                value,
+            } => {
+                check_not_locked(&self.view(), layer)?;
+                check_not_frozen(&self.view(), layer)?;
+                let json = serde_json::to_string(&PropertySource::constant(value))?;
+                (
+                    layer.entity_path(),
+                    vec![SerializedComponentBatch {
+                        descriptor: descriptor_track(&property),
+                        array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
+                            .map_err(|e| StoreError::Chunk(e.to_string()))?,
+                    }],
+                )
+            }
             Intent::SetCameraTrack { property, track } => {
                 let json = serde_json::to_string(&PropertySource::track(track))?;
                 (

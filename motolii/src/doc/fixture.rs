@@ -163,29 +163,17 @@ pub fn build() -> Fixture {
             layer: id,
             shapes: vec![crate::doc::store::rect_shape(spec.rgba, [320.0, 180.0])],
         });
-        let mut anchor = KeyframeTrack::new();
-        anchor.insert(Keyframe {
-            t: RationalTime::ZERO,
-            value: Value::Vec2([160.0, 90.0]),
-            interp: Interp::Linear,
-            spatial: None,
-        });
-        intents.push(Intent::SetTrack {
+        // 動かない初期値は**キーではなく値**で置く。キーで置くと、
+        // 利用者が何も触っていないのに菱形が並ぶ。
+        intents.push(Intent::SetConstant {
             layer: id,
             property: PropertyId::new(property::ANCHOR).expect("anchor は予約語ではない"),
-            track: anchor,
-        });
-        let mut position = KeyframeTrack::new();
-        position.insert(Keyframe {
-            t: RationalTime::ZERO,
             value: Value::Vec2([160.0, 90.0]),
-            interp: Interp::Linear,
-            spatial: None,
         });
-        intents.push(Intent::SetTrack {
+        intents.push(Intent::SetConstant {
             layer: id,
             property: PropertyId::new(property::POSITION).expect("position は予約語ではない"),
-            track: position,
+            value: Value::Vec2([160.0, 90.0]),
         });
         intents.push(Intent::SetAttrs {
             layer: id,

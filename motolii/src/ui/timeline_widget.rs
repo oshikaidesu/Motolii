@@ -202,6 +202,10 @@ pub(super) struct TimelineWidget {
     /// 再生位置の鏡。`clock` は signal ではないので、これが無いと
     /// 位置を動かしても値の欄が描き直されない。
     playhead_mirror: Option<Signal<f64>>,
+    /// 誰かが Document を書いたら上がる。**書いた者が知らせる**形だと
+    /// 書く場所の数だけ配線が要るので、こちらから見に行く。
+    revision: Option<Signal<u32>>,
+    seen_revision: u32,
     selected_key: Option<Arc<Mutex<Vec<crate::ui::session::KeySel>>>>,
 }
 
@@ -229,6 +233,8 @@ impl TimelineWidget {
             selected_mirror: None,
             scroll_y_mirror: None,
             playhead_mirror: None,
+            revision: None,
+            seen_revision: 0,
             selected_key: None,
         }
     }
@@ -254,6 +260,11 @@ impl TimelineWidget {
 
     pub(super) fn with_playhead_mirror(mut self, mirror: Signal<f64>) -> Self {
         self.playhead_mirror = Some(mirror);
+        self
+    }
+
+    pub(super) fn with_revision(mut self, revision: Signal<u32>) -> Self {
+        self.revision = Some(revision);
         self
     }
 
@@ -830,6 +841,17 @@ impl Widget for TimelineWidget {
         scale: f64,
     ) -> anyrender::Scene {
         self.process_messages();
+        // 誰かが書いたら行を作り直す。Stage で打ったキーが出ない、を塞ぐ。
+        if let Some(rev) = &self.revision {
+            let now = (*rev)();
+            if now != self.seen_revision {
+                self.seen_revision = now;
+                if let (Some(doc), Some(extractor)) = (self.doc.as_ref(), self.extractor) {
+                    let doc = doc.lock().unwrap();
+                    self.rows = extractor(&doc);
+                }
+            }
+        }
         // 再生位置が動いたら、値を出している側へ知らせる。
         if let (Some(clock), Some(mirror)) = (&self.clock, &mut self.playhead_mirror) {
             let now = clock.now_sec();

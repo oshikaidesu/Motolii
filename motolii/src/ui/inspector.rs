@@ -5,7 +5,7 @@ use dioxus_native::prelude::*;
 use crate::ui::fixture::{inspector_data_from_doc, InspectorData, PropRow};
 use crate::ui::playback::Clock;
 use crate::doc::store::{
-    property, BlendMode, ContentKeyframe, Document, Intent, Interp, Keyframe, KeyframeTrack,
+    property, BlendMode, ContentKeyframe, Document, Intent, Interp, Keyframe,
     LayerAttrsPatch, LayerId, PropertyId, RationalTime, Value,
 };
 
@@ -106,16 +106,47 @@ fn write_key(
         return Ok(());
     };
     let mut doc = doc.lock().unwrap();
-    let mut track = doc
-        .view()
-        .track(layer, &prop)
-        .ok()
-        .flatten()
-        .unwrap_or_else(KeyframeTrack::new);
-    // **打たれるのは、いま居る時刻。** 1つ目だけ 0秒 へ寄せると、
-    // 動かした所と菱形の出る所が食い違い、利用者には壊れて見える。
+    // **キーが無いなら、値を置くだけ。** 利用者が ◇ を押すまで時間の世界へ
+    // 入れない(根底3)。キーが在るなら、いま居る時刻に打つ。
+    let Some(mut track) = doc.view().track(layer, &prop).ok().flatten() else {
+        return doc.apply(Intent::SetConstant { layer, property: prop, value });
+    };
     track.insert(Keyframe { t, value, interp: Interp::Linear, spatial: None });
     doc.apply(Intent::SetTrack { layer, property: prop, track })
+}
+
+/// 時間の世界を開ける。**今の時刻に1つだけ**キーを立てる。
+/// `write_key` は「既に開いている物へ打つ」道なので、開ける時はこちら。
+fn open_time(
+    doc: &Arc<Mutex<Document>>,
+    layer: LayerId,
+    property: &str,
+    value: Value,
+    t: RationalTime,
+) -> Result<(), crate::doc::store::StoreError> {
+    let Ok(prop) = PropertyId::new(property) else {
+        return Ok(());
+    };
+    let mut track = crate::doc::store::KeyframeTrack::new();
+    track.insert(Keyframe { t, value, interp: Interp::Linear, spatial: None });
+    doc.lock()
+        .unwrap()
+        .apply(Intent::SetTrack { layer, property: prop, track })
+}
+
+/// 時間の世界を閉じる。キーを捨てて、**今見えている値だけ**を残す。
+fn close_time(
+    doc: &Arc<Mutex<Document>>,
+    layer: LayerId,
+    property: &str,
+    value: Value,
+) -> Result<(), crate::doc::store::StoreError> {
+    let Ok(prop) = PropertyId::new(property) else {
+        return Ok(());
+    };
+    doc.lock()
+        .unwrap()
+        .apply(Intent::SetConstant { layer, property: prop, value })
 }
 
 /// エフェクトを層から外す。**param は触れるのに本体を外せない**という
@@ -209,12 +240,28 @@ fn prop_row(
     let key_click = p.property.clone().map(|property| {
         let value = p.value.clone();
         let doc = doc.clone();
-        move |_| match write_key(&doc, layer, &property, value.clone(), t) {
-            Ok(_) => {
-                println!("PROBE room=write verdict=key-added layer={:?} prop={} t={:?}", layer, property, t);
-                *revision.write() += 1;
+        let keyed = p.keyed;
+        // ◇ は**時間の世界を開け閉めする一手**。開ける時は今の時刻に1つ立て、
+        // 閉じる時はキーを全部捨てて、今の値だけを残す(AE と同じ形)。
+        move |_| {
+            let done = if keyed {
+                close_time(&doc, layer, &property, value.clone())
+            } else {
+                open_time(&doc, layer, &property, value.clone(), t)
+            };
+            match done {
+                Ok(_) => {
+                    println!(
+                        "PROBE room=write verdict=key-{} layer={:?} prop={} t={:?}",
+                        if keyed { "closed" } else { "opened" },
+                        layer,
+                        property,
+                        t
+                    );
+                    *revision.write() += 1;
+                }
+                Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
             }
-            Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
         }
     });
     rsx!(

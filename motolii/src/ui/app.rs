@@ -254,7 +254,6 @@ fn StagePanel(
             session.view_camera.clone(),
             session.rings.clone(),
             session.frame_dim.clone(),
-            session.timeline_tx.clone(),
             false,
         ))
     });
@@ -341,7 +340,6 @@ fn OutputPanel(session: Session) -> Element {
             session.view_camera.clone(),
             session.rings.clone(),
             session.frame_dim.clone(),
-            session.timeline_tx.clone(),
             true,
         ))
     });
@@ -376,6 +374,7 @@ fn TimelinePanel(
                 .with_selection(session.selection.clone(), selected)
                 .with_scroll_mirror(scroll_y)
                 .with_playhead_mirror(playhead)
+                .with_revision(revision)
                 .with_key_mirror(session.selected_keys.clone()),
         )
     });

@@ -275,6 +275,7 @@ impl<'a> StoreView<'a> {
 
         let mut acc: Option<Value> = match source.base {
             Some(PropertyBase::Track(track)) => Some(track.eval(t)),
+            Some(PropertyBase::Constant(value)) => Some(value.clone()),
             Some(PropertyBase::Slot(slot_id)) => {
                 self.slot_track(&slot_id)?.map(|track| track.eval(t))
             }

@@ -35,6 +35,13 @@ pub enum Intent {
         property: PropertyId,
         track: crate::doc::eval::KeyframeTrack,
     },
+    /// **動かない値**を置く。キーは作らない —— 利用者が ◇ を押すまで
+    /// 時間の世界へ入れない(根底3)。
+    SetConstant {
+        layer: LayerId,
+        property: PropertyId,
+        value: crate::doc::eval::Value,
+    },
     SetPropertySlot {
         layer: LayerId,
         property: PropertyId,
