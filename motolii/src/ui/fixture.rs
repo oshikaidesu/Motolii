@@ -19,7 +19,9 @@ pub(super) fn label_rgb(ix: u8) -> [u8; 3] {
 
 #[derive(Clone)]
 pub(super) struct LayerRow {
-    pub layer: LayerId,
+    /// カメラの行は層ではないので None。**単一のカメラを層と同じ形で触らせる**
+    /// (裁定217: AE のカメラレイヤー相当は document 所有のカメラ)。
+    pub layer: Option<LayerId>,
     pub name: String,
     pub color: &'static str,
     pub hidden: bool,
@@ -34,6 +36,13 @@ pub(super) struct LayerRow {
     pub children: u16,
 }
 
+/// カメラが持つ値。`center`/`zoom`/`roll` は普通のトランスフォームの語彙で足りる。
+const CAMERA_PROPS: &[&str] = &[
+    property::CAMERA_CENTER,
+    property::CAMERA_ZOOM,
+    property::CAMERA_ROLL,
+];
+
 const TRANSFORM_PROPS: &[&str] = &[
     property::ANCHOR,
     property::POSITION,
@@ -45,12 +54,42 @@ const TRANSFORM_PROPS: &[&str] = &[
 #[derive(Default)]
 struct TimelineView {
     expanded: std::collections::BTreeSet<LayerId>,
+    /// カメラの行が開いているか。カメラは層ではないので別に持つ。
+    camera_open: bool,
+    /// カメラに錠。**掛けると破線の枠を掴めなくなる**(誤って掴むのを止める)。
+    camera_locked: bool,
     keyed_only: bool,
 }
 
 fn timeline_view() -> &'static std::sync::Mutex<TimelineView> {
     static V: std::sync::OnceLock<std::sync::Mutex<TimelineView>> = std::sync::OnceLock::new();
     V.get_or_init(|| std::sync::Mutex::new(TimelineView::default()))
+}
+
+/// カメラの値も**普通のトランスフォームの語彙**で呼ぶ。中心はカメラの居場所、
+/// 拡大は倍率、傾きは回転。層と別の言葉を作らない。
+fn camera_word(name: &str) -> &str {
+    match name {
+        property::CAMERA_CENTER => "position",
+        property::CAMERA_ZOOM => "scale",
+        property::CAMERA_ROLL => "rotation",
+        other => other,
+    }
+}
+
+pub(crate) fn camera_locked() -> bool {
+    timeline_view().lock().unwrap().camera_locked
+}
+
+pub(super) fn toggle_camera_locked() {
+    let mut v = timeline_view().lock().unwrap();
+    v.camera_locked = !v.camera_locked;
+}
+
+/// カメラの行の開閉。カメラは層ではないので `expanded` の集合に入らない。
+pub(super) fn toggle_camera_open() {
+    let mut v = timeline_view().lock().unwrap();
+    v.camera_open = !v.camera_open;
 }
 
 pub(super) fn toggle_expanded(layer: LayerId) {
@@ -75,7 +114,7 @@ pub(super) fn keyed_only() -> bool {
 
 /// 画面に出る行の並び。左の名前列と右の帯は必ずこれを通す(ずれると別物になる)。
 struct Row {
-    layer: LayerId,
+    layer: Option<LayerId>,
     prop: Option<PropertyId>,
     depth: u16,
     children: u16,
@@ -108,6 +147,21 @@ fn rows_nested(
     };
 
     let mut out = Vec::new();
+
+    // **カメラは1台きり**(裁定217)。層の一番上に、層と同じ形で置く。
+    let camera_open = {
+        let v = timeline_view().lock().unwrap();
+        v.camera_open
+    };
+    out.push(Row { layer: None, prop: None, depth: 0, children: 0 });
+    if camera_open {
+        for name in CAMERA_PROPS {
+            if let Ok(property) = PropertyId::camera(name) {
+                out.push(Row { layer: None, prop: Some(property), depth: 0, children: 0 });
+            }
+        }
+    }
+
     let mut stack: Vec<(LayerId, u16)> = layers
         .iter()
         .rev()
@@ -117,7 +171,7 @@ fn rows_nested(
 
     while let Some((layer, depth)) = stack.pop() {
         let children = layers.iter().filter(|c| parent_of(**c) == Some(layer)).count() as u16;
-        out.push(Row { layer, prop: None, depth, children });
+        out.push(Row { layer: Some(layer), prop: None, depth, children });
         if !expanded.contains(&layer) {
             continue;
         }
@@ -129,7 +183,7 @@ fn rows_nested(
             if keyed_only && !keyed {
                 continue;
             }
-            out.push(Row { layer, prop: Some(property), depth, children });
+            out.push(Row { layer: Some(layer), prop: Some(property), depth, children });
         }
         stack.extend(
             layers
@@ -152,6 +206,23 @@ pub(super) fn canvas_rows_from_doc(doc: &Document) -> Vec<CanvasRow> {
     rows_of(doc)
         .into_iter()
         .map(|Row { layer, prop, .. }| {
+            // カメラの行(層ではない)。キーは camera_track から引く。
+            let Some(layer) = layer else {
+                let keys = prop
+                    .as_ref()
+                    .and_then(|p| view.camera_track(p).ok().flatten())
+                    .map(|t| t.keys().iter().map(|k| k.t.as_seconds_f64()).collect())
+                    .unwrap_or_default();
+                return CanvasRow {
+                    is_group: false,
+                    keys,
+                    span: None,
+                    agg: Vec::new(),
+                    layer: None,
+                    prop,
+                    color: crate::ui::tokens::ACCENT,
+                };
+            };
             let color_ix = view
                 .attrs(layer)
                 .ok()
@@ -209,12 +280,29 @@ pub(super) fn layer_rows_from_doc(doc: &Document) -> Vec<LayerRow> {
     rows_of(doc)
         .into_iter()
         .map(|Row { layer, prop, depth, children }| {
-            let attrs = view.attrs(layer).ok().flatten().unwrap_or_default();
+            let Some(id) = layer else {
+                return LayerRow {
+                    layer: None,
+                    name: match &prop {
+                        Some(p) => camera_word(p.name()).to_string(),
+                        None => "Camera".to_string(),
+                    },
+                    color: "#d8b574",
+                    hidden: false,
+                    solo: false,
+                    locked: camera_locked(),
+                    prop: prop.map(|p| camera_word(p.name()).to_string()),
+                    expanded: timeline_view().lock().unwrap().camera_open,
+                    depth,
+                    children,
+                };
+            };
+            let attrs = view.attrs(id).ok().flatten().unwrap_or_default();
             let color = attrs
                 .label_color
                 .map(|ix| LABEL_PALETTE[ix as usize % LABEL_PALETTE.len()])
                 .unwrap_or("#8c8c8c");
-            let expanded = timeline_view().lock().unwrap().expanded.contains(&layer);
+            let expanded = timeline_view().lock().unwrap().expanded.contains(&id);
             LayerRow {
                 layer,
                 name: match &prop {
@@ -788,7 +876,7 @@ mod row_tests {
 
         assert_eq!(names.len(), bands.len(), "左右の行数がずれている");
         for (name, band) in names.iter().zip(&bands) {
-            assert_eq!(Some(name.layer), band.layer);
+            assert_eq!(name.layer, band.layer);
             assert_eq!(name.prop.is_some(), band.prop.is_some());
         }
         assert!(
@@ -813,7 +901,8 @@ mod nest_tests {
             let view = doc.view();
             rows.iter().position(|r| {
                 r.prop.is_none()
-                    && view.attrs(r.layer).ok().flatten().map(|a| a.name).as_deref() == Some(name)
+                    && r.layer.and_then(|l| view.attrs(l).ok().flatten()).map(|a| a.name).as_deref()
+                        == Some(name)
             })
         };
 
@@ -822,7 +911,7 @@ mod nest_tests {
         assert!(named(&folded, "グリッチトランジション").is_none(), "畳んだ親の子が出ている");
 
         let parent = folded[parent_ix].layer;
-        let opened = rows_nested(&doc, &[parent].into_iter().collect(), false);
+        let opened = rows_nested(&doc, &[parent].into_iter().flatten().collect(), false);
         let p = named(&opened, "ダンスカット").expect("親の行がある");
         let c = named(&opened, "グリッチトランジション").expect("開いたのに子が出ない");
         assert!(c > p, "子が親より上に居る");

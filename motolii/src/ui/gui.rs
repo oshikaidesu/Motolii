@@ -429,7 +429,8 @@ fn a_keystroke_reaches_the_app() {
     // 層を1つ選んでから複製する。
     let rows = gui.doc.inner().query_selector_all(".lsurface").unwrap_or_default();
     assert!(!rows.is_empty(), "層の行が無い");
-    let (x, y) = gui.center_of(".lsurface", 0);
+    // 0番はカメラの行(層ではないので選べない)。最初の層は1番。
+    let (x, y) = gui.center_of(".lsurface", 1);
     gui.click(x, y);
 
     let app = gui.doc.inner().query_selector("#app").unwrap().expect("#app");

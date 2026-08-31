@@ -809,11 +809,11 @@ pub fn app() -> Element {
                                 return;
                             }
                             let current = selected()
-                                .and_then(|l| rows.iter().position(|r| r.layer == l))
+                                .and_then(|l| rows.iter().position(|r| r.layer == Some(l)))
                                 .unwrap_or(0) as i32;
                             let next = (current + delta).clamp(0, rows.len() as i32 - 1) as usize;
-                            selection.set(Some(rows[next].layer));
-                            selected.set(Some(rows[next].layer));
+                            selection.set(rows[next].layer);
+                            selected.set(rows[next].layer);
                             *revision.write() += 1;
                         }
                         Intent::SelectAll => {

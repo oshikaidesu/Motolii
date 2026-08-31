@@ -57,8 +57,9 @@ pub(super) fn timeline_shell(
         let timeline_tx_row = timeline_tx.clone();
         let mut layer_rows_sig = layer_rows_sig;
         let selection = selection.clone();
-        let is_primary = selected() == Some(layer);
-        let is_secondary = !is_primary && selection.contains(layer);
+        let is_primary = layer.is_some() && selected() == layer;
+        let is_secondary =
+            !is_primary && layer.is_some_and(|l| selection.contains(l));
         let lsurface_style = if is_primary {
             format!("background:{};box-shadow:inset 0 0 0 2px var(--way-inspector);", row.color)
         } else if is_secondary {
@@ -79,6 +80,7 @@ pub(super) fn timeline_shell(
                 span {
                     class: "{class}",
                     onclick: move |_| {
+                        let Some(layer) = layer else { return };
                         let patch = match bit {
                             0 => LayerAttrsPatch { hidden: Some(!hidden), ..Default::default() },
                             1 => LayerAttrsPatch { solo: Some(!solo), ..Default::default() },
@@ -108,7 +110,9 @@ pub(super) fn timeline_shell(
             );
         }
         let expanded = row.expanded;
-        let editing_name = renaming().filter(|(l, _)| *l == layer).map(|(_, n)| n);
+        let editing_name = renaming()
+            .filter(|(l, _)| Some(*l) == layer)
+            .map(|(_, n)| n);
         let doc_rename = doc.clone();
         rsx!(
             div { class: "lrow", style: "{indent}",
@@ -118,7 +122,10 @@ pub(super) fn timeline_shell(
                         let timeline_tx = timeline_tx_row.clone();
                         let doc = doc_twirl.clone();
                         move |_| {
-                            crate::ui::fixture::toggle_expanded(layer);
+                            match layer {
+                                Some(l) => crate::ui::fixture::toggle_expanded(l),
+                                None => crate::ui::fixture::toggle_camera_open(),
+                            }
                             let d = doc.lock().unwrap();
                             let rows = crate::ui::fixture::layer_rows_from_doc(&d);
                             let canvas = crate::ui::fixture::canvas_rows_from_doc(&d);
@@ -140,7 +147,11 @@ pub(super) fn timeline_shell(
                         style: "{lsurface_style}",
                         value: "{draft}",
                         autofocus: "true",
-                        oninput: move |evt| *renaming.write() = Some((layer, evt.value())),
+                        oninput: move |evt| {
+                            if let Some(l) = layer {
+                                *renaming.write() = Some((l, evt.value()));
+                            }
+                        },
                         onkeydown: move |evt| match evt.key() {
                             Key::Enter => {
                                 evt.prevent_default();
@@ -167,24 +178,43 @@ pub(super) fn timeline_shell(
                         class: "lsurface",
                         style: "{lsurface_style}",
                         onclick: move |evt| {
+                            let Some(l) = layer else { return };
                             if evt.modifiers().meta() {
-                                selection.toggle(layer);
+                                selection.toggle(l);
                             } else {
-                                selection.set(Some(layer));
+                                selection.set(Some(l));
                             }
                             selected.set(selection.get());
                         },
                         ondoubleclick: {
                             let name = row.name.clone();
-                            move |_| *renaming.write() = Some((layer, name.clone()))
+                            move |_| {
+                                if let Some(l) = layer {
+                                    *renaming.write() = Some((l, name.clone()));
+                                }
+                            }
                         },
                         "{row.name}"
                     }
                 }
-                div { class: "lctrl",
-                    {glyph(0, "M")}
-                    {glyph(1, "S")}
-                    {glyph(2, "L")}
+                if layer.is_some() {
+                    div { class: "lctrl",
+                        {glyph(0, "M")}
+                        {glyph(1, "S")}
+                        {glyph(2, "L")}
+                    }
+                } else {
+                    // カメラに表示と独奏は無い。錠だけ在る —— 掛けると枠を掴めない。
+                    div { class: "lctrl",
+                        span {
+                            class: if row.locked { "glyph lit" } else { "glyph" },
+                            onclick: move |_| {
+                                crate::ui::fixture::toggle_camera_locked();
+                                *revision.write() += 1;
+                            },
+                            "L"
+                        }
+                    }
                 }
             }
         )

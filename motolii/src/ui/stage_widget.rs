@@ -732,7 +732,8 @@ impl Widget for StageWidget {
                     }
                     None => {
                         // 枠の縁を掴んだら書き出しカメラ、それ以外は視点。
-                        if self.near_export_frame(cx, cy) {
+                        // 錠が掛かっている間は枠を掴めない(誤って掴むのを止める)。
+                        if self.near_export_frame(cx, cy) && !crate::ui::fixture::camera_locked() {
                             let rt = self.current_rt();
                             self.camera_drag = Some(CameraDrag {
                                 grab: (cx, cy),
