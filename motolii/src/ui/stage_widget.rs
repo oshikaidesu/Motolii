@@ -458,6 +458,40 @@ fn orbit_axis(orig: (f64, f64), grab: (f64, f64), now: (f64, f64), axis_x: bool,
     }
 }
 
+/// 指の下に `target`(世界の点)が来るような視点の中心を、**写像を測って**解く。
+/// 視点を動かすと世界ごと動くので、世界の座標で差分を取ると自分を追いかけてしまう。
+fn pan_that_puts(fit: &Fit, cam: crate::doc::core::ResolvedCamera, screen: (f64, f64), target: (f64, f64)) -> [f32; 2] {
+    let at = |dx: f32, dy: f32| {
+        let mut c = cam;
+        c.center = [cam.center[0] + dx, cam.center[1] + dy];
+        let mut f = *fit;
+        f.camera = c;
+        f.image_from_world = crate::doc::core::camera_screen_from_world_z0(f.comp, c);
+        f.to_comp(screen.0, screen.1)
+    };
+    let base = at(0.0, 0.0);
+    let sx = at(1.0, 0.0).0 - base.0;
+    let sy = at(0.0, 1.0).1 - base.1;
+    if sx.abs() < 1e-9 || sy.abs() < 1e-9 {
+        return cam.center;
+    }
+    [
+        cam.center[0] + ((target.0 - base.0) / sx) as f32,
+        cam.center[1] + ((target.1 - base.1) / sy) as f32,
+    ]
+}
+
+/// 掴んだ物が指について来るように、カメラの中心を出す。
+///
+/// **視点は世界を掴んでいる**ので、世界を右へ引くならカメラは左へ動く。
+/// **書き出しの枠は枠そのものを掴んでいる**ので、枠を右へ引けば枠が右へ動く。
+/// 同じ式を使うと、掴んだ物が指と逆へ逃げる。
+fn camera_center_for(cam: &CameraDrag, at: (f64, f64)) -> (f64, f64) {
+    let (dx, dy) = (at.0 - cam.grab.0, at.1 - cam.grab.1);
+    let sign = if cam.export_frame { 1.0 } else { -1.0 };
+    (cam.orig_center.0 + sign * dx, cam.orig_center.1 + sign * dy)
+}
+
 fn rotate_around(center: (f64, f64), angle_deg: f64, p: (f64, f64)) -> (f64, f64) {
     let a = angle_deg.to_radians();
     let (dx, dy) = (p.0 - center.0, p.1 - center.1);
@@ -757,17 +791,20 @@ impl Widget for StageWidget {
                     let cam = self.camera_drag.as_mut().expect("直前に居ることを見た");
                     cam.last = Some(at);
                     let cam = &*cam;
-                    let (cx, cy) = at;
-                    let next = (
-                        cam.orig_center.0 - (cx - cam.grab.0),
-                        cam.orig_center.1 - (cy - cam.grab.1),
-                    );
                     if cam.export_frame {
+                        let next = camera_center_for(cam, at);
                         self.write_export_center(next, self.current_rt(), false);
                         self.revision += 1;
                     } else {
+                        let screen = (p.element.x as f64, p.element.y as f64);
+                        let grab = cam.grab;
                         let mut view = self.view_camera.lock().unwrap();
-                        view.pan = [next.0 as f32, next.1 as f32];
+                        view.pan = pan_that_puts(&self.fit, view.as_resolved_camera(), screen, grab);
+                        let camera = view.as_resolved_camera();
+                        drop(view);
+                        self.fit.camera = camera;
+                        self.fit.image_from_world =
+                            crate::doc::core::camera_screen_from_world_z0(self.fit.comp, camera);
                     }
                     return;
                 }
@@ -820,11 +857,8 @@ impl Widget for StageWidget {
             }
             UiEvent::PointerUp(p) => {
                 if let Some(cam) = self.camera_drag.take() {
-                    if let (true, Some((cx, cy))) = (cam.export_frame, cam.last) {
-                        let next = (
-                            cam.orig_center.0 - (cx - cam.grab.0),
-                            cam.orig_center.1 - (cy - cam.grab.1),
-                        );
+                    if let (true, Some(at)) = (cam.export_frame, cam.last) {
+                        let next = camera_center_for(&cam, at);
                         self.write_export_center(next, self.current_rt(), true);
                         self.revision += 1;
                     }
