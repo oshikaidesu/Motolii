@@ -48,7 +48,7 @@ AE 自体がガラパゴスなので、土台に据えると孤島を継承す�
 
 ## 迷った時に引く順
 
-1. [説明書](wiki/index.md) に、その操作の文が書けるか。書けないなら形が間違っている
+1. [理想の定義](ideal.md) の5つを当てる。形・順序・見せる段・触る段・入れ子
 2. `motolii/AGENTS.md`(15行)
 3. [decision-index](decision-index.md) を主題で grep
 
