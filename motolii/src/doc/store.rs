@@ -393,4 +393,6 @@ pub struct ResolvedLayer {
     pub blend_mode: BlendMode,
     pub matte: Option<Matte>,
     pub pinned: bool,
+    /// 3D の素材を平面へ収めるか。既定は収めない(裁定 2026-08-30)。
+    pub flatten: bool,
 }

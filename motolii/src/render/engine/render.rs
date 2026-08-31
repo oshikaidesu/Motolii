@@ -57,13 +57,13 @@ impl Engine {
             let Some(content) = content else {
                 continue;
             };
-            let built = Layer {
+            let built = self.flatten_if_asked(comp, camera, Layer {
                 content,
                 size: layer_size(layer, natural),
                 placement: layer.placement,
                 pinned: layer.pinned,
                 blend_mode,
-            };
+            }, layer.flatten)?;
 
             let final_layer = match layer.matte {
                 None => built,
@@ -136,13 +136,13 @@ impl Engine {
             let Some(content) = content else {
                 continue;
             };
-            let built = Layer {
+            let built = self.flatten_if_asked(comp, camera, Layer {
                 content,
                 size: layer_size(layer, natural),
                 placement: layer.placement,
                 pinned: layer.pinned,
                 blend_mode,
-            };
+            }, layer.flatten)?;
 
             let final_layer = match layer.matte {
                 None => built,
@@ -318,6 +318,48 @@ impl Engine {
         Ok(self
             .compositor
             .render_into(target, comp, camera, &layers, background_color)?)
+    }
+
+    /// 平面へ収める。3D の素材を comp の絵へ一度焼き、以後は板として扱う
+    /// (裁定 2026-08-30「平面に収めるのは選択肢」)。焼いた層にも blend・matte・
+    /// エフェクトは今まで通り効く。
+    fn flatten_if_asked(
+        &mut self,
+        comp: CompSpec,
+        camera: ResolvedCamera,
+        layer: Layer,
+        flatten: bool,
+    ) -> Result<Layer, EngineError> {
+        if !flatten || layer.content.texture().is_some() {
+            return Ok(layer);
+        }
+        let mut baked_placement = layer.placement;
+        baked_placement.opacity = 1.0;
+        let source = LayerWithPasses {
+            layer: Layer { placement: baked_placement, ..layer.clone() },
+            passes: Vec::new(),
+        };
+        let (texture, _view) = self.compositor.render_to_texture(
+            comp,
+            camera,
+            std::slice::from_ref(&source),
+            crate::render::compositor::NO_BACKGROUND,
+        )?;
+        let imported = self.compositor.import_premultiplied(&texture)?;
+        Ok(Layer {
+            content: crate::render::compositor::LayerContent::Texture(imported),
+            size: [comp.width as f32, comp.height as f32],
+            // 焼いた絵は既に comp の座標に居るので、もう一度動かさない。
+            placement: crate::doc::core::LayerPlacement {
+                transform: glam::Affine2::IDENTITY,
+                z: 0.0,
+                rotation_x: 0.0,
+                rotation_y: 0.0,
+                ..layer.placement
+            },
+            pinned: true,
+            blend_mode: layer.blend_mode,
+        })
     }
 
     pub fn apply_matte(

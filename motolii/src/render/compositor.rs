@@ -12,6 +12,7 @@ mod device;
 mod effects;
 mod headless;
 mod matte;
+mod mesh;
 mod point_cloud;
 mod presentable;
 mod render_basic;
@@ -226,6 +227,8 @@ impl RenderTiming {
 }
 
 pub struct Compositor {
+    /// 網の材質が要求する 1 画素の albedo。
+    white_pixel: Option<GpuTexture2D>,
     pub(crate) ctx: RenderContext,
     pub(crate) next_readback: u64,
     pub(crate) next_effect_key: u64,
@@ -256,13 +259,14 @@ pub enum LayerContent {
         /// 点の直径(comp のピクセル)。
         point_size: f32,
     },
+    Mesh(std::sync::Arc<crate::render::media::MeshData>),
 }
 
 impl LayerContent {
     pub fn texture(&self) -> Option<&GpuTexture2D> {
         match self {
             Self::Texture(t) => Some(t),
-            Self::Cloud { .. } => None,
+            Self::Cloud { .. } | Self::Mesh(_) => None,
         }
     }
 }
@@ -276,6 +280,7 @@ pub(crate) enum SequentialContent<'a> {
         colors: &'a [[u8; 4]],
         point_size: f32,
     },
+    Mesh(&'a crate::render::media::MeshData),
 }
 
 pub(crate) struct SequentialInput<'a> {

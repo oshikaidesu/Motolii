@@ -317,6 +317,7 @@ pub(crate) fn sequential_inputs<'a>(
                     LayerContent::Cloud { positions, colors, point_size } => {
                         SequentialContent::Cloud { positions, colors, point_size: *point_size }
                     }
+                    LayerContent::Mesh(mesh) => SequentialContent::Mesh(mesh),
                 },
                 local_min: glam::Vec2::new(-pad, -pad),
                 local_size: glam::Vec2::new(layer.size[0] + 2.0 * pad, layer.size[1] + 2.0 * pad),

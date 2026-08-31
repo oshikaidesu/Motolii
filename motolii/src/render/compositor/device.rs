@@ -65,6 +65,7 @@ impl Compositor {
         );
 
         Ok(Self {
+            white_pixel: None,
             ctx,
             next_readback: 1,
             next_effect_key: 1,
@@ -114,6 +115,19 @@ impl Compositor {
                 },
             )
             .map_err(|e| CompositorError::Rectangles(e.to_string()))
+    }
+
+    /// 焼いた絵を板として使えるようにする(上流の取り込み口)。
+    pub fn import_premultiplied(
+        &mut self,
+        texture: &wgpu::Texture,
+    ) -> Result<GpuTexture2D, CompositorError> {
+        self.next_effect_key += 1;
+        let key = self.next_effect_key;
+        self.ctx
+            .texture_manager_2d
+            .import_gpu_premultiplied(key, &self.ctx, texture)
+            .map_err(|e| CompositorError::Effect(e.to_string()))
     }
 
     pub fn upload_yuv420p(

@@ -19,6 +19,9 @@ blitz-traits = { git = "https://github.com/DioxusLabs/blitz", rev = "64eb27853aa
 blitz-shell = { git = "https://github.com/DioxusLabs/blitz", rev = "64eb27853aa2672486b7edf825fb044be78c9db3", default-features = false, features = ["data-uri", "custom-widget"] }
 keyboard-types = "0.7"
 anyrender = "0.13"
+# OBJ の読み(M5-A2 で private leaf として採択済み)
+tobj = "4"
+smallvec = "1"
 wgpu_context = "0.9"
 wgpu = "29"
 peniko = "0.6"

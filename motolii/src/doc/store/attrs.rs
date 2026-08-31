@@ -127,6 +127,9 @@ pub struct LayerAttrs {
     pub label_color: Option<u8>,
     #[serde(default)]
     pub frozen: bool,
+    /// 3D の素材を平面へ収めるか。**既定は収めない**(AE と逆。裁定 2026-08-30)。
+    #[serde(default)]
+    pub flatten: bool,
 }
 
 impl Default for LayerAttrs {
@@ -143,6 +146,7 @@ impl Default for LayerAttrs {
             locked: false,
             label_color: None,
             frozen: false,
+            flatten: false,
         }
     }
 }
@@ -183,6 +187,7 @@ pub struct LayerAttrsPatch {
     pub solo: Option<bool>,
     pub locked: Option<bool>,
     pub label_color: Option<Option<u8>>,
+    pub flatten: Option<bool>,
 }
 
 impl LayerAttrsPatch {
@@ -216,6 +221,9 @@ impl LayerAttrsPatch {
         }
         if let Some(v) = self.label_color {
             current.label_color = v;
+        }
+        if let Some(v) = self.flatten {
+            current.flatten = v;
         }
         current
     }

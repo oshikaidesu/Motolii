@@ -32,7 +32,9 @@ impl Engine {
         } else if layer.source == LayerSource::Shape {
             self.shape_texture_for(view, layer.id)
         } else if let LayerSource::File { path, .. } = &layer.source {
-            if is_point_cloud_path(path) {
+            if crate::render::media::is_mesh_path(path) {
+                self.mesh_content_for(path, comp)
+            } else if is_point_cloud_path(path) {
                 self.point_cloud_content_for(path, comp)
             } else {
                 let path = path.clone();
@@ -206,6 +208,35 @@ impl Engine {
         )?;
         self.shape_textures.insert(key, texture.clone());
         Ok((Some(LayerContent::Texture(texture)), [raster.width as f32, raster.height as f32]))
+    }
+
+    /// 網も焼かない。三角形のまま run の view へ渡り、深度で板と刺さり合う。
+    fn mesh_content_for(
+        &mut self,
+        path: &str,
+        comp: CompSpec,
+    ) -> Result<(Option<LayerContent>, [f32; 2]), EngineError> {
+        let natural = [comp.width as f32, comp.height as f32];
+        if let Some(mesh) = self.meshes.get(path) {
+            return Ok((Some(LayerContent::Mesh(mesh.clone())), natural));
+        }
+        if let Some(reason) = self.failed_meshes.get(path) {
+            self.layer_failures.push(reason.clone());
+            return Ok((None, natural));
+        }
+        match crate::render::media::load_mesh(path) {
+            Ok(data) => {
+                let data = std::sync::Arc::new(data);
+                self.meshes.insert(path.to_owned(), data.clone());
+                Ok((Some(LayerContent::Mesh(data)), natural))
+            }
+            Err(err) => {
+                let reason = format!("網を読めない: {path}: {err}");
+                self.failed_meshes.insert(path.to_owned(), reason.clone());
+                self.layer_failures.push(reason);
+                Ok((None, natural))
+            }
+        }
     }
 
     fn point_cloud_content_for(

@@ -32,11 +32,36 @@ enum NewKind {
 /// 点群のファイル座標を comp のピクセルへ橋渡しする初期値。囲む球が画角の
 /// 6割に収まる倍率と、中心が comp の中心に来る位置を**一度だけ**書く。
 /// 以後は利用者の物(キーフレームも打てる)。
-fn point_cloud_fit_intents(layer: LayerId, path: &str, comp: (f64, f64)) -> Vec<Intent> {
-    let Ok(data) = crate::render::media::load_point_cloud(std::path::Path::new(path)) else {
+/// 3D の素材を画角へ収める。中心を comp の真ん中へ、大きさを画面の6割へ。
+fn spatial_fit_intents(layer: LayerId, path: &str, comp: (f64, f64)) -> Vec<Intent> {
+    let sphere = if crate::render::media::is_mesh_path(path) {
+        crate::render::media::load_mesh(path).ok().map(|m| {
+            let mut min = [f32::MAX; 3];
+            let mut max = [f32::MIN; 3];
+            for p in &m.positions {
+                for i in 0..3 {
+                    min[i] = min[i].min(p[i]);
+                    max[i] = max[i].max(p[i]);
+                }
+            }
+            let center = [
+                (min[0] + max[0]) * 0.5,
+                (min[1] + max[1]) * 0.5,
+                (min[2] + max[2]) * 0.5,
+            ];
+            let radius = (0..3)
+                .map(|i| (max[i] - min[i]) * 0.5)
+                .fold(0.0f32, f32::max);
+            (center, radius)
+        })
+    } else {
+        crate::render::media::load_point_cloud(std::path::Path::new(path))
+            .ok()
+            .map(|d| d.bounding_sphere())
+    };
+    let Some((center, radius)) = sphere else {
         return Vec::new();
     };
-    let (center, radius) = data.bounding_sphere();
     if radius <= 0.0 {
         return Vec::new();
     }
@@ -72,8 +97,10 @@ fn new_layer_intents(layer: LayerId, order: i16, playhead: i64, duration_frames:
     let label_color = Some(Some((layer.0 % fixture::LABEL_PALETTE.len() as u64) as u8));
     match kind {
         NewKind::Media { path, name } => {
-            let fit = if crate::render::media::is_point_cloud_path(&path) {
-                point_cloud_fit_intents(layer, &path, comp)
+            let fit = if crate::render::media::is_point_cloud_path(&path)
+                || crate::render::media::is_mesh_path(&path)
+            {
+                spatial_fit_intents(layer, &path, comp)
             } else {
                 Vec::new()
             };

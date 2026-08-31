@@ -409,6 +409,7 @@ impl TimelineWidget {
 
 fn attrs_to_patch(a: &LayerAttrs) -> LayerAttrsPatch {
     LayerAttrsPatch {
+        flatten: Some(a.flatten),
         hidden: Some(a.hidden),
         parent: Some(a.parent),
         blend_mode: Some(a.blend_mode.clone()),

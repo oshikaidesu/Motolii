@@ -3622,10 +3622,12 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "smallvec",
  "symphonia",
  "tempfile",
  "thiserror 2.0.20",
  "tiny-skia 0.11.4",
+ "tobj",
  "wgpu",
  "wgpu_context",
 ]
@@ -7252,6 +7254,15 @@ dependencies = [
  "quote",
  "syn 2.0.119",
  "synstructure",
+]
+
+[[package]]
+name = "tobj"
+version = "4.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6eb8e04167c1c0c76b5de63226fd733485ad63ef71e40de31e16272f47b099e2"
+dependencies = [
+ "ahash",
 ]
 
 [[package]]

@@ -224,6 +224,7 @@ impl Compositor {
             }
 
             let mut clouds: Vec<re_renderer::renderer::PointCloudDrawData> = Vec::new();
+            let mut meshes: Vec<re_renderer::renderer::MeshDrawData> = Vec::new();
             for input in run {
                 let (transform, z, rx, ry) = if input.pinned {
                     (pinned_cancel * input.transform, 0.0, 0.0, 0.0)
@@ -240,6 +241,18 @@ impl Compositor {
                         positions,
                         colors,
                         point_size,
+                        transform,
+                        z,
+                        input.opacity,
+                    )?);
+                    continue;
+                }
+                if let SequentialContent::Mesh(mesh) = input.content {
+                    meshes.push(self.mesh_draw_data(
+                        &mesh.positions,
+                        &mesh.indices,
+                        &mesh.normals,
+                        &mesh.colors,
                         transform,
                         z,
                         input.opacity,
@@ -307,6 +320,9 @@ impl Compositor {
             view_builder.queue_draw(&self.ctx, draw_data);
             for cloud in clouds {
                 view_builder.queue_draw(&self.ctx, cloud);
+            }
+            for mesh in meshes {
+                view_builder.queue_draw(&self.ctx, mesh);
             }
             let clear = if background.is_none() {
                 crate::render::compositor::clear_color(background_color)
@@ -593,6 +609,9 @@ impl Compositor {
                         colors,
                         point_size: *point_size,
                     },
+                    crate::render::compositor::LayerContent::Mesh(mesh) => {
+                        crate::render::compositor::SequentialContent::Mesh(mesh)
+                    }
                 },
                 local_min: glam::Vec2::ZERO,
                 local_size: glam::Vec2::new(layer.size[0], layer.size[1]),

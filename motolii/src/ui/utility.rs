@@ -61,6 +61,17 @@ fn move_anchor(
     );
 }
 
+/// 3D の素材を平面へ収めるか。既定は収めない(AE と逆。裁定 2026-08-30)。
+fn set_flatten(doc: &Arc<Mutex<Document>>, layer: LayerId, flatten: bool) {
+    let patch = crate::doc::store::LayerAttrsPatch {
+        flatten: Some(flatten),
+        ..Default::default()
+    };
+    if let Err(e) = doc.lock().unwrap().apply(Intent::SetAttrs { layer, patch }) {
+        println!("PROBE room=write verdict=apply-error {e}");
+    }
+}
+
 pub(super) fn utility_panel(
     doc: &Arc<Mutex<Document>>,
     selection: Option<LayerId>,
@@ -74,6 +85,15 @@ pub(super) fn utility_panel(
         .unwrap_or(RationalTime::ZERO);
     let size = *selected_size.lock().unwrap();
     let three_d = gizmo_3d.load(Ordering::Relaxed);
+    let flattened = selection.is_some_and(|layer| {
+        doc.lock()
+            .unwrap()
+            .view()
+            .attrs(layer)
+            .ok()
+            .flatten()
+            .is_some_and(|a| a.flatten)
+    });
 
     let spots: [(&str, f64, f64); 9] = [
         ("左上", 0.0, 0.0),
@@ -137,6 +157,36 @@ pub(super) fn utility_panel(
             }
             if three_d {
                 div { class: "prow", span { class: "n empty", "ドラッグで向き・⌥ドラッグで奥行き" } }
+            }
+            div { class: "sec", "3D" }
+            if let Some(layer) = selection {
+                div { class: "prow",
+                    span { class: "n", "収める" }
+                    span {
+                        class: if flattened { "v" } else { "v content" },
+                        onclick: {
+                            let doc = doc.clone();
+                            move |_| {
+                                set_flatten(&doc, layer, false);
+                                *revision.write() += 1;
+                            }
+                        },
+                        "空間"
+                    }
+                    span {
+                        class: if flattened { "v content" } else { "v" },
+                        onclick: {
+                            let doc = doc.clone();
+                            move |_| {
+                                set_flatten(&doc, layer, true);
+                                *revision.write() += 1;
+                            }
+                        },
+                        "平面"
+                    }
+                }
+            } else {
+                div { class: "prow", span { class: "n empty", "層を選ぶ" } }
             }
         }
     )

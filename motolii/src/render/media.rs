@@ -1,5 +1,6 @@
 
 mod encode;
+mod mesh;
 mod point_cloud;
 mod probe;
 
@@ -7,6 +8,7 @@ use std::io::Read;
 use std::process::Command;
 
 pub use encode::Encoder;
+pub use mesh::{is_mesh_extension, is_mesh_path, load_mesh, MeshData, MeshError, MESH_EXTENSIONS};
 pub use point_cloud::{
     asset_type_for_extension, is_point_cloud_extension, is_point_cloud_path, is_rerun_importable_extension,
     load_point_cloud, PointCloudData,
