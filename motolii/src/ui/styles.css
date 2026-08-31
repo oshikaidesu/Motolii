@@ -483,7 +483,7 @@ body {
 
 .epresets {
     flex: 0 0 auto;
-    height: calc(84 * var(--s) * 1px);
+    height: calc(88 * var(--s) * 1px);
     display: grid;
     background: var(--app);
 }

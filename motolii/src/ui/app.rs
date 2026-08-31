@@ -186,22 +186,22 @@ fn InspectorPanel(
 
 #[component]
 fn EasePanel(session: Session, revision: Signal<u32>) -> Element {
-    let curve = use_hook(|| {
-        std::sync::Arc::new(std::sync::Mutex::new(crate::ui::ease_widget::LINEAR))
+    let shape = use_hook(|| {
+        std::sync::Arc::new(std::sync::Mutex::new(crate::ui::ease_widget::DEFAULT))
     });
     let editor = use_hook(|| {
         CustomWidgetAttr::new(crate::ui::ease_widget::EaseWidget::new(
-            curve.clone(),
+            shape.clone(),
             session.clone(),
         ))
     });
-    let presets = use_hook(|| {
-        CustomWidgetAttr::new(crate::ui::ease_widget::PresetsWidget::new(
-            curve.clone(),
+    let kinds = use_hook(|| {
+        CustomWidgetAttr::new(crate::ui::ease_widget::KindsWidget::new(
+            shape.clone(),
             session.clone(),
         ))
     });
-    crate::ui::ease::ease_panel(&session, editor, presets, revision)
+    crate::ui::ease::ease_panel(&session, editor, kinds, revision)
 }
 
 #[component]

@@ -43,9 +43,20 @@ pub enum Interp {
         x2: f64,
         y2: f64,
     },
-    Bounce { bounces: u32, decay: f64 },
-    Elastic { amplitude: f64, period: f64 },
-    Steps { count: u32 },
+    /// 自己相似バウンド。`first_dip` は最初の谷の時刻、`dip` はその深さ。
+    /// 振幅も持続も1バウンドごとに `1-dip` 倍(弾道則ではない)。
+    Bounce { first_dip: f64, dip: f64 },
+    /// `limit` は行き過ぎの天井、`period` は最初の谷の位置、`damp` は減衰。
+    Elastic { limit: f64, period: f64, damp: f64 },
+    /// 波を繰り返す。`peak` は頂点の位相、`linear` は cos↔三角の混ぜ、
+    /// `envelope_end` は谷が乗る線の終点。
+    Cyclic { period: f64, peak: f64, linear: f64, envelope_end: f64 },
+    /// 揺らす。`grain` は粒の細かさ、`center_*` は揺れの中心と振幅、`bias` は帯の押し。
+    Random { seed: f64, grain: f64, center_u: f64, center_v: f64, bias: f64 },
+    /// 段。`width` は段幅(連続値)、`smooth` は段へ到着する平滑幅。
+    Steps { width: f64, smooth: f64 },
+    /// 弾む段。遷移は段時刻から**始まる**(Steps とは逆)。
+    ElasticSteps { width: f64, elasticity: f64 },
 }
 
 impl Interp {
@@ -58,9 +69,18 @@ impl Interp {
             Interp::Bezier { x1, y1, x2, y2 } => {
                 cubic_bezier_ease(x1.clamp(0.0, 1.0), y1, x2.clamp(0.0, 1.0), y2, u)
             }
-            Interp::Bounce { bounces, decay } => bounce_ease(bounces, decay, u),
-            Interp::Elastic { amplitude, period } => elastic_ease(amplitude, period, u),
-            Interp::Steps { count } => steps_ease(count, u),
+            Interp::Bounce { first_dip, dip } => bounce_ease(first_dip, dip, u),
+            Interp::Elastic { limit, period, damp } => elastic_ease(limit, period, damp, u),
+            Interp::Cyclic { period, peak, linear, envelope_end } => {
+                cyclic_ease(period, peak, linear, envelope_end, u)
+            }
+            Interp::Random { seed, grain, center_u, center_v, bias } => {
+                random_ease(seed, grain, center_u, center_v, bias, u)
+            }
+            Interp::Steps { width, smooth } => steps_ease(width, smooth, u),
+            Interp::ElasticSteps { width, elasticity } => {
+                elastic_steps_ease(width, elasticity, u)
+            }
         }
     }
 
@@ -71,14 +91,22 @@ impl Interp {
             Interp::Bezier { .. } => "Bezier",
             Interp::Bounce { .. } => "Bounce",
             Interp::Elastic { .. } => "Elastic",
+            Interp::Cyclic { .. } => "Cyclic",
+            Interp::Random { .. } => "Random",
             Interp::Steps { .. } => "Steps",
+            Interp::ElasticSteps { .. } => "ElasticSteps",
         }
     }
 
     pub fn split_at(&self, progress: f64) -> Result<(Interp, Interp), TrackError> {
         if matches!(
             self,
-            Interp::Bounce { .. } | Interp::Elastic { .. } | Interp::Steps { .. }
+            Interp::Bounce { .. }
+                | Interp::Elastic { .. }
+                | Interp::Cyclic { .. }
+                | Interp::Random { .. }
+                | Interp::Steps { .. }
+                | Interp::ElasticSteps { .. }
         ) {
             return Err(TrackError::UnsplittableInterp { kind: self.kind() });
         }
@@ -116,7 +144,12 @@ impl Interp {
         match *self {
             Interp::Hold => Ok((Interp::Hold, Interp::Hold)),
             Interp::Linear => Ok((Interp::Linear, Interp::Linear)),
-            Interp::Bounce { .. } | Interp::Elastic { .. } | Interp::Steps { .. } => {
+            Interp::Bounce { .. }
+            | Interp::Elastic { .. }
+            | Interp::Cyclic { .. }
+            | Interp::Random { .. }
+            | Interp::Steps { .. }
+            | Interp::ElasticSteps { .. } => {
                 Err(TrackError::UnsplittableInterp { kind: self.kind() })
             }
             Interp::Bezier { x1, y1, x2, y2 } => {
@@ -225,82 +258,176 @@ impl Interp {
     }
 }
 
-fn bounce_ease(bounces: u32, decay: f64, u: f64) -> f64 {
+/// 以下は Alight Motion 実機から起こした閉形式(2026-07-19 観察台帳)。
+/// handle の位置がそのまま parameter になっている。
+
+fn smoothstep(edge0: f64, edge1: f64, x: f64) -> f64 {
+    if (edge1 - edge0).abs() < f64::EPSILON {
+        return if x < edge0 { 0.0 } else { 1.0 };
+    }
+    let t = ((x - edge0) / (edge1 - edge0)).clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
+}
+
+fn mix(a: f64, b: f64, t: f64) -> f64 {
+    a + (b - a) * t
+}
+
+fn fract(x: f64) -> f64 {
+    x - x.floor()
+}
+
+/// 自己相似バウンド。谷の頂点が handle。振幅も持続も1バウンドごとに `d` 倍。
+fn bounce_ease(first_dip: f64, dip: f64, u: f64) -> f64 {
     if !u.is_finite() || u <= 0.0 {
         return 0.0;
     }
     if u >= 1.0 {
         return 1.0;
     }
-    let decay = if decay.is_finite() {
-        decay.clamp(0.0, 1.0)
-    } else {
-        0.0
-    };
-    let n = bounces.min(Interp::MAX_BOUNCES);
-    let ratio = decay.sqrt();
-
-    let mut total = 1.0;
-    let mut width = 1.0;
-    for _ in 0..n {
-        width *= ratio;
-        total += width;
+    let d = (1.0 - dip).clamp(0.02, 1.0);
+    let t = (first_dip / (1.0 + d)).max(0.02);
+    if u <= t {
+        return (u / t) * (u / t);
     }
-    let x = u * total;
-    if x < 1.0 {
-        return x * x;
-    }
-
-    let mut start = 1.0;
-    let mut width = 1.0;
-    let mut height = 1.0;
-    for _ in 0..n {
-        width *= ratio;
-        height *= decay;
-        if width <= 0.0 {
-            break;
+    let mut cusp = t;
+    let mut scale = d;
+    for _ in 0..24 {
+        let width = 2.0 * t * scale;
+        if cusp + width > 1.0 {
+            return 1.0;
         }
-        if x < start + width {
-            let local = (x - start) / width;
-            return 1.0 - height * 4.0 * local * (1.0 - local);
+        if u <= cusp + width {
+            let local = (u - cusp - t * scale) / (t * scale);
+            return 1.0 - scale * (1.0 - local * local);
         }
-        start += width;
+        cusp += width;
+        scale *= d;
     }
     1.0
 }
 
-fn elastic_ease(amplitude: f64, period: f64, u: f64) -> f64 {
+/// `v = 1 − (A−1)(1−u)^n cos(2πu/p)`。クランプではなく振幅を縮める。
+fn elastic_ease(limit: f64, period: f64, damp: f64, u: f64) -> f64 {
     if !u.is_finite() || u <= 0.0 {
         return 0.0;
     }
     if u >= 1.0 {
         return 1.0;
     }
-    let period = if period.is_finite() && period > 0.0 {
-        period
-    } else {
-        0.3
-    };
-    let (amplitude, phase) = if !amplitude.is_finite() || amplitude.abs() < 1.0 {
-        (1.0, period / 4.0)
-    } else {
-        (
-            amplitude,
-            period / std::f64::consts::TAU * (1.0 / amplitude).asin(),
-        )
-    };
-    amplitude * (-10.0 * u).exp2() * ((u - phase) * std::f64::consts::TAU / period).sin() + 1.0
+    let period = if period.is_finite() && period > 0.0 { period } else { 0.3 };
+    let n = if damp >= 0.97 { 400.0 } else { 1.0 / (1.0 - damp).powi(2) };
+    let closed = (limit - 1.0) * (1.0 - u).powf(n);
+    let envelope = mix(1.0, closed, smoothstep(0.0, 0.45 * period, u));
+    1.0 - envelope * ((std::f64::consts::TAU * u) / period).cos()
 }
 
-fn steps_ease(count: u32, u: f64) -> f64 {
+fn cyclic_wave(peak: f64, linear: f64, phi: f64) -> f64 {
+    let s = peak.clamp(0.02, 0.98);
+    let tri = if phi < s { phi / s } else { (1.0 - phi) / (1.0 - s) };
+    let smooth = if phi < s {
+        (1.0 - ((std::f64::consts::PI * phi) / s).cos()) / 2.0
+    } else {
+        (1.0 + ((std::f64::consts::PI * (phi - s)) / (1.0 - s)).cos()) / 2.0
+    };
+    mix(smooth, tri, linear.clamp(0.0, 1.0))
+}
+
+/// `v = f + (1−f)·W(frac(u/T))`、`f = envelope_end·u`。谷は envelope 線に乗る。
+fn cyclic_ease(period: f64, peak: f64, linear: f64, envelope_end: f64, u: f64) -> f64 {
+    if !u.is_finite() {
+        return 0.0;
+    }
+    let period = if period.is_finite() && period > 0.0 { period } else { 2.0 / 7.0 };
+    if u >= 1.0 {
+        return envelope_end + (1.0 - envelope_end) * cyclic_wave(peak, linear, fract(1.0 / period));
+    }
+    let floor = envelope_end * u;
+    floor + (1.0 - floor) * cyclic_wave(peak, linear, fract(u / period))
+}
+
+fn lattice_noise(seed: f64, index: f64) -> f64 {
+    let value = ((seed + index * 97.13) * 12.9898).sin() * 43758.5453;
+    (value - value.floor()) * 2.0 - 1.0
+}
+
+fn value_noise(x: f64, seed: f64) -> f64 {
+    let index = x.floor();
+    let local = x - index;
+    let a = lattice_noise(seed, index);
+    let b = lattice_noise(seed, index + 1.0);
+    mix(a, b, (1.0 - (std::f64::consts::PI * local).cos()) / 2.0)
+}
+
+/// 揺れの中心からの距離が振幅。0..1 の外へも出る(クランプしない)。
+const RANDOM_NULL_LEVEL: f64 = 0.47;
+
+fn random_ease(seed: f64, grain: f64, center_u: f64, center_v: f64, bias: f64, u: f64) -> f64 {
     if !u.is_finite() || u <= 0.0 {
         return 0.0;
     }
     if u >= 1.0 {
         return 1.0;
     }
-    let count = count.max(1) as f64;
-    (u * count).floor() / count
+    let seed = seed.round();
+    let frequency = mix(40.0, 8.0, (grain / 0.5).clamp(0.0, 1.0));
+    let noise = 0.8 * value_noise(u * frequency, seed)
+        + 0.2 * value_noise(u * frequency * 2.7, seed + 37.0);
+    let amplitude = (1.7 * (center_v - RANDOM_NULL_LEVEL).abs()).clamp(0.0, 0.9);
+    let envelope = smoothstep(0.0, 1.0, (1.0 - (u - center_u).abs() / 0.55).clamp(0.0, 1.0));
+    let fade = smoothstep(0.0, 0.05, u) * smoothstep(1.0, 0.95, u);
+    let push = (0.5 - bias)
+        * (1.0 - (-u / 0.15).exp())
+        * (1.0 - (-(1.0 - u) / 0.15).exp());
+    u + amplitude * envelope * fade * noise + push
+}
+
+/// 対角線の sample-and-hold。平滑ランプは段時刻に**到着**する。
+fn steps_ease(width: f64, smooth: f64, u: f64) -> f64 {
+    if !u.is_finite() || u <= 0.0 {
+        return 0.0;
+    }
+    if u >= 1.0 {
+        return 1.0;
+    }
+    let width = if width.is_finite() && width > 0.0 { width } else { 0.178 };
+    let smooth = smooth.max(0.0);
+    let index = (u / width).floor();
+    let local = u - index * width;
+    let ramp_start = width - smooth;
+    let progress = if smooth <= 0.0001 {
+        0.0
+    } else {
+        smoothstep(0.0, 1.0, ((local - ramp_start) / smooth).clamp(0.0, 1.0))
+    };
+    (width * (index + progress)).clamp(0.0, 1.0)
+}
+
+/// 弾む段。遷移は段時刻 kP から**始まる**(Steps とは逆向き)。
+fn elastic_steps_ease(width: f64, elasticity: f64, u: f64) -> f64 {
+    if !u.is_finite() || u <= 0.0 {
+        return 0.0;
+    }
+    if u >= 1.0 {
+        return 1.0;
+    }
+    let width = if width.is_finite() && width > 0.0 { width } else { 0.2 };
+    let e = elasticity.clamp(0.0, 1.0);
+    if u < width {
+        return 0.0;
+    }
+    let index = (u / width).floor() - 1.0;
+    let tau = (u - (index + 1.0) * width) / width;
+    let rise = mix(0.45, 0.03, e);
+    let mut response = smoothstep(0.0, rise, tau);
+    if tau > rise && e > 0.01 {
+        let ring_t = tau - rise;
+        let ring_amp = 0.36 * e.powf(3.2);
+        response += ring_amp * (-5.9 * ring_t).exp() * ((std::f64::consts::TAU * ring_t) / 0.112).sin();
+    }
+    let predip = 0.045 * (std::f64::consts::PI * e).sin();
+    response -= predip * smoothstep(0.78, 0.99, tau);
+    (width * (index + response)).clamp(-0.2, 1.35)
 }
 
 fn is_valid_bezier_control(interp: Interp) -> bool {
@@ -387,31 +514,63 @@ impl KeyframeTrack {
                         return Err(TrackError::InvalidBezier { x1, x2 });
                     }
                 }
-                Interp::Bounce { bounces, decay } => {
-                    if !decay.is_finite()
-                        || !(0.0..=1.0).contains(&decay)
-                        || bounces > Interp::MAX_BOUNCES
-                    {
+                Interp::Bounce { first_dip, dip } => {
+                    if !first_dip.is_finite() || first_dip <= 0.0 || !dip.is_finite() {
                         return Err(TrackError::InvalidInterp(format!(
-                            "Bounce{{bounces: {bounces}, decay: {decay}}} — decay は [0,1]、\
-                             bounces は {} 以下",
-                            Interp::MAX_BOUNCES
-                        )));
-                    }
-                }
-                Interp::Elastic { amplitude, period } => {
-                    if !amplitude.is_finite() || !period.is_finite() || period <= 0.0 {
-                        return Err(TrackError::InvalidInterp(format!(
-                            "Elastic{{amplitude: {amplitude}, period: {period}}} — period は正、\
+                            "Bounce{{first_dip: {first_dip}, dip: {dip}}} — first_dip は正、\
                              どちらも有限"
                         )));
                     }
                 }
-                Interp::Steps { count } => {
-                    if count == 0 {
-                        return Err(TrackError::InvalidInterp(
-                            "Steps{count: 0} — 段数は 1 以上".to_owned(),
-                        ));
+                Interp::Elastic { limit, period, damp } => {
+                    if !limit.is_finite() || !period.is_finite() || period <= 0.0 || !damp.is_finite()
+                    {
+                        return Err(TrackError::InvalidInterp(format!(
+                            "Elastic{{limit: {limit}, period: {period}, damp: {damp}}} — \
+                             period は正、どれも有限"
+                        )));
+                    }
+                }
+                Interp::Cyclic { period, peak, linear, envelope_end } => {
+                    if !period.is_finite()
+                        || period <= 0.0
+                        || !peak.is_finite()
+                        || !linear.is_finite()
+                        || !envelope_end.is_finite()
+                    {
+                        return Err(TrackError::InvalidInterp(format!(
+                            "Cyclic{{period: {period}, peak: {peak}, linear: {linear}, \
+                             envelope_end: {envelope_end}}} — period は正、どれも有限"
+                        )));
+                    }
+                }
+                Interp::Random { seed, grain, center_u, center_v, bias } => {
+                    if !seed.is_finite()
+                        || !grain.is_finite()
+                        || !center_u.is_finite()
+                        || !center_v.is_finite()
+                        || !bias.is_finite()
+                    {
+                        return Err(TrackError::InvalidInterp(format!(
+                            "Random{{seed: {seed}, grain: {grain}, center_u: {center_u}, \
+                             center_v: {center_v}, bias: {bias}}} — どれも有限"
+                        )));
+                    }
+                }
+                Interp::Steps { width, smooth } => {
+                    if !width.is_finite() || width <= 0.0 || !smooth.is_finite() || smooth < 0.0 {
+                        return Err(TrackError::InvalidInterp(format!(
+                            "Steps{{width: {width}, smooth: {smooth}}} — width は正、\
+                             smooth は 0 以上"
+                        )));
+                    }
+                }
+                Interp::ElasticSteps { width, elasticity } => {
+                    if !width.is_finite() || width <= 0.0 || !elasticity.is_finite() {
+                        return Err(TrackError::InvalidInterp(format!(
+                            "ElasticSteps{{width: {width}, elasticity: {elasticity}}} — \
+                             width は正、どちらも有限"
+                        )));
                     }
                 }
                 Interp::Hold | Interp::Linear => {}
@@ -714,15 +873,12 @@ mod tests {
                 x2: 0.58,
                 y2: 1.0,
             },
-            Interp::Bounce {
-                bounces: 3,
-                decay: 0.5,
-            },
-            Interp::Elastic {
-                amplitude: 1.0,
-                period: 0.3,
-            },
-            Interp::Steps { count: 5 },
+            Interp::Bounce { first_dip: 0.27, dip: 0.2 },
+            Interp::Elastic { limit: 1.5, period: 0.3, damp: 0.35 },
+            Interp::Cyclic { period: 2.0 / 7.0, peak: 0.5, linear: 0.0, envelope_end: 0.0 },
+            Interp::Random { seed: 500.0, grain: 0.15, center_u: 0.5, center_v: 0.75, bias: 0.5 },
+            Interp::Steps { width: 0.178, smooth: 0.0 },
+            Interp::ElasticSteps { width: 0.2, elasticity: 0.5 },
         ];
         for interp in cases {
             assert!(
@@ -742,10 +898,7 @@ mod tests {
 
     #[test]
     fn bounce_is_continuous_across_its_segments() {
-        let interp = Interp::Bounce {
-            bounces: 4,
-            decay: 0.4,
-        };
+        let interp = Interp::Bounce { first_dip: 0.27, dip: 0.2 };
         let mut prev = interp.ease(0.0);
         for i in 1..=2000 {
             let y = interp.ease(i as f64 / 2000.0);
@@ -764,10 +917,7 @@ mod tests {
 
     #[test]
     fn elastic_overshoots_past_one() {
-        let interp = Interp::Elastic {
-            amplitude: 1.0,
-            period: 0.3,
-        };
+        let interp = Interp::Elastic { limit: 1.5, period: 0.3, damp: 0.35 };
         let peak = (1..100)
             .map(|i| interp.ease(i as f64 / 100.0))
             .fold(f64::NEG_INFINITY, f64::max);
@@ -776,25 +926,47 @@ mod tests {
 
     #[test]
     fn steps_holds_inside_each_step() {
-        let interp = Interp::Steps { count: 4 };
+        let interp = Interp::Steps { width: 0.25, smooth: 0.0 };
         assert!((interp.ease(0.10) - 0.0).abs() < 1e-12);
         assert!((interp.ease(0.24) - 0.0).abs() < 1e-12);
         assert!((interp.ease(0.26) - 0.25).abs() < 1e-12);
         assert!((interp.ease(0.51) - 0.5).abs() < 1e-12);
     }
 
+    /// 段幅は連続値でよい(1/w が整数でなくても段は同じ高さ)。実機の性質。
+    #[test]
+    fn step_width_may_be_a_continuous_value() {
+        let interp = Interp::Steps { width: 0.3, smooth: 0.0 };
+        assert!((interp.ease(0.29) - 0.0).abs() < 1e-12);
+        assert!((interp.ease(0.31) - 0.3).abs() < 1e-12);
+        assert!((interp.ease(0.61) - 0.6).abs() < 1e-12);
+        assert!((interp.ease(0.95) - 0.9).abs() < 1e-12, "端数は終端へ跳ぶ");
+    }
+
+    /// 段へ**到着**する(ease が段に先行する)。Elastic Steps とは逆向き。
+    #[test]
+    fn a_smoothed_step_arrives_at_the_step_time() {
+        let interp = Interp::Steps { width: 0.5, smooth: 0.2 };
+        assert!((interp.ease(0.25) - 0.0).abs() < 1e-12, "平滑幅の外はまだ平ら");
+        assert!(interp.ease(0.45) > 0.0, "段の手前で登り始める");
+        assert!((interp.ease(0.499) - 0.5).abs() < 0.02, "段時刻に着いている");
+    }
+
+    /// Elastic Steps は段時刻から**始まる**。
+    #[test]
+    fn an_elastic_step_starts_at_the_step_time() {
+        let interp = Interp::ElasticSteps { width: 0.25, elasticity: 0.5 };
+        assert!((interp.ease(0.24) - 0.0).abs() < 1e-12, "最初の段までは平ら");
+        assert!(interp.ease(0.30) > 0.0, "段時刻から動き出す");
+    }
+
     #[test]
     fn validate_rejects_out_of_domain_parametric_interps() {
         for interp in [
-            Interp::Bounce {
-                bounces: 1,
-                decay: 1.5,
-            },
-            Interp::Elastic {
-                amplitude: 1.0,
-                period: 0.0,
-            },
-            Interp::Steps { count: 0 },
+            Interp::Bounce { first_dip: 0.0, dip: 0.2 },
+            Interp::Elastic { limit: 1.5, period: 0.0, damp: 0.35 },
+            Interp::Steps { width: 0.0, smooth: 0.0 },
+            Interp::ElasticSteps { width: -1.0, elasticity: 0.5 },
         ] {
             let track = KeyframeTrack {
                 keys: vec![

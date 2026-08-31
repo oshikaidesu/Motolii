@@ -5,47 +5,49 @@ use anyrender::{PaintRef, PaintScene};
 use blitz_dom::node::ComputedStyles;
 use blitz_dom::Widget;
 use blitz_traits::events::UiEvent;
-use peniko::kurbo::{Affine, BezPath, Circle, Point, Rect, Stroke};
+use peniko::kurbo::{Affine, BezPath, Circle, Line, Point, Rect, Stroke};
 use peniko::{Color, Fill};
 
+use crate::doc::store::Interp;
+use crate::ui::ease_model::{handles, overshoots, KINDS};
 use crate::ui::session::{KeySel, Session};
 use crate::ui::tokens;
 
-/// 区間のイージング。CSS の cubic-bezier と同じ4つ(両端は (0,0) と (1,1) で固定)。
-pub(super) type Curve = [f64; 4];
+/// 盤の縦の見え幅。**曲線に合わせて動かさない**(掴んでいる間に写像が変わると
+/// 手が滑るため。2026-07-19 台帳の採用差分)。
+const STANDARD_VIEW: (f64, f64) = (-0.35, 1.35);
+const OVERSHOOT_VIEW: (f64, f64) = (-0.5, 2.2);
 
-pub(super) const LINEAR: Curve = [0.0, 0.0, 1.0, 1.0];
+const PAD: f64 = 18.0;
+const GRAB: f64 = 12.0;
 
-const PAD: f64 = 24.0;
-const GRAB: f64 = 14.0;
+pub(super) const DEFAULT: Interp = Interp::Linear;
 
-/// 曲線を掴んで曲げる盤。離した時にその形が区間へ乗る(押す手数を作らない)。
+/// 曲線を掴んで曲げる盤。離した時にその形が区間へ乗る。
 pub(super) struct EaseWidget {
-    curve: Arc<Mutex<Curve>>,
+    shape: Arc<Mutex<Interp>>,
     session: Session,
     size: (f64, f64),
     holding: Option<usize>,
-    /// 前に見ていた区間。変わったらその区間が持っている形を読み直す。
     showing: Option<Vec<KeySel>>,
 }
 
 impl EaseWidget {
-    pub(super) fn new(curve: Arc<Mutex<Curve>>, session: Session) -> Self {
-        Self { curve, session, size: (0.0, 0.0), holding: None, showing: None }
+    pub(super) fn new(shape: Arc<Mutex<Interp>>, session: Session) -> Self {
+        Self { shape, session, size: (0.0, 0.0), holding: None, showing: None }
     }
 
     fn starts(&self) -> Vec<KeySel> {
         crate::ui::ease::segments(&self.session.selected_keys.lock().unwrap())
     }
 
-    /// 掴んでいる区間が変わったら、その区間が今持っている形を盤へ映す。
     fn follow_selection(&mut self) {
         let starts = self.starts();
         if self.showing.as_ref() == Some(&starts) {
             return;
         }
         if let Some(first) = starts.first() {
-            *self.curve.lock().unwrap() = crate::ui::ease::curve_of(&self.session, first);
+            *self.shape.lock().unwrap() = crate::ui::ease::shape_of(&self.session, first);
         }
         self.showing = Some(starts);
     }
@@ -55,25 +57,34 @@ impl EaseWidget {
         if starts.is_empty() {
             return;
         }
-        let curve = *self.curve.lock().unwrap();
-        match crate::ui::ease::apply(&self.session, &starts, curve) {
-            Ok(n) => println!("PROBE room=write verdict=applied Ease tracks={n}"),
+        let shape = *self.shape.lock().unwrap();
+        match crate::ui::ease::apply(&self.session, &starts, shape) {
+            Ok(n) => println!("PROBE room=write verdict=applied Ease kind={} tracks={n}", shape.kind()),
             Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
         }
     }
 
-    /// 盤の中の位置(px)を曲線の値(0..1)へ。y は上が 1。
+    fn view(&self) -> (f64, f64) {
+        if overshoots(*self.shape.lock().unwrap()) {
+            OVERSHOOT_VIEW
+        } else {
+            STANDARD_VIEW
+        }
+    }
+
     fn to_curve(&self, x: f64, y: f64) -> (f64, f64) {
         let (w, h) = (self.size.0 - PAD * 2.0, self.size.1 - PAD * 2.0);
         if w <= 0.0 || h <= 0.0 {
             return (0.0, 0.0);
         }
-        (((x - PAD) / w).clamp(0.0, 1.0), 1.0 - (y - PAD) / h)
+        let (lo, hi) = self.view();
+        (((x - PAD) / w).clamp(-0.2, 1.2), hi - (y - PAD) / h * (hi - lo))
     }
 
-    fn to_px(&self, cx: f64, cy: f64) -> Point {
+    fn to_px(&self, cu: f64, cv: f64) -> Point {
         let (w, h) = (self.size.0 - PAD * 2.0, self.size.1 - PAD * 2.0);
-        Point::new(PAD + cx * w, PAD + (1.0 - cy) * h)
+        let (lo, hi) = self.view();
+        Point::new(PAD + cu * w, PAD + (hi - cv) / (hi - lo) * h)
     }
 }
 
@@ -88,30 +99,22 @@ impl Widget for EaseWidget {
     }
 
     fn handle_event(&mut self, event: &UiEvent) {
-        let point = |p: &blitz_traits::events::BlitzPointerEvent| {
-            (p.element.x as f64, p.element.y as f64)
-        };
         match event {
             UiEvent::PointerDown(p) => {
-                let (x, y) = point(p);
-                let c = *self.curve.lock().unwrap();
-                let a = self.to_px(c[0], c[1]);
-                let b = self.to_px(c[2], c[3]);
-                self.holding = if a.distance(Point::new(x, y)) <= GRAB {
-                    Some(0)
-                } else if b.distance(Point::new(x, y)) <= GRAB {
-                    Some(1)
-                } else {
-                    None
-                };
+                let point = Point::new(p.element.x as f64, p.element.y as f64);
+                let shape = *self.shape.lock().unwrap();
+                self.holding = handles(shape)
+                    .iter()
+                    .position(|h| self.to_px(h.at.0, h.at.1).distance(point) <= GRAB);
             }
             UiEvent::PointerMove(p) => {
                 let Some(which) = self.holding else { return };
-                let (x, y) = point(p);
-                let (cx, cy) = self.to_curve(x, y);
-                let mut c = self.curve.lock().unwrap();
-                c[which * 2] = cx;
-                c[which * 2 + 1] = cy;
+                let (cu, cv) = self.to_curve(p.element.x as f64, p.element.y as f64);
+                let mut shape = self.shape.lock().unwrap();
+                let Some(handle) = handles(*shape).into_iter().nth(which) else {
+                    return;
+                };
+                *shape = (handle.moved)(*shape, (cu, cv));
             }
             UiEvent::PointerUp(_) => {
                 if self.holding.take().is_some() {
@@ -144,6 +147,7 @@ impl Widget for EaseWidget {
             self.follow_selection();
         }
         let live = !self.starts().is_empty();
+        let shape = *self.shape.lock().unwrap();
 
         let t3 = |c: [u8; 3]| Color::from_rgb8(c[0], c[1], c[2]);
         let ink = if live { t3(tokens::INK) } else { t3(tokens::INK3) };
@@ -158,75 +162,62 @@ impl Widget for EaseWidget {
             &Rect::new(0.0, 0.0, self.size.0, self.size.1),
         );
 
-        let zero = self.to_px(0.0, 0.0);
-        let one = self.to_px(1.0, 1.0);
-        let frame = Rect::from_points(zero, one);
-        s.stroke(&Stroke::new(1.0 / k), at, PaintRef::Solid(dim), None, &frame);
-
-        let mut diagonal = BezPath::new();
-        diagonal.move_to(zero);
-        diagonal.line_to(one);
-        s.stroke(&Stroke::new(1.0 / k), at, PaintRef::Solid(dim), None, &diagonal);
-
-        let c = *self.curve.lock().unwrap();
-        let a = self.to_px(c[0], c[1]);
-        let b = self.to_px(c[2], c[3]);
-
-        for handle in [(zero, a), (one, b)] {
-            let mut line = BezPath::new();
-            line.move_to(handle.0);
-            line.line_to(handle.1);
-            s.stroke(&Stroke::new(1.0 / k), at, PaintRef::Solid(dim), None, &line);
+        // 案内は v=0 と v=1 の2本だけ(実機にも縦線は無い)。
+        for v in [0.0, 1.0] {
+            let a = self.to_px(0.0, v);
+            let b = self.to_px(1.0, v);
+            s.stroke(&Stroke::new(1.0 / k), at, PaintRef::Solid(dim), None, &Line::new(a, b));
         }
 
         let mut curve = BezPath::new();
-        curve.move_to(zero);
-        curve.curve_to(a, b, one);
+        const SAMPLES: usize = 240;
+        for i in 0..=SAMPLES {
+            let u = i as f64 / SAMPLES as f64;
+            let p = self.to_px(u, shape.ease(u));
+            if i == 0 {
+                curve.move_to(p);
+            } else {
+                curve.line_to(p);
+            }
+        }
         s.stroke(&Stroke::new(2.0 / k), at, PaintRef::Solid(ink), None, &curve);
 
-        for handle in [a, b] {
+        for (zero_or_one, v) in [(0.0, 0.0), (1.0, 1.0)] {
             s.fill(
                 Fill::NonZero,
                 at,
-                PaintRef::Solid(accent),
+                PaintRef::Solid(dim),
                 None,
-                &Circle::new(handle, 5.0),
+                &Circle::new(self.to_px(zero_or_one, v), 3.0),
             );
+        }
+
+        for handle in handles(shape) {
+            let p = self.to_px(handle.at.0, handle.at.1);
+            s.fill(Fill::NonZero, at, PaintRef::Solid(accent), None, &Circle::new(p, 5.0));
         }
         s
     }
 }
 
-/// よく使う形。Flow と同じで、名前ではなく**形そのもの**を並べる。
-pub(super) const PRESETS: &[Curve] = &[
-    LINEAR,
-    [0.42, 0.0, 1.0, 1.0],
-    [0.0, 0.0, 0.58, 1.0],
-    [0.42, 0.0, 0.58, 1.0],
-    [0.77, 0.0, 0.175, 1.0],
-    [0.165, 0.84, 0.44, 1.0],
-    [0.68, -0.55, 0.265, 1.55],
-    [0.175, 0.885, 0.32, 1.275],
-];
-
 const COLS: usize = 4;
 const CELL_PAD: f64 = 6.0;
 
-/// 形を並べた棚。押すとその形が盤と区間へ乗る。
-pub(super) struct PresetsWidget {
-    curve: Arc<Mutex<Curve>>,
+/// 型の棚。押すとその型がそのまま区間へ乗る。名前は置かず、形で見せる。
+pub(super) struct KindsWidget {
+    shape: Arc<Mutex<Interp>>,
     session: Session,
     size: (f64, f64),
     hovered: Option<usize>,
 }
 
-impl PresetsWidget {
-    pub(super) fn new(curve: Arc<Mutex<Curve>>, session: Session) -> Self {
-        Self { curve, session, size: (0.0, 0.0), hovered: None }
+impl KindsWidget {
+    pub(super) fn new(shape: Arc<Mutex<Interp>>, session: Session) -> Self {
+        Self { shape, session, size: (0.0, 0.0), hovered: None }
     }
 
     fn cell(&self, i: usize) -> Rect {
-        let rows = PRESETS.len().div_ceil(COLS);
+        let rows = KINDS.len().div_ceil(COLS);
         let w = self.size.0 / COLS as f64;
         let h = self.size.1 / rows.max(1) as f64;
         let (cx, cy) = (i % COLS, i / COLS);
@@ -234,11 +225,11 @@ impl PresetsWidget {
     }
 
     fn at(&self, x: f64, y: f64) -> Option<usize> {
-        (0..PRESETS.len()).find(|i| self.cell(*i).contains(Point::new(x, y)))
+        (0..KINDS.len()).find(|i| self.cell(*i).contains(Point::new(x, y)))
     }
 }
 
-impl Widget for PresetsWidget {
+impl Widget for KindsWidget {
     fn connected(&mut self) {}
     fn disconnected(&mut self) {}
     fn can_create_surfaces(&mut self, _ctx: &mut dyn anyrender::RenderContext) {}
@@ -257,14 +248,17 @@ impl Widget for PresetsWidget {
                 let Some(i) = self.at(p.element.x as f64, p.element.y as f64) else {
                     return;
                 };
-                *self.curve.lock().unwrap() = PRESETS[i];
+                *self.shape.lock().unwrap() = KINDS[i];
                 let starts =
                     crate::ui::ease::segments(&self.session.selected_keys.lock().unwrap());
                 if starts.is_empty() {
                     return;
                 }
-                match crate::ui::ease::apply(&self.session, &starts, PRESETS[i]) {
-                    Ok(n) => println!("PROBE room=write verdict=applied Ease tracks={n}"),
+                match crate::ui::ease::apply(&self.session, &starts, KINDS[i]) {
+                    Ok(n) => println!(
+                        "PROBE room=write verdict=applied Ease kind={} tracks={n}",
+                        KINDS[i].kind()
+                    ),
                     Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
                 }
             }
@@ -289,14 +283,11 @@ impl Widget for PresetsWidget {
         let at = Affine::scale(k);
 
         let t3 = |c: [u8; 3]| Color::from_rgb8(c[0], c[1], c[2]);
-        let current = *self.curve.lock().unwrap();
+        let current = *self.shape.lock().unwrap();
 
-        for (i, preset) in PRESETS.iter().enumerate() {
+        for (i, kind) in KINDS.iter().copied().enumerate() {
             let cell = self.cell(i);
-            let chosen = preset
-                .iter()
-                .zip(current.iter())
-                .all(|(a, b)| (a - b).abs() < 1e-6);
+            let chosen = kind.kind() == current.kind();
             let bg = if chosen {
                 t3(tokens::SURFACE_RAISED)
             } else if self.hovered == Some(i) {
@@ -306,15 +297,26 @@ impl Widget for PresetsWidget {
             };
             s.fill(Fill::NonZero, at, PaintRef::Solid(bg), None, &cell.inset(-0.5));
 
+            // 絵札も盤と同じ見え幅で描く。型ごとに縦の縮尺を変えない。
+            let (lo, hi) = if overshoots(kind) { OVERSHOOT_VIEW } else { STANDARD_VIEW };
             let box_ = cell.inset(-CELL_PAD);
-            let zero = Point::new(box_.x0, box_.y1);
-            let one = Point::new(box_.x1, box_.y0);
-            let ctrl = |cx: f64, cy: f64| {
-                Point::new(box_.x0 + cx * box_.width(), box_.y1 - cy * box_.height())
+            let point = |u: f64, v: f64| {
+                Point::new(
+                    box_.x0 + u * box_.width(),
+                    box_.y0 + (hi - v) / (hi - lo) * box_.height(),
+                )
             };
             let mut curve = BezPath::new();
-            curve.move_to(zero);
-            curve.curve_to(ctrl(preset[0], preset[1]), ctrl(preset[2], preset[3]), one);
+            const SAMPLES: usize = 96;
+            for j in 0..=SAMPLES {
+                let u = j as f64 / SAMPLES as f64;
+                let p = point(u, kind.ease(u));
+                if j == 0 {
+                    curve.move_to(p);
+                } else {
+                    curve.line_to(p);
+                }
+            }
             let ink = if chosen { t3(tokens::ACCENT) } else { t3(tokens::INK2) };
             s.stroke(&Stroke::new(1.5 / k), at, PaintRef::Solid(ink), None, &curve);
         }

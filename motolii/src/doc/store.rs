@@ -317,7 +317,10 @@ fn accumulate_speed_offset(
             other @ (Interp::Bezier { .. }
             | Interp::Bounce { .. }
             | Interp::Elastic { .. }
-            | Interp::Steps { .. }) => {
+            | Interp::Cyclic { .. }
+            | Interp::Random { .. }
+            | Interp::Steps { .. }
+            | Interp::ElasticSteps { .. }) => {
                 return Err(StoreError::Property(format!(
                     "{} の {} 補間区間は積算未対応(発注の検収条件は Hold のみ、\
                      黙って近似しない — 対応するなら別発注で判断すること)",

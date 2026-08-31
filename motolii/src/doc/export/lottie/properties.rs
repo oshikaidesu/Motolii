@@ -146,7 +146,12 @@ fn interp_easing(
             serde_json::json!({ "x": [x1], "y": [y1] }),
             serde_json::json!({ "x": [x2], "y": [y2] }),
         )),
-        Interp::Bounce { .. } | Interp::Elastic { .. } | Interp::Steps { .. } => {
+        Interp::Bounce { .. }
+        | Interp::Elastic { .. }
+        | Interp::Cyclic { .. }
+        | Interp::Random { .. }
+        | Interp::Steps { .. }
+        | Interp::ElasticSteps { .. } => {
             return Err(LottieExportError::UnrepresentableEasing(interp.kind()))
         }
     })

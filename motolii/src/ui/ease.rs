@@ -2,7 +2,7 @@
 use dioxus_native::prelude::*;
 
 use crate::doc::store::{Fps, Interp, Intent, KeyframeTrack, PropertyId, RationalTime};
-use crate::ui::ease_widget::{Curve, LINEAR};
+
 use crate::ui::session::{KeySel, Session};
 
 const FPS: f64 = 30.0;
@@ -35,7 +35,7 @@ pub(super) fn segments(keys: &[KeySel]) -> Vec<KeySel> {
     out
 }
 
-pub(super) fn apply(session: &Session, starts: &[KeySel], curve: Curve) -> Result<usize, String> {
+pub(super) fn apply(session: &Session, starts: &[KeySel], shape: Interp) -> Result<usize, String> {
     let mut doc = session.doc.lock().unwrap();
     let fps = Fps::try_new(FPS as i64, 1).map_err(|e| e.to_string())?;
 
@@ -62,12 +62,7 @@ pub(super) fn apply(session: &Session, starts: &[KeySel], curve: Curve) -> Resul
                     .zip(at.try_to_frame_round(fps).ok())
                     .is_some_and(|(a, b)| a == b);
                 if same {
-                    key.interp = Interp::Bezier {
-                        x1: curve[0],
-                        y1: curve[1],
-                        x2: curve[2],
-                        y2: curve[3],
-                    };
+                    key.interp = shape;
                     touched = true;
                 }
                 next.insert(key);
@@ -87,10 +82,12 @@ pub(super) fn apply(session: &Session, starts: &[KeySel], curve: Curve) -> Resul
 }
 
 /// 区間が今持っている形。無ければ直線。
-pub(super) fn curve_of(session: &Session, start: &KeySel) -> Curve {
+pub(super) fn shape_of(session: &Session, start: &KeySel) -> Interp {
     let doc = session.doc.lock().unwrap();
     let view = doc.view();
-    let Ok(fps) = Fps::try_new(FPS as i64, 1) else { return LINEAR };
+    let Ok(fps) = Fps::try_new(FPS as i64, 1) else {
+        return Interp::Linear;
+    };
     let properties: Vec<PropertyId> = match &start.property {
         Some(p) => vec![p.clone()],
         None => view.properties(start.layer),
@@ -104,13 +101,10 @@ pub(super) fn curve_of(session: &Session, start: &KeySel) -> Curve {
             if key.t.try_to_frame_round(fps).ok() != Some(at) {
                 continue;
             }
-            if let Interp::Bezier { x1, y1, x2, y2 } = key.interp {
-                return [x1, y1, x2, y2];
-            }
-            return LINEAR;
+            return key.interp;
         }
     }
-    LINEAR
+    Interp::Linear
 }
 
 /// 文字を置かない。上が盤、下が形の棚。掴めば区間へ乗る。
@@ -202,7 +196,12 @@ mod tests {
     fn applying_shapes_only_the_starting_key_of_the_segment() {
         let (session, property) = session_with_two_keys();
         let starts = segments(&[sel(&property, 0.0), sel(&property, 1.0)]);
-        apply(&session, &starts, [0.42, 0.0, 0.58, 1.0]).expect("当たるはず");
+        apply(
+            &session,
+            &starts,
+            Interp::Bezier { x1: 0.42, y1: 0.0, x2: 0.58, y2: 1.0 },
+        )
+        .expect("当たるはず");
 
         let doc = session.doc.lock().unwrap();
         let track = doc.view().track(LayerId(1), &property).unwrap().unwrap();
