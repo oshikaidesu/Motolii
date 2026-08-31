@@ -187,7 +187,9 @@ pub(super) struct TimelineWidget {
     viewport_h: f64,
     cursor: Option<(f64, f64)>,
     hovered: Option<(usize, usize)>,
-    selected: Option<(usize, usize)>,
+    selected: Vec<(usize, usize)>,
+    /// 空きからのドラッグで囲む。掴み始めと今の場所(秒, 行)。
+    marquee: Option<((f64, f64), (f64, f64))>,
     clock: Option<Arc<Clock>>,
     scale: Option<Arc<UiScale>>,
     doc: Option<Arc<Mutex<Document>>>,
@@ -197,6 +199,7 @@ pub(super) struct TimelineWidget {
     selection: Option<Selection>,
     selected_mirror: Option<Signal<Option<LayerId>>>,
     scroll_y_mirror: Option<Signal<f64>>,
+    selected_key: Option<Arc<Mutex<Vec<crate::ui::session::KeySel>>>>,
 }
 
 impl TimelineWidget {
@@ -211,7 +214,8 @@ impl TimelineWidget {
             viewport_h: 0.0,
             cursor: None,
             hovered: None,
-            selected: None,
+            selected: Vec::new(),
+            marquee: None,
             clock: None,
             scale: None,
             doc: None,
@@ -221,12 +225,21 @@ impl TimelineWidget {
             selection: None,
             selected_mirror: None,
             scroll_y_mirror: None,
+            selected_key: None,
         }
     }
 
     pub(super) fn with_selection(mut self, selection: Selection, mirror: Signal<Option<LayerId>>) -> Self {
         self.selection = Some(selection);
         self.selected_mirror = Some(mirror);
+        self
+    }
+
+    pub(super) fn with_key_mirror(
+        mut self,
+        slot: Arc<Mutex<Vec<crate::ui::session::KeySel>>>,
+    ) -> Self {
+        self.selected_key = Some(slot);
         self
     }
 
@@ -338,6 +351,49 @@ impl TimelineWidget {
             }
         }
         best.map(|(ki, _)| (row_ix, ki))
+    }
+
+    /// 囲んだ中のキーを選ぶ(足す)。
+    fn select_inside(&mut self, from: (f64, f64), to: (f64, f64)) {
+        let (x0, x1) = (from.0.min(to.0), from.0.max(to.0));
+        let (y0, y1) = (from.1.min(to.1), from.1.max(to.1));
+        if (x1 - x0) < 3.0 && (y1 - y0) < 3.0 {
+            return;
+        }
+        let (rh, rowh) = (RULER_H * self.sfac(), ROW_H * self.sfac());
+        for (row_ix, row) in self.rows.iter().enumerate() {
+            let mid = rh + row_ix as f64 * rowh + rowh * 0.5 - self.scroll_y;
+            if mid < y0 || mid > y1 {
+                continue;
+            }
+            for (key_ix, t) in row.keys.iter().enumerate() {
+                let x = (t - self.scroll_sec) * self.pps;
+                if x >= x0 && x <= x1 && !self.selected.contains(&(row_ix, key_ix)) {
+                    self.selected.push((row_ix, key_ix));
+                }
+            }
+        }
+        self.publish_keys();
+    }
+
+    /// 掴んでいるキーを窓の側へ出す。イージングのパネルがこれを読む。
+    fn publish_keys(&self) {
+        let Some(slot) = &self.selected_key else { return };
+        let mut out: Vec<crate::ui::session::KeySel> = self
+            .selected
+            .iter()
+            .filter_map(|(row_ix, key_ix)| {
+                let row = self.rows.get(*row_ix)?;
+                let at_sec = row.keys.get(*key_ix).copied()?;
+                Some(crate::ui::session::KeySel {
+                    layer: row.layer?,
+                    property: row.prop.clone(),
+                    at_sec,
+                })
+            })
+            .collect();
+        out.sort_by(|a, b| a.at_sec.total_cmp(&b.at_sec));
+        *slot.lock().unwrap() = out;
     }
 
     fn process_messages(&mut self) {
@@ -458,6 +514,12 @@ impl Widget for TimelineWidget {
                     self.hovered = self.hit_test(cx, cy);
                 }
             }
+            UiEvent::PointerMove(p) if self.marquee.is_some() => {
+                let (x, y) = (p.element.x as f64, p.element.y as f64);
+                if let Some((_, to)) = self.marquee.as_mut() {
+                    *to = (x, y);
+                }
+            }
             UiEvent::PointerMove(p) => {
                 let (x, y) = (p.element.x as f64, p.element.y as f64);
                 self.cursor = Some((x, y));
@@ -501,7 +563,16 @@ impl Widget for TimelineWidget {
                     t, x, y, hit
                 );
                 if let Some((row_ix, key_ix)) = hit {
-                    self.selected = Some((row_ix, key_ix));
+                    let add = p.mods.contains(Modifiers::META) || p.mods.contains(Modifiers::SHIFT);
+                    match (add, self.selected.iter().position(|k| *k == (row_ix, key_ix))) {
+                        (true, Some(at)) => {
+                            self.selected.remove(at);
+                        }
+                        (true, None) => self.selected.push((row_ix, key_ix)),
+                        (false, Some(_)) => {}
+                        (false, None) => self.selected = vec![(row_ix, key_ix)],
+                    }
+                    self.publish_keys();
                     if let (Some(layer), Some(at_sec)) = (
                         self.rows[row_ix].layer,
                         self.rows[row_ix].keys.get(key_ix).copied(),
@@ -568,10 +639,20 @@ impl Widget for TimelineWidget {
                             mode,
                         });
                     }
+                } else {
+                    // 何も無い所からのドラッグは囲って選ぶ。
+                    if !p.mods.contains(Modifiers::META) && !p.mods.contains(Modifiers::SHIFT) {
+                        self.selected.clear();
+                        self.publish_keys();
+                    }
+                    self.marquee = Some(((x, y), (x, y)));
                 }
             }
             UiEvent::PointerUp(_) => {
                 self.scrubbing = false;
+                if let Some((from, to)) = self.marquee.take() {
+                    self.select_inside(from, to);
+                }
                 if let Some(drag) = self.drag.take() {
                     let (Some(doc), Some(extractor)) = (self.doc.as_ref(), self.extractor) else {
                         return;
@@ -581,7 +662,30 @@ impl Widget for TimelineWidget {
                     if let DragMode::Key { at_sec } = drag.mode {
                         let at_frame = (at_sec * DOC_FPS).round() as i64;
                         if raw_delta != 0 {
-                            match keyframe_move_intents(&doc, drag.layer, drag.prop.as_ref(), at_frame, raw_delta) {
+                            // 掴んだ物だけでなく、選んでいるキーを全部同じだけ動かす。
+                            let mut moving: Vec<(LayerId, Option<crate::doc::store::PropertyId>, i64)> = self
+                                .selected
+                                .iter()
+                                .filter_map(|(row_ix, key_ix)| {
+                                    let row = self.rows.get(*row_ix)?;
+                                    let t = row.keys.get(*key_ix).copied()?;
+                                    Some((row.layer?, row.prop.clone(), (t * DOC_FPS).round() as i64))
+                                })
+                                .collect();
+                            if !moving.iter().any(|(l, p, f)| {
+                                *l == drag.layer && *p == drag.prop && *f == at_frame
+                            }) {
+                                moving.push((drag.layer, drag.prop.clone(), at_frame));
+                            }
+                            let mut all = Vec::new();
+                            let mut failed = None;
+                            for (layer, prop, frame) in moving {
+                                match keyframe_move_intents(&doc, layer, prop.as_ref(), frame, raw_delta) {
+                                    Ok(intents) => all.extend(intents),
+                                    Err(e) => failed = Some(e),
+                                }
+                            }
+                            match failed.map_or(Ok(all), Err) {
                                 Ok(intents) => match doc.apply_all(intents) {
                                     Ok(_) => {
                                         println!(
@@ -821,7 +925,7 @@ impl Widget for TimelineWidget {
                 if center.x < 0.0 || center.x > w {
                     continue;
                 }
-                if self.selected == Some((i, ki)) {
+                if self.selected.contains(&(i, ki)) {
                     diamond(&mut s, center, 12.0 * k, c_accent);
                     diamond(&mut s, center, 8.0 * k, Color::from_rgb8(0xff, 0xff, 0xff));
                 } else if self.hovered == Some((i, ki)) {
@@ -832,6 +936,23 @@ impl Widget for TimelineWidget {
                     diamond(&mut s, center, 7.0 * k, c_text);
                 }
             }
+        }
+
+        if let Some((from, to)) = self.marquee {
+            let r = Rect::new(
+                from.0.min(to.0),
+                from.1.min(to.1),
+                from.0.max(to.0),
+                from.1.max(to.1),
+            );
+            fill_rect(&mut s, r, Color::from_rgba8(0xd8, 0xb5, 0x74, 0x22));
+            s.stroke(
+                &peniko::kurbo::Stroke::new(1.0),
+                Affine::IDENTITY,
+                PaintRef::Solid(c_accent),
+                None,
+                &r,
+            );
         }
 
         let playhead_sec = self

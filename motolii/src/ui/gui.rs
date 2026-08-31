@@ -210,10 +210,10 @@ fn collect_text(doc: &blitz_dom::BaseDocument, node: blitz_dom::NodeId, out: &mu
 fn the_dock_opens_with_every_panel_reachable_by_a_tab() {
     let mut gui = Gui::open();
     let tabs = gui.texts(".ptab");
-    for expected in ["Media", "Effects", "Create", "Colors", "Stage", "Inspector", "Utility", "Timeline"] {
+    for panel in crate::ui::dock::Panel::all() {
         assert!(
-            tabs.iter().any(|t| t == expected),
-            "{expected} のタブが出ていない(出ているのは {tabs:?})"
+            tabs.iter().any(|t| t == panel.label()),
+            "{panel} のタブが出ていない(出ているのは {tabs:?})"
         );
     }
 }
@@ -245,7 +245,7 @@ fn every_panel_can_be_shown_without_breaking_the_next_render() {
     }
     assert_eq!(
         gui.texts(".ptab").len(),
-        8,
+        crate::ui::dock::Panel::all().count(),
         "順に押していったらタブが減った"
     );
 }

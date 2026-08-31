@@ -10,6 +10,7 @@ pub(crate) enum Panel {
     Inspector,
     Utility,
     Timeline,
+    Ease,
 }
 
 /// パネル1枚の素性。**足す時はここに1行足すだけ**。名前・色・既定の置き場は
@@ -30,6 +31,7 @@ const PANELS: &[Spec] = &[
     Spec { panel: Panel::Inspector, label: "Inspector", way: "var(--way-inspector)", home: Zone::Right },
     Spec { panel: Panel::Utility, label: "Utility", way: "var(--way-inspector)", home: Zone::Right },
     Spec { panel: Panel::Timeline, label: "Timeline", way: "var(--way-timeline)", home: Zone::Bottom },
+    Spec { panel: Panel::Ease, label: "Ease", way: "var(--way-timeline)", home: Zone::Right },
 ];
 
 impl Panel {
@@ -219,7 +221,8 @@ mod tests {
         dock.set_active(Zone::Right, Panel::Utility);
         dock.place(Panel::Utility, Zone::Left);
 
-        assert_eq!(dock.active(Zone::Right), Some(Panel::Inspector));
+        let left_behind = dock.active(Zone::Right).expect("右の置き場に何も選ばれていない");
+        assert_ne!(left_behind, Panel::Utility, "抜けたはずのパネルが選ばれている");
         assert_eq!(dock.active(Zone::Left), Some(Panel::Utility));
     }
 

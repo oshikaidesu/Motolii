@@ -106,6 +106,10 @@ fn panel_body(panel: Panel, session: &Session, ui: &fixture::UiData, p: Panes) -
             selected,
             revision: p.revision,
         }),
+        Panel::Ease => rsx!(EasePanel {
+            session: session.clone(),
+            revision: p.revision,
+        }),
         Panel::Timeline => rsx!(TimelinePanel {
             session: session.clone(),
             layer_rows: p.layer_rows,
@@ -181,6 +185,17 @@ fn InspectorPanel(
 }
 
 #[component]
+fn EasePanel(session: Session, revision: Signal<u32>) -> Element {
+    let curve = use_hook(|| {
+        std::sync::Arc::new(std::sync::Mutex::new(crate::ui::ease_widget::LINEAR))
+    });
+    let attr = use_hook(|| {
+        CustomWidgetAttr::new(crate::ui::ease_widget::EaseWidget::new(curve.clone()))
+    });
+    crate::ui::ease::ease_panel(&session, curve.clone(), attr, revision)
+}
+
+#[component]
 fn UtilityPanel(
     session: Session,
     selected: Option<crate::doc::store::LayerId>,
@@ -245,7 +260,8 @@ fn TimelinePanel(
                 .with_scale(session.scale.clone())
                 .with_document(session.doc.clone(), fixture::canvas_rows_from_doc)
                 .with_selection(session.selection.clone(), selected)
-                .with_scroll_mirror(scroll_y),
+                .with_scroll_mirror(scroll_y)
+                .with_key_mirror(session.selected_keys.clone()),
         )
     });
     timeline_shell(

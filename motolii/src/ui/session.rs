@@ -58,6 +58,17 @@ pub(super) struct Session {
     pub timeline_rx: std::rc::Rc<std::sync::mpsc::Receiver<TimelineMsg>>,
     /// 起動時に読んだ素材と見出し。動かないので窓が何枚でも1つ。
     pub ui: Arc<crate::ui::fixture::UiData>,
+    /// 今どのキーを掴んでいるか。イージングを触る口が要る(Document には入らない)。
+    pub selected_keys: Arc<Mutex<Vec<KeySel>>>,
+}
+
+/// タイムラインで選んだキー。区間は「このキーから次のキーまで」。
+#[derive(Clone, PartialEq, Debug)]
+pub(super) struct KeySel {
+    pub layer: LayerId,
+    /// 属性の行なら1つ。層の行なら束(その時刻に在る全部)。
+    pub property: Option<crate::doc::store::PropertyId>,
+    pub at_sec: f64,
 }
 
 /// 部品はどれも同じ物への取っ手なので、同じ Document を指していれば同じ session。
@@ -80,6 +91,7 @@ impl Session {
             timeline_tx,
             timeline_rx: std::rc::Rc::new(timeline_rx),
             ui: Arc::new(ui),
+            selected_keys: Arc::new(Mutex::new(Vec::new())),
         }
     }
 }

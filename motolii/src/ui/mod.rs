@@ -3,6 +3,8 @@
 pub mod app;
 mod browser;
 mod dock;
+mod ease;
+mod ease_widget;
 mod fixture;
 #[cfg(test)]
 mod gui;
