@@ -59,6 +59,8 @@ pub(super) struct Session {
     pub ui: Arc<crate::ui::fixture::UiData>,
     /// 曲線を手で範囲の外へ出してよいか。既定は OFF(AM-KG-07)。
     /// 型そのものが行き過ぎる物(Elastic 系)は型の意味として ON になる。
+    /// 向きの輪と奥行きの点を描くか。掴んだ所の意味は変えない、散らかりの加減だけ。
+    pub rings: Arc<std::sync::atomic::AtomicBool>,
     pub overshoot: Arc<std::sync::atomic::AtomicBool>,
     /// 写した曲線。区間から区間へ貼るための控え(Document には入らない)。
     pub curve_clip: Arc<Mutex<Option<crate::doc::store::Interp>>>,
@@ -98,6 +100,7 @@ impl Session {
             ui: Arc::new(ui),
             selected_keys: Arc::new(Mutex::new(Vec::new())),
             view_camera: Arc::new(Mutex::new(Default::default())),
+            rings: Arc::new(std::sync::atomic::AtomicBool::new(true)),
             overshoot: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             curve_clip: Arc::new(Mutex::new(None)),
         }

@@ -389,6 +389,17 @@ body {
     overflow: hidden;
 }
 
+#stagefoot .chip {
+    margin-right: auto;
+    padding: 0 var(--sp2);
+    color: var(--ink3);
+    cursor: pointer;
+}
+
+#stagefoot .chip.on {
+    color: var(--accent);
+}
+
 #stagefoot {
     background: var(--panel);
     border-top: var(--line) solid var(--dark);

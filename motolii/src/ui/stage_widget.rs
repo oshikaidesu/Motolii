@@ -110,6 +110,7 @@ pub(super) struct StageWidget {
     revision: Signal<u32>,
     selected_size: Arc<Mutex<Option<[f32; 2]>>>,
     view_camera: Arc<Mutex<crate::render::engine::ObservationCamera>>,
+    rings: Arc<std::sync::atomic::AtomicBool>,
 }
 
 enum State {
@@ -137,7 +138,8 @@ impl StageWidget {
         selected_mirror: Signal<Option<LayerId>>,
         revision: Signal<u32>,
         selected_size: Arc<Mutex<Option<[f32; 2]>>>,
-            view_camera: Arc<Mutex<crate::render::engine::ObservationCamera>>,
+        view_camera: Arc<Mutex<crate::render::engine::ObservationCamera>>,
+        rings: Arc<std::sync::atomic::AtomicBool>,
     ) -> Self {
         Self {
             state: State::Suspended,
@@ -152,6 +154,7 @@ impl StageWidget {
             revision,
             selected_size,
             view_camera,
+            rings,
         }
     }
 
@@ -509,11 +512,12 @@ impl Widget for StageWidget {
                             ];
                             mode = edges.into_iter().find(|&(px, py, _)| near(px, py)).map(|(_, _, m)| m);
                         }
+                        let rings = self.rings.load(std::sync::atomic::Ordering::Relaxed);
                         let (mx, my) = ((x0 + x1) * 0.5, (y0 + y1) * 0.5);
-                        if mode.is_none() && near(mx, my) {
+                        if rings && mode.is_none() && near(mx, my) {
                             mode = Some(GizmoMode::Depth);
                         }
-                        if mode.is_none() {
+                        if rings && mode.is_none() {
                             let (ra, rb) = ring_radii(bw, bh);
                             let on = |a: f64, b: f64| {
                                 a > 1e-6 && b > 1e-6 && {
@@ -956,6 +960,7 @@ impl Widget for StageWidget {
                 scene.fill(Fill::NonZero, rot, PaintRef::Solid(c(tokens::ACCENT)), None, &handle_rect);
             }
 
+            if self.rings.load(std::sync::atomic::Ordering::Relaxed) {
             let (mx, my) = ((x0 + x1) * 0.5, (y0 + y1) * 0.5);
             let (ra, rb) = ring_radii(x1 - x0, y1 - y0);
             let ring = peniko::kurbo::Stroke::new(1.0);
@@ -965,6 +970,7 @@ impl Widget for StageWidget {
             }
             let dot = peniko::kurbo::Circle::new((mx, my), 3.5);
             scene.fill(Fill::NonZero, rot, PaintRef::Solid(c(tokens::ACCENT)), None, &dot);
+            }
         }
 
         scene

@@ -237,14 +237,29 @@ fn StagePanel(
             revision,
             session.selected_size.clone(),
             session.view_camera.clone(),
+            session.rings.clone(),
         ))
     });
+    let rings = session.rings.clone();
+    let mut rings_on = use_signal(|| rings.load(std::sync::atomic::Ordering::Relaxed));
     rsx!(
         div { id: "stagecol",
             div { id: "stage",
                 object { "data": attr }
             }
-            div { id: "stagefoot", "{comp_line}" }
+            div { id: "stagefoot",
+                div {
+                    class: if rings_on() { "chip on" } else { "chip" },
+                    onclick: move |_| {
+                        let next = !rings_on();
+                        rings.store(next, std::sync::atomic::Ordering::Relaxed);
+                        rings_on.set(next);
+                        revision += 1;
+                    },
+                    "◎"
+                }
+                span { "{comp_line}" }
+            }
         }
     )
 }
