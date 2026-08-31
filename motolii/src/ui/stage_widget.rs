@@ -248,6 +248,71 @@ impl StageWidget {
     }
 
     /// 掴んでいる間は履歴を汚さず、離した時に1つだけ残す(層のドラッグと同じ流儀)。
+    /// 掴みを終える。**離した事が届かなかった時もここを通す** —— 捨てると
+    /// 離した所までの編集が失われる(規格の pointer capture が保証している物の、
+    /// 届く範囲での代わり)。
+    fn finish_drag(&mut self, shift: bool, alt: bool) {
+                if let Some(cam) = self.camera_drag.take() {
+                    if let (true, Some(at)) = (cam.export_frame, cam.last) {
+                        let next = camera_center_for(&cam, at);
+                        self.write_export_center(next, self.current_rt(), true);
+                        self.revision += 1;
+                    }
+                    return;
+                }
+                let Some(drag) = self.drag.take() else { return };
+                let Some((cx, cy)) = drag.last else {
+                    println!("PROBE room=write verdict=gizmo-noop reason=never-moved");
+                    return;
+                };
+                                                let rt = self.current_rt();
+                let mut doc = self.doc.lock().unwrap();
+                let mut intents = Vec::new();
+                let touched: &[&str] = match drag.mode {
+                    GizmoMode::Move => {
+                        let (dx, dy) = (cx - drag.grab.0, cy - drag.grab.1);
+                        let new_pos = (drag.orig_position.0 + dx, drag.orig_position.1 + dy);
+                        intents.extend(track_intent(&doc, drag.layer, property::POSITION, Value::Vec2([new_pos.0, new_pos.1]), rt));
+                        &[property::POSITION]
+                    }
+                    GizmoMode::ScaleCorner { .. } | GizmoMode::ScaleEdge { .. } => {
+                        let (new_scale, new_pos) =
+                            compute_scale(drag.orig_box, drag.natural, drag.anchor, drag.mode, (cx, cy), shift, alt);
+                        intents.extend(track_intent(&doc, drag.layer, property::SCALE, Value::Vec2([new_scale.0, new_scale.1]), rt));
+                        intents.extend(track_intent(&doc, drag.layer, property::POSITION, Value::Vec2([new_pos.0, new_pos.1]), rt));
+                        &[property::SCALE, property::POSITION]
+                    }
+                    GizmoMode::Rotate => {
+                        let r = compute_rotation(drag.orig_position, drag.grab, (cx, cy), drag.orig_rotation, shift);
+                        intents.extend(track_intent(&doc, drag.layer, property::ROTATION, Value::F64(r), rt));
+                        &[property::ROTATION]
+                    }
+                    GizmoMode::Orbit { axis_x } => {
+                        let (rx, ry) = orbit_axis(drag.orig_rotation_xy, drag.grab, (cx, cy), axis_x, self.fit.s);
+                        intents.extend(track_intent(&doc, drag.layer, property::ROTATION_X, Value::F64(rx), rt));
+                        intents.extend(track_intent(&doc, drag.layer, property::ROTATION_Y, Value::F64(ry), rt));
+                        &[property::ROTATION_X, property::ROTATION_Y]
+                    }
+                    GizmoMode::Depth => {
+                        let z = drag.orig_z + (cy - drag.grab.1);
+                        intents.extend(track_intent(&doc, drag.layer, property::POSITION_Z, Value::F64(z), rt));
+                        &[property::POSITION_Z]
+                    }
+                };
+                match doc.apply_all(intents) {
+                    Ok(_) => {
+                        *self.revision.write() += 1;
+                        println!("PROBE room=write verdict=gizmo-{:?} layer={:?}", drag.mode, drag.layer);
+                    }
+                    Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
+                }
+                for name in touched {
+                    if let Ok(prop) = PropertyId::new(name) {
+                        doc.clear_transient(drag.layer, &prop);
+                    }
+                }
+    }
+
     fn write_export_center(&self, center: (f64, f64), rt: RationalTime, commit: bool) {
         let Ok(property) = PropertyId::camera(property::CAMERA_CENTER) else { return };
         let value = Value::Vec2([center.0, center.1]);
@@ -496,6 +561,10 @@ fn orbit_axis(orig: (f64, f64), grab: (f64, f64), now: (f64, f64), axis_x: bool,
         (orig.0, ry)
     }
 }
+
+/// タップがドラッグになるまでに指が動ける長さ(窓の点)。
+/// 外の規格が必須として挙げている物(Android の touch slop)。
+const DRAG_SLOP_PIXELS: f64 = 3.0;
 
 /// 掴んだ物が指について来るように、カメラの中心を出す。
 ///
@@ -759,24 +828,10 @@ impl Widget for StageWidget {
                 self.cursor = Some((p.element.x as f64, p.element.y as f64));
                 // 枠の外で離すと、離した事がここへ届かない。掴んだままの絵が残る。
                 if p.buttons.is_empty() && (self.drag.is_some() || self.camera_drag.is_some()) {
-                    println!("PROBE room=input verdict=drag-dropped reason=release-not-seen");
-                    if let Some(drag) = self.drag.take() {
-                        let mut doc = self.doc.lock().unwrap();
-                        for name in [
-                            property::POSITION,
-                            property::SCALE,
-                            property::ROTATION,
-                            property::ROTATION_X,
-                            property::ROTATION_Y,
-                            property::POSITION_Z,
-                        ] {
-                            if let Ok(prop) = PropertyId::new(name) {
-                                doc.clear_transient(drag.layer, &prop);
-                            }
-                        }
-                    }
-                    self.camera_drag = None;
-                    self.revision += 1;
+                    println!("PROBE room=input verdict=drag-finished reason=release-not-seen");
+                    let shift = p.mods.contains(Modifiers::SHIFT);
+                    let alt = p.mods.contains(Modifiers::ALT);
+                    self.finish_drag(shift, alt);
                     return;
                 }
                 if self.camera_drag.is_some() {
@@ -802,7 +857,16 @@ impl Widget for StageWidget {
                     let z = self.drag.as_ref().map(|d| d.fit_z);
                     let Some(z) = z else { return };
                     let at = self.fit.at_z(z).to_comp(p.element.x as f64, p.element.y as f64);
+                    let slop = DRAG_SLOP_PIXELS / self.fit.s.max(1e-9);
                     let Some(drag) = self.drag.as_mut() else { return };
+                    // **押しただけでは動かない。** 指が少し動くまでは掴んだ事にしない
+                    // (押すつもりが値を変える、が起きる)。
+                    if drag.last.is_none() {
+                        let (dx, dy) = (at.0 - drag.grab.0, at.1 - drag.grab.1);
+                        if (dx * dx + dy * dy).sqrt() < slop {
+                            return;
+                        }
+                    }
                     drag.last = Some(at);
                     at
                 };
@@ -846,67 +910,9 @@ impl Widget for StageWidget {
                 }
             }
             UiEvent::PointerUp(p) => {
-                if let Some(cam) = self.camera_drag.take() {
-                    if let (true, Some(at)) = (cam.export_frame, cam.last) {
-                        let next = camera_center_for(&cam, at);
-                        self.write_export_center(next, self.current_rt(), true);
-                        self.revision += 1;
-                    }
-                    return;
-                }
-                let Some(drag) = self.drag.take() else { return };
-                let Some((cx, cy)) = drag.last else {
-                    println!("PROBE room=write verdict=gizmo-noop reason=never-moved");
-                    return;
-                };
                 let shift = p.mods.contains(Modifiers::SHIFT);
                 let alt = p.mods.contains(Modifiers::ALT);
-                let rt = self.current_rt();
-                let mut doc = self.doc.lock().unwrap();
-                let mut intents = Vec::new();
-                let touched: &[&str] = match drag.mode {
-                    GizmoMode::Move => {
-                        let (dx, dy) = (cx - drag.grab.0, cy - drag.grab.1);
-                        let new_pos = (drag.orig_position.0 + dx, drag.orig_position.1 + dy);
-                        intents.extend(track_intent(&doc, drag.layer, property::POSITION, Value::Vec2([new_pos.0, new_pos.1]), rt));
-                        &[property::POSITION]
-                    }
-                    GizmoMode::ScaleCorner { .. } | GizmoMode::ScaleEdge { .. } => {
-                        let (new_scale, new_pos) =
-                            compute_scale(drag.orig_box, drag.natural, drag.anchor, drag.mode, (cx, cy), shift, alt);
-                        intents.extend(track_intent(&doc, drag.layer, property::SCALE, Value::Vec2([new_scale.0, new_scale.1]), rt));
-                        intents.extend(track_intent(&doc, drag.layer, property::POSITION, Value::Vec2([new_pos.0, new_pos.1]), rt));
-                        &[property::SCALE, property::POSITION]
-                    }
-                    GizmoMode::Rotate => {
-                        let r = compute_rotation(drag.orig_position, drag.grab, (cx, cy), drag.orig_rotation, shift);
-                        intents.extend(track_intent(&doc, drag.layer, property::ROTATION, Value::F64(r), rt));
-                        &[property::ROTATION]
-                    }
-                    GizmoMode::Orbit { axis_x } => {
-                        let (rx, ry) = orbit_axis(drag.orig_rotation_xy, drag.grab, (cx, cy), axis_x, self.fit.s);
-                        intents.extend(track_intent(&doc, drag.layer, property::ROTATION_X, Value::F64(rx), rt));
-                        intents.extend(track_intent(&doc, drag.layer, property::ROTATION_Y, Value::F64(ry), rt));
-                        &[property::ROTATION_X, property::ROTATION_Y]
-                    }
-                    GizmoMode::Depth => {
-                        let z = drag.orig_z + (cy - drag.grab.1);
-                        intents.extend(track_intent(&doc, drag.layer, property::POSITION_Z, Value::F64(z), rt));
-                        &[property::POSITION_Z]
-                    }
-                };
-                match doc.apply_all(intents) {
-                    Ok(_) => {
-                        *self.revision.write() += 1;
-                        println!("PROBE room=write verdict=gizmo-{:?} layer={:?}", drag.mode, drag.layer);
-                    }
-                    Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
-                }
-                for name in touched {
-                    if let Ok(prop) = PropertyId::new(name) {
-                        doc.clear_transient(drag.layer, &prop);
-                    }
-                }
+                self.finish_drag(shift, alt);
             }
             _ => {}
         }

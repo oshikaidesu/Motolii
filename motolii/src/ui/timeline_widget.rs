@@ -58,9 +58,13 @@ struct DragState {
     grab_sec: f64,
     delta_sec: f64,
     mode: DragMode,
+    /// 閾値を超えて、本当に掴んだ事になったか。
+    moved: bool,
 }
 
 const EDGE_GRAB_PX: f64 = 6.0;
+/// タップがドラッグになるまでに指が動ける長さ。
+const DRAG_SLOP_PX: f64 = 3.0;
 /// 掴んだ物が吸い付く距離。手が止まらない感触はここで決まる。
 const SNAP_PX: f64 = 8.0;
 
@@ -298,6 +302,118 @@ impl TimelineWidget {
         let content_h = self.rows.len() as f64 * rowh;
         let avail_h = (self.viewport_h - RULER_H * self.sfac()).max(0.0);
         (content_h - avail_h).max(0.0)
+    }
+
+    /// 掴みを終える。**離した事が届かなかった時もここを通す** ——
+    /// 捨てると、離した所までの編集が失われる(外の規格の pointer capture が
+    /// 本来これを保証している物の、届く範囲での代わり)。
+    fn finish_drag(&mut self) {
+                self.scrubbing = false;
+                if let Some((from, to)) = self.marquee.take() {
+                    self.select_inside(from, to);
+                }
+                if let Some(drag) = self.drag.take() {
+                    let (Some(doc), Some(extractor)) = (self.doc.as_ref(), self.extractor) else {
+                        return;
+                    };
+                    let mut doc = doc.lock().unwrap();
+                    let raw_delta = (drag.delta_sec * DOC_FPS).round() as i64;
+                    if let DragMode::Key { at_sec } = drag.mode {
+                        let at_frame = (at_sec * DOC_FPS).round() as i64;
+                        if raw_delta != 0 {
+                            // 掴んだ物だけでなく、選んでいるキーを全部同じだけ動かす。
+                            let mut moving: Vec<(LayerId, Option<crate::doc::store::PropertyId>, i64)> = self
+                                .selected
+                                .iter()
+                                .filter_map(|(row_ix, key_ix)| {
+                                    let row = self.rows.get(*row_ix)?;
+                                    let t = row.keys.get(*key_ix).copied()?;
+                                    Some((row.layer?, row.prop.clone(), (t * DOC_FPS).round() as i64))
+                                })
+                                .collect();
+                            if !moving.iter().any(|(l, p, f)| {
+                                *l == drag.layer && *p == drag.prop && *f == at_frame
+                            }) {
+                                moving.push((drag.layer, drag.prop.clone(), at_frame));
+                            }
+                            let mut all = Vec::new();
+                            let mut failed = None;
+                            for (layer, prop, frame) in moving {
+                                match keyframe_move_intents(&doc, layer, prop.as_ref(), frame, raw_delta) {
+                                    Ok(intents) => all.extend(intents),
+                                    Err(e) => failed = Some(e),
+                                }
+                            }
+                            match failed.map_or(Ok(all), Err) {
+                                Ok(intents) => match doc.apply_all(intents) {
+                                    Ok(_) => {
+                                        println!(
+                                            "PROBE room=write verdict=applied MoveKey layer={:?} frame {}->{}",
+                                            drag.layer, at_frame, at_frame + raw_delta
+                                        );
+                                        self.rows = extractor(&doc);
+                                    }
+                                    Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
+                                },
+                                Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
+                            }
+                        }
+                        return;
+                    }
+                    let timing = match drag.mode {
+                        DragMode::Move => {
+                            let new_start = (drag.orig.start + raw_delta).max(0);
+                            LayerTiming { start: new_start, ..drag.orig }
+                        }
+                        DragMode::TrimStart => {
+                            let min_delta = -(drag.orig.start.min(drag.orig.source_in));
+                            let max_delta = drag.orig.duration - 1;
+                            let delta = raw_delta.clamp(min_delta, max_delta);
+                            LayerTiming {
+                                start: drag.orig.start + delta,
+                                duration: drag.orig.duration - delta,
+                                source_in: drag.orig.source_in + delta,
+                                ..drag.orig
+                            }
+                        }
+                        DragMode::TrimEnd => {
+                            let min_delta = -(drag.orig.duration - 1);
+                            let delta = raw_delta.max(min_delta);
+                            LayerTiming { duration: drag.orig.duration + delta, ..drag.orig }
+                        }
+                        DragMode::Key { .. } => unreachable!("上で返している"),
+                    };
+                    let mut intents = vec![Intent::SetTiming { layer: drag.layer, timing }];
+                    if drag.mode == DragMode::Move {
+                        let applied_delta = timing.start - drag.orig.start;
+                        if applied_delta != 0 {
+                            match keyframe_shift_intents(&doc, drag.layer, applied_delta) {
+                                Ok(more) => intents.extend(more),
+                                Err(e) => {
+                                    println!("PROBE room=write verdict=apply-error {e}");
+                                    return;
+                                }
+                            }
+                        }
+                    }
+                    match doc.apply_all(intents) {
+                        Ok(_) => {
+                            println!(
+                                "PROBE room=write verdict=applied SetTiming mode={} start {}->{} dur {}->{}",
+                                match drag.mode {
+                                    DragMode::Move => "move",
+                                    DragMode::TrimStart => "trim-start",
+                                    DragMode::TrimEnd => "trim-end",
+                                    DragMode::Key { .. } => unreachable!("上で返している"),
+                                },
+                                drag.orig.start, timing.start,
+                                drag.orig.duration, timing.duration
+                            );
+                            self.rows = extractor(&doc);
+                        }
+                        Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
+                    }
+                }
     }
 
     fn set_scroll_y(&mut self, y: f64) {
@@ -589,10 +705,8 @@ impl Widget for TimelineWidget {
                 // 帯の外で離すと、離した事がここへ届かない。掴んだままの絵が残り、
                 // **見えている物が作品と食い違う**。指が上がっていたら掴みを解く。
                 if p.buttons.is_empty() && (self.drag.is_some() || self.scrubbing || self.marquee.is_some()) {
-                    println!("PROBE room=input verdict=drag-dropped reason=release-not-seen");
-                    self.drag = None;
-                    self.scrubbing = false;
-                    self.marquee = None;
+                    println!("PROBE room=input verdict=drag-finished reason=release-not-seen");
+                    self.finish_drag();
                     return;
                 }
                 if self.scrubbing {
@@ -602,6 +716,15 @@ impl Widget for TimelineWidget {
                 } else if self.drag.is_some() {
                     let raw = (self.scroll_sec + x / self.pps)
                         - self.drag.as_ref().expect("直前に確認した").grab_sec;
+                    // **押しただけでは動かない。**(外の規格の touch slop)
+                    if !self.drag.as_ref().expect("同上").moved
+                        && (raw * self.pps).abs() < DRAG_SLOP_PX
+                    {
+                        return;
+                    }
+                    if let Some(drag) = &mut self.drag {
+                        drag.moved = true;
+                    }
                     let moving = match self.drag.as_ref().expect("同上").mode {
                         DragMode::Key { at_sec } => at_sec,
                         DragMode::TrimEnd => {
@@ -663,6 +786,7 @@ impl Widget for TimelineWidget {
                             grab_sec: t,
                             delta_sec: 0.0,
                             mode: DragMode::Key { at_sec },
+                            moved: false,
                         });
                     }
                 } else if let Some(row_ix) = self.band_hit(x, y) {
@@ -709,6 +833,7 @@ impl Widget for TimelineWidget {
                             grab_sec: t,
                             delta_sec: 0.0,
                             mode,
+                            moved: false,
                         });
                     }
                 } else {
@@ -721,112 +846,7 @@ impl Widget for TimelineWidget {
                 }
             }
             UiEvent::PointerUp(_) => {
-                self.scrubbing = false;
-                if let Some((from, to)) = self.marquee.take() {
-                    self.select_inside(from, to);
-                }
-                if let Some(drag) = self.drag.take() {
-                    let (Some(doc), Some(extractor)) = (self.doc.as_ref(), self.extractor) else {
-                        return;
-                    };
-                    let mut doc = doc.lock().unwrap();
-                    let raw_delta = (drag.delta_sec * DOC_FPS).round() as i64;
-                    if let DragMode::Key { at_sec } = drag.mode {
-                        let at_frame = (at_sec * DOC_FPS).round() as i64;
-                        if raw_delta != 0 {
-                            // 掴んだ物だけでなく、選んでいるキーを全部同じだけ動かす。
-                            let mut moving: Vec<(LayerId, Option<crate::doc::store::PropertyId>, i64)> = self
-                                .selected
-                                .iter()
-                                .filter_map(|(row_ix, key_ix)| {
-                                    let row = self.rows.get(*row_ix)?;
-                                    let t = row.keys.get(*key_ix).copied()?;
-                                    Some((row.layer?, row.prop.clone(), (t * DOC_FPS).round() as i64))
-                                })
-                                .collect();
-                            if !moving.iter().any(|(l, p, f)| {
-                                *l == drag.layer && *p == drag.prop && *f == at_frame
-                            }) {
-                                moving.push((drag.layer, drag.prop.clone(), at_frame));
-                            }
-                            let mut all = Vec::new();
-                            let mut failed = None;
-                            for (layer, prop, frame) in moving {
-                                match keyframe_move_intents(&doc, layer, prop.as_ref(), frame, raw_delta) {
-                                    Ok(intents) => all.extend(intents),
-                                    Err(e) => failed = Some(e),
-                                }
-                            }
-                            match failed.map_or(Ok(all), Err) {
-                                Ok(intents) => match doc.apply_all(intents) {
-                                    Ok(_) => {
-                                        println!(
-                                            "PROBE room=write verdict=applied MoveKey layer={:?} frame {}->{}",
-                                            drag.layer, at_frame, at_frame + raw_delta
-                                        );
-                                        self.rows = extractor(&doc);
-                                    }
-                                    Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
-                                },
-                                Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
-                            }
-                        }
-                        return;
-                    }
-                    let timing = match drag.mode {
-                        DragMode::Move => {
-                            let new_start = (drag.orig.start + raw_delta).max(0);
-                            LayerTiming { start: new_start, ..drag.orig }
-                        }
-                        DragMode::TrimStart => {
-                            let min_delta = -(drag.orig.start.min(drag.orig.source_in));
-                            let max_delta = drag.orig.duration - 1;
-                            let delta = raw_delta.clamp(min_delta, max_delta);
-                            LayerTiming {
-                                start: drag.orig.start + delta,
-                                duration: drag.orig.duration - delta,
-                                source_in: drag.orig.source_in + delta,
-                                ..drag.orig
-                            }
-                        }
-                        DragMode::TrimEnd => {
-                            let min_delta = -(drag.orig.duration - 1);
-                            let delta = raw_delta.max(min_delta);
-                            LayerTiming { duration: drag.orig.duration + delta, ..drag.orig }
-                        }
-                        DragMode::Key { .. } => unreachable!("上で返している"),
-                    };
-                    let mut intents = vec![Intent::SetTiming { layer: drag.layer, timing }];
-                    if drag.mode == DragMode::Move {
-                        let applied_delta = timing.start - drag.orig.start;
-                        if applied_delta != 0 {
-                            match keyframe_shift_intents(&doc, drag.layer, applied_delta) {
-                                Ok(more) => intents.extend(more),
-                                Err(e) => {
-                                    println!("PROBE room=write verdict=apply-error {e}");
-                                    return;
-                                }
-                            }
-                        }
-                    }
-                    match doc.apply_all(intents) {
-                        Ok(_) => {
-                            println!(
-                                "PROBE room=write verdict=applied SetTiming mode={} start {}->{} dur {}->{}",
-                                match drag.mode {
-                                    DragMode::Move => "move",
-                                    DragMode::TrimStart => "trim-start",
-                                    DragMode::TrimEnd => "trim-end",
-                                    DragMode::Key { .. } => unreachable!("上で返している"),
-                                },
-                                drag.orig.start, timing.start,
-                                drag.orig.duration, timing.duration
-                            );
-                            self.rows = extractor(&doc);
-                        }
-                        Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
-                    }
-                }
+                self.finish_drag();
             }
             _ => {}
         }
