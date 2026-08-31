@@ -183,6 +183,10 @@ struct Active {
     engine: Engine,
     displayed: Option<TexAndHandle>,
     next: Option<TexAndHandle>,
+    /// 画角を広げて撮った物。**枠の外**を見せるためだけに使う。
+    /// 目玉は動かさず画角だけ `zoom/k` に広げるので、中心基準で k 倍に
+    /// 拡げると**全ての奥行きで**元の絵と重なる。
+    wide: Option<TexAndHandle>,
 }
 
 struct TexAndHandle {
@@ -559,7 +563,7 @@ impl Widget for StageWidget {
         match Engine::with_device(device_handle.device.clone(), device_handle.queue.clone()) {
             Ok(engine) => {
                 println!("PROBE room=stage verdict=engine-up");
-                self.state = State::Active(Box::new(Active { engine, displayed: None, next: None }));
+                self.state = State::Active(Box::new(Active { engine, displayed: None, next: None, wide: None }));
             }
             Err(e) => println!("PROBE room=stage verdict=engine-error {e}"),
         }
@@ -989,22 +993,54 @@ impl Widget for StageWidget {
             return scene;
         }
 
+        // 枠の外を見せるための、画角を広げた1枚。**目玉は動かさず画角だけ**
+        // `zoom/k` に広げる。距離を変えると遠近そのものが変わってしまう。
+        // 窓が枠より広い時だけ撮る(枠が窓を覆っていれば外は見えない)。
+        let wide = if self.output_only {
+            None
+        } else {
+            let base = ((width as f64) / cw as f64).min((height as f64) / ch as f64);
+            let on_screen = base * observation.zoom as f64;
+            let need = ((width as f64) / (cw as f64 * on_screen))
+                .max((height as f64) / (ch as f64 * on_screen));
+            let k = need.clamp(1.0, 4.0);
+            if k <= 1.02 {
+                None
+            } else {
+                if active.wide.is_none() {
+                    let texture = create_target(active.engine.gpu_device(), cw, ch);
+                    let handle = render_ctx
+                        .try_register_custom_resource(Box::new(texture.clone()))
+                        .expect("wgpu backend accepts wgpu textures");
+                    active.wide = Some(TexAndHandle { texture, handle });
+                }
+                let wide = active.wide.as_ref().expect("直前に用意した");
+                let camera = crate::doc::core::ResolvedCamera {
+                    zoom: export_camera.zoom / k as f32,
+                    ..export_camera
+                };
+                match active.engine.render_frame_into_with_camera(
+                    &view,
+                    rt,
+                    &wide.texture,
+                    camera,
+                    false,
+                ) {
+                    Ok(()) => Some((wide.handle, k)),
+                    Err(e) => {
+                        println!("PROBE room=stage verdict=wide-render-error {e}");
+                        None
+                    }
+                }
+            }
+        };
+
         let primary_layer = self.selection.get();
         let primary_geom =
             primary_layer.and_then(|layer| selection_geom_in(&active.engine, &view, layer, rt));
         *self.selected_size.lock().unwrap() =
             primary_geom.as_ref().map(|g| [g.natural.0 as f32, g.natural.1 as f32]);
         let selected_box = primary_geom;
-        // 画角の外に出た形を薄く見せるため、**全部の層**の形を集める。
-        // 絵の下に敷くので、枠の中は撮れた絵が覆い、外だけが残る。
-        let all_geoms: Vec<_> = if self.output_only {
-            Vec::new()
-        } else {
-            view.layers()
-                .into_iter()
-                .filter_map(|l| selection_geom_in(&active.engine, &view, l, rt))
-                .collect()
-        };
         let secondary_boxes: Vec<_> = self
             .selection
             .all()
@@ -1085,36 +1121,31 @@ impl Widget for StageWidget {
             None,
             &frame,
         );
-        // 画角の外に在る形。**絵の下**に敷くので、枠の中は撮れた絵で隠れ、
-        // はみ出した所だけが薄く残る。出ている物が見えないと、外へ逃がした
-        // つもりの物が本当に外に在るのか確かめられない。
-        for geom in &all_geoms {
-            let (_, _, bw, bh) = geom.box_;
-            if bw.abs() < 1e-9 || bh.abs() < 1e-9 {
-                continue;
-            }
-            let map = plane_map(&draw, geom);
-            let p = |u: f64, v: f64| {
-                let (x, y) = map.to_screen(u, v);
-                peniko::kurbo::Point::new(x, y)
-            };
-            let mut quad = peniko::kurbo::BezPath::new();
-            quad.move_to(p(0.0, 0.0));
-            quad.line_to(p(1.0, 0.0));
-            quad.line_to(p(1.0, 1.0));
-            quad.line_to(p(0.0, 1.0));
-            quad.close_path();
+        // 枠の外。**中身は本物のまま、外側を暗い膜で落とす。**
+        // 形を塗りつぶすと動画に効かないので、広く撮った絵をそのまま敷く。
+        if let Some((wide_handle, k)) = wide {
+            let (wx, wy) = (fx + fw * 0.5, fy + fh * 0.5);
+            let (ww, wh) = (fw * k, fh * k);
+            let rect = Rect::from_origin_size((wx - ww * 0.5, wy - wh * 0.5), (ww, wh));
             scene.fill(
                 Fill::NonZero,
                 Affine::IDENTITY,
-                PaintRef::Solid(Color::from_rgba8(
-                    tokens::INK[0],
-                    tokens::INK[1],
-                    tokens::INK[2],
-                    90,
-                )),
+                PaintRef::Resource(ImageBrush {
+                    image: wide_handle,
+                    sampler: ImageSampler::default(),
+                }),
+                Some(
+                    Affine::translate((wx - ww * 0.5, wy - wh * 0.5))
+                        * Affine::scale(s * k),
+                ),
+                &rect,
+            );
+            scene.fill(
+                Fill::NonZero,
+                Affine::IDENTITY,
+                PaintRef::Solid(Color::from_rgba8(0x1a, 0x1a, 0x1a, 190)),
                 None,
-                &quad,
+                &rect,
             );
         }
 
