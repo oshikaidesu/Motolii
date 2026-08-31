@@ -1091,6 +1091,7 @@ impl Widget for StageWidget {
 
         // 副次の選択も**同じ写像**で描く。長方形で描くと、回した層や奥に在る層で
         // 枠だけが別の場所に残る。
+
         for geom in &secondary_boxes {
             let (_, _, bw, bh) = geom.box_;
             if bw.abs() < 1e-9 || bh.abs() < 1e-9 {
