@@ -32,9 +32,31 @@ struct Fit {
     /// 別の奥行きで写像を作り直すための材料。
     comp: crate::doc::core::CompSpec,
     camera: crate::doc::core::ResolvedCamera,
+    /// 視点を解くための素の値。**導き済みの `s`/`fx` から逆算しない** ——
+    /// 逆算は単位と向きを取り違える(一晩で5回踏んだ)。
+    widget: (f64, f64),
+    image: (f64, f64),
+    base: f64,
 }
 
 impl Fit {
+    /// 指の下に在る、撮れた絵の座標。
+    fn image_at(&self, sx: f64, sy: f64) -> (f64, f64) {
+        let s = self.s.max(1e-9);
+        ((sx - self.fx) / s, (sy - self.fy) / s)
+    }
+
+    /// `img`(絵の座標)が `screen` に来るような視点の移動量。
+    /// 拡大率を変える時は変えた後の値を渡す。**素の値から組み立てるので、
+    /// 単位も向きも推論しない。**
+    fn pan_putting(&self, img: (f64, f64), screen: (f64, f64), zoom: f64) -> [f32; 2] {
+        let s = (self.base * zoom).max(1e-9);
+        [
+            (((self.widget.0 - self.image.0 * s) * 0.5 + img.0 * s - screen.0) / s) as f32,
+            (((self.widget.1 - self.image.1 * s) * 0.5 + img.1 * s - screen.1) / s) as f32,
+        ]
+    }
+
     /// **その奥行きの面**での写像。奥に在る物は小さく、位置もずれて見えるので、
     /// 取っ手を絵の上に置くにはこちらを使う。
     fn at_z(&self, z: f64) -> Fit {
@@ -58,6 +80,9 @@ impl Default for Fit {
             image_from_world: glam::Affine2::IDENTITY,
             comp: crate::doc::core::CompSpec { width: 1, height: 1 },
             camera: crate::doc::core::ResolvedCamera::default(),
+            widget: (1.0, 1.0),
+            image: (1.0, 1.0),
+            base: 1.0,
         }
     }
 }
@@ -103,6 +128,8 @@ struct CameraDrag {
     export_frame: bool,
     /// 最後に動かした先。動かしていなければ None(→ 何も書かない)。
     last: Option<(f64, f64)>,
+    /// 掴んだ時に指の下に在った、**撮れた絵の座標**。視点はこれを指に付けて動かす。
+    grab_image: (f64, f64),
 }
 
 struct GizmoDrag {
@@ -463,29 +490,6 @@ fn orbit_axis(orig: (f64, f64), grab: (f64, f64), now: (f64, f64), axis_x: bool,
     }
 }
 
-/// 指の下に `target`(世界の点)が来るような視点の中心を、**写像を測って**解く。
-/// 視点を動かすと世界ごと動くので、世界の座標で差分を取ると自分を追いかけてしまう。
-fn pan_that_puts(fit: &Fit, cam: crate::doc::core::ResolvedCamera, screen: (f64, f64), target: (f64, f64)) -> [f32; 2] {
-    let at = |dx: f32, dy: f32| {
-        let mut c = cam;
-        c.center = [cam.center[0] + dx, cam.center[1] + dy];
-        let mut f = *fit;
-        f.camera = c;
-        f.image_from_world = crate::doc::core::camera_screen_from_world_z0(f.comp, c);
-        f.to_comp(screen.0, screen.1)
-    };
-    let base = at(0.0, 0.0);
-    let sx = at(1.0, 0.0).0 - base.0;
-    let sy = at(0.0, 1.0).1 - base.1;
-    if sx.abs() < 1e-9 || sy.abs() < 1e-9 {
-        return cam.center;
-    }
-    [
-        cam.center[0] + ((target.0 - base.0) / sx) as f32,
-        cam.center[1] + ((target.1 - base.1) / sy) as f32,
-    ]
-}
-
 /// 掴んだ物が指について来るように、カメラの中心を出す。
 ///
 /// **視点は世界を掴んでいる**ので、世界を右へ引くならカメラは左へ動く。
@@ -584,46 +588,16 @@ impl Widget for StageWidget {
                 if dy == 0.0 {
                     return;
                 }
-                // **指の下を動かさない。** 中心を基準に拡げると、拡げるたびに
-                // 見たい物が画面の外へ逃げ、必ず動かし直す手間が付く。
-                //
-                // 補正は式で立てずに**実際の写像で解く**。拡大率を変えた写像で
-                // 指の下が世界のどこへ移ったかを測り、その差だけ視点を戻す。
-                // (単位の取り違えが起きない。)
-                let anchor = self.cursor.map(|(x, y)| ((x, y), self.fit.to_comp(x, y)));
+                // **指の下を動かさない。** 中心を基準に拡げると、見たい物が
+                // 画面の外へ逃げ、拡げるたびに動かし直す手間が付く。
+                let anchor = self
+                    .cursor
+                    .map(|(x, y)| ((x, y), self.fit.image_at(x, y)));
                 let mut view = self.view_camera.lock().unwrap();
                 view.zoom = (view.zoom * (1.0 - dy as f32 * 0.002)).clamp(0.05, 40.0);
-
-                let refresh = |fit: &mut Fit, cam| {
-                    fit.camera = cam;
-                    fit.image_from_world =
-                        crate::doc::core::camera_screen_from_world_z0(fit.comp, cam);
-                };
-
-                if let Some(((px, py), w0)) = anchor {
-                    // 視点を 1 動かすと指の下の点がどれだけ動くかを**測って**から解く。
-                    // 軸ごとに向きが違う(絵の Y は世界の Y と逆)ので、符号は決め打ちしない。
-                    let pan = view.pan;
-                    let at = |dx: f32, dy: f32| {
-                        let mut cam = view.as_resolved_camera();
-                        cam.center = [pan[0] + dx, pan[1] + dy];
-                        let mut fit = self.fit;
-                        refresh(&mut fit, cam);
-                        fit.to_comp(px, py)
-                    };
-                    let base = at(0.0, 0.0);
-                    let slope_x = at(1.0, 0.0).0 - base.0;
-                    let slope_y = at(0.0, 1.0).1 - base.1;
-                    if slope_x.abs() > 1e-9 && slope_y.abs() > 1e-9 {
-                        view.pan = [
-                            pan[0] + ((w0.0 - base.0) / slope_x) as f32,
-                            pan[1] + ((w0.1 - base.1) / slope_y) as f32,
-                        ];
-                    }
+                if let Some((screen, img)) = anchor {
+                    view.pan = self.fit.pan_putting(img, screen, view.zoom as f64);
                 }
-                let camera = view.as_resolved_camera();
-                drop(view);
-                refresh(&mut self.fit, camera);
             }
             UiEvent::PointerDown(p) => {
                 let (cx, cy) = self.fit.to_comp(p.element.x as f64, p.element.y as f64);
@@ -758,6 +732,7 @@ impl Widget for StageWidget {
                                 orig_center: self.export_center(rt),
                                 export_frame: true,
                                 last: None,
+                                grab_image: self.fit.image_at(p.element.x as f64, p.element.y as f64),
                             });
                         } else {
                             let pan = self.view_camera.lock().unwrap().pan;
@@ -766,6 +741,7 @@ impl Widget for StageWidget {
                                 orig_center: (pan[0] as f64, pan[1] as f64),
                                 export_frame: false,
                                 last: None,
+                                grab_image: self.fit.image_at(p.element.x as f64, p.element.y as f64),
                             });
                         }
                     }
@@ -805,15 +781,12 @@ impl Widget for StageWidget {
                         self.write_export_center(next, self.current_rt(), false);
                         self.revision += 1;
                     } else {
+                        // 掴んだ絵の点が指について来るように動かす。
                         let screen = (p.element.x as f64, p.element.y as f64);
-                        let grab = cam.grab;
+                        let img = cam.grab_image;
                         let mut view = self.view_camera.lock().unwrap();
-                        view.pan = pan_that_puts(&self.fit, view.as_resolved_camera(), screen, grab);
-                        let camera = view.as_resolved_camera();
-                        drop(view);
-                        self.fit.camera = camera;
-                        self.fit.image_from_world =
-                            crate::doc::core::camera_screen_from_world_z0(self.fit.comp, camera);
+                        let zoom = view.zoom as f64;
+                        view.pan = self.fit.pan_putting(img, screen, zoom);
                     }
                     return;
                 }
@@ -1002,13 +975,15 @@ impl Widget for StageWidget {
             *self.view_camera.lock().unwrap()
         };
         let export_camera = view.resolve_camera(rt).unwrap_or_default();
-        let rendered = if self.output_only {
-            active.engine.render_frame_into(&view, rt, &target)
-        } else {
-            active
-                .engine
-                .render_frame_into_with_view_camera(&view, rt, &target, &observation, false)
-        };
+        // **撮るのは常に書き出しのカメラ。** 視点は撮れた絵を2Dで動かすだけなので、
+        // preview と export が食い違いようがない(裁定 2026-09-01)。
+        let rendered = active.engine.render_frame_into_with_camera(
+            &view,
+            rt,
+            &target,
+            export_camera,
+            self.output_only,
+        );
         if let Err(e) = rendered {
             println!("PROBE room=stage verdict=render-error {e}");
             return scene;
@@ -1038,23 +1013,31 @@ impl Widget for StageWidget {
 
         let (w, h) = (width as f64, height as f64);
         let (cw, ch) = (target.width() as f64, target.height() as f64);
-        let s = (w / cw).min(h / ch);
+        // 窓に収める倍率。ここへ**視点の拡大**を掛け、**視点の移動**を足す。
+        // 視点は撮れた絵に対する2Dの動きで、カメラには触らない。
+        let base = (w / cw).min(h / ch);
+        let s = base * observation.zoom as f64;
         let (fw, fh) = (cw * s, ch * s);
-        let (fx, fy) = ((w - fw) * 0.5, (h - fh) * 0.5);
+        let (fx, fy) = (
+            (w - fw) * 0.5 - observation.pan[0] as f64 * s,
+            (h - fh) * 0.5 - observation.pan[1] as f64 * s,
+        );
 
         let k = if scale > 0.0 { scale } else { 1.0 };
         let comp = crate::doc::core::CompSpec {
             width: target.width(),
             height: target.height(),
         };
-        let camera = observation.as_resolved_camera();
         self.fit = Fit {
             s: s / k,
             fx: fx / k,
             fy: fy / k,
-            image_from_world: crate::doc::core::camera_screen_from_world_z0(comp, camera),
+            image_from_world: crate::doc::core::camera_screen_from_world_z0(comp, export_camera),
             comp,
-            camera,
+            camera: export_camera,
+            widget: (w / k, h / k),
+            image: (cw, ch),
+            base: base / k,
         };
 
         // 描く時は物理 px、掴む時は論理 px。写像を2つ持つ。

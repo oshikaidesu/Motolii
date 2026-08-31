@@ -283,12 +283,14 @@ impl Engine {
         )?)
     }
 
-    pub fn render_frame_into_with_view_camera(
+    /// 指定したカメラで撮る。**窓の視点はここへ来ない** —— 視点は撮れた絵を
+    /// 2Dで動かすだけなので、撮るのは常に書き出しのカメラ(裁定 2026-09-01)。
+    pub fn render_frame_into_with_camera(
         &mut self,
         view: &StoreView<'_>,
         t: RationalTime,
         target: &wgpu::Texture,
-        observation: &crate::render::engine::ObservationCamera,
+        camera: ResolvedCamera,
         include_background: bool,
     ) -> Result<(), EngineError> {
         let composition = view
@@ -296,7 +298,6 @@ impl Engine {
             .map_err(|e| EngineError::Store(e.to_string()))?
             .ok_or(EngineError::NoComposition)?;
         let comp = composition.spec();
-        let camera = observation.as_resolved_camera();
         let resolved = view
             .resolved_layers(t)
             .map_err(|e| EngineError::Store(e.to_string()))?;
