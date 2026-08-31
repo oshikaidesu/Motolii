@@ -79,6 +79,8 @@ enum GizmoMode {
 struct CameraDrag {
     grab: (f64, f64),
     orig_center: (f64, f64),
+    /// 世界を見る側(視点)か、書き出しの枠(Document のカメラ)か。
+    export_frame: bool,
 }
 
 struct GizmoDrag {
@@ -159,6 +161,65 @@ impl StageWidget {
     fn current_rt(&self) -> RationalTime {
         let t_sec = self.clock.now_sec();
         RationalTime::try_new((t_sec * 3000.0) as i64, 3000).unwrap_or(RationalTime::ZERO)
+    }
+
+    /// 書き出しカメラの中心。
+    fn export_center(&self, rt: RationalTime) -> (f64, f64) {
+        let doc = self.doc.lock().unwrap();
+        let view = doc.view();
+        match PropertyId::camera(property::CAMERA_CENTER)
+            .ok()
+            .and_then(|p| view.camera_value_at(&p, rt).ok().flatten())
+        {
+            Some(Value::Vec2([x, y])) => (x, y),
+            _ => (0.0, 0.0),
+        }
+    }
+
+    /// 掴んでいる間は履歴を汚さず、離した時に1つだけ残す(層のドラッグと同じ流儀)。
+    fn write_export_center(&self, center: (f64, f64), rt: RationalTime, commit: bool) {
+        let Ok(property) = PropertyId::camera(property::CAMERA_CENTER) else { return };
+        let value = Value::Vec2([center.0, center.1]);
+        let mut doc = self.doc.lock().unwrap();
+        if !commit {
+            doc.set_camera_transient(property, value);
+            return;
+        }
+        doc.clear_camera_transient(&property);
+        let mut track = doc.view().camera_track(&property).ok().flatten().unwrap_or_default();
+        track.insert(crate::doc::store::Keyframe {
+            t: rt,
+            value,
+            interp: crate::doc::store::Interp::Linear,
+            spatial: None,
+        });
+        if let Err(e) = doc.apply(Intent::SetCameraTrack { property, track }) {
+            println!("PROBE room=write verdict=apply-error {e}");
+        }
+    }
+
+    /// 書き出しの枠の縁を掴んでいるか(世界の座標で見る)。
+    fn near_export_frame(&self, wx: f64, wy: f64) -> bool {
+        let State::Active(active) = &self.state else { return false };
+        let Some(target) = active.displayed.as_ref().or(active.next.as_ref()) else {
+            return false;
+        };
+        let comp = crate::doc::core::CompSpec {
+            width: target.texture.width(),
+            height: target.texture.height(),
+        };
+        let rt = self.current_rt();
+        let camera = {
+            let doc = self.doc.lock().unwrap();
+            doc.view().resolve_camera(rt).unwrap_or_default()
+        };
+        let image = crate::doc::core::camera_screen_from_world_z0(comp, camera)
+            .transform_point2(glam::vec2(wx as f32, wy as f32));
+        let (w, h) = (comp.width as f32, comp.height as f32);
+        let tol = (8.0 / self.fit.s.max(1e-6)) as f32;
+        let inside = image.x >= -tol && image.x <= w + tol && image.y >= -tol && image.y <= h + tol;
+        let core = image.x > tol && image.x < w - tol && image.y > tol && image.y < h - tol;
+        inside && !core
     }
 
     fn layer_f64(&self, layer: LayerId, name: &str) -> f64 {
@@ -500,22 +561,39 @@ impl Widget for StageWidget {
                         self.selected_mirror.set(self.selection.get());
                     }
                     None => {
-                        let pan = self.view_camera.lock().unwrap().pan;
-                        self.camera_drag = Some(CameraDrag {
-                            grab: (cx, cy),
-                            orig_center: (pan[0] as f64, pan[1] as f64),
-                        });
+                        // 枠の縁を掴んだら書き出しカメラ、それ以外は視点。
+                        if self.near_export_frame(cx, cy) {
+                            let rt = self.current_rt();
+                            self.camera_drag = Some(CameraDrag {
+                                grab: (cx, cy),
+                                orig_center: self.export_center(rt),
+                                export_frame: true,
+                            });
+                        } else {
+                            let pan = self.view_camera.lock().unwrap().pan;
+                            self.camera_drag = Some(CameraDrag {
+                                grab: (cx, cy),
+                                orig_center: (pan[0] as f64, pan[1] as f64),
+                                export_frame: false,
+                            });
+                        }
                     }
                 }
             }
             UiEvent::PointerMove(p) => {
                 if let Some(cam) = self.camera_drag.as_ref() {
                     let (cx, cy) = self.fit.to_comp(p.element.x as f64, p.element.y as f64);
-                    let mut view = self.view_camera.lock().unwrap();
-                    view.pan = [
-                        (cam.orig_center.0 - (cx - cam.grab.0)) as f32,
-                        (cam.orig_center.1 - (cy - cam.grab.1)) as f32,
-                    ];
+                    let next = (
+                        cam.orig_center.0 - (cx - cam.grab.0),
+                        cam.orig_center.1 - (cy - cam.grab.1),
+                    );
+                    if cam.export_frame {
+                        self.write_export_center(next, self.current_rt(), false);
+                        self.revision += 1;
+                    } else {
+                        let mut view = self.view_camera.lock().unwrap();
+                        view.pan = [next.0 as f32, next.1 as f32];
+                    }
                     return;
                 }
                 let Some(drag) = self.drag.as_ref() else { return };
@@ -559,7 +637,16 @@ impl Widget for StageWidget {
                 }
             }
             UiEvent::PointerUp(p) => {
-                if self.camera_drag.take().is_some() {
+                if let Some(cam) = self.camera_drag.take() {
+                    if cam.export_frame {
+                        let (cx, cy) = self.fit.to_comp(p.element.x as f64, p.element.y as f64);
+                        let next = (
+                            cam.orig_center.0 - (cx - cam.grab.0),
+                            cam.orig_center.1 - (cy - cam.grab.1),
+                        );
+                        self.write_export_center(next, self.current_rt(), true);
+                        self.revision += 1;
+                    }
                     return;
                 }
                 let Some(drag) = self.drag.take() else { return };
@@ -685,7 +772,7 @@ impl Widget for StageWidget {
         let observation = *self.view_camera.lock().unwrap();
         let export_camera = view.resolve_camera(rt).unwrap_or_default();
         if let Err(e) = active.engine.render_frame_into_with_view_camera(
-            &view, rt, &target, &observation, true,
+            &view, rt, &target, &observation, false,
         ) {
             println!("PROBE room=stage verdict=render-error {e}");
             return scene;
@@ -720,13 +807,6 @@ impl Widget for StageWidget {
         let s = (w / cw).min(h / ch);
         let (fw, fh) = (cw * s, ch * s);
         let (fx, fy) = ((w - fw) * 0.5, (h - fh) * 0.5);
-        scene.fill(
-            Fill::NonZero,
-            Affine::IDENTITY,
-            PaintRef::Resource(ImageBrush { image: handle, sampler: ImageSampler::default() }),
-            Some(Affine::translate((fx, fy)) * Affine::scale(s)),
-            &Rect::from_origin_size((fx, fy), (fw, fh)),
-        );
 
         let k = if scale > 0.0 { scale } else { 1.0 };
         self.fit = Fit {
@@ -750,8 +830,8 @@ impl Widget for StageWidget {
             image_from_world: self.fit.image_from_world,
         };
 
-        // 書き出しの枠を世界の中に描く(boxcam)。視点を動かしても枠は世界に残る。
-        {
+        // 書き出しの枠。地色は枠の中だけに敷く(視界全体を塗ると枠の意味が消える)。
+        let frame = {
             let comp = crate::doc::core::CompSpec {
                 width: target.width(),
                 height: target.height(),
@@ -771,14 +851,31 @@ impl Widget for StageWidget {
             frame.line_to(corner(iw, ih));
             frame.line_to(corner(0.0, ih));
             frame.close_path();
-            scene.stroke(
-                &peniko::kurbo::Stroke::new(1.0).with_dashes(0.0, [4.0, 4.0]),
-                Affine::IDENTITY,
-                PaintRef::Solid(c(tokens::INK3)),
-                None,
-                &frame,
-            );
-        }
+            frame
+        };
+
+        let bg = composition.background;
+        scene.fill(
+            Fill::NonZero,
+            Affine::IDENTITY,
+            PaintRef::Solid(Color::new([bg[0], bg[1], bg[2], bg[3]])),
+            None,
+            &frame,
+        );
+        scene.fill(
+            Fill::NonZero,
+            Affine::IDENTITY,
+            PaintRef::Resource(ImageBrush { image: handle, sampler: ImageSampler::default() }),
+            Some(Affine::translate((fx, fy)) * Affine::scale(s)),
+            &Rect::from_origin_size((fx, fy), (fw, fh)),
+        );
+        scene.stroke(
+            &peniko::kurbo::Stroke::new(1.0).with_dashes(0.0, [4.0, 4.0]),
+            Affine::IDENTITY,
+            PaintRef::Solid(c(tokens::INK3)),
+            None,
+            &frame,
+        );
 
         for (bx, by, bw, bh) in &secondary_boxes {
             let (x0, y0) = draw.to_screen(*bx, *by);
