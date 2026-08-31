@@ -4,7 +4,7 @@ use dioxus_native::CustomWidgetAttr;
 use crate::ui::browser::browser_panel;
 use crate::ui::dock::{Dock, Panel, Zone};
 use crate::ui::inspector::inspector_panel;
-use crate::ui::keymap::{lookup, Intent};
+use crate::ui::keymap::Intent;
 use crate::ui::session::Session;
 use crate::ui::stage_widget::StageWidget;
 use crate::ui::timeline_shell::timeline_shell;

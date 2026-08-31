@@ -288,6 +288,8 @@ impl StageWidget {
 
 struct SelGeom {
     z: f64,
+    rotation_x: f64,
+    rotation_y: f64,
     position: (f64, f64),
     anchor: (f64, f64),
     rotation: f64,
@@ -324,6 +326,8 @@ fn selection_geom_in(
         return None;
     }
     let z = f64_at(view, layer, property::POSITION_Z, rt, 0.0);
+    let rotation_x = f64_at(view, layer, property::ROTATION_X, rt, 0.0);
+    let rotation_y = f64_at(view, layer, property::ROTATION_Y, rt, 0.0);
     let position = vec2_at(view, layer, property::POSITION, rt, (0.0, 0.0));
     let anchor = vec2_at(view, layer, property::ANCHOR, rt, (0.0, 0.0));
     let scale = vec2_at(view, layer, property::SCALE, rt, (1.0, 1.0));
@@ -336,7 +340,7 @@ fn selection_geom_in(
         scale.0 * natural.0,
         scale.1 * natural.1,
     );
-    Some(SelGeom { z, position, anchor, rotation, natural, box_ })
+    Some(SelGeom { z, rotation_x, rotation_y, position, anchor, rotation, natural, box_ })
 }
 
 fn compute_scale(
@@ -539,9 +543,16 @@ impl Widget for StageWidget {
                 let (cx, cy) = self.fit.to_comp(p.element.x as f64, p.element.y as f64);
                 if let Some(layer) = self.selection.get() {
                     if let Some(geom) = self.selection_geom(layer) {
-                        // 奥に在る層は絵が動いて見える。掴む判定もその面で行う。
-                        let (cx, cy) = self.fit.at_z(geom.z).to_comp(p.element.x as f64, p.element.y as f64);
-                        let (lx, ly) = rotate_around(geom.position, -geom.rotation, (cx, cy));
+                        // 傾いた層は台形に見える。**見えている所で掴めるように**、
+                        // 層の面と窓の間の写像を通して箱の中の位置へ戻す。
+                        let map = plane_map(&self.fit, &geom);
+                        let (bxx, byy, bww, bhh) = geom.box_;
+                        let (u, v) = map.to_uv(p.element.x as f64, p.element.y as f64);
+                        if !u.is_finite() || !v.is_finite() {
+                            return;
+                        }
+                        let (lx, ly) = (bxx + u * bww, byy + v * bhh);
+                        let (cx, cy) = rotate_around(geom.position, geom.rotation, (lx, ly));
                         let (bx, by, bw, bh) = geom.box_;
                         let (x0, y0, x1, y1) = (bx, by, bx + bw, by + bh);
                         let tol = 8.0 / self.fit.s.max(1e-6);
@@ -903,8 +914,7 @@ impl Widget for StageWidget {
             primary_layer.and_then(|layer| selection_geom_in(&active.engine, &view, layer, rt));
         *self.selected_size.lock().unwrap() =
             primary_geom.as_ref().map(|g| [g.natural.0 as f32, g.natural.1 as f32]);
-        let selected_box = primary_geom
-            .map(|geom| (geom.box_, geom.position, geom.rotation, geom.z));
+        let selected_box = primary_geom;
         let secondary_boxes: Vec<_> = self
             .selection
             .all()
@@ -1008,65 +1018,68 @@ impl Widget for StageWidget {
             }
         }
 
-        if let Some(((_, _, _, _), position, _, z)) = selected_box {
-            let draw = draw.at_z(z);
-            // アンカー(回転と拡大の支点)。今まで描いていなかったので位置が見えなかった。
-            let (ax, ay) = draw.to_screen(position.0, position.1);
-            let arm = 6.0;
-            let th = 1.0;
-            for edge in [
-                Rect::from_origin_size((ax - arm, ay - th * 0.5), (arm * 2.0, th)),
-                Rect::from_origin_size((ax - th * 0.5, ay - arm), (th, arm * 2.0)),
-            ] {
-                scene.fill(Fill::NonZero, Affine::IDENTITY, PaintRef::Solid(c(tokens::ACCENT)), None, &edge);
-            }
-        }
+        if let Some(geom) = &selected_box {
+            let (bx, by, bw, bh) = geom.box_;
+            if bw.abs() > 1e-9 && bh.abs() > 1e-9 {
+                // 局所(箱の中)で組んでから、層の面の写像で窓へ落とす。
+                // 掴む側と同じ座標系なので、見えている所がそのまま掴める所になる。
+                let map = plane_map(&draw, geom);
+                let l2s = |lx: f64, ly: f64| {
+                    let (x, y) = map.to_screen((lx - bx) / bw, (ly - by) / bh);
+                    peniko::kurbo::Point::new(x, y)
+                };
+                let stroke = peniko::kurbo::Stroke::new(1.5);
+                let thin = peniko::kurbo::Stroke::new(1.0);
 
-        if let Some(((bx, by, bw, bh), position, rotation, z)) = selected_box {
-            let draw = draw.at_z(z);
-            let (x0, y0) = draw.to_screen(bx, by);
-            let (x1, y1) = draw.to_screen(bx + bw, by + bh);
-            let pivot = draw.to_screen(position.0, position.1);
-            let rot = Affine::translate(pivot)
-                * Affine::rotate(rotation.to_radians())
-                * Affine::translate((-pivot.0, -pivot.1));
-            let th = 1.5;
-            let edges = [
-                Rect::from_origin_size((x0, y0), (x1 - x0, th)),
-                Rect::from_origin_size((x0, y1 - th), (x1 - x0, th)),
-                Rect::from_origin_size((x0, y0), (th, y1 - y0)),
-                Rect::from_origin_size((x1 - th, y0), (th, y1 - y0)),
-            ];
-            for edge in &edges {
-                scene.fill(Fill::NonZero, rot, PaintRef::Solid(c(tokens::ACCENT)), None, edge);
-            }
-            let hs = 6.0;
-            let handles = [
-                (x0, y0), (x1, y0), (x0, y1), (x1, y1),
-                ((x0 + x1) * 0.5, y0), ((x0 + x1) * 0.5, y1),
-                (x0, (y0 + y1) * 0.5), (x1, (y0 + y1) * 0.5),
-            ];
-            for (cx, cy) in handles {
-                let handle_rect = Rect::from_origin_size((cx - hs * 0.5, cy - hs * 0.5), (hs, hs));
-                scene.fill(Fill::NonZero, rot, PaintRef::Solid(c(tokens::ACCENT)), None, &handle_rect);
-            }
+                // アンカー(回転と拡大の支点)
+                let a = l2s(geom.position.0, geom.position.1);
+                let arm = 6.0;
+                for line in [
+                    peniko::kurbo::Line::new((a.x - arm, a.y), (a.x + arm, a.y)),
+                    peniko::kurbo::Line::new((a.x, a.y - arm), (a.x, a.y + arm)),
+                ] {
+                    scene.stroke(&thin, Affine::IDENTITY, PaintRef::Solid(c(tokens::ACCENT)), None, &line);
+                }
 
-            if self.rings.load(std::sync::atomic::Ordering::Relaxed) {
-            let (mx, my) = ((x0 + x1) * 0.5, (y0 + y1) * 0.5);
-            // 描くのは物理 px、掴むのは論理 px。同じ長さになるよう倍率を戻す
-            // (ここを合わせないと、見えている点と掴める点が別の場所になる)。
-            let per_logical = draw.s / self.fit.s.max(1e-6);
-            let (ra, rb) = ring_radii(x1 - x0, y1 - y0, 1.0 / per_logical);
-            let ring = peniko::kurbo::Stroke::new(1.0);
-            for (a, b) in [(ra, rb * RING_FLAT), (ra * RING_FLAT, rb)] {
-                let e = peniko::kurbo::Ellipse::new((mx, my), (a.abs(), b.abs()), 0.0);
-                scene.stroke(&ring, rot, PaintRef::Solid(c(tokens::INK3)), None, &e);
-            }
-            let (hx, hy) = depth_handle(mx, my, 1.0 / per_logical);
-            let stem = peniko::kurbo::Line::new((mx, my), (hx, hy));
-            scene.stroke(&ring, rot, PaintRef::Solid(c(tokens::INK3)), None, &stem);
-            let dot = peniko::kurbo::Circle::new((hx, hy), 3.5);
-            scene.fill(Fill::NonZero, rot, PaintRef::Solid(c(tokens::ACCENT)), None, &dot);
+                // 枠
+                let mut outline = peniko::kurbo::BezPath::new();
+                outline.move_to(l2s(bx, by));
+                outline.line_to(l2s(bx + bw, by));
+                outline.line_to(l2s(bx + bw, by + bh));
+                outline.line_to(l2s(bx, by + bh));
+                outline.close_path();
+                scene.stroke(&stroke, Affine::IDENTITY, PaintRef::Solid(c(tokens::ACCENT)), None, &outline);
+
+                // 四隅と辺の取っ手
+                let hs = 6.0;
+                let (mx, my) = (bx + bw * 0.5, by + bh * 0.5);
+                for (lx, ly) in [
+                    (bx, by), (bx + bw, by), (bx, by + bh), (bx + bw, by + bh),
+                    (mx, by), (mx, by + bh), (bx, my), (bx + bw, my),
+                ] {
+                    let p = l2s(lx, ly);
+                    let r = Rect::from_origin_size((p.x - hs * 0.5, p.y - hs * 0.5), (hs, hs));
+                    scene.fill(Fill::NonZero, Affine::IDENTITY, PaintRef::Solid(c(tokens::ACCENT)), None, &r);
+                }
+
+                if self.rings.load(std::sync::atomic::Ordering::Relaxed) {
+                    let (ra, rb) = ring_radii(bw, bh, self.fit.s);
+                    for (a, b) in [(ra, rb * RING_FLAT), (ra * RING_FLAT, rb)] {
+                        let mut ring = peniko::kurbo::BezPath::new();
+                        for i in 0..=64 {
+                            let t = i as f64 / 64.0 * std::f64::consts::TAU;
+                            let p = l2s(mx + a * t.cos(), my + b * t.sin());
+                            if i == 0 { ring.move_to(p) } else { ring.line_to(p) }
+                        }
+                        scene.stroke(&thin, Affine::IDENTITY, PaintRef::Solid(c(tokens::INK3)), None, &ring);
+                    }
+                    let (hx, hy) = depth_handle(mx, my, self.fit.s);
+                    let end = l2s(hx, hy);
+                    let stem = peniko::kurbo::Line::new(l2s(mx, my), end);
+                    scene.stroke(&thin, Affine::IDENTITY, PaintRef::Solid(c(tokens::INK3)), None, &stem);
+                    let dot = peniko::kurbo::Circle::new(end, 3.5);
+                    scene.fill(Fill::NonZero, Affine::IDENTITY, PaintRef::Solid(c(tokens::ACCENT)), None, &dot);
+                }
             }
         }
 
@@ -1088,5 +1101,133 @@ mod orbit_tests {
     #[test]
     fn no_movement_keeps_the_original_angles() {
         assert_eq!(orbit_angles((12.0, -5.0), (7.0, 7.0), (7.0, 7.0), 1.0), (12.0, -5.0));
+    }
+}
+
+// ---- 傾いた層の面と、窓の間の写像 --------------------------------------
+//
+// 向きを付けた層は台形に見える。層の面は平面なので、4隅を投影すれば
+// 平面と窓の間は**射影写像**1つで書ける。描くのも掴むのもこれを通せば、
+// 見えている所と掴める所が必ず一致する。
+
+/// 単位正方形 (0,0)(1,0)(1,1)(0,1) を、与えた4点へ送る写像。
+fn homography_from_unit_square(p: [glam::DVec2; 4]) -> glam::DMat3 {
+    let (x0, y0) = (p[0].x, p[0].y);
+    let (x1, y1) = (p[1].x, p[1].y);
+    let (x2, y2) = (p[2].x, p[2].y);
+    let (x3, y3) = (p[3].x, p[3].y);
+    let sx = x0 - x1 + x2 - x3;
+    let sy = y0 - y1 + y2 - y3;
+
+    let (g, h) = if sx.abs() < 1e-9 && sy.abs() < 1e-9 {
+        (0.0, 0.0)
+    } else {
+        let (dx1, dx2) = (x1 - x2, x3 - x2);
+        let (dy1, dy2) = (y1 - y2, y3 - y2);
+        let den = dx1 * dy2 - dx2 * dy1;
+        if den.abs() < 1e-12 {
+            (0.0, 0.0)
+        } else {
+            ((sx * dy2 - dx2 * sy) / den, (dx1 * sy - sx * dy1) / den)
+        }
+    };
+
+    glam::DMat3::from_cols(
+        glam::dvec3(x1 - x0 + g * x1, y1 - y0 + g * y1, g),
+        glam::dvec3(x3 - x0 + h * x3, y3 - y0 + h * y3, h),
+        glam::dvec3(x0, y0, 1.0),
+    )
+}
+
+fn apply_h(m: &glam::DMat3, x: f64, y: f64) -> (f64, f64) {
+    let q = *m * glam::dvec3(x, y, 1.0);
+    if q.z.abs() < 1e-12 {
+        return (f64::NAN, f64::NAN);
+    }
+    (q.x / q.z, q.y / q.z)
+}
+
+/// 層の面と窓の間。`uv` は箱の中の割合(0..1)。
+struct PlaneMap {
+    screen_from_uv: glam::DMat3,
+    uv_from_screen: glam::DMat3,
+}
+
+impl PlaneMap {
+    fn to_screen(&self, u: f64, v: f64) -> (f64, f64) {
+        apply_h(&self.screen_from_uv, u, v)
+    }
+
+    fn to_uv(&self, sx: f64, sy: f64) -> (f64, f64) {
+        apply_h(&self.uv_from_screen, sx, sy)
+    }
+}
+
+/// 層の4隅を窓の点へ落とし、写像を組む。上流が絵を置くのと同じ式で隅を出す
+/// (`tilted_corners`)ので、取っ手は必ず絵の上に乗る。
+fn plane_map(fit: &Fit, geom: &SelGeom) -> PlaneMap {
+    let (bx, by, bw, bh) = geom.box_;
+    let pivot = glam::vec2(geom.position.0 as f32, geom.position.1 as f32);
+    let transform = glam::Affine2::from_translation(pivot)
+        * glam::Affine2::from_angle((geom.rotation as f32).to_radians())
+        * glam::Affine2::from_translation(-pivot);
+
+    let (corner, u, v) = crate::render::compositor::tilted_corners(
+        transform,
+        glam::vec2(bx as f32, by as f32),
+        glam::vec2(bw as f32, bh as f32),
+        geom.z as f32,
+        geom.rotation_x as f32,
+        geom.rotation_y as f32,
+    );
+
+    let projection = crate::doc::core::camera_projection(fit.comp, fit.camera);
+    let clip_from_world = projection.projection_matrix() * projection.view_matrix();
+    let to_screen = |p: glam::Vec3| -> glam::DVec2 {
+        let clip = clip_from_world * glam::Vec4::new(p.x, p.y, p.z, 1.0);
+        let w = if clip.w.abs() < 1e-6 { 1e-6 } else { clip.w };
+        let ndc = glam::vec2(clip.x / w, clip.y / w);
+        let image = glam::vec2(
+            (ndc.x + 1.0) * 0.5 * fit.comp.width as f32,
+            (1.0 - ndc.y) * 0.5 * fit.comp.height as f32,
+        );
+        glam::dvec2(
+            fit.fx + image.x as f64 * fit.s,
+            fit.fy + image.y as f64 * fit.s,
+        )
+    };
+
+    let screen_from_uv = homography_from_unit_square([
+        to_screen(corner),
+        to_screen(corner + u),
+        to_screen(corner + u + v),
+        to_screen(corner + v),
+    ]);
+    PlaneMap {
+        uv_from_screen: screen_from_uv.inverse(),
+        screen_from_uv,
+    }
+}
+
+#[cfg(test)]
+mod plane_tests {
+    use super::*;
+
+    #[test]
+    fn the_map_sends_the_corners_where_they_were_put_and_comes_back() {
+        let p = [
+            glam::dvec2(10.0, 10.0),
+            glam::dvec2(110.0, 20.0),
+            glam::dvec2(90.0, 80.0),
+            glam::dvec2(20.0, 70.0),
+        ];
+        let m = homography_from_unit_square(p);
+        let inv = m.inverse();
+        for (i, (u, v)) in [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)].iter().enumerate() {
+            let (sx, sy) = apply_h(&m, *u, *v);
+            assert!((sx - p[i].x).abs() < 1e-6 && (sy - p[i].y).abs() < 1e-6, "隅 {i} がずれる");
+            let (bu, bv) = apply_h(&inv, sx, sy);
+            assert!((bu - u).abs() < 1e-6 && (bv - v).abs() < 1e-6, "隅 {i} から戻れない");
+        }
     }
 }

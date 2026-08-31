@@ -189,24 +189,24 @@ mod held {
         }
     }
 
-    pub fn down(key: &Key) {
+    pub(crate) fn down(key: &Key) {
         if let Some(b) = bit(key) {
             HELD.fetch_or(b, Ordering::Relaxed);
         }
     }
 
-    pub fn up(key: &Key) {
+    pub(crate) fn up(key: &Key) {
         if let Some(b) = bit(key) {
             HELD.fetch_and(!b, Ordering::Relaxed);
         }
     }
 
     /// 窓から離れると押し下げが取り残されるので、そこで一度捨てる。
-    pub fn clear() {
+    pub(crate) fn clear() {
         HELD.store(0, Ordering::Relaxed);
     }
 
-    pub fn get() -> (bool, bool, bool) {
+    pub(crate) fn get() -> (bool, bool, bool) {
         let h = HELD.load(Ordering::Relaxed);
         (h & CMD != 0, h & SHIFT != 0, h & ALT != 0)
     }
