@@ -61,7 +61,7 @@ impl Default for ObservationCamera {
 }
 
 impl ObservationCamera {
-    fn as_resolved_camera(&self) -> ResolvedCamera {
+    pub fn as_resolved_camera(&self) -> ResolvedCamera {
         ResolvedCamera {
             center: self.pan,
             zoom: self.zoom,

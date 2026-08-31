@@ -402,7 +402,8 @@ body {
 
 #stage {
     display: grid;
-    background: #101010;
+    /* 枠の外も世界。作品の黒と紛れないよう、外は少し明るくしておく */
+    background: var(--app);
     overflow: hidden;
 }
 

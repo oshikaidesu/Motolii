@@ -19,22 +19,48 @@ fn c(rgb: [u8; 3]) -> Color {
     Color::from_rgb8(rgb[0], rgb[1], rgb[2])
 }
 
+/// 窓の点と世界の点の間の写像。**視点(User View)を通す**ので、
+/// 画面を動かしても世界の座標は変わらない。
 #[derive(Clone, Copy)]
 struct Fit {
+    /// 絵を窓へ収める倍率と余白(レターボックス)。
     s: f64,
     fx: f64,
     fy: f64,
+    /// 世界 → 絵の中の画素。視点カメラが決める(上流の写像)。
+    image_from_world: glam::Affine2,
 }
 
 impl Default for Fit {
     fn default() -> Self {
-        Self { s: 1.0, fx: 0.0, fy: 0.0 }
+        Self {
+            s: 1.0,
+            fx: 0.0,
+            fy: 0.0,
+            image_from_world: glam::Affine2::IDENTITY,
+        }
     }
 }
 
 impl Fit {
     fn to_comp(&self, x: f64, y: f64) -> (f64, f64) {
-        ((x - self.fx) / self.s, (y - self.fy) / self.s)
+        let image = glam::vec2(
+            ((x - self.fx) / self.s) as f32,
+            ((y - self.fy) / self.s) as f32,
+        );
+        let world = self.image_from_world.inverse().transform_point2(image);
+        (world.x as f64, world.y as f64)
+    }
+
+    /// 世界の点を窓の点へ。ギズモはこれを通して描く。
+    fn to_screen(&self, wx: f64, wy: f64) -> (f64, f64) {
+        let image = self
+            .image_from_world
+            .transform_point2(glam::vec2(wx as f32, wy as f32));
+        (
+            self.fx + image.x as f64 * self.s,
+            self.fy + image.y as f64 * self.s,
+        )
     }
 }
 
@@ -82,6 +108,7 @@ pub(super) struct StageWidget {
     revision: Signal<u32>,
     selected_size: Arc<Mutex<Option<[f32; 2]>>>,
     gizmo_3d: Arc<std::sync::atomic::AtomicBool>,
+    view_camera: Arc<Mutex<crate::render::engine::ObservationCamera>>,
 }
 
 enum State {
@@ -102,16 +129,36 @@ struct TexAndHandle {
 
 impl StageWidget {
     #[allow(clippy::too_many_arguments)]
-    fn camera_center(&self, rt: RationalTime) -> (f64, f64) {
-        let doc = self.doc.lock().unwrap();
-        let view = doc.view();
-        match PropertyId::new(property::CAMERA_CENTER)
-            .ok()
-            .and_then(|p| view.camera_value_at(&p, rt).ok().flatten())
-        {
-            Some(Value::Vec2([x, y])) => (x, y),
-            _ => (0.0, 0.0),
+    pub(super) fn new(
+        clock: Arc<Clock>,
+        doc: Arc<Mutex<Document>>,
+        selection: Selection,
+        selected_mirror: Signal<Option<LayerId>>,
+        revision: Signal<u32>,
+        selected_size: Arc<Mutex<Option<[f32; 2]>>>,
+        gizmo_3d: Arc<std::sync::atomic::AtomicBool>,
+        view_camera: Arc<Mutex<crate::render::engine::ObservationCamera>>,
+    ) -> Self {
+        Self {
+            state: State::Suspended,
+            frames: 0,
+            clock,
+            doc,
+            selection,
+            selected_mirror,
+            fit: Fit::default(),
+            drag: None,
+            camera_drag: None,
+            revision,
+            selected_size,
+            gizmo_3d,
+            view_camera,
         }
+    }
+
+    fn current_rt(&self) -> RationalTime {
+        let t_sec = self.clock.now_sec();
+        RationalTime::try_new((t_sec * 3000.0) as i64, 3000).unwrap_or(RationalTime::ZERO)
     }
 
     fn layer_f64(&self, layer: LayerId, name: &str) -> f64 {
@@ -136,58 +183,6 @@ impl StageWidget {
 
     fn depth(&self, layer: LayerId) -> f64 {
         self.layer_f64(layer, property::POSITION_Z)
-    }
-
-    fn write_camera(&self, name: &str, value: Value, rt: RationalTime, commit: bool) {
-        let Ok(property) = PropertyId::new(name) else { return };
-        let mut doc = self.doc.lock().unwrap();
-        if !commit {
-            doc.set_camera_transient(property, value);
-            return;
-        }
-        doc.clear_camera_transient(&property);
-        let mut track = doc
-            .view()
-            .camera_track(&property)
-            .ok()
-            .flatten()
-            .unwrap_or_else(KeyframeTrack::new);
-        let t = track.keys().first().map(|k| k.t).unwrap_or(rt);
-        track.insert(Keyframe { t, value, interp: Interp::Linear, spatial: None });
-        match doc.apply(Intent::SetCameraTrack { property, track }) {
-            Ok(_) => println!("PROBE room=write verdict=applied SetCameraTrack {name}"),
-            Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
-        }
-    }
-
-    pub(super) fn new(
-        clock: Arc<Clock>,
-        doc: Arc<Mutex<Document>>,
-        selection: Selection,
-        selected_mirror: Signal<Option<LayerId>>,
-        revision: Signal<u32>,
-        selected_size: Arc<Mutex<Option<[f32; 2]>>>,
-        gizmo_3d: Arc<std::sync::atomic::AtomicBool>,
-    ) -> Self {
-        Self {
-            state: State::Suspended,
-            frames: 0,
-            clock,
-            doc,
-            selection,
-            selected_mirror,
-            fit: Fit::default(),
-            drag: None,
-            camera_drag: None,
-            revision,
-            selected_size,
-            gizmo_3d,
-        }
-    }
-
-    fn current_rt(&self) -> RationalTime {
-        let t_sec = self.clock.now_sec();
-        RationalTime::try_new((t_sec * 3000.0) as i64, 3000).unwrap_or(RationalTime::ZERO)
     }
 
     fn selection_geom(&self, layer: LayerId) -> Option<SelGeom> {
@@ -413,20 +408,8 @@ impl Widget for StageWidget {
                 if dy == 0.0 {
                     return;
                 }
-                let rt = self.current_rt();
-                let doc = self.doc.lock().unwrap();
-                let current = PropertyId::new(property::CAMERA_ZOOM)
-                    .ok()
-                    .and_then(|p| doc.view().camera_value_at(&p, rt).ok().flatten())
-                    .and_then(|v| match v {
-                        Value::F64(v) => Some(v),
-                        _ => None,
-                    })
-                    .unwrap_or(1.0);
-                drop(doc);
-                let next = (current * (1.0 - dy * 0.002)).clamp(0.05, 40.0);
-                self.write_camera(property::CAMERA_ZOOM, Value::F64(next), rt, true);
-                self.revision += 1;
+                let mut view = self.view_camera.lock().unwrap();
+                view.zoom = (view.zoom * (1.0 - dy as f32 * 0.002)).clamp(0.05, 40.0);
             }
             UiEvent::PointerDown(p) => {
                 let (cx, cy) = self.fit.to_comp(p.element.x as f64, p.element.y as f64);
@@ -517,9 +500,10 @@ impl Widget for StageWidget {
                         self.selected_mirror.set(self.selection.get());
                     }
                     None => {
+                        let pan = self.view_camera.lock().unwrap().pan;
                         self.camera_drag = Some(CameraDrag {
                             grab: (cx, cy),
-                            orig_center: self.camera_center(rt),
+                            orig_center: (pan[0] as f64, pan[1] as f64),
                         });
                     }
                 }
@@ -527,12 +511,11 @@ impl Widget for StageWidget {
             UiEvent::PointerMove(p) => {
                 if let Some(cam) = self.camera_drag.as_ref() {
                     let (cx, cy) = self.fit.to_comp(p.element.x as f64, p.element.y as f64);
-                    let next = Value::Vec2([
-                        cam.orig_center.0 - (cx - cam.grab.0),
-                        cam.orig_center.1 - (cy - cam.grab.1),
-                    ]);
-                    self.write_camera(property::CAMERA_CENTER, next, self.current_rt(), false);
-                    self.revision += 1;
+                    let mut view = self.view_camera.lock().unwrap();
+                    view.pan = [
+                        (cam.orig_center.0 - (cx - cam.grab.0)) as f32,
+                        (cam.orig_center.1 - (cy - cam.grab.1)) as f32,
+                    ];
                     return;
                 }
                 let Some(drag) = self.drag.as_ref() else { return };
@@ -576,15 +559,7 @@ impl Widget for StageWidget {
                 }
             }
             UiEvent::PointerUp(p) => {
-                if let Some(cam) = self.camera_drag.take() {
-                    let (cx, cy) = self.fit.to_comp(p.element.x as f64, p.element.y as f64);
-                    let rt = self.current_rt();
-                    let next = Value::Vec2([
-                        cam.orig_center.0 - (cx - cam.grab.0),
-                        cam.orig_center.1 - (cy - cam.grab.1),
-                    ]);
-                    self.write_camera(property::CAMERA_CENTER, next, rt, true);
-                    self.revision += 1;
+                if self.camera_drag.take().is_some() {
                     return;
                 }
                 let Some(drag) = self.drag.take() else { return };
@@ -706,7 +681,12 @@ impl Widget for StageWidget {
         let t_sec = self.clock.now_sec();
         let rt = RationalTime::try_new((t_sec * 3000.0) as i64, 3000).unwrap_or(RationalTime::ZERO);
 
-        if let Err(e) = active.engine.render_frame_into(&view, rt, &target) {
+        // 見るのは視点カメラ、書き出しは Document のカメラ。同じ世界を通る。
+        let observation = *self.view_camera.lock().unwrap();
+        let export_camera = view.resolve_camera(rt).unwrap_or_default();
+        if let Err(e) = active.engine.render_frame_into_with_view_camera(
+            &view, rt, &target, &observation, true,
+        ) {
             println!("PROBE room=stage verdict=render-error {e}");
             return scene;
         }
@@ -749,11 +729,60 @@ impl Widget for StageWidget {
         );
 
         let k = if scale > 0.0 { scale } else { 1.0 };
-        self.fit = Fit { s: s / k, fx: fx / k, fy: fy / k };
+        self.fit = Fit {
+            s: s / k,
+            fx: fx / k,
+            fy: fy / k,
+            image_from_world: crate::doc::core::camera_screen_from_world_z0(
+                crate::doc::core::CompSpec {
+                    width: target.width(),
+                    height: target.height(),
+                },
+                observation.as_resolved_camera(),
+            ),
+        };
+
+        // 描く時は物理 px、掴む時は論理 px。写像を2つ持つ。
+        let draw = Fit {
+            s,
+            fx,
+            fy,
+            image_from_world: self.fit.image_from_world,
+        };
+
+        // 書き出しの枠を世界の中に描く(boxcam)。視点を動かしても枠は世界に残る。
+        {
+            let comp = crate::doc::core::CompSpec {
+                width: target.width(),
+                height: target.height(),
+            };
+            let image_from_world =
+                crate::doc::core::camera_screen_from_world_z0(comp, export_camera);
+            let world_from_image = image_from_world.inverse();
+            let corner = |ix: f32, iy: f32| {
+                let w = world_from_image.transform_point2(glam::vec2(ix, iy));
+                let (sx, sy) = draw.to_screen(w.x as f64, w.y as f64);
+                peniko::kurbo::Point::new(sx, sy)
+            };
+            let (iw, ih) = (comp.width as f32, comp.height as f32);
+            let mut frame = peniko::kurbo::BezPath::new();
+            frame.move_to(corner(0.0, 0.0));
+            frame.line_to(corner(iw, 0.0));
+            frame.line_to(corner(iw, ih));
+            frame.line_to(corner(0.0, ih));
+            frame.close_path();
+            scene.stroke(
+                &peniko::kurbo::Stroke::new(1.0).with_dashes(0.0, [4.0, 4.0]),
+                Affine::IDENTITY,
+                PaintRef::Solid(c(tokens::INK3)),
+                None,
+                &frame,
+            );
+        }
 
         for (bx, by, bw, bh) in &secondary_boxes {
-            let (x0, y0) = (fx + bx * s, fy + by * s);
-            let (x1, y1) = (fx + (bx + bw) * s, fy + (by + bh) * s);
+            let (x0, y0) = draw.to_screen(*bx, *by);
+            let (x1, y1) = draw.to_screen(bx + bw, by + bh);
             let th = 1.0;
             let edges = [
                 Rect::from_origin_size((x0, y0), (x1 - x0, th)),
@@ -768,7 +797,7 @@ impl Widget for StageWidget {
 
         if let Some(((_, _, _, _), position, _)) = selected_box {
             // アンカー(回転と拡大の支点)。今まで描いていなかったので位置が見えなかった。
-            let (ax, ay) = (fx + position.0 * s, fy + position.1 * s);
+            let (ax, ay) = draw.to_screen(position.0, position.1);
             let arm = 6.0;
             let th = 1.0;
             for edge in [
@@ -780,9 +809,9 @@ impl Widget for StageWidget {
         }
 
         if let Some(((bx, by, bw, bh), position, rotation)) = selected_box {
-            let (x0, y0) = (fx + bx * s, fy + by * s);
-            let (x1, y1) = (fx + (bx + bw) * s, fy + (by + bh) * s);
-            let pivot = (fx + position.0 * s, fy + position.1 * s);
+            let (x0, y0) = draw.to_screen(bx, by);
+            let (x1, y1) = draw.to_screen(bx + bw, by + bh);
+            let pivot = draw.to_screen(position.0, position.1);
             let rot = Affine::translate(pivot)
                 * Affine::rotate(rotation.to_radians())
                 * Affine::translate((-pivot.0, -pivot.1));

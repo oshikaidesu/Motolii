@@ -58,6 +58,8 @@ pub(super) struct Session {
     pub timeline_rx: std::rc::Rc<std::sync::mpsc::Receiver<TimelineMsg>>,
     /// 起動時に読んだ素材と見出し。動かないので窓が何枚でも1つ。
     pub ui: Arc<crate::ui::fixture::UiData>,
+    /// 見る側のカメラ(User View)。**Document には入らない** — 書き出しには出ない。
+    pub view_camera: Arc<Mutex<crate::render::engine::ObservationCamera>>,
     /// 今どのキーを掴んでいるか。イージングを触る口が要る(Document には入らない)。
     pub selected_keys: Arc<Mutex<Vec<KeySel>>>,
 }
@@ -92,6 +94,7 @@ impl Session {
             timeline_rx: std::rc::Rc::new(timeline_rx),
             ui: Arc::new(ui),
             selected_keys: Arc::new(Mutex::new(Vec::new())),
+            view_camera: Arc::new(Mutex::new(Default::default())),
         }
     }
 }
