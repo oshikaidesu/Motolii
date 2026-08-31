@@ -95,16 +95,17 @@ pub(super) fn utility_panel(
             .is_some_and(|a| a.flatten)
     });
 
-    let spots: [(&str, f64, f64); 9] = [
-        ("左上", 0.0, 0.0),
-        ("上", 0.5, 0.0),
-        ("右上", 1.0, 0.0),
-        ("左", 0.0, 0.5),
-        ("中心", 0.5, 0.5),
-        ("右", 1.0, 0.5),
-        ("左下", 0.0, 1.0),
-        ("下", 0.5, 1.0),
-        ("右下", 1.0, 1.0),
+    // 升の並びそのものが意味なので、言葉は置かない(裁定451)。
+    let spots: [(f64, f64); 9] = [
+        (0.0, 0.0),
+        (0.5, 0.0),
+        (1.0, 0.0),
+        (0.0, 0.5),
+        (0.5, 0.5),
+        (1.0, 0.5),
+        (0.0, 1.0),
+        (0.5, 1.0),
+        (1.0, 1.0),
     ];
 
     rsx!(
@@ -112,7 +113,7 @@ pub(super) fn utility_panel(
             div { class: "sec", "ANCHOR" }
             if let (Some(layer), Some(size)) = (selection, size) {
                 div { class: "anchorgrid",
-                    for (label , fx , fy) in spots.iter().copied() {
+                    for (fx , fy) in spots.iter().copied() {
                         span {
                             class: "aspot",
                             onclick: {
@@ -122,16 +123,19 @@ pub(super) fn utility_panel(
                                     *revision.write() += 1;
                                 }
                             },
-                            "{label}"
+                            span { class: "adot" }
                         }
                     }
                 }
+            } else if selection.is_none() {
+                div { class: "prow", span { class: "n empty", "No selection" } }
             } else {
-                div { class: "prow", span { class: "n empty", "層を選ぶ" } }
+                // 層は選ばれているが、まだ箱を測れていない(Stage が測る)。
+                div { class: "prow", span { class: "n empty", "No box yet" } }
             }
             div { class: "sec", "GIZMO" }
             div { class: "prow",
-                span { class: "n", "掴む物" }
+                span { class: "n", "Grab" }
                 span {
                     class: if three_d { "v" } else { "v content" },
                     onclick: {
@@ -141,7 +145,7 @@ pub(super) fn utility_panel(
                             *revision.write() += 1;
                         }
                     },
-                    "平面"
+                    "Plane"
                 }
                 span {
                     class: if three_d { "v content" } else { "v" },
@@ -152,16 +156,16 @@ pub(super) fn utility_panel(
                             *revision.write() += 1;
                         }
                     },
-                    "立体"
+                    "Space"
                 }
             }
             if three_d {
-                div { class: "prow", span { class: "n empty", "ドラッグで向き・⌥ドラッグで奥行き" } }
+                div { class: "prow", span { class: "n empty", "drag = orient · ⌥drag = depth" } }
             }
             div { class: "sec", "3D" }
             if let Some(layer) = selection {
                 div { class: "prow",
-                    span { class: "n", "収める" }
+                    span { class: "n", "Fit into" }
                     span {
                         class: if flattened { "v" } else { "v content" },
                         onclick: {
@@ -171,7 +175,7 @@ pub(super) fn utility_panel(
                                 *revision.write() += 1;
                             }
                         },
-                        "空間"
+                        "Space"
                     }
                     span {
                         class: if flattened { "v content" } else { "v" },
@@ -182,11 +186,11 @@ pub(super) fn utility_panel(
                                 *revision.write() += 1;
                             }
                         },
-                        "平面"
+                        "Plane"
                     }
                 }
             } else {
-                div { class: "prow", span { class: "n empty", "層を選ぶ" } }
+                div { class: "prow", span { class: "n empty", "No selection" } }
             }
         }
     )

@@ -456,7 +456,7 @@ pub(super) fn browser_panel(
         )
     });
     let footer_hint = if selected().is_some() {
-        "⌥click で選択中の層を差し替え"
+        "⌥click to replace source"
     } else {
         "Edit tags"
     };
@@ -591,7 +591,7 @@ pub(super) fn browser_panel(
                                     move |_| spawn_layer(&doc, &clock, layer_rows, attrs_state, &timeline_tx, NewKind::Text, "text", revision)
                                 },
                                 div { class: "thumb", style: "background:#222; display:flex; align-items:center; justify-content:center;",
-                                    span { style: "color:#fff; font-size:32px;", "あ" }
+                                    span { style: "color:#fff; font-size:32px;", "T" }
                                 }
                                 span { class: "tname", "Text" }
                                 span { class: "tmeta", "text layer" }

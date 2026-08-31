@@ -386,7 +386,7 @@ pub(super) fn inspector_panel(
                 .and_then(|p| view.attrs(p).ok().flatten().map(|a| a.name))
                 .unwrap_or_else(|| "なし".to_string())
         }
-        None => "なし".to_string(),
+        None => "None".to_string(),
     };
     let has_children = match selection {
         Some(layer) => {
@@ -512,7 +512,7 @@ pub(super) fn inspector_panel(
             if let Some(layer) = selection {
                 div { class: "sec", "PARENT" }
                 div { class: "prow",
-                    span { class: "n", "親" }
+                    span { class: "n", "Parent" }
                     span {
                         class: "v content",
                         onclick: move |_| {
@@ -535,7 +535,7 @@ pub(super) fn inspector_panel(
                             }
                         },
                         span { class: "n", "" }
-                        span { class: "v content", "なし" }
+                        span { class: "v content", "None" }
                     }
                     for (candidate , name) in candidates.iter().cloned() {
                         div {
@@ -570,8 +570,8 @@ pub(super) fn inspector_panel(
                                 }
                             }
                         },
-                        span { class: "n", "束" }
-                        span { class: "v content", if frozen { "解く" } else { "凍らせる" } }
+                        span { class: "n", "Group" }
+                        span { class: "v content", if frozen { "Unfreeze" } else { "Freeze" } }
                     }
                 }
             }

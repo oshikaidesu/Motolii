@@ -569,11 +569,22 @@ body {
     padding: var(--sp2);
 }
 
+.adot {
+    width: calc(4 * var(--s) * 1px);
+    height: calc(4 * var(--s) * 1px);
+    background: var(--ink2);
+}
+
+.aspot:hover .adot {
+    background: var(--accent);
+}
+
 .aspot {
-    text-align: center;
-    padding: var(--sp1) 0;
+    height: calc(16 * var(--s) * 1px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
     border: 1px solid var(--border);
-    color: var(--ink2);
 }
 
 .aspot:hover {

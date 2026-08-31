@@ -398,7 +398,7 @@ pub fn app() -> Element {
                 if let Some(panel) = d.active(zone) {
                     div { class: "zbody", {body(panel)} }
                 } else if dropping {
-                    div { class: "zhint", "ここへ落とす" }
+                    div { class: "zhint", "Drop here" }
                 }
             }
         )
@@ -765,7 +765,7 @@ pub fn app() -> Element {
                                                 host.open(panel);
                                             }
                                         },
-                                        "別窓"
+                                        "Window"
                                     }
                                 }
                             }
