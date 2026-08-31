@@ -203,6 +203,7 @@ pub fn app() -> Element {
     let mut drag = use_signal(|| Option::<DragSplit>::None);
     let mut dock = use_signal(Dock::default);
     let mut tab_drag = use_signal(|| Option::<Panel>::None);
+    let mut drop_zone = use_signal(|| Option::<Zone>::None);
     let mut view_open = use_signal(|| false);
     let mut scale_pct = use_signal(|| 100u32);
 
@@ -242,23 +243,43 @@ pub fn app() -> Element {
     let css = format!("{}{}", tokens::css_root(scale_pct()), STYLES);
 
     let d = dock();
-    let px = |on: bool, v: f64| if on { format!("{v}px") } else { "0px".to_string() };
-    let left_w = px(!d.panels(Zone::Left).is_empty(), bw);
-    let right_w = px(!d.panels(Zone::Right).is_empty(), iw);
-    let grip_l = px(!d.panels(Zone::Left).is_empty(), 8.0);
-    let grip_r = px(!d.panels(Zone::Right).is_empty(), 8.0);
-    let bottom_h = px(!d.panels(Zone::Bottom).is_empty(), th);
-    let grip_b = px(!d.panels(Zone::Bottom).is_empty(), 8.0);
+    // 掴んでいる間は空の置き場も開けておく。畳んだままだと戻す場所が無くなる。
+    let holding = tab_drag().is_some();
+    let px = |zone: Zone, v: f64| {
+        let filled = !d.panels(zone).is_empty();
+        match (filled, holding) {
+            (true, _) => format!("{v}px"),
+            (false, true) => format!("{}px", v.min(96.0)),
+            (false, false) => "0px".to_string(),
+        }
+    };
+    let left_w = px(Zone::Left, bw);
+    let right_w = px(Zone::Right, iw);
+    let grip_l = px(Zone::Left, 8.0);
+    let grip_r = px(Zone::Right, 8.0);
+    let bottom_h = px(Zone::Bottom, th);
+    let grip_b = px(Zone::Bottom, 8.0);
 
     let body = |panel: Panel| -> Element { panel_body(panel, &session, &loaded, panes) };
     let zone_view = |zone: Zone| -> Element {
         let d = dock();
         let panels = d.panels(zone).to_vec();
         let dropping = tab_drag().is_some();
-        let strip_class = if dropping { "ptabs drop" } else { "ptabs" };
+        let here = dropping && drop_zone() == Some(zone);
+        let strip_class = if here { "ptabs drop" } else { "ptabs" };
+        let zone_class = match (panels.is_empty(), here) {
+            (_, true) => "zone here",
+            (true, false) => "zone empty",
+            (false, false) => "zone",
+        };
         rsx!(
             div {
-                class: if panels.is_empty() { "zone empty" } else { "zone" },
+                class: "{zone_class}",
+                onmousemove: move |_| {
+                    if tab_drag.peek().is_some() && *drop_zone.peek() != Some(zone) {
+                        drop_zone.set(Some(zone));
+                    }
+                },
                 onmouseup: move |_| {
                     if let Some(panel) = tab_drag.write().take() {
                         dock.write().place(panel, zone);
@@ -282,6 +303,8 @@ pub fn app() -> Element {
                 }
                 if let Some(panel) = d.active(zone) {
                     div { class: "zbody", {body(panel)} }
+                } else if dropping {
+                    div { class: "zhint", "ここへ落とす" }
                 }
             }
         )
@@ -313,6 +336,17 @@ pub fn app() -> Element {
             onmouseup: move |_| {
                 *drag.write() = None;
                 *tab_drag.write() = None;
+                *drop_zone.write() = None;
+            },
+            onmouseleave: {
+                let host = host.clone();
+                move |_| {
+                    let Some(panel) = tab_drag.write().take() else { return };
+                    println!("PROBE room=dock verdict=detach panel={panel}");
+                    *drop_zone.write() = None;
+                    dock.write().detach(panel);
+                    host.open(panel);
+                }
             },
             onkeydown: {
                 let doc = doc.clone();

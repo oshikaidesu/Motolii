@@ -86,6 +86,37 @@ impl Gui {
         self.doc.inner().custom_widget_node_ids().len()
     }
 
+    /// 選択子に当たる要素の class 属性。
+    fn classes(&mut self, selector: &str) -> Vec<String> {
+        self.doc
+            .inner()
+            .query_selector_all(selector)
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|n| {
+                self.doc.inner().get_node(n).and_then(|node| {
+                    node.attrs().map(|attrs| {
+                        attrs
+                            .iter()
+                            .find(|a| a.name.local.as_ref() == "class")
+                            .map(|a| a.value.clone())
+                            .unwrap_or_default()
+                    })
+                })
+            })
+            .collect()
+    }
+
+    fn size_of_nth(&mut self, selector: &str, nth: usize) -> (f32, f32) {
+        let inner = self.doc.inner();
+        let nodes = inner.query_selector_all(selector).unwrap_or_default();
+        let node = *nodes
+            .get(nth)
+            .unwrap_or_else(|| panic!("`{selector}` の {nth} 番が居ない"));
+        let layout = inner.get_node(node).expect("node").final_layout();
+        (layout.size.width, layout.size.height)
+    }
+
     fn center_of(&mut self, selector: &str, nth: usize) -> (f32, f32) {
         let nodes = self
             .doc
@@ -309,4 +340,66 @@ fn a_panel_that_draws_itself_still_draws_after_being_moved() {
         2,
         "移した先で widget が付いていない(CustomWidgetAttr は一度しか中身を渡せない): {strips:?}"
     );
+}
+
+#[test]
+fn the_zone_under_the_pointer_lights_up_while_a_tab_is_held() {
+    let mut gui = Gui::open();
+    let tabs = gui.texts(".ptab");
+    let at = |name: &str| tabs.iter().position(|t| t == name).unwrap_or_else(|| panic!("{name} タブ"));
+
+    let from = gui.center_of(".ptab", at("Stage"));
+    let to = gui.center_of(".ptab", at("Timeline"));
+
+    gui.press(from.0, from.1);
+    gui.motion(to.0, to.1);
+    gui.settle();
+
+    let lit: Vec<String> = gui.classes(".zone").into_iter().filter(|c| c.contains("here")).collect();
+    assert_eq!(lit.len(), 1, "掴んでいる時に落とし先が1つだけ光っていない: {:?}", gui.classes(".zone"));
+}
+
+/// 窓の外へ引き出したら別窓になる。窓の縁より外へ運んで離す。
+#[test]
+fn dragging_a_tab_out_of_the_window_takes_it_off_the_dock() {
+    let mut gui = Gui::open();
+    let tabs = gui.texts(".ptab");
+    let at = |name: &str| tabs.iter().position(|t| t == name).unwrap_or_else(|| panic!("{name} タブ"));
+
+    let from = gui.center_of(".ptab", at("Stage"));
+    gui.press(from.0, from.1);
+    gui.motion(from.0, from.1 + 40.0);
+    gui.motion(-20.0, (H as f32) / 2.0);
+    gui.settle();
+
+    let tabs = gui.texts(".ptab");
+    assert!(
+        !tabs.iter().any(|t| t == "Stage"),
+        "窓の外へ引き出したのに置き場に残っている: {tabs:?}"
+    );
+}
+
+/// 空になった置き場は畳まれるが、掴んでいる間は戻せる大きさに開く。
+#[test]
+fn an_emptied_zone_opens_again_while_a_tab_is_held() {
+    let mut gui = Gui::open();
+    let tabs = gui.texts(".ptab");
+    let at = |name: &str| tabs.iter().position(|t| t == name).unwrap_or_else(|| panic!("{name} タブ"));
+
+    // 下の置き場を空にする
+    let from = gui.center_of(".ptab", at("Timeline"));
+    let to = gui.center_of(".ptab", at("Media"));
+    gui.drag(from, to);
+    assert!(gui.zone_tabs()[3].is_empty(), "下の置き場が空になっていない");
+
+    // 掴むと開く
+    let tabs = gui.texts(".ptab");
+    let at = |name: &str| tabs.iter().position(|t| t == name).unwrap_or_else(|| panic!("{name} タブ"));
+    let from = gui.center_of(".ptab", at("Timeline"));
+    gui.press(from.0, from.1);
+    gui.motion(from.0, from.1 + 20.0);
+    gui.settle();
+
+    let (_, h) = gui.size_of_nth(".zone", 3);
+    assert!(h > 40.0, "掴んでいるのに空の置き場が開かない: 高さ {h}");
 }
