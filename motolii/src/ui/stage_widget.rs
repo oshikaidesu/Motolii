@@ -995,6 +995,16 @@ impl Widget for StageWidget {
         *self.selected_size.lock().unwrap() =
             primary_geom.as_ref().map(|g| [g.natural.0 as f32, g.natural.1 as f32]);
         let selected_box = primary_geom;
+        // 画角の外に出た形を薄く見せるため、**全部の層**の形を集める。
+        // 絵の下に敷くので、枠の中は撮れた絵が覆い、外だけが残る。
+        let all_geoms: Vec<_> = if self.output_only {
+            Vec::new()
+        } else {
+            view.layers()
+                .into_iter()
+                .filter_map(|l| selection_geom_in(&active.engine, &view, l, rt))
+                .collect()
+        };
         let secondary_boxes: Vec<_> = self
             .selection
             .all()
@@ -1075,6 +1085,39 @@ impl Widget for StageWidget {
             None,
             &frame,
         );
+        // 画角の外に在る形。**絵の下**に敷くので、枠の中は撮れた絵で隠れ、
+        // はみ出した所だけが薄く残る。出ている物が見えないと、外へ逃がした
+        // つもりの物が本当に外に在るのか確かめられない。
+        for geom in &all_geoms {
+            let (_, _, bw, bh) = geom.box_;
+            if bw.abs() < 1e-9 || bh.abs() < 1e-9 {
+                continue;
+            }
+            let map = plane_map(&draw, geom);
+            let p = |u: f64, v: f64| {
+                let (x, y) = map.to_screen(u, v);
+                peniko::kurbo::Point::new(x, y)
+            };
+            let mut quad = peniko::kurbo::BezPath::new();
+            quad.move_to(p(0.0, 0.0));
+            quad.line_to(p(1.0, 0.0));
+            quad.line_to(p(1.0, 1.0));
+            quad.line_to(p(0.0, 1.0));
+            quad.close_path();
+            scene.fill(
+                Fill::NonZero,
+                Affine::IDENTITY,
+                PaintRef::Solid(Color::from_rgba8(
+                    tokens::INK[0],
+                    tokens::INK[1],
+                    tokens::INK[2],
+                    90,
+                )),
+                None,
+                &quad,
+            );
+        }
+
         scene.fill(
             Fill::NonZero,
             Affine::IDENTITY,
