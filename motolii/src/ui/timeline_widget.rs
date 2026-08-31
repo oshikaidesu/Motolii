@@ -566,6 +566,15 @@ impl Widget for TimelineWidget {
             UiEvent::PointerMove(p) => {
                 let (x, y) = (p.element.x as f64, p.element.y as f64);
                 self.cursor = Some((x, y));
+                // 帯の外で離すと、離した事がここへ届かない。掴んだままの絵が残り、
+                // **見えている物が作品と食い違う**。指が上がっていたら掴みを解く。
+                if p.buttons.is_empty() && (self.drag.is_some() || self.scrubbing || self.marquee.is_some()) {
+                    println!("PROBE room=input verdict=drag-dropped reason=release-not-seen");
+                    self.drag = None;
+                    self.scrubbing = false;
+                    self.marquee = None;
+                    return;
+                }
                 if self.scrubbing {
                     if let Some(clock) = &self.clock {
                         clock.seek(self.scroll_sec + x / self.pps);

@@ -666,6 +666,28 @@ impl Widget for StageWidget {
                 }
             }
             UiEvent::PointerMove(p) => {
+                // 枠の外で離すと、離した事がここへ届かない。掴んだままの絵が残る。
+                if p.buttons.is_empty() && (self.drag.is_some() || self.camera_drag.is_some()) {
+                    println!("PROBE room=input verdict=drag-dropped reason=release-not-seen");
+                    if let Some(drag) = self.drag.take() {
+                        let mut doc = self.doc.lock().unwrap();
+                        for name in [
+                            property::POSITION,
+                            property::SCALE,
+                            property::ROTATION,
+                            property::ROTATION_X,
+                            property::ROTATION_Y,
+                            property::POSITION_Z,
+                        ] {
+                            if let Ok(prop) = PropertyId::new(name) {
+                                doc.clear_transient(drag.layer, &prop);
+                            }
+                        }
+                    }
+                    self.camera_drag = None;
+                    self.revision += 1;
+                    return;
+                }
                 if self.camera_drag.is_some() {
                     let at = self.fit.to_comp(p.element.x as f64, p.element.y as f64);
                     let cam = self.camera_drag.as_mut().expect("直前に居ることを見た");
