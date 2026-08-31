@@ -28,6 +28,8 @@ pub(super) struct LayerRow {
     /// 属性の行なら属性名。層そのものの行なら None。
     pub prop: Option<String>,
     pub expanded: bool,
+    /// 入れ子の深さ。0 が親を持たない層。
+    pub depth: u16,
 }
 
 const TRANSFORM_PROPS: &[&str] = &[
@@ -70,15 +72,49 @@ pub(super) fn keyed_only() -> bool {
 }
 
 /// 画面に出る行の並び。左の名前列と右の帯は必ずこれを通す(ずれると別物になる)。
-fn rows_of(doc: &Document) -> Vec<(LayerId, Option<PropertyId>)> {
+struct Row {
+    layer: LayerId,
+    prop: Option<PropertyId>,
+    depth: u16,
+}
+
+fn rows_of(doc: &Document) -> Vec<Row> {
+    let (expanded, keyed_only) = {
+        let v = timeline_view().lock().unwrap();
+        (v.expanded.clone(), v.keyed_only)
+    };
+    rows_nested(doc, &expanded, keyed_only)
+}
+
+fn rows_nested(
+    doc: &Document,
+    expanded: &std::collections::BTreeSet<LayerId>,
+    keyed_only: bool,
+) -> Vec<Row> {
     let view = doc.view();
-    let v = timeline_view().lock().unwrap();
     let mut layers = view.layers();
     layers.sort_by_key(|l| std::cmp::Reverse(view.meta(*l).ok().flatten().map(|m| m.order).unwrap_or(0)));
+
+    let present: std::collections::HashSet<LayerId> = layers.iter().copied().collect();
+    let parent_of = |l: LayerId| {
+        view.attrs(l)
+            .ok()
+            .flatten()
+            .and_then(|a| a.parent)
+            .filter(|p| present.contains(p) && *p != l)
+    };
+
     let mut out = Vec::new();
-    for layer in layers {
-        out.push((layer, None));
-        if !v.expanded.contains(&layer) {
+    let mut stack: Vec<(LayerId, u16)> = layers
+        .iter()
+        .rev()
+        .filter(|l| parent_of(**l).is_none())
+        .map(|l| (*l, 0))
+        .collect();
+
+    while let Some((layer, depth)) = stack.pop() {
+        out.push(Row { layer, prop: None, depth });
+        if !expanded.contains(&layer) {
             continue;
         }
         for name in TRANSFORM_PROPS {
@@ -86,11 +122,18 @@ fn rows_of(doc: &Document) -> Vec<(LayerId, Option<PropertyId>)> {
                 continue;
             };
             let keyed = matches!(view.track(layer, &property), Ok(Some(t)) if !t.keys().is_empty());
-            if v.keyed_only && !keyed {
+            if keyed_only && !keyed {
                 continue;
             }
-            out.push((layer, Some(property)));
+            out.push(Row { layer, prop: Some(property), depth });
         }
+        stack.extend(
+            layers
+                .iter()
+                .rev()
+                .filter(|c| parent_of(**c) == Some(layer))
+                .map(|c| (*c, depth + 1)),
+        );
     }
     out
 }
@@ -104,7 +147,7 @@ pub(super) fn canvas_rows_from_doc(doc: &Document) -> Vec<CanvasRow> {
 
     rows_of(doc)
         .into_iter()
-        .map(|(layer, prop)| {
+        .map(|Row { layer, prop, .. }| {
             let color_ix = view
                 .attrs(layer)
                 .ok()
@@ -161,7 +204,7 @@ pub(super) fn layer_rows_from_doc(doc: &Document) -> Vec<LayerRow> {
     let view = doc.view();
     rows_of(doc)
         .into_iter()
-        .map(|(layer, prop)| {
+        .map(|Row { layer, prop, depth }| {
             let attrs = view.attrs(layer).ok().flatten().unwrap_or_default();
             let color = attrs
                 .label_color
@@ -180,6 +223,7 @@ pub(super) fn layer_rows_from_doc(doc: &Document) -> Vec<LayerRow> {
                 locked: attrs.locked,
                 prop: prop.map(|p| p.name().to_string()),
                 expanded,
+                depth,
             }
         })
         .collect()
@@ -749,5 +793,34 @@ mod row_tests {
 
         toggle_expanded(LayerId(2));
         assert!(layer_rows_from_doc(&doc).iter().all(|r| r.prop.is_none()));
+    }
+}
+
+#[cfg(test)]
+mod nest_tests {
+    use super::*;
+
+    /// 裁定: グループは層で、Timeline は入れ子で出す(2026-08-31)。
+    #[test]
+    fn a_child_comes_under_its_parent_one_step_in_and_hides_when_folded() {
+        let doc = crate::doc::fixture::build().doc;
+        let named = |rows: &[Row], name: &str| {
+            let view = doc.view();
+            rows.iter().position(|r| {
+                r.prop.is_none()
+                    && view.attrs(r.layer).ok().flatten().map(|a| a.name).as_deref() == Some(name)
+            })
+        };
+
+        let folded = rows_nested(&doc, &Default::default(), false);
+        let parent_ix = named(&folded, "ダンスカット").expect("親の行がある");
+        assert!(named(&folded, "グリッチトランジション").is_none(), "畳んだ親の子が出ている");
+
+        let parent = folded[parent_ix].layer;
+        let opened = rows_nested(&doc, &[parent].into_iter().collect(), false);
+        let p = named(&opened, "ダンスカット").expect("親の行がある");
+        let c = named(&opened, "グリッチトランジション").expect("開いたのに子が出ない");
+        assert!(c > p, "子が親より上に居る");
+        assert_eq!(opened[c].depth, opened[p].depth + 1, "子が一段内側に居ない");
     }
 }

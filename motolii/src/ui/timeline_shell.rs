@@ -98,9 +98,10 @@ pub(super) fn timeline_shell(
                 }
             )
         };
+        let indent = format!("padding-left:{}px", row.depth as u32 * 12);
         if let Some(name) = row.prop.clone() {
             return rsx!(
-                div { class: "lrow",
+                div { class: "lrow", style: "{indent}",
                     span { class: "lprop", "{name}" }
                 }
             );
@@ -109,7 +110,7 @@ pub(super) fn timeline_shell(
         let editing_name = renaming().filter(|(l, _)| *l == layer).map(|(_, n)| n);
         let doc_rename = doc.clone();
         rsx!(
-            div { class: "lrow",
+            div { class: "lrow", style: "{indent}",
                 span {
                     class: "twirl",
                     onclick: {
