@@ -1008,7 +1008,6 @@ impl Widget for StageWidget {
             .into_iter()
             .filter(|l| Some(*l) != primary_layer)
             .filter_map(|l| selection_geom_in(&active.engine, &view, l, rt))
-            .map(|geom| geom.box_)
             .collect();
 
         drop(view);
@@ -1090,19 +1089,31 @@ impl Widget for StageWidget {
             &frame,
         );
 
-        for (bx, by, bw, bh) in &secondary_boxes {
-            let (x0, y0) = draw.to_screen(*bx, *by);
-            let (x1, y1) = draw.to_screen(bx + bw, by + bh);
-            let th = 1.0;
-            let edges = [
-                Rect::from_origin_size((x0, y0), (x1 - x0, th)),
-                Rect::from_origin_size((x0, y1 - th), (x1 - x0, th)),
-                Rect::from_origin_size((x0, y0), (th, y1 - y0)),
-                Rect::from_origin_size((x1 - th, y0), (th, y1 - y0)),
-            ];
-            for edge in &edges {
-                scene.fill(Fill::NonZero, Affine::IDENTITY, PaintRef::Solid(c(tokens::ACCENT)), None, edge);
+        // 副次の選択も**同じ写像**で描く。長方形で描くと、回した層や奥に在る層で
+        // 枠だけが別の場所に残る。
+        for geom in &secondary_boxes {
+            let (_, _, bw, bh) = geom.box_;
+            if bw.abs() < 1e-9 || bh.abs() < 1e-9 {
+                continue;
             }
+            let map = plane_map(&draw, geom);
+            let p = |u: f64, v: f64| {
+                let (x, y) = map.to_screen(u, v);
+                peniko::kurbo::Point::new(x, y)
+            };
+            let mut outline = peniko::kurbo::BezPath::new();
+            outline.move_to(p(0.0, 0.0));
+            outline.line_to(p(1.0, 0.0));
+            outline.line_to(p(1.0, 1.0));
+            outline.line_to(p(0.0, 1.0));
+            outline.close_path();
+            scene.stroke(
+                &peniko::kurbo::Stroke::new(1.0),
+                Affine::IDENTITY,
+                PaintRef::Solid(c(tokens::ACCENT)),
+                None,
+                &outline,
+            );
         }
 
         if let Some(geom) = &selected_box {
