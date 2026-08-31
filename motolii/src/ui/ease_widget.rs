@@ -9,7 +9,7 @@ use peniko::kurbo::{Affine, BezPath, Circle, Line, Point, Rect, Stroke};
 use peniko::{Color, Fill};
 
 use crate::doc::store::Interp;
-use crate::ui::ease_model::{handles, overshoots, KINDS};
+use crate::ui::ease_model::{handles, hold_in_range, overshoots, KINDS};
 use crate::ui::session::{KeySel, Session};
 use crate::ui::tokens;
 
@@ -76,8 +76,23 @@ impl EaseWidget {
         (0.0..=1.0).contains(&u).then_some(u)
     }
 
+    /// 盤の右上に置く2つの小さな道具。左=写す、右=枠の外へ出す許し。
+    fn tools(&self) -> [Rect; 2] {
+        let top = PAD * 0.5;
+        let size = 14.0;
+        let right = self.size.0 - PAD * 0.5;
+        [
+            Rect::new(right - size * 2.0 - 6.0, top, right - size - 6.0, top + size),
+            Rect::new(right - size, top, right, top + size),
+        ]
+    }
+
     fn view(&self) -> (f64, f64) {
-        if overshoots(*self.shape.lock().unwrap()) {
+        let free = self
+            .session
+            .overshoot
+            .load(std::sync::atomic::Ordering::Relaxed);
+        if free || overshoots(*self.shape.lock().unwrap()) {
             OVERSHOOT_VIEW
         } else {
             STANDARD_VIEW
@@ -129,6 +144,25 @@ impl Widget for EaseWidget {
         match event {
             UiEvent::PointerDown(p) => {
                 let point = Point::new(p.element.x as f64, p.element.y as f64);
+                let [copy, free] = self.tools();
+                if copy.contains(point) {
+                    let starts = self.starts();
+                    if let Some(first) = starts.first() {
+                        let shape = crate::ui::ease::shape_of(&self.session, first);
+                        *self.session.curve_clip.lock().unwrap() = Some(shape);
+                    }
+                    return;
+                }
+                if free.contains(point) {
+                    let now = self
+                        .session
+                        .overshoot
+                        .load(std::sync::atomic::Ordering::Relaxed);
+                    self.session
+                        .overshoot
+                        .store(!now, std::sync::atomic::Ordering::Relaxed);
+                    return;
+                }
                 let shape = *self.shape.lock().unwrap();
                 self.holding = handles(shape)
                     .iter()
@@ -141,7 +175,11 @@ impl Widget for EaseWidget {
                 let Some(handle) = handles(*shape).into_iter().nth(which) else {
                     return;
                 };
-                *shape = (handle.moved)(*shape, (cu, cv));
+                let free = self
+                    .session
+                    .overshoot
+                    .load(std::sync::atomic::Ordering::Relaxed);
+                *shape = hold_in_range((handle.moved)(*shape, (cu, cv)), free);
             }
             UiEvent::PointerUp(_) => {
                 if self.holding.take().is_some() {
@@ -258,6 +296,39 @@ impl Widget for EaseWidget {
             let p = self.to_px(handle.at.0, handle.at.1);
             s.fill(Fill::NonZero, at, PaintRef::Solid(accent), None, &Circle::new(p, 5.0));
         }
+
+        // 道具。写す = 札が2枚重なった形、外へ出す = 箱の上下へ伸びた形。
+        let [copy, free] = self.tools();
+        let thin = Stroke::new(1.0 / k);
+        let held = self.session.curve_clip.lock().unwrap().is_some();
+        let copy_ink = if held { accent } else { dim };
+        s.stroke(&thin, at, PaintRef::Solid(copy_ink), None, &copy.inset(-4.0));
+        s.stroke(
+            &thin,
+            at,
+            PaintRef::Solid(copy_ink),
+            None,
+            &copy.inset(-4.0).with_origin((copy.x0 + 4.0, copy.y0 + 4.0)),
+        );
+
+        let open = self
+            .session
+            .overshoot
+            .load(std::sync::atomic::Ordering::Relaxed);
+        let free_ink = if open { accent } else { dim };
+        let mid = Rect::new(free.x0 + 2.0, free.y0 + 5.0, free.x1 - 2.0, free.y1 - 5.0);
+        s.stroke(&thin, at, PaintRef::Solid(free_ink), None, &mid);
+        if open {
+            for y in [free.y0 + 1.0, free.y1 - 1.0] {
+                s.stroke(
+                    &thin,
+                    at,
+                    PaintRef::Solid(free_ink),
+                    None,
+                    &Line::new(Point::new(free.x0, y), Point::new(free.x1, y)),
+                );
+            }
+        }
         s
     }
 }
@@ -278,8 +349,17 @@ impl KindsWidget {
         Self { shape, session, size: (0.0, 0.0), hovered: None }
     }
 
+    /// 棚に並ぶ形。最後に「写した曲線」が居ることがある。
+    fn shelf(&self) -> Vec<Interp> {
+        let mut out = KINDS.to_vec();
+        if let Some(clip) = *self.session.curve_clip.lock().unwrap() {
+            out.push(clip);
+        }
+        out
+    }
+
     fn cell(&self, i: usize) -> Rect {
-        let rows = KINDS.len().div_ceil(COLS);
+        let rows = self.shelf().len().div_ceil(COLS);
         let w = self.size.0 / COLS as f64;
         let h = self.size.1 / rows.max(1) as f64;
         let (cx, cy) = (i % COLS, i / COLS);
@@ -287,7 +367,7 @@ impl KindsWidget {
     }
 
     fn at(&self, x: f64, y: f64) -> Option<usize> {
-        (0..KINDS.len()).find(|i| self.cell(*i).contains(Point::new(x, y)))
+        (0..self.shelf().len()).find(|i| self.cell(*i).contains(Point::new(x, y)))
     }
 }
 
@@ -310,16 +390,17 @@ impl Widget for KindsWidget {
                 let Some(i) = self.at(p.element.x as f64, p.element.y as f64) else {
                     return;
                 };
-                *self.shape.lock().unwrap() = KINDS[i];
+                let Some(chosen) = self.shelf().get(i).copied() else { return };
+                *self.shape.lock().unwrap() = chosen;
                 let starts =
                     crate::ui::ease::segments(&self.session.selected_keys.lock().unwrap());
                 if starts.is_empty() {
                     return;
                 }
-                match crate::ui::ease::apply(&self.session, &starts, KINDS[i]) {
+                match crate::ui::ease::apply(&self.session, &starts, chosen) {
                     Ok(n) => println!(
                         "PROBE room=write verdict=applied Ease kind={} tracks={n}",
-                        KINDS[i].kind()
+                        chosen.kind()
                     ),
                     Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
                 }
@@ -347,7 +428,10 @@ impl Widget for KindsWidget {
         let t3 = |c: [u8; 3]| Color::from_rgb8(c[0], c[1], c[2]);
         let current = *self.shape.lock().unwrap();
 
-        for (i, kind) in KINDS.iter().copied().enumerate() {
+        let shelf = self.shelf();
+        let copied_at = shelf.len().saturating_sub(1);
+        let has_clip = self.session.curve_clip.lock().unwrap().is_some();
+        for (i, kind) in shelf.iter().copied().enumerate() {
             let cell = self.cell(i);
             let chosen = kind.kind() == current.kind();
             let bg = if chosen {
@@ -381,6 +465,15 @@ impl Widget for KindsWidget {
             }
             let ink = if chosen { t3(tokens::ACCENT) } else { t3(tokens::INK2) };
             s.stroke(&Stroke::new(1.5 / k), at, PaintRef::Solid(ink), None, &curve);
+
+            // 写した曲線の札には角へ印を置く(棚の物と見分けるため)。
+            if has_clip && i == copied_at {
+                let mark = Rect::from_origin_size(
+                    (cell.x0 + 3.0, cell.y0 + 3.0),
+                    (4.0, 4.0),
+                );
+                s.fill(Fill::NonZero, at, PaintRef::Solid(t3(tokens::ACCENT)), None, &mark);
+            }
         }
         s
     }

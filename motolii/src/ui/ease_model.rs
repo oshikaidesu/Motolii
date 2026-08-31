@@ -24,6 +24,23 @@ fn clamp(v: f64, lo: f64, hi: f64) -> f64 {
     v.clamp(lo, hi)
 }
 
+/// Overshoot が OFF の間、手で動かす handle は値の範囲へ縛る(AM-KG-07)。
+/// 型そのものが終点を越える物(Elastic 系)はこの縛りの外。
+pub(super) fn hold_in_range(interp: Interp, free: bool) -> Interp {
+    if free || overshoots(interp) {
+        return interp;
+    }
+    match interp {
+        Interp::Bezier { x1, y1, x2, y2 } => Interp::Bezier {
+            x1,
+            y1: clamp(y1, 0.0, 1.0),
+            x2,
+            y2: clamp(y2, 0.0, 1.0),
+        },
+        other => other,
+    }
+}
+
 /// 型が終点を越えるか。Overshoot の既定はこれで決まる(AM-KG-07)。
 pub(super) fn overshoots(interp: Interp) -> bool {
     matches!(interp, Interp::Elastic { .. } | Interp::ElasticSteps { .. })

@@ -58,6 +58,11 @@ pub(super) struct Session {
     pub timeline_rx: std::rc::Rc<std::sync::mpsc::Receiver<TimelineMsg>>,
     /// 起動時に読んだ素材と見出し。動かないので窓が何枚でも1つ。
     pub ui: Arc<crate::ui::fixture::UiData>,
+    /// 曲線を手で範囲の外へ出してよいか。既定は OFF(AM-KG-07)。
+    /// 型そのものが行き過ぎる物(Elastic 系)は型の意味として ON になる。
+    pub overshoot: Arc<std::sync::atomic::AtomicBool>,
+    /// 写した曲線。区間から区間へ貼るための控え(Document には入らない)。
+    pub curve_clip: Arc<Mutex<Option<crate::doc::store::Interp>>>,
     /// 見る側のカメラ(User View)。**Document には入らない** — 書き出しには出ない。
     pub view_camera: Arc<Mutex<crate::render::engine::ObservationCamera>>,
     /// 今どのキーを掴んでいるか。イージングを触る口が要る(Document には入らない)。
@@ -95,6 +100,8 @@ impl Session {
             ui: Arc::new(ui),
             selected_keys: Arc::new(Mutex::new(Vec::new())),
             view_camera: Arc::new(Mutex::new(Default::default())),
+            overshoot: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            curve_clip: Arc::new(Mutex::new(None)),
         }
     }
 }
