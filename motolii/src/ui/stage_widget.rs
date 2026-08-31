@@ -388,8 +388,18 @@ fn compute_scale(
 /// 向きの輪の大きさ。枠の内側に収め、潰した側が軸の向きを示す。
 const RING_FLAT: f64 = 0.28;
 
-fn ring_radii(bw: f64, bh: f64) -> (f64, f64) {
-    (bw * 0.31, bh * 0.31)
+/// 奥行きの取っ手。**真ん中は動かすための場所**なので、そこには置かない。
+/// 中心から画面上で一定の長さだけ左上へ伸ばした先に置く(AE や Blender の
+/// 軸の矢印と同じ考え)。層が小さくても真ん中と食い合わない。
+fn depth_handle(mx: f64, my: f64, scale: f64) -> (f64, f64) {
+    let d = 24.0 / scale.max(1e-6);
+    (mx - d, my - d)
+}
+
+/// 向きの輪は**箱の外**に置く。中は動かすための場所なので明け渡す。
+fn ring_radii(bw: f64, bh: f64, scale: f64) -> (f64, f64) {
+    let m = 34.0 / scale.max(1e-6);
+    (bw.abs() * 0.5 + m, bh.abs() * 0.5 + m)
 }
 
 fn orbit_angles(orig: (f64, f64), grab: (f64, f64), now: (f64, f64)) -> (f64, f64) {
@@ -520,11 +530,14 @@ impl Widget for StageWidget {
                         }
                         let rings = self.rings.load(std::sync::atomic::Ordering::Relaxed);
                         let (mx, my) = ((x0 + x1) * 0.5, (y0 + y1) * 0.5);
-                        if rings && mode.is_none() && near(mx, my) {
+                        let (dx, dy) = depth_handle(mx, my, self.fit.s);
+                        if rings && mode.is_none() && near(dx, dy) {
                             mode = Some(GizmoMode::Depth);
                         }
-                        if rings && mode.is_none() {
-                            let (ra, rb) = ring_radii(bw, bh);
+                        let inside = lx >= bx && lx <= bx + bw && ly >= by && ly <= by + bh;
+                        // **箱の中は必ず動かす。** 輪が中を横切っても、そこは掴めない。
+                        if rings && mode.is_none() && !inside {
+                            let (ra, rb) = ring_radii(bw, bh, self.fit.s);
                             let on = |a: f64, b: f64| {
                                 a > 1e-6 && b > 1e-6 && {
                                     let f = (((lx - mx) / a).powi(2) + ((ly - my) / b).powi(2)).sqrt();
@@ -538,7 +551,7 @@ impl Widget for StageWidget {
                             }
                         }
                         if mode.is_none() {
-                            if lx >= bx && lx <= bx + bw && ly >= by && ly <= by + bh {
+                            if inside {
                                 mode = Some(GizmoMode::Move);
                             } else {
                                 let margin = 24.0 / self.fit.s.max(1e-6);
@@ -982,13 +995,16 @@ impl Widget for StageWidget {
 
             if self.rings.load(std::sync::atomic::Ordering::Relaxed) {
             let (mx, my) = ((x0 + x1) * 0.5, (y0 + y1) * 0.5);
-            let (ra, rb) = ring_radii(x1 - x0, y1 - y0);
+            let (ra, rb) = ring_radii(x1 - x0, y1 - y0, 1.0);
             let ring = peniko::kurbo::Stroke::new(1.0);
             for (a, b) in [(ra, rb * RING_FLAT), (ra * RING_FLAT, rb)] {
                 let e = peniko::kurbo::Ellipse::new((mx, my), (a.abs(), b.abs()), 0.0);
                 scene.stroke(&ring, rot, PaintRef::Solid(c(tokens::INK3)), None, &e);
             }
-            let dot = peniko::kurbo::Circle::new((mx, my), 3.5);
+            let (hx, hy) = depth_handle(mx, my, 1.0);
+            let stem = peniko::kurbo::Line::new((mx, my), (hx, hy));
+            scene.stroke(&ring, rot, PaintRef::Solid(c(tokens::INK3)), None, &stem);
+            let dot = peniko::kurbo::Circle::new((hx, hy), 3.5);
             scene.fill(Fill::NonZero, rot, PaintRef::Solid(c(tokens::ACCENT)), None, &dot);
             }
         }
