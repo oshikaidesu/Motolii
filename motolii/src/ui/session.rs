@@ -51,7 +51,6 @@ pub(super) struct Session {
     /// (箱は engine が形/文字から測るので、Document だけでは出せない)。
     pub selected_size: Arc<Mutex<Option<[f32; 2]>>>,
     /// Stage のギズモが 3D(向きと奥行き)を掴む側に居るか。
-    pub gizmo_3d: Arc<std::sync::atomic::AtomicBool>,
     /// タイムラインの盤面へ積む口。盤面は置き場を移すと作り直されるので、
     /// 口は窓の側で持つ。
     pub timeline_tx: std::sync::mpsc::Sender<TimelineMsg>,
@@ -94,7 +93,6 @@ impl Session {
             scale: Arc::new(UiScale::new(100)),
             selection: Selection::default(),
             selected_size: Arc::new(Mutex::new(None)),
-            gizmo_3d: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             timeline_tx,
             timeline_rx: std::rc::Rc::new(timeline_rx),
             ui: Arc::new(ui),

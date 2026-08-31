@@ -214,7 +214,6 @@ fn UtilityPanel(
         &session.doc,
         selected,
         &session.selected_size,
-        &session.gizmo_3d,
         &session.clock,
         revision,
     )
@@ -237,7 +236,6 @@ fn StagePanel(
             selected,
             revision,
             session.selected_size.clone(),
-            session.gizmo_3d.clone(),
             session.view_camera.clone(),
         ))
     });

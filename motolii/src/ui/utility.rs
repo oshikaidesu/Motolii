@@ -1,4 +1,3 @@
-use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 
 use dioxus_native::prelude::*;
@@ -61,22 +60,10 @@ fn move_anchor(
     );
 }
 
-/// 3D の素材を平面へ収めるか。既定は収めない(AE と逆。裁定 2026-08-30)。
-fn set_flatten(doc: &Arc<Mutex<Document>>, layer: LayerId, flatten: bool) {
-    let patch = crate::doc::store::LayerAttrsPatch {
-        flatten: Some(flatten),
-        ..Default::default()
-    };
-    if let Err(e) = doc.lock().unwrap().apply(Intent::SetAttrs { layer, patch }) {
-        println!("PROBE room=write verdict=apply-error {e}");
-    }
-}
-
 pub(super) fn utility_panel(
     doc: &Arc<Mutex<Document>>,
     selection: Option<LayerId>,
     selected_size: &Arc<Mutex<Option<[f32; 2]>>>,
-    gizmo_3d: &Arc<std::sync::atomic::AtomicBool>,
     clock: &Clock,
     mut revision: Signal<u32>,
 ) -> Element {
@@ -84,16 +71,6 @@ pub(super) fn utility_panel(
     let t = RationalTime::try_new((clock.now_sec() * 3000.0) as i64, 3000)
         .unwrap_or(RationalTime::ZERO);
     let size = *selected_size.lock().unwrap();
-    let three_d = gizmo_3d.load(Ordering::Relaxed);
-    let flattened = selection.is_some_and(|layer| {
-        doc.lock()
-            .unwrap()
-            .view()
-            .attrs(layer)
-            .ok()
-            .flatten()
-            .is_some_and(|a| a.flatten)
-    });
 
     // 升の並びそのものが意味なので、言葉は置かない(裁定451)。
     let spots: [(f64, f64); 9] = [
@@ -132,65 +109,6 @@ pub(super) fn utility_panel(
             } else {
                 // 層は選ばれているが、まだ箱を測れていない(Stage が測る)。
                 div { class: "prow", span { class: "n empty", "No box yet" } }
-            }
-            div { class: "sec", "GIZMO" }
-            div { class: "prow",
-                span { class: "n", "Grab" }
-                span {
-                    class: if three_d { "v" } else { "v content" },
-                    onclick: {
-                        let gizmo_3d = gizmo_3d.clone();
-                        move |_| {
-                            gizmo_3d.store(false, Ordering::Relaxed);
-                            *revision.write() += 1;
-                        }
-                    },
-                    "Plane"
-                }
-                span {
-                    class: if three_d { "v content" } else { "v" },
-                    onclick: {
-                        let gizmo_3d = gizmo_3d.clone();
-                        move |_| {
-                            gizmo_3d.store(true, Ordering::Relaxed);
-                            *revision.write() += 1;
-                        }
-                    },
-                    "Space"
-                }
-            }
-            if three_d {
-                div { class: "prow", span { class: "n empty", "drag = orient · ⌥drag = depth" } }
-            }
-            div { class: "sec", "3D" }
-            if let Some(layer) = selection {
-                div { class: "prow",
-                    span { class: "n", "Fit into" }
-                    span {
-                        class: if flattened { "v" } else { "v content" },
-                        onclick: {
-                            let doc = doc.clone();
-                            move |_| {
-                                set_flatten(&doc, layer, false);
-                                *revision.write() += 1;
-                            }
-                        },
-                        "Space"
-                    }
-                    span {
-                        class: if flattened { "v content" } else { "v" },
-                        onclick: {
-                            let doc = doc.clone();
-                            move |_| {
-                                set_flatten(&doc, layer, true);
-                                *revision.write() += 1;
-                            }
-                        },
-                        "Plane"
-                    }
-                }
-            } else {
-                div { class: "prow", span { class: "n empty", "No selection" } }
             }
         }
     )

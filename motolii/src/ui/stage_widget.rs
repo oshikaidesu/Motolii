@@ -71,7 +71,7 @@ enum GizmoMode {
     ScaleEdge { axis_x: bool, positive: bool },
     Rotate,
     /// 3D: 横で rotation.y、縦で rotation.x を回す。
-    Orbit,
+    Orbit { axis_x: bool },
     /// 3D: 縦で position.z を動かす。
     Depth,
 }
@@ -109,7 +109,6 @@ pub(super) struct StageWidget {
     camera_drag: Option<CameraDrag>,
     revision: Signal<u32>,
     selected_size: Arc<Mutex<Option<[f32; 2]>>>,
-    gizmo_3d: Arc<std::sync::atomic::AtomicBool>,
     view_camera: Arc<Mutex<crate::render::engine::ObservationCamera>>,
 }
 
@@ -138,8 +137,7 @@ impl StageWidget {
         selected_mirror: Signal<Option<LayerId>>,
         revision: Signal<u32>,
         selected_size: Arc<Mutex<Option<[f32; 2]>>>,
-        gizmo_3d: Arc<std::sync::atomic::AtomicBool>,
-        view_camera: Arc<Mutex<crate::render::engine::ObservationCamera>>,
+            view_camera: Arc<Mutex<crate::render::engine::ObservationCamera>>,
     ) -> Self {
         Self {
             state: State::Suspended,
@@ -153,7 +151,6 @@ impl StageWidget {
             camera_drag: None,
             revision,
             selected_size,
-            gizmo_3d,
             view_camera,
         }
     }
@@ -369,7 +366,7 @@ fn compute_scale(
                 }
             }
         }
-        GizmoMode::Move | GizmoMode::Rotate | GizmoMode::Orbit | GizmoMode::Depth => {}
+        GizmoMode::Move | GizmoMode::Rotate | GizmoMode::Orbit { .. } | GizmoMode::Depth => {}
     }
     let (nbx, nby) = (nx0.min(nx1), ny0.min(ny1));
     let (nbw, nbh) = ((nx1 - nx0).abs().max(0.01), (ny1 - ny0).abs().max(0.01));
@@ -379,11 +376,28 @@ fn compute_scale(
 }
 
 /// 画面の1pxを0.5°に読む。掴んだ板が指の動きに素直に付いてくる速さ。
+/// 向きの輪の大きさ。枠の内側に収め、潰した側が軸の向きを示す。
+const RING_FLAT: f64 = 0.28;
+
+fn ring_radii(bw: f64, bh: f64) -> (f64, f64) {
+    (bw * 0.31, bh * 0.31)
+}
+
 fn orbit_angles(orig: (f64, f64), grab: (f64, f64), now: (f64, f64)) -> (f64, f64) {
     (
         orig.0 - (now.1 - grab.1) * 0.5,
         orig.1 + (now.0 - grab.0) * 0.5,
     )
+}
+
+/// 掴んだ輪だけが回る。もう一方の軸は掴まれていないので据え置く。
+fn orbit_axis(orig: (f64, f64), grab: (f64, f64), now: (f64, f64), axis_x: bool) -> (f64, f64) {
+    let (rx, ry) = orbit_angles(orig, grab, now);
+    if axis_x {
+        (rx, orig.1)
+    } else {
+        (orig.0, ry)
+    }
 }
 
 fn rotate_around(center: (f64, f64), angle_deg: f64, p: (f64, f64)) -> (f64, f64) {
@@ -495,18 +509,27 @@ impl Widget for StageWidget {
                             ];
                             mode = edges.into_iter().find(|&(px, py, _)| near(px, py)).map(|(_, _, m)| m);
                         }
-                        let three_d = self.gizmo_3d.load(std::sync::atomic::Ordering::Relaxed);
+                        let (mx, my) = ((x0 + x1) * 0.5, (y0 + y1) * 0.5);
+                        if mode.is_none() && near(mx, my) {
+                            mode = Some(GizmoMode::Depth);
+                        }
+                        if mode.is_none() {
+                            let (ra, rb) = ring_radii(bw, bh);
+                            let on = |a: f64, b: f64| {
+                                a > 1e-6 && b > 1e-6 && {
+                                    let f = (((lx - mx) / a).powi(2) + ((ly - my) / b).powi(2)).sqrt();
+                                    (f - 1.0).abs() * a.min(b) <= tol
+                                }
+                            };
+                            if on(ra, rb * RING_FLAT) {
+                                mode = Some(GizmoMode::Orbit { axis_x: false });
+                            } else if on(ra * RING_FLAT, rb) {
+                                mode = Some(GizmoMode::Orbit { axis_x: true });
+                            }
+                        }
                         if mode.is_none() {
                             if lx >= bx && lx <= bx + bw && ly >= by && ly <= by + bh {
-                                mode = Some(if three_d {
-                                    if p.mods.contains(Modifiers::ALT) {
-                                        GizmoMode::Depth
-                                    } else {
-                                        GizmoMode::Orbit
-                                    }
-                                } else {
-                                    GizmoMode::Move
-                                });
+                                mode = Some(GizmoMode::Move);
                             } else {
                                 let margin = 24.0 / self.fit.s.max(1e-6);
                                 if lx >= bx - margin && lx <= bx + bw + margin && ly >= by - margin && ly <= by + bh + margin {
@@ -621,8 +644,8 @@ impl Widget for StageWidget {
                         let r = compute_rotation(drag.orig_position, drag.grab, (cx, cy), drag.orig_rotation, shift);
                         doc.set_transient(drag.layer, rotation_prop, Value::F64(r));
                     }
-                    GizmoMode::Orbit => {
-                        let (rx, ry) = orbit_angles(drag.orig_rotation_xy, drag.grab, (cx, cy));
+                    GizmoMode::Orbit { axis_x } => {
+                        let (rx, ry) = orbit_axis(drag.orig_rotation_xy, drag.grab, (cx, cy), axis_x);
                         if let Ok(prop) = PropertyId::new(property::ROTATION_X) {
                             doc.set_transient(drag.layer, prop, Value::F64(rx));
                         }
@@ -675,8 +698,8 @@ impl Widget for StageWidget {
                         intents.extend(track_intent(&doc, drag.layer, property::ROTATION, Value::F64(r), rt));
                         &[property::ROTATION]
                     }
-                    GizmoMode::Orbit => {
-                        let (rx, ry) = orbit_angles(drag.orig_rotation_xy, drag.grab, (cx, cy));
+                    GizmoMode::Orbit { axis_x } => {
+                        let (rx, ry) = orbit_axis(drag.orig_rotation_xy, drag.grab, (cx, cy), axis_x);
                         intents.extend(track_intent(&doc, drag.layer, property::ROTATION_X, Value::F64(rx), rt));
                         intents.extend(track_intent(&doc, drag.layer, property::ROTATION_Y, Value::F64(ry), rt));
                         &[property::ROTATION_X, property::ROTATION_Y]
@@ -932,6 +955,16 @@ impl Widget for StageWidget {
                 let handle_rect = Rect::from_origin_size((cx - hs * 0.5, cy - hs * 0.5), (hs, hs));
                 scene.fill(Fill::NonZero, rot, PaintRef::Solid(c(tokens::ACCENT)), None, &handle_rect);
             }
+
+            let (mx, my) = ((x0 + x1) * 0.5, (y0 + y1) * 0.5);
+            let (ra, rb) = ring_radii(x1 - x0, y1 - y0);
+            let ring = peniko::kurbo::Stroke::new(1.0);
+            for (a, b) in [(ra, rb * RING_FLAT), (ra * RING_FLAT, rb)] {
+                let e = peniko::kurbo::Ellipse::new((mx, my), (a.abs(), b.abs()), 0.0);
+                scene.stroke(&ring, rot, PaintRef::Solid(c(tokens::INK3)), None, &e);
+            }
+            let dot = peniko::kurbo::Circle::new((mx, my), 3.5);
+            scene.fill(Fill::NonZero, rot, PaintRef::Solid(c(tokens::ACCENT)), None, &dot);
         }
 
         scene
