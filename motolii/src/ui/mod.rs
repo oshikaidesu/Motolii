@@ -4,6 +4,8 @@ pub mod app;
 mod browser;
 mod dock;
 mod fixture;
+#[cfg(test)]
+mod gui;
 pub mod host;
 mod inspector;
 mod keymap;

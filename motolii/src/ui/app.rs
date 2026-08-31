@@ -5,7 +5,6 @@ use dioxus_native::CustomWidgetAttr;
 
 use crate::ui::browser::browser_panel;
 use crate::ui::dock::{Dock, Panel, Zone};
-use crate::ui::fixture::{load_fixture, Loaded};
 use crate::ui::inspector::inspector_panel;
 use crate::ui::keymap::{lookup, Intent};
 use crate::ui::session::Session;
@@ -28,6 +27,105 @@ struct DragSplit {
     target: DragTarget,
     start: f64,
     orig: f64,
+}
+
+/// 窓1枚ぶんの見えかたの状態。Document には入らない物だけ。
+#[derive(Clone, Copy)]
+struct Panes {
+    layer_rows: Signal<Vec<fixture::LayerRow>>,
+    attrs_state: Signal<Vec<(bool, bool, bool)>>,
+    selected: Signal<Option<crate::doc::store::LayerId>>,
+    revision: Signal<u32>,
+    text_editing: Signal<Option<String>>,
+    renaming: Signal<Option<(crate::doc::store::LayerId, String)>>,
+    scroll_y: Signal<f64>,
+    browser_rail: Signal<Option<fixture::AssetFamily>>,
+    inspector_drag: Signal<Option<crate::ui::inspector::ValueDrag>>,
+    blend_open: Signal<bool>,
+    parent_open: Signal<bool>,
+}
+
+fn panes_for(ui: &fixture::UiData) -> Panes {
+    Panes {
+        layer_rows: use_signal(|| ui.layer_rows.clone()),
+        attrs_state: use_signal(|| {
+            ui.layer_rows.iter().map(|r| (r.hidden, r.solo, r.locked)).collect::<Vec<_>>()
+        }),
+        selected: use_signal(|| None),
+        revision: use_signal(|| 0u32),
+        text_editing: use_signal(|| None),
+        renaming: use_signal(|| None),
+        scroll_y: use_signal(|| 0.0f64),
+        browser_rail: use_signal(|| None),
+        inspector_drag: use_signal(|| None),
+        blend_open: use_signal(|| false),
+        parent_open: use_signal(|| false),
+    }
+}
+
+/// パネル1枚の中身。窓が変わっても同じ物を出す。
+fn panel_body(panel: Panel, session: &Session, ui: &fixture::UiData, p: Panes) -> Element {
+    match panel {
+        Panel::Media | Panel::Effects | Panel::Create | Panel::Colors => browser_panel(
+            ui,
+            session.doc.clone(),
+            session.clock.clone(),
+            p.layer_rows,
+            p.attrs_state,
+            session.timeline_tx.clone(),
+            p.selected,
+            p.revision,
+            panel,
+            p.browser_rail,
+        ),
+        Panel::Stage => rsx!(StagePanel {
+            session: session.clone(),
+            selected: p.selected,
+            revision: p.revision,
+            comp_line: ui.comp_line.clone(),
+        }),
+        Panel::Inspector => inspector_panel(
+            &session.doc,
+            p.selected.peek().as_ref().copied(),
+            &session.clock,
+            p.revision,
+            p.text_editing,
+            p.inspector_drag,
+            p.blend_open,
+            p.parent_open,
+        ),
+        Panel::Utility => crate::ui::utility::utility_panel(
+            &session.doc,
+            p.selected.peek().as_ref().copied(),
+            &session.selected_size,
+            &session.gizmo_3d,
+            &session.clock,
+            p.revision,
+        ),
+        Panel::Timeline => rsx!(TimelinePanel {
+            session: session.clone(),
+            layer_rows: p.layer_rows,
+            attrs_state: p.attrs_state,
+            selected: p.selected,
+            scroll_y: p.scroll_y,
+            renaming: p.renaming,
+            revision: p.revision,
+        }),
+    }
+}
+
+/// 別窓。パネル1枚だけを出す。状態は窓をまたいで1つ(Session)。
+pub fn detached() -> Element {
+    let session = use_hook(|| consume_context::<Session>());
+    let ui = use_hook(|| consume_context::<Arc<fixture::UiData>>());
+    let panel = use_hook(|| consume_context::<Panel>());
+    let panes = panes_for(&ui);
+    println!("PROBE room=detached verdict=render panel={panel}");
+    let css = format!("{}{}", tokens::css_root(100), STYLES);
+    rsx!(
+        style { {css} }
+        div { id: "detached", {panel_body(panel, &session, &ui, panes)} }
+    )
 }
 
 /// ウィジェットはコンポーネントの中で作る。置き場を移すと要素が作り直されるので、
@@ -106,37 +204,37 @@ pub fn app() -> Element {
     let mut dock = use_signal(Dock::default);
     let mut tab_drag = use_signal(|| Option::<Panel>::None);
     let mut view_open = use_signal(|| false);
-    // パネルの関数は条件付きで呼ばれるので、hook はここでしか作らない
-    // (パネル側で作ると、出ているパネルが変わった時に枠が入れ替わって落ちる)。
-    let browser_rail = use_signal(|| Option::<fixture::AssetFamily>::None);
-    let inspector_drag = use_signal(|| Option::<crate::ui::inspector::ValueDrag>::None);
-    let blend_open = use_signal(|| false);
-    let parent_open = use_signal(|| false);
-
     let mut scale_pct = use_signal(|| 100u32);
-    let revision = use_signal(|| 0u32);
-    let mut selected = use_signal(|| None);
-    let timeline_scroll_y = use_signal(|| 0.0f64);
-    let text_editing = use_signal(|| Option::<String>::None);
-    let renaming = use_signal(|| Option::<(crate::doc::store::LayerId, String)>::None);
 
-    let (session, loaded) = use_hook(|| {
-        let Loaded { doc, ui, duration_sec } = load_fixture();
-        (Session::new(doc, duration_sec), Arc::new(ui))
+    let session = use_hook(|| consume_context::<Session>()).clone();
+    let loaded = use_hook(|| consume_context::<Arc<fixture::UiData>>());
+    let host = use_hook(|| consume_context::<crate::ui::host::Host>());
+    // 別窓が閉じたら置き場へ戻す。別の窓からの合図なので、自分の runtime を包んで渡す。
+    use_hook(|| {
+        let runtime = dioxus_core::Runtime::current();
+        let scope = dioxus_core::current_scope_id();
+        host.on_close(move |panel| {
+            let mut dock = dock;
+            runtime.in_scope(scope, move || dock.write().reattach(panel));
+        });
     });
-    let session = session.clone();
+    let panes = panes_for(&loaded);
+    let Panes {
+        layer_rows,
+        attrs_state,
+        selected: selected_sig,
+        revision,
+        text_editing,
+        scroll_y: timeline_scroll_y,
+        ..
+    } = panes;
+    let mut selected = selected_sig;
+
     let timeline_tx = session.timeline_tx.clone();
     let doc = session.doc.clone();
     let clock = session.clock.clone();
     let ui_scale = session.scale.clone();
     let selection = session.selection.clone();
-    let selected_size = session.selected_size.clone();
-    let gizmo_3d = session.gizmo_3d.clone();
-
-    let layer_rows = use_signal(|| loaded.layer_rows.clone());
-    let attrs_state = use_signal(|| {
-        loaded.layer_rows.iter().map(|r| (r.hidden, r.solo, r.locked)).collect::<Vec<_>>()
-    });
 
     let bw = browser_w();
     let iw = inspector_w();
@@ -152,29 +250,7 @@ pub fn app() -> Element {
     let bottom_h = px(!d.panels(Zone::Bottom).is_empty(), th);
     let grip_b = px(!d.panels(Zone::Bottom).is_empty(), 8.0);
 
-    let body = |panel: Panel| -> Element {
-        match panel {
-            Panel::Media | Panel::Effects | Panel::Create | Panel::Colors => browser_panel(&loaded, doc.clone(), clock.clone(), layer_rows, attrs_state, timeline_tx.clone(), selected, revision, panel, browser_rail),
-            Panel::Stage => rsx!(StagePanel {
-                session: session.clone(),
-                selected,
-                revision,
-                comp_line: loaded.comp_line.clone(),
-            }),
-            Panel::Inspector => inspector_panel(&doc, selected(), &clock, revision, text_editing, inspector_drag, blend_open, parent_open),
-            Panel::Utility => crate::ui::utility::utility_panel(&doc, selected(), &selected_size, &gizmo_3d, &clock, revision),
-            Panel::Timeline => rsx!(TimelinePanel {
-                session: session.clone(),
-                layer_rows,
-                attrs_state,
-                selected,
-                scroll_y: timeline_scroll_y,
-                renaming,
-                revision,
-            }),
-        }
-    };
-
+    let body = |panel: Panel| -> Element { panel_body(panel, &session, &loaded, panes) };
     let zone_view = |zone: Zone| -> Element {
         let d = dock();
         let panels = d.panels(zone).to_vec();
@@ -503,14 +579,31 @@ pub fn app() -> Element {
                     if view_open() {
                         div { class: "vmenu",
                             for panel in Panel::ALL {
-                                span {
-                                    class: if d.is_visible(panel) { "vitem on" } else { "vitem" },
-                                    onclick: move |evt| {
-                                        evt.stop_propagation();
-                                        dock.write().toggle(panel);
-                                    },
-                                    if d.is_visible(panel) { "✓ " } else { "  " }
-                                    "{panel}"
+                                div { class: "vrow",
+                                    span {
+                                        class: if d.is_visible(panel) { "vitem on" } else { "vitem" },
+                                        onclick: move |evt| {
+                                            evt.stop_propagation();
+                                            dock.write().toggle(panel);
+                                        },
+                                        if d.is_visible(panel) { "✓ " } else { "  " }
+                                        "{panel}"
+                                    }
+                                    span {
+                                        class: if d.is_detached(panel) { "vout on" } else { "vout" },
+                                        onclick: {
+                                            let host = host.clone();
+                                            move |evt| {
+                                                evt.stop_propagation();
+                                                if dock.peek().is_detached(panel) {
+                                                    return;
+                                                }
+                                                dock.write().detach(panel);
+                                                host.open(panel);
+                                            }
+                                        },
+                                        "別窓"
+                                    }
                                 }
                             }
                         }
@@ -592,4 +685,56 @@ pub fn app() -> Element {
             div { id: "status", "{loaded.status}" }
         }
     )
+}
+
+#[cfg(test)]
+mod detached_tests {
+    use super::*;
+    use crate::ui::fixture::{load_fixture, Loaded};
+    use blitz_dom::{Document, DocumentConfig};
+    use blitz_traits::shell::{ColorScheme, Viewport};
+    use dioxus_native::DioxusDocument;
+
+    fn open(panel: Panel) -> DioxusDocument {
+        let Loaded { doc, ui, duration_sec } = load_fixture();
+        let mut vdom = VirtualDom::new(detached);
+        vdom.insert_any_root_context(Box::new(Session::new(doc, duration_sec)));
+        vdom.insert_any_root_context(Box::new(Arc::new(ui)));
+        vdom.insert_any_root_context(Box::new(panel));
+        let mut doc = DioxusDocument::new(
+            vdom,
+            DocumentConfig {
+                viewport: Some(Viewport::new(900, 600, 1.0, ColorScheme::Dark)),
+                ..Default::default()
+            },
+        );
+        doc.initial_build();
+        doc.inner_mut().resolve(0.0);
+        doc
+    }
+
+    fn size_of(doc: &DioxusDocument, selector: &str) -> (f32, f32) {
+        let inner = doc.inner();
+        let node = inner
+            .query_selector(selector)
+            .ok()
+            .flatten()
+            .unwrap_or_else(|| panic!("{selector} が居ない"));
+        let layout = inner.get_node(node).expect("node").final_layout();
+        (layout.size.width, layout.size.height)
+    }
+
+    #[test]
+    fn a_detached_stage_fills_its_window() {
+        let doc = open(Panel::Stage);
+        let (w, h) = size_of(&doc, "#stage");
+        assert!(w > 100.0 && h > 100.0, "別窓の Stage が潰れている: {w}x{h}");
+    }
+
+    #[test]
+    fn a_detached_timeline_fills_its_window() {
+        let doc = open(Panel::Timeline);
+        let (w, h) = size_of(&doc, "#timeline");
+        assert!(w > 100.0 && h > 100.0, "別窓のタイムラインが潰れている: {w}x{h}");
+    }
 }

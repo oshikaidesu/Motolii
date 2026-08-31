@@ -32,12 +32,26 @@ body {
     overflow: hidden;
 }
 
+#detached {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--app);
+}
+
+#detached > * {
+    flex: 1;
+    min-height: 0;
+}
+
 #menubar {
     background: var(--panel);
     border-bottom: var(--line) solid var(--dark);
     display: flex;
     flex-direction: row;
     align-items: center;
+    overflow: visible;
 }
 
 .appname {
@@ -410,14 +424,36 @@ body {
     background: var(--raised);
 }
 
+.menu {
+    position: relative;
+}
+
 .vmenu {
     position: absolute;
-    margin-top: calc(14 * var(--s) * 1px);
+    top: 100%;
+    left: 0;
     display: flex;
     flex-direction: column;
     background: var(--raised);
     border: var(--line) solid var(--dark);
     z-index: 10;
+}
+
+.vrow {
+    display: flex;
+    align-items: center;
+    gap: var(--sp2);
+}
+
+.vout {
+    padding: var(--sp1) var(--sp2);
+    margin-left: auto;
+    color: var(--ink3);
+    font-size: var(--t-dense);
+}
+
+.vout.on {
+    color: var(--accent);
 }
 
 .vitem {

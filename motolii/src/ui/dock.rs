@@ -81,6 +81,8 @@ impl Zone {
 pub(super) struct Dock {
     zones: [Vec<Panel>; 4],
     active: [usize; 4],
+    /// 別窓へ出ている物。置き場にも居ないし、隠れてもいない。
+    detached: Vec<Panel>,
 }
 
 impl Default for Dock {
@@ -93,6 +95,7 @@ impl Default for Dock {
                 vec![Panel::Timeline],
             ],
             active: [0; 4],
+            detached: Vec::new(),
         }
     }
 }
@@ -117,6 +120,22 @@ impl Dock {
         }
     }
 
+    pub(super) fn is_detached(&self, panel: Panel) -> bool {
+        self.detached.contains(&panel)
+    }
+
+    /// 別窓へ出す。置き場からは抜ける。
+    pub(super) fn detach(&mut self, panel: Panel) {
+        self.remove(panel);
+        self.detached.push(panel);
+    }
+
+    /// 別窓を閉じた。元の置き場へ戻す。
+    pub(super) fn reattach(&mut self, panel: Panel) {
+        self.detached.retain(|p| *p != panel);
+        self.place(panel, default_zone(panel));
+    }
+
     pub(super) fn zone_of(&self, panel: Panel) -> Option<Zone> {
         Zone::ALL
             .into_iter()
@@ -134,14 +153,14 @@ impl Dock {
             self.set_active(zone, panel);
             return;
         }
-        self.detach(panel);
+        self.remove(panel);
         let z = zone.ix();
         self.zones[z].push(panel);
         self.active[z] = self.zones[z].len() - 1;
     }
 
     pub(super) fn hide(&mut self, panel: Panel) {
-        self.detach(panel);
+        self.remove(panel);
     }
 
     /// 隠れていれば元/既定の置き場へ出し、出ていれば隠す。
@@ -152,7 +171,8 @@ impl Dock {
         }
     }
 
-    fn detach(&mut self, panel: Panel) {
+    fn remove(&mut self, panel: Panel) {
+        self.detached.retain(|p| *p != panel);
         for z in 0..4 {
             if let Some(i) = self.zones[z].iter().position(|p| *p == panel) {
                 self.zones[z].remove(i);
@@ -214,6 +234,27 @@ mod tests {
         dock.place(Panel::Inspector, Zone::Right);
         assert_eq!(dock.panels(Zone::Right), before.as_slice());
         assert_eq!(dock.active(Zone::Right), Some(Panel::Inspector));
+    }
+
+    #[test]
+    fn a_detached_panel_is_in_no_zone_and_comes_back_when_its_window_closes() {
+        let mut dock = Dock::default();
+        dock.detach(Panel::Stage);
+        assert!(dock.is_detached(Panel::Stage));
+        assert_eq!(dock.zone_of(Panel::Stage), None, "別窓のパネルが置き場にも居る");
+        assert!(!dock.is_visible(Panel::Stage));
+
+        dock.reattach(Panel::Stage);
+        assert!(!dock.is_detached(Panel::Stage));
+        assert_eq!(dock.zone_of(Panel::Stage), Some(Zone::Center));
+    }
+
+    #[test]
+    fn putting_a_detached_panel_back_in_a_zone_closes_the_detachment() {
+        let mut dock = Dock::default();
+        dock.detach(Panel::Colors);
+        dock.place(Panel::Colors, Zone::Bottom);
+        assert!(!dock.is_detached(Panel::Colors), "置き場に戻したのに別窓のままになっている");
     }
 
     #[test]

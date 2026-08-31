@@ -12,6 +12,10 @@ use blitz_traits::shell::{ColorScheme, Viewport};
 use dioxus_native::DioxusDocument;
 use dioxus_native::prelude::VirtualDom;
 
+use crate::ui::app::app;
+use crate::ui::fixture::{load_fixture, Loaded};
+use crate::ui::session::Session;
+
 const W: u32 = 1600;
 const H: u32 = 1000;
 
@@ -21,7 +25,11 @@ struct Gui {
 
 impl Gui {
     fn open() -> Self {
-        let vdom = VirtualDom::new(motolii::ui::app::app);
+        let Loaded { doc, ui, duration_sec } = load_fixture();
+        let mut vdom = VirtualDom::new(app);
+        vdom.insert_any_root_context(Box::new(Session::new(doc, duration_sec)));
+        vdom.insert_any_root_context(Box::new(std::sync::Arc::new(ui)));
+        vdom.insert_any_root_context(Box::new(crate::ui::host::Host::for_tests()));
         let mut doc = DioxusDocument::new(
             vdom,
             DocumentConfig {
