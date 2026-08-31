@@ -444,3 +444,119 @@ fn a_keystroke_reaches_the_app() {
         "⌘D が届いていない(層が増えていない)"
     );
 }
+
+// ---- 乱暴な操作で窓が壊れないか ----------------------------------------
+//
+// 窓が死ぬのはほぼ全部ここ(掴んだまま別の事をする、掴んだ物が途中で消える、
+// 枠の外で離す)。普通の手順では踏まないので、意図的に踏む。
+
+/// 押していないのに離す。窓の外から入ってきた指はこの形になる。
+#[test]
+fn releasing_without_pressing_is_harmless() {
+    let mut gui = Gui::open();
+    gui.release(200.0, 200.0);
+    gui.motion(300.0, 300.0);
+    gui.release(300.0, 300.0);
+    gui.settle();
+    assert!(!gui.texts(".ptab").is_empty(), "タブが消えた");
+}
+
+/// 離さずにもう一度押す。指が2本乗った時や、取りこぼした時に起きる。
+#[test]
+fn pressing_twice_without_releasing_is_harmless() {
+    let mut gui = Gui::open();
+    let (x, y) = gui.center_of(".ptab", 0);
+    gui.press(x, y);
+    gui.press(x + 40.0, y);
+    gui.motion(x + 80.0, y);
+    gui.release(x + 80.0, y);
+    gui.settle();
+    assert!(!gui.texts(".ptab").is_empty(), "タブが消えた");
+}
+
+/// 枠の外まで引っぱって、外で離す。**設計上ここは別窓になる**。
+/// 見るのは、桁の外れた座標を通しても窓が生きているか。
+#[test]
+fn dragging_far_outside_the_window_makes_it_a_separate_window_without_breaking() {
+    let mut gui = Gui::open();
+    let before = gui.texts(".ptab").len();
+    let (x, y) = gui.center_of(".ptab", 0);
+    gui.press(x, y);
+    for to in [(-500.0, -500.0), (99999.0, 99999.0), (-1e6, 1e6)] {
+        gui.motion(to.0, to.1);
+    }
+    gui.release(-1e6, 1e6);
+    gui.settle();
+    assert_eq!(gui.texts(".ptab").len(), before - 1, "外で離したのに別窓へ出ていない");
+    assert!(gui.drawing_panels() > 0, "描く panel が居なくなった");
+}
+
+/// 掴んでいる最中に打鍵する。⌘D で層が増える等、世界が動く。
+#[test]
+fn typing_in_the_middle_of_a_drag_is_harmless() {
+    let mut gui = Gui::open();
+    let (x, y) = gui.center_of(".ptab", 0);
+    gui.press(x, y);
+    gui.motion(x + 30.0, y + 30.0);
+    gui.key(keyboard_types::Key::Character("d".into()), keyboard_types::Modifiers::META);
+    gui.key(keyboard_types::Key::Escape, keyboard_types::Modifiers::empty());
+    gui.motion(x + 60.0, y + 60.0);
+    gui.release(x + 60.0, y + 60.0);
+    gui.settle();
+    assert!(!gui.texts(".ptab").is_empty(), "タブが消えた");
+}
+
+/// 同じ所を連打する。二重に押した扱いになって状態が壊れないか。
+#[test]
+fn hammering_the_same_spot_is_harmless() {
+    let mut gui = Gui::open();
+    let (x, y) = gui.center_of(".ptab", 1);
+    for _ in 0..12 {
+        gui.click(x, y);
+    }
+    gui.settle();
+    assert!(!gui.texts(".ptab").is_empty(), "タブが消えた");
+}
+
+/// タブを掴んで、元の場所に落とす。並びが崩れないか。
+#[test]
+fn dropping_a_tab_exactly_where_it_started_is_harmless() {
+    let mut gui = Gui::open();
+    let before = gui.zone_tabs();
+    let (x, y) = gui.center_of(".ptab", 0);
+    gui.press(x, y);
+    gui.motion(x + 3.0, y + 3.0);
+    gui.release(x, y);
+    gui.settle();
+    assert_eq!(gui.zone_tabs(), before, "同じ所へ落として並びが変わった");
+}
+
+/// 掴んだまま、別のタブを表に出す。掴んでいた物の居場所が変わる。
+#[test]
+fn switching_tabs_while_holding_one_is_harmless() {
+    let mut gui = Gui::open();
+    let (x, y) = gui.center_of(".ptab", 0);
+    gui.press(x, y);
+    gui.motion(x + 20.0, y);
+    let (ox, oy) = gui.center_of(".ptab", 2);
+    gui.click(ox, oy);
+    gui.motion(x + 40.0, y);
+    gui.release(x + 40.0, y);
+    gui.settle();
+    assert!(!gui.texts(".ptab").is_empty(), "タブが消えた");
+}
+
+/// Timeline の上で乱暴に掴んで引き回す。帯とキーの当たり判定が壊れないか。
+#[test]
+fn thrashing_the_pointer_over_the_timeline_is_harmless() {
+    let mut gui = Gui::open();
+    let (x, y) = gui.center_of(".lsurface", 0);
+    gui.press(x, y);
+    for i in 0..40 {
+        let f = i as f32;
+        gui.motion(x + f * 37.0 % 500.0 - 250.0, y - f * 53.0 % 400.0 + 200.0);
+    }
+    gui.release(x, y);
+    gui.settle();
+    assert!(gui.drawing_panels() > 0, "描く panel が居なくなった");
+}

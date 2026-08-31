@@ -81,6 +81,8 @@ struct CameraDrag {
     orig_center: (f64, f64),
     /// 世界を見る側(視点)か、書き出しの枠(Document のカメラ)か。
     export_frame: bool,
+    /// 最後に動かした先。動かしていなければ None(→ 何も書かない)。
+    last: Option<(f64, f64)>,
 }
 
 struct GizmoDrag {
@@ -94,6 +96,10 @@ struct GizmoDrag {
     anchor: (f64, f64),
     natural: (f64, f64),
     orig_box: (f64, f64, f64, f64),
+    /// 最後に**動かした**先。動かしていなければ None。
+    /// 離した時の座標から差分を取り直すと、掴んでいる間に要素の座標系がずれた分だけ
+    /// 勝手に動く。動かしていないなら1画素も動かさない。
+    last: Option<(f64, f64)>,
 }
 
 pub(super) struct StageWidget {
@@ -553,6 +559,7 @@ impl Widget for StageWidget {
                                 anchor: geom.anchor,
                                 natural: geom.natural,
                                 orig_box: geom.box_,
+                                last: None,
                             });
                             return;
                         }
@@ -595,6 +602,7 @@ impl Widget for StageWidget {
                                 grab: (cx, cy),
                                 orig_center: self.export_center(rt),
                                 export_frame: true,
+                                last: None,
                             });
                         } else {
                             let pan = self.view_camera.lock().unwrap().pan;
@@ -602,14 +610,19 @@ impl Widget for StageWidget {
                                 grab: (cx, cy),
                                 orig_center: (pan[0] as f64, pan[1] as f64),
                                 export_frame: false,
+                                last: None,
                             });
                         }
                     }
                 }
             }
             UiEvent::PointerMove(p) => {
-                if let Some(cam) = self.camera_drag.as_ref() {
-                    let (cx, cy) = self.fit.to_comp(p.element.x as f64, p.element.y as f64);
+                if self.camera_drag.is_some() {
+                    let at = self.fit.to_comp(p.element.x as f64, p.element.y as f64);
+                    let cam = self.camera_drag.as_mut().expect("直前に居ることを見た");
+                    cam.last = Some(at);
+                    let cam = &*cam;
+                    let (cx, cy) = at;
                     let next = (
                         cam.orig_center.0 - (cx - cam.grab.0),
                         cam.orig_center.1 - (cy - cam.grab.1),
@@ -623,8 +636,13 @@ impl Widget for StageWidget {
                     }
                     return;
                 }
+                let (cx, cy) = {
+                    let Some(drag) = self.drag.as_mut() else { return };
+                    let at = self.fit.to_comp(p.element.x as f64, p.element.y as f64);
+                    drag.last = Some(at);
+                    at
+                };
                 let Some(drag) = self.drag.as_ref() else { return };
-                let (cx, cy) = self.fit.to_comp(p.element.x as f64, p.element.y as f64);
                 let shift = p.mods.contains(Modifiers::SHIFT);
                 let alt = p.mods.contains(Modifiers::ALT);
                 let mut doc = self.doc.lock().unwrap();
@@ -665,8 +683,7 @@ impl Widget for StageWidget {
             }
             UiEvent::PointerUp(p) => {
                 if let Some(cam) = self.camera_drag.take() {
-                    if cam.export_frame {
-                        let (cx, cy) = self.fit.to_comp(p.element.x as f64, p.element.y as f64);
+                    if let (true, Some((cx, cy))) = (cam.export_frame, cam.last) {
                         let next = (
                             cam.orig_center.0 - (cx - cam.grab.0),
                             cam.orig_center.1 - (cy - cam.grab.1),
@@ -677,7 +694,10 @@ impl Widget for StageWidget {
                     return;
                 }
                 let Some(drag) = self.drag.take() else { return };
-                let (cx, cy) = self.fit.to_comp(p.element.x as f64, p.element.y as f64);
+                let Some((cx, cy)) = drag.last else {
+                    println!("PROBE room=write verdict=gizmo-noop reason=never-moved");
+                    return;
+                };
                 let shift = p.mods.contains(Modifiers::SHIFT);
                 let alt = p.mods.contains(Modifiers::ALT);
                 let rt = self.current_rt();

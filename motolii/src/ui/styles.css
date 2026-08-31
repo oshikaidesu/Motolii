@@ -390,6 +390,8 @@ body {
 }
 
 .lrow .inside {
+    order: 9;
+    margin-left: auto;
     font-size: var(--t-micro);
     color: var(--ink3);
     border: var(--line) solid var(--border);

@@ -829,3 +829,4 @@ mod nest_tests {
         assert_eq!(opened[c].depth, opened[p].depth + 1, "子が一段内側に居ない");
     }
 }
+
