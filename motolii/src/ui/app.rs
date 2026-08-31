@@ -493,6 +493,41 @@ pub fn app() -> Element {
                             let frame = (clock.now_sec() * 30.0).round() as i64 + delta;
                             clock.seek(frame as f64 / 30.0);
                         }
+                        Intent::Duplicate => {
+                            let Some(layer) = selected() else { return };
+                            let Some(copy) =
+                                crate::ui::timeline_widget::duplicate_layer(&doc, layer)
+                            else {
+                                return;
+                            };
+                            let d = doc.lock().unwrap();
+                            let rows = fixture::layer_rows_from_doc(&d);
+                            let canvas = fixture::canvas_rows_from_doc(&d);
+                            drop(d);
+                            attrs_state.set(rows.iter().map(|r| (r.hidden, r.solo, r.locked)).collect());
+                            layer_rows.set(rows);
+                            let _ = timeline_tx.send(TimelineMsg::SetRows(canvas));
+                            selection.set(Some(copy));
+                            selected.set(Some(copy));
+                            *revision.write() += 1;
+                            println!("PROBE room=write verdict=applied Duplicate layer={copy:?}");
+                        }
+                        Intent::EasyEase(side) => {
+                            let starts = crate::ui::ease::segments(
+                                &session.selected_keys.lock().unwrap(),
+                            );
+                            if starts.is_empty() {
+                                return;
+                            }
+                            let shape = crate::ui::ease::easy_ease(side);
+                            match crate::ui::ease::apply(&session, &starts, shape) {
+                                Ok(n) => println!(
+                                    "PROBE room=write verdict=applied EasyEase tracks={n}"
+                                ),
+                                Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
+                            }
+                            *revision.write() += 1;
+                        }
                         Intent::ToggleKeyedOnly => {
                             fixture::toggle_keyed_only();
                             if fixture::keyed_only() {

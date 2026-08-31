@@ -81,6 +81,16 @@ pub(super) fn apply(session: &Session, starts: &[KeySel], shape: Interp) -> Resu
     Ok(count)
 }
 
+/// AE の F9 一族。両側 / 入り / 出 を寝かせる。
+pub(super) fn easy_ease(side: crate::ui::keymap::EaseSide) -> Interp {
+    use crate::ui::keymap::EaseSide;
+    match side {
+        EaseSide::Both => Interp::Bezier { x1: 0.33, y1: 0.0, x2: 0.67, y2: 1.0 },
+        EaseSide::In => Interp::Bezier { x1: 0.33, y1: 0.0, x2: 1.0, y2: 1.0 },
+        EaseSide::Out => Interp::Bezier { x1: 0.0, y1: 0.0, x2: 0.67, y2: 1.0 },
+    }
+}
+
 /// 区間の始まりと終わりの時刻(秒)。終わりは次のキー。
 pub(super) fn span_of(session: &Session, start: &KeySel) -> Option<(f64, f64)> {
     let doc = session.doc.lock().unwrap();
@@ -213,6 +223,21 @@ mod tests {
     fn one_key_alone_is_treated_as_the_start_of_its_segment() {
         let property = PropertyId::new("opacity").unwrap();
         assert_eq!(segments(&[sel(&property, 0.0)]).len(), 1);
+    }
+
+    /// F9 一族は「両側 / 入り / 出」で形が違う。同じ物を3つ置かない。
+    #[test]
+    fn the_three_easy_eases_are_three_different_shapes() {
+        use crate::ui::keymap::EaseSide;
+        let both = easy_ease(EaseSide::Both);
+        let in_ = easy_ease(EaseSide::In);
+        let out = easy_ease(EaseSide::Out);
+        assert_ne!(both, in_);
+        assert_ne!(both, out);
+        assert_ne!(in_, out);
+        // 入りは出口が直線、出は入口が直線。
+        assert!(matches!(in_, Interp::Bezier { x2, .. } if x2 == 1.0));
+        assert!(matches!(out, Interp::Bezier { x1, .. } if x1 == 0.0));
     }
 
     #[test]

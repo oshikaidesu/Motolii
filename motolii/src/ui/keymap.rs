@@ -26,6 +26,18 @@ pub(super) enum Intent {
     JumpMarker(i32),
     /// キーを持つ属性だけに絞る / 戻す。
     ToggleKeyedOnly,
+    /// 選んだ層をそのまま増やす。
+    Duplicate,
+    /// 選んだ区間へイージングを当てる。AE の F9 一族。
+    EasyEase(EaseSide),
+}
+
+/// 区間のどちら側を寝かせるか。
+#[derive(Clone, Copy, PartialEq)]
+pub(super) enum EaseSide {
+    Both,
+    In,
+    Out,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -39,6 +51,7 @@ enum KeySpec {
     End,
     Escape,
     Delete,
+    F9,
 }
 
 struct Binding {
@@ -70,6 +83,10 @@ const BINDINGS: &[Binding] = &[
     Binding { key: KeySpec::Char('['), cmd: false, shift: false, alt: true, intent: Intent::TrimToPlayhead(false) },
     Binding { key: KeySpec::Char(']'), cmd: false, shift: false, alt: true, intent: Intent::TrimToPlayhead(true) },
     Binding { key: KeySpec::ArrowUp, cmd: false, shift: false, alt: false, intent: Intent::SelectStep(-1) },
+    Binding { key: KeySpec::Char('d'), cmd: true, shift: false, alt: false, intent: Intent::Duplicate },
+    Binding { key: KeySpec::F9, cmd: false, shift: false, alt: false, intent: Intent::EasyEase(EaseSide::Both) },
+    Binding { key: KeySpec::F9, cmd: false, shift: true, alt: false, intent: Intent::EasyEase(EaseSide::In) },
+    Binding { key: KeySpec::F9, cmd: true, shift: true, alt: false, intent: Intent::EasyEase(EaseSide::Out) },
     Binding { key: KeySpec::Char('u'), cmd: false, shift: false, alt: false, intent: Intent::ToggleKeyedOnly },
     Binding { key: KeySpec::Char('*'), cmd: false, shift: false, alt: false, intent: Intent::ToggleMarker },
     Binding { key: KeySpec::Char('*'), cmd: false, shift: true, alt: false, intent: Intent::ToggleMarker },
@@ -89,6 +106,7 @@ pub(super) fn lookup(key: &Key, cmd: bool, shift: bool, alt: bool) -> Option<Int
         Key::ArrowUp => KeySpec::ArrowUp,
         Key::ArrowDown => KeySpec::ArrowDown,
         Key::Delete | Key::Backspace => KeySpec::Delete,
+        Key::F9 => KeySpec::F9,
         _ => return None,
     };
     BINDINGS

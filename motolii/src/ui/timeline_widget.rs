@@ -422,6 +422,48 @@ fn attrs_to_patch(a: &LayerAttrs) -> LayerAttrsPatch {
     }
 }
 
+/// 層をそのまま増やす。中身(尺・見え方・エフェクト・キー)は全部連れていく。
+/// 重ね順だけ1つ上へ置く — AE の Cmd+D と同じで、複製は元の上に出る。
+pub(super) fn duplicate_layer(doc: &Arc<Mutex<Document>>, layer: LayerId) -> Option<LayerId> {
+    let mut doc = doc.lock().unwrap();
+    let view = doc.view();
+    let meta = view.meta(layer).ok().flatten()?;
+    let copy = LayerId(view.next_layer_id());
+    let attrs = view.attrs(layer).ok().flatten().unwrap_or_default();
+    let effects = view.effects(layer).unwrap_or_default();
+    let tracks: Vec<_> = view
+        .properties(layer)
+        .into_iter()
+        .filter_map(|p| view.track(layer, &p).ok().flatten().map(|t| (p, t)))
+        .collect();
+    let shapes = view.shapes(layer).unwrap_or_default();
+    let text = view.text_document(layer).ok().flatten();
+
+    let mut intents = vec![
+        Intent::AddLayer(copy),
+        Intent::SetMeta {
+            layer: copy,
+            meta: LayerMeta { order: meta.order.saturating_add(1), ..meta.clone() },
+        },
+        Intent::SetAttrs { layer: copy, patch: attrs_to_patch(&attrs) },
+    ];
+    if !effects.is_empty() {
+        intents.push(Intent::SetEffects { layer: copy, effects });
+    }
+    if !shapes.is_empty() {
+        intents.push(Intent::SetShapes { layer: copy, shapes });
+    }
+    if let Some(document) = text {
+        intents.push(Intent::SetTextDocument { layer: copy, document });
+    }
+    for (property, track) in tracks {
+        intents.push(Intent::SetTrack { layer: copy, property, track });
+    }
+
+    doc.apply_all(intents).ok()?;
+    Some(copy)
+}
+
 pub(super) fn split_layer(doc: &Arc<Mutex<Document>>, layer: LayerId, comp_frame: i64) -> Option<LayerId> {
     let mut doc = doc.lock().unwrap();
     let view = doc.view();
@@ -1121,5 +1163,72 @@ mod edge_tests {
     fn trimming_never_produces_an_empty_layer() {
         let out = edge_to_frame(t(10, 50, 0), 5, true, true);
         assert!(out.duration >= 1, "長さが 0 以下になった: {out:?}");
+    }
+}
+
+#[cfg(test)]
+mod duplicate_tests {
+    use super::*;
+    use crate::doc::store::{
+        Composition, Interp, Keyframe, LayerAttrsPatch, LayerSource, PropertyId, Value,
+    };
+
+    #[test]
+    fn a_duplicate_carries_the_whole_layer_and_sits_above_the_original() {
+        let mut doc = Document::new();
+        doc.apply(Intent::SetComposition(Composition {
+            width: 64,
+            height: 64,
+            fps: Fps::try_new(30, 1).unwrap(),
+            duration_frames: 300,
+            background: [0.0, 0.0, 0.0, 1.0],
+        }))
+        .unwrap();
+        let layer = LayerId(1);
+        doc.apply_all([
+            Intent::AddLayer(layer),
+            Intent::SetMeta {
+                layer,
+                meta: LayerMeta {
+                    source: LayerSource::Shape,
+                    order: 3,
+                    timing: LayerTiming::place(10, None, 50),
+                },
+            },
+            Intent::SetAttrs {
+                layer,
+                patch: LayerAttrsPatch { name: Some("原本".into()), ..Default::default() },
+            },
+        ])
+        .unwrap();
+        let property = PropertyId::new("opacity").unwrap();
+        let mut track = KeyframeTrack::new();
+        track.insert(Keyframe {
+            t: RationalTime::try_from_frame(15, Fps::try_new(30, 1).unwrap()).unwrap(),
+            value: Value::F64(0.5),
+            interp: Interp::Linear,
+            spatial: None,
+        });
+        doc.apply(Intent::SetTrack { layer, property: property.clone(), track }).unwrap();
+
+        let doc = Arc::new(Mutex::new(doc));
+        let copy = duplicate_layer(&doc, layer).expect("複製できるはず");
+
+        let d = doc.lock().unwrap();
+        let view = d.view();
+        let orig = view.meta(layer).unwrap().unwrap();
+        let made = view.meta(copy).unwrap().unwrap();
+        assert_eq!(made.timing.start, orig.timing.start, "尺が連れていかれていない");
+        assert_eq!(made.timing.duration, orig.timing.duration);
+        assert_eq!(made.order, orig.order + 1, "複製は元の上に出る");
+        assert_eq!(
+            view.attrs(copy).unwrap().unwrap().name,
+            "原本",
+            "見え方が連れていかれていない"
+        );
+        assert!(
+            view.track(copy, &property).unwrap().is_some(),
+            "キーが連れていかれていない"
+        );
     }
 }

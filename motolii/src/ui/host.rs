@@ -11,7 +11,7 @@ use dioxus_native::prelude::{provide_context, ScopeId};
 use dioxus_native::{DioxusDocument, DioxusNativeWindowRenderer, RendererOptions};
 use blitz_shell::{BlitzApplication, View};
 
-use blitz_dom::DocumentConfig;
+use blitz_dom::{Document, DocumentConfig};
 
 use crate::ui::dock::Panel;
 use crate::ui::fixture::{load_fixture, Loaded};
@@ -227,6 +227,26 @@ impl ApplicationHandler for Windows {
         window_id: WindowId,
         event: WindowEvent,
     ) {
+        // 打鍵は焦点のある節へ配られ、無ければ `<html>` へ行く。`<html>` からは
+        // 下りてこないので、根へ当て直さないと**打鍵が1つも届かない**。
+        // 上流の autofocus は属性が付く前に可否を見ていて効かない。
+        if matches!(event, WindowEvent::KeyboardInput { .. }) {
+            if let Some(view) = self.inner.windows.get_mut(&window_id) {
+                let doc = view.downcast_doc_mut::<DioxusDocument>();
+                let root = {
+                    let inner = doc.inner();
+                    ["#app", "#detached"]
+                        .into_iter()
+                        .find_map(|s| inner.query_selector(s).ok().flatten())
+                };
+                if let Some(root) = root {
+                    let mut inner = doc.inner_mut();
+                    if inner.get_focussed_node_id() != Some(root) {
+                        inner.set_focus_to(root);
+                    }
+                }
+            }
+        }
         if matches!(event, WindowEvent::CloseRequested) {
             if let Some(panel) = self.detached.remove(&window_id) {
                 self.host.closed(panel);

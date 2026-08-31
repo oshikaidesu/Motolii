@@ -156,6 +156,23 @@ impl Gui {
         }
     }
 
+    /// 打鍵を1つ流す。
+    fn key(&mut self, key: keyboard_types::Key, mods: keyboard_types::Modifiers) {
+        use blitz_traits::events::{BlitzKeyEvent, KeyState};
+        let event = BlitzKeyEvent {
+            key,
+            code: keyboard_types::Code::Unidentified,
+            modifiers: mods,
+            location: keyboard_types::Location::Standard,
+            is_auto_repeating: false,
+            is_composing: false,
+            state: KeyState::Pressed,
+            text: None,
+        };
+        self.doc.handle_ui_event(UiEvent::KeyDown(event));
+        self.settle();
+    }
+
     fn press(&mut self, x: f32, y: f32) {
         let moved = self.pointer_raw(x, y, MouseEventButtons::None);
         self.doc.handle_ui_event(UiEvent::PointerMove(moved));
@@ -401,4 +418,29 @@ fn an_emptied_zone_opens_again_while_a_tab_is_held() {
 
     let (_, h) = gui.size_of_nth(".zone", 3);
     assert!(h > 40.0, "掴んでいるのに空の置き場が開かない: 高さ {h}");
+}
+
+/// 打鍵がハンドラまで届くか(窓の外の事情と切り分ける)。
+#[test]
+fn a_keystroke_reaches_the_app() {
+    let mut gui = Gui::open();
+    let before = gui.texts(".lrow").len();
+    // 層を1つ選んでから複製する。
+    let rows = gui.doc.inner().query_selector_all(".lsurface").unwrap_or_default();
+    assert!(!rows.is_empty(), "層の行が無い");
+    let (x, y) = gui.center_of(".lsurface", 0);
+    gui.click(x, y);
+
+    let app = gui.doc.inner().query_selector("#app").unwrap().expect("#app");
+    gui.doc.inner_mut().set_focus_to(app);
+    gui.key(
+        keyboard_types::Key::Character("d".into()),
+        keyboard_types::Modifiers::META,
+    );
+
+    assert_eq!(
+        gui.texts(".lrow").len(),
+        before + 1,
+        "⌘D が届いていない(層が増えていない)"
+    );
 }
