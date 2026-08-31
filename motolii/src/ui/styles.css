@@ -389,6 +389,16 @@ body {
     overflow: hidden;
 }
 
+.lrow .inside {
+    font-size: var(--t-micro);
+    color: var(--ink3);
+    border: var(--line) solid var(--border);
+    border-radius: 7px;
+    padding: 0 4px;
+    margin-right: var(--sp2);
+    line-height: 1.2;
+}
+
 #stagefoot .chip {
     margin-right: auto;
     padding: 0 var(--sp2);

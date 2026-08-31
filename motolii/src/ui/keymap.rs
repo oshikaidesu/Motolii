@@ -165,3 +165,76 @@ mod tests {
         assert!(lookup(&Key::Character("k".into()), false, false, false).is_none());
     }
 }
+
+/// 修飾キーは、文字のイベントに乗らずに**別のイベントとして**届く。
+/// 押されている物を自分で覚えないと、⌘ を伴う打鍵が全部素通りする。
+mod held {
+    use keyboard_types::Key;
+    use std::sync::atomic::{AtomicU8, Ordering};
+
+    static HELD: AtomicU8 = AtomicU8::new(0);
+
+    const CMD: u8 = 1;
+    const SHIFT: u8 = 2;
+    const ALT: u8 = 4;
+
+    /// mac は ⌘、それ以外は Ctrl が「主」の修飾。
+    fn bit(key: &Key) -> Option<u8> {
+        let primary = if cfg!(target_os = "macos") { Key::Meta } else { Key::Control };
+        match key {
+            k if *k == primary => Some(CMD),
+            Key::Shift => Some(SHIFT),
+            Key::Alt => Some(ALT),
+            _ => None,
+        }
+    }
+
+    pub fn down(key: &Key) {
+        if let Some(b) = bit(key) {
+            HELD.fetch_or(b, Ordering::Relaxed);
+        }
+    }
+
+    pub fn up(key: &Key) {
+        if let Some(b) = bit(key) {
+            HELD.fetch_and(!b, Ordering::Relaxed);
+        }
+    }
+
+    /// 窓から離れると押し下げが取り残されるので、そこで一度捨てる。
+    pub fn clear() {
+        HELD.store(0, Ordering::Relaxed);
+    }
+
+    pub fn get() -> (bool, bool, bool) {
+        let h = HELD.load(Ordering::Relaxed);
+        (h & CMD != 0, h & SHIFT != 0, h & ALT != 0)
+    }
+}
+
+pub(super) use held::{clear as forget_modifiers, down as note_key_down, up as note_key_up};
+
+/// イベントに乗ってきた修飾と、覚えている押し下げを合わせる。
+pub(super) fn lookup_held(key: &Key, cmd: bool, shift: bool, alt: bool) -> Option<Intent> {
+    let (h_cmd, h_shift, h_alt) = held::get();
+    lookup(key, cmd || h_cmd, shift || h_shift, alt || h_alt)
+}
+
+#[cfg(test)]
+mod held_tests {
+    use super::*;
+
+    /// 実機では ⌘ が別イベントで来て、続く文字に乗らない。覚えていないと全部素通りする。
+    #[test]
+    fn a_modifier_that_arrived_as_its_own_event_still_counts() {
+        forget_modifiers();
+        let d = Key::Character("d".into());
+        assert!(lookup_held(&d, false, false, false).is_none(), "素の d が拾われている");
+
+        note_key_down(&if cfg!(target_os = "macos") { Key::Meta } else { Key::Control });
+        assert!(lookup_held(&d, false, false, false).is_some(), "覚えた ⌘ が効いていない");
+
+        note_key_up(&if cfg!(target_os = "macos") { Key::Meta } else { Key::Control });
+        assert!(lookup_held(&d, false, false, false).is_none(), "離した ⌘ が残っている");
+    }
+}

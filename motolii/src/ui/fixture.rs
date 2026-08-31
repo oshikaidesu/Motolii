@@ -30,6 +30,8 @@ pub(super) struct LayerRow {
     pub expanded: bool,
     /// 入れ子の深さ。0 が親を持たない層。
     pub depth: u16,
+    /// 直接の子の数。畳んだ時に「中に何枚居るか」を出すため。
+    pub children: u16,
 }
 
 const TRANSFORM_PROPS: &[&str] = &[
@@ -76,6 +78,7 @@ struct Row {
     layer: LayerId,
     prop: Option<PropertyId>,
     depth: u16,
+    children: u16,
 }
 
 fn rows_of(doc: &Document) -> Vec<Row> {
@@ -113,7 +116,8 @@ fn rows_nested(
         .collect();
 
     while let Some((layer, depth)) = stack.pop() {
-        out.push(Row { layer, prop: None, depth });
+        let children = layers.iter().filter(|c| parent_of(**c) == Some(layer)).count() as u16;
+        out.push(Row { layer, prop: None, depth, children });
         if !expanded.contains(&layer) {
             continue;
         }
@@ -125,7 +129,7 @@ fn rows_nested(
             if keyed_only && !keyed {
                 continue;
             }
-            out.push(Row { layer, prop: Some(property), depth });
+            out.push(Row { layer, prop: Some(property), depth, children });
         }
         stack.extend(
             layers
@@ -204,7 +208,7 @@ pub(super) fn layer_rows_from_doc(doc: &Document) -> Vec<LayerRow> {
     let view = doc.view();
     rows_of(doc)
         .into_iter()
-        .map(|Row { layer, prop, depth }| {
+        .map(|Row { layer, prop, depth, children }| {
             let attrs = view.attrs(layer).ok().flatten().unwrap_or_default();
             let color = attrs
                 .label_color
@@ -224,6 +228,7 @@ pub(super) fn layer_rows_from_doc(doc: &Document) -> Vec<LayerRow> {
                 prop: prop.map(|p| p.name().to_string()),
                 expanded,
                 depth,
+                children,
             }
         })
         .collect()

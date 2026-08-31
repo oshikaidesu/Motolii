@@ -455,6 +455,10 @@ pub fn app() -> Element {
                     host.open(panel);
                 }
             },
+            onkeyup: move |evt: dioxus_native::prelude::Event<dioxus_native::prelude::KeyboardData>| {
+                crate::ui::keymap::note_key_up(&evt.key());
+            },
+            onfocusout: move |_| crate::ui::keymap::forget_modifiers(),
             onkeydown: {
                 let doc = doc.clone();
                 let clock = clock.clone();
@@ -465,12 +469,19 @@ pub fn app() -> Element {
                 let mut revision = revision;
                 move |evt| {
                     println!("PROBE room=input verdict=keydown key={:?}", evt.key());
+                    crate::ui::keymap::note_key_down(&evt.key());
                     if text_editing.read().is_some() {
                         println!("PROBE room=input verdict=text-editing key={:?}", evt.key());
                         return;
                     }
                     let modifiers = evt.modifiers();
-                    let Some(intent) = lookup(&evt.key(), modifiers.meta(), modifiers.shift(), modifiers.alt()) else {
+                    let primary = if cfg!(target_os = "macos") { modifiers.meta() } else { modifiers.ctrl() };
+                    let Some(intent) = crate::ui::keymap::lookup_held(
+                        &evt.key(),
+                        primary,
+                        modifiers.shift(),
+                        modifiers.alt(),
+                    ) else {
                         println!("PROBE room=input verdict=no-binding key={:?}", evt.key());
                         return;
                     };

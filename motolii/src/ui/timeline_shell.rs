@@ -98,7 +98,8 @@ pub(super) fn timeline_shell(
                 }
             )
         };
-        let indent = format!("padding-left:{}px", row.depth as u32 * 12);
+        let indent = format!("padding-left:{}px", row.depth as u32 * 18);
+        let folded_children = (!row.expanded).then_some(row.children).filter(|n| *n > 0);
         if let Some(name) = row.prop.clone() {
             return rsx!(
                 div { class: "lrow", style: "{indent}",
@@ -129,6 +130,9 @@ pub(super) fn timeline_shell(
                         }
                     },
                     if expanded { "▾" } else { "▸" }
+                }
+                if let Some(n) = folded_children {
+                    span { class: "inside", "{n}" }
                 }
                 if let Some(draft) = editing_name {
                     input {
