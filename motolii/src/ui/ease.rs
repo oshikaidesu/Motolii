@@ -81,6 +81,29 @@ pub(super) fn apply(session: &Session, starts: &[KeySel], shape: Interp) -> Resu
     Ok(count)
 }
 
+/// 区間の始まりと終わりの時刻(秒)。終わりは次のキー。
+pub(super) fn span_of(session: &Session, start: &KeySel) -> Option<(f64, f64)> {
+    let doc = session.doc.lock().unwrap();
+    let view = doc.view();
+    let properties: Vec<PropertyId> = match &start.property {
+        Some(p) => vec![p.clone()],
+        None => view.properties(start.layer),
+    };
+    for property in properties {
+        let Ok(Some(track)) = view.track(start.layer, &property) else {
+            continue;
+        };
+        let times: Vec<f64> = track.keys().iter().map(|k| k.t.as_seconds_f64()).collect();
+        let Some(here) = times.iter().position(|t| (t - start.at_sec).abs() < 1e-6) else {
+            continue;
+        };
+        if let Some(next) = times.get(here + 1) {
+            return Some((start.at_sec, *next));
+        }
+    }
+    None
+}
+
 /// 区間が今持っている形。無ければ直線。
 pub(super) fn shape_of(session: &Session, start: &KeySel) -> Interp {
     let doc = session.doc.lock().unwrap();

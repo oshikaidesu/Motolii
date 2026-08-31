@@ -64,6 +64,18 @@ impl EaseWidget {
         }
     }
 
+    /// 再生位置が区間の中のどこか。外に居るなら None。
+    fn playhead_u(&self) -> Option<f64> {
+        let starts = self.starts();
+        let (a, b) = crate::ui::ease::span_of(&self.session, starts.first()?)?;
+        if b <= a {
+            return None;
+        }
+        let now = self.session.clock.now_sec();
+        let u = (now - a) / (b - a);
+        (0.0..=1.0).contains(&u).then_some(u)
+    }
+
     fn view(&self) -> (f64, f64) {
         if overshoots(*self.shape.lock().unwrap()) {
             OVERSHOOT_VIEW
@@ -163,9 +175,23 @@ impl Widget for EaseWidget {
         );
 
         // 案内は v=0 と v=1 の2本だけ(実機にも縦線は無い)。
+        // 目盛りは薄く4分割。読む線(v=0 / v=1)はその上に強く引く。
+        let grid = Color::from_rgba8(0x75, 0x75, 0x75, 0x44);
+        for i in 1..4 {
+            let f = i as f64 / 4.0;
+            let (a, b) = (self.to_px(f, 0.0), self.to_px(f, 1.0));
+            s.stroke(&Stroke::new(1.0 / k), at, PaintRef::Solid(grid), None, &Line::new(a, b));
+            let (a, b) = (self.to_px(0.0, f), self.to_px(1.0, f));
+            s.stroke(&Stroke::new(1.0 / k), at, PaintRef::Solid(grid), None, &Line::new(a, b));
+        }
         for v in [0.0, 1.0] {
             let a = self.to_px(0.0, v);
             let b = self.to_px(1.0, v);
+            s.stroke(&Stroke::new(1.0 / k), at, PaintRef::Solid(dim), None, &Line::new(a, b));
+        }
+        for u in [0.0, 1.0] {
+            let a = self.to_px(u, 0.0);
+            let b = self.to_px(u, 1.0);
             s.stroke(&Stroke::new(1.0 / k), at, PaintRef::Solid(dim), None, &Line::new(a, b));
         }
 
@@ -189,6 +215,27 @@ impl Widget for EaseWidget {
                 PaintRef::Solid(dim),
                 None,
                 &Circle::new(self.to_px(zero_or_one, v), 3.0),
+            );
+        }
+
+        // 今どこを再生しているか。区間の中に居る時だけ立てる。
+        if let Some(u) = self.playhead_u() {
+            let top = self.to_px(u, self.view().1);
+            let bottom = self.to_px(u, self.view().0);
+            let mark = t3(tokens::WAY_TIMELINE);
+            s.stroke(
+                &Stroke::new(1.0 / k),
+                at,
+                PaintRef::Solid(mark),
+                None,
+                &Line::new(top, bottom),
+            );
+            s.fill(
+                Fill::NonZero,
+                at,
+                PaintRef::Solid(mark),
+                None,
+                &Circle::new(self.to_px(u, shape.ease(u)), 4.0),
             );
         }
 
