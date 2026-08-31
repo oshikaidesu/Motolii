@@ -10,6 +10,7 @@ pub(crate) enum Panel {
     Output,
     Inspector,
     Utility,
+    Settings,
     Timeline,
     Ease,
 }
@@ -32,6 +33,7 @@ const PANELS: &[Spec] = &[
     Spec { panel: Panel::Output, label: "Output", way: "var(--way-stage)", home: Zone::Center },
     Spec { panel: Panel::Inspector, label: "Inspector", way: "var(--way-inspector)", home: Zone::Right },
     Spec { panel: Panel::Utility, label: "Utility", way: "var(--way-inspector)", home: Zone::Right },
+    Spec { panel: Panel::Settings, label: "Settings", way: "var(--way-inspector)", home: Zone::Right },
     Spec { panel: Panel::Timeline, label: "Timeline", way: "var(--way-timeline)", home: Zone::Bottom },
     Spec { panel: Panel::Ease, label: "Ease", way: "var(--way-timeline)", home: Zone::Right },
 ];

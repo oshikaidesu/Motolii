@@ -167,6 +167,7 @@ pub(super) struct StageWidget {
     selected_size: Arc<Mutex<Option<[f32; 2]>>>,
     view_camera: Arc<Mutex<crate::render::engine::ObservationCamera>>,
     rings: Arc<std::sync::atomic::AtomicBool>,
+    frame_dim: Arc<std::sync::atomic::AtomicU32>,
     /// 最後に指が居た所(窓の点)。拡縮を**指の下**で行うために覚える。
     cursor: Option<(f64, f64)>,
     /// **出す物だけを映す。** 書き出しカメラで撮り、取っ手も枠も描かず、触れない。
@@ -205,6 +206,7 @@ impl StageWidget {
         selected_size: Arc<Mutex<Option<[f32; 2]>>>,
         view_camera: Arc<Mutex<crate::render::engine::ObservationCamera>>,
         rings: Arc<std::sync::atomic::AtomicBool>,
+        frame_dim: Arc<std::sync::atomic::AtomicU32>,
         output_only: bool,
     ) -> Self {
         Self {
@@ -221,6 +223,7 @@ impl StageWidget {
             selected_size,
             view_camera,
             rings,
+            frame_dim,
             cursor: None,
             output_only,
         }
@@ -1143,7 +1146,13 @@ impl Widget for StageWidget {
             scene.fill(
                 Fill::NonZero,
                 Affine::IDENTITY,
-                PaintRef::Solid(Color::from_rgba8(0x1a, 0x1a, 0x1a, 190)),
+                PaintRef::Solid(Color::from_rgba8(
+                    0x1a,
+                    0x1a,
+                    0x1a,
+                    (self.frame_dim.load(std::sync::atomic::Ordering::Relaxed).min(100) * 255 / 100)
+                        as u8,
+                )),
                 None,
                 &rect,
             );

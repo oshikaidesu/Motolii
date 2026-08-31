@@ -61,6 +61,8 @@ pub(super) struct Session {
     /// 型そのものが行き過ぎる物(Elastic 系)は型の意味として ON になる。
     /// 向きの輪と奥行きの点を描くか。掴んだ所の意味は変えない、散らかりの加減だけ。
     pub rings: Arc<std::sync::atomic::AtomicBool>,
+    /// 枠の外へかける膜の濃さ(%)。見る側の設定で、作品には入らない。
+    pub frame_dim: Arc<std::sync::atomic::AtomicU32>,
     pub overshoot: Arc<std::sync::atomic::AtomicBool>,
     /// 写した曲線。区間から区間へ貼るための控え(Document には入らない)。
     pub curve_clip: Arc<Mutex<Option<crate::doc::store::Interp>>>,
@@ -101,6 +103,7 @@ impl Session {
             selected_keys: Arc::new(Mutex::new(Vec::new())),
             view_camera: Arc::new(Mutex::new(Default::default())),
             rings: Arc::new(std::sync::atomic::AtomicBool::new(true)),
+            frame_dim: Arc::new(std::sync::atomic::AtomicU32::new(75)),
             overshoot: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             curve_clip: Arc::new(Mutex::new(None)),
         }

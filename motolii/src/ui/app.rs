@@ -39,10 +39,13 @@ struct Panes {
     scroll_y: Signal<f64>,
     /// 他の窓が書いた時に上がる。状態は全窓で1つなので、これで描き直す。
     echo: Signal<u32>,
+    /// 窓の文字の大きさ(%)。設定を1枚へ集めるため Settings が触る。
+    scale_pct: Signal<u32>,
 }
 
 fn panes_for(ui: &fixture::UiData) -> Panes {
     Panes {
+        scale_pct: use_signal(|| 100),
         layer_rows: use_signal(|| ui.layer_rows.clone()),
         attrs_state: use_signal(|| {
             ui.layer_rows.iter().map(|r| (r.hidden, r.solo, r.locked)).collect::<Vec<_>>()
@@ -96,6 +99,10 @@ fn panel_body(panel: Panel, session: &Session, ui: &fixture::UiData, p: Panes) -
             comp_line: ui.comp_line.clone(),
         }),
         Panel::Output => rsx!(OutputPanel { session: session.clone() }),
+        Panel::Settings => rsx!(SettingsPanel {
+            session: session.clone(),
+            scale_pct: p.scale_pct,
+        }),
         Panel::Inspector => rsx!(InspectorPanel {
             session: session.clone(),
             selected,
@@ -239,6 +246,7 @@ fn StagePanel(
             session.selected_size.clone(),
             session.view_camera.clone(),
             session.rings.clone(),
+            session.frame_dim.clone(),
             false,
         ))
     });
@@ -266,6 +274,50 @@ fn StagePanel(
     )
 }
 
+/// 見る側の設定。**作品には入らない**物だけを置く。
+/// 散らばっていると探せないので、窓の設定はここへ集める。
+#[component]
+fn SettingsPanel(session: Session, scale_pct: Signal<u32>) -> Element {
+    let dim = session.frame_dim.clone();
+    let pct = use_signal(|| dim.load(std::sync::atomic::Ordering::Relaxed));
+    let dim_step = move |dim: std::sync::Arc<std::sync::atomic::AtomicU32>, mut pct: Signal<u32>, by: i32| {
+        let next = (pct() as i32 + by).clamp(0, 100) as u32;
+        dim.store(next, std::sync::atomic::Ordering::Relaxed);
+        pct.set(next);
+    };
+    let (dim_a, dim_b) = (dim.clone(), dim.clone());
+
+    let scale_step = move |ui: std::sync::Arc<crate::ui::tokens::UiScale>, mut sig: Signal<u32>, by: i32| {
+        let next = (sig() as i32 + by).clamp(50, 200) as u32;
+        ui.set_percent(next);
+        sig.set(ui.percent());
+    };
+    let (ui_a, ui_b) = (session.scale.clone(), session.scale.clone());
+
+    rsx!(
+        div { id: "inspector",
+            div { class: "sec", "VIEW" }
+            div { class: "prow",
+                span { class: "pname", "Outside dim" }
+                div { class: "zoomctl",
+                    span { class: "zbtn", onclick: move |_| dim_step(dim_a.clone(), pct, -5), "−" }
+                    span { class: "zval", "{pct()}%" }
+                    span { class: "zbtn", onclick: move |_| dim_step(dim_b.clone(), pct, 5), "+" }
+                }
+            }
+            div { class: "sec", "WINDOW" }
+            div { class: "prow",
+                span { class: "pname", "Scale" }
+                div { class: "zoomctl",
+                    span { class: "zbtn", onclick: move |_| scale_step(ui_a.clone(), scale_pct, -5), "−" }
+                    span { class: "zval", "{scale_pct()}%" }
+                    span { class: "zbtn", onclick: move |_| scale_step(ui_b.clone(), scale_pct, 5), "+" }
+                }
+            }
+        }
+    )
+}
+
 /// 出す物だけを映す窓。Stage が世界を見る場になった以上、
 /// **出力を確かめる場**が別に要る(枠を回した時、Stage では確かめようがない)。
 #[component]
@@ -280,6 +332,7 @@ fn OutputPanel(session: Session) -> Element {
             session.selected_size.clone(),
             session.view_camera.clone(),
             session.rings.clone(),
+            session.frame_dim.clone(),
             true,
         ))
     });
@@ -340,7 +393,6 @@ pub fn app() -> Element {
     let mut tab_drag = use_signal(|| Option::<Panel>::None);
     let mut drop_zone = use_signal(|| Option::<Zone>::None);
     let mut view_open = use_signal(|| false);
-    let mut scale_pct = use_signal(|| 100u32);
 
     let session = use_hook(|| consume_context::<Session>()).clone();
     let loaded = session.ui.clone();
@@ -355,6 +407,7 @@ pub fn app() -> Element {
         });
     });
     let panes = panes_for(&loaded);
+    let scale_pct = panes.scale_pct;
     wire_windows(&host, panes);
     let Panes {
         layer_rows,
@@ -369,7 +422,6 @@ pub fn app() -> Element {
     let timeline_tx = session.timeline_tx.clone();
     let doc = session.doc.clone();
     let clock = session.clock.clone();
-    let ui_scale = session.scale.clone();
     let selection = session.selection.clone();
 
     let bw = browser_w();
@@ -825,31 +877,7 @@ pub fn app() -> Element {
                     }
                 }
                 span { class: "menu", "Help" }
-                div { class: "zoomctl",
-                    span {
-                        class: "zbtn",
-                        onclick: {
-                            let ui_scale = ui_scale.clone();
-                            move |_| {
-                                ui_scale.set_percent(ui_scale.percent().saturating_sub(1));
-                                *scale_pct.write() = ui_scale.percent();
-                            }
-                        },
-                        "−"
-                    }
-                    span { class: "zval", "{scale_pct()}%" }
-                    span {
-                        class: "zbtn",
-                        onclick: {
-                            let ui_scale = ui_scale.clone();
-                            move |_| {
-                                ui_scale.set_percent(ui_scale.percent() + 1);
-                                *scale_pct.write() = ui_scale.percent();
-                            }
-                        },
-                        "+"
-                    }
-                }
+
             }
 
             div {
