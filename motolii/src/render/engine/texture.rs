@@ -100,7 +100,9 @@ impl Engine {
                 .unwrap_or(&[]);
             self.shape_texture_from_shapes(shapes, layer.id)
         } else if let LayerSource::File { path, .. } = &layer.source {
-            if is_point_cloud_path(path) {
+            if crate::render::media::is_mesh_path(path) {
+                self.mesh_content_for(path, comp)
+            } else if is_point_cloud_path(path) {
                 self.point_cloud_content_for(path, comp)
             } else {
                 let path = path.clone();
