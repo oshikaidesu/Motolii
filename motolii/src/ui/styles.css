@@ -475,7 +475,7 @@ body {
 
 .ecurve {
     flex: 1;
-    min-height: calc(90 * var(--s) * 1px);
+    min-height: calc(150 * var(--s) * 1px);
     display: grid;
     background: var(--app);
     border-bottom: var(--line) solid var(--dark);

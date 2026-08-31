@@ -84,19 +84,34 @@ impl EaseWidget {
         }
     }
 
+    /// 盤は**正方**にする。横長の箱に引き伸ばすと、同じ傾きが型ごとに
+    /// 違って見えて読めない(実機の plot も正方に近い)。
+    fn plot(&self) -> Rect {
+        let side = (self.size.0.min(self.size.1) - PAD * 2.0).max(1.0);
+        let x0 = (self.size.0 - side) / 2.0;
+        let y0 = (self.size.1 - side) / 2.0;
+        Rect::new(x0, y0, x0 + side, y0 + side)
+    }
+
     fn to_curve(&self, x: f64, y: f64) -> (f64, f64) {
-        let (w, h) = (self.size.0 - PAD * 2.0, self.size.1 - PAD * 2.0);
-        if w <= 0.0 || h <= 0.0 {
+        let plot = self.plot();
+        if plot.width() <= 0.0 || plot.height() <= 0.0 {
             return (0.0, 0.0);
         }
         let (lo, hi) = self.view();
-        (((x - PAD) / w).clamp(-0.2, 1.2), hi - (y - PAD) / h * (hi - lo))
+        (
+            ((x - plot.x0) / plot.width()).clamp(-0.2, 1.2),
+            hi - (y - plot.y0) / plot.height() * (hi - lo),
+        )
     }
 
     fn to_px(&self, cu: f64, cv: f64) -> Point {
-        let (w, h) = (self.size.0 - PAD * 2.0, self.size.1 - PAD * 2.0);
+        let plot = self.plot();
         let (lo, hi) = self.view();
-        Point::new(PAD + cu * w, PAD + (hi - cv) / (hi - lo) * h)
+        Point::new(
+            plot.x0 + cu * plot.width(),
+            plot.y0 + (hi - cv) / (hi - lo) * plot.height(),
+        )
     }
 }
 
