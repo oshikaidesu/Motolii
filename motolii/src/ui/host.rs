@@ -100,10 +100,31 @@ impl Host {
 
     pub(crate) fn open(&self, panel: Panel) {
         if self.tx.send(Ask::Open(panel)).is_ok() {
-            if let Some(proxy) = &self.proxy {
-                // event loop を起こす。中身は使わないが、これで proxy_wake_up が回る。
-                proxy.send_event(BlitzShellEvent::embedder_event(Woken));
-            }
+            self.poke();
+        }
+    }
+
+    /// event loop を起こす。中身は使わないが、これで proxy_wake_up が回る。
+    pub(crate) fn poke(&self) {
+        if let Some(proxy) = &self.proxy {
+            proxy.send_event(BlitzShellEvent::embedder_event(Woken));
+        }
+    }
+
+    /// 別の糸から窓を起こす線。糸をまたぐので proxy だけを渡す。
+    pub(crate) fn poker(&self) -> Poke {
+        Poke(self.proxy.clone())
+    }
+}
+
+/// 窓の外の糸が持つ、窓を起こすだけの口。
+#[derive(Clone)]
+pub(crate) struct Poke(Option<BlitzShellProxy>);
+
+impl Poke {
+    pub(crate) fn poke(&self) {
+        if let Some(proxy) = &self.0 {
+            proxy.send_event(BlitzShellEvent::embedder_event(Woken));
         }
     }
 }
@@ -286,6 +307,8 @@ impl ApplicationHandler for Windows {
     }
 
     fn proxy_wake_up(&mut self, event_loop: &dyn ActiveEventLoop) {
+        // 窓の外(書き出しの糸など)で状態が変わっている。全ての窓を描き直す。
+        self.host.wake_all();
         self.serve_asks();
         self.realise_pending(event_loop);
         self.inner.proxy_wake_up(event_loop);

@@ -21,6 +21,15 @@ pub fn is_rerun_importable_extension(extension: &str) -> bool {
     re_importer::is_supported_file_extension(&extension.to_ascii_lowercase())
 }
 
+/// 静止画か。動画と違って**1枚を焼いて置くだけ**なので、道が別れる。
+pub fn is_still_image_path(path: impl AsRef<Path>) -> bool {
+    path.as_ref()
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_ascii_lowercase())
+        .is_some_and(|e| re_importer::SUPPORTED_IMAGE_EXTENSIONS.contains(&e.as_str()))
+}
+
 pub fn asset_type_for_extension(extension: &str) -> Option<String> {
     let e = extension.to_ascii_lowercase();
     let e = e.as_str();

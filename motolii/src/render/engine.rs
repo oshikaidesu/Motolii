@@ -83,6 +83,7 @@ pub struct Engine {
     failed_containers: HashMap<String, String>,
     point_clouds: HashMap<String, PointCloudData>,
     failed_point_clouds: HashMap<String, String>,
+    stills: HashMap<String, GpuTexture2D>,
     videos: HashMap<String, (Vec<u8>, re_renderer::video::Video)>,
     video_last_texture: HashMap<u64, GpuTexture2D>,
 }
@@ -102,6 +103,7 @@ impl Engine {
             failed_containers: HashMap::new(),
             point_clouds: HashMap::new(),
             failed_point_clouds: HashMap::new(),
+            stills: HashMap::new(),
             videos: HashMap::new(),
             video_last_texture: HashMap::new(),
         })
@@ -125,6 +127,7 @@ impl Engine {
             failed_containers: HashMap::new(),
             point_clouds: HashMap::new(),
             failed_point_clouds: HashMap::new(),
+            stills: HashMap::new(),
             videos: HashMap::new(),
             video_last_texture: HashMap::new(),
         })

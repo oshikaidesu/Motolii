@@ -101,7 +101,7 @@ fn panel_body(panel: Panel, session: &Session, ui: &fixture::UiData, p: Panes) -
             revision: p.revision,
             comp_line: ui.comp_line.clone(),
         }),
-        Panel::Output => rsx!(OutputPanel { session: session.clone() }),
+        Panel::Output => rsx!(OutputPanel { session: session.clone(), echo: p.echo }),
         Panel::Settings => rsx!(SettingsPanel {
             session: session.clone(),
             scale_pct: p.scale_pct,
@@ -331,7 +331,7 @@ fn SettingsPanel(session: Session, scale_pct: Signal<u32>) -> Element {
 /// 出す物だけを映す窓。Stage が世界を見る場になった以上、
 /// **出力を確かめる場**が別に要る(枠を回した時、Stage では確かめようがない)。
 #[component]
-fn OutputPanel(session: Session) -> Element {
+fn OutputPanel(session: Session, echo: Signal<u32>) -> Element {
     let attr = use_hook(|| {
         CustomWidgetAttr::new(StageWidget::new(
             session.clock.clone(),
@@ -348,10 +348,16 @@ fn OutputPanel(session: Session) -> Element {
             true,
         ))
     });
+    // 書き出しの一言は窓の外の糸が書く。echo で起こされて読みに行く。
+    let _ = echo();
+    let outgo = session.outgo.lock().unwrap().clone();
     rsx!(
         div { id: "stagecol",
             div { id: "stage",
                 object { "data": attr }
+            }
+            if !outgo.is_empty() {
+                div { class: "hint", "{outgo}" }
             }
         }
     )
@@ -397,6 +403,55 @@ fn TimelinePanel(
         renaming,
         revision,
     )
+}
+
+/// 書き出しを別の糸で回す。窓は言葉だけを見る。
+///
+/// 元の Document は窓が触り続けるので、**写しを取ってから**渡す。掴んだままだと
+/// 書き出しの間ずっと窓が止まる。
+fn start_export(
+    doc: &std::sync::Arc<std::sync::Mutex<crate::doc::store::Document>>,
+    outgo: std::sync::Arc<std::sync::Mutex<String>>,
+    poke: crate::ui::host::Poke,
+    out_path: std::path::PathBuf,
+) {
+    let snapshot = std::env::temp_dir().join("motolii-export-snapshot.rrd");
+    let say = |outgo: &std::sync::Arc<std::sync::Mutex<String>>, poke: &crate::ui::host::Poke, word: String| {
+        *outgo.lock().unwrap() = word;
+        poke.poke();
+    };
+    if let Err(e) = doc.lock().unwrap().save(&snapshot) {
+        say(&outgo, &poke, format!("Export failed: {e}"));
+        return;
+    }
+    say(&outgo, &poke, "Exporting…".to_string());
+    std::thread::spawn(move || {
+        let done = (|| -> Result<crate::doc::export::ExportReport, String> {
+            let doc = crate::doc::store::Document::load(&snapshot).map_err(|e| e.to_string())?;
+            let mut engine = crate::render::engine::Engine::new().map_err(|e| e.to_string())?;
+            let job = crate::doc::export::ExportJob { out_path, qp0: false };
+            let cancel = crate::doc::export::Cancel::new();
+            crate::doc::export::export_with_progress(
+                &mut engine,
+                &doc.view(),
+                &job,
+                &cancel,
+                |p| {
+                    *outgo.lock().unwrap() =
+                        format!("Exporting {}/{}", p.frames_done, p.frames_total);
+                    poke.poke();
+                },
+            )
+            .map_err(|e| e.to_string())
+        })();
+        let word = match done {
+            Ok(report) => format!("Wrote {}", report.out_path.display()),
+            Err(e) => format!("Export failed: {e}"),
+        };
+        println!("PROBE room=export verdict=done {word}");
+        *outgo.lock().unwrap() = word;
+        poke.poke();
+    });
 }
 
 pub fn app() -> Element {
@@ -915,6 +970,32 @@ pub fn app() -> Element {
                                         }
                                     },
                                     "Import…"
+                                }
+                            }
+                            div { class: "vrow",
+                                span {
+                                    class: "vitem",
+                                    onclick: {
+                                        let doc = session.doc.clone();
+                                        let outgo = session.outgo.clone();
+                                        let poke = host.poker();
+                                        move |evt: Event<MouseData>| {
+                                            evt.stop_propagation();
+                                            file_open.set(false);
+                                            let doc = doc.clone();
+                                            let outgo = outgo.clone();
+                                            let poke = poke.clone();
+                                            dioxus_core::spawn(async move {
+                                                let picked = rfd::AsyncFileDialog::new()
+                                                    .set_file_name("comp.mp4")
+                                                    .save_file()
+                                                    .await;
+                                                let Some(file) = picked else { return };
+                                                start_export(&doc, outgo, poke, file.path().to_path_buf());
+                                            });
+                                        }
+                                    },
+                                    "Export…"
                                 }
                             }
                         }

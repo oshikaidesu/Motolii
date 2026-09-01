@@ -13,6 +13,7 @@ pub use point_cloud::{
     asset_type_for_extension, is_point_cloud_extension, is_point_cloud_path, is_rerun_importable_extension,
     load_point_cloud, PointCloudData,
     PointCloudError, POINT_CLOUD_EXTENSIONS,
+    is_still_image_path,
 };
 pub use probe::{
     probe, probe_container, require_supported_audio, select_audio_stream, select_video_stream,

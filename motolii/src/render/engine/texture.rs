@@ -36,6 +36,9 @@ impl Engine {
                 self.mesh_content_for(path, comp)
             } else if is_point_cloud_path(path) {
                 self.point_cloud_content_for(path, comp)
+            } else if crate::render::media::is_still_image_path(path) {
+                let path = path.clone();
+                self.still_texture_for(&path)
             } else {
                 let path = path.clone();
                 self.media_texture_for(&path, layer.source_frame, layer.id)
@@ -104,6 +107,9 @@ impl Engine {
                 self.mesh_content_for(path, comp)
             } else if is_point_cloud_path(path) {
                 self.point_cloud_content_for(path, comp)
+            } else if crate::render::media::is_still_image_path(path) {
+                let path = path.clone();
+                self.still_texture_for(&path)
             } else {
                 let path = path.clone();
                 self.media_texture_for(&path, layer.source_frame, layer.id)
@@ -286,6 +292,48 @@ impl Engine {
             }),
             natural,
         ))
+    }
+
+    /// 静止画は1枚を焼いて置くだけ。動画の道へ入れると
+    /// `load_from_bytes(.., "video/mp4", ..)` が必ず落ちて**絵が出ない**。
+    fn still_texture_for(
+        &mut self,
+        path: &str,
+    ) -> Result<(Option<LayerContent>, [f32; 2]), EngineError> {
+        if let Some(texture) = self.stills.get(path) {
+            let [w, h] = texture.width_height();
+            return Ok((Some(LayerContent::Texture(texture.clone())), [w as f32, h as f32]));
+        }
+        if let Some(reason) = self.failed_probes.get(path) {
+            self.layer_failures.push(reason.clone());
+            return Ok((None, [0.0, 0.0]));
+        }
+        let decoded = image::ImageReader::open(path)
+            .map_err(|e| e.to_string())
+            .and_then(|r| r.decode().map_err(|e| e.to_string()));
+        let image = match decoded {
+            Ok(image) => image.to_rgba8(),
+            Err(err) => {
+                let reason = format!("素材を読めない(画像decode失敗): {path}: {err}");
+                self.failed_probes.insert(path.to_owned(), reason.clone());
+                self.layer_failures.push(reason);
+                return Ok((None, [0.0, 0.0]));
+            }
+        };
+        let (width, height) = image.dimensions();
+        // 合成は乗算済みを前提にしている。素の RGBA を渡すと縁が光る。
+        let mut premultiplied = image.into_raw();
+        for px in premultiplied.chunks_exact_mut(4) {
+            let a = px[3] as u32;
+            for c in &mut px[..3] {
+                *c = ((*c as u32 * a + 127) / 255) as u8;
+            }
+        }
+        let texture = self
+            .compositor
+            .upload_rgba("still", &premultiplied, width, height)?;
+        self.stills.insert(path.to_owned(), texture.clone());
+        Ok((Some(LayerContent::Texture(texture)), [width as f32, height as f32]))
     }
 
     fn media_texture_for(
@@ -485,3 +533,40 @@ fn content_canvas(
 
 /// 点の直径(comp のピクセル)。層の属性になるまでの既定値。
 const DEFAULT_POINT_SIZE: f32 = 2.0;
+
+#[cfg(test)]
+mod still_image_tests {
+    use super::*;
+
+    /// 静止画は動画の道に入れると必ず落ちる(mp4 として読まれるため)。
+    /// 素人には「層はできたのに絵が出ない」としか見えないので、道を分ける。
+    #[test]
+    fn a_still_image_becomes_a_texture() {
+        let dir = std::env::temp_dir().join("motolii-still-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("logo.png");
+        image::RgbaImage::from_pixel(64, 48, image::Rgba([255, 80, 80, 255]))
+            .save(&path)
+            .unwrap();
+        let path = path.to_str().unwrap().to_owned();
+
+        let mut engine = Engine::new().expect("engine");
+        let (content, natural) = engine.still_texture_for(&path).expect("still");
+        assert!(content.is_some(), "静止画の絵が出ていない: {:?}", engine.layer_failures());
+        assert_eq!(natural, [64.0, 48.0], "素材の実寸が違う");
+    }
+
+    #[test]
+    fn a_broken_image_says_so_instead_of_going_silent() {
+        let dir = std::env::temp_dir().join("motolii-still-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("broken.png");
+        std::fs::write(&path, b"not a png").unwrap();
+        let path = path.to_str().unwrap().to_owned();
+
+        let mut engine = Engine::new().expect("engine");
+        let (content, _) = engine.still_texture_for(&path).expect("still");
+        assert!(content.is_none());
+        assert!(!engine.layer_failures().is_empty(), "読めなかった事が誰にも伝わらない");
+    }
+}
