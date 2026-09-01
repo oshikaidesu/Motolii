@@ -93,6 +93,32 @@ fn spatial_fit_intents(layer: LayerId, path: &str, comp: (f64, f64)) -> Vec<Inte
     ]
 }
 
+/// 位置を指定せずに生まれた層を、枠の真ん中へ置く。
+///
+/// 隅(0,0)に置くと、素材が小さいほど画面の角の点になって見つからない。
+/// 大きさが分かる物は中心を合わせ、分からない物(文字は組んでみるまで
+/// 大きさが決まらない)は左上を真ん中へ置く。
+fn center_intents(layer: LayerId, natural: (f64, f64), comp: (f64, f64)) -> Vec<Intent> {
+    let Ok(property) = crate::doc::store::PropertyId::new(crate::doc::store::property::POSITION)
+    else {
+        return Vec::new();
+    };
+    let value = crate::doc::store::Value::Vec2([
+        (comp.0 - natural.0) * 0.5,
+        (comp.1 - natural.1) * 0.5,
+    ]);
+    vec![Intent::SetConstant { layer, property, value }]
+}
+
+/// 形の実寸。焼く前でも輪郭から測れる。
+fn shape_natural(shapes: &[ShapeNode]) -> (f64, f64) {
+    crate::render::vector::content_bounds(shapes)
+        .ok()
+        .flatten()
+        .map(|b| (b[2] - b[0], b[3] - b[1]))
+        .unwrap_or((0.0, 0.0))
+}
+
 fn new_layer_intents(layer: LayerId, order: i16, playhead: i64, duration_frames: i64, comp: (f64, f64), kind: NewKind) -> Vec<Intent> {
     let label_color = Some(Some((layer.0 % fixture::LABEL_PALETTE.len() as u64) as u8));
     match kind {
@@ -102,7 +128,10 @@ fn new_layer_intents(layer: LayerId, order: i16, playhead: i64, duration_frames:
             {
                 spatial_fit_intents(layer, &path, comp)
             } else {
-                Vec::new()
+                let natural = crate::render::media::probe(&path)
+                    .map(|i| (i.width as f64, i.height as f64))
+                    .unwrap_or((0.0, 0.0));
+                center_intents(layer, natural, comp)
             };
             let mut out = vec![
                 Intent::AddLayer(layer),
@@ -122,7 +151,8 @@ fn new_layer_intents(layer: LayerId, order: i16, playhead: i64, duration_frames:
             out.extend(fit);
             out
         }
-        NewKind::Rectangle => vec![
+        NewKind::Rectangle => {
+            let mut out = vec![
             Intent::AddLayer(layer),
             Intent::SetMeta {
                 layer,
@@ -150,8 +180,16 @@ fn new_layer_intents(layer: LayerId, order: i16, playhead: i64, duration_frames:
                     stroke: None,
                 })],
             },
-        ],
-        NewKind::Bezier => vec![
+        ];
+            let shapes = match out.last() {
+                Some(Intent::SetShapes { shapes, .. }) => shapes.clone(),
+                _ => Vec::new(),
+            };
+            out.extend(center_intents(layer, shape_natural(&shapes), comp));
+            out
+        }
+        NewKind::Bezier => {
+            let mut out = vec![
             Intent::AddLayer(layer),
             Intent::SetMeta {
                 layer,
@@ -197,8 +235,16 @@ fn new_layer_intents(layer: LayerId, order: i16, playhead: i64, duration_frames:
                     }),
                 })],
             },
-        ],
-        NewKind::Text => vec![
+        ];
+            let shapes = match out.last() {
+                Some(Intent::SetShapes { shapes, .. }) => shapes.clone(),
+                _ => Vec::new(),
+            };
+            out.extend(center_intents(layer, shape_natural(&shapes), comp));
+            out
+        }
+        NewKind::Text => {
+            let mut out = vec![
             Intent::AddLayer(layer),
             Intent::SetMeta {
                 layer,
@@ -249,7 +295,12 @@ fn new_layer_intents(layer: LayerId, order: i16, playhead: i64, duration_frames:
                     runs: Vec::new(),
                 },
             },
-        ],
+        ];
+            // 文字は組んでみるまで大きさが決まらない。実寸が要らない形で
+            // 真ん中へ置く —— 左上を枠の中心に合わせる。
+            out.extend(center_intents(layer, (0.0, 0.0), comp));
+            out
+        }
     }
 }
 
@@ -673,4 +724,61 @@ pub(super) fn browser_panel(
             }
         }
     )
+}
+
+#[cfg(test)]
+mod placement {
+    use super::*;
+
+    /// 位置を指定せずに生まれた層は、**枠の真ん中に立つ**。
+    ///
+    /// 隅(0,0)に置くと、素材が小さいほど画面の角の点になって見つからない。
+    /// 説明書も最初から「画面の真ん中に立つ」と書いている。
+    fn box_of(kind: NewKind, comp: (f64, f64), natural: (f64, f64)) -> (f64, f64) {
+        let layer = LayerId(1);
+        let intents = new_layer_intents(layer, 0, 0, 30, comp, kind);
+        let mut doc = Document::new();
+        doc.apply_all(intents).unwrap();
+        let view = doc.view();
+        let property = crate::doc::store::PropertyId::new(crate::doc::store::property::POSITION).unwrap();
+        let position = view
+            .value_at(layer, &property, crate::doc::store::RationalTime::ZERO)
+            .unwrap()
+            .and_then(|v| match v {
+                crate::doc::store::Value::Vec2([x, y]) => Some((x, y)),
+                _ => None,
+            })
+            .unwrap_or((0.0, 0.0));
+        (position.0 + natural.0 * 0.5, position.1 + natural.1 * 0.5)
+    }
+
+    #[test]
+    fn a_rectangle_is_born_in_the_middle_of_the_frame() {
+        let comp = (640.0, 480.0);
+        let center = box_of(NewKind::Rectangle, comp, (200.0, 200.0));
+        assert!(
+            (center.0 - 320.0).abs() < 2.0 && (center.1 - 240.0).abs() < 2.0,
+            "四角の中心が枠の真ん中に無い: {center:?}"
+        );
+    }
+
+    #[test]
+    fn an_image_is_born_in_the_middle_of_the_frame() {
+        let dir = std::env::temp_dir().join("motolii-placement");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("logo.png");
+        image::RgbaImage::from_pixel(64, 48, image::Rgba([255, 0, 0, 255]))
+            .save(&path)
+            .unwrap();
+        let comp = (640.0, 480.0);
+        let center = box_of(
+            NewKind::Media { path: path.to_str().unwrap().to_owned(), name: "logo".into() },
+            comp,
+            (64.0, 48.0),
+        );
+        assert!(
+            (center.0 - 320.0).abs() < 2.0 && (center.1 - 240.0).abs() < 2.0,
+            "絵の中心が枠の真ん中に無い: {center:?}"
+        );
+    }
 }
