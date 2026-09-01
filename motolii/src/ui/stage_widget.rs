@@ -109,7 +109,7 @@ impl Fit {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum GizmoMode {
     Move,
     ScaleCorner { sx: bool, sy: bool },
@@ -560,6 +560,81 @@ const RING_FLAT: f64 = 0.28;
 /// 奥行きの取っ手。**真ん中は動かすための場所**なので、そこには置かない。
 /// 中心から画面上で一定の長さだけ左上へ伸ばした先に置く(AE や Blender の
 /// 軸の矢印と同じ考え)。層が小さくても真ん中と食い合わない。
+/// 掴んだ点が箱のどの役目に当たるか。**描く側と同じ箱**で決める。
+///
+/// 取っ手は箱の一部しか食べてよくない —— 画面上で小さい層では許容が箱より
+/// 広くなり、**動かす手が1画素も残らない**(実測: 6px の層で角の許容が77px)。
+fn gizmo_mode_at(
+    lx: f64,
+    ly: f64,
+    box_: (f64, f64, f64, f64),
+    scale: f64,
+    rings: bool,
+) -> Option<GizmoMode> {
+    let (bx, by, bw, bh) = box_;
+    let (x0, y0, x1, y1) = (bx, by, bx + bw, by + bh);
+    let tol = 8.0 / scale.max(1e-6);
+    // 取っ手が食べてよいのは箱の四半分まで。画面上で小さい層では許容が箱より
+    // 広くなり、**動かす手が1画素も残らない**(実測: 画面 6.6px の層で許容 77)。
+    let grab = tol.min(bw.abs() * 0.25).min(bh.abs() * 0.25);
+    let near = |px: f64, py: f64| (lx - px).abs() <= grab && (ly - py).abs() <= grab;
+    let corners = [(x0, y0, false, false), (x1, y0, true, false), (x0, y1, false, true), (x1, y1, true, true)];
+    let mut mode = corners
+        .into_iter()
+        .find(|&(px, py, ..)| near(px, py))
+        .map(|(_, _, sx, sy)| GizmoMode::ScaleCorner { sx, sy });
+    if mode.is_none() {
+        let edges = [
+            ((x0 + x1) * 0.5, y0, GizmoMode::ScaleEdge { axis_x: false, positive: false }),
+            ((x0 + x1) * 0.5, y1, GizmoMode::ScaleEdge { axis_x: false, positive: true }),
+            (x0, (y0 + y1) * 0.5, GizmoMode::ScaleEdge { axis_x: true, positive: false }),
+            (x1, (y0 + y1) * 0.5, GizmoMode::ScaleEdge { axis_x: true, positive: true }),
+        ];
+        mode = edges.into_iter().find(|&(px, py, _)| near(px, py)).map(|(_, _, m)| m);
+    }
+    let (mx, my) = ((x0 + x1) * 0.5, (y0 + y1) * 0.5);
+    let (dx, dy) = depth_handle(mx, my, scale);
+    if rings && mode.is_none() && near(dx, dy) {
+        mode = Some(GizmoMode::Depth);
+    }
+    let inside = lx >= bx && lx <= bx + bw && ly >= by && ly <= by + bh;
+    // **箱の中は必ず動かす。** 輪が中を横切っても、そこは掴めない。
+    if rings && mode.is_none() && !inside {
+        let (ra, rb) = ring_radii(bw, bh, scale);
+        // 輪までの距離は**中心から見た半径の差**で測る。
+        // `(f-1)*min(a,b)` で近似すると、平たい楕円の短径側で
+        // 距離を大きく見誤り、輪から遠い所まで輪として掴んでしまう。
+        let on = |a: f64, b: f64| {
+            if a <= 1e-6 || b <= 1e-6 {
+                return false;
+            }
+            let (px, py) = (lx - mx, ly - my);
+            let f = ((px / a).powi(2) + (py / b).powi(2)).sqrt();
+            if f < 1e-9 {
+                return false;
+            }
+            let reach = (px * px + py * py).sqrt();
+            (reach - reach / f).abs() <= tol
+        };
+        if on(ra, rb * RING_FLAT) {
+            mode = Some(GizmoMode::Orbit { axis_x: false });
+        } else if on(ra * RING_FLAT, rb) {
+            mode = Some(GizmoMode::Orbit { axis_x: true });
+        }
+    }
+    if mode.is_none() {
+        if inside {
+            mode = Some(GizmoMode::Move);
+        } else {
+            let margin = 24.0 / scale.max(1e-6);
+            if lx >= bx - margin && lx <= bx + bw + margin && ly >= by - margin && ly <= by + bh + margin {
+                mode = Some(GizmoMode::Rotate);
+            }
+        }
+    }
+    mode
+}
+
 fn depth_handle(mx: f64, my: f64, scale: f64) -> (f64, f64) {
     let d = 24.0 / scale.max(1e-6);
     (mx - d, my - d)
@@ -728,65 +803,12 @@ impl Widget for StageWidget {
                         }
                         let (lx, ly) = (bxx + u * bww, byy + v * bhh);
                         let (cx, cy) = rotate_around(geom.position, geom.rotation, (lx, ly));
-                        let (bx, by, bw, bh) = geom.box_;
-                        let (x0, y0, x1, y1) = (bx, by, bx + bw, by + bh);
-                        let tol = 8.0 / self.fit.s.max(1e-6);
-                        let near = |px: f64, py: f64| (lx - px).abs() <= tol && (ly - py).abs() <= tol;
-                        let corners = [(x0, y0, false, false), (x1, y0, true, false), (x0, y1, false, true), (x1, y1, true, true)];
-                        let mut mode = corners
-                            .into_iter()
-                            .find(|&(px, py, ..)| near(px, py))
-                            .map(|(_, _, sx, sy)| GizmoMode::ScaleCorner { sx, sy });
-                        if mode.is_none() {
-                            let edges = [
-                                ((x0 + x1) * 0.5, y0, GizmoMode::ScaleEdge { axis_x: false, positive: false }),
-                                ((x0 + x1) * 0.5, y1, GizmoMode::ScaleEdge { axis_x: false, positive: true }),
-                                (x0, (y0 + y1) * 0.5, GizmoMode::ScaleEdge { axis_x: true, positive: false }),
-                                (x1, (y0 + y1) * 0.5, GizmoMode::ScaleEdge { axis_x: true, positive: true }),
-                            ];
-                            mode = edges.into_iter().find(|&(px, py, _)| near(px, py)).map(|(_, _, m)| m);
-                        }
                         let rings = self.rings.load(std::sync::atomic::Ordering::Relaxed);
-                        let (mx, my) = ((x0 + x1) * 0.5, (y0 + y1) * 0.5);
+                        let mode = gizmo_mode_at(lx, ly, geom.box_, self.fit.s, rings);
+                        let (bx, by, bw, bh) = geom.box_;
+                        let (mx, my) = (bx + bw * 0.5, by + bh * 0.5);
                         let (dx, dy) = depth_handle(mx, my, self.fit.s);
-                        if rings && mode.is_none() && near(dx, dy) {
-                            mode = Some(GizmoMode::Depth);
-                        }
-                        let inside = lx >= bx && lx <= bx + bw && ly >= by && ly <= by + bh;
-                        // **箱の中は必ず動かす。** 輪が中を横切っても、そこは掴めない。
-                        if rings && mode.is_none() && !inside {
-                            let (ra, rb) = ring_radii(bw, bh, self.fit.s);
-                            // 輪までの距離は**中心から見た半径の差**で測る。
-                            // `(f-1)*min(a,b)` で近似すると、平たい楕円の短径側で
-                            // 距離を大きく見誤り、輪から遠い所まで輪として掴んでしまう。
-                            let on = |a: f64, b: f64| {
-                                if a <= 1e-6 || b <= 1e-6 {
-                                    return false;
-                                }
-                                let (px, py) = (lx - mx, ly - my);
-                                let f = ((px / a).powi(2) + (py / b).powi(2)).sqrt();
-                                if f < 1e-9 {
-                                    return false;
-                                }
-                                let reach = (px * px + py * py).sqrt();
-                                (reach - reach / f).abs() <= tol
-                            };
-                            if on(ra, rb * RING_FLAT) {
-                                mode = Some(GizmoMode::Orbit { axis_x: false });
-                            } else if on(ra * RING_FLAT, rb) {
-                                mode = Some(GizmoMode::Orbit { axis_x: true });
-                            }
-                        }
-                        if mode.is_none() {
-                            if inside {
-                                mode = Some(GizmoMode::Move);
-                            } else {
-                                let margin = 24.0 / self.fit.s.max(1e-6);
-                                if lx >= bx - margin && lx <= bx + bw + margin && ly >= by - margin && ly <= by + bh + margin {
-                                    mode = Some(GizmoMode::Rotate);
-                                }
-                            }
-                        }
+                        let tol = 8.0 / self.fit.s.max(1e-6);
                         println!(
                             "PROBE room=input verdict=gizmo-hit mode={mode:?} at=({lx:.0},{ly:.0})                              box=({bx:.0},{by:.0},{bw:.0},{bh:.0}) depth=({dx:.0},{dy:.0}) tol={tol:.0}"
                         );
@@ -1475,6 +1497,60 @@ mod plane_tests {
                     "({u:.3},{v:.3}) が ({bu:.3},{bv:.3}) で戻ってきた。隅={p:?}"
                 );
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod gizmo_reach {
+    use super::*;
+
+    /// **箱の真ん中はいつでも動かせなければならない。**
+    ///
+    /// 取っ手の許容は画面の画素で決まるので、画面上で小さい層では許容が箱より
+    /// 広くなる。実測: 1920 の枠を 198px で映すと 64px の層は画面上 6.6px、
+    /// 角の許容は 77 comp px —— 箱(64)より広く、掴んだ所は必ず角になる。
+    /// 試し手はこれで「動かず巨大化した」。
+    proptest::proptest! {
+        #[test]
+        fn the_middle_of_the_box_is_always_a_move(
+            // **画面上の大きさで振る。** comp の大きさで振ると、画面で小さく
+            // 映る組み合わせが千に一つしか出ず、当たりの領域を素通りする。
+            screen_w in 0.5f64..400.0,
+            screen_h in 0.5f64..400.0,
+            bx in -2000.0f64..2000.0,
+            by in -2000.0f64..2000.0,
+            scale in 0.01f64..8.0,
+            rings in proptest::bool::ANY,
+        ) {
+            let (bw, bh) = (screen_w / scale, screen_h / scale);
+            let mode = gizmo_mode_at(bx + bw * 0.5, by + bh * 0.5, (bx, by, bw, bh), scale, rings);
+            proptest::prop_assert_eq!(
+                mode,
+                Some(GizmoMode::Move),
+                "画面上 {:.1}x{:.1} px の箱の真ん中が掴めない(拡大率 {:.3})",
+                screen_w, screen_h, scale
+            );
+        }
+
+        /// 片側だけ守っても道具にならない。**画面で十分に大きい箱では、角は
+        /// 角のまま**掴めなければ拡縮ができない。
+        #[test]
+        fn a_big_enough_box_still_has_grabbable_corners(
+            screen_w in 80.0f64..2000.0,
+            screen_h in 80.0f64..2000.0,
+            bx in -2000.0f64..2000.0,
+            by in -2000.0f64..2000.0,
+            scale in 0.05f64..8.0,
+        ) {
+            let (bw, bh) = (screen_w / scale, screen_h / scale);
+            let mode = gizmo_mode_at(bx, by, (bx, by, bw, bh), scale, false);
+            proptest::prop_assert_eq!(
+                mode,
+                Some(GizmoMode::ScaleCorner { sx: false, sy: false }),
+                "画面上 {:.0}x{:.0} px の箱の角が掴めない(拡大率 {:.3})",
+                screen_w, screen_h, scale
+            );
         }
     }
 }
