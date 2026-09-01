@@ -228,21 +228,28 @@ impl ApplicationHandler for Windows {
         event: WindowEvent,
     ) {
         // 打鍵は焦点のある節へ配られ、無ければ `<html>` へ行く。`<html>` からは
-        // 下りてこないので、根へ当て直さないと**打鍵が1つも届かない**。
+        // 下りてこないので、当て直さないと**打鍵が1つも届かない**。
         // 上流の autofocus は属性が付く前に可否を見ていて効かない。
+        // 打ち込み中の欄が在る時はそちらへ当てる —— 根へ引き戻すと入力欄に
+        // 文字が1つも入らない。窓に開く欄は同時に1つだけ。
         if matches!(event, WindowEvent::KeyboardInput { .. }) {
             if let Some(view) = self.inner.windows.get_mut(&window_id) {
                 let doc = view.downcast_doc_mut::<DioxusDocument>();
-                let root = {
+                let field = doc.inner().query_selector("input").ok().flatten();
+                let typing = field.is_some();
+                let target = {
                     let inner = doc.inner();
-                    ["#app", "#detached"]
-                        .into_iter()
-                        .find_map(|s| inner.query_selector(s).ok().flatten())
+                    field.or_else(|| {
+                        ["#app", "#detached"]
+                            .into_iter()
+                            .find_map(|s| inner.query_selector(s).ok().flatten())
+                    })
                 };
-                if let Some(root) = root {
+                crate::ui::keymap::set_typing(typing);
+                if let Some(target) = target {
                     let mut inner = doc.inner_mut();
-                    if inner.get_focussed_node_id() != Some(root) {
-                        inner.set_focus_to(root);
+                    if inner.get_focussed_node_id() != Some(target) {
+                        inner.set_focus_to(target);
                     }
                 }
             }

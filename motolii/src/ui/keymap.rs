@@ -214,8 +214,20 @@ mod held {
 
 pub(super) use held::{clear as forget_modifiers, down as note_key_down, up as note_key_up};
 
+static TYPING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// 打鍵が入力欄へ入っているかを窓の側から知らせる。
+pub(super) fn set_typing(on: bool) {
+    TYPING.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
 /// イベントに乗ってきた修飾と、覚えている押し下げを合わせる。
 pub(super) fn lookup_held(key: &Key, cmd: bool, shift: bool, alt: bool) -> Option<Intent> {
+    // 欄へ打っている間は動詞を引かない。打鍵は入力欄へ入った**あと**根まで
+    // 上ってくるので、ここで止めないと名前の空白が再生を始める。
+    if TYPING.load(std::sync::atomic::Ordering::Relaxed) {
+        return None;
+    }
     let (h_cmd, h_shift, h_alt) = held::get();
     lookup(key, cmd || h_cmd, shift || h_shift, alt || h_alt)
 }
@@ -224,9 +236,13 @@ pub(super) fn lookup_held(key: &Key, cmd: bool, shift: bool, alt: bool) -> Optio
 mod held_tests {
     use super::*;
 
+    /// 押し下げと打ち込み中は窓ごとに1つ。並べて走らせると互いを踏む。
+    static ONE_AT_A_TIME: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     /// 実機では ⌘ が別イベントで来て、続く文字に乗らない。覚えていないと全部素通りする。
     #[test]
     fn a_modifier_that_arrived_as_its_own_event_still_counts() {
+        let _held = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
         forget_modifiers();
         let d = Key::Character("d".into());
         assert!(lookup_held(&d, false, false, false).is_none(), "素の d が拾われている");
@@ -236,5 +252,20 @@ mod held_tests {
 
         note_key_up(&if cfg!(target_os = "macos") { Key::Meta } else { Key::Control });
         assert!(lookup_held(&d, false, false, false).is_none(), "離した ⌘ が残っている");
+    }
+
+    /// 打鍵は入力欄へ入ったあと根まで上ってくる。ここで止めないと、
+    /// 名前に打った空白が再生を始める。
+    #[test]
+    fn a_stroke_typed_into_a_field_does_not_also_run_a_verb() {
+        let _held = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
+        forget_modifiers();
+        let space = Key::Character(" ".into());
+
+        set_typing(true);
+        assert!(lookup_held(&space, false, false, false).is_none(), "欄に打った空白が動詞を引いた");
+
+        set_typing(false);
+        assert!(lookup_held(&space, false, false, false).is_some(), "欄を閉じたのに動詞が戻らない");
     }
 }

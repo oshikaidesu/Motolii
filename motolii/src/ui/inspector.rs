@@ -95,6 +95,33 @@ pub(super) struct ValueDrag {
     last_dx: f64,
 }
 
+/// 数字を**打ち込んでいる最中**の一マス。`ValueDrag` が擦る道なら、こちらは打つ道。
+#[derive(Clone)]
+pub(super) struct NumEdit {
+    layer: LayerId,
+    property: String,
+    vec2: bool,
+    axis: usize,
+    value: Value,
+    range: Option<(f64, f64)>,
+    draft: String,
+}
+
+fn put_axis(value: &Value, vec2: bool, axis: usize, v: f64, range: Option<(f64, f64)>) -> Value {
+    match (vec2, value) {
+        (true, Value::Vec2([x, y])) => {
+            let mut a = [*x, *y];
+            a[axis] = v;
+            Value::Vec2(a)
+        }
+        (false, Value::F64(_)) => Value::F64(match range {
+            Some((min, max)) => v.clamp(min, max),
+            None => v,
+        }),
+        _ => value.clone(),
+    }
+}
+
 fn write_key(
     doc: &Arc<Mutex<Document>>,
     layer: LayerId,
@@ -194,6 +221,7 @@ fn prop_row(
     t: RationalTime,
     doc: &Arc<Mutex<Document>>,
     mut drag: Signal<Option<ValueDrag>>,
+    num_edit: Signal<Option<NumEdit>>,
     mut revision: Signal<u32>,
 ) -> Element {
     let cells = p.cells.iter().zip(p.dims).enumerate().map(|(i, (c, dim))| {
@@ -214,6 +242,43 @@ fn prop_row(
         };
         if let Some((property, start_value, vec2)) = target {
             let range = p.range;
+            let mut num_edit = num_edit;
+            let draft = num_edit
+                .read()
+                .as_ref()
+                .filter(|e| e.layer == layer && e.property == property && e.axis == i)
+                .map(|e| e.draft.clone());
+            if let Some(draft) = draft {
+                let doc_commit = doc.clone();
+                return rsx!(input {
+                    class: "{class} typing",
+                    value: "{draft}",
+                    autofocus: "true",
+                    oninput: move |evt| {
+                        if let Some(e) = num_edit.write().as_mut() {
+                            e.draft = evt.value();
+                        }
+                    },
+                    onkeydown: move |evt| match evt.key() {
+                        Key::Enter => {
+                            evt.prevent_default();
+                            let Some(e) = num_edit.write().take() else { return };
+                            let Ok(v) = e.draft.trim().parse::<f64>() else { return };
+                            let value = put_axis(&e.value, e.vec2, e.axis, v, e.range);
+                            match write_key(&doc_commit, e.layer, &e.property, value, t) {
+                                Ok(_) => *revision.write() += 1,
+                                Err(err) => println!("PROBE room=write verdict=apply-error {err}"),
+                            }
+                        }
+                        Key::Escape => {
+                            evt.prevent_default();
+                            *num_edit.write() = None;
+                        }
+                        _ => {}
+                    },
+                });
+            }
+            let open = (property.clone(), start_value.clone());
             rsx!(span {
                 class: "{class}",
                 onmousedown: move |evt| {
@@ -227,6 +292,18 @@ fn prop_row(
                         start_value: start_value.clone(),
                         range,
                         last_dx: 0.0,
+                    });
+                },
+                ondoubleclick: move |_| {
+                    *drag.write() = None;
+                    *num_edit.write() = Some(NumEdit {
+                        layer,
+                        property: open.0.clone(),
+                        vec2,
+                        axis: i,
+                        value: open.1.clone(),
+                        range,
+                        draft: String::new(),
                     });
                 },
                 "{c}"
@@ -361,6 +438,7 @@ pub(super) fn inspector_panel(
     mut revision: Signal<u32>,
     editing: Signal<Option<String>>,
     drag: Signal<Option<ValueDrag>>,
+    num_edit: Signal<Option<NumEdit>>,
     mut blend_open: Signal<bool>,
     mut parent_open: Signal<bool>,
     playhead: Signal<f64>,
@@ -395,7 +473,7 @@ pub(super) fn inspector_panel(
     let transform_rows = inspector
         .transform
         .iter()
-        .map(|p| prop_row(p, selection.unwrap_or(LayerId(0)), t, doc, drag, revision));
+        .map(|p| prop_row(p, selection.unwrap_or(LayerId(0)), t, doc, drag, num_edit, revision));
     let effect_blocks: Vec<_> = inspector
         .effects
         .iter()
@@ -406,7 +484,7 @@ pub(super) fn inspector_panel(
                 block
                     .params
                     .iter()
-                    .map(|p| prop_row(p, selection.unwrap_or(LayerId(0)), t, doc, drag, revision))
+                    .map(|p| prop_row(p, selection.unwrap_or(LayerId(0)), t, doc, drag, num_edit, revision))
                     .collect::<Vec<_>>(),
             )
         })

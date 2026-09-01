@@ -184,6 +184,7 @@ fn InspectorPanel(
     playhead: Signal<f64>,
 ) -> Element {
     let drag = use_signal(|| None);
+    let num_edit = use_signal(|| None);
     let blend_open = use_signal(|| false);
     let parent_open = use_signal(|| false);
     inspector_panel(
@@ -193,6 +194,7 @@ fn InspectorPanel(
         revision,
         editing,
         drag,
+        num_edit,
         blend_open,
         parent_open,
         playhead,
