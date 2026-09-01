@@ -19,6 +19,14 @@ fn layer_stream_id(layer: LayerId, path: &str) -> u64 {
     hasher.finish()
 }
 
+/// 静止画は道で1枚。層をまたいで同じ絵を二度焼かない。
+fn still_key(path: &str) -> u64 {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    "still".hash(&mut hasher);
+    path.hash(&mut hasher);
+    hasher.finish()
+}
+
 impl Engine {
     pub(crate) fn texture_for_layer(
         &mut self,
@@ -296,44 +304,44 @@ impl Engine {
 
     /// 静止画は1枚を焼いて置くだけ。動画の道へ入れると
     /// `load_from_bytes(.., "video/mp4", ..)` が必ず落ちて**絵が出ない**。
+    ///
+    /// 覚えるのは texture_manager に任せる。当たれば読み込みも起きない。
     fn still_texture_for(
         &mut self,
         path: &str,
     ) -> Result<(Option<LayerContent>, [f32; 2]), EngineError> {
-        if let Some(texture) = self.stills.get(path) {
-            let [w, h] = texture.width_height();
-            return Ok((Some(LayerContent::Texture(texture.clone())), [w as f32, h as f32]));
-        }
         if let Some(reason) = self.failed_probes.get(path) {
             self.layer_failures.push(reason.clone());
             return Ok((None, [0.0, 0.0]));
         }
-        let decoded = image::ImageReader::open(path)
-            .map_err(|e| e.to_string())
-            .and_then(|r| r.decode().map_err(|e| e.to_string()));
-        let image = match decoded {
-            Ok(image) => image.to_rgba8(),
+        let made = self.compositor.cached_rgba(still_key(path), "still", || {
+            let image = image::ImageReader::open(path)
+                .map_err(|e| e.to_string())
+                .and_then(|r| r.decode().map_err(|e| e.to_string()))?
+                .to_rgba8();
+            let (width, height) = image.dimensions();
+            // 合成は乗算済みを前提にしている。素の RGBA を渡すと縁が光る。
+            let mut rgba = image.into_raw();
+            for px in rgba.chunks_exact_mut(4) {
+                let a = px[3] as u32;
+                for c in &mut px[..3] {
+                    *c = ((*c as u32 * a + 127) / 255) as u8;
+                }
+            }
+            Ok::<_, String>((rgba, width, height))
+        });
+        match made {
+            Ok(texture) => {
+                let [w, h] = texture.width_height();
+                Ok((Some(LayerContent::Texture(texture)), [w as f32, h as f32]))
+            }
             Err(err) => {
                 let reason = format!("素材を読めない(画像decode失敗): {path}: {err}");
                 self.failed_probes.insert(path.to_owned(), reason.clone());
                 self.layer_failures.push(reason);
-                return Ok((None, [0.0, 0.0]));
-            }
-        };
-        let (width, height) = image.dimensions();
-        // 合成は乗算済みを前提にしている。素の RGBA を渡すと縁が光る。
-        let mut premultiplied = image.into_raw();
-        for px in premultiplied.chunks_exact_mut(4) {
-            let a = px[3] as u32;
-            for c in &mut px[..3] {
-                *c = ((*c as u32 * a + 127) / 255) as u8;
+                Ok((None, [0.0, 0.0]))
             }
         }
-        let texture = self
-            .compositor
-            .upload_rgba("still", &premultiplied, width, height)?;
-        self.stills.insert(path.to_owned(), texture.clone());
-        Ok((Some(LayerContent::Texture(texture)), [width as f32, height as f32]))
     }
 
     fn media_texture_for(

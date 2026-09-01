@@ -117,6 +117,30 @@ impl Compositor {
             .map_err(|e| CompositorError::Rectangles(e.to_string()))
     }
 
+    /// 鍵で覚えてもらう上げ口。**当たれば `make` は走らない**ので、
+    /// 焼き直しも読み直しも起きない。覚えるのは texture_manager の仕事で、
+    /// こちらは表を持たない。
+    pub fn cached_rgba<E: std::fmt::Display>(
+        &self,
+        key: u64,
+        label: &str,
+        make: impl FnOnce() -> Result<(Vec<u8>, u32, u32), E>,
+    ) -> Result<GpuTexture2D, CompositorError> {
+        self.ctx
+            .texture_manager_2d
+            .get_or_try_create_with(key, &self.ctx, || {
+                let (rgba, width, height) = make()?;
+                Ok::<_, E>(ImageDataDesc {
+                    label: label.into(),
+                    data: rgba.into(),
+                    format: wgpu::TextureFormat::Rgba8Unorm.into(),
+                    width_height: [width, height],
+                    alpha_channel_usage: re_renderer::AlphaChannelUsage::AlphaChannelInUse,
+                })
+            })
+            .map_err(|e| CompositorError::Rectangles(e.to_string()))
+    }
+
     /// 焼いた絵を板として使えるようにする(上流の取り込み口)。
     pub fn import_premultiplied(
         &mut self,
