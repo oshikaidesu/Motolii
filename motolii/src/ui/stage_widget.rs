@@ -784,7 +784,8 @@ impl Widget for StageWidget {
                     .cursor
                     .map(|(x, y)| ((x, y), self.fit.image_at(x, y)));
                 let mut view = self.view_camera.lock().unwrap();
-                view.zoom = (view.zoom * (1.0 - dy as f32 * 0.002)).clamp(0.05, 40.0);
+                // 上へ回すと近づく(拡大)。地図でも紙でも絵でもこの向き。
+                view.zoom = (view.zoom * (1.0 + dy as f32 * 0.002)).clamp(0.05, 40.0);
                 if let Some((screen, img)) = anchor {
                     view.pan = self.fit.pan_putting(img, screen, view.zoom as f64);
                 }

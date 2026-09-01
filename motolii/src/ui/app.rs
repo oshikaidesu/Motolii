@@ -483,6 +483,13 @@ pub fn app() -> Element {
         });
     });
     let panes = panes_for(&loaded);
+    let _ = (panes.echo)();
+    let outgo = session.outgo.lock().unwrap().clone();
+    let status_line = if outgo.is_empty() {
+        loaded.status.clone()
+    } else {
+        outgo
+    };
     let scale_pct = panes.scale_pct;
     wire_windows(&host, panes);
     let Panes {
@@ -991,11 +998,17 @@ pub fn app() -> Element {
                                             let poke = poke.clone();
                                             dioxus_core::spawn(async move {
                                                 let picked = rfd::AsyncFileDialog::new()
+                                                    .add_filter("MP4", &["mp4"])
                                                     .set_file_name("comp.mp4")
                                                     .save_file()
                                                     .await;
                                                 let Some(file) = picked else { return };
-                                                start_export(&doc, outgo, poke, file.path().to_path_buf());
+                                                // 打った名前に既に付いていたら足さない。
+                                                let mut out = file.path().to_path_buf();
+                                                if out.extension().is_none_or(|e| !e.eq_ignore_ascii_case("mp4")) {
+                                                    out.set_extension("mp4");
+                                                }
+                                                start_export(&doc, outgo, poke, out);
                                             });
                                         }
                                     },
@@ -1097,7 +1110,9 @@ pub fn app() -> Element {
 
             {zone_view(Zone::Bottom)}
 
-            div { id: "status", "{loaded.status}" }
+            // 出した事は**今いる場所**に返す。Output パネルの中だけだと、
+            // Stage を見ている人には起きていない事と同じになる。
+            div { id: "status", "{status_line}" }
         }
     )
 }
