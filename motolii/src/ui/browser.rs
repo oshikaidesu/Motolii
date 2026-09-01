@@ -15,7 +15,7 @@ use crate::render::vector::{Brush, Contour, Fill, FillRule, Rgb, Vertex};
 use crate::ui::fixture::ColorSwatch;
 
 use crate::ui::dock::Panel;
-use crate::ui::fixture::{self, LayerRow, UiData};
+use crate::ui::fixture::{self, LayerRow};
 use crate::ui::playback::Clock;
 use crate::ui::timeline_widget::TimelineMsg;
 
@@ -384,7 +384,6 @@ fn apply_layer_color(doc: &Arc<Mutex<Document>>, layer: LayerId, rgba: [u8; 4], 
 }
 
 pub(super) fn browser_panel(
-    ui: &UiData,
     doc: Arc<Mutex<Document>>,
     clock: Arc<Clock>,
     layer_rows: Signal<Vec<LayerRow>>,
@@ -402,14 +401,16 @@ pub(super) fn browser_panel(
             "srow"
         }
     };
+    // 棚は Document から引き直す。窓へ落ちてきた素材はここにしか現れない。
+    let _ = revision();
+    let assets = fixture::asset_rows_from_view(&doc.lock().unwrap().view());
     let families = {
-        let mut f: Vec<_> = ui.assets.iter().map(|a| a.family).collect();
+        let mut f: Vec<_> = assets.iter().map(|a| a.family).collect();
         f.sort();
         f.dedup();
         f
     };
-    let shown: Vec<_> = ui
-        .assets
+    let shown: Vec<_> = assets
         .iter()
         .filter(|a| rail().is_none_or(|f| a.family == f))
         .collect();

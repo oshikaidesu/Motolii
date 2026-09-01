@@ -37,6 +37,8 @@ glam = "0.30"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 base64 = "0.22"
 ffmpeg-sidecar = "2.5"
+# 素材を選ぶ窓。OS の物を借りる(自作しない)。
+rfd = "0.17"
 
 re_video = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14" }
 naga = { version = "29.0", default-features = false, features = ["glsl-in", "wgsl-out"] }

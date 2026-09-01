@@ -162,7 +162,6 @@ fn BrowserPanel(
 ) -> Element {
     let rail = use_signal(|| Option::<fixture::AssetFamily>::None);
     browser_panel(
-        &session.ui,
         session.doc.clone(),
         session.clock.clone(),
         layer_rows,
@@ -410,6 +409,7 @@ pub fn app() -> Element {
     let mut tab_drag = use_signal(|| Option::<Panel>::None);
     let mut drop_zone = use_signal(|| Option::<Zone>::None);
     let mut view_open = use_signal(|| false);
+    let mut file_open = use_signal(|| false);
 
     let session = use_hook(|| consume_context::<Session>()).clone();
     let loaded = session.ui.clone();
@@ -875,7 +875,51 @@ pub fn app() -> Element {
 
             div { id: "menubar",
                 span { class: "appname", "Motolii" }
-                span { class: "menu", "File" }
+                span {
+                    class: if file_open() { "menu on" } else { "menu" },
+                    onclick: move |_| {
+                        let open = file_open();
+                        file_open.set(!open);
+                    },
+                    "File"
+                    if file_open() {
+                        div { class: "vmenu",
+                            div { class: "vrow",
+                                span {
+                                    class: "vitem",
+                                    onclick: {
+                                        let doc = session.doc.clone();
+                                        let mut revision = panes.revision;
+                                        move |evt: Event<MouseData>| {
+                                            evt.stop_propagation();
+                                            file_open.set(false);
+                                            let doc = doc.clone();
+                                            // 選ぶ窓は事象処理の**外**で開ける。中から開けると
+                                            // winit が事象の入れ子になって落ちる。
+                                            dioxus_core::spawn(async move {
+                                                let Some(files) = rfd::AsyncFileDialog::new().pick_files().await else {
+                                                    return;
+                                                };
+                                                let admitted = {
+                                                    let mut d = doc.lock().unwrap();
+                                                    files
+                                                        .iter()
+                                                        .filter(|f| fixture::admit_path(&mut d, f.path()))
+                                                        .count()
+                                                };
+                                                println!("PROBE room=browser verdict=import admitted={admitted} of={}", files.len());
+                                                if admitted > 0 {
+                                                    *revision.write() += 1;
+                                                }
+                                            });
+                                        }
+                                    },
+                                    "Import…"
+                                }
+                            }
+                        }
+                    }
+                }
                 span { class: "menu", "Edit" }
                 span { class: "menu", "Layer" }
                 span { class: "menu", "Effect" }

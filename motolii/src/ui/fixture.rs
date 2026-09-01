@@ -460,7 +460,6 @@ pub(super) struct InspectorData {
 
 pub(super) struct UiData {
     pub layer_rows: Vec<LayerRow>,
-    pub assets: Vec<AssetRow>,
     pub comp_line: String,
     pub status: String,
 }
@@ -689,6 +688,47 @@ pub(super) fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: Ratio
     }
 }
 
+pub(super) fn asset_rows_from_view(view: &StoreView) -> Vec<AssetRow> {
+    view.assets()
+        .unwrap_or_default()
+        .into_iter()
+        .enumerate()
+        .map(|(i, a)| AssetRow {
+            family: asset_family(&a.asset_type),
+            preview: a.path_absolute.as_deref().and_then(|path| {
+                match asset_family(&a.asset_type) {
+                    AssetFamily::TwoD => crate::ui::thumbnail::image_data_uri(path),
+                    AssetFamily::Video => crate::ui::thumbnail::video_data_uri(path),
+                    _ => None,
+                }
+            }),
+            path: a.path_absolute,
+            name: a.name,
+            kind: a.asset_type,
+            thumb: ["#6f8fb5", "#8f7fb8", "#6fb58a", "#b59a6f"][i % 4],
+        })
+        .collect()
+}
+
+/// 窓へ落ちてきた道を素材として迎える。読めない物は黙って捨てる。
+pub(super) fn admit_path(doc: &mut crate::doc::store::Document, path: &std::path::Path) -> bool {
+    let Some(asset_type) = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .and_then(crate::render::media::asset_type_for_extension)
+    else {
+        return false;
+    };
+    let Ok(reader) = std::fs::File::open(path) else {
+        return false;
+    };
+    let Ok(fingerprint) = crate::doc::store::SourceFingerprintV1::from_reader(reader) else {
+        return false;
+    };
+    let draft = crate::doc::store::AssetDraft::from_probed_source(asset_type, &fingerprint, path, None);
+    doc.apply(crate::doc::store::Intent::AdmitAsset { draft }).is_ok()
+}
+
 fn admit_testdata(doc: &mut crate::doc::store::Document) {
     let Some(dir) = std::env::var_os("MOTOLII_TESTDATA") else {
         return;
@@ -760,26 +800,6 @@ pub(super) fn load_fixture() -> Loaded {
 
     let layer_rows = layer_rows_from_doc(&fx.doc);
 
-    let assets = view
-        .assets()
-        .unwrap_or_default()
-        .into_iter()
-        .enumerate()
-        .map(|(i, a)| AssetRow {
-            family: asset_family(&a.asset_type),
-            preview: a.path_absolute.as_deref().and_then(|path| {
-                match asset_family(&a.asset_type) {
-                    AssetFamily::TwoD => crate::ui::thumbnail::image_data_uri(path),
-                    AssetFamily::Video => crate::ui::thumbnail::video_data_uri(path),
-                    _ => None,
-                }
-            }),
-            path: a.path_absolute,
-            name: a.name,
-            kind: a.asset_type,
-            thumb: ["#6f8fb5", "#8f7fb8", "#6fb58a", "#b59a6f"][i % 4],
-        })
-        .collect();
 
     let comp_line = view
         .composition()
@@ -800,7 +820,7 @@ pub(super) fn load_fixture() -> Loaded {
 
     Loaded {
         doc: fx.doc,
-        ui: UiData { layer_rows, assets, comp_line, status: fx.status },
+        ui: UiData { layer_rows, comp_line, status: fx.status },
         duration_sec: 60.0,
     }
 }
@@ -919,3 +939,35 @@ mod nest_tests {
     }
 }
 
+
+#[cfg(test)]
+mod admit_tests {
+    use super::*;
+
+    /// 棚は Document から引く。窓へ落ちてきた素材はここにしか現れないので、
+    /// 起動時の一覧を持ち回っていると**入れた物が出ない**。
+    #[test]
+    fn a_dropped_file_shows_up_on_the_shelf() {
+        let mut fx = crate::doc::fixture::build();
+        let before = asset_rows_from_view(&fx.doc.view()).len();
+
+        let dir = std::env::temp_dir().join("motolii-admit-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("logo.png");
+        let img = image::RgbaImage::from_pixel(4, 4, image::Rgba([255, 0, 0, 255]));
+        img.save(&path).unwrap();
+
+        assert!(admit_path(&mut fx.doc, &path), "png を迎えられていない");
+        let rows = asset_rows_from_view(&fx.doc.view());
+        assert_eq!(rows.len(), before + 1, "落とした素材が棚に出ない");
+        assert!(rows.iter().any(|r| r.name.contains("logo")), "名前が付いていない");
+    }
+
+    #[test]
+    fn a_file_we_cannot_read_is_dropped_quietly() {
+        let mut fx = crate::doc::fixture::build();
+        let before = asset_rows_from_view(&fx.doc.view()).len();
+        assert!(!admit_path(&mut fx.doc, std::path::Path::new("/nowhere/readme.txt")));
+        assert_eq!(asset_rows_from_view(&fx.doc.view()).len(), before);
+    }
+}

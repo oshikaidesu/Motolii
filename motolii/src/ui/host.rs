@@ -50,6 +50,14 @@ impl Host {
         id
     }
 
+    /// 窓の外で状態が変わった時に、全ての窓を描き直させる。
+    pub(crate) fn wake_all(&self) {
+        let wakers: Vec<_> = self.wakers.borrow().iter().map(|(_, w)| w.clone()).collect();
+        for wake in wakers {
+            wake();
+        }
+    }
+
     /// 自分以外の窓を描き直させる。
     pub(crate) fn wake_others(&self, me: u64) {
         let wakers: Vec<_> = self
@@ -252,6 +260,21 @@ impl ApplicationHandler for Windows {
                         inner.set_focus_to(target);
                     }
                 }
+            }
+        }
+        // Finder から落ちてきた素材を棚へ入れる。窓の外の出来事なので、
+        // 入れたあと自分で全ての窓を起こす。
+        if let WindowEvent::DragDropped { paths, .. } = &event {
+            let admitted = {
+                let mut doc = self.session.doc.lock().unwrap();
+                paths
+                    .iter()
+                    .filter(|p| crate::ui::fixture::admit_path(&mut doc, p))
+                    .count()
+            };
+            println!("PROBE room=browser verdict=drop admitted={admitted} of={}", paths.len());
+            if admitted > 0 {
+                self.host.wake_all();
             }
         }
         if matches!(event, WindowEvent::CloseRequested) {
