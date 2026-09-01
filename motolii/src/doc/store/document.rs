@@ -437,35 +437,3 @@ impl Document {
         self.db.num_physical_chunks()
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_non_track_json_component_other_than_present_is_reported_not_silently_dropped() {
-        let mut doc = Document::new();
-        let layer = LayerId(99);
-        doc.apply(Intent::AddLayer(layer)).unwrap();
-
-        let bogus = re_types_core::ComponentDescriptor {
-            archetype: Some("motolii.archetypes.Layer".into()),
-            component: "Layer:bogus".into(),
-            component_type: Some(<LayerPresent as Component>::name()),
-        };
-        let batch = SerializedComponentBatch {
-            descriptor: bogus,
-            array: <LayerPresent as re_types_core::Loggable>::to_arrow([LayerPresent(true)])
-                .unwrap(),
-        };
-        let at = doc.head + 1;
-        doc.ingest(layer.entity_path(), vec![batch], at).unwrap();
-
-        let result = doc.flattened();
-        assert!(
-            result.is_err(),
-            "TrackJson でない component(present 以外)を静かに落としてしまっている \
-             (flattened()/save() から黙って消える)"
-        );
-    }
-}

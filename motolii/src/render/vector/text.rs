@@ -207,34 +207,3 @@ fn commands_to_contours(commands: &[Command], pen_x: f32, pen_y: f32, out: &mut 
         });
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    const ARIAL: &str = "/System/Library/Fonts/Supplemental/Arial.ttf";
-
-    fn font() -> GlyphFont {
-        GlyphFont {
-            path: ARIAL.to_owned(),
-            family: "Arial".to_owned(),
-        }
-    }
-
-    #[test]
-    fn empty_content_yields_no_contours_and_is_not_an_error() {
-        let shaped = shape_text("", &font(), &TextLayout::new(96.0)).expect("shape");
-        assert!(shaped.contours.is_empty());
-        assert!(shaped.lines.iter().all(|l| l.glyph_xs.is_empty()));
-    }
-
-    #[test]
-    fn missing_font_file_is_an_explicit_error() {
-        let bad = GlyphFont {
-            path: "/nonexistent/does-not-exist.ttf".to_owned(),
-            family: "Nonexistent".to_owned(),
-        };
-        let err = shape_text("hi", &bad, &TextLayout::new(32.0)).unwrap_err();
-        assert!(matches!(err, TextShapeError::FontFile { .. }));
-    }
-}

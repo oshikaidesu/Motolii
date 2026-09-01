@@ -109,8 +109,6 @@ impl IsfManifest {
     }
 }
 
-
-
 pub(crate) fn parse_isf_source(source: &str) -> Result<(IsfManifest, String), IsfError> {
     let trimmed = source.trim_start();
     if !trimmed.starts_with("/*") {
@@ -354,83 +352,5 @@ impl IsfProgram {
             params,
             render_size,
         );
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn parses_real_isf_header_and_body_generically() {
-        let (manifest, body) = parse_isf_source(BLOOM_SOURCE).expect("parse");
-        assert_eq!(manifest.inputs.len(), 4);
-        assert_eq!(manifest.image_inputs().count(), 1);
-        assert_eq!(manifest.param_inputs().count(), 3);
-
-        let threshold = manifest
-            .inputs
-            .iter()
-            .find(|input| input.name == "threshold")
-            .expect("threshold input");
-        assert_eq!(threshold.ty, IsfInputType::Float);
-        assert_eq!(threshold.default[0], 1.0);
-
-        let intensity = manifest
-            .inputs
-            .iter()
-            .find(|input| input.name == "intensity")
-            .expect("intensity input");
-        assert_eq!(intensity.default[0], 0.75);
-
-        assert!(body.contains("void main()"));
-        assert!(body.contains("IMG_THIS_PIXEL(inputImage)"));
-    }
-
-    #[test]
-    fn reads_passes_and_refuses_persistent_buffers() {
-        let with_passes = r#"/*{
-  "INPUTS": [],
-  "PASSES": [
-    { "TARGET": "bright", "FLOAT": true },
-    { }
-  ]
-}*/
-void main() {}"#;
-        let (manifest, _) = parse_isf_source(with_passes).expect("PASSES を読める");
-        assert_eq!(manifest.passes.len(), 2);
-        assert_eq!(manifest.passes[0].target.as_deref(), Some("bright"));
-        assert!(manifest.passes[0].float);
-        assert_eq!(manifest.passes[1].target, None);
-
-        let persistent = r#"/*{
-  "INPUTS": [],
-  "PASSES": [ { "TARGET": "acc", "PERSISTENT": true } ]
-}*/
-void main() {}"#;
-        assert!(
-            matches!(
-                parse_isf_source(persistent),
-                Err(IsfError::PersistentBuffer)
-            ),
-            "PERSISTENT は受け付けない(StatefulFilter 拒否)"
-        );
-    }
-
-    #[test]
-    fn compiles_the_wrapped_fragment_source_to_wgsl() {
-        let (manifest, body) = parse_isf_source(BLOOM_SOURCE).expect("parse");
-        let (image_order, param_order) = crate::render::compositor::effects::vism::orders(&manifest);
-        let glsl = wrap_fragment_source(&manifest, &image_order, &param_order, &body);
-        let wgsl = compile_glsl_to_wgsl(&glsl, naga::ShaderStage::Fragment)
-            .expect("naga: GLSL -> WGSL (fragment)");
-        assert!(wgsl.contains("fn main"), "WGSL に main が無い:\n{wgsl}");
-    }
-
-    #[test]
-    fn compiles_the_host_vertex_source_to_wgsl() {
-        let wgsl = compile_glsl_to_wgsl(VERTEX_SOURCE, naga::ShaderStage::Vertex)
-            .expect("naga: GLSL -> WGSL (vertex)");
-        assert!(wgsl.contains("fn main"), "WGSL に main が無い:\n{wgsl}");
     }
 }

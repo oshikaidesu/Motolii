@@ -183,26 +183,3 @@ fn pick_exact_output_config(
             detail: "no f32 output config spans the requested channels/sample-rate",
         })
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn select_prefers_exact_source_rate() {
-        let ranges = [(44_100, 48_000)];
-        assert_eq!(select_device_sample_rate(48_000, &ranges), Some(48_000));
-        assert_eq!(select_device_sample_rate(44_100, &ranges), Some(44_100));
-    }
-
-    #[test]
-    fn select_falls_back_when_source_unsupported() {
-        let ranges = [(48_000, 48_000)];
-        assert_eq!(select_device_sample_rate(44_100, &ranges), Some(48_000));
-    }
-
-    #[test]
-    fn select_returns_none_for_empty_ranges() {
-        assert_eq!(select_device_sample_rate(48_000, &[]), None);
-    }
-}

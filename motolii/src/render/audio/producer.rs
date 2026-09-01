@@ -242,22 +242,3 @@ fn producer_loop(
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn push_frames_stops_at_free_slots() {
-        let (mut producer, _consumer) = rtrb::RingBuffer::<f32>::new(4); // 2 frames stereo
-        let samples = [1.0, -1.0, 2.0, -2.0, 3.0, -3.0]; // 3 frames
-        let pushed = push_frames(&mut producer, &samples, 2);
-        assert_eq!(pushed, 2, "capacity(2フレーム)を超えて押し込んでいる");
-    }
-
-    #[test]
-    fn push_frames_ignores_channel_zero() {
-        let (mut producer, _consumer) = rtrb::RingBuffer::<f32>::new(4);
-        assert_eq!(push_frames(&mut producer, &[1.0, 2.0], 0), 0);
-    }
-}

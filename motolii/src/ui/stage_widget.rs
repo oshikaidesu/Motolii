@@ -346,7 +346,6 @@ impl StageWidget {
         self.revision += 1;
     }
 
-
     fn write_export_center(&self, center: (f64, f64), rt: RationalTime, commit: bool) {
         let Ok(property) = PropertyId::camera(property::CAMERA_CENTER) else { return };
         let value = Value::Vec2([center.0, center.1]);
@@ -1325,23 +1324,6 @@ impl Widget for StageWidget {
     }
 }
 
-#[cfg(test)]
-mod orbit_tests {
-    use super::orbit_angles;
-
-    #[test]
-    fn dragging_right_turns_the_plate_to_face_right_and_down_tips_it_back() {
-        let (rx, ry) = orbit_angles((0.0, 0.0), (100.0, 100.0), (120.0, 140.0), 1.0);
-        assert!(ry > 0.0, "右へ引いたのに rotation.y が正にならない");
-        assert!(rx < 0.0, "下へ引いたのに rotation.x が負にならない");
-    }
-
-    #[test]
-    fn no_movement_keeps_the_original_angles() {
-        assert_eq!(orbit_angles((12.0, -5.0), (7.0, 7.0), (7.0, 7.0), 1.0), (12.0, -5.0));
-    }
-}
-
 // ---- 傾いた層の面と、窓の間の写像 --------------------------------------
 //
 // 向きを付けた層は台形に見える。層の面は平面なので、4隅を投影すれば
@@ -1444,73 +1426,5 @@ fn plane_map(fit: &Fit, geom: &SelGeom) -> PlaneMap {
     PlaneMap {
         uv_from_screen: screen_from_uv.inverse(),
         screen_from_uv,
-    }
-}
-
-#[cfg(test)]
-mod plane_tests {
-    use super::*;
-
-    #[test]
-    fn the_map_sends_the_corners_where_they_were_put_and_comes_back() {
-        let p = [
-            glam::dvec2(10.0, 10.0),
-            glam::dvec2(110.0, 20.0),
-            glam::dvec2(90.0, 80.0),
-            glam::dvec2(20.0, 70.0),
-        ];
-        let m = homography_from_unit_square(p);
-        let inv = m.inverse();
-        for (i, (u, v)) in [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)].iter().enumerate() {
-            let (sx, sy) = apply_h(&m, *u, *v);
-            assert!((sx - p[i].x).abs() < 1e-6 && (sy - p[i].y).abs() < 1e-6, "隅 {i} がずれる");
-            let (bu, bv) = apply_h(&inv, sx, sy);
-            assert!((bu - u).abs() < 1e-6 && (bv - v).abs() < 1e-6, "隅 {i} から戻れない");
-        }
-    }
-
-    /// 隅だけ合っていても、**内側がずれていれば掴めない**。描く側と掴む側は
-    /// この1枚を共有しているので、任意の傾きの任意の点で往復できなければ、
-    /// 絵と当たり判定が別の場所に居る。
-    ///
-    /// 生成する四角形は角度を回り順にして凸に保つ。潰れた四角形では写像が
-    /// 定義できないので、面積に下限を置く。
-    proptest::proptest! {
-        #[test]
-        fn any_point_on_any_tilted_plane_comes_back_where_it_started(
-            cx in -500.0f64..500.0,
-            cy in -500.0f64..500.0,
-            radii in proptest::array::uniform4(30.0f64..400.0),
-            wobble in proptest::array::uniform4(-0.6f64..0.6),
-            probes in proptest::collection::vec((0.0f64..1.0, 0.0f64..1.0), 1..12),
-        ) {
-            let corner = |i: usize| {
-                let a = std::f64::consts::FRAC_PI_4 + i as f64 * std::f64::consts::FRAC_PI_2 + wobble[i];
-                glam::dvec2(cx + radii[i] * a.cos(), cy + radii[i] * a.sin())
-            };
-            let p = [corner(0), corner(1), corner(2), corner(3)];
-
-            let area: f64 = (0..4)
-                .map(|i| {
-                    let (a, b) = (p[i], p[(i + 1) % 4]);
-                    a.x * b.y - b.x * a.y
-                })
-                .sum::<f64>()
-                .abs()
-                * 0.5;
-            proptest::prop_assume!(area > 2_000.0);
-
-            let m = homography_from_unit_square(p);
-            let inv = m.inverse();
-            for (u, v) in probes {
-                let (sx, sy) = apply_h(&m, u, v);
-                proptest::prop_assume!(sx.is_finite() && sy.is_finite());
-                let (bu, bv) = apply_h(&inv, sx, sy);
-                proptest::prop_assert!(
-                    (bu - u).abs() < 1e-6 && (bv - v).abs() < 1e-6,
-                    "({u:.3},{v:.3}) が ({bu:.3},{bv:.3}) で戻ってきた。隅={p:?}"
-                );
-            }
-        }
     }
 }

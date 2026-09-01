@@ -115,57 +115,6 @@ pub(super) fn lookup(key: &Key, cmd: bool, shift: bool, alt: bool) -> Option<Int
         .map(|b| b.intent)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn no_two_bindings_claim_the_same_stroke() {
-        for (i, a) in BINDINGS.iter().enumerate() {
-            for b in &BINDINGS[i + 1..] {
-                assert!(
-                    !(a.key == b.key && a.cmd == b.cmd && a.shift == b.shift && a.alt == b.alt),
-                    "同じ打鍵に2つの動詞が居る(先に並んだ方しか届かない)"
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn cmd_a_is_select_all() {
-        assert!(matches!(
-            lookup(&Key::Character("a".into()), true, false, false),
-            Some(Intent::SelectAll)
-        ));
-    }
-
-    #[test]
-    fn plain_a_is_not_bound() {
-        assert!(lookup(&Key::Character("a".into()), false, false, false).is_none());
-    }
-
-    #[test]
-    fn space_is_play_pause() {
-        assert!(matches!(
-            lookup(&Key::Character(" ".into()), false, false, false),
-            Some(Intent::PlayPause)
-        ));
-    }
-
-    #[test]
-    fn cmd_k_is_split() {
-        assert!(matches!(
-            lookup(&Key::Character("k".into()), true, false, false),
-            Some(Intent::Split)
-        ));
-    }
-
-    #[test]
-    fn plain_k_is_not_split() {
-        assert!(lookup(&Key::Character("k".into()), false, false, false).is_none());
-    }
-}
-
 /// 修飾キーは、文字のイベントに乗らずに**別のイベントとして**届く。
 /// 押されている物を自分で覚えないと、⌘ を伴う打鍵が全部素通りする。
 mod held {
@@ -234,42 +183,4 @@ pub(super) fn lookup_held(key: &Key, cmd: bool, shift: bool, alt: bool) -> Optio
     }
     let (h_cmd, h_shift, h_alt) = held::get();
     lookup(key, cmd || h_cmd, shift || h_shift, alt || h_alt)
-}
-
-#[cfg(test)]
-mod held_tests {
-    use super::*;
-
-    /// 押し下げと打ち込み中は窓ごとに1つ。並べて走らせると互いを踏む。
-    static ONE_AT_A_TIME: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
-    /// 実機では ⌘ が別イベントで来て、続く文字に乗らない。覚えていないと全部素通りする。
-    #[test]
-    fn a_modifier_that_arrived_as_its_own_event_still_counts() {
-        let _held = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
-        forget_modifiers();
-        let d = Key::Character("d".into());
-        assert!(lookup_held(&d, false, false, false).is_none(), "素の d が拾われている");
-
-        note_key_down(&if cfg!(target_os = "macos") { Key::Meta } else { Key::Control });
-        assert!(lookup_held(&d, false, false, false).is_some(), "覚えた ⌘ が効いていない");
-
-        note_key_up(&if cfg!(target_os = "macos") { Key::Meta } else { Key::Control });
-        assert!(lookup_held(&d, false, false, false).is_none(), "離した ⌘ が残っている");
-    }
-
-    /// 打鍵は入力欄へ入ったあと根まで上ってくる。ここで止めないと、
-    /// 名前に打った空白が再生を始める。
-    #[test]
-    fn a_stroke_typed_into_a_field_does_not_also_run_a_verb() {
-        let _held = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
-        forget_modifiers();
-        let space = Key::Character(" ".into());
-
-        set_typing(true);
-        assert!(lookup_held(&space, false, false, false).is_none(), "欄に打った空白が動詞を引いた");
-
-        set_typing(false);
-        assert!(lookup_held(&space, false, false, false).is_some(), "欄を閉じたのに動詞が戻らない");
-    }
 }

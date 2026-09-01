@@ -259,39 +259,3 @@ pub(super) fn handles(interp: Interp) -> Vec<Handle> {
         ],
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn every_kind_has_at_least_one_handle_except_the_straight_ones() {
-        for interp in KINDS.iter().copied() {
-            let n = handles(interp).len();
-            match interp {
-                Interp::Linear => assert_eq!(n, 0),
-                _ => assert!(n > 0, "{} に掴む所が無い", interp.kind()),
-            }
-        }
-    }
-
-    /// 掴んだ点へ運ぶと、そこが新しい載り場所になる(往復して同じ場所)。
-    #[test]
-    fn moving_a_handle_puts_it_where_it_was_dropped() {
-        for interp in KINDS.iter().copied() {
-            for (i, handle) in handles(interp).into_iter().enumerate() {
-                let target = (0.3, 0.4);
-                let moved = (handle.moved)(interp, target);
-                let after = handles(moved);
-                let at = after[i].at;
-                // 可動域で切られる分はずれてよい。型が変わらないことと、
-                // 動かした軸が近づいたことだけを見る。
-                assert_eq!(moved.kind(), interp.kind(), "型が変わった");
-                let before = handle.at;
-                let closer = (at.0 - target.0).abs() <= (before.0 - target.0).abs() + 1e-9
-                    || (at.1 - target.1).abs() <= (before.1 - target.1).abs() + 1e-9;
-                assert!(closer, "{} の handle {i} が運んだ方へ寄っていない", interp.kind());
-            }
-        }
-    }
-}

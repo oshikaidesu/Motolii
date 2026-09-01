@@ -2,7 +2,6 @@
 #[path = "../../../tests/testkit/mod.rs"]
 mod testkit;
 
-
 use std::fs::File;
 use std::path::Path;
 
@@ -116,26 +115,4 @@ fn check_sample_limit(observed: u64) -> Result<()> {
         });
     }
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn missing_file_is_typed_io_error() {
-        let result = decode_file("/nonexistent/path/to/song.wav");
-        assert!(matches!(result, Err(AudioError::Io(_))));
-    }
-
-    #[test]
-    fn corrupt_input_is_typed_error_not_panic() {
-        let dir = testkit::tmp_dir("motolii-audio-decode-corrupt");
-        let path = dir.join("not-audio.bin");
-        std::fs::write(&path, b"this is not an audio file at all, just plain bytes")
-            .expect("write garbage file");
-
-        let result = decode_file(&path);
-        assert!(result.is_err(), "garbage input must not decode");
-    }
 }

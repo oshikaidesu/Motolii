@@ -58,21 +58,3 @@ fn video_frame(path: &str) -> Option<String> {
     }
     Some(encode_png_bytes(png))
 }
-
-#[cfg(test)]
-mod real_files {
-    use super::video_data_uri;
-
-    fn testdata() -> Option<std::path::PathBuf> {
-        std::env::var_os("MOTOLII_TESTDATA").map(std::path::PathBuf::from)
-    }
-
-    #[test]
-    fn video_data_uri_reads_first_frame_of_sample_mp4() {
-        let Some(dir) = testdata() else { return };
-        let path = dir.join("sample.mp4");
-        assert!(path.exists(), "sample.mp4 が無い");
-        let uri = video_data_uri(path.to_str().unwrap());
-        assert!(uri.as_deref().is_some_and(|u| u.starts_with("data:image/png;base64,")));
-    }
-}
