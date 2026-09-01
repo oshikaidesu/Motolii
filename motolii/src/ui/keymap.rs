@@ -214,18 +214,22 @@ mod held {
 
 pub(super) use held::{clear as forget_modifiers, down as note_key_down, up as note_key_up};
 
-static TYPING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+// 打ち込み中かは**窓の状態**で、窓は1本の糸の上に居る。大域にすると、
+// 並べて走る試験が互いの状態を踏む。
+thread_local! {
+    static TYPING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
 
 /// 打鍵が入力欄へ入っているかを窓の側から知らせる。
 pub(super) fn set_typing(on: bool) {
-    TYPING.store(on, std::sync::atomic::Ordering::Relaxed);
+    TYPING.with(|t| t.set(on));
 }
 
 /// イベントに乗ってきた修飾と、覚えている押し下げを合わせる。
 pub(super) fn lookup_held(key: &Key, cmd: bool, shift: bool, alt: bool) -> Option<Intent> {
     // 欄へ打っている間は動詞を引かない。打鍵は入力欄へ入った**あと**根まで
     // 上ってくるので、ここで止めないと名前の空白が再生を始める。
-    if TYPING.load(std::sync::atomic::Ordering::Relaxed) {
+    if TYPING.with(std::cell::Cell::get) {
         return None;
     }
     let (h_cmd, h_shift, h_alt) = held::get();

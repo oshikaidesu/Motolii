@@ -169,6 +169,8 @@ impl Gui {
             state: KeyState::Pressed,
             text: None,
         };
+        // 本番と同じ規則で焦点を当ててから配る(`host.rs` と同じ1つの関数)。
+        crate::ui::host::aim_keystrokes(&mut self.doc);
         self.doc.handle_ui_event(UiEvent::KeyDown(event));
         self.settle();
     }
@@ -652,4 +654,36 @@ proptest::proptest! {
             "嵐のあとの一押しで描く panel が居なくなった: {storm:?}"
         );
     }
+}
+
+/// 利用者の道 —— 名前をダブルクリックして、打って、Enter。
+///
+/// この道の試験が1本も無かったので、**打鍵のたび焦点を根へ引き戻していて
+/// 欄に1字も入らない**状態が長く残った。窓に「double-click to type」と
+/// 書いてあるのに打てない、という嘘まで出ていた。
+#[test]
+fn a_name_can_be_typed_after_double_clicking_it() {
+    let mut gui = Gui::open();
+    // 0番はカメラの行(層ではない)。最初の層は1番。
+    let (x, y) = gui.center_of(".lsurface", 1);
+    let before = gui.texts(".lsurface");
+
+    gui.click(x, y);
+    gui.click(x, y);
+    gui.settle();
+    for ch in ["Z", "Z"] {
+        gui.key(
+            keyboard_types::Key::Character(ch.into()),
+            keyboard_types::Modifiers::empty(),
+        );
+    }
+    gui.key(keyboard_types::Key::Enter, keyboard_types::Modifiers::empty());
+    gui.settle();
+
+    let after = gui.texts(".lsurface");
+    assert_ne!(after, before, "打った文字が層の名前に入っていない: {after:?}");
+    assert!(
+        after.iter().any(|n| n.contains("ZZ")),
+        "打った文字が層の名前に入っていない: {after:?}"
+    );
 }

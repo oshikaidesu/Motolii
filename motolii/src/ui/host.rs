@@ -155,6 +155,26 @@ fn window(
     )
 }
 
+/// 打鍵をどこへ配るかを決める。**窓の側と試験の側で同じ規則を通す** —— 分けると、
+/// 利用者が歩く道(欄を開けて打つ)の試験が書けない。
+pub(crate) fn aim_keystrokes(doc: &mut DioxusDocument) {
+    let field = doc.inner().query_selector("input").ok().flatten();
+    crate::ui::keymap::set_typing(field.is_some());
+    let target = {
+        let inner = doc.inner();
+        field.or_else(|| {
+            ["#app", "#detached"]
+                .into_iter()
+                .find_map(|s| inner.query_selector(s).ok().flatten())
+        })
+    };
+    let Some(target) = target else { return };
+    let mut inner = doc.inner_mut();
+    if inner.get_focussed_node_id() != Some(target) {
+        inner.set_focus_to(target);
+    }
+}
+
 /// 窓を増やせるようにするための薄い包み。頼みを先に食べて、残りは上流へ流す。
 struct Windows {
     inner: BlitzApplication<DioxusNativeWindowRenderer>,
@@ -263,24 +283,7 @@ impl ApplicationHandler for Windows {
         // 文字が1つも入らない。窓に開く欄は同時に1つだけ。
         if matches!(event, WindowEvent::KeyboardInput { .. }) {
             if let Some(view) = self.inner.windows.get_mut(&window_id) {
-                let doc = view.downcast_doc_mut::<DioxusDocument>();
-                let field = doc.inner().query_selector("input").ok().flatten();
-                let typing = field.is_some();
-                let target = {
-                    let inner = doc.inner();
-                    field.or_else(|| {
-                        ["#app", "#detached"]
-                            .into_iter()
-                            .find_map(|s| inner.query_selector(s).ok().flatten())
-                    })
-                };
-                crate::ui::keymap::set_typing(typing);
-                if let Some(target) = target {
-                    let mut inner = doc.inner_mut();
-                    if inner.get_focussed_node_id() != Some(target) {
-                        inner.set_focus_to(target);
-                    }
-                }
+                aim_keystrokes(view.downcast_doc_mut::<DioxusDocument>());
             }
         }
         // Finder から落ちてきた素材を棚へ入れる。窓の外の出来事なので、

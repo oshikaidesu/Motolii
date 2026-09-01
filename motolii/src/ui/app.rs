@@ -390,10 +390,14 @@ fn TimelinePanel(
                 .with_key_mirror(session.selected_keys.clone()),
         )
     });
+    // 行は Document から引き直す。一覧を持ち回っていると、書き込みの度に
+    // 引き直しを**忘れた手**の分だけ窓が古いまま残る(名前変更がそれだった)。
+    let _ = revision();
+    let rows_now = fixture::layer_rows_from_doc(&session.doc.lock().unwrap());
     timeline_shell(
         session.doc.clone(),
         attrs_state,
-        &layer_rows.read(),
+        &rows_now,
         layer_rows,
         attr,
         session.selection.clone(),
