@@ -73,6 +73,8 @@ pub(super) struct Session {
     /// 写した曲線。区間から区間へ貼るための控え(Document には入らない)。
     /// 書き出しの一言。別の糸が書き、窓が読む。
     pub outgo: Arc<Mutex<String>>,
+    /// 今の作品の仕舞い先。`Save` が問い直さないために覚える。
+    pub project_path: Arc<Mutex<Option<std::path::PathBuf>>>,
     pub curve_clip: Arc<Mutex<Option<crate::doc::store::Interp>>>,
     /// 見る側のカメラ(User View)。**Document には入らない** — 書き出しには出ない。
     pub view_camera: Arc<Mutex<crate::render::engine::ObservationCamera>>,
@@ -116,6 +118,7 @@ impl Session {
             gesture_active: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             overshoot: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             outgo: Arc::new(Mutex::new(String::new())),
+            project_path: Arc::new(Mutex::new(None)),
             curve_clip: Arc::new(Mutex::new(None)),
         }
     }

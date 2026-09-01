@@ -20,3 +20,19 @@ mod timeline_shell;
 mod timeline_widget;
 mod utility;
 pub(crate) mod tokens;
+
+/// 白紙。**枠だけは要る** —— 枠が無いと何も描けず、窓が空を出す。
+/// 大きさは既定の 1920x1080 30fps 60秒。
+pub fn blank_project() -> crate::doc::store::Document {
+    use crate::doc::store::{Composition, Document, Fps, Intent};
+    let mut doc = Document::new();
+    let comp = Composition {
+        width: 1920,
+        height: 1080,
+        fps: Fps::try_new(30, 1).expect("30fps"),
+        duration_frames: 1800,
+        background: [0.0, 0.0, 0.0, 1.0],
+    };
+    let _ = doc.apply(Intent::SetComposition(comp));
+    doc
+}

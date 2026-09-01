@@ -459,6 +459,43 @@ fn start_export(
     });
 }
 
+/// 作品を仕舞う。行き先が決まっていなければ聞く。
+async fn put_away(
+    doc: std::sync::Arc<std::sync::Mutex<crate::doc::store::Document>>,
+    project_path: std::sync::Arc<std::sync::Mutex<Option<std::path::PathBuf>>>,
+    outgo: std::sync::Arc<std::sync::Mutex<String>>,
+    poke: crate::ui::host::Poke,
+    ask: bool,
+) {
+    let known = project_path.lock().unwrap().clone();
+    let out = match known.filter(|_| !ask) {
+        Some(path) => path,
+        None => {
+            let picked = rfd::AsyncFileDialog::new()
+                .add_filter("Motolii", &["rrd"])
+                .set_file_name("song.rrd")
+                .save_file()
+                .await;
+            let Some(file) = picked else { return };
+            let mut out = file.path().to_path_buf();
+            if out.extension().is_none_or(|e| !e.eq_ignore_ascii_case("rrd")) {
+                out.set_extension("rrd");
+            }
+            out
+        }
+    };
+    let word = match doc.lock().unwrap().save(&out) {
+        Ok(()) => {
+            *project_path.lock().unwrap() = Some(out.clone());
+            format!("Saved {}", out.display())
+        }
+        Err(e) => format!("Save failed: {e}"),
+    };
+    println!("PROBE room=project verdict=save {word}");
+    *outgo.lock().unwrap() = word;
+    poke.poke();
+}
+
 pub fn app() -> Element {
     let mut playing = use_signal(|| false);
     let mut browser_w = use_signal(|| 300.0f64);
@@ -951,6 +988,111 @@ pub fn app() -> Element {
                     "File"
                     if file_open() {
                         div { class: "vmenu",
+                            div { class: "vrow",
+                                span {
+                                    class: "vitem",
+                                    onclick: {
+                                        let doc = session.doc.clone();
+                                        let project_path = session.project_path.clone();
+                                        let selection = session.selection.clone();
+                                        let mut revision = panes.revision;
+                                        let mut selected = panes.selected;
+                                        move |evt: Event<MouseData>| {
+                                            evt.stop_propagation();
+                                            file_open.set(false);
+                                            *doc.lock().unwrap() = crate::ui::blank_project();
+                                            *project_path.lock().unwrap() = None;
+                                            selection.set(None);
+                                            selected.set(None);
+                                            *revision.write() += 1;
+                                        }
+                                    },
+                                    "New"
+                                }
+                            }
+                            div { class: "vrow",
+                                span {
+                                    class: "vitem",
+                                    onclick: {
+                                        let doc = session.doc.clone();
+                                        let project_path = session.project_path.clone();
+                                        let selection = session.selection.clone();
+                                        let outgo = session.outgo.clone();
+                                        let mut revision = panes.revision;
+                                        let mut selected = panes.selected;
+                                        move |evt: Event<MouseData>| {
+                                            evt.stop_propagation();
+                                            file_open.set(false);
+                                            let doc = doc.clone();
+                                            let project_path = project_path.clone();
+                                            let selection = selection.clone();
+                                            let outgo = outgo.clone();
+                                            dioxus_core::spawn(async move {
+                                                let picked = rfd::AsyncFileDialog::new()
+                                                    .add_filter("Motolii", &["rrd"])
+                                                    .pick_file()
+                                                    .await;
+                                                let Some(file) = picked else { return };
+                                                match crate::doc::store::Document::load(file.path()) {
+                                                    Ok(loaded) => {
+                                                        *doc.lock().unwrap() = loaded;
+                                                        *project_path.lock().unwrap() =
+                                                            Some(file.path().to_path_buf());
+                                                        selection.set(None);
+                                                        selected.set(None);
+                                                        *outgo.lock().unwrap() = String::new();
+                                                        *revision.write() += 1;
+                                                    }
+                                                    Err(e) => {
+                                                        *outgo.lock().unwrap() =
+                                                            format!("Open failed: {e}");
+                                                        *revision.write() += 1;
+                                                    }
+                                                }
+                                            });
+                                        }
+                                    },
+                                    "Open…"
+                                }
+                            }
+                            div { class: "vrow",
+                                span {
+                                    class: "vitem",
+                                    onclick: {
+                                        let doc = session.doc.clone();
+                                        let project_path = session.project_path.clone();
+                                        let outgo = session.outgo.clone();
+                                        let poke = host.poker();
+                                        move |evt: Event<MouseData>| {
+                                            evt.stop_propagation();
+                                            file_open.set(false);
+                                            let (doc, project_path, outgo, poke) =
+                                                (doc.clone(), project_path.clone(), outgo.clone(), poke.clone());
+                                            dioxus_core::spawn(put_away(doc, project_path, outgo, poke, false));
+                                        }
+                                    },
+                                    "Save"
+                                }
+                            }
+                            div { class: "vrow",
+                                span {
+                                    class: "vitem",
+                                    onclick: {
+                                        let doc = session.doc.clone();
+                                        let project_path = session.project_path.clone();
+                                        let outgo = session.outgo.clone();
+                                        let poke = host.poker();
+                                        move |evt: Event<MouseData>| {
+                                            evt.stop_propagation();
+                                            file_open.set(false);
+                                            let (doc, project_path, outgo, poke) =
+                                                (doc.clone(), project_path.clone(), outgo.clone(), poke.clone());
+                                            dioxus_core::spawn(put_away(doc, project_path, outgo, poke, true));
+                                        }
+                                    },
+                                    "Save As…"
+                                }
+                            }
                             div { class: "vrow",
                                 span {
                                     class: "vitem",
