@@ -72,6 +72,7 @@ quick_cache = "0.7.0"
 re_build_tools = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14" }
 
 [dev-dependencies]
+proptest = "1"
 tempfile = "3"
 
 # 単一クレートだが、空の [workspace] が要る — 無いと cargo が上の

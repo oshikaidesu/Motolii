@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc f44ed0c41962834ea66dcb5e404c041b80f958bd619f0fafd5adf5b796cc6ea8 # shrinks to storm = [Press(1411.2776, 34.894688), Motion(0.0, -126.84372)]
