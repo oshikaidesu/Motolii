@@ -320,6 +320,13 @@ impl Engine {
             self.layer_failures.push(reason.clone());
             return Ok((None, [0.0, 0.0]));
         }
+        // 素材の素性は動画と同じ棚へ置く。選択枠の寸法はそこから引かれるので、
+        // 置かないと**選んでも枠が出ず、選べていないように見える**。
+        if !self.probes.contains_key(path) {
+            if let Ok(info) = probe(path) {
+                self.probes.insert(path.to_owned(), info);
+            }
+        }
         // 画素は長く覚え、テクスチャはフレーム単位。寿命の粒度が違うので層を分ける。
         let pixels = &self.pixels;
         let made = self.compositor.cached_rgba(still_key(path), "still", || {
