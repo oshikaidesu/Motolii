@@ -142,6 +142,6 @@ fn the_first_frame_of_the_fixture_still_looks_like_itself() {
         "fixture の再生位置の1コマ",
         testkit::RgbaImageDesc { width: comp.width, height: comp.height },
         &pixels,
-        2,
+        testkit::tol::GPU_RASTER,
     );
 }
