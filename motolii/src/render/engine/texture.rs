@@ -316,21 +316,30 @@ impl Engine {
             self.layer_failures.push(reason.clone());
             return Ok((None, [0.0, 0.0]));
         }
+        // 画素は長く覚え、テクスチャはフレーム単位。寿命の粒度が違うので層を分ける。
+        let pixels = &self.pixels;
         let made = self.compositor.cached_rgba(still_key(path), "still", || {
-            let image = image::ImageReader::open(path)
-                .map_err(|e| e.to_string())
-                .and_then(|r| r.decode().map_err(|e| e.to_string()))?
-                .to_rgba8();
-            let (width, height) = image.dimensions();
-            // 合成は乗算済みを前提にしている。素の RGBA を渡すと縁が光る。
-            let mut rgba = image.into_raw();
-            for px in rgba.chunks_exact_mut(4) {
-                let a = px[3] as u32;
-                for c in &mut px[..3] {
-                    *c = ((*c as u32 * a + 127) / 255) as u8;
+            let image = pixels.get_or_insert_with(path, || {
+                let decoded = image::ImageReader::open(path)
+                    .map_err(|e| e.to_string())
+                    .and_then(|r| r.decode().map_err(|e| e.to_string()))?
+                    .to_rgba8();
+                let (width, height) = decoded.dimensions();
+                // 合成は乗算済みを前提にしている。素の RGBA を渡すと縁が光る。
+                let mut premultiplied_rgba = decoded.into_raw();
+                for px in premultiplied_rgba.chunks_exact_mut(4) {
+                    let a = px[3] as u32;
+                    for c in &mut px[..3] {
+                        *c = ((*c as u32 * a + 127) / 255) as u8;
+                    }
                 }
-            }
-            Ok::<_, String>((rgba, width, height))
+                Ok::<_, String>(std::sync::Arc::new(crate::render::engine::StillImage {
+                    premultiplied_rgba,
+                    width,
+                    height,
+                }))
+            })?;
+            Ok::<_, String>((image.premultiplied_rgba.clone(), image.width, image.height))
         });
         match made {
             Ok(texture) => {
@@ -578,5 +587,36 @@ mod still_image_tests {
         let (content, _) = engine.still_texture_for(&path).expect("still");
         assert!(content.is_none());
         assert!(!engine.layer_failures().is_empty(), "読めなかった事が誰にも伝わらない");
+    }
+}
+
+#[cfg(test)]
+mod cache_hole {
+    use super::*;
+
+    /// テクスチャは1フレーム触られないだけで捨てられる。画素まで捨てると、
+    /// 再生位置が層の範囲を出入りするたび4Kの絵を読み直すことになる。
+    #[test]
+    fn leaving_the_frame_does_not_throw_away_the_pixels() {
+        let dir = std::env::temp_dir().join("motolii-hole");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("big.png");
+        image::RgbaImage::from_pixel(1024, 1024, image::Rgba([1, 2, 3, 255]))
+            .save(&path)
+            .unwrap();
+        let path = path.to_str().unwrap().to_owned();
+
+        let mut engine = Engine::new().unwrap();
+        engine.still_texture_for(&path).unwrap();
+        assert_eq!(engine.pixels.len(), 1, "画素を覚えていない");
+
+        engine.compositor.begin_frame_for_test();
+        engine.compositor.begin_frame_for_test();
+
+        // 絵が画面から外れてテクスチャは落ちても、読み直しは起きない。
+        std::fs::remove_file(&path).unwrap();
+        let (content, natural) = engine.still_texture_for(&path).unwrap();
+        assert!(content.is_some(), "戻ってきた絵が出ない: {:?}", engine.layer_failures());
+        assert_eq!(natural, [1024.0, 1024.0]);
     }
 }

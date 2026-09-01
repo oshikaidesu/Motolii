@@ -117,6 +117,11 @@ impl Compositor {
             .map_err(|e| CompositorError::Rectangles(e.to_string()))
     }
 
+    #[cfg(test)]
+    pub fn begin_frame_for_test(&mut self) {
+        self.ctx.begin_frame();
+    }
+
     /// 鍵で覚えてもらう上げ口。**当たれば `make` は走らない**ので、
     /// 焼き直しも読み直しも起きない。覚えるのは texture_manager の仕事で、
     /// こちらは表を持たない。

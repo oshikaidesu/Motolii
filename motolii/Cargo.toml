@@ -66,6 +66,7 @@ cpal = "0.18"
 rtrb = "0.4"
 serde_json = "1"
 thiserror = "2"
+quick_cache = "0.7.0"
 
 [build-dependencies]
 re_build_tools = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14" }

@@ -70,6 +70,34 @@ impl ObservationCamera {
     }
 }
 
+/// 焼いた画素。テクスチャは**フレーム単位**で捨てられる(`begin_frame` が
+/// 触られなかった物を全部落とす)ので、画素をこちら側で長く持たないと、
+/// 再生位置が層の範囲を出入りするたび読み直しになる。
+pub(crate) struct StillImage {
+    pub premultiplied_rgba: Vec<u8>,
+    pub width: u32,
+    pub height: u32,
+}
+
+/// 画素の予算。**個数ではなく重さで切る** —— 4K1枚は小さい絵の千枚分ある。
+const STILL_PIXEL_BUDGET_BYTES: u64 = 512 * 1024 * 1024;
+
+#[derive(Clone, Copy)]
+pub(crate) struct ByBytes;
+
+impl quick_cache::Weighter<String, std::sync::Arc<StillImage>> for ByBytes {
+    fn weight(&self, _key: &String, image: &std::sync::Arc<StillImage>) -> u64 {
+        image.premultiplied_rgba.len() as u64
+    }
+}
+
+pub(crate) type StillPixels =
+    quick_cache::sync::Cache<String, std::sync::Arc<StillImage>, ByBytes>;
+
+fn still_pixels() -> StillPixels {
+    StillPixels::with_weighter(64, STILL_PIXEL_BUDGET_BYTES, ByBytes)
+}
+
 pub struct Engine {
     compositor: Compositor,
     probes: HashMap<String, MediaInfo>,
@@ -83,6 +111,7 @@ pub struct Engine {
     failed_containers: HashMap<String, String>,
     point_clouds: HashMap<String, PointCloudData>,
     failed_point_clouds: HashMap<String, String>,
+    pixels: StillPixels,
     videos: HashMap<String, (Vec<u8>, re_renderer::video::Video)>,
     video_last_texture: HashMap<u64, GpuTexture2D>,
 }
@@ -102,6 +131,7 @@ impl Engine {
             failed_containers: HashMap::new(),
             point_clouds: HashMap::new(),
             failed_point_clouds: HashMap::new(),
+            pixels: still_pixels(),
             videos: HashMap::new(),
             video_last_texture: HashMap::new(),
         })
@@ -125,6 +155,7 @@ impl Engine {
             failed_containers: HashMap::new(),
             point_clouds: HashMap::new(),
             failed_point_clouds: HashMap::new(),
+            pixels: still_pixels(),
             videos: HashMap::new(),
             video_last_texture: HashMap::new(),
         })
