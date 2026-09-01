@@ -1428,3 +1428,53 @@ fn plane_map(fit: &Fit, geom: &SelGeom) -> PlaneMap {
         screen_from_uv,
     }
 }
+
+#[cfg(test)]
+mod plane_tests {
+    use super::*;
+
+    /// 隅だけ合っていても、**内側がずれていれば掴めない**。描く側と掴む側は
+    /// この1枚を共有しているので、任意の傾きの任意の点で往復できなければ、
+    /// 絵と当たり判定が別の場所に居る。
+    ///
+    /// 生成する四角形は角度を回り順にして凸に保つ。潰れた四角形では写像が
+    /// 定義できないので、面積に下限を置く。
+    proptest::proptest! {
+        #[test]
+        fn any_point_on_any_tilted_plane_comes_back_where_it_started(
+            cx in -500.0f64..500.0,
+            cy in -500.0f64..500.0,
+            radii in proptest::array::uniform4(30.0f64..400.0),
+            wobble in proptest::array::uniform4(-0.6f64..0.6),
+            probes in proptest::collection::vec((0.0f64..1.0, 0.0f64..1.0), 1..12),
+        ) {
+            let corner = |i: usize| {
+                let a = std::f64::consts::FRAC_PI_4 + i as f64 * std::f64::consts::FRAC_PI_2 + wobble[i];
+                glam::dvec2(cx + radii[i] * a.cos(), cy + radii[i] * a.sin())
+            };
+            let p = [corner(0), corner(1), corner(2), corner(3)];
+
+            let area: f64 = (0..4)
+                .map(|i| {
+                    let (a, b) = (p[i], p[(i + 1) % 4]);
+                    a.x * b.y - b.x * a.y
+                })
+                .sum::<f64>()
+                .abs()
+                * 0.5;
+            proptest::prop_assume!(area > 2_000.0);
+
+            let m = homography_from_unit_square(p);
+            let inv = m.inverse();
+            for (u, v) in probes {
+                let (sx, sy) = apply_h(&m, u, v);
+                proptest::prop_assume!(sx.is_finite() && sy.is_finite());
+                let (bu, bv) = apply_h(&inv, sx, sy);
+                proptest::prop_assert!(
+                    (bu - u).abs() < 1e-6 && (bv - v).abs() < 1e-6,
+                    "({u:.3},{v:.3}) が ({bu:.3},{bv:.3}) で戻ってきた。隅={p:?}"
+                );
+            }
+        }
+    }
+}

@@ -227,3 +227,125 @@ fn collect_text(doc: &blitz_dom::BaseDocument, node: blitz_dom::NodeId, out: &mu
         collect_text(doc, *child, out);
     }
 }
+/// 利用者の道 —— 名前をダブルクリックして、打って、Enter。
+///
+/// この道の試験が1本も無かったので、**打鍵のたび焦点を根へ引き戻していて
+/// 欄に1字も入らない**状態が長く残った。窓に「double-click to type」と
+/// 書いてあるのに打てない、という嘘まで出ていた。
+#[test]
+fn a_name_can_be_typed_after_double_clicking_it() {
+    let mut gui = Gui::open();
+    // 0番はカメラの行(層ではない)。最初の層は1番。
+    let (x, y) = gui.center_of(".lsurface", 1);
+    let before = gui.texts(".lsurface");
+
+    gui.click(x, y);
+    gui.click(x, y);
+    gui.settle();
+    for ch in ["Z", "Z"] {
+        gui.key(
+            keyboard_types::Key::Character(ch.into()),
+            keyboard_types::Modifiers::empty(),
+        );
+    }
+    gui.key(keyboard_types::Key::Enter, keyboard_types::Modifiers::empty());
+    gui.settle();
+
+    let after = gui.texts(".lsurface");
+    assert_ne!(after, before, "打った文字が層の名前に入っていない: {after:?}");
+    assert!(
+        after.iter().any(|n| n.contains("ZZ")),
+        "打った文字が層の名前に入っていない: {after:?}"
+    );
+}
+// ---- 生成した嵐 ------------------------------------------------------------
+
+/// 窓へ送れる一手。**利用者は決められた順番では触らない**ので、順番も座標も
+/// 種類も生成させる。
+#[derive(Debug, Clone)]
+enum Poke {
+    Press(f32, f32),
+    Motion(f32, f32),
+    Release(f32, f32),
+    Key(usize),
+}
+
+/// 素の打鍵で意味を持つ物を混ぜる。押されて困る物ほど入れる価値がある。
+const STORM_CHARS: &[&str] = &[" ", "u", "[", "]", "d", "*"];
+
+fn storm_key(i: usize) -> keyboard_types::Key {
+    match i.checked_sub(STORM_CHARS.len()) {
+        None => keyboard_types::Key::Character(STORM_CHARS[i].to_owned()),
+        Some(0) => keyboard_types::Key::Escape,
+        Some(1) => keyboard_types::Key::Delete,
+        Some(2) => keyboard_types::Key::ArrowLeft,
+        _ => keyboard_types::Key::ArrowRight,
+    }
+}
+
+const STORM_KEY_COUNT: usize = STORM_CHARS.len() + 4;
+
+fn poke() -> impl proptest::strategy::Strategy<Value = Poke> {
+    use proptest::prelude::*;
+    // 窓の外も混ぜる。掴んだまま外へ出るのは実際に起きる。
+    let x = -200.0f32..(W as f32 + 200.0);
+    let y = -200.0f32..(H as f32 + 200.0);
+    prop_oneof![
+        (x.clone(), y.clone()).prop_map(|(x, y)| Poke::Press(x, y)),
+        (x.clone(), y.clone()).prop_map(|(x, y)| Poke::Motion(x, y)),
+        (x, y).prop_map(|(x, y)| Poke::Release(x, y)),
+        (0..STORM_KEY_COUNT).prop_map(Poke::Key),
+    ]
+}
+
+proptest::proptest! {
+    #![proptest_config(proptest::prelude::ProptestConfig {
+        cases: 24,
+        max_shrink_iters: 64,
+        ..proptest::prelude::ProptestConfig::default()
+    })]
+
+    /// どんな順番で何を叩かれても、窓は操作を受け付け続ける。
+    ///
+    /// 落ちない事だけでは弱い —— 掴みが外れず固まる、置き場が空になる、
+    /// タブが効かなくなる、が実際に起きる壊れ方。**最後に普通の一手が
+    /// 通るか**まで見る。
+    #[test]
+    fn the_window_still_takes_orders_after_any_storm(storm in proptest::collection::vec(poke(), 1..40)) {
+        let mut gui = Gui::open();
+        for p in &storm {
+            match *p {
+                Poke::Press(x, y) => gui.press(x, y),
+                Poke::Motion(x, y) => gui.motion(x, y),
+                Poke::Release(x, y) => gui.release(x, y),
+                Poke::Key(i) => gui.key(storm_key(i), keyboard_types::Modifiers::empty()),
+            }
+        }
+        // 指を上げて、掴みを解く。ここから先は普通の窓でなければならない。
+        gui.release(10.0, 10.0);
+        gui.key(keyboard_types::Key::Escape, keyboard_types::Modifiers::empty());
+        gui.settle();
+
+        proptest::prop_assert!(gui.drawing_panels() > 0, "描く panel が居なくなった: {storm:?}");
+
+        // タブは窓の外へ引くと別窓へ出る(仕様)。全部は出られない。
+        let tabs = gui.texts(".ptab");
+        proptest::prop_assert!(!tabs.is_empty(), "置き場からタブが全部消えた: {storm:?}");
+
+        // 素の一押しは**タブの並びを変えない**。変わるなら掴みが残っている。
+        let (x, y) = gui.center_of(".ptab", 0);
+        gui.click(x, y);
+        gui.settle();
+        proptest::prop_assert_eq!(
+            gui.texts(".ptab"),
+            tabs,
+            "嵐のあと、タブを押しただけで並びが変わった(掴みが残っている): {:?}",
+            storm
+        );
+        proptest::prop_assert!(
+            gui.drawing_panels() > 0,
+            "嵐のあとの一押しで描く panel が居なくなった: {storm:?}"
+        );
+    }
+}
+
