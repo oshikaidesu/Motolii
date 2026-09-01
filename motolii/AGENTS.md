@@ -2,9 +2,9 @@
 
 **失敗はテストへ。この文書と記憶は、足すとき同じ行数を消す。**
 
-作ってよいのは**編集の意味**と**エフェクトのデータ**だけ。技術(GPU・デコード・描画・色)は
-rerun の部品 — **困ったら先に rerun の取説**(手元 `docs/content/`、https://rerun.io/docs)、
-次に `reference/` の地図、ソースは最後。**家は5つ — doc・render・ui・vism・tests。足すなら消す。**
+作ってよいのは**編集の意味**と**エフェクトのデータ**だけ。技術(GPU・デコード・描画・色・器具)は
+rerun の部品 — **作る前に上流を探す**(取説 `docs/content/` → `reference/` の地図 → ソース)。
+自前の天井は `reference/owned-budget.tsv`。**家は5つ — doc・render・ui・vism・tests。足すなら消す。**
 
 - 編集状態は Document が持つ。書き込みは Intent 経由のみ
 - 見た目の合否は利用者が窓で決める。cargo の緑は合格ではない
