@@ -498,6 +498,19 @@ body {
     position: relative;
 }
 
+/* 何を編集しているか。空振りに気づけるよう、選べていない時は盤ごと沈める。 */
+.etarget {
+    flex: 0 0 auto;
+    padding: var(--sp1) var(--sp4);
+    font-size: var(--t-dense);
+    color: var(--ink2);
+    border-bottom: var(--line) solid var(--dark);
+}
+
+#ease.idle .ecurve {
+    opacity: 0.35;
+}
+
 /* 棚の上へ重ねる。列にすると、盤に最低高が有るぶん窓が小さい時に切れる。 */
 .ename {
     position: absolute;

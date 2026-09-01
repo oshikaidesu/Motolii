@@ -184,6 +184,8 @@ struct Windows {
     pending: Vec<(WindowConfig<DioxusNativeWindowRenderer>, Option<Panel>)>,
     /// どの窓がどのパネルの別窓か。閉じた時に本体へ返すのに要る。
     detached: std::collections::HashMap<WindowId, Panel>,
+    /// 最後に指が居た所。摘まみの事象は場所を持たないので、ここから借りる。
+    cursor: std::collections::HashMap<WindowId, (f32, f32)>,
 }
 
 /// 窓1枚を実体にする。`BlitzApplication::add_window` は dioxus の配線
@@ -286,6 +288,41 @@ impl ApplicationHandler for Windows {
                 aim_keystrokes(view.downcast_doc_mut::<DioxusDocument>());
             }
         }
+        if let WindowEvent::PointerMoved { position, .. } = &event {
+            self.cursor.insert(window_id, (position.x as f32, position.y as f32));
+        }
+        // トラックパッドの摘まみ。blitz の `UiEvent` に摘まみは無いので、
+        // **Ctrl+ホイールへ翻訳**して配る(ブラウザと同じ作法で、盤も窓も
+        // 既にその形で拡縮する)。
+        if let WindowEvent::PinchGesture { delta, .. } = &event {
+            if delta.is_finite() && *delta != 0.0 {
+                let (x, y) = self.cursor.get(&window_id).copied().unwrap_or((0.0, 0.0));
+                if let Some(view) = self.inner.windows.get_mut(&window_id) {
+                    let doc = view.downcast_doc_mut::<DioxusDocument>();
+                    doc.handle_ui_event(blitz_traits::events::UiEvent::Wheel(
+                        blitz_traits::events::BlitzWheelEvent {
+                            delta: blitz_traits::events::BlitzWheelDelta::Pixels(
+                                0.0,
+                                *delta * 400.0,
+                            ),
+                            coords: blitz_traits::events::PointerCoords {
+                                page_x: x,
+                                page_y: y,
+                                screen_x: x,
+                                screen_y: y,
+                                client_x: x,
+                                client_y: y,
+                            },
+                            buttons: blitz_traits::events::MouseEventButtons::None,
+                            mods: keyboard_types::Modifiers::CONTROL,
+                            element: blitz_traits::events::Point { x, y },
+                        },
+                    ));
+                    view.request_redraw();
+                }
+            }
+            return;
+        }
         // Finder から落ちてきた素材を棚へ入れる。窓の外の出来事なので、
         // 入れたあと自分で全ての窓を起こす。
         if let WindowEvent::DragDropped { paths, .. } = &event {
@@ -351,6 +388,7 @@ pub fn launch(title: &str) {
             host,
             pending: vec![(main, None)],
             detached: Default::default(),
+            cursor: Default::default(),
         })
         .unwrap();
 }

@@ -149,12 +149,42 @@ pub(super) fn ease_panel(
     revision: Signal<u32>,
 ) -> Element {
     let _ = revision();
-    let live = !segments(&session.selected_keys.lock().unwrap()).is_empty();
+    let chosen = segments(&session.selected_keys.lock().unwrap());
+    let live = !chosen.is_empty();
+    // **今なにを編集しているか**を書く。選べていなくても盤は普通に曲線を描き、
+    // 形を押しても叱られないので、値を1コマずつ読むまで空振りに気づけない。
+    let target = if live {
+        let doc = session.doc.lock().unwrap();
+        let view = doc.view();
+        let layer = chosen[0].layer;
+        let name = view
+            .attrs(layer)
+            .ok()
+            .flatten()
+            .map(|a| a.name)
+            .unwrap_or_default();
+        let property = chosen[0]
+            .property
+            .as_ref()
+            .map(|p| p.name().to_string())
+            .unwrap_or_else(|| "all".to_string());
+        let mut at: Vec<f64> = chosen.iter().map(|k| k.at_sec).collect();
+        at.sort_by(f64::total_cmp);
+        let (a, b) = (at[0], *at.last().expect("空でない"));
+        format!(
+            "{name} · {property} · {}–{}",
+            crate::ui::fixture::fmt_timecode(a),
+            crate::ui::fixture::fmt_timecode(b)
+        )
+    } else {
+        "Pick a key on the timeline".to_string()
+    };
     // 説明書は形を名前で指す(「弾性」)。棚は形しか描けないので、
     // **指している間だけ**名前を返す。常に置くと8つの字が形を覆う。
     let name = kind_name();
     rsx!(
-        div { id: "ease",
+        div { id: if live { "ease" } else { "ease idle" },
+            div { class: "etarget", "{target}" }
             div { class: "ecurve", object { "data": editor } }
             div { class: if live { "epresets" } else { "epresets off" },
                 object { "data": presets }

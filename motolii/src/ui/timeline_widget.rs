@@ -702,7 +702,14 @@ impl Widget for TimelineWidget {
                 // 摘まみ)だけだと、**見つけられない手**になる —— 60秒の尺では
                 // 0.6秒が5画素で、キーが重なって選び分けられない。
                 let on_ruler = (wheel.element.y as f64) < RULER_H * self.sfac();
-                if wheel.mods.contains(Modifiers::CONTROL) || on_ruler {
+                // 摘まみ(Ctrl)・主の修飾(⌘)・目盛の帯、どれでも広がる。
+                // 1つしか道が無いと**見つけられない手**になる。
+                let primary = if cfg!(target_os = "macos") {
+                    wheel.mods.contains(Modifiers::META)
+                } else {
+                    wheel.mods.contains(Modifiers::CONTROL)
+                };
+                if wheel.mods.contains(Modifiers::CONTROL) || primary || on_ruler {
                     let cursor_x = wheel.element.x as f64;
                     let cursor_sec = self.scroll_sec + cursor_x / self.pps;
                     // 上へ回すと広がる。Stage の拡縮と同じ向き。

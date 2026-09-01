@@ -472,7 +472,6 @@ async fn put_away(
         Some(path) => path,
         None => {
             let picked = rfd::AsyncFileDialog::new()
-                .add_filter("Motolii", &["rrd"])
                 .set_file_name("song.rrd")
                 .save_file()
                 .await;
@@ -1140,8 +1139,9 @@ pub fn app() -> Element {
                                             let outgo = outgo.clone();
                                             let poke = poke.clone();
                                             dioxus_core::spawn(async move {
+                                                // 種の絞りを付けると、OS が拡張子を**もう一度**足して
+                                                // `x.mp4.mp4` になる。足すのはこちらの仕事に一本化する。
                                                 let picked = rfd::AsyncFileDialog::new()
-                                                    .add_filter("MP4", &["mp4"])
                                                     .set_file_name("comp.mp4")
                                                     .save_file()
                                                     .await;
