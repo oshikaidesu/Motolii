@@ -40,17 +40,8 @@ impl Engine {
         } else if layer.source == LayerSource::Shape {
             self.shape_texture_for(view, layer.id)
         } else if let LayerSource::File { path, .. } = &layer.source {
-            if crate::render::media::is_mesh_path(path) {
-                self.mesh_content_for(path, comp)
-            } else if is_point_cloud_path(path) {
-                self.point_cloud_content_for(path, comp)
-            } else if crate::render::media::is_still_image_path(path) {
-                let path = path.clone();
-                self.still_texture_for(&path)
-            } else {
-                let path = path.clone();
-                self.media_texture_for(&path, layer.source_frame, layer.id)
-            }
+            let path = path.clone();
+            self.file_content_for(&path, layer.source_frame, layer.id, comp)
         } else {
             self.texture_for(&layer.source, layer.source_frame)
         }
@@ -111,17 +102,8 @@ impl Engine {
                 .unwrap_or(&[]);
             self.shape_texture_from_shapes(shapes, layer.id)
         } else if let LayerSource::File { path, .. } = &layer.source {
-            if crate::render::media::is_mesh_path(path) {
-                self.mesh_content_for(path, comp)
-            } else if is_point_cloud_path(path) {
-                self.point_cloud_content_for(path, comp)
-            } else if crate::render::media::is_still_image_path(path) {
-                let path = path.clone();
-                self.still_texture_for(&path)
-            } else {
-                let path = path.clone();
-                self.media_texture_for(&path, layer.source_frame, layer.id)
-            }
+            let path = path.clone();
+            self.file_content_for(&path, layer.source_frame, layer.id, comp)
         } else {
             self.texture_for(&layer.source, layer.source_frame)
         }
@@ -300,6 +282,26 @@ impl Engine {
             }),
             natural,
         ))
+    }
+
+    /// ファイル素材の道はここ1本。**種別で分かれるのはこの関数の中だけ**で、
+    /// 呼ぶ側は素材が何かを知らない。種別を足す時に触るのもここだけ。
+    fn file_content_for(
+        &mut self,
+        path: &str,
+        source_frame: i64,
+        layer: LayerId,
+        comp: CompSpec,
+    ) -> Result<(Option<LayerContent>, [f32; 2]), EngineError> {
+        if crate::render::media::is_mesh_path(path) {
+            self.mesh_content_for(path, comp)
+        } else if is_point_cloud_path(path) {
+            self.point_cloud_content_for(path, comp)
+        } else if crate::render::media::is_still_image_path(path) {
+            self.still_texture_for(path)
+        } else {
+            self.media_texture_for(path, source_frame, layer)
+        }
     }
 
     /// 静止画は1枚を焼いて置くだけ。動画の道へ入れると
