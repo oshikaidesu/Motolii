@@ -698,10 +698,15 @@ impl Widget for TimelineWidget {
                     BlitzWheelDelta::Pixels(x, y) => (x, y),
                     BlitzWheelDelta::Lines(x, y) => (x * 20.0, y * 20.0),
                 };
-                if wheel.mods.contains(Modifiers::CONTROL) {
+                // 目盛の帯の上では素のホイールでも横に広がる。Ctrl(トラックパッドの
+                // 摘まみ)だけだと、**見つけられない手**になる —— 60秒の尺では
+                // 0.6秒が5画素で、キーが重なって選び分けられない。
+                let on_ruler = (wheel.element.y as f64) < RULER_H * self.sfac();
+                if wheel.mods.contains(Modifiers::CONTROL) || on_ruler {
                     let cursor_x = wheel.element.x as f64;
                     let cursor_sec = self.scroll_sec + cursor_x / self.pps;
-                    let new_pps = (self.pps * (1.0 - dy * 0.002)).clamp(MIN_PPS, MAX_PPS);
+                    // 上へ回すと広がる。Stage の拡縮と同じ向き。
+                    let new_pps = (self.pps * (1.0 + dy * 0.002)).clamp(MIN_PPS, MAX_PPS);
                     self.pps = new_pps;
                     self.scroll_sec = (cursor_sec - cursor_x / new_pps).max(0.0);
                 } else {
