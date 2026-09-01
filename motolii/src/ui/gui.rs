@@ -375,3 +375,39 @@ fn rolling_the_wheel_up_moves_the_view_closer() {
         "上へ回したのに遠ざかった: {before} → {after}"
     );
 }
+
+/// 掴んだまま窓を出ても、タブは消えない。
+///
+/// 前は `onmouseleave` が**離す前に**引きちぎって別窓にしていた。掴みは
+/// 離した時だけ効く —— 同じ手つきで判定の瞬間が違うのが不統一の芯だった。
+#[test]
+fn dragging_a_tab_out_of_the_window_does_not_take_it_away() {
+    let mut gui = Gui::open();
+    let before = gui.texts(".ptab");
+    let (x, y) = gui.center_of(".ptab", 0);
+
+    gui.press(x, y);
+    gui.motion(x, y + 40.0);
+    gui.motion(-80.0, -80.0);
+    gui.release(-80.0, -80.0);
+    gui.settle();
+
+    assert_eq!(gui.texts(".ptab"), before, "窓を出ただけでタブが消えた");
+}
+
+/// 掴んでいる間は、掴んでいると分かる。
+#[test]
+fn a_held_tab_looks_held() {
+    let mut gui = Gui::open();
+    let (x, y) = gui.center_of(".ptab", 0);
+
+    gui.press(x, y);
+    gui.motion(x + 30.0, y + 30.0);
+    gui.settle();
+
+    assert!(
+        gui.classes(".ptab").iter().any(|c| c.contains("held")),
+        "掴んでいるのに見た目が変わらない: {:?}",
+        gui.classes(".ptab")
+    );
+}

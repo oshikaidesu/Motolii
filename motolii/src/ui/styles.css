@@ -28,7 +28,9 @@ body {
 
 #app {
     display: grid;
+    grid-template-columns: 1fr;
     height: 100vh;
+    width: 100vw;
     overflow: hidden;
 }
 
@@ -109,8 +111,11 @@ body {
 }
 
 #main {
-    display: grid;
+    display: flex;
     overflow: hidden;
+    min-width: 0;
+    min-height: 0;
+    width: 100%;
 }
 
 .vgrip {
@@ -498,6 +503,56 @@ body {
     position: relative;
 }
 
+/* 掴んでいる間のタブ。消えたのか掴んでいるのかが分からないと手が止まる。 */
+.ptab.held {
+    opacity: 0.4;
+}
+
+/* 置き場の木。節は flex、葉は zone。割合は節が持つ。 */
+.tlinear {
+    display: flex;
+    min-width: 0;
+    min-height: 0;
+    flex: 1;
+    width: 100%;
+    height: 100%;
+}
+
+.tslot {
+    display: flex;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.tslot > .zone,
+.tslot > .tlinear {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+}
+
+/* 落とし先の当たり。掴んでいる間だけ出る。 */
+.dropmap {
+    position: absolute;
+    inset: 0;
+}
+
+.dz {
+    position: absolute;
+}
+
+.dz.top { left: 0; right: 0; top: 0; height: 25%; }
+.dz.bottom { left: 0; right: 0; bottom: 0; height: 25%; }
+.dz.left { top: 25%; bottom: 25%; left: 0; width: 25%; }
+.dz.right { top: 25%; bottom: 25%; right: 0; width: 25%; }
+.dz.center { top: 25%; bottom: 25%; left: 25%; right: 25%; }
+
+.dz.here {
+    background: var(--accent);
+    opacity: 0.28;
+}
+
 /* 何を編集しているか。空振りに気づけるよう、選べていない時は盤ごと沈める。 */
 .etarget {
     flex: 0 0 auto;
@@ -544,6 +599,8 @@ body {
     flex-direction: column;
     overflow: hidden;
     background: var(--panel);
+    /* 落とし先の当たりを重ねる土台。 */
+    position: relative;
 }
 
 .zone.empty {

@@ -134,6 +134,7 @@ struct Woken;
 fn window(
     root: fn() -> dioxus_native::prelude::Element,
     title: &str,
+    size: (u32, u32),
     contexts: Vec<Box<dyn std::any::Any>>,
 ) -> WindowConfig<DioxusNativeWindowRenderer> {
     let mut vdom = VirtualDom::new(root);
@@ -151,7 +152,9 @@ fn window(
     WindowConfig::with_attributes(
         Box::new(doc) as _,
         renderer,
-        WindowAttributes::default().with_title(title.to_string()),
+        WindowAttributes::default().with_title(title.to_string()).with_surface_size(
+            dioxus_native::winit::dpi::LogicalSize::new(size.0, size.1),
+        ),
     )
 }
 
@@ -235,6 +238,7 @@ impl Windows {
                 Ask::Open(panel) => self.pending.push((window(
                     crate::ui::app::detached,
                     panel.label(),
+                    panel.window_size(),
                     vec![
                         Box::new(self.session.clone()),
                         Box::new(self.host.clone()),
@@ -373,6 +377,7 @@ pub fn launch(title: &str) {
     let main = window(
         crate::ui::app::app,
         title,
+        (1600, 1000),
         vec![
             Box::new(session.clone()),
             Box::new(host.clone()),

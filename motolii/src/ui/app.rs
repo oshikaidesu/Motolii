@@ -2,7 +2,7 @@ use dioxus_native::prelude::*;
 use dioxus_native::CustomWidgetAttr;
 
 use crate::ui::browser::browser_panel;
-use crate::ui::dock::{Dock, Panel, Zone};
+use crate::ui::dock::{Dir, Dock, Panel, Side, Tile, TileId};
 use crate::ui::inspector::inspector_panel;
 use crate::ui::keymap::Intent;
 use crate::ui::session::Session;
@@ -14,17 +14,23 @@ use crate::ui::tokens;
 
 static STYLES: &str = include_str!("styles.css");
 
-#[derive(Clone, Copy, PartialEq)]
-enum DragTarget {
-    Browser,
-    Inspector,
-    Timeline,
-}
+/// 落とし先の当たり。**位置を計算しない** —— 5枚の当たりを重ねて置き、
+/// どれに乗ったかで決める。
+const SIDES: [(Side, &str); 5] = [
+    (Side::Top, "top"),
+    (Side::Left, "left"),
+    (Side::Center, "center"),
+    (Side::Right, "right"),
+    (Side::Bottom, "bottom"),
+];
 
-struct DragSplit {
-    target: DragTarget,
+/// 節の中で隣り合う2つの割合を動かす。
+#[derive(Clone, Copy)]
+struct GripDrag {
+    parent: TileId,
+    index: usize,
+    dir: Dir,
     start: f64,
-    orig: f64,
 }
 
 /// 窓1枚ぶんの見えかたの状態。Document には入らない物だけ。
@@ -495,15 +501,119 @@ async fn put_away(
     poke.poke();
 }
 
+/// 置き場は木。**節ごとに描く**ので割り方に上限が無い。語彙は egui_tiles と
+/// 同じ —— 葉が Pane、節が Linear(並べる)か Tabs(重ねる)。
+#[allow(clippy::too_many_arguments)]
+fn tile_view(
+    id: TileId,
+    mut dock: Signal<Dock>,
+    mut tab_drag: Signal<Option<Panel>>,
+    mut drop_at: Signal<Option<(TileId, Side)>>,
+    mut grip: Signal<Option<GripDrag>>,
+    session: &Session,
+    ui: &fixture::UiData,
+    panes: Panes,
+    playing: Signal<bool>,
+) -> Element {
+    let d = dock();
+    let dropping = tab_drag().is_some();
+    match d.tile(id).cloned() {
+        Some(Tile::Linear { dir, children, shares }) => {
+            let flow = if dir == Dir::Row { "row" } else { "column" };
+            let last = children.len().saturating_sub(1);
+            rsx!(
+                div { class: "tlinear", style: "flex-direction: {flow};",
+                    for (i , child) in children.iter().copied().enumerate() {
+                        div {
+                            class: "tslot",
+                            style: "flex: {shares.get(i).copied().unwrap_or(1.0)};",
+                            {tile_view(child, dock, tab_drag, drop_at, grip, session, ui, panes, playing)}
+                        }
+                        if i < last {
+                            div {
+                                class: if dir == Dir::Row { "vgrip" } else { "hgrip" },
+                                onmousedown: move |evt| {
+                                    let p = evt.data().client_coordinates();
+                                    *grip.write() = Some(GripDrag {
+                                        parent: id,
+                                        index: i,
+                                        dir,
+                                        start: if dir == Dir::Row { p.x } else { p.y },
+                                    });
+                                },
+                            }
+                        }
+                    }
+                }
+            )
+        }
+        Some(Tile::Tabs { children, active }) => {
+            let pane_of = |c: TileId| match d.tile(c) {
+                Some(Tile::Pane(p)) => Some(*p),
+                _ => None,
+            };
+            let panels: Vec<Panel> = children.iter().copied().filter_map(pane_of).collect();
+            let shown = children.get(active).copied().and_then(pane_of);
+            rsx!(
+                div { class: "zone",
+                    div { class: "ptabs",
+                        for panel in panels.iter().copied() {
+                            span {
+                                class: match (d.is_active(panel), tab_drag() == Some(panel)) {
+                                    (_, true) => "ptab held",
+                                    (true, false) => "ptab on",
+                                    (false, false) => "ptab",
+                                },
+                                style: if d.is_active(panel) { format!("border-bottom-color: {};", panel.way()) } else { String::new() },
+                                onmousedown: move |_| {
+                                    *tab_drag.write() = Some(panel);
+                                    dock.write().set_active(panel);
+                                },
+                                "{panel}"
+                            }
+                        }
+                        if shown == Some(Panel::Timeline) {
+                            {crate::ui::timeline_shell::transport(session.clock.clone(), playing, panes.playhead, panes.layer_rows.read().len())}
+                        }
+                    }
+                    if let Some(panel) = shown {
+                        div { class: "zbody", {panel_body(panel, session, ui, panes)} }
+                    }
+                    if dropping {
+                        div { class: "dropmap",
+                            for (side , class) in SIDES {
+                                div {
+                                    class: if drop_at() == Some((id, side)) { format!("dz {class} here") } else { format!("dz {class}") },
+                                    onmousemove: move |_| {
+                                        if *drop_at.peek() != Some((id, side)) {
+                                            drop_at.set(Some((id, side)));
+                                        }
+                                    },
+                                    onmouseup: move |_| {
+                                        let Some(panel) = tab_drag.write().take() else { return };
+                                        dock.write().drop_onto(panel, id, side);
+                                        drop_at.set(None);
+                                    },
+                                }
+                            }
+                        }
+                    }
+                }
+            )
+        }
+        Some(Tile::Pane(panel)) => {
+            rsx!(div { class: "zone", div { class: "zbody", {panel_body(panel, session, ui, panes)} } })
+        }
+        None => rsx!(div { class: "zone empty" }),
+    }
+}
+
 pub fn app() -> Element {
     let mut playing = use_signal(|| false);
-    let mut browser_w = use_signal(|| 300.0f64);
-    let mut inspector_w = use_signal(|| 270.0f64);
-    let mut timeline_h = use_signal(|| 300.0f64);
-    let mut drag = use_signal(|| Option::<DragSplit>::None);
     let mut dock = use_signal(Dock::default);
     let mut tab_drag = use_signal(|| Option::<Panel>::None);
-    let mut drop_zone = use_signal(|| Option::<Zone>::None);
+    let mut drop_at = use_signal(|| Option::<(TileId, Side)>::None);
+    let mut grip = use_signal(|| Option::<GripDrag>::None);
     let mut view_open = use_signal(|| false);
     let mut file_open = use_signal(|| false);
 
@@ -544,116 +654,42 @@ pub fn app() -> Element {
     let clock = session.clock.clone();
     let selection = session.selection.clone();
 
-    let bw = browser_w();
-    let iw = inspector_w();
-    let th = timeline_h();
     let css = format!("{}{}", tokens::css_root(scale_pct()), STYLES);
 
     let d = dock();
-    // 掴んでいる間は空の置き場も開けておく。畳んだままだと戻す場所が無くなる。
-    let holding = tab_drag().is_some();
-    let px = |zone: Zone, v: f64| {
-        let filled = !d.panels(zone).is_empty();
-        match (filled, holding) {
-            (true, _) => format!("{v}px"),
-            (false, true) => format!("{}px", v.min(96.0)),
-            (false, false) => "0px".to_string(),
-        }
-    };
-    let left_w = px(Zone::Left, bw);
-    let right_w = px(Zone::Right, iw);
-    let grip_l = px(Zone::Left, 8.0);
-    let grip_r = px(Zone::Right, 8.0);
-    let bottom_h = px(Zone::Bottom, th);
-    let grip_b = px(Zone::Bottom, 8.0);
-
-    let body = |panel: Panel| -> Element { panel_body(panel, &session, &loaded, panes) };
-    let zone_view = |zone: Zone| -> Element {
-        let d = dock();
-        let panels = d.panels(zone).to_vec();
-        let dropping = tab_drag().is_some();
-        let here = dropping && drop_zone() == Some(zone);
-        let strip_class = if here { "ptabs drop" } else { "ptabs" };
-        let zone_class = match (panels.is_empty(), here) {
-            (_, true) => "zone here",
-            (true, false) => "zone empty",
-            (false, false) => "zone",
-        };
-        rsx!(
-            div {
-                class: "{zone_class}",
-                onmousemove: move |_| {
-                    if tab_drag.peek().is_some() && *drop_zone.peek() != Some(zone) {
-                        drop_zone.set(Some(zone));
-                    }
-                },
-                onmouseup: move |_| {
-                    if let Some(panel) = tab_drag.write().take() {
-                        dock.write().place(panel, zone);
-                    }
-                },
-                div { class: "{strip_class}",
-                    for panel in panels.iter().copied() {
-                        span {
-                            class: if d.is_active(zone, panel) { "ptab on" } else { "ptab" },
-                            style: if d.is_active(zone, panel) { format!("border-bottom-color: {};", panel.way()) } else { String::new() },
-                            onmousedown: move |_| {
-                                *tab_drag.write() = Some(panel);
-                                dock.write().set_active(zone, panel);
-                            },
-                            "{panel}"
-                        }
-                    }
-                    if d.active(zone) == Some(Panel::Timeline) {
-                        {crate::ui::timeline_shell::transport(clock.clone(), playing, panes.playhead, layer_rows.read().len())}
-                    }
-                }
-                if let Some(panel) = d.active(zone) {
-                    div { class: "zbody", {body(panel)} }
-                } else if dropping {
-                    div { class: "zhint", "Drop here" }
-                }
-            }
-        )
-    };
-
     rsx!(
         style { {css} }
         div {
             id: "app",
             tabindex: "0",
             autofocus: "true",
-            style: "grid-template-rows: var(--section) 1fr {grip_b} {bottom_h} calc(20 * var(--s) * 1px);",
+            style: "grid-template-rows: var(--section) 1fr calc(20 * var(--s) * 1px);",
             onmousemove: move |evt| {
-                if let Some(d) = drag.read().as_ref() {
+                // 節の中の割合を動かす。**画面の実寸は窓の側にしか無い**ので、
+                // 名目の長さで割る。触った手応えで合わせる形。
+                let held = *grip.peek();
+                if let Some(g) = held {
                     let p = evt.data().client_coordinates();
-                    match d.target {
-                        DragTarget::Browser => {
-                            *browser_w.write() = (d.orig + (p.x - d.start)).clamp(140.0, 420.0);
-                        }
-                        DragTarget::Inspector => {
-                            *inspector_w.write() = (d.orig - (p.x - d.start)).clamp(180.0, 420.0);
-                        }
-                        DragTarget::Timeline => {
-                            *timeline_h.write() = (d.orig - (p.y - d.start)).clamp(120.0, 600.0);
-                        }
+                    let now = if g.dir == Dir::Row { p.x } else { p.y };
+                    let nominal = if g.dir == Dir::Row { 1200.0 } else { 800.0 };
+                    let delta = ((now - g.start) / nominal) as f32;
+                    if delta != 0.0 {
+                        dock.write().nudge_share(g.parent, g.index, delta);
+                        grip.set(Some(GripDrag { start: now, ..g }));
                     }
                 }
             },
             onmouseup: move |_| {
-                *drag.write() = None;
+                *grip.write() = None;
                 *tab_drag.write() = None;
-                *drop_zone.write() = None;
+                *drop_at.write() = None;
             },
-            onmouseleave: {
-                let host = host.clone();
-                move |_| {
-                    let Some(panel) = tab_drag.write().take() else { return };
-                    println!("PROBE room=dock verdict=detach panel={panel}");
-                    *drop_zone.write() = None;
-                    dock.write().detach(panel);
-                    host.open(panel);
-                }
+            // 掴んだまま窓を出ても引きちぎらない。掴みは**離した時だけ**効く。
+            // 別窓へ出すのは View 菜単の Window(明示の一手)だけ。
+            onmouseleave: move |_| {
+                *tab_drag.write() = None;
+                *drop_at.write() = None;
+                *grip.write() = None;
             },
             onkeyup: move |evt: dioxus_native::prelude::Event<dioxus_native::prelude::KeyboardData>| {
                 crate::ui::keymap::note_key_up(&evt.key());
@@ -1208,50 +1244,13 @@ pub fn app() -> Element {
 
             }
 
-            div {
-                id: "main",
-                style: "grid-template-columns: {left_w} {grip_l} 1fr {grip_r} {right_w};",
-
-                {zone_view(Zone::Left)}
-                div {
-                    class: "vgrip",
-                    onmousedown: move |evt| {
-                        let p = evt.data().client_coordinates();
-                        *drag.write() = Some(DragSplit {
-                            target: DragTarget::Browser,
-                            start: p.x,
-                            orig: browser_w(),
-                        });
-                    },
+            div { id: "main",
+                if let Some(root) = dock().root() {
+                    {tile_view(root, dock, tab_drag, drop_at, grip, &session, &loaded, panes, playing)}
+                } else {
+                    div { class: "zone empty" }
                 }
-                {zone_view(Zone::Center)}
-                div {
-                    class: "vgrip",
-                    onmousedown: move |evt| {
-                        let p = evt.data().client_coordinates();
-                        *drag.write() = Some(DragSplit {
-                            target: DragTarget::Inspector,
-                            start: p.x,
-                            orig: inspector_w(),
-                        });
-                    },
-                }
-                {zone_view(Zone::Right)}
             }
-
-            div {
-                class: "hgrip",
-                onmousedown: move |evt| {
-                    let p = evt.data().client_coordinates();
-                    *drag.write() = Some(DragSplit {
-                        target: DragTarget::Timeline,
-                        start: p.y,
-                        orig: timeline_h(),
-                    });
-                },
-            }
-
-            {zone_view(Zone::Bottom)}
 
             // 出した事は**今いる場所**に返す。Output パネルの中だけだと、
             // Stage を見ている人には起きていない事と同じになる。
