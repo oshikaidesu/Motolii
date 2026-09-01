@@ -113,7 +113,6 @@ pub struct Engine {
     failed_point_clouds: HashMap<String, String>,
     pixels: StillPixels,
     videos: HashMap<String, (Vec<u8>, re_renderer::video::Video)>,
-    video_last_texture: HashMap<u64, GpuTexture2D>,
 }
 
 impl Engine {
@@ -133,7 +132,6 @@ impl Engine {
             failed_point_clouds: HashMap::new(),
             pixels: still_pixels(),
             videos: HashMap::new(),
-            video_last_texture: HashMap::new(),
         })
     }
 
@@ -157,7 +155,6 @@ impl Engine {
             failed_point_clouds: HashMap::new(),
             pixels: still_pixels(),
             videos: HashMap::new(),
-            video_last_texture: HashMap::new(),
         })
     }
 
@@ -197,10 +194,6 @@ impl Engine {
         include_background: bool,
     ) -> Result<Vec<u8>, EngineError> {
         self.render_with_camera_override(view, t, include_background, None)
-    }
-
-    pub fn cached_frame_count(&self) -> usize {
-        self.video_last_texture.len()
     }
 
     pub fn cached_text_texture_count(&self) -> usize {

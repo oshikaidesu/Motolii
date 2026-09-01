@@ -12,6 +12,10 @@ use crate::doc::store::{
 use crate::render::engine::render::layer_size;
 use crate::render::engine::{shape, text, Engine, EngineError};
 
+/// コマ1つを待つ上限と、見に行く間隔。越えたら諦め、諦めた事を記録する。
+const DECODE_PATIENCE: std::time::Duration = std::time::Duration::from_secs(2);
+const DECODE_POLL: std::time::Duration = std::time::Duration::from_millis(2);
+
 fn layer_stream_id(layer: LayerId, path: &str) -> u64 {
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     layer.0.hash(&mut hasher);
@@ -437,28 +441,40 @@ impl Engine {
                 let video_time = re_video::Time::from_secs(secs, timescale);
                 let stream_id = re_video::player::VideoPlayerStreamId(layer_stream_id(layer, path));
                 let source = re_video::player::VideoSliceSource(bytes);
-                let output = video.frame_at(
-                    self.compositor.render_context(),
-                    stream_id,
-                    video_time,
-                    &source,
-                );
-                if let Some(err) = output.error {
-                    self.layer_failures
-                        .push(format!("フレームを読めない(decode失敗): {path} frame={frame}: {err}"));
-                }
-                match output.output.and_then(|frame_texture| frame_texture.texture) {
-                    Some(texture) => {
-                        self.video_last_texture.insert(stream_id.0, texture.clone());
-                        Ok((Some(LayerContent::Texture(texture)), natural))
+                // デコーダは非同期で、頼んだ直後は返さない。待たずに前のコマを
+                // 返すと、**同じ時刻でも辿り着き方で絵が変わり**、窓と書き出しが
+                // 一致しなくなる。待つのは素材ごとに初回だけ(実測 764ms、以降 65µs)。
+                let deadline = std::time::Instant::now() + DECODE_PATIENCE;
+                loop {
+                    let output = video.frame_at(
+                        self.compositor.render_context(),
+                        stream_id,
+                        video_time,
+                        &source,
+                    );
+                    let ready = output.output.as_ref().is_some_and(|frame| {
+                        frame.texture.is_some()
+                            && matches!(
+                                frame.decoder_delay_state,
+                                re_video::player::DecoderDelayState::UpToDate
+                            )
+                    });
+                    if ready {
+                        let texture = output.output.and_then(|frame| frame.texture);
+                        return Ok((texture.map(LayerContent::Texture), natural));
                     }
-                    None => Ok((
-                        self.video_last_texture
-                            .get(&stream_id.0)
-                            .cloned()
-                            .map(LayerContent::Texture),
-                        natural,
-                    )),
+                    if let Some(err) = output.error {
+                        self.layer_failures.push(format!(
+                            "フレームを読めない(decode失敗): {path} frame={frame}: {err}"
+                        ));
+                        return Ok((None, natural));
+                    }
+                    if std::time::Instant::now() >= deadline {
+                        self.layer_failures
+                            .push(format!("コマが間に合わなかった: {path} frame={frame}"));
+                        return Ok((None, natural));
+                    }
+                    std::thread::sleep(DECODE_POLL);
                 }
                 }
 
