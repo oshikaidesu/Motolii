@@ -211,13 +211,14 @@ fn EasePanel(session: Session, revision: Signal<u32>) -> Element {
             session.clone(),
         ))
     });
+    let kind_name = use_signal(String::new);
     let kinds = use_hook(|| {
-        CustomWidgetAttr::new(crate::ui::ease_widget::KindsWidget::new(
-            shape.clone(),
-            session.clone(),
-        ))
+        CustomWidgetAttr::new(
+            crate::ui::ease_widget::KindsWidget::new(shape.clone(), session.clone())
+                .with_name_mirror(kind_name),
+        )
     });
-    crate::ui::ease::ease_panel(&session, editor, kinds, revision)
+    crate::ui::ease::ease_panel(&session, editor, kinds, kind_name, revision)
 }
 
 #[component]
@@ -568,7 +569,7 @@ pub fn app() -> Element {
                         }
                     }
                     if d.active(zone) == Some(Panel::Timeline) {
-                        {crate::ui::timeline_shell::transport(clock.clone(), playing, layer_rows.read().len())}
+                        {crate::ui::timeline_shell::transport(clock.clone(), playing, panes.playhead, layer_rows.read().len())}
                     }
                 }
                 if let Some(panel) = d.active(zone) {

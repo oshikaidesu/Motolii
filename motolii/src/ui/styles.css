@@ -495,6 +495,16 @@ body {
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    position: relative;
+}
+
+/* 棚の上へ重ねる。列にすると、盤に最低高が有るぶん窓が小さい時に切れる。 */
+.ename {
+    position: absolute;
+    right: var(--sp4);
+    bottom: var(--sp1);
+    font-size: var(--t-dense);
+    color: var(--ink2);
 }
 
 .ecurve {

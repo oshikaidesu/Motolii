@@ -145,16 +145,21 @@ pub(super) fn ease_panel(
     session: &Session,
     editor: dioxus_native::CustomWidgetAttr,
     presets: dioxus_native::CustomWidgetAttr,
+    kind_name: Signal<String>,
     revision: Signal<u32>,
 ) -> Element {
     let _ = revision();
     let live = !segments(&session.selected_keys.lock().unwrap()).is_empty();
+    // 説明書は形を名前で指す(「弾性」)。棚は形しか描けないので、
+    // **指している間だけ**名前を返す。常に置くと8つの字が形を覆う。
+    let name = kind_name();
     rsx!(
         div { id: "ease",
             div { class: "ecurve", object { "data": editor } }
             div { class: if live { "epresets" } else { "epresets off" },
                 object { "data": presets }
             }
+            div { class: "ename", "{name}" }
         }
     )
 }

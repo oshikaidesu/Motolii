@@ -14,8 +14,12 @@ use crate::doc::store::{Document, Intent, LayerAttrsPatch, LayerId};
 pub(super) fn transport(
     clock: Arc<Clock>,
     mut playing: Signal<bool>,
+    playhead: Signal<f64>,
     layer_count: usize,
 ) -> Element {
+    // 再生位置の鏡を購読する。読むだけだと、再生中この字は描き直されず
+    // **絵は動いているのに時刻が止まって見える**。
+    let _ = playhead();
     let timecode = fmt_timecode(clock.now_sec());
     rsx!(
         div { class: "ptools",

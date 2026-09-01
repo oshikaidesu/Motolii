@@ -2,6 +2,7 @@
 use std::sync::{Arc, Mutex};
 
 use anyrender::{PaintRef, PaintScene};
+use dioxus_native::prelude::{Signal, WritableExt};
 use blitz_dom::node::ComputedStyles;
 use blitz_dom::Widget;
 use blitz_traits::events::UiEvent;
@@ -336,17 +337,40 @@ impl Widget for EaseWidget {
 const COLS: usize = 4;
 const CELL_PAD: f64 = 6.0;
 
+/// 型の名前。棚は形で見せるが、**説明書が名前で指す物には名前が要る**。
+/// 乗せた時だけ出す(常に置くと8つの字が並んで形が読めなくなる)。
+pub(super) fn kind_name(interp: &Interp) -> &'static str {
+    match interp {
+        Interp::Hold => "Hold",
+        Interp::Linear => "Linear",
+        Interp::Bezier { .. } => "Ease",
+        Interp::Bounce { .. } => "Bounce",
+        Interp::Elastic { .. } => "Elastic",
+        Interp::Cyclic { .. } => "Cyclic",
+        Interp::Random { .. } => "Random",
+        Interp::Steps { .. } => "Steps",
+        Interp::ElasticSteps { .. } => "Elastic Steps",
+    }
+}
+
 /// 型の棚。押すとその型がそのまま区間へ乗る。名前は置かず、形で見せる。
 pub(super) struct KindsWidget {
     shape: Arc<Mutex<Interp>>,
     session: Session,
     size: (f64, f64),
     hovered: Option<usize>,
+    /// 指している型の名前を窓へ返す鏡。窓は字を描けるが、盤は形しか描けない。
+    name_mirror: Option<Signal<String>>,
 }
 
 impl KindsWidget {
     pub(super) fn new(shape: Arc<Mutex<Interp>>, session: Session) -> Self {
-        Self { shape, session, size: (0.0, 0.0), hovered: None }
+        Self { shape, session, size: (0.0, 0.0), hovered: None, name_mirror: None }
+    }
+
+    pub(super) fn with_name_mirror(mut self, mirror: Signal<String>) -> Self {
+        self.name_mirror = Some(mirror);
+        self
     }
 
     /// 棚に並ぶ形。最後に「写した曲線」が居ることがある。
@@ -385,6 +409,15 @@ impl Widget for KindsWidget {
         match event {
             UiEvent::PointerMove(p) => {
                 self.hovered = self.at(p.element.x as f64, p.element.y as f64);
+                let name = self
+                    .hovered
+                    .and_then(|i| self.shelf().get(i).map(|k| kind_name(k).to_owned()))
+                    .unwrap_or_default();
+                if let Some(mirror) = &mut self.name_mirror {
+                    if (*mirror)() != name {
+                        mirror.set(name);
+                    }
+                }
             }
             UiEvent::PointerDown(p) => {
                 let Some(i) = self.at(p.element.x as f64, p.element.y as f64) else {
