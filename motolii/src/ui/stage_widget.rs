@@ -168,6 +168,9 @@ pub(super) struct StageWidget {
     view_camera: Arc<Mutex<crate::render::engine::ObservationCamera>>,
     rings: Arc<std::sync::atomic::AtomicBool>,
     frame_dim: Arc<std::sync::atomic::AtomicU32>,
+    cancel: Arc<std::sync::atomic::AtomicU32>,
+    gesture_active: Arc<std::sync::atomic::AtomicBool>,
+    seen_cancel: u32,
     /// 最後に指が居た所(窓の点)。拡縮を**指の下**で行うために覚える。
     cursor: Option<(f64, f64)>,
     /// **出す物だけを映す。** 書き出しカメラで撮り、取っ手も枠も描かず、触れない。
@@ -207,6 +210,8 @@ impl StageWidget {
         view_camera: Arc<Mutex<crate::render::engine::ObservationCamera>>,
         rings: Arc<std::sync::atomic::AtomicBool>,
         frame_dim: Arc<std::sync::atomic::AtomicU32>,
+        cancel: Arc<std::sync::atomic::AtomicU32>,
+        gesture_active: Arc<std::sync::atomic::AtomicBool>,
         output_only: bool,
     ) -> Self {
         Self {
@@ -224,6 +229,9 @@ impl StageWidget {
             view_camera,
             rings,
             frame_dim,
+            cancel,
+            gesture_active,
+            seen_cancel: 0,
             cursor: None,
             output_only,
         }
@@ -252,6 +260,8 @@ impl StageWidget {
     /// 離した所までの編集が失われる(規格の pointer capture が保証している物の、
     /// 届く範囲での代わり)。
     fn finish_drag(&mut self, shift: bool, alt: bool) {
+        self.gesture_active
+            .store(false, std::sync::atomic::Ordering::Relaxed);
                 if let Some(cam) = self.camera_drag.take() {
                     if let (true, Some(at)) = (cam.export_frame, cam.last) {
                         let next = camera_center_for(&cam, at);
@@ -312,6 +322,30 @@ impl StageWidget {
                     }
                 }
     }
+
+    /// 掴んだ物を**書かずに**手放す。窓が背面へ回った時や `Esc` で通る。
+    fn cancel_drag(&mut self) {
+        if let Some(drag) = self.drag.take() {
+            let mut doc = self.doc.lock().unwrap();
+            for name in [
+                property::POSITION,
+                property::SCALE,
+                property::ROTATION,
+                property::ROTATION_X,
+                property::ROTATION_Y,
+                property::POSITION_Z,
+            ] {
+                if let Ok(prop) = PropertyId::new(name) {
+                    doc.clear_transient(drag.layer, &prop);
+                }
+            }
+        }
+        self.camera_drag = None;
+        self.gesture_active
+            .store(false, std::sync::atomic::Ordering::Relaxed);
+        self.revision += 1;
+    }
+
 
     fn write_export_center(&self, center: (f64, f64), rt: RationalTime, commit: bool) {
         let Ok(property) = PropertyId::camera(property::CAMERA_CENTER) else { return };
@@ -655,6 +689,12 @@ impl Widget for StageWidget {
             // 出力を映す窓。ここは**見るだけ**で、触っても何も起きない。
             return;
         }
+        let cancel = self.cancel.load(std::sync::atomic::Ordering::Relaxed);
+        if cancel != self.seen_cancel {
+            self.seen_cancel = cancel;
+            self.cancel_drag();
+            return;
+        }
         match event {
             UiEvent::Wheel(wheel) => {
                 let dy = match wheel.delta {
@@ -752,6 +792,8 @@ impl Widget for StageWidget {
                             "PROBE room=input verdict=gizmo-hit mode={mode:?} at=({lx:.0},{ly:.0})                              box=({bx:.0},{by:.0},{bw:.0},{bh:.0}) depth=({dx:.0},{dy:.0}) tol={tol:.0}"
                         );
                         if let Some(mode) = mode {
+                            self.gesture_active
+                                .store(true, std::sync::atomic::Ordering::Relaxed);
                             self.drag = Some(GizmoDrag {
                                 layer,
                                 mode,
@@ -802,6 +844,8 @@ impl Widget for StageWidget {
                     None => {
                         // 枠の縁を掴んだら書き出しカメラ、それ以外は視点。
                         // 錠が掛かっている間は枠を掴めない(誤って掴むのを止める)。
+                        self.gesture_active
+                            .store(true, std::sync::atomic::Ordering::Relaxed);
                         if self.near_export_frame(cx, cy) && !crate::ui::fixture::camera_locked() {
                             let rt = self.current_rt();
                             self.camera_drag = Some(CameraDrag {

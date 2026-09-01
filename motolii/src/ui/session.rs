@@ -63,6 +63,12 @@ pub(super) struct Session {
     pub rings: Arc<std::sync::atomic::AtomicBool>,
     /// 枠の外へかける膜の濃さ(%)。見る側の設定で、作品には入らない。
     pub frame_dim: Arc<std::sync::atomic::AtomicU32>,
+    /// 掴みの取り消し。上がるたびに、掴んでいる物は**書かずに**手を離す
+    /// (規格が MUST で求める pointercancel の役)。
+    pub cancel_gesture: Arc<std::sync::atomic::AtomicU32>,
+    /// いま何かを掴んでいるか。`Esc` の意味を段で分けるために要る
+    /// (掴んでいる間は取り消し、そうでなければ選択を解く)。
+    pub gesture_active: Arc<std::sync::atomic::AtomicBool>,
     pub overshoot: Arc<std::sync::atomic::AtomicBool>,
     /// 写した曲線。区間から区間へ貼るための控え(Document には入らない)。
     pub curve_clip: Arc<Mutex<Option<crate::doc::store::Interp>>>,
@@ -104,6 +110,8 @@ impl Session {
             view_camera: Arc::new(Mutex::new(Default::default())),
             rings: Arc::new(std::sync::atomic::AtomicBool::new(true)),
             frame_dim: Arc::new(std::sync::atomic::AtomicU32::new(75)),
+            cancel_gesture: Arc::new(std::sync::atomic::AtomicU32::new(0)),
+            gesture_active: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             overshoot: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             curve_clip: Arc::new(Mutex::new(None)),
         }

@@ -210,6 +210,9 @@ pub(super) struct TimelineWidget {
     /// 書く場所の数だけ配線が要るので、こちらから見に行く。
     revision: Option<Signal<u32>>,
     seen_revision: u32,
+    cancel: Option<Arc<std::sync::atomic::AtomicU32>>,
+    gesture_active: Option<Arc<std::sync::atomic::AtomicBool>>,
+    seen_cancel: u32,
     selected_key: Option<Arc<Mutex<Vec<crate::ui::session::KeySel>>>>,
 }
 
@@ -239,6 +242,9 @@ impl TimelineWidget {
             playhead_mirror: None,
             revision: None,
             seen_revision: 0,
+            cancel: None,
+            gesture_active: None,
+            seen_cancel: 0,
             selected_key: None,
         }
     }
@@ -264,6 +270,16 @@ impl TimelineWidget {
 
     pub(super) fn with_playhead_mirror(mut self, mirror: Signal<f64>) -> Self {
         self.playhead_mirror = Some(mirror);
+        self
+    }
+
+    pub(super) fn with_cancel(
+        mut self,
+        cancel: Arc<std::sync::atomic::AtomicU32>,
+        active: Arc<std::sync::atomic::AtomicBool>,
+    ) -> Self {
+        self.cancel = Some(cancel);
+        self.gesture_active = Some(active);
         self
     }
 
@@ -308,6 +324,9 @@ impl TimelineWidget {
     /// 捨てると、離した所までの編集が失われる(外の規格の pointer capture が
     /// 本来これを保証している物の、届く範囲での代わり)。
     fn finish_drag(&mut self) {
+        if let Some(a) = &self.gesture_active {
+            a.store(false, std::sync::atomic::Ordering::Relaxed);
+        }
                 self.scrubbing = false;
                 if let Some((from, to)) = self.marquee.take() {
                     self.select_inside(from, to);
@@ -701,6 +720,20 @@ impl Widget for TimelineWidget {
             }
             UiEvent::PointerMove(p) => {
                 let (x, y) = (p.element.x as f64, p.element.y as f64);
+                if let Some(c) = &self.cancel {
+                    let now = c.load(std::sync::atomic::Ordering::Relaxed);
+                    if now != self.seen_cancel {
+                        self.seen_cancel = now;
+                        // **書かずに**手放す。
+                        self.drag = None;
+                        self.scrubbing = false;
+                        self.marquee = None;
+                        if let Some(a) = &self.gesture_active {
+                            a.store(false, std::sync::atomic::Ordering::Relaxed);
+                        }
+                        return;
+                    }
+                }
                 self.cursor = Some((x, y));
                 // 帯の外で離すと、離した事がここへ届かない。掴んだままの絵が残り、
                 // **見えている物が作品と食い違う**。指が上がっていたら掴みを解く。

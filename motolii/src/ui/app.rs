@@ -254,6 +254,8 @@ fn StagePanel(
             session.view_camera.clone(),
             session.rings.clone(),
             session.frame_dim.clone(),
+            session.cancel_gesture.clone(),
+            session.gesture_active.clone(),
             false,
         ))
     });
@@ -340,6 +342,8 @@ fn OutputPanel(session: Session) -> Element {
             session.view_camera.clone(),
             session.rings.clone(),
             session.frame_dim.clone(),
+            session.cancel_gesture.clone(),
+            session.gesture_active.clone(),
             true,
         ))
     });
@@ -375,6 +379,7 @@ fn TimelinePanel(
                 .with_scroll_mirror(scroll_y)
                 .with_playhead_mirror(playhead)
                 .with_revision(revision)
+                .with_cancel(session.cancel_gesture.clone(), session.gesture_active.clone())
                 .with_key_mirror(session.selected_keys.clone()),
         )
     });
@@ -548,7 +553,21 @@ pub fn app() -> Element {
             onkeyup: move |evt: dioxus_native::prelude::Event<dioxus_native::prelude::KeyboardData>| {
                 crate::ui::keymap::note_key_up(&evt.key());
             },
-            onfocusout: move |_| crate::ui::keymap::forget_modifiers(),
+            onfocusout: {
+                let session = session.clone();
+                move |_| {
+                    crate::ui::keymap::forget_modifiers();
+                    // 窓から離れたら掴みも手放す。押し下げが取り残されるのと同じ理由。
+                    if session
+                        .gesture_active
+                        .load(std::sync::atomic::Ordering::Relaxed)
+                    {
+                        session
+                            .cancel_gesture
+                            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    }
+                }
+            },
             onkeydown: {
                 let doc = doc.clone();
                 let clock = clock.clone();
@@ -717,8 +736,20 @@ pub fn app() -> Element {
                         Intent::Home => clock.seek(0.0),
                         Intent::End => clock.seek(clock.duration),
                         Intent::Deselect => {
-                            selection.set(None);
-                            selected.set(None);
+                            // 掴んでいる間の `Esc` は**取り消し**。掴んでいない時だけ
+                            // 選択を解く(規格が MUST で求める pointercancel の役)。
+                            if session
+                                .gesture_active
+                                .load(std::sync::atomic::Ordering::Relaxed)
+                            {
+                                session
+                                    .cancel_gesture
+                                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                                *revision.write() += 1;
+                            } else {
+                                selection.set(None);
+                                selected.set(None);
+                            }
                         }
                         Intent::PlayPause => {
                             clock.toggle();
