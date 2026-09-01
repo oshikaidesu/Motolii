@@ -118,3 +118,30 @@ fn the_same_time_gives_the_same_picture_however_you_got_there() {
         from_export == black
     );
 }
+
+/// 出た絵そのものを基準と突き合わせる。
+///
+/// 「同じ時刻なら同じ絵」は**辿り方によらない**ことしか見ていない。両方が
+/// 同じだけ壊れたら気づけないので、**絵の中身**にも基準を1枚置く。
+/// 器具は `testkit`(無ければ作って目視を促し、在れば許容差で比べる)。
+#[test]
+fn the_first_frame_of_the_fixture_still_looks_like_itself() {
+    use motolii::render::engine::Engine;
+    use motolii::doc::store::RationalTime;
+
+    // fixture 自身が持っている再生位置。層が重なっている所を選ぶ ——
+    // 0秒はほとんど黒で、基準にしても何も捕まえない。
+    let fx = motolii::doc::fixture::build();
+    let at = RationalTime::try_new(fx.playhead, 30).unwrap();
+    let mut engine = Engine::new().unwrap();
+    let pixels = engine.render_frame(&fx.doc.view(), at).unwrap();
+
+    let comp = fx.doc.view().composition().unwrap().expect("comp");
+    testkit::assert_rgba_matches_golden_file(
+        concat!(env!("CARGO_MANIFEST_DIR"), "/tests/golden/fixture_playhead.png"),
+        "fixture の再生位置の1コマ",
+        testkit::RgbaImageDesc { width: comp.width, height: comp.height },
+        &pixels,
+        2,
+    );
+}
