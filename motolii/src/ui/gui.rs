@@ -23,14 +23,17 @@ const W: u32 = 1600;
 const H: u32 = 1000;
 
 struct Gui {
-    doc: DioxusDocument,
+    h: blitz_test_harness::Harness<DioxusDocument>,
+    /// 窓と同じ状態への取っ手。**触った結果を数で見る**ために持つ。
+    session: Session,
 }
 
 impl Gui {
     fn open() -> Self {
         let Loaded { doc, ui, duration_sec } = load_fixture();
+        let session = Session::new(doc, duration_sec, ui);
         let mut vdom = VirtualDom::new(app);
-        vdom.insert_any_root_context(Box::new(Session::new(doc, duration_sec, ui)));
+        vdom.insert_any_root_context(Box::new(session.clone()));
         vdom.insert_any_root_context(Box::new(crate::ui::host::Host::for_tests()));
         let mut doc = DioxusDocument::new(
             vdom,
@@ -41,19 +44,19 @@ impl Gui {
         );
         doc.initial_build();
         doc.inner_mut().resolve(0.0);
-        Self { doc }
+        Self { h: blitz_test_harness::Harness::wrap(doc), session }
     }
 
     fn text_of(&self, node: blitz_dom::NodeId) -> String {
         let mut out = String::new();
-        collect_text(&self.doc.inner(), node, &mut out);
+        collect_text(&self.h.base(), node, &mut out);
         out
     }
 
     /// 選択子に当たる全部の見出し。並びは DOM の順。
     fn texts(&mut self, selector: &str) -> Vec<String> {
-        self.doc
-            .inner()
+        self.h
+            .base()
             .query_selector_all(selector)
             .unwrap_or_default()
             .into_iter()
@@ -64,14 +67,14 @@ impl Gui {
     /// 置き場ごとのタブの見出し。並びは DOM の順(左・中・右・下)。
     fn zone_tabs(&mut self) -> Vec<Vec<String>> {
         let strips = self
-            .doc
-            .inner()
+            .h
+            .base()
             .query_selector_all(".ptabs")
             .unwrap_or_default();
         strips
             .into_iter()
             .map(|strip| {
-                let doc = self.doc.inner();
+                let doc = self.h.base();
                 let children = doc.get_node(strip).map(|n| n.children.clone()).unwrap_or_default();
                 drop(doc);
                 children
@@ -85,18 +88,18 @@ impl Gui {
 
     /// 自前で描く widget が今いくつ生きているか。
     fn drawing_panels(&self) -> usize {
-        self.doc.inner().custom_widget_node_ids().len()
+        self.h.base().custom_widget_node_ids().len()
     }
 
     /// 選択子に当たる要素の class 属性。
     fn classes(&mut self, selector: &str) -> Vec<String> {
-        self.doc
-            .inner()
+        self.h
+            .base()
             .query_selector_all(selector)
             .unwrap_or_default()
             .into_iter()
             .filter_map(|n| {
-                self.doc.inner().get_node(n).and_then(|node| {
+                self.h.base().get_node(n).and_then(|node| {
                     node.attrs().map(|attrs| {
                         attrs
                             .iter()
@@ -110,7 +113,7 @@ impl Gui {
     }
 
     fn size_of_nth(&mut self, selector: &str, nth: usize) -> (f32, f32) {
-        let inner = self.doc.inner();
+        let inner = self.h.base();
         let nodes = inner.query_selector_all(selector).unwrap_or_default();
         let node = *nodes
             .get(nth)
@@ -121,14 +124,14 @@ impl Gui {
 
     fn center_of(&mut self, selector: &str, nth: usize) -> (f32, f32) {
         let nodes = self
-            .doc
-            .inner()
+            .h
+            .base()
             .query_selector_all(selector)
             .unwrap_or_default();
         let node = *nodes
             .get(nth)
             .unwrap_or_else(|| panic!("`{selector}` の {nth} 番が居ない(居るのは {})", nodes.len()));
-        let doc = self.doc.inner();
+        let doc = self.h.base();
         let node = doc.get_node(node).expect("node");
         let layout = node.final_layout();
         let pos = node.absolute_position(0.0, 0.0);
@@ -154,8 +157,7 @@ impl Gui {
 
     fn settle(&mut self) {
         for _ in 0..4 {
-            self.doc.poll(None);
-            self.doc.inner_mut().resolve(0.0);
+            self.h.pump();
         }
     }
 
@@ -173,26 +175,26 @@ impl Gui {
             text: None,
         };
         // 本番と同じ規則で焦点を当ててから配る(`host.rs` と同じ1つの関数)。
-        crate::ui::host::aim_keystrokes(&mut self.doc);
-        self.doc.handle_ui_event(UiEvent::KeyDown(event));
+        
+        self.h.dispatch(UiEvent::KeyDown(event));
         self.settle();
     }
 
     fn press(&mut self, x: f32, y: f32) {
         let moved = self.pointer_raw(x, y, MouseEventButtons::None);
-        self.doc.handle_ui_event(UiEvent::PointerMove(moved));
+        self.h.dispatch(UiEvent::PointerMove(moved));
         let event = self.pointer_raw(x, y, MouseEventButtons::Primary);
-        self.doc.handle_ui_event(UiEvent::PointerDown(event));
+        self.h.dispatch(UiEvent::PointerDown(event));
     }
 
     fn motion(&mut self, x: f32, y: f32) {
         let event = self.pointer_raw(x, y, MouseEventButtons::Primary);
-        self.doc.handle_ui_event(UiEvent::PointerMove(event));
+        self.h.dispatch(UiEvent::PointerMove(event));
     }
 
     fn release(&mut self, x: f32, y: f32) {
         let event = self.pointer_raw(x, y, MouseEventButtons::None);
-        self.doc.handle_ui_event(UiEvent::PointerUp(event));
+        self.h.dispatch(UiEvent::PointerUp(event));
     }
 
     fn pointer_raw(&self, x: f32, y: f32, buttons: MouseEventButtons) -> BlitzPointerEvent {
@@ -349,3 +351,27 @@ proptest::proptest! {
     }
 }
 
+
+/// ホイールの向き。**今日はこれを実機で目視するしかなかった** —— 自作の器具に
+/// ホイールが無かったため。上流のハーネスには `wheel_at` が在る。
+///
+/// 上へ回すと近づく(枠が広がる)。地図でも紙でも絵でもこの向き。
+fn gui_zoom(gui: &Gui) -> f32 {
+    gui.session.view_camera.lock().unwrap().zoom
+}
+
+#[test]
+fn rolling_the_wheel_up_moves_the_view_closer() {
+    let mut gui = Gui::open();
+    let (x, y) = gui.center_of("#stage", 0);
+
+    let before = gui_zoom(&gui);
+    gui.h.wheel_at(x, y, 0.0, 40.0);
+    gui.settle();
+    let after = gui_zoom(&gui);
+
+    assert!(
+        after > before,
+        "上へ回したのに遠ざかった: {before} → {after}"
+    );
+}

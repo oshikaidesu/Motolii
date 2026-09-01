@@ -19,8 +19,6 @@ use re_types_core::{Component, SerializedComponentBatch};
 
 use crate::doc::eval::Value;
 
-#[cfg(test)]
-use crate::doc::store::components::LayerPresent;
 use crate::doc::store::components::TrackJson;
 use crate::doc::store::slot::{PropertyLink, PropertySource};
 use crate::doc::store::view::StoreView;

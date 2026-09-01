@@ -11,11 +11,7 @@ use crate::doc::store::{
     StoreError, TextDocument,
 };
 
-#[cfg(test)]
-use crate::doc::store::Document;
 use super::StoreView;
-#[cfg(test)]
-use transform::{reset_world_affine_compute_count, world_affine_compute_count};
 
 impl<'a> StoreView<'a> {
     pub fn resolve_camera(&self, t: RationalTime) -> Result<crate::doc::core::ResolvedCamera, StoreError> {

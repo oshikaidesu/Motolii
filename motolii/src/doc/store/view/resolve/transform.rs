@@ -59,8 +59,6 @@ impl<'a> StoreView<'a> {
         if let Some(world) = memo.get(&layer) {
             return Ok(*world);
         }
-        #[cfg(test)]
-        record_world_affine_compute();
 
         let local = self.local_placement_transform(layer, t)?;
 
@@ -120,22 +118,3 @@ impl<'a> StoreView<'a> {
     }
 }
 
-#[cfg(test)]
-thread_local! {
-    static WORLD_AFFINE_COMPUTE_COUNT: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
-}
-
-#[cfg(test)]
-pub(super) fn record_world_affine_compute() {
-    WORLD_AFFINE_COMPUTE_COUNT.with(|c| c.set(c.get() + 1));
-}
-
-#[cfg(test)]
-pub(super) fn reset_world_affine_compute_count() {
-    WORLD_AFFINE_COMPUTE_COUNT.with(|c| c.set(0));
-}
-
-#[cfg(test)]
-pub(super) fn world_affine_compute_count() -> u32 {
-    WORLD_AFFINE_COMPUTE_COUNT.with(|c| c.get())
-}

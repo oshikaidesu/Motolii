@@ -74,6 +74,8 @@ re_build_tools = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3b
 [dev-dependencies]
 proptest = "1"
 tempfile = "3"
+# 窓を開けずに窓を触る。上流の器具を借りる。
+blitz-test-harness = { git = "https://github.com/DioxusLabs/blitz", rev = "64eb27853aa2672486b7edf825fb044be78c9db3" }
 
 # 単一クレートだが、空の [workspace] が要る — 無いと cargo が上の
 # 旧世界(../Cargo.toml、三代目の workspace)まで遡って壊れる。

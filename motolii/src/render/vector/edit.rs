@@ -1,8 +1,6 @@
 
 use crate::render::vector::geom::{Contour, Path, Point, Vertex};
 use crate::render::vector::ops;
-#[cfg(test)]
-use crate::render::vector::geom::bezier_point;
 
 #[derive(Debug, Clone, Copy, PartialEq, thiserror::Error)]
 pub enum PathEditError {
