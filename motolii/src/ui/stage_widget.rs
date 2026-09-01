@@ -7,7 +7,7 @@ use anyrender::{PaintRef, PaintScene, ResourceId};
 use blitz_traits::events::UiEvent;
 use dioxus_native::prelude::{Signal, WritableExt};
 use keyboard_types::Modifiers;
-use crate::doc::store::{property, Document, Intent, Interp, Keyframe, LayerId, PropertyId, RationalTime, StoreView, Value};
+use crate::doc::store::{property, Document, Intent, LayerId, PropertyId, RationalTime, StoreView, Value};
 use blitz_dom::node::ComputedStyles;
 use blitz_dom::Widget;
 use crate::render::engine::Engine;
@@ -705,11 +705,7 @@ fn compute_rotation(center: (f64, f64), grab: (f64, f64), cur: (f64, f64), orig_
 fn track_intent(doc: &Document, layer: LayerId, name: &str, value: Value, t: RationalTime) -> Option<Intent> {
     let prop = PropertyId::new(name).ok()?;
     // キーが無い間は**値を置くだけ**。◇ を押すまで時間の世界へ入れない。
-    let Some(mut track) = doc.view().track(layer, &prop).ok().flatten() else {
-        return Some(Intent::SetConstant { layer, property: prop, value });
-    };
-    track.insert(Keyframe { t, value, interp: Interp::Linear, spatial: None });
-    Some(Intent::SetTrack { layer, property: prop, track })
+    Some(doc.place(layer, &prop, value, t))
 }
 
 fn create_target(device: &wgpu::Device, width: u32, height: u32) -> wgpu::Texture {

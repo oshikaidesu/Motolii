@@ -5,7 +5,7 @@ use dioxus_native::prelude::*;
 
 use crate::doc::store::{
     property, ContentKeyframe, ContentTrack, Document, EffectId, EffectInstance, FontRef, Intent,
-    Interp, Keyframe, KeyframeTrack, LayerAttrsPatch, LayerId, LayerMeta, LayerSource, LayerTiming,
+    LayerAttrsPatch, LayerId, LayerMeta, LayerSource, LayerTiming,
     PathSource, PropertyId, RationalTime, Value,
     Shape, ShapeNode, TextAlignmentOptions, TextDocument, TextDocumentStyle, TextJustify,
     TextStyleId, VectorPoint,
@@ -66,30 +66,22 @@ fn spatial_fit_intents(layer: LayerId, path: &str, comp: (f64, f64)) -> Vec<Inte
         return Vec::new();
     }
     let fit = (comp.1 * 0.6) / (radius as f64 * 2.0);
-    let constant = |value: Value| {
-        let mut track = KeyframeTrack::new();
-        track.insert(Keyframe {
-            t: RationalTime::ZERO,
-            value,
-            interp: Interp::Linear,
-            spatial: None,
-        });
-        track
+    // 置いた時の初期値は**素の値**。0秒のキーにすると、利用者が ◇ を
+    // 押していないのに時間の世界が開いてしまう。
+    let put = |name: &str, value: Value| Intent::SetConstant {
+        layer,
+        property: PropertyId::new(name).expect("既知の属性"),
+        value,
     };
     vec![
-        Intent::SetTrack {
-            layer,
-            property: PropertyId::new(property::SCALE).expect("scale"),
-            track: constant(Value::Vec2([fit, fit])),
-        },
-        Intent::SetTrack {
-            layer,
-            property: PropertyId::new(property::POSITION).expect("position"),
-            track: constant(Value::Vec2([
+        put(property::SCALE, Value::Vec2([fit, fit])),
+        put(
+            property::POSITION,
+            Value::Vec2([
                 comp.0 * 0.5 - center[0] as f64 * fit,
                 comp.1 * 0.5 - center[1] as f64 * fit,
-            ])),
-        },
+            ]),
+        ),
     ]
 }
 

@@ -101,6 +101,12 @@ pub enum Intent {
     },
     SetComposition(crate::doc::store::Composition),
     SetMarkers { markers: Vec<crate::doc::store::Marker> },
+    /// カメラの属性へ**素の値**を置く。層側の `SetConstant` と同じ意味で、
+    /// 置き場が composition なだけ。
+    SetCameraConstant {
+        property: PropertyId,
+        value: Value,
+    },
     SetCameraTrack {
         property: PropertyId,
         track: crate::doc::eval::KeyframeTrack,
@@ -371,6 +377,47 @@ impl Document {
                 .map_err(|e| StoreError::Chunk(e.to_string()))?,
         };
         self.ingest(path, vec![batch], at)
+    }
+
+    /// 属性へ値を置く。**キーが生まれる規則はここ1つ**。
+    ///
+    /// 時間の世界がまだ開いていなければ素の値のまま。開いていれば、
+    /// **いま居る時刻**へ打つ。利用者が ◇ を押すまでキーは生まれない。
+    pub fn place(
+        &self,
+        layer: LayerId,
+        property: &PropertyId,
+        value: Value,
+        t: crate::doc::store::RationalTime,
+    ) -> Intent {
+        match self.view().track(layer, property).ok().flatten() {
+            None => Intent::SetConstant { layer, property: property.clone(), value },
+            Some(mut track) => {
+                track.insert(crate::doc::store::Keyframe {
+                    t,
+                    value,
+                    interp: crate::doc::store::Interp::Linear,
+                    spatial: None,
+                });
+                Intent::SetTrack { layer, property: property.clone(), track }
+            }
+        }
+    }
+
+    /// カメラ側の同じ規則。層を持たないので口が別なだけで、意味は同じ。
+    pub fn place_camera(&self, property: &PropertyId, value: Value, t: crate::doc::store::RationalTime) -> Intent {
+        match self.view().camera_track(property).ok().flatten() {
+            None => Intent::SetCameraConstant { property: property.clone(), value },
+            Some(mut track) => {
+                track.insert(crate::doc::store::Keyframe {
+                    t,
+                    value,
+                    interp: crate::doc::store::Interp::Linear,
+                    spatial: None,
+                });
+                Intent::SetCameraTrack { property: property.clone(), track }
+            }
+        }
     }
 
     pub fn revision(&self) -> Revision {

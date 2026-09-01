@@ -20,6 +20,19 @@ use peniko::{Color, Fill};
 
 const PX_PER_SEC: f64 = 60.0;
 const DOC_FPS: f64 = 30.0;
+/// 再生位置が視界から出たら追いかける。**止まっている間は追いかけない** ——
+/// 利用者が自分で右へ動かしたのを、その場で引き戻してしまう。
+fn follow_playhead(scroll: f64, visible: f64, playhead: f64, playing: bool) -> Option<f64> {
+    if !playing || visible <= 0.0 {
+        return None;
+    }
+    let right = scroll + visible;
+    if playhead < scroll || playhead > right - visible * 0.1 {
+        return Some((playhead - visible * 0.1).max(0.0));
+    }
+    None
+}
+
 const MIN_PPS: f64 = 8.0;
 const MAX_PPS: f64 = 600.0;
 const RULER_H: f64 = crate::ui::tokens::ROW;
@@ -1143,13 +1156,10 @@ impl Widget for TimelineWidget {
             .as_ref()
             .map(|c| c.now_sec())
             .unwrap_or(PLAYHEAD_SEC);
-        // 再生位置が視界から出たら追いかける。掴んでいる間は動かさない。
         if self.drag.is_none() && !self.scrubbing {
-            let visible = w / pps;
-            let left = scroll;
-            let right = scroll + visible;
-            if playhead_sec < left || playhead_sec > right - visible * 0.1 {
-                self.scroll_sec = (playhead_sec - visible * 0.1).max(0.0);
+            let playing = self.clock.as_ref().is_some_and(|c| c.playing());
+            if let Some(to) = follow_playhead(scroll, w / pps, playhead_sec, playing) {
+                self.scroll_sec = to;
             }
         }
         let px = x_of(playhead_sec);
@@ -1168,5 +1178,39 @@ impl Widget for TimelineWidget {
         }
 
         s
+    }
+}
+
+#[cfg(test)]
+mod follow {
+    use super::*;
+
+    proptest::proptest! {
+        /// 止まっている間は、どこへ動かしても引き戻されない。
+        /// **利用者が自分で動かした位置が真**で、再生位置ではない。
+        #[test]
+        fn a_paused_timeline_stays_where_you_put_it(
+            scroll in 0.0f64..600.0,
+            visible in 1.0f64..120.0,
+            playhead in 0.0f64..600.0,
+        ) {
+            proptest::prop_assert_eq!(
+                follow_playhead(scroll, visible, playhead, false),
+                None
+            );
+        }
+
+        /// 再生中に視界から出たら追いかける(こちらは効いていないと困る)。
+        #[test]
+        fn a_playing_timeline_catches_up_when_the_head_leaves(
+            scroll in 10.0f64..600.0,
+            visible in 1.0f64..120.0,
+        ) {
+            let behind = scroll - 1.0;
+            proptest::prop_assert!(
+                follow_playhead(scroll, visible, behind, true).is_some(),
+                "再生中に置いていかれた"
+            );
+        }
     }
 }

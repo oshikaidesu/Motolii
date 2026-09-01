@@ -133,13 +133,8 @@ fn write_key(
         return Ok(());
     };
     let mut doc = doc.lock().unwrap();
-    // **キーが無いなら、値を置くだけ。** 利用者が ◇ を押すまで時間の世界へ
-    // 入れない(根底3)。キーが在るなら、いま居る時刻に打つ。
-    let Some(mut track) = doc.view().track(layer, &prop).ok().flatten() else {
-        return doc.apply(Intent::SetConstant { layer, property: prop, value });
-    };
-    track.insert(Keyframe { t, value, interp: Interp::Linear, spatial: None });
-    doc.apply(Intent::SetTrack { layer, property: prop, track })
+    let intent = doc.place(layer, &prop, value, t);
+    doc.apply(intent)
 }
 
 /// 時間の世界を開ける。**今の時刻に1つだけ**キーを立てる。

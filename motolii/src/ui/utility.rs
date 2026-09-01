@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 use dioxus_native::prelude::*;
 
 use crate::doc::store::{
-    property, Document, Intent, Interp, Keyframe, KeyframeTrack, LayerId, PropertyId, RationalTime,
+    property, Document, LayerId, PropertyId, RationalTime,
     Value,
 };
 use crate::ui::playback::Clock;
@@ -19,19 +19,14 @@ fn vec2_at(doc: &Document, layer: LayerId, name: &str, t: RationalTime, fallback
     }
 }
 
-fn write_vec2(doc: &mut Document, layer: LayerId, name: &str, value: (f64, f64)) {
+fn write_vec2(doc: &mut Document, layer: LayerId, name: &str, value: (f64, f64), t: RationalTime) {
     let Ok(prop) = PropertyId::new(name) else {
         return;
     };
-    let mut track = doc.view().track(layer, &prop).ok().flatten().unwrap_or_else(KeyframeTrack::new);
-    let t = track.keys().first().map(|k| k.t).unwrap_or(RationalTime::ZERO);
-    track.insert(Keyframe {
-        t,
-        value: Value::Vec2([value.0, value.1]),
-        interp: Interp::Linear,
-        spatial: None,
-    });
-    let _ = doc.apply(Intent::SetTrack { layer, property: prop, track });
+    // 打つ時刻は**いま居る時刻**。以前は「最初のキーの時刻」へ打っていて、
+    // 触っただけでキーが生え、しかも別の時刻へ落ちていた。
+    let intent = doc.place(layer, &prop, Value::Vec2([value.0, value.1]), t);
+    let _ = doc.apply(intent);
 }
 
 /// アンカーを箱の中の `(fx, fy)`(0..1)へ移し、位置で打ち消して絵を動かさない。
@@ -52,8 +47,8 @@ fn move_anchor(
         position.0 + scale.0 * (next.0 - anchor.0),
         position.1 + scale.1 * (next.1 - anchor.1),
     );
-    write_vec2(&mut d, layer, property::ANCHOR, next);
-    write_vec2(&mut d, layer, property::POSITION, moved);
+    write_vec2(&mut d, layer, property::ANCHOR, next, t);
+    write_vec2(&mut d, layer, property::POSITION, moved, t);
     println!(
         "PROBE room=write verdict=anchor-move layer={layer:?} to=({:.1},{:.1})",
         next.0, next.1

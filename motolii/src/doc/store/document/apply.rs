@@ -291,6 +291,17 @@ impl Document {
                     }],
                 )
             }
+            Intent::SetCameraConstant { property, value } => {
+                let json = serde_json::to_string(&PropertySource::constant(value))?;
+                (
+                    Self::composition_path(),
+                    vec![SerializedComponentBatch {
+                        descriptor: descriptor_track(&property),
+                        array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
+                            .map_err(|e| StoreError::Chunk(e.to_string()))?,
+                    }],
+                )
+            }
             Intent::SetCameraTrack { property, track } => {
                 let json = serde_json::to_string(&PropertySource::track(track))?;
                 (
