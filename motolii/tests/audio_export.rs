@@ -2,7 +2,7 @@ mod testkit;
 
 use std::process::Command;
 
-use motolii::doc::export::{export, export_with_cancel, Cancel, ExportError, ExportJob};
+use motolii::render::export::{export, export_with_cancel, Cancel, ExportError, ExportJob};
 use motolii::doc::store::{
     Composition, Document, Fps, Intent, LayerAttrsPatch, LayerId, LayerMeta, LayerSource,
     LayerTiming,

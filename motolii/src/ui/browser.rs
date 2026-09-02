@@ -10,7 +10,7 @@ use crate::doc::store::{
     ShapeNode, TextAlignmentOptions, TextDocument, TextDocumentStyle, TextJustify, TextStyleId,
     Value, VectorPoint,
 };
-use crate::render::vector::{Brush, Contour, Fill, FillRule, Rgb, Vertex};
+use crate::doc::vector::{Brush, Contour, Fill, FillRule, Rgb, Vertex};
 
 use crate::ui::fixture::ColorSwatch;
 
@@ -87,7 +87,7 @@ fn center_intents(layer: LayerId, natural: (f64, f64), comp: (f64, f64)) -> Vec<
 
 /// 形の実寸。焼く前でも輪郭から測れる。
 fn shape_natural(shapes: &[ShapeNode]) -> (f64, f64) {
-    crate::render::vector::content_bounds(shapes)
+    crate::doc::vector::content_bounds(shapes)
         .ok()
         .flatten()
         .map(|b| (b[2] - b[0], b[3] - b[1]))
@@ -206,11 +206,11 @@ fn new_layer_intents(
                     }]),
                     ops: Vec::new(),
                     fill: None,
-                    stroke: Some(crate::render::vector::Stroke {
+                    stroke: Some(crate::doc::vector::Stroke {
                         brush: Brush::Solid(Rgb { r: 1.0, g: 1.0, b: 1.0 }),
                         width: 6.0,
-                        cap: crate::render::vector::LineCap::Round,
-                        join: crate::render::vector::LineJoin::Round,
+                        cap: crate::doc::vector::LineCap::Round,
+                        join: crate::doc::vector::LineJoin::Round,
                         miter_limit: 4.0,
                         opacity: 1.0,
                         hidden: false,

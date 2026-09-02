@@ -386,7 +386,7 @@ fn shape_fill_colors(
     match node {
         ShapeNode::Leaf(shape) => {
             if let Some(fill) = &shape.fill {
-                if let crate::render::vector::Brush::Solid(rgb) = &fill.brush {
+                if let crate::doc::vector::Brush::Solid(rgb) = &fill.brush {
                     push_swatch(
                         seen,
                         out,

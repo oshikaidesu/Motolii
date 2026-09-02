@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 
 use dioxus_native::prelude::*;
 
-use crate::doc::export::{Cancel, ExportError, ExportJob, ExportProgress, ExportReport};
+use crate::render::export::{Cancel, ExportError, ExportJob, ExportProgress, ExportReport};
 use crate::doc::store::Document;
 use crate::ui::host::Poke;
 
@@ -151,7 +151,7 @@ impl ExportController {
                     out_path: destination,
                     qp0: false,
                 };
-                crate::doc::export::export_with_progress(
+                crate::render::export::export_with_progress(
                     &mut engine,
                     &document.view(),
                     &job,

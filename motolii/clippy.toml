@@ -1,0 +1,6 @@
+# 借りた閾値。ironclaw(nearai/ironclaw#338)が AI 生成 code に当てた値で、clippy の既定より一段締まる。
+# 自作の数は置かない。締めるなら repo の分布(rust-code-analysis)を取ってから。
+cognitive-complexity-threshold = 15
+too-many-lines-threshold = 100
+too-many-arguments-threshold = 6
+type-complexity-threshold = 200

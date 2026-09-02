@@ -1,0 +1,46 @@
+[package]
+name = "motolii-render"
+version = "0.0.0"
+edition = "2021"
+publish = false
+build = "build.rs"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+motolii-doc = { path = "../motolii-doc" }
+tobj = { workspace = true }
+gltf = { workspace = true }
+stl_io = { workspace = true }
+smallvec = { workspace = true }
+wgpu = { workspace = true }
+re_renderer = { workspace = true }
+macaw = { workspace = true }
+glam = { workspace = true }
+image = { workspace = true }
+re_video = { workspace = true }
+naga = { workspace = true }
+pollster = { workspace = true }
+re_importer = { workspace = true }
+re_sdk_types = { workspace = true }
+re_types_core = { workspace = true }
+serde = { workspace = true }
+symphonia = { workspace = true }
+rubato = { workspace = true }
+cpal = { workspace = true }
+rtrb = { workspace = true }
+waveform-data = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+quick_cache = { workspace = true }
+re_log = { workspace = true }
+
+[build-dependencies]
+re_build_tools = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[lints]
+workspace = true

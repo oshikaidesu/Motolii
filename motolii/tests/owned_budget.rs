@@ -34,6 +34,7 @@ fn the_machinery_we_own_matches_its_ceiling() {
 
     let mut sources = Vec::new();
     rust_sources(&root.join("src"), &mut sources);
+    rust_sources(&root.join("crates"), &mut sources);
     assert!(!sources.is_empty(), "src を読めていない");
 
     let mut off = Vec::new();

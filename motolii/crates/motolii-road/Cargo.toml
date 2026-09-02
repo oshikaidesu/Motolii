@@ -1,0 +1,16 @@
+[package]
+name = "motolii-road"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["dylib"]
+path = "src/lib.rs"
+
+[dependencies]
+motolii-doc = { path = "../motolii-doc" }
+motolii-render = { path = "../motolii-render" }
+
+[lints]
+workspace = true

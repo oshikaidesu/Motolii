@@ -1,30 +1,70 @@
-# Motolii は単一クレート。家は5つ — doc・render・ui・vism・tests。
-# ビルドの家はここ1つ(worktreeでビルドしない。旧世界 app/ next/ crates/ はビルドしない)。
+# Motolii の家は5つ — doc・render・ui・vism・tests。build も家ごと。
+# crates/motolii-doc(契約)→ crates/motolii-render(描く側、vism の inventory も持つ)→ この package(ui、hotpatch が追う tip)。
+# crates/motolii-road は doc+render を 1 本の dylib に 1 回だけ link する道路(開発の feature `dynamic`)。
 [package]
 name = "motolii"
-build = "build.rs"
 version = "0.0.0"
 edition = "2021"
 publish = false
 
+[features]
+default = ["dynamic"]
+dynamic = ["dep:motolii-road"]
+
 [dependencies]
-# vello固定 — vello-hybridはウィンドウ移動中に前フレームの残像が出る
-# net: 画像の取得担当(blitz-net)がこのfeatureでしか入らない。無いとimgは
-# file:// も data: も静かに空になる(fetchエラーも出ない)。
+motolii-doc = { path = "crates/motolii-doc" }
+motolii-render = { path = "crates/motolii-render" }
+motolii-road = { path = "crates/motolii-road", optional = true }
+dioxus-native = { workspace = true }
+dioxus-devtools = { workspace = true }
+dioxus-asset-resolver = { workspace = true }
+dioxus-workbench = { workspace = true }
+dioxus-dnd = { workspace = true }
+blitz-dom = { workspace = true }
+blitz-paint = { workspace = true }
+blitz-traits = { workspace = true }
+blitz-shell = { workspace = true }
+keyboard-types = { workspace = true }
+anyrender = { workspace = true }
+wgpu_context = { workspace = true }
+wgpu = { workspace = true }
+peniko = { workspace = true }
+glam = { workspace = true }
+image = { workspace = true }
+base64 = { workspace = true }
+ffmpeg-sidecar = { workspace = true }
+rfd = { workspace = true }
+re_log = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+# OSのReduce Motionを読む。rfd/winitが既に使う同じAppKit bindingを直接借りる。
+objc2-app-kit = { version = "0.3.2", default-features = false, features = ["NSAccessibility", "NSWorkspace"] }
+
+[dev-dependencies]
+proptest = { workspace = true }
+tempfile = { workspace = true }
+# 窓を開けずに窓を触る。上流の器具を借りる。
+blitz-test-harness = { git = "https://github.com/DioxusLabs/blitz", rev = "64eb27853aa2672486b7edf825fb044be78c9db3" }
+
+[workspace]
+members = ["crates/motolii-doc", "crates/motolii-render", "crates/motolii-road"]
+
+[workspace.dependencies]
+# 識別子では使わないが、custom-widget の feature を立てるために要る(Stage・Timeline の object 描画)。
+blitz-paint = { git = "https://github.com/DioxusLabs/blitz", rev = "64eb27853aa2672486b7edf825fb044be78c9db3", default-features = false, features = ["custom-widget"] }
 dioxus-native = { git = "https://github.com/DioxusLabs/blitz", rev = "64eb27853aa2672486b7edf825fb044be78c9db3", default-features = false, features = ["prelude", "system-fonts", "vello", "complex-scripts", "hot-reload", "net"] }
 dioxus-devtools = "0.7.10"
-# custom multi-window HostもDioxus assetの実体を同じresolverから配る。
 dioxus-asset-resolver = { version = "=0.7.10", features = ["native"] }
 dioxus-workbench = "0.1.0"
 dioxus-dnd = { version = "3.1.0", default-features = false }
 blitz-dom = { git = "https://github.com/DioxusLabs/blitz", rev = "64eb27853aa2672486b7edf825fb044be78c9db3", default-features = false, features = ["custom-widget", "autofocus"] }
-blitz-paint = { git = "https://github.com/DioxusLabs/blitz", rev = "64eb27853aa2672486b7edf825fb044be78c9db3", default-features = false, features = ["custom-widget"] }
 blitz-traits = { git = "https://github.com/DioxusLabs/blitz", rev = "64eb27853aa2672486b7edf825fb044be78c9db3", default-features = false }
-# 窓を2枚以上開けるのは shell の仕事。dioxus-native の launch_cfg は1枚しか作らない
 blitz-shell = { git = "https://github.com/DioxusLabs/blitz", rev = "64eb27853aa2672486b7edf825fb044be78c9db3", default-features = false, features = ["data-uri", "custom-widget"] }
 keyboard-types = "0.7"
 anyrender = "0.13"
-# OBJ の読み(M5-A2 で private leaf として採択済み)
 tobj = "4"
 gltf = "1.4"
 stl_io = "0.11.0"
@@ -32,21 +72,14 @@ smallvec = "1"
 wgpu_context = "0.9"
 wgpu = "29"
 peniko = "0.6"
-bytemuck = { version = "1", features = ["derive"] }
-
-# 同一pin(346a0b3)のMotoliiフォーク。Stage相当の接続の本丸。
 re_renderer = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14", default-features = false, features = ["import-gltf", "import-obj", "import-stl"] }
 re_log = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14", features = ["setup"] }
 macaw = "0.30"
 glam = "0.30"
-
-# 実ドキュメント(--fixtureのMV風Document)と製品と同じ補間コード。自作の写経はしない。
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 base64 = "0.22"
 ffmpeg-sidecar = "2.5"
-# 素材を選ぶ窓。OS の物を借りる(自作しない)。
 rfd = "0.17"
-
 re_video = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14" }
 naga = { version = "29.0", default-features = false, features = ["glsl-in", "wgsl-out"] }
 pollster = "0.4"
@@ -75,26 +108,22 @@ waveform-data = "=0.1.1"
 serde_json = "1"
 thiserror = "2"
 quick_cache = "0.7.0"
-
-[target.'cfg(target_os = "macos")'.dependencies]
-# OSのReduce Motionを読む。rfd/winitが既に使う同じAppKit bindingを直接借りる。
-objc2-app-kit = { version = "0.3.2", default-features = false, features = ["NSAccessibility", "NSWorkspace"] }
-
-[build-dependencies]
+tempfile = "3"
 re_build_tools = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14" }
 
-[dev-dependencies]
-proptest = "1"
-tempfile = "3"
-# 窓を開けずに窓を触る。上流の器具を借りる。
-blitz-test-harness = { git = "https://github.com/DioxusLabs/blitz", rev = "64eb27853aa2672486b7edf825fb044be78c9db3" }
-
-# 単一クレートだが、空の [workspace] が要る — 無いと cargo が上の
-# 旧世界(../Cargo.toml、三代目の workspace)まで遡って壊れる。
-[workspace]
-
-[lints.rust]
+[workspace.lints.rust]
 unreachable_pub = "warn"
+
+# 「何か変」を赤緑へ翻訳する。閾値は clippy.toml(借り物)。まず warn、既存は漸進で直す(ironclaw と同じ運用)。
+[workspace.lints.clippy]
+cognitive_complexity = "warn"
+too_many_lines = "warn"
+too_many_arguments = "warn"
+type_complexity = "warn"
+
+[lints]
+workspace = true
+
 
 # 16GB機: debug情報を削り、依存(stylo/vello/rerun)だけ最適化して窓を実用速度にする。
 [profile.dev]
