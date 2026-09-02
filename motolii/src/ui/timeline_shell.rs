@@ -4,11 +4,12 @@ use std::sync::{Arc, Mutex};
 use dioxus_native::prelude::*;
 use dioxus_native::CustomWidgetAttr;
 
-use crate::ui::fixture::{fmt_timecode, LayerRow};
+use crate::doc::store::{Document, Intent, LayerAttrsPatch, LayerId};
+use crate::ui::fixture::LayerRow;
 use crate::ui::playback::Clock;
 use crate::ui::session::Selection;
+use crate::ui::semantic_menu::SemanticButton;
 use crate::ui::timeline_widget::TimelineMsg;
-use crate::doc::store::{Document, Intent, LayerAttrsPatch, LayerId};
 
 /// 再生の道具。タブの帯の右へ乗る(帯を2段にしないため)。
 pub(super) fn transport(
@@ -20,7 +21,9 @@ pub(super) fn transport(
     // 再生位置の鏡を購読する。読むだけだと、再生中この字は描き直されず
     // **絵は動いているのに時刻が止まって見える**。
     let _ = playhead();
-    let timecode = fmt_timecode(clock.now_sec());
+    let timecode = clock.format_timecode();
+    let composition = clock.composition_label();
+    let audio_health = clock.health().visible_label();
     rsx!(
         div { class: "ptools",
             button {
@@ -35,7 +38,10 @@ pub(super) fn transport(
                 if playing() { "■" } else { "▶" }
             }
             span { class: "tc", "{timecode}" }
-            em { "{layer_count} rows · 30fps · 60s" }
+            em {
+                "{layer_count} rows · {composition}"
+                if let Some(label) = audio_health { " · {label}" }
+            }
         }
     )
 }
@@ -81,8 +87,10 @@ pub(super) fn timeline_shell(
             let class = if lit { "glyph lit" } else { "glyph" };
             let doc = doc.clone();
             rsx!(
-                span {
+                SemanticButton {
                     class: "{class}",
+                    selected: lit,
+                    aria_label: match bit { 0 => "Toggle visibility", 1 => "Toggle solo", _ => "Toggle lock" },
                     onclick: move |_| {
                         let Some(layer) = layer else { return };
                         let patch = match bit {
@@ -120,8 +128,10 @@ pub(super) fn timeline_shell(
         let doc_rename = doc.clone();
         rsx!(
             div { class: "lrow", style: "{indent}",
-                span {
+                SemanticButton {
                     class: "twirl",
+                    selected: expanded,
+                    aria_label: if expanded { "Collapse row" } else { "Expand row" },
                     onclick: {
                         let timeline_tx = timeline_tx_row.clone();
                         let doc = doc_twirl.clone();
@@ -156,25 +166,37 @@ pub(super) fn timeline_shell(
                                 *renaming.write() = Some((l, evt.value()));
                             }
                         },
-                        onkeydown: move |evt| match evt.key() {
-                            Key::Enter => {
-                                evt.prevent_default();
-                                if let Some((layer, name)) = renaming.write().take() {
-                                    let patch = LayerAttrsPatch { name: Some(name.clone()), ..Default::default() };
-                                    match doc_rename.lock().unwrap().apply(Intent::SetAttrs { layer, patch }) {
-                                        Ok(_) => {
-                                            println!("PROBE room=write verdict=applied Rename layer={layer:?} name={name:?}");
-                                            *revision.write() += 1;
+                        onkeydown: move |evt| {
+                            evt.stop_propagation();
+                            match evt.key() {
+                                Key::Enter => {
+                                    evt.prevent_default();
+                                    if let Some((layer, name)) = renaming.write().take() {
+                                        let patch = LayerAttrsPatch {
+                                            name: Some(name.clone()),
+                                            ..Default::default()
+                                        };
+                                        match doc_rename
+                                            .lock()
+                                            .unwrap()
+                                            .apply(Intent::SetAttrs { layer, patch })
+                                        {
+                                            Ok(_) => {
+                                                println!("PROBE room=write verdict=applied Rename layer={layer:?} name={name:?}");
+                                                *revision.write() += 1;
+                                            }
+                                            Err(e) => {
+                                                println!("PROBE room=write verdict=apply-error {e}")
+                                            }
                                         }
-                                        Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
                                     }
                                 }
+                                Key::Escape => {
+                                    evt.prevent_default();
+                                    *renaming.write() = None;
+                                }
+                                _ => {}
                             }
-                            Key::Escape => {
-                                evt.prevent_default();
-                                *renaming.write() = None;
-                            }
-                            _ => {}
                         },
                     }
                 } else {
@@ -210,8 +232,10 @@ pub(super) fn timeline_shell(
                 } else {
                     // カメラに表示と独奏は無い。錠だけ在る —— 掛けると枠を掴めない。
                     div { class: "lctrl",
-                        span {
+                        SemanticButton {
                             class: if row.locked { "glyph lit" } else { "glyph" },
+                            selected: row.locked,
+                            aria_label: "Toggle camera lock",
                             onclick: move |_| {
                                 crate::ui::fixture::toggle_camera_locked();
                                 *revision.write() += 1;

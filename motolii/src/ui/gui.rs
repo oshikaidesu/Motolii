@@ -12,8 +12,8 @@ use blitz_traits::events::{
     BlitzPointerEvent, BlitzPointerId, MouseEventButton, MouseEventButtons, PointerCoords, UiEvent,
 };
 use blitz_traits::shell::{ColorScheme, Viewport};
-use dioxus_native::DioxusDocument;
 use dioxus_native::prelude::VirtualDom;
+use dioxus_native::DioxusDocument;
 
 use crate::ui::app::app;
 use crate::ui::fixture::{load_fixture, Loaded};
@@ -26,25 +26,39 @@ struct Gui {
     h: blitz_test_harness::Harness<DioxusDocument>,
     /// 窓と同じ状態への取っ手。**触った結果を数で見る**ために持つ。
     session: Session,
+    host: crate::ui::host::Host,
 }
 
 impl Gui {
     fn open() -> Self {
-        let Loaded { doc, ui, duration_sec } = load_fixture();
+        Self::open_at(W, H)
+    }
+
+    fn open_at(width: u32, height: u32) -> Self {
+        let Loaded {
+            doc,
+            ui,
+            duration_sec,
+        } = load_fixture();
         let session = Session::new(doc, duration_sec, ui);
+        let host = crate::ui::host::Host::for_tests();
         let mut vdom = VirtualDom::new(app);
         vdom.insert_any_root_context(Box::new(session.clone()));
-        vdom.insert_any_root_context(Box::new(crate::ui::host::Host::for_tests()));
+        vdom.insert_any_root_context(Box::new(host.clone()));
         let mut doc = DioxusDocument::new(
             vdom,
             DocumentConfig {
-                viewport: Some(Viewport::new(W, H, 1.0, ColorScheme::Dark)),
+                viewport: Some(Viewport::new(width, height, 1.0, ColorScheme::Dark)),
                 ..Default::default()
             },
         );
         doc.initial_build();
         doc.inner_mut().resolve(0.0);
-        Self { h: blitz_test_harness::Harness::wrap(doc), session }
+        Self {
+            h: blitz_test_harness::Harness::wrap(doc),
+            session,
+            host,
+        }
     }
 
     fn text_of(&self, node: blitz_dom::NodeId) -> String {
@@ -64,6 +78,14 @@ impl Gui {
             .collect()
     }
 
+    fn count(&self, selector: &str) -> usize {
+        self.h
+            .base()
+            .query_selector_all(selector)
+            .unwrap_or_default()
+            .len()
+    }
+
     /// 置き場ごとのタブの見出し。並びは DOM の順(左・中・右・下)。
     fn zone_tabs(&mut self) -> Vec<Vec<String>> {
         let strips = self
@@ -75,7 +97,10 @@ impl Gui {
             .into_iter()
             .map(|strip| {
                 let doc = self.h.base();
-                let children = doc.get_node(strip).map(|n| n.children.clone()).unwrap_or_default();
+                let children = doc
+                    .get_node(strip)
+                    .map(|n| n.children.clone())
+                    .unwrap_or_default();
                 drop(doc);
                 children
                     .into_iter()
@@ -122,15 +147,90 @@ impl Gui {
         (layout.size.width, layout.size.height)
     }
 
+    fn opacity_of_nth(&self, selector: &str, nth: usize) -> f32 {
+        let doc = self.h.base();
+        let nodes = doc.query_selector_all(selector).unwrap_or_default();
+        let node = *nodes
+            .get(nth)
+            .unwrap_or_else(|| panic!("`{selector}` の {nth} 番が居ない"));
+        let opacity = doc
+            .get_node(node)
+            .and_then(|node| node.primary_styles())
+            .expect("computed style")
+            .clone_opacity();
+        opacity
+    }
+
+    fn tick(&mut self, seconds: f64) {
+        self.h.tick(seconds);
+    }
+
+    fn tab_strip_overflow(&self) -> Vec<(usize, f32, f32)> {
+        let doc = self.h.base();
+        let strips = doc.query_selector_all(".ptabs").unwrap_or_default();
+        let mut out = Vec::new();
+        for (index, strip) in strips.into_iter().enumerate() {
+            let Some(strip_node) = doc.get_node(strip) else {
+                continue;
+            };
+            let strip_pos = strip_node.absolute_position(0.0, 0.0);
+            let strip_right = strip_pos.x as f32 + strip_node.final_layout().size.width;
+            let tab_right = strip_node
+                .children
+                .iter()
+                .filter_map(|child| doc.get_node(*child))
+                .filter(|child| {
+                    child.attrs().is_some_and(|attrs| {
+                        attrs.iter().any(|attr| {
+                            attr.name.local.as_ref() == "class"
+                                && attr.value.split_whitespace().any(|class| class == "ptab")
+                        })
+                    })
+                })
+                .map(|tab| {
+                    let pos = tab.absolute_position(0.0, 0.0);
+                    pos.x as f32 + tab.final_layout().size.width
+                })
+                .fold(strip_pos.x as f32, f32::max);
+            let scrollable = strip_node
+                .primary_styles()
+                .is_some_and(|styles| styles.clone_overflow_x().is_scrollable());
+            if tab_right > strip_right + 0.5 && !scrollable {
+                out.push((index, tab_right, strip_right));
+            }
+        }
+        out
+    }
+
     fn center_of(&mut self, selector: &str, nth: usize) -> (f32, f32) {
         let nodes = self
             .h
             .base()
             .query_selector_all(selector)
             .unwrap_or_default();
-        let node = *nodes
-            .get(nth)
-            .unwrap_or_else(|| panic!("`{selector}` の {nth} 番が居ない(居るのは {})", nodes.len()));
+        let node = *nodes.get(nth).unwrap_or_else(|| {
+            panic!("`{selector}` の {nth} 番が居ない(居るのは {})", nodes.len())
+        });
+        let doc = self.h.base();
+        let node = doc.get_node(node).expect("node");
+        let layout = node.final_layout();
+        let pos = node.absolute_position(0.0, 0.0);
+        (
+            pos.x as f32 + layout.size.width / 2.0,
+            pos.y as f32 + layout.size.height / 2.0,
+        )
+    }
+
+    fn center_of_text(&mut self, selector: &str, text: &str) -> (f32, f32) {
+        let nodes = self
+            .h
+            .base()
+            .query_selector_all(selector)
+            .unwrap_or_default();
+        let node = nodes
+            .into_iter()
+            .find(|node| self.text_of(*node).trim() == text)
+            .unwrap_or_else(|| panic!("`{selector}` に `{text}` が居ない"));
         let doc = self.h.base();
         let node = doc.get_node(node).expect("node");
         let layout = node.final_layout();
@@ -142,8 +242,8 @@ impl Gui {
     }
 
     fn click(&mut self, x: f32, y: f32) {
-        self.press(x, y);
-        self.release(x, y);
+        self.h.move_mouse_to(x, y);
+        self.h.click_at(x, y);
         self.settle();
     }
 
@@ -163,28 +263,13 @@ impl Gui {
 
     /// 打鍵を1つ流す。
     fn key(&mut self, key: keyboard_types::Key, mods: keyboard_types::Modifiers) {
-        use blitz_traits::events::{BlitzKeyEvent, KeyState};
-        let event = BlitzKeyEvent {
-            key,
-            code: keyboard_types::Code::Unidentified,
-            modifiers: mods,
-            location: keyboard_types::Location::Standard,
-            is_auto_repeating: false,
-            is_composing: false,
-            state: KeyState::Pressed,
-            text: None,
-        };
-        // 本番と同じ規則で焦点を当ててから配る(`host.rs` と同じ1つの関数)。
-        
-        self.h.dispatch(UiEvent::KeyDown(event));
+        self.h.press_with(key, mods);
         self.settle();
     }
 
     fn press(&mut self, x: f32, y: f32) {
-        let moved = self.pointer_raw(x, y, MouseEventButtons::None);
-        self.h.dispatch(UiEvent::PointerMove(moved));
-        let event = self.pointer_raw(x, y, MouseEventButtons::Primary);
-        self.h.dispatch(UiEvent::PointerDown(event));
+        self.h.move_mouse_to(x, y);
+        self.h.mouse_down_at(x, y);
     }
 
     fn motion(&mut self, x: f32, y: f32) {
@@ -193,8 +278,25 @@ impl Gui {
     }
 
     fn release(&mut self, x: f32, y: f32) {
-        let event = self.pointer_raw(x, y, MouseEventButtons::None);
-        self.h.dispatch(UiEvent::PointerUp(event));
+        self.h.mouse_up_at(x, y);
+    }
+
+    fn lose_focus(&mut self) {
+        self.host.focus_lost();
+        self.settle();
+    }
+
+    fn enter_files(&mut self, paths: &[std::path::PathBuf]) {
+        self.host.focus_lost();
+        self.session.file_drop.enter(paths);
+        self.host.wake_all();
+        self.settle();
+    }
+
+    fn leave_files(&mut self) {
+        self.session.file_drop.leave();
+        self.host.wake_all();
+        self.settle();
     }
 
     fn pointer_raw(&self, x: f32, y: f32, buttons: MouseEventButtons) -> BlitzPointerEvent {
@@ -218,10 +320,18 @@ impl Gui {
         };
         event(buttons)
     }
+
+    fn chord_motion(&mut self, x: f32, y: f32) {
+        let buttons = MouseEventButtons::Primary | MouseEventButtons::Secondary;
+        self.h
+            .dispatch(UiEvent::PointerMove(self.pointer_raw(x, y, buttons)));
+    }
 }
 
 fn collect_text(doc: &blitz_dom::BaseDocument, node: blitz_dom::NodeId, out: &mut String) {
-    let Some(node) = doc.get_node(node) else { return };
+    let Some(node) = doc.get_node(node) else {
+        return;
+    };
     if let Some(text) = node.text_data() {
         out.push_str(&text.content);
     }
@@ -250,15 +360,352 @@ fn a_name_can_be_typed_after_double_clicking_it() {
             keyboard_types::Modifiers::empty(),
         );
     }
-    gui.key(keyboard_types::Key::Enter, keyboard_types::Modifiers::empty());
+    gui.key(
+        keyboard_types::Key::Enter,
+        keyboard_types::Modifiers::empty(),
+    );
     gui.settle();
 
     let after = gui.texts(".lsurface");
-    assert_ne!(after, before, "打った文字が層の名前に入っていない: {after:?}");
+    assert_ne!(
+        after, before,
+        "打った文字が層の名前に入っていない: {after:?}"
+    );
     assert!(
         after.iter().any(|n| n.contains("ZZ")),
         "打った文字が層の名前に入っていない: {after:?}"
     );
+}
+
+#[test]
+fn menus_are_one_semantic_family() {
+    let mut gui = Gui::open();
+    let (file_x, file_y) = gui.center_of("#menu-file", 0);
+    gui.click(file_x, file_y);
+    assert_eq!(gui.count("#menu-file-list"), 1, "File menu did not open");
+
+    let (view_x, view_y) = gui.center_of("#menu-view", 0);
+    gui.click(view_x, view_y);
+    assert_eq!(
+        gui.count("#menu-file-list"),
+        0,
+        "opening View left File open"
+    );
+    assert_eq!(gui.count("#menu-view-list"), 1, "View menu did not open");
+
+    gui.key(
+        keyboard_types::Key::Escape,
+        keyboard_types::Modifiers::empty(),
+    );
+    gui.settle();
+    assert_eq!(gui.count(".vmenu"), 0, "Escape did not close the open menu");
+}
+
+#[test]
+fn losing_window_focus_dismisses_an_open_menu() {
+    let mut gui = Gui::open();
+    let file = gui.center_of("#menu-file", 0);
+    gui.click(file.0, file.1);
+    assert_eq!(gui.count("#menu-file-list"), 1);
+
+    gui.lose_focus();
+
+    assert_eq!(gui.count(".vmenu"), 0, "focus loss left a menu visible");
+}
+
+#[test]
+fn menu_motion_has_a_real_intermediate_frame_without_delaying_the_command() {
+    let mut gui = Gui::open();
+    let (file_x, file_y) = gui.center_of("#menu-file", 0);
+    gui.click(file_x, file_y);
+
+    assert_eq!(gui.count("#menu-file-list"), 1, "menu command was delayed");
+    let mut samples = vec![gui.opacity_of_nth(".vmenu", 0)];
+    for _ in 0..12 {
+        gui.tick(1.0 / 60.0);
+        samples.push(gui.opacity_of_nth(".vmenu", 0));
+    }
+    assert!(
+        samples.windows(2).all(|pair| pair[0] <= pair[1]),
+        "menu opacity went backwards: {samples:?}"
+    );
+    let moving_frames = samples
+        .windows(2)
+        .filter(|pair| (pair[1] - pair[0]).abs() > 0.0001)
+        .count();
+    assert!(
+        moving_frames >= 6,
+        "menu jumped instead of producing smooth frames: {samples:?}"
+    );
+    let end = *samples.last().unwrap();
+    assert!(
+        (end - 1.0).abs() < 0.001,
+        "menu did not finish opaque: {end}"
+    );
+}
+
+#[test]
+fn outside_menu_click_is_consumed_before_the_stage() {
+    let mut gui = Gui::open();
+    let (file_x, file_y) = gui.center_of("#menu-file", 0);
+    gui.click(file_x, file_y);
+    assert_eq!(
+        gui.count(".menu-dismiss"),
+        1,
+        "outside-click control is missing"
+    );
+    let dismiss_size = gui.size_of_nth(".menu-dismiss", 0);
+    assert!(
+        dismiss_size.0 >= W as f32 && dismiss_size.1 >= H as f32,
+        "outside-click control does not cover the window: {dismiss_size:?}"
+    );
+
+    let (stage_x, stage_y) = gui.center_of("#stage", 0);
+    gui.press(stage_x, stage_y);
+    assert!(
+        !gui.session.gesture.is_active(),
+        "the click passed through the menu dismissal surface into Stage"
+    );
+    gui.release(stage_x, stage_y);
+    gui.settle();
+    assert_eq!(
+        gui.count(".vmenu"),
+        0,
+        "outside click did not close the menu"
+    );
+}
+
+#[test]
+fn product_chrome_does_not_advertise_unimplemented_controls() {
+    let mut gui = Gui::open();
+    let menubar = gui.texts("#menubar").join(" ");
+    for dead in ["Edit", "Layer", "Effect", "Help"] {
+        assert!(
+            !menubar.contains(dead),
+            "dead menu is still visible: {dead}"
+        );
+    }
+    assert_eq!(
+        gui.count(".btoolbar"),
+        0,
+        "dead Browser toolbar is still visible"
+    );
+    let browser = gui.texts("#browser").join(" ");
+    for dead in [
+        "Search files and tags",
+        "Filters",
+        "Tags",
+        "Comp 1",
+        "Edit tags",
+    ] {
+        assert!(
+            !browser.contains(dead),
+            "dead Browser control is still visible: {dead}"
+        );
+    }
+}
+
+#[test]
+fn click_only_chrome_uses_real_buttons_and_real_disabled_state() {
+    let mut gui = Gui::open();
+
+    let create = gui.center_of("#dock-tab-Create", 0);
+    gui.click(create.0, create.1);
+    assert_eq!(gui.count(".tcard"), 4);
+    assert_eq!(gui.count("button.semantic-button.tcard"), 4);
+
+    let effects = gui.center_of("#dock-tab-Effects", 0);
+    gui.click(effects.0, effects.1);
+    let disabled = gui.count("button.semantic-button.tcard.disabled");
+    assert!(
+        disabled > 0,
+        "effect cards did not expose disabled button semantics"
+    );
+    assert_eq!(
+        gui.count("button.semantic-button.tcard.disabled[disabled]"),
+        disabled
+    );
+
+    let settings = gui.center_of("#dock-tab-Settings", 0);
+    gui.click(settings.0, settings.1);
+    assert_eq!(gui.count(".zbtn"), 4);
+    assert_eq!(gui.count("button.semantic-button.zbtn"), 4);
+}
+
+#[test]
+fn the_mask_card_adds_one_mask_to_the_selected_layer() {
+    let mut gui = Gui::open();
+    let layer_row = gui.center_of(".lsurface", 1);
+    gui.click(layer_row.0, layer_row.1);
+    gui.settle();
+    let selected = gui
+        .session
+        .selection
+        .get()
+        .expect("Timeline layer selection");
+    assert!(gui
+        .session
+        .doc
+        .lock()
+        .unwrap()
+        .view()
+        .masks(selected)
+        .unwrap()
+        .is_empty());
+
+    let create = gui.center_of("#dock-tab-Create", 0);
+    gui.click(create.0, create.1);
+    gui.settle();
+    let mask = gui.center_of(".tcard", 3);
+    gui.click(mask.0, mask.1);
+    gui.settle();
+
+    assert_eq!(
+        gui.session
+            .doc
+            .lock()
+            .unwrap()
+            .view()
+            .masks(selected)
+            .unwrap()
+            .len(),
+        1
+    );
+    assert!(gui.texts(".tcard")[3].contains("1 attached"));
+}
+
+#[test]
+fn edited_status_tracks_the_saved_document_revision() {
+    let mut gui = Gui::open();
+    assert!(!gui.texts("#status").join(" ").contains("Edited"));
+
+    let create = gui.center_of("#dock-tab-Create", 0);
+    gui.click(create.0, create.1);
+    let text = gui.center_of(".tcard", 0);
+    gui.click(text.0, text.1);
+    gui.settle();
+    assert!(gui.texts("#status").join(" ").contains("Edited"));
+
+    gui.session.mark_saved(std::path::PathBuf::from("song.rrd"));
+    gui.host.wake_all();
+    gui.settle();
+    assert!(!gui.texts("#status").join(" ").contains("Edited"));
+}
+
+#[test]
+fn file_drop_hover_and_cancel_are_visible_in_the_product_tree() {
+    let mut gui = Gui::open();
+    gui.enter_files(&["clip.mov".into(), "sound.wav".into()]);
+    assert_eq!(gui.count(".file-drop-overlay"), 1);
+    assert_eq!(gui.texts(".file-drop-card"), vec!["Drop 2 files to import"]);
+
+    gui.leave_files();
+    assert_eq!(gui.count(".file-drop-overlay"), 0);
+}
+
+#[test]
+fn timeline_uses_the_shared_focus_loss_cancellation() {
+    let mut gui = Gui::open();
+    let timeline = gui.center_of("#timeline", 0);
+    gui.press(timeline.0, timeline.1);
+    assert!(gui.session.gesture.is_active());
+    gui.lose_focus();
+    assert!(!gui.session.gesture.is_active());
+    gui.release(timeline.0, timeline.1);
+}
+
+#[test]
+fn opening_a_menu_cancels_a_dock_drag_before_the_menu_opens() {
+    let mut gui = Gui::open();
+    let tab = gui.center_of("#dock-tab-Media", 0);
+    gui.press(tab.0, tab.1);
+    gui.motion(tab.0 + 30.0, tab.1 + 30.0);
+    gui.settle();
+    assert_eq!(gui.count(".dock-ghost"), 1);
+
+    let file = gui.center_of("#menu-file", 0);
+    gui.click(file.0, file.1);
+
+    assert_eq!(gui.count("#menu-file-list"), 1);
+    assert_eq!(gui.count(".dock-ghost"), 0);
+    assert_eq!(gui.count(".dropmap"), 0);
+}
+
+#[test]
+fn file_drag_entry_cancels_a_splitter_before_showing_the_overlay() {
+    let mut gui = Gui::open();
+    let splitter = gui.center_of(".vgrip", 0);
+    let before = gui.size_of_nth(".tslot", 1).0;
+    gui.press(splitter.0, splitter.1);
+    gui.enter_files(&["chaos.mov".into()]);
+    gui.motion(splitter.0 + 120.0, splitter.1);
+    gui.release(splitter.0 + 120.0, splitter.1);
+    gui.settle();
+
+    assert_eq!(gui.count(".file-drop-overlay"), 1);
+    assert_eq!(gui.size_of_nth(".tslot", 1).0, before);
+}
+
+#[test]
+fn rename_owns_shortcuts_and_escape_without_mutating_the_document() {
+    let mut gui = Gui::open();
+    let row = gui.center_of(".lsurface", 1);
+    gui.click(row.0, row.1);
+    gui.click(row.0, row.1);
+    let selected = gui.session.selection.get();
+    let revision = gui.session.doc.lock().unwrap().revision();
+    let layers = gui.session.doc.lock().unwrap().view().layers();
+    assert_eq!(gui.count("input.lsurface"), 1);
+
+    gui.key(
+        keyboard_types::Key::Character("d".into()),
+        keyboard_types::Modifiers::SUPER,
+    );
+    gui.key(
+        keyboard_types::Key::Delete,
+        keyboard_types::Modifiers::empty(),
+    );
+    assert_eq!(gui.session.doc.lock().unwrap().view().layers(), layers);
+    assert_eq!(gui.session.doc.lock().unwrap().revision(), revision);
+    assert_eq!(gui.count("input.lsurface"), 1);
+
+    gui.key(
+        keyboard_types::Key::Escape,
+        keyboard_types::Modifiers::empty(),
+    );
+    assert_eq!(gui.count("input.lsurface"), 0);
+    assert_eq!(gui.session.selection.get(), selected);
+    assert_eq!(gui.session.doc.lock().unwrap().revision(), revision);
+}
+
+#[test]
+fn repeated_escape_and_undo_redo_boundaries_remain_idempotent() {
+    let mut gui = Gui::open();
+    let create = gui.center_of("#dock-tab-Create", 0);
+    gui.click(create.0, create.1);
+    let rectangle = gui.center_of(".tcard", 1);
+    gui.click(rectangle.0, rectangle.1);
+    let layers = gui.session.doc.lock().unwrap().view().layers();
+
+    for _ in 0..100 {
+        gui.key(
+            keyboard_types::Key::Character("z".into()),
+            keyboard_types::Modifiers::SUPER,
+        );
+        gui.key(
+            keyboard_types::Key::Character("Z".into()),
+            keyboard_types::Modifiers::SUPER | keyboard_types::Modifiers::SHIFT,
+        );
+    }
+    assert_eq!(gui.session.doc.lock().unwrap().view().layers(), layers);
+    let revision = gui.session.doc.lock().unwrap().revision();
+    for _ in 0..20 {
+        gui.key(
+            keyboard_types::Key::Escape,
+            keyboard_types::Modifiers::empty(),
+        );
+    }
+    assert_eq!(gui.session.doc.lock().unwrap().revision(), revision);
 }
 // ---- 生成した嵐 ------------------------------------------------------------
 
@@ -268,8 +715,15 @@ fn a_name_can_be_typed_after_double_clicking_it() {
 enum Poke {
     Press(f32, f32),
     Motion(f32, f32),
+    ChordMotion(f32, f32),
     Release(f32, f32),
     Key(usize),
+    Shortcut(usize),
+    Wheel(f32, f32, f32, f32),
+    FocusLoss,
+    FileEnter(u8),
+    FileLeave,
+    Tick(u8),
 }
 
 /// 素の打鍵で意味を持つ物を混ぜる。押されて困る物ほど入れる価値がある。
@@ -287,6 +741,27 @@ fn storm_key(i: usize) -> keyboard_types::Key {
 
 const STORM_KEY_COUNT: usize = STORM_CHARS.len() + 4;
 
+fn storm_shortcut(i: usize) -> (keyboard_types::Key, keyboard_types::Modifiers) {
+    use keyboard_types::{Key, Modifiers};
+    match i {
+        0 => (Key::Character("a".into()), Modifiers::SUPER),
+        1 => (Key::Character("d".into()), Modifiers::SUPER),
+        2 => (Key::Character("g".into()), Modifiers::SUPER),
+        3 => (
+            Key::Character("G".into()),
+            Modifiers::SUPER | Modifiers::SHIFT,
+        ),
+        4 => (Key::Character("z".into()), Modifiers::SUPER),
+        5 => (
+            Key::Character("Z".into()),
+            Modifiers::SUPER | Modifiers::SHIFT,
+        ),
+        _ => (Key::Character("[".into()), Modifiers::ALT),
+    }
+}
+
+const STORM_SHORTCUT_COUNT: usize = 7;
+
 fn poke() -> impl proptest::strategy::Strategy<Value = Poke> {
     use proptest::prelude::*;
     // 窓の外も混ぜる。掴んだまま外へ出るのは実際に起きる。
@@ -295,15 +770,28 @@ fn poke() -> impl proptest::strategy::Strategy<Value = Poke> {
     prop_oneof![
         (x.clone(), y.clone()).prop_map(|(x, y)| Poke::Press(x, y)),
         (x.clone(), y.clone()).prop_map(|(x, y)| Poke::Motion(x, y)),
+        (x.clone(), y.clone()).prop_map(|(x, y)| Poke::ChordMotion(x, y)),
         (x, y).prop_map(|(x, y)| Poke::Release(x, y)),
         (0..STORM_KEY_COUNT).prop_map(Poke::Key),
+        (0..STORM_SHORTCUT_COUNT).prop_map(Poke::Shortcut),
+        (
+            -200.0f32..(W as f32 + 200.0),
+            -200.0f32..(H as f32 + 200.0),
+            -120.0f32..120.0,
+            -120.0f32..120.0,
+        )
+            .prop_map(|(x, y, dx, dy)| Poke::Wheel(x, y, dx, dy)),
+        proptest::strategy::Just(Poke::FocusLoss),
+        (1u8..5).prop_map(Poke::FileEnter),
+        proptest::strategy::Just(Poke::FileLeave),
+        (1u8..13).prop_map(Poke::Tick),
     ]
 }
 
 proptest::proptest! {
     #![proptest_config(proptest::prelude::ProptestConfig {
-        cases: 24,
-        max_shrink_iters: 64,
+        cases: 64,
+        max_shrink_iters: 128,
         ..proptest::prelude::ProptestConfig::default()
     })]
 
@@ -313,22 +801,49 @@ proptest::proptest! {
     /// タブが効かなくなる、が実際に起きる壊れ方。**最後に普通の一手が
     /// 通るか**まで見る。
     #[test]
-    fn the_window_still_takes_orders_after_any_storm(storm in proptest::collection::vec(poke(), 1..40)) {
+    fn the_window_still_takes_orders_after_any_storm(storm in proptest::collection::vec(poke(), 1..96)) {
         let mut gui = Gui::open();
         for p in &storm {
             match *p {
                 Poke::Press(x, y) => gui.press(x, y),
                 Poke::Motion(x, y) => gui.motion(x, y),
+                Poke::ChordMotion(x, y) => gui.chord_motion(x, y),
                 Poke::Release(x, y) => gui.release(x, y),
                 Poke::Key(i) => gui.key(storm_key(i), keyboard_types::Modifiers::empty()),
+                Poke::Shortcut(i) => {
+                    let (key, modifiers) = storm_shortcut(i);
+                    gui.key(key, modifiers);
+                }
+                Poke::Wheel(x, y, dx, dy) => {
+                    gui.h.wheel_at(x, y, f64::from(dx), f64::from(dy));
+                    gui.settle();
+                }
+                Poke::FocusLoss => gui.lose_focus(),
+                Poke::FileEnter(count) => {
+                    let paths = (0..count)
+                        .map(|index| std::path::PathBuf::from(format!("chaos-{index}.mov")))
+                        .collect::<Vec<_>>();
+                    gui.enter_files(&paths);
+                }
+                Poke::FileLeave => gui.leave_files(),
+                Poke::Tick(frames) => gui.tick(f64::from(frames) / 60.0),
             }
         }
         // 指を上げて、掴みを解く。ここから先は普通の窓でなければならない。
+        gui.leave_files();
         gui.release(10.0, 10.0);
-        gui.key(keyboard_types::Key::Escape, keyboard_types::Modifiers::empty());
+        gui.lose_focus();
+        for _ in 0..2 {
+            gui.key(keyboard_types::Key::Escape, keyboard_types::Modifiers::empty());
+        }
         gui.settle();
 
         proptest::prop_assert!(gui.drawing_panels() > 0, "描く panel が居なくなった: {storm:?}");
+        proptest::prop_assert!(!gui.session.gesture.is_active(), "gestureが閉じていない: {storm:?}");
+        proptest::prop_assert_eq!(gui.count(".dock-ghost"), 0, "dock ghostが残った: {:?}", storm);
+        proptest::prop_assert_eq!(gui.count(".dropmap"), 0, "drop targetが残った: {:?}", storm);
+        proptest::prop_assert_eq!(gui.count(".file-drop-overlay"), 0, "file overlayが残った: {:?}", storm);
+        proptest::prop_assert_eq!(gui.count(".vmenu"), 0, "menuが残った: {:?}", storm);
 
         // タブは窓の外へ引くと別窓へ出る(仕様)。全部は出られない。
         let tabs = gui.texts(".ptab");
@@ -348,9 +863,27 @@ proptest::proptest! {
             gui.drawing_panels() > 0,
             "嵐のあとの一押しで描く panel が居なくなった: {storm:?}"
         );
+
+        // 置き場と通常操作を復旧し、UIからDocumentへもう一手書けることまで見る。
+        let view = gui.center_of("#menu-view", 0);
+        gui.click(view.0, view.1);
+        let reset = gui.center_of(".menu-section .vitem", 0);
+        gui.click(reset.0, reset.1);
+        let create = gui.center_of("#dock-tab-Create", 0);
+        gui.click(create.0, create.1);
+        let before_layers = gui.session.doc.lock().unwrap().view().layers().len();
+        let rectangle = gui.center_of(".tcard", 1);
+        gui.click(rectangle.0, rectangle.1);
+        let after_layers = gui.session.doc.lock().unwrap().view().layers().len();
+        proptest::prop_assert_eq!(after_layers, before_layers + 1, "嵐後のCreateが書けない: {:?}", storm);
+
+        let dir = tempfile::tempdir().unwrap();
+        let project = dir.path().join("chaos.rrd");
+        gui.session.doc.lock().unwrap().save(&project).unwrap();
+        let loaded = crate::doc::store::Document::load(&project).unwrap();
+        proptest::prop_assert_eq!(loaded.view().layers().len(), after_layers);
     }
 }
-
 
 /// ホイールの向き。**今日はこれを実機で目視するしかなかった** —— 自作の器具に
 /// ホイールが無かったため。上流のハーネスには `wheel_at` が在る。
@@ -376,23 +909,21 @@ fn rolling_the_wheel_up_moves_the_view_closer() {
     );
 }
 
-/// 掴んだまま窓を出ても、タブは消えない。
-///
-/// 前は `onmouseleave` が**離す前に**引きちぎって別窓にしていた。掴みは
-/// 離した時だけ効く —— 同じ手つきで判定の瞬間が違うのが不統一の芯だった。
 #[test]
-fn dragging_a_tab_out_of_the_window_does_not_take_it_away() {
+fn dragging_a_tab_out_of_the_window_detaches_on_release() {
     let mut gui = Gui::open();
-    let before = gui.texts(".ptab");
-    let (x, y) = gui.center_of(".ptab", 0);
+    let before = gui.count(".ptab");
+    let (x, y) = gui.center_of("#dock-tab-Inspector", 0);
 
     gui.press(x, y);
     gui.motion(x, y + 40.0);
     gui.motion(-80.0, -80.0);
+    assert_eq!(gui.count(".ptab"), before, "leaving detached before release");
     gui.release(-80.0, -80.0);
     gui.settle();
 
-    assert_eq!(gui.texts(".ptab"), before, "窓を出ただけでタブが消えた");
+    assert_eq!(gui.count(".ptab"), before - 1, "outside release did not detach");
+    assert_eq!(gui.count("#dock-tab-Inspector"), 0);
 }
 
 /// 掴んでいる間は、掴んでいると分かる。
@@ -410,4 +941,256 @@ fn a_held_tab_looks_held() {
         "掴んでいるのに見た目が変わらない: {:?}",
         gui.classes(".ptab")
     );
+}
+
+#[test]
+fn clicking_a_tab_does_not_enter_docking_mode() {
+    let mut gui = Gui::open();
+    let (x, y) = gui.center_of("#dock-tab-Media", 0);
+
+    gui.press(x, y);
+    gui.settle();
+
+    assert_eq!(
+        gui.count(".dropmap.dragging"),
+        0,
+        "a click exposed dock targets before any drag"
+    );
+    assert_eq!(gui.count(".dock-ghost"), 0, "a click created a drag ghost");
+    gui.release(x, y);
+}
+
+#[test]
+fn escape_cancels_a_dock_drag_without_moving_the_panel() {
+    let mut gui = Gui::open();
+    let before = gui.texts(".ptab");
+    let (x, y) = gui.center_of("#dock-tab-Media", 0);
+
+    gui.press(x, y);
+    gui.motion(x + 24.0, y + 24.0);
+    gui.settle();
+    assert!(
+        gui.count(".dropmap.dragging") > 0,
+        "dock targets did not appear after the drag threshold"
+    );
+    assert_eq!(
+        gui.count(".dock-ghost"),
+        1,
+        "the dragged panel has no visible ghost"
+    );
+
+    gui.key(
+        keyboard_types::Key::Escape,
+        keyboard_types::Modifiers::empty(),
+    );
+    gui.release(x + 24.0, y + 24.0);
+    gui.settle();
+
+    assert_eq!(gui.count(".dropmap"), 0, "Escape left dock targets armed");
+    assert_eq!(
+        gui.count(".dock-ghost"),
+        0,
+        "Escape left the drag ghost open"
+    );
+    assert_eq!(gui.texts(".ptab"), before, "Escape moved a panel");
+}
+
+#[test]
+fn a_split_out_panel_keeps_the_same_draggable_tab() {
+    let mut gui = Gui::open();
+    let tab_count = gui.count(".ptab");
+    let zone_count = gui.count(".ptabs");
+    let (x, y) = gui.center_of("#dock-tab-Colors", 0);
+
+    gui.press(x, y);
+    gui.motion(x + 24.0, y + 24.0);
+    gui.settle();
+    let target = gui.center_of(".dz.left", 1);
+    gui.motion(target.0, target.1);
+    gui.release(target.0, target.1);
+    gui.settle();
+
+    assert_eq!(
+        gui.count(".ptab"),
+        tab_count,
+        "the split-out panel lost its tab handle"
+    );
+    assert_eq!(
+        gui.count("#dock-tab-Colors"),
+        1,
+        "the split-out panel is not uniquely reachable"
+    );
+    assert_eq!(
+        gui.count(".ptabs"),
+        zone_count + 1,
+        "the edge drop did not create a new dock zone"
+    );
+}
+
+#[test]
+fn every_right_hand_panel_uses_the_same_dock_path() {
+    for panel in ["Inspector", "Utility", "Settings", "Ease"] {
+        let mut gui = Gui::open();
+        let (x, y) = gui.center_of(&format!("#dock-tab-{panel}"), 0);
+        gui.press(x, y);
+        let target = gui.center_of("#stage", 0);
+        gui.motion(target.0, target.1);
+        gui.release(target.0, target.1);
+        gui.settle();
+
+        let zones = gui.zone_tabs();
+        assert!(
+            zones[1].iter().any(|tab| tab == panel),
+            "{panel} did not dock into the Stage zone: {zones:?}"
+        );
+    }
+}
+
+#[test]
+fn every_panel_can_recreate_the_bottom_after_timeline_is_closed() {
+    let panels = crate::ui::dock::Panel::all()
+        .filter(|panel| *panel != crate::ui::dock::Panel::Timeline)
+        .collect::<Vec<_>>();
+    for moving in panels {
+        let mut gui = Gui::open();
+        let view = gui.center_of("#menu-view", 0);
+        gui.click(view.0, view.1);
+        let timeline = gui.center_of_text("#menu-view-list .vitem", "✓ Timeline");
+        gui.click(timeline.0, timeline.1);
+        assert_eq!(gui.count(".ptabs"), 3, "Timeline row did not collapse");
+
+        let tab = gui.center_of(&format!("#dock-tab-{moving}"), 0);
+        let source_zone = gui
+            .zone_tabs()
+            .iter()
+            .position(|tabs| tabs.iter().any(|tab| tab == moving.label()))
+            .expect("moving panel source zone");
+        gui.press(tab.0, tab.1);
+        gui.motion(tab.0 + 24.0, tab.1 + 24.0);
+        gui.settle();
+        let bottom = gui.center_of(".dz.bottom", source_zone);
+        gui.motion(bottom.0, bottom.1);
+        gui.release(bottom.0, bottom.1);
+        gui.settle();
+
+        assert_eq!(gui.count(".ptabs"), 4, "{moving} did not recreate the bottom");
+        assert_eq!(gui.count(".ptab"), 10, "{moving} made another panel disappear");
+        assert!(gui.drawing_panels() > 0, "{moving} removed all rendered content");
+        for panel in crate::ui::dock::Panel::all() {
+            assert_eq!(
+                gui.count(&format!("#dock-tab-{panel}")),
+                usize::from(panel != crate::ui::dock::Panel::Timeline),
+                "moving {moving} changed {panel} reachability"
+            );
+        }
+    }
+}
+
+#[test]
+fn reset_layout_is_a_visible_way_back_from_a_custom_dock() {
+    let mut gui = Gui::open();
+    let default_zones = gui.count(".ptabs");
+    let (x, y) = gui.center_of("#dock-tab-Colors", 0);
+    gui.press(x, y);
+    gui.motion(x + 24.0, y + 24.0);
+    gui.settle();
+    let target = gui.center_of(".dz.left", 1);
+    gui.motion(target.0, target.1);
+    gui.release(target.0, target.1);
+    gui.settle();
+    assert_eq!(gui.count(".ptabs"), default_zones + 1);
+
+    let view = gui.center_of("#menu-view", 0);
+    gui.click(view.0, view.1);
+    let reset = gui.center_of(".menu-section .vitem", 0);
+    gui.click(reset.0, reset.1);
+
+    assert_eq!(
+        gui.count(".ptabs"),
+        default_zones,
+        "Reset Layout did not restore the default dock"
+    );
+    assert_eq!(gui.count(".ptab"), crate::ui::dock::Panel::all().count());
+}
+
+#[test]
+fn splitters_have_a_normal_hit_target() {
+    let mut gui = Gui::open();
+    let vertical = gui.size_of_nth(".vgrip", 0);
+    let horizontal = gui.size_of_nth(".hgrip", 0);
+    assert!(
+        vertical.0 >= 6.0,
+        "vertical splitter is too thin to grab: {vertical:?}"
+    );
+    assert!(
+        horizontal.1 >= 6.0,
+        "horizontal splitter is too thin to grab: {horizontal:?}"
+    );
+}
+
+#[test]
+fn a_splitter_uses_the_live_taffy_extent_without_borrowing_the_document_twice() {
+    let mut gui = Gui::open();
+    let before = gui.size_of_nth(".tslot", 1).0;
+    let (x, y) = gui.center_of(".vgrip", 0);
+
+    gui.press(x, y);
+    gui.motion(x + 100.0, y);
+    gui.release(x + 100.0, y);
+    gui.settle();
+
+    let after = gui.size_of_nth(".tslot", 1).0;
+    assert!(
+        after > before,
+        "splitter did not follow the pointer: {before} -> {after}"
+    );
+}
+
+#[test]
+fn every_panel_tab_remains_reachable_at_ordinary_small_window_sizes() {
+    let mut clipped = Vec::new();
+    for (width, height) in [(640, 480), (900, 600), (1280, 800), (1600, 1000)] {
+        let gui = Gui::open_at(width, height);
+        let overflow = gui.tab_strip_overflow();
+        if !overflow.is_empty() {
+            clipped.push(((width, height), overflow));
+        }
+    }
+    assert!(clipped.is_empty(), "panel tabs are clipped: {clipped:?}");
+}
+
+#[test]
+fn losing_window_focus_cancels_tab_drag() {
+    let mut gui = Gui::open();
+    let tab = gui.center_of("#dock-tab-Media", 0);
+    gui.press(tab.0, tab.1);
+    gui.motion(tab.0 + 24.0, tab.1 + 24.0);
+    gui.settle();
+    assert_eq!(gui.count(".dock-ghost"), 1);
+
+    gui.lose_focus();
+    assert_eq!(
+        gui.count(".dock-ghost"),
+        0,
+        "focus loss left a dock drag active"
+    );
+    assert_eq!(
+        gui.count(".dropmap"),
+        0,
+        "focus loss left dock targets armed"
+    );
+}
+
+#[test]
+fn losing_window_focus_cancels_splitter_drag() {
+    let mut gui = Gui::open();
+    let splitter = gui.center_of(".vgrip", 0);
+    gui.press(splitter.0, splitter.1);
+    gui.lose_focus();
+    let before = gui.size_of_nth(".tslot", 1).0;
+    gui.motion(splitter.0 + 100.0, splitter.1);
+    gui.release(splitter.0 + 100.0, splitter.1);
+    gui.settle();
+    let after = gui.size_of_nth(".tslot", 1).0;
+    assert_eq!(after, before, "focus loss left a splitter drag active");
 }

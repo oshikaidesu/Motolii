@@ -37,14 +37,18 @@ MAY —— 画面の向きが変わった、同時ポインタ数の上限、手
 **4. 押しただけでは動かない(touch slop)**
 > 非移動のジェスチャ(タップ)が移動のジェスチャ(ドラッグ)になるまでに指が動ける距離
 
-*Motolii の状態:* **入れた**(3px、Stage と Timeline の両方)。
+*Motolii の状態:* **入れた**(3px、Stage と Timeline の両方)。ただし外部規格が定めるのは
+slopを持つこととgestureの競合を解くことまでで、**3pxは規格値ではなくMotoliiの暫定値**。
+合否の定規には使わず、platform APIまたは公式製品先例の値を採ってから再設定する。
 それまでは 1px 動いた時点でドラッグになり、押しただけのつもりが値を変えていた。
 
 **5. ボタンの重ね押し(chorded buttons)**
 > 重ね押しでは pointerdown/up は重ならない。`button` と `buttons` の変化で見る。
 > ドラッグ中の pointermove は `button` が -1
 
-*Motolii の状態:* 未検査。掴んでいる最中に別のボタンを足す/離すを踏んでいない。
+*Motolii の状態:* **自動stormへ追加**(2026-09-02)。primary保持中の
+`Primary | Secondary` moveを、focus loss/file enter/shortcut等と同じ列へ混ぜ、
+終端でactive gestureが0になることを64 case × 最大95手で確認した。
 
 ## 単一ポインタの窓では優先度が下がる物
 
@@ -66,14 +70,17 @@ MAY —— 画面の向きが変わった、同時ポインタ数の上限、手
 | 要件 | 状態 |
 |---|---|
 | 1 捕捉 | 代わりを置いた。指が上がっていたら確定する(窓の外は塞げていない) |
-| 2 取り消し | **入れた**。`Esc` と窓から離れた時 |
+| 2 取り消し | **入れた**。`Esc`、窓から離れた時、menu開始、file enter |
 | 3 必ず閉じる | 確定・取り消し・閾値で落とす、が揃った |
 | 4 閾値 | **入れた**(3px) |
-| 5 重ね押し | 未検査 |
+| 5 重ね押し | **自動storm PASS**。primary + secondary moveを含む |
 | 6 同一性 | 単一ポインタのため保留 |
 | 7 束ね | 直線で埋めている |
 
-**そして試験の土台が無い。** `src/ui/gui.rs` の harness は
-**カスタム widget にイベントを1件も届けない**ので、上の1〜5はどれも
-自動では踏めない。実窓で手で当てるしかなかった(それで13件出た)。
-harness を widget まで届かせるのが、この表を回すための前提。
+`src/ui/gui.rs` のharnessは現在、Blitz/Dioxus rootのraw pointer/key、Dock、Splitter、
+menu、file overlay、Document復旧を同じ操作列で踏める。64 case × 最大95手の後、
+transient state 0とReset Layout→Create→Save/Openをoracleにした。
+
+ただしStage/Timeline/Easeのcustom widget内部にあるpointer identityやnative window外releaseを
+直接生成する土台ではない。ここはwidget単体oracleと実窓gateを残す。現在の残件は
+`motolii/reference/ux-chaos.tsv`の`PENDING` 4行を正本とする。
