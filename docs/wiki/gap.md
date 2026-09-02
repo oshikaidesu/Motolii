@@ -71,6 +71,11 @@
 | ~~ホイールが逆~~ | 上で縮小していた。上で拡大へ |
 | ~~名前に `.mp4` が二重に付く~~ | 打った名前に既に付いていたら足さない |
 | ~~出しても何も返ってこない~~ | 報せが Output パネルの中だけで、Stage を見ている人には無いのと同じだった |
+| ~~UIの状態変化が全て0msで飛ぶ~~ | hover／selection／menu／panelを外部motion tokenの100/150/200msへ接続。Stage／Timeline／splitter等の直接操作は0msを維持し、macOS Reduce Motion時は全UI durationを0へ戻す(2026-09-02) |
+| ~~3D/点群を入れても普通に掴めない・回らない~~ | GLB/OBJ/STLとPLYをRerun draw dataのまま同じSpatial Layerへ接続。共通bounds、画角fit、選択枠、Position/Scale/Rotation XYZ/Opacity、Undo/Redo、Save/Open、Output/Exportを実窓で閉じた(2026-09-02) |
+| ~~menu/file-drop/renameが割り込むと別の操作が生き残る~~ | menu開始とfile enterをgesture cancel境界にし、renameが全keyを所有。64×95手の混合stormと実窓乱操作後にReset Layout→Createまで復帰(2026-09-02)。native外窓release等は`reference/ux-chaos.tsv`で保留 |
+| ~~Inspector等の右上パネルをDockできない~~ | tab入力を上流Workbenchと同じpointer系列へ統一し、drop guide描画前に離す高速操作もrelease座標と実寸zoneから確定。Inspectorを実窓でStageへ移動→Reset Layout、右上4枚の同族回帰PASS(2026-09-02) |
+| ~~Timelineを消して戻すと左上へ入り全画面が消えたようになる~~ | hidden／detachedを配置正本から削除せず、描画projectionだけで畳む。Timeline消滅→再表示が元の全幅最下段へ戻ることをhotpatch実窓で確認。全Panel共通で内容分岐なし(2026-09-02) |
 
 ## 数えた結果(6本)
 
@@ -80,7 +85,7 @@
 
 | 本 | 差 |
 |---|---|
-| **6/6** | **音が見えない。** Timeline に波形が出ない。どこがサビか目で分からない |
+| **6/6** | ~~**音が見えない。**~~ Audio棚→カード→層→包絡波形を実窓で通した(2026-09-02)。二層目はtrack dataだけ |
 | **5/6** | **拍が無い。** BPM も拍の線も無く、帯もキーも吸い付かない |
 | **5/6** | **複製に番号が配れない。** 紙片20枚・文字1字ずつ・粒子数千を、別々の値で散らせない |
 | 2/6 | 種を振り直して、散り方だけ変えられない |

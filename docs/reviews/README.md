@@ -32,6 +32,7 @@
 
 | ファイル | 表題 |
 |---|---|
+| [2026-09-02-intuitive-extension-grammar-prior-art.md](2026-09-02-intuitive-extension-grammar-prior-art.md) | **直観的な拡張文法**(決定)。Apple Motion／Cavalry／Autograph／Fusionの公式資料を比較し、後発競合は複雑さを消さずBehaviour／connection／slot／node graphへ移したと整理。Motoliiは値=PropertySource、表現=Vism、空間・描画=Rerun、UI入口=既存Browser群へ分け、**新しい能力は名詞としてcardへ増やしてよいが、新しい動詞・mode・panel・事前変換・node graphを増やさない**と固定 |
 | [2026-09-01-test-reset.md](2026-09-01-test-reset.md) | **試験448本を一度に消した**(利用者裁定)。src 33,607行に対し試験は13,402行=**4割**あり、その全部が通っている間に窓の中では静止画が一度も映らず、入力欄に1字も入らず、素材の入口も出口も無く、窓と書き出しが違う絵を出していた。見つけたのは**説明書だけ読んだ試し手が窓を触った時**。原因は「弱い」ではなく**その道の試験が1本も無い** —— `a_keystroke_reaches_the_app` は `#app` に焦点を当ててから撃っており、バグの方を正解として書いてあった。器具(`Gui` ハーネス・testkit・fixtures・golden)は主張しないので残す。消した448本の名前は本文に引き当て表として在る |
 | [2026-08-30-invariant-ledger.md](2026-08-30-invariant-ledger.md) | **「普通」の深い層は不変量で測る**(運転台帳)。ギャップ地図(触れるか)と品質バー(1操作が正しく応えるか)が取りこぼす層 — 編集した後に関係が壊れていないか。機械で測れる(Document水準のproperty test)。実測: 層を動かすとキーフレームが置き去り・キー時刻を変えられない・複数選択できない |
 | [2026-08-30-overnight-plan.md](2026-08-30-overnight-plan.md) | **夜間自走の台本**(運転台帳)。柵5本と順番7つ。利用者が名指しした欠落(色・縁・ギズモの拡縮回転・ベジェ)はどれもモデルに在庫がありUIだけ無い。Splitは新しいIntentが要らないと仮コードで測定済み。裁定115・多段パス・グループUIは触らない |

@@ -2,7 +2,7 @@
 
 作成日: 2026-07-17
 
-状態: **設計原則**。利用者と開発者の学習曲線、UI、編集系pluginの責任境界をまとめる。本書は未凍結の公開API、Document variant、custom plugin UIの実装許可ではない。具体的な契約追加はM2/M3の解凍手続きと反対側レビューを先に行う。
+状態: **設計原則**。利用者と開発者の学習曲線、UI、編集系pluginの責任境界をまとめる。本書から公開API、Document variant、custom plugin UIを直接追加しない。
 
 関連正本: [コンセプト](concept.md)、[操作単純化モデル](interaction-simplicity-model.md)、[UI操作言語](ui-interaction-language.md)、[ジェネラティブユーザー境界](generative-user-boundary.md)、[プラグイン作者向け規約](plugin-authoring.md)
 
@@ -38,22 +38,50 @@ Direct / Tool / Advanced / plugin UI
 
 ### 1.1 「小さなコア」はcrate名・UI実装・供給元ではない
 
-本書のCoreは、作品の意味と回復可能性を守る**architectural role**である。`motolii-core`というRust crateの公開item一覧、native／Reactというpresentation runtime、first／third-partyという供給元のどれとも同義ではない。
+本書のCoreは、作品の意味と回復可能性を守る**architectural role**であって、crate、家、UI runtime、
+供給元の分類ではない。具体実装が5つの家へ分かれても、Coreが持つのはidentity、time、revision、
+typed port、atomic commit、絶対規律だけである。公開plugin境界へ出た実装はfirst-partyでも特権を持たず、
+「core plugin」という中間分類も置かない。
 
-| 呼称 | 所有するもの | 例 | pluginか |
-|---|---|---|---|
-| **Controlled Core kernel** | identity、canonical time、revision、typed capability、immutable snapshot、atomic commit、authority多重度、絶対規律のenforcement | headlessな意味、protocol、裁定 | いいえ。欠落可能な拡張へ委譲しない |
-| **admitted Host capability module** | TCBとしてCoreが制御するseatの具体実装 | Document reducer、journal、Undo projection、evaluator、cache、resource admission、asset resolver | 公開pluginではない。静的同梱でも独立contractとconformanceを持てる |
-| **bundled first-party presentation module** | 標準製品面の投影、layout、hit-test、gesture adapter | native Stage／Timeline、React Browser／Inspector | 公開pluginではない。Host capabilityのconsumer／adapter |
-| **first-party plugin** | 公開plugin境界上の非信頼な表現固有計算 | Opacity、Sine、Radial Repeater | はい。第三者が到達できる参照実装。出自による実行特権なし |
-| **third-party plugin** | 同じ非信頼な公開能力上の外部作者成果 | 将来のEffect／Tool等 | はい。同じcapability／sandbox／failure containmentへ通す |
+### 1.2 統合を仕事にしない
 
-`motolii-core` crateは`FrameDesc`、`RationalTime`等の共有基礎型を置く実装packageであり、このarchitectural roleの全量でも所属判定表でもない。逆に標準TimelineやPreviewをnativeで描くこと、BrowserをReactで描くことだけでCoreまたはpluginへ分類しない。正確な4軸は[surface実装と拡張所有の軸分離](reviews/2026-07-22-m3-surface-extension-axis-separation.md)を正本とする。歴史上の「plugin境界凍結」「M2コア締結」「小さなコア」を同じ完了宣言として読まないための処分は[Core / plugin境界の歴史回収](reviews/2026-07-23-historical-core-plugin-boundary-lineage-recovery.md)に置く。
+最小コアは、完成した機能を最後に集めて製品へ結線する場所ではない。責任の単位は
+**入口 → 意味 → 評価または作用 → 窓で観測できる結果 → 試験**までを単独で完結し、
+締結済みのtyped portから製品へ現れる。後から別の担当が意味的な配線、型変換、登録分岐を
+足さなければ見えない成果は、部品が完成していても責任として未完である。
 
-「core plugin」という中間分類は置かない。Controlled Coreとadmitted Host capability moduleは製品のTCBであり、
-公開pluginではない。公開plugin境界へ出た実装はfirst-partyでも非信頼である。現在のstatic first-party実装は
-公開façadeの実証であって、将来のprocess／sandbox境界やクラッシュ隔離を証明しない。正本は
-[Controlled Microkernel決定 §6](reviews/2026-07-25-controlled-microkernel-host-module-parallelism-decision.md#6-pluginという語と信頼境界の分離)とする。
+必要なportが無い時は、複数機能を作ってから統合しない。portそのものを一つの責任として先に閉じ、
+admission、失敗、観測、conformanceまで確定する。その後のprovider／consumerは互いもHostのprivate型も
+知らずに載る。Coreに残せるのはtyped protocol、admission／discovery、衝突拒否、acceptance oracleであり、
+機能名ごとのrouting、手書きの登録表、機能固有lifecycle、受け渡すだけのadapterは残せない。
+
+次は責任が集まりすぎている機械的な徴候である。
+
+- 複数の実装laneが同じShell、`app`、`session`の分岐へ機能名を足す。
+- 一つの機能を見せるために、実装後の「統合担当」「WIRE」「最終結線」が要る。
+- 同じ意味をUI local state、Document、renderer用payloadへ写し、中央で同期する。
+- first-partyを増やすたびにenum、`match plugin_id`、手書きcatalogを同時更新する。
+
+この原則で先に削るのは、機能固有の中央分岐と手書きregistry、受け渡しだけのadapter、
+第二の意味状態、各laneが持つUndo／cache／Preview／Exportの例外、意味的な統合役と統合工程である。
+Gitの取り込み、全体build、衝突の機械拒否、実窓での製品審判は残す。それらは責任を集める
+統合ではなく、独立した責任が同じ契約を守ったことの検査である。
+
+### 1.3 一つ作るほど、残りを実装しなくてよくする
+
+componentの価値は、その一例を動かすcode量ではなく、**同族の次例をdataだけで追加できる範囲**で測る。
+一つ直した時に同じ意味を持つ全surface・全instanceへ届き、二つ目を足す時にShell、Intent、renderer、
+Inspectorへ同じ分岐を書かずに済むこと。feature数やdiff量を報酬にすると、保守点を増やすほど進捗に見える
+逆向きの誘因になるので採らない。
+
+完成の証拠は三つ。
+
+- ownerとなるcomponent／typed portが一つで、同じ意味の複製実装が無い。
+- 既存の一例を直すtestに加え、二つ目がmanifest／data／compositionだけで同じ経路を通る。
+- 削除または追加なしになった将来の分岐を数えられる。
+
+これは巨大な万能componentを作る意味ではない。責任は一つの意味族へ閉じ、組合せはtyped portへ任せる。
+一つのcomponentが複数の意味を知り始めたら、速度のための共通化ではなく新しい中央集権である。
 
 ## 2. 学習曲線は利用者と開発者で同じ形にする
 

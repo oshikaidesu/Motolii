@@ -214,3 +214,16 @@ export const TUNABLE_DEFAULTS = {
 
 **次の一手は1番を壊すこと。**それが済めば、宣言・ホットリロード・Inspector の param が
 一本道で繋がる。
+
+## 現在への接続(2026-09-01)
+
+本書は調査時点のpathと未実装状態を残す。現在の実装・出典・リロード境界は
+[motolii/reference/vgpu-vism.md](../../motolii/reference/vgpu-vism.md)を入口にする。
+
+- `vism/`のbuild生成inventoryにより、`KNOWN_EFFECTS`定数・`match plugin_id`・固有`EffectPass`は撤去。
+- ISFとWGSLは同じ`VismProgram`、`re_renderer`のshader/pipeline poolへ載る。
+- 既存plain WGSL本文のdebug hot reloadは在る。
+- manifest、layout、catalog、Inspector、新規fileを一緒に交換するtransactionはまだ無い。
+
+したがって本書206行目の「壁1」は中央分岐としては閉じたが、**宣言も同時にhot reloadする**という
+本来の完成条件は未達。本文だけのreloadをVism体系の完成と呼ばない。
