@@ -28,6 +28,12 @@ pub(crate) const SP2: f64 = 4.0;
 pub(crate) const SP3: f64 = 6.0;
 pub(crate) const SP4: f64 = 8.0;
 pub(crate) const HIT: f64 = 18.0;
+pub(crate) const MOTION_DIRECT_MS: u32 = 0;
+pub(crate) const MOTION_FAST_MS: u32 = 100;
+pub(crate) const MOTION_STATE_MS: u32 = 150;
+pub(crate) const MOTION_ENTER_MS: u32 = 200;
+pub(crate) const MOTION_EASE_STANDARD: &str = "cubic-bezier(0.2, 0, 0, 1)";
+pub(crate) const MOTION_EASE_ENTER: &str = "cubic-bezier(0, 0, 0, 1)";
 
 pub(crate) fn hex(c: [u8; 3]) -> String {
     format!("#{:02x}{:02x}{:02x}", c[0], c[1], c[2])
@@ -53,7 +59,10 @@ impl UiScale {
     }
 }
 
-pub(crate) fn css_root(percent: u32) -> String {
+pub(crate) fn css_root(percent: u32, reduced_motion: bool) -> String {
+    let motion_fast = if reduced_motion { 0 } else { MOTION_FAST_MS };
+    let motion_state = if reduced_motion { 0 } else { MOTION_STATE_MS };
+    let motion_enter = if reduced_motion { 0 } else { MOTION_ENTER_MS };
     format!(
         ":root{{\
 --s:{s:.2};\
@@ -73,6 +82,8 @@ pub(crate) fn css_root(percent: u32) -> String {
 --dark:{dark};--bd:{bd};\
 --ink:{ink};--ink2:{ink2};--ink3:{ink3};--accent:{accent};\
 --way-browser:{wb};--way-stage:{ws};--way-inspector:{wi};--way-timeline:{wt};\
+--motion-direct:{motion_direct}ms;--motion-fast:{motion_fast}ms;--motion-state:{motion_state}ms;--motion-enter:{motion_enter}ms;\
+--motion-ease-standard:{ease_standard};--motion-ease-enter:{ease_enter};\
 }}",
         s = percent as f64 / 100.0,
         app = hex(SURFACE_APP),
@@ -89,7 +100,40 @@ pub(crate) fn css_root(percent: u32) -> String {
         ws = hex(WAY_STAGE),
         wi = hex(WAY_INSPECTOR),
         wt = hex(WAY_TIMELINE),
+        motion_direct = MOTION_DIRECT_MS,
+        ease_standard = MOTION_EASE_STANDARD,
+        ease_enter = MOTION_EASE_ENTER,
     )
+}
+
+#[cfg(target_os = "macos")]
+pub(crate) fn system_prefers_reduced_motion() -> bool {
+    use objc2_app_kit::NSWorkspace;
+
+    NSWorkspace::sharedWorkspace().accessibilityDisplayShouldReduceMotion()
+}
+
+#[cfg(not(target_os = "macos"))]
+pub(crate) fn system_prefers_reduced_motion() -> bool {
+    false
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn motion_tokens_follow_the_material_short_scale_and_reduce_to_zero() {
+        let ordinary = super::css_root(100, false);
+        assert!(ordinary.contains("--motion-direct:0ms"));
+        assert!(ordinary.contains("--motion-fast:100ms"));
+        assert!(ordinary.contains("--motion-state:150ms"));
+        assert!(ordinary.contains("--motion-enter:200ms"));
+        assert!(ordinary.contains("--motion-ease-standard:cubic-bezier(0.2, 0, 0, 1)"));
+
+        let reduced = super::css_root(100, true);
+        assert!(reduced.contains("--motion-fast:0ms"));
+        assert!(reduced.contains("--motion-state:0ms"));
+        assert!(reduced.contains("--motion-enter:0ms"));
+    }
 }
 
 /// ラベル配色の枚数。DTCG 正本(`next/ui/motolii-tokens-rs`)由来の唯一の生きた値。

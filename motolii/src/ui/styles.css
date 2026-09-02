@@ -14,6 +14,86 @@
     user-select: none;
 }
 
+/* Motionは状態の前後をつなぐだけ。位置・寸法・scroll・作品時刻は補間しない。 */
+.menu,
+.zbtn,
+.srow,
+.tcard,
+.vitem,
+.vout,
+.glyph,
+.ptab,
+.aspot,
+.adot,
+.choice-trigger,
+#stagefoot .chip,
+#play,
+.output-cancel,
+.prow .v,
+.zone,
+.dz,
+.dropmap {
+    transition-property: background-color, color, border-color, opacity, box-shadow;
+    transition-duration: var(--motion-fast);
+    transition-timing-function: var(--motion-ease-standard);
+}
+
+.srow,
+.tcard,
+.glyph,
+.ptab,
+.choice-trigger,
+.zone {
+    transition-duration: var(--motion-state);
+}
+
+/* 押した瞬間は待たせず、離した後だけ短く戻す。 */
+.menu:active,
+.zbtn:active,
+.vitem:active,
+.vout:active,
+.glyph:active,
+.ptab:active,
+#play:active,
+.output-cancel:active {
+    transition-duration: var(--motion-direct);
+}
+
+@keyframes motion-panel-enter {
+    from { opacity: 0.82; transform: translateY(2px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes motion-menu-enter {
+    from { opacity: 0; transform: translateY(-2px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes motion-fade-enter {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes motion-dock-guide-enter {
+    from { opacity: 0; transform: translate(-50%, -50%) scale(0.94); }
+    to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+.zbody > * {
+    animation: motion-panel-enter var(--motion-enter) var(--motion-ease-enter) both;
+}
+
+.vmenu {
+    transform-origin: top left;
+    animation: motion-menu-enter var(--motion-enter) var(--motion-ease-enter) both;
+}
+
+.prow.blend-pick,
+.file-drop-overlay,
+.dock-ghost {
+    animation: motion-fade-enter var(--motion-state) var(--motion-ease-enter) both;
+}
+
 html {
     background: var(--app);
     color: var(--ink);
@@ -28,6 +108,7 @@ body {
 
 #app {
     display: grid;
+    position: relative;
     grid-template-columns: 1fr;
     height: 100vh;
     width: 100vw;
@@ -54,6 +135,8 @@ body {
     flex-direction: row;
     align-items: center;
     overflow: visible;
+    position: relative;
+    z-index: 20;
 }
 
 .appname {
@@ -63,17 +146,47 @@ body {
 }
 
 .menu {
+    border: 0;
+    background: transparent;
     padding: 0 var(--sp3);
     height: 100%;
     display: flex;
     align-items: center;
     color: var(--ink2);
     font-size: var(--t-base);
+    font-family: inherit;
+    position: relative;
+    z-index: 12;
 }
 
 .menu:hover {
     background: var(--hover);
     color: var(--ink);
+}
+
+.menu:active {
+    background: var(--raised);
+}
+
+.menu:focus-visible,
+.vitem:focus-visible,
+.vout:focus-visible,
+.semantic-button:focus-visible {
+    outline: var(--line) solid var(--accent);
+    outline-offset: calc(-1 * var(--line));
+}
+
+.semantic-button {
+    appearance: none;
+    -webkit-appearance: none;
+    box-sizing: border-box;
+    color: inherit;
+    font: inherit;
+    text-align: inherit;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
 }
 
 .zoomctl {
@@ -119,15 +232,24 @@ body {
 }
 
 .vgrip {
+    flex: 0 0 calc(6 * var(--s) * 1px);
+    width: calc(6 * var(--s) * 1px);
     background: var(--panel);
     border-left: var(--line) solid var(--dark);
     border-right: var(--line) solid var(--dark);
 }
 
 .hgrip {
+    flex: 0 0 calc(6 * var(--s) * 1px);
+    height: calc(6 * var(--s) * 1px);
     background: var(--panel);
     border-top: var(--line) solid var(--dark);
     border-bottom: var(--line) solid var(--dark);
+}
+
+.vgrip:hover,
+.hgrip:hover {
+    background: var(--accent);
 }
 
 .glyph {
@@ -164,51 +286,6 @@ body {
     display: flex;
     flex-direction: column;
     overflow: hidden;
-}
-
-.btoolbar {
-    height: calc(24 * var(--s) * 1px);
-    flex: 0 0 auto;
-    display: flex;
-    align-items: center;
-    gap: var(--sp1);
-    padding: var(--sp1) var(--sp1);
-    border-bottom: var(--line) solid var(--bd);
-}
-
-.hbtn,
-.tbtn {
-    height: var(--hit);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border: var(--line) solid var(--bd);
-    background: var(--raised);
-    color: var(--ink);
-}
-
-.hbtn {
-    width: var(--hit);
-    color: var(--ink2);
-    font-size: var(--t-base);
-}
-
-.tbtn {
-    padding: 0 var(--sp2);
-    font-size: var(--t-micro);
-}
-
-.search {
-    min-width: 0;
-    flex: 1;
-    height: var(--hit);
-    display: flex;
-    align-items: center;
-    padding: 0 var(--sp3);
-    border: var(--line) solid var(--bd);
-    background: var(--raised);
-    color: var(--ink3);
-    font-size: var(--t-micro);
 }
 
 .bwork {
@@ -448,13 +525,65 @@ body {
     color: var(--ink);
 }
 
-.menu.on {
+.menu-shell.on > .menu {
     color: var(--ink);
     background: var(--raised);
 }
 
-.menu {
+.menu-shell {
     position: relative;
+    height: 100%;
+    display: flex;
+    align-items: stretch;
+}
+
+.menu-dismiss {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 10;
+    border: 0;
+    background: transparent;
+    opacity: 0;
+    cursor: default;
+}
+
+.choice-trigger {
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+}
+
+.choice-dismiss {
+    position: fixed;
+    inset: 0;
+    z-index: 14;
+    background: transparent;
+    opacity: 0;
+    cursor: default;
+}
+
+.file-drop-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    background: rgba(0, 0, 0, .62);
+}
+
+.file-drop-card {
+    padding: var(--sp5) var(--sp6);
+    border: 2px dashed var(--accent);
+    background: var(--raised);
+    color: var(--ink);
+    font-size: var(--t-title);
 }
 
 .vmenu {
@@ -465,20 +594,32 @@ body {
     flex-direction: column;
     background: var(--raised);
     border: var(--line) solid var(--dark);
-    z-index: 10;
+    min-width: calc(120 * var(--s) * 1px);
+    padding: var(--sp1) 0;
+    z-index: 13;
 }
 
 .vrow {
     display: flex;
     align-items: center;
-    gap: var(--sp2);
+    min-height: var(--row);
+}
+
+.vrow.menu-section {
+    border-bottom: var(--line) solid var(--dark);
+    margin-bottom: var(--sp1);
+    padding-bottom: var(--sp1);
 }
 
 .vout {
+    border: 0;
+    background: transparent;
     padding: var(--sp1) var(--sp2);
     margin-left: auto;
     color: var(--ink3);
     font-size: var(--t-dense);
+    font-family: inherit;
+    text-align: right;
 }
 
 .vout.on {
@@ -486,13 +627,36 @@ body {
 }
 
 .vitem {
+    flex: 1;
+    border: 0;
+    background: transparent;
     padding: var(--sp1) var(--sp3);
-    color: var(--ink2);
+    color: var(--ink);
     white-space: nowrap;
+    font-size: var(--t-base);
+    font-family: inherit;
+    text-align: left;
 }
 
 .vitem.on {
     color: var(--ink);
+}
+
+.vitem:hover:not(:disabled),
+.vout:hover:not(:disabled) {
+    background: var(--hover);
+    color: var(--ink);
+}
+
+.vitem:active:not(:disabled),
+.vout:active:not(:disabled) {
+    background: var(--panel);
+}
+
+.vitem:disabled,
+.vout:disabled {
+    color: var(--ink3);
+    opacity: 0.45;
 }
 
 #ease {
@@ -505,7 +669,14 @@ body {
 
 /* 掴んでいる間のタブ。消えたのか掴んでいるのかが分からないと手が止まる。 */
 .ptab.held {
-    opacity: 0.4;
+    opacity: 0.62;
+    cursor: grabbing;
+}
+
+.ptab.pressed {
+    color: var(--ink);
+    background: var(--hover);
+    cursor: grabbing;
 }
 
 /* 置き場の木。節は flex、葉は zone。割合は節が持つ。 */
@@ -536,10 +707,41 @@ body {
 .dropmap {
     position: absolute;
     inset: 0;
+    z-index: 30;
+    opacity: 0;
+}
+
+.dock-capture {
+    position: fixed;
+    inset: 0;
+    z-index: 29;
+    cursor: grabbing;
+}
+
+.dropmap.dragging {
+    opacity: 1;
+    animation: motion-fade-enter var(--motion-fast) var(--motion-ease-enter) both;
 }
 
 .dz {
     position: absolute;
+    border: var(--line) solid transparent;
+    background: transparent;
+    opacity: 1;
+    overflow: hidden;
+}
+
+.dz::after {
+    content: "";
+    position: absolute;
+    inset: var(--sp2);
+    background: var(--accent);
+    border: var(--line) solid var(--accent);
+    opacity: 0;
+    transform: scale(0.96);
+    transition-property: opacity, transform;
+    transition-duration: var(--motion-state);
+    transition-timing-function: var(--motion-ease-standard);
 }
 
 .dz.top { left: 0; right: 0; top: 0; height: 25%; }
@@ -548,9 +750,94 @@ body {
 .dz.right { top: 25%; bottom: 25%; right: 0; width: 25%; }
 .dz.center { top: 25%; bottom: 25%; left: 25%; right: 25%; }
 
-.dz.here {
-    background: var(--accent);
+.dz:hover {
+    border-color: var(--accent);
+}
+
+.dz:hover::after {
     opacity: 0.28;
+    transform: scale(1);
+}
+
+.dock-guide {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: calc(68 * var(--s) * 1px);
+    height: calc(68 * var(--s) * 1px);
+    transform: translate(-50%, -50%);
+    background: var(--panel);
+    border: var(--line) solid var(--bd);
+    z-index: 2;
+    pointer-events: none;
+    animation: motion-dock-guide-enter var(--motion-state) var(--motion-ease-enter) both;
+}
+
+.dock-guide > span {
+    position: absolute;
+    background: var(--raised);
+    border: var(--line) solid var(--ink3);
+    transition-property: background-color, border-color, transform, box-shadow;
+    transition-duration: var(--motion-fast);
+    transition-timing-function: var(--motion-ease-standard);
+}
+
+.dz.center:hover ~ .dock-guide .dock-guide-center,
+.dz.top:hover ~ .dock-guide .dock-guide-top,
+.dz.bottom:hover ~ .dock-guide .dock-guide-bottom,
+.dz.left:hover ~ .dock-guide .dock-guide-left,
+.dz.right:hover ~ .dock-guide .dock-guide-right {
+    background: var(--accent);
+    border-color: var(--accent);
+    transform: scale(1.12);
+    box-shadow: 0 0 0 var(--sp1) var(--dark);
+}
+
+.dock-guide-center {
+    left: 35%;
+    top: 35%;
+    width: 30%;
+    height: 30%;
+}
+
+.dock-guide-top {
+    left: 35%;
+    top: 6%;
+    width: 30%;
+    height: 23%;
+}
+
+.dock-guide-bottom {
+    left: 35%;
+    bottom: 6%;
+    width: 30%;
+    height: 23%;
+}
+
+.dock-guide-left {
+    left: 6%;
+    top: 35%;
+    width: 23%;
+    height: 30%;
+}
+
+.dock-guide-right {
+    right: 6%;
+    top: 35%;
+    width: 23%;
+    height: 30%;
+}
+
+.dock-ghost {
+    position: fixed;
+    z-index: 40;
+    pointer-events: none;
+    padding: var(--sp2) var(--sp4);
+    color: var(--ink);
+    background: var(--raised);
+    border: var(--line) solid var(--accent);
+    box-shadow: 0 var(--sp2) var(--sp4) var(--dark);
+    font-size: var(--t-title);
 }
 
 /* 何を編集しているか。空振りに気づけるよう、選べていない時は盤ごと沈める。 */
@@ -646,6 +933,8 @@ body {
     background: var(--app);
     border-bottom: var(--line) solid var(--dark);
     flex: 0 0 auto;
+    overflow-x: auto;
+    overflow-y: hidden;
 }
 
 .ptab {
@@ -658,6 +947,7 @@ body {
     border-bottom: 2px solid transparent;
     font-size: var(--t-title);
     cursor: grab;
+    flex: 0 0 auto;
 }
 
 .ptab.on {
@@ -700,6 +990,8 @@ body {
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    position: relative;
+    z-index: 15;
 }
 
 .ident {
@@ -974,6 +1266,54 @@ body {
     color: var(--ink3);
 }
 
+.output-status {
+    display: flex;
+    align-items: center;
+    gap: var(--sp3);
+    min-width: 0;
+    color: var(--ink2);
+    font-size: var(--t-dense);
+}
+
+.output-status span {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.output-status.compact {
+    margin-left: auto;
+    max-width: 55%;
+}
+
+.output-status.panel {
+    min-height: var(--section);
+    padding: 0 var(--sp4);
+    border-top: var(--line) solid var(--dark);
+    background: var(--panel);
+}
+
+.output-cancel {
+    flex: 0 0 auto;
+    border: var(--line) solid var(--bd);
+    background: var(--raised);
+    color: var(--ink);
+    padding: var(--sp1) var(--sp3);
+    font: inherit;
+}
+
+.output-cancel:hover {
+    background: var(--hover);
+}
+
+.output-cancel:active {
+    background: var(--panel);
+}
+
+.output-cancel:focus-visible {
+    outline: var(--line) solid var(--accent);
+}
+
 .vgrip { cursor: col-resize; }
 .hgrip { cursor: row-resize; }
 
@@ -981,9 +1321,7 @@ body {
 .btab,
 .tcard:not(.disabled),
 .glyph,
-.zbtn,
-.hbtn,
-.tbtn,
+    .zbtn,
 .srow {
     cursor: pointer;
 }

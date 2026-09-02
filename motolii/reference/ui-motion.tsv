@@ -1,0 +1,6 @@
+family	duration_ms	easing	applies_to	excludes	oracle	status
+direct	0	linear	stage_timeline_scrub_splitter_scroll_drag_coordinates_playhead	none	direct_geometry_transition_count_0	PASS
+fast	100	cubic-bezier(0.2_0_0_1)	hover_pressed_focus_drop_target	layout_geometry	shared_state_transition	PASS
+state	150	cubic-bezier(0.2_0_0_1)	selected_tab_card_key_mute_inspector_choice	stage_pixels_playhead	shared_state_transition	PASS
+enter	200	cubic-bezier(0_0_0_1)	menu_panel_file_drop_feedback	frequent_direct_manipulation	60Hz_monotonic_opacity_12_frames	PASS
+reduced	0	linear	all_ui_motion	data_driven_playback_and_scrub	AppKit_NSWorkspace_reduce_motion_to_zero	PASS
