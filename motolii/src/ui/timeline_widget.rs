@@ -1208,11 +1208,12 @@ impl Widget for TimelineWidget {
         }
 
         if let Some((from, to)) = self.marquee {
+            // 囲いは pointer の CSS px で持つ。盤は device px で描くので、ここで倍率を掛ける。
             let r = Rect::new(
-                from.0.min(to.0),
-                from.1.min(to.1),
-                from.0.max(to.0),
-                from.1.max(to.1),
+                from.0.min(to.0) * k,
+                from.1.min(to.1) * k,
+                from.0.max(to.0) * k,
+                from.1.max(to.1) * k,
             );
             fill_rect(&mut s, r, Color::from_rgba8(0xd8, 0xb5, 0x74, 0x22));
             s.stroke(

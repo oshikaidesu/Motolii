@@ -72,3 +72,5 @@ Utility(ANCHOR)は Inspector の Transform 行へ。Output は File▸Export と
 4. 色型の引き出し(サークル、書き戻し口は shape/text の data)、参考画像の貼り場(素材と同じ口、Timeline に置かれない role)
 5. 仕切りを引きすぎると vello が溢れて落ちる(`vello_encoding config.rs:185`、8/30 から既知)。tile に最小寸法の柵は立てた。根は未特定
 6. 配置の永続化、机の pin と複数 instance
+7. **UX の振る舞いが harness で捕まらない(病巣、2026-09-03 利用者)。** 打鍵の規則(`aim_keystrokes`・外クリック確定・focus 喪失)が winit の host に居て harness が通らない。上流 Blitz の焦点 model(autofocus が属性の付く前に可否を見る bug)を直して host の規則を消す、または規則を Blitz の event driver 層へ移し、窓と harness を同じ道にする
+8. 試験の駆動を kittest(rerun 製、AccessKit 駆動)へ委託。Blitz の `accessibility` feature を有効にし、custom widget(Stage・Timeline・Ease)は Motolii が AccessKit node を申告する。画は vello_cpu の golden、振る舞いは kittest
