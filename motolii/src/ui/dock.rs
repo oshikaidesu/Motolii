@@ -12,12 +12,9 @@ pub(crate) enum Panel {
     Create,
     Colors,
     Stage,
-    Output,
     Inspector,
-    Utility,
-    Settings,
     Timeline,
-    Ease,
+    Desk,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -25,6 +22,7 @@ enum Zone {
     Left,
     Center,
     Right,
+    Desk,
     Bottom,
 }
 
@@ -42,12 +40,9 @@ const PANELS: &[Spec] = &[
     Spec { panel: Panel::Create, label: "Create", way: "var(--way-browser)", home: Zone::Left, window: (420, 640) },
     Spec { panel: Panel::Colors, label: "Colors", way: "var(--way-browser)", home: Zone::Left, window: (420, 640) },
     Spec { panel: Panel::Stage, label: "Stage", way: "var(--way-stage)", home: Zone::Center, window: (960, 620) },
-    Spec { panel: Panel::Output, label: "Output", way: "var(--way-stage)", home: Zone::Center, window: (960, 620) },
     Spec { panel: Panel::Inspector, label: "Inspector", way: "var(--way-inspector)", home: Zone::Right, window: (340, 700) },
-    Spec { panel: Panel::Utility, label: "Utility", way: "var(--way-inspector)", home: Zone::Right, window: (340, 700) },
-    Spec { panel: Panel::Settings, label: "Settings", way: "var(--way-inspector)", home: Zone::Right, window: (340, 700) },
     Spec { panel: Panel::Timeline, label: "Timeline", way: "var(--way-timeline)", home: Zone::Bottom, window: (1100, 420) },
-    Spec { panel: Panel::Ease, label: "Ease", way: "var(--way-timeline)", home: Zone::Right, window: (420, 520) },
+    Spec { panel: Panel::Desk, label: "Desk", way: "var(--way-timeline)", home: Zone::Desk, window: (420, 520) },
 ];
 
 impl Panel {
@@ -87,6 +82,7 @@ impl Panel {
             Zone::Left => "left",
             Zone::Center => "center",
             Zone::Right => "right",
+            Zone::Desk => "desk",
             Zone::Bottom => "bottom",
         })
     }
@@ -124,6 +120,8 @@ pub(super) struct Dock {
     layout: PanelLayout,
     hidden: BTreeSet<Panel>,
     detached: BTreeSet<Panel>,
+    /// 引き出しを開けて机を広げている間、畳んでいた時の割合を覚える。
+    desk_folded: Option<f64>,
 }
 
 impl Default for Dock {
@@ -132,6 +130,7 @@ impl Default for Dock {
             layout: canonical_layout(),
             hidden: BTreeSet::new(),
             detached: BTreeSet::new(),
+            desk_folded: None,
         }
     }
 }
@@ -191,12 +190,16 @@ impl Dock {
         self.layout.set_split_ratio(split, ratio);
     }
 
-    pub(super) fn detach(&mut self, panel: Panel) {
-        if !self.is_visible(panel) {
-            return;
+    /// 別窓へ出す。隠れている panel も出せる(隠れは解ける)。既に窓なら出さない。
+    pub(super) fn detach(&mut self, panel: Panel) -> bool {
+        if self.detached.contains(&panel)
+            || self.layout.tile_for_panel(&panel.workbench_id()).is_none()
+        {
+            return false;
         }
         self.hidden.remove(&panel);
         self.detached.insert(panel);
+        true
     }
 
     pub(super) fn reattach(&mut self, panel: Panel) {
@@ -227,7 +230,30 @@ impl Dock {
 
     pub(super) fn reset_layout(&mut self) {
         self.hidden.clear();
+        self.desk_folded = None;
         self.layout = canonical_layout();
+    }
+
+    pub(super) fn desk_open(&self) -> bool {
+        self.desk_folded.is_some()
+    }
+
+    /// 引き出しは机の中に出る。開けたら机の tile が上へ広がり、閉じたら畳んでいた割合へ戻る。
+    pub(super) fn open_desk(&mut self, open: bool) {
+        let id = SplitId::new("right-col");
+        match (open, self.desk_folded) {
+            (true, None) => {
+                if let Some(folded) = self.layout.split_ratio(&id) {
+                    self.desk_folded = Some(folded);
+                    self.layout.set_split_ratio(&id, DESK_OPEN_RATIO);
+                }
+            }
+            (false, Some(folded)) => {
+                self.desk_folded = None;
+                self.layout.set_split_ratio(&id, folded);
+            }
+            _ => {}
+        }
     }
 
     fn show(&mut self, panel: Panel) {
@@ -251,6 +277,9 @@ impl Dock {
     }
 }
 
+/// 引き出しが開いている間の Inspector の取り分。残りが机。
+const DESK_OPEN_RATIO: f64 = 0.42;
+
 fn canonical_layout() -> PanelLayout {
     PanelLayout::new(LayoutNode::split(
         "root",
@@ -265,8 +294,14 @@ fn canonical_layout() -> PanelLayout {
                 "top-center-right",
                 SplitAxis::Horizontal,
                 0.56 / 0.78,
-                LayoutNode::tile("center", ["Stage", "Output"]),
-                LayoutNode::tile("right", ["Inspector", "Utility", "Settings", "Ease"]),
+                LayoutNode::tile("center", ["Stage"]),
+                LayoutNode::split(
+                    "right-col",
+                    SplitAxis::Vertical,
+                    0.86,
+                    LayoutNode::tile("right", ["Inspector"]),
+                    LayoutNode::tile("desk", ["Desk"]),
+                ),
             ),
         ),
         LayoutNode::tile("bottom", ["Timeline"]),
@@ -294,17 +329,17 @@ mod tests {
     fn any_pane_can_be_split_again() {
         let mut dock = Dock::default();
         let target = dock.layout.tile_for_panel(&Panel::Media.workbench_id()).unwrap();
-        dock.drop_onto(Panel::Ease, &target, Side::Bottom);
+        dock.drop_onto(Panel::Desk, &target, Side::Bottom);
         assert!(dock.valid());
-        assert!(dock.is_visible(Panel::Ease));
+        assert!(dock.is_visible(Panel::Desk));
     }
 
     #[test]
     fn dropping_in_the_middle_stacks_instead_of_splitting() {
         let mut dock = Dock::default();
         let target = dock.layout.tile_for_panel(&Panel::Stage.workbench_id()).unwrap();
-        dock.drop_onto(Panel::Ease, &target, Side::Center);
-        assert!(dock.is_active(Panel::Ease));
+        dock.drop_onto(Panel::Desk, &target, Side::Center);
+        assert!(dock.is_active(Panel::Desk));
         assert!(dock.valid());
     }
 

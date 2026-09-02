@@ -142,8 +142,7 @@ fn finish_tab_release(
         GestureEffect::Drop { .. } => {
             if let Some((target, side)) = dock_target_at(tile_nodes, x, y) {
                 dock.write().drop_onto(drag.panel, &target, side);
-            } else {
-                dock.write().detach(drag.panel);
+            } else if dock.write().detach(drag.panel) {
                 host.open(drag.panel);
             }
         }
@@ -245,7 +244,12 @@ fn wire_windows(host: &crate::ui::host::Host, panes: Panes) {
         let scope = dioxus_core::current_scope_id();
         let mut echo = panes.echo;
         host.listen(move || {
-            runtime.in_scope(scope, move || *echo.write() += 1);
+            runtime.in_scope(scope, move || {
+                // 面が作り直された後(hotpatch・再描画)に古い信号へ書くと落ちる。捨てる。
+                if let Ok(mut echo) = echo.try_write() {
+                    *echo += 1;
+                }
+            });
         })
     });
     let host = host.clone();
@@ -276,11 +280,6 @@ fn panel_body(panel: Panel, session: &Session, ui: &fixture::UiData, p: Panes) -
             revision: p.revision,
             comp_line: ui.comp_line.clone(),
         }),
-        Panel::Output => rsx!(OutputPanel { session: session.clone(), echo: p.echo }),
-        Panel::Settings => rsx!(SettingsPanel {
-            session: session.clone(),
-            scale_pct: p.scale_pct,
-        }),
         Panel::Inspector => rsx!(InspectorPanel {
             session: session.clone(),
             selected,
@@ -289,14 +288,17 @@ fn panel_body(panel: Panel, session: &Session, ui: &fixture::UiData, p: Panes) -
             playhead: p.playhead,
             choice_open: p.inspector_choice,
         }),
-        Panel::Utility => rsx!(UtilityPanel {
-            session: session.clone(),
-            selected,
-            revision: p.revision,
-        }),
-        Panel::Ease => rsx!(EasePanel {
+        Panel::Desk => rsx!(crate::ui::desk::DeskPanel {
             session: session.clone(),
             revision: p.revision,
+            playhead: p.playhead,
+            on_history: {
+                let doc = session.doc.clone();
+                let timeline_tx = session.timeline_tx.clone();
+                move |steps: i32| {
+                    history_step(&doc, p.layer_rows, p.attrs_state, &timeline_tx, p.revision, steps);
+                }
+            },
         }),
         Panel::Timeline => rsx!(TimelinePanel {
             session: session.clone(),
@@ -390,42 +392,9 @@ fn InspectorPanel(
         num_edit,
         choice_open,
         playhead,
-    )
-}
-
-#[component]
-fn EasePanel(session: Session, revision: Signal<u32>) -> Element {
-    let shape = use_hook(|| {
-        std::sync::Arc::new(std::sync::Mutex::new(crate::ui::ease_widget::DEFAULT))
-    });
-    let editor = use_hook(|| {
-        CustomWidgetAttr::new(crate::ui::ease_widget::EaseWidget::new(
-            shape.clone(),
-            session.clone(),
-        ))
-    });
-    let kind_name = use_signal(String::new);
-    let kinds = use_hook(|| {
-        CustomWidgetAttr::new(
-            crate::ui::ease_widget::KindsWidget::new(shape.clone(), session.clone())
-                .with_name_mirror(kind_name),
-        )
-    });
-    crate::ui::ease::ease_panel(&session, editor, kinds, kind_name, revision)
-}
-
-#[component]
-fn UtilityPanel(
-    session: Session,
-    selected: Option<crate::doc::store::LayerId>,
-    revision: Signal<u32>,
-) -> Element {
-    crate::ui::utility::utility_panel(
-        &session.doc,
-        selected,
         &session.selected_size,
-        &session.clock,
-        revision,
+        &session.focus,
+        session.live_focus(),
     )
 }
 
@@ -482,7 +451,7 @@ fn StagePanel(
 /// 見る側の設定。**作品には入らない**物だけを置く。
 /// 散らばっていると探せないので、窓の設定はここへ集める。
 #[component]
-fn SettingsPanel(session: Session, scale_pct: Signal<u32>) -> Element {
+fn SettingsSheet(session: Session, scale_pct: Signal<u32>) -> Element {
     let dim = session.frame_dim.clone();
     let pct = use_signal(|| dim.load(std::sync::atomic::Ordering::Relaxed));
     let dim_step = move |dim: std::sync::Arc<std::sync::atomic::AtomicU32>, mut pct: Signal<u32>, by: i32| {
@@ -500,7 +469,7 @@ fn SettingsPanel(session: Session, scale_pct: Signal<u32>) -> Element {
     let (ui_a, ui_b) = (session.scale.clone(), session.scale.clone());
 
     rsx!(
-        div { id: "inspector",
+        div { class: "settings-sheet",
             div { class: "sec", "VIEW" }
             div { class: "prow",
                 span { class: "pname", "Outside dim" }
@@ -519,36 +488,6 @@ fn SettingsPanel(session: Session, scale_pct: Signal<u32>) -> Element {
                     SemanticButton { class: "zbtn", aria_label: "Increase interface scale", onclick: move |_| scale_step(ui_b.clone(), scale_pct, 5), "+" }
                 }
             }
-        }
-    )
-}
-
-/// 出す物だけを映す窓。Stage が世界を見る場になった以上、
-/// **出力を確かめる場**が別に要る(枠を回した時、Stage では確かめようがない)。
-#[component]
-fn OutputPanel(session: Session, echo: Signal<u32>) -> Element {
-    let attr = use_hook(|| {
-        CustomWidgetAttr::new(StageWidget::new(
-            session.clock.clone(),
-            session.doc.clone(),
-            session.selection.clone(),
-            Signal::new(None),
-            Signal::new(0),
-            session.selected_size.clone(),
-            session.view_camera.clone(),
-            session.rings.clone(),
-            session.frame_dim.clone(),
-            session.gesture.clone(),
-            true,
-        ))
-    });
-    let generation = echo();
-    rsx!(
-        div { id: "stagecol",
-            div { id: "stage",
-                object { "data": attr }
-            }
-            OutputStatus { controller: session.export.clone(), surface: OutputSurface::Panel, generation }
         }
     )
 }
@@ -597,6 +536,32 @@ fn TimelinePanel(
         renaming,
         revision,
     )
+}
+
+/// 履歴を進める・戻す手は 1 つ。キーも机の履歴も同じ手を使う(行の目・solo・鍵も追従する)。
+fn history_step(
+    doc: &std::sync::Arc<std::sync::Mutex<crate::doc::store::Document>>,
+    layer_rows: Signal<Vec<fixture::LayerRow>>,
+    attrs_state: Signal<Vec<(bool, bool, bool)>>,
+    timeline_tx: &std::sync::mpsc::Sender<TimelineMsg>,
+    revision: Signal<u32>,
+    steps: i32,
+) {
+    let mut moved = 0;
+    {
+        let mut d = doc.lock().unwrap();
+        for _ in 0..steps.unsigned_abs() {
+            let ok = if steps < 0 { d.undo() } else { d.redo() };
+            if !ok {
+                break;
+            }
+            moved += 1;
+        }
+    }
+    if moved > 0 {
+        refresh_layer_projection(doc, layer_rows, attrs_state, timeline_tx, revision);
+    }
+    println!("PROBE room=write verdict=history moved={moved}");
 }
 
 fn refresh_layer_projection(
@@ -703,6 +668,10 @@ fn dock_side_at(x: f64, y: f64, width: f64, height: f64) -> Side {
     }
 }
 
+fn node_has_id(node: &blitz_dom::Node, expected: &str) -> bool {
+    node.attr(blitz_dom::local_name!("id")).is_some_and(|id| id == expected)
+}
+
 fn dock_target_at(tile_nodes: &TileNodes, x: f64, y: f64) -> Option<(TileId, Side)> {
     let mounted = tile_nodes
         .borrow()
@@ -712,6 +681,10 @@ fn dock_target_at(tile_nodes: &TileNodes, x: f64, y: f64) -> Option<(TileId, Sid
     for (id, handle) in mounted {
         let Some(doc) = handle.try_doc() else { continue };
         let Some(node) = doc.get_node(handle.node_id()) else { continue };
+        // 消えた箱の id は次に作られた節へ再利用される。本人でなければ古い取っ手。
+        if !node_has_id(node, &format!("tile-{}", id.as_str())) {
+            continue;
+        }
         let origin = node.absolute_position(0.0, 0.0);
         let size = node.final_layout().size;
         let local_x = x - f64::from(origin.x);
@@ -744,6 +717,8 @@ fn dock_zone(
     rsx!(
         div {
             class: "zone",
+            key: "{id}",
+            id: "tile-{id}",
             onmounted: {
                 let tile_nodes = tile_nodes.clone();
                 let id = id.clone();
@@ -842,6 +817,8 @@ fn tile_view(
             rsx!(
                 div {
                     class: "tlinear",
+                    key: "{id}",
+                    id: "split-{id}",
                     style: "flex-direction: {flow};",
                     onmounted: {
                         let split_nodes = split_nodes.clone();
@@ -882,6 +859,9 @@ fn tile_view(
                                 };
                                 let Some(doc) = handle.try_doc() else { return };
                                 let Some(node) = doc.get_node(handle.node_id()) else { return };
+                                if !node_has_id(node, &format!("split-{}", split.as_str())) {
+                                    return;
+                                }
                                 let layout = node.final_layout();
                                 let extent = if axis == SplitAxis::Horizontal {
                                     f64::from(layout.size.width)
@@ -943,6 +923,7 @@ fn tile_view(
 pub fn app() -> Element {
     let mut playing = use_signal(|| false);
     let mut dock = use_signal(Dock::default);
+
     let mut tab_drag = use_signal(|| Option::<TabDrag>::None);
     let mut grip = use_signal(|| Option::<GripDrag>::None);
     let split_nodes = use_hook(|| {
@@ -988,6 +969,8 @@ pub fn app() -> Element {
         let gesture = session.gesture.clone();
         host.on_focus_lost(move || {
             gesture.cancel();
+            // Cmd+Tab で離れると修飾の keyup が届かない。戻った時の Space が Cmd+Space になる。
+            crate::ui::keymap::forget_modifiers();
             runtime.in_scope(scope, move || {
                 if let Some(drag) = *tab_drag.peek() {
                     let _ = drag.cancel();
@@ -1008,6 +991,19 @@ pub fn app() -> Element {
     };
     let scale_pct = panes.scale_pct;
     wire_windows(&host, panes);
+    // 引き出しの開閉を机の tile の広さへ写す。机は呼ばれない — 開閉は Document と焦点から読む。
+    {
+        let session = session.clone();
+        use_effect(move || {
+            let _ = (panes.revision)();
+            let _ = (panes.echo)();
+            let open = crate::ui::desk::drawer_of(&session).is_some();
+            if dock.peek().desk_open() != open {
+                dock.write().open_desk(open);
+            }
+        });
+    }
+
     let Panes {
         layer_rows,
         attrs_state,
@@ -1116,7 +1112,11 @@ pub fn app() -> Element {
                         return;
                     }
                     crate::ui::keymap::note_key_down(&evt.key());
-                    if text_editing.read().is_some() || renaming.read().is_some() {
+                    // 打っているかは窓が DOM で決める(`aim_keystrokes`)。flag は欄より長生きする。
+                    if crate::ui::keymap::is_typing()
+                        || text_editing.read().is_some()
+                        || renaming.read().is_some()
+                    {
                         println!("PROBE room=input verdict=text-editing key={:?}", evt.key());
                         return;
                     }
@@ -1291,6 +1291,7 @@ pub fn app() -> Element {
                                         name: format!("{}", markers.len() + 1),
                                         time,
                                         duration: crate::doc::store::RationalTime::ZERO,
+                                        body: String::new(),
                                     });
                                     markers.sort_by(|a, b| {
                                         a.time.as_seconds_f64().total_cmp(&b.time.as_seconds_f64())
@@ -1336,6 +1337,7 @@ pub fn app() -> Element {
                             } else {
                                 selection.set(None);
                                 selected.set(None);
+                                *session.focus.lock().unwrap() = None;
                             }
                         }
                         Intent::PlayPause => {
@@ -1343,18 +1345,8 @@ pub fn app() -> Element {
                             playing.set(clock.playing());
                         }
                         Intent::Undo | Intent::Redo => {
-                            let mut d = doc.lock().unwrap();
-                            let moved = if matches!(intent, Intent::Undo) { d.undo() } else { d.redo() };
-                            let rows = fixture::layer_rows_from_doc(&d);
-                            let canvas = fixture::canvas_rows_from_doc(&d);
-                            drop(d);
-                            if moved {
-                                attrs_state.set(rows.iter().map(|r| (r.hidden, r.solo, r.locked)).collect());
-                                layer_rows.set(rows);
-                                let _ = timeline_tx.send(TimelineMsg::SetRows(canvas));
-                                *revision.write() += 1;
-                            }
-                            println!("PROBE room=write verdict=history moved={moved}");
+                            let steps = if matches!(intent, Intent::Undo) { -1 } else { 1 };
+                            history_step(&doc, layer_rows, attrs_state, &timeline_tx, revision, steps);
                         }
                         Intent::DeleteLayer => {
                             let targets = selection.all();
@@ -1717,16 +1709,21 @@ pub fn app() -> Element {
                                             let host = host.clone();
                                             move |evt: Event<MouseData>| {
                                                 evt.stop_propagation();
-                                                if dock.peek().is_detached(panel) {
-                                                    return;
+                                                if dock.write().detach(panel) {
+                                                    host.open(panel);
                                                 }
-                                                dock.write().detach(panel);
-                                                host.open(panel);
                                             }
                                         }
                                     }
                                 }
                             }
+                }
+                // 窓の都合は作品でないので、面を持たずヘッダに仕舞う。
+                SemanticMenu {
+                    id: MenuId::Settings,
+                    label: "Settings",
+                    open: open_menu,
+                    SettingsSheet { session: session.clone(), scale_pct: panes.scale_pct }
                 }
 
             }

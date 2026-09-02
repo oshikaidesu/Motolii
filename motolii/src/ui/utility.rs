@@ -1,13 +1,9 @@
 use std::sync::{Arc, Mutex};
 
-use dioxus_native::prelude::*;
-use crate::ui::semantic_menu::SemanticButton;
-
 use crate::doc::store::{
     property, Document, LayerId, PropertyId, RationalTime,
     Value,
 };
-use crate::ui::playback::Clock;
 
 fn vec2_at(doc: &Document, layer: LayerId, name: &str, t: RationalTime, fallback: (f64, f64)) -> (f64, f64) {
     let view = doc.view();
@@ -31,7 +27,7 @@ fn write_vec2(doc: &mut Document, layer: LayerId, name: &str, value: (f64, f64),
 }
 
 /// アンカーを箱の中の `(fx, fy)`(0..1)へ移し、位置で打ち消して絵を動かさない。
-fn move_anchor(
+pub(super) fn move_anchor(
     doc: &Arc<Mutex<Document>>,
     layer: LayerId,
     size: [f32; 2],
@@ -54,59 +50,4 @@ fn move_anchor(
         "PROBE room=write verdict=anchor-move layer={layer:?} to=({:.1},{:.1})",
         next.0, next.1
     );
-}
-
-pub(super) fn utility_panel(
-    doc: &Arc<Mutex<Document>>,
-    selection: Option<LayerId>,
-    selected_size: &Arc<Mutex<Option<[f32; 2]>>>,
-    clock: &Clock,
-    mut revision: Signal<u32>,
-) -> Element {
-    let _ = revision();
-    let t = RationalTime::try_new((clock.now_sec() * 3000.0) as i64, 3000)
-        .unwrap_or(RationalTime::ZERO);
-    let size = *selected_size.lock().unwrap();
-
-    // 升の並びそのものが意味なので、言葉は置かない(裁定451)。
-    let spots: [(f64, f64); 9] = [
-        (0.0, 0.0),
-        (0.5, 0.0),
-        (1.0, 0.0),
-        (0.0, 0.5),
-        (0.5, 0.5),
-        (1.0, 0.5),
-        (0.0, 1.0),
-        (0.5, 1.0),
-        (1.0, 1.0),
-    ];
-
-    rsx!(
-        div { id: "inspector",
-            div { class: "sec", "ANCHOR" }
-            if let (Some(layer), Some(size)) = (selection, size) {
-                div { class: "anchorgrid",
-                    for (fx , fy) in spots.iter().copied() {
-                        SemanticButton {
-                            class: "aspot",
-                            aria_label: "Set anchor {fx} {fy}",
-                            onclick: {
-                                let doc = doc.clone();
-                                move |_| {
-                                    move_anchor(&doc, layer, size, t, fx, fy);
-                                    *revision.write() += 1;
-                                }
-                            },
-                            span { class: "adot" }
-                        }
-                    }
-                }
-            } else if selection.is_none() {
-                div { class: "prow", span { class: "n empty", "No selection" } }
-            } else {
-                // 層は選ばれているが、まだ箱を測れていない(Stage が測る)。
-                div { class: "prow", span { class: "n empty", "No box yet" } }
-            }
-        }
-    )
 }

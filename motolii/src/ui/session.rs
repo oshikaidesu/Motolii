@@ -102,6 +102,10 @@ mod gesture_tests {
 pub(super) struct Selection(Arc<Mutex<Vec<LayerId>>>);
 
 impl Selection {
+    pub(super) fn clear(&self) {
+        self.0.lock().unwrap().clear();
+    }
+
     pub(super) fn get(&self) -> Option<LayerId> {
         self.0.lock().unwrap().last().copied()
     }
@@ -169,6 +173,27 @@ pub(super) struct Session {
     pub view_camera: Arc<Mutex<crate::render::engine::ObservationCamera>>,
     /// 今どのキーを掴んでいるか。イージングを触る口が要る(Document には入らない)。
     pub selected_keys: Arc<Mutex<Vec<KeySel>>>,
+    /// 今どの値に手が触れているか。Inspector が行を光らせて書き、机が覗く。
+    /// 机を呼ぶ口ではない — 机は Document とこれを読むだけ。
+    pub focus: Arc<Mutex<Option<Focus>>>,
+    /// 机の引き出しの開閉。窓をまたいで 1 つ。
+    pub desk: Arc<Mutex<DeskState>>,
+}
+
+/// 机の引き出し。焦点に付いて行くか、手で開けたか、手で閉じたか。
+/// 手で閉じた物は、焦点が導く物が変わるまで開かない(閉じたそばから開き直さない)。
+#[derive(Clone, Copy, PartialEq, Debug, Default)]
+pub(super) enum DeskState {
+    #[default]
+    Follow,
+    Open(crate::ui::desk::Drawer),
+    Shut(Option<crate::ui::desk::Drawer>),
+}
+
+/// 焦点の型。机の引き出しは型に一つで、機能名では増やさない。
+#[derive(Clone, PartialEq, Debug)]
+pub(super) enum Focus {
+    Blend(LayerId),
 }
 
 /// タイムラインで選んだキー。区間は「このキーから次のキーまで」。
@@ -202,6 +227,8 @@ impl Session {
             timeline_rx: std::rc::Rc::new(timeline_rx),
             ui: Arc::new(ui),
             selected_keys: Arc::new(Mutex::new(Vec::new())),
+            focus: Arc::new(Mutex::new(None)),
+            desk: Arc::new(Mutex::new(DeskState::Follow)),
             view_camera: Arc::new(Mutex::new(Default::default())),
             rings: Arc::new(std::sync::atomic::AtomicBool::new(true)),
             frame_dim: Arc::new(std::sync::atomic::AtomicU32::new(75)),
@@ -232,6 +259,22 @@ impl Session {
         *self.doc.lock().unwrap() = document;
         *self.project_path.lock().unwrap() = path;
         *self.saved_revision.lock().unwrap() = revision;
+        // 層の id を名指す窓側の手は、作品が変われば全部嘘になる。
+        self.selection.clear();
+        *self.focus.lock().unwrap() = None;
+        *self.desk.lock().unwrap() = DeskState::Follow;
+        self.selected_keys.lock().unwrap().clear();
+        *self.selected_size.lock().unwrap() = None;
+        *self.curve_clip.lock().unwrap() = None;
+    }
+
+    /// 生きている焦点。選んでいる層を指す物だけ。層が変われば焦点は消えたも同じ。
+    pub(super) fn live_focus(&self) -> Option<Focus> {
+        let focus = self.focus.lock().unwrap().clone()?;
+        match focus {
+            Focus::Blend(layer) if self.selection.get() == Some(layer) => Some(focus),
+            Focus::Blend(_) => None,
+        }
     }
 }
 

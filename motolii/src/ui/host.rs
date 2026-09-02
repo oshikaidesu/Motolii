@@ -163,6 +163,46 @@ impl Host {
     }
 }
 
+fn primary_mouse_press(event: &WindowEvent) -> Option<dioxus_native::winit::dpi::PhysicalPosition<f64>> {
+    match event {
+        WindowEvent::PointerButton {
+            state: ElementState::Pressed,
+            button: ButtonSource::Mouse(MouseButton::Left),
+            primary: true,
+            position,
+            ..
+        } => Some(*position),
+        _ => None,
+    }
+}
+
+/// 欄は許可制。押すまで無く、Enter・Escape・**外を押す**のどれでも欄ごと消える。
+/// 欄を持つ面がそれぞれ閉じ方を書くのではなく、外を押した時は欄へ Enter を送る。
+/// 窓に欄が在る間は打鍵が全部そこへ行く(`aim_keystrokes`)ので、閉じ損ねは鍵の全喪失になる。
+pub(crate) fn commit_field_outside(doc: &mut DioxusDocument, x: f32, y: f32) {
+    let Some(field) = doc.inner().query_selector("input").ok().flatten() else { return };
+    if doc.inner().hit(x, y).is_some_and(|hit| hit.node_id == field) {
+        return;
+    }
+    aim_keystrokes(doc);
+    let enter = |state| blitz_traits::events::BlitzKeyEvent {
+        key: keyboard_types::Key::Enter,
+        code: keyboard_types::Code::Enter,
+        modifiers: keyboard_types::Modifiers::empty(),
+        location: keyboard_types::Location::Standard,
+        is_auto_repeating: false,
+        is_composing: false,
+        state,
+        text: None,
+    };
+    doc.handle_ui_event(blitz_traits::events::UiEvent::KeyDown(enter(
+        blitz_traits::events::KeyState::Pressed,
+    )));
+    doc.handle_ui_event(blitz_traits::events::UiEvent::KeyUp(enter(
+        blitz_traits::events::KeyState::Released,
+    )));
+}
+
 fn primary_mouse_release(event: &WindowEvent) -> Option<dioxus_native::winit::dpi::PhysicalPosition<f64>> {
     match event {
         WindowEvent::PointerButton {
@@ -444,6 +484,16 @@ impl ApplicationHandler for Windows {
         if matches!(event, WindowEvent::KeyboardInput { .. }) {
             if let Some(view) = self.inner.windows.get_mut(&window_id) {
                 aim_keystrokes(view.downcast_doc_mut::<DioxusDocument>());
+            }
+        }
+        if let Some(position) = primary_mouse_press(&event) {
+            if let Some(view) = self.inner.windows.get_mut(&window_id) {
+                let coords = view.pointer_coords(position);
+                commit_field_outside(
+                    view.downcast_doc_mut::<DioxusDocument>(),
+                    coords.client_x,
+                    coords.client_y,
+                );
             }
         }
         if let WindowEvent::PointerMoved { position, .. } = &event {

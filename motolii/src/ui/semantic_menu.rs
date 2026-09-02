@@ -4,6 +4,7 @@ use dioxus_native::prelude::*;
 pub(super) enum MenuId {
     File,
     View,
+    Settings,
 }
 
 #[component]
@@ -26,6 +27,7 @@ impl MenuId {
         match self {
             Self::File => "file",
             Self::View => "view",
+            Self::Settings => "settings",
         }
     }
 }

@@ -384,6 +384,10 @@ pub(super) fn set_typing(on: bool) {
     TYPING.with(|t| t.set(on));
 }
 
+pub(super) fn is_typing() -> bool {
+    TYPING.with(std::cell::Cell::get)
+}
+
 /// イベントに乗ってきた修飾と、覚えている押し下げを合わせる。
 pub(super) fn lookup_held(
     key: &Key,

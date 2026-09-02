@@ -526,7 +526,7 @@ fn click_only_chrome_uses_real_buttons_and_real_disabled_state() {
         disabled
     );
 
-    let settings = gui.center_of("#dock-tab-Settings", 0);
+    let settings = gui.center_of("#menu-settings", 0);
     gui.click(settings.0, settings.1);
     assert_eq!(gui.count(".zbtn"), 4);
     assert_eq!(gui.count("button.semantic-button.zbtn"), 4);
@@ -1029,7 +1029,7 @@ fn a_split_out_panel_keeps_the_same_draggable_tab() {
 
 #[test]
 fn every_right_hand_panel_uses_the_same_dock_path() {
-    for panel in ["Inspector", "Utility", "Settings", "Ease"] {
+    for panel in ["Inspector", "Desk"] {
         let mut gui = Gui::open();
         let (x, y) = gui.center_of(&format!("#dock-tab-{panel}"), 0);
         gui.press(x, y);

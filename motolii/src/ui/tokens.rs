@@ -63,6 +63,8 @@ pub(crate) fn css_root(percent: u32, reduced_motion: bool) -> String {
     let motion_fast = if reduced_motion { 0 } else { MOTION_FAST_MS };
     let motion_state = if reduced_motion { 0 } else { MOTION_STATE_MS };
     let motion_enter = if reduced_motion { 0 } else { MOTION_ENTER_MS };
+    // 鳥の呼吸とまばたきは純装飾なので Reduce Motion で止める(2026-08-08 §3)。
+    let pet_play = if reduced_motion { "paused" } else { "running" };
     format!(
         ":root{{\
 --s:{s:.2};\
@@ -84,6 +86,7 @@ pub(crate) fn css_root(percent: u32, reduced_motion: bool) -> String {
 --way-browser:{wb};--way-stage:{ws};--way-inspector:{wi};--way-timeline:{wt};\
 --motion-direct:{motion_direct}ms;--motion-fast:{motion_fast}ms;--motion-state:{motion_state}ms;--motion-enter:{motion_enter}ms;\
 --motion-ease-standard:{ease_standard};--motion-ease-enter:{ease_enter};\
+--pet-play:{pet_play};\
 }}",
         s = percent as f64 / 100.0,
         app = hex(SURFACE_APP),

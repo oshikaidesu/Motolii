@@ -6,6 +6,7 @@ use dioxus_native::prelude::*;
 use crate::ui::fixture::{inspector_data_from_doc, InspectorData, PropRow};
 use crate::ui::playback::Clock;
 use crate::ui::semantic_menu::SemanticButton;
+use crate::ui::session::Focus;
 use crate::doc::store::{
     property, BlendMode, ContentKeyframe, Document, Intent, Interp, Keyframe,
     LayerAttrsPatch, LayerId, LayerSource, Matte, MatteMode, PropertyId, RationalTime, StoreError,
@@ -14,7 +15,13 @@ use crate::doc::store::{
 
 /// 窓に並べる合成モード。**W3C Compositing の16 mix + `plus`(Add)**で、
 /// 順番は語彙の並び(reference/compositing-coverage.tsv と同じ)。
-const BLEND_MODES: &[(BlendMode, &str)] = &[
+const ANCHOR_SPOTS: [(f64, f64); 9] = [
+    (0.0, 0.0), (0.5, 0.0), (1.0, 0.0),
+    (0.0, 0.5), (0.5, 0.5), (1.0, 0.5),
+    (0.0, 1.0), (0.5, 1.0), (1.0, 1.0),
+];
+
+pub(super) const BLEND_MODES: &[(BlendMode, &str)] = &[
     (BlendMode::Normal, "Normal"),
     (BlendMode::Add, "Add"),
     (BlendMode::Multiply, "Multiply"),
@@ -42,7 +49,7 @@ fn blend_label(mode: BlendMode) -> &'static str {
         .unwrap_or("Normal")
 }
 
-fn write_blend(
+pub(super) fn write_blend(
     doc: &Arc<Mutex<Document>>,
     layer: LayerId,
     mode: BlendMode,
@@ -546,7 +553,6 @@ impl PartialEq for LayerChoiceAction {
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum ChoiceId {
-    Blend,
     Parent,
     MatteSource,
     MatteMode,
@@ -715,10 +721,18 @@ pub(super) fn inspector_panel(
     editing: Signal<Option<String>>,
     drag: Signal<Option<ValueDrag>>,
     num_edit: Signal<Option<NumEdit>>,
-    mut choice_open: Signal<Option<ChoiceId>>,
+    choice_open: Signal<Option<ChoiceId>>,
     playhead: Signal<f64>,
+    selected_size: &Arc<Mutex<Option<[f32; 2]>>>,
+    focus: &Arc<Mutex<Option<Focus>>>,
+    live_focus: Option<Focus>,
 ) -> Element {
     let mut drag = drag;
+    let blend_focused = matches!(
+        (selection, live_focus),
+        (Some(layer), Some(Focus::Blend(at))) if at == layer
+    );
+    let box_size = *selected_size.lock().unwrap();
     let _ = revision(); // Document書き換え後の再描画をここで購読する(値そのものは使わない)
     // 再生位置が動いた時も描き直す。**値は時刻で決まる**ので、
     // ここを購読しないと絵だけ動いて数字が止まる。
@@ -906,42 +920,46 @@ pub(super) fn inspector_panel(
             }
             div { class: "sec", "TRANSFORM" }
             {transform_rows}
+            // 升の並びそのものが意味なので、言葉は置かない(裁定451)。
+            if let (Some(layer), Some(size)) = (selection, box_size) {
+                div { class: "prow anchor",
+                    span { class: "n", "anchor" }
+                    div { class: "anchorgrid",
+                        for (fx , fy) in ANCHOR_SPOTS.iter().copied() {
+                            SemanticButton {
+                                class: "aspot",
+                                aria_label: "Set anchor {fx} {fy}",
+                                onclick: {
+                                    let doc = doc.clone();
+                                    move |_| {
+                                        crate::ui::utility::move_anchor(&doc, layer, size, t, fx, fy);
+                                        *revision.write() += 1;
+                                    }
+                                },
+                                span { class: "adot" }
+                            }
+                        }
+                    }
+                }
+            }
             div { class: "iscroll",
             if let Some(layer) = selection {
                 div { class: "sec", "BLEND" }
-                div { class: "prow",
-                    span { class: "n", "mode" }
-                    ChoiceTrigger {
-                        current: blend_label(inspector.blend).to_owned(),
-                        id: ChoiceId::Blend,
-                        open: choice_open,
-                    }
-                    span { class: "glyph", "◇" }
-                }
-                if choice_open() == Some(ChoiceId::Blend) {
-                    for (mode , label) in BLEND_MODES.iter().copied() {
-                        SemanticButton {
-                            class: if mode == inspector.blend { "prow blend-pick on" } else { "prow blend-pick" },
-                            selected: mode == inspector.blend,
-                            onclick: {
-                                let doc = doc.clone();
-                                move |_| {
-                                    match write_blend(&doc, layer, mode) {
-                                        Ok(_) => {
-                                            println!(
-                                                "PROBE room=write verdict=applied SetAttrs blend={label} layer={layer:?}"
-                                            );
-                                            *revision.write() += 1;
-                                        }
-                                        Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
-                                    }
-                                    choice_open.set(None);
-                                }
-                            },
-                            span { class: "n", "" }
-                            span { class: "v content", "{label}" }
+                // 値は文字で選ばない。行を光らせ、机がサムネイルの格子を出す。
+                SemanticButton {
+                    class: if blend_focused { "prow focus on" } else { "prow focus" },
+                    selected: blend_focused,
+                    aria_label: "Focus blend",
+                    onclick: {
+                        let focus = focus.clone();
+                        move |_| {
+                            *focus.lock().unwrap() = Some(Focus::Blend(layer));
+                            *revision.write() += 1;
                         }
-                    }
+                    },
+                    span { class: "n", "mode" }
+                    span { class: "v content", "{blend_label(inspector.blend)}" }
+                    span { class: "glyph", "◇" }
                 }
             }
             if let Some(layer) = selection {

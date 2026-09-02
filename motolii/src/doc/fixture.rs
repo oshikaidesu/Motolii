@@ -201,16 +201,19 @@ pub fn build() -> Fixture {
                 name: "Aメロ".to_owned(),
                 time: t(150),
                 duration: RationalTime::ZERO,
+                body: String::new(),
             },
             Marker {
                 name: "サビ".to_owned(),
                 time: t(510),
                 duration: RationalTime::ZERO,
+                body: String::new(),
             },
             Marker {
                 name: "ラスサビ".to_owned(),
                 time: t(1200),
                 duration: RationalTime::ZERO,
+                body: String::new(),
             },
         ],
     });

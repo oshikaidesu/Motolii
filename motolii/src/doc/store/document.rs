@@ -261,6 +261,14 @@ impl Document {
         self.head > self.floor
     }
 
+    /// 戻れる段数と進める段数。履歴を一覧にする側はこれだけ読む。
+    pub fn history_depth(&self) -> (usize, usize) {
+        (
+            (self.head - self.floor).max(0) as usize,
+            (self.tip - self.head).max(0) as usize,
+        )
+    }
+
     pub fn can_redo(&self) -> bool {
         self.head < self.tip
     }

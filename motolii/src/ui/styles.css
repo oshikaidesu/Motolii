@@ -1345,3 +1345,243 @@ body {
     min-height: 0;
     overflow-y: auto;
 }
+
+/* 机 — Document を覗くレンズ。顔は書き置き・参考画像・鳥、引き出しは焦点の型に一つ。 */
+#desk {
+    background: var(--panel);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    flex: 1;
+    min-height: 0;
+}
+
+/* 常設の顔。細く、下に居る。 */
+.desk-face {
+    flex: 0 0 auto;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp1);
+    padding: var(--sp1) var(--sp4);
+}
+
+.dempty {
+    padding: var(--sp4);
+    color: var(--ink3);
+    font-size: var(--t-dense);
+}
+
+.desk-note {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp1);
+}
+
+.desk-note .mname {
+    font-size: var(--t-dense);
+    color: var(--ink2);
+}
+
+.desk-note.editing {
+    position: relative;
+    z-index: 16;
+}
+
+.desk-note.idle .mname {
+    color: var(--ink3);
+}
+
+.desk-note .mbody {
+    background: var(--app);
+    color: var(--ink);
+    border: var(--line) solid var(--bd);
+    padding: var(--sp1) var(--sp2);
+    font-size: var(--t-base);
+    width: 100%;
+    text-align: left;
+}
+
+.desk-note .mbody.idle {
+    color: var(--ink3);
+}
+
+.desk-refs {
+    flex: 1;
+    min-height: calc(40 * var(--s) * 1px);
+    border: var(--line) dashed var(--bd);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--ink3);
+    font-size: var(--t-dense);
+}
+
+/* 引き出し。机の中に出て、顔の上を占める。 */
+.desk-drawer {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    border-bottom: var(--line) solid var(--dark);
+    animation: motion-fade-enter var(--motion-state) var(--motion-ease-enter) both;
+}
+
+.desk-drawer #ease {
+    flex: 1;
+    min-height: 0;
+}
+
+.dhead {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--sp1) var(--sp4);
+    font-size: var(--t-dense);
+    color: var(--ink2);
+    border-bottom: var(--line) solid var(--dark);
+}
+
+.desk-foot {
+    flex: 0 0 auto;
+    display: flex;
+    gap: var(--sp2);
+    padding-right: calc(40 * var(--s) * 1px);
+}
+
+/* Inspector の焦点の行。机の見出しと同じ物を指す1本の線。 */
+.prow.focus.on {
+    background: var(--hover);
+    box-shadow: inset calc(2 * var(--s) * 1px) 0 0 var(--way-timeline);
+}
+
+.blend-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--sp1);
+    padding: var(--sp2) var(--sp4);
+    overflow: auto;
+}
+
+.blend-cell {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--sp1);
+    padding: var(--sp1);
+    border: var(--line) solid transparent;
+    color: var(--ink2);
+    font-size: var(--t-micro);
+}
+
+.blend-cell.on {
+    border-color: var(--accent);
+    color: var(--ink);
+}
+
+.blend-swatch {
+    width: calc(28 * var(--s) * 1px);
+    height: calc(28 * var(--s) * 1px);
+    background: var(--raised);
+    border: var(--line) solid var(--bd);
+}
+
+.history-strip {
+    display: flex;
+    align-items: center;
+    gap: var(--sp1);
+    padding: var(--sp2) var(--sp4);
+    overflow: auto;
+}
+
+.hstep {
+    width: calc(10 * var(--s) * 1px);
+    height: calc(10 * var(--s) * 1px);
+    border-radius: 50%;
+    background: var(--ink3);
+    flex: 0 0 auto;
+}
+
+.hstep.now {
+    background: var(--accent);
+    width: calc(14 * var(--s) * 1px);
+    height: calc(14 * var(--s) * 1px);
+}
+
+.hstep.ahead {
+    opacity: 0.4;
+}
+
+/* カササギ。呼吸は立つ↔沈むの2枚、まばたきは目1px。どちらも純装飾で Reduce Motion で止まる。 */
+.pet {
+    position: absolute;
+    right: var(--sp4);
+    bottom: var(--sp1);
+    width: calc(32 * var(--s) * 1px);
+    height: calc(32 * var(--s) * 1px);
+}
+
+.pet-frame {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    grid-template-rows: repeat(8, 1fr);
+    animation: pet-breath 1.6s steps(1, end) infinite;
+    animation-play-state: var(--pet-play);
+}
+
+.pet-frame.sink {
+    animation-delay: -0.8s;
+}
+
+.pet-px.k {
+    background: var(--ink);
+}
+
+.pet-px.c {
+    background: #3ED9A4;
+}
+
+.pet-px.eye {
+    animation: pet-blink 3.4s steps(1, end) infinite;
+    animation-play-state: var(--pet-play);
+}
+
+@keyframes pet-breath {
+    0% { opacity: 1; }
+    50% { opacity: 0; }
+    100% { opacity: 1; }
+}
+
+@keyframes pet-blink {
+    0%, 94% { background: #3ED9A4; }
+    95%, 100% { background: var(--ink); }
+}
+
+.settings-sheet {
+    display: flex;
+    flex-direction: column;
+    min-width: calc(260 * var(--s) * 1px);
+}
+
+/* anchor の升は 3 段あるので、1 段の行の高さに押し込まない。 */
+.prow.anchor {
+    height: auto;
+    grid-template-columns: 1fr auto;
+    padding-top: var(--sp1);
+    padding-bottom: var(--sp1);
+}
+
+.prow.anchor .anchorgrid {
+    width: calc(54 * var(--s) * 1px);
+    padding: 0;
+}
+
+/* 仕切りを引きすぎて tile が潰れると、中の文字が 1 字ずつ折り返して path が爆発し、
+   vello の buffer 計算が溢れて落ちる(config.rs:185、8/30 から既知)。潰れない柵。 */
+.zone {
+    min-width: calc(120 * var(--s) * 1px);
+    min-height: calc(40 * var(--s) * 1px);
+}
