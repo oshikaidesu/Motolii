@@ -1,6 +1,11 @@
+use std::collections::BTreeSet;
 use std::fmt;
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+use dioxus_workbench::{
+    DockZone, LayoutNode, PanelId, PanelLayout, PanelPlacement, SplitAxis, SplitId, TileId,
+};
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub(crate) enum Panel {
     Media,
     Effects,
@@ -15,24 +20,19 @@ pub(crate) enum Panel {
     Ease,
 }
 
-/// パネルの生まれ。**置き場ではない** —— 最初の形と、隠れた物を戻す先を
-/// 決めるためだけに使う。置き場は木で、いくつでも割れる。
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub(super) enum Zone {
+enum Zone {
     Left,
     Center,
     Right,
     Bottom,
 }
 
-/// パネル1枚の素性。**足す時はここに1行足すだけ**。名前・色・既定の置き場は
-/// 全部ここから引く(散らすと足し忘れる)。中身は `app::panel_body`。
 struct Spec {
     panel: Panel,
     label: &'static str,
     way: &'static str,
     home: Zone,
-    /// 別窓にした時の大きさ。パネルごとに要る形が違う(帯は横長、属性は縦長)。
     window: (u32, u32),
 }
 
@@ -52,17 +52,13 @@ const PANELS: &[Spec] = &[
 
 impl Panel {
     fn spec(self) -> &'static Spec {
-        PANELS
-            .iter()
-            .find(|s| s.panel == self)
-            .expect("PANELS に載っていないパネル")
+        PANELS.iter().find(|spec| spec.panel == self).expect("panel spec")
     }
 
     pub(super) fn all() -> impl Iterator<Item = Panel> {
-        PANELS.iter().map(|s| s.panel)
+        PANELS.iter().map(|spec| spec.panel)
     }
 
-    /// 部屋ごとの色。帯を畳んだので、これはタブが引き継ぐ。
     pub(super) fn way(self) -> &'static str {
         self.spec().way
     }
@@ -74,6 +70,26 @@ impl Panel {
     pub(super) fn label(self) -> &'static str {
         self.spec().label
     }
+
+    fn workbench_id(self) -> PanelId {
+        PanelId::new(self.label())
+    }
+
+    fn from_workbench(id: &PanelId) -> Option<Self> {
+        PANELS
+            .iter()
+            .find(|spec| spec.label == id.as_str())
+            .map(|spec| spec.panel)
+    }
+
+    fn home(self) -> TileId {
+        TileId::new(match self.spec().home {
+            Zone::Left => "left",
+            Zone::Center => "center",
+            Zone::Right => "right",
+            Zone::Bottom => "bottom",
+        })
+    }
 }
 
 impl fmt::Display for Panel {
@@ -82,31 +98,6 @@ impl fmt::Display for Panel {
     }
 }
 
-/// 置き場は**木**。葉が Pane(パネル1枚)で、節は「並べる」か「重ねる」。
-/// 部屋を4つに決め打ちすると、左をさらに上下に割る手が**型として存在しない**。
-///
-/// 語彙は egui_tiles(rerun が出資)と同じ形にしてある —— Tile = Container か Pane、
-/// Container は Linear(並べる)か Tabs(重ねる)。ImGui も VS Code も骨は同じ。
-pub(super) type TileId = u32;
-
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub(super) enum Dir {
-    /// 横に並べる。
-    Row,
-    /// 縦に並べる。
-    Column,
-}
-
-#[derive(Clone, PartialEq, Debug)]
-pub(super) enum Tile {
-    Pane(Panel),
-    /// 並べる。`shares` は子と同じ長さで、合計に対する割合。
-    Linear { dir: Dir, children: Vec<TileId>, shares: Vec<f32> },
-    /// 重ねる。見えているのは1つ。
-    Tabs { children: Vec<TileId>, active: usize },
-}
-
-/// どこへ落としたか。中央は重ねる、縁は割る。
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(super) enum Side {
     Left,
@@ -116,294 +107,117 @@ pub(super) enum Side {
     Center,
 }
 
+impl Side {
+    fn workbench(self) -> DockZone {
+        match self {
+            Self::Left => DockZone::Left,
+            Self::Right => DockZone::Right,
+            Self::Top => DockZone::Top,
+            Self::Bottom => DockZone::Bottom,
+            Self::Center => DockZone::Center,
+        }
+    }
+}
+
 #[derive(Clone, PartialEq)]
 pub(super) struct Dock {
-    tiles: std::collections::BTreeMap<TileId, Tile>,
-    root: Option<TileId>,
-    next: TileId,
-    /// 別窓へ出ている物。木にも居ないし、隠れてもいない。
-    detached: Vec<Panel>,
+    layout: PanelLayout,
+    hidden: BTreeSet<Panel>,
+    detached: BTreeSet<Panel>,
 }
 
 impl Default for Dock {
     fn default() -> Self {
-        let mut d = Self {
-            tiles: Default::default(),
-            root: None,
-            next: 1,
-            detached: Vec::new(),
-        };
-        let group = |d: &mut Self, home: Zone| {
-            let panes: Vec<TileId> = PANELS
-                .iter()
-                .filter(|s| s.home == home)
-                .map(|s| d.add(Tile::Pane(s.panel)))
-                .collect();
-            d.add(Tile::Tabs { children: panes, active: 0 })
-        };
-        let left = group(&mut d, Zone::Left);
-        let center = group(&mut d, Zone::Center);
-        let right = group(&mut d, Zone::Right);
-        let bottom = group(&mut d, Zone::Bottom);
-        let row = d.add(Tile::Linear {
-            dir: Dir::Row,
-            children: vec![left, center, right],
-            shares: vec![0.22, 0.56, 0.22],
-        });
-        let root = d.add(Tile::Linear {
-            dir: Dir::Column,
-            children: vec![row, bottom],
-            shares: vec![0.68, 0.32],
-        });
-        d.root = Some(root);
-        d
+        Self {
+            layout: canonical_layout(),
+            hidden: BTreeSet::new(),
+            detached: BTreeSet::new(),
+        }
     }
 }
 
 impl Dock {
-    pub(super) fn root(&self) -> Option<TileId> {
-        self.root
+    pub(super) fn root(&self) -> LayoutNode {
+        self.projected_layout().root
     }
 
-    pub(super) fn tile(&self, id: TileId) -> Option<&Tile> {
-        self.tiles.get(&id)
+    pub(super) fn panels(&self, tile: &dioxus_workbench::Tile) -> Vec<Panel> {
+        tile.panels.iter().filter_map(Panel::from_workbench).collect()
     }
 
-    fn add(&mut self, tile: Tile) -> TileId {
-        let id = self.next;
-        self.next += 1;
-        self.tiles.insert(id, tile);
-        id
-    }
-
-    fn parent_of(&self, id: TileId) -> Option<TileId> {
-        self.tiles.iter().find_map(|(pid, t)| match t {
-            Tile::Linear { children, .. } | Tile::Tabs { children, .. } => {
-                children.contains(&id).then_some(*pid)
-            }
-            Tile::Pane(_) => None,
-        })
-    }
-
-    pub(super) fn tile_of(&self, panel: Panel) -> Option<TileId> {
-        self.tiles
-            .iter()
-            .find_map(|(id, t)| matches!(t, Tile::Pane(p) if *p == panel).then_some(*id))
+    pub(super) fn active(&self, tile: &dioxus_workbench::Tile) -> Option<Panel> {
+        tile.active.as_ref().and_then(Panel::from_workbench)
     }
 
     pub(super) fn is_visible(&self, panel: Panel) -> bool {
-        self.tile_of(panel).is_some()
+        !self.hidden.contains(&panel)
+            && !self.detached.contains(&panel)
+            && self.layout.tile_for_panel(&panel.workbench_id()).is_some()
     }
 
     pub(super) fn is_detached(&self, panel: Panel) -> bool {
         self.detached.contains(&panel)
     }
 
-    /// 重ねている束の中で今見えている物。
-    pub(super) fn active_of(&self, tabs: TileId) -> Option<TileId> {
-        match self.tiles.get(&tabs)? {
-            Tile::Tabs { children, active } => children.get(*active).copied(),
-            _ => None,
-        }
-    }
-
     pub(super) fn is_active(&self, panel: Panel) -> bool {
-        let Some(id) = self.tile_of(panel) else { return false };
-        let Some(parent) = self.parent_of(id) else { return true };
-        match self.tiles.get(&parent) {
-            Some(Tile::Tabs { .. }) => self.active_of(parent) == Some(id),
-            _ => true,
+        if !self.is_visible(panel) {
+            return false;
         }
+        let projected = self.projected_layout();
+        let Some(tile) = projected.tile_for_panel(&panel.workbench_id()) else {
+            return false;
+        };
+        projected
+            .tile(&tile)
+            .and_then(|tile| tile.active.as_ref())
+            .is_some_and(|active| active == &panel.workbench_id())
     }
 
     pub(super) fn set_active(&mut self, panel: Panel) {
-        let Some(id) = self.tile_of(panel) else { return };
-        let Some(parent) = self.parent_of(id) else { return };
-        if let Some(Tile::Tabs { children, active }) = self.tiles.get_mut(&parent) {
-            if let Some(i) = children.iter().position(|c| *c == id) {
-                *active = i;
-            }
+        if self.is_visible(panel) {
+            self.layout.activate(&panel.workbench_id());
         }
     }
 
-    /// パネルを別のタイルの隣(または上)へ移す。**中央なら重ね、縁なら割る。**
-    /// 同じ所へ落としても並びは動かない。
-    pub(super) fn drop_onto(&mut self, panel: Panel, target: TileId, side: Side) {
-        if self.tile_of(panel) == Some(target) {
+    pub(super) fn drop_onto(&mut self, panel: Panel, target: &TileId, side: Side) {
+        if self.detached.contains(&panel) || self.hidden.contains(&panel) {
             return;
         }
-        self.pull_out(panel);
-        let moving = self.add(Tile::Pane(panel));
-        self.insert_at(moving, target, side);
-        self.set_active(panel);
+        self.layout
+            .dock_panel(&panel.workbench_id(), target, side.workbench());
     }
 
-    fn insert_at(&mut self, moving: TileId, target: TileId, side: Side) {
-        let Some(root) = self.root else {
-            self.root = Some(moving);
-            return;
-        };
-        // 束の中の1枚へ落としたら、束そのものを相手にする。
-        let target = match self.parent_of(target) {
-            Some(p) if matches!(self.tiles.get(&p), Some(Tile::Tabs { .. })) => p,
-            _ => target,
-        };
-        if side == Side::Center {
-            match self.tiles.get_mut(&target) {
-                Some(Tile::Tabs { children, active }) => {
-                    children.push(moving);
-                    *active = children.len() - 1;
-                }
-                _ => {
-                    let tabs = self.add(Tile::Tabs { children: vec![target, moving], active: 1 });
-                    self.replace_child(target, tabs, root);
-                }
-            }
-            return;
-        }
-        let (dir, before) = match side {
-            Side::Left => (Dir::Row, true),
-            Side::Right => (Dir::Row, false),
-            Side::Top => (Dir::Column, true),
-            Side::Bottom => (Dir::Column, false),
-            Side::Center => unreachable!("上で返している"),
-        };
-        // 同じ向きの並びの中なら、割らずに間へ入れる。
-        if let Some(parent) = self.parent_of(target) {
-            if let Some(Tile::Linear { dir: pdir, children, shares }) = self.tiles.get_mut(&parent) {
-                if *pdir == dir {
-                    let i = children.iter().position(|c| *c == target).unwrap_or(0);
-                    let at = if before { i } else { i + 1 };
-                    let share = shares.get(i).copied().unwrap_or(1.0) * 0.5;
-                    if let Some(s) = shares.get_mut(i) {
-                        *s = share;
-                    }
-                    children.insert(at, moving);
-                    shares.insert(at, share);
-                    return;
-                }
-            }
-        }
-        let children = if before { vec![moving, target] } else { vec![target, moving] };
-        let split = self.add(Tile::Linear { dir, children, shares: vec![0.5, 0.5] });
-        self.replace_child(target, split, root);
-    }
-
-    /// `old` の居た場所へ `new` を差す。根なら根を差し替える。
-    fn replace_child(&mut self, old: TileId, new: TileId, root: TileId) {
-        if old == root {
-            self.root = Some(new);
-            return;
-        }
-        let Some(parent) = self.parent_of(old) else { return };
-        if let Some(Tile::Linear { children, .. } | Tile::Tabs { children, .. }) =
-            self.tiles.get_mut(&parent)
-        {
-            if let Some(slot) = children.iter_mut().find(|c| **c == old) {
-                *slot = new;
-            }
-        }
-    }
-
-    /// 木から抜いて、空になった節を畳む。**畳まないと空の箱が残る。**
-    fn pull_out(&mut self, panel: Panel) {
-        self.detached.retain(|p| *p != panel);
-        let Some(id) = self.tile_of(panel) else { return };
-        self.tiles.remove(&id);
-        if self.root == Some(id) {
-            self.root = None;
-            return;
-        }
-        let Some(parent) = self.parent_of(id) else { return };
-        let mut drop_parent = false;
-        if let Some(tile) = self.tiles.get_mut(&parent) {
-            match tile {
-                Tile::Linear { children, shares, .. } => {
-                    if let Some(i) = children.iter().position(|c| *c == id) {
-                        children.remove(i);
-                        if i < shares.len() {
-                            shares.remove(i);
-                        }
-                    }
-                    drop_parent = children.len() <= 1;
-                }
-                Tile::Tabs { children, active } => {
-                    if let Some(i) = children.iter().position(|c| *c == id) {
-                        children.remove(i);
-                        *active = (*active).min(children.len().saturating_sub(1));
-                    }
-                    drop_parent = children.is_empty();
-                }
-                Tile::Pane(_) => {}
-            }
-        }
-        if drop_parent {
-            self.collapse(parent);
-        }
-    }
-
-    /// 子が1つ以下になった節を、その子で置き換える。
-    fn collapse(&mut self, id: TileId) {
-        let Some(root) = self.root else { return };
-        let only = match self.tiles.get(&id) {
-            Some(Tile::Linear { children, .. } | Tile::Tabs { children, .. }) => {
-                children.first().copied()
-            }
-            _ => return,
-        };
-        match only {
-            Some(child) => {
-                self.replace_child(id, child, root);
-                self.tiles.remove(&id);
-            }
-            None => {
-                let parent = self.parent_of(id);
-                self.tiles.remove(&id);
-                if self.root == Some(id) {
-                    self.root = None;
-                } else if let Some(parent) = parent {
-                    if let Some(
-                        Tile::Linear { children, .. } | Tile::Tabs { children, .. },
-                    ) = self.tiles.get_mut(&parent)
-                    {
-                        if let Some(i) = children.iter().position(|c| *c == id) {
-                            children.remove(i);
-                        }
-                    }
-                    self.collapse(parent);
-                }
-            }
-        }
-    }
-
-    /// 隣り合う2つの割合を動かす。**合計は変えない** —— 変えると節ごとに
-    /// 大きさが漂う。
-    pub(super) fn nudge_share(&mut self, parent: TileId, index: usize, delta: f32) {
-        let Some(Tile::Linear { shares, .. }) = self.tiles.get_mut(&parent) else { return };
-        let (Some(a), Some(b)) = (shares.get(index).copied(), shares.get(index + 1).copied()) else {
-            return;
-        };
-        let total = a + b;
-        let next = (a + delta * total).clamp(total * 0.08, total * 0.92);
-        shares[index] = next;
-        shares[index + 1] = total - next;
+    pub(super) fn set_split_ratio(&mut self, split: &SplitId, ratio: f64) {
+        self.layout.set_split_ratio(split, ratio);
     }
 
     pub(super) fn detach(&mut self, panel: Panel) {
-        self.pull_out(panel);
-        self.detached.push(panel);
+        if !self.is_visible(panel) {
+            return;
+        }
+        self.hidden.remove(&panel);
+        self.detached.insert(panel);
     }
 
     pub(super) fn reattach(&mut self, panel: Panel) {
-        self.detached.retain(|p| *p != panel);
-        self.show(panel);
+        if !self.detached.remove(&panel) {
+            return;
+        }
+        self.hidden.remove(&panel);
+        self.set_active(panel);
     }
 
     pub(super) fn hide(&mut self, panel: Panel) {
-        self.pull_out(panel);
+        if self.detached.contains(&panel) {
+            return;
+        }
+        self.hidden.insert(panel);
     }
 
     pub(super) fn toggle(&mut self, panel: Panel) {
+        if self.detached.contains(&panel) {
+            return;
+        }
         if self.is_visible(panel) {
             self.hide(panel);
         } else {
@@ -411,129 +225,213 @@ impl Dock {
         }
     }
 
-    /// 隠れていた物を出す。**同じ家の仲間の隣**へ戻す(既定の置き場の代わり)。
+    pub(super) fn reset_layout(&mut self) {
+        self.hidden.clear();
+        self.layout = canonical_layout();
+    }
+
     fn show(&mut self, panel: Panel) {
-        if self.is_visible(panel) {
-            return;
-        }
-        let home = panel.spec().home;
-        let mate = PANELS
-            .iter()
-            .filter(|s| s.home == home && s.panel != panel)
-            .find_map(|s| self.tile_of(s.panel));
-        match mate {
-            Some(target) => self.drop_onto(panel, target, Side::Center),
-            None => {
-                let Some(root) = self.root else {
-                    let id = self.add(Tile::Pane(panel));
-                    self.root = Some(id);
-                    return;
-                };
-                self.drop_onto(panel, root, Side::Right);
-            }
-        }
+        self.hidden.remove(&panel);
+        self.set_active(panel);
+    }
+
+    fn projected_layout(&self) -> PanelLayout {
+        let placements = Panel::all()
+            .filter(|panel| !self.hidden.contains(panel) && !self.detached.contains(panel))
+            .map(|panel| PanelPlacement::new(panel.workbench_id(), panel.home()))
+            .collect::<Vec<_>>();
+        self.layout.reconciled(&placements)
+    }
+
+    #[cfg(test)]
+    fn valid(&self) -> bool {
+        self.layout.valid()
+            && self.projected_layout().valid()
+            && !Panel::all().any(|panel| self.is_visible(panel) && self.is_detached(panel))
     }
 }
 
+fn canonical_layout() -> PanelLayout {
+    PanelLayout::new(LayoutNode::split(
+        "root",
+        SplitAxis::Vertical,
+        0.68,
+        LayoutNode::split(
+            "top-left-rest",
+            SplitAxis::Horizontal,
+            0.22,
+            LayoutNode::tile("left", ["Media", "Effects", "Create", "Colors"]),
+            LayoutNode::split(
+                "top-center-right",
+                SplitAxis::Horizontal,
+                0.56 / 0.78,
+                LayoutNode::tile("center", ["Stage", "Output"]),
+                LayoutNode::tile("right", ["Inspector", "Utility", "Settings", "Ease"]),
+            ),
+        ),
+        LayoutNode::tile("bottom", ["Timeline"]),
+    ))
+}
+
 #[cfg(test)]
-mod tree {
+mod tests {
     use super::*;
 
-    fn panels_in(d: &Dock, id: TileId, out: &mut Vec<Panel>) {
-        match d.tile(id) {
-            Some(Tile::Pane(p)) => out.push(*p),
-            Some(Tile::Linear { children, .. } | Tile::Tabs { children, .. }) => {
-                for c in children.clone() {
-                    panels_in(d, c, out);
-                }
+    fn panel_count(node: &LayoutNode, panel: Panel) -> usize {
+        match node {
+            LayoutNode::Tile(tile) => tile
+                .panels
+                .iter()
+                .filter(|candidate| **candidate == panel.workbench_id())
+                .count(),
+            LayoutNode::Split { first, second, .. } => {
+                panel_count(first, panel) + panel_count(second, panel)
             }
-            None => {}
         }
     }
 
-    fn all(d: &Dock) -> Vec<Panel> {
-        let mut out = Vec::new();
-        if let Some(root) = d.root() {
-            panels_in(d, root, &mut out);
-        }
-        out
-    }
-
-    /// 木は**どの節でも割れる**。部屋を4つに決め打ちしていた時は、
-    /// 左をさらに上下に割る手が型として存在しなかった。
     #[test]
     fn any_pane_can_be_split_again() {
-        let mut d = Dock::default();
-        let target = d.tile_of(Panel::Media).expect("Media");
-        d.hide(Panel::Ease);
-        d.drop_onto(Panel::Ease, target, Side::Bottom);
-
-        assert!(d.is_visible(Panel::Ease));
-        let parent = d.parent_of(d.tile_of(Panel::Ease).unwrap()).unwrap();
-        assert!(
-            matches!(d.tile(parent), Some(Tile::Linear { dir: Dir::Column, .. })),
-            "縦に割れていない: {:?}",
-            d.tile(parent)
-        );
+        let mut dock = Dock::default();
+        let target = dock.layout.tile_for_panel(&Panel::Media.workbench_id()).unwrap();
+        dock.drop_onto(Panel::Ease, &target, Side::Bottom);
+        assert!(dock.valid());
+        assert!(dock.is_visible(Panel::Ease));
     }
 
-    /// 中央へ落としたら重ねる。縁なら割る。
     #[test]
     fn dropping_in_the_middle_stacks_instead_of_splitting() {
-        let mut d = Dock::default();
-        let target = d.tile_of(Panel::Stage).expect("Stage");
-        d.drop_onto(Panel::Ease, target, Side::Center);
-
-        let parent = d.parent_of(d.tile_of(Panel::Ease).unwrap()).unwrap();
-        assert!(matches!(d.tile(parent), Some(Tile::Tabs { .. })), "重なっていない");
-        assert!(d.is_active(Panel::Ease), "落とした物が見えていない");
+        let mut dock = Dock::default();
+        let target = dock.layout.tile_for_panel(&Panel::Stage.workbench_id()).unwrap();
+        dock.drop_onto(Panel::Ease, &target, Side::Center);
+        assert!(dock.is_active(Panel::Ease));
+        assert!(dock.valid());
     }
 
-    /// 抜いた後に**空の箱を残さない**。残ると触れない隙間になる。
     #[test]
-    fn taking_the_last_one_out_folds_the_box_away() {
-        let mut d = Dock::default();
-        let before = d.tiles.len();
-        d.hide(Panel::Timeline);
+    fn hiding_then_showing_brings_it_back() {
+        let mut dock = Dock::default();
+        for panel in Panel::all() {
+            dock.toggle(panel);
+            assert!(!dock.is_visible(panel));
+            dock.toggle(panel);
+            assert!(dock.is_visible(panel));
+            assert!(dock.valid());
+        }
+    }
 
-        assert!(!d.is_visible(Panel::Timeline));
-        assert!(
-            d.tiles.len() < before,
-            "空の箱が残っている: {} → {}",
-            before,
-            d.tiles.len()
-        );
-        for (id, t) in &d.tiles {
-            if let Tile::Linear { children, .. } | Tile::Tabs { children, .. } = t {
-                assert!(!children.is_empty(), "空の節 {id} が残った");
+    #[test]
+    fn every_operation_keeps_one_reachable_dock_tree() {
+        let mut dock = Dock::default();
+        dock.hide(Panel::Media);
+        dock.show(Panel::Media);
+        let timeline = dock.layout.tile_for_panel(&Panel::Timeline.workbench_id()).unwrap();
+        dock.drop_onto(Panel::Media, &timeline, Side::Top);
+        dock.hide(Panel::Effects);
+        dock.hide(Panel::Effects);
+        dock.detach(Panel::Timeline);
+        assert!(dock.valid());
+    }
+
+    #[test]
+    fn reset_layout_keeps_real_detached_windows_detached() {
+        let mut dock = Dock::default();
+        dock.detach(Panel::Inspector);
+        dock.reset_layout();
+        assert!(dock.is_detached(Panel::Inspector));
+        assert!(!dock.is_visible(Panel::Inspector));
+        assert!(dock.is_active(Panel::Media));
+    }
+
+    #[test]
+    fn a_detached_panel_cannot_be_docked_while_its_window_is_still_open() {
+        let mut dock = Dock::default();
+        dock.detach(Panel::Inspector);
+        dock.toggle(Panel::Inspector);
+        assert!(dock.is_detached(Panel::Inspector));
+        assert!(!dock.is_visible(Panel::Inspector));
+    }
+
+    #[test]
+    fn repeated_edge_drops_do_not_shrink_a_zone_below_the_splitter_floor() {
+        let mut dock = Dock::default();
+        for index in 0..8 {
+            let target = dock.layout.tile_for_panel(&Panel::Stage.workbench_id()).unwrap();
+            dock.drop_onto(
+                Panel::Media,
+                &target,
+                if index % 2 == 0 { Side::Left } else { Side::Right },
+            );
+            assert!(dock.valid());
+        }
+        assert!(dock
+            .layout
+            .split_ids()
+            .iter()
+            .all(|id| dock.layout.split_ratio(id).is_some_and(|ratio| (0.1..=0.9).contains(&ratio))));
+    }
+
+    #[test]
+    fn moving_an_inactive_tab_does_not_change_the_visible_panel() {
+        let mut dock = Dock::default();
+        dock.set_active(Panel::Create);
+        dock.hide(Panel::Media);
+        assert!(dock.is_active(Panel::Create));
+    }
+
+    #[test]
+    fn recreating_the_bottom_after_timeline_closes_keeps_every_other_panel_once() {
+        for moving in Panel::all().filter(|panel| *panel != Panel::Timeline) {
+            let mut dock = Dock::default();
+            dock.hide(Panel::Timeline);
+            let source = dock
+                .layout
+                .tile_for_panel(&moving.workbench_id())
+                .expect("moving panel remains reachable after Timeline closes");
+
+            dock.drop_onto(moving, &source, Side::Bottom);
+
+            assert!(dock.valid(), "{moving} made the recreated bottom invalid");
+            let projected = dock.projected_layout();
+            assert_eq!(
+                projected.tile_count(),
+                4,
+                "{moving} did not recreate one bottom branch"
+            );
+            for panel in Panel::all() {
+                assert_eq!(
+                    panel_count(&projected.root, panel),
+                    usize::from(panel != Panel::Timeline),
+                    "moving {moving} changed {panel} reachability"
+                );
+                assert_eq!(
+                    panel_count(&dock.layout.root, panel),
+                    1,
+                    "moving {moving} corrupted stored placement for {panel}"
+                );
             }
         }
     }
 
-    /// 同じパネルが2箇所に居ることはない。
     #[test]
-    fn a_panel_lives_in_exactly_one_place() {
-        let mut d = Dock::default();
-        let target = d.tile_of(Panel::Inspector).unwrap();
-        d.drop_onto(Panel::Media, target, Side::Center);
-
-        let seen = all(&d);
-        let mut sorted = seen.clone();
-        sorted.sort_by_key(|p| p.label());
-        sorted.dedup();
-        assert_eq!(seen.len(), sorted.len(), "同じ物が2箇所に居る: {seen:?}");
-    }
-
-    /// 隠して出すと戻ってくる。
-    #[test]
-    fn hiding_then_showing_brings_it_back() {
-        let mut d = Dock::default();
+    fn every_hidden_panel_returns_to_its_previous_tile() {
         for panel in Panel::all() {
-            d.toggle(panel);
-            assert!(!d.is_visible(panel), "{panel} が隠れていない");
-            d.toggle(panel);
-            assert!(d.is_visible(panel), "{panel} が戻ってこない");
+            let mut dock = Dock::default();
+            let home = dock
+                .layout
+                .tile_for_panel(&panel.workbench_id())
+                .expect("panel home");
+
+            dock.hide(panel);
+            assert_eq!(panel_count(&dock.projected_layout().root, panel), 0);
+            dock.show(panel);
+
+            assert_eq!(
+                dock.layout.tile_for_panel(&panel.workbench_id()),
+                Some(home),
+                "{panel} forgot its placement while hidden"
+            );
+            assert_eq!(panel_count(&dock.projected_layout().root, panel), 1);
         }
-        assert_eq!(all(&d).len(), Panel::all().count(), "数が合わない");
     }
 }
