@@ -1,23 +1,18 @@
-
 use std::path::Path;
 
-pub const MESH_EXTENSIONS: &[&str] = &["obj"];
+use crate::render::media::{SpatialBounds, SpatialBoundsError};
+
+/// Rerun Asset3Dのstable形式。DAEはupstream importerのsubsetなので、黙って受理しない。
+pub const MESH_EXTENSIONS: &[&str] = &["glb", "obj", "stl"];
 
 #[derive(Debug, thiserror::Error)]
 pub enum MeshError {
-    #[error("obj を読めない: {0}")]
+    #[error("対応していない3D形式: {0}")]
+    Unsupported(String),
+    #[error("3D素材を読めない: {0}")]
     Read(String),
-    #[error("面が1つも無い")]
-    Empty,
-}
-
-/// 三角形の網。色は無ければ白。**焼かない** — 呼び手が空間へ積む。
-#[derive(Clone, Debug)]
-pub struct MeshData {
-    pub positions: Vec<[f32; 3]>,
-    pub indices: Vec<[u32; 3]>,
-    pub normals: Vec<[f32; 3]>,
-    pub colors: Vec<[u8; 4]>,
+    #[error(transparent)]
+    Bounds(#[from] SpatialBoundsError),
 }
 
 pub fn is_mesh_extension(ext: &str) -> bool {
@@ -27,43 +22,94 @@ pub fn is_mesh_extension(ext: &str) -> bool {
 pub fn is_mesh_path(path: &str) -> bool {
     Path::new(path)
         .extension()
-        .and_then(|e| e.to_str())
+        .and_then(|extension| extension.to_str())
         .is_some_and(is_mesh_extension)
 }
 
-/// 読むのは形だけ。材質は PBR へ黙って変換しない(裁定 M5-A2)。
-pub fn load_mesh(path: &str) -> Result<MeshData, MeshError> {
+pub fn load_mesh_bounds(path: &str) -> Result<SpatialBounds, MeshError> {
+    let extension = Path::new(path)
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .map(str::to_ascii_lowercase)
+        .ok_or_else(|| MeshError::Unsupported(path.to_owned()))?;
+    match extension.as_str() {
+        "obj" => obj_bounds(path),
+        "glb" => gltf_bounds(path),
+        "stl" => stl_bounds(path),
+        _ => Err(MeshError::Unsupported(extension)),
+    }
+}
+
+fn obj_bounds(path: &str) -> Result<SpatialBounds, MeshError> {
     let options = tobj::LoadOptions {
         triangulate: true,
         single_index: true,
         ..Default::default()
     };
     let (models, _materials) =
-        tobj::load_obj(path, &options).map_err(|e| MeshError::Read(e.to_string()))?;
+        tobj::load_obj(path, &options).map_err(|error| MeshError::Read(error.to_string()))?;
+    SpatialBounds::from_points(models.iter().flat_map(|model| {
+        model
+            .mesh
+            .positions
+            .chunks_exact(3)
+            .map(|point| [point[0], point[1], point[2]])
+    }))
+    .map_err(Into::into)
+}
 
-    let mut positions = Vec::new();
-    let mut indices = Vec::new();
-    let mut normals = Vec::new();
-    for model in &models {
-        let mesh = &model.mesh;
-        let base = positions.len() as u32;
-        for xyz in mesh.positions.chunks_exact(3) {
-            positions.push([xyz[0], xyz[1], xyz[2]]);
-        }
-        for xyz in mesh.normals.chunks_exact(3) {
-            normals.push([xyz[0], xyz[1], xyz[2]]);
-        }
-        for tri in mesh.indices.chunks_exact(3) {
-            indices.push([base + tri[0], base + tri[1], base + tri[2]]);
+fn gltf_bounds(path: &str) -> Result<SpatialBounds, MeshError> {
+    let (document, buffers, _images) =
+        gltf::import(path).map_err(|error| MeshError::Read(error.to_string()))?;
+    let mut points = Vec::new();
+    for scene in document.scenes() {
+        for node in scene.nodes() {
+            collect_gltf_node_points(&node, glam::Affine3A::IDENTITY, &buffers, &mut points);
         }
     }
-    if indices.is_empty() {
-        return Err(MeshError::Empty);
+    SpatialBounds::from_points(points).map_err(Into::into)
+}
+
+fn collect_gltf_node_points(
+    node: &gltf::Node<'_>,
+    parent_from_node: glam::Affine3A,
+    buffers: &[gltf::buffer::Data],
+    points: &mut Vec<[f32; 3]>,
+) {
+    let local = match node.transform() {
+        gltf::scene::Transform::Matrix { matrix } => {
+            glam::Affine3A::from_mat4(glam::Mat4::from_cols_array_2d(&matrix))
+        }
+        gltf::scene::Transform::Decomposed {
+            translation,
+            rotation,
+            scale,
+        } => glam::Affine3A::from_scale_rotation_translation(
+            glam::Vec3::from(scale),
+            glam::Quat::from_array(rotation),
+            glam::Vec3::from(translation),
+        ),
+    };
+    let world_from_node = parent_from_node * local;
+    if let Some(mesh) = node.mesh() {
+        for primitive in mesh.primitives() {
+            let reader = primitive.reader(|buffer| Some(&buffers[buffer.index()].0));
+            if let Some(positions) = reader.read_positions() {
+                points.extend(positions.map(|point| {
+                    world_from_node
+                        .transform_point3(glam::Vec3::from(point))
+                        .to_array()
+                }));
+            }
+        }
     }
-    // 法線が無い obj は珍しくない。無い時は手前向きにしておく(真っ黒にしない)。
-    if normals.len() != positions.len() {
-        normals = vec![[0.0, 0.0, 1.0]; positions.len()];
+    for child in node.children() {
+        collect_gltf_node_points(&child, world_from_node, buffers, points);
     }
-    let colors = vec![[255u8, 255, 255, 255]; positions.len()];
-    Ok(MeshData { positions, indices, normals, colors })
+}
+
+fn stl_bounds(path: &str) -> Result<SpatialBounds, MeshError> {
+    let mut file = std::fs::File::open(path).map_err(|error| MeshError::Read(error.to_string()))?;
+    let mesh = stl_io::read_stl(&mut file).map_err(|error| MeshError::Read(error.to_string()))?;
+    SpatialBounds::from_points(mesh.vertices.into_iter().map(|vertex| vertex.0)).map_err(Into::into)
 }

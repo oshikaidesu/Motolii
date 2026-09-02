@@ -2,7 +2,10 @@
 use re_renderer::renderer::PointCloudBatchFlags;
 use re_renderer::{Color32, PointCloudBuilder, Size};
 
-use crate::render::compositor::{Compositor, CompositorError};
+use crate::render::compositor::{
+    spatial_world_from_bounds, Compositor, CompositorError,
+};
+use crate::render::media::SpatialBounds;
 
 impl Compositor {
     /// 層の変形を `world_from_obj` に載せた点群の draw data。**焼かない** —
@@ -11,9 +14,12 @@ impl Compositor {
         &mut self,
         positions: &[[f32; 3]],
         colors: &[[u8; 4]],
+        bounds: SpatialBounds,
         point_size: f32,
         transform: glam::Affine2,
         z: f32,
+        rotation_x: f32,
+        rotation_y: f32,
         opacity: f32,
     ) -> Result<re_renderer::renderer::PointCloudDrawData, CompositorError> {
         let points: Vec<glam::Vec3> = positions.iter().copied().map(glam::Vec3::from).collect();
@@ -30,16 +36,10 @@ impl Compositor {
             })
             .collect();
 
-        let m = transform.matrix2;
-        let t = transform.translation;
-        let world_from_obj = glam::Affine3A::from_cols(
-            glam::Vec3A::new(m.x_axis.x, m.x_axis.y, 0.0),
-            glam::Vec3A::new(m.y_axis.x, m.y_axis.y, 0.0),
-            glam::Vec3A::new(0.0, 0.0, 1.0),
-            glam::Vec3A::new(t.x, t.y, z),
-        );
+        let world_from_obj =
+            spatial_world_from_bounds(transform, z, rotation_x, rotation_y, bounds);
 
-        let radii = vec![Size::new_scene_units(point_size.max(1e-4)); points.len()];
+        let radii = vec![Size::new_ui_points(point_size.max(1e-4)); points.len()];
         let picking_ids = vec![Default::default(); points.len()];
         let mut builder = PointCloudBuilder::new(&self.ctx);
         builder

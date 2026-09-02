@@ -1,7 +1,10 @@
 
 use std::path::Path;
+use std::sync::Arc;
 
 use re_types_core::Loggable as _;
+
+use crate::render::media::{SpatialBounds, SpatialBoundsError};
 
 pub use re_importer::SUPPORTED_POINT_CLOUD_EXTENSIONS as POINT_CLOUD_EXTENSIONS;
 
@@ -30,7 +33,7 @@ pub fn is_still_image_path(path: impl AsRef<Path>) -> bool {
         .is_some_and(|e| re_importer::SUPPORTED_IMAGE_EXTENSIONS.contains(&e.as_str()))
 }
 
-pub fn asset_type_for_extension(extension: &str) -> Option<String> {
+pub(super) fn non_audio_asset_type_for_extension(extension: &str) -> Option<String> {
     let e = extension.to_ascii_lowercase();
     let e = e.as_str();
     if re_importer::SUPPORTED_VIDEO_EXTENSIONS.contains(&e) {
@@ -39,8 +42,10 @@ pub fn asset_type_for_extension(extension: &str) -> Option<String> {
         Some(format!("image/{e}"))
     } else if re_importer::SUPPORTED_POINT_CLOUD_EXTENSIONS.contains(&e) {
         Some(format!("pointcloud.{e}"))
-    } else if re_importer::SUPPORTED_MESH_EXTENSIONS.contains(&e) {
+    } else if crate::render::media::MESH_EXTENSIONS.contains(&e) {
         Some(format!("model/{e}"))
+    } else if re_importer::SUPPORTED_MESH_EXTENSIONS.contains(&e) {
+        None
     } else if re_importer::is_supported_file_extension(e) {
         Some(format!("application/{e}"))
     } else {
@@ -54,12 +59,15 @@ pub enum PointCloudError {
     Io(#[from] std::io::Error),
     #[error("component を取り出せない: {0}")]
     Component(String),
+    #[error(transparent)]
+    Bounds(#[from] SpatialBoundsError),
 }
 
 #[derive(Debug, Clone)]
 pub struct PointCloudData {
-    pub positions: Vec<[f32; 3]>,
-    pub colors: Vec<[u8; 4]>,
+    pub positions: Arc<Vec<[f32; 3]>>,
+    pub colors: Arc<Vec<[u8; 4]>>,
+    bounds: SpatialBounds,
 }
 
 impl PointCloudData {
@@ -67,33 +75,13 @@ impl PointCloudData {
         self.positions.len()
     }
 
+    pub fn bounds(&self) -> SpatialBounds {
+        self.bounds
+    }
+
     /// 点群を囲む球(中心と半径)。層を作る時の初期倍率に使う。
     pub fn bounding_sphere(&self) -> ([f32; 3], f32) {
-        if self.positions.is_empty() {
-            return ([0.0; 3], 0.0);
-        }
-        let mut lo = self.positions[0];
-        let mut hi = self.positions[0];
-        for p in &self.positions {
-            for i in 0..3 {
-                lo[i] = lo[i].min(p[i]);
-                hi[i] = hi[i].max(p[i]);
-            }
-        }
-        let center = [
-            (lo[0] + hi[0]) * 0.5,
-            (lo[1] + hi[1]) * 0.5,
-            (lo[2] + hi[2]) * 0.5,
-        ];
-        let radius = self
-            .positions
-            .iter()
-            .map(|p| {
-                let d = [p[0] - center[0], p[1] - center[1], p[2] - center[2]];
-                (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt()
-            })
-            .fold(0.0f32, f32::max);
-        (center, radius)
+        (self.bounds.center(), self.bounds.radius())
     }
 }
 
@@ -123,5 +111,10 @@ pub fn load_point_cloud(path: &Path) -> Result<PointCloudData, PointCloudError> 
         .map_err(|e| PointCloudError::Component(e.to_string()))?
         .unwrap_or_default();
 
-    Ok(PointCloudData { positions, colors })
+    let bounds = SpatialBounds::from_points(positions.iter().copied())?;
+    Ok(PointCloudData {
+        positions: Arc::new(positions),
+        colors: Arc::new(colors),
+        bounds,
+    })
 }

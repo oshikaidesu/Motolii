@@ -3,18 +3,36 @@ mod encode;
 mod mesh;
 mod point_cloud;
 mod probe;
+mod spatial;
 
 use std::io::Read;
 use std::process::Command;
 
 pub use encode::Encoder;
-pub use mesh::{is_mesh_extension, is_mesh_path, load_mesh, MeshData, MeshError, MESH_EXTENSIONS};
+pub use mesh::{
+    is_mesh_extension, is_mesh_path, load_mesh_bounds, MeshError, MESH_EXTENSIONS,
+};
 pub use point_cloud::{
-    asset_type_for_extension, is_point_cloud_extension, is_point_cloud_path, is_rerun_importable_extension,
+    is_point_cloud_extension, is_point_cloud_path, is_rerun_importable_extension,
     load_point_cloud, PointCloudData,
     PointCloudError, POINT_CLOUD_EXTENSIONS,
     is_still_image_path,
 };
+pub use spatial::{SpatialBounds, SpatialBoundsError};
+
+/// 素材棚が受け入れる拡張子の唯一の分類口。
+/// 映像・画像・3DはRerun importer、音声はpin済みSymphoniaのfeatureに合わせる。
+pub fn asset_type_for_extension(extension: &str) -> Option<String> {
+    const AUDIO: &[&str] = &[
+        "aac", "aif", "aiff", "flac", "m4a", "mp1", "mp2", "mp3", "oga", "ogg", "wav",
+    ];
+    let extension = extension.to_ascii_lowercase();
+    if AUDIO.contains(&extension.as_str()) {
+        Some(format!("audio/{extension}"))
+    } else {
+        point_cloud::non_audio_asset_type_for_extension(&extension)
+    }
+}
 pub use probe::{
     probe, probe_container, require_supported_audio, select_audio_stream, select_video_stream,
     ContainerInfo, MediaInfo, MediaStreamKind, ProbedAudioStream, ProbedVideoStream,
@@ -128,4 +146,29 @@ pub fn verify_tool_versions() -> Result<(u32, u32)> {
         }
     };
     Ok((major("ffmpeg")?, major("ffprobe")?))
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn the_media_gate_admits_the_audio_formats_our_decoder_owns() {
+        assert_eq!(super::asset_type_for_extension("wav").as_deref(), Some("audio/wav"));
+        assert_eq!(super::asset_type_for_extension("MP3").as_deref(), Some("audio/mp3"));
+    }
+
+    #[test]
+    fn the_spatial_gate_matches_the_formats_the_product_can_render() {
+        for extension in ["glb", "obj", "stl"] {
+            assert_eq!(
+                super::asset_type_for_extension(extension),
+                Some(format!("model/{extension}"))
+            );
+        }
+        assert_eq!(
+            super::asset_type_for_extension("ply").as_deref(),
+            Some("pointcloud.ply")
+        );
+        assert_eq!(super::asset_type_for_extension("gltf"), None);
+        assert_eq!(super::asset_type_for_extension("dae"), None);
+    }
 }
