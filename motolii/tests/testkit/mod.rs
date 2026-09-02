@@ -161,7 +161,11 @@ pub(crate) fn compare_rgba_labeled(
         sum += d as u64;
 
         let channel = i % 4;
-        diff_rgba[i] = if channel == 3 { 255 } else { d.saturating_mul(4) };
+        diff_rgba[i] = if channel == 3 {
+            255
+        } else {
+            d.saturating_mul(4)
+        };
     }
 
     let compared_bytes = actual.len();
@@ -191,13 +195,16 @@ pub(crate) fn save_rgba_png_labeled(
         });
     }
 
-    let image =
-        image::ImageBuffer::<image::Rgba<u8>, Vec<u8>>::from_raw(desc.width, desc.height, rgba.to_vec())
-            .ok_or_else(|| TestkitError::SizeMismatch {
-                label: label.into(),
-                actual: rgba.len(),
-                expected: desc.byte_len(),
-            })?;
+    let image = image::ImageBuffer::<image::Rgba<u8>, Vec<u8>>::from_raw(
+        desc.width,
+        desc.height,
+        rgba.to_vec(),
+    )
+    .ok_or_else(|| TestkitError::SizeMismatch {
+        label: label.into(),
+        actual: rgba.len(),
+        expected: desc.byte_len(),
+    })?;
 
     image.save(path).map_err(|source| TestkitError::PngWrite {
         path: path.to_path_buf(),
@@ -245,8 +252,8 @@ pub(crate) fn assert_rgba_matches_golden_file(
     );
     let expected = reference.into_raw();
 
-    let diff = compare_rgba_labeled(label, desc, actual, &expected)
-        .unwrap_or_else(|err| panic!("{err}"));
+    let diff =
+        compare_rgba_labeled(label, desc, actual, &expected).unwrap_or_else(|err| panic!("{err}"));
 
     let mean_limit = tol::mean_limit(tolerance);
     if diff.stats.max_abs_diff > tolerance || diff.stats.mean_abs_diff > mean_limit {

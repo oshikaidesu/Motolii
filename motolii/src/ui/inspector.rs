@@ -1,12 +1,15 @@
+use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
 use dioxus_native::prelude::*;
 
 use crate::ui::fixture::{inspector_data_from_doc, InspectorData, PropRow};
 use crate::ui::playback::Clock;
+use crate::ui::semantic_menu::SemanticButton;
 use crate::doc::store::{
     property, BlendMode, ContentKeyframe, Document, Intent, Interp, Keyframe,
-    LayerAttrsPatch, LayerId, PropertyId, RationalTime, Value,
+    LayerAttrsPatch, LayerId, LayerSource, Matte, MatteMode, PropertyId, RationalTime, StoreError,
+    StoreView, Value,
 };
 
 /// 窓に並べる合成モード。**W3C Compositing の16 mix + `plus`(Add)**で、
@@ -341,7 +344,7 @@ fn prop_row(
             span { class: "n", "{p.label}" }
             {cells}
             if let Some(on_click) = key_click {
-                span { class: "{key_class}", onclick: on_click, "{key_glyph}" }
+                SemanticButton { class: "{key_class}", selected: p.keyed, aria_label: "Toggle keyframes", onclick: on_click, "{key_glyph}" }
             } else {
                 span { class: "{key_class}", "{key_glyph}" }
             }
@@ -407,7 +410,7 @@ fn content_row(
     )
 }
 
-fn descends_from(view: &crate::doc::store::StoreView<'_>, layer: LayerId, ancestor: LayerId) -> bool {
+fn descends_from(view: &StoreView<'_>, layer: LayerId, ancestor: LayerId) -> bool {
     let mut cur = Some(layer);
     for _ in 0..64 {
         let Some(l) = cur else { return false };
@@ -419,11 +422,289 @@ fn descends_from(view: &crate::doc::store::StoreView<'_>, layer: LayerId, ancest
     false
 }
 
-fn set_parent(doc: &Arc<Mutex<Document>>, layer: LayerId, parent: Option<LayerId>) {
-    let patch = LayerAttrsPatch { parent: Some(parent), ..Default::default() };
-    if let Err(e) = doc.lock().unwrap().apply(Intent::SetAttrs { layer, patch }) {
-        println!("PROBE room=write verdict=apply-error {e}");
+fn layer_label(view: &StoreView<'_>, layer: LayerId) -> String {
+    view.attrs(layer)
+        .ok()
+        .flatten()
+        .map(|attrs| attrs.name)
+        .filter(|name| !name.is_empty())
+        .unwrap_or_else(|| format!("Layer {}", layer.0))
+}
+
+fn parent_candidates(view: &StoreView<'_>, layer: LayerId) -> Vec<(LayerId, String)> {
+    view.layers()
+        .into_iter()
+        .filter(|candidate| *candidate != layer && !descends_from(view, *candidate, layer))
+        .map(|candidate| (candidate, layer_label(view, candidate)))
+        .collect()
+}
+
+fn matte_chain_reaches(view: &StoreView<'_>, start: LayerId, target: LayerId) -> bool {
+    let mut current = Some(start);
+    let mut seen = std::collections::HashSet::new();
+    while let Some(layer) = current {
+        if layer == target {
+            return true;
+        }
+        if !seen.insert(layer) {
+            return false;
+        }
+        current = view
+            .attrs(layer)
+            .ok()
+            .flatten()
+            .and_then(|attrs| attrs.matte)
+            .map(|matte| matte.layer);
     }
+    false
+}
+
+fn is_texture_matte_source(source: &LayerSource) -> bool {
+    match source {
+        LayerSource::Shape | LayerSource::Text => true,
+        LayerSource::File { path, .. } => std::path::Path::new(path)
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .and_then(crate::render::media::asset_type_for_extension)
+            .is_some_and(|kind| kind.starts_with("image/") || kind.starts_with("video/")),
+        LayerSource::Null | LayerSource::Group => false,
+    }
+}
+
+fn matte_candidates(view: &StoreView<'_>, target: LayerId) -> Vec<(LayerId, String)> {
+    view.layers()
+        .into_iter()
+        .filter(|candidate| *candidate != target)
+        .filter(|candidate| !matte_chain_reaches(view, *candidate, target))
+        .filter(|candidate| {
+            view.meta(*candidate)
+                .ok()
+                .flatten()
+                .is_some_and(|meta| is_texture_matte_source(&meta.source))
+        })
+        .map(|candidate| (candidate, layer_label(view, candidate)))
+        .collect()
+}
+
+fn set_parent(
+    doc: &Arc<Mutex<Document>>,
+    layer: LayerId,
+    parent: Option<LayerId>,
+) -> Result<(), StoreError> {
+    let patch = LayerAttrsPatch { parent: Some(parent), ..Default::default() };
+    doc.lock().unwrap().apply(Intent::SetAttrs { layer, patch })
+}
+
+fn set_matte_source(
+    doc: &Arc<Mutex<Document>>,
+    layer: LayerId,
+    source: Option<LayerId>,
+) -> Result<(), StoreError> {
+    let mut doc = doc.lock().unwrap();
+    let mode = doc
+        .view()
+        .attrs(layer)?
+        .and_then(|attrs| attrs.matte)
+        .map_or(MatteMode::Alpha, |matte| matte.mode);
+    let matte = source.map(|source| Matte { layer: source, mode });
+    doc.apply(Intent::SetAttrs {
+        layer,
+        patch: LayerAttrsPatch { matte: Some(matte), ..Default::default() },
+    })
+}
+
+fn set_matte_mode(
+    doc: &Arc<Mutex<Document>>,
+    layer: LayerId,
+    mode: MatteMode,
+) -> Result<(), StoreError> {
+    let mut doc = doc.lock().unwrap();
+    let Some(mut matte) = doc.view().attrs(layer)?.and_then(|attrs| attrs.matte) else {
+        return Err(StoreError::Property("Choose a matte source first".to_owned()));
+    };
+    matte.mode = mode;
+    doc.apply(Intent::SetAttrs {
+        layer,
+        patch: LayerAttrsPatch { matte: Some(Some(matte)), ..Default::default() },
+    })
+}
+
+#[derive(Clone, PartialEq)]
+struct LayerChoice {
+    layer: Option<LayerId>,
+    label: String,
+}
+
+#[derive(Clone)]
+struct LayerChoiceAction(Rc<dyn Fn(Option<LayerId>) -> Result<(), StoreError>>);
+
+impl PartialEq for LayerChoiceAction {
+    fn eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum ChoiceId {
+    Blend,
+    Parent,
+    MatteSource,
+    MatteMode,
+}
+
+#[component]
+pub(super) fn ChoiceDismiss(mut open: Signal<Option<ChoiceId>>) -> Element {
+    if open().is_none() {
+        return rsx! {};
+    }
+    rsx!(div {
+        class: "choice-dismiss",
+        role: "presentation",
+        onmousedown: move |evt| {
+            evt.stop_propagation();
+            open.set(None);
+        },
+    })
+}
+
+#[component]
+fn ChoiceTrigger(current: String, id: ChoiceId, mut open: Signal<Option<ChoiceId>>) -> Element {
+    let shown = open() == Some(id);
+    rsx!(button {
+        class: "v content choice-trigger",
+        aria_expanded: if shown { "true" } else { "false" },
+        onclick: move |_| open.set(if open() == Some(id) { None } else { Some(id) }),
+        onkeydown: move |evt| {
+            if evt.key() == Key::Escape {
+                evt.prevent_default();
+                evt.stop_propagation();
+                open.set(None);
+            }
+        },
+        "{current}"
+    })
+}
+
+#[derive(Clone, PartialEq, Props)]
+struct LayerChoiceRowProps {
+    id: ChoiceId,
+    label: &'static str,
+    current: String,
+    choices: Vec<LayerChoice>,
+    action: LayerChoiceAction,
+    open: Signal<Option<ChoiceId>>,
+}
+
+#[allow(non_snake_case)]
+fn LayerChoiceRow(props: LayerChoiceRowProps) -> Element {
+    let mut open = props.open;
+    let mut rejection = use_signal(String::new);
+    let shown = open() == Some(props.id);
+    rsx!(
+        div { class: "prow",
+            span { class: "n", "{props.label}" }
+            ChoiceTrigger { current: props.current.clone(), id: props.id, open }
+            span { class: "glyph", "◇" }
+        }
+        if shown {
+            for choice in props.choices.iter().cloned() {
+                SemanticButton {
+                    class: "prow blend-pick",
+                    onclick: {
+                        let action = props.action.clone();
+                        move |_| {
+                            match (action.0)(choice.layer) {
+                                Ok(()) => {
+                                    rejection.set(String::new());
+                                    open.set(None);
+                                }
+                                Err(error) => rejection.set(error.to_string()),
+                            }
+                        }
+                    },
+                    span { class: "n", "" }
+                    span { class: "v content", "{choice.label}" }
+                }
+            }
+        }
+        if !rejection().is_empty() {
+            div { class: "hint", "{rejection}" }
+        }
+    )
+}
+
+const MATTE_MODES: &[(MatteMode, &str)] = &[
+    (MatteMode::Alpha, "Alpha"),
+    (MatteMode::InvertedAlpha, "Inverted Alpha"),
+    (MatteMode::Luma, "Luma"),
+    (MatteMode::InvertedLuma, "Inverted Luma"),
+];
+
+fn matte_mode_label(mode: MatteMode) -> &'static str {
+    MATTE_MODES
+        .iter()
+        .find(|(candidate, _)| *candidate == mode)
+        .map(|(_, label)| *label)
+        .unwrap_or("Alpha")
+}
+
+#[derive(Clone)]
+struct MatteModeAction(Rc<dyn Fn(MatteMode) -> Result<(), StoreError>>);
+
+impl PartialEq for MatteModeAction {
+    fn eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+#[derive(Clone, PartialEq, Props)]
+struct MatteModeRowProps {
+    current: MatteMode,
+    action: MatteModeAction,
+    open: Signal<Option<ChoiceId>>,
+}
+
+#[allow(non_snake_case)]
+fn MatteModeRow(props: MatteModeRowProps) -> Element {
+    let mut open = props.open;
+    let mut rejection = use_signal(String::new);
+    let shown = open() == Some(ChoiceId::MatteMode);
+    rsx!(
+        div { class: "prow",
+            span { class: "n", "Mode" }
+            ChoiceTrigger {
+                current: matte_mode_label(props.current).to_owned(),
+                id: ChoiceId::MatteMode,
+                open,
+            }
+            span { class: "glyph", "◇" }
+        }
+        if shown {
+            for (mode, label) in MATTE_MODES.iter().copied() {
+                SemanticButton {
+                    class: if mode == props.current { "prow blend-pick on" } else { "prow blend-pick" },
+                    selected: mode == props.current,
+                    onclick: {
+                        let action = props.action.clone();
+                        move |_| {
+                            match (action.0)(mode) {
+                                Ok(()) => {
+                                    rejection.set(String::new());
+                                    open.set(None);
+                                }
+                                Err(error) => rejection.set(error.to_string()),
+                            }
+                        }
+                    },
+                    span { class: "n", "" }
+                    span { class: "v content", "{label}" }
+                }
+            }
+        }
+        if !rejection().is_empty() {
+            div { class: "hint", "{rejection}" }
+        }
+    )
 }
 
 pub(super) fn inspector_panel(
@@ -434,8 +715,7 @@ pub(super) fn inspector_panel(
     editing: Signal<Option<String>>,
     drag: Signal<Option<ValueDrag>>,
     num_edit: Signal<Option<NumEdit>>,
-    mut blend_open: Signal<bool>,
-    mut parent_open: Signal<bool>,
+    mut choice_open: Signal<Option<ChoiceId>>,
     playhead: Signal<f64>,
 ) -> Element {
     let mut drag = drag;
@@ -486,33 +766,34 @@ pub(super) fn inspector_panel(
         .collect();
     let fx_label = if inspector.has_effects { "" } else { "No shared FX" };
 
-    let candidates: Vec<(LayerId, String)> = match selection {
+    let (parent_label, parent_choices, matte_source_label, matte_choices, matte) = match selection {
         Some(layer) => {
             let d = doc.lock().unwrap();
             let view = d.view();
-            view.layers()
-                .into_iter()
-                .filter(|l| *l != layer && !descends_from(&view, *l, layer))
-                .map(|l| {
-                    let name = view.attrs(l).ok().flatten().map(|a| a.name).unwrap_or_default();
-                    (l, name)
-                })
-                .collect()
+            let attrs = view.attrs(layer).ok().flatten().unwrap_or_default();
+            let parent_label = attrs
+                .parent
+                .map(|parent| layer_label(&view, parent))
+                .unwrap_or_else(|| "None".to_owned());
+            let mut parent_choices = vec![LayerChoice { layer: None, label: "None".to_owned() }];
+            parent_choices.extend(
+                parent_candidates(&view, layer)
+                    .into_iter()
+                    .map(|(candidate, label)| LayerChoice { layer: Some(candidate), label }),
+            );
+            let matte = attrs.matte;
+            let matte_source_label = matte
+                .map(|matte| layer_label(&view, matte.layer))
+                .unwrap_or_else(|| "None".to_owned());
+            let mut matte_choices = vec![LayerChoice { layer: None, label: "None".to_owned() }];
+            matte_choices.extend(
+                matte_candidates(&view, layer)
+                    .into_iter()
+                    .map(|(candidate, label)| LayerChoice { layer: Some(candidate), label }),
+            );
+            (parent_label, parent_choices, matte_source_label, matte_choices, matte)
         }
-        None => Vec::new(),
-    };
-    let parent_label = match selection {
-        Some(layer) => {
-            let d = doc.lock().unwrap();
-            let view = d.view();
-            view.attrs(layer)
-                .ok()
-                .flatten()
-                .and_then(|a| a.parent)
-                .and_then(|p| view.attrs(p).ok().flatten().map(|a| a.name))
-                .unwrap_or_else(|| "なし".to_string())
-        }
-        None => "None".to_string(),
+        None => ("None".to_owned(), Vec::new(), "None".to_owned(), Vec::new(), None),
     };
     let has_children = match selection {
         Some(layer) => {
@@ -535,6 +816,40 @@ pub(super) fn inspector_panel(
             .is_some_and(|a| a.frozen),
         None => false,
     };
+
+    let parent_action = selection.map(|layer| {
+        let doc = doc.clone();
+        let revision_signal = revision;
+        LayerChoiceAction(Rc::new(move |parent| {
+            set_parent(&doc, layer, parent)?;
+            let mut revision = revision_signal;
+            *revision.write() += 1;
+            println!("PROBE room=write verdict=applied SetAttrs parent={parent:?} layer={layer:?}");
+            Ok(())
+        }))
+    });
+    let matte_source_action = selection.map(|layer| {
+        let doc = doc.clone();
+        let revision_signal = revision;
+        LayerChoiceAction(Rc::new(move |source| {
+            set_matte_source(&doc, layer, source)?;
+            let mut revision = revision_signal;
+            *revision.write() += 1;
+            println!("PROBE room=write verdict=applied SetAttrs matte-source={source:?} layer={layer:?}");
+            Ok(())
+        }))
+    });
+    let matte_mode_action = selection.map(|layer| {
+        let doc = doc.clone();
+        let revision_signal = revision;
+        MatteModeAction(Rc::new(move |mode| {
+            set_matte_mode(&doc, layer, mode)?;
+            let mut revision = revision_signal;
+            *revision.write() += 1;
+            println!("PROBE room=write verdict=applied SetAttrs matte-mode={mode:?} layer={layer:?}");
+            Ok(())
+        }))
+    });
 
     let doc_move = doc.clone();
     let doc_up = doc.clone();
@@ -581,10 +896,6 @@ pub(super) fn inspector_panel(
                     b { "{inspector.ident_name}" }
                     span { class: "sub", "{inspector.ident_sub}" }
                 }
-                div { class: "sp",
-                    span { class: "glyph", "M" }
-                    span { class: "glyph on", "S" }
-                }
             }
             div { class: "cols",
                 span { class: "pn", "Property" }
@@ -600,20 +911,18 @@ pub(super) fn inspector_panel(
                 div { class: "sec", "BLEND" }
                 div { class: "prow",
                     span { class: "n", "mode" }
-                    span {
-                        class: "v content",
-                        onclick: move |_| {
-                            let open = *blend_open.read();
-                            *blend_open.write() = !open;
-                        },
-                        "{blend_label(inspector.blend)}"
+                    ChoiceTrigger {
+                        current: blend_label(inspector.blend).to_owned(),
+                        id: ChoiceId::Blend,
+                        open: choice_open,
                     }
                     span { class: "glyph", "◇" }
                 }
-                if blend_open() {
+                if choice_open() == Some(ChoiceId::Blend) {
                     for (mode , label) in BLEND_MODES.iter().copied() {
-                        div {
+                        SemanticButton {
                             class: if mode == inspector.blend { "prow blend-pick on" } else { "prow blend-pick" },
+                            selected: mode == inspector.blend,
                             onclick: {
                                 let doc = doc.clone();
                                 move |_| {
@@ -626,7 +935,7 @@ pub(super) fn inspector_panel(
                                         }
                                         Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
                                     }
-                                    *blend_open.write() = false;
+                                    choice_open.set(None);
                                 }
                             },
                             span { class: "n", "" }
@@ -637,51 +946,20 @@ pub(super) fn inspector_panel(
             }
             if let Some(layer) = selection {
                 div { class: "sec", "PARENT" }
-                div { class: "prow",
-                    span { class: "n", "Parent" }
-                    span {
-                        class: "v content",
-                        onclick: move |_| {
-                            let open = *parent_open.read();
-                            *parent_open.write() = !open;
-                        },
-                        "{parent_label}"
-                    }
-                    span { class: "glyph", "◇" }
-                }
-                if parent_open() {
-                    div {
-                        class: "prow blend-pick",
-                        onclick: {
-                            let doc = doc.clone();
-                            move |_| {
-                                set_parent(&doc, layer, None);
-                                *parent_open.write() = false;
-                                *revision.write() += 1;
-                            }
-                        },
-                        span { class: "n", "" }
-                        span { class: "v content", "None" }
-                    }
-                    for (candidate , name) in candidates.iter().cloned() {
-                        div {
-                            class: "prow blend-pick",
-                            onclick: {
-                                let doc = doc.clone();
-                                move |_| {
-                                    set_parent(&doc, layer, Some(candidate));
-                                    *parent_open.write() = false;
-                                    *revision.write() += 1;
-                                }
-                            },
-                            span { class: "n", "" }
-                            span { class: "v content", "{name}" }
-                        }
+                if let Some(action) = parent_action.clone() {
+                    LayerChoiceRow {
+                        id: ChoiceId::Parent,
+                        label: "Parent",
+                        current: parent_label.clone(),
+                        choices: parent_choices.clone(),
+                        action,
+                        open: choice_open,
                     }
                 }
                 if has_children {
-                    div {
+                    SemanticButton {
                         class: "prow",
+                        selected: frozen,
                         onclick: {
                             let doc = doc.clone();
                             move |_| {
@@ -699,6 +977,22 @@ pub(super) fn inspector_panel(
                         span { class: "n", "Group" }
                         span { class: "v content", if frozen { "Unfreeze" } else { "Freeze" } }
                     }
+                }
+            }
+            if selection.is_some() {
+                div { class: "sec", "MATTE" }
+                if let Some(action) = matte_source_action.clone() {
+                    LayerChoiceRow {
+                        id: ChoiceId::MatteSource,
+                        label: "Source",
+                        current: matte_source_label.clone(),
+                        choices: matte_choices.clone(),
+                        action,
+                        open: choice_open,
+                    }
+                }
+                if let (Some(matte), Some(action)) = (matte, matte_mode_action.clone()) {
+                    MatteModeRow { current: matte.mode, action, open: choice_open }
                 }
             }
             if !inspector.text.is_empty() {
@@ -733,8 +1027,9 @@ pub(super) fn inspector_panel(
                 for (id , plugin_id , rows) in effect_blocks.into_iter() {
                     div { class: "prow fxhead",
                         span { class: "n", "{plugin_id}" }
-                        span {
+                        SemanticButton {
                             class: "v fxdrop",
+                            aria_label: "Remove {plugin_id}",
                             onclick: {
                                 let doc = doc.clone();
                                 move |_| {
@@ -752,4 +1047,126 @@ pub(super) fn inspector_panel(
             div { class: "hint", "Drag to scrub · double-click to type · Esc to cancel" }
         }
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::doc::store::{Composition, Fps, LayerMeta, LayerTiming};
+
+    fn add_layer(doc: &mut Document, id: u64, source: LayerSource, name: &str) -> LayerId {
+        let layer = LayerId(id);
+        doc.apply_all([
+            Intent::AddLayer(layer),
+            Intent::SetMeta {
+                layer,
+                meta: LayerMeta {
+                    source,
+                    order: id as i16,
+                    timing: LayerTiming::place(0, None, 30),
+                },
+            },
+            Intent::SetAttrs {
+                layer,
+                patch: LayerAttrsPatch { name: Some(name.to_owned()), ..Default::default() },
+            },
+        ])
+        .unwrap();
+        layer
+    }
+
+    fn document() -> Document {
+        let mut doc = Document::new();
+        doc.apply(Intent::SetComposition(Composition {
+            width: 32,
+            height: 32,
+            fps: Fps::try_new(30, 1).unwrap(),
+            duration_frames: 30,
+            background: [0.0, 0.0, 0.0, 0.0],
+        }))
+        .unwrap();
+        doc
+    }
+
+    #[test]
+    fn matte_candidates_exclude_self_cycles_and_non_texture_sources() {
+        let mut doc = document();
+        let target = add_layer(&mut doc, 1, LayerSource::Shape, "Target");
+        let shape = add_layer(&mut doc, 2, LayerSource::Shape, "Shape");
+        let image = add_layer(
+            &mut doc,
+            3,
+            LayerSource::File { path: "image.png".into(), fingerprint: None },
+            "Image",
+        );
+        let video = add_layer(
+            &mut doc,
+            4,
+            LayerSource::File { path: "movie.mp4".into(), fingerprint: None },
+            "Video",
+        );
+        let mesh = add_layer(
+            &mut doc,
+            5,
+            LayerSource::File { path: "mesh.obj".into(), fingerprint: None },
+            "Mesh",
+        );
+        let points = add_layer(
+            &mut doc,
+            6,
+            LayerSource::File { path: "cloud.ply".into(), fingerprint: None },
+            "Points",
+        );
+        let group = add_layer(&mut doc, 7, LayerSource::Group, "Group");
+        let null = add_layer(&mut doc, 8, LayerSource::Null, "Null");
+        let cycle = add_layer(&mut doc, 9, LayerSource::Text, "Cycle");
+        doc.apply(Intent::SetAttrs {
+            layer: cycle,
+            patch: LayerAttrsPatch {
+                matte: Some(Some(Matte { layer: target, mode: MatteMode::Alpha })),
+                ..Default::default()
+            },
+        })
+        .unwrap();
+
+        let ids: Vec<_> = matte_candidates(&doc.view(), target)
+            .into_iter()
+            .map(|(layer, _)| layer)
+            .collect();
+        assert!(ids.contains(&shape));
+        assert!(ids.contains(&image));
+        assert!(ids.contains(&video));
+        for rejected in [target, mesh, points, group, null, cycle] {
+            assert!(!ids.contains(&rejected), "unexpected matte source: {rejected:?}");
+        }
+    }
+
+    #[test]
+    fn none_and_all_four_modes_round_trip_one_undo_at_a_time() {
+        for mode in [
+            MatteMode::Alpha,
+            MatteMode::InvertedAlpha,
+            MatteMode::Luma,
+            MatteMode::InvertedLuma,
+        ] {
+            let mut doc = document();
+            let target = add_layer(&mut doc, 1, LayerSource::Shape, "Target");
+            let source = add_layer(&mut doc, 2, LayerSource::Shape, "Source");
+            let doc = Arc::new(Mutex::new(doc));
+
+            set_matte_source(&doc, target, Some(source)).unwrap();
+            set_matte_mode(&doc, target, mode).unwrap();
+            assert_eq!(doc.lock().unwrap().view().attrs(target).unwrap().unwrap().matte,
+                Some(Matte { layer: source, mode }));
+            assert!(doc.lock().unwrap().undo());
+            assert_eq!(doc.lock().unwrap().view().attrs(target).unwrap().unwrap().matte,
+                Some(Matte { layer: source, mode: MatteMode::Alpha }));
+
+            set_matte_source(&doc, target, None).unwrap();
+            assert_eq!(doc.lock().unwrap().view().attrs(target).unwrap().unwrap().matte, None);
+            assert!(doc.lock().unwrap().undo());
+            assert_eq!(doc.lock().unwrap().view().attrs(target).unwrap().unwrap().matte,
+                Some(Matte { layer: source, mode: MatteMode::Alpha }));
+        }
+    }
 }

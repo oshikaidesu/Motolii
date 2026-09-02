@@ -1,11 +1,8 @@
-
 use dioxus_native::prelude::*;
 
-use crate::doc::store::{Fps, Interp, Intent, KeyframeTrack, PropertyId, RationalTime};
+use crate::doc::store::{Intent, Interp, KeyframeTrack, PropertyId, RationalTime};
 
 use crate::ui::session::{KeySel, Session};
-
-const FPS: f64 = 30.0;
 
 /// 選んだキーから作る区間。同じ層・同じ属性で時刻が隣り合う2つが1区間。
 /// 1つしか選んでいない時は「そのキーから次まで」を区間とみなす。
@@ -15,7 +12,10 @@ pub(super) fn segments(keys: &[KeySel]) -> Vec<KeySel> {
     for key in keys {
         let track = (
             key.layer.0,
-            key.property.as_ref().map(|p| p.name().to_string()).unwrap_or_default(),
+            key.property
+                .as_ref()
+                .map(|p| p.name().to_string())
+                .unwrap_or_default(),
         );
         by_track.entry(track).or_default().push(key.at_sec);
     }
@@ -23,7 +23,10 @@ pub(super) fn segments(keys: &[KeySel]) -> Vec<KeySel> {
     for key in keys {
         let track = (
             key.layer.0,
-            key.property.as_ref().map(|p| p.name().to_string()).unwrap_or_default(),
+            key.property
+                .as_ref()
+                .map(|p| p.name().to_string())
+                .unwrap_or_default(),
         );
         let times = &by_track[&track];
         let is_last = times.iter().all(|t| *t <= key.at_sec);
@@ -37,11 +40,16 @@ pub(super) fn segments(keys: &[KeySel]) -> Vec<KeySel> {
 
 pub(super) fn apply(session: &Session, starts: &[KeySel], shape: Interp) -> Result<usize, String> {
     let mut doc = session.doc.lock().unwrap();
-    let fps = Fps::try_new(FPS as i64, 1).map_err(|e| e.to_string())?;
+    let fps = doc
+        .view()
+        .composition()
+        .map_err(|error| error.to_string())?
+        .ok_or_else(|| "Composition has no frame rate".to_owned())?
+        .fps;
 
     let mut intents = Vec::new();
     for sel in starts {
-        let at = RationalTime::try_new((sel.at_sec * FPS).round() as i64, FPS as i64)
+        let at = RationalTime::try_from_frame((sel.at_sec * fps.as_f64()).round() as i64, fps)
             .map_err(|e| e.to_string())?;
         let properties: Vec<PropertyId> = match &sel.property {
             Some(p) => vec![p.clone()],
@@ -68,7 +76,11 @@ pub(super) fn apply(session: &Session, starts: &[KeySel], shape: Interp) -> Resu
                 next.insert(key);
             }
             if touched {
-                intents.push(Intent::SetTrack { layer: sel.layer, property, track: next });
+                intents.push(Intent::SetTrack {
+                    layer: sel.layer,
+                    property,
+                    track: next,
+                });
             }
         }
     }
@@ -85,9 +97,24 @@ pub(super) fn apply(session: &Session, starts: &[KeySel], shape: Interp) -> Resu
 pub(super) fn easy_ease(side: crate::ui::keymap::EaseSide) -> Interp {
     use crate::ui::keymap::EaseSide;
     match side {
-        EaseSide::Both => Interp::Bezier { x1: 0.33, y1: 0.0, x2: 0.67, y2: 1.0 },
-        EaseSide::In => Interp::Bezier { x1: 0.33, y1: 0.0, x2: 1.0, y2: 1.0 },
-        EaseSide::Out => Interp::Bezier { x1: 0.0, y1: 0.0, x2: 0.67, y2: 1.0 },
+        EaseSide::Both => Interp::Bezier {
+            x1: 0.33,
+            y1: 0.0,
+            x2: 0.67,
+            y2: 1.0,
+        },
+        EaseSide::In => Interp::Bezier {
+            x1: 0.33,
+            y1: 0.0,
+            x2: 1.0,
+            y2: 1.0,
+        },
+        EaseSide::Out => Interp::Bezier {
+            x1: 0.0,
+            y1: 0.0,
+            x2: 0.67,
+            y2: 1.0,
+        },
     }
 }
 
@@ -118,14 +145,15 @@ pub(super) fn span_of(session: &Session, start: &KeySel) -> Option<(f64, f64)> {
 pub(super) fn shape_of(session: &Session, start: &KeySel) -> Interp {
     let doc = session.doc.lock().unwrap();
     let view = doc.view();
-    let Ok(fps) = Fps::try_new(FPS as i64, 1) else {
+    let Ok(Some(composition)) = view.composition() else {
         return Interp::Linear;
     };
+    let fps = composition.fps;
     let properties: Vec<PropertyId> = match &start.property {
         Some(p) => vec![p.clone()],
         None => view.properties(start.layer),
     };
-    let at = ((start.at_sec * FPS).round()) as i64;
+    let at = (start.at_sec * fps.as_f64()).round() as i64;
     for property in properties {
         let Ok(Some(track)) = view.track(start.layer, &property) else {
             continue;
@@ -156,6 +184,12 @@ pub(super) fn ease_panel(
     let target = if live {
         let doc = session.doc.lock().unwrap();
         let view = doc.view();
+        let fps = view
+            .composition()
+            .ok()
+            .flatten()
+            .map(|composition| composition.fps)
+            .unwrap_or_else(|| crate::doc::store::Fps::try_new(30, 1).expect("30fps"));
         let layer = chosen[0].layer;
         let name = view
             .attrs(layer)
@@ -173,8 +207,8 @@ pub(super) fn ease_panel(
         let (a, b) = (at[0], *at.last().expect("空でない"));
         format!(
             "{name} · {property} · {}–{}",
-            crate::ui::fixture::fmt_timecode(a),
-            crate::ui::fixture::fmt_timecode(b)
+            crate::ui::fixture::fmt_timecode(a, fps),
+            crate::ui::fixture::fmt_timecode(b, fps)
         )
     } else {
         "Pick a key on the timeline".to_string()

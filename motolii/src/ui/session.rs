@@ -1,10 +1,102 @@
 use std::sync::{Arc, Mutex};
 
-use crate::doc::store::{Document, LayerId};
+use crate::doc::store::{Document, LayerId, Revision};
 
 use crate::ui::playback::Clock;
 use crate::ui::timeline_widget::TimelineMsg;
 use crate::ui::tokens::UiScale;
+
+#[derive(Clone, Default)]
+pub(super) struct GestureSurface {
+    active: Arc<std::sync::atomic::AtomicBool>,
+    cancel: Arc<std::sync::atomic::AtomicU32>,
+}
+
+#[derive(Clone, Default)]
+pub(super) struct FileDropSurface(Arc<Mutex<Vec<std::path::PathBuf>>>);
+
+impl FileDropSurface {
+    pub(super) fn enter(&self, paths: &[std::path::PathBuf]) {
+        *self.0.lock().unwrap() = paths.to_vec();
+    }
+
+    pub(super) fn leave(&self) {
+        self.0.lock().unwrap().clear();
+    }
+
+    pub(super) fn count(&self) -> usize {
+        self.0.lock().unwrap().len()
+    }
+}
+
+impl GestureSurface {
+    pub(super) fn begin(&self) {
+        self.active
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    pub(super) fn end(&self) {
+        self.active
+            .store(false, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    #[cfg(test)]
+    pub(super) fn is_active(&self) -> bool {
+        self.active.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    pub(super) fn cancel(&self) -> bool {
+        if !self
+            .active
+            .swap(false, std::sync::atomic::Ordering::Relaxed)
+        {
+            return false;
+        }
+        self.cancel
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        true
+    }
+
+    pub(super) fn cancelled(&self, seen: &mut u32) -> bool {
+        let current = self.cancel.load(std::sync::atomic::Ordering::Relaxed);
+        if current == *seen {
+            return false;
+        }
+        *seen = current;
+        true
+    }
+}
+
+#[cfg(test)]
+mod gesture_tests {
+    use super::{FileDropSurface, GestureSurface};
+
+    #[test]
+    fn one_cancel_generation_reaches_every_surface_once() {
+        let gesture = GestureSurface::default();
+        let mut stage = 0;
+        let mut timeline = 0;
+        let mut ease = 0;
+
+        gesture.begin();
+        assert!(gesture.cancel());
+        assert!(!gesture.is_active());
+        assert!(gesture.cancelled(&mut stage));
+        assert!(gesture.cancelled(&mut timeline));
+        assert!(gesture.cancelled(&mut ease));
+        assert!(!gesture.cancelled(&mut stage));
+        assert!(!gesture.cancel());
+    }
+
+    #[test]
+    fn file_drop_hover_is_one_shared_lifecycle() {
+        let drop = FileDropSurface::default();
+        drop.enter(&["a.mov".into(), "b.wav".into()]);
+        assert_eq!(drop.count(), 2);
+        drop.leave();
+        assert_eq!(drop.count(), 0);
+    }
+}
 
 #[derive(Clone, Default)]
 pub(super) struct Selection(Arc<Mutex<Vec<LayerId>>>);
@@ -63,18 +155,15 @@ pub(super) struct Session {
     pub rings: Arc<std::sync::atomic::AtomicBool>,
     /// 枠の外へかける膜の濃さ(%)。見る側の設定で、作品には入らない。
     pub frame_dim: Arc<std::sync::atomic::AtomicU32>,
-    /// 掴みの取り消し。上がるたびに、掴んでいる物は**書かずに**手を離す
-    /// (規格が MUST で求める pointercancel の役)。
-    pub cancel_gesture: Arc<std::sync::atomic::AtomicU32>,
-    /// いま何かを掴んでいるか。`Esc` の意味を段で分けるために要る
-    /// (掴んでいる間は取り消し、そうでなければ選択を解く)。
-    pub gesture_active: Arc<std::sync::atomic::AtomicBool>,
+    pub gesture: GestureSurface,
+    pub file_drop: FileDropSurface,
     pub overshoot: Arc<std::sync::atomic::AtomicBool>,
-    /// 写した曲線。区間から区間へ貼るための控え(Document には入らない)。
-    /// 書き出しの一言。別の糸が書き、窓が読む。
-    pub outgo: Arc<Mutex<String>>,
+    pub export: crate::ui::output::ExportController,
+    pub project_notice: Arc<Mutex<String>>,
     /// 今の作品の仕舞い先。`Save` が問い直さないために覚える。
     pub project_path: Arc<Mutex<Option<std::path::PathBuf>>>,
+    /// 最後に保存／読込／NewしたDocument revision。dirtyは現在との差だけで決まる。
+    pub saved_revision: Arc<Mutex<Revision>>,
     pub curve_clip: Arc<Mutex<Option<crate::doc::store::Interp>>>,
     /// 見る側のカメラ(User View)。**Document には入らない** — 書き出しには出ない。
     pub view_camera: Arc<Mutex<crate::render::engine::ObservationCamera>>,
@@ -101,9 +190,11 @@ impl PartialEq for Session {
 impl Session {
     pub(super) fn new(doc: Document, duration_sec: f64, ui: crate::ui::fixture::UiData) -> Self {
         let (timeline_tx, timeline_rx) = std::sync::mpsc::channel();
+        let clock = Arc::new(Clock::from_document(&doc, duration_sec));
+        let saved_revision = doc.revision();
         Self {
             doc: Arc::new(Mutex::new(doc)),
-            clock: Arc::new(Clock::new(duration_sec)),
+            clock,
             scale: Arc::new(UiScale::new(100)),
             selection: Selection::default(),
             selected_size: Arc::new(Mutex::new(None)),
@@ -114,12 +205,68 @@ impl Session {
             view_camera: Arc::new(Mutex::new(Default::default())),
             rings: Arc::new(std::sync::atomic::AtomicBool::new(true)),
             frame_dim: Arc::new(std::sync::atomic::AtomicU32::new(75)),
-            cancel_gesture: Arc::new(std::sync::atomic::AtomicU32::new(0)),
-            gesture_active: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            gesture: GestureSurface::default(),
+            file_drop: FileDropSurface::default(),
             overshoot: Arc::new(std::sync::atomic::AtomicBool::new(false)),
-            outgo: Arc::new(Mutex::new(String::new())),
+            export: Default::default(),
+            project_notice: Arc::new(Mutex::new(String::new())),
             project_path: Arc::new(Mutex::new(None)),
+            saved_revision: Arc::new(Mutex::new(saved_revision)),
             curve_clip: Arc::new(Mutex::new(None)),
         }
+    }
+
+    pub(super) fn is_dirty(&self) -> bool {
+        let current = self.doc.lock().unwrap().revision();
+        current != *self.saved_revision.lock().unwrap()
+    }
+
+    pub(super) fn mark_saved(&self, path: std::path::PathBuf) {
+        let current = self.doc.lock().unwrap().revision();
+        *self.project_path.lock().unwrap() = Some(path);
+        *self.saved_revision.lock().unwrap() = current;
+    }
+
+    pub(super) fn replace_project(&self, document: Document, path: Option<std::path::PathBuf>) {
+        let revision = document.revision();
+        *self.doc.lock().unwrap() = document;
+        *self.project_path.lock().unwrap() = path;
+        *self.saved_revision.lock().unwrap() = revision;
+    }
+}
+
+#[cfg(test)]
+mod project_tests {
+    use super::*;
+
+    #[test]
+    fn dirty_state_is_only_the_difference_from_the_saved_revision() {
+        let loaded = crate::ui::fixture::load_fixture();
+        let session = Session::new(loaded.doc, loaded.duration_sec, loaded.ui);
+        assert!(!session.is_dirty());
+
+        let layer = LayerId(session.doc.lock().unwrap().view().next_layer_id());
+        session
+            .doc
+            .lock()
+            .unwrap()
+            .apply(crate::doc::store::Intent::AddLayer(layer))
+            .unwrap();
+        assert!(session.is_dirty());
+
+        session.mark_saved(std::path::PathBuf::from("song.rrd"));
+        assert!(!session.is_dirty());
+
+        session
+            .doc
+            .lock()
+            .unwrap()
+            .apply(crate::doc::store::Intent::AddLayer(LayerId(layer.0 + 1)))
+            .unwrap();
+        assert!(session.is_dirty());
+
+        session.replace_project(crate::ui::blank_project(), None);
+        assert!(!session.is_dirty());
+        assert!(session.project_path.lock().unwrap().is_none());
     }
 }

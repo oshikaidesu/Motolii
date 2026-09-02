@@ -5,10 +5,10 @@ use dioxus_native::prelude::*;
 
 use crate::doc::store::{
     property, ContentKeyframe, ContentTrack, Document, EffectId, EffectInstance, FontRef, Intent,
-    LayerAttrsPatch, LayerId, LayerMeta, LayerSource, LayerTiming,
-    PathSource, PropertyId, RationalTime, Value,
-    Shape, ShapeNode, TextAlignmentOptions, TextDocument, TextDocumentStyle, TextJustify,
-    TextStyleId, VectorPoint,
+    Interp, Keyframe, KeyframeTrack, LayerAttrsPatch, LayerId, LayerMeta, LayerSource, LayerTiming,
+    Mask, MaskId, MaskMode, Path, PathSource, PathVertex, PropertyId, RationalTime, Shape,
+    ShapeNode, TextAlignmentOptions, TextDocument, TextDocumentStyle, TextJustify, TextStyleId,
+    Value, VectorPoint,
 };
 use crate::render::vector::{Brush, Contour, Fill, FillRule, Rgb, Vertex};
 
@@ -17,9 +17,8 @@ use crate::ui::fixture::ColorSwatch;
 use crate::ui::dock::Panel;
 use crate::ui::fixture::{self, LayerRow};
 use crate::ui::playback::Clock;
+use crate::ui::semantic_menu::SemanticButton;
 use crate::ui::timeline_widget::TimelineMsg;
-
-const FPS: f64 = 30.0;
 
 #[derive(Clone)]
 enum NewKind {
@@ -29,43 +28,27 @@ enum NewKind {
     Media { path: String, name: String },
 }
 
-/// 点群のファイル座標を comp のピクセルへ橋渡しする初期値。囲む球が画角の
-/// 6割に収まる倍率と、中心が comp の中心に来る位置を**一度だけ**書く。
+/// 空間素材のファイル座標を comp のピクセルへ橋渡しする初期値。囲む球が画角の
+/// 6割に収まる倍率と、正規化した箱の左上が中央配置になる位置を**一度だけ**書く。
 /// 以後は利用者の物(キーフレームも打てる)。
 /// 3D の素材を画角へ収める。中心を comp の真ん中へ、大きさを画面の6割へ。
 fn spatial_fit_intents(layer: LayerId, path: &str, comp: (f64, f64)) -> Vec<Intent> {
-    let sphere = if crate::render::media::is_mesh_path(path) {
-        crate::render::media::load_mesh(path).ok().map(|m| {
-            let mut min = [f32::MAX; 3];
-            let mut max = [f32::MIN; 3];
-            for p in &m.positions {
-                for i in 0..3 {
-                    min[i] = min[i].min(p[i]);
-                    max[i] = max[i].max(p[i]);
-                }
-            }
-            let center = [
-                (min[0] + max[0]) * 0.5,
-                (min[1] + max[1]) * 0.5,
-                (min[2] + max[2]) * 0.5,
-            ];
-            let radius = (0..3)
-                .map(|i| (max[i] - min[i]) * 0.5)
-                .fold(0.0f32, f32::max);
-            (center, radius)
-        })
+    let bounds = if crate::render::media::is_mesh_path(path) {
+        crate::render::media::load_mesh_bounds(path).ok()
     } else {
         crate::render::media::load_point_cloud(std::path::Path::new(path))
             .ok()
-            .map(|d| d.bounding_sphere())
+            .map(|data| data.bounds())
     };
-    let Some((center, radius)) = sphere else {
+    let Some(bounds) = bounds else {
         return Vec::new();
     };
+    let radius = bounds.radius();
     if radius <= 0.0 {
         return Vec::new();
     }
     let fit = (comp.1 * 0.6) / (radius as f64 * 2.0);
+    let size = bounds.size_xy();
     // 置いた時の初期値は**素の値**。0秒のキーにすると、利用者が ◇ を
     // 押していないのに時間の世界が開いてしまう。
     let put = |name: &str, value: Value| Intent::SetConstant {
@@ -78,8 +61,8 @@ fn spatial_fit_intents(layer: LayerId, path: &str, comp: (f64, f64)) -> Vec<Inte
         put(
             property::POSITION,
             Value::Vec2([
-                comp.0 * 0.5 - center[0] as f64 * fit,
-                comp.1 * 0.5 - center[1] as f64 * fit,
+                (comp.0 - size[0] as f64 * fit) * 0.5,
+                (comp.1 - size[1] as f64 * fit) * 0.5,
             ]),
         ),
     ]
@@ -111,7 +94,15 @@ fn shape_natural(shapes: &[ShapeNode]) -> (f64, f64) {
         .unwrap_or((0.0, 0.0))
 }
 
-fn new_layer_intents(layer: LayerId, order: i16, playhead: i64, duration_frames: i64, comp: (f64, f64), kind: NewKind) -> Vec<Intent> {
+fn new_layer_intents(
+    layer: LayerId,
+    order: i16,
+    playhead: i64,
+    duration_frames: i64,
+    fps: crate::doc::store::Fps,
+    comp: (f64, f64),
+    kind: NewKind,
+) -> Vec<Intent> {
     let label_color = Some(Some((layer.0 % fixture::LABEL_PALETTE.len() as u64) as u8));
     match kind {
         NewKind::Media { path, name } => {
@@ -256,7 +247,8 @@ fn new_layer_intents(layer: LayerId, order: i16, playhead: i64, duration_frames:
                     content: {
                         let mut track = ContentTrack::new();
                         track.insert(ContentKeyframe {
-                            t: RationalTime::try_new(playhead, 30).unwrap_or(RationalTime::ZERO),
+                            t: RationalTime::try_from_frame(playhead, fps)
+                                .unwrap_or(RationalTime::ZERO),
                             content: "テキスト".to_owned(),
                         });
                         track
@@ -316,16 +308,29 @@ fn spawn_layer(
         .max()
         .map(|m| m.saturating_add(1))
         .unwrap_or(0);
-    let playhead = (clock.now_sec() * FPS) as i64;
-    let duration_frames = d.view().composition().ok().flatten().map(|c| c.duration_frames).unwrap_or(1800);
-    let comp_size = d
-        .view()
-        .composition()
-        .ok()
-        .flatten()
-        .map(|c| (c.width as f64, c.height as f64))
+    let composition = d.view().composition().ok().flatten();
+    let fps = composition
+        .as_ref()
+        .map(|composition| composition.fps)
+        .unwrap_or_else(|| crate::doc::store::Fps::try_new(30, 1).expect("30fps"));
+    let playhead = clock.current_frame();
+    let duration_frames = composition
+        .as_ref()
+        .map(|composition| composition.duration_frames)
+        .unwrap_or(1800);
+    let comp_size = composition
+        .as_ref()
+        .map(|composition| (composition.width as f64, composition.height as f64))
         .unwrap_or((1920.0, 1080.0));
-    let intents = new_layer_intents(layer, order, playhead, duration_frames, comp_size, kind);
+    let intents = new_layer_intents(
+        layer,
+        order,
+        playhead,
+        duration_frames,
+        fps,
+        comp_size,
+        kind,
+    );
     match d.apply_all(intents) {
         Ok(_) => {
             let rows = fixture::layer_rows_from_doc(&d);
@@ -369,6 +374,86 @@ fn add_effect(doc: &Arc<Mutex<Document>>, layer: LayerId, plugin_id: &str, mut r
             println!("PROBE room=write verdict=effect-added layer={} plugin={plugin_id}", layer.0);
         }
         Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
+    }
+}
+
+fn mask_frame(doc: &Document, layer: LayerId) -> Option<[f64; 2]> {
+    let view = doc.view();
+    let meta = view.meta(layer).ok().flatten()?;
+    let comp = view.composition().ok().flatten()?;
+    match meta.source {
+        LayerSource::Text => Some([comp.width as f64, comp.height as f64]),
+        LayerSource::Shape => {
+            let shapes = view.shapes(layer).ok()?;
+            let (width, height) = shape_natural(&shapes);
+            (width > 0.0 && height > 0.0).then_some([width, height])
+        }
+        LayerSource::File { path, .. }
+            if !crate::render::media::is_mesh_path(&path)
+                && !crate::render::media::is_point_cloud_path(&path) =>
+        {
+            let info = crate::render::media::probe(&path).ok()?;
+            Some([info.width as f64, info.height as f64])
+        }
+        LayerSource::File { .. } | LayerSource::Null | LayerSource::Group => None,
+    }
+}
+
+fn add_rectangle_mask(
+    doc: &Arc<Mutex<Document>>,
+    layer: LayerId,
+    mut revision: Signal<u32>,
+) {
+    let mut d = doc.lock().unwrap();
+    let Some([width, height]) = mask_frame(&d, layer) else {
+        println!("PROBE room=write verdict=mask-skip layer={} reason=no-2d-frame", layer.0);
+        return;
+    };
+    let next_id = d
+        .view()
+        .masks(layer)
+        .unwrap_or_default()
+        .iter()
+        .map(|mask| mask.id.0)
+        .max()
+        .map(|id| id + 1)
+        .unwrap_or(0);
+    let x0 = width * 0.2;
+    let x1 = width * 0.8;
+    let y0 = height * 0.2;
+    let y1 = height * 0.8;
+    let mut shape = KeyframeTrack::new();
+    shape.insert(Keyframe {
+        t: RationalTime::ZERO,
+        value: Value::Path(Path {
+            vertices: [[x0, y0], [x1, y0], [x1, y1], [x0, y1]]
+                .into_iter()
+                .map(|point| PathVertex {
+                    point,
+                    in_tangent: [0.0, 0.0],
+                    out_tangent: [0.0, 0.0],
+                })
+                .collect(),
+            closed: true,
+        }),
+        interp: Interp::Hold,
+        spatial: None,
+    });
+    match d.apply(Intent::AddMask {
+        layer,
+        mask: Mask {
+            id: MaskId(next_id),
+            mode: MaskMode::Add,
+            inverted: false,
+        },
+        shape,
+    }) {
+        Ok(_) => {
+            drop(d);
+            *revision.write() += 1;
+            println!("PROBE room=write verdict=mask-added layer={} id={next_id}", layer.0);
+        }
+        Err(error) => println!("PROBE room=write verdict=apply-error {error}"),
     }
 }
 
@@ -485,9 +570,11 @@ pub(super) fn browser_panel(
                 );
             }
         });
+        let disabled = place.is_none();
         rsx!(
-            div {
+            SemanticButton {
                 class: "tcard",
+                disabled,
                 onclick: move |evt| { if let Some(f) = &place { f(evt) } },
                 if let Some(src) = preview {
                     img { class: "thumb", src: "{src}" }
@@ -499,23 +586,11 @@ pub(super) fn browser_panel(
             }
         )
     });
-    let footer_hint = if selected().is_some() {
-        "⌥click to replace source"
-    } else {
-        "Edit tags"
-    };
     let first_asset = shown.first().map(|a| a.name.clone()).unwrap_or_default();
     let asset_count = shown.len();
 
     rsx!(
         div { id: "browser",
-            div { class: "btoolbar",
-                span { class: "hbtn", "‹" }
-                span { class: "hbtn", "›" }
-                span { class: "search", "Search files and tags" }
-                span { class: "tbtn", "Filters" }
-                span { class: "tbtn", "Tags" }
-            }
             if panel == Panel::Colors {
                 {
                     let layer = selected();
@@ -528,8 +603,9 @@ pub(super) fn browser_panel(
                             move |_| apply_layer_color(&doc, l, rgba, revision)
                         });
                         rsx!(
-                            div {
+                            SemanticButton {
                                 class: "{card_class}",
+                                disabled: layer.is_none(),
                                 onclick: move |evt| { if let Some(f) = &onclick { f(evt) } },
                                 div { class: "thumb", style: "background:{hex};" }
                                 span { class: "tname", "{hex}" }
@@ -579,8 +655,10 @@ pub(super) fn browser_panel(
                             move |_| add_effect(&doc, l, &plugin_id, revision)
                         });
                         rsx!(
-                            div {
+                            SemanticButton {
                                 class: "{card_class}",
+                                disabled: layer.is_none(),
+                                selected: is_on,
                                 onclick: move |evt| { if let Some(f) = &onclick { f(evt) } },
                                 div { class: "thumb", style: "background:#222; display:flex; align-items:center; justify-content:center;",
                                     span { style: "color:#fff; font-size:20px;", "ƒ" }
@@ -611,22 +689,28 @@ pub(super) fn browser_panel(
                     )
                 }
             } else if panel == Panel::Create {
-                div { class: "bwork",
+                {
+                let mask_layer = selected().filter(|layer| {
+                    mask_frame(&doc.lock().unwrap(), *layer).is_some()
+                });
+                let mask_count = mask_layer
+                    .and_then(|layer| doc.lock().unwrap().view().masks(layer).ok())
+                    .map(|masks| masks.len())
+                    .unwrap_or(0);
+                rsx!(div { class: "bwork",
                     div { class: "bside",
                         div { class: "sh", "CREATE" }
                         div { class: "srow on", "All" }
-                        div { class: "srow", "Text" }
-                        div { class: "srow", "Shape" }
                     }
                     div { class: "bresults",
                         div { class: "rhead",
                             div {
                                 b { "Create" }
-                                span { class: "sub", "Adds a new layer to the composition" }
+                                span { class: "sub", "Adds a layer or applies a Mask to the selection" }
                             }
                         }
                         div { class: "tgrid",
-                            div {
+                            SemanticButton {
                                 class: "tcard",
                                 onclick: {
                                     let doc = doc.clone();
@@ -640,7 +724,7 @@ pub(super) fn browser_panel(
                                 span { class: "tname", "Text" }
                                 span { class: "tmeta", "text layer" }
                             }
-                            div {
+                            SemanticButton {
                                 class: "tcard",
                                 onclick: {
                                     let doc = doc.clone();
@@ -654,7 +738,7 @@ pub(super) fn browser_panel(
                                 span { class: "tname", "Rectangle" }
                                 span { class: "tmeta", "path shape" }
                             }
-                            div {
+                            SemanticButton {
                                 class: "tcard",
                                 onclick: {
                                     let doc = doc.clone();
@@ -668,37 +752,52 @@ pub(super) fn browser_panel(
                                 span { class: "tname", "Bezier" }
                                 span { class: "tmeta", "path shape" }
                             }
+                            SemanticButton {
+                                class: if mask_count > 0 { "tcard on" } else if mask_layer.is_some() { "tcard" } else { "tcard disabled" },
+                                disabled: mask_layer.is_none(),
+                                selected: mask_count > 0,
+                                onclick: {
+                                    let doc = doc.clone();
+                                    move |_| {
+                                        if let Some(layer) = mask_layer {
+                                            add_rectangle_mask(&doc, layer, revision);
+                                        }
+                                    }
+                                },
+                                div { class: "thumb", style: "background:#222; display:flex; align-items:center; justify-content:center;",
+                                    div { style: "width:40%; height:40%; border:3px solid #fff;" }
+                                }
+                                span { class: "tname", "Mask" }
+                                span { class: "tmeta", if mask_count > 0 { "{mask_count} attached" } else { "layer mask" } }
+                            }
                         }
                     }
+                })
                 }
             } else {
                 div { class: "bwork",
                     div { class: "bside",
                         div { class: "sh", "LIBRARY" }
-                        div {
+                        SemanticButton {
                             class: "{rail_class(None)}",
+                            selected: rail().is_none(),
                             onclick: move |_| rail.set(None),
                             "All media"
                         }
                         {families.iter().copied().map(|f| rsx!(
-                            div {
+                            SemanticButton {
                                 class: "{rail_class(Some(f))}",
+                                selected: rail() == Some(f),
                                 onclick: move |_| rail.set(Some(f)),
                                 "{f.label()}"
                             }
                         ))}
-                        div { class: "sh", "PLACES" }
-                        div { class: "srow", "Comp 1" }
                     }
                     div { class: "bresults",
                         div { class: "rhead",
                             div {
                                 b { "{rail_label}" }
-                                span { class: "sub", "Library · fixture" }
-                            }
-                            div { class: "sp",
-                                span { class: "glyph", "▦" }
-                                span { class: "glyph on", "▤" }
+                                span { class: "sub", "Library" }
                             }
                         }
                         div { class: "rcount",
@@ -709,7 +808,6 @@ pub(super) fn browser_panel(
                         div { class: "bfoot",
                             span { class: "dot", style: "background:var(--accent);" }
                             "{first_asset}"
-                            em { "{footer_hint}" }
                         }
                     }
                 }
@@ -728,7 +826,15 @@ mod placement {
     /// 説明書も最初から「画面の真ん中に立つ」と書いている。
     fn box_of(kind: NewKind, comp: (f64, f64), natural: (f64, f64)) -> (f64, f64) {
         let layer = LayerId(1);
-        let intents = new_layer_intents(layer, 0, 0, 30, comp, kind);
+        let intents = new_layer_intents(
+            layer,
+            0,
+            0,
+            30,
+            crate::doc::store::Fps::try_new(30, 1).unwrap(),
+            comp,
+            kind,
+        );
         let mut doc = Document::new();
         doc.apply_all(intents).unwrap();
         let view = doc.view();
@@ -771,6 +877,77 @@ mod placement {
         assert!(
             (center.0 - 320.0).abs() < 2.0 && (center.1 - 240.0).abs() < 2.0,
             "絵の中心が枠の真ん中に無い: {center:?}"
+        );
+    }
+
+    #[test]
+    fn mesh_and_point_cloud_receive_the_same_spatial_fit_contract() {
+        let dir = tempfile::tempdir().unwrap();
+        let obj = dir.path().join("triangle.obj");
+        let ply = dir.path().join("triangle.ply");
+        std::fs::write(
+            &obj,
+            "v -1 -1 0\nv 1 -1 0\nv 0 1 0\nf 1 2 3\n",
+        )
+        .unwrap();
+        std::fs::write(
+            &ply,
+            "ply\nformat ascii 1.0\nelement vertex 3\nproperty float x\nproperty float y\nproperty float z\nend_header\n-1 -1 0\n1 -1 0\n0 1 0\n",
+        )
+        .unwrap();
+
+        let values = |path: &std::path::Path| {
+            let layer = LayerId(1);
+            let mut doc = Document::new();
+            doc.apply_all(spatial_fit_intents(
+                layer,
+                path.to_str().unwrap(),
+                (640.0, 480.0),
+            ))
+            .unwrap();
+            let view = doc.view();
+            let read = |name| {
+                view.value_at(
+                    layer,
+                    &PropertyId::new(name).unwrap(),
+                    RationalTime::ZERO,
+                )
+                .unwrap()
+                .unwrap()
+            };
+            (read(property::POSITION), read(property::SCALE))
+        };
+
+        let mesh = values(&obj);
+        let points = values(&ply);
+        assert_eq!(mesh, points);
+        let (Value::Vec2(position), Value::Vec2(scale)) = mesh else {
+            panic!("spatial fit did not write Position and Scale")
+        };
+        assert!((position[0] + scale[0] - 320.0).abs() < 0.01);
+        assert!((position[1] + scale[1] - 240.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn text_content_starts_on_the_composition_frame() {
+        let fps = crate::doc::store::Fps::try_new(24, 1).unwrap();
+        let layer = LayerId(1);
+        let mut doc = Document::new();
+        doc.apply_all(new_layer_intents(
+            layer,
+            0,
+            37,
+            240,
+            fps,
+            (640.0, 480.0),
+            NewKind::Text,
+        ))
+        .unwrap();
+
+        let text = doc.view().text_document(layer).unwrap().unwrap();
+        assert_eq!(
+            text.content.keys()[0].t.try_to_frame_round(fps).unwrap(),
+            37
         );
     }
 }

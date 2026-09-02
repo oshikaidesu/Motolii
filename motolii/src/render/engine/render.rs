@@ -1,10 +1,12 @@
-
 use std::collections::{HashMap, HashSet};
 
-use crate::render::compositor::{Layer, LayerWithPasses};
 use crate::doc::core::{CompSpec, ResolvedCamera};
 use crate::doc::store::{
-    LayerId, LayerSource, RationalTime, ResolvedLayer, ShapeNode, StoreView, TextDocument,
+    LayerId, LayerSource, RationalTime, ResolvedLayer, ResolvedMask, ShapeNode, StoreView,
+    TextDocument,
+};
+use crate::render::compositor::{
+    BlendMode as CompositeBlendMode, EffectPass, Layer, LayerContent, LayerWithPasses,
 };
 
 use crate::render::engine::translate::{
@@ -36,63 +38,16 @@ impl Engine {
             .resolved_layers(t)
             .map_err(|e| EngineError::Store(e.to_string()))?;
 
-        let mut layers: Vec<LayerWithPasses> = Vec::with_capacity(resolved.len() + 1);
-
-        let by_id: HashMap<LayerId, &ResolvedLayer> =
-            resolved.iter().map(|layer| (layer.id, layer)).collect();
-        let matte_sources: HashSet<LayerId> = resolved
-            .iter()
-            .filter_map(|layer| layer.matte.map(|matte| matte.layer))
-            .collect();
-
-        for layer in &resolved {
-            if matte_sources.contains(&layer.id) {
-                continue;
-            }
-
-            let blend_mode = translate_blend_mode(layer.blend_mode)?;
-            let passes = translate_effect_passes(&layer.effects);
-
-            let (content, natural) = self.texture_for_layer(view, layer, t, comp)?;
-            let Some(content) = content else {
-                continue;
-            };
-            let built = self.flatten_if_asked(comp, camera, Layer {
-                content,
-                size: layer_size(layer, natural),
-                placement: layer.placement,
-                pinned: layer.pinned,
-                blend_mode,
-            }, layer.flatten)?;
-
-            let final_layer = match layer.matte {
-                None => built,
-                Some(matte) => {
-                    let Some(source) = by_id.get(&matte.layer).copied() else {
-                        continue;
-                    };
-                    let (source_content, source_natural) =
-                        self.texture_for_layer(view, source, t, comp)?;
-                    let Some(source_content) = source_content else {
-                        continue;
-                    };
-                    let source_blend = translate_blend_mode(source.blend_mode)?;
-                    let source_layer = Layer {
-                        content: source_content,
-                        size: layer_size(source, source_natural),
-                        placement: source.placement,
-                        pinned: source.pinned,
-                        blend_mode: source_blend,
-                    };
-                    self.apply_matte(comp, camera, &built, &source_layer, matte.mode)?
-                }
-            };
-
-            layers.push(LayerWithPasses {
-                layer: final_layer,
-                passes,
-            });
-        }
+        let text_documents = collect_text_documents(view, &resolved, t)?;
+        let shape_documents = collect_shape_documents(view, &resolved)?;
+        let layers = self.layers_from_resolved(
+            comp,
+            camera,
+            t,
+            &resolved,
+            &text_documents,
+            &shape_documents,
+        )?;
 
         let background_color = if include_background {
             composition.background
@@ -136,17 +91,24 @@ impl Engine {
             let Some(content) = content else {
                 continue;
             };
-            let built = self.flatten_if_asked(comp, camera, Layer {
-                content,
-                size: layer_size(layer, natural),
-                placement: layer.placement,
-                pinned: layer.pinned,
-                blend_mode,
-            }, layer.flatten)?;
+            let built = self.flatten_if_asked(
+                comp,
+                camera,
+                Layer {
+                    content,
+                    size: layer_size(layer, natural),
+                    placement: layer.placement,
+                    pinned: layer.pinned,
+                    blend_mode,
+                },
+                layer.flatten,
+            )?;
+            let built = self.apply_masks_to_layer(built, &layer.masks)?;
 
-            let final_layer = match layer.matte {
-                None => built,
+            let (final_layer, passes) = match layer.matte {
+                None => (built, passes),
                 Some(matte) => {
+                    let target = self.apply_effects_before_matte(comp, camera, built, &passes)?;
                     let Some(source) = by_id.get(&matte.layer).copied() else {
                         continue;
                     };
@@ -168,7 +130,20 @@ impl Engine {
                         pinned: source.pinned,
                         blend_mode: source_blend,
                     };
-                    self.apply_matte(comp, camera, &built, &source_layer, matte.mode)?
+                    let source_layer =
+                        self.flatten_if_asked(comp, camera, source_layer, source.flatten)?;
+                    let source_layer = self.apply_masks_to_layer(source_layer, &source.masks)?;
+                    let source_passes = translate_effect_passes(&source.effects);
+                    let source_layer = self.apply_effects_before_matte(
+                        comp,
+                        camera,
+                        source_layer,
+                        &source_passes,
+                    )?;
+                    (
+                        self.apply_matte(comp, camera, &target, &source_layer, matte.mode)?,
+                        Vec::new(),
+                    )
                 }
             };
 
@@ -274,13 +249,9 @@ impl Engine {
             &text_documents,
             &shape_documents,
         )?;
-        Ok(self.compositor.render_into(
-            target,
-            comp,
-            camera,
-            &layers,
-            composition.background,
-        )?)
+        Ok(self
+            .compositor
+            .render_into(target, comp, camera, &layers, composition.background)?)
     }
 
     /// 指定したカメラで撮る。**窓の視点はここへ来ない** —— 視点は撮れた絵を
@@ -337,7 +308,10 @@ impl Engine {
         let mut baked_placement = layer.placement;
         baked_placement.opacity = 1.0;
         let source = LayerWithPasses {
-            layer: Layer { placement: baked_placement, ..layer.clone() },
+            layer: Layer {
+                placement: baked_placement,
+                ..layer.clone()
+            },
             passes: Vec::new(),
         };
         let (texture, _view) = self.compositor.render_to_texture(
@@ -361,6 +335,99 @@ impl Engine {
             pinned: true,
             blend_mode: layer.blend_mode,
         })
+    }
+
+    /// Track Matte は、Effect後の層をsourceのcoverageで切り、その結果を他層へblendする。
+    /// EffectをMatte後のcomp大textureへ掛けると、0-input Effectが透明域を再び塗るため、
+    /// 既存のlocal-texture Effect経路をここで一度だけcomp座標へ収めてからMatteへ渡す。
+    fn apply_effects_before_matte(
+        &mut self,
+        comp: CompSpec,
+        camera: ResolvedCamera,
+        layer: Layer,
+        passes: &[EffectPass],
+    ) -> Result<Layer, EngineError> {
+        if passes.is_empty() {
+            return Ok(layer);
+        }
+
+        let output_blend = layer.blend_mode;
+        let mut effected = layer.clone();
+        // BlendはMatteでcoverageを得た後、作品の下層との間に一度だけ掛ける。
+        effected.blend_mode = CompositeBlendMode::Normal;
+        let source = LayerWithPasses {
+            layer: effected,
+            passes: passes.to_vec(),
+        };
+        let (texture, _view) = self.compositor.render_to_texture(
+            comp,
+            camera,
+            std::slice::from_ref(&source),
+            crate::render::compositor::NO_BACKGROUND,
+        )?;
+        let imported = self.compositor.import_premultiplied(&texture)?;
+        Ok(Layer {
+            content: LayerContent::Texture(imported),
+            size: [comp.width as f32, comp.height as f32],
+            placement: crate::doc::core::LayerPlacement {
+                transform: glam::Affine2::IDENTITY,
+                opacity: 1.0,
+                z: 0.0,
+                rotation_x: 0.0,
+                rotation_y: 0.0,
+                ..layer.placement
+            },
+            pinned: true,
+            blend_mode: output_blend,
+        })
+    }
+
+    fn apply_masks_to_layer(
+        &mut self,
+        mut layer: Layer,
+        masks: &[ResolvedMask],
+    ) -> Result<Layer, EngineError> {
+        if masks.is_empty() {
+            return Ok(layer);
+        }
+        let Some(texture) = layer.content.texture().cloned() else {
+            self.layer_failures.push(
+                "3D layer masks require the explicit flatten property before 2D coverage"
+                    .to_owned(),
+            );
+            return Ok(layer);
+        };
+        let [width, height] = texture.width_height();
+        let canvas = crate::render::vector::Canvas {
+            width,
+            height,
+            origin_x: 0,
+            origin_y: 0,
+        };
+        let coverage = crate::render::engine::mask::fold_masks(masks, &canvas)?;
+        let rgba = coverage
+            .bytes
+            .into_iter()
+            .flat_map(|alpha| [alpha, alpha, alpha, alpha])
+            .collect::<Vec<_>>();
+
+        use std::hash::{Hash, Hasher};
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        "layer-mask-coverage".hash(&mut hasher);
+        width.hash(&mut hasher);
+        height.hash(&mut hasher);
+        rgba.hash(&mut hasher);
+        let key = hasher.finish();
+        let mask_texture = self
+            .compositor
+            .cached_rgba(key, "layer-mask-coverage", || {
+                Ok::<_, std::convert::Infallible>((rgba, width, height))
+            })?;
+        let masked = self
+            .compositor
+            .apply_local_alpha_mask(&texture, &mask_texture)?;
+        layer.content = LayerContent::Texture(masked);
+        Ok(layer)
     }
 
     pub fn apply_matte(

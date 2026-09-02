@@ -18,7 +18,17 @@ pub struct Encoder {
 
 impl Encoder {
     pub fn open(out_path: impl AsRef<Path>, desc: &FrameDesc, fps: Fps, qp0: bool) -> Result<Self> {
-        Self::open_with_command("ffmpeg", out_path, desc, fps, qp0)
+        Self::open_with_command_and_audio("ffmpeg", out_path, desc, fps, qp0, None)
+    }
+
+    pub fn open_with_audio(
+        out_path: impl AsRef<Path>,
+        desc: &FrameDesc,
+        fps: Fps,
+        qp0: bool,
+        audio_path: &Path,
+    ) -> Result<Self> {
+        Self::open_with_command_and_audio("ffmpeg", out_path, desc, fps, qp0, Some(audio_path))
     }
 
     #[doc(hidden)]
@@ -29,6 +39,17 @@ impl Encoder {
         fps: Fps,
         qp0: bool,
     ) -> Result<Self> {
+        Self::open_with_command_and_audio(program, out_path, desc, fps, qp0, None)
+    }
+
+    fn open_with_command_and_audio(
+        program: impl AsRef<Path>,
+        out_path: impl AsRef<Path>,
+        desc: &FrameDesc,
+        fps: Fps,
+        qp0: bool,
+        audio_path: Option<&Path>,
+    ) -> Result<Self> {
         if desc.format != PixelFormat::Rgba8Unorm {
             return Err(MediaError::UnsupportedEncoderFormat(desc.format));
         }
@@ -36,7 +57,16 @@ impl Encoder {
         cmd.args(["-v", "error", "-y", "-f", "rawvideo", "-pix_fmt", "rgba"])
             .args(["-s", &format!("{}x{}", desc.width, desc.height)])
             .args(["-r", &format!("{}/{}", fps.num(), fps.den())])
-            .args(["-i", "-", "-c:v", "libx264"]);
+            .args(["-i", "-"]);
+        if let Some(audio_path) = audio_path {
+            cmd.args(["-f", "f32le", "-ar", "48000", "-ac", "2", "-i"])
+                .arg(audio_path);
+        }
+        cmd.args(["-map", "0:v:0"]);
+        if audio_path.is_some() {
+            cmd.args(["-map", "1:a:0", "-c:a", "aac", "-b:a", "192k", "-shortest"]);
+        }
+        cmd.args(["-c:v", "libx264"]);
         if qp0 {
             cmd.args(["-qp", "0", "-pix_fmt", "yuv444p"]);
         } else {

@@ -1,4 +1,3 @@
-
 use crate::doc::store::{RepeaterTransform, Shape as VecShape, ShapeGroup, ShapeNode};
 use crate::render::vector::{Brush, Contour, Dash, Fill, OpKind, PathSource, StarType, Stroke};
 
@@ -40,7 +39,11 @@ fn shape_leaf_to_group_item(shape: &VecShape) -> serde_json::Value {
             it.push(stroke_to_json(stroke));
         }
     }
-    it.push(repeater_transform_shape_item(&RepeaterTransform::IDENTITY, 1.0, 1.0));
+    it.push(repeater_transform_shape_item(
+        &RepeaterTransform::IDENTITY,
+        1.0,
+        1.0,
+    ));
     serde_json::json!({ "ty": "gr", "it": it })
 }
 
@@ -54,10 +57,7 @@ fn static_vec2(v: [f64; 2]) -> serde_json::Value {
 
 fn path_source_to_json_items(source: &PathSource) -> Vec<serde_json::Value> {
     match source {
-        PathSource::Bezier(contours) => contours
-            .iter()
-            .map(contour_to_path_item)
-            .collect(),
+        PathSource::Bezier(contours) => contours.iter().map(contour_to_path_item).collect(),
         PathSource::Rectangle { size } => vec![serde_json::json!({
             "ty": "rc",
             "p": static_vec2([0.0, 0.0]),
@@ -94,7 +94,11 @@ fn path_source_to_json_items(source: &PathSource) -> Vec<serde_json::Value> {
 }
 
 fn contour_to_path_item(contour: &Contour) -> serde_json::Value {
-    let v: Vec<[f64; 2]> = contour.vertices.iter().map(|p| [p.point.x, p.point.y]).collect();
+    let v: Vec<[f64; 2]> = contour
+        .vertices
+        .iter()
+        .map(|p| [p.point.x, p.point.y])
+        .collect();
     let i: Vec<[f64; 2]> = contour
         .vertices
         .iter()
@@ -113,7 +117,12 @@ fn contour_to_path_item(contour: &Contour) -> serde_json::Value {
 
 fn op_kind_to_json(kind: &OpKind) -> Option<serde_json::Value> {
     Some(match kind {
-        OpKind::TrimPath { start, end, offset, multiple } => serde_json::json!({
+        OpKind::TrimPath {
+            start,
+            end,
+            offset,
+            multiple,
+        } => serde_json::json!({
             "ty": "tm",
             "s": static_scalar(start * 100.0),
             "e": static_scalar(end * 100.0),
@@ -142,13 +151,21 @@ fn op_kind_to_json(kind: &OpKind) -> Option<serde_json::Value> {
             "ty": "pb",
             "a": static_scalar(amount * 100.0),
         }),
-        OpKind::ZigZag { amplitude, frequency, point_type } => serde_json::json!({
+        OpKind::ZigZag {
+            amplitude,
+            frequency,
+            point_type,
+        } => serde_json::json!({
             "ty": "zz",
             "s": static_scalar(*amplitude),
             "r": static_scalar(*frequency),
             "pt": static_scalar(point_type_to_int(*point_type) as f64),
         }),
-        OpKind::OffsetPath { amount, join, miter_limit } => serde_json::json!({
+        OpKind::OffsetPath {
+            amount,
+            join,
+            miter_limit,
+        } => serde_json::json!({
             "ty": "op",
             "a": static_scalar(*amount),
             "lj": line_join_to_int(*join),

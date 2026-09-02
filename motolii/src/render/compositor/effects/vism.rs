@@ -88,6 +88,10 @@ pub(crate) struct VismProgram {
 }
 
 impl VismProgram {
+    pub(crate) fn image_input_count(&self) -> usize {
+        self.image_order.len()
+    }
+
     pub(crate) fn new(
         ctx: &RenderContext,
         label: &str,
@@ -152,9 +156,8 @@ impl VismProgram {
             },
         );
 
-        let mut param_entries: Vec<wgpu::BindGroupLayoutEntry> = (0..param_order.len() as u32)
-            .map(uniform_entry)
-            .collect();
+        let mut param_entries: Vec<wgpu::BindGroupLayoutEntry> =
+            (0..param_order.len() as u32).map(uniform_entry).collect();
         param_entries.push(uniform_entry(render_size_binding(param_order.len())));
         // PASSINDEX(ISF 仕様。何段目かをシェーダへ渡す)
         param_entries.push(uniform_entry(pass_index_binding(param_order.len())));
@@ -190,29 +193,31 @@ impl VismProgram {
         let pipelines = pass_formats
             .iter()
             .enumerate()
-            .map(|(index, format)| ctx.gpu_resources.render_pipelines.get_or_create(
-            ctx,
-            &RenderPipelineDesc {
-                label: format!("{label}-pipeline-{index}").into(),
-                pipeline_layout,
-                vertex_entrypoint: vertex.entry_point.clone(),
-                vertex_handle,
-                fragment_entrypoint: fragment.entry_point.clone(),
-                fragment_handle,
-                vertex_buffers: Default::default(),
-                render_targets: re_renderer::external::smallvec::smallvec![Some(
-                    wgpu::ColorTargetState {
-                        format: *format,
-                        blend: None,
-                        write_mask: wgpu::ColorWrites::ALL,
-                    }
-                )],
-                primitive: wgpu::PrimitiveState::default(),
-                depth_stencil: None,
-                multisample: wgpu::MultisampleState::default(),
-            },
-        ))
-        .collect();
+            .map(|(index, format)| {
+                ctx.gpu_resources.render_pipelines.get_or_create(
+                    ctx,
+                    &RenderPipelineDesc {
+                        label: format!("{label}-pipeline-{index}").into(),
+                        pipeline_layout,
+                        vertex_entrypoint: vertex.entry_point.clone(),
+                        vertex_handle,
+                        fragment_entrypoint: fragment.entry_point.clone(),
+                        fragment_handle,
+                        vertex_buffers: Default::default(),
+                        render_targets: re_renderer::external::smallvec::smallvec![Some(
+                            wgpu::ColorTargetState {
+                                format: *format,
+                                blend: None,
+                                write_mask: wgpu::ColorWrites::ALL,
+                            }
+                        )],
+                        primitive: wgpu::PrimitiveState::default(),
+                        depth_stencil: None,
+                        multisample: wgpu::MultisampleState::default(),
+                    },
+                )
+            })
+            .collect();
 
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some(&format!("{label}-sampler")),
@@ -402,7 +407,12 @@ impl VismProgram {
         let mut render_info = [0u8; 8];
         render_info[0..4].copy_from_slice(&render_size[0].to_le_bytes());
         render_info[4..8].copy_from_slice(&render_size[1].to_le_bytes());
-        buffers.push(uniform_buffer(device, queue, "vism-render-info", &render_info));
+        buffers.push(uniform_buffer(
+            device,
+            queue,
+            "vism-render-info",
+            &render_info,
+        ));
         buffers.push(uniform_buffer(
             device,
             queue,

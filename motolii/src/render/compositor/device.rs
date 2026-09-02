@@ -25,30 +25,19 @@ impl Compositor {
         let ctx = RenderContext::new_from_device(device, queue, output_format, config_provider)
             .map_err(|e| CompositorError::Context(e.to_string()))?;
 
-        let glow_vism = effects::WgslFragmentProgram::compile(
-            &ctx,
-            "glow",
-            effects::GLOW_SOURCE,
-            effects::FLOAT_TARGET_FORMAT,
-        );
-        let isf_bloom = effects::IsfProgram::compile(
-            &ctx,
-            effects::BLOOM_SOURCE,
-            effects::ISF_TARGET_FORMAT,
-        )
-        .map_err(|e| CompositorError::Isf(e.to_string()))?;
-        let wgsl_gradient = effects::WgslFragmentProgram::compile(
-            &ctx,
-            "gradient",
-            effects::GRADIENT_SOURCE,
-            effects::GRADIENT_TARGET_FORMAT,
-        );
-        let wgsl_tri_led = effects::WgslFragmentProgram::compile(
-            &ctx,
-            "tri_led",
-            effects::TRI_LED_SOURCE,
-            effects::TRI_LED_TARGET_FORMAT,
-        );
+        let mut effect_programs = std::collections::HashMap::new();
+        for definition in effects::vism_definitions()
+            .iter()
+            .filter(|definition| definition.manifest.expose)
+        {
+            let program = effects::EffectProgram::compile(
+                &ctx,
+                definition.source,
+                definition.output_format(),
+            )
+            .map_err(|error| CompositorError::Isf(error.to_string()))?;
+            effect_programs.insert(definition.plugin_id().to_owned(), program);
+        }
         let blend_vism = effects::WgslFragmentProgram::compile_with_prelude(
             &ctx,
             "blend",
@@ -65,15 +54,11 @@ impl Compositor {
         );
 
         Ok(Self {
-            white_pixel: None,
             ctx,
             next_readback: 1,
             next_effect_key: 1,
             effect_scratch: effects::EffectScratch::default(),
-            glow_vism,
-            isf_bloom,
-            wgsl_gradient,
-            wgsl_tri_led,
+            effect_programs,
             blend_vism,
             matte_vism,
             sequential_submits: 0,
@@ -175,7 +160,9 @@ impl Compositor {
             crate::doc::core::ColorSpace::Rec709Limited => {
                 (YuvMatrixCoefficients::Bt709, YuvRange::Limited)
             }
-            crate::doc::core::ColorSpace::Rec709Full => (YuvMatrixCoefficients::Bt709, YuvRange::Full),
+            crate::doc::core::ColorSpace::Rec709Full => {
+                (YuvMatrixCoefficients::Bt709, YuvRange::Full)
+            }
             crate::doc::core::ColorSpace::Rec601Limited => {
                 (YuvMatrixCoefficients::Bt601, YuvRange::Limited)
             }
@@ -204,5 +191,4 @@ impl Compositor {
             )
             .map_err(|e| CompositorError::Rectangles(e.to_string()))
     }
-
 }

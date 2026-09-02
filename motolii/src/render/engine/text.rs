@@ -1,7 +1,12 @@
-
-use crate::doc::store::{RationalTime, TextDocument, TextDocumentStyle, TextJustify as StoreJustify};
-use crate::render::vector::text::{shape_text, GlyphFont, TextFeature, TextJustify, TextLayout, TextShapeError};
-use crate::render::vector::{Brush, Canvas, Fill, FillRule, PathSource, Raster, Rgb, Shape, Stroke, VectorError};
+use crate::doc::store::{
+    RationalTime, TextDocument, TextDocumentStyle, TextJustify as StoreJustify,
+};
+use crate::render::vector::text::{
+    shape_text, GlyphFont, TextFeature, TextJustify, TextLayout, TextShapeError,
+};
+use crate::render::vector::{
+    Brush, Canvas, Fill, FillRule, PathSource, Raster, Rgb, Shape, Stroke, VectorError,
+};
 
 #[derive(Debug, thiserror::Error)]
 pub enum TextRenderError {

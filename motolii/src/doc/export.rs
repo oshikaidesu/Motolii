@@ -1,13 +1,14 @@
-
+use std::io::Write;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use crate::doc::core::{FrameDesc, PixelFormat, RationalTime};
+use crate::doc::store::StoreView;
+use crate::render::audio::{time_to_canonical_frames, AudioError, AudioProgram, AudioProgramCache};
 use crate::render::engine::{Engine, EngineError};
 use crate::render::media::{Encoder, MediaError};
-use crate::doc::store::StoreView;
 
 mod lottie;
 pub use lottie::{export_lottie, LottieExport, LottieExportError, UnsupportedForLottie};
@@ -18,6 +19,8 @@ pub enum ExportError {
     Engine(#[from] EngineError),
     #[error(transparent)]
     Media(#[from] MediaError),
+    #[error(transparent)]
+    Audio(#[from] AudioError),
     #[error("frame 記述を作れない: {0}")]
     Desc(String),
     #[error("中断された(残骸は消してある)")]
@@ -135,13 +138,17 @@ pub fn export_range_with_progress(
     .map_err(|e| ExportError::Desc(e.to_string()))?;
 
     let frames_total = (range.end - range.start).max(0);
-    let mut encoder = Encoder::open(&job.out_path, &desc, fps, job.qp0)?;
+    let output = TempOutput::reserve(&job.out_path)?;
+    let audio = render_audio_input(view, &range, fps, cancel)?;
+    let mut encoder = match audio.as_ref() {
+        Some(audio) => Encoder::open_with_audio(&output.path, &desc, fps, job.qp0, &audio.path)?,
+        None => Encoder::open(&output.path, &desc, fps, job.qp0)?,
+    };
     let mut written = 0i64;
 
     for frame in range {
         if cancel.is_cancelled() {
             drop(encoder);
-            remove_partial(&job.out_path);
             return Err(ExportError::Cancelled);
         }
 
@@ -157,6 +164,7 @@ pub fn export_range_with_progress(
     }
 
     encoder.finish()?;
+    output.commit()?;
 
     Ok(ExportReport {
         out_path: job.out_path.clone(),
@@ -177,12 +185,18 @@ pub fn export_still(
     let comp = composition.spec();
     let fps = composition.fps;
 
-    let t = RationalTime::try_from_frame(frame, fps)
-        .map_err(|e| ExportError::Desc(e.to_string()))?;
+    let t =
+        RationalTime::try_from_frame(frame, fps).map_err(|e| ExportError::Desc(e.to_string()))?;
     let rgba = engine.render_frame(view, t)?;
 
-    image::save_buffer(out_path, &rgba, comp.width, comp.height, image::ColorType::Rgba8)
-        .map_err(|e| ExportError::Still(e.to_string()))?;
+    image::save_buffer(
+        out_path,
+        &rgba,
+        comp.width,
+        comp.height,
+        image::ColorType::Rgba8,
+    )
+    .map_err(|e| ExportError::Still(e.to_string()))?;
 
     Ok(ExportReport {
         out_path: out_path.to_path_buf(),
@@ -198,6 +212,149 @@ fn composition_duration_frames(view: &StoreView<'_>) -> Result<i64, ExportError>
     Ok(composition.duration_frames)
 }
 
-fn remove_partial(path: &Path) {
-    let _ = std::fs::remove_file(path);
+struct TempAudioInput {
+    path: PathBuf,
+}
+
+impl Drop for TempAudioInput {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.path);
+    }
+}
+
+struct TempOutput {
+    path: PathBuf,
+    destination: PathBuf,
+    committed: bool,
+}
+
+impl TempOutput {
+    fn reserve(destination: &Path) -> Result<Self, ExportError> {
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let dir = destination
+            .parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+            .unwrap_or_else(|| Path::new("."));
+        let stem = destination
+            .file_stem()
+            .and_then(|stem| stem.to_str())
+            .unwrap_or("movie");
+        let extension = destination
+            .extension()
+            .and_then(|extension| extension.to_str());
+
+        for _ in 0..32 {
+            let id = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            let name = match extension {
+                Some(extension) => {
+                    format!(".{stem}.export-{}-{id}.{extension}", std::process::id())
+                }
+                None => format!(".{stem}.export-{}-{id}", std::process::id()),
+            };
+            let path = dir.join(name);
+            match std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&path)
+            {
+                Ok(file) => {
+                    drop(file);
+                    return Ok(Self {
+                        path,
+                        destination: destination.to_path_buf(),
+                        committed: false,
+                    });
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                Err(error) => return Err(ExportError::Desc(error.to_string())),
+            }
+        }
+        Err(ExportError::Desc(
+            "could not reserve an export output".to_owned(),
+        ))
+    }
+
+    fn commit(mut self) -> Result<(), ExportError> {
+        std::fs::rename(&self.path, &self.destination)
+            .map_err(|error| ExportError::Desc(error.to_string()))?;
+        self.committed = true;
+        Ok(())
+    }
+}
+
+impl Drop for TempOutput {
+    fn drop(&mut self) {
+        if !self.committed {
+            let _ = std::fs::remove_file(&self.path);
+        }
+    }
+}
+
+fn render_audio_input(
+    view: &StoreView<'_>,
+    range: &Range<i64>,
+    fps: crate::doc::core::Fps,
+    cancel: &Cancel,
+) -> Result<Option<TempAudioInput>, ExportError> {
+    let mut cache = AudioProgramCache::default();
+    let program = AudioProgram::from_view(view, &mut cache)?;
+    if program.sources().is_empty() || range.end <= range.start {
+        return Ok(None);
+    }
+
+    let start = RationalTime::try_from_frame(range.start, fps)
+        .map_err(|error| ExportError::Desc(error.to_string()))?;
+    let end = RationalTime::try_from_frame(range.end, fps)
+        .map_err(|error| ExportError::Desc(error.to_string()))?;
+    let mut cursor = time_to_canonical_frames(start);
+    let end_frame = time_to_canonical_frames(end);
+    if end_frame <= cursor {
+        return Ok(None);
+    }
+
+    let (mut file, path) = reserve_audio_temp()?;
+    let input = TempAudioInput { path };
+    const CHUNK_FRAMES: usize = 48_000;
+    while cursor < end_frame {
+        if cancel.is_cancelled() {
+            return Err(ExportError::Cancelled);
+        }
+        let count = (end_frame - cursor).min(CHUNK_FRAMES as u64) as usize;
+        let (samples, _) = program.mix_audio(cursor, count, None)?;
+        let mut bytes = Vec::with_capacity(samples.len() * std::mem::size_of::<f32>());
+        for sample in samples {
+            bytes.extend_from_slice(&sample.to_le_bytes());
+        }
+        file.write_all(&bytes)
+            .map_err(|error| ExportError::Desc(error.to_string()))?;
+        cursor += count as u64;
+    }
+    file.flush()
+        .and_then(|_| file.sync_all())
+        .map_err(|error| ExportError::Desc(error.to_string()))?;
+    drop(file);
+    Ok(Some(input))
+}
+
+fn reserve_audio_temp() -> Result<(std::fs::File, PathBuf), ExportError> {
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    for _ in 0..32 {
+        let id = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let path = std::env::temp_dir().join(format!(
+            "motolii-export-audio-{}-{id}.f32le",
+            std::process::id()
+        ));
+        match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+        {
+            Ok(file) => return Ok((file, path)),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(ExportError::Desc(error.to_string())),
+        }
+    }
+    Err(ExportError::Desc(
+        "could not reserve an audio export input".to_owned(),
+    ))
 }

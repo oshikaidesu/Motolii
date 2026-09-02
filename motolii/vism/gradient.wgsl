@@ -1,3 +1,8 @@
+/*{
+  "ID": "motolii.gradient",
+  "DESCRIPTION": "二色の勾配"
+}*/
+
 struct VsOut {
   @builtin(position) position: vec4f,
   @location(0) uv: vec2f,

@@ -31,11 +31,12 @@ pub(super) struct EaseWidget {
     size: (f64, f64),
     holding: Option<usize>,
     showing: Option<Vec<KeySel>>,
+    seen_cancel: u32,
 }
 
 impl EaseWidget {
     pub(super) fn new(shape: Arc<Mutex<Interp>>, session: Session) -> Self {
-        Self { shape, session, size: (0.0, 0.0), holding: None, showing: None }
+        Self { shape, session, size: (0.0, 0.0), holding: None, showing: None, seen_cancel: 0 }
     }
 
     fn starts(&self) -> Vec<KeySel> {
@@ -63,6 +64,20 @@ impl EaseWidget {
             Ok(n) => println!("PROBE room=write verdict=applied Ease kind={} tracks={n}", shape.kind()),
             Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
         }
+    }
+
+    fn cancel_hold(&mut self) {
+        self.holding = None;
+        self.showing = None;
+        self.session.gesture.end();
+    }
+
+    fn sync_cancel(&mut self) -> bool {
+        if !self.session.gesture.cancelled(&mut self.seen_cancel) {
+            return false;
+        }
+        self.cancel_hold();
+        true
     }
 
     /// 再生位置が区間の中のどこか。外に居るなら None。
@@ -142,6 +157,9 @@ impl Widget for EaseWidget {
     }
 
     fn handle_event(&mut self, event: &UiEvent) {
+        if self.sync_cancel() {
+            return;
+        }
         match event {
             UiEvent::PointerDown(p) => {
                 let point = Point::new(p.element.x as f64, p.element.y as f64);
@@ -168,6 +186,9 @@ impl Widget for EaseWidget {
                 self.holding = handles(shape)
                     .iter()
                     .position(|h| self.to_px(h.at.0, h.at.1).distance(point) <= GRAB);
+                if self.holding.is_some() {
+                    self.session.gesture.begin();
+                }
             }
             UiEvent::PointerMove(p) => {
                 let Some(which) = self.holding else { return };
@@ -184,6 +205,7 @@ impl Widget for EaseWidget {
             }
             UiEvent::PointerUp(_) => {
                 if self.holding.take().is_some() {
+                    self.session.gesture.end();
                     self.commit();
                     self.showing = None;
                 }
@@ -200,6 +222,7 @@ impl Widget for EaseWidget {
         height: u32,
         scale: f64,
     ) -> anyrender::Scene {
+        self.sync_cancel();
         let mut s = anyrender::Scene::new();
         if width == 0 || height == 0 {
             return s;
@@ -332,6 +355,23 @@ impl Widget for EaseWidget {
         }
         s
     }
+}
+
+#[cfg(test)]
+#[test]
+fn focus_loss_cancels_an_ease_handle_without_committing_it() {
+    let loaded = crate::ui::fixture::load_fixture();
+    let session = Session::new(loaded.doc, loaded.duration_sec, loaded.ui);
+    let shape = Arc::new(Mutex::new(DEFAULT));
+    let mut widget = EaseWidget::new(shape, session.clone());
+    widget.holding = Some(0);
+    widget.showing = Some(Vec::new());
+    session.gesture.begin();
+
+    assert!(session.gesture.cancel());
+    assert!(widget.sync_cancel());
+    assert!(widget.holding.is_none());
+    assert!(widget.showing.is_none());
 }
 
 const COLS: usize = 4;

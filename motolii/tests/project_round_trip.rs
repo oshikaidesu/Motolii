@@ -33,7 +33,10 @@ fn a_doc(name: &str) -> Document {
     .unwrap();
     doc.apply(Intent::SetAttrs {
         layer,
-        patch: LayerAttrsPatch { name: Some(name.to_owned()), ..Default::default() },
+        patch: LayerAttrsPatch {
+            name: Some(name.to_owned()),
+            ..Default::default()
+        },
     })
     .unwrap();
     doc
@@ -55,7 +58,10 @@ fn a_saved_project_opens_again_with_its_layers() {
         .iter()
         .filter_map(|l| view.attrs(*l).ok().flatten().map(|a| a.name))
         .collect();
-    assert!(names.iter().any(|n| n == "タイトルロゴ"), "層の名前が消えた: {names:?}");
+    assert!(
+        names.iter().any(|n| n == "タイトルロゴ"),
+        "層の名前が消えた: {names:?}"
+    );
 }
 
 #[test]
@@ -65,4 +71,34 @@ fn a_new_project_is_empty_but_has_a_frame() {
     assert!(view.layers().is_empty(), "白紙に層が居る");
     let comp = view.composition().unwrap().expect("白紙にも枠は要る");
     assert_eq!((comp.width, comp.height), (1920, 1080));
+}
+
+#[test]
+fn a_failed_replacement_keeps_the_previous_project_readable() {
+    let dir = testkit::tmp_dir("project-atomic-save");
+    let path = dir.join("song.rrd");
+    a_doc("old layer").save(&path).unwrap();
+
+    std::fs::create_dir(dir.join(".song.rrd.tmp")).unwrap();
+    let result = a_doc("new layer").save(&path);
+    assert!(
+        result.is_err(),
+        "the blocked temporary path did not stop Save"
+    );
+
+    let back = Document::load(&path).expect("the previous project was damaged by failed Save");
+    let view = back.view();
+    let names = view
+        .layers()
+        .iter()
+        .filter_map(|layer| view.attrs(*layer).ok().flatten().map(|attrs| attrs.name))
+        .collect::<Vec<_>>();
+    assert!(
+        names.iter().any(|name| name == "old layer"),
+        "old project was replaced: {names:?}"
+    );
+    assert!(
+        !names.iter().any(|name| name == "new layer"),
+        "failed Save became visible: {names:?}"
+    );
 }

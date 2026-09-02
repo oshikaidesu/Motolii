@@ -1,10 +1,11 @@
-
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
-use crate::render::audio::convert::{time_to_canonical_frames, CANONICAL_CHANNELS, CANONICAL_SAMPLE_RATE};
+use crate::render::audio::convert::{
+    time_to_canonical_frames, CANONICAL_CHANNELS, CANONICAL_SAMPLE_RATE,
+};
 use crate::render::audio::error::{AudioError, Result};
 use crate::render::audio::program::AudioProgram;
 use crate::render::audio::resample::FixedRatioResampler;
@@ -21,6 +22,7 @@ pub struct MixProducer {
     running: Arc<AtomicBool>,
     seek_to: Arc<AtomicU64>,
     finished: Arc<AtomicBool>,
+    ready: Option<std::sync::mpsc::Receiver<bool>>,
     handle: Option<JoinHandle<()>>,
 }
 
@@ -43,6 +45,7 @@ impl MixProducer {
         let running_thread = Arc::clone(&running);
         let seek_thread = Arc::clone(&seek_to);
         let finished_thread = Arc::clone(&finished);
+        let (ready_tx, ready_rx) = std::sync::mpsc::sync_channel(1);
 
         let handle = thread::Builder::new()
             .name("motolii-audio-mix-producer".into())
@@ -55,6 +58,7 @@ impl MixProducer {
                     &running_thread,
                     &seek_thread,
                     &finished_thread,
+                    ready_tx,
                 );
             })
             .map_err(AudioError::ProducerSpawn)?;
@@ -63,12 +67,22 @@ impl MixProducer {
             running,
             seek_to,
             finished,
+            ready: Some(ready_rx),
             handle: Some(handle),
         })
     }
 
+    /// CPAL streamをplayする前に、consumerが最初のsampleを読める状態まで待つ。
+    pub fn wait_ready(&mut self) -> bool {
+        self.ready
+            .take()
+            .and_then(|ready| ready.recv().ok())
+            .unwrap_or(false)
+    }
+
     pub fn seek(&self, frame: u64) {
-        self.seek_to.store(frame.min(NO_SEEK - 1), Ordering::Release);
+        self.seek_to
+            .store(frame.min(NO_SEEK - 1), Ordering::Release);
     }
 
     pub fn finished(&self) -> bool {
@@ -125,11 +139,16 @@ fn producer_loop(
     running: &AtomicBool,
     seek_to: &AtomicU64,
     finished: &AtomicBool,
+    ready_tx: std::sync::mpsc::SyncSender<bool>,
 ) {
     let channels = CANONICAL_CHANNELS as usize;
     let resampling = device_sample_rate != CANONICAL_SAMPLE_RATE;
     let mut resampler = if resampling {
-        match FixedRatioResampler::new(CANONICAL_SAMPLE_RATE, device_sample_rate, CANONICAL_CHANNELS) {
+        match FixedRatioResampler::new(
+            CANONICAL_SAMPLE_RATE,
+            device_sample_rate,
+            CANONICAL_CHANNELS,
+        ) {
             Ok(mut resampler) => {
                 resampler.reset();
                 Some(resampler)
@@ -146,6 +165,7 @@ fn producer_loop(
     let mut pending_off = 0usize;
     let mut flushing = playhead >= end_frame;
     let mut flush_chunks = 0usize;
+    let mut ready_tx = Some(ready_tx);
 
     while running.load(Ordering::Acquire) {
         let seek = seek_to.swap(NO_SEEK, Ordering::AcqRel);
@@ -173,6 +193,9 @@ fn producer_loop(
             if pushed == 0 {
                 thread::sleep(POLL_INTERVAL);
                 continue;
+            }
+            if let Some(ready) = ready_tx.take() {
+                let _ = ready.send(true);
             }
             pending_off += pushed * channels;
             if pending_off >= pending.len() {
@@ -240,5 +263,27 @@ fn producer_loop(
         if playhead >= end_frame {
             flushing = true;
         }
+    }
+    if let Some(ready) = ready_tx.take() {
+        let _ = ready.send(false);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ready_means_the_consumer_has_samples_before_device_play() {
+        let program = Arc::new(crate::render::audio::program_from_sources(
+            Vec::new(),
+            1.0,
+            crate::doc::core::RationalTime::try_new(1, 1).unwrap(),
+        ));
+        let (producer, consumer) = rtrb::RingBuffer::<f32>::new(4_096 * 2);
+        let mut producer = MixProducer::spawn(program, producer, 0, 48_000).unwrap();
+
+        assert!(producer.wait_ready());
+        assert!(consumer.slots() > 0);
     }
 }

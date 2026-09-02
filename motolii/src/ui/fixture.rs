@@ -1,4 +1,6 @@
-use crate::doc::store::{property, Document, LayerId, LayerSource, PropertyId, RationalTime, ShapeNode, StoreView, Value};
+use crate::doc::store::{
+    property, Document, LayerId, LayerSource, PropertyId, RationalTime, ShapeNode, StoreView, Value,
+};
 
 use crate::render::engine::known_effects;
 
@@ -7,8 +9,8 @@ use crate::ui::timeline_widget::CanvasRow;
 const FPS: f64 = 30.0;
 
 pub(super) const LABEL_PALETTE: [&str; 12] = [
-    "#d96b6b", "#d9985a", "#d9c95a", "#a3d95a", "#5ad98c", "#5ac6c6",
-    "#5a96d9", "#7d7dd9", "#a86bd9", "#d96bbc", "#9a9a9a", "#cba97a",
+    "#d96b6b", "#d9985a", "#d9c95a", "#a3d95a", "#5ad98c", "#5ac6c6", "#5a96d9", "#7d7dd9",
+    "#a86bd9", "#d96bbc", "#9a9a9a", "#cba97a",
 ];
 
 pub(super) fn label_rgb(ix: u8) -> [u8; 3] {
@@ -135,7 +137,9 @@ fn rows_nested(
 ) -> Vec<Row> {
     let view = doc.view();
     let mut layers = view.layers();
-    layers.sort_by_key(|l| std::cmp::Reverse(view.meta(*l).ok().flatten().map(|m| m.order).unwrap_or(0)));
+    layers.sort_by_key(|l| {
+        std::cmp::Reverse(view.meta(*l).ok().flatten().map(|m| m.order).unwrap_or(0))
+    });
 
     let present: std::collections::HashSet<LayerId> = layers.iter().copied().collect();
     let parent_of = |l: LayerId| {
@@ -153,11 +157,21 @@ fn rows_nested(
         let v = timeline_view().lock().unwrap();
         v.camera_open
     };
-    out.push(Row { layer: None, prop: None, depth: 0, children: 0 });
+    out.push(Row {
+        layer: None,
+        prop: None,
+        depth: 0,
+        children: 0,
+    });
     if camera_open {
         for name in CAMERA_PROPS {
             if let Ok(property) = PropertyId::camera(name) {
-                out.push(Row { layer: None, prop: Some(property), depth: 0, children: 0 });
+                out.push(Row {
+                    layer: None,
+                    prop: Some(property),
+                    depth: 0,
+                    children: 0,
+                });
             }
         }
     }
@@ -170,8 +184,16 @@ fn rows_nested(
         .collect();
 
     while let Some((layer, depth)) = stack.pop() {
-        let children = layers.iter().filter(|c| parent_of(**c) == Some(layer)).count() as u16;
-        out.push(Row { layer: Some(layer), prop: None, depth, children });
+        let children = layers
+            .iter()
+            .filter(|c| parent_of(**c) == Some(layer))
+            .count() as u16;
+        out.push(Row {
+            layer: Some(layer),
+            prop: None,
+            depth,
+            children,
+        });
         if !expanded.contains(&layer) {
             continue;
         }
@@ -183,7 +205,12 @@ fn rows_nested(
             if keyed_only && !keyed {
                 continue;
             }
-            out.push(Row { layer: Some(layer), prop: Some(property), depth, children });
+            out.push(Row {
+                layer: Some(layer),
+                prop: Some(property),
+                depth,
+                children,
+            });
         }
         stack.extend(
             layers
@@ -279,46 +306,53 @@ pub(super) fn layer_rows_from_doc(doc: &Document) -> Vec<LayerRow> {
     let view = doc.view();
     rows_of(doc)
         .into_iter()
-        .map(|Row { layer, prop, depth, children }| {
-            let Some(id) = layer else {
-                return LayerRow {
-                    layer: None,
+        .map(
+            |Row {
+                 layer,
+                 prop,
+                 depth,
+                 children,
+             }| {
+                let Some(id) = layer else {
+                    return LayerRow {
+                        layer: None,
+                        name: match &prop {
+                            Some(p) => camera_word(p.name()).to_string(),
+                            None => "Camera".to_string(),
+                        },
+                        color: "#d8b574",
+                        hidden: false,
+                        solo: false,
+                        locked: camera_locked(),
+                        prop: prop.map(|p| camera_word(p.name()).to_string()),
+                        expanded: timeline_view().lock().unwrap().camera_open,
+                        depth,
+                        children,
+                    };
+                };
+                let attrs = view.attrs(id).ok().flatten().unwrap_or_default();
+                let color = attrs
+                    .label_color
+                    .map(|ix| LABEL_PALETTE[ix as usize % LABEL_PALETTE.len()])
+                    .unwrap_or("#8c8c8c");
+                let expanded = timeline_view().lock().unwrap().expanded.contains(&id);
+                LayerRow {
+                    layer,
                     name: match &prop {
-                        Some(p) => camera_word(p.name()).to_string(),
-                        None => "Camera".to_string(),
+                        Some(p) => p.name().to_string(),
+                        None => attrs.name,
                     },
-                    color: "#d8b574",
-                    hidden: false,
-                    solo: false,
-                    locked: camera_locked(),
-                    prop: prop.map(|p| camera_word(p.name()).to_string()),
-                    expanded: timeline_view().lock().unwrap().camera_open,
+                    color,
+                    hidden: attrs.hidden,
+                    solo: attrs.solo,
+                    locked: attrs.locked,
+                    prop: prop.map(|p| p.name().to_string()),
+                    expanded,
                     depth,
                     children,
-                };
-            };
-            let attrs = view.attrs(id).ok().flatten().unwrap_or_default();
-            let color = attrs
-                .label_color
-                .map(|ix| LABEL_PALETTE[ix as usize % LABEL_PALETTE.len()])
-                .unwrap_or("#8c8c8c");
-            let expanded = timeline_view().lock().unwrap().expanded.contains(&id);
-            LayerRow {
-                layer,
-                name: match &prop {
-                    Some(p) => p.name().to_string(),
-                    None => attrs.name,
-                },
-                color,
-                hidden: attrs.hidden,
-                solo: attrs.solo,
-                locked: attrs.locked,
-                prop: prop.map(|p| p.name().to_string()),
-                expanded,
-                depth,
-                children,
-            }
-        })
+                }
+            },
+        )
         .collect()
 }
 
@@ -331,18 +365,38 @@ fn hex_of(rgba: [u8; 4]) -> String {
     format!("#{:02x}{:02x}{:02x}", rgba[0], rgba[1], rgba[2])
 }
 
-fn push_swatch(seen: &mut std::collections::BTreeSet<[u8; 4]>, out: &mut Vec<ColorSwatch>, rgba: [u8; 4]) {
+fn push_swatch(
+    seen: &mut std::collections::BTreeSet<[u8; 4]>,
+    out: &mut Vec<ColorSwatch>,
+    rgba: [u8; 4],
+) {
     if seen.insert(rgba) {
-        out.push(ColorSwatch { hex: hex_of(rgba), rgba });
+        out.push(ColorSwatch {
+            hex: hex_of(rgba),
+            rgba,
+        });
     }
 }
 
-fn shape_fill_colors(node: &ShapeNode, seen: &mut std::collections::BTreeSet<[u8; 4]>, out: &mut Vec<ColorSwatch>) {
+fn shape_fill_colors(
+    node: &ShapeNode,
+    seen: &mut std::collections::BTreeSet<[u8; 4]>,
+    out: &mut Vec<ColorSwatch>,
+) {
     match node {
         ShapeNode::Leaf(shape) => {
             if let Some(fill) = &shape.fill {
                 if let crate::render::vector::Brush::Solid(rgb) = &fill.brush {
-                    push_swatch(seen, out, [(rgb.r * 255.0) as u8, (rgb.g * 255.0) as u8, (rgb.b * 255.0) as u8, 255]);
+                    push_swatch(
+                        seen,
+                        out,
+                        [
+                            (rgb.r * 255.0) as u8,
+                            (rgb.g * 255.0) as u8,
+                            (rgb.b * 255.0) as u8,
+                            255,
+                        ],
+                    );
                 }
             }
         }
@@ -362,9 +416,27 @@ pub(super) fn used_colors_from_doc(doc: &Document) -> Vec<ColorSwatch> {
         if let Ok(Some(text)) = view.text_document(layer) {
             for style in &text.styles {
                 let f = style.fill;
-                push_swatch(&mut seen, &mut out, [(f[0] * 255.0) as u8, (f[1] * 255.0) as u8, (f[2] * 255.0) as u8, (f[3] * 255.0) as u8]);
+                push_swatch(
+                    &mut seen,
+                    &mut out,
+                    [
+                        (f[0] * 255.0) as u8,
+                        (f[1] * 255.0) as u8,
+                        (f[2] * 255.0) as u8,
+                        (f[3] * 255.0) as u8,
+                    ],
+                );
                 if let Some(s) = style.stroke_color {
-                    push_swatch(&mut seen, &mut out, [(s[0] * 255.0) as u8, (s[1] * 255.0) as u8, (s[2] * 255.0) as u8, (s[3] * 255.0) as u8]);
+                    push_swatch(
+                        &mut seen,
+                        &mut out,
+                        [
+                            (s[0] * 255.0) as u8,
+                            (s[1] * 255.0) as u8,
+                            (s[2] * 255.0) as u8,
+                            (s[3] * 255.0) as u8,
+                        ],
+                    );
                 }
             }
         }
@@ -461,7 +533,6 @@ pub(super) struct InspectorData {
 pub(super) struct UiData {
     pub layer_rows: Vec<LayerRow>,
     pub comp_line: String,
-    pub status: String,
 }
 
 pub(super) struct Loaded {
@@ -470,7 +541,11 @@ pub(super) struct Loaded {
     pub duration_sec: f64,
 }
 
-pub(super) fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: RationalTime) -> InspectorData {
+pub(super) fn inspector_data_from_doc(
+    view: &StoreView,
+    layer: LayerId,
+    t: RationalTime,
+) -> InspectorData {
     let value_of = |prop: &str| {
         PropertyId::new(prop)
             .ok()
@@ -567,6 +642,8 @@ pub(super) fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: Ratio
         Some(LayerSource::File { path, .. }) => {
             if crate::render::media::is_point_cloud_path(&path) {
                 "point cloud"
+            } else if crate::render::media::is_mesh_path(&path) {
+                "3D model"
             } else {
                 "media"
             }
@@ -581,7 +658,11 @@ pub(super) fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: Ratio
     let text = match view.text_document(layer) {
         Ok(Some(doc)) => vec![PropRow {
             label: "Content",
-            cells: [String::new(), String::new(), doc.content.eval(t).to_string()],
+            cells: [
+                String::new(),
+                String::new(),
+                doc.content.eval(t).to_string(),
+            ],
             dims: [false, false, false],
             keyed: doc.content.keys().len() > 1,
             property: None,
@@ -599,9 +680,25 @@ pub(super) fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: Ratio
             if let Ok(Some(doc)) = view.text_document(layer) {
                 if let Some(style) = doc.styles.first() {
                     let f = style.fill;
-                    colors.push(("Fill", hex_of([(f[0] * 255.0) as u8, (f[1] * 255.0) as u8, (f[2] * 255.0) as u8, (f[3] * 255.0) as u8])));
+                    colors.push((
+                        "Fill",
+                        hex_of([
+                            (f[0] * 255.0) as u8,
+                            (f[1] * 255.0) as u8,
+                            (f[2] * 255.0) as u8,
+                            (f[3] * 255.0) as u8,
+                        ]),
+                    ));
                     if let Some(s) = style.stroke_color {
-                        colors.push(("Stroke", hex_of([(s[0] * 255.0) as u8, (s[1] * 255.0) as u8, (s[2] * 255.0) as u8, (s[3] * 255.0) as u8])));
+                        colors.push((
+                            "Stroke",
+                            hex_of([
+                                (s[0] * 255.0) as u8,
+                                (s[1] * 255.0) as u8,
+                                (s[2] * 255.0) as u8,
+                                (s[3] * 255.0) as u8,
+                            ]),
+                        ));
                     }
                 }
             }
@@ -622,58 +719,58 @@ pub(super) fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: Ratio
     }
 
     let transform = vec![
-            PropRow {
-                label: "Position",
-                cells: [px, py, f1(pos_z)],
-                dims: [false, false, false],
-                keyed: keyed(property::POSITION),
-                property: Some(property::POSITION.to_owned()),
-                vec2: true,
-                value: Value::Vec2([pos_x, pos_y]),
-                range: None,
-                axis: [
-                    None,
-                    None,
-                    Some((property::POSITION_Z.to_owned(), Value::F64(pos_z))),
-                ],
-            },
-            PropRow {
-                label: "Scale",
-                cells: [f(scale_x), f(scale_y), f(1.0)],
-                dims: [false, false, true],
-                keyed: keyed(property::SCALE),
-                property: Some(property::SCALE.to_owned()),
-                vec2: true,
-                value: Value::Vec2([scale_x, scale_y]),
-                range: None,
-                axis: [None, None, None],
-            },
-            PropRow {
-                label: "Rotation",
-                cells: [f(rot_x), f(rot_y), f(rotation_v)],
-                dims: [false, false, false],
-                keyed: keyed(property::ROTATION),
-                property: Some(property::ROTATION.to_owned()),
-                vec2: false,
-                value: Value::F64(rotation_v),
-                range: None,
-                axis: [
-                    Some((property::ROTATION_X.to_owned(), Value::F64(rot_x))),
-                    Some((property::ROTATION_Y.to_owned(), Value::F64(rot_y))),
-                    None,
-                ],
-            },
-            PropRow {
-                label: "Opacity",
-                cells: [String::new(), String::new(), opacity],
-                dims: [false, false, false],
-                keyed: keyed(property::OPACITY),
-                property: Some(property::OPACITY.to_owned()),
-                vec2: false,
-                value: Value::F64(opacity_v),
-                range: None,
-                axis: [None, None, None],
-            },
+        PropRow {
+            label: "Position",
+            cells: [px, py, f1(pos_z)],
+            dims: [false, false, false],
+            keyed: keyed(property::POSITION),
+            property: Some(property::POSITION.to_owned()),
+            vec2: true,
+            value: Value::Vec2([pos_x, pos_y]),
+            range: None,
+            axis: [
+                None,
+                None,
+                Some((property::POSITION_Z.to_owned(), Value::F64(pos_z))),
+            ],
+        },
+        PropRow {
+            label: "Scale",
+            cells: [f(scale_x), f(scale_y), f(1.0)],
+            dims: [false, false, true],
+            keyed: keyed(property::SCALE),
+            property: Some(property::SCALE.to_owned()),
+            vec2: true,
+            value: Value::Vec2([scale_x, scale_y]),
+            range: None,
+            axis: [None, None, None],
+        },
+        PropRow {
+            label: "Rotation",
+            cells: [f(rot_x), f(rot_y), f(rotation_v)],
+            dims: [false, false, false],
+            keyed: keyed(property::ROTATION),
+            property: Some(property::ROTATION.to_owned()),
+            vec2: false,
+            value: Value::F64(rotation_v),
+            range: None,
+            axis: [
+                Some((property::ROTATION_X.to_owned(), Value::F64(rot_x))),
+                Some((property::ROTATION_Y.to_owned(), Value::F64(rot_y))),
+                None,
+            ],
+        },
+        PropRow {
+            label: "Opacity",
+            cells: [String::new(), String::new(), opacity],
+            dims: [false, false, false],
+            keyed: keyed(property::OPACITY),
+            property: Some(property::OPACITY.to_owned()),
+            vec2: false,
+            value: Value::F64(opacity_v),
+            range: None,
+            axis: [None, None, None],
+        },
     ];
 
     InspectorData {
@@ -710,23 +807,79 @@ pub(super) fn asset_rows_from_view(view: &StoreView) -> Vec<AssetRow> {
         .collect()
 }
 
-/// 窓へ落ちてきた道を素材として迎える。読めない物は黙って捨てる。
-pub(super) fn admit_path(doc: &mut crate::doc::store::Document, path: &std::path::Path) -> bool {
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct ImportSummary {
+    pub admitted: usize,
+    pub total: usize,
+    pub first_failure: Option<String>,
+}
+
+impl ImportSummary {
+    pub(super) fn notice(&self) -> String {
+        match (self.admitted, self.total, self.first_failure.as_deref()) {
+            (0, 0, _) => String::new(),
+            (admitted, total, None) if admitted == total => format!("Imported {admitted} files"),
+            (0, _, Some(reason)) => format!("Import failed: {reason}"),
+            (admitted, total, Some(reason)) => {
+                format!("Imported {admitted} of {total} · {reason}")
+            }
+            (admitted, total, None) => format!("Imported {admitted} of {total}"),
+        }
+    }
+}
+
+pub(super) fn admit_paths(
+    doc: &mut crate::doc::store::Document,
+    paths: &[std::path::PathBuf],
+) -> ImportSummary {
+    let mut summary = ImportSummary {
+        admitted: 0,
+        total: paths.len(),
+        first_failure: None,
+    };
+    for path in paths {
+        match admit_path(doc, path) {
+            Ok(()) => summary.admitted += 1,
+            Err(reason) if summary.first_failure.is_none() => {
+                let name = path
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .unwrap_or("file");
+                summary.first_failure = Some(format!("{name} — {reason}"));
+            }
+            Err(_) => {}
+        }
+    }
+    summary
+}
+
+fn admit_path(doc: &mut crate::doc::store::Document, path: &std::path::Path) -> Result<(), String> {
     let Some(asset_type) = path
         .extension()
         .and_then(|e| e.to_str())
         .and_then(crate::render::media::asset_type_for_extension)
     else {
-        return false;
+        return Err("unsupported file type".to_owned());
     };
-    let Ok(reader) = std::fs::File::open(path) else {
-        return false;
-    };
-    let Ok(fingerprint) = crate::doc::store::SourceFingerprintV1::from_reader(reader) else {
-        return false;
-    };
-    let draft = crate::doc::store::AssetDraft::from_probed_source(asset_type, &fingerprint, path, None);
-    doc.apply(crate::doc::store::Intent::AdmitAsset { draft }).is_ok()
+    let reader = std::fs::File::open(path).map_err(|error| format!("cannot read: {error}"))?;
+    let fingerprint = crate::doc::store::SourceFingerprintV1::from_reader(reader)
+        .map_err(|error| format!("cannot fingerprint: {error}"))?;
+    let draft =
+        crate::doc::store::AssetDraft::from_probed_source(asset_type, &fingerprint, path, None);
+    doc.apply(crate::doc::store::Intent::AdmitAsset { draft })
+        .map(|_| ())
+        .map_err(|error| error.to_string())
+}
+
+#[cfg(test)]
+#[test]
+fn rejected_imports_keep_a_user_visible_reason() {
+    let mut doc = crate::doc::store::Document::new();
+    let summary = admit_paths(&mut doc, &[std::path::PathBuf::from("notes.unsupported")]);
+    assert_eq!(summary.admitted, 0);
+    assert_eq!(summary.total, 1);
+    assert!(summary.notice().contains("unsupported file type"));
+    assert!(summary.notice().contains("notes.unsupported"));
 }
 
 fn admit_testdata(doc: &mut crate::doc::store::Document) {
@@ -774,7 +927,10 @@ fn admit_testdata(doc: &mut crate::doc::store::Document) {
 pub(super) fn load_fixture() -> Loaded {
     let mut fx = crate::doc::fixture::build();
     admit_testdata(&mut fx.doc);
-    if let Some(deg) = std::env::var("MOTOLII_TILT").ok().and_then(|v| v.parse::<f64>().ok()) {
+    if let Some(deg) = std::env::var("MOTOLII_TILT")
+        .ok()
+        .and_then(|v| v.parse::<f64>().ok())
+    {
         let layers = fx.doc.view().layers();
         let intents: Vec<_> = layers
             .iter()
@@ -788,11 +944,18 @@ pub(super) fn load_fixture() -> Loaded {
                 });
                 crate::doc::store::PropertyId::new(crate::doc::store::property::ROTATION_X)
                     .ok()
-                    .map(|property| crate::doc::store::Intent::SetTrack { layer: *l, property, track })
+                    .map(|property| crate::doc::store::Intent::SetTrack {
+                        layer: *l,
+                        property,
+                        track,
+                    })
             })
             .collect();
         match fx.doc.apply_all(intents) {
-            Ok(_) => println!("PROBE room=stage verdict=tilt-seeded deg={deg} layers={}", layers.len()),
+            Ok(_) => println!(
+                "PROBE room=stage verdict=tilt-seeded deg={deg} layers={}",
+                layers.len()
+            ),
             Err(e) => println!("PROBE room=stage verdict=tilt-seed-error {e}"),
         }
     }
@@ -819,12 +982,26 @@ pub(super) fn load_fixture() -> Loaded {
 
     Loaded {
         doc: fx.doc,
-        ui: UiData { layer_rows, comp_line, status: fx.status },
+        ui: UiData {
+            layer_rows,
+            comp_line,
+        },
         duration_sec: 60.0,
     }
 }
 
-pub(super) fn fmt_timecode(sec: f64) -> String {
-    let f = (sec * FPS).round() as i64;
-    format!("{}:{:02}:{:02}", f / 1800, (f / 30) % 60, f % 30)
+pub(super) fn fmt_timecode(sec: f64, fps: crate::doc::store::Fps) -> String {
+    let at = crate::doc::store::RationalTime::try_new(
+        (sec.max(0.0) * 1_000_000.0).round() as i64,
+        1_000_000,
+    )
+    .unwrap_or(crate::doc::store::RationalTime::ZERO);
+    let frame = at.try_to_frame_round(fps).unwrap_or(0);
+    let nominal = fps.as_f64().round().max(1.0) as i64;
+    format!(
+        "{}:{:02}:{:02}",
+        frame / (nominal * 60),
+        (frame / nominal) % 60,
+        frame % nominal
+    )
 }

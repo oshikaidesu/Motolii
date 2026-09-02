@@ -1,4 +1,5 @@
 /*{
+  "EXPOSE": false,
   "DESCRIPTION": "層と背景を W3C Compositing and Blending Level 1 の規則で混ぜる。式は借り物 — reference/vello-blend.wgsl(vello_shaders 0.10.0、原文のまま)を前置きして呼ぶだけ。Motolii は式を持たない",
   "INPUTS": [
     { "NAME": "backdrop", "TYPE": "image" },

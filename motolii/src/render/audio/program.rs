@@ -1,4 +1,3 @@
-
 /* motolii-component
 id = "audio.media_soundtrack_input"
 kind = "semantic"
@@ -24,14 +23,24 @@ use crate::render::audio::convert::{to_canonical, CANONICAL_SAMPLE_RATE};
 use crate::render::audio::decode::decode_file_audio_ordinal;
 use crate::render::audio::error::{AudioError, Result};
 use crate::render::audio::meter::AudioMeter;
-use crate::render::audio::mix::{mix_audio, AudioOutOfRange, FadeCurve, FadeSpec, MixReport, MixSource};
+use crate::render::audio::mix::{
+    mix_audio, AudioOutOfRange, FadeCurve, FadeSpec, MixReport, MixSource,
+};
 use crate::render::audio::time_map::TimeMap;
+use crate::render::audio::waveform::{WaveformPeaks, WaveformTrack};
 
 #[derive(Debug, Clone)]
 pub struct AudioProgram {
     sources: Vec<MixSource>,
+    waveform_tracks: Vec<WaveformTrack>,
     master_gain: f64,
     composition_duration: RationalTime,
+}
+
+#[derive(Default)]
+pub struct AudioProgramCache {
+    pcm: HashMap<(String, u32), Arc<PcmCache>>,
+    waveform: HashMap<usize, Arc<WaveformPeaks>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -50,20 +59,38 @@ fn project_soundtrack_input(
     let LayerSource::File { path, fingerprint } = &meta.source else {
         return None;
     };
+    if !file_source_can_have_audio(path) {
+        return None;
+    }
     Some(SoundtrackInput {
         path: path.clone(),
         cache_key: fingerprint.clone().unwrap_or_else(|| path.clone()),
     })
 }
 
+fn file_source_can_have_audio(path: &str) -> bool {
+    let Some(extension) = Path::new(path)
+        .extension()
+        .and_then(|extension| extension.to_str())
+    else {
+        // 古いprojectや外部生成Documentの未知形式は、従来どおりSymphoniaへ委ねる。
+        return true;
+    };
+    match crate::render::media::asset_type_for_extension(extension) {
+        Some(asset_type) => asset_type.starts_with("audio/") || asset_type.starts_with("video/"),
+        None => true,
+    }
+}
+
 impl AudioProgram {
     pub fn from_view(
         view: &StoreView<'_>,
-        caches: &mut HashMap<(String, u32), Arc<PcmCache>>,
+        cache: &mut AudioProgramCache,
     ) -> Result<Self> {
         let Some(composition) = view.composition()? else {
             return Ok(Self {
                 sources: Vec::new(),
+                waveform_tracks: Vec::new(),
                 master_gain: 1.0,
                 composition_duration: RationalTime::ZERO,
             });
@@ -73,14 +100,36 @@ impl AudioProgram {
             .map_err(|_| AudioError::InvalidMixRange)?;
 
         let mut sources = Vec::new();
+        let mut waveform_tracks = Vec::new();
         for layer in view.layers() {
-            if let Some(source) = layer_mix_source(view, layer, fps, caches)? {
-                sources.push(source);
+            match layer_mix_source(view, layer, fps, &mut cache.pcm) {
+                Ok(Some(source)) => {
+                    let pcm_key = Arc::as_ptr(&source.pcm) as usize;
+                    let peaks = cache
+                        .waveform
+                        .entry(pcm_key)
+                        .or_insert_with(|| WaveformPeaks::spawn(Arc::clone(&source.pcm)))
+                        .clone();
+                    waveform_tracks.push(WaveformTrack {
+                        layer,
+                        peaks,
+                        timeline_start: source.timeline_start,
+                        timeline_duration: source.timeline_duration,
+                        time_map: source.time_map,
+                    });
+                    sources.push(source);
+                }
+                Ok(None)
+                | Err(AudioError::NoAudioTrack)
+                | Err(AudioError::StreamNotFound { .. })
+                | Err(AudioError::Symphonia(symphonia::core::errors::Error::Unsupported(_))) => {}
+                Err(err) => return Err(err),
             }
         }
 
         Ok(Self {
             sources,
+            waveform_tracks,
             master_gain: 1.0,
             composition_duration,
         })
@@ -88,6 +137,10 @@ impl AudioProgram {
 
     pub fn sources(&self) -> &[MixSource] {
         &self.sources
+    }
+
+    pub fn waveform_tracks(&self) -> &[WaveformTrack] {
+        &self.waveform_tracks
     }
 
     pub fn master_gain(&self) -> f64 {
@@ -215,6 +268,7 @@ pub fn program_from_sources(
 ) -> AudioProgram {
     AudioProgram {
         sources,
+        waveform_tracks: Vec::new(),
         master_gain,
         composition_duration,
     }

@@ -1,6 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use dioxus_native::prelude::*;
+use crate::ui::semantic_menu::SemanticButton;
 
 use crate::doc::store::{
     property, Document, LayerId, PropertyId, RationalTime,
@@ -86,8 +87,9 @@ pub(super) fn utility_panel(
             if let (Some(layer), Some(size)) = (selection, size) {
                 div { class: "anchorgrid",
                     for (fx , fy) in spots.iter().copied() {
-                        span {
+                        SemanticButton {
                             class: "aspot",
+                            aria_label: "Set anchor {fx} {fy}",
                             onclick: {
                                 let doc = doc.clone();
                                 move |_| {

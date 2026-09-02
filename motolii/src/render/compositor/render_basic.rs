@@ -1,7 +1,4 @@
-use re_renderer::renderer::{
-    RectangleDrawData, RectangleOptions,
-    TexturedRect,
-};
+use re_renderer::renderer::{RectangleDrawData, RectangleOptions, TexturedRect};
 use re_renderer::view_builder::{
     BlendWithBackground, Projection, RenderMode, TargetConfiguration, ViewBuilder,
 };
@@ -75,6 +72,7 @@ impl Compositor {
             })
             .collect::<Result<Vec<_>, CompositorError>>()?;
 
+        self.ctx.before_submit();
         self.ctx.begin_frame();
 
         let draw_data = RectangleDrawData::new(&self.ctx, &rects)
@@ -131,6 +129,7 @@ impl Compositor {
         timing.gpu_us = gpu_start.elapsed().as_micros();
 
         let readback_start = std::time::Instant::now();
+        self.ctx.before_submit();
         self.ctx.begin_frame();
 
         let mut out: Option<Vec<u8>> = None;
@@ -146,5 +145,4 @@ impl Compositor {
         timing.readback_us = readback_start.elapsed().as_micros();
         Ok((frame, timing))
     }
-
 }

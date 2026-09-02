@@ -11,7 +11,6 @@ pub struct Fixture {
     pub doc: Document,
     pub selected: LayerId,
     pub playhead: i64,
-    pub status: String,
 }
 
 const FPS_NUM: i64 = 30;
@@ -447,6 +446,5 @@ pub fn build() -> Fixture {
         doc,
         selected: sabi_id,
         playhead: DURATION_FRAMES / 2,
-        status: "fixture: layer 16 · marker 3 · keyframe済み 3層".to_owned(),
     }
 }

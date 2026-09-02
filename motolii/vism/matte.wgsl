@@ -1,4 +1,5 @@
 /*{
+  "EXPOSE": false,
   "DESCRIPTION": "トラックマット。どの層で切るか(alpha / 反転alpha / luma / 反転luma)は編集の意味なので Motolii が持つ。輝度の式は借り物 — reference/vello-blend.wgsl の svg_lum(SVG luminanceToAlpha と同じ係数)を呼ぶ",
   "INPUTS": [
     { "NAME": "layer", "TYPE": "image" },

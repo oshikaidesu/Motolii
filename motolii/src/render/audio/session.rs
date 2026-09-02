@@ -1,4 +1,3 @@
-
 use std::sync::Arc;
 
 use cpal::traits::HostTrait;
@@ -43,7 +42,7 @@ impl PlaybackSession {
         let (ring_prod, ring_cons) =
             rtrb::RingBuffer::<f32>::new(RING_CAPACITY_FRAMES * format.channels as usize);
 
-        let stream = OutputStream::open_negotiated_shared(
+        let stream = OutputStream::build_negotiated_shared(
             device,
             &negotiated,
             ring_cons,
@@ -52,15 +51,22 @@ impl PlaybackSession {
         )?;
 
         let start_frame = time_to_canonical_frames(at);
-        let producer = MixProducer::spawn(
+        let mut producer = MixProducer::spawn(
             program,
             ring_prod,
             start_frame,
             negotiated.device_sample_rate,
         )?;
+        if !producer.wait_ready() {
+            return Err(AudioError::InvalidMixRange);
+        }
+        stream.play()?;
 
-        let mut clock =
-            PlaybackClock::new(Arc::clone(&counters), Arc::clone(&device_wait), negotiated.device_sample_rate)?;
+        let mut clock = PlaybackClock::new(
+            Arc::clone(&counters),
+            Arc::clone(&device_wait),
+            negotiated.device_sample_rate,
+        )?;
         clock.start(at);
 
         Ok(Self {

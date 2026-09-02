@@ -1,41 +1,6 @@
-
 use crate::render::compositor::*;
 
 impl Compositor {
-    // `&mut EffectScratch` と Vism を同時に触るための分割借用。self をまとめて
-    // 借りると衝突するので、必要な場所だけ field ごとに分ける。
-    fn record_isf(
-        &mut self,
-        encoder: &mut wgpu::CommandEncoder,
-        src_view: &wgpu::TextureView,
-        dst_view: &wgpu::TextureView,
-        params: &[(String, f32)],
-        render_size: [f32; 2],
-    ) {
-        let Self { ctx, isf_bloom, effect_scratch, .. } = self;
-        isf_bloom.record(ctx, encoder, effect_scratch, src_view, dst_view, params, render_size);
-    }
-
-    fn record_gradient(
-        &mut self,
-        encoder: &mut wgpu::CommandEncoder,
-        dst_view: &wgpu::TextureView,
-        render_size: [f32; 2],
-    ) {
-        let Self { ctx, wgsl_gradient, effect_scratch, .. } = self;
-        wgsl_gradient.record(ctx, encoder, effect_scratch, dst_view, render_size);
-    }
-
-    fn record_tri_led(
-        &mut self,
-        encoder: &mut wgpu::CommandEncoder,
-        dst_view: &wgpu::TextureView,
-        render_size: [f32; 2],
-    ) {
-        let Self { ctx, wgsl_tri_led, effect_scratch, .. } = self;
-        wgsl_tri_led.record(ctx, encoder, effect_scratch, dst_view, render_size);
-    }
-
     pub(crate) fn effective_layer_textures(
         &mut self,
         layers: &[LayerWithPasses],
@@ -103,130 +68,99 @@ impl Compositor {
             });
 
             for pass in &lwp.passes {
-                match pass {
-                    EffectPass::Identity => {
-                        encoder.copy_texture_to_texture(
-                            wgpu::TexelCopyTextureInfo {
-                                texture: &src.texture,
-                                mip_level: 0,
-                                origin: wgpu::Origin3d::ZERO,
-                                aspect: wgpu::TextureAspect::All,
-                            },
-                            wgpu::TexelCopyTextureInfo {
-                                texture: &scratch,
-                                mip_level: 0,
-                                origin: wgpu::Origin3d {
-                                    x: padding,
-                                    y: padding,
-                                    z: 0,
+                let image_inputs = self
+                    .effect_programs
+                    .get(&pass.plugin_id)
+                    .ok_or_else(|| {
+                        CompositorError::Effect(format!("unknown Vism {}", pass.plugin_id))
+                    })?
+                    .image_input_count();
+                let mut padded_source = None;
+                let source_view = if image_inputs == 0 {
+                    None
+                } else if padding == 0 {
+                    Some(src.texture.create_view(&Default::default()))
+                } else {
+                    let texture = self.effect_scratch.acquire(
+                        &self.ctx.device,
+                        padded_width,
+                        padded_height,
+                        layer_texture.format(),
+                    );
+                    let view = texture.create_view(&Default::default());
+                    {
+                        let _clear_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                            label: Some("motolii-compositor-vism-padded-source-clear"),
+                            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                                view: &view,
+                                depth_slice: None,
+                                resolve_target: None,
+                                ops: wgpu::Operations {
+                                    load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                                    store: wgpu::StoreOp::Store,
                                 },
-                                aspect: wgpu::TextureAspect::All,
-                            },
-                            wgpu::Extent3d {
-                                width,
-                                height,
-                                depth_or_array_layers: 1,
-                            },
-                        );
+                            })],
+                            depth_stencil_attachment: None,
+                            timestamp_writes: None,
+                            occlusion_query_set: None,
+                            multiview_mask: None,
+                        });
                     }
-                    EffectPass::Glow {
-                        threshold,
-                        intensity,
-                        radius,
-                    } => {
-                        let padded_source = self.effect_scratch.acquire(
-                            &self.ctx.device,
-                            padded_width,
-                            padded_height,
-                            layer_texture.format(),
-                        );
-                        let padded_source_view = padded_source.create_view(&Default::default());
-                        {
-                            let _clear_pass =
-                                encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                                    label: Some(
-                                        "motolii-compositor-glow-padded-source-clear",
-                                    ),
-                                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                                        view: &padded_source_view,
-                                        depth_slice: None,
-                                        resolve_target: None,
-                                        ops: wgpu::Operations {
-                                            load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
-                                            store: wgpu::StoreOp::Store,
-                                        },
-                                    })],
-                                    depth_stencil_attachment: None,
-                                    timestamp_writes: None,
-                                    occlusion_query_set: None,
-                                    multiview_mask: None,
-                                });
-                        }
-                        encoder.copy_texture_to_texture(
-                            wgpu::TexelCopyTextureInfo {
-                                texture: &src.texture,
-                                mip_level: 0,
-                                origin: wgpu::Origin3d::ZERO,
-                                aspect: wgpu::TextureAspect::All,
+                    encoder.copy_texture_to_texture(
+                        wgpu::TexelCopyTextureInfo {
+                            texture: &src.texture,
+                            mip_level: 0,
+                            origin: wgpu::Origin3d::ZERO,
+                            aspect: wgpu::TextureAspect::All,
+                        },
+                        wgpu::TexelCopyTextureInfo {
+                            texture: &texture,
+                            mip_level: 0,
+                            origin: wgpu::Origin3d {
+                                x: padding,
+                                y: padding,
+                                z: 0,
                             },
-                            wgpu::TexelCopyTextureInfo {
-                                texture: &padded_source,
-                                mip_level: 0,
-                                origin: wgpu::Origin3d {
-                                    x: padding,
-                                    y: padding,
-                                    z: 0,
-                                },
-                                aspect: wgpu::TextureAspect::All,
-                            },
-                            wgpu::Extent3d {
-                                width,
-                                height,
-                                depth_or_array_layers: 1,
-                            },
-                        );
-
-                        let dst_view = scratch.create_view(&Default::default());
-                        let Self { ctx, glow_vism, effect_scratch, .. } = self;
-                        glow_vism.record_over(
-                            ctx,
-                            encoder,
-                            effect_scratch,
-                            &[&padded_source_view],
-                            &dst_view,
-                            &[
-                                ("threshold".to_owned(), *threshold),
-                                ("intensity".to_owned(), *intensity),
-                                ("radius".to_owned(), *radius),
-                            ],
-                            [padded_width as f32, padded_height as f32],
-                        );
-                        effect_scratch.release(
-                            padded_width,
-                            padded_height,
-                            layer_texture.format(),
-                            padded_source,
-                        );
-                    }
-                    EffectPass::Isf { params } => {
-                        let src_view = src.texture.create_view(&Default::default());
-                        let dst_view = scratch.create_view(&Default::default());
-                        self.record_isf(
-                            encoder,
-                            &src_view,
-                            &dst_view,
-                            params,
-                            [width as f32, height as f32],
-                        );
-                    }
-                    EffectPass::Gradient => {
-                        let dst_view = scratch.create_view(&Default::default());
-                        self.record_gradient(encoder, &dst_view, [width as f32, height as f32]);
-                    }
-                    EffectPass::TriLed => {
-                        let dst_view = scratch.create_view(&Default::default());
-                        self.record_tri_led(encoder, &dst_view, [width as f32, height as f32]);
-                    }
+                            aspect: wgpu::TextureAspect::All,
+                        },
+                        wgpu::Extent3d {
+                            width,
+                            height,
+                            depth_or_array_layers: 1,
+                        },
+                    );
+                    padded_source = Some(texture);
+                    Some(view)
+                };
+                let sources: Vec<&wgpu::TextureView> = source_view.iter().collect();
+                let dst_view = scratch.create_view(&Default::default());
+                {
+                    let Self {
+                        ctx,
+                        effect_programs,
+                        effect_scratch,
+                        ..
+                    } = self;
+                    let program = effect_programs
+                        .get(&pass.plugin_id)
+                        .expect("Vism presence checked above");
+                    program.record(
+                        ctx,
+                        encoder,
+                        effect_scratch,
+                        &sources,
+                        &dst_view,
+                        &pass.params,
+                        [padded_width as f32, padded_height as f32],
+                    );
+                }
+                if let Some(texture) = padded_source {
+                    self.effect_scratch.release(
+                        padded_width,
+                        padded_height,
+                        layer_texture.format(),
+                        texture,
+                    );
                 }
             }
 
@@ -296,7 +230,6 @@ impl Compositor {
 
         Ok((texture, view))
     }
-
 }
 
 pub(crate) fn sequential_inputs<'a>(
@@ -314,10 +247,18 @@ pub(crate) fn sequential_inputs<'a>(
             SequentialInput {
                 content: match content {
                     LayerContent::Texture(t) => SequentialContent::Rect(t),
-                    LayerContent::Cloud { positions, colors, point_size } => {
-                        SequentialContent::Cloud { positions, colors, point_size: *point_size }
-                    }
-                    LayerContent::Mesh(mesh) => SequentialContent::Mesh(mesh),
+                    LayerContent::Cloud {
+                        positions,
+                        colors,
+                        bounds,
+                        point_size,
+                    } => SequentialContent::Cloud {
+                        positions,
+                        colors,
+                        bounds: *bounds,
+                        point_size: *point_size,
+                    },
+                    LayerContent::Model(model) => SequentialContent::Model(model),
                 },
                 local_min: glam::Vec2::new(-pad, -pad),
                 local_size: glam::Vec2::new(layer.size[0] + 2.0 * pad, layer.size[1] + 2.0 * pad),

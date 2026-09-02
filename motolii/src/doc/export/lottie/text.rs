@@ -16,7 +16,10 @@ pub(crate) fn build_text_data(
     if static_document.styles.len() > 1
         || !static_document.runs.is_empty()
         || !static_document.ranges.is_empty()
-        || static_document.styles.iter().any(|s| !s.axes.is_empty() || !s.features.is_empty())
+        || static_document
+            .styles
+            .iter()
+            .any(|s| !s.axes.is_empty() || !s.features.is_empty())
     {
         unsupported.push(UnsupportedForLottie {
             layer: Some(layer),

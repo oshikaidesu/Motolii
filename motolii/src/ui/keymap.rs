@@ -1,4 +1,4 @@
-use dioxus_native::prelude::Key;
+use dioxus_native::prelude::{Code, Key, Modifiers};
 
 #[derive(Clone, Copy)]
 pub(super) enum Intent {
@@ -28,6 +28,10 @@ pub(super) enum Intent {
     ToggleKeyedOnly,
     /// 選んだ層をそのまま増やす。
     Duplicate,
+    /// 選択した層を1つのGroupへ入れる。
+    Group,
+    /// 選択したGroupを一段だけ開く。
+    Ungroup,
     /// 選んだ区間へイージングを当てる。AE の F9 一族。
     EasyEase(EaseSide),
 }
@@ -38,6 +42,14 @@ pub(super) enum EaseSide {
     Both,
     In,
     Out,
+}
+
+pub(super) fn primary_modifier(modifiers: Modifiers) -> bool {
+    if cfg!(target_os = "macos") {
+        modifiers.intersects(Modifiers::META | Modifiers::SUPER)
+    } else {
+        modifiers.ctrl()
+    }
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -63,36 +75,230 @@ struct Binding {
 }
 
 const BINDINGS: &[Binding] = &[
-    Binding { key: KeySpec::Char('k'), cmd: true, shift: false, alt: false, intent: Intent::Split },
-    Binding { key: KeySpec::Char('a'), cmd: true, shift: false, alt: false, intent: Intent::SelectAll },
-    Binding { key: KeySpec::ArrowLeft, cmd: false, shift: false, alt: false, intent: Intent::StepFrame(-1) },
-    Binding { key: KeySpec::ArrowLeft, cmd: false, shift: true, alt: false, intent: Intent::StepFrame(-10) },
-    Binding { key: KeySpec::ArrowRight, cmd: false, shift: false, alt: false, intent: Intent::StepFrame(1) },
-    Binding { key: KeySpec::ArrowRight, cmd: false, shift: true, alt: false, intent: Intent::StepFrame(10) },
-    Binding { key: KeySpec::Home, cmd: false, shift: false, alt: false, intent: Intent::Home },
-    Binding { key: KeySpec::End, cmd: false, shift: false, alt: false, intent: Intent::End },
-    Binding { key: KeySpec::Escape, cmd: false, shift: false, alt: false, intent: Intent::Deselect },
-    Binding { key: KeySpec::Char(' '), cmd: false, shift: false, alt: false, intent: Intent::PlayPause },
-    Binding { key: KeySpec::Delete, cmd: false, shift: false, alt: false, intent: Intent::DeleteLayer },
-    Binding { key: KeySpec::Char('z'), cmd: true, shift: false, alt: false, intent: Intent::Undo },
-    Binding { key: KeySpec::Char('z'), cmd: true, shift: true, alt: false, intent: Intent::Redo },
-    Binding { key: KeySpec::Char(']'), cmd: true, shift: false, alt: false, intent: Intent::Reorder(1) },
-    Binding { key: KeySpec::Char('['), cmd: true, shift: false, alt: false, intent: Intent::Reorder(-1) },
-    Binding { key: KeySpec::Char('['), cmd: false, shift: false, alt: false, intent: Intent::SnapEdgeToPlayhead(false) },
-    Binding { key: KeySpec::Char(']'), cmd: false, shift: false, alt: false, intent: Intent::SnapEdgeToPlayhead(true) },
-    Binding { key: KeySpec::Char('['), cmd: false, shift: false, alt: true, intent: Intent::TrimToPlayhead(false) },
-    Binding { key: KeySpec::Char(']'), cmd: false, shift: false, alt: true, intent: Intent::TrimToPlayhead(true) },
-    Binding { key: KeySpec::ArrowUp, cmd: false, shift: false, alt: false, intent: Intent::SelectStep(-1) },
-    Binding { key: KeySpec::Char('d'), cmd: true, shift: false, alt: false, intent: Intent::Duplicate },
-    Binding { key: KeySpec::F9, cmd: false, shift: false, alt: false, intent: Intent::EasyEase(EaseSide::Both) },
-    Binding { key: KeySpec::F9, cmd: false, shift: true, alt: false, intent: Intent::EasyEase(EaseSide::In) },
-    Binding { key: KeySpec::F9, cmd: true, shift: true, alt: false, intent: Intent::EasyEase(EaseSide::Out) },
-    Binding { key: KeySpec::Char('u'), cmd: false, shift: false, alt: false, intent: Intent::ToggleKeyedOnly },
-    Binding { key: KeySpec::Char('*'), cmd: false, shift: false, alt: false, intent: Intent::ToggleMarker },
-    Binding { key: KeySpec::Char('*'), cmd: false, shift: true, alt: false, intent: Intent::ToggleMarker },
-    Binding { key: KeySpec::ArrowLeft, cmd: true, shift: false, alt: false, intent: Intent::JumpMarker(-1) },
-    Binding { key: KeySpec::ArrowRight, cmd: true, shift: false, alt: false, intent: Intent::JumpMarker(1) },
-    Binding { key: KeySpec::ArrowDown, cmd: false, shift: false, alt: false, intent: Intent::SelectStep(1) },
+    Binding {
+        key: KeySpec::Char('k'),
+        cmd: true,
+        shift: false,
+        alt: false,
+        intent: Intent::Split,
+    },
+    Binding {
+        key: KeySpec::Char('a'),
+        cmd: true,
+        shift: false,
+        alt: false,
+        intent: Intent::SelectAll,
+    },
+    Binding {
+        key: KeySpec::ArrowLeft,
+        cmd: false,
+        shift: false,
+        alt: false,
+        intent: Intent::StepFrame(-1),
+    },
+    Binding {
+        key: KeySpec::ArrowLeft,
+        cmd: false,
+        shift: true,
+        alt: false,
+        intent: Intent::StepFrame(-10),
+    },
+    Binding {
+        key: KeySpec::ArrowRight,
+        cmd: false,
+        shift: false,
+        alt: false,
+        intent: Intent::StepFrame(1),
+    },
+    Binding {
+        key: KeySpec::ArrowRight,
+        cmd: false,
+        shift: true,
+        alt: false,
+        intent: Intent::StepFrame(10),
+    },
+    Binding {
+        key: KeySpec::Home,
+        cmd: false,
+        shift: false,
+        alt: false,
+        intent: Intent::Home,
+    },
+    Binding {
+        key: KeySpec::End,
+        cmd: false,
+        shift: false,
+        alt: false,
+        intent: Intent::End,
+    },
+    Binding {
+        key: KeySpec::Escape,
+        cmd: false,
+        shift: false,
+        alt: false,
+        intent: Intent::Deselect,
+    },
+    Binding {
+        key: KeySpec::Char(' '),
+        cmd: false,
+        shift: false,
+        alt: false,
+        intent: Intent::PlayPause,
+    },
+    Binding {
+        key: KeySpec::Delete,
+        cmd: false,
+        shift: false,
+        alt: false,
+        intent: Intent::DeleteLayer,
+    },
+    Binding {
+        key: KeySpec::Char('z'),
+        cmd: true,
+        shift: false,
+        alt: false,
+        intent: Intent::Undo,
+    },
+    Binding {
+        key: KeySpec::Char('z'),
+        cmd: true,
+        shift: true,
+        alt: false,
+        intent: Intent::Redo,
+    },
+    Binding {
+        key: KeySpec::Char(']'),
+        cmd: true,
+        shift: false,
+        alt: false,
+        intent: Intent::Reorder(1),
+    },
+    Binding {
+        key: KeySpec::Char('['),
+        cmd: true,
+        shift: false,
+        alt: false,
+        intent: Intent::Reorder(-1),
+    },
+    Binding {
+        key: KeySpec::Char('['),
+        cmd: false,
+        shift: false,
+        alt: false,
+        intent: Intent::SnapEdgeToPlayhead(false),
+    },
+    Binding {
+        key: KeySpec::Char(']'),
+        cmd: false,
+        shift: false,
+        alt: false,
+        intent: Intent::SnapEdgeToPlayhead(true),
+    },
+    Binding {
+        key: KeySpec::Char('['),
+        cmd: false,
+        shift: false,
+        alt: true,
+        intent: Intent::TrimToPlayhead(false),
+    },
+    Binding {
+        key: KeySpec::Char(']'),
+        cmd: false,
+        shift: false,
+        alt: true,
+        intent: Intent::TrimToPlayhead(true),
+    },
+    Binding {
+        key: KeySpec::ArrowUp,
+        cmd: false,
+        shift: false,
+        alt: false,
+        intent: Intent::SelectStep(-1),
+    },
+    Binding {
+        key: KeySpec::Char('d'),
+        cmd: true,
+        shift: false,
+        alt: false,
+        intent: Intent::Duplicate,
+    },
+    Binding {
+        key: KeySpec::Char('g'),
+        cmd: true,
+        shift: false,
+        alt: false,
+        intent: Intent::Group,
+    },
+    Binding {
+        key: KeySpec::Char('g'),
+        cmd: true,
+        shift: true,
+        alt: false,
+        intent: Intent::Ungroup,
+    },
+    Binding {
+        key: KeySpec::F9,
+        cmd: false,
+        shift: false,
+        alt: false,
+        intent: Intent::EasyEase(EaseSide::Both),
+    },
+    Binding {
+        key: KeySpec::F9,
+        cmd: false,
+        shift: true,
+        alt: false,
+        intent: Intent::EasyEase(EaseSide::In),
+    },
+    Binding {
+        key: KeySpec::F9,
+        cmd: true,
+        shift: true,
+        alt: false,
+        intent: Intent::EasyEase(EaseSide::Out),
+    },
+    Binding {
+        key: KeySpec::Char('u'),
+        cmd: false,
+        shift: false,
+        alt: false,
+        intent: Intent::ToggleKeyedOnly,
+    },
+    Binding {
+        key: KeySpec::Char('*'),
+        cmd: false,
+        shift: false,
+        alt: false,
+        intent: Intent::ToggleMarker,
+    },
+    Binding {
+        key: KeySpec::Char('*'),
+        cmd: false,
+        shift: true,
+        alt: false,
+        intent: Intent::ToggleMarker,
+    },
+    Binding {
+        key: KeySpec::ArrowLeft,
+        cmd: true,
+        shift: false,
+        alt: false,
+        intent: Intent::JumpMarker(-1),
+    },
+    Binding {
+        key: KeySpec::ArrowRight,
+        cmd: true,
+        shift: false,
+        alt: false,
+        intent: Intent::JumpMarker(1),
+    },
+    Binding {
+        key: KeySpec::ArrowDown,
+        cmd: false,
+        shift: false,
+        alt: false,
+        intent: Intent::SelectStep(1),
+    },
 ];
 
 pub(super) fn lookup(key: &Key, cmd: bool, shift: bool, alt: bool) -> Option<Intent> {
@@ -129,7 +335,11 @@ mod held {
 
     /// mac は ⌘、それ以外は Ctrl が「主」の修飾。
     fn bit(key: &Key) -> Option<u8> {
-        let primary = if cfg!(target_os = "macos") { Key::Meta } else { Key::Control };
+        let primary = if cfg!(target_os = "macos") {
+            Key::Meta
+        } else {
+            Key::Control
+        };
         match key {
             k if *k == primary => Some(CMD),
             Key::Shift => Some(SHIFT),
@@ -175,12 +385,75 @@ pub(super) fn set_typing(on: bool) {
 }
 
 /// イベントに乗ってきた修飾と、覚えている押し下げを合わせる。
-pub(super) fn lookup_held(key: &Key, cmd: bool, shift: bool, alt: bool) -> Option<Intent> {
+pub(super) fn lookup_held(
+    key: &Key,
+    code: Code,
+    cmd: bool,
+    shift: bool,
+    alt: bool,
+) -> Option<Intent> {
     // 欄へ打っている間は動詞を引かない。打鍵は入力欄へ入った**あと**根まで
     // 上ってくるので、ここで止めないと名前の空白が再生を始める。
     if TYPING.with(std::cell::Cell::get) {
         return None;
     }
     let (h_cmd, h_shift, h_alt) = held::get();
-    lookup(key, cmd || h_cmd, shift || h_shift, alt || h_alt)
+    let effective_cmd = cmd || h_cmd;
+    let effective_shift = shift || h_shift;
+    let effective_alt = alt || h_alt;
+    let physical = match code {
+        Code::BracketLeft => Some(Key::Character("[".into())),
+        Code::BracketRight => Some(Key::Character("]".into())),
+        _ => None,
+    };
+    lookup(
+        physical.as_ref().unwrap_or(key),
+        effective_cmd,
+        effective_shift,
+        effective_alt,
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn primary_g_groups_and_shift_primary_g_ungroups() {
+        let key = Key::Character("g".into());
+        assert!(matches!(
+            lookup(&key, true, false, false),
+            Some(Intent::Group)
+        ));
+        assert!(matches!(
+            lookup(&key, true, true, false),
+            Some(Intent::Ungroup)
+        ));
+    }
+
+    #[test]
+    fn platform_primary_accepts_the_upstream_modifier_bits() {
+        if cfg!(target_os = "macos") {
+            assert!(primary_modifier(Modifiers::META));
+            assert!(primary_modifier(Modifiers::SUPER));
+            assert!(!primary_modifier(Modifiers::CONTROL));
+        } else {
+            assert!(primary_modifier(Modifiers::CONTROL));
+            assert!(!primary_modifier(Modifiers::META | Modifiers::SUPER));
+        }
+    }
+
+    #[test]
+    fn mac_option_bracket_uses_physical_code_when_the_logical_character_changes() {
+        assert!(matches!(
+            lookup_held(
+                &Key::Character("“".into()),
+                Code::BracketLeft,
+                false,
+                false,
+                true,
+            ),
+            Some(Intent::TrimToPlayhead(false))
+        ));
+    }
 }

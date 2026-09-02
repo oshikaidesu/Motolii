@@ -1,17 +1,16 @@
-
 use std::collections::HashSet;
 
 use crate::doc::core::{Fps, RationalTimeError};
-use crate::render::media::is_point_cloud_path;
 use crate::doc::store::{
     property, EffectInstance, LayerAttrs, LayerId, LayerMeta, LayerSource, PropertyId, StoreError,
     StoreView, Value,
 };
+use crate::render::media::is_point_cloud_path;
 
+mod enums;
 mod properties;
 mod shapes;
 mod text;
-mod enums;
 
 use enums::{blend_mode_to_int, matte_mode_to_int};
 use properties::{build_markers, build_masks, build_slots, scalar_property, vector_property};
@@ -63,7 +62,9 @@ struct Ctx<'a, 'b> {
 }
 
 pub fn export_lottie(view: &StoreView<'_>) -> Result<LottieExport, LottieExportError> {
-    let composition = view.composition()?.ok_or(LottieExportError::NoComposition)?;
+    let composition = view
+        .composition()?
+        .ok_or(LottieExportError::NoComposition)?;
     let fps = composition.fps;
     let ctx = Ctx {
         view,
@@ -121,7 +122,10 @@ fn attrs_of(view: &StoreView<'_>, layer: LayerId) -> Result<LayerAttrs, LottieEx
 
 fn meta_of(view: &StoreView<'_>, layer: LayerId) -> Result<LayerMeta, LottieExportError> {
     view.meta(layer)?.ok_or_else(|| {
-        LottieExportError::TypeMismatch(format!("layer {} に meta が無い", layer.0), Value::Bool(false))
+        LottieExportError::TypeMismatch(
+            format!("layer {} に meta が無い", layer.0),
+            Value::Bool(false),
+        )
     })
 }
 
@@ -129,7 +133,11 @@ fn check_camera(
     ctx: &Ctx<'_, '_>,
     unsupported: &mut Vec<UnsupportedForLottie>,
 ) -> Result<(), LottieExportError> {
-    let names = [property::CAMERA_CENTER, property::CAMERA_ZOOM, property::CAMERA_ROLL];
+    let names = [
+        property::CAMERA_CENTER,
+        property::CAMERA_ZOOM,
+        property::CAMERA_ROLL,
+    ];
     for name in names {
         let property = PropertyId::camera(name)?;
         if ctx.view.camera_property_source(&property)?.is_some() {
@@ -247,9 +255,8 @@ fn build_layer(
         LayerSource::Shape => {
             out["ty"] = serde_json::json!(4);
             let shapes = view.shapes(layer)?;
-            out["shapes"] = serde_json::Value::Array(
-                shapes.iter().map(shape_node_to_json).collect::<Vec<_>>(),
-            );
+            out["shapes"] =
+                serde_json::Value::Array(shapes.iter().map(shape_node_to_json).collect::<Vec<_>>());
         }
         LayerSource::Text => {
             out["ty"] = serde_json::json!(5);
@@ -326,7 +333,6 @@ fn check_audio_settings_unsupported(
     }
     Ok(())
 }
-
 
 fn build_media_asset(
     layer: LayerId,
@@ -408,7 +414,23 @@ fn build_position(
     if !has_split {
         return vector_property(ctx, layer, property::POSITION, 1.0, [0.0, 0.0], unsupported);
     }
-    let x = scalar_property(ctx, layer, property::POSITION_X, 1.0, 0.0, None, unsupported)?;
-    let y = scalar_property(ctx, layer, property::POSITION_Y, 1.0, 0.0, None, unsupported)?;
+    let x = scalar_property(
+        ctx,
+        layer,
+        property::POSITION_X,
+        1.0,
+        0.0,
+        None,
+        unsupported,
+    )?;
+    let y = scalar_property(
+        ctx,
+        layer,
+        property::POSITION_Y,
+        1.0,
+        0.0,
+        None,
+        unsupported,
+    )?;
     Ok(serde_json::json!({ "s": true, "x": x, "y": y }))
 }

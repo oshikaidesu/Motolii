@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex};
 
 use crate::ui::playback::Clock;
 use crate::ui::session::Selection;
+use crate::ui::session::GestureSurface;
 use crate::ui::tokens::{self, UiScale};
 use anyrender::{PaintRef, PaintScene};
 use dioxus_native::prelude::{Signal, WritableExt};
@@ -19,7 +20,6 @@ use peniko::kurbo::{Affine, Point, Rect, Size};
 use peniko::{Color, Fill};
 
 const PX_PER_SEC: f64 = 60.0;
-const DOC_FPS: f64 = 30.0;
 /// 再生位置が視界から出たら追いかける。**止まっている間は追いかけない** ——
 /// 利用者が自分で右へ動かしたのを、その場で引き戻してしまう。
 fn follow_playhead(scroll: f64, visible: f64, playhead: f64, playing: bool) -> Option<f64> {
@@ -81,13 +81,20 @@ const DRAG_SLOP_PX: f64 = 3.0;
 /// 掴んだ物が吸い付く距離。手が止まらない感触はここで決まる。
 const SNAP_PX: f64 = 8.0;
 
+fn document_fps(doc: &Document) -> Result<Fps, StoreError> {
+    doc.view()
+        .composition()?
+        .map(|composition| composition.fps)
+        .ok_or_else(|| StoreError::Property("Composition has no frame rate".to_owned()))
+}
+
 fn keyframe_shift_intents(
     doc: &Document,
     layer: LayerId,
     delta_frames: i64,
 ) -> Result<Vec<Intent>, StoreError> {
     let view = doc.view();
-    let fps = Fps::try_new(DOC_FPS as i64, 1).map_err(|e| StoreError::Property(e.to_string()))?;
+    let fps = document_fps(doc)?;
     let shift =
         RationalTime::try_from_frame(delta_frames, fps).map_err(|e| StoreError::Property(e.to_string()))?;
     let mut intents = Vec::new();
@@ -116,7 +123,7 @@ fn keyframe_move_intents(
     delta_frames: i64,
 ) -> Result<Vec<Intent>, StoreError> {
     let view = doc.view();
-    let fps = Fps::try_new(DOC_FPS as i64, 1).map_err(|e| StoreError::Property(e.to_string()))?;
+    let fps = document_fps(doc)?;
     let shift =
         RationalTime::try_from_frame(delta_frames, fps).map_err(|e| StoreError::Property(e.to_string()))?;
     let mut intents = Vec::new();
@@ -198,6 +205,7 @@ pub(super) struct TimelineWidget {
     rx: Rc<Receiver<TimelineMsg>>,
     rows: Vec<CanvasRow>,
     markers: Vec<f64>,
+    fps: f64,
     pps: f64,
     scroll_sec: f64,
     scroll_y: f64,
@@ -223,8 +231,7 @@ pub(super) struct TimelineWidget {
     /// 書く場所の数だけ配線が要るので、こちらから見に行く。
     revision: Option<Signal<u32>>,
     seen_revision: u32,
-    cancel: Option<Arc<std::sync::atomic::AtomicU32>>,
-    gesture_active: Option<Arc<std::sync::atomic::AtomicBool>>,
+    gesture: Option<GestureSurface>,
     seen_cancel: u32,
     selected_key: Option<Arc<Mutex<Vec<crate::ui::session::KeySel>>>>,
 }
@@ -235,6 +242,7 @@ impl TimelineWidget {
             rx,
             rows,
             markers: Vec::new(),
+            fps: 30.0,
             pps: PX_PER_SEC,
             scroll_sec: 0.0,
             scroll_y: 0.0,
@@ -255,8 +263,7 @@ impl TimelineWidget {
             playhead_mirror: None,
             revision: None,
             seen_revision: 0,
-            cancel: None,
-            gesture_active: None,
+            gesture: None,
             seen_cancel: 0,
             selected_key: None,
         }
@@ -286,13 +293,8 @@ impl TimelineWidget {
         self
     }
 
-    pub(super) fn with_cancel(
-        mut self,
-        cancel: Arc<std::sync::atomic::AtomicU32>,
-        active: Arc<std::sync::atomic::AtomicBool>,
-    ) -> Self {
-        self.cancel = Some(cancel);
-        self.gesture_active = Some(active);
+    pub(super) fn with_gesture(mut self, gesture: GestureSurface) -> Self {
+        self.gesture = Some(gesture);
         self
     }
 
@@ -321,6 +323,12 @@ impl TimelineWidget {
         doc: Arc<Mutex<Document>>,
         extractor: fn(&Document) -> Vec<CanvasRow>,
     ) -> Self {
+        self.fps = doc
+            .lock()
+            .ok()
+            .and_then(|doc| document_fps(&doc).ok())
+            .map(|fps| fps.as_f64())
+            .unwrap_or(30.0);
         self.doc = Some(doc);
         self.extractor = Some(extractor);
         self
@@ -337,8 +345,8 @@ impl TimelineWidget {
     /// 捨てると、離した所までの編集が失われる(外の規格の pointer capture が
     /// 本来これを保証している物の、届く範囲での代わり)。
     fn finish_drag(&mut self) {
-        if let Some(a) = &self.gesture_active {
-            a.store(false, std::sync::atomic::Ordering::Relaxed);
+        if let Some(gesture) = &self.gesture {
+            gesture.end();
         }
                 self.scrubbing = false;
                 if let Some((from, to)) = self.marquee.take() {
@@ -349,9 +357,14 @@ impl TimelineWidget {
                         return;
                     };
                     let mut doc = doc.lock().unwrap();
-                    let raw_delta = (drag.delta_sec * DOC_FPS).round() as i64;
+                    let Ok(fps) = document_fps(&doc) else {
+                        return;
+                    };
+                    let fps_value = fps.as_f64();
+                    self.fps = fps_value;
+                    let raw_delta = (drag.delta_sec * fps_value).round() as i64;
                     if let DragMode::Key { at_sec } = drag.mode {
-                        let at_frame = (at_sec * DOC_FPS).round() as i64;
+                        let at_frame = (at_sec * fps_value).round() as i64;
                         if raw_delta != 0 {
                             // 掴んだ物だけでなく、選んでいるキーを全部同じだけ動かす。
                             let mut moving: Vec<(LayerId, Option<crate::doc::store::PropertyId>, i64)> = self
@@ -360,7 +373,7 @@ impl TimelineWidget {
                                 .filter_map(|(row_ix, key_ix)| {
                                     let row = self.rows.get(*row_ix)?;
                                     let t = row.keys.get(*key_ix).copied()?;
-                                    Some((row.layer?, row.prop.clone(), (t * DOC_FPS).round() as i64))
+                                    Some((row.layer?, row.prop.clone(), (t * fps_value).round() as i64))
                                 })
                                 .collect();
                             if !moving.iter().any(|(l, p, f)| {
@@ -705,6 +718,16 @@ impl Widget for TimelineWidget {
     }
 
     fn handle_event(&mut self, event: &UiEvent) {
+        if self
+            .gesture
+            .as_ref()
+            .is_some_and(|gesture| gesture.cancelled(&mut self.seen_cancel))
+        {
+            self.drag = None;
+            self.scrubbing = false;
+            self.marquee = None;
+            return;
+        }
         match event {
             UiEvent::Wheel(wheel) => {
                 let (dx, dy) = match wheel.delta {
@@ -745,20 +768,6 @@ impl Widget for TimelineWidget {
             }
             UiEvent::PointerMove(p) => {
                 let (x, y) = (p.element.x as f64, p.element.y as f64);
-                if let Some(c) = &self.cancel {
-                    let now = c.load(std::sync::atomic::Ordering::Relaxed);
-                    if now != self.seen_cancel {
-                        self.seen_cancel = now;
-                        // **書かずに**手放す。
-                        self.drag = None;
-                        self.scrubbing = false;
-                        self.marquee = None;
-                        if let Some(a) = &self.gesture_active {
-                            a.store(false, std::sync::atomic::Ordering::Relaxed);
-                        }
-                        return;
-                    }
-                }
                 self.cursor = Some((x, y));
                 // 帯の外で離すと、離した事がここへ届かない。掴んだままの絵が残り、
                 // **見えている物が作品と食い違う**。指が上がっていたら掴みを解く。
@@ -787,9 +796,9 @@ impl Widget for TimelineWidget {
                         DragMode::Key { at_sec } => at_sec,
                         DragMode::TrimEnd => {
                             let d = self.drag.as_ref().expect("同上");
-                            (d.orig.start + d.orig.duration) as f64 / DOC_FPS
+                            (d.orig.start + d.orig.duration) as f64 / self.fps
                         }
-                        _ => self.drag.as_ref().expect("同上").orig.start as f64 / DOC_FPS,
+                        _ => self.drag.as_ref().expect("同上").orig.start as f64 / self.fps,
                     };
                     let snapped = self.snapped_delta(moving, raw);
                     if let Some(drag) = &mut self.drag {
@@ -800,6 +809,9 @@ impl Widget for TimelineWidget {
                 }
             }
             UiEvent::PointerDown(p) => {
+                if let Some(gesture) = &self.gesture {
+                    gesture.begin();
+                }
                 let (x, y) = (p.element.x as f64, p.element.y as f64);
                 let t = self.scroll_sec + x / self.pps;
                 if y < RULER_H * self.sfac() {
@@ -918,6 +930,15 @@ impl Widget for TimelineWidget {
         height: u32,
         scale: f64,
     ) -> anyrender::Scene {
+        if self
+            .gesture
+            .as_ref()
+            .is_some_and(|gesture| gesture.cancelled(&mut self.seen_cancel))
+        {
+            self.drag = None;
+            self.scrubbing = false;
+            self.marquee = None;
+        }
         self.process_messages();
         // 誰かが書いたら行を作り直す。Stage で打ったキーが出ない、を塞ぐ。
         if let Some(rev) = &self.revision {
@@ -926,6 +947,9 @@ impl Widget for TimelineWidget {
                 self.seen_revision = now;
                 if let (Some(doc), Some(extractor)) = (self.doc.as_ref(), self.extractor) {
                     let doc = doc.lock().unwrap();
+                    if let Ok(fps) = document_fps(&doc) {
+                        self.fps = fps.as_f64();
+                    }
                     self.rows = extractor(&doc);
                 }
             }
@@ -954,6 +978,11 @@ impl Widget for TimelineWidget {
         let scroll = self.scroll_sec;
         let x_of = |t: f64| (t - scroll) * pps;
         let hairline = k.max(1.0);
+        let waveform_tracks = self
+            .clock
+            .as_ref()
+            .map(|clock| clock.waveform_tracks())
+            .unwrap_or_default();
 
         let t3 = |v: [u8; 3]| c(v[0], v[1], v[2]);
         let c_app = t3(tokens::SURFACE_APP);
@@ -1026,6 +1055,10 @@ impl Widget for TimelineWidget {
                 },
                 _ => (0.0, 0.0),
             };
+            let waveform_shift = match &self.drag {
+                Some(d) if d.row == i && d.mode == DragMode::Move => d.delta_sec,
+                _ => 0.0,
+            };
 
             let top = y.max(ruler_h);
             if row.is_group {
@@ -1055,6 +1088,46 @@ impl Widget for TimelineWidget {
                         ),
                         c(row.color[0], row.color[1], row.color[2]),
                     );
+                    let waveform_columns = row
+                        .prop
+                        .is_none()
+                        .then_some(row.layer)
+                        .flatten()
+                        .and_then(|layer| {
+                            waveform_tracks.iter().find(|track| track.layer == layer)
+                        })
+                        .and_then(|track| {
+                            track.columns(
+                                scroll - waveform_shift,
+                                scroll - waveform_shift + w / pps,
+                                self.pps,
+                            )
+                        });
+                    if let Some(columns) = waveform_columns {
+                        let amplitude = (row_h - 4.0 * hairline) * 0.45;
+                        let wave_color = Color::from_rgba8(
+                            tokens::INK[0],
+                            tokens::INK[1],
+                            tokens::INK[2],
+                            0x90,
+                        );
+                        for column in columns {
+                            let x = x_of(column.at_sec + waveform_shift);
+                            if x < x0 || x > x1 {
+                                continue;
+                            }
+                            let y0 = (mid - f64::from(column.max) * amplitude).max(top);
+                            let y1 = (mid - f64::from(column.min) * amplitude)
+                                .min(y + row_h - 2.0 * hairline);
+                            if y1 >= y0 {
+                                fill_rect(
+                                    &mut s,
+                                    Rect::new(x, y0, x + hairline, (y1 + hairline).min(y + row_h)),
+                                    wave_color,
+                                );
+                            }
+                        }
+                    }
                     let selected = row
                         .layer
                         .map(|l| Some(l) == primary_layer || self.selection.as_ref().is_some_and(|s| s.contains(l)))
@@ -1114,7 +1187,7 @@ impl Widget for TimelineWidget {
             }
             for (ki, kf) in row.keys.iter().enumerate() {
                 let dragged = key_shift
-                    .filter(|(at, _)| (at - *kf).abs() < 0.5 / DOC_FPS)
+                    .filter(|(at, _)| (at - *kf).abs() < 0.5 / self.fps)
                     .map(|(_, delta)| delta)
                     .unwrap_or(0.0);
                 let center = Point::new(x_of(*kf + dragged), mid);
@@ -1212,5 +1285,58 @@ mod follow {
                 "再生中に置いていかれた"
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod timebase {
+    use super::*;
+    use crate::doc::store::{
+        property, Composition, Interp, Keyframe, LayerSource, PropertyId, Value,
+    };
+
+    #[test]
+    fn moving_a_key_uses_the_composition_frame_rate() {
+        let fps = Fps::try_new(24, 1).unwrap();
+        let mut doc = Document::new();
+        doc.apply(Intent::SetComposition(Composition {
+            width: 640,
+            height: 480,
+            fps,
+            duration_frames: 240,
+            background: Composition::default_background(),
+        }))
+        .unwrap();
+        let layer = LayerId(1);
+        let property = PropertyId::new(property::POSITION).unwrap();
+        let mut track = KeyframeTrack::new();
+        track.insert(Keyframe {
+            t: RationalTime::try_from_frame(12, fps).unwrap(),
+            value: Value::Vec2([1.0, 2.0]),
+            interp: Interp::Linear,
+            spatial: None,
+        });
+        doc.apply_all([
+            Intent::AddLayer(layer),
+            Intent::SetMeta {
+                layer,
+                meta: LayerMeta {
+                    source: LayerSource::Shape,
+                    order: 0,
+                    timing: LayerTiming::place(0, None, 240),
+                },
+            },
+            Intent::SetTrack {
+                layer,
+                property: property.clone(),
+                track,
+            },
+        ])
+        .unwrap();
+
+        doc.apply_all(keyframe_shift_intents(&doc, layer, 1).unwrap())
+            .unwrap();
+        let moved = doc.view().track(layer, &property).unwrap().unwrap();
+        assert_eq!(moved.keys()[0].t.try_to_frame_round(fps).unwrap(), 13);
     }
 }

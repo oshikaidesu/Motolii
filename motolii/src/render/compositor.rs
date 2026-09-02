@@ -1,11 +1,7 @@
-
 use re_renderer::renderer::{
-    ColorMapper, ColormappedTexture, RectangleOptions, TextureAlpha,
-    TexturedRect,
+    ColorMapper, ColormappedTexture, RectangleOptions, TextureAlpha, TexturedRect,
 };
-use re_renderer::view_builder::{
-    BlendWithBackground, Projection, RenderMode, TargetConfiguration,
-};
+use re_renderer::view_builder::{BlendWithBackground, Projection, RenderMode, TargetConfiguration};
 use re_renderer::{RenderContext, Rgba};
 
 mod device;
@@ -91,6 +87,36 @@ pub(crate) fn tilt(rotation_x: f32, rotation_y: f32) -> glam::Quat {
         * glam::Quat::from_rotation_x(rotation_x.to_radians())
 }
 
+pub(crate) fn spatial_world_from_bounds(
+    transform: glam::Affine2,
+    z: f32,
+    rotation_x: f32,
+    rotation_y: f32,
+    bounds: crate::render::media::SpatialBounds,
+) -> glam::Affine3A {
+    let rotation = tilt(rotation_x, rotation_y);
+    let matrix = transform.matrix2;
+    let basis_x = rotation * glam::vec3(matrix.x_axis.x, matrix.x_axis.y, 0.0);
+    let basis_y = rotation * glam::vec3(matrix.y_axis.x, matrix.y_axis.y, 0.0);
+    let basis_z = rotation * glam::Vec3::Z;
+    let size = glam::Vec3::from(bounds.size());
+    let center = size * 0.5;
+    let center_xy = transform.transform_point2(center.truncate());
+    let world_center = glam::vec3(center_xy.x, center_xy.y, z);
+    let translation = world_center
+        - basis_x * center.x
+        - basis_y * center.y
+        - basis_z * center.z;
+    let world_from_normalized = glam::Affine3A::from_cols(
+        basis_x.into(),
+        basis_y.into(),
+        basis_z.into(),
+        translation.into(),
+    );
+    world_from_normalized
+        * glam::Affine3A::from_translation(-glam::Vec3::from(bounds.min))
+}
+
 pub(crate) fn accumulator_plane_z(
     comp: CompSpec,
     camera: crate::doc::core::ResolvedCamera,
@@ -133,7 +159,12 @@ pub(crate) fn premultiplied_texture(texture: GpuTexture2D) -> ColormappedTexture
 
 pub fn clear_color(background: [f32; 4]) -> Rgba {
     let q = |c: f32| (c * 255.0).round().clamp(0.0, 255.0) as u8;
-    Rgba::from_srgba_unmultiplied(q(background[0]), q(background[1]), q(background[2]), q(background[3]))
+    Rgba::from_srgba_unmultiplied(
+        q(background[0]),
+        q(background[1]),
+        q(background[2]),
+        q(background[3]),
+    )
 }
 
 pub const NO_BACKGROUND: [f32; 4] = [0.0, 0.0, 0.0, 0.0];
@@ -142,25 +173,8 @@ pub use headless::{HeadlessError, HeadlessGpu};
 
 pub use effects::EffectPass;
 
+pub(crate) use effects::vism_definitions;
 pub use effects::{IsfInput, IsfInputType, IsfManifest};
-
-pub fn isf_bloom_manifest() -> &'static IsfManifest {
-    static MANIFEST: std::sync::OnceLock<IsfManifest> = std::sync::OnceLock::new();
-    MANIFEST.get_or_init(|| {
-        effects::isf::parse_isf_source(effects::BLOOM_SOURCE)
-            .expect("bloom.fs はビルドに埋め込まれた定数——parse 失敗はここのバグ")
-            .0
-    })
-}
-
-pub fn tri_led_manifest() -> &'static IsfManifest {
-    static MANIFEST: std::sync::OnceLock<IsfManifest> = std::sync::OnceLock::new();
-    MANIFEST.get_or_init(|| {
-        effects::isf::parse_isf_source(effects::TRI_LED_SOURCE)
-            .expect("tri_led.wgsl はビルドに埋め込まれた定数——parse 失敗はここのバグ")
-            .0
-    })
-}
 
 pub use matte::MatteMode;
 
@@ -227,17 +241,11 @@ impl RenderTiming {
 }
 
 pub struct Compositor {
-    /// 網の材質が要求する 1 画素の albedo。
-    white_pixel: Option<GpuTexture2D>,
     pub(crate) ctx: RenderContext,
     pub(crate) next_readback: u64,
     pub(crate) next_effect_key: u64,
     pub(crate) effect_scratch: effects::EffectScratch,
-    /// 明部を広げて足す Vism(vism/glow.wgsl、4段。段は PASSES が宣言する)。
-    pub(crate) glow_vism: effects::WgslFragmentProgram,
-    pub(crate) isf_bloom: effects::IsfProgram,
-    pub(crate) wgsl_gradient: effects::WgslFragmentProgram,
-    pub(crate) wgsl_tri_led: effects::WgslFragmentProgram,
+    pub(crate) effect_programs: std::collections::HashMap<String, effects::EffectProgram>,
     /// 層と背景を混ぜる Vism(vism/blend.wgsl + 借りた式)。
     pub(crate) blend_vism: effects::WgslFragmentProgram,
     /// 層をマットで切る Vism(vism/matte.wgsl + 借りた svg_lum)。
@@ -249,6 +257,18 @@ pub struct Compositor {
 
 type AccumulatorBacking = wgpu::Texture;
 
+#[derive(Clone)]
+pub struct GpuModelData {
+    pub(crate) instances: std::sync::Arc<Vec<re_renderer::renderer::GpuMeshInstance>>,
+    pub(crate) bounds: crate::render::media::SpatialBounds,
+}
+
+impl GpuModelData {
+    pub fn bounds(&self) -> crate::render::media::SpatialBounds {
+        self.bounds
+    }
+}
+
 /// 層が持つ中身。3D の素材はテクスチャにならず、点のまま run へ渡る。
 #[derive(Clone)]
 pub enum LayerContent {
@@ -256,17 +276,18 @@ pub enum LayerContent {
     Cloud {
         positions: std::sync::Arc<Vec<[f32; 3]>>,
         colors: std::sync::Arc<Vec<[u8; 4]>>,
+        bounds: crate::render::media::SpatialBounds,
         /// 点の直径(comp のピクセル)。
         point_size: f32,
     },
-    Mesh(std::sync::Arc<crate::render::media::MeshData>),
+    Model(std::sync::Arc<GpuModelData>),
 }
 
 impl LayerContent {
     pub fn texture(&self) -> Option<&GpuTexture2D> {
         match self {
             Self::Texture(t) => Some(t),
-            Self::Cloud { .. } | Self::Mesh(_) => None,
+            Self::Cloud { .. } | Self::Model(_) => None,
         }
     }
 }
@@ -278,9 +299,10 @@ pub(crate) enum SequentialContent<'a> {
     Cloud {
         positions: &'a [[f32; 3]],
         colors: &'a [[u8; 4]],
+        bounds: crate::render::media::SpatialBounds,
         point_size: f32,
     },
-    Mesh(&'a crate::render::media::MeshData),
+    Model(&'a GpuModelData),
 }
 
 pub(crate) struct SequentialInput<'a> {
@@ -339,5 +361,31 @@ fn background_rect(
             texture_filter_minification: re_renderer::renderer::TextureFilterMin::Nearest,
             ..Default::default()
         },
+    }
+}
+
+#[cfg(test)]
+mod spatial_transform_tests {
+    use super::*;
+
+    #[test]
+    fn mesh_and_points_share_a_center_preserving_xyz_transform() {
+        let bounds = crate::render::media::SpatialBounds {
+            min: [-1.0, -1.0, -1.0],
+            max: [1.0, 1.0, 1.0],
+        };
+        let transform = glam::Affine2::from_scale_angle_translation(
+            glam::Vec2::splat(20.0),
+            0.0,
+            glam::vec2(100.0, 200.0),
+        );
+        let world = spatial_world_from_bounds(transform, 30.0, 90.0, 0.0, bounds);
+
+        let center = world.transform_point3(glam::Vec3::ZERO);
+        assert!((center - glam::vec3(120.0, 220.0, 30.0)).length() < 1e-4);
+        let above = world.transform_point3(glam::vec3(0.0, 1.0, 0.0));
+        assert!((above.x - center.x).abs() < 1e-4);
+        assert!((above.y - center.y).abs() < 1e-4);
+        assert!((above.z - (center.z + 20.0)).abs() < 1e-4);
     }
 }

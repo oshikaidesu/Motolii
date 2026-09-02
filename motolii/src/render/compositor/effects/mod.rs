@@ -1,55 +1,143 @@
-
 use std::collections::HashMap;
 
 pub(crate) mod isf;
 pub(crate) mod vism;
 mod wgsl_fragment;
 
+pub(crate) use isf::IsfProgram;
 pub use isf::{IsfInput, IsfInputType, IsfManifest};
 pub(crate) use vism::FLOAT_TARGET_FORMAT;
-pub(crate) use isf::{IsfProgram, BLOOM_SOURCE, ISF_TARGET_FORMAT};
 pub(crate) use wgsl_fragment::{
-    WgslFragmentProgram, BLEND_SOURCE, GLOW_SOURCE, MATTE_SOURCE, GRADIENT_SOURCE, GRADIENT_TARGET_FORMAT, TRI_LED_SOURCE,
-    TRI_LED_TARGET_FORMAT, VELLO_BLEND_PRELUDE,
+    WgslFragmentProgram, BLEND_SOURCE, MATTE_SOURCE, VELLO_BLEND_PRELUDE,
 };
 
+#[derive(Clone, Copy)]
+pub(crate) struct VismSource {
+    pub(crate) name: &'static str,
+    pub(crate) extension: &'static str,
+    pub(crate) source: &'static str,
+}
+
+include!(concat!(env!("OUT_DIR"), "/vism_inventory.rs"));
+
+pub(crate) struct VismDefinition {
+    pub(crate) source: VismSource,
+    pub(crate) manifest: IsfManifest,
+}
+
+impl VismDefinition {
+    pub(crate) fn plugin_id(&self) -> &str {
+        self.manifest.id.as_deref().unwrap_or(self.source.name)
+    }
+
+    pub(crate) fn output_format(&self) -> wgpu::TextureFormat {
+        if self.manifest.output_float {
+            FLOAT_TARGET_FORMAT
+        } else {
+            wgpu::TextureFormat::Rgba8Unorm
+        }
+    }
+}
+
+pub(crate) fn vism_definitions() -> &'static [VismDefinition] {
+    static DEFINITIONS: std::sync::OnceLock<Vec<VismDefinition>> = std::sync::OnceLock::new();
+    DEFINITIONS.get_or_init(|| {
+        VISM_SOURCES
+            .iter()
+            .copied()
+            .map(|source| VismDefinition {
+                source,
+                manifest: isf::parse_isf_source(source.source)
+                    .unwrap_or_else(|error| panic!("{}: {error}", source.name))
+                    .0,
+            })
+            .collect()
+    })
+}
+
+pub(crate) enum EffectProgram {
+    Wgsl(WgslFragmentProgram),
+    Isf(IsfProgram),
+}
+
+impl EffectProgram {
+    pub(crate) fn compile(
+        ctx: &re_renderer::RenderContext,
+        source: VismSource,
+        output_format: wgpu::TextureFormat,
+    ) -> Result<Self, isf::IsfError> {
+        match source.extension {
+            "wgsl" => Ok(Self::Wgsl(WgslFragmentProgram::compile(
+                ctx,
+                source.name,
+                source.source,
+                output_format,
+            ))),
+            "fs" => Ok(Self::Isf(IsfProgram::compile(
+                ctx,
+                source.source,
+                output_format,
+            )?)),
+            _ => unreachable!("build.rs filters Vism extensions"),
+        }
+    }
+
+    pub(crate) fn image_input_count(&self) -> usize {
+        match self {
+            Self::Wgsl(program) => program.image_input_count(),
+            Self::Isf(program) => program.image_input_count(),
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn record(
+        &self,
+        ctx: &re_renderer::RenderContext,
+        encoder: &mut wgpu::CommandEncoder,
+        scratch: &mut EffectScratch,
+        sources: &[&wgpu::TextureView],
+        dst_view: &wgpu::TextureView,
+        params: &[(String, f32)],
+        render_size: [f32; 2],
+    ) {
+        match self {
+            Self::Wgsl(program) => program.record_over(
+                ctx,
+                encoder,
+                scratch,
+                sources,
+                dst_view,
+                params,
+                render_size,
+            ),
+            Self::Isf(program) => program.record(
+                ctx,
+                encoder,
+                scratch,
+                sources,
+                dst_view,
+                params,
+                render_size,
+            ),
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
-pub enum EffectPass {
-    Identity,
-    Glow {
-        threshold: f32,
-        intensity: f32,
-        radius: f32,
-    },
-    Isf {
-        params: Vec<(String, f32)>,
-    },
-    Gradient,
-    TriLed,
+pub struct EffectPass {
+    pub(crate) plugin_id: String,
+    pub(crate) params: Vec<(String, f32)>,
+    pub(crate) padding: u32,
+    pub(crate) output_format: wgpu::TextureFormat,
 }
 
 impl EffectPass {
     pub fn padding(&self) -> u32 {
-        match self {
-            EffectPass::Identity => 0,
-            EffectPass::Glow { radius, .. } => {
-                let step = radius.round().max(1.0) as u32;
-                step * 2
-            }
-            EffectPass::Isf { .. } => 0,
-            EffectPass::Gradient => 0,
-            EffectPass::TriLed => 0,
-        }
+        self.padding
     }
 
     pub(crate) fn intermediate_format(&self) -> Option<wgpu::TextureFormat> {
-        match self {
-            EffectPass::Identity => None,
-            EffectPass::Glow { .. } => Some(FLOAT_TARGET_FORMAT),
-            EffectPass::Isf { .. } => Some(ISF_TARGET_FORMAT),
-            EffectPass::Gradient => Some(GRADIENT_TARGET_FORMAT),
-            EffectPass::TriLed => Some(TRI_LED_TARGET_FORMAT),
-        }
+        Some(self.output_format)
     }
 }
 

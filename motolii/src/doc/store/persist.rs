@@ -32,10 +32,7 @@ impl Document {
     }
 
     pub fn save(&self, path: impl AsRef<Path>) -> Result<(), StoreError> {
-        let flat = self.flattened()?;
-        let file = std::fs::File::create(path.as_ref())
-            .map_err(|e| StoreError::Io(e.to_string()))?;
-        Self::encode_flattened_to(&flat, file)
+        self.save_atomic(path.as_ref())
     }
 
     fn encode_flattened_to(flat: &Self, file: std::fs::File) -> Result<(), StoreError> {

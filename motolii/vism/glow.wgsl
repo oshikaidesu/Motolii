@@ -1,10 +1,13 @@
 /*{
+  "ID": "motolii.glow",
   "DESCRIPTION": "明部を抜いて広げ、元へ足す。段は ISF の PASSES で宣言する(1フレーム内の中間ターゲットだけ。PERSISTENT は採らない)",
+  "OUTPUT_FLOAT": true,
+  "PADDING": { "PARAM": "radius", "SCALE": 2.0 },
   "INPUTS": [
     { "NAME": "source", "TYPE": "image" },
-    { "NAME": "threshold", "TYPE": "float", "DEFAULT": 0.75, "MIN": 0.0, "MAX": 1.0 },
-    { "NAME": "intensity", "TYPE": "float", "DEFAULT": 1.0, "MIN": 0.0, "MAX": 4.0 },
-    { "NAME": "radius", "TYPE": "float", "DEFAULT": 4.0, "MIN": 1.0, "MAX": 64.0 }
+    { "NAME": "threshold", "TYPE": "float", "DEFAULT": 1.0, "MIN": 0.0, "MAX": 1.0 },
+    { "NAME": "intensity", "TYPE": "float", "DEFAULT": 0.75, "MIN": 0.0, "MAX": 4.0 },
+    { "NAME": "radius", "TYPE": "float", "DEFAULT": 1.0, "MIN": 1.0, "MAX": 64.0 }
   ],
   "PASSES": [
     { "TARGET": "bright", "FLOAT": true },

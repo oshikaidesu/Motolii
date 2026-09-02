@@ -1,17 +1,11 @@
-
-
 #[cfg(not(load_shaders_from_disk))]
 use std::path::PathBuf;
 
+use re_renderer::RenderContext;
 #[cfg(not(load_shaders_from_disk))]
 use re_renderer::{get_filesystem, FileSystem as _};
-use re_renderer::RenderContext;
 
 use super::vism::{ShaderStageSource, VismProgram};
-
-pub(crate) const BLOOM_SOURCE: &str = include_str!("../../../../../vism/bloom.fs");
-
-pub(crate) const ISF_TARGET_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum IsfError {
@@ -92,20 +86,48 @@ pub struct IsfPass {
     pub float: bool,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
+pub struct IsfPadding {
+    pub param: String,
+    pub scale: f32,
+}
+
+#[derive(Clone, Debug)]
 pub struct IsfManifest {
+    pub id: Option<String>,
+    pub expose: bool,
+    pub output_float: bool,
+    pub padding: Option<IsfPadding>,
     pub description: Option<String>,
     pub inputs: Vec<IsfInput>,
     pub passes: Vec<IsfPass>,
 }
 
+impl Default for IsfManifest {
+    fn default() -> Self {
+        Self {
+            id: None,
+            expose: true,
+            output_float: false,
+            padding: None,
+            description: None,
+            inputs: Vec::new(),
+            passes: Vec::new(),
+        }
+    }
+}
+
 impl IsfManifest {
     pub fn image_inputs(&self) -> impl Iterator<Item = &IsfInput> {
-        self.inputs.iter().filter(|input| input.ty == IsfInputType::Image)
+        self.inputs
+            .iter()
+            .filter(|input| input.ty == IsfInputType::Image)
     }
 
     pub fn param_inputs(&self) -> impl Iterator<Item = &IsfInput> {
-        self.inputs.iter().filter(|input| input.ty != IsfInputType::Image)
+        self.inputs
+            .iter()
+            .filter(|input| input.ty != IsfInputType::Image)
     }
 }
 
@@ -119,6 +141,21 @@ pub(crate) fn parse_isf_source(source: &str) -> Result<(IsfManifest, String), Is
     let body = trimmed[header_end + 2..].to_owned();
 
     let value: serde_json::Value = serde_json::from_str(json_text)?;
+    let id = value.get("ID").and_then(|v| v.as_str()).map(str::to_owned);
+    let expose = value
+        .get("EXPOSE")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true);
+    let output_float = value
+        .get("OUTPUT_FLOAT")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let padding = value.get("PADDING").and_then(|v| {
+        Some(IsfPadding {
+            param: v.get("PARAM")?.as_str()?.to_owned(),
+            scale: v.get("SCALE").and_then(|v| v.as_f64()).unwrap_or(1.0) as f32,
+        })
+    });
     let description = value
         .get("DESCRIPTION")
         .and_then(|v| v.as_str())
@@ -174,6 +211,10 @@ pub(crate) fn parse_isf_source(source: &str) -> Result<(IsfManifest, String), Is
     }
     Ok((
         IsfManifest {
+            id,
+            expose,
+            output_float,
+            padding,
             description,
             inputs,
             passes,
@@ -268,9 +309,12 @@ fn compile_glsl_to_wgsl(source: &str, stage: naga::ShaderStage) -> Result<String
             stage,
             detail: errors.to_string(),
         })?;
-    let info = naga::valid::Validator::new(naga::valid::ValidationFlags::all(), naga::valid::Capabilities::all())
-        .validate(&module)
-        .map_err(|e| IsfError::Validate(e.to_string()))?;
+    let info = naga::valid::Validator::new(
+        naga::valid::ValidationFlags::all(),
+        naga::valid::Capabilities::all(),
+    )
+    .validate(&module)
+    .map_err(|e| IsfError::Validate(e.to_string()))?;
     naga::back::wgsl::write_string(&module, &info, naga::back::wgsl::WriterFlags::empty())
         .map_err(|e| IsfError::WgslWrite(e.to_string()))
 }
@@ -282,6 +326,10 @@ pub(crate) struct IsfProgram {
 }
 
 impl IsfProgram {
+    pub(crate) fn image_input_count(&self) -> usize {
+        self.inner.image_input_count()
+    }
+
     pub(crate) fn compile(
         ctx: &RenderContext,
         isf_source: &str,
@@ -338,7 +386,7 @@ impl IsfProgram {
         ctx: &RenderContext,
         encoder: &mut wgpu::CommandEncoder,
         scratch: &mut super::EffectScratch,
-        source_view: &wgpu::TextureView,
+        source_views: &[&wgpu::TextureView],
         dst_view: &wgpu::TextureView,
         params: &[(String, f32)],
         render_size: [f32; 2],
@@ -347,7 +395,7 @@ impl IsfProgram {
             ctx,
             encoder,
             scratch,
-            &[source_view],
+            source_views,
             dst_view,
             params,
             render_size,

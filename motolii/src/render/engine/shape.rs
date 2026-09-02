@@ -1,4 +1,3 @@
-
 use crate::doc::store::ShapeNode;
 use crate::render::vector::{Canvas, Raster, VectorError};
 

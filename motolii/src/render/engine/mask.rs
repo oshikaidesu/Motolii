@@ -1,4 +1,3 @@
-
 use crate::doc::store::{MaskMode, Path as EvalPath, ResolvedMask};
 use crate::render::vector::coverage::{self, Coverage};
 use crate::render::vector::{
@@ -35,13 +34,15 @@ pub fn rasterize_mask_coverage(
     mask: &ResolvedMask,
     canvas: &Canvas,
 ) -> Result<Raster, VectorError> {
-    let ops = (mask.expansion != 0.0).then(|| {
-        vec![ShapeOp::new(OpKind::OffsetPath {
-            amount: mask.expansion,
-            join: LineJoin::Miter,
-            miter_limit: 4.0,
-        })]
-    }).unwrap_or_default();
+    let ops = (mask.expansion != 0.0)
+        .then(|| {
+            vec![ShapeOp::new(OpKind::OffsetPath {
+                amount: mask.expansion,
+                join: LineJoin::Miter,
+                miter_limit: 4.0,
+            })]
+        })
+        .unwrap_or_default();
     let shape = Shape {
         source: PathSource::Bezier(eval_path_to_vector_path(&mask.shape)),
         ops,

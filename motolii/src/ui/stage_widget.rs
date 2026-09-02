@@ -2,6 +2,7 @@ use std::sync::{Arc, Mutex};
 
 use crate::ui::playback::Clock;
 use crate::ui::session::Selection;
+use crate::ui::session::GestureSurface;
 use crate::ui::tokens;
 use anyrender::{PaintRef, PaintScene, ResourceId};
 use blitz_traits::events::UiEvent;
@@ -168,8 +169,7 @@ pub(super) struct StageWidget {
     view_camera: Arc<Mutex<crate::render::engine::ObservationCamera>>,
     rings: Arc<std::sync::atomic::AtomicBool>,
     frame_dim: Arc<std::sync::atomic::AtomicU32>,
-    cancel: Arc<std::sync::atomic::AtomicU32>,
-    gesture_active: Arc<std::sync::atomic::AtomicBool>,
+    gesture: GestureSurface,
     seen_cancel: u32,
     /// 最後に指が居た所(窓の点)。拡縮を**指の下**で行うために覚える。
     cursor: Option<(f64, f64)>,
@@ -210,8 +210,7 @@ impl StageWidget {
         view_camera: Arc<Mutex<crate::render::engine::ObservationCamera>>,
         rings: Arc<std::sync::atomic::AtomicBool>,
         frame_dim: Arc<std::sync::atomic::AtomicU32>,
-        cancel: Arc<std::sync::atomic::AtomicU32>,
-        gesture_active: Arc<std::sync::atomic::AtomicBool>,
+        gesture: GestureSurface,
         output_only: bool,
     ) -> Self {
         Self {
@@ -229,8 +228,7 @@ impl StageWidget {
             view_camera,
             rings,
             frame_dim,
-            cancel,
-            gesture_active,
+            gesture,
             seen_cancel: 0,
             cursor: None,
             output_only,
@@ -260,8 +258,7 @@ impl StageWidget {
     /// 離した所までの編集が失われる(規格の pointer capture が保証している物の、
     /// 届く範囲での代わり)。
     fn finish_drag(&mut self, shift: bool, alt: bool) {
-        self.gesture_active
-            .store(false, std::sync::atomic::Ordering::Relaxed);
+        self.gesture.end();
                 if let Some(cam) = self.camera_drag.take() {
                     if let (true, Some(at)) = (cam.export_frame, cam.last) {
                         let next = camera_center_for(&cam, at);
@@ -341,8 +338,7 @@ impl StageWidget {
             }
         }
         self.camera_drag = None;
-        self.gesture_active
-            .store(false, std::sync::atomic::Ordering::Relaxed);
+        self.gesture.end();
         self.revision += 1;
     }
 
@@ -759,9 +755,7 @@ impl Widget for StageWidget {
             // 出力を映す窓。ここは**見るだけ**で、触っても何も起きない。
             return;
         }
-        let cancel = self.cancel.load(std::sync::atomic::Ordering::Relaxed);
-        if cancel != self.seen_cancel {
-            self.seen_cancel = cancel;
+        if self.gesture.cancelled(&mut self.seen_cancel) {
             self.cancel_drag();
             return;
         }
@@ -810,8 +804,7 @@ impl Widget for StageWidget {
                             "PROBE room=input verdict=gizmo-hit mode={mode:?} at=({lx:.0},{ly:.0})                              box=({bx:.0},{by:.0},{bw:.0},{bh:.0}) depth=({dx:.0},{dy:.0}) tol={tol:.0}"
                         );
                         if let Some(mode) = mode {
-                            self.gesture_active
-                                .store(true, std::sync::atomic::Ordering::Relaxed);
+                            self.gesture.begin();
                             self.drag = Some(GizmoDrag {
                                 layer,
                                 mode,
@@ -862,8 +855,7 @@ impl Widget for StageWidget {
                     None => {
                         // 枠の縁を掴んだら書き出しカメラ、それ以外は視点。
                         // 錠が掛かっている間は枠を掴めない(誤って掴むのを止める)。
-                        self.gesture_active
-                            .store(true, std::sync::atomic::Ordering::Relaxed);
+                        self.gesture.begin();
                         if self.near_export_frame(cx, cy) && !crate::ui::fixture::camera_locked() {
                             let rt = self.current_rt();
                             self.camera_drag = Some(CameraDrag {
@@ -988,6 +980,9 @@ impl Widget for StageWidget {
         height: u32,
         scale: f64,
     ) -> anyrender::Scene {
+        if self.gesture.cancelled(&mut self.seen_cancel) {
+            self.cancel_drag();
+        }
         let mut scene = anyrender::Scene::new();
         self.frames += 1;
         let first = self.frames == 1;

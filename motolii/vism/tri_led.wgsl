@@ -1,4 +1,8 @@
 /*{
+  "ID": "motolii.tri_led",
+  "CREDIT": "Adapted from vgpu Triangle LED Hero by Vercel Labs",
+  "SOURCE": "https://github.com/vercel-labs/vgpu",
+  "LICENSE": "MIT",
   "INPUTS": [
     { "NAME": "glow", "TYPE": "float", "DEFAULT": 0.5, "MIN": 0.0, "MAX": 1.0,
       "MAPS": [

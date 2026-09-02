@@ -1,4 +1,3 @@
-
 use std::sync::Arc;
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
@@ -63,6 +62,19 @@ impl OutputStream {
     pub fn open_negotiated_shared(
         device: &cpal::Device,
         negotiated: &NegotiatedOutput,
+        consumer: rtrb::Consumer<f32>,
+        counters: Arc<PlaybackCounters>,
+        device_wait: Arc<DeviceWaitLatency>,
+    ) -> Result<Self> {
+        let stream =
+            Self::build_negotiated_shared(device, negotiated, consumer, counters, device_wait)?;
+        stream.play()?;
+        Ok(stream)
+    }
+
+    pub fn build_negotiated_shared(
+        device: &cpal::Device,
+        negotiated: &NegotiatedOutput,
         mut consumer: rtrb::Consumer<f32>,
         counters: Arc<PlaybackCounters>,
         device_wait: Arc<DeviceWaitLatency>,
@@ -82,8 +94,6 @@ impl OutputStream {
             },
             None,
         )?;
-        stream.play()?;
-
         Ok(Self { stream })
     }
 

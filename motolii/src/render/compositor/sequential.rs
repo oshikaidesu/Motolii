@@ -1,7 +1,4 @@
-use re_renderer::renderer::{
-    RectangleDrawData, RectangleOptions,
-    TexturedRect,
-};
+use re_renderer::renderer::{RectangleDrawData, RectangleOptions, TexturedRect};
 use re_renderer::view_builder::ViewBuilder;
 use re_renderer::{GpuTexture, Rgba, ScreenshotProcessor, ViewBuilderId};
 
@@ -151,11 +148,9 @@ impl Compositor {
                     Some((backing, _)) => {
                         let dst_view = backing.create_view(&Default::default());
                         let src_view = layer_canvas.create_view(&Default::default());
-                        let out_texture = spare
-                            .pop()
-                            .unwrap_or_else(|| {
-                                self.create_blend_scratch_texture(comp.width, comp.height)
-                            });
+                        let out_texture = spare.pop().unwrap_or_else(|| {
+                            self.create_blend_scratch_texture(comp.width, comp.height)
+                        });
                         let out_view = out_texture.create_view(&Default::default());
 
                         let encoder = blend_encoder.get_or_insert_with(|| {
@@ -165,7 +160,12 @@ impl Compositor {
                                 },
                             )
                         });
-                        let Self { ctx, blend_vism, effect_scratch, .. } = self;
+                        let Self {
+                            ctx,
+                            blend_vism,
+                            effect_scratch,
+                            ..
+                        } = self;
                         blend_vism.record_over(
                             ctx,
                             encoder,
@@ -234,29 +234,34 @@ impl Compositor {
                 if let crate::render::compositor::SequentialContent::Cloud {
                     positions,
                     colors,
+                    bounds,
                     point_size,
                 } = input.content
                 {
                     clouds.push(self.point_cloud_draw_data(
                         positions,
                         colors,
+                        bounds,
                         point_size,
                         transform,
                         z,
+                        rx,
+                        ry,
                         input.opacity,
                     )?);
                     continue;
                 }
-                if let SequentialContent::Mesh(mesh) = input.content {
-                    meshes.push(self.mesh_draw_data(
-                        &mesh.positions,
-                        &mesh.indices,
-                        &mesh.normals,
-                        &mesh.colors,
-                        transform,
-                        z,
-                        input.opacity,
-                    )?);
+                if let SequentialContent::Model(model) = input.content {
+                    meshes.push(
+                        self.model_draw_data(
+                            model,
+                            transform,
+                            z,
+                            rx,
+                            ry,
+                            input.opacity,
+                        )?,
+                    );
                     continue;
                 }
                 let (corner, extent_u, extent_v) = crate::render::compositor::tilted_corners(
@@ -270,9 +275,9 @@ impl Compositor {
                 let a = match input.blend_mode {
                     BlendMode::Normal => input.opacity,
                     BlendMode::Add => 0.0,
-                    _ => unreachable!(
-                        "vello_blend_mode が None を返した blend_mode のみ run に入る"
-                    ),
+                    _ => {
+                        unreachable!("vello_blend_mode が None を返した blend_mode のみ run に入る")
+                    }
                 };
                 rects.push(TexturedRect {
                     top_left_corner_position: corner,
@@ -438,6 +443,7 @@ impl Compositor {
             .poll(wgpu::PollType::wait_indefinitely())
             .map_err(|e| CompositorError::Draw(e.to_string()))?;
 
+        self.ctx.before_submit();
         self.ctx.begin_frame();
 
         let mut out: Option<Vec<u8>> = None;
@@ -575,7 +581,10 @@ impl Compositor {
                 self.next_readback += 1;
                 view_builder.queue_draw(&self.ctx, draw_data);
                 let command_buffer = view_builder
-                    .draw(&self.ctx, crate::render::compositor::clear_color(background_color))
+                    .draw(
+                        &self.ctx,
+                        crate::render::compositor::clear_color(background_color),
+                    )
                     .map_err(|e| CompositorError::Draw(e.to_string()))?;
                 self.pending.push(command_buffer);
                 self.flush_pending();
@@ -603,14 +612,16 @@ impl Compositor {
                     crate::render::compositor::LayerContent::Cloud {
                         positions,
                         colors,
+                        bounds,
                         point_size,
                     } => crate::render::compositor::SequentialContent::Cloud {
                         positions,
                         colors,
+                        bounds: *bounds,
                         point_size: *point_size,
                     },
-                    crate::render::compositor::LayerContent::Mesh(mesh) => {
-                        crate::render::compositor::SequentialContent::Mesh(mesh)
+                    crate::render::compositor::LayerContent::Model(model) => {
+                        crate::render::compositor::SequentialContent::Model(model)
                     }
                 },
                 local_min: glam::Vec2::ZERO,
@@ -645,7 +656,8 @@ impl Compositor {
             (layer.placement.transform, layer.placement.z)
         };
 
-        let tilt = crate::render::compositor::tilt(layer.placement.rotation_x, layer.placement.rotation_y);
+        let tilt =
+            crate::render::compositor::tilt(layer.placement.rotation_x, layer.placement.rotation_y);
         let u = tilt * to_vector3(transform.transform_vector2(glam::Vec2::new(layer.size[0], 0.0)));
         let v = tilt * to_vector3(transform.transform_vector2(glam::Vec2::new(0.0, layer.size[1])));
         let center = to_point3(
@@ -743,7 +755,12 @@ impl Compositor {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("motolii-compositor-matte-pass-encoder"),
             });
-        let Self { ctx, matte_vism, effect_scratch, .. } = self;
+        let Self {
+            ctx,
+            matte_vism,
+            effect_scratch,
+            ..
+        } = self;
         matte_vism.record_over(
             ctx,
             &mut encoder,

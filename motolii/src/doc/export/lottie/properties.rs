@@ -1,7 +1,6 @@
-
 use crate::doc::core::RationalTime;
 use crate::doc::store::{
-    LayerId, Mask, Marker, Path as BezierPath, PropertyBase, PropertyId, PropertySource, Slot,
+    LayerId, Marker, Mask, Path as BezierPath, PropertyBase, PropertyId, PropertySource, Slot,
     SlotId, Value,
 };
 
@@ -37,7 +36,9 @@ pub(crate) fn vector_property(
     match resolve(ctx, layer, name, unsupported)? {
         Resolved::None => Ok(serde_json::json!({ "a": 0, "k": [default[0], default[1]] })),
         Resolved::SlotRef(sid) => Ok(serde_json::json!({ "sid": sid })),
-        Resolved::Track(track) => encode_vector_track(ctx, name, &track, scale, /* spatial */ false),
+        Resolved::Track(track) => {
+            encode_vector_track(ctx, name, &track, scale, /* spatial */ false)
+        }
     }
 }
 
@@ -48,7 +49,15 @@ fn scalar_property_percent0_100(
     default: f64,
     unsupported: &mut Vec<UnsupportedForLottie>,
 ) -> Result<serde_json::Value, LottieExportError> {
-    scalar_property(ctx, layer, name, 100.0, default, Some((0.0, 100.0)), unsupported)
+    scalar_property(
+        ctx,
+        layer,
+        name,
+        100.0,
+        default,
+        Some((0.0, 100.0)),
+        unsupported,
+    )
 }
 
 fn bezier_property(
@@ -58,7 +67,9 @@ fn bezier_property(
     unsupported: &mut Vec<UnsupportedForLottie>,
 ) -> Result<serde_json::Value, LottieExportError> {
     match resolve(ctx, layer, name, unsupported)? {
-        Resolved::None => Ok(serde_json::json!({ "a": 0, "k": bezier_to_json(&BezierPath::default()) })),
+        Resolved::None => {
+            Ok(serde_json::json!({ "a": 0, "k": bezier_to_json(&BezierPath::default()) }))
+        }
         Resolved::SlotRef(sid) => Ok(serde_json::json!({ "sid": sid })),
         Resolved::Track(track) => encode_bezier_track(ctx, name, &track),
     }
@@ -79,10 +90,7 @@ fn resolve(
     let property = PropertyId::new(name)?;
     match ctx.view.property_source(layer, &property)? {
         None => Ok(Resolved::None),
-        Some(PropertySource {
-            base,
-            modulators,
-        }) if modulators.is_empty() => match base {
+        Some(PropertySource { base, modulators }) if modulators.is_empty() => match base {
             None => Ok(Resolved::None),
             Some(PropertyBase::Track(track)) => Ok(Resolved::Track(track)),
             Some(PropertyBase::Slot(SlotId(id))) => Ok(Resolved::SlotRef(id)),
@@ -183,7 +191,9 @@ pub(crate) fn encode_scalar_track(
             .first()
             .map(|k| &k.value)
             .and_then(Value::as_f64)
-            .ok_or_else(|| LottieExportError::TypeMismatch(name.to_owned(), keys[0].value.clone()))?;
+            .ok_or_else(|| {
+                LottieExportError::TypeMismatch(name.to_owned(), keys[0].value.clone())
+            })?;
         let scaled = v * scale;
         if let Some(bounds) = bounds {
             report_out_of_range(unsupported, layer, name, scaled, bounds);
@@ -231,7 +241,9 @@ fn encode_vector_track(
             .first()
             .map(|k| &k.value)
             .and_then(Value::as_vec2)
-            .ok_or_else(|| LottieExportError::TypeMismatch(name.to_owned(), keys[0].value.clone()))?;
+            .ok_or_else(|| {
+                LottieExportError::TypeMismatch(name.to_owned(), keys[0].value.clone())
+            })?;
         return Ok(serde_json::json!({ "a": 0, "k": [v[0] * scale, v[1] * scale] }));
     }
     let mut out = Vec::with_capacity(keys.len());
@@ -275,7 +287,9 @@ fn encode_bezier_track(
             .first()
             .map(|k| &k.value)
             .and_then(Value::as_path)
-            .ok_or_else(|| LottieExportError::TypeMismatch(name.to_owned(), keys[0].value.clone()))?;
+            .ok_or_else(|| {
+                LottieExportError::TypeMismatch(name.to_owned(), keys[0].value.clone())
+            })?;
         return Ok(serde_json::json!({ "a": 0, "k": bezier_to_json(p) }));
     }
     let mut out = Vec::with_capacity(keys.len());
@@ -340,7 +354,9 @@ fn build_mask(
     }))
 }
 
-pub(crate) fn build_markers(ctx: &Ctx<'_, '_>) -> Result<Vec<serde_json::Value>, LottieExportError> {
+pub(crate) fn build_markers(
+    ctx: &Ctx<'_, '_>,
+) -> Result<Vec<serde_json::Value>, LottieExportError> {
     let mut out = Vec::new();
     for marker in ctx.view.markers()? {
         out.push(marker_to_json(ctx, &marker)?);
@@ -348,7 +364,10 @@ pub(crate) fn build_markers(ctx: &Ctx<'_, '_>) -> Result<Vec<serde_json::Value>,
     Ok(out)
 }
 
-fn marker_to_json(ctx: &Ctx<'_, '_>, marker: &Marker) -> Result<serde_json::Value, LottieExportError> {
+fn marker_to_json(
+    ctx: &Ctx<'_, '_>,
+    marker: &Marker,
+) -> Result<serde_json::Value, LottieExportError> {
     Ok(serde_json::json!({
         "cm": marker.name,
         "tm": time_to_frame(ctx, marker.time)?,
@@ -384,13 +403,17 @@ fn slot_property_value(
     let keys = slot.track.keys();
     let first = keys.first().ok_or("track が空(値が無い)")?;
     match &first.value {
-        Value::F64(_) => encode_scalar_track(ctx, None, "slot", &slot.track, 1.0, None, unsupported)
-            .map_err(|e| e.to_string()),
-        Value::Vec2(_) => encode_vector_track(ctx, "slot", &slot.track, 1.0, false)
-            .map_err(|e| e.to_string()),
+        Value::F64(_) => {
+            encode_scalar_track(ctx, None, "slot", &slot.track, 1.0, None, unsupported)
+                .map_err(|e| e.to_string())
+        }
+        Value::Vec2(_) => {
+            encode_vector_track(ctx, "slot", &slot.track, 1.0, false).map_err(|e| e.to_string())
+        }
         Value::Color(color) => {
             let _ = color;
-            encode_color_track(ctx, None, "slot", &slot.track, unsupported).map_err(|e| e.to_string())
+            encode_color_track(ctx, None, "slot", &slot.track, unsupported)
+                .map_err(|e| e.to_string())
         }
         Value::Path(_) => encode_bezier_track(ctx, "slot", &slot.track).map_err(|e| e.to_string()),
         other => Err(format!(
@@ -418,7 +441,9 @@ fn encode_color_track(
             .first()
             .map(|k| &k.value)
             .and_then(Value::as_color)
-            .ok_or_else(|| LottieExportError::TypeMismatch(name.to_owned(), keys[0].value.clone()))?;
+            .ok_or_else(|| {
+                LottieExportError::TypeMismatch(name.to_owned(), keys[0].value.clone())
+            })?;
         check(unsupported, c);
         return Ok(serde_json::json!({ "a": 0, "k": [c[0], c[1], c[2]] }));
     }

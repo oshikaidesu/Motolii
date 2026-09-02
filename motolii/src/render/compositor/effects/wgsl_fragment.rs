@@ -5,28 +5,18 @@
 
 use std::path::PathBuf;
 
-#[cfg(load_shaders_from_disk)]
-use re_renderer::{new_recommended_file_resolver, FileServer};
+use re_renderer::RenderContext;
 #[cfg(not(load_shaders_from_disk))]
 use re_renderer::{get_filesystem, FileSystem as _};
-use re_renderer::RenderContext;
+#[cfg(load_shaders_from_disk)]
+use re_renderer::{new_recommended_file_resolver, FileServer};
 
 use super::isf::parse_isf_source;
 use super::vism::{ShaderStageSource, VismProgram};
 
-pub(crate) const GRADIENT_SOURCE: &str = include_str!("../../../../vism/gradient.wgsl");
-
-pub(crate) const GRADIENT_TARGET_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
-
-pub(crate) const TRI_LED_SOURCE: &str = include_str!("../../../../vism/tri_led.wgsl");
-
-pub(crate) const TRI_LED_TARGET_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
-
 pub(crate) const BLEND_SOURCE: &str = include_str!("../../../../vism/blend.wgsl");
 
 pub(crate) const MATTE_SOURCE: &str = include_str!("../../../../vism/matte.wgsl");
-
-pub(crate) const GLOW_SOURCE: &str = include_str!("../../../../vism/glow.wgsl");
 
 /// 借りた式(`reference/vello-blend.wgsl`、vello_shaders 0.10.0 原文)。
 /// W3C Compositing の 16 mix + 13 compose がここに在る。Motolii は式を持たない。
@@ -37,6 +27,10 @@ pub(crate) struct WgslFragmentProgram {
 }
 
 impl WgslFragmentProgram {
+    pub(crate) fn image_input_count(&self) -> usize {
+        self.inner.image_input_count()
+    }
+
     pub(crate) fn compile(
         ctx: &RenderContext,
         name: &str,
@@ -110,18 +104,6 @@ impl WgslFragmentProgram {
                 output_format,
             ),
         }
-    }
-
-    pub(crate) fn record(
-        &self,
-        ctx: &RenderContext,
-        encoder: &mut wgpu::CommandEncoder,
-        scratch: &mut super::EffectScratch,
-        dst_view: &wgpu::TextureView,
-        render_size: [f32; 2],
-    ) {
-        self.inner
-            .record(ctx, encoder, scratch, &[], dst_view, &[], render_size);
     }
 
     /// 宣言した image 入力へ順に texture を渡して描く。

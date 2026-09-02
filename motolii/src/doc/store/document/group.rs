@@ -9,28 +9,42 @@ use super::{Document, Intent, LayerId, PropertyId};
 
 impl Document {
     pub fn group_layers(&mut self, layers: &[LayerId]) -> Result<Option<LayerId>, StoreError> {
-        if layers.is_empty() {
+        let view = self.view();
+        let roots = outermost_present(&view, layers)?;
+        if roots.is_empty() {
             return Ok(None);
         }
 
-        let view = self.view();
         let group_id = LayerId(view.next_layer_id());
         let comp_duration = view
             .composition()?
             .map(|composition| composition.duration_frames)
             .unwrap_or(0);
+        let order = view
+            .meta(roots[0])?
+            .map(|meta| meta.order)
+            .ok_or_else(|| StoreError::Property(format!("layer {} has no placement", roots[0].0)))?;
+        let common_parent = common_parent(&view, &roots)?;
 
-        let mut intents = Vec::with_capacity(layers.len() + 2);
+        let mut intents = Vec::with_capacity(roots.len() + 3);
         intents.push(Intent::AddLayer(group_id));
         intents.push(Intent::SetMeta {
             layer: group_id,
             meta: LayerMeta {
                 source: LayerSource::Group,
-                order: group_id.0 as i16,
+                order,
                 timing: LayerTiming::place(0, None, comp_duration),
             },
         });
-        for &child in layers {
+        intents.push(Intent::SetAttrs {
+            layer: group_id,
+            patch: LayerAttrsPatch {
+                name: Some("Group".to_owned()),
+                parent: Some(common_parent),
+                ..Default::default()
+            },
+        });
+        for &child in &roots {
             intents.push(Intent::SetAttrs {
                 layer: child,
                 patch: LayerAttrsPatch {
@@ -45,24 +59,27 @@ impl Document {
     }
 
     pub fn ungroup_layers(&mut self, groups: &[LayerId]) -> Result<Vec<LayerId>, StoreError> {
+        let t = RationalTime::ZERO;
+        let view = self.view();
+        let present = view.layers();
+        let mut group_candidates = Vec::new();
+        for &group in groups {
+            if view
+                .meta(group)?
+                .is_some_and(|meta| meta.source == LayerSource::Group)
+            {
+                group_candidates.push(group);
+            }
+        }
+        let groups = outermost_present(&view, &group_candidates)?;
         if groups.is_empty() {
             return Ok(Vec::new());
         }
 
-        let t = RationalTime::ZERO;
-        let view = self.view();
-        let present = view.layers();
-
         let mut intents = Vec::new();
         let mut released = Vec::new();
 
-        for &group in groups {
-            let Some(meta) = view.meta(group)? else {
-                continue;
-            };
-            if meta.source != LayerSource::Group {
-                continue;
-            }
+        for &group in &groups {
             if view.attrs(group)?.unwrap_or_default().frozen {
                 return Err(StoreError::Property(format!(
                     "layer {} は凍結中(frozen)なので ungroup できない \
@@ -70,6 +87,7 @@ impl Document {
                     group.0
                 )));
             }
+            reject_animated_transform(&view, group, "group")?;
             let new_parent = view.attrs(group)?.and_then(|attrs| attrs.parent);
             let group_local = view.local_transform(group, t)?;
             let identity = affine2_is_identity(group_local);
@@ -82,6 +100,9 @@ impl Document {
                     continue;
                 }
 
+                if !identity {
+                    reject_animated_transform(&view, child, "child")?;
+                }
                 intents.push(Intent::SetAttrs {
                     layer: child,
                     patch: LayerAttrsPatch {
@@ -107,6 +128,85 @@ impl Document {
         Ok(released)
     }
 
+}
+
+fn outermost_present(view: &StoreView<'_>, layers: &[LayerId]) -> Result<Vec<LayerId>, StoreError> {
+    let present: std::collections::HashSet<_> = view.layers().into_iter().collect();
+    let mut unique = Vec::new();
+    let mut selected = std::collections::HashSet::new();
+    for &layer in layers {
+        if present.contains(&layer) && selected.insert(layer) {
+            unique.push(layer);
+        }
+    }
+
+    let mut roots = Vec::new();
+    for layer in unique {
+        let mut parent = view.attrs(layer)?.and_then(|attrs| attrs.parent);
+        let mut seen = std::collections::HashSet::new();
+        let mut has_selected_ancestor = false;
+        while let Some(candidate) = parent {
+            if !seen.insert(candidate) {
+                break;
+            }
+            if selected.contains(&candidate) {
+                has_selected_ancestor = true;
+                break;
+            }
+            parent = view.attrs(candidate)?.and_then(|attrs| attrs.parent);
+        }
+        if !has_selected_ancestor {
+            roots.push(layer);
+        }
+    }
+    Ok(roots)
+}
+
+fn common_parent(view: &StoreView<'_>, layers: &[LayerId]) -> Result<Option<LayerId>, StoreError> {
+    let Some((&first, rest)) = layers.split_first() else {
+        return Ok(None);
+    };
+    let parent = view.attrs(first)?.and_then(|attrs| attrs.parent);
+    for &layer in rest {
+        if view.attrs(layer)?.and_then(|attrs| attrs.parent) != parent {
+            return Err(StoreError::Property(
+                "cannot group layers from different parents without changing their world transforms"
+                    .to_owned(),
+            ));
+        }
+    }
+    Ok(parent)
+}
+
+const TRANSFORM_PROPERTIES: &[&str] = &[
+    crate::doc::store::property::ANCHOR,
+    crate::doc::store::property::POSITION,
+    crate::doc::store::property::POSITION_X,
+    crate::doc::store::property::POSITION_Y,
+    crate::doc::store::property::SCALE,
+    crate::doc::store::property::ROTATION,
+    crate::doc::store::property::SKEW,
+    crate::doc::store::property::SKEW_AXIS,
+];
+
+fn reject_animated_transform(
+    view: &StoreView<'_>,
+    layer: LayerId,
+    role: &str,
+) -> Result<(), StoreError> {
+    for &name in TRANSFORM_PROPERTIES {
+        let property = PropertyId::new(name)?;
+        if view
+            .track(layer, &property)?
+            .is_some_and(|track| track.keys().len() > 1)
+        {
+            return Err(StoreError::Property(format!(
+                "cannot ungroup: {role} layer {} has animated `{name}`; keep the group or remove the animation first",
+                layer.0
+            )));
+        }
+    }
+    Ok(())
 }
 
 struct BakedChildTransform {

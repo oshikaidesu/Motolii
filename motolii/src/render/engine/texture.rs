@@ -1,13 +1,12 @@
-
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 
-use crate::render::compositor::LayerContent;
 use crate::doc::core::CompSpec;
-use crate::render::media::{is_point_cloud_path, load_point_cloud, probe};
 use crate::doc::store::{
     LayerId, LayerSource, RationalTime, ResolvedLayer, ShapeNode, StoreView, TextDocument,
 };
+use crate::render::compositor::LayerContent;
+use crate::render::media::{is_point_cloud_path, load_point_cloud, probe};
 
 use crate::render::engine::render::layer_size;
 use crate::render::engine::{shape, text, Engine, EngineError};
@@ -32,25 +31,6 @@ fn still_key(path: &str) -> u64 {
 }
 
 impl Engine {
-    pub(crate) fn texture_for_layer(
-        &mut self,
-        view: &StoreView<'_>,
-        layer: &ResolvedLayer,
-        t: RationalTime,
-        comp: CompSpec,
-    ) -> Result<(Option<LayerContent>, [f32; 2]), EngineError> {
-        if layer.source == LayerSource::Text {
-            self.text_texture_for(view, layer.id, t, comp)
-        } else if layer.source == LayerSource::Shape {
-            self.shape_texture_for(view, layer.id)
-        } else if let LayerSource::File { path, .. } = &layer.source {
-            let path = path.clone();
-            self.file_content_for(&path, layer.source_frame, layer.id, comp)
-        } else {
-            self.texture_for(&layer.source, layer.source_frame)
-        }
-    }
-
     pub fn selected_layer_size(
         &self,
         view: &StoreView<'_>,
@@ -66,20 +46,26 @@ impl Engine {
             LayerSource::Text => {
                 let document = view.resolved_text_document(layer_id, t).ok().flatten()?;
                 let key = TextCacheKey::new(layer_id, &document, t, comp.width, comp.height);
-                self.text_textures.get(&key)?.width_height().map(|v| v as f32)
+                self.text_textures
+                    .get(&key)?
+                    .width_height()
+                    .map(|v| v as f32)
             }
             LayerSource::Shape => {
                 let shapes = view.shapes(layer_id).ok()?;
                 let canvas = content_canvas(&shapes).ok().flatten()?;
                 let key = ShapeCacheKey::new(layer_id, &shapes, canvas.width, canvas.height);
-                self.shape_textures.get(&key)?.width_height().map(|v| v as f32)
+                self.shape_textures
+                    .get(&key)?
+                    .width_height()
+                    .map(|v| v as f32)
             }
-            LayerSource::Null | LayerSource::Group => {
-                [comp.width as f32, comp.height as f32]
-            }
+            LayerSource::Null | LayerSource::Group => [comp.width as f32, comp.height as f32],
             LayerSource::File { path, .. } => {
-                if is_point_cloud_path(path) {
-                    [comp.width as f32, comp.height as f32]
+                if crate::render::media::is_mesh_path(path) {
+                    self.models.get(path)?.bounds().size_xy()
+                } else if is_point_cloud_path(path) {
+                    self.point_clouds.get(path)?.bounds().size_xy()
                 } else {
                     let info = self.probes.get(path)?;
                     [info.width as f32, info.height as f32]
@@ -111,19 +97,6 @@ impl Engine {
         } else {
             self.texture_for(&layer.source, layer.source_frame)
         }
-    }
-
-    fn text_texture_for(
-        &mut self,
-        view: &StoreView<'_>,
-        layer_id: LayerId,
-        t: RationalTime,
-        comp: CompSpec,
-    ) -> Result<(Option<LayerContent>, [f32; 2]), EngineError> {
-        let document = view
-            .resolved_text_document(layer_id, t)
-            .map_err(|e| EngineError::Store(e.to_string()))?;
-        self.text_texture_from_document(document.as_ref(), layer_id, t, comp)
     }
 
     fn text_texture_from_document(
@@ -163,18 +136,10 @@ impl Engine {
             raster.height,
         )?;
         self.text_textures.insert(key, texture.clone());
-        Ok((Some(LayerContent::Texture(texture)), [raster.width as f32, raster.height as f32]))
-    }
-
-    fn shape_texture_for(
-        &mut self,
-        view: &StoreView<'_>,
-        layer_id: LayerId,
-    ) -> Result<(Option<LayerContent>, [f32; 2]), EngineError> {
-        let shapes = view
-            .shapes(layer_id)
-            .map_err(|e| EngineError::Store(e.to_string()))?;
-        self.shape_texture_from_shapes(&shapes, layer_id)
+        Ok((
+            Some(LayerContent::Texture(texture)),
+            [raster.width as f32, raster.height as f32],
+        ))
     }
 
     fn shape_texture_from_shapes(
@@ -209,7 +174,10 @@ impl Engine {
             raster.height,
         )?;
         self.shape_textures.insert(key, texture.clone());
-        Ok((Some(LayerContent::Texture(texture)), [raster.width as f32, raster.height as f32]))
+        Ok((
+            Some(LayerContent::Texture(texture)),
+            [raster.width as f32, raster.height as f32],
+        ))
     }
 
     /// 網も焼かない。三角形のまま run の view へ渡り、深度で板と刺さり合う。
@@ -218,25 +186,29 @@ impl Engine {
         path: &str,
         comp: CompSpec,
     ) -> Result<(Option<LayerContent>, [f32; 2]), EngineError> {
-        let natural = [comp.width as f32, comp.height as f32];
-        if let Some(mesh) = self.meshes.get(path) {
-            return Ok((Some(LayerContent::Mesh(mesh.clone())), natural));
+        let fallback = [comp.width as f32, comp.height as f32];
+        if let Some(model) = self.models.get(path) {
+            return Ok((
+                Some(LayerContent::Model(model.clone())),
+                model.bounds().size_xy(),
+            ));
         }
         if let Some(reason) = self.failed_meshes.get(path) {
             self.layer_failures.push(reason.clone());
-            return Ok((None, natural));
+            return Ok((None, fallback));
         }
-        match crate::render::media::load_mesh(path) {
-            Ok(data) => {
-                let data = std::sync::Arc::new(data);
-                self.meshes.insert(path.to_owned(), data.clone());
-                Ok((Some(LayerContent::Mesh(data)), natural))
+        match self.compositor.import_model(path) {
+            Ok(model) => {
+                let model = std::sync::Arc::new(model);
+                let natural = model.bounds().size_xy();
+                self.models.insert(path.to_owned(), model.clone());
+                Ok((Some(LayerContent::Model(model)), natural))
             }
             Err(err) => {
-                let reason = format!("網を読めない: {path}: {err}");
+                let reason = format!("3D素材を読めない: {path}: {err}");
                 self.failed_meshes.insert(path.to_owned(), reason.clone());
                 self.layer_failures.push(reason);
-                Ok((None, natural))
+                Ok((None, fallback))
             }
         }
     }
@@ -246,7 +218,7 @@ impl Engine {
         path: &str,
         comp: CompSpec,
     ) -> Result<(Option<LayerContent>, [f32; 2]), EngineError> {
-        let natural = [comp.width as f32, comp.height as f32];
+        let fallback = [comp.width as f32, comp.height as f32];
 
         let data = match self.point_clouds.get(path) {
             Some(data) => Some(data.clone()),
@@ -271,17 +243,19 @@ impl Engine {
             },
         };
         let Some(data) = data else {
-            return Ok((None, natural));
+            return Ok((None, fallback));
         };
         if data.positions.is_empty() {
-            return Ok((None, natural));
+            return Ok((None, fallback));
         }
+        let natural = data.bounds().size_xy();
 
         // 焼かない(裁定 2026-08-30)。点のまま run の view へ渡り、深度で板と刺さり合う。
         Ok((
             Some(LayerContent::Cloud {
-                positions: std::sync::Arc::new(data.positions.clone()),
-                colors: std::sync::Arc::new(data.colors.clone()),
+                positions: data.positions.clone(),
+                colors: data.colors.clone(),
+                bounds: data.bounds(),
                 point_size: DEFAULT_POINT_SIZE,
             }),
             natural,
@@ -372,118 +346,114 @@ impl Engine {
         frame: i64,
         layer: LayerId,
     ) -> Result<(Option<LayerContent>, [f32; 2]), EngineError> {
-                let info = match self.probes.get(path) {
-                    Some(info) => Some(info.clone()),
-                    None => match self.failed_probes.get(path) {
-                        Some(reason) => {
-                            self.layer_failures.push(reason.clone());
-                            None
-                        }
-                        None => match probe(path) {
-                            Ok(info) => {
-                                self.probes.insert(path.to_owned(), info.clone());
-                                Some(info)
-                            }
-                            Err(err) => {
-                                let reason =
-                                    format!("素材を読めない(probe失敗): {path}: {err}");
-                                self.failed_probes.insert(path.to_owned(), reason.clone());
-                                self.layer_failures.push(reason);
-                                None
-                            }
-                        },
-                    },
-                };
-                let Some(info) = info else {
-                    return Ok((None, [0.0, 0.0]));
-                };
-                let natural = [info.width as f32, info.height as f32];
-
-                let last_frame = info.nb_frames.map(|n| n - 1);
-                if frame < 0 || last_frame.is_some_and(|last| frame > last) {
-                    return Ok((None, natural));
+        let info = match self.probes.get(path) {
+            Some(info) => Some(info.clone()),
+            None => match self.failed_probes.get(path) {
+                Some(reason) => {
+                    self.layer_failures.push(reason.clone());
+                    None
                 }
+                None => match probe(path) {
+                    Ok(info) => {
+                        self.probes.insert(path.to_owned(), info.clone());
+                        Some(info)
+                    }
+                    Err(err) => {
+                        let reason = format!("素材を読めない(probe失敗): {path}: {err}");
+                        self.failed_probes.insert(path.to_owned(), reason.clone());
+                        self.layer_failures.push(reason);
+                        None
+                    }
+                },
+            },
+        };
+        let Some(info) = info else {
+            return Ok((None, [0.0, 0.0]));
+        };
+        let natural = [info.width as f32, info.height as f32];
 
-                if !self.videos.contains_key(path) {
-                    let bytes = match std::fs::read(path) {
-                        Ok(bytes) => bytes,
-                        Err(err) => {
-                            self.layer_failures
-                                .push(format!("素材を読めない(read失敗): {path}: {err}"));
-                            return Ok((None, natural));
-                        }
-                    };
-                    let descr = match re_video::VideoDataDescription::load_from_bytes(
-                        &bytes,
-                        "video/mp4",
-                        path,
-                    ) {
-                        Ok(descr) => descr,
-                        Err(err) => {
-                            self.layer_failures
-                                .push(format!("動画を読めない(decode失敗): {path}: {err}"));
-                            return Ok((None, natural));
-                        }
-                    };
-                    let video = re_renderer::video::Video::load(
-                        path.to_owned(),
-                        descr,
-                        re_video::DecodeSettings::default(),
-                    );
-                    self.videos.insert(path.to_owned(), (bytes, video));
-                }
-                let (bytes, video) = self.videos.get(path).expect("直前に insert した");
+        let last_frame = info.nb_frames.map(|n| n - 1);
+        if frame < 0 || last_frame.is_some_and(|last| frame > last) {
+            return Ok((None, natural));
+        }
 
-                let Some(timescale) = video.data_descr().timescale else {
+        if !self.videos.contains_key(path) {
+            let bytes = match std::fs::read(path) {
+                Ok(bytes) => bytes,
+                Err(err) => {
                     self.layer_failures
-                        .push(format!("動画にタイムスケールが無い: {path}"));
+                        .push(format!("素材を読めない(read失敗): {path}: {err}"));
                     return Ok((None, natural));
-                };
-                // frame → 時刻は正準口を通す(浮動小数の割り算で写さない)。
-                // `re_video::Time::from_secs` が秒の f64 を要求するので、
-                // 有理数で写してから最後に一度だけ f64 にする。
-                let secs = crate::doc::core::RationalTime::try_from_frame(frame, info.fps)
-                    .map_err(|e| crate::render::engine::EngineError::Time(e.to_string()))?
-                    .as_seconds_f64();
-                let video_time = re_video::Time::from_secs(secs, timescale);
-                let stream_id = re_video::player::VideoPlayerStreamId(layer_stream_id(layer, path));
-                let source = re_video::player::VideoSliceSource(bytes);
-                // デコーダは非同期で、頼んだ直後は返さない。待たずに前のコマを
-                // 返すと、**同じ時刻でも辿り着き方で絵が変わり**、窓と書き出しが
-                // 一致しなくなる。待つのは素材ごとに初回だけ(実測 764ms、以降 65µs)。
-                let deadline = std::time::Instant::now() + DECODE_PATIENCE;
-                loop {
-                    let output = video.frame_at(
-                        self.compositor.render_context(),
-                        stream_id,
-                        video_time,
-                        &source,
-                    );
-                    let ready = output.output.as_ref().is_some_and(|frame| {
-                        frame.texture.is_some()
-                            && matches!(
-                                frame.decoder_delay_state,
-                                re_video::player::DecoderDelayState::UpToDate
-                            )
-                    });
-                    if ready {
-                        let texture = output.output.and_then(|frame| frame.texture);
-                        return Ok((texture.map(LayerContent::Texture), natural));
-                    }
-                    if let Some(err) = output.error {
-                        self.layer_failures.push(format!(
-                            "フレームを読めない(decode失敗): {path} frame={frame}: {err}"
-                        ));
-                        return Ok((None, natural));
-                    }
-                    if std::time::Instant::now() >= deadline {
+                }
+            };
+            let descr =
+                match re_video::VideoDataDescription::load_from_bytes(&bytes, "video/mp4", path) {
+                    Ok(descr) => descr,
+                    Err(err) => {
                         self.layer_failures
-                            .push(format!("コマが間に合わなかった: {path} frame={frame}"));
+                            .push(format!("動画を読めない(decode失敗): {path}: {err}"));
                         return Ok((None, natural));
                     }
-                    std::thread::sleep(DECODE_POLL);
-                }
-                }
+                };
+            let video = re_renderer::video::Video::load(
+                path.to_owned(),
+                descr,
+                re_video::DecodeSettings::default(),
+            );
+            self.videos.insert(path.to_owned(), (bytes, video));
+        }
+        let (bytes, video) = self.videos.get(path).expect("直前に insert した");
+
+        let Some(timescale) = video.data_descr().timescale else {
+            self.layer_failures
+                .push(format!("動画にタイムスケールが無い: {path}"));
+            return Ok((None, natural));
+        };
+        // frame → 時刻は正準口を通す(浮動小数の割り算で写さない)。
+        // `re_video::Time::from_secs` が秒の f64 を要求するので、
+        // 有理数で写してから最後に一度だけ f64 にする。
+        let secs = crate::doc::core::RationalTime::try_from_frame(frame, info.fps)
+            .map_err(|e| crate::render::engine::EngineError::Time(e.to_string()))?
+            .as_seconds_f64();
+        let video_time = re_video::Time::from_secs(secs, timescale);
+        let stream_id = re_video::player::VideoPlayerStreamId(layer_stream_id(layer, path));
+        let source = re_video::player::VideoSliceSource(bytes);
+        // デコーダは非同期で、頼んだ直後は返さない。待たずに前のコマを
+        // 返すと、**同じ時刻でも辿り着き方で絵が変わり**、窓と書き出しが
+        // 一致しなくなる。待つのは素材ごとに初回だけ(実測 764ms、以降 65µs)。
+        let deadline = std::time::Instant::now() + DECODE_PATIENCE;
+        loop {
+            let output = video.frame_at(
+                self.compositor.render_context(),
+                stream_id,
+                video_time,
+                &source,
+            );
+            let ready = output.output.as_ref().is_some_and(|frame| {
+                frame.texture.is_some()
+                    && matches!(
+                        frame.decoder_delay_state,
+                        re_video::player::DecoderDelayState::UpToDate
+                    )
+            });
+            if ready {
+                let texture = output.output.and_then(|frame| frame.texture);
+                return Ok((texture.map(LayerContent::Texture), natural));
+            }
+            if let Some(err) = output.error {
+                self.layer_failures.push(format!(
+                    "フレームを読めない(decode失敗): {path} frame={frame}: {err}"
+                ));
+                return Ok((None, natural));
+            }
+            if std::time::Instant::now() >= deadline {
+                self.layer_failures
+                    .push(format!("コマが間に合わなかった: {path} frame={frame}"));
+                return Ok((None, natural));
+            }
+            std::thread::sleep(DECODE_POLL);
+        }
+    }
 
     pub(crate) fn texture_for(
         &mut self,

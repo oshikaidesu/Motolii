@@ -13,6 +13,7 @@ mod resample;
 mod ring;
 mod session;
 mod time_map;
+mod waveform;
 
 pub use cache::{PcmCache, PcmFormat};
 pub use clock::{
@@ -32,8 +33,9 @@ pub use mix::{
     mix_audio, normalize_gain_for_peak, AudioOutOfRange, FadeCurve, FadeSpec, MixReport, MixSource,
 };
 pub use producer::MixProducer;
-pub use program::{program_from_sources, AudioProgram};
+pub use program::{program_from_sources, AudioProgram, AudioProgramCache};
 pub use resample::{source_frame_to_device, FixedRatioResampler};
 pub use ring::fill_or_silence;
 pub use session::PlaybackSession;
 pub use time_map::{TimeMap, TimeMapError};
+pub use waveform::{PeakColumn, WaveformError, WaveformPeaks, WaveformStatus, WaveformTrack, BASE_SCALE};

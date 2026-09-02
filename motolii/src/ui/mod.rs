@@ -12,14 +12,16 @@ mod gui;
 pub mod host;
 mod inspector;
 mod keymap;
+mod output;
 mod playback;
+mod semantic_menu;
 mod session;
 mod stage_widget;
 mod thumbnail;
 mod timeline_shell;
 mod timeline_widget;
-mod utility;
 pub(crate) mod tokens;
+mod utility;
 
 /// 白紙。**枠だけは要る** —— 枠が無いと何も描けず、窓が空を出す。
 /// 大きさは既定の 1920x1080 30fps 60秒。

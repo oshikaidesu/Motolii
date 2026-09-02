@@ -1,17 +1,21 @@
-
 use std::sync::mpsc::{channel, Receiver, Sender};
 
 use blitz_shell::{create_default_event_loop, BlitzShellEvent, BlitzShellProxy, WindowConfig};
+use blitz_shell::{BlitzApplication, View};
 use dioxus_native::prelude::VirtualDom;
+use dioxus_native::prelude::{provide_context, ScopeId};
 use dioxus_native::winit::application::ApplicationHandler;
-use dioxus_native::winit::event::{StartCause, WindowEvent};
+use dioxus_native::winit::event::{
+    ButtonSource, ElementState, MouseButton, PointerKind, StartCause, WindowEvent,
+};
 use dioxus_native::winit::event_loop::ActiveEventLoop;
 use dioxus_native::winit::window::{WindowAttributes, WindowId};
-use dioxus_native::prelude::{provide_context, ScopeId};
-use dioxus_native::{DioxusDocument, DioxusNativeWindowRenderer, RendererOptions};
-use blitz_shell::{BlitzApplication, View};
+use dioxus_native::{
+    DioxusDocument, DioxusNativeEvent, DioxusNativeWindowRenderer, RendererOptions,
+};
 
 use blitz_dom::{Document, DocumentConfig};
+use blitz_traits::net::{NetHandler, NetProvider, Request};
 
 use crate::ui::dock::Panel;
 use crate::ui::fixture::{load_fixture, Loaded};
@@ -29,6 +33,10 @@ pub(crate) struct Host {
     proxy: Option<BlitzShellProxy>,
     /// 別窓が閉じた時に本体へ知らせる線。本体が自分の runtime を包んで置く。
     on_close: std::rc::Rc<std::cell::RefCell<Option<std::rc::Rc<dyn Fn(Panel)>>>>,
+    on_focus_lost: std::rc::Rc<std::cell::RefCell<Option<std::rc::Rc<dyn Fn()>>>>,
+    on_primary_pointer_release: std::rc::Rc<
+        std::cell::RefCell<Option<(WindowId, std::rc::Rc<dyn Fn(f64, f64)>)>>,
+    >,
     /// 窓を起こす線。窓ごとに1本、自分の runtime を包んで置く。
     /// 状態は全窓で1つなので、誰かが書いたら他の窓も描き直す必要がある。
     wakers: std::rc::Rc<std::cell::RefCell<Vec<(u64, std::rc::Rc<dyn Fn()>)>>>,
@@ -52,7 +60,12 @@ impl Host {
 
     /// 窓の外で状態が変わった時に、全ての窓を描き直させる。
     pub(crate) fn wake_all(&self) {
-        let wakers: Vec<_> = self.wakers.borrow().iter().map(|(_, w)| w.clone()).collect();
+        let wakers: Vec<_> = self
+            .wakers
+            .borrow()
+            .iter()
+            .map(|(_, w)| w.clone())
+            .collect();
         for wake in wakers {
             wake();
         }
@@ -84,6 +97,37 @@ impl Host {
         }
     }
 
+    pub(crate) fn on_focus_lost(&self, callback: impl Fn() + 'static) {
+        *self.on_focus_lost.borrow_mut() = Some(std::rc::Rc::new(callback));
+    }
+
+    pub(crate) fn focus_lost(&self) {
+        if let Some(callback) = self.on_focus_lost.borrow().clone() {
+            callback();
+        }
+    }
+
+    pub(crate) fn on_primary_pointer_release(
+        &self,
+        window: WindowId,
+        callback: impl Fn(f64, f64) + 'static,
+    ) {
+        *self.on_primary_pointer_release.borrow_mut() =
+            Some((window, std::rc::Rc::new(callback)));
+    }
+
+    fn primary_pointer_released(&self, window: WindowId, x: f64, y: f64) {
+        let callback = self
+            .on_primary_pointer_release
+            .borrow()
+            .as_ref()
+            .filter(|(owner, _)| *owner == window)
+            .map(|(_, callback)| callback.clone());
+        if let Some(callback) = callback {
+            callback(x, y);
+        }
+    }
+
     /// 窓を開けずに動かす時用。頼みは誰も受け取らない。
     #[cfg(test)]
     pub(crate) fn for_tests() -> Self {
@@ -93,6 +137,8 @@ impl Host {
             tx,
             proxy: None,
             on_close: Default::default(),
+            on_focus_lost: Default::default(),
+            on_primary_pointer_release: Default::default(),
             wakers: Default::default(),
             next_id: Default::default(),
         }
@@ -117,6 +163,47 @@ impl Host {
     }
 }
 
+fn primary_mouse_release(event: &WindowEvent) -> Option<dioxus_native::winit::dpi::PhysicalPosition<f64>> {
+    match event {
+        WindowEvent::PointerButton {
+            state: ElementState::Released,
+            button: ButtonSource::Mouse(MouseButton::Left),
+            primary: true,
+            position,
+            ..
+        } => Some(*position),
+        _ => None,
+    }
+}
+
+fn primary_mouse_leave(event: &WindowEvent) -> Option<dioxus_native::winit::dpi::PhysicalPosition<f64>> {
+    match event {
+        WindowEvent::PointerLeft {
+            position: Some(position),
+            primary: true,
+            kind: PointerKind::Mouse,
+            ..
+        } => Some(*position),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+#[test]
+fn host_routes_only_primary_mouse_release_to_the_owning_window() {
+    let host = Host::for_tests();
+    let owner = WindowId::from_raw(11);
+    let other = WindowId::from_raw(12);
+    let calls = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+    let seen = calls.clone();
+    host.on_primary_pointer_release(owner, move |x, y| seen.borrow_mut().push((x, y)));
+
+    host.primary_pointer_released(other, 1.0, 2.0);
+    host.primary_pointer_released(owner, -3.0, 4.0);
+
+    assert_eq!(&*calls.borrow(), &[(-3.0, 4.0)]);
+}
+
 /// 窓の外の糸が持つ、窓を起こすだけの口。
 #[derive(Clone)]
 pub(crate) struct Poke(Option<BlitzShellProxy>);
@@ -131,6 +218,33 @@ impl Poke {
 
 struct Woken;
 
+struct MotoliiNetProvider {
+    fallback: std::sync::Arc<dyn NetProvider>,
+}
+
+impl NetProvider for MotoliiNetProvider {
+    fn fetch(&self, doc_id: usize, request: Request, handler: Box<dyn NetHandler>) {
+        if request.url.scheme() == "dioxus" {
+            if let Ok(response) = dioxus_asset_resolver::native::serve_asset(request.url.path()) {
+                handler.bytes(request.url.to_string(), response.into_body().into());
+            }
+        } else {
+            self.fallback.fetch(doc_id, request, handler);
+        }
+    }
+}
+
+fn wakes_shared_state(event: &BlitzShellEvent) -> bool {
+    matches!(event, BlitzShellEvent::Embedder(value) if value.is::<Woken>())
+}
+
+#[cfg(test)]
+#[test]
+fn only_explicit_external_state_events_wake_every_window() {
+    assert!(wakes_shared_state(&BlitzShellEvent::embedder_event(Woken)));
+    assert!(!wakes_shared_state(&BlitzShellEvent::embedder_event(())));
+}
+
 fn window(
     root: fn() -> dioxus_native::prelude::Element,
     title: &str,
@@ -144,7 +258,9 @@ fn window(
     let doc = DioxusDocument::new(
         vdom,
         DocumentConfig {
-            net_provider: Some(std::sync::Arc::new(blitz_shell::DataUriNetProvider::new(None))),
+            net_provider: Some(std::sync::Arc::new(MotoliiNetProvider {
+                fallback: std::sync::Arc::new(blitz_shell::DataUriNetProvider::new(None)),
+            })),
             ..Default::default()
         },
     );
@@ -152,9 +268,9 @@ fn window(
     WindowConfig::with_attributes(
         Box::new(doc) as _,
         renderer,
-        WindowAttributes::default().with_title(title.to_string()).with_surface_size(
-            dioxus_native::winit::dpi::LogicalSize::new(size.0, size.1),
-        ),
+        WindowAttributes::default()
+            .with_title(title.to_string())
+            .with_surface_size(dioxus_native::winit::dpi::LogicalSize::new(size.0, size.1)),
     )
 }
 
@@ -223,6 +339,41 @@ fn realise(
 }
 
 impl Windows {
+    fn handle_native_event(&mut self, event_loop: &dyn ActiveEventLoop, event: &DioxusNativeEvent) {
+        match event {
+            #[cfg(debug_assertions)]
+            DioxusNativeEvent::DevserverEvent(event) => match event {
+                dioxus_devtools::DevserverMsg::HotReload(message) => {
+                    for (index, window) in self.inner.windows.values_mut().enumerate() {
+                        let doc = window.downcast_doc_mut::<DioxusDocument>();
+                        dioxus_devtools::apply_changes(&doc.vdom, message);
+                        for asset in &message.assets {
+                            if let Some(url) = asset.to_str() {
+                                doc.inner.borrow_mut().reload_resource_by_href(url);
+                            }
+                        }
+                        println!("PROBE room=reload verdict=applied window={index}");
+                        window.poll();
+                    }
+                }
+                dioxus_devtools::DevserverMsg::Shutdown => event_loop.exit(),
+                _ => {}
+            },
+            DioxusNativeEvent::CreateHeadElement {
+                name,
+                attributes,
+                contents,
+                window,
+            } => {
+                if let Some(view) = self.inner.windows.get_mut(window) {
+                    view.downcast_doc_mut::<DioxusDocument>()
+                        .create_head_element(name, attributes, contents);
+                    view.poll();
+                }
+            }
+        }
+    }
+
     fn realise_pending(&mut self, event_loop: &dyn ActiveEventLoop) {
         for (config, panel) in std::mem::take(&mut self.pending) {
             let id = realise(&mut self.inner, config, event_loop);
@@ -235,16 +386,19 @@ impl Windows {
     fn serve_asks(&mut self) {
         while let Ok(ask) = self.asks.try_recv() {
             match ask {
-                Ask::Open(panel) => self.pending.push((window(
-                    crate::ui::app::detached,
-                    panel.label(),
-                    panel.window_size(),
-                    vec![
-                        Box::new(self.session.clone()),
-                        Box::new(self.host.clone()),
-                        Box::new(panel),
-                    ],
-                ), Some(panel))),
+                Ask::Open(panel) => self.pending.push((
+                    window(
+                        crate::ui::app::detached,
+                        panel.label(),
+                        panel.window_size(),
+                        vec![
+                            Box::new(self.session.clone()),
+                            Box::new(self.host.clone()),
+                            Box::new(panel),
+                        ],
+                    ),
+                    Some(panel),
+                )),
             }
         }
     }
@@ -293,7 +447,18 @@ impl ApplicationHandler for Windows {
             }
         }
         if let WindowEvent::PointerMoved { position, .. } = &event {
-            self.cursor.insert(window_id, (position.x as f32, position.y as f32));
+            self.cursor
+                .insert(window_id, (position.x as f32, position.y as f32));
+        }
+        if let Some(position) = primary_mouse_release(&event).or_else(|| primary_mouse_leave(&event)) {
+            if let Some(view) = self.inner.windows.get(&window_id) {
+                let coords = view.pointer_coords(position);
+                self.host.primary_pointer_released(
+                    window_id,
+                    f64::from(coords.client_x),
+                    f64::from(coords.client_y),
+                );
+            }
         }
         // トラックパッドの摘まみ。blitz の `UiEvent` に摘まみは無いので、
         // **Ctrl+ホイールへ翻訳**して配る(ブラウザと同じ作法で、盤も窓も
@@ -327,35 +492,73 @@ impl ApplicationHandler for Windows {
             }
             return;
         }
-        // Finder から落ちてきた素材を棚へ入れる。窓の外の出来事なので、
-        // 入れたあと自分で全ての窓を起こす。
+        if let WindowEvent::DragEntered { paths, .. } = &event {
+            self.host.focus_lost();
+            self.session.file_drop.enter(paths);
+            self.host.wake_all();
+        }
+        if matches!(event, WindowEvent::DragLeft { .. }) {
+            self.session.file_drop.leave();
+            self.host.wake_all();
+        }
         if let WindowEvent::DragDropped { paths, .. } = &event {
-            let admitted = {
+            self.session.file_drop.leave();
+            let summary = {
                 let mut doc = self.session.doc.lock().unwrap();
-                paths
-                    .iter()
-                    .filter(|p| crate::ui::fixture::admit_path(&mut doc, p))
-                    .count()
+                crate::ui::fixture::admit_paths(&mut doc, paths)
             };
-            println!("PROBE room=browser verdict=drop admitted={admitted} of={}", paths.len());
-            if admitted > 0 {
-                self.host.wake_all();
-            }
+            println!(
+                "PROBE room=browser verdict=drop admitted={} of={}",
+                summary.admitted, summary.total
+            );
+            *self.session.project_notice.lock().unwrap() = summary.notice();
+            self.host.wake_all();
         }
         if matches!(event, WindowEvent::CloseRequested) {
+            if !self.detached.contains_key(&window_id) && self.session.is_dirty() {
+                let answer = rfd::MessageDialog::new()
+                    .set_level(rfd::MessageLevel::Warning)
+                    .set_title("Unsaved changes")
+                    .set_description("Close this project without saving your changes?")
+                    .set_buttons(rfd::MessageButtons::OkCancelCustom(
+                        "Close Without Saving".to_owned(),
+                        "Cancel".to_owned(),
+                    ))
+                    .show();
+                if answer != rfd::MessageDialogResult::Custom("Close Without Saving".to_owned()) {
+                    return;
+                }
+            }
             if let Some(panel) = self.detached.remove(&window_id) {
                 self.host.closed(panel);
             }
+        }
+        if matches!(event, WindowEvent::Focused(false)) {
+            self.host.focus_lost();
         }
         self.inner.window_event(event_loop, window_id, event);
     }
 
     fn proxy_wake_up(&mut self, event_loop: &dyn ActiveEventLoop) {
-        // 窓の外(書き出しの糸など)で状態が変わっている。全ての窓を描き直す。
-        self.host.wake_all();
+        let mut wake_shared = false;
+        while let Ok(event) = self.inner.event_queue.try_recv() {
+            let event_wakes_shared = wakes_shared_state(&event);
+            match event {
+                BlitzShellEvent::Embedder(event) => {
+                    if let Some(event) = event.downcast_ref::<DioxusNativeEvent>() {
+                        self.handle_native_event(event_loop, event);
+                    } else if event_wakes_shared {
+                        wake_shared = true;
+                    }
+                }
+                event => self.inner.handle_blitz_shell_event(event_loop, event),
+            }
+        }
+        if wake_shared {
+            self.host.wake_all();
+        }
         self.serve_asks();
         self.realise_pending(event_loop);
-        self.inner.proxy_wake_up(event_loop);
     }
 }
 
@@ -363,13 +566,29 @@ pub fn launch(title: &str) {
     let event_loop = create_default_event_loop();
     let (proxy, event_queue) = BlitzShellProxy::new(event_loop.create_proxy());
 
-    let Loaded { doc, ui, duration_sec } = load_fixture();
+    #[cfg(debug_assertions)]
+    {
+        let proxy = proxy.clone();
+        dioxus_devtools::connect(move |event| {
+            proxy.send_event(BlitzShellEvent::embedder_event(
+                DioxusNativeEvent::DevserverEvent(event),
+            ));
+        });
+    }
+
+    let Loaded {
+        doc,
+        ui,
+        duration_sec,
+    } = load_fixture();
     let session = Session::new(doc, duration_sec, ui);
     let (tx, asks) = channel();
     let host = Host {
         tx,
         proxy: Some(proxy.clone()),
         on_close: Default::default(),
+        on_focus_lost: Default::default(),
+        on_primary_pointer_release: Default::default(),
         wakers: Default::default(),
         next_id: Default::default(),
     };
@@ -378,10 +597,7 @@ pub fn launch(title: &str) {
         crate::ui::app::app,
         title,
         (1600, 1000),
-        vec![
-            Box::new(session.clone()),
-            Box::new(host.clone()),
-        ],
+        vec![Box::new(session.clone()), Box::new(host.clone())],
     );
     let inner = BlitzApplication::new(proxy, event_queue);
 
