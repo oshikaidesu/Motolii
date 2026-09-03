@@ -524,3 +524,13 @@ mod project_tests {
         assert!(session.project_path.lock().unwrap().is_none());
     }
 }
+
+/// 書き込みの結果を 1 箇所で扱う: 通れば revision を上げ、通らなければ PROBE に残す。
+/// 同じ 4 行が 20 箇所に在った(Rust 初学者の会議)。
+pub(super) fn noted<T>(result: Result<T, crate::doc::store::StoreError>, mut revision: dioxus_native::prelude::Signal<u32>) {
+    use dioxus_native::prelude::WritableExt;
+    match result {
+        Ok(_) => *revision.write() += 1,
+        Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
+    }
+}

@@ -707,10 +707,7 @@ pub(super) fn browser_panel(
                         aria_label: "Remove from library",
                         title: "Remove from library",
                         onclick: move |_| {
-                            match remove_doc.lock().unwrap().apply(Intent::RemoveAsset { asset: asset_id }) {
-                                Ok(_) => *revision.write() += 1,
-                                Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
-                            }
+                            crate::ui::session::noted(remove_doc.lock().unwrap().apply(Intent::RemoveAsset { asset: asset_id }), revision)
                         },
                         "×"
                     }

@@ -439,7 +439,7 @@
 
 ## 会議 RB: Rust 初学者(行の抑制)
 - ☑ RB1 同形の 2 箇所を畳んだ(if applied で包む 7 箇所と attrs_state の導出は未)
-- ☐ RB2 apply + revision + PROBE の 4 行が 20 箇所(≒54 行)— write(&doc, revision, intent) 1 本
+- ☑ RB2 session::noted を 1 本置き、同形の 4 箇所を畳んだ(文言の違う残りは未)
 - ☐ RB3 doc.lock().unwrap().view() が 49 箇所 — view_with で握る時間を型に
 - ☐ RB4 Create の tcard 3 枚を data に(≒26 行)
 - ☐ RB5 閉包前の clone 群 164 行 — Ctx に束ねる

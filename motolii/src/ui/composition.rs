@@ -35,11 +35,8 @@ pub(super) fn CompositionSheet(session: Session, revision: Signal<u32>) -> Eleme
     let write = {
         let session = session.clone();
         move |next: Composition| {
-            let mut revision = revision;
-            match session.doc.lock().unwrap().apply(Intent::SetComposition(next)) {
-                Ok(_) => *revision.write() += 1,
-                Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
-            }
+            let revision = revision;
+            crate::ui::session::noted(session.doc.lock().unwrap().apply(Intent::SetComposition(next)), revision)
         }
     };
     let size_row = |label: &'static str, value: u32, apply: fn(&Composition, u32) -> Composition| {

@@ -1204,10 +1204,7 @@ pub(super) fn inspector_panel(
                                 } else {
                                     Intent::Freeze { group: layer }
                                 };
-                                match doc.lock().unwrap().apply(intent) {
-                                    Ok(_) => *revision.write() += 1,
-                                    Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
-                                }
+                                crate::ui::session::noted(doc.lock().unwrap().apply(intent), revision)
                             }
                         },
                         span { class: "n", "Group" }

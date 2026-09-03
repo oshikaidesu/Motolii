@@ -331,10 +331,7 @@ pub(super) fn DeskPanel(
                                 let doc = session.doc.clone();
                                 let id = *id;
                                 move |_| {
-                                    match doc.lock().unwrap().apply(Intent::RemoveAsset { asset: id }) {
-                                        Ok(_) => *revision.write() += 1,
-                                        Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
-                                    }
+                                    crate::ui::session::noted(doc.lock().unwrap().apply(Intent::RemoveAsset { asset: id }), revision)
                                 }
                             },
                             "×"
