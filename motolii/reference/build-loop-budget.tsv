@@ -1,0 +1,8 @@
+metric	limit	severity	reason
+cold_first_paint_ms	60000	gate	利用者が待てる開発窓の上限
+ui_hotpatch_ms	5000	gate	状態とGPU資源を保つ通常路
+stock_dx_processes	0	gate	asdf Cargo source全走査を再発させない
+nested_checkout_targets	0	gate	依存source checkout内のbuild出力は所有者なし
+stopped_build_processes	0	gate	60秒を超えたbuildを放置しない
+target_gib	10	advisory	総量だけではlive cacheと孤児を区別できない
+libdeps_generations	4	advisory	Dioxusの隠れた参照があるため自動clean禁止

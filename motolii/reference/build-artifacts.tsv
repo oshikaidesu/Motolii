@@ -1,0 +1,10 @@
+id	path	producer	identity	consumer	live_when	retire_rule
+fixed-dx-binary	${HOME}/.local/bin/motolii-dx-0.7.10-fixed	dioxus-cli 0.7.10 + dioxus-cli-0.7.10-asdf.patch	sha256:25acf557e325b79acc4f1e4e02105cba08094c7476db3b90e1328df35591746a	scripts/motolii-dx.sh	checksum matches	replace only after cold-first-paint and hotpatch gates pass
+cargo-source-cache	${CARGO_HOME}/{registry/src,git/checkouts}	Cargo	package-source-revision	Cargo metadata/build	Cargo.lock references revision	Cargo built-in cache GC only
+orphan-checkout-target	${CARGO_HOME}/git/checkouts/*/*/target	ad-hoc Cargo	checkout-path+toolchain+profile	none	never	move to Trash after process and lock revision check
+cargo-test-cache	target/debug	cargo check/test	toolchain+profile+features+rustflags	static checks and tests	current test loop reuses it	retire whole profile only after replacement loop passes
+dx-host-cache	target/desktop-dev	dx/Cargo host build	toolchain+desktop-dev+host-rustflags	proc macros and build scripts	current dx baseline resolves it	never prune while dx baseline is live
+dx-target-cache	target/aarch64-apple-darwin/desktop-dev	dx fat/thin build	target+profile+features+hotpatch-rustflags	dx linker and Subsecond	fixed dx process or its next restart uses it	no fine cleanup; establish a new full baseline first
+dx-bundle	target/dx/motolii/debug/macos/Motolii.app	dx bundle	current successful baseline	Computer Use and user	fixed dx launched it	replace only through fixed dx
+dx-libdeps	target/aarch64-apple-darwin/desktop-dev/libdeps-*.a	dx fat linker	fat-build generation	Subsecond patch linker	current baseline may resolve older generations	advisory count only; never age-clean
+dx-incremental	target/aarch64-apple-darwin/desktop-dev/incremental	rustc via dx	crate+hotpatch-rustflags+generation	Subsecond patch compiler	current baseline may resolve older generations	advisory count only; never age-clean

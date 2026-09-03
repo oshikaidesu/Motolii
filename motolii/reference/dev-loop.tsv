@@ -1,0 +1,18 @@
+metric	limit	observed	status	note
+stock_cold_serve_first_paint_ms	60000	244610	FAIL	stock dx 0.7.10; asdf Cargo sources scanned
+fixed_cold_serve_run1_ms	60000	38310	PASS	build 30540ms
+fixed_cold_serve_run2_ms	60000	27180	PASS	build 17000ms
+fixed_cold_serve_run3_ms	60000	15090	PASS	build 10610ms
+ui_rust_hotpatch_ms	5000	2400	PASS	tip crate function body
+ui_rust_hotpatch_restore_ms	5000	568	PASS	process and Stage retained
+css_hot_reload	1	1	PASS	styles.css applied without rebuild
+workspace_crate_hotpatch	1	0	FAIL	motolii-doc produced E0460; restart fixed serve instead
+cargo_profile_unification_disk_kib	0	1804500	REJECT	aligned check added artifacts instead of sharing fat-build outputs
+motolii_target_gib	10	13	WARN	total cannot distinguish live Subsecond generations; see build-artifacts.tsv
+artifact_liveness_contract	1	1	PASS	build-artifacts.tsv owns retire rules; no age-based fine cleanup
+cargo_target_gc_signal	1	0	REJECT	reported 18.3GB logical and reclaimable 0 for a 13GB target; no Subsecond liveness model
+motolii_build_doctor	1	1	PASS	fixed dx, stock process, stopped build, orphan target, axes, generations, sccache
+live_cache_fine_cleanup	1	0	REJECT	broke Subsecond dependency resolution; hidden generations are live
+recovery_after_live_cache_cleanup_ms	60000	664600	FAIL	one-time full baseline after rejected cleanup
+post_recovery_restart_ms	60000	17220	PASS	fixed dx build 10870ms and Stage first paint
+nextest_first_run_ms	60000	55000	REJECT	stopped before tests; rebuilt dependencies while cargo test was already 24330ms

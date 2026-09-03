@@ -12,7 +12,12 @@ check() { # name actual
     if [ "$2" -gt "$limit" ]; then echo "NG: $1 = $2 > $limit"; fail=1; else echo "ok: $1 = $2 (<= $limit)"; fi
 }
 target_gb=$( [ -d target ] && du -sk target | awk '{print int($1/1048576)}' || echo 0 )
-check target_gb "$target_gb"
+target_limit=$(val target_gb)
+if [ "$target_gb" -gt "$target_limit" ]; then
+    echo "WARN: target_gb = $target_gb > $target_limit (live cache は reference/build-artifacts.tsv で分類。総量だけでは消さない)"
+else
+    echo "ok: target_gb = $target_gb (<= $target_limit)"
+fi
 incr=$( [ -d target/debug/incremental ] && ls target/debug/incremental | wc -l | tr -d ' ' || echo 0 )
 check incremental_sessions "$incr"
 longest=$(find src crates/*/src -name '*.rs' -exec wc -l {} + | grep -v ' total$' | sort -rn | head -1 | awk '{print $1}')

@@ -1,0 +1,38 @@
+--- a/src/serve/runner.rs
++++ b/src/serve/runner.rs
+@@ -977 +977,6 @@
+-        for entry in walkdir::WalkDir::new(crate_dir).into_iter().flatten() {
++        // Match the narrower eager scan used by Dioxus 0.8: only a crate's source tree is
++        // relevant here, never its target directory or unrelated neighboring files.
++        for entry in walkdir::WalkDir::new(crate_dir.join("src"))
++            .into_iter()
++            .flatten()
++        {
+@@ -1102,2 +1107 @@
+-    /// Get all the Manifest paths for dependencies that we should watch. Will not return anything
+-    /// in the `.cargo` folder - only local dependencies will be watched.
++    /// Get all the manifest paths for local dependencies that we should watch.
+@@ -1104,0 +1109,4 @@
++    /// Cargo's package source is authoritative here: registry and git dependencies have a
++    /// source, while workspace/path dependencies do not. Checking for a literal `.cargo` path
++    /// component misclassifies cached dependencies when Cargo is installed by asdf.
++    ///
+@@ -1123,5 +1131 @@
+-            if krate
+-                .manifest_path
+-                .components()
+-                .any(|c| c.as_str() == ".cargo")
+-            {
++            if krate.source.is_some() {
+@@ -1152,5 +1155,0 @@
+-            .map(|p| {
+-                p.parent()
+-                    .expect("Local manifest to exist and have a parent")
+-                    .to_path_buf()
+-            })
+@@ -1167,5 +1165,0 @@
+-                .map(|p| {
+-                    p.parent()
+-                        .expect("Server manifest to exist and have a parent")
+-                        .to_path_buf()
+-                })
