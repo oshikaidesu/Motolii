@@ -34,6 +34,7 @@ mod timeline_shell;
 mod timeline_widget;
 pub(crate) mod tokens;
 mod utility;
+mod window_frame;
 
 /// 白紙。**枠だけは要る** —— 枠が無いと何も描けず、窓が空を出す。
 /// 大きさは既定の 1920x1080 30fps 60秒。

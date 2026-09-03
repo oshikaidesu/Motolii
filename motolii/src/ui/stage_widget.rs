@@ -185,6 +185,9 @@ pub(super) struct StageWidget {
     hover: Option<GizmoMode>,
     /// 入力が来た(次の paint が要る)。paint で下ろす。
     dirty: std::cell::Cell<bool>,
+    /// 前の paint で登録した画像の id。その frame が出た後(次の paint の頭)で外す。
+    /// 同じ paint の中で外すと、まだ出ていない scene が「空の image」を指して落ちる。
+    stale: Vec<ResourceId>,
     /// 最後に描いた時の revision。同じなら描き直さない。
     seen_revision: std::cell::Cell<u32>,
     /// 画面の倍率(%)。#stagefoot が読む。
@@ -249,6 +252,7 @@ impl StageWidget {
             cursor: None,
             hover: None,
             dirty: std::cell::Cell::new(true),
+            stale: Vec::new(),
             seen_revision: std::cell::Cell::new(u32::MAX),
             output_only,
             view_pct,
@@ -1167,6 +1171,10 @@ impl Widget for StageWidget {
         let mut scene = anyrender::Scene::new();
         self.frames += 1;
         self.dirty.set(false);
+        // 前の frame の画像はもう出た。ここで外す(登録は毎 paint、renderer が作り直されても古い id を指さない)。
+        for old in self.stale.drain(..) {
+            render_ctx.unregister_resource(old);
+        }
         self.seen_revision.set(*self.revision.peek());
         let first = self.frames == 1;
         // 面が 0 の時は描かない(timeline_widget と同じ)。ここを通すと下の
@@ -1217,7 +1225,11 @@ impl Widget for StageWidget {
             }
         };
         let target = tex_and_handle.texture.clone();
-        let handle = tex_and_handle.handle;
+        // この frame の為に登録し直す。前の id は次の paint で外す。
+        let handle = render_ctx
+            .try_register_custom_resource(Box::new(target.clone()))
+            .expect("wgpu backend accepts wgpu textures");
+        self.stale.push(handle);
 
         let rt = self.clock.current_time();
 
@@ -1275,7 +1287,13 @@ impl Widget for StageWidget {
                     camera,
                     false,
                 ) {
-                    Ok(()) => Some((wide.handle, k)),
+                    Ok(()) => {
+                    let fresh = render_ctx
+                        .try_register_custom_resource(Box::new(wide.texture.clone()))
+                        .expect("wgpu backend accepts wgpu textures");
+                    self.stale.push(fresh);
+                    Some((fresh, k))
+                },
                     Err(e) => {
                         println!("PROBE room=stage verdict=wide-render-error {e}");
                         None

@@ -289,16 +289,8 @@ impl NetProvider for MotoliiNetProvider {
     }
 }
 
-fn wakes_shared_state(event: &BlitzShellEvent) -> bool {
-    matches!(event, BlitzShellEvent::Embedder(value) if value.is::<Woken>())
-}
+pub(crate) use crate::ui::poke::wakes_shared_state;
 
-#[cfg(test)]
-#[test]
-fn only_explicit_external_state_events_wake_every_window() {
-    assert!(wakes_shared_state(&BlitzShellEvent::embedder_event(Woken)));
-    assert!(!wakes_shared_state(&BlitzShellEvent::embedder_event(())));
-}
 
 fn window(
     root: fn() -> dioxus_native::prelude::Element,
@@ -799,35 +791,4 @@ pub fn launch(title: &str) {
         })
         .unwrap();
 }
-
-/// 窓の枠(論理 px)。~/Library/Application Support/Motolii/window.json。
-#[derive(Clone, Copy, serde::Serialize, serde::Deserialize)]
-struct WindowFrame {
-    x: i32,
-    y: i32,
-    w: u32,
-    h: u32,
-}
-
-fn load_window_frame() -> Option<WindowFrame> {
-    let file = settings_dir()?.join("window.json");
-    let frame: WindowFrame = serde_json::from_str(&std::fs::read_to_string(file).ok()?).ok()?;
-    (frame.w >= 400 && frame.h >= 300).then_some(frame)
-}
-
-fn save_window_frame(window: &dyn dioxus_native::winit::window::Window) {
-    let Some(dir) = settings_dir() else { return };
-    let scale = window.scale_factor().max(0.5);
-    let size = window.surface_size();
-    let pos = window.outer_position().unwrap_or_default();
-    let frame = WindowFrame {
-        x: (pos.x as f64 / scale) as i32,
-        y: (pos.y as f64 / scale) as i32,
-        w: (size.width as f64 / scale) as u32,
-        h: (size.height as f64 / scale) as u32,
-    };
-    let _ = std::fs::create_dir_all(&dir);
-    if let Ok(json) = serde_json::to_string(&frame) {
-        let _ = std::fs::write(dir.join("window.json"), json);
-    }
-}
+pub(crate) use crate::ui::window_frame::{load_window_frame, save_window_frame};

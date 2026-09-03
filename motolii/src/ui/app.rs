@@ -9,7 +9,7 @@ use crate::ui::output::{OutputStatus, OutputSurface};
 use crate::ui::settings::SettingsSheet;
 use crate::ui::composition::CompositionSheet;
 use crate::ui::export_sheet::ExportSheet;
-use crate::ui::dock_hit::{dock_target_at, node_has_id};
+use crate::ui::dock_hit::{dock_target_at, node_has_id, dock_zone};
 use crate::ui::panels::{BrowserPanel, InspectorPanel, StagePanel, TimelinePanel};
 use crate::ui::semantic_menu::{
     MenuDismiss, MenuId, SemanticControl, SemanticMenu,
@@ -21,7 +21,7 @@ use crate::ui::tokens;
 
 /// 落とし先の当たり。**位置を計算しない** —— 5枚の当たりを重ねて置き、
 /// どれに乗ったかで決める。
-const SIDES: [(Side, &str); 5] = [
+pub(super) const SIDES: [(Side, &str); 5] = [
     (Side::Top, "top"),
     (Side::Left, "left"),
     (Side::Center, "center"),
@@ -39,7 +39,7 @@ struct GripDrag {
     start_ratio: f64,
 }
 
-fn take_tab_release(
+pub(super) fn take_tab_release(
     drag: &mut Option<TabDrag>,
     x: f64,
     y: f64,
@@ -50,7 +50,7 @@ fn take_tab_release(
     Some((drag, effect))
 }
 
-fn finish_tab_release(
+pub(super) fn finish_tab_release(
     mut dock: Signal<Dock>,
     mut tab_drag: Signal<Option<TabDrag>>,
     tile_nodes: &TileNodes,
@@ -156,7 +156,7 @@ fn wire_windows(host: &crate::ui::host::Host, panes: Panes) {
 }
 
 /// パネル1枚の中身。窓が変わっても同じ物を出す。
-fn panel_body(panel: Panel, session: &Session, _ui: &fixture::UiData, p: Panes) -> Element {
+pub(super) fn panel_body(panel: Panel, session: &Session, _ui: &fixture::UiData, p: Panes) -> Element {
     let selected = session.selection.get();
     match panel {
         Panel::Media | Panel::Effects | Panel::Create | Panel::Colors => rsx!(BrowserPanel {
@@ -328,127 +328,6 @@ type SplitNodes = std::rc::Rc<
 pub(super) type TileNodes = std::rc::Rc<
     std::cell::RefCell<std::collections::BTreeMap<TileId, dioxus_native::NodeHandle>>,
 >;
-
-#[allow(clippy::too_many_arguments)]
-fn dock_zone(
-    id: TileId,
-    panels: Vec<Panel>,
-    shown: Option<Panel>,
-    d: &Dock,
-    mut dock: Signal<Dock>,
-    mut tab_drag: Signal<Option<TabDrag>>,
-    tile_nodes: TileNodes,
-    session: &Session,
-    ui: &fixture::UiData,
-    panes: Panes,
-    playing: Signal<bool>,
-) -> Element {
-    let gesture = tab_drag();
-    let dragging = gesture.is_some_and(TabDrag::dragging);
-    rsx!(
-        div {
-            class: "zone",
-            key: "{id}",
-            id: "tile-{id}",
-            onmounted: {
-                let tile_nodes = tile_nodes.clone();
-                let id = id.clone();
-                move |evt: MountedEvent| {
-                    let mounted = evt.data();
-                    if let Some(node) = mounted.downcast::<dioxus_native::NodeHandle>() {
-                        tile_nodes.borrow_mut().insert(id.clone(), node.clone());
-                    }
-                }
-            },
-            div { class: "ptabs", role: "tablist",
-                // ←→ Home End で面を切り替える(tablist の作法。Tab は 1 停止だけ)。
-                onkeydown: {
-                    let panels = panels.clone();
-                    move |evt: KeyboardEvent| {
-                        let n = panels.len();
-                        if n == 0 {
-                            return;
-                        }
-                        let cur = panels.iter().position(|p| dock.read().is_active(*p)).unwrap_or(0);
-                        let next = match evt.key() {
-                            Key::ArrowLeft => (cur + n - 1) % n,
-                            Key::ArrowRight => (cur + 1) % n,
-                            Key::Home => 0,
-                            Key::End => n - 1,
-                            _ => return,
-                        };
-                        evt.stop_propagation();
-                        dock.write().set_active(panels[next]);
-                    }
-                },
-                for panel in panels.iter().copied() {
-                    button {
-                        id: "dock-tab-{panel}",
-                        role: "tab",
-                        aria_selected: if d.is_active(panel) { "true" } else { "false" },
-                        aria_controls: "zbody-{panel}",
-                        tabindex: if d.is_active(panel) { "0" } else { "-1" },
-                        class: match gesture.filter(|drag| drag.panel == panel) {
-                            Some(drag) if drag.dragging() => "ptab held",
-                            Some(_) => "ptab pressed",
-                            None if d.is_active(panel) => "ptab on",
-                            None => "ptab",
-                        },
-                        style: if d.is_active(panel) {
-                            format!("border-bottom-color: {};", panel.way())
-                        } else {
-                            String::new()
-                        },
-                        onpointerdown: move |evt: PointerEvent| {
-                            if evt.data().trigger_button()
-                                != Some(
-                                    dioxus_native::prelude::dioxus_elements::input_data::MouseButton::Primary,
-                                )
-                            {
-                                return;
-                            }
-                            evt.prevent_default();
-                            let p = evt.data().client_coordinates();
-                            tab_drag.set(Some(TabDrag::pressed(
-                                panel,
-                                p.x,
-                                p.y,
-                                evt.data().pointer_id(),
-                            )));
-                        },
-                        "{panel}"
-                        if d.is_active(panel) { span { class: "a11y", "selected" } }
-                    }
-                }
-                if shown == Some(Panel::Timeline) {
-                    {crate::ui::timeline_shell::transport(
-                        session.clock.clone(),
-                        playing,
-                        panes.playhead,
-                        panes.layer_rows.read().len(),
-                    )}
-                }
-            }
-            if let Some(panel) = shown {
-                div { class: "zbody", id: "zbody-{panel}", role: "tabpanel", aria_labelledby: "dock-tab-{panel}", {panel_body(panel, session, ui, panes)} }
-            }
-            if dragging {
-                div { class: "dropmap dragging",
-                    for (_, class) in SIDES {
-                        div {
-                            class: "dz {class}",
-                        }
-                    }
-                    div { class: "dock-guide", aria_label: "Dock position guide",
-                        for (_, class) in SIDES {
-                            span { class: "dock-guide-{class}" }
-                        }
-                    }
-                }
-            }
-        }
-    )
-}
 
 #[allow(clippy::too_many_arguments)]
 fn tile_view(
