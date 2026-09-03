@@ -250,7 +250,7 @@ impl Gui {
 
     fn click(&mut self, x: f32, y: f32) {
         self.h.move_mouse_to(x, y);
-        crate::ui::host::commit_field_outside(&mut self.h.doc, x, y);
+        crate::ui::keys::commit_field_outside(&mut self.h.doc, x, y);
         self.h.click_at(x, y);
         self.settle();
     }
@@ -267,21 +267,31 @@ impl Gui {
         for _ in 0..4 {
             self.h.pump();
         }
-        crate::ui::host::select_new_field(&mut self.h.doc, &mut self.seen_field);
+        crate::ui::keys::select_new_field(&mut self.h.doc, &mut self.seen_field);
     }
 
     /// 打鍵を1つ流す。窓の shell と同じ順: 先に打鍵の当て先を決める(`host::aim_keystrokes`)。
     fn key(&mut self, key: keyboard_types::Key, mods: keyboard_types::Modifiers) {
-        crate::ui::host::select_new_field(&mut self.h.doc, &mut self.seen_field);
-        crate::ui::host::aim_keystrokes(&mut self.h.doc);
-        self.h.press_with(key, mods);
+        crate::ui::keys::select_new_field(&mut self.h.doc, &mut self.seen_field);
+        crate::ui::keys::aim_keystrokes(&mut self.h.doc);
+        if !crate::ui::keys::activate_focused_control(&mut self.h.doc, &key) {
+            self.h.press_with(key, mods);
+        }
+        self.settle();
+    }
+
+    /// 焦点を鍵で置く(Tab の代わり)。
+    fn focus(&mut self, selector: &str) {
+        let node = self.h.base().query_selector(selector).ok().flatten().expect("focus target");
+        self.h.base_mut().set_focus_to(node);
+        // 窓は次の frame で style を解決してから鍵を受ける。同じ順にする(解決前の合成 click は落ちる)。
         self.settle();
     }
 
     /// 窓の shell と同じ順: 欄の外を押したら先に欄を確定させる(`host::Windows::window_event`)。
     fn press(&mut self, x: f32, y: f32) {
         self.h.move_mouse_to(x, y);
-        crate::ui::host::commit_field_outside(&mut self.h.doc, x, y);
+        crate::ui::keys::commit_field_outside(&mut self.h.doc, x, y);
         self.h.mouse_down_at(x, y);
     }
 
@@ -303,7 +313,7 @@ impl Gui {
     }
 
     fn lose_focus(&mut self) {
-        crate::ui::host::commit_field(&mut self.h.doc);
+        crate::ui::keys::commit_field(&mut self.h.doc);
         self.host.focus_lost();
         self.settle();
     }
@@ -318,7 +328,7 @@ impl Gui {
     /// 窓へ落とす。host の `DragDropped` と同じ順: 落とし先で役目を決め、admit して全窓を起こす。
     fn drop_files(&mut self, paths: &[std::path::PathBuf], x: f32, y: f32) -> crate::ui::fixture::ImportSummary {
         self.session.file_drop.leave();
-        let role = crate::ui::host::drop_role_at(&self.h.doc, x, y);
+        let role = crate::ui::keys::drop_role_at(&self.h.doc, x, y);
         let summary = crate::ui::fixture::admit_paths(&mut self.session.doc.lock().unwrap(), paths, role);
         self.host.wake_all();
         self.settle();
@@ -509,11 +519,11 @@ fn a_file_dropped_on_the_desk_is_a_reference_and_stays_off_the_browser() {
     let desk = gui.center_of("#desk", 0);
     let stage = gui.center_of("#stage", 0);
     assert_eq!(
-        crate::ui::host::drop_role_at(&gui.h.doc, desk.0, desk.1),
+        crate::ui::keys::drop_role_at(&gui.h.doc, desk.0, desk.1),
         crate::doc::store::AssetRole::Reference
     );
     assert_eq!(
-        crate::ui::host::drop_role_at(&gui.h.doc, stage.0, stage.1),
+        crate::ui::keys::drop_role_at(&gui.h.doc, stage.0, stage.1),
         crate::doc::store::AssetRole::Material
     );
 

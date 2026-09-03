@@ -98,6 +98,8 @@ pub(super) fn SemanticControl(
     #[props(default)] selected: bool,
     #[props(default)] secondary: bool,
     #[props(default)] disabled: bool,
+    /// 右端の加速鍵(⌘S)。menu は鍵の名簿でもある(Finder・VS Code)。
+    #[props(default)] hint: Option<String>,
 ) -> Element {
     let class = match (secondary, selected) {
         (true, true) => "vout on",
@@ -111,6 +113,9 @@ pub(super) fn SemanticControl(
         disabled: disabled,
         onclick: move |evt| onclick.call(evt),
         "{label}"
+        if let Some(hint) = hint {
+            span { class: "khint", "{hint}" }
+        }
     })
 }
 
@@ -156,6 +161,10 @@ pub(super) fn Field(
     let oninput = move |evt: FormEvent| edit.edit_field(evt.value());
     let onkeydown = move |evt: KeyboardEvent| {
         evt.stop_propagation();
+        // 変換中の Enter は変換の確定。欄の確定ではない。
+        if evt.is_composing() {
+            return;
+        }
         match evt.key() {
             Key::Enter if !multiline || evt.modifiers().intersects(Modifiers::META | Modifiers::SUPER) => {
                 evt.prevent_default();

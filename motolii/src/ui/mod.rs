@@ -14,6 +14,7 @@ mod gui;
 pub mod host;
 mod inspector;
 mod keymap;
+pub(crate) mod keys;
 mod output;
 mod playback;
 mod project;

@@ -291,8 +291,8 @@ fn enter_renames_m_marks_and_edit_menu_has_undo() {
     let edit = gui.center_of("#menu-edit", 0);
     gui.click(edit.0, edit.1);
     assert_eq!(gui.count("#menu-edit-list"), 1);
-    assert!(gui.texts("#menu-edit-list .vitem").iter().any(|t| t == "Undo"));
-    let undo = gui.center_of_text("#menu-edit-list .vitem", "Undo");
+    assert!(gui.texts("#menu-edit-list .vitem").iter().any(|t| t.starts_with("Undo")));
+    let undo = gui.center_of("#menu-edit-list .vitem", 0);
     gui.click(undo.0, undo.1);
     assert_eq!(gui.session.doc.lock().unwrap().view().markers().unwrap().len(), before, "Edit▸Undo did not undo");
     assert_eq!(gui.count("#menu-edit-list"), 0, "picking Undo left the menu open");
@@ -481,4 +481,39 @@ fn the_first_key_after_closing_a_field_is_not_eaten() {
     gui.key(keyboard_types::Key::Character(" ".into()), keyboard_types::Modifiers::empty());
     assert!(gui.session.clock.playing(), "Space right after closing a field did not play");
     gui.key(keyboard_types::Key::Character(" ".into()), keyboard_types::Modifiers::empty());
+}
+
+/// 鍵だけの道: button に焦点が在れば Enter で押せ、焦点は打鍵で奪い返されない。Space は再生でなく button。
+#[test]
+fn a_focused_button_is_pressed_by_enter_and_keeps_focus() {
+    let mut gui = Gui::open();
+    gui.focus("#menu-file");
+    gui.key(keyboard_types::Key::Enter, keyboard_types::Modifiers::empty());
+    assert_eq!(gui.count("#menu-file-list"), 1, "Enter did not press the focused button");
+    gui.key(keyboard_types::Key::Escape, keyboard_types::Modifiers::empty());
+    assert_eq!(gui.count("#menu-file-list"), 0);
+    gui.focus("#menu-view");
+    gui.key(keyboard_types::Key::Character(" ".into()), keyboard_types::Modifiers::empty());
+    assert!(!gui.session.clock.playing(), "Space on a focused button started playback");
+    assert_eq!(gui.count("#menu-view-list"), 1, "Space did not press the focused button");
+    gui.key(keyboard_types::Key::Escape, keyboard_types::Modifiers::empty());
+}
+
+/// Cmd+= / Cmd+- / Cmd+0 で窓の文字の大きさ。Shift+↓ で選択が伸びる。
+#[test]
+fn scale_and_extend_selection_have_keys() {
+    let mut gui = Gui::open();
+    let (x, y) = gui.center_of("#stage", 0);
+    gui.click(x, y);
+    gui.key(keyboard_types::Key::Character("=".into()), keyboard_types::Modifiers::SUPER);
+    assert_eq!(gui.session.scale.percent(), 105);
+    gui.key(keyboard_types::Key::Character("0".into()), keyboard_types::Modifiers::SUPER);
+    assert_eq!(gui.session.scale.percent(), 100);
+
+    let (x, y) = gui.center_of(".lsurface", 1);
+    gui.click(x, y);
+    gui.key(keyboard_types::Key::ArrowDown, keyboard_types::Modifiers::SHIFT);
+    assert_eq!(gui.session.selection.all().len(), 2, "Shift+Down did not extend the selection");
+    gui.key(keyboard_types::Key::ArrowDown, keyboard_types::Modifiers::empty());
+    assert_eq!(gui.session.selection.all().len(), 1, "Down alone should collapse to one");
 }

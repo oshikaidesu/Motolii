@@ -38,6 +38,10 @@ pub(super) enum Intent {
     Save,
     /// 選んだ層の名前を開く。Enter(AE・Finder)。
     Rename,
+    /// 窓の文字の大きさ。0 は 100% へ戻す(Cmd+= / Cmd+- / Cmd+0)。
+    UiScale(i32),
+    /// 選択を伸ばす(Shift+↑↓、Finder・AE)。
+    SelectExtend(i32),
 }
 
 /// 区間のどちら側を寝かせるか。
@@ -318,6 +322,11 @@ const BINDINGS: &[Binding] = &[
         alt: false,
         intent: Intent::Rename,
     },
+    Binding { key: KeySpec::Char('='), cmd: true, shift: false, alt: false, intent: Intent::UiScale(5) },
+    Binding { key: KeySpec::Char('-'), cmd: true, shift: false, alt: false, intent: Intent::UiScale(-5) },
+    Binding { key: KeySpec::Char('0'), cmd: true, shift: false, alt: false, intent: Intent::UiScale(0) },
+    Binding { key: KeySpec::ArrowUp, cmd: false, shift: true, alt: false, intent: Intent::SelectExtend(-1) },
+    Binding { key: KeySpec::ArrowDown, cmd: false, shift: true, alt: false, intent: Intent::SelectExtend(1) },
     // マーカーは NLE の M でも打てる(AE のテンキー `*` と並べる)。
     Binding {
         key: KeySpec::Char('m'),
@@ -405,6 +414,16 @@ pub(super) use held::{clear as forget_modifiers, down as note_key_down, up as no
 // 並べて走る試験が互いの状態を踏む。
 thread_local! {
     static TYPING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    static ON_CONTROL: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// 焦点が button の上に在るか。在れば Enter / Space はその button の物(macOS・Finder)。
+pub(super) fn set_on_control(on: bool) {
+    ON_CONTROL.with(|t| t.set(on));
+}
+
+pub(super) fn is_on_control() -> bool {
+    ON_CONTROL.with(std::cell::Cell::get)
 }
 
 /// 打鍵が入力欄へ入っているかを窓の側から知らせる。

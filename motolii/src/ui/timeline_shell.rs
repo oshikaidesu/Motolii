@@ -76,7 +76,7 @@ pub(super) fn timeline_shell(
         } else if is_secondary {
             format!("border-left-color:{};background:var(--raised);", row.color)
         } else {
-            format!("background:{};", row.color)
+            format!("border-left-color:{};", row.color)
         };
         let glyph = |bit: u8, label: &'static str| {
             let (hidden, solo, locked) = attrs.read().get(i).copied().unwrap_or_default();

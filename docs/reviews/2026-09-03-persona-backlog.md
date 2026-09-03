@@ -9,22 +9,22 @@
 - ✗ 履歴の行に操作名(Document に操作名が無い)、J/K/L(Clock に速度が無い) — model 側の口が先
 
 ## 第 2 波 K: キーボードだけの人
-- ☐ K1 Tab / Shift+Tab: `aim_keystrokes` が焦点を `#app` へ奪い返す
-- ☐ K2 焦点のある button を Enter / Space で押せない
-- ☐ K3 menu をキーボードで開けない・歩けない(↑↓ が SelectStep に食われる)
-- ☐ K4 Escape の層: Inspector の選択肢・机の引き出し・Browser の rail
+- ☑ K1 Tab / Shift+Tab: `aim_keystrokes` が焦点を `#app` へ奪い返す
+- ☑ K2 焦点のある button を Enter / Space で押せない
+- ☑ K3 menu をキーボードで開けない・歩けない — Tab + Enter で開けて中も押せる。開いている間は鍵を引かない(↑↓ の巡回は未)
+- ☑ K4 Escape の層: Inspector の選択肢・机の引き出し・Browser の rail
 - ☐ K5 数値・本文・名前の欄を開く鍵(焦点の行へ Enter)
-- ☐ K6 Cmd+= / Cmd+- / Cmd+0 の UI 倍率
-- ☐ K7 IME: 欄が閉じたら Disable、composing 中は Enter を送らない
-- ☐ K8 焦点の輪が無い面(Timeline 行・Inspector の値・Browser の札)
+- ☑ K6 Cmd+= / Cmd+- / Cmd+0 の UI 倍率
+- ☑ K7 IME: 欄が閉じたら Disable、composing 中は Enter を送らない
+- ☑ K8 焦点の輪が無い面(Timeline 行・Inspector の値・Browser の札)
 - ☐ K9 素材を鍵で置く
 - ☐ K10 Cmd+C / V / X
-- ☐ K11 Shift+↑↓ で選択を伸ばす
+- ☑ K11 Shift+↑↓ で選択を伸ばす
 - ☐ K12 Cmd+←/→ = 印跳びは macOS の予約鍵(裁定 489 の preset 待ち)
 - ☐ K13 複数選択で Enter が先頭だけ
 - ✗ K14 Delete と Backspace 同義(害が小さい)
 - ☐ K15 F9 は OS が食う(案内)
-- ☐ K16 menu に加速鍵の表記
+- ☑ K16 menu に加速鍵の表記
 - ☐ K17 forget_modifiers が欄を開くたび走る
 - ☐ K18 auto-repeat の加速
 - ☐ K19 harness の鍵の道(1・2 が構造上捕まらない)

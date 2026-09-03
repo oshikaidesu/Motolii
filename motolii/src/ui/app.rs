@@ -960,6 +960,8 @@ pub fn app() -> Element {
                 let mut revision = revision;
                 let poke = host.poker();
                 let session = session.clone();
+                let mut choice = panes.inspector_choice;
+                let mut scale_pct = panes.scale_pct;
                 move |evt| {
                     if evt.key() == Key::Escape && tab_drag.peek().is_some() {
                         evt.prevent_default();
@@ -973,6 +975,22 @@ pub fn app() -> Element {
                         evt.prevent_default();
                         evt.stop_propagation();
                         open_menu.set(None);
+                        return;
+                    }
+                    // Escape は一番内側から 1 枚ずつ(Figma・VS Code)。Inspector の選択肢も 1 枚。
+                    if evt.key() == Key::Escape && choice.peek().is_some() {
+                        evt.prevent_default();
+                        evt.stop_propagation();
+                        choice.set(None);
+                        return;
+                    }
+                    // 焦点が button に在る時の Enter / Space はその button の物。menu が開いている間は鍵を引かない。
+                    if crate::ui::keymap::is_on_control()
+                        && (evt.key() == Key::Enter || evt.key() == Key::Character(" ".into()))
+                    {
+                        return;
+                    }
+                    if open_menu.peek().is_some() {
                         return;
                     }
                     crate::ui::keymap::note_key_down(&evt.key());
@@ -1320,6 +1338,25 @@ pub fn app() -> Element {
                             selected.set(rows[next].layer);
                             *revision.write() += 1;
                         }
+                        Intent::SelectExtend(delta) => {
+                            let d = doc.lock().unwrap();
+                            let rows = fixture::layer_rows_from_doc(&d);
+                            drop(d);
+                            let Some(current) = selected().and_then(|l| rows.iter().position(|r| r.layer == Some(l))) else { return };
+                            let next = (current as i32 + delta).clamp(0, rows.len() as i32 - 1) as usize;
+                            if let Some(layer) = rows[next].layer {
+                                if !selection.contains(layer) {
+                                    selection.toggle(layer);
+                                }
+                                selected.set(Some(layer));
+                                *revision.write() += 1;
+                            }
+                        }
+                        Intent::UiScale(by) => {
+                            let next = if by == 0 { 100 } else { (scale_pct() as i32 + by).clamp(50, 200) as u32 };
+                            session.scale.set_percent(next);
+                            scale_pct.set(session.scale.percent());
+                        }
                         Intent::SelectAll => {
                             let layers = doc.lock().unwrap().view().layers();
                             for layer in layers {
@@ -1454,6 +1491,7 @@ pub fn app() -> Element {
                             div { class: "vrow",
                                 SemanticControl {
                                     label: "Save",
+                                    hint: "⌘S",
                                     onclick: {
                                         let session = session.clone();
                                         let poke = host.poker();
@@ -1563,10 +1601,11 @@ pub fn app() -> Element {
                     id: MenuId::Edit,
                     label: "Edit",
                     open: open_menu,
-                            for (label , steps) in [("Undo", -1i32), ("Redo", 1i32)] {
+                            for (label , hint , steps) in [("Undo", "⌘Z", -1i32), ("Redo", "⇧⌘Z", 1i32)] {
                                 div { class: "vrow",
                                     SemanticControl {
                                         label: label,
+                                        hint: hint,
                                         onclick: {
                                             let session = session.clone();
                                             let timeline_tx = timeline_tx.clone();

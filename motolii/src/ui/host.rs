@@ -1,5 +1,6 @@
 use std::sync::mpsc::{channel, Receiver, Sender};
 
+use crate::ui::keys::{activate_focused_control, aim_keystrokes, commit_field, commit_field_outside, drop_role_at, select_new_field, FIELD};
 use blitz_shell::{create_default_event_loop, BlitzShellEvent, BlitzShellProxy, WindowConfig};
 use blitz_shell::{BlitzApplication, View};
 use dioxus_native::prelude::VirtualDom;
@@ -198,7 +199,14 @@ fn place_ime(view: &mut blitz_shell::View<DioxusNativeWindowRenderer>) {
     let area = {
         let doc: &DioxusDocument = view.downcast_doc_mut();
         let inner = doc.inner();
-        let Some(field) = inner.query_selector(FIELD).ok().flatten() else { return };
+        let Some(field) = inner.query_selector(FIELD).ok().flatten() else {
+            drop(inner);
+            // 欄が閉じたら IME も閉じる。開いたままだと 1 文字の鍵(m・Space)が変換に吸われる。
+            if view.window.ime_capabilities().is_some() {
+                let _ = view.window.request_ime_update(ImeRequest::Disable);
+            }
+            return;
+        };
         let Some(node) = inner.get_node(field) else { return };
         let pos = node.absolute_position(0.0, 0.0);
         let layout = node.final_layout();
@@ -222,93 +230,6 @@ fn place_ime(view: &mut blitz_shell::View<DioxusNativeWindowRenderer>) {
     if let Some(enable) = ImeEnableRequest::new(ImeCapabilities::new().with_cursor_area(), data) {
         let _ = window.request_ime_update(ImeRequest::Enable(enable));
     }
-}
-
-/// 落とした先が机なら参考画像、他は素材。落とす口は 1 つで、役目だけが場所で決まる。
-pub(crate) fn drop_role_at(doc: &DioxusDocument, x: f32, y: f32) -> crate::doc::store::AssetRole {
-    let inner = doc.inner();
-    let desk = inner.query_selector("#desk").ok().flatten();
-    let mut cur = inner.hit(x, y).map(|hit| hit.node_id);
-    while let (Some(node), Some(desk)) = (cur, desk) {
-        if node == desk {
-            return crate::doc::store::AssetRole::Reference;
-        }
-        cur = inner.get_node(node).and_then(|n| n.parent);
-    }
-    crate::doc::store::AssetRole::Material
-}
-
-/// 窓に開く欄。1 行は `input`、書き置きは `textarea`。同時に 1 つ(`Session.field`)。
-const FIELD: &str = "input, textarea";
-
-/// 欄は許可制。押すまで無く、Enter・Escape・**外を押す**のどれでも欄ごと消える。
-/// 欄を持つ面がそれぞれ閉じ方を書くのではなく、外を押した時は欄へ Cmd+Enter を送る
-/// (書き置きは Enter が改行なので、確定は Cmd 付き)。
-/// 窓に欄が在る間は打鍵が全部そこへ行く(`aim_keystrokes`)ので、閉じ損ねは鍵の全喪失になる。
-pub(crate) fn commit_field_outside(doc: &mut DioxusDocument, x: f32, y: f32) {
-    let Some(field) = doc.inner().query_selector(FIELD).ok().flatten() else { return };
-    if doc.inner().hit(x, y).is_some_and(|hit| hit.node_id == field) {
-        return;
-    }
-    commit_field(doc);
-}
-
-/// 窓を離れる時も欄は確定して消える(§6b)。
-pub(crate) fn commit_field(doc: &mut DioxusDocument) {
-    if doc.inner().query_selector(FIELD).ok().flatten().is_none() {
-        return;
-    }
-    aim_keystrokes(doc);
-    send_chord(doc, keyboard_types::Key::Enter, keyboard_types::Code::Enter);
-}
-
-/// 開いたばかりの欄: 1 行(input)は全選択 — 打てば置き換わる(Finder・AE の名前と同じ)。
-/// 書き置き(textarea)は caret を末尾へ。blitz は欄の editor を node より後に作り、その時
-/// caret を先頭に置くので、editor が出来るまでは何もせず次の event で再び見る。
-pub(crate) fn select_new_field(doc: &mut DioxusDocument, seen: &mut Option<blitz_dom::NodeId>) {
-    let field = doc.inner().query_selector(FIELD).ok().flatten();
-    if field == *seen {
-        return;
-    }
-    let Some(node) = field else {
-        *seen = None;
-        return;
-    };
-    let ready = {
-        let inner = doc.inner();
-        inner.get_node(node).and_then(|n| {
-            let element = n.element_data()?;
-            element.text_input_data()?;
-            Some(element.name.local.as_ref() == "textarea")
-        })
-    };
-    let Some(multiline) = ready else { return };
-    *seen = field;
-    aim_keystrokes(doc);
-    if multiline {
-        send_chord(doc, keyboard_types::Key::End, keyboard_types::Code::End);
-    } else {
-        send_chord(doc, keyboard_types::Key::Character("a".into()), keyboard_types::Code::KeyA);
-    }
-}
-
-fn send_chord(doc: &mut DioxusDocument, key: keyboard_types::Key, code: keyboard_types::Code) {
-    let event = |state| blitz_traits::events::BlitzKeyEvent {
-        key: key.clone(),
-        code,
-        modifiers: keyboard_types::Modifiers::SUPER,
-        location: keyboard_types::Location::Standard,
-        is_auto_repeating: false,
-        is_composing: false,
-        state,
-        text: None,
-    };
-    doc.handle_ui_event(blitz_traits::events::UiEvent::KeyDown(event(
-        blitz_traits::events::KeyState::Pressed,
-    )));
-    doc.handle_ui_event(blitz_traits::events::UiEvent::KeyUp(event(
-        blitz_traits::events::KeyState::Released,
-    )));
 }
 
 fn primary_mouse_release(event: &WindowEvent) -> Option<dioxus_native::winit::dpi::PhysicalPosition<f64>> {
@@ -416,25 +337,7 @@ fn window(
     )
 }
 
-/// 打鍵をどこへ配るかを決める。**窓の側と試験の側で同じ規則を通す** —— 分けると、
-/// 利用者が歩く道(欄を開けて打つ)の試験が書けない。
-pub(crate) fn aim_keystrokes(doc: &mut DioxusDocument) {
-    let field = doc.inner().query_selector(FIELD).ok().flatten();
-    crate::ui::keymap::set_typing(field.is_some());
-    let target = {
-        let inner = doc.inner();
-        field.or_else(|| {
-            ["#app", "#detached"]
-                .into_iter()
-                .find_map(|s| inner.query_selector(s).ok().flatten())
-        })
-    };
-    let Some(target) = target else { return };
-    let mut inner = doc.inner_mut();
-    if inner.get_focussed_node_id() != Some(target) {
-        inner.set_focus_to(target);
-    }
-}
+
 
 /// 窓を増やせるようにするための薄い包み。頼みを先に食べて、残りは上流へ流す。
 struct Windows {
@@ -589,9 +492,18 @@ impl ApplicationHandler for Windows {
             let seen = self.seen_field.entry(window_id).or_default();
             select_new_field(view.downcast_doc_mut::<DioxusDocument>(), seen);
         }
-        if matches!(event, WindowEvent::KeyboardInput { .. }) {
+        if let WindowEvent::KeyboardInput { event: key, .. } = &event {
             if let Some(view) = self.inner.windows.get_mut(&window_id) {
-                aim_keystrokes(view.downcast_doc_mut::<DioxusDocument>());
+                let doc = view.downcast_doc_mut::<DioxusDocument>();
+                aim_keystrokes(doc);
+                if key.state.is_pressed() {
+                    let logical = keyboard_types::Key::Character(key.text.as_deref().unwrap_or("").to_string());
+                    let is_enter = matches!(key.logical_key, dioxus_native::winit::keyboard::Key::Named(dioxus_native::winit::keyboard::NamedKey::Enter));
+                    let k = if is_enter { keyboard_types::Key::Enter } else { logical };
+                    if activate_focused_control(doc, &k) {
+                        return;
+                    }
+                }
             }
         }
         if let Some(position) = primary_mouse_press(&event) {
