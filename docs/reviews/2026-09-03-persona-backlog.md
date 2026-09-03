@@ -63,7 +63,7 @@
 - ☑ V14 Key 列の見出しだけ accent
 - ☑ V15 .ptab の cursor: grab
 - ☑ V16 色相環が円板で赤が 3 時
-- ☐ V17 hex が表示専用
+- ☑ V17 hex が表示専用
 - ☐ V18 空状態の文体
 - ☑ V19 カササギが drop 領域に被る、色が palette 外
 - ☑ V20 status bar が痩せている、尺表記の不一致
@@ -122,7 +122,7 @@
 - ☐ C12 効果の色 param
 - ☐ C13 効果カードに絵・検索・分類
 - ☑ C14 BLEND 行で机が前に出る
-- ☐ C15 hex / HSV / RGB を打つ口
+- ☑ C15 hex / HSV / RGB を打つ口
 
 ## 第 3 波 A: 音と拍の編集者
 - ☐ A1 スクラブに音が無い(seek が device を捨てる)

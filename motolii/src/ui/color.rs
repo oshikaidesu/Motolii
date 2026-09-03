@@ -7,7 +7,8 @@ use dioxus_native::prelude::*;
 
 use crate::doc::store::{Document, Intent, ShapeNode, StoreError};
 use crate::doc::vector::{Brush, Fill, Rgb};
-use crate::ui::session::{ColorSlot, Focus, Session};
+use crate::ui::semantic_menu::{Field, SemanticButton};
+use crate::ui::session::{ColorSlot, FieldAt, Focus, OpenField, Session};
 
 /// 輪が今指す色。焦点の色、無ければ選んでいる層の最初の色。
 pub(super) fn wheel_slot(session: &Session) -> Option<ColorSlot> {
@@ -101,6 +102,18 @@ fn leaf_mut<'a>(nodes: &'a mut [ShapeNode], path: &[usize]) -> Option<&'a mut cr
 }
 
 /// 今の色。無ければ黒。
+/// `#ff8800` / `ff8800` / `#f80` を読む。読めなければ None(書かない)。
+pub(super) fn parse_hex(text: &str) -> Option<[f64; 3]> {
+    let t = text.trim().trim_start_matches('#');
+    let expanded: String = match t.len() {
+        3 => t.chars().flat_map(|c| [c, c]).collect(),
+        6 => t.to_owned(),
+        _ => return None,
+    };
+    let byte = |i: usize| u8::from_str_radix(&expanded[i..i + 2], 16).ok().map(|b| b as f64 / 255.0);
+    Some([byte(0)?, byte(2)?, byte(4)?])
+}
+
 pub(super) fn read_color(doc: &Arc<Mutex<Document>>, slot: &ColorSlot) -> Option<[f64; 4]> {
     let d = doc.lock().unwrap();
     let view = d.view();
@@ -290,7 +303,40 @@ pub(super) fn ColorWheel(session: Session, slot: ColorSlot, revision: Signal<u32
         }
         div { class: "color-now",
             span { class: "dot", style: "background: {shown};" }
-            span { "{shown}" }
+            // hex は打てる(Figma・Photoshop)。押して打ち、Enter で書く。
+            if session.field_at(&FieldAt::Hex(slot.clone())).is_some() {
+                Field {
+                    session: session.clone(),
+                    class: "hex typing",
+                    revision,
+                    oncommit: {
+                        let session = session.clone();
+                        move |f: OpenField| {
+                            let FieldAt::Hex(slot) = f.at else { return };
+                            let Some(rgb) = parse_hex(&f.draft) else { return };
+                            match write_color(&session.doc, &slot, rgb) {
+                                Ok(()) => *revision.write() += 1,
+                                Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
+                            }
+                        }
+                    },
+                }
+            } else {
+                SemanticButton {
+                    class: "hex",
+                    title: "Type a hex color",
+                    onclick: {
+                        let session = session.clone();
+                        let slot = slot.clone();
+                        let shown = shown.clone();
+                        move |_| {
+                            session.open_field(FieldAt::Hex(slot.clone()), shown.clone());
+                            *revision.write() += 1;
+                        }
+                    },
+                    "{shown}"
+                }
+            }
         }
         // 不透明度。歌詞のフェードは色でもやる(Transform の opacity だけに頼らない)。
         if !matches!(slot, ColorSlot::ShapeFill { .. }) {

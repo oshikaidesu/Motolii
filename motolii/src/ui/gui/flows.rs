@@ -564,3 +564,33 @@ fn arrow_keys_walk_an_open_menu() {
     assert_eq!(gui.count("#menu-view-list"), 0, "Enter on a focused item did not close the menu");
     assert_eq!(gui.count(".ptab"), tabs - 1, "the second item (a panel) was not toggled");
 }
+
+/// Colors の hex は押して打てる。Enter で色が書かれ、下書きは全選択から始まる。
+#[test]
+fn a_hex_can_be_typed_into_the_colors_panel() {
+    let mut gui = Gui::open();
+    let rows = gui.count(".lsurface");
+    for i in 1..rows {
+        let (x, y) = gui.center_of(".lsurface", i);
+        gui.click(x, y);
+        if gui.count(".prow.color") > 0 {
+            break;
+        }
+    }
+    let (x, y) = gui.center_of(".prow.color", 0);
+    gui.click(x, y);
+    let colors = gui.center_of("#dock-tab-Colors", 0);
+    gui.click(colors.0, colors.1);
+    let hex = gui.center_of(".color-now .hex", 0);
+    gui.click(hex.0, hex.1);
+    assert_eq!(gui.count("input"), 1, "the hex did not open as a field");
+    type_chars(&mut gui, "#00ff00");
+    enter(&mut gui);
+    let slot = match gui.session.live_focus() {
+        Some(crate::ui::session::Focus::Color(slot)) => slot,
+        other => panic!("focus drifted: {other:?}"),
+    };
+    let after = crate::ui::color::read_color(&gui.session.doc, &slot).unwrap();
+    assert!(after[0] < 0.01 && after[1] > 0.99 && after[2] < 0.01, "hex was not written: {after:?}");
+    assert_eq!(crate::ui::color::parse_hex("#f80"), Some([1.0, 136.0 / 255.0, 0.0]));
+}

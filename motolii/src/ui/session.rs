@@ -263,6 +263,8 @@ pub(super) enum FieldAt {
     },
     Content(LayerId),
     Name(LayerId),
+    /// 色の hex(Colors の輪の下)。
+    Hex(ColorSlot),
 }
 
 /// タイムラインで選んだキー。区間は「このキーから次のキーまで」。
@@ -375,6 +377,7 @@ impl Session {
         }
         let field_dead = self.field().is_some_and(|f| match f.at {
             FieldAt::Number { layer, .. } | FieldAt::Content(layer) | FieldAt::Name(layer) => !live.contains(&layer),
+            FieldAt::Hex(ref slot) => !live.contains(&slot.layer()),
             FieldAt::Note(_) => false,
         });
         if field_dead {
