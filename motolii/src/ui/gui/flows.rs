@@ -380,3 +380,30 @@ fn a_text_layer_has_a_scrubbable_size_row() {
     assert!(matches!(after, Some(crate::doc::eval::Value::F64(v)) if v > shown), "size did not grow: {after:?} from {shown}");
 }
 
+/// Blend の格子は hover するだけで Stage が変わり、離れれば戻る。Undo には残らない(§4)。
+#[test]
+fn hovering_a_blend_cell_previews_it_on_the_stage() {
+    let mut gui = Gui::open();
+    let (x, y) = gui.center_of(".lsurface", 1);
+    gui.click(x, y);
+    let layer = gui.session.selection.get().unwrap();
+    let blend = gui.center_of_text(".desk-foot .chip", "Blend");
+    gui.click(blend.0, blend.1);
+    assert!(gui.count(".blend-cell") > 2);
+    let before = history_back(&gui);
+    let prop = crate::doc::store::PropertyId::blend_mode();
+    let t = gui.session.clock.current_time();
+    let resolved = |gui: &Gui| gui.session.doc.lock().unwrap().view().value_at(layer, &prop, t).unwrap();
+    assert_eq!(resolved(&gui), None);
+
+    let (cx, cy) = gui.center_of(".blend-cell", 2);
+    gui.motion(cx, cy);
+    gui.settle();
+    assert!(matches!(resolved(&gui), Some(crate::doc::eval::Value::Enum(2))), "hover did not preview: {:?}", resolved(&gui));
+
+    let stage = gui.center_of("#stage", 0);
+    gui.motion(stage.0, stage.1);
+    gui.settle();
+    assert_eq!(resolved(&gui), None, "leaving did not restore the blend");
+    assert_eq!(history_back(&gui), before);
+}

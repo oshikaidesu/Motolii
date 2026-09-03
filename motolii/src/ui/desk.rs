@@ -326,11 +326,33 @@ fn drawer_body(
                             class: if mode == current { "blend-cell on" } else { "blend-cell" },
                             selected: mode == current,
                             aria_label: "Blend {label}",
+                            // hover で Stage が下見(§4)。blend は property なので transient で足りる。
+                            onmouseenter: {
+                                let doc = session.doc.clone();
+                                move |_| {
+                                    doc.lock().unwrap().set_transient(
+                                        layer,
+                                        crate::doc::store::PropertyId::blend_mode(),
+                                        crate::doc::eval::Value::Enum(mode.to_enum_value()),
+                                    );
+                                    *revision.write() += 1;
+                                }
+                            },
+                            onmouseleave: {
+                                let doc = session.doc.clone();
+                                move |_| {
+                                    doc.lock().unwrap().clear_transient(layer, &crate::doc::store::PropertyId::blend_mode());
+                                    *revision.write() += 1;
+                                }
+                            },
                             onclick: {
                                 let doc = session.doc.clone();
-                                move |_| match write_blend(&doc, layer, mode) {
-                                    Ok(_) => *revision.write() += 1,
-                                    Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
+                                move |_| {
+                                    doc.lock().unwrap().clear_transient(layer, &crate::doc::store::PropertyId::blend_mode());
+                                    match write_blend(&doc, layer, mode) {
+                                        Ok(_) => *revision.write() += 1,
+                                        Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
+                                    }
                                 }
                             },
                             span { class: "blend-swatch" }

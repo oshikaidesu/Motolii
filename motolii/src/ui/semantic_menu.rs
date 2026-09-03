@@ -121,6 +121,9 @@ pub(super) fn SemanticButton(
     #[props(default)] disabled: bool,
     #[props(default)] selected: Option<bool>,
     #[props(default)] aria_label: Option<String>,
+    /// hover で下見する物(blend の格子)だけが持つ。
+    #[props(default)] onmouseenter: Option<EventHandler<MouseEvent>>,
+    #[props(default)] onmouseleave: Option<EventHandler<MouseEvent>>,
     children: Element,
 ) -> Element {
     rsx!(button {
@@ -129,6 +132,8 @@ pub(super) fn SemanticButton(
         aria_pressed: selected.map(|on| if on { "true" } else { "false" }),
         aria_label,
         onclick: move |evt| onclick.call(evt),
+        onmouseenter: move |evt| if let Some(h) = &onmouseenter { h.call(evt) },
+        onmouseleave: move |evt| if let Some(h) = &onmouseleave { h.call(evt) },
         {children}
     })
 }
