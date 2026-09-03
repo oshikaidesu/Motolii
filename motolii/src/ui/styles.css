@@ -1848,3 +1848,8 @@ h1.a11y, h2, h3.sec, h3.sh {
     margin: 0;
     font-weight: inherit;
 }
+
+.csheet-in:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+}

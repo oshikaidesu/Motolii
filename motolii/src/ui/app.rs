@@ -8,6 +8,7 @@ use crate::ui::keymap::Intent;
 use crate::ui::output::{OutputStatus, OutputSurface};
 use crate::ui::settings::SettingsSheet;
 use crate::ui::composition::CompositionSheet;
+use crate::ui::export_sheet::ExportSheet;
 use crate::ui::dock_hit::{dock_target_at, node_has_id};
 use crate::ui::panels::{BrowserPanel, InspectorPanel, StagePanel, TimelinePanel};
 use crate::ui::semantic_menu::{
@@ -334,6 +335,7 @@ fn dock_zone(
     panels: Vec<Panel>,
     shown: Option<Panel>,
     d: &Dock,
+    mut dock: Signal<Dock>,
     mut tab_drag: Signal<Option<TabDrag>>,
     tile_nodes: TileNodes,
     session: &Session,
@@ -359,6 +361,26 @@ fn dock_zone(
                 }
             },
             div { class: "ptabs", role: "tablist",
+                // ←→ Home End で面を切り替える(tablist の作法。Tab は 1 停止だけ)。
+                onkeydown: {
+                    let panels = panels.clone();
+                    move |evt: KeyboardEvent| {
+                        let n = panels.len();
+                        if n == 0 {
+                            return;
+                        }
+                        let cur = panels.iter().position(|p| dock.read().is_active(*p)).unwrap_or(0);
+                        let next = match evt.key() {
+                            Key::ArrowLeft => (cur + n - 1) % n,
+                            Key::ArrowRight => (cur + 1) % n,
+                            Key::Home => 0,
+                            Key::End => n - 1,
+                            _ => return,
+                        };
+                        evt.stop_propagation();
+                        dock.write().set_active(panels[next]);
+                    }
+                },
                 for panel in panels.iter().copied() {
                     button {
                         id: "dock-tab-{panel}",
@@ -541,6 +563,7 @@ fn tile_view(
                 panels,
                 shown,
                 &d,
+                dock,
                 tab_drag,
                 tile_nodes,
                 session,
@@ -1229,7 +1252,7 @@ pub fn app() -> Element {
                         }
                         Intent::SelectStep(delta) => {
                             let d = doc.lock().unwrap();
-                            let rows = fixture::layer_rows_from_doc(&d);
+                            let rows: Vec<_> = fixture::layer_rows_from_doc(&d).into_iter().filter(|r| r.layer.is_some()).collect();
                             drop(d);
                             if rows.is_empty() {
                                 return;
@@ -1487,47 +1510,12 @@ pub fn app() -> Element {
                             div { class: "vrow",
                                 SemanticControl {
                                     label: "Export…",
-                                    // 白紙(comp 無し)は書き出せない。押せない理由は hint に。
+                                    // 白紙(comp 無し)や ffmpeg 無しは押せない。押せない理由は hint に。
                                     disabled: session.export.is_active() || !can_export,
                                     hint: export_hint,
-                                    onclick: {
-                                        let doc = session.doc.clone();
-                                        let export = session.export.clone();
-                                        let project_path = session.project_path.clone();
-                                        let poke = host.poker();
-                                        let window = window.clone();
-                                        move |evt: Event<MouseData>| {
-                                            evt.stop_propagation();
-                                            open_menu.set(None);
-                                            let doc = doc.clone();
-                                            let export = export.clone();
-                                            let poke = poke.clone();
-                                            let window = window.clone();
-                                            // 出力名は作品名から(Premiere・Resolve)。無ければ Untitled。
-                                            let export_name = project_path
-                                                .lock()
-                                                .unwrap()
-                                                .as_ref()
-                                                .and_then(|p| p.file_stem().map(|s| s.to_string_lossy().into_owned()))
-                                                .map_or_else(|| "Untitled.mp4".to_owned(), |s| format!("{s}.mp4"));
-                                            dioxus_core::spawn(async move {
-                                                // 種の絞りを付けると、OS が拡張子を**もう一度**足して
-                                                // `x.mp4.mp4` になる。足すのはこちらの仕事に一本化する。
-                                                let picked = crate::ui::project::sheet(window.as_deref())
-                                                    .set_file_name(&export_name)
-                                                    .save_file()
-                                                    .await;
-                                                let Some(file) = picked else { return };
-                                                // 打った名前に既に付いていたら足さない。
-                                                let mut out = file.path().to_path_buf();
-                                                if out.extension().is_none_or(|e| !e.eq_ignore_ascii_case("mp4")) {
-                                                    out.set_extension("mp4");
-                                                }
-                                                if let Err(error) = export.start(doc, out, poke) {
-                                                    println!("PROBE room=export verdict=start-error {error}");
-                                                }
-                                            });
-                                        }
+                                    onclick: move |evt: Event<MouseData>| {
+                                        evt.stop_propagation();
+                                        open_menu.set(Some(MenuId::Export));
                                     }
                                 }
                             }
@@ -1669,6 +1657,12 @@ pub fn app() -> Element {
                     label: "Composition",
                     open: open_menu,
                     CompositionSheet { session: session.clone(), revision }
+                }
+                SemanticMenu {
+                    id: MenuId::Export,
+                    label: "Export",
+                    open: open_menu,
+                    ExportSheet { session: session.clone(), revision, poke: host.poker(), window: window.clone(), open: open_menu }
                 }
                 // 窓の都合は作品でないので、面を持たずヘッダに仕舞う。
                 SemanticMenu {

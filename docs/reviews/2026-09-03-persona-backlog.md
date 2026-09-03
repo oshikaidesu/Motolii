@@ -96,9 +96,9 @@
 
 ## 第 3 波 D: 書き出しの人
 - ☑ D1 Composition menu で寸法・fps・尺・9:16
-- ☐ D2 書き出しの選択肢がゼロ(preset・寸法・fps・範囲)
+- ☑ D2 範囲と fps・寸法は Composition から(format preset は X1)
 - ☐ D3 素材の欠落が窓に出ず relink の口も無い。描画が Asset でなく生 path を見る
-- ☐ D4 書き出し前の確認(1 行のサマリ)
+- ☑ D4 Export sheet の 1 行サマリ
 - ☑ D5 進捗の母数が最初 0 / 0、支度中に止められない
 - ☑ D6 完了通知が status bar の 1 行だけ(Reveal・×・通知)
 - ☑ D7 出力名が comp.mp4 固定 → 作品名(前回の出力先の記憶は未)
@@ -381,12 +381,26 @@
 - ☐ B14 上流: live region の TreeUpdate
 
 ## 第 6 波 X: 納品(書き出し)
-- ☐ X1 出せるのは MP4/H.264/全体/音込みの 1 本だけ — ExportJob に range と format(H264 / ProRes4444 / PNG / 連番 / Lottie)、Export sheet(preset・範囲・1 行サマリ)
+- ☑ X1 Export sheet(範囲 All / 印から印、1 行サマリ)— format(ProRes4444 / PNG / 連番 / Lottie)は未
 - ☑ X2 書き込み失敗が "Could not read the frame" と嘘をつく(Desc を read / write に割る)
 - ☑ X3 disk full が "Broken pipe"(ffmpeg の stderr を読む)
 - ☑ X4 ffmpeg 無しの文言と、tools_available が未使用(can_export で先に断る)
 - ☐ X5 色: 中身 sRGB・タグ bt709(in_range=full を明示 / transfer)、PNG が premultiplied のまま
 - ☑ X6 29.97 / 23.976 / 59.94 が窓から選べない
-- ☐ X7 保存 dialog の間の二度押し(Choosing phase)、start の Err が窓に出ない
+- ☑ X7 Choosing phase、start の Err は status へ
 - ☑ X8 終わった状態から Idle へ戻る道が無い(Dismiss)
 - ☐ X9 音の支度中に進捗が 0 のまま(Mixing audio…)
+
+## 第 6 波 KB: 鍵だけの再点検
+- ☐ KB1 【致命】Shift+Tab が前へ行かない(上流 keyboard.rs は Tab のみ)— keys.rs に focus_prev
+- ☑ KB2 【致命】面タブを ←→ で切り替えられない(Colors へ届かない)
+- ☑ KB3 【致命】Content の span に焦点が届かない(tabindex / textbox / Enter)
+- ☑ KB4 【致命】層名で Enter / Space が飲まれる(onkeydown が無い)
+- ☑ KB5 【致命】Composition の生 input が窓中の鍵を人質に(FIELD が生 input を拾う)
+- ☐ KB6 欄を確定すると焦点が #app へ飛ぶ(開いた時の焦点へ返す)
+- ☑ KB7 ⌥ を伴う文字の binding が macOS で発火しない疑い(⌥⌘E・⌥⌘K)— code→文字の表を alt 全域へ
+- ☐ KB8 Tab 順: Position まで 16、層 16 枚で 80 停止(roving・仮想化)
+- ☑ KB9 menu の ↑↓ が Composition / Settings で効かない(SemanticButton が MenuItems に名乗らない)
+- ☑ KB10 ↓ が property 行に落ちると選択が消える
+- ☑ KB11 .csheet-in の輪(#app と custom widget は未)
+- ☐ KB12 menu を開けている間は全 Intent が死ぬ(⌥⌘K で閉じられない)、Browser の rail は Escape で閉じない

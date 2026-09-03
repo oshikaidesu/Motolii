@@ -484,9 +484,11 @@ pub(super) fn lookup_held(
     let effective_cmd = cmd || h_cmd;
     let effective_shift = shift || h_shift;
     let effective_alt = alt || h_alt;
+    // ⌥ を足すと macOS は文字を変える(⌥E = ´、⌥K = ˚)。alt が効いている間は物理 code から文字を引く。
     let physical = match code {
         Code::BracketLeft => Some(Key::Character("[".into())),
         Code::BracketRight => Some(Key::Character("]".into())),
+        _ if effective_alt => code_to_char(code).map(|c| Key::Character(c.to_string())),
         _ => None,
     };
     lookup(
@@ -539,4 +541,20 @@ mod tests {
             Some(Intent::TrimToPlayhead(false))
         ));
     }
+}
+
+/// 物理 code → 文字(US 配列の素の字)。⌥ 付きの binding を救う為の表。
+fn code_to_char(code: Code) -> Option<char> {
+    Some(match code {
+        Code::KeyA => 'a', Code::KeyB => 'b', Code::KeyC => 'c', Code::KeyD => 'd', Code::KeyE => 'e',
+        Code::KeyF => 'f', Code::KeyG => 'g', Code::KeyH => 'h', Code::KeyI => 'i', Code::KeyJ => 'j',
+        Code::KeyK => 'k', Code::KeyL => 'l', Code::KeyM => 'm', Code::KeyN => 'n', Code::KeyO => 'o',
+        Code::KeyP => 'p', Code::KeyQ => 'q', Code::KeyR => 'r', Code::KeyS => 's', Code::KeyT => 't',
+        Code::KeyU => 'u', Code::KeyV => 'v', Code::KeyW => 'w', Code::KeyX => 'x', Code::KeyY => 'y',
+        Code::KeyZ => 'z',
+        Code::Digit0 => '0', Code::Digit1 => '1', Code::Digit2 => '2', Code::Digit3 => '3', Code::Digit4 => '4',
+        Code::Digit5 => '5', Code::Digit6 => '6', Code::Digit7 => '7', Code::Digit8 => '8', Code::Digit9 => '9',
+        Code::Minus => '-', Code::Equal => '=',
+        _ => return None,
+    })
 }

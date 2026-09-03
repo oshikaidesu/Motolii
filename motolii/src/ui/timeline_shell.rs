@@ -202,6 +202,33 @@ pub(super) fn timeline_shell(
                         tabindex: "0",
                         role: "option",
                         aria_selected: if is_selected { "true" } else { "false" },
+                        // 鍵の道: Space で選ぶ、Enter で選んで名前を開く(Finder)。
+                        onkeydown: {
+                            let session = session.clone();
+                            let selection = selection.clone();
+                            move |evt: KeyboardEvent| {
+                                let Some(l) = layer else { return };
+                                match evt.key() {
+                                    Key::Enter => {
+                                        evt.stop_propagation();
+                                        selection.set(Some(l));
+                                        let name = session.doc.lock().unwrap().view().attrs(l).ok().flatten().map(|a| a.name).unwrap_or_default();
+                                        session.open_field(FieldAt::Name(l), name);
+                                        *revision.write() += 1;
+                                    }
+                                    Key::Character(c) if c == " " => {
+                                        evt.stop_propagation();
+                                        if evt.modifiers().intersects(Modifiers::META | Modifiers::SUPER) {
+                                            selection.toggle(l);
+                                        } else {
+                                            selection.set(Some(l));
+                                        }
+                                        *revision.write() += 1;
+                                    }
+                                    _ => {}
+                                }
+                            }
+                        },
                         onclick: move |evt| {
                             let Some(l) = layer else { return };
                             if evt.modifiers().intersects(Modifiers::META | Modifiers::SUPER) {

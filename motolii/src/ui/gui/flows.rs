@@ -611,3 +611,27 @@ fn the_composition_sheet_changes_the_frame() {
     assert_eq!((comp.width, comp.height), (1080, 1920));
     assert_eq!(gui.texts("#stagefoot span").last().map(|s| s.contains("1080×1920")), Some(true));
 }
+
+/// File ▸ Export… は sheet を開く。範囲とサマリが読めてから保存先を選ぶ。
+#[test]
+fn export_opens_a_sheet_with_a_summary() {
+    let mut gui = Gui::open();
+    let file = gui.center_of("#menu-file", 0);
+    gui.click(file.0, file.1);
+    let export = gui.center_of_text("#menu-file-list .vitem", "Export…");
+    gui.click(export.0, export.1);
+    assert_eq!(gui.count("#menu-export-list"), 1, "Export… did not open the sheet");
+    let text = gui.texts("#menu-export-list").join(" ");
+    assert!(text.contains("frames") && text.contains("1920×1080"), "{text}");
+}
+
+/// 面の tab は ←→ で切り替わる(tablist の作法)。
+#[test]
+fn tab_arrows_switch_panels() {
+    let mut gui = Gui::open();
+    gui.focus("#dock-tab-Create");
+    gui.key(keyboard_types::Key::ArrowRight, keyboard_types::Modifiers::empty());
+    assert!(gui.classes("#dock-tab-Media").iter().any(|c| c.contains("on")), "→ did not move to Media");
+    gui.key(keyboard_types::Key::End, keyboard_types::Modifiers::empty());
+    assert!(gui.classes("#dock-tab-Colors").iter().any(|c| c.contains("on")), "End did not move to Colors");
+}

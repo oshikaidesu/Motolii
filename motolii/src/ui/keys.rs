@@ -5,7 +5,8 @@ use blitz_dom::Document;
 use dioxus_native::DioxusDocument;
 
 /// 窓に開く欄。1 行は `input`、書き置きは `textarea`。同時に 1 つ(`Session.field`)。
-pub(crate) const FIELD: &str = "input, textarea";
+/// 欄は Session の Field だけ(`.field`)。生の input(枠の設定)は打鍵の道を奪わない。
+pub(crate) const FIELD: &str = "input.field, textarea.field";
 
 /// 欄は許可制。押すまで無く、Enter・Escape・**外を押す**のどれでも欄ごと消える。
 /// 欄を持つ面がそれぞれ閉じ方を書くのではなく、外を押した時は欄へ Cmd+Enter を送る
@@ -106,7 +107,11 @@ pub(crate) fn aim_keystrokes(doc: &mut DioxusDocument) {
         let on_control = field.is_none()
             && focused.is_some_and(|f| {
                 Some(f) != root
-                    && inner.get_node(f).is_some_and(|n| n.is_focussable())
+                    // tabindex="-1"(roving で休んでいる tab)も焦点の持ち主。奪って根へ戻さない。
+                    && inner.get_node(f).is_some_and(|n| {
+                        n.is_focussable()
+                            || n.element_data().is_some_and(|e| e.attr(blitz_dom::local_name!("tabindex")).is_some())
+                    })
                     && root.is_some_and(|r| descends_from(&inner, f, r))
             });
         (if on_control { focused } else { field.or(root) }, on_control)

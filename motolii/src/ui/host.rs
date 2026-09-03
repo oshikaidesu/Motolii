@@ -273,6 +273,13 @@ fn settings_dir() -> Option<std::path::PathBuf> {
 #[derive(Clone)]
 pub(crate) struct Poke(Option<BlitzShellProxy>);
 
+/// 起こす口はどれも同じ物(props の比較用)。
+impl PartialEq for Poke {
+    fn eq(&self, _: &Self) -> bool {
+        true
+    }
+}
+
 impl Poke {
     pub(crate) fn poke(&self) {
         if let Some(proxy) = &self.0 {

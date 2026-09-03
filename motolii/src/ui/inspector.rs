@@ -547,11 +547,22 @@ fn content_row(
         );
     }
     let opener = session.clone();
+    let key_opener = session.clone();
+    let key_current = current.clone();
     rsx!(
         div { class: "prow content-row",
             span { class: "n", "{p.label}" }
             span {
                 class: "v content",
+                tabindex: "0",
+                role: "textbox",
+                onkeydown: move |evt: KeyboardEvent| {
+                    if evt.key() == Key::Enter {
+                        evt.stop_propagation();
+                        key_opener.open_field(FieldAt::Content(layer), key_current.clone());
+                        *revision.write() += 1;
+                    }
+                },
                 ondoubleclick: move |_| {
                     opener.open_field(FieldAt::Content(layer), current.clone());
                     *revision.write() += 1;

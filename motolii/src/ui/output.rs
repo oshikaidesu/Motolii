@@ -10,6 +10,8 @@ use crate::ui::host::Poke;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum ExportPhase {
     Idle,
+    /// 保存先を選んでいる(dialog の間)。二度押しを止める為だけの相。
+    Choosing,
     Preparing,
     Running,
     Cancelling,
@@ -93,22 +95,35 @@ impl ExportController {
         }
     }
 
+    /// 保存先を選び始めた。dialog の間に menu からもう 1 枚開かせない。
+    pub(super) fn choosing(&self) -> bool {
+        let mut state = self.0.lock().unwrap();
+        if matches!(state.status.phase, ExportPhase::Idle | ExportPhase::Completed | ExportPhase::Cancelled | ExportPhase::Failed) {
+            state.status.phase = ExportPhase::Choosing;
+            true
+        } else {
+            false
+        }
+    }
+
+    /// 選ぶのをやめた(dialog を閉じた)。
+    pub(super) fn unchoose(&self) {
+        let mut state = self.0.lock().unwrap();
+        if state.status.phase == ExportPhase::Choosing {
+            state.status.phase = ExportPhase::Idle;
+        }
+    }
+
     pub(super) fn start(
         &self,
         doc: Arc<Mutex<Document>>,
         destination: PathBuf,
+        range: std::ops::Range<i64>,
         poke: Poke,
     ) -> Result<(), String> {
         let cancel = Cancel::new();
         // 母数は最初から出す(音の支度の間 0 / 0 と出さない)。
-        let frames_total = doc
-            .lock()
-            .unwrap()
-            .view()
-            .composition()
-            .ok()
-            .flatten()
-            .map_or(0, |c| c.duration_frames);
+        let frames_total = (range.end - range.start).max(0);
         {
             let mut state = self.0.lock().unwrap();
             if matches!(
@@ -145,13 +160,14 @@ impl ExportController {
             return Err(message);
         }
 
-        self.run(destination, cancel, snapshot, temp_dir, poke);
+        self.run(destination, range, cancel, snapshot, temp_dir, poke);
         Ok(())
     }
 
     fn run(
         &self,
         destination: PathBuf,
+        range: std::ops::Range<i64>,
         cancel: Cancel,
         snapshot: PathBuf,
         temp_dir: PathBuf,
@@ -169,10 +185,11 @@ impl ExportController {
                     out_path: destination,
                     qp0: false,
                 };
-                crate::render::export::export_with_progress(
+                crate::render::export::export_range_with_progress(
                     &mut engine,
                     &document.view(),
                     &job,
+                    range.clone(),
                     &cancel,
                     |progress| {
                         controller.progress(progress);
@@ -274,7 +291,7 @@ pub(super) fn OutputStatus(
         .unwrap_or_default();
     let text = match status.phase {
         ExportPhase::Idle if surface == OutputSurface::Panel => idle_note.unwrap_or_else(|| "Ready to export".to_owned()),
-        ExportPhase::Idle => String::new(),
+        ExportPhase::Idle | ExportPhase::Choosing => String::new(),
         ExportPhase::Preparing => format!("Preparing export · {file_name}"),
         ExportPhase::Running => format!(
             "Exporting {} / {} · {file_name}",

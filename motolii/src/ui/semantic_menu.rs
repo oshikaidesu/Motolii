@@ -9,6 +9,8 @@ pub(super) enum MenuId {
     View,
     /// 枠の設定(⌘K)。
     Composition,
+    /// 書き出しの sheet(範囲・サマリ)。
+    Export,
     Settings,
 }
 
@@ -34,6 +36,7 @@ impl MenuId {
             Self::Edit => "edit",
             Self::View => "view",
             Self::Composition => "composition",
+            Self::Export => "export",
             Self::Settings => "settings",
         }
     }
@@ -202,10 +205,20 @@ pub(super) fn SemanticButton(
     children: Element,
 ) -> Element {
     let a11y_name = aria_label.clone();
+    let items = dioxus_core::try_consume_context::<MenuItems>();
     rsx!(button {
         class: "semantic-button {class}",
         disabled,
         title,
+        onmounted: move |evt: MountedEvent| {
+            if let (Some(mut items), false) = (items, disabled) {
+                let handle = evt.data();
+                let mut handles = items.handles.write();
+                if !handles.iter().any(|h| std::rc::Rc::ptr_eq(h, &handle)) {
+                    handles.push(handle);
+                }
+            }
+        },
         aria_pressed: selected.map(|on| if on { "true" } else { "false" }),
         aria_label,
         onclick: move |evt| onclick.call(evt),
@@ -262,7 +275,7 @@ pub(super) fn Field(
     let name = label.clone();
     if multiline {
         rsx!(if let Some(name) = name.clone() { span { class: "a11y", "{name}" } } textarea {
-            class,
+            class: "{class} field",
             style,
             value: draft.clone(),
             autofocus: "true",
@@ -272,7 +285,7 @@ pub(super) fn Field(
         })
     } else {
         rsx!(if let Some(name) = name.clone() { span { class: "a11y", "{name}" } } input {
-            class,
+            class: "{class} field",
             style,
             value: draft,
             autofocus: "true",

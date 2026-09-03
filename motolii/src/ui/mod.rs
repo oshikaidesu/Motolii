@@ -9,6 +9,7 @@ mod desk;
 mod dock;
 mod dock_hit;
 mod ease;
+mod export_sheet;
 mod ease_model;
 mod ease_widget;
 mod fixture;
