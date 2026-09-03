@@ -6,18 +6,16 @@ use std::sync::{Arc, Mutex};
 use dioxus_native::prelude::*;
 use dioxus_native::CustomWidgetAttr;
 
-use crate::doc::store::{Document, Intent, LayerId, Marker, ShapeNode, StoreError};
-use crate::doc::vector::{Brush, Fill, Rgb};
+use crate::doc::store::{Document, Intent, LayerId, Marker, StoreError};
 use crate::ui::inspector::{write_blend, BLEND_MODES};
 use crate::ui::semantic_menu::{Field, SemanticButton};
-use crate::ui::session::{ColorSlot, DeskState, FieldAt, Focus, OpenField, Session};
+use crate::ui::session::{DeskState, FieldAt, Focus, OpenField, Session};
 
 /// 引き出しは焦点の型に一つ。履歴だけが型を持たない例外。
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub(super) enum Drawer {
     Key,
     Blend,
-    Color,
     Text,
     History,
 }
@@ -25,7 +23,6 @@ pub(super) enum Drawer {
 const DRAWERS: &[(Drawer, &str)] = &[
     (Drawer::Key, "Ease"),
     (Drawer::Blend, "Blend"),
-    (Drawer::Color, "Color"),
     (Drawer::Text, "Text"),
     (Drawer::History, "History"),
 ];
@@ -34,7 +31,8 @@ const DRAWERS: &[(Drawer, &str)] = &[
 fn derived(session: &Session) -> Option<Drawer> {
     match session.live_focus() {
         Some(Focus::Blend(_)) => Some(Drawer::Blend),
-        Some(Focus::Color(_)) => Some(Drawer::Color),
+        // 色は机に出さない。Browser の Colors に常設の輪が居て、焦点に付いて行く(2026-09-03 利用者)。
+        Some(Focus::Color(_)) => None,
         None if !session.selected_keys.lock().unwrap().is_empty() => Some(Drawer::Key),
         None => None,
     }
@@ -342,24 +340,6 @@ fn drawer_body(
                 }),
             }
         }
-        Drawer::Color => {
-            let slot = match session.live_focus() {
-                Some(Focus::Color(slot)) => Some(slot),
-                _ => session.selection.get().and_then(|layer| {
-                    let d = session.doc.lock().unwrap();
-                    let t = crate::doc::store::RationalTime::ZERO;
-                    crate::ui::fixture::inspector_data_from_doc(&d.view(), layer, t)
-                        .colors
-                        .into_iter()
-                        .next()
-                        .map(|row| row.slot)
-                }),
-            };
-            match slot {
-                None => rsx!(div { class: "dempty", "Pick a color" }),
-                Some(slot) => rsx!(ColorDrawer { session: session.clone(), slot, revision }),
-            }
-        }
         Drawer::Text => rsx! {},
         Drawer::History => {
             let (back, forward) = session.doc.lock().unwrap().history_depth();
@@ -384,195 +364,6 @@ fn drawer_body(
     }
 }
 
-/// 色相の輪の直径(scale 100% の px)。面はその 0.6 倍。
-const RING: f64 = 128.0;
-const SQUARE: f64 = RING * 0.6;
-
-/// HSV → RGB。h は度、s・v は 0..1。
-pub(super) fn hsv_to_rgb(h: f64, s: f64, v: f64) -> [f64; 3] {
-    let h = h.rem_euclid(360.0) / 60.0;
-    let c = v * s;
-    let x = c * (1.0 - (h % 2.0 - 1.0).abs());
-    let (r, g, b) = match h as u32 {
-        0 => (c, x, 0.0),
-        1 => (x, c, 0.0),
-        2 => (0.0, c, x),
-        3 => (0.0, x, c),
-        4 => (x, 0.0, c),
-        _ => (c, 0.0, x),
-    };
-    let m = v - c;
-    [r + m, g + m, b + m]
-}
-
-pub(super) fn rgb_to_hsv([r, g, b]: [f64; 3]) -> (f64, f64, f64) {
-    let max = r.max(g).max(b);
-    let min = r.min(g).min(b);
-    let d = max - min;
-    let h = if d <= f64::EPSILON {
-        0.0
-    } else if max == r {
-        60.0 * ((g - b) / d).rem_euclid(6.0)
-    } else if max == g {
-        60.0 * ((b - r) / d + 2.0)
-    } else {
-        60.0 * ((r - g) / d + 4.0)
-    };
-    let s = if max <= f64::EPSILON { 0.0 } else { d / max };
-    (h, s, max)
-}
-
-fn hex_of([r, g, b]: [f64; 3]) -> String {
-    let c = |v: f64| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
-    format!("#{:02x}{:02x}{:02x}", c(r), c(g), c(b))
-}
-
-fn leaf_mut<'a>(nodes: &'a mut [ShapeNode], path: &[usize]) -> Option<&'a mut crate::doc::vector::Shape> {
-    let (first, rest) = path.split_first()?;
-    match nodes.get_mut(*first)? {
-        ShapeNode::Leaf(shape) if rest.is_empty() => Some(shape),
-        ShapeNode::Group(group) => leaf_mut(&mut group.children, rest),
-        ShapeNode::Leaf(_) => None,
-    }
-}
-
-/// 今の色。無ければ黒。
-pub(super) fn read_color(doc: &Arc<Mutex<Document>>, slot: &ColorSlot) -> Option<[f64; 4]> {
-    let d = doc.lock().unwrap();
-    let view = d.view();
-    match slot {
-        ColorSlot::TextFill { layer, style } | ColorSlot::TextStroke { layer, style } => {
-            let text = view.text_document(*layer).ok()??;
-            let found = text.styles.iter().find(|s| s.id == *style)?;
-            match slot {
-                ColorSlot::TextFill { .. } => Some(found.fill),
-                _ => found.stroke_color,
-            }
-        }
-        ColorSlot::ShapeFill { layer, path } => {
-            let mut shapes = view.shapes(*layer).ok()?;
-            let shape = leaf_mut(&mut shapes, path)?;
-            match shape.fill.as_ref().map(|f| &f.brush) {
-                Some(Brush::Solid(rgb)) => Some([rgb.r, rgb.g, rgb.b, 1.0]),
-                _ => None,
-            }
-        }
-    }
-}
-
-/// 色を data へ書き戻す。α は触らない。
-pub(super) fn write_color(
-    doc: &Arc<Mutex<Document>>,
-    slot: &ColorSlot,
-    [r, g, b]: [f64; 3],
-) -> Result<(), StoreError> {
-    let mut d = doc.lock().unwrap();
-    let intent = match slot {
-        ColorSlot::TextFill { layer, style } | ColorSlot::TextStroke { layer, style } => {
-            let Some(mut text) = d.view().text_document(*layer)? else { return Ok(()) };
-            let Some(found) = text.styles.iter_mut().find(|s| s.id == *style) else { return Ok(()) };
-            match slot {
-                ColorSlot::TextFill { .. } => found.fill = [r, g, b, found.fill[3]],
-                _ => {
-                    let a = found.stroke_color.map_or(1.0, |c| c[3]);
-                    found.stroke_color = Some([r, g, b, a]);
-                }
-            }
-            Intent::SetTextDocument { layer: *layer, document: text }
-        }
-        ColorSlot::ShapeFill { layer, path } => {
-            let mut shapes = d.view().shapes(*layer)?;
-            let Some(shape) = leaf_mut(&mut shapes, path) else { return Ok(()) };
-            let mut fill = shape.fill.take().unwrap_or_default();
-            fill.brush = Brush::Solid(Rgb { r, g, b });
-            shape.fill = Some(Fill { ..fill });
-            Intent::SetShapes { layer: *layer, shapes }
-        }
-    };
-    d.apply(intent).map(|_| ())
-}
-
-/// 色の引き出し。輪で色相、面で彩度と明度。掴んでいる間は下書きで、放した時に 1 回だけ書く
-/// (Undo が 1 手になる)。
-#[component]
-fn ColorDrawer(session: Session, slot: ColorSlot, revision: Signal<u32>) -> Element {
-    let mut revision = revision;
-    let current = read_color(&session.doc, &slot).unwrap_or([0.0, 0.0, 0.0, 1.0]);
-    let mut draft: Signal<Option<(f64, f64, f64)>> = use_signal(|| None);
-    let (h, s, v) = draft().unwrap_or_else(|| rgb_to_hsv([current[0], current[1], current[2]]));
-    let k = session.scale.factor();
-    let ring = RING * k;
-    let square = SQUARE * k;
-    let inset = (ring - square) / 2.0;
-    let hue_hex = hex_of(hsv_to_rgb(h, 1.0, 1.0));
-    let shown = hex_of(hsv_to_rgb(h, s, v));
-    let a = h.to_radians();
-    let r = ring / 2.0 - (ring - square) / 4.0;
-    let (mx, my) = (ring / 2.0 + r * a.cos(), ring / 2.0 + r * a.sin());
-    let (sx, sy) = (inset + s * square, inset + (1.0 - v) * square);
-
-    let commit = {
-        let session = session.clone();
-        let slot = slot.clone();
-        move || {
-            let Some((h, s, v)) = draft.write().take() else { return };
-            match write_color(&session.doc, &slot, hsv_to_rgb(h, s, v)) {
-                Ok(()) => *revision.write() += 1,
-                Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
-            }
-        }
-    };
-    let mut pick_hue = move |evt: PointerEvent| {
-        let p = evt.data().element_coordinates();
-        let deg = (p.y - ring / 2.0).atan2(p.x - ring / 2.0).to_degrees().rem_euclid(360.0);
-        draft.set(Some((deg, s, v)));
-    };
-    let mut pick_sv = move |evt: PointerEvent| {
-        let p = evt.data().element_coordinates();
-        let s = (p.x / square).clamp(0.0, 1.0);
-        let v = (1.0 - p.y / square).clamp(0.0, 1.0);
-        draft.set(Some((h, s, v)));
-    };
-    let held = |evt: &PointerEvent| {
-        evt.data()
-            .held_buttons()
-            .contains(dioxus_native::prelude::dioxus_elements::input_data::MouseButton::Primary)
-    };
-    let mut commit_up = commit.clone();
-    let mut commit_far = commit.clone();
-    let mut commit_leave = commit.clone();
-    rsx!(div { class: "color-drawer",
-        onpointerup: move |_| commit_up(),
-        // 引き出しの外へ出たら、そこまでの色で確定(掴んだまま彷徨わせない)。
-        onpointerleave: move |_| commit_leave(),
-        // 外で放して戻ってきた時。押していないのに下書きが残っていれば、それが放した印。
-        onpointermove: move |evt: PointerEvent| {
-            if !held(&evt) && draft.peek().is_some() {
-                commit_far();
-            }
-        },
-        div { class: "color-wheel", style: "width: {ring}px; height: {ring}px;",
-            div {
-                class: "hue-ring",
-                onpointerdown: pick_hue,
-                onpointermove: move |evt: PointerEvent| if held(&evt) { pick_hue(evt) },
-            }
-            div {
-                class: "sv-square",
-                style: "left: {inset}px; top: {inset}px; width: {square}px; height: {square}px; background: linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, {hue_hex});",
-                onpointerdown: pick_sv,
-                onpointermove: move |evt: PointerEvent| if held(&evt) { pick_sv(evt) },
-            }
-            span { class: "color-mark", style: "left: {mx}px; top: {my}px;" }
-            span { class: "color-mark", style: "left: {sx}px; top: {sy}px;" }
-        }
-        div { class: "color-now",
-            span { class: "dot", style: "background: {shown};" }
-            span { "{shown}" }
-        }
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -594,42 +385,6 @@ mod tests {
         assert_eq!(current_marker(&markers, 5.0), Some(1));
         assert_eq!(current_marker(&markers, 8.9), Some(1));
         assert_eq!(current_marker(&markers, 30.0), Some(2));
-    }
-
-    #[test]
-    fn hue_wheel_math_round_trips() {
-        for (h, s, v) in [(0.0, 1.0, 1.0), (120.0, 0.5, 0.75), (300.0, 0.2, 0.1), (0.0, 0.0, 0.5)] {
-            let (h2, s2, v2) = rgb_to_hsv(hsv_to_rgb(h, s, v));
-            let h_ok = s <= f64::EPSILON || (h - h2).abs() < 1e-6;
-            assert!(h_ok && (s - s2).abs() < 1e-6 && (v - v2).abs() < 1e-6, "{h} {s} {v} -> {h2} {s2} {v2}");
-        }
-        assert_eq!(hex_of(hsv_to_rgb(0.0, 1.0, 1.0)), "#ff0000");
-    }
-
-    /// 色は shape / text の data へ戻る。Inspector が見せる行と同じ場所を書く。
-    #[test]
-    fn a_color_written_through_its_slot_is_the_color_the_inspector_shows() {
-        let loaded = crate::ui::fixture::load_fixture();
-        let session = Session::new(loaded.doc, loaded.duration_sec, loaded.ui);
-        let layers = session.doc.lock().unwrap().view().layers();
-        let t = crate::doc::store::RationalTime::ZERO;
-        let mut slots = Vec::new();
-        for layer in layers {
-            let d = session.doc.lock().unwrap();
-            for row in crate::ui::fixture::inspector_data_from_doc(&d.view(), layer, t).colors {
-                slots.push(row.slot);
-            }
-        }
-        assert!(!slots.is_empty(), "the fixture has no colored layer to test against");
-        for slot in slots {
-            write_color(&session.doc, &slot, [0.25, 0.5, 0.75]).unwrap();
-            let back = read_color(&session.doc, &slot).unwrap();
-            assert!((back[0] - 0.25).abs() < 1e-9 && (back[1] - 0.5).abs() < 1e-9 && (back[2] - 0.75).abs() < 1e-9, "{slot:?} {back:?}");
-            let layer = slot.layer();
-            let d = session.doc.lock().unwrap();
-            let rows = crate::ui::fixture::inspector_data_from_doc(&d.view(), layer, t).colors;
-            assert!(rows.iter().any(|r| r.slot == slot && r.hex.starts_with("#3f7fbf")), "{slot:?} {:?}", rows.iter().map(|r| r.hex.clone()).collect::<Vec<_>>());
-        }
     }
 
     #[test]

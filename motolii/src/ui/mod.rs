@@ -2,6 +2,7 @@
 // 編集状態は Document(doc)が持ち、書き込みは Intent 経由のみ。
 pub mod app;
 mod browser;
+mod color;
 mod desk;
 mod dock;
 mod ease;

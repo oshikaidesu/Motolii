@@ -326,6 +326,7 @@ fn BrowserPanel(
 ) -> Element {
     let rail = use_signal(|| Option::<fixture::AssetFamily>::None);
     browser_panel(
+        &session,
         session.doc.clone(),
         session.clock.clone(),
         layer_rows,

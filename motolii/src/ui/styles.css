@@ -1512,12 +1512,13 @@ body {
     border: var(--line) solid var(--bd);
 }
 
-.color-drawer {
+.color-pick {
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: var(--sp2);
     padding: var(--sp2) var(--sp4);
+    border-bottom: var(--line) solid var(--dark);
 }
 
 .color-wheel {

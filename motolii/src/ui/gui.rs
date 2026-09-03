@@ -448,9 +448,9 @@ fn a_note_is_typed_in_a_textarea_and_committed_by_clicking_outside() {
     );
 }
 
-/// 色は Inspector の行を押すと焦点になり、机の輪と面で変わって data へ戻る。
+/// 色は Inspector の行を押すと焦点になり、Browser の Colors の輪と面で変わって data へ戻る。
 #[test]
-fn picking_on_the_desk_wheel_writes_the_focused_color_back() {
+fn picking_on_the_colors_wheel_writes_the_focused_color_back() {
     let mut gui = Gui::open();
     let rows = gui.count(".lsurface");
     let mut found = false;
@@ -465,9 +465,10 @@ fn picking_on_the_desk_wheel_writes_the_focused_color_back() {
     assert!(found, "no layer in the fixture shows a COLOR row");
     let (x, y) = gui.center_of(".prow.color", 0);
     gui.click(x, y);
-    assert_eq!(gui.count(".color-drawer"), 1, "the color focus did not open the desk drawer");
-    let before = gui.session.field();
-    assert!(before.is_none());
+    assert_eq!(gui.count(".desk-drawer"), 0, "the color focus opened a desk drawer");
+    let colors = gui.center_of("#dock-tab-Colors", 0);
+    gui.click(colors.0, colors.1);
+    assert_eq!(gui.count(".color-pick"), 1, "the Colors panel has no wheel");
 
     // 面の右上 = 彩度 1・明度 1 の純色。輪の色相はそのまま。
     let (sx, sy) = gui.size_of_nth(".sv-square", 0);
@@ -482,8 +483,8 @@ fn picking_on_the_desk_wheel_writes_the_focused_color_back() {
         Some(crate::ui::session::Focus::Color(slot)) => slot,
         other => panic!("focus drifted: {other:?}"),
     };
-    let after = crate::ui::desk::read_color(&gui.session.doc, &slot).unwrap();
-    let (_, s, v) = crate::ui::desk::rgb_to_hsv([after[0], after[1], after[2]]);
+    let after = crate::ui::color::read_color(&gui.session.doc, &slot).unwrap();
+    let (_, s, v) = crate::ui::color::rgb_to_hsv([after[0], after[1], after[2]]);
     assert!(s > 0.9 && v > 0.9, "the pick did not reach the document: {after:?}");
 }
 
@@ -679,7 +680,7 @@ fn a_tab_released_over_chrome_stays_put() {
 
 /// 掴んだまま引き出しの外へ出ても、色は置き去りにならない(そこまでの色で確定)。
 #[test]
-fn dragging_out_of_the_color_drawer_commits_the_pick() {
+fn dragging_out_of_the_color_wheel_commits_the_pick() {
     let mut gui = Gui::open();
     let rows = gui.count(".lsurface");
     for i in 1..rows {
@@ -691,6 +692,8 @@ fn dragging_out_of_the_color_drawer_commits_the_pick() {
     }
     let (x, y) = gui.center_of(".prow.color", 0);
     gui.click(x, y);
+    let colors = gui.center_of("#dock-tab-Colors", 0);
+    gui.click(colors.0, colors.1);
     let (sx, sy) = gui.size_of_nth(".sv-square", 0);
     let (cx, cy) = gui.center_of(".sv-square", 0);
     gui.press(cx + sx / 2.0 - 4.0, cy - sy / 2.0 + 4.0);
@@ -701,8 +704,8 @@ fn dragging_out_of_the_color_drawer_commits_the_pick() {
         Some(crate::ui::session::Focus::Color(slot)) => slot,
         other => panic!("focus drifted: {other:?}"),
     };
-    let after = crate::ui::desk::read_color(&gui.session.doc, &slot).unwrap();
-    let (_, s, v) = crate::ui::desk::rgb_to_hsv([after[0], after[1], after[2]]);
+    let after = crate::ui::color::read_color(&gui.session.doc, &slot).unwrap();
+    let (_, s, v) = crate::ui::color::rgb_to_hsv([after[0], after[1], after[2]]);
     assert!(s > 0.9 && v > 0.9, "leaving the drawer lost the pick: {after:?}");
     gui.release(stage.0, stage.1);
 }

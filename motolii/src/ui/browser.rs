@@ -17,7 +17,9 @@ use crate::ui::fixture::ColorSwatch;
 use crate::ui::dock::Panel;
 use crate::ui::fixture::{self, LayerRow};
 use crate::ui::playback::Clock;
+use crate::ui::color::{wheel_slot, ColorWheel};
 use crate::ui::semantic_menu::SemanticButton;
+use crate::ui::session::Session;
 use crate::ui::timeline_widget::TimelineMsg;
 
 #[derive(Clone)]
@@ -512,6 +514,7 @@ fn apply_layer_color(doc: &Arc<Mutex<Document>>, layer: LayerId, rgba: [u8; 4], 
 }
 
 pub(super) fn browser_panel(
+    session: &Session,
     doc: Arc<Mutex<Document>>,
     clock: Arc<Clock>,
     layer_rows: Signal<Vec<LayerRow>>,
@@ -626,6 +629,10 @@ pub(super) fn browser_panel(
                                             if layer.is_some() { "Click to apply to the selected layer" } else { "Select a layer first" }
                                         }
                                     }
+                                }
+                                match wheel_slot(session) {
+                                    Some(slot) => rsx!(ColorWheel { session: session.clone(), slot, revision }),
+                                    None => rsx!(div { class: "rcount", "Pick a layer with a color" }),
                                 }
                                 if has_swatches {
                                     div { class: "tgrid", {cards} }
