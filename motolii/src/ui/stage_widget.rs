@@ -5,8 +5,8 @@ use crate::ui::session::Selection;
 use crate::ui::session::GestureSurface;
 use crate::ui::tokens;
 use anyrender::{PaintRef, PaintScene, ResourceId};
-use blitz_traits::events::UiEvent;
-use dioxus_native::prelude::{Signal, WritableExt};
+use blitz_traits::events::{BlitzWheelDelta, MouseEventButton, UiEvent};
+use dioxus_native::prelude::{ReadableExt, Signal, WritableExt};
 use keyboard_types::Modifiers;
 use crate::doc::store::{property, Document, Intent, LayerId, PropertyId, RationalTime, StoreView, Value};
 use blitz_dom::node::ComputedStyles;
@@ -151,6 +151,11 @@ struct GizmoDrag {
     /// 離した時の座標から差分を取り直すと、掴んでいる間に要素の座標系がずれた分だけ
     /// 勝手に動く。動かしていないなら1画素も動かさない。
     last: Option<(f64, f64)>,
+    /// 最後に見せた値。**離した瞬間の見た目がそのまま確定値** —— 離す直前に
+    /// Shift を放しても、見えていた物と違う値は書かない。
+    preview: Vec<(LayerId, &'static str, Value)>,
+    /// 一緒に選んでいる他の層と、掴んだ時の位置。動かす時は同じ差分で運ぶ。
+    others: Vec<(LayerId, (f64, f64))>,
 }
 
 pub(super) struct StageWidget {
@@ -176,6 +181,9 @@ pub(super) struct StageWidget {
     /// **出す物だけを映す。** 書き出しカメラで撮り、取っ手も枠も描かず、触れない。
     /// Stage が世界を見る場になった以上、出力を確かめる場が別に要る。
     output_only: bool,
+    /// 画面の倍率(%)。#stagefoot が読む。
+    view_pct: Signal<u32>,
+    view_request: Arc<Mutex<Option<crate::ui::session::ViewRequest>>>,
 }
 
 enum State {
@@ -212,6 +220,8 @@ impl StageWidget {
         frame_dim: Arc<std::sync::atomic::AtomicU32>,
         gesture: GestureSurface,
         output_only: bool,
+        view_pct: Signal<u32>,
+        view_request: Arc<Mutex<Option<crate::ui::session::ViewRequest>>>,
     ) -> Self {
         Self {
             state: State::Suspended,
@@ -232,7 +242,42 @@ impl StageWidget {
             seen_cancel: 0,
             cursor: None,
             output_only,
+            view_pct,
+            view_request,
         }
+    }
+
+    /// 一緒に選んでいる他の層の、今の位置。
+    fn companions(&self, primary: LayerId) -> Vec<(LayerId, (f64, f64))> {
+        self.selection
+            .all()
+            .into_iter()
+            .filter(|l| *l != primary)
+            .filter_map(|l| self.selection_geom(l).map(|g| (l, g.position)))
+            .collect()
+    }
+
+    /// 視点への注文を取り込む。Fit は倍率 1・移動 0、100% は `1/base`、段階は指の下でなく中心基準。
+    fn take_view_request(
+        &self,
+        observation: crate::render::engine::ObservationCamera,
+        base: f64,
+    ) -> crate::render::engine::ObservationCamera {
+        let Some(request) = self.view_request.lock().unwrap().take() else { return observation };
+        let mut view = self.view_camera.lock().unwrap();
+        match request {
+            crate::ui::session::ViewRequest::Fit => {
+                view.zoom = 1.0;
+                view.pan = [0.0, 0.0];
+            }
+            crate::ui::session::ViewRequest::Actual => {
+                view.zoom = (1.0 / base.max(1e-9)) as f32;
+            }
+            crate::ui::session::ViewRequest::Step(k) => {
+                view.zoom = (view.zoom * k as f32).clamp(0.05, 40.0);
+            }
+        }
+        *view
     }
 
     fn current_rt(&self) -> RationalTime {
@@ -268,44 +313,18 @@ impl StageWidget {
                     return;
                 }
                 let Some(drag) = self.drag.take() else { return };
-                let Some((cx, cy)) = drag.last else {
+                let _ = (shift, alt);
+                if drag.last.is_none() || drag.preview.is_empty() {
                     println!("PROBE room=write verdict=gizmo-noop reason=never-moved");
                     return;
-                };
-                                                let rt = self.current_rt();
+                }
+                let rt = self.current_rt();
                 let mut doc = self.doc.lock().unwrap();
-                let mut intents = Vec::new();
-                let touched: &[&str] = match drag.mode {
-                    GizmoMode::Move => {
-                        let (dx, dy) = (cx - drag.grab.0, cy - drag.grab.1);
-                        let new_pos = (drag.orig_position.0 + dx, drag.orig_position.1 + dy);
-                        intents.extend(track_intent(&doc, drag.layer, property::POSITION, Value::Vec2([new_pos.0, new_pos.1]), rt));
-                        &[property::POSITION]
-                    }
-                    GizmoMode::ScaleCorner { .. } | GizmoMode::ScaleEdge { .. } => {
-                        let (new_scale, new_pos) =
-                            compute_scale(drag.orig_box, drag.natural, drag.anchor, drag.mode, (cx, cy), shift, alt);
-                        intents.extend(track_intent(&doc, drag.layer, property::SCALE, Value::Vec2([new_scale.0, new_scale.1]), rt));
-                        intents.extend(track_intent(&doc, drag.layer, property::POSITION, Value::Vec2([new_pos.0, new_pos.1]), rt));
-                        &[property::SCALE, property::POSITION]
-                    }
-                    GizmoMode::Rotate => {
-                        let r = compute_rotation(drag.orig_position, drag.grab, (cx, cy), drag.orig_rotation, shift);
-                        intents.extend(track_intent(&doc, drag.layer, property::ROTATION, Value::F64(r), rt));
-                        &[property::ROTATION]
-                    }
-                    GizmoMode::Orbit { axis_x } => {
-                        let (rx, ry) = orbit_axis(drag.orig_rotation_xy, drag.grab, (cx, cy), axis_x, self.fit.s);
-                        intents.extend(track_intent(&doc, drag.layer, property::ROTATION_X, Value::F64(rx), rt));
-                        intents.extend(track_intent(&doc, drag.layer, property::ROTATION_Y, Value::F64(ry), rt));
-                        &[property::ROTATION_X, property::ROTATION_Y]
-                    }
-                    GizmoMode::Depth => {
-                        let z = drag.orig_z + (cy - drag.grab.1);
-                        intents.extend(track_intent(&doc, drag.layer, property::POSITION_Z, Value::F64(z), rt));
-                        &[property::POSITION_Z]
-                    }
-                };
+                let intents: Vec<Intent> = drag
+                    .preview
+                    .iter()
+                    .filter_map(|(layer, name, value)| track_intent(&doc, *layer, name, value.clone(), rt))
+                    .collect();
                 match doc.apply_all(intents) {
                     Ok(_) => {
                         *self.revision.write() += 1;
@@ -313,9 +332,9 @@ impl StageWidget {
                     }
                     Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
                 }
-                for name in touched {
+                for (layer, name, _) in &drag.preview {
                     if let Ok(prop) = PropertyId::new(name) {
-                        doc.clear_transient(drag.layer, &prop);
+                        doc.clear_transient(*layer, &prop);
                     }
                 }
     }
@@ -324,6 +343,11 @@ impl StageWidget {
     fn cancel_drag(&mut self) {
         if let Some(drag) = self.drag.take() {
             let mut doc = self.doc.lock().unwrap();
+            for (layer, name, _) in &drag.preview {
+                if let Ok(prop) = PropertyId::new(name) {
+                    doc.clear_transient(*layer, &prop);
+                }
+            }
             for name in [
                 property::POSITION,
                 property::SCALE,
@@ -631,9 +655,80 @@ fn gizmo_mode_at(
     mode
 }
 
+/// 奥行きの取っ手は中心の**真上** 40px。回転の帯(24px)より外に置いて食い合わない。
+/// 上へ引くと奥へ(+z)—— Blender の Z 軸の矢印と同じ向き。
 fn depth_handle(mx: f64, my: f64, scale: f64) -> (f64, f64) {
-    let d = 24.0 / scale.max(1e-6);
-    (mx - d, my - d)
+    let d = 40.0 / scale.max(1e-6);
+    (mx, my - d)
+}
+
+/// 見せる値。Move は Shift で支配軸に固定し、一緒に選んだ層も同じ差分で運ぶ。
+/// Orbit は掴んだ輪の軸だけ(触っていない属性にキーを生やさない)。
+fn preview_values(
+    drag: &GizmoDrag,
+    cur: (f64, f64),
+    shift: bool,
+    alt: bool,
+    scale: f64,
+) -> Vec<(LayerId, &'static str, Value)> {
+    let (cx, cy) = cur;
+    let mut out = Vec::new();
+    match drag.mode {
+        GizmoMode::Move => {
+            let (mut dx, mut dy) = (cx - drag.grab.0, cy - drag.grab.1);
+            if shift {
+                if dx.abs() >= dy.abs() {
+                    dy = 0.0;
+                } else {
+                    dx = 0.0;
+                }
+            }
+            let p = drag.orig_position;
+            out.push((drag.layer, property::POSITION, Value::Vec2([p.0 + dx, p.1 + dy])));
+            for (layer, p) in &drag.others {
+                out.push((*layer, property::POSITION, Value::Vec2([p.0 + dx, p.1 + dy])));
+            }
+        }
+        GizmoMode::ScaleCorner { .. } | GizmoMode::ScaleEdge { .. } => {
+            let (new_scale, new_pos) =
+                compute_scale(drag.orig_box, drag.natural, drag.anchor, drag.mode, cur, shift, alt);
+            out.push((drag.layer, property::SCALE, Value::Vec2([new_scale.0, new_scale.1])));
+            out.push((drag.layer, property::POSITION, Value::Vec2([new_pos.0, new_pos.1])));
+        }
+        GizmoMode::Rotate => {
+            let r = compute_rotation(drag.orig_position, drag.grab, cur, drag.orig_rotation, shift);
+            out.push((drag.layer, property::ROTATION, Value::F64(r)));
+        }
+        GizmoMode::Orbit { axis_x } => {
+            let (rx, ry) = orbit_axis(drag.orig_rotation_xy, drag.grab, cur, axis_x, scale);
+            if axis_x {
+                out.push((drag.layer, property::ROTATION_X, Value::F64(rx)));
+            } else {
+                out.push((drag.layer, property::ROTATION_Y, Value::F64(ry)));
+            }
+        }
+        GizmoMode::Depth => {
+            out.push((drag.layer, property::POSITION_Z, Value::F64(drag.orig_z + (drag.grab.1 - cy))));
+        }
+    }
+    out
+}
+
+/// 矢印で運ぶ。今の時刻の位置に差分を足して置く(キーが在れば打つ、無ければ値を置く)。
+pub(super) fn nudge_intents(doc: &Document, layers: &[LayerId], by: (f64, f64), t_sec: f64) -> Vec<Intent> {
+    let rt = RationalTime::try_new((t_sec * 3000.0) as i64, 3000).unwrap_or(RationalTime::ZERO);
+    let Ok(prop) = PropertyId::new(property::POSITION) else { return Vec::new() };
+    let view = doc.view();
+    layers
+        .iter()
+        .filter_map(|layer| {
+            let (x, y) = match view.value_at(*layer, &prop, rt).ok().flatten() {
+                Some(Value::Vec2([x, y])) => (x, y),
+                _ => (0.0, 0.0),
+            };
+            track_intent(doc, *layer, property::POSITION, Value::Vec2([x + by.0, y + by.1]), rt)
+        })
+        .collect()
 }
 
 /// 向きの輪は**箱の外**に置く。中は動かすための場所なので明け渡す。
@@ -761,10 +856,24 @@ impl Widget for StageWidget {
         }
         match event {
             UiEvent::Wheel(wheel) => {
-                let dy = match wheel.delta {
-                    blitz_traits::events::BlitzWheelDelta::Pixels(_, y) => y,
-                    blitz_traits::events::BlitzWheelDelta::Lines(_, y) => y * 20.0,
+                let (dx, dy) = match wheel.delta {
+                    BlitzWheelDelta::Pixels(x, y) => (x, y),
+                    BlitzWheelDelta::Lines(x, y) => (x * 20.0, y * 20.0),
                 };
+                // 素のホイール(2 本指)は**滑らせる**。寄るのは ⌘ / Ctrl 付き —— Figma・Nuke・Blender。
+                let zooming = wheel
+                    .mods
+                    .intersects(Modifiers::META | Modifiers::SUPER | Modifiers::CONTROL);
+                if !zooming {
+                    if dx == 0.0 && dy == 0.0 {
+                        return;
+                    }
+                    let mut view = self.view_camera.lock().unwrap();
+                    let s = (self.fit.base * view.zoom as f64).max(1e-9);
+                    view.pan[0] += (dx as f64 / s) as f32;
+                    view.pan[1] += (dy as f64 / s) as f32;
+                    return;
+                }
                 if dy == 0.0 {
                     return;
                 }
@@ -782,6 +891,23 @@ impl Widget for StageWidget {
             }
             UiEvent::PointerDown(p) => {
                 let (cx, cy) = self.fit.to_comp(p.element.x as f64, p.element.y as f64);
+                match p.button {
+                    // 中ボタンはどこを押しても視点を滑らせる(Blender・Nuke・Figma)。
+                    MouseEventButton::Auxiliary => {
+                        let pan = self.view_camera.lock().unwrap().pan;
+                        self.gesture.begin();
+                        self.camera_drag = Some(CameraDrag {
+                            grab: (cx, cy),
+                            orig_center: (pan[0] as f64, pan[1] as f64),
+                            export_frame: false,
+                            last: None,
+                            grab_image: self.fit.image_at(p.element.x as f64, p.element.y as f64),
+                        });
+                        return;
+                    }
+                    MouseEventButton::Main => {}
+                    _ => return,
+                }
                 if let Some(layer) = self.selection.get() {
                     if let Some(geom) = self.selection_geom(layer) {
                         // 傾いた層は台形に見える。**見えている所で掴めるように**、
@@ -818,6 +944,8 @@ impl Widget for StageWidget {
                                 orig_box: geom.box_,
                                 fit_z: geom.z,
                                 last: None,
+                                preview: Vec::new(),
+                                others: self.companions(layer),
                             });
                             return;
                         }
@@ -868,6 +996,8 @@ impl Widget for StageWidget {
                                 orig_box: geom.box_,
                                 fit_z: geom.z,
                                 last: None,
+                                preview: Vec::new(),
+                                others: self.companions(layer),
                             });
                         }
                     }
@@ -946,40 +1076,16 @@ impl Widget for StageWidget {
                 let Some(drag) = self.drag.as_ref() else { return };
                 let shift = p.mods.contains(Modifiers::SHIFT);
                 let alt = p.mods.contains(Modifiers::ALT);
+                let preview = preview_values(drag, (cx, cy), shift, alt, self.fit.s);
                 let mut doc = self.doc.lock().unwrap();
-                match drag.mode {
-                    GizmoMode::Move => {
-                        let Ok(position_prop) = PropertyId::new(property::POSITION) else { return };
-                        let (dx, dy) = (cx - drag.grab.0, cy - drag.grab.1);
-                        let new_pos = (drag.orig_position.0 + dx, drag.orig_position.1 + dy);
-                        doc.set_transient(drag.layer, position_prop, Value::Vec2([new_pos.0, new_pos.1]));
+                for (layer, name, value) in &preview {
+                    if let Ok(prop) = PropertyId::new(name) {
+                        doc.set_transient(*layer, prop, value.clone());
                     }
-                    GizmoMode::ScaleCorner { .. } | GizmoMode::ScaleEdge { .. } => {
-                        let Ok(scale_prop) = PropertyId::new(property::SCALE) else { return };
-                        let Ok(position_prop) = PropertyId::new(property::POSITION) else { return };
-                        let (new_scale, new_pos) =
-                            compute_scale(drag.orig_box, drag.natural, drag.anchor, drag.mode, (cx, cy), shift, alt);
-                        doc.set_transient(drag.layer, scale_prop, Value::Vec2([new_scale.0, new_scale.1]));
-                        doc.set_transient(drag.layer, position_prop, Value::Vec2([new_pos.0, new_pos.1]));
-                    }
-                    GizmoMode::Rotate => {
-                        let Ok(rotation_prop) = PropertyId::new(property::ROTATION) else { return };
-                        let r = compute_rotation(drag.orig_position, drag.grab, (cx, cy), drag.orig_rotation, shift);
-                        doc.set_transient(drag.layer, rotation_prop, Value::F64(r));
-                    }
-                    GizmoMode::Orbit { axis_x } => {
-                        let (rx, ry) = orbit_axis(drag.orig_rotation_xy, drag.grab, (cx, cy), axis_x, self.fit.s);
-                        if let Ok(prop) = PropertyId::new(property::ROTATION_X) {
-                            doc.set_transient(drag.layer, prop, Value::F64(rx));
-                        }
-                        if let Ok(prop) = PropertyId::new(property::ROTATION_Y) {
-                            doc.set_transient(drag.layer, prop, Value::F64(ry));
-                        }
-                    }
-                    GizmoMode::Depth => {
-                        let Ok(prop) = PropertyId::new(property::POSITION_Z) else { return };
-                        doc.set_transient(drag.layer, prop, Value::F64(drag.orig_z + (cy - drag.grab.1)));
-                    }
+                }
+                drop(doc);
+                if let Some(drag) = self.drag.as_mut() {
+                    drag.preview = preview;
                 }
             }
             UiEvent::PointerUp(p) => {
@@ -1148,14 +1254,19 @@ impl Widget for StageWidget {
         // 窓に収める倍率。ここへ**視点の拡大**を掛け、**視点の移動**を足す。
         // 視点は撮れた絵に対する2Dの動きで、カメラには触らない。
         let base = (w / cw).min(h / ch);
+        let k = if scale > 0.0 { scale } else { 1.0 };
+        let observation = self.take_view_request(observation, base / k);
         let s = base * observation.zoom as f64;
+        let pct = (base / k * observation.zoom as f64 * 100.0).round() as u32;
+        if *self.view_pct.peek() != pct {
+            self.view_pct.set(pct);
+        }
         let (fw, fh) = (cw * s, ch * s);
         let (fx, fy) = (
             (w - fw) * 0.5 - observation.pan[0] as f64 * s,
             (h - fh) * 0.5 - observation.pan[1] as f64 * s,
         );
 
-        let k = if scale > 0.0 { scale } else { 1.0 };
         let comp = crate::doc::core::CompSpec {
             width: target.width(),
             height: target.height(),
@@ -1320,8 +1431,8 @@ impl Widget for StageWidget {
                 outline.close_path();
                 scene.stroke(&stroke, Affine::IDENTITY, PaintRef::Solid(c(tokens::ACCENT)), None, &outline);
 
-                // 四隅と辺の取っ手
-                let hs = 6.0;
+                // 四隅と辺の取っ手。**掴める大きさをそのまま描く**(gizmo_mode_at と同じ式)。
+                let hs = (16.0_f64).min(bw.abs() * self.fit.s * 0.5).min(bh.abs() * self.fit.s * 0.5).max(3.0);
                 let (mx, my) = (bx + bw * 0.5, by + bh * 0.5);
                 for (lx, ly) in [
                     (bx, by), (bx + bw, by), (bx, by + bh), (bx + bw, by + bh),
@@ -1563,5 +1674,63 @@ mod gizmo_reach {
                 screen_w, screen_h, scale
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod previews {
+    use super::*;
+
+    fn drag(mode: GizmoMode) -> GizmoDrag {
+        GizmoDrag {
+            layer: LayerId(1),
+            mode,
+            grab: (100.0, 100.0),
+            orig_position: (100.0, 100.0),
+            orig_rotation: 0.0,
+            orig_rotation_xy: (0.0, 0.0),
+            orig_z: 0.0,
+            anchor: (0.5, 0.5),
+            natural: (200.0, 100.0),
+            orig_box: (0.0, 50.0, 200.0, 100.0),
+            fit_z: 0.0,
+            last: None,
+            preview: Vec::new(),
+            others: vec![(LayerId(2), (300.0, 300.0))],
+        }
+    }
+
+    /// Shift は支配軸に固定し、一緒に選んだ層も同じ差分で動く。
+    #[test]
+    fn shift_locks_the_dominant_axis_and_carries_companions() {
+        let out = preview_values(&drag(GizmoMode::Move), (130.0, 108.0), true, false, 1.0);
+        assert_eq!(out[0], (LayerId(1), property::POSITION, Value::Vec2([130.0, 100.0])));
+        assert_eq!(out[1], (LayerId(2), property::POSITION, Value::Vec2([330.0, 300.0])));
+    }
+
+    /// 軌道は掴んだ輪の軸だけ書く。上へ引くと奥へ。
+    #[test]
+    fn orbit_touches_one_axis_and_depth_goes_up() {
+        let out = preview_values(&drag(GizmoMode::Orbit { axis_x: true }), (100.0, 140.0), false, false, 1.0);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].1, property::ROTATION_X);
+        let out = preview_values(&drag(GizmoMode::Depth), (100.0, 60.0), false, false, 1.0);
+        assert_eq!(out[0], (LayerId(1), property::POSITION_Z, Value::F64(40.0)));
+    }
+
+    /// 矢印は今の位置に差分を足す。
+    #[test]
+    fn nudge_adds_to_the_current_position() {
+        let loaded = crate::ui::fixture::load_fixture();
+        let mut doc = loaded.doc;
+        let layer = doc.view().layers()[0];
+        let prop = PropertyId::new(property::POSITION).unwrap();
+        let before = match doc.view().value_at(layer, &prop, RationalTime::ZERO).unwrap() {
+            Some(Value::Vec2(v)) => v,
+            _ => [0.0, 0.0],
+        };
+        doc.apply_all(nudge_intents(&doc, &[layer], (10.0, -1.0), 0.0)).unwrap();
+        let after = doc.view().value_at(layer, &prop, RationalTime::ZERO).unwrap();
+        assert_eq!(after, Some(Value::Vec2([before[0] + 10.0, before[1] - 1.0])));
     }
 }

@@ -499,16 +499,22 @@ fn a_focused_button_is_pressed_by_enter_and_keeps_focus() {
     gui.key(keyboard_types::Key::Escape, keyboard_types::Modifiers::empty());
 }
 
-/// Cmd+= / Cmd+- / Cmd+0 で窓の文字の大きさ。Shift+↓ で選択が伸びる。
+/// Cmd+= / Cmd+- / Cmd+0 / Cmd+1 は**視点**の倍率(AE・Figma・Nuke)。窓の文字は Settings の ±。
+/// Shift+↓ で選択が伸びる。
 #[test]
-fn scale_and_extend_selection_have_keys() {
+fn view_zoom_and_extend_selection_have_keys() {
+    use crate::ui::session::ViewRequest;
     let mut gui = Gui::open();
     let (x, y) = gui.center_of("#stage", 0);
     gui.click(x, y);
+    let request = |gui: &Gui| *gui.session.view_request.lock().unwrap();
     gui.key(keyboard_types::Key::Character("=".into()), keyboard_types::Modifiers::SUPER);
-    assert_eq!(gui.session.scale.percent(), 105);
+    assert_eq!(request(&gui), Some(ViewRequest::Step(1.25)));
     gui.key(keyboard_types::Key::Character("0".into()), keyboard_types::Modifiers::SUPER);
-    assert_eq!(gui.session.scale.percent(), 100);
+    assert_eq!(request(&gui), Some(ViewRequest::Fit));
+    gui.key(keyboard_types::Key::Character("1".into()), keyboard_types::Modifiers::SUPER);
+    assert_eq!(request(&gui), Some(ViewRequest::Actual));
+    assert_eq!(gui.session.scale.percent(), 100, "the view keys must not touch the interface scale");
 
     let (x, y) = gui.center_of(".lsurface", 1);
     gui.click(x, y);

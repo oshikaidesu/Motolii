@@ -299,6 +299,7 @@ fn StagePanel(
     revision: Signal<u32>,
     comp_line: String,
 ) -> Element {
+    let view_pct = use_signal(|| 100u32);
     let attr = use_hook(|| {
         CustomWidgetAttr::new(StageWidget::new(
             session.clock.clone(),
@@ -312,6 +313,8 @@ fn StagePanel(
             session.frame_dim.clone(),
             session.gesture.clone(),
             false,
+            view_pct,
+            session.view_request.clone(),
         ))
     });
     let rings = session.rings.clone();
@@ -333,7 +336,20 @@ fn StagePanel(
                         revision += 1;
                     },
                     title: "3D handles",
-                    "◎"
+                    "3D"
+                }
+                SemanticButton {
+                    class: "chip zoomchip",
+                    aria_label: "View zoom {view_pct()}% · fit to window",
+                    title: "Fit to window · ⌘0",
+                    onclick: {
+                        let request = session.view_request.clone();
+                        move |_| {
+                            *request.lock().unwrap() = Some(crate::ui::session::ViewRequest::Fit);
+                            revision += 1;
+                        }
+                    },
+                    "{view_pct()}%"
                 }
                 span { "{comp_line}" }
             }
@@ -959,7 +975,6 @@ pub fn app() -> Element {
                 let session = session.clone();
                 let window = window.clone();
                 let mut choice = panes.inspector_choice;
-                let mut scale_pct = panes.scale_pct;
                 let selected_sig = panes.selected;
                 move |evt| {
                     if evt.key() == Key::Escape && tab_drag.peek().is_some() {
@@ -1385,10 +1400,21 @@ pub fn app() -> Element {
                                 *revision.write() += 1;
                             }
                         }
-                        Intent::UiScale(by) => {
-                            let next = if by == 0 { 100 } else { (scale_pct() as i32 + by).clamp(50, 200) as u32 };
-                            session.scale.set_percent(next);
-                            scale_pct.set(session.scale.percent());
+                        Intent::View(request) => {
+                            *session.view_request.lock().unwrap() = Some(request);
+                            *revision.write() += 1;
+                        }
+                        Intent::Nudge(dx, dy) => {
+                            let targets = session.editable_selection();
+                            if targets.is_empty() {
+                                return;
+                            }
+                            let mut d = doc.lock().unwrap();
+                            let intents = crate::ui::stage_widget::nudge_intents(&d, &targets, (dx, dy), clock.now_sec());
+                            match d.apply_all(intents) {
+                                Ok(_) => *revision.write() += 1,
+                                Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
+                            }
                         }
                         Intent::SelectAll => {
                             let layers = doc.lock().unwrap().view().layers();

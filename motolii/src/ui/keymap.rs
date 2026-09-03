@@ -44,8 +44,10 @@ pub(super) enum Intent {
     OpenProject,
     /// 選んだ層の名前を開く。Enter(AE・Finder)。
     Rename,
-    /// 窓の文字の大きさ。0 は 100% へ戻す(Cmd+= / Cmd+- / Cmd+0)。
-    UiScale(i32),
+    /// 視点(⌘0 = Fit、⌘1 = 100%、⌘= / ⌘− = 段階)。AE・Figma・Nuke の指。
+    View(crate::ui::session::ViewRequest),
+    /// 選んだ層を 1px(Shift で 10px)動かす。Alt+矢印 —— 素の矢印は時間の物。
+    Nudge(f64, f64),
     /// 選択を伸ばす(Shift+↑↓、Finder・AE)。
     SelectExtend(i32),
 }
@@ -331,9 +333,18 @@ const BINDINGS: &[Binding] = &[
     Binding { key: KeySpec::Char('s'), cmd: true, shift: true, alt: false, intent: Intent::SaveAs },
     Binding { key: KeySpec::Char('n'), cmd: true, shift: false, alt: false, intent: Intent::NewProject },
     Binding { key: KeySpec::Char('o'), cmd: true, shift: false, alt: false, intent: Intent::OpenProject },
-    Binding { key: KeySpec::Char('='), cmd: true, shift: false, alt: false, intent: Intent::UiScale(5) },
-    Binding { key: KeySpec::Char('-'), cmd: true, shift: false, alt: false, intent: Intent::UiScale(-5) },
-    Binding { key: KeySpec::Char('0'), cmd: true, shift: false, alt: false, intent: Intent::UiScale(0) },
+    Binding { key: KeySpec::Char('='), cmd: true, shift: false, alt: false, intent: Intent::View(crate::ui::session::ViewRequest::Step(1.25)) },
+    Binding { key: KeySpec::Char('-'), cmd: true, shift: false, alt: false, intent: Intent::View(crate::ui::session::ViewRequest::Step(0.8)) },
+    Binding { key: KeySpec::Char('0'), cmd: true, shift: false, alt: false, intent: Intent::View(crate::ui::session::ViewRequest::Fit) },
+    Binding { key: KeySpec::Char('1'), cmd: true, shift: false, alt: false, intent: Intent::View(crate::ui::session::ViewRequest::Actual) },
+    Binding { key: KeySpec::ArrowLeft, cmd: false, shift: false, alt: true, intent: Intent::Nudge(-1.0, 0.0) },
+    Binding { key: KeySpec::ArrowRight, cmd: false, shift: false, alt: true, intent: Intent::Nudge(1.0, 0.0) },
+    Binding { key: KeySpec::ArrowUp, cmd: false, shift: false, alt: true, intent: Intent::Nudge(0.0, -1.0) },
+    Binding { key: KeySpec::ArrowDown, cmd: false, shift: false, alt: true, intent: Intent::Nudge(0.0, 1.0) },
+    Binding { key: KeySpec::ArrowLeft, cmd: false, shift: true, alt: true, intent: Intent::Nudge(-10.0, 0.0) },
+    Binding { key: KeySpec::ArrowRight, cmd: false, shift: true, alt: true, intent: Intent::Nudge(10.0, 0.0) },
+    Binding { key: KeySpec::ArrowUp, cmd: false, shift: true, alt: true, intent: Intent::Nudge(0.0, -10.0) },
+    Binding { key: KeySpec::ArrowDown, cmd: false, shift: true, alt: true, intent: Intent::Nudge(0.0, 10.0) },
     Binding { key: KeySpec::ArrowUp, cmd: false, shift: true, alt: false, intent: Intent::SelectExtend(-1) },
     Binding { key: KeySpec::ArrowDown, cmd: false, shift: true, alt: false, intent: Intent::SelectExtend(1) },
     // マーカーは NLE の M でも打てる(AE のテンキー `*` と並べる)。

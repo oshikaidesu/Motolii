@@ -851,7 +851,7 @@ impl Widget for TimelineWidget {
                 // 摘まみ(Ctrl)・主の修飾(⌘)・目盛の帯、どれでも広がる。
                 // 1つしか道が無いと**見つけられない手**になる。
                 let primary = if cfg!(target_os = "macos") {
-                    wheel.mods.contains(Modifiers::META)
+                    wheel.mods.intersects(Modifiers::META | Modifiers::SUPER)
                 } else {
                     wheel.mods.contains(Modifiers::CONTROL)
                 };
@@ -938,7 +938,7 @@ impl Widget for TimelineWidget {
                     t, x, y, hit
                 );
                 if let Some((row_ix, key_ix)) = hit {
-                    let add = p.mods.contains(Modifiers::META) || p.mods.contains(Modifiers::SHIFT);
+                    let add = p.mods.intersects(Modifiers::META | Modifiers::SUPER) || p.mods.contains(Modifiers::SHIFT);
                     match (add, self.selected.iter().position(|k| *k == (row_ix, key_ix))) {
                         (true, Some(at)) => {
                             self.selected.remove(at);
@@ -978,7 +978,7 @@ impl Widget for TimelineWidget {
                     if let (Some(selection), Some(mirror)) =
                         (self.selection.as_ref(), self.selected_mirror.as_mut())
                     {
-                        if p.mods.contains(Modifiers::META) {
+                        if p.mods.intersects(Modifiers::META | Modifiers::SUPER) {
                             if let Some(l) = layer {
                                 selection.toggle(l);
                             }
@@ -1026,7 +1026,7 @@ impl Widget for TimelineWidget {
                     }
                 } else {
                     // 何も無い所からのドラッグは囲って選ぶ。
-                    if !p.mods.contains(Modifiers::META) && !p.mods.contains(Modifiers::SHIFT) {
+                    if !p.mods.intersects(Modifiers::META | Modifiers::SUPER) && !p.mods.contains(Modifiers::SHIFT) {
                         self.selected.clear();
                         self.publish_keys();
                     }

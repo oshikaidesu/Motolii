@@ -1097,8 +1097,23 @@ fn rolling_the_wheel_up_moves_the_view_closer() {
     let mut gui = Gui::open();
     let (x, y) = gui.center_of("#stage", 0);
 
+    // 素のホイールは滑らせる(Figma・Nuke・Blender)。倍率は動かない。
     let before = gui_zoom(&gui);
+    let pan_before = gui.session.view_camera.lock().unwrap().pan;
     gui.h.wheel_at(x, y, 0.0, 40.0);
+    gui.settle();
+    assert_eq!(gui_zoom(&gui), before, "a plain wheel must scroll, not zoom");
+    assert_ne!(gui.session.view_camera.lock().unwrap().pan, pan_before, "a plain wheel did not scroll");
+
+    // ⌘ を添えると寄る。上へ回すと近づく。
+    let wheel = blitz_traits::events::BlitzWheelEvent {
+        delta: blitz_traits::events::BlitzWheelDelta::Pixels(0.0, 40.0),
+        coords: PointerCoords { page_x: x, page_y: y, screen_x: x, screen_y: y, client_x: x, client_y: y },
+        buttons: MouseEventButtons::empty(),
+        mods: keyboard_types::Modifiers::SUPER,
+        element: Default::default(),
+    };
+    gui.h.dispatch(UiEvent::Wheel(wheel));
     gui.settle();
     let after = gui_zoom(&gui);
 

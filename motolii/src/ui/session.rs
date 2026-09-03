@@ -171,6 +171,9 @@ pub(super) struct Session {
     pub curve_clip: Arc<Mutex<Option<crate::doc::store::Interp>>>,
     /// 見る側のカメラ(User View)。**Document には入らない** — 書き出しには出ない。
     pub view_camera: Arc<Mutex<crate::render::engine::ObservationCamera>>,
+    /// 視点への注文(Fit / 100% / 段階)。Stage が次の描画で取り込む —— 100% は
+    /// 窓に収める倍率を知っている Stage にしか解けない。
+    pub view_request: Arc<Mutex<Option<ViewRequest>>>,
     /// 今どのキーを掴んでいるか。イージングを触る口が要る(Document には入らない)。
     pub selected_keys: Arc<Mutex<Vec<KeySel>>>,
     /// 今どの値に手が触れているか。Inspector が行を光らせて書き、机が覗く。
@@ -198,6 +201,17 @@ pub(super) enum DeskState {
 }
 
 /// 焦点の型。机の引き出しは型に一つで、機能名では増やさない。
+/// 視点の注文。
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub(super) enum ViewRequest {
+    /// 窓に収める(⌘0)。
+    Fit,
+    /// 画素等倍(⌘1)。
+    Actual,
+    /// 段階で寄る / 引く(⌘= / ⌘−)。
+    Step(f64),
+}
+
 #[derive(Clone, PartialEq, Debug)]
 pub(super) enum Focus {
     Blend(LayerId),
@@ -287,6 +301,7 @@ impl Session {
             scrub: Arc::new(Mutex::new(None)),
             panel_ask: Arc::new(Mutex::new(None)),
             view_camera: Arc::new(Mutex::new(Default::default())),
+            view_request: Arc::new(Mutex::new(None)),
             rings: Arc::new(std::sync::atomic::AtomicBool::new(true)),
             frame_dim: Arc::new(std::sync::atomic::AtomicU32::new(75)),
             gesture: GestureSurface::default(),
