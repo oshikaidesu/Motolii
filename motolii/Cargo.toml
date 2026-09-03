@@ -24,6 +24,8 @@ blitz-dom = { workspace = true }
 blitz-paint = { workspace = true }
 blitz-traits = { workspace = true }
 blitz-shell = { workspace = true }
+accesskit = "0.24.1"
+accesskit_xplat = { git = "https://github.com/DioxusLabs/blitz", rev = "64eb27853aa2672486b7edf825fb044be78c9db3" }
 keyboard-types = { workspace = true }
 anyrender = { workspace = true }
 wgpu_context = { workspace = true }

@@ -491,3 +491,34 @@
 - ☐ PD6 面 8 → 5(Create/Media/Effects/Colors は 1 枚 Library の rail)、Export は File に畳む、Settings は ⌘,
 - ☐ PD7 ◇/◆/⌥◆ が 1 グリフに 3 操作(AE は stopwatch と navigator の 2 部品)、菱形が歌詞と transform を混ぜる(歌詞は旗で)
 - ☐ PD8 telemetry 5 つ(first_layer_ms・first_export_ok・reopen・undo_after_intent・content_keys)
+
+## 第 7 波 Q2: QA の再点検(午後の差分 c3162ce1..HEAD)
+- ☐ Q2-1 α の順: 効果の出力(Rgba8Unorm/Rgba16Float)は乗算済みなのに SeparateAlpha が付いて α が 2 回掛かる、効果の入力が非乗算のまま畳み込まれ透明部の黒が滲む、Linear sampler が非乗算を補間して縁が灰になる — 実窓で「縮小した白文字」「blur を載せた半透明層」を撮ってから閉じる
+- ☑ Q2-2(終了時の 1 回は残) 自動保存が未保存の作品(project_path None)に効かない、doc.lock を握ったまま disk へ書く、報せが println!、終了時に走らない
+- ☑ Q2-3 Export が Choosing で固着する(dialog 中に窓を閉じると unchoose が来ない)、status が空、復帰の口が無い
+- ☑ Q2-4 comp_line が fps.num() を出す(29.97 → 30000fps)。fps の整形が 3 箇所
+- ☑ Q2-5 Composition sheet の生 input(.csheet-in)が .field でないので is_typing が false → p/s/r/t/a が発火、外押しで確定しない
+- ☑ Q2-6 LAST_CONTROL が別窓・親の作り直しで誤爆する(doc の同一性と id の照合が無い)
+- ☑ Q2-7 歌詞キーが 1 つの層: 層を動かしても切替時刻が置き去り、◇ を掴んでも Delete も効かない、記号が ◇ なのに押すと「消せない」
+- ☑ Q2-8 Media を落とすと doc.lock の中で ffprobe(process spawn)
+- ☑ Q2-9 requires_redraw に時刻の項が無い(別窓の Stage が擦りで凍る)、drop 時の stale 未解除
+- ☑ Q2-10 argv の .rrd は macOS の open/Finder では届かない、load の失敗が黙る
+- ☐ Q2-11 窓の枠が display の外へ復元し得る、⌘Q で保存されない、主窓を title で判定
+- ☑ Q2-12 recents() が UI 糸で exists() を叩き、消えた path を永久に捨てる
+- ☑ Q2-13 Field の use_drop が他人の欄を閉じ得る
+- ☑ Q2-14a wrap_width の既定が canvas 幅 = 全文字層が折り返す
+- ✗ Q2-14b 縁取り 2 倍は stroke_over_fill=false の時だけ — 上に置く縁取りは中心線で内側半分が fill を覆う(AE の "Stroke over fill" と同じ)。外側だけにするのは別の機能
+- ☑ Q2-14c 使用中の素材の × の理由が tmeta に無い
+- ☑ Q2-14d 「Used in this composition」の下に既定パレットが並ぶ、dedup が α を無視
+- ☑ Q2-14e 札の title が単数(全選択層に効く)
+- ☑ Q2-14f 複数選択の帯 drag で 0 に当たった層だけ縮む(群で clamp)
+- ☑ Q2-14g app.rs の lock().unwrap(); drop() の残骸 2 箇所
+- ☑ Q2-14h SetComposition が noted を通らない
+- ☑ Q2-14i memo 鍵 format!("{:?}/{}") が 2 箇所
+- ☑ Q2-14j format_duration(20.999) → "0:201.00"
+- ☐ Q2-14k menu の ↑↓ が mount 順(条件付き項目が末尾)
+- ☑ Q2-14l ⌥⌘K の "˚" 直書き(code_to_char を通っていない)
+- ☑ Q2-14m blur.wgsl の tap 間隔 radius*0.25 固定(大半径で 9 枚に割れる、小半径で素通し)
+- ☐ Q2-14n DeskState::Shut の payload が死にデータ
+- ☑ Q2-14o step_focus_back が is_typing を見ない
+- ☐ Q2-15 試験の穴: 自動保存・argv・window_frame・recents・unpremultiply・blur・content move/delete・text の 3 振る舞い・Choosing・requires_redraw・comp_line・LAST_CONTROL

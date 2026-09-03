@@ -252,8 +252,12 @@ pub(super) fn Field(
     // 消えた時に Session の欄も畳む —— 残すと窓の打鍵が全部「欄へ」で死ぬ。
     {
         let session = session.clone();
+        // 自分が担当した欄だけ畳む(升を移した再 render で、開いたばかりの別の欄を畳まない)。
+        let mine = use_hook(|| session.field().map(|f| f.at));
         use_drop(move || {
-            session.close_field();
+            if mine.is_some() && session.field().map(|f| f.at) == mine {
+                session.close_field();
+            }
         });
     }
     let edit = session.clone();

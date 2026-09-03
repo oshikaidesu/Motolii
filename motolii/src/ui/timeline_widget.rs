@@ -122,7 +122,7 @@ fn keyframe_shift_intents(
     }
     // 文字の切替(ContentTrack)は property でなく data。層と一緒に動かさないと歌詞の時刻だけ置き去りになる。
     if let Some(mut text) = view.text_document(layer)? {
-        if text.content.keys().len() > 1 {
+        if !text.content.keys().is_empty() {
             let mut moved = crate::doc::store::ContentTrack::new();
             for key in text.content.keys() {
                 let t = key.t.try_add(shift).map_err(|e| StoreError::Property(e.to_string()))?;
@@ -192,7 +192,7 @@ fn content_track_intent(
     map: impl Fn(RationalTime) -> Option<RationalTime>,
 ) -> Result<Option<Intent>, StoreError> {
     let Some(mut text) = view.text_document(layer)? else { return Ok(None) };
-    if text.content.keys().len() <= 1 {
+    if text.content.keys().is_empty() {
         return Ok(None);
     }
     let mut next = crate::doc::store::ContentTrack::new();
@@ -562,9 +562,21 @@ impl TimelineWidget {
                         }
                         return;
                     }
+                    // 群で 0 に当てる — 一番早い層が 0 で止まったら全員止まる(相対位置を壊さない)。
+                    let group_floor = self
+                        .selection
+                        .as_ref()
+                        .map(|s| s.all())
+                        .unwrap_or_default()
+                        .into_iter()
+                        .filter(|l| *l != drag.layer)
+                        .filter(|l| !doc.view().attrs(*l).ok().flatten().is_some_and(|a| a.locked))
+                        .filter_map(|l| doc.view().meta(l).ok().flatten().map(|m| m.timing.start))
+                        .min()
+                        .unwrap_or(i64::MAX);
                     let timing = match drag.mode {
                         DragMode::Move => {
-                            let new_start = (drag.orig.start + raw_delta).max(0);
+                            let new_start = (drag.orig.start + raw_delta.max(-drag.orig.start.min(group_floor))).max(0);
                             LayerTiming { start: new_start, ..drag.orig }
                         }
                         DragMode::Slip => {
@@ -1231,7 +1243,7 @@ impl Widget for TimelineWidget {
                 self.seen_revision = now;
                 if let (Some(doc), Some(extractor)) = (self.doc.as_ref(), self.extractor) {
                     let doc = doc.lock().unwrap();
-                    let stamp = format!("{:?}/{}", doc.revision(), crate::ui::fixture::view_stamp());
+                    let stamp = crate::ui::fixture::memo_stamp(doc.revision());
                     if stamp != self.seen_doc_revision {
                         self.seen_doc_revision = stamp;
                         if let Ok(fps) = document_fps(&doc) {

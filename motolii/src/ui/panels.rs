@@ -104,7 +104,7 @@ pub(super) fn StagePanel(
                                     let mut d = session.doc.lock().unwrap();
                                     if let Ok(Some(comp)) = d.view().composition() {
                                         let next = crate::doc::store::Composition { width: w, height: h, ..comp };
-                                        let _ = d.apply(crate::doc::store::Intent::SetComposition(next));
+                                        crate::ui::session::noted(d.apply(crate::doc::store::Intent::SetComposition(next)), revision);
                                     }
                                     drop(d);
                                     *revision.write() += 1;
@@ -188,7 +188,7 @@ pub(super) fn TimelinePanel(
         use_hook(|| std::rc::Rc::new(std::cell::RefCell::new(None)));
     let rows_now = {
         let d = session.doc.lock().unwrap();
-        let stamp = format!("{:?}/{}", d.revision(), fixture::view_stamp());
+        let stamp = fixture::memo_stamp(d.revision());
         let mut memo = memo.borrow_mut();
         match memo.as_ref() {
             Some((seen, rows)) if *seen == stamp => rows.clone(),

@@ -551,7 +551,7 @@ mod tests {
 }
 
 /// 物理 code → 文字(US 配列の素の字)。⌥ 付きの binding を救う為の表。
-fn code_to_char(code: Code) -> Option<char> {
+pub(super) fn code_to_char(code: Code) -> Option<char> {
     Some(match code {
         Code::KeyA => 'a', Code::KeyB => 'b', Code::KeyC => 'c', Code::KeyD => 'd', Code::KeyE => 'e',
         Code::KeyF => 'f', Code::KeyG => 'g', Code::KeyH => 'h', Code::KeyI => 'i', Code::KeyJ => 'j',

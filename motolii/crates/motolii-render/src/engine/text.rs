@@ -31,9 +31,10 @@ fn to_justify(justify: StoreJustify) -> TextJustify {
     }
 }
 
-fn to_layout(style: &TextDocumentStyle, justify: StoreJustify, wrap_width: Option<f32>) -> TextLayout {
+fn to_layout(style: &TextDocumentStyle, justify: StoreJustify, wrap_width: Option<f32>, wrap: bool) -> TextLayout {
     TextLayout {
         wrap_width,
+        wrap,
         size: style.size,
         line_height: style.line_height,
         tracking: style.tracking,
@@ -90,7 +91,8 @@ pub fn rasterize_text_document(
     }
 
     let font = to_glyph_font(style);
-    let layout = to_layout(style, document.justify, Some(document.wrap_size.map(|s| s[0]).unwrap_or(canvas.width as f32)));
+    // 幅は揃えに要る(無いと Center/Right が効かない)が、折り返すのは wrap 箱を持つ層だけ。
+    let layout = to_layout(style, document.justify, Some(document.wrap_size.map(|s| s[0]).unwrap_or(canvas.width as f32)), document.wrap_size.is_some());
     let mut shaped = shape_text(content, &font, &layout)?;
 
     // 文字の塊を枠の縦中央へ。1 行目のベースラインの上に約 1 級、最終行の下に約 1/4 級を見る。

@@ -190,6 +190,8 @@ pub(super) struct StageWidget {
     stale: Vec<ResourceId>,
     /// 最後に描いた時の revision。同じなら描き直さない。
     seen_revision: std::cell::Cell<u32>,
+    /// 最後に描いた時刻。別窓の Stage は event も revision も来ないので、時刻で描き直す。
+    seen_time: std::cell::Cell<Option<crate::doc::store::RationalTime>>,
     /// 画面の倍率(%)。#stagefoot が読む。
     view_pct: Signal<u32>,
     view_request: Arc<Mutex<Option<crate::ui::session::ViewRequest>>>,
@@ -254,6 +256,7 @@ impl StageWidget {
             dirty: std::cell::Cell::new(true),
             stale: Vec::new(),
             seen_revision: std::cell::Cell::new(u32::MAX),
+            seen_time: std::cell::Cell::new(None),
             output_only,
             view_pct,
             view_request,
@@ -902,6 +905,7 @@ impl Widget for StageWidget {
             || self.dirty.get()
             || self.view_request.lock().unwrap().is_some()
             || *self.revision.peek() != self.seen_revision.get()
+            || self.seen_time.get() != Some(self.clock.current_time())
     }
 
     fn handle_event(&mut self, event: &UiEvent) {
@@ -1183,6 +1187,7 @@ impl Widget for StageWidget {
             render_ctx.unregister_resource(old);
         }
         self.seen_revision.set(*self.revision.peek());
+        self.seen_time.set(Some(self.clock.current_time()));
         let first = self.frames == 1;
         // 面が 0 の時は描かない(timeline_widget と同じ)。ここを通すと下の
         // `s = (w/cw).min(h/ch)` が 0 になり、退化した Affine で vello を回すことになる。

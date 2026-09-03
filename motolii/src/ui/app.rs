@@ -757,7 +757,7 @@ pub fn app() -> Element {
                         let same_chord = matches!(open, MenuId::Composition)
                             && evt.modifiers().alt()
                             && evt.modifiers().intersects(Modifiers::META | Modifiers::SUPER)
-                            && matches!(evt.key(), Key::Character(ref c) if c.eq_ignore_ascii_case("k") || c == "˚");
+                            && crate::ui::keymap::code_to_char(evt.code()) == Some('k');
                         if same_chord {
                             evt.prevent_default();
                             evt.stop_propagation();
@@ -912,8 +912,6 @@ pub fn app() -> Element {
                                     fixture::expand(layer);
                                 }
                             }
-                            let d = doc.lock().unwrap();
-                            drop(d);
                             refresh_layer_projection(&doc, layer_rows, attrs_state, &timeline_tx, revision);
                         }
                         Intent::ToggleKeyedOnly => {
@@ -923,8 +921,6 @@ pub fn app() -> Element {
                                     fixture::expand(layer);
                                 }
                             }
-                            let d = doc.lock().unwrap();
-                            drop(d);
                             refresh_layer_projection(&doc, layer_rows, attrs_state, &timeline_tx, revision);
                         }
                         Intent::ToggleMarker => {

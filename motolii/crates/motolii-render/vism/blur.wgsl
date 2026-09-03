@@ -31,7 +31,7 @@ fn vs_main(@builtin(vertex_index) index: u32) -> VsOut {
   return out;
 }
 
-// 9 tap のガウス(σ ≒ radius / 2)。半径 0 は素通し。
+// ガウス(σ ≒ radius / 2)。tap は 3σ まで 1px 刻み(上限 96、越えたら刻みを広げる)。半径 0 は素通し。
 fn blur(t: texture_2d<f32>, p: vec2i, direction: vec2i) -> vec4f {
   let size = vec2i(textureDimensions(t));
   let lo = vec2i(0);
@@ -40,10 +40,13 @@ fn blur(t: texture_2d<f32>, p: vec2i, direction: vec2i) -> vec4f {
     return textureLoad(t, clamp(p, lo, hi), 0);
   }
   let sigma = max(radius * 0.5, 0.5);
+  let reach = ceil(sigma * 3.0);
+  let taps = i32(min(reach, 96.0));
+  let step = max(1.0, reach / 96.0);
   var sum = vec4f(0.0);
   var weight = 0.0;
-  for (var i = -4; i <= 4; i = i + 1) {
-    let offset = f32(i) * radius * 0.25;
+  for (var i = -taps; i <= taps; i = i + 1) {
+    let offset = f32(i) * step;
     let w = exp(-(offset * offset) / (2.0 * sigma * sigma));
     let q = clamp(p + direction * i32(round(offset)), lo, hi);
     sum = sum + textureLoad(t, q, 0) * w;

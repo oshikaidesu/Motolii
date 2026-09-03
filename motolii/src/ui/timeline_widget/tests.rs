@@ -74,6 +74,27 @@ mod lyrics {
         assert_eq!(frames, vec![10, 34], "lyric keys did not move with the layer");
     }
 
+    /// 歌詞のキーが 1 つでも、層と一緒に動く(1 つの時だけ置き去りになっていた)。
+    #[test]
+    fn a_single_lyric_key_moves_with_the_layer_too() {
+        let loaded = crate::ui::fixture::load_fixture();
+        let mut doc = loaded.doc;
+        let layer = text_layer(&doc);
+        let fps = document_fps(&doc).unwrap();
+        let mut text = doc.view().text_document(layer).unwrap().unwrap();
+        let mut track = ContentTrack::new();
+        track.insert(ContentKeyframe { t: RationalTime::try_from_frame(12, fps).unwrap(), content: "solo".into() });
+        text.content = track;
+        doc.apply(Intent::SetTextDocument { layer, document: text }).unwrap();
+
+        doc.apply_all(keyframe_shift_intents(&doc, layer, 10).unwrap()).unwrap();
+        let keys = doc.view().text_document(layer).unwrap().unwrap().content.keys().to_vec();
+        assert_eq!(keys[0].t.try_to_frame_floor(fps).unwrap(), 22);
+        // 最後の 1 つは消えない(削除の map が None を返しても 0 個にはしない)。
+        let gone = content_track_intent(&doc.view(), layer, fps, &[22], |_| None).unwrap();
+        assert!(gone.is_none(), "the only lyric line must survive a delete");
+    }
+
     /// 目盛の段は倍率に付いて行き、詰まらず空きすぎない。
     #[test]
     fn ruler_steps_follow_the_zoom() {

@@ -515,3 +515,5 @@
 | 2026-09-03 | 営業ペルソナ(Dioxus/Blitz・rerun)を回し、上流で賄える物は自前を消して上流へ寄せる。まず feature flag(accessibility・clipboard)を立てる | 自前 UI 17,000 行のうち ≒330 行と宿題 12 件が上流に在った。足すとき同じ行数を消す規則に沿う | [vendor-pitches](reviews/2026-09-03-vendor-pitches.md) |
 | 2026-09-03 | 文字・図形・静止画・動画は**非乗算の sRGB** で上げ、shader が decode → 乗算の順で扱う。乗算済みは sRGB 形式の scratch(blend)だけ | 乗算済みを非乗算として decode すると α の中間(文字の縁)が暗く沈む(色の再点検 CV2)。実窓で縁を確認してから確定 | 色の再点検 |
 | 2026-09-03 | Stage の画像 id は毎 paint 登録し、前の id は次の paint の頭で外す。renderer が作り直されたら(engine-up)必ず描き直す | 起動時に renderer が 2 回作られ、前の renderer の id を持つ scene を出すと vello が「空の image」で落ちる(起動 5 回中 4 回) | 起動の panic |
+| 2026-09-03 | 書体は OS の台帳を全部積み(fontdb load_system_fonts)、locale は ja-JP、shaper は process に 1 つ。file path は台帳に無い書体を足す口 | 1 file だけだと欧文・絵文字が glyph 0、呼ぶたび台帳を作り直すと 1 秒級(cosmic-text の指示) | 営業 2 波 CT1–CT3 |
+| 2026-09-03 | 支援技術の押下(AccessKit ActionRequested)は窓側で受け、打鍵の Enter/Space と同じ press_node を通す | 上流 blitz-shell は TODO で捨てる。試験と読み上げが同じ関数を通る | 営業 2 波 AK2 |

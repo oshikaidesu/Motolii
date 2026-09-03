@@ -73,7 +73,8 @@ impl ExportController {
     /// 終わった報せを畳む。次の書き出しまで status bar に残さない。
     pub(super) fn dismiss(&self) {
         let mut state = self.0.lock().unwrap();
-        if matches!(state.status.phase, ExportPhase::Completed | ExportPhase::Cancelled | ExportPhase::Failed) {
+        // Choosing も畳める(dialog 中に窓を閉じると unchoose が来ず、Export が永久に死ぬ)。
+        if matches!(state.status.phase, ExportPhase::Completed | ExportPhase::Cancelled | ExportPhase::Failed | ExportPhase::Choosing) {
             state.status.phase = ExportPhase::Idle;
         }
     }
@@ -292,7 +293,8 @@ pub(super) fn OutputStatus(
         .unwrap_or_default();
     let text = match status.phase {
         ExportPhase::Idle if surface == OutputSurface::Panel => idle_note.unwrap_or_else(|| "Ready to export".to_owned()),
-        ExportPhase::Idle | ExportPhase::Choosing => String::new(),
+        ExportPhase::Idle => String::new(),
+        ExportPhase::Choosing => "Choosing a destination…".to_owned(),
         ExportPhase::Preparing => format!("Preparing export · {file_name}"),
         ExportPhase::Running => format!(
             "Exporting {} / {} · {file_name}",

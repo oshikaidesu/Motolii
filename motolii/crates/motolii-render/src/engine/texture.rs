@@ -33,8 +33,10 @@ fn still_key(path: &str) -> u64 {
 /// 文字の texture を憶える上限(枚)。
 const TEXT_CACHE_LIMIT: usize = 256;
 
-/// tiny-skia の乗算済み RGBA を非乗算へ(上げる直前に 1 回)。
-fn unpremultiply(rgba: &mut [u8]) {
+/// tiny-skia の乗算済み RGBA を非乗算へ(上げる直前に 1 回)。透明な texel は隣の色で埋める
+/// (edge bleed)— 非乗算は sampler の線形補間と効果の畳み込みが透明部の RGB を混ぜるので、
+/// 黒のままだと縁が灰・暈が黒になる(QA 再点検 Q2-1)。
+fn unpremultiply(rgba: &mut [u8], width: usize) {
     for px in rgba.chunks_exact_mut(4) {
         let a = px[3] as u32;
         if a == 0 || a == 255 {
@@ -43,6 +45,49 @@ fn unpremultiply(rgba: &mut [u8]) {
         for c in &mut px[..3] {
             *c = ((*c as u32 * 255 + a / 2) / a).min(255) as u8;
         }
+    }
+    bleed_edges(rgba, width);
+}
+
+/// 透明(a=0)の texel に、色を持つ 4 近傍の平均を書く。2 回回して 2px ぶん広げる。
+fn bleed_edges(rgba: &mut [u8], width: usize) {
+    if width == 0 || rgba.len() < 4 {
+        return;
+    }
+    let height = rgba.len() / 4 / width;
+    let mut colored: Vec<bool> = rgba.chunks_exact(4).map(|p| p[3] != 0).collect();
+    for _ in 0..2 {
+        let snapshot = rgba.to_vec();
+        let mut next = colored.clone();
+        for y in 0..height {
+            for x in 0..width {
+                let i = y * width + x;
+                if colored[i] {
+                    continue;
+                }
+                let mut sum = [0u32; 3];
+                let mut n = 0u32;
+                let mut take = |j: usize| {
+                    if colored[j] {
+                        for c in 0..3 {
+                            sum[c] += snapshot[j * 4 + c] as u32;
+                        }
+                        n += 1;
+                    }
+                };
+                if x > 0 { take(i - 1); }
+                if x + 1 < width { take(i + 1); }
+                if y > 0 { take(i - width); }
+                if y + 1 < height { take(i + width); }
+                if n > 0 {
+                    for c in 0..3 {
+                        rgba[i * 4 + c] = (sum[c] / n) as u8;
+                    }
+                    next[i] = true;
+                }
+            }
+        }
+        colored = next;
     }
 }
 
@@ -155,7 +200,7 @@ impl Engine {
         let Some(mut raster) = text::rasterize_text_document(document, t, &canvas)? else {
             return Ok((None, [0.0, 0.0]));
         };
-        unpremultiply(&mut raster.premultiplied_rgba8);
+        unpremultiply(&mut raster.premultiplied_rgba8, raster.width as usize);
 
         let texture = self.compositor.upload_rgba(
             "text",
@@ -201,7 +246,7 @@ impl Engine {
         let Some(mut raster) = shape::rasterize_shapes(shapes, &canvas)? else {
             return Ok((None, [0.0, 0.0]));
         };
-        unpremultiply(&mut raster.premultiplied_rgba8);
+        unpremultiply(&mut raster.premultiplied_rgba8, raster.width as usize);
 
         let texture = self.compositor.upload_rgba(
             "shape",
@@ -575,3 +620,29 @@ fn content_canvas(
 
 /// 点の直径(comp のピクセル)。層の属性になるまでの既定値。
 const DEFAULT_POINT_SIZE: f32 = 2.0;
+
+#[cfg(test)]
+mod tests {
+    use super::unpremultiply;
+
+    #[test]
+    fn unpremultiply_restores_the_straight_color_and_leaves_the_edges() {
+        // 乗算済み (64,32,0,128) ≒ 非乗算 (128,64,0)。a=0 と a=255 は触らない。
+        let mut px = [64, 32, 0, 128, 10, 20, 30, 0, 200, 100, 50, 255];
+        unpremultiply(&mut px, 3);
+        assert_eq!(&px[..4], &[128, 64, 0, 128]);
+        // 透明な texel は隣の色の平均で埋まる(α は 0 のまま)。
+        assert_eq!(&px[4..8], &[164, 82, 25, 0]);
+        assert_eq!(&px[8..], &[200, 100, 50, 255]);
+        // c > a(壊れた入力)は 255 で止まる。
+        let mut bad = [200, 0, 0, 100];
+        unpremultiply(&mut bad, 1);
+        assert_eq!(bad[0], 255);
+        // 2px まで広がる。3px 先はまだ黒。
+        let mut row = [255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+        unpremultiply(&mut row, 4);
+        assert_eq!(&row[4..7], &[255, 255, 255]);
+        assert_eq!(&row[8..11], &[255, 255, 255]);
+        assert_eq!(&row[12..15], &[0, 0, 0]);
+    }
+}

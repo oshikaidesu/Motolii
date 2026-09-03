@@ -31,6 +31,8 @@ pub struct TextFeature {
 pub struct TextLayout {
     /// 折返しと揃えの幅。None なら point text(揃えは効かない — cosmic-text は幅が無いと補正 0)。
     pub wrap_width: Option<f32>,
+    /// 折り返すか。幅は揃え(Center/Right)にも要るので、point text は幅を持って折り返さない。
+    pub wrap: bool,
     pub size: f32,
     pub line_height: Option<f32>,
     pub tracking: f32,
@@ -42,6 +44,7 @@ impl TextLayout {
     pub fn new(size: f32) -> Self {
         Self {
             wrap_width: None,
+            wrap: false,
             size,
             line_height: None,
             tracking: 0.0,
@@ -75,18 +78,43 @@ pub struct ShapedText {
     pub lines: Vec<LineMeasure>,
 }
 
+/// 書体の台帳と shaper は process に 1 つ(cosmic-text の指示: 作るのは 1 秒級、一度だけ共有せよ)。
+/// OS の書体を全部積み、locale は ja-JP — 漢字の後詰めがヒラギノになり、絵文字・欧文は OS の
+/// fallback(Apple Color Emoji・.SF NS)へ落ちる。`path` は台帳に無い書体を足す口として残す。
+fn font_system() -> std::sync::MutexGuard<'static, FontSystem> {
+    static SYSTEM: std::sync::OnceLock<std::sync::Mutex<FontSystem>> = std::sync::OnceLock::new();
+    SYSTEM
+        .get_or_init(|| {
+            let mut db = fontdb::Database::new();
+            db.load_system_fonts();
+            std::sync::Mutex::new(FontSystem::new_with_locale_and_db("ja-JP".to_owned(), db))
+        })
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+}
+
+/// family が台帳に無ければ path の file を足す。path も読めなければ、その時だけ誤り。
+fn ensure_font(system: &mut FontSystem, font: &GlyphFont) -> Result<(), TextShapeError> {
+    let known = |db: &fontdb::Database| {
+        db.faces().any(|f| f.families.iter().any(|(name, _)| name == &font.family))
+    };
+    if known(system.db()) || font.path.is_empty() {
+        return Ok(());
+    }
+    system
+        .db_mut()
+        .load_font_file(&font.path)
+        .map_err(|source| TextShapeError::FontFile { path: font.path.clone(), source })
+}
+
 pub fn shape_text(
     content: &str,
     font: &GlyphFont,
     layout: &TextLayout,
 ) -> Result<ShapedText, TextShapeError> {
-    let mut db = fontdb::Database::new();
-    db.load_font_file(&font.path)
-        .map_err(|source| TextShapeError::FontFile {
-            path: font.path.clone(),
-            source,
-        })?;
-    let mut font_system = FontSystem::new_with_locale_and_db("en-US".to_owned(), db);
+    let mut guard = font_system();
+    let font_system = &mut *guard;
+    ensure_font(font_system, font)?;
 
     let line_height = layout.line_height.unwrap_or(layout.size * 1.2);
     let metrics = Metrics::new(layout.size, line_height);
@@ -112,11 +140,12 @@ pub fn shape_text(
         TextJustify::Center => Align::Center,
     };
 
-    let mut buffer = Buffer::new(&mut font_system, metrics);
+    let mut buffer = Buffer::new(font_system, metrics);
     // 幅が無いと Align::Center / Right が常に 0 補正になる。幅は wrap_size か枠の幅。
     buffer.set_size(layout.wrap_width, None);
+    buffer.set_wrap(if layout.wrap { cosmic_text::Wrap::WordOrGlyph } else { cosmic_text::Wrap::None });
     buffer.set_text(content, &attrs, Shaping::Advanced, Some(align));
-    buffer.shape_until_scroll(&mut font_system, false);
+    buffer.shape_until_scroll(font_system, false);
 
     let mut swash_cache = SwashCache::new();
     let mut contours = Vec::new();
@@ -128,7 +157,7 @@ pub fn shape_text(
             let pen_y = run.line_y + glyph.y - glyph.font_size * glyph.y_offset;
             glyph_xs.push(glyph.x);
             let cache_key = glyph.physical((0.0, 0.0), 1.0).cache_key;
-            let Some(commands) = swash_cache.get_outline_commands(&mut font_system, cache_key)
+            let Some(commands) = swash_cache.get_outline_commands(font_system, cache_key)
             else {
                 continue; // 空白など、輪郭を持たない glyph。
             };

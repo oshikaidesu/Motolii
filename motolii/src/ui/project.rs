@@ -158,6 +158,7 @@ pub(super) fn open_path(
         }
         Err(e) => {
             *session.project_notice.lock().unwrap() = format!("Open failed: {e}");
+            forget_recent(&path);
         }
     }
     *revision.write() += 1;
@@ -172,18 +173,48 @@ pub(super) fn recents() -> Vec<std::path::PathBuf> {
         .unwrap_or_default()
         .into_iter()
         .map(std::path::PathBuf::from)
-        .filter(|p| p.exists())
         .collect()
 }
 
-pub(super) fn remember_recent(path: &std::path::Path) {
+/// 一覧から外すのは「開こうとして失敗した時」だけ(外れた volume の作品を menu を開くたびに stat しない、消さない)。
+pub(super) fn forget_recent(path: &std::path::Path) {
+    write_recents(recents().into_iter().filter(|p| p != path).collect());
+}
+
+fn write_recents(list: Vec<std::path::PathBuf>) {
     let Some(dir) = crate::ui::host::settings_dir() else { return };
-    let mut list: Vec<std::path::PathBuf> = recents().into_iter().filter(|p| p != path).collect();
-    list.insert(0, path.to_path_buf());
-    list.truncate(10);
     let text: Vec<String> = list.iter().map(|p| p.to_string_lossy().into_owned()).collect();
     let _ = std::fs::create_dir_all(&dir);
     if let Ok(json) = serde_json::to_string(&text) {
         let _ = std::fs::write(dir.join("recents.json"), json);
     }
+}
+
+pub(super) fn remember_recent(path: &std::path::Path) {
+    let mut list: Vec<std::path::PathBuf> = recents().into_iter().filter(|p| p != path).collect();
+    list.insert(0, path.to_path_buf());
+    list.truncate(10);
+    write_recents(list);
+}
+
+/// 引数の .rrd を開く(`Motolii.app/Contents/MacOS/Motolii song.rrd`)。macOS の Finder・`open -a` は
+/// argv でなく `application:openFile:` で来るので、そちらは H1(NSMainMenu)の時に繋ぐ。
+/// 壊れた .rrd は黙って白紙にせず、理由を返す(「作品が消えた」に見える)。
+pub(super) fn open_from_argv() -> (Option<crate::doc::store::Document>, Option<std::path::PathBuf>, Option<String>) {
+    let path = std::env::args().nth(1).map(std::path::PathBuf::from).filter(|p| p.extension().is_some_and(|e| e == "rrd"));
+    let mut error = None;
+    let opened = path.as_ref().and_then(|p| match crate::doc::store::Document::load(p) {
+        Ok(d) => Some(d),
+        Err(e) => {
+            error = Some(format!("Open failed: {e}"));
+            None
+        }
+    });
+    (opened, path, error)
+}
+
+/// ~/Library/Application Support/Motolii(最近の作品・窓の枠・自動保存の逃がし先)。
+pub(crate) fn settings_dir() -> Option<std::path::PathBuf> {
+    let home = std::env::var_os("HOME")?;
+    Some(std::path::Path::new(&home).join("Library/Application Support/Motolii"))
 }

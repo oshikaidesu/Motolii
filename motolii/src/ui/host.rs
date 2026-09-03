@@ -264,10 +264,7 @@ fn host_routes_only_primary_mouse_release_to_the_owning_window() {
 }
 
 /// macOS の Application Support(v1 は macOS だけ、V2-6)。
-pub(crate) fn settings_dir() -> Option<std::path::PathBuf> {
-    let home = std::env::var_os("HOME")?;
-    Some(std::path::Path::new(&home).join("Library/Application Support/Motolii"))
-}
+pub(crate) use crate::ui::project::settings_dir;
 
 pub(crate) use crate::ui::poke::Poke;
 
@@ -709,6 +706,12 @@ impl ApplicationHandler for Windows {
                         wake_shared = true;
                     }
                 }
+                // 支援技術(VoiceOver)の押下。上流の blitz-shell は `ActionRequested` を捨てる(TODO)。
+                BlitzShellEvent::Accessibility { window_id, ref data } if crate::ui::keys::action_of(data).is_some() => {
+                    if let (Some(req), Some(view)) = (crate::ui::keys::action_of(data), self.inner.windows.get_mut(&window_id)) {
+                        crate::ui::keys::act(view.downcast_doc_mut::<DioxusDocument>(), req);
+                    }
+                }
                 event => self.inner.handle_blitz_shell_event(event_loop, event),
             }
         }
@@ -740,9 +743,7 @@ pub fn launch(title: &str) {
         duration_sec,
     } = load_fixture();
     // 普通のソフトは白紙で起動する。見本の作品は MOTOLII_FIXTURE=1 の時だけ(試験と実窓の検分用)。
-    // 引数に .rrd が来たらそれを開く(Finder のダブルクリック、`open -a Motolii song.rrd`)。
-    let argv_path = std::env::args().nth(1).map(std::path::PathBuf::from).filter(|p| p.extension().is_some_and(|e| e == "rrd"));
-    let mut opened = argv_path.as_ref().and_then(|p| crate::doc::store::Document::load(p).ok());
+    let (mut opened, argv_path, load_error) = crate::ui::project::open_from_argv();
     let from_argv = opened.is_some();
     let doc = match (opened.take(), std::env::var_os("MOTOLII_FIXTURE").is_some()) {
         (Some(loaded), _) => loaded,
@@ -754,6 +755,9 @@ pub fn launch(title: &str) {
         let revision = session.doc.lock().unwrap().revision();
         session.mark_saved(path.clone(), revision);
         crate::ui::project::remember_recent(&path);
+    }
+    if let Some(e) = load_error {
+        *session.project_notice.lock().unwrap() = e;
     }
     crate::ui::autosave::start(&session);
     let (tx, asks) = channel();

@@ -1,4 +1,4 @@
-# 2026-09-03 売り込み 第 2 波(営業 12 社)— カタログを持った利害関係者
+# 2026-09-03 売り込み 第 2 波(営業 13 社)— カタログを持った利害関係者
 
 利用者の依頼: 第 1 波(rerun・Dioxus/Blitz、[vendor-pitches](2026-09-03-vendor-pitches.md))が「feature 2 語で 20 件級の宿題」を掘り当てたので、同じ形で全社を回す。営業 = **カタログを持った利害関係者**が、売る動機で code を読み、file:line で裏を取り、「弊社に無い物」も白状する。買い手 1 名(rerun 上流)は逆向き。全員読み取り専用、code も backlog も触っていない。宿題番号は [persona-backlog](2026-09-03-persona-backlog.md)。
 
@@ -16,6 +16,7 @@
 | Apple | winit は app delegate を空けている。NSMainMenu + `applicationShouldTerminate` で H1〜H4・H12・H14 が ≒100 行、⌘Q の未保存素通りも直る。Core Text の列挙で書体の再配布問題が消える | AVFoundation の crate は本機に無く未検証。NSDocument の自動保存は載らない |
 | Lottie 仕様 | 書き出しは完成品で呼ぶ側が 0 件(SE5)。S7 の Range Selector は仕様と model が一対一で対応表済み。**縁取り・blend は落ちない**(依頼文の誤り) | 取り込みは無い。`lottie_coverage.rs` の照合試験が tree に無い |
 | ISF 仕様 | bool を int に・color を 4 成分にで公開 327 本の compile が 210→277(IS1)。audioFFT で A 波と繋がる。実行時読み込みは仕様の前提 | PERSISTENT(49 本)は裁定と相容れない。効果の鎖は仕様外 |
+| vgpu(外部証拠) | 交換の前の検証が無い: `vgpu check` の形を naga で写して admission gate に(VG1)。tri_led の `glow` は INPUTS にあるが本文で束縛されておらず空回り(VG2)。param を 1 struct に畳む(VG3)、prelude を `#import` にして staging を消す(VG4) | last-good を保つ原子的交換そのものは弊社にも無い。1pass 畳みは他の vism に転用できない |
 | After Effects(model) | Adjustment / Shy / Motion Blur は **kind でなく flag**、`LayerAttrs` に 3 つ(AE1)。`PropertyId` の prefix 規約を `property_tree()` に格上げすれば P/S/R/T/A・値グラフ・S7 が同じ木(AE2)。work area(AE4)、undo 群の名前(AE5) | Expression は売らない(PropertyLink が既に型付きで持つ)。precomp も売らない |
 | rerun 上流(買い手) | fork +1461 行のうち Motolii が呼ぶのは re_renderer 5 file だけ、≒750 行は egui 期の遺物。UP1(from_device)は即引き取り、UP2 は閉包署名を変えずに分割、UP4 は複製 180 行を畳んでから | rebase の負債は dynamic_resource_pool.rs の署名変更が最大。2 rev の checkout が dx の 7 GB の一因 |
 
@@ -381,6 +382,26 @@ Motolii の ISF 実装は `crates/motolii-render/src/compositor/effects/isf/mod.
 - **`WIDTH`/`HEIGHT` の式評価**(DDMathParser 前提、40 本)、**サムネイル・検索・絵**(C13 は `CATEGORIES`/`DESCRIPTION` の文字までが仕様)、**キーフレーム・ease・Undo**、**書き出し**、**色管理**(仕様は linear/sRGB を語らない — CV2/CV4 は Motolii 側の問題)。
 - **`.vs` の `varying`/GLSL 1.x** — 仕様の問題ではなく naga の GLSL 4.5 前端の問題。38 本は書き換えが要る。
 
+## vgpu(Vercel Labs、外部証拠として)
+
+前提: 弊社は runtime 依存にならない(decision-index.md:41)。売るのは**形**だけで、実装は naga / re_renderer の既存経路に写す。弊社側の裏は README.md、packages/wgsl/README.md(HMR behavior・Reflection)、docs/cli.md(`check`/`doctor`/`docs`/`examples`)、docs/topics/shader-workflow.docs.md、getting-started.docs.md、examples/triangle-led-front/{settings,scene-renderer}.ts。
+
+Motolii の今(共通の観察): `vism/` は build.rs:8-40 が `include_str!` に焼き、`vism_definitions()` は `OnceLock`(effects/mod.rs:42-56)、header 不正は panic(同 :51)。debug 窓の reload は re_renderer が `begin_frame` で変更 path の module を作り直し(shader_module_pool.rs:146-166)、pipeline を作り直す(render_pipeline_pool.rs:205-238)。ただし WGSL の誤りは wgpu 側で**非同期**(shader_module_pool.rs:94、render_pipeline_pool.rs:228「We don't know yet if this actually succeeded」)、path 解決に失敗すると**空文字の module** を作る(shader_module_pool.rs:67-71 `unwrap_or_default`)。「失敗時に旧 pipeline を置換しない」のは layout / handle 欠落の `Err` だけで、文法誤りの絵は last-good にならない。
+
+| # | Motolii の今 | 弊社で賄える形 | 見込み |
+|---|---|---|---|
+| VG1 | 交換の前に検証が無い。reload は「変更された → 作り直す」だけ(上記)。起動時は device.rs:29-39 で全部 compile、1 本失敗で Engine ごと立たない | `vgpu check` は load の**前**に `{validation{mode,attempted,ok}, diagnostics(fix/where 付き), reflection, wgsl}` を JSON で返し、失敗でも payload を出して exit 1(cli.md「vgpu check」)。Motolii では同じ関数を naga(`wgsl-in` を 1 語足す — 今は glsl-in/wgsl-out のみ、naga 節)+ `parse_isf_source` で作り、**transaction の admission gate** と `motolii vism check <file>` の両方に使う。診断の行番号は NG2、device caps 一致は NG5 と同根 | ≒40 行 + feature 1 語。decision-index が「未完成」と書く「安定読取 → 検証 → 準備 → 同時交換」の 2 段目 |
+| VG2 | 束縛番号は manifest の並びから決め打ち(vism.rs:17-30・36-47)、shader が実際に何を束縛したかは見ない。実例: tri_led.wgsl:7 は `glow` を INPUTS に宣言するが本文に `@group`/`@binding` が 1 つも無く、Inspector の行(tests/vism_catalog.rs:86-94 が name だけ確認)は絵に効かない。`MAPS` は parse する(isf/mod.rs:76・180・187)が消費者が無い(grep で他に無し) | reflection `bindings{group,binding,name,type,kind,layout}` + `overrides` + `hostShareableLayouts`(packages/wgsl README「Reflection」)。Motolii は naga `Module.global_variables` で同じ物が取れる(NG3 の WGSL 版)。「INPUTS に在るが束縛が無い」「本文が束縛するが INPUTS に無い」を VG1 の diagnostics に載せる | ≒20 行。tri_led の `glow` が空回りしている事実が試験で出る |
+| VG3 | param は 1 つずつ別 uniform buffer + 別 binding(vism.rs:393-406、`param_count` 分の entry :159-163)。名前照合は host 側のみ(:398)。color/point2D は成分 0 だけ(IS1 と同根) | `struct Params { time: f32, texel: vec2f }` 1 本に `set({ params: { time } })` で**構造体のメンバ名**で入れる(getting-started)。layout は reflection の `hostShareableLayouts`。Motolii は manifest から 1 struct を生成し naga の layout で詰める → binding 数が param 数に依存しない、shader 側は `params.glow` | ≒40 行(vism.rs の bind 生成を 1 buffer に畳む)。C12 の 4 成分は IS1 で |
+| VG4 | prelude を前置きした blend/matte は temp へ置き watch 対象外(wgsl_fragment.rs:43-44・67-71、vism.rs:53-71 の hash 名 staging)。reference/vello-blend.wgsl を直しても反映しない | 弊社 HMR は**推移的 import を bundler の watch graph に登録するだけ**(packages/wgsl README「HMR behavior」: `addDependency`/`addWatchFile`)。re_renderer は既に `#import` の依存を集めて再 compile 対象にしている(shader_module_pool.rs:150-155 `source_interpolated.imports`)。prelude を文字列連結でなく `#import` に変えれば staging が消え、依存も watch に載る | ≒−25 行。要確認: resolver の探索 path が crate 外(`reference/`)を許すか |
+| VG5 | agent の検証口は tests/vism_catalog.rs(catalog 名 + 実画素の不一致)だけ。catalog を窓無しで列挙する口が無い。AGENTS.md は 15 行で index へ誘導 | `docs ls/cat/grep/find/symbols`、`examples search/pull`(sha256 検証付き)、`doctor`(実描画で環境判定)、agents.md/llms.txt(cli.md、shader-workflow「every claim about pixels must come from pixels you read」)。Motolii 版は `known_effects()` の JSON dump と `Engine::new()` headless 1 枚読みを 1 subcommand に | ≒30 行。VG1 の出力を再利用 |
+| VG6 | tri_led は 2pass→1pass に畳んだ(tri_led.wgsl:15-19)。glow.wgsl は PASSES 4 段(glow.wgsl:12-17) | 弊社の元は draw() 3 本: floor-noise を **setup 時に 1 回だけ** target へ、毎 frame raycast→target→floor、LED 配列は storage buffer(scene-renderer.ts)。畳めたのは中間が**静的入力の関数**だったから(hash が代行)。分離 blur(blur_h/blur_v)は畳めない(段数 = 計算量)。「1 回だけ描く target」は frame を跨ぐ持ち越しで裁定 M5-FEEDBACK-P0 に触れる — 売らない | 他 vism への転用は無し(正直に) |
+| VG7 | 共通 `VismProgram` の宣言語彙は ISF の INPUTS 5 型 + MAPS + PASSES(isf/mod.rs:29-104) | 弊社が持ち ISF に無い物: 構造体メンバの入れ子指定(VG3)、storage buffer 入力(LED 配列 — ISF の型に無い)、`override` 定数(reflection `overrides`; pipeline 定数なので keyframe には向かず、静的調整だけ)。弊社に無く ISF に在る物: DEFAULT/MIN/MAX(settings.ts の TUNABLE_DEFAULTS に範囲無し、viability §「宣言は誰が持つか」と一致)、LABEL/VALUES、PASSES/TARGET(host の TS が組む)、MAPS。なお MAPS の `EXPR` は WGSL そのものなので本文の関数で書ける — 弊社は宣言に式を持たない | 語彙の追加は storage 入力 1 型のみ検討。MAPS は消費者を作るか捨てるかの裁定待ち |
+
+弊社に無い物(正直に): **last-good を保つ原子的交換そのもの**(HMR は bundler の watch graph 登録止まりで、失敗時に旧 module を保つかは bundler 側 — 弊社の文書に記述無し)。C13 の名前・絵(`CATEGORIES`/`LABEL` 相当無し、C13 は IS3 で)。C1/C2 の bypass・並べ替え(効果の鎖は host の TS)。時刻は `clock()` の壁時計(`time/deltaTime/frameCount`)で作品時刻ではない — Motolii の WGSL 経路には時刻 uniform 自体が無い(vism.rs:407-421 は render size + PASSINDEX のみ)が、答えは IS2 の TIME と同根。GLSL、Rust runtime、golden 比較の枠組み(workflow は「画素を読め」と言うだけ)。`set()` の未知名・型不一致の挙動は reference.md が 404 で未確認。
+
+見込み合計: feature 1 語 + ≒130 行、staging −25 行。VG1+VG2 で decision-index.md:41 の「未完成」5 段のうち検証と layout 準備が埋まり、catalog/Inspector の同時交換(`OnceLock` の撤去)は Motolii 側の仕事として残る。
+
 ## After Effects(競合の model 営業)
 
 読んだ物: `motolii/AGENTS.md`、`concept.md`、`decision-index.md`、`2026-07-16-ae-layer-system-disposition.md`、`2026-09-03-persona-backlog.md`(第 6 波 E)、`crates/motolii-doc/src/store/`。使い勝手は言わない。弊社(AE)の scripting object model の名で語る。
@@ -475,3 +496,9 @@ Motolii の lock に居る fork crate は re_renderer / re_video / re_importer /
 ### 4. 引き取り順の提案
 
 UP1(単独、即)→ UP2-a(`texture_pool.import` + `insert`、閉包署名は触らない)→ UP3(accessor 15 行)→ UP4(`new` へ畳む)。UP5 は出さず、spikes の pin を落として fork から消す。利用者裁定「勘違いの線が濃い時は上流 PR を出さない」(decision-index.md:510、dx の件)は dx 側の話で、ここは fork の実 diff に基づくので該当しないが、UP2 の閉包署名変更だけは「上流の設計意図を読み違えている」可能性が残るので issue で先に聞く形が CONTRIBUTING(「大きい未議論の PR は無言で閉じる」)に沿う。
+
+## 対応(2026-09-03 夕)
+
+- AK2 ☑ host.rs が `BlitzShellEvent::Accessibility` の `ActionRequested` を 1 腕受け、keys.rs `act` → `press_node`(Enter/Space と同じ口)。Click/Focus/Blur。
+- CT1 ☑ / CT2 ☑ / CT3 ☑ text.rs: `FontSystem` は process に 1 つ(`OnceLock<Mutex>`)、`load_system_fonts()`、locale "ja-JP"。`path` は台帳に無い family を足す口として残す。
+- 残り(VL・AE・AP・FF・LT・IS・UP)は backlog に節を足すかの利用者裁定待ち。

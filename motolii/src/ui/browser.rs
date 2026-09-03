@@ -334,6 +334,16 @@ fn spawn_layer(
     label: &'static str,
     mut revision: Signal<u32>,
 ) {
+    // 最初の曲・動画の probe(ffprobe の process)は lock の外で。握ったまま起こすと窓が止まる。
+    let probed = match &kind {
+        NewKind::Media { path, .. } => {
+            let fresh = !doc.lock().unwrap().view().layers().into_iter().any(|l| {
+                matches!(doc.lock().unwrap().view().meta(l).ok().flatten().map(|m| m.source), Some(LayerSource::File { .. }))
+            });
+            fresh.then(|| crate::render::media::probe(path).ok()).flatten()
+        }
+        _ => None,
+    };
     let mut d = doc.lock().unwrap();
     let layer = LayerId(d.view().next_layer_id());
     let order = d
@@ -359,19 +369,7 @@ fn spawn_layer(
         .map(|composition| (composition.width as f64, composition.height as f64))
         .unwrap_or((1920.0, 1080.0));
     // 空の作品に最初の曲・動画が来たら、尺を素材に合わせる(60 秒の既定で 3 分の曲を黙って切らない)。
-    let mut grow_to: Option<i64> = None;
-    if let NewKind::Media { path, .. } = &kind {
-        let fresh = !d.view().layers().into_iter().any(|l| {
-            matches!(d.view().meta(l).ok().flatten().map(|m| m.source), Some(LayerSource::File { .. }))
-        });
-        if fresh {
-            if let Some(frames) = crate::render::media::probe(path).ok().and_then(|i| source_frames_in(&i, fps)) {
-                if frames > duration_frames {
-                    grow_to = Some(frames);
-                }
-            }
-        }
-    }
+    let grow_to = probed.as_ref().and_then(|i| source_frames_in(i, fps)).filter(|f| *f > duration_frames);
     let duration_frames = grow_to.unwrap_or(duration_frames);
     let mut intents = new_layer_intents(
         layer,
@@ -672,7 +670,7 @@ pub(super) fn browser_panel(
                         div { class: "thumb", style: "background:{a.thumb};" }
                     }
                     span { class: "tname", "{a.name}" }
-                    span { class: "tmeta", "{a.kind}" }
+                    span { class: "tmeta", if in_use { "{a.kind} · in use" } else { "{a.kind}" } }
                 }
                 // 札の上に出る手。隠し技(Alt+click)を表に出す(Premiere の Replace Footage、Finder の Reveal)。
                 div { class: "tacts",
@@ -732,11 +730,11 @@ pub(super) fn browser_panel(
                     let layer = selected();
                     // 白紙では使われた色が無い。最初の一歩は既定のパレットから(Canva・CapCut)。
                     let used = fixture::used_colors_from_doc(&doc.lock().unwrap());
-                    let starter = used.is_empty();
+                    let used_count = used.len();
                     // 使われた色の後ろに既定のパレットを繋ぐ(1 色使った瞬間に棚が空にならない)。
                     let mut swatches = used;
                     for sw in fixture::default_palette() {
-                        if !swatches.iter().any(|s| s.rgba[..3] == sw.rgba[..3]) {
+                        if !swatches.iter().any(|s| s.rgba == sw.rgba) {
                             swatches.push(sw);
                         }
                     }
@@ -769,7 +767,7 @@ pub(super) fn browser_panel(
                             SemanticButton {
                                 class: "{card_class}",
                                 disabled: layer.is_none(),
-                                title: if layer.is_none() { "Select a layer first" } else { "Apply to the selected layer" },
+                                title: if layer.is_none() { "Select a layer first" } else if session.selection.all().len() > 1 { "Apply to the selected layers" } else { "Apply to the selected layer" },
                                 onclick: {
                                     let mut cb = onclick;
                                     move |evt| { if let Some(f) = cb.as_mut() { f(evt) } }
@@ -783,7 +781,7 @@ pub(super) fn browser_panel(
                         div { class: "bwork",
                             div { class: "bside",
                                 h3 { class: "sh", "Colors" }
-                                div { class: "srow on", if starter { "Starter palette" } else { "Used in this composition" } }
+                                div { class: "srow on", if used_count == 0 { "Starter palette" } else { "Used here · then starter" } }
                             }
                             div { class: "bresults",
                                 div { class: "rhead",

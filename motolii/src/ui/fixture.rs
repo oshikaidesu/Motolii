@@ -751,7 +751,7 @@ pub(super) fn inspector_data_from_doc(
                     doc.content.eval(t).to_string(),
                 ],
                 dims: [false, false, false],
-                keyed: doc.content.keys().len() > 1 && doc.content.keys().iter().any(|k| k.t == t),
+                keyed: doc.content.keys().iter().any(|k| k.t == t),
                 property: None,
                 vec2: false,
                 value: Value::F64(0.0),
@@ -1290,8 +1290,13 @@ pub(super) fn comp_line(view: &StoreView) -> String {
         .ok()
         .flatten()
         .map(|c| {
-            let secs = c.duration_frames / c.fps.num().max(1);
-            format!("{}×{} · {}fps · {}:{:02}", c.width, c.height, c.fps.num(), secs / 60, secs % 60)
+            let secs = (c.duration_frames as f64 / c.fps.as_f64().max(1e-9)).round() as i64;
+            format!("{}×{} · {}fps · {}:{:02}", c.width, c.height, crate::ui::export_sheet::fps_label(c.fps), secs / 60, secs % 60)
         })
         .unwrap_or_default()
+}
+
+/// 行の memo 鍵。作品の revision と表示の状態(畳み・鍵だけ)を 1 つの文字に。
+pub(super) fn memo_stamp(revision: crate::doc::store::Revision) -> String {
+    format!("{:?}/{}", revision, view_stamp())
 }

@@ -168,6 +168,7 @@ pub(super) fn parse_duration(text: &str) -> Option<f64> {
 }
 
 pub(super) fn format_duration(secs: f64) -> String {
+    let secs = (secs * 100.0).round() / 100.0; // 20.999 が "0:201.00" にならない
     let whole = secs.floor() as i64;
     let frac = secs - whole as f64;
     let base = format!("{}:{:02}", whole / 60, whole % 60);
@@ -181,6 +182,13 @@ pub(super) fn format_duration(secs: f64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn duration_rounds_before_it_splits_the_fraction() {
+        assert_eq!(format_duration(20.999), "0:21");
+        assert_eq!(format_duration(20.5), "0:20.50");
+        assert_eq!(format_duration(61.0), "1:01");
+    }
 
     #[test]
     fn durations_round_trip() {
