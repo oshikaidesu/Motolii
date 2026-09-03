@@ -255,3 +255,14 @@
 - ☐ F20 親付けがピックウィップでない
 - ☑ F21 掴んでいる間フレームに丸まらない
 - ☑ F22 複製の重ね順が衝突する
+
+## 営業 R: rerun で賄える物(→ [vendor-pitches](2026-09-03-vendor-pitches.md))
+- ☐ R1 時間↔画素と目盛を re_time_ruler / re_format へ(V8・A15・F18)
+- ☐ R2 当たり判定を PickingLayerProcessor へ
+- ☐ R3 選択の縁取りを OutlineMaskProcessor へ
+- ☐ R4 Fit / orbit を RectTransform / eye.rs の関数へ
+- ☐ R5 グリッドを WorldGridConfiguration で
+- ☐ R6 札の絵と素性を re_video へ(M5・M6・M7・A19)
+- ☐ R7 mesh 読み込みの二重化を importer へ一本化
+- ☐ R8 取っ手の大きさを re_renderer::Size へ
+- ☐ R9 Blend / 効果のサムネイルを headless の ScreenshotProcessor で(C4・C13)
