@@ -3,6 +3,7 @@ use crate::doc::store::Interp;
 
 /// 実機で確かめた既定値(2026-07-19 観察台帳)。
 pub(super) const KINDS: &[Interp] = &[
+    Interp::Hold,
     Interp::Linear,
     Interp::Bezier { x1: 0.42, y1: 0.0, x2: 0.58, y2: 1.0 },
     Interp::Bounce { first_dip: 0.27, dip: 0.2 },

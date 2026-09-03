@@ -138,7 +138,7 @@ fn keyframe_move_intents(
     doc: &Document,
     layer: LayerId,
     only: Option<&crate::doc::store::PropertyId>,
-    at_frame: i64,
+    frames: &[i64],
     delta_frames: i64,
 ) -> Result<Vec<Intent>, StoreError> {
     let view = doc.view();
@@ -161,7 +161,7 @@ fn keyframe_move_intents(
                 .t
                 .try_to_frame_round(fps)
                 .map_err(|e| StoreError::Property(e.to_string()))?;
-            if frame == at_frame {
+            if frames.contains(&frame) {
                 key.t = key.t.try_add(shift).map_err(|e| StoreError::Property(e.to_string()))?;
                 touched = true;
             }
@@ -169,6 +169,48 @@ fn keyframe_move_intents(
         }
         if touched {
             intents.push(Intent::SetTrack { layer, property, track: moved });
+        }
+    }
+    Ok(intents)
+}
+
+/// その時刻のキーだけ外す。最後の 1 つを外した時は、その値を定数として残す
+/// —— 絵が飛ばない(AE の ◆ を消した時と同じ)。
+pub(super) fn keyframe_delete_intents(
+    doc: &Document,
+    layer: LayerId,
+    only: Option<&crate::doc::store::PropertyId>,
+    at_sec: f64,
+) -> Result<Vec<Intent>, StoreError> {
+    let view = doc.view();
+    let fps = document_fps(doc)?;
+    let at_frame = (at_sec * fps.as_f64()).round() as i64;
+    let mut intents = Vec::new();
+    for property in view.properties(layer) {
+        if only.is_some_and(|p| *p != property) {
+            continue;
+        }
+        let Some(track) = view.track(layer, &property)? else {
+            continue;
+        };
+        let mut kept = KeyframeTrack::new();
+        let mut removed: Option<RationalTime> = None;
+        for key in track.keys() {
+            let frame = key
+                .t
+                .try_to_frame_round(fps)
+                .map_err(|e| StoreError::Property(e.to_string()))?;
+            if frame == at_frame {
+                removed = Some(key.t);
+            } else {
+                kept.insert(key.clone());
+            }
+        }
+        let Some(at) = removed else { continue };
+        if kept.keys().is_empty() {
+            intents.push(Intent::SetConstant { layer, property, value: track.eval(at) });
+        } else {
+            intents.push(Intent::SetTrack { layer, property, track: kept });
         }
     }
     Ok(intents)
@@ -402,12 +444,28 @@ impl TimelineWidget {
                             }
                             let mut all = Vec::new();
                             let mut failed = None;
+                            // 同じ帯の複数キーは 1 本の SetTrack に束ねる —— 別々に出すと最後の 1 本が勝つ。
+                            let mut tracks: Vec<((LayerId, Option<crate::doc::store::PropertyId>), Vec<i64>)> = Vec::new();
                             for (layer, prop, frame) in moving {
-                                match keyframe_move_intents(&doc, layer, prop.as_ref(), frame, raw_delta) {
+                                match tracks.iter_mut().find(|(k, _)| *k == (layer, prop.clone())) {
+                                    Some((_, frames)) => frames.push(frame),
+                                    None => tracks.push(((layer, prop), vec![frame])),
+                                }
+                            }
+                            for ((layer, prop), frames) in tracks {
+                                match keyframe_move_intents(&doc, layer, prop.as_ref(), &frames, raw_delta) {
                                     Ok(intents) => all.extend(intents),
                                     Err(e) => failed = Some(e),
                                 }
                             }
+                            let landed: Vec<(usize, f64)> = self
+                                .selected
+                                .iter()
+                                .filter_map(|(row_ix, key_ix)| {
+                                    let t = self.rows.get(*row_ix)?.keys.get(*key_ix).copied()?;
+                                    Some((*row_ix, t + raw_delta as f64 / fps_value))
+                                })
+                                .collect();
                             match failed.map_or(Ok(all), Err) {
                                 Ok(intents) => match doc.apply_all(intents) {
                                     Ok(_) => {
@@ -416,6 +474,18 @@ impl TimelineWidget {
                                             drag.layer, at_frame, at_frame + raw_delta
                                         );
                                         self.rows = extractor(&doc);
+                                        // 選択は動かした先へ付いていく。時刻で照合し直さないと、
+                                        // 直後の F9 が動かす前の秒を見て空振りする。
+                                        let half = 0.5 / fps_value;
+                                        self.selected = landed
+                                            .iter()
+                                            .filter_map(|(row_ix, t)| {
+                                                let row = self.rows.get(*row_ix)?;
+                                                let ki = row.keys.iter().position(|k| (k - t).abs() < half)?;
+                                                Some((*row_ix, ki))
+                                            })
+                                            .collect();
+                                        self.publish_keys();
                                     }
                                     Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
                                 },
@@ -542,13 +612,13 @@ impl TimelineWidget {
         let row_ix = row_ix as usize;
         let row = self.rows.get(row_ix)?;
         let mid_y = rh + row_ix as f64 * rowh + rowh * 0.5 - self.scroll_y;
-        if (y - mid_y).abs() > 8.0 {
+        if (y - mid_y).abs() > 8.0 * self.sfac() {
             return None;
         }
         let mut best: Option<(usize, f64)> = None;
         for (ki, t) in row.keys.iter().enumerate() {
             let dx = (x - (t - self.scroll_sec) * self.pps).abs();
-            if dx <= 6.0 && best.map_or(true, |(_, d)| dx < d) {
+            if dx <= 6.0 * self.sfac() && best.map_or(true, |(_, d)| dx < d) {
                 best = Some((ki, dx));
             }
         }
@@ -579,6 +649,14 @@ impl TimelineWidget {
     }
 
     /// 掴んでいるキーを窓の側へ出す。イージングのパネルがこれを読む。
+    /// 錠の掛かった層は掴めない。選ぶ事はできる —— 外す為に。
+    fn is_locked(&self, layer: LayerId) -> bool {
+        self.doc
+            .as_ref()
+            .and_then(|d| d.lock().unwrap().view().attrs(layer).ok().flatten())
+            .is_some_and(|a| a.locked)
+    }
+
     fn publish_keys(&self) {
         let Some(slot) = &self.selected_key else { return };
         let mut out: Vec<crate::ui::session::KeySel> = self
@@ -642,6 +720,13 @@ pub(super) fn duplicate_layer(doc: &Arc<Mutex<Document>>, layer: LayerId) -> Opt
     let shapes = view.shapes(layer).unwrap_or_default();
     let text = view.text_document(layer).ok().flatten();
 
+    let above: Vec<(LayerId, i16)> = view
+        .layers()
+        .into_iter()
+        .filter(|l| *l != layer)
+        .filter_map(|l| view.meta(l).ok().flatten().map(|m| (l, m.order)))
+        .filter(|(_, order)| *order > meta.order)
+        .collect();
     let mut intents = vec![
         Intent::AddLayer(copy),
         Intent::SetMeta {
@@ -650,6 +735,10 @@ pub(super) fn duplicate_layer(doc: &Arc<Mutex<Document>>, layer: LayerId) -> Opt
         },
         Intent::SetAttrs { layer: copy, patch: attrs_to_patch(&attrs) },
     ];
+    // 複製は元の**すぐ上**に割り込む。上に居た層は 1 つずつ退く。
+    for (l, order) in above {
+        intents.push(Intent::SetOrder { layer: l, order: order.saturating_add(1) });
+    }
     if !effects.is_empty() {
         intents.push(Intent::SetEffects { layer: copy, effects });
     }
@@ -821,7 +910,7 @@ impl Widget for TimelineWidget {
                         }
                         _ => self.drag.as_ref().expect("同上").orig.start as f64 / self.fps,
                     };
-                    let snapped = self.snapped_delta(moving, raw);
+                    let snapped = (self.snapped_delta(moving, raw) * self.fps).round() / self.fps;
                     if let Some(drag) = &mut self.drag {
                         drag.delta_sec = snapped;
                     }
@@ -863,6 +952,10 @@ impl Widget for TimelineWidget {
                         self.rows[row_ix].layer,
                         self.rows[row_ix].keys.get(key_ix).copied(),
                     ) {
+                        if self.is_locked(layer) {
+                            println!("PROBE room=input verdict=locked layer={layer:?}");
+                            return;
+                        }
                         let orig = self
                             .doc
                             .as_ref()
@@ -901,6 +994,10 @@ impl Widget for TimelineWidget {
                             .map(|m| m.timing)
                     });
                     if let (Some(layer), Some(orig)) = (layer, orig) {
+                        if self.is_locked(layer) {
+                            println!("PROBE room=input verdict=locked layer={layer:?}");
+                            return;
+                        }
                         let mode = match self.rows[row_ix].span {
                             Some((a, b)) => {
                                 let xa = (a - self.scroll_sec) * self.pps;
@@ -1378,6 +1475,104 @@ mod lyrics {
         w.markers = vec![1.5, 7.25];
         let targets = w.snap_targets();
         assert!(targets.contains(&1.5) && targets.contains(&7.25), "{targets:?}");
+    }
+}
+
+#[cfg(test)]
+mod keys {
+    use super::*;
+    use crate::doc::store::{
+        property, Composition, Interp, Keyframe, LayerSource, PropertyId, Value,
+    };
+
+    fn two_key_doc() -> (Document, LayerId, PropertyId, Fps) {
+        let fps = Fps::try_new(24, 1).unwrap();
+        let mut doc = Document::new();
+        doc.apply(Intent::SetComposition(Composition {
+            width: 640,
+            height: 480,
+            fps,
+            duration_frames: 240,
+            background: Composition::default_background(),
+        }))
+        .unwrap();
+        let layer = LayerId(1);
+        let property = PropertyId::new(property::POSITION).unwrap();
+        let mut track = KeyframeTrack::new();
+        for (frame, x) in [(12, 1.0), (36, 3.0)] {
+            track.insert(Keyframe {
+                t: RationalTime::try_from_frame(frame, fps).unwrap(),
+                value: Value::Vec2([x, 0.0]),
+                interp: Interp::Linear,
+                spatial: None,
+            });
+        }
+        doc.apply_all([
+            Intent::AddLayer(layer),
+            Intent::SetMeta {
+                layer,
+                meta: LayerMeta { source: LayerSource::Shape, order: 0, timing: LayerTiming::place(0, None, 240) },
+            },
+            Intent::SetTrack { layer, property: property.clone(), track },
+        ])
+        .unwrap();
+        (doc, layer, property, fps)
+    }
+
+    fn frames(doc: &Document, layer: LayerId, property: &PropertyId, fps: Fps) -> Vec<i64> {
+        doc.view()
+            .track(layer, property)
+            .unwrap()
+            .unwrap()
+            .keys()
+            .iter()
+            .map(|k| k.t.try_to_frame_round(fps).unwrap())
+            .collect()
+    }
+
+    /// 同じ帯の 2 つを掴めば 2 つとも動く。別々の SetTrack だと最後の 1 本が勝っていた。
+    #[test]
+    fn two_keys_on_one_track_move_together() {
+        let (mut doc, layer, property, fps) = two_key_doc();
+        let intents = keyframe_move_intents(&doc, layer, Some(&property), &[12, 36], 5).unwrap();
+        assert_eq!(intents.len(), 1, "one track, one SetTrack");
+        doc.apply_all(intents).unwrap();
+        assert_eq!(frames(&doc, layer, &property, fps), vec![17, 41]);
+    }
+
+    /// Delete はその時刻のキーだけ外す。最後の 1 つを外すと値は定数で残り、絵は飛ばない。
+    #[test]
+    fn deleting_a_key_leaves_the_others_and_then_a_constant() {
+        let (mut doc, layer, property, fps) = two_key_doc();
+        doc.apply_all(keyframe_delete_intents(&doc, layer, Some(&property), 0.5).unwrap()).unwrap();
+        assert_eq!(frames(&doc, layer, &property, fps), vec![36]);
+        doc.apply_all(keyframe_delete_intents(&doc, layer, Some(&property), 1.5).unwrap()).unwrap();
+        assert!(doc.view().track(layer, &property).unwrap().is_none(), "track should be gone");
+        let at = RationalTime::try_from_frame(36, fps).unwrap();
+        assert_eq!(doc.view().value_at(layer, &property, at).unwrap(), Some(Value::Vec2([3.0, 0.0])));
+    }
+
+    /// 複製は元のすぐ上に割り込み、上に居た層は退く。
+    #[test]
+    fn duplicate_slips_in_above_the_original() {
+        let (doc, layer, _, _) = two_key_doc();
+        let doc = Arc::new(Mutex::new(doc));
+        {
+            let mut d = doc.lock().unwrap();
+            let upper = LayerId(2);
+            d.apply_all([
+                Intent::AddLayer(upper),
+                Intent::SetMeta {
+                    layer: upper,
+                    meta: LayerMeta { source: LayerSource::Shape, order: 1, timing: LayerTiming::place(0, None, 240) },
+                },
+            ])
+            .unwrap();
+        }
+        let copy = duplicate_layer(&doc, layer).unwrap();
+        let d = doc.lock().unwrap();
+        let order = |l: LayerId| d.view().meta(l).unwrap().unwrap().order;
+        assert_eq!((order(layer), order(copy), order(LayerId(2))), (0, 1, 2));
     }
 }
 

@@ -211,38 +211,38 @@
 - ☐ M16 落とす先の可否・役目が覆いに出ない(H17)
 
 ## 第 4 波 X: 支援技術と文言
-- ☐ X1 再生ボタンに名前が無い
-- ☐ X2 書き出しの進捗・status bar に live region が無い
-- ☐ X3 M/S/L の aria_label が可視文字と違う
-- ☐ X4 ◎ の title と aria_label が食い違う / "To layer" → "Send to layer"
-- ☐ X5 面タブが span で focus も role も無い
+- ☑ X1 再生ボタンに名前が無い
+- ☑ X2 書き出しの進捗・status bar に live region が無い
+- ☑ X3 M/S/L の aria_label が可視文字と違う
+- ☑ X4 ◎ の title と aria_label が食い違う / "To layer" → "Send to layer"
+- ☑ X5 面タブが span で focus も role も無い
 - ☐ X6 disabled な札の理由が届かない
-- ☐ X7 "Imported 1 files"
-- ☐ X8 書き出し error の文体(小文字始まり・回復手段無し)
-- ☐ X9 "Wrote {fullpath}" など完了文が経路まる出し
-- ☐ X10 未保存 dialog の文面が 2 種類
-- ☐ X11 View menu の ✓ が字(menuitemcheckbox へ)
-- ☐ X12 "Window" が 8 個同名
-- ☐ X13 倍率・調光の値が名前に紐づかない
+- ☑ X7 "Imported 1 files"
+- ☑ X8 書き出し error の文体(小文字始まり・回復手段無し)
+- ☑ X9 "Wrote {fullpath}" など完了文が経路まる出し
+- ☑ X10 未保存 dialog の文面が 2 種類
+- ☑ X11 View menu の ✓ が字(menuitemcheckbox へ)
+- ☑ X12 "Window" が 8 個同名
+- ☑ X13 倍率・調光の値が名前に紐づかない
 - ☐ X14 状態が色だけ(.lit .on)
-- ☐ X15 OBJECT / rows / layer の呼び名
-- ☐ X16 空状態の文体が揃わない
-- ☐ X17 命令文と説明文の混在
-- ☐ X18 参考画像の名前が 3 回読まれる
-- ☐ X19 見出しの全大文字を CSS へ
+- ☑ X15 OBJECT / rows / layer の呼び名
+- ☑ X16 空状態の文体が揃わない
+- ☑ X17 命令文と説明文の混在
+- ☑ X18 参考画像の名前が 3 回読まれる
+- ☑ X19 見出しの全大文字を CSS へ
 - ☐ X20 Freeze が押せる物に見えない・"Linear light"・小文字の "attached"
 
 ## 第 4 波 F: キーを打つ人
-- ☐ F1 Delete がキーでなく層を消す(selected_keys があればキー削除)
-- ☐ F2 同じトラックの複数キーを掴むと 1 つしか動かない(SetTrack が最後勝ち)
+- ☑ F1 Delete がキーでなく層を消す(selected_keys があればキー削除)
+- ☑ F2 同じトラックの複数キーを掴むと 1 つしか動かない(SetTrack が最後勝ち)
 - ☐ F3 分割が shape / text を落とす・切り口の Interp を split_at しない
-- ☐ F4 帯の時刻が 30fps 決め打ち(fixture FPS)
+- ☑ F4 帯の時刻が 30fps 決め打ち(fixture FPS)
 - ☐ F5 キー選択が index(行が組み替わると別のキー)
-- ☐ F6 掴み終わりに publish_keys を呼ばない(F9 が空振り)
+- ☑ F6 掴み終わりに publish_keys を呼ばない(F9 が空振り)
 - ☐ F7 キーを 1 つだけ消す口が無い(◆ navigator)
 - ☐ F8 既存のキーへ落とすと黙って上書き
-- ☐ F9 Hold が棚に無い
-- ☐ F10 錠が Timeline の掴みに効かない
+- ☑ F9 Hold が棚に無い
+- ☑ F10 錠が Timeline の掴みに効かない
 - ☐ F11 層の行のキーへ形を当てると全属性に乗る / 値グラフが無い
 - ☐ F12 Easy Ease In / Out が AE と裏返し
 - ☐ F13 キーを鍵で動かせない(Alt+←→)
@@ -251,7 +251,7 @@
 - ☐ F16 スリップ(Alt+drag)が無い
 - ☐ F17 囲い選択がキー専用・足すだけ
 - ☐ F18 zoom to fit が無く、右が無限
-- ☐ F19 キーの当たり半径が UI 倍率に付いてこない
+- ☑ F19 キーの当たり半径が UI 倍率に付いてこない
 - ☐ F20 親付けがピックウィップでない
-- ☐ F21 掴んでいる間フレームに丸まらない
-- ☐ F22 複製の重ね順が衝突する
+- ☑ F21 掴んでいる間フレームに丸まらない
+- ☑ F22 複製の重ね順が衝突する

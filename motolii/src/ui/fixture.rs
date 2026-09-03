@@ -225,6 +225,14 @@ fn rows_nested(
 }
 
 pub(super) fn canvas_rows_from_doc(doc: &Document) -> Vec<CanvasRow> {
+    // 帯の秒は作品の fps で割る。30 決め打ちだと 24fps の作品で帯だけ時間軸がずれる。
+    let fps = doc
+        .view()
+        .composition()
+        .ok()
+        .flatten()
+        .map(|c| c.fps.as_f64())
+        .unwrap_or(FPS);
     let view = doc.view();
     let agg_props: Vec<PropertyId> = [property::OPACITY, property::POSITION]
         .iter()
@@ -274,7 +282,7 @@ pub(super) fn canvas_rows_from_doc(doc: &Document) -> Vec<CanvasRow> {
                     CanvasRow {
                         is_group: false,
                         keys,
-                        span: Some((start as f64 / FPS, (start + duration) as f64 / FPS)),
+                        span: Some((start as f64 / fps, (start + duration) as f64 / fps)),
                         agg: Vec::new(),
                         layer: Some(layer),
                         prop: None,

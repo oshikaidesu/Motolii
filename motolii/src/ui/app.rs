@@ -1262,6 +1262,28 @@ pub fn app() -> Element {
                             *revision.write() += 1;
                         }
                         Intent::DeleteLayer => {
+                            // キーを選んでいる時の Delete はキーを消す。層は残る(AE・Blender)。
+                            let keys: Vec<_> = session.selected_keys.lock().unwrap().clone();
+                            if !keys.is_empty() {
+                                let mut d = doc.lock().unwrap();
+                                let mut intents = Vec::new();
+                                for k in &keys {
+                                    match crate::ui::timeline_widget::keyframe_delete_intents(&d, k.layer, k.property.as_ref(), k.at_sec) {
+                                        Ok(more) => intents.extend(more),
+                                        Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
+                                    }
+                                }
+                                let applied = d.apply_all(intents).is_ok();
+                                let canvas = fixture::canvas_rows_from_doc(&d);
+                                drop(d);
+                                if applied {
+                                    session.selected_keys.lock().unwrap().clear();
+                                    let _ = timeline_tx.send(TimelineMsg::SetRows(canvas));
+                                    *revision.write() += 1;
+                                }
+                                println!("PROBE room=write verdict=applied DeleteKeys n={} ok={applied}", keys.len());
+                                return;
+                            }
                             let targets = session.editable_selection();
                             if targets.is_empty() {
                                 println!("PROBE room=write verdict=delete-noop reason=no-selection");
