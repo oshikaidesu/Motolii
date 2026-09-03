@@ -187,10 +187,10 @@ fn panel_body(panel: Panel, session: &Session, ui: &fixture::UiData, p: Panes) -
             revision: p.revision,
             playhead: p.playhead,
             on_history: {
-                let doc = session.doc.clone();
+                let session = session.clone();
                 let timeline_tx = session.timeline_tx.clone();
                 move |steps: i32| {
-                    history_step(&doc, p.layer_rows, p.attrs_state, &timeline_tx, p.revision, steps);
+                    history_step(&session, p.layer_rows, p.attrs_state, &timeline_tx, p.revision, steps);
                 }
             },
         }),
@@ -432,13 +432,14 @@ fn TimelinePanel(
 
 /// 履歴を進める・戻す手は 1 つ。キーも机の履歴も同じ手を使う(行の目・solo・鍵も追従する)。
 fn history_step(
-    doc: &std::sync::Arc<std::sync::Mutex<crate::doc::store::Document>>,
+    session: &Session,
     layer_rows: Signal<Vec<fixture::LayerRow>>,
     attrs_state: Signal<Vec<(bool, bool, bool)>>,
     timeline_tx: &std::sync::mpsc::Sender<TimelineMsg>,
     revision: Signal<u32>,
     steps: i32,
 ) {
+    let doc = &session.doc;
     let mut moved = 0;
     {
         let mut d = doc.lock().unwrap();
@@ -451,6 +452,7 @@ fn history_step(
         }
     }
     if moved > 0 {
+        session.forget_dead_layers();
         refresh_layer_projection(doc, layer_rows, attrs_state, timeline_tx, revision);
     }
     println!("PROBE room=write verdict=history moved={moved}");
@@ -830,9 +832,18 @@ pub fn app() -> Element {
         let asker = session.clone();
         use_effect(move || {
             let _ = (panes.revision)();
+            let _ = (panes.echo)();
             if let Some(panel) = asker.take_panel_ask() {
                 dock.write().set_active(panel);
             }
+        });
+    }
+    // 選択が変わったら箱の寸法は一度捨てる(前の層の箱でアンカーの升を押させない)。
+    {
+        let sizer = session.clone();
+        use_effect(move || {
+            let _ = (panes.selected)();
+            *sizer.selected_size.lock().unwrap() = None;
         });
     }
     let output_generation = (panes.echo)();
@@ -1198,7 +1209,7 @@ pub fn app() -> Element {
                         }
                         Intent::Undo | Intent::Redo => {
                             let steps = if matches!(intent, Intent::Undo) { -1 } else { 1 };
-                            history_step(&doc, layer_rows, attrs_state, &timeline_tx, revision, steps);
+                            history_step(&session, layer_rows, attrs_state, &timeline_tx, revision, steps);
                         }
                         Intent::Save => {
                             let session = session.clone();
@@ -1222,7 +1233,7 @@ pub fn app() -> Element {
                             *revision.write() += 1;
                         }
                         Intent::DeleteLayer => {
-                            let targets = selection.all();
+                            let targets = session.editable_selection();
                             if targets.is_empty() {
                                 println!("PROBE room=write verdict=delete-noop reason=no-selection");
                                 return;
@@ -1558,12 +1569,12 @@ pub fn app() -> Element {
                                     SemanticControl {
                                         label: label,
                                         onclick: {
-                                            let doc = doc.clone();
+                                            let session = session.clone();
                                             let timeline_tx = timeline_tx.clone();
                                             move |evt: Event<MouseData>| {
                                                 evt.stop_propagation();
                                                 open_menu.set(None);
-                                                history_step(&doc, layer_rows, attrs_state, &timeline_tx, revision, steps);
+                                                history_step(&session, layer_rows, attrs_state, &timeline_tx, revision, steps);
                                             }
                                         }
                                     }

@@ -144,7 +144,14 @@ impl Dock {
     pub(super) fn load(path: &std::path::Path) -> Option<Self> {
         let text = std::fs::read_to_string(path).ok()?;
         let dock: Self = serde_json::from_str(&text).ok()?;
-        dock.layout.valid().then_some(dock)
+        // 知らない panel 名(11 面時代の Ease / Output 等)が居る配置は捨てて既定へ。空の tile が残る。
+        fn all_known(node: &LayoutNode) -> bool {
+            match node {
+                LayoutNode::Tile(tile) => tile.panels.iter().all(|p| Panel::from_workbench(p).is_some()),
+                LayoutNode::Split { first, second, .. } => all_known(first) && all_known(second),
+            }
+        }
+        (dock.layout.valid() && all_known(&dock.layout.root)).then_some(dock)
     }
 
     pub(super) fn save(&self, path: &std::path::Path) {
@@ -453,6 +460,11 @@ mod tests {
 
         std::fs::write(&path, "{ not layout").unwrap();
         assert!(Dock::load(&path).is_none());
+
+        // 昔の panel 名を含む配置は既定へ戻る(空の tile を居座らせない)。
+        let stale = serde_json::to_string(&Dock::default()).unwrap().replace("\"Media\"", "\"Ease\"");
+        std::fs::write(&path, stale).unwrap();
+        assert!(Dock::load(&path).is_none(), "a stale panel name survived into the layout");
     }
 
     #[test]

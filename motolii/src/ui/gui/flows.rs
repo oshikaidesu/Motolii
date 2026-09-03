@@ -341,6 +341,20 @@ fn a_multi_selection_shows_common_rows_and_writes_to_every_layer() {
     for l in &chosen {
         assert!((x_of(&gui, *l) - 10.0).abs() < 1e-6, "typed value did not reach every layer");
     }
+
+    // 主の層が既にその値でも、他の層には届く(主だけで早帰りしない)。
+    gui.click(x2, y2);
+    gui.click(cx + 6.0, cy);
+    gui.click(cx + 6.0, cy);
+    type_chars(&mut gui, "77");
+    enter(&mut gui);
+    gui.click(x1, y1);
+    gui.click_super(x2, y2);
+    gui.click(cx + 9.0, cy);
+    gui.click(cx + 9.0, cy);
+    type_chars(&mut gui, "10");
+    enter(&mut gui);
+    assert!((x_of(&gui, chosen[1]) - 10.0).abs() < 1e-6, "the second layer kept its old value");
 }
 
 /// 文字の級数は Inspector の数の行。擦れば変わる。
@@ -452,4 +466,19 @@ fn a_marker_note_can_be_sent_to_the_selected_text_layer() {
     gui.click(send.0, send.1);
     let content = gui.session.doc.lock().unwrap().view().text_document(layer).unwrap().unwrap().content.eval(gui.session.clock.current_time()).to_string();
     assert_eq!(content, "la la");
+}
+
+/// 欄を Escape で閉じた直後の Space は再生になる(flag が欄より長生きしない)。
+#[test]
+fn the_first_key_after_closing_a_field_is_not_eaten() {
+    let mut gui = Gui::open();
+    let (x, y) = gui.center_of(".lsurface", 1);
+    gui.click(x, y);
+    gui.click(x, y);
+    assert_eq!(gui.count("input"), 1);
+    gui.key(keyboard_types::Key::Escape, keyboard_types::Modifiers::empty());
+    assert_eq!(gui.count("input"), 0);
+    gui.key(keyboard_types::Key::Character(" ".into()), keyboard_types::Modifiers::empty());
+    assert!(gui.session.clock.playing(), "Space right after closing a field did not play");
+    gui.key(keyboard_types::Key::Character(" ".into()), keyboard_types::Modifiers::empty());
 }

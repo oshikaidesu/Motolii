@@ -8,6 +8,18 @@ pub(super) async fn put_away(
     poke: crate::ui::host::Poke,
     ask: bool,
 ) -> bool {
+    // dialog を待つ間に Cmd+S をもう一度押しても 2 枚目は開かない。
+    if session.saving.swap(true, std::sync::atomic::Ordering::SeqCst) {
+        return false;
+    }
+    let done = put_away_inner(&session, ask).await;
+    session.saving.store(false, std::sync::atomic::Ordering::SeqCst);
+    println!("PROBE room=project verdict=save {}", session.project_notice.lock().unwrap());
+    poke.poke();
+    done
+}
+
+async fn put_away_inner(session: &Session, ask: bool) -> bool {
     let known = session.project_path.lock().unwrap().clone();
     let out = match known.filter(|_| !ask) {
         Some(path) => path,
@@ -24,17 +36,19 @@ pub(super) async fn put_away(
             out
         }
     };
-    let save_result = session.doc.lock().unwrap().save(&out);
+    // 仕舞う物と「仕舞った revision」は同じ lock の中で決める。取り直すと間の編集が消える。
+    let save_result = {
+        let d = session.doc.lock().unwrap();
+        d.save(&out).map(|()| d.revision())
+    };
     let (word, saved) = match save_result {
-        Ok(()) => {
-            session.mark_saved(out.clone());
+        Ok(revision) => {
+            session.mark_saved(out.clone(), revision);
             (format!("Saved {}", out.display()), true)
         }
         Err(e) => (format!("Save failed: {e}"), false),
     };
-    println!("PROBE room=project verdict=save {word}");
     *session.project_notice.lock().unwrap() = word;
-    poke.poke();
     saved
 }
 

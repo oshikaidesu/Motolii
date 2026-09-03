@@ -77,19 +77,19 @@
 - ☐ V28 常設ヒント
 
 ## 第 2 波 Q: QA の状態 bug
-- ☐ Q1 Undo/Redo が窓側の id を掃除しない
-- ☐ Q2 replace_project が scrub / panel_ask を残す
-- ☐ Q3 印の本文が index 指し(並べ替えでずれる)
+- ☑ Q1 Undo/Redo が窓側の id を掃除しない
+- ☑ Q2 replace_project が scrub / panel_ask を残す
+- ☑ Q3 印の本文が index 指し(並べ替えでずれる)
 - ☐ Q4 窓外 release の受け口が別窓に無い
-- ☐ Q5 panel_ask が別窓から届かない
-- ☐ Q6 錠が編集経路で見られていない
-- ☐ Q7 複数選択で同じ値を打つと他が更新されない
-- ☐ Q8 ダブルクリックが擦りの transient を残す
-- ☐ Q9 set_typing が欄より長生き(閉じた直後の 1 打鍵)
-- ☐ Q10 保存の revision の取り直し、Cmd+S 連打
-- ☐ Q11 layout.json の古い panel 名
+- ☑ Q5 panel_ask が別窓から届かない
+- ☑ Q6 錠が編集経路で見られていない
+- ☑ Q7 複数選択で同じ値を打つと他が更新されない
+- ☑ Q8 ダブルクリックが擦りの transient を残す
+- ☑ Q9 set_typing が欄より長生き(閉じた直後の 1 打鍵)
+- ☑ Q10 保存の revision の取り直し、Cmd+S 連打
+- ☑ Q11 layout.json の古い panel 名
 - ☐ Q12 主窓を閉じても別窓が残る
-- ☐ Q13 アンカー升が前の層の箱で押される
+- ☑ Q13 アンカー升が前の層の箱で押される
 - ☐ Q14 style が空の文字層
 - ☐ Q15 harness と窓のずれ(click_super、IME の試験)
 - ☐ Q16 落とした物・drag の後始末

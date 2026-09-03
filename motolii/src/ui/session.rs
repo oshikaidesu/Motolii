@@ -179,6 +179,8 @@ pub(super) struct Session {
     /// 机の引き出しの開閉。窓をまたいで 1 つ。
     pub desk: Arc<Mutex<DeskState>>,
     pub field: Arc<Mutex<Option<OpenField>>>,
+    /// 仕舞っている最中(dialog を待つ間)。Cmd+S の連打で 2 枚開けない。
+    pub saving: Arc<std::sync::atomic::AtomicBool>,
     /// 数値を擦っている最中。窓の外で放しても、Escape でも、ここから終える。
     pub scrub: Arc<Mutex<Option<crate::ui::inspector::ValueDrag>>>,
     /// 面が「この panel を前に出して」と頼む口。app が revision ごとに拾う。
@@ -236,8 +238,8 @@ pub(super) struct OpenField {
 /// 欄が指す物。値の型ではなく置き場で見分ける。
 #[derive(Clone, PartialEq, Debug)]
 pub(super) enum FieldAt {
-    /// マーカーの本文(index)。
-    Note(usize),
+    /// マーカーの本文。印は並べ替えられ消されるので、index でなく時刻で指す。
+    Note(crate::doc::store::RationalTime),
     Number {
         layer: LayerId,
         property: String,
@@ -281,6 +283,7 @@ impl Session {
             focus: Arc::new(Mutex::new(None)),
             desk: Arc::new(Mutex::new(DeskState::Follow)),
             field: Arc::new(Mutex::new(None)),
+            saving: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             scrub: Arc::new(Mutex::new(None)),
             panel_ask: Arc::new(Mutex::new(None)),
             view_camera: Arc::new(Mutex::new(Default::default())),
@@ -302,10 +305,10 @@ impl Session {
         current != *self.saved_revision.lock().unwrap()
     }
 
-    pub(super) fn mark_saved(&self, path: std::path::PathBuf) {
-        let current = self.doc.lock().unwrap().revision();
+    /// 仕舞った revision は、仕舞った時に同じ lock の中で読んだ物を渡す(取り直すと嘘になる)。
+    pub(super) fn mark_saved(&self, path: std::path::PathBuf, revision: Revision) {
         *self.project_path.lock().unwrap() = Some(path);
-        *self.saved_revision.lock().unwrap() = current;
+        *self.saved_revision.lock().unwrap() = revision;
     }
 
     pub(super) fn replace_project(&self, document: Document, path: Option<std::path::PathBuf>) {
@@ -318,12 +321,54 @@ impl Session {
         *self.focus.lock().unwrap() = None;
         *self.desk.lock().unwrap() = DeskState::Follow;
         *self.field.lock().unwrap() = None;
+        *self.scrub.lock().unwrap() = None;
+        *self.panel_ask.lock().unwrap() = None;
         self.selected_keys.lock().unwrap().clear();
         *self.selected_size.lock().unwrap() = None;
         *self.curve_clip.lock().unwrap() = None;
     }
 
+    /// Undo / Redo の後。消えた層を名指す窓側の手を全部手放す(層の id は嘘になっている)。
+    pub(super) fn forget_dead_layers(&self) {
+        let live = self.doc.lock().unwrap().view().layers();
+        let dead: Vec<LayerId> = self.selection.all().into_iter().filter(|l| !live.contains(l)).collect();
+        for l in &dead {
+            self.selection.toggle(*l);
+        }
+        let focus_dead = self.focus.lock().unwrap().as_ref().is_some_and(|f| {
+            let layer = match f {
+                Focus::Blend(l) => *l,
+                Focus::Color(slot) => slot.layer(),
+            };
+            !live.contains(&layer)
+        });
+        if focus_dead {
+            *self.focus.lock().unwrap() = None;
+        }
+        let field_dead = self.field().is_some_and(|f| match f.at {
+            FieldAt::Number { layer, .. } | FieldAt::Content(layer) | FieldAt::Name(layer) => !live.contains(&layer),
+            FieldAt::Note(_) => false,
+        });
+        if field_dead {
+            self.close_field();
+        }
+        *self.scrub.lock().unwrap() = None;
+        self.selected_keys.lock().unwrap().retain(|k| live.contains(&k.layer));
+    }
+
+    /// 錠の掛かっていない選択。書く経路はこちらを見る(錠は Timeline が掛ける)。
+    pub(super) fn editable_selection(&self) -> Vec<LayerId> {
+        let doc = self.doc.lock().unwrap();
+        let view = doc.view();
+        self.selection
+            .all()
+            .into_iter()
+            .filter(|l| !view.attrs(*l).ok().flatten().is_some_and(|a| a.locked))
+            .collect()
+    }
+
     pub(super) fn open_field(&self, at: FieldAt, draft: String) {
+        crate::ui::keymap::set_typing(true);
         *self.field.lock().unwrap() = Some(OpenField { at, draft });
     }
 
@@ -345,6 +390,8 @@ impl Session {
     }
 
     pub(super) fn close_field(&self) -> Option<OpenField> {
+        // flag は欄と同じ寿命。長生きさせると閉じた直後の 1 打鍵(Space)が食われる。
+        crate::ui::keymap::set_typing(false);
         self.field.lock().unwrap().take()
     }
 
@@ -371,6 +418,23 @@ impl Session {
 mod project_tests {
     use super::*;
 
+    /// Undo で消えた層を名指す手は全部手放す。
+    #[test]
+    fn undo_forgets_selection_focus_and_field_of_a_dead_layer() {
+        let loaded = crate::ui::fixture::load_fixture();
+        let session = Session::new(loaded.doc, loaded.duration_sec, loaded.ui);
+        let layer = LayerId(session.doc.lock().unwrap().view().next_layer_id());
+        session.doc.lock().unwrap().apply(crate::doc::store::Intent::AddLayer(layer)).unwrap();
+        session.selection.set(Some(layer));
+        *session.focus.lock().unwrap() = Some(Focus::Blend(layer));
+        session.open_field(FieldAt::Name(layer), "x".into());
+        assert!(session.doc.lock().unwrap().undo());
+        session.forget_dead_layers();
+        assert_eq!(session.selection.get(), None);
+        assert!(session.focus.lock().unwrap().is_none());
+        assert!(session.field().is_none());
+    }
+
     #[test]
     fn dirty_state_is_only_the_difference_from_the_saved_revision() {
         let loaded = crate::ui::fixture::load_fixture();
@@ -386,7 +450,8 @@ mod project_tests {
             .unwrap();
         assert!(session.is_dirty());
 
-        session.mark_saved(std::path::PathBuf::from("song.rrd"));
+        let rev = session.doc.lock().unwrap().revision();
+        session.mark_saved(std::path::PathBuf::from("song.rrd"), rev);
         assert!(!session.is_dirty());
 
         session

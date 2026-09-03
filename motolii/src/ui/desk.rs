@@ -60,7 +60,10 @@ fn shut(session: &Session) {
 /// 無ければ今の時刻の印。
 fn note_index(session: &Session, markers: &[Marker], now: f64) -> Option<usize> {
     match session.field().map(|f| f.at) {
-        Some(FieldAt::Note(i)) if i < markers.len() => Some(i),
+        Some(FieldAt::Note(at)) => markers
+            .iter()
+            .position(|m| m.time == at)
+            .or_else(|| current_marker(markers, now)),
         _ => current_marker(markers, now),
     }
 }
@@ -75,14 +78,15 @@ fn current_marker(markers: &[Marker], now: f64) -> Option<usize> {
         .map(|(i, _)| i)
 }
 
+/// 印は時刻で引く。index は打ち直しや Undo でずれる。
 fn write_marker_body(
     doc: &Arc<Mutex<Document>>,
-    index: usize,
+    at: crate::doc::store::RationalTime,
     body: String,
 ) -> Result<(), StoreError> {
     let mut d = doc.lock().unwrap();
     let mut markers = d.view().markers()?;
-    let Some(marker) = markers.get_mut(index) else {
+    let Some(marker) = markers.iter_mut().find(|m| m.time == at) else {
         return Ok(());
     };
     marker.body = body;
@@ -152,7 +156,8 @@ pub(super) fn DeskPanel(
     let note = drawer.filter(|d| *d == Drawer::Text).map(|_| match current {
         Some(i) => {
             let marker = &markers[i];
-            let editing = session.field_at(&FieldAt::Note(i)).is_some();
+            let at = marker.time;
+            let editing = session.field_at(&FieldAt::Note(at)).is_some();
             let doc = session.doc.clone();
             let body = marker.body.clone();
             let unchanged = marker.body.clone();
@@ -195,7 +200,7 @@ pub(super) fn DeskPanel(
                         class: if body.is_empty() { "mbody idle" } else { "mbody" },
                         aria_label: "Edit note",
                         onclick: move |_| {
-                            opener.open_field(FieldAt::Note(i), body.clone());
+                            opener.open_field(FieldAt::Note(at), body.clone());
                             *revision.write() += 1;
                         },
                         if marker.body.is_empty() { "Write what happens here" } else { "{marker.body}" }
@@ -436,10 +441,10 @@ mod tests {
         let session = Session::new(loaded.doc, loaded.duration_sec, loaded.ui);
         let markers = [marker(0), marker(1)];
         assert_eq!(note_index(&session, &markers, 1.5), Some(1));
-        session.open_field(FieldAt::Note(0), String::new());
+        session.open_field(FieldAt::Note(markers[0].time), String::new());
         assert_eq!(note_index(&session, &markers, 1.5), Some(0));
-        session.open_field(FieldAt::Note(7), String::new());
-        assert_eq!(note_index(&session, &markers, 1.5), Some(1), "a stale note index must not panic the desk");
+        session.open_field(FieldAt::Note(RationalTime::try_new(7, 1).unwrap()), String::new());
+        assert_eq!(note_index(&session, &markers, 1.5), Some(1), "a stale note must not panic the desk");
     }
 
     #[test]

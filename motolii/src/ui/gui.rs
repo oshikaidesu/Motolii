@@ -763,7 +763,8 @@ fn edited_status_tracks_the_saved_document_revision() {
     gui.settle();
     assert!(gui.texts("#status").join(" ").contains("Edited"));
 
-    gui.session.mark_saved(std::path::PathBuf::from("song.rrd"));
+    let rev = gui.session.doc.lock().unwrap().revision();
+    gui.session.mark_saved(std::path::PathBuf::from("song.rrd"), rev);
     gui.host.wake_all();
     gui.settle();
     assert!(!gui.texts("#status").join(" ").contains("Edited"));

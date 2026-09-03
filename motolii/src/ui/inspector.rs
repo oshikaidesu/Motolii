@@ -227,11 +227,11 @@ pub(super) fn cancel_scrub(session: &Session) -> bool {
 /// 選んでいる他の層の、同じ property の今の値。複数選択で一緒に動かす為。
 fn others_at(session: &Session, primary: LayerId, property: &str, t: RationalTime) -> Vec<(LayerId, Value)> {
     let Ok(prop) = PropertyId::new(property) else { return Vec::new() };
+    // 錠の判定は doc の lock を取る。ここで lock を握る前に済ませる(同じ lock は二度取れない)。
+    let editable = session.editable_selection();
     let doc = session.doc.lock().unwrap();
     let view = doc.view();
-    session
-        .selection
-        .all()
+    editable
         .into_iter()
         .filter(|l| *l != primary)
         .filter_map(|l| value_with_default(&view, l, &prop, property, t).map(|v| (l, v)))
@@ -317,19 +317,23 @@ fn prop_row(
                     oncommit: move |f: OpenField| {
                         let FieldAt::Number { layer, property, axis } = f.at else { return };
                         let Ok(v) = f.draft.trim().parse::<f64>() else { return };
-                        let value = put_axis(&start_value, vec2, axis, v, range);
-                        if value == start_value {
-                            return;
-                        }
                         let others = others_at(&commit_session, layer, &property, t);
                         let targets = std::iter::once((layer, start_value.clone())).chain(others);
+                        let mut wrote = false;
                         for (layer, base) in targets {
                             let value = put_axis(&base, vec2, axis, v, range);
-                            if let Err(err) = write_key(&doc_commit, layer, &property, value, t) {
-                                println!("PROBE room=write verdict=apply-error {err}");
+                            // 同じ値は書かない。複数選択では層ごとに見る(主の層だけで早帰りしない)。
+                            if value == base {
+                                continue;
+                            }
+                            match write_key(&doc_commit, layer, &property, value, t) {
+                                Ok(()) => wrote = true,
+                                Err(err) => println!("PROBE room=write verdict=apply-error {err}"),
                             }
                         }
-                        *revision.write() += 1;
+                        if wrote {
+                            *revision.write() += 1;
+                        }
                     },
                 });
             }
@@ -355,7 +359,8 @@ fn prop_row(
                     });
                 },
                 ondoubleclick: move |_| {
-                    *opener.scrub.lock().unwrap() = None;
+                    // 擦りかけの下書き(transient)を残さない。
+                    cancel_scrub(&opener);
                     opener.open_field(
                         FieldAt::Number { layer, property: open.0.clone(), axis: i },
                         cell.clone(),
