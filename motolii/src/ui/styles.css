@@ -139,12 +139,6 @@ body {
     z-index: 20;
 }
 
-.appname {
-    padding: 0 var(--sp4);
-    font-size: var(--t-base);
-    font-weight: 700;
-}
-
 .menu {
     border: 0;
     background: transparent;
@@ -389,12 +383,6 @@ body {
 .rhead > div {
     flex: 1 1 auto;
     min-width: 0;
-}
-
-.rhead .sp {
-    margin-left: auto;
-    display: flex;
-    gap: var(--sp1);
 }
 
 .rcount {
@@ -932,23 +920,6 @@ body {
     position: relative;
 }
 
-.zone.empty {
-    background: var(--app);
-}
-
-.zone.here {
-    box-shadow: inset 0 0 0 2px var(--accent);
-}
-
-.zhint {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--ink3);
-    font-size: var(--t-dense);
-}
-
 .zbody {
     flex: 1;
     min-height: 0;
@@ -1061,12 +1032,6 @@ body {
     font-size: var(--t-dense);
     color: var(--ink2);
     display: block;
-}
-
-.ident .sp {
-    margin-left: auto;
-    display: flex;
-    gap: var(--sp1);
 }
 
 .prow:hover {

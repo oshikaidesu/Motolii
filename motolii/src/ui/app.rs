@@ -1460,6 +1460,35 @@ pub fn app() -> Element {
                                     }
                                 }
                             }
+                            // 最近の作品(Mac の Open Recent)。5 件。
+                            for path in crate::ui::project::recents().into_iter().take(5) {
+                                div { class: "vrow",
+                                    SemanticControl {
+                                        label: path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default(),
+                                        secondary: true,
+                                        onclick: {
+                                            let session = session.clone();
+                                            let poke = host.poker();
+                                            let window = window.clone();
+                                            let path = path.clone();
+                                            let selected_sig = panes.selected;
+                                            move |evt: Event<MouseData>| {
+                                                evt.stop_propagation();
+                                                open_menu.set(None);
+                                                let session = session.clone();
+                                                let poke = poke.clone();
+                                                let window = window.clone();
+                                                let path = path.clone();
+                                                dioxus_core::spawn(async move {
+                                                    if crate::ui::project::allow_project_replacement(session.clone(), poke, window).await {
+                                                        crate::ui::project::open_path(&session, path, revision, selected_sig);
+                                                    }
+                                                });
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                             div { class: "vrow",
                                 SemanticControl {
                                     label: "Save",

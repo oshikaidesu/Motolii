@@ -153,12 +153,12 @@
 - ☑ H5 未保存で閉じる alert に Save が無い(project.rs の 3 択へ寄せる)
 - ☑ H6 rfd の dialog に set_parent — Import・Export・Open は sheet(Save は put_away が窓を持たず未)
 - ☑ H7 title bar が書類を指さない(set_title・representedFilename・documentEdited)
-- ☐ H8 Open Recent
+- ☑ H8 Open Recent(File menu に 5 件)
 - ☐ H9 Revert to Saved
 - ☐ H10 自動保存・版
 - ☑ H11 ⌘N ⌘O ⇧⌘S の加速鍵
 - ☐ H12 ⌘W と閉じる意味(窓を閉じる ≠ 終了)
-- ☐ H13 窓の位置・大きさの復元
+- ☑ H13 窓の位置・大きさを window.json で復元
 - ☐ H14 別窓に menu が無い(H1 で解決)
 - ☑ H15 save panel に種別の絞り
 - ✗ H16 DragEntered で欄が確定してしまう — 読み違い(focus_lost は掴みと menu を畳むだけで、欄の確定は Focused(false) のみ)
@@ -469,7 +469,7 @@
 - ☐ UX7 部品 10 種を .control 1 つに(≒160 行減)、.output-cancel だけ生 button、:active が 3 つだけ、.ptab に hover 無し
 - ☐ UX8 見出し 3 段と空状態の器 4 つを .head / .sub / .group に(≒70 行減)、.zoomctl の流用
 - ☐ UX9 .on と .lit が正反対の光り方、色だけの選択 6 箇所、沈める opacity 7 値 → 3 段
-- ☐ UX10 死に selector 41 行と二重定義 15 行、focus ring が 3 種、.a11y の親に position:relative が無い
+- ☑ UX10 死に selector 6 块を消した(二重定義・focus ring の統一は未)
 
 ## 会議 GC: グラフィックデザインのコンポーザー(作品の見え方)
 - ☑ GC1 文字の塊を枠の縦中央へ(LineMeasure を使う)
@@ -483,7 +483,7 @@
 - ☐ GC9 kern / liga は効く、palt / tnum は既定を 1 箇所書けば効く(model → shaper は通っている)
 
 ## 会議 PD: プロダクトデザイナー(旅と語彙)
-- ☐ PD1 起動が最後の作品を知らない — recents.json・window.json・argv・Open Recent(≒70 行)、保存 dialog だけ sheet でない
+- ☑ PD1 recents.json・Open Recent(5 件)・引数の .rrd・窓の枠を window.json で復元(保存 dialog の sheet は未)
 - ☐ PD2 60 秒の既定が 1 本目を壊す — 層 0 の comp に長い素材が来たら尺を合わせる(L4)、空状態を「曲をここに置く + 比率 3 chip」に、既定 Text に黒縁
 - ☑ PD3 status に "N keyframes selected"、キー削除にも報せ
 - ☑ PD4 手で閉じた引き出しは手で開けるまで開かない(shut の焦点は未)

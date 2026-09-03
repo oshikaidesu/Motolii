@@ -264,7 +264,7 @@ fn host_routes_only_primary_mouse_release_to_the_owning_window() {
 }
 
 /// macOS の Application Support(v1 は macOS だけ、V2-6)。
-fn settings_dir() -> Option<std::path::PathBuf> {
+pub(crate) fn settings_dir() -> Option<std::path::PathBuf> {
     let home = std::env::var_os("HOME")?;
     Some(std::path::Path::new(&home).join("Library/Application Support/Motolii"))
 }
@@ -323,9 +323,18 @@ fn window(
     WindowConfig::with_attributes(
         Box::new(doc) as _,
         renderer,
-        WindowAttributes::default()
-            .with_title(title.to_string())
-            .with_surface_size(dioxus_native::winit::dpi::LogicalSize::new(size.0, size.1)),
+        {
+            let mut attrs = WindowAttributes::default()
+                .with_title(title.to_string())
+                .with_surface_size(dioxus_native::winit::dpi::LogicalSize::new(size.0, size.1));
+            // 主窓だけ前回の位置へ(別窓は既定)。
+            if title == "Motolii" {
+                if let Some(f) = load_window_frame() {
+                    attrs = attrs.with_position(dioxus_native::winit::dpi::LogicalPosition::new(f.x, f.y));
+                }
+            }
+            attrs
+        },
     )
 }
 
@@ -676,6 +685,9 @@ impl ApplicationHandler for Windows {
                 self.host.closed(panel);
             } else {
                 // 主窓を閉じたら終わる。panel の別窓だけを残さない(Mac の document app)。
+                if let Some(view) = self.inner.windows.get(&window_id) {
+                    save_window_frame(&*view.window);
+                }
                 event_loop.exit();
                 return;
             }
@@ -736,8 +748,21 @@ pub fn launch(title: &str) {
         duration_sec,
     } = load_fixture();
     // 普通のソフトは白紙で起動する。見本の作品は MOTOLII_FIXTURE=1 の時だけ(試験と実窓の検分用)。
-    let doc = if std::env::var_os("MOTOLII_FIXTURE").is_some() { doc } else { crate::ui::blank_project() };
+    // 引数に .rrd が来たらそれを開く(Finder のダブルクリック、`open -a Motolii song.rrd`)。
+    let argv_path = std::env::args().nth(1).map(std::path::PathBuf::from).filter(|p| p.extension().is_some_and(|e| e == "rrd"));
+    let mut opened = argv_path.as_ref().and_then(|p| crate::doc::store::Document::load(p).ok());
+    let from_argv = opened.is_some();
+    let doc = match (opened.take(), std::env::var_os("MOTOLII_FIXTURE").is_some()) {
+        (Some(loaded), _) => loaded,
+        (None, true) => doc,
+        (None, false) => crate::ui::blank_project(),
+    };
     let session = Session::new(doc, duration_sec, ui);
+    if let (Some(path), true) = (argv_path, from_argv) {
+        let revision = session.doc.lock().unwrap().revision();
+        session.mark_saved(path.clone(), revision);
+        crate::ui::project::remember_recent(&path);
+    }
     let (tx, asks) = channel();
     let host = Host {
         tx,
@@ -750,10 +775,12 @@ pub fn launch(title: &str) {
         settings_dir: settings_dir(),
     };
 
+    // 窓の枠は前回の続き(macOS の作法)。無ければ既定。
+    let frame = load_window_frame();
     let main = window(
         crate::ui::app::app,
         title,
-        (1600, 1000),
+        frame.map_or((1600, 1000), |f| (f.w, f.h)),
         vec![Box::new(session.clone()), Box::new(host.clone())],
     );
     let inner = BlitzApplication::new(proxy, event_queue);
@@ -771,4 +798,36 @@ pub fn launch(title: &str) {
             reflected: Default::default(),
         })
         .unwrap();
+}
+
+/// 窓の枠(論理 px)。~/Library/Application Support/Motolii/window.json。
+#[derive(Clone, Copy, serde::Serialize, serde::Deserialize)]
+struct WindowFrame {
+    x: i32,
+    y: i32,
+    w: u32,
+    h: u32,
+}
+
+fn load_window_frame() -> Option<WindowFrame> {
+    let file = settings_dir()?.join("window.json");
+    let frame: WindowFrame = serde_json::from_str(&std::fs::read_to_string(file).ok()?).ok()?;
+    (frame.w >= 400 && frame.h >= 300).then_some(frame)
+}
+
+fn save_window_frame(window: &dyn dioxus_native::winit::window::Window) {
+    let Some(dir) = settings_dir() else { return };
+    let scale = window.scale_factor().max(0.5);
+    let size = window.surface_size();
+    let pos = window.outer_position().unwrap_or_default();
+    let frame = WindowFrame {
+        x: (pos.x as f64 / scale) as i32,
+        y: (pos.y as f64 / scale) as i32,
+        w: (size.width as f64 / scale) as u32,
+        h: (size.height as f64 / scale) as u32,
+    };
+    let _ = std::fs::create_dir_all(&dir);
+    if let Ok(json) = serde_json::to_string(&frame) {
+        let _ = std::fs::write(dir.join("window.json"), json);
+    }
 }

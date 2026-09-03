@@ -61,6 +61,7 @@ pub(super) fn save_to(session: &Session, out: std::path::PathBuf) -> bool {
     let (word, saved) = match save_result {
         Ok(revision) => {
             session.mark_saved(out.clone(), revision);
+            remember_recent(&out);
             (format!("Saved {}", out.display()), true)
         }
         Err(e) => (format!("Save failed: {e}"), false),
@@ -126,8 +127,8 @@ pub(super) async fn open_project(
     session: Session,
     poke: crate::ui::host::Poke,
     window: Option<std::sync::Arc<dyn dioxus_native::winit::window::Window>>,
-    mut revision: dioxus_native::prelude::Signal<u32>,
-    mut selected: dioxus_native::prelude::Signal<Option<crate::doc::store::LayerId>>,
+    revision: dioxus_native::prelude::Signal<u32>,
+    selected: dioxus_native::prelude::Signal<Option<crate::doc::store::LayerId>>,
 ) {
     if !allow_project_replacement(session.clone(), poke, window.clone()).await {
         return;
@@ -137,16 +138,52 @@ pub(super) async fn open_project(
         dialog = dialog.set_parent(window);
     }
     let Some(file) = dialog.pick_file().await else { return };
-    match crate::doc::store::Document::load(file.path()) {
+    open_path(&session, file.path().to_path_buf(), revision, selected);
+}
+
+/// path を開く本体(Open… と Open Recent と起動時の引数が同じ道を通る)。
+pub(super) fn open_path(
+    session: &Session,
+    path: std::path::PathBuf,
+    mut revision: dioxus_native::prelude::Signal<u32>,
+    mut selected: dioxus_native::prelude::Signal<Option<crate::doc::store::LayerId>>,
+) {
+    match crate::doc::store::Document::load(&path) {
         Ok(loaded) => {
-            session.replace_project(loaded, Some(file.path().to_path_buf()));
+            session.replace_project(loaded, Some(path.clone()));
             session.selection.set(None);
             selected.set(None);
-            *session.project_notice.lock().unwrap() = String::new();
+            remember_recent(&path);
+            *session.project_notice.lock().unwrap() = format!("Opened {}", session.document_title());
         }
         Err(e) => {
             *session.project_notice.lock().unwrap() = format!("Open failed: {e}");
         }
     }
     *revision.write() += 1;
+}
+
+/// 最近開いた・仕舞った作品(新しい順、10 件)。~/Library/Application Support/Motolii/recents.json。
+pub(super) fn recents() -> Vec<std::path::PathBuf> {
+    let Some(file) = crate::ui::host::settings_dir().map(|d| d.join("recents.json")) else { return Vec::new() };
+    std::fs::read_to_string(file)
+        .ok()
+        .and_then(|s| serde_json::from_str::<Vec<String>>(&s).ok())
+        .unwrap_or_default()
+        .into_iter()
+        .map(std::path::PathBuf::from)
+        .filter(|p| p.exists())
+        .collect()
+}
+
+pub(super) fn remember_recent(path: &std::path::Path) {
+    let Some(dir) = crate::ui::host::settings_dir() else { return };
+    let mut list: Vec<std::path::PathBuf> = recents().into_iter().filter(|p| p != path).collect();
+    list.insert(0, path.to_path_buf());
+    list.truncate(10);
+    let text: Vec<String> = list.iter().map(|p| p.to_string_lossy().into_owned()).collect();
+    let _ = std::fs::create_dir_all(&dir);
+    if let Ok(json) = serde_json::to_string(&text) {
+        let _ = std::fs::write(dir.join("recents.json"), json);
+    }
 }
