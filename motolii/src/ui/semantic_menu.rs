@@ -248,6 +248,14 @@ pub(super) fn Field(
 ) -> Element {
     let draft = session.field().map(|f| f.draft).unwrap_or_default();
     let mut revision = revision;
+    // 欄が DOM から消える経路は幾つもある(印が動いて Note の相手が変わる、別窓、層の削除)。
+    // 消えた時に Session の欄も畳む —— 残すと窓の打鍵が全部「欄へ」で死ぬ。
+    {
+        let session = session.clone();
+        use_drop(move || {
+            session.close_field();
+        });
+    }
     let edit = session.clone();
     let oninput = move |evt: FormEvent| edit.edit_field(evt.value());
     let onkeydown = move |evt: KeyboardEvent| {

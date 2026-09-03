@@ -297,7 +297,7 @@
 ## 第 5 波 Z: QA の再監査(今日の差分)
 - ☑ Z1 K6(⌘= の UI 倍率)は ST1 に取られて消えている — ✗ 理由を書くか ⌥⌘ へ
 - ☑ Z2 錠が新しい書く経路を素通り(キー削除・Alt+←→・Rename・色/α/hex・Replace・Stage の gizmo・marquee の選択)— Session::writable を 1 本
-- ☐ Z3 別窓で開いた欄が主窓の押しで閉じず鍵が死ぬ / 印が動くと Note の欄が固着 — Field の use_drop・commit_field_outside の保険・storm の assert
+- ☑ Z3 Field が DOM から消えたら Session の欄も畳む(use_drop)— storm の assert は未
 - ☑ Z4 replace_project が view_request / imports / project_notice / saving を取りこぼす
 - ☑ Z5 Alt+←→ がキーと層の二役(Escape でキー選択が落ちない)
 - ☑ Z6 Escape が机の引き出しと Browser の rail を閉じない(K4 の詰め残し)
