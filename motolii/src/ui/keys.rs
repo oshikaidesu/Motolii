@@ -92,6 +92,31 @@ pub(crate) fn drop_role_at(doc: &DioxusDocument, x: f32, y: f32) -> crate::doc::
     crate::doc::store::AssetRole::Material
 }
 
+thread_local! {
+    /// 最後に焦点が居た control の場所(親と何番目か)。欄を確定して升が作り直された後も、
+    /// 同じ場所に居る新しい節へ返す(NodeId は作り直しで変わる)。
+    static LAST_CONTROL: std::cell::Cell<Option<(blitz_dom::NodeId, usize)>> = const { std::cell::Cell::new(None) };
+}
+
+fn place_of(doc: &blitz_dom::BaseDocument, node: blitz_dom::NodeId) -> Option<(blitz_dom::NodeId, usize)> {
+    let parent = doc.get_node(node)?.parent?;
+    let index = doc.get_node(parent)?.children.iter().position(|c| *c == node)?;
+    Some((parent, index))
+}
+
+fn node_at(doc: &blitz_dom::BaseDocument, place: (blitz_dom::NodeId, usize)) -> Option<blitz_dom::NodeId> {
+    doc.get_node(place.0)?.children.get(place.1).copied()
+}
+
+/// ⇧Tab は前の焦点へ(上流の Tab は前方だけ)。扱ったら true。
+pub(crate) fn step_focus_back(doc: &mut DioxusDocument, key: &keyboard_types::Key, shift: bool) -> bool {
+    if *key != keyboard_types::Key::Tab || !shift {
+        return false;
+    }
+    doc.inner_mut().focus_prev_node();
+    true
+}
+
 /// 打鍵をどこへ配るかを決める。**窓の側と試験の側で同じ規則を通す** —— 分けると、
 /// 利用者が歩く道(欄を開けて打つ)の試験が書けない。
 pub(crate) fn aim_keystrokes(doc: &mut DioxusDocument) {
@@ -114,7 +139,29 @@ pub(crate) fn aim_keystrokes(doc: &mut DioxusDocument) {
                     })
                     && root.is_some_and(|r| descends_from(&inner, f, r))
             });
-        (if on_control { focused } else { field.or(root) }, on_control)
+        // 欄が閉じて input が消えた直後は、開く前に居た control へ返す(根へ飛ばすと Tab をやり直す)。
+        let remembered = LAST_CONTROL
+            .with(|c| c.get())
+            .filter(|_| field.is_none() && !on_control)
+            .and_then(|place| node_at(&inner, place))
+            .filter(|n| {
+                Some(*n) != root
+                    && root.is_some_and(|r| descends_from(&inner, *n, r))
+                    && inner.get_node(*n).is_some_and(|x| {
+                        x.is_focussable()
+                            || x.element_data().is_some_and(|e| e.attr(blitz_dom::local_name!("tabindex")).is_some())
+                    })
+            });
+        if on_control {
+            LAST_CONTROL.with(|c| c.set(focused.and_then(|f| place_of(&inner, f))));
+        }
+        let (target, on_control) = if let Some(back) = remembered {
+            LAST_CONTROL.with(|c| c.set(None));
+            (Some(back), true)
+        } else {
+            (if on_control { focused } else { field.or(root) }, on_control)
+        };
+        (target, on_control)
     };
     crate::ui::keymap::set_on_control(on_control);
     let Some(target) = target else { return };

@@ -392,12 +392,12 @@
 - ☐ X9 音の支度中に進捗が 0 のまま(Mixing audio…)
 
 ## 第 6 波 KB: 鍵だけの再点検
-- ☐ KB1 【致命】Shift+Tab が前へ行かない(上流 keyboard.rs は Tab のみ)— keys.rs に focus_prev
+- ☑ KB1 ⇧Tab は前へ(上流の focus_prev_node を配線)
 - ☑ KB2 【致命】面タブを ←→ で切り替えられない(Colors へ届かない)
 - ☑ KB3 【致命】Content の span に焦点が届かない(tabindex / textbox / Enter)
 - ☑ KB4 【致命】層名で Enter / Space が飲まれる(onkeydown が無い)
 - ☑ KB5 【致命】Composition の生 input が窓中の鍵を人質に(FIELD が生 input を拾う)
-- ☐ KB6 欄を確定すると焦点が #app へ飛ぶ(開いた時の焦点へ返す)
+- ☑ KB6 欄を閉じたら開く前の升(親と何番目か)へ焦点を返す
 - ☑ KB7 ⌥ を伴う文字の binding が macOS で発火しない疑い(⌥⌘E・⌥⌘K)— code→文字の表を alt 全域へ
 - ☐ KB8 Tab 順: Position まで 16、層 16 枚で 80 停止(roving・仮想化)
 - ☑ KB9 menu の ↑↓ が Composition / Settings で効かない(SemanticButton が MenuItems に名乗らない)

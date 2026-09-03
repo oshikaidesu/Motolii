@@ -558,3 +558,8 @@ fn code_to_char(code: Code) -> Option<char> {
         _ => return None,
     })
 }
+
+/// 今 Shift が押されているか(⇧Tab の判定。winit の KeyEvent は修飾を持たない)。
+pub(crate) fn shift_held() -> bool {
+    held::get().1
+}

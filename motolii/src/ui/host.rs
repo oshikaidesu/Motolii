@@ -269,26 +269,9 @@ fn settings_dir() -> Option<std::path::PathBuf> {
     Some(std::path::Path::new(&home).join("Library/Application Support/Motolii"))
 }
 
-/// 窓の外の糸が持つ、窓を起こすだけの口。
-#[derive(Clone)]
-pub(crate) struct Poke(Option<BlitzShellProxy>);
+pub(crate) use crate::ui::poke::Poke;
 
-/// 起こす口はどれも同じ物(props の比較用)。
-impl PartialEq for Poke {
-    fn eq(&self, _: &Self) -> bool {
-        true
-    }
-}
-
-impl Poke {
-    pub(crate) fn poke(&self) {
-        if let Some(proxy) = &self.0 {
-            proxy.send_event(BlitzShellEvent::embedder_event(Woken));
-        }
-    }
-}
-
-struct Woken;
+pub(crate) struct Woken;
 
 struct MotoliiNetProvider {
     fallback: std::sync::Arc<dyn NetProvider>,
@@ -571,7 +554,11 @@ impl ApplicationHandler for Windows {
                 if key.state.is_pressed() {
                     let logical = keyboard_types::Key::Character(key.text.as_deref().unwrap_or("").to_string());
                     let is_enter = matches!(key.logical_key, dioxus_native::winit::keyboard::Key::Named(dioxus_native::winit::keyboard::NamedKey::Enter));
-                    let k = if is_enter { keyboard_types::Key::Enter } else { logical };
+                    let is_tab = matches!(key.logical_key, dioxus_native::winit::keyboard::Key::Named(dioxus_native::winit::keyboard::NamedKey::Tab));
+                    let k = if is_enter { keyboard_types::Key::Enter } else if is_tab { keyboard_types::Key::Tab } else { logical };
+                    if crate::ui::keys::step_focus_back(doc, &k, crate::ui::keymap::shift_held()) {
+                        return;
+                    }
                     if activate_focused_control(doc, &k) {
                         return;
                     }

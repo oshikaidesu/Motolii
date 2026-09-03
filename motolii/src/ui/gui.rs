@@ -274,6 +274,10 @@ impl Gui {
     fn key(&mut self, key: keyboard_types::Key, mods: keyboard_types::Modifiers) {
         crate::ui::keys::select_new_field(&mut self.h.doc, &mut self.seen_field);
         crate::ui::keys::aim_keystrokes(&mut self.h.doc);
+        if crate::ui::keys::step_focus_back(&mut self.h.doc, &key, mods.contains(keyboard_types::Modifiers::SHIFT)) {
+            self.settle();
+            return;
+        }
         if !crate::ui::keys::activate_focused_control(&mut self.h.doc, &key) {
             self.h.press_with(key, mods);
         }

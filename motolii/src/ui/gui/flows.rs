@@ -635,3 +635,30 @@ fn tab_arrows_switch_panels() {
     gui.key(keyboard_types::Key::End, keyboard_types::Modifiers::empty());
     assert!(gui.classes("#dock-tab-Colors").iter().any(|c| c.contains("on")), "End did not move to Colors");
 }
+
+
+/// ⇧Tab は前へ戻る。欄を確定した後は、開く前の升へ焦点が返る(根へ飛ばない)。
+#[test]
+fn shift_tab_goes_back_and_a_closed_field_returns_focus() {
+    let mut gui = Gui::open();
+    gui.focus("#dock-tab-Create");
+    gui.key(keyboard_types::Key::Tab, keyboard_types::Modifiers::empty());
+    let after_tab = gui.h.base().get_focussed_node_id();
+    gui.key(keyboard_types::Key::Tab, keyboard_types::Modifiers::SHIFT);
+    let back = gui.h.base().get_focussed_node_id();
+    assert_ne!(after_tab, back, "⇧Tab did not move");
+    let create = gui.h.base().query_selector("#dock-tab-Create").ok().flatten();
+    assert_eq!(back, create, "⇧Tab did not return to the previous stop");
+
+    let (x, y) = gui.center_of(".lsurface", 1);
+    gui.click(x, y);
+    gui.focus(".prow .v");
+    let cell = gui.h.base().get_focussed_node_id();
+    gui.key(keyboard_types::Key::Enter, keyboard_types::Modifiers::empty());
+    assert_eq!(gui.count("input"), 1, "Enter on a value cell did not open the field");
+    gui.key(keyboard_types::Key::Escape, keyboard_types::Modifiers::empty());
+    gui.key(keyboard_types::Key::Character("x".into()), keyboard_types::Modifiers::empty());
+    let root = gui.h.base().query_selector("#app").ok().flatten();
+    assert_ne!(gui.h.base().get_focussed_node_id(), root, "focus fell back to the root after closing the field");
+    let _ = cell;
+}

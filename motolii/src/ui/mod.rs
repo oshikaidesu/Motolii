@@ -22,6 +22,7 @@ pub(crate) mod keys;
 mod output;
 mod panels;
 mod playback;
+mod poke;
 mod project;
 mod semantic_menu;
 mod session;
