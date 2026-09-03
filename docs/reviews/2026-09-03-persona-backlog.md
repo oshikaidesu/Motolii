@@ -25,7 +25,7 @@
 - ✗ K14 Delete と Backspace 同義(害が小さい)
 - ☐ K15 F9 は OS が食う(案内)
 - ☑ K16 menu に加速鍵の表記
-- ☐ K17 forget_modifiers が欄を開くたび走る
+- ☑ K17 forget_modifiers が欄を開くたび走る
 - ☐ K18 auto-repeat の加速
 - ☐ K19 harness の鍵の道(1・2 が構造上捕まらない)
 
@@ -44,7 +44,7 @@
 - ☐ S12 印を掴む・名前
 - ☐ S13 BPM / 拍
 - ☐ S14 IME の確定文字と単一行欄の Enter(K7 と同根)
-- ☐ S15 文字色の α
+- ☑ S15 文字色の α
 
 ## 第 2 波 V: 視覚デザイン(styles.css / tokens.rs)
 - ☑ V1 面の分離(panel / raised / hover の値)
@@ -88,8 +88,8 @@
 - ☑ Q9 set_typing が欄より長生き(閉じた直後の 1 打鍵)
 - ☑ Q10 保存の revision の取り直し、Cmd+S 連打
 - ☑ Q11 layout.json の古い panel 名
-- ☐ Q12 主窓を閉じても別窓が残る
+- ☑ Q12 主窓を閉じても別窓が残る
 - ☑ Q13 アンカー升が前の層の箱で押される
-- ☐ Q14 style が空の文字層
+- ☑ Q14 style が空の文字層
 - ☐ Q15 harness と窓のずれ(click_super、IME の試験)
 - ☐ Q16 落とした物・drag の後始末

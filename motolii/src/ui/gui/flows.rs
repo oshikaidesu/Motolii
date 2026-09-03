@@ -517,3 +517,28 @@ fn scale_and_extend_selection_have_keys() {
     gui.key(keyboard_types::Key::ArrowDown, keyboard_types::Modifiers::empty());
     assert_eq!(gui.session.selection.all().len(), 1, "Down alone should collapse to one");
 }
+
+/// 文字の色には不透明度の口が在る。帯を押せば α が変わる。
+#[test]
+fn the_alpha_bar_writes_text_opacity() {
+    let mut gui = Gui::open();
+    let rows = gui.count(".lsurface");
+    let mut layer = None;
+    for i in 1..rows {
+        let (x, y) = gui.center_of(".lsurface", i);
+        gui.click(x, y);
+        if gui.count(".prow.content-row") > 0 {
+            layer = gui.session.selection.get();
+            break;
+        }
+    }
+    let layer = layer.expect("a text layer");
+    let colors = gui.center_of("#dock-tab-Colors", 0);
+    gui.click(colors.0, colors.1);
+    assert_eq!(gui.count(".alpha-bar"), 1);
+    let (w, _) = gui.size_of_nth(".alpha-bar", 0);
+    let (cx, cy) = gui.center_of(".alpha-bar", 0);
+    gui.click(cx - w / 2.0 + w * 0.25, cy);
+    let fill = gui.session.doc.lock().unwrap().view().text_document(layer).unwrap().unwrap().styles[0].fill;
+    assert!((fill[3] - 0.25).abs() < 0.05, "alpha did not follow the bar: {fill:?}");
+}

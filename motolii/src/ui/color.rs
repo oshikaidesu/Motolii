@@ -11,7 +11,7 @@ use crate::ui::session::{ColorSlot, Focus, Session};
 
 /// 輪が今指す色。焦点の色、無ければ選んでいる層の最初の色。
 pub(super) fn wheel_slot(session: &Session) -> Option<ColorSlot> {
-    match session.live_focus() {
+    let slot = match session.live_focus() {
         Some(Focus::Color(slot)) => Some(slot),
         _ => session.selection.get().and_then(|layer| {
             let d = session.doc.lock().unwrap();
@@ -22,7 +22,30 @@ pub(super) fn wheel_slot(session: &Session) -> Option<ColorSlot> {
                 .next()
                 .map(|row| row.slot)
         }),
+    };
+    // 読めない slot(style が消えた文字層)は輪の相手にしない。黒を見せて書き込みを捨てる嘘を避ける。
+    slot.filter(|s| read_color(&session.doc, s).is_some())
+}
+
+/// 不透明度だけを書く(文字の fill / stroke)。shape の塗りは α を持たない。
+pub(super) fn write_alpha(doc: &Arc<Mutex<Document>>, slot: &ColorSlot, alpha: f64) -> Result<(), StoreError> {
+    let mut d = doc.lock().unwrap();
+    let (layer, style) = match slot {
+        ColorSlot::TextFill { layer, style } | ColorSlot::TextStroke { layer, style } => (*layer, *style),
+        ColorSlot::ShapeFill { .. } => return Ok(()),
+    };
+    let Some(mut text) = d.view().text_document(layer)? else { return Ok(()) };
+    let Some(found) = text.styles.iter_mut().find(|s| s.id == style) else { return Ok(()) };
+    let a = alpha.clamp(0.0, 1.0);
+    match slot {
+        ColorSlot::TextFill { .. } => found.fill[3] = a,
+        _ => {
+            if let Some(c) = found.stroke_color.as_mut() {
+                c[3] = a;
+            }
+        }
     }
+    d.apply(Intent::SetTextDocument { layer, document: text }).map(|_| ())
 }
 
 /// 色相の輪の直径(scale 100% の px)。面はその 0.6 倍。
@@ -262,6 +285,25 @@ pub(super) fn ColorWheel(session: Session, slot: ColorSlot, revision: Signal<u32
         div { class: "color-now",
             span { class: "dot", style: "background: {shown};" }
             span { "{shown}" }
+        }
+        // 不透明度。歌詞のフェードは色でもやる(Transform の opacity だけに頼らない)。
+        if !matches!(slot, ColorSlot::ShapeFill { .. }) {
+            div {
+                class: "alpha-bar",
+                style: "width: {ring}px; background: linear-gradient(to right, transparent, {shown});",
+                onpointerdown: {
+                    let session = session.clone();
+                    let slot = slot.clone();
+                    move |evt: PointerEvent| {
+                        let a = (evt.data().element_coordinates().x / ring).clamp(0.0, 1.0);
+                        match write_alpha(&session.doc, &slot, a) {
+                            Ok(()) => *revision.write() += 1,
+                            Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
+                        }
+                    }
+                },
+                span { class: "color-mark", style: "left: {current[3] * ring}px; top: 50%;" }
+            }
         }
     })
 }

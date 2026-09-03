@@ -617,6 +617,10 @@ impl ApplicationHandler for Windows {
             }
             if let Some(panel) = self.detached.remove(&window_id) {
                 self.host.closed(panel);
+            } else {
+                // 主窓を閉じたら終わる。panel の別窓だけを残さない(Mac の document app)。
+                event_loop.exit();
+                return;
             }
         }
         if matches!(event, WindowEvent::Focused(false)) {

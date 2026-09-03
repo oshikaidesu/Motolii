@@ -945,11 +945,6 @@ pub fn app() -> Element {
             onkeyup: move |evt: dioxus_native::prelude::Event<dioxus_native::prelude::KeyboardData>| {
                 crate::ui::keymap::note_key_up(&evt.key());
             },
-            onfocusout: {
-                move |_| {
-                    crate::ui::keymap::forget_modifiers();
-                }
-            },
             onkeydown: {
                 let doc = doc.clone();
                 let clock = clock.clone();
