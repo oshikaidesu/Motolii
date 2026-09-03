@@ -194,7 +194,7 @@
 
 ## 第 4 波 M: 媒体の司書
 - ☑ M1 置いた素材の尺が必ず comp の終わりまで(probe の nb_frames を渡す)
-- ☐ M2 取り込みが窓を止める(SHA-256 を UI thread で doc.lock を握ったまま)
+- ☑ M2 取り込みが窓を止める(SHA-256 を UI thread で doc.lock を握ったまま)
 - ☑ M3 フォルダを取り込めない
 - ☑ M4 重複が黙って消える(Imported 1 files と出て札は増えない)
 - ☐ M5 札の情報が種別文字列だけ(尺・fps・解像度・容量)

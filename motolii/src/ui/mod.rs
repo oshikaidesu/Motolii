@@ -20,6 +20,7 @@ mod playback;
 mod project;
 mod semantic_menu;
 mod session;
+mod settings;
 mod stage_widget;
 mod thumbnail;
 mod timeline_shell;

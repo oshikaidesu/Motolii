@@ -956,34 +956,57 @@ impl ImportSummary {
     }
 }
 
+/// 読んで指紋を取った後の 1 本。Document を触らないので、別の糸で作れる。
+pub(super) enum Prepared {
+    Draft(crate::doc::store::AssetDraft),
+    Failed(String),
+}
+
+/// 指紋(SHA-256)を取る。**Document も窓も要らない** —— 10GB の素材で窓を止めない為に、
+/// 取り込みはここを別の糸で回し、棚へ入れる所だけ窓の糸で行う。
+pub(super) fn prepare_paths(paths: &[std::path::PathBuf], role: crate::doc::store::AssetRole) -> Vec<Prepared> {
+    // フォルダは中身を全部(Finder・Bridge の bin)。隠しファイルは見ない。
+    expand_folders(paths)
+        .iter()
+        .map(|path| match prepare_path(path, role) {
+            Ok(draft) => Prepared::Draft(draft),
+            Err(reason) => {
+                let name = path.file_name().and_then(|name| name.to_str()).unwrap_or("file");
+                Prepared::Failed(format!("{name} — {reason}"))
+            }
+        })
+        .collect()
+}
+
+/// 棚へ入れる。中身が同じ物は数えるだけで増やさない。
+pub(super) fn admit_prepared(doc: &mut crate::doc::store::Document, prepared: Vec<Prepared>) -> ImportSummary {
+    let mut summary = ImportSummary {
+        admitted: 0,
+        total: prepared.len(),
+        duplicates: 0,
+        first_failure: None,
+    };
+    for item in prepared {
+        match item {
+            Prepared::Draft(draft) => match admit_draft(doc, draft) {
+                Ok(true) => summary.admitted += 1,
+                Ok(false) => summary.duplicates += 1,
+                Err(reason) if summary.first_failure.is_none() => summary.first_failure = Some(reason),
+                Err(_) => {}
+            },
+            Prepared::Failed(reason) if summary.first_failure.is_none() => summary.first_failure = Some(reason),
+            Prepared::Failed(_) => {}
+        }
+    }
+    summary
+}
+
 pub(super) fn admit_paths(
     doc: &mut crate::doc::store::Document,
     paths: &[std::path::PathBuf],
     role: crate::doc::store::AssetRole,
 ) -> ImportSummary {
-    // フォルダは中身を全部(Finder・Bridge の bin)。隠しファイルは見ない。
-    let paths = expand_folders(paths);
-    let mut summary = ImportSummary {
-        admitted: 0,
-        total: paths.len(),
-        duplicates: 0,
-        first_failure: None,
-    };
-    for path in &paths {
-        match admit_path(doc, path, role) {
-            Ok(true) => summary.admitted += 1,
-            Ok(false) => summary.duplicates += 1,
-            Err(reason) if summary.first_failure.is_none() => {
-                let name = path
-                    .file_name()
-                    .and_then(|name| name.to_str())
-                    .unwrap_or("file");
-                summary.first_failure = Some(format!("{name} — {reason}"));
-            }
-            Err(_) => {}
-        }
-    }
-    summary
+    admit_prepared(doc, prepare_paths(paths, role))
 }
 
 fn expand_folders(paths: &[std::path::PathBuf]) -> Vec<std::path::PathBuf> {
@@ -1014,12 +1037,10 @@ fn expand_folders(paths: &[std::path::PathBuf]) -> Vec<std::path::PathBuf> {
     out
 }
 
-/// `Ok(true)` で棚に増えた、`Ok(false)` で中身が同じ物が既に在った。
-fn admit_path(
-    doc: &mut crate::doc::store::Document,
+fn prepare_path(
     path: &std::path::Path,
     role: crate::doc::store::AssetRole,
-) -> Result<bool, String> {
+) -> Result<crate::doc::store::AssetDraft, String> {
     let Some(asset_type) = path
         .extension()
         .and_then(|e| e.to_str())
@@ -1037,6 +1058,14 @@ fn admit_path(
         (crate::doc::store::AssetRole::Reference, AssetFamily::TwoD) => role,
         _ => crate::doc::store::AssetRole::Material,
     };
+    Ok(draft)
+}
+
+/// `Ok(true)` で棚に増えた、`Ok(false)` で中身が同じ物が既に在った。
+fn admit_draft(
+    doc: &mut crate::doc::store::Document,
+    draft: crate::doc::store::AssetDraft,
+) -> Result<bool, String> {
     let known = doc
         .view()
         .assets()

@@ -8,6 +8,7 @@ use crate::ui::dock::{splitter_delta, Dock, Panel, Side, TabDrag};
 use crate::ui::inspector::{inspector_panel, ChoiceDismiss, ChoiceId};
 use crate::ui::keymap::Intent;
 use crate::ui::output::{OutputStatus, OutputSurface};
+use crate::ui::settings::SettingsSheet;
 use crate::ui::semantic_menu::{
     MenuDismiss, MenuId, SemanticButton, SemanticControl, SemanticMenu,
 };
@@ -362,50 +363,6 @@ fn StagePanel(
                     "{view_pct()}%"
                 }
                 span { "{comp_line}" }
-            }
-        }
-    )
-}
-
-/// 見る側の設定。**作品には入らない**物だけを置く。
-/// 散らばっていると探せないので、窓の設定はここへ集める。
-#[component]
-fn SettingsSheet(session: Session, scale_pct: Signal<u32>) -> Element {
-    let dim = session.frame_dim.clone();
-    let pct = use_signal(|| dim.load(std::sync::atomic::Ordering::Relaxed));
-    let dim_step = move |dim: std::sync::Arc<std::sync::atomic::AtomicU32>, mut pct: Signal<u32>, by: i32| {
-        let next = (pct() as i32 + by).clamp(0, 100) as u32;
-        dim.store(next, std::sync::atomic::Ordering::Relaxed);
-        pct.set(next);
-    };
-    let (dim_a, dim_b) = (dim.clone(), dim.clone());
-
-    let scale_step = move |ui: std::sync::Arc<crate::ui::tokens::UiScale>, mut sig: Signal<u32>, by: i32| {
-        let next = (sig() as i32 + by).clamp(50, 200) as u32;
-        ui.set_percent(next);
-        sig.set(ui.percent());
-    };
-    let (ui_a, ui_b) = (session.scale.clone(), session.scale.clone());
-
-    rsx!(
-        div { class: "settings-sheet",
-            div { class: "sec", "View" }
-            div { class: "prow",
-                span { class: "pname", "Outside dim" }
-                div { class: "zoomctl", role: "group", aria_label: "Outside dim",
-                    SemanticButton { class: "zbtn", aria_label: "Decrease outside dim", onclick: move |_| dim_step(dim_a.clone(), pct, -5), "−" }
-                    span { class: "zval", role: "status", "{pct()}%" }
-                    SemanticButton { class: "zbtn", aria_label: "Increase outside dim", onclick: move |_| dim_step(dim_b.clone(), pct, 5), "+" }
-                }
-            }
-            div { class: "sec", "Window" }
-            div { class: "prow",
-                span { class: "pname", "Scale" }
-                div { class: "zoomctl", role: "group", aria_label: "Interface scale",
-                    SemanticButton { class: "zbtn", aria_label: "Decrease interface scale", onclick: move |_| scale_step(ui_a.clone(), scale_pct, -5), "−" }
-                    span { class: "zval", role: "status", "{scale_pct()}%" }
-                    SemanticButton { class: "zbtn", aria_label: "Increase interface scale", onclick: move |_| scale_step(ui_b.clone(), scale_pct, 5), "+" }
-                }
             }
         }
     )
@@ -858,11 +815,26 @@ pub fn app() -> Element {
     // 面からの「この panel を前に出して」。revision の度に拾う(Inspector の COLOR 行 → Colors)。
     {
         let asker = session.clone();
+        let mut revision = panes.revision;
         use_effect(move || {
             let _ = (panes.revision)();
             let _ = (panes.echo)();
             if let Some(panel) = asker.take_panel_ask() {
                 dock.write().set_active(panel);
+            }
+            // 別の糸が指紋を取り終えた取り込みを棚へ入れる。
+            let batches: Vec<_> = std::mem::take(&mut *asker.imports.lock().unwrap());
+            if !batches.is_empty() {
+                let mut d = asker.doc.lock().unwrap();
+                let mut last = String::new();
+                for batch in batches {
+                    let summary = fixture::admit_prepared(&mut d, batch);
+                    println!("PROBE room=browser verdict=import admitted={} of={}", summary.admitted, summary.total);
+                    last = summary.notice();
+                }
+                drop(d);
+                *asker.project_notice.lock().unwrap() = last;
+                *revision.write() += 1;
             }
         });
     }
@@ -1556,12 +1528,16 @@ pub fn app() -> Element {
                                     onclick: {
                                         let doc = session.doc.clone();
                                         let project_notice = session.project_notice.clone();
+                                        let inbox = session.imports.clone();
+                                        let poke = host.poker();
                                         let mut revision = panes.revision;
                                         move |evt: Event<MouseData>| {
                                             evt.stop_propagation();
                                             open_menu.set(None);
                                             let doc = doc.clone();
                                             let project_notice = project_notice.clone();
+                                            let inbox = inbox.clone();
+                                            let poke = poke.clone();
                                             // 選ぶ窓は事象処理の**外**で開ける。中から開けると
                                             // winit が事象の入れ子になって落ちる。
                                             dioxus_core::spawn(async move {
@@ -1572,15 +1548,19 @@ pub fn app() -> Element {
                                                     .iter()
                                                     .map(|file| file.path().to_path_buf())
                                                     .collect::<Vec<_>>();
-                                                let summary = {
-                                                    let mut d = doc.lock().unwrap();
-                                                    fixture::admit_paths(&mut d, &paths, crate::doc::store::AssetRole::Material)
-                                                };
-                                                println!("PROBE room=browser verdict=import admitted={} of={}", summary.admitted, summary.total);
-                                                *project_notice.lock().unwrap() = summary.notice();
-                                                if summary.admitted > 0 {
-                                                    *revision.write() += 1;
-                                                }
+                                                let _ = &doc;
+                                                let count = paths.len();
+                                                *project_notice.lock().unwrap() =
+                                                    format!("Importing {count} {}…", if count == 1 { "file" } else { "files" });
+                                                *revision.write() += 1;
+                                                // 指紋(全 byte の SHA-256)は別の糸。窓は止めない。
+                                                let inbox = inbox.clone();
+                                                let poke = poke.clone();
+                                                std::thread::spawn(move || {
+                                                    let prepared = fixture::prepare_paths(&paths, crate::doc::store::AssetRole::Material);
+                                                    inbox.lock().unwrap().push(prepared);
+                                                    poke.poke();
+                                                });
                                             });
                                         }
                                     }

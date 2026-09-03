@@ -164,6 +164,8 @@ pub(super) struct Session {
     pub overshoot: Arc<std::sync::atomic::AtomicBool>,
     pub export: crate::ui::output::ExportController,
     pub project_notice: Arc<Mutex<String>>,
+    /// 別の糸で指紋を取り終えた取り込み。窓の糸が echo の度に拾って棚へ入れる。
+    pub imports: Arc<Mutex<Vec<Vec<crate::ui::fixture::Prepared>>>>,
     /// 今の作品の仕舞い先。`Save` が問い直さないために覚える。
     pub project_path: Arc<Mutex<Option<std::path::PathBuf>>>,
     /// 最後に保存／読込／NewしたDocument revision。dirtyは現在との差だけで決まる。
@@ -309,6 +311,7 @@ impl Session {
             overshoot: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             export: Default::default(),
             project_notice: Arc::new(Mutex::new(String::new())),
+            imports: Arc::new(Mutex::new(Vec::new())),
             project_path: Arc::new(Mutex::new(None)),
             saved_revision: Arc::new(Mutex::new(saved_revision)),
             curve_clip: Arc::new(Mutex::new(None)),
