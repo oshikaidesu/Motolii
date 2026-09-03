@@ -407,3 +407,49 @@ fn hovering_a_blend_cell_previews_it_on_the_stage() {
     assert_eq!(resolved(&gui), None, "leaving did not restore the blend");
     assert_eq!(history_back(&gui), before);
 }
+
+/// 文字層の Inspector には縁取り・行間・字送りの行が最初から在る。
+#[test]
+fn a_text_layer_exposes_stroke_line_height_and_tracking() {
+    let mut gui = Gui::open();
+    let rows = gui.count(".lsurface");
+    for i in 1..rows {
+        let (x, y) = gui.center_of(".lsurface", i);
+        gui.click(x, y);
+        if gui.count(".prow.content-row") > 0 {
+            break;
+        }
+    }
+    let labels = gui.texts(".prow .n");
+    for want in ["Stroke", "Line height", "Tracking"] {
+        assert!(labels.iter().any(|l| l == want), "missing {want}: {labels:?}");
+    }
+}
+
+/// 机の書き置きは、選んでいる文字層の本文へ 1 押しで送れる。
+#[test]
+fn a_marker_note_can_be_sent_to_the_selected_text_layer() {
+    let mut gui = Gui::open();
+    {
+        use crate::doc::store::{Intent, Marker, RationalTime};
+        let marker = Marker { name: "verse".into(), time: RationalTime::ZERO, duration: RationalTime::ZERO, body: "la la".into() };
+        gui.session.doc.lock().unwrap().apply(Intent::SetMarkers { markers: vec![marker] }).unwrap();
+    }
+    let rows = gui.count(".lsurface");
+    let mut layer = None;
+    for i in 1..rows {
+        let (x, y) = gui.center_of(".lsurface", i);
+        gui.click(x, y);
+        if gui.count(".prow.content-row") > 0 {
+            layer = gui.session.selection.get();
+            break;
+        }
+    }
+    let layer = layer.expect("a text layer");
+    let text = gui.center_of_text(".desk-foot .chip", "Text");
+    gui.click(text.0, text.1);
+    let send = gui.center_of(".desk-note .tolayer", 0);
+    gui.click(send.0, send.1);
+    let content = gui.session.doc.lock().unwrap().view().text_document(layer).unwrap().unwrap().content.eval(gui.session.clock.current_time()).to_string();
+    assert_eq!(content, "la la");
+}

@@ -145,6 +145,10 @@ pub(super) fn write_color(
                 _ => {
                     let a = found.stroke_color.map_or(1.0, |c| c[3]);
                     found.stroke_color = Some([r, g, b, a]);
+                    // 幅 0 の縁取りは描かれない。色を付けた時点で見える幅を入れる(級数の 5%)。
+                    if found.stroke_width <= 0.0 {
+                        found.stroke_width = (found.size * 0.05).max(1.0);
+                    }
                 }
             }
             Intent::SetTextDocument { layer: *layer, document: text }

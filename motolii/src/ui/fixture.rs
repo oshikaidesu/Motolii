@@ -716,6 +716,33 @@ pub(super) fn inspector_data_from_doc(
                     range: Some((1.0, 1000.0)),
                     axis: [None, None, None],
                 });
+                // 行間と字送り。model も resolve も持っているのに行が無かった(組版の主要素)。
+                let line_height_prop = PropertyId::text_style_line_height(style.id);
+                let line_height = match view.value_at(layer, &line_height_prop, t).ok().flatten() {
+                    Some(Value::F64(v)) => v,
+                    _ => style.line_height.map_or(size * 1.2, f64::from),
+                };
+                let tracking_prop = PropertyId::text_style_tracking(style.id);
+                let tracking = match view.value_at(layer, &tracking_prop, t).ok().flatten() {
+                    Some(Value::F64(v)) => v,
+                    _ => f64::from(style.tracking),
+                };
+                for (label, prop, value, range) in [
+                    ("Line height", line_height_prop, line_height, (0.0, 1000.0)),
+                    ("Tracking", tracking_prop, tracking, (-200.0, 200.0)),
+                ] {
+                    rows.push(PropRow {
+                        label,
+                        cells: [String::new(), String::new(), f1(value)],
+                        dims: [false, false, false],
+                        keyed: keyed(prop.name()),
+                        property: Some(prop.name().to_owned()),
+                        vec2: false,
+                        value: Value::F64(value),
+                        range: Some(range),
+                        axis: [None, None, None],
+                    });
+                }
             }
             rows
         }
@@ -738,9 +765,9 @@ pub(super) fn inspector_data_from_doc(
             if let Ok(Some(doc)) = view.text_document(layer) {
                 if let Some(style) = doc.styles.first() {
                     colors.push(row("Fill", style.fill, ColorSlot::TextFill { layer, style: style.id }));
-                    if let Some(s) = style.stroke_color {
-                        colors.push(row("Stroke", s, ColorSlot::TextStroke { layer, style: style.id }));
-                    }
+                    // 縁取りは無くても行を出す。無い物を「足す口」が無いと、縁取り無しの歌詞しか作れない。
+                    let stroke = style.stroke_color.unwrap_or([0.0, 0.0, 0.0, 1.0]);
+                    colors.push(row("Stroke", stroke, ColorSlot::TextStroke { layer, style: style.id }));
                 }
             }
         }

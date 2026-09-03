@@ -110,6 +110,18 @@ fn keyframe_shift_intents(
         }
         intents.push(Intent::SetTrack { layer, property, track: shifted });
     }
+    // 文字の切替(ContentTrack)は property でなく data。層と一緒に動かさないと歌詞の時刻だけ置き去りになる。
+    if let Some(mut text) = view.text_document(layer)? {
+        if text.content.keys().len() > 1 {
+            let mut moved = crate::doc::store::ContentTrack::new();
+            for key in text.content.keys() {
+                let t = key.t.try_add(shift).map_err(|e| StoreError::Property(e.to_string()))?;
+                moved.insert(crate::doc::store::ContentKeyframe { t, content: key.content.clone() });
+            }
+            text.content = moved;
+            intents.push(Intent::SetTextDocument { layer, document: text });
+        }
+    }
     Ok(intents)
 }
 
@@ -480,6 +492,8 @@ impl TimelineWidget {
                 out.push(b);
             }
         }
+        // 印(マーカー)にも吸い付く。歌詞を拍へ寄せる中核の手(AE・Premiere と同じ)。
+        out.extend(self.markers.iter().copied());
         out
     }
 
@@ -1286,6 +1300,52 @@ mod follow {
                 "再生中に置いていかれた"
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod lyrics {
+    use super::*;
+    use crate::doc::store::{ContentKeyframe, ContentTrack, Intent, LayerSource};
+
+    fn text_layer(doc: &Document) -> LayerId {
+        let view = doc.view();
+        view.layers()
+            .into_iter()
+            .find(|l| view.meta(*l).ok().flatten().map(|m| m.source) == Some(LayerSource::Text))
+            .expect("a text layer in the fixture")
+    }
+
+    /// 歌詞の切替時刻は層と一緒に動く。
+    #[test]
+    fn moving_a_layer_carries_its_lyric_keys() {
+        let loaded = crate::ui::fixture::load_fixture();
+        let mut doc = loaded.doc;
+        let layer = text_layer(&doc);
+        let fps = document_fps(&doc).unwrap();
+        let mut text = doc.view().text_document(layer).unwrap().unwrap();
+        let mut track = ContentTrack::new();
+        for (frame, word) in [(0, "a"), (24, "b")] {
+            track.insert(ContentKeyframe { t: RationalTime::try_from_frame(frame, fps).unwrap(), content: word.into() });
+        }
+        text.content = track;
+        doc.apply(Intent::SetTextDocument { layer, document: text }).unwrap();
+
+        let intents = keyframe_shift_intents(&doc, layer, 10).unwrap();
+        doc.apply_all(intents).unwrap();
+        let keys = doc.view().text_document(layer).unwrap().unwrap().content.keys().to_vec();
+        let frames: Vec<i64> = keys.iter().map(|k| k.t.try_to_frame_floor(fps).unwrap()).collect();
+        assert_eq!(frames, vec![10, 34], "lyric keys did not move with the layer");
+    }
+
+    /// 印は吸い付き先。
+    #[test]
+    fn markers_are_snap_targets() {
+        let (_tx, rx) = std::sync::mpsc::channel();
+        let mut w = TimelineWidget::new(Vec::new(), Rc::new(rx));
+        w.markers = vec![1.5, 7.25];
+        let targets = w.snap_targets();
+        assert!(targets.contains(&1.5) && targets.contains(&7.25), "{targets:?}");
     }
 }
 

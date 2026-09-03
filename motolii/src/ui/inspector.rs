@@ -256,7 +256,7 @@ pub(super) fn value_with_default(
         .map(|row| row.value)
 }
 
-fn write_content(
+pub(super) fn write_content(
     doc: &Arc<Mutex<Document>>,
     layer: LayerId,
     t: RationalTime,

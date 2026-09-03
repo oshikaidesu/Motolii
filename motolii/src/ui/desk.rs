@@ -157,6 +157,19 @@ pub(super) fn DeskPanel(
             let body = marker.body.clone();
             let unchanged = marker.body.clone();
             let opener = session.clone();
+            // 書き置きを選んでいる文字層の本文へ。歌詞は机で打って層へ送る(二度打ちさせない)。
+            let text_layer = session.selection.get().filter(|l| {
+                session.doc.lock().unwrap().view().text_document(*l).ok().flatten().is_some()
+            });
+            let to_layer = text_layer.map(|layer| {
+                let doc = session.doc.clone();
+                let clock = session.clock.clone();
+                let body = marker.body.clone();
+                move |_| match crate::ui::inspector::write_content(&doc, layer, clock.current_time(), body.clone()) {
+                    Ok(()) => *revision.write() += 1,
+                    Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
+                }
+            });
             rsx!(div { class: "desk-note",
                 span { class: "mname", "{marker.name}" }
                 // 欄は押した間だけ在る。Enter・Escape・外を押す、のどれでも欄ごと消える。
@@ -186,6 +199,14 @@ pub(super) fn DeskPanel(
                             *revision.write() += 1;
                         },
                         if marker.body.is_empty() { "Write what happens here" } else { "{marker.body}" }
+                    }
+                    if let (Some(mut send), false) = (to_layer, marker.body.is_empty()) {
+                        SemanticButton {
+                            class: "chip tolayer",
+                            aria_label: "Send note to the selected text layer",
+                            onclick: move |evt| send(evt),
+                            "To layer"
+                        }
                     }
                 }
             })
