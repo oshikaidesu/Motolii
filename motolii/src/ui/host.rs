@@ -544,6 +544,10 @@ impl ApplicationHandler for Windows {
         window_id: WindowId,
         event: WindowEvent,
     ) {
+        if self.session.quit.load(std::sync::atomic::Ordering::Relaxed) {
+            event_loop.exit();
+            return;
+        }
         // 打鍵は焦点のある節へ配られ、無ければ `<html>` へ行く。`<html>` からは
         // 下りてこないので、当て直さないと**打鍵が1つも届かない**。
         // 上流の autofocus は属性が付く前に可否を見ていて効かない。
@@ -750,6 +754,8 @@ pub fn launch(title: &str) {
         ui,
         duration_sec,
     } = load_fixture();
+    // 普通のソフトは白紙で起動する。見本の作品は MOTOLII_FIXTURE=1 の時だけ(試験と実窓の検分用)。
+    let doc = if std::env::var_os("MOTOLII_FIXTURE").is_some() { doc } else { crate::ui::blank_project() };
     let session = Session::new(doc, duration_sec, ui);
     let (tx, asks) = channel();
     let host = Host {

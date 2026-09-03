@@ -250,6 +250,18 @@ impl StageWidget {
         }
     }
 
+    /// 錠の掛かった層は掴めない(選ぶ事はできる)。
+    fn is_locked(&self, layer: LayerId) -> bool {
+        self.doc
+            .lock()
+            .unwrap()
+            .view()
+            .attrs(layer)
+            .ok()
+            .flatten()
+            .is_some_and(|a| a.locked)
+    }
+
     /// 窓の点の下に在る取っ手(選んでいる層の箱で見る)。
     fn mode_under(&self, sx: f64, sy: f64) -> Option<GizmoMode> {
         let layer = self.selection.get()?;
@@ -941,7 +953,7 @@ impl Widget for StageWidget {
                         println!(
                             "PROBE room=input verdict=gizmo-hit mode={mode:?} at=({lx:.0},{ly:.0})                              box=({bx:.0},{by:.0},{bw:.0},{bh:.0}) depth=({dx:.0},{dy:.0}) tol={tol:.0}"
                         );
-                        if let Some(mode) = mode {
+                        if let (Some(mode), false) = (mode, self.is_locked(layer)) {
                             self.gesture.begin();
                             self.drag = Some(GizmoDrag {
                                 layer,
@@ -993,7 +1005,7 @@ impl Widget for StageWidget {
                         self.selection.set(Some(layer));
                         self.selected_mirror.set(self.selection.get());
                         // 選んだその手で動かせる(押し直しをさせない — Figma・CapCut・AE 全部そう)。
-                        if let Some(geom) = self.selection_geom(layer) {
+                        if let (Some(geom), false) = (self.selection_geom(layer), self.is_locked(layer)) {
                             self.gesture.begin();
                             self.drag = Some(GizmoDrag {
                                 layer,

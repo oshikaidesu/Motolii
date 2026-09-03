@@ -153,6 +153,23 @@ pub(super) fn DeskPanel(
     playhead: Signal<f64>,
     on_history: EventHandler<i32>,
 ) -> Element {
+    // 下見(blend の transient)は格子が消えたら落とす。mouseleave 無しで消える経路が幾つもある。
+    let shown_blend: std::rc::Rc<std::cell::Cell<Option<crate::doc::store::LayerId>>> =
+        use_hook(|| std::rc::Rc::new(std::cell::Cell::new(None)));
+    {
+        let doc = session.doc.clone();
+        let shown = shown_blend.clone();
+        let grid_open = matches!(*session.desk.lock().unwrap(), DeskState::Open(Drawer::Blend))
+            || (matches!(*session.desk.lock().unwrap(), DeskState::Follow)
+                && matches!(*session.focus.lock().unwrap(), Some(Focus::Blend(_))));
+        use_effect(move || {
+            if !grid_open {
+                if let Some(layer) = shown.take() {
+                    doc.lock().unwrap().clear_transient(layer, &crate::doc::store::PropertyId::blend_mode());
+                }
+            }
+        });
+    }
     let _ = revision();
     let _ = playhead();
     let mut revision = revision;
@@ -216,7 +233,7 @@ pub(super) fn DeskPanel(
                             opener.open_field(FieldAt::Note(at), body.clone());
                             *revision.write() += 1;
                         },
-                        if marker.body.is_empty() { "Write what happens here" } else { "{marker.body}" }
+                        if marker.body.is_empty() { "Add a note" } else { "{marker.body}" }
                     }
                     if let (Some(mut send), false) = (to_layer, marker.body.is_empty()) {
                         SemanticButton {
@@ -234,7 +251,7 @@ pub(super) fn DeskPanel(
 
     let drawer_body = drawer.map(|drawer| match drawer {
         Drawer::Text => note.clone().unwrap_or_else(|| rsx! {}),
-        other => drawer_body(&session, other, revision, on_history),
+        other => drawer_body(&session, other, revision, on_history, shown_blend.clone()),
     });
     let drawer_label = drawer
         .and_then(|d| DRAWERS.iter().find(|(x, _)| *x == d))
@@ -348,6 +365,7 @@ fn drawer_body(
     drawer: Drawer,
     revision: Signal<u32>,
     on_history: EventHandler<i32>,
+    shown_blend: std::rc::Rc<std::cell::Cell<Option<crate::doc::store::LayerId>>>,
 ) -> Element {
     let mut revision = revision;
     match drawer {
@@ -358,10 +376,11 @@ fn drawer_body(
                 d.view().attrs(layer).ok().flatten().map(|a| (layer, a.blend_mode))
             });
             match target {
-                None => rsx!(div { class: "dempty", "No layer yet · select one" }),
+                None => rsx!(div { class: "dempty", "Select a layer to change its blend" }),
                 // 合成は線形光(裁定 498)。AE の既定(ガンマ)とは Multiply / Screen の絵が違う。将来の切替点はここ。
                 Some((layer, current)) => {
                     let tint = blend_tint(&session, layer);
+                    shown_blend.set(Some(layer));
                     rsx!(div { class: "dnote", "Blend preview · linear light" } div { class: "blend-grid",
                     for (mode , label) in BLEND_MODES.iter().copied() {
                         SemanticButton {

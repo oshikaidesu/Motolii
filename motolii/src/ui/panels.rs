@@ -89,6 +89,9 @@ pub(super) fn StagePanel(
     let mut rings_on = use_signal(|| rings.load(std::sync::atomic::Ordering::Relaxed));
     rsx!(
         div { id: "stagecol",
+            if session.doc.lock().unwrap().view().layers().is_empty() {
+                div { class: "stagehint", "Add a Text layer from Create to begin" }
+            }
             div { id: "stage",
                 object { "data": attr }
             }

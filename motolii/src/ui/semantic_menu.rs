@@ -161,7 +161,11 @@ pub(super) fn SemanticControl(
         disabled: disabled,
         onmounted: move |evt: MountedEvent| {
             if let (Some(mut items), false) = (items, disabled) {
-                items.handles.write().push(evt.data());
+                let handle = evt.data();
+                let mut handles = items.handles.write();
+                if !handles.iter().any(|h| std::rc::Rc::ptr_eq(h, &handle)) {
+                    handles.push(handle);
+                }
             }
         },
         onclick: move |evt| onclick.call(evt),

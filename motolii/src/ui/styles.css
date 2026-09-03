@@ -1201,13 +1201,6 @@ body {
     font-size: var(--t-dense);
     color: var(--ink3);
     border-top: var(--line) solid var(--dark);
-    /* 常設の説明文は HIG の反例。面に手が乗っている間だけ見せる。 */
-    opacity: 0;
-    transition: opacity var(--motion-fast) var(--motion-ease-standard);
-}
-
-#inspector:hover .hint {
-    opacity: 1;
 }
 
 #timelineshell {
@@ -1806,7 +1799,8 @@ body {
     gap: var(--sp1);
 }
 
-.tcell:hover .tacts {
+.tcell:hover .tacts,
+.tcell:focus-within .tacts {
     display: flex;
 }
 
@@ -1814,4 +1808,13 @@ body {
     margin-top: var(--sp1);
     font-size: var(--t-dense);
     color: var(--ink2);
+}
+
+/* 白紙の Stage の一言。層が出来たら消える。 */
+.stagehint {
+    flex: 0 0 auto;
+    padding: var(--sp2) var(--sp4);
+    color: var(--ink3);
+    font-size: var(--t-dense);
+    text-align: center;
 }

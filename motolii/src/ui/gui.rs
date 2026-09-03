@@ -516,6 +516,9 @@ fn picking_on_the_colors_wheel_writes_the_focused_color_back() {
 #[test]
 fn a_file_dropped_on_the_desk_is_a_reference_and_stays_off_the_browser() {
     let mut gui = Gui::open();
+    // 棚(Media)は前面の tab ではなくなった(白紙の最初の一歩は Create)。数える前に前へ出す。
+    let media = gui.center_of("#dock-tab-Media", 0);
+    gui.click(media.0, media.1);
     let desk = gui.center_of("#desk", 0);
     let stage = gui.center_of("#stage", 0);
     assert_eq!(

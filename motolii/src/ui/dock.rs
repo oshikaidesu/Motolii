@@ -406,7 +406,7 @@ fn canonical_layout() -> PanelLayout {
             "top-left-rest",
             SplitAxis::Horizontal,
             0.22,
-            LayoutNode::tile("left", ["Media", "Effects", "Create", "Colors"]),
+            LayoutNode::tile("left", ["Create", "Media", "Effects", "Colors"]),
             LayoutNode::split(
                 "top-center-right",
                 SplitAxis::Horizontal,
@@ -517,7 +517,7 @@ mod tests {
         dock.reset_layout();
         assert!(dock.is_detached(Panel::Inspector));
         assert!(!dock.is_visible(Panel::Inspector));
-        assert!(dock.is_active(Panel::Media));
+        assert!(dock.is_active(Panel::Create));
     }
 
     #[test]

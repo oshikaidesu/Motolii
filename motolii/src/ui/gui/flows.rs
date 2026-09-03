@@ -105,6 +105,9 @@ fn a_number_field_starts_from_the_current_value() {
 #[test]
 fn a_dropped_file_appears_where_it_landed_without_another_click() {
     let mut gui = Gui::open();
+    // 棚(Media)は前面の tab ではなくなった(白紙の最初の一歩は Create)。数える前に前へ出す。
+    let media = gui.center_of("#dock-tab-Media", 0);
+    gui.click(media.0, media.1);
     let dir = tempfile::tempdir().unwrap();
     let a = dir.path().join("a.png");
     let b = dir.path().join("b.png");

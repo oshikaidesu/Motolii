@@ -14,7 +14,7 @@
 - ☑ K3 menu をキーボードで開けない・歩けない — Tab + Enter で開けて中も押せる。開いている間は鍵を引かない(↑↓ の巡回は未)
 - ☑ K4 Escape の層: Inspector の選択肢・机の引き出し・Browser の rail
 - ☐ K5 数値・本文・名前の欄を開く鍵(焦点の行へ Enter)
-- ☑ K6 Cmd+= / Cmd+- / Cmd+0 の UI 倍率
+- ✗ K6 Cmd+= / Cmd+- / Cmd+0 の UI 倍率 — ⌘= ⌘− ⌘0 は視点(ST1)が取った。窓の文字は Settings の ±
 - ☑ K7 IME: 欄が閉じたら Disable、composing 中は Enter を送らない
 - ☑ K8 焦点の輪が無い面(Timeline 行・Inspector の値・Browser の札)
 - ☐ K9 素材を鍵で置く
@@ -280,3 +280,46 @@
 - ☐ B10 H22 は 0 行(試験のみ)、H18 は @media prefers-color-scheme
 - ☐ B11 scrollbars / svg feature
 - ☐ BU1〜BU8 上流 PR 待ち(button の Enter/Space、gesture/drag event、TextInputData の選択 API、widget の文字、widget の a11y、menu の roving focus、窓 blur、NSMainMenu は範囲外)
+
+## 第 5 波 N: 初めての 10 分
+- ☑ N1 白紙で起動しない(fixture の完成品が毎回立つ)— blank_project を既定に、fixture は環境変数
+- ☑ N2 空状態の案内が無い(.zhint が未使用)、既定の前面タブを Create に
+- ☑ N3 tmeta の説明・◇ の title・既定パレット(Desk の名前は未)
+- ☑ N4 履歴の一覧の入口が無い — Edit ▸ History…
+- ☑ N5 Delete の後に "Deleted … · ⌘Z to undo"(Shift+click の範囲選択は未)
+- ☑ N6 既定名 Untitled.rrd・filter "Motolii Project"(Save の sheet は Z11)
+- ☑ N7 層が無くても Export が押せて真っ黒が出る
+- ☑ N8 ⌘Q が無い(File ▸ Quit を自前 menubar に)
+- ☑ N9 文言(No layer yet · select one / Nothing of this kind yet / Write what happens here)、.hint が hover の間しか出ない(V28)
+- ☑ N10 Reset Layout の確認・報告・名前
+- ☐ N11 title 属性が tooltip として描かれるか未確認(隠し技の唯一の伝達路)
+
+## 第 5 波 Z: QA の再監査(今日の差分)
+- ☑ Z1 K6(⌘= の UI 倍率)は ST1 に取られて消えている — ✗ 理由を書くか ⌥⌘ へ
+- ☑ Z2 錠が新しい書く経路を素通り(キー削除・Alt+←→・Rename・色/α/hex・Replace・Stage の gizmo・marquee の選択)— Session::writable を 1 本
+- ☐ Z3 別窓で開いた欄が主窓の押しで閉じず鍵が死ぬ / 印が動くと Note の欄が固着 — Field の use_drop・commit_field_outside の保険・storm の assert
+- ☑ Z4 replace_project が view_request / imports / project_notice / saving を取りこぼす
+- ☑ Z5 Alt+←→ がキーと層の二役(Escape でキー選択が落ちない)
+- ☑ Z6 Escape が机の引き出しと Browser の rail を閉じない(K4 の詰め残し)
+- ☑ Z7 blend の hover 下見の transient が mouseleave 無しで残る(選択変更・焦点・引き出し閉じ・窓の焦点喪失)— 全 transient を落とす 1 本
+- ☑ Z8 札の上の Replace / Finder / × が hover のみ(:focus-within を足す)
+- ☑ Z9 α の帯は縦にぶれた瞬間に確定して追従が止まる(color と同じ move の保険)
+- ☑ Z10 tablist / tabpanel(aria-controls と roving tabindex は未)
+- ☐ Z11 仕舞う経路が 2 本(host.rs save_now と project.rs put_away_inner)で文言と後始末が食い違う
+- ☑ Z12 select_inside の層選択が ⌘/⇧ を無視して置き換える
+- ☐ Z13 試験の穴(storm が新しい状態を見ない、印の drag が move_marker を直接呼ぶ、Note の欄が死なない)
+- ☑ Z14 set_typing(false) と handles の重複(note_key_down は未)
+
+## 第 5 波 L: 歌詞動画を 1 本作り切る(致命 3 つが先)
+- ☐ L1 【致命】comp の設定が窓に無い(9:16・曲の長さの尺・fps・background)— File ▸ New… / Composition Settings の sheet、Export… に寸法 preset・範囲・1 行サマリ(D1・D2・D4)
+- ☐ L2 【致命】1 レイヤに歌詞を並べられない — Content 行の ◆ が押せず write_content が差し替える。ContentTrack へ今の時刻にキーを足す口、複数行の貼り付けを「行ごとにキー / 印へ配る」
+- ☐ L3 【致命】印を打つたびに音が切れる(sync_document が revision ごと)— 音に関わる変更だけで再投影(A2)、スクラブに音(A1)、印 2 つから BPM を出して拍を撒く(S13)
+- ☐ L4 空の comp に最初の音・動画を入れたら尺を素材に伸ばす(place が切った事を status に)
+- ☐ L5 Import に ⌘I
+- ☐ L6 M の toggle が連打で直前の印を消す
+- ☐ L7 Text 節に family / weight / justify(S6・S5 の残り)
+- ☐ L8 文字送り(Range Selector を描く側から、S7)、出入りの preset(C3)
+- ☐ L9 Create に Solid、新しい素材は下・文字は上(新層が必ず一番上)
+- ☐ L10 ループ区間 I / O(A3)
+- ☐ L11 Timeline の帯 drag を選択している全層へ(finish_drag が drag.layer 1 枚)
+- ☐ L12 層の Copy / Paste(行の入れ替え)

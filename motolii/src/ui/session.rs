@@ -170,6 +170,8 @@ pub(super) struct Session {
     pub overshoot: Arc<std::sync::atomic::AtomicBool>,
     pub export: crate::ui::output::ExportController,
     pub project_notice: Arc<Mutex<String>>,
+    /// 終わる注文(⌘Q / File ▸ Quit)。未保存の確認が通ったら立ち、窓の糸が拾って終わる。
+    pub quit: Arc<std::sync::atomic::AtomicBool>,
     /// 別の糸で指紋を取り終えた取り込み。窓の糸が echo の度に拾って棚へ入れる。
     pub imports: Arc<Mutex<Vec<Vec<crate::ui::fixture::Prepared>>>>,
     /// 今の作品の仕舞い先。`Save` が問い直さないために覚える。
@@ -320,6 +322,7 @@ impl Session {
             overshoot: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             export: Default::default(),
             project_notice: Arc::new(Mutex::new(String::new())),
+            quit: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             imports: Arc::new(Mutex::new(Vec::new())),
             project_path: Arc::new(Mutex::new(None)),
             saved_revision: Arc::new(Mutex::new(saved_revision)),
@@ -363,6 +366,22 @@ impl Session {
         self.selected_keys.lock().unwrap().clear();
         *self.selected_size.lock().unwrap() = None;
         *self.curve_clip.lock().unwrap() = None;
+        *self.view_request.lock().unwrap() = None;
+        self.imports.lock().unwrap().clear();
+        *self.project_notice.lock().unwrap() = String::new();
+        crate::ui::keymap::set_typing(false);
+    }
+
+    /// 錠の掛かっていない層だけが書ける。**書く経路は全部ここを通す**(擦り・鍵・色・差し替え・掴み)。
+    pub(super) fn writable(&self, layer: LayerId) -> bool {
+        self.doc
+            .lock()
+            .unwrap()
+            .view()
+            .attrs(layer)
+            .ok()
+            .flatten()
+            .is_none_or(|a| !a.locked)
     }
 
     /// Undo / Redo の後。消えた層を名指す窓側の手を全部手放す(層の id は嘘になっている)。

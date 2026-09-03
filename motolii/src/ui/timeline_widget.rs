@@ -264,6 +264,8 @@ pub(super) enum TimelineMsg {
     SetRows(Vec<CanvasRow>),
     ScrollBy(f64),
     SetMarkers(Vec<f64>),
+    /// Escape: キーの選択を落とす。
+    DeselectKeys,
 }
 
 pub(super) struct TimelineWidget {
@@ -285,6 +287,8 @@ pub(super) struct TimelineWidget {
     selected: Vec<(usize, usize)>,
     /// 空きからのドラッグで囲む。掴み始めと今の場所(秒, 行)。
     marquee: Option<((f64, f64), (f64, f64))>,
+    /// 囲いが ⌘ / ⇧ 付きで始まった(足す。置き換えない)。
+    marquee_add: bool,
     clock: Option<Arc<Clock>>,
     scale: Option<Arc<UiScale>>,
     doc: Option<Arc<Mutex<Document>>>,
@@ -324,6 +328,7 @@ impl TimelineWidget {
             hovered: None,
             selected: Vec::new(),
             marquee: None,
+            marquee_add: false,
             clock: None,
             scale: None,
             doc: None,
@@ -723,9 +728,11 @@ impl TimelineWidget {
             if mid < y0 || mid > y1 {
                 continue;
             }
+            // 錠の掛かった層のキーは選ばない(選べれば消せてしまう)。層そのものは選べる。
+            let locked = row.layer.is_some_and(|l| self.is_locked(l));
             for (key_ix, t) in row.keys.iter().enumerate() {
                 let x = (t - self.scroll_sec) * self.pps;
-                if x >= x0 && x <= x1 && !self.selected.contains(&(row_ix, key_ix)) {
+                if !locked && x >= x0 && x <= x1 && !self.selected.contains(&(row_ix, key_ix)) {
                     self.selected.push((row_ix, key_ix));
                 }
             }
@@ -741,9 +748,18 @@ impl TimelineWidget {
         if let (Some(selection), Some(mirror), false) =
             (self.selection.as_ref(), self.selected_mirror.as_mut(), layers.is_empty())
         {
-            selection.set(Some(layers[0]));
-            for layer in &layers[1..] {
-                selection.toggle(*layer);
+            // ⌘ / ⇧ 付きの囲いは足す(キーと同じ流儀)。素の囲いは置き換える。
+            if self.marquee_add {
+                for layer in &layers {
+                    if !selection.contains(*layer) {
+                        selection.toggle(*layer);
+                    }
+                }
+            } else {
+                selection.set(Some(layers[0]));
+                for layer in &layers[1..] {
+                    selection.toggle(*layer);
+                }
             }
             mirror.set(selection.get());
         }
@@ -819,6 +835,10 @@ impl TimelineWidget {
                 TimelineMsg::SetRows(rows) => self.replace_rows(rows),
                 TimelineMsg::ScrollBy(dy) => self.set_scroll_y(self.scroll_y + dy),
                 TimelineMsg::SetMarkers(markers) => self.markers = markers,
+                TimelineMsg::DeselectKeys => {
+                    self.selected.clear();
+                    self.publish_keys();
+                }
             }
         }
     }
@@ -1158,6 +1178,10 @@ impl Widget for TimelineWidget {
                     t, x, y, hit
                 );
                 if let Some((row_ix, key_ix)) = hit {
+                    if self.rows[row_ix].layer.is_some_and(|l| self.is_locked(l)) {
+                        println!("PROBE room=input verdict=locked-key row={row_ix}");
+                        return;
+                    }
                     let add = p.mods.intersects(Modifiers::META | Modifiers::SUPER) || p.mods.contains(Modifiers::SHIFT);
                     match (add, self.selected.iter().position(|k| *k == (row_ix, key_ix))) {
                         (true, Some(at)) => {
@@ -1248,10 +1272,12 @@ impl Widget for TimelineWidget {
                     }
                 } else {
                     // 何も無い所からのドラッグは囲って選ぶ。
-                    if !p.mods.intersects(Modifiers::META | Modifiers::SUPER) && !p.mods.contains(Modifiers::SHIFT) {
+                    let add = p.mods.intersects(Modifiers::META | Modifiers::SUPER) || p.mods.contains(Modifiers::SHIFT);
+                    if !add {
                         self.selected.clear();
                         self.publish_keys();
                     }
+                    self.marquee_add = add;
                     self.marquee = Some(((x, y), (x, y)));
                 }
             }

@@ -436,7 +436,7 @@ fn prop_row(
             span { class: "n", "{p.label}" }
             {cells}
             if let Some(on_click) = key_click {
-                SemanticButton { class: "{key_class}", selected: p.keyed, aria_label: if p.keyed { "Remove the keyframe at this time · Alt removes all" } else { "Add a keyframe at this time" }, onclick: on_click, "{key_glyph}" }
+                SemanticButton { class: "{key_class}", selected: p.keyed, aria_label: if p.keyed { "Remove the keyframe at this time · Alt removes all" } else { "Add a keyframe at this time" }, title: if p.keyed { "Remove the keyframe here · Alt removes all" } else { "Animate this value" }, onclick: on_click, "{key_glyph}" }
             } else {
                 span { class: "{key_class}", "{key_glyph}" }
             }

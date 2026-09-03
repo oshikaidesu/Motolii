@@ -399,7 +399,7 @@ fn dock_zone(
                     }
                 }
             },
-            div { class: "ptabs",
+            div { class: "ptabs", role: "tablist",
                 for panel in panels.iter().copied() {
                     button {
                         id: "dock-tab-{panel}",
@@ -446,7 +446,7 @@ fn dock_zone(
                 }
             }
             if let Some(panel) = shown {
-                div { class: "zbody", {panel_body(panel, session, ui, panes)} }
+                div { class: "zbody", role: "tabpanel", {panel_body(panel, session, ui, panes)} }
             }
             if dragging {
                 div { class: "dropmap dragging",
@@ -656,8 +656,11 @@ pub fn app() -> Element {
         let runtime = dioxus_core::Runtime::current();
         let scope = dioxus_core::current_scope_id();
         let gesture = session.gesture.clone();
+        let lost_session = session.clone();
         host.on_focus_lost(move || {
             gesture.cancel();
+            // 下見(transient)は窓を離れたら全部落とす。書類に無い絵を描き続けない。
+            lost_session.doc.lock().unwrap().clear_all_transients();
             // Cmd+Tab で離れると修飾の keyup が届かない。戻った時の Space が Cmd+Space になる。
             crate::ui::keymap::forget_modifiers();
             runtime.in_scope(scope, move || {
@@ -671,7 +674,12 @@ pub fn app() -> Element {
         });
     });
     let panes = panes_for(&loaded);
-    let has_composition = session.doc.lock().unwrap().view().composition().ok().flatten().is_some();
+    let can_export = {
+        let d = session.doc.lock().unwrap();
+        let view = d.view();
+        // 白紙(comp 無し・層 0)は書き出せない。真っ黒な mp4 を出して「壊れた」と思わせない。
+        view.composition().ok().flatten().is_some() && !view.layers().is_empty()
+    };
     // 面からの「この panel を前に出して」。revision の度に拾う(Inspector の COLOR 行 → Colors)。
     {
         let asker = session.clone();
@@ -838,6 +846,22 @@ pub fn app() -> Element {
                         evt.prevent_default();
                         evt.stop_propagation();
                         choice.set(None);
+                        return;
+                    }
+                    // 机の引き出しも 1 枚。開いていれば閉じるだけで、選択には触らない。
+                    if evt.key() == Key::Escape
+                        && matches!(*session.desk.lock().unwrap(), crate::ui::session::DeskState::Open(_))
+                    {
+                        evt.prevent_default();
+                        evt.stop_propagation();
+                        let mut desk = session.desk.lock().unwrap();
+                        let was = match *desk {
+                            crate::ui::session::DeskState::Open(d) => Some(d),
+                            _ => None,
+                        };
+                        *desk = crate::ui::session::DeskState::Shut(was);
+                        drop(desk);
+                        *revision.write() += 1;
                         return;
                     }
                     // 焦点が button に在る時の Enter / Space はその button の物。menu が開いている間は鍵を引かない。
@@ -1079,6 +1103,9 @@ pub fn app() -> Element {
                                 selection.set(None);
                                 selected.set(None);
                                 *session.focus.lock().unwrap() = None;
+                                // キーの選択も落とす。落とさないと Alt+矢印が層へ戻れない。
+                                session.selected_keys.lock().unwrap().clear();
+                                let _ = timeline_tx.send(TimelineMsg::DeselectKeys);
                             }
                         }
                         Intent::PlayPause => {
@@ -1105,6 +1132,9 @@ pub fn app() -> Element {
                         }
                         Intent::Rename => {
                             let Some(layer) = selection.get() else { return };
+                            if !session.writable(layer) {
+                                return;
+                            }
                             let name = doc
                                 .lock()
                                 .unwrap()
@@ -1120,6 +1150,7 @@ pub fn app() -> Element {
                         Intent::DeleteLayer => {
                             // キーを選んでいる時の Delete はキーを消す。層は残る(AE・Blender)。
                             let keys: Vec<_> = session.selected_keys.lock().unwrap().clone();
+                            let keys: Vec<_> = keys.into_iter().filter(|k| session.writable(k.layer)).collect();
                             if !keys.is_empty() {
                                 let mut d = doc.lock().unwrap();
                                 let mut intents = Vec::new();
@@ -1146,6 +1177,10 @@ pub fn app() -> Element {
                                 return;
                             }
                             let mut d = doc.lock().unwrap();
+                            let names: Vec<String> = targets
+                                .iter()
+                                .filter_map(|l| d.view().attrs(*l).ok().flatten().map(|a| a.name))
+                                .collect();
                             let intents: Vec<_> = targets
                                 .iter()
                                 .map(|l| crate::doc::store::Intent::RemoveLayer(*l))
@@ -1161,6 +1196,13 @@ pub fn app() -> Element {
                                 layer_rows.set(rows);
                                 let _ = timeline_tx.send(TimelineMsg::SetRows(canvas));
                                 *revision.write() += 1;
+                            }
+                            if applied {
+                                let what = match (names.len(), names.first()) {
+                                    (1, Some(name)) => format!("Deleted \"{name}\""),
+                                    (n, _) => format!("Deleted {n} layers"),
+                                };
+                                *session.project_notice.lock().unwrap() = format!("{what} · ⌘Z to undo");
                             }
                             println!("PROBE room=write verdict=applied RemoveLayer n={} ok={applied}", targets.len());
                         }
@@ -1241,6 +1283,17 @@ pub fn app() -> Element {
                                 *revision.write() += 1;
                             }
                         }
+                        Intent::Quit => {
+                            let session = session.clone();
+                            let poke = poke.clone();
+                            let window = window.clone();
+                            dioxus_core::spawn(async move {
+                                if crate::ui::project::allow_project_replacement(session.clone(), poke.clone(), window).await {
+                                    session.quit.store(true, std::sync::atomic::Ordering::Relaxed);
+                                    poke.poke();
+                                }
+                            });
+                        }
                         Intent::View(request) => {
                             *session.view_request.lock().unwrap() = Some(request);
                             *revision.write() += 1;
@@ -1248,6 +1301,7 @@ pub fn app() -> Element {
                         Intent::Nudge(dx, dy) => {
                             // キーを選んでいる時の Alt+←→ はキーをコマで動かす(AE)。
                             let keys: Vec<_> = session.selected_keys.lock().unwrap().clone();
+                            let keys: Vec<_> = keys.into_iter().filter(|k| session.writable(k.layer)).collect();
                             if !keys.is_empty() && dy == 0.0 {
                                 let mut d = doc.lock().unwrap();
                                 let Ok(fps) = crate::ui::timeline_widget::document_fps(&d) else { return };
@@ -1458,8 +1512,8 @@ pub fn app() -> Element {
                                 SemanticControl {
                                     label: "Export…",
                                     // 白紙(comp 無し)は書き出せない。押せない理由は hint に。
-                                    disabled: session.export.is_active() || !has_composition,
-                                    hint: if has_composition { "" } else { "No composition" },
+                                    disabled: session.export.is_active() || !can_export,
+                                    hint: if can_export { "" } else { "Nothing to export yet" },
                                     onclick: {
                                         let doc = session.doc.clone();
                                         let export = session.export.clone();
@@ -1501,6 +1555,30 @@ pub fn app() -> Element {
                                     }
                                 }
                             }
+                            div { class: "vrow menu-section",
+                                SemanticControl {
+                                    label: "Quit Motolii",
+                                    hint: "⌘Q",
+                                    onclick: {
+                                        let session = session.clone();
+                                        let poke = host.poker();
+                                        let window = window.clone();
+                                        move |evt: Event<MouseData>| {
+                                            evt.stop_propagation();
+                                            open_menu.set(None);
+                                            let session = session.clone();
+                                            let poke = poke.clone();
+                                            let window = window.clone();
+                                            dioxus_core::spawn(async move {
+                                                if crate::ui::project::allow_project_replacement(session.clone(), poke.clone(), window).await {
+                                                    session.quit.store(true, std::sync::atomic::Ordering::Relaxed);
+                                                    poke.poke();
+                                                }
+                                            });
+                                        }
+                                    }
+                                }
+                            }
                 }
                 SemanticMenu {
                     id: MenuId::Edit,
@@ -1523,6 +1601,22 @@ pub fn app() -> Element {
                                     }
                                 }
                             }
+                            div { class: "vrow menu-section",
+                                SemanticControl {
+                                    label: "History…",
+                                    onclick: {
+                                        let session = session.clone();
+                                        let mut revision = revision;
+                                        move |evt: Event<MouseData>| {
+                                            evt.stop_propagation();
+                                            *session.desk.lock().unwrap() = crate::ui::session::DeskState::Open(crate::ui::desk::Drawer::History);
+                                            session.ask_panel(Panel::Desk);
+                                            *revision.write() += 1;
+                                            open_menu.set(None);
+                                        }
+                                    }
+                                }
+                            }
                 }
                 SemanticMenu {
                     id: MenuId::View,
@@ -1530,11 +1624,17 @@ pub fn app() -> Element {
                     open: open_menu,
                             div { class: "vrow menu-section",
                                 SemanticControl {
-                                    label: "Reset Layout",
-                                    onclick: move |evt: Event<MouseData>| {
-                                        evt.stop_propagation();
-                                        dock.write().reset_layout();
-                                        open_menu.set(None);
+                                    label: "Reset Panel Layout",
+                                    onclick: {
+                                        let notice = session.project_notice.clone();
+                                        let mut revision = revision;
+                                        move |evt: Event<MouseData>| {
+                                            evt.stop_propagation();
+                                            dock.write().reset_layout();
+                                            *notice.lock().unwrap() = "Panel layout reset".to_owned();
+                                            *revision.write() += 1;
+                                            open_menu.set(None);
+                                        }
                                     }
                                 }
                             }

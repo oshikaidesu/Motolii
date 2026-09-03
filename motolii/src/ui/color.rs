@@ -233,6 +233,9 @@ pub(super) fn ColorWheel(session: Session, slot: ColorSlot, revision: Signal<u32
         move || {
             let Some((h, s, v)) = draft.write().take() else { return };
             clear_preview(&session.doc, &slot);
+            if !session.writable(slot.layer()) {
+                return;
+            }
             let rgb = hsv_to_rgb(h, s, v);
             let same = read_color(&session.doc, &slot)
                 .is_some_and(|c| (0..3).all(|i| (c[i] - rgb[i]).abs() < 1e-9));
@@ -262,6 +265,20 @@ pub(super) fn ColorWheel(session: Session, slot: ColorSlot, revision: Signal<u32
         preview_color(&preview_sv.0.doc, &preview_sv.1, hsv_to_rgb(h, s, v));
         *revision.write() += 1;
     };
+    let commit_alpha = {
+        let session = session.clone();
+        let slot = slot.clone();
+        move || {
+            let Some(a) = alpha_draft.write().take() else { return };
+            if !session.writable(slot.layer()) {
+                return;
+            }
+            match write_alpha(&session.doc, &slot, a) {
+                Ok(()) => *revision.write() += 1,
+                Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
+            }
+        }
+    };
     let held = |evt: &PointerEvent| {
         evt.data()
             .held_buttons()
@@ -271,9 +288,9 @@ pub(super) fn ColorWheel(session: Session, slot: ColorSlot, revision: Signal<u32
     let mut commit_far = commit.clone();
     let mut commit_leave = commit.clone();
     rsx!(div { class: "color-pick",
-        onpointerup: move |_| commit_up(),
+        onpointerup: { let mut alpha = commit_alpha.clone(); move |_| { commit_up(); alpha() } },
         // 引き出しの外へ出たら、そこまでの色で確定(掴んだまま彷徨わせない)。
-        onpointerleave: move |_| commit_leave(),
+        onpointerleave: { let mut alpha = commit_alpha.clone(); move |_| { commit_leave(); alpha() } },
         // 外で放して戻ってきた時。押していないのに下書きが残っていれば、それが放した印。
         onpointermove: move |evt: PointerEvent| {
             if !held(&evt) && draft.peek().is_some() {
@@ -314,6 +331,9 @@ pub(super) fn ColorWheel(session: Session, slot: ColorSlot, revision: Signal<u32
                         move |f: OpenField| {
                             let FieldAt::Hex(slot) = f.at else { return };
                             let Some(rgb) = parse_hex(&f.draft) else { return };
+                            if !session.writable(slot.layer()) {
+                                return;
+                            }
                             match write_color(&session.doc, &slot, rgb) {
                                 Ok(()) => *revision.write() += 1,
                                 Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
@@ -346,33 +366,21 @@ pub(super) fn ColorWheel(session: Session, slot: ColorSlot, revision: Signal<u32
                 onpointerdown: move |evt: PointerEvent| {
                     alpha_draft.set(Some((evt.data().element_coordinates().x / ring).clamp(0.0, 1.0)));
                 },
-                onpointermove: move |evt: PointerEvent| {
-                    if held(&evt) && alpha_draft().is_some() {
-                        alpha_draft.set(Some((evt.data().element_coordinates().x / ring).clamp(0.0, 1.0)));
-                    }
-                },
-                onpointerup: {
-                    let session = session.clone();
-                    let slot = slot.clone();
-                    move |_| {
-                        let Some(a) = alpha_draft.write().take() else { return };
-                        match write_alpha(&session.doc, &slot, a) {
-                            Ok(()) => *revision.write() += 1,
-                            Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
+                // 帯から縦にぶれても追う。押していないのに下書きが残っていれば、それが放した印(色と同じ保険)。
+                onpointermove: {
+                    let mut commit = commit_alpha.clone();
+                    move |evt: PointerEvent| {
+                        if alpha_draft.peek().is_none() {
+                            return;
+                        }
+                        if held(&evt) {
+                            alpha_draft.set(Some((evt.data().element_coordinates().x / ring).clamp(0.0, 1.0)));
+                        } else {
+                            commit();
                         }
                     }
                 },
-                onpointerleave: {
-                    let session = session.clone();
-                    let slot = slot.clone();
-                    move |_| {
-                        let Some(a) = alpha_draft.write().take() else { return };
-                        match write_alpha(&session.doc, &slot, a) {
-                            Ok(()) => *revision.write() += 1,
-                            Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
-                        }
-                    }
-                },
+                onpointerup: { let mut commit = commit_alpha.clone(); move |_| commit() },
                 span { class: "color-mark", style: "left: {alpha_draft().unwrap_or(current[3]) * ring}px; top: 50%;" }
             }
         }

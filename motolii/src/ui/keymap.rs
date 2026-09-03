@@ -48,6 +48,8 @@ pub(super) enum Intent {
     View(crate::ui::session::ViewRequest),
     /// 選んだ層を 1px(Shift で 10px)動かす。Alt+矢印 —— 素の矢印は時間の物。
     Nudge(f64, f64),
+    /// 終わる(⌘Q)。未保存なら先に訊く。
+    Quit,
     /// 選択を伸ばす(Shift+↑↓、Finder・AE)。
     SelectExtend(i32),
 }
@@ -337,6 +339,7 @@ const BINDINGS: &[Binding] = &[
     Binding { key: KeySpec::Char('-'), cmd: true, shift: false, alt: false, intent: Intent::View(crate::ui::session::ViewRequest::Step(0.8)) },
     Binding { key: KeySpec::Char('0'), cmd: true, shift: false, alt: false, intent: Intent::View(crate::ui::session::ViewRequest::Fit) },
     Binding { key: KeySpec::Char('1'), cmd: true, shift: false, alt: false, intent: Intent::View(crate::ui::session::ViewRequest::Actual) },
+    Binding { key: KeySpec::Char('q'), cmd: true, shift: false, alt: false, intent: Intent::Quit },
     Binding { key: KeySpec::ArrowLeft, cmd: false, shift: false, alt: true, intent: Intent::Nudge(-1.0, 0.0) },
     Binding { key: KeySpec::ArrowRight, cmd: false, shift: false, alt: true, intent: Intent::Nudge(1.0, 0.0) },
     Binding { key: KeySpec::ArrowUp, cmd: false, shift: false, alt: true, intent: Intent::Nudge(0.0, -1.0) },

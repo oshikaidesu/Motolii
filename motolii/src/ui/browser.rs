@@ -659,7 +659,14 @@ pub(super) fn browser_panel(
                         SemanticButton {
                             class: "chip",
                             title: "Replace the selected layer's source with this",
-                            onclick: move |_| replace_source(&replace_doc, layer, path.clone(), revision),
+                            onclick: {
+                                let session = session.clone();
+                                move |_| {
+                                    if session.writable(layer) {
+                                        replace_source(&replace_doc, layer, path.clone(), revision)
+                                    }
+                                }
+                            },
                             "Replace"
                         }
                     }
@@ -703,7 +710,12 @@ pub(super) fn browser_panel(
             if panel == Panel::Colors {
                 {
                     let layer = selected();
-                    let swatches = fixture::used_colors_from_doc(&doc.lock().unwrap());
+                    // 白紙では使われた色が無い。最初の一歩は既定のパレットから(Canva・CapCut)。
+                    let mut swatches = fixture::used_colors_from_doc(&doc.lock().unwrap());
+                    let starter = swatches.is_empty();
+                    if starter {
+                        swatches = fixture::default_palette();
+                    }
                     let has_swatches = !swatches.is_empty();
                     let cards = swatches.into_iter().map(|ColorSwatch { hex, rgba }| {
                         let card_class = if layer.is_none() { "tcard disabled" } else { "tcard" };
@@ -726,7 +738,7 @@ pub(super) fn browser_panel(
                         div { class: "bwork",
                             div { class: "bside",
                                 div { class: "sh", "Colors" }
-                                div { class: "srow on", "Used in this composition" }
+                                div { class: "srow on", if starter { "Starter palette" } else { "Used in this composition" } }
                             }
                             div { class: "bresults",
                                 div { class: "rhead",
@@ -837,7 +849,7 @@ pub(super) fn browser_panel(
                                     span { style: "color:#fff; font-size:32px;", "T" }
                                 }
                                 span { class: "tname", "Text" }
-                                span { class: "tmeta", "text layer" }
+                                span { class: "tmeta", "Adds a text layer" }
                             }
                             SemanticButton {
                                 class: "tcard",
@@ -921,7 +933,7 @@ pub(super) fn browser_panel(
                         }
                         if filtered_out {
                             div { class: "rcount",
-                                "Nothing of this kind yet · "
+                                "No {rail_label} in this project yet · "
                                 SemanticButton { class: "chip", onclick: move |_| rail.set(None), "Show all media" }
                             }
                         } else {

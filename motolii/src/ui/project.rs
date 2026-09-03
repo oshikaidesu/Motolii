@@ -36,8 +36,8 @@ async fn put_away_inner(session: &Session, ask: bool) -> bool {
         Some(path) => path,
         None => {
             let picked = rfd::AsyncFileDialog::new()
-                .add_filter("Motolii", &["rrd"])
-                .set_file_name("song.rrd")
+                .add_filter("Motolii Project", &["rrd"])
+                .set_file_name("Untitled.rrd")
                 .save_file()
                 .await;
             let Some(file) = picked else { return false };
@@ -122,7 +122,7 @@ pub(super) async fn open_project(
     if !allow_project_replacement(session.clone(), poke, window.clone()).await {
         return;
     }
-    let mut dialog = rfd::AsyncFileDialog::new().add_filter("Motolii", &["rrd"]);
+    let mut dialog = rfd::AsyncFileDialog::new().add_filter("Motolii Project", &["rrd"]);
     if let Some(window) = window.as_deref() {
         dialog = dialog.set_parent(window);
     }

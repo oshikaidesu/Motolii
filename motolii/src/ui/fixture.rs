@@ -442,6 +442,17 @@ fn shape_fill_colors(
     }
 }
 
+/// 白紙の時のパレット。使われた色が出来たらそちらに譲る。
+pub(super) fn default_palette() -> Vec<ColorSwatch> {
+    ["#ffffff", "#000000", "#f2f2f2", "#d8b574", "#e35b5b", "#f29b3c", "#f2d43c", "#5ab34a", "#3cb5b5", "#4a7fe3", "#8c6eaa", "#e37fb8"]
+        .into_iter()
+        .map(|hex| {
+            let b = |i: usize| u8::from_str_radix(&hex[i..i + 2], 16).unwrap_or(0);
+            ColorSwatch { hex: hex.to_owned(), rgba: [b(1), b(3), b(5), 255] }
+        })
+        .collect()
+}
+
 pub(super) fn used_colors_from_doc(doc: &Document) -> Vec<ColorSwatch> {
     let view = doc.view();
     let mut seen = std::collections::BTreeSet::new();
