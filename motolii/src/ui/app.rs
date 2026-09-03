@@ -332,6 +332,7 @@ fn StagePanel(
                         rings_on.set(next);
                         revision += 1;
                     },
+                    title: "3D handles",
                     "◎"
                 }
                 span { "{comp_line}" }

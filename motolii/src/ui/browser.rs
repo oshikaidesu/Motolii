@@ -632,12 +632,12 @@ pub(super) fn browser_panel(
                                 }
                                 match wheel_slot(session) {
                                     Some(slot) => rsx!(ColorWheel { session: session.clone(), slot, revision }),
-                                    None => rsx!(div { class: "rcount", "Pick a layer with a color" }),
+                                    None => rsx!(div { class: "rcount", "No color yet · select a layer" }),
                                 }
                                 if has_swatches {
                                     div { class: "tgrid", {cards} }
                                 } else {
-                                    div { class: "rcount", "No colors used yet" }
+                                    div { class: "rcount", "No colors yet" }
                                 }
                             }
                         }

@@ -1186,6 +1186,13 @@ body {
     font-size: var(--t-dense);
     color: var(--ink3);
     border-top: var(--line) solid var(--dark);
+    /* 常設の説明文は HIG の反例。面に手が乗っている間だけ見せる。 */
+    opacity: 0;
+    transition: opacity var(--motion-fast) var(--motion-ease-standard);
+}
+
+#inspector:hover .hint {
+    opacity: 1;
 }
 
 #timelineshell {

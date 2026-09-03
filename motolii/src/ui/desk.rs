@@ -345,7 +345,7 @@ fn drawer_body(
                 d.view().attrs(layer).ok().flatten().map(|a| (layer, a.blend_mode))
             });
             match target {
-                None => rsx!(div { class: "dempty", "Pick a layer" }),
+                None => rsx!(div { class: "dempty", "No layer yet · select one" }),
                 Some((layer, current)) => rsx!(div { class: "blend-grid",
                     for (mode , label) in BLEND_MODES.iter().copied() {
                         SemanticButton {
