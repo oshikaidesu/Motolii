@@ -155,7 +155,7 @@
 - ☑ H7 title bar が書類を指さない(set_title・representedFilename・documentEdited)
 - ☑ H8 Open Recent(File menu に 5 件)
 - ☐ H9 Revert to Saved
-- ☐ H10 自動保存・版
+- ☑ H10 自動保存(版は auto-save の世代 5)
 - ☑ H11 ⌘N ⌘O ⇧⌘S の加速鍵
 - ☐ H12 ⌘W と閉じる意味(窓を閉じる ≠ 終了)
 - ☑ H13 窓の位置・大きさを window.json で復元
@@ -453,7 +453,7 @@
 - ☐ SE1 署名・公証・updater が repo に無い(Gatekeeper で開けない)— 教育向けの前提
 - ☐ SE2 ffmpeg を同梱しない(brew を客に言わせる)、ライセンスの法務判断
 - ☐ SE3 .rrd の version 番号と migration が無い(「rerun 互換」とは言わない)
-- ☐ SE4 auto_save が persist.rs に在るのに src から呼ばれない(H10)
+- ☑ SE4 5 分ごとの自動保存(仕舞い先が決まっていて手が入った時、世代 5)
 - ☐ SE5 Lottie 書き出しが UI から呼ばれない
 - ☐ SE6 ISF は仕組みだけ(bloom 1 本、include_str で焼く)— 実行時に .fs を読む口
 - ☐ SE7 素材 relink(D3)と snapshot の相対 path(D9)は試用版の翌日に必ず来る
@@ -476,7 +476,7 @@
 - ☑ GC2 既定 Text: 行送り 1.5・palt・黒の縁取り 8%(W6 は機械に無いので W3 のまま)
 - ☑ GC3 縁取りは既定で fill の下、幅は外側基準(2 倍で焼いて重ねる)
 - ☐ GC4 ShapedText に glyph の区切り(glyph_spans)— Range Selector / 文字送りの入口
-- ☐ GC5 vism/blur.wgsl を 1 枚(ブラー・影・feather の土台)、mask に feather が無い
+- ☑ GC5 vism/blur.wgsl(ガウス 2 段)— feather は未
 - ☐ GC6 文字の焼きが comp 固定解像度(scale 200% でぼける)— canvas を実効 scale で
 - ☐ GC7 出口が yuv420p(色付き細字の縁が横 2px 平均)— qp0 / 444 / ProRes の口(X1)
 - ☐ GC8 Composition sheet に背景色の行が無い、既定パレットが色相環の等分(目が入っていない)
