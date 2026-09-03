@@ -85,7 +85,7 @@ const DRAG_SLOP_PX: f64 = 3.0;
 /// 掴んだ物が吸い付く距離。手が止まらない感触はここで決まる。
 const SNAP_PX: f64 = 8.0;
 
-fn document_fps(doc: &Document) -> Result<Fps, StoreError> {
+pub(super) fn document_fps(doc: &Document) -> Result<Fps, StoreError> {
     doc.view()
         .composition()?
         .map(|composition| composition.fps)
@@ -138,7 +138,7 @@ fn keyframe_shift_intents(
 
 /// `at_frame` にあるキーだけを `delta_frames` ずらす。層の行に見えている菱形は
 /// 複数のトラックの同じ時刻を束ねているので、束ごと動かす(AE と同じ)。
-fn keyframe_move_intents(
+pub(super) fn keyframe_move_intents(
     doc: &Document,
     layer: LayerId,
     only: Option<&crate::doc::store::PropertyId>,
@@ -573,6 +573,24 @@ impl TimelineWidget {
     }
 
     /// 掴んでいる時刻の吸い付き先(再生位置・comp の頭・各層の端)。
+    /// 印と帯の端へ吸った時刻。再生位置そのものは吸い先に入れない(自分に吸う)。
+    fn snapped_time(&self, t: f64) -> f64 {
+        let threshold = SNAP_PX / self.pps;
+        let mut targets = vec![0.0];
+        for row in &self.rows {
+            if let Some((a, b)) = row.span {
+                targets.push(a);
+                targets.push(b);
+            }
+        }
+        targets.extend(self.markers.iter().copied());
+        targets
+            .into_iter()
+            .filter(|target| (target - t).abs() <= threshold)
+            .min_by(|a, b| (a - t).abs().total_cmp(&(b - t).abs()))
+            .unwrap_or(t)
+    }
+
     fn snap_targets(&self) -> Vec<f64> {
         let mut out = vec![0.0];
         if let Some(clock) = &self.clock {
@@ -822,6 +840,10 @@ pub(super) fn split_layer(doc: &Arc<Mutex<Document>>, layer: LayerId, comp_frame
 
     let attrs = view.attrs(layer).ok().flatten().unwrap_or_default();
     let effects = view.effects(layer).unwrap_or_default();
+    let shapes = view.shapes(layer).unwrap_or_default();
+    let text = view.text_document(layer).ok().flatten();
+    let fps = document_fps(&doc).ok()?;
+    let cut = RationalTime::try_from_frame(comp_frame, fps).ok()?;
     let tracks: Vec<_> = view
         .properties(layer)
         .into_iter()
@@ -837,12 +859,64 @@ pub(super) fn split_layer(doc: &Arc<Mutex<Document>>, layer: LayerId, comp_frame
     if !effects.is_empty() {
         intents.push(Intent::SetEffects { layer: tail, effects });
     }
+    // 形と文字も連れていく(複製と同じ)。切らないと歌詞層の尻が空になる。
+    if !shapes.is_empty() {
+        intents.push(Intent::SetShapes { layer: tail, shapes });
+    }
+    if let Some(document) = text {
+        intents.push(Intent::SetTextDocument { layer: tail, document });
+    }
     for (property, track) in tracks {
-        intents.push(Intent::SetTrack { layer: tail, property, track });
+        let (head, tail_track) = split_track_at(&track, cut);
+        if let Some(head) = head {
+            intents.push(Intent::SetTrack { layer, property: property.clone(), track: head });
+        }
+        intents.push(Intent::SetTrack { layer: tail, property, track: tail_track });
     }
 
     doc.apply_all(intents).ok()?;
     Some(tail)
+}
+
+/// 切り口を跨ぐ区間のイージングを両側へ分ける(Premiere・Resolve は切っても見た目が変わらない)。
+/// 跨ぐ区間が無ければ頭はそのまま(None)、尻は丸ごと写す。
+fn split_track_at(track: &KeyframeTrack, cut: RationalTime) -> (Option<KeyframeTrack>, KeyframeTrack) {
+    let keys = track.keys();
+    let straddle = keys
+        .windows(2)
+        .position(|pair| pair[0].t < cut && cut < pair[1].t);
+    let Some(i) = straddle else {
+        return (None, track.clone());
+    };
+    let (a, b) = (&keys[i], &keys[i + 1]);
+    let progress = (cut.as_seconds_f64() - a.t.as_seconds_f64())
+        / (b.t.as_seconds_f64() - a.t.as_seconds_f64()).max(f64::EPSILON);
+    let Ok((first, second)) = a.interp.split_at(progress) else {
+        return (None, track.clone());
+    };
+    let at_cut = crate::doc::store::Keyframe {
+        t: cut,
+        value: track.eval(cut),
+        interp: second,
+        spatial: None,
+    };
+    let mut head = KeyframeTrack::new();
+    let mut tail = KeyframeTrack::new();
+    for (k, key) in keys.iter().enumerate() {
+        let mut key = key.clone();
+        if k == i {
+            key.interp = first;
+        }
+        if k <= i {
+            head.insert(key.clone());
+        }
+        if k > i {
+            tail.insert(key);
+        }
+    }
+    head.insert(at_cut.clone());
+    tail.insert(at_cut);
+    (Some(head), tail)
 }
 
 fn fill_rect(s: &mut anyrender::Scene, r: Rect, color: Color) {
@@ -931,7 +1005,10 @@ impl Widget for TimelineWidget {
                 }
                 if self.scrubbing {
                     if let Some(clock) = &self.clock {
-                        clock.seek(self.scroll_sec + x / self.pps);
+                        let t = self.scroll_sec + x / self.pps;
+                        // 再生位置も印・帯の端へ吸う。⌘ を添えると素通り(吸い付きを切る手)。
+                        let free = p.mods.intersects(Modifiers::META | Modifiers::SUPER);
+                        clock.seek(if free { t } else { self.snapped_time(t) });
                     }
                 } else if self.drag.is_some() {
                     let raw = (self.scroll_sec + x / self.pps)
@@ -1435,244 +1512,4 @@ impl Widget for TimelineWidget {
 }
 
 #[cfg(test)]
-mod follow {
-    use super::*;
-
-    proptest::proptest! {
-        /// 止まっている間は、どこへ動かしても引き戻されない。
-        /// **利用者が自分で動かした位置が真**で、再生位置ではない。
-        #[test]
-        fn a_paused_timeline_stays_where_you_put_it(
-            scroll in 0.0f64..600.0,
-            visible in 1.0f64..120.0,
-            playhead in 0.0f64..600.0,
-        ) {
-            proptest::prop_assert_eq!(
-                follow_playhead(scroll, visible, playhead, false, false),
-                None
-            );
-        }
-
-        /// 再生中に視界から出たら追いかける(こちらは効いていないと困る)。
-        #[test]
-        fn a_playing_timeline_catches_up_when_the_head_leaves(
-            scroll in 10.0f64..600.0,
-            visible in 1.0f64..120.0,
-        ) {
-            let behind = scroll - 1.0;
-            proptest::prop_assert!(
-                follow_playhead(scroll, visible, behind, true, false).is_some(),
-                "再生中に置いていかれた"
-            );
-        }
-    }
-}
-
-#[cfg(test)]
-mod lyrics {
-    use super::*;
-    use crate::doc::store::{ContentKeyframe, ContentTrack, Intent, LayerSource};
-
-    fn text_layer(doc: &Document) -> LayerId {
-        let view = doc.view();
-        view.layers()
-            .into_iter()
-            .find(|l| view.meta(*l).ok().flatten().map(|m| m.source) == Some(LayerSource::Text))
-            .expect("a text layer in the fixture")
-    }
-
-    /// 歌詞の切替時刻は層と一緒に動く。
-    #[test]
-    fn moving_a_layer_carries_its_lyric_keys() {
-        let loaded = crate::ui::fixture::load_fixture();
-        let mut doc = loaded.doc;
-        let layer = text_layer(&doc);
-        let fps = document_fps(&doc).unwrap();
-        let mut text = doc.view().text_document(layer).unwrap().unwrap();
-        let mut track = ContentTrack::new();
-        for (frame, word) in [(0, "a"), (24, "b")] {
-            track.insert(ContentKeyframe { t: RationalTime::try_from_frame(frame, fps).unwrap(), content: word.into() });
-        }
-        text.content = track;
-        doc.apply(Intent::SetTextDocument { layer, document: text }).unwrap();
-
-        let intents = keyframe_shift_intents(&doc, layer, 10).unwrap();
-        doc.apply_all(intents).unwrap();
-        let keys = doc.view().text_document(layer).unwrap().unwrap().content.keys().to_vec();
-        let frames: Vec<i64> = keys.iter().map(|k| k.t.try_to_frame_floor(fps).unwrap()).collect();
-        assert_eq!(frames, vec![10, 34], "lyric keys did not move with the layer");
-    }
-
-    /// 目盛の段は倍率に付いて行き、詰まらず空きすぎない。
-    #[test]
-    fn ruler_steps_follow_the_zoom() {
-        assert_eq!(nice_step(8.0), 10.0);
-        assert_eq!(nice_step(80.0), 1.0);
-        assert_eq!(nice_step(600.0), 0.2);
-        for pps in [8.0, 20.0, 80.0, 200.0, 600.0] {
-            let px = nice_step(pps) * pps;
-            assert!((80.0..=800.0).contains(&px), "{pps}: {px}px");
-        }
-    }
-
-    /// 印は吸い付き先。
-    #[test]
-    fn markers_are_snap_targets() {
-        let (_tx, rx) = std::sync::mpsc::channel();
-        let mut w = TimelineWidget::new(Vec::new(), Rc::new(rx));
-        w.markers = vec![1.5, 7.25];
-        let targets = w.snap_targets();
-        assert!(targets.contains(&1.5) && targets.contains(&7.25), "{targets:?}");
-    }
-}
-
-#[cfg(test)]
-mod keys {
-    use super::*;
-    use crate::doc::store::{
-        property, Composition, Interp, Keyframe, LayerSource, PropertyId, Value,
-    };
-
-    fn two_key_doc() -> (Document, LayerId, PropertyId, Fps) {
-        let fps = Fps::try_new(24, 1).unwrap();
-        let mut doc = Document::new();
-        doc.apply(Intent::SetComposition(Composition {
-            width: 640,
-            height: 480,
-            fps,
-            duration_frames: 240,
-            background: Composition::default_background(),
-        }))
-        .unwrap();
-        let layer = LayerId(1);
-        let property = PropertyId::new(property::POSITION).unwrap();
-        let mut track = KeyframeTrack::new();
-        for (frame, x) in [(12, 1.0), (36, 3.0)] {
-            track.insert(Keyframe {
-                t: RationalTime::try_from_frame(frame, fps).unwrap(),
-                value: Value::Vec2([x, 0.0]),
-                interp: Interp::Linear,
-                spatial: None,
-            });
-        }
-        doc.apply_all([
-            Intent::AddLayer(layer),
-            Intent::SetMeta {
-                layer,
-                meta: LayerMeta { source: LayerSource::Shape, order: 0, timing: LayerTiming::place(0, None, 240) },
-            },
-            Intent::SetTrack { layer, property: property.clone(), track },
-        ])
-        .unwrap();
-        (doc, layer, property, fps)
-    }
-
-    fn frames(doc: &Document, layer: LayerId, property: &PropertyId, fps: Fps) -> Vec<i64> {
-        doc.view()
-            .track(layer, property)
-            .unwrap()
-            .unwrap()
-            .keys()
-            .iter()
-            .map(|k| k.t.try_to_frame_round(fps).unwrap())
-            .collect()
-    }
-
-    /// 同じ帯の 2 つを掴めば 2 つとも動く。別々の SetTrack だと最後の 1 本が勝っていた。
-    #[test]
-    fn two_keys_on_one_track_move_together() {
-        let (mut doc, layer, property, fps) = two_key_doc();
-        let intents = keyframe_move_intents(&doc, layer, Some(&property), &[12, 36], 5).unwrap();
-        assert_eq!(intents.len(), 1, "one track, one SetTrack");
-        doc.apply_all(intents).unwrap();
-        assert_eq!(frames(&doc, layer, &property, fps), vec![17, 41]);
-    }
-
-    /// Delete はその時刻のキーだけ外す。最後の 1 つを外すと値は定数で残り、絵は飛ばない。
-    #[test]
-    fn deleting_a_key_leaves_the_others_and_then_a_constant() {
-        let (mut doc, layer, property, fps) = two_key_doc();
-        doc.apply_all(keyframe_delete_intents(&doc, layer, Some(&property), 0.5).unwrap()).unwrap();
-        assert_eq!(frames(&doc, layer, &property, fps), vec![36]);
-        doc.apply_all(keyframe_delete_intents(&doc, layer, Some(&property), 1.5).unwrap()).unwrap();
-        assert!(doc.view().track(layer, &property).unwrap().is_none(), "track should be gone");
-        let at = RationalTime::try_from_frame(36, fps).unwrap();
-        assert_eq!(doc.view().value_at(layer, &property, at).unwrap(), Some(Value::Vec2([3.0, 0.0])));
-    }
-
-    /// 複製は元のすぐ上に割り込み、上に居た層は退く。
-    #[test]
-    fn duplicate_slips_in_above_the_original() {
-        let (doc, layer, _, _) = two_key_doc();
-        let doc = Arc::new(Mutex::new(doc));
-        {
-            let mut d = doc.lock().unwrap();
-            let upper = LayerId(2);
-            d.apply_all([
-                Intent::AddLayer(upper),
-                Intent::SetMeta {
-                    layer: upper,
-                    meta: LayerMeta { source: LayerSource::Shape, order: 1, timing: LayerTiming::place(0, None, 240) },
-                },
-            ])
-            .unwrap();
-        }
-        let copy = duplicate_layer(&doc, layer).unwrap();
-        let d = doc.lock().unwrap();
-        let order = |l: LayerId| d.view().meta(l).unwrap().unwrap().order;
-        assert_eq!((order(layer), order(copy), order(LayerId(2))), (0, 1, 2));
-    }
-}
-
-#[cfg(test)]
-mod timebase {
-    use super::*;
-    use crate::doc::store::{
-        property, Composition, Interp, Keyframe, LayerSource, PropertyId, Value,
-    };
-
-    #[test]
-    fn moving_a_key_uses_the_composition_frame_rate() {
-        let fps = Fps::try_new(24, 1).unwrap();
-        let mut doc = Document::new();
-        doc.apply(Intent::SetComposition(Composition {
-            width: 640,
-            height: 480,
-            fps,
-            duration_frames: 240,
-            background: Composition::default_background(),
-        }))
-        .unwrap();
-        let layer = LayerId(1);
-        let property = PropertyId::new(property::POSITION).unwrap();
-        let mut track = KeyframeTrack::new();
-        track.insert(Keyframe {
-            t: RationalTime::try_from_frame(12, fps).unwrap(),
-            value: Value::Vec2([1.0, 2.0]),
-            interp: Interp::Linear,
-            spatial: None,
-        });
-        doc.apply_all([
-            Intent::AddLayer(layer),
-            Intent::SetMeta {
-                layer,
-                meta: LayerMeta {
-                    source: LayerSource::Shape,
-                    order: 0,
-                    timing: LayerTiming::place(0, None, 240),
-                },
-            },
-            Intent::SetTrack {
-                layer,
-                property: property.clone(),
-                track,
-            },
-        ])
-        .unwrap();
-
-        doc.apply_all(keyframe_shift_intents(&doc, layer, 1).unwrap())
-            .unwrap();
-        let moved = doc.view().track(layer, &property).unwrap().unwrap();
-        assert_eq!(moved.keys()[0].t.try_to_frame_round(fps).unwrap(), 13);
-    }
-}
+mod tests;

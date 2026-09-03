@@ -375,14 +375,9 @@ impl StageWidget {
             return;
         }
         doc.clear_camera_transient(&property);
-        let mut track = doc.view().camera_track(&property).ok().flatten().unwrap_or_default();
-        track.insert(crate::doc::store::Keyframe {
-            t: rt,
-            value,
-            interp: crate::doc::store::Interp::Linear,
-            spatial: None,
-        });
-        if let Err(e) = doc.apply(Intent::SetCameraTrack { property, track }) {
+        // 層と同じ流儀: キーが無い間は値を置くだけ。◇ を押すまで時間の世界へ入れない。
+        let intent = doc.place_camera(&property, value, rt);
+        if let Err(e) = doc.apply(intent) {
             println!("PROBE room=write verdict=apply-error {e}");
         }
     }

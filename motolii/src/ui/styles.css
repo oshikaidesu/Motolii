@@ -1763,3 +1763,13 @@ body {
     min-width: calc(120 * var(--s) * 1px);
     min-height: calc(40 * var(--s) * 1px);
 }
+
+/* 状態は色だけに頼らない(WCAG 1.4.1)。点いた札は下線、選んだ袖は左の帯。 */
+.glyph.lit {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.srow.on {
+    box-shadow: inset calc(2 * var(--s) * 1px) 0 0 var(--accent);
+}

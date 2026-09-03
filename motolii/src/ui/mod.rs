@@ -16,6 +16,7 @@ mod inspector;
 mod keymap;
 pub(crate) mod keys;
 mod output;
+mod panels;
 mod playback;
 mod project;
 mod semantic_menu;

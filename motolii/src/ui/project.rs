@@ -5,6 +5,15 @@ use dioxus_native::prelude::*;
 use crate::ui::session::Session;
 
 /// 作品を仕舞う。行き先が決まっていなければ聞く。
+/// 窓に紐付く sheet として開く file dialog。親が無ければ素の窓(HIG: 書類の dialog はその窓の sheet)。
+pub(super) fn sheet(window: Option<&dyn dioxus_native::winit::window::Window>) -> rfd::AsyncFileDialog {
+    let dialog = rfd::AsyncFileDialog::new();
+    match window {
+        Some(window) => dialog.set_parent(window),
+        None => dialog,
+    }
+}
+
 pub(super) async fn put_away(
     session: Session,
     poke: crate::ui::host::Poke,

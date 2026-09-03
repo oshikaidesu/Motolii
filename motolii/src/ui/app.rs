@@ -1,21 +1,18 @@
 use dioxus_native::prelude::*;
-use dioxus_native::CustomWidgetAttr;
 use dioxus_dnd::prelude::GestureEffect;
 use dioxus_workbench::{LayoutNode, SplitAxis, SplitId, TileId};
 
-use crate::ui::browser::browser_panel;
 use crate::ui::dock::{splitter_delta, Dock, Panel, Side, TabDrag};
-use crate::ui::inspector::{inspector_panel, ChoiceDismiss, ChoiceId};
+use crate::ui::inspector::{ChoiceDismiss, ChoiceId};
 use crate::ui::keymap::Intent;
 use crate::ui::output::{OutputStatus, OutputSurface};
 use crate::ui::settings::SettingsSheet;
+use crate::ui::panels::{BrowserPanel, InspectorPanel, StagePanel, TimelinePanel};
 use crate::ui::semantic_menu::{
-    MenuDismiss, MenuId, SemanticButton, SemanticControl, SemanticMenu,
+    MenuDismiss, MenuId, SemanticControl, SemanticMenu,
 };
 use crate::ui::session::Session;
-use crate::ui::stage_widget::StageWidget;
-use crate::ui::timeline_shell::timeline_shell;
-use crate::ui::timeline_widget::{split_layer, TimelineMsg, TimelineWidget};
+use crate::ui::timeline_widget::{split_layer, TimelineMsg};
 use crate::ui::fixture;
 use crate::ui::tokens;
 
@@ -99,19 +96,19 @@ fn tab_release_has_one_terminal_action_and_cancel_has_none() {
 
 /// 窓1枚ぶんの見えかたの状態。Document には入らない物だけ。
 #[derive(Clone, Copy)]
-struct Panes {
-    layer_rows: Signal<Vec<fixture::LayerRow>>,
-    attrs_state: Signal<Vec<(bool, bool, bool)>>,
-    selected: Signal<Option<crate::doc::store::LayerId>>,
-    revision: Signal<u32>,
-    scroll_y: Signal<f64>,
+pub(super) struct Panes {
+    pub(super) layer_rows: Signal<Vec<fixture::LayerRow>>,
+    pub(super) attrs_state: Signal<Vec<(bool, bool, bool)>>,
+    pub(super) selected: Signal<Option<crate::doc::store::LayerId>>,
+    pub(super) revision: Signal<u32>,
+    pub(super) scroll_y: Signal<f64>,
     /// 他の窓が書いた時に上がる。状態は全窓で1つなので、これで描き直す。
-    echo: Signal<u32>,
+    pub(super) echo: Signal<u32>,
     /// 窓の文字の大きさ(%)。設定を1枚へ集めるため Settings が触る。
-    scale_pct: Signal<u32>,
+    pub(super) scale_pct: Signal<u32>,
     /// 再生位置。値を出す側はこれを見て描き直す。
-    playhead: Signal<f64>,
-    inspector_choice: Signal<Option<ChoiceId>>,
+    pub(super) playhead: Signal<f64>,
+    pub(super) inspector_choice: Signal<Option<ChoiceId>>,
 }
 
 fn panes_for(ui: &fixture::UiData) -> Panes {
@@ -250,167 +247,6 @@ pub fn detached() -> Element {
         ChoiceDismiss { open: panes.inspector_choice }
         div { id: "detached", {panel_body(panel, &session, &ui, panes)} }
         {file_drop_overlay(&session)}
-    )
-}
-
-#[component]
-fn BrowserPanel(
-    session: Session,
-    echo: u32,
-    panel: Panel,
-    layer_rows: Signal<Vec<fixture::LayerRow>>,
-    attrs_state: Signal<Vec<(bool, bool, bool)>>,
-    selected: Signal<Option<crate::doc::store::LayerId>>,
-    revision: Signal<u32>,
-) -> Element {
-    let rail = use_signal(|| Option::<fixture::AssetFamily>::None);
-    browser_panel(
-        &session,
-        session.doc.clone(),
-        session.clock.clone(),
-        layer_rows,
-        attrs_state,
-        session.timeline_tx.clone(),
-        selected,
-        revision,
-        panel,
-        rail,
-    )
-}
-
-#[component]
-fn InspectorPanel(
-    session: Session,
-    echo: u32,
-    selected: Option<crate::doc::store::LayerId>,
-    revision: Signal<u32>,
-    playhead: Signal<f64>,
-    choice_open: Signal<Option<ChoiceId>>,
-) -> Element {
-    inspector_panel(
-        &session.doc,
-        selected,
-        &session.clock,
-        revision,
-        &session,
-        choice_open,
-        playhead,
-        &session.selected_size,
-        &session.focus,
-        session.live_focus(),
-    )
-}
-
-/// ウィジェットはコンポーネントの中で作る。置き場を移すと要素が作り直されるので、
-/// `CustomWidgetAttr` を app と共有すると2枚目が空になる(中身は一度しか渡せない)。
-#[component]
-fn StagePanel(
-    session: Session,
-    selected: Signal<Option<crate::doc::store::LayerId>>,
-    revision: Signal<u32>,
-    comp_line: String,
-) -> Element {
-    let view_pct = use_signal(|| 100u32);
-    let attr = use_hook(|| {
-        CustomWidgetAttr::new(StageWidget::new(
-            session.clock.clone(),
-            session.doc.clone(),
-            session.selection.clone(),
-            selected,
-            revision,
-            session.selected_size.clone(),
-            session.view_camera.clone(),
-            session.rings.clone(),
-            session.frame_dim.clone(),
-            session.gesture.clone(),
-            false,
-            view_pct,
-            session.view_request.clone(),
-        ))
-    });
-    let rings = session.rings.clone();
-    let mut rings_on = use_signal(|| rings.load(std::sync::atomic::Ordering::Relaxed));
-    rsx!(
-        div { id: "stagecol",
-            div { id: "stage",
-                object { "data": attr }
-            }
-            div { id: "stagefoot",
-                SemanticButton {
-                    class: if rings_on() { "chip on" } else { "chip" },
-                    selected: rings_on(),
-                    aria_label: "3D handles",
-                    onclick: move |_| {
-                        let next = !rings_on();
-                        rings.store(next, std::sync::atomic::Ordering::Relaxed);
-                        rings_on.set(next);
-                        revision += 1;
-                    },
-                    title: "3D handles",
-                    "3D"
-                }
-                SemanticButton {
-                    class: "chip zoomchip",
-                    aria_label: "View zoom {view_pct()}% · fit to window",
-                    title: "Fit to window · ⌘0",
-                    onclick: {
-                        let request = session.view_request.clone();
-                        move |_| {
-                            *request.lock().unwrap() = Some(crate::ui::session::ViewRequest::Fit);
-                            revision += 1;
-                        }
-                    },
-                    "{view_pct()}%"
-                }
-                span { "{comp_line}" }
-            }
-        }
-    )
-}
-
-#[component]
-#[allow(clippy::too_many_arguments)]
-fn TimelinePanel(
-    session: Session,
-    echo: u32,
-    layer_rows: Signal<Vec<fixture::LayerRow>>,
-    attrs_state: Signal<Vec<(bool, bool, bool)>>,
-    selected: Signal<Option<crate::doc::store::LayerId>>,
-    scroll_y: Signal<f64>,
-    playhead: Signal<f64>,
-    revision: Signal<u32>,
-) -> Element {
-    let attr = use_hook(|| {
-        let rows = fixture::canvas_rows_from_doc(&session.doc.lock().unwrap());
-        CustomWidgetAttr::new(
-            TimelineWidget::new(rows, session.timeline_rx.clone())
-                .with_clock(session.clock.clone())
-                .with_scale(session.scale.clone())
-                .with_document(session.doc.clone(), fixture::canvas_rows_from_doc)
-                .with_selection(session.selection.clone(), selected)
-                .with_scroll_mirror(scroll_y)
-                .with_playhead_mirror(playhead)
-                .with_revision(revision)
-                .with_gesture(session.gesture.clone())
-                .with_key_mirror(session.selected_keys.clone()),
-        )
-    });
-    // 行は Document から引き直す。一覧を持ち回っていると、書き込みの度に
-    // 引き直しを**忘れた手**の分だけ窓が古いまま残る(名前変更がそれだった)。
-    let _ = revision();
-    let rows_now = fixture::layer_rows_from_doc(&session.doc.lock().unwrap());
-    timeline_shell(
-        session.doc.clone(),
-        attrs_state,
-        &rows_now,
-        layer_rows,
-        attr,
-        session.selection.clone(),
-        selected,
-        scroll_y,
-        session.timeline_tx.clone(),
-        &session,
-        revision,
     )
 }
 
@@ -1386,6 +1222,32 @@ pub fn app() -> Element {
                             *revision.write() += 1;
                         }
                         Intent::Nudge(dx, dy) => {
+                            // キーを選んでいる時の Alt+←→ はキーをコマで動かす(AE)。
+                            let keys: Vec<_> = session.selected_keys.lock().unwrap().clone();
+                            if !keys.is_empty() && dy == 0.0 {
+                                let mut d = doc.lock().unwrap();
+                                let Ok(fps) = crate::ui::timeline_widget::document_fps(&d) else { return };
+                                let by = dx.signum() as i64 * if dx.abs() >= 10.0 { 10 } else { 1 };
+                                let mut intents = Vec::new();
+                                for k in &keys {
+                                    let frame = (k.at_sec * fps.as_f64()).round() as i64;
+                                    match crate::ui::timeline_widget::keyframe_move_intents(&d, k.layer, k.property.as_ref(), &[frame], by) {
+                                        Ok(more) => intents.extend(more),
+                                        Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
+                                    }
+                                }
+                                let applied = d.apply_all(intents).is_ok();
+                                let canvas = fixture::canvas_rows_from_doc(&d);
+                                drop(d);
+                                if applied {
+                                    for k in session.selected_keys.lock().unwrap().iter_mut() {
+                                        k.at_sec += by as f64 / fps.as_f64();
+                                    }
+                                    let _ = timeline_tx.send(TimelineMsg::SetRows(canvas));
+                                    *revision.write() += 1;
+                                }
+                                return;
+                            }
                             let targets = session.editable_selection();
                             if targets.is_empty() {
                                 return;
@@ -1530,6 +1392,7 @@ pub fn app() -> Element {
                                         let project_notice = session.project_notice.clone();
                                         let inbox = session.imports.clone();
                                         let poke = host.poker();
+                                        let window = window.clone();
                                         let mut revision = panes.revision;
                                         move |evt: Event<MouseData>| {
                                             evt.stop_propagation();
@@ -1538,10 +1401,11 @@ pub fn app() -> Element {
                                             let project_notice = project_notice.clone();
                                             let inbox = inbox.clone();
                                             let poke = poke.clone();
+                                            let window = window.clone();
                                             // 選ぶ窓は事象処理の**外**で開ける。中から開けると
                                             // winit が事象の入れ子になって落ちる。
                                             dioxus_core::spawn(async move {
-                                                let Some(files) = rfd::AsyncFileDialog::new().pick_files().await else {
+                                                let Some(files) = crate::ui::project::sheet(window.as_deref()).pick_files().await else {
                                                     return;
                                                 };
                                                 let paths = files
@@ -1575,12 +1439,14 @@ pub fn app() -> Element {
                                         let export = session.export.clone();
                                         let project_path = session.project_path.clone();
                                         let poke = host.poker();
+                                        let window = window.clone();
                                         move |evt: Event<MouseData>| {
                                             evt.stop_propagation();
                                             open_menu.set(None);
                                             let doc = doc.clone();
                                             let export = export.clone();
                                             let poke = poke.clone();
+                                            let window = window.clone();
                                             // 出力名は作品名から(Premiere・Resolve)。無ければ Untitled。
                                             let export_name = project_path
                                                 .lock()
@@ -1591,7 +1457,7 @@ pub fn app() -> Element {
                                             dioxus_core::spawn(async move {
                                                 // 種の絞りを付けると、OS が拡張子を**もう一度**足して
                                                 // `x.mp4.mp4` になる。足すのはこちらの仕事に一本化する。
-                                                let picked = rfd::AsyncFileDialog::new()
+                                                let picked = crate::ui::project::sheet(window.as_deref())
                                                     .set_file_name(&export_name)
                                                     .save_file()
                                                     .await;

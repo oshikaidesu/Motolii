@@ -1111,7 +1111,7 @@ pub(super) fn inspector_panel(
                             }
                         },
                         span { class: "n", "Group" }
-                        span { class: "v content", if frozen { "Unfreeze" } else { "Freeze" } }
+                        span { class: "v chip", if frozen { "Unfreeze" } else { "Freeze" } }
                     }
                 }
             }

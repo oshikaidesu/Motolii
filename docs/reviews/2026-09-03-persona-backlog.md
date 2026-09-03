@@ -136,8 +136,8 @@
 - ☑ A9 波形の解像度が Retina で半分
 - ☐ A10 波形が線形振幅
 - ☑ A11 印が目盛の中にしか描かれない → 全 track を貫く線
-- ☐ A12 吸い付きを切れない
-- ☐ A13 再生位置のスクラブが吸い付かない
+- ☑ A12 吸い付きを切れない
+- ☑ A13 再生位置のスクラブが吸い付かない
 - ☑ A14 目盛の刻みが 1 秒固定 → 倍率で段
 - ☐ A15 空きを押すと再生位置が動かない
 - ☑ A16 印の名前が採番 → タイムコード
@@ -151,7 +151,7 @@
 - ☐ H3 App menu(About・⌘,)
 - ☐ H4 フルスクリーン・Window menu
 - ☑ H5 未保存で閉じる alert に Save が無い(project.rs の 3 択へ寄せる)
-- ☐ H6 rfd の dialog に set_parent が無い(sheet にならない)
+- ☑ H6 rfd の dialog に set_parent — Import・Export・Open は sheet(Save は put_away が窓を持たず未)
 - ☑ H7 title bar が書類を指さない(set_title・representedFilename・documentEdited)
 - ☐ H8 Open Recent
 - ☐ H9 Revert to Saved
@@ -168,7 +168,7 @@
 - ☐ H20 Reduce Motion を起動時にしか読まない
 - ☑ H21 menubar の role / aria-controls
 - ☐ H22 scale_factor 変化(外部 display)の再 layout — 要実窓
-- ☐ H23 alert の文面が Mac 調でない
+- ☑ H23 alert の文面(host.rs と project.rs を HIG の文に統一)
 
 ## 第 4 波 ST: Stage / 空間の人
 - ☑ ST1 ⌘0 ⌘= ⌘− が UI 倍率に取られ、view の Fit / 100% の入口が無い
@@ -179,7 +179,7 @@
 - ☑ ST6 Shift の軸拘束(スナップは未)
 - ☑ ST7 矢印で 1px ナッジ(Stage focus 時)
 - ☑ ST8 修飾を離してから放すと確定値がプレビューと食い違う
-- ☐ ST9 書き出し枠のドラッグが無条件でカメラにキーを打つ
+- ☑ ST9 書き出し枠のドラッグが無条件でカメラにキーを打つ
 - ☐ ST10 hover / cursor / 変形中の数値が無い
 - ☑ ST11 描いた取っ手と掴める取っ手の大きさが違う
 - ☑ ST12 ◎ chip が 3D の状態を読めない
@@ -224,18 +224,18 @@
 - ☑ X11 View menu の ✓ が字(menuitemcheckbox へ)
 - ☑ X12 "Window" が 8 個同名
 - ☑ X13 倍率・調光の値が名前に紐づかない
-- ☐ X14 状態が色だけ(.lit .on)
+- ☑ X14 状態が色だけ(.lit .on)
 - ☑ X15 OBJECT / rows / layer の呼び名
 - ☑ X16 空状態の文体が揃わない
 - ☑ X17 命令文と説明文の混在
 - ☑ X18 参考画像の名前が 3 回読まれる
 - ☑ X19 見出しの全大文字を CSS へ
-- ☐ X20 Freeze が押せる物に見えない・"Linear light"・小文字の "attached"
+- ☑ X20 Freeze を chip に・"Blend preview · linear light"・"Attached"
 
 ## 第 4 波 F: キーを打つ人
 - ☑ F1 Delete がキーでなく層を消す(selected_keys があればキー削除)
 - ☑ F2 同じトラックの複数キーを掴むと 1 つしか動かない(SetTrack が最後勝ち)
-- ☐ F3 分割が shape / text を落とす・切り口の Interp を split_at しない
+- ☑ F3 分割が shape / text を落とす・切り口の Interp を split_at しない
 - ☑ F4 帯の時刻が 30fps 決め打ち(fixture FPS)
 - ☐ F5 キー選択が index(行が組み替わると別のキー)
 - ☑ F6 掴み終わりに publish_keys を呼ばない(F9 が空振り)
@@ -245,7 +245,7 @@
 - ☑ F10 錠が Timeline の掴みに効かない
 - ☐ F11 層の行のキーへ形を当てると全属性に乗る / 値グラフが無い
 - ☑ F12 Easy Ease In / Out が AE と裏返し
-- ☐ F13 キーを鍵で動かせない(Alt+←→)
+- ☑ F13 キーを鍵で動かせない(Alt+←→)
 - ☐ F14 spatial(モーションパス)が窓から触れない
 - ☐ F15 タイムストレッチ(speed)の UI が無い
 - ☑ F16 スリップ(Alt+drag)が無い
