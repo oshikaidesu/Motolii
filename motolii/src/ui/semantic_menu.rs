@@ -128,3 +128,37 @@ pub(super) fn SemanticButton(
         {children}
     })
 }
+
+/// 欄。押した間だけ在り、Enter で確定、Escape で消える。外を押した時と焦点喪失は
+/// host が Enter を送る(`host::commit_field_outside`)ので、閉じ方はここ 1 つ。
+#[component]
+pub(super) fn Field(
+    class: String,
+    #[props(default)] style: String,
+    value: String,
+    oninput: EventHandler<String>,
+    oncommit: EventHandler<()>,
+    oncancel: EventHandler<()>,
+) -> Element {
+    rsx!(input {
+        class,
+        style,
+        value,
+        autofocus: "true",
+        oninput: move |evt| oninput.call(evt.value()),
+        onkeydown: move |evt| {
+            evt.stop_propagation();
+            match evt.key() {
+                Key::Enter => {
+                    evt.prevent_default();
+                    oncommit.call(());
+                }
+                Key::Escape => {
+                    evt.prevent_default();
+                    oncancel.call(());
+                }
+                _ => {}
+            }
+        },
+    })
+}

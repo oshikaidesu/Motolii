@@ -277,7 +277,13 @@ impl Gui {
         self.h.dispatch(UiEvent::PointerMove(event));
     }
 
+    /// 窓の shell と同じ順: 持ち主へ配ってから blitz へ流す(`host::Windows::window_event`)。
     fn release(&mut self, x: f32, y: f32) {
+        self.host.primary_pointer_released(
+            crate::ui::host::Host::HEADLESS,
+            f64::from(x),
+            f64::from(y),
+        );
         self.h.mouse_up_at(x, y);
     }
 
@@ -615,7 +621,9 @@ fn timeline_uses_the_shared_focus_loss_cancellation() {
 }
 
 #[test]
-fn opening_a_menu_cancels_a_dock_drag_before_the_menu_opens() {
+/// 掴んでいる間、窓の他の部品は押せない(`.dock-capture` が全面を取る)。
+/// 部品の上で放しても menu は開かず、掴みだけが終わる。
+fn a_held_tab_keeps_the_rest_of_the_window_inert() {
     let mut gui = Gui::open();
     let tab = gui.center_of("#dock-tab-Media", 0);
     gui.press(tab.0, tab.1);
@@ -624,9 +632,11 @@ fn opening_a_menu_cancels_a_dock_drag_before_the_menu_opens() {
     assert_eq!(gui.count(".dock-ghost"), 1);
 
     let file = gui.center_of("#menu-file", 0);
-    gui.click(file.0, file.1);
+    gui.motion(file.0, file.1);
+    gui.release(file.0, file.1);
+    gui.settle();
 
-    assert_eq!(gui.count("#menu-file-list"), 1);
+    assert_eq!(gui.count("#menu-file-list"), 0, "a release over chrome opened a menu");
     assert_eq!(gui.count(".dock-ghost"), 0);
     assert_eq!(gui.count(".dropmap"), 0);
 }
@@ -1053,11 +1063,13 @@ fn every_panel_can_recreate_the_bottom_after_timeline_is_closed() {
         .collect::<Vec<_>>();
     for moving in panels {
         let mut gui = Gui::open();
+        let zones = gui.count(".ptabs");
+        let tabs = gui.count(".ptab");
         let view = gui.center_of("#menu-view", 0);
         gui.click(view.0, view.1);
         let timeline = gui.center_of_text("#menu-view-list .vitem", "✓ Timeline");
         gui.click(timeline.0, timeline.1);
-        assert_eq!(gui.count(".ptabs"), 3, "Timeline row did not collapse");
+        assert_eq!(gui.count(".ptabs"), zones - 1, "Timeline row did not collapse");
 
         let tab = gui.center_of(&format!("#dock-tab-{moving}"), 0);
         let source_zone = gui
@@ -1065,6 +1077,8 @@ fn every_panel_can_recreate_the_bottom_after_timeline_is_closed() {
             .iter()
             .position(|tabs| tabs.iter().any(|tab| tab == moving.label()))
             .expect("moving panel source zone");
+        // 独りの tab を自分の下へ落としても列は増えない(元の箱が消える)。
+        let alone = gui.zone_tabs()[source_zone].len() == 1;
         gui.press(tab.0, tab.1);
         gui.motion(tab.0 + 24.0, tab.1 + 24.0);
         gui.settle();
@@ -1073,8 +1087,12 @@ fn every_panel_can_recreate_the_bottom_after_timeline_is_closed() {
         gui.release(bottom.0, bottom.1);
         gui.settle();
 
-        assert_eq!(gui.count(".ptabs"), 4, "{moving} did not recreate the bottom");
-        assert_eq!(gui.count(".ptab"), 10, "{moving} made another panel disappear");
+        assert_eq!(
+            gui.count(".ptabs"),
+            if alone { zones - 1 } else { zones },
+            "{moving} did not recreate the bottom"
+        );
+        assert_eq!(gui.count(".ptab"), tabs - 1, "{moving} made another panel disappear");
         assert!(gui.drawing_panels() > 0, "{moving} removed all rendered content");
         for panel in crate::ui::dock::Panel::all() {
             assert_eq!(
@@ -1194,3 +1212,4 @@ fn losing_window_focus_cancels_splitter_drag() {
     let after = gui.size_of_nth(".tslot", 1).0;
     assert_eq!(after, before, "focus loss left a splitter drag active");
 }
+

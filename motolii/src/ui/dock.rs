@@ -416,6 +416,7 @@ mod tests {
 
     #[test]
     fn recreating_the_bottom_after_timeline_closes_keeps_every_other_panel_once() {
+        let tiles = Dock::default().projected_layout().tile_count();
         for moving in Panel::all().filter(|panel| *panel != Panel::Timeline) {
             let mut dock = Dock::default();
             dock.hide(Panel::Timeline);
@@ -424,13 +425,17 @@ mod tests {
                 .tile_for_panel(&moving.workbench_id())
                 .expect("moving panel remains reachable after Timeline closes");
 
+            let alone = dock
+                .projected_layout()
+                .tile(&source)
+                .is_some_and(|tile| tile.panels.len() == 1);
             dock.drop_onto(moving, &source, Side::Bottom);
 
             assert!(dock.valid(), "{moving} made the recreated bottom invalid");
             let projected = dock.projected_layout();
             assert_eq!(
                 projected.tile_count(),
-                4,
+                if alone { tiles - 1 } else { tiles },
                 "{moving} did not recreate one bottom branch"
             );
             for panel in Panel::all() {

@@ -66,6 +66,18 @@ Utility(ANCHOR)は Inspector の Transform 行へ。Output は File▸Export と
 
 ## 8. 宿題(2026-09-03 朝、利用者裁定: 細々した整備は後回し。責任は分かれているので後からで直る)
 
+2026-09-03 昼の片付け(実窓では未確認 — 見た目と手触りの合否は利用者):
+
+1. **済。** 原因は 2 つ重なっていた。(a) `asset!` の stylesheet は harness に配る net が無く当たらない → test では同じ文面を inline で当てる(`tokens::stylesheet`)。(b) 赤の一部は CSS が当たって初めて見えた製品の穴: 窓の外で放した pointerup は blitz が root へ落とし `#app` に届かない(host の `on_primary_pointer_release` は在ったが窓無しでは未登録) → headless の窓 id を 1 つ決めて harness も同じ線を通す。View menu の「✓ Timeline」を選んでも menu が閉じず覆いが次の押しを食っていた → 選んだら閉じる(Reset Layout・macOS と同じ)。数を決め打ちした test は 11 面時代の残り → 面の数から測る。PointerLeft を release 扱いする routing は外した(縁で dock してしまう)。lib test 77/77 緑
+2. 未再現のまま。§8-1 の「外で放すと届かない」が同族の可能性あり
+3. **半分済。** 4 実装を `semantic_menu::Field` 1 component へ畳んだ(閉じ方は 1 箇所)。`Session.field` への持ち主の統一と歌詞の `textarea` 委託は未
+4. 未
+5. 未特定。`vello_encoding 0.10 config.rs:185` は `bin_data(1<<18) - bin_data_start` の減算で、draw object が数万を超えた時に落ちる。custom widget の paint は面 0 で描かず tick 数も `MIN_PPS` で有界なので、疑うのは DOM 側の文字(細い tile で折り返し)
+6. 未
+7. 未。§8-1 で host と harness の線は 1 本になった(release)。打鍵の規則(`aim_keystrokes`)は host のまま
+8. **上流に壁。** blitz-dom の `custom-widget` feature は既に `accessibility` を連れてくるが、`Widget::accessibility_tree` はこの rev ではコメントアウト(`custom_widget.rs:143`)。custom widget が AccessKit node を申告する口が無く、fork か上流 PR が先。kittest 0.4.0 は registry に在る
+
+
 1. **headless の窓 test 16 本が赤。** HEAD 時点で赤(stylesheet が harness に当たらず全 zone が縦積み)。実窓には出ない。**宿題の先頭** — これが赤いままだと以降の直しで緑を頼れない
 2. 右上の panel(Inspector / Desk)が他の panel と同じ手で dock できない。未再現
 3. 欄の持ち主を `Session.field` 1 つにし、本文・数値・文字・名前の 4 実装を 1 component へ。歌詞は Blitz の `textarea` へ委託(§6b)

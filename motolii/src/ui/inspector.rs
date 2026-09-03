@@ -5,7 +5,7 @@ use dioxus_native::prelude::*;
 
 use crate::ui::fixture::{inspector_data_from_doc, InspectorData, PropRow};
 use crate::ui::playback::Clock;
-use crate::ui::semantic_menu::SemanticButton;
+use crate::ui::semantic_menu::{Field, SemanticButton};
 use crate::ui::session::Focus;
 use crate::doc::store::{
     property, BlendMode, ContentKeyframe, Document, Intent, Interp, Keyframe,
@@ -255,32 +255,24 @@ fn prop_row(
                 .map(|e| e.draft.clone());
             if let Some(draft) = draft {
                 let doc_commit = doc.clone();
-                return rsx!(input {
+                return rsx!(Field {
                     class: "{class} typing",
                     value: "{draft}",
-                    autofocus: "true",
-                    oninput: move |evt| {
+                    oninput: move |v| {
                         if let Some(e) = num_edit.write().as_mut() {
-                            e.draft = evt.value();
+                            e.draft = v;
                         }
                     },
-                    onkeydown: move |evt| match evt.key() {
-                        Key::Enter => {
-                            evt.prevent_default();
-                            let Some(e) = num_edit.write().take() else { return };
-                            let Ok(v) = e.draft.trim().parse::<f64>() else { return };
-                            let value = put_axis(&e.value, e.vec2, e.axis, v, e.range);
-                            match write_key(&doc_commit, e.layer, &e.property, value, t) {
-                                Ok(_) => *revision.write() += 1,
-                                Err(err) => println!("PROBE room=write verdict=apply-error {err}"),
-                            }
+                    oncommit: move |_| {
+                        let Some(e) = num_edit.write().take() else { return };
+                        let Ok(v) = e.draft.trim().parse::<f64>() else { return };
+                        let value = put_axis(&e.value, e.vec2, e.axis, v, e.range);
+                        match write_key(&doc_commit, e.layer, &e.property, value, t) {
+                            Ok(_) => *revision.write() += 1,
+                            Err(err) => println!("PROBE room=write verdict=apply-error {err}"),
                         }
-                        Key::Escape => {
-                            evt.prevent_default();
-                            *num_edit.write() = None;
-                        }
-                        _ => {}
                     },
+                    oncancel: move |_| *num_edit.write() = None,
                 });
             }
             let open = (property.clone(), start_value.clone());
@@ -374,30 +366,22 @@ fn content_row(
         return rsx!(
             div { class: "prow content-row",
                 span { class: "n", "{p.label}" }
-                input {
+                Field {
                     class: "v content",
                     value: "{draft}",
-                    autofocus: "true",
-                    oninput: move |evt| *editing.write() = Some(evt.value()),
-                    onkeydown: move |evt| match evt.key() {
-                        Key::Enter => {
-                            evt.prevent_default();
-                            if let Some(text) = editing.write().take() {
-                                match write_content(&doc_commit, layer, t, text) {
-                                    Ok(_) => {
-                                        println!("PROBE room=write verdict=content-commit layer={:?} t={:?}", layer, t);
-                                        *revision.write() += 1;
-                                    }
-                                    Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
+                    oninput: move |v| *editing.write() = Some(v),
+                    oncommit: move |_| {
+                        if let Some(text) = editing.write().take() {
+                            match write_content(&doc_commit, layer, t, text) {
+                                Ok(_) => {
+                                    println!("PROBE room=write verdict=content-commit layer={:?} t={:?}", layer, t);
+                                    *revision.write() += 1;
                                 }
+                                Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
                             }
                         }
-                        Key::Escape => {
-                            evt.prevent_default();
-                            *editing.write() = None;
-                        }
-                        _ => {}
                     },
+                    oncancel: move |_| *editing.write() = None,
                 }
                 span { class: "{key_class}", "{key_glyph}" }
             }

@@ -8,7 +8,7 @@ use dioxus_native::CustomWidgetAttr;
 
 use crate::doc::store::{Document, Intent, LayerId, Marker, StoreError};
 use crate::ui::inspector::{write_blend, BLEND_MODES};
-use crate::ui::semantic_menu::SemanticButton;
+use crate::ui::semantic_menu::{Field, SemanticButton};
 use crate::ui::session::{DeskState, Focus, Session};
 
 /// 引き出しは焦点の型に一つ。履歴だけが型を持たない例外。
@@ -153,27 +153,18 @@ pub(super) fn DeskPanel(
                 span { class: "mname", "{marker.name}" }
                 // 欄は押した間だけ在る。Enter・Escape・外を押す、のどれでも欄ごと消える。
                 if editing {
-                    input {
+                    Field {
                         class: "mbody",
-                        autofocus: "true",
                         value: "{text}",
-                        oninput: move |evt| note_draft.set(Some((i, evt.value()))),
-                        onkeydown: move |evt| match evt.key() {
-                            Key::Enter => {
-                                evt.prevent_default();
-                                let Some((at, draft)) = note_draft.write().take() else { return };
-                                match write_marker_body(&doc, at, draft) {
-                                    Ok(()) => *revision.write() += 1,
-                                    Err(err) => println!("PROBE room=write verdict=apply-error {err}"),
-                                }
+                        oninput: move |v| note_draft.set(Some((i, v))),
+                        oncommit: move |_| {
+                            let Some((at, draft)) = note_draft.write().take() else { return };
+                            match write_marker_body(&doc, at, draft) {
+                                Ok(()) => *revision.write() += 1,
+                                Err(err) => println!("PROBE room=write verdict=apply-error {err}"),
                             }
-                            Key::Escape => {
-                                evt.prevent_default();
-                                evt.stop_propagation();
-                                note_draft.set(None);
-                            }
-                            _ => {}
                         },
+                        oncancel: move |_| note_draft.set(None),
                     }
                 } else {
                     SemanticButton {

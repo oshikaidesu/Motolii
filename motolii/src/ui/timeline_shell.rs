@@ -8,7 +8,7 @@ use crate::doc::store::{Document, Intent, LayerAttrsPatch, LayerId};
 use crate::ui::fixture::LayerRow;
 use crate::ui::playback::Clock;
 use crate::ui::session::Selection;
-use crate::ui::semantic_menu::SemanticButton;
+use crate::ui::semantic_menu::{Field, SemanticButton};
 use crate::ui::timeline_widget::TimelineMsg;
 
 /// 再生の道具。タブの帯の右へ乗る(帯を2段にしないため)。
@@ -156,48 +156,37 @@ pub(super) fn timeline_shell(
                     span { class: "inside", "{n}" }
                 }
                 if let Some(draft) = editing_name {
-                    input {
+                    Field {
                         class: "lsurface",
                         style: "{lsurface_style}",
                         value: "{draft}",
-                        autofocus: "true",
-                        oninput: move |evt| {
+                        oninput: move |v| {
                             if let Some(l) = layer {
-                                *renaming.write() = Some((l, evt.value()));
+                                *renaming.write() = Some((l, v));
                             }
                         },
-                        onkeydown: move |evt| {
-                            evt.stop_propagation();
-                            match evt.key() {
-                                Key::Enter => {
-                                    evt.prevent_default();
-                                    if let Some((layer, name)) = renaming.write().take() {
-                                        let patch = LayerAttrsPatch {
-                                            name: Some(name.clone()),
-                                            ..Default::default()
-                                        };
-                                        match doc_rename
-                                            .lock()
-                                            .unwrap()
-                                            .apply(Intent::SetAttrs { layer, patch })
-                                        {
-                                            Ok(_) => {
-                                                println!("PROBE room=write verdict=applied Rename layer={layer:?} name={name:?}");
-                                                *revision.write() += 1;
-                                            }
-                                            Err(e) => {
-                                                println!("PROBE room=write verdict=apply-error {e}")
-                                            }
-                                        }
+                        oncommit: move |_| {
+                            if let Some((layer, name)) = renaming.write().take() {
+                                let patch = LayerAttrsPatch {
+                                    name: Some(name.clone()),
+                                    ..Default::default()
+                                };
+                                match doc_rename
+                                    .lock()
+                                    .unwrap()
+                                    .apply(Intent::SetAttrs { layer, patch })
+                                {
+                                    Ok(_) => {
+                                        println!("PROBE room=write verdict=applied Rename layer={layer:?} name={name:?}");
+                                        *revision.write() += 1;
+                                    }
+                                    Err(e) => {
+                                        println!("PROBE room=write verdict=apply-error {e}")
                                     }
                                 }
-                                Key::Escape => {
-                                    evt.prevent_default();
-                                    *renaming.write() = None;
-                                }
-                                _ => {}
                             }
                         },
+                        oncancel: move |_| *renaming.write() = None,
                     }
                 } else {
                     span {

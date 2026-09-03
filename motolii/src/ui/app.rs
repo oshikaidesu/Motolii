@@ -18,11 +18,6 @@ use crate::ui::timeline_widget::{split_layer, TimelineMsg, TimelineWidget};
 use crate::ui::fixture;
 use crate::ui::tokens;
 
-static STYLES: Asset = asset!("/src/ui/styles.css");
-
-#[cfg(test)]
-static TEST_STYLES: &str = include_str!("styles.css");
-
 /// 落とし先の当たり。**位置を計算しない** —— 5枚の当たりを重ねて置き、
 /// どれに乗ったかで決める。
 const SIDES: [(Side, &str); 5] = [
@@ -187,18 +182,6 @@ fn splitter_delta_uses_the_measured_container_extent() {
     assert_eq!(splitter_delta(120.0, 0.0), 0.0);
 }
 
-#[cfg(test)]
-#[test]
-fn ui_motion_never_transitions_direct_manipulation_geometry() {
-    assert!(!TEST_STYLES.contains("transition: all"));
-    for property in ["left", "top", "width", "height", "transform"] {
-        assert!(
-            !TEST_STYLES.contains(&format!("transition-property: {property}")),
-            "direct manipulation property entered the transition contract: {property}"
-        );
-    }
-}
-
 /// 窓1枚ぶんの見えかたの状態。Document には入らない物だけ。
 #[derive(Clone, Copy)]
 struct Panes {
@@ -341,7 +324,7 @@ pub fn detached() -> Element {
     let css = tokens::css_root(100, reduced_motion);
     rsx!(
         style { {css} }
-        link { rel: "stylesheet", href: STYLES }
+        {tokens::stylesheet()}
         ChoiceDismiss { open: panes.inspector_choice }
         div { id: "detached", {panel_body(panel, &session, &ui, panes)} }
         {file_drop_overlay(&session)}
@@ -704,7 +687,6 @@ fn dock_zone(
     panels: Vec<Panel>,
     shown: Option<Panel>,
     d: &Dock,
-    mut dock: Signal<Dock>,
     mut tab_drag: Signal<Option<TabDrag>>,
     tile_nodes: TileNodes,
     session: &Session,
@@ -908,7 +890,6 @@ fn tile_view(
                 panels,
                 shown,
                 &d,
-                dock,
                 tab_drag,
                 tile_nodes,
                 session,
@@ -952,7 +933,7 @@ pub fn app() -> Element {
         });
     });
     use_hook(|| {
-        let Some(window_id) = window.as_ref().map(|window| window.id()) else { return };
+        let window_id = window.as_ref().map_or(crate::ui::host::Host::HEADLESS, |w| w.id());
         let runtime = dioxus_core::Runtime::current();
         let scope = dioxus_core::current_scope_id();
         let tile_nodes = tile_nodes.clone();
@@ -1035,7 +1016,7 @@ pub fn app() -> Element {
     let dock_host = host.clone();
     rsx!(
         style { {css} }
-        link { rel: "stylesheet", href: STYLES }
+        {tokens::stylesheet()}
         div {
             id: "app",
             tabindex: "0",
@@ -1698,6 +1679,7 @@ pub fn app() -> Element {
                                         onclick: move |evt: Event<MouseData>| {
                                             evt.stop_propagation();
                                             dock.write().toggle(panel);
+                                            open_menu.set(None);
                                         }
                                     }
                                     SemanticControl {
@@ -1712,6 +1694,7 @@ pub fn app() -> Element {
                                                 if dock.write().detach(panel) {
                                                     host.open(panel);
                                                 }
+                                                open_menu.set(None);
                                             }
                                         }
                                     }

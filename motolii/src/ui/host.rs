@@ -6,7 +6,7 @@ use dioxus_native::prelude::VirtualDom;
 use dioxus_native::prelude::{provide_context, ScopeId};
 use dioxus_native::winit::application::ApplicationHandler;
 use dioxus_native::winit::event::{
-    ButtonSource, ElementState, MouseButton, PointerKind, StartCause, WindowEvent,
+    ButtonSource, ElementState, MouseButton, StartCause, WindowEvent,
 };
 use dioxus_native::winit::event_loop::ActiveEventLoop;
 use dioxus_native::winit::window::{WindowAttributes, WindowId};
@@ -116,7 +116,9 @@ impl Host {
             Some((window, std::rc::Rc::new(callback)));
     }
 
-    fn primary_pointer_released(&self, window: WindowId, x: f64, y: f64) {
+    /// 窓の外で放しても届く線。blitz は当たりの無い pointerup を root へ落とし、
+    /// `#app` へ下りてこない。窓の shell(winit・harness)がここへ直に配る。
+    pub(crate) fn primary_pointer_released(&self, window: WindowId, x: f64, y: f64) {
         let callback = self
             .on_primary_pointer_release
             .borrow()
@@ -127,6 +129,9 @@ impl Host {
             callback(x, y);
         }
     }
+
+    /// 窓を開けずに動かす時の窓 id。harness はこれで窓の持ち主になる。
+    pub(crate) const HEADLESS: WindowId = WindowId::from_raw(0);
 
     /// 窓を開けずに動かす時用。頼みは誰も受け取らない。
     #[cfg(test)]
@@ -210,18 +215,6 @@ fn primary_mouse_release(event: &WindowEvent) -> Option<dioxus_native::winit::dp
             button: ButtonSource::Mouse(MouseButton::Left),
             primary: true,
             position,
-            ..
-        } => Some(*position),
-        _ => None,
-    }
-}
-
-fn primary_mouse_leave(event: &WindowEvent) -> Option<dioxus_native::winit::dpi::PhysicalPosition<f64>> {
-    match event {
-        WindowEvent::PointerLeft {
-            position: Some(position),
-            primary: true,
-            kind: PointerKind::Mouse,
             ..
         } => Some(*position),
         _ => None,
@@ -500,7 +493,7 @@ impl ApplicationHandler for Windows {
             self.cursor
                 .insert(window_id, (position.x as f32, position.y as f32));
         }
-        if let Some(position) = primary_mouse_release(&event).or_else(|| primary_mouse_leave(&event)) {
+        if let Some(position) = primary_mouse_release(&event) {
             if let Some(view) = self.inner.windows.get(&window_id) {
                 let coords = view.pointer_coords(position);
                 self.host.primary_pointer_released(

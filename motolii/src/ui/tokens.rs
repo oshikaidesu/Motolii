@@ -1,6 +1,8 @@
 
 use std::sync::atomic::{AtomicU32, Ordering};
 
+use dioxus_native::prelude::*;
+
 pub(crate) const SURFACE_APP: [u8; 3] = [0x28, 0x28, 0x28];
 pub(crate) const SURFACE_PANEL: [u8; 3] = [0x36, 0x36, 0x36];
 pub(crate) const SURFACE_RAISED: [u8; 3] = [0x3e, 0x3e, 0x3e];
@@ -119,6 +121,36 @@ pub(crate) fn system_prefers_reduced_motion() -> bool {
 #[cfg(not(target_os = "macos"))]
 pub(crate) fn system_prefers_reduced_motion() -> bool {
     false
+}
+
+#[cfg(not(test))]
+static STYLES: Asset = asset!("/src/ui/styles.css");
+
+#[cfg(test)]
+static TEST_STYLES: &str = include_str!("styles.css");
+
+/// 窓は asset を link で引く(dx の CSS hot reload が効く)。headless の harness には
+/// 資産を配る net が無いので、同じ文面を inline で当てる。
+#[cfg(not(test))]
+pub(crate) fn stylesheet() -> Element {
+    rsx!(link { rel: "stylesheet", href: STYLES })
+}
+
+#[cfg(test)]
+pub(crate) fn stylesheet() -> Element {
+    rsx!(style { {TEST_STYLES} })
+}
+
+#[cfg(test)]
+#[test]
+fn ui_motion_never_transitions_direct_manipulation_geometry() {
+    assert!(!TEST_STYLES.contains("transition: all"));
+    for property in ["left", "top", "width", "height", "transform"] {
+        assert!(
+            !TEST_STYLES.contains(&format!("transition-property: {property}")),
+            "direct manipulation property entered the transition contract: {property}"
+        );
+    }
 }
 
 #[cfg(test)]
