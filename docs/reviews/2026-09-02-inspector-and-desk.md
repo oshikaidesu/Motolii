@@ -88,3 +88,5 @@ Utility(ANCHOR)は Inspector の Transform 行へ。Output は File▸Export と
 6. 配置の永続化、机の pin と複数 instance
 7. **UX の振る舞いが harness で捕まらない(病巣、2026-09-03 利用者)。** 打鍵の規則(`aim_keystrokes`・外クリック確定・focus 喪失)が winit の host に居て harness が通らない。上流 Blitz の焦点 model(autofocus が属性の付く前に可否を見る bug)を直して host の規則を消す、または規則を Blitz の event driver 層へ移し、窓と harness を同じ道にする
 8. 試験の駆動を kittest(rerun 製、AccessKit 駆動)へ委託。Blitz の `accessibility` feature を有効にし、custom widget(Stage・Timeline・Ease)は Motolii が AccessKit node を申告する。画は vello_cpu の golden、振る舞いは kittest
+
+実窓での確認(2026-09-03 午後、computer-use で background 操作): 名前のダブルクリック → 全選択 → 打てば置き換わる、Escape で戻る、外を押して確定、数字の欄に 42 → 42.0、Colors の輪と面で Fill が変わる(Undo 1 手)、`*` でマーカー → 机の Text → 書き置きに改行入りで打って外を押して確定、まで通った。実窓でだけ出た穴 2 つを直した: 全選択が editor の生成前に送られて caret が先頭に残る(host)、Colors の見出しが細く折り返す・書き置きの改行が潰れる(CSS)。未確認: 参考画像の drop(Finder からの drag は background 操作では出来ない)、日本語 IME(raw input では IME を通らない)、tab を窓の外へ出す。気になる観察: Stage の枠が左上に小さく描かれ、ホイールで拡大すると見えなくなる(私の変更の外、要確認)。
