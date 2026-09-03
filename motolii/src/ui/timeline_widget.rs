@@ -270,6 +270,8 @@ pub(super) struct TimelineWidget {
     rx: Rc<Receiver<TimelineMsg>>,
     rows: Vec<CanvasRow>,
     markers: Vec<f64>,
+    /// 目盛の帯で印を掴んでいる: (index, 元の秒, 掴んだ秒, 今の差分)。
+    marker_drag: Option<(usize, f64, f64, f64)>,
     fps: f64,
     /// 前の描画の再生位置。跳んだかどうかはこれと比べる。
     last_playhead: f64,
@@ -310,6 +312,7 @@ impl TimelineWidget {
             rx,
             rows,
             markers: Vec::new(),
+            marker_drag: None,
             fps: 30.0,
             last_playhead: 0.0,
             pps: PX_PER_SEC,
@@ -419,6 +422,11 @@ impl TimelineWidget {
             gesture.end();
         }
                 self.scrubbing = false;
+                if let Some((i, orig, _, delta)) = self.marker_drag.take() {
+                    if delta != 0.0 {
+                        self.move_marker(i, orig + delta);
+                    }
+                }
                 if let Some((from, to)) = self.marquee.take() {
                     self.select_inside(from, to);
                 }
@@ -573,6 +581,49 @@ impl TimelineWidget {
     }
 
     /// 掴んでいる時刻の吸い付き先(再生位置・comp の頭・各層の端)。
+    /// 印を新しい時刻へ。Document の印を書き直し、名前は残す(時刻名は打った時の物)。
+    fn move_marker(&mut self, i: usize, sec: f64) {
+        let Some(doc) = self.doc.as_ref() else { return };
+        let mut d = doc.lock().unwrap();
+        let Ok(fps) = document_fps(&d) else { return };
+        let Ok(mut markers) = d.view().markers() else { return };
+        let Some(marker) = markers.get_mut(i) else { return };
+        let Ok(time) = RationalTime::try_from_frame((sec * fps.as_f64()).round() as i64, fps) else { return };
+        marker.time = time;
+        markers.sort_by(|a, b| a.time.as_seconds_f64().total_cmp(&b.time.as_seconds_f64()));
+        match d.apply(Intent::SetMarkers { markers: markers.clone() }) {
+            Ok(_) => {
+                self.markers = markers.iter().map(|m| m.time.as_seconds_f64()).collect();
+                if let Some(mut revision) = self.revision {
+                    *revision.write() += 1;
+                }
+                println!("PROBE room=write verdict=applied MoveMarker index={i} to={sec:.3}");
+            }
+            Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
+        }
+    }
+
+    /// 印を動かす時の吸い先。動かしている印自身は外す。
+    fn snapped_time_excluding(&self, t: f64, skip: usize) -> f64 {
+        let threshold = SNAP_PX / self.pps;
+        let mut targets = vec![0.0];
+        if let Some(clock) = &self.clock {
+            targets.push(clock.now_sec());
+        }
+        for row in &self.rows {
+            if let Some((a, b)) = row.span {
+                targets.push(a);
+                targets.push(b);
+            }
+        }
+        targets.extend(self.markers.iter().enumerate().filter(|(i, _)| *i != skip).map(|(_, m)| *m));
+        targets
+            .into_iter()
+            .filter(|target| (target - t).abs() <= threshold)
+            .min_by(|a, b| (a - t).abs().total_cmp(&(b - t).abs()))
+            .unwrap_or(t)
+    }
+
     /// 印と帯の端へ吸った時刻。再生位置そのものは吸い先に入れない(自分に吸う)。
     fn snapped_time(&self, t: f64) -> f64 {
         let threshold = SNAP_PX / self.pps;
@@ -951,6 +1002,7 @@ impl Widget for TimelineWidget {
             .is_some_and(|gesture| gesture.cancelled(&mut self.seen_cancel))
         {
             self.drag = None;
+            self.marker_drag = None;
             self.scrubbing = false;
             self.marquee = None;
             return;
@@ -998,9 +1050,18 @@ impl Widget for TimelineWidget {
                 self.cursor = Some((x, y));
                 // 帯の外で離すと、離した事がここへ届かない。掴んだままの絵が残り、
                 // **見えている物が作品と食い違う**。指が上がっていたら掴みを解く。
-                if p.buttons.is_empty() && (self.drag.is_some() || self.scrubbing || self.marquee.is_some()) {
+                if p.buttons.is_empty()
+                    && (self.drag.is_some() || self.scrubbing || self.marquee.is_some() || self.marker_drag.is_some())
+                {
                     println!("PROBE room=input verdict=drag-finished reason=release-not-seen");
                     self.finish_drag();
+                    return;
+                }
+                if let Some((i, orig, grab, _)) = self.marker_drag {
+                    let raw = (self.scroll_sec + x / self.pps) - grab;
+                    let landed = self.snapped_time_excluding(orig + raw, i).max(0.0);
+                    let delta = ((landed - orig) * self.fps).round() / self.fps;
+                    self.marker_drag = Some((i, orig, grab, delta));
                     return;
                 }
                 if self.scrubbing {
@@ -1045,6 +1106,20 @@ impl Widget for TimelineWidget {
                 let (x, y) = (p.element.x as f64, p.element.y as f64);
                 let t = self.scroll_sec + x / self.pps;
                 if y < RULER_H * self.sfac() {
+                    // 印は掴んで動かせる(AE・Premiere)。近ければ seek でなく印を持つ。
+                    let reach = 6.0 * self.sfac() / self.pps;
+                    let grabbed = self
+                        .markers
+                        .iter()
+                        .enumerate()
+                        .map(|(i, m)| (i, *m, (m - t).abs()))
+                        .filter(|(_, _, d)| *d <= reach)
+                        .min_by(|a, b| a.2.total_cmp(&b.2));
+                    if let Some((i, sec, _)) = grabbed {
+                        println!("PROBE room=input down t={t:.3}s hit=marker index={i}");
+                        self.marker_drag = Some((i, sec, t, 0.0));
+                        return;
+                    }
                     println!("PROBE room=input down t={:.3}s el=({:.0},{:.0}) hit=ruler-seek", t, x, y);
                     self.scrubbing = true;
                     if let Some(clock) = &self.clock {
@@ -1176,6 +1251,7 @@ impl Widget for TimelineWidget {
             .is_some_and(|gesture| gesture.cancelled(&mut self.seen_cancel))
         {
             self.drag = None;
+            self.marker_drag = None;
             self.scrubbing = false;
             self.marquee = None;
         }
@@ -1267,8 +1343,12 @@ impl Widget for TimelineWidget {
                 }
             }
         }
-        for &sec in &self.markers {
-            let x = x_of(sec);
+        for (i, &sec) in self.markers.iter().enumerate() {
+            let shift = match self.marker_drag {
+                Some((d, _, _, delta)) if d == i => delta,
+                _ => 0.0,
+            };
+            let x = x_of(sec + shift);
             if (0.0..=w).contains(&x) {
                 fill_rect(
                     &mut s,

@@ -269,3 +269,38 @@ mod timebase {
         assert_eq!(moved.keys()[0].t.try_to_frame_round(fps).unwrap(), 13);
     }
 }
+
+mod markers_move {
+    use crate::ui::timeline_widget::*;
+    use crate::doc::store::{Intent, Marker};
+
+    /// 印は掴んで動かせ、Document の印が書き直される。名前は残る。
+    #[test]
+    fn a_dragged_marker_is_written_back_with_its_name() {
+        let loaded = crate::ui::fixture::load_fixture();
+        let mut doc = loaded.doc;
+        let fps = document_fps(&doc).unwrap();
+        let at = |f: i64| RationalTime::try_from_frame(f, fps).unwrap();
+        doc.apply(Intent::SetMarkers {
+            markers: vec![
+                Marker { name: "verse".into(), time: at(24), duration: RationalTime::ZERO, body: String::new() },
+                Marker { name: "chorus".into(), time: at(96), duration: RationalTime::ZERO, body: String::new() },
+            ],
+        })
+        .unwrap();
+        let doc = Arc::new(Mutex::new(doc));
+        let (_tx, rx) = std::sync::mpsc::channel();
+        let mut w = TimelineWidget::new(Vec::new(), Rc::new(rx)).with_document(doc.clone(), |_| Vec::new());
+        w.fps = fps.as_f64();
+        let second = 96.0 / fps.as_f64();
+        w.markers = vec![1.0, second];
+        w.marker_drag = Some((0, 1.0, 1.0, 1.5));
+        assert_eq!(w.snapped_time_excluding(second + 0.01, 0), second, "other markers are snap targets");
+        assert_eq!(w.snapped_time_excluding(1.01, 0), 1.01, "the dragged marker does not snap to itself");
+        w.finish_drag();
+        let markers = doc.lock().unwrap().view().markers().unwrap();
+        assert_eq!(markers[0].name, "verse");
+        assert_eq!(markers[0].time, at((2.5 * fps.as_f64()).round() as i64));
+        assert_eq!(w.markers, vec![2.5, second]);
+    }
+}
