@@ -509,6 +509,18 @@ fn selection_geom_in(
     layer: LayerId,
     rt: RationalTime,
 ) -> Option<SelGeom> {
+    let resolved = view.resolved_layers(rt).ok()?;
+    selection_geom_resolved(engine, view, &resolved, layer, rt)
+}
+
+/// 解いた層の一覧を渡す版。paint は 1 回解いて全部に使う(選択層ごとに層²で解かない)。
+fn selection_geom_resolved(
+    engine: &Engine,
+    view: &StoreView<'_>,
+    resolved: &[crate::doc::store::ResolvedLayer],
+    layer: LayerId,
+    rt: RationalTime,
+) -> Option<SelGeom> {
     let meta = view.meta(layer).ok().flatten()?;
     let fps = view.composition().ok().flatten()?.fps;
     let frame = rt.try_to_frame_floor(fps).ok()?;
@@ -522,7 +534,7 @@ fn selection_geom_in(
     let anchor = vec2_at(view, layer, property::ANCHOR, rt, (0.0, 0.0));
     let scale = vec2_at(view, layer, property::SCALE, rt, (1.0, 1.0));
     let rotation = f64_at(view, layer, property::ROTATION, rt, 0.0);
-    let [w0, h0] = engine.selected_layer_size(view, layer, rt)?;
+    let [w0, h0] = engine.selected_layer_size_in(view, resolved, layer, rt)?;
     let natural = (w0 as f64, h0 as f64);
     let box_ = (
         position.0 - scale.0 * anchor.0,
@@ -995,7 +1007,7 @@ impl Widget for StageWidget {
                 let Ok(layers) = view.resolved_layers(rt) else { return };
                 let mut hit: Option<(i16, LayerId)> = None;
                 for layer in &layers {
-                    let Some(geom) = selection_geom_in(&active.engine, &view, layer.id, rt) else { continue };
+                    let Some(geom) = selection_geom_resolved(&active.engine, &view, &layers, layer.id, rt) else { continue };
                     let (bx, by, bw, bh) = geom.box_;
                     let (lx, ly) = rotate_around(geom.position, -geom.rotation, (cx, cy));
                     if lx < bx || lx > bx + bw || ly < by || ly > by + bh {
@@ -1272,9 +1284,11 @@ impl Widget for StageWidget {
             }
         };
 
+        // 層は 1 回だけ解く。選択層ごとに解き直すと層²になる。
+        let resolved_now = view.resolved_layers(rt).unwrap_or_default();
         let primary_layer = self.selection.get();
         let primary_geom =
-            primary_layer.and_then(|layer| selection_geom_in(&active.engine, &view, layer, rt));
+            primary_layer.and_then(|layer| selection_geom_resolved(&active.engine, &view, &resolved_now, layer, rt));
         *self.selected_size.lock().unwrap() =
             primary_geom.as_ref().map(|g| [g.natural.0 as f32, g.natural.1 as f32]);
         let selected_box = primary_geom;
@@ -1283,7 +1297,7 @@ impl Widget for StageWidget {
             .all()
             .into_iter()
             .filter(|l| Some(*l) != primary_layer)
-            .filter_map(|l| selection_geom_in(&active.engine, &view, l, rt))
+            .filter_map(|l| selection_geom_resolved(&active.engine, &view, &resolved_now, l, rt))
             .collect();
 
         drop(view);

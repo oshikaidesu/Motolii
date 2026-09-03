@@ -37,9 +37,20 @@ impl Engine {
         layer_id: LayerId,
         t: RationalTime,
     ) -> Option<[f32; 2]> {
+        let resolved = view.resolved_layers(t).ok()?;
+        self.selected_layer_size_in(view, &resolved, layer_id, t)
+    }
+
+    /// 解いた層の一覧を持っている側(Stage の paint)は、層ごとに解き直さない。
+    pub fn selected_layer_size_in(
+        &self,
+        view: &StoreView<'_>,
+        resolved: &[crate::doc::store::ResolvedLayer],
+        layer_id: LayerId,
+        t: RationalTime,
+    ) -> Option<[f32; 2]> {
         let composition = view.composition().ok().flatten()?;
         let comp = composition.spec();
-        let resolved = view.resolved_layers(t).ok()?;
         let layer = resolved.iter().find(|l| l.id == layer_id)?;
 
         let natural = match &layer.source {
