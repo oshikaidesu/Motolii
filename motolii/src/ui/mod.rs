@@ -16,6 +16,7 @@ mod inspector;
 mod keymap;
 mod output;
 mod playback;
+mod project;
 mod semantic_menu;
 mod session;
 mod stage_widget;

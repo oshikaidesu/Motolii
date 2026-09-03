@@ -833,10 +833,14 @@ pub(super) fn inspector_panel(
     }
     let inspector = &data;
 
-    let text_rows = inspector
-        .text
-        .iter()
-        .map(|p| content_row(p, selection.unwrap_or(LayerId(0)), t, doc, session, revision));
+    // 文字の行のうち、property を持つ物(級数)は数の行。本文だけが文の行。
+    let text_rows = inspector.text.iter().map(|p| {
+        if p.property.is_some() {
+            prop_row(p, selection.unwrap_or(LayerId(0)), t, doc, session, revision)
+        } else {
+            content_row(p, selection.unwrap_or(LayerId(0)), t, doc, session, revision)
+        }
+    });
     let transform_rows = inspector
         .transform
         .iter()

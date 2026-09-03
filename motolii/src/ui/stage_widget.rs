@@ -847,10 +847,29 @@ impl Widget for StageWidget {
                     Some((_, layer)) => {
                         if p.mods.intersects(Modifiers::META | Modifiers::SUPER) {
                             self.selection.toggle(layer);
-                        } else {
-                            self.selection.set(Some(layer));
+                            self.selected_mirror.set(self.selection.get());
+                            return;
                         }
+                        self.selection.set(Some(layer));
                         self.selected_mirror.set(self.selection.get());
+                        // 選んだその手で動かせる(押し直しをさせない — Figma・CapCut・AE 全部そう)。
+                        if let Some(geom) = self.selection_geom(layer) {
+                            self.gesture.begin();
+                            self.drag = Some(GizmoDrag {
+                                layer,
+                                mode: GizmoMode::Move,
+                                grab: (cx, cy),
+                                orig_position: geom.position,
+                                orig_rotation: geom.rotation,
+                                orig_rotation_xy: self.rotation_xy(layer),
+                                orig_z: self.depth(layer),
+                                anchor: geom.anchor,
+                                natural: geom.natural,
+                                orig_box: geom.box_,
+                                fit_z: geom.z,
+                                last: None,
+                            });
+                        }
                     }
                     None => {
                         // 枠の縁を掴んだら書き出しカメラ、それ以外は視点。

@@ -682,21 +682,43 @@ pub(super) fn inspector_data_from_doc(
     };
 
     let text = match view.text_document(layer) {
-        Ok(Some(doc)) => vec![PropRow {
-            label: "Content",
-            cells: [
-                String::new(),
-                String::new(),
-                doc.content.eval(t).to_string(),
-            ],
-            dims: [false, false, false],
-            keyed: doc.content.keys().len() > 1,
-            property: None,
-            vec2: false,
-            value: Value::F64(0.0),
-            range: None,
-            axis: [None, None, None],
-        }],
+        Ok(Some(doc)) => {
+            let mut rows = vec![PropRow {
+                label: "Content",
+                cells: [
+                    String::new(),
+                    String::new(),
+                    doc.content.eval(t).to_string(),
+                ],
+                dims: [false, false, false],
+                keyed: doc.content.keys().len() > 1,
+                property: None,
+                vec2: false,
+                value: Value::F64(0.0),
+                range: None,
+                axis: [None, None, None],
+            }];
+            // 級数。style の size を property が上書きする(resolve と同じ順)。数の行なので擦れる。
+            if let Some(style) = doc.styles.first() {
+                let prop = PropertyId::text_style_size(style.id);
+                let size = match view.value_at(layer, &prop, t).ok().flatten() {
+                    Some(Value::F64(v)) => v,
+                    _ => f64::from(style.size),
+                };
+                rows.push(PropRow {
+                    label: "Size",
+                    cells: [String::new(), String::new(), f1(size)],
+                    dims: [false, false, false],
+                    keyed: keyed(prop.name()),
+                    property: Some(prop.name().to_owned()),
+                    vec2: false,
+                    value: Value::F64(size),
+                    range: Some((1.0, 1000.0)),
+                    axis: [None, None, None],
+                });
+            }
+            rows
+        }
         _ => Vec::new(),
     };
 
