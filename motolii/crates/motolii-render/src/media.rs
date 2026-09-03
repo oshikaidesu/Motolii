@@ -40,9 +40,9 @@ pub use probe::{
 
 #[derive(Debug, thiserror::Error)]
 pub enum MediaError {
-    #[error("ffmpeg/ffprobe not found on PATH: {0}")]
+    #[error("{0} was not found on PATH. Install ffmpeg, then export again.")]
     ToolNotFound(&'static str),
-    #[error("io error: {0}")]
+    #[error("I/O error. {0}")]
     Io(#[from] std::io::Error),
     #[error("probe failed: {0}")]
     Probe(String),
@@ -66,7 +66,7 @@ pub enum MediaError {
     UnsupportedEncoderFormat(crate::doc::core::PixelFormat),
     #[error("frame size mismatch: expected {expected} bytes, got {got}")]
     FrameSizeMismatch { expected: usize, got: usize },
-    #[error("ffmpeg failed: {0}")]
+    #[error("ffmpeg reported an error. {0}")]
     Ffmpeg(String),
     #[error("frame read cancelled")]
     Cancelled,

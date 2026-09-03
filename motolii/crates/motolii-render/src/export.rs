@@ -23,6 +23,8 @@ pub enum ExportError {
     Audio(#[from] AudioError),
     #[error("Could not read the frame to export. {0}")]
     Desc(String),
+    #[error("Could not write the export file. {0}")]
+    Write(String),
     #[error("Export cancelled. The partial file was removed.")]
     Cancelled,
     #[error("This document has no composition to export. Create a composition first.")]
@@ -266,17 +268,17 @@ impl TempOutput {
                     });
                 }
                 Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
-                Err(error) => return Err(ExportError::Desc(error.to_string())),
+                Err(error) => return Err(ExportError::Write(error.to_string())),
             }
         }
-        Err(ExportError::Desc(
+        Err(ExportError::Write(
             "Could not create the export file. Check that the destination folder is writable.".to_owned(),
         ))
     }
 
     fn commit(mut self) -> Result<(), ExportError> {
         std::fs::rename(&self.path, &self.destination)
-            .map_err(|error| ExportError::Desc(error.to_string()))?;
+            .map_err(|error| ExportError::Write(error.to_string()))?;
         self.committed = true;
         Ok(())
     }
@@ -303,9 +305,9 @@ fn render_audio_input(
     }
 
     let start = RationalTime::try_from_frame(range.start, fps)
-        .map_err(|error| ExportError::Desc(error.to_string()))?;
+        .map_err(|error| ExportError::Write(error.to_string()))?;
     let end = RationalTime::try_from_frame(range.end, fps)
-        .map_err(|error| ExportError::Desc(error.to_string()))?;
+        .map_err(|error| ExportError::Write(error.to_string()))?;
     let mut cursor = time_to_canonical_frames(start);
     let end_frame = time_to_canonical_frames(end);
     if end_frame <= cursor {
@@ -326,12 +328,12 @@ fn render_audio_input(
             bytes.extend_from_slice(&sample.to_le_bytes());
         }
         file.write_all(&bytes)
-            .map_err(|error| ExportError::Desc(error.to_string()))?;
+            .map_err(|error| ExportError::Write(error.to_string()))?;
         cursor += count as u64;
     }
     file.flush()
         .and_then(|_| file.sync_all())
-        .map_err(|error| ExportError::Desc(error.to_string()))?;
+        .map_err(|error| ExportError::Write(error.to_string()))?;
     drop(file);
     Ok(Some(input))
 }
@@ -351,10 +353,10 @@ fn reserve_audio_temp() -> Result<(std::fs::File, PathBuf), ExportError> {
         {
             Ok(file) => return Ok((file, path)),
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
-            Err(error) => return Err(ExportError::Desc(error.to_string())),
+            Err(error) => return Err(ExportError::Write(error.to_string())),
         }
     }
-    Err(ExportError::Desc(
+    Err(ExportError::Write(
         "Could not create the temporary audio file. Check free space in the system temporary folder.".to_owned(),
     ))
 }

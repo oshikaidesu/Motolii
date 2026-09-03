@@ -8,6 +8,17 @@ use crate::doc::store::{Composition, Fps, Intent};
 use crate::ui::semantic_menu::SemanticButton;
 use crate::ui::session::Session;
 
+/// fps の preset(名前・分子・分母)。
+const FPS_PRESETS: &[(&str, i64, i64)] = &[
+    ("23.976", 24000, 1001),
+    ("24", 24, 1),
+    ("25", 25, 1),
+    ("29.97", 30000, 1001),
+    ("30", 30, 1),
+    ("59.94", 60000, 1001),
+    ("60", 60, 1),
+];
+
 /// 比率の preset。幅×高さ。
 const PRESETS: &[(&str, u32, u32)] = &[("16:9", 1920, 1080), ("9:16", 1080, 1920), ("1:1", 1080, 1080), ("4K", 3840, 2160)];
 
@@ -75,21 +86,22 @@ pub(super) fn CompositionSheet(session: Session, revision: Signal<u32>) -> Eleme
             div { class: "prow",
                 span { class: "pname", "Frame rate" }
                 div { class: "zoomctl", role: "group", aria_label: "Frame rate",
-                    for fps in [24u32, 25, 30, 60] {
+                    // 米国系の納品(23.976 / 29.97 / 59.94)も有理数のまま持てる。
+                    for (label , num , den) in FPS_PRESETS.iter().copied() {
                         SemanticButton {
-                            class: if (fps_value - fps as f64).abs() < 1e-6 { "chip on" } else { "chip" },
-                            selected: (fps_value - fps as f64).abs() < 1e-6,
+                            class: if (fps_value - num as f64 / den as f64).abs() < 1e-6 { "chip on" } else { "chip" },
+                            selected: (fps_value - num as f64 / den as f64).abs() < 1e-6,
                             onclick: {
                                 let base = current.clone();
                                 let write = write.clone();
                                 move |_| {
-                                    let Ok(next_fps) = Fps::try_new(fps as i64, 1) else { return };
+                                    let Ok(next_fps) = Fps::try_new(num, den) else { return };
                                     // 尺は秒で保つ。fps を変えてもコマ数で伸び縮みしない。
-                                    let frames = (base.duration_frames as f64 / base.fps.as_f64() * fps as f64).round() as i64;
+                                    let frames = (base.duration_frames as f64 / base.fps.as_f64() * next_fps.as_f64()).round() as i64;
                                     write(Composition { fps: next_fps, duration_frames: frames.max(1), ..base.clone() })
                                 }
                             },
-                            "{fps}"
+                            "{label}"
                         }
                     }
                 }

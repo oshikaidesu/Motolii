@@ -107,11 +107,27 @@ impl Encoder {
                 got: data.len(),
             });
         }
-        self.stdin
+        let written = self
+            .stdin
             .as_mut()
             .expect("encoder already finished")
-            .write_all(data)?;
-        Ok(())
+            .write_all(data);
+        match written {
+            Ok(()) => Ok(()),
+            // ffmpeg が落ちると stdin が EPIPE で返る。本当の理由(No space left 等)は stderr に在る。
+            Err(error) if error.kind() == std::io::ErrorKind::BrokenPipe => {
+                let mut err = String::new();
+                if let Some(stderr) = self.child.stderr.as_mut() {
+                    err = read_child_stderr(stderr).unwrap_or_default();
+                }
+                if err.trim().is_empty() {
+                    Err(MediaError::Io(error))
+                } else {
+                    Err(MediaError::Ffmpeg(err))
+                }
+            }
+            Err(error) => Err(MediaError::Io(error)),
+        }
     }
 
     pub fn finish(mut self) -> Result<()> {

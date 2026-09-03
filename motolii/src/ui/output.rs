@@ -67,6 +67,14 @@ impl ExportController {
         )
     }
 
+    /// 終わった報せを畳む。次の書き出しまで status bar に残さない。
+    pub(super) fn dismiss(&self) {
+        let mut state = self.0.lock().unwrap();
+        if matches!(state.status.phase, ExportPhase::Completed | ExportPhase::Cancelled | ExportPhase::Failed) {
+            state.status.phase = ExportPhase::Idle;
+        }
+    }
+
     pub(super) fn cancel(&self) {
         let (cancel, wake) = {
             let mut state = self.0.lock().unwrap();
@@ -291,7 +299,10 @@ pub(super) fn OutputStatus(
                 if status.phase == ExportPhase::Running {
                     button {
                         class: "output-cancel",
-                        onclick: move |_| controller.cancel(),
+                        onclick: {
+                            let controller = controller.clone();
+                            move |_| controller.cancel()
+                        },
                         "Cancel"
                     }
                 }
@@ -302,6 +313,17 @@ pub(super) fn OutputStatus(
                             onclick: move |_| reveal_in_finder(&path),
                             "Show in Finder"
                         }
+                    }
+                }
+                if matches!(status.phase, ExportPhase::Completed | ExportPhase::Cancelled | ExportPhase::Failed) {
+                    button {
+                        class: "output-cancel",
+                        aria_label: "Dismiss",
+                        onclick: {
+                            let controller = controller.clone();
+                            move |_| controller.dismiss()
+                        },
+                        "×"
                     }
                 }
             }

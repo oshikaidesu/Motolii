@@ -379,3 +379,14 @@
 - ☐ B12 上流: aria-label / presentation / disabled / aria-* を a11y へ
 - ☐ B13 上流: a11y node に bounds
 - ☐ B14 上流: live region の TreeUpdate
+
+## 第 6 波 X: 納品(書き出し)
+- ☐ X1 出せるのは MP4/H.264/全体/音込みの 1 本だけ — ExportJob に range と format(H264 / ProRes4444 / PNG / 連番 / Lottie)、Export sheet(preset・範囲・1 行サマリ)
+- ☑ X2 書き込み失敗が "Could not read the frame" と嘘をつく(Desc を read / write に割る)
+- ☑ X3 disk full が "Broken pipe"(ffmpeg の stderr を読む)
+- ☑ X4 ffmpeg 無しの文言と、tools_available が未使用(can_export で先に断る)
+- ☐ X5 色: 中身 sRGB・タグ bt709(in_range=full を明示 / transfer)、PNG が premultiplied のまま
+- ☑ X6 29.97 / 23.976 / 59.94 が窓から選べない
+- ☐ X7 保存 dialog の間の二度押し(Choosing phase)、start の Err が窓に出ない
+- ☑ X8 終わった状態から Idle へ戻る道が無い(Dismiss)
+- ☐ X9 音の支度中に進捗が 0 のまま(Mixing audio…)

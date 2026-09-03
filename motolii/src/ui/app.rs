@@ -636,12 +636,17 @@ pub fn app() -> Element {
         });
     });
     let panes = panes_for(&loaded);
-    let can_export = {
+    // ffmpeg の有無は起動後 1 回だけ見る(毎 render に子プロセスを起こさない)。
+    static FFMPEG_READY: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    let ffmpeg_ready = *FFMPEG_READY.get_or_init(crate::render::media::tools_available);
+    let has_work = {
         let d = session.doc.lock().unwrap();
         let view = d.view();
         // 白紙(comp 無し・層 0)は書き出せない。真っ黒な mp4 を出して「壊れた」と思わせない。
         view.composition().ok().flatten().is_some() && !view.layers().is_empty()
     };
+    let can_export = has_work && ffmpeg_ready;
+    let export_hint = if !ffmpeg_ready { "Install ffmpeg to export video" } else if !has_work { "Nothing to export yet" } else { "" };
     // 面からの「この panel を前に出して」。revision の度に拾う(Inspector の COLOR 行 → Colors)。
     {
         let asker = session.clone();
@@ -1484,7 +1489,7 @@ pub fn app() -> Element {
                                     label: "Export…",
                                     // 白紙(comp 無し)は書き出せない。押せない理由は hint に。
                                     disabled: session.export.is_active() || !can_export,
-                                    hint: if can_export { "" } else { "Nothing to export yet" },
+                                    hint: export_hint,
                                     onclick: {
                                         let doc = session.doc.clone();
                                         let export = session.export.clone();
