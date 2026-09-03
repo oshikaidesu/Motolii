@@ -55,14 +55,14 @@ members = ["crates/motolii-doc", "crates/motolii-render", "crates/motolii-road"]
 [workspace.dependencies]
 # 識別子では使わないが、custom-widget の feature を立てるために要る(Stage・Timeline の object 描画)。
 blitz-paint = { git = "https://github.com/DioxusLabs/blitz", rev = "64eb27853aa2672486b7edf825fb044be78c9db3", default-features = false, features = ["custom-widget"] }
-dioxus-native = { git = "https://github.com/DioxusLabs/blitz", rev = "64eb27853aa2672486b7edf825fb044be78c9db3", default-features = false, features = ["prelude", "system-fonts", "vello", "complex-scripts", "hot-reload", "net"] }
+dioxus-native = { git = "https://github.com/DioxusLabs/blitz", rev = "64eb27853aa2672486b7edf825fb044be78c9db3", default-features = false, features = ["prelude", "system-fonts", "vello", "complex-scripts", "hot-reload", "net", "accessibility"] }
 dioxus-devtools = "0.7.10"
 dioxus-asset-resolver = { version = "=0.7.10", features = ["native"] }
 dioxus-workbench = "0.1.0"
 dioxus-dnd = { version = "3.1.0", default-features = false }
 blitz-dom = { git = "https://github.com/DioxusLabs/blitz", rev = "64eb27853aa2672486b7edf825fb044be78c9db3", default-features = false, features = ["custom-widget", "autofocus"] }
 blitz-traits = { git = "https://github.com/DioxusLabs/blitz", rev = "64eb27853aa2672486b7edf825fb044be78c9db3", default-features = false }
-blitz-shell = { git = "https://github.com/DioxusLabs/blitz", rev = "64eb27853aa2672486b7edf825fb044be78c9db3", default-features = false, features = ["data-uri", "custom-widget"] }
+blitz-shell = { git = "https://github.com/DioxusLabs/blitz", rev = "64eb27853aa2672486b7edf825fb044be78c9db3", default-features = false, features = ["data-uri", "custom-widget", "clipboard"] }
 keyboard-types = "0.7"
 anyrender = "0.13"
 tobj = "4"

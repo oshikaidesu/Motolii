@@ -18,7 +18,7 @@
 - ☑ K7 IME: 欄が閉じたら Disable、composing 中は Enter を送らない
 - ☑ K8 焦点の輪が無い面(Timeline 行・Inspector の値・Browser の札)
 - ☐ K9 素材を鍵で置く
-- ☐ K10 Cmd+C / V / X
+- ☑ K10 Cmd+C / V / X(blitz-shell の clipboard feature)
 - ☑ K11 Shift+↑↓ で選択を伸ばす
 - ☐ K12 Cmd+←/→ = 印跳びは macOS の予約鍵(裁定 489 の preset 待ち)
 - ✗ K13 複数選択で Enter が先頭だけ — Finder も 1 つずつ。一括の名前付けは別の手
@@ -266,3 +266,17 @@
 - ☐ R7 mesh 読み込みの二重化を importer へ一本化
 - ☐ R8 取っ手の大きさを re_renderer::Size へ
 - ☐ R9 Blend / 効果のサムネイルを headless の ScreenshotProcessor で(C4・C13)
+
+## 営業 B: Dioxus / Blitz で賄える物(→ [vendor-pitches](2026-09-03-vendor-pitches.md))
+- ☑ B1 `accessibility` feature を立てる(X1〜X20 が platform へ)
+- ☑ B2 `clipboard` feature を立てる(K10)
+- ☐ B3 realise() と hotreload の複製を DioxusNativeApplication へ(上流 PR: pending_window を Vec に)
+- ☐ B4 place_ime を上流の focus/blur へ(上流 1 行: ImeCapabilities に cursor_area)
+- ☐ B5 thumbnail を NetProvider / ImageHandler へ(M6)
+- ☐ B6 custom widget が ComputedStyles を読む(V25・V22・V23)
+- ☐ B7 harness の合成 event を pointer_event / press_with / ime へ(Q15・K19)
+- ☐ B8 dioxus-dnd を使い切る(M8・K9・M15・Q16・C1・F20)
+- ☐ B9 欄の確定を onblur へ
+- ☐ B10 H22 は 0 行(試験のみ)、H18 は @media prefers-color-scheme
+- ☐ B11 scrollbars / svg feature
+- ☐ BU1〜BU8 上流 PR 待ち(button の Enter/Space、gesture/drag event、TextInputData の選択 API、widget の文字、widget の a11y、menu の roving focus、窓 blur、NSMainMenu は範囲外)
