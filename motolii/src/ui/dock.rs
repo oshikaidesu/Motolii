@@ -296,6 +296,23 @@ impl Dock {
     }
 }
 
+/// 仕切りの移動量を、測った箱の長さで割合にする。長さが無ければ動かない。
+pub(super) fn splitter_delta(pointer_delta: f64, extent: f64) -> f32 {
+    if extent.is_finite() && extent > 0.0 {
+        (pointer_delta / extent) as f32
+    } else {
+        0.0
+    }
+}
+
+#[cfg(test)]
+#[test]
+fn splitter_delta_uses_the_measured_container_extent() {
+    assert!((splitter_delta(120.0, 600.0) - 0.2).abs() < f32::EPSILON);
+    assert!((splitter_delta(120.0, 1_200.0) - 0.1).abs() < f32::EPSILON);
+    assert_eq!(splitter_delta(120.0, 0.0), 0.0);
+}
+
 /// 引き出しが開いている間の Inspector の取り分。残りが机。
 const DESK_OPEN_RATIO: f64 = 0.42;
 

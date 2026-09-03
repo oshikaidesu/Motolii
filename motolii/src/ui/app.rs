@@ -4,7 +4,7 @@ use dioxus_dnd::prelude::{transition, GestureEffect, GestureEvent, GesturePhase,
 use dioxus_workbench::{LayoutNode, SplitAxis, SplitId, TileId};
 
 use crate::ui::browser::browser_panel;
-use crate::ui::dock::{Dock, Panel, Side};
+use crate::ui::dock::{splitter_delta, Dock, Panel, Side};
 use crate::ui::inspector::{inspector_panel, ChoiceDismiss, ChoiceId};
 use crate::ui::keymap::Intent;
 use crate::ui::output::{OutputStatus, OutputSurface};
@@ -129,15 +129,17 @@ fn finish_tab_release(
     x: f64,
     y: f64,
     pointer_id: Option<i32>,
+    outside: bool,
 ) {
     let terminal = take_tab_release(&mut tab_drag.write(), x, y, pointer_id);
     let Some((drag, effect)) = terminal else { return };
     match effect {
         GestureEffect::Tap => dock.write().set_active(drag.panel),
         GestureEffect::Drop { .. } => {
+            // 置き場に落とせば移る。窓の外なら別窓へ出る。窓の中の余白(menubar 等)は何もしない。
             if let Some((target, side)) = dock_target_at(tile_nodes, x, y) {
                 dock.write().drop_onto(drag.panel, &target, side);
-            } else if dock.write().detach(drag.panel) {
+            } else if outside && dock.write().detach(drag.panel) {
                 host.open(drag.panel);
             }
         }
@@ -164,22 +166,6 @@ fn tab_release_has_one_terminal_action_and_cancel_has_none() {
     let mut cancelled = Some(drag);
     let _ = cancelled.take().unwrap().cancel();
     assert!(take_tab_release(&mut cancelled, -20.0, -20.0, None).is_none());
-}
-
-fn splitter_delta(pointer_delta: f64, extent: f64) -> f32 {
-    if extent.is_finite() && extent > 0.0 {
-        (pointer_delta / extent) as f32
-    } else {
-        0.0
-    }
-}
-
-#[cfg(test)]
-#[test]
-fn splitter_delta_uses_the_measured_container_extent() {
-    assert!((splitter_delta(120.0, 600.0) - 0.2).abs() < f32::EPSILON);
-    assert!((splitter_delta(120.0, 1_200.0) - 0.1).abs() < f32::EPSILON);
-    assert_eq!(splitter_delta(120.0, 0.0), 0.0);
 }
 
 /// 窓1枚ぶんの見えかたの状態。Document には入らない物だけ。
@@ -242,11 +228,11 @@ fn wire_windows(host: &crate::ui::host::Host, panes: Panes) {
 
 /// パネル1枚の中身。窓が変わっても同じ物を出す。
 fn panel_body(panel: Panel, session: &Session, ui: &fixture::UiData, p: Panes) -> Element {
-    let _ = (p.echo)();
     let selected = session.selection.get();
     match panel {
         Panel::Media | Panel::Effects | Panel::Create | Panel::Colors => rsx!(BrowserPanel {
             session: session.clone(),
+            echo: (p.echo)(),
             panel,
             layer_rows: p.layer_rows,
             attrs_state: p.attrs_state,
@@ -261,6 +247,7 @@ fn panel_body(panel: Panel, session: &Session, ui: &fixture::UiData, p: Panes) -
         }),
         Panel::Inspector => rsx!(InspectorPanel {
             session: session.clone(),
+            echo: (p.echo)(),
             selected,
             revision: p.revision,
             playhead: p.playhead,
@@ -268,6 +255,7 @@ fn panel_body(panel: Panel, session: &Session, ui: &fixture::UiData, p: Panes) -
         }),
         Panel::Desk => rsx!(crate::ui::desk::DeskPanel {
             session: session.clone(),
+            echo: (p.echo)(),
             revision: p.revision,
             playhead: p.playhead,
             on_history: {
@@ -280,6 +268,7 @@ fn panel_body(panel: Panel, session: &Session, ui: &fixture::UiData, p: Panes) -
         }),
         Panel::Timeline => rsx!(TimelinePanel {
             session: session.clone(),
+            echo: (p.echo)(),
             layer_rows: p.layer_rows,
             attrs_state: p.attrs_state,
             selected: p.selected,
@@ -328,6 +317,7 @@ pub fn detached() -> Element {
 #[component]
 fn BrowserPanel(
     session: Session,
+    echo: u32,
     panel: Panel,
     layer_rows: Signal<Vec<fixture::LayerRow>>,
     attrs_state: Signal<Vec<(bool, bool, bool)>>,
@@ -351,6 +341,7 @@ fn BrowserPanel(
 #[component]
 fn InspectorPanel(
     session: Session,
+    echo: u32,
     selected: Option<crate::doc::store::LayerId>,
     revision: Signal<u32>,
     playhead: Signal<f64>,
@@ -470,6 +461,7 @@ fn SettingsSheet(session: Session, scale_pct: Signal<u32>) -> Element {
 #[allow(clippy::too_many_arguments)]
 fn TimelinePanel(
     session: Session,
+    echo: u32,
     layer_rows: Signal<Vec<fixture::LayerRow>>,
     attrs_state: Signal<Vec<(bool, bool, bool)>>,
     selected: Signal<Option<crate::doc::store::LayerId>>,
@@ -942,9 +934,9 @@ pub fn app() -> Element {
         let scope = dioxus_core::current_scope_id();
         let tile_nodes = tile_nodes.clone();
         let dock_host = host.clone();
-        host.on_primary_pointer_release(window_id, move |x, y| {
+        host.on_primary_pointer_release(window_id, move |x, y, outside| {
             runtime.in_scope(scope, || {
-                finish_tab_release(dock, tab_drag, &tile_nodes, &dock_host, x, y, None);
+                finish_tab_release(dock, tab_drag, &tile_nodes, &dock_host, x, y, None, outside);
             });
         });
     });
@@ -1054,6 +1046,7 @@ pub fn app() -> Element {
                     p.x,
                     p.y,
                     Some(evt.data().pointer_id()),
+                    false,
                 );
             },
             onpointercancel: move |_| {

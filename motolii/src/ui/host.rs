@@ -35,7 +35,7 @@ pub(crate) struct Host {
     on_close: std::rc::Rc<std::cell::RefCell<Option<std::rc::Rc<dyn Fn(Panel)>>>>,
     on_focus_lost: std::rc::Rc<std::cell::RefCell<Option<std::rc::Rc<dyn Fn()>>>>,
     on_primary_pointer_release: std::rc::Rc<
-        std::cell::RefCell<Option<(WindowId, std::rc::Rc<dyn Fn(f64, f64)>)>>,
+        std::cell::RefCell<Option<(WindowId, std::rc::Rc<dyn Fn(f64, f64, bool)>)>>,
     >,
     /// 窓を起こす線。窓ごとに1本、自分の runtime を包んで置く。
     /// 状態は全窓で1つなので、誰かが書いたら他の窓も描き直す必要がある。
@@ -92,7 +92,7 @@ impl Host {
         *self.on_close.borrow_mut() = Some(std::rc::Rc::new(f));
     }
 
-    fn closed(&self, panel: Panel) {
+    pub(crate) fn closed(&self, panel: Panel) {
         let f = self.on_close.borrow().clone();
         if let Some(f) = f {
             f(panel);
@@ -113,10 +113,11 @@ impl Host {
         }
     }
 
+    /// 放した場所と、それが窓の外かどうか。外なら tab は別窓へ出る。
     pub(crate) fn on_primary_pointer_release(
         &self,
         window: WindowId,
-        callback: impl Fn(f64, f64) + 'static,
+        callback: impl Fn(f64, f64, bool) + 'static,
     ) {
         *self.on_primary_pointer_release.borrow_mut() =
             Some((window, std::rc::Rc::new(callback)));
@@ -124,7 +125,7 @@ impl Host {
 
     /// 窓の外で放しても届く線。blitz は当たりの無い pointerup を root へ落とし、
     /// `#app` へ下りてこない。窓の shell(winit・harness)がここへ直に配る。
-    pub(crate) fn primary_pointer_released(&self, window: WindowId, x: f64, y: f64) {
+    pub(crate) fn primary_pointer_released(&self, window: WindowId, x: f64, y: f64, outside: bool) {
         let callback = self
             .on_primary_pointer_release
             .borrow()
@@ -132,7 +133,7 @@ impl Host {
             .filter(|(owner, _)| *owner == window)
             .map(|(_, callback)| callback.clone());
         if let Some(callback) = callback {
-            callback(x, y);
+            callback(x, y, outside);
         }
     }
 
@@ -281,12 +282,12 @@ fn host_routes_only_primary_mouse_release_to_the_owning_window() {
     let other = WindowId::from_raw(12);
     let calls = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
     let seen = calls.clone();
-    host.on_primary_pointer_release(owner, move |x, y| seen.borrow_mut().push((x, y)));
+    host.on_primary_pointer_release(owner, move |x, y, out| seen.borrow_mut().push((x, y, out)));
 
-    host.primary_pointer_released(other, 1.0, 2.0);
-    host.primary_pointer_released(owner, -3.0, 4.0);
+    host.primary_pointer_released(other, 1.0, 2.0, false);
+    host.primary_pointer_released(owner, -3.0, 4.0, true);
 
-    assert_eq!(&*calls.borrow(), &[(-3.0, 4.0)]);
+    assert_eq!(&*calls.borrow(), &[(-3.0, 4.0, true)]);
 }
 
 /// macOS の Application Support。他 OS は v1 の対象外(V2-6)なので HOME 直下。
@@ -565,10 +566,16 @@ impl ApplicationHandler for Windows {
         if let Some(position) = primary_mouse_release(&event) {
             if let Some(view) = self.inner.windows.get(&window_id) {
                 let coords = view.pointer_coords(position);
+                let size = view.window.surface_size();
+                let outside = position.x < 0.0
+                    || position.y < 0.0
+                    || position.x > f64::from(size.width)
+                    || position.y > f64::from(size.height);
                 self.host.primary_pointer_released(
                     window_id,
                     f64::from(coords.client_x),
                     f64::from(coords.client_y),
+                    outside,
                 );
             }
         }

@@ -133,6 +133,7 @@ fn blend_target(session: &Session) -> Option<LayerId> {
 #[component]
 pub(super) fn DeskPanel(
     session: Session,
+    echo: u32,
     revision: Signal<u32>,
     playhead: Signal<f64>,
     on_history: EventHandler<i32>,

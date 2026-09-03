@@ -28,6 +28,7 @@ struct Gui {
     session: Session,
     host: crate::ui::host::Host,
     seen_field: Option<blitz_dom::NodeId>,
+    size: (f32, f32),
 }
 
 impl Gui {
@@ -60,6 +61,7 @@ impl Gui {
             session,
             host,
             seen_field: None,
+            size: (width as f32, height as f32),
         }
     }
 
@@ -287,10 +289,12 @@ impl Gui {
 
     /// 窓の shell と同じ順: 持ち主へ配ってから blitz へ流す(`host::Windows::window_event`)。
     fn release(&mut self, x: f32, y: f32) {
+        let outside = x < 0.0 || y < 0.0 || x > self.size.0 || y > self.size.1;
         self.host.primary_pointer_released(
             crate::ui::host::Host::HEADLESS,
             f64::from(x),
             f64::from(y),
+            outside,
         );
         self.h.mouse_up_at(x, y);
     }
@@ -306,6 +310,16 @@ impl Gui {
         self.session.file_drop.enter(paths);
         self.host.wake_all();
         self.settle();
+    }
+
+    /// 窓へ落とす。host の `DragDropped` と同じ順: 落とし先で役目を決め、admit して全窓を起こす。
+    fn drop_files(&mut self, paths: &[std::path::PathBuf], x: f32, y: f32) -> crate::ui::fixture::ImportSummary {
+        self.session.file_drop.leave();
+        let role = crate::ui::host::drop_role_at(&self.h.doc, x, y);
+        let summary = crate::ui::fixture::admit_paths(&mut self.session.doc.lock().unwrap(), paths, role);
+        self.host.wake_all();
+        self.settle();
+        summary
     }
 
     fn leave_files(&mut self) {
@@ -622,6 +636,45 @@ fn a_number_field_starts_from_the_current_value() {
     let after = gui.texts(".prow .v");
     assert!(after[idx].trim().parse::<f64>().is_ok_and(|v| (v - 42.0).abs() < 1e-6), "typed number did not replace the value: {:?}", after[idx]);
     assert_eq!(history_back(&gui), before + 1);
+}
+
+/// 落とした物は落とした先に出る。棚へ落とせば棚に、机へ落とせば机に、押さなくても。
+#[test]
+fn a_dropped_file_appears_where_it_landed_without_another_click() {
+    let mut gui = Gui::open();
+    let dir = tempfile::tempdir().unwrap();
+    let a = dir.path().join("a.png");
+    let b = dir.path().join("b.png");
+    image::RgbaImage::from_pixel(4, 4, image::Rgba([20, 200, 40, 255])).save(&a).unwrap();
+    image::RgbaImage::from_pixel(4, 4, image::Rgba([20, 40, 200, 255])).save(&b).unwrap();
+
+    let cards = gui.count(".tcard");
+    let stage = gui.center_of("#stage", 0);
+    let summary = gui.drop_files(&[a], stage.0, stage.1);
+    assert_eq!(summary.admitted, 1, "{}", summary.notice());
+    assert_eq!(gui.count(".tcard"), cards + 1, "a dropped file did not appear on the shelf");
+
+    let desk = gui.center_of("#desk", 0);
+    let summary = gui.drop_files(&[b], desk.0, desk.1);
+    assert_eq!(summary.admitted, 1, "{}", summary.notice());
+    assert_eq!(gui.count(".desk-refs .ref"), 1, "a file dropped on the desk did not appear there");
+    assert_eq!(gui.count(".tcard"), cards + 1, "a reference leaked onto the shelf");
+}
+
+/// 窓の中の余白(menubar)へ落としても、tab は別窓へ飛ばない。外へ出した時だけ。
+#[test]
+fn a_tab_released_over_chrome_stays_put() {
+    let mut gui = Gui::open();
+    let before = gui.texts(".ptab");
+    let (x, y) = gui.center_of("#dock-tab-Create", 0);
+    gui.press(x, y);
+    gui.motion(x, y + 40.0);
+    let file = gui.center_of("#menu-file", 0);
+    gui.motion(file.0, file.1);
+    gui.release(file.0, file.1);
+    gui.settle();
+    assert_eq!(gui.texts(".ptab"), before, "a release over the menubar moved a tab");
+    assert_eq!(gui.count(".dock-ghost"), 0);
 }
 
 #[test]
@@ -1120,6 +1173,13 @@ proptest::proptest! {
         gui.click(view.0, view.1);
         let reset = gui.center_of(".menu-section .vitem", 0);
         gui.click(reset.0, reset.1);
+        // 窓の外へ出た tab は別窓に居る。窓を閉じれば戻る(harness には窓が無いので閉じた事にする)。
+        for panel in crate::ui::dock::Panel::all() {
+            if gui.count(&format!("#dock-tab-{panel}")) == 0 {
+                gui.host.closed(panel);
+            }
+        }
+        gui.settle();
         let create = gui.center_of("#dock-tab-Create", 0);
         gui.click(create.0, create.1);
         let before_layers = gui.session.doc.lock().unwrap().view().layers().len();
