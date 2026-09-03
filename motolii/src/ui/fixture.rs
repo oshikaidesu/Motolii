@@ -486,6 +486,7 @@ pub(super) fn used_colors_from_doc(doc: &Document) -> Vec<ColorSwatch> {
 pub(super) struct AssetRow {
     pub name: String,
     pub kind: String,
+    pub size: Option<u64>,
     pub thumb: &'static str,
     pub family: AssetFamily,
     pub path: Option<String>,
@@ -876,8 +877,7 @@ pub(super) fn asset_rows_from_view(view: &StoreView) -> Vec<AssetRow> {
         .unwrap_or_default()
         .into_iter()
         .filter(|a| a.role == crate::doc::store::AssetRole::Material)
-        .enumerate()
-        .map(|(i, a)| AssetRow {
+        .map(|a| AssetRow {
             family: asset_family(&a.asset_type),
             preview: a.path_absolute.as_deref().and_then(|path| {
                 match asset_family(&a.asset_type) {
@@ -887,23 +887,63 @@ pub(super) fn asset_rows_from_view(view: &StoreView) -> Vec<AssetRow> {
                 }
             }),
             path: a.path_absolute,
+            size: a.size_bytes,
+            // 下地の色は中身から引く。並び順で引くと 1 本消した時に全部回る。
+            thumb: ["#6f8fb5", "#8f7fb8", "#6fb58a", "#b59a6f"][hash_ix(&a.content_hash)],
             name: a.name,
             kind: a.asset_type,
-            thumb: ["#6f8fb5", "#8f7fb8", "#6fb58a", "#b59a6f"][i % 4],
         })
         .collect()
+}
+
+fn hash_ix(hash: &str) -> usize {
+    hash.get(..2)
+        .and_then(|h| u8::from_str_radix(h, 16).ok())
+        .unwrap_or(0) as usize
+        % 4
+}
+
+/// 12.3 MB の様な人向けの容量。
+pub(super) fn human_size(bytes: u64) -> String {
+    const UNITS: [&str; 4] = ["B", "KB", "MB", "GB"];
+    let mut value = bytes as f64;
+    let mut unit = 0;
+    while value >= 1000.0 && unit < UNITS.len() - 1 {
+        value /= 1000.0;
+        unit += 1;
+    }
+    if unit == 0 {
+        format!("{bytes} B")
+    } else {
+        format!("{value:.1} {}", UNITS[unit])
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct ImportSummary {
     pub admitted: usize,
     pub total: usize,
+    /// 中身が同じ物が既に棚に在った数。黙って消すと「入らない」に見える。
+    pub duplicates: usize,
     pub first_failure: Option<String>,
 }
 
 impl ImportSummary {
     pub(super) fn notice(&self) -> String {
-        match (self.admitted, self.total, self.first_failure.as_deref()) {
+        let base = self.base_notice();
+        match (self.duplicates, base.is_empty()) {
+            (0, _) => base,
+            (1, true) => "1 file is already in the library".to_owned(),
+            (n, true) => format!("{n} files are already in the library"),
+            (1, false) => format!("{base} · 1 already in library"),
+            (n, false) => format!("{base} · {n} already in library"),
+        }
+    }
+
+    fn base_notice(&self) -> String {
+        // 棚に既に在った物は「入らなかった」ではない。全部で数える時は成功側に置く。
+        let total = self.total.saturating_sub(self.duplicates);
+        match (self.admitted, total, self.first_failure.as_deref()) {
             (0, 0, _) => String::new(),
             (1, 1, None) => "Imported 1 file".to_owned(),
             (admitted, total, None) if admitted == total => format!("Imported {admitted} files"),
@@ -921,14 +961,18 @@ pub(super) fn admit_paths(
     paths: &[std::path::PathBuf],
     role: crate::doc::store::AssetRole,
 ) -> ImportSummary {
+    // フォルダは中身を全部(Finder・Bridge の bin)。隠しファイルは見ない。
+    let paths = expand_folders(paths);
     let mut summary = ImportSummary {
         admitted: 0,
         total: paths.len(),
+        duplicates: 0,
         first_failure: None,
     };
-    for path in paths {
+    for path in &paths {
         match admit_path(doc, path, role) {
-            Ok(()) => summary.admitted += 1,
+            Ok(true) => summary.admitted += 1,
+            Ok(false) => summary.duplicates += 1,
             Err(reason) if summary.first_failure.is_none() => {
                 let name = path
                     .file_name()
@@ -942,11 +986,40 @@ pub(super) fn admit_paths(
     summary
 }
 
+fn expand_folders(paths: &[std::path::PathBuf]) -> Vec<std::path::PathBuf> {
+    fn walk(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+        let Ok(entries) = std::fs::read_dir(dir) else { return };
+        let mut entries: Vec<_> = entries.flatten().map(|e| e.path()).collect();
+        entries.sort();
+        for path in entries {
+            let hidden = path.file_name().and_then(|n| n.to_str()).is_some_and(|n| n.starts_with('.'));
+            if hidden {
+                continue;
+            }
+            if path.is_dir() {
+                walk(&path, out);
+            } else {
+                out.push(path);
+            }
+        }
+    }
+    let mut out = Vec::new();
+    for path in paths {
+        if path.is_dir() {
+            walk(path, &mut out);
+        } else {
+            out.push(path.clone());
+        }
+    }
+    out
+}
+
+/// `Ok(true)` で棚に増えた、`Ok(false)` で中身が同じ物が既に在った。
 fn admit_path(
     doc: &mut crate::doc::store::Document,
     path: &std::path::Path,
     role: crate::doc::store::AssetRole,
-) -> Result<(), String> {
+) -> Result<bool, String> {
     let Some(asset_type) = path
         .extension()
         .and_then(|e| e.to_str())
@@ -964,9 +1037,40 @@ fn admit_path(
         (crate::doc::store::AssetRole::Reference, AssetFamily::TwoD) => role,
         _ => crate::doc::store::AssetRole::Material,
     };
+    let known = doc
+        .view()
+        .assets()
+        .unwrap_or_default()
+        .iter()
+        .any(|a| a.content_hash == draft.content_hash);
+    if known {
+        return Ok(false);
+    }
     doc.apply(crate::doc::store::Intent::AdmitAsset { draft })
-        .map(|_| ())
+        .map(|_| true)
         .map_err(|error| error.to_string())
+}
+
+#[cfg(test)]
+mod library {
+    use super::*;
+
+    #[test]
+    fn folders_expand_and_duplicates_are_counted_not_dropped() {
+        let dir = std::env::temp_dir().join(format!("motolii-lib-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("inner")).unwrap();
+        let png = image::RgbaImage::from_pixel(2, 2, image::Rgba([1, 2, 3, 255]));
+        png.save(dir.join("a.png")).unwrap();
+        png.save(dir.join("inner").join("b.png")).unwrap();
+        std::fs::write(dir.join(".hidden.png"), b"x").unwrap();
+        let mut doc = crate::doc::store::Document::new();
+        let summary = admit_paths(&mut doc, &[dir.clone()], crate::doc::store::AssetRole::Material);
+        assert_eq!((summary.admitted, summary.duplicates, summary.total), (1, 1, 2), "{summary:?}");
+        assert_eq!(summary.notice(), "Imported 1 file · 1 already in library");
+        assert_eq!(human_size(12_345_678), "12.3 MB");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
 
 #[cfg(test)]

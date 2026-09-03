@@ -96,6 +96,34 @@ fn shape_natural(shapes: &[ShapeNode]) -> (f64, f64) {
         .unwrap_or((0.0, 0.0))
 }
 
+/// 素材の尺を comp のコマ数に直す。0.2 秒に満たない物(静止画の nb_frames=1 など)は尺無し。
+fn source_frames_in(info: &crate::render::media::MediaInfo, fps: crate::doc::store::Fps) -> Option<i64> {
+    let secs = info
+        .duration
+        .map(|d| d.as_seconds_f64())
+        .or_else(|| info.nb_frames.map(|n| n as f64 / info.fps.as_f64().max(1e-9)))?;
+    if secs < 0.2 {
+        return None;
+    }
+    Some((secs * fps.as_f64()).round().max(1.0) as i64)
+}
+
+/// 四角の初期辺。comp の短辺の 1/4 —— 4K で点にならず、SD で枠を覆わない。
+fn rect_side(comp: (f64, f64)) -> f64 {
+    (comp.0.min(comp.1) * 0.25).round().max(1.0)
+}
+
+/// 既にある名前なら `Text 2`(Finder・Figma)。
+fn numbered(base: &str, taken: &[String]) -> String {
+    if !taken.iter().any(|n| n == base) {
+        return base.to_owned();
+    }
+    (2..)
+        .map(|k| format!("{base} {k}"))
+        .find(|candidate| !taken.iter().any(|n| n == candidate))
+        .expect("an unbounded range always yields")
+}
+
 fn new_layer_intents(
     layer: LayerId,
     order: i16,
@@ -108,16 +136,20 @@ fn new_layer_intents(
     let label_color = Some(Some((layer.0 % fixture::LABEL_PALETTE.len() as u64) as u8));
     match kind {
         NewKind::Media { path, name } => {
-            let fit = if crate::render::media::is_point_cloud_path(&path)
-                || crate::render::media::is_mesh_path(&path)
-            {
+            let spatial = crate::render::media::is_point_cloud_path(&path)
+                || crate::render::media::is_mesh_path(&path);
+            let info = if spatial { None } else { crate::render::media::probe(&path).ok() };
+            let fit = if spatial {
                 spatial_fit_intents(layer, &path, comp)
             } else {
-                let natural = crate::render::media::probe(&path)
+                let natural = info
+                    .as_ref()
                     .map(|i| (i.width as f64, i.height as f64))
                     .unwrap_or((0.0, 0.0));
                 center_intents(layer, natural, comp)
             };
+            // 動画は**素材の尺**で入る(Premiere・Resolve)。静止画と尺の無い物は comp の終わりまで。
+            let source_frames = info.as_ref().and_then(|i| source_frames_in(i, fps));
             let mut out = vec![
                 Intent::AddLayer(layer),
                 Intent::SetMeta {
@@ -125,7 +157,7 @@ fn new_layer_intents(
                     meta: LayerMeta {
                         source: LayerSource::File { path, fingerprint: None },
                         order,
-                        timing: LayerTiming::place(playhead, None, duration_frames),
+                        timing: LayerTiming::place(playhead, source_frames, duration_frames),
                     },
                 },
                 Intent::SetAttrs {
@@ -154,7 +186,7 @@ fn new_layer_intents(
             Intent::SetShapes {
                 layer,
                 shapes: vec![ShapeNode::Leaf(Shape {
-                    source: PathSource::Rectangle { size: VectorPoint { x: 200.0, y: 200.0 } },
+                    source: PathSource::Rectangle { size: VectorPoint { x: rect_side(comp), y: rect_side(comp) } },
                     ops: Vec::new(),
                     fill: Some(Fill {
                         brush: Brush::Solid(Rgb { r: 1.0, g: 1.0, b: 1.0 }),
@@ -324,7 +356,7 @@ fn spawn_layer(
         .as_ref()
         .map(|composition| (composition.width as f64, composition.height as f64))
         .unwrap_or((1920.0, 1080.0));
-    let intents = new_layer_intents(
+    let mut intents = new_layer_intents(
         layer,
         order,
         playhead,
@@ -333,6 +365,19 @@ fn spawn_layer(
         comp_size,
         kind,
     );
+    let taken: Vec<String> = d
+        .view()
+        .layers()
+        .into_iter()
+        .filter_map(|l| d.view().attrs(l).ok().flatten().map(|a| a.name))
+        .collect();
+    for intent in &mut intents {
+        if let Intent::SetAttrs { patch, .. } = intent {
+            if let Some(name) = patch.name.take() {
+                patch.name = Some(numbered(&name, &taken));
+            }
+        }
+    }
     match d.apply_all(intents) {
         Ok(_) => {
             let rows = fixture::layer_rows_from_doc(&d);
@@ -589,8 +634,14 @@ pub(super) fn browser_panel(
             }
         )
     });
-    let first_asset = shown.first().map(|a| a.name.clone()).unwrap_or_default();
+    let library_line = {
+        let bytes: u64 = shown.iter().filter_map(|a| a.size).sum();
+        let count = shown.len();
+        let noun = if count == 1 { "item" } else { "items" };
+        format!("{count} {noun} · {}", fixture::human_size(bytes))
+    };
     let asset_count = shown.len();
+    let filtered_out = shown.is_empty() && rail().is_some();
 
     rsx!(
         div { id: "browser",
@@ -811,10 +862,17 @@ pub(super) fn browser_panel(
                             "Results"
                             em { "{asset_count}" }
                         }
-                        div { class: "tgrid", {asset_cards} }
+                        if filtered_out {
+                            div { class: "rcount",
+                                "Nothing of this kind yet · "
+                                SemanticButton { class: "chip", onclick: move |_| rail.set(None), "Show all media" }
+                            }
+                        } else {
+                            div { class: "tgrid", {asset_cards} }
+                        }
                         div { class: "bfoot",
                             span { class: "dot", style: "background:var(--accent);" }
-                            "{first_asset}"
+                            "{library_line}"
                         }
                     }
                 }
@@ -860,7 +918,8 @@ mod placement {
     #[test]
     fn a_rectangle_is_born_in_the_middle_of_the_frame() {
         let comp = (640.0, 480.0);
-        let center = box_of(NewKind::Rectangle, comp, (200.0, 200.0));
+        let side = rect_side(comp);
+        let center = box_of(NewKind::Rectangle, comp, (side, side));
         assert!(
             (center.0 - 320.0).abs() < 2.0 && (center.1 - 240.0).abs() < 2.0,
             "四角の中心が枠の真ん中に無い: {center:?}"

@@ -193,19 +193,19 @@
 - ☐ ST20 fit が paint でしか更新されない
 
 ## 第 4 波 M: 媒体の司書
-- ☐ M1 置いた素材の尺が必ず comp の終わりまで(probe の nb_frames を渡す)
+- ☑ M1 置いた素材の尺が必ず comp の終わりまで(probe の nb_frames を渡す)
 - ☐ M2 取り込みが窓を止める(SHA-256 を UI thread で doc.lock を握ったまま)
-- ☐ M3 フォルダを取り込めない
-- ☐ M4 重複が黙って消える(Imported 1 files と出て札は増えない)
+- ☑ M3 フォルダを取り込めない
+- ☑ M4 重複が黙って消える(Imported 1 files と出て札は増えない)
 - ☐ M5 札の情報が種別文字列だけ(尺・fps・解像度・容量)
 - ☐ M6 札の絵を描画の最中に作る(ffmpeg 同期 spawn、失敗を永久に憶える)
 - ☐ M7 hover scrub / 下見が無く、押すと即座に層が生まれる
 - ☐ M8 Browser から Stage / Timeline へ引けない
 - ☐ M9 差し替えが Alt+click の隠し技
-- ☐ M10 Create の既定値(書体の絶対 path・"テキスト"・200×200 固定・採番無し・Null/Solid 無し)
-- ☐ M11 family の袖が空になっても残る
-- ☐ M12 Library の下帯が先頭の素材名
-- ☐ M13 札の下地色が並び順で回る
+- ☑ M10 Create の既定値 — "Text"・四角は短辺の 1/4・採番(書体の path と Null/Solid は未)
+- ☑ M11 family の袖が空になっても残る
+- ☑ M12 Library の下帯が先頭の素材名
+- ☑ M13 札の下地色が並び順で回る
 - ☐ M14 素材を library から外せない / Reveal in Finder
 - ☐ M15 格子を鍵で歩けない(K9)
 - ☐ M16 落とす先の可否・役目が覆いに出ない(H17)
