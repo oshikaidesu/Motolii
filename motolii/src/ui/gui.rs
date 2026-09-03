@@ -262,8 +262,9 @@ impl Gui {
         }
     }
 
-    /// 打鍵を1つ流す。
+    /// 打鍵を1つ流す。窓の shell と同じ順: 先に打鍵の当て先を決める(`host::aim_keystrokes`)。
     fn key(&mut self, key: keyboard_types::Key, mods: keyboard_types::Modifiers) {
+        crate::ui::host::aim_keystrokes(&mut self.h.doc);
         self.h.press_with(key, mods);
         self.settle();
     }

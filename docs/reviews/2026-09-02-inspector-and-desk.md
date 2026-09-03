@@ -66,16 +66,16 @@ Utility(ANCHOR)は Inspector の Transform 行へ。Output は File▸Export と
 
 ## 8. 宿題(2026-09-03 朝、利用者裁定: 細々した整備は後回し。責任は分かれているので後からで直る)
 
-2026-09-03 昼の片付け(実窓では未確認 — 見た目と手触りの合否は利用者):
+2026-09-03 の片付け(実窓では未確認 — 見た目と手触りの合否は利用者):
 
-1. **済。** 原因は 2 つ重なっていた。(a) `asset!` の stylesheet は harness に配る net が無く当たらない → test では同じ文面を inline で当てる(`tokens::stylesheet`)。(b) 赤の一部は CSS が当たって初めて見えた製品の穴: 窓の外で放した pointerup は blitz が root へ落とし `#app` に届かない(host の `on_primary_pointer_release` は在ったが窓無しでは未登録) → headless の窓 id を 1 つ決めて harness も同じ線を通す。View menu の「✓ Timeline」を選んでも menu が閉じず覆いが次の押しを食っていた → 選んだら閉じる(Reset Layout・macOS と同じ)。数を決め打ちした test は 11 面時代の残り → 面の数から測る。PointerLeft を release 扱いする routing は外した(縁で dock してしまう)。lib test 77/77 緑
-2. 未再現のまま。§8-1 の「外で放すと届かない」が同族の可能性あり
-3. **半分済。** 4 実装を `semantic_menu::Field` 1 component へ畳んだ(閉じ方は 1 箇所)。`Session.field` への持ち主の統一と歌詞の `textarea` 委託は未
-4. 未
-5. 未特定。`vello_encoding 0.10 config.rs:185` は `bin_data(1<<18) - bin_data_start` の減算で、draw object が数万を超えた時に落ちる。custom widget の paint は面 0 で描かず tick 数も `MIN_PPS` で有界なので、疑うのは DOM 側の文字(細い tile で折り返し)
-6. 未
-7. 未。§8-1 で host と harness の線は 1 本になった(release)。打鍵の規則(`aim_keystrokes`)は host のまま
-8. **上流に壁。** blitz-dom の `custom-widget` feature は既に `accessibility` を連れてくるが、`Widget::accessibility_tree` はこの rev ではコメントアウト(`custom_widget.rs:143`)。custom widget が AccessKit node を申告する口が無く、fork か上流 PR が先。kittest 0.4.0 は registry に在る
+1. **済。** 原因は 2 つ重なっていた。(a) `asset!` の stylesheet は harness に配る net が無く当たらない → test では同じ文面を inline で当てる(`tokens::stylesheet`)。(b) 赤の一部は CSS が当たって初めて見えた製品の穴: 窓の外で放した pointerup は blitz が root へ落とし `#app` に届かない(host の `on_primary_pointer_release` は在ったが窓無しでは未登録) → `Host::HEADLESS` を決めて harness も同じ線を通す。View menu の「✓ Timeline」を選んでも menu が閉じず覆いが次の押しを食っていた → 選んだら閉じる(Reset Layout・macOS と同じ)。数を決め打ちした test は 11 面時代の残り → 面の数から測る。PointerLeft を release 扱いする routing は外した(縁で dock してしまう)
+2. 未再現のまま。1 の「外で放すと届かない」が同族の可能性あり
+3. **済。** 4 実装を `semantic_menu::Field` 1 component へ、持ち主は `Session.field`(`OpenField { at: FieldAt, draft }`)1 つ。書き置きは `textarea`、Enter は改行、確定は Cmd+Enter(外を押した時に host が送る鍵も同じ)
+4. **済。** `Focus::Color(ColorSlot)`。Inspector の COLOR 行が焦点、机の引き出しは色相の輪(conic-gradient)と彩度・明度の面。書き戻し口は property でなく data(text の style の fill / stroke、shape の木の葉の fill)。掴んでいる間は下書きで放した時に 1 回だけ書く(Undo 1 手)。参考画像は `Asset.role`(Material / Reference)。窓へ落とした先が `#desk` なら Reference で admit し、Browser には出さず机の顔の帯に thumbnail で並ぶ。preset(人の層)は未
+5. **未特定。** `vello_encoding 0.10 config.rs:185` は `bin_data(1<<18) - bin_data_start` の減算で、draw object が数万を超えた時に落ちる。custom widget の paint は面 0 で描かず、tick は `MIN_PPS`、波形は列が幅ぶんで有界。疑うのは DOM 側の文字(細い tile で折り返し)。実窓の再現手順が要る
+6. **配置は済。** `~/Library/Application Support/Motolii/layout.json` へ Dock を serde で仕舞い、起動時に読む。別窓は仕舞わない。机の pin と複数 instance は §3「最初の一枚を見てから」のまま(利用者裁定待ち)
+7. **半分済。** host の 3 つの規則(押す前の `commit_field_outside`、放しの `primary_pointer_released`、打鍵前の `aim_keystrokes`)を harness が同じ順で通す(`gui.rs` の press / click / release / key)。規則そのものは host に居る。本丸は上流: blitz の autofocus は要素の作成時にだけ属性を見る(`mutator.rs:961`)ので、Dioxus が属性を後から付ける `#app` には効かない。`set_attribute` でも見る 1 行の fork が要る
+8. **上流に壁。** blitz-dom の `custom-widget` feature は既に `accessibility` を連れてくるが、`Widget::accessibility_tree` は pin した rev でも upstream main(2026-09-03 時点)でもコメントアウト。custom widget が AccessKit node を申告する口が無く、fork か上流 PR が先。kittest 0.4.0 は registry に在る
 
 
 1. **headless の窓 test 16 本が赤。** HEAD 時点で赤(stylesheet が harness に当たらず全 zone が縦積み)。実窓には出ない。**宿題の先頭** — これが赤いままだと以降の直しで緑を頼れない
