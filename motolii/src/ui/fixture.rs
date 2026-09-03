@@ -450,9 +450,9 @@ fn shape_fill_colors(
                         seen,
                         out,
                         [
-                            (rgb.r * 255.0) as u8,
-                            (rgb.g * 255.0) as u8,
-                            (rgb.b * 255.0) as u8,
+                            (rgb.r * 255.0).round() as u8,
+                            (rgb.g * 255.0).round() as u8,
+                            (rgb.b * 255.0).round() as u8,
                             255,
                         ],
                     );
@@ -490,10 +490,10 @@ pub(super) fn used_colors_from_doc(doc: &Document) -> Vec<ColorSwatch> {
                     &mut seen,
                     &mut out,
                     [
-                        (f[0] * 255.0) as u8,
-                        (f[1] * 255.0) as u8,
-                        (f[2] * 255.0) as u8,
-                        (f[3] * 255.0) as u8,
+                        (f[0] * 255.0).round() as u8,
+                        (f[1] * 255.0).round() as u8,
+                        (f[2] * 255.0).round() as u8,
+                        (f[3] * 255.0).round() as u8,
                     ],
                 );
                 if let Some(s) = style.stroke_color {
@@ -501,10 +501,10 @@ pub(super) fn used_colors_from_doc(doc: &Document) -> Vec<ColorSwatch> {
                         &mut seen,
                         &mut out,
                         [
-                            (s[0] * 255.0) as u8,
-                            (s[1] * 255.0) as u8,
-                            (s[2] * 255.0) as u8,
-                            (s[3] * 255.0) as u8,
+                            (s[0] * 255.0).round() as u8,
+                            (s[1] * 255.0).round() as u8,
+                            (s[2] * 255.0).round() as u8,
+                            (s[3] * 255.0).round() as u8,
                         ],
                     );
                 }
@@ -798,10 +798,10 @@ pub(super) fn inspector_data_from_doc(
     let row = |label, c: [f64; 4], slot| ColorRow {
         label,
         hex: hex_of([
-            (c[0] * 255.0) as u8,
-            (c[1] * 255.0) as u8,
-            (c[2] * 255.0) as u8,
-            (c[3] * 255.0) as u8,
+            (c[0] * 255.0).round() as u8,
+            (c[1] * 255.0).round() as u8,
+            (c[2] * 255.0).round() as u8,
+            (c[3] * 255.0).round() as u8,
         ]),
         slot,
     };

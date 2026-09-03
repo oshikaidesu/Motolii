@@ -420,14 +420,14 @@
 ## 第 6 波 CV: 色と Blend の再点検
 - ☑ CV1 焼けない入力(網・点群の mix)は run 側へ落とす
 - ☐ CV2 【致命】乗算済み sRGB を非乗算として linear 化(decode → premultiply の順が逆)— α 0.5 が 0.29 相当に暗い
-- ☐ CV3 hex の丸めが 3 通り(輪は round、Inspector と札は切り捨て)
+- ☑ CV3 hex の丸めが 3 通り(輪は round、Inspector と札は切り捨て)
 - ☐ CV4 Blend の札は sRGB で混ぜ、実物は linear light(札の中だけ往復する)、Normal の札が 4 つ同じ
-- ☐ CV5 Blend の下見の後始末の use_effect が反応源を読んでいない(閉じた時の掃除が走らない)
-- ☐ CV6 Stroke の行を押すと輪が消える(stroke_color が None の slot を捨てる)
-- ☐ CV7 パレットの一括適用が錠を素通り・α を潰す・選択の 1 枚だけ・Stroke へ行かない
-- ☐ CV8 使われた色が 1 つ在ると既定パレットが消える、used の重複判定に α が入る、上限が無い
-- ☐ CV9 Blend の札の色が文字層で accent(text の fill を見ない)
-- ☐ CV10 α の帯の当たりが枠 1 本ぶんずれる(box-sizing)
+- ☑ CV5 Blend の下見の後始末の use_effect が反応源を読んでいない(閉じた時の掃除が走らない)
+- ☑ CV6 Stroke の行を押すと輪が消える(stroke_color が None の slot を捨てる)
+- ☑ CV7 パレットの一括適用が錠を素通り・α を潰す・選択の 1 枚だけ・Stroke へ行かない
+- ☑ CV8 使われた色が 1 つ在ると既定パレットが消える、used の重複判定に α が入る、上限が無い
+- ☑ CV9 Blend の札の色が文字層で accent(text の fill を見ない)
+- ☑ CV10 α の帯の当たりが枠 1 本ぶんずれる(box-sizing)
 - ☐ CV11 Document::display_revision が未使用(Stage は窓側の Signal だけを見る)
 
 ## 会議 CD: コンセプトへの異議(→ [concept-challenge](2026-09-03-concept-challenge.md))— 裁定待ち
@@ -448,3 +448,46 @@
 - ☐ RB8 状態 3 種(Signal / Arc<Mutex> / Cell)の選び分けと PROBE の読み手を mod.rs の頭に 3 行
 - ☐ RB9 expect("同上") 5 連・日本語の panic 文、as i64 の飽和、unwrap 428(うち lock 314)
 - ☐ RB10 gui.rs の頭に使える手の一覧 1 行、fixture.rs の名前と場所の食い違い
+
+## 会議 SE: Motolii のセールスエンジニア
+- ☐ SE1 署名・公証・updater が repo に無い(Gatekeeper で開けない)— 教育向けの前提
+- ☐ SE2 ffmpeg を同梱しない(brew を客に言わせる)、ライセンスの法務判断
+- ☐ SE3 .rrd の version 番号と migration が無い(「rerun 互換」とは言わない)
+- ☐ SE4 auto_save が persist.rs に在るのに src から呼ばれない(H10)
+- ☐ SE5 Lottie 書き出しが UI から呼ばれない
+- ☐ SE6 ISF は仕組みだけ(bloom 1 本、include_str で焼く)— 実行時に .fs を読む口
+- ☐ SE7 素材 relink(D3)と snapshot の相対 path(D9)は試用版の翌日に必ず来る
+- ☐ SE8 デモ台本: MOTOLII_FIXTURE=1、Send to layer、Blend の札、Export のサマリ、締めは「窓と書き出しが同じ 1 本」
+
+## 会議 UX: UI デザイナー(token と部品の律)
+- ☑ UX1 #stagecol が 2 行 grid のまま .stagehint を足した(白紙で Stage が 26px に潰れる)
+- ☑ UX2 .hex に CSS が無い(押せる物に見えず、打つ欄も無地)、.zoomchip も無い(tabular-nums)
+- ☑ UX3 .tacts の 3 枚が 88px の札から溢れる(縮小と scrim)
+- ☐ UX4 級数は実は 3 段(MICRO = DENSE)、最大の文字が tab(.ptab の t-title)
+- ☐ UX5 --hit が唯一の口でない(18 に 3 通り、16 に 3 通り)
+- ☐ UX6 素の色 6・素の px 16・律の外の N 43・rsx の style 41(Create の札 #222/#fff/20px/32px)
+- ☐ UX7 部品 10 種を .control 1 つに(≒160 行減)、.output-cancel だけ生 button、:active が 3 つだけ、.ptab に hover 無し
+- ☐ UX8 見出し 3 段と空状態の器 4 つを .head / .sub / .group に(≒70 行減)、.zoomctl の流用
+- ☐ UX9 .on と .lit が正反対の光り方、色だけの選択 6 箇所、沈める opacity 7 値 → 3 段
+- ☐ UX10 死に selector 41 行と二重定義 15 行、focus ring が 3 種、.a11y の親に position:relative が無い
+
+## 会議 GC: グラフィックデザインのコンポーザー(作品の見え方)
+- ☐ GC1 既定の Text が縦に中央でない(position 0,0 で上端 85px)— shape 後に LineMeasure で縦中央へ
+- ☐ GC2 既定 style を「そのまま出せる」値へ(W6・line_height 1.5・palt・黒の縁取り 8%)
+- ☐ GC3 縁取りを fill の下へ(stroke_over_fill を読む)、幅は外側基準(輪郭中心なので 2 倍)
+- ☐ GC4 ShapedText に glyph の区切り(glyph_spans)— Range Selector / 文字送りの入口
+- ☐ GC5 vism/blur.wgsl を 1 枚(ブラー・影・feather の土台)、mask に feather が無い
+- ☐ GC6 文字の焼きが comp 固定解像度(scale 200% でぼける)— canvas を実効 scale で
+- ☐ GC7 出口が yuv420p(色付き細字の縁が横 2px 平均)— qp0 / 444 / ProRes の口(X1)
+- ☐ GC8 Composition sheet に背景色の行が無い、既定パレットが色相環の等分(目が入っていない)
+- ☐ GC9 kern / liga は効く、palt / tnum は既定を 1 箇所書けば効く(model → shaper は通っている)
+
+## 会議 PD: プロダクトデザイナー(旅と語彙)
+- ☐ PD1 起動が最後の作品を知らない — recents.json・window.json・argv・Open Recent(≒70 行)、保存 dialog だけ sheet でない
+- ☐ PD2 60 秒の既定が 1 本目を壊す — 層 0 の comp に長い素材が来たら尺を合わせる(L4)、空状態を「曲をここに置く + 比率 3 chip」に、既定 Text に黒縁
+- ☐ PD3 選択キーが見えないまま矢印と Delete の意味が変わる — "3 keyframes selected" を status に、キー削除にも報せ
+- ☐ PD4 Desk が自分で開く(Shut(seen) が derived で戻る)、shut() が焦点を落とす
+- ☐ PD5 語彙: Media / Library の二重、dock.rs の 2 つの並び、'm' と M chip の衝突、Key → Keyframe、Desk → Notes
+- ☐ PD6 面 8 → 5(Create/Media/Effects/Colors は 1 枚 Library の rail)、Export は File に畳む、Settings は ⌘,
+- ☐ PD7 ◇/◆/⌥◆ が 1 グリフに 3 操作(AE は stopwatch と navigator の 2 部品)、菱形が歌詞と transform を混ぜる(歌詞は旗で)
+- ☐ PD8 telemetry 5 つ(first_layer_ms・first_export_ok・reopen・undo_after_intent・content_keys)

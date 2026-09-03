@@ -5,7 +5,15 @@ const NO_MARKER: &str = "No marker yet";
 
 /// Blend の札に載せる色。層の塗り(shape の最初の solid fill)、無ければ accent。
 fn blend_tint(session: &Session, layer: crate::doc::store::LayerId) -> [f32; 3] {
-    let shapes = session.doc.lock().unwrap().view().shapes(layer).unwrap_or_default();
+    let d = session.doc.lock().unwrap();
+    let view = d.view();
+    // 文字層は本文の塗り(歌詞は文字なので、札が層の色を映す)。
+    if let Ok(Some(text)) = view.text_document(layer) {
+        if let Some(style) = text.styles.first() {
+            return [style.fill[0] as f32, style.fill[1] as f32, style.fill[2] as f32];
+        }
+    }
+    let shapes = view.shapes(layer).unwrap_or_default();
     match crate::ui::fixture::first_solid_fill(&shapes, Vec::new()) {
         Some((_, rgb)) => [rgb.r as f32, rgb.g as f32, rgb.b as f32],
         None => {
@@ -159,10 +167,14 @@ pub(super) fn DeskPanel(
     {
         let doc = session.doc.clone();
         let shown = shown_blend.clone();
-        let grid_open = matches!(*session.desk.lock().unwrap(), DeskState::Open(Drawer::Blend))
-            || (matches!(*session.desk.lock().unwrap(), DeskState::Follow)
-                && matches!(*session.focus.lock().unwrap(), Some(Focus::Blend(_))));
+        let watch = session.clone();
+        let rev = revision;
         use_effect(move || {
+            // 反応源を読む(読まないと初回しか走らず、閉じた時の掃除が一度も来ない)。
+            let _ = rev();
+            let grid_open = matches!(*watch.desk.lock().unwrap(), DeskState::Open(Drawer::Blend))
+                || (matches!(*watch.desk.lock().unwrap(), DeskState::Follow)
+                    && matches!(*watch.focus.lock().unwrap(), Some(Focus::Blend(_))));
             if !grid_open {
                 if let Some(layer) = shown.take() {
                     doc.lock().unwrap().clear_transient(layer, &crate::doc::store::PropertyId::blend_mode());

@@ -25,7 +25,8 @@ pub(super) fn wheel_slot(session: &Session) -> Option<ColorSlot> {
         }),
     };
     // 読めない slot(style が消えた文字層)は輪の相手にしない。黒を見せて書き込みを捨てる嘘を避ける。
-    slot.filter(|s| read_color(&session.doc, s).is_some())
+    // 縁取り(stroke)はまだ無くても輪を出す — 無い物を足す口が要る。読めない shape の fill だけ捨てる。
+    slot.filter(|s| matches!(s, ColorSlot::TextStroke { .. }) || read_color(&session.doc, s).is_some())
 }
 
 /// 不透明度だけを書く(文字の fill / stroke)。shape の塗りは α を持たない。
@@ -425,7 +426,7 @@ mod tests {
             let layer = slot.layer();
             let d = session.doc.lock().unwrap();
             let rows = crate::ui::fixture::inspector_data_from_doc(&d.view(), layer, t).colors;
-            assert!(rows.iter().any(|r| r.slot == slot && r.hex.starts_with("#3f7fbf")), "{slot:?} {:?}", rows.iter().map(|r| r.hex.clone()).collect::<Vec<_>>());
+            assert!(rows.iter().any(|r| r.slot == slot && r.hex.starts_with("#4080bf")), "{slot:?} {:?}", rows.iter().map(|r| r.hex.clone()).collect::<Vec<_>>());
         }
     }
 

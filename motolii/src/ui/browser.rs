@@ -525,9 +525,9 @@ fn apply_layer_color(doc: &Arc<Mutex<Document>>, layer: LayerId, rgba: [u8; 4], 
     let source = d.view().meta(layer).ok().flatten().map(|m| m.source);
     let intent = match source {
         Some(LayerSource::Text) => d.view().text_document(layer).ok().flatten().map(|mut document| {
-            let fill = [rgba[0] as f64 / 255.0, rgba[1] as f64 / 255.0, rgba[2] as f64 / 255.0, rgba[3] as f64 / 255.0];
+            // 色を変える手は色だけ触る。α(帯で置いた値)は残す。
             for style in document.styles.iter_mut() {
-                style.fill = fill;
+                style.fill = [rgba[0] as f64 / 255.0, rgba[1] as f64 / 255.0, rgba[2] as f64 / 255.0, style.fill[3]];
             }
             Intent::SetTextDocument { layer, document }
         }),
@@ -714,24 +714,49 @@ pub(super) fn browser_panel(
                 {
                     let layer = selected();
                     // 白紙では使われた色が無い。最初の一歩は既定のパレットから(Canva・CapCut)。
-                    let mut swatches = fixture::used_colors_from_doc(&doc.lock().unwrap());
-                    let starter = swatches.is_empty();
-                    if starter {
-                        swatches = fixture::default_palette();
+                    let used = fixture::used_colors_from_doc(&doc.lock().unwrap());
+                    let starter = used.is_empty();
+                    // 使われた色の後ろに既定のパレットを繋ぐ(1 色使った瞬間に棚が空にならない)。
+                    let mut swatches = used;
+                    for sw in fixture::default_palette() {
+                        if !swatches.iter().any(|s| s.rgba[..3] == sw.rgba[..3]) {
+                            swatches.push(sw);
+                        }
                     }
                     let has_swatches = !swatches.is_empty();
                     let cards = swatches.into_iter().map(|ColorSwatch { hex, rgba }| {
                         let card_class = if layer.is_none() { "tcard disabled" } else { "tcard" };
-                        let onclick = layer.map(|l| {
+                        let onclick = layer.map(|_| {
                             let doc = doc.clone();
-                            move |_| apply_layer_color(&doc, l, rgba, revision)
+                            let session = session.clone();
+                            move |_| {
+                                let rgb = [rgba[0] as f64 / 255.0, rgba[1] as f64 / 255.0, rgba[2] as f64 / 255.0];
+                                // 焦点が縁取りなら縁取りへ(輪と札は同じ口)。それ以外は選んだ層の全部へ。
+                                if let Some(crate::ui::session::Focus::Color(slot @ crate::ui::session::ColorSlot::TextStroke { .. })) = session.live_focus() {
+                                    if session.writable(slot.layer()) {
+                                        match crate::ui::color::write_color(&doc, &slot, rgb) {
+                                            Ok(()) => *revision.write() += 1,
+                                            Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
+                                        }
+                                    }
+                                    return;
+                                }
+                                for l in session.selection.all() {
+                                    if session.writable(l) {
+                                        apply_layer_color(&doc, l, rgba, revision);
+                                    }
+                                }
+                            }
                         });
                         rsx!(
                             SemanticButton {
                                 class: "{card_class}",
                                 disabled: layer.is_none(),
                                 title: if layer.is_none() { "Select a layer first" } else { "Apply to the selected layer" },
-                                onclick: move |evt| { if let Some(f) = &onclick { f(evt) } },
+                                onclick: {
+                                    let mut cb = onclick;
+                                    move |evt| { if let Some(f) = cb.as_mut() { f(evt) } }
+                                },
                                 div { class: "thumb", style: "background:{hex};" }
                                 span { class: "tname", "{hex}" }
                             }
