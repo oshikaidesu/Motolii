@@ -4,14 +4,14 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use dioxus_native::prelude::*;
 
 pub(crate) const SURFACE_APP: [u8; 3] = [0x28, 0x28, 0x28];
-pub(crate) const SURFACE_PANEL: [u8; 3] = [0x36, 0x36, 0x36];
-pub(crate) const SURFACE_RAISED: [u8; 3] = [0x3e, 0x3e, 0x3e];
-pub(crate) const SURFACE_HOVER: [u8; 3] = [0x46, 0x46, 0x46];
+pub(crate) const SURFACE_PANEL: [u8; 3] = [0x2f, 0x2f, 0x2f];
+pub(crate) const SURFACE_RAISED: [u8; 3] = [0x42, 0x42, 0x42];
+pub(crate) const SURFACE_HOVER: [u8; 3] = [0x50, 0x50, 0x50];
 pub(crate) const LINE_DARK: [u8; 3] = [0x1a, 0x1a, 0x1a];
-pub(crate) const BORDER: [u8; 3] = [0x55, 0x55, 0x55];
+pub(crate) const BORDER: [u8; 3] = [0x63, 0x63, 0x63];
 pub(crate) const INK: [u8; 3] = [0xb8, 0xb8, 0xb8];
-pub(crate) const INK2: [u8; 3] = [0x8c, 0x8c, 0x8c];
-pub(crate) const INK3: [u8; 3] = [0x75, 0x75, 0x75];
+pub(crate) const INK2: [u8; 3] = [0xa2, 0xa2, 0xa2];
+pub(crate) const INK3: [u8; 3] = [0x92, 0x92, 0x92];
 pub(crate) const ACCENT: [u8; 3] = [0xd8, 0xb5, 0x74];
 
 pub(crate) const WAY_BROWSER: [u8; 3] = [0x6e, 0xb3, 0xae];
@@ -19,10 +19,10 @@ pub(crate) const WAY_STAGE: [u8; 3] = [0xbc, 0xa0, 0x72];
 pub(crate) const WAY_INSPECTOR: [u8; 3] = [0x8e, 0xb0, 0x86];
 pub(crate) const WAY_TIMELINE: [u8; 3] = [0xcc, 0x95, 0x87];
 
-pub(crate) const TEXT_MICRO: f64 = 8.0;
-pub(crate) const TEXT_DENSE: f64 = 9.0;
+pub(crate) const TEXT_MICRO: f64 = 10.0;
+pub(crate) const TEXT_DENSE: f64 = 10.0;
 pub(crate) const TEXT_BASE: f64 = 11.0;
-pub(crate) const TEXT_TITLE: f64 = 12.0;
+pub(crate) const TEXT_TITLE: f64 = 13.0;
 pub(crate) const ROW: f64 = 20.0;
 pub(crate) const SECTION: f64 = 26.0;
 pub(crate) const SP1: f64 = 2.0;

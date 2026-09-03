@@ -583,9 +583,9 @@ pub(super) fn inspector_data_from_doc(
             .and_then(|p| view.track(layer, &p).ok().flatten())
             .is_some()
     };
-    let f = |v: f64| format!("{v:.3}");
+    let f = |v: f64| format!("{v:.2}");
 
-    let f1 = |v: f64| format!("{v:.1}");
+    let f1 = |v: f64| format!("{v:.2}");
     let (pos_x, pos_y) = match value_of(property::POSITION) {
         Some(Value::Vec2([x, y])) => (x, y),
         _ => (0.0, 0.0),
@@ -1061,13 +1061,8 @@ pub(super) fn load_fixture() -> Loaded {
         .ok()
         .flatten()
         .map(|c| {
-            format!(
-                "{}×{} · {}fps · {}s",
-                c.width,
-                c.height,
-                c.fps.num(),
-                c.duration_frames / c.fps.num()
-            )
+            let secs = c.duration_frames / c.fps.num();
+            format!("{}×{} · {}fps · {}:{:02}", c.width, c.height, c.fps.num(), secs / 60, secs % 60)
         })
         .unwrap_or_default();
 

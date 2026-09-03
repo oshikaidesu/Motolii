@@ -47,32 +47,32 @@
 - ☐ S15 文字色の α
 
 ## 第 2 波 V: 視覚デザイン(styles.css / tokens.rs)
-- ☐ V1 面の分離(panel / raised / hover の値)
-- ☐ V2 ink3 のコントラスト、t-micro 8px
-- ☐ V3 未定義 token(--border, --sp5/6, --fg)
-- ☐ V4 Inspector の値に hover が無い
-- ☐ V5 机の chip が素の文字(selector が #stagefoot 限定)
-- ☐ V6 Colors の左袖で文字が溢れる
-- ☐ V7 Timeline の層名列が色の壁
-- ☐ V8 時間軸に目盛の数字が無い
-- ☐ V9 窓の頭が二重(title + appname)
-- ☐ V10 罫線 #555 のコントラスト
-- ☐ V11 数字の桁が行ごとに違う
-- ☐ V12 スカラ値が Z 列
+- ☑ V1 面の分離(panel / raised / hover の値)
+- ☑ V2 ink3 のコントラスト、t-micro 8px
+- ☑ V3 未定義 token(--border, --sp5/6, --fg)
+- ☑ V4 Inspector の値に hover が無い
+- ☑ V5 机の chip が素の文字(selector が #stagefoot 限定)
+- ☑ V6 Colors の左袖で文字が溢れる
+- ☑ V7 Timeline の層名列が色の壁
+- ☐ V8 時間軸に目盛の数字が無い(timeline widget に文字を描く口が無い — vello の text が要る)
+- ☑ V9 窓の頭が二重(title + appname)
+- ☑ V10 罫線 #555 のコントラスト
+- ☑ V11 数字の桁が行ごとに違う
+- ☑ V12 スカラ値が Z 列
 - ☐ V13 見出し 3 段
-- ☐ V14 Key 列の見出しだけ accent
-- ☐ V15 .ptab の cursor: grab
-- ☐ V16 色相環が円板で赤が 3 時
+- ☑ V14 Key 列の見出しだけ accent
+- ☑ V15 .ptab の cursor: grab
+- ☑ V16 色相環が円板で赤が 3 時
 - ☐ V17 hex が表示専用
 - ☐ V18 空状態の文体
-- ☐ V19 カササギが drop 領域に被る、色が palette 外
-- ☐ V20 status bar が痩せている、尺表記の不一致
-- ☐ V21 focus ring が 1px 内側
+- ☑ V19 カササギが drop 領域に被る、色が palette 外
+- ☑ V20 status bar が痩せている、尺表記の不一致
+- ☑ V21 focus ring が 1px 内側
 - ☐ V22 級数の段
 - ☐ V23 間隔の律
-- ☐ V24 .vgrip:hover が全面 accent
-- ☐ V25 Stage の作品枠が外と同色
-- ☐ V26 .btab 死に selector、.tgrid 2 列固定
+- ☑ V24 .vgrip:hover が全面 accent
+- ☐ V25 Stage の作品枠が外と同色(custom widget が自分で塗る。CSS では効かない)
+- ☑ V26 .btab 死に selector、.tgrid 2 列固定
 - ☐ V27 stagefoot の ◎ が無枠
 - ☐ V28 常設ヒント
 

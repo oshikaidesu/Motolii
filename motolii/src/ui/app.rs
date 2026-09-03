@@ -1361,7 +1361,6 @@ pub fn app() -> Element {
                         grip.set(None);
                     }
                 },
-                span { class: "appname", "Motolii" }
                 SemanticMenu {
                     id: MenuId::File,
                     label: "File",

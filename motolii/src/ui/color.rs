@@ -179,7 +179,8 @@ pub(super) fn ColorWheel(session: Session, slot: ColorSlot, revision: Signal<u32
     let inset = (ring - square) / 2.0;
     let hue_hex = hex_of(hsv_to_rgb(h, 1.0, 1.0));
     let shown = hex_of(hsv_to_rgb(h, s, v));
-    let a = h.to_radians();
+    // 輪は赤が 12 時、時計回り(Photoshop・Resolve)。画面の角度(3 時が 0)とは 90° ずれる。
+    let a = (h - 90.0).to_radians();
     let r = ring / 2.0 - (ring - square) / 4.0;
     let (mx, my) = (ring / 2.0 + r * a.cos(), ring / 2.0 + r * a.sin());
     let (sx, sy) = (inset + s * square, inset + (1.0 - v) * square);
@@ -205,7 +206,7 @@ pub(super) fn ColorWheel(session: Session, slot: ColorSlot, revision: Signal<u32
     let preview_hue = (session.clone(), slot.clone());
     let pick_hue = move |evt: PointerEvent| {
         let p = evt.data().element_coordinates();
-        let deg = (p.y - ring / 2.0).atan2(p.x - ring / 2.0).to_degrees().rem_euclid(360.0);
+        let deg = ((p.y - ring / 2.0).atan2(p.x - ring / 2.0).to_degrees() + 90.0).rem_euclid(360.0);
         draft.set(Some((deg, s, v)));
         preview_color(&preview_hue.0.doc, &preview_hue.1, hsv_to_rgb(deg, s, v));
         *revision.write() += 1;

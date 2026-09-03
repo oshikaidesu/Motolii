@@ -171,9 +171,13 @@ body {
 .menu:focus-visible,
 .vitem:focus-visible,
 .vout:focus-visible,
+.ptab:focus-visible,
+.srow:focus-visible,
+.prow .v:focus-visible,
+.lsurface:focus-visible,
 .semantic-button:focus-visible {
-    outline: var(--line) solid var(--accent);
-    outline-offset: calc(-1 * var(--line));
+    outline: calc(2 * var(--s) * 1px) solid var(--accent);
+    outline-offset: calc(1 * var(--s) * 1px);
 }
 
 .semantic-button {
@@ -249,6 +253,11 @@ body {
 
 .vgrip:hover,
 .hgrip:hover {
+    background: var(--bd);
+}
+
+.vgrip:active,
+.hgrip:active {
     background: var(--accent);
 }
 
@@ -292,7 +301,7 @@ body {
     min-height: 0;
     flex: 1;
     display: grid;
-    grid-template-columns: calc(96 * var(--s) * 1px) 1fr;
+    grid-template-columns: calc(120 * var(--s) * 1px) 1fr;
     overflow: hidden;
 }
 
@@ -318,12 +327,13 @@ body {
 }
 
 .srow {
-    height: var(--hit);
+    min-height: var(--hit);
     flex: 0 0 auto;
     display: flex;
     align-items: center;
     gap: var(--sp2);
-    padding: 0 var(--sp3);
+    padding: var(--sp1) var(--sp3);
+    line-height: 1.3;
     color: var(--ink);
     font-size: var(--t-dense);
     border-left: calc(2 * var(--s) * 1px) solid transparent;
@@ -403,7 +413,7 @@ body {
     flex: 1;
     min-height: 0;
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(auto-fill, minmax(calc(88 * var(--s) * 1px), 1fr));
     gap: var(--line);
     padding: var(--line);
     overflow-y: auto;
@@ -481,18 +491,35 @@ body {
     margin-left: auto;
     font-size: var(--t-micro);
     color: var(--ink3);
-    border: var(--line) solid var(--border);
+    border: var(--line) solid var(--bd);
     border-radius: 7px;
     padding: 0 4px;
     margin-right: var(--sp2);
     line-height: 1.2;
 }
 
+.chip {
+    display: inline-flex;
+    align-items: center;
+    height: var(--hit);
+    padding: 0 var(--sp3);
+    color: var(--ink2);
+    border: var(--line) solid var(--bd);
+    cursor: pointer;
+}
+
+.chip:hover {
+    background: var(--hover);
+    color: var(--ink);
+}
+
+.chip.on {
+    border-color: var(--accent);
+    color: var(--ink);
+}
+
 #stagefoot .chip {
     margin-right: auto;
-    padding: 0 var(--sp2);
-    color: var(--ink3);
-    cursor: pointer;
 }
 
 #stagefoot .chip.on {
@@ -584,7 +611,7 @@ body {
 }
 
 .file-drop-card {
-    padding: var(--sp5) var(--sp6);
+    padding: var(--sp4) calc(var(--sp4) * 2);
     border: 2px dashed var(--accent);
     background: var(--raised);
     color: var(--ink);
@@ -948,6 +975,7 @@ body {
     padding: 0 var(--sp4);
     color: var(--ink3);
     background: var(--panel);
+    cursor: default;
     border-right: var(--line) solid var(--dark);
     border-bottom: 2px solid transparent;
     font-size: var(--t-title);
@@ -982,7 +1010,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    border: 1px solid var(--border);
+    border: 1px solid var(--bd);
 }
 
 .aspot:hover {
@@ -1024,6 +1052,23 @@ body {
     margin-left: auto;
     display: flex;
     gap: var(--sp1);
+}
+
+.prow:hover {
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.prow .v:not(.blank):hover {
+    background: var(--hover);
+    color: var(--ink);
+}
+
+.cols .k {
+    color: var(--ink3);
+}
+
+.glyph:hover {
+    background: var(--hover);
 }
 
 .cols,
@@ -1107,11 +1152,11 @@ body {
 
 /* 合成モードの一覧。開いている間だけ並ぶ */
 .prow.blend-pick .v.content {
-    color: var(--fg-dim, #999);
+    color: var(--ink2);
 }
 
 .prow.blend-pick.on .v.content {
-    color: var(--fg, #eee);
+    color: var(--ink);
 }
 
 .prow.content-row .v.content {
@@ -1219,8 +1264,9 @@ body {
     display: flex;
     align-items: center;
     padding: 0 var(--sp2);
-    color: #1a1a1a;
-    font-weight: 600;
+    color: var(--ink);
+    background: var(--panel);
+    border-left: calc(4 * var(--s) * 1px) solid transparent;
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
@@ -1261,6 +1307,7 @@ body {
 }
 
 #status {
+    min-height: var(--row);
     background: var(--panel);
     border-top: var(--line) solid var(--dark);
     display: flex;
@@ -1416,6 +1463,7 @@ body {
 .desk-refs {
     flex: 0 1 auto;
     min-height: 0;
+    padding-right: calc(44 * var(--s) * 1px);
     max-height: calc(110 * var(--s) * 1px);
     display: flex;
     flex-wrap: wrap;
@@ -1537,7 +1585,7 @@ body {
     position: absolute;
     inset: 0;
     border-radius: 50%;
-    background: conic-gradient(from 90deg, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);
+    background: conic-gradient(#f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);
 }
 
 .sv-square {
@@ -1624,7 +1672,7 @@ body {
 }
 
 .pet-px.c {
-    background: #3ED9A4;
+    background: var(--way-inspector);
 }
 
 .pet-px.eye {

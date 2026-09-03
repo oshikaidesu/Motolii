@@ -287,7 +287,10 @@ fn prop_row(
     session: &Session,
     mut revision: Signal<u32>,
 ) -> Element {
-    let cells = p.cells.iter().zip(p.dims).enumerate().map(|(i, (c, dim))| {
+    // 1 値の行は X の列に置く(AE・Figma)。data は 3 番目に持つので描く順だけ入れ替える。
+    let solo = p.cells[0].is_empty() && p.cells[1].is_empty() && !p.cells[2].is_empty();
+    let order: [usize; 3] = if solo { [2, 0, 1] } else { [0, 1, 2] };
+    let cells = order.into_iter().map(|i| (i, (&p.cells[i], p.dims[i]))).map(|(i, (c, dim))| {
         let class = if c.is_empty() {
             "v blank"
         } else if dim {

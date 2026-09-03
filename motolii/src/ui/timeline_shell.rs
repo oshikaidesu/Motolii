@@ -70,10 +70,11 @@ pub(super) fn timeline_shell(
         let is_primary = layer.is_some() && selected() == layer;
         let is_secondary =
             !is_primary && layer.is_some_and(|l| selection.contains(l));
+        // 色は左の帯、選択は行の背景(AE・Resolve)。色の壁の上に文字を置かない。
         let lsurface_style = if is_primary {
-            format!("background:{};box-shadow:inset 0 0 0 2px var(--way-inspector);", row.color)
+            format!("border-left-color:{};background:var(--raised);box-shadow:inset 2px 0 0 var(--accent);", row.color)
         } else if is_secondary {
-            format!("background:{};box-shadow:inset 0 0 0 1px var(--way-inspector);", row.color)
+            format!("border-left-color:{};background:var(--raised);", row.color)
         } else {
             format!("background:{};", row.color)
         };
