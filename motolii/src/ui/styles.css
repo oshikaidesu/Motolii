@@ -1606,6 +1606,12 @@ body {
     height: calc(28 * var(--s) * 1px);
     background: var(--raised);
     border: var(--line) solid var(--bd);
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+}
+
+.blend-px {
+    display: block;
 }
 
 .color-pick {

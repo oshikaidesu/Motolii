@@ -111,7 +111,7 @@
 - ☐ C1 効果の bypass・並べ替え・複製(EffectInstance に enabled が無い)
 - ☐ C2 同じ効果を二度足せる、番号無し
 - ☐ C3 効果の preset の器
-- ☐ C4 Blend のサムネイルが空の四角
+- ☑ C4 Blend の札は式で混ざった色(暗・明・青・暖の下地)
 - ☐ C5 hover preview が鍵(focus)とタッチに無い
 - ☑ C6 色の書き戻しが gradient を潰す
 - ☑ C7 線形光の一言
@@ -263,9 +263,9 @@
 - ☐ R4 Fit / orbit を RectTransform / eye.rs の関数へ
 - ☐ R5 グリッドを WorldGridConfiguration で
 - ☐ R6 札の絵と素性を re_video へ(M5・M6・M7・A19)
-- ☐ R7 mesh 読み込みの二重化を importer へ一本化
+- ✗ R7 mesh 読み込みの二重化 — importer は RenderContext(GPU)を要し、取り込み時の寸法取りは CPU 経路が正当
 - ☐ R8 取っ手の大きさを re_renderer::Size へ
-- ☐ R9 Blend / 効果のサムネイルを headless の ScreenshotProcessor で(C4・C13)
+- ☑ R9 (CPU の式で代替)Blend / 効果のサムネイルを headless の ScreenshotProcessor で(C4・C13)
 
 ## 営業 B: Dioxus / Blitz で賄える物(→ [vendor-pitches](2026-09-03-vendor-pitches.md))
 - ☑ B1 `accessibility` feature を立てる(X1〜X20 が platform へ)

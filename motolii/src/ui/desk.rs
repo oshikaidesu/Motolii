@@ -2,6 +2,18 @@
 //! 常設なのは細い顔(書き置き・取っ手・鳥)。引き出しは机の中に出て、その間だけ机が広がる。
 
 const NO_MARKER: &str = "No marker yet";
+
+/// Blend の札に載せる色。層の塗り(shape の最初の solid fill)、無ければ accent。
+fn blend_tint(session: &Session, layer: crate::doc::store::LayerId) -> [f32; 3] {
+    let shapes = session.doc.lock().unwrap().view().shapes(layer).unwrap_or_default();
+    match crate::ui::fixture::first_solid_fill(&shapes, Vec::new()) {
+        Some((_, rgb)) => [rgb.r as f32, rgb.g as f32, rgb.b as f32],
+        None => {
+            let a = crate::ui::tokens::ACCENT;
+            [a[0] as f32 / 255.0, a[1] as f32 / 255.0, a[2] as f32 / 255.0]
+        }
+    }
+}
 use std::sync::{Arc, Mutex};
 
 use dioxus_native::prelude::*;
@@ -348,7 +360,9 @@ fn drawer_body(
             match target {
                 None => rsx!(div { class: "dempty", "No layer yet · select one" }),
                 // 合成は線形光(裁定 498)。AE の既定(ガンマ)とは Multiply / Screen の絵が違う。将来の切替点はここ。
-                Some((layer, current)) => rsx!(div { class: "dnote", "Blend preview · linear light" } div { class: "blend-grid",
+                Some((layer, current)) => {
+                    let tint = blend_tint(&session, layer);
+                    rsx!(div { class: "dnote", "Blend preview · linear light" } div { class: "blend-grid",
                     for (mode , label) in BLEND_MODES.iter().copied() {
                         SemanticButton {
                             class: if mode == current { "blend-cell on" } else { "blend-cell" },
@@ -383,11 +397,17 @@ fn drawer_body(
                                     }
                                 }
                             },
-                            span { class: "blend-swatch" }
+                            // 札の絵は実際にその式で混ざった色(暗・明・青・暖の 4 つの下地)。
+                            span { class: "blend-swatch",
+                                for bed in crate::ui::blend_preview::BEDS {
+                                    span { class: "blend-px", style: "background: {crate::ui::blend_preview::css(crate::ui::blend_preview::blend(mode, tint, bed))};" }
+                                }
+                            }
                             span { class: "blend-name", "{label}" }
                         }
                     }
-                }),
+                })
+                }
             }
         }
         Drawer::Text => rsx! {},
