@@ -189,6 +189,41 @@ fn primary_mouse_press(event: &WindowEvent) -> Option<dioxus_native::winit::dpi:
     }
 }
 
+/// blitz-shell は IME を能力ゼロで有効にする(`ImeCapabilities::new()`)。winit はその場合、
+/// 変換候補の窓を出す位置が無いとして候補を隠す — 日本語の打ち心地が悪い根。欄が居る間は
+/// host が `cursor_area` 付きで有効にし直し、候補を欄の箱の位置へ置く。
+fn place_ime(view: &mut blitz_shell::View<DioxusNativeWindowRenderer>) {
+    use dioxus_native::winit::dpi::{LogicalPosition, LogicalSize};
+    use dioxus_native::winit::window::{ImeCapabilities, ImeEnableRequest, ImeRequest, ImeRequestData};
+    let area = {
+        let doc: &DioxusDocument = view.downcast_doc_mut();
+        let inner = doc.inner();
+        let Some(field) = inner.query_selector(FIELD).ok().flatten() else { return };
+        let Some(node) = inner.get_node(field) else { return };
+        let pos = node.absolute_position(0.0, 0.0);
+        let layout = node.final_layout();
+        (
+            pos.x + layout.content_box_x(),
+            pos.y + layout.content_box_y(),
+            layout.content_box_width(),
+            layout.content_box_height(),
+        )
+    };
+    let data = ImeRequestData::default().with_cursor_area(
+        LogicalPosition::new(area.0, area.1).into(),
+        LogicalSize::new(area.2, area.3).into(),
+    );
+    let window = &view.window;
+    if window.ime_capabilities().is_some_and(|caps| caps.cursor_area()) {
+        let _ = window.request_ime_update(ImeRequest::Update(data));
+        return;
+    }
+    let _ = window.request_ime_update(ImeRequest::Disable);
+    if let Some(enable) = ImeEnableRequest::new(ImeCapabilities::new().with_cursor_area(), data) {
+        let _ = window.request_ime_update(ImeRequest::Enable(enable));
+    }
+}
+
 /// 落とした先が机なら参考画像、他は素材。落とす口は 1 つで、役目だけが場所で決まる。
 pub(crate) fn drop_role_at(doc: &DioxusDocument, x: f32, y: f32) -> crate::doc::store::AssetRole {
     let inner = doc.inner();
@@ -669,6 +704,9 @@ impl ApplicationHandler for Windows {
             self.host.focus_lost();
         }
         self.inner.window_event(event_loop, window_id, event);
+        if let Some(view) = self.inner.windows.get_mut(&window_id) {
+            place_ime(view);
+        }
     }
 
     fn proxy_wake_up(&mut self, event_loop: &dyn ActiveEventLoop) {
