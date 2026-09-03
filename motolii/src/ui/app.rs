@@ -265,7 +265,8 @@ pub fn detached() -> Element {
         });
     });
     let reduced_motion = window.is_some() && tokens::system_prefers_reduced_motion();
-    let css = tokens::css_root(100, reduced_motion);
+    // 別窓も同じ倍率(150% で左の名前列と右の帯がずれない)。
+    let css = tokens::css_root(session.scale.percent(), reduced_motion);
     rsx!(
         style { {css} }
         {tokens::stylesheet()}
@@ -1301,7 +1302,7 @@ pub fn app() -> Element {
                                 return;
                             }
                             let mut d = doc.lock().unwrap();
-                            let intents = crate::ui::stage_widget::nudge_intents(&d, &targets, (dx, dy), clock.now_sec());
+                            let intents = crate::ui::stage_widget::nudge_intents(&d, &targets, (dx, dy), clock.current_time());
                             match d.apply_all(intents) {
                                 Ok(_) => *revision.write() += 1,
                                 Err(e) => println!("PROBE room=write verdict=apply-error {e}"),

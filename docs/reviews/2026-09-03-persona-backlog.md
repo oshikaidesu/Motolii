@@ -353,11 +353,11 @@
 - ☐ P9 Undo 履歴が伸びっぱなし、SetTrack が track 丸ごと(帯 1 拍で 1,000 chunk)
 - ☐ P10 保存が UI の糸で全同期(flattened + encode)
 - ☐ P11 Timeline paint が selected の線形探索、waveform_tracks の to_vec、snap_targets の再生成
-- ☐ P12 select_inside が行ごとに doc.lock
+- ☑ P12 select_inside が行ごとに doc.lock
 - ☐ P13 Desk が再生位置ごとに再構築(印 400 の parse、参考画像の data URI clone)
-- ☐ P14 MIN_PPS 固定で 4 分の曲が画面に入らない、scroll_ceiling が comp の尺と印を見ない、sfac 未反映
-- ☐ P15 別窓の CSS 倍率が 100% 固定(150% で左右がずれる)
-- ☐ P16 1/3000 量子化が truncate で ◆ の一致が外れる — clock.current_time() を使う
+- ☑ P14 天井は帯・印・作品の尺の最遠(MIN_PPS の動的下限と sfac は未)
+- ☑ P15 別窓の CSS 倍率が 100% 固定(150% で左右がずれる)
+- ☑ P16 1/3000 量子化が truncate で ◆ の一致が外れる — clock.current_time() を使う
 - ☐ P17 小物: has_layer が layers()、can_export が毎 render、used / used_colors が毎 render、擦りの transient × 選択数、blend の enter/leave が revision
 
 ## 第 6 波 VO: VoiceOver(adapter が立った後)

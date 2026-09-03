@@ -310,8 +310,8 @@ impl StageWidget {
     }
 
     fn current_rt(&self) -> RationalTime {
-        let t_sec = self.clock.now_sec();
-        RationalTime::try_new((t_sec * 3000.0) as i64, 3000).unwrap_or(RationalTime::ZERO)
+        // コマから作る正確な時刻(1/3000 の切り捨てだと ◆ の一致が外れる)。
+        self.clock.current_time()
     }
 
     /// 書き出しカメラの中心。
@@ -739,8 +739,7 @@ fn preview_values(
 }
 
 /// 矢印で運ぶ。今の時刻の位置に差分を足して置く(キーが在れば打つ、無ければ値を置く)。
-pub(super) fn nudge_intents(doc: &Document, layers: &[LayerId], by: (f64, f64), t_sec: f64) -> Vec<Intent> {
-    let rt = RationalTime::try_new((t_sec * 3000.0) as i64, 3000).unwrap_or(RationalTime::ZERO);
+pub(super) fn nudge_intents(doc: &Document, layers: &[LayerId], by: (f64, f64), rt: RationalTime) -> Vec<Intent> {
     let Ok(prop) = PropertyId::new(property::POSITION) else { return Vec::new() };
     let view = doc.view();
     layers
@@ -1192,8 +1191,7 @@ impl Widget for StageWidget {
         let target = tex_and_handle.texture.clone();
         let handle = tex_and_handle.handle;
 
-        let t_sec = self.clock.now_sec();
-        let rt = RationalTime::try_new((t_sec * 3000.0) as i64, 3000).unwrap_or(RationalTime::ZERO);
+        let rt = self.clock.current_time();
 
         // 見るのは視点カメラ、書き出しは Document のカメラ。同じ世界を通る。
         let observation = if self.output_only.load(std::sync::atomic::Ordering::Relaxed) {

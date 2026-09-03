@@ -895,7 +895,7 @@ pub(super) fn inspector_panel(
         has_effects: false,
         colors: Vec::new(),
     };
-    let t = RationalTime::try_new((clock.now_sec() * 3000.0) as i64, 3000).unwrap_or(RationalTime::ZERO);
+    let t = clock.current_time();
     let mut data = match selection {
         Some(layer) => inspector_data_from_doc(&doc.lock().unwrap().view(), layer, t),
         None => empty,

@@ -746,13 +746,26 @@ impl TimelineWidget {
         }
         let (rh, rowh) = (RULER_H * self.sfac(), ROW_H * self.sfac());
         let mut layers = Vec::new();
+        // 錠は 1 回の lock で全部引く(行ごとに doc を取り合わない)。
+        let locked_set: std::collections::HashSet<LayerId> = self
+            .doc
+            .as_ref()
+            .map(|d| {
+                let d = d.lock().unwrap();
+                let view = d.view();
+                view.layers()
+                    .into_iter()
+                    .filter(|l| view.attrs(*l).ok().flatten().is_some_and(|a| a.locked))
+                    .collect()
+            })
+            .unwrap_or_default();
         for (row_ix, row) in self.rows.iter().enumerate() {
             let mid = rh + row_ix as f64 * rowh + rowh * 0.5 - self.scroll_y;
             if mid < y0 || mid > y1 {
                 continue;
             }
             // 錠の掛かった層のキーは選ばない(選べれば消せてしまう)。層そのものは選べる。
-            let locked = row.layer.is_some_and(|l| self.is_locked(l));
+            let locked = row.layer.is_some_and(|l| locked_set.contains(&l));
             for (key_ix, t) in row.keys.iter().enumerate() {
                 let x = (t - self.scroll_sec) * self.pps;
                 if !locked && x >= x0 && x <= x1 && !self.selected.contains(&(row_ix, key_ix)) {
@@ -791,11 +804,11 @@ impl TimelineWidget {
 
     /// 横スクロールの天井。作品の終わりが左端に来る所より先へは行かない(右が無限にならない)。
     fn scroll_ceiling(&self) -> f64 {
-        let end = self
-            .rows
-            .iter()
-            .filter_map(|r| r.span.map(|(_, b)| b))
-            .fold(0.0_f64, f64::max);
+        // 天井は帯の右端・印・作品の尺の一番遠い所(層が前半にしか無い 4 分の曲でも後半へ行ける)。
+        let bands = self.rows.iter().filter_map(|r| r.span.map(|(_, b)| b)).fold(0.0_f64, f64::max);
+        let marks = self.markers.iter().copied().fold(0.0_f64, f64::max);
+        let comp = self.clock.as_ref().map_or(0.0, |c| c.duration());
+        let end = bands.max(marks).max(comp);
         (end - self.viewport_w * 0.5 / self.pps).max(0.0)
     }
 

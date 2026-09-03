@@ -151,7 +151,7 @@ mod previews {
             Some(Value::Vec2(v)) => v,
             _ => [0.0, 0.0],
         };
-        doc.apply_all(nudge_intents(&doc, &[layer], (10.0, -1.0), 0.0)).unwrap();
+        doc.apply_all(nudge_intents(&doc, &[layer], (10.0, -1.0), RationalTime::ZERO)).unwrap();
         let after = doc.view().value_at(layer, &prop, RationalTime::ZERO).unwrap();
         assert_eq!(after, Some(Value::Vec2([before[0] + 10.0, before[1] - 1.0])));
     }
