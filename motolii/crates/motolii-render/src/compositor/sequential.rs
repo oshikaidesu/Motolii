@@ -57,11 +57,13 @@ impl Compositor {
         while idx < inputs.len() {
             let input = &inputs[idx];
 
-            let is_rect = matches!(
-                input.content,
-                crate::render::compositor::SequentialContent::Rect(_)
-            );
-            if let Some(mode_index) = vello_blend_mode(input.blend_mode).filter(|_| is_rect) {
+            // この入口で焼ける物 = 矩形かつ mix 系の blend。網・点群の mix は焼けないので run 側へ落とす
+            // (落とした物を run の走査が拾わないと、idx が進まず空の run で panic か無限ループ)。
+            let bakeable = |i: &crate::render::compositor::SequentialInput<'_>| {
+                matches!(i.content, crate::render::compositor::SequentialContent::Rect(_))
+                    && vello_blend_mode(i.blend_mode).is_some()
+            };
+            if let Some(mode_index) = vello_blend_mode(input.blend_mode).filter(|_| bakeable(input)) {
                 let (transform, z, rx, ry) = if input.pinned {
                     (pinned_cancel * input.transform, 0.0, 0.0, 0.0)
                 } else {
@@ -194,7 +196,7 @@ impl Compositor {
             }
 
             let run_start = idx;
-            while idx < inputs.len() && vello_blend_mode(inputs[idx].blend_mode).is_none() {
+            while idx < inputs.len() && !bakeable(&inputs[idx]) {
                 idx += 1;
             }
             let run = &inputs[run_start..idx];

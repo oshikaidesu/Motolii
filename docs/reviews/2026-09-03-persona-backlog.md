@@ -406,13 +406,26 @@
 - ☑ KB12 ⌥⌘K で開けた枠は ⌥⌘K で閉じる、修飾の記憶は menu 中も続く(rail の Escape は未)
 
 ## 第 6 波 LD: 歌詞デザイナーの再点検
-- ☐ LD1 【致命】Timeline の菱形を掴んでも歌詞のキーは動かず、Delete でも消えない(move / delete が content を見ない)
-- ☐ LD2 【致命】Justify が shaper で死んでいる(set_size(None) で幅が無い)、文字の原点が枠の中心から右下へ
-- ☐ LD3 【致命】Content の ◇ は欄を開いている間しか押せず、押すと render 時の本文が入る(上下が入れ替わる)、最後の 1 つの noop が無音
+- ☑ LD1 菱形の drag と Delete が歌詞のキーにも効く
+- ☑ LD2 揃えの幅を枠(または wrap_size)で渡す、文字の箱は枠の左上起点
+- ☑ LD3 Content の ◇ は常に押せ、本文は store から取り、最後の 1 つは断る
 - ☐ LD4 書体: path 直書き、fingerprint 死、weight の口が無い、font が無いと描画が黙って止まる(fallback 無し)
 - ☐ LD5 級数の刻みが 3.33(range / 300)、Line height と Tracking の単位が違うのに表示が無い、Auto 行送りへ戻れない
 - ☐ LD6 描く側が読まない field(stroke_over_fill・stroke 幅の追従・runs・ranges・wrap_size)、LineMeasure が未使用
 - ☐ LD7 shape_text が呼ぶたび fontdb / FontSystem / SwashCache を作り直す、locale が en-US
-- ☐ LD8 split が ContentTrack を切らずに両方へ配る
+- ☑ LD8 split は歌詞のキーも切り口で分ける
 - ☐ LD9 日本語: 禁則(幅を入れた瞬間に要る)、palt の既定、縦書きは shaper が無い
 - ☐ LD10 歌詞のキーだけを選ぶ道が無い(層の行に transform と混ざる)
+
+## 第 6 波 CV: 色と Blend の再点検
+- ☑ CV1 焼けない入力(網・点群の mix)は run 側へ落とす
+- ☐ CV2 【致命】乗算済み sRGB を非乗算として linear 化(decode → premultiply の順が逆)— α 0.5 が 0.29 相当に暗い
+- ☐ CV3 hex の丸めが 3 通り(輪は round、Inspector と札は切り捨て)
+- ☐ CV4 Blend の札は sRGB で混ぜ、実物は linear light(札の中だけ往復する)、Normal の札が 4 つ同じ
+- ☐ CV5 Blend の下見の後始末の use_effect が反応源を読んでいない(閉じた時の掃除が走らない)
+- ☐ CV6 Stroke の行を押すと輪が消える(stroke_color が None の slot を捨てる)
+- ☐ CV7 パレットの一括適用が錠を素通り・α を潰す・選択の 1 枚だけ・Stroke へ行かない
+- ☐ CV8 使われた色が 1 つ在ると既定パレットが消える、used の重複判定に α が入る、上限が無い
+- ☐ CV9 Blend の札の色が文字層で accent(text の fill を見ない)
+- ☐ CV10 α の帯の当たりが枠 1 本ぶんずれる(box-sizing)
+- ☐ CV11 Document::display_revision が未使用(Stage は窓側の Signal だけを見る)

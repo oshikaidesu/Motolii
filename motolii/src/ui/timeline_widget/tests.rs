@@ -1,6 +1,10 @@
 #![allow(clippy::all)]
 mod follow {
     use crate::ui::timeline_widget::*;
+    #[allow(unused_imports)]
+    use crate::ui::timeline_edit::*;
+    #[allow(unused_imports)]
+    use crate::doc::store::*;
 
     proptest::proptest! {
         /// 止まっている間は、どこへ動かしても引き戻されない。
@@ -34,6 +38,10 @@ mod follow {
 
 mod lyrics {
     use crate::ui::timeline_widget::*;
+    #[allow(unused_imports)]
+    use crate::ui::timeline_edit::*;
+    #[allow(unused_imports)]
+    use crate::doc::store::*;
     use crate::doc::store::{ContentKeyframe, ContentTrack, Intent, LayerSource};
 
     fn text_layer(doc: &Document) -> LayerId {
@@ -91,6 +99,10 @@ mod lyrics {
 
 mod keys {
     use crate::ui::timeline_widget::*;
+    #[allow(unused_imports)]
+    use crate::ui::timeline_edit::*;
+    #[allow(unused_imports)]
+    use crate::doc::store::*;
     use crate::doc::store::{
         property, Composition, Interp, Keyframe, LayerSource, PropertyId, Value,
     };
@@ -220,6 +232,10 @@ mod keys {
 
 mod timebase {
     use crate::ui::timeline_widget::*;
+    #[allow(unused_imports)]
+    use crate::ui::timeline_edit::*;
+    #[allow(unused_imports)]
+    use crate::doc::store::*;
     use crate::doc::store::{
         property, Composition, Interp, Keyframe, LayerSource, PropertyId, Value,
     };
@@ -272,6 +288,10 @@ mod timebase {
 
 mod markers_move {
     use crate::ui::timeline_widget::*;
+    #[allow(unused_imports)]
+    use crate::ui::timeline_edit::*;
+    #[allow(unused_imports)]
+    use crate::doc::store::*;
     use crate::doc::store::{Intent, Marker};
 
     /// 印は掴んで動かせ、Document の印が書き直される。名前は残る。
@@ -307,6 +327,10 @@ mod markers_move {
 
 mod selection_identity {
     use crate::ui::timeline_widget::*;
+    #[allow(unused_imports)]
+    use crate::ui::timeline_edit::*;
+    #[allow(unused_imports)]
+    use crate::doc::store::*;
 
     fn row(layer: u64, keys: Vec<f64>) -> CanvasRow {
         CanvasRow {

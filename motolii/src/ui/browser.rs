@@ -316,7 +316,8 @@ fn new_layer_intents(
         ];
             // 文字は組んでみるまで大きさが決まらない。実寸が要らない形で
             // 真ん中へ置く —— 左上を枠の中心に合わせる。
-            out.extend(center_intents(layer, (0.0, 0.0), comp));
+            out.extend(// 文字の箱は枠と同じ幅・左上起点。中央揃えが枠の中心軸に乗る(揃えは箱の幅で決まる)。
+            center_intents(layer, comp, comp));
             out
         }
     }

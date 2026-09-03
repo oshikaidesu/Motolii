@@ -29,6 +29,7 @@ mod session;
 mod settings;
 mod stage_widget;
 mod thumbnail;
+mod timeline_edit;
 mod timeline_shell;
 mod timeline_widget;
 pub(crate) mod tokens;

@@ -31,8 +31,9 @@ fn to_justify(justify: StoreJustify) -> TextJustify {
     }
 }
 
-fn to_layout(style: &TextDocumentStyle, justify: StoreJustify) -> TextLayout {
+fn to_layout(style: &TextDocumentStyle, justify: StoreJustify, wrap_width: Option<f32>) -> TextLayout {
     TextLayout {
+        wrap_width,
         size: style.size,
         line_height: style.line_height,
         tracking: style.tracking,
@@ -89,7 +90,7 @@ pub fn rasterize_text_document(
     }
 
     let font = to_glyph_font(style);
-    let layout = to_layout(style, document.justify);
+    let layout = to_layout(style, document.justify, Some(document.wrap_size.map(|s| s[0]).unwrap_or(canvas.width as f32)));
     let shaped = shape_text(content, &font, &layout)?;
 
     let (fill, stroke) = to_fill_stroke(style);

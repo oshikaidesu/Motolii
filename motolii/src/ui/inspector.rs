@@ -317,8 +317,16 @@ pub(super) fn toggle_content_key(
     };
     let keys = document.content.keys().to_vec();
     let here = keys.iter().position(|k| k.t == t);
+    // 立てる本文は**今 store に在る**この時刻の行(render 時の写しは、欄を確定した直後は古い)。
+    let content = if content.is_empty() {
+        keys.iter().filter(|k| k.t <= t).last().or(keys.first()).map(|k| k.content.clone()).unwrap_or_default()
+    } else {
+        keys.iter().filter(|k| k.t <= t).last().or(keys.first()).map(|k| k.content.clone()).unwrap_or(content)
+    };
     match here {
-        Some(_) if keys.len() <= 1 => return Ok(()),
+        Some(_) if keys.len() <= 1 => {
+            return Err(crate::doc::store::StoreError::Property("The only lyric line cannot be removed".to_owned()))
+        }
         Some(i) => {
             let mut rest = crate::doc::store::ContentTrack::new();
             for (k, key) in keys.iter().enumerate() {
@@ -569,7 +577,25 @@ fn content_row(
                 },
                 "{p.cells[2]}"
             }
-            span { class: "{key_class}", "{key_glyph}" }
+            // ◇ は欄の開閉に依らず押せる(他の属性の行と同じ)。
+            SemanticButton {
+                class: "{key_class}",
+                selected: p.keyed,
+                aria_label: if p.keyed { "Remove the content keyframe at this time" } else { "Add a content keyframe at this time" },
+                title: if p.keyed { "Remove the lyric keyframe here" } else { "Add a lyric keyframe here" },
+                onclick: {
+                    let doc = doc.clone();
+                    let notice = session.project_notice.clone();
+                    move |_| match toggle_content_key(&doc, layer, t, String::new()) {
+                        Ok(_) => *revision.write() += 1,
+                        Err(e) => {
+                            *notice.lock().unwrap() = e.to_string();
+                            *revision.write() += 1;
+                        }
+                    }
+                },
+                "{key_glyph}"
+            }
         }
     )
 }
@@ -1300,7 +1326,7 @@ mod tests {
         assert_eq!(count(&doc), before);
         if before == 1 {
             let only = doc.lock().unwrap().view().text_document(layer).unwrap().unwrap().content.keys()[0].t;
-            toggle_content_key(&doc, layer, only, String::new()).unwrap();
+            assert!(toggle_content_key(&doc, layer, only, String::new()).is_err(), "the last content key must refuse, aloud");
             assert_eq!(count(&doc), 1, "the last content key must survive");
         }
     }

@@ -29,6 +29,8 @@ pub struct TextFeature {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TextLayout {
+    /// 折返しと揃えの幅。None なら point text(揃えは効かない — cosmic-text は幅が無いと補正 0)。
+    pub wrap_width: Option<f32>,
     pub size: f32,
     pub line_height: Option<f32>,
     pub tracking: f32,
@@ -39,6 +41,7 @@ pub struct TextLayout {
 impl TextLayout {
     pub fn new(size: f32) -> Self {
         Self {
+            wrap_width: None,
             size,
             line_height: None,
             tracking: 0.0,
@@ -110,7 +113,8 @@ pub fn shape_text(
     };
 
     let mut buffer = Buffer::new(&mut font_system, metrics);
-    buffer.set_size(None, None); // point text(折返し無し)。wrap は次切片(module doc 参照)。
+    // 幅が無いと Align::Center / Right が常に 0 補正になる。幅は wrap_size か枠の幅。
+    buffer.set_size(layout.wrap_width, None);
     buffer.set_text(content, &attrs, Shaping::Advanced, Some(align));
     buffer.shape_until_scroll(&mut font_system, false);
 
