@@ -677,6 +677,36 @@ fn a_tab_released_over_chrome_stays_put() {
     assert_eq!(gui.count(".dock-ghost"), 0);
 }
 
+/// 掴んだまま引き出しの外へ出ても、色は置き去りにならない(そこまでの色で確定)。
+#[test]
+fn dragging_out_of_the_color_drawer_commits_the_pick() {
+    let mut gui = Gui::open();
+    let rows = gui.count(".lsurface");
+    for i in 1..rows {
+        let (x, y) = gui.center_of(".lsurface", i);
+        gui.click(x, y);
+        if gui.count(".prow.color") > 0 {
+            break;
+        }
+    }
+    let (x, y) = gui.center_of(".prow.color", 0);
+    gui.click(x, y);
+    let (sx, sy) = gui.size_of_nth(".sv-square", 0);
+    let (cx, cy) = gui.center_of(".sv-square", 0);
+    gui.press(cx + sx / 2.0 - 4.0, cy - sy / 2.0 + 4.0);
+    let stage = gui.center_of("#stage", 0);
+    gui.motion(stage.0, stage.1);
+    gui.settle();
+    let slot = match gui.session.live_focus() {
+        Some(crate::ui::session::Focus::Color(slot)) => slot,
+        other => panic!("focus drifted: {other:?}"),
+    };
+    let after = crate::ui::desk::read_color(&gui.session.doc, &slot).unwrap();
+    let (_, s, v) = crate::ui::desk::rgb_to_hsv([after[0], after[1], after[2]]);
+    assert!(s > 0.9 && v > 0.9, "leaving the drawer lost the pick: {after:?}");
+    gui.release(stage.0, stage.1);
+}
+
 #[test]
 fn menus_are_one_semantic_family() {
     let mut gui = Gui::open();

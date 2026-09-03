@@ -74,8 +74,10 @@ Utility(ANCHOR)は Inspector の Transform 行へ。Output は File▸Export と
 4. **済。** `Focus::Color(ColorSlot)`。Inspector の COLOR 行が焦点、机の引き出しは色相の輪(conic-gradient)と彩度・明度の面。書き戻し口は property でなく data(text の style の fill / stroke、shape の木の葉の fill)。掴んでいる間は下書きで放した時に 1 回だけ書く(Undo 1 手)。参考画像は `Asset.role`(Material / Reference)。窓へ落とした先が `#desk` なら Reference で admit し、Browser には出さず机の顔の帯に thumbnail で並ぶ。preset(人の層)は未
 5. **未特定。** `vello_encoding 0.10 config.rs:185` は `bin_data(1<<18) - bin_data_start` の減算で、draw object が数万を超えた時に落ちる。custom widget の paint は面 0 で描かず、tick は `MIN_PPS`、波形は列が幅ぶんで有界。疑うのは DOM 側の文字(細い tile で折り返し)。実窓の再現手順が要る
 6. **配置は済。** `~/Library/Application Support/Motolii/layout.json` へ Dock を serde で仕舞い、起動時に読む。別窓は仕舞わない。机の pin と複数 instance は §3「最初の一枚を見てから」のまま(利用者裁定待ち)
-7. **半分済。** host の 3 つの規則(押す前の `commit_field_outside`、放しの `primary_pointer_released`、打鍵前の `aim_keystrokes`)を harness が同じ順で通す(`gui.rs` の press / click / release / key)。規則そのものは host に居る。本丸は上流: blitz の autofocus は要素の作成時にだけ属性を見る(`mutator.rs:961`)ので、Dioxus が属性を後から付ける `#app` には効かない。`set_attribute` でも見る 1 行の fork が要る
+7. **半分済。** host の 4 つの規則(押す前の `commit_field_outside`、放しの `primary_pointer_released` と「窓の外か」、打鍵前の `aim_keystrokes`、開いた欄の全選択 `select_new_field`)を harness が同じ順で通す(`gui.rs` の press / click / release / key / settle / lose_focus / drop_files)。規則そのものは host に居る。本丸は上流: blitz の autofocus は要素の作成時にだけ属性を見る(`mutator.rs:961`)ので、Dioxus が属性を後から付ける `#app` には効かない。`set_attribute` でも見る 1 行の fork が要る
 8. **上流に壁。** blitz-dom の `custom-widget` feature は既に `accessibility` を連れてくるが、`Widget::accessibility_tree` は pin した rev でも upstream main(2026-09-03 時点)でもコメントアウト。custom widget が AccessKit node を申告する口が無く、fork か上流 PR が先。kittest 0.4.0 は registry に在る
+
+「普通こうなる」の通し(2026-09-03 午後): 開いた欄は全選択・同じ値は書かない・空の名前は名前でない・窓を離れたら確定・書き置きは再生に逃げない・参考画像は × で外せる・画でない物は棚へ・落とした物は押さなくても落とした先に出る・tab は窓の外でだけ別窓へ(余白では何もしない)・色は引き出しの外へ出ても確定・配置は放した時に 1 回だけ書く。全部 harness の test で赤→緑
 
 
 1. **headless の窓 test 16 本が赤。** HEAD 時点で赤(stylesheet が harness に当たらず全 zone が縦積み)。実窓には出ない。**宿題の先頭** — これが赤いままだと以降の直しで緑を頼れない

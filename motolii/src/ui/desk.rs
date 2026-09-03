@@ -540,8 +540,11 @@ fn ColorDrawer(session: Session, slot: ColorSlot, revision: Signal<u32>) -> Elem
     };
     let mut commit_up = commit.clone();
     let mut commit_far = commit.clone();
+    let mut commit_leave = commit.clone();
     rsx!(div { class: "color-drawer",
         onpointerup: move |_| commit_up(),
+        // 引き出しの外へ出たら、そこまでの色で確定(掴んだまま彷徨わせない)。
+        onpointerleave: move |_| commit_leave(),
         // 外で放して戻ってきた時。押していないのに下書きが残っていれば、それが放した印。
         onpointermove: move |evt: PointerEvent| {
             if !held(&evt) && draft.peek().is_some() {
