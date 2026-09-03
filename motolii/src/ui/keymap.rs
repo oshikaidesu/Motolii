@@ -342,6 +342,11 @@ const BINDINGS: &[Binding] = &[
     Binding { key: KeySpec::Char('0'), cmd: true, shift: false, alt: false, intent: Intent::View(crate::ui::session::ViewRequest::Fit) },
     Binding { key: KeySpec::Char('1'), cmd: true, shift: false, alt: false, intent: Intent::View(crate::ui::session::ViewRequest::Actual) },
     Binding { key: KeySpec::Char('q'), cmd: true, shift: false, alt: false, intent: Intent::Quit },
+    // AE の指: ⌘⇧D で分割(⌘K も切る)。F9 一族は macOS が食うので ⌘⌥E 一族を並べる。
+    Binding { key: KeySpec::Char('d'), cmd: true, shift: true, alt: false, intent: Intent::Split },
+    Binding { key: KeySpec::Char('e'), cmd: true, shift: false, alt: true, intent: Intent::EasyEase(EaseSide::Both) },
+    Binding { key: KeySpec::Char('e'), cmd: true, shift: true, alt: true, intent: Intent::EasyEase(EaseSide::In) },
+    Binding { key: KeySpec::Char('e'), cmd: false, shift: true, alt: true, intent: Intent::EasyEase(EaseSide::Out) },
     // ⌘K は切る(NLE)。枠の設定は ⌥⌘K(AE の ⌘K は取られている)。
     Binding { key: KeySpec::Char('k'), cmd: true, shift: false, alt: true, intent: Intent::CompositionSettings },
     Binding { key: KeySpec::ArrowLeft, cmd: false, shift: false, alt: true, intent: Intent::Nudge(-1.0, 0.0) },

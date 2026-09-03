@@ -1159,7 +1159,10 @@ impl Widget for TimelineWidget {
                         }
                         _ => self.drag.as_ref().expect("同上").orig.start as f64 / self.fps,
                     };
-                    let snapped = (self.snapped_delta(moving, raw) * self.fps).round() / self.fps;
+                    // ⌘ を添えると吸い付きを切る(再生位置と同じ手)。
+                    let free = p.mods.intersects(Modifiers::META | Modifiers::SUPER);
+                    let landed = if free { raw } else { self.snapped_delta(moving, raw) };
+                    let snapped = (landed * self.fps).round() / self.fps;
                     if let Some(drag) = &mut self.drag {
                         drag.delta_sec = snapped;
                     }
@@ -1245,7 +1248,7 @@ impl Widget for TimelineWidget {
                     if let (Some(selection), Some(mirror)) =
                         (self.selection.as_ref(), self.selected_mirror.as_mut())
                     {
-                        if p.mods.intersects(Modifiers::META | Modifiers::SUPER) {
+                        if p.mods.intersects(Modifiers::META | Modifiers::SUPER) || p.mods.contains(Modifiers::SHIFT) {
                             if let Some(l) = layer {
                                 selection.toggle(l);
                             }
@@ -1269,12 +1272,13 @@ impl Widget for TimelineWidget {
                             Some((a, b)) => {
                                 let xa = (a - self.scroll_sec) * self.pps;
                                 let xb = (b - self.scroll_sec) * self.pps;
-                                if (x - xa).abs() <= EDGE_GRAB_PX {
+                                // ⌥ は常に Slip の宣言(AE)。端でも trim に食わせない。
+                                if p.mods.contains(Modifiers::ALT) {
+                                    DragMode::Slip
+                                } else if (x - xa).abs() <= EDGE_GRAB_PX {
                                     DragMode::TrimStart
                                 } else if (x - xb).abs() <= EDGE_GRAB_PX {
                                     DragMode::TrimEnd
-                                } else if p.mods.contains(Modifiers::ALT) {
-                                    DragMode::Slip
                                 } else {
                                     DragMode::Move
                                 }

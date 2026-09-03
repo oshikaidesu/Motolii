@@ -997,7 +997,7 @@ impl Widget for StageWidget {
                 drop(doc);
                 match hit {
                     Some((_, layer)) => {
-                        if p.mods.intersects(Modifiers::META | Modifiers::SUPER) {
+                        if p.mods.intersects(Modifiers::META | Modifiers::SUPER) || p.mods.contains(Modifiers::SHIFT) {
                             self.selection.toggle(layer);
                             self.selected_mirror.set(self.selection.get());
                             return;

@@ -23,7 +23,7 @@
 - ☐ K12 Cmd+←/→ = 印跳びは macOS の予約鍵(裁定 489 の preset 待ち)
 - ✗ K13 複数選択で Enter が先頭だけ — Finder も 1 つずつ。一括の名前付けは別の手
 - ✗ K14 Delete と Backspace 同義(害が小さい)
-- ☐ K15 F9 は OS が食う(案内)
+- ☑ K15 F9 の代替 ⌘⌥E 一族、効かなければ "Select keyframes first"
 - ☑ K16 menu に加速鍵の表記
 - ☑ K17 forget_modifiers が欄を開くたび走る
 - ☐ K18 auto-repeat の加速
@@ -327,14 +327,14 @@
 ## 第 6 波 E: AE 10 年の再点検
 - ☐ E1 P/S/R/T/A の単打で属性の行を絞る(U の同族)、UU
 - ☐ E2 J/K で前後のキーへ、I/O で層の頭/尻へ
-- ☐ E3 ⌘⇧D で分割(⌘K は切る手のまま、枠は ⌥⌘K)
+- ☑ E3 ⌘⇧D で分割(⌘K は切る手のまま、枠は ⌥⌘K)
 - ☐ E4 Y の pan-behind = Stage でアンカーを掴む(ST5)
 - ☐ E5 ◆ の ⌥ が AE と逆(停止時計を別に置き、◇/◆ は今の 1 つだけ)
 - ☐ E6 数値 drag の ⇧=10x ⌘=0.1x
-- ☐ E7 ⇧+click が帯と Stage で効かない(キーと囲いは効く)
-- ☐ E8 帯とキーの drag が ⌘ で吸い付きを切れない(再生位置だけ)
-- ☐ E9 端の ⌥drag が Trim に食われる(⌥ は常に Slip)
-- ☐ E10 F9 の代替鍵(⌘⌥E 一族)と、0 track の時の報せ
+- ☑ E7 ⇧+click が帯と Stage で効かない(キーと囲いは効く)
+- ☑ E8 帯とキーの drag が ⌘ で吸い付きを切れない(再生位置だけ)
+- ☑ E9 端の ⌥drag が Trim に食われる(⌥ は常に Slip)
+- ☑ E10 F9 の代替鍵(⌘⌥E 一族)と、0 track の時の報せ
 - ☐ E11 複数選択の拡縮が主の層だけ(Move は配る)
 - ☐ E12 Pre-compose(時間を持つ入れ物)、shy、Work Area(B/N)、Motion Blur、Frame Blending、Continuously Rasterize — 無い
 - ☐ E13 RAM preview(描画のフレーム cache と緑帯)

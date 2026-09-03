@@ -1007,7 +1007,11 @@ pub fn app() -> Element {
                                 Ok(n) => println!(
                                     "PROBE room=write verdict=applied EasyEase tracks={n}"
                                 ),
-                                Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
+                                Err(e) => {
+                                    // 効かなかった事を黙らない(AE の F9 は必ず何かが起きる)。
+                                    *session.project_notice.lock().unwrap() = "Select keyframes first".to_owned();
+                                    println!("PROBE room=write verdict=apply-error {e}");
+                                }
                             }
                             *revision.write() += 1;
                         }
