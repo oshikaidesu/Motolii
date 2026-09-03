@@ -35,8 +35,9 @@ pub(crate) struct Host {
     /// 別窓が閉じた時に本体へ知らせる線。本体が自分の runtime を包んで置く。
     on_close: std::rc::Rc<std::cell::RefCell<Option<std::rc::Rc<dyn Fn(Panel)>>>>,
     on_focus_lost: std::rc::Rc<std::cell::RefCell<Option<std::rc::Rc<dyn Fn()>>>>,
+    /// 窓ごとに 1 本。別窓で擦って外で放しても、その窓の線が受ける。
     on_primary_pointer_release: std::rc::Rc<
-        std::cell::RefCell<Option<(WindowId, std::rc::Rc<dyn Fn(f64, f64, bool)>)>>,
+        std::cell::RefCell<Vec<(WindowId, std::rc::Rc<dyn Fn(f64, f64, bool)>)>>,
     >,
     /// 窓を起こす線。窓ごとに1本、自分の runtime を包んで置く。
     /// 状態は全窓で1つなので、誰かが書いたら他の窓も描き直す必要がある。
@@ -120,8 +121,9 @@ impl Host {
         window: WindowId,
         callback: impl Fn(f64, f64, bool) + 'static,
     ) {
-        *self.on_primary_pointer_release.borrow_mut() =
-            Some((window, std::rc::Rc::new(callback)));
+        let mut hooks = self.on_primary_pointer_release.borrow_mut();
+        hooks.retain(|(owner, _)| *owner != window);
+        hooks.push((window, std::rc::Rc::new(callback)));
     }
 
     /// 窓の外で放しても届く線。blitz は当たりの無い pointerup を root へ落とし、
@@ -130,8 +132,8 @@ impl Host {
         let callback = self
             .on_primary_pointer_release
             .borrow()
-            .as_ref()
-            .filter(|(owner, _)| *owner == window)
+            .iter()
+            .find(|(owner, _)| *owner == window)
             .map(|(_, callback)| callback.clone());
         if let Some(callback) = callback {
             callback(x, y, outside);

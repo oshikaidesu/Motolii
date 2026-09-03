@@ -227,11 +227,21 @@ pub fn detached() -> Element {
     let host = use_hook(|| consume_context::<crate::ui::host::Host>());
     let panes = panes_for(&ui);
     wire_windows(&host, panes);
-    let reduced_motion = dioxus_core::try_consume_context::<
+    let window = dioxus_core::try_consume_context::<
         std::sync::Arc<dyn dioxus_native::winit::window::Window>,
-    >()
-    .is_some()
-        && tokens::system_prefers_reduced_motion();
+    >();
+    // 別窓で数値を擦って窓の外で放しても、そこで確定する(主窓と同じ線)。
+    use_hook(|| {
+        let Some(window) = window.as_ref() else { return };
+        let scrub_session = session.clone();
+        let waker = host.clone();
+        host.on_primary_pointer_release(window.id(), move |_, _, _| {
+            if crate::ui::inspector::end_scrub(&scrub_session) {
+                waker.wake_all();
+            }
+        });
+    });
+    let reduced_motion = window.is_some() && tokens::system_prefers_reduced_motion();
     let css = tokens::css_root(100, reduced_motion);
     rsx!(
         style { {css} }

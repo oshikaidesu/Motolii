@@ -311,12 +311,16 @@ impl PlaybackController {
 
     pub(super) fn composition_label(&self) -> String {
         let state = self.state.lock().unwrap();
-        let seconds = state.duration.round() as i64;
-        let duration = if seconds >= 60 {
-            format!("{}:{:02}", seconds / 60, seconds % 60)
-        } else {
-            format!("{seconds}s")
-        };
+        let fps = state.timebase.fps.as_f64().max(f64::EPSILON);
+        let frames = (state.duration * fps).round() as i64;
+        let whole = fps.round() as i64;
+        let seconds = frames / whole.max(1);
+        let rest = frames % whole.max(1);
+        // 尺は丸めない。秒に収まらない分はコマで足す(0:20+12f)。
+        let mut duration = format!("{}:{:02}", seconds / 60, seconds % 60);
+        if rest != 0 {
+            duration.push_str(&format!("+{rest}f"));
+        }
         format!("{} · {duration}", state.timebase.fps_label())
     }
 
@@ -421,7 +425,7 @@ mod tests {
 
         assert_eq!(clock.duration(), 10.0);
         assert_eq!(clock.now_sec(), 10.0);
-        assert_eq!(clock.composition_label(), "24fps · 10s");
+        assert_eq!(clock.composition_label(), "24fps · 0:10");
     }
 
     #[test]

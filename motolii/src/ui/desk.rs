@@ -250,6 +250,28 @@ pub(super) fn DeskPanel(
                 {body}
             }
         }
+        div { class: "desk-foot",
+            for (which , label) in DRAWERS.iter().copied() {
+                SemanticButton {
+                    class: if drawer == Some(which) { "chip on" } else { "chip" },
+                    selected: drawer == Some(which),
+                    aria_label: "Open {label}",
+                    onclick: {
+                        let session = session.clone();
+                        move |_| {
+                            // 開いている物を押せば閉じる。焦点で開いた物も同じ手で閉じる。
+                            if drawer == Some(which) {
+                                shut(&session);
+                            } else {
+                                *session.desk.lock().unwrap() = DeskState::Open(which);
+                            }
+                            *revision.write() += 1;
+                        }
+                    },
+                    "{label}"
+                }
+            }
+        }
         div { class: "desk-face",
         span { class: "mname", "{face_name}" }
         div { class: if refs.is_empty() { "desk-refs empty" } else { "desk-refs" },
@@ -276,28 +298,6 @@ pub(super) fn DeskPanel(
                             "×"
                         }
                     }
-                }
-            }
-        }
-        div { class: "desk-foot",
-            for (which , label) in DRAWERS.iter().copied() {
-                SemanticButton {
-                    class: if drawer == Some(which) { "chip on" } else { "chip" },
-                    selected: drawer == Some(which),
-                    aria_label: "Open {label}",
-                    onclick: {
-                        let session = session.clone();
-                        move |_| {
-                            // 開いている物を押せば閉じる。焦点で開いた物も同じ手で閉じる。
-                            if drawer == Some(which) {
-                                shut(&session);
-                            } else {
-                                *session.desk.lock().unwrap() = DeskState::Open(which);
-                            }
-                            *revision.write() += 1;
-                        }
-                    },
-                    "{label}"
                 }
             }
         }

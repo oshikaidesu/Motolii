@@ -415,7 +415,7 @@ fn canonical_layout() -> PanelLayout {
                 LayoutNode::split(
                     "right-col",
                     SplitAxis::Vertical,
-                    0.86,
+                    0.8,
                     LayoutNode::tile("right", ["Inspector"]),
                     LayoutNode::tile("desk", ["Desk"]),
                 ),

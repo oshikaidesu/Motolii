@@ -1515,6 +1515,7 @@ body {
 
 .desk-refs .refi {
     position: relative;
+    min-height: calc(18 * var(--s) * 1px);
 }
 
 .desk-refs .ref {
@@ -1530,8 +1531,9 @@ body {
 
 /* 引き出し。机の中に出て、顔の上を占める。 */
 .desk-drawer {
-    flex: 1 1 auto;
+    flex: 1 1 0px;
     min-height: 0;
+    overflow: hidden;
     display: flex;
     flex-direction: column;
     border-bottom: var(--line) solid var(--dark);
@@ -1554,10 +1556,12 @@ body {
     border-bottom: var(--line) solid var(--dark);
 }
 
+/* 引き出しの札は机の一番上。机が低くても札だけは必ず見える。 */
 .desk-foot {
     flex: 0 0 auto;
     display: flex;
     gap: var(--sp2);
+    padding: var(--sp1) var(--sp4) 0;
     padding-right: calc(44 * var(--s) * 1px);
 }
 

@@ -157,6 +157,30 @@ fn open_time(
         .apply(Intent::SetTrack { layer, property: prop, track })
 }
 
+/// 今の時刻にキーが在れば外し、無ければ今の値で 1 つ立てる。
+fn toggle_key_at(
+    doc: &Arc<Mutex<Document>>,
+    layer: LayerId,
+    property: &str,
+    value: Value,
+    t: RationalTime,
+) -> Result<(), crate::doc::store::StoreError> {
+    let Ok(prop) = PropertyId::new(property) else {
+        return Ok(());
+    };
+    let mut d = doc.lock().unwrap();
+    let here = d
+        .view()
+        .track(layer, &prop)?
+        .is_some_and(|track| track.keys().iter().any(|k| k.t == t));
+    let intents = if here {
+        crate::ui::timeline_widget::keyframe_delete_intents(&d, layer, Some(&prop), t.as_seconds_f64())?
+    } else {
+        vec![d.place(layer, &prop, value, t)]
+    };
+    d.apply_all(intents).map(|_| ())
+}
+
 /// 時間の世界を閉じる。キーを捨てて、**今見えている値だけ**を残す。
 fn close_time(
     doc: &Arc<Mutex<Document>>,
@@ -382,11 +406,13 @@ fn prop_row(
         let value = p.value.clone();
         let doc = doc.clone();
         let keyed = p.keyed;
-        // ◇ は**時間の世界を開け閉めする一手**。開ける時は今の時刻に1つ立て、
-        // 閉じる時はキーを全部捨てて、今の値だけを残す(AE と同じ形)。
-        move |_| {
-            let done = if keyed {
+        // ◇ は今の時刻に 1 つ立てる。◆ は今の時刻のキーだけ外す(AE のナビゲータ)。
+        // Alt+◆ で時間の世界を閉じ、今の値だけを残す(AE のストップウォッチ)。
+        move |evt: MouseEvent| {
+            let done = if keyed && evt.modifiers().alt() {
                 close_time(&doc, layer, &property, value.clone())
+            } else if keyed {
+                toggle_key_at(&doc, layer, &property, value.clone(), t)
             } else {
                 open_time(&doc, layer, &property, value.clone(), t)
             };
@@ -410,7 +436,7 @@ fn prop_row(
             span { class: "n", "{p.label}" }
             {cells}
             if let Some(on_click) = key_click {
-                SemanticButton { class: "{key_class}", selected: p.keyed, aria_label: "Toggle keyframes", onclick: on_click, "{key_glyph}" }
+                SemanticButton { class: "{key_class}", selected: p.keyed, aria_label: if p.keyed { "Remove the keyframe at this time · Alt removes all" } else { "Add a keyframe at this time" }, onclick: on_click, "{key_glyph}" }
             } else {
                 span { class: "{key_class}", "{key_glyph}" }
             }

@@ -22,8 +22,10 @@ use peniko::{Color, Fill};
 const PX_PER_SEC: f64 = 60.0;
 /// 再生位置が視界から出たら追いかける。**止まっている間は追いかけない** ——
 /// 利用者が自分で右へ動かしたのを、その場で引き戻してしまう。
-fn follow_playhead(scroll: f64, visible: f64, playhead: f64, playing: bool) -> Option<f64> {
-    if !playing || visible <= 0.0 {
+/// 止まっていても**跳んだ**時(印へ・Home/End)は見せに行く —— 跳んだ先が視界の外では、
+/// 押した事が起きていないのと同じに見える。
+fn follow_playhead(scroll: f64, visible: f64, playhead: f64, playing: bool, jumped: bool) -> Option<f64> {
+    if !(playing || jumped) || visible <= 0.0 {
         return None;
     }
     let right = scroll + visible;
@@ -267,6 +269,8 @@ pub(super) struct TimelineWidget {
     rows: Vec<CanvasRow>,
     markers: Vec<f64>,
     fps: f64,
+    /// 前の描画の再生位置。跳んだかどうかはこれと比べる。
+    last_playhead: f64,
     pps: f64,
     scroll_sec: f64,
     scroll_y: f64,
@@ -304,6 +308,7 @@ impl TimelineWidget {
             rows,
             markers: Vec::new(),
             fps: 30.0,
+            last_playhead: 0.0,
             pps: PX_PER_SEC,
             scroll_sec: 0.0,
             scroll_y: 0.0,
@@ -1363,10 +1368,12 @@ impl Widget for TimelineWidget {
             .unwrap_or(PLAYHEAD_SEC);
         if self.drag.is_none() && !self.scrubbing {
             let playing = self.clock.as_ref().is_some_and(|c| c.playing());
-            if let Some(to) = follow_playhead(scroll, w / pps, playhead_sec, playing) {
+            let jumped = (playhead_sec - self.last_playhead).abs() > 2.5 / self.fps.max(1.0);
+            if let Some(to) = follow_playhead(scroll, w / pps, playhead_sec, playing, jumped) {
                 self.scroll_sec = to;
             }
         }
+        self.last_playhead = playhead_sec;
         let px = x_of(playhead_sec);
         if (0.0..=w).contains(&px) {
             fill_rect(&mut s, Rect::new(px - hairline * 0.5, 0.0, px + hairline * 0.5, h), c_accent);
@@ -1400,7 +1407,7 @@ mod follow {
             playhead in 0.0f64..600.0,
         ) {
             proptest::prop_assert_eq!(
-                follow_playhead(scroll, visible, playhead, false),
+                follow_playhead(scroll, visible, playhead, false, false),
                 None
             );
         }
@@ -1413,7 +1420,7 @@ mod follow {
         ) {
             let behind = scroll - 1.0;
             proptest::prop_assert!(
-                follow_playhead(scroll, visible, behind, true).is_some(),
+                follow_playhead(scroll, visible, behind, true, false).is_some(),
                 "再生中に置いていかれた"
             );
         }
