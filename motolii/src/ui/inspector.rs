@@ -868,7 +868,7 @@ pub(super) fn inspector_panel(
             )
         })
         .collect();
-    let fx_label = if inspector.has_effects { "" } else { "No shared FX" };
+    let fx_label = if inspector.has_effects { "" } else { "No effects shared by the selection" };
 
     let (parent_label, parent_choices, matte_source_label, matte_choices, matte) = match selection {
         Some(layer) => {
@@ -1007,7 +1007,7 @@ pub(super) fn inspector_panel(
                 span { "Z" }
                 span { class: "k", "Key" }
             }
-            div { class: "sec", "TRANSFORM" }
+            div { class: "sec", "Transform" }
             {transform_rows}
             // 升の並びそのものが意味なので、言葉は置かない(裁定451)。
             if let (Some(layer), Some(size)) = (selection, box_size) {
@@ -1033,7 +1033,7 @@ pub(super) fn inspector_panel(
             }
             div { class: "iscroll",
             if let Some(layer) = selection {
-                div { class: "sec", "BLEND" }
+                div { class: "sec", "Blend" }
                 // 値は文字で選ばない。行を光らせ、机がサムネイルの格子を出す。
                 SemanticButton {
                     class: if blend_focused { "prow focus on" } else { "prow focus" },
@@ -1055,7 +1055,7 @@ pub(super) fn inspector_panel(
                 }
             }
             if let Some(layer) = selection {
-                div { class: "sec", "PARENT" }
+                div { class: "sec", "Parent" }
                 if let Some(action) = parent_action.clone() {
                     LayerChoiceRow {
                         id: ChoiceId::Parent,
@@ -1090,7 +1090,7 @@ pub(super) fn inspector_panel(
                 }
             }
             if selection.is_some() {
-                div { class: "sec", "MATTE" }
+                div { class: "sec", "Matte" }
                 if let Some(action) = matte_source_action.clone() {
                     LayerChoiceRow {
                         id: ChoiceId::MatteSource,
@@ -1106,11 +1106,11 @@ pub(super) fn inspector_panel(
                 }
             }
             if !inspector.text.is_empty() {
-                div { class: "sec", "TEXT" }
+                div { class: "sec", "Text" }
                 {text_rows}
             }
             if !inspector.colors.is_empty() {
-                div { class: "sec", "COLOR" }
+                div { class: "sec", "Color" }
                 for ColorRow { label , hex , slot } in inspector.colors.iter() {
                     SemanticButton {
                         class: if color_focus.as_ref() == Some(slot) { "prow color focus on" } else { "prow color focus" },
@@ -1138,7 +1138,7 @@ pub(super) fn inspector_panel(
                     }
                 }
             }
-            div { class: "sec", "EFFECTS" }
+            div { class: "sec", "Effects" }
             if inspector.effects.is_empty() {
                 div { class: "prow",
                     span { class: "n empty", "{fx_label}" }

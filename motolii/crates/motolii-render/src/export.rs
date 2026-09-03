@@ -21,13 +21,13 @@ pub enum ExportError {
     Media(#[from] MediaError),
     #[error(transparent)]
     Audio(#[from] AudioError),
-    #[error("cannot describe frame: {0}")]
+    #[error("Could not read the frame to export. {0}")]
     Desc(String),
-    #[error("cancelled (partial output removed)")]
+    #[error("Export cancelled. The partial file was removed.")]
     Cancelled,
-    #[error("the document has no composition")]
+    #[error("This document has no composition to export. Create a composition first.")]
     NoComposition,
-    #[error("still export failed: {0}")]
+    #[error("Could not export the still image. {0}")]
     Still(String),
 }
 
@@ -270,7 +270,7 @@ impl TempOutput {
             }
         }
         Err(ExportError::Desc(
-            "could not reserve an export output".to_owned(),
+            "Could not create the export file. Check that the destination folder is writable.".to_owned(),
         ))
     }
 
@@ -355,6 +355,6 @@ fn reserve_audio_temp() -> Result<(std::fs::File, PathBuf), ExportError> {
         }
     }
     Err(ExportError::Desc(
-        "could not reserve an audio export input".to_owned(),
+        "Could not create the temporary audio file. Check free space in the system temporary folder.".to_owned(),
     ))
 }

@@ -65,8 +65,8 @@ pub(super) async fn allow_project_replacement(
     }
     let mut dialog = rfd::AsyncMessageDialog::new()
         .set_level(rfd::MessageLevel::Warning)
-        .set_title("Save changes?")
-        .set_description("This project has changes that are not saved.")
+        .set_title(&format!("Do you want to save the changes you made to {}?", session.document_title()))
+        .set_description("Your changes will be lost if you don't save them.")
         .set_buttons(rfd::MessageButtons::YesNoCancelCustom(
             "Save".to_owned(),
             "Don't Save".to_owned(),

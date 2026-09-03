@@ -101,7 +101,11 @@ pub(super) fn SemanticControl(
     #[props(default)] disabled: bool,
     /// 右端の加速鍵(⌘S)。menu は鍵の名簿でもある(Finder・VS Code)。
     #[props(default)] hint: Option<String>,
+    /// View menu の「出ている / 隠れている」。字の ✓ でなく状態として持つ。
+    #[props(default)] checked: Option<bool>,
+    #[props(default)] aria_label: Option<String>,
 ) -> Element {
+    let selected = selected || checked == Some(true);
     let class = match (secondary, selected) {
         (true, true) => "vout on",
         (true, false) => "vout",
@@ -110,9 +114,14 @@ pub(super) fn SemanticControl(
     };
     rsx!(button {
         class: class,
-        role: "menuitem",
+        role: if checked.is_some() { "menuitemcheckbox" } else { "menuitem" },
+        aria_checked: checked.map(|on| if on { "true" } else { "false" }),
+        aria_label,
         disabled: disabled,
         onclick: move |evt| onclick.call(evt),
+        if let Some(on) = checked {
+            span { class: "vcheck", aria_hidden: "true", if on { "✓" } else { "" } }
+        }
         "{label}"
         if let Some(hint) = hint {
             span { class: "khint", "{hint}" }

@@ -24,10 +24,14 @@ pub(super) fn transport(
     let timecode = clock.format_timecode();
     let composition = clock.composition_label();
     let audio_health = clock.health().visible_label();
+    let layer_word = if layer_count == 1 { "layer" } else { "layers" };
     rsx!(
         div { class: "ptools",
-            button {
-                id: "play",
+            SemanticButton {
+                class: "play",
+                selected: playing(),
+                aria_label: if playing() { "Pause" } else { "Play" },
+                title: "Space",
                 onclick: {
                     let clock = clock.clone();
                     move |_| {
@@ -39,7 +43,7 @@ pub(super) fn transport(
             }
             span { class: "tc", "{timecode}" }
             em {
-                "{layer_count} rows · {composition}"
+                "{layer_count} {layer_word} · {composition}"
                 if let Some(label) = audio_health { " · {label}" }
             }
         }
@@ -91,7 +95,8 @@ pub(super) fn timeline_shell(
                 SemanticButton {
                     class: "{class}",
                     selected: lit,
-                    aria_label: match bit { 0 => "Toggle visibility", 1 => "Toggle solo", _ => "Toggle lock" },
+                    aria_label: match bit { 0 => "M · hide layer", 1 => "S · solo layer", _ => "L · lock layer" },
+                    title: match bit { 0 => "Hide layer", 1 => "Solo layer", _ => "Lock layer" },
                     onclick: move |_| {
                         let Some(layer) = layer else { return };
                         let patch = match bit {
@@ -247,7 +252,7 @@ pub(super) fn timeline_shell(
                         let dy = evt.data().delta().strip_units().y;
                         let _ = timeline_tx.send(TimelineMsg::ScrollBy(dy));
                     },
-                    div { class: "lhead", "OBJECT" }
+                    div { class: "lhead", "Layer" }
                     div {
                         style: "transform: translateY(-{scroll_y()}px);",
                         {layer_rows}

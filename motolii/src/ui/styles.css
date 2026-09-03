@@ -27,7 +27,7 @@
 .adot,
 .choice-trigger,
 #stagefoot .chip,
-#play,
+.play,
 .output-cancel,
 .prow .v,
 .zone,
@@ -54,7 +54,7 @@
 .vout:active,
 .glyph:active,
 .ptab:active,
-#play:active,
+.play:active,
 .output-cancel:active {
     transition-duration: var(--motion-direct);
 }
@@ -288,6 +288,8 @@ body {
     font-size: var(--t-dense);
     color: var(--ink3);
     letter-spacing: .08em;
+    text-transform: uppercase;
+    letter-spacing: .08em;
 }
 
 #browser {
@@ -324,6 +326,8 @@ body {
     font-size: var(--t-micro);
     letter-spacing: .11em;
     margin-top: var(--sp2);
+    text-transform: uppercase;
+    letter-spacing: .08em;
 }
 
 .srow {
@@ -674,6 +678,12 @@ body {
     color: var(--ink);
 }
 
+.vcheck {
+    display: inline-block;
+    width: calc(14 * var(--s) * 1px);
+    flex: 0 0 auto;
+}
+
 .vitem:hover:not(:disabled),
 .vout:hover:not(:disabled) {
     background: var(--hover);
@@ -970,6 +980,11 @@ body {
 }
 
 .ptab {
+    appearance: none;
+    -webkit-appearance: none;
+    font: inherit;
+    margin: 0;
+    border: 0;
     display: flex;
     align-items: center;
     padding: 0 var(--sp4);
@@ -1212,7 +1227,7 @@ body {
     font-size: var(--t-base);
 }
 
-#play {
+.play {
     background: var(--raised);
     color: var(--ink);
     border: var(--line) solid var(--bd);
@@ -1221,7 +1236,7 @@ body {
     font-size: var(--t-base);
 }
 
-#play:hover {
+.play:hover {
     background: var(--hover);
 }
 
@@ -1260,6 +1275,8 @@ body {
     font-size: var(--t-dense);
     color: var(--ink3);
     border-bottom: var(--line) solid var(--dark);
+    text-transform: uppercase;
+    letter-spacing: .08em;
 }
 
 .lrow {

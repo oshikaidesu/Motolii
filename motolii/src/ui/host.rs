@@ -388,16 +388,6 @@ fn realise(
 }
 
 impl Windows {
-    /// 書類の名前(title bar・alert)。仕舞っていなければ Untitled。
-    fn document_title(&self) -> String {
-        self.session
-            .project_path
-            .lock()
-            .unwrap()
-            .as_ref()
-            .and_then(|p| p.file_stem().map(|s| s.to_string_lossy().into_owned()))
-            .unwrap_or_else(|| "Untitled".to_owned())
-    }
 
     /// 閉じる時の Save。行き先が無ければ同期の panel で聞く(event の中なので async は使えない)。
     fn save_now(&self) -> bool {
@@ -439,7 +429,7 @@ impl Windows {
         if self.detached.contains_key(&window_id) {
             return;
         }
-        let title = self.document_title();
+        let title = self.session.document_title();
         let dirty = self.session.is_dirty();
         if self.reflected.get(&window_id) == Some(&(title.clone(), dirty)) {
             return;
@@ -672,7 +662,7 @@ impl ApplicationHandler for Windows {
         if matches!(event, WindowEvent::CloseRequested) {
             if !self.detached.contains_key(&window_id) && self.session.is_dirty() {
                 // Mac の書類: Save / Don't Save / Cancel、既定は Save(HIG Alerts、TextEdit と同じ文面)。
-                let name = self.document_title();
+                let name = self.session.document_title();
                 let mut dialog = rfd::MessageDialog::new()
                     .set_level(rfd::MessageLevel::Warning)
                     .set_title(format!("Do you want to save the changes you made to {name}?"))

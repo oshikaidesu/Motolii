@@ -1,6 +1,7 @@
 //! 机 — Document を覗くレンズ。誰にも呼ばれない。
 //! 常設なのは細い顔(書き置き・取っ手・鳥)。引き出しは机の中に出て、その間だけ机が広がる。
 
+const NO_MARKER: &str = "No marker yet";
 use std::sync::{Arc, Mutex};
 
 use dioxus_native::prelude::*;
@@ -151,7 +152,7 @@ pub(super) fn DeskPanel(
 
     let face_name = current
         .map(|i| markers[i].name.clone())
-        .unwrap_or_else(|| "No marker yet".to_owned());
+        .unwrap_or_else(|| NO_MARKER.to_owned());
     let refs = crate::ui::fixture::reference_images_from_view(&session.doc.lock().unwrap().view());
     let note = drawer.filter(|d| *d == Drawer::Text).map(|_| match current {
         Some(i) => {
@@ -210,13 +211,13 @@ pub(super) fn DeskPanel(
                             class: "chip tolayer",
                             aria_label: "Send note to the selected text layer",
                             onclick: move |evt| send(evt),
-                            "To layer"
+                            "Send to layer"
                         }
                     }
                 }
             })
         }
-        None => rsx!(div { class: "desk-note idle", span { class: "mname", "No marker yet" } }),
+        None => rsx!(div { class: "desk-note idle", span { class: "mname", "{NO_MARKER}" } }),
     });
 
     let drawer_body = drawer.map(|drawer| match drawer {
@@ -258,7 +259,7 @@ pub(super) fn DeskPanel(
             for (id , name , uri) in refs.iter() {
                 if let Some(uri) = uri {
                     div { class: "refi",
-                        img { class: "ref", src: "{uri}", alt: "{name}", title: "{name}" }
+                        img { class: "ref", src: "{uri}", alt: "{name}" }
                         SemanticButton {
                             class: "chip refx",
                             aria_label: "Remove {name}",
@@ -347,7 +348,7 @@ fn drawer_body(
             match target {
                 None => rsx!(div { class: "dempty", "No layer yet · select one" }),
                 // 合成は線形光(裁定 498)。AE の既定(ガンマ)とは Multiply / Screen の絵が違う。将来の切替点はここ。
-                Some((layer, current)) => rsx!(div { class: "dnote", "Linear light" } div { class: "blend-grid",
+                Some((layer, current)) => rsx!(div { class: "dnote", "Blend preview · linear light" } div { class: "blend-grid",
                     for (mode , label) in BLEND_MODES.iter().copied() {
                         SemanticButton {
                             class: if mode == current { "blend-cell on" } else { "blend-cell" },

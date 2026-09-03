@@ -1256,7 +1256,7 @@ fn every_panel_can_recreate_the_bottom_after_timeline_is_closed() {
         let tabs = gui.count(".ptab");
         let view = gui.center_of("#menu-view", 0);
         gui.click(view.0, view.1);
-        let timeline = gui.center_of_text("#menu-view-list .vitem", "✓ Timeline");
+        let timeline = gui.center_of_text("#menu-view-list .vitem", "✓Timeline");
         gui.click(timeline.0, timeline.1);
         assert_eq!(gui.count(".ptabs"), zones - 1, "Timeline row did not collapse");
 

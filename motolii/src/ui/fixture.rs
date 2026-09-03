@@ -897,6 +897,7 @@ impl ImportSummary {
     pub(super) fn notice(&self) -> String {
         match (self.admitted, self.total, self.first_failure.as_deref()) {
             (0, 0, _) => String::new(),
+            (1, 1, None) => "Imported 1 file".to_owned(),
             (admitted, total, None) if admitted == total => format!("Imported {admitted} files"),
             (0, _, Some(reason)) => format!("Import failed: {reason}"),
             (admitted, total, Some(reason)) => {

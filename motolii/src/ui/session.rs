@@ -300,6 +300,16 @@ impl Session {
         }
     }
 
+    /// 書類の名前(title bar・alert)。仕舞っていなければ Untitled。
+    pub(super) fn document_title(&self) -> String {
+        self.project_path
+            .lock()
+            .unwrap()
+            .as_ref()
+            .and_then(|p| p.file_stem().map(|s| s.to_string_lossy().into_owned()))
+            .unwrap_or_else(|| "Untitled".to_owned())
+    }
+
     pub(super) fn is_dirty(&self) -> bool {
         let current = self.doc.lock().unwrap().revision();
         current != *self.saved_revision.lock().unwrap()

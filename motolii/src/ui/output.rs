@@ -256,18 +256,25 @@ pub(super) fn OutputStatus(
         .as_ref()
         .map(|path| path.display().to_string())
         .unwrap_or_default();
+    let file_name = status
+        .destination
+        .as_ref()
+        .and_then(|path| path.file_name())
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_default();
     let text = match status.phase {
         ExportPhase::Idle if surface == OutputSurface::Panel => "Ready to export".to_owned(),
         ExportPhase::Idle => String::new(),
-        ExportPhase::Preparing => format!("Preparing {destination}"),
+        ExportPhase::Preparing => format!("Preparing export · {file_name}"),
         ExportPhase::Running => format!(
-            "Exporting {} / {} to {destination}",
+            "Exporting {} / {} · {file_name}",
             status.frames_done, status.frames_total
         ),
-        ExportPhase::Cancelling => format!("Cancelling {destination}"),
-        ExportPhase::Completed => format!("Wrote {destination}"),
-        ExportPhase::Cancelled => format!("Cancelled {destination}"),
-        ExportPhase::Failed => format!("Export failed: {}", status.detail),
+        ExportPhase::Cancelling => "Cancelling export…".to_owned(),
+        ExportPhase::Completed if surface == OutputSurface::Panel => format!("Export finished · {destination}"),
+        ExportPhase::Completed => format!("Export finished · {file_name}"),
+        ExportPhase::Cancelled => format!("Export cancelled · {file_name}"),
+        ExportPhase::Failed => format!("Export failed · {}", status.detail),
     };
     let class = if surface == OutputSurface::Panel {
         "output-status panel"
@@ -277,7 +284,7 @@ pub(super) fn OutputStatus(
 
     rsx!(
         if !text.is_empty() {
-            div { class: class,
+            div { class: class, role: "status", aria_live: "polite",
                 span { "{text}" }
                 if status.phase == ExportPhase::Running {
                     button {

@@ -325,7 +325,7 @@ fn StagePanel(
                 SemanticButton {
                     class: if rings_on() { "chip on" } else { "chip" },
                     selected: rings_on(),
-                    aria_label: "Toggle 3D handles",
+                    aria_label: "3D handles",
                     onclick: move |_| {
                         let next = !rings_on();
                         rings.store(next, std::sync::atomic::Ordering::Relaxed);
@@ -363,21 +363,21 @@ fn SettingsSheet(session: Session, scale_pct: Signal<u32>) -> Element {
 
     rsx!(
         div { class: "settings-sheet",
-            div { class: "sec", "VIEW" }
+            div { class: "sec", "View" }
             div { class: "prow",
                 span { class: "pname", "Outside dim" }
-                div { class: "zoomctl",
+                div { class: "zoomctl", role: "group", aria_label: "Outside dim",
                     SemanticButton { class: "zbtn", aria_label: "Decrease outside dim", onclick: move |_| dim_step(dim_a.clone(), pct, -5), "−" }
-                    span { class: "zval", "{pct()}%" }
+                    span { class: "zval", role: "status", "{pct()}%" }
                     SemanticButton { class: "zbtn", aria_label: "Increase outside dim", onclick: move |_| dim_step(dim_b.clone(), pct, 5), "+" }
                 }
             }
-            div { class: "sec", "WINDOW" }
+            div { class: "sec", "Window" }
             div { class: "prow",
                 span { class: "pname", "Scale" }
-                div { class: "zoomctl",
+                div { class: "zoomctl", role: "group", aria_label: "Interface scale",
                     SemanticButton { class: "zbtn", aria_label: "Decrease interface scale", onclick: move |_| scale_step(ui_a.clone(), scale_pct, -5), "−" }
-                    span { class: "zval", "{scale_pct()}%" }
+                    span { class: "zval", role: "status", "{scale_pct()}%" }
                     SemanticButton { class: "zbtn", aria_label: "Increase interface scale", onclick: move |_| scale_step(ui_b.clone(), scale_pct, 5), "+" }
                 }
             }
@@ -559,9 +559,10 @@ fn dock_zone(
             },
             div { class: "ptabs",
                 for panel in panels.iter().copied() {
-                    span {
+                    button {
                         id: "dock-tab-{panel}",
-                        aria_label: "{panel} panel tab",
+                        role: "tab",
+                        aria_selected: if d.is_active(panel) { "true" } else { "false" },
                         class: match gesture.filter(|drag| drag.panel == panel) {
                             Some(drag) if drag.dragging() => "ptab held",
                             Some(_) => "ptab pressed",
@@ -1611,8 +1612,8 @@ pub fn app() -> Element {
                             for panel in Panel::all() {
                                 div { class: "vrow",
                                     SemanticControl {
-                                        label: if d.is_visible(panel) { format!("✓ {panel}") } else { format!("  {panel}") },
-                                        selected: d.is_visible(panel),
+                                        label: "{panel}",
+                                        checked: d.is_visible(panel),
                                         onclick: move |evt: Event<MouseData>| {
                                             evt.stop_propagation();
                                             dock.write().toggle(panel);
@@ -1621,6 +1622,7 @@ pub fn app() -> Element {
                                     }
                                     SemanticControl {
                                         label: "Window",
+                                        aria_label: "Open {panel} in a new window",
                                         selected: d.is_detached(panel),
                                         secondary: true,
                                         disabled: d.is_detached(panel),
@@ -1665,7 +1667,7 @@ pub fn app() -> Element {
 
             // 出した事は**今いる場所**に返す。Output パネルの中だけだと、
             // Stage を見ている人には起きていない事と同じになる。
-            div { id: "status",
+            div { id: "status", role: "status", aria_live: "polite",
                 span { "{status_line}" }
                 OutputStatus { controller: session.export.clone(), surface: OutputSurface::StatusBar, generation: output_generation }
             }

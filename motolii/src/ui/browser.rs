@@ -251,7 +251,7 @@ fn new_layer_intents(
                         track.insert(ContentKeyframe {
                             t: RationalTime::try_from_frame(playhead, fps)
                                 .unwrap_or(RationalTime::ZERO),
-                            content: "テキスト".to_owned(),
+                            content: "Text".to_owned(),
                         });
                         track
                     },
@@ -618,7 +618,7 @@ pub(super) fn browser_panel(
                     rsx!(
                         div { class: "bwork",
                             div { class: "bside",
-                                div { class: "sh", "COLORS" }
+                                div { class: "sh", "Colors" }
                                 div { class: "srow on", "Used in this composition" }
                             }
                             div { class: "bresults",
@@ -626,18 +626,18 @@ pub(super) fn browser_panel(
                                     div {
                                         b { "Colors" }
                                         span { class: "sub",
-                                            if layer.is_some() { "Click to apply to the selected layer" } else { "Select a layer first" }
+                                            if layer.is_some() { "Choose a color to apply it to the selected layer" } else { "Select a layer to apply a color" }
                                         }
                                     }
                                 }
                                 match wheel_slot(session) {
                                     Some(slot) => rsx!(ColorWheel { session: session.clone(), slot, revision }),
-                                    None => rsx!(div { class: "rcount", "No color yet · select a layer" }),
+                                    None => rsx!(div { class: "rcount", "No color yet · select a layer to edit one" }),
                                 }
                                 if has_swatches {
                                     div { class: "tgrid", {cards} }
                                 } else {
-                                    div { class: "rcount", "No colors yet" }
+                                    div { class: "rcount", "No colors yet · select a layer to apply one" }
                                 }
                             }
                         }
@@ -671,14 +671,14 @@ pub(super) fn browser_panel(
                                     span { style: "color:#fff; font-size:20px;", "ƒ" }
                                 }
                                 span { class: "tname", "{plugin_id}" }
-                                span { class: "tmeta", if is_on { "attached" } else { "effect" } }
+                                span { class: "tmeta", if is_on { "Attached" } else { "Effect" } }
                             }
                         )
                     });
                     rsx!(
                         div { class: "bwork",
                             div { class: "bside",
-                                div { class: "sh", "EFFECTS" }
+                                div { class: "sh", "Effects" }
                                 div { class: "srow on", "All" }
                             }
                             div { class: "bresults",
@@ -686,7 +686,7 @@ pub(super) fn browser_panel(
                                     div {
                                         b { "Effects" }
                                         span { class: "sub",
-                                            if layer.is_some() { "Click to add to the selected layer" } else { "Select a layer first" }
+                                            if layer.is_some() { "Choose an effect to add it to the selected layer" } else { "Select a layer to add an effect" }
                                         }
                                     }
                                 }
@@ -706,14 +706,14 @@ pub(super) fn browser_panel(
                     .unwrap_or(0);
                 rsx!(div { class: "bwork",
                     div { class: "bside",
-                        div { class: "sh", "CREATE" }
+                        div { class: "sh", "Create" }
                         div { class: "srow on", "All" }
                     }
                     div { class: "bresults",
                         div { class: "rhead",
                             div {
                                 b { "Create" }
-                                span { class: "sub", "Adds a layer or applies a Mask to the selection" }
+                                span { class: "sub", "Add a layer, or apply a mask to the selection" }
                             }
                         }
                         div { class: "tgrid",
@@ -784,7 +784,7 @@ pub(super) fn browser_panel(
             } else {
                 div { class: "bwork",
                     div { class: "bside",
-                        div { class: "sh", "LIBRARY" }
+                        div { class: "sh", "Library" }
                         SemanticButton {
                             class: "{rail_class(None)}",
                             selected: rail().is_none(),
