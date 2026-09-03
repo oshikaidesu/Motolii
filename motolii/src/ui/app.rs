@@ -733,13 +733,7 @@ pub fn app() -> Element {
                     {
                         evt.prevent_default();
                         evt.stop_propagation();
-                        let mut desk = session.desk.lock().unwrap();
-                        let was = match *desk {
-                            crate::ui::session::DeskState::Open(d) => Some(d),
-                            _ => None,
-                        };
-                        *desk = crate::ui::session::DeskState::Shut(was);
-                        drop(desk);
+                        *session.desk.lock().unwrap() = crate::ui::session::DeskState::Shut;
                         *revision.write() += 1;
                         return;
                     }

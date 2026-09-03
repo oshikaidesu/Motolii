@@ -357,6 +357,9 @@ fn realise(
     let proxy = app.proxy.clone();
     let mut view = View::init(config, event_loop, &proxy);
     let winit_window = std::sync::Arc::clone(&view.window);
+    if view.window.title() == "Motolii" {
+        crate::ui::window_frame::nudge_onto_screen(&*view.window, event_loop);
+    }
     let renderer = view.renderer.clone();
     let window_id = view.window_id();
     let doc = view.downcast_doc_mut::<DioxusDocument>();
@@ -519,7 +522,22 @@ impl ApplicationHandler for Windows {
         window_id: WindowId,
         event: WindowEvent,
     ) {
+        // Blitz は hover node が無い瞬間を `set_cursor(None)` として shell へ渡し、
+        // shell は None を「既定」ではなく `set_cursor_visible(false)` にしている。
+        // custom widget(Stage/Timeline)の空所や再layout直後でこれが起きるため、
+        // Motolii 内を指しているnative eventの最後に可視性を必ず取り戻す。
+        // このappは CSS cursor:none を使わないので、意図的な非表示との競合は無い。
+        let restore_cursor = matches!(
+            &event,
+            WindowEvent::PointerMoved { .. }
+                | WindowEvent::PointerEntered { .. }
+                | WindowEvent::Focused(true)
+        );
         if self.session.quit.load(std::sync::atomic::Ordering::Relaxed) {
+            // ⌘Q でも枠を憶える(閉じるボタンだけだった)。主窓 = 別窓に登録されていない窓。
+            if let Some(view) = self.inner.windows.iter().find(|(id, _)| !self.detached.contains_key(id)).map(|(_, v)| v) {
+                save_window_frame(&*view.window);
+            }
             event_loop.exit();
             return;
         }
@@ -689,6 +707,9 @@ impl ApplicationHandler for Windows {
         }
         self.inner.window_event(event_loop, window_id, event);
         if let Some(view) = self.inner.windows.get_mut(&window_id) {
+            if restore_cursor {
+                view.window.set_cursor_visible(true);
+            }
             place_ime(view);
         }
         self.reflect_document(window_id);

@@ -3,7 +3,7 @@
 
 const NO_MARKER: &str = "No marker yet";
 
-/// Blend の札に載せる色。層の塗り(shape の最初の solid fill)、無ければ accent。
+/// Blend の札に載せる色。層の最初の塗り(gradientなら始端)、無ければ accent。
 fn blend_tint(session: &Session, layer: crate::doc::store::LayerId) -> [f32; 3] {
     let d = session.doc.lock().unwrap();
     let view = d.view();
@@ -14,8 +14,17 @@ fn blend_tint(session: &Session, layer: crate::doc::store::LayerId) -> [f32; 3] 
         }
     }
     let shapes = view.shapes(layer).unwrap_or_default();
-    match crate::ui::fixture::first_solid_fill(&shapes, Vec::new()) {
-        Some((_, rgb)) => [rgb.r as f32, rgb.g as f32, rgb.b as f32],
+    match crate::ui::fixture::first_shape_fill(&shapes, Vec::new()) {
+        Some((_, crate::doc::vector::Brush::Solid(rgb))) => [rgb.r as f32, rgb.g as f32, rgb.b as f32],
+        Some((_, crate::doc::vector::Brush::Gradient(gradient))) => gradient
+            .stops
+            .iter()
+            .min_by(|a, b| a.offset.total_cmp(&b.offset))
+            .map(|stop| [stop.color.r as f32, stop.color.g as f32, stop.color.b as f32])
+            .unwrap_or_else(|| {
+                let a = crate::ui::tokens::ACCENT;
+                [a[0] as f32 / 255.0, a[1] as f32 / 255.0, a[2] as f32 / 255.0]
+            }),
         None => {
             let a = crate::ui::tokens::ACCENT;
             [a[0] as f32 / 255.0, a[1] as f32 / 255.0, a[2] as f32 / 255.0]
@@ -66,15 +75,14 @@ pub(super) fn drawer_of(session: &Session) -> Option<Drawer> {
         DeskState::Open(drawer) => Some(drawer),
         DeskState::Follow => derived,
         // 手で閉じた引き出しは、手で開けるまで開かない(選択を変えただけで勝手に戻らない)。
-        DeskState::Shut(_) => None,
+        DeskState::Shut => None,
     }
 }
 
 /// 手で閉じる。焦点も手放す。
 fn shut(session: &Session) {
     *session.focus.lock().unwrap() = None;
-    let derived = derived(session);
-    *session.desk.lock().unwrap() = DeskState::Shut(derived);
+    *session.desk.lock().unwrap() = DeskState::Shut;
 }
 
 /// 机が見せる書き置き。開けている欄が在ればその印(再生が進んでも欄は逃げない)、

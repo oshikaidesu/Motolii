@@ -228,7 +228,7 @@ pub(super) fn timeline_shell(
                                     }
                                     Key::Character(c) if c == " " => {
                                         evt.stop_propagation();
-                                        if evt.modifiers().intersects(Modifiers::META | Modifiers::SUPER) {
+                                        if evt.modifiers().intersects(Modifiers::META | Modifiers::SUPER | Modifiers::SHIFT) {
                                             selection.toggle(l);
                                         } else {
                                             selection.set(Some(l));
@@ -241,7 +241,7 @@ pub(super) fn timeline_shell(
                         },
                         onclick: move |evt| {
                             let Some(l) = layer else { return };
-                            if evt.modifiers().intersects(Modifiers::META | Modifiers::SUPER) {
+                            if evt.modifiers().intersects(Modifiers::META | Modifiers::SUPER | Modifiers::SHIFT) {
                                 selection.toggle(l);
                             } else {
                                 selection.set(Some(l));

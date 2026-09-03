@@ -417,20 +417,17 @@ pub(super) struct ColorRow {
     pub slot: ColorSlot,
 }
 
-/// 木の中で最初に単色で塗っている葉と、そこへの道。
-pub(super) fn first_solid_fill(
+/// 木の中で最初に塗りを持つ葉と、そこへの道。Inspector/Deskは同じ塗りを見る。
+pub(super) fn first_shape_fill(
     nodes: &[ShapeNode],
     path: Vec<usize>,
-) -> Option<(Vec<usize>, crate::doc::vector::Rgb)> {
+) -> Option<(Vec<usize>, crate::doc::vector::Brush)> {
     nodes.iter().enumerate().find_map(|(i, node)| {
         let mut here = path.clone();
         here.push(i);
         match node {
-            ShapeNode::Leaf(shape) => match shape.fill.as_ref().map(|f| &f.brush) {
-                Some(crate::doc::vector::Brush::Solid(rgb)) => Some((here, *rgb)),
-                _ => None,
-            },
-            ShapeNode::Group(group) => first_solid_fill(&group.children, here),
+            ShapeNode::Leaf(shape) => shape.fill.as_ref().map(|fill| (here, fill.brush.clone())),
+            ShapeNode::Group(group) => first_shape_fill(&group.children, here),
         }
     })
 }
@@ -460,17 +457,19 @@ fn shape_fill_colors(
     match node {
         ShapeNode::Leaf(shape) => {
             if let Some(fill) = &shape.fill {
-                if let crate::doc::vector::Brush::Solid(rgb) = &fill.brush {
-                    push_swatch(
-                        seen,
-                        out,
-                        [
-                            (rgb.r * 255.0).round() as u8,
-                            (rgb.g * 255.0).round() as u8,
-                            (rgb.b * 255.0).round() as u8,
-                            255,
-                        ],
-                    );
+                let colors: Vec<_> = match &fill.brush {
+                    crate::doc::vector::Brush::Solid(rgb) => vec![*rgb],
+                    crate::doc::vector::Brush::Gradient(gradient) => {
+                        gradient.stops.iter().map(|stop| stop.color).collect()
+                    }
+                };
+                for rgb in colors {
+                    push_swatch(seen, out, [
+                        (rgb.r * 255.0).round() as u8,
+                        (rgb.g * 255.0).round() as u8,
+                        (rgb.b * 255.0).round() as u8,
+                        255,
+                    ]);
                 }
             }
         }
@@ -833,8 +832,24 @@ pub(super) fn inspector_data_from_doc(
         }
         Some(LayerSource::Shape) => {
             if let Ok(shapes) = view.shapes(layer) {
-                if let Some((path, rgb)) = first_solid_fill(&shapes, Vec::new()) {
-                    colors.push(row("Fill", [rgb.r, rgb.g, rgb.b, 1.0], ColorSlot::ShapeFill { layer, path }));
+                if let Some((path, brush)) = first_shape_fill(&shapes, Vec::new()) {
+                    match brush {
+                        crate::doc::vector::Brush::Solid(rgb) => {
+                            colors.push(row("Color", [rgb.r, rgb.g, rgb.b, 1.0], ColorSlot::ShapeFill { layer, path }));
+                        }
+                        crate::doc::vector::Brush::Gradient(gradient) => {
+                            let start = gradient.stops.iter()
+                                .min_by(|a, b| a.offset.total_cmp(&b.offset))
+                                .map(|stop| stop.color)
+                                .unwrap_or(crate::doc::vector::Rgb::BLACK);
+                            let end = gradient.stops.iter()
+                                .max_by(|a, b| a.offset.total_cmp(&b.offset))
+                                .map(|stop| stop.color)
+                                .unwrap_or(start);
+                            colors.push(row("Start", [start.r, start.g, start.b, 1.0], ColorSlot::ShapeGradientStop { layer, path: path.clone(), end: false }));
+                            colors.push(row("End", [end.r, end.g, end.b, 1.0], ColorSlot::ShapeGradientStop { layer, path, end: true }));
+                        }
+                    }
                 }
             }
         }
@@ -1143,6 +1158,17 @@ fn admit_draft(
 #[cfg(test)]
 mod library {
     use super::*;
+
+    /// 29.97 は "29.970fps"、秒は as_f64 で割る(num() の 30000 を出していた)。
+    #[test]
+    fn comp_line_shows_fractional_fps_and_real_seconds() {
+        let mut doc = load_fixture().doc;
+        let comp = doc.view().composition().unwrap().unwrap();
+        let fps = crate::doc::store::Fps::try_new(30000, 1001).unwrap();
+        doc.apply(crate::doc::store::Intent::SetComposition(crate::doc::store::Composition { fps, duration_frames: 2997, ..comp })).unwrap();
+        let line = comp_line(&doc.view());
+        assert!(line.ends_with("29.970fps · 1:40"), "{line}");
+    }
 
     #[test]
     fn folders_expand_and_duplicates_are_counted_not_dropped() {

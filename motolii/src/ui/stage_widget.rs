@@ -187,7 +187,8 @@ pub(super) struct StageWidget {
     dirty: std::cell::Cell<bool>,
     /// 前の paint で登録した画像の id。その frame が出た後(次の paint の頭)で外す。
     /// 同じ paint の中で外すと、まだ出ていない scene が「空の image」を指して落ちる。
-    stale: Vec<ResourceId>,
+    /// 外す予定の id と、外して良くなる frame。vello は描いた frame の後にも参照する事があるので 2 frame 待つ。
+    retired: Vec<(u64, ResourceId)>,
     /// 最後に描いた時の revision。同じなら描き直さない。
     seen_revision: std::cell::Cell<u32>,
     /// 最後に描いた時刻。別窓の Stage は event も revision も来ないので、時刻で描き直す。
@@ -254,7 +255,7 @@ impl StageWidget {
             cursor: None,
             hover: None,
             dirty: std::cell::Cell::new(true),
-            stale: Vec::new(),
+            retired: Vec::new(),
             seen_revision: std::cell::Cell::new(u32::MAX),
             seen_time: std::cell::Cell::new(None),
             output_only,
@@ -881,7 +882,7 @@ impl Widget for StageWidget {
                 self.state = State::Active(Box::new(Active { engine, displayed: None, next: None, wide: None }));
                 // renderer が作り直された(起動時に 2 回来る)。前の renderer の id を持つ scene を
                 // そのまま出させない —— 次の frame は必ず描き直す。古い id はもう無効なので捨てる。
-                self.stale.clear();
+                self.retired.clear();
                 self.frames = 0;
                 self.dirty.set(true);
             }
@@ -892,7 +893,7 @@ impl Widget for StageWidget {
     fn destroy_surfaces(&mut self) {
         println!("PROBE room=stage verdict=destroy-surfaces");
         self.state = State::Suspended;
-        self.stale.clear();
+        self.retired.clear();
         self.dirty.set(true);
     }
 
@@ -993,7 +994,10 @@ impl Widget for StageWidget {
                         println!(
                             "PROBE room=input verdict=gizmo-hit mode={mode:?} at=({lx:.0},{ly:.0})                              box=({bx:.0},{by:.0},{bw:.0},{bh:.0}) depth=({dx:.0},{dy:.0}) tol={tol:.0}"
                         );
-                        if let (Some(mode), false) = (mode, self.is_locked(layer)) {
+                        // 枠・回転・奥行きの取っ手は常にギズモが勝つ。
+                        // 面の Move はまだ確定しない。手前の別層が重なっていれば、
+                        // そちらを選べない「透明な板」になってしまうため、描画順 hit-test へ渡す。
+                        if let (Some(mode), false) = (mode.filter(|mode| *mode != GizmoMode::Move), self.is_locked(layer)) {
                             self.gesture.begin();
                             self.drag = Some(GizmoDrag {
                                 layer,
@@ -1023,9 +1027,11 @@ impl Widget for StageWidget {
                 let mut hit: Option<(i16, LayerId)> = None;
                 for layer in &layers {
                     let Some(geom) = selection_geom_resolved(&active.engine, &view, &layers, layer.id, rt) else { continue };
-                    let (bx, by, bw, bh) = geom.box_;
-                    let (lx, ly) = rotate_around(geom.position, -geom.rotation, (cx, cy));
-                    if lx < bx || lx > bx + bw || ly < by || ly > by + bh {
+                    // 見えている台形で判定する。comp の長方形で判定すると、3D 傾斜時に
+                    // 空所が層に当たり、絵そのものは当たらない。
+                    let (u, v) = plane_map(&self.fit, &geom)
+                        .to_uv(p.element.x as f64, p.element.y as f64);
+                    if !u.is_finite() || !v.is_finite() || !(0.0..=1.0).contains(&u) || !(0.0..=1.0).contains(&v) {
                         continue;
                     }
                     let order = layer.placement.order;
@@ -1046,11 +1052,19 @@ impl Widget for StageWidget {
                         self.selected_mirror.set(self.selection.get());
                         // 選んだその手で動かせる(押し直しをさせない — Figma・CapCut・AE 全部そう)。
                         if let (Some(geom), false) = (self.selection_geom(layer), self.is_locked(layer)) {
+                            let map = plane_map(&self.fit, &geom);
+                            let (u, v) = map.to_uv(p.element.x as f64, p.element.y as f64);
+                            if !u.is_finite() || !v.is_finite() {
+                                return;
+                            }
+                            let (bx, by, bw, bh) = geom.box_;
+                            let local = (bx + u * bw, by + v * bh);
+                            let grab = rotate_around(geom.position, geom.rotation, local);
                             self.gesture.begin();
                             self.drag = Some(GizmoDrag {
                                 layer,
                                 mode: GizmoMode::Move,
-                                grab: (cx, cy),
+                                grab,
                                 orig_position: geom.position,
                                 orig_rotation: geom.rotation,
                                 orig_rotation_xy: self.rotation_xy(layer),
@@ -1066,6 +1080,10 @@ impl Widget for StageWidget {
                         }
                     }
                     None => {
+                        // 空所を押した時点で選択は終わる。カメラを滑らせても、以前の
+                        // ギズモだけが Stage に貼り付いたままにならない。
+                        self.selection.clear();
+                        self.selected_mirror.set(None);
                         // 枠の縁を掴んだら書き出しカメラ、それ以外は視点。
                         // 錠が掛かっている間は枠を掴めない(誤って掴むのを止める)。
                         self.gesture.begin();
@@ -1127,27 +1145,50 @@ impl Widget for StageWidget {
                     }
                     return;
                 }
-                let (cx, cy) = {
-                    let z = self.drag.as_ref().map(|d| d.fit_z);
-                    let Some(z) = z else { return };
-                    let at = self.fit.at_z(z).to_comp(p.element.x as f64, p.element.y as f64);
-                    let slop = DRAG_SLOP_PIXELS / self.fit.s.max(1e-9);
-                    let Some(drag) = self.drag.as_mut() else { return };
+                let screen = (p.element.x as f64, p.element.y as f64);
+                let at = {
+                    let Some(drag) = self.drag.as_ref() else { return };
+                    // Down と Move を同じ、掴み始めの面へ戻す。`at_z().to_comp()` は
+                    // 傾いた面の homography を失うため、同じ画面点でも別の世界点になっていた。
+                    let geom = SelGeom {
+                        z: drag.fit_z,
+                        rotation_x: drag.orig_rotation_xy.0,
+                        rotation_y: drag.orig_rotation_xy.1,
+                        position: drag.orig_position,
+                        anchor: drag.anchor,
+                        rotation: drag.orig_rotation,
+                        natural: drag.natural,
+                        box_: drag.orig_box,
+                    };
+                    let map = plane_map(&self.fit, &geom);
+                    let (u, v) = map.to_uv(screen.0, screen.1);
+                    if !u.is_finite() || !v.is_finite() {
+                        return;
+                    }
+                    let (bx, by, bw, bh) = drag.orig_box;
+                    let local = (bx + u * bw, by + v * bh);
+                    let at = rotate_around(drag.orig_position, drag.orig_rotation, local);
                     // **押しただけでは動かない。** 指が少し動くまでは掴んだ事にしない
-                    // (押すつもりが値を変える、が起きる)。
+                    // (押すつもりが値を変える、が起きる)。距離は面の傾きと無関係な画面px。
                     if drag.last.is_none() {
-                        let (dx, dy) = (at.0 - drag.grab.0, at.1 - drag.grab.1);
-                        if (dx * dx + dy * dy).sqrt() < slop {
+                        let grab_local =
+                            rotate_around(drag.orig_position, -drag.orig_rotation, drag.grab);
+                        let grab_uv = ((grab_local.0 - bx) / bw, (grab_local.1 - by) / bh);
+                        let grab_screen = map.to_screen(grab_uv.0, grab_uv.1);
+                        let (dx, dy) = (screen.0 - grab_screen.0, screen.1 - grab_screen.1);
+                        if (dx * dx + dy * dy).sqrt() < DRAG_SLOP_PIXELS {
                             return;
                         }
                     }
-                    drag.last = Some(at);
                     at
                 };
+                if let Some(drag) = self.drag.as_mut() {
+                    drag.last = Some(at);
+                }
                 let Some(drag) = self.drag.as_ref() else { return };
                 let shift = p.mods.contains(Modifiers::SHIFT);
                 let alt = p.mods.contains(Modifiers::ALT);
-                let preview = preview_values(drag, (cx, cy), shift, alt, self.fit.s);
+                let preview = preview_values(drag, at, shift, alt, self.fit.s);
                 let mut doc = self.doc.lock().unwrap();
                 for (layer, name, value) in &preview {
                     if let Ok(prop) = PropertyId::new(name) {
@@ -1182,8 +1223,15 @@ impl Widget for StageWidget {
         let mut scene = anyrender::Scene::new();
         self.frames += 1;
         self.dirty.set(false);
-        // 前の frame の画像はもう出た。ここで外す(登録は毎 paint、renderer が作り直されても古い id を指さない)。
-        for old in self.stale.drain(..) {
+        // 登録は texture ごとに 1 回。外すのは、描かなくなってから 2 frame 待ってから
+        // (vello の atlas は前 frame の画像を次の resolve でも触る。描いた直後に外すと「空の image」で落ちる)。
+        let now = self.frames;
+        let (due, keep): (Vec<_>, Vec<_>) = self.retired.drain(..).partition(|(at, _)| now > at + 2);
+        self.retired = keep;
+        for (_, old) in due {
+            if now < 8 {
+                println!("PROBE room=stage verdict=unregister frame={now} id={old:?}");
+            }
             render_ctx.unregister_resource(old);
         }
         self.seen_revision.set(*self.revision.peek());
@@ -1223,7 +1271,7 @@ impl Widget for StageWidget {
 
         if active.next.as_ref().is_some_and(|t| t.texture.width() != cw || t.texture.height() != ch) {
             let handle = active.next.take().unwrap().handle;
-            render_ctx.unregister_resource(handle);
+            self.retired.push((self.frames, handle));
         }
         let tex_and_handle = match &active.next {
             Some(next) => next,
@@ -1237,11 +1285,10 @@ impl Widget for StageWidget {
             }
         };
         let target = tex_and_handle.texture.clone();
-        // この frame の為に登録し直す。前の id は次の paint で外す。
-        let handle = render_ctx
-            .try_register_custom_resource(Box::new(target.clone()))
-            .expect("wgpu backend accepts wgpu textures");
-        self.stale.push(handle);
+        let handle = tex_and_handle.handle;
+        if first {
+            println!("PROBE room=stage verdict=register-target id={handle:?}");
+        }
 
         let rt = self.clock.current_time();
 
@@ -1299,13 +1346,7 @@ impl Widget for StageWidget {
                     camera,
                     false,
                 ) {
-                    Ok(()) => {
-                    let fresh = render_ctx
-                        .try_register_custom_resource(Box::new(wide.texture.clone()))
-                        .expect("wgpu backend accepts wgpu textures");
-                    self.stale.push(fresh);
-                    Some((fresh, k))
-                },
+                    Ok(()) => Some((wide.handle, k)),
                     Err(e) => {
                         println!("PROBE room=stage verdict=wide-render-error {e}");
                         None
@@ -1319,8 +1360,20 @@ impl Widget for StageWidget {
         let primary_layer = self.selection.get();
         let primary_geom =
             primary_layer.and_then(|layer| selection_geom_resolved(&active.engine, &view, &resolved_now, layer, rt));
-        *self.selected_size.lock().unwrap() =
-            primary_geom.as_ref().map(|g| [g.natural.0 as f32, g.natural.1 as f32]);
+        let next_size = primary_geom
+            .as_ref()
+            .map(|g| [g.natural.0 as f32, g.natural.1 as f32]);
+        let size_changed = {
+            let mut selected_size = self.selected_size.lock().unwrap();
+            let changed = *selected_size != next_size;
+            *selected_size = next_size;
+            changed
+        };
+        if size_changed {
+            // Inspector はこの寸法でAnchorの現在地を割合表示する。Mutexだけを書いても
+            // componentは再評価されないので、値が変わった1回だけ起こす。
+            *self.revision.write() += 1;
+        }
         let selected_box = primary_geom;
         let secondary_boxes: Vec<_> = self
             .selection
@@ -1413,8 +1466,17 @@ impl Widget for StageWidget {
             let (wx, wy) = (fx + fw * 0.5, fy + fh * 0.5);
             let (ww, wh) = (fw * k, fh * k);
             let rect = Rect::from_origin_size((wx - ww * 0.5, wy - wh * 0.5), (ww, wh));
+            // wide view と膜は**枠の外だけ**。矩形全体へ敷くと、main texture の透明部を
+            // 通して膜が export frame 内へ残る。偶奇パスで frame を穴にする。
+            let mut outside = peniko::kurbo::BezPath::new();
+            outside.move_to((rect.x0, rect.y0));
+            outside.line_to((rect.x1, rect.y0));
+            outside.line_to((rect.x1, rect.y1));
+            outside.line_to((rect.x0, rect.y1));
+            outside.close_path();
+            outside.extend(frame.elements().iter().copied());
             scene.fill(
-                Fill::NonZero,
+                Fill::EvenOdd,
                 Affine::IDENTITY,
                 PaintRef::Resource(ImageBrush {
                     image: wide_handle,
@@ -1424,10 +1486,10 @@ impl Widget for StageWidget {
                     Affine::translate((wx - ww * 0.5, wy - wh * 0.5))
                         * Affine::scale(s * k),
                 ),
-                &rect,
+                &outside,
             );
             scene.fill(
-                Fill::NonZero,
+                Fill::EvenOdd,
                 Affine::IDENTITY,
                 PaintRef::Solid(Color::from_rgba8(
                     0x1a,
@@ -1437,7 +1499,7 @@ impl Widget for StageWidget {
                         as u8,
                 )),
                 None,
-                &rect,
+                &outside,
             );
         }
 
@@ -1501,15 +1563,22 @@ impl Widget for StageWidget {
                 let stroke = peniko::kurbo::Stroke::new(1.5);
                 let thin = peniko::kurbo::Stroke::new(1.0);
 
-                // アンカー(回転と拡大の支点)
+                // アンカー(回転と拡大の支点)。選択枠と同じ金色の十字だけでは
+                // 中心取っ手に見えるので、Inspector の道色で target として描き分ける。
                 let a = l2s(geom.position.0, geom.position.1);
-                let arm = 6.0;
+                let anchor_color = c(tokens::WAY_INSPECTOR);
+                let outer = peniko::kurbo::Circle::new(a, 7.0);
+                scene.fill(Fill::NonZero, Affine::IDENTITY, PaintRef::Solid(c(tokens::SURFACE_APP)), None, &outer);
+                scene.stroke(&peniko::kurbo::Stroke::new(2.0), Affine::IDENTITY, PaintRef::Solid(anchor_color), None, &outer);
+                let arm = 9.0;
                 for line in [
                     peniko::kurbo::Line::new((a.x - arm, a.y), (a.x + arm, a.y)),
                     peniko::kurbo::Line::new((a.x, a.y - arm), (a.x, a.y + arm)),
                 ] {
-                    scene.stroke(&thin, Affine::IDENTITY, PaintRef::Solid(c(tokens::ACCENT)), None, &line);
+                    scene.stroke(&thin, Affine::IDENTITY, PaintRef::Solid(anchor_color), None, &line);
                 }
+                let center = peniko::kurbo::Circle::new(a, 2.0);
+                scene.fill(Fill::NonZero, Affine::IDENTITY, PaintRef::Solid(c(tokens::INK)), None, &center);
 
                 // 枠
                 let mut outline = peniko::kurbo::BezPath::new();

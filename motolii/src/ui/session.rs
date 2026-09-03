@@ -207,7 +207,7 @@ pub(super) enum DeskState {
     #[default]
     Follow,
     Open(crate::ui::desk::Drawer),
-    Shut(Option<crate::ui::desk::Drawer>),
+    Shut,
 }
 
 /// 焦点の型。机の引き出しは型に一つで、機能名では増やさない。
@@ -241,13 +241,27 @@ pub(super) enum ColorSlot {
     },
     /// ShapeNode の木の中の葉。index の列で指す。
     ShapeFill { layer: LayerId, path: Vec<usize> },
+    /// 2色gradientの端。`end=false` が最小offset、`end=true` が最大offset。
+    /// VecのindexをUIへ漏らさないので、stopの並び順が違う文書でも同じ端を指せる。
+    ShapeGradientStop {
+        layer: LayerId,
+        path: Vec<usize>,
+        end: bool,
+    },
 }
 
 impl ColorSlot {
     pub(super) fn layer(&self) -> LayerId {
         match self {
-            Self::TextFill { layer, .. } | Self::TextStroke { layer, .. } | Self::ShapeFill { layer, .. } => *layer,
+            Self::TextFill { layer, .. }
+            | Self::TextStroke { layer, .. }
+            | Self::ShapeFill { layer, .. }
+            | Self::ShapeGradientStop { layer, .. } => *layer,
         }
+    }
+
+    pub(super) fn is_shape_fill(&self) -> bool {
+        matches!(self, Self::ShapeFill { .. } | Self::ShapeGradientStop { .. })
     }
 }
 

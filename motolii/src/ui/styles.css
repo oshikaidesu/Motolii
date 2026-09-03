@@ -996,6 +996,18 @@ body {
     background: var(--accent);
 }
 
+.aspot.on {
+    border-color: var(--way-inspector);
+    background: color-mix(in srgb, var(--way-inspector) 22%, transparent);
+}
+
+.aspot.on .adot {
+    width: calc(6 * var(--s) * 1px);
+    height: calc(6 * var(--s) * 1px);
+    background: var(--way-inspector);
+    outline: 1px solid var(--ink);
+}
+
 .aspot {
     height: calc(16 * var(--s) * 1px);
     display: flex;
@@ -1128,10 +1140,41 @@ body {
     background: transparent;
 }
 
-.prow .v.swatch {
-    justify-content: flex-start;
-    gap: var(--sp2);
+.prow .v.color-hex {
+    justify-content: center;
     padding: 0 var(--sp2);
+    border: var(--line) solid var(--bd);
+    cursor: text;
+    font-variant-numeric: tabular-nums;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+}
+
+.prow input.v.color-hex {
+    min-width: 0;
+    width: auto;
+    outline: calc(2 * var(--s) * 1px) solid var(--accent);
+    outline-offset: calc(-2 * var(--s) * 1px);
+    font: inherit;
+}
+
+.fill-kinds {
+    grid-column: 2 / -1;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--sp1);
+    min-width: 0;
+}
+
+.fill-kinds .chip {
+    height: calc(var(--row) - 4 * var(--s) * 1px);
+    min-width: 0;
+    border: var(--line) solid var(--bd);
+    background: var(--app);
+}
+
+.fill-kinds .chip.on {
+    border-color: var(--way-inspector);
+    color: var(--ink);
 }
 
 
@@ -1296,9 +1339,9 @@ body {
 }
 
 .glyph.lit {
-    background: var(--accent);
+    background: transparent;
     border-color: var(--accent);
-    color: #1a1a1a;
+    color: var(--accent);
 }
 
 #status {
@@ -1386,7 +1429,7 @@ body {
     cursor: default;
 }
 
-/* 基本トランスフォームより下だけが流れる — 上固定で動線を失わせない */
+/* identity と列見出しだけを固定し、Transform/Anchorを含むproperty bodyは同じ流れ。 */
 .iscroll {
     flex: 1;
     min-height: 0;

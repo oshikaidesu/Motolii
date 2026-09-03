@@ -5,8 +5,8 @@ use std::sync::{Arc, Mutex};
 
 use dioxus_native::prelude::*;
 
-use crate::doc::store::{Document, Intent, ShapeNode, StoreError};
-use crate::doc::vector::{Brush, Fill, Rgb};
+use crate::doc::store::{Document, Intent, LayerId, ShapeNode, StoreError};
+use crate::doc::vector::{Brush, Fill, Gradient, GradientStop, GradientType, PathSource, Point, Rgb};
 use crate::ui::semantic_menu::{Field, SemanticButton};
 use crate::ui::session::{ColorSlot, FieldAt, Focus, OpenField, Session};
 
@@ -34,7 +34,7 @@ pub(super) fn write_alpha(doc: &Arc<Mutex<Document>>, slot: &ColorSlot, alpha: f
     let mut d = doc.lock().unwrap();
     let (layer, style) = match slot {
         ColorSlot::TextFill { layer, style } | ColorSlot::TextStroke { layer, style } => (*layer, *style),
-        ColorSlot::ShapeFill { .. } => return Ok(()),
+        ColorSlot::ShapeFill { .. } | ColorSlot::ShapeGradientStop { .. } => return Ok(()),
     };
     let Some(mut text) = d.view().text_document(layer)? else { return Ok(()) };
     let Some(found) = text.styles.iter_mut().find(|s| s.id == style) else { return Ok(()) };
@@ -102,6 +102,124 @@ fn leaf_mut<'a>(nodes: &'a mut [ShapeNode], path: &[usize]) -> Option<&'a mut cr
     }
 }
 
+fn shape_location(slot: &ColorSlot) -> Option<(LayerId, &[usize])> {
+    match slot {
+        ColorSlot::ShapeFill { layer, path } | ColorSlot::ShapeGradientStop { layer, path, .. } => {
+            Some((*layer, path))
+        }
+        _ => None,
+    }
+}
+
+/// Shapeのlocal boundsを横切る既定軸。Brushの座標もshape-localなので、
+/// layer/親groupのtransformを混ぜない。
+fn gradient_axis(source: &PathSource) -> (Point, Point) {
+    let bounds = match source {
+        PathSource::Rectangle { size } | PathSource::Ellipse { size } => {
+            Some([-size.x * 0.5, -size.y * 0.5, size.x * 0.5, size.y * 0.5])
+        }
+        PathSource::PolyStar { outer_radius, .. } => {
+            let r = outer_radius.abs();
+            Some([-r, -r, r, r])
+        }
+        PathSource::Bezier(path) => {
+            let mut bounds: Option<[f64; 4]> = None;
+            for vertex in path.iter().flat_map(|contour| &contour.vertices) {
+                // Bezier曲線は端点とcontrol pointの凸包内にある。既定軸には十分で、
+                // 曲線を小さく見積もってgradientが途中で終わることもない。
+                for point in [
+                    vertex.point,
+                    Point { x: vertex.point.x + vertex.in_tangent.x, y: vertex.point.y + vertex.in_tangent.y },
+                    Point { x: vertex.point.x + vertex.out_tangent.x, y: vertex.point.y + vertex.out_tangent.y },
+                ] {
+                    bounds = Some(match bounds {
+                        None => [point.x, point.y, point.x, point.y],
+                        Some(b) => [b[0].min(point.x), b[1].min(point.y), b[2].max(point.x), b[3].max(point.y)],
+                    });
+                }
+            }
+            bounds
+        }
+    }
+    .unwrap_or([-50.0, -50.0, 50.0, 50.0]);
+    let [x0, y0, x1, y1] = bounds;
+    if (x1 - x0).abs() > f64::EPSILON {
+        let y = (y0 + y1) * 0.5;
+        (Point { x: x0, y }, Point { x: x1, y })
+    } else {
+        let x = (x0 + x1) * 0.5;
+        (Point { x, y: y0 }, Point { x, y: y1 })
+    }
+}
+
+fn endpoint_color(gradient: &Gradient, end: bool) -> Option<Rgb> {
+    let choose = if end {
+        gradient.stops.iter().max_by(|a, b| a.offset.total_cmp(&b.offset))
+    } else {
+        gradient.stops.iter().min_by(|a, b| a.offset.total_cmp(&b.offset))
+    };
+    choose.map(|stop| stop.color)
+}
+
+fn write_endpoint(gradient: &mut Gradient, end: bool, color: Rgb) {
+    match gradient.stops.len() {
+        0 => gradient.stops.extend([
+            GradientStop { offset: 0.0, color },
+            GradientStop { offset: 1.0, color },
+        ]),
+        1 => {
+            let first = gradient.stops[0].color;
+            gradient.stops[0].offset = 0.0;
+            gradient.stops.push(GradientStop { offset: 1.0, color: first });
+        }
+        _ => {}
+    }
+    let index = if end {
+        gradient.stops.iter().enumerate().max_by(|(_, a), (_, b)| a.offset.total_cmp(&b.offset))
+    } else {
+        gradient.stops.iter().enumerate().min_by(|(_, a), (_, b)| a.offset.total_cmp(&b.offset))
+    }
+    .map(|(index, _)| index);
+    if let Some(index) = index {
+        gradient.stops[index].color = color;
+    }
+}
+
+/// Solid/2色Linear Gradientを切り替える。変換自体もSetShapes 1手なのでUndo可能。
+/// Gradient化では両端を現在色にして、切替だけで作品の見た目を変えない。
+pub(super) fn set_shape_gradient(
+    doc: &Arc<Mutex<Document>>,
+    slot: &ColorSlot,
+    enabled: bool,
+) -> Result<(), StoreError> {
+    let Some((layer, path)) = shape_location(slot) else { return Ok(()) };
+    let mut d = doc.lock().unwrap();
+    let mut shapes = d.view().shapes(layer)?;
+    let Some(shape) = leaf_mut(&mut shapes, path) else { return Ok(()) };
+    let mut fill = shape.fill.take().unwrap_or_default();
+    fill.brush = match (enabled, fill.brush) {
+        (true, Brush::Solid(color)) => {
+            let (start, end) = gradient_axis(&shape.source);
+            Brush::Gradient(Gradient {
+                kind: GradientType::Linear,
+                start,
+                end,
+                stops: vec![
+                    GradientStop { offset: 0.0, color },
+                    GradientStop { offset: 1.0, color },
+                ],
+            })
+        }
+        (true, brush @ Brush::Gradient(_)) => brush,
+        (false, Brush::Gradient(gradient)) => {
+            Brush::Solid(endpoint_color(&gradient, false).unwrap_or(Rgb::BLACK))
+        }
+        (false, brush @ Brush::Solid(_)) => brush,
+    };
+    shape.fill = Some(fill);
+    d.apply(Intent::SetShapes { layer, shapes }).map(|_| ())
+}
+
 /// 今の色。無ければ黒。
 /// `#ff8800` / `ff8800` / `#f80` を読む。読めなければ None(書かない)。
 pub(super) fn parse_hex(text: &str) -> Option<[f64; 3]> {
@@ -135,6 +253,15 @@ pub(super) fn read_color(doc: &Arc<Mutex<Document>>, slot: &ColorSlot) -> Option
                 _ => None,
             }
         }
+        ColorSlot::ShapeGradientStop { layer, path, end } => {
+            let mut shapes = view.shapes(*layer).ok()?;
+            let shape = leaf_mut(&mut shapes, path)?;
+            match shape.fill.as_ref().map(|fill| &fill.brush) {
+                Some(Brush::Gradient(gradient)) => endpoint_color(gradient, *end)
+                    .map(|rgb| [rgb.r, rgb.g, rgb.b, 1.0]),
+                _ => None,
+            }
+        }
     }
 }
 
@@ -152,7 +279,7 @@ fn preview_color(doc: &Arc<Mutex<Document>>, slot: &ColorSlot, [r, g, b]: [f64; 
             crate::doc::store::PropertyId::text_style_stroke_color(*style),
             read_color(doc, slot).map_or(1.0, |c| c[3]),
         ),
-        ColorSlot::ShapeFill { .. } => return,
+        ColorSlot::ShapeFill { .. } | ColorSlot::ShapeGradientStop { .. } => return,
     };
     doc.lock().unwrap().set_transient(layer, property, crate::doc::eval::Value::Color([r, g, b, a]));
 }
@@ -161,7 +288,7 @@ fn clear_preview(doc: &Arc<Mutex<Document>>, slot: &ColorSlot) {
     let (layer, property) = match slot {
         ColorSlot::TextFill { layer, style } => (*layer, crate::doc::store::PropertyId::text_style_fill_color(*style)),
         ColorSlot::TextStroke { layer, style } => (*layer, crate::doc::store::PropertyId::text_style_stroke_color(*style)),
-        ColorSlot::ShapeFill { .. } => return,
+        ColorSlot::ShapeFill { .. } | ColorSlot::ShapeGradientStop { .. } => return,
     };
     doc.lock().unwrap().clear_transient(layer, &property);
 }
@@ -200,6 +327,14 @@ pub(super) fn write_color(
             let mut fill = shape.fill.take().unwrap_or_default();
             fill.brush = Brush::Solid(Rgb { r, g, b });
             shape.fill = Some(Fill { ..fill });
+            Intent::SetShapes { layer: *layer, shapes }
+        }
+        ColorSlot::ShapeGradientStop { layer, path, end } => {
+            let mut shapes = d.view().shapes(*layer)?;
+            let Some(shape) = leaf_mut(&mut shapes, path) else { return Ok(()) };
+            let Some(fill) = shape.fill.as_mut() else { return Ok(()) };
+            let Brush::Gradient(gradient) = &mut fill.brush else { return Ok(()) };
+            write_endpoint(gradient, *end, Rgb { r, g, b });
             Intent::SetShapes { layer: *layer, shapes }
         }
     };
@@ -361,7 +496,7 @@ pub(super) fn ColorWheel(session: Session, slot: ColorSlot, revision: Signal<u32
             }
         }
         // 不透明度。歌詞のフェードは色でもやる(Transform の opacity だけに頼らない)。
-        if !matches!(slot, ColorSlot::ShapeFill { .. }) {
+        if !slot.is_shape_fill() {
             div {
                 class: "alpha-bar",
                 style: "width: {ring}px; background: linear-gradient(to right, transparent, {shown});",
@@ -428,6 +563,51 @@ mod tests {
             let rows = crate::ui::fixture::inspector_data_from_doc(&d.view(), layer, t).colors;
             assert!(rows.iter().any(|r| r.slot == slot && r.hex.starts_with("#4080bf")), "{slot:?} {:?}", rows.iter().map(|r| r.hex.clone()).collect::<Vec<_>>());
         }
+    }
+
+    #[test]
+    fn a_shape_fill_switches_to_two_editable_gradient_ends_without_changing_color() {
+        let loaded = crate::ui::fixture::load_fixture();
+        let session = Session::new(loaded.doc, loaded.duration_sec, loaded.ui);
+        let t = crate::doc::store::RationalTime::ZERO;
+        let (layer, solid) = {
+            let d = session.doc.lock().unwrap();
+            d.view()
+                .layers()
+                .into_iter()
+                .find_map(|layer| {
+                    crate::ui::fixture::inspector_data_from_doc(&d.view(), layer, t)
+                        .colors
+                        .into_iter()
+                        .find(|row| matches!(row.slot, ColorSlot::ShapeFill { .. }))
+                        .map(|row| (layer, row.slot))
+                })
+                .expect("fixture has no solid shape fill")
+        };
+        let original = read_color(&session.doc, &solid).unwrap();
+
+        set_shape_gradient(&session.doc, &solid, true).unwrap();
+        let rows = {
+            let d = session.doc.lock().unwrap();
+            crate::ui::fixture::inspector_data_from_doc(&d.view(), layer, t).colors
+        };
+        assert_eq!(rows.len(), 2);
+        let start = rows.iter().find(|row| matches!(row.slot, ColorSlot::ShapeGradientStop { end: false, .. })).unwrap().slot.clone();
+        let end = rows.iter().find(|row| matches!(row.slot, ColorSlot::ShapeGradientStop { end: true, .. })).unwrap().slot.clone();
+        assert_eq!(read_color(&session.doc, &start), Some(original));
+        assert_eq!(read_color(&session.doc, &end), Some(original));
+
+        write_color(&session.doc, &end, [0.1, 0.2, 0.3]).unwrap();
+        let changed = read_color(&session.doc, &end).unwrap();
+        assert!((changed[0] - 0.1).abs() < 1e-9 && (changed[1] - 0.2).abs() < 1e-9 && (changed[2] - 0.3).abs() < 1e-9);
+
+        set_shape_gradient(&session.doc, &start, false).unwrap();
+        let rows = {
+            let d = session.doc.lock().unwrap();
+            crate::ui::fixture::inspector_data_from_doc(&d.view(), layer, t).colors
+        };
+        assert_eq!(rows.len(), 1);
+        assert!(matches!(rows[0].slot, ColorSlot::ShapeFill { .. }));
     }
 
 

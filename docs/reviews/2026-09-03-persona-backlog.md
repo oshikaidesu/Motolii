@@ -503,7 +503,7 @@
 - ☑ Q2-8 Media を落とすと doc.lock の中で ffprobe(process spawn)
 - ☑ Q2-9 requires_redraw に時刻の項が無い(別窓の Stage が擦りで凍る)、drop 時の stale 未解除
 - ☑ Q2-10 argv の .rrd は macOS の open/Finder では届かない、load の失敗が黙る
-- ☐ Q2-11 窓の枠が display の外へ復元し得る、⌘Q で保存されない、主窓を title で判定
+- ☑ Q2-11 窓の枠が display の外へ復元し得る、⌘Q で保存されない、主窓を title で判定
 - ☑ Q2-12 recents() が UI 糸で exists() を叩き、消えた path を永久に捨てる
 - ☑ Q2-13 Field の use_drop が他人の欄を閉じ得る
 - ☑ Q2-14a wrap_width の既定が canvas 幅 = 全文字層が折り返す
@@ -519,6 +519,6 @@
 - ☐ Q2-14k menu の ↑↓ が mount 順(条件付き項目が末尾)
 - ☑ Q2-14l ⌥⌘K の "˚" 直書き(code_to_char を通っていない)
 - ☑ Q2-14m blur.wgsl の tap 間隔 radius*0.25 固定(大半径で 9 枚に割れる、小半径で素通し)
-- ☐ Q2-14n DeskState::Shut の payload が死にデータ
+- ☑ Q2-14n DeskState::Shut の payload が死にデータ
 - ☑ Q2-14o step_focus_back が is_typing を見ない
-- ☐ Q2-15 試験の穴: 自動保存・argv・window_frame・recents・unpremultiply・blur・content move/delete・text の 3 振る舞い・Choosing・requires_redraw・comp_line・LAST_CONTROL
+- ☐ Q2-15(comp_line・window_frame・unpremultiply・format_duration・歌詞 1 キーは済)試験の穴: 自動保存・argv・window_frame・recents・unpremultiply・blur・content move/delete・text の 3 振る舞い・Choosing・requires_redraw・comp_line・LAST_CONTROL

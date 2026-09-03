@@ -967,6 +967,32 @@ pub(super) fn inspector_panel(
     }
     let inspector = &data;
 
+    // Document のAnchor座標だけでは、箱のどこを指すかを毎回暗算させる。
+    // Document の現在値を箱に対する割合へ直し、9点の現在地と任意位置を同じ表示にする。
+    let anchor_fraction = if chosen.len() == 1 {
+        match (selection, box_size, PropertyId::new(property::ANCHOR).ok()) {
+            (Some(layer), Some([w, h]), Some(anchor_prop))
+                if w.abs() > f32::EPSILON && h.abs() > f32::EPSILON =>
+            {
+                match doc.lock().unwrap().view().value_at(layer, &anchor_prop, t) {
+                    Ok(Some(Value::Vec2([x, y]))) => Some((x / w as f64, y / h as f64)),
+                    _ => Some((0.0, 0.0)),
+                }
+            }
+            _ => None,
+        }
+    } else {
+        None
+    };
+    let anchor_label = anchor_fraction
+        .map(|(x, y)| format!("Anchor · {:.0}% {:.0}%", x * 100.0, y * 100.0))
+        .unwrap_or_else(|| "Anchor".to_owned());
+    let shape_fill_mode = inspector.colors.iter().find_map(|row| match &row.slot {
+        crate::ui::session::ColorSlot::ShapeFill { .. } => Some((row.slot.clone(), false)),
+        crate::ui::session::ColorSlot::ShapeGradientStop { .. } => Some((row.slot.clone(), true)),
+        _ => None,
+    });
+
     // 文字の行のうち、property を持つ物(級数)は数の行。本文だけが文の行。
     let text_rows = inspector.text.iter().map(|p| {
         if p.property.is_some() {
@@ -1133,16 +1159,18 @@ pub(super) fn inspector_panel(
                 span { "Z" }
                 span { class: "k", "Key" }
             }
+            div { class: "iscroll",
             h3 { class: "sec", "Transform" }
             {transform_rows}
             // 升の並びそのものが意味なので、言葉は置かない(裁定451)。
             if let (Some(layer), Some(size)) = (selection, box_size) {
                 div { class: "prow anchor",
-                    span { class: "n", "anchor" }
+                    span { class: "n", "{anchor_label}" }
                     div { class: "anchorgrid",
                         for (fx , fy) in ANCHOR_SPOTS.iter().copied() {
                             SemanticButton {
-                                class: "aspot",
+                                class: if anchor_fraction.is_some_and(|(x, y)| (x - fx).abs() < 1e-6 && (y - fy).abs() < 1e-6) { "aspot on" } else { "aspot" },
+                                selected: anchor_fraction.is_some_and(|(x, y)| (x - fx).abs() < 1e-6 && (y - fy).abs() < 1e-6),
                                 aria_label: "Set anchor {fx} {fy}",
                                 onclick: {
                                     let doc = doc.clone();
@@ -1157,7 +1185,6 @@ pub(super) fn inspector_panel(
                     }
                 }
             }
-            div { class: "iscroll",
             if let Some(layer) = selection {
                 h3 { class: "sec", "Blend" }
                 // 値は文字で選ばない。行を光らせ、机がサムネイルの格子を出す。
@@ -1170,6 +1197,11 @@ pub(super) fn inspector_panel(
                         let asker = session.clone();
                         move |_| {
                             *focus.lock().unwrap() = Some(Focus::Blend(layer));
+                            // 行を明示的に押した手は、以前の × による Shut より新しい。
+                            // Focus だけでは Shut が勝ち続けて一覧が二度と開かない。
+                            *asker.desk.lock().unwrap() = crate::ui::session::DeskState::Open(
+                                crate::ui::desk::Drawer::Blend,
+                            );
                             // COLOR 行と同じ扱い: 応える所(机)を前に出す。
                             asker.ask_panel(crate::ui::dock::Panel::Desk);
                             *revision.write() += 1;
@@ -1234,30 +1266,122 @@ pub(super) fn inspector_panel(
             }
             if !inspector.colors.is_empty() {
                 h3 { class: "sec", "Color" }
-                for ColorRow { label , hex , slot } in inspector.colors.iter() {
-                    SemanticButton {
-                        class: if color_focus.as_ref() == Some(slot) { "prow color focus on" } else { "prow color focus" },
-                        selected: color_focus.as_ref() == Some(slot),
-                        aria_label: "Focus {label} color",
-                        onclick: {
-                            let focus = focus.clone();
-                            let slot = slot.clone();
-                            let asker = session.clone();
-                            move |_| {
-                                *focus.lock().unwrap() = Some(Focus::Color(slot.clone()));
-                                // 押した所と応える所を離さない。輪の居る Colors を前に出す。
-                                asker.ask_panel(crate::ui::dock::Panel::Colors);
-                                *revision.write() += 1;
+                if let Some((slot, is_gradient)) = shape_fill_mode.clone() {
+                    div { class: "prow fill-mode",
+                        span { class: "n", "Fill" }
+                        div { class: "fill-kinds",
+                            button {
+                                class: if is_gradient { "semantic-button chip" } else { "semantic-button chip on" },
+                                aria_pressed: if is_gradient { "false" } else { "true" },
+                                aria_label: "Use solid fill",
+                                onclick: {
+                                    let session = session.clone();
+                                    let focus = focus.clone();
+                                    let slot = slot.clone();
+                                    move |_| {
+                                        if !session.writable(slot.layer()) { return; }
+                                        match crate::ui::color::set_shape_gradient(&session.doc, &slot, false) {
+                                            Ok(()) => {
+                                                *focus.lock().unwrap() = None;
+                                                *revision.write() += 1;
+                                            }
+                                            Err(error) => println!("PROBE room=write verdict=apply-error {error}"),
+                                        }
+                                    }
+                                },
+                                "Solid"
                             }
-                        },
+                            button {
+                                class: if is_gradient { "semantic-button chip on" } else { "semantic-button chip" },
+                                aria_pressed: if is_gradient { "true" } else { "false" },
+                                aria_label: "Use two color gradient fill",
+                                onclick: {
+                                    let session = session.clone();
+                                    let focus = focus.clone();
+                                    let slot = slot.clone();
+                                    move |_| {
+                                        if !session.writable(slot.layer()) { return; }
+                                        match crate::ui::color::set_shape_gradient(&session.doc, &slot, true) {
+                                            Ok(()) => {
+                                                *focus.lock().unwrap() = None;
+                                                *revision.write() += 1;
+                                            }
+                                            Err(error) => println!("PROBE room=write verdict=apply-error {error}"),
+                                        }
+                                    }
+                                },
+                                "Gradient"
+                            }
+                        }
+                    }
+                }
+                for ColorRow { label , hex , slot } in inspector.colors.iter() {
+                    {
+                    let text_color = crate::ui::color::parse_hex(hex)
+                        .map(|[r, g, b]| if 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.55 { "#1a1a1a" } else { "#f2f2f2" })
+                        .unwrap_or("#f2f2f2");
+                    let color_style = format!("background:{hex};color:{text_color};");
+                    rsx!(div {
+                        class: if color_focus.as_ref() == Some(slot) { "prow color focus on" } else { "prow color focus" },
                         span { class: "n", "{label}" }
-                        span { class: "v swatch",
-                            span { class: "dot", style: "background:{hex};" }
-                            "{hex}"
+                        if session.field_at(&FieldAt::Hex(slot.clone())).is_some() {
+                            Field {
+                                label: "Hex color",
+                                session: session.clone(),
+                                class: "v color-hex typing",
+                                style: "{color_style}",
+                                revision,
+                                oncommit: {
+                                    let session = session.clone();
+                                    move |field: OpenField| {
+                                        let FieldAt::Hex(slot) = field.at else { return };
+                                        let Some(rgb) = crate::ui::color::parse_hex(&field.draft) else { return };
+                                        if !session.writable(slot.layer()) { return; }
+                                        match crate::ui::color::write_color(&session.doc, &slot, rgb) {
+                                            Ok(()) => *revision.write() += 1,
+                                            Err(error) => println!("PROBE room=write verdict=apply-error {error}"),
+                                        }
+                                    }
+                                },
+                            }
+                        } else {
+                            button {
+                                class: "semantic-button v color-hex",
+                                style: "{color_style}",
+                                aria_label: "Edit {label} hex color",
+                                onclick: {
+                                    let session = session.clone();
+                                    let focus = focus.clone();
+                                    let slot = slot.clone();
+                                    let hex = hex.clone();
+                                    move |event: MouseEvent| {
+                                        event.stop_propagation();
+                                        *focus.lock().unwrap() = Some(Focus::Color(slot.clone()));
+                                        session.open_field(FieldAt::Hex(slot.clone()), hex.clone());
+                                        *revision.write() += 1;
+                                    }
+                                },
+                                "{hex}"
+                            }
                         }
                         span { class: "v blank", "" }
                         span { class: "v blank", "" }
-                        span { class: "glyph", "◇" }
+                        SemanticButton {
+                            class: "glyph",
+                            aria_label: "Open {label} color picker",
+                            onclick: {
+                                let focus = focus.clone();
+                                let slot = slot.clone();
+                                let asker = session.clone();
+                                move |_| {
+                                    *focus.lock().unwrap() = Some(Focus::Color(slot.clone()));
+                                    asker.ask_panel(crate::ui::dock::Panel::Colors);
+                                    *revision.write() += 1;
+                                }
+                            },
+                            "◇"
+                        }
+                    })
                     }
                 }
             }
