@@ -198,7 +198,7 @@
 - ☑ M3 フォルダを取り込めない
 - ☑ M4 重複が黙って消える(Imported 1 files と出て札は増えない)
 - ☐ M5 札の情報が種別文字列だけ(尺・fps・解像度・容量)
-- ☐ M6 札の絵を描画の最中に作る(ffmpeg 同期 spawn、失敗を永久に憶える)
+- ☑ M6 札の絵は取り込みの糸で先に作る(失敗の記憶と re_video 化は R6)
 - ☐ M7 hover scrub / 下見が無く、押すと即座に層が生まれる
 - ☐ M8 Browser から Stage / Timeline へ引けない
 - ☑ M9 差し替えが Alt+click の隠し技

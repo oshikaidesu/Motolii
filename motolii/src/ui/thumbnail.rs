@@ -18,6 +18,15 @@ fn remembered(path: &str, make: impl FnOnce() -> Option<String>) -> Option<Strin
     fresh
 }
 
+/// 取り込みの糸で先に札を作っておく。描画の最中に decode / ffmpeg を回さない(M6)。
+pub(super) fn warm(path: &str, video: bool) {
+    if video {
+        let _ = video_data_uri(path);
+    } else {
+        let _ = image_data_uri(path);
+    }
+}
+
 pub(super) fn image_data_uri(path: &str) -> Option<String> {
     remembered(path, || {
         let image = image::ImageReader::open(path).ok()?.decode().ok()?;

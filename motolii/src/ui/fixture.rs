@@ -971,7 +971,15 @@ pub(super) fn prepare_paths(paths: &[std::path::PathBuf], role: crate::doc::stor
     expand_folders(paths)
         .iter()
         .map(|path| match prepare_path(path, role) {
-            Ok(draft) => Prepared::Draft(draft),
+            Ok(draft) => {
+                // 札の絵もここ(別の糸)で作る。描画の糸で ffmpeg を待たせない。
+                match asset_family(&draft.asset_type) {
+                    AssetFamily::TwoD => crate::ui::thumbnail::warm(&path.to_string_lossy(), false),
+                    AssetFamily::Video => crate::ui::thumbnail::warm(&path.to_string_lossy(), true),
+                    _ => {}
+                }
+                Prepared::Draft(draft)
+            }
             Err(reason) => {
                 let name = path.file_name().and_then(|name| name.to_str()).unwrap_or("file");
                 Prepared::Failed(format!("{name} — {reason}"))
