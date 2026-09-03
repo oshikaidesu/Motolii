@@ -179,6 +179,10 @@ pub(super) struct Session {
     /// 机の引き出しの開閉。窓をまたいで 1 つ。
     pub desk: Arc<Mutex<DeskState>>,
     pub field: Arc<Mutex<Option<OpenField>>>,
+    /// 数値を擦っている最中。窓の外で放しても、Escape でも、ここから終える。
+    pub scrub: Arc<Mutex<Option<crate::ui::inspector::ValueDrag>>>,
+    /// 面が「この panel を前に出して」と頼む口。app が revision ごとに拾う。
+    pub panel_ask: Arc<Mutex<Option<crate::ui::dock::Panel>>>,
 }
 
 /// 机の引き出し。焦点に付いて行くか、手で開けたか、手で閉じたか。
@@ -277,6 +281,8 @@ impl Session {
             focus: Arc::new(Mutex::new(None)),
             desk: Arc::new(Mutex::new(DeskState::Follow)),
             field: Arc::new(Mutex::new(None)),
+            scrub: Arc::new(Mutex::new(None)),
+            panel_ask: Arc::new(Mutex::new(None)),
             view_camera: Arc::new(Mutex::new(Default::default())),
             rings: Arc::new(std::sync::atomic::AtomicBool::new(true)),
             frame_dim: Arc::new(std::sync::atomic::AtomicU32::new(75)),
@@ -340,6 +346,14 @@ impl Session {
 
     pub(super) fn close_field(&self) -> Option<OpenField> {
         self.field.lock().unwrap().take()
+    }
+
+    pub(super) fn ask_panel(&self, panel: crate::ui::dock::Panel) {
+        *self.panel_ask.lock().unwrap() = Some(panel);
+    }
+
+    pub(super) fn take_panel_ask(&self) -> Option<crate::ui::dock::Panel> {
+        self.panel_ask.lock().unwrap().take()
     }
 
     /// 生きている焦点。選んでいる層を指す物だけ。層が変われば焦点は消えたも同じ。

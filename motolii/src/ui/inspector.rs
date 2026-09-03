@@ -94,7 +94,7 @@ fn nudge(value: &Value, vec2: bool, axis: usize, delta: f64, range: Option<(f64,
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub(super) struct ValueDrag {
     layer: LayerId,
     property: String,
@@ -195,6 +195,22 @@ fn commit_drag(doc: &Arc<Mutex<Document>>, d: &ValueDrag, t: RationalTime) {
     }
 }
 
+/// 擦りを終える。窓の外で放した時も同じ道(host の release から)。
+pub(super) fn end_scrub(session: &Session) -> bool {
+    let Some(d) = session.scrub.lock().unwrap().take() else { return false };
+    commit_drag(&session.doc, &d, session.clock.current_time());
+    true
+}
+
+/// 擦りを取り消す。値は掴む前へ戻り、Undo には何も残らない。
+pub(super) fn cancel_scrub(session: &Session) -> bool {
+    let Some(d) = session.scrub.lock().unwrap().take() else { return false };
+    if let Ok(prop) = PropertyId::new(&d.property) {
+        session.doc.lock().unwrap().clear_transient(d.layer, &prop);
+    }
+    true
+}
+
 fn write_content(
     doc: &Arc<Mutex<Document>>,
     layer: LayerId,
@@ -205,7 +221,16 @@ fn write_content(
     let Some(mut document) = doc.view().text_document(layer)? else {
         return Ok(());
     };
-    document.content.insert(ContentKeyframe { t, content });
+    // 文字は時間を開けていない限り 1 つ。キーが 1 つ以下なら差し替え、2 つ以上なら今の時刻に足す。
+    let keys = document.content.keys();
+    if keys.len() <= 1 {
+        let at = keys.first().map_or(t, |k| k.t);
+        let mut only = crate::doc::store::ContentTrack::new();
+        only.insert(ContentKeyframe { t: at, content });
+        document.content = only;
+    } else {
+        document.content.insert(ContentKeyframe { t, content });
+    }
     doc.apply(Intent::SetTextDocument { layer, document })
 }
 
@@ -214,7 +239,6 @@ fn prop_row(
     layer: LayerId,
     t: RationalTime,
     doc: &Arc<Mutex<Document>>,
-    mut drag: Signal<Option<ValueDrag>>,
     session: &Session,
     mut revision: Signal<u32>,
 ) -> Element {
@@ -259,13 +283,14 @@ fn prop_row(
                 });
             }
             let opener = session.clone();
+            let grabber = session.clone();
             let open = (property.clone(), start_value.clone());
             let cell = c.clone();
             rsx!(span {
                 class: "{class}",
                 onmousedown: move |evt| {
                     let x = evt.data().client_coordinates().x;
-                    *drag.write() = Some(ValueDrag {
+                    *grabber.scrub.lock().unwrap() = Some(ValueDrag {
                         layer,
                         property: property.clone(),
                         vec2,
@@ -277,7 +302,7 @@ fn prop_row(
                     });
                 },
                 ondoubleclick: move |_| {
-                    *drag.write() = None;
+                    *opener.scrub.lock().unwrap() = None;
                     opener.open_field(
                         FieldAt::Number { layer, property: open.0.clone(), axis: i },
                         cell.clone(),
@@ -352,6 +377,7 @@ fn content_row(
                 Field {
                     session: session.clone(),
                     class: "v content",
+                    multiline: true,
                     revision,
                     oncommit: move |f: OpenField| {
                         if f.draft == unchanged {
@@ -689,14 +715,12 @@ pub(super) fn inspector_panel(
     clock: &Clock,
     mut revision: Signal<u32>,
     session: &Session,
-    drag: Signal<Option<ValueDrag>>,
     choice_open: Signal<Option<ChoiceId>>,
     playhead: Signal<f64>,
     selected_size: &Arc<Mutex<Option<[f32; 2]>>>,
     focus: &Arc<Mutex<Option<Focus>>>,
     live_focus: Option<Focus>,
 ) -> Element {
-    let mut drag = drag;
     let blend_focused = matches!(
         (selection, &live_focus),
         (Some(layer), Some(Focus::Blend(at))) if *at == layer
@@ -735,7 +759,7 @@ pub(super) fn inspector_panel(
     let transform_rows = inspector
         .transform
         .iter()
-        .map(|p| prop_row(p, selection.unwrap_or(LayerId(0)), t, doc, drag, session, revision));
+        .map(|p| prop_row(p, selection.unwrap_or(LayerId(0)), t, doc, session, revision));
     let effect_blocks: Vec<_> = inspector
         .effects
         .iter()
@@ -746,7 +770,7 @@ pub(super) fn inspector_panel(
                 block
                     .params
                     .iter()
-                    .map(|p| prop_row(p, selection.unwrap_or(LayerId(0)), t, doc, drag, session, revision))
+                    .map(|p| prop_row(p, selection.unwrap_or(LayerId(0)), t, doc, session, revision))
                     .collect::<Vec<_>>(),
             )
         })
@@ -838,43 +862,37 @@ pub(super) fn inspector_panel(
         }))
     });
 
-    let doc_move = doc.clone();
-    let doc_up = doc.clone();
+    let scrub_move = session.clone();
+    let scrub_up = session.clone();
     rsx!(
         div {
             id: "inspector",
             onmousemove: move |evt| {
                 if evt.data().held_buttons().is_empty() {
-                    if let Some(d) = drag.write().take() {
-                        commit_drag(&doc_move, &d, t);
+                    if end_scrub(&scrub_move) {
                         *revision.write() += 1;
                     }
                     return;
                 }
-                let Some(state) = drag.write().as_mut().map(|d| {
+                let state = scrub_move.scrub.lock().unwrap().as_mut().map(|d| {
                     let x = evt.data().client_coordinates().x;
                     let dx = x - d.start_x;
                     let changed = dx != d.last_dx;
                     d.last_dx = dx;
                     (changed, d.layer, d.property.clone(), d.vec2, d.axis, d.start_value.clone(), d.range, dx)
-                }) else { return };
-                let (changed, layer, property, vec2, axis, start_value, range, dx) = state;
+                });
+                let Some((changed, layer, property, vec2, axis, start_value, range, dx)) = state else { return };
                 if !changed {
                     return;
                 }
                 let new_value = nudge(&start_value, vec2, axis, dx * increment(&property, range), range);
                 if let Ok(prop) = PropertyId::new(&property) {
-                    doc_move.lock().unwrap().set_transient(layer, prop, new_value.clone());
-                    println!(
-                        "PROBE room=write verdict=value-scrub layer={:?} prop={} axis={} dx={:.1} new={:?}",
-                        layer, property, axis, dx, new_value
-                    );
+                    scrub_move.doc.lock().unwrap().set_transient(layer, prop, new_value);
                     *revision.write() += 1;
                 }
             },
             onmouseup: move |_| {
-                if let Some(d) = drag.write().take() {
-                    commit_drag(&doc_up, &d, t);
+                if end_scrub(&scrub_up) {
                     *revision.write() += 1;
                 }
             },
@@ -1000,8 +1018,11 @@ pub(super) fn inspector_panel(
                         onclick: {
                             let focus = focus.clone();
                             let slot = slot.clone();
+                            let asker = session.clone();
                             move |_| {
                                 *focus.lock().unwrap() = Some(Focus::Color(slot.clone()));
+                                // 押した所と応える所を離さない。輪の居る Colors を前に出す。
+                                asker.ask_panel(crate::ui::dock::Panel::Colors);
                                 *revision.write() += 1;
                             }
                         },

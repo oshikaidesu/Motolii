@@ -514,7 +514,7 @@ fn a_file_dropped_on_the_desk_is_a_reference_and_stays_off_the_browser() {
     );
     assert_eq!(summary.admitted, 1, "{}", summary.notice());
     // 引き出しの開閉で顔は動く。chip の座標は押す度に取り直す。
-    let mut chip = |gui: &mut Gui| {
+    let chip = |gui: &mut Gui| {
         let at = gui.center_of_text(".desk-foot .chip", "Text");
         gui.click(at.0, at.1);
     };
@@ -710,6 +710,132 @@ fn dragging_out_of_the_color_wheel_commits_the_pick() {
     gui.release(stage.0, stage.1);
 }
 
+fn first_numeric_cell(gui: &mut Gui) -> (usize, String) {
+    let cells = gui.texts(".prow .v");
+    let idx = cells
+        .iter()
+        .position(|c| c.trim().parse::<f64>().is_ok())
+        .expect("a numeric cell in the inspector");
+    (idx, cells[idx].clone())
+}
+
+/// 数値を擦っている最中の Escape は取り消し。値は掴む前へ戻り、Undo には残らない。
+#[test]
+fn escape_while_scrubbing_restores_the_value() {
+    let mut gui = Gui::open();
+    let (x, y) = gui.center_of(".lsurface", 1);
+    gui.click(x, y);
+    let (idx, shown) = first_numeric_cell(&mut gui);
+    let (cx, cy) = gui.center_of(".prow .v", idx);
+    let before = history_back(&gui);
+    gui.press(cx, cy);
+    gui.motion(cx + 60.0, cy);
+    gui.settle();
+    assert_ne!(gui.texts(".prow .v")[idx], shown, "scrubbing did not move the value");
+    gui.key(keyboard_types::Key::Escape, keyboard_types::Modifiers::empty());
+    gui.release(cx + 60.0, cy);
+    gui.settle();
+    assert_eq!(gui.texts(".prow .v")[idx], shown, "Escape did not restore the value");
+    assert_eq!(history_back(&gui), before, "a cancelled scrub left an undo step");
+    assert!(gui.session.selection.get().is_some(), "Escape dropped the selection instead of the scrub");
+}
+
+/// 擦ったまま窓の外で放しても、そこで確定する(Undo 1 手)。
+#[test]
+fn releasing_a_scrub_outside_the_window_commits_it() {
+    let mut gui = Gui::open();
+    let (x, y) = gui.center_of(".lsurface", 1);
+    gui.click(x, y);
+    let (idx, shown) = first_numeric_cell(&mut gui);
+    let (cx, cy) = gui.center_of(".prow .v", idx);
+    let before = history_back(&gui);
+    gui.press(cx, cy);
+    gui.motion(cx + 60.0, cy);
+    gui.release(-20.0, -20.0);
+    gui.settle();
+    assert_ne!(gui.texts(".prow .v")[idx], shown, "the scrub was lost on an outside release");
+    assert_eq!(history_back(&gui), before + 1);
+    assert!(gui.session.scrub.lock().unwrap().is_none());
+}
+
+/// 文字の本文は複数行で、時間を開けていない限り 1 つの文字を差し替える。
+#[test]
+fn text_content_is_multiline_and_replaces_the_only_keyframe() {
+    let mut gui = Gui::open();
+    let rows = gui.count(".lsurface");
+    let mut layer = None;
+    for i in 1..rows {
+        let (x, y) = gui.center_of(".lsurface", i);
+        gui.click(x, y);
+        if gui.count(".prow.content-row") > 0 {
+            layer = gui.session.selection.get();
+            break;
+        }
+    }
+    let layer = layer.expect("a text layer in the fixture");
+    let keys_before = gui.session.doc.lock().unwrap().view().text_document(layer).unwrap().unwrap().content.keys().len();
+    let (x, y) = gui.center_of(".prow.content-row .v.content", 0);
+    gui.click(x, y);
+    gui.click(x, y);
+    assert_eq!(gui.count("textarea.content"), 1, "the content field is not multiline");
+    type_chars(&mut gui, "ab");
+    gui.key(keyboard_types::Key::Enter, keyboard_types::Modifiers::empty());
+    type_chars(&mut gui, "cd");
+    gui.key(keyboard_types::Key::Enter, keyboard_types::Modifiers::SUPER);
+    assert_eq!(gui.count("textarea"), 0);
+    let text = gui.session.doc.lock().unwrap().view().text_document(layer).unwrap().unwrap();
+    let keys = text.content.keys();
+    assert!(keys.iter().any(|k| k.content.contains("ab\ncd")), "the line break was lost: {:?}", keys.iter().map(|k| k.content.clone()).collect::<Vec<_>>());
+    if keys_before <= 1 {
+        assert_eq!(keys.len(), 1, "typing opened time without asking");
+    }
+}
+
+/// COLOR の行を押したら、輪の居る Colors が前に出る。
+#[test]
+fn focusing_a_color_row_brings_the_colors_panel_forward() {
+    let mut gui = Gui::open();
+    let rows = gui.count(".lsurface");
+    for i in 1..rows {
+        let (x, y) = gui.center_of(".lsurface", i);
+        gui.click(x, y);
+        if gui.count(".prow.color") > 0 {
+            break;
+        }
+    }
+    assert!(!gui.classes("#dock-tab-Colors").iter().any(|c| c.contains("on")));
+    let (x, y) = gui.center_of(".prow.color", 0);
+    gui.click(x, y);
+    assert!(gui.classes("#dock-tab-Colors").iter().any(|c| c.contains("on")), "Colors did not come forward");
+    assert_eq!(gui.count(".color-pick"), 1);
+}
+
+/// Enter で選んだ層の名前が開く。M で印が生まれ、本文を書く場所が開いている。Edit menu に Undo / Redo。
+#[test]
+fn enter_renames_m_marks_and_edit_menu_has_undo() {
+    let mut gui = Gui::open();
+    let (x, y) = gui.center_of(".lsurface", 1);
+    gui.click(x, y);
+    gui.key(keyboard_types::Key::Enter, keyboard_types::Modifiers::empty());
+    assert_eq!(gui.count("input.lsurface"), 1, "Enter did not open the name");
+    gui.key(keyboard_types::Key::Escape, keyboard_types::Modifiers::empty());
+    assert_eq!(gui.count("input"), 0);
+
+    let before = gui.session.doc.lock().unwrap().view().markers().unwrap().len();
+    gui.key(keyboard_types::Key::Character("m".into()), keyboard_types::Modifiers::empty());
+    assert_eq!(gui.session.doc.lock().unwrap().view().markers().unwrap().len(), before + 1, "M did not mark");
+    assert_eq!(gui.count(".desk-note .mbody"), 1, "the note did not open with the marker");
+
+    let edit = gui.center_of("#menu-edit", 0);
+    gui.click(edit.0, edit.1);
+    assert_eq!(gui.count("#menu-edit-list"), 1);
+    assert!(gui.texts("#menu-edit-list .vitem").iter().any(|t| t == "Undo"));
+    let undo = gui.center_of_text("#menu-edit-list .vitem", "Undo");
+    gui.click(undo.0, undo.1);
+    assert_eq!(gui.session.doc.lock().unwrap().view().markers().unwrap().len(), before, "Edit▸Undo did not undo");
+    assert_eq!(gui.count("#menu-edit-list"), 0, "picking Undo left the menu open");
+}
+
 #[test]
 fn menus_are_one_semantic_family() {
     let mut gui = Gui::open();
@@ -812,7 +938,7 @@ fn outside_menu_click_is_consumed_before_the_stage() {
 fn product_chrome_does_not_advertise_unimplemented_controls() {
     let mut gui = Gui::open();
     let menubar = gui.texts("#menubar").join(" ");
-    for dead in ["Edit", "Layer", "Effect", "Help"] {
+    for dead in ["Layer", "Effect", "Help"] {
         assert!(
             !menubar.contains(dead),
             "dead menu is still visible: {dead}"

@@ -5,6 +5,7 @@ use crate::ui::session::{OpenField, Session};
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum MenuId {
     File,
+    Edit,
     View,
     Settings,
 }
@@ -28,6 +29,7 @@ impl MenuId {
     fn slug(self) -> &'static str {
         match self {
             Self::File => "file",
+            Self::Edit => "edit",
             Self::View => "view",
             Self::Settings => "settings",
         }

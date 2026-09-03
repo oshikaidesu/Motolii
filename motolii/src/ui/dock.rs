@@ -4,6 +4,7 @@ use std::fmt;
 use dioxus_workbench::{
     DockZone, LayoutNode, PanelId, PanelLayout, PanelPlacement, SplitAxis, SplitId, TileId,
 };
+use dioxus_dnd::prelude::{transition, GestureEffect, GestureEvent, GesturePhase, Point};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Serialize, Deserialize)]
@@ -293,6 +294,79 @@ impl Dock {
         self.layout.valid()
             && self.projected_layout().valid()
             && !Panel::all().any(|panel| self.is_visible(panel) && self.is_detached(panel))
+    }
+}
+
+/// tab を掴んでから放すまで。相(押した・引いている)と効果(tap・drop・cancel)は dioxus-dnd の物。
+pub(super) const TAB_DRAG_THRESHOLD: f64 = 6.0;
+
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub(super) struct TabDrag {
+    pub(super) panel: Panel,
+    pub(super) phase: GesturePhase,
+    pub(super) cursor: Point,
+}
+
+impl TabDrag {
+    pub(super) fn pressed(panel: Panel, x: f64, y: f64, pointer_id: i32) -> Self {
+        let at = Point::new(x, y);
+        let (phase, _) = transition(
+            GesturePhase::Idle,
+            GestureEvent::Down { at, pointer_id },
+            TAB_DRAG_THRESHOLD,
+        );
+        Self { panel, phase, cursor: at }
+    }
+
+    pub(super) fn move_to(mut self, x: f64, y: f64, pointer_id: i32) -> (Self, GestureEffect) {
+        let at = Point::new(x, y);
+        let (phase, effect) = transition(
+            self.phase,
+            GestureEvent::Move { at, pointer_id },
+            TAB_DRAG_THRESHOLD,
+        );
+        self.phase = phase;
+        self.cursor = at;
+        (self, effect)
+    }
+
+    pub(super) fn release(mut self, x: f64, y: f64, pointer_id: i32) -> (Self, GestureEffect) {
+        let at = Point::new(x, y);
+        let (phase, _) = transition(
+            self.phase,
+            GestureEvent::Move { at, pointer_id },
+            TAB_DRAG_THRESHOLD,
+        );
+        let (phase, effect) = transition(
+            phase,
+            GestureEvent::Up { at, pointer_id },
+            TAB_DRAG_THRESHOLD,
+        );
+        self.phase = phase;
+        self.cursor = at;
+        (self, effect)
+    }
+
+    pub(super) fn cancel(mut self) -> (Self, GestureEffect) {
+        let (phase, effect) = transition(
+            self.phase,
+            GestureEvent::Cancel,
+            TAB_DRAG_THRESHOLD,
+        );
+        self.phase = phase;
+        (self, effect)
+    }
+
+    pub(super) fn dragging(self) -> bool {
+        matches!(self.phase, GesturePhase::Dragging { .. })
+    }
+
+    pub(super) fn pointer_id(self) -> i32 {
+        match self.phase {
+            GesturePhase::Pressed { pointer_id, .. }
+            | GesturePhase::Dragging { pointer_id, .. } => pointer_id,
+            GesturePhase::Idle => 0,
+        }
     }
 }
 

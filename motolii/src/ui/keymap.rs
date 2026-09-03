@@ -34,6 +34,10 @@ pub(super) enum Intent {
     Ungroup,
     /// 選んだ区間へイージングを当てる。AE の F9 一族。
     EasyEase(EaseSide),
+    /// 仕舞う。Cmd+S。
+    Save,
+    /// 選んだ層の名前を開く。Enter(AE・Finder)。
+    Rename,
 }
 
 /// 区間のどちら側を寝かせるか。
@@ -64,6 +68,7 @@ enum KeySpec {
     Escape,
     Delete,
     F9,
+    Enter,
 }
 
 struct Binding {
@@ -299,6 +304,28 @@ const BINDINGS: &[Binding] = &[
         alt: false,
         intent: Intent::SelectStep(1),
     },
+    Binding {
+        key: KeySpec::Char('s'),
+        cmd: true,
+        shift: false,
+        alt: false,
+        intent: Intent::Save,
+    },
+    Binding {
+        key: KeySpec::Enter,
+        cmd: false,
+        shift: false,
+        alt: false,
+        intent: Intent::Rename,
+    },
+    // マーカーは NLE の M でも打てる(AE のテンキー `*` と並べる)。
+    Binding {
+        key: KeySpec::Char('m'),
+        cmd: false,
+        shift: false,
+        alt: false,
+        intent: Intent::ToggleMarker,
+    },
 ];
 
 pub(super) fn lookup(key: &Key, cmd: bool, shift: bool, alt: bool) -> Option<Intent> {
@@ -313,6 +340,7 @@ pub(super) fn lookup(key: &Key, cmd: bool, shift: bool, alt: bool) -> Option<Int
         Key::ArrowDown => KeySpec::ArrowDown,
         Key::Delete | Key::Backspace => KeySpec::Delete,
         Key::F9 => KeySpec::F9,
+        Key::Enter => KeySpec::Enter,
         _ => return None,
     };
     BINDINGS

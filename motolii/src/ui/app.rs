@@ -1,10 +1,10 @@
 use dioxus_native::prelude::*;
 use dioxus_native::CustomWidgetAttr;
-use dioxus_dnd::prelude::{transition, GestureEffect, GestureEvent, GesturePhase, Point};
+use dioxus_dnd::prelude::GestureEffect;
 use dioxus_workbench::{LayoutNode, SplitAxis, SplitId, TileId};
 
 use crate::ui::browser::browser_panel;
-use crate::ui::dock::{splitter_delta, Dock, Panel, Side};
+use crate::ui::dock::{splitter_delta, Dock, Panel, Side, TabDrag};
 use crate::ui::inspector::{inspector_panel, ChoiceDismiss, ChoiceId};
 use crate::ui::keymap::Intent;
 use crate::ui::output::{OutputStatus, OutputSurface};
@@ -36,78 +36,6 @@ struct GripDrag {
     start: f64,
     extent: f64,
     start_ratio: f64,
-}
-
-const TAB_DRAG_THRESHOLD: f64 = 6.0;
-
-#[derive(Clone, Copy, PartialEq, Debug)]
-struct TabDrag {
-    panel: Panel,
-    phase: GesturePhase,
-    cursor: Point,
-}
-
-impl TabDrag {
-    fn pressed(panel: Panel, x: f64, y: f64, pointer_id: i32) -> Self {
-        let at = Point::new(x, y);
-        let (phase, _) = transition(
-            GesturePhase::Idle,
-            GestureEvent::Down { at, pointer_id },
-            TAB_DRAG_THRESHOLD,
-        );
-        Self { panel, phase, cursor: at }
-    }
-
-    fn move_to(mut self, x: f64, y: f64, pointer_id: i32) -> (Self, GestureEffect) {
-        let at = Point::new(x, y);
-        let (phase, effect) = transition(
-            self.phase,
-            GestureEvent::Move { at, pointer_id },
-            TAB_DRAG_THRESHOLD,
-        );
-        self.phase = phase;
-        self.cursor = at;
-        (self, effect)
-    }
-
-    fn release(mut self, x: f64, y: f64, pointer_id: i32) -> (Self, GestureEffect) {
-        let at = Point::new(x, y);
-        let (phase, _) = transition(
-            self.phase,
-            GestureEvent::Move { at, pointer_id },
-            TAB_DRAG_THRESHOLD,
-        );
-        let (phase, effect) = transition(
-            phase,
-            GestureEvent::Up { at, pointer_id },
-            TAB_DRAG_THRESHOLD,
-        );
-        self.phase = phase;
-        self.cursor = at;
-        (self, effect)
-    }
-
-    fn cancel(mut self) -> (Self, GestureEffect) {
-        let (phase, effect) = transition(
-            self.phase,
-            GestureEvent::Cancel,
-            TAB_DRAG_THRESHOLD,
-        );
-        self.phase = phase;
-        (self, effect)
-    }
-
-    fn dragging(self) -> bool {
-        matches!(self.phase, GesturePhase::Dragging { .. })
-    }
-
-    fn pointer_id(self) -> i32 {
-        match self.phase {
-            GesturePhase::Pressed { pointer_id, .. }
-            | GesturePhase::Dragging { pointer_id, .. } => pointer_id,
-            GesturePhase::Idle => 0,
-        }
-    }
 }
 
 fn take_tab_release(
@@ -348,14 +276,12 @@ fn InspectorPanel(
     playhead: Signal<f64>,
     choice_open: Signal<Option<ChoiceId>>,
 ) -> Element {
-    let drag = use_signal(|| None);
     inspector_panel(
         &session.doc,
         selected,
         &session.clock,
         revision,
         &session,
-        drag,
         choice_open,
         playhead,
         &session.selected_size,
@@ -935,10 +861,15 @@ pub fn app() -> Element {
         let scope = dioxus_core::current_scope_id();
         let tile_nodes = tile_nodes.clone();
         let dock_host = host.clone();
+        let scrub_session = session.clone();
         host.on_primary_pointer_release(window_id, move |x, y, outside| {
             runtime.in_scope(scope, || {
                 finish_tab_release(dock, tab_drag, &tile_nodes, &dock_host, x, y, None, outside);
             });
+            // 数値を擦ったまま窓の外で放しても、そこで確定する。
+            if crate::ui::inspector::end_scrub(&scrub_session) {
+                dock_host.wake_all();
+            }
         });
     });
     use_hook(|| {
@@ -960,6 +891,16 @@ pub fn app() -> Element {
         });
     });
     let panes = panes_for(&loaded);
+    // 面からの「この panel を前に出して」。revision の度に拾う(Inspector の COLOR 行 → Colors)。
+    {
+        let asker = session.clone();
+        use_effect(move || {
+            let _ = (panes.revision)();
+            if let Some(panel) = asker.take_panel_ask() {
+                dock.write().set_active(panel);
+            }
+        });
+    }
     let output_generation = (panes.echo)();
     let project_notice = session.project_notice.lock().unwrap().clone();
     let status_line = match (project_notice.is_empty(), session.is_dirty()) {
@@ -1072,8 +1013,9 @@ pub fn app() -> Element {
                 let mut layer_rows = layer_rows;
                 let mut attrs_state = attrs_state;
                 let mut revision = revision;
+                let poke = host.poker();
+                let session = session.clone();
                 move |evt| {
-                    println!("PROBE room=input verdict=keydown key={:?}", evt.key());
                     if evt.key() == Key::Escape && tab_drag.peek().is_some() {
                         evt.prevent_default();
                         evt.stop_propagation();
@@ -1091,7 +1033,6 @@ pub fn app() -> Element {
                     crate::ui::keymap::note_key_down(&evt.key());
                     // 打っているかは窓が DOM で決める(`aim_keystrokes`)。flag は欄より長生きする。
                     if crate::ui::keymap::is_typing() || session.field().is_some() {
-                        println!("PROBE room=input verdict=text-editing key={:?}", evt.key());
                         return;
                     }
                     let modifiers = evt.modifiers();
@@ -1103,10 +1044,8 @@ pub fn app() -> Element {
                         modifiers.shift(),
                         modifiers.alt(),
                     ) else {
-                        println!("PROBE room=input verdict=no-binding key={:?}", evt.key());
                         return;
                     };
-                    println!("PROBE room=input verdict=intent key={:?}", evt.key());
                     evt.prevent_default();
                     match intent {
                         Intent::Split => {
@@ -1281,6 +1220,11 @@ pub fn app() -> Element {
                             if applied {
                                 let secs = markers.iter().map(|m| m.time.as_seconds_f64()).collect();
                                 let _ = timeline_tx.send(TimelineMsg::SetMarkers(secs));
+                                // 印を打ったら、その本文を書く場所が開いている(押し直しをさせない)。
+                                if hit.is_none() {
+                                    *session.desk.lock().unwrap() =
+                                        crate::ui::session::DeskState::Open(crate::ui::desk::Drawer::Text);
+                                }
                                 *revision.write() += 1;
                             }
                         }
@@ -1306,7 +1250,7 @@ pub fn app() -> Element {
                         Intent::Deselect => {
                             // 掴んでいる間の `Esc` は**取り消し**。掴んでいない時だけ
                             // 選択を解く(規格が MUST で求める pointercancel の役)。
-                            if session.gesture.cancel() {
+                            if crate::ui::inspector::cancel_scrub(&session) || session.gesture.cancel() {
                                 *revision.write() += 1;
                             } else {
                                 selection.set(None);
@@ -1321,6 +1265,27 @@ pub fn app() -> Element {
                         Intent::Undo | Intent::Redo => {
                             let steps = if matches!(intent, Intent::Undo) { -1 } else { 1 };
                             history_step(&doc, layer_rows, attrs_state, &timeline_tx, revision, steps);
+                        }
+                        Intent::Save => {
+                            let session = session.clone();
+                            let poke = poke.clone();
+                            dioxus_core::spawn(async move {
+                                let _ = put_away(session, poke, false).await;
+                            });
+                        }
+                        Intent::Rename => {
+                            let Some(layer) = selection.get() else { return };
+                            let name = doc
+                                .lock()
+                                .unwrap()
+                                .view()
+                                .attrs(layer)
+                                .ok()
+                                .flatten()
+                                .map(|a| a.name)
+                                .unwrap_or_default();
+                            session.open_field(crate::ui::session::FieldAt::Name(layer), name);
+                            *revision.write() += 1;
                         }
                         Intent::DeleteLayer => {
                             let targets = selection.all();
@@ -1645,6 +1610,27 @@ pub fn app() -> Element {
                                                     println!("PROBE room=export verdict=start-error {error}");
                                                 }
                                             });
+                                        }
+                                    }
+                                }
+                            }
+                }
+                SemanticMenu {
+                    id: MenuId::Edit,
+                    label: "Edit",
+                    open: open_menu,
+                            for (label , steps) in [("Undo", -1i32), ("Redo", 1i32)] {
+                                div { class: "vrow",
+                                    SemanticControl {
+                                        label: label,
+                                        onclick: {
+                                            let doc = doc.clone();
+                                            let timeline_tx = timeline_tx.clone();
+                                            move |evt: Event<MouseData>| {
+                                                evt.stop_propagation();
+                                                open_menu.set(None);
+                                                history_step(&doc, layer_rows, attrs_state, &timeline_tx, revision, steps);
+                                            }
                                         }
                                     }
                                 }

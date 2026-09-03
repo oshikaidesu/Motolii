@@ -101,6 +101,34 @@ pub(super) fn read_color(doc: &Arc<Mutex<Document>>, slot: &ColorSlot) -> Option
     }
 }
 
+/// 掴んでいる間の下見。文字の色は property を持つので transient で Stage に出る。
+/// shape の塗りは data だけなので、放した時の 1 回まで待つ。
+fn preview_color(doc: &Arc<Mutex<Document>>, slot: &ColorSlot, [r, g, b]: [f64; 3]) {
+    let (layer, property, a) = match slot {
+        ColorSlot::TextFill { layer, style } => (
+            *layer,
+            crate::doc::store::PropertyId::text_style_fill_color(*style),
+            read_color(doc, slot).map_or(1.0, |c| c[3]),
+        ),
+        ColorSlot::TextStroke { layer, style } => (
+            *layer,
+            crate::doc::store::PropertyId::text_style_stroke_color(*style),
+            read_color(doc, slot).map_or(1.0, |c| c[3]),
+        ),
+        ColorSlot::ShapeFill { .. } => return,
+    };
+    doc.lock().unwrap().set_transient(layer, property, crate::doc::eval::Value::Color([r, g, b, a]));
+}
+
+fn clear_preview(doc: &Arc<Mutex<Document>>, slot: &ColorSlot) {
+    let (layer, property) = match slot {
+        ColorSlot::TextFill { layer, style } => (*layer, crate::doc::store::PropertyId::text_style_fill_color(*style)),
+        ColorSlot::TextStroke { layer, style } => (*layer, crate::doc::store::PropertyId::text_style_stroke_color(*style)),
+        ColorSlot::ShapeFill { .. } => return,
+    };
+    doc.lock().unwrap().clear_transient(layer, &property);
+}
+
 /// 色を data へ書き戻す。α は触らない。
 pub(super) fn write_color(
     doc: &Arc<Mutex<Document>>,
@@ -157,6 +185,7 @@ pub(super) fn ColorWheel(session: Session, slot: ColorSlot, revision: Signal<u32
         let slot = slot.clone();
         move || {
             let Some((h, s, v)) = draft.write().take() else { return };
+            clear_preview(&session.doc, &slot);
             let rgb = hsv_to_rgb(h, s, v);
             let same = read_color(&session.doc, &slot)
                 .is_some_and(|c| (0..3).all(|i| (c[i] - rgb[i]).abs() < 1e-9));
@@ -169,16 +198,22 @@ pub(super) fn ColorWheel(session: Session, slot: ColorSlot, revision: Signal<u32
             }
         }
     };
-    let mut pick_hue = move |evt: PointerEvent| {
+    let preview_hue = (session.clone(), slot.clone());
+    let pick_hue = move |evt: PointerEvent| {
         let p = evt.data().element_coordinates();
         let deg = (p.y - ring / 2.0).atan2(p.x - ring / 2.0).to_degrees().rem_euclid(360.0);
         draft.set(Some((deg, s, v)));
+        preview_color(&preview_hue.0.doc, &preview_hue.1, hsv_to_rgb(deg, s, v));
+        *revision.write() += 1;
     };
-    let mut pick_sv = move |evt: PointerEvent| {
+    let preview_sv = (session.clone(), slot.clone());
+    let pick_sv = move |evt: PointerEvent| {
         let p = evt.data().element_coordinates();
         let s = (p.x / square).clamp(0.0, 1.0);
         let v = (1.0 - p.y / square).clamp(0.0, 1.0);
         draft.set(Some((h, s, v)));
+        preview_color(&preview_sv.0.doc, &preview_sv.1, hsv_to_rgb(h, s, v));
+        *revision.write() += 1;
     };
     let held = |evt: &PointerEvent| {
         evt.data()
@@ -201,14 +236,20 @@ pub(super) fn ColorWheel(session: Session, slot: ColorSlot, revision: Signal<u32
         div { class: "color-wheel", style: "width: {ring}px; height: {ring}px;",
             div {
                 class: "hue-ring",
-                onpointerdown: pick_hue,
-                onpointermove: move |evt: PointerEvent| if held(&evt) { pick_hue(evt) },
+                onpointerdown: pick_hue.clone(),
+                onpointermove: {
+                    let mut pick = pick_hue.clone();
+                    move |evt: PointerEvent| if held(&evt) { pick(evt) }
+                },
             }
             div {
                 class: "sv-square",
                 style: "left: {inset}px; top: {inset}px; width: {square}px; height: {square}px; background: linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, {hue_hex});",
-                onpointerdown: pick_sv,
-                onpointermove: move |evt: PointerEvent| if held(&evt) { pick_sv(evt) },
+                onpointerdown: pick_sv.clone(),
+                onpointermove: {
+                    let mut pick = pick_sv.clone();
+                    move |evt: PointerEvent| if held(&evt) { pick(evt) }
+                },
             }
             span { class: "color-mark", style: "left: {mx}px; top: {my}px;" }
             span { class: "color-mark", style: "left: {sx}px; top: {sy}px;" }

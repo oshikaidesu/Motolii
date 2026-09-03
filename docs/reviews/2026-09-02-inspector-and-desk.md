@@ -90,3 +90,15 @@ Utility(ANCHOR)は Inspector の Transform 行へ。Output は File▸Export と
 8. 試験の駆動を kittest(rerun 製、AccessKit 駆動)へ委託。Blitz の `accessibility` feature を有効にし、custom widget(Stage・Timeline・Ease)は Motolii が AccessKit node を申告する。画は vello_cpu の golden、振る舞いは kittest
 
 実窓での確認(2026-09-03 午後、computer-use で background 操作): 名前のダブルクリック → 全選択 → 打てば置き換わる、Escape で戻る、外を押して確定、数字の欄に 42 → 42.0、Colors の輪と面で Fill が変わる(Undo 1 手)、`*` でマーカー → 机の Text → 書き置きに改行入りで打って外を押して確定、まで通った。実窓でだけ出た穴 2 つを直した: 全選択が editor の生成前に送られて caret が先頭に残る(host)、Colors の見出しが細く折り返す・書き置きの改行が潰れる(CSS)。未確認: 参考画像の drop(Finder からの drag は background 操作では出来ない)、日本語 IME(raw input では IME を通らない)、tab を窓の外へ出す。気になる観察: Stage の枠が左上に小さく描かれ、ホイールで拡大すると見えなくなる(私の変更の外、要確認)。
+
+## 9. persona の通し(2026-09-03 夕、利用者の進め方: 並列に出して最大公約数を一撃で)
+
+AE 10 年・Premiere/Resolve の編集者・Figma 育ち・初めてのリリックビデオ、の 4 人に code と test を歩かせた。4 人が重なった所を 1 batch で入れた(harness test 6 本、96/96 緑):
+
+- **数値スクラブの終わり方**: Escape で掴む前へ戻る(Undo に残らない、選択も消えない)。面の外・窓の外で放してもそこで確定(host の release 経由)。擦りの持ち主は `Session.scrub`
+- **文字の入口**(初めての人の離脱点): 本文は複数行(Enter は改行、Cmd+Enter で確定)。時間を開けていない限り(キー 1 つ以下)打った文字は差し替えで、勝手にキーが増えない
+- **色の到達と下見**: COLOR 行を押すと Colors が前に出る(`Session.panel_ask`)。文字の色は掴んでいる間 Stage に出る(property の transient)。shape の塗りは data だけなので放した時
+- **指の記憶**: Cmd+S、Enter で名前、M で印。印を打ったら本文を書く場所(Text)が開いている。Edit menu に Undo / Redo
+- 打鍵ごとの `PROBE` 出力を消した
+
+4 人が挙げて**入れていない物**(次の batch): Blend の hover preview と本物のサムネイル(§4、attrs に transient が無く、blitz に mix-blend-mode も無い)、複数選択の Inspector(§1)、Stage の文字を直接ダブルクリックで打つ、書体と級数の欄、J/K/L と I/O、印を掴んで動かす、選んでそのまま動かす(押し直し無し)、履歴の行に操作名。
