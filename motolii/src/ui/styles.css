@@ -1773,3 +1773,10 @@ body {
 .srow.on {
     box-shadow: inset calc(2 * var(--s) * 1px) 0 0 var(--accent);
 }
+
+/* 見出しの副文は 1 行。長ければ切る(折り返すと下の行に重なる)。 */
+.rhead .sub {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}

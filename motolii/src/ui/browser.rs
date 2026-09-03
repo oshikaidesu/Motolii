@@ -677,7 +677,7 @@ pub(super) fn browser_panel(
                                     div {
                                         b { "Colors" }
                                         span { class: "sub",
-                                            if layer.is_some() { "Choose a color to apply it to the selected layer" } else { "Select a layer to apply a color" }
+                                            if layer.is_some() { "Choose a color to apply it" } else { "Select a layer first" }
                                         }
                                     }
                                 }
@@ -737,7 +737,7 @@ pub(super) fn browser_panel(
                                     div {
                                         b { "Effects" }
                                         span { class: "sub",
-                                            if layer.is_some() { "Choose an effect to add it to the selected layer" } else { "Select a layer to add an effect" }
+                                            if layer.is_some() { "Choose an effect to add it" } else { "Select a layer first" }
                                         }
                                     }
                                 }
