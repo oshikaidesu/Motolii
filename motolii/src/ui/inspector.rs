@@ -97,6 +97,8 @@ fn nudge(value: &Value, vec2: bool, axis: usize, delta: f64, range: Option<(f64,
 #[derive(Clone, Debug, PartialEq)]
 pub(super) struct ValueDrag {
     layer: LayerId,
+    /// 一緒に選んでいる層と、それぞれの掴んだ時の値。同じ差分で動く(AE の複数選択)。
+    others: Vec<(LayerId, Value)>,
     property: String,
     vec2: bool,
     axis: usize,
@@ -189,9 +191,16 @@ fn commit_drag(doc: &Arc<Mutex<Document>>, d: &ValueDrag, t: RationalTime) {
     if d.last_dx == 0.0 {
         return;
     }
-    let new_value = nudge(&d.start_value, d.vec2, d.axis, d.last_dx * increment(&d.property, d.range), d.range);
-    if let Err(e) = write_key(doc, d.layer, &d.property, new_value, t) {
-        println!("PROBE room=write verdict=apply-error {e}");
+    let delta = d.last_dx * increment(&d.property, d.range);
+    let targets = std::iter::once((d.layer, d.start_value.clone())).chain(d.others.iter().cloned());
+    for (layer, start) in targets {
+        if let Ok(prop) = PropertyId::new(&d.property) {
+            doc.lock().unwrap().clear_transient(layer, &prop);
+        }
+        let new_value = nudge(&start, d.vec2, d.axis, delta, d.range);
+        if let Err(e) = write_key(doc, layer, &d.property, new_value, t) {
+            println!("PROBE room=write verdict=apply-error {e}");
+        }
     }
 }
 
@@ -206,9 +215,45 @@ pub(super) fn end_scrub(session: &Session) -> bool {
 pub(super) fn cancel_scrub(session: &Session) -> bool {
     let Some(d) = session.scrub.lock().unwrap().take() else { return false };
     if let Ok(prop) = PropertyId::new(&d.property) {
-        session.doc.lock().unwrap().clear_transient(d.layer, &prop);
+        let mut doc = session.doc.lock().unwrap();
+        doc.clear_transient(d.layer, &prop);
+        for (layer, _) in &d.others {
+            doc.clear_transient(*layer, &prop);
+        }
     }
     true
+}
+
+/// 選んでいる他の層の、同じ property の今の値。複数選択で一緒に動かす為。
+fn others_at(session: &Session, primary: LayerId, property: &str, t: RationalTime) -> Vec<(LayerId, Value)> {
+    let Ok(prop) = PropertyId::new(property) else { return Vec::new() };
+    let doc = session.doc.lock().unwrap();
+    let view = doc.view();
+    session
+        .selection
+        .all()
+        .into_iter()
+        .filter(|l| *l != primary)
+        .filter_map(|l| value_with_default(&view, l, &prop, property, t).map(|v| (l, v)))
+        .collect()
+}
+
+/// 明示の値が無い property は既定値。Inspector の行と同じ物を見る。
+pub(super) fn value_with_default(
+    view: &StoreView<'_>,
+    layer: LayerId,
+    prop: &PropertyId,
+    property: &str,
+    t: RationalTime,
+) -> Option<Value> {
+    if let Ok(Some(v)) = view.value_at(layer, prop, t) {
+        return Some(v);
+    }
+    crate::ui::fixture::inspector_data_from_doc(view, layer, t)
+        .transform
+        .into_iter()
+        .find(|row| row.property.as_deref() == Some(property))
+        .map(|row| row.value)
 }
 
 fn write_content(
@@ -263,6 +308,7 @@ fn prop_row(
             let at = FieldAt::Number { layer, property: property.clone(), axis: i };
             if session.field_at(&at).is_some() {
                 let doc_commit = doc.clone();
+                let commit_session = session.clone();
                 let start_value = start_value.clone();
                 return rsx!(Field {
                     session: session.clone(),
@@ -275,10 +321,15 @@ fn prop_row(
                         if value == start_value {
                             return;
                         }
-                        match write_key(&doc_commit, layer, &property, value, t) {
-                            Ok(_) => *revision.write() += 1,
-                            Err(err) => println!("PROBE room=write verdict=apply-error {err}"),
+                        let others = others_at(&commit_session, layer, &property, t);
+                        let targets = std::iter::once((layer, start_value.clone())).chain(others);
+                        for (layer, base) in targets {
+                            let value = put_axis(&base, vec2, axis, v, range);
+                            if let Err(err) = write_key(&doc_commit, layer, &property, value, t) {
+                                println!("PROBE room=write verdict=apply-error {err}");
+                            }
                         }
+                        *revision.write() += 1;
                     },
                 });
             }
@@ -290,8 +341,10 @@ fn prop_row(
                 class: "{class}",
                 onmousedown: move |evt| {
                     let x = evt.data().client_coordinates().x;
+                    let others = others_at(&grabber, layer, &property, t);
                     *grabber.scrub.lock().unwrap() = Some(ValueDrag {
                         layer,
+                        others,
                         property: property.clone(),
                         vec2,
                         axis: i,
@@ -746,10 +799,38 @@ pub(super) fn inspector_panel(
         colors: Vec::new(),
     };
     let t = RationalTime::try_new((clock.now_sec() * 3000.0) as i64, 3000).unwrap_or(RationalTime::ZERO);
-    let data = match selection {
+    let mut data = match selection {
         Some(layer) => inspector_data_from_doc(&doc.lock().unwrap().view(), layer, t),
         None => empty,
     };
+    // 複数選択: Transform の共通行だけ。違う値の欄は空にして、書けば全部へ届く(§1)。
+    let chosen = session.selection.all();
+    if chosen.len() > 1 {
+        let d = doc.lock().unwrap();
+        let view = d.view();
+        let siblings: Vec<_> = chosen
+            .iter()
+            .filter(|l| Some(**l) != selection)
+            .map(|l| inspector_data_from_doc(&view, *l, t))
+            .collect();
+        for row in &mut data.transform {
+            for i in 0..3 {
+                let agree = siblings.iter().all(|s| {
+                    s.transform.iter().any(|r| r.label == row.label && r.cells[i] == row.cells[i])
+                });
+                // 違う値は「—」(Figma の Mixed)。空にすると掴む口が消えるので文字で残す。
+                if !agree && !row.cells[i].is_empty() {
+                    row.cells[i] = "—".to_owned();
+                }
+            }
+            row.keyed = false;
+        }
+        data.ident_name = format!("{} layers", chosen.len());
+        data.text.clear();
+        data.colors.clear();
+        data.effects.clear();
+        data.has_effects = true;
+    }
     let inspector = &data;
 
     let text_rows = inspector
@@ -879,17 +960,22 @@ pub(super) fn inspector_panel(
                     let dx = x - d.start_x;
                     let changed = dx != d.last_dx;
                     d.last_dx = dx;
-                    (changed, d.layer, d.property.clone(), d.vec2, d.axis, d.start_value.clone(), d.range, dx)
+                    let mut targets = vec![(d.layer, d.start_value.clone())];
+                    targets.extend(d.others.iter().cloned());
+                    (changed, targets, d.property.clone(), d.vec2, d.axis, d.range, dx)
                 });
-                let Some((changed, layer, property, vec2, axis, start_value, range, dx)) = state else { return };
+                let Some((changed, targets, property, vec2, axis, range, dx)) = state else { return };
                 if !changed {
                     return;
                 }
-                let new_value = nudge(&start_value, vec2, axis, dx * increment(&property, range), range);
-                if let Ok(prop) = PropertyId::new(&property) {
-                    scrub_move.doc.lock().unwrap().set_transient(layer, prop, new_value);
-                    *revision.write() += 1;
+                let Ok(prop) = PropertyId::new(&property) else { return };
+                let mut doc = scrub_move.doc.lock().unwrap();
+                for (layer, start) in targets {
+                    let new_value = nudge(&start, vec2, axis, dx * increment(&property, range), range);
+                    doc.set_transient(layer, prop.clone(), new_value);
                 }
+                drop(doc);
+                *revision.write() += 1;
             },
             onmouseup: move |_| {
                 if end_scrub(&scrub_up) {

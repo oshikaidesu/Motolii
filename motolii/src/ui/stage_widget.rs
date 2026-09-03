@@ -845,7 +845,7 @@ impl Widget for StageWidget {
                 drop(doc);
                 match hit {
                     Some((_, layer)) => {
-                        if p.mods.contains(Modifiers::META) {
+                        if p.mods.intersects(Modifiers::META | Modifiers::SUPER) {
                             self.selection.toggle(layer);
                         } else {
                             self.selection.set(Some(layer));

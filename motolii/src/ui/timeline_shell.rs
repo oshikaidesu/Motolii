@@ -193,7 +193,7 @@ pub(super) fn timeline_shell(
                         style: "{lsurface_style}",
                         onclick: move |evt| {
                             let Some(l) = layer else { return };
-                            if evt.modifiers().meta() {
+                            if evt.modifiers().intersects(Modifiers::META | Modifiers::SUPER) {
                                 selection.toggle(l);
                             } else {
                                 selection.set(Some(l));

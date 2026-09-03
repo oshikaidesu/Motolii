@@ -101,4 +101,6 @@ AE 10 年・Premiere/Resolve の編集者・Figma 育ち・初めてのリリッ
 - **指の記憶**: Cmd+S、Enter で名前、M で印。印を打ったら本文を書く場所(Text)が開いている。Edit menu に Undo / Redo
 - 打鍵ごとの `PROBE` 出力を消した
 
-4 人が挙げて**入れていない物**(次の batch): Blend の hover preview と本物のサムネイル(§4、attrs に transient が無く、blitz に mix-blend-mode も無い)、複数選択の Inspector(§1)、Stage の文字を直接ダブルクリックで打つ、書体と級数の欄、J/K/L と I/O、印を掴んで動かす、選んでそのまま動かす(押し直し無し)、履歴の行に操作名。
+- **複数選択の Inspector**(§1): Transform の共通行。違う欄は「—」(Figma の Mixed)で掴めるまま。擦れば全部が同じ差分、打てば全部が同じ値。Cmd+click の多重選択は macOS では Cmd が SUPER なので META しか見ていなかった code を両方受ける形に(実窓で効いていなかった)
+
+4 人が挙げて**入れていない物**(次の batch): Blend の hover preview と本物のサムネイル(§4、attrs に transient が無く、blitz に mix-blend-mode も無い)、Stage の文字を直接ダブルクリックで打つ、書体と級数の欄、J/K/L と I/O、印を掴んで動かす、選んでそのまま動かす(押し直し無し)、履歴の行に操作名。

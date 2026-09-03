@@ -328,6 +328,17 @@ impl Gui {
         self.settle();
     }
 
+    /// Cmd を押しながらの一押し(選択に足す)。macOS の Cmd は SUPER。
+    fn click_super(&mut self, x: f32, y: f32) {
+        let mut down = self.pointer_raw(x, y, MouseEventButtons::Primary);
+        down.mods = keyboard_types::Modifiers::SUPER;
+        let mut up = self.pointer_raw(x, y, MouseEventButtons::None);
+        up.mods = keyboard_types::Modifiers::SUPER;
+        self.h.dispatch(UiEvent::PointerDown(down));
+        self.h.dispatch(UiEvent::PointerUp(up));
+        self.settle();
+    }
+
     fn pointer_raw(&self, x: f32, y: f32, buttons: MouseEventButtons) -> BlitzPointerEvent {
         let event = |buttons| BlitzPointerEvent {
             id: BlitzPointerId::Mouse,
@@ -834,6 +845,51 @@ fn enter_renames_m_marks_and_edit_menu_has_undo() {
     gui.click(undo.0, undo.1);
     assert_eq!(gui.session.doc.lock().unwrap().view().markers().unwrap().len(), before, "Edit▸Undo did not undo");
     assert_eq!(gui.count("#menu-edit-list"), 0, "picking Undo left the menu open");
+}
+
+/// 複数選択: Inspector は Transform の共通行を出し、擦れば全部が同じ差分で動き、打てば全部が同じ値になる。
+#[test]
+fn a_multi_selection_shows_common_rows_and_writes_to_every_layer() {
+    let mut gui = Gui::open();
+    let (x1, y1) = gui.center_of(".lsurface", 1);
+    let (x2, y2) = gui.center_of(".lsurface", 2);
+    gui.click(x1, y1);
+    gui.click_super(x2, y2);
+    let chosen = gui.session.selection.all();
+    assert_eq!(chosen.len(), 2, "Cmd-click did not add to the selection");
+    assert!(gui.texts(".ident b").iter().any(|t| t == "2 layers"), "{:?}", gui.texts(".ident b"));
+
+    let pos = crate::doc::store::PropertyId::new(crate::doc::store::property::POSITION).unwrap();
+    let t = gui.session.clock.current_time();
+    let x_of = |gui: &Gui, l: crate::doc::store::LayerId| -> f64 {
+        let d = gui.session.doc.lock().unwrap();
+        match crate::ui::inspector::value_with_default(&d.view(), l, &pos, crate::doc::store::property::POSITION, t) {
+            Some(crate::doc::eval::Value::Vec2([x, _])) => x,
+            other => panic!("position is not a vec2: {other:?}"),
+        }
+    };
+    let before: Vec<f64> = chosen.iter().map(|l| x_of(&gui, *l)).collect();
+
+    let labels = gui.texts(".prow .n");
+    let row = labels.iter().position(|l| l == "Position").expect("Position row");
+    let (cx, cy) = gui.center_of(".prow .v", row * 3);
+    gui.press(cx, cy);
+    gui.motion(cx + 40.0, cy);
+    gui.release(cx + 40.0, cy);
+    gui.settle();
+    let after: Vec<f64> = chosen.iter().map(|l| x_of(&gui, *l)).collect();
+    for i in 0..2 {
+        assert!((after[i] - before[i] - 40.0).abs() < 1e-6, "layer {i} moved by {} not 40", after[i] - before[i]);
+    }
+
+    gui.click(cx + 3.0, cy);
+    gui.click(cx + 3.0, cy);
+    assert_eq!(gui.count("input.typing"), 1);
+    type_chars(&mut gui, "10");
+    enter(&mut gui);
+    for l in &chosen {
+        assert!((x_of(&gui, *l) - 10.0).abs() < 1e-6, "typed value did not reach every layer");
+    }
 }
 
 #[test]
