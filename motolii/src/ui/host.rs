@@ -340,15 +340,10 @@ fn host_routes_only_primary_mouse_release_to_the_owning_window() {
     assert_eq!(&*calls.borrow(), &[(-3.0, 4.0, true)]);
 }
 
-/// macOS の Application Support。他 OS は v1 の対象外(V2-6)なので HOME 直下。
+/// macOS の Application Support(v1 は macOS だけ、V2-6)。
 fn settings_dir() -> Option<std::path::PathBuf> {
     let home = std::env::var_os("HOME")?;
-    let base = if cfg!(target_os = "macos") {
-        std::path::Path::new(&home).join("Library/Application Support")
-    } else {
-        std::path::Path::new(&home).join(".config")
-    };
-    Some(base.join("Motolii"))
+    Some(std::path::Path::new(&home).join("Library/Application Support/Motolii"))
 }
 
 /// 窓の外の糸が持つ、窓を起こすだけの口。
