@@ -1024,13 +1024,8 @@ pub fn app() -> Element {
                                 }
                             }
                             let d = doc.lock().unwrap();
-                            let rows = fixture::layer_rows_from_doc(&d);
-                            let canvas = fixture::canvas_rows_from_doc(&d);
                             drop(d);
-                            attrs_state.set(rows.iter().map(|r| (r.hidden, r.solo, r.locked)).collect());
-                            layer_rows.set(rows);
-                            let _ = timeline_tx.send(TimelineMsg::SetRows(canvas));
-                            *revision.write() += 1;
+                            refresh_layer_projection(&doc, layer_rows, attrs_state, &timeline_tx, revision);
                         }
                         Intent::ToggleKeyedOnly => {
                             fixture::toggle_keyed_only();
@@ -1040,13 +1035,8 @@ pub fn app() -> Element {
                                 }
                             }
                             let d = doc.lock().unwrap();
-                            let rows = fixture::layer_rows_from_doc(&d);
-                            let canvas = fixture::canvas_rows_from_doc(&d);
                             drop(d);
-                            attrs_state.set(rows.iter().map(|r| (r.hidden, r.solo, r.locked)).collect());
-                            layer_rows.set(rows);
-                            let _ = timeline_tx.send(TimelineMsg::SetRows(canvas));
-                            *revision.write() += 1;
+                            refresh_layer_projection(&doc, layer_rows, attrs_state, &timeline_tx, revision);
                         }
                         Intent::ToggleMarker => {
                             let time = clock.current_time();
@@ -1297,6 +1287,10 @@ pub fn app() -> Element {
                             let d = doc.lock().unwrap();
                             let rows = fixture::layer_rows_from_doc(&d);
                             drop(d);
+                            let rows: Vec<_> = rows.into_iter().filter(|r| r.layer.is_some()).collect();
+                            if rows.is_empty() {
+                                return;
+                            }
                             let Some(current) = selected().and_then(|l| rows.iter().position(|r| r.layer == Some(l))) else { return };
                             let next = (current as i32 + delta).clamp(0, rows.len() as i32 - 1) as usize;
                             if let Some(layer) = rows[next].layer {

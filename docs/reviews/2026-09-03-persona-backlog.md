@@ -429,3 +429,22 @@
 - ☐ CV9 Blend の札の色が文字層で accent(text の fill を見ない)
 - ☐ CV10 α の帯の当たりが枠 1 本ぶんずれる(box-sizing)
 - ☐ CV11 Document::display_revision が未使用(Stage は窓側の Signal だけを見る)
+
+## 会議 CD: コンセプトへの異議(→ [concept-challenge](2026-09-03-concept-challenge.md))— 裁定待ち
+- ☐ CD1 詳細は 1 枚(Inspector + Desk + 色 popover)、ask_panel / DeskState の廃止
+- ☐ CD2 Browser 4 面 → 1 面 + rail
+- ☐ CD3 配置を固定 4 面にし dock / detach / layout.json を廃止(dock.rs 619 行)
+- ☐ CD4 menu 6 本 → ⌘K コマンドパレット(Intent と SemanticControl を流用)
+- ☐ CD5 先に 8→4 で試験の壊れ方を測る
+
+## 会議 RB: Rust 初学者(行の抑制)
+- ☑ RB1 同形の 2 箇所を畳んだ(if applied で包む 7 箇所と attrs_state の導出は未)
+- ☐ RB2 apply + revision + PROBE の 4 行が 20 箇所(≒54 行)— write(&doc, revision, intent) 1 本
+- ☐ RB3 doc.lock().unwrap().view() が 49 箇所 — view_with で握る時間を型に
+- ☐ RB4 Create の tcard 3 枚を data に(≒26 行)
+- ☐ RB5 閉包前の clone 群 164 行 — Ctx に束ねる
+- ☑ RB6 SelectExtend の空の panic を塞ぐ(1 本化は未)
+- ☐ RB7 app() が 1150 行、match intent 485 行 — run_intent を別の家へ
+- ☐ RB8 状態 3 種(Signal / Arc<Mutex> / Cell)の選び分けと PROBE の読み手を mod.rs の頭に 3 行
+- ☐ RB9 expect("同上") 5 連・日本語の panic 文、as i64 の飽和、unwrap 428(うち lock 314)
+- ☐ RB10 gui.rs の頭に使える手の一覧 1 行、fixture.rs の名前と場所の食い違い
