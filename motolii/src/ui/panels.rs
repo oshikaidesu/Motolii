@@ -158,7 +158,22 @@ pub(super) fn TimelinePanel(
     // 行は Document から引き直す。一覧を持ち回っていると、書き込みの度に
     // 引き直しを**忘れた手**の分だけ窓が古いまま残る(名前変更がそれだった)。
     let _ = revision();
-    let rows_now = fixture::layer_rows_from_doc(&session.doc.lock().unwrap());
+    // 行の投影は Document の revision が動いた時だけ(擦りの transient では引き直さない)。
+    let memo: std::rc::Rc<std::cell::RefCell<Option<(String, Vec<crate::ui::fixture::LayerRow>)>>> =
+        use_hook(|| std::rc::Rc::new(std::cell::RefCell::new(None)));
+    let rows_now = {
+        let d = session.doc.lock().unwrap();
+        let stamp = format!("{:?}", d.revision());
+        let mut memo = memo.borrow_mut();
+        match memo.as_ref() {
+            Some((seen, rows)) if *seen == stamp => rows.clone(),
+            _ => {
+                let rows = fixture::layer_rows_from_doc(&d);
+                *memo = Some((stamp, rows.clone()));
+                rows
+            }
+        }
+    };
     timeline_shell(
         session.doc.clone(),
         attrs_state,

@@ -183,6 +183,10 @@ pub(super) struct StageWidget {
     output_only: Arc<std::sync::atomic::AtomicBool>,
     /// 指の下に在る取っ手。掴める物は掴める前から見える(Figma・AE)。
     hover: Option<GizmoMode>,
+    /// 入力が来た(次の paint が要る)。paint で下ろす。
+    dirty: std::cell::Cell<bool>,
+    /// 最後に描いた時の revision。同じなら描き直さない。
+    seen_revision: std::cell::Cell<u32>,
     /// 画面の倍率(%)。#stagefoot が読む。
     view_pct: Signal<u32>,
     view_request: Arc<Mutex<Option<crate::ui::session::ViewRequest>>>,
@@ -244,6 +248,8 @@ impl StageWidget {
             seen_cancel: 0,
             cursor: None,
             hover: None,
+            dirty: std::cell::Cell::new(true),
+            seen_revision: std::cell::Cell::new(u32::MAX),
             output_only,
             view_pct,
             view_request,
@@ -864,11 +870,19 @@ impl Widget for StageWidget {
         self.state = State::Suspended;
     }
 
+    /// 毎 frame 描かない。再生中・掴んでいる間・入力が来た後・作品や視点の注文が変わった時だけ。
     fn requires_redraw(&self) -> bool {
-        true
+        self.frames < 3
+            || self.clock.playing()
+            || self.drag.is_some()
+            || self.camera_drag.is_some()
+            || self.dirty.get()
+            || self.view_request.lock().unwrap().is_some()
+            || *self.revision.peek() != self.seen_revision.get()
     }
 
     fn handle_event(&mut self, event: &UiEvent) {
+        self.dirty.set(true);
         if self.output_only.load(std::sync::atomic::Ordering::Relaxed) {
             // 出力を映す窓。ここは**見るだけ**で、触っても何も起きない。
             return;
@@ -1140,6 +1154,8 @@ impl Widget for StageWidget {
         }
         let mut scene = anyrender::Scene::new();
         self.frames += 1;
+        self.dirty.set(false);
+        self.seen_revision.set(*self.revision.peek());
         let first = self.frames == 1;
         // 面が 0 の時は描かない(timeline_widget と同じ)。ここを通すと下の
         // `s = (w/cw).min(h/ch)` が 0 になり、退化した Affine で vello を回すことになる。

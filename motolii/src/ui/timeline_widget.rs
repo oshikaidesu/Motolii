@@ -305,6 +305,8 @@ pub(super) struct TimelineWidget {
     /// 書く場所の数だけ配線が要るので、こちらから見に行く。
     revision: Option<Signal<u32>>,
     seen_revision: u32,
+    /// 最後に行を引いた時の Document の revision(擦りの transient では引き直さない)。
+    seen_doc_revision: String,
     gesture: Option<GestureSurface>,
     seen_cancel: u32,
     selected_key: Option<Arc<Mutex<Vec<crate::ui::session::KeySel>>>>,
@@ -341,6 +343,7 @@ impl TimelineWidget {
             playhead_mirror: None,
             revision: None,
             seen_revision: 0,
+            seen_doc_revision: String::new(),
             gesture: None,
             seen_cancel: 0,
             selected_key: None,
@@ -1354,10 +1357,16 @@ impl Widget for TimelineWidget {
                 self.seen_revision = now;
                 if let (Some(doc), Some(extractor)) = (self.doc.as_ref(), self.extractor) {
                     let doc = doc.lock().unwrap();
-                    if let Ok(fps) = document_fps(&doc) {
-                        self.fps = fps.as_f64();
+                    let stamp = format!("{:?}", doc.revision());
+                    if stamp != self.seen_doc_revision {
+                        self.seen_doc_revision = stamp;
+                        if let Ok(fps) = document_fps(&doc) {
+                            self.fps = fps.as_f64();
+                        }
+                        let rows = extractor(&doc);
+                        drop(doc);
+                        self.replace_rows(rows);
                     }
-                    self.rows = extractor(&doc);
                 }
             }
         }
