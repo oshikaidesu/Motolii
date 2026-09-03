@@ -33,6 +33,19 @@ fn still_key(path: &str) -> u64 {
 /// 文字の texture を憶える上限(枚)。
 const TEXT_CACHE_LIMIT: usize = 256;
 
+/// tiny-skia の乗算済み RGBA を非乗算へ(上げる直前に 1 回)。
+fn unpremultiply(rgba: &mut [u8]) {
+    for px in rgba.chunks_exact_mut(4) {
+        let a = px[3] as u32;
+        if a == 0 || a == 255 {
+            continue;
+        }
+        for c in &mut px[..3] {
+            *c = ((*c as u32 * 255 + a / 2) / a).min(255) as u8;
+        }
+    }
+}
+
 impl Engine {
     pub fn selected_layer_size(
         &self,
@@ -139,9 +152,10 @@ impl Engine {
             ));
         }
 
-        let Some(raster) = text::rasterize_text_document(document, t, &canvas)? else {
+        let Some(mut raster) = text::rasterize_text_document(document, t, &canvas)? else {
             return Ok((None, [0.0, 0.0]));
         };
+        unpremultiply(&mut raster.premultiplied_rgba8);
 
         let texture = self.compositor.upload_rgba(
             "text",
@@ -184,9 +198,10 @@ impl Engine {
             ));
         }
 
-        let Some(raster) = shape::rasterize_shapes(shapes, &canvas)? else {
+        let Some(mut raster) = shape::rasterize_shapes(shapes, &canvas)? else {
             return Ok((None, [0.0, 0.0]));
         };
+        unpremultiply(&mut raster.premultiplied_rgba8);
 
         let texture = self.compositor.upload_rgba(
             "shape",
@@ -331,14 +346,8 @@ impl Engine {
                     .and_then(|r| r.decode().map_err(|e| e.to_string()))?
                     .to_rgba8();
                 let (width, height) = decoded.dimensions();
-                // 合成は乗算済みを前提にしている。素の RGBA を渡すと縁が光る。
-                let mut premultiplied_rgba = decoded.into_raw();
-                for px in premultiplied_rgba.chunks_exact_mut(4) {
-                    let a = px[3] as u32;
-                    for c in &mut px[..3] {
-                        *c = ((*c as u32 * a + 127) / 255) as u8;
-                    }
-                }
+                // 非乗算のまま上げる。乗算は shader(decode の後)。
+                let premultiplied_rgba = decoded.into_raw();
                 Ok::<_, String>(std::sync::Arc::new(crate::render::engine::StillImage {
                     premultiplied_rgba,
                     width,

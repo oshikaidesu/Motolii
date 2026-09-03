@@ -145,13 +145,17 @@ pub fn tilted_corners(
     (center - (u + v) * 0.5, u, v)
 }
 
+/// 上げた画素の扱い。sRGB 形式(blend の scratch)は乗算済みで、decode は hardware。
+/// それ以外(文字・図形・静止画・動画)は**非乗算の sRGB** で上げ、shader が decode → 乗算の順で扱う。
+/// 乗算済みを非乗算として decode すると α の中間(文字の縁)が暗く沈む(色の再点検 CV2)。
 pub(crate) fn premultiplied_texture(texture: GpuTexture2D) -> ColormappedTexture {
+    let srgb = texture.format().is_srgb();
     ColormappedTexture {
-        decode_srgb: !texture.format().is_srgb(),
+        decode_srgb: !srgb,
         texture,
         range: [0.0, 1.0],
         gamma: 1.0,
-        texture_alpha: TextureAlpha::AlreadyPremultiplied,
+        texture_alpha: if srgb { TextureAlpha::AlreadyPremultiplied } else { TextureAlpha::SeparateAlpha },
         color_mapper: ColorMapper::OffRGB,
         shader_decoding: None,
     }

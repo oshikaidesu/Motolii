@@ -1864,3 +1864,13 @@ h1.a11y, h2, h3.sec, h3.sh {
     font-size: var(--t-dense);
     background: var(--panel);
 }
+
+/* Create の札の絵: 素の色でなく token で。 */
+.thumb.glyphy {
+    background: var(--raised);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--ink);
+    font-size: calc(2 * var(--t-title));
+}

@@ -882,47 +882,25 @@ pub(super) fn browser_panel(
                             }
                         }
                         div { class: "tgrid",
-                            SemanticButton {
-                                class: "tcard",
-                                onclick: {
-                                    let doc = doc.clone();
-                                    let clock = clock.clone();
-                                    let timeline_tx = timeline_tx.clone();
-                                    move |_| spawn_layer(&doc, &clock, layer_rows, attrs_state, &timeline_tx, NewKind::Text, "text", revision)
-                                },
-                                div { class: "thumb", style: "background:#222; display:flex; align-items:center; justify-content:center;",
-                                    span { style: "color:#fff; font-size:32px;", "T" }
+                            // 札は data から(4 枚目を足す時は 1 行)。
+                            for (kind , label , meta , glyph) in [
+                                (NewKind::Text, "Text", "Adds a text layer", "T"),
+                                (NewKind::Rectangle, "Rectangle", "Adds a shape layer", "■"),
+                                (NewKind::Bezier, "Bezier", "Adds a path layer", "〜"),
+                            ] {
+                                SemanticButton {
+                                    class: "tcard",
+                                    onclick: {
+                                        let doc = doc.clone();
+                                        let clock = clock.clone();
+                                        let timeline_tx = timeline_tx.clone();
+                                        let kind = kind.clone();
+                                        move |_| spawn_layer(&doc, &clock, layer_rows, attrs_state, &timeline_tx, kind.clone(), label, revision)
+                                    },
+                                    div { class: "thumb glyphy", span { "{glyph}" } }
+                                    span { class: "tname", "{label}" }
+                                    span { class: "tmeta", "{meta}" }
                                 }
-                                span { class: "tname", "Text" }
-                                span { class: "tmeta", "Adds a text layer" }
-                            }
-                            SemanticButton {
-                                class: "tcard",
-                                onclick: {
-                                    let doc = doc.clone();
-                                    let clock = clock.clone();
-                                    let timeline_tx = timeline_tx.clone();
-                                    move |_| spawn_layer(&doc, &clock, layer_rows, attrs_state, &timeline_tx, NewKind::Rectangle, "rectangle", revision)
-                                },
-                                div { class: "thumb", style: "background:#222; display:flex; align-items:center; justify-content:center;",
-                                    div { style: "width:40%; height:40%; background:#fff;" }
-                                }
-                                span { class: "tname", "Rectangle" }
-                                span { class: "tmeta", "path shape" }
-                            }
-                            SemanticButton {
-                                class: "tcard",
-                                onclick: {
-                                    let doc = doc.clone();
-                                    let clock = clock.clone();
-                                    let timeline_tx = timeline_tx.clone();
-                                    move |_| spawn_layer(&doc, &clock, layer_rows, attrs_state, &timeline_tx, NewKind::Bezier, "bezier", revision)
-                                },
-                                div { class: "thumb", style: "background:#222; display:flex; align-items:center; justify-content:center;",
-                                    span { style: "color:#fff; font-size:32px;", "〜" }
-                                }
-                                span { class: "tname", "Bezier" }
-                                span { class: "tmeta", "path shape" }
                             }
                             SemanticButton {
                                 class: if mask_count > 0 { "tcard on" } else if mask_layer.is_some() { "tcard" } else { "tcard disabled" },

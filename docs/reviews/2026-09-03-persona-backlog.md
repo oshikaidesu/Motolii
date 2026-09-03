@@ -419,7 +419,7 @@
 
 ## 第 6 波 CV: 色と Blend の再点検
 - ☑ CV1 焼けない入力(網・点群の mix)は run 側へ落とす
-- ☐ CV2 【致命】乗算済み sRGB を非乗算として linear 化(decode → premultiply の順が逆)— α 0.5 が 0.29 相当に暗い
+- ☑ CV2 文字・図形・静止画は非乗算で上げ、shader が decode → 乗算(sRGB の scratch は乗算済みのまま)— 実窓で縁を確認する
 - ☑ CV3 hex の丸めが 3 通り(輪は round、Inspector と札は切り捨て)
 - ☐ CV4 Blend の札は sRGB で混ぜ、実物は linear light(札の中だけ往復する)、Normal の札が 4 つ同じ
 - ☑ CV5 Blend の下見の後始末の use_effect が反応源を読んでいない(閉じた時の掃除が走らない)
@@ -441,7 +441,7 @@
 - ☑ RB1 同形の 2 箇所を畳んだ(if applied で包む 7 箇所と attrs_state の導出は未)
 - ☑ RB2 session::noted を 1 本置き、同形の 4 箇所を畳んだ(文言の違う残りは未)
 - ☐ RB3 doc.lock().unwrap().view() が 49 箇所 — view_with で握る時間を型に
-- ☐ RB4 Create の tcard 3 枚を data に(≒26 行)
+- ☑ RB4 Create の札 3 枚を data と .thumb.glyphy に
 - ☐ RB5 閉包前の clone 群 164 行 — Ctx に束ねる
 - ☑ RB6 SelectExtend の空の panic を塞ぐ(1 本化は未)
 - ☐ RB7 app() が 1150 行、match intent 485 行 — run_intent を別の家へ
