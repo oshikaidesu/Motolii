@@ -484,6 +484,7 @@ pub(super) fn used_colors_from_doc(doc: &Document) -> Vec<ColorSwatch> {
 }
 
 pub(super) struct AssetRow {
+    pub id: crate::doc::store::AssetId,
     pub name: String,
     pub kind: String,
     pub size: Option<u64>,
@@ -878,6 +879,7 @@ pub(super) fn asset_rows_from_view(view: &StoreView) -> Vec<AssetRow> {
         .into_iter()
         .filter(|a| a.role == crate::doc::store::AssetRole::Material)
         .map(|a| AssetRow {
+            id: a.id,
             family: asset_family(&a.asset_type),
             preview: a.path_absolute.as_deref().and_then(|path| {
                 match asset_family(&a.asset_type) {

@@ -118,7 +118,7 @@
 - ☐ C8 Add が mix の列に混じる
 - ☐ C9 色を保存する口(palette、裁定 244)
 - ☐ C10 スポイト
-- ☐ C11 α が drag できず 1 押し 1 手
+- ☑ C11 α が drag できず 1 押し 1 手
 - ☐ C12 効果の色 param
 - ☐ C13 効果カードに絵・検索・分類
 - ☑ C14 BLEND 行で机が前に出る
@@ -201,12 +201,12 @@
 - ☐ M6 札の絵を描画の最中に作る(ffmpeg 同期 spawn、失敗を永久に憶える)
 - ☐ M7 hover scrub / 下見が無く、押すと即座に層が生まれる
 - ☐ M8 Browser から Stage / Timeline へ引けない
-- ☐ M9 差し替えが Alt+click の隠し技
+- ☑ M9 差し替えが Alt+click の隠し技
 - ☑ M10 Create の既定値 — "Text"・四角は短辺の 1/4・採番(書体の path と Null/Solid は未)
 - ☑ M11 family の袖が空になっても残る
 - ☑ M12 Library の下帯が先頭の素材名
 - ☑ M13 札の下地色が並び順で回る
-- ☐ M14 素材を library から外せない / Reveal in Finder
+- ☑ M14 素材を library から外せない / Reveal in Finder
 - ☐ M15 格子を鍵で歩けない(K9)
 - ☐ M16 落とす先の可否・役目が覆いに出ない(H17)
 
@@ -216,7 +216,7 @@
 - ☑ X3 M/S/L の aria_label が可視文字と違う
 - ☑ X4 ◎ の title と aria_label が食い違う / "To layer" → "Send to layer"
 - ☑ X5 面タブが span で focus も role も無い
-- ☐ X6 disabled な札の理由が届かない
+- ☑ X6 disabled な札の理由が届かない
 - ☑ X7 "Imported 1 files"
 - ☑ X8 書き出し error の文体(小文字始まり・回復手段無し)
 - ☑ X9 "Wrote {fullpath}" など完了文が経路まる出し

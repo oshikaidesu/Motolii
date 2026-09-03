@@ -566,7 +566,7 @@ pub(super) fn browser_panel(
     attrs_state: Signal<Vec<(bool, bool, bool)>>,
     timeline_tx: Sender<TimelineMsg>,
     selected: Signal<Option<LayerId>>,
-    revision: Signal<u32>,
+    mut revision: Signal<u32>,
     panel: Panel,
     mut rail: Signal<Option<fixture::AssetFamily>>,
 ) -> Element {
@@ -591,9 +591,28 @@ pub(super) fn browser_panel(
         .filter(|a| rail().is_none_or(|f| a.family == f))
         .collect();
     let rail_label = rail().map_or("All media", |f| f.label());
+    // 層が使っている素材は棚から外せない(外すと層が空を指す)。
+    let used: std::collections::HashSet<String> = {
+        let d = doc.lock().unwrap();
+        let view = d.view();
+        view.layers()
+            .into_iter()
+            .filter_map(|l| view.meta(l).ok().flatten())
+            .filter_map(|m| match m.source {
+                crate::doc::store::LayerSource::File { path, .. } => Some(path),
+                _ => None,
+            })
+            .collect()
+    };
 
     let asset_cards = shown.iter().map(|a| {
         let preview = a.preview.as_deref();
+        let in_use = a.path.as_ref().is_some_and(|p| used.contains(p));
+        let asset_id = a.id;
+        let reveal_path = a.path.clone();
+        let replace_path = a.path.clone();
+        let replace_doc = doc.clone();
+        let remove_doc = doc.clone();
         let place = a.path.clone().map(|path| {
             let name = a.name.clone();
             let doc = doc.clone();
@@ -620,17 +639,53 @@ pub(super) fn browser_panel(
         });
         let disabled = place.is_none();
         rsx!(
-            SemanticButton {
-                class: "tcard",
-                disabled,
-                onclick: move |evt| { if let Some(f) = &place { f(evt) } },
-                if let Some(src) = preview {
-                    img { class: "thumb", src: "{src}" }
-                } else {
-                    div { class: "thumb", style: "background:{a.thumb};" }
+            div { class: "tcell",
+                SemanticButton {
+                    class: "tcard",
+                    disabled,
+                    title: "Add as a layer · Alt+click replaces the selected layer's source",
+                    onclick: move |evt| { if let Some(f) = &place { f(evt) } },
+                    if let Some(src) = preview {
+                        img { class: "thumb", src: "{src}" }
+                    } else {
+                        div { class: "thumb", style: "background:{a.thumb};" }
+                    }
+                    span { class: "tname", "{a.name}" }
+                    span { class: "tmeta", "{a.kind}" }
                 }
-                span { class: "tname", "{a.name}" }
-                span { class: "tmeta", "{a.kind}" }
+                // 札の上に出る手。隠し技(Alt+click)を表に出す(Premiere の Replace Footage、Finder の Reveal)。
+                div { class: "tacts",
+                    if let (Some(layer), Some(path)) = (selected(), replace_path) {
+                        SemanticButton {
+                            class: "chip",
+                            title: "Replace the selected layer's source with this",
+                            onclick: move |_| replace_source(&replace_doc, layer, path.clone(), revision),
+                            "Replace"
+                        }
+                    }
+                    if let Some(path) = reveal_path {
+                        SemanticButton {
+                            class: "chip",
+                            aria_label: "Reveal in Finder",
+                            title: "Reveal in Finder",
+                            onclick: move |_| crate::ui::output::reveal_in_finder(std::path::Path::new(&path)),
+                            "Finder"
+                        }
+                    }
+                    SemanticButton {
+                        class: "chip",
+                        disabled: in_use,
+                        aria_label: "Remove from library",
+                        title: if in_use { "In use by a layer" } else { "Remove from library" },
+                        onclick: move |_| {
+                            match remove_doc.lock().unwrap().apply(Intent::RemoveAsset { asset: asset_id }) {
+                                Ok(_) => *revision.write() += 1,
+                                Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
+                            }
+                        },
+                        "×"
+                    }
+                }
             }
         )
     });
@@ -660,6 +715,7 @@ pub(super) fn browser_panel(
                             SemanticButton {
                                 class: "{card_class}",
                                 disabled: layer.is_none(),
+                                title: if layer.is_none() { "Select a layer first" } else { "Apply to the selected layer" },
                                 onclick: move |evt| { if let Some(f) = &onclick { f(evt) } },
                                 div { class: "thumb", style: "background:{hex};" }
                                 span { class: "tname", "{hex}" }
@@ -716,6 +772,7 @@ pub(super) fn browser_panel(
                             SemanticButton {
                                 class: "{card_class}",
                                 disabled: layer.is_none(),
+                                title: if layer.is_none() { "Select a layer first" } else { "Add to the selected layer" },
                                 selected: is_on,
                                 onclick: move |evt| { if let Some(f) = &onclick { f(evt) } },
                                 div { class: "thumb", style: "background:#222; display:flex; align-items:center; justify-content:center;",

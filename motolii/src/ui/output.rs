@@ -308,7 +308,7 @@ pub(super) fn OutputStatus(
 }
 
 /// 出来た物を Finder で指す(Premiere・Resolve の「書き出し先を開く」)。
-fn reveal_in_finder(path: &std::path::Path) {
+pub(super) fn reveal_in_finder(path: &std::path::Path) {
     let _ = std::process::Command::new("open").arg("-R").arg(path).spawn();
 }
 

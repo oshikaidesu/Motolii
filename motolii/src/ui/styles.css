@@ -1780,3 +1780,26 @@ body {
     overflow: hidden;
     text-overflow: ellipsis;
 }
+
+/* 札の上の手。hover の間だけ出る。 */
+.tcell {
+    position: relative;
+    display: flex;
+}
+
+.tcell .tcard {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.tacts {
+    position: absolute;
+    top: var(--sp1);
+    right: var(--sp1);
+    display: none;
+    gap: var(--sp1);
+}
+
+.tcell:hover .tacts {
+    display: flex;
+}

@@ -199,6 +199,8 @@ pub(super) fn ColorWheel(session: Session, slot: ColorSlot, revision: Signal<u32
     let mut revision = revision;
     let current = read_color(&session.doc, &slot).unwrap_or([0.0, 0.0, 0.0, 1.0]);
     let mut draft: Signal<Option<(f64, f64, f64)>> = use_signal(|| None);
+    // 不透明度の下書き。掴んで滑らせ、放した時に 1 回だけ書く。
+    let mut alpha_draft: Signal<Option<f64>> = use_signal(|| None);
     let (h, s, v) = draft().unwrap_or_else(|| rgb_to_hsv([current[0], current[1], current[2]]));
     let k = session.scale.factor();
     let ring = RING * k;
@@ -295,18 +297,37 @@ pub(super) fn ColorWheel(session: Session, slot: ColorSlot, revision: Signal<u32
             div {
                 class: "alpha-bar",
                 style: "width: {ring}px; background: linear-gradient(to right, transparent, {shown});",
-                onpointerdown: {
+                onpointerdown: move |evt: PointerEvent| {
+                    alpha_draft.set(Some((evt.data().element_coordinates().x / ring).clamp(0.0, 1.0)));
+                },
+                onpointermove: move |evt: PointerEvent| {
+                    if held(&evt) && alpha_draft().is_some() {
+                        alpha_draft.set(Some((evt.data().element_coordinates().x / ring).clamp(0.0, 1.0)));
+                    }
+                },
+                onpointerup: {
                     let session = session.clone();
                     let slot = slot.clone();
-                    move |evt: PointerEvent| {
-                        let a = (evt.data().element_coordinates().x / ring).clamp(0.0, 1.0);
+                    move |_| {
+                        let Some(a) = alpha_draft.write().take() else { return };
                         match write_alpha(&session.doc, &slot, a) {
                             Ok(()) => *revision.write() += 1,
                             Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
                         }
                     }
                 },
-                span { class: "color-mark", style: "left: {current[3] * ring}px; top: 50%;" }
+                onpointerleave: {
+                    let session = session.clone();
+                    let slot = slot.clone();
+                    move |_| {
+                        let Some(a) = alpha_draft.write().take() else { return };
+                        match write_alpha(&session.doc, &slot, a) {
+                            Ok(()) => *revision.write() += 1,
+                            Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
+                        }
+                    }
+                },
+                span { class: "color-mark", style: "left: {alpha_draft().unwrap_or(current[3]) * ring}px; top: 50%;" }
             }
         }
     })
