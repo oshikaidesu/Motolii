@@ -88,6 +88,13 @@ fn document_fps(doc: &Document) -> Result<Fps, StoreError> {
         .ok_or_else(|| StoreError::Property("Composition has no frame rate".to_owned()))
 }
 
+/// 目盛の段。1 段は約 80px 以上空く物を 1・2・5・10 … 秒(と 1/fps 未満は frame)から選ぶ。
+fn nice_step(pps: f64) -> f64 {
+    let min_sec = 80.0 / pps.max(1e-6);
+    let steps = [0.1, 0.2, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0, 60.0, 120.0, 300.0, 600.0];
+    steps.into_iter().find(|s| *s >= min_sec).unwrap_or(600.0)
+}
+
 fn keyframe_shift_intents(
     doc: &Document,
     layer: LayerId,
@@ -1012,12 +1019,14 @@ impl Widget for TimelineWidget {
 
         fill_rect(&mut s, Rect::new(0.0, 0.0, w, h), c_app);
 
-        let t_first = scroll.floor() as i64;
-        let t_last = (scroll + w / pps).ceil() as i64;
+        // 目盛の段は倍率で変わる(NLE と同じ)。主目盛は約 80px 以上空くように選ぶ。
+        let step = nice_step(pps);
+        let t_first = (scroll / step).floor() as i64;
+        let t_last = ((scroll + w / pps) / step).ceil() as i64;
         for t in t_first..=t_last {
             if t >= 0 && t % 2 == 1 {
-                let x0 = x_of(t as f64).max(0.0);
-                let x1 = x_of(t as f64 + 1.0).min(w);
+                let x0 = x_of(t as f64 * step).max(0.0);
+                let x1 = x_of((t + 1) as f64 * step).min(w);
                 fill_rect(&mut s, Rect::new(x0, ruler_h, x1, h), c_zebra);
             }
         }
@@ -1025,9 +1034,16 @@ impl Widget for TimelineWidget {
         fill_rect(&mut s, Rect::new(0.0, 0.0, w, ruler_h), c_panel);
         for t in t_first..=t_last {
             if t >= 0 {
-                let x = x_of(t as f64);
+                let x = x_of(t as f64 * step);
                 if (0.0..=w).contains(&x) {
                     fill_rect(&mut s, Rect::new(x, ruler_h * 0.5, x + hairline, ruler_h), c_bd);
+                }
+                // 副目盛(主の 1/5)。
+                for k in 1..5 {
+                    let x = x_of((t as f64 + k as f64 / 5.0) * step);
+                    if (0.0..=w).contains(&x) {
+                        fill_rect(&mut s, Rect::new(x, ruler_h * 0.78, x + hairline, ruler_h), c_hair);
+                    }
                 }
             }
         }
@@ -1039,6 +1055,9 @@ impl Widget for TimelineWidget {
                     Rect::new(x - 3.0, ruler_h * 0.15, x + 3.0, ruler_h * 0.55),
                     c_marker,
                 );
+                // 印は全 track を貫く(Premiere・Ableton)。歌詞の頭を目で合わせる線。
+                let faint = Color::from_rgba8(tokens::ACCENT[0], tokens::ACCENT[1], tokens::ACCENT[2], 0x50);
+                fill_rect(&mut s, Rect::new(x, ruler_h, x + hairline, h), faint);
             }
         }
         fill_rect(&mut s, Rect::new(0.0, ruler_h - hairline, w, ruler_h), c_hair);
@@ -1111,10 +1130,11 @@ impl Widget for TimelineWidget {
                             waveform_tracks.iter().find(|track| track.layer == layer)
                         })
                         .and_then(|track| {
+                            // 描くのは物理 px。列は物理 px ごとに要る(Retina で半分にしない)。
                             track.columns(
                                 scroll - waveform_shift,
                                 scroll - waveform_shift + w / pps,
-                                self.pps,
+                                pps,
                             )
                         });
                     if let Some(columns) = waveform_columns {
@@ -1336,6 +1356,18 @@ mod lyrics {
         let keys = doc.view().text_document(layer).unwrap().unwrap().content.keys().to_vec();
         let frames: Vec<i64> = keys.iter().map(|k| k.t.try_to_frame_floor(fps).unwrap()).collect();
         assert_eq!(frames, vec![10, 34], "lyric keys did not move with the layer");
+    }
+
+    /// 目盛の段は倍率に付いて行き、詰まらず空きすぎない。
+    #[test]
+    fn ruler_steps_follow_the_zoom() {
+        assert_eq!(nice_step(8.0), 10.0);
+        assert_eq!(nice_step(80.0), 1.0);
+        assert_eq!(nice_step(600.0), 0.2);
+        for pps in [8.0, 20.0, 80.0, 200.0, 600.0] {
+            let px = nice_step(pps) * pps;
+            assert!((80.0..=800.0).contains(&px), "{pps}: {px}px");
+        }
     }
 
     /// 印は吸い付き先。

@@ -179,6 +179,10 @@ pub(super) fn write_color(
         ColorSlot::ShapeFill { layer, path } => {
             let mut shapes = d.view().shapes(*layer)?;
             let Some(shape) = leaf_mut(&mut shapes, path) else { return Ok(()) };
+            // gradient の塗りは単色で潰さない(輪の相手は read_color が Solid の時だけ)。
+            if matches!(shape.fill.as_ref().map(|f| &f.brush), Some(Brush::Gradient(_))) {
+                return Ok(());
+            }
             let mut fill = shape.fill.take().unwrap_or_default();
             fill.brush = Brush::Solid(Rgb { r, g, b });
             shape.fill = Some(Fill { ..fill });

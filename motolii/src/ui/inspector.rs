@@ -1041,8 +1041,11 @@ pub(super) fn inspector_panel(
                     aria_label: "Focus blend",
                     onclick: {
                         let focus = focus.clone();
+                        let asker = session.clone();
                         move |_| {
                             *focus.lock().unwrap() = Some(Focus::Blend(layer));
+                            // COLOR 行と同じ扱い: 応える所(机)を前に出す。
+                            asker.ask_panel(crate::ui::dock::Panel::Desk);
                             *revision.write() += 1;
                         }
                     },

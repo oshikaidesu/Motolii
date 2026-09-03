@@ -1160,7 +1160,8 @@ pub fn app() -> Element {
                                 }
                                 None => {
                                     markers.push(crate::doc::store::Marker {
-                                        name: format!("{}", markers.len() + 1),
+                                        // 名前は時刻から。採番は途中を消すと衝突する。
+                                        name: clock.format_timecode(),
                                         time,
                                         duration: crate::doc::store::RationalTime::ZERO,
                                         body: String::new(),
@@ -1180,7 +1181,11 @@ pub fn app() -> Element {
                                 let secs = markers.iter().map(|m| m.time.as_seconds_f64()).collect();
                                 let _ = timeline_tx.send(TimelineMsg::SetMarkers(secs));
                                 // 印を打ったら、その本文を書く場所が開いている(押し直しをさせない)。
-                                if hit.is_none() {
+                                // 本文を書く場所を開けるのは、机が焦点に付いて回っている時だけ。
+                                // 手で閉じた/別の引き出しを開けている人の連打(拍を叩く)を邪魔しない。
+                                if hit.is_none()
+                                    && *session.desk.lock().unwrap() == crate::ui::session::DeskState::Follow
+                                {
                                     *session.desk.lock().unwrap() =
                                         crate::ui::session::DeskState::Open(crate::ui::desk::Drawer::Text);
                                 }
@@ -1564,6 +1569,7 @@ pub fn app() -> Element {
                                     onclick: {
                                         let doc = session.doc.clone();
                                         let export = session.export.clone();
+                                        let project_path = session.project_path.clone();
                                         let poke = host.poker();
                                         move |evt: Event<MouseData>| {
                                             evt.stop_propagation();
@@ -1571,11 +1577,18 @@ pub fn app() -> Element {
                                             let doc = doc.clone();
                                             let export = export.clone();
                                             let poke = poke.clone();
+                                            // 出力名は作品名から(Premiere・Resolve)。無ければ Untitled。
+                                            let export_name = project_path
+                                                .lock()
+                                                .unwrap()
+                                                .as_ref()
+                                                .and_then(|p| p.file_stem().map(|s| s.to_string_lossy().into_owned()))
+                                                .map_or_else(|| "Untitled.mp4".to_owned(), |s| format!("{s}.mp4"));
                                             dioxus_core::spawn(async move {
                                                 // 種の絞りを付けると、OS が拡張子を**もう一度**足して
                                                 // `x.mp4.mp4` になる。足すのはこちらの仕事に一本化する。
                                                 let picked = rfd::AsyncFileDialog::new()
-                                                    .set_file_name("comp.mp4")
+                                                    .set_file_name(&export_name)
                                                     .save_file()
                                                     .await;
                                                 let Some(file) = picked else { return };

@@ -93,3 +93,79 @@
 - ☑ Q14 style が空の文字層
 - ☐ Q15 harness と窓のずれ(click_super、IME の試験)
 - ☐ Q16 落とした物・drag の後始末
+
+## 第 3 波 D: 書き出しの人
+- ☐ D1 comp の設定(寸法・fps・尺・縦)を窓から変えられない — 9:16 が作れない
+- ☐ D2 書き出しの選択肢がゼロ(preset・寸法・fps・範囲)
+- ☐ D3 素材の欠落が窓に出ず relink の口も無い。描画が Asset でなく生 path を見る
+- ☐ D4 書き出し前の確認(1 行のサマリ)
+- ☑ D5 進捗の母数が最初 0 / 0、支度中に止められない
+- ☐ D6 完了通知が status bar の 1 行だけ(Reveal・×・通知)
+- ☑ D7 出力名が comp.mp4 固定 → 作品名(前回の出力先の記憶は未)
+- ☐ D8 バッチ書き出し
+- ☐ D9 snapshot 経由の書き出しが相対 path を壊す
+- ☐ D10 白紙と ffmpeg 無しの無表示
+- ☑ D11 エラー文言が日本語
+
+## 第 3 波 C: 色と Blend の VJ
+- ☐ C1 効果の bypass・並べ替え・複製(EffectInstance に enabled が無い)
+- ☐ C2 同じ効果を二度足せる、番号無し
+- ☐ C3 効果の preset の器
+- ☐ C4 Blend のサムネイルが空の四角
+- ☐ C5 hover preview が鍵(focus)とタッチに無い
+- ☑ C6 色の書き戻しが gradient を潰す
+- ☑ C7 線形光の一言
+- ☐ C8 Add が mix の列に混じる
+- ☐ C9 色を保存する口(palette、裁定 244)
+- ☐ C10 スポイト
+- ☐ C11 α が drag できず 1 押し 1 手
+- ☐ C12 効果の色 param
+- ☐ C13 効果カードに絵・検索・分類
+- ☑ C14 BLEND 行で机が前に出る
+- ☐ C15 hex / HSV / RGB を打つ口
+
+## 第 3 波 A: 音と拍の編集者
+- ☐ A1 スクラブに音が無い(seek が device を捨てる)
+- ☐ A2 Document を書くたび音が止まる(sync_document)
+- ☐ A3 ループ区間・イン/アウト
+- ☑ A4 印を打つと机が毎回開く → 机が Follow の時だけ
+- ☐ A5 印へ跳んでも画面が付いてこない
+- ☑ A6 S(solo)が音に効かない、音だけの mute が無い
+- ☐ A7 メーターが死んでいる・音量の口が無い
+- ☐ A8 波形がモノラル
+- ☑ A9 波形の解像度が Retina で半分
+- ☐ A10 波形が線形振幅
+- ☑ A11 印が目盛の中にしか描かれない → 全 track を貫く線
+- ☐ A12 吸い付きを切れない
+- ☐ A13 再生位置のスクラブが吸い付かない
+- ☑ A14 目盛の刻みが 1 秒固定 → 倍率で段
+- ☐ A15 空きを押すと再生位置が動かない
+- ☑ A16 印の名前が採番 → タイムコード
+- ☐ A17 波形の生成中が無表示
+- ☐ A18 尺の表記が秒丸め
+- ☐ A19 動画の音は 1 本目だけ
+
+## 第 3 波 H: macOS HIG
+- ☐ H1 NSMainMenu が無い(⌘Q ⌘H ⌘M ⌘W ⌘, が全滅)— objc2-app-kit で App / Edit / Window / Help の 4 本
+- ☐ H2 Services・標準 Edit(日本語の入力ソース・Emoji)— H1 と同時
+- ☐ H3 App menu(About・⌘,)
+- ☐ H4 フルスクリーン・Window menu
+- ☐ H5 未保存で閉じる alert に Save が無い(project.rs の 3 択へ寄せる)
+- ☐ H6 rfd の dialog に set_parent が無い(sheet にならない)
+- ☐ H7 title bar が書類を指さない(set_title・representedFilename・documentEdited)
+- ☐ H8 Open Recent
+- ☐ H9 Revert to Saved
+- ☐ H10 自動保存・版
+- ☐ H11 ⌘N ⌘O ⇧⌘S の加速鍵
+- ☐ H12 ⌘W と閉じる意味(窓を閉じる ≠ 終了)
+- ☐ H13 窓の位置・大きさの復元
+- ☐ H14 別窓に menu が無い(H1 で解決)
+- ☐ H15 save panel に種別の絞り
+- ☐ H16 DragEntered で欄が確定してしまう(通っただけで)
+- ☐ H17 drop の受け入れ可否が視覚に出ない
+- ☐ H18 dark 固定(Appearance の設定)
+- ☐ H19 accent が OS 設定を無視
+- ☐ H20 Reduce Motion を起動時にしか読まない
+- ☐ H21 menubar の role / aria-controls
+- ☐ H22 scale_factor 変化(外部 display)の再 layout — 要実窓
+- ☐ H23 alert の文面が Mac 調でない

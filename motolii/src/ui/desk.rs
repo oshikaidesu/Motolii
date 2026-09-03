@@ -346,7 +346,8 @@ fn drawer_body(
             });
             match target {
                 None => rsx!(div { class: "dempty", "No layer yet · select one" }),
-                Some((layer, current)) => rsx!(div { class: "blend-grid",
+                // 合成は線形光(裁定 498)。AE の既定(ガンマ)とは Multiply / Screen の絵が違う。将来の切替点はここ。
+                Some((layer, current)) => rsx!(div { class: "dnote", "Linear light" } div { class: "blend-grid",
                     for (mode , label) in BLEND_MODES.iter().copied() {
                         SemanticButton {
                             class: if mode == current { "blend-cell on" } else { "blend-cell" },

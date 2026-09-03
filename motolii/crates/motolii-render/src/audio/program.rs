@@ -101,7 +101,16 @@ impl AudioProgram {
 
         let mut sources = Vec::new();
         let mut waveform_tracks = Vec::new();
+        // S(solo)は音の系(DAW・NLE)。誰かが solo なら、その層だけ鳴る。
+        let soloed: Vec<_> = view
+            .layers()
+            .into_iter()
+            .filter(|l| view.attrs(*l).ok().flatten().is_some_and(|a| a.solo))
+            .collect();
         for layer in view.layers() {
+            if !soloed.is_empty() && !soloed.contains(&layer) {
+                continue;
+            }
             match layer_mix_source(view, layer, fps, &mut cache.pcm) {
                 Ok(Some(source)) => {
                     let pcm_key = Arc::as_ptr(&source.pcm) as usize;

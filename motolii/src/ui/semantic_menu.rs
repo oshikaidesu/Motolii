@@ -129,11 +129,14 @@ pub(super) fn SemanticButton(
     /// hover で下見する物(blend の格子)だけが持つ。
     #[props(default)] onmouseenter: Option<EventHandler<MouseEvent>>,
     #[props(default)] onmouseleave: Option<EventHandler<MouseEvent>>,
+    /// 名札(hover で出る)。文字を持たない chip だけが持つ。
+    #[props(default)] title: Option<String>,
     children: Element,
 ) -> Element {
     rsx!(button {
         class: "semantic-button {class}",
         disabled,
+        title,
         aria_pressed: selected.map(|on| if on { "true" } else { "false" }),
         aria_label,
         onclick: move |evt| onclick.call(evt),

@@ -70,7 +70,8 @@ impl ExportController {
     pub(super) fn cancel(&self) {
         let (cancel, wake) = {
             let mut state = self.0.lock().unwrap();
-            if !matches!(state.status.phase, ExportPhase::Running) {
+            // 支度の最中も止められる(長い書き出しで最初に押すのはここ)。
+            if !matches!(state.status.phase, ExportPhase::Preparing | ExportPhase::Running) {
                 return;
             }
             state.status.phase = ExportPhase::Cancelling;
@@ -91,6 +92,15 @@ impl ExportController {
         poke: Poke,
     ) -> Result<(), String> {
         let cancel = Cancel::new();
+        // 母数は最初から出す(音の支度の間 0 / 0 と出さない)。
+        let frames_total = doc
+            .lock()
+            .unwrap()
+            .view()
+            .composition()
+            .ok()
+            .flatten()
+            .map_or(0, |c| c.duration_frames);
         {
             let mut state = self.0.lock().unwrap();
             if matches!(
@@ -103,7 +113,7 @@ impl ExportController {
                 phase: ExportPhase::Preparing,
                 destination: Some(destination.clone()),
                 frames_done: 0,
-                frames_total: 0,
+                frames_total,
                 detail: String::new(),
             };
             state.cancel = Some(cancel.clone());

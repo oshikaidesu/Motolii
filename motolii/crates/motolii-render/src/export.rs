@@ -21,13 +21,13 @@ pub enum ExportError {
     Media(#[from] MediaError),
     #[error(transparent)]
     Audio(#[from] AudioError),
-    #[error("frame 記述を作れない: {0}")]
+    #[error("cannot describe frame: {0}")]
     Desc(String),
-    #[error("中断された(残骸は消してある)")]
+    #[error("cancelled (partial output removed)")]
     Cancelled,
-    #[error("comp の設定が Document に無い")]
+    #[error("the document has no composition")]
     NoComposition,
-    #[error("静止画の書き出しに失敗: {0}")]
+    #[error("still export failed: {0}")]
     Still(String),
 }
 
