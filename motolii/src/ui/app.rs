@@ -1146,8 +1146,7 @@ pub fn app() -> Element {
                             if starts.is_empty() {
                                 return;
                             }
-                            let shape = crate::ui::ease::easy_ease(side);
-                            match crate::ui::ease::apply(&session, &starts, shape) {
+                            match crate::ui::ease::apply_easy(&session, &starts, side) {
                                 Ok(n) => println!(
                                     "PROBE room=write verdict=applied EasyEase tracks={n}"
                                 ),

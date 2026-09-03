@@ -61,6 +61,8 @@ enum DragMode {
     Move,
     TrimStart,
     TrimEnd,
+    /// Alt+drag: 帯は動かさず中身だけずらす(Premiere・Resolve のスリップ)。
+    Slip,
     /// 菱形そのものを掴んで時間を動かす。
     Key { at_sec: f64 },
 }
@@ -275,6 +277,7 @@ pub(super) struct TimelineWidget {
     scroll_sec: f64,
     scroll_y: f64,
     viewport_h: f64,
+    viewport_w: f64,
     cursor: Option<(f64, f64)>,
     hovered: Option<(usize, usize)>,
     selected: Vec<(usize, usize)>,
@@ -313,6 +316,7 @@ impl TimelineWidget {
             scroll_sec: 0.0,
             scroll_y: 0.0,
             viewport_h: 0.0,
+            viewport_w: 0.0,
             cursor: None,
             hovered: None,
             selected: Vec::new(),
@@ -504,6 +508,11 @@ impl TimelineWidget {
                             let new_start = (drag.orig.start + raw_delta).max(0);
                             LayerTiming { start: new_start, ..drag.orig }
                         }
+                        DragMode::Slip => {
+                            // 右へ引くと中身が右へ来る = 頭に映る素材が前へ戻る。
+                            let source_in = (drag.orig.source_in - raw_delta).max(0);
+                            LayerTiming { source_in, ..drag.orig }
+                        }
                         DragMode::TrimStart => {
                             let min_delta = -(drag.orig.start.min(drag.orig.source_in));
                             let max_delta = drag.orig.duration - 1;
@@ -541,6 +550,7 @@ impl TimelineWidget {
                                 "PROBE room=write verdict=applied SetTiming mode={} start {}->{} dur {}->{}",
                                 match drag.mode {
                                     DragMode::Move => "move",
+                                    DragMode::Slip => "slip",
                                     DragMode::TrimStart => "trim-start",
                                     DragMode::TrimEnd => "trim-end",
                                     DragMode::Key { .. } => unreachable!("上で返している"),
@@ -638,6 +648,7 @@ impl TimelineWidget {
             return;
         }
         let (rh, rowh) = (RULER_H * self.sfac(), ROW_H * self.sfac());
+        let mut layers = Vec::new();
         for (row_ix, row) in self.rows.iter().enumerate() {
             let mid = rh + row_ix as f64 * rowh + rowh * 0.5 - self.scroll_y;
             if mid < y0 || mid > y1 {
@@ -649,8 +660,35 @@ impl TimelineWidget {
                     self.selected.push((row_ix, key_ix));
                 }
             }
+            // 帯が箱に触れていれば層も選ぶ(Premiere・Blender は箱で clip も選ぶ)。
+            if let (Some(layer), Some((a, b))) = (row.layer, row.span) {
+                let xa = (a - self.scroll_sec) * self.pps;
+                let xb = (b - self.scroll_sec) * self.pps;
+                if xb >= x0 && xa <= x1 && row.prop.is_none() {
+                    layers.push(layer);
+                }
+            }
+        }
+        if let (Some(selection), Some(mirror), false) =
+            (self.selection.as_ref(), self.selected_mirror.as_mut(), layers.is_empty())
+        {
+            selection.set(Some(layers[0]));
+            for layer in &layers[1..] {
+                selection.toggle(*layer);
+            }
+            mirror.set(selection.get());
         }
         self.publish_keys();
+    }
+
+    /// 横スクロールの天井。作品の終わりが左端に来る所より先へは行かない(右が無限にならない)。
+    fn scroll_ceiling(&self) -> f64 {
+        let end = self
+            .rows
+            .iter()
+            .filter_map(|r| r.span.map(|(_, b)| b))
+            .fold(0.0_f64, f64::max);
+        (end - self.viewport_w * 0.5 / self.pps).max(0.0)
     }
 
     /// 掴んでいるキーを窓の側へ出す。イージングのパネルがこれを読む。
@@ -866,11 +904,11 @@ impl Widget for TimelineWidget {
                     // 上へ回すと広がる。Stage の拡縮と同じ向き。
                     let new_pps = (self.pps * (1.0 + dy * 0.002)).clamp(MIN_PPS, MAX_PPS);
                     self.pps = new_pps;
-                    self.scroll_sec = (cursor_sec - cursor_x / new_pps).max(0.0);
+                    self.scroll_sec = (cursor_sec - cursor_x / new_pps).clamp(0.0, self.scroll_ceiling().max(cursor_sec));
                 } else {
                     self.set_scroll_y(self.scroll_y + dy);
                 }
-                self.scroll_sec = (self.scroll_sec - dx / self.pps).max(0.0);
+                self.scroll_sec = (self.scroll_sec - dx / self.pps).clamp(0.0, self.scroll_ceiling());
                 if let Some((cx, cy)) = self.cursor {
                     self.hovered = self.hit_test(cx, cy);
                 }
@@ -1011,6 +1049,8 @@ impl Widget for TimelineWidget {
                                     DragMode::TrimStart
                                 } else if (x - xb).abs() <= EDGE_GRAB_PX {
                                     DragMode::TrimEnd
+                                } else if p.mods.contains(Modifiers::ALT) {
+                                    DragMode::Slip
                                 } else {
                                     DragMode::Move
                                 }
@@ -1095,6 +1135,7 @@ impl Widget for TimelineWidget {
         let ruler_h = RULER_H * self.sfac() * k;
         let row_h = ROW_H * self.sfac() * k;
         self.viewport_h = h / k;
+        self.viewport_w = w / k;
         self.set_scroll_y(self.scroll_y);
         let scroll_y = self.scroll_y * k;
         let pps = self.pps * k;
@@ -1186,12 +1227,12 @@ impl Widget for TimelineWidget {
                     DragMode::Move => (d.delta_sec, d.delta_sec),
                     DragMode::TrimStart => (d.delta_sec, 0.0),
                     DragMode::TrimEnd => (0.0, d.delta_sec),
-                    DragMode::Key { .. } => (0.0, 0.0),
+                    DragMode::Slip | DragMode::Key { .. } => (0.0, 0.0),
                 },
                 _ => (0.0, 0.0),
             };
             let waveform_shift = match &self.drag {
-                Some(d) if d.row == i && d.mode == DragMode::Move => d.delta_sec,
+                Some(d) if d.row == i && matches!(d.mode, DragMode::Move | DragMode::Slip) => d.delta_sec,
                 _ => 0.0,
             };
 

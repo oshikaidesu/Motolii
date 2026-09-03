@@ -39,6 +39,17 @@ pub(super) fn segments(keys: &[KeySel]) -> Vec<KeySel> {
 }
 
 pub(super) fn apply(session: &Session, starts: &[KeySel], shape: Interp) -> Result<usize, String> {
+    apply_at(session, starts, shape, false)
+}
+
+/// AE の F9 一族。Easy Ease In(⇧F9)は**キーへ入る側** = 前の区間の終わりを寝かせる。
+/// Easy Ease Out(⌘F9)はキーから出る側 = この区間の始まり。形はキーが持つので、In は前のキーへ書く。
+pub(super) fn apply_easy(session: &Session, starts: &[KeySel], side: crate::ui::keymap::EaseSide) -> Result<usize, String> {
+    let previous = side == crate::ui::keymap::EaseSide::In;
+    apply_at(session, starts, easy_ease(side), previous)
+}
+
+fn apply_at(session: &Session, starts: &[KeySel], shape: Interp, previous: bool) -> Result<usize, String> {
     let mut doc = session.doc.lock().unwrap();
     let fps = doc
         .view()
@@ -61,15 +72,22 @@ pub(super) fn apply(session: &Session, starts: &[KeySel], shape: Interp) -> Resu
             };
             let mut next = KeyframeTrack::new();
             let mut touched = false;
-            for key in track.keys() {
-                let mut key = key.clone();
-                let same = key
-                    .t
+            let keys = track.keys();
+            let hit = keys.iter().position(|key| {
+                key.t
                     .try_to_frame_round(fps)
                     .ok()
                     .zip(at.try_to_frame_round(fps).ok())
-                    .is_some_and(|(a, b)| a == b);
-                if same {
+                    .is_some_and(|(a, b)| a == b)
+            });
+            let target = match (hit, previous) {
+                (Some(i), true) => i.checked_sub(1),
+                (hit, false) => hit,
+                (None, true) => None,
+            };
+            for (i, key) in keys.iter().enumerate() {
+                let mut key = key.clone();
+                if Some(i) == target {
                     key.interp = shape;
                     touched = true;
                 }
@@ -103,16 +121,17 @@ pub(super) fn easy_ease(side: crate::ui::keymap::EaseSide) -> Interp {
             x2: 0.67,
             y2: 1.0,
         },
+        // In は前の区間の**終わり**を寝かせる(x2 側)。Out はこの区間の始まり(x1 側)。
         EaseSide::In => Interp::Bezier {
-            x1: 0.33,
-            y1: 0.0,
-            x2: 1.0,
-            y2: 1.0,
-        },
-        EaseSide::Out => Interp::Bezier {
             x1: 0.0,
             y1: 0.0,
             x2: 0.67,
+            y2: 1.0,
+        },
+        EaseSide::Out => Interp::Bezier {
+            x1: 0.33,
+            y1: 0.0,
+            x2: 1.0,
             y2: 1.0,
         },
     }
@@ -226,4 +245,45 @@ pub(super) fn ease_panel(
             div { class: "ename", "{name}" }
         }
     )
+}
+
+#[cfg(test)]
+mod easy {
+    use super::*;
+    use crate::doc::store::{property, Keyframe, Value};
+    use crate::ui::keymap::EaseSide;
+
+    fn keyed_session() -> (Session, crate::doc::store::LayerId, PropertyId, crate::doc::store::Fps) {
+        let loaded = crate::ui::fixture::load_fixture();
+        let mut doc = loaded.doc;
+        let fps = doc.view().composition().unwrap().unwrap().fps;
+        let layer = doc.view().layers()[0];
+        let prop = PropertyId::new(property::OPACITY).unwrap();
+        let mut track = KeyframeTrack::new();
+        for frame in [0, 24, 48] {
+            track.insert(Keyframe {
+                t: RationalTime::try_from_frame(frame, fps).unwrap(),
+                value: Value::F64(frame as f64),
+                interp: Interp::Linear,
+                spatial: None,
+            });
+        }
+        doc.apply(Intent::SetTrack { layer, property: prop.clone(), track }).unwrap();
+        (Session::new(doc, loaded.duration_sec, loaded.ui), layer, prop, fps)
+    }
+
+    /// ⇧F9 は選んだキーへ**入る**区間(前のキーが持つ形)を寝かせ、⌘F9 は出る区間を寝かせる。
+    #[test]
+    fn ease_in_lands_on_the_previous_segment_and_out_on_this_one() {
+        let (session, layer, prop, fps) = keyed_session();
+        let middle = KeySel { layer, property: Some(prop.clone()), at_sec: 24.0 / fps.as_f64() };
+        apply_easy(&session, &[middle.clone()], EaseSide::In).unwrap();
+        let keys = session.doc.lock().unwrap().view().track(layer, &prop).unwrap().unwrap().keys().to_vec();
+        assert_eq!(keys[0].interp, easy_ease(EaseSide::In), "In must shape the segment before the key");
+        assert_eq!(keys[1].interp, Interp::Linear);
+
+        apply_easy(&session, &[middle], EaseSide::Out).unwrap();
+        let keys = session.doc.lock().unwrap().view().track(layer, &prop).unwrap().unwrap().keys().to_vec();
+        assert_eq!(keys[1].interp, easy_ease(EaseSide::Out), "Out must shape the segment after the key");
+    }
 }
