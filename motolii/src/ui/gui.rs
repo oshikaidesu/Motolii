@@ -783,9 +783,10 @@ fn edited_status_tracks_the_saved_document_revision() {
 #[test]
 fn file_drop_hover_and_cancel_are_visible_in_the_product_tree() {
     let mut gui = Gui::open();
-    gui.enter_files(&["clip.mov".into(), "sound.wav".into()]);
+    gui.enter_files(&["clip.mp4".into(), "still.png".into(), "notes.xyz".into()]);
     assert_eq!(gui.count(".file-drop-overlay"), 1);
-    assert_eq!(gui.texts(".file-drop-card"), vec!["Drop 2 files to import"]);
+    // 受け付けられる物だけを数える(notes.xyz は入らない)。
+    assert_eq!(gui.texts(".file-drop-card .line"), vec!["Drop to import 2 of 3 files"]);
 
     gui.leave_files();
     assert_eq!(gui.count(".file-drop-overlay"), 0);

@@ -211,9 +211,32 @@ fn file_drop_overlay(session: &Session) -> Element {
         return rsx! {};
     }
     let noun = if count == 1 { "file" } else { "files" };
+    // 受け付けられる物だけを数える。覆いが「入る」と言い切って後で断るのは嘘になる。
+    let supported = session
+        .file_drop
+        .paths()
+        .iter()
+        .filter(|p| {
+            p.is_dir()
+                || p.extension()
+                    .and_then(|e| e.to_str())
+                    .and_then(crate::render::media::asset_type_for_extension)
+                    .is_some()
+        })
+        .count();
+    let line = if supported == 0 {
+        "Nothing here can be imported".to_owned()
+    } else if supported < count {
+        format!("Drop to import {supported} of {count} {noun}")
+    } else {
+        format!("Drop {count} {noun} to import")
+    };
     rsx!(div {
         class: "file-drop-overlay",
-        div { class: "file-drop-card", "Drop {count} {noun} to import" }
+        div { class: "file-drop-card",
+            span { class: "line", "{line}" }
+            div { class: "sub", "Onto the Desk adds images as references" }
+        }
     })
 }
 
@@ -648,6 +671,7 @@ pub fn app() -> Element {
         });
     });
     let panes = panes_for(&loaded);
+    let has_composition = session.doc.lock().unwrap().view().composition().ok().flatten().is_some();
     // 面からの「この panel を前に出して」。revision の度に拾う(Inspector の COLOR 行 → Colors)。
     {
         let asker = session.clone();
@@ -1433,7 +1457,9 @@ pub fn app() -> Element {
                             div { class: "vrow",
                                 SemanticControl {
                                     label: "Export…",
-                                    disabled: session.export.is_active(),
+                                    // 白紙(comp 無し)は書き出せない。押せない理由は hint に。
+                                    disabled: session.export.is_active() || !has_composition,
+                                    hint: if has_composition { "" } else { "No composition" },
                                     onclick: {
                                         let doc = session.doc.clone();
                                         let export = session.export.clone();
@@ -1509,6 +1535,24 @@ pub fn app() -> Element {
                                         evt.stop_propagation();
                                         dock.write().reset_layout();
                                         open_menu.set(None);
+                                    }
+                                }
+                            }
+                            div { class: "vrow",
+                                SemanticControl {
+                                    label: "Output Only",
+                                    checked: session.output_only.load(std::sync::atomic::Ordering::Relaxed),
+                                    hint: "Stage",
+                                    onclick: {
+                                        let flag = session.output_only.clone();
+                                        let mut revision = revision;
+                                        move |evt: Event<MouseData>| {
+                                            evt.stop_propagation();
+                                            let next = !flag.load(std::sync::atomic::Ordering::Relaxed);
+                                            flag.store(next, std::sync::atomic::Ordering::Relaxed);
+                                            *revision.write() += 1;
+                                            open_menu.set(None);
+                                        }
                                     }
                                 }
                             }

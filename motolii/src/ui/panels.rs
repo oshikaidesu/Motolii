@@ -80,7 +80,7 @@ pub(super) fn StagePanel(
             session.rings.clone(),
             session.frame_dim.clone(),
             session.gesture.clone(),
-            false,
+            session.output_only.clone(),
             view_pct,
             session.view_request.clone(),
         ))

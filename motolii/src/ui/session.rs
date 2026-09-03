@@ -27,6 +27,10 @@ impl FileDropSurface {
     pub(super) fn count(&self) -> usize {
         self.0.lock().unwrap().len()
     }
+
+    pub(super) fn paths(&self) -> Vec<std::path::PathBuf> {
+        self.0.lock().unwrap().clone()
+    }
 }
 
 impl GestureSurface {
@@ -157,6 +161,8 @@ pub(super) struct Session {
     /// 型そのものが行き過ぎる物(Elastic 系)は型の意味として ON になる。
     /// 向きの輪と奥行きの点を描くか。掴んだ所の意味は変えない、散らかりの加減だけ。
     pub rings: Arc<std::sync::atomic::AtomicBool>,
+    /// Stage を「出す物だけ」で映す(取っ手も枠も無し)。View menu の Output only。
+    pub output_only: Arc<std::sync::atomic::AtomicBool>,
     /// 枠の外へかける膜の濃さ(%)。見る側の設定で、作品には入らない。
     pub frame_dim: Arc<std::sync::atomic::AtomicU32>,
     pub gesture: GestureSurface,
@@ -307,6 +313,7 @@ impl Session {
             view_camera: Arc::new(Mutex::new(Default::default())),
             view_request: Arc::new(Mutex::new(None)),
             rings: Arc::new(std::sync::atomic::AtomicBool::new(true)),
+            output_only: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             frame_dim: Arc::new(std::sync::atomic::AtomicU32::new(75)),
             gesture: GestureSurface::default(),
             file_drop: FileDropSurface::default(),

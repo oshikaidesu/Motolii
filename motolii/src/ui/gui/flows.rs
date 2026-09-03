@@ -557,7 +557,8 @@ fn arrow_keys_walk_an_open_menu() {
     let view = gui.center_of("#menu-view", 0);
     gui.click(view.0, view.1);
     assert_eq!(gui.count("#menu-view-list"), 1);
-    // 1 つ目は Reset Layout、2 つ目は最初の面の出し入れ。
+    // 1 つ目は Reset Layout、2 つ目は Output Only、3 つ目は最初の面の出し入れ。
+    gui.key(keyboard_types::Key::ArrowDown, keyboard_types::Modifiers::empty());
     gui.key(keyboard_types::Key::ArrowDown, keyboard_types::Modifiers::empty());
     gui.key(keyboard_types::Key::ArrowDown, keyboard_types::Modifiers::empty());
     gui.key(keyboard_types::Key::Enter, keyboard_types::Modifiers::empty());

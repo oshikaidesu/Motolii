@@ -1803,3 +1803,9 @@ body {
 .tcell:hover .tacts {
     display: flex;
 }
+
+.file-drop-card .sub {
+    margin-top: var(--sp1);
+    font-size: var(--t-dense);
+    color: var(--ink2);
+}

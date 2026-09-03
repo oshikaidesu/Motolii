@@ -180,7 +180,7 @@ pub(super) struct StageWidget {
     cursor: Option<(f64, f64)>,
     /// **出す物だけを映す。** 書き出しカメラで撮り、取っ手も枠も描かず、触れない。
     /// Stage が世界を見る場になった以上、出力を確かめる場が別に要る。
-    output_only: bool,
+    output_only: Arc<std::sync::atomic::AtomicBool>,
     /// 画面の倍率(%)。#stagefoot が読む。
     view_pct: Signal<u32>,
     view_request: Arc<Mutex<Option<crate::ui::session::ViewRequest>>>,
@@ -219,7 +219,7 @@ impl StageWidget {
         rings: Arc<std::sync::atomic::AtomicBool>,
         frame_dim: Arc<std::sync::atomic::AtomicU32>,
         gesture: GestureSurface,
-        output_only: bool,
+        output_only: Arc<std::sync::atomic::AtomicBool>,
         view_pct: Signal<u32>,
         view_request: Arc<Mutex<Option<crate::ui::session::ViewRequest>>>,
     ) -> Self {
@@ -841,7 +841,7 @@ impl Widget for StageWidget {
     }
 
     fn handle_event(&mut self, event: &UiEvent) {
-        if self.output_only {
+        if self.output_only.load(std::sync::atomic::Ordering::Relaxed) {
             // 出力を映す窓。ここは**見るだけ**で、触っても何も起きない。
             return;
         }
@@ -1160,7 +1160,7 @@ impl Widget for StageWidget {
         let rt = RationalTime::try_new((t_sec * 3000.0) as i64, 3000).unwrap_or(RationalTime::ZERO);
 
         // 見るのは視点カメラ、書き出しは Document のカメラ。同じ世界を通る。
-        let observation = if self.output_only {
+        let observation = if self.output_only.load(std::sync::atomic::Ordering::Relaxed) {
             crate::render::engine::ObservationCamera::default()
         } else {
             *self.view_camera.lock().unwrap()
@@ -1173,7 +1173,7 @@ impl Widget for StageWidget {
             rt,
             &target,
             export_camera,
-            self.output_only,
+            self.output_only.load(std::sync::atomic::Ordering::Relaxed),
         );
         if let Err(e) = rendered {
             println!("PROBE room=stage verdict=render-error {e}");
@@ -1183,7 +1183,7 @@ impl Widget for StageWidget {
         // 枠の外を見せるための、画角を広げた1枚。**目玉は動かさず画角だけ**
         // `zoom/k` に広げる。距離を変えると遠近そのものが変わってしまう。
         // 窓が枠より広い時だけ撮る(枠が窓を覆っていれば外は見えない)。
-        let wide = if self.output_only {
+        let wide = if self.output_only.load(std::sync::atomic::Ordering::Relaxed) {
             None
         } else {
             let base = ((width as f64) / cw as f64).min((height as f64) / ch as f64);
@@ -1354,7 +1354,7 @@ impl Widget for StageWidget {
             Some(Affine::translate((fx, fy)) * Affine::scale(s)),
             &Rect::from_origin_size((fx, fy), (fw, fh)),
         );
-        if self.output_only {
+        if self.output_only.load(std::sync::atomic::Ordering::Relaxed) {
             // 出す物だけ。枠も取っ手も描かない。
             return scene;
         }

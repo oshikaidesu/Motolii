@@ -248,6 +248,8 @@ pub(super) fn OutputStatus(
     controller: ExportController,
     surface: OutputSurface,
     generation: u32,
+    /// 白紙(comp 無し)の時の一言。Panel だけが持つ。
+    #[props(default)] idle_note: Option<String>,
 ) -> Element {
     let _ = generation;
     let status = controller.status();
@@ -263,7 +265,7 @@ pub(super) fn OutputStatus(
         .map(|name| name.to_string_lossy().into_owned())
         .unwrap_or_default();
     let text = match status.phase {
-        ExportPhase::Idle if surface == OutputSurface::Panel => "Ready to export".to_owned(),
+        ExportPhase::Idle if surface == OutputSurface::Panel => idle_note.unwrap_or_else(|| "Ready to export".to_owned()),
         ExportPhase::Idle => String::new(),
         ExportPhase::Preparing => format!("Preparing export · {file_name}"),
         ExportPhase::Running => format!(
@@ -324,11 +326,13 @@ mod tests {
             controller: controller.clone(),
             surface: OutputSurface::Panel,
             generation: 1,
+            idle_note: None,
         };
         let after = OutputStatusProps {
             controller,
             surface: OutputSurface::Panel,
             generation: 2,
+            idle_note: None,
         };
         assert!(!before.memoize(&after));
     }
