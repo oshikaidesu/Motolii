@@ -416,7 +416,7 @@ fn a_note_is_typed_in_a_textarea_and_committed_by_clicking_outside() {
             name: "intro".into(),
             time: RationalTime::ZERO,
             duration: RationalTime::ZERO,
-            body: String::new(),
+            body: "x".into(),
         };
         gui.session.doc.lock().unwrap().apply(Intent::SetMarkers { markers: vec![marker] }).unwrap();
     }
@@ -442,8 +442,8 @@ fn a_note_is_typed_in_a_textarea_and_committed_by_clicking_outside() {
     assert!(gui.session.field().is_none(), "the field owner still holds a closed field");
     let markers = gui.session.doc.lock().unwrap().view().markers().unwrap();
     assert!(
-        markers.iter().any(|m| m.body.starts_with("La")),
-        "typed note did not reach the marker: {:?}",
+        markers.iter().any(|m| m.body.starts_with("xLa")),
+        "typed note did not continue from the end of the body: {:?}",
         markers.iter().map(|m| m.body.clone()).collect::<Vec<_>>()
     );
 }

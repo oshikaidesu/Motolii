@@ -262,19 +262,34 @@ pub(crate) fn commit_field(doc: &mut DioxusDocument) {
     send_chord(doc, keyboard_types::Key::Enter, keyboard_types::Code::Enter);
 }
 
-/// 開いたばかりの 1 行の欄は全選択 — 打てば置き換わる(Finder・AE の名前と同じ)。
-/// 書き置き(textarea)は末尾から続ける。`seen` は前に見た欄で、同じ欄には二度しない。
+/// 開いたばかりの欄: 1 行(input)は全選択 — 打てば置き換わる(Finder・AE の名前と同じ)。
+/// 書き置き(textarea)は caret を末尾へ。blitz は欄の editor を node より後に作り、その時
+/// caret を先頭に置くので、editor が出来るまでは何もせず次の event で再び見る。
 pub(crate) fn select_new_field(doc: &mut DioxusDocument, seen: &mut Option<blitz_dom::NodeId>) {
-    let field = doc.inner().query_selector("input").ok().flatten();
+    let field = doc.inner().query_selector(FIELD).ok().flatten();
     if field == *seen {
         return;
     }
-    *seen = field;
-    if field.is_none() {
+    let Some(node) = field else {
+        *seen = None;
         return;
-    }
+    };
+    let ready = {
+        let inner = doc.inner();
+        inner.get_node(node).and_then(|n| {
+            let element = n.element_data()?;
+            element.text_input_data()?;
+            Some(element.name.local.as_ref() == "textarea")
+        })
+    };
+    let Some(multiline) = ready else { return };
+    *seen = field;
     aim_keystrokes(doc);
-    send_chord(doc, keyboard_types::Key::Character("a".into()), keyboard_types::Code::KeyA);
+    if multiline {
+        send_chord(doc, keyboard_types::Key::End, keyboard_types::Code::End);
+    } else {
+        send_chord(doc, keyboard_types::Key::Character("a".into()), keyboard_types::Code::KeyA);
+    }
 }
 
 fn send_chord(doc: &mut DioxusDocument, key: keyboard_types::Key, code: keyboard_types::Code) {
