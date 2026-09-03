@@ -314,7 +314,7 @@
 - ☑ L1 Composition menu(⌥⌘K)に preset / 寸法 / fps / 尺 / Fit to layers(background・Export の範囲と preset は未 = D2・D4)
 - ☑ L2 Content の ◇/◆ で今の時刻に本文のキーを立てる・外す、Timeline に菱形(複数行の貼り付けを行ごとに配るのは未)
 - ☑ L3 音に関わる変更だけで再投影(指紋で gate、A2)— スクラブの音(A1)と BPM(S13)は未
-- ☐ L4 空の comp に最初の音・動画を入れたら尺を素材に伸ばす(place が切った事を status に)
+- ☑ L4 空の作品に最初の曲・動画が来たら尺を素材に合わせる
 - ☐ L5 Import に ⌘I
 - ☑ L6 M の toggle が連打で直前の印を消す
 - ☐ L7 Text 節に family / weight / justify(S6・S5 の残り)

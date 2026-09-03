@@ -358,6 +358,21 @@ fn spawn_layer(
         .as_ref()
         .map(|composition| (composition.width as f64, composition.height as f64))
         .unwrap_or((1920.0, 1080.0));
+    // 空の作品に最初の曲・動画が来たら、尺を素材に合わせる(60 秒の既定で 3 分の曲を黙って切らない)。
+    let mut grow_to: Option<i64> = None;
+    if let NewKind::Media { path, .. } = &kind {
+        let fresh = !d.view().layers().into_iter().any(|l| {
+            matches!(d.view().meta(l).ok().flatten().map(|m| m.source), Some(LayerSource::File { .. }))
+        });
+        if fresh {
+            if let Some(frames) = crate::render::media::probe(path).ok().and_then(|i| source_frames_in(&i, fps)) {
+                if frames > duration_frames {
+                    grow_to = Some(frames);
+                }
+            }
+        }
+    }
+    let duration_frames = grow_to.unwrap_or(duration_frames);
     let mut intents = new_layer_intents(
         layer,
         order,
@@ -367,6 +382,10 @@ fn spawn_layer(
         comp_size,
         kind,
     );
+    if let (Some(frames), Some(comp)) = (grow_to, composition.as_ref()) {
+        intents.insert(0, Intent::SetComposition(crate::doc::store::Composition { duration_frames: frames, ..comp.clone() }));
+        println!("PROBE room=write verdict=composition-grown frames={frames}");
+    }
     let taken: Vec<String> = d
         .view()
         .layers()
