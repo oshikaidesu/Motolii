@@ -372,6 +372,11 @@ body {
     display: block;
 }
 
+.rhead > div {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
 .rhead .sp {
     margin-left: auto;
     display: flex;
@@ -1393,6 +1398,7 @@ body {
 }
 
 .desk-note .mbody {
+    display: block;
     background: var(--app);
     color: var(--ink);
     border: var(--line) solid var(--bd);
@@ -1400,6 +1406,7 @@ body {
     font-size: var(--t-base);
     width: 100%;
     text-align: left;
+    white-space: pre-wrap;
 }
 
 .desk-note .mbody.idle {
@@ -1513,6 +1520,7 @@ body {
 }
 
 .color-pick {
+    align-self: stretch;
     display: flex;
     flex-direction: column;
     align-items: center;
