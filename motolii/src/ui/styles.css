@@ -969,6 +969,11 @@ body {
     flex: 0 0 auto;
 }
 
+.ptab:hover:not(.on) {
+    background: var(--hover);
+    color: var(--ink);
+}
+
 .ptab.on {
     color: var(--ink);
     background: var(--raised);
@@ -1787,6 +1792,10 @@ body {
 }
 
 .stagehint {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--sp2);
     padding: var(--sp2) var(--sp4);
     color: var(--ink3);
     font-size: var(--t-dense);

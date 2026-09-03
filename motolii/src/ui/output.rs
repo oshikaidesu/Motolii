@@ -1,3 +1,4 @@
+use crate::ui::semantic_menu::SemanticButton;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
@@ -314,7 +315,7 @@ pub(super) fn OutputStatus(
             div { class: class, role: "status", aria_live: "polite",
                 span { "{text}" }
                 if status.phase == ExportPhase::Running {
-                    button {
+                    SemanticButton {
                         class: "output-cancel",
                         onclick: {
                             let controller = controller.clone();
@@ -325,7 +326,7 @@ pub(super) fn OutputStatus(
                 }
                 if status.phase == ExportPhase::Completed {
                     if let Some(path) = status.destination.clone() {
-                        button {
+                        SemanticButton {
                             class: "output-cancel",
                             onclick: move |_| reveal_in_finder(&path),
                             "Show in Finder"
@@ -333,7 +334,7 @@ pub(super) fn OutputStatus(
                     }
                 }
                 if matches!(status.phase, ExportPhase::Completed | ExportPhase::Cancelled | ExportPhase::Failed) {
-                    button {
+                    SemanticButton {
                         class: "output-cancel",
                         aria_label: "Dismiss",
                         onclick: {

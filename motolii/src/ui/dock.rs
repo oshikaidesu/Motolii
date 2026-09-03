@@ -37,9 +37,9 @@ struct Spec {
 }
 
 const PANELS: &[Spec] = &[
+    Spec { panel: Panel::Create, label: "Create", way: "var(--way-browser)", home: Zone::Left, window: (420, 640) },
     Spec { panel: Panel::Media, label: "Media", way: "var(--way-browser)", home: Zone::Left, window: (420, 640) },
     Spec { panel: Panel::Effects, label: "Effects", way: "var(--way-browser)", home: Zone::Left, window: (420, 640) },
-    Spec { panel: Panel::Create, label: "Create", way: "var(--way-browser)", home: Zone::Left, window: (420, 640) },
     Spec { panel: Panel::Colors, label: "Colors", way: "var(--way-browser)", home: Zone::Left, window: (420, 640) },
     Spec { panel: Panel::Stage, label: "Stage", way: "var(--way-stage)", home: Zone::Center, window: (960, 620) },
     Spec { panel: Panel::Inspector, label: "Inspector", way: "var(--way-inspector)", home: Zone::Right, window: (340, 700) },

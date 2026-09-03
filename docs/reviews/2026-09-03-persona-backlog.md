@@ -466,7 +466,7 @@
 - ☐ UX4 級数は実は 3 段(MICRO = DENSE)、最大の文字が tab(.ptab の t-title)
 - ☐ UX5 --hit が唯一の口でない(18 に 3 通り、16 に 3 通り)
 - ☐ UX6 素の色 6・素の px 16・律の外の N 43・rsx の style 41(Create の札 #222/#fff/20px/32px)
-- ☐ UX7 部品 10 種を .control 1 つに(≒160 行減)、.output-cancel だけ生 button、:active が 3 つだけ、.ptab に hover 無し
+- ☑ UX7 .output-cancel を SemanticButton に、.ptab に hover(.control への畳み込みは未)
 - ☐ UX8 見出し 3 段と空状態の器 4 つを .head / .sub / .group に(≒70 行減)、.zoomctl の流用
 - ☐ UX9 .on と .lit が正反対の光り方、色だけの選択 6 箇所、沈める opacity 7 値 → 3 段
 - ☑ UX10 死に selector 6 块を消した(二重定義・focus ring の統一は未)
@@ -484,10 +484,10 @@
 
 ## 会議 PD: プロダクトデザイナー(旅と語彙)
 - ☑ PD1 recents.json・Open Recent(5 件)・引数の .rrd・窓の枠を window.json で復元(保存 dialog の sheet は未)
-- ☐ PD2 60 秒の既定が 1 本目を壊す — 層 0 の comp に長い素材が来たら尺を合わせる(L4)、空状態を「曲をここに置く + 比率 3 chip」に、既定 Text に黒縁
+- ☑ PD2 尺は最初の素材に合わせ、空状態は「曲をここに落とす + 16:9 / 9:16 / 1:1」、既定 Text に黒縁
 - ☑ PD3 status に "N keyframes selected"、キー削除にも報せ
 - ☑ PD4 手で閉じた引き出しは手で開けるまで開かない(shut の焦点は未)
-- ☐ PD5 語彙: Media / Library の二重、dock.rs の 2 つの並び、'm' と M chip の衝突、Key → Keyframe、Desk → Notes
+- ☑ PD5 Media の名を 1 つに、dock の並びを 1 つに('m'・Key → Keyframe・Desk → Notes は裁定待ち)
 - ☐ PD6 面 8 → 5(Create/Media/Effects/Colors は 1 枚 Library の rail)、Export は File に畳む、Settings は ⌘,
 - ☐ PD7 ◇/◆/⌥◆ が 1 グリフに 3 操作(AE は stopwatch と navigator の 2 部品)、菱形が歌詞と transform を混ぜる(歌詞は旗で)
 - ☐ PD8 telemetry 5 つ(first_layer_ms・first_export_ok・reopen・undo_after_intent・content_keys)

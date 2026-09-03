@@ -91,7 +91,29 @@ pub(super) fn StagePanel(
         div { id: "stagecol",
             // 行は常に 3 つ(grid の行数を揺らさない)。層が在れば空の 0px 行。
             if session.doc.lock().unwrap().view().layers().is_empty() {
-                div { class: "stagehint", "Add a Text layer from Create to begin" }
+                // 最初の問いは 1 つ「曲は?」。答えは操作そのもの(落とす)。比率は 3 つの chip。
+                div { class: "stagehint",
+                    span { "Drop a song or video here to begin · or add a Text layer from Create" }
+                    for (label , w , h) in [("16:9", 1920u32, 1080u32), ("9:16", 1080, 1920), ("1:1", 1080, 1080)] {
+                        SemanticButton {
+                            class: "chip",
+                            title: "Set the frame to {label}",
+                            onclick: {
+                                let session = session.clone();
+                                move |_| {
+                                    let mut d = session.doc.lock().unwrap();
+                                    if let Ok(Some(comp)) = d.view().composition() {
+                                        let next = crate::doc::store::Composition { width: w, height: h, ..comp };
+                                        let _ = d.apply(crate::doc::store::Intent::SetComposition(next));
+                                    }
+                                    drop(d);
+                                    *revision.write() += 1;
+                                }
+                            },
+                            "{label}"
+                        }
+                    }
+                }
             } else {
                 div { class: "stagehint empty" }
             }
