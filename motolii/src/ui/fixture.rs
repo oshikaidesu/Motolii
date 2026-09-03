@@ -98,6 +98,7 @@ pub(super) fn toggle_camera_open() {
 }
 
 pub(super) fn toggle_expanded(layer: LayerId) {
+    bump_view_stamp();
     let mut v = timeline_view().lock().unwrap();
     if !v.expanded.remove(&layer) {
         v.expanded.insert(layer);
@@ -105,10 +106,23 @@ pub(super) fn toggle_expanded(layer: LayerId) {
 }
 
 pub(super) fn expand(layer: LayerId) {
+    bump_view_stamp();
     timeline_view().lock().unwrap().expanded.insert(layer);
 }
 
+/// 行の並びを変える窓側の状態(展開・絞り・reveal)の世代。行の memo の鍵に入れる。
+static VIEW_STAMP: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+pub(super) fn view_stamp() -> u64 {
+    VIEW_STAMP.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+fn bump_view_stamp() {
+    VIEW_STAMP.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+}
+
 pub(super) fn toggle_keyed_only() {
+    bump_view_stamp();
     let mut v = timeline_view().lock().unwrap();
     v.keyed_only = !v.keyed_only;
 }
@@ -119,6 +133,7 @@ pub(super) fn keyed_only() -> bool {
 
 /// 属性を 1 つだけ出す(同じ鍵でもう一度押せば全部に戻る)。
 pub(super) fn toggle_reveal(property: &'static str) {
+    bump_view_stamp();
     let mut v = timeline_view().lock().unwrap();
     v.reveal = if v.reveal == Some(property) { None } else { Some(property) };
 }

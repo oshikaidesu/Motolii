@@ -65,8 +65,8 @@ pub(super) fn drawer_of(session: &Session) -> Option<Drawer> {
     match *session.desk.lock().unwrap() {
         DeskState::Open(drawer) => Some(drawer),
         DeskState::Follow => derived,
-        DeskState::Shut(seen) if seen == derived => None,
-        DeskState::Shut(_) => derived,
+        // 手で閉じた引き出しは、手で開けるまで開かない(選択を変えただけで勝手に戻らない)。
+        DeskState::Shut(_) => None,
     }
 }
 

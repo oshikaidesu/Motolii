@@ -706,11 +706,21 @@ pub fn app() -> Element {
     }
     let output_generation = (panes.echo)();
     let project_notice = session.project_notice.lock().unwrap().clone();
-    let status_line = match (project_notice.is_empty(), session.is_dirty()) {
+    let mut status_line = match (project_notice.is_empty(), session.is_dirty()) {
         (true, true) => "Edited".to_owned(),
         (false, true) => format!("{project_notice} · Edited"),
         _ => project_notice,
     };
+    // 選んでいるキーは見せる。見えないまま Delete と ⌥矢印の意味が変わるのは予測できない。
+    let keys_selected = session.selected_keys.lock().unwrap().len();
+    if keys_selected > 0 {
+        let word = if keys_selected == 1 { "keyframe" } else { "keyframes" };
+        status_line = if status_line.is_empty() {
+            format!("{keys_selected} {word} selected")
+        } else {
+            format!("{keys_selected} {word} selected · {status_line}")
+        };
+    }
     let scale_pct = panes.scale_pct;
     wire_windows(&host, panes);
     // 引き出しの開閉を机の tile の広さへ写す。机は呼ばれない — 開閉は Document と焦点から読む。
@@ -1181,6 +1191,11 @@ pub fn app() -> Element {
                                     session.selected_keys.lock().unwrap().clear();
                                     let _ = timeline_tx.send(TimelineMsg::SetRows(canvas));
                                     *revision.write() += 1;
+                                }
+                                if applied {
+                                    let n = keys.len();
+                                    *session.project_notice.lock().unwrap() =
+                                        format!("Deleted {n} {} · ⌘Z to undo", if n == 1 { "keyframe" } else { "keyframes" });
                                 }
                                 println!("PROBE room=write verdict=applied DeleteKeys n={} ok={applied}", keys.len());
                                 return;

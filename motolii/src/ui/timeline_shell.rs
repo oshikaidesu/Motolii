@@ -116,7 +116,10 @@ pub(super) fn timeline_shell(
                         match doc.apply(Intent::SetAttrs { layer, patch }) {
                             Ok(_) => {
                                 let a = doc.view().attrs(layer).ok().flatten().unwrap_or_default();
-                                attrs.write()[i] = (a.hidden, a.solo, a.locked);
+                                // 行の並び(展開・絞り)は attrs より先に動く事がある。無い番地には書かない。
+                                if let Some(slot) = attrs.write().get_mut(i) {
+                                    *slot = (a.hidden, a.solo, a.locked);
+                                }
                                 println!("PROBE room=write verdict=applied SetAttrs bit={bit}");
                             }
                             Err(e) => println!("PROBE room=write verdict=apply-error {e}"),

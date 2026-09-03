@@ -166,7 +166,7 @@ pub(super) fn TimelinePanel(
         use_hook(|| std::rc::Rc::new(std::cell::RefCell::new(None)));
     let rows_now = {
         let d = session.doc.lock().unwrap();
-        let stamp = format!("{:?}", d.revision());
+        let stamp = format!("{:?}/{}", d.revision(), fixture::view_stamp());
         let mut memo = memo.borrow_mut();
         match memo.as_ref() {
             Some((seen, rows)) if *seen == stamp => rows.clone(),

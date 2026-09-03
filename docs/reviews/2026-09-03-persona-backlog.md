@@ -473,7 +473,7 @@
 
 ## 会議 GC: グラフィックデザインのコンポーザー(作品の見え方)
 - ☐ GC1 既定の Text が縦に中央でない(position 0,0 で上端 85px)— shape 後に LineMeasure で縦中央へ
-- ☐ GC2 既定 style を「そのまま出せる」値へ(W6・line_height 1.5・palt・黒の縁取り 8%)
+- ☑ GC2 既定 Text: 行送り 1.5・palt・黒の縁取り 8%(W6 は機械に無いので W3 のまま)
 - ☐ GC3 縁取りを fill の下へ(stroke_over_fill を読む)、幅は外側基準(輪郭中心なので 2 倍)
 - ☐ GC4 ShapedText に glyph の区切り(glyph_spans)— Range Selector / 文字送りの入口
 - ☐ GC5 vism/blur.wgsl を 1 枚(ブラー・影・feather の土台)、mask に feather が無い
@@ -485,8 +485,8 @@
 ## 会議 PD: プロダクトデザイナー(旅と語彙)
 - ☐ PD1 起動が最後の作品を知らない — recents.json・window.json・argv・Open Recent(≒70 行)、保存 dialog だけ sheet でない
 - ☐ PD2 60 秒の既定が 1 本目を壊す — 層 0 の comp に長い素材が来たら尺を合わせる(L4)、空状態を「曲をここに置く + 比率 3 chip」に、既定 Text に黒縁
-- ☐ PD3 選択キーが見えないまま矢印と Delete の意味が変わる — "3 keyframes selected" を status に、キー削除にも報せ
-- ☐ PD4 Desk が自分で開く(Shut(seen) が derived で戻る)、shut() が焦点を落とす
+- ☑ PD3 status に "N keyframes selected"、キー削除にも報せ
+- ☑ PD4 手で閉じた引き出しは手で開けるまで開かない(shut の焦点は未)
 - ☐ PD5 語彙: Media / Library の二重、dock.rs の 2 つの並び、'm' と M chip の衝突、Key → Keyframe、Desk → Notes
 - ☐ PD6 面 8 → 5(Create/Media/Effects/Colors は 1 枚 Library の rail)、Export は File に畳む、Settings は ⌘,
 - ☐ PD7 ◇/◆/⌥◆ が 1 グリフに 3 操作(AE は stopwatch と navigator の 2 部品)、菱形が歌詞と transform を混ぜる(歌詞は旗で)

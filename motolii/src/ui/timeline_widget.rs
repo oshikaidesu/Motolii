@@ -1231,7 +1231,7 @@ impl Widget for TimelineWidget {
                 self.seen_revision = now;
                 if let (Some(doc), Some(extractor)) = (self.doc.as_ref(), self.extractor) {
                     let doc = doc.lock().unwrap();
-                    let stamp = format!("{:?}", doc.revision());
+                    let stamp = format!("{:?}/{}", doc.revision(), crate::ui::fixture::view_stamp());
                     if stamp != self.seen_doc_revision {
                         self.seen_doc_revision = stamp;
                         if let Ok(fps) = document_fps(&doc) {

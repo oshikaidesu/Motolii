@@ -299,13 +299,14 @@ fn new_layer_intents(
                         },
                         size: 96.0,
                         fill: [1.0, 1.0, 1.0, 1.0],
-                        line_height: None,
+                        // 日本語の歌詞の既定: 行送り 1.5、約物を詰める(palt)、黒の縁取り(背景が動画でも読める)。
+                        line_height: Some(96.0 * 1.5),
                         tracking: 0.0,
-                        stroke_color: None,
-                        stroke_width: 0.0,
+                        stroke_color: Some([0.0, 0.0, 0.0, 1.0]),
+                        stroke_width: 96.0 * 0.08,
                         stroke_over_fill: false,
                         axes: Vec::new(),
-                        features: Vec::new(),
+                        features: vec![crate::doc::store::TextStyleFeature { tag: "palt".to_owned(), value: 1 }],
                     }],
                     slot_id: None,
                     ranges: Vec::new(),
@@ -932,7 +933,7 @@ pub(super) fn browser_panel(
             } else {
                 div { class: "bwork",
                     div { class: "bside",
-                        h3 { class: "sh", "Library" }
+                        h3 { class: "sh", "Media" }
                         SemanticButton {
                             class: "{rail_class(None)}",
                             selected: rail().is_none(),
@@ -952,7 +953,7 @@ pub(super) fn browser_panel(
                         div { class: "rhead",
                             div {
                                 h2 { "{rail_label}" }
-                                span { class: "sub", "Library" }
+                                span { class: "sub", "Media" }
                             }
                         }
                         div { class: "rcount",
