@@ -62,6 +62,8 @@ struct TimelineView {
     /// カメラに錠。**掛けると破線の枠を掴めなくなる**(誤って掴むのを止める)。
     camera_locked: bool,
     keyed_only: bool,
+    /// AE の P / S / R / T / A: 展開した層にその属性の行だけを出す。もう一度押せば戻る。
+    reveal: Option<&'static str>,
 }
 
 fn timeline_view() -> &'static std::sync::Mutex<TimelineView> {
@@ -115,6 +117,16 @@ pub(super) fn keyed_only() -> bool {
     timeline_view().lock().unwrap().keyed_only
 }
 
+/// 属性を 1 つだけ出す(同じ鍵でもう一度押せば全部に戻る)。
+pub(super) fn toggle_reveal(property: &'static str) {
+    let mut v = timeline_view().lock().unwrap();
+    v.reveal = if v.reveal == Some(property) { None } else { Some(property) };
+}
+
+pub(super) fn reveal() -> Option<&'static str> {
+    timeline_view().lock().unwrap().reveal
+}
+
 /// 画面に出る行の並び。左の名前列と右の帯は必ずこれを通す(ずれると別物になる)。
 struct Row {
     layer: Option<LayerId>,
@@ -124,17 +136,18 @@ struct Row {
 }
 
 fn rows_of(doc: &Document) -> Vec<Row> {
-    let (expanded, keyed_only) = {
+    let (expanded, keyed_only, reveal) = {
         let v = timeline_view().lock().unwrap();
-        (v.expanded.clone(), v.keyed_only)
+        (v.expanded.clone(), v.keyed_only, v.reveal)
     };
-    rows_nested(doc, &expanded, keyed_only)
+    rows_nested(doc, &expanded, keyed_only, reveal)
 }
 
 fn rows_nested(
     doc: &Document,
     expanded: &std::collections::BTreeSet<LayerId>,
     keyed_only: bool,
+    reveal: Option<&str>,
 ) -> Vec<Row> {
     let view = doc.view();
     let mut layers = view.layers();
@@ -204,6 +217,10 @@ fn rows_nested(
             };
             let keyed = matches!(view.track(layer, &property), Ok(Some(t)) if !t.keys().is_empty());
             if keyed_only && !keyed {
+                continue;
+            }
+            // P / S / R / T / A: その属性の行だけ。
+            if reveal.is_some_and(|r| r != *name) {
                 continue;
             }
             out.push(Row {

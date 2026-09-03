@@ -52,6 +52,8 @@ pub(super) enum Intent {
     Quit,
     /// 枠の設定を開く(⌥⌘K。AE の Composition Settings は ⌘K だが、⌘K は切る手に使っている)。
     CompositionSettings,
+    /// AE の P / S / R / T / A: 選んだ層を展開してその属性の行だけ出す。
+    Reveal(&'static str),
     /// 選択を伸ばす(Shift+↑↓、Finder・AE)。
     SelectExtend(i32),
 }
@@ -344,6 +346,11 @@ const BINDINGS: &[Binding] = &[
     Binding { key: KeySpec::Char('q'), cmd: true, shift: false, alt: false, intent: Intent::Quit },
     // AE の指: ⌘⇧D で分割(⌘K も切る)。F9 一族は macOS が食うので ⌘⌥E 一族を並べる。
     Binding { key: KeySpec::Char('d'), cmd: true, shift: true, alt: false, intent: Intent::Split },
+    Binding { key: KeySpec::Char('p'), cmd: false, shift: false, alt: false, intent: Intent::Reveal(crate::doc::store::property::POSITION) },
+    Binding { key: KeySpec::Char('s'), cmd: false, shift: false, alt: false, intent: Intent::Reveal(crate::doc::store::property::SCALE) },
+    Binding { key: KeySpec::Char('r'), cmd: false, shift: false, alt: false, intent: Intent::Reveal(crate::doc::store::property::ROTATION) },
+    Binding { key: KeySpec::Char('t'), cmd: false, shift: false, alt: false, intent: Intent::Reveal(crate::doc::store::property::OPACITY) },
+    Binding { key: KeySpec::Char('a'), cmd: false, shift: false, alt: false, intent: Intent::Reveal(crate::doc::store::property::ANCHOR) },
     Binding { key: KeySpec::Char('e'), cmd: true, shift: false, alt: true, intent: Intent::EasyEase(EaseSide::Both) },
     Binding { key: KeySpec::Char('e'), cmd: true, shift: true, alt: true, intent: Intent::EasyEase(EaseSide::In) },
     Binding { key: KeySpec::Char('e'), cmd: false, shift: true, alt: true, intent: Intent::EasyEase(EaseSide::Out) },

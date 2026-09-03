@@ -1016,6 +1016,22 @@ pub fn app() -> Element {
                             }
                             *revision.write() += 1;
                         }
+                        Intent::Reveal(property) => {
+                            fixture::toggle_reveal(property);
+                            if fixture::reveal().is_some() {
+                                if let Some(layer) = selected() {
+                                    fixture::expand(layer);
+                                }
+                            }
+                            let d = doc.lock().unwrap();
+                            let rows = fixture::layer_rows_from_doc(&d);
+                            let canvas = fixture::canvas_rows_from_doc(&d);
+                            drop(d);
+                            attrs_state.set(rows.iter().map(|r| (r.hidden, r.solo, r.locked)).collect());
+                            layer_rows.set(rows);
+                            let _ = timeline_tx.send(TimelineMsg::SetRows(canvas));
+                            *revision.write() += 1;
+                        }
                         Intent::ToggleKeyedOnly => {
                             fixture::toggle_keyed_only();
                             if fixture::keyed_only() {

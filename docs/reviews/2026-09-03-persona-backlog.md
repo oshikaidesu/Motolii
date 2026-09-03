@@ -325,7 +325,7 @@
 - ☐ L12 層の Copy / Paste(行の入れ替え)
 
 ## 第 6 波 E: AE 10 年の再点検
-- ☐ E1 P/S/R/T/A の単打で属性の行を絞る(U の同族)、UU
+- ☑ E1 P/S/R/T/A で属性の行を絞る(UU は未)
 - ☐ E2 J/K で前後のキーへ、I/O で層の頭/尻へ
 - ☑ E3 ⌘⇧D で分割(⌘K は切る手のまま、枠は ⌥⌘K)
 - ☐ E4 Y の pan-behind = Stage でアンカーを掴む(ST5)
@@ -404,3 +404,15 @@
 - ☑ KB10 ↓ が property 行に落ちると選択が消える
 - ☑ KB11 .csheet-in の輪(#app と custom widget は未)
 - ☑ KB12 ⌥⌘K で開けた枠は ⌥⌘K で閉じる、修飾の記憶は menu 中も続く(rail の Escape は未)
+
+## 第 6 波 LD: 歌詞デザイナーの再点検
+- ☐ LD1 【致命】Timeline の菱形を掴んでも歌詞のキーは動かず、Delete でも消えない(move / delete が content を見ない)
+- ☐ LD2 【致命】Justify が shaper で死んでいる(set_size(None) で幅が無い)、文字の原点が枠の中心から右下へ
+- ☐ LD3 【致命】Content の ◇ は欄を開いている間しか押せず、押すと render 時の本文が入る(上下が入れ替わる)、最後の 1 つの noop が無音
+- ☐ LD4 書体: path 直書き、fingerprint 死、weight の口が無い、font が無いと描画が黙って止まる(fallback 無し)
+- ☐ LD5 級数の刻みが 3.33(range / 300)、Line height と Tracking の単位が違うのに表示が無い、Auto 行送りへ戻れない
+- ☐ LD6 描く側が読まない field(stroke_over_fill・stroke 幅の追従・runs・ranges・wrap_size)、LineMeasure が未使用
+- ☐ LD7 shape_text が呼ぶたび fontdb / FontSystem / SwashCache を作り直す、locale が en-US
+- ☐ LD8 split が ContentTrack を切らずに両方へ配る
+- ☐ LD9 日本語: 禁則(幅を入れた瞬間に要る)、palt の既定、縦書きは shaper が無い
+- ☐ LD10 歌詞のキーだけを選ぶ道が無い(層の行に transform と混ざる)
