@@ -181,11 +181,15 @@ fn primary_mouse_press(event: &WindowEvent) -> Option<dioxus_native::winit::dpi:
     }
 }
 
+/// 窓に開く欄。1 行は `input`、書き置きは `textarea`。同時に 1 つ(`Session.field`)。
+const FIELD: &str = "input, textarea";
+
 /// 欄は許可制。押すまで無く、Enter・Escape・**外を押す**のどれでも欄ごと消える。
-/// 欄を持つ面がそれぞれ閉じ方を書くのではなく、外を押した時は欄へ Enter を送る。
+/// 欄を持つ面がそれぞれ閉じ方を書くのではなく、外を押した時は欄へ Cmd+Enter を送る
+/// (書き置きは Enter が改行なので、確定は Cmd 付き)。
 /// 窓に欄が在る間は打鍵が全部そこへ行く(`aim_keystrokes`)ので、閉じ損ねは鍵の全喪失になる。
 pub(crate) fn commit_field_outside(doc: &mut DioxusDocument, x: f32, y: f32) {
-    let Some(field) = doc.inner().query_selector("input").ok().flatten() else { return };
+    let Some(field) = doc.inner().query_selector(FIELD).ok().flatten() else { return };
     if doc.inner().hit(x, y).is_some_and(|hit| hit.node_id == field) {
         return;
     }
@@ -193,7 +197,7 @@ pub(crate) fn commit_field_outside(doc: &mut DioxusDocument, x: f32, y: f32) {
     let enter = |state| blitz_traits::events::BlitzKeyEvent {
         key: keyboard_types::Key::Enter,
         code: keyboard_types::Code::Enter,
-        modifiers: keyboard_types::Modifiers::empty(),
+        modifiers: keyboard_types::Modifiers::META,
         location: keyboard_types::Location::Standard,
         is_auto_repeating: false,
         is_composing: false,
@@ -310,7 +314,7 @@ fn window(
 /// 打鍵をどこへ配るかを決める。**窓の側と試験の側で同じ規則を通す** —— 分けると、
 /// 利用者が歩く道(欄を開けて打つ)の試験が書けない。
 pub(crate) fn aim_keystrokes(doc: &mut DioxusDocument) {
-    let field = doc.inner().query_selector("input").ok().flatten();
+    let field = doc.inner().query_selector(FIELD).ok().flatten();
     crate::ui::keymap::set_typing(field.is_some());
     let target = {
         let inner = doc.inner();

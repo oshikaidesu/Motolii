@@ -6,7 +6,7 @@ use dioxus_native::prelude::*;
 use crate::ui::fixture::{inspector_data_from_doc, InspectorData, PropRow};
 use crate::ui::playback::Clock;
 use crate::ui::semantic_menu::{Field, SemanticButton};
-use crate::ui::session::Focus;
+use crate::ui::session::{FieldAt, Focus, OpenField, Session};
 use crate::doc::store::{
     property, BlendMode, ContentKeyframe, Document, Intent, Interp, Keyframe,
     LayerAttrsPatch, LayerId, LayerSource, Matte, MatteMode, PropertyId, RationalTime, StoreError,
@@ -103,18 +103,6 @@ pub(super) struct ValueDrag {
     start_value: Value,
     range: Option<(f64, f64)>,
     last_dx: f64,
-}
-
-/// 数字を**打ち込んでいる最中**の一マス。`ValueDrag` が擦る道なら、こちらは打つ道。
-#[derive(Clone)]
-pub(super) struct NumEdit {
-    layer: LayerId,
-    property: String,
-    vec2: bool,
-    axis: usize,
-    value: Value,
-    range: Option<(f64, f64)>,
-    draft: String,
 }
 
 fn put_axis(value: &Value, vec2: bool, axis: usize, v: f64, range: Option<(f64, f64)>) -> Value {
@@ -226,7 +214,7 @@ fn prop_row(
     t: RationalTime,
     doc: &Arc<Mutex<Document>>,
     mut drag: Signal<Option<ValueDrag>>,
-    num_edit: Signal<Option<NumEdit>>,
+    session: &Session,
     mut revision: Signal<u32>,
 ) -> Element {
     let cells = p.cells.iter().zip(p.dims).enumerate().map(|(i, (c, dim))| {
@@ -247,34 +235,26 @@ fn prop_row(
         };
         if let Some((property, start_value, vec2)) = target {
             let range = p.range;
-            let mut num_edit = num_edit;
-            let draft = num_edit
-                .read()
-                .as_ref()
-                .filter(|e| e.layer == layer && e.property == property && e.axis == i)
-                .map(|e| e.draft.clone());
-            if let Some(draft) = draft {
+            let at = FieldAt::Number { layer, property: property.clone(), axis: i };
+            if session.field_at(&at).is_some() {
                 let doc_commit = doc.clone();
+                let start_value = start_value.clone();
                 return rsx!(Field {
+                    session: session.clone(),
                     class: "{class} typing",
-                    value: "{draft}",
-                    oninput: move |v| {
-                        if let Some(e) = num_edit.write().as_mut() {
-                            e.draft = v;
-                        }
-                    },
-                    oncommit: move |_| {
-                        let Some(e) = num_edit.write().take() else { return };
-                        let Ok(v) = e.draft.trim().parse::<f64>() else { return };
-                        let value = put_axis(&e.value, e.vec2, e.axis, v, e.range);
-                        match write_key(&doc_commit, e.layer, &e.property, value, t) {
+                    revision,
+                    oncommit: move |f: OpenField| {
+                        let FieldAt::Number { layer, property, axis } = f.at else { return };
+                        let Ok(v) = f.draft.trim().parse::<f64>() else { return };
+                        let value = put_axis(&start_value, vec2, axis, v, range);
+                        match write_key(&doc_commit, layer, &property, value, t) {
                             Ok(_) => *revision.write() += 1,
                             Err(err) => println!("PROBE room=write verdict=apply-error {err}"),
                         }
                     },
-                    oncancel: move |_| *num_edit.write() = None,
                 });
             }
+            let opener = session.clone();
             let open = (property.clone(), start_value.clone());
             rsx!(span {
                 class: "{class}",
@@ -293,15 +273,11 @@ fn prop_row(
                 },
                 ondoubleclick: move |_| {
                     *drag.write() = None;
-                    *num_edit.write() = Some(NumEdit {
-                        layer,
-                        property: open.0.clone(),
-                        vec2,
-                        axis: i,
-                        value: open.1.clone(),
-                        range,
-                        draft: String::new(),
-                    });
+                    opener.open_field(
+                        FieldAt::Number { layer, property: open.0.clone(), axis: i },
+                        String::new(),
+                    );
+                    *revision.write() += 1;
                 },
                 "{c}"
             })
@@ -356,44 +332,45 @@ fn content_row(
     layer: LayerId,
     t: RationalTime,
     doc: &Arc<Mutex<Document>>,
-    mut editing: Signal<Option<String>>,
+    session: &Session,
     mut revision: Signal<u32>,
 ) -> Element {
     let key_class = if p.keyed { "glyph on" } else { "glyph" };
     let key_glyph = if p.keyed { "◆" } else { "◇" };
-    if let Some(draft) = editing.read().clone() {
+    if session.field_at(&FieldAt::Content(layer)).is_some() {
         let doc_commit = doc.clone();
         return rsx!(
             div { class: "prow content-row",
                 span { class: "n", "{p.label}" }
                 Field {
+                    session: session.clone(),
                     class: "v content",
-                    value: "{draft}",
-                    oninput: move |v| *editing.write() = Some(v),
-                    oncommit: move |_| {
-                        if let Some(text) = editing.write().take() {
-                            match write_content(&doc_commit, layer, t, text) {
-                                Ok(_) => {
-                                    println!("PROBE room=write verdict=content-commit layer={:?} t={:?}", layer, t);
-                                    *revision.write() += 1;
-                                }
-                                Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
+                    revision,
+                    oncommit: move |f: OpenField| {
+                        match write_content(&doc_commit, layer, t, f.draft) {
+                            Ok(_) => {
+                                println!("PROBE room=write verdict=content-commit layer={:?} t={:?}", layer, t);
+                                *revision.write() += 1;
                             }
+                            Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
                         }
                     },
-                    oncancel: move |_| *editing.write() = None,
                 }
                 span { class: "{key_class}", "{key_glyph}" }
             }
         );
     }
+    let opener = session.clone();
     let current = p.cells[2].clone();
     rsx!(
         div { class: "prow content-row",
             span { class: "n", "{p.label}" }
             span {
                 class: "v content",
-                ondoubleclick: move |_| *editing.write() = Some(current.clone()),
+                ondoubleclick: move |_| {
+                    opener.open_field(FieldAt::Content(layer), current.clone());
+                    *revision.write() += 1;
+                },
                 "{p.cells[2]}"
             }
             span { class: "{key_class}", "{key_glyph}" }
@@ -702,9 +679,8 @@ pub(super) fn inspector_panel(
     selection: Option<LayerId>,
     clock: &Clock,
     mut revision: Signal<u32>,
-    editing: Signal<Option<String>>,
+    session: &Session,
     drag: Signal<Option<ValueDrag>>,
-    num_edit: Signal<Option<NumEdit>>,
     choice_open: Signal<Option<ChoiceId>>,
     playhead: Signal<f64>,
     selected_size: &Arc<Mutex<Option<[f32; 2]>>>,
@@ -742,11 +718,11 @@ pub(super) fn inspector_panel(
     let text_rows = inspector
         .text
         .iter()
-        .map(|p| content_row(p, selection.unwrap_or(LayerId(0)), t, doc, editing, revision));
+        .map(|p| content_row(p, selection.unwrap_or(LayerId(0)), t, doc, session, revision));
     let transform_rows = inspector
         .transform
         .iter()
-        .map(|p| prop_row(p, selection.unwrap_or(LayerId(0)), t, doc, drag, num_edit, revision));
+        .map(|p| prop_row(p, selection.unwrap_or(LayerId(0)), t, doc, drag, session, revision));
     let effect_blocks: Vec<_> = inspector
         .effects
         .iter()
@@ -757,7 +733,7 @@ pub(super) fn inspector_panel(
                 block
                     .params
                     .iter()
-                    .map(|p| prop_row(p, selection.unwrap_or(LayerId(0)), t, doc, drag, num_edit, revision))
+                    .map(|p| prop_row(p, selection.unwrap_or(LayerId(0)), t, doc, drag, session, revision))
                     .collect::<Vec<_>>(),
             )
         })

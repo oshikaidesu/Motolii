@@ -1,5 +1,7 @@
 use dioxus_native::prelude::*;
 
+use crate::ui::session::{OpenField, Session};
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum MenuId {
     File,
@@ -129,36 +131,58 @@ pub(super) fn SemanticButton(
     })
 }
 
-/// 欄。押した間だけ在り、Enter で確定、Escape で消える。外を押した時と焦点喪失は
-/// host が Enter を送る(`host::commit_field_outside`)ので、閉じ方はここ 1 つ。
+/// 欄。押した間だけ在り、Enter で確定、Escape で消える。外を押した時は host が
+/// Cmd+Enter を送る(`host::commit_field_outside`)ので、閉じ方はここ 1 つ。
+/// 複数行(書き置き)は Enter が改行で、確定は Cmd+Enter。
 #[component]
 pub(super) fn Field(
+    session: Session,
     class: String,
     #[props(default)] style: String,
-    value: String,
-    oninput: EventHandler<String>,
-    oncommit: EventHandler<()>,
-    oncancel: EventHandler<()>,
+    #[props(default)] multiline: bool,
+    revision: Signal<u32>,
+    oncommit: EventHandler<OpenField>,
 ) -> Element {
-    rsx!(input {
-        class,
-        style,
-        value,
-        autofocus: "true",
-        oninput: move |evt| oninput.call(evt.value()),
-        onkeydown: move |evt| {
-            evt.stop_propagation();
-            match evt.key() {
-                Key::Enter => {
-                    evt.prevent_default();
-                    oncommit.call(());
+    let draft = session.field().map(|f| f.draft).unwrap_or_default();
+    let mut revision = revision;
+    let edit = session.clone();
+    let oninput = move |evt: FormEvent| edit.edit_field(evt.value());
+    let onkeydown = move |evt: KeyboardEvent| {
+        evt.stop_propagation();
+        match evt.key() {
+            Key::Enter if !multiline || evt.modifiers().meta() => {
+                evt.prevent_default();
+                if let Some(field) = session.close_field() {
+                    oncommit.call(field);
                 }
-                Key::Escape => {
-                    evt.prevent_default();
-                    oncancel.call(());
-                }
-                _ => {}
+                *revision.write() += 1;
             }
-        },
-    })
+            Key::Escape => {
+                evt.prevent_default();
+                session.close_field();
+                *revision.write() += 1;
+            }
+            _ => {}
+        }
+    };
+    if multiline {
+        rsx!(textarea {
+            class,
+            style,
+            value: draft.clone(),
+            autofocus: "true",
+            oninput,
+            onkeydown,
+            "{draft}"
+        })
+    } else {
+        rsx!(input {
+            class,
+            style,
+            value: draft,
+            autofocus: "true",
+            oninput,
+            onkeydown,
+        })
+    }
 }

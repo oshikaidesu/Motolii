@@ -9,7 +9,7 @@ use dioxus_native::CustomWidgetAttr;
 use crate::doc::store::{Document, Intent, LayerId, Marker, StoreError};
 use crate::ui::inspector::{write_blend, BLEND_MODES};
 use crate::ui::semantic_menu::{Field, SemanticButton};
-use crate::ui::session::{DeskState, Focus, Session};
+use crate::ui::session::{DeskState, FieldAt, Focus, OpenField, Session};
 
 /// 引き出しは焦点の型に一つ。履歴だけが型を持たない例外。
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -127,7 +127,6 @@ pub(super) fn DeskPanel(
     let _ = revision();
     let _ = playhead();
     let mut revision = revision;
-    let mut note_draft: Signal<Option<(usize, String)>> = use_signal(|| None);
 
     let now = session.clock.now_sec();
     let markers = session.doc.lock().unwrap().view().markers().unwrap_or_default();
@@ -140,37 +139,35 @@ pub(super) fn DeskPanel(
     let note = drawer.filter(|d| *d == Drawer::Text).map(|_| match current {
         Some(i) => {
             let marker = &markers[i];
-            let text = note_draft
-                .read()
-                .as_ref()
-                .filter(|(at, _)| *at == i)
-                .map(|(_, draft)| draft.clone())
-                .unwrap_or_else(|| marker.body.clone());
-            let editing = note_draft.read().as_ref().is_some_and(|(at, _)| *at == i);
+            let editing = session.field_at(&FieldAt::Note(i)).is_some();
             let doc = session.doc.clone();
             let body = marker.body.clone();
+            let opener = session.clone();
             rsx!(div { class: "desk-note",
                 span { class: "mname", "{marker.name}" }
                 // 欄は押した間だけ在る。Enter・Escape・外を押す、のどれでも欄ごと消える。
                 if editing {
                     Field {
+                        session: session.clone(),
                         class: "mbody",
-                        value: "{text}",
-                        oninput: move |v| note_draft.set(Some((i, v))),
-                        oncommit: move |_| {
-                            let Some((at, draft)) = note_draft.write().take() else { return };
-                            match write_marker_body(&doc, at, draft) {
+                        multiline: true,
+                        revision,
+                        oncommit: move |f: OpenField| {
+                            let FieldAt::Note(at) = f.at else { return };
+                            match write_marker_body(&doc, at, f.draft) {
                                 Ok(()) => *revision.write() += 1,
                                 Err(err) => println!("PROBE room=write verdict=apply-error {err}"),
                             }
                         },
-                        oncancel: move |_| note_draft.set(None),
                     }
                 } else {
                     SemanticButton {
                         class: if body.is_empty() { "mbody idle" } else { "mbody" },
                         aria_label: "Edit note",
-                        onclick: move |_| note_draft.set(Some((i, body.clone()))),
+                        onclick: move |_| {
+                            opener.open_field(FieldAt::Note(i), body.clone());
+                            *revision.write() += 1;
+                        },
                         if marker.body.is_empty() { "Write what happens here" } else { "{marker.body}" }
                     }
                 }

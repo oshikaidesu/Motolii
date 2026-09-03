@@ -243,6 +243,7 @@ impl Gui {
 
     fn click(&mut self, x: f32, y: f32) {
         self.h.move_mouse_to(x, y);
+        crate::ui::host::commit_field_outside(&mut self.h.doc, x, y);
         self.h.click_at(x, y);
         self.settle();
     }
@@ -267,8 +268,10 @@ impl Gui {
         self.settle();
     }
 
+    /// 窓の shell と同じ順: 欄の外を押したら先に欄を確定させる(`host::Windows::window_event`)。
     fn press(&mut self, x: f32, y: f32) {
         self.h.move_mouse_to(x, y);
+        crate::ui::host::commit_field_outside(&mut self.h.doc, x, y);
         self.h.mouse_down_at(x, y);
     }
 
@@ -380,6 +383,48 @@ fn a_name_can_be_typed_after_double_clicking_it() {
     assert!(
         after.iter().any(|n| n.contains("ZZ")),
         "打った文字が層の名前に入っていない: {after:?}"
+    );
+}
+
+/// 書き置きは複数行。Enter は改行で欄は残り、外を押すと確定する。
+#[test]
+fn a_note_is_typed_in_a_textarea_and_committed_by_clicking_outside() {
+    let mut gui = Gui::open();
+    {
+        use crate::doc::store::{Intent, Marker, RationalTime};
+        let marker = Marker {
+            name: "intro".into(),
+            time: RationalTime::ZERO,
+            duration: RationalTime::ZERO,
+            body: String::new(),
+        };
+        gui.session.doc.lock().unwrap().apply(Intent::SetMarkers { markers: vec![marker] }).unwrap();
+    }
+    let text = gui.center_of_text(".desk-foot .chip", "Text");
+    gui.click(text.0, text.1);
+    let note = gui.center_of(".desk-note .mbody", 0);
+    gui.click(note.0, note.1);
+    assert_eq!(gui.count("textarea.mbody"), 1, "the note did not open as a textarea");
+
+    for ch in ["L", "a"] {
+        gui.key(
+            keyboard_types::Key::Character(ch.into()),
+            keyboard_types::Modifiers::empty(),
+        );
+    }
+    gui.key(keyboard_types::Key::Enter, keyboard_types::Modifiers::empty());
+    assert_eq!(gui.count("textarea.mbody"), 1, "Enter closed a multi-line note");
+    assert!(gui.session.field().is_some());
+
+    let stage = gui.center_of("#stage", 0);
+    gui.click(stage.0, stage.1);
+    assert_eq!(gui.count("textarea"), 0, "clicking outside left the note open");
+    assert!(gui.session.field().is_none(), "the field owner still holds a closed field");
+    let markers = gui.session.doc.lock().unwrap().view().markers().unwrap();
+    assert!(
+        markers.iter().any(|m| m.body.starts_with("La")),
+        "typed note did not reach the marker: {:?}",
+        markers.iter().map(|m| m.body.clone()).collect::<Vec<_>>()
     );
 }
 

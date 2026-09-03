@@ -189,8 +189,6 @@ struct Panes {
     attrs_state: Signal<Vec<(bool, bool, bool)>>,
     selected: Signal<Option<crate::doc::store::LayerId>>,
     revision: Signal<u32>,
-    text_editing: Signal<Option<String>>,
-    renaming: Signal<Option<(crate::doc::store::LayerId, String)>>,
     scroll_y: Signal<f64>,
     /// 他の窓が書いた時に上がる。状態は全窓で1つなので、これで描き直す。
     echo: Signal<u32>,
@@ -212,8 +210,6 @@ fn panes_for(ui: &fixture::UiData) -> Panes {
         }),
         selected: use_signal(|| None),
         revision: use_signal(|| 0u32),
-        text_editing: use_signal(|| None),
-        renaming: use_signal(|| None),
         scroll_y: use_signal(|| 0.0f64),
         echo: use_signal(|| 0u32),
     }
@@ -267,7 +263,6 @@ fn panel_body(panel: Panel, session: &Session, ui: &fixture::UiData, p: Panes) -
             session: session.clone(),
             selected,
             revision: p.revision,
-            editing: p.text_editing,
             playhead: p.playhead,
             choice_open: p.inspector_choice,
         }),
@@ -290,7 +285,6 @@ fn panel_body(panel: Panel, session: &Session, ui: &fixture::UiData, p: Panes) -
             selected: p.selected,
             scroll_y: p.scroll_y,
             playhead: p.playhead,
-            renaming: p.renaming,
             revision: p.revision,
         }),
     }
@@ -359,20 +353,17 @@ fn InspectorPanel(
     session: Session,
     selected: Option<crate::doc::store::LayerId>,
     revision: Signal<u32>,
-    editing: Signal<Option<String>>,
     playhead: Signal<f64>,
     choice_open: Signal<Option<ChoiceId>>,
 ) -> Element {
     let drag = use_signal(|| None);
-    let num_edit = use_signal(|| None);
     inspector_panel(
         &session.doc,
         selected,
         &session.clock,
         revision,
-        editing,
+        &session,
         drag,
-        num_edit,
         choice_open,
         playhead,
         &session.selected_size,
@@ -484,7 +475,6 @@ fn TimelinePanel(
     selected: Signal<Option<crate::doc::store::LayerId>>,
     scroll_y: Signal<f64>,
     playhead: Signal<f64>,
-    renaming: Signal<Option<(crate::doc::store::LayerId, String)>>,
     revision: Signal<u32>,
 ) -> Element {
     let attr = use_hook(|| {
@@ -516,7 +506,7 @@ fn TimelinePanel(
         selected,
         scroll_y,
         session.timeline_tx.clone(),
-        renaming,
+        &session,
         revision,
     )
 }
@@ -990,8 +980,6 @@ pub fn app() -> Element {
         attrs_state,
         selected: selected_sig,
         revision,
-        text_editing,
-        renaming,
         ..
     } = panes;
     let mut selected = selected_sig;
@@ -1094,10 +1082,7 @@ pub fn app() -> Element {
                     }
                     crate::ui::keymap::note_key_down(&evt.key());
                     // 打っているかは窓が DOM で決める(`aim_keystrokes`)。flag は欄より長生きする。
-                    if crate::ui::keymap::is_typing()
-                        || text_editing.read().is_some()
-                        || renaming.read().is_some()
-                    {
+                    if crate::ui::keymap::is_typing() || session.field().is_some() {
                         println!("PROBE room=input verdict=text-editing key={:?}", evt.key());
                         return;
                     }

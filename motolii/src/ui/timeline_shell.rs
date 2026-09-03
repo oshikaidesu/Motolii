@@ -7,7 +7,7 @@ use dioxus_native::CustomWidgetAttr;
 use crate::doc::store::{Document, Intent, LayerAttrsPatch, LayerId};
 use crate::ui::fixture::LayerRow;
 use crate::ui::playback::Clock;
-use crate::ui::session::Selection;
+use crate::ui::session::{FieldAt, OpenField, Selection, Session};
 use crate::ui::semantic_menu::{Field, SemanticButton};
 use crate::ui::timeline_widget::TimelineMsg;
 
@@ -57,7 +57,7 @@ pub(super) fn timeline_shell(
     mut selected: Signal<Option<LayerId>>,
     scroll_y: Signal<f64>,
     timeline_tx: Sender<TimelineMsg>,
-    mut renaming: Signal<Option<(LayerId, String)>>,
+    session: &Session,
     mut revision: Signal<u32>,
 ) -> Element {
     let layer_rows = layer_rows_data.iter().enumerate().map(|(i, row)| {
@@ -122,9 +122,9 @@ pub(super) fn timeline_shell(
             );
         }
         let expanded = row.expanded;
-        let editing_name = renaming()
-            .filter(|(l, _)| Some(*l) == layer)
-            .map(|(_, n)| n);
+        let editing_name = layer.is_some_and(|l| session.field_at(&FieldAt::Name(l)).is_some());
+        let opener = session.clone();
+        let field_session = session.clone();
         let doc_rename = doc.clone();
         rsx!(
             div { class: "lrow", style: "{indent}",
@@ -155,38 +155,33 @@ pub(super) fn timeline_shell(
                 if let Some(n) = folded_children {
                     span { class: "inside", "{n}" }
                 }
-                if let Some(draft) = editing_name {
+                if editing_name {
                     Field {
+                        session: field_session,
                         class: "lsurface",
                         style: "{lsurface_style}",
-                        value: "{draft}",
-                        oninput: move |v| {
-                            if let Some(l) = layer {
-                                *renaming.write() = Some((l, v));
-                            }
-                        },
-                        oncommit: move |_| {
-                            if let Some((layer, name)) = renaming.write().take() {
-                                let patch = LayerAttrsPatch {
-                                    name: Some(name.clone()),
-                                    ..Default::default()
-                                };
-                                match doc_rename
-                                    .lock()
-                                    .unwrap()
-                                    .apply(Intent::SetAttrs { layer, patch })
-                                {
-                                    Ok(_) => {
-                                        println!("PROBE room=write verdict=applied Rename layer={layer:?} name={name:?}");
-                                        *revision.write() += 1;
-                                    }
-                                    Err(e) => {
-                                        println!("PROBE room=write verdict=apply-error {e}")
-                                    }
+                        revision,
+                        oncommit: move |f: OpenField| {
+                            let FieldAt::Name(layer) = f.at else { return };
+                            let name = f.draft;
+                            let patch = LayerAttrsPatch {
+                                name: Some(name.clone()),
+                                ..Default::default()
+                            };
+                            match doc_rename
+                                .lock()
+                                .unwrap()
+                                .apply(Intent::SetAttrs { layer, patch })
+                            {
+                                Ok(_) => {
+                                    println!("PROBE room=write verdict=applied Rename layer={layer:?} name={name:?}");
+                                    *revision.write() += 1;
+                                }
+                                Err(e) => {
+                                    println!("PROBE room=write verdict=apply-error {e}")
                                 }
                             }
                         },
-                        oncancel: move |_| *renaming.write() = None,
                     }
                 } else {
                     span {
@@ -205,7 +200,8 @@ pub(super) fn timeline_shell(
                             let name = row.name.clone();
                             move |_| {
                                 if let Some(l) = layer {
-                                    *renaming.write() = Some((l, name.clone()));
+                                    opener.open_field(FieldAt::Name(l), name.clone());
+                                    *revision.write() += 1;
                                 }
                             }
                         },

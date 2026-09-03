@@ -178,6 +178,7 @@ pub(super) struct Session {
     pub focus: Arc<Mutex<Option<Focus>>>,
     /// 机の引き出しの開閉。窓をまたいで 1 つ。
     pub desk: Arc<Mutex<DeskState>>,
+    pub field: Arc<Mutex<Option<OpenField>>>,
 }
 
 /// 机の引き出し。焦点に付いて行くか、手で開けたか、手で閉じたか。
@@ -194,6 +195,28 @@ pub(super) enum DeskState {
 #[derive(Clone, PartialEq, Debug)]
 pub(super) enum Focus {
     Blend(LayerId),
+}
+
+/// 開いている欄。窓に同時に 1 つで、持ち主はここだけ。面は開ける・読む・閉じるだけ。
+/// 閉じ損ねは鍵の全喪失になる(`host::aim_keystrokes`)ので、閉じ方は `Field` の 1 箇所。
+#[derive(Clone, PartialEq, Debug)]
+pub(super) struct OpenField {
+    pub at: FieldAt,
+    pub draft: String,
+}
+
+/// 欄が指す物。値の型ではなく置き場で見分ける。
+#[derive(Clone, PartialEq, Debug)]
+pub(super) enum FieldAt {
+    /// マーカーの本文(index)。
+    Note(usize),
+    Number {
+        layer: LayerId,
+        property: String,
+        axis: usize,
+    },
+    Content(LayerId),
+    Name(LayerId),
 }
 
 /// タイムラインで選んだキー。区間は「このキーから次のキーまで」。
@@ -229,6 +252,7 @@ impl Session {
             selected_keys: Arc::new(Mutex::new(Vec::new())),
             focus: Arc::new(Mutex::new(None)),
             desk: Arc::new(Mutex::new(DeskState::Follow)),
+            field: Arc::new(Mutex::new(None)),
             view_camera: Arc::new(Mutex::new(Default::default())),
             rings: Arc::new(std::sync::atomic::AtomicBool::new(true)),
             frame_dim: Arc::new(std::sync::atomic::AtomicU32::new(75)),
@@ -263,9 +287,35 @@ impl Session {
         self.selection.clear();
         *self.focus.lock().unwrap() = None;
         *self.desk.lock().unwrap() = DeskState::Follow;
+        *self.field.lock().unwrap() = None;
         self.selected_keys.lock().unwrap().clear();
         *self.selected_size.lock().unwrap() = None;
         *self.curve_clip.lock().unwrap() = None;
+    }
+
+    pub(super) fn open_field(&self, at: FieldAt, draft: String) {
+        *self.field.lock().unwrap() = Some(OpenField { at, draft });
+    }
+
+    pub(super) fn field(&self) -> Option<OpenField> {
+        self.field.lock().unwrap().clone()
+    }
+
+    /// この置き場の欄が開いていれば、その下書き。
+    pub(super) fn field_at(&self, at: &FieldAt) -> Option<String> {
+        self.field()
+            .filter(|f| f.at == *at)
+            .map(|f| f.draft)
+    }
+
+    pub(super) fn edit_field(&self, draft: String) {
+        if let Some(f) = self.field.lock().unwrap().as_mut() {
+            f.draft = draft;
+        }
+    }
+
+    pub(super) fn close_field(&self) -> Option<OpenField> {
+        self.field.lock().unwrap().take()
     }
 
     /// 生きている焦点。選んでいる層を指す物だけ。層が変われば焦点は消えたも同じ。
