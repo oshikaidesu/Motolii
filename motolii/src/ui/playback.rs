@@ -104,6 +104,8 @@ struct PlaybackState {
     duration: f64,
     program: Option<Arc<AudioProgram>>,
     cache: AudioProgramCache,
+    /// 音に関わる部分の指紋。同じなら再投影しない(印を打つたびに音を切らない)。
+    audio_key: Option<String>,
     session: Option<PlaybackSession>,
     health: PlaybackHealth,
 }
@@ -152,6 +154,7 @@ impl PlaybackController {
                 duration,
                 program,
                 cache,
+                audio_key: None,
                 session: None,
                 health,
             }),
@@ -179,6 +182,13 @@ impl PlaybackController {
     /// Document revision後の唯一の再投影口。decode済みPCMとpeak pyramidはcacheで再利用する。
     pub(super) fn sync_document(&self, doc: &Document) {
         let mut state = self.state.lock().unwrap();
+        // 音に関わらない変更(印・色・変形・キー)では音を開き直さない。
+        // 拍を叩く作業は「聴きながら M を連打」なので、打つたびに音が切れては成立しない。
+        let key = Self::audio_fingerprint(doc);
+        if state.audio_key.as_deref() == Some(key.as_str()) {
+            return;
+        }
+        state.audio_key = Some(key);
         let now = Instant::now();
         let old_duration = state.duration;
         let position = position_of(&state, now, old_duration);
@@ -213,7 +223,31 @@ impl PlaybackController {
         }
     }
 
-    /// Timelineへ渡すimmutableなdata port。生成やcache規則はaudio側から出さない。
+    /// 音を決める物だけを並べた指紋: comp の fps と尺、各層の source・timing・hidden・solo。
+fn audio_fingerprint(doc: &Document) -> String {
+    use std::fmt::Write as _;
+    let view = doc.view();
+    let mut out = String::new();
+    if let Ok(Some(c)) = view.composition() {
+        let _ = write!(out, "c{:?}/{};", c.fps, c.duration_frames);
+    }
+    for layer in view.layers() {
+        let meta = view.meta(layer).ok().flatten();
+        let attrs = view.attrs(layer).ok().flatten().unwrap_or_default();
+        let _ = write!(
+            out,
+            "l{}:{:?}:{:?}:{}{};",
+            layer.0,
+            meta.as_ref().map(|m| &m.source),
+            meta.as_ref().map(|m| &m.timing),
+            attrs.hidden as u8,
+            attrs.solo as u8
+        );
+    }
+    out
+}
+
+/// Timelineへ渡すimmutableなdata port。生成やcache規則はaudio側から出さない。
     pub(super) fn waveform_tracks(&self) -> Vec<WaveformTrack> {
         self.state
             .lock()

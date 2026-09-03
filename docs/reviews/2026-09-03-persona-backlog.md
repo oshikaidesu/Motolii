@@ -126,7 +126,7 @@
 
 ## 第 3 波 A: 音と拍の編集者
 - ☐ A1 スクラブに音が無い(seek が device を捨てる)
-- ☐ A2 Document を書くたび音が止まる(sync_document)
+- ☑ A2 Document を書くたび音が止まる — 音の指紋が同じなら再投影しない
 - ☐ A3 ループ区間・イン/アウト
 - ☑ A4 印を打つと机が毎回開く → 机が Follow の時だけ
 - ☑ A5 印へ跳んでも画面が付いてこない
@@ -312,14 +312,14 @@
 
 ## 第 5 波 L: 歌詞動画を 1 本作り切る(致命 3 つが先)
 - ☐ L1 【致命】comp の設定が窓に無い(9:16・曲の長さの尺・fps・background)— File ▸ New… / Composition Settings の sheet、Export… に寸法 preset・範囲・1 行サマリ(D1・D2・D4)
-- ☐ L2 【致命】1 レイヤに歌詞を並べられない — Content 行の ◆ が押せず write_content が差し替える。ContentTrack へ今の時刻にキーを足す口、複数行の貼り付けを「行ごとにキー / 印へ配る」
-- ☐ L3 【致命】印を打つたびに音が切れる(sync_document が revision ごと)— 音に関わる変更だけで再投影(A2)、スクラブに音(A1)、印 2 つから BPM を出して拍を撒く(S13)
+- ☑ L2 Content の ◇/◆ で今の時刻に本文のキーを立てる・外す、Timeline に菱形(複数行の貼り付けを行ごとに配るのは未)
+- ☑ L3 音に関わる変更だけで再投影(指紋で gate、A2)— スクラブの音(A1)と BPM(S13)は未
 - ☐ L4 空の comp に最初の音・動画を入れたら尺を素材に伸ばす(place が切った事を status に)
 - ☐ L5 Import に ⌘I
-- ☐ L6 M の toggle が連打で直前の印を消す
+- ☑ L6 M の toggle が連打で直前の印を消す
 - ☐ L7 Text 節に family / weight / justify(S6・S5 の残り)
 - ☐ L8 文字送り(Range Selector を描く側から、S7)、出入りの preset(C3)
 - ☐ L9 Create に Solid、新しい素材は下・文字は上(新層が必ず一番上)
 - ☐ L10 ループ区間 I / O(A3)
-- ☐ L11 Timeline の帯 drag を選択している全層へ(finish_drag が drag.layer 1 枚)
+- ☑ L11 Timeline の帯 drag を選択している全層へ(finish_drag が drag.layer 1 枚)
 - ☐ L12 層の Copy / Paste(行の入れ替え)

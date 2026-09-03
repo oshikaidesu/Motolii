@@ -303,6 +303,36 @@ pub(super) fn write_content(
     doc.apply(Intent::SetTextDocument { layer, document })
 }
 
+/// Content の ◇/◆。◇ で今の時刻に本文のキーを立てる(1 レイヤに歌詞を並べる口)。
+/// ◆(今の時刻にキーが在る)なら外す。最後の 1 つは外せない —— 本文が無くなる。
+pub(super) fn toggle_content_key(
+    doc: &Arc<Mutex<Document>>,
+    layer: LayerId,
+    t: RationalTime,
+    content: String,
+) -> Result<(), crate::doc::store::StoreError> {
+    let mut doc = doc.lock().unwrap();
+    let Some(mut document) = doc.view().text_document(layer)? else {
+        return Ok(());
+    };
+    let keys = document.content.keys().to_vec();
+    let here = keys.iter().position(|k| k.t == t);
+    match here {
+        Some(_) if keys.len() <= 1 => return Ok(()),
+        Some(i) => {
+            let mut rest = crate::doc::store::ContentTrack::new();
+            for (k, key) in keys.iter().enumerate() {
+                if k != i {
+                    rest.insert(key.clone());
+                }
+            }
+            document.content = rest;
+        }
+        None => document.content.insert(ContentKeyframe { t, content }),
+    }
+    doc.apply(Intent::SetTextDocument { layer, document })
+}
+
 fn prop_row(
     p: &PropRow,
     layer: LayerId,
@@ -479,7 +509,21 @@ fn content_row(
                         }
                     },
                 }
-                span { class: "{key_class}", "{key_glyph}" }
+                SemanticButton {
+                    class: "{key_class}",
+                    selected: p.keyed,
+                    aria_label: if p.keyed { "Remove the content keyframe at this time" } else { "Add a content keyframe at this time" },
+                    title: if p.keyed { "Remove the lyric keyframe here" } else { "Add a lyric keyframe here" },
+                    onclick: {
+                        let doc = doc.clone();
+                        let content = current.clone();
+                        move |_| match toggle_content_key(&doc, layer, t, content.clone()) {
+                            Ok(_) => *revision.write() += 1,
+                            Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
+                        }
+                    },
+                    "{key_glyph}"
+                }
             }
         );
     }
@@ -1202,6 +1246,34 @@ pub(super) fn inspector_panel(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// ◇ で今の時刻に本文のキーが立ち、◆ で外れる。最後の 1 つは外せない。
+    #[test]
+    fn content_keys_are_added_and_removed_at_the_playhead() {
+        let loaded = crate::ui::fixture::load_fixture();
+        let doc = Arc::new(Mutex::new(loaded.doc));
+        let layer = {
+            let d = doc.lock().unwrap();
+            let view = d.view();
+            view.layers()
+                .into_iter()
+                .find(|l| view.text_document(*l).ok().flatten().is_some())
+                .expect("a text layer")
+        };
+        let fps = doc.lock().unwrap().view().composition().unwrap().unwrap().fps;
+        let at = |f: i64| RationalTime::try_from_frame(f, fps).unwrap();
+        let count = |doc: &Arc<Mutex<Document>>| doc.lock().unwrap().view().text_document(layer).unwrap().unwrap().content.keys().len();
+        let before = count(&doc);
+        toggle_content_key(&doc, layer, at(48), "second line".into()).unwrap();
+        assert_eq!(count(&doc), before + 1);
+        toggle_content_key(&doc, layer, at(48), String::new()).unwrap();
+        assert_eq!(count(&doc), before);
+        if before == 1 {
+            let only = doc.lock().unwrap().view().text_document(layer).unwrap().unwrap().content.keys()[0].t;
+            toggle_content_key(&doc, layer, only, String::new()).unwrap();
+            assert_eq!(count(&doc), 1, "the last content key must survive");
+        }
+    }
     use crate::doc::store::{Composition, Fps, LayerMeta, LayerTiming};
 
     fn add_layer(doc: &mut Document, id: u64, source: LayerSource, name: &str) -> LayerId {

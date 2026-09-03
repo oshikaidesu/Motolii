@@ -555,6 +555,29 @@ impl TimelineWidget {
                                     return;
                                 }
                             }
+                            // 一緒に選んでいる層も同じだけ運ぶ(曲を 1 拍ずらすのに 60 枚を掴ませない)。
+                            let others: Vec<LayerId> = self
+                                .selection
+                                .as_ref()
+                                .map(|s| s.all())
+                                .unwrap_or_default()
+                                .into_iter()
+                                .filter(|l| *l != drag.layer)
+                                .filter(|l| !doc.view().attrs(*l).ok().flatten().is_some_and(|a| a.locked))
+                                .collect();
+                            for other in others {
+                                let Some(meta) = doc.view().meta(other).ok().flatten() else { continue };
+                                let start = (meta.timing.start + applied_delta).max(0);
+                                let shift = start - meta.timing.start;
+                                if shift == 0 {
+                                    continue;
+                                }
+                                intents.push(Intent::SetTiming { layer: other, timing: LayerTiming { start, ..meta.timing } });
+                                match keyframe_shift_intents(&doc, other, shift) {
+                                    Ok(more) => intents.extend(more),
+                                    Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
+                                }
+                            }
                         }
                     }
                     match doc.apply_all(intents) {

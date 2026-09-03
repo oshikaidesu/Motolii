@@ -1038,9 +1038,11 @@ pub fn app() -> Element {
                                         < 0.5 * clock.frame_duration_sec()
                                 });
                             match hit {
-                                Some(i) => {
+                                // 止まっている時に同じ所を押せば外す。再生中の連打(拍を叩く)では消さない。
+                                Some(i) if !clock.playing() => {
                                     markers.remove(i);
                                 }
+                                Some(_) => return,
                                 None => {
                                     markers.push(crate::doc::store::Marker {
                                         // 名前は時刻から。採番は途中を消すと衝突する。

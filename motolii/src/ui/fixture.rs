@@ -279,6 +279,14 @@ pub(super) fn canvas_rows_from_doc(doc: &Document) -> Vec<CanvasRow> {
                             keys.extend(track.keys().iter().map(|k| k.t.as_seconds_f64()));
                         }
                     }
+                    // 歌詞の切替(content のキー)も層の行に菱形で出す。2 つ以上ある時だけ(1 つは「本文」)。
+                    if let Ok(Some(text)) = view.text_document(layer) {
+                        if text.content.keys().len() > 1 {
+                            keys.extend(text.content.keys().iter().map(|k| k.t.as_seconds_f64()));
+                        }
+                    }
+                    keys.sort_by(|a, b| a.total_cmp(b));
+                    keys.dedup();
                     CanvasRow {
                         is_group: false,
                         keys,
@@ -712,7 +720,7 @@ pub(super) fn inspector_data_from_doc(
                     doc.content.eval(t).to_string(),
                 ],
                 dims: [false, false, false],
-                keyed: doc.content.keys().len() > 1,
+                keyed: doc.content.keys().len() > 1 && doc.content.keys().iter().any(|k| k.t == t),
                 property: None,
                 vec2: false,
                 value: Value::F64(0.0),
