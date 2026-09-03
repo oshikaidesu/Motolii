@@ -37,12 +37,20 @@ pub(super) fn image_data_uri(path: &str) -> Option<String> {
 fn encode(image: image::DynamicImage) -> Option<String> {
     let mut png = std::io::Cursor::new(Vec::new());
     image.write_to(&mut png, image::ImageFormat::Png).ok()?;
-    Some(encode_png_bytes(png.into_inner()))
+    encode_png_bytes(png.into_inner())
 }
 
-fn encode_png_bytes(png: Vec<u8>) -> String {
+/// 絵として読める PNG だけを data URI にする。壊れた bytes を描画へ渡すと、
+/// renderer が「空の image」で落ちる(実測: 起動時に vello が panic)。
+fn encode_png_bytes(png: Vec<u8>) -> Option<String> {
+    let ok = image::load_from_memory_with_format(&png, image::ImageFormat::Png)
+        .map(|img| img.width() > 0 && img.height() > 0)
+        .unwrap_or(false);
+    if !ok {
+        return None;
+    }
     let body = base64::engine::general_purpose::STANDARD.encode(png);
-    format!("data:image/png;base64,{body}")
+    Some(format!("data:image/png;base64,{body}"))
 }
 
 pub(super) fn video_data_uri(path: &str) -> Option<String> {
@@ -65,5 +73,5 @@ fn video_frame(path: &str) -> Option<String> {
     if !status.success() || png.is_empty() {
         return None;
     }
-    Some(encode_png_bytes(png))
+    encode_png_bytes(png)
 }

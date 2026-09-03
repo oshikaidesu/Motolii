@@ -598,3 +598,16 @@ fn a_hex_can_be_typed_into_the_colors_panel() {
     assert!(after[0] < 0.01 && after[1] > 0.99 && after[2] < 0.01, "hex was not written: {after:?}");
     assert_eq!(crate::ui::color::parse_hex("#f80"), Some([1.0, 136.0 / 255.0, 0.0]));
 }
+
+/// 枠の設定は menu の中。9:16 の preset を押せば作品の寸法が変わる(⌥⌘K でも開く)。
+#[test]
+fn the_composition_sheet_changes_the_frame() {
+    let mut gui = Gui::open();
+    gui.key(keyboard_types::Key::Character("k".into()), keyboard_types::Modifiers::SUPER | keyboard_types::Modifiers::ALT);
+    assert_eq!(gui.count("#menu-composition-list"), 1, "⌥⌘K did not open the Composition sheet");
+    let portrait = gui.center_of_text("#menu-composition-list .chip", "9:16");
+    gui.click(portrait.0, portrait.1);
+    let comp = gui.session.doc.lock().unwrap().view().composition().unwrap().unwrap();
+    assert_eq!((comp.width, comp.height), (1080, 1920));
+    assert_eq!(gui.texts("#stagefoot span").last().map(|s| s.contains("1080×1920")), Some(true));
+}

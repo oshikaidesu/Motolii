@@ -1227,15 +1227,7 @@ pub(super) fn load_fixture() -> Loaded {
 
     let layer_rows = layer_rows_from_doc(&fx.doc);
 
-    let comp_line = view
-        .composition()
-        .ok()
-        .flatten()
-        .map(|c| {
-            let secs = c.duration_frames / c.fps.num();
-            format!("{}×{} · {}fps · {}:{:02}", c.width, c.height, c.fps.num(), secs / 60, secs % 60)
-        })
-        .unwrap_or_default();
+    let comp_line = comp_line(&view);
 
     drop(view);
 
@@ -1263,4 +1255,16 @@ pub(super) fn fmt_timecode(sec: f64, fps: crate::doc::store::Fps) -> String {
         (frame / nominal) % 60,
         frame % nominal
     )
+}
+
+/// #stagefoot の 1 行(1920×1080 · 30fps · 1:00)。枠を変えたら描き直すので毎 render 引く。
+pub(super) fn comp_line(view: &StoreView) -> String {
+    view.composition()
+        .ok()
+        .flatten()
+        .map(|c| {
+            let secs = c.duration_frames / c.fps.num().max(1);
+            format!("{}×{} · {}fps · {}:{:02}", c.width, c.height, c.fps.num(), secs / 60, secs % 60)
+        })
+        .unwrap_or_default()
 }

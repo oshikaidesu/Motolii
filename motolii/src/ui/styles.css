@@ -1818,3 +1818,14 @@ body {
     font-size: var(--t-dense);
     text-align: center;
 }
+
+/* 枠の設定の欄。数を打つだけの小さな input。 */
+.csheet-in {
+    width: calc(72 * var(--s) * 1px);
+    background: var(--app);
+    color: var(--ink);
+    border: var(--line) solid var(--bd);
+    padding: var(--sp1) var(--sp2);
+    font: inherit;
+    font-size: var(--t-base);
+}

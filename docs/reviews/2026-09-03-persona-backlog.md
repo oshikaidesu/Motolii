@@ -95,7 +95,7 @@
 - ☐ Q16 落とした物・drag の後始末
 
 ## 第 3 波 D: 書き出しの人
-- ☐ D1 comp の設定(寸法・fps・尺・縦)を窓から変えられない — 9:16 が作れない
+- ☑ D1 Composition menu で寸法・fps・尺・9:16
 - ☐ D2 書き出しの選択肢がゼロ(preset・寸法・fps・範囲)
 - ☐ D3 素材の欠落が窓に出ず relink の口も無い。描画が Asset でなく生 path を見る
 - ☐ D4 書き出し前の確認(1 行のサマリ)
@@ -311,7 +311,7 @@
 - ☑ Z14 set_typing(false) と handles の重複(note_key_down は未)
 
 ## 第 5 波 L: 歌詞動画を 1 本作り切る(致命 3 つが先)
-- ☐ L1 【致命】comp の設定が窓に無い(9:16・曲の長さの尺・fps・background)— File ▸ New… / Composition Settings の sheet、Export… に寸法 preset・範囲・1 行サマリ(D1・D2・D4)
+- ☑ L1 Composition menu(⌥⌘K)に preset / 寸法 / fps / 尺 / Fit to layers(background・Export の範囲と preset は未 = D2・D4)
 - ☑ L2 Content の ◇/◆ で今の時刻に本文のキーを立てる・外す、Timeline に菱形(複数行の貼り付けを行ごとに配るのは未)
 - ☑ L3 音に関わる変更だけで再投影(指紋で gate、A2)— スクラブの音(A1)と BPM(S13)は未
 - ☐ L4 空の comp に最初の音・動画を入れたら尺を素材に伸ばす(place が切った事を status に)
@@ -323,3 +323,20 @@
 - ☐ L10 ループ区間 I / O(A3)
 - ☑ L11 Timeline の帯 drag を選択している全層へ(finish_drag が drag.layer 1 枚)
 - ☐ L12 層の Copy / Paste(行の入れ替え)
+
+## 第 6 波 E: AE 10 年の再点検
+- ☐ E1 P/S/R/T/A の単打で属性の行を絞る(U の同族)、UU
+- ☐ E2 J/K で前後のキーへ、I/O で層の頭/尻へ
+- ☐ E3 ⌘⇧D で分割(⌘K は切る手のまま、枠は ⌥⌘K)
+- ☐ E4 Y の pan-behind = Stage でアンカーを掴む(ST5)
+- ☐ E5 ◆ の ⌥ が AE と逆(停止時計を別に置き、◇/◆ は今の 1 つだけ)
+- ☐ E6 数値 drag の ⇧=10x ⌘=0.1x
+- ☐ E7 ⇧+click が帯と Stage で効かない(キーと囲いは効く)
+- ☐ E8 帯とキーの drag が ⌘ で吸い付きを切れない(再生位置だけ)
+- ☐ E9 端の ⌥drag が Trim に食われる(⌥ は常に Slip)
+- ☐ E10 F9 の代替鍵(⌘⌥E 一族)と、0 track の時の報せ
+- ☐ E11 複数選択の拡縮が主の層だけ(Move は配る)
+- ☐ E12 Pre-compose(時間を持つ入れ物)、shy、Work Area(B/N)、Motion Blur、Frame Blending、Continuously Rasterize — 無い
+- ☐ E13 RAM preview(描画のフレーム cache と緑帯)
+- ☐ E14 印の番号打ち
+- ☐ E15 AE を超える芽: blend の式を効果カードの絵へ(C13)、キー同定子を Undo 後の選択復元と ⌘C/V へ、◇ で貼り付けを行ごとに配る、印の BPM 格子、音の指紋を描画 cache へ

@@ -4,6 +4,7 @@ pub mod app;
 mod blend_preview;
 mod browser;
 mod color;
+mod composition;
 mod desk;
 mod dock;
 mod ease;

@@ -7,6 +7,7 @@ use crate::ui::inspector::{ChoiceDismiss, ChoiceId};
 use crate::ui::keymap::Intent;
 use crate::ui::output::{OutputStatus, OutputSurface};
 use crate::ui::settings::SettingsSheet;
+use crate::ui::composition::CompositionSheet;
 use crate::ui::panels::{BrowserPanel, InspectorPanel, StagePanel, TimelinePanel};
 use crate::ui::semantic_menu::{
     MenuDismiss, MenuId, SemanticControl, SemanticMenu,
@@ -169,7 +170,7 @@ fn panel_body(panel: Panel, session: &Session, ui: &fixture::UiData, p: Panes) -
             session: session.clone(),
             selected: p.selected,
             revision: p.revision,
-            comp_line: ui.comp_line.clone(),
+            comp_line: fixture::comp_line(&session.doc.lock().unwrap().view()),
         }),
         Panel::Inspector => rsx!(InspectorPanel {
             session: session.clone(),
@@ -1285,6 +1286,9 @@ pub fn app() -> Element {
                                 *revision.write() += 1;
                             }
                         }
+                        Intent::CompositionSettings => {
+                            open_menu.set(Some(MenuId::Composition));
+                        }
                         Intent::Quit => {
                             let session = session.clone();
                             let poke = poke.clone();
@@ -1688,6 +1692,13 @@ pub fn app() -> Element {
                                     }
                                 }
                             }
+                }
+                // 枠は作品の物。File の隣に置く(AE の Composition ▸ Composition Settings ⌘K)。
+                SemanticMenu {
+                    id: MenuId::Composition,
+                    label: "Composition",
+                    open: open_menu,
+                    CompositionSheet { session: session.clone(), revision }
                 }
                 // 窓の都合は作品でないので、面を持たずヘッダに仕舞う。
                 SemanticMenu {

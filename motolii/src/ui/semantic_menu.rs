@@ -7,6 +7,8 @@ pub(super) enum MenuId {
     File,
     Edit,
     View,
+    /// 枠の設定(⌘K)。
+    Composition,
     Settings,
 }
 
@@ -31,6 +33,7 @@ impl MenuId {
             Self::File => "file",
             Self::Edit => "edit",
             Self::View => "view",
+            Self::Composition => "composition",
             Self::Settings => "settings",
         }
     }
