@@ -169,3 +169,89 @@
 - ☑ H21 menubar の role / aria-controls
 - ☐ H22 scale_factor 変化(外部 display)の再 layout — 要実窓
 - ☐ H23 alert の文面が Mac 調でない
+
+## 第 4 波 ST: Stage / 空間の人
+- ☐ ST1 ⌘0 ⌘= ⌘− が UI 倍率に取られ、view の Fit / 100% の入口が無い
+- ☐ ST2 倍率の表示が無い(#stagefoot)
+- ☐ ST3 中ボタン・右ボタンでもパンが始まる / Space+drag が無い
+- ☐ ST4 Stage に marquee が無く、複数選択を一括で動かせない
+- ☐ ST5 アンカーを Stage で掴めない
+- ☐ ST6 スナップ・Shift の軸拘束が無い
+- ☐ ST7 矢印で 1px ナッジ(Stage focus 時)
+- ☐ ST8 修飾を離してから放すと確定値がプレビューと食い違う
+- ☐ ST9 書き出し枠のドラッグが無条件でカメラにキーを打つ
+- ☐ ST10 hover / cursor / 変形中の数値が無い
+- ☐ ST11 描いた取っ手と掴める取っ手の大きさが違う
+- ☐ ST12 ◎ chip が 3D の状態を読めない
+- ☐ ST13 奥行きドラッグが下=奥、取っ手が回転帯と食い合う
+- ☐ ST14 orbit が触っていない軸にもキーを書く
+- ☐ ST15 市松・セーフエリア・グリッド・定規・ガイドが無い
+- ☐ ST16 整列・分布
+- ☐ ST17 Stage で文字を直接打てない(第 1 波の残り)
+- ☐ ST18 output_only が到達不能
+- ☐ ST19 素のホイールが拡縮(先例は パン / ⌘+ホイール=拡縮)
+- ☐ ST20 fit が paint でしか更新されない
+
+## 第 4 波 M: 媒体の司書
+- ☐ M1 置いた素材の尺が必ず comp の終わりまで(probe の nb_frames を渡す)
+- ☐ M2 取り込みが窓を止める(SHA-256 を UI thread で doc.lock を握ったまま)
+- ☐ M3 フォルダを取り込めない
+- ☐ M4 重複が黙って消える(Imported 1 files と出て札は増えない)
+- ☐ M5 札の情報が種別文字列だけ(尺・fps・解像度・容量)
+- ☐ M6 札の絵を描画の最中に作る(ffmpeg 同期 spawn、失敗を永久に憶える)
+- ☐ M7 hover scrub / 下見が無く、押すと即座に層が生まれる
+- ☐ M8 Browser から Stage / Timeline へ引けない
+- ☐ M9 差し替えが Alt+click の隠し技
+- ☐ M10 Create の既定値(書体の絶対 path・"テキスト"・200×200 固定・採番無し・Null/Solid 無し)
+- ☐ M11 family の袖が空になっても残る
+- ☐ M12 Library の下帯が先頭の素材名
+- ☐ M13 札の下地色が並び順で回る
+- ☐ M14 素材を library から外せない / Reveal in Finder
+- ☐ M15 格子を鍵で歩けない(K9)
+- ☐ M16 落とす先の可否・役目が覆いに出ない(H17)
+
+## 第 4 波 X: 支援技術と文言
+- ☐ X1 再生ボタンに名前が無い
+- ☐ X2 書き出しの進捗・status bar に live region が無い
+- ☐ X3 M/S/L の aria_label が可視文字と違う
+- ☐ X4 ◎ の title と aria_label が食い違う / "To layer" → "Send to layer"
+- ☐ X5 面タブが span で focus も role も無い
+- ☐ X6 disabled な札の理由が届かない
+- ☐ X7 "Imported 1 files"
+- ☐ X8 書き出し error の文体(小文字始まり・回復手段無し)
+- ☐ X9 "Wrote {fullpath}" など完了文が経路まる出し
+- ☐ X10 未保存 dialog の文面が 2 種類
+- ☐ X11 View menu の ✓ が字(menuitemcheckbox へ)
+- ☐ X12 "Window" が 8 個同名
+- ☐ X13 倍率・調光の値が名前に紐づかない
+- ☐ X14 状態が色だけ(.lit .on)
+- ☐ X15 OBJECT / rows / layer の呼び名
+- ☐ X16 空状態の文体が揃わない
+- ☐ X17 命令文と説明文の混在
+- ☐ X18 参考画像の名前が 3 回読まれる
+- ☐ X19 見出しの全大文字を CSS へ
+- ☐ X20 Freeze が押せる物に見えない・"Linear light"・小文字の "attached"
+
+## 第 4 波 F: キーを打つ人
+- ☐ F1 Delete がキーでなく層を消す(selected_keys があればキー削除)
+- ☐ F2 同じトラックの複数キーを掴むと 1 つしか動かない(SetTrack が最後勝ち)
+- ☐ F3 分割が shape / text を落とす・切り口の Interp を split_at しない
+- ☐ F4 帯の時刻が 30fps 決め打ち(fixture FPS)
+- ☐ F5 キー選択が index(行が組み替わると別のキー)
+- ☐ F6 掴み終わりに publish_keys を呼ばない(F9 が空振り)
+- ☐ F7 キーを 1 つだけ消す口が無い(◆ navigator)
+- ☐ F8 既存のキーへ落とすと黙って上書き
+- ☐ F9 Hold が棚に無い
+- ☐ F10 錠が Timeline の掴みに効かない
+- ☐ F11 層の行のキーへ形を当てると全属性に乗る / 値グラフが無い
+- ☐ F12 Easy Ease In / Out が AE と裏返し
+- ☐ F13 キーを鍵で動かせない(Alt+←→)
+- ☐ F14 spatial(モーションパス)が窓から触れない
+- ☐ F15 タイムストレッチ(speed)の UI が無い
+- ☐ F16 スリップ(Alt+drag)が無い
+- ☐ F17 囲い選択がキー専用・足すだけ
+- ☐ F18 zoom to fit が無く、右が無限
+- ☐ F19 キーの当たり半径が UI 倍率に付いてこない
+- ☐ F20 親付けがピックウィップでない
+- ☐ F21 掴んでいる間フレームに丸まらない
+- ☐ F22 複製の重ね順が衝突する
