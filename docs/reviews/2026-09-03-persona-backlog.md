@@ -366,7 +366,7 @@
 - ☑ VO3 Inspector の升と層名に焦点が届く — tabindex / spinbutton / option、Enter で欄(K5)
 - ☑ VO4 tab の roving tabindex・aria-controls・tabpanel の名前(ptools を tablist の外へは未)
 - ☑ VO5 menuitemcheckbox の状態を文字で(on / off)
-- ☐ VO6 disabled が届かない — 理由を可視の文言へ
+- ☑ VO6 使用中の × は描かない(他の disabled は文言で)
 - ☐ VO7 status / live が届かない — 上流 B14
 - ☑ VO8 input / textarea に名前(Field の label)
 - ☑ VO9 hover だけの物(.tacts を opacity へ)
@@ -403,4 +403,4 @@
 - ☑ KB9 menu の ↑↓ が Composition / Settings で効かない(SemanticButton が MenuItems に名乗らない)
 - ☑ KB10 ↓ が property 行に落ちると選択が消える
 - ☑ KB11 .csheet-in の輪(#app と custom widget は未)
-- ☐ KB12 menu を開けている間は全 Intent が死ぬ(⌥⌘K で閉じられない)、Browser の rail は Escape で閉じない
+- ☑ KB12 ⌥⌘K で開けた枠は ⌥⌘K で閉じる、修飾の記憶は menu 中も続く(rail の Escape は未)

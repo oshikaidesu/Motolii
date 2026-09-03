@@ -679,11 +679,12 @@ pub(super) fn browser_panel(
                             "Finder"
                         }
                     }
+                    // 使用中は × を出さない(押せるのに反応しない、より正しい)。理由は tmeta に。
+                    if !in_use {
                     SemanticButton {
                         class: "chip",
-                        disabled: in_use,
                         aria_label: "Remove from library",
-                        title: if in_use { "In use by a layer" } else { "Remove from library" },
+                        title: "Remove from library",
                         onclick: move |_| {
                             match remove_doc.lock().unwrap().apply(Intent::RemoveAsset { asset: asset_id }) {
                                 Ok(_) => *revision.write() += 1,
@@ -691,6 +692,7 @@ pub(super) fn browser_panel(
                             }
                         },
                         "×"
+                    }
                     }
                 }
             }

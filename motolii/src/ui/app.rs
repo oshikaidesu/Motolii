@@ -860,10 +860,22 @@ pub fn app() -> Element {
                     {
                         return;
                     }
-                    if open_menu.peek().is_some() {
+                    // menu を開けている間も修飾の記憶は続ける(Cmd を押したまま menu が閉じると Space が Cmd+Space になる)。
+                    crate::ui::keymap::note_key_down(&evt.key());
+                    let open_now = *open_menu.peek();
+                    if let Some(open) = open_now {
+                        // 開いた鍵でもう一度押せば閉じる(⌥⌘K で開けた枠の設定を ⌥⌘K で閉じる)。
+                        let same_chord = matches!(open, MenuId::Composition)
+                            && evt.modifiers().alt()
+                            && evt.modifiers().intersects(Modifiers::META | Modifiers::SUPER)
+                            && matches!(evt.key(), Key::Character(ref c) if c.eq_ignore_ascii_case("k") || c == "˚");
+                        if same_chord {
+                            evt.prevent_default();
+                            evt.stop_propagation();
+                            open_menu.set(None);
+                        }
                         return;
                     }
-                    crate::ui::keymap::note_key_down(&evt.key());
                     // 打っているかは窓が DOM で決める(`aim_keystrokes`)。flag は欄より長生きする。
                     if crate::ui::keymap::is_typing() || session.field().is_some() {
                         return;
