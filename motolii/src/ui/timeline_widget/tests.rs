@@ -304,3 +304,31 @@ mod markers_move {
         assert_eq!(w.markers, vec![2.5, second]);
     }
 }
+
+mod selection_identity {
+    use crate::ui::timeline_widget::*;
+
+    fn row(layer: u64, keys: Vec<f64>) -> CanvasRow {
+        CanvasRow {
+            is_group: false,
+            keys,
+            span: Some((0.0, 10.0)),
+            agg: Vec::new(),
+            layer: Some(LayerId(layer)),
+            prop: None,
+            color: [0, 0, 0],
+        }
+    }
+
+    /// 行が組み替わっても、選んだキーは同じキーのまま。
+    #[test]
+    fn a_selected_key_follows_its_layer_when_rows_are_rebuilt() {
+        let (_tx, rx) = std::sync::mpsc::channel();
+        let mut w = TimelineWidget::new(vec![row(1, vec![1.0, 2.0]), row(2, vec![3.0])], Rc::new(rx));
+        w.selected = vec![(1, 0)];
+        w.replace_rows(vec![row(3, vec![0.5]), row(2, vec![3.0]), row(1, vec![1.0, 2.0])]);
+        assert_eq!(w.selected, vec![(1, 0)], "the key on layer 2 at 3.0s must stay selected");
+        w.replace_rows(vec![row(1, vec![1.0, 2.0])]);
+        assert!(w.selected.is_empty(), "a vanished row drops its selection");
+    }
+}

@@ -761,6 +761,31 @@ impl TimelineWidget {
     }
 
     /// 掴んでいるキーを窓の側へ出す。イージングのパネルがこれを読む。
+    /// 行を差し替える。選んだキーは index でなく(層・属性・秒)で追う —— twirl の開閉や
+    /// 親子の入れ子で行が組み替わっても、別のキーを指さない。
+    fn replace_rows(&mut self, rows: Vec<CanvasRow>) {
+        let half = 0.5 / self.fps.max(1.0);
+        let kept: Vec<(Option<LayerId>, Option<crate::doc::store::PropertyId>, f64)> = self
+            .selected
+            .iter()
+            .filter_map(|(row_ix, key_ix)| {
+                let row = self.rows.get(*row_ix)?;
+                Some((row.layer, row.prop.clone(), *row.keys.get(*key_ix)?))
+            })
+            .collect();
+        self.rows = rows;
+        self.selected = kept
+            .iter()
+            .filter_map(|(layer, prop, sec)| {
+                let row_ix = self.rows.iter().position(|r| r.layer == *layer && r.prop == *prop)?;
+                let key_ix = self.rows[row_ix].keys.iter().position(|k| (k - sec).abs() < half)?;
+                Some((row_ix, key_ix))
+            })
+            .collect();
+        self.hovered = None;
+        self.publish_keys();
+    }
+
     /// 錠の掛かった層は掴めない。選ぶ事はできる —— 外す為に。
     fn is_locked(&self, layer: LayerId) -> bool {
         self.doc
@@ -791,7 +816,7 @@ impl TimelineWidget {
     fn process_messages(&mut self) {
         while let Ok(msg) = self.rx.try_recv() {
             match msg {
-                TimelineMsg::SetRows(rows) => self.rows = rows,
+                TimelineMsg::SetRows(rows) => self.replace_rows(rows),
                 TimelineMsg::ScrollBy(dy) => self.set_scroll_y(self.scroll_y + dy),
                 TimelineMsg::SetMarkers(markers) => self.markers = markers,
             }
