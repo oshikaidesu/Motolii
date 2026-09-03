@@ -4,8 +4,9 @@ use std::fmt;
 use dioxus_workbench::{
     DockZone, LayoutNode, PanelId, PanelLayout, PanelPlacement, SplitAxis, SplitId, TileId,
 };
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Serialize, Deserialize)]
 pub(crate) enum Panel {
     Media,
     Effects,
@@ -115,10 +116,12 @@ impl Side {
     }
 }
 
-#[derive(Clone, PartialEq)]
+/// 配置は人の物。作品ではなく利用者の設定へ仕舞う(別窓は窓が閉じれば戻るので仕舞わない)。
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub(super) struct Dock {
     layout: PanelLayout,
     hidden: BTreeSet<Panel>,
+    #[serde(skip)]
     detached: BTreeSet<Panel>,
     /// 引き出しを開けて机を広げている間、畳んでいた時の割合を覚える。
     desk_folded: Option<f64>,
@@ -136,6 +139,22 @@ impl Default for Dock {
 }
 
 impl Dock {
+    /// 仕舞った配置。壊れていれば無かった事にして既定へ戻る。
+    pub(super) fn load(path: &std::path::Path) -> Option<Self> {
+        let text = std::fs::read_to_string(path).ok()?;
+        let dock: Self = serde_json::from_str(&text).ok()?;
+        dock.layout.valid().then_some(dock)
+    }
+
+    pub(super) fn save(&self, path: &std::path::Path) {
+        if let Some(dir) = path.parent() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        if let Ok(text) = serde_json::to_string(self) {
+            let _ = std::fs::write(path, text);
+        }
+    }
+
     pub(super) fn root(&self) -> LayoutNode {
         self.projected_layout().root
     }
@@ -323,6 +342,26 @@ mod tests {
                 panel_count(first, panel) + panel_count(second, panel)
             }
         }
+    }
+
+    #[test]
+    fn a_saved_layout_comes_back_without_its_detached_windows() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("layout.json");
+        let mut dock = Dock::default();
+        dock.hide(Panel::Colors);
+        dock.set_split_ratio(&SplitId::new("root"), 0.5);
+        assert!(dock.detach(Panel::Desk));
+        dock.save(&path);
+
+        let back = Dock::load(&path).unwrap();
+        assert!(!back.is_visible(Panel::Colors));
+        assert_eq!(back.layout.split_ratio(&SplitId::new("root")), Some(0.5));
+        assert!(!back.is_detached(Panel::Desk), "a closed window came back detached");
+        assert!(back.is_visible(Panel::Desk));
+
+        std::fs::write(&path, "{ not layout").unwrap();
+        assert!(Dock::load(&path).is_none());
     }
 
     #[test]

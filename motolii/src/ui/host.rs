@@ -41,6 +41,8 @@ pub(crate) struct Host {
     /// 状態は全窓で1つなので、誰かが書いたら他の窓も描き直す必要がある。
     wakers: std::rc::Rc<std::cell::RefCell<Vec<(u64, std::rc::Rc<dyn Fn()>)>>>,
     next_id: std::rc::Rc<std::cell::Cell<u64>>,
+    /// 人の設定の置き場(配置・preset)。窓を開けない時は無く、何も仕舞わない。
+    settings_dir: Option<std::path::PathBuf>,
 }
 
 impl PartialEq for Host {
@@ -97,6 +99,10 @@ impl Host {
         }
     }
 
+    pub(crate) fn settings_file(&self, name: &str) -> Option<std::path::PathBuf> {
+        self.settings_dir.as_ref().map(|dir| dir.join(name))
+    }
+
     pub(crate) fn on_focus_lost(&self, callback: impl Fn() + 'static) {
         *self.on_focus_lost.borrow_mut() = Some(std::rc::Rc::new(callback));
     }
@@ -146,6 +152,7 @@ impl Host {
             on_primary_pointer_release: Default::default(),
             wakers: Default::default(),
             next_id: Default::default(),
+            settings_dir: None,
         }
     }
 
@@ -239,6 +246,17 @@ fn host_routes_only_primary_mouse_release_to_the_owning_window() {
     host.primary_pointer_released(owner, -3.0, 4.0);
 
     assert_eq!(&*calls.borrow(), &[(-3.0, 4.0)]);
+}
+
+/// macOS の Application Support。他 OS は v1 の対象外(V2-6)なので HOME 直下。
+fn settings_dir() -> Option<std::path::PathBuf> {
+    let home = std::env::var_os("HOME")?;
+    let base = if cfg!(target_os = "macos") {
+        std::path::Path::new(&home).join("Library/Application Support")
+    } else {
+        std::path::Path::new(&home).join(".config")
+    };
+    Some(base.join("Motolii"))
 }
 
 /// 窓の外の糸が持つ、窓を起こすだけの口。
@@ -638,6 +656,7 @@ pub fn launch(title: &str) {
         on_primary_pointer_release: Default::default(),
         wakers: Default::default(),
         next_id: Default::default(),
+        settings_dir: settings_dir(),
     };
 
     let main = window(

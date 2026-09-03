@@ -893,7 +893,21 @@ fn tile_view(
 
 pub fn app() -> Element {
     let mut playing = use_signal(|| false);
-    let mut dock = use_signal(Dock::default);
+    let layout_file = use_hook(|| {
+        consume_context::<crate::ui::host::Host>().settings_file("layout.json")
+    });
+    let mut dock = use_signal(|| {
+        layout_file
+            .as_deref()
+            .and_then(Dock::load)
+            .unwrap_or_default()
+    });
+    use_effect(move || {
+        let d = dock();
+        if let Some(path) = &layout_file {
+            d.save(path);
+        }
+    });
 
     let mut tab_drag = use_signal(|| Option::<TabDrag>::None);
     let mut grip = use_signal(|| Option::<GripDrag>::None);
