@@ -195,6 +195,30 @@ pub(super) enum DeskState {
 #[derive(Clone, PartialEq, Debug)]
 pub(super) enum Focus {
     Blend(LayerId),
+    Color(ColorSlot),
+}
+
+/// 色が居る場所。property ではなく shape / text の data を指す(書き戻しもそこ)。
+#[derive(Clone, PartialEq, Debug)]
+pub(super) enum ColorSlot {
+    TextFill {
+        layer: LayerId,
+        style: crate::doc::store::TextStyleId,
+    },
+    TextStroke {
+        layer: LayerId,
+        style: crate::doc::store::TextStyleId,
+    },
+    /// ShapeNode の木の中の葉。index の列で指す。
+    ShapeFill { layer: LayerId, path: Vec<usize> },
+}
+
+impl ColorSlot {
+    pub(super) fn layer(&self) -> LayerId {
+        match self {
+            Self::TextFill { layer, .. } | Self::TextStroke { layer, .. } | Self::ShapeFill { layer, .. } => *layer,
+        }
+    }
 }
 
 /// 開いている欄。窓に同時に 1 つで、持ち主はここだけ。面は開ける・読む・閉じるだけ。
@@ -321,10 +345,11 @@ impl Session {
     /// 生きている焦点。選んでいる層を指す物だけ。層が変われば焦点は消えたも同じ。
     pub(super) fn live_focus(&self) -> Option<Focus> {
         let focus = self.focus.lock().unwrap().clone()?;
-        match focus {
-            Focus::Blend(layer) if self.selection.get() == Some(layer) => Some(focus),
-            Focus::Blend(_) => None,
-        }
+        let layer = match &focus {
+            Focus::Blend(layer) => *layer,
+            Focus::Color(slot) => slot.layer(),
+        };
+        (self.selection.get() == Some(layer)).then_some(focus)
     }
 }
 

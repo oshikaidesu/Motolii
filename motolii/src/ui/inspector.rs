@@ -7,6 +7,7 @@ use crate::ui::fixture::{inspector_data_from_doc, InspectorData, PropRow};
 use crate::ui::playback::Clock;
 use crate::ui::semantic_menu::{Field, SemanticButton};
 use crate::ui::session::{FieldAt, Focus, OpenField, Session};
+use crate::ui::fixture::ColorRow;
 use crate::doc::store::{
     property, BlendMode, ContentKeyframe, Document, Intent, Interp, Keyframe,
     LayerAttrsPatch, LayerId, LayerSource, Matte, MatteMode, PropertyId, RationalTime, StoreError,
@@ -689,9 +690,13 @@ pub(super) fn inspector_panel(
 ) -> Element {
     let mut drag = drag;
     let blend_focused = matches!(
-        (selection, live_focus),
-        (Some(layer), Some(Focus::Blend(at))) if at == layer
+        (selection, &live_focus),
+        (Some(layer), Some(Focus::Blend(at))) if *at == layer
     );
+    let color_focus = match live_focus {
+        Some(Focus::Color(slot)) => Some(slot),
+        _ => None,
+    };
     let box_size = *selected_size.lock().unwrap();
     let _ = revision(); // Document書き換え後の再描画をここで購読する(値そのものは使わない)
     // 再生位置が動いた時も描き直す。**値は時刻で決まる**ので、
@@ -979,8 +984,19 @@ pub(super) fn inspector_panel(
             }
             if !inspector.colors.is_empty() {
                 div { class: "sec", "COLOR" }
-                for (label , hex) in inspector.colors.iter() {
-                    div { class: "prow",
+                for ColorRow { label , hex , slot } in inspector.colors.iter() {
+                    SemanticButton {
+                        class: if color_focus.as_ref() == Some(slot) { "prow color focus on" } else { "prow color focus" },
+                        selected: color_focus.as_ref() == Some(slot),
+                        aria_label: "Focus {label} color",
+                        onclick: {
+                            let focus = focus.clone();
+                            let slot = slot.clone();
+                            move |_| {
+                                *focus.lock().unwrap() = Some(Focus::Color(slot.clone()));
+                                *revision.write() += 1;
+                            }
+                        },
                         span { class: "n", "{label}" }
                         span { class: "v swatch",
                             span { class: "dot", style: "background:{hex};" }

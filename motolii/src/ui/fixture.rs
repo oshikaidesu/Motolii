@@ -2,6 +2,7 @@ use crate::doc::store::{
     property, Document, LayerId, LayerSource, PropertyId, RationalTime, ShapeNode, StoreView, Value,
 };
 
+use crate::ui::session::ColorSlot;
 use crate::render::engine::known_effects;
 
 use crate::ui::timeline_widget::CanvasRow;
@@ -361,6 +362,31 @@ pub(super) struct ColorSwatch {
     pub rgba: [u8; 4],
 }
 
+/// Inspector の COLOR の行。押すと焦点になり、机の色の引き出しが指す。
+pub(super) struct ColorRow {
+    pub label: &'static str,
+    pub hex: String,
+    pub slot: ColorSlot,
+}
+
+/// 木の中で最初に単色で塗っている葉と、そこへの道。
+pub(super) fn first_solid_fill(
+    nodes: &[ShapeNode],
+    path: Vec<usize>,
+) -> Option<(Vec<usize>, crate::doc::vector::Rgb)> {
+    nodes.iter().enumerate().find_map(|(i, node)| {
+        let mut here = path.clone();
+        here.push(i);
+        match node {
+            ShapeNode::Leaf(shape) => match shape.fill.as_ref().map(|f| &f.brush) {
+                Some(crate::doc::vector::Brush::Solid(rgb)) => Some((here, *rgb)),
+                _ => None,
+            },
+            ShapeNode::Group(group) => first_solid_fill(&group.children, here),
+        }
+    })
+}
+
 fn hex_of(rgba: [u8; 4]) -> String {
     format!("#{:02x}{:02x}{:02x}", rgba[0], rgba[1], rgba[2])
 }
@@ -527,7 +553,7 @@ pub(super) struct InspectorData {
     pub transform: Vec<PropRow>,
     pub effects: Vec<EffectBlock>,
     pub has_effects: bool,
-    pub colors: Vec<(&'static str, String)>,
+    pub colors: Vec<ColorRow>,
 }
 
 pub(super) struct UiData {
@@ -674,44 +700,32 @@ pub(super) fn inspector_data_from_doc(
         _ => Vec::new(),
     };
 
-    let mut colors: Vec<(&'static str, String)> = Vec::new();
+    let mut colors = Vec::new();
+    let row = |label, c: [f64; 4], slot| ColorRow {
+        label,
+        hex: hex_of([
+            (c[0] * 255.0) as u8,
+            (c[1] * 255.0) as u8,
+            (c[2] * 255.0) as u8,
+            (c[3] * 255.0) as u8,
+        ]),
+        slot,
+    };
     match view.meta(layer).ok().flatten().map(|m| m.source) {
         Some(LayerSource::Text) => {
             if let Ok(Some(doc)) = view.text_document(layer) {
                 if let Some(style) = doc.styles.first() {
-                    let f = style.fill;
-                    colors.push((
-                        "Fill",
-                        hex_of([
-                            (f[0] * 255.0) as u8,
-                            (f[1] * 255.0) as u8,
-                            (f[2] * 255.0) as u8,
-                            (f[3] * 255.0) as u8,
-                        ]),
-                    ));
+                    colors.push(row("Fill", style.fill, ColorSlot::TextFill { layer, style: style.id }));
                     if let Some(s) = style.stroke_color {
-                        colors.push((
-                            "Stroke",
-                            hex_of([
-                                (s[0] * 255.0) as u8,
-                                (s[1] * 255.0) as u8,
-                                (s[2] * 255.0) as u8,
-                                (s[3] * 255.0) as u8,
-                            ]),
-                        ));
+                        colors.push(row("Stroke", s, ColorSlot::TextStroke { layer, style: style.id }));
                     }
                 }
             }
         }
         Some(LayerSource::Shape) => {
             if let Ok(shapes) = view.shapes(layer) {
-                let mut seen = std::collections::BTreeSet::new();
-                let mut swatches = Vec::new();
-                for node in &shapes {
-                    shape_fill_colors(node, &mut seen, &mut swatches);
-                }
-                if let Some(sw) = swatches.into_iter().next() {
-                    colors.push(("Fill", sw.hex));
+                if let Some((path, rgb)) = first_solid_fill(&shapes, Vec::new()) {
+                    colors.push(row("Fill", [rgb.r, rgb.g, rgb.b, 1.0], ColorSlot::ShapeFill { layer, path }));
                 }
             }
         }

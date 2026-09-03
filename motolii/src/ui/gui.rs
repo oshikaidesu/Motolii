@@ -428,6 +428,45 @@ fn a_note_is_typed_in_a_textarea_and_committed_by_clicking_outside() {
     );
 }
 
+/// 色は Inspector の行を押すと焦点になり、机の輪と面で変わって data へ戻る。
+#[test]
+fn picking_on_the_desk_wheel_writes_the_focused_color_back() {
+    let mut gui = Gui::open();
+    let rows = gui.count(".lsurface");
+    let mut found = false;
+    for i in 1..rows {
+        let (x, y) = gui.center_of(".lsurface", i);
+        gui.click(x, y);
+        if gui.count(".prow.color") > 0 {
+            found = true;
+            break;
+        }
+    }
+    assert!(found, "no layer in the fixture shows a COLOR row");
+    let (x, y) = gui.center_of(".prow.color", 0);
+    gui.click(x, y);
+    assert_eq!(gui.count(".color-drawer"), 1, "the color focus did not open the desk drawer");
+    let before = gui.session.field();
+    assert!(before.is_none());
+
+    // 面の右上 = 彩度 1・明度 1 の純色。輪の色相はそのまま。
+    let (sx, sy) = gui.size_of_nth(".sv-square", 0);
+    let (cx, cy) = gui.center_of(".sv-square", 0);
+    let (px, py) = (cx + sx / 2.0 - 4.0, cy - sy / 2.0 + 4.0);
+    gui.press(px, py);
+    gui.motion(px, py);
+    gui.release(px, py);
+    gui.settle();
+
+    let slot = match gui.session.live_focus() {
+        Some(crate::ui::session::Focus::Color(slot)) => slot,
+        other => panic!("focus drifted: {other:?}"),
+    };
+    let after = crate::ui::desk::read_color(&gui.session.doc, &slot).unwrap();
+    let (_, s, v) = crate::ui::desk::rgb_to_hsv([after[0], after[1], after[2]]);
+    assert!(s > 0.9 && v > 0.9, "the pick did not reach the document: {after:?}");
+}
+
 #[test]
 fn menus_are_one_semantic_family() {
     let mut gui = Gui::open();
