@@ -472,9 +472,9 @@
 - ☐ UX10 死に selector 41 行と二重定義 15 行、focus ring が 3 種、.a11y の親に position:relative が無い
 
 ## 会議 GC: グラフィックデザインのコンポーザー(作品の見え方)
-- ☐ GC1 既定の Text が縦に中央でない(position 0,0 で上端 85px)— shape 後に LineMeasure で縦中央へ
+- ☑ GC1 文字の塊を枠の縦中央へ(LineMeasure を使う)
 - ☑ GC2 既定 Text: 行送り 1.5・palt・黒の縁取り 8%(W6 は機械に無いので W3 のまま)
-- ☐ GC3 縁取りを fill の下へ(stroke_over_fill を読む)、幅は外側基準(輪郭中心なので 2 倍)
+- ☑ GC3 縁取りは既定で fill の下、幅は外側基準(2 倍で焼いて重ねる)
 - ☐ GC4 ShapedText に glyph の区切り(glyph_spans)— Range Selector / 文字送りの入口
 - ☐ GC5 vism/blur.wgsl を 1 枚(ブラー・影・feather の土台)、mask に feather が無い
 - ☐ GC6 文字の焼きが comp 固定解像度(scale 200% でぼける)— canvas を実効 scale で
