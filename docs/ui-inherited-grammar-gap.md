@@ -44,7 +44,7 @@
 | 反射 | 中身 | 依存 |
 |---|---|---|
 | ~~**Space = 再生/停止**~~ | 着地済(2026-08-30、窓で実映像の再生を確認)。**JKLシャトル・playhead追従スクロールは未着** | playback spine(PlaybackSession接続、audio clock)。transport一式のQ0違反もここで解消 |
-| **右クリック menu** | 文脈操作の普遍的な逃げ道(削除・複製・rename…) | context menu基盤(ObjC)。中身はTier 1/2の再掲で良い |
+| **右クリック menu** | 文脈操作の普遍的な逃げ道(削除・複製・rename…) | PR提案あり(2026-09-03、**未ビルド・窓未確認**): ObjCでなくDOM側で描く。Blitzは`contextmenu`をDOM要素へ配り、custom widget(Timeline帯・Stage)には右ボタン`PointerDown`しか届かないのでSignal経由。中身はTier 1の再掲(Split/Duplicate/Delete/Select All/Deselect、空面はPlay/Home/End)。renameは未 |
 
 ## Tier 2 — D2/モデルのgrainが要る反射(仕様粒→実装の二段)
 

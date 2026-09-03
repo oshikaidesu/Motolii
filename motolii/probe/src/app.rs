@@ -4,13 +4,15 @@ use dioxus_native::prelude::*;
 use dioxus_native::CustomWidgetAttr;
 
 use crate::browser::browser_panel;
+use crate::context_menu::{context_menu, MenuRequest};
+use crate::dispatch::{run_intent, IntentCtx};
 use crate::fixture::{load_fixture, Loaded};
 use crate::inspector::inspector_panel;
-use crate::keymap::{lookup, Intent};
+use crate::keymap::lookup;
 use crate::session::Session;
 use crate::stage_widget::StageWidget;
 use crate::timeline_shell::timeline_shell;
-use crate::timeline_widget::{split_layer, TimelineMsg, TimelineWidget};
+use crate::timeline_widget::{TimelineMsg, TimelineWidget};
 use crate::fixture;
 use crate::tokens;
 
@@ -30,7 +32,7 @@ struct DragSplit {
 }
 
 pub fn app() -> Element {
-    let mut playing = use_signal(|| false);
+    let playing = use_signal(|| false);
     let mut browser_w = use_signal(|| 300.0f64);
     let mut inspector_w = use_signal(|| 270.0f64);
     let mut timeline_h = use_signal(|| 300.0f64);
@@ -38,9 +40,10 @@ pub fn app() -> Element {
 
     let mut scale_pct = use_signal(|| 100u32);
     let revision = use_signal(|| 0u32);
-    let mut selected = use_signal(|| None);
+    let selected = use_signal(|| None);
     let timeline_scroll_y = use_signal(|| 0.0f64);
     let text_editing = use_signal(|| Option::<String>::None);
+    let mut menu = use_signal(|| Option::<MenuRequest>::None);
 
     let (clock, ui_scale, timeline_attr, timeline_tx, stage_attr, loaded, doc, selection) = use_hook(|| {
         let Loaded { doc, ui, duration_sec } = load_fixture();
@@ -53,9 +56,10 @@ pub fn app() -> Element {
             .with_scale(ui_scale.clone())
             .with_document(doc.clone(), fixture::canvas_rows_from_doc)
             .with_selection(selection.clone(), selected)
-            .with_scroll_mirror(timeline_scroll_y);
+            .with_scroll_mirror(timeline_scroll_y)
+            .with_context_menu(menu);
         let timeline_tx = timeline.sender();
-        let stage = StageWidget::new(clock.clone(), doc.clone(), selection.clone(), selected, revision);
+        let stage = StageWidget::new(clock.clone(), doc.clone(), selection.clone(), selected, revision, menu);
         (
             clock,
             ui_scale,
@@ -71,6 +75,18 @@ pub fn app() -> Element {
     let attrs_state = use_signal(|| {
         loaded.layer_rows.iter().map(|r| (r.hidden, r.solo, r.locked)).collect::<Vec<_>>()
     });
+
+    let intent_ctx = IntentCtx {
+        doc: doc.clone(),
+        clock: clock.clone(),
+        selection: selection.clone(),
+        timeline_tx: timeline_tx.clone(),
+        layer_rows,
+        attrs_state,
+        revision,
+        selected,
+        playing,
+    };
 
     let bw = browser_w();
     let iw = inspector_w();
@@ -104,17 +120,16 @@ pub fn app() -> Element {
                 *drag.write() = None;
             },
             onkeydown: {
-                let doc = doc.clone();
-                let clock = clock.clone();
-                let selection = selection.clone();
-                let timeline_tx = timeline_tx.clone();
-                let mut layer_rows = layer_rows;
-                let mut attrs_state = attrs_state;
-                let mut revision = revision;
+                let ctx = intent_ctx.clone();
                 move |evt| {
                     println!("PROBE room=input verdict=keydown key={:?}", evt.key());
                     if text_editing.read().is_some() {
                         println!("PROBE room=input verdict=text-editing key={:?}", evt.key());
+                        return;
+                    }
+                    if menu.read().is_some() && evt.key() == Key::Escape {
+                        evt.prevent_default();
+                        menu.set(None);
                         return;
                     }
                     let modifiers = evt.modifiers();
@@ -124,58 +139,7 @@ pub fn app() -> Element {
                     };
                     println!("PROBE room=input verdict=intent key={:?}", evt.key());
                     evt.prevent_default();
-                    match intent {
-                        Intent::Split => {
-                            let Some(layer) = selected() else {
-                                println!("PROBE room=write verdict=split-noop reason=no-selection");
-                                return;
-                            };
-                            let comp_frame = (clock.now_sec() * 30.0).round() as i64;
-                            match split_layer(&doc, layer, comp_frame) {
-                                Some(tail) => {
-                                    let snapshot = doc.lock().unwrap();
-                                    let rows = fixture::layer_rows_from_doc(&snapshot);
-                                    let canvas = fixture::canvas_rows_from_doc(&snapshot);
-                                    drop(snapshot);
-                                    attrs_state.set(
-                                        rows.iter().map(|r| (r.hidden, r.solo, r.locked)).collect(),
-                                    );
-                                    layer_rows.set(rows);
-                                    let _ = timeline_tx.send(TimelineMsg::SetRows(canvas));
-                                    println!(
-                                        "PROBE room=write verdict=applied Split layer={layer:?} tail={tail:?} comp_frame={comp_frame}"
-                                    );
-                                }
-                                None => println!(
-                                    "PROBE room=write verdict=split-noop layer={layer:?} comp_frame={comp_frame}"
-                                ),
-                            }
-                        }
-                        Intent::StepFrame(delta) => {
-                            let frame = (clock.now_sec() * 30.0).round() as i64 + delta;
-                            clock.seek(frame as f64 / 30.0);
-                        }
-                        Intent::Home => clock.seek(0.0),
-                        Intent::End => clock.seek(clock.duration),
-                        Intent::Deselect => {
-                            selection.set(None);
-                            selected.set(None);
-                        }
-                        Intent::PlayPause => {
-                            clock.toggle();
-                            playing.set(clock.playing());
-                        }
-                        Intent::SelectAll => {
-                            let layers = doc.lock().unwrap().view().layers();
-                            for layer in layers {
-                                if !selection.contains(layer) {
-                                    selection.toggle(layer);
-                                }
-                            }
-                            selected.set(selection.get());
-                            *revision.write() += 1;
-                        }
-                    }
+                    run_intent(&ctx, intent);
                 }
             },
 
@@ -270,9 +234,10 @@ pub fn app() -> Element {
                 },
             }
 
-            {timeline_shell(clock.clone(), playing, doc.clone(), attrs_state, &layer_rows.read(), timeline_attr, selection.clone(), selected, timeline_scroll_y, timeline_tx.clone())}
+            {timeline_shell(clock.clone(), playing, doc.clone(), attrs_state, &layer_rows.read(), timeline_attr, selection.clone(), selected, timeline_scroll_y, timeline_tx.clone(), menu)}
 
             div { id: "status", "{loaded.status}" }
+            {context_menu(menu, intent_ctx.clone())}
         }
     )
 }
