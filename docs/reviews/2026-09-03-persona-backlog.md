@@ -343,10 +343,10 @@
 
 ## 第 6 波 P: 規模と性能(層 200・7200 コマ・4K×3・キー 2000・印 400・素材 50)
 - ☐ P1 【致命】view.attrs()/meta() が毎回 latest_at + serde_json、rows_nested が O(層²)— StoreView に revision 付き cache、親表を 1 回で
-- ☐ P2 【致命】text の texture が comp 解像度 × 無制限(200 層で 1.6GB、4K で 6.6GB)— 実バウンディング + LRU 上限、鍵を u64 に
+- ☑ P2 text の texture は 256 枚で古い物から落とす(実バウンディングと u64 の鍵は未)
 - ☑ P3 Stage は変化があった時だけ描き、層は paint で 1 回だけ解く
 - ☑ P4 行の投影は Document の revision が動いた時だけ(面の再構築の分割は未)
-- ☐ P5 【致命】Timeline 左列に仮想化が無い(6,000 node)
+- ☑ P5 Timeline 左列は見える 64 行だけ DOM に出す
 - ☐ P6 音の指紋が O(層)の String、from_view が同期 decode(92MB/本、evict 無し)、doc.lock の中
 - ☐ P7 保存済み project を開くと札の decode / ffmpeg が描画の糸(MADE は process 内)— cache に無い物は別の糸へ、data URI の clone
 - ☐ P8 複数選択の Inspector が O(選択 × 層)

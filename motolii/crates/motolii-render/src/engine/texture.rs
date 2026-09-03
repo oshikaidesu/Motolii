@@ -30,6 +30,9 @@ fn still_key(path: &str) -> u64 {
     hasher.finish()
 }
 
+/// 文字の texture を憶える上限(枚)。
+const TEXT_CACHE_LIMIT: usize = 256;
+
 impl Engine {
     pub fn selected_layer_size(
         &self,
@@ -146,7 +149,14 @@ impl Engine {
             raster.width,
             raster.height,
         )?;
-        self.text_textures.insert(key, texture.clone());
+        self.text_textures.insert(key.clone(), texture.clone());
+        self.text_order.push_back(key);
+        // 級数を擦るだけで鍵が増える。歌詞 200 行 + 擦りの残骸で GPU を食い潰さない。
+        while self.text_order.len() > TEXT_CACHE_LIMIT {
+            if let Some(old) = self.text_order.pop_front() {
+                self.text_textures.remove(&old);
+            }
+        }
         Ok((
             Some(LayerContent::Texture(texture)),
             [raster.width as f32, raster.height as f32],

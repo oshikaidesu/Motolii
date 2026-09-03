@@ -64,7 +64,14 @@ pub(super) fn timeline_shell(
     session: &Session,
     mut revision: Signal<u32>,
 ) -> Element {
-    let layer_rows = layer_rows_data.iter().enumerate().map(|(i, row)| {
+    // 見える範囲だけ DOM に出す(層 200 で 6,000 node を stylo に舐めさせない)。
+    let row_px = crate::ui::tokens::ROW * session.scale.factor();
+    let first = ((scroll_y() / row_px).floor() as usize).min(layer_rows_data.len());
+    let count = 64;
+    let last = (first + count).min(layer_rows_data.len());
+    let above_px = first as f64 * row_px;
+    let below_px = (layer_rows_data.len() - last) as f64 * row_px;
+    let layer_rows = layer_rows_data.iter().enumerate().skip(first).take(count).map(|(i, row)| {
         let layer = row.layer;
         let doc = doc.clone();
         let doc_twirl = doc.clone();
@@ -287,7 +294,9 @@ pub(super) fn timeline_shell(
                     div { class: "lhead", "Layer" }
                     div {
                         style: "transform: translateY(-{scroll_y()}px);",
+                        div { style: "height: {above_px}px;" }
                         {layer_rows}
+                        div { style: "height: {below_px}px;" }
                     }
                 }
                 object { "data": timeline_attr }
