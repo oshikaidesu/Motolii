@@ -368,6 +368,7 @@ fn prop_row(
                 let commit_session = session.clone();
                 let start_value = start_value.clone();
                 return rsx!(Field {
+                    label: "{p.label}",
                     session: session.clone(),
                     class: "{class} typing",
                     revision,
@@ -398,6 +399,9 @@ fn prop_row(
             let grabber = session.clone();
             let open = (property.clone(), start_value.clone());
             let cell = c.clone();
+            let key_opener = session.clone();
+            let key_open = open.clone();
+            let key_cell = c.clone();
             rsx!(span {
                 class: "{class}",
                 onmousedown: move |evt| {
@@ -423,6 +427,20 @@ fn prop_row(
                         cell.clone(),
                     );
                     *revision.write() += 1;
+                },
+                // 鍵の道: Tab で升に止まり、Enter で打てる(読み上げにも「値」として出る)。
+                tabindex: "0",
+                role: "spinbutton",
+                onkeydown: move |evt: KeyboardEvent| {
+                    if evt.key() == Key::Enter {
+                        evt.stop_propagation();
+                        cancel_scrub(&key_opener);
+                        key_opener.open_field(
+                            FieldAt::Number { layer, property: key_open.0.clone(), axis: i },
+                            key_cell.clone(),
+                        );
+                        *revision.write() += 1;
+                    }
                 },
                 "{c}"
             })
@@ -492,6 +510,7 @@ fn content_row(
             div { class: "prow content-row",
                 span { class: "n", "{p.label}" }
                 Field {
+                    label: "Content",
                     session: session.clone(),
                     class: "v content",
                     multiline: true,
@@ -1077,7 +1096,7 @@ pub(super) fn inspector_panel(
                 span { "Z" }
                 span { class: "k", "Key" }
             }
-            div { class: "sec", "Transform" }
+            h3 { class: "sec", "Transform" }
             {transform_rows}
             // 升の並びそのものが意味なので、言葉は置かない(裁定451)。
             if let (Some(layer), Some(size)) = (selection, box_size) {
@@ -1103,7 +1122,7 @@ pub(super) fn inspector_panel(
             }
             div { class: "iscroll",
             if let Some(layer) = selection {
-                div { class: "sec", "Blend" }
+                h3 { class: "sec", "Blend" }
                 // 値は文字で選ばない。行を光らせ、机がサムネイルの格子を出す。
                 SemanticButton {
                     class: if blend_focused { "prow focus on" } else { "prow focus" },
@@ -1125,7 +1144,7 @@ pub(super) fn inspector_panel(
                 }
             }
             if let Some(layer) = selection {
-                div { class: "sec", "Parent" }
+                h3 { class: "sec", "Parent" }
                 if let Some(action) = parent_action.clone() {
                     LayerChoiceRow {
                         id: ChoiceId::Parent,
@@ -1160,7 +1179,7 @@ pub(super) fn inspector_panel(
                 }
             }
             if selection.is_some() {
-                div { class: "sec", "Matte" }
+                h3 { class: "sec", "Matte" }
                 if let Some(action) = matte_source_action.clone() {
                     LayerChoiceRow {
                         id: ChoiceId::MatteSource,
@@ -1176,11 +1195,11 @@ pub(super) fn inspector_panel(
                 }
             }
             if !inspector.text.is_empty() {
-                div { class: "sec", "Text" }
+                h3 { class: "sec", "Text" }
                 {text_rows}
             }
             if !inspector.colors.is_empty() {
-                div { class: "sec", "Color" }
+                h3 { class: "sec", "Color" }
                 for ColorRow { label , hex , slot } in inspector.colors.iter() {
                     SemanticButton {
                         class: if color_focus.as_ref() == Some(slot) { "prow color focus on" } else { "prow color focus" },
@@ -1208,7 +1227,7 @@ pub(super) fn inspector_panel(
                     }
                 }
             }
-            div { class: "sec", "Effects" }
+            h3 { class: "sec", "Effects" }
             if inspector.effects.is_empty() {
                 div { class: "prow",
                     span { class: "n empty", "{fx_label}" }

@@ -172,8 +172,13 @@ pub(super) fn SemanticControl(
             }
         },
         onclick: move |evt| onclick.call(evt),
+        // adapter は可視の文字しか名前にしない(aria-* は捨てられる)。状態も文字で。
         if let Some(on) = checked {
             span { class: "vcheck", aria_hidden: "true", if on { "✓" } else { "" } }
+            span { class: "a11y", if on { "on" } else { "off" } }
+        }
+        if let Some(name) = aria_label.clone() {
+            span { class: "a11y", "{name}" }
         }
         "{label}"
         if let Some(hint) = hint {
@@ -196,6 +201,7 @@ pub(super) fn SemanticButton(
     #[props(default)] title: Option<String>,
     children: Element,
 ) -> Element {
+    let a11y_name = aria_label.clone();
     rsx!(button {
         class: "semantic-button {class}",
         disabled,
@@ -205,6 +211,10 @@ pub(super) fn SemanticButton(
         onclick: move |evt| onclick.call(evt),
         onmouseenter: move |evt| if let Some(h) = &onmouseenter { h.call(evt) },
         onmouseleave: move |evt| if let Some(h) = &onmouseleave { h.call(evt) },
+        // 見えない名前。adapter が aria-label を捨てるので、文字として置く(記号だけの button の為)。
+        if let Some(name) = a11y_name.clone() {
+            span { class: "a11y", "{name}" }
+        }
         {children}
     })
 }
@@ -220,6 +230,8 @@ pub(super) fn Field(
     #[props(default)] multiline: bool,
     revision: Signal<u32>,
     oncommit: EventHandler<OpenField>,
+    /// 欄の名前(読み上げ用)。見えない文字として欄の前に置く。
+    #[props(default)] label: Option<String>,
 ) -> Element {
     let draft = session.field().map(|f| f.draft).unwrap_or_default();
     let mut revision = revision;
@@ -247,8 +259,9 @@ pub(super) fn Field(
             _ => {}
         }
     };
+    let name = label.clone();
     if multiline {
-        rsx!(textarea {
+        rsx!(if let Some(name) = name.clone() { span { class: "a11y", "{name}" } } textarea {
             class,
             style,
             value: draft.clone(),
@@ -258,7 +271,7 @@ pub(super) fn Field(
             "{draft}"
         })
     } else {
-        rsx!(input {
+        rsx!(if let Some(name) = name.clone() { span { class: "a11y", "{name}" } } input {
             class,
             style,
             value: draft,

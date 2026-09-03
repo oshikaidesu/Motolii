@@ -8,6 +8,7 @@ use crate::ui::keymap::Intent;
 use crate::ui::output::{OutputStatus, OutputSurface};
 use crate::ui::settings::SettingsSheet;
 use crate::ui::composition::CompositionSheet;
+use crate::ui::dock_hit::{dock_target_at, node_has_id};
 use crate::ui::panels::{BrowserPanel, InspectorPanel, StagePanel, TimelinePanel};
 use crate::ui::semantic_menu::{
     MenuDismiss, MenuId, SemanticControl, SemanticMenu,
@@ -154,7 +155,7 @@ fn wire_windows(host: &crate::ui::host::Host, panes: Panes) {
 }
 
 /// パネル1枚の中身。窓が変わっても同じ物を出す。
-fn panel_body(panel: Panel, session: &Session, ui: &fixture::UiData, p: Panes) -> Element {
+fn panel_body(panel: Panel, session: &Session, _ui: &fixture::UiData, p: Panes) -> Element {
     let selected = session.selection.get();
     match panel {
         Panel::Media | Panel::Effects | Panel::Create | Panel::Colors => rsx!(BrowserPanel {
@@ -322,53 +323,9 @@ fn refresh_layer_projection(
 type SplitNodes = std::rc::Rc<
     std::cell::RefCell<std::collections::BTreeMap<SplitId, dioxus_native::NodeHandle>>,
 >;
-type TileNodes = std::rc::Rc<
+pub(super) type TileNodes = std::rc::Rc<
     std::cell::RefCell<std::collections::BTreeMap<TileId, dioxus_native::NodeHandle>>,
 >;
-
-fn dock_side_at(x: f64, y: f64, width: f64, height: f64) -> Side {
-    if y < height * 0.25 {
-        Side::Top
-    } else if y > height * 0.75 {
-        Side::Bottom
-    } else if x < width * 0.25 {
-        Side::Left
-    } else if x > width * 0.75 {
-        Side::Right
-    } else {
-        Side::Center
-    }
-}
-
-fn node_has_id(node: &blitz_dom::Node, expected: &str) -> bool {
-    node.attr(blitz_dom::local_name!("id")).is_some_and(|id| id == expected)
-}
-
-fn dock_target_at(tile_nodes: &TileNodes, x: f64, y: f64) -> Option<(TileId, Side)> {
-    let mounted = tile_nodes
-        .borrow()
-        .iter()
-        .map(|(id, node)| (id.clone(), node.clone()))
-        .collect::<Vec<_>>();
-    for (id, handle) in mounted {
-        let Some(doc) = handle.try_doc() else { continue };
-        let Some(node) = doc.get_node(handle.node_id()) else { continue };
-        // 消えた箱の id は次に作られた節へ再利用される。本人でなければ古い取っ手。
-        if !node_has_id(node, &format!("tile-{}", id.as_str())) {
-            continue;
-        }
-        let origin = node.absolute_position(0.0, 0.0);
-        let size = node.final_layout().size;
-        let local_x = x - f64::from(origin.x);
-        let local_y = y - f64::from(origin.y);
-        let width = f64::from(size.width);
-        let height = f64::from(size.height);
-        if local_x >= 0.0 && local_y >= 0.0 && local_x <= width && local_y <= height {
-            return Some((id, dock_side_at(local_x, local_y, width, height)));
-        }
-    }
-    None
-}
 
 #[allow(clippy::too_many_arguments)]
 fn dock_zone(
@@ -406,6 +363,8 @@ fn dock_zone(
                         id: "dock-tab-{panel}",
                         role: "tab",
                         aria_selected: if d.is_active(panel) { "true" } else { "false" },
+                        aria_controls: "zbody-{panel}",
+                        tabindex: if d.is_active(panel) { "0" } else { "-1" },
                         class: match gesture.filter(|drag| drag.panel == panel) {
                             Some(drag) if drag.dragging() => "ptab held",
                             Some(_) => "ptab pressed",
@@ -435,6 +394,7 @@ fn dock_zone(
                             )));
                         },
                         "{panel}"
+                        if d.is_active(panel) { span { class: "a11y", "selected" } }
                     }
                 }
                 if shown == Some(Panel::Timeline) {
@@ -447,7 +407,7 @@ fn dock_zone(
                 }
             }
             if let Some(panel) = shown {
-                div { class: "zbody", role: "tabpanel", {panel_body(panel, session, ui, panes)} }
+                div { class: "zbody", id: "zbody-{panel}", role: "tabpanel", aria_labelledby: "dock-tab-{panel}", {panel_body(panel, session, ui, panes)} }
             }
             if dragging {
                 div { class: "dropmap dragging",

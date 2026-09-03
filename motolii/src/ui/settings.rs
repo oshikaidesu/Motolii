@@ -25,7 +25,7 @@ pub(super) fn SettingsSheet(session: Session, scale_pct: Signal<u32>) -> Element
 
     rsx!(
         div { class: "settings-sheet",
-            div { class: "sec", "View" }
+            h3 { class: "sec", "View" }
             div { class: "prow",
                 span { class: "pname", "Outside dim" }
                 div { class: "zoomctl", role: "group", aria_label: "Outside dim",
@@ -34,7 +34,7 @@ pub(super) fn SettingsSheet(session: Session, scale_pct: Signal<u32>) -> Element
                     SemanticButton { class: "zbtn", aria_label: "Increase outside dim", onclick: move |_| dim_step(dim_b.clone(), pct, 5), "+" }
                 }
             }
-            div { class: "sec", "Window" }
+            h3 { class: "sec", "Window" }
             div { class: "prow",
                 span { class: "pname", "Scale" }
                 div { class: "zoomctl", role: "group", aria_label: "Interface scale",

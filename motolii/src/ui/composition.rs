@@ -16,7 +16,7 @@ pub(super) fn CompositionSheet(session: Session, revision: Signal<u32>) -> Eleme
     let _ = revision();
     let current = session.doc.lock().unwrap().view().composition().ok().flatten();
     let Some(current) = current else {
-        return rsx!(div { class: "settings-sheet", div { class: "sec", "Composition" } div { class: "rcount", "No composition" } });
+        return rsx!(div { class: "settings-sheet", h3 { class: "sec", "Composition" } div { class: "rcount", "No composition" } });
     };
     let fps_value = current.fps.as_f64();
     let seconds = current.duration_frames as f64 / fps_value.max(1e-9);
@@ -52,7 +52,7 @@ pub(super) fn CompositionSheet(session: Session, revision: Signal<u32>) -> Eleme
     };
     rsx!(
         div { class: "settings-sheet",
-            div { class: "sec", "Composition" }
+            h3 { class: "sec", "Composition" }
             div { class: "prow",
                 span { class: "pname", "Preset" }
                 div { class: "zoomctl", role: "group", aria_label: "Aspect presets",

@@ -646,7 +646,7 @@ pub(super) fn browser_panel(
                     title: "Add as a layer · Alt+click replaces the selected layer's source",
                     onclick: move |evt| { if let Some(f) = &place { f(evt) } },
                     if let Some(src) = preview {
-                        img { class: "thumb", src: "{src}" }
+                        img { class: "thumb", src: "{src}", alt: "" }
                     } else {
                         div { class: "thumb", style: "background:{a.thumb};" }
                     }
@@ -737,13 +737,13 @@ pub(super) fn browser_panel(
                     rsx!(
                         div { class: "bwork",
                             div { class: "bside",
-                                div { class: "sh", "Colors" }
+                                h3 { class: "sh", "Colors" }
                                 div { class: "srow on", if starter { "Starter palette" } else { "Used in this composition" } }
                             }
                             div { class: "bresults",
                                 div { class: "rhead",
                                     div {
-                                        b { "Colors" }
+                                        h2 { "Colors" }
                                         span { class: "sub",
                                             if layer.is_some() { "Choose a color to apply it" } else { "Select a layer first" }
                                         }
@@ -798,13 +798,13 @@ pub(super) fn browser_panel(
                     rsx!(
                         div { class: "bwork",
                             div { class: "bside",
-                                div { class: "sh", "Effects" }
+                                h3 { class: "sh", "Effects" }
                                 div { class: "srow on", "All" }
                             }
                             div { class: "bresults",
                                 div { class: "rhead",
                                     div {
-                                        b { "Effects" }
+                                        h2 { "Effects" }
                                         span { class: "sub",
                                             if layer.is_some() { "Choose an effect to add it" } else { "Select a layer first" }
                                         }
@@ -826,13 +826,13 @@ pub(super) fn browser_panel(
                     .unwrap_or(0);
                 rsx!(div { class: "bwork",
                     div { class: "bside",
-                        div { class: "sh", "Create" }
+                        h3 { class: "sh", "Create" }
                         div { class: "srow on", "All" }
                     }
                     div { class: "bresults",
                         div { class: "rhead",
                             div {
-                                b { "Create" }
+                                h2 { "Create" }
                                 span { class: "sub", "Add a layer, or apply a mask to the selection" }
                             }
                         }
@@ -904,7 +904,7 @@ pub(super) fn browser_panel(
             } else {
                 div { class: "bwork",
                     div { class: "bside",
-                        div { class: "sh", "Library" }
+                        h3 { class: "sh", "Library" }
                         SemanticButton {
                             class: "{rail_class(None)}",
                             selected: rail().is_none(),
@@ -923,7 +923,7 @@ pub(super) fn browser_panel(
                     div { class: "bresults",
                         div { class: "rhead",
                             div {
-                                b { "{rail_label}" }
+                                h2 { "{rail_label}" }
                                 span { class: "sub", "Library" }
                             }
                         }

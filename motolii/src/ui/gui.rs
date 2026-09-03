@@ -381,10 +381,18 @@ impl Gui {
     }
 }
 
+/// 見える文字だけを集める。`.a11y`(読み上げにだけ在る名前)は目には無いので数えない。
 fn collect_text(doc: &blitz_dom::BaseDocument, node: blitz_dom::NodeId, out: &mut String) {
     let Some(node) = doc.get_node(node) else {
         return;
     };
+    if node
+        .element_data()
+        .and_then(|e| e.attr(blitz_dom::local_name!("class")))
+        .is_some_and(|c| c.split_whitespace().any(|c| c == "a11y"))
+    {
+        return;
+    }
     if let Some(text) = node.text_data() {
         out.push_str(&text.content);
     }

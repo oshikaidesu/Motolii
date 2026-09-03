@@ -7,6 +7,7 @@ mod color;
 mod composition;
 mod desk;
 mod dock;
+mod dock_hit;
 mod ease;
 mod ease_model;
 mod ease_widget;

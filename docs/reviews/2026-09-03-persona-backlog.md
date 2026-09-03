@@ -340,3 +340,42 @@
 - ☐ E13 RAM preview(描画のフレーム cache と緑帯)
 - ☐ E14 印の番号打ち
 - ☐ E15 AE を超える芽: blend の式を効果カードの絵へ(C13)、キー同定子を Undo 後の選択復元と ⌘C/V へ、◇ で貼り付けを行ごとに配る、印の BPM 格子、音の指紋を描画 cache へ
+
+## 第 6 波 P: 規模と性能(層 200・7200 コマ・4K×3・キー 2000・印 400・素材 50)
+- ☐ P1 【致命】view.attrs()/meta() が毎回 latest_at + serde_json、rows_nested が O(層²)— StoreView に revision 付き cache、親表を 1 回で
+- ☐ P2 【致命】text の texture が comp 解像度 × 無制限(200 層で 1.6GB、4K で 6.6GB)— 実バウンディング + LRU 上限、鍵を u64 に
+- ☐ P3 【致命】Stage の paint が毎 frame・選択層ごとに resolved_layers(O(層²))— requires_redraw を条件付きに、resolve は 1 回
+- ☐ P4 【致命】revision 1 で全面が作り直る(擦り中は毎 frame)— 構造と値に割る、行の投影をメモ化
+- ☐ P5 【致命】Timeline 左列に仮想化が無い(6,000 node)
+- ☐ P6 音の指紋が O(層)の String、from_view が同期 decode(92MB/本、evict 無し)、doc.lock の中
+- ☐ P7 保存済み project を開くと札の decode / ffmpeg が描画の糸(MADE は process 内)— cache に無い物は別の糸へ、data URI の clone
+- ☐ P8 複数選択の Inspector が O(選択 × 層)
+- ☐ P9 Undo 履歴が伸びっぱなし、SetTrack が track 丸ごと(帯 1 拍で 1,000 chunk)
+- ☐ P10 保存が UI の糸で全同期(flattened + encode)
+- ☐ P11 Timeline paint が selected の線形探索、waveform_tracks の to_vec、snap_targets の再生成
+- ☐ P12 select_inside が行ごとに doc.lock
+- ☐ P13 Desk が再生位置ごとに再構築(印 400 の parse、参考画像の data URI clone)
+- ☐ P14 MIN_PPS 固定で 4 分の曲が画面に入らない、scroll_ceiling が comp の尺と印を見ない、sfac 未反映
+- ☐ P15 別窓の CSS 倍率が 100% 固定(150% で左右がずれる)
+- ☐ P16 1/3000 量子化が truncate で ◆ の一致が外れる — clock.current_time() を使う
+- ☐ P17 小物: has_layer が layers()、can_export が毎 render、used / used_colors が毎 render、擦りの transient × 選択数、blend の enter/leave が revision
+
+## 第 6 波 VO: VoiceOver(adapter が立った後)
+- ☑ VO1 名前の路は可視の文字だけ — aria_label を見えない span(.a11y)として置く(SemanticButton / SemanticControl / Field)
+- ☐ VO2 node に矩形が無い(VO の枠が動かない)— 上流 B13
+- ☑ VO3 Inspector の升と層名に焦点が届く — tabindex / spinbutton / option、Enter で欄(K5)
+- ☑ VO4 tab の roving tabindex・aria-controls・tabpanel の名前(ptools を tablist の外へは未)
+- ☑ VO5 menuitemcheckbox の状態を文字で(on / off)
+- ☐ VO6 disabled が届かない — 理由を可視の文言へ
+- ☐ VO7 status / live が届かない — 上流 B14
+- ☑ VO8 input / textarea に名前(Field の label)
+- ☑ VO9 hover だけの物(.tacts を opacity へ)
+- ☑ VO10 見出し(.sec → h3、.sh → h3、b → h2)、img の alt
+- ☑ VO11 起動直後の一言(h1 Motolii)
+- ☐ VO12 DOM 順(MenuDismiss が先頭)、stagehint の role
+- ☐ VO13 custom widget の代替路の穴: Ease、層の並べ替え
+- ☑ VO14 焦点の輪(content の欄の outline:none を撤回)
+- ☑ VO15 コントラスト(INK3 0x92→0xa0、BORDER 0x63→0x74)
+- ☐ B12 上流: aria-label / presentation / disabled / aria-* を a11y へ
+- ☐ B13 上流: a11y node に bounds
+- ☐ B14 上流: live region の TreeUpdate

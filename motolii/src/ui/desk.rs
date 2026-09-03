@@ -210,6 +210,7 @@ pub(super) fn DeskPanel(
                 // 欄は押した間だけ在る。Enter・Escape・外を押す、のどれでも欄ごと消える。
                 if editing {
                     Field {
+                        label: "Note",
                         session: session.clone(),
                         class: "mbody",
                         multiline: true,

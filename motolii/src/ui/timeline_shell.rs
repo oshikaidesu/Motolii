@@ -75,6 +75,7 @@ pub(super) fn timeline_shell(
         let is_secondary =
             !is_primary && layer.is_some_and(|l| selection.contains(l));
         // 色は左の帯、選択は行の背景(AE・Resolve)。色の壁の上に文字を置かない。
+        let is_selected = layer.is_some_and(|l| selection.contains(l));
         let lsurface_style = if is_primary {
             format!("border-left-color:{};background:var(--raised);box-shadow:inset 2px 0 0 var(--accent);", row.color)
         } else if is_secondary {
@@ -164,6 +165,7 @@ pub(super) fn timeline_shell(
                 }
                 if editing_name {
                     Field {
+                        label: "Layer name",
                         session: field_session,
                         class: "lsurface",
                         style: "{lsurface_style}",
@@ -197,6 +199,9 @@ pub(super) fn timeline_shell(
                     span {
                         class: "lsurface",
                         style: "{lsurface_style}",
+                        tabindex: "0",
+                        role: "option",
+                        aria_selected: if is_selected { "true" } else { "false" },
                         onclick: move |evt| {
                             let Some(l) = layer else { return };
                             if evt.modifiers().intersects(Modifiers::META | Modifiers::SUPER) {

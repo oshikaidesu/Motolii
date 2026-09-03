@@ -587,7 +587,6 @@ pub(super) struct InspectorData {
 
 pub(super) struct UiData {
     pub layer_rows: Vec<LayerRow>,
-    pub comp_line: String,
 }
 
 pub(super) struct Loaded {
@@ -1227,16 +1226,12 @@ pub(super) fn load_fixture() -> Loaded {
 
     let layer_rows = layer_rows_from_doc(&fx.doc);
 
-    let comp_line = comp_line(&view);
 
     drop(view);
 
     Loaded {
         doc: fx.doc,
-        ui: UiData {
-            layer_rows,
-            comp_line,
-        },
+        ui: UiData { layer_rows },
         duration_sec: 60.0,
     }
 }

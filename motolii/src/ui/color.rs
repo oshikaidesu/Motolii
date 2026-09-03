@@ -323,6 +323,7 @@ pub(super) fn ColorWheel(session: Session, slot: ColorSlot, revision: Signal<u32
             // hex は打てる(Figma・Photoshop)。押して打ち、Enter で書く。
             if session.field_at(&FieldAt::Hex(slot.clone())).is_some() {
                 Field {
+                    label: "Hex color",
                     session: session.clone(),
                     class: "hex typing",
                     revision,
