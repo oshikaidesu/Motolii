@@ -1,6 +1,7 @@
 // 家: 窓。blitz/dioxus-native の上に置く面と、面が持つ表示状態だけ。
 // 編集状態は Document(doc)が持ち、書き込みは Intent 経由のみ。
 pub mod app;
+mod autosave;
 mod blend_preview;
 mod browser;
 mod color;

@@ -876,6 +876,11 @@ impl Widget for StageWidget {
             Ok(engine) => {
                 println!("PROBE room=stage verdict=engine-up");
                 self.state = State::Active(Box::new(Active { engine, displayed: None, next: None, wide: None }));
+                // renderer が作り直された(起動時に 2 回来る)。前の renderer の id を持つ scene を
+                // そのまま出させない —— 次の frame は必ず描き直す。古い id はもう無効なので捨てる。
+                self.stale.clear();
+                self.frames = 0;
+                self.dirty.set(true);
             }
             Err(e) => println!("PROBE room=stage verdict=engine-error {e}"),
         }
@@ -884,6 +889,8 @@ impl Widget for StageWidget {
     fn destroy_surfaces(&mut self) {
         println!("PROBE room=stage verdict=destroy-surfaces");
         self.state = State::Suspended;
+        self.stale.clear();
+        self.dirty.set(true);
     }
 
     /// 毎 frame 描かない。再生中・掴んでいる間・入力が来た後・作品や視点の注文が変わった時だけ。
