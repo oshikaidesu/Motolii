@@ -305,7 +305,7 @@
 - ☑ Z8 札の上の Replace / Finder / × が hover のみ(:focus-within を足す)
 - ☑ Z9 α の帯は縦にぶれた瞬間に確定して追従が止まる(color と同じ move の保険)
 - ☑ Z10 tablist / tabpanel(aria-controls と roving tabindex は未)
-- ☐ Z11 仕舞う経路が 2 本(host.rs save_now と project.rs put_away_inner)で文言と後始末が食い違う
+- ☑ Z11 仕舞う本体は project::save_to の 1 本、既定名は作品名
 - ☑ Z12 select_inside の層選択が ⌘/⇧ を無視して置き換える
 - ☐ Z13 試験の穴(storm が新しい状態を見ない、印の drag が move_marker を直接呼ぶ、Note の欄が死なない)
 - ☑ Z14 set_typing(false) と handles の重複(note_key_down は未)

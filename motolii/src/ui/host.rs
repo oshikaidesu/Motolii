@@ -388,8 +388,8 @@ impl Windows {
             Some(p) => p,
             None => {
                 let Some(mut p) = rfd::FileDialog::new()
-                    .add_filter("Motolii", &["rrd"])
-                    .set_file_name("song.rrd")
+                    .add_filter("Motolii Project", &["rrd"])
+                    .set_file_name(crate::ui::project::default_file_name(&self.session))
                     .save_file()
                 else {
                     return false;
@@ -400,20 +400,7 @@ impl Windows {
                 p
             }
         };
-        let saved = {
-            let d = self.session.doc.lock().unwrap();
-            d.save(&out).map(|()| d.revision())
-        };
-        match saved {
-            Ok(rev) => {
-                self.session.mark_saved(out, rev);
-                true
-            }
-            Err(e) => {
-                *self.session.project_notice.lock().unwrap() = format!("Save failed: {e}");
-                false
-            }
-        }
+        crate::ui::project::save_to(&self.session, out)
     }
 
     /// title bar が書類を指す: 名前と、編集済みの●(macOS)。変わった時だけ触る。

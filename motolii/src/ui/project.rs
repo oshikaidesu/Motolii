@@ -37,7 +37,7 @@ async fn put_away_inner(session: &Session, ask: bool) -> bool {
         None => {
             let picked = rfd::AsyncFileDialog::new()
                 .add_filter("Motolii Project", &["rrd"])
-                .set_file_name("Untitled.rrd")
+                .set_file_name(default_file_name(session))
                 .save_file()
                 .await;
             let Some(file) = picked else { return false };
@@ -48,7 +48,12 @@ async fn put_away_inner(session: &Session, ask: bool) -> bool {
             out
         }
     };
-    // 仕舞う物と「仕舞った revision」は同じ lock の中で決める。取り直すと間の編集が消える。
+    save_to(session, out)
+}
+
+/// 仕舞う本体。**窓を閉じる時の Save もここを通す**(経路が 2 本だと文言と後始末が食い違う)。
+/// 仕舞う物と「仕舞った revision」は同じ lock の中で決める。取り直すと間の編集が消える。
+pub(super) fn save_to(session: &Session, out: std::path::PathBuf) -> bool {
     let save_result = {
         let d = session.doc.lock().unwrap();
         d.save(&out).map(|()| d.revision())
@@ -62,6 +67,11 @@ async fn put_away_inner(session: &Session, ask: bool) -> bool {
     };
     *session.project_notice.lock().unwrap() = word;
     saved
+}
+
+/// 仕舞う先の既定名(作品名.rrd、無ければ Untitled.rrd)。
+pub(super) fn default_file_name(session: &Session) -> String {
+    format!("{}.rrd", session.document_title())
 }
 
 pub(super) async fn allow_project_replacement(
