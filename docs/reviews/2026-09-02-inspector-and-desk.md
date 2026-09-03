@@ -104,6 +104,6 @@ AE 10 年・Premiere/Resolve の編集者・Figma 育ち・初めてのリリッ
 - **複数選択の Inspector**(§1): Transform の共通行。違う欄は「—」(Figma の Mixed)で掴めるまま。擦れば全部が同じ差分、打てば全部が同じ値。Cmd+click の多重選択は macOS では Cmd が SUPER なので META しか見ていなかった code を両方受ける形に(実窓で効いていなかった)
 
 - **級数**: 文字の Inspector に Size の数の行(style の size を property が上書きする、resolve と同じ順)。擦れる
-- **選んでそのまま動かす**(Stage): 押した層を選び、その手で Move を始める(押し直し無し)。Stage は headless で描けないので実窓で確かめる物
+- **選んでそのまま動かす**(Stage): 押した層を選び、その手で Move を始める(押し直し無し)。実窓で確認済(2026-09-03 夕: 未選択の層を 1 回の drag で選んで動かせた)。あわせて、朝から気になっていた「Stage の左上の小さな枠」は bug でなく fixture の層(メインボーカル映像)だった
 
 4 人が挙げて**入れていない物**(次の batch): Blend の hover preview と本物のサムネイル(§4、attrs に transient が無く、blitz に mix-blend-mode も無い)、Stage の文字を直接ダブルクリックで打つ、書体と級数の欄、J/K/L と I/O、印を掴んで動かす、履歴の行に操作名(Document に操作名が無い)、J/K/L(Clock に速度が無い)。
