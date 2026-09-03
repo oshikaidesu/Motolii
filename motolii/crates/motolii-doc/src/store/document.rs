@@ -153,6 +153,25 @@ pub(crate) enum TransientKey {
     Camera(PropertyId),
 }
 
+/// 層の attrs / meta の cache。毎回 latest_at + serde_json では、行を組む度に層²回の parse になる。
+/// revision が動けば丸ごと捨てる(TrackCache と同じ流儀)。
+#[derive(Default)]
+pub(crate) struct RecordCache {
+    revision: Option<Revision>,
+    pub(crate) attrs: HashMap<LayerId, Option<super::LayerAttrs>>,
+    pub(crate) meta: HashMap<LayerId, Option<super::LayerMeta>>,
+}
+
+impl RecordCache {
+    pub(crate) fn sync(&mut self, current: &Revision) {
+        if self.revision.as_ref() != Some(current) {
+            self.attrs.clear();
+            self.meta.clear();
+            self.revision = Some(current.clone());
+        }
+    }
+}
+
 #[derive(Default)]
 pub(crate) struct TrackCache {
     revision: Option<Revision>,
@@ -191,6 +210,7 @@ pub struct Document {
     transient: HashMap<TransientKey, Value>,
     transient_generation: u64,
     track_cache: RefCell<TrackCache>,
+    record_cache: RefCell<RecordCache>,
 }
 
 impl Default for Document {
@@ -213,6 +233,7 @@ impl Document {
             transient: HashMap::new(),
             transient_generation: 0,
             track_cache: RefCell::new(TrackCache::default()),
+            record_cache: RefCell::new(RecordCache::default()),
         }
     }
 
@@ -235,6 +256,7 @@ impl Document {
             &self.transient,
             self.revision(),
             &self.track_cache,
+            &self.record_cache,
         )
     }
 

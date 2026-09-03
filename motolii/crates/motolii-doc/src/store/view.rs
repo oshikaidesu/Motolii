@@ -30,6 +30,7 @@ pub struct StoreView<'a> {
     transient: &'a HashMap<TransientKey, Value>,
     revision: Revision,
     track_cache: &'a RefCell<TrackCache>,
+    record_cache: &'a RefCell<super::document::RecordCache>,
 }
 
 const MAX_LINK_DEPTH: u32 = 64;
@@ -41,6 +42,7 @@ impl<'a> StoreView<'a> {
         transient: &'a HashMap<TransientKey, Value>,
         revision: Revision,
         track_cache: &'a RefCell<TrackCache>,
+        record_cache: &'a RefCell<super::document::RecordCache>,
     ) -> Self {
         Self {
             db,
@@ -48,6 +50,7 @@ impl<'a> StoreView<'a> {
             transient,
             revision,
             track_cache,
+            record_cache,
         }
     }
 
@@ -397,6 +400,19 @@ impl<'a> StoreView<'a> {
     }
 
     pub fn meta(&self, layer: LayerId) -> Result<Option<LayerMeta>, StoreError> {
+        {
+            let mut cache = self.record_cache.borrow_mut();
+            cache.sync(&self.revision);
+            if let Some(hit) = cache.meta.get(&layer) {
+                return Ok(hit.clone());
+            }
+        }
+        let value = self.meta_uncached(layer)?;
+        self.record_cache.borrow_mut().meta.insert(layer, value.clone());
+        Ok(value)
+    }
+
+    fn meta_uncached(&self, layer: LayerId) -> Result<Option<LayerMeta>, StoreError> {
         let descriptor = descriptor_meta();
         let path = layer.entity_path();
         let results = self
@@ -429,6 +445,19 @@ impl<'a> StoreView<'a> {
     }
 
     pub fn attrs(&self, layer: LayerId) -> Result<Option<LayerAttrs>, StoreError> {
+        {
+            let mut cache = self.record_cache.borrow_mut();
+            cache.sync(&self.revision);
+            if let Some(hit) = cache.attrs.get(&layer) {
+                return Ok(hit.clone());
+            }
+        }
+        let value = self.attrs_uncached(layer)?;
+        self.record_cache.borrow_mut().attrs.insert(layer, value.clone());
+        Ok(value)
+    }
+
+    fn attrs_uncached(&self, layer: LayerId) -> Result<Option<LayerAttrs>, StoreError> {
         let descriptor = descriptor_attrs();
         let path = layer.entity_path();
         let results = self
