@@ -548,3 +548,19 @@ fn the_alpha_bar_writes_text_opacity() {
     let fill = gui.session.doc.lock().unwrap().view().text_document(layer).unwrap().unwrap().styles[0].fill;
     assert!((fill[3] - 0.25).abs() < 0.05, "alpha did not follow the bar: {fill:?}");
 }
+
+/// 開いた menu は ↑↓ で項目を回り、Enter で押せる(Mac の menu)。
+#[test]
+fn arrow_keys_walk_an_open_menu() {
+    let mut gui = Gui::open();
+    let tabs = gui.count(".ptab");
+    let view = gui.center_of("#menu-view", 0);
+    gui.click(view.0, view.1);
+    assert_eq!(gui.count("#menu-view-list"), 1);
+    // 1 つ目は Reset Layout、2 つ目は最初の面の出し入れ。
+    gui.key(keyboard_types::Key::ArrowDown, keyboard_types::Modifiers::empty());
+    gui.key(keyboard_types::Key::ArrowDown, keyboard_types::Modifiers::empty());
+    gui.key(keyboard_types::Key::Enter, keyboard_types::Modifiers::empty());
+    assert_eq!(gui.count("#menu-view-list"), 0, "Enter on a focused item did not close the menu");
+    assert_eq!(gui.count(".ptab"), tabs - 1, "the second item (a panel) was not toggled");
+}

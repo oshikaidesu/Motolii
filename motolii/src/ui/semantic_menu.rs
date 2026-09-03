@@ -36,6 +36,13 @@ impl MenuId {
     }
 }
 
+/// 開いている menu の項目。↑↓ で焦点を回す為に、項目は載った順にここへ名乗る。
+#[derive(Clone, Copy)]
+pub(super) struct MenuItems {
+    handles: Signal<Vec<std::rc::Rc<MountedData>>>,
+    cursor: Signal<Option<usize>>,
+}
+
 #[component]
 pub(super) fn SemanticMenu(
     id: MenuId,
@@ -44,6 +51,10 @@ pub(super) fn SemanticMenu(
     children: Element,
 ) -> Element {
     let mut trigger = use_signal(|| None::<std::rc::Rc<MountedData>>);
+    let items = use_context_provider(|| MenuItems {
+        handles: Signal::new(Vec::new()),
+        cursor: Signal::new(None),
+    });
     use_effect(move || {
         if open() == Some(id) {
             if let Some(handle) = trigger() {
@@ -51,6 +62,10 @@ pub(super) fn SemanticMenu(
                     let _ = handle.set_focus(true).await;
                 });
             }
+        } else {
+            let mut items = items;
+            items.handles.write().clear();
+            items.cursor.set(None);
         }
     });
     let shown = open() == Some(id);
@@ -65,6 +80,31 @@ pub(super) fn SemanticMenu(
                     evt.prevent_default();
                     evt.stop_propagation();
                     open.set(None);
+                    return;
+                }
+                // ↑↓ Home End で項目を回る(Mac の menu と同じ)。Enter / Space は焦点の項目を押す。
+                let count = items.handles.read().len();
+                if count == 0 {
+                    return;
+                }
+                let cursor = (items.cursor)();
+                let next = match evt.key() {
+                    Key::ArrowDown => Some(cursor.map_or(0, |c| (c + 1) % count)),
+                    Key::ArrowUp => Some(cursor.map_or(count - 1, |c| (c + count - 1) % count)),
+                    Key::Home => Some(0),
+                    Key::End => Some(count - 1),
+                    _ => None,
+                };
+                let Some(next) = next else { return };
+                evt.prevent_default();
+                evt.stop_propagation();
+                let mut items = items;
+                items.cursor.set(Some(next));
+                let handle = items.handles.read().get(next).cloned();
+                if let Some(handle) = handle {
+                    dioxus_core::spawn(async move {
+                        let _ = handle.set_focus(true).await;
+                    });
                 }
             },
             button {
@@ -112,12 +152,18 @@ pub(super) fn SemanticControl(
         (false, true) => "vitem on",
         (false, false) => "vitem",
     };
+    let items = dioxus_core::try_consume_context::<MenuItems>();
     rsx!(button {
         class: class,
         role: if checked.is_some() { "menuitemcheckbox" } else { "menuitem" },
         aria_checked: checked.map(|on| if on { "true" } else { "false" }),
         aria_label,
         disabled: disabled,
+        onmounted: move |evt: MountedEvent| {
+            if let (Some(mut items), false) = (items, disabled) {
+                items.handles.write().push(evt.data());
+            }
+        },
         onclick: move |evt| onclick.call(evt),
         if let Some(on) = checked {
             span { class: "vcheck", aria_hidden: "true", if on { "✓" } else { "" } }
