@@ -956,8 +956,10 @@ pub fn app() -> Element {
                 let mut revision = revision;
                 let poke = host.poker();
                 let session = session.clone();
+                let window = window.clone();
                 let mut choice = panes.inspector_choice;
                 let mut scale_pct = panes.scale_pct;
+                let selected_sig = panes.selected;
                 move |evt| {
                     if evt.key() == Key::Escape && tab_drag.peek().is_some() {
                         evt.prevent_default();
@@ -1230,12 +1232,19 @@ pub fn app() -> Element {
                             let steps = if matches!(intent, Intent::Undo) { -1 } else { 1 };
                             history_step(&session, layer_rows, attrs_state, &timeline_tx, revision, steps);
                         }
-                        Intent::Save => {
+                        Intent::Save | Intent::SaveAs => {
                             let session = session.clone();
                             let poke = poke.clone();
+                            let ask = matches!(intent, Intent::SaveAs);
                             dioxus_core::spawn(async move {
-                                let _ = crate::ui::project::put_away(session, poke, false).await;
+                                let _ = crate::ui::project::put_away(session, poke, ask).await;
                             });
+                        }
+                        Intent::NewProject => {
+                            dioxus_core::spawn(crate::ui::project::new_project(session.clone(), poke.clone(), window.clone(), revision, selected_sig));
+                        }
+                        Intent::OpenProject => {
+                            dioxus_core::spawn(crate::ui::project::open_project(session.clone(), poke.clone(), window.clone(), revision, selected_sig));
                         }
                         Intent::Rename => {
                             let Some(layer) = selection.get() else { return };
@@ -1388,7 +1397,7 @@ pub fn app() -> Element {
                 }
             }
 
-            div { id: "menubar",
+            div { id: "menubar", role: "menubar",
                 onmousedown: {
                     let gesture = menubar_gesture.clone();
                     move |_| {
@@ -1406,33 +1415,20 @@ pub fn app() -> Element {
                             div { class: "vrow",
                                 SemanticControl {
                                     label: "New",
+                                    hint: "⌘N",
                                     onclick: {
                                         let session = session.clone();
                                         let poke = host.poker();
                                         let window = window.clone();
-                                        let mut revision = panes.revision;
-                                        let mut selected = panes.selected;
+                                        let revision = panes.revision;
+                                        let selected = panes.selected;
                                         move |evt: Event<MouseData>| {
                                             evt.stop_propagation();
                                             open_menu.set(None);
                                             let session = session.clone();
                                             let poke = poke.clone();
                                             let window = window.clone();
-                                            dioxus_core::spawn(async move {
-                                                if !crate::ui::project::allow_project_replacement(
-                                                    session.clone(),
-                                                    poke,
-                                                    window,
-                                                )
-                                                .await
-                                                {
-                                                    return;
-                                                }
-                                                session.replace_project(crate::ui::blank_project(), None);
-                                                session.selection.set(None);
-                                                selected.set(None);
-                                                *revision.write() += 1;
-                                            });
+                                            dioxus_core::spawn(crate::ui::project::new_project(session, poke, window, revision, selected));
                                         }
                                     }
                                 }
@@ -1440,51 +1436,20 @@ pub fn app() -> Element {
                             div { class: "vrow",
                                 SemanticControl {
                                     label: "Open…",
+                                    hint: "⌘O",
                                     onclick: {
                                         let session = session.clone();
                                         let poke = host.poker();
                                         let window = window.clone();
-                                        let mut revision = panes.revision;
-                                        let mut selected = panes.selected;
+                                        let revision = panes.revision;
+                                        let selected = panes.selected;
                                         move |evt: Event<MouseData>| {
                                             evt.stop_propagation();
                                             open_menu.set(None);
                                             let session = session.clone();
                                             let poke = poke.clone();
                                             let window = window.clone();
-                                            dioxus_core::spawn(async move {
-                                                if !crate::ui::project::allow_project_replacement(
-                                                    session.clone(),
-                                                    poke,
-                                                    window,
-                                                )
-                                                .await
-                                                {
-                                                    return;
-                                                }
-                                                let picked = rfd::AsyncFileDialog::new()
-                                                    .add_filter("Motolii", &["rrd"])
-                                                    .pick_file()
-                                                    .await;
-                                                let Some(file) = picked else { return };
-                                                match crate::doc::store::Document::load(file.path()) {
-                                                    Ok(loaded) => {
-                                                        session.replace_project(
-                                                            loaded,
-                                                            Some(file.path().to_path_buf()),
-                                                        );
-                                                        session.selection.set(None);
-                                                        selected.set(None);
-                                                        *session.project_notice.lock().unwrap() = String::new();
-                                                        *revision.write() += 1;
-                                                    }
-                                                    Err(e) => {
-                                                        *session.project_notice.lock().unwrap() =
-                                                            format!("Open failed: {e}");
-                                                        *revision.write() += 1;
-                                                    }
-                                                }
-                                            });
+                                            dioxus_core::spawn(crate::ui::project::open_project(session, poke, window, revision, selected));
                                         }
                                     }
                                 }
@@ -1511,6 +1476,7 @@ pub fn app() -> Element {
                             div { class: "vrow",
                                 SemanticControl {
                                     label: "Save As…",
+                                    hint: "⇧⌘S",
                                     onclick: {
                                         let session = session.clone();
                                         let poke = host.poker();

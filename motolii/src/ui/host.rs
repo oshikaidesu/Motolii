@@ -352,6 +352,8 @@ struct Windows {
     cursor: std::collections::HashMap<WindowId, (f32, f32)>,
     /// 窓ごとに前に見た欄。新しく開いた欄を全選択するための印。
     seen_field: std::collections::HashMap<WindowId, Option<blitz_dom::NodeId>>,
+    /// title bar に映した(名前, 編集済み)。同じ物を毎 event 書かない。
+    reflected: std::collections::HashMap<WindowId, (String, bool)>,
 }
 
 /// 窓1枚を実体にする。`BlitzApplication::add_window` は dioxus の配線
@@ -386,6 +388,73 @@ fn realise(
 }
 
 impl Windows {
+    /// 書類の名前(title bar・alert)。仕舞っていなければ Untitled。
+    fn document_title(&self) -> String {
+        self.session
+            .project_path
+            .lock()
+            .unwrap()
+            .as_ref()
+            .and_then(|p| p.file_stem().map(|s| s.to_string_lossy().into_owned()))
+            .unwrap_or_else(|| "Untitled".to_owned())
+    }
+
+    /// 閉じる時の Save。行き先が無ければ同期の panel で聞く(event の中なので async は使えない)。
+    fn save_now(&self) -> bool {
+        let known = self.session.project_path.lock().unwrap().clone();
+        let out = match known {
+            Some(p) => p,
+            None => {
+                let Some(mut p) = rfd::FileDialog::new()
+                    .add_filter("Motolii", &["rrd"])
+                    .set_file_name("song.rrd")
+                    .save_file()
+                else {
+                    return false;
+                };
+                if p.extension().is_none_or(|e| !e.eq_ignore_ascii_case("rrd")) {
+                    p.set_extension("rrd");
+                }
+                p
+            }
+        };
+        let saved = {
+            let d = self.session.doc.lock().unwrap();
+            d.save(&out).map(|()| d.revision())
+        };
+        match saved {
+            Ok(rev) => {
+                self.session.mark_saved(out, rev);
+                true
+            }
+            Err(e) => {
+                *self.session.project_notice.lock().unwrap() = format!("Save failed: {e}");
+                false
+            }
+        }
+    }
+
+    /// title bar が書類を指す: 名前と、編集済みの●(macOS)。変わった時だけ触る。
+    fn reflect_document(&mut self, window_id: WindowId) {
+        if self.detached.contains_key(&window_id) {
+            return;
+        }
+        let title = self.document_title();
+        let dirty = self.session.is_dirty();
+        if self.reflected.get(&window_id) == Some(&(title.clone(), dirty)) {
+            return;
+        }
+        if let Some(view) = self.inner.windows.get(&window_id) {
+            view.window.set_title(&title);
+            #[cfg(target_os = "macos")]
+            {
+                use dioxus_native::winit::platform::macos::WindowExtMacOS;
+                view.window.set_document_edited(dirty);
+            }
+        }
+        self.reflected.insert(window_id, (title, dirty));
+    }
+
     fn handle_native_event(&mut self, event_loop: &dyn ActiveEventLoop, event: &DioxusNativeEvent) {
         match event {
             #[cfg(debug_assertions)]
@@ -602,17 +671,28 @@ impl ApplicationHandler for Windows {
         }
         if matches!(event, WindowEvent::CloseRequested) {
             if !self.detached.contains_key(&window_id) && self.session.is_dirty() {
-                let answer = rfd::MessageDialog::new()
+                // Mac の書類: Save / Don't Save / Cancel、既定は Save(HIG Alerts、TextEdit と同じ文面)。
+                let name = self.document_title();
+                let mut dialog = rfd::MessageDialog::new()
                     .set_level(rfd::MessageLevel::Warning)
-                    .set_title("Unsaved changes")
-                    .set_description("Close this project without saving your changes?")
-                    .set_buttons(rfd::MessageButtons::OkCancelCustom(
-                        "Close Without Saving".to_owned(),
+                    .set_title(format!("Do you want to save the changes you made to {name}?"))
+                    .set_description("Your changes will be lost if you don't save them.")
+                    .set_buttons(rfd::MessageButtons::YesNoCancelCustom(
+                        "Save".to_owned(),
+                        "Don't Save".to_owned(),
                         "Cancel".to_owned(),
-                    ))
-                    .show();
-                if answer != rfd::MessageDialogResult::Custom("Close Without Saving".to_owned()) {
-                    return;
+                    ));
+                if let Some(view) = self.inner.windows.get(&window_id) {
+                    dialog = dialog.set_parent(&*view.window);
+                }
+                match dialog.show() {
+                    rfd::MessageDialogResult::Custom(label) if label == "Save" => {
+                        if !self.save_now() {
+                            return;
+                        }
+                    }
+                    rfd::MessageDialogResult::Custom(label) if label == "Don't Save" => {}
+                    _ => return,
                 }
             }
             if let Some(panel) = self.detached.remove(&window_id) {
@@ -633,6 +713,7 @@ impl ApplicationHandler for Windows {
         if let Some(view) = self.inner.windows.get_mut(&window_id) {
             place_ime(view);
         }
+        self.reflect_document(window_id);
     }
 
     fn proxy_wake_up(&mut self, event_loop: &dyn ActiveEventLoop) {
@@ -708,6 +789,7 @@ pub fn launch(title: &str) {
             detached: Default::default(),
             cursor: Default::default(),
             seen_field: Default::default(),
+            reflected: Default::default(),
         })
         .unwrap();
 }

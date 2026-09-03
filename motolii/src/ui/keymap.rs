@@ -36,6 +36,12 @@ pub(super) enum Intent {
     EasyEase(EaseSide),
     /// 仕舞う。Cmd+S。
     Save,
+    /// 別名で仕舞う。Shift+Cmd+S。
+    SaveAs,
+    /// 白紙。Cmd+N。
+    NewProject,
+    /// 開く。Cmd+O。
+    OpenProject,
     /// 選んだ層の名前を開く。Enter(AE・Finder)。
     Rename,
     /// 窓の文字の大きさ。0 は 100% へ戻す(Cmd+= / Cmd+- / Cmd+0)。
@@ -322,6 +328,9 @@ const BINDINGS: &[Binding] = &[
         alt: false,
         intent: Intent::Rename,
     },
+    Binding { key: KeySpec::Char('s'), cmd: true, shift: true, alt: false, intent: Intent::SaveAs },
+    Binding { key: KeySpec::Char('n'), cmd: true, shift: false, alt: false, intent: Intent::NewProject },
+    Binding { key: KeySpec::Char('o'), cmd: true, shift: false, alt: false, intent: Intent::OpenProject },
     Binding { key: KeySpec::Char('='), cmd: true, shift: false, alt: false, intent: Intent::UiScale(5) },
     Binding { key: KeySpec::Char('-'), cmd: true, shift: false, alt: false, intent: Intent::UiScale(-5) },
     Binding { key: KeySpec::Char('0'), cmd: true, shift: false, alt: false, intent: Intent::UiScale(0) },

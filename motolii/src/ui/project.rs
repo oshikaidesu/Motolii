@@ -1,5 +1,7 @@
 //! 作品の仕舞いと開き直し。窓の外(rfd の dialog)と Document の間。
 
+use dioxus_native::prelude::*;
+
 use crate::ui::session::Session;
 
 /// 作品を仕舞う。行き先が決まっていなければ聞く。
@@ -25,6 +27,7 @@ async fn put_away_inner(session: &Session, ask: bool) -> bool {
         Some(path) => path,
         None => {
             let picked = rfd::AsyncFileDialog::new()
+                .add_filter("Motolii", &["rrd"])
                 .set_file_name("song.rrd")
                 .save_file()
                 .await;
@@ -80,4 +83,51 @@ pub(super) async fn allow_project_replacement(
         rfd::MessageDialogResult::Custom(label) if label == "Don't Save" => true,
         _ => false,
     }
+}
+
+/// 白紙にする(File▸New、⌘N)。未保存なら先に聞く。
+pub(super) async fn new_project(
+    session: Session,
+    poke: crate::ui::host::Poke,
+    window: Option<std::sync::Arc<dyn dioxus_native::winit::window::Window>>,
+    mut revision: dioxus_native::prelude::Signal<u32>,
+    mut selected: dioxus_native::prelude::Signal<Option<crate::doc::store::LayerId>>,
+) {
+    if !allow_project_replacement(session.clone(), poke, window).await {
+        return;
+    }
+    session.replace_project(crate::ui::blank_project(), None);
+    session.selection.set(None);
+    selected.set(None);
+    *revision.write() += 1;
+}
+
+/// 開く(File▸Open…、⌘O)。未保存なら先に聞く。
+pub(super) async fn open_project(
+    session: Session,
+    poke: crate::ui::host::Poke,
+    window: Option<std::sync::Arc<dyn dioxus_native::winit::window::Window>>,
+    mut revision: dioxus_native::prelude::Signal<u32>,
+    mut selected: dioxus_native::prelude::Signal<Option<crate::doc::store::LayerId>>,
+) {
+    if !allow_project_replacement(session.clone(), poke, window.clone()).await {
+        return;
+    }
+    let mut dialog = rfd::AsyncFileDialog::new().add_filter("Motolii", &["rrd"]);
+    if let Some(window) = window.as_deref() {
+        dialog = dialog.set_parent(window);
+    }
+    let Some(file) = dialog.pick_file().await else { return };
+    match crate::doc::store::Document::load(file.path()) {
+        Ok(loaded) => {
+            session.replace_project(loaded, Some(file.path().to_path_buf()));
+            session.selection.set(None);
+            selected.set(None);
+            *session.project_notice.lock().unwrap() = String::new();
+        }
+        Err(e) => {
+            *session.project_notice.lock().unwrap() = format!("Open failed: {e}");
+        }
+    }
+    *revision.write() += 1;
 }

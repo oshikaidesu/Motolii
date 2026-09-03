@@ -150,22 +150,22 @@
 - ☐ H2 Services・標準 Edit(日本語の入力ソース・Emoji)— H1 と同時
 - ☐ H3 App menu(About・⌘,)
 - ☐ H4 フルスクリーン・Window menu
-- ☐ H5 未保存で閉じる alert に Save が無い(project.rs の 3 択へ寄せる)
+- ☑ H5 未保存で閉じる alert に Save が無い(project.rs の 3 択へ寄せる)
 - ☐ H6 rfd の dialog に set_parent が無い(sheet にならない)
-- ☐ H7 title bar が書類を指さない(set_title・representedFilename・documentEdited)
+- ☑ H7 title bar が書類を指さない(set_title・representedFilename・documentEdited)
 - ☐ H8 Open Recent
 - ☐ H9 Revert to Saved
 - ☐ H10 自動保存・版
-- ☐ H11 ⌘N ⌘O ⇧⌘S の加速鍵
+- ☑ H11 ⌘N ⌘O ⇧⌘S の加速鍵
 - ☐ H12 ⌘W と閉じる意味(窓を閉じる ≠ 終了)
 - ☐ H13 窓の位置・大きさの復元
 - ☐ H14 別窓に menu が無い(H1 で解決)
-- ☐ H15 save panel に種別の絞り
-- ☐ H16 DragEntered で欄が確定してしまう(通っただけで)
+- ☑ H15 save panel に種別の絞り
+- ✗ H16 DragEntered で欄が確定してしまう — 読み違い(focus_lost は掴みと menu を畳むだけで、欄の確定は Focused(false) のみ)
 - ☐ H17 drop の受け入れ可否が視覚に出ない
 - ☐ H18 dark 固定(Appearance の設定)
 - ☐ H19 accent が OS 設定を無視
 - ☐ H20 Reduce Motion を起動時にしか読まない
-- ☐ H21 menubar の role / aria-controls
+- ☑ H21 menubar の role / aria-controls
 - ☐ H22 scale_factor 変化(外部 display)の再 layout — 要実窓
 - ☐ H23 alert の文面が Mac 調でない

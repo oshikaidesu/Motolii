@@ -72,6 +72,7 @@ pub(super) fn SemanticMenu(
                 class: "menu",
                 aria_haspopup: "menu",
                 aria_expanded: if shown { "true" } else { "false" },
+                aria_controls: "{list_id}",
                 onmounted: move |evt: MountedEvent| trigger.set(Some(evt.data())),
                 onclick: move |_| {
                     open.set(if open() == Some(id) { None } else { Some(id) });
