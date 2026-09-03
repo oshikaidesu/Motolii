@@ -1427,9 +1427,19 @@ body {
     font-size: var(--t-dense);
 }
 
+.desk-refs .refi {
+    position: relative;
+}
+
 .desk-refs .ref {
     max-height: calc(96 * var(--s) * 1px);
     border: var(--line) solid var(--bd);
+}
+
+.desk-refs .refx {
+    position: absolute;
+    top: 0;
+    right: 0;
 }
 
 /* 引き出し。机の中に出て、顔の上を占める。 */

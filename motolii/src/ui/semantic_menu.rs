@@ -150,7 +150,7 @@ pub(super) fn Field(
     let onkeydown = move |evt: KeyboardEvent| {
         evt.stop_propagation();
         match evt.key() {
-            Key::Enter if !multiline || evt.modifiers().meta() => {
+            Key::Enter if !multiline || evt.modifiers().intersects(Modifiers::META | Modifiers::SUPER) => {
                 evt.prevent_default();
                 if let Some(field) = session.close_field() {
                     oncommit.call(field);

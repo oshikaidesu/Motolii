@@ -902,15 +902,15 @@ pub fn app() -> Element {
             .and_then(Dock::load)
             .unwrap_or_default()
     });
+    let mut tab_drag = use_signal(|| Option::<TabDrag>::None);
+    let mut grip = use_signal(|| Option::<GripDrag>::None);
+    // 掴んでいる間は書かない。放した時に 1 回。
     use_effect(move || {
-        let d = dock();
-        if let Some(path) = &layout_file {
-            d.save(path);
+        if let (false, Some(path)) = (grip().is_some() || tab_drag().is_some(), &layout_file) {
+            dock().save(path);
         }
     });
 
-    let mut tab_drag = use_signal(|| Option::<TabDrag>::None);
-    let mut grip = use_signal(|| Option::<GripDrag>::None);
     let split_nodes = use_hook(|| {
         std::rc::Rc::new(std::cell::RefCell::new(std::collections::BTreeMap::new()))
     });

@@ -58,6 +58,15 @@ fn shut(session: &Session) {
     *session.desk.lock().unwrap() = DeskState::Shut(derived);
 }
 
+/// 机が見せる書き置き。開けている欄が在ればその印(再生が進んでも欄は逃げない)、
+/// 無ければ今の時刻の印。
+fn note_index(session: &Session, markers: &[Marker], now: f64) -> Option<usize> {
+    match session.field().map(|f| f.at) {
+        Some(FieldAt::Note(i)) if i < markers.len() => Some(i),
+        _ => current_marker(markers, now),
+    }
+}
+
 /// 今の時刻に効いているマーカー。並びは時刻順なので、時刻以前の最後の物。
 fn current_marker(markers: &[Marker], now: f64) -> Option<usize> {
     markers
@@ -134,7 +143,7 @@ pub(super) fn DeskPanel(
 
     let now = session.clock.now_sec();
     let markers = session.doc.lock().unwrap().view().markers().unwrap_or_default();
-    let current = current_marker(&markers, now);
+    let current = note_index(&session, &markers, now);
     let drawer = drawer_of(&session);
 
     let face_name = current
@@ -147,6 +156,7 @@ pub(super) fn DeskPanel(
             let editing = session.field_at(&FieldAt::Note(i)).is_some();
             let doc = session.doc.clone();
             let body = marker.body.clone();
+            let unchanged = marker.body.clone();
             let opener = session.clone();
             rsx!(div { class: "desk-note",
                 span { class: "mname", "{marker.name}" }
@@ -159,6 +169,9 @@ pub(super) fn DeskPanel(
                         revision,
                         oncommit: move |f: OpenField| {
                             let FieldAt::Note(at) = f.at else { return };
+                            if f.draft == unchanged {
+                                return;
+                            }
                             match write_marker_body(&doc, at, f.draft) {
                                 Ok(()) => *revision.write() += 1,
                                 Err(err) => println!("PROBE room=write verdict=apply-error {err}"),
@@ -217,9 +230,26 @@ pub(super) fn DeskPanel(
             if refs.is_empty() {
                 "Drop reference images here"
             }
-            for (name , uri) in refs.iter() {
+            for (id , name , uri) in refs.iter() {
                 if let Some(uri) = uri {
-                    img { class: "ref", src: "{uri}", alt: "{name}", title: "{name}" }
+                    div { class: "refi",
+                        img { class: "ref", src: "{uri}", alt: "{name}", title: "{name}" }
+                        SemanticButton {
+                            class: "chip refx",
+                            aria_label: "Remove {name}",
+                            onclick: {
+                                let doc = session.doc.clone();
+                                let id = *id;
+                                move |_| {
+                                    match doc.lock().unwrap().apply(Intent::RemoveAsset { asset: id }) {
+                                        Ok(_) => *revision.write() += 1,
+                                        Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
+                                    }
+                                }
+                            },
+                            "×"
+                        }
+                    }
                 }
             }
         }
@@ -596,6 +626,18 @@ mod tests {
             let rows = crate::ui::fixture::inspector_data_from_doc(&d.view(), layer, t).colors;
             assert!(rows.iter().any(|r| r.slot == slot && r.hex.starts_with("#3f7fbf")), "{slot:?} {:?}", rows.iter().map(|r| r.hex.clone()).collect::<Vec<_>>());
         }
+    }
+
+    #[test]
+    fn the_note_under_edit_does_not_follow_the_playhead() {
+        let loaded = crate::ui::fixture::load_fixture();
+        let session = Session::new(loaded.doc, loaded.duration_sec, loaded.ui);
+        let markers = [marker(0), marker(1)];
+        assert_eq!(note_index(&session, &markers, 1.5), Some(1));
+        session.open_field(FieldAt::Note(0), String::new());
+        assert_eq!(note_index(&session, &markers, 1.5), Some(0));
+        session.open_field(FieldAt::Note(7), String::new());
+        assert_eq!(note_index(&session, &markers, 1.5), Some(1), "a stale note index must not panic the desk");
     }
 
     #[test]

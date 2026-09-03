@@ -27,6 +27,7 @@ struct Gui {
     /// 窓と同じ状態への取っ手。**触った結果を数で見る**ために持つ。
     session: Session,
     host: crate::ui::host::Host,
+    seen_field: Option<blitz_dom::NodeId>,
 }
 
 impl Gui {
@@ -58,6 +59,7 @@ impl Gui {
             h: blitz_test_harness::Harness::wrap(doc),
             session,
             host,
+            seen_field: None,
         }
     }
 
@@ -260,10 +262,12 @@ impl Gui {
         for _ in 0..4 {
             self.h.pump();
         }
+        crate::ui::host::select_new_field(&mut self.h.doc, &mut self.seen_field);
     }
 
     /// 打鍵を1つ流す。窓の shell と同じ順: 先に打鍵の当て先を決める(`host::aim_keystrokes`)。
     fn key(&mut self, key: keyboard_types::Key, mods: keyboard_types::Modifiers) {
+        crate::ui::host::select_new_field(&mut self.h.doc, &mut self.seen_field);
         crate::ui::host::aim_keystrokes(&mut self.h.doc);
         self.h.press_with(key, mods);
         self.settle();
@@ -292,6 +296,7 @@ impl Gui {
     }
 
     fn lose_focus(&mut self) {
+        crate::ui::host::commit_field(&mut self.h.doc);
         self.host.focus_lost();
         self.settle();
     }
@@ -493,12 +498,130 @@ fn a_file_dropped_on_the_desk_is_a_reference_and_stays_off_the_browser() {
         crate::doc::store::AssetRole::Reference,
     );
     assert_eq!(summary.admitted, 1, "{}", summary.notice());
-    gui.session.desk.lock().unwrap().clone_from(&crate::ui::session::DeskState::Follow);
-    let text = gui.center_of_text(".desk-foot .chip", "Text");
-    gui.click(text.0, text.1);
-    gui.click(text.0, text.1);
+    // 引き出しの開閉で顔は動く。chip の座標は押す度に取り直す。
+    let mut chip = |gui: &mut Gui| {
+        let at = gui.center_of_text(".desk-foot .chip", "Text");
+        gui.click(at.0, at.1);
+    };
+    chip(&mut gui);
     assert_eq!(gui.count(".desk-refs .ref"), 1, "the reference image is not on the desk");
     assert_eq!(gui.count(".tcard"), before, "a reference image leaked into the browser");
+
+    let x = gui.center_of(".desk-refs .refx", 0);
+    gui.click(x.0, x.1);
+    assert_eq!(gui.count(".desk-refs .ref"), 0, "the reference image did not leave the desk");
+
+    // 画でない物を机に落としても消えない — 素材として棚へ行く。
+    let wav = dir.path().join("beat.wav");
+    std::fs::write(&wav, b"RIFF\0\0\0\0WAVEfmt ").unwrap();
+    let summary = crate::ui::fixture::admit_paths(
+        &mut gui.session.doc.lock().unwrap(),
+        &[wav],
+        crate::doc::store::AssetRole::Reference,
+    );
+    assert_eq!(summary.admitted, 1, "{}", summary.notice());
+    chip(&mut gui);
+    assert_eq!(gui.count(".desk-refs .ref"), 0);
+    assert_eq!(gui.count(".tcard"), before + 1, "a non-image dropped on the desk vanished");
+}
+
+fn type_chars(gui: &mut Gui, text: &str) {
+    for ch in text.chars() {
+        gui.key(
+            keyboard_types::Key::Character(ch.to_string()),
+            keyboard_types::Modifiers::empty(),
+        );
+    }
+}
+
+fn enter(gui: &mut Gui) {
+    gui.key(keyboard_types::Key::Enter, keyboard_types::Modifiers::empty());
+}
+
+fn history_back(gui: &Gui) -> usize {
+    gui.session.doc.lock().unwrap().history_depth().0
+}
+
+/// 名前を開いたら全選択。打てば置き換わり、そのまま Enter なら何も起きない。
+#[test]
+fn an_opened_name_is_selected_so_typing_replaces_it() {
+    let mut gui = Gui::open();
+    let (x, y) = gui.center_of(".lsurface", 1);
+    let before = history_back(&gui);
+    gui.click(x, y);
+    gui.click(x, y);
+    enter(&mut gui);
+    assert_eq!(gui.count("input"), 0, "Enter did not close the untouched field");
+    assert_eq!(history_back(&gui), before, "an unchanged name became an undo step");
+
+    // blitz は 500ms の実時間と 2px で連打を数える。位置をずらして数え直させる。
+    gui.click(x + 3.0, y);
+    gui.click(x + 3.0, y);
+    type_chars(&mut gui, "Q");
+    enter(&mut gui);
+    assert!(gui.texts(".lsurface").iter().any(|n| n == "Q"), "typing did not replace the selected name: {:?}", gui.texts(".lsurface"));
+    assert_eq!(history_back(&gui), before + 1);
+}
+
+/// 空の名前は名前にならない。
+#[test]
+fn an_emptied_name_is_not_a_rename() {
+    let mut gui = Gui::open();
+    let (x, y) = gui.center_of(".lsurface", 1);
+    let names = gui.texts(".lsurface");
+    let before = history_back(&gui);
+    gui.click(x, y);
+    gui.click(x, y);
+    gui.key(keyboard_types::Key::Backspace, keyboard_types::Modifiers::empty());
+    enter(&mut gui);
+    assert_eq!(gui.count("input"), 0);
+    assert_eq!(gui.texts(".lsurface"), names);
+    assert_eq!(history_back(&gui), before);
+}
+
+/// 窓を離れたら欄は確定して消える(§6b)。
+#[test]
+fn losing_window_focus_commits_the_open_field() {
+    let mut gui = Gui::open();
+    let (x, y) = gui.center_of(".lsurface", 1);
+    gui.click(x, y);
+    gui.click(x, y);
+    type_chars(&mut gui, "W");
+    gui.lose_focus();
+    assert_eq!(gui.count("input"), 0, "focus loss left the field open");
+    assert!(gui.session.field().is_none());
+    assert!(gui.texts(".lsurface").iter().any(|n| n == "W"), "{:?}", gui.texts(".lsurface"));
+}
+
+/// 数字を開いたら今の値が入っていて全選択。打てば置き換わり、同じ値なら何も起きない。
+#[test]
+fn a_number_field_starts_from_the_current_value() {
+    let mut gui = Gui::open();
+    let (x, y) = gui.center_of(".lsurface", 1);
+    gui.click(x, y);
+    let cells = gui.texts(".prow .v");
+    let idx = cells
+        .iter()
+        .position(|c| c.trim().parse::<f64>().is_ok())
+        .expect("a numeric cell in the inspector");
+    let shown = cells[idx].clone();
+    let (cx, cy) = gui.center_of(".prow .v", idx);
+    let before = history_back(&gui);
+    gui.click(cx, cy);
+    gui.click(cx, cy);
+    assert_eq!(gui.count("input.typing"), 1, "double-click did not open the number");
+    assert_eq!(gui.h.attr("input.typing", "value").unwrap_or_default().trim(), shown.trim());
+    enter(&mut gui);
+    assert_eq!(history_back(&gui), before, "an unchanged number became an undo step");
+
+    gui.click(cx + 3.0, cy);
+    gui.click(cx + 3.0, cy);
+    type_chars(&mut gui, "42");
+    enter(&mut gui);
+    assert_eq!(gui.count("input.typing"), 0);
+    let after = gui.texts(".prow .v");
+    assert!(after[idx].trim().parse::<f64>().is_ok_and(|v| (v - 42.0).abs() < 1e-6), "typed number did not replace the value: {:?}", after[idx]);
+    assert_eq!(history_back(&gui), before + 1);
 }
 
 #[test]

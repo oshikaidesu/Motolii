@@ -248,6 +248,9 @@ fn prop_row(
                         let FieldAt::Number { layer, property, axis } = f.at else { return };
                         let Ok(v) = f.draft.trim().parse::<f64>() else { return };
                         let value = put_axis(&start_value, vec2, axis, v, range);
+                        if value == start_value {
+                            return;
+                        }
                         match write_key(&doc_commit, layer, &property, value, t) {
                             Ok(_) => *revision.write() += 1,
                             Err(err) => println!("PROBE room=write verdict=apply-error {err}"),
@@ -257,6 +260,7 @@ fn prop_row(
             }
             let opener = session.clone();
             let open = (property.clone(), start_value.clone());
+            let cell = c.clone();
             rsx!(span {
                 class: "{class}",
                 onmousedown: move |evt| {
@@ -276,7 +280,7 @@ fn prop_row(
                     *drag.write() = None;
                     opener.open_field(
                         FieldAt::Number { layer, property: open.0.clone(), axis: i },
-                        String::new(),
+                        cell.clone(),
                     );
                     *revision.write() += 1;
                 },
@@ -338,8 +342,10 @@ fn content_row(
 ) -> Element {
     let key_class = if p.keyed { "glyph on" } else { "glyph" };
     let key_glyph = if p.keyed { "◆" } else { "◇" };
+    let current = p.cells[2].clone();
     if session.field_at(&FieldAt::Content(layer)).is_some() {
         let doc_commit = doc.clone();
+        let unchanged = current.clone();
         return rsx!(
             div { class: "prow content-row",
                 span { class: "n", "{p.label}" }
@@ -348,6 +354,9 @@ fn content_row(
                     class: "v content",
                     revision,
                     oncommit: move |f: OpenField| {
+                        if f.draft == unchanged {
+                            return;
+                        }
                         match write_content(&doc_commit, layer, t, f.draft) {
                             Ok(_) => {
                                 println!("PROBE room=write verdict=content-commit layer={:?} t={:?}", layer, t);
@@ -362,7 +371,6 @@ fn content_row(
         );
     }
     let opener = session.clone();
-    let current = p.cells[2].clone();
     rsx!(
         div { class: "prow content-row",
             span { class: "n", "{p.label}" }

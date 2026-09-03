@@ -800,14 +800,16 @@ pub(super) fn inspector_data_from_doc(
 }
 
 /// 机の顔に貼る参考画像。素材と同じ口で入るが、Browser にも Timeline にも出ない。
-pub(super) fn reference_images_from_view(view: &StoreView) -> Vec<(String, Option<String>)> {
+pub(super) fn reference_images_from_view(
+    view: &StoreView,
+) -> Vec<(crate::doc::store::AssetId, String, Option<String>)> {
     view.assets()
         .unwrap_or_default()
         .into_iter()
         .filter(|a| a.role == crate::doc::store::AssetRole::Reference)
         .map(|a| {
             let uri = a.path_absolute.as_deref().and_then(crate::ui::thumbnail::image_data_uri);
-            (a.name, uri)
+            (a.id, a.name, uri)
         })
         .collect()
 }
@@ -899,7 +901,11 @@ fn admit_path(
         .map_err(|error| format!("cannot fingerprint: {error}"))?;
     let mut draft =
         crate::doc::store::AssetDraft::from_probed_source(asset_type, &fingerprint, path, None);
-    draft.role = role;
+    // 参考になれるのは画だけ。机に落とした動画や音は素材として棚へ行く(消えない)。
+    draft.role = match (role, asset_family(&draft.asset_type)) {
+        (crate::doc::store::AssetRole::Reference, AssetFamily::TwoD) => role,
+        _ => crate::doc::store::AssetRole::Material,
+    };
     doc.apply(crate::doc::store::Intent::AdmitAsset { draft })
         .map(|_| ())
         .map_err(|error| error.to_string())

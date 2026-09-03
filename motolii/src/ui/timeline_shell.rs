@@ -125,6 +125,7 @@ pub(super) fn timeline_shell(
         let editing_name = layer.is_some_and(|l| session.field_at(&FieldAt::Name(l)).is_some());
         let opener = session.clone();
         let field_session = session.clone();
+        let unchanged = row.name.clone();
         let doc_rename = doc.clone();
         rsx!(
             div { class: "lrow", style: "{indent}",
@@ -164,6 +165,9 @@ pub(super) fn timeline_shell(
                         oncommit: move |f: OpenField| {
                             let FieldAt::Name(layer) = f.at else { return };
                             let name = f.draft;
+                            if name.trim().is_empty() || name == unchanged {
+                                return;
+                            }
                             let patch = LayerAttrsPatch {
                                 name: Some(name.clone()),
                                 ..Default::default()

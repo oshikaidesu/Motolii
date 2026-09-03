@@ -214,21 +214,48 @@ pub(crate) fn commit_field_outside(doc: &mut DioxusDocument, x: f32, y: f32) {
     if doc.inner().hit(x, y).is_some_and(|hit| hit.node_id == field) {
         return;
     }
+    commit_field(doc);
+}
+
+/// 窓を離れる時も欄は確定して消える(§6b)。
+pub(crate) fn commit_field(doc: &mut DioxusDocument) {
+    if doc.inner().query_selector(FIELD).ok().flatten().is_none() {
+        return;
+    }
     aim_keystrokes(doc);
-    let enter = |state| blitz_traits::events::BlitzKeyEvent {
-        key: keyboard_types::Key::Enter,
-        code: keyboard_types::Code::Enter,
-        modifiers: keyboard_types::Modifiers::META,
+    send_chord(doc, keyboard_types::Key::Enter, keyboard_types::Code::Enter);
+}
+
+/// 開いたばかりの 1 行の欄は全選択 — 打てば置き換わる(Finder・AE の名前と同じ)。
+/// 書き置き(textarea)は末尾から続ける。`seen` は前に見た欄で、同じ欄には二度しない。
+pub(crate) fn select_new_field(doc: &mut DioxusDocument, seen: &mut Option<blitz_dom::NodeId>) {
+    let field = doc.inner().query_selector("input").ok().flatten();
+    if field == *seen {
+        return;
+    }
+    *seen = field;
+    if field.is_none() {
+        return;
+    }
+    aim_keystrokes(doc);
+    send_chord(doc, keyboard_types::Key::Character("a".into()), keyboard_types::Code::KeyA);
+}
+
+fn send_chord(doc: &mut DioxusDocument, key: keyboard_types::Key, code: keyboard_types::Code) {
+    let event = |state| blitz_traits::events::BlitzKeyEvent {
+        key: key.clone(),
+        code,
+        modifiers: keyboard_types::Modifiers::SUPER,
         location: keyboard_types::Location::Standard,
         is_auto_repeating: false,
         is_composing: false,
         state,
         text: None,
     };
-    doc.handle_ui_event(blitz_traits::events::UiEvent::KeyDown(enter(
+    doc.handle_ui_event(blitz_traits::events::UiEvent::KeyDown(event(
         blitz_traits::events::KeyState::Pressed,
     )));
-    doc.handle_ui_event(blitz_traits::events::UiEvent::KeyUp(enter(
+    doc.handle_ui_event(blitz_traits::events::UiEvent::KeyUp(event(
         blitz_traits::events::KeyState::Released,
     )));
 }
@@ -374,6 +401,8 @@ struct Windows {
     detached: std::collections::HashMap<WindowId, Panel>,
     /// 最後に指が居た所。摘まみの事象は場所を持たないので、ここから借りる。
     cursor: std::collections::HashMap<WindowId, (f32, f32)>,
+    /// 窓ごとに前に見た欄。新しく開いた欄を全選択するための印。
+    seen_field: std::collections::HashMap<WindowId, Option<blitz_dom::NodeId>>,
 }
 
 /// 窓1枚を実体にする。`BlitzApplication::add_window` は dioxus の配線
@@ -510,6 +539,10 @@ impl ApplicationHandler for Windows {
         // 上流の autofocus は属性が付く前に可否を見ていて効かない。
         // 打ち込み中の欄が在る時はそちらへ当てる —— 根へ引き戻すと入力欄に
         // 文字が1つも入らない。窓に開く欄は同時に1つだけ。
+        if let Some(view) = self.inner.windows.get_mut(&window_id) {
+            let seen = self.seen_field.entry(window_id).or_default();
+            select_new_field(view.downcast_doc_mut::<DioxusDocument>(), seen);
+        }
         if matches!(event, WindowEvent::KeyboardInput { .. }) {
             if let Some(view) = self.inner.windows.get_mut(&window_id) {
                 aim_keystrokes(view.downcast_doc_mut::<DioxusDocument>());
@@ -623,6 +656,9 @@ impl ApplicationHandler for Windows {
             }
         }
         if matches!(event, WindowEvent::Focused(false)) {
+            if let Some(view) = self.inner.windows.get_mut(&window_id) {
+                commit_field(view.downcast_doc_mut::<DioxusDocument>());
+            }
             self.host.focus_lost();
         }
         self.inner.window_event(event_loop, window_id, event);
@@ -700,6 +736,7 @@ pub fn launch(title: &str) {
             pending: vec![(main, None)],
             detached: Default::default(),
             cursor: Default::default(),
+            seen_field: Default::default(),
         })
         .unwrap();
 }
