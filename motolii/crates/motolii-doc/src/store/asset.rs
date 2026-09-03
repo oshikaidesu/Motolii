@@ -67,12 +67,22 @@ render = ["AssetStatus", "AssetListItem"]
 observable = ["relinking_a_missing_asset_makes_it_present"]
 */
 
+/// 素材の役目。Reference は作品の一部だが Timeline には置かれない(机の顔に貼る参考画像)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, DeserializeDerive)]
+pub enum AssetRole {
+    #[default]
+    Material,
+    Reference,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, DeserializeDerive)]
 pub struct Asset {
     pub id: AssetId,
     pub name: String,
     pub asset_type: String,
     pub content_hash: String,
+    #[serde(default)]
+    pub role: AssetRole,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub path_absolute: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -96,6 +106,7 @@ pub struct AssetDraft {
     pub name: String,
     pub asset_type: String,
     pub content_hash: String,
+    pub role: AssetRole,
     pub path_absolute: Option<String>,
     pub path_project_relative: Option<String>,
     pub file_name: Option<String>,
@@ -127,6 +138,7 @@ impl AssetDraft {
             name,
             asset_type: asset_type.into(),
             content_hash: fingerprint.content_hash(),
+            role: AssetRole::Material,
             path_absolute: Some(Asset::normalize_path(&path_absolute.to_string_lossy())),
             path_project_relative,
             file_name,
@@ -143,6 +155,7 @@ impl AssetDraft {
             name: self.name,
             asset_type: self.asset_type,
             content_hash: self.content_hash,
+            role: self.role,
             path_absolute: self.path_absolute,
             path_project_relative: self.path_project_relative,
             file_name: self.file_name,

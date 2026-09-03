@@ -467,6 +467,39 @@ fn picking_on_the_desk_wheel_writes_the_focused_color_back() {
     assert!(s > 0.9 && v > 0.9, "the pick did not reach the document: {after:?}");
 }
 
+/// 参考画像は素材と同じ口で入るが、役目は落とした場所で決まる。机なら参考、他は素材。
+#[test]
+fn a_file_dropped_on_the_desk_is_a_reference_and_stays_off_the_browser() {
+    let mut gui = Gui::open();
+    let desk = gui.center_of("#desk", 0);
+    let stage = gui.center_of("#stage", 0);
+    assert_eq!(
+        crate::ui::host::drop_role_at(&gui.h.doc, desk.0, desk.1),
+        crate::doc::store::AssetRole::Reference
+    );
+    assert_eq!(
+        crate::ui::host::drop_role_at(&gui.h.doc, stage.0, stage.1),
+        crate::doc::store::AssetRole::Material
+    );
+
+    let dir = tempfile::tempdir().unwrap();
+    let png = dir.path().join("ref.png");
+    image::RgbaImage::from_pixel(4, 4, image::Rgba([200, 40, 40, 255])).save(&png).unwrap();
+    let before = gui.count(".tcard");
+    let summary = crate::ui::fixture::admit_paths(
+        &mut gui.session.doc.lock().unwrap(),
+        &[png],
+        crate::doc::store::AssetRole::Reference,
+    );
+    assert_eq!(summary.admitted, 1, "{}", summary.notice());
+    gui.session.desk.lock().unwrap().clone_from(&crate::ui::session::DeskState::Follow);
+    let text = gui.center_of_text(".desk-foot .chip", "Text");
+    gui.click(text.0, text.1);
+    gui.click(text.0, text.1);
+    assert_eq!(gui.count(".desk-refs .ref"), 1, "the reference image is not on the desk");
+    assert_eq!(gui.count(".tcard"), before, "a reference image leaked into the browser");
+}
+
 #[test]
 fn menus_are_one_semantic_family() {
     let mut gui = Gui::open();

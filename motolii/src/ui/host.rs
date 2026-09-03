@@ -188,6 +188,20 @@ fn primary_mouse_press(event: &WindowEvent) -> Option<dioxus_native::winit::dpi:
     }
 }
 
+/// 落とした先が机なら参考画像、他は素材。落とす口は 1 つで、役目だけが場所で決まる。
+pub(crate) fn drop_role_at(doc: &DioxusDocument, x: f32, y: f32) -> crate::doc::store::AssetRole {
+    let inner = doc.inner();
+    let desk = inner.query_selector("#desk").ok().flatten();
+    let mut cur = inner.hit(x, y).map(|hit| hit.node_id);
+    while let (Some(node), Some(desk)) = (cur, desk) {
+        if node == desk {
+            return crate::doc::store::AssetRole::Reference;
+        }
+        cur = inner.get_node(node).and_then(|n| n.parent);
+    }
+    crate::doc::store::AssetRole::Material
+}
+
 /// 窓に開く欄。1 行は `input`、書き置きは `textarea`。同時に 1 つ(`Session.field`)。
 const FIELD: &str = "input, textarea";
 
@@ -566,11 +580,21 @@ impl ApplicationHandler for Windows {
             self.session.file_drop.leave();
             self.host.wake_all();
         }
-        if let WindowEvent::DragDropped { paths, .. } = &event {
+        if let WindowEvent::DragDropped { paths, position } = &event {
             self.session.file_drop.leave();
+            let role = self
+                .inner
+                .windows
+                .get_mut(&window_id)
+                .map(|view| {
+                    let coords = view.pointer_coords(*position);
+                    let doc: &DioxusDocument = view.downcast_doc_mut();
+                    drop_role_at(doc, coords.client_x, coords.client_y)
+                })
+                .unwrap_or_default();
             let summary = {
                 let mut doc = self.session.doc.lock().unwrap();
-                crate::ui::fixture::admit_paths(&mut doc, paths)
+                crate::ui::fixture::admit_paths(&mut doc, paths, role)
             };
             println!(
                 "PROBE room=browser verdict=drop admitted={} of={}",

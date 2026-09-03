@@ -799,10 +799,24 @@ pub(super) fn inspector_data_from_doc(
     }
 }
 
+/// 机の顔に貼る参考画像。素材と同じ口で入るが、Browser にも Timeline にも出ない。
+pub(super) fn reference_images_from_view(view: &StoreView) -> Vec<(String, Option<String>)> {
+    view.assets()
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|a| a.role == crate::doc::store::AssetRole::Reference)
+        .map(|a| {
+            let uri = a.path_absolute.as_deref().and_then(crate::ui::thumbnail::image_data_uri);
+            (a.name, uri)
+        })
+        .collect()
+}
+
 pub(super) fn asset_rows_from_view(view: &StoreView) -> Vec<AssetRow> {
     view.assets()
         .unwrap_or_default()
         .into_iter()
+        .filter(|a| a.role == crate::doc::store::AssetRole::Material)
         .enumerate()
         .map(|(i, a)| AssetRow {
             family: asset_family(&a.asset_type),
@@ -845,6 +859,7 @@ impl ImportSummary {
 pub(super) fn admit_paths(
     doc: &mut crate::doc::store::Document,
     paths: &[std::path::PathBuf],
+    role: crate::doc::store::AssetRole,
 ) -> ImportSummary {
     let mut summary = ImportSummary {
         admitted: 0,
@@ -852,7 +867,7 @@ pub(super) fn admit_paths(
         first_failure: None,
     };
     for path in paths {
-        match admit_path(doc, path) {
+        match admit_path(doc, path, role) {
             Ok(()) => summary.admitted += 1,
             Err(reason) if summary.first_failure.is_none() => {
                 let name = path
@@ -867,7 +882,11 @@ pub(super) fn admit_paths(
     summary
 }
 
-fn admit_path(doc: &mut crate::doc::store::Document, path: &std::path::Path) -> Result<(), String> {
+fn admit_path(
+    doc: &mut crate::doc::store::Document,
+    path: &std::path::Path,
+    role: crate::doc::store::AssetRole,
+) -> Result<(), String> {
     let Some(asset_type) = path
         .extension()
         .and_then(|e| e.to_str())
@@ -878,8 +897,9 @@ fn admit_path(doc: &mut crate::doc::store::Document, path: &std::path::Path) -> 
     let reader = std::fs::File::open(path).map_err(|error| format!("cannot read: {error}"))?;
     let fingerprint = crate::doc::store::SourceFingerprintV1::from_reader(reader)
         .map_err(|error| format!("cannot fingerprint: {error}"))?;
-    let draft =
+    let mut draft =
         crate::doc::store::AssetDraft::from_probed_source(asset_type, &fingerprint, path, None);
+    draft.role = role;
     doc.apply(crate::doc::store::Intent::AdmitAsset { draft })
         .map(|_| ())
         .map_err(|error| error.to_string())
@@ -889,7 +909,11 @@ fn admit_path(doc: &mut crate::doc::store::Document, path: &std::path::Path) -> 
 #[test]
 fn rejected_imports_keep_a_user_visible_reason() {
     let mut doc = crate::doc::store::Document::new();
-    let summary = admit_paths(&mut doc, &[std::path::PathBuf::from("notes.unsupported")]);
+    let summary = admit_paths(
+        &mut doc,
+        &[std::path::PathBuf::from("notes.unsupported")],
+        crate::doc::store::AssetRole::Material,
+    );
     assert_eq!(summary.admitted, 0);
     assert_eq!(summary.total, 1);
     assert!(summary.notice().contains("unsupported file type"));

@@ -1407,14 +1407,29 @@ body {
 }
 
 .desk-refs {
-    flex: 1;
-    min-height: calc(40 * var(--s) * 1px);
-    border: var(--line) dashed var(--bd);
+    flex: 0 1 auto;
+    min-height: 0;
+    max-height: calc(110 * var(--s) * 1px);
     display: flex;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    gap: var(--sp2);
+    padding: var(--sp2) var(--sp4);
+    overflow: auto;
+}
+
+.desk-refs.empty {
+    padding: var(--sp1) var(--sp4);
     align-items: center;
     justify-content: center;
+    border: var(--line) dashed var(--bd);
     color: var(--ink3);
     font-size: var(--t-dense);
+}
+
+.desk-refs .ref {
+    max-height: calc(96 * var(--s) * 1px);
+    border: var(--line) solid var(--bd);
 }
 
 /* 引き出し。机の中に出て、顔の上を占める。 */

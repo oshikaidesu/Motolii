@@ -1608,7 +1608,7 @@ pub fn app() -> Element {
                                                     .collect::<Vec<_>>();
                                                 let summary = {
                                                     let mut d = doc.lock().unwrap();
-                                                    fixture::admit_paths(&mut d, &paths)
+                                                    fixture::admit_paths(&mut d, &paths, crate::doc::store::AssetRole::Material)
                                                 };
                                                 println!("PROBE room=browser verdict=import admitted={} of={}", summary.admitted, summary.total);
                                                 *project_notice.lock().unwrap() = summary.notice();

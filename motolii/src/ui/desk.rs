@@ -140,6 +140,7 @@ pub(super) fn DeskPanel(
     let face_name = current
         .map(|i| markers[i].name.clone())
         .unwrap_or_else(|| "No marker yet".to_owned());
+    let refs = crate::ui::fixture::reference_images_from_view(&session.doc.lock().unwrap().view());
     let note = drawer.filter(|d| *d == Drawer::Text).map(|_| match current {
         Some(i) => {
             let marker = &markers[i];
@@ -212,6 +213,16 @@ pub(super) fn DeskPanel(
         }
         div { class: "desk-face",
         span { class: "mname", "{face_name}" }
+        div { class: if refs.is_empty() { "desk-refs empty" } else { "desk-refs" },
+            if refs.is_empty() {
+                "Drop reference images here"
+            }
+            for (name , uri) in refs.iter() {
+                if let Some(uri) = uri {
+                    img { class: "ref", src: "{uri}", alt: "{name}", title: "{name}" }
+                }
+            }
+        }
         div { class: "desk-foot",
             for (which , label) in DRAWERS.iter().copied() {
                 SemanticButton {
