@@ -609,9 +609,20 @@ pub(super) fn browser_panel(
     timeline_tx: Sender<TimelineMsg>,
     selected: Signal<Option<LayerId>>,
     mut revision: Signal<u32>,
+    layout_tick: u32,
     panel: Panel,
     mut rail: Signal<Option<fixture::AssetFamily>>,
 ) -> Element {
+    let grid_class = match layout_tick {
+        0 => "tgrid",
+        tick if tick % 2 == 0 => "tgrid browser-reflow-a",
+        _ => "tgrid browser-reflow-b",
+    };
+    let color_grid_class = match layout_tick {
+        0 => "tgrid color-grid",
+        tick if tick % 2 == 0 => "tgrid color-grid browser-reflow-a",
+        _ => "tgrid color-grid browser-reflow-b",
+    };
     let rail_class = move |f: Option<fixture::AssetFamily>| {
         if rail() == f {
             "srow on"
@@ -817,7 +828,7 @@ pub(super) fn browser_panel(
                                     None => rsx!(div { class: "rcount", "No color yet · select a layer to edit one" }),
                                 }
                                 if has_swatches {
-                                    div { class: "tgrid color-grid", {cards} }
+                                    div { class: "{color_grid_class}", {cards} }
                                 } else {
                                     div { class: "rcount", "No colors yet · select a layer to apply one" }
                                 }
@@ -877,7 +888,7 @@ pub(super) fn browser_panel(
                                         }
                                     }
                                 }
-                                div { class: "tgrid", {cards} }
+                                div { class: "{grid_class}", {cards} }
                             }
                         }
                     )
@@ -903,7 +914,7 @@ pub(super) fn browser_panel(
                                 span { class: "sub", "Add a layer, or apply a mask to the selection" }
                             }
                         }
-                        div { class: "tgrid",
+                        div { class: "{grid_class}",
                             // 札は data から(4 枚目を足す時は 1 行)。
                             for (kind , label , meta , glyph) in [
                                 (NewKind::Text, "Text", "Adds a text layer", "T"),
@@ -982,7 +993,7 @@ pub(super) fn browser_panel(
                                 SemanticButton { class: "chip", onclick: move |_| rail.set(None), "Show all media" }
                             }
                         } else {
-                            div { class: "tgrid", {asset_cards} }
+                            div { class: "{grid_class}", {asset_cards} }
                         }
                         div { class: "bfoot",
                             span { class: "dot", style: "background:var(--accent);" }

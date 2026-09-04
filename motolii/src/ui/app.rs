@@ -833,9 +833,11 @@ pub fn app() -> Element {
         attrs_state,
         selected: selected_sig,
         revision,
+        echo: layout_echo,
         ..
     } = panes;
     let mut selected = selected_sig;
+    let mut layout_echo = layout_echo;
 
     let timeline_tx = session.timeline_tx.clone();
     let doc = session.doc.clone();
@@ -879,6 +881,7 @@ pub fn app() -> Element {
                     if delta != 0.0 {
                         dock.write()
                             .set_split_ratio(&g.split, g.start_ratio + f64::from(delta));
+                        *layout_echo.write() += 1;
                     }
                 }
             },

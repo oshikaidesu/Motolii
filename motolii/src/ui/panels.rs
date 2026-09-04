@@ -31,6 +31,7 @@ pub(super) fn BrowserPanel(
         session.timeline_tx.clone(),
         selected,
         revision,
+        echo,
         panel,
         rail,
     )

@@ -79,6 +79,16 @@
     to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
 }
 
+@keyframes browser-grid-reflow-a {
+    from { opacity: 0.88; transform: translateY(2px) scale(0.985); }
+    to { opacity: 1; transform: none; }
+}
+
+@keyframes browser-grid-reflow-b {
+    from { opacity: 0.88; transform: translateY(2px) scale(0.985); }
+    to { opacity: 1; transform: none; }
+}
+
 .zbody > * {
     animation: motion-panel-enter var(--motion-enter) var(--motion-ease-enter) both;
 }
@@ -414,6 +424,14 @@ body {
     padding: var(--line);
     overflow-y: auto;
     align-content: start;
+}
+
+.browser-reflow-a > * {
+    animation: browser-grid-reflow-a var(--motion-fast) var(--motion-ease-standard) both;
+}
+
+.browser-reflow-b > * {
+    animation: browser-grid-reflow-b var(--motion-fast) var(--motion-ease-standard) both;
 }
 
 .tcard {

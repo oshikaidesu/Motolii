@@ -964,6 +964,10 @@ impl Windows {
                 | WindowEvent::PointerEntered { .. }
                 | WindowEvent::Focused(true)
         );
+        let browser_layout_changed = matches!(
+            &event,
+            WindowEvent::SurfaceResized(_) | WindowEvent::ScaleFactorChanged { .. }
+        );
         if self.session.quit.load(std::sync::atomic::Ordering::Relaxed) {
             // ⌘Q でも枠を憶える(閉じるボタンだけだった)。主窓 = 別窓に登録されていない窓。
             if let Some(view) = self
@@ -1205,6 +1209,9 @@ impl Windows {
             self.host.focus_lost();
         }
         self.inner.window_event(event_loop, window_id, event);
+        if browser_layout_changed {
+            self.host.wake_all();
+        }
         if let Some(view) = self.inner.windows.get_mut(&window_id) {
             if restore_cursor {
                 view.window.set_cursor_visible(true);
