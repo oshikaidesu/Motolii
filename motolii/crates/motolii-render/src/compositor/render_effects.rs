@@ -12,14 +12,21 @@ impl Compositor {
         ),
         CompositorError,
     > {
-        let mut effective_textures: Vec<LayerContent> = Vec::with_capacity(layers.len());
-        let mut effective_paddings: Vec<u32> = Vec::with_capacity(layers.len());
-        let mut checked_out: Vec<(u32, u32, wgpu::TextureFormat, wgpu::Texture)> = Vec::new();
+        self.refresh_catalog_programs();
+        for pass in layers.iter().flat_map(|layer| &layer.passes) {
+            if !self.effect_programs.contains_key(&pass.plugin_id) {
+                return Err(CompositorError::Effect(format!(
+                    "unknown Vism {}",
+                    pass.plugin_id
+                )));
+            }
+        }
+        let mut effective_textures = Vec::with_capacity(layers.len());
+        let mut effective_paddings = Vec::with_capacity(layers.len());
+        let mut checked_out = Vec::new();
         let mut copy_encoder: Option<wgpu::CommandEncoder> = None;
 
         for lwp in layers {
-            // 3D の素材は焼かない(裁定 2026-08-30)。エフェクトはテクスチャの上でしか
-            // 動かないので、掛かっていても素通しする。
             let Some(layer_texture) = lwp.layer.content.texture().cloned() else {
                 effective_textures.push(lwp.layer.content.clone());
                 effective_paddings.push(0);
@@ -30,7 +37,6 @@ impl Compositor {
                 effective_paddings.push(0);
                 continue;
             }
-
             let [width, height] = layer_texture.width_height();
             let padding = lwp
                 .passes
@@ -38,27 +44,23 @@ impl Compositor {
                 .map(EffectPass::padding)
                 .max()
                 .unwrap_or(0);
-            let padded_width = width + 2 * padding;
-            let padded_height = height + 2 * padding;
-
-            let format = lwp
-                .passes
-                .iter()
-                .find_map(EffectPass::intermediate_format)
-                .unwrap_or_else(|| layer_texture.format());
-
-            let src_handle = layer_texture.handle();
+            let border = padding
+                .checked_mul(2)
+                .ok_or_else(|| CompositorError::Effect("effect padding overflow".into()))?;
+            let padded_width = width
+                .checked_add(border)
+                .ok_or_else(|| CompositorError::Effect("effect width overflow".into()))?;
+            let padded_height = height
+                .checked_add(border)
+                .ok_or_else(|| CompositorError::Effect("effect height overflow".into()))?;
             let src = self
                 .ctx
                 .gpu_resources
                 .textures
-                .get_from_handle(src_handle)
-                .map_err(|e| CompositorError::Effect(e.to_string()))?;
-
-            let scratch =
-                self.effect_scratch
-                    .acquire(&self.ctx.device, padded_width, padded_height, format);
-
+                .get_from_handle(layer_texture.handle())
+                .map_err(|error| CompositorError::Effect(error.to_string()))?;
+            let mut current = src.texture.clone();
+            let mut current_is_scratch = false;
             let encoder = copy_encoder.get_or_insert_with(|| {
                 self.ctx
                     .device
@@ -67,122 +69,112 @@ impl Compositor {
                     })
             });
 
-            for pass in &lwp.passes {
-                let image_inputs = self
-                    .effect_programs
-                    .get(&pass.plugin_id)
-                    .ok_or_else(|| {
-                        CompositorError::Effect(format!("unknown Vism {}", pass.plugin_id))
-                    })?
-                    .image_input_count();
-                let mut padded_source = None;
-                let source_view = if image_inputs == 0 {
-                    None
-                } else if padding == 0 {
-                    Some(src.texture.create_view(&Default::default()))
-                } else {
-                    let texture = self.effect_scratch.acquire(
-                        &self.ctx.device,
-                        padded_width,
-                        padded_height,
-                        layer_texture.format(),
-                    );
-                    let view = texture.create_view(&Default::default());
-                    {
-                        let _clear_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                            label: Some("motolii-compositor-vism-padded-source-clear"),
-                            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                                view: &view,
-                                depth_slice: None,
-                                resolve_target: None,
-                                ops: wgpu::Operations {
-                                    load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
-                                    store: wgpu::StoreOp::Store,
-                                },
-                            })],
-                            depth_stencil_attachment: None,
-                            timestamp_writes: None,
-                            occlusion_query_set: None,
-                            multiview_mask: None,
-                        });
-                    }
-                    encoder.copy_texture_to_texture(
-                        wgpu::TexelCopyTextureInfo {
-                            texture: &src.texture,
-                            mip_level: 0,
-                            origin: wgpu::Origin3d::ZERO,
-                            aspect: wgpu::TextureAspect::All,
-                        },
-                        wgpu::TexelCopyTextureInfo {
-                            texture: &texture,
-                            mip_level: 0,
-                            origin: wgpu::Origin3d {
-                                x: padding,
-                                y: padding,
-                                z: 0,
-                            },
-                            aspect: wgpu::TextureAspect::All,
-                        },
-                        wgpu::Extent3d {
-                            width,
-                            height,
-                            depth_or_array_layers: 1,
-                        },
-                    );
-                    padded_source = Some(texture);
-                    Some(view)
-                };
-                let sources: Vec<&wgpu::TextureView> = source_view.iter().collect();
-                let dst_view = scratch.create_view(&Default::default());
+            if padding > 0 && self.effect_programs[&lwp.passes[0].plugin_id].image_input_count() > 0
+            {
+                let padded = self.effect_scratch.acquire(
+                    &self.ctx.device,
+                    padded_width,
+                    padded_height,
+                    current.format(),
+                );
+                let padded_view = padded.create_view(&Default::default());
                 {
-                    let Self {
-                        ctx,
-                        effect_programs,
-                        effect_scratch,
-                        ..
-                    } = self;
-                    let program = effect_programs
-                        .get(&pass.plugin_id)
-                        .expect("Vism presence checked above");
-                    program.record(
-                        ctx,
-                        encoder,
-                        effect_scratch,
-                        &sources,
-                        &dst_view,
-                        &pass.params,
-                        [padded_width as f32, padded_height as f32],
-                    );
+                    let _clear = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                        label: Some("motolii-compositor-vism-padded-source-clear"),
+                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                            view: &padded_view,
+                            depth_slice: None,
+                            resolve_target: None,
+                            ops: wgpu::Operations {
+                                load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                                store: wgpu::StoreOp::Store,
+                            },
+                        })],
+                        depth_stencil_attachment: None,
+                        timestamp_writes: None,
+                        occlusion_query_set: None,
+                        multiview_mask: None,
+                    });
                 }
-                if let Some(texture) = padded_source {
+                encoder.copy_texture_to_texture(
+                    wgpu::TexelCopyTextureInfo {
+                        texture: &current,
+                        mip_level: 0,
+                        origin: wgpu::Origin3d::ZERO,
+                        aspect: wgpu::TextureAspect::All,
+                    },
+                    wgpu::TexelCopyTextureInfo {
+                        texture: &padded,
+                        mip_level: 0,
+                        origin: wgpu::Origin3d {
+                            x: padding,
+                            y: padding,
+                            z: 0,
+                        },
+                        aspect: wgpu::TextureAspect::All,
+                    },
+                    wgpu::Extent3d {
+                        width,
+                        height,
+                        depth_or_array_layers: 1,
+                    },
+                );
+                current = padded;
+                current_is_scratch = true;
+            }
+
+            for pass in &lwp.passes {
+                let program = &self.effect_programs[&pass.plugin_id];
+                let format = pass
+                    .intermediate_format()
+                    .unwrap_or_else(|| current.format());
+                let destination = self.effect_scratch.acquire(
+                    &self.ctx.device,
+                    padded_width,
+                    padded_height,
+                    format,
+                );
+                let source_view = (program.image_input_count() > 0)
+                    .then(|| current.create_view(&Default::default()));
+                let sources: Vec<_> = source_view.iter().collect();
+                let destination_view = destination.create_view(&Default::default());
+                program.record(
+                    &self.ctx,
+                    encoder,
+                    &mut self.effect_scratch,
+                    &sources,
+                    &destination_view,
+                    &pass.params,
+                    [padded_width as f32, padded_height as f32],
+                );
+                // The previous output stays checked out until its consuming pass is recorded.
+                // Reuse thereafter is ordered by this command encoder, never within the same pass.
+                if current_is_scratch {
                     self.effect_scratch.release(
                         padded_width,
                         padded_height,
-                        layer_texture.format(),
-                        texture,
+                        current.format(),
+                        current,
                     );
                 }
+                current = destination;
+                current_is_scratch = true;
             }
 
             self.next_effect_key += 1;
-            let key = self.next_effect_key;
             let imported = self
                 .ctx
                 .texture_manager_2d
-                .import_gpu_premultiplied(key, &self.ctx, &scratch)
-                .map_err(|e| CompositorError::Effect(e.to_string()))?;
-
+                .import_gpu_premultiplied(self.next_effect_key, &self.ctx, &current)
+                .map_err(|error| CompositorError::Effect(error.to_string()))?;
             effective_textures.push(LayerContent::Texture(imported));
             effective_paddings.push(padding);
-            checked_out.push((padded_width, padded_height, format, scratch));
+            checked_out.push((padded_width, padded_height, current.format(), current));
         }
-
-        if let Some(encoder) = copy_encoder.take() {
+        if let Some(encoder) = copy_encoder {
             self.pending.push(encoder.finish());
         }
-        // 効果の出力を次段が読むので、ここで一度だけ出す(層ごとには止めない)。
         self.flush_pending();
-
         Ok((effective_textures, effective_paddings, checked_out))
     }
 
@@ -266,11 +258,130 @@ pub(crate) fn sequential_inputs<'a>(
                 z: layer.placement.z,
                 rotation_x: layer.placement.rotation_x,
                 rotation_y: layer.placement.rotation_y,
-                pinned: layer.pinned,
+                projection: layer.projection,
+                projection_camera: layer.projection_camera,
                 opacity: layer.placement.opacity,
                 depth_offset: layer.placement.order,
                 blend_mode: layer.blend_mode,
             }
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::doc::store::{
+        Composition, Document, EffectId, EffectInstance, Fps, Intent, LayerId, LayerMeta,
+        LayerSource, LayerTiming, PropertyId, RationalTime, Value,
+    };
+    use crate::render::engine::Engine;
+
+    fn document_with_effects(path: &std::path::Path, plugins: &[&str]) -> Document {
+        let mut doc = Document::new();
+        doc.apply_all([
+            Intent::SetComposition(Composition {
+                width: 24,
+                height: 24,
+                fps: Fps::try_new(30, 1).unwrap(),
+                duration_frames: 1,
+                background: [0.0; 4],
+            }),
+            Intent::AddLayer(LayerId(1)),
+            Intent::SetMeta {
+                layer: LayerId(1),
+                meta: LayerMeta {
+                    source: LayerSource::File {
+                        path: path.to_string_lossy().into_owned(),
+                        fingerprint: None,
+                    },
+                    order: 0,
+                    timing: LayerTiming::place(0, None, 1),
+                },
+            },
+            Intent::SetEffects {
+                layer: LayerId(1),
+                effects: plugins
+                    .iter()
+                    .enumerate()
+                    .map(|(index, plugin)| EffectInstance {
+                        id: EffectId(index as u32),
+                        plugin_id: (*plugin).into(),
+                    })
+                    .collect(),
+            },
+        ])
+        .unwrap();
+        doc
+    }
+
+    #[test]
+    fn mixed_format_effects_consume_previous_output_and_recover_after_undo() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("source.png");
+        let pixels = [32u8, 64, 96, 255]
+            .into_iter()
+            .cycle()
+            .take(24 * 24 * 4)
+            .collect::<Vec<_>>();
+        image::save_buffer(&source, &pixels, 24, 24, image::ColorType::Rgba8).unwrap();
+        let mut doc = document_with_effects(&source, &["motolii.gradient"]);
+        let mut engine = Engine::new().unwrap();
+        let mut checked_render = |doc: &Document| {
+            let scope = engine
+                .gpu_device()
+                .push_error_scope(wgpu::ErrorFilter::Validation);
+            let pixels = engine
+                .render_frame(&doc.view(), RationalTime::ZERO)
+                .unwrap();
+            let error = pollster::block_on(scope.pop());
+            assert!(
+                error.is_none(),
+                "effect attachments must match pipeline formats: {error:?}"
+            );
+            pixels
+        };
+        let gradient = checked_render(&doc);
+        assert!(
+            gradient.chunks_exact(4).any(|pixel| pixel[0] != pixel[1]),
+            "the reference is visibly nonuniform"
+        );
+        for plugins in [
+            vec!["motolii.gradient", "motolii.blur"],
+            vec!["motolii.blur", "motolii.gradient"],
+            vec!["motolii.gradient", "motolii.blur", "motolii.blur"],
+        ] {
+            let mut edits = vec![Intent::SetEffects {
+                layer: LayerId(1),
+                effects: plugins
+                    .iter()
+                    .enumerate()
+                    .map(|(index, plugin)| EffectInstance {
+                        id: EffectId(index as u32),
+                        plugin_id: (*plugin).into(),
+                    })
+                    .collect(),
+            }];
+            for (index, plugin) in plugins.iter().enumerate() {
+                if *plugin == "motolii.blur" {
+                    edits.push(Intent::SetConstant {
+                        layer: LayerId(1),
+                        property: PropertyId::effect_param(EffectId(index as u32), "radius")
+                            .unwrap(),
+                        value: Value::F64(0.0),
+                    });
+                }
+            }
+            doc.apply_all(edits).unwrap();
+            let actual = checked_render(&doc);
+            assert_eq!(actual.len(), gradient.len());
+            assert!(actual.iter().zip(&gradient).all(|(actual, expected)| actual.abs_diff(*expected) <= 2),
+            "a zero-radius blur must preserve the previous Vism output through 8-bit/float format transitions: {plugins:?}");
+            assert!(doc.undo());
+            assert_eq!(
+                checked_render(&doc),
+                gradient,
+                "removing the chain restores rendering in the same Engine"
+            );
+        }
+    }
 }

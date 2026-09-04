@@ -1,24 +1,26 @@
+use crate::ui::functions::paint::rgb as c;
 use std::sync::{Arc, Mutex};
 
+use crate::doc::store::LayerProjection;
+use crate::doc::store::{
+    property, Document, Intent, LayerId, PropertyId, RationalTime, StoreView, Value,
+};
+use crate::render::engine::Engine;
+use crate::ui::context_menu::{MenuRequest, MenuTarget};
+use crate::ui::mount::SurfaceState;
 use crate::ui::playback::Clock;
-use crate::ui::session::Selection;
+use crate::ui::property_edit::{self, PropertyEdit};
 use crate::ui::session::GestureSurface;
+use crate::ui::session::Selection;
 use crate::ui::tokens;
 use anyrender::{PaintRef, PaintScene, ResourceId};
+use blitz_dom::node::ComputedStyles;
 use blitz_traits::events::{BlitzWheelDelta, MouseEventButton, UiEvent};
 use dioxus_native::prelude::{ReadableExt, Signal, WritableExt};
 use keyboard_types::Modifiers;
-use crate::doc::store::{property, Document, Intent, LayerId, PropertyId, RationalTime, StoreView, Value};
-use blitz_dom::node::ComputedStyles;
-use blitz_dom::Widget;
-use crate::render::engine::Engine;
 use peniko::kurbo::{Affine, Rect};
 use peniko::{Color, Fill, ImageBrush, ImageSampler};
 use wgpu_context::DeviceHandle;
-
-fn c(rgb: [u8; 3]) -> Color {
-    Color::from_rgb8(rgb[0], rgb[1], rgb[2])
-}
 
 /// 窓の点と世界の点の間の写像。**視点(User View)を通す**ので、
 /// 画面を動かしても世界の座標は変わらない。
@@ -79,7 +81,10 @@ impl Default for Fit {
             fx: 0.0,
             fy: 0.0,
             image_from_world: glam::Affine2::IDENTITY,
-            comp: crate::doc::core::CompSpec { width: 1, height: 1 },
+            comp: crate::doc::core::CompSpec {
+                width: 1,
+                height: 1,
+            },
             camera: crate::doc::core::ResolvedCamera::default(),
             widget: (1.0, 1.0),
             image: (1.0, 1.0),
@@ -113,16 +118,27 @@ impl Fit {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum GizmoMode {
     Move,
-    ScaleCorner { sx: bool, sy: bool },
-    ScaleEdge { axis_x: bool, positive: bool },
+    ScaleCorner {
+        sx: bool,
+        sy: bool,
+    },
+    ScaleEdge {
+        axis_x: bool,
+        positive: bool,
+    },
     Rotate,
     /// 3D: 横で rotation.y、縦で rotation.x を回す。
-    Orbit { axis_x: bool },
+    Orbit {
+        axis_x: bool,
+    },
     /// 3D: 縦で position.z を動かす。
     Depth,
 }
 
 struct CameraDrag {
+    at: RationalTime,
+    owner: Option<u64>,
+    preview: Option<(f64, f64)>,
     grab: (f64, f64),
     orig_center: (f64, f64),
     /// 世界を見る側(視点)か、書き出しの枠(Document のカメラ)か。
@@ -134,6 +150,7 @@ struct CameraDrag {
 }
 
 struct GizmoDrag {
+    owner: u64,
     layer: LayerId,
     mode: GizmoMode,
     grab: (f64, f64),
@@ -147,29 +164,31 @@ struct GizmoDrag {
     /// 掴んだ時の奥行き。掴んでいる間、写像はこの面に固定する
     /// (奥行きを動かしている最中に写像まで動くと、指と絵が食い違う)。
     fit_z: f64,
+    projection: LayerProjection,
+    orig_placement: crate::doc::core::LayerPlacement,
     /// 最後に**動かした**先。動かしていなければ None。
     /// 離した時の座標から差分を取り直すと、掴んでいる間に要素の座標系がずれた分だけ
     /// 勝手に動く。動かしていないなら1画素も動かさない。
     last: Option<(f64, f64)>,
     /// 最後に見せた値。**離した瞬間の見た目がそのまま確定値** —— 離す直前に
     /// Shift を放しても、見えていた物と違う値は書かない。
-    preview: Vec<(LayerId, &'static str, Value)>,
+    preview: Vec<PropertyEdit>,
+    original_values: Vec<PropertyEdit>,
+    at: RationalTime,
     /// 一緒に選んでいる他の層と、掴んだ時の位置。動かす時は同じ差分で運ぶ。
-    others: Vec<(LayerId, (f64, f64))>,
+    others: Vec<(LayerId, SelGeom)>,
 }
 
-pub(super) struct StageWidget {
+pub(super) struct StageState {
     state: State,
     frames: u64,
     clock: Arc<Clock>,
     doc: Arc<Mutex<Document>>,
     selection: Selection,
-    selected_mirror: Signal<Option<LayerId>>,
     fit: Fit,
     drag: Option<GizmoDrag>,
     /// 何も掴んでいない所からのドラッグ = カメラを動かす。
     camera_drag: Option<CameraDrag>,
-    revision: Signal<u32>,
     selected_size: Arc<Mutex<Option<[f32; 2]>>>,
     view_camera: Arc<Mutex<crate::render::engine::ObservationCamera>>,
     rings: Arc<std::sync::atomic::AtomicBool>,
@@ -185,16 +204,11 @@ pub(super) struct StageWidget {
     hover: Option<GizmoMode>,
     /// 入力が来た(次の paint が要る)。paint で下ろす。
     dirty: std::cell::Cell<bool>,
-    /// 前の paint で登録した画像の id。その frame が出た後(次の paint の頭)で外す。
-    /// 同じ paint の中で外すと、まだ出ていない scene が「空の image」を指して落ちる。
-    /// 外す予定の id と、外して良くなる frame。vello は描いた frame の後にも参照する事があるので 2 frame 待つ。
-    retired: Vec<(u64, ResourceId)>,
     /// 最後に描いた時の revision。同じなら描き直さない。
     seen_revision: std::cell::Cell<u32>,
+    seen_catalog: std::cell::Cell<u64>,
     /// 最後に描いた時刻。別窓の Stage は event も revision も来ないので、時刻で描き直す。
     seen_time: std::cell::Cell<Option<crate::doc::store::RationalTime>>,
-    /// 画面の倍率(%)。#stagefoot が読む。
-    view_pct: Signal<u32>,
     view_request: Arc<Mutex<Option<crate::ui::session::ViewRequest>>>,
 }
 
@@ -205,34 +219,146 @@ enum State {
 
 struct Active {
     engine: Engine,
-    displayed: Option<TexAndHandle>,
-    next: Option<TexAndHandle>,
+    displayed: Option<wgpu::Texture>,
+    next: Option<wgpu::Texture>,
     /// 画角を広げて撮った物。**枠の外**を見せるためだけに使う。
     /// 目玉は動かさず画角だけ `zoom/k` に広げるので、中心基準で k 倍に
     /// 拡げると**全ての奥行きで**元の絵と重なる。
-    wide: Option<TexAndHandle>,
+    wide: Option<wgpu::Texture>,
 }
 
-struct TexAndHandle {
-    texture: wgpu::Texture,
-    handle: ResourceId,
+#[derive(Clone, PartialEq)]
+pub(super) struct StageBindings {
+    pub selected: Signal<Option<LayerId>>,
+    pub revision: Signal<u32>,
+    pub view_pct: Signal<u32>,
+    pub context_menu: Signal<Option<MenuRequest>>,
 }
 
-impl StageWidget {
+#[derive(Default)]
+pub(super) struct StageMount {
+    images: Vec<(wgpu::Texture, ResourceId)>,
+    retired: Vec<(u64, wgpu::Texture, ResourceId)>,
+}
+
+impl StageMount {
+    fn image(
+        &mut self,
+        ctx: &mut dyn anyrender::RenderContext,
+        texture: &wgpu::Texture,
+    ) -> ResourceId {
+        if let Some((_, id)) = self
+            .images
+            .iter()
+            .find(|(registered, _)| registered == texture)
+        {
+            return *id;
+        }
+        self.register_image(ctx, texture, true)
+    }
+
+    fn register_image(
+        &mut self,
+        ctx: &mut dyn anyrender::RenderContext,
+        texture: &wgpu::Texture,
+        announce: bool,
+    ) -> ResourceId {
+        let id = ctx
+            .try_register_custom_resource(Box::new(texture.clone()))
+            .expect("wgpu backend accepts wgpu textures");
+        if announce {
+            println!(
+                "MOTOLII_RELOAD {}",
+                serde_json::json!({ "event":"surface_texture_registered", "texture":crate::ui::mount::resource_identity(texture), "registration":format!("{id:?}") })
+            );
+        }
+        self.images.push((texture.clone(), id));
+        id
+    }
+
+    fn image_after_write(
+        &mut self,
+        ctx: &mut dyn anyrender::RenderContext,
+        texture: &wgpu::Texture,
+        frame: u64,
+    ) -> ResourceId {
+        // Vello's atlas must be invalidated after texture writes. AnyRender exposes
+        // registration rather than Vello's mark_override_image_dirty operation.
+        let previous = self
+            .images
+            .iter()
+            .position(|(registered, _)| registered == texture);
+        if let Some(index) = previous {
+            let (texture, id) = self.images.remove(index);
+            self.retired.push((frame, texture, id));
+        }
+        self.register_image(ctx, texture, previous.is_none())
+    }
+
+    fn collect(&mut self, ctx: &mut dyn anyrender::RenderContext, frame: u64) {
+        self.retired.retain(|(at, _, id)| {
+            if frame > at + 2 {
+                ctx.unregister_resource(*id);
+                false
+            } else {
+                true
+            }
+        });
+    }
+
+    fn retain(&mut self, live: [Option<&wgpu::Texture>; 3], frame: u64) {
+        let mut kept = Vec::new();
+        for (texture, id) in self.images.drain(..) {
+            if live
+                .iter()
+                .flatten()
+                .any(|candidate| **candidate == texture)
+            {
+                kept.push((texture, id));
+            } else {
+                self.retired.push((frame, texture, id));
+            }
+        }
+        self.images = kept;
+    }
+}
+
+fn stage_render_key(
+    doc: &Document,
+    at: RationalTime,
+    viewport: (f64, f64),
+    observation: crate::render::engine::ObservationCamera,
+    output_only: bool,
+) -> u64 {
+    let observation = if output_only {
+        crate::render::engine::ObservationCamera::default()
+    } else {
+        observation
+    };
+    crate::ui::mount::resource_identity(&(
+        format!("{:?}|{at:?}", doc.display_revision()),
+        crate::render::engine::catalog_generation(),
+        viewport.0.to_bits(),
+        viewport.1.to_bits(),
+        observation.zoom.to_bits(),
+        observation.pan[0].to_bits(),
+        observation.pan[1].to_bits(),
+        output_only,
+    ))
+}
+
+impl StageState {
     #[allow(clippy::too_many_arguments)]
     pub(super) fn new(
         clock: Arc<Clock>,
         doc: Arc<Mutex<Document>>,
         selection: Selection,
-        selected_mirror: Signal<Option<LayerId>>,
-        revision: Signal<u32>,
         selected_size: Arc<Mutex<Option<[f32; 2]>>>,
         view_camera: Arc<Mutex<crate::render::engine::ObservationCamera>>,
         rings: Arc<std::sync::atomic::AtomicBool>,
         frame_dim: Arc<std::sync::atomic::AtomicU32>,
         gesture: GestureSurface,
         output_only: Arc<std::sync::atomic::AtomicBool>,
-        view_pct: Signal<u32>,
         view_request: Arc<Mutex<Option<crate::ui::session::ViewRequest>>>,
     ) -> Self {
         Self {
@@ -241,11 +367,9 @@ impl StageWidget {
             clock,
             doc,
             selection,
-            selected_mirror,
             fit: Fit::default(),
             drag: None,
             camera_drag: None,
-            revision,
             selected_size,
             view_camera,
             rings,
@@ -255,28 +379,52 @@ impl StageWidget {
             cursor: None,
             hover: None,
             dirty: std::cell::Cell::new(true),
-            retired: Vec::new(),
             seen_revision: std::cell::Cell::new(u32::MAX),
+            seen_catalog: std::cell::Cell::new(0),
             seen_time: std::cell::Cell::new(None),
             output_only,
-            view_pct,
             view_request,
         }
     }
 
-    /// 錠の掛かった層は掴めない(選ぶ事はできる)。
-    fn is_locked(&self, layer: LayerId) -> bool {
-        self.doc
-            .lock()
-            .unwrap()
-            .view()
-            .attrs(layer)
-            .ok()
-            .flatten()
-            .is_some_and(|a| a.locked)
+    fn original_values(
+        &self,
+        layer: LayerId,
+        others: &[(LayerId, SelGeom)],
+        at: RationalTime,
+    ) -> Vec<PropertyEdit> {
+        let doc = self.doc.lock().unwrap();
+        let view = doc.view().without_transients();
+        std::iter::once(layer)
+            .chain(others.iter().map(|(layer, _)| *layer))
+            .flat_map(|layer| {
+                [
+                    property::POSITION,
+                    property::SCALE,
+                    property::ROTATION,
+                    property::ROTATION_X,
+                    property::ROTATION_Y,
+                    property::POSITION_Z,
+                ]
+                .into_iter()
+                .filter_map(|name| {
+                    let prop = PropertyId::new(name).expect("transform property");
+                    let value = view
+                        .value_at(layer, &prop, at)
+                        .ok()
+                        .flatten()
+                        .or_else(|| view.default_value(layer, &prop).ok().flatten())?;
+                    Some((layer, prop, value))
+                })
+                .collect::<Vec<_>>()
+            })
+            .collect()
     }
 
-    /// 窓の点の下に在る取っ手(選んでいる層の箱で見る)。
+    fn is_locked(&self, layer: LayerId) -> bool {
+        crate::ui::session::edit_rejection(&self.doc.lock().unwrap().view(), layer).is_some()
+    }
+
     fn mode_under(&self, sx: f64, sy: f64) -> Option<GizmoMode> {
         let layer = self.selection.get()?;
         let geom = self.selection_geom(layer)?;
@@ -291,12 +439,12 @@ impl StageWidget {
     }
 
     /// 一緒に選んでいる他の層の、今の位置。
-    fn companions(&self, primary: LayerId) -> Vec<(LayerId, (f64, f64))> {
+    fn companions(&self, primary: LayerId) -> Vec<(LayerId, SelGeom)> {
         self.selection
             .all()
             .into_iter()
-            .filter(|l| *l != primary)
-            .filter_map(|l| self.selection_geom(l).map(|g| (l, g.position)))
+            .filter(|l| *l != primary && !self.is_locked(*l))
+            .filter_map(|l| self.selection_geom(l).map(|g| (l, g)))
             .collect()
     }
 
@@ -306,7 +454,9 @@ impl StageWidget {
         observation: crate::render::engine::ObservationCamera,
         base: f64,
     ) -> crate::render::engine::ObservationCamera {
-        let Some(request) = self.view_request.lock().unwrap().take() else { return observation };
+        let Some(request) = self.view_request.lock().unwrap().take() else {
+            return observation;
+        };
         let mut view = self.view_camera.lock().unwrap();
         match request {
             crate::ui::session::ViewRequest::Fit => {
@@ -345,95 +495,101 @@ impl StageWidget {
     /// 掴みを終える。**離した事が届かなかった時もここを通す** —— 捨てると
     /// 離した所までの編集が失われる(規格の pointer capture が保証している物の、
     /// 届く範囲での代わり)。
-    fn finish_drag(&mut self, shift: bool, alt: bool) {
-        self.gesture.end();
-                if let Some(cam) = self.camera_drag.take() {
-                    if let (true, Some(at)) = (cam.export_frame, cam.last) {
-                        let next = camera_center_for(&cam, at);
-                        self.write_export_center(next, self.current_rt(), true);
-                        self.revision += 1;
+    fn finish_drag(&mut self, bindings: &StageBindings, _shift: bool, _alt: bool) {
+        let mut bindings = bindings.clone();
+        if let Some(cam) = self.camera_drag.take() {
+            if let Some(owner) = cam.owner {
+                if self.doc.lock().unwrap().preview_is_current(owner) {
+                    if let Some(center) = cam.preview {
+                        self.write_export_center(center, cam.at, owner, true);
+                    } else {
+                        self.doc.lock().unwrap().clear_preview_edits(owner);
                     }
-                    return;
+                    self.gesture.end();
+                    bindings.revision += 1;
                 }
-                let Some(drag) = self.drag.take() else { return };
-                let _ = (shift, alt);
-                if drag.last.is_none() || drag.preview.is_empty() {
-                    println!("PROBE room=write verdict=gizmo-noop reason=never-moved");
-                    return;
-                }
-                let rt = self.current_rt();
-                let mut doc = self.doc.lock().unwrap();
-                let intents: Vec<Intent> = drag
-                    .preview
-                    .iter()
-                    .filter_map(|(layer, name, value)| track_intent(&doc, *layer, name, value.clone(), rt))
-                    .collect();
-                match doc.apply_all(intents) {
-                    Ok(_) => {
-                        *self.revision.write() += 1;
-                        println!("PROBE room=write verdict=gizmo-{:?} layer={:?}", drag.mode, drag.layer);
-                    }
-                    Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
-                }
-                for (layer, name, _) in &drag.preview {
-                    if let Ok(prop) = PropertyId::new(name) {
-                        doc.clear_transient(*layer, &prop);
-                    }
-                }
-    }
-
-    /// 掴んだ物を**書かずに**手放す。窓が背面へ回った時や `Esc` で通る。
-    fn cancel_drag(&mut self) {
-        if let Some(drag) = self.drag.take() {
-            let mut doc = self.doc.lock().unwrap();
-            for (layer, name, _) in &drag.preview {
-                if let Ok(prop) = PropertyId::new(name) {
-                    doc.clear_transient(*layer, &prop);
-                }
+            } else {
+                self.gesture.end();
             }
-            for name in [
-                property::POSITION,
-                property::SCALE,
-                property::ROTATION,
-                property::ROTATION_X,
-                property::ROTATION_Y,
-                property::POSITION_Z,
-            ] {
-                if let Ok(prop) = PropertyId::new(name) {
-                    doc.clear_transient(drag.layer, &prop);
-                }
-            }
-        }
-        self.camera_drag = None;
-        self.gesture.end();
-        self.revision += 1;
-    }
-
-    fn write_export_center(&self, center: (f64, f64), rt: RationalTime, commit: bool) {
-        let Ok(property) = PropertyId::camera(property::CAMERA_CENTER) else { return };
-        let value = Value::Vec2([center.0, center.1]);
-        let mut doc = self.doc.lock().unwrap();
-        if !commit {
-            doc.set_camera_transient(property, value);
             return;
         }
-        doc.clear_camera_transient(&property);
-        // 層と同じ流儀: キーが無い間は値を置くだけ。◇ を押すまで時間の世界へ入れない。
-        let intent = doc.place_camera(&property, value, rt);
-        if let Err(e) = doc.apply(intent) {
-            println!("PROBE room=write verdict=apply-error {e}");
+        let Some(drag) = self.drag.take() else { return };
+        let mut doc = self.doc.lock().unwrap();
+        if !doc.preview_is_current(drag.owner) {
+            return;
+        }
+        self.gesture.end();
+        if drag.last.is_none() || drag.preview.is_empty() {
+            property_edit::cancel_owned(&mut doc, drag.owner);
+            return;
+        }
+        match property_edit::commit_owned(&mut doc, drag.owner, drag.at, &drag.preview) {
+            Ok(()) => {
+                *bindings.revision.write() += 1;
+            }
+            Err(error) => println!("PROBE room=write verdict=apply-error {error}"),
+        }
+    }
+
+    fn cancel_drag(&mut self, bindings: &StageBindings) {
+        let mut bindings = bindings.clone();
+        let mut cancelled = false;
+        if let Some(drag) = self.drag.take() {
+            cancelled |= property_edit::cancel_owned(&mut self.doc.lock().unwrap(), drag.owner);
+        }
+        if let Some(cam) = self.camera_drag.take() {
+            if let Some(owner) = cam.owner {
+                cancelled |= self.doc.lock().unwrap().clear_preview_edits(owner);
+            } else {
+                self.view_camera.lock().unwrap().pan =
+                    [cam.orig_center.0 as f32, cam.orig_center.1 as f32];
+                cancelled = true;
+            }
+        }
+        if cancelled {
+            self.gesture.end();
+        }
+        bindings.revision += 1;
+    }
+
+    fn write_export_center(&self, center: (f64, f64), at: RationalTime, owner: u64, commit: bool) {
+        let Ok(property) = PropertyId::camera(property::CAMERA_CENTER) else {
+            return;
+        };
+        let value = Value::Vec2([center.0, center.1]);
+        let mut doc = self.doc.lock().unwrap();
+        if !doc.preview_is_current(owner) {
+            return;
+        }
+        if !commit {
+            if let Err(error) =
+                doc.preview_edits(owner, &[Intent::SetCameraConstant { property, value }])
+            {
+                println!("PROBE room=write verdict=camera-preview-error {error}");
+            }
+            return;
+        }
+        doc.clear_preview_edits(owner);
+        if doc.view().camera_value_at(&property, at).ok().flatten() == Some(value.clone()) {
+            return;
+        }
+        let intent = doc.place_camera(&property, value, at);
+        if let Err(error) = doc.apply(intent) {
+            println!("PROBE room=write verdict=apply-error {error}");
         }
     }
 
     /// 書き出しの枠の縁を掴んでいるか(世界の座標で見る)。
     fn near_export_frame(&self, wx: f64, wy: f64) -> bool {
-        let State::Active(active) = &self.state else { return false };
+        let State::Active(active) = &self.state else {
+            return false;
+        };
         let Some(target) = active.displayed.as_ref().or(active.next.as_ref()) else {
             return false;
         };
         let comp = crate::doc::core::CompSpec {
-            width: target.texture.width(),
-            height: target.texture.height(),
+            width: target.width(),
+            height: target.height(),
         };
         let rt = self.current_rt();
         let camera = {
@@ -447,6 +603,42 @@ impl StageWidget {
         let inside = image.x >= -tol && image.x <= w + tol && image.y >= -tol && image.y <= h + tol;
         let core = image.x > tol && image.x < w - tol && image.y > tol && image.y < h - tol;
         inside && !core
+    }
+
+    fn hit_layer(&self, x: f64, y: f64) -> Option<(i16, LayerId)> {
+        let State::Active(active) = &self.state else {
+            return None;
+        };
+        let doc = self.doc.lock().unwrap();
+        let view = doc.view();
+        let rt = self.current_rt();
+        let Ok(layers) = view.resolved_layers(rt) else {
+            return None;
+        };
+        let mut hit: Option<(i16, LayerId)> = None;
+        for layer in &layers {
+            let Some(geom) = selection_geom_resolved(&active.engine, &view, &layers, layer.id, rt)
+            else {
+                continue;
+            };
+            // 見えている台形で判定する。comp の長方形で判定すると、3D 傾斜時に
+            // 空所が層に当たり、絵そのものは当たらない。
+            let (u, v) = plane_map(&self.fit, &geom).to_uv(x, y);
+            if !u.is_finite()
+                || !v.is_finite()
+                || !(0.0..=1.0).contains(&u)
+                || !(0.0..=1.0).contains(&v)
+            {
+                continue;
+            }
+            let order = layer.placement.order;
+            if hit.map(|(o, _)| order > o).unwrap_or(true) {
+                hit = Some((order, layer.id));
+            }
+        }
+        drop(view);
+        drop(doc);
+        hit
     }
 
     fn layer_f64(&self, layer: LayerId, name: &str) -> f64 {
@@ -481,10 +673,12 @@ impl StageWidget {
         let view = doc.view();
         selection_geom_in(&active.engine, &view, layer, self.current_rt())
     }
-
 }
 
+#[derive(Clone, Debug)]
 struct SelGeom {
+    projection: LayerProjection,
+    placement: crate::doc::core::LayerPlacement,
     z: f64,
     rotation_x: f64,
     rotation_y: f64,
@@ -495,8 +689,16 @@ struct SelGeom {
     box_: (f64, f64, f64, f64),
 }
 
-fn vec2_at(view: &StoreView<'_>, layer: LayerId, name: &str, rt: RationalTime, default: (f64, f64)) -> (f64, f64) {
-    let Ok(prop) = PropertyId::new(name) else { return default };
+fn vec2_at(
+    view: &StoreView<'_>,
+    layer: LayerId,
+    name: &str,
+    rt: RationalTime,
+    default: (f64, f64),
+) -> (f64, f64) {
+    let Ok(prop) = PropertyId::new(name) else {
+        return default;
+    };
     match view.value_at(layer, &prop, rt).ok().flatten() {
         Some(Value::Vec2([x, y])) => (x, y),
         _ => default,
@@ -504,7 +706,9 @@ fn vec2_at(view: &StoreView<'_>, layer: LayerId, name: &str, rt: RationalTime, d
 }
 
 fn f64_at(view: &StoreView<'_>, layer: LayerId, name: &str, rt: RationalTime, default: f64) -> f64 {
-    let Ok(prop) = PropertyId::new(name) else { return default };
+    let Ok(prop) = PropertyId::new(name) else {
+        return default;
+    };
     match view.value_at(layer, &prop, rt).ok().flatten() {
         Some(Value::F64(v)) => v,
         _ => default,
@@ -550,7 +754,19 @@ fn selection_geom_resolved(
         scale.0 * natural.0,
         scale.1 * natural.1,
     );
-    Some(SelGeom { z, rotation_x, rotation_y, position, anchor, rotation, natural, box_ })
+    let evaluated = resolved.iter().find(|l| l.id == layer)?;
+    Some(SelGeom {
+        projection: evaluated.projection,
+        placement: evaluated.placement,
+        z,
+        rotation_x,
+        rotation_y,
+        position,
+        anchor,
+        rotation,
+        natural,
+        box_,
+    })
 }
 
 fn compute_scale(
@@ -568,8 +784,16 @@ fn compute_scale(
     let (mut nx0, mut ny0, mut nx1, mut ny1) = (x0, y0, x1, y1);
     match mode {
         GizmoMode::ScaleCorner { sx, sy } => {
-            if sx { nx1 = cx } else { nx0 = cx }
-            if sy { ny1 = cy } else { ny0 = cy }
+            if sx {
+                nx1 = cx
+            } else {
+                nx0 = cx
+            }
+            if sy {
+                ny1 = cy
+            } else {
+                ny0 = cy
+            }
             if alt {
                 let (ccx, ccy) = ((x0 + x1) * 0.5, (y0 + y1) * 0.5);
                 let (hx, hy) = ((cx - ccx).abs(), (cy - ccy).abs());
@@ -592,21 +816,37 @@ fn compute_scale(
                     (nx0, nx1) = (fx - new_w * 0.5, fx + new_w * 0.5);
                     (ny0, ny1) = (fy - new_h * 0.5, fy + new_h * 0.5);
                 } else {
-                    if sx { nx1 = fx + new_w } else { nx0 = fx - new_w }
-                    if sy { ny1 = fy + new_h } else { ny0 = fy - new_h }
+                    if sx {
+                        nx1 = fx + new_w
+                    } else {
+                        nx0 = fx - new_w
+                    }
+                    if sy {
+                        ny1 = fy + new_h
+                    } else {
+                        ny0 = fy - new_h
+                    }
                 }
             }
         }
         GizmoMode::ScaleEdge { axis_x, positive } => {
             if axis_x {
-                if positive { nx1 = cx } else { nx0 = cx }
+                if positive {
+                    nx1 = cx
+                } else {
+                    nx0 = cx
+                }
                 if alt {
                     let ccx = (x0 + x1) * 0.5;
                     let hx = (cx - ccx).abs();
                     (nx0, nx1) = (ccx - hx, ccx + hx);
                 }
             } else {
-                if positive { ny1 = cy } else { ny0 = cy }
+                if positive {
+                    ny1 = cy
+                } else {
+                    ny0 = cy
+                }
                 if alt {
                     let ccy = (y0 + y1) * 0.5;
                     let hy = (cy - ccy).abs();
@@ -619,7 +859,13 @@ fn compute_scale(
     let (nbx, nby) = (nx0.min(nx1), ny0.min(ny1));
     let (nbw, nbh) = ((nx1 - nx0).abs().max(0.01), (ny1 - ny0).abs().max(0.01));
     let scale = (nbw / natural.0.max(0.01), nbh / natural.1.max(0.01));
-    let position = (nbx + scale.0 * anchor.0, nby + scale.1 * anchor.1);
+    let local_anchor = crate::ui::functions::atom::scale_about(
+        [anchor.0, anchor.1],
+        [0.0, 0.0],
+        [scale.0, scale.1],
+    );
+    let shifted = crate::ui::functions::atom::translate2([nbx, nby], local_anchor);
+    let position = (shifted[0], shifted[1]);
     (scale, position)
 }
 
@@ -648,19 +894,55 @@ fn gizmo_mode_at(
     // 広くなり、**動かす手が1画素も残らない**(実測: 画面 6.6px の層で許容 77)。
     let grab = tol.min(bw.abs() * 0.25).min(bh.abs() * 0.25);
     let near = |px: f64, py: f64| (lx - px).abs() <= grab && (ly - py).abs() <= grab;
-    let corners = [(x0, y0, false, false), (x1, y0, true, false), (x0, y1, false, true), (x1, y1, true, true)];
+    let corners = [
+        (x0, y0, false, false),
+        (x1, y0, true, false),
+        (x0, y1, false, true),
+        (x1, y1, true, true),
+    ];
     let mut mode = corners
         .into_iter()
         .find(|&(px, py, ..)| near(px, py))
         .map(|(_, _, sx, sy)| GizmoMode::ScaleCorner { sx, sy });
     if mode.is_none() {
         let edges = [
-            ((x0 + x1) * 0.5, y0, GizmoMode::ScaleEdge { axis_x: false, positive: false }),
-            ((x0 + x1) * 0.5, y1, GizmoMode::ScaleEdge { axis_x: false, positive: true }),
-            (x0, (y0 + y1) * 0.5, GizmoMode::ScaleEdge { axis_x: true, positive: false }),
-            (x1, (y0 + y1) * 0.5, GizmoMode::ScaleEdge { axis_x: true, positive: true }),
+            (
+                (x0 + x1) * 0.5,
+                y0,
+                GizmoMode::ScaleEdge {
+                    axis_x: false,
+                    positive: false,
+                },
+            ),
+            (
+                (x0 + x1) * 0.5,
+                y1,
+                GizmoMode::ScaleEdge {
+                    axis_x: false,
+                    positive: true,
+                },
+            ),
+            (
+                x0,
+                (y0 + y1) * 0.5,
+                GizmoMode::ScaleEdge {
+                    axis_x: true,
+                    positive: false,
+                },
+            ),
+            (
+                x1,
+                (y0 + y1) * 0.5,
+                GizmoMode::ScaleEdge {
+                    axis_x: true,
+                    positive: true,
+                },
+            ),
         ];
-        mode = edges.into_iter().find(|&(px, py, _)| near(px, py)).map(|(_, _, m)| m);
+        mode = edges
+            .into_iter()
+            .find(|&(px, py, _)| near(px, py))
+            .map(|(_, _, m)| m);
     }
     let (mx, my) = ((x0 + x1) * 0.5, (y0 + y1) * 0.5);
     let (dx, dy) = depth_handle(mx, my, scale);
@@ -697,7 +979,11 @@ fn gizmo_mode_at(
             mode = Some(GizmoMode::Move);
         } else {
             let margin = 24.0 / scale.max(1e-6);
-            if lx >= bx - margin && lx <= bx + bw + margin && ly >= by - margin && ly <= by + bh + margin {
+            if lx >= bx - margin
+                && lx <= bx + bw + margin
+                && ly >= by - margin
+                && ly <= by + bh + margin
+            {
                 mode = Some(GizmoMode::Rotate);
             }
         }
@@ -720,7 +1006,7 @@ fn preview_values(
     shift: bool,
     alt: bool,
     scale: f64,
-) -> Vec<(LayerId, &'static str, Value)> {
+) -> Vec<PropertyEdit> {
     let (cx, cy) = cur;
     let mut out = Vec::new();
     match drag.mode {
@@ -734,19 +1020,41 @@ fn preview_values(
                 }
             }
             let p = drag.orig_position;
-            out.push((drag.layer, property::POSITION, Value::Vec2([p.0 + dx, p.1 + dy])));
-            for (layer, p) in &drag.others {
-                out.push((*layer, property::POSITION, Value::Vec2([p.0 + dx, p.1 + dy])));
-            }
+            out.push((
+                drag.layer,
+                property::POSITION,
+                Value::Vec2([p.0 + dx, p.1 + dy]),
+            ));
         }
         GizmoMode::ScaleCorner { .. } | GizmoMode::ScaleEdge { .. } => {
-            let (new_scale, new_pos) =
-                compute_scale(drag.orig_box, drag.natural, drag.anchor, drag.mode, cur, shift, alt);
-            out.push((drag.layer, property::SCALE, Value::Vec2([new_scale.0, new_scale.1])));
-            out.push((drag.layer, property::POSITION, Value::Vec2([new_pos.0, new_pos.1])));
+            let (new_scale, new_pos) = compute_scale(
+                drag.orig_box,
+                drag.natural,
+                drag.anchor,
+                drag.mode,
+                cur,
+                shift,
+                alt,
+            );
+            out.push((
+                drag.layer,
+                property::SCALE,
+                Value::Vec2([new_scale.0, new_scale.1]),
+            ));
+            out.push((
+                drag.layer,
+                property::POSITION,
+                Value::Vec2([new_pos.0, new_pos.1]),
+            ));
         }
         GizmoMode::Rotate => {
-            let r = compute_rotation(drag.orig_position, drag.grab, cur, drag.orig_rotation, shift);
+            let r = compute_rotation(
+                drag.orig_position,
+                drag.grab,
+                cur,
+                drag.orig_rotation,
+                shift,
+            );
             out.push((drag.layer, property::ROTATION, Value::F64(r)));
         }
         GizmoMode::Orbit { axis_x } => {
@@ -758,26 +1066,89 @@ fn preview_values(
             }
         }
         GizmoMode::Depth => {
-            out.push((drag.layer, property::POSITION_Z, Value::F64(drag.orig_z + (drag.grab.1 - cy))));
+            out.push((
+                drag.layer,
+                property::POSITION_Z,
+                Value::F64(drag.orig_z + (drag.grab.1 - cy)),
+            ));
         }
     }
-    out
+    let primary = out.clone();
+    for (layer, geom) in &drag.others {
+        for (_, name, value) in &primary {
+            let lifted = match (*name, value) {
+                (property::POSITION, Value::Vec2(v)) => {
+                    let mut dx = v[0] - drag.orig_position.0;
+                    let mut dy = v[1] - drag.orig_position.1;
+                    if matches!(
+                        drag.mode,
+                        GizmoMode::ScaleCorner { .. } | GizmoMode::ScaleEdge { .. }
+                    ) {
+                        if drag.orig_box.2.abs() > 1e-9 {
+                            dx *= geom.box_.2 / drag.orig_box.2;
+                        }
+                        if drag.orig_box.3.abs() > 1e-9 {
+                            dy *= geom.box_.3 / drag.orig_box.3;
+                        }
+                    }
+                    Value::Vec2([geom.position.0 + dx, geom.position.1 + dy])
+                }
+                (property::SCALE, Value::Vec2(v)) => {
+                    let original = [
+                        drag.orig_box.2 / drag.natural.0,
+                        drag.orig_box.3 / drag.natural.1,
+                    ];
+                    let own = [geom.box_.2 / geom.natural.0, geom.box_.3 / geom.natural.1];
+                    Value::Vec2(std::array::from_fn(|axis| {
+                        if original[axis].abs() > 1e-9 {
+                            own[axis] * v[axis] / original[axis]
+                        } else {
+                            own[axis] + v[axis] - original[axis]
+                        }
+                    }))
+                }
+                (property::ROTATION, Value::F64(v)) => {
+                    Value::F64(geom.rotation + v - drag.orig_rotation)
+                }
+                (property::ROTATION_X, Value::F64(v)) => {
+                    Value::F64(geom.rotation_x + v - drag.orig_rotation_xy.0)
+                }
+                (property::ROTATION_Y, Value::F64(v)) => {
+                    Value::F64(geom.rotation_y + v - drag.orig_rotation_xy.1)
+                }
+                (property::POSITION_Z, Value::F64(v)) => Value::F64(geom.z + v - drag.orig_z),
+                _ => continue,
+            };
+            out.push((*layer, *name, lifted));
+        }
+    }
+    out.into_iter()
+        .map(|(layer, name, value)| {
+            (
+                layer,
+                PropertyId::new(name).expect("transform property"),
+                value,
+            )
+        })
+        .filter(|(layer, property, value)| {
+            !drag
+                .original_values
+                .iter()
+                .any(|(original_layer, original_property, original)| {
+                    layer == original_layer && property == original_property && value == original
+                })
+        })
+        .collect()
 }
 
 /// 矢印で運ぶ。今の時刻の位置に差分を足して置く(キーが在れば打つ、無ければ値を置く)。
-pub(super) fn nudge_intents(doc: &Document, layers: &[LayerId], by: (f64, f64), rt: RationalTime) -> Vec<Intent> {
-    let Ok(prop) = PropertyId::new(property::POSITION) else { return Vec::new() };
-    let view = doc.view();
-    layers
-        .iter()
-        .filter_map(|layer| {
-            let (x, y) = match view.value_at(*layer, &prop, rt).ok().flatten() {
-                Some(Value::Vec2([x, y])) => (x, y),
-                _ => (0.0, 0.0),
-            };
-            track_intent(doc, *layer, property::POSITION, Value::Vec2([x + by.0, y + by.1]), rt)
-        })
-        .collect()
+pub(super) fn nudge_intents(
+    doc: &Document,
+    layers: &[LayerId],
+    by: (f64, f64),
+    at: RationalTime,
+) -> Result<Vec<Intent>, crate::doc::store::StoreError> {
+    crate::ui::functions::placement::nudge_plan(doc, layers, [by.0, by.1], at)
 }
 
 /// 向きの輪は**箱の外**に置く。中は動かすための場所なので明け渡す。
@@ -794,14 +1165,17 @@ const ORBIT_DEGREES_PER_PIXEL: f64 = 0.5;
 
 fn orbit_angles(orig: (f64, f64), grab: (f64, f64), now: (f64, f64), scale: f64) -> (f64, f64) {
     let k = ORBIT_DEGREES_PER_PIXEL * scale;
-    (
-        orig.0 - (now.1 - grab.1) * k,
-        orig.1 + (now.0 - grab.0) * k,
-    )
+    (orig.0 - (now.1 - grab.1) * k, orig.1 + (now.0 - grab.0) * k)
 }
 
 /// 掴んだ輪だけが回る。もう一方の軸は掴まれていないので据え置く。
-fn orbit_axis(orig: (f64, f64), grab: (f64, f64), now: (f64, f64), axis_x: bool, scale: f64) -> (f64, f64) {
+fn orbit_axis(
+    orig: (f64, f64),
+    grab: (f64, f64),
+    now: (f64, f64),
+    axis_x: bool,
+    scale: f64,
+) -> (f64, f64) {
     let (rx, ry) = orbit_angles(orig, grab, now, scale);
     if axis_x {
         (rx, orig.1)
@@ -822,17 +1196,29 @@ const DRAG_SLOP_PIXELS: f64 = 3.0;
 fn camera_center_for(cam: &CameraDrag, at: (f64, f64)) -> (f64, f64) {
     let (dx, dy) = (at.0 - cam.grab.0, at.1 - cam.grab.1);
     let sign = if cam.export_frame { 1.0 } else { -1.0 };
-    (cam.orig_center.0 + sign * dx, cam.orig_center.1 + sign * dy)
+    let value = crate::ui::functions::atom::translate2(
+        [cam.orig_center.0, cam.orig_center.1],
+        [sign * dx, sign * dy],
+    );
+    (value[0], value[1])
 }
 
 fn rotate_around(center: (f64, f64), angle_deg: f64, p: (f64, f64)) -> (f64, f64) {
-    let a = angle_deg.to_radians();
-    let (dx, dy) = (p.0 - center.0, p.1 - center.1);
-    let (s, c) = a.sin_cos();
-    (center.0 + dx * c - dy * s, center.1 + dx * s + dy * c)
+    let v = crate::ui::functions::atom::rotate_about(
+        [p.0, p.1],
+        [center.0, center.1],
+        angle_deg.to_radians(),
+    );
+    (v[0], v[1])
 }
 
-fn compute_rotation(center: (f64, f64), grab: (f64, f64), cur: (f64, f64), orig_rotation: f64, shift: bool) -> f64 {
+fn compute_rotation(
+    center: (f64, f64),
+    grab: (f64, f64),
+    cur: (f64, f64),
+    orig_rotation: f64,
+    shift: bool,
+) -> f64 {
     let ang0 = (grab.1 - center.1).atan2(grab.0 - center.0);
     let ang1 = (cur.1 - center.1).atan2(cur.0 - center.0);
     let mut r = orig_rotation + (ang1 - ang0).to_degrees();
@@ -842,16 +1228,14 @@ fn compute_rotation(center: (f64, f64), grab: (f64, f64), cur: (f64, f64), orig_
     r
 }
 
-fn track_intent(doc: &Document, layer: LayerId, name: &str, value: Value, t: RationalTime) -> Option<Intent> {
-    let prop = PropertyId::new(name).ok()?;
-    // キーが無い間は**値を置くだけ**。◇ を押すまで時間の世界へ入れない。
-    Some(doc.place(layer, &prop, value, t))
-}
-
 fn create_target(device: &wgpu::Device, width: u32, height: u32) -> wgpu::Texture {
     device.create_texture(&wgpu::TextureDescriptor {
         label: Some("probe-stage-target"),
-        size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+        size: wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
         mip_level_count: 1,
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
@@ -863,60 +1247,101 @@ fn create_target(device: &wgpu::Device, width: u32, height: u32) -> wgpu::Textur
     })
 }
 
-impl Widget for StageWidget {
-    fn connected(&mut self) {}
-    fn disconnected(&mut self) {}
+impl SurfaceState for StageState {
+    type Bindings = StageBindings;
+    type Mount = StageMount;
 
-    fn can_create_surfaces(&mut self, render_ctx: &mut dyn anyrender::RenderContext) {
+    fn can_create_surfaces(
+        &mut self,
+        mount: &mut StageMount,
+        render_ctx: &mut dyn anyrender::RenderContext,
+    ) {
+        self.seen_catalog.set(0);
+        self.dirty.set(true);
         let Some(ctx) = render_ctx.renderer_specific_context() else {
-            println!("PROBE room=stage verdict=no-renderer-context");
             return;
         };
         let Ok(device_handle) = ctx.downcast::<DeviceHandle>() else {
-            println!("PROBE room=stage verdict=non-wgpu-backend");
             return;
         };
+        self.dirty.set(true);
+        if let State::Active(active) = &self.state {
+            if active.engine.gpu_device() == &device_handle.device {
+                println!(
+                    "MOTOLII_RELOAD {}",
+                    serde_json::json!({
+                        "event":"engine_retained", "owner":active.as_ref() as *const Active as usize,
+                        "device":crate::ui::mount::resource_identity(&device_handle.device),
+                        "queue":crate::ui::mount::resource_identity(&device_handle.queue),
+                        "displayed":active.displayed.as_ref().map(crate::ui::mount::resource_identity),
+                        "next":active.next.as_ref().map(crate::ui::mount::resource_identity)
+                    })
+                );
+                return;
+            }
+        }
+        *mount = StageMount::default();
         match Engine::with_device(device_handle.device.clone(), device_handle.queue.clone()) {
             Ok(engine) => {
-                println!("PROBE room=stage verdict=engine-up");
-                self.state = State::Active(Box::new(Active { engine, displayed: None, next: None, wide: None }));
-                // renderer が作り直された(起動時に 2 回来る)。前の renderer の id を持つ scene を
-                // そのまま出させない —— 次の frame は必ず描き直す。古い id はもう無効なので捨てる。
-                self.retired.clear();
+                println!(
+                    "MOTOLII_RELOAD {}",
+                    serde_json::json!({
+                        "event":"engine_created", "device":crate::ui::mount::resource_identity(&device_handle.device),
+                        "queue":crate::ui::mount::resource_identity(&device_handle.queue)
+                    })
+                );
+                self.state = State::Active(Box::new(Active {
+                    engine,
+                    displayed: None,
+                    next: None,
+                    wide: None,
+                }));
                 self.frames = 0;
-                self.dirty.set(true);
             }
-            Err(e) => println!("PROBE room=stage verdict=engine-error {e}"),
+            Err(error) => println!("PROBE room=stage verdict=engine-error {error}"),
         }
     }
 
-    fn destroy_surfaces(&mut self) {
-        println!("PROBE room=stage verdict=destroy-surfaces");
-        self.state = State::Suspended;
-        self.retired.clear();
+    fn destroy_surfaces(&mut self, mount: &mut StageMount) {
+        *mount = StageMount::default();
         self.dirty.set(true);
     }
 
     /// 毎 frame 描かない。再生中・掴んでいる間・入力が来た後・作品や視点の注文が変わった時だけ。
-    fn requires_redraw(&self) -> bool {
+    fn requires_redraw(&self, bindings: &StageBindings) -> bool {
+        let output_only = self.output_only.load(std::sync::atomic::Ordering::Relaxed);
+        let observation = if output_only {
+            crate::render::engine::ObservationCamera::default()
+        } else {
+            *self.view_camera.lock().unwrap()
+        };
+        let key = stage_render_key(
+            &self.doc.lock().unwrap(),
+            self.clock.current_time(),
+            self.fit.widget,
+            observation,
+            output_only,
+        );
         self.frames < 3
+            || self.seen_catalog.get() != key
             || self.clock.playing()
             || self.drag.is_some()
             || self.camera_drag.is_some()
             || self.dirty.get()
             || self.view_request.lock().unwrap().is_some()
-            || *self.revision.peek() != self.seen_revision.get()
+            || *bindings.revision.peek() != self.seen_revision.get()
             || self.seen_time.get() != Some(self.clock.current_time())
     }
 
-    fn handle_event(&mut self, event: &UiEvent) {
+    fn handle_event(&mut self, _mount: &mut StageMount, bindings: &StageBindings, event: &UiEvent) {
+        let mut bindings = bindings.clone();
         self.dirty.set(true);
         if self.output_only.load(std::sync::atomic::Ordering::Relaxed) {
             // 出力を映す窓。ここは**見るだけ**で、触っても何も起きない。
             return;
         }
         if self.gesture.cancelled(&mut self.seen_cancel) {
-            self.cancel_drag();
+            self.cancel_drag(&bindings);
             return;
         }
         match event {
@@ -944,9 +1369,7 @@ impl Widget for StageWidget {
                 }
                 // **指の下を動かさない。** 中心を基準に拡げると、見たい物が
                 // 画面の外へ逃げ、拡げるたびに動かし直す手間が付く。
-                let anchor = self
-                    .cursor
-                    .map(|(x, y)| ((x, y), self.fit.image_at(x, y)));
+                let anchor = self.cursor.map(|(x, y)| ((x, y), self.fit.image_at(x, y)));
                 let mut view = self.view_camera.lock().unwrap();
                 // 上へ回すと近づく(拡大)。地図でも紙でも絵でもこの向き。
                 view.zoom = (view.zoom * (1.0 + dy as f32 * 0.002)).clamp(0.05, 40.0);
@@ -955,6 +1378,27 @@ impl Widget for StageWidget {
                 }
             }
             UiEvent::PointerDown(p) => {
+                if p.button == MouseEventButton::Secondary {
+                    self.cancel_drag(&bindings);
+                    let hit = self.hit_layer(p.element.x as f64, p.element.y as f64);
+                    if let Some((_, layer)) = hit {
+                        if !self.selection.contains(layer) {
+                            self.selection.set(Some(layer));
+                        }
+                        bindings.selected.set(self.selection.get());
+                    }
+                    {
+                        let mut menu = bindings.context_menu;
+                        menu.set(Some(MenuRequest {
+                            x: f64::from(p.client_x()),
+                            y: f64::from(p.client_y()),
+                            target: hit
+                                .map(|(_, layer)| MenuTarget::Layer(layer))
+                                .unwrap_or(MenuTarget::Stage),
+                        }));
+                    }
+                    return;
+                }
                 let (cx, cy) = self.fit.to_comp(p.element.x as f64, p.element.y as f64);
                 match p.button {
                     // 中ボタンはどこを押しても視点を滑らせる(Blender・Nuke・Figma)。
@@ -965,6 +1409,9 @@ impl Widget for StageWidget {
                             grab: (cx, cy),
                             orig_center: (pan[0] as f64, pan[1] as f64),
                             export_frame: false,
+                            at: self.current_rt(),
+                            owner: None,
+                            preview: None,
                             last: None,
                             grab_image: self.fit.image_at(p.element.x as f64, p.element.y as f64),
                         });
@@ -997,8 +1444,15 @@ impl Widget for StageWidget {
                         // 枠・回転・奥行きの取っ手は常にギズモが勝つ。
                         // 面の Move はまだ確定しない。手前の別層が重なっていれば、
                         // そちらを選べない「透明な板」になってしまうため、描画順 hit-test へ渡す。
-                        if let (Some(mode), false) = (mode.filter(|mode| *mode != GizmoMode::Move), self.is_locked(layer)) {
+                        if let (Some(mode), false) = (
+                            mode.filter(|mode| *mode != GizmoMode::Move),
+                            self.is_locked(layer),
+                        ) {
                             self.gesture.begin();
+                            let owner = self.doc.lock().unwrap().begin_preview();
+                            let at = self.current_rt();
+                            let others = self.companions(layer);
+                            let original_values = self.original_values(layer, &others, at);
                             self.drag = Some(GizmoDrag {
                                 layer,
                                 mode,
@@ -1011,47 +1465,37 @@ impl Widget for StageWidget {
                                 natural: geom.natural,
                                 orig_box: geom.box_,
                                 fit_z: geom.z,
+                                projection: geom.projection,
+                                orig_placement: geom.placement,
                                 last: None,
                                 preview: Vec::new(),
-                                others: self.companions(layer),
+                                original_values,
+                                at,
+                                owner,
+                                others,
                             });
                             return;
                         }
                     }
                 }
-                let State::Active(active) = &self.state else { return };
-                let doc = self.doc.lock().unwrap();
-                let view = doc.view();
-                let rt = self.current_rt();
-                let Ok(layers) = view.resolved_layers(rt) else { return };
-                let mut hit: Option<(i16, LayerId)> = None;
-                for layer in &layers {
-                    let Some(geom) = selection_geom_resolved(&active.engine, &view, &layers, layer.id, rt) else { continue };
-                    // 見えている台形で判定する。comp の長方形で判定すると、3D 傾斜時に
-                    // 空所が層に当たり、絵そのものは当たらない。
-                    let (u, v) = plane_map(&self.fit, &geom)
-                        .to_uv(p.element.x as f64, p.element.y as f64);
-                    if !u.is_finite() || !v.is_finite() || !(0.0..=1.0).contains(&u) || !(0.0..=1.0).contains(&v) {
-                        continue;
-                    }
-                    let order = layer.placement.order;
-                    if hit.map(|(o, _)| order > o).unwrap_or(true) {
-                        hit = Some((order, layer.id));
-                    }
-                }
-                drop(view);
-                drop(doc);
+                let hit = self.hit_layer(p.element.x as f64, p.element.y as f64);
                 match hit {
                     Some((_, layer)) => {
-                        if p.mods.intersects(Modifiers::META | Modifiers::SUPER) || p.mods.contains(Modifiers::SHIFT) {
+                        if p.mods.intersects(Modifiers::META | Modifiers::SUPER)
+                            || p.mods.contains(Modifiers::SHIFT)
+                        {
                             self.selection.toggle(layer);
-                            self.selected_mirror.set(self.selection.get());
+                            bindings.selected.set(self.selection.get());
                             return;
                         }
-                        self.selection.set(Some(layer));
-                        self.selected_mirror.set(self.selection.get());
+                        if !self.selection.contains(layer) {
+                            self.selection.set(Some(layer));
+                        }
+                        bindings.selected.set(self.selection.get());
                         // 選んだその手で動かせる(押し直しをさせない — Figma・CapCut・AE 全部そう)。
-                        if let (Some(geom), false) = (self.selection_geom(layer), self.is_locked(layer)) {
+                        if let (Some(geom), false) =
+                            (self.selection_geom(layer), self.is_locked(layer))
+                        {
                             let map = plane_map(&self.fit, &geom);
                             let (u, v) = map.to_uv(p.element.x as f64, p.element.y as f64);
                             if !u.is_finite() || !v.is_finite() {
@@ -1061,6 +1505,10 @@ impl Widget for StageWidget {
                             let local = (bx + u * bw, by + v * bh);
                             let grab = rotate_around(geom.position, geom.rotation, local);
                             self.gesture.begin();
+                            let owner = self.doc.lock().unwrap().begin_preview();
+                            let at = self.current_rt();
+                            let others = self.companions(layer);
+                            let original_values = self.original_values(layer, &others, at);
                             self.drag = Some(GizmoDrag {
                                 layer,
                                 mode: GizmoMode::Move,
@@ -1073,9 +1521,14 @@ impl Widget for StageWidget {
                                 natural: geom.natural,
                                 orig_box: geom.box_,
                                 fit_z: geom.z,
+                                projection: geom.projection,
+                                orig_placement: geom.placement,
                                 last: None,
                                 preview: Vec::new(),
-                                others: self.companions(layer),
+                                original_values,
+                                at,
+                                owner,
+                                others,
                             });
                         }
                     }
@@ -1083,7 +1536,7 @@ impl Widget for StageWidget {
                         // 空所を押した時点で選択は終わる。カメラを滑らせても、以前の
                         // ギズモだけが Stage に貼り付いたままにならない。
                         self.selection.clear();
-                        self.selected_mirror.set(None);
+                        bindings.selected.set(None);
                         // 枠の縁を掴んだら書き出しカメラ、それ以外は視点。
                         // 錠が掛かっている間は枠を掴めない(誤って掴むのを止める)。
                         self.gesture.begin();
@@ -1093,8 +1546,13 @@ impl Widget for StageWidget {
                                 grab: (cx, cy),
                                 orig_center: self.export_center(rt),
                                 export_frame: true,
+                                at: rt,
+                                owner: Some(self.doc.lock().unwrap().begin_preview()),
+                                preview: None,
                                 last: None,
-                                grab_image: self.fit.image_at(p.element.x as f64, p.element.y as f64),
+                                grab_image: self
+                                    .fit
+                                    .image_at(p.element.x as f64, p.element.y as f64),
                             });
                         } else {
                             let pan = self.view_camera.lock().unwrap().pan;
@@ -1102,8 +1560,13 @@ impl Widget for StageWidget {
                                 grab: (cx, cy),
                                 orig_center: (pan[0] as f64, pan[1] as f64),
                                 export_frame: false,
+                                at: self.current_rt(),
+                                owner: None,
+                                preview: None,
                                 last: None,
-                                grab_image: self.fit.image_at(p.element.x as f64, p.element.y as f64),
+                                grab_image: self
+                                    .fit
+                                    .image_at(p.element.x as f64, p.element.y as f64),
                             });
                         }
                     }
@@ -1115,7 +1578,7 @@ impl Widget for StageWidget {
                     let next = self.mode_under(p.element.x as f64, p.element.y as f64);
                     if next != self.hover {
                         self.hover = next;
-                        *self.revision.write() += 1;
+                        *bindings.revision.write() += 1;
                     }
                 }
                 // 枠の外で離すと、離した事がここへ届かない。掴んだままの絵が残る。
@@ -1123,18 +1586,20 @@ impl Widget for StageWidget {
                     println!("PROBE room=input verdict=drag-finished reason=release-not-seen");
                     let shift = p.mods.contains(Modifiers::SHIFT);
                     let alt = p.mods.contains(Modifiers::ALT);
-                    self.finish_drag(shift, alt);
+                    self.finish_drag(&bindings, shift, alt);
                     return;
                 }
                 if self.camera_drag.is_some() {
                     let at = self.fit.to_comp(p.element.x as f64, p.element.y as f64);
                     let cam = self.camera_drag.as_mut().expect("直前に居ることを見た");
                     cam.last = Some(at);
-                    let cam = &*cam;
                     if cam.export_frame {
                         let next = camera_center_for(cam, at);
-                        self.write_export_center(next, self.current_rt(), false);
-                        self.revision += 1;
+                        cam.preview = Some(next);
+                        let (fixed_at, owner) =
+                            (cam.at, cam.owner.expect("Export camera owns its preview"));
+                        self.write_export_center(next, fixed_at, owner, false);
+                        bindings.revision += 1;
                     } else {
                         // 掴んだ絵の点が指について来るように動かす。
                         let screen = (p.element.x as f64, p.element.y as f64);
@@ -1147,10 +1612,14 @@ impl Widget for StageWidget {
                 }
                 let screen = (p.element.x as f64, p.element.y as f64);
                 let at = {
-                    let Some(drag) = self.drag.as_ref() else { return };
+                    let Some(drag) = self.drag.as_ref() else {
+                        return;
+                    };
                     // Down と Move を同じ、掴み始めの面へ戻す。`at_z().to_comp()` は
                     // 傾いた面の homography を失うため、同じ画面点でも別の世界点になっていた。
                     let geom = SelGeom {
+                        projection: drag.projection,
+                        placement: drag.orig_placement,
                         z: drag.fit_z,
                         rotation_x: drag.orig_rotation_xy.0,
                         rotation_y: drag.orig_rotation_xy.1,
@@ -1185,25 +1654,33 @@ impl Widget for StageWidget {
                 if let Some(drag) = self.drag.as_mut() {
                     drag.last = Some(at);
                 }
-                let Some(drag) = self.drag.as_ref() else { return };
+                let Some(drag) = self.drag.as_ref() else {
+                    return;
+                };
                 let shift = p.mods.contains(Modifiers::SHIFT);
                 let alt = p.mods.contains(Modifiers::ALT);
                 let preview = preview_values(drag, at, shift, alt, self.fit.s);
-                let mut doc = self.doc.lock().unwrap();
-                for (layer, name, value) in &preview {
-                    if let Ok(prop) = PropertyId::new(name) {
-                        doc.set_transient(*layer, prop, value.clone());
+                let result = property_edit::preview_owned(
+                    &mut self.doc.lock().unwrap(),
+                    drag.owner,
+                    &preview,
+                );
+                match result {
+                    Ok(()) => {
+                        if let Some(drag) = self.drag.as_mut() {
+                            drag.preview = preview;
+                        }
                     }
-                }
-                drop(doc);
-                if let Some(drag) = self.drag.as_mut() {
-                    drag.preview = preview;
+                    Err(error) => {
+                        println!("PROBE room=write verdict=gizmo-preview-error {error}");
+                        self.cancel_drag(&bindings);
+                    }
                 }
             }
             UiEvent::PointerUp(p) => {
                 let shift = p.mods.contains(Modifiers::SHIFT);
                 let alt = p.mods.contains(Modifiers::ALT);
-                self.finish_drag(shift, alt);
+                self.finish_drag(&bindings, shift, alt);
             }
             _ => {}
         }
@@ -1211,155 +1688,147 @@ impl Widget for StageWidget {
 
     fn paint(
         &mut self,
+        mount: &mut StageMount,
+        bindings: &StageBindings,
         render_ctx: &mut dyn anyrender::RenderContext,
         _styles: &ComputedStyles,
         width: u32,
         height: u32,
         scale: f64,
     ) -> anyrender::Scene {
+        let mut bindings = bindings.clone();
         if self.gesture.cancelled(&mut self.seen_cancel) {
-            self.cancel_drag();
+            self.cancel_drag(&bindings);
         }
         let mut scene = anyrender::Scene::new();
         self.frames += 1;
-        self.dirty.set(false);
-        // 登録は texture ごとに 1 回。外すのは、描かなくなってから 2 frame 待ってから
-        // (vello の atlas は前 frame の画像を次の resolve でも触る。描いた直後に外すと「空の image」で落ちる)。
-        let now = self.frames;
-        let (due, keep): (Vec<_>, Vec<_>) = self.retired.drain(..).partition(|(at, _)| now > at + 2);
-        self.retired = keep;
-        for (_, old) in due {
-            if now < 8 {
-                println!("PROBE room=stage verdict=unregister frame={now} id={old:?}");
-            }
-            render_ctx.unregister_resource(old);
-        }
-        self.seen_revision.set(*self.revision.peek());
-        self.seen_time.set(Some(self.clock.current_time()));
         let first = self.frames == 1;
-        // 面が 0 の時は描かない(timeline_widget と同じ)。ここを通すと下の
-        // `s = (w/cw).min(h/ch)` が 0 になり、退化した Affine で vello を回すことになる。
+        mount.collect(render_ctx, self.frames);
         if width == 0 || height == 0 {
             return scene;
         }
-        let State::Active(active) = &mut self.state else {
-            if first {
-                println!("PROBE room=stage verdict=paint-while-suspended");
-            }
-            return scene;
-        };
-        if width == 0 || height == 0 {
-            if first {
-                println!("PROBE room=stage verdict=zero-size");
-            }
-            return scene;
-        }
-
         let doc = self.doc.lock().unwrap();
         let view = doc.view();
         let Some(composition) = view.composition().ok().flatten() else {
-            if first {
-                println!("PROBE room=stage verdict=no-composition");
-            }
             return scene;
         };
         let (cw, ch) = (composition.width, composition.height);
-
-        if first {
-            println!("PROBE room=stage verdict=first-paint {}x{} comp={}x{}", width, height, cw, ch);
-        }
-
-        if active.next.as_ref().is_some_and(|t| t.texture.width() != cw || t.texture.height() != ch) {
-            let handle = active.next.take().unwrap().handle;
-            self.retired.push((self.frames, handle));
-        }
-        let tex_and_handle = match &active.next {
-            Some(next) => next,
-            None => {
-                let texture = create_target(active.engine.gpu_device(), cw, ch);
-                let handle = render_ctx
-                    .try_register_custom_resource(Box::new(texture.clone()))
-                    .expect("wgpu backend accepts wgpu textures");
-                active.next = Some(TexAndHandle { texture, handle });
-                active.next.as_ref().unwrap()
-            }
-        };
-        let target = tex_and_handle.texture.clone();
-        let handle = tex_and_handle.handle;
-        if first {
-            println!("PROBE room=stage verdict=register-target id={handle:?}");
-        }
-
-        let rt = self.clock.current_time();
-
-        // 見るのは視点カメラ、書き出しは Document のカメラ。同じ世界を通る。
-        let observation = if self.output_only.load(std::sync::atomic::Ordering::Relaxed) {
+        let pixel_scale = if scale > 0.0 { scale } else { 1.0 };
+        let viewport = (width as f64 / pixel_scale, height as f64 / pixel_scale);
+        let output_only = self.output_only.load(std::sync::atomic::Ordering::Relaxed);
+        let observation = if output_only {
             crate::render::engine::ObservationCamera::default()
         } else {
             *self.view_camera.lock().unwrap()
         };
-        let export_camera = view.resolve_camera(rt).unwrap_or_default();
-        // **撮るのは常に書き出しのカメラ。** 視点は撮れた絵を2Dで動かすだけなので、
-        // preview と export が食い違いようがない(裁定 2026-09-01)。
-        let rendered = active.engine.render_frame_into_with_camera(
-            &view,
-            rt,
-            &target,
-            export_camera,
-            self.output_only.load(std::sync::atomic::Ordering::Relaxed),
-        );
-        if let Err(e) = rendered {
-            println!("PROBE room=stage verdict=render-error {e}");
+        let base = (viewport.0 / f64::from(cw)).min(viewport.1 / f64::from(ch));
+        let observation = self.take_view_request(observation, base);
+        let rt = self.clock.current_time();
+        let render_key = stage_render_key(&doc, rt, viewport, observation, output_only);
+        let State::Active(active) = &mut self.state else {
             return scene;
+        };
+        let render_needed = self.seen_catalog.get() != render_key
+            || active
+                .displayed
+                .as_ref()
+                .is_none_or(|target| target.width() != cw || target.height() != ch);
+        let export_camera = view.resolve_camera(rt).unwrap_or_default();
+        if first {
+            println!(
+                "PROBE room=stage verdict=first-paint {}x{} comp={}x{}",
+                width, height, cw, ch
+            );
         }
-
-        // 枠の外を見せるための、画角を広げた1枚。**目玉は動かさず画角だけ**
-        // `zoom/k` に広げる。距離を変えると遠近そのものが変わってしまう。
-        // 窓が枠より広い時だけ撮る(枠が窓を覆っていれば外は見えない)。
-        let wide = if self.output_only.load(std::sync::atomic::Ordering::Relaxed) {
+        let (target, handle) = if render_needed {
+            if active
+                .next
+                .as_ref()
+                .is_some_and(|target| target.width() != cw || target.height() != ch)
+            {
+                active.next = None;
+            }
+            let target = active
+                .next
+                .get_or_insert_with(|| create_target(active.engine.gpu_device(), cw, ch))
+                .clone();
+            if let Err(error) = active.engine.render_frame_into_with_camera(
+                &view,
+                rt,
+                &target,
+                export_camera,
+                output_only,
+            ) {
+                println!("PROBE room=stage verdict=render-error {error}");
+                return scene;
+            }
+            let handle = mount.image_after_write(render_ctx, &target, self.frames);
+            std::mem::swap(&mut active.next, &mut active.displayed);
+            (target, handle)
+        } else {
+            let target = active
+                .displayed
+                .as_ref()
+                .expect("displayed frame checked")
+                .clone();
+            let handle = mount.image(render_ctx, &target);
+            (target, handle)
+        };
+        let mut rendered_all = true;
+        let wide = if output_only {
             None
         } else {
-            let base = ((width as f64) / cw as f64).min((height as f64) / ch as f64);
-            let on_screen = base * observation.zoom as f64;
-            let need = ((width as f64) / (cw as f64 * on_screen))
-                .max((height as f64) / (ch as f64 * on_screen));
+            let physical_base =
+                (f64::from(width) / f64::from(cw)).min(f64::from(height) / f64::from(ch));
+            let on_screen = physical_base * f64::from(observation.zoom);
+            let need = (f64::from(width) / (f64::from(cw) * on_screen))
+                .max(f64::from(height) / (f64::from(ch) * on_screen));
             let k = need.clamp(1.0, 4.0);
             if k <= 1.02 {
                 None
             } else {
-                if active.wide.is_none() {
-                    let texture = create_target(active.engine.gpu_device(), cw, ch);
-                    let handle = render_ctx
-                        .try_register_custom_resource(Box::new(texture.clone()))
-                        .expect("wgpu backend accepts wgpu textures");
-                    active.wide = Some(TexAndHandle { texture, handle });
+                let missing = active
+                    .wide
+                    .as_ref()
+                    .is_none_or(|target| target.width() != cw || target.height() != ch);
+                if missing {
+                    active.wide = Some(create_target(active.engine.gpu_device(), cw, ch));
                 }
-                let wide = active.wide.as_ref().expect("直前に用意した");
-                let camera = crate::doc::core::ResolvedCamera {
-                    zoom: export_camera.zoom / k as f32,
-                    ..export_camera
-                };
-                match active.engine.render_frame_into_with_camera(
-                    &view,
-                    rt,
-                    &wide.texture,
-                    camera,
-                    false,
-                ) {
-                    Ok(()) => Some((wide.handle, k)),
-                    Err(e) => {
-                        println!("PROBE room=stage verdict=wide-render-error {e}");
-                        None
+                let wide = active.wide.as_ref().expect("wide target installed");
+                if render_needed || missing {
+                    let camera = crate::doc::core::ResolvedCamera {
+                        zoom: export_camera.zoom / k as f32,
+                        ..export_camera
+                    };
+                    match active
+                        .engine
+                        .render_frame_into_with_camera(&view, rt, wide, camera, false)
+                    {
+                        Ok(()) => Some((mount.image_after_write(render_ctx, wide, self.frames), k)),
+                        Err(error) => {
+                            rendered_all = false;
+                            println!("PROBE room=stage verdict=wide-render-error {error}");
+                            None
+                        }
                     }
+                } else {
+                    Some((mount.image(render_ctx, wide), k))
                 }
             }
         };
+        if rendered_all {
+            self.seen_catalog.set(render_key);
+        }
+        self.dirty.set(false);
+        self.seen_revision.set(*bindings.revision.peek());
+        self.seen_time.set(Some(rt));
 
         // 層は 1 回だけ解く。選択層ごとに解き直すと層²になる。
         let resolved_now = view.resolved_layers(rt).unwrap_or_default();
         let primary_layer = self.selection.get();
-        let primary_geom =
-            primary_layer.and_then(|layer| selection_geom_resolved(&active.engine, &view, &resolved_now, layer, rt));
+        let primary_geom = primary_layer.and_then(|layer| {
+            selection_geom_resolved(&active.engine, &view, &resolved_now, layer, rt)
+        });
         let next_size = primary_geom
             .as_ref()
             .map(|g| [g.natural.0 as f32, g.natural.1 as f32]);
@@ -1372,7 +1841,7 @@ impl Widget for StageWidget {
         if size_changed {
             // Inspector はこの寸法でAnchorの現在地を割合表示する。Mutexだけを書いても
             // componentは再評価されないので、値が変わった1回だけ起こす。
-            *self.revision.write() += 1;
+            *bindings.revision.write() += 1;
         }
         let selected_box = primary_geom;
         let secondary_boxes: Vec<_> = self
@@ -1389,7 +1858,14 @@ impl Widget for StageWidget {
             println!("PROBE room=stage verdict=first-submit-ok");
         }
 
-        std::mem::swap(&mut active.next, &mut active.displayed);
+        mount.retain(
+            [
+                active.displayed.as_ref(),
+                active.next.as_ref(),
+                active.wide.as_ref(),
+            ],
+            self.frames,
+        );
 
         let (w, h) = (width as f64, height as f64);
         let (cw, ch) = (target.width() as f64, target.height() as f64);
@@ -1397,11 +1873,10 @@ impl Widget for StageWidget {
         // 視点は撮れた絵に対する2Dの動きで、カメラには触らない。
         let base = (w / cw).min(h / ch);
         let k = if scale > 0.0 { scale } else { 1.0 };
-        let observation = self.take_view_request(observation, base / k);
         let s = base * observation.zoom as f64;
         let pct = (base / k * observation.zoom as f64 * 100.0).round() as u32;
-        if *self.view_pct.peek() != pct {
-            self.view_pct.set(pct);
+        if *bindings.view_pct.peek() != pct {
+            bindings.view_pct.set(pct);
         }
         let (fw, fh) = (cw * s, ch * s);
         let (fx, fy) = (
@@ -1426,7 +1901,12 @@ impl Widget for StageWidget {
         };
 
         // 描く時は物理 px、掴む時は論理 px。写像を2つ持つ。
-        let draw = Fit { s, fx, fy, ..self.fit };
+        let draw = Fit {
+            s,
+            fx,
+            fy,
+            ..self.fit
+        };
 
         // 書き出しの枠。地色は枠の中だけに敷く(視界全体を塗ると枠の意味が消える)。
         let frame = {
@@ -1482,10 +1962,7 @@ impl Widget for StageWidget {
                     image: wide_handle,
                     sampler: ImageSampler::default(),
                 }),
-                Some(
-                    Affine::translate((wx - ww * 0.5, wy - wh * 0.5))
-                        * Affine::scale(s * k),
-                ),
+                Some(Affine::translate((wx - ww * 0.5, wy - wh * 0.5)) * Affine::scale(s * k)),
                 &outside,
             );
             scene.fill(
@@ -1495,8 +1972,12 @@ impl Widget for StageWidget {
                     0x1a,
                     0x1a,
                     0x1a,
-                    (self.frame_dim.load(std::sync::atomic::Ordering::Relaxed).min(100) * 255 / 100)
-                        as u8,
+                    (self
+                        .frame_dim
+                        .load(std::sync::atomic::Ordering::Relaxed)
+                        .min(100)
+                        * 255
+                        / 100) as u8,
                 )),
                 None,
                 &outside,
@@ -1506,7 +1987,10 @@ impl Widget for StageWidget {
         scene.fill(
             Fill::NonZero,
             Affine::IDENTITY,
-            PaintRef::Resource(ImageBrush { image: handle, sampler: ImageSampler::default() }),
+            PaintRef::Resource(ImageBrush {
+                image: handle,
+                sampler: ImageSampler::default(),
+            }),
             Some(Affine::translate((fx, fy)) * Affine::scale(s)),
             &Rect::from_origin_size((fx, fy), (fw, fh)),
         );
@@ -1568,17 +2052,41 @@ impl Widget for StageWidget {
                 let a = l2s(geom.position.0, geom.position.1);
                 let anchor_color = c(tokens::WAY_INSPECTOR);
                 let outer = peniko::kurbo::Circle::new(a, 7.0);
-                scene.fill(Fill::NonZero, Affine::IDENTITY, PaintRef::Solid(c(tokens::SURFACE_APP)), None, &outer);
-                scene.stroke(&peniko::kurbo::Stroke::new(2.0), Affine::IDENTITY, PaintRef::Solid(anchor_color), None, &outer);
+                scene.fill(
+                    Fill::NonZero,
+                    Affine::IDENTITY,
+                    PaintRef::Solid(c(tokens::SURFACE_APP)),
+                    None,
+                    &outer,
+                );
+                scene.stroke(
+                    &peniko::kurbo::Stroke::new(2.0),
+                    Affine::IDENTITY,
+                    PaintRef::Solid(anchor_color),
+                    None,
+                    &outer,
+                );
                 let arm = 9.0;
                 for line in [
                     peniko::kurbo::Line::new((a.x - arm, a.y), (a.x + arm, a.y)),
                     peniko::kurbo::Line::new((a.x, a.y - arm), (a.x, a.y + arm)),
                 ] {
-                    scene.stroke(&thin, Affine::IDENTITY, PaintRef::Solid(anchor_color), None, &line);
+                    scene.stroke(
+                        &thin,
+                        Affine::IDENTITY,
+                        PaintRef::Solid(anchor_color),
+                        None,
+                        &line,
+                    );
                 }
                 let center = peniko::kurbo::Circle::new(a, 2.0);
-                scene.fill(Fill::NonZero, Affine::IDENTITY, PaintRef::Solid(c(tokens::INK)), None, &center);
+                scene.fill(
+                    Fill::NonZero,
+                    Affine::IDENTITY,
+                    PaintRef::Solid(c(tokens::INK)),
+                    None,
+                    &center,
+                );
 
                 // 枠
                 let mut outline = peniko::kurbo::BezPath::new();
@@ -1587,29 +2095,98 @@ impl Widget for StageWidget {
                 outline.line_to(l2s(bx + bw, by + bh));
                 outline.line_to(l2s(bx, by + bh));
                 outline.close_path();
-                scene.stroke(&stroke, Affine::IDENTITY, PaintRef::Solid(c(tokens::ACCENT)), None, &outline);
+                scene.stroke(
+                    &stroke,
+                    Affine::IDENTITY,
+                    PaintRef::Solid(c(tokens::ACCENT)),
+                    None,
+                    &outline,
+                );
 
                 // 四隅と辺の取っ手。**掴める大きさをそのまま描く**(gizmo_mode_at と同じ式)。
-                let hs = (16.0_f64).min(bw.abs() * self.fit.s * 0.5).min(bh.abs() * self.fit.s * 0.5).max(3.0);
+                let hs = (16.0_f64)
+                    .min(bw.abs() * self.fit.s * 0.5)
+                    .min(bh.abs() * self.fit.s * 0.5)
+                    .max(3.0);
                 let (mx, my) = (bx + bw * 0.5, by + bh * 0.5);
                 let live = self.drag.as_ref().map(|d| d.mode).or(self.hover);
                 for (lx, ly, mode) in [
-                    (bx, by, GizmoMode::ScaleCorner { sx: false, sy: false }),
-                    (bx + bw, by, GizmoMode::ScaleCorner { sx: true, sy: false }),
-                    (bx, by + bh, GizmoMode::ScaleCorner { sx: false, sy: true }),
-                    (bx + bw, by + bh, GizmoMode::ScaleCorner { sx: true, sy: true }),
-                    (mx, by, GizmoMode::ScaleEdge { axis_x: false, positive: false }),
-                    (mx, by + bh, GizmoMode::ScaleEdge { axis_x: false, positive: true }),
-                    (bx, my, GizmoMode::ScaleEdge { axis_x: true, positive: false }),
-                    (bx + bw, my, GizmoMode::ScaleEdge { axis_x: true, positive: true }),
+                    (
+                        bx,
+                        by,
+                        GizmoMode::ScaleCorner {
+                            sx: false,
+                            sy: false,
+                        },
+                    ),
+                    (
+                        bx + bw,
+                        by,
+                        GizmoMode::ScaleCorner {
+                            sx: true,
+                            sy: false,
+                        },
+                    ),
+                    (
+                        bx,
+                        by + bh,
+                        GizmoMode::ScaleCorner {
+                            sx: false,
+                            sy: true,
+                        },
+                    ),
+                    (
+                        bx + bw,
+                        by + bh,
+                        GizmoMode::ScaleCorner { sx: true, sy: true },
+                    ),
+                    (
+                        mx,
+                        by,
+                        GizmoMode::ScaleEdge {
+                            axis_x: false,
+                            positive: false,
+                        },
+                    ),
+                    (
+                        mx,
+                        by + bh,
+                        GizmoMode::ScaleEdge {
+                            axis_x: false,
+                            positive: true,
+                        },
+                    ),
+                    (
+                        bx,
+                        my,
+                        GizmoMode::ScaleEdge {
+                            axis_x: true,
+                            positive: false,
+                        },
+                    ),
+                    (
+                        bx + bw,
+                        my,
+                        GizmoMode::ScaleEdge {
+                            axis_x: true,
+                            positive: true,
+                        },
+                    ),
                 ] {
                     let p = l2s(lx, ly);
                     // 指の下(掴んでいる間も)の取っ手は白く、ひとまわり大きく。
                     let lit = live == Some(mode);
                     let size = if lit { hs + 4.0 } else { hs };
                     let color = if lit { tokens::INK } else { tokens::ACCENT };
-                    let r = Rect::from_origin_size((p.x - size * 0.5, p.y - size * 0.5), (size, size));
-                    scene.fill(Fill::NonZero, Affine::IDENTITY, PaintRef::Solid(c(color)), None, &r);
+                    let r =
+                        Rect::from_origin_size((p.x - size * 0.5, p.y - size * 0.5), (size, size));
+                    scene.fill(
+                        Fill::NonZero,
+                        Affine::IDENTITY,
+                        PaintRef::Solid(c(color)),
+                        None,
+                        &r,
+                    );
                 }
 
                 if self.rings.load(std::sync::atomic::Ordering::Relaxed) {
@@ -1619,16 +2196,38 @@ impl Widget for StageWidget {
                         for i in 0..=64 {
                             let t = i as f64 / 64.0 * std::f64::consts::TAU;
                             let p = l2s(mx + a * t.cos(), my + b * t.sin());
-                            if i == 0 { ring.move_to(p) } else { ring.line_to(p) }
+                            if i == 0 {
+                                ring.move_to(p)
+                            } else {
+                                ring.line_to(p)
+                            }
                         }
-                        scene.stroke(&thin, Affine::IDENTITY, PaintRef::Solid(c(tokens::INK3)), None, &ring);
+                        scene.stroke(
+                            &thin,
+                            Affine::IDENTITY,
+                            PaintRef::Solid(c(tokens::INK3)),
+                            None,
+                            &ring,
+                        );
                     }
                     let (hx, hy) = depth_handle(mx, my, self.fit.s);
                     let end = l2s(hx, hy);
                     let stem = peniko::kurbo::Line::new(l2s(mx, my), end);
-                    scene.stroke(&thin, Affine::IDENTITY, PaintRef::Solid(c(tokens::INK3)), None, &stem);
+                    scene.stroke(
+                        &thin,
+                        Affine::IDENTITY,
+                        PaintRef::Solid(c(tokens::INK3)),
+                        None,
+                        &stem,
+                    );
                     let dot = peniko::kurbo::Circle::new(end, 3.5);
-                    scene.fill(Fill::NonZero, Affine::IDENTITY, PaintRef::Solid(c(tokens::ACCENT)), None, &dot);
+                    scene.fill(
+                        Fill::NonZero,
+                        Affine::IDENTITY,
+                        PaintRef::Solid(c(tokens::ACCENT)),
+                        None,
+                        &dot,
+                    );
                 }
             }
         }
@@ -1699,19 +2298,17 @@ impl PlaneMap {
 /// 層の4隅を窓の点へ落とし、写像を組む。上流が絵を置くのと同じ式で隅を出す
 /// (`tilted_corners`)ので、取っ手は必ず絵の上に乗る。
 fn plane_map(fit: &Fit, geom: &SelGeom) -> PlaneMap {
-    let (bx, by, bw, bh) = geom.box_;
-    let pivot = glam::vec2(geom.position.0 as f32, geom.position.1 as f32);
-    let transform = glam::Affine2::from_translation(pivot)
-        * glam::Affine2::from_angle((geom.rotation as f32).to_radians())
-        * glam::Affine2::from_translation(-pivot);
-
-    let (corner, u, v) = crate::render::compositor::tilted_corners(
-        transform,
-        glam::vec2(bx as f32, by as f32),
-        glam::vec2(bw as f32, bh as f32),
-        geom.z as f32,
-        geom.rotation_x as f32,
-        geom.rotation_y as f32,
+    let placement = geom.placement;
+    let (corner, u, v) = crate::render::compositor::projected_corners(
+        fit.comp,
+        fit.camera,
+        geom.projection,
+        placement.transform,
+        glam::Vec2::ZERO,
+        glam::vec2(geom.natural.0 as f32, geom.natural.1 as f32),
+        placement.z,
+        placement.rotation_x,
+        placement.rotation_y,
     );
 
     let projection = crate::doc::core::camera_projection(fit.comp, fit.camera);

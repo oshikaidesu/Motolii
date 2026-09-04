@@ -1,14 +1,15 @@
-use dioxus_native::prelude::*;
-use dioxus_native::CustomWidgetAttr;
 use crate::ui::browser::browser_panel;
+use crate::ui::context_menu::MenuRequest;
 use crate::ui::dock::Panel;
+use crate::ui::fixture;
 use crate::ui::inspector::{inspector_panel, ChoiceId};
+use crate::ui::mount::SurfaceView;
 use crate::ui::semantic_menu::SemanticButton;
 use crate::ui::session::Session;
-use crate::ui::stage_widget::StageWidget;
+use crate::ui::stage_widget::{StageBindings, StageState};
 use crate::ui::timeline_shell::timeline_shell;
-use crate::ui::timeline_widget::TimelineWidget;
-use crate::ui::fixture;
+use crate::ui::timeline_widget::{TimelineBindings, TimelineState};
+use dioxus_native::prelude::*;
 
 #[component]
 pub(super) fn BrowserPanel(
@@ -58,33 +59,37 @@ pub(super) fn InspectorPanel(
     )
 }
 
-/// ウィジェットはコンポーネントの中で作る。置き場を移すと要素が作り直されるので、
-/// `CustomWidgetAttr` を app と共有すると2枚目が空になる(中身は一度しか渡せない)。
 #[component]
 pub(super) fn StagePanel(
     session: Session,
     selected: Signal<Option<crate::doc::store::LayerId>>,
     revision: Signal<u32>,
     comp_line: String,
+    menu: Signal<Option<MenuRequest>>,
 ) -> Element {
+    let _ = revision();
     let view_pct = use_signal(|| 100u32);
-    let attr = use_hook(|| {
-        CustomWidgetAttr::new(StageWidget::new(
+    let host = consume_context::<crate::ui::host::Host>();
+    let handle = host.mounts.get(surface_window(), "stage", || {
+        StageState::new(
             session.clock.clone(),
             session.doc.clone(),
             session.selection.clone(),
-            selected,
-            revision,
             session.selected_size.clone(),
             session.view_camera.clone(),
             session.rings.clone(),
             session.frame_dim.clone(),
             session.gesture.clone(),
             session.output_only.clone(),
-            view_pct,
             session.view_request.clone(),
-        ))
+        )
     });
+    let bindings = StageBindings {
+        selected,
+        revision,
+        view_pct,
+        context_menu: menu,
+    };
     let rings = session.rings.clone();
     let mut rings_on = use_signal(|| rings.load(std::sync::atomic::Ordering::Relaxed));
     rsx!(
@@ -118,7 +123,7 @@ pub(super) fn StagePanel(
                 div { class: "stagehint empty" }
             }
             div { id: "stage",
-                object { "data": attr }
+                SurfaceView::<StageState> { handle, bindings }
             }
             div { id: "stagefoot",
                 SemanticButton {
@@ -164,22 +169,28 @@ pub(super) fn TimelinePanel(
     scroll_y: Signal<f64>,
     playhead: Signal<f64>,
     revision: Signal<u32>,
+    menu: Signal<Option<MenuRequest>>,
 ) -> Element {
-    let attr = use_hook(|| {
+    let host = consume_context::<crate::ui::host::Host>();
+    let handle = host.mounts.get(surface_window(), "timeline", || {
         let rows = fixture::canvas_rows_from_doc(&session.doc.lock().unwrap());
-        CustomWidgetAttr::new(
-            TimelineWidget::new(rows, session.timeline_rx.clone())
-                .with_clock(session.clock.clone())
-                .with_scale(session.scale.clone())
-                .with_document(session.doc.clone(), fixture::canvas_rows_from_doc)
-                .with_selection(session.selection.clone(), selected)
-                .with_scroll_mirror(scroll_y)
-                .with_playhead_mirror(playhead)
-                .with_revision(revision)
-                .with_gesture(session.gesture.clone())
-                .with_key_mirror(session.selected_keys.clone()),
-        )
+        TimelineState::new(rows, session.timeline_rx.clone())
+            .with_clock(session.clock.clone())
+            .with_scale(session.scale.clone())
+            .with_document(session.doc.clone(), fixture::canvas_rows_from_doc)
+            .with_selection(session.selection.clone())
+            .with_gesture(session.gesture.clone())
+            .with_key_mirror(session.selected_keys.clone())
+            .with_notice(session.project_notice.clone())
     });
+    let bindings = TimelineBindings {
+        selected: Some(selected),
+        scroll_y: Some(scroll_y),
+        playhead: Some(playhead),
+        revision: Some(revision),
+        context_menu: Some(menu),
+    };
+    let surface = rsx! { SurfaceView::<TimelineState> { handle, bindings } };
     // 行は Document から引き直す。一覧を持ち回っていると、書き込みの度に
     // 引き直しを**忘れた手**の分だけ窓が古いまま残る(名前変更がそれだった)。
     let _ = revision();
@@ -204,12 +215,18 @@ pub(super) fn TimelinePanel(
         attrs_state,
         &rows_now,
         layer_rows,
-        attr,
+        surface,
         session.selection.clone(),
         selected,
         scroll_y,
         session.timeline_tx.clone(),
         &session,
         revision,
+        menu,
     )
+}
+
+fn surface_window() -> dioxus_native::winit::window::WindowId {
+    try_consume_context::<std::sync::Arc<dyn dioxus_native::winit::window::Window>>()
+        .map_or(crate::ui::host::Host::HEADLESS, |window| window.id())
 }

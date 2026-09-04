@@ -1,0 +1,187 @@
+use super::{validate, Document, Intent, LayerId, PropertyId};
+use crate::doc::store::{
+    property, Interp, Keyframe, PropertyBase, RationalTime, StoreError, Value,
+};
+
+impl Document {
+    pub fn place_checked(
+        &self,
+        layer: LayerId,
+        property: &PropertyId,
+        value: Value,
+        at: RationalTime,
+    ) -> Result<Option<Intent>, StoreError> {
+        let view = self.view().without_transients();
+        if !view.has_layer(layer) {
+            return Err(StoreError::Property(format!(
+                "Layer {} no longer exists",
+                layer.0
+            )));
+        }
+        validate::check_not_locked(&view, layer)?;
+        validate::check_not_frozen(&view, layer)?;
+        let source = view.property_source(layer, property)?;
+        if let Some(reason) = view.property_write_rejection(layer, property)? {
+            return Err(StoreError::Property(reason.into()));
+        }
+        let current = view
+            .value_at(layer, property, at)?
+            .or(view.default_value(layer, property)?);
+        if let Some(current) = &current {
+            if std::mem::discriminant(current) != std::mem::discriminant(&value) {
+                return Err(StoreError::Property(format!(
+                    "Value type differs for {}",
+                    property.name()
+                )));
+            }
+        }
+        match source.and_then(|source| source.base) {
+            Some(PropertyBase::Slot(_)) => Err(StoreError::Property(
+                "Edit the shared slot explicitly".into(),
+            )),
+            Some(PropertyBase::Track(mut track)) => {
+                if let Some(key) = track.keys().iter().find(|key| key.t == at) {
+                    if key.value == value {
+                        return Ok(None);
+                    }
+                    track.insert(Keyframe {
+                        value,
+                        ..key.clone()
+                    });
+                } else {
+                    // Adding a key is a state change even when its evaluated value is unchanged.
+                    track.insert(Keyframe {
+                        t: at,
+                        value,
+                        interp: Interp::Linear,
+                        spatial: None,
+                    });
+                }
+                Ok(Some(Intent::SetTrack {
+                    layer,
+                    property: property.clone(),
+                    track,
+                }))
+            }
+            Some(PropertyBase::Constant(_)) | None => {
+                if current.as_ref() == Some(&value) {
+                    return Ok(None);
+                }
+                Ok(Some(Intent::SetConstant {
+                    layer,
+                    property: property.clone(),
+                    value,
+                }))
+            }
+        }
+    }
+
+    pub fn begin_preview(&mut self) -> u64 {
+        self.clear_all_transients();
+        self.preview_owner
+    }
+
+    pub fn preview_is_current(&self, owner: u64) -> bool {
+        owner != 0 && self.preview_owner == owner
+    }
+
+    pub fn preview_edits(&mut self, owner: u64, edits: &[Intent]) -> Result<(), StoreError> {
+        if !self.preview_is_current(owner) {
+            return Err(StoreError::Property(
+                "This interaction has been superseded".into(),
+            ));
+        }
+        let view = self.view().without_transients();
+        for edit in edits {
+            if let Intent::SetCameraConstant { .. } = edit {
+                continue;
+            }
+            if let Intent::SetCameraTrack { track, .. } = edit {
+                track
+                    .validate()
+                    .map_err(|e| StoreError::Property(e.to_string()))?;
+                continue;
+            }
+            let layer = match edit {
+                Intent::SetTiming { layer, timing } => {
+                    if timing.duration <= 0 {
+                        return Err(StoreError::Property(
+                            "A clip must keep a positive duration".into(),
+                        ));
+                    }
+                    *layer
+                }
+                Intent::SetTrack { layer, track, .. } => {
+                    track
+                        .validate()
+                        .map_err(|e| StoreError::Property(e.to_string()))?;
+                    *layer
+                }
+                Intent::SetTextDocument { layer, document } => {
+                    crate::doc::store::text::validate(document)?;
+                    *layer
+                }
+                Intent::SetConstant { layer, .. } => *layer,
+                _ => {
+                    return Err(StoreError::Property(
+                        "This edit has no preview projection".into(),
+                    ))
+                }
+            };
+            if !view.has_layer(layer) {
+                return Err(StoreError::Property(format!(
+                    "Layer {} no longer exists",
+                    layer.0
+                )));
+            }
+            validate::check_not_locked(&view, layer)?;
+            validate::check_not_frozen(&view, layer)?;
+        }
+        self.preview_edits = edits.to_vec();
+        self.bump_transient_generation();
+        Ok(())
+    }
+
+    pub fn clear_preview_edits(&mut self, owner: u64) -> bool {
+        if !self.preview_is_current(owner) {
+            return false;
+        }
+        self.clear_all_transients();
+        true
+    }
+}
+
+impl crate::doc::store::StoreView<'_> {
+    pub fn property_write_rejection(&self, layer: LayerId, id: &PropertyId) -> Result<Option<&'static str>, StoreError> {
+        let source = self.clone().without_transients().property_source(layer, id)?;
+        Ok(match source {
+            Some(source) if !source.modulators.is_empty() => Some("Edit the driver before changing a driven value"),
+            Some(source) if matches!(source.base, Some(PropertyBase::Slot(_))) => Some("Edit the shared slot explicitly"),
+            _ => None,
+        })
+    }
+
+    pub fn default_value(
+        &self,
+        _layer: LayerId,
+        id: &PropertyId,
+    ) -> Result<Option<Value>, StoreError> {
+        Ok(match id.name() {
+            property::POSITION | property::ANCHOR => Some(Value::Vec2([0.0, 0.0])),
+            property::SCALE => Some(Value::Vec2([1.0, 1.0])),
+            property::OPACITY => Some(Value::F64(1.0)),
+            property::ROTATION
+            | property::ROTATION_X
+            | property::ROTATION_Y
+            | property::POSITION_X
+            | property::POSITION_Y
+            | property::POSITION_Z
+            | property::SKEW
+            | property::SKEW_AXIS
+            | property::PAN
+            | property::FADE_IN
+            | property::FADE_OUT => Some(Value::F64(0.0)),
+            _ => None,
+        })
+    }
+}

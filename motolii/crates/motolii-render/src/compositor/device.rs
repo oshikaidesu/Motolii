@@ -25,33 +25,16 @@ impl Compositor {
         let ctx = RenderContext::new_from_device(device, queue, output_format, config_provider)
             .map_err(|e| CompositorError::Context(e.to_string()))?;
 
-        let mut effect_programs = std::collections::HashMap::new();
-        for definition in effects::vism_definitions()
-            .iter()
-            .filter(|definition| definition.manifest.expose)
-        {
-            let program = effects::EffectProgram::compile(
-                &ctx,
-                definition.source,
-                definition.output_format(),
-            )
-            .map_err(|error| CompositorError::Isf(error.to_string()))?;
-            effect_programs.insert(definition.plugin_id().to_owned(), program);
-        }
-        let blend_vism = effects::WgslFragmentProgram::compile_with_prelude(
-            &ctx,
-            "blend",
-            effects::VELLO_BLEND_PRELUDE,
-            effects::BLEND_SOURCE,
-            crate::render::compositor::BLEND_TARGET_FORMAT,
-        );
-        let matte_vism = effects::WgslFragmentProgram::compile_with_prelude(
-            &ctx,
-            "matte",
-            effects::VELLO_BLEND_PRELUDE,
-            effects::MATTE_SOURCE,
-            crate::render::compositor::BLEND_TARGET_FORMAT,
-        );
+        let catalog = super::catalog_snapshot();
+        let effect_programs = catalog.definitions.iter().filter(|d| d.manifest.expose)
+            .map(|d| (d.plugin_id().to_owned(), effects::EffectProgram::compile(&ctx, d))).collect();
+        let builtin = |name: &str| -> Result<effects::EffectProgram, CompositorError> {
+            let definition = catalog.definitions.iter().find(|d| d.source.name == name)
+                .ok_or_else(|| CompositorError::Effect(format!("missing validated {name} program")))?;
+            Ok(effects::EffectProgram::compile(&ctx, definition))
+        };
+        let blend_vism = builtin("blend")?;
+        let matte_vism = builtin("matte")?;
 
         Ok(Self {
             ctx,
@@ -61,9 +44,37 @@ impl Compositor {
             effect_programs,
             blend_vism,
             matte_vism,
+            catalog,
             sequential_submits: 0,
             pending: Vec::new(),
         })
+    }
+
+    pub(crate) fn refresh_catalog_programs(&mut self) {
+        let next = super::catalog_snapshot();
+        if next.generation == self.catalog.generation { return; }
+        let changed: Vec<_> = next.definitions.iter().filter(|d| self.catalog.definitions.iter()
+            .find(|old| old.source.name == d.source.name)
+            .is_none_or(|old| old.source.source != d.source.source || old.vertex_text != d.vertex_text || old.fragment_text != d.fragment_text)).collect();
+        #[cfg(load_shaders_from_disk)]
+        {
+            let frame = self.ctx.active_frame_idx();
+            let paths = changed.iter().flat_map(|d| d.paths()).collect();
+            let resolver = re_renderer::new_recommended_file_resolver();
+            let pools = &mut self.ctx.gpu_resources;
+            pools.shader_modules.begin_frame(&self.ctx.device, &resolver, frame, &paths);
+            pools.render_pipelines.begin_frame(&self.ctx.device, frame, &pools.shader_modules, &pools.pipeline_layouts);
+        }
+        for definition in changed {
+            let program = effects::EffectProgram::compile(&self.ctx, definition);
+            match definition.source.name.as_str() {
+                "blend" => self.blend_vism = program,
+                "matte" => self.matte_vism = program,
+                _ if definition.manifest.expose => { self.effect_programs.insert(definition.plugin_id().to_owned(), program); }
+                _ => {}
+            }
+        }
+        self.catalog = next;
     }
 
     pub fn with_device_using_headless_defaults(

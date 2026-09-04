@@ -21,6 +21,9 @@ impl Compositor {
         rotation_x: f32,
         rotation_y: f32,
         opacity: f32,
+        comp: crate::doc::core::CompSpec,
+        camera: crate::doc::core::ResolvedCamera,
+        projection: crate::doc::store::LayerProjection,
     ) -> Result<re_renderer::renderer::PointCloudDrawData, CompositorError> {
         let points: Vec<glam::Vec3> = positions.iter().copied().map(glam::Vec3::from).collect();
         let alpha = (opacity.clamp(0.0, 1.0) * 255.0).round() as u8;
@@ -39,6 +42,8 @@ impl Compositor {
         let world_from_obj =
             spatial_world_from_bounds(transform, z, rotation_x, rotation_y, bounds);
 
+        let center = world_from_obj.transform_point3((glam::Vec3::from(bounds.min) + glam::Vec3::from(bounds.max)) * 0.5);
+        let world_from_obj = crate::doc::core::layer_projection_transform(comp, camera, projection, center) * world_from_obj;
         let radii = vec![Size::new_ui_points(point_size.max(1e-4)); points.len()];
         let picking_ids = vec![Default::default(); points.len()];
         let mut builder = PointCloudBuilder::new(&self.ctx);

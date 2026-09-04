@@ -47,6 +47,7 @@
 - **`rotation.x/y/z`・多次元 scale は実装する。欄を消さない** — Lottie にある語彙なので削らない
 - **Duplicate / Copy-Paste は常に Independent** — 全 ID を新規採番、複製サブツリー内参照だけ再写像。
   **live 同期しない**
+- **複数選択は一手一 Undo、scrub は相対・入力は絶対** — 現行 Inspector の混在「—」を継ぎ、対象解決と Intent の一括確定を共有する。PR #479 の旧「消費側なし」は失効。採否と残余は [採用計画](reviews/2026-09-04-pr-479-adoption.md)、設計入力は [持ち上げ](reviews/2026-09-03-selection-lifting.md)。
 - **Asset 識別は source fingerprint と recipe/artifact digest を別 identity へ分離** —
   fingerprint は `motolii-source-v1:sha256:<64桁hex>` + size。worker は生の locator でなく
   Host-private `SourceBinding` を使う
@@ -79,6 +80,7 @@
 - **Stage に独自 post-pass quad / shape 特例 / 近似 bounds preview を作らない** — 通常接続は
   すべて Rerun 経由の同一評価結果を使う。drag preview も Preview/Export と同じ D2 Command 評価
 - **camera は document 所有、view camera は出力に出ない** — export は document camera で offscreen 撮影
+- **層の投影は `2D / 2.5D / 3D` の属性として採用する** — 2D はカメラ独立の affine 補償、2.5D は共有世界で相対角度を剛体補正、3D は通常投影。native depth と全属性欄を保ち、板へ焼かない。旧 `pinned` は true→2D、false／省略→3D、新規 2D 素材→2.5D、mesh／point cloud→3D。実装と検収は [採用計画](reviews/2026-09-04-pr-479-adoption.md)が持つ([原文と訂正](reviews/2026-09-03-camera-behavior-design.md))。
 - **boxcam** — カメラのビューは世界に破線 + ハンドルのボックスとして描き、**世界自体は縮めない**。
   視点は上縁タブ。**初期倍率は fit**
 - **clipping mask は Motolii 側 authority のまま** — Rerun の segmentation / opacity へ委譲しない。

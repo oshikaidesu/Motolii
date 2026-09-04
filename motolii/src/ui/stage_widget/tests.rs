@@ -105,6 +105,7 @@ mod previews {
 
     fn drag(mode: GizmoMode) -> GizmoDrag {
         GizmoDrag {
+            owner: 0,
             layer: LayerId(1),
             mode,
             grab: (100.0, 100.0),
@@ -116,9 +117,27 @@ mod previews {
             natural: (200.0, 100.0),
             orig_box: (0.0, 50.0, 200.0, 100.0),
             fit_z: 0.0,
+            projection: LayerProjection::ThreeD,
+            orig_placement: crate::doc::core::LayerPlacement::default(),
             last: None,
             preview: Vec::new(),
-            others: vec![(LayerId(2), (300.0, 300.0))],
+            original_values: Vec::new(),
+            at: RationalTime::ZERO,
+            others: vec![(
+                LayerId(2),
+                SelGeom {
+                    projection: LayerProjection::ThreeD,
+                    placement: crate::doc::core::LayerPlacement::default(),
+                    z: 50.0,
+                    rotation_x: 20.0,
+                    rotation_y: 30.0,
+                    position: (300.0, 300.0),
+                    anchor: (0.5, 0.5),
+                    rotation: 40.0,
+                    natural: (100.0, 50.0),
+                    box_: (250.0, 275.0, 100.0, 50.0),
+                },
+            )],
         }
     }
 
@@ -126,18 +145,100 @@ mod previews {
     #[test]
     fn shift_locks_the_dominant_axis_and_carries_companions() {
         let out = preview_values(&drag(GizmoMode::Move), (130.0, 108.0), true, false, 1.0);
-        assert_eq!(out[0], (LayerId(1), property::POSITION, Value::Vec2([130.0, 100.0])));
-        assert_eq!(out[1], (LayerId(2), property::POSITION, Value::Vec2([330.0, 300.0])));
+        assert_eq!(
+            out[0],
+            (
+                LayerId(1),
+                PropertyId::new(property::POSITION).unwrap(),
+                Value::Vec2([130.0, 100.0])
+            )
+        );
+        assert_eq!(
+            out[1],
+            (
+                LayerId(2),
+                PropertyId::new(property::POSITION).unwrap(),
+                Value::Vec2([330.0, 300.0])
+            )
+        );
     }
 
     /// 軌道は掴んだ輪の軸だけ書く。上へ引くと奥へ。
     #[test]
     fn orbit_touches_one_axis_and_depth_goes_up() {
-        let out = preview_values(&drag(GizmoMode::Orbit { axis_x: true }), (100.0, 140.0), false, false, 1.0);
-        assert_eq!(out.len(), 1);
-        assert_eq!(out[0].1, property::ROTATION_X);
+        let out = preview_values(
+            &drag(GizmoMode::Orbit { axis_x: true }),
+            (100.0, 140.0),
+            false,
+            false,
+            1.0,
+        );
+        assert_eq!(out.len(), 2);
+        assert_eq!(out[0].1, PropertyId::new(property::ROTATION_X).unwrap());
         let out = preview_values(&drag(GizmoMode::Depth), (100.0, 60.0), false, false, 1.0);
-        assert_eq!(out[0], (LayerId(1), property::POSITION_Z, Value::F64(40.0)));
+        assert_eq!(
+            out[0],
+            (
+                LayerId(1),
+                PropertyId::new(property::POSITION_Z).unwrap(),
+                Value::F64(40.0)
+            )
+        );
+    }
+
+    #[test]
+    fn every_transform_lifts_from_each_original_pose() {
+        let orbit = preview_values(
+            &drag(GizmoMode::Orbit { axis_x: true }),
+            (100.0, 140.0),
+            false,
+            false,
+            1.0,
+        );
+        assert_eq!(
+            orbit[1],
+            (
+                LayerId(2),
+                PropertyId::new(property::ROTATION_X).unwrap(),
+                Value::F64(0.0)
+            )
+        );
+        let depth = preview_values(&drag(GizmoMode::Depth), (100.0, 60.0), false, false, 1.0);
+        assert_eq!(
+            depth[1],
+            (
+                LayerId(2),
+                PropertyId::new(property::POSITION_Z).unwrap(),
+                Value::F64(90.0)
+            )
+        );
+        let rotate = preview_values(&drag(GizmoMode::Rotate), (140.0, 100.0), false, false, 1.0);
+        let Value::F64(primary) = rotate[0].2 else {
+            panic!("rotation")
+        };
+        assert_eq!(
+            rotate[1],
+            (
+                LayerId(2),
+                PropertyId::new(property::ROTATION).unwrap(),
+                Value::F64(40.0 + primary)
+            )
+        );
+        let scale = preview_values(
+            &drag(GizmoMode::ScaleCorner { sx: true, sy: true }),
+            (400.0, 250.0),
+            false,
+            false,
+            1.0,
+        );
+        assert_eq!(
+            scale[2],
+            (
+                LayerId(2),
+                PropertyId::new(property::SCALE).unwrap(),
+                scale[0].2.clone()
+            )
+        );
     }
 
     /// 矢印は今の位置に差分を足す。
@@ -147,12 +248,267 @@ mod previews {
         let mut doc = loaded.doc;
         let layer = doc.view().layers()[0];
         let prop = PropertyId::new(property::POSITION).unwrap();
-        let before = match doc.view().value_at(layer, &prop, RationalTime::ZERO).unwrap() {
+        let before = match doc
+            .view()
+            .value_at(layer, &prop, RationalTime::ZERO)
+            .unwrap()
+        {
             Some(Value::Vec2(v)) => v,
             _ => [0.0, 0.0],
         };
-        doc.apply_all(nudge_intents(&doc, &[layer], (10.0, -1.0), RationalTime::ZERO)).unwrap();
-        let after = doc.view().value_at(layer, &prop, RationalTime::ZERO).unwrap();
-        assert_eq!(after, Some(Value::Vec2([before[0] + 10.0, before[1] - 1.0])));
+        doc.apply_all(nudge_intents(&doc, &[layer], (10.0, -1.0), RationalTime::ZERO).unwrap())
+            .unwrap();
+        let after = doc
+            .view()
+            .value_at(layer, &prop, RationalTime::ZERO)
+            .unwrap();
+        assert_eq!(
+            after,
+            Some(Value::Vec2([before[0] + 10.0, before[1] - 1.0]))
+        );
+    }
+}
+
+mod checked_placement_commands {
+    use crate::doc::store::*;
+    use crate::ui::{stage_widget::nudge_intents, utility};
+    use std::sync::{Arc, Mutex};
+
+    fn doc() -> Document {
+        let mut doc = Document::new();
+        doc.apply(Intent::SetComposition(Composition {
+            width: 640,
+            height: 480,
+            fps: Fps::try_new(30, 1).unwrap(),
+            duration_frames: 300,
+            background: Composition::default_background(),
+        }))
+        .unwrap();
+        for layer in [LayerId(1), LayerId(2)] {
+            doc.apply_all([
+                Intent::AddLayer(layer),
+                Intent::SetMeta {
+                    layer,
+                    meta: LayerMeta {
+                        source: LayerSource::Shape,
+                        order: layer.0 as i16,
+                        timing: LayerTiming::place(0, None, 300),
+                    },
+                },
+            ])
+            .unwrap();
+        }
+        doc
+    }
+
+    #[test]
+    fn nudge_keeps_key_interpolation_and_zero_delta_creates_no_key() {
+        let mut doc = doc();
+        let layer = LayerId(1);
+        let property = PropertyId::new(property::POSITION).unwrap();
+        let original = Keyframe {
+            t: RationalTime::ZERO,
+            value: Value::Vec2([10.0, 20.0]),
+            interp: Interp::Hold,
+            spatial: None,
+        };
+        let mut track = KeyframeTrack::new();
+        track.insert(original.clone());
+        doc.apply(Intent::SetTrack {
+            layer,
+            property: property.clone(),
+            track,
+        })
+        .unwrap();
+        let head = doc.edit_head();
+        doc.apply_all(nudge_intents(&doc, &[layer], (10.0, -1.0), RationalTime::ZERO).unwrap())
+            .unwrap();
+        let changed = doc.view().track(layer, &property).unwrap().unwrap().keys()[0].clone();
+        assert_eq!(changed.value, Value::Vec2([20.0, 19.0]));
+        assert_eq!(changed.interp, original.interp);
+        assert_eq!(doc.edit_head(), head + 1);
+        assert!(
+            nudge_intents(&doc, &[layer], (0.0, 0.0), RationalTime::from_seconds(1))
+                .unwrap()
+                .is_empty()
+        );
+        assert!(doc.undo());
+        assert_eq!(
+            doc.view().track(layer, &property).unwrap().unwrap().keys(),
+            &[original]
+        );
+    }
+
+    #[test]
+    fn rejected_shared_or_driven_position_never_partially_moves_anchor_or_other_layers() {
+        for driven in [false, true] {
+            let mut doc = doc();
+            let layer = LayerId(1);
+            let property = PropertyId::new(property::POSITION).unwrap();
+            if driven {
+                doc.apply_all([
+                    Intent::SetConstant {
+                        layer: LayerId(2),
+                        property: property.clone(),
+                        value: Value::Vec2([10.0, 20.0]),
+                    },
+                    Intent::SetPropertyLink {
+                        layer,
+                        property: property.clone(),
+                        link: PropertyLink {
+                            source_layer: LayerId(2),
+                            source_property: property.clone(),
+                            time_offset: RationalTime::ZERO,
+                            plugin_id: "motolii.link.identity".into(),
+                            params: Vec::new(),
+                        },
+                    },
+                ])
+                .unwrap();
+            } else {
+                let mut track = KeyframeTrack::new();
+                track.insert(Keyframe {
+                    t: RationalTime::ZERO,
+                    value: Value::Vec2([10.0, 20.0]),
+                    interp: Interp::Hold,
+                    spatial: None,
+                });
+                let slot = SlotId("position".into());
+                doc.apply_all([
+                    Intent::SetSlots {
+                        slots: vec![Slot {
+                            id: slot.clone(),
+                            track,
+                        }],
+                    },
+                    Intent::SetPropertySlot {
+                        layer,
+                        property: property.clone(),
+                        slot,
+                    },
+                ])
+                .unwrap();
+            }
+            let source = doc.view().property_source(layer, &property).unwrap();
+            let head = doc.edit_head();
+            assert!(
+                nudge_intents(&doc, &[LayerId(2), layer], (10.0, 0.0), RationalTime::ZERO).is_err()
+            );
+            let doc = Arc::new(Mutex::new(doc));
+            assert!(utility::move_anchor(
+                &doc,
+                layer,
+                [200.0, 100.0],
+                RationalTime::ZERO,
+                0.5,
+                0.5
+            )
+            .is_err());
+            let doc = doc.lock().unwrap();
+            assert_eq!(doc.edit_head(), head);
+            assert_eq!(
+                doc.view().property_source(layer, &property).unwrap(),
+                source
+            );
+            assert!(doc
+                .view()
+                .property_source(layer, &PropertyId::new(property::ANCHOR).unwrap())
+                .unwrap()
+                .is_none());
+        }
+    }
+
+    #[test]
+    fn anchor_position_composition_preserves_rotated_skewed_geometry_with_one_undo() {
+        let mut doc = doc();
+        let layer = LayerId(1);
+        let position = PropertyId::new(property::POSITION).unwrap();
+        let anchor = PropertyId::new(property::ANCHOR).unwrap();
+        let mut track = KeyframeTrack::new();
+        track.insert(Keyframe {
+            t: RationalTime::ZERO,
+            value: Value::Vec2([100.0, 120.0]),
+            interp: Interp::Hold,
+            spatial: None,
+        });
+        doc.apply_all([
+            Intent::SetTrack {
+                layer,
+                property: position.clone(),
+                track,
+            },
+            Intent::SetConstant {
+                layer,
+                property: anchor.clone(),
+                value: Value::Vec2([10.0, 20.0]),
+            },
+            Intent::SetConstant {
+                layer,
+                property: PropertyId::new(property::SCALE).unwrap(),
+                value: Value::Vec2([2.0, 3.0]),
+            },
+            Intent::SetConstant {
+                layer,
+                property: PropertyId::new(property::ROTATION).unwrap(),
+                value: Value::F64(30.0),
+            },
+            Intent::SetConstant {
+                layer,
+                property: PropertyId::new(property::SKEW).unwrap(),
+                value: Value::F64(15.0),
+            },
+            Intent::SetConstant {
+                layer,
+                property: PropertyId::new(property::SKEW_AXIS).unwrap(),
+                value: Value::F64(20.0),
+            },
+        ])
+        .unwrap();
+        let before = doc
+            .view()
+            .local_transform(layer, RationalTime::ZERO)
+            .unwrap();
+        let head = doc.edit_head();
+        let doc = Arc::new(Mutex::new(doc));
+        utility::move_anchor(&doc, layer, [200.0, 100.0], RationalTime::ZERO, 0.5, 0.5).unwrap();
+        {
+            let doc = doc.lock().unwrap();
+            let after = doc
+                .view()
+                .local_transform(layer, RationalTime::ZERO)
+                .unwrap();
+            for point in [
+                glam::Vec2::ZERO,
+                glam::vec2(100.0, 0.0),
+                glam::vec2(0.0, 80.0),
+                glam::vec2(20.0, 40.0),
+            ] {
+                assert!(
+                    (before.transform_point2(point) - after.transform_point2(point)).length()
+                        < 0.001
+                );
+            }
+            assert_eq!(doc.edit_head(), head + 1);
+            assert_eq!(
+                doc.view().track(layer, &position).unwrap().unwrap().keys()[0].interp,
+                Interp::Hold
+            );
+        }
+        utility::move_anchor(&doc, layer, [200.0, 100.0], RationalTime::ZERO, 0.5, 0.5).unwrap();
+        let mut doc = doc.lock().unwrap();
+        assert_eq!(doc.edit_head(), head + 1, "the same anchor is a no-op");
+        assert!(doc.undo());
+        assert_eq!(
+            doc.view()
+                .value_at(layer, &anchor, RationalTime::ZERO)
+                .unwrap(),
+            Some(Value::Vec2([10.0, 20.0]))
+        );
+        assert_eq!(
+            doc.view()
+                .value_at(layer, &position, RationalTime::ZERO)
+                .unwrap(),
+            Some(Value::Vec2([100.0, 120.0]))
+        );
     }
 }

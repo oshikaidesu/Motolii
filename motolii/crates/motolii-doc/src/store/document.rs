@@ -1,5 +1,5 @@
-
 mod apply;
+mod edit;
 mod group;
 mod ids;
 mod validate;
@@ -67,7 +67,10 @@ pub enum Intent {
         layer: LayerId,
         source: crate::doc::store::LayerSource,
     },
-    SetOrder { layer: LayerId, order: i16 },
+    SetOrder {
+        layer: LayerId,
+        order: i16,
+    },
     SetMasks {
         layer: LayerId,
         masks: Vec<crate::doc::store::Mask>,
@@ -98,7 +101,9 @@ pub enum Intent {
         document: crate::doc::store::TextDocument,
     },
     SetComposition(crate::doc::store::Composition),
-    SetMarkers { markers: Vec<crate::doc::store::Marker> },
+    SetMarkers {
+        markers: Vec<crate::doc::store::Marker>,
+    },
     /// カメラの属性へ**素の値**を置く。層側の `SetConstant` と同じ意味で、
     /// 置き場が composition なだけ。
     SetCameraConstant {
@@ -209,6 +214,8 @@ pub struct Document {
     floor: i64,
     transient: HashMap<TransientKey, Value>,
     transient_generation: u64,
+    preview_edits: Vec<Intent>,
+    preview_owner: u64,
     track_cache: RefCell<TrackCache>,
     record_cache: RefCell<RecordCache>,
 }
@@ -232,6 +239,8 @@ impl Document {
             floor: 0,
             transient: HashMap::new(),
             transient_generation: 0,
+            preview_edits: Vec::new(),
+            preview_owner: 0,
             track_cache: RefCell::new(TrackCache::default()),
             record_cache: RefCell::new(RecordCache::default()),
         }
@@ -254,6 +263,7 @@ impl Document {
             &self.db,
             self.head,
             &self.transient,
+            &self.preview_edits,
             self.revision(),
             &self.track_cache,
             &self.record_cache,
@@ -298,6 +308,7 @@ impl Document {
     pub fn undo(&mut self) -> bool {
         if self.can_undo() {
             self.head -= 1;
+            self.clear_all_transients();
             true
         } else {
             false
@@ -307,6 +318,7 @@ impl Document {
     pub fn redo(&mut self) -> bool {
         if self.can_redo() {
             self.head += 1;
+            self.clear_all_transients();
             true
         } else {
             false
@@ -322,18 +334,41 @@ impl Document {
             return Ok(());
         }
 
-        self.drop_redo_space();
         let original_head = self.head;
         let original_tip = self.tip;
+        // Rerun's chunk-sharing snapshot keeps the redo branch intact until the edit succeeds.
+        let original_db = if self.can_redo() {
+            let staged = self
+                .db
+                .clone_with_new_id(self.db.store_id().clone())
+                .map_err(|error| StoreError::Ingest(error.to_string()))?;
+            Some(std::mem::replace(&mut self.db, staged))
+        } else {
+            None
+        };
+        let transient = std::mem::take(&mut self.transient);
+        let preview = std::mem::take(&mut self.preview_edits);
+        self.drop_redo_space();
         let at = self.head + 1;
         for intent in intents {
             if let Err(error) = self.write(intent, at) {
-                self.discard_batch_at(at, original_head, original_tip);
+                if let Some(original) = original_db {
+                    self.db = original;
+                    self.head = original_head;
+                    self.tip = original_tip;
+                } else {
+                    self.discard_batch_at(at, original_head, original_tip);
+                }
+                *self.track_cache.get_mut() = TrackCache::default();
+                *self.record_cache.get_mut() = RecordCache::default();
+                self.transient = transient;
+                self.preview_edits = preview;
                 return Err(error);
             }
         }
         self.head = at;
         self.tip = at;
+        self.clear_all_transients();
         Ok(())
     }
 
@@ -419,7 +454,11 @@ impl Document {
         t: crate::doc::store::RationalTime,
     ) -> Intent {
         match self.view().track(layer, property).ok().flatten() {
-            None => Intent::SetConstant { layer, property: property.clone(), value },
+            None => Intent::SetConstant {
+                layer,
+                property: property.clone(),
+                value,
+            },
             Some(mut track) => {
                 track.insert(crate::doc::store::Keyframe {
                     t,
@@ -427,15 +466,27 @@ impl Document {
                     interp: crate::doc::store::Interp::Linear,
                     spatial: None,
                 });
-                Intent::SetTrack { layer, property: property.clone(), track }
+                Intent::SetTrack {
+                    layer,
+                    property: property.clone(),
+                    track,
+                }
             }
         }
     }
 
     /// カメラ側の同じ規則。層を持たないので口が別なだけで、意味は同じ。
-    pub fn place_camera(&self, property: &PropertyId, value: Value, t: crate::doc::store::RationalTime) -> Intent {
+    pub fn place_camera(
+        &self,
+        property: &PropertyId,
+        value: Value,
+        t: crate::doc::store::RationalTime,
+    ) -> Intent {
         match self.view().camera_track(property).ok().flatten() {
-            None => Intent::SetCameraConstant { property: property.clone(), value },
+            None => Intent::SetCameraConstant {
+                property: property.clone(),
+                value,
+            },
             Some(mut track) => {
                 track.insert(crate::doc::store::Keyframe {
                     t,
@@ -443,7 +494,10 @@ impl Document {
                     interp: crate::doc::store::Interp::Linear,
                     spatial: None,
                 });
-                Intent::SetCameraTrack { property: property.clone(), track }
+                Intent::SetCameraTrack {
+                    property: property.clone(),
+                    track,
+                }
             }
         }
     }
@@ -494,10 +548,10 @@ impl Document {
     }
 
     pub fn clear_all_transients(&mut self) {
-        if !self.transient.is_empty() {
-            self.transient.clear();
-            self.bump_transient_generation();
-        }
+        self.transient.clear();
+        self.preview_edits.clear();
+        self.preview_owner = self.preview_owner.wrapping_add(1).max(1);
+        self.bump_transient_generation();
     }
 
     fn bump_transient_generation(&mut self) {

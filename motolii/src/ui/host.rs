@@ -1,10 +1,13 @@
 use std::sync::mpsc::{channel, Receiver, Sender};
 
-use crate::ui::keys::{activate_focused_control, aim_keystrokes, commit_field, commit_field_outside, drop_role_at, select_new_field, FIELD};
+use crate::ui::keys::{
+    activate_focused_control, aim_keystrokes, commit_field, commit_field_outside, drop_role_at,
+    select_new_field, FIELD,
+};
 use blitz_shell::{create_default_event_loop, BlitzShellEvent, BlitzShellProxy, WindowConfig};
 use blitz_shell::{BlitzApplication, View};
 use dioxus_native::prelude::VirtualDom;
-use dioxus_native::prelude::{provide_context, ScopeId};
+use dioxus_native::prelude::{dioxus_core, dioxus_signals, provide_context, ScopeId, Signal};
 use dioxus_native::winit::application::ApplicationHandler;
 use dioxus_native::winit::event::{
     ButtonSource, ElementState, MouseButton, StartCause, WindowEvent,
@@ -30,15 +33,17 @@ pub(crate) enum Ask {
 /// パネルを別窓へ出す口。窓の中のコードはこれしか触らない。
 #[derive(Clone)]
 pub(crate) struct Host {
+    pub(crate) mounts: crate::ui::mount::MountStore,
+    patch_epoch: std::rc::Rc<std::cell::Cell<u64>>,
+    last_patch: std::rc::Rc<std::cell::RefCell<Option<std::path::PathBuf>>>,
     tx: Sender<Ask>,
     proxy: Option<BlitzShellProxy>,
     /// 別窓が閉じた時に本体へ知らせる線。本体が自分の runtime を包んで置く。
-    on_close: std::rc::Rc<std::cell::RefCell<Option<std::rc::Rc<dyn Fn(Panel)>>>>,
-    on_focus_lost: std::rc::Rc<std::cell::RefCell<Option<std::rc::Rc<dyn Fn()>>>>,
+    on_close: std::rc::Rc<std::cell::RefCell<Option<(u64, std::rc::Rc<dyn Fn(Panel)>)>>>,
+    on_focus_lost: std::rc::Rc<std::cell::RefCell<Vec<(WindowId, u64, std::rc::Rc<dyn Fn()>)>>>,
     /// 窓ごとに 1 本。別窓で擦って外で放しても、その窓の線が受ける。
-    on_primary_pointer_release: std::rc::Rc<
-        std::cell::RefCell<Vec<(WindowId, std::rc::Rc<dyn Fn(f64, f64, bool)>)>>,
-    >,
+    on_primary_pointer_release:
+        std::rc::Rc<std::cell::RefCell<Vec<(WindowId, u64, std::rc::Rc<dyn Fn(f64, f64, bool)>)>>>,
     /// 窓を起こす線。窓ごとに1本、自分の runtime を包んで置く。
     /// 状態は全窓で1つなので、誰かが書いたら他の窓も描き直す必要がある。
     wakers: std::rc::Rc<std::cell::RefCell<Vec<(u64, std::rc::Rc<dyn Fn()>)>>>,
@@ -60,6 +65,10 @@ impl Host {
         self.next_id.set(id);
         self.wakers.borrow_mut().push((id, std::rc::Rc::new(wake)));
         id
+    }
+
+    pub(crate) fn unlisten(&self, id: u64) {
+        self.wakers.borrow_mut().retain(|(owner, _)| *owner != id);
     }
 
     /// 窓の外で状態が変わった時に、全ての窓を描き直させる。
@@ -90,13 +99,15 @@ impl Host {
     }
 
     /// 別窓が閉じた時に呼ばれる物を置く。本体の窓だけが置く。
-    pub(crate) fn on_close(&self, f: impl Fn(Panel) + 'static) {
-        *self.on_close.borrow_mut() = Some(std::rc::Rc::new(f));
+    pub(crate) fn on_close(&self, f: impl Fn(Panel) + 'static) -> u64 {
+        let id = self.new_callback_id();
+        *self.on_close.borrow_mut() = Some((id, std::rc::Rc::new(f)));
+        id
     }
 
     pub(crate) fn closed(&self, panel: Panel) {
         let f = self.on_close.borrow().clone();
-        if let Some(f) = f {
+        if let Some((_, f)) = f {
             f(panel);
         }
     }
@@ -105,12 +116,17 @@ impl Host {
         self.settings_dir.as_ref().map(|dir| dir.join(name))
     }
 
-    pub(crate) fn on_focus_lost(&self, callback: impl Fn() + 'static) {
-        *self.on_focus_lost.borrow_mut() = Some(std::rc::Rc::new(callback));
+    pub(crate) fn on_focus_lost(&self, window: WindowId, callback: impl Fn() + 'static) -> u64 {
+        let id = self.new_callback_id();
+        let mut callbacks = self.on_focus_lost.borrow_mut();
+        callbacks.retain(|(owner, _, _)| *owner != window);
+        callbacks.push((window, id, std::rc::Rc::new(callback)));
+        id
     }
 
     pub(crate) fn focus_lost(&self) {
-        if let Some(callback) = self.on_focus_lost.borrow().clone() {
+        let callbacks = self.on_focus_lost.borrow().clone();
+        for (_, _, callback) in callbacks {
             callback();
         }
     }
@@ -120,10 +136,74 @@ impl Host {
         &self,
         window: WindowId,
         callback: impl Fn(f64, f64, bool) + 'static,
-    ) {
+    ) -> u64 {
+        let id = self.new_callback_id();
         let mut hooks = self.on_primary_pointer_release.borrow_mut();
-        hooks.retain(|(owner, _)| *owner != window);
-        hooks.push((window, std::rc::Rc::new(callback)));
+        hooks.retain(|(owner, _, _)| *owner != window);
+        hooks.push((window, id, std::rc::Rc::new(callback)));
+        id
+    }
+
+    fn new_callback_id(&self) -> u64 {
+        let id = self.next_id.get() + 1;
+        self.next_id.set(id);
+        id
+    }
+
+    pub(crate) fn patch_epoch(&self) -> u64 {
+        self.patch_epoch.get()
+    }
+
+    pub(crate) fn remove_callback(&self, id: u64) {
+        let remove_close = self
+            .on_close
+            .borrow()
+            .as_ref()
+            .is_some_and(|(token, _)| *token == id);
+        if remove_close {
+            self.on_close.borrow_mut().take();
+        }
+        self.on_focus_lost
+            .borrow_mut()
+            .retain(|(_, token, _)| *token != id);
+        self.on_primary_pointer_release
+            .borrow_mut()
+            .retain(|(_, token, _)| *token != id);
+        self.unlisten(id);
+    }
+
+    fn retire_window_callbacks(&self, window: WindowId) -> usize {
+        let focus = {
+            let mut callbacks = self.on_focus_lost.borrow_mut();
+            let mut retired = Vec::new();
+            for index in (0..callbacks.len()).rev() {
+                if callbacks[index].0 == window {
+                    retired.push(callbacks.remove(index));
+                }
+            }
+            retired
+        };
+        let release = {
+            let mut callbacks = self.on_primary_pointer_release.borrow_mut();
+            let mut retired = Vec::new();
+            for index in (0..callbacks.len()).rev() {
+                if callbacks[index].0 == window {
+                    retired.push(callbacks.remove(index));
+                }
+            }
+            retired
+        };
+        let count = focus.len() + release.len();
+        drop((focus, release));
+        count
+    }
+
+    fn clear_scope_callbacks(&self) {
+        let close = self.on_close.borrow_mut().take();
+        let focus = std::mem::take(&mut *self.on_focus_lost.borrow_mut());
+        let release = std::mem::take(&mut *self.on_primary_pointer_release.borrow_mut());
+        let wakers = std::mem::take(&mut *self.wakers.borrow_mut());
+        drop((close, focus, release, wakers));
     }
 
     /// 窓の外で放しても届く線。blitz は当たりの無い pointerup を root へ落とし、
@@ -133,8 +213,8 @@ impl Host {
             .on_primary_pointer_release
             .borrow()
             .iter()
-            .find(|(owner, _)| *owner == window)
-            .map(|(_, callback)| callback.clone());
+            .find(|(owner, _, _)| *owner == window)
+            .map(|(_, _, callback)| callback.clone());
         if let Some(callback) = callback {
             callback(x, y, outside);
         }
@@ -157,6 +237,9 @@ impl Host {
             wakers: Default::default(),
             next_id: Default::default(),
             settings_dir: None,
+            mounts: Default::default(),
+            patch_epoch: Default::default(),
+            last_patch: Default::default(),
         }
     }
 
@@ -179,7 +262,9 @@ impl Host {
     }
 }
 
-fn primary_mouse_press(event: &WindowEvent) -> Option<dioxus_native::winit::dpi::PhysicalPosition<f64>> {
+fn primary_mouse_press(
+    event: &WindowEvent,
+) -> Option<dioxus_native::winit::dpi::PhysicalPosition<f64>> {
     match event {
         WindowEvent::PointerButton {
             state: ElementState::Pressed,
@@ -197,7 +282,9 @@ fn primary_mouse_press(event: &WindowEvent) -> Option<dioxus_native::winit::dpi:
 /// host が `cursor_area` 付きで有効にし直し、候補を欄の箱の位置へ置く。
 fn place_ime(view: &mut blitz_shell::View<DioxusNativeWindowRenderer>) {
     use dioxus_native::winit::dpi::{LogicalPosition, LogicalSize};
-    use dioxus_native::winit::window::{ImeCapabilities, ImeEnableRequest, ImeRequest, ImeRequestData};
+    use dioxus_native::winit::window::{
+        ImeCapabilities, ImeEnableRequest, ImeRequest, ImeRequestData,
+    };
     let area = {
         let doc: &DioxusDocument = view.downcast_doc_mut();
         let inner = doc.inner();
@@ -209,7 +296,9 @@ fn place_ime(view: &mut blitz_shell::View<DioxusNativeWindowRenderer>) {
             }
             return;
         };
-        let Some(node) = inner.get_node(field) else { return };
+        let Some(node) = inner.get_node(field) else {
+            return;
+        };
         let pos = node.absolute_position(0.0, 0.0);
         let layout = node.final_layout();
         (
@@ -224,7 +313,10 @@ fn place_ime(view: &mut blitz_shell::View<DioxusNativeWindowRenderer>) {
         LogicalSize::new(area.2, area.3).into(),
     );
     let window = &view.window;
-    if window.ime_capabilities().is_some_and(|caps| caps.cursor_area()) {
+    if window
+        .ime_capabilities()
+        .is_some_and(|caps| caps.cursor_area())
+    {
         let _ = window.request_ime_update(ImeRequest::Update(data));
         return;
     }
@@ -234,7 +326,9 @@ fn place_ime(view: &mut blitz_shell::View<DioxusNativeWindowRenderer>) {
     }
 }
 
-fn primary_mouse_release(event: &WindowEvent) -> Option<dioxus_native::winit::dpi::PhysicalPosition<f64>> {
+fn primary_mouse_release(
+    event: &WindowEvent,
+) -> Option<dioxus_native::winit::dpi::PhysicalPosition<f64>> {
     match event {
         WindowEvent::PointerButton {
             state: ElementState::Released,
@@ -263,6 +357,143 @@ fn host_routes_only_primary_mouse_release_to_the_owning_window() {
     assert_eq!(&*calls.borrow(), &[(-3.0, 4.0, true)]);
 }
 
+#[cfg(any(debug_assertions, test))]
+fn carry_patch_aliases(
+    incoming: &mut dioxus_devtools::subsecond::JumpTable,
+    previous: &dioxus_devtools::subsecond::JumpTable,
+    runtime_reference: u64,
+) -> Result<usize, String> {
+    let slide = runtime_reference
+        .checked_sub(incoming.aslr_reference)
+        .ok_or("Reload address is below the baseline ASLR reference")?;
+    let mut aliases_by_target = std::collections::HashMap::<u64, Vec<u64>>::new();
+    for (&address, &target) in &previous.map {
+        aliases_by_target.entry(target).or_default().push(address);
+    }
+    for aliases in aliases_by_target.values_mut() {
+        aliases.sort_unstable();
+    }
+    let mut originals = incoming
+        .map
+        .iter()
+        .map(|(&address, &target)| (address, target))
+        .collect::<Vec<_>>();
+    originals.sort_unstable();
+    let mut expanded = incoming.map.clone();
+    for (baseline, next) in originals {
+        let address = baseline
+            .checked_add(slide)
+            .ok_or("Reload baseline address overflow")?;
+        let Some(&previous_target) = previous.map.get(&address) else {
+            continue;
+        };
+        for old in std::iter::once(previous_target)
+            .chain(aliases_by_target[&previous_target].iter().copied())
+        {
+            let key = old
+                .checked_sub(slide)
+                .ok_or("Reload alias is below the baseline ASLR slide")?;
+            match expanded.entry(key) {
+                std::collections::hash_map::Entry::Vacant(entry) => {
+                    entry.insert(next);
+                }
+                std::collections::hash_map::Entry::Occupied(entry) if *entry.get() == next => {}
+                std::collections::hash_map::Entry::Occupied(entry) => {
+                    return Err(format!(
+                        "Ambiguous retained function address {old:#x}: {:#x} or {next:#x}",
+                        entry.get()
+                    ));
+                }
+            }
+        }
+    }
+    let added = expanded.len() - incoming.map.len();
+    incoming.map = expanded;
+    Ok(added)
+}
+
+#[cfg(test)]
+#[test]
+fn patch_aliases_follow_aslr_and_every_observed_generation() {
+    use dioxus_devtools::subsecond::JumpTable;
+    let table = |pairs: &[(u64, u64)]| JumpTable {
+        lib: Default::default(),
+        map: pairs.iter().copied().collect(),
+        aslr_reference: 0x1000,
+        new_base_address: 0,
+        ifunc_count: 0,
+    };
+    let slide = 0x10000;
+    let previous = table(&[
+        (slide + 0x100, 0x30100),
+        (slide + 0x200, 0x30200),
+        (0x20100, 0x30100),
+        (0x20200, 0x30200),
+        (0x20900, 0x30900),
+    ]);
+    let mut incoming = table(&[(0x100, 0x10), (0x200, 0x20)]);
+    assert_eq!(
+        carry_patch_aliases(&mut incoming, &previous, slide + 0x1000).unwrap(),
+        4
+    );
+    assert!(!incoming.map.contains_key(&(0x20900 - slide)));
+
+    // Pinned Subsecond::apply_patch rebases keys by the baseline slide and values by the new image slide.
+    let second = JumpTable {
+        map: incoming
+            .map
+            .iter()
+            .map(|(&key, &value)| (key + slide, value + 0x40000))
+            .collect(),
+        ..incoming
+    };
+    let mut third = table(&[(0x100, 0x50), (0x200, 0x60)]);
+    assert_eq!(
+        carry_patch_aliases(&mut third, &second, slide + 0x1000).unwrap(),
+        6
+    );
+    for old in [slide + 0x100, 0x20100, 0x30100, 0x40010] {
+        assert_eq!(third.map.get(&(old - slide)), Some(&0x50));
+    }
+    for old in [slide + 0x200, 0x20200, 0x30200, 0x40020] {
+        assert_eq!(third.map.get(&(old - slide)), Some(&0x60));
+    }
+}
+
+#[cfg(test)]
+#[test]
+fn patch_alias_collision_and_invalid_aslr_leave_incoming_unchanged() {
+    use dioxus_devtools::subsecond::JumpTable;
+    let mut incoming = JumpTable {
+        lib: Default::default(),
+        map: [(0x100, 0x10), (0x200, 0x20)].into_iter().collect(),
+        aslr_reference: 0x1000,
+        new_base_address: 0,
+        ifunc_count: 0,
+    };
+    let previous = JumpTable {
+        map: [(0x1100, 0x7000), (0x1200, 0x7000)].into_iter().collect(),
+        ..incoming.clone()
+    };
+    let original = incoming.clone();
+    assert!(carry_patch_aliases(&mut incoming, &previous, 0x2000)
+        .unwrap_err()
+        .contains("Ambiguous retained function address"));
+    assert_eq!(incoming, original);
+    assert!(carry_patch_aliases(&mut incoming, &previous, 0x0).is_err());
+    assert_eq!(incoming, original);
+    incoming.map.insert(u64::MAX, 0x30);
+    let overflowing = incoming.clone();
+    let empty_previous = JumpTable {
+        map: Default::default(),
+        ..previous
+    };
+    assert!(carry_patch_aliases(&mut incoming, &empty_previous, 0x2000)
+        .unwrap_err()
+        .contains("overflow"));
+    assert_eq!(incoming, overflowing);
+}
+
 /// macOS の Application Support(v1 は macOS だけ、V2-6)。
 pub(crate) use crate::ui::project::settings_dir;
 
@@ -288,7 +519,6 @@ impl NetProvider for MotoliiNetProvider {
 
 pub(crate) use crate::ui::poke::wakes_shared_state;
 
-
 fn window(
     root: fn() -> dioxus_native::prelude::Element,
     title: &str,
@@ -309,25 +539,20 @@ fn window(
         },
     );
     let renderer = DioxusNativeWindowRenderer::with_options(RendererOptions::default());
-    WindowConfig::with_attributes(
-        Box::new(doc) as _,
-        renderer,
-        {
-            let mut attrs = WindowAttributes::default()
-                .with_title(title.to_string())
-                .with_surface_size(dioxus_native::winit::dpi::LogicalSize::new(size.0, size.1));
-            // 主窓だけ前回の位置へ(別窓は既定)。
-            if title == "Motolii" {
-                if let Some(f) = load_window_frame() {
-                    attrs = attrs.with_position(dioxus_native::winit::dpi::LogicalPosition::new(f.x, f.y));
-                }
+    WindowConfig::with_attributes(Box::new(doc) as _, renderer, {
+        let mut attrs = WindowAttributes::default()
+            .with_title(title.to_string())
+            .with_surface_size(dioxus_native::winit::dpi::LogicalSize::new(size.0, size.1));
+        // 主窓だけ前回の位置へ(別窓は既定)。
+        if title == "Motolii" {
+            if let Some(f) = load_window_frame() {
+                attrs =
+                    attrs.with_position(dioxus_native::winit::dpi::LogicalPosition::new(f.x, f.y));
             }
-            attrs
-        },
-    )
+        }
+        attrs
+    })
 }
-
-
 
 /// 窓を増やせるようにするための薄い包み。頼みを先に食べて、残りは上流へ流す。
 struct Windows {
@@ -335,6 +560,7 @@ struct Windows {
     asks: Receiver<Ask>,
     session: Session,
     host: Host,
+    _catalog_watcher: Option<crate::render::engine::CatalogWatcher>,
     pending: Vec<(WindowConfig<DioxusNativeWindowRenderer>, Option<Panel>)>,
     /// どの窓がどのパネルの別窓か。閉じた時に本体へ返すのに要る。
     detached: std::collections::HashMap<WindowId, Panel>,
@@ -381,7 +607,6 @@ fn realise(
 }
 
 impl Windows {
-
     /// 閉じる時の Save。行き先が無ければ同期の panel で聞く(event の中なので async は使えない)。
     fn save_now(&self) -> bool {
         let known = self.session.project_path.lock().unwrap().clone();
@@ -430,15 +655,152 @@ impl Windows {
             #[cfg(debug_assertions)]
             DioxusNativeEvent::DevserverEvent(event) => match event {
                 dioxus_devtools::DevserverMsg::HotReload(message) => {
+                    let mut view_message = message.clone();
+                    view_message.jump_table = None;
+                    let mut rust_applied = false;
+                    if let Some(jump) = &message.jump_table {
+                        let target_matches = message.for_pid == Some(std::process::id())
+                            && message.for_build_id == Some(dioxus_cli_config::build_id());
+                        let duplicate = self.host.last_patch.borrow().as_ref() == Some(&jump.lib);
+                        if !target_matches || duplicate {
+                            println!(
+                                "MOTOLII_RELOAD {}",
+                                serde_json::json!({
+                                    "event":"ignored", "execution_class":"THIN_PATCH",
+                                    "reason":if duplicate { "duplicate_patch" } else { "target_mismatch" },
+                                    "pid":std::process::id(), "epoch":self.host.patch_epoch.get()
+                                })
+                            );
+                        } else {
+                            let mut incoming = jump.clone();
+                            let aliases = unsafe { dioxus_devtools::subsecond::get_jump_table() }
+                                .map_or(Ok(0), |previous| {
+                                    carry_patch_aliases(
+                                        &mut incoming,
+                                        previous,
+                                        dioxus_devtools::subsecond::aslr_reference() as u64,
+                                    )
+                                });
+                            let aliases = match aliases {
+                                Ok(aliases) => aliases,
+                                Err(error) => {
+                                    println!(
+                                        "MOTOLII_RELOAD {}",
+                                        serde_json::json!({
+                                            "event":"failed", "execution_class":"THIN_PATCH", "reason":error,
+                                            "pid":std::process::id()
+                                        })
+                                    );
+                                    *self.session.project_notice.lock().unwrap() =
+                                        format!("Reload failed: {error}");
+                                    self.host.wake_all();
+                                    return;
+                                }
+                            };
+                            crate::ui::inspector::cancel_scrub(&self.session);
+                            self.session.gesture.cancel();
+                            self.session.close_field();
+                            crate::ui::keymap::set_typing(false);
+                            self.session.doc.lock().unwrap().clear_all_transients();
+                            match unsafe { dioxus_devtools::subsecond::apply_patch(incoming) } {
+                                Ok(()) => {
+                                    if let Some(watcher) = &self._catalog_watcher {
+                                        let runtime = watcher.runtime();
+                                        dioxus_devtools::subsecond::HotFn::current(
+                                            crate::render::engine::bind_catalog_runtime
+                                                as fn(&crate::render::engine::CatalogRuntime),
+                                        )
+                                        .call((&runtime,));
+                                        println!(
+                                            "MOTOLII_RELOAD {}",
+                                            serde_json::json!({
+                                                "event":"catalog_runtime_rebound", "owner":runtime.identity(),
+                                                "generation":runtime.generation()
+                                            })
+                                        );
+                                    }
+                                    self.host.clear_scope_callbacks();
+                                    let epoch = self.host.patch_epoch.get() + 1;
+                                    self.host.patch_epoch.set(epoch);
+                                    *self.host.last_patch.borrow_mut() = Some(jump.lib.clone());
+                                    rust_applied = true;
+                                    println!(
+                                        "MOTOLII_RELOAD {}",
+                                        serde_json::json!({
+                                            "event":"accepted", "execution_class":"THIN_PATCH", "epoch":epoch,
+                                            "retained_function_aliases":aliases,
+                                            "pid":std::process::id(), "build_id":dioxus_cli_config::build_id(),
+                                            "document_owner":std::sync::Arc::as_ptr(&self.session.doc) as usize,
+                                            "history":self.session.doc.lock().unwrap().history_depth(),
+                                            "playing":self.session.clock.playing()
+                                        })
+                                    );
+                                }
+                                Err(error) => {
+                                    println!(
+                                        "MOTOLII_RELOAD {}",
+                                        serde_json::json!({
+                                            "event":"failed", "execution_class":"THIN_PATCH",
+                                            "reason":error.to_string(), "pid":std::process::id()
+                                        })
+                                    );
+                                    *self.session.project_notice.lock().unwrap() =
+                                        format!("Reload failed: {error}");
+                                    self.host.wake_all();
+                                    return;
+                                }
+                            }
+                        }
+                    }
                     for (index, window) in self.inner.windows.values_mut().enumerate() {
                         let doc = window.downcast_doc_mut::<DioxusDocument>();
-                        dioxus_devtools::apply_changes(&doc.vdom, message);
+                        if let Some(watcher) = &self._catalog_watcher {
+                            doc.vdom.provide_root_context(watcher.runtime());
+                        }
+                        if let Err(error) =
+                            dioxus_devtools::try_apply_changes(&doc.vdom, &view_message)
+                        {
+                            *self.session.project_notice.lock().unwrap() =
+                                format!("View reload failed: {error}");
+                            continue;
+                        }
+                        if rust_applied {
+                            doc.vdom
+                                .runtime()
+                                .in_scope(ScopeId::ROOT_ERROR_BOUNDARY, || {
+                                    if let Some(errors) = dioxus_core::try_consume_context::<
+                                        dioxus_core::ErrorContext,
+                                    >() {
+                                        if errors.error().is_some() {
+                                            errors.clear_errors();
+                                            println!(
+                                                "MOTOLII_RELOAD {}",
+                                                serde_json::json!({
+                                                    "event":"view_error_retry", "window":index,
+                                                    "epoch":self.host.patch_epoch.get()
+                                                })
+                                            );
+                                        }
+                                    }
+                                });
+                            doc.vdom.runtime().in_scope(ScopeId::ROOT, || {
+                                dioxus_signals::get_global_context()
+                                    .clear::<Signal<Option<dioxus_core::internal::HotReloadedTemplate>>>();
+                                doc.vdom.runtime().force_all_dirty();
+                            });
+                        }
                         for asset in &message.assets {
                             if let Some(url) = asset.to_str() {
                                 doc.inner.borrow_mut().reload_resource_by_href(url);
                             }
                         }
-                        println!("PROBE room=reload verdict=applied window={index}");
+                        println!(
+                            "MOTOLII_RELOAD {}",
+                            serde_json::json!({
+                                "event":"view_updated", "window":index,
+                                "epoch":self.host.patch_epoch.get(), "rust_applied":rust_applied
+                            })
+                        );
                         window.poll();
                     }
                 }
@@ -472,19 +834,42 @@ impl Windows {
     fn serve_asks(&mut self) {
         while let Ok(ask) = self.asks.try_recv() {
             match ask {
-                Ask::Open(panel) => self.pending.push((
-                    window(
-                        crate::ui::app::detached,
-                        panel.label(),
-                        panel.window_size(),
-                        vec![
-                            Box::new(self.session.clone()),
-                            Box::new(self.host.clone()),
-                            Box::new(panel),
-                        ],
-                    ),
-                    Some(panel),
-                )),
+                Ask::Open(panel) => {
+                    if let Some(view) = self.detached.iter().find_map(|(id, existing)| {
+                        (*existing == panel)
+                            .then(|| self.inner.windows.get(id))
+                            .flatten()
+                    }) {
+                        view.window.set_minimized(false);
+                        view.window.focus_window();
+                        view.window.request_redraw();
+                        continue;
+                    }
+                    if self
+                        .pending
+                        .iter()
+                        .any(|(_, existing)| *existing == Some(panel))
+                    {
+                        continue;
+                    }
+                    let mut contexts: Vec<Box<dyn std::any::Any>> = vec![
+                        Box::new(self.session.clone()),
+                        Box::new(self.host.clone()),
+                        Box::new(panel),
+                    ];
+                    if let Some(watcher) = &self._catalog_watcher {
+                        contexts.push(Box::new(watcher.runtime()));
+                    }
+                    self.pending.push((
+                        window(
+                            crate::ui::app::detached,
+                            panel.label(),
+                            panel.window_size(),
+                            contexts,
+                        ),
+                        Some(panel),
+                    ));
+                }
             }
         }
     }
@@ -522,6 +907,52 @@ impl ApplicationHandler for Windows {
         window_id: WindowId,
         event: WindowEvent,
     ) {
+        let call = dioxus_devtools::subsecond::call(|| {
+            Self::dispatch_window_event
+                as fn(&mut Self, &dyn ActiveEventLoop, WindowId, WindowEvent)
+        });
+        call(self, event_loop, window_id, event);
+    }
+
+    fn proxy_wake_up(&mut self, event_loop: &dyn ActiveEventLoop) {
+        let call = dioxus_devtools::subsecond::call(|| {
+            Self::dispatch_proxy_wake_up as fn(&mut Self, &dyn ActiveEventLoop)
+        });
+        call(self, event_loop);
+    }
+}
+
+impl Windows {
+    fn dispatch_window_event(
+        &mut self,
+        event_loop: &dyn ActiveEventLoop,
+        window_id: WindowId,
+        event: WindowEvent,
+    ) {
+        dioxus_devtools::subsecond::HotFn::current(
+            Self::run_window_event as fn(&mut Self, &dyn ActiveEventLoop, WindowId, WindowEvent),
+        )
+        .call((self, event_loop, window_id, event));
+    }
+
+    fn dispatch_proxy_wake_up(&mut self, event_loop: &dyn ActiveEventLoop) {
+        dioxus_devtools::subsecond::HotFn::current(
+            Self::run_proxy_wake_up as fn(&mut Self, &dyn ActiveEventLoop),
+        )
+        .call((self, event_loop));
+    }
+
+    fn run_window_event(
+        &mut self,
+        event_loop: &dyn ActiveEventLoop,
+        window_id: WindowId,
+        event: WindowEvent,
+    ) {
+        if !self.inner.windows.contains_key(&window_id) {
+            self.reap_closed_window_state();
+            return;
+        }
+
         // Blitz は hover node が無い瞬間を `set_cursor(None)` として shell へ渡し、
         // shell は None を「既定」ではなく `set_cursor_visible(false)` にしている。
         // custom widget(Stage/Timeline)の空所や再layout直後でこれが起きるため、
@@ -535,7 +966,13 @@ impl ApplicationHandler for Windows {
         );
         if self.session.quit.load(std::sync::atomic::Ordering::Relaxed) {
             // ⌘Q でも枠を憶える(閉じるボタンだけだった)。主窓 = 別窓に登録されていない窓。
-            if let Some(view) = self.inner.windows.iter().find(|(id, _)| !self.detached.contains_key(id)).map(|(_, v)| v) {
+            if let Some(view) = self
+                .inner
+                .windows
+                .iter()
+                .find(|(id, _)| !self.detached.contains_key(id))
+                .map(|(_, v)| v)
+            {
                 save_window_frame(&*view.window);
             }
             event_loop.exit();
@@ -551,14 +988,56 @@ impl ApplicationHandler for Windows {
             select_new_field(view.downcast_doc_mut::<DioxusDocument>(), seen);
         }
         if let WindowEvent::KeyboardInput { event: key, .. } = &event {
+            // Native fullscreen consumes Escape before document/menu commands.
+            if key.state.is_pressed()
+                && matches!(
+                    key.logical_key,
+                    dioxus_native::winit::keyboard::Key::Named(
+                        dioxus_native::winit::keyboard::NamedKey::Escape
+                    )
+                )
+            {
+                if let Some(view) = self.inner.windows.get(&window_id) {
+                    if view.window.fullscreen().is_some() {
+                        view.window.set_fullscreen(None);
+                        view.window.request_redraw();
+                        println!(
+                            "MOTOLII_RELOAD {}",
+                            serde_json::json!({
+                                "event":"fullscreen_exit_requested", "window":format!("{window_id:?}"),
+                                "reason":"escape"
+                            })
+                        );
+                        return;
+                    }
+                }
+            }
             if let Some(view) = self.inner.windows.get_mut(&window_id) {
                 let doc = view.downcast_doc_mut::<DioxusDocument>();
                 aim_keystrokes(doc);
                 if key.state.is_pressed() {
-                    let logical = keyboard_types::Key::Character(key.text.as_deref().unwrap_or("").to_string());
-                    let is_enter = matches!(key.logical_key, dioxus_native::winit::keyboard::Key::Named(dioxus_native::winit::keyboard::NamedKey::Enter));
-                    let is_tab = matches!(key.logical_key, dioxus_native::winit::keyboard::Key::Named(dioxus_native::winit::keyboard::NamedKey::Tab));
-                    let k = if is_enter { keyboard_types::Key::Enter } else if is_tab { keyboard_types::Key::Tab } else { logical };
+                    let logical = keyboard_types::Key::Character(
+                        key.text.as_deref().unwrap_or("").to_string(),
+                    );
+                    let is_enter = matches!(
+                        key.logical_key,
+                        dioxus_native::winit::keyboard::Key::Named(
+                            dioxus_native::winit::keyboard::NamedKey::Enter
+                        )
+                    );
+                    let is_tab = matches!(
+                        key.logical_key,
+                        dioxus_native::winit::keyboard::Key::Named(
+                            dioxus_native::winit::keyboard::NamedKey::Tab
+                        )
+                    );
+                    let k = if is_enter {
+                        keyboard_types::Key::Enter
+                    } else if is_tab {
+                        keyboard_types::Key::Tab
+                    } else {
+                        logical
+                    };
                     if crate::ui::keys::step_focus_back(doc, &k, crate::ui::keymap::shift_held()) {
                         return;
                     }
@@ -668,7 +1147,9 @@ impl ApplicationHandler for Windows {
                 let name = self.session.document_title();
                 let mut dialog = rfd::MessageDialog::new()
                     .set_level(rfd::MessageLevel::Warning)
-                    .set_title(format!("Do you want to save the changes you made to {name}?"))
+                    .set_title(format!(
+                        "Do you want to save the changes you made to {name}?"
+                    ))
                     .set_description("Your changes will be lost if you don't save them.")
                     .set_buttons(rfd::MessageButtons::YesNoCancelCustom(
                         "Save".to_owned(),
@@ -689,7 +1170,25 @@ impl ApplicationHandler for Windows {
                 }
             }
             if let Some(panel) = self.detached.remove(&window_id) {
+                let native = self.inner.windows.get(&window_id).map(|view| {
+                    view.window.set_visible(false);
+                    std::sync::Arc::downgrade(&view.window)
+                });
+                crate::ui::inspector::cancel_scrub(&self.session);
+                self.session.gesture.cancel();
+                let callbacks = self.retire_window_state(window_id);
+                self.inner.window_event(event_loop, window_id, event);
                 self.host.closed(panel);
+                self.focus_main_after_child_close();
+                println!(
+                    "MOTOLII_RELOAD {}",
+                    serde_json::json!({
+                        "event":"child_window_closed", "window":format!("{window_id:?}"),
+                        "callbacks_retired":callbacks, "remaining_windows":self.inner.windows.len(),
+                        "retained_native_refs":native.map_or(0, |window| window.strong_count())
+                    })
+                );
+                return;
             } else {
                 // 主窓を閉じたら終わる。panel の別窓だけを残さない(Mac の document app)。
                 if let Some(view) = self.inner.windows.get(&window_id) {
@@ -715,7 +1214,75 @@ impl ApplicationHandler for Windows {
         self.reflect_document(window_id);
     }
 
-    fn proxy_wake_up(&mut self, event_loop: &dyn ActiveEventLoop) {
+    fn retire_window_state(&mut self, window: WindowId) -> usize {
+        self.cursor.remove(&window);
+        self.seen_field.remove(&window);
+        self.reflected.remove(&window);
+        self.host.mounts.remove_window(window);
+        self.host.retire_window_callbacks(window)
+    }
+
+    fn focus_main_after_child_close(&self) {
+        if let Some((_, main)) = self
+            .inner
+            .windows
+            .iter()
+            .find(|(id, _)| !self.detached.contains_key(*id))
+        {
+            main.window.focus_window();
+            main.window.request_redraw();
+        }
+        self.host.wake_all();
+    }
+
+    fn reap_closed_window_state(&mut self) {
+        let closed: std::collections::HashSet<_> = self
+            .cursor
+            .keys()
+            .chain(self.seen_field.keys())
+            .chain(self.reflected.keys())
+            .chain(self.detached.keys())
+            .filter(|id| !self.inner.windows.contains_key(*id))
+            .copied()
+            .collect();
+        if closed.is_empty() {
+            return;
+        }
+        for window in closed {
+            let callbacks = self.retire_window_state(window);
+            if let Some(panel) = self.detached.remove(&window) {
+                self.host.closed(panel);
+            }
+            println!(
+                "MOTOLII_RELOAD {}",
+                serde_json::json!({
+                    "event":"closed_window_reaped", "window":format!("{window:?}"), "callbacks_retired":callbacks,
+                    "remaining_windows":self.inner.windows.len()
+                })
+            );
+        }
+        self.focus_main_after_child_close();
+    }
+
+    fn run_proxy_wake_up(&mut self, event_loop: &dyn ActiveEventLoop) {
+        self.reap_closed_window_state();
+        let retained_catalog = self
+            ._catalog_watcher
+            .as_ref()
+            .map(|watcher| watcher.runtime());
+        if let Some(runtime) = &retained_catalog {
+            for window in self.inner.windows.values_mut() {
+                window
+                    .downcast_doc_mut::<DioxusDocument>()
+                    .vdom
+                    .provide_root_context(runtime.clone());
+            }
+            dioxus_devtools::subsecond::HotFn::current(
+                crate::render::engine::bind_catalog_runtime
+                    as fn(&crate::render::engine::CatalogRuntime),
+            )
+            .call((runtime,));
+        }
         let mut wake_shared = false;
         while let Ok(event) = self.inner.event_queue.try_recv() {
             let event_wakes_shared = wakes_shared_state(&event);
@@ -728,15 +1295,81 @@ impl ApplicationHandler for Windows {
                     }
                 }
                 // 支援技術(VoiceOver)の押下。上流の blitz-shell は `ActionRequested` を捨てる(TODO)。
-                BlitzShellEvent::Accessibility { window_id, ref data } if crate::ui::keys::action_of(data).is_some() => {
-                    if let (Some(req), Some(view)) = (crate::ui::keys::action_of(data), self.inner.windows.get_mut(&window_id)) {
+                BlitzShellEvent::Accessibility {
+                    window_id,
+                    ref data,
+                } if crate::ui::keys::action_of(data).is_some() => {
+                    if let (Some(req), Some(view)) = (
+                        crate::ui::keys::action_of(data),
+                        self.inner.windows.get_mut(&window_id),
+                    ) {
                         crate::ui::keys::act(view.downcast_doc_mut::<DioxusDocument>(), req);
                     }
+                }
+                BlitzShellEvent::CloseWindow { window_id } => {
+                    Self::dispatch_window_event(
+                        self,
+                        event_loop,
+                        window_id,
+                        WindowEvent::CloseRequested,
+                    );
                 }
                 event => self.inner.handle_blitz_shell_event(event_loop, event),
             }
         }
-        if wake_shared {
+        if wake_shared
+            || retained_catalog
+                .as_ref()
+                .is_some_and(|runtime| runtime.is_dirty())
+        {
+            let catalog = if let Some(runtime) = &retained_catalog {
+                dioxus_devtools::subsecond::HotFn::current(
+                    crate::render::engine::refresh_effect_catalog_for
+                        as fn(
+                            &crate::render::engine::CatalogRuntime,
+                        ) -> crate::render::engine::CatalogRefresh,
+                )
+                .call((runtime,))
+            } else {
+                dioxus_devtools::subsecond::HotFn::current(
+                    crate::render::engine::refresh_effect_catalog
+                        as fn() -> crate::render::engine::CatalogRefresh,
+                )
+                .call(())
+            };
+            if catalog.changed {
+                crate::ui::inspector::cancel_scrub(&self.session);
+                self.session.gesture.cancel();
+                self.session.close_field();
+                crate::ui::keymap::set_typing(false);
+                self.session.doc.lock().unwrap().clear_all_transients();
+            }
+            let notice_changed = {
+                let mut notice = self.session.project_notice.lock().unwrap();
+                let next = if !catalog.errors.is_empty() {
+                    Some(format!("Effect reload: {}", catalog.errors.join("; ")))
+                } else if notice.starts_with("Effect reload: ") {
+                    Some(String::new())
+                } else {
+                    None
+                };
+                next.is_some_and(|next| {
+                    if *notice == next {
+                        return false;
+                    }
+                    *notice = next;
+                    true
+                })
+            };
+            if catalog.changed || notice_changed {
+                println!(
+                    "MOTOLII_RELOAD {}",
+                    serde_json::json!({"event":"catalog_updated", "generation":catalog.generation, "changed":catalog.changed, "errors":catalog.errors})
+                );
+                for window in self.inner.windows.values() {
+                    window.window.request_redraw();
+                }
+            }
             self.host.wake_all();
         }
         self.serve_asks();
@@ -758,6 +1391,42 @@ pub fn launch(title: &str) {
         });
     }
 
+    let catalog_poke = crate::ui::poke::Poke(Some(proxy.clone()));
+    let catalog_watcher = match crate::render::engine::watch_effect_catalog(move || {
+        catalog_poke.poke()
+    }) {
+        Ok(watcher) => {
+            if let (Some(path), Ok(session)) = (
+                std::env::var_os("MOTOLII_RUNTIME_SOURCE_REGISTRATION"),
+                std::env::var("MOTOLII_RELOAD_SESSION"),
+            ) {
+                let path = std::path::PathBuf::from(path);
+                let temporary = path.with_extension("tmp");
+                let data = serde_json::json!({"app_pid":std::process::id(), "session":session, "roots":crate::render::engine::catalog_source_roots()});
+                if let Err(error) = std::fs::write(&temporary, data.to_string())
+                    .and_then(|_| std::fs::rename(&temporary, &path))
+                {
+                    eprintln!(
+                        "MOTOLII_RELOAD {}",
+                        serde_json::json!({"event":"runtime_registration_failed", "reason":error.to_string()})
+                    );
+                }
+            }
+
+            println!(
+                "MOTOLII_RELOAD {}",
+                serde_json::json!({"event":"catalog_watcher_ready", "pid":std::process::id(), "owner":watcher.runtime().identity()})
+            );
+            Some(watcher)
+        }
+        Err(error) => {
+            eprintln!(
+                "MOTOLII_RELOAD {}",
+                serde_json::json!({"event":"catalog_watcher_failed", "reason":error})
+            );
+            None
+        }
+    };
     let Loaded {
         doc,
         ui,
@@ -791,15 +1460,23 @@ pub fn launch(title: &str) {
         wakers: Default::default(),
         next_id: Default::default(),
         settings_dir: settings_dir(),
+        mounts: Default::default(),
+        patch_epoch: Default::default(),
+        last_patch: Default::default(),
     };
 
     // 窓の枠は前回の続き(macOS の作法)。無ければ既定。
     let frame = load_window_frame();
+    let mut contexts: Vec<Box<dyn std::any::Any>> =
+        vec![Box::new(session.clone()), Box::new(host.clone())];
+    if let Some(watcher) = &catalog_watcher {
+        contexts.push(Box::new(watcher.runtime()));
+    }
     let main = window(
         crate::ui::app::app,
         title,
         frame.map_or((1600, 1000), |f| (f.w, f.h)),
-        vec![Box::new(session.clone()), Box::new(host.clone())],
+        contexts,
     );
     let inner = BlitzApplication::new(proxy, event_queue);
 
@@ -809,6 +1486,7 @@ pub fn launch(title: &str) {
             asks,
             session,
             host,
+            _catalog_watcher: catalog_watcher,
             pending: vec![(main, None)],
             detached: Default::default(),
             cursor: Default::default(),
@@ -818,3 +1496,34 @@ pub fn launch(title: &str) {
         .unwrap();
 }
 pub(crate) use crate::ui::window_frame::{load_window_frame, save_window_frame};
+
+#[cfg(test)]
+#[test]
+fn closing_one_window_retires_only_its_callbacks() {
+    use std::cell::RefCell;
+    use std::rc::Rc;
+    let host = Host::for_tests();
+    let main = WindowId::from_raw(81);
+    let child = WindowId::from_raw(82);
+    let calls = Rc::new(RefCell::new(Vec::new()));
+    for (window, tag) in [(main, "main-focus"), (child, "child-focus")] {
+        let calls = calls.clone();
+        host.on_focus_lost(window, move || calls.borrow_mut().push(tag));
+    }
+    for (window, tag) in [(main, "main-release"), (child, "child-release")] {
+        let calls = calls.clone();
+        host.on_primary_pointer_release(window, move |_, _, _| calls.borrow_mut().push(tag));
+    }
+    let live_calls = calls.clone();
+    host.listen(move || live_calls.borrow_mut().push("main-wake"));
+    assert_eq!(host.retire_window_callbacks(child), 2);
+    assert_eq!(host.retire_window_callbacks(child), 0);
+    host.focus_lost();
+    host.primary_pointer_released(child, 0.0, 0.0, false);
+    host.primary_pointer_released(main, 0.0, 0.0, false);
+    host.wake_all();
+    assert_eq!(
+        &*calls.borrow(),
+        &["main-focus", "main-release", "main-wake"]
+    );
+}

@@ -44,7 +44,7 @@
 | 反射 | 中身 | 依存 |
 |---|---|---|
 | ~~**Space = 再生/停止**~~ | 着地済(2026-08-30、窓で実映像の再生を確認)。**JKLシャトル・playhead追従スクロールは未着** | playback spine(PlaybackSession接続、audio clock)。transport一式のQ0違反もここで解消 |
-| **右クリック menu** | 文脈操作の普遍的な逃げ道(削除・複製・rename…) | context menu基盤(ObjC)。中身はTier 1/2の再掲で良い |
+| **右クリック menu** | 文脈操作の普遍的な逃げ道(削除・複製・rename…) | 2026-09-04: PR #479 を現行 Dioxus/Blitz の semantic menu と操作経路へ採用。旧 probe/ObjC 基盤へ戻さない。対象・実装・実窓検収の現在地は [採用計画](reviews/2026-09-04-pr-479-adoption.md) |
 
 ## Tier 2 — D2/モデルのgrainが要る反射(仕様粒→実装の二段)
 
@@ -53,7 +53,7 @@
 | **属性の絞り込み**(述語) | 層あたりの「今出ている属性」がtimelineに無い — **器ごと不在** | 表示状態でありDocumentを変えない。`U`/`UU`/`SS`相当(キーか式を持つ/既定から変わった/選択中)。1属性=1文字は[deltas](motolii-deltas.md)で不採用 |
 | ~~**Split at playhead**~~ | 着地済(2026-08-30) | |
 | Rename(名前double-click) | renameコマンド不在(R2地図でも既知) | layer_names台帳は存在 |
-| ~~複数選択~~ | 着地済(2026-08-30、`Selection`は`Vec<LayerId>`で末尾が primary) | |
+| ~~複数選択~~ | 選択型に加え、現行は Inspector の混在「—」・相対 scrub・絶対入力、選択全体の Delete/nudge が在る | PR #479 の [持ち上げ設計](reviews/2026-09-03-selection-lifting.md)を現行へ分類。未接続の動詞と検収は [採用計画](reviews/2026-09-04-pr-479-adoption.md)へ |
 | Copy/Paste | コマンド不在 | duplicate既存が下敷き |
 | I/O点・work area | range概念が未設計 | 台帳の「Preview Range/Loop/Trim比較中」row参照 |
 | M/S(mute/solo)直クリック | layer mute/soloのD2コマンド不在(実測) | 旧「object bar read-only」は2026-08-12裁定で撤回済み |

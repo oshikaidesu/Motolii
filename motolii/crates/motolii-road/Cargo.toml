@@ -5,7 +5,7 @@ edition = "2021"
 publish = false
 
 [lib]
-crate-type = ["dylib"]
+crate-type = ["rlib", "dylib"]
 path = "src/lib.rs"
 
 [dependencies]

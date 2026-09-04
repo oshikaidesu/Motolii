@@ -32,6 +32,13 @@
 
 | ファイル | 表題 |
 |---|---|
+| [2026-09-04-dioxus-reload-goal.md](2026-09-04-dioxus-reload-goal.md) | **通常実装をhotreloadで完結**(実装・代表検収完了)。workspace replay、混在CSS/Rust、runtime shader、後から開いた別窓の連続更新とDocument/GPU保持を実窓で確認。全体buildは理由・影響・修正ownerを残す例外。既存の型・保持入口の契約と証跡を明記 |
+| [2026-09-04-function-group-contract.md](2026-09-04-function-group-contract.md) | **関数群の契約**(実装・代表検収完了)。Parnas/Hughes/Foster/Elmと固定版Subsecond/Blitz一次資料に基づく原子・意味ブロック・合成・副作用・hot入口。名前のあるmodule、同じPreview/Commit計画、Redo原子性、操作中patch取消、新placement moduleとGainデータの実測 |
+| [2026-09-04-pr-479-adoption.md](2026-09-04-pr-479-adoption.md) | PR #479 の現行採用計画 — 右クリック・選択操作・カメラ・hotpatch・関数分類の採否、担当、実装と検収の現在地 |
+| [2026-09-03-camera-behavior-design.md](2026-09-03-camera-behavior-design.md) | カメラの挙動設計(縮小採用)。旧 base の原文と、現行 Camera 行・User View・投影に対する訂正、層の 2D / 2.5D / 3D 設計入力 |
+| [2026-09-03-selection-lifting.md](2026-09-03-selection-lifting.md) | 動詞を選択へ持ち上げる(縮小採用)。単体から選択への展開と一手一 Undo。現行 Inspector の先行実装・原文の適用単位の矛盾を明示 |
+| [2026-09-03-hot-reload-replaceable-functions.md](2026-09-03-hot-reload-replaceable-functions.md) | 置き換え可能な関数群(縮小採用)。旧 probe の提案を保存し、現行 warm process・tip crate・既存 reload 接続と分離。Lens / Gesture / Control は設計参考 |
+| [2026-09-03-probe-function-groups.md](2026-09-03-probe-function-groups.md) | probe の関数グループ台帳(観察)。旧 base の 8 群と原子の分類を参考として保存。現行 5 家の移動指示・全量台帳にはしない |
 | [2026-09-02-intuitive-extension-grammar-prior-art.md](2026-09-02-intuitive-extension-grammar-prior-art.md) | **直観的な拡張文法**(決定)。Apple Motion／Cavalry／Autograph／Fusionの公式資料を比較し、後発競合は複雑さを消さずBehaviour／connection／slot／node graphへ移したと整理。Motoliiは値=PropertySource、表現=Vism、空間・描画=Rerun、UI入口=既存Browser群へ分け、**新しい能力は名詞としてcardへ増やしてよいが、新しい動詞・mode・panel・事前変換・node graphを増やさない**と固定 |
 | [2026-09-02-inspector-and-desk.md](2026-09-02-inspector-and-desk.md) | **Inspector の今後と机**(決定)。Inspector は複数選択を受け、関係の行は選択肢でなく手つき(ウィップ／クリッピング／フリーズ後の flatten)で指す。**机**を常設の一枚として立て、Document を覗くレンズ(誰にも呼ばれない)、顔は書き置き・参考画像・カササギ、引き出しは焦点の型に一つ+履歴、preset は人の物で 2 層、面は三段で Panel 11→5 |
 | [2026-09-01-test-reset.md](2026-09-01-test-reset.md) | **試験448本を一度に消した**(利用者裁定)。src 33,607行に対し試験は13,402行=**4割**あり、その全部が通っている間に窓の中では静止画が一度も映らず、入力欄に1字も入らず、素材の入口も出口も無く、窓と書き出しが違う絵を出していた。見つけたのは**説明書だけ読んだ試し手が窓を触った時**。原因は「弱い」ではなく**その道の試験が1本も無い** —— `a_keystroke_reaches_the_app` は `#app` に焦点を当ててから撃っており、バグの方を正解として書いてあった。器具(`Gui` ハーネス・testkit・fixtures・golden)は主張しないので残す。消した448本の名前は本文に引き当て表として在る |

@@ -1,70 +1,8 @@
 use dioxus_native::prelude::{Code, Key, Modifiers};
 
-#[derive(Clone, Copy)]
-pub(super) enum Intent {
-    Split,
-    StepFrame(i64),
-    Home,
-    End,
-    Deselect,
-    SelectAll,
-    PlayPause,
-    DeleteLayer,
-    Undo,
-    Redo,
-    /// 重ね順。正なら前へ、負なら後ろへ。
-    Reorder(i16),
-    /// 層の頭(false)/尻(true)を現在時刻へ動かす。
-    SnapEdgeToPlayhead(bool),
-    /// 現在時刻で切り落とす。頭(false)/尻(true)。
-    TrimToPlayhead(bool),
-    /// 選択を1つ上/下の層へ。
-    SelectStep(i32),
-    /// 現在時刻のマーカーを打つ / 既に在れば外す。
-    ToggleMarker,
-    /// 前(-1)/次(+1)のマーカーへ跳ぶ。
-    JumpMarker(i32),
-    /// キーを持つ属性だけに絞る / 戻す。
-    ToggleKeyedOnly,
-    /// 選んだ層をそのまま増やす。
-    Duplicate,
-    /// 選択した層を1つのGroupへ入れる。
-    Group,
-    /// 選択したGroupを一段だけ開く。
-    Ungroup,
-    /// 選んだ区間へイージングを当てる。AE の F9 一族。
-    EasyEase(EaseSide),
-    /// 仕舞う。Cmd+S。
-    Save,
-    /// 別名で仕舞う。Shift+Cmd+S。
-    SaveAs,
-    /// 白紙。Cmd+N。
-    NewProject,
-    /// 開く。Cmd+O。
-    OpenProject,
-    /// 選んだ層の名前を開く。Enter(AE・Finder)。
-    Rename,
-    /// 視点(⌘0 = Fit、⌘1 = 100%、⌘= / ⌘− = 段階)。AE・Figma・Nuke の指。
-    View(crate::ui::session::ViewRequest),
-    /// 選んだ層を 1px(Shift で 10px)動かす。Alt+矢印 —— 素の矢印は時間の物。
-    Nudge(f64, f64),
-    /// 終わる(⌘Q)。未保存なら先に訊く。
-    Quit,
-    /// 枠の設定を開く(⌥⌘K。AE の Composition Settings は ⌘K だが、⌘K は切る手に使っている)。
-    CompositionSettings,
-    /// AE の P / S / R / T / A: 選んだ層を展開してその属性の行だけ出す。
-    Reveal(&'static str),
-    /// 選択を伸ばす(Shift+↑↓、Finder・AE)。
-    SelectExtend(i32),
-}
-
-/// 区間のどちら側を寝かせるか。
-#[derive(Clone, Copy, PartialEq)]
-pub(super) enum EaseSide {
-    Both,
-    In,
-    Out,
-}
+use crate::ui::contracts::KeySpec;
+pub(super) use crate::ui::contracts::{EaseSide, Intent};
+use crate::ui::functions::table::bindings;
 
 pub(super) fn primary_modifier(modifiers: Modifiers) -> bool {
     if cfg!(target_os = "macos") {
@@ -73,308 +11,6 @@ pub(super) fn primary_modifier(modifiers: Modifiers) -> bool {
         modifiers.ctrl()
     }
 }
-
-#[derive(Clone, Copy, PartialEq)]
-enum KeySpec {
-    Char(char),
-    ArrowLeft,
-    ArrowRight,
-    ArrowUp,
-    ArrowDown,
-    Home,
-    End,
-    Escape,
-    Delete,
-    F9,
-    Enter,
-}
-
-struct Binding {
-    key: KeySpec,
-    cmd: bool,
-    shift: bool,
-    alt: bool,
-    intent: Intent,
-}
-
-const BINDINGS: &[Binding] = &[
-    Binding {
-        key: KeySpec::Char('k'),
-        cmd: true,
-        shift: false,
-        alt: false,
-        intent: Intent::Split,
-    },
-    Binding {
-        key: KeySpec::Char('a'),
-        cmd: true,
-        shift: false,
-        alt: false,
-        intent: Intent::SelectAll,
-    },
-    Binding {
-        key: KeySpec::ArrowLeft,
-        cmd: false,
-        shift: false,
-        alt: false,
-        intent: Intent::StepFrame(-1),
-    },
-    Binding {
-        key: KeySpec::ArrowLeft,
-        cmd: false,
-        shift: true,
-        alt: false,
-        intent: Intent::StepFrame(-10),
-    },
-    Binding {
-        key: KeySpec::ArrowRight,
-        cmd: false,
-        shift: false,
-        alt: false,
-        intent: Intent::StepFrame(1),
-    },
-    Binding {
-        key: KeySpec::ArrowRight,
-        cmd: false,
-        shift: true,
-        alt: false,
-        intent: Intent::StepFrame(10),
-    },
-    Binding {
-        key: KeySpec::Home,
-        cmd: false,
-        shift: false,
-        alt: false,
-        intent: Intent::Home,
-    },
-    Binding {
-        key: KeySpec::End,
-        cmd: false,
-        shift: false,
-        alt: false,
-        intent: Intent::End,
-    },
-    Binding {
-        key: KeySpec::Escape,
-        cmd: false,
-        shift: false,
-        alt: false,
-        intent: Intent::Deselect,
-    },
-    Binding {
-        key: KeySpec::Char(' '),
-        cmd: false,
-        shift: false,
-        alt: false,
-        intent: Intent::PlayPause,
-    },
-    Binding {
-        key: KeySpec::Delete,
-        cmd: false,
-        shift: false,
-        alt: false,
-        intent: Intent::DeleteLayer,
-    },
-    Binding {
-        key: KeySpec::Char('z'),
-        cmd: true,
-        shift: false,
-        alt: false,
-        intent: Intent::Undo,
-    },
-    Binding {
-        key: KeySpec::Char('z'),
-        cmd: true,
-        shift: true,
-        alt: false,
-        intent: Intent::Redo,
-    },
-    Binding {
-        key: KeySpec::Char(']'),
-        cmd: true,
-        shift: false,
-        alt: false,
-        intent: Intent::Reorder(1),
-    },
-    Binding {
-        key: KeySpec::Char('['),
-        cmd: true,
-        shift: false,
-        alt: false,
-        intent: Intent::Reorder(-1),
-    },
-    Binding {
-        key: KeySpec::Char('['),
-        cmd: false,
-        shift: false,
-        alt: false,
-        intent: Intent::SnapEdgeToPlayhead(false),
-    },
-    Binding {
-        key: KeySpec::Char(']'),
-        cmd: false,
-        shift: false,
-        alt: false,
-        intent: Intent::SnapEdgeToPlayhead(true),
-    },
-    Binding {
-        key: KeySpec::Char('['),
-        cmd: false,
-        shift: false,
-        alt: true,
-        intent: Intent::TrimToPlayhead(false),
-    },
-    Binding {
-        key: KeySpec::Char(']'),
-        cmd: false,
-        shift: false,
-        alt: true,
-        intent: Intent::TrimToPlayhead(true),
-    },
-    Binding {
-        key: KeySpec::ArrowUp,
-        cmd: false,
-        shift: false,
-        alt: false,
-        intent: Intent::SelectStep(-1),
-    },
-    Binding {
-        key: KeySpec::Char('d'),
-        cmd: true,
-        shift: false,
-        alt: false,
-        intent: Intent::Duplicate,
-    },
-    Binding {
-        key: KeySpec::Char('g'),
-        cmd: true,
-        shift: false,
-        alt: false,
-        intent: Intent::Group,
-    },
-    Binding {
-        key: KeySpec::Char('g'),
-        cmd: true,
-        shift: true,
-        alt: false,
-        intent: Intent::Ungroup,
-    },
-    Binding {
-        key: KeySpec::F9,
-        cmd: false,
-        shift: false,
-        alt: false,
-        intent: Intent::EasyEase(EaseSide::Both),
-    },
-    Binding {
-        key: KeySpec::F9,
-        cmd: false,
-        shift: true,
-        alt: false,
-        intent: Intent::EasyEase(EaseSide::In),
-    },
-    Binding {
-        key: KeySpec::F9,
-        cmd: true,
-        shift: true,
-        alt: false,
-        intent: Intent::EasyEase(EaseSide::Out),
-    },
-    Binding {
-        key: KeySpec::Char('u'),
-        cmd: false,
-        shift: false,
-        alt: false,
-        intent: Intent::ToggleKeyedOnly,
-    },
-    Binding {
-        key: KeySpec::Char('*'),
-        cmd: false,
-        shift: false,
-        alt: false,
-        intent: Intent::ToggleMarker,
-    },
-    Binding {
-        key: KeySpec::Char('*'),
-        cmd: false,
-        shift: true,
-        alt: false,
-        intent: Intent::ToggleMarker,
-    },
-    Binding {
-        key: KeySpec::ArrowLeft,
-        cmd: true,
-        shift: false,
-        alt: false,
-        intent: Intent::JumpMarker(-1),
-    },
-    Binding {
-        key: KeySpec::ArrowRight,
-        cmd: true,
-        shift: false,
-        alt: false,
-        intent: Intent::JumpMarker(1),
-    },
-    Binding {
-        key: KeySpec::ArrowDown,
-        cmd: false,
-        shift: false,
-        alt: false,
-        intent: Intent::SelectStep(1),
-    },
-    Binding {
-        key: KeySpec::Char('s'),
-        cmd: true,
-        shift: false,
-        alt: false,
-        intent: Intent::Save,
-    },
-    Binding {
-        key: KeySpec::Enter,
-        cmd: false,
-        shift: false,
-        alt: false,
-        intent: Intent::Rename,
-    },
-    Binding { key: KeySpec::Char('s'), cmd: true, shift: true, alt: false, intent: Intent::SaveAs },
-    Binding { key: KeySpec::Char('n'), cmd: true, shift: false, alt: false, intent: Intent::NewProject },
-    Binding { key: KeySpec::Char('o'), cmd: true, shift: false, alt: false, intent: Intent::OpenProject },
-    Binding { key: KeySpec::Char('='), cmd: true, shift: false, alt: false, intent: Intent::View(crate::ui::session::ViewRequest::Step(1.25)) },
-    Binding { key: KeySpec::Char('-'), cmd: true, shift: false, alt: false, intent: Intent::View(crate::ui::session::ViewRequest::Step(0.8)) },
-    Binding { key: KeySpec::Char('0'), cmd: true, shift: false, alt: false, intent: Intent::View(crate::ui::session::ViewRequest::Fit) },
-    Binding { key: KeySpec::Char('1'), cmd: true, shift: false, alt: false, intent: Intent::View(crate::ui::session::ViewRequest::Actual) },
-    Binding { key: KeySpec::Char('q'), cmd: true, shift: false, alt: false, intent: Intent::Quit },
-    // AE の指: ⌘⇧D で分割(⌘K も切る)。F9 一族は macOS が食うので ⌘⌥E 一族を並べる。
-    Binding { key: KeySpec::Char('d'), cmd: true, shift: true, alt: false, intent: Intent::Split },
-    Binding { key: KeySpec::Char('p'), cmd: false, shift: false, alt: false, intent: Intent::Reveal(crate::doc::store::property::POSITION) },
-    Binding { key: KeySpec::Char('s'), cmd: false, shift: false, alt: false, intent: Intent::Reveal(crate::doc::store::property::SCALE) },
-    Binding { key: KeySpec::Char('r'), cmd: false, shift: false, alt: false, intent: Intent::Reveal(crate::doc::store::property::ROTATION) },
-    Binding { key: KeySpec::Char('t'), cmd: false, shift: false, alt: false, intent: Intent::Reveal(crate::doc::store::property::OPACITY) },
-    Binding { key: KeySpec::Char('a'), cmd: false, shift: false, alt: false, intent: Intent::Reveal(crate::doc::store::property::ANCHOR) },
-    Binding { key: KeySpec::Char('e'), cmd: true, shift: false, alt: true, intent: Intent::EasyEase(EaseSide::Both) },
-    Binding { key: KeySpec::Char('e'), cmd: true, shift: true, alt: true, intent: Intent::EasyEase(EaseSide::In) },
-    Binding { key: KeySpec::Char('e'), cmd: false, shift: true, alt: true, intent: Intent::EasyEase(EaseSide::Out) },
-    // ⌘K は切る(NLE)。枠の設定は ⌥⌘K(AE の ⌘K は取られている)。
-    Binding { key: KeySpec::Char('k'), cmd: true, shift: false, alt: true, intent: Intent::CompositionSettings },
-    Binding { key: KeySpec::ArrowLeft, cmd: false, shift: false, alt: true, intent: Intent::Nudge(-1.0, 0.0) },
-    Binding { key: KeySpec::ArrowRight, cmd: false, shift: false, alt: true, intent: Intent::Nudge(1.0, 0.0) },
-    Binding { key: KeySpec::ArrowUp, cmd: false, shift: false, alt: true, intent: Intent::Nudge(0.0, -1.0) },
-    Binding { key: KeySpec::ArrowDown, cmd: false, shift: false, alt: true, intent: Intent::Nudge(0.0, 1.0) },
-    Binding { key: KeySpec::ArrowLeft, cmd: false, shift: true, alt: true, intent: Intent::Nudge(-10.0, 0.0) },
-    Binding { key: KeySpec::ArrowRight, cmd: false, shift: true, alt: true, intent: Intent::Nudge(10.0, 0.0) },
-    Binding { key: KeySpec::ArrowUp, cmd: false, shift: true, alt: true, intent: Intent::Nudge(0.0, -10.0) },
-    Binding { key: KeySpec::ArrowDown, cmd: false, shift: true, alt: true, intent: Intent::Nudge(0.0, 10.0) },
-    Binding { key: KeySpec::ArrowUp, cmd: false, shift: true, alt: false, intent: Intent::SelectExtend(-1) },
-    Binding { key: KeySpec::ArrowDown, cmd: false, shift: true, alt: false, intent: Intent::SelectExtend(1) },
-    // マーカーは NLE の M でも打てる(AE のテンキー `*` と並べる)。
-    Binding {
-        key: KeySpec::Char('m'),
-        cmd: false,
-        shift: false,
-        alt: false,
-        intent: Intent::ToggleMarker,
-    },
-];
 
 pub(super) fn lookup(key: &Key, cmd: bool, shift: bool, alt: bool) -> Option<Intent> {
     let spec = match key {
@@ -391,10 +27,42 @@ pub(super) fn lookup(key: &Key, cmd: bool, shift: bool, alt: bool) -> Option<Int
         Key::Enter => KeySpec::Enter,
         _ => return None,
     };
-    BINDINGS
+    bindings()
         .iter()
         .find(|b| b.key == spec && b.cmd == cmd && b.shift == shift && b.alt == alt)
         .map(|b| b.intent)
+}
+
+pub(super) fn hint(intent: Intent) -> Option<String> {
+    let binding = bindings().into_iter().find(|b| b.intent == intent)?;
+    let key = match binding.key {
+        KeySpec::Char(' ') => "Space".to_owned(),
+        KeySpec::Char(c) => c.to_ascii_uppercase().to_string(),
+        KeySpec::Delete => "⌫".to_owned(),
+        KeySpec::Enter => "Enter".to_owned(),
+        KeySpec::Escape => "Esc".to_owned(),
+        KeySpec::Home => "Home".to_owned(),
+        KeySpec::End => "End".to_owned(),
+        KeySpec::ArrowLeft => "←".to_owned(),
+        KeySpec::ArrowRight => "→".to_owned(),
+        KeySpec::ArrowUp => "↑".to_owned(),
+        KeySpec::ArrowDown => "↓".to_owned(),
+        KeySpec::F9 => "F9".to_owned(),
+    };
+    let primary = if binding.cmd {
+        if cfg!(target_os = "macos") {
+            "⌘"
+        } else {
+            "Ctrl+"
+        }
+    } else {
+        ""
+    };
+    Some(format!(
+        "{}{}{primary}{key}",
+        if binding.shift { "⇧" } else { "" },
+        if binding.alt { "⌥" } else { "" }
+    ))
 }
 
 /// 修飾キーは、文字のイベントに乗らずに**別のイベントとして**届く。
@@ -553,15 +221,44 @@ mod tests {
 /// 物理 code → 文字(US 配列の素の字)。⌥ 付きの binding を救う為の表。
 pub(super) fn code_to_char(code: Code) -> Option<char> {
     Some(match code {
-        Code::KeyA => 'a', Code::KeyB => 'b', Code::KeyC => 'c', Code::KeyD => 'd', Code::KeyE => 'e',
-        Code::KeyF => 'f', Code::KeyG => 'g', Code::KeyH => 'h', Code::KeyI => 'i', Code::KeyJ => 'j',
-        Code::KeyK => 'k', Code::KeyL => 'l', Code::KeyM => 'm', Code::KeyN => 'n', Code::KeyO => 'o',
-        Code::KeyP => 'p', Code::KeyQ => 'q', Code::KeyR => 'r', Code::KeyS => 's', Code::KeyT => 't',
-        Code::KeyU => 'u', Code::KeyV => 'v', Code::KeyW => 'w', Code::KeyX => 'x', Code::KeyY => 'y',
+        Code::KeyA => 'a',
+        Code::KeyB => 'b',
+        Code::KeyC => 'c',
+        Code::KeyD => 'd',
+        Code::KeyE => 'e',
+        Code::KeyF => 'f',
+        Code::KeyG => 'g',
+        Code::KeyH => 'h',
+        Code::KeyI => 'i',
+        Code::KeyJ => 'j',
+        Code::KeyK => 'k',
+        Code::KeyL => 'l',
+        Code::KeyM => 'm',
+        Code::KeyN => 'n',
+        Code::KeyO => 'o',
+        Code::KeyP => 'p',
+        Code::KeyQ => 'q',
+        Code::KeyR => 'r',
+        Code::KeyS => 's',
+        Code::KeyT => 't',
+        Code::KeyU => 'u',
+        Code::KeyV => 'v',
+        Code::KeyW => 'w',
+        Code::KeyX => 'x',
+        Code::KeyY => 'y',
         Code::KeyZ => 'z',
-        Code::Digit0 => '0', Code::Digit1 => '1', Code::Digit2 => '2', Code::Digit3 => '3', Code::Digit4 => '4',
-        Code::Digit5 => '5', Code::Digit6 => '6', Code::Digit7 => '7', Code::Digit8 => '8', Code::Digit9 => '9',
-        Code::Minus => '-', Code::Equal => '=',
+        Code::Digit0 => '0',
+        Code::Digit1 => '1',
+        Code::Digit2 => '2',
+        Code::Digit3 => '3',
+        Code::Digit4 => '4',
+        Code::Digit5 => '5',
+        Code::Digit6 => '6',
+        Code::Digit7 => '7',
+        Code::Digit8 => '8',
+        Code::Digit9 => '9',
+        Code::Minus => '-',
+        Code::Equal => '=',
         _ => return None,
     })
 }

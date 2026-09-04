@@ -115,6 +115,38 @@ pub struct Matte {
 /// 層の名札の色数。窓の palette と同じ数で回す。
 pub const LABEL_PALETTE_LEN: usize = 12;
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum LayerProjection {
+    #[serde(rename = "2D")]
+    TwoD,
+    #[serde(rename = "2.5D")]
+    TwoPointFiveD,
+    #[default]
+    #[serde(rename = "3D")]
+    ThreeD,
+}
+
+impl LayerProjection {
+    pub const fn label(self) -> &'static str {
+        match self { Self::TwoD => "2D", Self::TwoPointFiveD => "2.5D", Self::ThreeD => "3D" }
+    }
+
+    pub const fn next(self) -> Self {
+        match self { Self::TwoD => Self::TwoPointFiveD, Self::TwoPointFiveD => Self::ThreeD, Self::ThreeD => Self::TwoD }
+    }
+}
+
+fn read_projection<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<LayerProjection, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Stored { Projection(LayerProjection), Pinned(bool) }
+    Ok(match Stored::deserialize(deserializer)? {
+        Stored::Projection(p) => p,
+        Stored::Pinned(true) => LayerProjection::TwoD,
+        Stored::Pinned(false) => LayerProjection::ThreeD,
+    })
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LayerAttrs {
     pub hidden: bool,
@@ -123,7 +155,8 @@ pub struct LayerAttrs {
     pub matte: Option<Matte>,
     pub name: String,
     pub auto_orient: bool,
-    pub pinned: bool,
+    #[serde(default, alias = "pinned", deserialize_with = "read_projection")]
+    pub projection: LayerProjection,
     pub solo: bool,
     pub locked: bool,
     #[serde(default)]
@@ -144,7 +177,7 @@ impl Default for LayerAttrs {
             matte: None,
             name: String::new(),
             auto_orient: false,
-            pinned: false,
+            projection: LayerProjection::ThreeD,
             solo: false,
             locked: false,
             label_color: None,
@@ -186,7 +219,7 @@ pub struct LayerAttrsPatch {
     pub matte: Option<Option<Matte>>,
     pub name: Option<String>,
     pub auto_orient: Option<bool>,
-    pub pinned: Option<bool>,
+    pub projection: Option<LayerProjection>,
     pub solo: Option<bool>,
     pub locked: Option<bool>,
     pub label_color: Option<Option<u8>>,
@@ -213,8 +246,8 @@ impl LayerAttrsPatch {
         if let Some(v) = self.auto_orient {
             current.auto_orient = v;
         }
-        if let Some(v) = self.pinned {
-            current.pinned = v;
+        if let Some(v) = self.projection {
+            current.projection = v;
         }
         if let Some(v) = self.solo {
             current.solo = v;
@@ -229,5 +262,24 @@ impl LayerAttrsPatch {
             current.flatten = v;
         }
         current
+    }
+}
+
+#[cfg(test)]
+mod projection_storage_tests {
+    use super::*;
+
+    #[test]
+    fn old_pinned_and_absent_attrs_migrate_without_reframing() {
+        for (legacy, expected) in [(Some(true), LayerProjection::TwoD), (Some(false), LayerProjection::ThreeD), (None, LayerProjection::ThreeD)] {
+            let mut json = serde_json::to_value(LayerAttrs::default()).unwrap();
+            json.as_object_mut().unwrap().remove("projection");
+            if let Some(pinned) = legacy { json["pinned"] = pinned.into(); }
+            let attrs: LayerAttrs = serde_json::from_value(json).unwrap();
+            assert_eq!(attrs.projection, expected);
+            let saved = serde_json::to_value(attrs).unwrap();
+            assert!(saved.get("pinned").is_none());
+            assert_eq!(saved["projection"], expected.label());
+        }
     }
 }

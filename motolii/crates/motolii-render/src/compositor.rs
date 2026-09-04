@@ -145,6 +145,23 @@ pub fn tilted_corners(
     (center - (u + v) * 0.5, u, v)
 }
 
+#[allow(clippy::too_many_arguments)]
+pub fn projected_corners(
+    comp: CompSpec,
+    camera: ResolvedCamera,
+    projection: crate::doc::store::LayerProjection,
+    transform: glam::Affine2,
+    local_min: glam::Vec2,
+    local_size: glam::Vec2,
+    z: f32,
+    rotation_x: f32,
+    rotation_y: f32,
+) -> (glam::Vec3, glam::Vec3, glam::Vec3) {
+    let (corner, u, v) = tilted_corners(transform, local_min, local_size, z, rotation_x, rotation_y);
+    let correction = crate::doc::core::layer_projection_transform(comp, camera, projection, corner + (u + v) * 0.5);
+    (correction.transform_point3(corner), correction.transform_vector3(u), correction.transform_vector3(v))
+}
+
 /// 上げた画素の扱い。sRGB 形式(blend の scratch)は乗算済みで、decode は hardware。
 /// それ以外(文字・図形・静止画・動画)は**非乗算の sRGB** で上げ、shader が decode → 乗算の順で扱う。
 /// 乗算済みを非乗算として decode すると α の中間(文字の縁)が暗く沈む(色の再点検 CV2)。
@@ -177,7 +194,8 @@ pub use headless::{HeadlessError, HeadlessGpu};
 
 pub use effects::EffectPass;
 
-pub(crate) use effects::vism_definitions;
+pub(crate) use effects::catalog::catalog_snapshot;
+pub use effects::catalog::{bind_catalog_runtime, catalog_generation, catalog_source_roots, refresh_effect_catalog, refresh_effect_catalog_for, watch_effect_catalog, CatalogRefresh, CatalogRuntime, CatalogWatcher, EffectDescriptor, EffectParamDescriptor};
 pub use effects::{IsfInput, IsfInputType, IsfManifest};
 
 pub use matte::MatteMode;
@@ -193,7 +211,8 @@ pub struct Layer {
     pub content: LayerContent,
     pub size: [f32; 2],
     pub placement: LayerPlacement,
-    pub pinned: bool,
+    pub projection: crate::doc::store::LayerProjection,
+    pub projection_camera: ResolvedCamera,
     pub blend_mode: BlendMode,
 }
 
@@ -251,9 +270,10 @@ pub struct Compositor {
     pub(crate) effect_scratch: effects::EffectScratch,
     pub(crate) effect_programs: std::collections::HashMap<String, effects::EffectProgram>,
     /// 層と背景を混ぜる Vism(vism/blend.wgsl + 借りた式)。
-    pub(crate) blend_vism: effects::WgslFragmentProgram,
+    pub(crate) blend_vism: effects::EffectProgram,
     /// 層をマットで切る Vism(vism/matte.wgsl + 借りた svg_lum)。
-    pub(crate) matte_vism: effects::WgslFragmentProgram,
+    pub(crate) matte_vism: effects::EffectProgram,
+    pub(crate) catalog: std::sync::Arc<effects::catalog::CatalogSnapshot>,
     pub(crate) sequential_submits: u64,
     /// フレーム中に記録したパスの束。層ごとに submit せず、読み戻しが要る所まで貯める。
     pub(crate) pending: Vec<wgpu::CommandBuffer>,
@@ -317,7 +337,8 @@ pub(crate) struct SequentialInput<'a> {
     z: f32,
     rotation_x: f32,
     rotation_y: f32,
-    pinned: bool,
+    projection: crate::doc::store::LayerProjection,
+    projection_camera: ResolvedCamera,
     opacity: f32,
     depth_offset: i16,
     blend_mode: BlendMode,

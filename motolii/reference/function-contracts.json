@@ -1,0 +1,1168 @@
+{
+  "schema_version": 1,
+  "contract_document": "docs/reviews/2026-09-04-function-group-contract.md",
+  "design_status": "DECIDED",
+  "implementation_status": "DELIVERED",
+  "manifest_role": "DESIGN_OWNERSHIP_AND_EVIDENCE_NOT_RUNTIME_DISPATCH",
+  "implementation_gate": "REPRESENTATIVE_TESTS_AND_NATIVE_ACCEPTANCE_PASSED",
+  "groups": [
+    {
+      "id": "atom",
+      "depends": [],
+      "input": "validated numeric values, ranges and coordinate maps",
+      "output": "values or domain rejection",
+      "effects": "none",
+      "hidden_decision": "mathematical representation and algorithms",
+      "reuse": "std; kurbo; glam; existing doc evaluation",
+      "module": "ui::functions::atom",
+      "module_status": "IMPLEMENTED",
+      "compilation_unit": "MOTOLII_BINARY_TIP",
+      "reload_entry": "VERIFIED_HOTFN_REACHABLE_CHAIN",
+      "retained_state_owner": "NONE",
+      "implementation_status": "REPRESENTATIVE_ROUTE_IMPLEMENTED_AND_TESTED",
+      "functions": [
+        "bounded",
+        "translate2",
+        "scale_about",
+        "rotate_about",
+        "translate_frames",
+        "frame_span",
+        "split_span",
+        "shift_span",
+        "clamp_to_span"
+      ],
+      "implementation_paths": [
+        "motolii/src/ui/functions/atom.rs"
+      ],
+      "proof_scope": "Representative tests; not exhaustive per-function hotpatch proof"
+    },
+    {
+      "id": "lens",
+      "depends": [
+        "atom"
+      ],
+      "input": "read baseline, typed address, time, value and source policy",
+      "output": "read result or ordered edit fragment; no-op; rejection",
+      "effects": "none",
+      "hidden_decision": "property storage, defaults and source-preserving writes",
+      "reuse": "Document::place_checked; StoreView; PropertySource",
+      "module": "ui::functions::lens",
+      "module_status": "IMPLEMENTED",
+      "compilation_unit": "MOTOLII_BINARY_TIP",
+      "reload_entry": "VERIFIED_HOTFN_REACHABLE_CHAIN",
+      "retained_state_owner": "NONE",
+      "implementation_status": "REPRESENTATIVE_ROUTE_IMPLEMENTED_AND_TESTED",
+      "functions": [
+        "edit_rejection",
+        "place",
+        "require_local_source"
+      ],
+      "implementation_paths": [
+        "motolii/src/ui/functions/lens.rs"
+      ],
+      "proof_scope": "Representative tests; not exhaustive per-function hotpatch proof"
+    },
+    {
+      "id": "read",
+      "depends": [
+        "lens",
+        "atom"
+      ],
+      "input": "StoreView, explicit time and EffectDescriptor slice; no implicit catalog or disclosure-state access",
+      "output": "display or geometry snapshot",
+      "effects": "none",
+      "hidden_decision": "query/layout of displayed values",
+      "reuse": "StoreView; existing row projections",
+      "module": "ui::functions::read",
+      "module_status": "IMPLEMENTED",
+      "compilation_unit": "MOTOLII_BINARY_TIP",
+      "reload_entry": "VERIFIED_HOTFN_REACHABLE_CHAIN",
+      "retained_state_owner": "NONE",
+      "implementation_status": "REPRESENTATIVE_ROUTE_IMPLEMENTED_AND_TESTED",
+      "functions": [
+        "property_value",
+        "inspector_data_from_doc",
+        "first_shape_fill",
+        "asset_family",
+        "label_rgb",
+        "human_size",
+        "fmt_timecode"
+      ],
+      "implementation_paths": [
+        "motolii/src/ui/functions/read.rs"
+      ],
+      "proof_scope": "Representative tests; not exhaustive per-function hotpatch proof"
+    },
+    {
+      "id": "verb",
+      "depends": [
+        "lens",
+        "read",
+        "atom"
+      ],
+      "input": "fixed baseline, target scope and typed payload",
+      "output": "ordered semantic edit block with result identities and reasons",
+      "effects": "none",
+      "hidden_decision": "operation semantics and identity/reference policy",
+      "reuse": "existing Split/Duplicate/Group planners",
+      "module": "ui::functions::verb",
+      "module_status": "IMPLEMENTED",
+      "compilation_unit": "MOTOLII_BINARY_TIP",
+      "reload_entry": "VERIFIED_HOTFN_REACHABLE_CHAIN",
+      "retained_state_owner": "NONE",
+      "implementation_status": "REPRESENTATIVE_ROUTE_IMPLEMENTED_AND_TESTED",
+      "functions": [
+        "timing_delta",
+        "effect_intents",
+        "color_intents",
+        "flag_intents",
+        "keyframe_shift_intents",
+        "retime_layer"
+      ],
+      "implementation_paths": [
+        "motolii/src/ui/functions/verb.rs"
+      ],
+      "proof_scope": "Representative tests; not exhaustive per-function hotpatch proof"
+    },
+    {
+      "id": "control",
+      "depends": [
+        "atom"
+      ],
+      "input": "typed value, descriptor, axis, range and input amount",
+      "output": "typed edit payload or rejection",
+      "effects": "none",
+      "hidden_decision": "value presentation and input conversion",
+      "reuse": "existing PropRow; EffectParamDescriptor",
+      "module": "ui::functions::control",
+      "module_status": "IMPLEMENTED",
+      "compilation_unit": "MOTOLII_BINARY_TIP",
+      "reload_entry": "VERIFIED_HOTFN_REACHABLE_CHAIN",
+      "retained_state_owner": "NONE",
+      "implementation_status": "REPRESENTATIVE_ROUTE_IMPLEMENTED_AND_TESTED",
+      "functions": [
+        "axis_delta",
+        "axis_absolute"
+      ],
+      "implementation_paths": [
+        "motolii/src/ui/functions/control.rs"
+      ],
+      "proof_scope": "Representative tests; not exhaustive per-function hotpatch proof"
+    },
+    {
+      "id": "gesture",
+      "depends": [
+        "atom",
+        "control"
+      ],
+      "input": "baseline, explicit interaction state and normalized input",
+      "output": "next state and preview/commit/cancel request",
+      "effects": "none",
+      "hidden_decision": "interaction transition and modifier policy",
+      "reuse": "explicit state transition; existing GestureSurface adapter",
+      "module": "ui::functions::gesture",
+      "module_status": "IMPLEMENTED",
+      "compilation_unit": "MOTOLII_BINARY_TIP",
+      "reload_entry": "WIDGET_ADAPTER_TO_VERIFIED_HOTFN",
+      "retained_state_owner": "NONE",
+      "implementation_status": "REPRESENTATIVE_ROUTE_IMPLEMENTED_AND_TESTED",
+      "functions": [
+        "displacement"
+      ],
+      "implementation_paths": [
+        "motolii/src/ui/functions/gesture.rs"
+      ],
+      "proof_scope": "Shared displacement plus retained widget interaction adapters; full widget state machines are not all moved into this module"
+    },
+    {
+      "id": "compose",
+      "depends": [
+        "verb",
+        "gesture",
+        "lens",
+        "read",
+        "control",
+        "atom"
+      ],
+      "input": "compatible blocks, fixed baseline and ordered targets",
+      "output": "prepared edit plan",
+      "effects": "none",
+      "hidden_decision": "independent versus dependent combination and refusal units",
+      "reuse": "Rust functions; Iterator::map/fold; Result",
+      "module": "ui::functions::compose",
+      "module_status": "IMPLEMENTED",
+      "compilation_unit": "MOTOLII_BINARY_TIP",
+      "reload_entry": "VERIFIED_HOTFN_REACHABLE_CHAIN",
+      "retained_state_owner": "NONE",
+      "implementation_status": "REPRESENTATIVE_ROUTE_IMPLEMENTED_AND_TESTED",
+      "functions": [
+        "independent_layers",
+        "independent_blocks",
+        "placement::nudge_plan",
+        "placement::anchor_position_plan"
+      ],
+      "implementation_paths": [
+        "motolii/src/ui/functions/compose.rs",
+        "motolii/src/ui/functions/placement.rs"
+      ],
+      "proof_scope": "Held-out distribution test passed; new placement module arrived by Thin epoch11 and anchor composition was checked in the live window"
+    },
+    {
+      "id": "paint",
+      "depends": [
+        "read",
+        "atom"
+      ],
+      "input": "display snapshot and exclusively owned output buffer",
+      "output": "completed existing Scene/output commands",
+      "effects": "explicit_output_buffer_only",
+      "hidden_decision": "geometry-to-drawing preparation",
+      "reuse": "kurbo; anyrender; Rerun draw descriptions",
+      "module": "ui::functions::paint",
+      "module_status": "IMPLEMENTED",
+      "compilation_unit": "MOTOLII_BINARY_TIP",
+      "reload_entry": "WIDGET_ADAPTER_TO_VERIFIED_HOTFN",
+      "retained_state_owner": "NONE",
+      "implementation_status": "REPRESENTATIVE_ROUTE_IMPLEMENTED_AND_TESTED",
+      "functions": [
+        "color",
+        "rgb",
+        "fill_rect",
+        "diamond"
+      ],
+      "implementation_paths": [
+        "motolii/src/ui/functions/paint.rs"
+      ],
+      "proof_scope": "Representative tests; not exhaustive per-function hotpatch proof"
+    },
+    {
+      "id": "table",
+      "depends": [
+        "compose",
+        "control",
+        "read"
+      ],
+      "input": "explicit context snapshot",
+      "output": "typed bindings, descriptors and command selection",
+      "effects": "none",
+      "hidden_decision": "available combinations and UI discovery",
+      "reuse": "existing keymap/menu/catalog functions",
+      "module": "ui::functions::table",
+      "module_status": "IMPLEMENTED",
+      "compilation_unit": "MOTOLII_BINARY_TIP",
+      "reload_entry": "VERIFIED_HOTFN_REACHABLE_CHAIN",
+      "retained_state_owner": "NONE",
+      "implementation_status": "REPRESENTATIVE_ROUTE_IMPLEMENTED_AND_TESTED",
+      "functions": [
+        "bindings",
+        "entries"
+      ],
+      "implementation_paths": [
+        "motolii/src/ui/functions/table.rs"
+      ],
+      "proof_scope": "Binding/menu tests and live table Thin updates, including epoch8 while playing"
+    },
+    {
+      "id": "view",
+      "depends": [
+        "table",
+        "read",
+        "control",
+        "paint"
+      ],
+      "input": "display snapshot and typed input-notification port",
+      "output": "Element and input notifications",
+      "effects": "framework_view_and_input_notification_only",
+      "hidden_decision": "RSX layout and component arrangement",
+      "reuse": "Dioxus RSX; existing components",
+      "module": "ui::functions::view",
+      "module_status": "IMPLEMENTED",
+      "compilation_unit": "MOTOLII_BINARY_TIP",
+      "reload_entry": "DIOXUS_RSX_AND_VERIFIED_HOTFN",
+      "retained_state_owner": "NONE",
+      "implementation_status": "REPRESENTATIVE_ROUTE_IMPLEMENTED_AND_TESTED",
+      "functions": [
+        "ContextPopup"
+      ],
+      "implementation_paths": [
+        "motolii/src/ui/functions/view.rs"
+      ],
+      "proof_scope": "Representative tests; not exhaustive per-function hotpatch proof"
+    },
+    {
+      "id": "shell",
+      "depends": [
+        "atom",
+        "lens",
+        "read",
+        "verb",
+        "control",
+        "gesture",
+        "compose",
+        "paint",
+        "table",
+        "view"
+      ],
+      "input": "OS/framework messages, stored state and prepared plans",
+      "output": "applied results and refreshed views",
+      "effects": "document_transient_commit_clock_io_window_gpu",
+      "hidden_decision": "runtime lifetimes, patch ingress and effect execution",
+      "reuse": "Host; Session; Widget adapters; doc/render owners",
+      "module": "existing ui::host/session/widget adapters and owning doc/render modules",
+      "module_status": "IMPLEMENTED",
+      "compilation_unit": "BINARY_TIP_ADAPTERS_WITH_DOC_RENDER_RESOURCE_OWNERS",
+      "reload_entry": "STABLE_OWNER_CALLS_EXISTING_PATCH_API",
+      "retained_state_owner": "SELF_OR_EXISTING_OWNER",
+      "implementation_status": "REPRESENTATIVE_ROUTE_IMPLEMENTED_AND_TESTED",
+      "functions": [
+        "Host patch acceptance and callback registrations",
+        "Session and MountStore",
+        "MountedSurface detour",
+        "property_edit preview_owned/commit_owned/cancel_owned",
+        "Document apply_all/preview_edits",
+        "Host CatalogRuntime/root VDOM context binding",
+        "Stage cached rendering and mutable atlas registrations"
+      ],
+      "implementation_paths": [
+        "motolii/src/ui/host.rs",
+        "motolii/src/ui/session.rs",
+        "motolii/src/ui/mount.rs",
+        "motolii/src/ui/property_edit.rs",
+        "motolii/crates/motolii-doc/src/store/document.rs"
+      ],
+      "proof_scope": "Doc7, related UI50, render/catalog5; representative native Thin/RSX/data/workspace retention in final app43349. Not every function individually hotpatched."
+    }
+  ],
+  "shared_types": {
+    "placement": "existing doc types and ui/contracts.rs; fixture projection declarations are a temporary shared type location",
+    "rules": [
+      "State storage owner is separate from type declaration ownership",
+      "No dependency on Shell capabilities from pure groups",
+      "Typed units, coordinate systems, property identity and time remain distinct",
+      "No fixed limit on the number of port types",
+      "No live Signal, Mutex, GPU, clock or I/O capability in a pure block's input"
+    ],
+    "temporary_projection_declarations": [
+      "ui::fixture::PropRow",
+      "ui::fixture::InspectorData",
+      "ui::fixture::ColorRow",
+      "ui::fixture::AssetFamily",
+      "ui::fixture::LABEL_PALETTE"
+    ]
+  },
+  "block_contract_fields": [
+    "group",
+    "hidden_decision",
+    "input_output_types",
+    "valid_domain_units_space",
+    "baseline_reads",
+    "source_write_policy",
+    "target_scope",
+    "ordered_write_footprint",
+    "rejection_unit",
+    "state_owner",
+    "effects",
+    "compilation_unit",
+    "reload_entry",
+    "abi_compatibility",
+    "existing_ruler",
+    "implementation_evidence"
+  ],
+  "composition_rules": [
+    {
+      "id": "independent",
+      "operator": "map_then_atomic_commit",
+      "requires": "Noninterfering semantic blocks; disjoint write keys alone are insufficient when one reads another's writes; predeclare rejection units"
+    },
+    {
+      "id": "dependent",
+      "operator": "ordered_semantic_fold",
+      "requires": "Shared Vec2, track, effect collection, IDs or references are combined before emitting final writes"
+    },
+    {
+      "id": "selection",
+      "operator": "whole_selection_planner",
+      "requires": "Group, duplicate, distribution and reorder resolve dependency closure and identities once"
+    },
+    {
+      "id": "effects",
+      "operator": "existing_owner_interpreter",
+      "requires": "External results return explicitly; neither function composition nor Cmd.batch promises effect order or atomicity"
+    }
+  ],
+  "interaction": {
+    "frozen_at_start": [
+      "document_revision",
+      "time",
+      "target_ids_and_order",
+      "base_values_and_sources",
+      "coordinate_mapping",
+      "accepted_function_epoch"
+    ],
+    "modifier_policy": "DECLARED_PER_OPERATION",
+    "preview_commit": "SAME_LAST_PREPARED_PLAN_AT_SAME_EVALUATION_TIME",
+    "stale_revision_policy": "CANCEL_WITH_REASON; explicit reprepare only when the operation contract permits it",
+    "rust_patch_policy": "CANCEL_UNCOMMITTED_OPERATIONS_BEFORE_ACCEPTED_PATCH; no implicit commit",
+    "transient_ownership": "ONE_OWNER_PER_WRITE_FOOTPRINT; clear only own writes",
+    "atomicity": "SUCCESS_ONE_UNDO; NOOP_CANCEL_FAILURE_ZERO_UNDO_AND_PRESERVE_REDO"
+  },
+  "reload": {
+    "source_versions": {
+      "subsecond": "0.7.10",
+      "dioxus_devtools": "0.7.10",
+      "dioxus_commit": "57d6794ad60b949e5bd8aa282f6f8c3dc97a365e",
+      "blitz_commit": "64eb27853aa2672486b7edf825fb044be78c9db3"
+    },
+    "preserve": [
+      "Document identity and contents",
+      "Undo and Redo",
+      "selection",
+      "playback state",
+      "Device and Queue",
+      "unrelated live GPU resources"
+    ],
+    "require_measurement": [
+      "actual function behavior change",
+      "main and detached window update",
+      "stable owner identities",
+      "one accepted process-global patch",
+      "no duplicated side effects on retry"
+    ],
+    "budget_source": "motolii/reference/build-loop-budget.tsv",
+    "current_gaps": [],
+    "runtime_descriptor": "motolii/reference/dioxus-cli-runtime.json",
+    "driver": "motolii-dx-0.7.10-guarded",
+    "resolved_findings": [
+      {
+        "id": "binary_tip",
+        "source": "motolii/src/main.rs",
+        "status": "REPRESENTATIVE_LIVE_PROOF",
+        "result": "UI compiled directly by binary; representative UI/doc/render Thin and mixed CSS batch reached final native app43349"
+      },
+      {
+        "id": "widget_detour",
+        "source": "motolii/src/ui/mount.rs",
+        "status": "REPRESENTATIVE_LIVE_PROOF",
+        "result": "Native adapters call the typed callee through HotFn::current(fn).call(args); returning a raw pointer from a hot closure did not establish callee detour. Final native Stage retained Engine/textures."
+      },
+      {
+        "id": "redo_atomicity",
+        "source": "motolii/crates/motolii-doc/src/store/document.rs",
+        "status": "REGRESSION_PASSED",
+        "result": "Failed ordered batch after Undo preserves values/head/redo; doc7"
+      },
+      {
+        "id": "source_policy",
+        "source": "motolii/crates/motolii-doc/src/store/document/edit.rs",
+        "status": "REPRESENTATIVE_REGRESSIONS_PASSED",
+        "result": "place_checked preserves existing key metadata and rejects implicit Slot/driver replacement; doc7 and checked placement UI tests"
+      },
+      {
+        "id": "paused_integration",
+        "source": "motolii/src/ui/property_edit.rs",
+        "status": "INTEGRATED",
+        "result": "Owned preview/commit/cancel helper exists and is connected; UI50 and doc7 passed"
+      },
+      {
+        "id": "mount_lifetime",
+        "source": "motolii/src/ui/mount.rs",
+        "status": "REPRESENTATIVE_LIVE_PROOF",
+        "result": "Host state survives valid RSX layout changes; native mount registrations can be renewed while actual Engine/Texture identities stay stable"
+      },
+      {
+        "id": "tls_initializer",
+        "source": "motolii/reference/dioxus-cli-0.7.10-reload.patch",
+        "status": "FIXED_AND_LIVE_RECHECKED",
+        "result": "Original __thread_bss RefCell initializer was wrongly populated from initialized TLS bytes (borrow flag0->2); section-aware zero initialization fixed the first Thin failure"
+      },
+      {
+        "id": "workspace_body_replay",
+        "source": "motolii/crates/motolii-road/Cargo.toml",
+        "status": "FIXED_AND_REPRESENTATIVE_LIVE_RECHECKED",
+        "historical_failure": "road now declares rlib+dylib, but compositor/device.rs Thin at1961s failed: no motolii_road rlib in desktop-dev/deps",
+        "result": "Exact captured compiler output lookup accepts unhashed libmotolii_road.rlib; final native UI/doc/render workspace Thin passed without restart",
+        "evidence": "/tmp/motolii-live-reload-final.log"
+      },
+      {
+        "id": "mixed_css_rust",
+        "source": "motolii/reference/dioxus-cli-0.7.10-reload.patch",
+        "status": "FIXED_AND_REPRESENTATIVE_LIVE_RECHECKED",
+        "historical_failure": "Combined CSS and Rust delivery requires correction and revalidation; separate CSS/RSX and Thin paths have live evidence",
+        "result": "Guarded driver delivers CSS assets before Rust scan and retains notifications; final epoch1 mixed CSS/UI Rust/doc change accepted while playing=true",
+        "evidence": "/tmp/motolii-live-reload-final.log"
+      },
+      {
+        "id": "catalog_frame_lifecycle",
+        "source": "motolii/crates/motolii-render/src/compositor/device.rs",
+        "status": "FIXED_AND_REPRESENTATIVE_LIVE_RECHECKED",
+        "historical_failure": "Runtime-data generation2/3 updates reached the view, but re_renderer reported a leftover command encoder at begin_frame",
+        "result": "Removed extra begin_frame during catalog refresh; open-frame/Device regression passed in render5, final native data refresh passed",
+        "evidence": "/tmp/motolii-live-reload-final.log"
+      },
+      {
+        "id": "new_vism_and_invalid_data",
+        "source": "motolii/crates/motolii-render/vism",
+        "status": "FIXED_AND_REPRESENTATIVE_LIVE_RECHECKED",
+        "historical_failure": "Existing shader and descriptor changes were observed; invalid shader logged last-valid retention, while negative visual recovery and creation of a new Vism remain to close",
+        "result": "New gain.wgsl card/parameter/value edit/Undo/tab continuity passed data-only; invalid blur kept magenta/radius12 across Rust, original restored white/radius8 and cleared notice",
+        "evidence": "/tmp/motolii-live-reload-final.log"
+      },
+      {
+        "id": "catalog_static_copy",
+        "source": "motolii/src/ui/app.rs",
+        "status": "FIXED_AND_LIVE_RECHECKED",
+        "historical_failure": "Workspace replay copied ACTIVE_RUNTIME; preserved Host watcher Arc and new consumer read different owners/generations despite a rebound log",
+        "result": "Host supplies retained CatalogRuntime through each root VDOM context; app/detached directly bind before first catalog consumer. Final epochs15/16 used canonical owner5685643920 and retained last-good."
+      },
+      {
+        "id": "dioxus_error_retry",
+        "source": "motolii/src/ui/host.rs",
+        "status": "FIXED_AND_LIVE_RECHECKED",
+        "historical_failure": "Dioxus root ErrorContext retained a caught view panic after replacement source arrived",
+        "result": "Accepted Rust patch clears the root ErrorContext before forced view retry; final native process recovered without PID change. Other failures are not silently accepted."
+      },
+      {
+        "id": "mutable_override_atlas",
+        "source": "motolii/src/ui/stage_widget.rs",
+        "status": "FIXED_AND_LIVE_RECHECKED",
+        "historical_failure": "Retaining a written GPU texture does not automatically invalidate Vello image-atlas contents",
+        "result": "After texture writes, Stage renews AnyRender ResourceId and retires old registrations after the frame grace period; unchanged paint reuses cached rendered output. Engine/Device/Queue/actual textures remain retained."
+      },
+      {
+        "id": "mixed_effect_target_formats",
+        "source": "motolii/crates/motolii-render/src/compositor/render_effects.rs",
+        "status": "REGRESSION_AND_LIVE_RECHECK_PASSED",
+        "historical_failure": "Float/unorm effect chain failed format validation or failed to consume previous output",
+        "result": "Real-GPU 8bit->float, reverse and repeated float chain with Undo passed; native Blur16bit->Gradient8bit and Undo passed."
+      },
+      {
+        "id": "woken_type_identity",
+        "source": "motolii/src/ui/poke.rs",
+        "status": "ALTERNATIVE_CAUSE_RULED_OUT",
+        "result": "Read-only original/epoch4 dylib disassembly found identical Woken TypeId d65255ab141206eb8f7cc04181d2bcf7; Thin replay preserves captured metadata. Consumer static split, not this Any comparison, explained that failure."
+      },
+      {
+        "id": "native_inspector_fullscreen_close",
+        "source": "motolii/src/ui/host.rs",
+        "status": "NATIVE_BEHAVIOR_VERIFIED",
+        "finding": "The apparently unclosable Inspector was fullscreen per native metadata; original UI action was not a verified close attempt",
+        "result": "Escape exited fullscreen; AX close button closed only Inspector (callbacks_retired2, remaining_windows1). Main Document/GPU retained; reopening at epoch27 showed current Live/Gain0.5. No ghost-window or Arc-cycle repair claim.",
+        "evidence": "/tmp/motolii-live-reload-final.log 3470.65s fullscreen_exit_requested;3482.25s child_window_closed"
+      },
+      {
+        "id": "final_two_window_restore",
+        "status": "NATIVE_ACCEPTANCE_PASSED",
+        "owner": "root",
+        "finding": "Detached Gain default0.5 data-only and epoch17 delivery to both VDOMs observed. Root confirms doc label/Gain source restoration and both-window final behavior before goal completion.",
+        "result": "Inspector reopened after epoch27 followed Live to Hot to2.5D through epochs28-30; Gain restored1, both-window behavior and retained owners confirmed"
+      },
+      {
+        "id": "retained_patch_function_generations",
+        "source": "motolii/src/ui/host.rs",
+        "status": "NATIVE_ACCEPTANCE_PASSED",
+        "finding": "Inspector created from epoch16 image kept old doc function behavior through17/18 despite view_updated; baseline-only JumpTable did not cover later image pointers",
+        "repair": "Carry previous resolved target aliases into incoming table, with checked baseline ASLR rebasing and conflict refusal before mutation",
+        "regression": "patch_alias2 exit0; /tmp/motolii-ui-tests.jsonl",
+        "result": "Inspector reopened after epoch27 followed Live to Hot to2.5D through epochs28-30; Gain restored1, both-window behavior and retained owners confirmed"
+      }
+    ],
+    "live_snapshot": {
+      "status": "ACCEPTED_WITHIN_TYPE_AND_RETAINED_ENTRY_CONTRACTS",
+      "log": "/tmp/motolii-live-reload-final.log",
+      "cli_pid": 42238,
+      "app_pid": 43349,
+      "baseline_build_seconds": 30.39,
+      "first_paint_seconds": 38.25,
+      "document_owner": 5712755216,
+      "accepted_epochs": [
+        {
+          "build_id": 0,
+          "document_owner": 5712755216,
+          "epoch": 1,
+          "event": "accepted",
+          "execution_class": "THIN_PATCH",
+          "history": [
+            3,
+            0
+          ],
+          "pid": 43349,
+          "playing": true
+        },
+        {
+          "build_id": 0,
+          "document_owner": 5712755216,
+          "epoch": 15,
+          "event": "accepted",
+          "execution_class": "THIN_PATCH",
+          "history": [
+            3,
+            1
+          ],
+          "pid": 43349,
+          "playing": false
+        },
+        {
+          "build_id": 0,
+          "document_owner": 5712755216,
+          "epoch": 16,
+          "event": "accepted",
+          "execution_class": "THIN_PATCH",
+          "history": [
+            4,
+            0
+          ],
+          "pid": 43349,
+          "playing": false
+        },
+        {
+          "build_id": 0,
+          "document_owner": 5712755216,
+          "epoch": 20,
+          "event": "accepted",
+          "execution_class": "THIN_PATCH",
+          "history": [
+            4,
+            1
+          ],
+          "pid": 43349,
+          "playing": false,
+          "retained_function_aliases": 59960
+        },
+        {
+          "build_id": 0,
+          "document_owner": 5712755216,
+          "epoch": 21,
+          "event": "accepted",
+          "execution_class": "THIN_PATCH",
+          "history": [
+            4,
+            1
+          ],
+          "pid": 43349,
+          "playing": false,
+          "retained_function_aliases": 119920
+        },
+        {
+          "build_id": 0,
+          "document_owner": 5712755216,
+          "epoch": 27,
+          "event": "accepted",
+          "execution_class": "THIN_PATCH",
+          "history": [
+            4,
+            1
+          ],
+          "pid": 43349,
+          "playing": false,
+          "retained_function_aliases": 479181
+        },
+        {
+          "build_id": 0,
+          "document_owner": 5712755216,
+          "epoch": 28,
+          "event": "accepted",
+          "execution_class": "THIN_PATCH",
+          "history": [
+            4,
+            1
+          ],
+          "pid": 43349,
+          "playing": false,
+          "retained_function_aliases": 539136
+        },
+        {
+          "build_id": 0,
+          "document_owner": 5712755216,
+          "epoch": 29,
+          "event": "accepted",
+          "execution_class": "THIN_PATCH",
+          "history": [
+            4,
+            1
+          ],
+          "pid": 43349,
+          "playing": false,
+          "retained_function_aliases": 599083
+        },
+        {
+          "build_id": 0,
+          "document_owner": 5712755216,
+          "epoch": 30,
+          "event": "accepted",
+          "execution_class": "THIN_PATCH",
+          "history": [
+            4,
+            1
+          ],
+          "pid": 43349,
+          "playing": false,
+          "retained_function_aliases": 659036
+        }
+      ],
+      "windows_by_epoch": {
+        "1": [
+          0
+        ],
+        "2": [
+          0
+        ],
+        "3": [
+          0
+        ],
+        "4": [
+          0
+        ],
+        "5": [
+          0
+        ],
+        "6": [
+          0
+        ],
+        "7": [
+          0
+        ],
+        "8": [
+          0
+        ],
+        "9": [
+          0
+        ],
+        "10": [
+          0
+        ],
+        "11": [
+          0
+        ],
+        "12": [
+          0
+        ],
+        "13": [
+          0
+        ],
+        "14": [
+          0
+        ],
+        "15": [
+          0
+        ],
+        "16": [
+          0
+        ],
+        "17": [
+          0,
+          1
+        ],
+        "18": [
+          0,
+          1
+        ]
+      },
+      "playing_epoch": 1,
+      "main_stage_engine_owner": 5706051584,
+      "device_identity": 6961116553929376407,
+      "queue_identity": 6961116553929376407,
+      "catalog_runtime_owner": 5685643920,
+      "gpu_evidence": "Engine/device/queue/actual textures retained; image-atlas freshness uses renderer-local re-registration after writes and cached paint when inputs unchanged",
+      "state_evidence": "Root native observations confirmed Document/Undo/Redo/selection continuity; epoch1 accepted while playing=true",
+      "mixed_change": {
+        "epoch": 1,
+        "changes": [
+          "CSS",
+          "UI Rust",
+          "doc body"
+        ],
+        "status": "LIVE_VERIFIED"
+      },
+      "catalog_first_consumer": {
+        "epochs": [
+          15,
+          16
+        ],
+        "status": "LIVE_VERIFIED",
+        "owner": 5685643920,
+        "binding": "Host Arc -> per-root VDOM context -> direct app/detached bind before first consumer"
+      },
+      "new_module": {
+        "path": "motolii/src/ui/functions/placement.rs",
+        "status": "LIVE_VERIFIED_IN_PREVIOUS_RECOVERY_RUN",
+        "log": "/tmp/motolii-live-reload-2.log",
+        "epoch": 11,
+        "behavior": "Anchor0%,0% position825,405 -> 50%,50% position961,541 with unchanged bounds; one CmdZ restored both"
+      },
+      "runtime_data": {
+        "status": "REPRESENTATIVE_NATIVE_ACCEPTANCE_PASSED",
+        "new_vism": "motolii/crates/motolii-render/vism/gain.wgsl",
+        "observed_by_root": [
+          "New RGB multiply Vism card and Gain parameter appeared data-only",
+          "Gain1.0->0.25 produced dark gray; one Undo restored1.0 and white",
+          "Tab switching kept effect state",
+          "Invalid blur retained magenta and radius12 through Rust patch; original source restoration produced white/radius8 and cleared notice",
+          "Blur16bit->Gradient8bit and Undo passed",
+          "Detached Inspector received Gain default0.5 data-only"
+        ],
+        "compilation": "WGSL/descriptor edits classified RUNTIME_DATA; no compiler or registry code for the added Vism",
+        "final_source_restore": "All temporary labels, CSS/layout markers, invalid shader and Gain0.5 restored; gain.wgsl retained as reusable primitive"
+      },
+      "native_recovery": "Typed callee HotFn and clearing root ErrorContext after accepted Rust recovered caught view panic without app PID change",
+      "latency_claim": "Some Thin runs exceed5000ms; no general five-second guarantee",
+      "ordinary_full_restart_scope": "No full/restart for ordinary changes within this final baseline; earlier state-layout baseline was separately justified",
+      "final_native_receipt": "motolii/reference/reload-product-receipt.jsonl",
+      "late_window_generations": {
+        "created_after_epoch": 27,
+        "observed_labels": [
+          "Live",
+          "Hot",
+          "2.5D"
+        ],
+        "final_gain": 1.0,
+        "same_child_across_changes": true,
+        "native_close_returned_to_main": true
+      }
+    },
+    "historical_live_snapshots": [
+      {
+        "log": "/tmp/motolii-live-reload-2.log",
+        "cli_pid": 34607,
+        "app_pid": 35658,
+        "document_owner": 5150816784,
+        "epochs": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11
+        ],
+        "playing_epoch": 8,
+        "new_module": {
+          "path": "motolii/src/ui/functions/placement.rs",
+          "epoch": 11,
+          "status": "LIVE_VERIFIED",
+          "behavior": "Anchor0%,0% position825,405 -> 50%,50% position961,541 with unchanged shape bounds; one CmdZ restored both"
+        },
+        "status": "HISTORICAL_RECOVERY_EVIDENCE; SUPERSEDED_BY_FINAL_BASELINE"
+      }
+    ],
+    "driver_sha256": "4a852874e7e3fb114d6af7ba8468d7d630a9cc5e049031377c3ded08861afcb4",
+    "native_contracts": [
+      "Use typed HotFn for the actual callee at retained native callback/Widget boundaries; a hot closure returning a raw function pointer is insufficient",
+      "Canonical catalog state is Host-retained Arc, passed through root VDOM context and bound before first consumer; copied crate statics are only bindings",
+      "ErrorContext retry follows accepted Rust replacement; arbitrary panic is not converted into success",
+      "Mutable Vello override texture writes require atlas invalidation/re-registration; renderer-local IDs cannot be shared across renderers",
+      "Retained state ABI and valid layout are preconditions; incompatible state changes require recorded migration/baseline",
+      "Stage reuses rendered output when document display revision, catalog generation, time, viewport and observation inputs are unchanged"
+    ]
+  },
+  "validation": {
+    "state": "REPRESENTATIVE_TESTS_AND_NATIVE_ACCEPTANCE_PASSED",
+    "representatives": [
+      "numeric scrub and absolute input",
+      "Stage transform",
+      "Timeline Move/Trim",
+      "Split/Duplicate"
+    ],
+    "held_out": {
+      "operation": "fixed-gap distribution of selected clips in original Timeline order",
+      "use": "TEST_ONLY_NOT_NEW_PRODUCT_COMMAND",
+      "rules": [
+        "anchor the first clip start",
+        "preserve source-in",
+        "shift all keys with each clip",
+        "reject whole plan if relational constraints cannot hold"
+      ],
+      "success": "selection planner plus existing Move blocks; no operation-name special cases in Shell, Gesture or Control",
+      "status": "PASSED",
+      "test": "ui::timeline_widget::tests::composed_edit_contracts::held_out_distribution_uses_existing_move_blocks_without_new_gesture_or_shell_cases"
+    },
+    "runs": [
+      {
+        "target": "motolii-doc --test edit_transactions",
+        "passed": 7,
+        "failed": 0,
+        "exit_code": 0,
+        "receipt": "/tmp/motolii-doc-tests.jsonl"
+      },
+      {
+        "target": "motolii --bin motolii with related filters",
+        "passed": 50,
+        "failed": 0,
+        "filtered_out": 103,
+        "exit_code": 0,
+        "cargo_duration": "19.38s",
+        "test_duration_seconds": 1.36,
+        "receipt": "/tmp/motolii-ui-tests.jsonl"
+      },
+      {
+        "target": "motolii-render --lib with catalog and mixed-format filters",
+        "passed": 5,
+        "failed": 0,
+        "filtered_out": 8,
+        "exit_code": 0,
+        "cargo_duration": "6m15s",
+        "test_duration_seconds": 1.0,
+        "cfg": "load_shaders_from_disk enabled; both gated frame/rebind tests ran",
+        "receipt": "/tmp/motolii-render-tests.jsonl",
+        "scope": "Exact tested source snapshot; subsequent native adapter/catalog binding fixes verified live rather than claimed as covered by this earlier run"
+      },
+      {
+        "target": "motolii --bin motolii ui::host filter",
+        "passed": 4,
+        "failed": 0,
+        "filtered_out": 152,
+        "exit_code": 0,
+        "cargo_duration": "18.93s",
+        "test_duration_seconds": 0.0,
+        "receipt": "/tmp/motolii-ui-tests.jsonl",
+        "scope": "Close owner-isolation, pointer owner routing and alias2, after temporary metadata log removal"
+      }
+    ],
+    "new_module_live": "ui/functions/placement.rs Thin epoch11 and live anchor compensation/Undo"
+  },
+  "sources": [
+    {
+      "id": "parnas1972",
+      "kind": "PRIMARY_PAPER",
+      "url": "https://wstomv.win.tue.nl/edu/2ip30/references/criteria_for_modularization.pdf",
+      "location": "p1054 What Is Modularization; p1056 The Criteria; pp1057-1058",
+      "supports": "Modules hide independently changeable decisions; hierarchy alone is insufficient",
+      "does_not_establish": "This group count or a productivity multiplier"
+    },
+    {
+      "id": "hughes1989",
+      "kind": "PRIMARY_AUTHOR_TEXT",
+      "url": "https://www.classes.cs.uchicago.edu/archive/2010/spring/22300-1/papers/whyfp.pdf",
+      "location": "sections 2-4, pp3-11; section 6 p22 (revised author text)",
+      "supports": "Reusable composition enables useful decomposition",
+      "does_not_establish": "Eight atoms are complete; Rust hotpatch or GPU retention"
+    },
+    {
+      "id": "foster2007",
+      "kind": "PRIMARY_AUTHOR_PAPER",
+      "url": "https://www.cis.upenn.edu/~bcpierce/papers/lenses-toplas-final.pdf",
+      "location": "definitions 3.1-3.3 pp6-8; Composition p13",
+      "supports": "Partial get/putback, domain-conditioned GetPut/PutGet and compatible lens composition",
+      "does_not_establish": "PropertyId plus arbitrary Intent list is a lawful lens; PutPut is mandatory"
+    },
+    {
+      "id": "elm_architecture",
+      "kind": "OFFICIAL_GUIDE",
+      "url": "https://guide.elm-lang.org/architecture/",
+      "location": "The Basic Pattern",
+      "supports": "Model View Update decomposition"
+    },
+    {
+      "id": "elm_effects",
+      "kind": "OFFICIAL_GUIDE",
+      "url": "https://guide.elm-lang.org/effects/http",
+      "location": "init and update",
+      "supports": "Model/command outputs, explicit success/failure messages"
+    },
+    {
+      "id": "elm_cmd",
+      "kind": "PINNED_PRIMARY_SOURCE",
+      "url": "https://github.com/elm/core/blob/1.0.5/src/Platform/Cmd.elm#L52-L62",
+      "location": "lines52-62",
+      "supports": "Cmd.batch does not guarantee ordering of results",
+      "does_not_establish": "Ordered atomic Document transaction"
+    },
+    {
+      "id": "subsecond",
+      "kind": "PINNED_PRIMARY_SOURCE",
+      "url": "https://github.com/DioxusLabs/dioxus/blob/57d6794ad60b949e5bd8aa282f6f8c3dc97a365e/packages/subsecond/subsecond/src/lib.rs",
+      "location": "Workspace support; Globals; Struct layout; Nesting Calls; HotFn::try_call",
+      "supports": "Actual detour and binary-tip/ABI/state constraints"
+    },
+    {
+      "id": "dioxus_devtools",
+      "kind": "PINNED_PRIMARY_SOURCE",
+      "url": "https://github.com/DioxusLabs/dioxus/blob/57d6794ad60b949e5bd8aa282f6f8c3dc97a365e/packages/devtools/src/lib.rs#L19-L56",
+      "location": "try_apply_changes",
+      "supports": "Process-global patch guarded by build/PID plus VDOM dirtiness"
+    },
+    {
+      "id": "blitz_events",
+      "kind": "PINNED_PRIMARY_SOURCE",
+      "url": "https://github.com/DioxusLabs/blitz/blob/64eb27853aa2672486b7edf825fb044be78c9db3/packages/blitz-dom/src/events/mod.rs#L145-L159",
+      "location": "custom-widget event forwarding",
+      "supports": "Direct Widget trait-object call; extraction alone does not establish detour"
+    },
+    {
+      "id": "dx_runner",
+      "kind": "PINNED_PRIMARY_SOURCE",
+      "url": "https://github.com/DioxusLabs/dioxus/blob/57d6794ad60b949e5bd8aa282f6f8c3dc97a365e/packages/cli/src/serve/runner.rs",
+      "location": "initialize; handle_file_change; order_changed_crates; full_rebuild",
+      "supports": "Selects RSX/assets or Thin/Base/Fat; variable name is not execution class"
+    },
+    {
+      "id": "dx_replay",
+      "kind": "PINNED_PRIMARY_SOURCE",
+      "url": "https://github.com/DioxusLabs/dioxus/blob/57d6794ad60b949e5bd8aa282f6f8c3dc97a365e/packages/cli/src/build/link.rs",
+      "location": "compile_workspace_hotpatch; workspace_hotpatch_replay_order; workspace_hotpatch_link_rlibs",
+      "supports": "Workspace invocation replay exists; tip package and rlib artifact conditions constrain coverage"
+    },
+    {
+      "id": "dx_rustcwrapper",
+      "kind": "PINNED_PRIMARY_SOURCE",
+      "url": "https://github.com/DioxusLabs/dioxus/blob/57d6794ad60b949e5bd8aa282f6f8c3dc97a365e/packages/cli/src/rustcwrapper.rs",
+      "location": "target suffix selection lines120-126",
+      "supports": "lib/rlib are .lib; other crate types including dylib become .bin"
+    },
+    {
+      "id": "dx_serve_dispatch",
+      "kind": "PINNED_PRIMARY_SOURCE",
+      "url": "https://github.com/DioxusLabs/dioxus/blob/57d6794ad60b949e5bd8aa282f6f8c3dc97a365e/packages/cli/src/serve/mod.rs",
+      "location": "BuildReady Thin PatchError branch; RequestRebuild; OpenApp",
+      "supports": "Specific PatchError can trigger automatic Fat fallback"
+    },
+    {
+      "id": "dx_builder",
+      "kind": "PINNED_PRIMARY_SOURCE",
+      "url": "https://github.com/DioxusLabs/dioxus/blob/57d6794ad60b949e5bd8aa282f6f8c3dc97a365e/packages/cli/src/build/builder.rs",
+      "location": "patch_rebuild and hotpatch",
+      "supports": "Collect dependency closure and base/ASLR preconditions"
+    },
+    {
+      "id": "dx_request",
+      "kind": "PINNED_PRIMARY_SOURCE",
+      "url": "https://github.com/DioxusLabs/dioxus/blob/57d6794ad60b949e5bd8aa282f6f8c3dc97a365e/packages/cli/src/build/request.rs",
+      "location": "Thin cargo_build_command; Fat invocation capture",
+      "supports": "Thin uses captured binary invocation; Fat captures workspace baseline"
+    },
+    {
+      "id": "vello_mutable_override",
+      "kind": "PINNED_PRIMARY_SOURCE",
+      "url": "https://github.com/linebender/vello/blob/v0.10.0/vello/src/lib.rs",
+      "location": "Renderer::mark_override_image_dirty and register_texture",
+      "supports": "Changed override texture contents must invalidate the atlas; registered images belong to their renderer",
+      "local_verified_source": "vello-0.10.0/src/lib.rs lines548-568",
+      "does_not_establish": "Preserved texture identity alone proves changed pixels reached the native window"
+    }
+  ],
+  "development_goal": {
+    "document": "docs/reviews/2026-09-04-dioxus-reload-goal.md",
+    "objective": "Ordinary feature additions and corrections finish through state-preserving reload/hotpatch; full build/restart remains a visible, justified exception with a repair owner",
+    "status": "COMPLETE",
+    "ordinary_changes": [
+      "RSX and CSS/assets",
+      "typed descriptors and catalog data",
+      "menu/shortcut",
+      "numeric and edit functions",
+      "gesture and paint preparation",
+      "new functions/modules/combinations within existing ABI",
+      "supported workspace function bodies"
+    ],
+    "execution_classes": [
+      "RSX_ASSET",
+      "THIN_PATCH",
+      "FULL_BASELINE",
+      "RELINK",
+      "RESTART",
+      "BUNDLE"
+    ],
+    "ordinary_full_builds_allowed": 0,
+    "ordinary_restarts_allowed": 0,
+    "thin_compilation": "NORMAL; rustc and linker work are included in hotpatch budget",
+    "normal_flow": [
+      "CLASSIFY_CHANGE",
+      "VERIFY_BASELINE_AND_ROUTE",
+      "RELOAD_OR_THIN_PATCH",
+      "CONFIRM_PATCH_ACCEPTANCE",
+      "CONFIRM_BEHAVIOR_AND_OWNERS",
+      "HOT_COMPLETE"
+    ],
+    "gap_flow": "Failure, ignored/unmatched patch, no behavior change or unknown measurement -> HOT_ROUTE_GAP. Slow runs are recorded without killing the compiler; no unrecorded full fallback.",
+    "exception_flow": [
+      "RECORD_NEED_RULER_GAP_AND_IMPACT",
+      "LIMITED_BASELINE_RELINK_RESTART_OR_BUNDLE",
+      "RECORD_ACTUAL_RESULT_AND_STATE_IMPACT",
+      "VERIFY_NEW_BASELINE",
+      "REVERIFY_ORDINARY_HOT_CHANGE"
+    ],
+    "exception_candidates": [
+      "missing initial baseline",
+      "toolchain or locked dependency or feature graph change",
+      "incompatible retained state ABI or persistence schema migration",
+      "specific codegen/link verification",
+      "requested distribution artifact"
+    ],
+    "not_exception_reasons": [
+      "workspace location alone",
+      "dx requested it",
+      "just in case",
+      "final validation ritual",
+      "hot route not yet wired"
+    ],
+    "exception_record_fields": [
+      "id",
+      "diff_hash_and_paths",
+      "BUILD_NEED",
+      "EXTERNAL_RULER",
+      "HOTPATCH_OR_CHECK_GAP",
+      "change_class",
+      "execution_class",
+      "command_and_toolchain_dx_lock_profile_features",
+      "before_after_serve_app_pid_buildid_patch_epoch",
+      "retained_and_recreated_owners",
+      "compile_link_apply_behavior_times",
+      "exit_code_and_timeout",
+      "actual_fallback",
+      "repair_owner_and_hot_recheck_evidence"
+    ],
+    "runtime_enforcement": "GUARDED_CLI_AND_HOST_DELIVERED; baseline refusal checked; mixed changes/workspace replay/runtime data verified in native application",
+    "control_points": [
+      "guarded CLI file-change classification",
+      "Fat fallback/manual/native-open branch before execution",
+      "configuration graph refresh",
+      "Host patch acceptance and per-window redraw",
+      "retained GPU owner versus mount registration"
+    ],
+    "current_internal_findings": [
+      "CLI workspace replay works with captured invocation and exact/unhashed rlib resolution",
+      "UI compiled directly by binary; actual typed HotFn callee detours cover native Host/Widget boundaries",
+      "Guarded native driver records baseline/fallback decisions before mutation; driver SHA follows runtime descriptor",
+      "Mach-O thread_bss initialization repaired; earlier fatal run retained as historical failure",
+      "Host applies one process-global patch and updates active VDOMs; scoped callbacks retire by epoch/registration identity",
+      "Host-owned CatalogRuntime is bound from each root VDOM context before the first consumer; copied statics do not own the canonical snapshot",
+      "Vello mutable-image atlas registration and Stage cached paint preserve GPU owners while reflecting changed data",
+      "New Gain data, invalid shader last-good/restoration, mixed-format chain and Undo passed native acceptance"
+    ],
+    "acceptance": "Run each ordinary change family with visible behavior changes and restoration, retained identities, main/detached coverage, zero full/restart; test true exception and mistaken ordinary fallback separately",
+    "proof_status": "DOC7_UI50_RENDER_GPU5_HOST4_EXIT0; NATIVE_CHANGE_FAMILIES_AND_TWO_WINDOW_GENERATIONS_PASSED",
+    "time_policy": "User override 2026-09-04: advisory targets only; no destructive compiler timeouts. Finish necessary baseline/test work with stable features/profile/cache; no excessive staging or repeated approval.",
+    "pending_acceptance": [],
+    "completed_at": "2026-09-04T16:14:38.028494+00:00",
+    "compatibility_limits": [
+      "Incompatible retained types/schema/dependency graph require recorded baseline exception",
+      "Aliases cover baseline symbols; new retained entry absent from baseline needs an identity contract/baseline",
+      "Rust Thin still compiles; hot5s is advisory, not a universal latency guarantee"
+    ]
+  },
+  "resumption": {
+    "authorization": "2026-09-04 user explicitly requested continued implementation until achieved",
+    "checkpoint": "/tmp/motolii-resume-20260904-221238.zip",
+    "root_owns": [
+      "Host integration",
+      "main/lib/Cargo topology",
+      "Document transactions and preview",
+      "evidence convergence"
+    ],
+    "cli_owns": [
+      "guarded CLI",
+      "reload launch/doctor/guard"
+    ],
+    "editing_owns": [
+      "atoms and blocks",
+      "Inspector/Browser/Timeline"
+    ],
+    "mount_owns": [
+      "mount adapter",
+      "panels",
+      "Stage retained state"
+    ]
+  }
+}

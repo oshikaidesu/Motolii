@@ -42,11 +42,11 @@ pub(crate) fn translate_matte_mode(
 pub(crate) fn translate_effect_passes(
     effects: &[crate::doc::store::ResolvedEffect],
 ) -> Vec<crate::render::compositor::EffectPass> {
+    let catalog = known_effects();
     effects
         .iter()
         .filter_map(|effect| {
-            let descriptor = known_effects()
-                .iter()
+            let descriptor = catalog.iter()
                 .find(|descriptor| descriptor.plugin_id == effect.plugin_id)?;
             let params: Vec<(String, f32)> = effect
                 .params
@@ -56,10 +56,10 @@ pub(crate) fn translate_effect_passes(
                     _ => None,
                 })
                 .collect();
-            let padding = descriptor.padding.map_or(0, |padding| {
+            let padding = descriptor.padding.as_ref().map_or(0, |padding| {
                 let value = params
                     .iter()
-                    .find(|(name, _)| name == padding.param)
+                    .find(|(name, _)| name == &padding.param)
                     .map(|(_, value)| *value)
                     .or_else(|| {
                         descriptor
@@ -81,59 +81,8 @@ pub(crate) fn translate_effect_passes(
         .collect()
 }
 
-pub struct EffectDescriptor {
-    pub plugin_id: &'static str,
-    pub params: &'static [EffectParamDescriptor],
-    pub(crate) padding: Option<EffectPaddingDescriptor>,
-    pub(crate) output_format: wgpu::TextureFormat,
-}
+pub use crate::render::compositor::{EffectDescriptor, EffectParamDescriptor};
 
-pub struct EffectParamDescriptor {
-    pub name: &'static str,
-    pub default: f64,
-    pub range: Option<(f64, f64)>,
-}
-
-#[derive(Clone, Copy)]
-pub(crate) struct EffectPaddingDescriptor {
-    param: &'static str,
-    scale: f32,
-}
-
-fn params_from_manifest(
-    manifest: &crate::render::compositor::IsfManifest,
-) -> &'static [EffectParamDescriptor] {
-    let params: Vec<EffectParamDescriptor> = manifest
-        .param_inputs()
-        .map(|input| EffectParamDescriptor {
-            name: Box::leak(input.name.clone().into_boxed_str()),
-            default: f64::from(input.default[0]),
-            range: input
-                .min
-                .zip(input.max)
-                .map(|(min, max)| (f64::from(min[0]), f64::from(max[0]))),
-        })
-        .collect();
-    Box::leak(params.into_boxed_slice())
-}
-
-pub fn known_effects() -> &'static [EffectDescriptor] {
-    static KNOWN: std::sync::OnceLock<Vec<EffectDescriptor>> = std::sync::OnceLock::new();
-    KNOWN.get_or_init(|| {
-        crate::render::compositor::vism_definitions()
-            .iter()
-            .filter(|definition| definition.manifest.expose)
-            .map(|definition| EffectDescriptor {
-                plugin_id: definition.plugin_id(),
-                params: params_from_manifest(&definition.manifest),
-                padding: definition.manifest.padding.as_ref().map(|padding| {
-                    EffectPaddingDescriptor {
-                        param: Box::leak(padding.param.clone().into_boxed_str()),
-                        scale: padding.scale,
-                    }
-                }),
-                output_format: definition.output_format(),
-            })
-            .collect()
-    })
+pub fn known_effects() -> std::sync::Arc<[EffectDescriptor]> {
+    crate::render::compositor::catalog_snapshot().descriptors.clone()
 }

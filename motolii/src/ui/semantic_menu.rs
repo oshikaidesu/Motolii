@@ -47,6 +47,67 @@ impl MenuId {
 pub(super) struct MenuItems {
     handles: Signal<Vec<std::rc::Rc<MountedData>>>,
     cursor: Signal<Option<usize>>,
+    focus_on_mount: bool,
+}
+
+impl MenuItems {
+    pub(super) fn new(focus_on_mount: bool) -> Self {
+        Self {
+            handles: Signal::new(Vec::new()),
+            cursor: Signal::new(None),
+            focus_on_mount,
+        }
+    }
+
+    pub(super) fn clear(mut self) {
+        self.handles.write().clear();
+        self.cursor.set(None);
+    }
+
+    pub(super) fn focus_first(self) {
+        self.focus(0);
+    }
+
+    fn focus(mut self, index: usize) {
+        let handle = self.handles.read().get(index).cloned();
+        if let Some(handle) = handle {
+            self.cursor.set(Some(index));
+            dioxus_core::spawn(async move {
+                let _ = handle.set_focus(true).await;
+            });
+        }
+    }
+
+    pub(super) fn navigate(self, key: &Key) -> bool {
+        let count = self.handles.read().len();
+        if count == 0 {
+            return false;
+        }
+        let cursor = (self.cursor)();
+        let next = match key {
+            Key::ArrowDown => cursor.map_or(0, |c| (c + 1) % count),
+            Key::ArrowUp => cursor.map_or(count - 1, |c| (c + count - 1) % count),
+            Key::Home => 0,
+            Key::End => count - 1,
+            _ => return false,
+        };
+        self.focus(next);
+        true
+    }
+
+    fn register(mut self, handle: std::rc::Rc<MountedData>) {
+        let first = {
+            let mut handles = self.handles.write();
+            if handles.iter().any(|h| std::rc::Rc::ptr_eq(h, &handle)) {
+                return;
+            }
+            handles.push(handle);
+            handles.len() == 1
+        };
+        if first && self.focus_on_mount {
+            self.focus_first();
+        }
+    }
 }
 
 #[component]
@@ -57,10 +118,7 @@ pub(super) fn SemanticMenu(
     children: Element,
 ) -> Element {
     let mut trigger = use_signal(|| None::<std::rc::Rc<MountedData>>);
-    let items = use_context_provider(|| MenuItems {
-        handles: Signal::new(Vec::new()),
-        cursor: Signal::new(None),
-    });
+    let items = use_context_provider(|| MenuItems::new(false));
     use_effect(move || {
         if open() == Some(id) {
             if let Some(handle) = trigger() {
@@ -89,28 +147,9 @@ pub(super) fn SemanticMenu(
                     return;
                 }
                 // ↑↓ Home End で項目を回る(Mac の menu と同じ)。Enter / Space は焦点の項目を押す。
-                let count = items.handles.read().len();
-                if count == 0 {
-                    return;
-                }
-                let cursor = (items.cursor)();
-                let next = match evt.key() {
-                    Key::ArrowDown => Some(cursor.map_or(0, |c| (c + 1) % count)),
-                    Key::ArrowUp => Some(cursor.map_or(count - 1, |c| (c + count - 1) % count)),
-                    Key::Home => Some(0),
-                    Key::End => Some(count - 1),
-                    _ => None,
-                };
-                let Some(next) = next else { return };
-                evt.prevent_default();
-                evt.stop_propagation();
-                let mut items = items;
-                items.cursor.set(Some(next));
-                let handle = items.handles.read().get(next).cloned();
-                if let Some(handle) = handle {
-                    dioxus_core::spawn(async move {
-                        let _ = handle.set_focus(true).await;
-                    });
+                if items.navigate(&evt.key()) {
+                    evt.prevent_default();
+                    evt.stop_propagation();
                 }
             },
             button {
@@ -146,9 +185,11 @@ pub(super) fn SemanticControl(
     #[props(default)] secondary: bool,
     #[props(default)] disabled: bool,
     /// 右端の加速鍵(⌘S)。menu は鍵の名簿でもある(Finder・VS Code)。
-    #[props(default)] hint: Option<String>,
+    #[props(default)]
+    hint: Option<String>,
     /// View menu の「出ている / 隠れている」。字の ✓ でなく状態として持つ。
-    #[props(default)] checked: Option<bool>,
+    #[props(default)]
+    checked: Option<bool>,
     #[props(default)] aria_label: Option<String>,
 ) -> Element {
     let selected = selected || checked == Some(true);
@@ -166,12 +207,8 @@ pub(super) fn SemanticControl(
         aria_label,
         disabled: disabled,
         onmounted: move |evt: MountedEvent| {
-            if let (Some(mut items), false) = (items, disabled) {
-                let handle = evt.data();
-                let mut handles = items.handles.write();
-                if !handles.iter().any(|h| std::rc::Rc::ptr_eq(h, &handle)) {
-                    handles.push(handle);
-                }
+            if let (Some(items), false) = (items, disabled) {
+                items.register(evt.data());
             }
         },
         onclick: move |evt| onclick.call(evt),
@@ -198,10 +235,12 @@ pub(super) fn SemanticButton(
     #[props(default)] selected: Option<bool>,
     #[props(default)] aria_label: Option<String>,
     /// hover で下見する物(blend の格子)だけが持つ。
-    #[props(default)] onmouseenter: Option<EventHandler<MouseEvent>>,
+    #[props(default)]
+    onmouseenter: Option<EventHandler<MouseEvent>>,
     #[props(default)] onmouseleave: Option<EventHandler<MouseEvent>>,
     /// 名札(hover で出る)。文字を持たない chip だけが持つ。
-    #[props(default)] title: Option<String>,
+    #[props(default)]
+    title: Option<String>,
     children: Element,
 ) -> Element {
     let a11y_name = aria_label.clone();
@@ -211,12 +250,8 @@ pub(super) fn SemanticButton(
         disabled,
         title,
         onmounted: move |evt: MountedEvent| {
-            if let (Some(mut items), false) = (items, disabled) {
-                let handle = evt.data();
-                let mut handles = items.handles.write();
-                if !handles.iter().any(|h| std::rc::Rc::ptr_eq(h, &handle)) {
-                    handles.push(handle);
-                }
+            if let (Some(items), false) = (items, disabled) {
+                items.register(evt.data());
             }
         },
         aria_pressed: selected.map(|on| if on { "true" } else { "false" }),
@@ -244,7 +279,8 @@ pub(super) fn Field(
     revision: Signal<u32>,
     oncommit: EventHandler<OpenField>,
     /// 欄の名前(読み上げ用)。見えない文字として欄の前に置く。
-    #[props(default)] label: Option<String>,
+    #[props(default)]
+    label: Option<String>,
 ) -> Element {
     let draft = session.field().map(|f| f.draft).unwrap_or_default();
     let mut revision = revision;
@@ -269,7 +305,12 @@ pub(super) fn Field(
             return;
         }
         match evt.key() {
-            Key::Enter if !multiline || evt.modifiers().intersects(Modifiers::META | Modifiers::SUPER) => {
+            Key::Enter
+                if !multiline
+                    || evt
+                        .modifiers()
+                        .intersects(Modifiers::META | Modifiers::SUPER) =>
+            {
                 evt.prevent_default();
                 if let Some(field) = session.close_field() {
                     oncommit.call(field);

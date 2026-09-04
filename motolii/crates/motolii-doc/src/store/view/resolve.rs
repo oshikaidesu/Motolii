@@ -388,7 +388,7 @@ impl<'a> StoreView<'a> {
             effects: self.resolved_effects(layer, t)?,
             blend_mode: self.resolved_blend_mode(layer, t, attrs.blend_mode)?,
             matte: self.resolved_matte(layer, t, attrs.matte)?,
-            pinned: attrs.pinned,
+            projection: attrs.projection,
             flatten: attrs.flatten,
         }))
     }

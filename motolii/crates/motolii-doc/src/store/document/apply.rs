@@ -1,4 +1,3 @@
-
 use re_types_core::SerializedComponentBatch;
 
 use crate::doc::store::components::{
@@ -191,7 +190,7 @@ impl Document {
                         || patch.matte.is_some()
                         || patch.name.is_some()
                         || patch.auto_orient.is_some()
-                        || patch.pinned.is_some()
+                        || patch.projection.is_some()
                         || patch.solo.is_some()
                         || patch.label_color.is_some();
                     if touches_other_than_locked {
@@ -264,6 +263,9 @@ impl Document {
             } => {
                 check_not_locked(&self.view(), layer)?;
                 check_not_frozen(&self.view(), layer)?;
+                track
+                    .validate()
+                    .map_err(|error| StoreError::Property(error.to_string()))?;
                 let json = serde_json::to_string(&PropertySource::track(track))?;
                 (
                     layer.entity_path(),
@@ -303,6 +305,9 @@ impl Document {
                 )
             }
             Intent::SetCameraTrack { property, track } => {
+                track
+                    .validate()
+                    .map_err(|error| StoreError::Property(error.to_string()))?;
                 let json = serde_json::to_string(&PropertySource::track(track))?;
                 (
                     Self::composition_path(),
@@ -369,13 +374,13 @@ impl Document {
                 for link in &modulators {
                     validate_no_link_cycle(&self.view(), layer, &property, link)?;
                 }
-                let mut source = self
-                    .view()
-                    .property_source(layer, &property)?
-                    .unwrap_or(PropertySource {
-                        base: None,
-                        modulators: Vec::new(),
-                    });
+                let mut source =
+                    self.view()
+                        .property_source(layer, &property)?
+                        .unwrap_or(PropertySource {
+                            base: None,
+                            modulators: Vec::new(),
+                        });
                 source.modulators = modulators;
                 let json = serde_json::to_string(&source)?;
                 (
@@ -391,13 +396,13 @@ impl Document {
                 property,
                 modulators,
             } => {
-                let mut source = self
-                    .view()
-                    .camera_property_source(&property)?
-                    .unwrap_or(PropertySource {
-                        base: None,
-                        modulators: Vec::new(),
-                    });
+                let mut source =
+                    self.view()
+                        .camera_property_source(&property)?
+                        .unwrap_or(PropertySource {
+                            base: None,
+                            modulators: Vec::new(),
+                        });
                 source.modulators = modulators;
                 let json = serde_json::to_string(&source)?;
                 (
@@ -490,7 +495,6 @@ impl Document {
         let (path, batches) = batches;
         self.ingest(path, batches, at)
     }
-
 }
 
 fn serialize_present(present: bool) -> Result<SerializedComponentBatch, StoreError> {

@@ -6,7 +6,7 @@ mod wide_div;
 
 pub use camera::{
     camera_projection, camera_screen_from_world_at_z, camera_screen_from_world_z0,
-    distance_from_camera, CameraProjection, ResolvedCamera, CAMERA_BASE_VERTICAL_FOV_DEGREES,
+    distance_from_camera, layer_projection_transform, CameraProjection, ResolvedCamera, CAMERA_BASE_VERTICAL_FOV_DEGREES,
     NEAR_PLANE,
 };
 pub use frame::{CompSpec, LayerPlacement,

@@ -2,13 +2,14 @@ use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
 
 use dioxus_native::prelude::*;
-use dioxus_native::CustomWidgetAttr;
 
 use crate::doc::store::{Document, Intent, LayerAttrsPatch, LayerId};
+use crate::ui::context_menu::{MenuRequest, MenuTarget};
 use crate::ui::fixture::LayerRow;
+use crate::ui::functions::verb::{flag_intents, LayerFlag};
 use crate::ui::playback::Clock;
-use crate::ui::session::{FieldAt, OpenField, Selection, Session};
 use crate::ui::semantic_menu::{Field, SemanticButton};
+use crate::ui::session::{FieldAt, OpenField, Selection, Session};
 use crate::ui::timeline_widget::TimelineMsg;
 
 /// 再生の道具。タブの帯の右へ乗る(帯を2段にしないため)。
@@ -56,13 +57,14 @@ pub(super) fn timeline_shell(
     mut attrs: Signal<Vec<(bool, bool, bool)>>,
     layer_rows_data: &[LayerRow],
     layer_rows_sig: Signal<Vec<LayerRow>>,
-    timeline_attr: CustomWidgetAttr,
+    surface: Element,
     selection: Selection,
     mut selected: Signal<Option<LayerId>>,
     scroll_y: Signal<f64>,
     timeline_tx: Sender<TimelineMsg>,
     session: &Session,
     mut revision: Signal<u32>,
+    mut menu: Signal<Option<MenuRequest>>,
 ) -> Element {
     // 見える範囲だけ DOM に出す(層 200 で 6,000 node を stylo に舐めさせない)。
     let row_px = crate::ui::tokens::ROW * session.scale.factor();
@@ -99,6 +101,8 @@ pub(super) fn timeline_shell(
             };
             let class = if lit { "glyph lit" } else { "glyph" };
             let doc = doc.clone();
+            let session = session.clone();
+            let timeline_tx = timeline_tx_row.clone();
             rsx!(
                 SemanticButton {
                     class: "{class}",
@@ -107,33 +111,56 @@ pub(super) fn timeline_shell(
                     title: match bit { 0 => "Hide layer", 1 => "Solo layer", _ => "Lock layer" },
                     onclick: move |_| {
                         let Some(layer) = layer else { return };
-                        let patch = match bit {
-                            0 => LayerAttrsPatch { hidden: Some(!hidden), ..Default::default() },
-                            1 => LayerAttrsPatch { solo: Some(!solo), ..Default::default() },
-                            _ => LayerAttrsPatch { locked: Some(!locked), ..Default::default() },
-                        };
+                        let flag = match bit { 0 => LayerFlag::Hidden, 1 => LayerFlag::Solo, _ => LayerFlag::Locked };
+                        let targets = if bit == 2 { session.targets(Some(layer)) } else { session.editable_targets(Some(layer)) };
                         let mut doc = doc.lock().unwrap();
-                        match doc.apply(Intent::SetAttrs { layer, patch }) {
-                            Ok(_) => {
-                                let a = doc.view().attrs(layer).ok().flatten().unwrap_or_default();
-                                // 行の並び(展開・絞り)は attrs より先に動く事がある。無い番地には書かない。
-                                if let Some(slot) = attrs.write().get_mut(i) {
-                                    *slot = (a.hidden, a.solo, a.locked);
-                                }
-                                println!("PROBE room=write verdict=applied SetAttrs bit={bit}");
+                        let clicked = doc.view().attrs(layer).ok().flatten().unwrap_or_default();
+                        let value = !match flag { LayerFlag::Hidden => clicked.hidden, LayerFlag::Solo => clicked.solo, LayerFlag::Locked => clicked.locked };
+                        let targets: Vec<_> = targets.into_iter().filter(|target| {
+                            let frozen = doc.view().frozen_ancestor(*target).ok().flatten().is_some();
+                            if frozen { *session.project_notice.lock().unwrap() = format!("Skipped {}: inside a frozen group", target.0); }
+                            !frozen
+                        }).collect();
+                        let result = crate::ui::functions::compose::independent_layers(&doc, &targets, |doc, target| flag_intents(doc, target, flag, value))
+                            .and_then(|(intents, _)| doc.apply_all(intents));
+                        match result {
+                            Ok(()) => {
+                                let rows = crate::ui::fixture::layer_rows_from_doc(&doc);
+                                let canvas = crate::ui::fixture::canvas_rows_from_doc(&doc);
+                                drop(doc);
+                                attrs.set(rows.iter().map(|row| (row.hidden, row.solo, row.locked)).collect());
+                                layer_rows_sig.set(rows);
+                                let _ = timeline_tx.send(TimelineMsg::SetRows(canvas));
+                                *revision.write() += 1;
                             }
-                            Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
+                            Err(error) => *session.project_notice.lock().unwrap() = error.to_string(),
                         }
                     },
                     "{label}"
                 }
             )
         };
+        let context = {
+            let session = session.clone();
+            let selection = selection.clone();
+            move |evt: MouseEvent| {
+                evt.prevent_default();
+                evt.stop_propagation();
+                session.gesture.cancel();
+                crate::ui::inspector::cancel_scrub(&session);
+                if let Some(layer) = layer {
+                    if !selection.contains(layer) { selection.set(Some(layer)); }
+                    selected.set(selection.get());
+                }
+                let point = evt.client_coordinates();
+                menu.set(Some(MenuRequest { x: point.x, y: point.y, target: layer.map(MenuTarget::Layer).unwrap_or(MenuTarget::Timeline) }));
+            }
+        };
         let indent = format!("padding-left:{}px", row.depth as u32 * 18);
         let folded_children = (!row.expanded).then_some(row.children).filter(|n| *n > 0);
         if let Some(name) = row.prop.clone() {
             return rsx!(
-                div { class: "lrow", style: "{indent}",
+                div { class: "lrow", style: "{indent}", oncontextmenu: context,
                     span { class: "lprop", "{name}" }
                 }
             );
@@ -145,7 +172,7 @@ pub(super) fn timeline_shell(
         let unchanged = row.name.clone();
         let doc_rename = doc.clone();
         rsx!(
-            div { class: "lrow", style: "{indent}",
+            div { class: "lrow", style: "{indent}", oncontextmenu: context,
                 SemanticButton {
                     class: "twirl",
                     selected: expanded,
@@ -290,6 +317,17 @@ pub(super) fn timeline_shell(
             div { id: "timeline",
                 div {
                     id: "layers",
+                    oncontextmenu: {
+                        let session = session.clone();
+                        move |evt| {
+                            evt.prevent_default();
+                            evt.stop_propagation();
+                            session.gesture.cancel();
+                            crate::ui::inspector::cancel_scrub(&session);
+                            let point = evt.client_coordinates();
+                            menu.set(Some(MenuRequest { x: point.x, y: point.y, target: MenuTarget::Timeline }));
+                        }
+                    },
                     onwheel: move |evt| {
                         let dy = evt.data().delta().strip_units().y;
                         let _ = timeline_tx.send(TimelineMsg::ScrollBy(dy));
@@ -302,7 +340,7 @@ pub(super) fn timeline_shell(
                         div { style: "height: {below_px}px;" }
                     }
                 }
-                object { "data": timeline_attr }
+                {surface}
             }
         }
     )

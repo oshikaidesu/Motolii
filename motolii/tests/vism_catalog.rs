@@ -87,7 +87,7 @@ fn two_manifest_only_visms_share_the_catalog_and_effect_stack() {
         tri_led
             .params
             .iter()
-            .map(|param| param.name)
+            .map(|param| param.name.as_str())
             .collect::<Vec<_>>(),
         ["glow"],
         "Inspector rows must come from the second Vism manifest"

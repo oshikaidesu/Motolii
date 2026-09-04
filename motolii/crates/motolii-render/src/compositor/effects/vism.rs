@@ -46,28 +46,26 @@ pub(crate) fn orders(manifest: &IsfManifest) -> (Vec<usize>, Vec<usize>) {
     (images, params)
 }
 
-/// ホットリロード付きビルドでは、生成した WGSL を**実ファイル**として置く必要がある
-/// (上流の resolver がディスクから読む)。中身で名前を決め、書き込みは一時ファイル
-/// →rename で原子的に行う。**固定の1枚へ書くと、複数の Compositor を同時に作った時に
-/// 半端な中身を読んでしまう**(テストが並列で走ると実際に起きた)。
-#[cfg(load_shaders_from_disk)]
-pub(crate) fn stage_source_on_disk(name: &str, text: &str) -> PathBuf {
-    use std::hash::{Hash as _, Hasher as _};
+pub(crate) fn catalog_stage_path(name: &str, stage: &str) -> PathBuf {
+    #[cfg(load_shaders_from_disk)]
+    { std::env::temp_dir().join(format!("motolii-vism-runtime-{}", std::process::id())).join(format!("{name}-{stage}.wgsl")) }
+    #[cfg(not(load_shaders_from_disk))]
+    { PathBuf::from(format!("motolii-vism/{name}-{stage}.wgsl")) }
+}
 
-    let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    text.hash(&mut hasher);
-    let stamp = hasher.finish();
-
-    let dir = std::env::temp_dir().join("motolii-vism-wgsl");
-    std::fs::create_dir_all(&dir).expect("temp dir を作れる");
-    let path = dir.join(format!("{name}-{stamp:016x}.wgsl"));
-    if !path.exists() {
-        let tmp = dir.join(format!("{name}-{stamp:016x}.{}.tmp", std::process::id()));
-        std::fs::write(&tmp, text).expect("temp へ書ける");
-        // rename は同一ディレクトリなら原子的。読み手が半端な中身を見ない
-        let _ = std::fs::rename(&tmp, &path);
+pub(crate) fn write_catalog_stage(path: &std::path::Path, text: &str) -> Result<(), String> {
+    #[cfg(load_shaders_from_disk)]
+    {
+        std::fs::create_dir_all(path.parent().ok_or("shader stage has no parent")?).map_err(|e| e.to_string())?;
+        let tmp = path.with_extension("pending");
+        std::fs::write(&tmp, text).map_err(|e| e.to_string())?;
+        std::fs::rename(tmp, path).map_err(|e| e.to_string())
     }
-    path
+    #[cfg(not(load_shaders_from_disk))]
+    {
+        use re_renderer::FileSystem;
+        re_renderer::get_filesystem().create_file(path, text.to_owned().into()).map_err(|e| e.to_string())
+    }
 }
 
 /// 言語ごとの入口が用意する物 — 上流のファイルシステムに載った WGSL の場所と入口名。

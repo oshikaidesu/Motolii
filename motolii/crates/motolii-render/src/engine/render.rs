@@ -43,6 +43,7 @@ impl Engine {
         let layers = self.layers_from_resolved(
             comp,
             camera,
+            view.resolve_camera(t).map_err(|e| EngineError::Store(e.to_string()))?,
             t,
             &resolved,
             &text_documents,
@@ -63,6 +64,7 @@ impl Engine {
         &mut self,
         comp: CompSpec,
         camera: ResolvedCamera,
+        projection_camera: ResolvedCamera,
         t: RationalTime,
         resolved: &[ResolvedLayer],
         text_documents: &HashMap<LayerId, TextDocument>,
@@ -98,7 +100,8 @@ impl Engine {
                     content,
                     size: layer_size(layer, natural),
                     placement: layer.placement,
-                    pinned: layer.pinned,
+                    projection: layer.projection,
+                    projection_camera,
                     blend_mode,
                 },
                 layer.flatten,
@@ -127,7 +130,8 @@ impl Engine {
                         content: source_content,
                         size: layer_size(source, source_natural),
                         placement: source.placement,
-                        pinned: source.pinned,
+                        projection: source.projection,
+                        projection_camera,
                         blend_mode: source_blend,
                     };
                     let source_layer =
@@ -187,7 +191,7 @@ impl Engine {
         shape_documents: &HashMap<LayerId, Vec<ShapeNode>>,
     ) -> Result<(wgpu::Texture, wgpu::TextureView), EngineError> {
         let layers =
-            self.layers_from_resolved(comp, camera, t, resolved, text_documents, shape_documents)?;
+            self.layers_from_resolved(comp, camera, camera, t, resolved, text_documents, shape_documents)?;
         Ok(self
             .compositor
             .render_to_texture(comp, camera, &layers, background)?)
@@ -244,6 +248,7 @@ impl Engine {
         let layers = self.layers_from_resolved(
             comp,
             camera,
+            view.resolve_camera(t).map_err(|e| EngineError::Store(e.to_string()))?,
             t,
             &resolved,
             &text_documents,
@@ -277,6 +282,7 @@ impl Engine {
         let layers = self.layers_from_resolved(
             comp,
             camera,
+            view.resolve_camera(t).map_err(|e| EngineError::Store(e.to_string()))?,
             t,
             &resolved,
             &text_documents,
@@ -332,7 +338,8 @@ impl Engine {
                 rotation_y: 0.0,
                 ..layer.placement
             },
-            pinned: true,
+            projection: crate::doc::store::LayerProjection::TwoD,
+            projection_camera: camera,
             blend_mode: layer.blend_mode,
         })
     }
@@ -377,7 +384,8 @@ impl Engine {
                 rotation_y: 0.0,
                 ..layer.placement
             },
-            pinned: true,
+            projection: crate::doc::store::LayerProjection::TwoD,
+            projection_camera: camera,
             blend_mode: output_blend,
         })
     }

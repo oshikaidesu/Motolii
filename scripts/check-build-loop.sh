@@ -6,8 +6,7 @@ repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 product_root="$repo_root/motolii"
 budget_file="$product_root/reference/hygiene-budget.tsv"
 loop_budget="$product_root/reference/build-loop-budget.tsv"
-fixed_dx="${MOTOLII_DX_BIN:-${HOME}/.local/bin/motolii-dx-0.7.10-fixed}"
-expected_sha="25acf557e325b79acc4f1e4e02105cba08094c7476db3b90e1328df35591746a"
+runtime="$repo_root/scripts/reload-runtime.py"
 target_limit_gib="$(awk -F '\t' '$1=="target_gb" {print $2}' "$budget_file")"
 libdeps_advisory="$(awk -F '\t' '$1=="libdeps_generations" {print $2}' "$loop_budget")"
 
@@ -18,24 +17,30 @@ advice() { echo "WARN $1 $2"; warn=$((warn + 1)); }
 ng() { echo "NG $1 $2"; fail=$((fail + 1)); }
 size_kib() { [ -e "$1" ] && du -sk "$1" 2>/dev/null | awk '{print $1}' || echo 0; }
 
-if [ -x "$fixed_dx" ]; then
-  actual_sha="$(shasum -a 256 "$fixed_dx" | awk '{print $1}')"
-  if [ "$actual_sha" = "$expected_sha" ]; then
-    pass fixed_dx "sha256=$actual_sha"
-  else
-    ng fixed_dx "checksum=$actual_sha expected=$expected_sha"
-  fi
+if binary_info="$(python3 "$runtime" binary-info)"; then
+  fixed_dx="$(printf '%s' "$binary_info" | python3 -c 'import json,sys; print(json.load(sys.stdin)["path"])')"
+  actual_sha="$(printf '%s' "$binary_info" | python3 -c 'import json,sys; print(json.load(sys.stdin)["sha256"])')"
+  pass fixed_dx "sha256=$actual_sha path=$fixed_dx"
 else
-  ng fixed_dx "missing=$fixed_dx"
+  fixed_dx="unverified"
+  ng fixed_dx "runtime descriptor or pinned executable unavailable"
 fi
 
-processes="$(ps ax -o pid=,state=,command= 2>/dev/null)"
-stock_count="$(printf '%s\n' "$processes" | awk '/\/bin\/dx serve/ && !/motolii-dx-0\.7\.10-fixed/ {n++} END {print n+0}')"
-fixed_count="$(printf '%s\n' "$processes" | awk '/motolii-dx-0\.7\.10-fixed serve/ {n++} END {print n+0}')"
-stopped_builds="$(printf '%s\n' "$processes" | awk -v root="$product_root/target" '$2 ~ /^T/ && ($0 ~ /motolii-dx-0\.7\.10-fixed/ || ($0 ~ root && ($0 ~ /\/cargo/ || $0 ~ /\/rustc/))) {n++} END {print n+0}')"
-[ "$stock_count" -eq 0 ] && pass stock_dx_process "count=0" || ng stock_dx_process "count=$stock_count"
-if [ "$fixed_count" -eq 1 ]; then pass fixed_dx_process "count=1"; elif [ "$fixed_count" -eq 0 ]; then advice fixed_dx_process "count=0; start scripts/motolii-dx.sh serve"; else ng fixed_dx_process "count=$fixed_count"; fi
-[ "$stopped_builds" -eq 0 ] && pass stopped_build_processes "count=0" || ng stopped_build_processes "count=$stopped_builds"
+if inventory="$(python3 "$runtime" inventory)"; then
+  counts="$(printf '%s' "$inventory" | python3 -c '
+import json,sys
+from pathlib import Path
+rows=json.load(sys.stdin); fixed=Path(sys.argv[1]).resolve()
+ok=[r for r in rows if Path(r["executable"]).resolve()==fixed]
+print(len(rows)-len(ok), len(ok), sum(r["state"].startswith("T") for r in rows))
+' "$fixed_dx")"
+  read -r stock_count fixed_count stopped_builds <<< "$counts"
+  [ "$stock_count" -eq 0 ] && pass stock_dx_process "count=0" || ng stock_dx_process "count=$stock_count"
+  if [ "$fixed_count" -eq 1 ]; then pass fixed_dx_process "count=1; reuse warm process"; elif [ "$fixed_count" -eq 0 ]; then advice fixed_dx_process "count=0; initial baseline requires exception record"; else ng fixed_dx_process "count=$fixed_count"; fi
+  [ "$stopped_builds" -eq 0 ] && pass stopped_build_processes "count=0" || ng stopped_build_processes "count=$stopped_builds"
+else
+  ng process_inventory "inspection failed; unknown is not zero"
+fi
 
 target_kib="$(size_kib "$product_root/target")"
 target_gib=$((target_kib / 1048576))

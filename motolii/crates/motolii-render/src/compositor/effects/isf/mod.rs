@@ -1,12 +1,3 @@
-#[cfg(not(load_shaders_from_disk))]
-use std::path::PathBuf;
-
-use re_renderer::RenderContext;
-#[cfg(not(load_shaders_from_disk))]
-use re_renderer::{get_filesystem, FileSystem as _};
-
-use super::vism::{ShaderStageSource, VismProgram};
-
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum IsfError {
     #[error("ISF ファイルに `/*{{ ... }}*/` の JSON ヘッダが見つからない")]
@@ -319,22 +310,7 @@ fn compile_glsl_to_wgsl(source: &str, stage: naga::ShaderStage) -> Result<String
         .map_err(|e| IsfError::WgslWrite(e.to_string()))
 }
 
-/// ISF の入口 — GLSL の本体を naga で WGSL へ写し、束縛はマニフェストへ委ねる。
-/// プログラム本体は `super::vism::VismProgram`(WGSL の入口と同じ物)。
-pub(crate) struct IsfProgram {
-    inner: VismProgram,
-}
-
-impl IsfProgram {
-    pub(crate) fn image_input_count(&self) -> usize {
-        self.inner.image_input_count()
-    }
-
-    pub(crate) fn compile(
-        ctx: &RenderContext,
-        isf_source: &str,
-        output_format: wgpu::TextureFormat,
-    ) -> Result<Self, IsfError> {
+pub(super) fn compiled_stages(isf_source: &str) -> Result<(IsfManifest, String, String), IsfError> {
         let (manifest, filter_body) = parse_isf_source(isf_source)?;
         let (image_order, param_order) = super::vism::orders(&manifest);
 
@@ -343,62 +319,5 @@ impl IsfProgram {
         let fragment_wgsl = compile_glsl_to_wgsl(&fragment_glsl, naga::ShaderStage::Fragment)?;
         let vertex_wgsl = compile_glsl_to_wgsl(VERTEX_SOURCE, naga::ShaderStage::Vertex)?;
 
-        // 生成した WGSL は上流のファイルシステムへ載せる(ホットリロード時だけ実ファイル)。
-        #[cfg(load_shaders_from_disk)]
-        let (vertex_path, fragment_path) = (
-            super::vism::stage_source_on_disk("isf-vertex", &vertex_wgsl),
-            super::vism::stage_source_on_disk("isf-fragment", &fragment_wgsl),
-        );
-        #[cfg(not(load_shaders_from_disk))]
-        let (vertex_path, fragment_path) = {
-            let vertex_path = PathBuf::from("motolii-vism/isf/vertex.wgsl");
-            let fragment_path = PathBuf::from("motolii-vism/isf/fragment.wgsl");
-            get_filesystem()
-                .create_file(&vertex_path, vertex_wgsl.into())
-                .map_err(|e| IsfError::WgslWrite(e.to_string()))?;
-            get_filesystem()
-                .create_file(&fragment_path, fragment_wgsl.into())
-                .map_err(|e| IsfError::WgslWrite(e.to_string()))?;
-            (vertex_path, fragment_path)
-        };
-
-        Ok(Self {
-            inner: VismProgram::new(
-                ctx,
-                "motolii-vism-isf",
-                manifest,
-                ShaderStageSource {
-                    path: vertex_path,
-                    entry_point: "main".to_owned(),
-                },
-                ShaderStageSource {
-                    path: fragment_path,
-                    entry_point: "main".to_owned(),
-                },
-                output_format,
-            ),
-        })
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn record(
-        &self,
-        ctx: &RenderContext,
-        encoder: &mut wgpu::CommandEncoder,
-        scratch: &mut super::EffectScratch,
-        source_views: &[&wgpu::TextureView],
-        dst_view: &wgpu::TextureView,
-        params: &[(String, f32)],
-        render_size: [f32; 2],
-    ) {
-        self.inner.record(
-            ctx,
-            encoder,
-            scratch,
-            source_views,
-            dst_view,
-            params,
-            render_size,
-        );
-    }
+    Ok((manifest, vertex_wgsl, fragment_wgsl))
 }

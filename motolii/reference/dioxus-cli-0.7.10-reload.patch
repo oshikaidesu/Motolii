@@ -1,0 +1,868 @@
+--- a/src/serve/mod.rs
++++ b/src/serve/mod.rs
+@@ -9,6 +9,7 @@
+ mod proxy;
+ mod proxy_ws;
+ mod runner;
++pub(crate) mod motolii_guard;
+ mod server;
+ mod update;
+ 
+@@ -67,6 +68,7 @@
+         }
+     );
+ 
++    anyhow::ensure!(motolii_guard::baseline("initial_baseline"), "initial baseline is not recorded");
+     builder.initialize();
+ 
+     loop {
+@@ -96,7 +98,7 @@
+                 // `Hotreloading:` to keep the alignment during long edit sessions
+                 // `Hot-patching:` to keep the alignment during long edit sessions
+                 tracing::info!("Full rebuild: triggered manually");
+-                builder.full_rebuild().await;
++                if !builder.full_rebuild("manual_rebuild").await { continue; }
+                 devserver.send_reload_start().await;
+                 devserver.start_build().await;
+             }
+@@ -186,7 +188,7 @@
+                                         err.downcast_ref::<crate::build::PatchError>()
+                                     {
+                                         tracing::info!("Starting full rebuild: {err}");
+-                                        builder.full_rebuild().await;
++                                        if !builder.full_rebuild("patch_error_fallback").await { continue; }
+                                         devserver.send_reload_start().await;
+                                         devserver.start_build().await;
+                                     }
+@@ -256,7 +258,7 @@
+                     tracing::warn!(
+                         "Opening a native app with hotpatching enabled requires a full rebuild..."
+                     );
+-                    builder.full_rebuild().await;
++                    if !builder.full_rebuild("native_open").await { continue; }
+                     devserver.send_reload_start().await;
+                     devserver.start_build().await;
+                 } else if let Err(err) = builder.open_all(&devserver, true).await {
+--- a/src/serve/runner.rs
++++ b/src/serve/runner.rs
+@@ -373,11 +373,24 @@
+         let mut templates = vec![];
+ 
+         // Prepare the hotreload message we need to send
+-        let mut assets = Vec::new();
++        let client = &self.client;
++        let assets = collect_asset_changes(files, |path| async move {
++            client.hotreload_bundled_assets(&path).await
++        }).await;
+         let mut needs_full_rebuild = false;
++        let mut runtime_owned = false;
+ 
+         // We attempt to hotreload rsx blocks without a full rebuild
+         for path in files {
++            if super::motolii_guard::runtime_owned(path, self.client.pid) {
++                runtime_owned = true;
++                super::motolii_guard::event("RUNTIME_DATA", "owned", "live_catalog_watcher", &[path.clone()]);
++                continue;
++            }
++            if super::motolii_guard::enabled() && matches!(path.file_name().and_then(|n| n.to_str()), Some("Cargo.toml" | "Cargo.lock" | "Dioxus.toml" | "dioxus.toml")) {
++                super::motolii_guard::event("CONFIGURATION", "blocked", "configuration_graph_refresh_required", files);
++                return;
++            }
+             // for various assets that might be linked in, we just try to hotreloading them forcefully
+             // That is, unless they appear in an include! macro, in which case we need to a full rebuild....
+             let ext = path
+@@ -385,14 +398,6 @@
+                 .and_then(|v| v.to_str())
+                 .unwrap_or_default();
+ 
+-            // If it's an asset, we want to hotreload it
+-            // todo(jon): don't hardcode this here
+-            if let Some(bundled_names) = self.client.hotreload_bundled_assets(path).await {
+-                for bundled_name in bundled_names {
+-                    assets.push(PathBuf::from("/assets/").join(bundled_name));
+-                }
+-            }
+-
+             // If it's in the public dir, we sync it and trigger a full rebuild
+             if self.client.build.path_is_in_public_dir(path) {
+                 needs_full_rebuild = true;
+@@ -403,13 +408,14 @@
+             if ext == "rs" {
+                 // And grabout the contents
+                 let Ok(new_contents) = std::fs::read_to_string(path) else {
+-                    tracing::debug!("Failed to read rust file while hotreloading: {:?}", path);
++                    super::motolii_guard::event("HOT_ROUTE_GAP", "ignored", "rust_file_unreadable", &[path.clone()]);
+                     continue;
+                 };
+ 
+                 // Get the cached file if it exists - ignoring if it doesn't exist
+                 let Some(cached_file) = self.file_map.get_mut(path) else {
+-                    tracing::debug!("No entry for file in filemap: {:?}", path);
++                    super::motolii_guard::event("THIN_PATCH", "requested", "new_rust_file", &[path.clone()]);
++                    needs_full_rebuild = true;
+                     continue;
+                 };
+ 
+@@ -422,7 +428,7 @@
+                 let old_syn = syn::parse_file(&cached_file.contents);
+                 let new_syn = syn::parse_file(&new_contents);
+                 let (Ok(old_file), Ok(new_file)) = (old_syn, new_syn) else {
+-                    tracing::debug!("Diff rsx returned not parseable");
++                    super::motolii_guard::event("HOT_ROUTE_GAP", "ignored", "rust_parse_failed", &[path.clone()]);
+                     continue;
+                 };
+ 
+@@ -432,7 +438,7 @@
+                 // This assumes the two files are structured similarly. If they're not, we can't diff them
+                 let Some(changed_rsx) = dioxus_rsx_hotreload::diff_rsx(&new_file, &old_file) else {
+                     needs_full_rebuild = true;
+-                    break;
++                    continue;
+                 };
+ 
+                 for ChangedRsx { old, new } in changed_rsx {
+@@ -495,7 +501,6 @@
+                 if let Some(artifacts) = self.client.artifacts.as_ref() {
+                     if artifacts.depinfo.files.contains(path) {
+                         needs_full_rebuild = true;
+-                        break;
+                     }
+                 }
+             }
+@@ -510,7 +515,17 @@
+         //        A full rebuild is required when the user modifies static initializers which we haven't wired up yet.
+         if needs_full_rebuild && self.automatic_rebuilds {
+             if self.use_hotpatch_engine {
++                super::motolii_guard::event("THIN_PATCH", "requested", "rust_or_included_source_change", files);
+                 let changed_crates = self.order_changed_crates(files);
++                let mut retained_assets = self.applied_client_hot_reload_message.assets.clone();
++                retained_assets.extend(assets.iter().cloned());
++                self.clear_hot_reload_changes();
++                self.add_hot_reload_message(&HotReloadMsg { assets: retained_assets, ..Default::default() });
++                self.clear_cached_rsx();
++                if !assets.is_empty() && self.client.can_receive_hotreloads() {
++                    super::motolii_guard::event("RSX_ASSET", "sent", "asset_update_independent_of_thin_result", files);
++                    server.send_hotreload(HotReloadMsg { assets, ..Default::default() }).await;
++                }
+ 
+                 self.client
+                     .patch_rebuild(files.to_vec(), changed_crates.clone(), BuildId::PRIMARY);
+@@ -518,10 +533,9 @@
+                 if let Some(server) = self.server.as_mut() {
+                     server.patch_rebuild(files.to_vec(), changed_crates, BuildId::SECONDARY);
+                 }
+-                self.clear_hot_reload_changes();
+-                self.clear_cached_rsx();
+                 server.send_patch_start().await;
+             } else {
++                if !super::motolii_guard::baseline("automatic_base_rebuild") { return; }
+                 self.client
+                     .start_rebuild(BuildMode::Base { run: true }, BuildId::PRIMARY);
+                 if let Some(server) = self.server.as_mut() {
+@@ -532,6 +546,7 @@
+                 server.send_reload_start().await;
+             }
+         } else {
++            if runtime_owned && templates.is_empty() && assets.is_empty() { return; }
+             let msg = HotReloadMsg {
+                 templates,
+                 assets,
+@@ -570,8 +585,10 @@
+                     tracing::warn!("No clients to hotreload - try reloading the app!");
+                 }
+ 
++                super::motolii_guard::event("RSX_ASSET", "sent", "template_or_asset_change", files);
+                 server.send_hotreload(msg).await;
+             } else {
++                super::motolii_guard::event("HOT_ROUTE_GAP", "ignored", "no_deliverable_change_or_client_busy", files);
+                 tracing::debug!(dx_src = ?TraceSrc::Dev, "Ignoring file change: {}", file);
+             }
+         }
+@@ -728,7 +745,8 @@
+ 
+     /// Perform a full rebuild of the app, equivalent to `cargo rustc` from scratch with no incremental
+     /// hot-patch engine integration.
+-    pub(crate) async fn full_rebuild(&mut self) {
++    pub(crate) async fn full_rebuild(&mut self, cause: &str) -> bool {
++        if !super::motolii_guard::baseline(cause) { return false; }
+         let build_mode = match self.use_hotpatch_engine {
+             true => BuildMode::Fat,
+             false => BuildMode::Base { run: true },
+@@ -743,6 +761,7 @@
+         self.clear_hot_reload_changes();
+         self.clear_cached_rsx();
+         self.clear_patches();
++        true
+     }
+ 
+     pub(crate) async fn hotpatch(
+@@ -974,7 +993,7 @@
+     ///
+     /// todo: There are known bugs here when handling gitignores.
+     fn fill_filemap_from_krate(&mut self, crate_dir: PathBuf) {
+-        for entry in walkdir::WalkDir::new(crate_dir).into_iter().flatten() {
++        for entry in walkdir::WalkDir::new(crate_dir.join("src")).into_iter().flatten() {
+             if self
+                 .workspace
+                 .ignore
+@@ -1120,11 +1139,7 @@
+                 }
+             };
+ 
+-            if krate
+-                .manifest_path
+-                .components()
+-                .any(|c| c.as_str() == ".cargo")
+-            {
++            if krate.source.is_some() {
+                 continue;
+             }
+ 
+@@ -1149,11 +1164,6 @@
+         let mut krates: Vec<PathBuf> = self
+             .local_dependencies(crate_package)
+             .into_iter()
+-            .map(|p| {
+-                p.parent()
+-                    .expect("Local manifest to exist and have a parent")
+-                    .to_path_buf()
+-            })
+             .chain(Some(crate_dir))
+             .collect();
+ 
+@@ -1164,11 +1174,6 @@
+             let server_krates: Vec<PathBuf> = self
+                 .local_dependencies(server_crate_package)
+                 .into_iter()
+-                .map(|p| {
+-                    p.parent()
+-                        .expect("Server manifest to exist and have a parent")
+-                        .to_path_buf()
+-                })
+                 .chain(Some(server_crate_dir))
+                 .collect();
+             krates.extend(server_krates);
+@@ -1482,3 +1487,38 @@
+         format!("{secs:.2}s")
+     }
+ }
++
++async fn collect_asset_changes<F, Fut>(files: &[PathBuf], mut copy: F) -> Vec<PathBuf>
++where
++    F: FnMut(PathBuf) -> Fut,
++    Fut: std::future::Future<Output = Option<Vec<PathBuf>>>,
++{
++    let mut assets = Vec::new();
++    for path in files {
++        if let Some(names) = copy(path.clone()).await {
++            assets.extend(names.into_iter().map(|name| PathBuf::from("/assets/").join(name)));
++        }
++    }
++    assets.sort();
++    assets.dedup();
++    assets
++}
++
++#[cfg(test)]
++mod motolii_asset_batch_tests {
++    use super::collect_asset_changes;
++    use std::{cell::RefCell, path::PathBuf};
++    #[tokio::test]
++    async fn rust_before_or_after_css_does_not_skip_asset_copy_or_notification() {
++        for names in [["host.rs", "styles.css"], ["styles.css", "host.rs"]] {
++            let files = names.map(PathBuf::from);
++            let copied = RefCell::new(Vec::new());
++            let assets = collect_asset_changes(&files, |path| {
++                copied.borrow_mut().push(path.clone());
++                std::future::ready((path.extension().unwrap() == "css").then(|| vec![PathBuf::from("styles-hash.css")]))
++            }).await;
++            assert_eq!(copied.into_inner(), files);
++            assert_eq!(assets, [PathBuf::from("/assets/styles-hash.css")]);
++        }
++    }
++}
+--- a/src/serve/motolii_guard.rs
++++ b/src/serve/motolii_guard.rs
+@@ -0,0 +1,89 @@
++use std::{fs::OpenOptions, io::Write, path::PathBuf};
++
++pub(crate) fn enabled() -> bool {
++    true
++}
++
++pub(crate) fn event(class: &str, decision: &str, reason: &str, files: &[PathBuf]) {
++    if !enabled() { return; }
++    let record = serde_json::json!({
++        "schema": 1, "event": "reload_decision", "execution_class": class,
++        "decision": decision, "reason": reason, "files": files,
++        "pid": std::process::id(),
++        "unix_ms": std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis(),
++    });
++    tracing::warn!("MOTOLII_RELOAD {record}");
++    if let Some(path) = std::env::var_os("MOTOLII_RELOAD_EVENTS") {
++        match OpenOptions::new().create(true).append(true).open(path) {
++            Ok(mut file) => { if let Err(error) = writeln!(file, "{record}") { tracing::error!("reload receipt write failed: {error}"); } }
++            Err(error) => tracing::error!("reload receipt unavailable: {error}"),
++        }
++    }
++}
++
++pub(crate) fn baseline(cause: &str) -> bool {
++    if !enabled() { return true; }
++    let permit = std::env::var_os("MOTOLII_BASELINE_PERMIT").map(PathBuf::from);
++    let accepted = permit.and_then(|path| {
++        let bytes = std::fs::read(&path).ok()?;
++        let record: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
++        if record.get("cause")?.as_str()? != cause { return None; }
++        for field in ["build_need", "external_ruler", "hotpatch_or_check_gap", "repair_owner"] {
++            if record.get(field)?.as_str()?.trim().is_empty() { return None; }
++        }
++        let consumed = path.with_extension(format!("{}.consumed.json", std::process::id()));
++        std::fs::rename(path, consumed).ok()?;
++        Some(record)
++    });
++    if let Some(record) = accepted {
++        event("FULL_BASELINE", "permitted", &format!("{cause}: {record}"), &[]);
++        true
++    } else {
++        event("FULL_BASELINE", "blocked", cause, &[]);
++        tracing::error!("HOT_ROUTE_GAP: {cause}; the running app and patch baseline are retained. A one-use baseline record with BUILD_NEED, EXTERNAL_RULER, HOTPATCH_OR_CHECK_GAP and repair owner is required.");
++        false
++    }
++}
++
++pub(crate) async fn bounded<T>(class: &str, work: impl std::future::Future<Output = crate::Result<T>>) -> crate::Result<T> {
++    let target_ms = if class == "THIN_PATCH" { 5_000 } else { 60_000 };
++    let started = std::time::Instant::now();
++    let result = work.await;
++    let elapsed = started.elapsed().as_millis();
++    event(class, if result.is_err() { "failed" } else if elapsed > target_ms { "slow_completed" } else { "compiled" },
++        &format!("elapsed_ms={elapsed}; target_ms={target_ms}; no_timeout_abort"), &[]);
++    result
++}
++
++#[cfg(test)]
++mod motolii_guard_tests {
++    use super::baseline;
++    #[test]
++    fn baseline_record_is_cause_specific_and_consumed_once() {
++        let dir = tempfile::tempdir().unwrap();
++        let path = dir.path().join("permit.json");
++        std::env::set_var("MOTOLII_BASELINE_PERMIT", &path);
++        assert!(!baseline("initial_baseline"));
++        let permit = serde_json::json!({"cause":"initial_baseline", "build_need":"driver test baseline", "external_ruler":"pinned CLI Fat branch", "hotpatch_or_check_gap":"missing test baseline", "repair_owner":"cli"});
++        std::fs::write(&path, permit.to_string()).unwrap();
++        assert!(!baseline("patch_error_fallback"));
++        assert!(path.exists());
++        assert!(baseline("initial_baseline"));
++        assert!(!baseline("initial_baseline"));
++        assert!(!path.exists());
++        std::env::remove_var("MOTOLII_BASELINE_PERMIT");
++    }
++}
++
++pub(crate) fn runtime_owned(path: &std::path::Path, app_pid: Option<u32>) -> bool {
++    if !matches!(path.extension().and_then(|v| v.to_str()), Some("wgsl" | "fs")) { return false; }
++    let Some(pid) = app_pid else { return false; };
++    let Some(registration) = std::env::var_os("MOTOLII_RUNTIME_SOURCE_REGISTRATION") else { return false; };
++    let Some(session) = std::env::var("MOTOLII_RELOAD_SESSION").ok() else { return false; };
++    let Some(value) = std::fs::read(registration).ok().and_then(|s| serde_json::from_slice::<serde_json::Value>(&s).ok()) else { return false; };
++    if value.get("app_pid").and_then(|v| v.as_u64()) != Some(pid as u64)
++        || value.get("session").and_then(|v| v.as_str()) != Some(session.as_str()) { return false; }
++    let Ok(path) = path.canonicalize() else { return false; };
++    value.get("roots").and_then(|v| v.as_array()).is_some_and(|roots| roots.iter()
++        .filter_map(|v| v.as_str()).any(|root| path.starts_with(root)))
++}
+--- a/src/build/builder.rs
++++ b/src/build/builder.rs
+@@ -184,9 +184,11 @@
+         let tx = self.tx.clone();
+         self.build_task = tokio::spawn(async move {
+             let ctx = BuildContext::new(tx, mode, build_id);
+-            request.verify_tooling(&ctx).await?;
+-            request.prebuild(&ctx).await?;
+-            request.build(ctx).await
++            crate::serve::motolii_guard::bounded("FULL_BASELINE", async {
++                request.verify_tooling(&ctx).await?;
++                request.prebuild(&ctx).await?;
++                request.build(ctx).await
++            }).await
+         });
+     }
+ 
+@@ -369,9 +371,7 @@
+     ) {
+         // We need the rustc args from the original build to pass to the new build
+         let Some(artifacts) = self.artifacts.as_ref().cloned() else {
+-            tracing::warn!(
+-                "Ignoring patch rebuild for {build_id:?} since there is no existing build."
+-            );
++            crate::serve::motolii_guard::event("HOT_ROUTE_GAP", "ignored", "missing_patch_baseline", &changed_files);
+             return;
+         };
+ 
+@@ -387,9 +387,7 @@
+                 0
+             }
+             None => {
+-                tracing::warn!(
+-                    "Ignoring hotpatch since there is no ASLR reference. Is the client connected?"
+-                );
++                crate::serve::motolii_guard::event("HOT_ROUTE_GAP", "ignored", "missing_native_aslr_connection", &changed_files);
+                 return;
+             }
+         };
+@@ -451,7 +449,7 @@
+                 },
+                 build_id,
+             );
+-            async move { request.build(ctx).await }
++            async move { crate::serve::motolii_guard::bounded("THIN_PATCH", request.build(ctx)).await }
+         });
+     }
+ 
+@@ -471,7 +469,7 @@
+             let tx = self.tx.clone();
+             async move {
+                 let ctx = BuildContext::new(tx, mode, build_id);
+-                request.build(ctx).await
++                crate::serve::motolii_guard::bounded("FULL_BASELINE", request.build(ctx)).await
+             }
+         });
+     }
+@@ -894,6 +892,7 @@
+                 .as_millis()
+         );
+ 
++        crate::serve::motolii_guard::event("THIN_PATCH", "generated", "jump_table_ready_not_yet_app_accepted", &changed_files);
+         // Commit this patch
+         self.patches.push(jump_table.clone());
+ 
+--- a/src/build/link.rs
++++ b/src/build/link.rs
+@@ -146,7 +146,7 @@
+         // Replay the rustcs for all modified workspace crates. This is not the final tip binary.
+         // Note that the final tip might include itself as a lib (lib.rs + main.rs) which gets covered here.
+         ctx.profile_phase("Workspace hotpatch replay");
+-        let replayed_crates = self.workspace_hotpatch_replay_order(modified_crates)?;
++        let replayed_crates = self.workspace_hotpatch_replay_order(modified_crates, workspace_rustc_args)?;
+         tracing::debug!("replaying crates: {replayed_crates:?}");
+         for crate_name in &replayed_crates {
+             let rustc_args = self
+@@ -285,6 +285,7 @@
+         // does it since it uses llvm-objcopy into the `target/debug/` folder.
+         ctx.profile_phase("Patch: Link");
+         let res = Command::new(linker)
++            .kill_on_drop(true)
+             .args(out_args)
+             .env_clear()
+             .envs(command_envs)
+@@ -574,7 +575,7 @@
+             cmd.arg("-Crelocation-model=pic");
+         }
+ 
+-        let output = cmd.output().await?;
++        let output = cmd.kill_on_drop(true).output().await?;
+         if !output.status.success() {
+             let stderr = String::from_utf8_lossy(&output.stderr);
+             bail!("Failed to compile workspace dep crate '{crate_name}':\n{stderr}");
+@@ -612,6 +613,7 @@
+     fn workspace_hotpatch_replay_order(
+         &self,
+         modified_crates: &HashSet<String>,
++        workspace_rustc_args: &WorkspaceRustcArgs,
+     ) -> Result<Vec<String>> {
+         // Exclude the tip crate — it's compiled separately via cargo_build after replay.
+         // Modified crates are tracked by *package* name, which can differ from the bin
+@@ -619,7 +621,7 @@
+         let tip = self.tip_package_name();
+         let crates: HashSet<&String> = modified_crates
+             .iter()
+-            .filter(|name| **name != tip)
++            .filter(|name| **name != tip || workspace_rustc_args.rustc_args.contains_key(&format!("{tip}.lib")))
+             .collect();
+ 
+         // Build the subgraph: edge A→B means "A must compile before B".
+@@ -1082,6 +1084,7 @@
+ 
+         // Run the linker directly!
+         let res = Command::new(linker)
++            .kill_on_drop(true)
+             .args(out_args)
+             .env_clear()
+             .envs(command_envs)
+@@ -1309,13 +1312,72 @@
+                 })
+         });
+ 
+-        // If we have an exact extra-filename, construct the precise rlib path.
+-        if let Some(extra) = &extra_filename {
+-            let exact = out_dir.join(format!("lib{crate_name}{extra}.rlib"));
+-            if exact.exists() {
+-                return Ok(exact);
+-            }
+-        }
++        find_emitted_rlib(&out_dir, crate_name, extra_filename.as_deref())
++    }
++
++    fn rustc_wrapper_capture_mode(&self, build_mode: &BuildMode) -> &'static str {
++        match build_mode {
++            BuildMode::Fat => "fat",
++            BuildMode::Base { run: true } => "base-run",
++            BuildMode::Base { run: false } => "base",
++            BuildMode::Thin { .. } => "thin",
++        }
++    }
++
++    pub fn rustc_wrapper_scope_dir_name(&self, build_mode: &BuildMode) -> Result<String> {
++        #[derive(Debug, Serialize)]
++        struct RustcWrapperScope {
++            version: u8,
++            capture_mode: &'static str,
++            bundle: String,
++            triple: String,
++            profile: String,
++            package: String,
++            main_target: String,
++            executable_type: String,
++            rustc_version: String,
++            features: Vec<String>,
++            all_features: bool,
++            rustflags: Vec<String>,
++            extra_cargo_args: Vec<String>,
++            extra_rustc_args: Vec<String>,
++        }
++
++        let scope = RustcWrapperScope {
++            version: 1,
++            capture_mode: self.rustc_wrapper_capture_mode(build_mode),
++            bundle: self.bundle.to_string(),
++            triple: self.triple.to_string(),
++            profile: self.profile.clone(),
++            package: self.package.clone(),
++            main_target: self.main_target.clone(),
++            executable_type: format!("{:?}", self.executable_type()),
++            rustc_version: self.workspace.rustc_version.clone(),
++            features: self.features.clone(),
++            all_features: self.all_features,
++            rustflags: self.rustflags.flags.clone(),
++            extra_cargo_args: self.extra_cargo_args.clone(),
++            extra_rustc_args: self.extra_rustc_args.clone(),
++        };
++
++        let encoded =
++            serde_json::to_vec(&scope).context("Failed to serialize rustc wrapper scope")?;
++        let mut hasher = Sha256::new();
++        hasher.update(encoded);
++        let scope_hash = format!("{:x}", hasher.finalize());
++        Ok(format!(
++            "{}-{}-{}-{}",
++            self.tip_crate_name(),
++            self.triple,
++            self.profile,
++            &scope_hash[..16]
++        ))
++    }
++}
++
++fn find_emitted_rlib(out_dir: &Path, crate_name: &str, extra_filename: Option<&str>) -> Result<PathBuf> {
++        let exact = out_dir.join(format!("lib{crate_name}{}.rlib", extra_filename.unwrap_or("")));
++        if exact.exists() { return Ok(exact); }
+ 
+         // Fallback: glob for lib<crate_name>-<hash>.rlib in the output directory.
+         // Prefer the most recently modified rlib to avoid picking up stale artifacts.
+@@ -1346,64 +1408,27 @@
+                 extra_filename
+             )
+         })
+-    }
+-
+-    fn rustc_wrapper_capture_mode(&self, build_mode: &BuildMode) -> &'static str {
+-        match build_mode {
+-            BuildMode::Fat => "fat",
+-            BuildMode::Base { run: true } => "base-run",
+-            BuildMode::Base { run: false } => "base",
+-            BuildMode::Thin { .. } => "thin",
+-        }
+-    }
+-
+-    pub fn rustc_wrapper_scope_dir_name(&self, build_mode: &BuildMode) -> Result<String> {
+-        #[derive(Debug, Serialize)]
+-        struct RustcWrapperScope {
+-            version: u8,
+-            capture_mode: &'static str,
+-            bundle: String,
+-            triple: String,
+-            profile: String,
+-            package: String,
+-            main_target: String,
+-            executable_type: String,
+-            rustc_version: String,
+-            features: Vec<String>,
+-            all_features: bool,
+-            rustflags: Vec<String>,
+-            extra_cargo_args: Vec<String>,
+-            extra_rustc_args: Vec<String>,
+-        }
+-
+-        let scope = RustcWrapperScope {
+-            version: 1,
+-            capture_mode: self.rustc_wrapper_capture_mode(build_mode),
+-            bundle: self.bundle.to_string(),
+-            triple: self.triple.to_string(),
+-            profile: self.profile.clone(),
+-            package: self.package.clone(),
+-            main_target: self.main_target.clone(),
+-            executable_type: format!("{:?}", self.executable_type()),
+-            rustc_version: self.workspace.rustc_version.clone(),
+-            features: self.features.clone(),
+-            all_features: self.all_features,
+-            rustflags: self.rustflags.flags.clone(),
+-            extra_cargo_args: self.extra_cargo_args.clone(),
+-            extra_rustc_args: self.extra_rustc_args.clone(),
+-        };
+-
+-        let encoded =
+-            serde_json::to_vec(&scope).context("Failed to serialize rustc wrapper scope")?;
+-        let mut hasher = Sha256::new();
+-        hasher.update(encoded);
+-        let scope_hash = format!("{:x}", hasher.finalize());
+-        Ok(format!(
+-            "{}-{}-{}-{}",
+-            self.tip_crate_name(),
+-            self.triple,
+-            self.profile,
+-            &scope_hash[..16]
+-        ))
+-    }
++
+ }
++
++#[cfg(test)]
++mod motolii_rlib_tests {
++    use super::find_emitted_rlib;
++    #[test]
++    fn capture_without_extra_filename_resolves_the_real_unhashed_rlib() {
++        let dir = tempfile::tempdir().unwrap();
++        let real = dir.path().join("libmotolii_road.rlib");
++        std::fs::write(&real, b"current compiler output").unwrap();
++        std::fs::write(dir.path().join("libmotolii_road-old.rlib"), b"stale alternate output").unwrap();
++        assert_eq!(find_emitted_rlib(dir.path(), "motolii_road", None).unwrap(), real);
++        assert_eq!(find_emitted_rlib(dir.path(), "motolii_road", Some("")).unwrap(), real);
++    }
++    #[test]
++    fn explicit_extra_filename_selects_its_exact_rlib() {
++        let dir = tempfile::tempdir().unwrap();
++        let named = dir.path().join("libmotolii_render-current.rlib");
++        std::fs::write(&named, b"current compiler output").unwrap();
++        std::fs::write(dir.path().join("libmotolii_render.rlib"), b"another build").unwrap();
++        assert_eq!(find_emitted_rlib(dir.path(), "motolii_render", Some("-current")).unwrap(), named);
++    }
++}
+--- a/src/build/request.rs
++++ b/src/build/request.rs
+@@ -1033,6 +1033,7 @@
+         // Spawn the `cargo rustc` or `rustc` command
+         let mut child = self
+             .cargo_build_command(&ctx.mode)?
++            .kill_on_drop(true)
+             .stdout(Stdio::piped())
+             .stderr(Stdio::piped())
+             .spawn()
+--- a/src/build/patch.rs
++++ b/src/build/patch.rs
+@@ -89,6 +89,30 @@
+     pub tls_init_sizes: HashMap<String, (u64, u64)>,
+ }
+ 
++fn native_tls_initializers(obj: &File<'_>) -> Result<(Vec<u8>, HashMap<String, (u64, u64)>)> {
++    let mut data = Vec::new();
++    let mut sizes = HashMap::new();
++    for section in obj.sections().filter(|section| matches!(section.name(), Ok(".tdata" | "__thread_data" | "__thread_bss"))) {
++        let base = data.len() as u64;
++        let length = section.size();
++        if section.name()? == "__thread_bss" {
++            data.resize(data.len() + length as usize, 0);
++        } else {
++            data.extend_from_slice(section.data()?);
++        }
++        let mut symbols: Vec<_> = obj.symbols().filter_map(|symbol| {
++            if symbol.section_index() != Some(section.index()) { return None; }
++            Some((symbol.address().saturating_sub(section.address()), symbol.name().ok()?.to_owned()))
++        }).collect();
++        symbols.sort_by_key(|(offset, _)| *offset);
++        for (offset, name) in &symbols {
++            let end = symbols.iter().find(|(next, _)| next > offset).map_or(length, |(next, _)| *next);
++            sizes.insert(name.clone(), (base + offset, end.saturating_sub(*offset)));
++        }
++    }
++    Ok((data, sizes))
++}
++
+ pub struct CachedSymbol {
+     pub address: u64,
+     pub kind: SymbolKind,
+@@ -289,47 +313,7 @@
+                     })
+                     .collect::<HashMap<_, _>>();
+ 
+-                // Extract TLS initialization data and section metadata.
+-                // This is used to correctly initialize TLS symbols in the stub
+-                // instead of writing bogus absolute addresses into .tdata.
+-                let tls_section = obj
+-                    .sections()
+-                    .find(|s| matches!(s.name(), Ok(".tdata" | "__thread_data")));
+-
+-                let tls_init_data = tls_section
+-                    .as_ref()
+-                    .and_then(|s| s.data().ok())
+-                    .unwrap_or(&[])
+-                    .to_vec();
+-
+-                // Build TLS init size map for macOS. Mach-O nlist doesn't carry symbol
+-                // sizes, so we compute them from adjacent symbols in __thread_data.
+-                // LLVM/rustc names init data symbols as `FOO$tlv$init` in __thread_data.
+-                let tls_data_addr = tls_section.as_ref().map(|s| s.address()).unwrap_or(0);
+-                let tls_data_size = tls_section.as_ref().map(|s| s.size()).unwrap_or(0);
+-                let tls_section_index = tls_section.as_ref().map(|s| s.index());
+-
+-                let mut tls_init_syms: Vec<(u64, String)> = Vec::new();
+-                for sym in obj.symbols() {
+-                    if let (Some(section_idx), Ok(sname)) = (sym.section_index(), sym.name()) {
+-                        if Some(section_idx) == tls_section_index {
+-                            let offset = sym.address().saturating_sub(tls_data_addr);
+-                            tls_init_syms.push((offset, sname.to_string()));
+-                        }
+-                    }
+-                }
+-                tls_init_syms.sort_by_key(|(addr, _)| *addr);
+-                tls_init_syms.dedup_by_key(|(addr, _)| *addr);
+-
+-                let mut tls_init_sizes: HashMap<String, (u64, u64)> = HashMap::new();
+-                for (i, (offset, sname)) in tls_init_syms.iter().enumerate() {
+-                    let size = if i + 1 < tls_init_syms.len() {
+-                        tls_init_syms[i + 1].0 - offset
+-                    } else {
+-                        tls_data_size.saturating_sub(*offset)
+-                    };
+-                    tls_init_sizes.insert(sname.clone(), (*offset, size));
+-                }
++                let (tls_init_data, tls_init_sizes) = native_tls_initializers(&obj)?;
+ 
+                 HotpatchModuleCache {
+                     symbol_table,
+@@ -1189,10 +1173,10 @@
+                     } else if sym.size > 0 {
+                         // ELF: sym.address is the TLS offset, sym.size is the data size
+                         (sym.address, sym.size)
+-                    } else if !cache.tls_init_sizes.is_empty() {
+-                        // macOS fallback: $tlv$init not found but map isn't empty (binary
+-                        // might be partially stripped). Use entire tdata as upper bound.
+-                        (0, cache.tls_init_data.len() as u64)
++                    } else if matches!(triple.binary_format, target_lexicon::BinaryFormat::Macho) {
++                        return Err(PatchError::InvalidModule(format!(
++                            "Missing Mach-O TLS initializer {init_key}; refusing an invalid TLS patch"
++                        )));
+                     } else {
+                         // Last resort (ELF with size=0): use pointer width
+                         (sym.address, pointer_width)
+@@ -1653,3 +1637,29 @@
+         _ => "main",
+     }
+ }
++
++#[cfg(test)]
++mod motolii_tls_tests {
++    use super::*;
++    #[test]
++    fn macho_zero_fill_tls_does_not_copy_unrelated_initialized_borrow_flag() {
++        let mut obj = object::write::Object::new(object::BinaryFormat::MachO, object::Architecture::Aarch64, Endianness::Little);
++        let initialized = obj.section_id(StandardSection::Tls);
++        let zero_fill = obj.section_id(StandardSection::UninitializedTls);
++        let make_symbol = |name: &[u8]| Symbol { name: name.to_vec(), value: 0, size: 0, scope: SymbolScope::Linkage,
++            kind: SymbolKind::Tls, weak: false, section: SymbolSection::Undefined, flags: SymbolFlags::None };
++        let counter = obj.add_symbol(make_symbol(b"counter"));
++        obj.add_symbol_data(counter, initialized, &2u64.to_le_bytes(), 8);
++        let owner = obj.add_symbol(make_symbol(b"zero_refcell_owner"));
++        obj.add_symbol_bss(owner, zero_fill, 24, 8);
++        let bytes = obj.write().unwrap();
++        let parsed = File::parse(bytes.as_slice()).unwrap();
++        let (data, sizes) = native_tls_initializers(&parsed).unwrap();
++        let &(offset, size) = sizes.iter().find(|(name, _)| name.contains("zero_refcell_owner$tlv$init")).unwrap().1;
++        assert_eq!(size, 24);
++        assert_eq!(&data[offset as usize..(offset + size) as usize], &[0; 24]);
++        let &(offset, size) = sizes.iter().find(|(name, _)| name.contains("counter$tlv$init")).unwrap().1;
++        assert_eq!(size, 8);
++        assert_eq!(&data[offset as usize..(offset + size) as usize], &2u64.to_le_bytes());
++    }
++}
+--- a/src/rustcwrapper.rs
++++ b/src/rustcwrapper.rs
+@@ -107,24 +107,13 @@
+             std::fs::create_dir_all(args_dir)
+                 .expect("Failed to create args directory for rustc wrapper");
+ 
+-            let crate_type = rustc_args
+-                .args
+-                .iter()
+-                .skip_while(|arg| *arg != "--crate-type")
+-                .nth(1)
+-                .map(|s| s.as_str());
+-
+             let serialized_args =
+                 serde_json::to_string(rustc_args).expect("Failed to serialize rustc args");
+ 
+             // Write args with an explicit target suffix: {crate_name}.lib.json or
+             // {crate_name}.bin.json. This avoids the ambiguity of a bare {crate_name}.json
+             // and ensures lib+bin crates don't overwrite each other.
+-            let suffix = match crate_type {
+-                Some("lib" | "rlib") => "lib",
+-                Some("bin") => "bin",
+-                _ => "bin", // proc-macro, cdylib, etc. — treat as bin
+-            };
++            let suffix = captured_target_suffix(&rustc_args.args);
+ 
+             std::fs::write(
+                 args_dir.join(format!("{crate_name}.{suffix}.json")),
+@@ -168,3 +157,41 @@
+ 
+     false
+ }
++
++fn captured_target_suffix(args: &[String]) -> &'static str {
++    let mut expect_type = false;
++    for arg in args {
++        let kinds = if expect_type {
++            expect_type = false;
++            Some(arg.as_str())
++        } else if arg == "--crate-type" {
++            expect_type = true;
++            None
++        } else {
++            arg.strip_prefix("--crate-type=")
++        };
++        if kinds.is_some_and(|types| types.split(',').any(|kind| matches!(kind, "lib" | "rlib"))) {
++            return "lib";
++        }
++    }
++    "bin"
++}
++
++#[cfg(test)]
++mod motolii_target_tests {
++    use super::captured_target_suffix;
++    #[test]
++    fn repeated_and_combined_crate_types_keep_rlib_capture() {
++        for args in [
++            vec!["--crate-type", "rlib", "--crate-type", "dylib"],
++            vec!["--crate-type", "dylib", "--crate-type", "rlib"],
++            vec!["--crate-type", "rlib,dylib"],
++            vec!["--crate-type=dylib,rlib"],
++        ] {
++            assert_eq!(captured_target_suffix(&args.into_iter().map(String::from).collect::<Vec<_>>()), "lib");
++        }
++        for kind in ["bin", "dylib", "cdylib", "proc-macro"] {
++            assert_eq!(captured_target_suffix(&["--crate-type".into(), kind.into()]), "bin");
++        }
++    }
++}

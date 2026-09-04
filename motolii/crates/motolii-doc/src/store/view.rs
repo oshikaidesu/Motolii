@@ -1,4 +1,3 @@
-
 mod resolve;
 
 use std::cell::RefCell;
@@ -28,6 +27,8 @@ pub struct StoreView<'a> {
     db: &'a EntityDb,
     at: i64,
     transient: &'a HashMap<TransientKey, Value>,
+    preview_edits: &'a [crate::doc::store::Intent],
+    ignore_transients: bool,
     revision: Revision,
     track_cache: &'a RefCell<TrackCache>,
     record_cache: &'a RefCell<super::document::RecordCache>,
@@ -40,6 +41,7 @@ impl<'a> StoreView<'a> {
         db: &'a EntityDb,
         at: i64,
         transient: &'a HashMap<TransientKey, Value>,
+        preview_edits: &'a [crate::doc::store::Intent],
         revision: Revision,
         track_cache: &'a RefCell<TrackCache>,
         record_cache: &'a RefCell<super::document::RecordCache>,
@@ -48,10 +50,17 @@ impl<'a> StoreView<'a> {
             db,
             at,
             transient,
+            preview_edits,
+            ignore_transients: false,
             revision,
             track_cache,
             record_cache,
         }
+    }
+
+    pub fn without_transients(mut self) -> Self {
+        self.ignore_transients = true;
+        self
     }
 
     fn cache_key(path: &EntityPath, property: &PropertyId) -> Option<TransientKey> {
@@ -132,7 +141,11 @@ impl<'a> StoreView<'a> {
         let query = self.query();
         let present = descriptor_present().component;
         let mut out: Vec<(re_types_core::ComponentIdentifier, String)> = Vec::new();
-        for component in components.iter().copied().filter(|component| *component != present) {
+        for component in components
+            .iter()
+            .copied()
+            .filter(|component| *component != present)
+        {
             let results = self.db.latest_at(&query, path, [component]);
             if results.component_batch_raw(component).is_none() {
                 continue;
@@ -160,14 +173,57 @@ impl<'a> StoreView<'a> {
         path: &EntityPath,
         property: &PropertyId,
     ) -> Result<Option<PropertySource>, StoreError> {
+        if !self.ignore_transients {
+            if *path == Document::composition_path() {
+                for edit in self.preview_edits.iter().rev() {
+                    match edit {
+                        crate::doc::store::Intent::SetCameraTrack {
+                            property: prop,
+                            track,
+                        } if prop == property => {
+                            return Ok(Some(PropertySource::track(track.clone())))
+                        }
+                        crate::doc::store::Intent::SetCameraConstant {
+                            property: prop,
+                            value,
+                        } if prop == property => {
+                            return Ok(Some(PropertySource::constant(value.clone())))
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            if let Some(layer) = layer_id_of(path) {
+                for edit in self.preview_edits.iter().rev() {
+                    use crate::doc::store::Intent;
+                    match edit {
+                        Intent::SetTrack {
+                            layer: target,
+                            property: prop,
+                            track,
+                        } if *target == layer && prop == property => {
+                            return Ok(Some(PropertySource::track(track.clone())));
+                        }
+                        Intent::SetConstant {
+                            layer: target,
+                            property: prop,
+                            value,
+                        } if *target == layer && prop == property => {
+                            return Ok(Some(PropertySource::constant(value.clone())));
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
         let Some(key) = Self::cache_key(path, property) else {
             return self.parse_source_at_path(path, property);
         };
-        self.track_cache.borrow_mut().get_or_try_insert_with(
-            &self.revision,
-            key,
-            || self.parse_source_at_path(path, property),
-        )
+        self.track_cache
+            .borrow_mut()
+            .get_or_try_insert_with(&self.revision, key, || {
+                self.parse_source_at_path(path, property)
+            })
     }
 
     fn parse_source_at_path(
@@ -233,9 +289,11 @@ impl<'a> StoreView<'a> {
 
     pub fn slots(&self) -> Result<Vec<Slot>, StoreError> {
         let descriptor = descriptor_slots();
-        let results = self
-            .db
-            .latest_at(&self.query(), &Document::composition_path(), [descriptor.component]);
+        let results = self.db.latest_at(
+            &self.query(),
+            &Document::composition_path(),
+            [descriptor.component],
+        );
         let Some(json) = results
             .component_batch::<TrackJson>(descriptor.component)
             .and_then(|batch| batch.into_iter().next())
@@ -269,7 +327,10 @@ impl<'a> StoreView<'a> {
         t: RationalTime,
         link_depth: u32,
     ) -> Result<Option<Value>, StoreError> {
-        if let Some(value) = self.transient_value_at(path, property) {
+        if let Some(value) = (!self.ignore_transients)
+            .then(|| self.transient_value_at(path, property))
+            .flatten()
+        {
             return Ok(Some(value));
         }
         let Some(source) = self.source_at_path(path, property)? else {
@@ -304,9 +365,11 @@ impl<'a> StoreView<'a> {
             let Some(source_value) = source_value else {
                 continue;
             };
-            let Some(contribution) =
-                crate::doc::store::slot::translate_link(&modulator.plugin_id, &modulator.params, source_value)
-            else {
+            let Some(contribution) = crate::doc::store::slot::translate_link(
+                &modulator.plugin_id,
+                &modulator.params,
+                source_value,
+            ) else {
                 continue; // 型不一致・未知の plugin_id は近似せず寄与ゼロ。
             };
             acc = Some(match acc {
@@ -400,6 +463,27 @@ impl<'a> StoreView<'a> {
     }
 
     pub fn meta(&self, layer: LayerId) -> Result<Option<LayerMeta>, StoreError> {
+        let mut value = self.persistent_meta(layer)?;
+        if !self.ignore_transients {
+            if let Some(meta) = value.as_mut() {
+                for edit in self.preview_edits.iter().rev() {
+                    if let crate::doc::store::Intent::SetTiming {
+                        layer: target,
+                        timing,
+                    } = edit
+                    {
+                        if *target == layer {
+                            meta.timing = *timing;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        Ok(value)
+    }
+
+    fn persistent_meta(&self, layer: LayerId) -> Result<Option<LayerMeta>, StoreError> {
         {
             let mut cache = self.record_cache.borrow_mut();
             cache.sync(&self.revision);
@@ -408,7 +492,10 @@ impl<'a> StoreView<'a> {
             }
         }
         let value = self.meta_uncached(layer)?;
-        self.record_cache.borrow_mut().meta.insert(layer, value.clone());
+        self.record_cache
+            .borrow_mut()
+            .meta
+            .insert(layer, value.clone());
         Ok(value)
     }
 
@@ -453,7 +540,10 @@ impl<'a> StoreView<'a> {
             }
         }
         let value = self.attrs_uncached(layer)?;
-        self.record_cache.borrow_mut().attrs.insert(layer, value.clone());
+        self.record_cache
+            .borrow_mut()
+            .attrs
+            .insert(layer, value.clone());
         Ok(value)
     }
 
@@ -524,6 +614,19 @@ impl<'a> StoreView<'a> {
     }
 
     pub fn text_document(&self, layer: LayerId) -> Result<Option<TextDocument>, StoreError> {
+        if !self.ignore_transients {
+            for edit in self.preview_edits.iter().rev() {
+                if let crate::doc::store::Intent::SetTextDocument {
+                    layer: target,
+                    document,
+                } = edit
+                {
+                    if *target == layer {
+                        return Ok(Some(document.clone()));
+                    }
+                }
+            }
+        }
         let descriptor = descriptor_text();
         let path = layer.entity_path();
         let results = self

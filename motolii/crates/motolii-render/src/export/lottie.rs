@@ -203,12 +203,11 @@ fn build_layer(
         unsupported.push(effect_unsupported(layer, &effect));
     }
 
-    if attrs.pinned {
+    if attrs.projection != crate::doc::store::LayerProjection::ThreeD {
         unsupported.push(UnsupportedForLottie {
             layer: Some(layer),
-            category: "pinned",
-            detail: "LayerAttrs.pinned(カメラ非追従、裁定113)に対応する Lottie 語彙が無い"
-                .to_owned(),
+            category: "projection",
+            detail: format!("Layer projection {} has no Lottie equivalent", attrs.projection.label()),
         });
     }
 

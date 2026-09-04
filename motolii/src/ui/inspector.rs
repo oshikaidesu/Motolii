@@ -3,23 +3,29 @@ use std::sync::{Arc, Mutex};
 
 use dioxus_native::prelude::*;
 
+use crate::doc::store::{
+    property, BlendMode, ContentKeyframe, Document, Intent, Interp, Keyframe, LayerAttrsPatch,
+    LayerId, LayerProjection, LayerSource, Matte, MatteMode, PropertyId, RationalTime, StoreError,
+    StoreView, Value,
+};
+use crate::ui::fixture::ColorRow;
 use crate::ui::fixture::{inspector_data_from_doc, InspectorData, PropRow};
 use crate::ui::playback::Clock;
 use crate::ui::semantic_menu::{Field, SemanticButton};
 use crate::ui::session::{FieldAt, Focus, OpenField, Session};
-use crate::ui::fixture::ColorRow;
-use crate::doc::store::{
-    property, BlendMode, ContentKeyframe, Document, Intent, Interp, Keyframe,
-    LayerAttrsPatch, LayerId, LayerSource, Matte, MatteMode, PropertyId, RationalTime, StoreError,
-    StoreView, Value,
-};
 
 /// 窓に並べる合成モード。**W3C Compositing の16 mix + `plus`(Add)**で、
 /// 順番は語彙の並び(reference/compositing-coverage.tsv と同じ)。
 const ANCHOR_SPOTS: [(f64, f64); 9] = [
-    (0.0, 0.0), (0.5, 0.0), (1.0, 0.0),
-    (0.0, 0.5), (0.5, 0.5), (1.0, 0.5),
-    (0.0, 1.0), (0.5, 1.0), (1.0, 1.0),
+    (0.0, 0.0),
+    (0.5, 0.0),
+    (1.0, 0.0),
+    (0.0, 0.5),
+    (0.5, 0.5),
+    (1.0, 0.5),
+    (0.0, 1.0),
+    (0.5, 1.0),
+    (1.0, 1.0),
 ];
 
 pub(super) const BLEND_MODES: &[(BlendMode, &str)] = &[
@@ -76,22 +82,9 @@ fn increment(property: &str, range: Option<(f64, f64)>) -> f64 {
     }
 }
 
-fn nudge(value: &Value, vec2: bool, axis: usize, delta: f64, range: Option<(f64, f64)>) -> Value {
-    match (vec2, value) {
-        (true, Value::Vec2([x, y])) => {
-            let mut v = [*x, *y];
-            v[axis] += delta;
-            Value::Vec2(v)
-        }
-        (false, Value::F64(v)) => {
-            let v = v + delta;
-            Value::F64(match range {
-                Some((min, max)) => v.clamp(min, max),
-                None => v,
-            })
-        }
-        _ => value.clone(),
-    }
+fn nudge(value: &Value, _vec2: bool, axis: usize, delta: f64, range: Option<(f64, f64)>) -> Value {
+    crate::ui::functions::control::axis_delta(value, axis, delta, range)
+        .unwrap_or_else(|_| value.clone())
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -106,94 +99,69 @@ pub(super) struct ValueDrag {
     start_value: Value,
     range: Option<(f64, f64)>,
     last_dx: f64,
+    at: RationalTime,
+    preview: Vec<crate::ui::property_edit::PropertyEdit>,
+    base_revision: crate::doc::store::Revision,
+    preview_owner: u64,
+    primary_editable: bool,
 }
 
-fn put_axis(value: &Value, vec2: bool, axis: usize, v: f64, range: Option<(f64, f64)>) -> Value {
-    match (vec2, value) {
-        (true, Value::Vec2([x, y])) => {
-            let mut a = [*x, *y];
-            a[axis] = v;
-            Value::Vec2(a)
+fn put_axis(
+    value: &Value,
+    _vec2: bool,
+    axis: usize,
+    number: f64,
+    range: Option<(f64, f64)>,
+) -> Value {
+    crate::ui::functions::control::axis_absolute(value, axis, number, range)
+        .unwrap_or_else(|_| value.clone())
+}
+
+fn key_intents(
+    doc: &Document,
+    layer: LayerId,
+    property: &str,
+    t: RationalTime,
+    remove: bool,
+    all: bool,
+) -> Result<Vec<Intent>, StoreError> {
+    let prop = PropertyId::new(property)?;
+    crate::ui::functions::lens::require_local_source(&doc.view(), layer, &prop)?;
+    let value = value_with_default(&doc.view(), layer, &prop, property, t)
+        .ok_or_else(|| StoreError::Property(format!("No {property} value")))?;
+    if all {
+        if doc.view().track(layer, &prop)?.is_none() {
+            return Ok(Vec::new());
         }
-        (false, Value::F64(_)) => Value::F64(match range {
-            Some((min, max)) => v.clamp(min, max),
-            None => v,
-        }),
-        _ => value.clone(),
+        return Ok(vec![Intent::SetConstant {
+            layer,
+            property: prop,
+            value,
+        }]);
     }
-}
-
-fn write_key(
-    doc: &Arc<Mutex<Document>>,
-    layer: LayerId,
-    property: &str,
-    value: Value,
-    t: RationalTime,
-) -> Result<(), crate::doc::store::StoreError> {
-    let Ok(prop) = PropertyId::new(property) else {
-        return Ok(());
-    };
-    let mut doc = doc.lock().unwrap();
-    let intent = doc.place(layer, &prop, value, t);
-    doc.apply(intent)
-}
-
-/// 時間の世界を開ける。**今の時刻に1つだけ**キーを立てる。
-/// `write_key` は「既に開いている物へ打つ」道なので、開ける時はこちら。
-fn open_time(
-    doc: &Arc<Mutex<Document>>,
-    layer: LayerId,
-    property: &str,
-    value: Value,
-    t: RationalTime,
-) -> Result<(), crate::doc::store::StoreError> {
-    let Ok(prop) = PropertyId::new(property) else {
-        return Ok(());
-    };
-    let mut track = crate::doc::store::KeyframeTrack::new();
-    track.insert(Keyframe { t, value, interp: Interp::Linear, spatial: None });
-    doc.lock()
-        .unwrap()
-        .apply(Intent::SetTrack { layer, property: prop, track })
-}
-
-/// 今の時刻にキーが在れば外し、無ければ今の値で 1 つ立てる。
-fn toggle_key_at(
-    doc: &Arc<Mutex<Document>>,
-    layer: LayerId,
-    property: &str,
-    value: Value,
-    t: RationalTime,
-) -> Result<(), crate::doc::store::StoreError> {
-    let Ok(prop) = PropertyId::new(property) else {
-        return Ok(());
-    };
-    let mut d = doc.lock().unwrap();
-    let here = d
-        .view()
-        .track(layer, &prop)?
-        .is_some_and(|track| track.keys().iter().any(|k| k.t == t));
-    let intents = if here {
-        crate::ui::timeline_widget::keyframe_delete_intents(&d, layer, Some(&prop), t.as_seconds_f64())?
-    } else {
-        vec![d.place(layer, &prop, value, t)]
-    };
-    d.apply_all(intents).map(|_| ())
-}
-
-/// 時間の世界を閉じる。キーを捨てて、**今見えている値だけ**を残す。
-fn close_time(
-    doc: &Arc<Mutex<Document>>,
-    layer: LayerId,
-    property: &str,
-    value: Value,
-) -> Result<(), crate::doc::store::StoreError> {
-    let Ok(prop) = PropertyId::new(property) else {
-        return Ok(());
-    };
-    doc.lock()
-        .unwrap()
-        .apply(Intent::SetConstant { layer, property: prop, value })
+    if remove {
+        return crate::ui::timeline_widget::keyframe_delete_intents(
+            doc,
+            layer,
+            Some(&prop),
+            t.as_seconds_f64(),
+        );
+    }
+    let mut track = doc.view().track(layer, &prop)?.unwrap_or_default();
+    if track.keys().iter().any(|key| key.t == t) {
+        return Ok(Vec::new());
+    }
+    track.insert(Keyframe {
+        t,
+        value,
+        interp: Interp::Linear,
+        spatial: None,
+    });
+    Ok(vec![Intent::SetTrack {
+        layer,
+        property: prop,
+        track,
+    }])
 }
 
 /// エフェクトを層から外す。**param は触れるのに本体を外せない**という
@@ -208,51 +176,54 @@ fn remove_effect(doc: &Arc<Mutex<Document>>, layer: LayerId, id: u32) {
     }
 }
 
-fn commit_drag(doc: &Arc<Mutex<Document>>, d: &ValueDrag, t: RationalTime) {
-    if let Ok(prop) = PropertyId::new(&d.property) {
-        doc.lock().unwrap().clear_transient(d.layer, &prop);
+fn commit_drag(doc: &Arc<Mutex<Document>>, drag: &ValueDrag) -> Result<(), StoreError> {
+    let mut doc = doc.lock().unwrap();
+    if doc.revision() != drag.base_revision {
+        crate::ui::property_edit::cancel_owned(&mut doc, drag.preview_owner);
+        return Err(StoreError::Property(
+            "Value edit cancelled because the document changed".into(),
+        ));
     }
-    if d.last_dx == 0.0 {
-        return;
-    }
-    let delta = d.last_dx * increment(&d.property, d.range);
-    let targets = std::iter::once((d.layer, d.start_value.clone())).chain(d.others.iter().cloned());
-    for (layer, start) in targets {
-        if let Ok(prop) = PropertyId::new(&d.property) {
-            doc.lock().unwrap().clear_transient(layer, &prop);
-        }
-        let new_value = nudge(&start, d.vec2, d.axis, delta, d.range);
-        if let Err(e) = write_key(doc, layer, &d.property, new_value, t) {
-            println!("PROBE room=write verdict=apply-error {e}");
-        }
-    }
+    crate::ui::property_edit::commit_owned(&mut doc, drag.preview_owner, drag.at, &drag.preview)
 }
 
 /// 擦りを終える。窓の外で放した時も同じ道(host の release から)。
 pub(super) fn end_scrub(session: &Session) -> bool {
-    let Some(d) = session.scrub.lock().unwrap().take() else { return false };
-    commit_drag(&session.doc, &d, session.clock.current_time());
+    let Some(d) = session.scrub.lock().unwrap().take() else {
+        return false;
+    };
+    if let Err(error) = commit_drag(&session.doc, &d) {
+        *session.project_notice.lock().unwrap() = error.to_string();
+    }
     true
 }
 
 /// 擦りを取り消す。値は掴む前へ戻り、Undo には何も残らない。
 pub(super) fn cancel_scrub(session: &Session) -> bool {
-    let Some(d) = session.scrub.lock().unwrap().take() else { return false };
-    if let Ok(prop) = PropertyId::new(&d.property) {
-        let mut doc = session.doc.lock().unwrap();
-        doc.clear_transient(d.layer, &prop);
-        for (layer, _) in &d.others {
-            doc.clear_transient(*layer, &prop);
-        }
-    }
+    let Some(d) = session.scrub.lock().unwrap().take() else {
+        return false;
+    };
+    crate::ui::property_edit::cancel_owned(&mut session.doc.lock().unwrap(), d.preview_owner);
     true
 }
 
 /// 選んでいる他の層の、同じ property の今の値。複数選択で一緒に動かす為。
-fn others_at(session: &Session, primary: LayerId, property: &str, t: RationalTime) -> Vec<(LayerId, Value)> {
-    let Ok(prop) = PropertyId::new(property) else { return Vec::new() };
+fn others_at(
+    session: &Session,
+    primary: LayerId,
+    property: &str,
+    t: RationalTime,
+) -> Vec<(LayerId, Value)> {
+    let Ok(prop) = PropertyId::new(property) else {
+        return Vec::new();
+    };
     // 錠の判定は doc の lock を取る。ここで lock を握る前に済ませる(同じ lock は二度取れない)。
-    let editable = session.editable_selection();
+    let editable = session
+        .property_targets(Some(primary), &prop)
+        .unwrap_or_else(|error| {
+            *session.project_notice.lock().unwrap() = error.to_string();
+            Vec::new()
+        });
     let doc = session.doc.lock().unwrap();
     let view = doc.view();
     editable
@@ -267,17 +238,13 @@ pub(super) fn value_with_default(
     view: &StoreView<'_>,
     layer: LayerId,
     prop: &PropertyId,
-    property: &str,
-    t: RationalTime,
+    _property: &str,
+    at: RationalTime,
 ) -> Option<Value> {
-    if let Ok(Some(v)) = view.value_at(layer, prop, t) {
-        return Some(v);
-    }
-    crate::ui::fixture::inspector_data_from_doc(view, layer, t)
-        .transform
-        .into_iter()
-        .find(|row| row.property.as_deref() == Some(property))
-        .map(|row| row.value)
+    view.value_at(layer, prop, at)
+        .ok()
+        .flatten()
+        .or_else(|| view.default_value(layer, prop).ok().flatten())
 }
 
 pub(super) fn write_content(
@@ -319,13 +286,25 @@ pub(super) fn toggle_content_key(
     let here = keys.iter().position(|k| k.t == t);
     // 立てる本文は**今 store に在る**この時刻の行(render 時の写しは、欄を確定した直後は古い)。
     let content = if content.is_empty() {
-        keys.iter().filter(|k| k.t <= t).last().or(keys.first()).map(|k| k.content.clone()).unwrap_or_default()
+        keys.iter()
+            .filter(|k| k.t <= t)
+            .last()
+            .or(keys.first())
+            .map(|k| k.content.clone())
+            .unwrap_or_default()
     } else {
-        keys.iter().filter(|k| k.t <= t).last().or(keys.first()).map(|k| k.content.clone()).unwrap_or(content)
+        keys.iter()
+            .filter(|k| k.t <= t)
+            .last()
+            .or(keys.first())
+            .map(|k| k.content.clone())
+            .unwrap_or(content)
     };
     match here {
         Some(_) if keys.len() <= 1 => {
-            return Err(crate::doc::store::StoreError::Property("The only lyric line cannot be removed".to_owned()))
+            return Err(crate::doc::store::StoreError::Property(
+                "The only lyric line cannot be removed".to_owned(),
+            ))
         }
         Some(i) => {
             let mut rest = crate::doc::store::ContentTrack::new();
@@ -352,138 +331,198 @@ fn prop_row(
     // 1 値の行は X の列に置く(AE・Figma)。data は 3 番目に持つので描く順だけ入れ替える。
     let solo = p.cells[0].is_empty() && p.cells[1].is_empty() && !p.cells[2].is_empty();
     let order: [usize; 3] = if solo { [2, 0, 1] } else { [0, 1, 2] };
-    let cells = order.into_iter().map(|i| (i, (&p.cells[i], p.dims[i]))).map(|(i, (c, dim))| {
-        let class = if c.is_empty() {
-            "v blank"
-        } else if dim {
-            "v z"
-        } else {
-            "v"
-        };
-        let target = match &p.axis[i] {
-            Some((property, value)) => Some((property.clone(), value.clone(), false)),
-            None if !c.is_empty() && (if p.vec2 { i < 2 } else { i == 2 }) => p
-                .property
-                .clone()
-                .map(|property| (property, p.value.clone(), p.vec2)),
-            None => None,
-        };
-        if let Some((property, start_value, vec2)) = target {
-            let range = p.range;
-            let at = FieldAt::Number { layer, property: property.clone(), axis: i };
-            if session.field_at(&at).is_some() {
-                let doc_commit = doc.clone();
-                let commit_session = session.clone();
-                let start_value = start_value.clone();
-                return rsx!(Field {
-                    label: "{p.label}",
-                    session: session.clone(),
-                    class: "{class} typing",
-                    revision,
-                    oncommit: move |f: OpenField| {
-                        let FieldAt::Number { layer, property, axis } = f.at else { return };
-                        let Ok(v) = f.draft.trim().parse::<f64>() else { return };
-                        let others = others_at(&commit_session, layer, &property, t);
-                        let targets = std::iter::once((layer, start_value.clone())).chain(others);
-                        let mut wrote = false;
-                        for (layer, base) in targets {
-                            let value = put_axis(&base, vec2, axis, v, range);
-                            // 同じ値は書かない。複数選択では層ごとに見る(主の層だけで早帰りしない)。
-                            if value == base {
-                                continue;
+    let cells = order
+        .into_iter()
+        .map(|i| (i, (&p.cells[i], p.dims[i])))
+        .map(|(i, (c, dim))| {
+            let class = if c.is_empty() {
+                "v blank"
+            } else if dim {
+                "v z"
+            } else {
+                "v"
+            };
+            let target = match &p.axis[i] {
+                Some((property, value)) => Some((property.clone(), value.clone(), false)),
+                None if !c.is_empty() && (if p.vec2 { i < 2 } else { i == 2 }) => p
+                    .property
+                    .clone()
+                    .map(|property| (property, p.value.clone(), p.vec2)),
+                None => None,
+            };
+            if let Some((property, start_value, vec2)) = target {
+                let range = p.range;
+                let at = FieldAt::Number {
+                    layer,
+                    property: property.clone(),
+                    axis: i,
+                };
+                if session.field_at(&at).is_some() {
+                    let commit_session = session.clone();
+                    let input_default = start_value.clone();
+                    return rsx!(Field {
+                        label: "{p.label}",
+                        session: session.clone(),
+                        class: "{class} typing",
+                        revision,
+                        oncommit: move |f: OpenField| {
+                            let FieldAt::Number {
+                                layer,
+                                property,
+                                axis,
+                            } = f.at
+                            else {
+                                return;
+                            };
+                            let v = match f.draft.trim().parse::<f64>() {
+                                Ok(value) if value.is_finite() => value,
+                                _ => { *commit_session.project_notice.lock().unwrap() = "Enter a finite number".into(); return; }
+                            };
+                            let Ok(prop) = PropertyId::new(&property) else {
+                                return;
+                            };
+                            let Some(basis) = f.number_basis else { return; };
+                            let mut doc = commit_session.doc.lock().unwrap();
+                            if doc.revision() != basis.revision {
+                                *commit_session.project_notice.lock().unwrap() = "Value edit cancelled because the document changed".into();
+                                return;
                             }
-                            match write_key(&doc_commit, layer, &property, value, t) {
-                                Ok(()) => wrote = true,
-                                Err(err) => println!("PROBE room=write verdict=apply-error {err}"),
-                            }
-                        }
-                        if wrote {
+                            let targets = basis.targets;
+                            let t = basis.at;
+                            let owner = doc.begin_preview();
+                            let values: Vec<_> = targets
+                                .into_iter()
+                                .filter_map(|target| {
+                                    let base = value_with_default(
+                                        &doc.view(),
+                                        target,
+                                        &prop,
+                                        &property,
+                                        t,
+                                    ).or_else(|| (target == layer).then(|| input_default.clone()))?;
+                                    let value = put_axis(&base, vec2, axis, v, range);
+                                    (value != base).then_some((target, prop.clone(), value))
+                                })
+                                .collect();
+                            let result = crate::ui::property_edit::commit_owned(&mut doc, owner, t, &values);
+                            drop(doc);
+                            crate::ui::session::noted(result, revision);
+                        },
+                    });
+                }
+                let opener = session.clone();
+                let grabber = session.clone();
+                let open = (property.clone(), start_value.clone());
+                let cell = c.clone();
+                let key_opener = session.clone();
+                let key_open = open.clone();
+                let key_cell = c.clone();
+                rsx!(span {
+                    class: "{class}",
+                    onmousedown: move |evt| {
+                        if !grabber.writable(layer) { return; }
+                        let x = evt.data().client_coordinates().x;
+                        let at = grabber.clock.current_time();
+                        let preview_owner = grabber.doc.lock().unwrap().begin_preview();
+                        let others = others_at(&grabber, layer, &property, at);
+                        let primary_editable = PropertyId::new(&property).ok().is_some_and(|prop| grabber.doc.lock().unwrap().view().without_transients().property_write_rejection(layer, &prop).map(|reason| reason.is_none()).unwrap_or(false));
+                        if !primary_editable && others.is_empty() { grabber.doc.lock().unwrap().clear_preview_edits(preview_owner); return; }
+                        let fresh = PropertyId::new(&property).ok().and_then(|prop| value_with_default(&grabber.doc.lock().unwrap().view().without_transients(), layer, &prop, &property, at)).unwrap_or_else(|| start_value.clone());
+                        *grabber.scrub.lock().unwrap() = Some(ValueDrag {
+                            layer,
+                            others,
+                            property: property.clone(),
+                            vec2,
+                            axis: i,
+                            start_x: x,
+                            start_value: fresh,
+                            range,
+                            last_dx: 0.0,
+                            at,
+                            preview: Vec::new(),
+                            base_revision: grabber.doc.lock().unwrap().revision(),
+                            preview_owner,
+                            primary_editable,
+                        });
+                    },
+                    ondoubleclick: move |_| {
+                        // 擦りかけの下書き(transient)を残さない。
+                        cancel_scrub(&opener);
+                        opener.open_field(
+                            FieldAt::Number { layer, property: open.0.clone(), axis: i },
+                            cell.clone(),
+                        );
+                        *revision.write() += 1;
+                    },
+                    // 鍵の道: Tab で升に止まり、Enter で打てる(読み上げにも「値」として出る)。
+                    tabindex: "0",
+                    role: "spinbutton",
+                    onkeydown: move |evt: KeyboardEvent| {
+                        if evt.key() == Key::Enter {
+                            evt.stop_propagation();
+                            cancel_scrub(&key_opener);
+                            key_opener.open_field(
+                                FieldAt::Number { layer, property: key_open.0.clone(), axis: i },
+                                key_cell.clone(),
+                            );
                             *revision.write() += 1;
                         }
                     },
-                });
-            }
-            let opener = session.clone();
-            let grabber = session.clone();
-            let open = (property.clone(), start_value.clone());
-            let cell = c.clone();
-            let key_opener = session.clone();
-            let key_open = open.clone();
-            let key_cell = c.clone();
-            rsx!(span {
-                class: "{class}",
-                onmousedown: move |evt| {
-                    let x = evt.data().client_coordinates().x;
-                    let others = others_at(&grabber, layer, &property, t);
-                    *grabber.scrub.lock().unwrap() = Some(ValueDrag {
-                        layer,
-                        others,
-                        property: property.clone(),
-                        vec2,
-                        axis: i,
-                        start_x: x,
-                        start_value: start_value.clone(),
-                        range,
-                        last_dx: 0.0,
-                    });
-                },
-                ondoubleclick: move |_| {
-                    // 擦りかけの下書き(transient)を残さない。
-                    cancel_scrub(&opener);
-                    opener.open_field(
-                        FieldAt::Number { layer, property: open.0.clone(), axis: i },
-                        cell.clone(),
-                    );
-                    *revision.write() += 1;
-                },
-                // 鍵の道: Tab で升に止まり、Enter で打てる(読み上げにも「値」として出る)。
-                tabindex: "0",
-                role: "spinbutton",
-                onkeydown: move |evt: KeyboardEvent| {
-                    if evt.key() == Key::Enter {
-                        evt.stop_propagation();
-                        cancel_scrub(&key_opener);
-                        key_opener.open_field(
-                            FieldAt::Number { layer, property: key_open.0.clone(), axis: i },
-                            key_cell.clone(),
-                        );
-                        *revision.write() += 1;
-                    }
-                },
-                "{c}"
-            })
-        } else {
-            rsx!(span { class: "{class}", "{c}" })
-        }
-    });
-    let key_class = if p.keyed { "glyph on" } else { "glyph" };
-    let key_glyph = if p.keyed { "◆" } else { "◇" };
-    let key_click = p.property.clone().map(|property| {
-        let value = p.value.clone();
-        let doc = doc.clone();
-        let keyed = p.keyed;
-        // ◇ は今の時刻に 1 つ立てる。◆ は今の時刻のキーだけ外す(AE のナビゲータ)。
-        // Alt+◆ で時間の世界を閉じ、今の値だけを残す(AE のストップウォッチ)。
-        move |evt: MouseEvent| {
-            let done = if keyed && evt.modifiers().alt() {
-                close_time(&doc, layer, &property, value.clone())
-            } else if keyed {
-                toggle_key_at(&doc, layer, &property, value.clone(), t)
+                    "{c}"
+                })
             } else {
-                open_time(&doc, layer, &property, value.clone(), t)
-            };
-            match done {
-                Ok(_) => {
-                    println!(
-                        "PROBE room=write verdict=key-{} layer={:?} prop={} t={:?}",
-                        if keyed { "closed" } else { "opened" },
-                        layer,
-                        property,
-                        t
-                    );
-                    *revision.write() += 1;
+                rsx!(span { class: "{class}", "{c}" })
+            }
+        });
+    let targets = session.targets(Some(layer));
+    let keyed = p.property.as_ref().is_some_and(|property| {
+        let Ok(property) = PropertyId::new(property) else {
+            return false;
+        };
+        let doc = doc.lock().unwrap();
+        let eligible: Vec<_> = targets
+            .iter()
+            .filter(|target| {
+                doc.view()
+                    .without_transients()
+                    .property_write_rejection(**target, &property)
+                    .map(|reason| reason.is_none())
+                    .unwrap_or(false)
+            })
+            .collect();
+        !eligible.is_empty()
+            && eligible.into_iter().all(|target| {
+                doc.view()
+                    .track(*target, &property)
+                    .ok()
+                    .flatten()
+                    .is_some_and(|track| track.keys().iter().any(|key| key.t == t))
+            })
+    });
+    let key_class = if keyed { "glyph on" } else { "glyph" };
+    let key_glyph = if keyed { "◆" } else { "◇" };
+    let key_click = p.property.clone().map(|property| {
+        let session = session.clone();
+        move |evt: MouseEvent| {
+            let at = session.clock.current_time();
+            let result = session.apply_blocks(Some(layer), |doc, target| {
+                let prop = PropertyId::new(&property)?;
+                if let Some(reason) = doc
+                    .view()
+                    .without_transients()
+                    .property_write_rejection(target, &prop)?
+                {
+                    return Ok(crate::ui::functions::compose::Block::Rejected(
+                        reason.into(),
+                    ));
                 }
-                Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
+                key_intents(doc, target, &property, at, keyed, evt.modifiers().alt())
+                    .map(crate::ui::functions::compose::Block::Edits)
+            });
+            match result {
+                Ok(written) if written > 0 => *revision.write() += 1,
+                Err(error) => println!("PROBE room=write verdict=apply-error {error}"),
+                _ => {}
             }
         }
     });
@@ -492,7 +531,7 @@ fn prop_row(
             span { class: "n", "{p.label}" }
             {cells}
             if let Some(on_click) = key_click {
-                SemanticButton { class: "{key_class}", selected: p.keyed, aria_label: if p.keyed { "Remove the keyframe at this time · Alt removes all" } else { "Add a keyframe at this time" }, title: if p.keyed { "Remove the keyframe here · Alt removes all" } else { "Animate this value" }, onclick: on_click, "{key_glyph}" }
+                SemanticButton { class: "{key_class}", selected: keyed, aria_label: if keyed { "Remove the keyframe at this time · Alt removes all" } else { "Add a keyframe at this time" }, title: if keyed { "Remove the keyframe here · Alt removes all" } else { "Animate this value" }, onclick: on_click, "{key_glyph}" }
             } else {
                 span { class: "{key_class}", "{key_glyph}" }
             }
@@ -681,7 +720,10 @@ fn set_parent(
     layer: LayerId,
     parent: Option<LayerId>,
 ) -> Result<(), StoreError> {
-    let patch = LayerAttrsPatch { parent: Some(parent), ..Default::default() };
+    let patch = LayerAttrsPatch {
+        parent: Some(parent),
+        ..Default::default()
+    };
     doc.lock().unwrap().apply(Intent::SetAttrs { layer, patch })
 }
 
@@ -696,10 +738,16 @@ fn set_matte_source(
         .attrs(layer)?
         .and_then(|attrs| attrs.matte)
         .map_or(MatteMode::Alpha, |matte| matte.mode);
-    let matte = source.map(|source| Matte { layer: source, mode });
+    let matte = source.map(|source| Matte {
+        layer: source,
+        mode,
+    });
     doc.apply(Intent::SetAttrs {
         layer,
-        patch: LayerAttrsPatch { matte: Some(matte), ..Default::default() },
+        patch: LayerAttrsPatch {
+            matte: Some(matte),
+            ..Default::default()
+        },
     })
 }
 
@@ -710,12 +758,17 @@ fn set_matte_mode(
 ) -> Result<(), StoreError> {
     let mut doc = doc.lock().unwrap();
     let Some(mut matte) = doc.view().attrs(layer)?.and_then(|attrs| attrs.matte) else {
-        return Err(StoreError::Property("Choose a matte source first".to_owned()));
+        return Err(StoreError::Property(
+            "Choose a matte source first".to_owned(),
+        ));
     };
     matte.mode = mode;
     doc.apply(Intent::SetAttrs {
         layer,
-        patch: LayerAttrsPatch { matte: Some(Some(matte)), ..Default::default() },
+        patch: LayerAttrsPatch {
+            matte: Some(Some(matte)),
+            ..Default::default()
+        },
     })
 }
 
@@ -918,8 +971,8 @@ pub(super) fn inspector_panel(
     };
     let box_size = *selected_size.lock().unwrap();
     let _ = revision(); // Document書き換え後の再描画をここで購読する(値そのものは使わない)
-    // 再生位置が動いた時も描き直す。**値は時刻で決まる**ので、
-    // ここを購読しないと絵だけ動いて数字が止まる。
+                        // 再生位置が動いた時も描き直す。**値は時刻で決まる**ので、
+                        // ここを購読しないと絵だけ動いて数字が止まる。
     let _ = playhead();
 
     let empty = InspectorData {
@@ -950,14 +1003,15 @@ pub(super) fn inspector_panel(
         for row in &mut data.transform {
             for i in 0..3 {
                 let agree = siblings.iter().all(|s| {
-                    s.transform.iter().any(|r| r.label == row.label && r.cells[i] == row.cells[i])
+                    s.transform
+                        .iter()
+                        .any(|r| r.label == row.label && r.cells[i] == row.cells[i])
                 });
                 // 違う値は「—」(Figma の Mixed)。空にすると掴む口が消えるので文字で残す。
                 if !agree && !row.cells[i].is_empty() {
                     row.cells[i] = "—".to_owned();
                 }
             }
-            row.keyed = false;
         }
         data.ident_name = format!("{} layers", chosen.len());
         data.text.clear();
@@ -996,15 +1050,35 @@ pub(super) fn inspector_panel(
     // 文字の行のうち、property を持つ物(級数)は数の行。本文だけが文の行。
     let text_rows = inspector.text.iter().map(|p| {
         if p.property.is_some() {
-            prop_row(p, selection.unwrap_or(LayerId(0)), t, doc, session, revision)
+            prop_row(
+                p,
+                selection.unwrap_or(LayerId(0)),
+                t,
+                doc,
+                session,
+                revision,
+            )
         } else {
-            content_row(p, selection.unwrap_or(LayerId(0)), t, doc, session, revision)
+            content_row(
+                p,
+                selection.unwrap_or(LayerId(0)),
+                t,
+                doc,
+                session,
+                revision,
+            )
         }
     });
-    let transform_rows = inspector
-        .transform
-        .iter()
-        .map(|p| prop_row(p, selection.unwrap_or(LayerId(0)), t, doc, session, revision));
+    let transform_rows = inspector.transform.iter().map(|p| {
+        prop_row(
+            p,
+            selection.unwrap_or(LayerId(0)),
+            t,
+            doc,
+            session,
+            revision,
+        )
+    });
     let effect_blocks: Vec<_> = inspector
         .effects
         .iter()
@@ -1015,12 +1089,25 @@ pub(super) fn inspector_panel(
                 block
                     .params
                     .iter()
-                    .map(|p| prop_row(p, selection.unwrap_or(LayerId(0)), t, doc, session, revision))
+                    .map(|p| {
+                        prop_row(
+                            p,
+                            selection.unwrap_or(LayerId(0)),
+                            t,
+                            doc,
+                            session,
+                            revision,
+                        )
+                    })
                     .collect::<Vec<_>>(),
             )
         })
         .collect();
-    let fx_label = if inspector.has_effects { "" } else { "No effects shared by the selection" };
+    let fx_label = if inspector.has_effects {
+        ""
+    } else {
+        "No effects shared by the selection"
+    };
 
     let (parent_label, parent_choices, matte_source_label, matte_choices, matte) = match selection {
         Some(layer) => {
@@ -1031,33 +1118,53 @@ pub(super) fn inspector_panel(
                 .parent
                 .map(|parent| layer_label(&view, parent))
                 .unwrap_or_else(|| "None".to_owned());
-            let mut parent_choices = vec![LayerChoice { layer: None, label: "None".to_owned() }];
-            parent_choices.extend(
-                parent_candidates(&view, layer)
-                    .into_iter()
-                    .map(|(candidate, label)| LayerChoice { layer: Some(candidate), label }),
-            );
+            let mut parent_choices = vec![LayerChoice {
+                layer: None,
+                label: "None".to_owned(),
+            }];
+            parent_choices.extend(parent_candidates(&view, layer).into_iter().map(
+                |(candidate, label)| LayerChoice {
+                    layer: Some(candidate),
+                    label,
+                },
+            ));
             let matte = attrs.matte;
             let matte_source_label = matte
                 .map(|matte| layer_label(&view, matte.layer))
                 .unwrap_or_else(|| "None".to_owned());
-            let mut matte_choices = vec![LayerChoice { layer: None, label: "None".to_owned() }];
-            matte_choices.extend(
-                matte_candidates(&view, layer)
-                    .into_iter()
-                    .map(|(candidate, label)| LayerChoice { layer: Some(candidate), label }),
-            );
-            (parent_label, parent_choices, matte_source_label, matte_choices, matte)
+            let mut matte_choices = vec![LayerChoice {
+                layer: None,
+                label: "None".to_owned(),
+            }];
+            matte_choices.extend(matte_candidates(&view, layer).into_iter().map(
+                |(candidate, label)| LayerChoice {
+                    layer: Some(candidate),
+                    label,
+                },
+            ));
+            (
+                parent_label,
+                parent_choices,
+                matte_source_label,
+                matte_choices,
+                matte,
+            )
         }
-        None => ("None".to_owned(), Vec::new(), "None".to_owned(), Vec::new(), None),
+        None => (
+            "None".to_owned(),
+            Vec::new(),
+            "None".to_owned(),
+            Vec::new(),
+            None,
+        ),
     };
     let has_children = match selection {
         Some(layer) => {
             let d = doc.lock().unwrap();
             let view = d.view();
-            view.layers().into_iter().any(|l| {
-                view.attrs(l).ok().flatten().and_then(|a| a.parent) == Some(layer)
-            })
+            view.layers()
+                .into_iter()
+                .any(|l| view.attrs(l).ok().flatten().and_then(|a| a.parent) == Some(layer))
         }
         None => false,
     };
@@ -1091,7 +1198,9 @@ pub(super) fn inspector_panel(
             set_matte_source(&doc, layer, source)?;
             let mut revision = revision_signal;
             *revision.write() += 1;
-            println!("PROBE room=write verdict=applied SetAttrs matte-source={source:?} layer={layer:?}");
+            println!(
+                "PROBE room=write verdict=applied SetAttrs matte-source={source:?} layer={layer:?}"
+            );
             Ok(())
         }))
     });
@@ -1102,7 +1211,9 @@ pub(super) fn inspector_panel(
             set_matte_mode(&doc, layer, mode)?;
             let mut revision = revision_signal;
             *revision.write() += 1;
-            println!("PROBE room=write verdict=applied SetAttrs matte-mode={mode:?} layer={layer:?}");
+            println!(
+                "PROBE room=write verdict=applied SetAttrs matte-mode={mode:?} layer={layer:?}"
+            );
             Ok(())
         }))
     });
@@ -1124,21 +1235,26 @@ pub(super) fn inspector_panel(
                     let dx = x - d.start_x;
                     let changed = dx != d.last_dx;
                     d.last_dx = dx;
-                    let mut targets = vec![(d.layer, d.start_value.clone())];
+                    let mut targets = if d.primary_editable { vec![(d.layer, d.start_value.clone())] } else { Vec::new() };
                     targets.extend(d.others.iter().cloned());
-                    (changed, targets, d.property.clone(), d.vec2, d.axis, d.range, dx)
+                    (changed, targets, d.property.clone(), d.vec2, d.axis, d.range, dx, d.preview_owner)
                 });
-                let Some((changed, targets, property, vec2, axis, range, dx)) = state else { return };
+                let Some((changed, targets, property, vec2, axis, range, dx, owner)) = state else { return };
                 if !changed {
                     return;
                 }
                 let Ok(prop) = PropertyId::new(&property) else { return };
-                let mut doc = scrub_move.doc.lock().unwrap();
-                for (layer, start) in targets {
-                    let new_value = nudge(&start, vec2, axis, dx * increment(&property, range), range);
-                    doc.set_transient(layer, prop.clone(), new_value);
+                let values: Vec<_> = targets.into_iter().filter_map(|(layer, start)| {
+                    let value = nudge(&start, vec2, axis, dx * increment(&property, range), range);
+                    (value != start).then_some((layer, prop.clone(), value))
+                }).collect();
+                let previewed = crate::ui::property_edit::preview_owned(&mut scrub_move.doc.lock().unwrap(), owner, &values);
+                if let Err(error) = previewed {
+                    *scrub_move.project_notice.lock().unwrap() = error.to_string();
+                    cancel_scrub(&scrub_move);
+                    return;
                 }
-                drop(doc);
+                if let Some(drag) = scrub_move.scrub.lock().unwrap().as_mut() { drag.preview = values; }
                 *revision.write() += 1;
             },
             onmouseup: move |_| {
@@ -1174,9 +1290,13 @@ pub(super) fn inspector_panel(
                                 aria_label: "Set anchor {fx} {fy}",
                                 onclick: {
                                     let doc = doc.clone();
+                                    let session = session.clone();
                                     move |_| {
-                                        crate::ui::utility::move_anchor(&doc, layer, size, t, fx, fy);
-                                        *revision.write() += 1;
+                                        let at = session.clock.current_time();
+                                        match crate::ui::utility::move_anchor(&doc, layer, size, at, fx, fy) {
+                                            Ok(()) => *revision.write() += 1,
+                                            Err(error) => *session.project_notice.lock().unwrap() = format!("Anchor edit failed: {error}"),
+                                        }
                                     }
                                 },
                                 span { class: "adot" }
@@ -1186,6 +1306,26 @@ pub(super) fn inspector_panel(
                 }
             }
             if let Some(layer) = selection {
+                h3 { class: "sec", "Projection" }
+                div { class: "prow",
+                    span { class: "n", "Space" }
+                    { [LayerProjection::TwoD, LayerProjection::TwoPointFiveD, LayerProjection::ThreeD].into_iter().map(|projection| {
+                        let chosen = session.targets(Some(layer));
+                        let current = {
+                            let document = doc.lock().unwrap();
+                            !chosen.is_empty() && chosen.iter().all(|target| document.view().attrs(*target).ok().flatten().unwrap_or_default().projection == projection)
+                        };
+                        let session = session.clone();
+                        rsx!(SemanticButton {
+                            class: "chip", selected: current, aria_label: projection.label(),
+                            onclick: move |_| {
+                                let result = session.apply_each(Some(layer), |_, target| Ok(vec![Intent::SetAttrs { layer: target, patch: LayerAttrsPatch { projection: Some(projection), ..Default::default() } }]));
+                                crate::ui::session::noted(result.map(|_| ()), revision);
+                            },
+                            "{projection.label()}"
+                        })
+                    }) }
+                }
                 h3 { class: "sec", "Blend" }
                 // 値は文字で選ばない。行を光らせ、机がサムネイルの格子を出す。
                 SemanticButton {
@@ -1437,17 +1577,46 @@ mod tests {
                 .find(|l| view.text_document(*l).ok().flatten().is_some())
                 .expect("a text layer")
         };
-        let fps = doc.lock().unwrap().view().composition().unwrap().unwrap().fps;
+        let fps = doc
+            .lock()
+            .unwrap()
+            .view()
+            .composition()
+            .unwrap()
+            .unwrap()
+            .fps;
         let at = |f: i64| RationalTime::try_from_frame(f, fps).unwrap();
-        let count = |doc: &Arc<Mutex<Document>>| doc.lock().unwrap().view().text_document(layer).unwrap().unwrap().content.keys().len();
+        let count = |doc: &Arc<Mutex<Document>>| {
+            doc.lock()
+                .unwrap()
+                .view()
+                .text_document(layer)
+                .unwrap()
+                .unwrap()
+                .content
+                .keys()
+                .len()
+        };
         let before = count(&doc);
         toggle_content_key(&doc, layer, at(48), "second line".into()).unwrap();
         assert_eq!(count(&doc), before + 1);
         toggle_content_key(&doc, layer, at(48), String::new()).unwrap();
         assert_eq!(count(&doc), before);
         if before == 1 {
-            let only = doc.lock().unwrap().view().text_document(layer).unwrap().unwrap().content.keys()[0].t;
-            assert!(toggle_content_key(&doc, layer, only, String::new()).is_err(), "the last content key must refuse, aloud");
+            let only = doc
+                .lock()
+                .unwrap()
+                .view()
+                .text_document(layer)
+                .unwrap()
+                .unwrap()
+                .content
+                .keys()[0]
+                .t;
+            assert!(
+                toggle_content_key(&doc, layer, only, String::new()).is_err(),
+                "the last content key must refuse, aloud"
+            );
             assert_eq!(count(&doc), 1, "the last content key must survive");
         }
     }
@@ -1467,7 +1636,10 @@ mod tests {
             },
             Intent::SetAttrs {
                 layer,
-                patch: LayerAttrsPatch { name: Some(name.to_owned()), ..Default::default() },
+                patch: LayerAttrsPatch {
+                    name: Some(name.to_owned()),
+                    ..Default::default()
+                },
             },
         ])
         .unwrap();
@@ -1495,25 +1667,37 @@ mod tests {
         let image = add_layer(
             &mut doc,
             3,
-            LayerSource::File { path: "image.png".into(), fingerprint: None },
+            LayerSource::File {
+                path: "image.png".into(),
+                fingerprint: None,
+            },
             "Image",
         );
         let video = add_layer(
             &mut doc,
             4,
-            LayerSource::File { path: "movie.mp4".into(), fingerprint: None },
+            LayerSource::File {
+                path: "movie.mp4".into(),
+                fingerprint: None,
+            },
             "Video",
         );
         let mesh = add_layer(
             &mut doc,
             5,
-            LayerSource::File { path: "mesh.obj".into(), fingerprint: None },
+            LayerSource::File {
+                path: "mesh.obj".into(),
+                fingerprint: None,
+            },
             "Mesh",
         );
         let points = add_layer(
             &mut doc,
             6,
-            LayerSource::File { path: "cloud.ply".into(), fingerprint: None },
+            LayerSource::File {
+                path: "cloud.ply".into(),
+                fingerprint: None,
+            },
             "Points",
         );
         let group = add_layer(&mut doc, 7, LayerSource::Group, "Group");
@@ -1522,7 +1706,10 @@ mod tests {
         doc.apply(Intent::SetAttrs {
             layer: cycle,
             patch: LayerAttrsPatch {
-                matte: Some(Some(Matte { layer: target, mode: MatteMode::Alpha })),
+                matte: Some(Some(Matte {
+                    layer: target,
+                    mode: MatteMode::Alpha,
+                })),
                 ..Default::default()
             },
         })
@@ -1536,7 +1723,10 @@ mod tests {
         assert!(ids.contains(&image));
         assert!(ids.contains(&video));
         for rejected in [target, mesh, points, group, null, cycle] {
-            assert!(!ids.contains(&rejected), "unexpected matte source: {rejected:?}");
+            assert!(
+                !ids.contains(&rejected),
+                "unexpected matte source: {rejected:?}"
+            );
         }
     }
 
@@ -1555,17 +1745,59 @@ mod tests {
 
             set_matte_source(&doc, target, Some(source)).unwrap();
             set_matte_mode(&doc, target, mode).unwrap();
-            assert_eq!(doc.lock().unwrap().view().attrs(target).unwrap().unwrap().matte,
-                Some(Matte { layer: source, mode }));
+            assert_eq!(
+                doc.lock()
+                    .unwrap()
+                    .view()
+                    .attrs(target)
+                    .unwrap()
+                    .unwrap()
+                    .matte,
+                Some(Matte {
+                    layer: source,
+                    mode
+                })
+            );
             assert!(doc.lock().unwrap().undo());
-            assert_eq!(doc.lock().unwrap().view().attrs(target).unwrap().unwrap().matte,
-                Some(Matte { layer: source, mode: MatteMode::Alpha }));
+            assert_eq!(
+                doc.lock()
+                    .unwrap()
+                    .view()
+                    .attrs(target)
+                    .unwrap()
+                    .unwrap()
+                    .matte,
+                Some(Matte {
+                    layer: source,
+                    mode: MatteMode::Alpha
+                })
+            );
 
             set_matte_source(&doc, target, None).unwrap();
-            assert_eq!(doc.lock().unwrap().view().attrs(target).unwrap().unwrap().matte, None);
+            assert_eq!(
+                doc.lock()
+                    .unwrap()
+                    .view()
+                    .attrs(target)
+                    .unwrap()
+                    .unwrap()
+                    .matte,
+                None
+            );
             assert!(doc.lock().unwrap().undo());
-            assert_eq!(doc.lock().unwrap().view().attrs(target).unwrap().unwrap().matte,
-                Some(Matte { layer: source, mode: MatteMode::Alpha }));
+            assert_eq!(
+                doc.lock()
+                    .unwrap()
+                    .view()
+                    .attrs(target)
+                    .unwrap()
+                    .unwrap()
+                    .matte,
+                Some(Matte {
+                    layer: source,
+                    mode: MatteMode::Alpha
+                })
+            );
         }
     }
 }

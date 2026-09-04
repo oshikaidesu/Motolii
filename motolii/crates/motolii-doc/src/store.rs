@@ -13,7 +13,7 @@ mod text;
 mod view;
 
 pub use asset::{Asset, AssetDraft, AssetError, AssetId, AssetRole, AssetStatus, AssetTable};
-pub use attrs::{BlendMode, LayerAttrs, LayerAttrsPatch, Matte, MatteMode, LABEL_PALETTE_LEN};
+pub use attrs::{BlendMode, LayerAttrs, LayerAttrsPatch, LayerProjection, Matte, MatteMode, LABEL_PALETTE_LEN};
 pub use document::{DisplayRevision, Document, Intent, LayerId, PropertyId, Revision};
 pub use effect::{EffectId, EffectInstance, ResolvedEffect};
 pub use fingerprint::{SourceFingerprintDecode, SourceFingerprintError, SourceFingerprintV1};
@@ -392,7 +392,23 @@ pub struct ResolvedLayer {
     pub effects: Vec<ResolvedEffect>,
     pub blend_mode: BlendMode,
     pub matte: Option<Matte>,
-    pub pinned: bool,
+    pub projection: LayerProjection,
     /// 3D の素材を平面へ収めるか。既定は収めない(裁定 2026-08-30)。
     pub flatten: bool,
+}
+
+/// 白紙。**枠だけは要る** —— 枠が無いと何も描けず、窓が空を出す。
+/// 大きさは既定の 1920x1080 30fps 60秒。
+pub fn blank_project() -> Document {
+    use crate::doc::store::{Composition, Document, Fps, Intent};
+    let mut doc = Document::new();
+    let comp = Composition {
+        width: 1920,
+        height: 1080,
+        fps: Fps::try_new(30, 1).expect("30fps"),
+        duration_frames: 1800,
+        background: [0.0, 0.0, 0.0, 1.0],
+    };
+    let _ = doc.apply(Intent::SetComposition(comp));
+    doc
 }

@@ -5,26 +5,32 @@ mod autosave;
 mod blend_preview;
 mod browser;
 mod color;
+mod commands;
 mod composition;
+mod context_menu;
+mod contracts;
 mod desk;
 mod dock;
 mod dock_hit;
 mod ease;
-mod export_sheet;
 mod ease_model;
 mod ease_widget;
+mod export_sheet;
 mod fixture;
+mod functions;
 #[cfg(test)]
 mod gui;
 pub mod host;
 mod inspector;
 mod keymap;
 pub(crate) mod keys;
+mod mount;
 mod output;
 mod panels;
 mod playback;
 mod poke;
 mod project;
+mod property_edit;
 mod semantic_menu;
 mod session;
 mod settings;
@@ -37,18 +43,4 @@ pub(crate) mod tokens;
 mod utility;
 mod window_frame;
 
-/// 白紙。**枠だけは要る** —— 枠が無いと何も描けず、窓が空を出す。
-/// 大きさは既定の 1920x1080 30fps 60秒。
-pub fn blank_project() -> crate::doc::store::Document {
-    use crate::doc::store::{Composition, Document, Fps, Intent};
-    let mut doc = Document::new();
-    let comp = Composition {
-        width: 1920,
-        height: 1080,
-        fps: Fps::try_new(30, 1).expect("30fps"),
-        duration_frames: 1800,
-        background: [0.0, 0.0, 0.0, 1.0],
-    };
-    let _ = doc.apply(Intent::SetComposition(comp));
-    doc
-}
+pub use crate::doc::store::blank_project;

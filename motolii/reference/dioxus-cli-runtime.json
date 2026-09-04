@@ -1,0 +1,22 @@
+{
+  "binary": "motolii-dx-0.7.10-guarded",
+  "version": "0.7.10",
+  "upstream_commit": "57d6794ad60b949e5bd8aa282f6f8c3dc97a365e",
+  "sha256": "4a852874e7e3fb114d6af7ba8468d7d630a9cc5e049031377c3ded08861afcb4",
+  "patch": "motolii/reference/dioxus-cli-0.7.10-reload.patch",
+  "patch_sha256": "db393aabcc5327e7d6055bd5be88321ae6c1658bcb641781abc480a4fc8328c8",
+  "original_binary": "motolii-dx-0.7.10-fixed",
+  "original_sha256": "25acf557e325b79acc4f1e4e02105cba08094c7476db3b90e1328df35591746a",
+  "source_directory": "/tmp/motolii-dx-guard-source/dioxus-cli-0.7.10",
+  "build_target": "/tmp/motolii-dx-guard-target",
+  "gate": "one-use cause-specific baseline permit before state mutation",
+  "validation": "Native driver regressions and final live mixed CSS/Rust/workspace route passed in app43349; continuity recorded in reload-product-receipt.jsonl",
+  "source_sha256": "57bbcea3266cbcbb28c27416cb3e61c1e827758c951dd0c9de0af232b1b1505b",
+  "lock_sha256": "44aa73b276d8533c9aae58c76bf3da098fd416f67a85bbc0873470f12bf8b8dd",
+  "build_receipt": "motolii/reference/reload-driver-receipt.jsonl",
+  "timing": "slow-run telemetry only; no Thin/Fat timeout abortion",
+  "runtime_data": "app-PID/session-verified live watcher registration skips redundant WGSL/ISF Thin compilation",
+  "tls": "Mach-O __thread_bss initializers extracted as zeros; unknown TLS initializer refuses patch instead of copying unrelated initialized image",
+  "mixed_assets": "all files asset-copied before Rust scan; CSS notification sent before Thin and retained across compile failure",
+  "rlib_resolution": "exact compiler output with absent/empty extra-filename resolves lib<crate>.rlib before hashed fallback"
+}

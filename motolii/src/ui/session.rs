@@ -102,6 +102,14 @@ mod gesture_tests {
     }
 }
 
+pub(super) fn edit_rejection(
+    view: &crate::doc::store::StoreView<'_>,
+    layer: LayerId,
+) -> Option<&'static str> {
+    crate::ui::functions::lens::edit_rejection(view, layer)
+        .unwrap_or(Some("layer could not be read"))
+}
+
 #[derive(Clone, Default)]
 pub(super) struct Selection(Arc<Mutex<Vec<LayerId>>>);
 
@@ -124,6 +132,24 @@ impl Selection {
 
     pub(super) fn all(&self) -> Vec<LayerId> {
         self.0.lock().unwrap().clone()
+    }
+
+    pub(super) fn targets(&self, clicked: Option<LayerId>) -> Vec<LayerId> {
+        let selected = self.all();
+        match clicked {
+            Some(layer) if !selected.contains(&layer) => vec![layer],
+            _ => selected,
+        }
+    }
+
+    pub(super) fn replace(&self, layers: impl IntoIterator<Item = LayerId>) {
+        let mut selected = self.0.lock().unwrap();
+        selected.clear();
+        for layer in layers {
+            if !selected.contains(&layer) {
+                selected.push(layer);
+            }
+        }
     }
 
     pub(super) fn contains(&self, layer: LayerId) -> bool {
@@ -212,15 +238,7 @@ pub(super) enum DeskState {
 
 /// 焦点の型。机の引き出しは型に一つで、機能名では増やさない。
 /// 視点の注文。
-#[derive(Clone, Copy, PartialEq, Debug)]
-pub(super) enum ViewRequest {
-    /// 窓に収める(⌘0)。
-    Fit,
-    /// 画素等倍(⌘1)。
-    Actual,
-    /// 段階で寄る / 引く(⌘= / ⌘−)。
-    Step(f64),
-}
+pub(super) use crate::ui::contracts::ViewRequest;
 
 #[derive(Clone, PartialEq, Debug)]
 pub(super) enum Focus {
@@ -261,7 +279,10 @@ impl ColorSlot {
     }
 
     pub(super) fn is_shape_fill(&self) -> bool {
-        matches!(self, Self::ShapeFill { .. } | Self::ShapeGradientStop { .. })
+        matches!(
+            self,
+            Self::ShapeFill { .. } | Self::ShapeGradientStop { .. }
+        )
     }
 }
 
@@ -271,6 +292,14 @@ impl ColorSlot {
 pub(super) struct OpenField {
     pub at: FieldAt,
     pub draft: String,
+    pub number_basis: Option<NumberBasis>,
+}
+
+#[derive(Clone, PartialEq, Debug)]
+pub(super) struct NumberBasis {
+    pub revision: Revision,
+    pub at: crate::doc::store::RationalTime,
+    pub targets: Vec<LayerId>,
 }
 
 /// 欄が指す物。値の型ではなく置き場で見分ける。
@@ -388,20 +417,107 @@ impl Session {
 
     /// 錠の掛かっていない層だけが書ける。**書く経路は全部ここを通す**(擦り・鍵・色・差し替え・掴み)。
     pub(super) fn writable(&self, layer: LayerId) -> bool {
-        self.doc
-            .lock()
-            .unwrap()
-            .view()
-            .attrs(layer)
-            .ok()
-            .flatten()
-            .is_none_or(|a| !a.locked)
+        edit_rejection(&self.doc.lock().unwrap().view(), layer).is_none()
+    }
+
+    pub(super) fn targets(&self, clicked: Option<LayerId>) -> Vec<LayerId> {
+        self.selection.targets(clicked)
+    }
+
+    pub(super) fn editable_targets(&self, clicked: Option<LayerId>) -> Vec<LayerId> {
+        let doc = self.doc.lock().unwrap();
+        let view = doc.view();
+        let mut skipped = Vec::new();
+        let targets = self
+            .targets(clicked)
+            .into_iter()
+            .filter(|layer| {
+                if let Some(reason) = edit_rejection(&view, *layer) {
+                    skipped.push(format!("{}: {reason}", layer.0));
+                    false
+                } else {
+                    true
+                }
+            })
+            .collect();
+        if !skipped.is_empty() {
+            *self.project_notice.lock().unwrap() = format!("Skipped {}", skipped.join(", "));
+        }
+        targets
+    }
+
+    pub(super) fn property_targets(
+        &self,
+        clicked: Option<LayerId>,
+        property: &crate::doc::store::PropertyId,
+    ) -> Result<Vec<LayerId>, crate::doc::store::StoreError> {
+        let targets = self.editable_targets(clicked);
+        let doc = self.doc.lock().unwrap();
+        let view = doc.view().without_transients();
+        let mut accepted = Vec::new();
+        let mut rejected = Vec::new();
+        for layer in targets {
+            match view.property_write_rejection(layer, property)? {
+                Some(reason) => rejected.push(format!("{}: {reason}", layer.0)),
+                None => accepted.push(layer),
+            }
+        }
+        if !rejected.is_empty() {
+            *self.project_notice.lock().unwrap() = format!("Skipped {}", rejected.join(", "));
+        }
+        Ok(accepted)
+    }
+
+    pub(super) fn apply_each(
+        &self,
+        clicked: Option<LayerId>,
+        mut verb: impl FnMut(
+            &Document,
+            LayerId,
+        )
+            -> Result<Vec<crate::doc::store::Intent>, crate::doc::store::StoreError>,
+    ) -> Result<usize, crate::doc::store::StoreError> {
+        self.apply_blocks(clicked, |doc, layer| {
+            verb(doc, layer).map(crate::ui::functions::compose::Block::Edits)
+        })
+    }
+
+    pub(super) fn apply_blocks(
+        &self,
+        clicked: Option<LayerId>,
+        verb: impl FnMut(
+            &Document,
+            LayerId,
+        )
+            -> Result<crate::ui::functions::compose::Block, crate::doc::store::StoreError>,
+    ) -> Result<usize, crate::doc::store::StoreError> {
+        let targets = self.editable_targets(clicked);
+        let mut doc = self.doc.lock().unwrap();
+        let (intents, count, rejected) =
+            crate::ui::functions::compose::independent_blocks(&doc, &targets, verb)?;
+        doc.apply_all(intents)?;
+        if !rejected.is_empty() {
+            *self.project_notice.lock().unwrap() = format!(
+                "Skipped {}",
+                rejected
+                    .into_iter()
+                    .map(|(layer, reason)| format!("{}: {reason}", layer.0))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+        }
+        Ok(count)
     }
 
     /// Undo / Redo の後。消えた層を名指す窓側の手を全部手放す(層の id は嘘になっている)。
     pub(super) fn forget_dead_layers(&self) {
         let live = self.doc.lock().unwrap().view().layers();
-        let dead: Vec<LayerId> = self.selection.all().into_iter().filter(|l| !live.contains(l)).collect();
+        let dead: Vec<LayerId> = self
+            .selection
+            .all()
+            .into_iter()
+            .filter(|l| !live.contains(l))
+            .collect();
         for l in &dead {
             self.selection.toggle(*l);
         }
@@ -416,7 +532,9 @@ impl Session {
             *self.focus.lock().unwrap() = None;
         }
         let field_dead = self.field().is_some_and(|f| match f.at {
-            FieldAt::Number { layer, .. } | FieldAt::Content(layer) | FieldAt::Name(layer) => !live.contains(&layer),
+            FieldAt::Number { layer, .. } | FieldAt::Content(layer) | FieldAt::Name(layer) => {
+                !live.contains(&layer)
+            }
             FieldAt::Hex(ref slot) => !live.contains(&slot.layer()),
             FieldAt::Note(_) => false,
         });
@@ -424,23 +542,43 @@ impl Session {
             self.close_field();
         }
         *self.scrub.lock().unwrap() = None;
-        self.selected_keys.lock().unwrap().retain(|k| live.contains(&k.layer));
+        self.selected_keys
+            .lock()
+            .unwrap()
+            .retain(|k| live.contains(&k.layer));
     }
 
     /// 錠の掛かっていない選択。書く経路はこちらを見る(錠は Timeline が掛ける)。
     pub(super) fn editable_selection(&self) -> Vec<LayerId> {
-        let doc = self.doc.lock().unwrap();
-        let view = doc.view();
-        self.selection
-            .all()
-            .into_iter()
-            .filter(|l| !view.attrs(*l).ok().flatten().is_some_and(|a| a.locked))
-            .collect()
+        self.editable_targets(None)
     }
 
     pub(super) fn open_field(&self, at: FieldAt, draft: String) {
         crate::ui::keymap::set_typing(true);
-        *self.field.lock().unwrap() = Some(OpenField { at, draft });
+        let number_basis = match &at {
+            FieldAt::Number {
+                layer, property, ..
+            } => {
+                let targets = crate::doc::store::PropertyId::new(property)
+                    .and_then(|property| self.property_targets(Some(*layer), &property))
+                    .unwrap_or_else(|error| {
+                        *self.project_notice.lock().unwrap() = error.to_string();
+                        Vec::new()
+                    });
+                let revision = self.doc.lock().unwrap().revision();
+                Some(NumberBasis {
+                    revision,
+                    at: self.clock.current_time(),
+                    targets,
+                })
+            }
+            _ => None,
+        };
+        *self.field.lock().unwrap() = Some(OpenField {
+            at,
+            draft,
+            number_basis,
+        });
     }
 
     pub(super) fn field(&self) -> Option<OpenField> {
@@ -449,9 +587,7 @@ impl Session {
 
     /// この置き場の欄が開いていれば、その下書き。
     pub(super) fn field_at(&self, at: &FieldAt) -> Option<String> {
-        self.field()
-            .filter(|f| f.at == *at)
-            .map(|f| f.draft)
+        self.field().filter(|f| f.at == *at).map(|f| f.draft)
     }
 
     pub(super) fn edit_field(&self, draft: String) {
@@ -495,7 +631,12 @@ mod project_tests {
         let loaded = crate::ui::fixture::load_fixture();
         let session = Session::new(loaded.doc, loaded.duration_sec, loaded.ui);
         let layer = LayerId(session.doc.lock().unwrap().view().next_layer_id());
-        session.doc.lock().unwrap().apply(crate::doc::store::Intent::AddLayer(layer)).unwrap();
+        session
+            .doc
+            .lock()
+            .unwrap()
+            .apply(crate::doc::store::Intent::AddLayer(layer))
+            .unwrap();
         session.selection.set(Some(layer));
         *session.focus.lock().unwrap() = Some(Focus::Blend(layer));
         session.open_field(FieldAt::Name(layer), "x".into());
@@ -541,7 +682,10 @@ mod project_tests {
 
 /// 書き込みの結果を 1 箇所で扱う: 通れば revision を上げ、通らなければ PROBE に残す。
 /// 同じ 4 行が 20 箇所に在った(Rust 初学者の会議)。
-pub(super) fn noted<T>(result: Result<T, crate::doc::store::StoreError>, mut revision: dioxus_native::prelude::Signal<u32>) {
+pub(super) fn noted<T>(
+    result: Result<T, crate::doc::store::StoreError>,
+    mut revision: dioxus_native::prelude::Signal<u32>,
+) {
     use dioxus_native::prelude::WritableExt;
     match result {
         Ok(_) => *revision.write() += 1,

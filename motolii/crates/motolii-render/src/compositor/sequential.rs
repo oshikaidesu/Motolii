@@ -39,7 +39,6 @@ impl Compositor {
             "accumulate_sequential: inputs は depth_offset 非減少(=重ね順)で渡すこと"
         );
         let projection = crate::doc::core::camera_projection(comp, camera);
-        let pinned_cancel = crate::doc::core::camera_screen_from_world_z0(comp, camera).inverse();
         let view_from_world = macaw::IsoTransform::from_rotation_translation(
             projection.rotation,
             -(projection.rotation * projection.eye),
@@ -64,12 +63,9 @@ impl Compositor {
                     && vello_blend_mode(i.blend_mode).is_some()
             };
             if let Some(mode_index) = vello_blend_mode(input.blend_mode).filter(|_| bakeable(input)) {
-                let (transform, z, rx, ry) = if input.pinned {
-                    (pinned_cancel * input.transform, 0.0, 0.0, 0.0)
-                } else {
-                    (input.transform, input.z, input.rotation_x, input.rotation_y)
-                };
-                let (corner, extent_u, extent_v) = crate::render::compositor::tilted_corners(
+                let (transform, z, rx, ry) = (input.transform, input.z, input.rotation_x, input.rotation_y);
+                let (corner, extent_u, extent_v) = crate::render::compositor::projected_corners(
+                    comp, input.projection_camera, input.projection,
                     transform,
                     input.local_min,
                     input.local_size,
@@ -207,13 +203,9 @@ impl Compositor {
                     comp,
                     camera,
                     run.iter().map(|i| {
-                        let (transform, z) = if i.pinned {
-                            (pinned_cancel * i.transform, 0.0)
-                        } else {
-                            (i.transform, i.z)
-                        };
-                        let c = transform.transform_point2(i.local_min + i.local_size * 0.5);
-                        glam::vec3(c.x, c.y, z)
+                        let c = i.transform.transform_point2(i.local_min + i.local_size * 0.5);
+                        let c = glam::vec3(c.x, c.y, i.z);
+                        crate::doc::core::layer_projection_transform(comp, i.projection_camera, i.projection, c).transform_point3(c)
                     }),
                 );
                 rects.push(background_rect(
@@ -228,11 +220,7 @@ impl Compositor {
             let mut clouds: Vec<re_renderer::renderer::PointCloudDrawData> = Vec::new();
             let mut meshes: Vec<re_renderer::renderer::MeshDrawData> = Vec::new();
             for input in run {
-                let (transform, z, rx, ry) = if input.pinned {
-                    (pinned_cancel * input.transform, 0.0, 0.0, 0.0)
-                } else {
-                    (input.transform, input.z, input.rotation_x, input.rotation_y)
-                };
+                let (transform, z, rx, ry) = (input.transform, input.z, input.rotation_x, input.rotation_y);
                 if let crate::render::compositor::SequentialContent::Cloud {
                     positions,
                     colors,
@@ -250,6 +238,7 @@ impl Compositor {
                         rx,
                         ry,
                         input.opacity,
+                        comp, input.projection_camera, input.projection,
                     )?);
                     continue;
                 }
@@ -262,11 +251,13 @@ impl Compositor {
                             rx,
                             ry,
                             input.opacity,
+                            comp, input.projection_camera, input.projection,
                         )?,
                     );
                     continue;
                 }
-                let (corner, extent_u, extent_v) = crate::render::compositor::tilted_corners(
+                let (corner, extent_u, extent_v) = crate::render::compositor::projected_corners(
+                    comp, input.projection_camera, input.projection,
                     transform,
                     input.local_min,
                     input.local_size,
@@ -394,7 +385,6 @@ impl Compositor {
         background_color: [f32; 4],
     ) -> Result<Vec<u8>, CompositorError> {
         let projection = crate::doc::core::camera_projection(comp, camera);
-        let _pinned_cancel = crate::doc::core::camera_screen_from_world_z0(comp, camera).inverse();
         let view_from_world = macaw::IsoTransform::from_rotation_translation(
             projection.rotation,
             -(projection.rotation * projection.eye),
@@ -469,7 +459,6 @@ impl Compositor {
         background_color: [f32; 4],
     ) -> Result<(), CompositorError> {
         let projection = crate::doc::core::camera_projection(comp, camera);
-        let _pinned_cancel = crate::doc::core::camera_screen_from_world_z0(comp, camera).inverse();
         let view_from_world = macaw::IsoTransform::from_rotation_translation(
             projection.rotation,
             -(projection.rotation * projection.eye),
@@ -632,7 +621,8 @@ impl Compositor {
                 z: layer.placement.z,
                 rotation_x: layer.placement.rotation_x,
                 rotation_y: layer.placement.rotation_y,
-                pinned: layer.pinned,
+                projection: layer.projection,
+                projection_camera: layer.projection_camera,
                 opacity: layer.placement.opacity,
                 depth_offset: layer.placement.order,
                 blend_mode: layer.blend_mode,
@@ -648,27 +638,18 @@ impl Compositor {
         comp: CompSpec,
         projection: crate::doc::core::CameraProjection,
         view_from_world: macaw::IsoTransform,
-        pinned_cancel: glam::Affine2,
+        camera: ResolvedCamera,
         layer: &Layer,
         label: &'static str,
     ) -> Result<GpuTexture, CompositorError> {
-        let (transform, z) = if layer.pinned {
-            (pinned_cancel * layer.placement.transform, 0.0)
-        } else {
-            (layer.placement.transform, layer.placement.z)
-        };
-
-        let tilt =
-            crate::render::compositor::tilt(layer.placement.rotation_x, layer.placement.rotation_y);
-        let u = tilt * to_vector3(transform.transform_vector2(glam::Vec2::new(layer.size[0], 0.0)));
-        let v = tilt * to_vector3(transform.transform_vector2(glam::Vec2::new(0.0, layer.size[1])));
-        let center = to_point3(
-            transform.transform_point2(glam::Vec2::new(layer.size[0], layer.size[1]) * 0.5),
-            z,
+        let (corner, u, v) = projected_corners(
+            comp, layer.projection_camera, layer.projection, layer.placement.transform,
+            glam::Vec2::ZERO, glam::Vec2::from(layer.size), layer.placement.z,
+            layer.placement.rotation_x, layer.placement.rotation_y,
         );
 
         let rect = TexturedRect {
-            top_left_corner_position: center - (u + v) * 0.5,
+            top_left_corner_position: corner,
             extent_u: u,
             extent_v: v,
             colormapped_texture: crate::render::compositor::premultiplied_texture(
@@ -723,7 +704,6 @@ impl Compositor {
         mode: MatteMode,
     ) -> Result<Layer, CompositorError> {
         let projection = crate::doc::core::camera_projection(comp, camera);
-        let pinned_cancel = crate::doc::core::camera_screen_from_world_z0(comp, camera).inverse();
         let view_from_world = macaw::IsoTransform::from_rotation_translation(
             projection.rotation,
             -(projection.rotation * projection.eye),
@@ -733,7 +713,7 @@ impl Compositor {
             comp,
             projection,
             view_from_world,
-            pinned_cancel,
+            camera,
             layer,
             "motolii-comp-matte-layer",
         )?;
@@ -741,7 +721,7 @@ impl Compositor {
             comp,
             projection,
             view_from_world,
-            pinned_cancel,
+            camera,
             matte_source,
             "motolii-comp-matte-source",
         )?;
@@ -793,7 +773,8 @@ impl Compositor {
                 rotation_x: 0.0,
                 rotation_y: 0.0,
             },
-            pinned: true,
+            projection: crate::doc::store::LayerProjection::TwoD,
+            projection_camera: camera,
             blend_mode: layer.blend_mode,
         })
     }

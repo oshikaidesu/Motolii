@@ -27,28 +27,20 @@ impl Compositor {
         let build_start = std::time::Instant::now();
 
         let projection = crate::doc::core::camera_projection(comp, camera);
-        let pinned_cancel = crate::doc::core::camera_screen_from_world_z0(comp, camera).inverse();
 
         let rects: Vec<TexturedRect> = layers
             .iter()
             .map(|layer| {
-                let (transform, z) = if layer.pinned {
-                    (pinned_cancel * layer.placement.transform, 0.0)
-                } else {
-                    (layer.placement.transform, layer.placement.z)
-                };
+                let (corner, u, v) = projected_corners(
+                    comp, layer.projection_camera, layer.projection, layer.placement.transform,
+                    glam::Vec2::ZERO, glam::Vec2::from(layer.size), layer.placement.z,
+                    layer.placement.rotation_x, layer.placement.rotation_y,
+                );
                 let a = fixed_function_tint_alpha(layer.blend_mode, layer.placement.opacity)?;
                 Ok(TexturedRect {
-                    top_left_corner_position: to_point3(
-                        transform.transform_point2(glam::Vec2::ZERO),
-                        z,
-                    ),
-                    extent_u: to_vector3(
-                        transform.transform_vector2(glam::Vec2::new(layer.size[0], 0.0)),
-                    ),
-                    extent_v: to_vector3(
-                        transform.transform_vector2(glam::Vec2::new(0.0, layer.size[1])),
-                    ),
+                    top_left_corner_position: corner,
+                    extent_u: u,
+                    extent_v: v,
                     colormapped_texture: crate::render::compositor::premultiplied_texture(
                         layer
                             .content

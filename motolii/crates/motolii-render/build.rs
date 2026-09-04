@@ -17,7 +17,7 @@ fn main() {
         })
         .collect();
     paths.sort();
-    let mut inventory = String::from("pub(crate) const VISM_SOURCES: &[VismSource] = &[\n");
+    let mut inventory = String::from("pub(crate) const VISM_SOURCES: &[EmbeddedVismSource] = &[\n");
     for path in paths {
         let name = path
             .file_stem()
@@ -32,7 +32,7 @@ fn main() {
             .and_then(|file| file.to_str())
             .expect("vism file");
         inventory.push_str(&format!(
-            "    VismSource {{ name: {name:?}, extension: {extension:?}, source: include_str!(concat!(env!(\"CARGO_MANIFEST_DIR\"), \"/vism/{file}\")) }},\n"
+            "    EmbeddedVismSource {{ name: {name:?}, extension: {extension:?}, source: include_str!(concat!(env!(\"CARGO_MANIFEST_DIR\"), \"/vism/{file}\")) }},\n"
         ));
     }
     inventory.push_str("];\n");

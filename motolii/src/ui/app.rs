@@ -1,22 +1,21 @@
-use dioxus_native::prelude::*;
 use dioxus_dnd::prelude::GestureEffect;
+use dioxus_native::prelude::*;
 use dioxus_workbench::{LayoutNode, SplitAxis, SplitId, TileId};
 
+use crate::ui::composition::CompositionSheet;
+use crate::ui::context_menu::{ContextMenu, MenuRequest};
 use crate::ui::dock::{splitter_delta, Dock, Panel, Side, TabDrag};
+use crate::ui::dock_hit::{dock_target_at, dock_zone, node_has_id};
+use crate::ui::export_sheet::ExportSheet;
+use crate::ui::fixture;
 use crate::ui::inspector::{ChoiceDismiss, ChoiceId};
 use crate::ui::keymap::Intent;
 use crate::ui::output::{OutputStatus, OutputSurface};
-use crate::ui::settings::SettingsSheet;
-use crate::ui::composition::CompositionSheet;
-use crate::ui::export_sheet::ExportSheet;
-use crate::ui::dock_hit::{dock_target_at, node_has_id, dock_zone};
 use crate::ui::panels::{BrowserPanel, InspectorPanel, StagePanel, TimelinePanel};
-use crate::ui::semantic_menu::{
-    MenuDismiss, MenuId, SemanticControl, SemanticMenu,
-};
+use crate::ui::semantic_menu::{MenuDismiss, MenuId, SemanticControl, SemanticMenu};
 use crate::ui::session::Session;
-use crate::ui::timeline_widget::{split_layer, TimelineMsg};
-use crate::ui::fixture;
+use crate::ui::settings::SettingsSheet;
+use crate::ui::timeline_widget::TimelineMsg;
 use crate::ui::tokens;
 
 /// 落とし先の当たり。**位置を計算しない** —— 5枚の当たりを重ねて置き、
@@ -50,9 +49,38 @@ pub(super) fn take_tab_release(
     Some((drag, effect))
 }
 
+#[track_caller]
+fn live_signal<T: 'static>(signal: Signal<T>) -> bool {
+    let result = match signal.try_peek() {
+        Ok(_) => true,
+        Err(BorrowError::Dropped(error)) => {
+            println!("PROBE room=callback verdict=stale-scope {error}");
+            false
+        }
+        Err(error) => panic!("Host callback signal borrow failed: {error}"),
+    };
+    result
+}
+
+#[track_caller]
+fn update_live_signal<T: 'static, R>(
+    mut signal: Signal<T>,
+    update: impl FnOnce(&mut T) -> R,
+) -> Option<R> {
+    let result = match signal.try_write() {
+        Ok(mut value) => Some(update(&mut value)),
+        Err(BorrowMutError::Dropped(error)) => {
+            println!("PROBE room=callback verdict=stale-scope {error}");
+            None
+        }
+        Err(error) => panic!("Host callback signal borrow failed: {error}"),
+    };
+    result
+}
+
 pub(super) fn finish_tab_release(
-    mut dock: Signal<Dock>,
-    mut tab_drag: Signal<Option<TabDrag>>,
+    dock: Signal<Dock>,
+    tab_drag: Signal<Option<TabDrag>>,
     tile_nodes: &TileNodes,
     host: &crate::ui::host::Host,
     x: f64,
@@ -60,15 +88,25 @@ pub(super) fn finish_tab_release(
     pointer_id: Option<i32>,
     outside: bool,
 ) {
-    let terminal = take_tab_release(&mut tab_drag.write(), x, y, pointer_id);
-    let Some((drag, effect)) = terminal else { return };
+    if !live_signal(dock) || !live_signal(tab_drag) {
+        return;
+    }
+    let terminal =
+        update_live_signal(tab_drag, |drag| take_tab_release(drag, x, y, pointer_id)).flatten();
+    let Some((drag, effect)) = terminal else {
+        return;
+    };
     match effect {
-        GestureEffect::Tap => dock.write().set_active(drag.panel),
+        GestureEffect::Tap => {
+            let _ = update_live_signal(dock, |dock| dock.set_active(drag.panel));
+        }
         GestureEffect::Drop { .. } => {
             // 置き場に落とせば移る。窓の外なら別窓へ出る。窓の中の余白(menubar 等)は何もしない。
             if let Some((target, side)) = dock_target_at(tile_nodes, x, y) {
-                dock.write().drop_onto(drag.panel, &target, side);
-            } else if outside && dock.write().detach(drag.panel) {
+                let _ = update_live_signal(dock, |dock| dock.drop_onto(drag.panel, &target, side));
+            } else if outside
+                && update_live_signal(dock, |dock| dock.detach(drag.panel)).unwrap_or(false)
+            {
                 host.open(drag.panel);
             }
         }
@@ -98,8 +136,9 @@ fn tab_release_has_one_terminal_action_and_cancel_has_none() {
 }
 
 /// 窓1枚ぶんの見えかたの状態。Document には入らない物だけ。
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 pub(super) struct Panes {
+    pub(super) context_menu: Signal<Option<MenuRequest>>,
     pub(super) layer_rows: Signal<Vec<fixture::LayerRow>>,
     pub(super) attrs_state: Signal<Vec<(bool, bool, bool)>>,
     pub(super) selected: Signal<Option<crate::doc::store::LayerId>>,
@@ -114,49 +153,91 @@ pub(super) struct Panes {
     pub(super) inspector_choice: Signal<Option<ChoiceId>>,
 }
 
-fn panes_for(ui: &fixture::UiData) -> Panes {
+fn panes_for(session: &Session) -> Panes {
+    let rows = fixture::layer_rows_from_doc(&session.doc.lock().unwrap());
     Panes {
-        scale_pct: use_signal(|| 100),
-        playhead: use_signal(|| 0.0),
+        context_menu: use_signal(|| None),
+        scale_pct: use_signal(|| session.scale.percent()),
+        playhead: use_signal(|| session.clock.now_sec()),
         inspector_choice: use_signal(|| None),
-        layer_rows: use_signal(|| ui.layer_rows.clone()),
+        layer_rows: use_signal(|| rows.clone()),
         attrs_state: use_signal(|| {
-            ui.layer_rows.iter().map(|r| (r.hidden, r.solo, r.locked)).collect::<Vec<_>>()
+            rows.iter()
+                .map(|r| (r.hidden, r.solo, r.locked))
+                .collect::<Vec<_>>()
         }),
-        selected: use_signal(|| None),
+        selected: use_signal(|| session.selection.get()),
         revision: use_signal(|| 0u32),
         scroll_y: use_signal(|| 0.0f64),
         echo: use_signal(|| 0u32),
     }
 }
 
+type EpochRegistration = std::rc::Rc<std::cell::Cell<(Option<u64>, Option<u64>)>>;
+
+fn use_epoch_registration(
+    host: &crate::ui::host::Host,
+    register: impl FnOnce() -> Option<u64>,
+    remove: fn(&crate::ui::host::Host, u64),
+) -> EpochRegistration {
+    let lease = use_hook(|| std::rc::Rc::new(std::cell::Cell::new((None, None))));
+    let epoch = host.patch_epoch();
+    if lease.get().0 != Some(epoch) {
+        if let Some(token) = lease.get().1 {
+            remove(host, token);
+        }
+        lease.set((Some(epoch), register()));
+    }
+    let retained = lease.clone();
+    let owner = host.clone();
+    use_drop(move || {
+        if let Some(token) = retained.take().1 {
+            remove(&owner, token);
+        }
+    });
+    lease
+}
+
 /// 窓をまたいだ描き直しを繋ぐ。自分が書いたら他の窓を起こし、他の窓に起こされたら
 /// 自分を描き直す。起こされた側は `echo` だけが動くので、起こし返しは起きない。
 fn wire_windows(host: &crate::ui::host::Host, panes: Panes) {
-    let me = use_hook(|| {
-        let runtime = dioxus_core::Runtime::current();
-        let scope = dioxus_core::current_scope_id();
-        let mut echo = panes.echo;
-        host.listen(move || {
-            runtime.in_scope(scope, move || {
-                // 面が作り直された後(hotpatch・再描画)に古い信号へ書くと落ちる。捨てる。
-                if let Ok(mut echo) = echo.try_write() {
-                    *echo += 1;
+    let registration = use_epoch_registration(
+        host,
+        || {
+            let runtime = dioxus_core::Runtime::current();
+            let scope = dioxus_core::current_scope_id();
+            let echo = panes.echo;
+            Some(host.listen(move || {
+                if !live_signal(echo) {
+                    return;
                 }
-            });
-        })
-    });
+                runtime.in_scope(scope, move || {
+                    let _ = update_live_signal(echo, |echo| *echo += 1);
+                });
+            }))
+        },
+        crate::ui::host::Host::unlisten,
+    );
     let host = host.clone();
     use_effect(move || {
         // 書き込みの合図。選択は revision を上げない経路なので別に見る。
         let _ = (panes.revision)();
         let _ = (panes.selected)();
-        host.wake_others(me);
+        if let Some(token) = registration.get().1 {
+            host.wake_others(token);
+        }
     });
 }
 
 /// パネル1枚の中身。窓が変わっても同じ物を出す。
-pub(super) fn panel_body(panel: Panel, session: &Session, _ui: &fixture::UiData, p: Panes) -> Element {
+pub(super) fn panel_body(
+    panel: Panel,
+    session: &Session,
+    _ui: &fixture::UiData,
+    p: Panes,
+) -> Element {
+    let _ = (p.selected)();
+    let _ = (p.echo)();
     let selected = session.selection.get();
     match panel {
         Panel::Media | Panel::Effects | Panel::Create | Panel::Colors => rsx!(BrowserPanel {
@@ -173,6 +254,7 @@ pub(super) fn panel_body(panel: Panel, session: &Session, _ui: &fixture::UiData,
             selected: p.selected,
             revision: p.revision,
             comp_line: fixture::comp_line(&session.doc.lock().unwrap().view()),
+            menu: p.context_menu,
         }),
         Panel::Inspector => rsx!(InspectorPanel {
             session: session.clone(),
@@ -191,7 +273,14 @@ pub(super) fn panel_body(panel: Panel, session: &Session, _ui: &fixture::UiData,
                 let session = session.clone();
                 let timeline_tx = session.timeline_tx.clone();
                 move |steps: i32| {
-                    history_step(&session, p.layer_rows, p.attrs_state, &timeline_tx, p.revision, steps);
+                    history_step(
+                        &session,
+                        p.layer_rows,
+                        p.attrs_state,
+                        &timeline_tx,
+                        p.revision,
+                        steps,
+                    );
                 }
             },
         }),
@@ -204,6 +293,7 @@ pub(super) fn panel_body(panel: Panel, session: &Session, _ui: &fixture::UiData,
             scroll_y: p.scroll_y,
             playhead: p.playhead,
             revision: p.revision,
+            menu: p.context_menu,
         }),
     }
 }
@@ -245,26 +335,55 @@ fn file_drop_overlay(session: &Session) -> Element {
 
 /// 別窓。パネル1枚だけを出す。状態は窓をまたいで1つ(Session)。
 pub fn detached() -> Element {
+    if let Some(runtime) = try_consume_context::<crate::render::engine::CatalogRuntime>() {
+        crate::render::engine::bind_catalog_runtime(&runtime);
+    }
     let session = use_hook(|| consume_context::<Session>());
     let ui = session.ui.clone();
     let panel = use_hook(|| consume_context::<Panel>());
     let host = use_hook(|| consume_context::<crate::ui::host::Host>());
-    let panes = panes_for(&ui);
+    let panes = panes_for(&session);
     wire_windows(&host, panes);
     let window = dioxus_core::try_consume_context::<
         std::sync::Arc<dyn dioxus_native::winit::window::Window>,
     >();
     // 別窓で数値を擦って窓の外で放しても、そこで確定する(主窓と同じ線)。
-    use_hook(|| {
-        let Some(window) = window.as_ref() else { return };
-        let scrub_session = session.clone();
-        let waker = host.clone();
-        host.on_primary_pointer_release(window.id(), move |_, _, _| {
-            if crate::ui::inspector::end_scrub(&scrub_session) {
-                waker.wake_all();
-            }
-        });
-    });
+    use_epoch_registration(
+        &host,
+        || {
+            let window = window.as_ref()?;
+            let scrub_session = session.clone();
+            let waker = host.clone();
+            Some(
+                host.on_primary_pointer_release(window.id(), move |_, _, _| {
+                    if !live_signal(panes.echo) {
+                        return;
+                    }
+                    if crate::ui::inspector::end_scrub(&scrub_session) {
+                        waker.wake_all();
+                    }
+                }),
+            )
+        },
+        crate::ui::host::Host::remove_callback,
+    );
+    use_epoch_registration(
+        &host,
+        || {
+            let menu = panes.context_menu;
+            Some(
+                host.on_focus_lost(
+                    window
+                        .as_ref()
+                        .map_or(crate::ui::host::Host::HEADLESS, |w| w.id()),
+                    move || {
+                        let _ = update_live_signal(menu, |open| *open = None);
+                    },
+                ),
+            )
+        },
+        crate::ui::host::Host::remove_callback,
+    );
     let reduced_motion = window.is_some() && tokens::system_prefers_reduced_motion();
     // 別窓も同じ倍率(150% で左の名前列と右の帯がずれない)。
     let css = tokens::css_root(session.scale.percent(), reduced_motion);
@@ -272,13 +391,38 @@ pub fn detached() -> Element {
         style { {css} }
         {tokens::stylesheet()}
         ChoiceDismiss { open: panes.inspector_choice }
-        div { id: "detached", {panel_body(panel, &session, &ui, panes)} }
+        div {
+            id: "detached",
+            tabindex: "0",
+            onkeyup: move |evt: KeyboardEvent| crate::ui::keymap::note_key_up(&evt.key()),
+            onkeydown: {
+                let session = session.clone();
+                let mut context = panes.context_menu;
+                move |evt: KeyboardEvent| {
+                    if context.peek().is_some() {
+                        evt.stop_propagation();
+                        if evt.key() == Key::Escape { evt.prevent_default(); context.set(None); }
+                        return;
+                    }
+                    if session.field().is_some() || crate::ui::keymap::is_typing() { return; }
+                    if crate::ui::keymap::is_on_control() && matches!(evt.key(), Key::Enter) { return; }
+                    crate::ui::keymap::note_key_down(&evt.key());
+                    let mods = evt.modifiers();
+                    if let Some(intent) = crate::ui::keymap::lookup_held(&evt.key(), evt.code(),
+                        crate::ui::keymap::primary_modifier(mods), mods.shift(), mods.alt()) {
+                        if crate::ui::commands::run(&session, panes, intent) { evt.prevent_default(); }
+                    }
+                }
+            },
+            {panel_body(panel, &session, &ui, panes)}
+            ContextMenu { session: session.clone(), panes }
+        }
         {file_drop_overlay(&session)}
     )
 }
 
 /// 履歴を進める・戻す手は 1 つ。キーも机の履歴も同じ手を使う(行の目・solo・鍵も追従する)。
-fn history_step(
+pub(super) fn history_step(
     session: &Session,
     layer_rows: Signal<Vec<fixture::LayerRow>>,
     attrs_state: Signal<Vec<(bool, bool, bool)>>,
@@ -305,7 +449,7 @@ fn history_step(
     println!("PROBE room=write verdict=history moved={moved}");
 }
 
-fn refresh_layer_projection(
+pub(super) fn refresh_layer_projection(
     doc: &std::sync::Arc<std::sync::Mutex<crate::doc::store::Document>>,
     mut layer_rows: Signal<Vec<fixture::LayerRow>>,
     mut attrs_state: Signal<Vec<(bool, bool, bool)>>,
@@ -316,18 +460,20 @@ fn refresh_layer_projection(
     let rows = fixture::layer_rows_from_doc(&snapshot);
     let canvas = fixture::canvas_rows_from_doc(&snapshot);
     drop(snapshot);
-    attrs_state.set(rows.iter().map(|row| (row.hidden, row.solo, row.locked)).collect());
+    attrs_state.set(
+        rows.iter()
+            .map(|row| (row.hidden, row.solo, row.locked))
+            .collect(),
+    );
     layer_rows.set(rows);
     let _ = timeline_tx.send(TimelineMsg::SetRows(canvas));
     *revision.write() += 1;
 }
 
-type SplitNodes = std::rc::Rc<
-    std::cell::RefCell<std::collections::BTreeMap<SplitId, dioxus_native::NodeHandle>>,
->;
-pub(super) type TileNodes = std::rc::Rc<
-    std::cell::RefCell<std::collections::BTreeMap<TileId, dioxus_native::NodeHandle>>,
->;
+type SplitNodes =
+    std::rc::Rc<std::cell::RefCell<std::collections::BTreeMap<SplitId, dioxus_native::NodeHandle>>>;
+pub(super) type TileNodes =
+    std::rc::Rc<std::cell::RefCell<std::collections::BTreeMap<TileId, dioxus_native::NodeHandle>>>;
 
 #[allow(clippy::too_many_arguments)]
 fn tile_view(
@@ -344,8 +490,18 @@ fn tile_view(
 ) -> Element {
     let d = dock();
     match node {
-        LayoutNode::Split { id, axis, ratio, first, second } => {
-            let flow = if axis == SplitAxis::Horizontal { "row" } else { "column" };
+        LayoutNode::Split {
+            id,
+            axis,
+            ratio,
+            first,
+            second,
+        } => {
+            let flow = if axis == SplitAxis::Horizontal {
+                "row"
+            } else {
+                "column"
+            };
             let first_share = ratio;
             let second_share = 1.0 - ratio;
             rsx!(
@@ -438,27 +594,19 @@ fn tile_view(
             let panels = d.panels(&tile);
             let shown = d.active(&tile);
             dock_zone(
-                tile.id,
-                panels,
-                shown,
-                &d,
-                dock,
-                tab_drag,
-                tile_nodes,
-                session,
-                ui,
-                panes,
-                playing,
+                tile.id, panels, shown, &d, dock, tab_drag, tile_nodes, session, ui, panes, playing,
             )
         }
     }
 }
 
 pub fn app() -> Element {
+    if let Some(runtime) = try_consume_context::<crate::render::engine::CatalogRuntime>() {
+        crate::render::engine::bind_catalog_runtime(&runtime);
+    }
     let mut playing = use_signal(|| false);
-    let layout_file = use_hook(|| {
-        consume_context::<crate::ui::host::Host>().settings_file("layout.json")
-    });
+    let layout_file =
+        use_hook(|| consume_context::<crate::ui::host::Host>().settings_file("layout.json"));
     let mut dock = use_signal(|| {
         layout_file
             .as_deref()
@@ -474,70 +622,115 @@ pub fn app() -> Element {
         }
     });
 
-    let split_nodes = use_hook(|| {
-        std::rc::Rc::new(std::cell::RefCell::new(std::collections::BTreeMap::new()))
-    });
-    let tile_nodes = use_hook(|| {
-        std::rc::Rc::new(std::cell::RefCell::new(std::collections::BTreeMap::new()))
-    });
+    let split_nodes =
+        use_hook(|| std::rc::Rc::new(std::cell::RefCell::new(std::collections::BTreeMap::new())));
+    let tile_nodes =
+        use_hook(|| std::rc::Rc::new(std::cell::RefCell::new(std::collections::BTreeMap::new())));
     let mut open_menu = use_signal(|| None::<MenuId>);
 
     let session = use_hook(|| consume_context::<Session>()).clone();
     let loaded = session.ui.clone();
+    let panes = panes_for(&session);
     let host = use_hook(|| consume_context::<crate::ui::host::Host>());
     let window = use_hook(|| {
-        dioxus_core::try_consume_context::<
-            std::sync::Arc<dyn dioxus_native::winit::window::Window>,
-        >()
+        dioxus_core::try_consume_context::<std::sync::Arc<dyn dioxus_native::winit::window::Window>>(
+        )
     });
     // 別窓が閉じたら置き場へ戻す。別の窓からの合図なので、自分の runtime を包んで渡す。
-    use_hook(|| {
-        let runtime = dioxus_core::Runtime::current();
-        let scope = dioxus_core::current_scope_id();
-        host.on_close(move |panel| {
-            let mut dock = dock;
-            runtime.in_scope(scope, move || dock.write().reattach(panel));
-        });
-    });
-    use_hook(|| {
-        let window_id = window.as_ref().map_or(crate::ui::host::Host::HEADLESS, |w| w.id());
-        let runtime = dioxus_core::Runtime::current();
-        let scope = dioxus_core::current_scope_id();
-        let tile_nodes = tile_nodes.clone();
-        let dock_host = host.clone();
-        let scrub_session = session.clone();
-        host.on_primary_pointer_release(window_id, move |x, y, outside| {
-            runtime.in_scope(scope, || {
-                finish_tab_release(dock, tab_drag, &tile_nodes, &dock_host, x, y, None, outside);
-            });
-            // 数値を擦ったまま窓の外で放しても、そこで確定する。
-            if crate::ui::inspector::end_scrub(&scrub_session) {
-                dock_host.wake_all();
-            }
-        });
-    });
-    use_hook(|| {
-        let runtime = dioxus_core::Runtime::current();
-        let scope = dioxus_core::current_scope_id();
-        let gesture = session.gesture.clone();
-        let lost_session = session.clone();
-        host.on_focus_lost(move || {
-            gesture.cancel();
-            // 下見(transient)は窓を離れたら全部落とす。書類に無い絵を描き続けない。
-            lost_session.doc.lock().unwrap().clear_all_transients();
-            // Cmd+Tab で離れると修飾の keyup が届かない。戻った時の Space が Cmd+Space になる。
-            crate::ui::keymap::forget_modifiers();
-            runtime.in_scope(scope, move || {
-                if let Some(drag) = *tab_drag.peek() {
-                    let _ = drag.cancel();
+    use_epoch_registration(
+        &host,
+        || {
+            let runtime = dioxus_core::Runtime::current();
+            let scope = dioxus_core::current_scope_id();
+            Some(host.on_close(move |panel| {
+                if !live_signal(dock) {
+                    return;
                 }
-                tab_drag.set(None);
-                grip.set(None);
-                open_menu.set(None);
-            });
-        });
-    });
-    let panes = panes_for(&loaded);
+                runtime.in_scope(scope, move || {
+                    let _ = update_live_signal(dock, |dock| dock.reattach(panel));
+                });
+            }))
+        },
+        crate::ui::host::Host::remove_callback,
+    );
+    use_epoch_registration(
+        &host,
+        || {
+            let window_id = window
+                .as_ref()
+                .map_or(crate::ui::host::Host::HEADLESS, |w| w.id());
+            let runtime = dioxus_core::Runtime::current();
+            let scope = dioxus_core::current_scope_id();
+            let tile_nodes = tile_nodes.clone();
+            let dock_host = host.clone();
+            let scrub_session = session.clone();
+            Some(
+                host.on_primary_pointer_release(window_id, move |x, y, outside| {
+                    if !live_signal(dock) || !live_signal(tab_drag) {
+                        return;
+                    }
+                    runtime.in_scope(scope, || {
+                        finish_tab_release(
+                            dock,
+                            tab_drag,
+                            &tile_nodes,
+                            &dock_host,
+                            x,
+                            y,
+                            None,
+                            outside,
+                        );
+                    });
+                    // 数値を擦ったまま窓の外で放しても、そこで確定する。
+                    if crate::ui::inspector::end_scrub(&scrub_session) {
+                        dock_host.wake_all();
+                    }
+                }),
+            )
+        },
+        crate::ui::host::Host::remove_callback,
+    );
+    use_epoch_registration(
+        &host,
+        || {
+            let runtime = dioxus_core::Runtime::current();
+            let scope = dioxus_core::current_scope_id();
+            let gesture = session.gesture.clone();
+            let lost_session = session.clone();
+            Some(
+                host.on_focus_lost(
+                    window
+                        .as_ref()
+                        .map_or(crate::ui::host::Host::HEADLESS, |w| w.id()),
+                    move || {
+                        if !live_signal(tab_drag)
+                            || !live_signal(grip)
+                            || !live_signal(open_menu)
+                            || !live_signal(panes.context_menu)
+                        {
+                            return;
+                        }
+                        gesture.cancel();
+                        // 下見(transient)は窓を離れたら全部落とす。書類に無い絵を描き続けない。
+                        lost_session.doc.lock().unwrap().clear_all_transients();
+                        // Cmd+Tab で離れると修飾の keyup が届かない。戻った時の Space が Cmd+Space になる。
+                        crate::ui::keymap::forget_modifiers();
+                        runtime.in_scope(scope, move || {
+                            let _ = update_live_signal(tab_drag, |drag| {
+                                if let Some(drag) = drag.take() {
+                                    let _ = drag.cancel();
+                                }
+                            });
+                            let _ = update_live_signal(grip, |grip| *grip = None);
+                            let _ = update_live_signal(open_menu, |menu| *menu = None);
+                            let _ = update_live_signal(panes.context_menu, |menu| *menu = None);
+                        });
+                    },
+                ),
+            )
+        },
+        crate::ui::host::Host::remove_callback,
+    );
     // ffmpeg の有無は起動後 1 回だけ見る(毎 render に子プロセスを起こさない)。
     static FFMPEG_READY: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     let ffmpeg_ready = *FFMPEG_READY.get_or_init(crate::render::media::tools_available);
@@ -548,7 +741,13 @@ pub fn app() -> Element {
         view.composition().ok().flatten().is_some() && !view.layers().is_empty()
     };
     let can_export = has_work && ffmpeg_ready;
-    let export_hint = if !ffmpeg_ready { "Install ffmpeg to export video" } else if !has_work { "Nothing to export yet" } else { "" };
+    let export_hint = if !ffmpeg_ready {
+        "Install ffmpeg to export video"
+    } else if !has_work {
+        "Nothing to export yet"
+    } else {
+        ""
+    };
     // 面からの「この panel を前に出して」。revision の度に拾う(Inspector の COLOR 行 → Colors)。
     {
         let asker = session.clone();
@@ -566,7 +765,10 @@ pub fn app() -> Element {
                 let mut last = String::new();
                 for batch in batches {
                     let summary = fixture::admit_prepared(&mut d, batch);
-                    println!("PROBE room=browser verdict=import admitted={} of={}", summary.admitted, summary.total);
+                    println!(
+                        "PROBE room=browser verdict=import admitted={} of={}",
+                        summary.admitted, summary.total
+                    );
                     last = summary.notice();
                 }
                 drop(d);
@@ -583,6 +785,13 @@ pub fn app() -> Element {
             *sizer.selected_size.lock().unwrap() = None;
         });
     }
+    use_effect(move || {
+        if (panes.context_menu)().is_some() {
+            open_menu.set(None);
+            let mut choice = panes.inspector_choice;
+            choice.set(None);
+        }
+    });
     let output_generation = (panes.echo)();
     let project_notice = session.project_notice.lock().unwrap().clone();
     let mut status_line = match (project_notice.is_empty(), session.is_dirty()) {
@@ -593,7 +802,11 @@ pub fn app() -> Element {
     // 選んでいるキーは見せる。見えないまま Delete と ⌥矢印の意味が変わるのは予測できない。
     let keys_selected = session.selected_keys.lock().unwrap().len();
     if keys_selected > 0 {
-        let word = if keys_selected == 1 { "keyframe" } else { "keyframes" };
+        let word = if keys_selected == 1 {
+            "keyframe"
+        } else {
+            "keyframes"
+        };
         status_line = if status_line.is_empty() {
             format!("{keys_selected} {word} selected")
         } else {
@@ -706,6 +919,12 @@ pub fn app() -> Element {
                 let mut choice = panes.inspector_choice;
                 let selected_sig = panes.selected;
                 move |evt| {
+                    if panes.context_menu.peek().is_some() {
+                        evt.prevent_default();
+                        evt.stop_propagation();
+                        if evt.key() == Key::Escape { let mut menu = panes.context_menu; menu.set(None); }
+                        return;
+                    }
                     if evt.key() == Key::Escape && tab_drag.peek().is_some() {
                         evt.prevent_default();
                         evt.stop_propagation();
@@ -776,53 +995,12 @@ pub fn app() -> Element {
                     };
                     evt.prevent_default();
                     match intent {
-                        Intent::Split => {
-                            let Some(layer) = selected() else {
-                                println!("PROBE room=write verdict=split-noop reason=no-selection");
-                                return;
-                            };
-                            let comp_frame = clock.current_frame();
-                            match split_layer(&doc, layer, comp_frame) {
-                                Some(tail) => {
-                                    let snapshot = doc.lock().unwrap();
-                                    let rows = fixture::layer_rows_from_doc(&snapshot);
-                                    let canvas = fixture::canvas_rows_from_doc(&snapshot);
-                                    drop(snapshot);
-                                    attrs_state.set(
-                                        rows.iter().map(|r| (r.hidden, r.solo, r.locked)).collect(),
-                                    );
-                                    layer_rows.set(rows);
-                                    let _ = timeline_tx.send(TimelineMsg::SetRows(canvas));
-                                    println!(
-                                        "PROBE room=write verdict=applied Split layer={layer:?} tail={tail:?} comp_frame={comp_frame}"
-                                    );
-                                }
-                                None => println!(
-                                    "PROBE room=write verdict=split-noop layer={layer:?} comp_frame={comp_frame}"
-                                ),
-                            }
-                        }
-                        Intent::StepFrame(delta) => {
-                            clock.seek_frame(clock.current_frame() + delta);
-                        }
-                        Intent::Duplicate => {
-                            let Some(layer) = selected() else { return };
-                            let Some(copy) =
-                                crate::ui::timeline_widget::duplicate_layer(&doc, layer)
-                            else {
-                                return;
-                            };
-                            let d = doc.lock().unwrap();
-                            let rows = fixture::layer_rows_from_doc(&d);
-                            let canvas = fixture::canvas_rows_from_doc(&d);
-                            drop(d);
-                            attrs_state.set(rows.iter().map(|r| (r.hidden, r.solo, r.locked)).collect());
-                            layer_rows.set(rows);
-                            let _ = timeline_tx.send(TimelineMsg::SetRows(canvas));
-                            selection.set(Some(copy));
-                            selected.set(Some(copy));
-                            *revision.write() += 1;
-                            println!("PROBE room=write verdict=applied Duplicate layer={copy:?}");
+                        Intent::Split | Intent::Duplicate | Intent::StepFrame(_)
+                        | Intent::Home | Intent::End | Intent::Deselect | Intent::PlayPause
+                        | Intent::Undo | Intent::Redo | Intent::Rename | Intent::DeleteLayer
+                        | Intent::SelectAll => {
+                            crate::ui::commands::run(&session, panes, intent);
+                            playing.set(clock.playing());
                         }
                         Intent::Group => {
                             let targets = selection.all();
@@ -985,30 +1163,6 @@ pub fn app() -> Element {
                                 clock.seek(t);
                             }
                         }
-                        Intent::Home => clock.seek(0.0),
-                        Intent::End => clock.seek(clock.duration()),
-                        Intent::Deselect => {
-                            // 掴んでいる間の `Esc` は**取り消し**。掴んでいない時だけ
-                            // 選択を解く(規格が MUST で求める pointercancel の役)。
-                            if crate::ui::inspector::cancel_scrub(&session) || session.gesture.cancel() {
-                                *revision.write() += 1;
-                            } else {
-                                selection.set(None);
-                                selected.set(None);
-                                *session.focus.lock().unwrap() = None;
-                                // キーの選択も落とす。落とさないと Alt+矢印が層へ戻れない。
-                                session.selected_keys.lock().unwrap().clear();
-                                let _ = timeline_tx.send(TimelineMsg::DeselectKeys);
-                            }
-                        }
-                        Intent::PlayPause => {
-                            clock.toggle();
-                            playing.set(clock.playing());
-                        }
-                        Intent::Undo | Intent::Redo => {
-                            let steps = if matches!(intent, Intent::Undo) { -1 } else { 1 };
-                            history_step(&session, layer_rows, attrs_state, &timeline_tx, revision, steps);
-                        }
                         Intent::Save | Intent::SaveAs => {
                             let session = session.clone();
                             let poke = poke.clone();
@@ -1022,87 +1176,6 @@ pub fn app() -> Element {
                         }
                         Intent::OpenProject => {
                             dioxus_core::spawn(crate::ui::project::open_project(session.clone(), poke.clone(), window.clone(), revision, selected_sig));
-                        }
-                        Intent::Rename => {
-                            let Some(layer) = selection.get() else { return };
-                            if !session.writable(layer) {
-                                return;
-                            }
-                            let name = doc
-                                .lock()
-                                .unwrap()
-                                .view()
-                                .attrs(layer)
-                                .ok()
-                                .flatten()
-                                .map(|a| a.name)
-                                .unwrap_or_default();
-                            session.open_field(crate::ui::session::FieldAt::Name(layer), name);
-                            *revision.write() += 1;
-                        }
-                        Intent::DeleteLayer => {
-                            // キーを選んでいる時の Delete はキーを消す。層は残る(AE・Blender)。
-                            let keys: Vec<_> = session.selected_keys.lock().unwrap().clone();
-                            let keys: Vec<_> = keys.into_iter().filter(|k| session.writable(k.layer)).collect();
-                            if !keys.is_empty() {
-                                let mut d = doc.lock().unwrap();
-                                let mut intents = Vec::new();
-                                for k in &keys {
-                                    match crate::ui::timeline_widget::keyframe_delete_intents(&d, k.layer, k.property.as_ref(), k.at_sec) {
-                                        Ok(more) => intents.extend(more),
-                                        Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
-                                    }
-                                }
-                                let applied = d.apply_all(intents).is_ok();
-                                let canvas = fixture::canvas_rows_from_doc(&d);
-                                drop(d);
-                                if applied {
-                                    session.selected_keys.lock().unwrap().clear();
-                                    let _ = timeline_tx.send(TimelineMsg::SetRows(canvas));
-                                    *revision.write() += 1;
-                                }
-                                if applied {
-                                    let n = keys.len();
-                                    *session.project_notice.lock().unwrap() =
-                                        format!("Deleted {n} {} · ⌘Z to undo", if n == 1 { "keyframe" } else { "keyframes" });
-                                }
-                                println!("PROBE room=write verdict=applied DeleteKeys n={} ok={applied}", keys.len());
-                                return;
-                            }
-                            let targets = session.editable_selection();
-                            if targets.is_empty() {
-                                println!("PROBE room=write verdict=delete-noop reason=no-selection");
-                                return;
-                            }
-                            let mut d = doc.lock().unwrap();
-                            let names: Vec<String> = targets
-                                .iter()
-                                .filter_map(|l| d.view().attrs(*l).ok().flatten().map(|a| a.name))
-                                .collect();
-                            let intents: Vec<_> = targets
-                                .iter()
-                                .map(|l| crate::doc::store::Intent::RemoveLayer(*l))
-                                .collect();
-                            let applied = d.apply_all(intents).is_ok();
-                            let rows = fixture::layer_rows_from_doc(&d);
-                            let canvas = fixture::canvas_rows_from_doc(&d);
-                            drop(d);
-                            if applied {
-                                selection.set(None);
-                                selected.set(None);
-                                attrs_state.set(rows.iter().map(|r| (r.hidden, r.solo, r.locked)).collect());
-                                layer_rows.set(rows);
-                                let _ = timeline_tx.send(TimelineMsg::SetRows(canvas));
-                                *revision.write() += 1;
-                            }
-                            if applied {
-                                let what = match (names.len(), names.first()) {
-                                    (1, Some(name)) => format!("Deleted \"{name}\""),
-                                    (n, _) => format!("Deleted {n} layers"),
-                                };
-                                *session.project_notice.lock().unwrap() = format!("{what} · ⌘Z to undo");
-                            }
-                            println!("PROBE room=write verdict=applied RemoveLayer n={} ok={applied}", targets.len());
                         }
                         Intent::Reorder(delta) => {
                             let Some(layer) = selected() else { return };
@@ -1235,27 +1308,21 @@ pub fn app() -> Element {
                             if targets.is_empty() {
                                 return;
                             }
+                            let at = clock.current_time();
                             let mut d = doc.lock().unwrap();
-                            let intents = crate::ui::stage_widget::nudge_intents(&d, &targets, (dx, dy), clock.current_time());
-                            match d.apply_all(intents) {
-                                Ok(_) => *revision.write() += 1,
-                                Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
+                            let result = crate::ui::stage_widget::nudge_intents(&d, &targets, (dx, dy), at).and_then(|intents| d.apply_all(intents));
+                            drop(d);
+                            match result {
+                                Ok(()) => *revision.write() += 1,
+                                Err(error) => *session.project_notice.lock().unwrap() = format!("Move failed: {error}"),
                             }
                         }
-                        Intent::SelectAll => {
-                            let layers = doc.lock().unwrap().view().layers();
-                            for layer in layers {
-                                if !selection.contains(layer) {
-                                    selection.toggle(layer);
-                                }
-                            }
-                            selected.set(selection.get());
-                            *revision.write() += 1;
-                        }
+
                     }
                 }
             },
 
+            ContextMenu { session: session.clone(), panes }
             MenuDismiss { open: open_menu }
             ChoiceDismiss { open: panes.inspector_choice }
             {file_drop_overlay(&session)}
@@ -1571,12 +1638,12 @@ pub fn app() -> Element {
                                         aria_label: "Open {panel} in a new window",
                                         selected: d.is_detached(panel),
                                         secondary: true,
-                                        disabled: d.is_detached(panel),
                                         onclick: {
                                             let host = host.clone();
                                             move |evt: Event<MouseData>| {
                                                 evt.stop_propagation();
-                                                if dock.write().detach(panel) {
+                                                let already_detached = dock.peek().is_detached(panel);
+                                                if already_detached || dock.write().detach(panel) {
                                                     host.open(panel);
                                                 }
                                                 open_menu.set(None);
@@ -1632,4 +1699,64 @@ pub fn app() -> Element {
             }
         }
     )
+}
+
+#[cfg(test)]
+mod host_callback_lifetimes {
+    use super::*;
+
+    fn empty() -> Element {
+        rsx! {}
+    }
+
+    #[test]
+    fn dropped_drag_scope_rejects_release_without_changing_live_dock() {
+        let dock_dom = VirtualDom::new(empty);
+        let dock = dock_dom.in_scope(ScopeId::ROOT, || Signal::new(Dock::default()));
+        let before = dock.peek().clone();
+        let drag_dom = VirtualDom::new(empty);
+        let drag = drag_dom.in_scope(ScopeId::ROOT, || {
+            Signal::new(Some(
+                TabDrag::pressed(Panel::Inspector, 10.0, 10.0, 7)
+                    .move_to(30.0, 10.0, 7)
+                    .0,
+            ))
+        });
+        drop(drag_dom);
+        assert!(matches!(drag.try_peek(), Err(BorrowError::Dropped(_))));
+        let host = crate::ui::host::Host::for_tests();
+        finish_tab_release(
+            dock,
+            drag,
+            &TileNodes::default(),
+            &host,
+            -100.0,
+            -100.0,
+            None,
+            true,
+        );
+        assert!(*dock.peek() == before);
+        assert!(update_live_signal(drag, |drag| drag.take()).is_none());
+    }
+
+    #[test]
+    fn live_borrow_conflicts_are_not_treated_as_disposed_callbacks() {
+        let dom = VirtualDom::new(empty);
+        dom.in_scope(ScopeId::ROOT, || {
+            let mut signal = Signal::new(7u32);
+            let alias = signal;
+            let borrowed = signal.peek();
+            let write_failure = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                update_live_signal(alias, |value| *value += 1)
+            }));
+            assert!(write_failure.is_err());
+            drop(borrowed);
+            assert_eq!(*signal.peek(), 7);
+            let borrowed = signal.write();
+            let read_failure =
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| live_signal(alias)));
+            assert!(read_failure.is_err());
+            drop(borrowed);
+        });
+    }
 }

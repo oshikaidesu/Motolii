@@ -54,6 +54,9 @@ impl Compositor {
         rotation_x: f32,
         rotation_y: f32,
         opacity: f32,
+        comp: crate::doc::core::CompSpec,
+        camera: crate::doc::core::ResolvedCamera,
+        projection: crate::doc::store::LayerProjection,
     ) -> Result<MeshDrawData, CompositorError> {
         let world_from_object = spatial_world_from_bounds(
             transform,
@@ -62,6 +65,8 @@ impl Compositor {
             rotation_y,
             model.bounds,
         );
+        let center = world_from_object.transform_point3((glam::Vec3::from(model.bounds.min) + glam::Vec3::from(model.bounds.max)) * 0.5);
+        let world_from_object = crate::doc::core::layer_projection_transform(comp, camera, projection, center) * world_from_object;
         let alpha = (opacity.clamp(0.0, 1.0) * 255.0).round() as u8;
         let tint = Color32::from_rgba_unmultiplied(0, 0, 0, alpha);
         let instances: Vec<GpuMeshInstance> = model

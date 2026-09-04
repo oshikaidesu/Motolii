@@ -17,6 +17,7 @@ motolii-render = { path = "crates/motolii-render" }
 motolii-road = { path = "crates/motolii-road", optional = true }
 dioxus-native = { workspace = true }
 dioxus-devtools = { workspace = true }
+dioxus-cli-config = "=0.7.10"
 dioxus-asset-resolver = { workspace = true }
 dioxus-workbench = { workspace = true }
 dioxus-dnd = { workspace = true }

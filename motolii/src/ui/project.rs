@@ -6,7 +6,9 @@ use crate::ui::session::Session;
 
 /// 作品を仕舞う。行き先が決まっていなければ聞く。
 /// 窓に紐付く sheet として開く file dialog。親が無ければ素の窓(HIG: 書類の dialog はその窓の sheet)。
-pub(super) fn sheet(window: Option<&dyn dioxus_native::winit::window::Window>) -> rfd::AsyncFileDialog {
+pub(super) fn sheet(
+    window: Option<&dyn dioxus_native::winit::window::Window>,
+) -> rfd::AsyncFileDialog {
     let dialog = rfd::AsyncFileDialog::new();
     match window {
         Some(window) => dialog.set_parent(window),
@@ -14,18 +16,22 @@ pub(super) fn sheet(window: Option<&dyn dioxus_native::winit::window::Window>) -
     }
 }
 
-pub(super) async fn put_away(
-    session: Session,
-    poke: crate::ui::host::Poke,
-    ask: bool,
-) -> bool {
+pub(super) async fn put_away(session: Session, poke: crate::ui::host::Poke, ask: bool) -> bool {
     // dialog を待つ間に Cmd+S をもう一度押しても 2 枚目は開かない。
-    if session.saving.swap(true, std::sync::atomic::Ordering::SeqCst) {
+    if session
+        .saving
+        .swap(true, std::sync::atomic::Ordering::SeqCst)
+    {
         return false;
     }
     let done = put_away_inner(&session, ask).await;
-    session.saving.store(false, std::sync::atomic::Ordering::SeqCst);
-    println!("PROBE room=project verdict=save {}", session.project_notice.lock().unwrap());
+    session
+        .saving
+        .store(false, std::sync::atomic::Ordering::SeqCst);
+    println!(
+        "PROBE room=project verdict=save {}",
+        session.project_notice.lock().unwrap()
+    );
     poke.poke();
     done
 }
@@ -42,7 +48,10 @@ async fn put_away_inner(session: &Session, ask: bool) -> bool {
                 .await;
             let Some(file) = picked else { return false };
             let mut out = file.path().to_path_buf();
-            if out.extension().is_none_or(|e| !e.eq_ignore_ascii_case("rrd")) {
+            if out
+                .extension()
+                .is_none_or(|e| !e.eq_ignore_ascii_case("rrd"))
+            {
                 out.set_extension("rrd");
             }
             out
@@ -85,7 +94,10 @@ pub(super) async fn allow_project_replacement(
     }
     let mut dialog = rfd::AsyncMessageDialog::new()
         .set_level(rfd::MessageLevel::Warning)
-        .set_title(&format!("Do you want to save the changes you made to {}?", session.document_title()))
+        .set_title(&format!(
+            "Do you want to save the changes you made to {}?",
+            session.document_title()
+        ))
         .set_description("Your changes will be lost if you don't save them.")
         .set_buttons(rfd::MessageButtons::YesNoCancelCustom(
             "Save".to_owned(),
@@ -137,7 +149,9 @@ pub(super) async fn open_project(
     if let Some(window) = window.as_deref() {
         dialog = dialog.set_parent(window);
     }
-    let Some(file) = dialog.pick_file().await else { return };
+    let Some(file) = dialog.pick_file().await else {
+        return;
+    };
     open_path(&session, file.path().to_path_buf(), revision, selected);
 }
 
@@ -154,7 +168,8 @@ pub(super) fn open_path(
             session.selection.set(None);
             selected.set(None);
             remember_recent(&path);
-            *session.project_notice.lock().unwrap() = format!("Opened {}", session.document_title());
+            *session.project_notice.lock().unwrap() =
+                format!("Opened {}", session.document_title());
         }
         Err(e) => {
             *session.project_notice.lock().unwrap() = format!("Open failed: {e}");
@@ -166,7 +181,9 @@ pub(super) fn open_path(
 
 /// 最近開いた・仕舞った作品(新しい順、10 件)。~/Library/Application Support/Motolii/recents.json。
 pub(super) fn recents() -> Vec<std::path::PathBuf> {
-    let Some(file) = crate::ui::host::settings_dir().map(|d| d.join("recents.json")) else { return Vec::new() };
+    let Some(file) = crate::ui::host::settings_dir().map(|d| d.join("recents.json")) else {
+        return Vec::new();
+    };
     std::fs::read_to_string(file)
         .ok()
         .and_then(|s| serde_json::from_str::<Vec<String>>(&s).ok())
@@ -182,8 +199,13 @@ pub(super) fn forget_recent(path: &std::path::Path) {
 }
 
 fn write_recents(list: Vec<std::path::PathBuf>) {
-    let Some(dir) = crate::ui::host::settings_dir() else { return };
-    let text: Vec<String> = list.iter().map(|p| p.to_string_lossy().into_owned()).collect();
+    let Some(dir) = crate::ui::host::settings_dir() else {
+        return;
+    };
+    let text: Vec<String> = list
+        .iter()
+        .map(|p| p.to_string_lossy().into_owned())
+        .collect();
     let _ = std::fs::create_dir_all(&dir);
     if let Ok(json) = serde_json::to_string(&text) {
         let _ = std::fs::write(dir.join("recents.json"), json);
@@ -200,21 +222,33 @@ pub(super) fn remember_recent(path: &std::path::Path) {
 /// 引数の .rrd を開く(`Motolii.app/Contents/MacOS/Motolii song.rrd`)。macOS の Finder・`open -a` は
 /// argv でなく `application:openFile:` で来るので、そちらは H1(NSMainMenu)の時に繋ぐ。
 /// 壊れた .rrd は黙って白紙にせず、理由を返す(「作品が消えた」に見える)。
-pub(super) fn open_from_argv() -> (Option<crate::doc::store::Document>, Option<std::path::PathBuf>, Option<String>) {
-    let path = std::env::args().nth(1).map(std::path::PathBuf::from).filter(|p| p.extension().is_some_and(|e| e == "rrd"));
+pub(super) fn open_from_argv() -> (
+    Option<crate::doc::store::Document>,
+    Option<std::path::PathBuf>,
+    Option<String>,
+) {
+    let path = std::env::args()
+        .nth(1)
+        .map(std::path::PathBuf::from)
+        .filter(|p| p.extension().is_some_and(|e| e == "rrd"));
     let mut error = None;
-    let opened = path.as_ref().and_then(|p| match crate::doc::store::Document::load(p) {
-        Ok(d) => Some(d),
-        Err(e) => {
-            error = Some(format!("Open failed: {e}"));
-            None
-        }
-    });
+    let opened = path
+        .as_ref()
+        .and_then(|p| match crate::doc::store::Document::load(p) {
+            Ok(d) => Some(d),
+            Err(e) => {
+                error = Some(format!("Open failed: {e}"));
+                None
+            }
+        });
     (opened, path, error)
 }
 
 /// ~/Library/Application Support/Motolii(最近の作品・窓の枠・自動保存の逃がし先)。
 pub(crate) fn settings_dir() -> Option<std::path::PathBuf> {
+    if let Some(directory) = std::env::var_os("MOTOLII_SETTINGS_DIR") {
+        return Some(directory.into());
+    }
     let home = std::env::var_os("HOME")?;
     Some(std::path::Path::new(&home).join("Library/Application Support/Motolii"))
 }

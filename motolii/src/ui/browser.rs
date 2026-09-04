@@ -4,8 +4,8 @@ use std::sync::{Arc, Mutex};
 use dioxus_native::prelude::*;
 
 use crate::doc::store::{
-    property, ContentKeyframe, ContentTrack, Document, EffectId, EffectInstance, FontRef, Intent,
-    Interp, Keyframe, KeyframeTrack, LayerAttrsPatch, LayerId, LayerMeta, LayerSource, LayerTiming,
+    property, ContentKeyframe, ContentTrack, Document, FontRef, Intent, Interp, Keyframe,
+    KeyframeTrack, LayerAttrsPatch, LayerId, LayerMeta, LayerProjection, LayerSource, LayerTiming,
     Mask, MaskId, MaskMode, Path, PathSource, PathVertex, PropertyId, RationalTime, Shape,
     ShapeNode, TextAlignmentOptions, TextDocument, TextDocumentStyle, TextJustify, TextStyleId,
     Value, VectorPoint,
@@ -14,10 +14,11 @@ use crate::doc::vector::{Brush, Contour, Fill, FillRule, Rgb, Vertex};
 
 use crate::ui::fixture::ColorSwatch;
 
+use crate::ui::color::{wheel_slot, ColorWheel};
 use crate::ui::dock::Panel;
 use crate::ui::fixture::{self, LayerRow};
+use crate::ui::functions::verb::{color_block, effect_intents};
 use crate::ui::playback::Clock;
-use crate::ui::color::{wheel_slot, ColorWheel};
 use crate::ui::semantic_menu::SemanticButton;
 use crate::ui::session::Session;
 use crate::ui::timeline_widget::TimelineMsg;
@@ -80,11 +81,13 @@ fn center_intents(layer: LayerId, natural: (f64, f64), comp: (f64, f64)) -> Vec<
     else {
         return Vec::new();
     };
-    let value = crate::doc::store::Value::Vec2([
-        (comp.0 - natural.0) * 0.5,
-        (comp.1 - natural.1) * 0.5,
-    ]);
-    vec![Intent::SetConstant { layer, property, value }]
+    let value =
+        crate::doc::store::Value::Vec2([(comp.0 - natural.0) * 0.5, (comp.1 - natural.1) * 0.5]);
+    vec![Intent::SetConstant {
+        layer,
+        property,
+        value,
+    }]
 }
 
 /// 形の実寸。焼く前でも輪郭から測れる。
@@ -97,11 +100,14 @@ fn shape_natural(shapes: &[ShapeNode]) -> (f64, f64) {
 }
 
 /// 素材の尺を comp のコマ数に直す。0.2 秒に満たない物(静止画の nb_frames=1 など)は尺無し。
-fn source_frames_in(info: &crate::render::media::MediaInfo, fps: crate::doc::store::Fps) -> Option<i64> {
-    let secs = info
-        .duration
-        .map(|d| d.as_seconds_f64())
-        .or_else(|| info.nb_frames.map(|n| n as f64 / info.fps.as_f64().max(1e-9)))?;
+fn source_frames_in(
+    info: &crate::render::media::MediaInfo,
+    fps: crate::doc::store::Fps,
+) -> Option<i64> {
+    let secs = info.duration.map(|d| d.as_seconds_f64()).or_else(|| {
+        info.nb_frames
+            .map(|n| n as f64 / info.fps.as_f64().max(1e-9))
+    })?;
     if secs < 0.2 {
         return None;
     }
@@ -138,7 +144,11 @@ fn new_layer_intents(
         NewKind::Media { path, name } => {
             let spatial = crate::render::media::is_point_cloud_path(&path)
                 || crate::render::media::is_mesh_path(&path);
-            let info = if spatial { None } else { crate::render::media::probe(&path).ok() };
+            let info = if spatial {
+                None
+            } else {
+                crate::render::media::probe(&path).ok()
+            };
             let fit = if spatial {
                 spatial_fit_intents(layer, &path, comp)
             } else {
@@ -155,14 +165,26 @@ fn new_layer_intents(
                 Intent::SetMeta {
                     layer,
                     meta: LayerMeta {
-                        source: LayerSource::File { path, fingerprint: None },
+                        source: LayerSource::File {
+                            path,
+                            fingerprint: None,
+                        },
                         order,
                         timing: LayerTiming::place(playhead, source_frames, duration_frames),
                     },
                 },
                 Intent::SetAttrs {
                     layer,
-                    patch: LayerAttrsPatch { name: Some(name), label_color, ..Default::default() },
+                    patch: LayerAttrsPatch {
+                        name: Some(name),
+                        label_color,
+                        projection: Some(if spatial {
+                            LayerProjection::ThreeD
+                        } else {
+                            LayerProjection::TwoPointFiveD
+                        }),
+                        ..Default::default()
+                    },
                 },
             ];
             out.extend(fit);
@@ -170,34 +192,48 @@ fn new_layer_intents(
         }
         NewKind::Rectangle => {
             let mut out = vec![
-            Intent::AddLayer(layer),
-            Intent::SetMeta {
-                layer,
-                meta: LayerMeta {
-                    source: LayerSource::Shape,
-                    order,
-                    timing: LayerTiming::place(playhead, None, duration_frames),
+                Intent::AddLayer(layer),
+                Intent::SetMeta {
+                    layer,
+                    meta: LayerMeta {
+                        source: LayerSource::Shape,
+                        order,
+                        timing: LayerTiming::place(playhead, None, duration_frames),
+                    },
                 },
-            },
-            Intent::SetAttrs {
-                layer,
-                patch: LayerAttrsPatch { name: Some("Rectangle".to_owned()), label_color, ..Default::default() },
-            },
-            Intent::SetShapes {
-                layer,
-                shapes: vec![ShapeNode::Leaf(Shape {
-                    source: PathSource::Rectangle { size: VectorPoint { x: rect_side(comp), y: rect_side(comp) } },
-                    ops: Vec::new(),
-                    fill: Some(Fill {
-                        brush: Brush::Solid(Rgb { r: 1.0, g: 1.0, b: 1.0 }),
-                        rule: FillRule::NonZero,
-                        opacity: 1.0,
-                        hidden: false,
-                    }),
-                    stroke: None,
-                })],
-            },
-        ];
+                Intent::SetAttrs {
+                    layer,
+                    patch: LayerAttrsPatch {
+                        name: Some("Rectangle".to_owned()),
+                        label_color,
+                        projection: Some(LayerProjection::TwoPointFiveD),
+                        ..Default::default()
+                    },
+                },
+                Intent::SetShapes {
+                    layer,
+                    shapes: vec![ShapeNode::Leaf(Shape {
+                        source: PathSource::Rectangle {
+                            size: VectorPoint {
+                                x: rect_side(comp),
+                                y: rect_side(comp),
+                            },
+                        },
+                        ops: Vec::new(),
+                        fill: Some(Fill {
+                            brush: Brush::Solid(Rgb {
+                                r: 1.0,
+                                g: 1.0,
+                                b: 1.0,
+                            }),
+                            rule: FillRule::NonZero,
+                            opacity: 1.0,
+                            hidden: false,
+                        }),
+                        stroke: None,
+                    })],
+                },
+            ];
             let shapes = match out.last() {
                 Some(Intent::SetShapes { shapes, .. }) => shapes.clone(),
                 _ => Vec::new(),
@@ -207,52 +243,67 @@ fn new_layer_intents(
         }
         NewKind::Bezier => {
             let mut out = vec![
-            Intent::AddLayer(layer),
-            Intent::SetMeta {
-                layer,
-                meta: LayerMeta {
-                    source: LayerSource::Shape,
-                    order,
-                    timing: LayerTiming::place(playhead, None, duration_frames),
+                Intent::AddLayer(layer),
+                Intent::SetMeta {
+                    layer,
+                    meta: LayerMeta {
+                        source: LayerSource::Shape,
+                        order,
+                        timing: LayerTiming::place(playhead, None, duration_frames),
+                    },
                 },
-            },
-            Intent::SetAttrs {
-                layer,
-                patch: LayerAttrsPatch { name: Some("Bezier".to_owned()), label_color, ..Default::default() },
-            },
-            Intent::SetShapes {
-                layer,
-                shapes: vec![ShapeNode::Leaf(Shape {
-                    source: PathSource::Bezier(vec![Contour {
-                        closed: false,
-                        vertices: vec![
-                            Vertex {
-                                point: VectorPoint { x: -150.0, y: 0.0 },
-                                in_tangent: VectorPoint { x: 0.0, y: 0.0 },
-                                out_tangent: VectorPoint { x: 100.0, y: -150.0 },
-                            },
-                            Vertex {
-                                point: VectorPoint { x: 150.0, y: 0.0 },
-                                in_tangent: VectorPoint { x: -100.0, y: 150.0 },
-                                out_tangent: VectorPoint { x: 0.0, y: 0.0 },
-                            },
-                        ],
-                    }]),
-                    ops: Vec::new(),
-                    fill: None,
-                    stroke: Some(crate::doc::vector::Stroke {
-                        brush: Brush::Solid(Rgb { r: 1.0, g: 1.0, b: 1.0 }),
-                        width: 6.0,
-                        cap: crate::doc::vector::LineCap::Round,
-                        join: crate::doc::vector::LineJoin::Round,
-                        miter_limit: 4.0,
-                        opacity: 1.0,
-                        hidden: false,
-                        dash: None,
-                    }),
-                })],
-            },
-        ];
+                Intent::SetAttrs {
+                    layer,
+                    patch: LayerAttrsPatch {
+                        name: Some("Bezier".to_owned()),
+                        label_color,
+                        projection: Some(LayerProjection::TwoPointFiveD),
+                        ..Default::default()
+                    },
+                },
+                Intent::SetShapes {
+                    layer,
+                    shapes: vec![ShapeNode::Leaf(Shape {
+                        source: PathSource::Bezier(vec![Contour {
+                            closed: false,
+                            vertices: vec![
+                                Vertex {
+                                    point: VectorPoint { x: -150.0, y: 0.0 },
+                                    in_tangent: VectorPoint { x: 0.0, y: 0.0 },
+                                    out_tangent: VectorPoint {
+                                        x: 100.0,
+                                        y: -150.0,
+                                    },
+                                },
+                                Vertex {
+                                    point: VectorPoint { x: 150.0, y: 0.0 },
+                                    in_tangent: VectorPoint {
+                                        x: -100.0,
+                                        y: 150.0,
+                                    },
+                                    out_tangent: VectorPoint { x: 0.0, y: 0.0 },
+                                },
+                            ],
+                        }]),
+                        ops: Vec::new(),
+                        fill: None,
+                        stroke: Some(crate::doc::vector::Stroke {
+                            brush: Brush::Solid(Rgb {
+                                r: 1.0,
+                                g: 1.0,
+                                b: 1.0,
+                            }),
+                            width: 6.0,
+                            cap: crate::doc::vector::LineCap::Round,
+                            join: crate::doc::vector::LineJoin::Round,
+                            miter_limit: 4.0,
+                            opacity: 1.0,
+                            hidden: false,
+                            dash: None,
+                        }),
+                    })],
+                },
+            ];
             let shapes = match out.last() {
                 Some(Intent::SetShapes { shapes, .. }) => shapes.clone(),
                 _ => Vec::new(),
@@ -262,63 +313,73 @@ fn new_layer_intents(
         }
         NewKind::Text => {
             let mut out = vec![
-            Intent::AddLayer(layer),
-            Intent::SetMeta {
-                layer,
-                meta: LayerMeta {
-                    source: LayerSource::Text,
-                    order,
-                    timing: LayerTiming::place(playhead, None, duration_frames),
-                },
-            },
-            Intent::SetAttrs {
-                layer,
-                patch: LayerAttrsPatch { name: Some("Text".to_owned()), label_color, ..Default::default() },
-            },
-            Intent::SetTextDocument {
-                layer,
-                document: TextDocument {
-                    content: {
-                        let mut track = ContentTrack::new();
-                        track.insert(ContentKeyframe {
-                            t: RationalTime::try_from_frame(playhead, fps)
-                                .unwrap_or(RationalTime::ZERO),
-                            content: "Text".to_owned(),
-                        });
-                        track
+                Intent::AddLayer(layer),
+                Intent::SetMeta {
+                    layer,
+                    meta: LayerMeta {
+                        source: LayerSource::Text,
+                        order,
+                        timing: LayerTiming::place(playhead, None, duration_frames),
                     },
-                    justify: TextJustify::Center,
-                    wrap_size: None,
-                    styles: vec![TextDocumentStyle {
-                        id: TextStyleId(0),
-                        font: FontRef {
-                            path: "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc".to_owned(),
-                            fingerprint: None,
-                            family: "Hiragino Sans".to_owned(),
-                            style: "W3".to_owned(),
-                        },
-                        size: 96.0,
-                        fill: [1.0, 1.0, 1.0, 1.0],
-                        // 日本語の歌詞の既定: 行送り 1.5、約物を詰める(palt)、黒の縁取り(背景が動画でも読める)。
-                        line_height: Some(96.0 * 1.5),
-                        tracking: 0.0,
-                        stroke_color: Some([0.0, 0.0, 0.0, 1.0]),
-                        stroke_width: 96.0 * 0.08,
-                        stroke_over_fill: false,
-                        axes: Vec::new(),
-                        features: vec![crate::doc::store::TextStyleFeature { tag: "palt".to_owned(), value: 1 }],
-                    }],
-                    slot_id: None,
-                    ranges: Vec::new(),
-                    alignment: TextAlignmentOptions::default(),
-                    runs: Vec::new(),
                 },
-            },
-        ];
+                Intent::SetAttrs {
+                    layer,
+                    patch: LayerAttrsPatch {
+                        name: Some("Text".to_owned()),
+                        label_color,
+                        projection: Some(LayerProjection::TwoPointFiveD),
+                        ..Default::default()
+                    },
+                },
+                Intent::SetTextDocument {
+                    layer,
+                    document: TextDocument {
+                        content: {
+                            let mut track = ContentTrack::new();
+                            track.insert(ContentKeyframe {
+                                t: RationalTime::try_from_frame(playhead, fps)
+                                    .unwrap_or(RationalTime::ZERO),
+                                content: "Text".to_owned(),
+                            });
+                            track
+                        },
+                        justify: TextJustify::Center,
+                        wrap_size: None,
+                        styles: vec![TextDocumentStyle {
+                            id: TextStyleId(0),
+                            font: FontRef {
+                                path: "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc".to_owned(),
+                                fingerprint: None,
+                                family: "Hiragino Sans".to_owned(),
+                                style: "W3".to_owned(),
+                            },
+                            size: 96.0,
+                            fill: [1.0, 1.0, 1.0, 1.0],
+                            // 日本語の歌詞の既定: 行送り 1.5、約物を詰める(palt)、黒の縁取り(背景が動画でも読める)。
+                            line_height: Some(96.0 * 1.5),
+                            tracking: 0.0,
+                            stroke_color: Some([0.0, 0.0, 0.0, 1.0]),
+                            stroke_width: 96.0 * 0.08,
+                            stroke_over_fill: false,
+                            axes: Vec::new(),
+                            features: vec![crate::doc::store::TextStyleFeature {
+                                tag: "palt".to_owned(),
+                                value: 1,
+                            }],
+                        }],
+                        slot_id: None,
+                        ranges: Vec::new(),
+                        alignment: TextAlignmentOptions::default(),
+                        runs: Vec::new(),
+                    },
+                },
+            ];
             // 文字は組んでみるまで大きさが決まらない。実寸が要らない形で
             // 真ん中へ置く —— 左上を枠の中心に合わせる。
-            out.extend(// 文字の箱は枠と同じ幅・左上起点。中央揃えが枠の中心軸に乗る(揃えは箱の幅で決まる)。
-            center_intents(layer, comp, comp));
+            out.extend(
+                // 文字の箱は枠と同じ幅・左上起点。中央揃えが枠の中心軸に乗る(揃えは箱の幅で決まる)。
+                center_intents(layer, comp, comp),
+            );
             out
         }
     }
@@ -338,9 +399,20 @@ fn spawn_layer(
     let probed = match &kind {
         NewKind::Media { path, .. } => {
             let fresh = !doc.lock().unwrap().view().layers().into_iter().any(|l| {
-                matches!(doc.lock().unwrap().view().meta(l).ok().flatten().map(|m| m.source), Some(LayerSource::File { .. }))
+                matches!(
+                    doc.lock()
+                        .unwrap()
+                        .view()
+                        .meta(l)
+                        .ok()
+                        .flatten()
+                        .map(|m| m.source),
+                    Some(LayerSource::File { .. })
+                )
             });
-            fresh.then(|| crate::render::media::probe(path).ok()).flatten()
+            fresh
+                .then(|| crate::render::media::probe(path).ok())
+                .flatten()
         }
         _ => None,
     };
@@ -369,7 +441,10 @@ fn spawn_layer(
         .map(|composition| (composition.width as f64, composition.height as f64))
         .unwrap_or((1920.0, 1080.0));
     // 空の作品に最初の曲・動画が来たら、尺を素材に合わせる(60 秒の既定で 3 分の曲を黙って切らない)。
-    let grow_to = probed.as_ref().and_then(|i| source_frames_in(i, fps)).filter(|f| *f > duration_frames);
+    let grow_to = probed
+        .as_ref()
+        .and_then(|i| source_frames_in(i, fps))
+        .filter(|f| *f > duration_frames);
     let duration_frames = grow_to.unwrap_or(duration_frames);
     let mut intents = new_layer_intents(
         layer,
@@ -381,7 +456,13 @@ fn spawn_layer(
         kind,
     );
     if let (Some(frames), Some(comp)) = (grow_to, composition.as_ref()) {
-        intents.insert(0, Intent::SetComposition(crate::doc::store::Composition { duration_frames: frames, ..comp.clone() }));
+        intents.insert(
+            0,
+            Intent::SetComposition(crate::doc::store::Composition {
+                duration_frames: frames,
+                ..comp.clone()
+            }),
+        );
         println!("PROBE room=write verdict=composition-grown frames={frames}");
     }
     let taken: Vec<String> = d
@@ -400,14 +481,20 @@ fn spawn_layer(
     match d.apply_all(intents) {
         Ok(_) => {
             let rows = fixture::layer_rows_from_doc(&d);
-            let attrs_vec = rows.iter().map(|r| (r.hidden, r.solo, r.locked)).collect::<Vec<_>>();
+            let attrs_vec = rows
+                .iter()
+                .map(|r| (r.hidden, r.solo, r.locked))
+                .collect::<Vec<_>>();
             let canvas_rows = fixture::canvas_rows_from_doc(&d);
             drop(d);
             *layer_rows.write() = rows;
             *attrs_state.write() = attrs_vec;
             timeline_tx.send(TimelineMsg::SetRows(canvas_rows)).ok();
             *revision.write() += 1;
-            println!("PROBE room=write verdict=created kind={label} layer={}", layer.0);
+            println!(
+                "PROBE room=write verdict=created kind={label} layer={}",
+                layer.0
+            );
         }
         Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
     }
@@ -420,26 +507,14 @@ fn replace_source(
     mut revision: Signal<u32>,
 ) {
     let mut d = doc.lock().unwrap();
-    let source = crate::doc::store::LayerSource::File { path, fingerprint: None };
+    let source = crate::doc::store::LayerSource::File {
+        path,
+        fingerprint: None,
+    };
     let applied = d.apply(Intent::SetSource { layer, source }).is_ok();
     drop(d);
     if applied {
         *revision.write() += 1;
-    }
-}
-
-fn add_effect(doc: &Arc<Mutex<Document>>, layer: LayerId, plugin_id: &str, mut revision: Signal<u32>) {
-    let mut d = doc.lock().unwrap();
-    let mut effects = d.view().effects(layer).unwrap_or_default();
-    let next_id = effects.iter().map(|e| e.id.0).max().map(|m| m + 1).unwrap_or(0);
-    effects.push(EffectInstance { id: EffectId(next_id), plugin_id: plugin_id.to_owned() });
-    match d.apply(Intent::SetEffects { layer, effects }) {
-        Ok(_) => {
-            drop(d);
-            *revision.write() += 1;
-            println!("PROBE room=write verdict=effect-added layer={} plugin={plugin_id}", layer.0);
-        }
-        Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
     }
 }
 
@@ -465,14 +540,13 @@ fn mask_frame(doc: &Document, layer: LayerId) -> Option<[f64; 2]> {
     }
 }
 
-fn add_rectangle_mask(
-    doc: &Arc<Mutex<Document>>,
-    layer: LayerId,
-    mut revision: Signal<u32>,
-) {
+fn add_rectangle_mask(doc: &Arc<Mutex<Document>>, layer: LayerId, mut revision: Signal<u32>) {
     let mut d = doc.lock().unwrap();
     let Some([width, height]) = mask_frame(&d, layer) else {
-        println!("PROBE room=write verdict=mask-skip layer={} reason=no-2d-frame", layer.0);
+        println!(
+            "PROBE room=write verdict=mask-skip layer={} reason=no-2d-frame",
+            layer.0
+        );
         return;
     };
     let next_id = d
@@ -517,63 +591,12 @@ fn add_rectangle_mask(
         Ok(_) => {
             drop(d);
             *revision.write() += 1;
-            println!("PROBE room=write verdict=mask-added layer={} id={next_id}", layer.0);
+            println!(
+                "PROBE room=write verdict=mask-added layer={} id={next_id}",
+                layer.0
+            );
         }
         Err(error) => println!("PROBE room=write verdict=apply-error {error}"),
-    }
-}
-
-fn set_shape_fill_color(node: &mut ShapeNode, brush: Brush) {
-    match node {
-        ShapeNode::Leaf(shape) => {
-            if let Some(fill) = shape.fill.as_mut() {
-                fill.brush = brush;
-            }
-        }
-        ShapeNode::Group(group) => {
-            for child in group.children.iter_mut() {
-                set_shape_fill_color(child, brush.clone());
-            }
-        }
-    }
-}
-
-fn apply_layer_color(doc: &Arc<Mutex<Document>>, layer: LayerId, rgba: [u8; 4], mut revision: Signal<u32>) {
-    let mut d = doc.lock().unwrap();
-    let source = d.view().meta(layer).ok().flatten().map(|m| m.source);
-    let intent = match source {
-        Some(LayerSource::Text) => d.view().text_document(layer).ok().flatten().map(|mut document| {
-            // 色を変える手は色だけ触る。α(帯で置いた値)は残す。
-            for style in document.styles.iter_mut() {
-                style.fill = [rgba[0] as f64 / 255.0, rgba[1] as f64 / 255.0, rgba[2] as f64 / 255.0, style.fill[3]];
-            }
-            Intent::SetTextDocument { layer, document }
-        }),
-        Some(LayerSource::Shape) => {
-            let mut shapes = d.view().shapes(layer).unwrap_or_default();
-            if shapes.is_empty() {
-                None
-            } else {
-                let brush = Brush::Solid(Rgb { r: rgba[0] as f64 / 255.0, g: rgba[1] as f64 / 255.0, b: rgba[2] as f64 / 255.0 });
-                for node in shapes.iter_mut() {
-                    set_shape_fill_color(node, brush.clone());
-                }
-                Some(Intent::SetShapes { layer, shapes })
-            }
-        }
-        _ => None,
-    };
-    let Some(intent) = intent else {
-        println!("PROBE room=write verdict=color-skip layer={} reason=unsupported-source", layer.0);
-        return;
-    };
-    match d.apply(intent) {
-        Ok(_) => {
-            drop(d);
-            *revision.write() += 1;
-            println!("PROBE room=write verdict=color-applied layer={}", layer.0);
-        }
-        Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
     }
 }
 
@@ -756,11 +779,8 @@ pub(super) fn browser_panel(
                                     }
                                     return;
                                 }
-                                for l in session.selection.all() {
-                                    if session.writable(l) {
-                                        apply_layer_color(&doc, l, rgba, revision);
-                                    }
-                                }
+                                let result = session.apply_blocks(None, |doc, target| color_block(doc, target, rgba));
+                                crate::ui::session::noted(result.map(|_| ()), revision);
                             }
                         });
                         rsx!(
@@ -814,20 +834,24 @@ pub(super) fn browser_panel(
                         .into_iter()
                         .map(|e| e.plugin_id)
                         .collect();
-                    let cards = crate::render::engine::known_effects().iter().map(|desc| {
+                    let catalog = crate::render::engine::known_effects();
+                    let cards = catalog.iter().map(|desc| {
                         let plugin_id = desc.plugin_id.to_owned();
                         let is_on = attached.contains(&plugin_id);
                         let card_class = if is_on { "tcard on" } else if layer.is_none() { "tcard disabled" } else { "tcard" };
-                        let onclick = layer.map(|l| {
-                            let doc = doc.clone();
+                        let onclick = layer.map(|_| {
+                            let session = session.clone();
                             let plugin_id = plugin_id.clone();
-                            move |_| add_effect(&doc, l, &plugin_id, revision)
+                            move |_| {
+                                let result = session.apply_each(None, |doc, target| effect_intents(doc, target, &plugin_id));
+                                crate::ui::session::noted(result.map(|_| ()), revision);
+                            }
                         });
                         rsx!(
                             SemanticButton {
                                 class: "{card_class}",
                                 disabled: layer.is_none(),
-                                title: if layer.is_none() { "Select a layer first" } else { "Add to the selected layer" },
+                                title: if layer.is_none() { "Select a layer first" } else { "Add to the selected layers" },
                                 selected: is_on,
                                 onclick: move |evt| { if let Some(f) = &onclick { f(evt) } },
                                 div { class: "thumb", style: "background:#222; display:flex; align-items:center; justify-content:center;",
@@ -993,7 +1017,8 @@ mod placement {
         let mut doc = Document::new();
         doc.apply_all(intents).unwrap();
         let view = doc.view();
-        let property = crate::doc::store::PropertyId::new(crate::doc::store::property::POSITION).unwrap();
+        let property =
+            crate::doc::store::PropertyId::new(crate::doc::store::property::POSITION).unwrap();
         let position = view
             .value_at(layer, &property, crate::doc::store::RationalTime::ZERO)
             .unwrap()
@@ -1026,7 +1051,10 @@ mod placement {
             .unwrap();
         let comp = (640.0, 480.0);
         let center = box_of(
-            NewKind::Media { path: path.to_str().unwrap().to_owned(), name: "logo".into() },
+            NewKind::Media {
+                path: path.to_str().unwrap().to_owned(),
+                name: "logo".into(),
+            },
             comp,
             (64.0, 48.0),
         );
@@ -1041,11 +1069,7 @@ mod placement {
         let dir = tempfile::tempdir().unwrap();
         let obj = dir.path().join("triangle.obj");
         let ply = dir.path().join("triangle.ply");
-        std::fs::write(
-            &obj,
-            "v -1 -1 0\nv 1 -1 0\nv 0 1 0\nf 1 2 3\n",
-        )
-        .unwrap();
+        std::fs::write(&obj, "v -1 -1 0\nv 1 -1 0\nv 0 1 0\nf 1 2 3\n").unwrap();
         std::fs::write(
             &ply,
             "ply\nformat ascii 1.0\nelement vertex 3\nproperty float x\nproperty float y\nproperty float z\nend_header\n-1 -1 0\n1 -1 0\n0 1 0\n",
@@ -1063,13 +1087,9 @@ mod placement {
             .unwrap();
             let view = doc.view();
             let read = |name| {
-                view.value_at(
-                    layer,
-                    &PropertyId::new(name).unwrap(),
-                    RationalTime::ZERO,
-                )
-                .unwrap()
-                .unwrap()
+                view.value_at(layer, &PropertyId::new(name).unwrap(), RationalTime::ZERO)
+                    .unwrap()
+                    .unwrap()
             };
             (read(property::POSITION), read(property::SCALE))
         };

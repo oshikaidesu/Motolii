@@ -20,6 +20,7 @@ use crate::render::media::PointCloudData;
 
 use crate::render::engine::texture::{ShapeCacheKey, TextCacheKey};
 
+pub use crate::render::compositor::{bind_catalog_runtime, catalog_generation, catalog_source_roots, refresh_effect_catalog, refresh_effect_catalog_for, watch_effect_catalog, CatalogRefresh, CatalogRuntime, CatalogWatcher};
 pub use crate::render::engine::translate::{
     known_effects, EffectDescriptor, EffectParamDescriptor,
 };

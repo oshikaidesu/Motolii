@@ -2,124 +2,80 @@ use std::collections::HashMap;
 
 pub(crate) mod isf;
 pub(crate) mod vism;
+pub(crate) mod catalog;
 mod wgsl_fragment;
 
-pub(crate) use isf::IsfProgram;
 pub use isf::{IsfInput, IsfInputType, IsfManifest};
 pub(crate) use vism::FLOAT_TARGET_FORMAT;
-pub(crate) use wgsl_fragment::{
-    WgslFragmentProgram, BLEND_SOURCE, MATTE_SOURCE, VELLO_BLEND_PRELUDE,
-};
+#[cfg(not(load_shaders_from_disk))]
+pub(crate) use wgsl_fragment::VELLO_BLEND_PRELUDE;
 
-#[derive(Clone, Copy)]
-pub(crate) struct VismSource {
-    pub(crate) name: &'static str,
-    pub(crate) extension: &'static str,
-    pub(crate) source: &'static str,
+#[cfg(not(load_shaders_from_disk))]
+pub(crate) struct EmbeddedVismSource {
+    name: &'static str,
+    extension: &'static str,
+    source: &'static str,
 }
 
+#[cfg(not(load_shaders_from_disk))]
 include!(concat!(env!("OUT_DIR"), "/vism_inventory.rs"));
 
+#[derive(Clone)]
+pub(crate) struct VismSource {
+    pub(crate) name: String,
+    pub(crate) extension: String,
+    pub(crate) source: std::sync::Arc<str>,
+}
+
+#[derive(Clone)]
 pub(crate) struct VismDefinition {
     pub(crate) source: VismSource,
     pub(crate) manifest: IsfManifest,
+    pub(crate) interface: String,
+    pub(crate) vertex_text: String,
+    pub(crate) fragment_text: String,
+    pub(crate) vertex_entry: String,
+    pub(crate) fragment_entry: String,
 }
 
 impl VismDefinition {
-    pub(crate) fn plugin_id(&self) -> &str {
-        self.manifest.id.as_deref().unwrap_or(self.source.name)
-    }
-
+    pub(crate) fn plugin_id(&self) -> &str { self.manifest.id.as_deref().unwrap_or(&self.source.name) }
     pub(crate) fn output_format(&self) -> wgpu::TextureFormat {
-        if self.manifest.output_float {
-            FLOAT_TARGET_FORMAT
-        } else {
-            wgpu::TextureFormat::Rgba8Unorm
-        }
+        if matches!(self.source.name.as_str(), "blend" | "matte") { crate::render::compositor::BLEND_TARGET_FORMAT }
+        else if self.manifest.output_float { FLOAT_TARGET_FORMAT } else { wgpu::TextureFormat::Rgba8Unorm }
+    }
+    pub(crate) fn paths(&self) -> [std::path::PathBuf; 2] {
+        [vism::catalog_stage_path(&self.source.name, "vertex"), vism::catalog_stage_path(&self.source.name, "fragment")]
+    }
+    pub(crate) fn stage(&self) -> Result<(), String> {
+        let [vertex, fragment] = self.paths();
+        vism::write_catalog_stage(&vertex, &self.vertex_text)?;
+        vism::write_catalog_stage(&fragment, &self.fragment_text)
     }
 }
 
-pub(crate) fn vism_definitions() -> &'static [VismDefinition] {
-    static DEFINITIONS: std::sync::OnceLock<Vec<VismDefinition>> = std::sync::OnceLock::new();
-    DEFINITIONS.get_or_init(|| {
-        VISM_SOURCES
-            .iter()
-            .copied()
-            .map(|source| VismDefinition {
-                source,
-                manifest: isf::parse_isf_source(source.source)
-                    .unwrap_or_else(|error| panic!("{}: {error}", source.name))
-                    .0,
-            })
-            .collect()
-    })
-}
-
-pub(crate) enum EffectProgram {
-    Wgsl(WgslFragmentProgram),
-    Isf(IsfProgram),
-}
+pub(crate) struct EffectProgram(vism::VismProgram);
 
 impl EffectProgram {
-    pub(crate) fn compile(
-        ctx: &re_renderer::RenderContext,
-        source: VismSource,
-        output_format: wgpu::TextureFormat,
-    ) -> Result<Self, isf::IsfError> {
-        match source.extension {
-            "wgsl" => Ok(Self::Wgsl(WgslFragmentProgram::compile(
-                ctx,
-                source.name,
-                source.source,
-                output_format,
-            ))),
-            "fs" => Ok(Self::Isf(IsfProgram::compile(
-                ctx,
-                source.source,
-                output_format,
-            )?)),
-            _ => unreachable!("build.rs filters Vism extensions"),
-        }
+    pub(crate) fn compile(ctx: &re_renderer::RenderContext, definition: &VismDefinition) -> Self {
+        let [vertex, fragment] = definition.paths();
+        Self(vism::VismProgram::new(ctx, &format!("motolii-vism-{}", definition.source.name), definition.manifest.clone(),
+            vism::ShaderStageSource { path: vertex, entry_point: definition.vertex_entry.clone() },
+            vism::ShaderStageSource { path: fragment, entry_point: definition.fragment_entry.clone() },
+            definition.output_format()))
     }
-
-    pub(crate) fn image_input_count(&self) -> usize {
-        match self {
-            Self::Wgsl(program) => program.image_input_count(),
-            Self::Isf(program) => program.image_input_count(),
-        }
-    }
-
+    pub(crate) fn image_input_count(&self) -> usize { self.0.image_input_count() }
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn record(
-        &self,
-        ctx: &re_renderer::RenderContext,
-        encoder: &mut wgpu::CommandEncoder,
-        scratch: &mut EffectScratch,
-        sources: &[&wgpu::TextureView],
-        dst_view: &wgpu::TextureView,
-        params: &[(String, f32)],
-        render_size: [f32; 2],
-    ) {
-        match self {
-            Self::Wgsl(program) => program.record_over(
-                ctx,
-                encoder,
-                scratch,
-                sources,
-                dst_view,
-                params,
-                render_size,
-            ),
-            Self::Isf(program) => program.record(
-                ctx,
-                encoder,
-                scratch,
-                sources,
-                dst_view,
-                params,
-                render_size,
-            ),
-        }
+    pub(crate) fn record(&self, ctx: &re_renderer::RenderContext, encoder: &mut wgpu::CommandEncoder,
+        scratch: &mut EffectScratch, sources: &[&wgpu::TextureView], dst_view: &wgpu::TextureView,
+        params: &[(String, f32)], render_size: [f32; 2]) {
+        self.0.record(ctx, encoder, scratch, sources, dst_view, params, render_size)
+    }
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn record_over(&self, ctx: &re_renderer::RenderContext, encoder: &mut wgpu::CommandEncoder,
+        scratch: &mut EffectScratch, sources: &[&wgpu::TextureView], dst_view: &wgpu::TextureView,
+        params: &[(String, f32)], render_size: [f32; 2]) {
+        self.record(ctx, encoder, scratch, sources, dst_view, params, render_size)
     }
 }
 
