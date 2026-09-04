@@ -7,6 +7,28 @@
 - グループの入力・出力・依存・副作用・配置の正本: [function-contracts.json](../../motolii/reference/function-contracts.json)。本書は意味・法則・採用根拠・検収を持つ。
 - doc/render/ui/vism/tests の5家、Documentの編集状態、Intent経由の書き込み、上流再利用、固定dxの運転を継ぐ。[現行憲法](../../motolii/AGENTS.md)
 
+## 0. 後続が最初に使う要約
+
+結論は、**通常の機能追加を、型付きの小さな関数と合成へ分解し、その関数本体・RSX・dataを状態保持hotpatchで反復する設計は成立する**、である。ただし「何でも自由なnode graphへ入れれば正しい」ことや「buildが永久に不要」なことは意味しない。
+
+```text
+安定した型とowner ── 値として渡す ──> 純粋な意味ブロック ── 合成 ──> 編集計画
+      │                                                       │
+      └──── Document / Undo / GPU / windowを保持 ── Shellが一度だけ実行 ┘
+```
+
+後続は次の順で判断する。
+
+1. 変更される設計判断を一つの名前付きblockへ閉じる。数式の短さではなく、独立して変わる責任でmoduleを切る。
+2. 入力へ対象、時刻、baseline、単位、座標系、source policyを明示し、出力を値・理由付き拒否・順序付きIntent計画にする。隠れたglobal、時計、I/O、GPU、Document書込を純粋なblockへ入れない。
+3. 独立対象は`map`、前の結果を読む変更は意味を先に`fold`する。同じtrack、Vec2、effects列、ID／参照を別々に書いてIntentの後勝ちへ任せない。
+4. Gestureはstateを値としてShellに預ける`step`にする。PreviewとCommitは同じ固定baselineから作った最後の計画を使い、成功だけを1 Undoで確定する。
+5. 頻繁に変える本体、RSX、descriptor、組合せは実際のreload入口へ置く。Document、Undo/Redo、selection、再生、Device/Queue等のownerは差し替えられるcomponentの外に保持する。
+6. 型layout、schema、dependency graph、保持ownerの非互換変更だけは記録付きbaseline例外になり得る。普通の関数変更がhotで届かない場合はbuild理由ではなくhot経路の欠落として直す。
+7. 純関数testだけで完了にしない。実際の挙動変更、mainと後から開いた別窓、owner identity、操作中patchの取消、Undo/Redo保持を同じwarm processで観測する。
+
+新しい機能は、まず既存blockの組合せで書く。足りない時だけ最小blockを追加し、[function-contracts.json](../../motolii/reference/function-contracts.json)へ入力・出力・副作用・compilation unit・reload入口・証拠を足す。新しいVM、文字列dispatch、万能node editorは、この理論からは導かれない。
+
 ## 1. 確定する構造
 
 数学の原子を既存の `std` / `kurbo` / `glam` / doc評価へ借り、意味を守るブロックをその上に組む。ブロックを名前のあるRust moduleとして切り、内部の関数を合成する。Dioxusは表示・入力の接続、実行側は状態保持と副作用を担う。
@@ -127,6 +149,6 @@ workspace内のstaticを唯一の状態ownerにしない。catalogのArcはHost�
 4. 合成の判定: 未使用課題の追加が、選択全体の意味関数と既存Moveブロックの組み合わせで閉じる。Shell/Control/Gestureへ操作名の特例が要れば、契約を再設計する。
 5. hotpatch: 群の関数本体・descriptorを変更し、実際の挙動が変わる。main/別窓、Undo/Redo・選択・再生・GPU資源の保持、drag中patchの取消、focus lossを観測する。時間は[build-loop budget](../../motolii/reference/build-loop-budget.tsv)の改善目標として測り、最新の利用者指示に従って必要なbuildを強制中断しない。
 
-現在の判定は **実装済み／代表試験とnative経路は合格／最終2窓確認待ち**。Doc7・UI50・render GPU5はexit0。最終runのCLI42238/app43349はDocumentとGPUを保持し、epoch1で再生中の混在変更、epochs15/16でcanonical catalogと不正shaderのlast-goodを確認した。新Gainと異format連鎖も実窓へ届いた。最後のdoc label/Gain既定値のsource復元後の両窓確認はrootが確定する。[採用計画](2026-09-04-pr-479-adoption.md)とmanifestに範囲を残し、全関数個別検証や常時5秒以内の保証にはしない。
+現在の判定は **実装済み／代表試験とnative経路は合格／最終2窓確認済み**。Doc7・UI50・render GPU5はexit0。最終runのCLI42238/app43349はDocumentとGPUを保持し、epoch1で再生中の混在変更、epochs15/16でcanonical catalogと不正shaderのlast-goodを確認した。新Gainと異format連鎖も実窓へ届き、doc label/Gain既定値のsource復元後にmainと後から開いた別窓の連続更新も確認した。[採用計画](2026-09-04-pr-479-adoption.md)とmanifestに範囲を残し、全関数個別検証や常時5秒以内の保証にはしない。
 
 設計確定時はJSON構文・群ID・依存の非循環・契約欄と局所リンクを確認した。その時点の全体 `check-docs.sh` は範囲外のreview未登録とunbound variableで未完走であり、リポジトリ全体の文書合格へは繰り上げない。

@@ -12,7 +12,7 @@ use crate::ui::inspector::{ChoiceDismiss, ChoiceId};
 use crate::ui::keymap::Intent;
 use crate::ui::output::{OutputStatus, OutputSurface};
 use crate::ui::panels::{BrowserPanel, InspectorPanel, StagePanel, TimelinePanel};
-use crate::ui::semantic_menu::{MenuDismiss, MenuId, SemanticControl, SemanticMenu};
+use crate::ui::semantic_menu::{MenuDismiss, MenuId, SemanticButton, SemanticControl, SemanticMenu};
 use crate::ui::session::Session;
 use crate::ui::settings::SettingsSheet;
 use crate::ui::timeline_widget::TimelineMsg;
@@ -267,6 +267,7 @@ pub(super) fn panel_body(
             attrs_state: p.attrs_state,
             selected: p.selected,
             revision: p.revision,
+            menu: p.context_menu,
         }),
         Panel::Stage => rsx!(StagePanel {
             session: session.clone(),
@@ -432,6 +433,8 @@ pub fn detached() -> Element {
     let command_window = window.clone();
     let mut command_revision = panes.revision;
     let command_selected = panes.selected;
+    let dock_window = window.clone();
+    let dock_host = host.clone();
     rsx!(
         style { {css} }
         {tokens::stylesheet()}
@@ -545,6 +548,22 @@ pub fn detached() -> Element {
                     }
                 }
             },
+            if let Some(window) = dock_window.as_ref() {
+                div { class: "detached-bar",
+                    span { "{panel}" }
+                    SemanticButton {
+                        class: "chip",
+                        aria_label: "Dock {panel} back in the main window",
+                        title: "Dock back in the main window",
+                        onclick: {
+                            let window_id = window.id();
+                            let host = dock_host.clone();
+                            move |_| host.close_window(window_id)
+                        },
+                        "Dock"
+                    }
+                }
+            }
             {panel_body(panel, &session, &ui, panes)}
             ContextMenu { session: session.clone(), panes }
             MenuDismiss { open: detached_menu }
@@ -1486,6 +1505,30 @@ pub fn app() -> Element {
                                                 evt.stop_propagation();
                                                 open_menu.set(None);
                                                 history_step(&session, layer_rows, attrs_state, &timeline_tx, revision, steps);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            for (label, intent) in [
+                                ("Cut", Intent::Cut),
+                                ("Copy", Intent::Copy),
+                                ("Paste", Intent::Paste),
+                            ] {
+                                div { class: "vrow",
+                                    SemanticControl {
+                                        label,
+                                        hint: crate::ui::keymap::hint(intent),
+                                        disabled: match intent {
+                                            Intent::Paste => !session.clipboard.has_payload(),
+                                            _ => session.selection.all().is_empty(),
+                                        },
+                                        onclick: {
+                                            let session = session.clone();
+                                            move |evt: Event<MouseData>| {
+                                                evt.stop_propagation();
+                                                open_menu.set(None);
+                                                crate::ui::commands::run(&session, panes, intent);
                                             }
                                         }
                                     }

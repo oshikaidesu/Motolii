@@ -641,6 +641,8 @@ pub(super) fn SemanticButton(
     #[props(default)] aria_haspopup: Option<String>,
     #[props(default)] aria_controls: Option<String>,
     #[props(default)] aria_selected: Option<String>,
+    #[props(default)] aria_posinset: Option<String>,
+    #[props(default)] aria_setsize: Option<String>,
     #[props(default)] role: Option<String>,
     #[props(default)] tabindex: Option<String>,
     #[props(default)] style: Option<String>,
@@ -652,6 +654,7 @@ pub(super) fn SemanticButton(
     onmouseenter: Option<EventHandler<MouseEvent>>,
     #[props(default)] onmouseleave: Option<EventHandler<MouseEvent>>,
     #[props(default)] ondoubleclick: Option<EventHandler<MouseEvent>>,
+    #[props(default)] oncontextmenu: Option<EventHandler<MouseEvent>>,
     #[props(default)] onkeydown: Option<EventHandler<KeyboardEvent>>,
     /// 名札(hover で出る)。文字を持たない chip だけが持つ。
     #[props(default)]
@@ -659,6 +662,7 @@ pub(super) fn SemanticButton(
     children: Element,
 ) -> Element {
     let a11y_name = aria_label.clone();
+    let a11y_selected = aria_selected.clone();
     let items = dioxus_core::try_consume_context::<MenuItems>();
     let focusable = dioxus_core::try_consume_context::<FocusableItems>();
     let mut mounted = use_signal(|| None::<std::rc::Rc<MountedData>>);
@@ -695,6 +699,8 @@ pub(super) fn SemanticButton(
         aria_haspopup,
         aria_controls,
         aria_selected,
+        aria_posinset,
+        aria_setsize,
         onpointerdown: move |evt: PointerEvent| if !disabled {
             let pointer = primary_pointer(&evt);
             armed.set(pointer.clone());
@@ -737,10 +743,23 @@ pub(super) fn SemanticButton(
             double_ready.set(false);
             if !disabled && ready { if let Some(h) = &ondoubleclick { h.call(evt) } }
         },
+        oncontextmenu: move |evt| {
+            if !disabled {
+                if let Some(handler) = &oncontextmenu {
+                    handler.call(evt);
+                }
+            }
+        },
         onkeydown: move |evt| if !disabled { if let Some(h) = &onkeydown { h.call(evt) } },
         // 見えない名前。adapter が aria-label を捨てるので、文字として置く(記号だけの button の為)。
         if let Some(name) = a11y_name.clone() {
             span { class: "a11y", "{name}" }
+        }
+        if a11y_selected.as_deref() == Some("true") {
+            span { class: "a11y", "selected" }
+        }
+        if disabled {
+            span { class: "a11y", "disabled" }
         }
         {children}
     })

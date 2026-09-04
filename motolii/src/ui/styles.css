@@ -609,6 +609,7 @@ body {
 
 #stage {
     display: grid;
+    position: relative;
     /* 枠の外も世界。作品の黒と紛れないよう、外は少し明るくしておく */
     background: var(--app);
     overflow: hidden;
@@ -1957,6 +1958,51 @@ h1.a11y, h2, h3.sec, h3.sh {
 .csheet-in:focus {
     outline: 2px solid var(--accent);
     outline-offset: -2px;
+}
+
+.custom-surface:focus {
+    outline: calc(2 * var(--s) * 1px) solid var(--accent);
+    outline-offset: calc(-2 * var(--s) * 1px);
+}
+
+.surface-stack {
+    position: relative;
+    display: grid;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.surface-stack > .custom-surface {
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+}
+
+.canvas-a11y {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
+.surface-stack:focus-within > .custom-surface {
+    outline: calc(2 * var(--s) * 1px) solid var(--accent);
+    outline-offset: calc(-2 * var(--s) * 1px);
+}
+
+#detached > .detached-bar {
+    height: var(--section);
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 var(--sp2);
+    border-bottom: var(--line) solid var(--bd);
+    background: var(--raised);
 }
 
 /* Colors の hex。押せる物に見え、打つ欄は枠の設定と同じ姿。 */

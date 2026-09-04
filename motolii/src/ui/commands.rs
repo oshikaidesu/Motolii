@@ -29,6 +29,8 @@ pub(super) fn preflight(session: &Session, intent: Intent) {
         intent,
         Intent::Split
             | Intent::Duplicate
+            | Intent::Cut
+            | Intent::Paste
             | Intent::DeleteLayer
             | Intent::Undo
             | Intent::Redo
@@ -66,6 +68,31 @@ pub(super) fn run(session: &Session, mut panes: Panes, intent: Intent) -> bool {
         return false;
     }
     let result: Result<(), StoreError> = (|| match intent {
+        Intent::Duplicate if !session.selected_keys.lock().unwrap().is_empty() => {
+            let keys = session.selected_keys.lock().unwrap().clone();
+            let mut doc = session.doc.lock().unwrap();
+            let fps = crate::ui::timeline_widget::document_fps(&doc)?;
+            let last = keys
+                .iter()
+                .map(|key| (key.at_sec * fps.as_f64()).round() as i64)
+                .max()
+                .unwrap_or(session.clock.current_frame());
+            let scratch = crate::ui::clipboard::Clipboard::default();
+            scratch.copy_keys(&doc, &keys)?;
+            let crate::ui::clipboard::PasteResult::Keys(copies) =
+                scratch.paste(&mut doc, session.selection.get(), last.saturating_add(1))?
+            else {
+                unreachable!("a keyframe duplicate changed clipboard payload kind")
+            };
+            let rows = crate::ui::fixture::canvas_rows_from_doc(&doc);
+            drop(doc);
+            *session.selected_keys.lock().unwrap() = copies.clone();
+            let _ = session.timeline_tx.send(TimelineMsg::SetRows(rows));
+            let _ = session.timeline_tx.send(TimelineMsg::SelectKeys(copies.clone()));
+            *session.project_notice.lock().unwrap() =
+                format!("Duplicated {} keyframes · ⌘Z to undo", copies.len());
+            Ok(())
+        }
         Intent::Split | Intent::Duplicate => {
             let targets = session.editable_selection();
             let result = if matches!(intent, Intent::Split) {
@@ -97,6 +124,64 @@ pub(super) fn run(session: &Session, mut panes: Panes, intent: Intent) -> bool {
             })
         }
         Intent::DeleteLayer => delete(session, panes),
+        Intent::Copy | Intent::Cut => {
+            let keys = session.selected_keys.lock().unwrap().clone();
+            let targets = session.selection.all();
+            if keys.is_empty() && targets.is_empty() {
+                *session.project_notice.lock().unwrap() = "Select layers to copy".into();
+                Ok(())
+            } else {
+                let (count, noun) = if keys.is_empty() {
+                    (
+                        session
+                            .clipboard
+                            .copy_layers(&session.doc.lock().unwrap(), &targets)?,
+                        "layers",
+                    )
+                } else {
+                    (
+                        session
+                            .clipboard
+                            .copy_keys(&session.doc.lock().unwrap(), &keys)?,
+                        "keyframes",
+                    )
+                };
+                *session.project_notice.lock().unwrap() = format!("Copied {count} {noun}");
+                if matches!(intent, Intent::Cut) {
+                    delete(session, panes)?;
+                }
+                Ok(())
+            }
+        }
+        Intent::Paste => {
+            let pasted = session.clipboard.paste(
+                &mut session.doc.lock().unwrap(),
+                session.selection.get(),
+                session.clock.current_frame(),
+            )?;
+            match pasted {
+                crate::ui::clipboard::PasteResult::Layers(copies) => {
+                    let count = copies.len();
+                    session.selection.replace(copies);
+                    panes.selected.set(session.selection.get());
+                    *session.project_notice.lock().unwrap() =
+                        format!("Pasted {count} layers · ⌘Z to undo");
+                    refresh(session, panes);
+                }
+                crate::ui::clipboard::PasteResult::Keys(keys) => {
+                    let count = keys.len();
+                    *session.selected_keys.lock().unwrap() = keys.clone();
+                    let rows = crate::ui::fixture::canvas_rows_from_doc(
+                        &session.doc.lock().unwrap(),
+                    );
+                    let _ = session.timeline_tx.send(TimelineMsg::SetRows(rows));
+                    let _ = session.timeline_tx.send(TimelineMsg::SelectKeys(keys));
+                    *session.project_notice.lock().unwrap() =
+                        format!("Pasted {count} keyframes · ⌘Z to undo");
+                }
+            }
+            Ok(())
+        }
         Intent::Rename => {
             if let Some(layer) = session
                 .selection
@@ -144,9 +229,44 @@ pub(super) fn run(session: &Session, mut panes: Panes, intent: Intent) -> bool {
             Ok(())
         }
         Intent::SelectAll => {
-            let layers = session.doc.lock().unwrap().view().layers();
-            session.selection.replace(layers);
-            panes.selected.set(session.selection.get());
+            let current_keys = session.selected_keys.lock().unwrap().clone();
+            if current_keys.is_empty() {
+                let layers = session.doc.lock().unwrap().view().layers();
+                session.selection.replace(layers);
+                panes.selected.set(session.selection.get());
+            } else {
+                let domains: Vec<_> = current_keys
+                    .iter()
+                    .map(|key| key.property.clone())
+                    .fold(Vec::new(), |mut domains, property| {
+                        if !domains.contains(&property) {
+                            domains.push(property);
+                        }
+                        domains
+                    });
+                let rows = crate::ui::fixture::canvas_rows_from_doc(
+                    &session.doc.lock().unwrap(),
+                );
+                let mut keys = Vec::new();
+                for row in &rows {
+                    let Some(layer) = row.layer else { continue };
+                    if !domains.contains(&row.prop) {
+                        continue;
+                    }
+                    for &at_sec in &row.keys {
+                        let key = crate::ui::session::KeySel {
+                            layer,
+                            property: row.prop.clone(),
+                            at_sec,
+                        };
+                        if !keys.contains(&key) {
+                            keys.push(key);
+                        }
+                    }
+                }
+                *session.selected_keys.lock().unwrap() = keys.clone();
+                let _ = session.timeline_tx.send(TimelineMsg::SelectKeys(keys));
+            }
             Ok(())
         }
         Intent::PlayPause => {

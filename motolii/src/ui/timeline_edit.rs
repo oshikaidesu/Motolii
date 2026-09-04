@@ -44,6 +44,281 @@ struct CopyPlan {
     ids: std::collections::HashMap<LayerId, LayerId>,
 }
 
+#[derive(Clone, Debug)]
+pub(super) struct LayerClipboard {
+    intents: Vec<Intent>,
+    roots: Vec<LayerId>,
+    copies: Vec<LayerId>,
+    slots: Vec<Slot>,
+}
+
+pub(super) fn copy_layers(
+    doc: &Document,
+    layers: &[LayerId],
+) -> Result<LayerClipboard, StoreError> {
+    let existing_slots: std::collections::HashSet<_> =
+        doc.view().slots()?.into_iter().map(|slot| slot.id).collect();
+    let plan = copy_plan(doc, layers)?;
+    let copies: Vec<_> = plan.ids.values().copied().collect();
+    let copy_set: std::collections::HashSet<_> = copies.iter().copied().collect();
+    let mut slots = Vec::new();
+    let mut intents = Vec::new();
+    for intent in plan.intents {
+        match intent {
+            Intent::SetSlots { slots: all } => {
+                slots.extend(
+                    all.into_iter()
+                        .filter(|slot| !existing_slots.contains(&slot.id)),
+                );
+            }
+            Intent::SetOrder { layer, .. } if !copy_set.contains(&layer) => {}
+            other => intents.push(other),
+        }
+    }
+    Ok(LayerClipboard {
+        intents,
+        roots: plan.roots.into_iter().map(|(_, copy)| copy).collect(),
+        copies,
+        slots,
+    })
+}
+
+pub(super) fn paste_layers(
+    doc: &mut Document,
+    clipboard: &LayerClipboard,
+) -> Result<Vec<LayerId>, StoreError> {
+    if clipboard.copies.is_empty() {
+        return Ok(Vec::new());
+    }
+    let view = doc.view().without_transients();
+    let first = view.next_layer_id();
+    let ids: std::collections::HashMap<_, _> = clipboard
+        .copies
+        .iter()
+        .enumerate()
+        .map(|(index, old)| {
+            first
+                .checked_add(index as u64)
+                .map(|id| (*old, LayerId(id)))
+                .ok_or_else(|| StoreError::Property("Layer identity space is full".into()))
+        })
+        .collect::<Result<_, _>>()?;
+    let root_set: std::collections::HashSet<_> = clipboard.roots.iter().copied().collect();
+    let mut next_order = view
+        .layers()
+        .into_iter()
+        .filter_map(|layer| {
+            if view
+                .attrs(layer)
+                .ok()
+                .flatten()
+                .and_then(|attrs| attrs.parent)
+                .is_some()
+            {
+                return None;
+            }
+            view.meta(layer).ok().flatten().map(|meta| meta.order)
+        })
+        .max()
+        .unwrap_or(-1)
+        .saturating_add(1);
+
+    let mut slot_ids = std::collections::HashMap::new();
+    let mut slots = view.slots()?;
+    for (index, slot) in clipboard.slots.iter().enumerate() {
+        let id = SlotId(format!("clipboard.{first}.{index}"));
+        slot_ids.insert(slot.id.clone(), id.clone());
+        slots.push(Slot {
+            id,
+            track: slot.track.clone(),
+        });
+    }
+    drop(view);
+
+    let mut remapped = Vec::new();
+    if !clipboard.slots.is_empty() {
+        remapped.push(Intent::SetSlots { slots });
+    }
+    for intent in clipboard.intents.iter().cloned() {
+        let next = remap_clipboard_intent(
+            intent,
+            &ids,
+            &slot_ids,
+            &root_set,
+            &mut next_order,
+        )?;
+        remapped.push(next);
+    }
+    doc.apply_all(remapped)?;
+    Ok(clipboard
+        .roots
+        .iter()
+        .filter_map(|root| ids.get(root).copied())
+        .collect())
+}
+
+fn remap_clipboard_intent(
+    intent: Intent,
+    layers: &std::collections::HashMap<LayerId, LayerId>,
+    slots: &std::collections::HashMap<SlotId, SlotId>,
+    roots: &std::collections::HashSet<LayerId>,
+    next_order: &mut i16,
+) -> Result<Intent, StoreError> {
+    let layer = |old: LayerId| {
+        layers
+            .get(&old)
+            .copied()
+            .ok_or_else(|| StoreError::Property("Clipboard layer identity is incomplete".into()))
+    };
+    let links = |links: Vec<crate::doc::store::PropertyLink>| {
+        links
+            .into_iter()
+            .filter_map(|mut link| {
+                link.source_layer = layers.get(&link.source_layer).copied()?;
+                Some(link)
+            })
+            .collect()
+    };
+    Ok(match intent {
+        Intent::AddLayer(old) => Intent::AddLayer(layer(old)?),
+        Intent::SetTrack {
+            layer: old,
+            property,
+            track,
+        } => Intent::SetTrack {
+            layer: layer(old)?,
+            property,
+            track,
+        },
+        Intent::SetConstant {
+            layer: old,
+            property,
+            value,
+        } => Intent::SetConstant {
+            layer: layer(old)?,
+            property,
+            value,
+        },
+        Intent::SetPropertySlot {
+            layer: old,
+            property,
+            slot,
+        } => Intent::SetPropertySlot {
+            layer: layer(old)?,
+            property,
+            slot: slots.get(&slot).cloned().ok_or_else(|| {
+                StoreError::Property("Clipboard shared value is incomplete".into())
+            })?,
+        },
+        Intent::SetPropertyLink {
+            layer: old,
+            property,
+            mut link,
+        } => {
+            link.source_layer = layer(link.source_layer)?;
+            Intent::SetPropertyLink {
+                layer: layer(old)?,
+                property,
+                link,
+            }
+        }
+        Intent::SetPropertyModulators {
+            layer: old,
+            property,
+            modulators,
+        } => Intent::SetPropertyModulators {
+            layer: layer(old)?,
+            property,
+            modulators: links(modulators),
+        },
+        Intent::SetMeta {
+            layer: old,
+            mut meta,
+        } => {
+            if roots.contains(&old) {
+                meta.order = *next_order;
+                *next_order = next_order.saturating_add(1);
+            }
+            Intent::SetMeta {
+                layer: layer(old)?,
+                meta,
+            }
+        }
+        Intent::SetSource { layer: old, source } => Intent::SetSource {
+            layer: layer(old)?,
+            source,
+        },
+        Intent::SetOrder { layer: old, order } => Intent::SetOrder {
+            layer: layer(old)?,
+            order,
+        },
+        Intent::SetMasks { layer: old, masks } => Intent::SetMasks {
+            layer: layer(old)?,
+            masks,
+        },
+        Intent::AddMask {
+            layer: old,
+            mask,
+            shape,
+        } => Intent::AddMask {
+            layer: layer(old)?,
+            mask,
+            shape,
+        },
+        Intent::SetTiming { layer: old, timing } => Intent::SetTiming {
+            layer: layer(old)?,
+            timing,
+        },
+        Intent::SetAttrs {
+            layer: old,
+            mut patch,
+        } => {
+            if let Some(parent) = patch.parent {
+                patch.parent = Some(parent.and_then(|parent| layers.get(&parent).copied()));
+            }
+            if let Some(matte) = patch.matte {
+                patch.matte = Some(matte.and_then(|mut matte| {
+                    matte.layer = layers.get(&matte.layer).copied()?;
+                    Some(matte)
+                }));
+            }
+            Intent::SetAttrs {
+                layer: layer(old)?,
+                patch,
+            }
+        }
+        Intent::SetEffects {
+            layer: old,
+            effects,
+        } => Intent::SetEffects {
+            layer: layer(old)?,
+            effects,
+        },
+        Intent::SetShapes { layer: old, shapes } => Intent::SetShapes {
+            layer: layer(old)?,
+            shapes,
+        },
+        Intent::SetTextDocument {
+            layer: old,
+            document,
+        } => Intent::SetTextDocument {
+            layer: layer(old)?,
+            document,
+        },
+        Intent::Freeze { group } => Intent::Freeze {
+            group: layer(group)?,
+        },
+        Intent::Unfreeze { group } => Intent::Unfreeze {
+            group: layer(group)?,
+        },
+        _ => {
+            return Err(StoreError::Property(
+                "Clipboard contains a non-layer operation".into(),
+            ));
+        }
+    })
+}
+
 fn copy_plan(doc: &Document, layers: &[LayerId]) -> Result<CopyPlan, StoreError> {
     let view = doc.view().without_transients();
     let mut sources = Vec::new();

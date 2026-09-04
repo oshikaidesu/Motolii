@@ -409,6 +409,24 @@ impl Gui {
         self.settle();
     }
 
+    fn context_click(&mut self, x: f32, y: f32) {
+        self.h.move_mouse_to(x, y);
+        crate::ui::keys::commit_field_outside(&mut self.h.doc, x, y);
+        let event = blitz_test_harness::pointer_event(
+            BlitzPointerId::Mouse,
+            x,
+            y,
+            MouseEventButton::Secondary,
+            MouseEventButtons::Secondary,
+            keyboard_types::Modifiers::empty(),
+        );
+        self.h.dispatch(UiEvent::PointerDown(event.clone()));
+        crate::ui::semantic_menu::flush_dom_work();
+        self.h.pump();
+        self.h.dispatch(UiEvent::PointerUp(event));
+        self.settle();
+    }
+
     fn pointer_raw(&self, x: f32, y: f32, buttons: MouseEventButtons) -> BlitzPointerEvent {
         let event = |buttons| BlitzPointerEvent {
             id: BlitzPointerId::Mouse,

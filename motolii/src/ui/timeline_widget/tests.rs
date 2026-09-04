@@ -36,6 +36,70 @@ mod follow {
     }
 }
 
+mod keyboard_surface {
+    use crate::doc::store::{LayerId, PropertyId};
+    use crate::ui::session::KeySel;
+    use crate::ui::timeline_widget::*;
+    use blitz_traits::events::{KeyState, UiEvent};
+    use std::rc::Rc;
+    use std::sync::{Arc, Mutex};
+
+    fn row(property: Option<PropertyId>) -> CanvasRow {
+        CanvasRow {
+            is_group: false,
+            keys: vec![0.1, 0.2],
+            span: Some((0.0, 1.0)),
+            agg: Vec::new(),
+            layer: Some(LayerId(1)),
+            prop: property,
+            color: [120, 130, 140],
+        }
+    }
+
+    #[test]
+    fn page_keys_scroll_the_focused_timeline_surface() {
+        let (_tx, rx) = std::sync::mpsc::channel();
+        let mut state = TimelineState::new(vec![row(None); 20], Rc::new(rx));
+        state.viewport_h = 100.0;
+        let mut bindings = TimelineBindings::default();
+        state.event(
+            &UiEvent::KeyDown(blitz_test_harness::key_event(
+                keyboard_types::Key::PageDown,
+                KeyState::Pressed,
+                keyboard_types::Modifiers::empty(),
+            )),
+            &mut bindings,
+        );
+        assert!(state.scroll_y > 0.0);
+        state.event(
+            &UiEvent::KeyDown(blitz_test_harness::key_event(
+                keyboard_types::Key::PageUp,
+                KeyState::Pressed,
+                keyboard_types::Modifiers::empty(),
+            )),
+            &mut bindings,
+        );
+        assert_eq!(state.scroll_y, 0.0);
+    }
+
+    #[test]
+    fn an_external_key_selection_restores_canvas_identity_and_the_shared_mirror() {
+        let property = PropertyId::new(crate::doc::store::property::OPACITY).unwrap();
+        let mirror = Arc::new(Mutex::new(Vec::new()));
+        let (_tx, rx) = std::sync::mpsc::channel();
+        let mut state = TimelineState::new(vec![row(Some(property.clone()))], Rc::new(rx))
+            .with_key_mirror(mirror.clone());
+        let key = KeySel {
+            layer: LayerId(1),
+            property: Some(property),
+            at_sec: 0.2,
+        };
+        state.select_keys(vec![key.clone()]);
+        assert_eq!(state.selected, vec![(0, 1)]);
+        assert_eq!(*mirror.lock().unwrap(), vec![key]);
+    }
+}
+
 mod lyrics {
     #[allow(unused_imports)]
     use crate::doc::store::*;

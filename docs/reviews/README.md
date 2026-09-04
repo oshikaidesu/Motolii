@@ -33,7 +33,7 @@
 | ファイル | 表題 |
 |---|---|
 | [2026-09-04-dioxus-reload-goal.md](2026-09-04-dioxus-reload-goal.md) | **通常実装をhotreloadで完結**(実装・代表検収完了)。workspace replay、混在CSS/Rust、runtime shader、後から開いた別窓の連続更新とDocument/GPU保持を実窓で確認。全体buildは理由・影響・修正ownerを残す例外。既存の型・保持入口の契約と証跡を明記 |
-| [2026-09-04-function-group-contract.md](2026-09-04-function-group-contract.md) | **関数群の契約**(実装・代表検収完了)。Parnas/Hughes/Foster/Elmと固定版Subsecond/Blitz一次資料に基づく原子・意味ブロック・合成・副作用・hot入口。名前のあるmodule、同じPreview/Commit計画、Redo原子性、操作中patch取消、新placement moduleとGainデータの実測 |
+| [2026-09-04-function-group-contract.md](2026-09-04-function-group-contract.md) | **ノードツール理論／関数群の契約**(実装・代表検収完了)。後続向けの判定手順、Parnas/Hughes/Foster/Elmと固定版Subsecond/Blitz一次資料に基づく原子・意味ブロック・合成・副作用・hot入口。名前のあるmodule、同じPreview/Commit計画、Redo原子性、操作中patch取消、新placement moduleとGainデータの実測 |
 | [2026-09-04-pr-479-adoption.md](2026-09-04-pr-479-adoption.md) | PR #479 の現行採用計画 — 右クリック・選択操作・カメラ・hotpatch・関数分類の採否、担当、実装と検収の現在地 |
 | [2026-09-03-camera-behavior-design.md](2026-09-03-camera-behavior-design.md) | カメラの挙動設計(縮小採用)。旧 base の原文と、現行 Camera 行・User View・投影に対する訂正、層の 2D / 2.5D / 3D 設計入力 |
 | [2026-09-03-selection-lifting.md](2026-09-03-selection-lifting.md) | 動詞を選択へ持ち上げる(縮小採用)。単体から選択への展開と一手一 Undo。現行 Inspector の先行実装・原文の適用単位の矛盾を明示 |

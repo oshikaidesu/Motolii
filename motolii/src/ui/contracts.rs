@@ -1,4 +1,4 @@
-use crate::doc::store::LayerId;
+use crate::doc::store::{AssetId, LayerId};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) enum Intent {
@@ -12,6 +12,9 @@ pub(crate) enum Intent {
     DeleteLayer,
     Undo,
     Redo,
+    Copy,
+    Cut,
+    Paste,
     /// 重ね順。正なら前へ、負なら後ろへ。
     Reorder(i16),
     /// 層の頭(false)/尻(true)を現在時刻へ動かす。
@@ -102,6 +105,7 @@ pub(crate) enum ViewRequest {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) enum MenuTarget {
+    BrowserMedia(AssetId),
     StageLayer(LayerId),
     TimelineLayer(LayerId),
     TimelineKey { layer: LayerId },

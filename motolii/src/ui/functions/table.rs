@@ -1,6 +1,6 @@
 use crate::ui::contracts::{Binding, EaseSide, Intent, KeySpec, MenuTarget, ViewRequest};
 
-pub(crate) fn bindings() -> [Binding; 63] {
+pub(crate) fn bindings() -> [Binding; 66] {
     [
         Binding {
             key: KeySpec::Char('k'),
@@ -148,6 +148,27 @@ pub(crate) fn bindings() -> [Binding; 63] {
             shift: false,
             alt: false,
             intent: Intent::Duplicate,
+        },
+        Binding {
+            key: KeySpec::Char('c'),
+            cmd: true,
+            shift: false,
+            alt: false,
+            intent: Intent::Copy,
+        },
+        Binding {
+            key: KeySpec::Char('x'),
+            cmd: true,
+            shift: false,
+            alt: false,
+            intent: Intent::Cut,
+        },
+        Binding {
+            key: KeySpec::Char('v'),
+            cmd: true,
+            shift: false,
+            alt: false,
+            intent: Intent::Paste,
         },
         Binding {
             key: KeySpec::Char('g'),
@@ -456,6 +477,8 @@ pub(crate) fn entries(target: MenuTarget) -> Vec<(&'static str, Intent)> {
         MenuTarget::StageLayer(_) | MenuTarget::TimelineLayer(_) | MenuTarget::TimelineKey { .. }
     ) {
         rows.extend([
+            ("Cut", Intent::Cut),
+            ("Copy", Intent::Copy),
             ("Split at Playhead", Intent::Split),
             ("Duplicate", Intent::Duplicate),
             ("Rename", Intent::Rename),
@@ -469,6 +492,7 @@ pub(crate) fn entries(target: MenuTarget) -> Vec<(&'static str, Intent)> {
         ]);
     }
     rows.extend([
+        ("Paste", Intent::Paste),
         ("Select All", Intent::SelectAll),
         ("Deselect", Intent::Deselect),
         ("Undo", Intent::Undo),

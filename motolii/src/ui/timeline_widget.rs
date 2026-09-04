@@ -372,6 +372,7 @@ pub(super) enum TimelineMsg {
     ScrollBy(f64),
     RevealLayer(LayerId),
     SetMarkers(Vec<f64>),
+    SelectKeys(Vec<crate::ui::session::KeySel>),
     /// Escape: キーの選択を落とす。
     DeselectKeys,
 }
@@ -1135,6 +1136,44 @@ impl TimelineState {
         *slot.lock().unwrap() = out;
     }
 
+    fn select_keys(&mut self, keys: Vec<crate::ui::session::KeySel>) {
+        let half = 0.5 / self.fps.max(1.0);
+        let mut selected = Vec::new();
+        for key in &keys {
+            let exact = self.rows.iter().enumerate().find_map(|(row_ix, row)| {
+                (row.layer == Some(key.layer) && row.prop == key.property)
+                    .then(|| {
+                        row.keys
+                            .iter()
+                            .position(|at| (*at - key.at_sec).abs() < half)
+                            .map(|key_ix| (row_ix, key_ix))
+                    })
+                    .flatten()
+            });
+            let visible = exact.or_else(|| {
+                self.rows.iter().enumerate().find_map(|(row_ix, row)| {
+                    (row.layer == Some(key.layer) && row.prop.is_none())
+                        .then(|| {
+                            row.keys
+                                .iter()
+                                .position(|at| (*at - key.at_sec).abs() < half)
+                                .map(|key_ix| (row_ix, key_ix))
+                        })
+                        .flatten()
+                })
+            });
+            if let Some(selected_key) = visible {
+                if !selected.contains(&selected_key) {
+                    selected.push(selected_key);
+                }
+            }
+        }
+        self.selected = selected;
+        if let Some(slot) = &self.selected_key {
+            *slot.lock().unwrap() = keys;
+        }
+    }
+
     fn process_messages(&mut self, bindings: &mut TimelineBindings) {
         while let Ok(msg) = self.rx.try_recv() {
             match msg {
@@ -1142,6 +1181,7 @@ impl TimelineState {
                 TimelineMsg::ScrollBy(dy) => self.set_scroll_y(self.scroll_y + dy, bindings),
                 TimelineMsg::RevealLayer(layer) => self.reveal_layer(layer, bindings),
                 TimelineMsg::SetMarkers(markers) => self.markers = markers,
+                TimelineMsg::SelectKeys(keys) => self.select_keys(keys),
                 TimelineMsg::DeselectKeys => {
                     self.selected.clear();
                     self.publish_keys();
@@ -1166,6 +1206,16 @@ impl TimelineState {
             return;
         }
         match event {
+            UiEvent::KeyDown(key) if matches!(key.key, keyboard_types::Key::PageUp) => {
+                let page = (self.viewport_h - RULER_H * self.sfac())
+                    .max(ROW_H * self.sfac());
+                self.set_scroll_y(self.scroll_y - page, bindings);
+            }
+            UiEvent::KeyDown(key) if matches!(key.key, keyboard_types::Key::PageDown) => {
+                let page = (self.viewport_h - RULER_H * self.sfac())
+                    .max(ROW_H * self.sfac());
+                self.set_scroll_y(self.scroll_y + page, bindings);
+            }
             UiEvent::Wheel(wheel) => {
                 let (x, y, lines) = match wheel.delta {
                     BlitzWheelDelta::Pixels(x, y) => (x, y, false),

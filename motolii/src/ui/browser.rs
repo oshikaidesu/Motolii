@@ -1000,18 +1000,16 @@ fn spawn_layer(
     // 最初の曲・動画の probe(ffprobe の process)は lock の外で。握ったまま起こすと窓が止まる。
     let probed = match &kind {
         NewKind::Media { path, .. } => {
-            let fresh = !doc.lock().unwrap().view().layers().into_iter().any(|l| {
-                matches!(
-                    doc.lock()
-                        .unwrap()
-                        .view()
-                        .meta(l)
-                        .ok()
-                        .flatten()
-                        .map(|m| m.source),
-                    Some(LayerSource::File { .. })
-                )
-            });
+            let fresh = {
+                let doc = doc.lock().unwrap();
+                let view = doc.view();
+                !view.layers().into_iter().any(|layer| {
+                    matches!(
+                        view.meta(layer).ok().flatten().map(|meta| meta.source),
+                        Some(LayerSource::File { .. })
+                    )
+                })
+            };
             fresh
                 .then(|| crate::render::media::probe(path).ok())
                 .flatten()
@@ -1314,6 +1312,87 @@ fn commit_active_media(
     );
 }
 
+pub(super) fn media_context_info(
+    session: &Session,
+    asset: crate::doc::store::AssetId,
+) -> Option<(String, Option<String>, bool)> {
+    let doc = session.doc.lock().unwrap();
+    let view = doc.view();
+    let row = fixture::asset_rows_from_view(&view)
+        .into_iter()
+        .find(|row| row.id == asset)?;
+    let in_use = row.path.as_ref().is_some_and(|path| {
+        view.layers().into_iter().any(|layer| {
+            view.meta(layer)
+                .ok()
+                .flatten()
+                .is_some_and(|meta| matches!(meta.source, LayerSource::File { path: source, .. } if source == *path))
+        })
+    });
+    Some((row.name, row.path, in_use))
+}
+
+pub(super) fn place_media_asset(
+    session: &Session,
+    asset: crate::doc::store::AssetId,
+    panes: crate::ui::app::Panes,
+) {
+    let Some((name, path, _)) = media_context_info(session, asset) else {
+        return;
+    };
+    let Some(path) = path else {
+        *session.project_notice.lock().unwrap() = "This media file is missing".into();
+        return;
+    };
+    spawn_layer(
+        &session.doc,
+        &session.clock,
+        panes.layer_rows,
+        panes.attrs_state,
+        &session.timeline_tx,
+        NewKind::Media { path, name },
+        "media",
+        panes.revision,
+    );
+}
+
+pub(super) fn replace_with_media_asset(
+    session: &Session,
+    asset: crate::doc::store::AssetId,
+    panes: crate::ui::app::Panes,
+) {
+    let Some(layer) = session.selection.get().filter(|layer| session.writable(*layer)) else {
+        *session.project_notice.lock().unwrap() = "Select an editable layer to replace".into();
+        return;
+    };
+    let Some((_, Some(path), _)) = media_context_info(session, asset) else {
+        *session.project_notice.lock().unwrap() = "This media file is missing".into();
+        return;
+    };
+    replace_source(&session.doc, layer, path, panes.revision);
+}
+
+pub(super) fn remove_media_asset(
+    session: &Session,
+    asset: crate::doc::store::AssetId,
+    mut revision: Signal<u32>,
+) {
+    let Some((_, _, in_use)) = media_context_info(session, asset) else {
+        return;
+    };
+    if in_use {
+        *session.project_notice.lock().unwrap() = "This media is still in use".into();
+        return;
+    }
+    match session.doc.lock().unwrap().apply(Intent::RemoveAsset { asset }) {
+        Ok(()) => {
+            *revision.write() += 1;
+            *session.project_notice.lock().unwrap() = "Removed media".into();
+        }
+        Err(error) => *session.project_notice.lock().unwrap() = error.to_string(),
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn commit_create_item(
     session: &Session,
@@ -1430,6 +1509,7 @@ pub(super) fn browser_panel(
     poke: crate::ui::poke::Poke,
     mut search_node: Signal<Option<std::rc::Rc<MountedData>>>,
     mut marquee: Signal<Option<BrowserMarquee>>,
+    menu: Signal<Option<crate::ui::context_menu::MenuRequest>>,
 ) -> Element {
     let scope = browser_scope(panel);
     let focusable_items = consume_context::<FocusableItems>();
@@ -1539,7 +1619,8 @@ pub(super) fn browser_panel(
     };
     let media_active = media_selection.active_in(BrowserScope::Media, &media_ids);
 
-    let asset_cards = shown.iter().map(|a| {
+    let media_count = shown.len();
+    let asset_cards = shown.iter().enumerate().map(|(index, a)| {
         let preview = a.preview.as_deref();
         let in_use = a.path.as_ref().is_some_and(|p| used.contains(p));
         let asset_id = a.id;
@@ -1565,10 +1646,19 @@ pub(super) fn browser_panel(
         let commit_path = a.path.clone();
         let commit_name = a.name.clone();
         let commit_timeline = timeline_tx.clone();
+        let context_session = session.clone();
+        let context_ids = media_ids.clone();
+        let context_item = item_id.clone();
+        let context_poke = poke.clone();
+        let mut context_menu = menu;
         rsx!(
             div { class: "tcell",
                 SemanticButton {
                     class: "{card_class}",
+                    role: "gridcell",
+                    aria_selected: if media_selection.is_selected(BrowserScope::Media, &item_id) { "true" } else { "false" },
+                    aria_posinset: Some((index + 1).to_string()),
+                    aria_setsize: Some(media_count.to_string()),
                     focus_key: Some(focus_key),
                     tabindex: Some(result_tabindex(media_active.as_ref(), &item_id)),
                     selected: media_selection.is_selected(BrowserScope::Media, &item_id),
@@ -1607,6 +1697,33 @@ pub(super) fn browser_panel(
                             *commit_session.project_notice.lock().unwrap() = "This media file is missing".into();
                             commit_poke.poke();
                         }
+                    },
+                    oncontextmenu: move |evt: MouseEvent| {
+                        evt.prevent_default();
+                        evt.stop_propagation();
+                        let changed = {
+                            let mut selection = context_session.browser_selection.lock().unwrap();
+                            if selection.is_selected(BrowserScope::Media, &context_item) {
+                                selection.activate(BrowserScope::Media, &context_item, &context_ids)
+                            } else {
+                                selection.click(
+                                    BrowserScope::Media,
+                                    &context_item,
+                                    &context_ids,
+                                    false,
+                                    false,
+                                )
+                            }
+                        };
+                        if changed {
+                            context_poke.poke();
+                        }
+                        let point = evt.client_coordinates();
+                        context_menu.set(Some(crate::ui::context_menu::MenuRequest {
+                            x: point.x,
+                            y: point.y,
+                            target: crate::ui::context_menu::MenuTarget::BrowserMedia(asset_id),
+                        }));
                     },
                     if let Some(src) = preview {
                         img { class: "thumb", src: "{src}", alt: "" }
@@ -1700,6 +1817,7 @@ pub(super) fn browser_panel(
             div { class: "rhead", style: "flex:0 0 auto;",
                 input {
                     id: "{search_id}",
+                    r#type: "search",
                     class: "csheet-in",
                     style: "width:100%; min-width:0;",
                     aria_label: "Search Browser",
@@ -1754,15 +1872,12 @@ pub(super) fn browser_panel(
                             evt.stop_propagation();
                             let (changed, focus) = {
                                 let mut selection = search_key_session.browser_selection.lock().unwrap();
-                                if selection.clear_query(scope) {
-                                    selection.ensure_active_in(scope, &search_focus_ids);
-                                    (
-                                        true,
-                                        selection.active_in(scope, &search_focus_ids),
-                                    )
-                                } else {
-                                    (selection.clear(scope), None)
-                                }
+                                let changed = selection.clear_query(scope);
+                                selection.ensure_active_in(scope, &search_focus_ids);
+                                (
+                                    changed,
+                                    selection.active_in(scope, &search_focus_ids),
+                                )
                             };
                             if changed {
                                 search_key_poke.poke();
@@ -1828,7 +1943,8 @@ pub(super) fn browser_panel(
                         selection.clone()
                     };
                     let color_active = color_selection.active_in(BrowserScope::Colors, &color_ids);
-                    let cards = swatches.into_iter().map(|ColorSwatch { hex, rgba }| {
+                    let color_count = swatches.len();
+                    let cards = swatches.into_iter().enumerate().map(|(index, ColorSwatch { hex, rgba })| {
                         let item_id = BrowserItemId::Color(rgba);
                         let is_selected = color_selection.is_selected(BrowserScope::Colors, &item_id);
                         let card_class = if is_selected { "tcard color-swatch on" } else { "tcard color-swatch" };
@@ -1844,6 +1960,10 @@ pub(super) fn browser_panel(
                         rsx!(
                             SemanticButton {
                                 class: "{card_class}",
+                                role: "gridcell",
+                                aria_selected: if is_selected { "true" } else { "false" },
+                                aria_posinset: Some((index + 1).to_string()),
+                                aria_setsize: Some(color_count.to_string()),
                                 focus_key: Some(focus_key),
                                 tabindex: Some(result_tabindex(color_active.as_ref(), &item_id)),
                                 selected: is_selected,
@@ -1955,7 +2075,7 @@ pub(super) fn browser_panel(
                                     None => rsx!(div { class: "rcount", "No color yet · select a layer to edit one" }),
                                 }
                                 if has_swatches {
-                                    div { class: "{color_grid_class}", {cards} }
+                                    div { class: "{color_grid_class}", role: "grid", {cards} }
                                 } else {
                                     div { class: "rcount", "No colors yet · select a layer to apply one" }
                                 }
@@ -1995,7 +2115,8 @@ pub(super) fn browser_panel(
                         selection.clone()
                     };
                     let effect_active = effect_selection.active_in(BrowserScope::Effects, &effect_ids);
-                    let cards = shown_effects.iter().map(|desc| {
+                    let effect_count = shown_effects.len();
+                    let cards = shown_effects.iter().enumerate().map(|(index, desc)| {
                         let plugin_id = desc.plugin_id.to_owned();
                         let is_on = attached.contains(&plugin_id);
                         let item_id = BrowserItemId::Effect(plugin_id.clone());
@@ -2013,6 +2134,10 @@ pub(super) fn browser_panel(
                         rsx!(
                             SemanticButton {
                                 class: "{card_class}",
+                                role: "gridcell",
+                                aria_selected: if is_selected { "true" } else { "false" },
+                                aria_posinset: Some((index + 1).to_string()),
+                                aria_setsize: Some(effect_count.to_string()),
                                 focus_key: Some(focus_key),
                                 tabindex: Some(result_tabindex(effect_active.as_ref(), &item_id)),
                                 title: if layer.is_none() { "Select · choose a layer before attaching" } else { "Select · double-click or Enter to attach" },
@@ -2128,6 +2253,7 @@ pub(super) fn browser_panel(
                                 }
                                 div {
                                     class: "{grid_class}",
+                                    role: "grid",
                                     onpointerdown: move |evt: PointerEvent| begin_browser_marquee(
                                         &marquee_down_session,
                                         BrowserScope::Effects,
@@ -2189,7 +2315,8 @@ pub(super) fn browser_panel(
                     }
                     let create_selection = session.browser_selection.lock().unwrap().clone();
                     let create_active = create_selection.active_in(BrowserScope::Create, &create_ids);
-                    let cards = shown_create.into_iter().map(|(item, label, meta, glyph)| {
+                    let create_count = shown_create.len();
+                    let cards = shown_create.into_iter().enumerate().map(|(index, (item, label, meta, glyph))| {
                         let item_id = BrowserItemId::Create(item);
                         let is_selected = create_selection.is_selected(BrowserScope::Create, &item_id);
                         let card_class = if is_selected { "tcard on" } else { "tcard" };
@@ -2210,6 +2337,10 @@ pub(super) fn browser_panel(
                         };
                         rsx!(SemanticButton {
                             class: "{card_class}",
+                            role: "gridcell",
+                            aria_selected: if is_selected { "true" } else { "false" },
+                            aria_posinset: Some((index + 1).to_string()),
+                            aria_setsize: Some(create_count.to_string()),
                             focus_key: Some(focus_key),
                             tabindex: Some(result_tabindex(create_active.as_ref(), &item_id)),
                             selected: is_selected,
@@ -2330,7 +2461,7 @@ pub(super) fn browser_panel(
                                     span { class: "sub", "Select a card, then press Enter or double-click" }
                                 }
                             }
-                            div { class: "{grid_class}", {cards} }
+                            div { class: "{grid_class}", role: "grid", {cards} }
                         }
                     })
                 }
@@ -2478,6 +2609,7 @@ pub(super) fn browser_panel(
                         } else {
                             div {
                                 class: "{grid_class}",
+                                role: "grid",
                                 onpointerdown: move |evt: PointerEvent| begin_browser_marquee(
                                     &marquee_down_session,
                                     BrowserScope::Media,

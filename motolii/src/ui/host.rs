@@ -254,6 +254,12 @@ impl Host {
         }
     }
 
+    pub(crate) fn close_window(&self, window: WindowId) {
+        if let Some(proxy) = &self.proxy {
+            proxy.send_event(BlitzShellEvent::CloseWindow { window_id: window });
+        }
+    }
+
     /// event loop を起こす。中身は使わないが、これで proxy_wake_up が回る。
     pub(crate) fn poke(&self) {
         if let Some(proxy) = &self.proxy {
@@ -1575,6 +1581,11 @@ fn closing_one_window_retires_only_its_callbacks() {
     }
     let live_calls = calls.clone();
     host.listen(move || live_calls.borrow_mut().push("main-wake"));
+
+    host.focus_lost(child);
+    assert_eq!(&*calls.borrow(), &["child-focus"]);
+    calls.borrow_mut().clear();
+
     assert_eq!(host.retire_window_callbacks(child), 2);
     assert_eq!(host.retire_window_callbacks(child), 0);
     host.focus_lost(main);

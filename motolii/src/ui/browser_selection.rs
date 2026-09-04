@@ -275,6 +275,22 @@ impl BrowserSelection {
             .cloned()
     }
 
+    pub(super) fn activate(
+        &mut self,
+        scope: BrowserScope,
+        id: &BrowserItemId,
+        ordered: &[BrowserItemId],
+    ) -> bool {
+        let Some(id) = ordered.iter().find(|candidate| *candidate == id).cloned() else {
+            return false;
+        };
+        let state = self.state_mut(scope);
+        let changed = state.active.as_ref() != Some(&id) || state.anchor.as_ref() != Some(&id);
+        state.active = Some(id.clone());
+        state.anchor = Some(id);
+        changed
+    }
+
     /// Keep one keyboard target in the visible result set without selecting it.
     pub(super) fn ensure_active_in(
         &mut self,
@@ -490,6 +506,21 @@ mod tests {
 
         assert_eq!(selection.active(BrowserScope::Effects), Some(&ids[0]));
         assert!(!selection.is_selected(BrowserScope::Effects, &ids[0]));
+    }
+
+    #[test]
+    fn activating_an_already_selected_context_target_keeps_the_multi_selection() {
+        let ids = effects(&["a", "b", "c"]);
+        let mut selection = BrowserSelection::default();
+        selection.click(BrowserScope::Effects, &ids[0], &ids, false, false);
+        selection.click(BrowserScope::Effects, &ids[2], &ids, true, false);
+
+        assert!(selection.activate(BrowserScope::Effects, &ids[0], &ids));
+        assert_eq!(selection.active(BrowserScope::Effects), Some(&ids[0]));
+        assert_eq!(
+            selection.selected_in_order(BrowserScope::Effects, &ids),
+            vec![ids[0].clone(), ids[2].clone()]
+        );
     }
 
     #[test]

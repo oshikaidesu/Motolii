@@ -70,10 +70,19 @@ pub(crate) fn select_new_field(doc: &mut DioxusDocument, seen: &mut Option<blitz
 }
 
 fn send_chord(doc: &mut DioxusDocument, key: keyboard_types::Key, code: keyboard_types::Code) {
+    send_key(doc, key, code, keyboard_types::Modifiers::SUPER);
+}
+
+fn send_key(
+    doc: &mut DioxusDocument,
+    key: keyboard_types::Key,
+    code: keyboard_types::Code,
+    modifiers: keyboard_types::Modifiers,
+) {
     let event = |state| blitz_traits::events::BlitzKeyEvent {
         key: key.clone(),
         code,
-        modifiers: keyboard_types::Modifiers::SUPER,
+        modifiers,
         location: keyboard_types::Location::Standard,
         is_auto_repeating: false,
         is_composing: false,
@@ -307,7 +316,58 @@ pub(crate) fn press_node(doc: &mut DioxusDocument, focused: blitz_dom::NodeId) -
     true
 }
 
-/// AccessKit の要求を Document へ。Click は click 1 対、Focus/Blur は焦点。木の id は blitz の node id そのもの。
+fn access_key(action: accesskit::Action) -> Option<(keyboard_types::Key, keyboard_types::Code)> {
+    use accesskit::Action;
+    use keyboard_types::{Code, Key};
+    match action {
+        Action::Increment => Some((Key::ArrowUp, Code::ArrowUp)),
+        Action::Decrement => Some((Key::ArrowDown, Code::ArrowDown)),
+        Action::ScrollUp => Some((Key::PageUp, Code::PageUp)),
+        Action::ScrollDown => Some((Key::PageDown, Code::PageDown)),
+        Action::ScrollLeft => Some((Key::ArrowLeft, Code::ArrowLeft)),
+        Action::ScrollRight => Some((Key::ArrowRight, Code::ArrowRight)),
+        _ => None,
+    }
+}
+
+fn context_node(doc: &mut DioxusDocument, target: blitz_dom::NodeId) {
+    let center = {
+        let inner = doc.inner();
+        let Some(node) = inner.get_node(target) else {
+            return;
+        };
+        let pos = node.absolute_position(0.0, 0.0);
+        let size = node.final_layout().size;
+        (pos.x + size.width / 2.0, pos.y + size.height / 2.0)
+    };
+    let event = |buttons| blitz_traits::events::BlitzPointerEvent {
+        id: blitz_traits::events::BlitzPointerId::Mouse,
+        is_primary: true,
+        coords: blitz_traits::events::PointerCoords {
+            page_x: center.0,
+            page_y: center.1,
+            screen_x: center.0,
+            screen_y: center.1,
+            client_x: center.0,
+            client_y: center.1,
+        },
+        button: blitz_traits::events::MouseEventButton::Secondary,
+        buttons,
+        mods: Default::default(),
+        details: Default::default(),
+        element: Default::default(),
+        active_pointers: std::sync::Arc::default(),
+    };
+    doc.handle_ui_event(blitz_traits::events::UiEvent::PointerDown(event(
+        blitz_traits::events::MouseEventButtons::Secondary,
+    )));
+    doc.handle_ui_event(blitz_traits::events::UiEvent::PointerUp(event(
+        blitz_traits::events::MouseEventButtons::Secondary,
+    )));
+}
+
+/// AccessKit requests use the same button and keyboard paths as direct input.
+/// The accessibility tree's integer node id is the versioned Blitz node id.
 pub(crate) fn act(doc: &mut DioxusDocument, req: &accesskit::ActionRequest) {
     let id = blitz_dom::NodeId::from_u64(req.target_node.0);
     match req.action {
@@ -319,7 +379,41 @@ pub(crate) fn act(doc: &mut DioxusDocument, req: &accesskit::ActionRequest) {
             doc.inner_mut().set_focus_to(id);
         }
         accesskit::Action::Blur => doc.inner_mut().clear_focus(),
+        accesskit::Action::Expand | accesskit::Action::Collapse => {
+            doc.inner_mut().set_focus_to(id);
+            press_node(doc, id);
+        }
+        accesskit::Action::ShowContextMenu => {
+            doc.inner_mut().set_focus_to(id);
+            context_node(doc, id);
+        }
+        accesskit::Action::ScrollIntoView => {
+            crate::ui::semantic_menu::reveal_node(&mut doc.inner_mut(), id);
+        }
+        action if access_key(action).is_some() => {
+            let (key, code) = access_key(action).expect("guarded above");
+            doc.inner_mut().set_focus_to(id);
+            send_key(doc, key, code, keyboard_types::Modifiers::empty());
+        }
         _ => {}
+    }
+}
+
+#[cfg(test)]
+mod access_tests {
+    use super::*;
+
+    #[test]
+    fn access_adjust_and_scroll_actions_map_to_the_same_keyboard_language() {
+        assert_eq!(
+            access_key(accesskit::Action::Increment),
+            Some((keyboard_types::Key::ArrowUp, keyboard_types::Code::ArrowUp))
+        );
+        assert_eq!(
+            access_key(accesskit::Action::ScrollDown),
+            Some((keyboard_types::Key::PageDown, keyboard_types::Code::PageDown))
+        );
+        assert_eq!(access_key(accesskit::Action::Click), None);
     }
 }
 

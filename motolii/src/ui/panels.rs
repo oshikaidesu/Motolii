@@ -8,7 +8,7 @@ use crate::ui::semantic_menu::{FocusableItems, SemanticButton};
 use crate::ui::session::Session;
 use crate::ui::stage_widget::{StageBindings, StageState};
 use crate::ui::timeline_shell::timeline_shell;
-use crate::ui::timeline_widget::{TimelineBindings, TimelineState};
+use crate::ui::timeline_widget::{TimelineBindings, TimelineMsg, TimelineState};
 use dioxus_native::prelude::*;
 
 #[component]
@@ -20,6 +20,7 @@ pub(super) fn BrowserPanel(
     attrs_state: Signal<Vec<(bool, bool, bool)>>,
     selected: Signal<Option<crate::doc::store::LayerId>>,
     revision: Signal<u32>,
+    menu: Signal<Option<MenuRequest>>,
 ) -> Element {
     let rail = use_signal(|| Option::<fixture::AssetFamily>::None);
     let search_node = use_signal(|| None::<std::rc::Rc<MountedData>>);
@@ -50,6 +51,7 @@ pub(super) fn BrowserPanel(
         poke,
         search_node,
         marquee,
+        menu,
     )
 }
 
@@ -110,6 +112,39 @@ pub(super) fn StagePanel(
     };
     let rings = session.rings.clone();
     let mut rings_on = use_signal(|| rings.load(std::sync::atomic::Ordering::Relaxed));
+    let stage_items = {
+        let doc = session.doc.lock().unwrap();
+        let view = doc.view();
+        let mut layers = view.layers();
+        layers.sort_by_key(|layer| {
+            std::cmp::Reverse(
+                view.meta(*layer)
+                    .ok()
+                    .flatten()
+                    .map(|meta| meta.order)
+                    .unwrap_or(0),
+            )
+        });
+        let solo = layers.iter().any(|layer| {
+            view.attrs(*layer)
+                .ok()
+                .flatten()
+                .is_some_and(|attrs| attrs.solo && !attrs.hidden)
+        });
+        layers
+            .into_iter()
+            .filter_map(|layer| {
+                let attrs = view.attrs(layer).ok().flatten().unwrap_or_default();
+                let meta = view.meta(layer).ok().flatten()?;
+                (!attrs.hidden
+                    && (!solo || attrs.solo)
+                    && meta.timing.covers(session.clock.current_frame()))
+                .then_some((layer, attrs.name, attrs.locked))
+            })
+            .collect::<Vec<_>>()
+    };
+    let stage_item_count = stage_items.len();
+    let selected_layers = session.selection.all();
     rsx!(
         div { id: "stagecol",
             // 行は常に 3 つ(grid の行数を揺らさない)。層が在れば空の 0px 行。
@@ -140,8 +175,55 @@ pub(super) fn StagePanel(
             } else {
                 div { class: "stagehint empty" }
             }
-            div { id: "stage",
-                SurfaceView::<StageState> { handle, bindings }
+            div { id: "stage", class: "surface-stack",
+                SurfaceView::<StageState> { handle, bindings, label: "Stage canvas" }
+                div { class: "canvas-a11y", role: "listbox", aria_label: "Visible Stage layers",
+                    for (index, (layer, name, locked)) in stage_items.into_iter().enumerate() {
+                        SemanticButton {
+                            class: "canvas-a11y-item",
+                            role: "option",
+                            tabindex: Some("-1".to_owned()),
+                            selected: selected_layers.contains(&layer),
+                            aria_selected: Some(if selected_layers.contains(&layer) { "true" } else { "false" }.to_owned()),
+                            aria_posinset: Some((index + 1).to_string()),
+                            aria_setsize: Some(stage_item_count.to_string()),
+                            aria_label: Some(format!(
+                                "{name}, layer {} of {}{}",
+                                index + 1,
+                                stage_item_count,
+                                if locked { ", locked" } else { "" },
+                            )),
+                            onclick: {
+                                let selection = session.selection.clone();
+                                move |_| {
+                                    selection.set(Some(layer));
+                                    selected.set(Some(layer));
+                                    *revision.write() += 1;
+                                }
+                            },
+                            oncontextmenu: {
+                                let selection = session.selection.clone();
+                                move |evt: MouseEvent| {
+                                    evt.prevent_default();
+                                    evt.stop_propagation();
+                                    if !selection.contains(layer) {
+                                        selection.set(Some(layer));
+                                        selected.set(Some(layer));
+                                    } else {
+                                        selection.activate(layer);
+                                    }
+                                    let point = evt.client_coordinates();
+                                    menu.set(Some(MenuRequest {
+                                        x: point.x,
+                                        y: point.y,
+                                        target: crate::ui::context_menu::MenuTarget::StageLayer(layer),
+                                    }));
+                                }
+                            },
+                            "{name}"
+                        }
+                    }
+                }
             }
             div { id: "stagefoot",
                 SemanticButton {
@@ -209,7 +291,6 @@ pub(super) fn TimelinePanel(
         revision: Some(revision),
         context_menu: Some(menu),
     };
-    let surface = rsx! { SurfaceView::<TimelineState> { handle, bindings } };
     // 行は Document から引き直す。一覧を持ち回っていると、書き込みの度に
     // 引き直しを**忘れた手**の分だけ窓が古いまま残る(名前変更がそれだった)。
     let _ = revision();
@@ -226,6 +307,93 @@ pub(super) fn TimelinePanel(
                 let rows = fixture::layer_rows_from_doc(&d);
                 *memo = Some((stamp, rows.clone()));
                 rows
+            }
+        }
+    };
+    let canvas_rows = fixture::canvas_rows_from_doc(&session.doc.lock().unwrap());
+    let first = ((scroll_y() / (crate::ui::tokens::ROW * session.scale.factor())).floor() as usize)
+        .min(canvas_rows.len());
+    let selected_keys = session.selected_keys.lock().unwrap().clone();
+    let mut timeline_items = Vec::new();
+    for (row, label) in canvas_rows
+        .iter()
+        .zip(rows_now.iter())
+        .skip(first)
+        .take(64)
+    {
+        let Some(layer) = row.layer else { continue };
+        for &at_sec in &row.keys {
+            timeline_items.push((
+                layer,
+                row.prop.clone(),
+                at_sec,
+                label.name.clone(),
+                label.locked,
+            ));
+        }
+    }
+    let timeline_item_count = timeline_items.len();
+    let surface = rsx! {
+        div { class: "surface-stack",
+            SurfaceView::<TimelineState> { handle, bindings, label: "Timeline canvas" }
+            div { class: "canvas-a11y", role: "listbox", aria_label: "Visible Timeline keyframes",
+                for (index, (layer, property, at_sec, name, locked)) in timeline_items.into_iter().enumerate() {
+                    {
+                        let key = crate::ui::session::KeySel {
+                            layer,
+                            property: property.clone(),
+                            at_sec,
+                        };
+                        let is_selected = selected_keys.iter().any(|selected| {
+                            selected.layer == key.layer
+                                && selected.property == key.property
+                                && (selected.at_sec - key.at_sec).abs()
+                                    < 0.5 * session.clock.frame_duration_sec()
+                        });
+                        let choose = key.clone();
+                        let choose_session = session.clone();
+                        let context = key.clone();
+                        let context_session = session.clone();
+                        rsx!(SemanticButton {
+                            class: "canvas-a11y-item",
+                            role: "option",
+                            tabindex: Some("-1".to_owned()),
+                            selected: is_selected,
+                            aria_selected: Some(if is_selected { "true" } else { "false" }.to_owned()),
+                            aria_posinset: Some((index + 1).to_string()),
+                            aria_setsize: Some(timeline_item_count.to_string()),
+                            aria_label: Some(format!(
+                                "{name} keyframe at {at_sec:.3} seconds, {} of {}{}",
+                                index + 1,
+                                timeline_item_count,
+                                if locked { ", locked" } else { "" },
+                            )),
+                            onclick: move |_| {
+                                choose_session.selection.replace_preserving_keys([choose.layer]);
+                                *choose_session.selected_keys.lock().unwrap() = vec![choose.clone()];
+                                let _ = choose_session.timeline_tx.send(TimelineMsg::SelectKeys(vec![choose.clone()]));
+                                selected.set(Some(choose.layer));
+                                *revision.write() += 1;
+                            },
+                            oncontextmenu: move |evt: MouseEvent| {
+                                evt.prevent_default();
+                                evt.stop_propagation();
+                                context_session.selection.replace_preserving_keys([context.layer]);
+                                *context_session.selected_keys.lock().unwrap() = vec![context.clone()];
+                                let _ = context_session.timeline_tx.send(TimelineMsg::SelectKeys(vec![context.clone()]));
+                                selected.set(Some(context.layer));
+                                let point = evt.client_coordinates();
+                                menu.set(Some(MenuRequest {
+                                    x: point.x,
+                                    y: point.y,
+                                    target: crate::ui::context_menu::MenuTarget::TimelineKey { layer: context.layer },
+                                }));
+                                *revision.write() += 1;
+                            },
+                            "{name}"
+                        })
+                    }
+                }
             }
         }
     };

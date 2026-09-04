@@ -695,6 +695,7 @@ pub(super) struct Session {
     pub imports: Arc<Mutex<Vec<Vec<crate::ui::fixture::Prepared>>>>,
     /// Browser の候補選択。panel の置き場を変えても同じ候補集合を指す。
     pub browser_selection: Arc<Mutex<crate::ui::browser_selection::BrowserSelection>>,
+    pub clipboard: crate::ui::clipboard::Clipboard,
     /// 今の作品の仕舞い先。`Save` が問い直さないために覚える。
     pub project_path: Arc<Mutex<Option<std::path::PathBuf>>>,
     /// 最後に保存／読込／NewしたDocument revision。dirtyは現在との差だけで決まる。
@@ -865,6 +866,7 @@ impl Session {
             quit: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             imports: Arc::new(Mutex::new(Vec::new())),
             browser_selection: Arc::new(Mutex::new(Default::default())),
+            clipboard: Default::default(),
             project_path: Arc::new(Mutex::new(None)),
             saved_revision: Arc::new(Mutex::new(saved_revision)),
             curve_clip: Arc::new(Mutex::new(None)),

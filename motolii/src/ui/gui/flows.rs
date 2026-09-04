@@ -22,6 +22,121 @@ fn history_back(gui: &Gui) -> usize {
     gui.session.doc.lock().unwrap().history_depth().0
 }
 
+#[test]
+fn command_copy_survives_delete_and_paste_restores_one_layer() {
+    let mut gui = Gui::open();
+    let row = gui.center_of(".lsurface", 1);
+    gui.click(row.0, row.1);
+    let original = gui.session.selection.get().expect("selected layer");
+    let position = crate::doc::store::PropertyId::new(crate::doc::store::property::POSITION).unwrap();
+    let at = gui.session.clock.current_time();
+    let before_value = gui
+        .session
+        .doc
+        .lock()
+        .unwrap()
+        .view()
+        .value_at(original, &position, at)
+        .unwrap();
+    let before_count = gui.session.doc.lock().unwrap().view().layers().len();
+
+    gui.key(
+        keyboard_types::Key::Character("c".into()),
+        keyboard_types::Modifiers::SUPER,
+    );
+    gui.key(
+        keyboard_types::Key::Delete,
+        keyboard_types::Modifiers::empty(),
+    );
+    assert_eq!(gui.session.doc.lock().unwrap().view().layers().len(), before_count - 1);
+    gui.key(
+        keyboard_types::Key::Character("v".into()),
+        keyboard_types::Modifiers::SUPER,
+    );
+
+    let pasted = gui.session.selection.get().expect("pasted selection");
+    assert_ne!(pasted, original);
+    assert_eq!(gui.session.doc.lock().unwrap().view().layers().len(), before_count);
+    assert_eq!(
+        gui.session
+            .doc
+            .lock()
+            .unwrap()
+            .view()
+            .value_at(pasted, &position, at)
+            .unwrap(),
+        before_value,
+    );
+}
+
+#[test]
+fn timeline_commands_keep_keyframes_as_the_active_selection_domain() {
+    let mut gui = Gui::open();
+    let (layer, property, at_sec, before_keys) = {
+        let doc = gui.session.doc.lock().unwrap();
+        let view = doc.view();
+        view.layers()
+            .into_iter()
+            .find_map(|layer| {
+                view.properties(layer).into_iter().find_map(|property| {
+                    let track = view.track(layer, &property).ok().flatten()?;
+                    let key = track.keys().first()?;
+                    Some((layer, property, key.t.as_seconds_f64(), track.keys().len()))
+                })
+            })
+            .expect("fixture keyframe")
+    };
+    crate::ui::fixture::expand(layer);
+    gui.session.selection.replace_preserving_keys([layer]);
+    let selected = crate::ui::session::KeySel {
+        layer,
+        property: Some(property.clone()),
+        at_sec,
+    };
+    *gui.session.selected_keys.lock().unwrap() = vec![selected.clone()];
+    let _ = gui
+        .session
+        .timeline_tx
+        .send(crate::ui::timeline_widget::TimelineMsg::SetRows(
+            crate::ui::fixture::canvas_rows_from_doc(&gui.session.doc.lock().unwrap()),
+        ));
+    let _ = gui
+        .session
+        .timeline_tx
+        .send(crate::ui::timeline_widget::TimelineMsg::SelectKeys(vec![selected]));
+    let before_history = history_back(&gui);
+
+    gui.key(
+        keyboard_types::Key::Character("d".into()),
+        keyboard_types::Modifiers::SUPER,
+    );
+    let duplicated = gui.session.selected_keys.lock().unwrap().clone();
+    assert!(!duplicated.is_empty());
+    assert!(duplicated.iter().all(|key| key.property.as_ref() == Some(&property)));
+    assert!(duplicated.iter().all(|key| key.at_sec > at_sec));
+    assert_eq!(history_back(&gui), before_history + 1);
+    let after_keys = gui
+        .session
+        .doc
+        .lock()
+        .unwrap()
+        .view()
+        .track(layer, &property)
+        .unwrap()
+        .unwrap()
+        .keys()
+        .len();
+    assert_eq!(after_keys, before_keys + duplicated.len());
+
+    gui.key(
+        keyboard_types::Key::Character("a".into()),
+        keyboard_types::Modifiers::SUPER,
+    );
+    let all = gui.session.selected_keys.lock().unwrap().clone();
+    assert_eq!(all.len(), after_keys);
+    assert!(all.iter().all(|key| key.property.as_ref() == Some(&property)));
+}
+
 /// 名前を開いたら全選択。打てば置き換わり、そのまま Enter なら何も起きない。
 #[test]
 fn an_opened_name_is_selected_so_typing_replaces_it() {
@@ -188,6 +303,254 @@ fn a_dropped_file_appears_where_it_landed_without_another_click() {
         cards + 1,
         "a reference leaked onto the shelf"
     );
+}
+
+#[test]
+fn a_media_context_click_preserves_a_multi_selection_and_places_the_target() {
+    let mut gui = Gui::open();
+    let media = gui.center_of("#dock-tab-Media", 0);
+    gui.click(media.0, media.1);
+    let dir = tempfile::tempdir().unwrap();
+    let a = dir.path().join("context-a.png");
+    let b = dir.path().join("context-b.png");
+    image::RgbaImage::from_pixel(4, 4, image::Rgba([220, 40, 40, 255]))
+        .save(&a)
+        .unwrap();
+    image::RgbaImage::from_pixel(4, 4, image::Rgba([40, 40, 220, 255]))
+        .save(&b)
+        .unwrap();
+    let stage = gui.center_of("#stage", 0);
+    let summary = gui.drop_files(&[a, b], stage.0, stage.1);
+    assert_eq!(summary.admitted, 2, "{}", summary.notice());
+
+    let first = gui.center_of(".tcard", 0);
+    let second = gui.center_of(".tcard", 1);
+    gui.click(first.0, first.1);
+    gui.click_super(second.0, second.1);
+    let media_ids: Vec<_> = crate::ui::fixture::asset_rows_from_view(
+        &gui.session.doc.lock().unwrap().view(),
+    )
+    .into_iter()
+    .map(|asset| crate::ui::browser_selection::BrowserItemId::Media(asset.id))
+    .collect();
+    let browser_selection = gui.session.browser_selection.clone();
+    let selected = || {
+        browser_selection
+            .lock()
+            .unwrap()
+            .selected_in_order(crate::ui::browser_selection::BrowserScope::Media, &media_ids)
+    };
+    assert_eq!(selected().len(), 2);
+
+    gui.context_click(first.0, first.1);
+    assert_eq!(selected().len(), 2, "right click collapsed the selection");
+    assert_eq!(gui.count(".context-menu"), 1, "media actions did not open");
+
+    let before = gui.session.doc.lock().unwrap().view().layers().len();
+    let place = gui.center_of_text(".context-menu .vitem", "Place as Layer");
+    gui.click(place.0, place.1);
+    assert_eq!(gui.count(".context-menu"), 0);
+    assert_eq!(gui.session.doc.lock().unwrap().view().layers().len(), before + 1);
+}
+
+#[test]
+fn browser_keyboard_navigation_search_and_local_shortcuts_stay_in_the_active_face() {
+    let mut gui = Gui::open();
+    let layer_row = gui.center_of(".lsurface", 1);
+    gui.click(layer_row.0, layer_row.1);
+    let artwork = gui.session.selection.all();
+    let effects = gui.center_of("#dock-tab-Effects", 0);
+    gui.click(effects.0, effects.1);
+    let ids: Vec<_> = crate::render::engine::known_effects()
+        .iter()
+        .map(|effect| {
+            crate::ui::browser_selection::BrowserItemId::Effect(effect.plugin_id.clone())
+        })
+        .collect();
+    assert!(ids.len() > 1);
+    gui.focus(".tcard");
+    let before = gui
+        .session
+        .browser_selection
+        .lock()
+        .unwrap()
+        .active(crate::ui::browser_selection::BrowserScope::Effects)
+        .cloned();
+    gui.key(
+        keyboard_types::Key::ArrowRight,
+        keyboard_types::Modifiers::empty(),
+    );
+    let after = gui
+        .session
+        .browser_selection
+        .lock()
+        .unwrap()
+        .active(crate::ui::browser_selection::BrowserScope::Effects)
+        .cloned();
+    assert_ne!(after, before, "a grid arrow did not move the active card");
+
+    gui.key(
+        keyboard_types::Key::Character("a".into()),
+        keyboard_types::Modifiers::SUPER,
+    );
+    assert_eq!(
+        gui.session
+            .browser_selection
+            .lock()
+            .unwrap()
+            .selected_in_order(crate::ui::browser_selection::BrowserScope::Effects, &ids)
+            .len(),
+        ids.len()
+    );
+    gui.key(
+        keyboard_types::Key::Character("c".into()),
+        keyboard_types::Modifiers::SUPER,
+    );
+    assert_eq!(gui.session.selection.all(), artwork);
+    assert!(!gui.session.clipboard.has_payload());
+
+    gui.key(
+        keyboard_types::Key::Character("f".into()),
+        keyboard_types::Modifiers::SUPER,
+    );
+    let search = gui
+        .h
+        .base()
+        .query_selector("#browser-search-Effects")
+        .ok()
+        .flatten()
+        .unwrap();
+    assert_eq!(gui.h.base().get_focussed_node_id(), Some(search));
+    type_chars(&mut gui, "b");
+    assert_eq!(
+        gui.session
+            .browser_selection
+            .lock()
+            .unwrap()
+            .query(crate::ui::browser_selection::BrowserScope::Effects),
+        "b"
+    );
+    gui.key(
+        keyboard_types::Key::Escape,
+        keyboard_types::Modifiers::empty(),
+    );
+    assert_eq!(
+        gui.session
+            .browser_selection
+            .lock()
+            .unwrap()
+            .query(crate::ui::browser_selection::BrowserScope::Effects),
+        ""
+    );
+    let focused = gui.h.base().get_focussed_node_id().unwrap();
+    let class = gui
+        .h
+        .base()
+        .get_node(focused)
+        .and_then(|node| node.element_data())
+        .and_then(|element| element.attr(blitz_dom::local_name!("class")))
+        .unwrap_or_default()
+        .to_owned();
+    assert!(class.split_ascii_whitespace().any(|name| name == "tcard"));
+}
+
+#[test]
+fn a_custom_surface_is_focusable_and_names_its_keyboard_scope() {
+    let mut gui = Gui::open();
+    assert!(gui.count(".custom-surface") >= 2);
+    assert_eq!(gui.h.attr(".custom-surface", "role").as_deref(), Some("application"));
+    assert_eq!(
+        gui.h.attr(".custom-surface", "aria-label").as_deref(),
+        Some("Stage canvas")
+    );
+    let node = gui
+        .h
+        .base()
+        .query_selector(".custom-surface")
+        .ok()
+        .flatten()
+        .unwrap();
+    let point = gui.center_of(".custom-surface", 0);
+    gui.click(point.0, point.1);
+    assert_eq!(gui.h.base().get_focussed_node_id(), Some(node));
+
+    let proxy = gui
+        .h
+        .base()
+        .query_selector(".canvas-a11y-item")
+        .ok()
+        .flatten()
+        .expect("visible canvas item proxy");
+    assert_eq!(
+        gui.h.attr(".canvas-a11y-item", "aria-posinset").as_deref(),
+        Some("1")
+    );
+    gui.session.selection.clear();
+    crate::ui::keys::act(
+        &mut gui.h.doc,
+        &accesskit::ActionRequest {
+            action: accesskit::Action::Click,
+            target_tree: accesskit::TreeId::ROOT,
+            target_node: accesskit::NodeId(proxy.as_u64()),
+            data: None,
+        },
+    );
+    gui.settle();
+    assert!(gui.session.selection.get().is_some());
+}
+
+#[test]
+fn a_custom_surface_context_menu_uses_window_client_coordinates() {
+    let mut gui = Gui::open();
+    let (x, y) = gui.center_of(".custom-surface", 0);
+    gui.context_click(x, y);
+    let menu = gui
+        .h
+        .base()
+        .query_selector(".context-menu")
+        .ok()
+        .flatten()
+        .expect("Stage context menu");
+    let menu_x = gui
+        .h
+        .base()
+        .get_node(menu)
+        .unwrap()
+        .absolute_position(0.0, 0.0)
+        .x;
+    assert!(
+        (f64::from(menu_x) - f64::from(x)).abs() < 1.0,
+        "custom surface local coordinates leaked into fixed menu placement: {menu_x} vs {x}"
+    );
+}
+
+#[test]
+fn an_accessibility_increment_uses_the_inspector_spinbutton_path() {
+    let mut gui = Gui::open();
+    let row = gui.center_of(".lsurface", 1);
+    gui.click(row.0, row.1);
+    let (index, before) = first_numeric_cell(&mut gui);
+    let before = before.trim().parse::<f64>().unwrap();
+    let node = gui
+        .h
+        .base()
+        .query_selector_all(".prow .v")
+        .unwrap_or_default()[index];
+    crate::ui::keys::act(
+        &mut gui.h.doc,
+        &accesskit::ActionRequest {
+            action: accesskit::Action::Increment,
+            target_tree: accesskit::TreeId::ROOT,
+            target_node: accesskit::NodeId(node.as_u64()),
+            data: None,
+        },
+    );
+    gui.settle();
+    let after = gui.texts(".prow .v")[index]
+        .trim()
+        .parse::<f64>()
+        .unwrap();
+    assert!(after > before, "increment did not change the value: {before} -> {after}");
 }
 
 /// 窓の中の余白(menubar)へ落としても、tab は別窓へ飛ばない。外へ出した時だけ。
