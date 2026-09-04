@@ -47,6 +47,12 @@
 - **`rotation.x/y/z`・多次元 scale は実装する。欄を消さない** — Lottie にある語彙なので削らない
 - **Duplicate / Copy-Paste は常に Independent** — 全 ID を新規採番、複製サブツリー内参照だけ再写像。
   **live 同期しない**
+- **複数選択への展開は発明しない — Composite/Command に委託**(2026-09-03) — 動詞は 1 層分だけ書き、
+  `targets(clicked)`(含まれれば選択全体・含まれなければその物だけ・クリック無しは選択全体)と
+  `lift`(Intent を集めて `apply_all` 1 回 = 1 undo)の 2 関数だけが集まりを知る。動詞が宣言するのは
+  **絶対か差分かの 1 ビット**(AE/Premiere 慣習: ドラッグ = 相対、入力 = 絶対)。混在値は「—」で出し打てば
+  全員に入る(Unity)。回転・拡縮の中心は各層自身の anchor。例外は結果が 1 つしか無い「跳ぶ」「rename」。
+  正本: [動詞を選択へ持ち上げる](reviews/2026-09-03-selection-lifting.md)
 - **Asset 識別は source fingerprint と recipe/artifact digest を別 identity へ分離** —
   fingerprint は `motolii-source-v1:sha256:<64桁hex>` + size。worker は生の locator でなく
   Host-private `SourceBinding` を使う
@@ -81,6 +87,13 @@
 - **camera は document 所有、view camera は出力に出ない** — export は document camera で offscreen 撮影
 - **boxcam** — カメラのビューは世界に破線 + ハンドルのボックスとして描き、**世界自体は縮めない**。
   視点は上縁タブ。**初期倍率は fit**
+- **層の投影の状態は `2D / 2.5D / 3D` の 3 値属性、モードではない**(2026-09-03) — 2D = 画面に貼る
+  (旧 `pinned`)/ **2.5D = カメラとの相対角度を打ち消す**(層の中心へ向かう視線と光軸のなす角だけ層を逆回転
+  してから共有カメラへ。どこへ運んでも同じ向きに見えるが、**奥行き・深度テスト・3D 物体同士の貫通は世界のまま**。
+  AE のプリコンポの畳みのように板へ焼かない)/ 3D = 共有カメラが投影。どの値でも `rotation.x/y/z`・
+  `position.z` の欄は出る。既定は素材の種類で決める(動画・図形・テキスト = 2.5D、メッシュ・点群 = 3D)。
+  **「2.5D」の語は以後この層ごとの状態を指す**(裁定115 の「プレビュー全体の透視表現」の意味では使わない)。
+  Lottie に該当語彙は無い(camera-layer 系は不採用)。正本: [カメラの挙動設計](reviews/2026-09-03-camera-behavior-design.md)
 - **clipping mask は Motolii 側 authority のまま** — Rerun の segmentation / opacity へ委譲しない。
   一回使うだけの vector mask は中間 texture を作らない
 - **Vism 出力の透明レイヤー表示は `GridMap` → `RectangleRenderer`** — `Mesh3D` は shader が

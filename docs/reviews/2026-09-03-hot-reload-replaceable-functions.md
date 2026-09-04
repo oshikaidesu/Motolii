@@ -1,0 +1,254 @@
+# ホットリロードの利益を取る — 置き換え可能な関数群と tip crate の設計
+
+- 日付: 2026-09-03
+- 位置づけ: **設計提案**(コードに触らない上流工程)。事実(§0)と、委託先(§1)と、その上に置く形(§2)を分ける
+- 発端: 利用者「現在は常にビルドし直して Dioxus の旨味を何も取れていない。置き換え可能な関数群を事前に
+  作っておき、内部をノードツールのように組み替えることで共通化とホットリロードの最適化を目指したい。可能か」
+- 答えの一行: **可能。ただし今は起動の仕方の時点で何も効いていない。**機構は 4 つ既に手元にあり、
+  足りないのは「どの関数を tip crate に置くか」の切り方だけ
+
+## 0. 現在地(2026-09-03、`main` c2c7a89 と手元の依存を読んだ事実)
+
+| 機構 | 在る | 効いているか | 根拠 |
+|---|---|---|---|
+| **RSX テンプレートのホットリロード** | `dioxus-native` の `hot-reload` feature(probe は有効)。`DevserverMsg::HotReload` → `apply_changes` | **効いていない**。`dioxus_devtools::connect` は devserver(`dx serve`)が居る時だけ繋がる。`cargo run` では無音 | `dioxus-native/src/lib.rs:167-171`、`dioxus_application.rs:66-71` |
+| **asset のリロード** | `HotReload` の `assets` を `reload_resource_by_href` で差し替え | **効いていない**。`styles.css` は `include_str!` で焼いている(`app.rs:19`)ので href が無い | `dioxus_application.rs:73-78`、`blitz-dom/src/document.rs:1078` |
+| **関数単位のホットパッチ(subsecond)** | Dioxus 0.7.10、`dioxus-devtools` が `apply_patch` を持つ。`dx serve --hotpatch` | **効いていない**(同上、devserver 不在)。効いても **tip crate = `probe` だけ**。`motolii-store`/`engine` の変更は全ビルド | `subsecond-0.7.10/src/lib.rs` 冒頭・「Workspace support」節 |
+| **re_renderer シェーダのディスク読み** | `.cargo/config.toml` の `IS_IN_RERUN_WORKSPACE=1` で `load_shaders_from_disk` | **効いている**(motolii/ の中から回した時) | `motolii/.cargo/config.toml` |
+
+subsecond の制約(公開文書に明記、設計に効く物だけ):
+
+- **tip crate のみ**(`main.rs` のある crate)。他 crate の変更は無視される
+- **struct のレイアウト変更は不可**(旧レイアウトを参照する新関数が落ちる)。Dioxus は「古い状態を捨てて作り直す」で回避
+- static の初期化子の変更は反映されない。thread-local は patch でリセットされ得る(「HUGE WARNING」)
+- patch 点は `subsecond::call` を通した所。Dioxus は component と handler を `HotFn` で包んでいる(`dioxus-devtools/src/lib.rs:198`)。
+  **custom widget の `paint`/`handle_event` は Blitz が直接呼ぶので包まれていない**
+
+## 1. 委託先(発明しない)
+
+| 借りる物 | 出典 | ここで担う役 |
+|---|---|---|
+| **Functional core, imperative shell** | Gary Bernhardt(2012、講演) | 純関数(値→値)を核に、副作用(GPU・window・Document 書き込み)を薄い殻へ。**核が置き換え可能な関数群、殻が tip crate の配線** |
+| **The Elm Architecture** | Elm guide「The Elm Architecture」 | `update: Msg × Model → Model`、`view: Model → Html`。Motolii では `Intent` が Msg、`Document` が Model、`rsx!` が view。**既にこの形**(裁定「Document への書きは Intent 経由のみ」) |
+| **subsecond の「Nesting Calls」** | `subsecond` crate docs | patch 点は入れ子にでき、外側は初期化(副作用)、内側は頻繁に変える関数。**包む場所の設計指針そのもの** |
+| **Bevy の hotpatching** | Bevy 0.16 リリースノート「Hotpatching systems」 | ゲームエンジンが system(素の `fn`)を subsecond で差し替える先例。**素の関数 + 安定した引数型**という切り方の実証 |
+| **ノードツール** | Blender Geometry Nodes / Houdini(型付きポートの純関数を data で配線) | 「内部をノードのように組み替える」の外部像。ノード = 純関数、配線 = 表(データ) |
+
+利用者の言う「置き換え可能な関数群 + ノードのような組み替え」は、この表では
+**Functional core(関数群)+ Elm の update/view(型)+ 配線を表で持つ(ノードツール)**、の 3 つの合成であって、新しい物は無い。
+
+## 2. 設計(§0 の制約の上に §1 を置く)
+
+### 2.1 切り方の規則は 2 本
+
+1. **よく変える物は tip crate(`probe`)の素の関数に置く。struct は下の crate に置く。**
+   subsecond が差し替えられるのは tip crate の関数だけで、struct のレイアウト変更は不可。だから
+   「引数と戻り値の型は `motolii-store`/`core` の安定した型(`Intent`・`LayerId`・`StoreView`・`RationalTime`)、
+   本体は probe の `fn`」にすれば、本体の変更は hot-patch、型の変更だけが全ビルド、と自然に分かれる。
+2. **副作用は殻に 1 段だけ。核は値→値。**
+   核の関数は `&StoreView` を読み `Vec<Intent>` を返す(書かない)、`&Scene` を受け取って描く(GPU 資源を作らない)、
+   `&UiEvent` を受け取って `Option<Msg>` を返す(状態を持たない)。殻(`app.rs`・widget の `impl Widget`)が
+   `apply_all`・GPU 資源・window を持つ。**核は state を持たないので「古い状態を捨てる」問題が起きない。**
+
+### 2.2 何を置き換え可能にするか(変える頻度の順)
+
+| 関数群 | 今の場所 | 形(核) | 殻 | 効く機構 |
+|---|---|---|---|---|
+| **動詞**(Intent を作る) | `dispatch.rs` の `run_intent` の各 arm、`timeline_widget.rs` の drag 確定、`stage_widget.rs` のギズモ確定 | `fn(&StoreView, LayerId, Payload) -> Vec<Intent>`([持ち上げ](2026-09-03-selection-lifting.md)の動詞台帳と同じ物) | `lift` + `apply_all` | hot-patch |
+| **献立**(右クリック menu) | `context_menu.rs::entries` | `fn(MenuTarget) -> Vec<Entry>`(既に純関数) | `context_menu` の rsx | hot-patch + RSX |
+| **打鍵表** | `keymap.rs::BINDINGS`(static) | **static のままだと変更が反映されない**(§0)。`fn bindings() -> &'static [Binding]` か `fn lookup` 内の `match` へ | `onkeydown` | hot-patch |
+| **層行・帯の抽出** | `fixture.rs::layer_rows_from_doc`/`canvas_rows_from_doc` | 既に `fn(&Document) -> Vec<Row>` | `refresh_rows` | hot-patch |
+| **Inspector の行の並び・条件付き節** | `inspector.rs` の rsx | rsx literal・attribute・構造 | — | **RSX**(dx serve だけで効く、コード変更不要) |
+| **custom widget の描画** | `timeline_widget.rs::paint`(`impl Widget` の中) | `fn paint_timeline(&TimelineState, &mut Scene, w, h, scale)` を切り出し | `impl Widget for TimelineWidget { fn paint { subsecond::call(\|\| paint_timeline(..)) } }` | hot-patch(**殻で包む 1 行が要る**) |
+| **当たり判定・ジェスチャの判定** | `hit_test`/`band_hit`/`handle_event` | `fn(&TimelineState, x, y) -> Hit`、`fn(&UiEvent, &State) -> Option<Msg>` | 同上 | hot-patch |
+| **CSS** | `styles.css` を `include_str!` | ファイルのまま | `asset!("./styles.css")` を `document::Stylesheet` で head へ(Blitz は `CreateHeadElement` を持つ) | **asset**(dx serve だけで効く) |
+| **トークン**(`css_root`) | `tokens.rs` が文字列生成 | 生成を `fn` のまま(static にしない) | `style {}` | hot-patch |
+| **シェーダ** | `shader.wgsl`(probe)、re_renderer | — | — | 既に効く(re_renderer 側)。probe の wgsl も同じ経路へ |
+
+「ノードのように組み替える」は、この表の**核関数を配線する表**が data であること。動詞台帳(持ち上げ文書 §3)が
+そのまま配線表で、`keymap` と `context_menu::entries` は既にその形をしている。
+
+### 2.3 置かない物(規則 1 の裏)
+
+- **struct 定義**(`TimelineWidget`・`StageWidget`・`IntentCtx`)。変えれば全ビルド。頻度が低いので許容する
+- **GPU 資源・`State::Active`・wgpu device を握る物**。殻の持ち物。patch で「捨てて作り直す」と GPU 状態が飛ぶので、
+  核に置かない = 飛ばない
+- **static/thread-local に置いた設定**(打鍵表・献立・トークン)。§0 の制約でそのまま反映されない。関数にする
+
+### 2.4 起動
+
+`motolii/` の中で `dx serve --hotpatch -p dioxus-native-probe`(dx CLI 0.7 系)。`.cargo/config.toml` の env は
+cargo を通るので継承される(**要実測**、§C)。`cargo run` は「ホットリロード無し」の起動として残す。
+
+## 2.5 理想像 — Rust が箱、RSX が配線(利用者 2026-09-03)
+
+利用者の狙いは「Rust の関数を事前にたくさん作っておき、UI の設計段階ではホットリロードで組み合わせるだけにして、
+実質ノードツールとして開発を速くする」。**可能。**外部の実例は Unreal の C++(箱)と Blueprint(ホットな配線)で、
+Blender のノード・TouchDesigner も同型。Motolii では **Rust が箱、RSX が配線**(RSX の literal と構造はホットに
+差し替わる。配線を Rust で書いても probe なら subsecond で差し替わる)。
+
+**箱の形の規則は 3 本:**
+
+1. **型を少なく、関数を多く**(Perlis「1 つのデータ構造に 100 の関数」)。ポートの型を絞る(§2.6.6 で 7 つに確定)。
+   型が少ないほど組み合わせが増え、多いほどノードは孤立する
+2. **箱は状態を持たない**。読む・判定する・Intent を返す・Scene に描く、のどれか 1 つ。副作用は殻が 1 段だけ持つ(§2.1)
+3. **箱には名前がある**。配線が RSX から名前で引ける登録表を 1 つ持つ(ノードツールのパレット)
+
+**箱の種類は 5 つ + 結合子 2 つ:**
+
+| 種類 | 型 | 例 |
+|---|---|---|
+| 読む | `(&StoreView, LayerId, t) -> Value` | position・尺・選択・playhead |
+| 判定する | `Value -> bool` | 鍵があるか・既定から変わったか・選択中か(属性の絞り込み `U`/`UU`/`SS` はこれ) |
+| 動詞 | `(&StoreView, LayerId, Payload) -> Vec<Intent>` | [持ち上げ](2026-09-03-selection-lifting.md)の動詞台帳そのもの |
+| 描く | `(&Value, &mut Scene) -> ()` | 帯・ダイヤ・枠 |
+| ジェスチャ | `(&UiEvent, &State) -> Option<Msg>` | 掴む・端・スクラブ |
+| 結合子 | `lift`(集合へ)・`zip`(2 つを合わせる) | 持ち上げの `lift` と同じ物 |
+
+**UI 設計の日の回り方**: Inspector に行を足す = 読む箱を選び、判定の箱で出る条件を付け、動詞の箱をスクラブに繋ぎ、
+RSX で並べる。全部既存の箱ならビルドは走らない。箱が足りない時だけ Rust を書き、probe の中なら subsecond で即座に載る。
+
+**罠は 1 つ**: 箱を「便利だから」と大きくすると Blueprint と同じ地獄になる。**1 箱 1 動詞、引数は 5 型のどれか**、
+を grep で柵にする(§3 の「核は書かない」と同じ形)。
+
+## 2.6 抽象化の芯 — 箱は 1 つの形、原始は 3 つ、結合子は 5 つ
+
+§2.5 の「5 種の箱」は用途の分類で、抽象化の単位ではない。芯を詰めると **形は 1 つ、原始は 3 つ**に落ちる。
+鍵は「何を箱にするか」ではなく「**性質(property)への読み書きを値にする**」こと — それが在れば、面(Inspector・
+Timeline・Stage・menu)は全部その値の上の**同じ 3 つの原始の組み合わせ**になり、N 面 × M 性質のコードが
+N + M に落ちる。
+
+### 2.6.1 箱の形は 1 つ(委託: Mealy machine / Elm `update` / FRP `scan`)
+
+```text
+step : (State, Input) -> (State, Output)
+```
+
+- **状態を持たない箱**は `State = ()` の特殊形。読む・判定する・動詞・描く は全部これ
+- **ジェスチャ**(掴む→動かす→離す)だけは状態が要るが、**状態は data として殻が持ち、箱は step 関数**。
+  今の `DragState`/`GizmoDrag` がその data で、`handle_event` の各 arm が step の本体。箱自身は何も抱えない
+- この 1 形にする利益: **全ての箱が同じ試験で測れる**(`step` に列を流して出力を assert)。hot-patch で「古い状態を
+  捨てる」問題も起きない(状態は殻の data、箱は関数)
+
+### 2.6.2 原始は 3 つ
+
+| 原始 | 形 | 委託先 | Motolii での実体 |
+|---|---|---|---|
+| **Lens**(性質への読み書き) | `get: (&StoreView, Target, t) -> Value` / `set: (Target, Value) -> Vec<Intent>` / `delta: (Target, Value) -> Vec<Intent>` | van Laarhoven / Kmett の lens(「読む・書く」を第一級の値にする) | **`PropertyId` が既にこれ**(`value_at` + `Intent::SetTrack`)。camera は `PropertyId::camera`。足りないのは attrs・timing・effect param・name の lens アダプタ |
+| **Gesture**(入力の折り畳み) | `step: (GestureState, &UiEvent) -> (GestureState, Option<Msg>)`、`Msg = Preview(Payload) \| Commit(Payload) \| Cancel` | Mealy / Elm | `DragMode::{Move,TrimStart,TrimEnd}`・`GizmoMode`・スクラブ・矩形選択。**種類は 4 つで尽きる**(押す・引く・端を引く・回す) |
+| **Control**(値と面の往復) | `show: (&Value, Range) -> Element \| Scene` / `edit: (&Value, input) -> Value` | MVC の View+Controller | 数値スクラブ・トグル・3 択・色・key ◇・帯・ダイヤ・枠。**種類は 1 桁** |
+
+**Q4(preview = 結果)は構造で守られる**: Gesture は `Preview(payload)` と `Commit(payload)` を**同じ payload 型**で出し、
+殻は両方を**同じ Lens の `delta`** に流す(Preview は transient overlay へ、Commit は `apply_all` へ)。
+「drag 中の見た目と離した後の結果が違う」経路が**書けない**。
+
+### 2.6.3 結合子は 5 つ
+
+| 結合子 | 形 | 使い所 |
+|---|---|---|
+| `>>`(合成) | `step_a >> step_b` | Gesture → Lens.delta、Lens.get → Control.show |
+| `lift`(集合へ) | `lens.set` を `Vec<Target>` へ | [持ち上げ](2026-09-03-selection-lifting.md)の `lift` そのもの。**Composite** |
+| `filter`(述語) | `(Lens, pred: Value -> bool)` | 属性の絞り込み `U`(鍵がある)/`UU`(既定から変わった)/`SS`(選択中)。Inspector の条件付き節 |
+| `zip`(束ねる) | `(Lens_x, Lens_y) -> Lens_vec2` | Position X/Y を 1 行に。Stage の 2 軸ドラッグ |
+| `scan`(折り畳み) | `Gesture` を event 列へ | 殻が 1 回だけ使う(`handle_event`) |
+
+### 2.6.4 検算 — 今の全面がこの 3 原始で書けるか
+
+| 面・操作 | 合成 | 今のコード |
+|---|---|---|
+| Inspector の数値行 | `Control::scrub(Lens(prop).get)` >> `Lens(prop).delta` | `prop_row` + `nudge` + `commit_drag`(専用実装) |
+| Inspector の key ◇ | `Control::toggle(has_key(Lens(prop)))` >> `Lens(prop).set_key` | `write_key`(専用) |
+| Inspector の色 | `Control::color(Lens(color).get)` >> `Lens(color).set` | `apply_layer_color`(Browser 側に専用) |
+| Camera 節(カメラ設計 §3.1) | **同じ `Control::scrub` に `Lens(camera.center)`** | 無い。**lens が在れば行を足すだけ = 0 行の新規コード** |
+| M / S / L | `lift(Lens(attrs.hidden).set(!v))` | glyph の onclick(専用、1 行だけ) |
+| 2D / 2.5D / 3D | `lift(Lens(attrs.projection).set(v))` | 無い。**M と同じ箱** |
+| 帯の Move | `Gesture::drag` >> `lift(Lens(timing.start).delta)` + key 追随 | `handle_event` + `PointerUp` の 60 行(専用) |
+| 帯の Trim | `Gesture::edge_drag` >> `Lens(timing.{start,duration,source_in}).delta` | 同上 |
+| ギズモ Move | **同じ `Gesture::drag`** >> `lift(zip(Lens(position.x), Lens(position.y)).delta)` | `GizmoMode::Move`(専用) |
+| ギズモ Rotate | `Gesture::rotate` >> `lift(Lens(rotation).delta)` | 専用 |
+| ギズモ Scale | `Gesture::edge_drag` >> `Lens(scale).delta` + 固定点 | `compute_scale`(専用) |
+| スクラブ(ルーラー) | `Gesture::drag` >> `Lens(playhead).set` | `scrubbing`(専用)。**playhead も Lens**(書き先が clock なだけ) |
+| 右クリック menu | `entries(target)` >> `lift(verb)` | #479 |
+| 属性の絞り込み | `filter(Lens(prop), has_key)` で行を選ぶ | 無い(Tier 2)。**filter 1 つで成立** |
+| Split / Delete / Duplicate | `lift(verb)`(Lens を跨ぐので動詞のまま) | `dispatch.rs` |
+
+**帯の Move とギズモの Move が同じ Gesture**、**Inspector の数値行と Camera 節が同じ Control**、**M と 2.5D が同じ箱**。
+専用実装が 1 面 1 実装で 10 本あった物が、Gesture 4 × Control 数個 × Lens N に落ちる。**新しい性質を足す = Lens を 1 つ足す**
+で、Inspector の行・Timeline の key・Stage の追随が同時に付いてくる。
+
+### 2.6.5 Lens の在庫(触れる物は全て Lens を持つ = Q0b の機械版)
+
+| 性質 | get | set / delta | 状態 |
+|---|---|---|---|
+| property track(position・scale・rotation・opacity・色…) | `value_at` | `SetTrack` | **在る**(`PropertyId`) |
+| camera(center・zoom・roll) | `camera_value_at` | `SetCameraTrack` | **在る**(`PropertyId::camera`) |
+| attrs(hidden・solo・locked・projection) | `attrs()` | `SetAttrs{patch}` | アダプタが要る(1 つずつ) |
+| timing(start・duration・source_in・speed) | `meta().timing` | `SetTiming` | アダプタが要る |
+| effect param(layer, i, param) | `effects()[i].params` | `SetEffects`(列ごと書き戻し) | アダプタが要る。**Vism の param も同じ lens** |
+| name | `layer_names` | rename(未実装) | アダプタ + Intent が要る |
+| playhead | clock | clock.seek | Document 外だが同じ形 |
+
+規則: **Q0b「触れる物は全て編集可能」を、「触れる物は全て Lens を持つ」で機械検収する**。Lens の無い性質を面に出したら
+柵(grep)で落ちる。逆に Lens さえ在れば、面は既存の Control を並べるだけ。
+
+### 2.6.6 型の総数(§2.5 の「5 型」を訂正)
+
+ポートを流れる型は **7 つ**で閉じる。データ側 4 つ: `Value`(既存 enum: F64/Vec2/Color/Bool/Path/index)・`Time`(`RationalTime`)・
+`Target`(`LayerId` の集合 | camera | effect(layer, i))・`Intent`。UI 側 3 つ: `UiEvent`・`Msg`・`Scene`/`Element`。
+`State` は箱ごとの data で、ポートを流れない(殻が持つ)。**8 つ目を足したくなった時が裁定**(型を足すか、その機能を諦めるか)。
+
+### 2.6.7 配線を RSX に置く形(ホットな層)
+
+```text
+PropRow { lens: "position", control: "scrub", filter: "has_key" }
+Glyph   { lens: "attrs.hidden", control: "toggle", label: "M" }
+Band    { lens: "timing", gesture: "drag+edge" }
+```
+
+- 名前 → 箱は **登録表 1 つ**(`registry.rs`)。RSX の文字列 literal はホットに差し替わるので、**行の追加・並べ替え・
+  条件の付け替えはビルド無し**
+- 型検査は登録表で失う。代わりに **dev 時は解決失敗をその場に赤で出す**(Q3 の拒否の報酬を開発者にも)。
+  release では登録表の解決を起動時に全件検査して落とす(名前の typo を出荷しない)
+- 登録表に載せるのは Lens・Control・Gesture・述語・動詞の 5 種だけ。**レイアウトは RSX literal のまま**(抽象化しない。
+  ここが「見た目を触る」層で、抽象化すると逆にホットの利益が消える)
+
+### 2.6.8 過剰抽象の柵
+
+- **箱にするのは 2 面以上から使うか、RSX から配線する物だけ**(rule of three の 2 面版)。1 面 1 回の処理は殻に inline
+- **Lens は性質 1 つ**。「position と anchor を同時に」は `zip`、「全 property」は `lift`。Lens 自身に複数を持たせない
+- **Gesture に意味を持たせない**。`drag` は「掴んで動かした差分」を出すだけで、それが position か timing かは Lens が決める
+- **Control に書き先を持たせない**。Control は `Value` を出すだけで、Intent を作らない
+
+## 3. 不変量(核が純関数であることの検分)
+
+| 不変量 | 測り方 |
+|---|---|
+| **核は書かない** | `probe` の核関数の引数に `&mut Document`/`Arc<Mutex<Document>>` が無い(grep 1 本で柵にできる) |
+| **同じ入力に同じ出力** | 動詞・献立・抽出・当たり判定は `Document` 水準の test で決定的(既に `context_menu`/`keymap`/`dispatch` の test がこの形) |
+| **殻は薄い** | `impl Widget` の各メソッドが「状態を取り出して核を 1 回呼ぶ」以上の分岐を持たない |
+| **patch 後も Document は同じ** | hot-patch は Document(store)に触れない。patch 前後で `Document` のバイトが同じ |
+
+## A. 利用者裁定待ち
+
+| 件 | 分岐 |
+|---|---|
+| 配線を **表(データ)** にするか **素の Rust 呼び出し** にするか | 推し = 表は動詞台帳・打鍵表・献立の 3 つだけ(既にその形)。それ以外は素の呼び出し。表を増やしすぎると Rust の型検査を捨てることになる |
+| widget の `paint` を核へ切り出す際、`State` を **読み取り専用の view struct** にするか | 推し = する(`&TimelineState`)。描画中に state を変える経路(`process_messages`)は殻へ |
+| `dx serve` を正の起動にするか | 推し = 開発は `dx serve --hotpatch`、検分器具(`MOTOLII_TILT` 等)は `cargo run` のまま |
+
+## B. 順序(器が在る)
+
+1. **`dx serve` で RSX が差し替わることを実測**(コード変更ゼロ。効けば Inspector の並び替えが即座に見える)
+2. `styles.css` を `asset!` + `document::Stylesheet` へ(CSS のホットリロード)
+3. `dx serve --hotpatch` を実測(tip = probe。`entries`/`layer_rows_from_doc` を変えて反映を見る)
+4. 動詞・打鍵表を関数へ(static を外す)。[持ち上げ](2026-09-03-selection-lifting.md)の B-1 と同じ commit で済む
+5. `paint`/`hit_test`/`handle_event` の核を切り出し、殻を `subsecond::call` で包む
+
+1〜3 は設計を待たない。4〜5 が「置き換え可能な関数群」の本体で、持ち上げの設計と同じ切り方になる。
+
+## C. 先に測る
+
+- `dx serve` が dioxus-native + custom widget + 共有 wgpu device の構成で動くか(Blitz の example は動く。共有 device は未実測)
+- hot-patch 時に Dioxus が vdom を作り直すと `use_hook` の `CustomWidgetAttr::new(stage)` も作り直されるか
+  (= GPU 状態の再初期化が毎 patch で起きるか)。起きるなら Stage の `State::Active` を patch をまたいで持つ形が要る
+- `.cargo/config.toml` の env が `dx serve` 経由で re_renderer の build.rs に届くか

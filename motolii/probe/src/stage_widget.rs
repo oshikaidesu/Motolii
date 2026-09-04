@@ -4,8 +4,10 @@ use crate::playback::Clock;
 use crate::session::Selection;
 use crate::tokens;
 use anyrender::{PaintRef, PaintScene, ResourceId};
-use blitz_traits::events::UiEvent;
+use blitz_traits::events::{MouseEventButton, UiEvent};
 use dioxus_native::prelude::{Signal, WritableExt};
+
+use crate::context_menu::{MenuRequest, MenuTarget};
 use keyboard_types::Modifiers;
 use motolii_store::{property, Document, Intent, Interp, Keyframe, KeyframeTrack, LayerId, PropertyId, RationalTime, StoreView, Value};
 use blitz_dom::node::ComputedStyles;
@@ -73,6 +75,8 @@ pub struct StageWidget {
     fit: Fit,
     drag: Option<GizmoDrag>,
     revision: Signal<u32>,
+    /// 右クリックの要求先(custom widget には `contextmenu` が届かない)。
+    menu: Signal<Option<MenuRequest>>,
 }
 
 enum State {
@@ -98,6 +102,7 @@ impl StageWidget {
         selection: Selection,
         selected_mirror: Signal<Option<LayerId>>,
         revision: Signal<u32>,
+        menu: Signal<Option<MenuRequest>>,
     ) -> Self {
         Self {
             state: State::Suspended,
@@ -109,6 +114,7 @@ impl StageWidget {
             fit: Fit::default(),
             drag: None,
             revision,
+            menu,
         }
     }
 
@@ -338,8 +344,49 @@ impl Widget for StageWidget {
         true
     }
 
+    /// キャンバス上の (cx, cy) に居る層。手前(order大)が勝つ。
+    fn layer_under(&self, cx: f64, cy: f64) -> Option<LayerId> {
+        let State::Active(active) = &self.state else { return None };
+        let doc = self.doc.lock().unwrap();
+        let view = doc.view();
+        let rt = self.current_rt();
+        let layers = view.resolved_layers(rt).ok()?;
+        let mut hit: Option<(i16, LayerId)> = None;
+        for layer in &layers {
+            let Some(geom) = selection_geom_in(&active.engine, &view, layer.id, rt) else { continue };
+            let (bx, by, bw, bh) = geom.box_;
+            let (lx, ly) = rotate_around(geom.position, -geom.rotation, (cx, cy));
+            if lx < bx || lx > bx + bw || ly < by || ly > by + bh {
+                continue;
+            }
+            let order = layer.placement.order;
+            if hit.map(|(o, _)| order > o).unwrap_or(true) {
+                hit = Some((order, layer.id));
+            }
+        }
+        hit.map(|(_, l)| l)
+    }
+
     fn handle_event(&mut self, event: &UiEvent) {
         match event {
+            UiEvent::PointerDown(p) if p.button == MouseEventButton::Secondary => {
+                // 右ボタンはギズモを掴まない。層の上なら(未選択の時だけ)選んで menu を要求する。
+                let (cx, cy) = self.fit.to_comp(p.element.x as f64, p.element.y as f64);
+                let layer = self.layer_under(cx, cy);
+                if let Some(l) = layer {
+                    if !self.selection.contains(l) {
+                        self.selection.set(Some(l));
+                    }
+                    self.selected_mirror.set(self.selection.get());
+                }
+                let target = layer.map(MenuTarget::Layer).unwrap_or(MenuTarget::Stage);
+                println!("PROBE room=input verdict=context-menu-request target={target:?}");
+                self.menu.set(Some(MenuRequest {
+                    x: p.coords.client_x as f64,
+                    y: p.coords.client_y as f64,
+                    target,
+                }));
+            }
             UiEvent::PointerDown(p) => {
                 let (cx, cy) = self.fit.to_comp(p.element.x as f64, p.element.y as f64);
                 if let Some(layer) = self.selection.get() {
@@ -391,29 +438,9 @@ impl Widget for StageWidget {
                         }
                     }
                 }
-                // ハンドルに当たらなかった——キャンバス上の層を直接拾う。手前(order大)が勝つ。
+                // ハンドルに当たらなかった——キャンバス上の層を直接拾う。
                 // 何も当たらなければ選択はそのまま(Timelineの空白クリックと同じ文法)。
-                let State::Active(active) = &self.state else { return };
-                let doc = self.doc.lock().unwrap();
-                let view = doc.view();
-                let rt = self.current_rt();
-                let Ok(layers) = view.resolved_layers(rt) else { return };
-                let mut hit: Option<(i16, LayerId)> = None;
-                for layer in &layers {
-                    let Some(geom) = selection_geom_in(&active.engine, &view, layer.id, rt) else { continue };
-                    let (bx, by, bw, bh) = geom.box_;
-                    let (lx, ly) = rotate_around(geom.position, -geom.rotation, (cx, cy));
-                    if lx < bx || lx > bx + bw || ly < by || ly > by + bh {
-                        continue;
-                    }
-                    let order = layer.placement.order;
-                    if hit.map(|(o, _)| order > o).unwrap_or(true) {
-                        hit = Some((order, layer.id));
-                    }
-                }
-                drop(view);
-                drop(doc);
-                if let Some((_, layer)) = hit {
+                if let Some(layer) = self.layer_under(cx, cy) {
                     if p.mods.contains(Modifiers::META) {
                         self.selection.toggle(layer);
                     } else {

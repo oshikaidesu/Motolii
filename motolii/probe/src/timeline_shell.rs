@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex};
 use dioxus_native::prelude::*;
 use dioxus_native::CustomWidgetAttr;
 
+use crate::context_menu::{MenuRequest, MenuTarget};
 use crate::fixture::{fmt_timecode, LayerRow};
 use crate::playback::Clock;
 use crate::session::Selection;
@@ -21,11 +22,13 @@ pub fn timeline_shell(
     mut selected: Signal<Option<LayerId>>,
     scroll_y: Signal<f64>,
     timeline_tx: Sender<TimelineMsg>,
+    mut menu: Signal<Option<MenuRequest>>,
 ) -> Element {
     let layer_rows = layer_rows_data.iter().enumerate().map(|(i, row)| {
         let layer = row.layer;
         let doc = doc.clone();
         let selection = selection.clone();
+        let row_selection = selection.clone();
         let is_primary = selected() == Some(layer);
         let is_secondary = !is_primary && selection.contains(layer);
         let lsurface_style = if is_primary {
@@ -80,6 +83,16 @@ pub fn timeline_shell(
                         }
                         selected.set(selection.get());
                     },
+                    oncontextmenu: move |evt| {
+                        evt.prevent_default();
+                        evt.stop_propagation();
+                        if !row_selection.contains(layer) {
+                            row_selection.set(Some(layer));
+                        }
+                        selected.set(row_selection.get());
+                        let p = evt.data().client_coordinates();
+                        menu.set(Some(MenuRequest { x: p.x, y: p.y, target: MenuTarget::Layer(layer) }));
+                    },
                     "{row.name}"
                 }
                 div { class: "lctrl",
@@ -117,6 +130,11 @@ pub fn timeline_shell(
                     onwheel: move |evt| {
                         let dy = evt.data().delta().strip_units().y;
                         let _ = timeline_tx.send(TimelineMsg::ScrollBy(dy));
+                    },
+                    oncontextmenu: move |evt| {
+                        evt.prevent_default();
+                        let p = evt.data().client_coordinates();
+                        menu.set(Some(MenuRequest { x: p.x, y: p.y, target: MenuTarget::Timeline }));
                     },
                     div { class: "lhead", "OBJECT" }
                     div {

@@ -2,6 +2,8 @@ use std::any::Any;
 
 mod app;
 mod browser;
+mod context_menu;
+mod dispatch;
 mod fixture;
 mod inspector;
 mod keymap;

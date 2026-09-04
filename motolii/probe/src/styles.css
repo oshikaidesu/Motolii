@@ -712,3 +712,52 @@ body {
     min-height: 0;
     overflow-y: auto;
 }
+
+/* 右クリック menu。#app は 100vh/overflow hidden なので client 座標 = fixed 座標。 */
+#ctxbackdrop {
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 100;
+}
+
+#ctxmenu {
+    position: fixed;
+    z-index: 101;
+    min-width: calc(180 * var(--s) * 1px);
+    padding: var(--sp1) 0;
+    background: var(--panel);
+    border: var(--line) solid var(--bd);
+    color: var(--ink);
+    font-size: var(--t-base);
+}
+
+.mi {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    height: var(--row);
+    padding: 0 var(--sp3);
+}
+
+.mi:hover {
+    background: var(--hover);
+}
+
+.ml {
+    flex: 1;
+}
+
+.ms {
+    margin-left: var(--sp4);
+    color: var(--ink3);
+    font-size: var(--t-dense);
+}
+
+.msep {
+    height: var(--line);
+    margin: var(--sp1) 0;
+    background: var(--dark);
+}

@@ -12,7 +12,9 @@ use motolii_store::{
 };
 use blitz_dom::node::ComputedStyles;
 use blitz_dom::Widget;
-use blitz_traits::events::{BlitzWheelDelta, UiEvent};
+use blitz_traits::events::{BlitzWheelDelta, MouseEventButton, UiEvent};
+
+use crate::context_menu::{MenuRequest, MenuTarget};
 use keyboard_types::Modifiers;
 use peniko::kurbo::{Affine, Point, Rect, Size};
 use peniko::{Color, Fill};
@@ -119,6 +121,8 @@ pub struct TimelineWidget {
     selection: Option<Selection>,
     selected_mirror: Option<Signal<Option<LayerId>>>,
     scroll_y_mirror: Option<Signal<f64>>,
+    /// 右クリックの要求先。custom widget には `contextmenu` が届かないので Signal で chrome へ渡す。
+    menu_mirror: Option<Signal<Option<MenuRequest>>>,
 }
 
 impl TimelineWidget {
@@ -144,6 +148,7 @@ impl TimelineWidget {
             selection: None,
             selected_mirror: None,
             scroll_y_mirror: None,
+            menu_mirror: None,
         }
     }
 
@@ -151,6 +156,12 @@ impl TimelineWidget {
     pub fn with_selection(mut self, selection: Selection, mirror: Signal<Option<LayerId>>) -> Self {
         self.selection = Some(selection);
         self.selected_mirror = Some(mirror);
+        self
+    }
+
+    /// 右クリック menu を開く要求の書き先。
+    pub fn with_context_menu(mut self, mirror: Signal<Option<MenuRequest>>) -> Self {
+        self.menu_mirror = Some(mirror);
         self
     }
 
@@ -251,7 +262,7 @@ impl TimelineWidget {
     }
 }
 
-fn attrs_to_patch(a: &LayerAttrs) -> LayerAttrsPatch {
+pub(crate) fn attrs_to_patch(a: &LayerAttrs) -> LayerAttrsPatch {
     LayerAttrsPatch {
         hidden: Some(a.hidden),
         parent: Some(a.parent),
@@ -374,6 +385,34 @@ impl Widget for TimelineWidget {
                     drag.delta_sec = (self.scroll_sec + x / self.pps) - drag.grab_sec;
                 } else {
                     self.hovered = self.hit_test(x, y);
+                }
+            }
+            UiEvent::PointerDown(p) if p.button == MouseEventButton::Secondary => {
+                // 右ボタンはドラッグ/スクラブを始めない。帯の上なら(未選択の時だけ)その層を
+                // 選び、menu を chrome へ要求する。ルーラー上は何もしない。
+                let (x, y) = (p.element.x as f64, p.element.y as f64);
+                if y < RULER_H * self.sfac() {
+                    return;
+                }
+                let layer = self.band_hit(x, y).and_then(|ix| self.rows[ix].layer);
+                if let Some(l) = layer {
+                    if let (Some(selection), Some(mirror)) =
+                        (self.selection.as_ref(), self.selected_mirror.as_mut())
+                    {
+                        if !selection.contains(l) {
+                            selection.set(Some(l));
+                        }
+                        mirror.set(selection.get());
+                    }
+                }
+                let target = layer.map(MenuTarget::Layer).unwrap_or(MenuTarget::Timeline);
+                println!("PROBE room=input verdict=context-menu-request target={target:?}");
+                if let Some(menu) = self.menu_mirror.as_mut() {
+                    menu.set(Some(MenuRequest {
+                        x: p.coords.client_x as f64,
+                        y: p.coords.client_y as f64,
+                        target,
+                    }));
                 }
             }
             UiEvent::PointerDown(p) => {

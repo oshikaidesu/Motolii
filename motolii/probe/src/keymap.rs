@@ -1,9 +1,13 @@
 use dioxus_native::prelude::Key;
 
 /// キー→意図の対応。機構名でなく意図名(裁定174)。
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Intent {
     Split,
+    /// 選択層を丸ごと写す(尺・属性・エフェクト・全 track)。写しが主選択になる。
+    Duplicate,
+    /// 選択層を全部外す(`Intent::RemoveLayer`、墓標なので undo で戻る)。
+    Delete,
     StepFrame(i64),
     Home,
     End,
@@ -20,6 +24,8 @@ enum KeySpec {
     Home,
     End,
     Escape,
+    Backspace,
+    Delete,
 }
 
 struct Binding {
@@ -32,6 +38,9 @@ struct Binding {
 const BINDINGS: &[Binding] = &[
     Binding { key: KeySpec::Char('k'), cmd: true, shift: false, intent: Intent::Split },
     Binding { key: KeySpec::Char('a'), cmd: true, shift: false, intent: Intent::SelectAll },
+    Binding { key: KeySpec::Char('d'), cmd: true, shift: false, intent: Intent::Duplicate },
+    Binding { key: KeySpec::Backspace, cmd: false, shift: false, intent: Intent::Delete },
+    Binding { key: KeySpec::Delete, cmd: false, shift: false, intent: Intent::Delete },
     Binding { key: KeySpec::ArrowLeft, cmd: false, shift: false, intent: Intent::StepFrame(-1) },
     Binding { key: KeySpec::ArrowLeft, cmd: false, shift: true, intent: Intent::StepFrame(-10) },
     Binding { key: KeySpec::ArrowRight, cmd: false, shift: false, intent: Intent::StepFrame(1) },
@@ -51,6 +60,8 @@ pub fn lookup(key: &Key, cmd: bool, shift: bool) -> Option<Intent> {
         Key::Home => KeySpec::Home,
         Key::End => KeySpec::End,
         Key::Escape => KeySpec::Escape,
+        Key::Backspace => KeySpec::Backspace,
+        Key::Delete => KeySpec::Delete,
         _ => return None,
     };
     BINDINGS
@@ -59,9 +70,26 @@ pub fn lookup(key: &Key, cmd: bool, shift: bool) -> Option<Intent> {
         .map(|b| b.intent)
 }
 
+/// この意図を撃てる binding が表に在るか。右クリック menu が「打鍵の再掲」で
+/// あることの検分に使う。
+pub fn is_bound(intent: Intent) -> bool {
+    BINDINGS.iter().any(|b| b.intent == intent)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cmd_d_is_duplicate() {
+        assert_eq!(lookup(&Key::Character("d".into()), true, false), Some(Intent::Duplicate));
+    }
+
+    #[test]
+    fn backspace_and_delete_are_delete() {
+        assert_eq!(lookup(&Key::Backspace, false, false), Some(Intent::Delete));
+        assert_eq!(lookup(&Key::Delete, false, false), Some(Intent::Delete));
+    }
 
     #[test]
     fn cmd_a_is_select_all() {

@@ -44,7 +44,7 @@
 | 反射 | 中身 | 依存 |
 |---|---|---|
 | ~~**Space = 再生/停止**~~ | 着地済(2026-08-30、窓で実映像の再生を確認)。**JKLシャトル・playhead追従スクロールは未着** | playback spine(PlaybackSession接続、audio clock)。transport一式のQ0違反もここで解消 |
-| **右クリック menu** | 文脈操作の普遍的な逃げ道(削除・複製・rename…) | context menu基盤(ObjC)。中身はTier 1/2の再掲で良い |
+| **右クリック menu** | 文脈操作の普遍的な逃げ道(削除・複製・rename…) | PR提案あり(2026-09-03、**未ビルド・窓未確認**): ObjCでなくDOM側で描く。Blitzは`contextmenu`をDOM要素へ配り、custom widget(Timeline帯・Stage)には右ボタン`PointerDown`しか届かないのでSignal経由。中身はTier 1の再掲(Split/Duplicate/Delete/Select All/Deselect、空面はPlay/Home/End)。renameは未 |
 
 ## Tier 2 — D2/モデルのgrainが要る反射(仕様粒→実装の二段)
 
@@ -53,7 +53,7 @@
 | **属性の絞り込み**(述語) | 層あたりの「今出ている属性」がtimelineに無い — **器ごと不在** | 表示状態でありDocumentを変えない。`U`/`UU`/`SS`相当(キーか式を持つ/既定から変わった/選択中)。1属性=1文字は[deltas](motolii-deltas.md)で不採用 |
 | ~~**Split at playhead**~~ | 着地済(2026-08-30) | |
 | Rename(名前double-click) | renameコマンド不在(R2地図でも既知) | layer_names台帳は存在 |
-| ~~複数選択~~ | 着地済(2026-08-30、`Selection`は`Vec<LayerId>`で末尾が primary) | |
+| ~~複数選択~~ | 着地済(2026-08-30、`Selection`は`Vec<LayerId>`で末尾が primary)。**ただし消費側が無い**(M/S/L はクリック行のみ、ギズモ・Inspector は主選択のみ) | 展開の縫い目は [動詞を選択へ持ち上げる](reviews/2026-09-03-selection-lifting.md)(設計提案) |
 | Copy/Paste | コマンド不在 | duplicate既存が下敷き |
 | I/O点・work area | range概念が未設計 | 台帳の「Preview Range/Loop/Trim比較中」row参照 |
 | M/S(mute/solo)直クリック | layer mute/soloのD2コマンド不在(実測) | 旧「object bar read-only」は2026-08-12裁定で撤回済み |
