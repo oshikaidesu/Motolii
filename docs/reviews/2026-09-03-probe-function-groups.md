@@ -153,6 +153,55 @@ view ──▶ table ──▶ { control, gesture, paint, verb } ──▶ { len
 | `timeline_shell` | view | — | rsx。M/S/L の onclick は `lift(lens::attrs.set)` |
 | `main` | shell | — | — |
 
+## 1.5 基礎の基礎 — 群の下の原子(利用者 2026-09-03「まだ分解できないか」)
+
+§1 の群は**用途**で切った物。その下に、**意味(層・時間・帯)で分岐せず、数学の語で名前が付き、代数の法則を持つ**関数が
+在る。法則を持つ = property test で測れる、が原子の判定基準。
+
+### 分解の実演(§1 の代表 5 本)
+
+| 群の関数 | 原子への分解 | 共有される物 |
+|---|---|---|
+| `hit_test` / `band_hit`(gesture) | `row_at(y)` + `sec_at(x)` + `nearest(候補, 距離)` / `within(t, [a,b])` | `row_at`・`sec_at`・`Fit::to_comp` は**全部 1 つの型**(アフィン写像) |
+| `split_layer`(verb) | `covers(区間, 点)` + `split_at(区間, 点)` + **`copy_body(層)`** + `next_id` | `duplicate_layer` = `copy_body` + `next_id`。**Split と Duplicate の違いは `split_at` の有無だけ** |
+| `PointerUp` の Move / TrimStart / TrimEnd(gesture→lens) | 区間の `shift` / `clip_start` / `clip_end`(+ `source_in` の連動) | `keyframe_shift_intents` = 各 key の `shift`。**全部 `Interval` の算術** |
+| `compute_scale` / `compute_rotation` + `rotate_around`(gesture) | `delta(grab, cur)` + `ratio` + `constrain_uniform` + **`about(固定点, 変換)`** | 「ある点を固定して変換する」= `translate(p) ∘ f ∘ translate(−p)` の 1 原子。拡縮も回転も同じ |
+| `nudge` / `increment`(control) | `component(値, 軸)` + `add` + `clamp(範囲)` + `with_component` | `Value` の成分算術。Inspector・ギズモ・矢印 nudge が同じ物 |
+
+### 原子は 8 族、大半は依存の中に在る(再発明しない)
+
+| 族 | 原子 | 法則(= property test) | 在り処 |
+|---|---|---|---|
+| **写像** | `Map1 {origin, scale}` の `to`/`from`、`Map2`(2D アフィン) | `from(to(x)) == x`、`(a∘b)∘c == a∘(b∘c)` | **`kurbo::Affine`**(inverse 付き。probe は peniko 経由で既に持つ)。3D は `glam`。固定 z のカメラ投影も `camera_screen_from_world_at_z` が `Affine2` を返す = 同じ族 |
+| **区間** | `covers`・`split_at`・`join`・`shift`・`clip_start`・`clip_end` | `join(split_at(i,p)) == i`、`shift(shift(i,a),−a) == i`、`clip` は `len ≥ 1` を保つ | `LayerTiming::covers` は core に在る。split/shift/clip は **probe に無い**(`PointerUp` の中に手書き) |
+| **値の成分算術** | `component`・`with_component`・`add`・`scale`・`clamp`・`lerp` | `with_component(v, i, component(v, i)) == v`、`clamp` は冪等 | `Value` は `motolii-eval`。`lerp` は eval の補間に在る。成分の出し入れは `nudge` の中に手書き |
+| **近傍** | `near(a, b, tol)`・`within(t, [a,b])`・`nearest(iter, dist)` | `near` は対称、`nearest` は距離最小を返す | `kurbo::Rect::contains`・`Point::distance`。`nearest` は `hit_test` の中に手書き |
+| **固定点変換** | `about(p, f) = translate(p) ∘ f ∘ translate(−p)` | `about(p, id) == id`、`about(p, f)(p) == p` | `kurbo::Affine::translate` の合成で 1 行。`rotate_around`・`compute_scale` に手書きが 2 つ |
+| **層の複写** | `copy_body(view, src) -> Vec<Intent for dst>`(attrs・effects・全 track) | 写しの全 track・attrs・effects が元と等しい(#479 の `duplicate` test) | `split_layer` と `duplicate_layer` に **2 回書かれている** |
+| **集合** | `targets`・`lift` | `lift(v, S) == S の各層に v`、undo 1 回 | [持ち上げ](2026-09-03-selection-lifting.md) |
+| **描画原語** | `rect`・`diamond`・`line`・`text` + palette(`c`・`label_rgb`・`hex`) | — (原語。法則は無い) | `fill_rect`・`diamond` は在る。`c` が 2 箇所 |
+
+probe が**自前で持つべき原子は 4 つだけ**: 区間の split/shift/clip、`copy_body`、`about`、`nearest`。残りは kurbo・glam・core・eval の物をそのまま使う(**再発明は罪**)。
+
+### 群と原子の関係
+
+```text
+原子(8 族、法則あり、意味で分岐しない)
+  └─ Lens / Gesture / Control(原子を意味に結び付ける: 「この Map1 は時間↔x」「この Interval は timing」)
+       └─ 群(lens/ gesture/ control/ verb/ paint/ read/)= 意味ごとの引き出し
+            └─ 面(view)= RSX で並べる
+```
+
+原子には意味が無いので **hot-patch で触る頻度は最も低い**(数学は変わらない)。触るのは Lens〜面。
+だから原子は probe の `atoms/` でも、下の crate(`motolii-core`)でも良い — **法則が test で縛られていれば置き場は自由**。
+推し: 区間と `copy_body` は core(Document の意味に近い)、`about`・`nearest` は probe の `atoms/`。
+
+### 原子の柵
+
+- 原子の引数に `LayerId`・`PropertyId`・`Document` が現れない(意味を持ち込まない)。例外は `copy_body`(層の複写は意味)
+- 原子は 1 つ以上の法則を test で持つ。法則が書けない関数は原子ではなく群(用途)
+- 同じ数学が 2 箇所に手書きされたら原子へ(今日の実測: `about` 2 つ、`copy_body` 2 つ、`Map1` 3 つ、`nearest` 1 つ + `layer_under` の同型)
+
 ## 2. 数えると
 
 | 群 | 関数数(概算) | うち今すぐ `git mv` で済む | 切り出しが要る |
