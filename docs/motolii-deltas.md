@@ -47,6 +47,12 @@
 - **`rotation.x/y/z`・多次元 scale は実装する。欄を消さない** — Lottie にある語彙なので削らない
 - **Duplicate / Copy-Paste は常に Independent** — 全 ID を新規採番、複製サブツリー内参照だけ再写像。
   **live 同期しない**
+- **複数選択への展開は発明しない — Composite/Command に委託**(2026-09-03) — 動詞は 1 層分だけ書き、
+  `targets(clicked)`(含まれれば選択全体・含まれなければその物だけ・クリック無しは選択全体)と
+  `lift`(Intent を集めて `apply_all` 1 回 = 1 undo)の 2 関数だけが集まりを知る。動詞が宣言するのは
+  **絶対か差分かの 1 ビット**(AE/Premiere 慣習: ドラッグ = 相対、入力 = 絶対)。混在値は「—」で出し打てば
+  全員に入る(Unity)。回転・拡縮の中心は各層自身の anchor。例外は結果が 1 つしか無い「跳ぶ」「rename」。
+  正本: [動詞を選択へ持ち上げる](reviews/2026-09-03-selection-lifting.md)
 - **Asset 識別は source fingerprint と recipe/artifact digest を別 identity へ分離** —
   fingerprint は `motolii-source-v1:sha256:<64桁hex>` + size。worker は生の locator でなく
   Host-private `SourceBinding` を使う
