@@ -81,6 +81,13 @@
 - **camera は document 所有、view camera は出力に出ない** — export は document camera で offscreen 撮影
 - **boxcam** — カメラのビューは世界に破線 + ハンドルのボックスとして描き、**世界自体は縮めない**。
   視点は上縁タブ。**初期倍率は fit**
+- **層の投影の状態は `2D / 2.5D / 3D` の 3 値属性、モードではない**(2026-09-03) — 2D = 画面に貼る
+  (旧 `pinned`)/ **2.5D = 視線固定**(カメラが真正面から見ているとして投影し画面位置へずらす。
+  どこへ運んでも同じ向きに見えるが、**奥行き・深度テスト・3D 物体同士の貫通は世界のまま**。
+  AE のプリコンポの畳みのように板へ焼かない)/ 3D = 共有カメラが投影。どの値でも `rotation.x/y/z`・
+  `position.z` の欄は出る。既定は素材の種類で決める(動画・図形・テキスト = 2.5D、メッシュ・点群 = 3D)。
+  **「2.5D」の語は以後この層ごとの状態を指す**(裁定115 の「プレビュー全体の透視表現」の意味では使わない)。
+  Lottie に該当語彙は無い(camera-layer 系は不採用)。正本: [カメラの挙動設計](reviews/2026-09-03-camera-behavior-design.md)
 - **clipping mask は Motolii 側 authority のまま** — Rerun の segmentation / opacity へ委譲しない。
   一回使うだけの vector mask は中間 texture を作らない
 - **Vism 出力の透明レイヤー表示は `GridMap` → `RectangleRenderer`** — `Mesh3D` は shader が
