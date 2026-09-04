@@ -602,6 +602,7 @@ pub(super) fn ColorWheel(
     let alpha_draft: Signal<Option<f64>> = use_signal(|| None);
     let mut capture: Signal<Option<ColorDrag>> = use_signal(|| None);
     let mut seen_cancel = use_signal(|| 0u32);
+    let mut wheel_node = use_signal(|| None::<std::rc::Rc<MountedData>>);
     {
         let cancel_session = session.clone();
         let mut cancel_capture = capture;
@@ -625,8 +626,33 @@ pub(super) fn ColorWheel(
     }
     let (h, s, v) = draft().unwrap_or_else(|| rgb_to_hsv([current[0], current[1], current[2]]));
     let k = session.scale.factor();
-    let ring = RING * k;
-    let square = SQUARE * k;
+    let max_ring = RING * k;
+    let mut measured_ring = use_signal(|| max_ring);
+    {
+        let node = wheel_node;
+        use_effect(use_reactive!(|wake| {
+            let _ = wake;
+            // The first mounted measurement can happen before layout resolves.
+            // Re-run after the measured size itself causes that first render;
+            // the second pass reads the resolved responsive width and converges.
+            let _ = measured_ring();
+            let Some(handle) = node.read().as_ref().cloned() else { return };
+            crate::ui::semantic_menu::measure_mounted(handle, move |width, _height| {
+                // A zero/tiny rect means this callback ran before layout. It is
+                // not evidence that the panel is that small; keep the valid
+                // default until a resolved measurement arrives.
+                if width < 64.0 {
+                    return;
+                }
+                let next = width.min(max_ring).max(32.0);
+                if (*measured_ring.peek() - next).abs() > 0.5 {
+                    measured_ring.set(next);
+                }
+            });
+        }));
+    }
+    let ring = measured_ring().min(max_ring).max(32.0);
+    let square = ring * (SQUARE / RING);
     let inset = (ring - square) / 2.0;
     let hue_hex = hex_of(hsv_to_rgb(h, 1.0, 1.0));
     let shown = hex_of(hsv_to_rgb(h, s, v));
@@ -745,7 +771,10 @@ pub(super) fn ColorWheel(
                 },
             }
         }
-        div { class: "color-wheel", style: "width: {ring}px; height: {ring}px;",
+        div {
+            class: "color-wheel",
+            style: "width: {max_ring}px; max-width: 100%; aspect-ratio: 1;",
+            onmounted: move |evt: MountedEvent| wheel_node.set(Some(evt.data())),
             div {
                 class: "hue-ring",
                 onpointerdown: {
@@ -831,7 +860,7 @@ pub(super) fn ColorWheel(
         if !slot.is_shape_fill() {
             div {
                 class: "alpha-bar",
-                style: "width: {ring}px; background: linear-gradient(to right, transparent, {shown});",
+                style: "width: {ring}px; max-width: 100%; background: linear-gradient(to right, transparent, {shown});",
                 onpointerdown: {
                     let session = session.clone();
                     let slot = slot.clone();

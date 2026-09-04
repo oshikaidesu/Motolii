@@ -1383,6 +1383,55 @@ fn a_hex_can_be_typed_into_the_colors_panel() {
     );
 }
 
+#[test]
+fn the_color_picker_stays_inside_a_small_browser_tile() {
+    for (width, height, scale) in [(640, 480, 100), (640, 480, 200), (900, 600, 100)] {
+        let mut gui = Gui::open_at_scale(width, height, scale);
+        let layer = {
+            let doc = gui.session.doc.lock().unwrap();
+            let view = doc.view();
+            view.layers()
+                .into_iter()
+                .find(|layer| {
+                    !crate::ui::fixture::inspector_data_from_doc(
+                        &view,
+                        *layer,
+                        crate::doc::store::RationalTime::ZERO,
+                    )
+                    .colors
+                    .is_empty()
+                })
+                .expect("fixture color layer")
+        };
+        gui.session.selection.set(Some(layer));
+        gui.focus("#dock-tab-Create");
+        gui.key(
+            keyboard_types::Key::End,
+            keyboard_types::Modifiers::empty(),
+        );
+        assert_eq!(gui.count(".color-pick"), 1, "{width}x{height}@{scale}%: Colors did not open");
+        let (rx, _, rw, _) = gui.rect_of_nth(".bresults", 0);
+        let (px, _, pw, _) = gui.rect_of_nth(".color-pick", 0);
+        let (wx, _, ww, _) = gui.rect_of_nth(".color-wheel", 0);
+        let (_, _, sw, sh) = gui.rect_of_nth(".sv-square", 0);
+        let right = rx + rw;
+        assert!(
+            px >= rx - 0.5 && px + pw <= right + 0.5,
+            "{width}x{height}@{scale}%: color picker escaped Browser: picker={px}..{} result={rx}..{right}",
+            px + pw,
+        );
+        assert!(
+            wx >= rx - 0.5 && wx + ww <= right + 0.5,
+            "{width}x{height}@{scale}%: wheel escaped Browser: wheel={wx}..{} result={rx}..{right}",
+            wx + ww,
+        );
+        assert!(
+            (sw - ww * 0.6).abs() < 1.0 && (sh - ww * 0.6).abs() < 1.0,
+            "{width}x{height}@{scale}%: SV square did not scale with its wheel: wheel={ww} square={sw}x{sh}",
+        );
+    }
+}
+
 /// 枠の設定は menu の中。9:16 の preset を押せば作品の寸法が変わる(⌥⌘K でも開く)。
 #[test]
 fn the_composition_sheet_changes_the_frame() {

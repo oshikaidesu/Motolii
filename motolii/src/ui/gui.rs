@@ -40,12 +40,17 @@ impl Gui {
     }
 
     fn open_at(width: u32, height: u32) -> Self {
+        Self::open_at_scale(width, height, 100)
+    }
+
+    fn open_at_scale(width: u32, height: u32, scale_percent: u32) -> Self {
         let Loaded {
             doc,
             ui,
             duration_sec,
         } = load_fixture();
         let session = Session::new(doc, duration_sec, ui);
+        session.scale.set_percent(scale_percent);
         let host = crate::ui::host::Host::for_tests();
         let mut vdom = VirtualDom::new(app);
         vdom.insert_any_root_context(Box::new(session.clone()));
@@ -152,6 +157,18 @@ impl Gui {
             .unwrap_or_else(|| panic!("`{selector}` の {nth} 番が居ない"));
         let layout = inner.get_node(node).expect("node").final_layout();
         (layout.size.width, layout.size.height)
+    }
+
+    fn rect_of_nth(&self, selector: &str, nth: usize) -> (f32, f32, f32, f32) {
+        let doc = self.h.base();
+        let nodes = doc.query_selector_all(selector).unwrap_or_default();
+        let id = *nodes
+            .get(nth)
+            .unwrap_or_else(|| panic!("`{selector}` の {nth} 番が居ない"));
+        let node = doc.get_node(id).expect("node");
+        let pos = node.absolute_position(0.0, 0.0);
+        let size = node.final_layout().size;
+        (pos.x, pos.y, size.width, size.height)
     }
 
     fn opacity_of_nth(&self, selector: &str, nth: usize) -> f32 {

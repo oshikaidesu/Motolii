@@ -137,6 +137,17 @@ fn mounted_rect(handle: &std::rc::Rc<MountedData>) -> Option<FocusRect> {
     })
 }
 
+pub(crate) fn measure_mounted(
+    handle: std::rc::Rc<MountedData>,
+    measured: impl FnOnce(f64, f64) + 'static,
+) {
+    queue_dom_work(move || {
+        if let Some(rect) = mounted_rect(&handle) {
+            measured(rect.width, rect.height);
+        }
+    });
+}
+
 fn primary_pointer(event: &PointerEvent) -> Option<(String, i32)> {
     (event.data().is_primary()
         && event.data().trigger_button()
