@@ -267,6 +267,161 @@ mod previews {
             Some(Value::Vec2([before[0] + 10.0, before[1] - 1.0]))
         );
     }
+
+    #[test]
+    fn superseded_preview_still_releases_stage_gesture_ownership() {
+        let doc = Arc::new(Mutex::new(Document::new()));
+        let owner = doc.lock().unwrap().begin_preview();
+        let _newer = doc.lock().unwrap().begin_preview();
+        let gesture = GestureSurface::default();
+        gesture.begin();
+
+        assert!(!finish_preview_owner(&doc, &gesture, owner));
+        assert!(!gesture.is_active());
+    }
+}
+
+mod marquee_contract {
+    use crate::doc::store::LayerId;
+    use crate::ui::session::Selection;
+    use crate::ui::stage_widget::{apply_marquee_selection, marquee_hits};
+    use dioxus_native::prelude::*;
+
+    #[test]
+    fn marquee_intersection_is_independent_of_drag_direction() {
+        let layer = [(20.0, 20.0), (60.0, 20.0), (60.0, 60.0), (20.0, 60.0)];
+        assert!(marquee_hits((0.0, 0.0), (40.0, 40.0), layer));
+        assert!(marquee_hits((40.0, 0.0), (0.0, 40.0), layer));
+        assert!(marquee_hits((0.0, 0.0), (80.0, 80.0), layer));
+        assert!(!marquee_hits((0.0, 0.0), (10.0, 10.0), layer));
+    }
+
+    #[test]
+    fn additive_marquee_preserves_selection_and_plain_empty_click_clears_it() {
+        let selection = Selection::default();
+        selection.set(Some(LayerId(1)));
+        apply_marquee_selection(&selection, true, Some(vec![LayerId(2)]));
+        assert_eq!(selection.all(), vec![LayerId(1), LayerId(2)]);
+
+        apply_marquee_selection(&selection, true, None);
+        assert_eq!(selection.all(), vec![LayerId(1), LayerId(2)]);
+        apply_marquee_selection(&selection, false, Some(Vec::new()));
+        assert!(
+            selection.all().is_empty(),
+            "an empty completed marquee must clear"
+        );
+        selection.set(Some(LayerId(1)));
+        apply_marquee_selection(&selection, false, None);
+        assert!(
+            selection.all().is_empty(),
+            "a sub-slop plain click must clear"
+        );
+    }
+
+    fn signal<T: 'static>(value: T) -> dioxus_native::prelude::Signal<T> {
+        dioxus_native::prelude::Signal::leak_with_caller(value, std::panic::Location::caller())
+    }
+
+    fn pointer(
+        id: blitz_traits::events::BlitzPointerId,
+    ) -> blitz_traits::events::BlitzPointerEvent {
+        blitz_traits::events::BlitzPointerEvent {
+            id,
+            is_primary: true,
+            coords: blitz_traits::events::PointerCoords {
+                page_x: 100.0,
+                page_y: 100.0,
+                screen_x: 100.0,
+                screen_y: 100.0,
+                client_x: 100.0,
+                client_y: 100.0,
+            },
+            button: blitz_traits::events::MouseEventButton::Main,
+            buttons: blitz_traits::events::MouseEventButtons::Primary,
+            mods: Default::default(),
+            details: Default::default(),
+            element: blitz_traits::events::Point { x: 100.0, y: 100.0 },
+            active_pointers: Default::default(),
+        }
+    }
+
+    #[test]
+    fn matching_pointer_cancel_rolls_back_marquee_and_foreign_cancel_is_ignored() {
+        use crate::doc::store::{Composition, Document, Fps, Intent};
+        use crate::ui::mount::SurfaceState;
+        use crate::ui::session::{GestureSurface, SurfaceCapture};
+        use crate::ui::stage_widget::{StageBindings, StageMount, StageState};
+        use std::sync::{Arc, Mutex};
+
+        let runtime = VirtualDom::new(|| rsx! {});
+        runtime.in_scope(dioxus_native::prelude::dioxus_core::ScopeId::ROOT, || {
+            let mut doc = Document::new();
+            doc.apply(Intent::SetComposition(Composition {
+                width: 640,
+                height: 480,
+                fps: Fps::try_new(30, 1).unwrap(),
+                duration_frames: 300,
+                background: [0.0, 0.0, 0.0, 1.0],
+            }))
+            .unwrap();
+            let clock = Arc::new(crate::ui::playback::Clock::from_document(&doc, 10.0));
+            let doc = Arc::new(Mutex::new(doc));
+            let selection = Selection::default();
+            selection.set(Some(LayerId(99)));
+            let gesture = GestureSurface::default();
+            let mut state = StageState::new(
+                clock,
+                doc,
+                selection.clone(),
+                Arc::new(Mutex::new(None)),
+                Arc::new(Mutex::new(Default::default())),
+                Arc::new(std::sync::atomic::AtomicBool::new(true)),
+                Arc::new(std::sync::atomic::AtomicU32::new(75)),
+                gesture.clone(),
+                SurfaceCapture::default(),
+                Arc::new(std::sync::atomic::AtomicBool::new(false)),
+                Arc::new(Mutex::new(None)),
+            );
+            let bindings = StageBindings {
+                selected: signal(Some(LayerId(99))),
+                revision: signal(0),
+                view_pct: signal(100),
+                context_menu: signal(None),
+            };
+            let mut mount = StageMount::default();
+            let first = pointer(blitz_traits::events::BlitzPointerId::Finger(1));
+            <StageState as SurfaceState>::handle_event(
+                &mut state,
+                &mut mount,
+                &bindings,
+                &blitz_traits::events::UiEvent::PointerDown(first),
+            );
+            assert!(gesture.is_active());
+            assert!(state.marquee.is_some());
+
+            let mut foreign = pointer(blitz_traits::events::BlitzPointerId::Finger(2));
+            foreign.buttons = blitz_traits::events::MouseEventButtons::None;
+            <StageState as SurfaceState>::handle_event(
+                &mut state,
+                &mut mount,
+                &bindings,
+                &blitz_traits::events::UiEvent::PointerCancel(foreign),
+            );
+            assert!(gesture.is_active() && state.marquee.is_some());
+
+            let mut matching = pointer(blitz_traits::events::BlitzPointerId::Finger(1));
+            matching.buttons = blitz_traits::events::MouseEventButtons::None;
+            <StageState as SurfaceState>::handle_event(
+                &mut state,
+                &mut mount,
+                &bindings,
+                &blitz_traits::events::UiEvent::PointerCancel(matching),
+            );
+            assert!(!gesture.is_active());
+            assert!(state.marquee.is_none());
+            assert_eq!(selection.all(), vec![LayerId(99)]);
+        });
+    }
 }
 
 mod checked_placement_commands {

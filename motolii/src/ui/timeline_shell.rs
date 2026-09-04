@@ -73,6 +73,12 @@ pub(super) fn timeline_shell(
     let last = (first + count).min(layer_rows_data.len());
     let above_px = first as f64 * row_px;
     let below_px = (layer_rows_data.len() - last) as f64 * row_px;
+    let mut ordered_layers = Vec::new();
+    for layer in layer_rows_data.iter().filter_map(|row| row.layer) {
+        if !ordered_layers.contains(&layer) {
+            ordered_layers.push(layer);
+        }
+    }
     let layer_rows = layer_rows_data.iter().enumerate().skip(first).take(count).map(|(i, row)| {
         let layer = row.layer;
         let doc = doc.clone();
@@ -80,6 +86,9 @@ pub(super) fn timeline_shell(
         let timeline_tx_row = timeline_tx.clone();
         let mut layer_rows_sig = layer_rows_sig;
         let selection = selection.clone();
+        let ordered_layers = ordered_layers.clone();
+        let keyboard_order = ordered_layers.clone();
+        let click_order = ordered_layers.clone();
         let is_primary = layer.is_some() && selected() == layer;
         let is_secondary =
             !is_primary && layer.is_some_and(|l| selection.contains(l));
@@ -149,11 +158,11 @@ pub(super) fn timeline_shell(
                 session.gesture.cancel();
                 crate::ui::inspector::cancel_scrub(&session);
                 if let Some(layer) = layer {
-                    if !selection.contains(layer) { selection.set(Some(layer)); }
+                    if !selection.contains(layer) { selection.set(Some(layer)); } else { selection.activate(layer); }
                     selected.set(selection.get());
                 }
                 let point = evt.client_coordinates();
-                menu.set(Some(MenuRequest { x: point.x, y: point.y, target: layer.map(MenuTarget::Layer).unwrap_or(MenuTarget::Timeline) }));
+                menu.set(Some(MenuRequest { x: point.x, y: point.y, target: layer.map(MenuTarget::TimelineLayer).unwrap_or(MenuTarget::Timeline) }));
             }
         };
         let indent = format!("padding-left:{}px", row.depth as u32 * 18);
@@ -255,7 +264,10 @@ pub(super) fn timeline_shell(
                                     }
                                     Key::Character(c) if c == " " => {
                                         evt.stop_propagation();
-                                        if evt.modifiers().intersects(Modifiers::META | Modifiers::SUPER | Modifiers::SHIFT) {
+                                        evt.prevent_default();
+                                        if evt.modifiers().contains(Modifiers::SHIFT) {
+                                            selection.extend_to(&keyboard_order, l);
+                                        } else if evt.modifiers().intersects(Modifiers::META | Modifiers::SUPER) {
                                             selection.toggle(l);
                                         } else {
                                             selection.set(Some(l));
@@ -268,7 +280,9 @@ pub(super) fn timeline_shell(
                         },
                         onclick: move |evt| {
                             let Some(l) = layer else { return };
-                            if evt.modifiers().intersects(Modifiers::META | Modifiers::SUPER | Modifiers::SHIFT) {
+                            if evt.modifiers().contains(Modifiers::SHIFT) {
+                                selection.extend_to(&click_order, l);
+                            } else if evt.modifiers().intersects(Modifiers::META | Modifiers::SUPER) {
                                 selection.toggle(l);
                             } else {
                                 selection.set(Some(l));
@@ -329,7 +343,18 @@ pub(super) fn timeline_shell(
                         }
                     },
                     onwheel: move |evt| {
-                        let dy = evt.data().delta().strip_units().y;
+                        let (_, dy) = match evt.data().delta() {
+                            dioxus_native::prelude::dioxus_elements::geometry::WheelDelta::Pixels(delta) => {
+                                crate::ui::timeline_widget::wheel_pixels(delta.x, delta.y, false)
+                            }
+                            dioxus_native::prelude::dioxus_elements::geometry::WheelDelta::Lines(delta) => {
+                                crate::ui::timeline_widget::wheel_pixels(delta.x, delta.y, true)
+                            }
+                            dioxus_native::prelude::dioxus_elements::geometry::WheelDelta::Pages(delta) => {
+                                (delta.x * 400.0, delta.y * 400.0)
+                            }
+                        };
+                        evt.prevent_default();
                         let _ = timeline_tx.send(TimelineMsg::ScrollBy(dy));
                     },
                     div { class: "lhead", "Layer" }

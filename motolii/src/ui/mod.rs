@@ -4,6 +4,7 @@ pub mod app;
 mod autosave;
 mod blend_preview;
 mod browser;
+mod browser_selection;
 mod color;
 mod commands;
 mod composition;

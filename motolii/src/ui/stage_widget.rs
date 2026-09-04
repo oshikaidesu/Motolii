@@ -10,8 +10,7 @@ use crate::ui::context_menu::{MenuRequest, MenuTarget};
 use crate::ui::mount::SurfaceState;
 use crate::ui::playback::Clock;
 use crate::ui::property_edit::{self, PropertyEdit};
-use crate::ui::session::GestureSurface;
-use crate::ui::session::Selection;
+use crate::ui::session::{CapturePhase, CustomSurface, GestureSurface, Selection, SurfaceCapture};
 use crate::ui::tokens;
 use anyrender::{PaintRef, PaintScene, ResourceId};
 use blitz_dom::node::ComputedStyles;
@@ -179,6 +178,14 @@ struct GizmoDrag {
     others: Vec<(LayerId, SelGeom)>,
 }
 
+#[derive(Clone, Debug)]
+struct StageMarquee {
+    from: (f64, f64),
+    to: (f64, f64),
+    additive: bool,
+    original_keys: Vec<crate::ui::session::KeySel>,
+}
+
 pub(super) struct StageState {
     state: State,
     frames: u64,
@@ -189,6 +196,9 @@ pub(super) struct StageState {
     drag: Option<GizmoDrag>,
     /// 何も掴んでいない所からのドラッグ = カメラを動かす。
     camera_drag: Option<CameraDrag>,
+    marquee: Option<StageMarquee>,
+    active_pointer: Option<(blitz_traits::events::BlitzPointerId, bool)>,
+    capture: SurfaceCapture,
     selected_size: Arc<Mutex<Option<[f32; 2]>>>,
     view_camera: Arc<Mutex<crate::render::engine::ObservationCamera>>,
     rings: Arc<std::sync::atomic::AtomicBool>,
@@ -358,6 +368,7 @@ impl StageState {
         rings: Arc<std::sync::atomic::AtomicBool>,
         frame_dim: Arc<std::sync::atomic::AtomicU32>,
         gesture: GestureSurface,
+        capture: SurfaceCapture,
         output_only: Arc<std::sync::atomic::AtomicBool>,
         view_request: Arc<Mutex<Option<crate::ui::session::ViewRequest>>>,
     ) -> Self {
@@ -370,6 +381,9 @@ impl StageState {
             fit: Fit::default(),
             drag: None,
             camera_drag: None,
+            marquee: None,
+            active_pointer: None,
+            capture,
             selected_size,
             view_camera,
             rings,
@@ -385,6 +399,81 @@ impl StageState {
             output_only,
             view_request,
         }
+    }
+
+    fn arm_pointer(&mut self, pointer: &blitz_traits::events::BlitzPointerEvent) -> bool {
+        if !pointer.is_primary || !self.capture.begin(CustomSurface::Stage, pointer) {
+            return false;
+        }
+        self.active_pointer = Some((pointer.id, pointer.is_primary));
+        true
+    }
+
+    fn accepts_pointer(&self, pointer: &blitz_traits::events::BlitzPointerEvent) -> bool {
+        self.active_pointer
+            .is_some_and(|active| active == (pointer.id, pointer.is_primary))
+    }
+
+    fn release_pointer(&mut self, pointer: &blitz_traits::events::BlitzPointerEvent) {
+        self.capture.finish(CustomSurface::Stage, pointer);
+        self.active_pointer = None;
+    }
+
+    fn relay_to_capture_owner(&self, event: &UiEvent) -> bool {
+        let (phase, pointer) = match event {
+            UiEvent::PointerMove(pointer) => (CapturePhase::Move, pointer),
+            UiEvent::PointerUp(pointer) => (CapturePhase::Up, pointer),
+            UiEvent::PointerCancel(pointer) => (CapturePhase::Cancel, pointer),
+            _ => return false,
+        };
+        self.capture
+            .relay_from_other_surface(CustomSurface::Stage, phase, pointer)
+    }
+
+    fn note_direct_pointer(&self, event: &UiEvent) {
+        let (phase, pointer) = match event {
+            UiEvent::PointerMove(pointer) => (CapturePhase::Move, pointer),
+            UiEvent::PointerUp(pointer) => (CapturePhase::Up, pointer),
+            UiEvent::PointerCancel(pointer) => (CapturePhase::Cancel, pointer),
+            _ => return,
+        };
+        self.capture
+            .note_direct(CustomSurface::Stage, phase, pointer);
+    }
+
+    fn marquee_layers(&self, marquee: &StageMarquee) -> Vec<LayerId> {
+        let State::Active(active) = &self.state else {
+            return Vec::new();
+        };
+        let doc = self.doc.lock().unwrap();
+        let view = doc.view();
+        let rt = self.current_rt();
+        let Ok(layers) = view.resolved_layers(rt) else {
+            return Vec::new();
+        };
+        layers
+            .iter()
+            .filter_map(|layer| {
+                let geom = selection_geom_resolved(&active.engine, &view, &layers, layer.id, rt)?;
+                let map = plane_map(&self.fit, &geom);
+                let points = [
+                    map.to_screen(0.0, 0.0),
+                    map.to_screen(1.0, 0.0),
+                    map.to_screen(1.0, 1.0),
+                    map.to_screen(0.0, 1.0),
+                ];
+                marquee_hits(marquee.from, marquee.to, points).then_some(layer.id)
+            })
+            .collect()
+    }
+
+    fn finish_marquee(&mut self, bindings: &mut StageBindings, marquee: StageMarquee) {
+        let distance = ((marquee.to.0 - marquee.from.0).powi(2)
+            + (marquee.to.1 - marquee.from.1).powi(2))
+        .sqrt();
+        let hits = (distance >= DRAG_SLOP_PIXELS).then(|| self.marquee_layers(&marquee));
+        apply_marquee_selection(&self.selection, marquee.additive, hits);
+        bindings.selected.set(self.selection.get());
     }
 
     fn original_values(
@@ -497,15 +586,21 @@ impl StageState {
     /// 届く範囲での代わり)。
     fn finish_drag(&mut self, bindings: &StageBindings, _shift: bool, _alt: bool) {
         let mut bindings = bindings.clone();
+        if let Some(marquee) = self.marquee.take() {
+            self.gesture.end();
+            self.finish_marquee(&mut bindings, marquee);
+            return;
+        }
         if let Some(cam) = self.camera_drag.take() {
+            // A terminal pointer always releases gesture ownership. Preview
+            // ownership only decides whether this particular write may commit.
             if let Some(owner) = cam.owner {
-                if self.doc.lock().unwrap().preview_is_current(owner) {
+                if finish_preview_owner(&self.doc, &self.gesture, owner) {
                     if let Some(center) = cam.preview {
                         self.write_export_center(center, cam.at, owner, true);
                     } else {
                         self.doc.lock().unwrap().clear_preview_edits(owner);
                     }
-                    self.gesture.end();
                     bindings.revision += 1;
                 }
             } else {
@@ -514,11 +609,10 @@ impl StageState {
             return;
         }
         let Some(drag) = self.drag.take() else { return };
-        let mut doc = self.doc.lock().unwrap();
-        if !doc.preview_is_current(drag.owner) {
+        if !finish_preview_owner(&self.doc, &self.gesture, drag.owner) {
             return;
         }
-        self.gesture.end();
+        let mut doc = self.doc.lock().unwrap();
         if drag.last.is_none() || drag.preview.is_empty() {
             property_edit::cancel_owned(&mut doc, drag.owner);
             return;
@@ -533,20 +627,25 @@ impl StageState {
 
     fn cancel_drag(&mut self, bindings: &StageBindings) {
         let mut bindings = bindings.clone();
-        let mut cancelled = false;
+        let had_interaction =
+            self.drag.is_some() || self.camera_drag.is_some() || self.marquee.is_some();
         if let Some(drag) = self.drag.take() {
-            cancelled |= property_edit::cancel_owned(&mut self.doc.lock().unwrap(), drag.owner);
+            property_edit::cancel_owned(&mut self.doc.lock().unwrap(), drag.owner);
         }
         if let Some(cam) = self.camera_drag.take() {
             if let Some(owner) = cam.owner {
-                cancelled |= self.doc.lock().unwrap().clear_preview_edits(owner);
+                self.doc.lock().unwrap().clear_preview_edits(owner);
             } else {
                 self.view_camera.lock().unwrap().pan =
                     [cam.orig_center.0 as f32, cam.orig_center.1 as f32];
-                cancelled = true;
             }
         }
-        if cancelled {
+        if let Some(marquee) = self.marquee.take() {
+            self.selection.restore_keys(marquee.original_keys);
+        }
+        self.active_pointer = None;
+        self.capture.cancel(CustomSurface::Stage);
+        if had_interaction {
             self.gesture.end();
         }
         bindings.revision += 1;
@@ -1188,6 +1287,74 @@ fn orbit_axis(
 /// 外の規格が必須として挙げている物(Android の touch slop)。
 const DRAG_SLOP_PIXELS: f64 = 3.0;
 
+fn marquee_hits(from: (f64, f64), to: (f64, f64), quad: [(f64, f64); 4]) -> bool {
+    let (x0, y0, x1, y1) = (
+        from.0.min(to.0),
+        from.1.min(to.1),
+        from.0.max(to.0),
+        from.1.max(to.1),
+    );
+    let rect = [(x0, y0), (x1, y0), (x1, y1), (x0, y1)];
+    let in_rect =
+        |point: (f64, f64)| point.0 >= x0 && point.0 <= x1 && point.1 >= y0 && point.1 <= y1;
+    let cross = |a: (f64, f64), b: (f64, f64), p: (f64, f64)| {
+        (b.0 - a.0) * (p.1 - a.1) - (b.1 - a.1) * (p.0 - a.0)
+    };
+    let in_quad = |point: (f64, f64)| {
+        let signs = (0..4).map(|index| cross(quad[index], quad[(index + 1) % 4], point));
+        let mut positive = false;
+        let mut negative = false;
+        for sign in signs {
+            positive |= sign > 1e-9;
+            negative |= sign < -1e-9;
+        }
+        !(positive && negative)
+    };
+    let segments_cross = |a: (f64, f64), b: (f64, f64), c: (f64, f64), d: (f64, f64)| {
+        let boxes_overlap = a.0.min(b.0) <= c.0.max(d.0)
+            && c.0.min(d.0) <= a.0.max(b.0)
+            && a.1.min(b.1) <= c.1.max(d.1)
+            && c.1.min(d.1) <= a.1.max(b.1);
+        let ab_c = cross(a, b, c);
+        let ab_d = cross(a, b, d);
+        let cd_a = cross(c, d, a);
+        let cd_b = cross(c, d, b);
+        boxes_overlap && ab_c * ab_d <= 0.0 && cd_a * cd_b <= 0.0
+    };
+    quad.into_iter().any(in_rect)
+        || rect.into_iter().any(in_quad)
+        || (0..4).any(|quad_edge| {
+            (0..4).any(|rect_edge| {
+                segments_cross(
+                    quad[quad_edge],
+                    quad[(quad_edge + 1) % 4],
+                    rect[rect_edge],
+                    rect[(rect_edge + 1) % 4],
+                )
+            })
+        })
+}
+
+fn finish_preview_owner(doc: &Arc<Mutex<Document>>, gesture: &GestureSurface, owner: u64) -> bool {
+    gesture.end();
+    doc.lock().unwrap().preview_is_current(owner)
+}
+
+fn apply_marquee_selection(selection: &Selection, additive: bool, hits: Option<Vec<LayerId>>) {
+    match (additive, hits) {
+        (true, Some(hits)) => {
+            for layer in hits {
+                if !selection.contains(layer) {
+                    selection.toggle(layer);
+                }
+            }
+        }
+        (true, None) => {}
+        (false, Some(hits)) => selection.replace(hits),
+        (false, None) => selection.clear(),
+    }
+}
+
 /// 掴んだ物が指について来るように、カメラの中心を出す。
 ///
 /// **視点は世界を掴んでいる**ので、世界を右へ引くならカメラは左へ動く。
@@ -1327,6 +1494,8 @@ impl SurfaceState for StageState {
             || self.clock.playing()
             || self.drag.is_some()
             || self.camera_drag.is_some()
+            || self.marquee.is_some()
+            || self.capture.has_pending(CustomSurface::Stage)
             || self.dirty.get()
             || self.view_request.lock().unwrap().is_some()
             || *bindings.revision.peek() != self.seen_revision.get()
@@ -1336,10 +1505,14 @@ impl SurfaceState for StageState {
     fn handle_event(&mut self, _mount: &mut StageMount, bindings: &StageBindings, event: &UiEvent) {
         let mut bindings = bindings.clone();
         self.dirty.set(true);
+        if self.relay_to_capture_owner(event) {
+            return;
+        }
         if self.output_only.load(std::sync::atomic::Ordering::Relaxed) {
             // 出力を映す窓。ここは**見るだけ**で、触っても何も起きない。
             return;
         }
+        self.note_direct_pointer(event);
         if self.gesture.cancelled(&mut self.seen_cancel) {
             self.cancel_drag(&bindings);
             return;
@@ -1378,12 +1551,18 @@ impl SurfaceState for StageState {
                 }
             }
             UiEvent::PointerDown(p) => {
+                if self.capture.blocks(CustomSurface::Stage, p) {
+                    return;
+                }
                 if p.button == MouseEventButton::Secondary {
                     self.cancel_drag(&bindings);
+                    self.selection.clear_keys();
                     let hit = self.hit_layer(p.element.x as f64, p.element.y as f64);
                     if let Some((_, layer)) = hit {
                         if !self.selection.contains(layer) {
                             self.selection.set(Some(layer));
+                        } else {
+                            self.selection.activate(layer);
                         }
                         bindings.selected.set(self.selection.get());
                     }
@@ -1393,7 +1572,7 @@ impl SurfaceState for StageState {
                             x: f64::from(p.client_x()),
                             y: f64::from(p.client_y()),
                             target: hit
-                                .map(|(_, layer)| MenuTarget::Layer(layer))
+                                .map(|(_, layer)| MenuTarget::StageLayer(layer))
                                 .unwrap_or(MenuTarget::Stage),
                         }));
                     }
@@ -1403,6 +1582,9 @@ impl SurfaceState for StageState {
                 match p.button {
                     // 中ボタンはどこを押しても視点を滑らせる(Blender・Nuke・Figma)。
                     MouseEventButton::Auxiliary => {
+                        if !self.arm_pointer(p) {
+                            return;
+                        }
                         let pan = self.view_camera.lock().unwrap().pan;
                         self.gesture.begin();
                         self.camera_drag = Some(CameraDrag {
@@ -1420,6 +1602,11 @@ impl SurfaceState for StageState {
                     MouseEventButton::Main => {}
                     _ => return,
                 }
+                if !p.is_primary {
+                    return;
+                }
+                let original_keys = self.selection.keys();
+                self.selection.clear_keys();
                 if let Some(layer) = self.selection.get() {
                     if let Some(geom) = self.selection_geom(layer) {
                         // 傾いた層は台形に見える。**見えている所で掴めるように**、
@@ -1448,6 +1635,9 @@ impl SurfaceState for StageState {
                             mode.filter(|mode| *mode != GizmoMode::Move),
                             self.is_locked(layer),
                         ) {
+                            if !self.arm_pointer(p) {
+                                return;
+                            }
                             self.gesture.begin();
                             let owner = self.doc.lock().unwrap().begin_preview();
                             let at = self.current_rt();
@@ -1490,6 +1680,8 @@ impl SurfaceState for StageState {
                         }
                         if !self.selection.contains(layer) {
                             self.selection.set(Some(layer));
+                        } else {
+                            self.selection.activate(layer);
                         }
                         bindings.selected.set(self.selection.get());
                         // 選んだその手で動かせる(押し直しをさせない — Figma・CapCut・AE 全部そう)。
@@ -1504,6 +1696,9 @@ impl SurfaceState for StageState {
                             let (bx, by, bw, bh) = geom.box_;
                             let local = (bx + u * bw, by + v * bh);
                             let grab = rotate_around(geom.position, geom.rotation, local);
+                            if !self.arm_pointer(p) {
+                                return;
+                            }
                             self.gesture.begin();
                             let owner = self.doc.lock().unwrap().begin_preview();
                             let at = self.current_rt();
@@ -1533,13 +1728,13 @@ impl SurfaceState for StageState {
                         }
                     }
                     None => {
-                        // 空所を押した時点で選択は終わる。カメラを滑らせても、以前の
-                        // ギズモだけが Stage に貼り付いたままにならない。
-                        self.selection.clear();
-                        bindings.selected.set(None);
-                        // 枠の縁を掴んだら書き出しカメラ、それ以外は視点。
-                        // 錠が掛かっている間は枠を掴めない(誤って掴むのを止める)。
+                        let additive = p.mods.intersects(Modifiers::META | Modifiers::SUPER)
+                            || p.mods.contains(Modifiers::SHIFT);
+                        if !self.arm_pointer(p) {
+                            return;
+                        }
                         self.gesture.begin();
+                        // 枠の縁は camera handle。真の空所は矩形選択で、中ボタンだけが視点を動かす。
                         if self.near_export_frame(cx, cy) && !crate::ui::fixture::camera_locked() {
                             let rt = self.current_rt();
                             self.camera_drag = Some(CameraDrag {
@@ -1555,24 +1750,20 @@ impl SurfaceState for StageState {
                                     .image_at(p.element.x as f64, p.element.y as f64),
                             });
                         } else {
-                            let pan = self.view_camera.lock().unwrap().pan;
-                            self.camera_drag = Some(CameraDrag {
-                                grab: (cx, cy),
-                                orig_center: (pan[0] as f64, pan[1] as f64),
-                                export_frame: false,
-                                at: self.current_rt(),
-                                owner: None,
-                                preview: None,
-                                last: None,
-                                grab_image: self
-                                    .fit
-                                    .image_at(p.element.x as f64, p.element.y as f64),
+                            self.marquee = Some(StageMarquee {
+                                from: (p.element.x as f64, p.element.y as f64),
+                                to: (p.element.x as f64, p.element.y as f64),
+                                additive,
+                                original_keys,
                             });
                         }
                     }
                 }
             }
             UiEvent::PointerMove(p) => {
+                if self.active_pointer.is_some() && !self.accepts_pointer(p) {
+                    return;
+                }
                 self.cursor = Some((p.element.x as f64, p.element.y as f64));
                 if self.drag.is_none() && self.camera_drag.is_none() {
                     let next = self.mode_under(p.element.x as f64, p.element.y as f64);
@@ -1582,11 +1773,18 @@ impl SurfaceState for StageState {
                     }
                 }
                 // 枠の外で離すと、離した事がここへ届かない。掴んだままの絵が残る。
-                if p.buttons.is_empty() && (self.drag.is_some() || self.camera_drag.is_some()) {
+                if p.buttons.is_empty()
+                    && (self.drag.is_some() || self.camera_drag.is_some() || self.marquee.is_some())
+                {
                     println!("PROBE room=input verdict=drag-finished reason=release-not-seen");
                     let shift = p.mods.contains(Modifiers::SHIFT);
                     let alt = p.mods.contains(Modifiers::ALT);
+                    self.release_pointer(p);
                     self.finish_drag(&bindings, shift, alt);
+                    return;
+                }
+                if let Some(marquee) = self.marquee.as_mut() {
+                    marquee.to = (p.element.x as f64, p.element.y as f64);
                     return;
                 }
                 if self.camera_drag.is_some() {
@@ -1677,10 +1875,15 @@ impl SurfaceState for StageState {
                     }
                 }
             }
-            UiEvent::PointerUp(p) => {
+            UiEvent::PointerUp(p) if self.accepts_pointer(p) => {
                 let shift = p.mods.contains(Modifiers::SHIFT);
                 let alt = p.mods.contains(Modifiers::ALT);
+                self.release_pointer(p);
                 self.finish_drag(&bindings, shift, alt);
+            }
+            UiEvent::PointerCancel(p) if self.accepts_pointer(p) => {
+                self.release_pointer(p);
+                self.cancel_drag(&bindings);
             }
             _ => {}
         }
@@ -1697,6 +1900,9 @@ impl SurfaceState for StageState {
         scale: f64,
     ) -> anyrender::Scene {
         let mut bindings = bindings.clone();
+        for pointer in self.capture.take(CustomSurface::Stage) {
+            <Self as SurfaceState>::handle_event(self, mount, &bindings, &pointer.event());
+        }
         if self.gesture.cancelled(&mut self.seen_cancel) {
             self.cancel_drag(&bindings);
         }
@@ -2230,6 +2436,29 @@ impl SurfaceState for StageState {
                     );
                 }
             }
+        }
+
+        if let Some(marquee) = &self.marquee {
+            let rect = Rect::new(
+                marquee.from.0.min(marquee.to.0) * k,
+                marquee.from.1.min(marquee.to.1) * k,
+                marquee.from.0.max(marquee.to.0) * k,
+                marquee.from.1.max(marquee.to.1) * k,
+            );
+            scene.fill(
+                Fill::NonZero,
+                Affine::IDENTITY,
+                PaintRef::Solid(Color::from_rgba8(0xd8, 0xb5, 0x74, 0x22)),
+                None,
+                &rect,
+            );
+            scene.stroke(
+                &peniko::kurbo::Stroke::new(1.0),
+                Affine::IDENTITY,
+                PaintRef::Solid(c(tokens::ACCENT)),
+                None,
+                &rect,
+            );
         }
 
         scene

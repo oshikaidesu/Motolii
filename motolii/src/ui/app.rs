@@ -18,6 +18,25 @@ use crate::ui::settings::SettingsSheet;
 use crate::ui::timeline_widget::TimelineMsg;
 use crate::ui::tokens;
 
+fn relay_surface_pointer(
+    capture: &crate::ui::session::SurfaceCapture,
+    phase: crate::ui::session::CapturePhase,
+    event: &PointerEvent,
+) -> bool {
+    let data = event.data();
+    let point = data.client_coordinates();
+    capture.relay_dom(
+        phase,
+        &data.pointer_type(),
+        data.pointer_id(),
+        data.is_primary(),
+        [point.x, point.y],
+        data.held_buttons()
+            .contains(dioxus_native::prelude::dioxus_elements::input_data::MouseButton::Primary),
+        data.modifiers(),
+    )
+}
+
 /// 落とし先の当たり。**位置を計算しない** —— 5枚の当たりを重ねて置き、
 /// どれに乗ったかで決める。
 pub(super) const SIDES: [(Side, &str); 5] = [
@@ -343,6 +362,7 @@ pub fn detached() -> Element {
     let panel = use_hook(|| consume_context::<Panel>());
     let host = use_hook(|| consume_context::<crate::ui::host::Host>());
     let panes = panes_for(&session);
+    let mut detached_menu = use_signal(|| None::<MenuId>);
     wire_windows(&host, panes);
     let window = dioxus_core::try_consume_context::<
         std::sync::Arc<dyn dioxus_native::winit::window::Window>,
@@ -355,9 +375,14 @@ pub fn detached() -> Element {
             let scrub_session = session.clone();
             let waker = host.clone();
             Some(
-                host.on_primary_pointer_release(window.id(), move |_, _, _| {
+                host.on_primary_pointer_release(window.id(), move |_, _, outside| {
                     if !live_signal(panes.echo) {
                         return;
+                    }
+                    if outside {
+                        scrub_session.gesture.cancel();
+                        scrub_session.surface_capture.cancel_all();
+                        waker.wake_all();
                     }
                     if crate::ui::inspector::end_scrub(&scrub_session) {
                         waker.wake_all();
@@ -371,13 +396,22 @@ pub fn detached() -> Element {
         &host,
         || {
             let menu = panes.context_menu;
+            let choice = panes.inspector_choice;
+            let session = session.clone();
+            let wake = host.clone();
             Some(
                 host.on_focus_lost(
                     window
                         .as_ref()
                         .map_or(crate::ui::host::Host::HEADLESS, |w| w.id()),
                     move || {
+                        crate::ui::commands::cancel_interactions(&session);
+                        session.doc.lock().unwrap().clear_all_transients();
+                        crate::ui::keymap::forget_modifiers();
                         let _ = update_live_signal(menu, |open| *open = None);
+                        let _ = update_live_signal(choice, |open| *open = None);
+                        let _ = update_live_signal(detached_menu, |open| *open = None);
+                        wake.wake_all();
                     },
                 ),
             )
@@ -387,6 +421,17 @@ pub fn detached() -> Element {
     let reduced_motion = window.is_some() && tokens::system_prefers_reduced_motion();
     // 別窓も同じ倍率(150% で左の名前列と右の帯がずれない)。
     let css = tokens::css_root(session.scale.percent(), reduced_motion);
+    let move_capture = session.surface_capture.clone();
+    let up_capture = session.surface_capture.clone();
+    let cancel_capture = session.surface_capture.clone();
+    let scrub_move = session.clone();
+    let scrub_up = session.clone();
+    let scrub_cancel = session.clone();
+    let mut capture_revision = panes.revision;
+    let command_host = host.clone();
+    let command_window = window.clone();
+    let mut command_revision = panes.revision;
+    let command_selected = panes.selected;
     rsx!(
         style { {css} }
         {tokens::stylesheet()}
@@ -394,6 +439,33 @@ pub fn detached() -> Element {
         div {
             id: "detached",
             tabindex: "0",
+            onpointermove: move |evt: PointerEvent| {
+                if crate::ui::inspector::move_scrub_pointer(&scrub_move, &evt, capture_revision) {
+                    return;
+                }
+                if relay_surface_pointer(&move_capture, crate::ui::session::CapturePhase::Move, &evt) {
+                    evt.prevent_default();
+                    *capture_revision.write() += 1;
+                }
+            },
+            onpointerup: move |evt: PointerEvent| {
+                if crate::ui::inspector::end_scrub_pointer(&scrub_up, &evt, capture_revision) {
+                    return;
+                }
+                if relay_surface_pointer(&up_capture, crate::ui::session::CapturePhase::Up, &evt) {
+                    evt.prevent_default();
+                    *capture_revision.write() += 1;
+                }
+            },
+            onpointercancel: move |evt: PointerEvent| {
+                if crate::ui::inspector::cancel_scrub_pointer(&scrub_cancel, &evt, capture_revision) {
+                    return;
+                }
+                if relay_surface_pointer(&cancel_capture, crate::ui::session::CapturePhase::Cancel, &evt) {
+                    evt.prevent_default();
+                    *capture_revision.write() += 1;
+                }
+            },
             onkeyup: move |evt: KeyboardEvent| crate::ui::keymap::note_key_up(&evt.key()),
             onkeydown: {
                 let session = session.clone();
@@ -404,18 +476,88 @@ pub fn detached() -> Element {
                         if evt.key() == Key::Escape { evt.prevent_default(); context.set(None); }
                         return;
                     }
+                    if detached_menu.peek().is_some() {
+                        evt.stop_propagation();
+                        if evt.key() == Key::Escape { evt.prevent_default(); detached_menu.set(None); }
+                        return;
+                    }
+                    if panes.inspector_choice.peek().is_some() && evt.key() == Key::Escape {
+                        evt.prevent_default();
+                        evt.stop_propagation();
+                        let mut choice = panes.inspector_choice;
+                        choice.set(None);
+                        return;
+                    }
+                    if evt.key() == Key::Escape
+                        && matches!(*session.desk.lock().unwrap(), crate::ui::session::DeskState::Open(_))
+                    {
+                        evt.prevent_default();
+                        evt.stop_propagation();
+                        *session.desk.lock().unwrap() = crate::ui::session::DeskState::Shut;
+                        *command_revision.write() += 1;
+                        return;
+                    }
                     if session.field().is_some() || crate::ui::keymap::is_typing() { return; }
                     if crate::ui::keymap::is_on_control() && matches!(evt.key(), Key::Enter) { return; }
                     crate::ui::keymap::note_key_down(&evt.key());
                     let mods = evt.modifiers();
                     if let Some(intent) = crate::ui::keymap::lookup_held(&evt.key(), evt.code(),
                         crate::ui::keymap::primary_modifier(mods), mods.shift(), mods.alt()) {
-                        if crate::ui::commands::run(&session, panes, intent) { evt.prevent_default(); }
+                        if crate::ui::commands::run(&session, panes, intent) {
+                            evt.prevent_default();
+                            return;
+                        }
+                        match intent {
+                            Intent::Save | Intent::SaveAs => {
+                                evt.prevent_default();
+                                let session = session.clone();
+                                let poke = command_host.poker();
+                                dioxus_core::spawn(async move {
+                                    let _ = crate::ui::project::put_away(session, poke, matches!(intent, Intent::SaveAs)).await;
+                                });
+                            }
+                            Intent::NewProject => {
+                                evt.prevent_default();
+                                dioxus_core::spawn(crate::ui::project::new_project(session.clone(), command_host.poker(), command_window.clone(), command_revision, command_selected));
+                            }
+                            Intent::OpenProject => {
+                                evt.prevent_default();
+                                dioxus_core::spawn(crate::ui::project::open_project(session.clone(), command_host.poker(), command_window.clone(), command_revision, command_selected));
+                            }
+                            Intent::CompositionSettings => {
+                                evt.prevent_default();
+                                detached_menu.set(Some(MenuId::Composition));
+                            }
+                            Intent::Quit => {
+                                evt.prevent_default();
+                                let session = session.clone();
+                                let poke = command_host.poker();
+                                let window = command_window.clone();
+                                dioxus_core::spawn(async move {
+                                    if crate::ui::project::allow_project_replacement(session.clone(), poke.clone(), window).await {
+                                        session.quit.store(true, std::sync::atomic::Ordering::Relaxed);
+                                        poke.poke();
+                                    }
+                                });
+                            }
+                            _ => {}
+                        }
                     }
                 }
             },
             {panel_body(panel, &session, &ui, panes)}
             ContextMenu { session: session.clone(), panes }
+            MenuDismiss { open: detached_menu }
+            if detached_menu() == Some(MenuId::Composition) {
+                div {
+                    id: "menu-composition-list",
+                    class: "vmenu",
+                    role: "menu",
+                    style: "position:fixed;left:var(--sp3);top:var(--sp3);max-width:calc(100vw - 2 * var(--sp3));max-height:calc(100vh - 2 * var(--sp3));overflow:auto;z-index:13;",
+                    onmousedown: move |evt| evt.stop_propagation(),
+                    CompositionSheet { session: session.clone(), revision: panes.revision }
+                }
+            }
         }
         {file_drop_overlay(&session)}
     )
@@ -681,6 +823,11 @@ pub fn app() -> Element {
                             outside,
                         );
                     });
+                    if outside {
+                        scrub_session.gesture.cancel();
+                        scrub_session.surface_capture.cancel_all();
+                        dock_host.wake_all();
+                    }
                     // 数値を擦ったまま窓の外で放しても、そこで確定する。
                     if crate::ui::inspector::end_scrub(&scrub_session) {
                         dock_host.wake_all();
@@ -695,8 +842,8 @@ pub fn app() -> Element {
         || {
             let runtime = dioxus_core::Runtime::current();
             let scope = dioxus_core::current_scope_id();
-            let gesture = session.gesture.clone();
             let lost_session = session.clone();
+            let lost_wake = host.clone();
             Some(
                 host.on_focus_lost(
                     window
@@ -707,10 +854,11 @@ pub fn app() -> Element {
                             || !live_signal(grip)
                             || !live_signal(open_menu)
                             || !live_signal(panes.context_menu)
+                            || !live_signal(panes.inspector_choice)
                         {
                             return;
                         }
-                        gesture.cancel();
+                        crate::ui::commands::cancel_interactions(&lost_session);
                         // 下見(transient)は窓を離れたら全部落とす。書類に無い絵を描き続けない。
                         lost_session.doc.lock().unwrap().clear_all_transients();
                         // Cmd+Tab で離れると修飾の keyup が届かない。戻った時の Space が Cmd+Space になる。
@@ -724,7 +872,10 @@ pub fn app() -> Element {
                             let _ = update_live_signal(grip, |grip| *grip = None);
                             let _ = update_live_signal(open_menu, |menu| *menu = None);
                             let _ = update_live_signal(panes.context_menu, |menu| *menu = None);
+                            let _ =
+                                update_live_signal(panes.inspector_choice, |choice| *choice = None);
                         });
+                        lost_wake.wake_all();
                     },
                 ),
             )
@@ -783,6 +934,11 @@ pub fn app() -> Element {
         use_effect(move || {
             let _ = (panes.selected)();
             *sizer.selected_size.lock().unwrap() = None;
+            // Selection clears shared key identities on a layer-domain change.
+            // Retained Timeline row/key indices must follow on its next paint.
+            if sizer.selected_keys.lock().unwrap().is_empty() {
+                let _ = sizer.timeline_tx.send(TimelineMsg::DeselectKeys);
+            }
         });
     }
     use_effect(move || {
@@ -831,24 +987,33 @@ pub fn app() -> Element {
     let Panes {
         layer_rows,
         attrs_state,
-        selected: selected_sig,
         revision,
         echo: layout_echo,
         ..
     } = panes;
-    let mut selected = selected_sig;
     let mut layout_echo = layout_echo;
 
     let timeline_tx = session.timeline_tx.clone();
     let doc = session.doc.clone();
     let clock = session.clock.clone();
-    let selection = session.selection.clone();
     let sync_doc = doc.clone();
     let sync_clock = clock.clone();
     use_effect(move || {
         let _ = revision();
         sync_clock.sync_document(&sync_doc.lock().unwrap());
     });
+    {
+        let clock = clock.clone();
+        let mut playing = playing;
+        use_effect(move || {
+            let _ = (panes.echo)();
+            let _ = (panes.revision)();
+            let current = clock.playing();
+            if *playing.peek() != current {
+                playing.set(current);
+            }
+        });
+    }
 
     let reduced_motion = window.is_some() && tokens::system_prefers_reduced_motion();
     let css = tokens::css_root(scale_pct(), reduced_motion);
@@ -857,6 +1022,15 @@ pub fn app() -> Element {
     let menubar_gesture = session.gesture.clone();
     let pointer_tiles = tile_nodes.clone();
     let dock_host = host.clone();
+    let move_capture = session.surface_capture.clone();
+    let up_capture = session.surface_capture.clone();
+    let cancel_capture = session.surface_capture.clone();
+    let scrub_pointer_move = session.clone();
+    let scrub_pointer_up = session.clone();
+    let scrub_pointer_cancel = session.clone();
+    let mut move_capture_revision = revision;
+    let mut up_capture_revision = revision;
+    let mut cancel_capture_revision = revision;
     rsx!(
         style { {css} }
         {tokens::stylesheet()}
@@ -866,6 +1040,18 @@ pub fn app() -> Element {
             autofocus: "true",
             style: "grid-template-rows: var(--section) 1fr calc(20 * var(--s) * 1px);",
             onpointermove: move |evt: PointerEvent| {
+                if crate::ui::inspector::move_scrub_pointer(
+                    &scrub_pointer_move,
+                    &evt,
+                    move_capture_revision,
+                ) {
+                    return;
+                }
+                if relay_surface_pointer(&move_capture, crate::ui::session::CapturePhase::Move, &evt) {
+                    evt.prevent_default();
+                    *move_capture_revision.write() += 1;
+                    return;
+                }
                 let p = evt.data().client_coordinates();
                 let current = *tab_drag.peek();
                 if let Some(drag) = current {
@@ -886,7 +1072,20 @@ pub fn app() -> Element {
                 }
             },
             onpointerup: move |evt: PointerEvent| {
+                if crate::ui::inspector::end_scrub_pointer(
+                    &scrub_pointer_up,
+                    &evt,
+                    up_capture_revision,
+                ) {
+                    return;
+                }
+                if relay_surface_pointer(&up_capture, crate::ui::session::CapturePhase::Up, &evt) {
+                    evt.prevent_default();
+                    *up_capture_revision.write() += 1;
+                    return;
+                }
                 *grip.write() = None;
+                let finishing_tab = tab_drag.peek().is_some();
                 let p = evt.data().client_coordinates();
                 finish_tab_release(
                     dock,
@@ -898,8 +1097,25 @@ pub fn app() -> Element {
                     Some(evt.data().pointer_id()),
                     false,
                 );
+                if finishing_tab {
+                    // The fixed drag shield is the up target. Without cancelling
+                    // its default click, Blitz clears the tab focus we set on down.
+                    evt.prevent_default();
+                }
             },
-            onpointercancel: move |_| {
+            onpointercancel: move |evt: PointerEvent| {
+                if crate::ui::inspector::cancel_scrub_pointer(
+                    &scrub_pointer_cancel,
+                    &evt,
+                    cancel_capture_revision,
+                ) {
+                    return;
+                }
+                if relay_surface_pointer(&cancel_capture, crate::ui::session::CapturePhase::Cancel, &evt) {
+                    evt.prevent_default();
+                    *cancel_capture_revision.write() += 1;
+                    return;
+                }
                 if let Some(drag) = tab_drag.write().take() {
                     let _ = drag.cancel();
                 }
@@ -909,12 +1125,7 @@ pub fn app() -> Element {
                 crate::ui::keymap::note_key_up(&evt.key());
             },
             onkeydown: {
-                let doc = doc.clone();
                 let clock = clock.clone();
-                let selection = selection.clone();
-                let timeline_tx = timeline_tx.clone();
-                let mut layer_rows = layer_rows;
-                let mut attrs_state = attrs_state;
                 let mut revision = revision;
                 let poke = host.poker();
                 let session = session.clone();
@@ -997,175 +1208,11 @@ pub fn app() -> Element {
                         return;
                     };
                     evt.prevent_default();
+                    if crate::ui::commands::run(&session, panes, intent) {
+                        playing.set(clock.playing());
+                        return;
+                    }
                     match intent {
-                        Intent::Split | Intent::Duplicate | Intent::StepFrame(_)
-                        | Intent::Home | Intent::End | Intent::Deselect | Intent::PlayPause
-                        | Intent::Undo | Intent::Redo | Intent::Rename | Intent::DeleteLayer
-                        | Intent::SelectAll => {
-                            crate::ui::commands::run(&session, panes, intent);
-                            playing.set(clock.playing());
-                        }
-                        Intent::Group => {
-                            let targets = selection.all();
-                            let result = doc.lock().unwrap().group_layers(&targets);
-                            match result {
-                                Ok(Some(group)) => {
-                                    fixture::expand(group);
-                                    selection.set(Some(group));
-                                    selected.set(Some(group));
-                                    *session.project_notice.lock().unwrap() = "Grouped".to_owned();
-                                    refresh_layer_projection(
-                                        &doc,
-                                        layer_rows,
-                                        attrs_state,
-                                        &timeline_tx,
-                                        revision,
-                                    );
-                                    println!("PROBE room=write verdict=applied Group layer={group:?}");
-                                }
-                                Ok(None) => println!("PROBE room=write verdict=group-noop reason=no-selection"),
-                                Err(error) => {
-                                    *session.project_notice.lock().unwrap() = format!("Group failed: {error}");
-                                    *revision.write() += 1;
-                                    println!("PROBE room=write verdict=apply-error {error}");
-                                }
-                            }
-                        }
-                        Intent::Ungroup => {
-                            let targets = selection.all();
-                            let result = doc.lock().unwrap().ungroup_layers(&targets);
-                            match result {
-                                Ok(released) if !released.is_empty() => {
-                                    selection.set(None);
-                                    for layer in released {
-                                        if !selection.contains(layer) {
-                                            selection.toggle(layer);
-                                        }
-                                    }
-                                    selected.set(selection.get());
-                                    *session.project_notice.lock().unwrap() = "Ungrouped".to_owned();
-                                    refresh_layer_projection(
-                                        &doc,
-                                        layer_rows,
-                                        attrs_state,
-                                        &timeline_tx,
-                                        revision,
-                                    );
-                                    println!("PROBE room=write verdict=applied Ungroup");
-                                }
-                                Ok(_) => println!("PROBE room=write verdict=ungroup-noop reason=no-group-selection"),
-                                Err(error) => {
-                                    *session.project_notice.lock().unwrap() = format!("Ungroup failed: {error}");
-                                    *revision.write() += 1;
-                                    println!("PROBE room=write verdict=apply-error {error}");
-                                }
-                            }
-                        }
-                        Intent::EasyEase(side) => {
-                            let starts = crate::ui::ease::segments(
-                                &session.selected_keys.lock().unwrap(),
-                            );
-                            if starts.is_empty() {
-                                return;
-                            }
-                            match crate::ui::ease::apply_easy(&session, &starts, side) {
-                                Ok(n) => println!(
-                                    "PROBE room=write verdict=applied EasyEase tracks={n}"
-                                ),
-                                Err(e) => {
-                                    // 効かなかった事を黙らない(AE の F9 は必ず何かが起きる)。
-                                    *session.project_notice.lock().unwrap() = "Select keyframes first".to_owned();
-                                    println!("PROBE room=write verdict=apply-error {e}");
-                                }
-                            }
-                            *revision.write() += 1;
-                        }
-                        Intent::Reveal(property) => {
-                            fixture::toggle_reveal(property);
-                            if fixture::reveal().is_some() {
-                                if let Some(layer) = selected() {
-                                    fixture::expand(layer);
-                                }
-                            }
-                            refresh_layer_projection(&doc, layer_rows, attrs_state, &timeline_tx, revision);
-                        }
-                        Intent::ToggleKeyedOnly => {
-                            fixture::toggle_keyed_only();
-                            if fixture::keyed_only() {
-                                if let Some(layer) = selected() {
-                                    fixture::expand(layer);
-                                }
-                            }
-                            refresh_layer_projection(&doc, layer_rows, attrs_state, &timeline_tx, revision);
-                        }
-                        Intent::ToggleMarker => {
-                            let time = clock.current_time();
-                            let sec = time.as_seconds_f64();
-                            let mut d = doc.lock().unwrap();
-                            let mut markers = d.view().markers().unwrap_or_default();
-                            let hit = markers
-                                .iter()
-                                .position(|m| {
-                                    (m.time.as_seconds_f64() - sec).abs()
-                                        < 0.5 * clock.frame_duration_sec()
-                                });
-                            match hit {
-                                // 止まっている時に同じ所を押せば外す。再生中の連打(拍を叩く)では消さない。
-                                Some(i) if !clock.playing() => {
-                                    markers.remove(i);
-                                }
-                                Some(_) => return,
-                                None => {
-                                    markers.push(crate::doc::store::Marker {
-                                        // 名前は時刻から。採番は途中を消すと衝突する。
-                                        name: clock.format_timecode(),
-                                        time,
-                                        duration: crate::doc::store::RationalTime::ZERO,
-                                        body: String::new(),
-                                    });
-                                    markers.sort_by(|a, b| {
-                                        a.time.as_seconds_f64().total_cmp(&b.time.as_seconds_f64())
-                                    });
-                                }
-                            }
-                            let applied = d
-                                .apply(crate::doc::store::Intent::SetMarkers {
-                                    markers: markers.clone(),
-                                })
-                                .is_ok();
-                            drop(d);
-                            if applied {
-                                let secs = markers.iter().map(|m| m.time.as_seconds_f64()).collect();
-                                let _ = timeline_tx.send(TimelineMsg::SetMarkers(secs));
-                                // 印を打ったら、その本文を書く場所が開いている(押し直しをさせない)。
-                                // 本文を書く場所を開けるのは、机が焦点に付いて回っている時だけ。
-                                // 手で閉じた/別の引き出しを開けている人の連打(拍を叩く)を邪魔しない。
-                                if hit.is_none()
-                                    && *session.desk.lock().unwrap() == crate::ui::session::DeskState::Follow
-                                {
-                                    *session.desk.lock().unwrap() =
-                                        crate::ui::session::DeskState::Open(crate::ui::desk::Drawer::Text);
-                                }
-                                *revision.write() += 1;
-                            }
-                        }
-                        Intent::JumpMarker(dir) => {
-                            let sec = clock.now_sec();
-                            let d = doc.lock().unwrap();
-                            let markers = d.view().markers().unwrap_or_default();
-                            drop(d);
-                            let mut times: Vec<f64> =
-                                markers.iter().map(|m| m.time.as_seconds_f64()).collect();
-                            times.sort_by(f64::total_cmp);
-                            let next = if dir < 0 {
-                                times.into_iter().rev().find(|t| *t < sec - 1e-6)
-                            } else {
-                                times.into_iter().find(|t| *t > sec + 1e-6)
-                            };
-                            if let Some(t) = next {
-                                clock.seek(t);
-                            }
-                        }
                         Intent::Save | Intent::SaveAs => {
                             let session = session.clone();
                             let poke = poke.clone();
@@ -1179,87 +1226,6 @@ pub fn app() -> Element {
                         }
                         Intent::OpenProject => {
                             dioxus_core::spawn(crate::ui::project::open_project(session.clone(), poke.clone(), window.clone(), revision, selected_sig));
-                        }
-                        Intent::Reorder(delta) => {
-                            let Some(layer) = selected() else { return };
-                            let mut d = doc.lock().unwrap();
-                            let current = d.view().meta(layer).ok().flatten().map(|m| m.order).unwrap_or(0);
-                            let applied = d
-                                .apply(crate::doc::store::Intent::SetOrder {
-                                    layer,
-                                    order: current.saturating_add(delta),
-                                })
-                                .is_ok();
-                            let rows = fixture::layer_rows_from_doc(&d);
-                            let canvas = fixture::canvas_rows_from_doc(&d);
-                            drop(d);
-                            if applied {
-                                attrs_state.set(rows.iter().map(|r| (r.hidden, r.solo, r.locked)).collect());
-                                layer_rows.set(rows);
-                                let _ = timeline_tx.send(TimelineMsg::SetRows(canvas));
-                                *revision.write() += 1;
-                            }
-                            println!("PROBE room=write verdict=applied SetOrder layer={layer:?} {current}->{} ok={applied}", current.saturating_add(delta));
-                        }
-                        Intent::SnapEdgeToPlayhead(tail) | Intent::TrimToPlayhead(tail) => {
-                            let trim = matches!(intent, Intent::TrimToPlayhead(_));
-                            let Some(layer) = selected() else { return };
-                            let frame = clock.current_frame();
-                            let mut d = doc.lock().unwrap();
-                            let Some(orig) = d.view().meta(layer).ok().flatten().map(|m| m.timing) else {
-                                return;
-                            };
-                            let timing = crate::ui::timeline_widget::edge_to_frame(orig, frame, tail, trim);
-                            let applied = d
-                                .apply(crate::doc::store::Intent::SetTiming { layer, timing })
-                                .is_ok();
-                            let rows = fixture::layer_rows_from_doc(&d);
-                            let canvas = fixture::canvas_rows_from_doc(&d);
-                            drop(d);
-                            if applied {
-                                attrs_state.set(rows.iter().map(|r| (r.hidden, r.solo, r.locked)).collect());
-                                layer_rows.set(rows);
-                                let _ = timeline_tx.send(TimelineMsg::SetRows(canvas));
-                                *revision.write() += 1;
-                            }
-                            println!(
-                                "PROBE room=write verdict=applied {} tail={tail} start {}->{} dur {}->{}",
-                                if trim { "TrimToPlayhead" } else { "SnapEdgeToPlayhead" },
-                                orig.start, timing.start, orig.duration, timing.duration
-                            );
-                        }
-                        Intent::SelectStep(delta) => {
-                            let d = doc.lock().unwrap();
-                            let rows: Vec<_> = fixture::layer_rows_from_doc(&d).into_iter().filter(|r| r.layer.is_some()).collect();
-                            drop(d);
-                            if rows.is_empty() {
-                                return;
-                            }
-                            let current = selected()
-                                .and_then(|l| rows.iter().position(|r| r.layer == Some(l)))
-                                .unwrap_or(0) as i32;
-                            let next = (current + delta).clamp(0, rows.len() as i32 - 1) as usize;
-                            selection.set(rows[next].layer);
-                            selected.set(rows[next].layer);
-                            *revision.write() += 1;
-                        }
-                        Intent::SelectExtend(delta) => {
-                            let d = doc.lock().unwrap();
-                            let rows = fixture::layer_rows_from_doc(&d);
-                            drop(d);
-                            let rows: Vec<_> = rows.into_iter().filter(|r| r.layer.is_some()).collect();
-                            if rows.is_empty() {
-                                return;
-                            }
-                            let Some(current) = selected().and_then(|l| rows.iter().position(|r| r.layer == Some(l))) else { return };
-                            let next = (current as i32 + delta).clamp(0, rows.len() as i32 - 1) as usize;
-                            if let Some(layer) = rows[next].layer {
-                                if !selection.contains(layer) {
-                                    selection.toggle(layer);
-                                }
-                                selected.set(Some(layer));
-                                *revision.write() += 1;
-                            }
                         }
                         Intent::CompositionSettings => {
                             open_menu.set(Some(MenuId::Composition));
@@ -1275,52 +1241,7 @@ pub fn app() -> Element {
                                 }
                             });
                         }
-                        Intent::View(request) => {
-                            *session.view_request.lock().unwrap() = Some(request);
-                            *revision.write() += 1;
-                        }
-                        Intent::Nudge(dx, dy) => {
-                            // キーを選んでいる時の Alt+←→ はキーをコマで動かす(AE)。
-                            let keys: Vec<_> = session.selected_keys.lock().unwrap().clone();
-                            let keys: Vec<_> = keys.into_iter().filter(|k| session.writable(k.layer)).collect();
-                            if !keys.is_empty() && dy == 0.0 {
-                                let mut d = doc.lock().unwrap();
-                                let Ok(fps) = crate::ui::timeline_widget::document_fps(&d) else { return };
-                                let by = dx.signum() as i64 * if dx.abs() >= 10.0 { 10 } else { 1 };
-                                let mut intents = Vec::new();
-                                for k in &keys {
-                                    let frame = (k.at_sec * fps.as_f64()).round() as i64;
-                                    match crate::ui::timeline_widget::keyframe_move_intents(&d, k.layer, k.property.as_ref(), &[frame], by) {
-                                        Ok(more) => intents.extend(more),
-                                        Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
-                                    }
-                                }
-                                let applied = d.apply_all(intents).is_ok();
-                                let canvas = fixture::canvas_rows_from_doc(&d);
-                                drop(d);
-                                if applied {
-                                    for k in session.selected_keys.lock().unwrap().iter_mut() {
-                                        k.at_sec += by as f64 / fps.as_f64();
-                                    }
-                                    let _ = timeline_tx.send(TimelineMsg::SetRows(canvas));
-                                    *revision.write() += 1;
-                                }
-                                return;
-                            }
-                            let targets = session.editable_selection();
-                            if targets.is_empty() {
-                                return;
-                            }
-                            let at = clock.current_time();
-                            let mut d = doc.lock().unwrap();
-                            let result = crate::ui::stage_widget::nudge_intents(&d, &targets, (dx, dy), at).and_then(|intents| d.apply_all(intents));
-                            drop(d);
-                            match result {
-                                Ok(()) => *revision.write() += 1,
-                                Err(error) => *session.project_notice.lock().unwrap() = format!("Move failed: {error}"),
-                            }
-                        }
-
+                        _ => {}
                     }
                 }
             },
@@ -1422,9 +1343,9 @@ pub fn app() -> Element {
                                                     if crate::ui::project::allow_project_replacement(session.clone(), poke, window).await {
                                                         crate::ui::project::open_path(&session, path, revision, selected_sig);
                                                     }
-                                                });
-                                            }
-                                        }
+                            });
+                        }
+                    }
                                     }
                                 }
                             }

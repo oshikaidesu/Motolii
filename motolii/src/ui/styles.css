@@ -183,7 +183,15 @@ body {
 .srow:focus-visible,
 .prow .v:focus-visible,
 .lsurface:focus-visible,
-.semantic-button:focus-visible {
+.semantic-button:focus-visible,
+.menu:focus,
+.vitem:focus,
+.vout:focus,
+.ptab:focus,
+.srow:focus,
+.prow .v:focus,
+.lsurface:focus,
+.semantic-button:focus {
     outline: calc(2 * var(--s) * 1px) solid var(--accent);
     outline-offset: calc(1 * var(--s) * 1px);
 }
@@ -432,6 +440,20 @@ body {
 
 .browser-reflow-b > * {
     animation: browser-grid-reflow-b var(--motion-fast) var(--motion-ease-standard) both;
+}
+
+.browser-marquee-capture {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    cursor: crosshair;
+}
+
+.browser-marquee {
+    position: absolute;
+    pointer-events: none;
+    border: var(--line) solid var(--way-browser);
+    background: color-mix(in srgb, var(--way-browser) 18%, transparent);
 }
 
 .tcard {
@@ -1456,7 +1478,8 @@ body {
     background: var(--panel);
 }
 
-.output-cancel:focus-visible {
+.output-cancel:focus-visible,
+.output-cancel:focus {
     outline: var(--line) solid var(--accent);
 }
 
@@ -1490,6 +1513,8 @@ body {
     flex: 1;
     min-height: 0;
     overflow-y: auto;
+    /* Keep the final Inspector control clear of a dock splitter/scroll edge. */
+    padding-bottom: var(--row);
 }
 
 /* 机 — Document を覗くレンズ。顔は書き置き・参考画像・鳥、引き出しは焦点の型に一つ。 */
@@ -1852,7 +1877,7 @@ body {
     text-overflow: ellipsis;
 }
 
-/* 札の上の手。hover の間だけ出る。 */
+/* 札の上の手。Blitz は :focus-within を持たないので、鍵で辿っても消えない。 */
 .tcell {
     position: relative;
     display: flex;
@@ -1869,12 +1894,13 @@ body {
     right: var(--sp1);
     display: flex;
     gap: var(--sp1);
-    opacity: 0;
-    pointer-events: none;
+    opacity: 0.72;
+    pointer-events: auto;
 }
 
 .tcell:hover .tacts,
-.tcell:focus-within .tacts {
+.tcell:focus-within .tacts,
+.tcell > .tcard:focus + .tacts {
     opacity: 1;
     pointer-events: auto;
 }
@@ -1927,7 +1953,8 @@ h1.a11y, h2, h3.sec, h3.sh {
     font-weight: inherit;
 }
 
-.csheet-in:focus-visible {
+.csheet-in:focus-visible,
+.csheet-in:focus {
     outline: 2px solid var(--accent);
     outline-offset: -2px;
 }

@@ -11,8 +11,7 @@ use crate::ui::functions::paint::{color as c, diamond, fill_rect};
 use crate::ui::functions::verb::keyframe_shift_intents;
 use crate::ui::functions::verb::{self, TimingMode};
 use crate::ui::playback::Clock;
-use crate::ui::session::GestureSurface;
-use crate::ui::session::Selection;
+use crate::ui::session::{CapturePhase, CustomSurface, GestureSurface, Selection, SurfaceCapture};
 use crate::ui::tokens::{self, UiScale};
 use anyrender::{PaintRef, PaintScene};
 use blitz_dom::node::ComputedStyles;
@@ -191,6 +190,12 @@ fn prepare_drag(doc: &Document, drag: &DragState, fps: f64) -> Result<Vec<Intent
 const EDGE_GRAB_PX: f64 = 6.0;
 /// タップがドラッグになるまでに指が動ける長さ。
 const DRAG_SLOP_PX: f64 = 3.0;
+const WHEEL_LINE_PX: f64 = 20.0;
+
+pub(super) fn wheel_pixels(x: f64, y: f64, lines: bool) -> (f64, f64) {
+    let scale = if lines { WHEEL_LINE_PX } else { 1.0 };
+    (x * scale, y * scale)
+}
 /// 掴んだ物が吸い付く距離。手が止まらない感触はここで決まる。
 const SNAP_PX: f64 = 8.0;
 
@@ -365,6 +370,7 @@ pub(super) fn edge_to_frame(orig: LayerTiming, frame: i64, tail: bool, trim: boo
 pub(super) enum TimelineMsg {
     SetRows(Vec<CanvasRow>),
     ScrollBy(f64),
+    RevealLayer(LayerId),
     SetMarkers(Vec<f64>),
     /// Escape: キーの選択を落とす。
     DeselectKeys,
@@ -425,12 +431,65 @@ pub(super) struct TimelineState {
     /// 最後に行を引いた時の Document の revision(擦りの transient では引き直さない)。
     seen_doc_revision: String,
     gesture: Option<GestureSurface>,
+    capture: Option<SurfaceCapture>,
+    active_pointer: Option<(blitz_traits::events::BlitzPointerId, bool)>,
     seen_cancel: u32,
     selected_key: Option<Arc<Mutex<Vec<crate::ui::session::KeySel>>>>,
     notice: Option<Arc<Mutex<String>>>,
 }
 
 impl TimelineState {
+    fn arm_pointer(&mut self, pointer: &blitz_traits::events::BlitzPointerEvent) -> bool {
+        if !pointer.is_primary {
+            return false;
+        }
+        if self
+            .capture
+            .as_ref()
+            .is_some_and(|capture| !capture.begin(CustomSurface::Timeline, pointer))
+        {
+            return false;
+        }
+        self.active_pointer = Some((pointer.id, pointer.is_primary));
+        true
+    }
+
+    fn accepts_pointer(&self, pointer: &blitz_traits::events::BlitzPointerEvent) -> bool {
+        self.active_pointer
+            .is_some_and(|active| active == (pointer.id, pointer.is_primary))
+    }
+
+    fn release_pointer(&mut self, pointer: &blitz_traits::events::BlitzPointerEvent) {
+        if let Some(capture) = self.capture.clone() {
+            capture.finish(CustomSurface::Timeline, pointer);
+        }
+        self.active_pointer = None;
+    }
+
+    fn relay_to_capture_owner(&self, event: &UiEvent) -> bool {
+        let Some(capture) = &self.capture else {
+            return false;
+        };
+        let (phase, pointer) = match event {
+            UiEvent::PointerMove(pointer) => (CapturePhase::Move, pointer),
+            UiEvent::PointerUp(pointer) => (CapturePhase::Up, pointer),
+            UiEvent::PointerCancel(pointer) => (CapturePhase::Cancel, pointer),
+            _ => return false,
+        };
+        capture.relay_from_other_surface(CustomSurface::Timeline, phase, pointer)
+    }
+
+    fn note_direct_pointer(&self, event: &UiEvent) {
+        let Some(capture) = &self.capture else { return };
+        let (phase, pointer) = match event {
+            UiEvent::PointerMove(pointer) => (CapturePhase::Move, pointer),
+            UiEvent::PointerUp(pointer) => (CapturePhase::Up, pointer),
+            UiEvent::PointerCancel(pointer) => (CapturePhase::Cancel, pointer),
+            _ => return,
+        };
+        capture.note_direct(CustomSurface::Timeline, phase, pointer);
+    }
+
     pub(super) fn new(rows: Vec<CanvasRow>, rx: Rc<Receiver<TimelineMsg>>) -> Self {
         Self {
             rx,
@@ -459,6 +518,8 @@ impl TimelineState {
             seen_revision: 0,
             seen_doc_revision: String::new(),
             gesture: None,
+            capture: None,
+            active_pointer: None,
             seen_cancel: 0,
             selected_key: None,
             notice: None,
@@ -485,6 +546,11 @@ impl TimelineState {
 
     pub(super) fn with_gesture(mut self, gesture: GestureSurface) -> Self {
         self.gesture = Some(gesture);
+        self
+    }
+
+    pub(super) fn with_capture(mut self, capture: SurfaceCapture) -> Self {
+        self.capture = Some(capture);
         self
     }
 
@@ -582,7 +648,7 @@ impl TimelineState {
                 origins.push((target, meta.timing));
             }
         }
-        let keys = self
+        let keys: Vec<_> = self
             .selected
             .iter()
             .filter_map(|(row, key)| {
@@ -590,6 +656,15 @@ impl TimelineState {
                 Some((row.layer?, row.prop.clone(), *row.keys.get(*key)?))
             })
             .collect();
+        let has_edit = if matches!(mode, DragMode::Key { .. }) {
+            !keys.is_empty()
+        } else {
+            !origins.is_empty()
+        };
+        if !has_edit {
+            doc.clear_preview_edits(owner);
+            return None;
+        }
         Some(DragState {
             row,
             layer,
@@ -608,6 +683,11 @@ impl TimelineState {
     }
 
     fn cancel_edit(&mut self) {
+        let had_interaction = self.drag.is_some()
+            || self.marker_drag.is_some()
+            || self.scrubbing
+            || self.marquee.is_some()
+            || self.active_pointer.is_some();
         if let Some(drag) = self.drag.take() {
             if let Some(doc) = &self.doc {
                 let mut doc = doc.lock().unwrap();
@@ -620,6 +700,15 @@ impl TimelineState {
         self.marker_drag = None;
         self.scrubbing = false;
         self.marquee = None;
+        self.active_pointer = None;
+        if let Some(capture) = &self.capture {
+            capture.cancel(CustomSurface::Timeline);
+        }
+        if had_interaction {
+            if let Some(gesture) = &self.gesture {
+                gesture.end();
+            }
+        }
     }
 
     fn preview_edit(&mut self) {
@@ -729,6 +818,28 @@ impl TimelineState {
                 mirror.set(self.scroll_y);
             }
         }
+    }
+
+    fn reveal_layer(&mut self, layer: LayerId, bindings: &mut TimelineBindings) {
+        let Some(row) = self
+            .rows
+            .iter()
+            .position(|candidate| candidate.layer == Some(layer))
+        else {
+            return;
+        };
+        let row_height = ROW_H * self.sfac();
+        let top = row as f64 * row_height;
+        let bottom = top + row_height;
+        let visible = (self.viewport_h - RULER_H * self.sfac()).max(row_height);
+        let next = if top < self.scroll_y {
+            top
+        } else if bottom > self.scroll_y + visible {
+            bottom - visible
+        } else {
+            self.scroll_y
+        };
+        self.set_scroll_y(next, bindings);
     }
 
     /// 掴んでいる時刻の吸い付き先(再生位置・comp の頭・各層の端)。
@@ -841,6 +952,16 @@ impl TimelineState {
         }
     }
 
+    fn layer_order(&self) -> Vec<LayerId> {
+        let mut ordered = Vec::new();
+        for layer in self.rows.iter().filter_map(|row| row.layer) {
+            if !ordered.contains(&layer) {
+                ordered.push(layer);
+            }
+        }
+        ordered
+    }
+
     fn band_hit(&self, x: f64, y: f64) -> Option<usize> {
         let row_ix = ((y - RULER_H * self.sfac() + self.scroll_y) / (ROW_H * self.sfac())).floor();
         if row_ix < 0.0 {
@@ -919,25 +1040,22 @@ impl TimelineState {
                 }
             }
         }
-        if let (Some(selection), Some(mirror), false) = (
-            self.selection.as_ref(),
-            bindings.selected.as_mut(),
-            layers.is_empty(),
-        ) {
+        if let Some(selection) = self.selection.as_ref() {
             // ⌘ / ⇧ 付きの囲いは足す(キーと同じ流儀)。素の囲いは置き換える。
             if self.marquee_add {
                 for layer in &layers {
                     if !selection.contains(*layer) {
-                        selection.toggle(*layer);
+                        selection.toggle_preserving_keys(*layer);
                     }
                 }
+            } else if layers.is_empty() {
+                selection.clear();
             } else {
-                selection.set(Some(layers[0]));
-                for layer in &layers[1..] {
-                    selection.toggle(*layer);
-                }
+                selection.replace_preserving_keys(layers.iter().copied());
             }
-            mirror.set(selection.get());
+            if let Some(mirror) = bindings.selected.as_mut() {
+                mirror.set(selection.get());
+            }
         }
         self.publish_keys();
     }
@@ -1022,6 +1140,7 @@ impl TimelineState {
             match msg {
                 TimelineMsg::SetRows(rows) => self.replace_rows(rows),
                 TimelineMsg::ScrollBy(dy) => self.set_scroll_y(self.scroll_y + dy, bindings),
+                TimelineMsg::RevealLayer(layer) => self.reveal_layer(layer, bindings),
                 TimelineMsg::SetMarkers(markers) => self.markers = markers,
                 TimelineMsg::DeselectKeys => {
                     self.selected.clear();
@@ -1034,6 +1153,10 @@ impl TimelineState {
 
 impl TimelineState {
     fn event(&mut self, event: &UiEvent, bindings: &mut TimelineBindings) {
+        if self.relay_to_capture_owner(event) {
+            return;
+        }
+        self.note_direct_pointer(event);
         if self
             .gesture
             .as_ref()
@@ -1044,10 +1167,11 @@ impl TimelineState {
         }
         match event {
             UiEvent::Wheel(wheel) => {
-                let (dx, dy) = match wheel.delta {
-                    BlitzWheelDelta::Pixels(x, y) => (x, y),
-                    BlitzWheelDelta::Lines(x, y) => (x * 20.0, y * 20.0),
+                let (x, y, lines) = match wheel.delta {
+                    BlitzWheelDelta::Pixels(x, y) => (x, y, false),
+                    BlitzWheelDelta::Lines(x, y) => (x, y, true),
                 };
+                let (dx, dy) = wheel_pixels(x, y, lines);
                 // 目盛の帯の上では素のホイールでも横に広がる。Ctrl(トラックパッドの
                 // 摘まみ)だけだと、**見つけられない手**になる —— 60秒の尺では
                 // 0.6秒が5画素で、キーが重なって選び分けられない。
@@ -1077,12 +1201,18 @@ impl TimelineState {
                 }
             }
             UiEvent::PointerMove(p) if self.marquee.is_some() => {
+                if !self.accepts_pointer(p) {
+                    return;
+                }
                 let (x, y) = (p.element.x as f64, p.element.y as f64);
                 if let Some((_, to)) = self.marquee.as_mut() {
                     *to = (x, y);
                 }
             }
             UiEvent::PointerMove(p) => {
+                if self.active_pointer.is_some() && !self.accepts_pointer(p) {
+                    return;
+                }
                 let (x, y) = (p.element.x as f64, p.element.y as f64);
                 self.cursor = Some((x, y));
                 // 帯の外で離すと、離した事がここへ届かない。掴んだままの絵が残り、
@@ -1094,6 +1224,7 @@ impl TimelineState {
                         || self.marker_drag.is_some())
                 {
                     println!("PROBE room=input verdict=drag-finished reason=release-not-seen");
+                    self.release_pointer(p);
                     self.finish_drag(bindings);
                     return;
                 }
@@ -1153,30 +1284,52 @@ impl TimelineState {
                 }
             }
             UiEvent::PointerDown(p) => {
+                if self
+                    .capture
+                    .as_ref()
+                    .is_some_and(|capture| capture.blocks(CustomSurface::Timeline, p))
+                {
+                    return;
+                }
                 if p.button == MouseEventButton::Secondary {
                     self.cancel_edit();
                     if let Some(gesture) = &self.gesture {
                         gesture.cancel();
                     }
                     let (x, y) = (f64::from(p.element.x), f64::from(p.element.y));
-                    let hit = self
-                        .hit_test(x, y)
-                        .map(|(row, _)| row)
-                        .or_else(|| self.band_hit(x, y));
-                    let layer = hit.and_then(|row| self.rows[row].layer);
+                    let key_hit = self.hit_test(x, y);
+                    let row = key_hit.map(|(row, _)| row).or_else(|| self.band_hit(x, y));
+                    let layer = row.and_then(|row| self.rows[row].layer);
                     if let (Some(selection), Some(layer)) = (&self.selection, layer) {
                         if !selection.contains(layer) {
                             selection.set(Some(layer));
-                        }
-                        if let Some(mut mirror) = bindings.selected {
-                            mirror.set(selection.get());
+                        } else {
+                            selection.activate(layer);
                         }
                     }
+                    if let Some((row, key)) = key_hit {
+                        if !self.selected.contains(&(row, key)) {
+                            self.selected = vec![(row, key)];
+                        }
+                    } else {
+                        self.selected.clear();
+                    }
+                    self.publish_keys();
+                    if let (Some(selection), Some(mut mirror)) =
+                        (&self.selection, bindings.selected)
+                    {
+                        mirror.set(selection.get());
+                    }
                     if let Some(mut menu) = bindings.context_menu {
+                        let target = match (key_hit, layer) {
+                            (Some(_), Some(layer)) => MenuTarget::TimelineKey { layer },
+                            (None, Some(layer)) => MenuTarget::TimelineLayer(layer),
+                            _ => MenuTarget::Timeline,
+                        };
                         menu.set(Some(MenuRequest {
                             x: f64::from(p.client_x()),
                             y: f64::from(p.client_y()),
-                            target: layer.map(MenuTarget::Layer).unwrap_or(MenuTarget::Timeline),
+                            target,
                         }));
                     }
                     return;
@@ -1184,8 +1337,8 @@ impl TimelineState {
                 if p.button != MouseEventButton::Main {
                     return;
                 }
-                if let Some(gesture) = &self.gesture {
-                    gesture.begin();
+                if !p.is_primary {
+                    return;
                 }
                 let (x, y) = (p.element.x as f64, p.element.y as f64);
                 let t = self.scroll_sec + x / self.pps;
@@ -1201,6 +1354,12 @@ impl TimelineState {
                         .min_by(|a, b| a.2.total_cmp(&b.2));
                     if let Some((i, sec, _)) = grabbed {
                         println!("PROBE room=input down t={t:.3}s hit=marker index={i}");
+                        if !self.arm_pointer(p) {
+                            return;
+                        }
+                        if let Some(gesture) = &self.gesture {
+                            gesture.begin();
+                        }
                         self.marker_drag = Some((i, sec, t, 0.0));
                         return;
                     }
@@ -1208,6 +1367,12 @@ impl TimelineState {
                         "PROBE room=input down t={:.3}s el=({:.0},{:.0}) hit=ruler-seek",
                         t, x, y
                     );
+                    if !self.arm_pointer(p) {
+                        return;
+                    }
+                    if let Some(gesture) = &self.gesture {
+                        gesture.begin();
+                    }
                     self.scrubbing = true;
                     if let Some(clock) = &self.clock {
                         clock.seek(t);
@@ -1238,6 +1403,11 @@ impl TimelineState {
                         (false, None) => self.selected = vec![(row_ix, key_ix)],
                     }
                     self.publish_keys();
+                    // Modifier click changes selection only. In particular, a
+                    // key that was just toggled off must not be re-added by drag preparation.
+                    if add {
+                        return;
+                    }
                     if let (Some(layer), Some(at_sec)) = (
                         self.rows[row_ix].layer,
                         self.rows[row_ix].keys.get(key_ix).copied(),
@@ -1252,24 +1422,42 @@ impl TimelineState {
                             .and_then(|d| d.lock().unwrap().view().meta(layer).ok().flatten())
                             .map(|m| m.timing)
                             .unwrap_or_default();
-                        self.drag =
-                            self.begin_edit(layer, DragMode::Key { at_sec }, row_ix, orig, t);
+                        if !self.arm_pointer(p) {
+                            return;
+                        }
+                        if let Some(drag) =
+                            self.begin_edit(layer, DragMode::Key { at_sec }, row_ix, orig, t)
+                        {
+                            if let Some(gesture) = &self.gesture {
+                                gesture.begin();
+                            }
+                            self.drag = Some(drag);
+                        } else {
+                            self.release_pointer(p);
+                        }
                     }
                 } else if let Some(row_ix) = self.band_hit(x, y) {
                     let layer = self.rows[row_ix].layer;
-                    if let (Some(selection), Some(mirror)) =
-                        (self.selection.as_ref(), bindings.selected.as_mut())
-                    {
-                        if p.mods.intersects(Modifiers::META | Modifiers::SUPER)
-                            || p.mods.contains(Modifiers::SHIFT)
-                        {
-                            if let Some(l) = layer {
-                                selection.toggle(l);
-                            }
+                    let shift = p.mods.contains(Modifiers::SHIFT);
+                    let toggle = p.mods.intersects(Modifiers::META | Modifiers::SUPER);
+                    if let Some(selection) = self.selection.as_ref() {
+                        if let (true, Some(layer)) = (shift, layer) {
+                            selection.extend_to(&self.layer_order(), layer);
+                        } else if let (true, Some(layer)) = (toggle, layer) {
+                            selection.toggle(layer);
                         } else if layer.is_none_or(|layer| !selection.contains(layer)) {
                             selection.set(layer);
+                        } else if let Some(layer) = layer {
+                            selection.activate(layer);
                         }
-                        mirror.set(selection.get());
+                        if let Some(mirror) = bindings.selected.as_mut() {
+                            mirror.set(selection.get());
+                        }
+                    }
+                    self.selected.clear();
+                    self.publish_keys();
+                    if shift || toggle {
+                        return;
                     }
                     let orig = layer.and_then(|l| {
                         self.doc
@@ -1303,7 +1491,17 @@ impl TimelineState {
                             "PROBE room=write drag-start row={row_ix} start={}",
                             orig.start
                         );
-                        self.drag = self.begin_edit(layer, mode, row_ix, orig, t);
+                        if !self.arm_pointer(p) {
+                            return;
+                        }
+                        if let Some(drag) = self.begin_edit(layer, mode, row_ix, orig, t) {
+                            if let Some(gesture) = &self.gesture {
+                                gesture.begin();
+                            }
+                            self.drag = Some(drag);
+                        } else {
+                            self.release_pointer(p);
+                        }
                     }
                 } else {
                     // 何も無い所からのドラッグは囲って選ぶ。
@@ -1312,13 +1510,30 @@ impl TimelineState {
                     if !add {
                         self.selected.clear();
                         self.publish_keys();
+                        if let Some(selection) = self.selection.as_ref() {
+                            selection.clear();
+                            if let Some(mirror) = bindings.selected.as_mut() {
+                                mirror.set(None);
+                            }
+                        }
+                    }
+                    if !self.arm_pointer(p) {
+                        return;
+                    }
+                    if let Some(gesture) = &self.gesture {
+                        gesture.begin();
                     }
                     self.marquee_add = add;
                     self.marquee = Some(((x, y), (x, y)));
                 }
             }
-            UiEvent::PointerUp(_) => {
+            UiEvent::PointerUp(pointer) if self.accepts_pointer(pointer) => {
+                self.release_pointer(pointer);
                 self.finish_drag(bindings);
+            }
+            UiEvent::PointerCancel(pointer) if self.accepts_pointer(pointer) => {
+                self.release_pointer(pointer);
+                self.cancel_edit();
             }
             _ => {}
         }
@@ -1731,6 +1946,12 @@ impl crate::ui::mount::SurfaceState for TimelineState {
         height: u32,
         scale: f64,
     ) -> anyrender::Scene {
-        self.draw(&mut bindings.clone(), ctx, styles, width, height, scale)
+        let mut bindings = bindings.clone();
+        if let Some(capture) = self.capture.clone() {
+            for pointer in capture.take(CustomSurface::Timeline) {
+                self.event(&pointer.event(), &mut bindings);
+            }
+        }
+        self.draw(&mut bindings, ctx, styles, width, height, scale)
     }
 }

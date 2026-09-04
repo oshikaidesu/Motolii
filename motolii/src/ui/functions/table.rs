@@ -451,7 +451,10 @@ pub(crate) fn bindings() -> [Binding; 63] {
 
 pub(crate) fn entries(target: MenuTarget) -> Vec<(&'static str, Intent)> {
     let mut rows = Vec::new();
-    if matches!(target, MenuTarget::Layer(_)) {
+    if matches!(
+        target,
+        MenuTarget::StageLayer(_) | MenuTarget::TimelineLayer(_) | MenuTarget::TimelineKey { .. }
+    ) {
         rows.extend([
             ("Split at Playhead", Intent::Split),
             ("Duplicate", Intent::Duplicate),

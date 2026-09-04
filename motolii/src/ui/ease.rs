@@ -44,12 +44,21 @@ pub(super) fn apply(session: &Session, starts: &[KeySel], shape: Interp) -> Resu
 
 /// AE の F9 一族。Easy Ease In(⇧F9)は**キーへ入る側** = 前の区間の終わりを寝かせる。
 /// Easy Ease Out(⌘F9)はキーから出る側 = この区間の始まり。形はキーが持つので、In は前のキーへ書く。
-pub(super) fn apply_easy(session: &Session, starts: &[KeySel], side: crate::ui::keymap::EaseSide) -> Result<usize, String> {
+pub(super) fn apply_easy(
+    session: &Session,
+    starts: &[KeySel],
+    side: crate::ui::keymap::EaseSide,
+) -> Result<usize, String> {
     let previous = side == crate::ui::keymap::EaseSide::In;
     apply_at(session, starts, easy_ease(side), previous)
 }
 
-fn apply_at(session: &Session, starts: &[KeySel], shape: Interp, previous: bool) -> Result<usize, String> {
+fn apply_at(
+    session: &Session,
+    starts: &[KeySel],
+    shape: Interp,
+    previous: bool,
+) -> Result<usize, String> {
     let mut doc = session.doc.lock().unwrap();
     let fps = doc
         .view()
@@ -193,7 +202,9 @@ pub(super) fn ease_panel(
     editor: dioxus_native::CustomWidgetAttr,
     presets: dioxus_native::CustomWidgetAttr,
     kind_name: Signal<String>,
-    revision: Signal<u32>,
+    shape: std::sync::Arc<std::sync::Mutex<Interp>>,
+    preset_focus: crate::ui::ease_widget::PresetFocus,
+    mut revision: Signal<u32>,
 ) -> Element {
     let _ = revision();
     let chosen = segments(&session.selected_keys.lock().unwrap());
@@ -239,7 +250,39 @@ pub(super) fn ease_panel(
         div { id: if live { "ease" } else { "ease idle" },
             div { class: "etarget", "{target}" }
             div { class: "ecurve", object { "data": editor } }
-            div { class: if live { "epresets" } else { "epresets off" },
+            div {
+                class: if live { "epresets" } else { "epresets off" },
+                tabindex: if live { "0" } else { "-1" },
+                role: "grid",
+                aria_label: "Easing presets",
+                onkeydown: {
+                    let session = session.clone();
+                    move |evt: KeyboardEvent| {
+                        if !live {
+                            return;
+                        }
+                        let moved = crate::ui::ease_widget::move_preset_focus(
+                            &session,
+                            &preset_focus,
+                            &evt.key(),
+                        );
+                        let activate = matches!(evt.key(), Key::Enter)
+                            || matches!(evt.key(), Key::Character(c) if c == " ");
+                        if !moved && !activate {
+                            return;
+                        }
+                        evt.prevent_default();
+                        evt.stop_propagation();
+                        if activate {
+                            crate::ui::ease_widget::apply_focused_preset(
+                                &session,
+                                &shape,
+                                &preset_focus,
+                            );
+                        }
+                        *revision.write() += 1;
+                    }
+                },
                 object { "data": presets }
             }
             div { class: "ename", "{name}" }
@@ -253,7 +296,12 @@ mod easy {
     use crate::doc::store::{property, Keyframe, Value};
     use crate::ui::keymap::EaseSide;
 
-    fn keyed_session() -> (Session, crate::doc::store::LayerId, PropertyId, crate::doc::store::Fps) {
+    fn keyed_session() -> (
+        Session,
+        crate::doc::store::LayerId,
+        PropertyId,
+        crate::doc::store::Fps,
+    ) {
         let loaded = crate::ui::fixture::load_fixture();
         let mut doc = loaded.doc;
         let fps = doc.view().composition().unwrap().unwrap().fps;
@@ -268,22 +316,62 @@ mod easy {
                 spatial: None,
             });
         }
-        doc.apply(Intent::SetTrack { layer, property: prop.clone(), track }).unwrap();
-        (Session::new(doc, loaded.duration_sec, loaded.ui), layer, prop, fps)
+        doc.apply(Intent::SetTrack {
+            layer,
+            property: prop.clone(),
+            track,
+        })
+        .unwrap();
+        (
+            Session::new(doc, loaded.duration_sec, loaded.ui),
+            layer,
+            prop,
+            fps,
+        )
     }
 
     /// ⇧F9 は選んだキーへ**入る**区間(前のキーが持つ形)を寝かせ、⌘F9 は出る区間を寝かせる。
     #[test]
     fn ease_in_lands_on_the_previous_segment_and_out_on_this_one() {
         let (session, layer, prop, fps) = keyed_session();
-        let middle = KeySel { layer, property: Some(prop.clone()), at_sec: 24.0 / fps.as_f64() };
+        let middle = KeySel {
+            layer,
+            property: Some(prop.clone()),
+            at_sec: 24.0 / fps.as_f64(),
+        };
         apply_easy(&session, &[middle.clone()], EaseSide::In).unwrap();
-        let keys = session.doc.lock().unwrap().view().track(layer, &prop).unwrap().unwrap().keys().to_vec();
-        assert_eq!(keys[0].interp, easy_ease(EaseSide::In), "In must shape the segment before the key");
+        let keys = session
+            .doc
+            .lock()
+            .unwrap()
+            .view()
+            .track(layer, &prop)
+            .unwrap()
+            .unwrap()
+            .keys()
+            .to_vec();
+        assert_eq!(
+            keys[0].interp,
+            easy_ease(EaseSide::In),
+            "In must shape the segment before the key"
+        );
         assert_eq!(keys[1].interp, Interp::Linear);
 
         apply_easy(&session, &[middle], EaseSide::Out).unwrap();
-        let keys = session.doc.lock().unwrap().view().track(layer, &prop).unwrap().unwrap().keys().to_vec();
-        assert_eq!(keys[1].interp, easy_ease(EaseSide::Out), "Out must shape the segment after the key");
+        let keys = session
+            .doc
+            .lock()
+            .unwrap()
+            .view()
+            .track(layer, &prop)
+            .unwrap()
+            .unwrap()
+            .keys()
+            .to_vec();
+        assert_eq!(
+            keys[1].interp,
+            easy_ease(EaseSide::Out),
+            "Out must shape the segment after the key"
+        );
     }
 }

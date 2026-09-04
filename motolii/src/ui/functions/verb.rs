@@ -64,23 +64,41 @@ pub(crate) fn timing_delta(
     })
 }
 
-pub(crate) fn effect_intents(
+/// Add a Browser selection as one effect-stack replacement. Existing plugin
+/// identities and duplicates in the requested selection are kept to one
+/// instance, so repeated activation is an empty edit rather than another Undo.
+pub(crate) fn effect_batch_intents(
     doc: &Document,
     layer: LayerId,
-    plugin_id: &str,
+    plugin_ids: &[String],
 ) -> Result<Vec<Intent>, StoreError> {
     let mut effects = doc.view().effects(layer)?;
-    let next_id = effects
-        .iter()
-        .map(|effect| effect.id.0)
-        .max()
-        .map(|id| id + 1)
-        .unwrap_or(0);
-    effects.push(EffectInstance {
-        id: EffectId(next_id),
-        plugin_id: plugin_id.to_owned(),
-    });
-    Ok(vec![Intent::SetEffects { layer, effects }])
+    let before_len = effects.len();
+    let mut known = std::collections::BTreeSet::new();
+    effects.retain(|effect| known.insert(effect.plugin_id.clone()));
+    let mut last_id = effects.iter().map(|effect| effect.id.0).max();
+    let mut changed = effects.len() != before_len;
+    for plugin_id in plugin_ids {
+        if !known.insert(plugin_id.clone()) {
+            continue;
+        }
+        let next_id = match last_id {
+            Some(id) => id
+                .checked_add(1)
+                .ok_or_else(|| StoreError::Property("effect id space exhausted".into()))?,
+            None => 0,
+        };
+        effects.push(EffectInstance {
+            id: EffectId(next_id),
+            plugin_id: plugin_id.clone(),
+        });
+        last_id = Some(next_id);
+        changed = true;
+    }
+    Ok(changed
+        .then_some(Intent::SetEffects { layer, effects })
+        .into_iter()
+        .collect())
 }
 
 fn set_shape_fill_color(node: &mut ShapeNode, brush: Brush) {

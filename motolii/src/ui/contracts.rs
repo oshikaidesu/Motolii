@@ -102,7 +102,9 @@ pub(crate) enum ViewRequest {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) enum MenuTarget {
-    Layer(LayerId),
+    StageLayer(LayerId),
+    TimelineLayer(LayerId),
+    TimelineKey { layer: LayerId },
     Timeline,
     Stage,
 }

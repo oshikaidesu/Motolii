@@ -12,6 +12,329 @@ pub(super) struct GestureSurface {
     cancel: Arc<std::sync::atomic::AtomicU32>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum CustomSurface {
+    Stage,
+    Timeline,
+    Ease,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum CapturePhase {
+    Move,
+    Up,
+    Cancel,
+}
+
+#[derive(Clone, Copy)]
+struct CaptureOwner {
+    surface: CustomSurface,
+    id: blitz_traits::events::BlitzPointerId,
+    is_primary: bool,
+    origin: [f32; 2],
+}
+
+#[derive(Clone, Copy)]
+struct DirectPointer {
+    surface: CustomSurface,
+    phase: CapturePhase,
+    id: blitz_traits::events::BlitzPointerId,
+    is_primary: bool,
+    client: [f32; 2],
+}
+
+#[derive(Clone, Copy)]
+pub(super) struct CapturedPointer {
+    phase: CapturePhase,
+    id: blitz_traits::events::BlitzPointerId,
+    is_primary: bool,
+    client: [f32; 2],
+    element: [f32; 2],
+    primary_held: bool,
+    mods: keyboard_types::Modifiers,
+}
+
+impl CapturedPointer {
+    pub(super) fn event(self) -> blitz_traits::events::UiEvent {
+        let pointer = blitz_traits::events::BlitzPointerEvent {
+            id: self.id,
+            is_primary: self.is_primary,
+            coords: blitz_traits::events::PointerCoords {
+                page_x: self.client[0],
+                page_y: self.client[1],
+                screen_x: self.client[0],
+                screen_y: self.client[1],
+                client_x: self.client[0],
+                client_y: self.client[1],
+            },
+            button: blitz_traits::events::MouseEventButton::Main,
+            buttons: if self.primary_held {
+                blitz_traits::events::MouseEventButtons::Primary
+            } else {
+                blitz_traits::events::MouseEventButtons::None
+            },
+            mods: self.mods,
+            details: Default::default(),
+            element: blitz_traits::events::Point {
+                x: self.element[0],
+                y: self.element[1],
+            },
+            active_pointers: Default::default(),
+        };
+        match self.phase {
+            CapturePhase::Move => blitz_traits::events::UiEvent::PointerMove(pointer),
+            CapturePhase::Up => blitz_traits::events::UiEvent::PointerUp(pointer),
+            CapturePhase::Cancel => blitz_traits::events::UiEvent::PointerCancel(pointer),
+        }
+    }
+}
+
+#[derive(Default)]
+struct SurfaceCaptureState {
+    owner: Option<CaptureOwner>,
+    last_direct: Option<DirectPointer>,
+    pending: std::collections::VecDeque<(CustomSurface, CapturedPointer)>,
+}
+
+/// Custom widgets do not receive move/up after the pointer crosses into DOM chrome.
+/// This is the one window-local capture relay until Blitz exposes pointer capture.
+#[derive(Clone, Default)]
+pub(super) struct SurfaceCapture(Arc<Mutex<SurfaceCaptureState>>);
+
+impl SurfaceCapture {
+    pub(super) fn begin(
+        &self,
+        surface: CustomSurface,
+        pointer: &blitz_traits::events::BlitzPointerEvent,
+    ) -> bool {
+        if !pointer.is_primary {
+            return false;
+        }
+        let mut state = self.0.lock().unwrap();
+        if state.owner.is_some_and(|owner| {
+            owner.surface != surface || owner.id != pointer.id || !owner.is_primary
+        }) {
+            return false;
+        }
+        state.owner = Some(CaptureOwner {
+            surface,
+            id: pointer.id,
+            is_primary: pointer.is_primary,
+            origin: [
+                pointer.client_x() - pointer.element.x,
+                pointer.client_y() - pointer.element.y,
+            ],
+        });
+        true
+    }
+
+    pub(super) fn owns(
+        &self,
+        surface: CustomSurface,
+        pointer: &blitz_traits::events::BlitzPointerEvent,
+    ) -> bool {
+        self.0.lock().unwrap().owner.is_some_and(|owner| {
+            owner.surface == surface
+                && owner.id == pointer.id
+                && owner.is_primary == pointer.is_primary
+        })
+    }
+
+    pub(super) fn blocks(
+        &self,
+        surface: CustomSurface,
+        pointer: &blitz_traits::events::BlitzPointerEvent,
+    ) -> bool {
+        self.0.lock().unwrap().owner.is_some_and(|owner| {
+            owner.surface != surface
+                || owner.id != pointer.id
+                || owner.is_primary != pointer.is_primary
+        })
+    }
+
+    pub(super) fn finish(
+        &self,
+        surface: CustomSurface,
+        pointer: &blitz_traits::events::BlitzPointerEvent,
+    ) {
+        let mut state = self.0.lock().unwrap();
+        if state.owner.is_some_and(|owner| {
+            owner.surface == surface
+                && owner.id == pointer.id
+                && owner.is_primary == pointer.is_primary
+        }) {
+            state.owner = None;
+        }
+        state.last_direct = None;
+    }
+
+    pub(super) fn note_direct(
+        &self,
+        surface: CustomSurface,
+        phase: CapturePhase,
+        pointer: &blitz_traits::events::BlitzPointerEvent,
+    ) {
+        let mut state = self.0.lock().unwrap();
+        if state.owner.is_some_and(|owner| {
+            owner.surface == surface
+                && owner.id == pointer.id
+                && owner.is_primary == pointer.is_primary
+        }) {
+            state.last_direct = Some(DirectPointer {
+                surface,
+                phase,
+                id: pointer.id,
+                is_primary: pointer.is_primary,
+                client: [pointer.client_x(), pointer.client_y()],
+            });
+        }
+    }
+
+    pub(super) fn cancel_all(&self) {
+        let mut state = self.0.lock().unwrap();
+        state.owner = None;
+        state.last_direct = None;
+        state.pending.clear();
+    }
+
+    pub(super) fn cancel(&self, surface: CustomSurface) {
+        let mut state = self.0.lock().unwrap();
+        if state.owner.is_some_and(|owner| owner.surface == surface) {
+            state.owner = None;
+        }
+        if state
+            .last_direct
+            .is_some_and(|pointer| pointer.surface == surface)
+        {
+            state.last_direct = None;
+        }
+        state.pending.retain(|(target, _)| *target != surface);
+    }
+
+    fn dom_identity_matches(owner: CaptureOwner, pointer_type: &str, pointer_id: i32) -> bool {
+        match owner.id {
+            blitz_traits::events::BlitzPointerId::Mouse => {
+                pointer_type == "mouse" && pointer_id == 0
+            }
+            blitz_traits::events::BlitzPointerId::Pen => pointer_type == "pen" && pointer_id == 0,
+            blitz_traits::events::BlitzPointerId::Finger(id) => {
+                pointer_type == "touch" && pointer_id == id as i32
+            }
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn relay_dom(
+        &self,
+        phase: CapturePhase,
+        pointer_type: &str,
+        pointer_id: i32,
+        is_primary: bool,
+        client: [f64; 2],
+        primary_held: bool,
+        mods: keyboard_types::Modifiers,
+    ) -> bool {
+        let mut state = self.0.lock().unwrap();
+        let Some(owner) = state.owner else {
+            return false;
+        };
+        if owner.is_primary != is_primary
+            || !Self::dom_identity_matches(owner, pointer_type, pointer_id)
+        {
+            return false;
+        }
+        let client = [client[0] as f32, client[1] as f32];
+        if state.last_direct.is_some_and(|direct| {
+            direct.surface == owner.surface
+                && direct.phase == phase
+                && direct.id == owner.id
+                && direct.is_primary == is_primary
+                && direct.client == client
+        }) {
+            state.last_direct = None;
+            return false;
+        }
+        state.last_direct = None;
+        state.pending.push_back((
+            owner.surface,
+            CapturedPointer {
+                phase,
+                id: owner.id,
+                is_primary,
+                client,
+                element: [client[0] - owner.origin[0], client[1] - owner.origin[1]],
+                primary_held,
+                mods,
+            },
+        ));
+        if !matches!(phase, CapturePhase::Move) {
+            state.owner = None;
+        }
+        true
+    }
+
+    pub(super) fn relay_from_other_surface(
+        &self,
+        current: CustomSurface,
+        phase: CapturePhase,
+        pointer: &blitz_traits::events::BlitzPointerEvent,
+    ) -> bool {
+        let mut state = self.0.lock().unwrap();
+        let Some(owner) = state.owner else {
+            return false;
+        };
+        if owner.surface == current
+            || owner.id != pointer.id
+            || owner.is_primary != pointer.is_primary
+        {
+            return false;
+        }
+        state.pending.push_back((
+            owner.surface,
+            CapturedPointer {
+                phase,
+                id: pointer.id,
+                is_primary: pointer.is_primary,
+                client: [pointer.client_x(), pointer.client_y()],
+                element: [
+                    pointer.client_x() - owner.origin[0],
+                    pointer.client_y() - owner.origin[1],
+                ],
+                primary_held: !pointer.buttons.is_empty(),
+                mods: pointer.mods,
+            },
+        ));
+        if !matches!(phase, CapturePhase::Move) {
+            state.owner = None;
+        }
+        true
+    }
+
+    pub(super) fn take(&self, surface: CustomSurface) -> Vec<CapturedPointer> {
+        let mut state = self.0.lock().unwrap();
+        let mut taken = Vec::new();
+        let mut keep = std::collections::VecDeque::new();
+        while let Some((target, pointer)) = state.pending.pop_front() {
+            if target == surface {
+                taken.push(pointer);
+            } else {
+                keep.push_back((target, pointer));
+            }
+        }
+        state.pending = keep;
+        taken
+    }
+
+    pub(super) fn has_pending(&self, surface: CustomSurface) -> bool {
+        self.0
+            .lock()
+            .unwrap()
+            .pending
+            .iter()
+            .any(|(target, _)| *target == surface)
+    }
+}
+
 #[derive(Clone, Default)]
 pub(super) struct FileDropSurface(Arc<Mutex<Vec<std::path::PathBuf>>>);
 
@@ -110,28 +433,103 @@ pub(super) fn edit_rejection(
         .unwrap_or(Some("layer could not be read"))
 }
 
+#[derive(Default)]
+struct SelectionState {
+    layers: Vec<LayerId>,
+    active: Option<LayerId>,
+    anchor: Option<LayerId>,
+    keys: Option<std::sync::Weak<Mutex<Vec<KeySel>>>>,
+}
+
 #[derive(Clone, Default)]
-pub(super) struct Selection(Arc<Mutex<Vec<LayerId>>>);
+pub(super) struct Selection(Arc<Mutex<SelectionState>>);
 
 impl Selection {
-    pub(super) fn clear(&self) {
-        self.0.lock().unwrap().clear();
+    fn with_keys(keys: &Arc<Mutex<Vec<KeySel>>>) -> Self {
+        Self(Arc::new(Mutex::new(SelectionState {
+            keys: Some(Arc::downgrade(keys)),
+            ..Default::default()
+        })))
     }
 
-    pub(super) fn get(&self) -> Option<LayerId> {
-        self.0.lock().unwrap().last().copied()
-    }
-
-    pub(super) fn set(&self, layer: Option<LayerId>) {
-        let mut v = self.0.lock().unwrap();
-        v.clear();
-        if let Some(l) = layer {
-            v.push(l);
+    fn clear_keys_in(state: &SelectionState) {
+        if let Some(keys) = state.keys.as_ref().and_then(std::sync::Weak::upgrade) {
+            keys.lock().unwrap().clear();
         }
     }
 
+    pub(super) fn clear_keys(&self) {
+        Self::clear_keys_in(&self.0.lock().unwrap());
+    }
+
+    pub(super) fn keys(&self) -> Vec<KeySel> {
+        self.0
+            .lock()
+            .unwrap()
+            .keys
+            .as_ref()
+            .and_then(std::sync::Weak::upgrade)
+            .map(|keys| keys.lock().unwrap().clone())
+            .unwrap_or_default()
+    }
+
+    pub(super) fn restore_keys(&self, values: Vec<KeySel>) {
+        if let Some(keys) = self
+            .0
+            .lock()
+            .unwrap()
+            .keys
+            .as_ref()
+            .and_then(std::sync::Weak::upgrade)
+        {
+            *keys.lock().unwrap() = values;
+        }
+    }
+
+    pub(super) fn clear(&self) {
+        let mut state = self.0.lock().unwrap();
+        Self::clear_keys_in(&state);
+        state.layers.clear();
+        state.active = None;
+        state.anchor = None;
+    }
+
+    pub(super) fn get(&self) -> Option<LayerId> {
+        self.active()
+    }
+
+    pub(super) fn active(&self) -> Option<LayerId> {
+        self.0.lock().unwrap().active
+    }
+
+    pub(super) fn anchor(&self) -> Option<LayerId> {
+        self.0.lock().unwrap().anchor
+    }
+
+    pub(super) fn set(&self, layer: Option<LayerId>) {
+        let mut state = self.0.lock().unwrap();
+        Self::clear_keys_in(&state);
+        state.layers.clear();
+        if let Some(l) = layer {
+            state.layers.push(l);
+        }
+        state.active = layer;
+        state.anchor = layer;
+    }
+
+    /// Make one member the active/anchor end without discarding the group.
+    pub(super) fn activate(&self, layer: LayerId) {
+        let mut state = self.0.lock().unwrap();
+        if !state.layers.contains(&layer) {
+            return;
+        }
+        Self::clear_keys_in(&state);
+        state.active = Some(layer);
+        state.anchor = Some(layer);
+    }
+
     pub(super) fn all(&self) -> Vec<LayerId> {
-        self.0.lock().unwrap().clone()
+        self.0.lock().unwrap().layers.clone()
     }
 
     pub(super) fn targets(&self, clicked: Option<LayerId>) -> Vec<LayerId> {
@@ -143,27 +541,121 @@ impl Selection {
     }
 
     pub(super) fn replace(&self, layers: impl IntoIterator<Item = LayerId>) {
-        let mut selected = self.0.lock().unwrap();
-        selected.clear();
+        self.replace_impl(layers, false);
+    }
+
+    pub(super) fn replace_preserving_keys(&self, layers: impl IntoIterator<Item = LayerId>) {
+        self.replace_impl(layers, true);
+    }
+
+    fn replace_impl(&self, layers: impl IntoIterator<Item = LayerId>, preserve_keys: bool) {
+        let mut state = self.0.lock().unwrap();
+        if !preserve_keys {
+            Self::clear_keys_in(&state);
+        }
+        state.layers.clear();
         for layer in layers {
-            if !selected.contains(&layer) {
-                selected.push(layer);
+            if !state.layers.contains(&layer) {
+                state.layers.push(layer);
             }
         }
+        state.anchor = state.layers.first().copied();
+        state.active = state.layers.last().copied();
     }
 
     pub(super) fn contains(&self, layer: LayerId) -> bool {
-        self.0.lock().unwrap().contains(&layer)
+        self.0.lock().unwrap().layers.contains(&layer)
     }
 
     pub(super) fn toggle(&self, layer: LayerId) {
-        let mut v = self.0.lock().unwrap();
-        match v.iter().position(|l| *l == layer) {
-            Some(i) => {
-                v.remove(i);
-            }
-            None => v.push(layer),
+        self.toggle_impl(layer, false);
+    }
+
+    pub(super) fn toggle_preserving_keys(&self, layer: LayerId) {
+        self.toggle_impl(layer, true);
+    }
+
+    fn toggle_impl(&self, layer: LayerId, preserve_keys: bool) {
+        let mut state = self.0.lock().unwrap();
+        if !preserve_keys {
+            Self::clear_keys_in(&state);
         }
+        match state.layers.iter().position(|l| *l == layer) {
+            Some(i) => {
+                state.layers.remove(i);
+                if state.layers.is_empty() {
+                    state.active = None;
+                    state.anchor = None;
+                } else {
+                    if state.active == Some(layer) {
+                        state.active = state.layers.last().copied();
+                    }
+                    if state.anchor == Some(layer) {
+                        state.anchor = state.active;
+                    }
+                }
+            }
+            None => {
+                state.layers.push(layer);
+                state.active = Some(layer);
+                state.anchor.get_or_insert(layer);
+            }
+        }
+    }
+
+    /// Shift selection. The anchor stays fixed while active can cross it, so the
+    /// contiguous range grows, shrinks and reverses like a browser list selection.
+    pub(super) fn extend_to(&self, ordered: &[LayerId], target: LayerId) {
+        self.extend_to_impl(ordered, target, false);
+    }
+
+    fn extend_to_impl(&self, ordered: &[LayerId], target: LayerId, preserve_keys: bool) {
+        let mut state = self.0.lock().unwrap();
+        if !preserve_keys {
+            Self::clear_keys_in(&state);
+        }
+        let anchor = state
+            .anchor
+            .filter(|layer| ordered.contains(layer))
+            .or_else(|| state.active.filter(|layer| ordered.contains(layer)))
+            .unwrap_or(target);
+        let Some(anchor_index) = ordered.iter().position(|layer| *layer == anchor) else {
+            return;
+        };
+        let Some(target_index) = ordered.iter().position(|layer| *layer == target) else {
+            return;
+        };
+        let (start, end) = if anchor_index <= target_index {
+            (anchor_index, target_index)
+        } else {
+            (target_index, anchor_index)
+        };
+        state.layers = ordered[start..=end].to_vec();
+        state.anchor = Some(anchor);
+        state.active = Some(target);
+    }
+
+    /// Move the active end through an ordered list. With `extend`, retain the
+    /// anchor and replace the selection by the contiguous interval.
+    pub(super) fn step(&self, ordered: &[LayerId], delta: i32, extend: bool) -> Option<LayerId> {
+        if ordered.is_empty() {
+            return None;
+        }
+        let active = self.active();
+        let target = match active.and_then(|layer| ordered.iter().position(|item| *item == layer)) {
+            Some(index) => {
+                let next = (index as i32 + delta).clamp(0, ordered.len() as i32 - 1) as usize;
+                ordered[next]
+            }
+            None if delta < 0 => *ordered.last().expect("non-empty order"),
+            None => ordered[0],
+        };
+        if extend {
+            self.extend_to(ordered, target);
+        } else {
+            self.set(Some(target));
+        }
+        Some(target)
     }
 }
 
@@ -192,6 +684,7 @@ pub(super) struct Session {
     /// 枠の外へかける膜の濃さ(%)。見る側の設定で、作品には入らない。
     pub frame_dim: Arc<std::sync::atomic::AtomicU32>,
     pub gesture: GestureSurface,
+    pub surface_capture: SurfaceCapture,
     pub file_drop: FileDropSurface,
     pub overshoot: Arc<std::sync::atomic::AtomicBool>,
     pub export: crate::ui::output::ExportController,
@@ -200,6 +693,8 @@ pub(super) struct Session {
     pub quit: Arc<std::sync::atomic::AtomicBool>,
     /// 別の糸で指紋を取り終えた取り込み。窓の糸が echo の度に拾って棚へ入れる。
     pub imports: Arc<Mutex<Vec<Vec<crate::ui::fixture::Prepared>>>>,
+    /// Browser の候補選択。panel の置き場を変えても同じ候補集合を指す。
+    pub browser_selection: Arc<Mutex<crate::ui::browser_selection::BrowserSelection>>,
     /// 今の作品の仕舞い先。`Save` が問い直さないために覚える。
     pub project_path: Arc<Mutex<Option<std::path::PathBuf>>>,
     /// 最後に保存／読込／NewしたDocument revision。dirtyは現在との差だけで決まる。
@@ -339,16 +834,17 @@ impl Session {
         let (timeline_tx, timeline_rx) = std::sync::mpsc::channel();
         let clock = Arc::new(Clock::from_document(&doc, duration_sec));
         let saved_revision = doc.revision();
+        let selected_keys = Arc::new(Mutex::new(Vec::new()));
         Self {
             doc: Arc::new(Mutex::new(doc)),
             clock,
             scale: Arc::new(UiScale::new(100)),
-            selection: Selection::default(),
+            selection: Selection::with_keys(&selected_keys),
             selected_size: Arc::new(Mutex::new(None)),
             timeline_tx,
             timeline_rx: std::rc::Rc::new(timeline_rx),
             ui: Arc::new(ui),
-            selected_keys: Arc::new(Mutex::new(Vec::new())),
+            selected_keys,
             focus: Arc::new(Mutex::new(None)),
             desk: Arc::new(Mutex::new(DeskState::Follow)),
             field: Arc::new(Mutex::new(None)),
@@ -361,12 +857,14 @@ impl Session {
             output_only: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             frame_dim: Arc::new(std::sync::atomic::AtomicU32::new(75)),
             gesture: GestureSurface::default(),
+            surface_capture: SurfaceCapture::default(),
             file_drop: FileDropSurface::default(),
             overshoot: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             export: Default::default(),
             project_notice: Arc::new(Mutex::new(String::new())),
             quit: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             imports: Arc::new(Mutex::new(Vec::new())),
+            browser_selection: Arc::new(Mutex::new(Default::default())),
             project_path: Arc::new(Mutex::new(None)),
             saved_revision: Arc::new(Mutex::new(saved_revision)),
             curve_clip: Arc::new(Mutex::new(None)),
@@ -618,6 +1116,164 @@ impl Session {
             Focus::Color(slot) => slot.layer(),
         };
         (self.selection.get() == Some(layer)).then_some(focus)
+    }
+}
+
+#[cfg(test)]
+mod selection_tests {
+    use super::*;
+
+    #[test]
+    fn ordered_selection_starts_at_the_near_edge_and_reverses_around_a_fixed_anchor() {
+        let order = [LayerId(1), LayerId(2), LayerId(3), LayerId(4)];
+        let selection = Selection::default();
+
+        assert_eq!(selection.step(&order, 1, false), Some(LayerId(1)));
+        selection.clear();
+        assert_eq!(selection.step(&order, -1, false), Some(LayerId(4)));
+
+        selection.set(Some(LayerId(2)));
+        assert_eq!(selection.step(&order, 1, true), Some(LayerId(3)));
+        assert_eq!(selection.all(), vec![LayerId(2), LayerId(3)]);
+        assert_eq!(selection.anchor(), Some(LayerId(2)));
+        assert_eq!(selection.active(), Some(LayerId(3)));
+
+        assert_eq!(selection.step(&order, -1, true), Some(LayerId(2)));
+        assert_eq!(selection.all(), vec![LayerId(2)]);
+        assert_eq!(selection.step(&order, -1, true), Some(LayerId(1)));
+        assert_eq!(selection.all(), vec![LayerId(1), LayerId(2)]);
+        assert_eq!(selection.anchor(), Some(LayerId(2)));
+        assert_eq!(selection.active(), Some(LayerId(1)));
+
+        selection.activate(LayerId(2));
+        assert_eq!(selection.all(), vec![LayerId(1), LayerId(2)]);
+        assert_eq!(selection.active(), Some(LayerId(2)));
+        assert_eq!(selection.anchor(), Some(LayerId(2)));
+    }
+
+    #[test]
+    fn layer_domain_changes_clear_keys_but_a_mixed_marquee_can_publish_both() {
+        let keys = Arc::new(Mutex::new(vec![KeySel {
+            layer: LayerId(1),
+            property: None,
+            at_sec: 1.0,
+        }]));
+        let selection = Selection::with_keys(&keys);
+        selection.set(Some(LayerId(2)));
+        assert!(keys.lock().unwrap().is_empty());
+
+        keys.lock().unwrap().push(KeySel {
+            layer: LayerId(2),
+            property: None,
+            at_sec: 2.0,
+        });
+        selection.replace_preserving_keys([LayerId(2), LayerId(3)]);
+        assert_eq!(selection.all(), vec![LayerId(2), LayerId(3)]);
+        assert_eq!(keys.lock().unwrap().len(), 1);
+    }
+
+    fn pointer(
+        id: blitz_traits::events::BlitzPointerId,
+        client: [f32; 2],
+    ) -> blitz_traits::events::BlitzPointerEvent {
+        blitz_traits::events::BlitzPointerEvent {
+            id,
+            is_primary: true,
+            coords: blitz_traits::events::PointerCoords {
+                page_x: client[0],
+                page_y: client[1],
+                screen_x: client[0],
+                screen_y: client[1],
+                client_x: client[0],
+                client_y: client[1],
+            },
+            button: blitz_traits::events::MouseEventButton::Main,
+            buttons: blitz_traits::events::MouseEventButtons::Primary,
+            mods: Default::default(),
+            details: Default::default(),
+            element: blitz_traits::events::Point {
+                x: client[0] - 10.0,
+                y: client[1] - 20.0,
+            },
+            active_pointers: Default::default(),
+        }
+    }
+
+    #[test]
+    fn capture_ignores_foreign_pointer_and_relays_matching_terminal_once() {
+        let capture = SurfaceCapture::default();
+        let first = pointer(
+            blitz_traits::events::BlitzPointerId::Finger(7),
+            [40.0, 60.0],
+        );
+        let other = pointer(
+            blitz_traits::events::BlitzPointerId::Finger(8),
+            [50.0, 70.0],
+        );
+        assert!(capture.begin(CustomSurface::Stage, &first));
+        capture.finish(CustomSurface::Stage, &other);
+        assert!(capture.owns(CustomSurface::Stage, &first));
+        assert!(!capture.relay_from_other_surface(
+            CustomSurface::Timeline,
+            CapturePhase::Up,
+            &other,
+        ));
+        assert!(capture.relay_from_other_surface(
+            CustomSurface::Timeline,
+            CapturePhase::Move,
+            &blitz_traits::events::BlitzPointerEvent {
+                coords: blitz_traits::events::PointerCoords {
+                    page_x: 50.0,
+                    page_y: 80.0,
+                    screen_x: 50.0,
+                    screen_y: 80.0,
+                    client_x: 50.0,
+                    client_y: 80.0,
+                },
+                element: blitz_traits::events::Point { x: 1.0, y: 1.0 },
+                ..first.clone()
+            },
+        ));
+        let moved = capture.take(CustomSurface::Stage);
+        let blitz_traits::events::UiEvent::PointerMove(moved) = moved[0].event() else {
+            panic!("capture did not preserve a move")
+        };
+        assert_eq!((moved.element.x, moved.element.y), (40.0, 60.0));
+        assert!(capture.relay_from_other_surface(
+            CustomSurface::Timeline,
+            CapturePhase::Up,
+            &first,
+        ));
+        assert_eq!(capture.take(CustomSurface::Stage).len(), 1);
+        assert!(capture.take(CustomSurface::Stage).is_empty());
+    }
+
+    #[test]
+    fn a_direct_move_is_not_queued_again_when_it_bubbles_to_the_root() {
+        let capture = SurfaceCapture::default();
+        let direct = pointer(blitz_traits::events::BlitzPointerId::Mouse, [40.0, 60.0]);
+        assert!(capture.begin(CustomSurface::Stage, &direct));
+        capture.note_direct(CustomSurface::Stage, CapturePhase::Move, &direct);
+        assert!(!capture.relay_dom(
+            CapturePhase::Move,
+            "mouse",
+            0,
+            true,
+            [40.0, 60.0],
+            true,
+            Default::default(),
+        ));
+        assert!(capture.take(CustomSurface::Stage).is_empty());
+        assert!(capture.relay_dom(
+            CapturePhase::Move,
+            "mouse",
+            0,
+            true,
+            [42.0, 61.0],
+            true,
+            Default::default(),
+        ));
+        assert_eq!(capture.take(CustomSurface::Stage).len(), 1);
     }
 }
 

@@ -14,12 +14,15 @@ use crate::doc::vector::{Brush, Contour, Fill, FillRule, Rgb, Vertex};
 
 use crate::ui::fixture::ColorSwatch;
 
+use crate::ui::browser_selection::{
+    BrowserItemId, BrowserScope, BrowserSelection, CreateItem, MoveActive,
+};
 use crate::ui::color::{wheel_slot, ColorWheel};
 use crate::ui::dock::Panel;
 use crate::ui::fixture::{self, LayerRow};
-use crate::ui::functions::verb::{color_block, effect_intents};
+use crate::ui::functions::verb::{color_block, effect_batch_intents};
 use crate::ui::playback::Clock;
-use crate::ui::semantic_menu::SemanticButton;
+use crate::ui::semantic_menu::{FocusableItems, SemanticButton, SpatialDirection};
 use crate::ui::session::Session;
 use crate::ui::timeline_widget::TimelineMsg;
 
@@ -29,6 +32,605 @@ enum NewKind {
     Rectangle,
     Bezier,
     Media { path: String, name: String },
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(super) struct BrowserMarquee {
+    scope: BrowserScope,
+    pointer_type: String,
+    pointer_id: i32,
+    start: [f64; 2],
+    current: [f64; 2],
+    additive: bool,
+}
+
+impl BrowserMarquee {
+    const THRESHOLD: f64 = 4.0;
+
+    fn new(scope: BrowserScope, event: &PointerEvent) -> Self {
+        let p = event.data().client_coordinates();
+        Self {
+            scope,
+            pointer_type: event.data().pointer_type(),
+            pointer_id: event.data().pointer_id(),
+            start: [p.x, p.y],
+            current: [p.x, p.y],
+            additive: crate::ui::keymap::primary_modifier(event.data().modifiers()),
+        }
+    }
+
+    fn matches(&self, event: &PointerEvent) -> bool {
+        self.pointer_id == event.data().pointer_id()
+            && self.pointer_type == event.data().pointer_type()
+    }
+
+    fn move_to(&mut self, event: &PointerEvent) {
+        let p = event.data().client_coordinates();
+        self.current = [p.x, p.y];
+    }
+
+    fn dragging(&self) -> bool {
+        (self.current[0] - self.start[0]).abs() >= Self::THRESHOLD
+            || (self.current[1] - self.start[1]).abs() >= Self::THRESHOLD
+    }
+
+    fn bounds(&self) -> (f64, f64, f64, f64) {
+        (
+            self.start[0].min(self.current[0]),
+            self.start[1].min(self.current[1]),
+            self.start[0].max(self.current[0]),
+            self.start[1].max(self.current[1]),
+        )
+    }
+}
+
+fn browser_scope(panel: Panel) -> BrowserScope {
+    match panel {
+        Panel::Media => BrowserScope::Media,
+        Panel::Effects => BrowserScope::Effects,
+        Panel::Create => BrowserScope::Create,
+        Panel::Colors => BrowserScope::Colors,
+        _ => unreachable!("only Browser panels enter browser_panel"),
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum BrowserKeyAction {
+    None,
+    Commit,
+    Delete,
+    FocusSearch,
+    TypeAhead(String),
+    Unavailable,
+    Spatial(SpatialDirection, bool),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct BrowserKeyResult {
+    handled: bool,
+    changed: bool,
+    focus_key: Option<String>,
+    action: BrowserKeyAction,
+}
+
+impl BrowserKeyResult {
+    fn ignored() -> Self {
+        Self {
+            handled: false,
+            changed: false,
+            focus_key: None,
+            action: BrowserKeyAction::None,
+        }
+    }
+}
+
+/// Browser-owned keys never reach the artwork keymap. Arrow keys are handed to
+/// the mounted-card spatial registry; PageUp/PageDown use the deterministic
+/// linear step documented by `browser_selection`.
+fn browser_key(
+    selection: &mut BrowserSelection,
+    scope: BrowserScope,
+    ordered: &[BrowserItemId],
+    key: &Key,
+    code: Code,
+    modifiers: Modifiers,
+    multiple: bool,
+) -> BrowserKeyResult {
+    let before = selection.clone();
+    let command = crate::ui::keymap::primary_modifier(modifiers);
+    let shift = modifiers.shift() && multiple;
+    let spatial = match key {
+        Key::ArrowLeft => Some(SpatialDirection::Left),
+        Key::ArrowRight => Some(SpatialDirection::Right),
+        Key::ArrowUp => Some(SpatialDirection::Up),
+        Key::ArrowDown => Some(SpatialDirection::Down),
+        _ => None,
+    };
+    if let Some(direction) = spatial {
+        return BrowserKeyResult {
+            handled: true,
+            changed: false,
+            focus_key: None,
+            action: BrowserKeyAction::Spatial(direction, shift),
+        };
+    }
+    let movement = match key {
+        Key::PageUp => Some(MoveActive::PagePrevious),
+        Key::PageDown => Some(MoveActive::PageNext),
+        Key::Home => Some(MoveActive::First),
+        Key::End => Some(MoveActive::Last),
+        _ => None,
+    };
+
+    let (handled, action, focus) = if let Some(movement) = movement {
+        let focus = selection.move_active(scope, ordered, movement, shift);
+        (true, BrowserKeyAction::None, focus)
+    } else if matches!(key, Key::Character(c) if command && c.eq_ignore_ascii_case("f")) {
+        (true, BrowserKeyAction::FocusSearch, None)
+    } else if matches!(key, Key::Character(c) if command && c.eq_ignore_ascii_case("a")) {
+        if multiple {
+            selection.select_all(scope, ordered);
+        } else if let Some(active) = selection.active_in(scope, ordered) {
+            selection.click(scope, &active, ordered, false, false);
+        } else {
+            selection.move_active(scope, ordered, MoveActive::First, false);
+        }
+        (
+            true,
+            BrowserKeyAction::None,
+            selection.active_in(scope, ordered),
+        )
+    } else if matches!(key, Key::Character(c) if command && matches!(c.to_ascii_lowercase().as_str(), "c" | "v" | "x"))
+    {
+        (true, BrowserKeyAction::Unavailable, None)
+    } else if matches!(key, Key::Character(c) if c == " ") {
+        if let Some(active) = selection.active_in(scope, ordered) {
+            selection.click(
+                scope,
+                &active,
+                ordered,
+                multiple && command,
+                multiple && modifiers.shift(),
+            );
+        } else {
+            selection.move_active(scope, ordered, MoveActive::First, false);
+        }
+        (
+            true,
+            BrowserKeyAction::None,
+            selection.active_in(scope, ordered),
+        )
+    } else {
+        match key {
+            Key::Escape => {
+                let focus = if selection.clear_query(scope) {
+                    let active = selection.active_in(scope, ordered);
+                    if active.is_none() {
+                        selection.move_active(scope, ordered, MoveActive::First, false)
+                    } else {
+                        active
+                    }
+                } else {
+                    selection.clear(scope);
+                    None
+                };
+                (true, BrowserKeyAction::None, focus)
+            }
+            Key::Enter => (true, BrowserKeyAction::Commit, None),
+            Key::Delete | Key::Backspace => (true, BrowserKeyAction::Delete, None),
+            Key::Character(c)
+                if !modifiers
+                    .intersects(Modifiers::CONTROL | Modifiers::SUPER | Modifiers::ALT)
+                    && c != " " =>
+            {
+                let query = c.to_string();
+                selection.set_query(scope, query.clone());
+                (true, BrowserKeyAction::TypeAhead(query), None)
+            }
+            _ => {
+                let mapped = crate::ui::keymap::lookup_held(
+                    key,
+                    code,
+                    command,
+                    modifiers.shift(),
+                    modifiers.alt(),
+                );
+                if matches!(
+                    mapped,
+                    Some(
+                        crate::ui::contracts::Intent::Undo
+                            | crate::ui::contracts::Intent::Redo
+                            | crate::ui::contracts::Intent::Save
+                            | crate::ui::contracts::Intent::SaveAs
+                            | crate::ui::contracts::Intent::NewProject
+                            | crate::ui::contracts::Intent::OpenProject
+                            | crate::ui::contracts::Intent::Quit
+                            | crate::ui::contracts::Intent::CompositionSettings
+                    )
+                ) {
+                    return BrowserKeyResult::ignored();
+                }
+                if mapped.is_some() {
+                    (true, BrowserKeyAction::Unavailable, None)
+                } else {
+                    return BrowserKeyResult::ignored();
+                }
+            }
+        }
+    };
+
+    BrowserKeyResult {
+        handled,
+        changed: *selection != before,
+        focus_key: focus.map(|id| id.focus_key()),
+        action,
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn move_browser_spatial(
+    focusable_items: FocusableItems,
+    session: Session,
+    scope: BrowserScope,
+    ordered: Vec<BrowserItemId>,
+    direction: SpatialDirection,
+    extend: bool,
+    poke: crate::ui::poke::Poke,
+) {
+    let current = session
+        .browser_selection
+        .lock()
+        .unwrap()
+        .active_in(scope, &ordered);
+    let Some(current) = current else {
+        let next = session.browser_selection.lock().unwrap().move_active(
+            scope,
+            &ordered,
+            MoveActive::First,
+            false,
+        );
+        if let Some(next) = next {
+            poke.poke();
+            focusable_items.focus(&next.focus_key());
+        }
+        return;
+    };
+    let current_key = current.focus_key();
+    let fallback_direction = match direction {
+        SpatialDirection::Left | SpatialDirection::Up => MoveActive::Previous,
+        SpatialDirection::Right | SpatialDirection::Down => MoveActive::Next,
+    };
+    let moved_session = session.clone();
+    let moved_order = ordered.clone();
+    let moved_poke = poke.clone();
+    let allowed: Vec<_> = ordered.iter().map(BrowserItemId::focus_key).collect();
+    let moved = focusable_items.move_spatial(&current_key, &allowed, direction, move |next_key| {
+        let Some(next) = moved_order
+            .iter()
+            .find(|id| id.focus_key() == next_key)
+            .cloned()
+        else {
+            return;
+        };
+        let changed = moved_session.browser_selection.lock().unwrap().click(
+            scope,
+            &next,
+            &moved_order,
+            false,
+            extend,
+        );
+        if changed {
+            moved_poke.poke();
+        }
+    });
+    if !moved {
+        let next = session.browser_selection.lock().unwrap().move_active(
+            scope,
+            &ordered,
+            fallback_direction,
+            extend,
+        );
+        if let Some(next) = next {
+            poke.poke();
+            focusable_items.focus(&next.focus_key());
+        }
+    }
+}
+
+fn consume_browser_key(
+    event: &Event<KeyboardData>,
+    result: BrowserKeyResult,
+    focusable_items: FocusableItems,
+    poke: &crate::ui::poke::Poke,
+) -> Option<BrowserKeyAction> {
+    if !result.handled {
+        return None;
+    }
+    event.prevent_default();
+    event.stop_propagation();
+    if result.changed {
+        poke.poke();
+    }
+    if let Some(key) = result.focus_key {
+        focusable_items.focus(&key);
+    }
+    Some(result.action)
+}
+
+fn choose_browser_item(
+    session: &Session,
+    scope: BrowserScope,
+    id: &BrowserItemId,
+    ordered: &[BrowserItemId],
+    modifiers: Modifiers,
+    multiple: bool,
+    poke: &crate::ui::poke::Poke,
+) {
+    let changed = session.browser_selection.lock().unwrap().click(
+        scope,
+        id,
+        ordered,
+        multiple && crate::ui::keymap::primary_modifier(modifiers),
+        multiple && modifiers.shift(),
+    );
+    if changed {
+        poke.poke();
+    }
+}
+
+fn query_matches(value: &str, query: &str) -> bool {
+    let query = query.trim().to_lowercase();
+    query.is_empty() || value.to_lowercase().contains(&query)
+}
+
+fn media_rail_key(family: Option<fixture::AssetFamily>) -> String {
+    format!(
+        "browser:media-rail:{}",
+        family.map_or("all", fixture::AssetFamily::label)
+    )
+}
+
+fn result_tabindex(active: Option<&BrowserItemId>, item: &BrowserItemId) -> String {
+    if active == Some(item) {
+        "0".to_owned()
+    } else {
+        "-1".to_owned()
+    }
+}
+
+fn consume_fixed_rail_key(event: &KeyboardEvent) {
+    if matches!(
+        event.key(),
+        Key::ArrowLeft
+            | Key::ArrowRight
+            | Key::ArrowUp
+            | Key::ArrowDown
+            | Key::Home
+            | Key::End
+            | Key::Enter
+    ) || matches!(event.key(), Key::Character(ref c) if c == " ")
+    {
+        event.prevent_default();
+        event.stop_propagation();
+    }
+}
+
+/// Pinned Blitz has no MountedData text-selection method. Its NodeHandle does
+/// expose the underlying BaseDocument, so Cmd+F uses the same native text-input
+/// default action as a physical Cmd/Ctrl+A after moving focus to the search box.
+fn focus_and_select_search(handle: Option<std::rc::Rc<MountedData>>) -> bool {
+    let Some(handle) = handle else { return false };
+    let Some(node) = handle.downcast::<dioxus_native::NodeHandle>().cloned() else {
+        return false;
+    };
+    let id = node.node_id();
+    let mut doc = node.doc_mut();
+    doc.set_focus_to(id);
+    let mut event = blitz_traits::events::DomEvent::new(
+        id,
+        blitz_traits::events::DomEventData::KeyDown(blitz_traits::events::BlitzKeyEvent {
+            key: Key::Character("a".into()),
+            code: Code::KeyA,
+            modifiers: if cfg!(target_os = "macos") {
+                Modifiers::SUPER
+            } else {
+                Modifiers::CONTROL
+            },
+            location: keyboard_types::Location::Standard,
+            is_auto_repeating: false,
+            is_composing: false,
+            state: blitz_traits::events::KeyState::Pressed,
+            text: None,
+        }),
+    );
+    doc.handle_dom_event(&mut event, |_| {});
+    true
+}
+
+fn focus_search_with_text(handle: Option<std::rc::Rc<MountedData>>, text: &str) -> bool {
+    let Some(handle) = handle else { return false };
+    if !focus_and_select_search(Some(handle.clone())) {
+        return false;
+    }
+    let Some(node) = handle.downcast::<dioxus_native::NodeHandle>().cloned() else {
+        return false;
+    };
+    let id = node.node_id();
+    let mut event = blitz_traits::events::DomEvent::new(
+        id,
+        blitz_traits::events::DomEventData::KeyDown(blitz_traits::events::BlitzKeyEvent {
+            key: Key::Character(text.into()),
+            code: Code::Unidentified,
+            modifiers: Modifiers::empty(),
+            location: keyboard_types::Location::Standard,
+            is_auto_repeating: false,
+            is_composing: false,
+            state: blitz_traits::events::KeyState::Pressed,
+            text: Some(text.into()),
+        }),
+    );
+    node.doc_mut().handle_dom_event(&mut event, |_| {});
+    true
+}
+
+fn browser_action_unavailable(session: &Session, poke: &crate::ui::poke::Poke) {
+    *session.project_notice.lock().unwrap() =
+        "That action is not available for Browser items".into();
+    poke.poke();
+}
+
+fn begin_browser_marquee(
+    session: &Session,
+    scope: BrowserScope,
+    event: &PointerEvent,
+    mut marquee: Signal<Option<BrowserMarquee>>,
+) {
+    if !session.browser_selection.lock().unwrap().select_mode(scope)
+        || !event.data().is_primary()
+        || event.data().trigger_button()
+            != Some(dioxus_native::prelude::dioxus_elements::input_data::MouseButton::Primary)
+    {
+        return;
+    }
+    event.prevent_default();
+    event.stop_propagation();
+    session.gesture.begin();
+    marquee.set(Some(BrowserMarquee::new(scope, event)));
+}
+
+fn move_browser_marquee(event: &PointerEvent, mut marquee: Signal<Option<BrowserMarquee>>) {
+    let mut state = marquee.write();
+    let Some(drag) = state.as_mut().filter(|drag| drag.matches(event)) else {
+        return;
+    };
+    drag.move_to(event);
+    if drag.dragging() {
+        event.prevent_default();
+        event.stop_propagation();
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn finish_browser_marquee(
+    session: &Session,
+    scope: BrowserScope,
+    ordered: &[BrowserItemId],
+    event: &PointerEvent,
+    focusable_items: FocusableItems,
+    mut marquee: Signal<Option<BrowserMarquee>>,
+    poke: &crate::ui::poke::Poke,
+) {
+    let Some(mut drag) = marquee.write().take() else {
+        return;
+    };
+    if drag.scope != scope || !drag.matches(event) {
+        marquee.set(Some(drag));
+        return;
+    }
+    drag.move_to(event);
+    session.gesture.end();
+    let dragging = drag.dragging();
+    event.prevent_default();
+    event.stop_propagation();
+    let (left, top, right, bottom) = drag.bounds();
+    let allowed: Vec<_> = ordered.iter().map(BrowserItemId::focus_key).collect();
+    let moved_session = session.clone();
+    let moved_order = ordered.to_vec();
+    let moved_poke = poke.clone();
+    let additive = drag.additive;
+    focusable_items.items_intersecting(&allowed, left, top, right, bottom, move |keys| {
+        let key_set: std::collections::BTreeSet<_> = keys.into_iter().collect();
+        let hits: Vec<_> = moved_order
+            .iter()
+            .filter(|id| key_set.contains(&id.focus_key()))
+            .cloned()
+            .collect();
+        let changed = if dragging {
+            moved_session.browser_selection.lock().unwrap().marquee(
+                scope,
+                &moved_order,
+                &hits,
+                additive,
+            )
+        } else if let Some(hit) = hits.first() {
+            moved_session.browser_selection.lock().unwrap().click(
+                scope,
+                hit,
+                &moved_order,
+                true,
+                false,
+            )
+        } else if additive {
+            false
+        } else {
+            moved_session.browser_selection.lock().unwrap().clear(scope)
+        };
+        if changed {
+            moved_poke.poke();
+        }
+    });
+}
+
+fn cancel_browser_marquee(
+    session: &Session,
+    event: &PointerEvent,
+    mut marquee: Signal<Option<BrowserMarquee>>,
+) {
+    let matches = marquee
+        .peek()
+        .as_ref()
+        .is_some_and(|drag| drag.matches(event));
+    if matches {
+        marquee.set(None);
+        session.gesture.end();
+    }
+}
+
+fn marquee_overlay(
+    session: &Session,
+    drag: Option<BrowserMarquee>,
+    scope: BrowserScope,
+    ordered: &[BrowserItemId],
+    focusable_items: FocusableItems,
+    marquee: Signal<Option<BrowserMarquee>>,
+    poke: &crate::ui::poke::Poke,
+) -> Element {
+    let Some(drag) = drag.filter(|drag| drag.scope == scope) else {
+        return rsx! {};
+    };
+    let (left, top, right, bottom) = drag.bounds();
+    let width = right - left;
+    let height = bottom - top;
+    let moving = marquee;
+    let up_session = session.clone();
+    let up_order = ordered.to_vec();
+    let up_poke = poke.clone();
+    let cancel_session = session.clone();
+    rsx!(div {
+        class: "browser-marquee-capture",
+        aria_hidden: "true",
+        onpointermove: move |evt: PointerEvent| move_browser_marquee(&evt, moving),
+        onpointerup: move |evt: PointerEvent| finish_browser_marquee(
+            &up_session,
+            scope,
+            &up_order,
+            &evt,
+            focusable_items,
+            marquee,
+            &up_poke,
+        ),
+        onpointercancel: move |evt: PointerEvent| cancel_browser_marquee(
+            &cancel_session,
+            &evt,
+            marquee,
+        ),
+        if drag.dragging() {
+            div {
+                class: "browser-marquee",
+                style: "left:{left}px; top:{top}px; width:{width}px; height:{height}px;",
+            }
+        }
+    })
 }
 
 /// 空間素材のファイル座標を comp のピクセルへ橋渡しする初期値。囲む球が画角の
@@ -600,19 +1202,245 @@ fn add_rectangle_mask(doc: &Arc<Mutex<Document>>, layer: LayerId, mut revision: 
     }
 }
 
+fn commit_effect_selection(
+    session: &Session,
+    ordered: &[BrowserItemId],
+    mut revision: Signal<u32>,
+    poke: &crate::ui::poke::Poke,
+) {
+    let plugins: Vec<String> = session
+        .browser_selection
+        .lock()
+        .unwrap()
+        .selected_or_active_in_order(BrowserScope::Effects, ordered)
+        .into_iter()
+        .filter_map(|id| match id {
+            BrowserItemId::Effect(plugin) => Some(plugin),
+            _ => None,
+        })
+        .collect();
+    if plugins.is_empty() {
+        return;
+    }
+    if session.selection.all().is_empty() {
+        *session.project_notice.lock().unwrap() = "Select a layer before adding effects".into();
+        poke.poke();
+        return;
+    }
+    match session.apply_each(None, |doc, target| {
+        effect_batch_intents(doc, target, &plugins)
+    }) {
+        Ok(0) => {
+            *session.project_notice.lock().unwrap() =
+                "Selected effects are already attached".into();
+            poke.poke();
+        }
+        Ok(_) => *revision.write() += 1,
+        Err(error) => println!("PROBE room=write verdict=apply-error {error}"),
+    }
+}
+
+fn commit_color(
+    session: &Session,
+    rgba: [u8; 4],
+    mut revision: Signal<u32>,
+    poke: &crate::ui::poke::Poke,
+) {
+    let rgb = [
+        rgba[0] as f64 / 255.0,
+        rgba[1] as f64 / 255.0,
+        rgba[2] as f64 / 255.0,
+    ];
+    if let Some(crate::ui::session::Focus::Color(
+        slot @ crate::ui::session::ColorSlot::TextStroke { .. },
+    )) = session.live_focus()
+    {
+        if session.writable(slot.layer()) {
+            match crate::ui::color::write_color(&session.doc, &slot, rgb) {
+                Ok(()) => *revision.write() += 1,
+                Err(error) => println!("PROBE room=write verdict=apply-error {error}"),
+            }
+        }
+        return;
+    }
+    if session.selection.all().is_empty() {
+        *session.project_notice.lock().unwrap() = "Select a layer before applying a color".into();
+        poke.poke();
+        return;
+    }
+    let result = session.apply_blocks(None, |doc, target| color_block(doc, target, rgba));
+    crate::ui::session::noted(result.map(|_| ()), revision);
+}
+
+#[allow(clippy::too_many_arguments)]
+fn commit_active_media(
+    session: &Session,
+    ordered: &[BrowserItemId],
+    commands: &[(crate::doc::store::AssetId, Option<String>, String)],
+    layer_rows: Signal<Vec<LayerRow>>,
+    attrs_state: Signal<Vec<(bool, bool, bool)>>,
+    timeline_tx: &Sender<TimelineMsg>,
+    revision: Signal<u32>,
+    poke: &crate::ui::poke::Poke,
+) {
+    let active = session
+        .browser_selection
+        .lock()
+        .unwrap()
+        .active_in(BrowserScope::Media, ordered);
+    let Some(BrowserItemId::Media(active)) = active else {
+        return;
+    };
+    let Some((_, path, name)) = commands.iter().find(|(id, _, _)| *id == active) else {
+        return;
+    };
+    let Some(path) = path else {
+        *session.project_notice.lock().unwrap() = "This media file is missing".into();
+        poke.poke();
+        return;
+    };
+    spawn_layer(
+        &session.doc,
+        &session.clock,
+        layer_rows,
+        attrs_state,
+        timeline_tx,
+        NewKind::Media {
+            path: path.clone(),
+            name: name.clone(),
+        },
+        "media",
+        revision,
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
+fn commit_create_item(
+    session: &Session,
+    item: CreateItem,
+    layer_rows: Signal<Vec<LayerRow>>,
+    attrs_state: Signal<Vec<(bool, bool, bool)>>,
+    timeline_tx: &Sender<TimelineMsg>,
+    revision: Signal<u32>,
+    poke: &crate::ui::poke::Poke,
+) {
+    let kind = match item {
+        CreateItem::Text => Some((NewKind::Text, "Text")),
+        CreateItem::Rectangle => Some((NewKind::Rectangle, "Rectangle")),
+        CreateItem::Bezier => Some((NewKind::Bezier, "Bezier")),
+        CreateItem::Mask => None,
+    };
+    if let Some((kind, label)) = kind {
+        spawn_layer(
+            &session.doc,
+            &session.clock,
+            layer_rows,
+            attrs_state,
+            timeline_tx,
+            kind,
+            label,
+            revision,
+        );
+        return;
+    }
+
+    let layer = session
+        .selection
+        .get()
+        .filter(|layer| mask_frame(&session.doc.lock().unwrap(), *layer).is_some());
+    if let Some(layer) = layer {
+        add_rectangle_mask(&session.doc, layer, revision);
+    } else {
+        *session.project_notice.lock().unwrap() = "Select a 2D layer before adding a mask".into();
+        poke.poke();
+    }
+}
+
+fn delete_selected_media(
+    session: &Session,
+    ordered: &[BrowserItemId],
+    all: &[BrowserItemId],
+    used: &std::collections::BTreeSet<crate::doc::store::AssetId>,
+    mut revision: Signal<u32>,
+    poke: &crate::ui::poke::Poke,
+) {
+    let selected = session
+        .browser_selection
+        .lock()
+        .unwrap()
+        .selected_in_order(BrowserScope::Media, ordered);
+    let selected_count = selected.len();
+    let removable: Vec<_> = selected
+        .into_iter()
+        .filter_map(|id| match id {
+            BrowserItemId::Media(asset) if !used.contains(&asset) => Some(asset),
+            _ => None,
+        })
+        .collect();
+    if removable.is_empty() {
+        if selected_count > 0 {
+            *session.project_notice.lock().unwrap() = "Selected media is still in use".into();
+            poke.poke();
+        }
+        return;
+    }
+    let result = session.doc.lock().unwrap().apply_all(
+        removable
+            .iter()
+            .copied()
+            .map(|asset| Intent::RemoveAsset { asset }),
+    );
+    match result {
+        Ok(()) => {
+            let remaining: Vec<_> = all
+                .iter()
+                .filter(
+                    |id| !matches!(id, BrowserItemId::Media(asset) if removable.contains(asset)),
+                )
+                .cloned()
+                .collect();
+            session
+                .browser_selection
+                .lock()
+                .unwrap()
+                .reconcile(BrowserScope::Media, &remaining);
+            let kept = selected_count.saturating_sub(removable.len());
+            *session.project_notice.lock().unwrap() = match kept {
+                0 => format!("Removed {} media", removable.len()),
+                _ => format!("Removed {} media · {kept} still in use", removable.len()),
+            };
+            *revision.write() += 1;
+            poke.poke();
+        }
+        Err(error) => println!("PROBE room=write verdict=apply-error {error}"),
+    }
+}
+
 pub(super) fn browser_panel(
     session: &Session,
     doc: Arc<Mutex<Document>>,
-    clock: Arc<Clock>,
     layer_rows: Signal<Vec<LayerRow>>,
     attrs_state: Signal<Vec<(bool, bool, bool)>>,
     timeline_tx: Sender<TimelineMsg>,
     selected: Signal<Option<LayerId>>,
-    mut revision: Signal<u32>,
+    revision: Signal<u32>,
     layout_tick: u32,
     panel: Panel,
     mut rail: Signal<Option<fixture::AssetFamily>>,
+    poke: crate::ui::poke::Poke,
+    mut search_node: Signal<Option<std::rc::Rc<MountedData>>>,
+    mut marquee: Signal<Option<BrowserMarquee>>,
 ) -> Element {
+    let scope = browser_scope(panel);
+    let focusable_items = consume_context::<FocusableItems>();
+    let query_value = session
+        .browser_selection
+        .lock()
+        .unwrap()
+        .query(scope)
+        .to_owned();
+    let query = query_value.clone();
+    let search_id = format!("browser-search-{panel}");
     let grid_class = match layout_tick {
         0 => "tgrid",
         tick if tick % 2 == 0 => "tgrid browser-reflow-a",
@@ -641,7 +1469,7 @@ pub(super) fn browser_panel(
     };
     let shown: Vec<_> = assets
         .iter()
-        .filter(|a| rail().is_none_or(|f| a.family == f))
+        .filter(|a| rail().is_none_or(|f| a.family == f) && query_matches(&a.name, &query))
         .collect();
     let rail_label = rail().map_or("All media", |f| f.label());
     // 層が使っている素材は棚から外せない(外すと層が空を指す)。
@@ -658,46 +1486,128 @@ pub(super) fn browser_panel(
             .collect()
     };
 
+    let all_media_ids: Vec<_> = assets
+        .iter()
+        .map(|asset| BrowserItemId::Media(asset.id))
+        .collect();
+    let search_all_ids = match scope {
+        BrowserScope::Media => all_media_ids.clone(),
+        BrowserScope::Effects => crate::render::engine::known_effects()
+            .iter()
+            .map(|effect| BrowserItemId::Effect(effect.plugin_id.clone()))
+            .collect(),
+        BrowserScope::Create => [
+            CreateItem::Text,
+            CreateItem::Rectangle,
+            CreateItem::Bezier,
+            CreateItem::Mask,
+        ]
+        .into_iter()
+        .map(BrowserItemId::Create)
+        .collect(),
+        BrowserScope::Colors => {
+            let mut swatches = fixture::used_colors_from_doc(&doc.lock().unwrap());
+            for swatch in fixture::default_palette() {
+                if !swatches.iter().any(|known| known.rgba == swatch.rgba) {
+                    swatches.push(swatch);
+                }
+            }
+            swatches
+                .into_iter()
+                .map(|swatch| BrowserItemId::Color(swatch.rgba))
+                .collect()
+        }
+    };
+    let media_ids: Vec<_> = shown
+        .iter()
+        .map(|asset| BrowserItemId::Media(asset.id))
+        .collect();
+    let used_asset_ids: std::collections::BTreeSet<_> = assets
+        .iter()
+        .filter(|asset| asset.path.as_ref().is_some_and(|path| used.contains(path)))
+        .map(|asset| asset.id)
+        .collect();
+    let media_commands: Vec<_> = shown
+        .iter()
+        .map(|asset| (asset.id, asset.path.clone(), asset.name.clone()))
+        .collect();
+    let media_selection = {
+        let mut selection = session.browser_selection.lock().unwrap();
+        selection.reconcile(BrowserScope::Media, &all_media_ids);
+        selection.ensure_active_in(BrowserScope::Media, &media_ids);
+        selection.clone()
+    };
+    let media_active = media_selection.active_in(BrowserScope::Media, &media_ids);
+
     let asset_cards = shown.iter().map(|a| {
         let preview = a.preview.as_deref();
         let in_use = a.path.as_ref().is_some_and(|p| used.contains(p));
         let asset_id = a.id;
+        let item_id = BrowserItemId::Media(asset_id);
+        let focus_key = item_id.focus_key();
+        let card_class = if media_selection.is_selected(BrowserScope::Media, &item_id) {
+            "tcard on"
+        } else {
+            "tcard"
+        };
         let reveal_path = a.path.clone();
         let replace_path = a.path.clone();
         let replace_doc = doc.clone();
         let remove_doc = doc.clone();
-        let place = a.path.clone().map(|path| {
-            let name = a.name.clone();
-            let doc = doc.clone();
-            let clock = clock.clone();
-            let timeline_tx = timeline_tx.clone();
-            move |evt: Event<MouseData>| {
-                if evt.modifiers().alt() {
-                    if let Some(layer) = selected() {
-                        replace_source(&doc, layer, path.clone(), revision);
-                        return;
-                    }
-                }
-                spawn_layer(
-                    &doc,
-                    &clock,
-                    layer_rows,
-                    attrs_state,
-                    &timeline_tx,
-                    NewKind::Media { path: path.clone(), name: name.clone() },
-                    "media",
-                    revision,
-                );
-            }
-        });
-        let disabled = place.is_none();
+        let select_session = session.clone();
+        let select_ids = media_ids.clone();
+        let select_item = item_id.clone();
+        let select_poke = poke.clone();
+        let commit_session = session.clone();
+        let commit_ids = media_ids.clone();
+        let commit_item = item_id.clone();
+        let commit_poke = poke.clone();
+        let commit_path = a.path.clone();
+        let commit_name = a.name.clone();
+        let commit_timeline = timeline_tx.clone();
         rsx!(
             div { class: "tcell",
                 SemanticButton {
-                    class: "tcard",
-                    disabled,
-                    title: "Add as a layer · Alt+click replaces the selected layer's source",
-                    onclick: move |evt| { if let Some(f) = &place { f(evt) } },
+                    class: "{card_class}",
+                    focus_key: Some(focus_key),
+                    tabindex: Some(result_tabindex(media_active.as_ref(), &item_id)),
+                    selected: media_selection.is_selected(BrowserScope::Media, &item_id),
+                    title: if a.path.is_some() { "Select · double-click or Enter to add as a layer" } else { "Missing media · select it to remove or relink" },
+                    onclick: move |evt: MouseEvent| choose_browser_item(
+                        &select_session,
+                        BrowserScope::Media,
+                        &select_item,
+                        &select_ids,
+                        evt.modifiers(),
+                        true,
+                        &select_poke,
+                    ),
+                    ondoubleclick: move |evt: MouseEvent| {
+                        choose_browser_item(
+                            &commit_session,
+                            BrowserScope::Media,
+                            &commit_item,
+                            &commit_ids,
+                            evt.modifiers(),
+                            true,
+                            &commit_poke,
+                        );
+                        if let Some(path) = &commit_path {
+                            spawn_layer(
+                                &commit_session.doc,
+                                &commit_session.clock,
+                                layer_rows,
+                                attrs_state,
+                                &commit_timeline,
+                                NewKind::Media { path: path.clone(), name: commit_name.clone() },
+                                "media",
+                                revision,
+                            );
+                        } else {
+                            *commit_session.project_notice.lock().unwrap() = "This media file is missing".into();
+                            commit_poke.poke();
+                        }
+                    },
                     if let Some(src) = preview {
                         img { class: "thumb", src: "{src}", alt: "" }
                     } else {
@@ -707,7 +1617,24 @@ pub(super) fn browser_panel(
                     span { class: "tmeta", if in_use { "{a.kind} · in use" } else { "{a.kind}" } }
                 }
                 // 札の上に出る手。隠し技(Alt+click)を表に出す(Premiere の Replace Footage、Finder の Reveal)。
-                div { class: "tacts",
+                div {
+                    class: "tacts",
+                    onkeydown: move |evt: KeyboardEvent| {
+                        if matches!(
+                            evt.key(),
+                            Key::ArrowLeft
+                                | Key::ArrowRight
+                                | Key::ArrowUp
+                                | Key::ArrowDown
+                                | Key::Home
+                                | Key::End
+                                | Key::PageUp
+                                | Key::PageDown
+                        ) {
+                            evt.prevent_default();
+                            evt.stop_propagation();
+                        }
+                    },
                     if let (Some(layer), Some(path)) = (selected(), replace_path) {
                         SemanticButton {
                             class: "chip",
@@ -756,9 +1683,118 @@ pub(super) fn browser_panel(
     };
     let asset_count = shown.len();
     let filtered_out = shown.is_empty() && rail().is_some();
+    let search_session = session.clone();
+    let search_poke = poke.clone();
+    let search_key_session = session.clone();
+    let search_key_poke = poke.clone();
+    let search_focus_node = search_node;
+    let search_focus_items = focusable_items;
+    let search_focus_ids = search_all_ids.clone();
+    let can_marquee = matches!(scope, BrowserScope::Media | BrowserScope::Effects);
+    let select_mode = session.browser_selection.lock().unwrap().select_mode(scope);
+    let mode_session = session.clone();
+    let mode_poke = poke.clone();
 
     rsx!(
         div { id: "browser",
+            div { class: "rhead", style: "flex:0 0 auto;",
+                input {
+                    id: "{search_id}",
+                    class: "csheet-in",
+                    style: "width:100%; min-width:0;",
+                    aria_label: "Search Browser",
+                    placeholder: "Search {panel}",
+                    value: "{query_value}",
+                    onmounted: move |evt: MountedEvent| search_node.set(Some(evt.data())),
+                    oninput: move |evt: FormEvent| {
+                        if search_session
+                            .browser_selection
+                            .lock()
+                            .unwrap()
+                            .set_query(scope, evt.value())
+                        {
+                            search_poke.poke();
+                        }
+                    },
+                    onkeydown: move |evt: KeyboardEvent| {
+                        let command = crate::ui::keymap::primary_modifier(evt.modifiers());
+                        if command
+                            && matches!(evt.key(), Key::Character(ref c) if c.eq_ignore_ascii_case("f"))
+                        {
+                            evt.prevent_default();
+                            evt.stop_propagation();
+                            focus_and_select_search(search_focus_node.read().clone());
+                            return;
+                        }
+                        if command
+                            && matches!(evt.key(), Key::Character(ref c) if c.eq_ignore_ascii_case("a"))
+                        {
+                            // Keep the native text input's Cmd+A default action; only stop the
+                            // Browser/artwork handlers above it.
+                            evt.stop_propagation();
+                            return;
+                        }
+                        if command
+                            && matches!(evt.key(), Key::Character(ref c) if matches!(c.to_ascii_lowercase().as_str(), "c" | "v" | "x"))
+                        {
+                            // Clipboard editing stays with the native input.
+                            evt.stop_propagation();
+                            return;
+                        }
+                        if command
+                            && matches!(evt.key(), Key::Character(ref c) if matches!(c.to_ascii_lowercase().as_str(), "d" | "g" | "k"))
+                        {
+                            evt.prevent_default();
+                            evt.stop_propagation();
+                            browser_action_unavailable(&search_key_session, &search_key_poke);
+                            return;
+                        }
+                        if evt.key() == Key::Escape {
+                            evt.prevent_default();
+                            evt.stop_propagation();
+                            let (changed, focus) = {
+                                let mut selection = search_key_session.browser_selection.lock().unwrap();
+                                if selection.clear_query(scope) {
+                                    selection.ensure_active_in(scope, &search_focus_ids);
+                                    (
+                                        true,
+                                        selection.active_in(scope, &search_focus_ids),
+                                    )
+                                } else {
+                                    (selection.clear(scope), None)
+                                }
+                            };
+                            if changed {
+                                search_key_poke.poke();
+                            }
+                            if let Some(focus) = focus {
+                                search_focus_items.focus(&focus.focus_key());
+                            }
+                        }
+                    },
+                }
+                if can_marquee {
+                    SemanticButton {
+                        class: if select_mode { "chip on" } else { "chip" },
+                        selected: select_mode,
+                        aria_label: "Select several Browser items",
+                        title: "Drag a rectangle to select several items",
+                        onclick: move |_| {
+                            let enabled = mode_session
+                                .browser_selection
+                                .lock()
+                                .unwrap()
+                                .toggle_select_mode(scope);
+                            if !enabled {
+                                marquee.set(None);
+                                mode_session.gesture.end();
+                            }
+                            mode_poke.poke();
+                        },
+                        "Select"
+                    }
+                }
+            }
             if panel == Panel::Colors {
                 {
                     let layer = selected();
@@ -772,47 +1808,138 @@ pub(super) fn browser_panel(
                             swatches.push(sw);
                         }
                     }
+                    let all_color_ids: Vec<_> = swatches
+                        .iter()
+                        .map(|swatch| BrowserItemId::Color(swatch.rgba))
+                        .collect();
+                    {
+                        let mut selection = session.browser_selection.lock().unwrap();
+                        selection.reconcile(BrowserScope::Colors, &all_color_ids);
+                    }
+                    swatches.retain(|swatch| query_matches(&swatch.hex, &query));
                     let has_swatches = !swatches.is_empty();
+                    let color_ids: Vec<_> = swatches
+                        .iter()
+                        .map(|swatch| BrowserItemId::Color(swatch.rgba))
+                        .collect();
+                    let color_selection = {
+                        let mut selection = session.browser_selection.lock().unwrap();
+                        selection.ensure_active_in(BrowserScope::Colors, &color_ids);
+                        selection.clone()
+                    };
+                    let color_active = color_selection.active_in(BrowserScope::Colors, &color_ids);
                     let cards = swatches.into_iter().map(|ColorSwatch { hex, rgba }| {
-                        let card_class = if layer.is_none() { "tcard color-swatch disabled" } else { "tcard color-swatch" };
-                        let onclick = layer.map(|_| {
-                            let doc = doc.clone();
-                            let session = session.clone();
-                            move |_| {
-                                let rgb = [rgba[0] as f64 / 255.0, rgba[1] as f64 / 255.0, rgba[2] as f64 / 255.0];
-                                // 焦点が縁取りなら縁取りへ(輪と札は同じ口)。それ以外は選んだ層の全部へ。
-                                if let Some(crate::ui::session::Focus::Color(slot @ crate::ui::session::ColorSlot::TextStroke { .. })) = session.live_focus() {
-                                    if session.writable(slot.layer()) {
-                                        match crate::ui::color::write_color(&doc, &slot, rgb) {
-                                            Ok(()) => *revision.write() += 1,
-                                            Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
-                                        }
-                                    }
-                                    return;
-                                }
-                                let result = session.apply_blocks(None, |doc, target| color_block(doc, target, rgba));
-                                crate::ui::session::noted(result.map(|_| ()), revision);
-                            }
-                        });
+                        let item_id = BrowserItemId::Color(rgba);
+                        let is_selected = color_selection.is_selected(BrowserScope::Colors, &item_id);
+                        let card_class = if is_selected { "tcard color-swatch on" } else { "tcard color-swatch" };
+                        let focus_key = item_id.focus_key();
+                        let select_session = session.clone();
+                        let select_item = item_id.clone();
+                        let select_ids = color_ids.clone();
+                        let select_poke = poke.clone();
+                        let commit_session = session.clone();
+                        let commit_item = item_id.clone();
+                        let commit_ids = color_ids.clone();
+                        let commit_poke = poke.clone();
                         rsx!(
                             SemanticButton {
                                 class: "{card_class}",
-                                disabled: layer.is_none(),
-                                title: if layer.is_none() { "Select a layer first" } else if session.selection.all().len() > 1 { "Apply to the selected layers" } else { "Apply to the selected layer" },
-                                onclick: {
-                                    let mut cb = onclick;
-                                    move |evt| { if let Some(f) = cb.as_mut() { f(evt) } }
+                                focus_key: Some(focus_key),
+                                tabindex: Some(result_tabindex(color_active.as_ref(), &item_id)),
+                                selected: is_selected,
+                                title: if layer.is_none() { "Select · choose a layer before applying" } else if session.selection.all().len() > 1 { "Select · double-click or Enter to apply to the selected layers" } else { "Select · double-click or Enter to apply to the selected layer" },
+                                onclick: move |evt: MouseEvent| choose_browser_item(
+                                    &select_session,
+                                    BrowserScope::Colors,
+                                    &select_item,
+                                    &select_ids,
+                                    evt.modifiers(),
+                                    false,
+                                    &select_poke,
+                                ),
+                                ondoubleclick: move |evt: MouseEvent| {
+                                    choose_browser_item(
+                                        &commit_session,
+                                        BrowserScope::Colors,
+                                        &commit_item,
+                                        &commit_ids,
+                                        evt.modifiers(),
+                                        false,
+                                        &commit_poke,
+                                    );
+                                    commit_color(&commit_session, rgba, revision, &commit_poke);
                                 },
                                 div { class: "thumb", style: "background:{hex};" }
                                 span { class: "tname", "{hex}" }
                             }
                         )
                     });
+                    let key_session = session.clone();
+                    let key_ids = color_ids.clone();
+                    let key_poke = poke.clone();
+                    let key_search = search_node;
                     rsx!(
                         div { class: "bwork",
-                            div { class: "bside",
+                            onkeydown: move |evt: KeyboardEvent| {
+                                if key_session.field().is_some() || crate::ui::keymap::is_typing() {
+                                    return;
+                                }
+                                let result = {
+                                    let mut selection = key_session.browser_selection.lock().unwrap();
+                                    browser_key(
+                                        &mut selection,
+                                        BrowserScope::Colors,
+                                        &key_ids,
+                                        &evt.key(),
+                                        evt.code(),
+                                        evt.modifiers(),
+                                        false,
+                                    )
+                                };
+                                match consume_browser_key(
+                                    &evt,
+                                    result,
+                                    focusable_items,
+                                    &key_poke,
+                                ) {
+                                    Some(BrowserKeyAction::Commit) => {
+                                        let active = key_session
+                                            .browser_selection
+                                            .lock()
+                                            .unwrap()
+                                            .active_in(BrowserScope::Colors, &key_ids);
+                                        if let Some(BrowserItemId::Color(rgba)) = active {
+                                            commit_color(&key_session, rgba, revision, &key_poke);
+                                        }
+                                    }
+                                    Some(BrowserKeyAction::Spatial(direction, extend)) => {
+                                        move_browser_spatial(
+                                            focusable_items,
+                                            key_session.clone(),
+                                            BrowserScope::Colors,
+                                            key_ids.clone(),
+                                            direction,
+                                            extend,
+                                            key_poke.clone(),
+                                        );
+                                    }
+                                    Some(BrowserKeyAction::FocusSearch) => {
+                                        focus_and_select_search(key_search.read().clone());
+                                    }
+                                    Some(BrowserKeyAction::TypeAhead(query)) => {
+                                        focus_search_with_text(key_search.read().clone(), &query);
+                                    }
+                                    Some(BrowserKeyAction::Delete | BrowserKeyAction::Unavailable) => {
+                                        browser_action_unavailable(&key_session, &key_poke);
+                                    }
+                                    _ => {}
+                                }
+                            },
+                            div {
+                                class: "bside",
+                                onkeydown: move |evt: KeyboardEvent| consume_fixed_rail_key(&evt),
                                 h3 { class: "sh", "Colors" }
-                                div { class: "srow on", if used_count == 0 { "Starter palette" } else { "Used here · then starter" } }
+                                div { class: "srow on", tabindex: "0", if used_count == 0 { "Starter palette" } else { "Used here · then starter" } }
                             }
                             div { class: "bresults",
                                 div { class: "rhead",
@@ -824,7 +1951,7 @@ pub(super) fn browser_panel(
                                     }
                                 }
                                 match wheel_slot(session) {
-                                    Some(slot) => rsx!(ColorWheel { session: session.clone(), slot, revision }),
+                                    Some(slot) => rsx!(ColorWheel { session: session.clone(), slot, revision, wake: layout_tick }),
                                     None => rsx!(div { class: "rcount", "No color yet · select a layer to edit one" }),
                                 }
                                 if has_swatches {
@@ -846,25 +1973,76 @@ pub(super) fn browser_panel(
                         .map(|e| e.plugin_id)
                         .collect();
                     let catalog = crate::render::engine::known_effects();
-                    let cards = catalog.iter().map(|desc| {
+                    let all_effect_ids: Vec<_> = catalog
+                        .iter()
+                        .map(|desc| BrowserItemId::Effect(desc.plugin_id.clone()))
+                        .collect();
+                    {
+                        let mut selection = session.browser_selection.lock().unwrap();
+                        selection.reconcile(BrowserScope::Effects, &all_effect_ids);
+                    }
+                    let shown_effects: Vec<_> = catalog
+                        .iter()
+                        .filter(|desc| query_matches(&desc.plugin_id, &query))
+                        .collect();
+                    let effect_ids: Vec<_> = shown_effects
+                        .iter()
+                        .map(|desc| BrowserItemId::Effect(desc.plugin_id.clone()))
+                        .collect();
+                    let effect_selection = {
+                        let mut selection = session.browser_selection.lock().unwrap();
+                        selection.ensure_active_in(BrowserScope::Effects, &effect_ids);
+                        selection.clone()
+                    };
+                    let effect_active = effect_selection.active_in(BrowserScope::Effects, &effect_ids);
+                    let cards = shown_effects.iter().map(|desc| {
                         let plugin_id = desc.plugin_id.to_owned();
                         let is_on = attached.contains(&plugin_id);
-                        let card_class = if is_on { "tcard on" } else if layer.is_none() { "tcard disabled" } else { "tcard" };
-                        let onclick = layer.map(|_| {
-                            let session = session.clone();
-                            let plugin_id = plugin_id.clone();
-                            move |_| {
-                                let result = session.apply_each(None, |doc, target| effect_intents(doc, target, &plugin_id));
-                                crate::ui::session::noted(result.map(|_| ()), revision);
-                            }
-                        });
+                        let item_id = BrowserItemId::Effect(plugin_id.clone());
+                        let is_selected = effect_selection.is_selected(BrowserScope::Effects, &item_id);
+                        let card_class = if is_selected { "tcard on" } else { "tcard" };
+                        let focus_key = item_id.focus_key();
+                        let select_session = session.clone();
+                        let select_item = item_id.clone();
+                        let select_ids = effect_ids.clone();
+                        let select_poke = poke.clone();
+                        let commit_session = session.clone();
+                        let commit_item = item_id.clone();
+                        let commit_ids = effect_ids.clone();
+                        let commit_poke = poke.clone();
                         rsx!(
                             SemanticButton {
                                 class: "{card_class}",
-                                disabled: layer.is_none(),
-                                title: if layer.is_none() { "Select a layer first" } else { "Add to the selected layers" },
-                                selected: is_on,
-                                onclick: move |evt| { if let Some(f) = &onclick { f(evt) } },
+                                focus_key: Some(focus_key),
+                                tabindex: Some(result_tabindex(effect_active.as_ref(), &item_id)),
+                                title: if layer.is_none() { "Select · choose a layer before attaching" } else { "Select · double-click or Enter to attach" },
+                                selected: is_selected,
+                                onclick: move |evt: MouseEvent| choose_browser_item(
+                                    &select_session,
+                                    BrowserScope::Effects,
+                                    &select_item,
+                                    &select_ids,
+                                    evt.modifiers(),
+                                    true,
+                                    &select_poke,
+                                ),
+                                ondoubleclick: move |evt: MouseEvent| {
+                                    choose_browser_item(
+                                        &commit_session,
+                                        BrowserScope::Effects,
+                                        &commit_item,
+                                        &commit_ids,
+                                        evt.modifiers(),
+                                        true,
+                                        &commit_poke,
+                                    );
+                                    commit_effect_selection(
+                                        &commit_session,
+                                        &commit_ids,
+                                        revision,
+                                        &commit_poke,
+                                    );
+                                },
                                 div { class: "thumb", style: "background:#222; display:flex; align-items:center; justify-content:center;",
                                     span { style: "color:#fff; font-size:20px;", "ƒ" }
                                 }
@@ -873,11 +2051,71 @@ pub(super) fn browser_panel(
                             }
                         )
                     });
+                    let key_session = session.clone();
+                    let key_ids = effect_ids.clone();
+                    let key_poke = poke.clone();
+                    let key_search = search_node;
+                    let marquee_down_session = session.clone();
                     rsx!(
                         div { class: "bwork",
-                            div { class: "bside",
+                            onkeydown: move |evt: KeyboardEvent| {
+                                if key_session.field().is_some() || crate::ui::keymap::is_typing() {
+                                    return;
+                                }
+                                let result = {
+                                    let mut selection = key_session.browser_selection.lock().unwrap();
+                                    browser_key(
+                                        &mut selection,
+                                        BrowserScope::Effects,
+                                        &key_ids,
+                                        &evt.key(),
+                                        evt.code(),
+                                        evt.modifiers(),
+                                        true,
+                                    )
+                                };
+                                match consume_browser_key(
+                                    &evt,
+                                    result,
+                                    focusable_items,
+                                    &key_poke,
+                                ) {
+                                    Some(BrowserKeyAction::Commit) => {
+                                        commit_effect_selection(
+                                            &key_session,
+                                            &key_ids,
+                                            revision,
+                                            &key_poke,
+                                        );
+                                    }
+                                    Some(BrowserKeyAction::Spatial(direction, extend)) => {
+                                        move_browser_spatial(
+                                            focusable_items,
+                                            key_session.clone(),
+                                            BrowserScope::Effects,
+                                            key_ids.clone(),
+                                            direction,
+                                            extend,
+                                            key_poke.clone(),
+                                        );
+                                    }
+                                    Some(BrowserKeyAction::FocusSearch) => {
+                                        focus_and_select_search(key_search.read().clone());
+                                    }
+                                    Some(BrowserKeyAction::TypeAhead(query)) => {
+                                        focus_search_with_text(key_search.read().clone(), &query);
+                                    }
+                                    Some(BrowserKeyAction::Delete | BrowserKeyAction::Unavailable) => {
+                                        browser_action_unavailable(&key_session, &key_poke);
+                                    }
+                                    _ => {}
+                                }
+                            },
+                            div {
+                                class: "bside",
+                                onkeydown: move |evt: KeyboardEvent| consume_fixed_rail_key(&evt),
                                 h3 { class: "sh", "Effects" }
-                                div { class: "srow on", "All" }
+                                div { class: "srow on", tabindex: "0", "All" }
                             }
                             div { class: "bresults",
                                 div { class: "rhead",
@@ -888,81 +2126,324 @@ pub(super) fn browser_panel(
                                         }
                                     }
                                 }
-                                div { class: "{grid_class}", {cards} }
+                                div {
+                                    class: "{grid_class}",
+                                    onpointerdown: move |evt: PointerEvent| begin_browser_marquee(
+                                        &marquee_down_session,
+                                        BrowserScope::Effects,
+                                        &evt,
+                                        marquee,
+                                    ),
+                                    {cards}
+                                    {marquee_overlay(
+                                        session,
+                                        marquee(),
+                                        BrowserScope::Effects,
+                                        &effect_ids,
+                                        focusable_items,
+                                        marquee,
+                                        &poke,
+                                    )}
+                                }
                             }
                         }
                     )
                 }
             } else if panel == Panel::Create {
                 {
-                let mask_layer = selected().filter(|layer| {
-                    mask_frame(&doc.lock().unwrap(), *layer).is_some()
-                });
-                let mask_count = mask_layer
-                    .and_then(|layer| doc.lock().unwrap().view().masks(layer).ok())
-                    .map(|masks| masks.len())
-                    .unwrap_or(0);
-                rsx!(div { class: "bwork",
-                    div { class: "bside",
-                        h3 { class: "sh", "Create" }
-                        div { class: "srow on", "All" }
+                    let mask_layer = selected().filter(|layer| {
+                        mask_frame(&doc.lock().unwrap(), *layer).is_some()
+                    });
+                    let mask_count = mask_layer
+                        .and_then(|layer| doc.lock().unwrap().view().masks(layer).ok())
+                        .map(|masks| masks.len())
+                        .unwrap_or(0);
+                    let all_create = [
+                        (CreateItem::Text, "Text", "Adds a text layer", "T"),
+                        (CreateItem::Rectangle, "Rectangle", "Adds a shape layer", "■"),
+                        (CreateItem::Bezier, "Bezier", "Adds a path layer", "〜"),
+                        (CreateItem::Mask, "Mask", "layer mask", "□"),
+                    ];
+                    let all_create_ids: Vec<_> = all_create
+                        .iter()
+                        .map(|(item, _, _, _)| BrowserItemId::Create(*item))
+                        .collect();
+                    {
+                        let mut selection = session.browser_selection.lock().unwrap();
+                        selection.reconcile(BrowserScope::Create, &all_create_ids);
                     }
-                    div { class: "bresults",
-                        div { class: "rhead",
-                            div {
-                                h2 { "Create" }
-                                span { class: "sub", "Add a layer, or apply a mask to the selection" }
+                    let shown_create: Vec<_> = all_create
+                        .into_iter()
+                        .filter(|(_, label, _, _)| query_matches(label, &query))
+                        .collect();
+                    let create_ids: Vec<_> = shown_create
+                        .iter()
+                        .map(|(item, _, _, _)| BrowserItemId::Create(*item))
+                        .collect();
+                    {
+                        session
+                            .browser_selection
+                            .lock()
+                            .unwrap()
+                            .ensure_active_in(BrowserScope::Create, &create_ids);
+                    }
+                    let create_selection = session.browser_selection.lock().unwrap().clone();
+                    let create_active = create_selection.active_in(BrowserScope::Create, &create_ids);
+                    let cards = shown_create.into_iter().map(|(item, label, meta, glyph)| {
+                        let item_id = BrowserItemId::Create(item);
+                        let is_selected = create_selection.is_selected(BrowserScope::Create, &item_id);
+                        let card_class = if is_selected { "tcard on" } else { "tcard" };
+                        let focus_key = item_id.focus_key();
+                        let select_session = session.clone();
+                        let select_item = item_id.clone();
+                        let select_ids = create_ids.clone();
+                        let select_poke = poke.clone();
+                        let commit_session = session.clone();
+                        let commit_item = item_id.clone();
+                        let commit_ids = create_ids.clone();
+                        let commit_poke = poke.clone();
+                        let commit_timeline = timeline_tx.clone();
+                        let detail = if item == CreateItem::Mask && mask_count > 0 {
+                            format!("{mask_count} attached")
+                        } else {
+                            meta.to_owned()
+                        };
+                        rsx!(SemanticButton {
+                            class: "{card_class}",
+                            focus_key: Some(focus_key),
+                            tabindex: Some(result_tabindex(create_active.as_ref(), &item_id)),
+                            selected: is_selected,
+                            title: "Select · double-click or Enter to create",
+                            onclick: move |evt: MouseEvent| choose_browser_item(
+                                &select_session,
+                                BrowserScope::Create,
+                                &select_item,
+                                &select_ids,
+                                evt.modifiers(),
+                                false,
+                                &select_poke,
+                            ),
+                            ondoubleclick: move |evt: MouseEvent| {
+                                choose_browser_item(
+                                    &commit_session,
+                                    BrowserScope::Create,
+                                    &commit_item,
+                                    &commit_ids,
+                                    evt.modifiers(),
+                                    false,
+                                    &commit_poke,
+                                );
+                                commit_create_item(
+                                    &commit_session,
+                                    item,
+                                    layer_rows,
+                                    attrs_state,
+                                    &commit_timeline,
+                                    revision,
+                                    &commit_poke,
+                                );
+                            },
+                            div { class: "thumb glyphy", span { "{glyph}" } }
+                            span { class: "tname", "{label}" }
+                            span { class: "tmeta", "{detail}" }
+                        })
+                    });
+                    let key_session = session.clone();
+                    let key_ids = create_ids.clone();
+                    let key_timeline = timeline_tx.clone();
+                    let key_poke = poke.clone();
+                    let key_search = search_node;
+                    rsx!(div { class: "bwork",
+                        onkeydown: move |evt: KeyboardEvent| {
+                            if key_session.field().is_some() || crate::ui::keymap::is_typing() {
+                                return;
                             }
-                        }
-                        div { class: "{grid_class}",
-                            // 札は data から(4 枚目を足す時は 1 行)。
-                            for (kind , label , meta , glyph) in [
-                                (NewKind::Text, "Text", "Adds a text layer", "T"),
-                                (NewKind::Rectangle, "Rectangle", "Adds a shape layer", "■"),
-                                (NewKind::Bezier, "Bezier", "Adds a path layer", "〜"),
-                            ] {
-                                SemanticButton {
-                                    class: "tcard",
-                                    onclick: {
-                                        let doc = doc.clone();
-                                        let clock = clock.clone();
-                                        let timeline_tx = timeline_tx.clone();
-                                        let kind = kind.clone();
-                                        move |_| spawn_layer(&doc, &clock, layer_rows, attrs_state, &timeline_tx, kind.clone(), label, revision)
-                                    },
-                                    div { class: "thumb glyphy", span { "{glyph}" } }
-                                    span { class: "tname", "{label}" }
-                                    span { class: "tmeta", "{meta}" }
-                                }
-                            }
-                            SemanticButton {
-                                class: if mask_count > 0 { "tcard on" } else if mask_layer.is_some() { "tcard" } else { "tcard disabled" },
-                                disabled: mask_layer.is_none(),
-                                selected: mask_count > 0,
-                                onclick: {
-                                    let doc = doc.clone();
-                                    move |_| {
-                                        if let Some(layer) = mask_layer {
-                                            add_rectangle_mask(&doc, layer, revision);
-                                        }
+                            let result = {
+                                let mut selection = key_session.browser_selection.lock().unwrap();
+                                browser_key(
+                                    &mut selection,
+                                    BrowserScope::Create,
+                                    &key_ids,
+                                    &evt.key(),
+                                    evt.code(),
+                                    evt.modifiers(),
+                                    false,
+                                )
+                            };
+                            match consume_browser_key(
+                                &evt,
+                                result,
+                                focusable_items,
+                                &key_poke,
+                            ) {
+                                Some(BrowserKeyAction::Commit) => {
+                                    let active = key_session
+                                        .browser_selection
+                                        .lock()
+                                        .unwrap()
+                                        .active_in(BrowserScope::Create, &key_ids);
+                                    if let Some(BrowserItemId::Create(item)) = active {
+                                        commit_create_item(
+                                            &key_session,
+                                            item,
+                                            layer_rows,
+                                            attrs_state,
+                                            &key_timeline,
+                                            revision,
+                                            &key_poke,
+                                        );
                                     }
-                                },
-                                div { class: "thumb", style: "background:#222; display:flex; align-items:center; justify-content:center;",
-                                    div { style: "width:40%; height:40%; border:3px solid #fff;" }
                                 }
-                                span { class: "tname", "Mask" }
-                                span { class: "tmeta", if mask_count > 0 { "{mask_count} attached" } else { "layer mask" } }
+                                Some(BrowserKeyAction::Spatial(direction, extend)) => {
+                                    move_browser_spatial(
+                                        focusable_items,
+                                        key_session.clone(),
+                                        BrowserScope::Create,
+                                        key_ids.clone(),
+                                        direction,
+                                        extend,
+                                        key_poke.clone(),
+                                    );
+                                }
+                                Some(BrowserKeyAction::FocusSearch) => {
+                                    focus_and_select_search(key_search.read().clone());
+                                }
+                                Some(BrowserKeyAction::TypeAhead(query)) => {
+                                    focus_search_with_text(key_search.read().clone(), &query);
+                                }
+                                Some(BrowserKeyAction::Delete | BrowserKeyAction::Unavailable) => {
+                                    browser_action_unavailable(&key_session, &key_poke);
+                                }
+                                _ => {}
                             }
+                        },
+                        div {
+                            class: "bside",
+                            onkeydown: move |evt: KeyboardEvent| consume_fixed_rail_key(&evt),
+                            h3 { class: "sh", "Create" }
+                            div { class: "srow on", tabindex: "0", "All" }
                         }
-                    }
-                })
+                        div { class: "bresults",
+                            div { class: "rhead",
+                                div {
+                                    h2 { "Create" }
+                                    span { class: "sub", "Select a card, then press Enter or double-click" }
+                                }
+                            }
+                            div { class: "{grid_class}", {cards} }
+                        }
+                    })
                 }
             } else {
-                div { class: "bwork",
-                    div { class: "bside",
+                {
+                let key_session = session.clone();
+                let key_ids = media_ids.clone();
+                let key_all = all_media_ids.clone();
+                let key_commands = media_commands.clone();
+                let key_used = used_asset_ids.clone();
+                let key_timeline = timeline_tx.clone();
+                let key_poke = poke.clone();
+                let key_search = search_node;
+                let marquee_down_session = session.clone();
+                let rail_options: Vec<_> = std::iter::once(None)
+                    .chain(families.iter().copied().map(Some))
+                    .collect();
+                let rail_keys: Vec<_> = rail_options.iter().copied().map(media_rail_key).collect();
+                let rail_key_options = rail_options.clone();
+                let rail_key_names = rail_keys.clone();
+                let mut key_rail = rail;
+                rsx!(div { class: "bwork",
+                    onkeydown: move |evt: KeyboardEvent| {
+                        if key_session.field().is_some() || crate::ui::keymap::is_typing() {
+                            return;
+                        }
+                        let result = {
+                            let mut selection = key_session.browser_selection.lock().unwrap();
+                            browser_key(
+                                &mut selection,
+                                BrowserScope::Media,
+                                &key_ids,
+                                &evt.key(),
+                                evt.code(),
+                                evt.modifiers(),
+                                true,
+                            )
+                        };
+                        match consume_browser_key(
+                            &evt,
+                            result,
+                            focusable_items,
+                            &key_poke,
+                        ) {
+                            Some(BrowserKeyAction::Commit) => commit_active_media(
+                                &key_session,
+                                &key_ids,
+                                &key_commands,
+                                layer_rows,
+                                attrs_state,
+                                &key_timeline,
+                                revision,
+                                &key_poke,
+                            ),
+                            Some(BrowserKeyAction::Delete) => delete_selected_media(
+                                &key_session,
+                                &key_ids,
+                                &key_all,
+                                &key_used,
+                                revision,
+                                &key_poke,
+                            ),
+                            Some(BrowserKeyAction::Spatial(direction, extend)) => {
+                                move_browser_spatial(
+                                    focusable_items,
+                                    key_session.clone(),
+                                    BrowserScope::Media,
+                                    key_ids.clone(),
+                                    direction,
+                                    extend,
+                                    key_poke.clone(),
+                                );
+                            }
+                            Some(BrowserKeyAction::FocusSearch) => {
+                                focus_and_select_search(key_search.read().clone());
+                            }
+                            Some(BrowserKeyAction::TypeAhead(query)) => {
+                                focus_search_with_text(key_search.read().clone(), &query);
+                            }
+                            Some(BrowserKeyAction::Unavailable) => {
+                                browser_action_unavailable(&key_session, &key_poke);
+                            }
+                            _ => {}
+                        }
+                    },
+                    div {
+                        class: "bside",
+                        onkeydown: move |evt: KeyboardEvent| {
+                            let current = rail_key_options
+                                .iter()
+                                .position(|family| *family == key_rail())
+                                .unwrap_or(0);
+                            let next = match evt.key() {
+                                Key::ArrowLeft | Key::ArrowUp => current.saturating_sub(1),
+                                Key::ArrowRight | Key::ArrowDown => {
+                                    (current + 1).min(rail_key_options.len().saturating_sub(1))
+                                }
+                                Key::Home => 0,
+                                Key::End => rail_key_options.len().saturating_sub(1),
+                                Key::Enter => current,
+                                Key::Character(ref c) if c == " " => current,
+                                _ => return,
+                            };
+                            evt.prevent_default();
+                            evt.stop_propagation();
+                            key_rail.set(rail_key_options[next]);
+                            focusable_items.focus(&rail_key_names[next]);
+                        },
                         h3 { class: "sh", "Media" }
                         SemanticButton {
                             class: "{rail_class(None)}",
+                            focus_key: Some(media_rail_key(None)),
+                            tabindex: Some(if rail().is_none() { "0".to_owned() } else { "-1".to_owned() }),
                             selected: rail().is_none(),
                             onclick: move |_| rail.set(None),
                             "All media"
@@ -970,6 +2451,8 @@ pub(super) fn browser_panel(
                         {families.iter().copied().map(|f| rsx!(
                             SemanticButton {
                                 class: "{rail_class(Some(f))}",
+                                focus_key: Some(media_rail_key(Some(f))),
+                                tabindex: Some(if rail() == Some(f) { "0".to_owned() } else { "-1".to_owned() }),
                                 selected: rail() == Some(f),
                                 onclick: move |_| rail.set(Some(f)),
                                 "{f.label()}"
@@ -993,13 +2476,32 @@ pub(super) fn browser_panel(
                                 SemanticButton { class: "chip", onclick: move |_| rail.set(None), "Show all media" }
                             }
                         } else {
-                            div { class: "{grid_class}", {asset_cards} }
+                            div {
+                                class: "{grid_class}",
+                                onpointerdown: move |evt: PointerEvent| begin_browser_marquee(
+                                    &marquee_down_session,
+                                    BrowserScope::Media,
+                                    &evt,
+                                    marquee,
+                                ),
+                                {asset_cards}
+                                {marquee_overlay(
+                                    session,
+                                    marquee(),
+                                    BrowserScope::Media,
+                                    &media_ids,
+                                    focusable_items,
+                                    marquee,
+                                    &poke,
+                                )}
+                            }
                         }
                         div { class: "bfoot",
                             span { class: "dot", style: "background:var(--accent);" }
                             "{library_line}"
                         }
                     }
+                })
                 }
             }
         }
@@ -1009,6 +2511,90 @@ pub(super) fn browser_panel(
 #[cfg(test)]
 mod placement {
     use super::*;
+
+    fn effect_ids(names: &[&str]) -> Vec<BrowserItemId> {
+        names
+            .iter()
+            .map(|name| BrowserItemId::Effect((*name).to_owned()))
+            .collect()
+    }
+
+    #[test]
+    fn first_printable_key_enters_search_and_filters_the_first_result() {
+        let ids = effect_ids(&["Blur", "Glow"]);
+        let mut selection = BrowserSelection::default();
+        selection.ensure_active_in(BrowserScope::Effects, &ids);
+        let result = browser_key(
+            &mut selection,
+            BrowserScope::Effects,
+            &ids,
+            &Key::Character("g".into()),
+            Code::KeyG,
+            Modifiers::empty(),
+            true,
+        );
+        assert_eq!(result.action, BrowserKeyAction::TypeAhead("g".into()));
+        assert_eq!(selection.query(BrowserScope::Effects), "g");
+        let shown: Vec<_> = ["Blur", "Glow"]
+            .into_iter()
+            .filter(|name| query_matches(name, selection.query(BrowserScope::Effects)))
+            .collect();
+        assert_eq!(shown, vec!["Glow"]);
+    }
+
+    #[test]
+    fn one_visible_result_is_in_the_tab_order() {
+        let ids = effect_ids(&["a", "b", "c"]);
+        let mut selection = BrowserSelection::default();
+        selection.ensure_active_in(BrowserScope::Effects, &ids);
+        let active = selection.active_in(BrowserScope::Effects, &ids);
+        assert_eq!(
+            ids.iter()
+                .filter(|id| result_tabindex(active.as_ref(), id) == "0")
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn select_mode_pointer_taps_build_and_toggle_a_multi_selection() {
+        let ids = effect_ids(&["a", "b", "c"]);
+        let mut selection = BrowserSelection::default();
+        selection.toggle_select_mode(BrowserScope::Effects);
+        selection.click(BrowserScope::Effects, &ids[0], &ids, true, false);
+        selection.click(BrowserScope::Effects, &ids[1], &ids, true, false);
+        assert_eq!(
+            selection.selected_in_order(BrowserScope::Effects, &ids),
+            vec![ids[0].clone(), ids[1].clone()]
+        );
+        selection.click(BrowserScope::Effects, &ids[0], &ids, true, false);
+        assert_eq!(
+            selection.selected_in_order(BrowserScope::Effects, &ids),
+            vec![ids[1].clone()]
+        );
+    }
+
+    #[test]
+    fn effect_batch_is_atomic_and_does_not_duplicate_plugin_ids() {
+        let layer = LayerId(1);
+        let mut doc = Document::new();
+        doc.apply(Intent::AddLayer(layer)).unwrap();
+        let chosen = vec!["blur".to_owned(), "blur".to_owned(), "glow".to_owned()];
+        let intents = effect_batch_intents(&doc, layer, &chosen).unwrap();
+        doc.apply_all(intents).unwrap();
+        assert!(effect_batch_intents(&doc, layer, &chosen)
+            .unwrap()
+            .is_empty());
+        assert_eq!(
+            doc.view()
+                .effects(layer)
+                .unwrap()
+                .into_iter()
+                .map(|effect| effect.plugin_id)
+                .collect::<Vec<_>>(),
+            vec!["blur", "glow"]
+        );
+    }
 
     /// 位置を指定せずに生まれた層は、**枠の真ん中に立つ**。
     ///

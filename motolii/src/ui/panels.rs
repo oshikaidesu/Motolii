@@ -1,10 +1,10 @@
-use crate::ui::browser::browser_panel;
+use crate::ui::browser::{browser_panel, BrowserMarquee};
 use crate::ui::context_menu::MenuRequest;
 use crate::ui::dock::Panel;
 use crate::ui::fixture;
 use crate::ui::inspector::{inspector_panel, ChoiceId};
 use crate::ui::mount::SurfaceView;
-use crate::ui::semantic_menu::SemanticButton;
+use crate::ui::semantic_menu::{FocusableItems, SemanticButton};
 use crate::ui::session::Session;
 use crate::ui::stage_widget::{StageBindings, StageState};
 use crate::ui::timeline_shell::timeline_shell;
@@ -22,10 +22,23 @@ pub(super) fn BrowserPanel(
     revision: Signal<u32>,
 ) -> Element {
     let rail = use_signal(|| Option::<fixture::AssetFamily>::None);
+    let search_node = use_signal(|| None::<std::rc::Rc<MountedData>>);
+    let mut marquee = use_signal(|| None::<BrowserMarquee>);
+    let cancel_seen = use_hook(|| std::rc::Rc::new(std::cell::Cell::new(0u32)));
+    let mut seen = cancel_seen.get();
+    if session.gesture.cancelled(&mut seen) {
+        cancel_seen.set(seen);
+        marquee.set(None);
+    }
+    if !matches!(panel, Panel::Media | Panel::Effects) && marquee.peek().is_some() {
+        session.gesture.end();
+        marquee.set(None);
+    }
+    let _focusable_items = use_context_provider(FocusableItems::new);
+    let poke = consume_context::<crate::ui::host::Host>().poker();
     browser_panel(
         &session,
         session.doc.clone(),
-        session.clock.clone(),
         layer_rows,
         attrs_state,
         session.timeline_tx.clone(),
@@ -34,6 +47,9 @@ pub(super) fn BrowserPanel(
         echo,
         panel,
         rail,
+        poke,
+        search_node,
+        marquee,
     )
 }
 
@@ -81,6 +97,7 @@ pub(super) fn StagePanel(
             session.rings.clone(),
             session.frame_dim.clone(),
             session.gesture.clone(),
+            session.surface_capture.clone(),
             session.output_only.clone(),
             session.view_request.clone(),
         )
@@ -181,6 +198,7 @@ pub(super) fn TimelinePanel(
             .with_document(session.doc.clone(), fixture::canvas_rows_from_doc)
             .with_selection(session.selection.clone())
             .with_gesture(session.gesture.clone())
+            .with_capture(session.surface_capture.clone())
             .with_key_mirror(session.selected_keys.clone())
             .with_notice(session.project_notice.clone())
     });

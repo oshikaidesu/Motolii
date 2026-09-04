@@ -251,7 +251,13 @@ impl Gui {
     fn click(&mut self, x: f32, y: f32) {
         self.h.move_mouse_to(x, y);
         crate::ui::keys::commit_field_outside(&mut self.h.doc, x, y);
-        self.h.click_at(x, y);
+        // Native down/up are separate event-loop turns. Let Dioxus mount capture
+        // overlays and apply queued focus between them instead of collapsing a
+        // click into one synthetic document borrow.
+        self.h.mouse_down_at(x, y);
+        crate::ui::semantic_menu::flush_dom_work();
+        self.h.pump();
+        self.h.mouse_up_at(x, y);
         self.settle();
     }
 
@@ -266,6 +272,19 @@ impl Gui {
     fn settle(&mut self) {
         for _ in 0..4 {
             self.h.pump();
+            crate::ui::semantic_menu::flush_dom_work();
+        }
+        self.h.pump();
+        if self.session.field().is_some()
+            && self
+                .h
+                .base()
+                .query_selector(crate::ui::keys::FIELD)
+                .ok()
+                .flatten()
+                .is_none()
+        {
+            self.session.close_field();
         }
         crate::ui::keys::select_new_field(&mut self.h.doc, &mut self.seen_field);
     }
@@ -274,7 +293,11 @@ impl Gui {
     fn key(&mut self, key: keyboard_types::Key, mods: keyboard_types::Modifiers) {
         crate::ui::keys::select_new_field(&mut self.h.doc, &mut self.seen_field);
         crate::ui::keys::aim_keystrokes(&mut self.h.doc);
-        if crate::ui::keys::step_focus_back(&mut self.h.doc, &key, mods.contains(keyboard_types::Modifiers::SHIFT)) {
+        if crate::ui::keys::step_focus_back(
+            &mut self.h.doc,
+            &key,
+            mods.contains(keyboard_types::Modifiers::SHIFT),
+        ) {
             self.settle();
             return;
         }
@@ -286,9 +309,28 @@ impl Gui {
 
     /// 焦点を鍵で置く(Tab の代わり)。
     fn focus(&mut self, selector: &str) {
-        let node = self.h.base().query_selector(selector).ok().flatten().expect("focus target");
+        let node = self
+            .h
+            .base()
+            .query_selector(selector)
+            .ok()
+            .flatten()
+            .expect("focus target");
         self.h.base_mut().set_focus_to(node);
         // 窓は次の frame で style を解決してから鍵を受ける。同じ順にする(解決前の合成 click は落ちる)。
+        self.settle();
+    }
+
+    fn reveal(&mut self, selector: &str, index: usize) {
+        let nodes = self
+            .h
+            .base()
+            .query_selector_all(selector)
+            .unwrap_or_default();
+        let node = *nodes
+            .get(index)
+            .unwrap_or_else(|| panic!("`{selector}` の {index} 番が居ない"));
+        crate::ui::semantic_menu::reveal_node(&mut self.h.base_mut(), node);
         self.settle();
     }
 
@@ -318,22 +360,28 @@ impl Gui {
 
     fn lose_focus(&mut self) {
         crate::ui::keys::commit_field(&mut self.h.doc);
-        self.host.focus_lost();
+        self.host.focus_lost(crate::ui::host::Host::HEADLESS);
         self.settle();
     }
 
     fn enter_files(&mut self, paths: &[std::path::PathBuf]) {
-        self.host.focus_lost();
+        self.host.focus_lost(crate::ui::host::Host::HEADLESS);
         self.session.file_drop.enter(paths);
         self.host.wake_all();
         self.settle();
     }
 
     /// 窓へ落とす。host の `DragDropped` と同じ順: 落とし先で役目を決め、admit して全窓を起こす。
-    fn drop_files(&mut self, paths: &[std::path::PathBuf], x: f32, y: f32) -> crate::ui::fixture::ImportSummary {
+    fn drop_files(
+        &mut self,
+        paths: &[std::path::PathBuf],
+        x: f32,
+        y: f32,
+    ) -> crate::ui::fixture::ImportSummary {
         self.session.file_drop.leave();
         let role = crate::ui::keys::drop_role_at(&self.h.doc, x, y);
-        let summary = crate::ui::fixture::admit_paths(&mut self.session.doc.lock().unwrap(), paths, role);
+        let summary =
+            crate::ui::fixture::admit_paths(&mut self.session.doc.lock().unwrap(), paths, role);
         self.host.wake_all();
         self.settle();
         summary
@@ -349,9 +397,14 @@ impl Gui {
     fn click_super(&mut self, x: f32, y: f32) {
         let mut down = self.pointer_raw(x, y, MouseEventButtons::Primary);
         down.mods = keyboard_types::Modifiers::SUPER;
-        let mut up = self.pointer_raw(x, y, MouseEventButtons::None);
+        // Pinned Blitz's harness/native mouse path keeps Primary in `buttons`
+        // on the terminal sample; using None suppresses its synthesized click.
+        let mut up = self.pointer_raw(x, y, MouseEventButtons::Primary);
         up.mods = keyboard_types::Modifiers::SUPER;
         self.h.dispatch(UiEvent::PointerDown(down));
+        self.h.pump();
+        crate::ui::semantic_menu::flush_dom_work();
+        self.h.pump();
         self.h.dispatch(UiEvent::PointerUp(up));
         self.settle();
     }
@@ -454,13 +507,24 @@ fn a_note_is_typed_in_a_textarea_and_committed_by_clicking_outside() {
             duration: RationalTime::ZERO,
             body: "x".into(),
         };
-        gui.session.doc.lock().unwrap().apply(Intent::SetMarkers { markers: vec![marker] }).unwrap();
+        gui.session
+            .doc
+            .lock()
+            .unwrap()
+            .apply(Intent::SetMarkers {
+                markers: vec![marker],
+            })
+            .unwrap();
     }
     let text = gui.center_of_text(".desk-foot .chip", "Text");
     gui.click(text.0, text.1);
     let note = gui.center_of(".desk-note .mbody", 0);
     gui.click(note.0, note.1);
-    assert_eq!(gui.count("textarea.mbody"), 1, "the note did not open as a textarea");
+    assert_eq!(
+        gui.count("textarea.mbody"),
+        1,
+        "the note did not open as a textarea"
+    );
 
     for ch in ["L", "a"] {
         gui.key(
@@ -468,14 +532,28 @@ fn a_note_is_typed_in_a_textarea_and_committed_by_clicking_outside() {
             keyboard_types::Modifiers::empty(),
         );
     }
-    gui.key(keyboard_types::Key::Enter, keyboard_types::Modifiers::empty());
-    assert_eq!(gui.count("textarea.mbody"), 1, "Enter closed a multi-line note");
+    gui.key(
+        keyboard_types::Key::Enter,
+        keyboard_types::Modifiers::empty(),
+    );
+    assert_eq!(
+        gui.count("textarea.mbody"),
+        1,
+        "Enter closed a multi-line note"
+    );
     assert!(gui.session.field().is_some());
 
     let stage = gui.center_of("#stage", 0);
     gui.click(stage.0, stage.1);
-    assert_eq!(gui.count("textarea"), 0, "clicking outside left the note open");
-    assert!(gui.session.field().is_none(), "the field owner still holds a closed field");
+    assert_eq!(
+        gui.count("textarea"),
+        0,
+        "clicking outside left the note open"
+    );
+    assert!(
+        gui.session.field().is_none(),
+        "the field owner still holds a closed field"
+    );
     let markers = gui.session.doc.lock().unwrap().view().markers().unwrap();
     assert!(
         markers.iter().any(|m| m.body.starts_with("xLa")),
@@ -499,9 +577,14 @@ fn picking_on_the_colors_wheel_writes_the_focused_color_back() {
         }
     }
     assert!(found, "no layer in the fixture shows a COLOR row");
-    let (x, y) = gui.center_of(".prow.color", 0);
+    gui.reveal(".prow.color .glyph", 0);
+    let (x, y) = gui.center_of(".prow.color .glyph", 0);
     gui.click(x, y);
-    assert_eq!(gui.count(".desk-drawer"), 0, "the color focus opened a desk drawer");
+    assert_eq!(
+        gui.count(".desk-drawer"),
+        0,
+        "the color focus opened a desk drawer"
+    );
     let colors = gui.center_of("#dock-tab-Colors", 0);
     gui.click(colors.0, colors.1);
     assert_eq!(gui.count(".color-pick"), 1, "the Colors panel has no wheel");
@@ -521,7 +604,10 @@ fn picking_on_the_colors_wheel_writes_the_focused_color_back() {
     };
     let after = crate::ui::color::read_color(&gui.session.doc, &slot).unwrap();
     let (_, s, v) = crate::ui::color::rgb_to_hsv([after[0], after[1], after[2]]);
-    assert!(s > 0.9 && v > 0.9, "the pick did not reach the document: {after:?}");
+    assert!(
+        s > 0.9 && v > 0.9,
+        "the pick did not reach the document: {after:?}"
+    );
 }
 
 /// 参考画像は素材と同じ口で入るが、役目は落とした場所で決まる。机なら参考、他は素材。
@@ -544,7 +630,9 @@ fn a_file_dropped_on_the_desk_is_a_reference_and_stays_off_the_browser() {
 
     let dir = tempfile::tempdir().unwrap();
     let png = dir.path().join("ref.png");
-    image::RgbaImage::from_pixel(4, 4, image::Rgba([200, 40, 40, 255])).save(&png).unwrap();
+    image::RgbaImage::from_pixel(4, 4, image::Rgba([200, 40, 40, 255]))
+        .save(&png)
+        .unwrap();
     let before = gui.count(".tcard");
     let summary = crate::ui::fixture::admit_paths(
         &mut gui.session.doc.lock().unwrap(),
@@ -558,12 +646,24 @@ fn a_file_dropped_on_the_desk_is_a_reference_and_stays_off_the_browser() {
         gui.click(at.0, at.1);
     };
     chip(&mut gui);
-    assert_eq!(gui.count(".desk-refs .ref"), 1, "the reference image is not on the desk");
-    assert_eq!(gui.count(".tcard"), before, "a reference image leaked into the browser");
+    assert_eq!(
+        gui.count(".desk-refs .ref"),
+        1,
+        "the reference image is not on the desk"
+    );
+    assert_eq!(
+        gui.count(".tcard"),
+        before,
+        "a reference image leaked into the browser"
+    );
 
     let x = gui.center_of(".desk-refs .refx", 0);
     gui.click(x.0, x.1);
-    assert_eq!(gui.count(".desk-refs .ref"), 0, "the reference image did not leave the desk");
+    assert_eq!(
+        gui.count(".desk-refs .ref"),
+        0,
+        "the reference image did not leave the desk"
+    );
 
     // 画でない物を机に落としても消えない — 素材として棚へ行く。
     let wav = dir.path().join("beat.wav");
@@ -576,7 +676,11 @@ fn a_file_dropped_on_the_desk_is_a_reference_and_stays_off_the_browser() {
     assert_eq!(summary.admitted, 1, "{}", summary.notice());
     chip(&mut gui);
     assert_eq!(gui.count(".desk-refs .ref"), 0);
-    assert_eq!(gui.count(".tcard"), before + 1, "a non-image dropped on the desk vanished");
+    assert_eq!(
+        gui.count(".tcard"),
+        before + 1,
+        "a non-image dropped on the desk vanished"
+    );
 }
 
 #[test]
@@ -718,14 +822,11 @@ fn click_only_chrome_uses_real_buttons_and_real_disabled_state() {
 
     let effects = gui.center_of("#dock-tab-Effects", 0);
     gui.click(effects.0, effects.1);
-    let disabled = gui.count("button.semantic-button.tcard.disabled");
-    assert!(
-        disabled > 0,
-        "effect cards did not expose disabled button semantics"
-    );
+    assert!(gui.count("button.semantic-button.tcard") > 0);
     assert_eq!(
-        gui.count("button.semantic-button.tcard.disabled[disabled]"),
-        disabled
+        gui.count("button.semantic-button.tcard[disabled]"),
+        0,
+        "effect candidates must stay selectable so Enter can explain the missing target"
     );
 
     let settings = gui.center_of("#menu-settings", 0);
@@ -760,6 +861,7 @@ fn the_mask_card_adds_one_mask_to_the_selected_layer() {
     gui.settle();
     let mask = gui.center_of(".tcard", 3);
     gui.click(mask.0, mask.1);
+    gui.click(mask.0, mask.1);
     gui.settle();
 
     assert_eq!(
@@ -785,11 +887,13 @@ fn edited_status_tracks_the_saved_document_revision() {
     gui.click(create.0, create.1);
     let text = gui.center_of(".tcard", 0);
     gui.click(text.0, text.1);
+    gui.click(text.0, text.1);
     gui.settle();
     assert!(gui.texts("#status").join(" ").contains("Edited"));
 
     let rev = gui.session.doc.lock().unwrap().revision();
-    gui.session.mark_saved(std::path::PathBuf::from("song.rrd"), rev);
+    gui.session
+        .mark_saved(std::path::PathBuf::from("song.rrd"), rev);
     gui.host.wake_all();
     gui.settle();
     assert!(!gui.texts("#status").join(" ").contains("Edited"));
@@ -801,7 +905,10 @@ fn file_drop_hover_and_cancel_are_visible_in_the_product_tree() {
     gui.enter_files(&["clip.mp4".into(), "still.png".into(), "notes.xyz".into()]);
     assert_eq!(gui.count(".file-drop-overlay"), 1);
     // 受け付けられる物だけを数える(notes.xyz は入らない)。
-    assert_eq!(gui.texts(".file-drop-card .line"), vec!["Drop to import 2 of 3 files"]);
+    assert_eq!(
+        gui.texts(".file-drop-card .line"),
+        vec!["Drop to import 2 of 3 files"]
+    );
 
     gui.leave_files();
     assert_eq!(gui.count(".file-drop-overlay"), 0);
@@ -834,7 +941,11 @@ fn a_held_tab_keeps_the_rest_of_the_window_inert() {
     gui.release(file.0, file.1);
     gui.settle();
 
-    assert_eq!(gui.count("#menu-file-list"), 0, "a release over chrome opened a menu");
+    assert_eq!(
+        gui.count("#menu-file-list"),
+        0,
+        "a release over chrome opened a menu"
+    );
     assert_eq!(gui.count(".dock-ghost"), 0);
     assert_eq!(gui.count(".dropmap"), 0);
 }
@@ -1086,8 +1197,16 @@ proptest::proptest! {
         gui.settle();
         let create = gui.center_of("#dock-tab-Create", 0);
         gui.click(create.0, create.1);
+        gui.session
+            .browser_selection
+            .lock()
+            .unwrap()
+            .set_query(crate::ui::browser_selection::BrowserScope::Create, String::new());
+        gui.host.wake_all();
+        gui.settle();
         let before_layers = gui.session.doc.lock().unwrap().view().layers().len();
         let rectangle = gui.center_of(".tcard", 1);
+        gui.click(rectangle.0, rectangle.1);
         gui.click(rectangle.0, rectangle.1);
         let after_layers = gui.session.doc.lock().unwrap().view().layers().len();
         proptest::prop_assert_eq!(after_layers, before_layers + 1, "嵐後のCreateが書けない: {:?}", storm);
@@ -1118,13 +1237,28 @@ fn rolling_the_wheel_up_moves_the_view_closer() {
     let pan_before = gui.session.view_camera.lock().unwrap().pan;
     gui.h.wheel_at(x, y, 0.0, 40.0);
     gui.settle();
-    assert_eq!(gui_zoom(&gui), before, "a plain wheel must scroll, not zoom");
-    assert_ne!(gui.session.view_camera.lock().unwrap().pan, pan_before, "a plain wheel did not scroll");
+    assert_eq!(
+        gui_zoom(&gui),
+        before,
+        "a plain wheel must scroll, not zoom"
+    );
+    assert_ne!(
+        gui.session.view_camera.lock().unwrap().pan,
+        pan_before,
+        "a plain wheel did not scroll"
+    );
 
     // ⌘ を添えると寄る。上へ回すと近づく。
     let wheel = blitz_traits::events::BlitzWheelEvent {
         delta: blitz_traits::events::BlitzWheelDelta::Pixels(0.0, 40.0),
-        coords: PointerCoords { page_x: x, page_y: y, screen_x: x, screen_y: y, client_x: x, client_y: y },
+        coords: PointerCoords {
+            page_x: x,
+            page_y: y,
+            screen_x: x,
+            screen_y: y,
+            client_x: x,
+            client_y: y,
+        },
         buttons: MouseEventButtons::empty(),
         mods: keyboard_types::Modifiers::SUPER,
         element: Default::default(),
@@ -1148,11 +1282,19 @@ fn dragging_a_tab_out_of_the_window_detaches_on_release() {
     gui.press(x, y);
     gui.motion(x, y + 40.0);
     gui.motion(-80.0, -80.0);
-    assert_eq!(gui.count(".ptab"), before, "leaving detached before release");
+    assert_eq!(
+        gui.count(".ptab"),
+        before,
+        "leaving detached before release"
+    );
     gui.release(-80.0, -80.0);
     gui.settle();
 
-    assert_eq!(gui.count(".ptab"), before - 1, "outside release did not detach");
+    assert_eq!(
+        gui.count(".ptab"),
+        before - 1,
+        "outside release did not detach"
+    );
     assert_eq!(gui.count("#dock-tab-Inspector"), 0);
 }
 
@@ -1289,7 +1431,11 @@ fn every_panel_can_recreate_the_bottom_after_timeline_is_closed() {
         gui.click(view.0, view.1);
         let timeline = gui.center_of_text("#menu-view-list .vitem", "✓Timeline");
         gui.click(timeline.0, timeline.1);
-        assert_eq!(gui.count(".ptabs"), zones - 1, "Timeline row did not collapse");
+        assert_eq!(
+            gui.count(".ptabs"),
+            zones - 1,
+            "Timeline row did not collapse"
+        );
 
         let tab = gui.center_of(&format!("#dock-tab-{moving}"), 0);
         let source_zone = gui
@@ -1312,8 +1458,15 @@ fn every_panel_can_recreate_the_bottom_after_timeline_is_closed() {
             if alone { zones - 1 } else { zones },
             "{moving} did not recreate the bottom"
         );
-        assert_eq!(gui.count(".ptab"), tabs - 1, "{moving} made another panel disappear");
-        assert!(gui.drawing_panels() > 0, "{moving} removed all rendered content");
+        assert_eq!(
+            gui.count(".ptab"),
+            tabs - 1,
+            "{moving} made another panel disappear"
+        );
+        assert!(
+            gui.drawing_panels() > 0,
+            "{moving} removed all rendered content"
+        );
         for panel in crate::ui::dock::Panel::all() {
             assert_eq!(
                 gui.count(&format!("#dock-tab-{panel}")),
@@ -1432,4 +1585,3 @@ fn losing_window_focus_cancels_splitter_drag() {
     let after = gui.size_of_nth(".tslot", 1).0;
     assert_eq!(after, before, "focus loss left a splitter drag active");
 }
-

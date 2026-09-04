@@ -13,8 +13,14 @@ pub(crate) const FIELD: &str = "input.field, textarea.field";
 /// (書き置きは Enter が改行なので、確定は Cmd 付き)。
 /// 窓に欄が在る間は打鍵が全部そこへ行く(`aim_keystrokes`)ので、閉じ損ねは鍵の全喪失になる。
 pub(crate) fn commit_field_outside(doc: &mut DioxusDocument, x: f32, y: f32) {
-    let Some(field) = doc.inner().query_selector(FIELD).ok().flatten() else { return };
-    if doc.inner().hit(x, y).is_some_and(|hit| hit.node_id == field) {
+    let Some(field) = doc.inner().query_selector(FIELD).ok().flatten() else {
+        return;
+    };
+    if doc
+        .inner()
+        .hit(x, y)
+        .is_some_and(|hit| hit.node_id == field)
+    {
         return;
     }
     commit_field(doc);
@@ -55,7 +61,11 @@ pub(crate) fn select_new_field(doc: &mut DioxusDocument, seen: &mut Option<blitz
     if multiline {
         send_chord(doc, keyboard_types::Key::End, keyboard_types::Code::End);
     } else {
-        send_chord(doc, keyboard_types::Key::Character("a".into()), keyboard_types::Code::KeyA);
+        send_chord(
+            doc,
+            keyboard_types::Key::Character("a".into()),
+            keyboard_types::Code::KeyA,
+        );
     }
 }
 
@@ -99,23 +109,34 @@ thread_local! {
     static LAST_CONTROL: std::cell::Cell<Option<(Option<blitz_dom::NodeId>, blitz_dom::NodeId, usize)>> = const { std::cell::Cell::new(None) };
 }
 
-fn place_of(doc: &blitz_dom::BaseDocument, node: blitz_dom::NodeId) -> Option<(blitz_dom::NodeId, usize)> {
+fn place_of(
+    doc: &blitz_dom::BaseDocument,
+    node: blitz_dom::NodeId,
+) -> Option<(blitz_dom::NodeId, usize)> {
     let parent = doc.get_node(node)?.parent?;
-    let index = doc.get_node(parent)?.children.iter().position(|c| *c == node)?;
+    let index = doc
+        .get_node(parent)?
+        .children
+        .iter()
+        .position(|c| *c == node)?;
     Some((parent, index))
 }
 
-fn node_at(doc: &blitz_dom::BaseDocument, place: (blitz_dom::NodeId, usize)) -> Option<blitz_dom::NodeId> {
+fn node_at(
+    doc: &blitz_dom::BaseDocument,
+    place: (blitz_dom::NodeId, usize),
+) -> Option<blitz_dom::NodeId> {
     doc.get_node(place.0)?.children.get(place.1).copied()
 }
 
-/// ⇧Tab は前の焦点へ(上流の Tab は前方だけ)。扱ったら true。
-pub(crate) fn step_focus_back(doc: &mut DioxusDocument, key: &keyboard_types::Key, shift: bool) -> bool {
-    if *key != keyboard_types::Key::Tab || !shift || crate::ui::keymap::is_typing() {
-        return false;
-    }
-    doc.inner_mut().focus_prev_node();
-    true
+/// 互換用の入口。固定した Blitz は Tab / ⇧Tab を同じ document-order 走査で扱うため、
+/// ここでは奪わず native document へ流す。
+pub(crate) fn step_focus_back(
+    _doc: &mut DioxusDocument,
+    _key: &keyboard_types::Key,
+    _shift: bool,
+) -> bool {
+    false
 }
 
 /// 打鍵をどこへ配るかを決める。**窓の側と試験の側で同じ規則を通す** —— 分けると、
@@ -125,9 +146,13 @@ pub(crate) fn aim_keystrokes(doc: &mut DioxusDocument) {
     // 生の input(枠の設定)に焦点が在る間も「打っている」— p/s/r/t/a の素の鍵を発火させない。
     let raw_input = {
         let inner = doc.inner();
-        inner.get_focussed_node_id().and_then(|f| inner.get_node(f)).is_some_and(|n| {
-            n.element_data().is_some_and(|e| matches!(e.name.local.as_ref(), "input" | "textarea"))
-        })
+        inner
+            .get_focussed_node_id()
+            .and_then(|f| inner.get_node(f))
+            .is_some_and(|n| {
+                n.element_data()
+                    .is_some_and(|e| matches!(e.name.local.as_ref(), "input" | "textarea"))
+            })
     };
     crate::ui::keymap::set_typing(field.is_some() || raw_input);
     let (target, on_control) = {
@@ -158,17 +183,28 @@ pub(crate) fn aim_keystrokes(doc: &mut DioxusDocument) {
                     && root.is_some_and(|r| descends_from(&inner, *n, r))
                     && inner.get_node(*n).is_some_and(|x| {
                         x.is_focussable()
-                            || x.element_data().is_some_and(|e| e.attr(blitz_dom::local_name!("tabindex")).is_some())
+                            || x.element_data().is_some_and(|e| {
+                                e.attr(blitz_dom::local_name!("tabindex")).is_some()
+                            })
                     })
             });
         if on_control {
-            LAST_CONTROL.with(|c| c.set(focused.and_then(|f| place_of(&inner, f)).map(|(p, i)| (root, p, i))));
+            LAST_CONTROL.with(|c| {
+                c.set(
+                    focused
+                        .and_then(|f| place_of(&inner, f))
+                        .map(|(p, i)| (root, p, i)),
+                )
+            });
         }
         let (target, on_control) = if let Some(back) = remembered {
             LAST_CONTROL.with(|c| c.set(None));
             (Some(back), true)
         } else {
-            (if on_control { focused } else { field.or(root) }, on_control)
+            (
+                if on_control { focused } else { field.or(root) },
+                on_control,
+            )
         };
         (target, on_control)
     };
@@ -180,7 +216,11 @@ pub(crate) fn aim_keystrokes(doc: &mut DioxusDocument) {
     }
 }
 
-fn descends_from(doc: &blitz_dom::BaseDocument, node: blitz_dom::NodeId, ancestor: blitz_dom::NodeId) -> bool {
+fn descends_from(
+    doc: &blitz_dom::BaseDocument,
+    node: blitz_dom::NodeId,
+    ancestor: blitz_dom::NodeId,
+) -> bool {
     let mut cur = Some(node);
     while let Some(n) = cur {
         if n == ancestor {
@@ -192,12 +232,31 @@ fn descends_from(doc: &blitz_dom::BaseDocument, node: blitz_dom::NodeId, ancesto
 }
 
 /// 焦点のある button を Enter / Space で押す(blitz は鍵で button を押さない)。押したら true。
-pub(crate) fn activate_focused_control(doc: &mut DioxusDocument, key: &keyboard_types::Key) -> bool {
-    let pressing = matches!(key, keyboard_types::Key::Enter) || matches!(key, keyboard_types::Key::Character(c) if c == " ");
+pub(crate) fn activate_focused_control(
+    doc: &mut DioxusDocument,
+    key: &keyboard_types::Key,
+) -> bool {
+    let pressing = matches!(key, keyboard_types::Key::Enter)
+        || matches!(key, keyboard_types::Key::Character(c) if c == " ");
     if !pressing || !crate::ui::keymap::is_on_control() {
         return false;
     }
-    let Some(focused) = doc.inner().get_focussed_node_id() else { return false };
+    let Some(focused) = doc.inner().get_focussed_node_id() else {
+        return false;
+    };
+    let browser_owns_activation = doc
+        .inner()
+        .get_node(focused)
+        .and_then(|node| node.element_data())
+        .and_then(|element| element.attr(blitz_dom::local_name!("class")))
+        .is_some_and(|class| {
+            class
+                .split_ascii_whitespace()
+                .any(|name| name == "browser-focusable")
+        });
+    if browser_owns_activation {
+        return false;
+    }
     press_node(doc, focused)
 }
 
@@ -206,7 +265,9 @@ pub(crate) fn activate_focused_control(doc: &mut DioxusDocument, key: &keyboard_
 pub(crate) fn press_node(doc: &mut DioxusDocument, focused: blitz_dom::NodeId) -> bool {
     let center = {
         let inner = doc.inner();
-        let Some(node) = inner.get_node(focused) else { return false };
+        let Some(node) = inner.get_node(focused) else {
+            return false;
+        };
         if node.element_data().map(|e| e.name.local.as_ref()) != Some("button") {
             return false;
         }
@@ -234,14 +295,17 @@ pub(crate) fn press_node(doc: &mut DioxusDocument, focused: blitz_dom::NodeId) -
         active_pointers: std::sync::Arc::default(),
     };
     // 上流の harness と同じ形(up でも buttons は Primary)。それ以外だと click にならない。
-    doc.handle_ui_event(blitz_traits::events::UiEvent::PointerDown(event(blitz_traits::events::MouseEventButtons::Primary)));
-    doc.handle_ui_event(blitz_traits::events::UiEvent::PointerUp(event(blitz_traits::events::MouseEventButtons::Primary)));
+    doc.handle_ui_event(blitz_traits::events::UiEvent::PointerDown(event(
+        blitz_traits::events::MouseEventButtons::Primary,
+    )));
+    doc.handle_ui_event(blitz_traits::events::UiEvent::PointerUp(event(
+        blitz_traits::events::MouseEventButtons::Primary,
+    )));
     if doc.inner().get_node(focused).is_some() {
         doc.inner_mut().set_focus_to(focused);
     }
     true
 }
-
 
 /// AccessKit の要求を Document へ。Click は click 1 対、Focus/Blur は焦点。木の id は blitz の node id そのもの。
 pub(crate) fn act(doc: &mut DioxusDocument, req: &accesskit::ActionRequest) {

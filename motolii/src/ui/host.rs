@@ -124,9 +124,14 @@ impl Host {
         id
     }
 
-    pub(crate) fn focus_lost(&self) {
-        let callbacks = self.on_focus_lost.borrow().clone();
-        for (_, _, callback) in callbacks {
+    pub(crate) fn focus_lost(&self, window: WindowId) {
+        let callback = self
+            .on_focus_lost
+            .borrow()
+            .iter()
+            .find(|(owner, _, _)| *owner == window)
+            .map(|(_, _, callback)| callback.clone());
+        if let Some(callback) = callback {
             callback();
         }
     }
@@ -968,6 +973,13 @@ impl Windows {
             &event,
             WindowEvent::SurfaceResized(_) | WindowEvent::ScaleFactorChanged { .. }
         );
+        let mouse_left_window = matches!(
+            &event,
+            WindowEvent::PointerLeft {
+                kind: dioxus_native::winit::event::PointerKind::Mouse,
+                ..
+            }
+        );
         if self.session.quit.load(std::sync::atomic::Ordering::Relaxed) {
             // ⌘Q でも枠を憶える(閉じるボタンだけだった)。主窓 = 別窓に登録されていない窓。
             if let Some(view) = self
@@ -1062,8 +1074,11 @@ impl Windows {
             }
         }
         if let WindowEvent::PointerMoved { position, .. } = &event {
-            self.cursor
-                .insert(window_id, (position.x as f32, position.y as f32));
+            if let Some(view) = self.inner.windows.get(&window_id) {
+                let position = view.pointer_coords(*position);
+                self.cursor
+                    .insert(window_id, (position.client_x, position.client_y));
+            }
         }
         if let Some(position) = primary_mouse_release(&event) {
             if let Some(view) = self.inner.windows.get(&window_id) {
@@ -1114,7 +1129,7 @@ impl Windows {
             return;
         }
         if let WindowEvent::DragEntered { paths, .. } = &event {
-            self.host.focus_lost();
+            self.host.focus_lost(window_id);
             self.session.file_drop.enter(paths);
             self.host.wake_all();
         }
@@ -1206,11 +1221,25 @@ impl Windows {
             if let Some(view) = self.inner.windows.get_mut(&window_id) {
                 commit_field(view.downcast_doc_mut::<DioxusDocument>());
             }
-            self.host.focus_lost();
+            self.host.focus_lost(window_id);
         }
         self.inner.window_event(event_loop, window_id, event);
+        if crate::ui::semantic_menu::flush_dom_work() > 0 {
+            if let Some(view) = self.inner.windows.get(&window_id) {
+                view.window.request_redraw();
+            }
+        }
+        self.reconcile_field_surface();
         if browser_layout_changed {
             self.host.wake_all();
+        }
+        if mouse_left_window {
+            if let Some(view) = self.inner.windows.get_mut(&window_id) {
+                view.downcast_doc_mut::<DioxusDocument>()
+                    .inner_mut()
+                    .clear_hover();
+                view.window.request_redraw();
+            }
         }
         if let Some(view) = self.inner.windows.get_mut(&window_id) {
             if restore_cursor {
@@ -1227,6 +1256,23 @@ impl Windows {
         self.reflected.remove(&window);
         self.host.mounts.remove_window(window);
         self.host.retire_window_callbacks(window)
+    }
+
+    fn reconcile_field_surface(&mut self) {
+        if self.session.field().is_none() {
+            return;
+        }
+        let present = self.inner.windows.values_mut().any(|view| {
+            view.downcast_doc_mut::<DioxusDocument>()
+                .inner()
+                .query_selector(FIELD)
+                .ok()
+                .flatten()
+                .is_some()
+        });
+        if !present {
+            self.session.close_field();
+        }
     }
 
     fn focus_main_after_child_close(&self) {
@@ -1381,6 +1427,12 @@ impl Windows {
         }
         self.serve_asks();
         self.realise_pending(event_loop);
+        if crate::ui::semantic_menu::flush_dom_work() > 0 {
+            for view in self.inner.windows.values() {
+                view.window.request_redraw();
+            }
+        }
+        self.reconcile_field_surface();
     }
 }
 
@@ -1525,7 +1577,7 @@ fn closing_one_window_retires_only_its_callbacks() {
     host.listen(move || live_calls.borrow_mut().push("main-wake"));
     assert_eq!(host.retire_window_callbacks(child), 2);
     assert_eq!(host.retire_window_callbacks(child), 0);
-    host.focus_lost();
+    host.focus_lost(main);
     host.primary_pointer_released(child, 0.0, 0.0, false);
     host.primary_pointer_released(main, 0.0, 0.0, false);
     host.wake_all();

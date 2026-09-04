@@ -929,6 +929,266 @@ mod composed_edit_contracts {
     }
 }
 
+mod interaction_terminals {
+    use crate::doc::store::*;
+    use crate::ui::session::{GestureSurface, Selection, SurfaceCapture};
+    use crate::ui::timeline_widget::*;
+    use blitz_traits::events::{
+        BlitzPointerEvent, BlitzPointerId, MouseEventButton, MouseEventButtons, Point,
+        PointerCoords, UiEvent,
+    };
+    use std::rc::Rc;
+    use std::sync::{Arc, Mutex};
+
+    fn extract(_: &Document) -> Vec<CanvasRow> {
+        Vec::new()
+    }
+
+    fn widget(
+        locked: bool,
+    ) -> (
+        TimelineWidget,
+        Arc<Mutex<Document>>,
+        GestureSurface,
+        Arc<Mutex<Vec<crate::ui::session::KeySel>>>,
+        LayerId,
+    ) {
+        let mut doc = Document::new();
+        doc.apply(Intent::SetComposition(Composition {
+            width: 640,
+            height: 480,
+            fps: Fps::try_new(30, 1).unwrap(),
+            duration_frames: 300,
+            background: [0.0, 0.0, 0.0, 1.0],
+        }))
+        .unwrap();
+        let layer = LayerId(1);
+        doc.apply_all([
+            Intent::AddLayer(layer),
+            Intent::SetMeta {
+                layer,
+                meta: LayerMeta {
+                    source: LayerSource::Shape,
+                    order: 0,
+                    timing: LayerTiming {
+                        duration: 300,
+                        ..Default::default()
+                    },
+                },
+            },
+            Intent::SetAttrs {
+                layer,
+                patch: LayerAttrsPatch {
+                    locked: Some(locked),
+                    ..Default::default()
+                },
+            },
+        ])
+        .unwrap();
+        let doc = Arc::new(Mutex::new(doc));
+        let row = CanvasRow {
+            is_group: false,
+            keys: vec![1.0],
+            span: Some((0.0, 10.0)),
+            agg: Vec::new(),
+            layer: Some(layer),
+            prop: None,
+            color: [0, 0, 0],
+        };
+        let (_tx, rx) = std::sync::mpsc::channel();
+        let gesture = GestureSurface::default();
+        let keys = Arc::new(Mutex::new(Vec::new()));
+        let selection = Selection::default();
+        selection.set(Some(layer));
+        let widget = TimelineWidget::new(vec![row], Rc::new(rx))
+            .with_document(doc.clone(), extract)
+            .with_selection(selection)
+            .with_gesture(gesture.clone())
+            .with_capture(SurfaceCapture::default())
+            .with_key_mirror(keys.clone());
+        (widget, doc, gesture, keys, layer)
+    }
+
+    fn pointer(
+        id: BlitzPointerId,
+        x: f32,
+        y: f32,
+        button: MouseEventButton,
+        buttons: MouseEventButtons,
+        mods: keyboard_types::Modifiers,
+    ) -> BlitzPointerEvent {
+        BlitzPointerEvent {
+            id,
+            is_primary: true,
+            coords: PointerCoords {
+                page_x: x,
+                page_y: y,
+                screen_x: x,
+                screen_y: y,
+                client_x: x,
+                client_y: y,
+            },
+            button,
+            buttons,
+            mods,
+            details: Default::default(),
+            element: Point { x, y },
+            active_pointers: Default::default(),
+        }
+    }
+
+    #[test]
+    fn locked_press_and_modifier_toggle_do_not_leave_an_armed_drag() {
+        let (mut locked, _, locked_gesture, _, _) = widget(true);
+        let down = pointer(
+            BlitzPointerId::Mouse,
+            120.0,
+            (RULER_H + ROW_H * 0.5) as f32,
+            MouseEventButton::Main,
+            MouseEventButtons::Primary,
+            Default::default(),
+        );
+        locked.event(
+            &UiEvent::PointerDown(down.clone()),
+            &mut TimelineBindings::default(),
+        );
+        assert!(!locked_gesture.is_active());
+        assert!(locked.drag.is_none());
+
+        let (mut widget, _, gesture, _, _) = widget(false);
+        widget.selected = vec![(0, 0)];
+        let mut toggle = down;
+        toggle.mods = keyboard_types::Modifiers::SHIFT;
+        widget.event(
+            &UiEvent::PointerDown(toggle),
+            &mut TimelineBindings::default(),
+        );
+        assert!(widget.selected.is_empty());
+        assert!(widget.drag.is_none());
+        assert!(!gesture.is_active());
+    }
+
+    #[test]
+    fn foreign_up_is_ignored_and_matching_cancel_rolls_back_without_history() {
+        let (mut widget, doc, gesture, _, _) = widget(false);
+        let y = (RULER_H + ROW_H * 0.5) as f32;
+        let down = pointer(
+            BlitzPointerId::Finger(1),
+            300.0,
+            y,
+            MouseEventButton::Main,
+            MouseEventButtons::Primary,
+            Default::default(),
+        );
+        let history = doc.lock().unwrap().history_depth();
+        widget.event(
+            &UiEvent::PointerDown(down),
+            &mut TimelineBindings::default(),
+        );
+        assert!(gesture.is_active() && widget.drag.is_some());
+
+        let foreign = pointer(
+            BlitzPointerId::Finger(2),
+            330.0,
+            y,
+            MouseEventButton::Main,
+            MouseEventButtons::None,
+            Default::default(),
+        );
+        widget.event(
+            &UiEvent::PointerUp(foreign),
+            &mut TimelineBindings::default(),
+        );
+        assert!(gesture.is_active() && widget.drag.is_some());
+
+        let cancel = pointer(
+            BlitzPointerId::Finger(1),
+            330.0,
+            y,
+            MouseEventButton::Main,
+            MouseEventButtons::None,
+            Default::default(),
+        );
+        widget.event(
+            &UiEvent::PointerCancel(cancel),
+            &mut TimelineBindings::default(),
+        );
+        assert!(!gesture.is_active());
+        assert!(widget.drag.is_none());
+        assert_eq!(doc.lock().unwrap().history_depth(), history);
+    }
+
+    #[test]
+    fn right_clicking_an_unselected_key_replaces_the_key_selection() {
+        let (mut widget, _, _, keys, layer) = widget(false);
+        let right = pointer(
+            BlitzPointerId::Mouse,
+            PX_PER_SEC as f32,
+            (RULER_H + ROW_H * 0.5) as f32,
+            MouseEventButton::Secondary,
+            MouseEventButtons::Secondary,
+            Default::default(),
+        );
+        widget.event(
+            &UiEvent::PointerDown(right),
+            &mut TimelineBindings::default(),
+        );
+        assert_eq!(widget.selected, vec![(0, 0)]);
+        let selected = keys.lock().unwrap();
+        assert_eq!(selected.len(), 1);
+        assert_eq!(selected[0].layer, layer);
+        assert!((selected[0].at_sec - 1.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_plain_empty_marquee_clears_layer_and_key_domains() {
+        let (mut widget, _, gesture, keys, layer) = widget(false);
+        widget.selected = vec![(0, 0)];
+        widget.publish_keys();
+        let selection = widget.selection.clone().unwrap();
+        assert_eq!(selection.get(), Some(layer));
+        assert_eq!(keys.lock().unwrap().len(), 1);
+
+        let y = (RULER_H + ROW_H * 0.5) as f32;
+        let down = pointer(
+            BlitzPointerId::Mouse,
+            2_000.0,
+            y,
+            MouseEventButton::Main,
+            MouseEventButtons::Primary,
+            Default::default(),
+        );
+        widget.event(
+            &UiEvent::PointerDown(down),
+            &mut TimelineBindings::default(),
+        );
+        assert!(selection.all().is_empty());
+        assert!(keys.lock().unwrap().is_empty());
+        assert!(gesture.is_active() && widget.marquee.is_some());
+
+        let up = pointer(
+            BlitzPointerId::Mouse,
+            2_010.0,
+            y,
+            MouseEventButton::Main,
+            MouseEventButtons::None,
+            Default::default(),
+        );
+        widget.event(&UiEvent::PointerUp(up), &mut TimelineBindings::default());
+        assert!(!gesture.is_active());
+        assert!(selection.all().is_empty());
+        assert!(keys.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn line_and_pixel_wheels_share_one_distance() {
+        assert_eq!(
+            wheel_pixels(1.0, -2.0, true),
+            wheel_pixels(20.0, -40.0, false)
+        );
+    }
+}
+
 mod borrowed_atom_laws {
     use crate::doc::store::LayerTiming;
     use crate::ui::functions::{

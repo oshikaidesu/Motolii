@@ -11,7 +11,9 @@ use crate::doc::store::{
 use crate::ui::fixture::ColorRow;
 use crate::ui::fixture::{inspector_data_from_doc, InspectorData, PropRow};
 use crate::ui::playback::Clock;
-use crate::ui::semantic_menu::{Field, SemanticButton};
+use crate::ui::semantic_menu::{
+    focus_and_reveal, page_scroll, Field, FocusableItems, SemanticButton,
+};
 use crate::ui::session::{FieldAt, Focus, OpenField, Session};
 
 /// 窓に並べる合成モード。**W3C Compositing の16 mix + `plus`(Add)**で、
@@ -87,8 +89,91 @@ fn nudge(value: &Value, _vec2: bool, axis: usize, delta: f64, range: Option<(f64
         .unwrap_or_else(|_| value.clone())
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum SpinKey {
+    Delta(f64),
+    Absolute(f64),
+    Consume,
+}
+
+fn spin_key(key: &Key, shift: bool, step: f64, range: Option<(f64, f64)>) -> Option<SpinKey> {
+    match key {
+        Key::ArrowUp => Some(SpinKey::Delta(step * if shift { 10.0 } else { 1.0 })),
+        Key::ArrowDown => Some(SpinKey::Delta(-step * if shift { 10.0 } else { 1.0 })),
+        Key::Home => Some(range.map_or(SpinKey::Consume, |(min, _)| SpinKey::Absolute(min))),
+        Key::End => Some(range.map_or(SpinKey::Consume, |(_, max)| SpinKey::Absolute(max))),
+        _ => None,
+    }
+}
+
+fn apply_spin_key(
+    session: &Session,
+    layer: LayerId,
+    property: &str,
+    axis: usize,
+    range: Option<(f64, f64)>,
+    change: SpinKey,
+) -> Result<bool, StoreError> {
+    let (SpinKey::Delta(_) | SpinKey::Absolute(_)) = change else {
+        return Ok(false);
+    };
+    let property = PropertyId::new(property)?;
+    let targets = session.property_targets(Some(layer), &property)?;
+    let at = session.clock.current_time();
+    let mut doc = session.doc.lock().unwrap();
+    let mut edits = Vec::new();
+    for target in targets {
+        let Some(current) = value_with_default(
+            &doc.view().without_transients(),
+            target,
+            &property,
+            property.name(),
+            at,
+        ) else {
+            continue;
+        };
+        let next = match change {
+            SpinKey::Delta(delta) => {
+                crate::ui::functions::control::axis_delta(&current, axis, delta, range)?
+            }
+            SpinKey::Absolute(value) => {
+                crate::ui::functions::control::axis_absolute(&current, axis, value, range)?
+            }
+            SpinKey::Consume => unreachable!(),
+        };
+        if next != current {
+            edits.push((target, property.clone(), next));
+        }
+    }
+    if edits.is_empty() {
+        return Ok(false);
+    }
+    let owner = doc.begin_preview();
+    crate::ui::property_edit::commit_owned(&mut doc, owner, at, &edits)?;
+    Ok(true)
+}
+
+type MountedSlot = Rc<std::cell::RefCell<Option<Rc<MountedData>>>>;
+
+fn page_key(evt: &KeyboardEvent, mounted: &MountedSlot) -> bool {
+    let direction = match evt.key() {
+        Key::PageUp => -1,
+        Key::PageDown => 1,
+        _ => return false,
+    };
+    evt.prevent_default();
+    evt.stop_propagation();
+    if let Some(handle) = mounted.borrow().as_ref().cloned() {
+        page_scroll(handle, direction);
+    }
+    true
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub(super) struct ValueDrag {
+    pointer_type: String,
+    pointer_id: i32,
+    is_primary: bool,
     layer: LayerId,
     /// 一緒に選んでいる層と、それぞれの掴んだ時の値。同じ差分で動く(AE の複数選択)。
     others: Vec<(LayerId, Value)>,
@@ -104,6 +189,14 @@ pub(super) struct ValueDrag {
     base_revision: crate::doc::store::Revision,
     preview_owner: u64,
     primary_editable: bool,
+}
+
+impl ValueDrag {
+    fn owns_pointer(&self, event: &PointerEvent) -> bool {
+        self.pointer_type == event.data().pointer_type()
+            && self.pointer_id == event.data().pointer_id()
+            && self.is_primary == event.data().is_primary()
+    }
 }
 
 fn put_axis(
@@ -192,6 +285,7 @@ pub(super) fn end_scrub(session: &Session) -> bool {
     let Some(d) = session.scrub.lock().unwrap().take() else {
         return false;
     };
+    session.gesture.end();
     if let Err(error) = commit_drag(&session.doc, &d) {
         *session.project_notice.lock().unwrap() = error.to_string();
     }
@@ -203,7 +297,130 @@ pub(super) fn cancel_scrub(session: &Session) -> bool {
     let Some(d) = session.scrub.lock().unwrap().take() else {
         return false;
     };
+    session.gesture.end();
     crate::ui::property_edit::cancel_owned(&mut session.doc.lock().unwrap(), d.preview_owner);
+    true
+}
+
+/// Continue a numeric scrub anywhere in the same DOM window. The app root calls
+/// this after the pointer leaves Inspector; Inspector itself calls the same path.
+pub(super) fn move_scrub_pointer(
+    session: &Session,
+    evt: &PointerEvent,
+    mut revision: Signal<u32>,
+) -> bool {
+    if !session
+        .scrub
+        .lock()
+        .unwrap()
+        .as_ref()
+        .is_some_and(|drag| drag.owns_pointer(evt))
+    {
+        return false;
+    }
+    evt.prevent_default();
+    evt.stop_propagation();
+    let state = session.scrub.lock().unwrap().as_mut().map(|drag| {
+        let x = evt.data().client_coordinates().x;
+        let dx = x - drag.start_x;
+        let changed = dx != drag.last_dx;
+        drag.last_dx = dx;
+        let mut targets = if drag.primary_editable {
+            vec![(drag.layer, drag.start_value.clone())]
+        } else {
+            Vec::new()
+        };
+        targets.extend(drag.others.iter().cloned());
+        (
+            changed,
+            targets,
+            drag.property.clone(),
+            drag.vec2,
+            drag.axis,
+            drag.range,
+            dx,
+            drag.preview_owner,
+        )
+    });
+    let Some((changed, targets, property, vec2, axis, range, dx, owner)) = state else {
+        return true;
+    };
+    if !changed {
+        return true;
+    }
+    let Ok(prop) = PropertyId::new(&property) else {
+        return true;
+    };
+    let values: Vec<_> = targets
+        .into_iter()
+        .filter_map(|(layer, start)| {
+            let value = nudge(&start, vec2, axis, dx * increment(&property, range), range);
+            (value != start).then_some((layer, prop.clone(), value))
+        })
+        .collect();
+    if let Err(error) =
+        crate::ui::property_edit::preview_owned(&mut session.doc.lock().unwrap(), owner, &values)
+    {
+        *session.project_notice.lock().unwrap() = error.to_string();
+        cancel_scrub(session);
+        return true;
+    }
+    if let Some(drag) = session.scrub.lock().unwrap().as_mut() {
+        drag.preview = values;
+    }
+    *revision.write() += 1;
+    true
+}
+
+pub(super) fn end_scrub_pointer(
+    session: &Session,
+    evt: &PointerEvent,
+    mut revision: Signal<u32>,
+) -> bool {
+    if !session
+        .scrub
+        .lock()
+        .unwrap()
+        .as_ref()
+        .is_some_and(|drag| drag.owns_pointer(evt))
+    {
+        return false;
+    }
+    let moved = session
+        .scrub
+        .lock()
+        .unwrap()
+        .as_ref()
+        .is_some_and(|drag| drag.last_dx.abs() >= 3.0);
+    if moved {
+        evt.prevent_default();
+    }
+    evt.stop_propagation();
+    if end_scrub(session) {
+        *revision.write() += 1;
+    }
+    true
+}
+
+pub(super) fn cancel_scrub_pointer(
+    session: &Session,
+    evt: &PointerEvent,
+    mut revision: Signal<u32>,
+) -> bool {
+    if !session
+        .scrub
+        .lock()
+        .unwrap()
+        .as_ref()
+        .is_some_and(|drag| drag.owns_pointer(evt))
+    {
+        return false;
+    }
+    evt.prevent_default();
+    evt.stop_propagation();
+    if cancel_scrub(session) {
+        *revision.write() += 1;
+    }
     true
 }
 
@@ -415,12 +632,31 @@ fn prop_row(
                 let open = (property.clone(), start_value.clone());
                 let cell = c.clone();
                 let key_opener = session.clone();
+                let key_session = session.clone();
                 let key_open = open.clone();
                 let key_cell = c.clone();
+                let key_property = property.clone();
+                let mounted: MountedSlot = Rc::new(std::cell::RefCell::new(None));
+                let reveal = mounted.clone();
+                let number_now = match &start_value {
+                    Value::F64(value) => Some(*value),
+                    Value::Vec2(value) => value.get(i).copied(),
+                    _ => None,
+                };
                 rsx!(span {
                     class: "{class}",
-                    onmousedown: move |evt| {
-                        if !grabber.writable(layer) { return; }
+                    onpointerdown: move |evt: PointerEvent| {
+                        if !evt.data().is_primary()
+                            || evt.data().trigger_button()
+                                != Some(
+                                    dioxus_native::prelude::dioxus_elements::input_data::MouseButton::Primary,
+                                )
+                            || grabber.scrub.lock().unwrap().is_some()
+                            || !grabber.writable(layer)
+                        {
+                            return;
+                        }
+                        evt.stop_propagation();
                         let x = evt.data().client_coordinates().x;
                         let at = grabber.clock.current_time();
                         let preview_owner = grabber.doc.lock().unwrap().begin_preview();
@@ -429,6 +665,9 @@ fn prop_row(
                         if !primary_editable && others.is_empty() { grabber.doc.lock().unwrap().clear_preview_edits(preview_owner); return; }
                         let fresh = PropertyId::new(&property).ok().and_then(|prop| value_with_default(&grabber.doc.lock().unwrap().view().without_transients(), layer, &prop, &property, at)).unwrap_or_else(|| start_value.clone());
                         *grabber.scrub.lock().unwrap() = Some(ValueDrag {
+                            pointer_type: evt.data().pointer_type(),
+                            pointer_id: evt.data().pointer_id(),
+                            is_primary: evt.data().is_primary(),
                             layer,
                             others,
                             property: property.clone(),
@@ -444,6 +683,8 @@ fn prop_row(
                             preview_owner,
                             primary_editable,
                         });
+                        grabber.gesture.begin();
+                        *revision.write() += 1;
                     },
                     ondoubleclick: move |_| {
                         // 擦りかけの下書き(transient)を残さない。
@@ -457,8 +698,20 @@ fn prop_row(
                     // 鍵の道: Tab で升に止まり、Enter で打てる(読み上げにも「値」として出る)。
                     tabindex: "0",
                     role: "spinbutton",
+                    aria_valuemin: range.map(|(min, _)| min.to_string()),
+                    aria_valuemax: range.map(|(_, max)| max.to_string()),
+                    aria_valuenow: number_now.map(|value| value.to_string()),
+                    onmounted: move |evt: MountedEvent| {
+                        *mounted.borrow_mut() = Some(evt.data());
+                    },
+                    onfocus: move |_| {
+                        if let Some(handle) = reveal.borrow().as_ref().cloned() {
+                            focus_and_reveal(handle);
+                        }
+                    },
                     onkeydown: move |evt: KeyboardEvent| {
                         if evt.key() == Key::Enter {
+                            evt.prevent_default();
                             evt.stop_propagation();
                             cancel_scrub(&key_opener);
                             key_opener.open_field(
@@ -466,6 +719,33 @@ fn prop_row(
                                 key_cell.clone(),
                             );
                             *revision.write() += 1;
+                            return;
+                        }
+                        let Some(change) = spin_key(
+                            &evt.key(),
+                            evt.modifiers().contains(Modifiers::SHIFT),
+                            increment(&key_property, range),
+                            range,
+                        ) else {
+                            return;
+                        };
+                        evt.prevent_default();
+                        evt.stop_propagation();
+                        cancel_scrub(&key_session);
+                        match apply_spin_key(
+                            &key_session,
+                            layer,
+                            &key_property,
+                            i,
+                            range,
+                            change,
+                        ) {
+                            Ok(true) => *revision.write() += 1,
+                            Ok(false) => {}
+                            Err(error) => {
+                                *key_session.project_notice.lock().unwrap() = error.to_string();
+                                *revision.write() += 1;
+                            }
                         }
                     },
                     "{c}"
@@ -787,11 +1067,86 @@ impl PartialEq for LayerChoiceAction {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(super) enum ChoiceId {
     Parent,
     MatteSource,
     MatteMode,
+}
+
+impl ChoiceId {
+    fn slug(self) -> &'static str {
+        match self {
+            Self::Parent => "parent",
+            Self::MatteSource => "matte-source",
+            Self::MatteMode => "matte-mode",
+        }
+    }
+}
+
+#[derive(Clone, Copy, PartialEq)]
+struct ChoiceNav {
+    items: FocusableItems,
+    cursor: Signal<usize>,
+}
+
+impl ChoiceNav {
+    fn trigger_key(id: ChoiceId) -> String {
+        format!("inspector:choice:{}:trigger", id.slug())
+    }
+
+    fn option_key(id: ChoiceId, index: usize) -> String {
+        format!("inspector:choice:{}:{index}", id.slug())
+    }
+
+    fn restore(self, id: ChoiceId) {
+        self.items.focus(&Self::trigger_key(id));
+    }
+
+    fn focus(mut self, id: ChoiceId, index: usize, count: usize) {
+        if count == 0 {
+            return;
+        }
+        let index = index.min(count - 1);
+        if (self.cursor)() != index {
+            self.cursor.set(index);
+        }
+        self.items.focus(&Self::option_key(id, index));
+    }
+
+    fn key(
+        self,
+        evt: &KeyboardEvent,
+        id: ChoiceId,
+        count: usize,
+        mut open: Signal<Option<ChoiceId>>,
+    ) -> bool {
+        let shown = open() == Some(id);
+        if evt.key() == Key::Escape && shown {
+            evt.prevent_default();
+            evt.stop_propagation();
+            open.set(None);
+            self.restore(id);
+            return true;
+        }
+        let target = match (shown, evt.key()) {
+            (_, Key::Home) => Some(0),
+            (_, Key::End) => count.checked_sub(1),
+            (false, Key::ArrowDown) => Some(0),
+            (false, Key::ArrowUp) => count.checked_sub(1),
+            (true, Key::ArrowDown) => Some(((self.cursor)() + 1).min(count.saturating_sub(1))),
+            (true, Key::ArrowUp) => Some((self.cursor)().saturating_sub(1)),
+            _ => None,
+        };
+        let Some(target) = target else { return false };
+        evt.prevent_default();
+        evt.stop_propagation();
+        if !shown {
+            open.set(Some(id));
+        }
+        self.focus(id, target, count);
+        true
+    }
 }
 
 #[component]
@@ -810,19 +1165,23 @@ pub(super) fn ChoiceDismiss(mut open: Signal<Option<ChoiceId>>) -> Element {
 }
 
 #[component]
-fn ChoiceTrigger(current: String, id: ChoiceId, mut open: Signal<Option<ChoiceId>>) -> Element {
+fn ChoiceTrigger(
+    current: String,
+    id: ChoiceId,
+    mut open: Signal<Option<ChoiceId>>,
+    nav: ChoiceNav,
+    count: usize,
+) -> Element {
     let shown = open() == Some(id);
-    rsx!(button {
+    let list_id = format!("inspector-choice-{}", id.slug());
+    rsx!(SemanticButton {
         class: "v content choice-trigger",
-        aria_expanded: if shown { "true" } else { "false" },
+        aria_expanded: Some(if shown { "true" } else { "false" }.to_owned()),
+        aria_haspopup: Some("listbox".to_owned()),
+        aria_controls: Some(list_id),
+        focus_key: Some(ChoiceNav::trigger_key(id)),
         onclick: move |_| open.set(if open() == Some(id) { None } else { Some(id) }),
-        onkeydown: move |evt| {
-            if evt.key() == Key::Escape {
-                evt.prevent_default();
-                evt.stop_propagation();
-                open.set(None);
-            }
-        },
+        onkeydown: move |evt: KeyboardEvent| { nav.key(&evt, id, count, open); },
         "{current}"
     })
 }
@@ -842,23 +1201,48 @@ fn LayerChoiceRow(props: LayerChoiceRowProps) -> Element {
     let mut open = props.open;
     let mut rejection = use_signal(String::new);
     let shown = open() == Some(props.id);
+    let preferred = props
+        .choices
+        .iter()
+        .position(|choice| choice.label == props.current)
+        .unwrap_or(0);
+    let nav = ChoiceNav {
+        items: use_context_provider(FocusableItems::new),
+        cursor: use_signal(move || preferred),
+    };
+    let count = props.choices.len();
+    let list_id = format!("inspector-choice-{}", props.id.slug());
+    use_effect(move || {
+        if open() == Some(props.id) {
+            nav.focus(props.id, (nav.cursor)(), count);
+        }
+    });
     rsx!(
         div { class: "prow",
             span { class: "n", "{props.label}" }
-            ChoiceTrigger { current: props.current.clone(), id: props.id, open }
+            ChoiceTrigger { current: props.current.clone(), id: props.id, open, nav, count }
             span { class: "glyph", "◇" }
         }
         if shown {
-            for choice in props.choices.iter().cloned() {
+            div { id: "{list_id}", role: "listbox", aria_label: "{props.label}",
+            for (index, choice) in props.choices.iter().cloned().enumerate() {
                 SemanticButton {
                     class: "prow blend-pick",
+                    role: Some("option".to_owned()),
+                    aria_selected: Some(if props.current == choice.label { "true" } else { "false" }.to_owned()),
+                    tabindex: Some(if (nav.cursor)() == index { "0".to_owned() } else { "-1".to_owned() }),
+                    focus_key: Some(ChoiceNav::option_key(props.id, index)),
+                    onkeydown: move |evt: KeyboardEvent| { nav.key(&evt, props.id, count, open); },
                     onclick: {
                         let action = props.action.clone();
                         move |_| {
+                            let mut cursor = nav.cursor;
+                            cursor.set(index);
                             match (action.0)(choice.layer) {
                                 Ok(()) => {
                                     rejection.set(String::new());
                                     open.set(None);
+                                    nav.restore(props.id);
                                 }
                                 Err(error) => rejection.set(error.to_string()),
                             }
@@ -867,6 +1251,7 @@ fn LayerChoiceRow(props: LayerChoiceRowProps) -> Element {
                     span { class: "n", "" }
                     span { class: "v content", "{choice.label}" }
                 }
+            }
             }
         }
         if !rejection().is_empty() {
@@ -911,6 +1296,21 @@ fn MatteModeRow(props: MatteModeRowProps) -> Element {
     let mut open = props.open;
     let mut rejection = use_signal(String::new);
     let shown = open() == Some(ChoiceId::MatteMode);
+    let preferred = MATTE_MODES
+        .iter()
+        .position(|(mode, _)| *mode == props.current)
+        .unwrap_or(0);
+    let nav = ChoiceNav {
+        items: use_context_provider(FocusableItems::new),
+        cursor: use_signal(move || preferred),
+    };
+    let count = MATTE_MODES.len();
+    let list_id = format!("inspector-choice-{}", ChoiceId::MatteMode.slug());
+    use_effect(move || {
+        if open() == Some(ChoiceId::MatteMode) {
+            nav.focus(ChoiceId::MatteMode, (nav.cursor)(), count);
+        }
+    });
     rsx!(
         div { class: "prow",
             span { class: "n", "Mode" }
@@ -918,21 +1318,33 @@ fn MatteModeRow(props: MatteModeRowProps) -> Element {
                 current: matte_mode_label(props.current).to_owned(),
                 id: ChoiceId::MatteMode,
                 open,
+                nav,
+                count,
             }
             span { class: "glyph", "◇" }
         }
         if shown {
-            for (mode, label) in MATTE_MODES.iter().copied() {
+            div { id: "{list_id}", role: "listbox", aria_label: "Matte mode",
+            for (index, (mode, label)) in MATTE_MODES.iter().copied().enumerate() {
                 SemanticButton {
                     class: if mode == props.current { "prow blend-pick on" } else { "prow blend-pick" },
-                    selected: mode == props.current,
+                    role: Some("option".to_owned()),
+                    aria_selected: Some(if mode == props.current { "true" } else { "false" }.to_owned()),
+                    tabindex: Some(if (nav.cursor)() == index { "0".to_owned() } else { "-1".to_owned() }),
+                    focus_key: Some(ChoiceNav::option_key(ChoiceId::MatteMode, index)),
+                    onkeydown: move |evt: KeyboardEvent| {
+                        nav.key(&evt, ChoiceId::MatteMode, count, open);
+                    },
                     onclick: {
                         let action = props.action.clone();
                         move |_| {
+                            let mut cursor = nav.cursor;
+                            cursor.set(index);
                             match (action.0)(mode) {
                                 Ok(()) => {
                                     rejection.set(String::new());
                                     open.set(None);
+                                    nav.restore(ChoiceId::MatteMode);
                                 }
                                 Err(error) => rejection.set(error.to_string()),
                             }
@@ -941,6 +1353,7 @@ fn MatteModeRow(props: MatteModeRowProps) -> Element {
                     span { class: "n", "" }
                     span { class: "v content", "{label}" }
                 }
+            }
             }
         }
         if !rejection().is_empty() {
@@ -961,6 +1374,13 @@ pub(super) fn inspector_panel(
     focus: &Arc<Mutex<Option<Focus>>>,
     live_focus: Option<Focus>,
 ) -> Element {
+    let inspector_scroll: MountedSlot = use_hook(|| Rc::new(std::cell::RefCell::new(None)));
+    let seen_cancel = use_hook(|| Rc::new(std::cell::Cell::new(0u32)));
+    let mut cancel_generation = seen_cancel.get();
+    if session.gesture.cancelled(&mut cancel_generation) {
+        seen_cancel.set(cancel_generation);
+        cancel_scrub(session);
+    }
     let blend_focused = matches!(
         (selection, &live_focus),
         (Some(layer), Some(Focus::Blend(at))) if *at == layer
@@ -1223,43 +1643,16 @@ pub(super) fn inspector_panel(
     rsx!(
         div {
             id: "inspector",
-            onmousemove: move |evt| {
-                if evt.data().held_buttons().is_empty() {
-                    if end_scrub(&scrub_move) {
-                        *revision.write() += 1;
-                    }
-                    return;
-                }
-                let state = scrub_move.scrub.lock().unwrap().as_mut().map(|d| {
-                    let x = evt.data().client_coordinates().x;
-                    let dx = x - d.start_x;
-                    let changed = dx != d.last_dx;
-                    d.last_dx = dx;
-                    let mut targets = if d.primary_editable { vec![(d.layer, d.start_value.clone())] } else { Vec::new() };
-                    targets.extend(d.others.iter().cloned());
-                    (changed, targets, d.property.clone(), d.vec2, d.axis, d.range, dx, d.preview_owner)
-                });
-                let Some((changed, targets, property, vec2, axis, range, dx, owner)) = state else { return };
-                if !changed {
-                    return;
-                }
-                let Ok(prop) = PropertyId::new(&property) else { return };
-                let values: Vec<_> = targets.into_iter().filter_map(|(layer, start)| {
-                    let value = nudge(&start, vec2, axis, dx * increment(&property, range), range);
-                    (value != start).then_some((layer, prop.clone(), value))
-                }).collect();
-                let previewed = crate::ui::property_edit::preview_owned(&mut scrub_move.doc.lock().unwrap(), owner, &values);
-                if let Err(error) = previewed {
-                    *scrub_move.project_notice.lock().unwrap() = error.to_string();
-                    cancel_scrub(&scrub_move);
-                    return;
-                }
-                if let Some(drag) = scrub_move.scrub.lock().unwrap().as_mut() { drag.preview = values; }
-                *revision.write() += 1;
+            onpointermove: move |evt: PointerEvent| {
+                move_scrub_pointer(&scrub_move, &evt, revision);
             },
-            onmouseup: move |_| {
-                if end_scrub(&scrub_up) {
-                    *revision.write() += 1;
+            onpointerup: move |evt: PointerEvent| {
+                end_scrub_pointer(&scrub_up, &evt, revision);
+            },
+            onpointercancel: {
+                let cancel = session.clone();
+                move |evt: PointerEvent| {
+                    cancel_scrub_pointer(&cancel, &evt, revision);
                 }
             },
             div { class: "ident",
@@ -1275,7 +1668,16 @@ pub(super) fn inspector_panel(
                 span { "Z" }
                 span { class: "k", "Key" }
             }
-            div { class: "iscroll",
+            div {
+            class: "iscroll",
+            onmounted: {
+                let inspector_scroll = inspector_scroll.clone();
+                move |evt: MountedEvent| *inspector_scroll.borrow_mut() = Some(evt.data())
+            },
+            onkeydown: {
+                let inspector_scroll = inspector_scroll.clone();
+                move |evt: KeyboardEvent| { page_key(&evt, &inspector_scroll); }
+            },
             h3 { class: "sec", "Transform" }
             {transform_rows}
             // 升の並びそのものが意味なので、言葉は置かない(裁定451)。
@@ -1410,9 +1812,9 @@ pub(super) fn inspector_panel(
                     div { class: "prow fill-mode",
                         span { class: "n", "Fill" }
                         div { class: "fill-kinds",
-                            button {
-                                class: if is_gradient { "semantic-button chip" } else { "semantic-button chip on" },
-                                aria_pressed: if is_gradient { "false" } else { "true" },
+                            SemanticButton {
+                                class: if is_gradient { "chip" } else { "chip on" },
+                                selected: !is_gradient,
                                 aria_label: "Use solid fill",
                                 onclick: {
                                     let session = session.clone();
@@ -1431,9 +1833,9 @@ pub(super) fn inspector_panel(
                                 },
                                 "Solid"
                             }
-                            button {
-                                class: if is_gradient { "semantic-button chip on" } else { "semantic-button chip" },
-                                aria_pressed: if is_gradient { "true" } else { "false" },
+                            SemanticButton {
+                                class: if is_gradient { "chip on" } else { "chip" },
+                                selected: is_gradient,
                                 aria_label: "Use two color gradient fill",
                                 onclick: {
                                     let session = session.clone();
@@ -1485,8 +1887,8 @@ pub(super) fn inspector_panel(
                                 },
                             }
                         } else {
-                            button {
-                                class: "semantic-button v color-hex",
+                            SemanticButton {
+                                class: "v color-hex",
                                 style: "{color_style}",
                                 aria_label: "Edit {label} hex color",
                                 onclick: {
@@ -1497,6 +1899,7 @@ pub(super) fn inspector_panel(
                                     move |event: MouseEvent| {
                                         event.stop_propagation();
                                         *focus.lock().unwrap() = Some(Focus::Color(slot.clone()));
+                                        session.ask_panel(crate::ui::dock::Panel::Colors);
                                         session.open_field(FieldAt::Hex(slot.clone()), hex.clone());
                                         *revision.write() += 1;
                                     }
@@ -1563,6 +1966,169 @@ pub(super) fn inspector_panel(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn choice_fixture() -> Element {
+        let open = use_signal(|| None::<ChoiceId>);
+        let action = LayerChoiceAction(Rc::new(|_| Ok(())));
+        rsx!(
+            style { "button, .prow {{ display:block; width:180px; height:24px; }}" }
+            LayerChoiceRow {
+                id: ChoiceId::Parent,
+                label: "Parent",
+                current: "None".to_owned(),
+                choices: vec![
+                    LayerChoice { layer: None, label: "None".to_owned() },
+                    LayerChoice { layer: Some(LayerId(2)), label: "Two".to_owned() },
+                    LayerChoice { layer: Some(LayerId(3)), label: "Three".to_owned() },
+                ],
+                action,
+                open,
+            }
+        )
+    }
+
+    #[test]
+    fn choice_popup_arrows_home_end_escape_and_focus_restore() {
+        let mut gui = blitz_test_harness::Harness::from_component(choice_fixture);
+        gui.click(".choice-trigger");
+        crate::ui::semantic_menu::flush_dom_work();
+        gui.pump();
+        assert_eq!(gui.query_all("[role=option]").len(), 3);
+        gui.press(Key::End);
+        crate::ui::semantic_menu::flush_dom_work();
+        gui.pump();
+        let options = gui.query_all("[role=option]");
+        assert_eq!(gui.focused(), options.last().copied());
+        gui.press(Key::Home);
+        crate::ui::semantic_menu::flush_dom_work();
+        gui.pump();
+        assert_eq!(gui.focused(), options.first().copied());
+        gui.press(Key::ArrowDown);
+        crate::ui::semantic_menu::flush_dom_work();
+        gui.pump();
+        assert_eq!(gui.focused(), options.get(1).copied());
+        gui.press(Key::Escape);
+        crate::ui::semantic_menu::flush_dom_work();
+        gui.pump();
+        assert!(gui.query("[role=listbox]").is_none());
+        assert_eq!(gui.focused(), gui.query(".choice-trigger"));
+    }
+
+    fn page_fixture() -> Element {
+        let mounted: MountedSlot = use_hook(|| Rc::new(std::cell::RefCell::new(None)));
+        rsx!(div {
+            id: "page-scroll",
+            tabindex: "0",
+            style: "height:40px;width:120px;overflow-y:auto;",
+            onmounted: {
+                let mounted = mounted.clone();
+                move |evt: MountedEvent| *mounted.borrow_mut() = Some(evt.data())
+            },
+            onkeydown: {
+                let mounted = mounted.clone();
+                move |evt: KeyboardEvent| { page_key(&evt, &mounted); }
+            },
+            div { style: "height:320px;", "long inspector" }
+        })
+    }
+
+    #[test]
+    fn page_keys_scroll_the_local_region_instead_of_the_global_timeline() {
+        let mut gui = blitz_test_harness::Harness::from_component(page_fixture);
+        let node = gui.node("#page-scroll");
+        gui.base_mut().set_focus_to(node);
+        gui.press(Key::PageDown);
+        crate::ui::semantic_menu::flush_dom_work();
+        gui.pump();
+        let down = gui
+            .base()
+            .get_node(node)
+            .map(|node| node.scroll_offset().y)
+            .unwrap_or_default();
+        assert!(down > 0.0, "PageDown did not move the local scroller");
+        gui.press(Key::PageUp);
+        crate::ui::semantic_menu::flush_dom_work();
+        gui.pump();
+        let up = gui
+            .base()
+            .get_node(node)
+            .map(|node| node.scroll_offset().y)
+            .unwrap_or_default();
+        assert!(up < down, "PageUp did not reverse the local scroller");
+    }
+
+    #[test]
+    fn spin_keys_have_small_large_and_bounded_endpoints() {
+        assert_eq!(
+            spin_key(&Key::ArrowUp, false, 0.5, Some((0.0, 10.0))),
+            Some(SpinKey::Delta(0.5))
+        );
+        assert_eq!(
+            spin_key(&Key::ArrowDown, true, 0.5, Some((0.0, 10.0))),
+            Some(SpinKey::Delta(-5.0))
+        );
+        assert_eq!(
+            spin_key(&Key::Home, false, 1.0, Some((2.0, 8.0))),
+            Some(SpinKey::Absolute(2.0))
+        );
+        assert_eq!(
+            spin_key(&Key::End, false, 1.0, Some((2.0, 8.0))),
+            Some(SpinKey::Absolute(8.0))
+        );
+        assert_eq!(
+            spin_key(&Key::Home, false, 1.0, None),
+            Some(SpinKey::Consume)
+        );
+    }
+
+    #[test]
+    fn one_spin_key_is_one_undoable_property_edit() {
+        let loaded = crate::ui::fixture::load_fixture();
+        let session = Session::new(loaded.doc, loaded.duration_sec, loaded.ui);
+        let layers = session.doc.lock().unwrap().view().layers();
+        let layer = layers
+            .into_iter()
+            .find(|layer| session.writable(*layer))
+            .expect("fixture has no editable layer");
+        session.selection.set(Some(layer));
+        let property = PropertyId::new(property::POSITION).unwrap();
+        let before = value_with_default(
+            &session.doc.lock().unwrap().view(),
+            layer,
+            &property,
+            property::POSITION,
+            session.clock.current_time(),
+        )
+        .unwrap();
+        assert!(apply_spin_key(
+            &session,
+            layer,
+            property::POSITION,
+            0,
+            None,
+            SpinKey::Delta(1.0),
+        )
+        .unwrap());
+        let after = value_with_default(
+            &session.doc.lock().unwrap().view(),
+            layer,
+            &property,
+            property::POSITION,
+            session.clock.current_time(),
+        )
+        .unwrap();
+        assert_ne!(after, before);
+        assert!(session.doc.lock().unwrap().undo());
+        let restored = value_with_default(
+            &session.doc.lock().unwrap().view(),
+            layer,
+            &property,
+            property::POSITION,
+            session.clock.current_time(),
+        )
+        .unwrap();
+        assert_eq!(restored, before);
+    }
 
     /// ◇ で今の時刻に本文のキーが立ち、◆ で外れる。最後の 1 つは外せない。
     #[test]
