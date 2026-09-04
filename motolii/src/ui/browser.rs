@@ -1999,7 +1999,7 @@ pub(super) fn browser_panel(
                     let key_poke = poke.clone();
                     let key_search = search_node;
                     rsx!(
-                        div { class: "bwork colors-work",
+                        div { class: "bwork",
                             onkeydown: move |evt: KeyboardEvent| {
                                 if key_session.field().is_some() || crate::ui::keymap::is_typing() {
                                     return;

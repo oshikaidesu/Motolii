@@ -14,15 +14,6 @@
     user-select: none;
 }
 
-body {
-    cursor: default;
-}
-
-input,
-textarea {
-    cursor: text;
-}
-
 /* Motionは状態の前後をつなぐだけ。位置・寸法・scroll・作品時刻は補間しない。 */
 .menu,
 .zbtn,
@@ -486,14 +477,6 @@ body {
     grid-auto-rows: calc(48 * var(--s) * 1px);
     gap: var(--sp1);
     padding: var(--sp2);
-}
-
-.colors-work {
-    grid-template-columns: minmax(0, 1fr);
-}
-
-.colors-work > .bside {
-    display: none;
 }
 
 .color-swatch {
@@ -1722,9 +1705,6 @@ body {
 
 .color-pick {
     align-self: stretch;
-    min-width: 0;
-    max-width: 100%;
-    overflow: hidden;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -1735,9 +1715,6 @@ body {
 
 .color-wheel {
     position: relative;
-    flex: 0 1 auto;
-    min-width: 0;
-    overflow: hidden;
 }
 
 .hue-ring {
@@ -1770,7 +1747,6 @@ body {
     gap: var(--sp2);
     font-size: var(--t-dense);
     color: var(--ink2);
-    max-width: 100%;
 }
 
 .alpha-bar {

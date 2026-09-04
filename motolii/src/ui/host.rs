@@ -969,6 +969,12 @@ impl Windows {
         // custom widget(Stage/Timeline)の空所や再layout直後でこれが起きるため、
         // Motolii 内を指しているnative eventの最後に可視性を必ず取り戻す。
         // このappは CSS cursor:none を使わないので、意図的な非表示との競合は無い。
+        let restore_cursor = matches!(
+            &event,
+            WindowEvent::PointerMoved { .. }
+                | WindowEvent::PointerEntered { .. }
+                | WindowEvent::Focused(true)
+        );
         let browser_layout_changed = matches!(
             &event,
             WindowEvent::SurfaceResized(_) | WindowEvent::ScaleFactorChanged { .. }
@@ -1242,11 +1248,9 @@ impl Windows {
             }
         }
         if let Some(view) = self.inner.windows.get_mut(&window_id) {
-            // No Motolii tool intentionally hides the system pointer. Restore it
-            // after every native event, including redraw/pointer-up after a
-            // fixed capture overlay is removed. A PointerMoved-only repair
-            // leaves it hidden until the user moves again.
-            view.window.set_cursor_visible(true);
+            if restore_cursor {
+                view.window.set_cursor_visible(true);
+            }
             place_ime(view);
         }
         self.reflect_document(window_id);
