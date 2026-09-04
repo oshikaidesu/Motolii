@@ -763,7 +763,7 @@ pub(super) fn browser_panel(
                     }
                     let has_swatches = !swatches.is_empty();
                     let cards = swatches.into_iter().map(|ColorSwatch { hex, rgba }| {
-                        let card_class = if layer.is_none() { "tcard disabled" } else { "tcard" };
+                        let card_class = if layer.is_none() { "tcard color-swatch disabled" } else { "tcard color-swatch" };
                         let onclick = layer.map(|_| {
                             let doc = doc.clone();
                             let session = session.clone();
@@ -817,7 +817,7 @@ pub(super) fn browser_panel(
                                     None => rsx!(div { class: "rcount", "No color yet · select a layer to edit one" }),
                                 }
                                 if has_swatches {
-                                    div { class: "tgrid", {cards} }
+                                    div { class: "tgrid color-grid", {cards} }
                                 } else {
                                     div { class: "rcount", "No colors yet · select a layer to apply one" }
                                 }

@@ -432,6 +432,40 @@ body {
     pointer-events: none;
 }
 
+.color-grid {
+    grid-template-columns: repeat(auto-fill, calc(48 * var(--s) * 1px));
+    grid-auto-rows: calc(48 * var(--s) * 1px);
+    gap: var(--sp1);
+    padding: var(--sp2);
+}
+
+.color-swatch {
+    position: relative;
+    width: calc(48 * var(--s) * 1px);
+    height: calc(48 * var(--s) * 1px);
+    aspect-ratio: 1;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.color-swatch .thumb {
+    position: absolute;
+    inset: 0;
+    height: 100%;
+}
+
+.color-swatch .tname {
+    position: absolute;
+    inset: auto 0 0;
+    padding: var(--sp1);
+    background: rgba(0, 0, 0, 0.62);
+    color: var(--ink);
+    font-size: var(--t-micro);
+    line-height: 1;
+    text-align: center;
+    z-index: 1;
+}
+
 .thumb {
     height: calc(40 * var(--s) * 1px);
     width: 100%;
