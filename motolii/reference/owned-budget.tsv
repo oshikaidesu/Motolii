@@ -15,5 +15,5 @@ create_compute_pipeline	0	まだ1つも持っていない。増やす前に上�
 create_shader_module	0	**ゼロ**。シェーダは全部上流の ShaderModuleDesc + FileServer 経由
 device.create_bind_group_layout	0	**ゼロ**。上流は BindGroupLayoutDesc のプール。Vism の口はそちらを通る
 begin_render_pass	3	上流の Renderer trait は**パスを渡される**。自分で開くのは登録していない証拠
-poll(wgpu::PollType::wait_indefinitely	2	**読み戻す所だけ**(finalize_readback・render_basic)。窓の経路で毎フレーム待つと、共有 device の blitz/vello が壊れて窓ごと落ちる — 5〜30秒で vello がバッファを4倍(192MiB)に育て、この機の上限128MiBを超える(2026-08-30 実測)
-naga::front	2	シェーダ言語のパーサ。ISF(GLSL)の入口だけ
+poll(wgpu::PollType::wait_indefinitely	3	**読み戻しと frame の完了待ちだけ**(render_basic・finalize_readback・ui/native の render)。Flutter 経路は frame ごとに GPU 完了を待って IOSurface を渡す(docs/stage5/technical-boundaries.md)。pool 化・非同期 fence は未完。増やす前に上流の fence を探す
+naga::front	3	シェーダ言語のパーサ。Vism(WGSL)の検証 1 と ISF(GLSL)の入口 2 だけ

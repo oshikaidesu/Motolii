@@ -28,14 +28,16 @@ fn rust_sources(dir: &Path, out: &mut Vec<String>) {
 
 #[test]
 fn the_machinery_we_own_matches_its_ceiling() {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    // motolii-road は doc と render を 1 本に link する道路。家 5 つのうち Rust の 3 つ
+    // (doc・render・ui/native)を、旧 src/ui を数えずにここから見る。
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let table = std::fs::read_to_string(root.join("reference/owned-budget.tsv"))
         .expect("reference/owned-budget.tsv");
 
     let mut sources = Vec::new();
-    rust_sources(&root.join("src"), &mut sources);
     rust_sources(&root.join("crates"), &mut sources);
-    assert!(!sources.is_empty(), "src を読めていない");
+    rust_sources(&root.join("ui/native/src"), &mut sources);
+    assert!(!sources.is_empty(), "crates・ui/native を読めていない");
 
     let mut off = Vec::new();
     for line in table.lines() {
