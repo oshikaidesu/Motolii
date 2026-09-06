@@ -1,5 +1,7 @@
 # 現設計の落とし穴分析と実装ロードマップ
 
+> Stage 5では[現行UI・操作](stage5/product-contract.md)と[技術境界](stage5/technical-boundaries.md)が入口。以下の「正本」「現行」は記載当時の世代を指す。既存の知見は参照するが、旧モック・旧framework・未実装UIの一律撤去規則を現在の指示へ適用しない。
+
 作成日: 2026-07-07
 前提資料: [concept.md](concept.md)(決定事項の台帳)、[performance-model.md](performance-model.md)。初期検討資料(design-memo 2026-07-05 / discussion-log 2026-07-06)は現決定と矛盾する旧仕様を含むため削除済み(2026-07-08整理。経緯はgit履歴参照)。生きた決定はすべてconcept.mdに移植済み
 

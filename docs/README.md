@@ -1,3 +1,10 @@
+# 現在の入口 — Stage 5
+
+[コンセプト](concept.md)、[UIと操作](stage5/product-contract.md)、[Stage 5](stage5/README.md)を読む。根拠の対応は[救出・照合表](stage5/document-map.md)、構成は[workspace.json](stage5/workspace.json)。以下は過去世代の索引で、現行の技術選定・起動手順を上書きしない。
+
+<details>
+<summary>過去世代の資料索引</summary>
+
 # docs/ 読み方ガイド
 
 このディレクトリが**設計の意味(コンセプト・裁定・審判)の唯一の情報源**。世界には属さない共有地であり、実装の現在地は各世界のコード(Cargo.toml・その場のコメント)が正本。必修ではない — 必要になったターンに引く。
@@ -218,3 +225,5 @@
 - **TemporalFootprint(時間窓)**: エコー/モーションブラー等が前後フレーム/サブフレームサンプルを読むための、`NodeDesc`への静的宣言(予約。任意時刻アクセスAPIは不採用)
 - **プラグインパネル**: `NodeDesc.params`自動生成panelは全保存paramを操作できる必須fallbackとして決定済みだが、製品U4aは未実装。plugin所有egui/native/Web/wgpu UIはG0-3 / GAP-13の公開・sandbox・互換・配布審判まで公開しない。標準製品surfaceのG0-9合格だけでは解除しない
 - **UI配置保留**: 操作意味とtyped routeが閉じ、最終surfaceだけが未決のcontrolは[Host-owned staging surface](reviews/2026-08-09-ui-placement-deferral-staging-surface-decision.md)へ一時配置して並列接続を進められる。値／保存ownerを移さず、final assignmentで退役する。空間interaction、未決意味、公開UI frameworkの逃げ道にはしない
+
+</details>

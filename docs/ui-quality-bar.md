@@ -1,5 +1,7 @@
 # 「普通に使える」品質バー(quality bar)
 
+> Stage 5では[現行UI・操作](stage5/product-contract.md)と[技術境界](stage5/technical-boundaries.md)が入口。以下の「正本」「現行」は記載当時の世代を指す。既存の知見は参照するが、旧モック・旧framework・未実装UIの一律撤去規則を現在の指示へ適用しない。
+
 - 制定: 2026-08-12(利用者目標「普通のUI・普通のUX・トンマナ維持・違和感ゼロ・常時滑らか・Stageリアルタイム追従・**触れる物は全部本物**」の数値化・規則化)
 - 位置づけ: 全UI発注の常設oracle。トンマナ(色・密度・語彙)の正本は[ui-visual-language](ui-visual-language.md)/[ui-interaction-language](ui-interaction-language.md)であり、本書は**時間予算(B)と操作品質規則(Q)**を持つ
 - 検収規則: UI系orderのoracleへ本書のB/Q番号を明記して引用する。予算・規則は反証可能 — 実測で満たせない場合は条件つきで本書を改訂する(黙って破らない)

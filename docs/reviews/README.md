@@ -747,3 +747,19 @@
 | [2026-08-27-attention-failures-and-the-partition.md](2026-08-27-attention-failures-and-the-partition.md) | **注意の失敗と、世界の分断**(事後記録・実施済み)。1日に5回同型の失敗 — 220GB target を warm cache と誤認(runbook の22.7秒は2026-08-10の世界の数字)/ 迂回の連鎖(コピー→細いコピー→種ビルド)/ `git add -A` が生成物17,615個を commit へ / `[patch]` と `default-features` がメンバー側で黙って無視される / 製品 front が `probes/` のまま CI 圏外で27件の UX 欠陥を通過。**どれもアルゴリズムの誤りではなく視界の問題**。診断 = 「決定は下されたが帰結が実行されていない」堆積(iced を降りたのにコードも target も残る・front を製品にしたのに probe の身分が残る)と、規模がエージェントに人間より強く効く非対称(体の記憶が無く毎回文書から組み直す・その文書が古い)。対策 = (1) 生きた世界を `app/` へ分断(15 crate・441 crate グラフ・iced 0)(2) **バック/フロントの段差が構造で消えた**ので段差の番人を撤去、テスト85ファイル→9。残す基準 = **窓を叩いても見えない嘘のみ**(往復・整合・フレーム演算・ゼロコピーが CPU フォールバックへ落ちていないこと)。教訓は主題ではなく**引き金**の形で7項 | **事後記録**(2026-08-27) |
 | [2026-08-28-current-position.md](2026-08-28-current-position.md) | **現在地(引き継ぎ台帳)**。**歴史ではなく現在地** — 進んだら書き換える。第一目標 = GUI だけで普通の編集の輪が回ること(素材の配置 → エフェクト適用 → プレビューカメラ分離 → xyz 駆動 → 区間イージング)。実状 = 背骨(fixture → engine → compositor → 共有Surface → Stage)は端から端まで通っているが、**入口と出口が無い**(実素材が入る口も、成果物が出る口も front に繋がっていない)。**5つの目標が共有する欠落は1本だけ = front から store へ書く経路**。`Intent` は既に27種あり意味の側は待っている。よって順序 = (1)経路を1本(`SetTiming`=トリム)で型を作る (2)素材の配置 (3)xyz駆動→区間イージング (4)カメラ分離 (5)エフェクト適用。1 が済めば 2〜5 は並列 | **現在地/引き継ぎ**(2026-08-28) |
 | [2026-08-28-seams-remaining.md](2026-08-28-seams-remaining.md) | **繋げるだけの口 — 残りの一覧**(観察・**現在地**。繋いだら消す)。`grep` で数えた実測: `Intent` 24中**9接続**/`Engine` 18中**3**/`motolii-export` 10中**0**/`motolii-audio` 73中**0**/`motolii-vector` 34中**0**/`motolii-shell-state` 41中3。**バックはほぼ完成していて front が呼んでいないだけ**(2026-08-28 朝まで Intent 接続はゼロだった)。hero への距離順のタスク表 S1〜S18 — 第1波 = `SetSource`(棚の資産をレイヤーへ = インポートの切れている線)・音(73本丸ごと未接続)・`layer_failures`(**失敗が見えないのは失敗するより悪い**)・`RemoveLayer`・`SetMarkers`。第2波 = 書き出し(10本すべて未接続、`export_surface.rs` の進捗バーは何にも繋がっていない)・カメラkey・comp設定・テキスト・シェイプ。**1行 = 1レーン**、審判は裁定271/272/274 の3つ | **現在地/タスク表**(2026-08-28) |
+
+## 追加索引 — 2026-09-06整理
+
+現行の判断は[Stage 5](../stage5/README.md)。以下は作成時点の調査・候補・決定の根拠。
+
+- [2026-09-03 コンセプトへの異議(コンセプトデザイナー: Ableton / Figma の人)](2026-09-03-concept-challenge.md)
+- [persona の違和感 backlog — しらみ潰し(2026-09-03 利用者: 最大公約数でなく全部)](2026-09-03-persona-backlog.md)
+- [2026-09-03 売り込み 第 2 波(営業 13 社)— カタログを持った利害関係者](2026-09-03-vendor-pitches-2.md)
+- [2026-09-03 売り込み 第 3 波(中小 11 社)+ 技術カンファレンス(委託の館)](2026-09-03-vendor-pitches-3.md)
+- [2026-09-03 売り込み(営業ペルソナ)— 弊社の技術で賄える部分](2026-09-03-vendor-pitches.md)
+- [副社長の査定 — 営業 41 社の売り込み(2026-09-03)](2026-09-03-vp-verdict.md)
+- [Motoliiの根本コンセプト](2026-09-05-concept-alignment.md)
+- [Motolii パネル別レビュー候補](2026-09-05-panel-review-candidates.md)
+- [Motolii: ordinary, comfortable editing](2026-09-05-product-quality.md)
+- [Spatial authoring: structural repair](2026-09-05-spatial-authoring-plan.md)
+- [Timeline clipping masks](2026-09-05-timeline-clipping.md)

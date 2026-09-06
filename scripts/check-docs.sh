@@ -108,7 +108,7 @@ if [ -f "$DOCS/decision-index.md" ]; then
   }' "$DOCS/decision-index.md" | sort -u)
   if [ -n "$bad" ]; then
     while IFS= read -r w; do
-      err "decision-index.md に未定義の状態語彙: 「$w」(許可: 決定/縮小採用/延期/棄却/撤回/未統一/観察/比較中/停止線)"
+      err "decision-index.md に未定義の状態語彙: 「${w}」(許可: 決定/縮小採用/延期/棄却/撤回/未統一/観察/比較中/停止線)"
     done <<< "$bad"
   fi
 else
