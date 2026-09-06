@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import '../session/editor_session.dart';
 import '../foundation/theme.dart';
 import '../foundation/panel_controls.dart';
+import '../foundation/metrics.dart';
 
 class NotesPanel extends StatefulWidget {
   const NotesPanel({super.key, required this.controller});
@@ -228,7 +229,7 @@ class _NotesPanelState extends State<NotesPanel> {
         child: Column(
           children: [
             SizedBox(
-              height: 30,
+              height: EditorMetrics.tall,
               child: Row(
                 children: [
                   Expanded(
@@ -253,7 +254,9 @@ class _NotesPanelState extends State<NotesPanel> {
                             ),
                             child: Text(
                               '${p['title']}',
-                              style: const TextStyle(fontSize: 11),
+                              style: const TextStyle(
+                                fontSize: EditorMetrics.font,
+                              ),
                             ),
                           ),
                       ],
@@ -261,7 +264,7 @@ class _NotesPanelState extends State<NotesPanel> {
                   ),
                   IconButton(
                     tooltip: 'New page',
-                    iconSize: 16,
+                    iconSize: EditorMetrics.s16,
                     onPressed: _newPage,
                     icon: const Icon(Icons.add),
                   ),
@@ -270,7 +273,9 @@ class _NotesPanelState extends State<NotesPanel> {
             ),
             if (page != null)
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: EditorMetrics.s8,
+                ),
                 child: EditorDraftField(
                   key: ValueKey('page:${page['id']}'),
                   value: '${page['title']}',
@@ -281,28 +286,28 @@ class _NotesPanelState extends State<NotesPanel> {
                 ),
               ),
             SizedBox(
-              height: 32,
+              height: EditorMetrics.s32,
               child: Row(
                 children: [
                   IconButton(
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints.tightFor(
-                      width: 30,
-                      height: 30,
+                      width: EditorMetrics.tall,
+                      height: EditorMetrics.tall,
                     ),
                     tooltip: 'Paste',
-                    iconSize: 16,
+                    iconSize: EditorMetrics.s16,
                     onPressed: _paste,
                     icon: const Icon(Icons.content_paste),
                   ),
                   IconButton(
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints.tightFor(
-                      width: 30,
-                      height: 30,
+                      width: EditorMetrics.tall,
+                      height: EditorMetrics.tall,
                     ),
                     tooltip: 'Insert image',
-                    iconSize: 16,
+                    iconSize: EditorMetrics.s16,
                     onPressed: () async {
                       final paths = await c.native('pickImport');
                       if (paths is List)
@@ -318,22 +323,22 @@ class _NotesPanelState extends State<NotesPanel> {
                   IconButton(
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints.tightFor(
-                      width: 30,
-                      height: 30,
+                      width: EditorMetrics.tall,
+                      height: EditorMetrics.tall,
                     ),
                     tooltip: 'Link selection',
-                    iconSize: 16,
+                    iconSize: EditorMetrics.s16,
                     onPressed: _reference,
                     icon: const Icon(Icons.link),
                   ),
                   IconButton(
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints.tightFor(
-                      width: 30,
-                      height: 30,
+                      width: EditorMetrics.tall,
+                      height: EditorMetrics.tall,
                     ),
                     tooltip: 'Reset view',
-                    iconSize: 16,
+                    iconSize: EditorMetrics.s16,
                     onPressed: () =>
                         setState(() => _transform.value = Matrix4.identity()),
                     icon: const Icon(Icons.center_focus_strong),
@@ -342,11 +347,11 @@ class _NotesPanelState extends State<NotesPanel> {
                     IconButton(
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints.tightFor(
-                        width: 30,
-                        height: 30,
+                        width: EditorMetrics.tall,
+                        height: EditorMetrics.tall,
                       ),
                       tooltip: 'Delete page',
-                      iconSize: 16,
+                      iconSize: EditorMetrics.s16,
                       onPressed: () async {
                         await c.flushEditors();
                         await _action('deletePage', {}, page: '${page['id']}');
@@ -358,12 +363,15 @@ class _NotesPanelState extends State<NotesPanel> {
             ),
             if (_pages.isEmpty)
               Padding(
-                padding: const EdgeInsets.all(8),
+                padding: const EdgeInsets.all(EditorMetrics.s8),
                 child: Column(
                   children: [
                     const Text(
                       'Click anywhere to write',
-                      style: TextStyle(fontSize: 11, color: EditorTheme.muted),
+                      style: TextStyle(
+                        fontSize: EditorMetrics.font,
+                        color: EditorTheme.muted,
+                      ),
                     ),
                     if (c.deskWork.value['note'] != null ||
                         c.deskWork.value['notes'] != null ||
@@ -385,7 +393,7 @@ class _NotesPanelState extends State<NotesPanel> {
                   constrained: false,
                   minScale: .25,
                   maxScale: 2.0,
-                  boundaryMargin: const EdgeInsets.all(200),
+                  boundaryMargin: const EdgeInsets.all(EditorMetrics.s200),
                   child: SizedBox(
                     width: width,
                     height: height,
@@ -557,8 +565,8 @@ class _NoteCardState extends State<_NoteCard> {
         alignment: Alignment.topLeft,
         minWidth: 0,
         minHeight: 0,
-        maxWidth: 5000,
-        maxHeight: 5000,
+        maxWidth: EditorMetrics.canvas,
+        maxHeight: EditorMetrics.canvas,
         child: SizedBox(
           width: ((b['width'] as num) + (_resizing ? delta.dx : 0))
               .clamp(80, 5000)
@@ -579,7 +587,7 @@ class _NoteCardState extends State<_NoteCard> {
               child: Column(
                 children: [
                   SizedBox(
-                    height: 20,
+                    height: EditorMetrics.row,
                     child: Row(
                       children: [
                         Expanded(
@@ -594,7 +602,7 @@ class _NoteCardState extends State<_NoteCard> {
                             child: const Center(
                               child: Icon(
                                 Icons.drag_handle,
-                                size: 14,
+                                size: EditorMetrics.s14,
                                 color: EditorTheme.muted,
                               ),
                             ),
@@ -604,10 +612,10 @@ class _NoteCardState extends State<_NoteCard> {
                           tooltip: 'Delete note',
                           padding: EdgeInsets.zero,
                           constraints: const BoxConstraints.tightFor(
-                            width: 20,
-                            height: 20,
+                            width: EditorMetrics.row,
+                            height: EditorMetrics.row,
                           ),
-                          iconSize: 12,
+                          iconSize: EditorMetrics.s12,
                           onPressed: () async {
                             await _flush();
                             await widget.controller.command('notes', {
@@ -623,7 +631,9 @@ class _NoteCardState extends State<_NoteCard> {
                   ),
                   Expanded(
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: EditorMetrics.s6,
+                      ),
                       child: switch (b['kind']) {
                         'image' =>
                           _imageBytes == null
@@ -644,7 +654,9 @@ class _NoteCardState extends State<_NoteCard> {
                           },
                           child: Text(
                             '${b['label']}',
-                            style: const TextStyle(fontSize: 11),
+                            style: const TextStyle(
+                              fontSize: EditorMetrics.font,
+                            ),
                           ),
                         ),
                         _ => TextField(
@@ -653,7 +665,7 @@ class _NoteCardState extends State<_NoteCard> {
                           maxLines: null,
                           expands: true,
                           style: const TextStyle(
-                            fontSize: 13,
+                            fontSize: EditorMetrics.title,
                             color: EditorTheme.ink,
                           ),
                           decoration: const InputDecoration(
@@ -683,11 +695,11 @@ class _NoteCardState extends State<_NoteCard> {
                       onPanEnd: (_) => _end(),
                       onPanCancel: () => setState(() => _delta = null),
                       child: const SizedBox(
-                        width: 18,
-                        height: 16,
+                        width: EditorMetrics.s18,
+                        height: EditorMetrics.s16,
                         child: Icon(
                           Icons.south_east,
-                          size: 12,
+                          size: EditorMetrics.s12,
                           color: EditorTheme.muted,
                         ),
                       ),

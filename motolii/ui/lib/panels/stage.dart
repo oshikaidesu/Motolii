@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 
 import '../session/editor_session.dart';
 import '../foundation/theme.dart';
+import '../foundation/metrics.dart';
 
 class StagePanel extends StatefulWidget {
   const StagePanel({super.key, required this.controller});
@@ -83,10 +84,17 @@ class _StagePanelState extends State<StagePanel> {
         _orbitPending = null;
         await c.command('stageView', {'orbit': angles});
       }
-    } finally { _orbitSending = false; }
+    } finally {
+      _orbitSending = false;
+    }
   }
-  List<Map<String,dynamic>> get _cameras => _userStage ? EditorSession.maps(_state['cameraGizmos']) : [];
-  List<Offset> _cameraPoints(Map<String,dynamic> camera) => (camera['points'] as List).map((p)=>_toScreen(Offset(_num(p[0]),_num(p[1])))).toList();
+
+  List<Map<String, dynamic>> get _cameras =>
+      _userStage ? EditorSession.maps(_state['cameraGizmos']) : [];
+  List<Offset> _cameraPoints(Map<String, dynamic> camera) =>
+      (camera['points'] as List)
+          .map((p) => _toScreen(Offset(_num(p[0]), _num(p[1]))))
+          .toList();
 
   final _focus = FocusNode(debugLabel: 'Stage');
   double? _zoom;
@@ -289,12 +297,16 @@ class _StagePanelState extends State<StagePanel> {
     if (_userStage && event.buttons == kSecondaryMouseButton) {
       _orbiting = true;
       final angles = c.state['userOrbit'] as List?;
-      _orbitAngles = angles == null ? [-15,30] : angles.map((v)=>(v as num).toDouble()).toList();
+      _orbitAngles = angles == null
+          ? [-15, 30]
+          : angles.map((v) => (v as num).toDouble()).toList();
       return;
     }
     for (final camera in _cameras) {
-      if ((_cameraPoints(camera).first-event.localPosition).distance < 12) {
-        c.command('select', {'ids':[camera['id']]});
+      if ((_cameraPoints(camera).first - event.localPosition).distance < 12) {
+        c.command('select', {
+          'ids': [camera['id']],
+        });
         _pointer = null;
         return;
       }
@@ -348,8 +360,11 @@ class _StagePanelState extends State<StagePanel> {
     final old = _lastScreen ?? event.localPosition;
     _lastScreen = event.localPosition;
     if (_orbiting) {
-      final delta = event.localPosition-old;
-      _orbitAngles = [(_orbitAngles[0]+delta.dy*.3).clamp(-85.0,85.0),_orbitAngles[1]-delta.dx*.3];
+      final delta = event.localPosition - old;
+      _orbitAngles = [
+        (_orbitAngles[0] + delta.dy * .3).clamp(-85.0, 85.0),
+        _orbitAngles[1] - delta.dx * .3,
+      ];
       _orbitPending = List.of(_orbitAngles);
       _sendOrbit();
       return;
@@ -376,7 +391,11 @@ class _StagePanelState extends State<StagePanel> {
   void _up(PointerUpEvent event) {
     if (event.pointer != _pointer) return;
     _lastScreen = event.localPosition;
-    if (_orbiting) { _orbiting=false; _pointer=null; return; }
+    if (_orbiting) {
+      _orbiting = false;
+      _pointer = null;
+      return;
+    }
     final box = _marquee;
     if (box != null && c.supports('select')) {
       final hits = _visible
@@ -433,17 +452,23 @@ class _StagePanelState extends State<StagePanel> {
     builder: (context, _) => Column(
       children: [
         Container(
-          height: 22,
+          height: EditorMetrics.s22,
           decoration: const BoxDecoration(
             color: EditorTheme.panel,
             border: Border(bottom: BorderSide(color: EditorTheme.line)),
           ),
           child: Row(
             children: [
-              const SizedBox(width: 8),
+              const SizedBox(width: EditorMetrics.s8),
 
-              _button(_userStage ? '● User Stage' : 'User Stage', () => c.command('stageView', {'mode':'User'})),
-              _button(!_userStage ? '● Camera View' : 'Camera View', () => c.command('stageView', {'mode':'Camera'})),
+              _button(
+                _userStage ? '● User Stage' : 'User Stage',
+                () => c.command('stageView', {'mode': 'User'}),
+              ),
+              _button(
+                !_userStage ? '● Camera View' : 'Camera View',
+                () => c.command('stageView', {'mode': 'Camera'}),
+              ),
               const Spacer(),
               _button(
                 'Fit',
@@ -465,7 +490,7 @@ class _StagePanelState extends State<StagePanel> {
               ),
               Text(
                 '${(_scale * 100).round()}%',
-                style: const TextStyle(fontSize: 10),
+                style: const TextStyle(fontSize: EditorMetrics.dense),
               ),
               _button(
                 '+',
@@ -549,7 +574,7 @@ class _StagePanelState extends State<StagePanel> {
                                       child: Text(
                                         'No rendered texture',
                                         style: TextStyle(
-                                          fontSize: 11,
+                                          fontSize: EditorMetrics.font,
                                           color: EditorTheme.muted,
                                         ),
                                       ),
@@ -594,14 +619,17 @@ class _StagePanelState extends State<StagePanel> {
           ),
         ),
         Container(
-          height: 22,
-          padding: const EdgeInsets.symmetric(horizontal: 8),
+          height: EditorMetrics.s22,
+          padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s8),
           color: EditorTheme.panel,
           child: Row(
             children: [
               Text(
                 '${_width.toInt()} × ${_height.toInt()}',
-                style: const TextStyle(fontSize: 10, color: EditorTheme.muted),
+                style: const TextStyle(
+                  fontSize: EditorMetrics.dense,
+                  color: EditorTheme.muted,
+                ),
               ),
               const Spacer(),
               ValueListenableBuilder<int>(
@@ -609,17 +637,20 @@ class _StagePanelState extends State<StagePanel> {
                 builder: (context, frame, _) => Text(
                   'Frame $frame',
                   style: const TextStyle(
-                    fontSize: 10,
+                    fontSize: EditorMetrics.dense,
                     color: EditorTheme.muted,
                   ),
                 ),
               ),
               if (!c.supports('stageGesture'))
                 const Padding(
-                  padding: EdgeInsets.only(left: 8),
+                  padding: EdgeInsets.only(left: EditorMetrics.s8),
                   child: Text(
                     'Transform gestures unavailable',
-                    style: TextStyle(fontSize: 10, color: EditorTheme.muted),
+                    style: TextStyle(
+                      fontSize: EditorMetrics.dense,
+                      color: EditorTheme.muted,
+                    ),
                   ),
                 ),
             ],
@@ -658,17 +689,42 @@ class _StageOverlay extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..color = EditorTheme.accent
       ..strokeWidth = 1;
-    final cameraLine = Paint()..color = const Color(0xff8ed9e6)..strokeWidth=1..style=PaintingStyle.stroke;
+    final cameraLine = Paint()
+      ..color = const Color(0xff8ed9e6)
+      ..strokeWidth = 1
+      ..style = PaintingStyle.stroke;
     for (final points in cameras) {
       if (points.length != 5) continue;
-      for (var i=1;i<5;i++) {
-        canvas.drawLine(points[0],points[i],cameraLine);
-        canvas.drawLine(points[i],points[i==4?1:i+1],cameraLine);
+      for (var i = 1; i < 5; i++) {
+        canvas.drawLine(points[0], points[i], cameraLine);
+        canvas.drawLine(points[i], points[i == 4 ? 1 : i + 1], cameraLine);
       }
-      canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromCenter(center:points[0],width:16,height:12),const Radius.circular(2)),cameraLine);
-      canvas.drawLine(points[0]+const Offset(8,-4),points[0]+const Offset(13,-7),cameraLine);
-      canvas.drawLine(points[0]+const Offset(13,-7),points[0]+const Offset(13,7),cameraLine);
-      canvas.drawLine(points[0]+const Offset(13,7),points[0]+const Offset(8,4),cameraLine);
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromCenter(
+            center: points[0],
+            width: EditorMetrics.s16,
+            height: EditorMetrics.s12,
+          ),
+          const Radius.circular(EditorMetrics.s2),
+        ),
+        cameraLine,
+      );
+      canvas.drawLine(
+        points[0] + const Offset(8, -4),
+        points[0] + const Offset(13, -7),
+        cameraLine,
+      );
+      canvas.drawLine(
+        points[0] + const Offset(13, -7),
+        points[0] + const Offset(13, 7),
+        cameraLine,
+      );
+      canvas.drawLine(
+        points[0] + const Offset(13, 7),
+        points[0] + const Offset(8, 4),
+        cameraLine,
+      );
     }
     for (final points in outlines) {
       if (points.isEmpty) continue;
@@ -692,7 +748,11 @@ class _StageOverlay extends CustomPainter {
         canvas.drawCircle(entry.value, 4, Paint()..color = EditorTheme.app);
         canvas.drawCircle(entry.value, 4, line);
       } else {
-        final rect = Rect.fromCenter(center: entry.value, width: 6, height: 6);
+        final rect = Rect.fromCenter(
+          center: entry.value,
+          width: EditorMetrics.s6,
+          height: EditorMetrics.s6,
+        );
         canvas.drawRect(rect, Paint()..color = EditorTheme.app);
         canvas.drawRect(rect, line);
       }

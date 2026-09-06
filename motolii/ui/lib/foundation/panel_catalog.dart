@@ -26,6 +26,7 @@ class PanelSpec {
   final String name, category;
   final IconData icon;
   final double minWidth, minHeight;
+
   /// Docked size along each axis; detached windows use [minWidth]/[minHeight].
   final Extent width, height;
   final bool drawer;

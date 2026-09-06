@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../session/editor_session.dart';
 import '../foundation/panel_catalog.dart';
 import '../foundation/theme.dart';
+import '../foundation/metrics.dart';
 
 class DeskPanel extends StatefulWidget {
   const DeskPanel({
@@ -113,12 +114,15 @@ class _DeskPanelState extends State<DeskPanel> {
       ))
         ListTile(
           dense: true,
-          leading: Icon(spec.icon, size: 23),
-          title: Text(spec.name, style: const TextStyle(fontSize: 12)),
+          leading: Icon(spec.icon, size: EditorMetrics.s23),
+          title: Text(
+            spec.name,
+            style: const TextStyle(fontSize: EditorMetrics.s12),
+          ),
           onTap: () => _open(spec.name),
           trailing: IconButton(
             tooltip: 'Use ${spec.name} when idle',
-            iconSize: 16,
+            iconSize: EditorMetrics.s16,
             color: _name(c.deskDefault.value) == spec.name
                 ? EditorTheme.accent
                 : EditorTheme.muted,
@@ -156,20 +160,20 @@ class _DeskPanelState extends State<DeskPanel> {
             child: Column(
               children: [
                 SizedBox(
-                  height: 28,
+                  height: EditorMetrics.bar,
                   child: Row(
                     children: [
                       IconButton(
                         tooltip: 'Desk tools',
-                        iconSize: 18,
+                        iconSize: EditorMetrics.s18,
                         onPressed: () => c.deskDrawer.value = 'Tools',
                         icon: const Icon(Icons.all_inbox_outlined),
                       ),
-                      if (live) Icon(spec!.icon, size: 16),
-                      const SizedBox(width: 6),
+                      if (live) Icon(spec!.icon, size: EditorMetrics.s16),
+                      const SizedBox(width: EditorMetrics.s6),
                       Text(
                         live ? shown : 'Tools',
-                        style: const TextStyle(fontSize: 11),
+                        style: const TextStyle(fontSize: EditorMetrics.font),
                       ),
                     ],
                   ),

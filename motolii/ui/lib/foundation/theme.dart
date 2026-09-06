@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'metrics.dart';
+
 abstract final class EditorTheme {
   static const app = Color(0xff292929),
       panel = Color(0xff3c3c3c),
@@ -33,7 +35,6 @@ abstract final class EditorTheme {
     '2d' || 'images' => const Color(0xff93a5f5),
     _ => const Color(0xffc18bd3),
   };
-  static const double row = 20, section = 26, font = 11, dense = 10;
   static ThemeData get data => ThemeData.dark(useMaterial3: false).copyWith(
     scaffoldBackgroundColor: app,
     canvasColor: panel,
@@ -58,10 +59,10 @@ abstract final class EditorTheme {
       surface: panel,
     ),
     textTheme: const TextTheme(
-      bodyMedium: TextStyle(fontSize: font, color: ink),
-      bodySmall: TextStyle(fontSize: dense, color: muted),
-      titleMedium: TextStyle(fontSize: font, color: ink),
-      labelLarge: TextStyle(fontSize: font, color: ink),
+      bodyMedium: TextStyle(fontSize: EditorMetrics.font, color: ink),
+      bodySmall: TextStyle(fontSize: EditorMetrics.dense, color: muted),
+      titleMedium: TextStyle(fontSize: EditorMetrics.font, color: ink),
+      labelLarge: TextStyle(fontSize: EditorMetrics.font, color: ink),
     ),
     visualDensity: VisualDensity.compact,
     inputDecorationTheme: const InputDecorationTheme(
@@ -91,7 +92,7 @@ abstract final class EditorTheme {
         ),
         padding: const EdgeInsets.symmetric(horizontal: 4),
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        textStyle: const TextStyle(fontSize: font),
+        textStyle: const TextStyle(fontSize: EditorMetrics.font),
       ),
     ),
     iconTheme: const IconThemeData(size: 14, color: ink),
@@ -119,7 +120,7 @@ class EditorButton extends StatelessWidget {
     final button = Padding(
       padding: const EdgeInsets.symmetric(horizontal: 1, vertical: 1),
       child: SizedBox(
-        height: EditorTheme.row - 2,
+        height: EditorMetrics.row - 2,
         child: TextButton(
           onPressed: onPressed,
           style: TextButton.styleFrom(
@@ -144,7 +145,7 @@ class EditorSection extends StatelessWidget {
     mainAxisSize: MainAxisSize.min,
     children: [
       Container(
-        height: EditorTheme.section,
+        height: EditorMetrics.section,
         decoration: const BoxDecoration(
           color: EditorTheme.raised,
           border: Border(bottom: BorderSide(color: EditorTheme.line)),

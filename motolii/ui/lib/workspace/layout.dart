@@ -15,8 +15,10 @@ class DockNode {
   String id, active;
   List<String> tabs;
   Axis? axis;
+
   /// Share of the axis given to [first] when neither side has a fixed extent.
   double ratio = .5;
+
   /// Pixels the user dragged a fixed side away from its catalog extent.
   double offset = 0;
   DockNode? first, second;
@@ -34,7 +36,8 @@ class DockNode {
     if (leaf) {
       var fixed = 0.0;
       for (final t in tabs) {
-        final e = (t == 'Desk' ? deskHostSpec : panelSpec(t))?.extent(along) ??
+        final e =
+            (t == 'Desk' ? deskHostSpec : panelSpec(t))?.extent(along) ??
             Extent.any;
         if (e.isFill) return Extent.fill;
         if (e.isFixed && e.px > fixed) fixed = e.px;
@@ -73,6 +76,7 @@ class DockNode {
       ratio = (ratio + delta / size).clamp(.1, .9);
     }
   }
+
   Iterable<DockNode> get leaves sync* {
     if (leaf) {
       yield this;

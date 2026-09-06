@@ -6,6 +6,7 @@ import '../foundation/theme.dart';
 import '../foundation/panel_catalog.dart';
 import 'layout.dart';
 import 'panel_ids.dart';
+import '../foundation/metrics.dart';
 
 class WorkspaceView extends StatefulWidget {
   const WorkspaceView({
@@ -63,8 +64,8 @@ class _WorkspaceViewState extends State<WorkspaceView> {
                 ),
                 onPanEnd: (_) => widget.onLayoutChanged(),
                 child: Container(
-                  width: horizontal ? 4 : null,
-                  height: horizontal ? null : 4,
+                  width: horizontal ? EditorMetrics.s4 : null,
+                  height: horizontal ? null : EditorMetrics.s4,
                   color: EditorTheme.line,
                 ),
               ),
@@ -115,19 +116,22 @@ class _WorkspaceViewState extends State<WorkspaceView> {
               decoration: BoxDecoration(
                 color: EditorTheme.panel,
                 border: candidates.isNotEmpty
-                    ? Border.all(color: EditorTheme.accent, width: 2)
+                    ? Border.all(
+                        color: EditorTheme.accent,
+                        width: EditorMetrics.s2,
+                      )
                     : Border.all(
                         color: focusedPanel == node.id
                             ? const Color(0xffacacac)
                             : Colors.transparent,
                         width: 1,
                       ),
-                borderRadius: BorderRadius.circular(3),
+                borderRadius: BorderRadius.circular(EditorMetrics.s3),
               ),
               child: Column(
                 children: [
                   SizedBox(
-                    height: 20,
+                    height: EditorMetrics.row,
                     child: Row(
                       children: [
                         Expanded(
@@ -141,7 +145,9 @@ class _WorkspaceViewState extends State<WorkspaceView> {
                                     feedback: Material(
                                       color: EditorTheme.raised,
                                       child: Padding(
-                                        padding: const EdgeInsets.all(8),
+                                        padding: const EdgeInsets.all(
+                                          EditorMetrics.s8,
+                                        ),
                                         child: Text(name),
                                       ),
                                     ),
@@ -162,12 +168,12 @@ class _WorkspaceViewState extends State<WorkspaceView> {
                                           items: [
                                             const PopupMenuItem(
                                               value: 'detach',
-                                              height: 20,
+                                              height: EditorMetrics.row,
                                               child: Text('Detach'),
                                             ),
                                             const PopupMenuItem(
                                               value: 'close',
-                                              height: 20,
+                                              height: EditorMetrics.row,
                                               child: Text('Close'),
                                             ),
                                           ],
@@ -182,10 +188,10 @@ class _WorkspaceViewState extends State<WorkspaceView> {
                                         onTap: () =>
                                             setState(() => node.active = name),
                                         child: Container(
-                                          height: 20,
+                                          height: EditorMetrics.row,
                                           alignment: Alignment.center,
                                           padding: const EdgeInsets.symmetric(
-                                            horizontal: 5,
+                                            horizontal: EditorMetrics.s5,
                                           ),
                                           decoration: BoxDecoration(
                                             color:
@@ -196,7 +202,7 @@ class _WorkspaceViewState extends State<WorkspaceView> {
                                             border: const Border(
                                               right: BorderSide(
                                                 color: EditorTheme.line,
-                                                width: 2,
+                                                width: EditorMetrics.s2,
                                               ),
                                             ),
                                           ),
@@ -206,9 +212,11 @@ class _WorkspaceViewState extends State<WorkspaceView> {
                                               Icon(
                                                 panelSpec(name)?.icon ??
                                                     Icons.all_inbox_outlined,
-                                                size: 13,
+                                                size: EditorMetrics.title,
                                               ),
-                                              const SizedBox(width: 4),
+                                              const SizedBox(
+                                                width: EditorMetrics.s4,
+                                              ),
                                               Text(
                                                 name,
                                                 style: TextStyle(
@@ -218,7 +226,7 @@ class _WorkspaceViewState extends State<WorkspaceView> {
                                                       ? EditorTheme.tabInk
                                                       : EditorTheme.ink,
                                                   fontWeight: FontWeight.w600,
-                                                  fontSize: 10,
+                                                  fontSize: EditorMetrics.dense,
                                                 ),
                                               ),
                                             ],

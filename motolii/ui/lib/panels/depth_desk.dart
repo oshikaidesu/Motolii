@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../session/editor_session.dart';
 import '../foundation/theme.dart';
 import '../foundation/panel_controls.dart';
+import '../foundation/metrics.dart';
 
 class DepthDesk extends StatefulWidget {
   const DepthDesk({super.key, required this.controller});
@@ -65,13 +66,13 @@ class _DepthDeskState extends State<DepthDesk> {
       return Column(
         children: [
           SizedBox(
-            height: 24,
+            height: EditorMetrics.control,
             child: Row(
               children: [
-                const SizedBox(width: 6),
+                const SizedBox(width: EditorMetrics.s6),
                 const Icon(
                   Icons.videocam_outlined,
-                  size: 15,
+                  size: EditorMetrics.s15,
                   color: EditorTheme.muted,
                 ),
                 const Spacer(),
@@ -188,13 +189,13 @@ class _DepthDeskState extends State<DepthDesk> {
                         ),
                         for (final item in items)
                           Positioned(
-                            left: point(item).dx - 9,
-                            top: point(item).dy - 9,
+                            left: point(item).dx - EditorMetrics.micro,
+                            top: point(item).dy - EditorMetrics.micro,
                             child: Tooltip(
                               message: '${item['name']}',
                               child: Container(
-                                width: 18,
-                                height: 18,
+                                width: EditorMetrics.s18,
+                                height: EditorMetrics.s18,
                                 decoration: BoxDecoration(
                                   color: EditorTheme.layerColor(item['id']),
                                   shape: BoxShape.circle,
@@ -203,14 +204,14 @@ class _DepthDeskState extends State<DepthDesk> {
                                         ? EditorTheme.ink
                                         : EditorTheme.line,
                                     width: c.selectedIds.contains(item['id'])
-                                        ? 2
+                                        ? EditorMetrics.s2
                                         : 1,
                                   ),
                                 ),
                                 child: Center(
                                   child: Icon(
                                     Icons.circle,
-                                    size: 4,
+                                    size: EditorMetrics.s4,
                                     color: c.selectedIds.contains(item['id'])
                                         ? EditorTheme.ink
                                         : EditorTheme.line,
@@ -223,17 +224,17 @@ class _DepthDeskState extends State<DepthDesk> {
                           (item) => c.selectedIds.contains(item['id']),
                         ))
                           Positioned(
-                            left: point(item).dx + 12,
-                            top: point(item).dy - 7,
+                            left: point(item).dx + EditorMetrics.s12,
+                            top: point(item).dy - EditorMetrics.s7,
                             child: IgnorePointer(
                               child: SizedBox(
-                                width: 76,
+                                width: EditorMetrics.s76,
                                 child: Text(
                                   '${item['name']}',
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: const TextStyle(
-                                    fontSize: 10,
+                                    fontSize: EditorMetrics.dense,
                                     color: EditorTheme.ink,
                                   ),
                                 ),
@@ -278,7 +279,11 @@ class _DepthGrid extends CustomPainter {
         view,
       );
     canvas.drawRect(
-      Rect.fromCenter(center: origin, width: 14, height: 10),
+      Rect.fromCenter(
+        center: origin,
+        width: EditorMetrics.s14,
+        height: EditorMetrics.dense,
+      ),
       Paint()..color = const Color(0xff8ed9e6),
     );
     final arrow = Path()

@@ -13,6 +13,7 @@ import '../panels/registry.dart';
 import '../panels/panel_settings.dart';
 import '../panels/composition_controls.dart';
 import '../panels/export_controls.dart';
+import '../foundation/metrics.dart';
 
 class EditorWindow extends StatefulWidget {
   const EditorWindow({super.key});
@@ -350,12 +351,18 @@ class _EditorWindowState extends State<EditorWindow> {
       for (final item in items)
         PopupMenuItem(
           value: item,
-          height: 26,
-          child: Text(item, style: const TextStyle(fontSize: 11)),
+          height: EditorMetrics.section,
+          child: Text(
+            item,
+            style: const TextStyle(fontSize: EditorMetrics.font),
+          ),
         ),
     ],
     child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+      padding: const EdgeInsets.symmetric(
+        horizontal: EditorMetrics.s7,
+        vertical: EditorMetrics.s4,
+      ),
       child: Text(label),
     ),
   );
@@ -367,7 +374,10 @@ class _EditorWindowState extends State<EditorWindow> {
     onKeyEvent: shortcuts.handle,
     child: Scaffold(
       body: DefaultTextStyle(
-        style: const TextStyle(fontSize: 11, color: EditorTheme.ink),
+        style: const TextStyle(
+          fontSize: EditorMetrics.font,
+          color: EditorTheme.ink,
+        ),
         child: LayoutBuilder(
           builder: (context, box) => Transform.scale(
             scale: uiScale,
@@ -381,7 +391,7 @@ class _EditorWindowState extends State<EditorWindow> {
                     children: [
                       if (c.windowInfo['main'] != false)
                         Container(
-                          height: 24,
+                          height: EditorMetrics.control,
                           color: EditorTheme.app,
                           child: Row(
                             children: [
@@ -441,9 +451,11 @@ class _EditorWindowState extends State<EditorWindow> {
                       ValueListenableBuilder<String?>(
                         valueListenable: c.error,
                         builder: (_, message, __) => Container(
-                          height: 20,
+                          height: EditorMetrics.row,
                           alignment: Alignment.centerLeft,
-                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: EditorMetrics.s6,
+                          ),
                           color: EditorTheme.app,
                           child: Text(
                             message ?? '',
@@ -463,16 +475,18 @@ class _EditorWindowState extends State<EditorWindow> {
                     ),
                     Positioned(
                       left: sheet == 'Composition'
-                          ? 85
+                          ? EditorMetrics.s85
                           : sheet == 'Export'
-                          ? 155
-                          : 200,
-                      top: 24,
+                          ? EditorMetrics.s155
+                          : EditorMetrics.s200,
+                      top: EditorMetrics.control,
                       child: Material(
                         color: EditorTheme.panel,
                         elevation: 4,
                         child: Container(
-                          width: sheet == 'Settings' ? 420 : 320,
+                          width: sheet == 'Settings'
+                              ? EditorMetrics.sheetWide
+                              : EditorMetrics.sheet,
                           decoration: BoxDecoration(
                             border: Border.all(color: EditorTheme.border),
                           ),
@@ -484,7 +498,7 @@ class _EditorWindowState extends State<EditorWindow> {
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     SizedBox(
-                                      height: 320,
+                                      height: EditorMetrics.sheet,
                                       child: PanelSettings(controller: c),
                                     ),
                                     const EditorSection(
@@ -493,7 +507,7 @@ class _EditorWindowState extends State<EditorWindow> {
                                     ),
                                     Row(
                                       children: [
-                                        const SizedBox(width: 8),
+                                        const SizedBox(width: EditorMetrics.s8),
                                         const Expanded(
                                           child: Text('Outside dim'),
                                         ),
@@ -514,7 +528,7 @@ class _EditorWindowState extends State<EditorWindow> {
                                     ),
                                     Row(
                                       children: [
-                                        const SizedBox(width: 8),
+                                        const SizedBox(width: EditorMetrics.s8),
                                         const Expanded(child: Text('Scale')),
                                         EditorButton('−', () {
                                           setState(

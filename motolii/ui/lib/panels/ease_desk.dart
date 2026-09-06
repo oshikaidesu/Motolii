@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import '../session/editor_session.dart';
 import '../foundation/panel_controls.dart';
 import '../foundation/theme.dart';
+import '../foundation/metrics.dart';
 
 class EaseDesk extends StatefulWidget {
   const EaseDesk({super.key, required this.controller});
@@ -250,14 +251,17 @@ class _EaseDeskState extends State<EaseDesk> with WidgetsBindingObserver {
         return KeyEventResult.ignored;
       },
       child: ListView(
-        padding: const EdgeInsets.all(8),
+        padding: const EdgeInsets.all(EditorMetrics.s8),
         children: [
           Text(
             target,
-            style: const TextStyle(fontSize: 10, color: EditorTheme.muted),
+            style: const TextStyle(
+              fontSize: EditorMetrics.dense,
+              color: EditorTheme.muted,
+            ),
           ),
           Wrap(
-            spacing: 3,
+            spacing: EditorMetrics.s3,
             children: [
               panelButton('Apply', _canApply ? _commit : null),
               panelButton(
@@ -375,8 +379,8 @@ class _EaseDeskState extends State<EaseDesk> with WidgetsBindingObserver {
                 child: Semantics(
                   label: 'Easing presets',
                   child: Wrap(
-                    spacing: 4,
-                    runSpacing: 4,
+                    spacing: EditorMetrics.s4,
+                    runSpacing: EditorMetrics.s4,
                     children: [
                       for (var i = 0; i < presets.length; i++)
                         MouseRegion(
@@ -395,8 +399,8 @@ class _EaseDeskState extends State<EaseDesk> with WidgetsBindingObserver {
                                   _choose(presets[i]);
                                 },
                                 child: Container(
-                                  width: 48,
-                                  height: 36,
+                                  width: EditorMetrics.s48,
+                                  height: EditorMetrics.s36,
                                   decoration: BoxDecoration(
                                     border: Border.all(
                                       color:
@@ -423,20 +427,26 @@ class _EaseDeskState extends State<EaseDesk> with WidgetsBindingObserver {
             },
           ),
           SizedBox(
-            height: 20,
+            height: EditorMetrics.row,
             child: Text(
               _hover ?? '${_shape['kind']}',
-              style: const TextStyle(fontSize: 10, color: EditorTheme.muted),
+              style: const TextStyle(
+                fontSize: EditorMetrics.dense,
+                color: EditorTheme.muted,
+              ),
             ),
           ),
           for (final param in _shape.entries.where((e) => e.value is num))
             Row(
               children: [
                 Expanded(
-                  child: Text(param.key, style: const TextStyle(fontSize: 11)),
+                  child: Text(
+                    param.key,
+                    style: const TextStyle(fontSize: EditorMetrics.font),
+                  ),
                 ),
                 SizedBox(
-                  width: 70,
+                  width: EditorMetrics.s70,
                   child: EditorNumericField(
                     key: ValueKey('${_shape['kind']}:${param.key}'),
                     value: (param.value as num).toDouble(),

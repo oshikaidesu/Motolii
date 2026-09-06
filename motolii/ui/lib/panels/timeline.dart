@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import '../session/editor_session.dart';
 import '../foundation/theme.dart';
 import '../input/viewport_motion.dart';
+import '../foundation/metrics.dart';
 
 part 'timeline_layout.dart';
 
@@ -705,7 +706,7 @@ class _TimelinePanelState extends State<TimelinePanel> {
       context: context,
       color: const Color(0xff222222),
       elevation: 0,
-      menuPadding: const EdgeInsets.symmetric(vertical: 2),
+      menuPadding: const EdgeInsets.symmetric(vertical: EditorMetrics.s2),
       shape: const RoundedRectangleBorder(
         side: BorderSide(color: Color(0xffbbbbbb)),
       ),
@@ -736,7 +737,7 @@ class _TimelinePanelState extends State<TimelinePanel> {
             value: entry.key,
             enabled: has(entry.key),
             child: SizedBox(
-              width: 244,
+              width: EditorMetrics.s244,
               child: Row(
                 children: [
                   Expanded(child: Text(entry.value)),
@@ -811,10 +812,10 @@ class _TimelinePanelState extends State<TimelinePanel> {
                     Column(
                       children: [
                         SizedBox(
-                          height: 22,
+                          height: EditorMetrics.s22,
                           child: Row(
                             children: [
-                              const SizedBox(width: 6),
+                              const SizedBox(width: EditorMetrics.s6),
                               ValueListenableBuilder<bool>(
                                 valueListenable: widget.controller.playing,
                                 builder: (_, playing, __) => EditorButton(
@@ -837,10 +838,10 @@ class _TimelinePanelState extends State<TimelinePanel> {
                               }),
                               Expanded(
                                 child: SizedBox(
-                                  height: 18,
+                                  height: EditorMetrics.s18,
                                   child: Padding(
                                     padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
+                                      horizontal: EditorMetrics.s8,
                                     ),
                                     child: LayoutBuilder(
                                       builder: (context, overview) {
@@ -887,7 +888,10 @@ class _TimelinePanelState extends State<TimelinePanel> {
                                             );
                                           },
                                           child: CustomPaint(
-                                            size: Size(overview.maxWidth, 18),
+                                            size: Size(
+                                              overview.maxWidth,
+                                              EditorMetrics.s18,
+                                            ),
                                             painter: _ArrangementOverview(
                                               layers: widget.controller.layers,
                                               duration: duration,
@@ -908,12 +912,12 @@ class _TimelinePanelState extends State<TimelinePanel> {
                                 builder: (_, frame, __) => Text(
                                   '$frame / $duration',
                                   style: const TextStyle(
-                                    fontSize: 10,
+                                    fontSize: EditorMetrics.dense,
                                     color: EditorTheme.muted,
                                   ),
                                 ),
                               ),
-                              const SizedBox(width: 8),
+                              const SizedBox(width: EditorMetrics.s8),
                               EditorButton(
                                 'Marker',
                                 has('addMarker')
@@ -1036,7 +1040,7 @@ class _TimelinePanelState extends State<TimelinePanel> {
                         Padding(
                           padding: EdgeInsets.only(left: labelWidth),
                           child: SizedBox(
-                            height: 12,
+                            height: EditorMetrics.s12,
                             child: Scrollbar(
                               controller: horizontal,
                               thumbVisibility: true,
@@ -1051,7 +1055,7 @@ class _TimelinePanelState extends State<TimelinePanel> {
                                     bounds.maxWidth - labelWidth,
                                     duration * pixelsPerFrame,
                                   ),
-                                  height: 12,
+                                  height: EditorMetrics.s12,
                                 ),
                               ),
                             ),
@@ -1060,10 +1064,10 @@ class _TimelinePanelState extends State<TimelinePanel> {
                       ],
                     ),
                     Positioned(
-                      left: layout.nameWidth - 3,
-                      top: 22,
-                      bottom: 12,
-                      width: 6,
+                      left: layout.nameWidth - EditorMetrics.s3,
+                      top: EditorMetrics.s22,
+                      bottom: EditorMetrics.s12,
+                      width: EditorMetrics.s6,
                       child: MouseRegion(
                         cursor: SystemMouseCursors.resizeColumn,
                         child: GestureDetector(
@@ -1278,15 +1282,15 @@ class _TimelinePainter extends CustomPainter {
           canvas,
           '${seconds.toStringAsFixed(seconds == seconds.roundToDouble() ? 0 : 2)}s',
           Offset(x + 4, 2),
-          width: 78,
-          size: 10,
+          width: EditorMetrics.s78,
+          size: EditorMetrics.dense,
         );
         text(
           canvas,
           '${t}f',
           Offset(x + 4, 17),
-          width: 78,
-          size: 9,
+          width: EditorMetrics.s78,
+          size: EditorMetrics.micro,
           color: EditorTheme.muted,
         );
       }
@@ -1460,7 +1464,7 @@ class _TimelinePainter extends CustomPainter {
         'Layers',
         const Offset(6, 16),
         color: EditorTheme.muted,
-        size: 10,
+        size: EditorMetrics.dense,
         weight: FontWeight.w600,
       );
     else
@@ -1481,7 +1485,7 @@ class _TimelinePainter extends CustomPainter {
             canvas,
             row.isGroup ? (row.groupOpen ? '⊟' : '⊞') : '',
             Offset(row.bounds.left + 5, y + 3),
-            width: 12,
+            width: EditorMetrics.s12,
             centered: true,
             color: const Color(0xff202020),
           );
@@ -1503,8 +1507,8 @@ class _TimelinePainter extends CustomPainter {
             canvas,
             keysOpen ? '◆' : '◇',
             Offset(label - 81, y + 3),
-            width: 14,
-            size: 10,
+            width: EditorMetrics.s14,
+            size: EditorMetrics.dense,
             centered: true,
             color: keysOpen ? const Color(0xff202020) : EditorTheme.ink,
           );
@@ -1527,8 +1531,8 @@ class _TimelinePainter extends CustomPainter {
               canvas,
               symbols[column],
               Offset(x, y + 3),
-              width: 14,
-              size: 9,
+              width: EditorMetrics.s14,
+              size: EditorMetrics.micro,
               centered: true,
               weight: FontWeight.w600,
               color: on ? const Color(0xff202020) : EditorTheme.muted,
@@ -1539,14 +1543,14 @@ class _TimelinePainter extends CustomPainter {
             canvas,
             '${row.property!['label'] ?? row.property!['id'] ?? 'Content'}',
             Offset(row.bounds.left + 6, y + 3),
-            width: 160,
+            width: EditorMetrics.s160,
             color: EditorTheme.muted,
           );
           text(
             canvas,
             row.property!['keyedNow'] == true ? '◆' : '◇',
             Offset(label - 21, y + 3),
-            width: 17,
+            width: EditorMetrics.s17,
             color: EditorTheme.accent,
           );
         }
@@ -1650,7 +1654,7 @@ class _ArrangementOverview extends CustomPainter {
     canvas.drawRRect(
       RRect.fromRectAndRadius(
         Rect.fromLTRB(left, 1, right, 17),
-        const Radius.circular(3),
+        const Radius.circular(EditorMetrics.s3),
       ),
       Paint()
         ..color = EditorTheme.tab

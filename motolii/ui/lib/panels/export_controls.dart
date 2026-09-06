@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../session/editor_session.dart';
 import '../foundation/theme.dart';
+import '../foundation/metrics.dart';
 
 class ExportControls extends StatefulWidget {
   const ExportControls({super.key, required this.controller});
@@ -46,7 +47,7 @@ class _ExportControlsState extends State<ExportControls> {
       final ex = EditorSession.map(s['export']);
       final running = ['running', 'cancelling'].contains(ex['phase']);
       return Padding(
-        padding: const EdgeInsets.all(8),
+        padding: const EdgeInsets.all(EditorMetrics.s8),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,

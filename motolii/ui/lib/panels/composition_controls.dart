@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../session/editor_session.dart';
 import '../foundation/theme.dart';
+import '../foundation/metrics.dart';
 
 class CompositionControls extends StatelessWidget {
   const CompositionControls({super.key, required this.controller});
@@ -11,7 +12,7 @@ class CompositionControls extends StatelessWidget {
       ValueListenableBuilder<Map<String, dynamic>>(
         valueListenable: controller.document,
         builder: (_, s, __) => Padding(
-          padding: const EdgeInsets.all(8),
+          padding: const EdgeInsets.all(EditorMetrics.s8),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -37,12 +38,12 @@ class CompositionControls extends StatelessWidget {
               for (final key in ['width', 'height', 'durationFrames'])
                 Row(
                   children: [
-                    SizedBox(width: 90, child: Text(key)),
+                    SizedBox(width: EditorMetrics.s90, child: Text(key)),
                     Expanded(
                       child: TextFormField(
                         key: ValueKey('$key-${s[key]}'),
                         initialValue: '${s[key]}',
-                        style: const TextStyle(fontSize: 11),
+                        style: const TextStyle(fontSize: EditorMetrics.font),
                         onFieldSubmitted: (value) {
                           final parsed = int.tryParse(value);
                           if (parsed == null || parsed < 1) {

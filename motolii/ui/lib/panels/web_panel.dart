@@ -2,16 +2,17 @@ import 'package:flutter/material.dart';
 
 import '../session/editor_session.dart';
 import '../foundation/panel_controls.dart';
+import '../foundation/metrics.dart';
 
 class WebPanel extends StatelessWidget {
   const WebPanel({super.key, required this.controller});
   final EditorSession controller;
   @override
   Widget build(BuildContext context) => ListView(
-    padding: const EdgeInsets.all(12),
+    padding: const EdgeInsets.all(EditorMetrics.s12),
     children: [
-      const Icon(Icons.language, size: 48),
-      const SizedBox(height: 12),
+      const Icon(Icons.language, size: EditorMetrics.s48),
+      const SizedBox(height: EditorMetrics.s12),
       EditorDraftField(
         value:
             '${controller.deskWork.value['webUrl'] ?? 'https://www.pinterest.com/'}',

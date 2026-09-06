@@ -6,6 +6,7 @@ import '../session/editor_session.dart';
 import '../session/read_model.dart';
 import '../foundation/theme.dart';
 import '../foundation/panel_controls.dart';
+import '../foundation/metrics.dart';
 
 class HistoryPanel extends StatelessWidget {
   const HistoryPanel({super.key, required this.controller});
@@ -25,15 +26,15 @@ class HistoryPanel extends StatelessWidget {
     }
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(8),
+      padding: const EdgeInsets.all(EditorMetrics.s8),
       child: Wrap(
-        spacing: 3,
-        runSpacing: 4,
+        spacing: EditorMetrics.s3,
+        runSpacing: EditorMetrics.s4,
         children: [
           for (var n = back; n >= 1; n--)
             SizedBox(
-              width: 16,
-              height: 32,
+              width: EditorMetrics.s16,
+              height: EditorMetrics.s32,
               child: Tooltip(
                 message: 'Back $n',
                 child: InkWell(
@@ -43,14 +44,14 @@ class HistoryPanel extends StatelessWidget {
               ),
             ),
           const SizedBox(
-            width: 4,
-            height: 32,
+            width: EditorMetrics.s4,
+            height: EditorMetrics.s32,
             child: ColoredBox(color: EditorTheme.accent),
           ),
           for (var n = 1; n <= forward; n++)
             SizedBox(
-              width: 16,
-              height: 32,
+              width: EditorMetrics.s16,
+              height: EditorMetrics.s32,
               child: Tooltip(
                 message: 'Forward $n',
                 child: InkWell(
@@ -62,7 +63,10 @@ class HistoryPanel extends StatelessWidget {
           if (back + forward == 0)
             const Text(
               'No history',
-              style: TextStyle(fontSize: 11, color: EditorTheme.muted),
+              style: TextStyle(
+                fontSize: EditorMetrics.font,
+                color: EditorTheme.muted,
+              ),
             ),
         ],
       ),
@@ -127,10 +131,10 @@ class BlendPanelState extends State<BlendPanel> {
       controller.storeDesk('blend', value);
     });
     return ListView(
-      padding: const EdgeInsets.all(6),
+      padding: const EdgeInsets.all(EditorMetrics.s6),
       children: [
         Wrap(
-          spacing: 4,
+          spacing: EditorMetrics.s4,
           children: [
             panelButton(
               'Load selection',
@@ -155,16 +159,16 @@ class BlendPanelState extends State<BlendPanel> {
             ),
           ],
         ),
-        const SizedBox(height: 5),
+        const SizedBox(height: EditorMetrics.s5),
         LayoutBuilder(
           builder: (context, box) => Wrap(
-            spacing: 3,
-            runSpacing: 3,
+            spacing: EditorMetrics.s3,
+            runSpacing: EditorMetrics.s3,
             children: [
               for (final item in modes)
                 SizedBox(
                   width: (box.maxWidth - 6) / 3,
-                  height: 44,
+                  height: EditorMetrics.s44,
                   child: Tooltip(
                     message: item,
                     child: InkWell(
@@ -206,7 +210,7 @@ class BlendPanelState extends State<BlendPanel> {
             ],
           ),
         ),
-        if (saved.isNotEmpty) const SizedBox(height: 6),
+        if (saved.isNotEmpty) const SizedBox(height: EditorMetrics.s6),
         for (final item in saved)
           Row(
             children: [

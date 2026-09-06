@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../session/editor_session.dart';
 import '../foundation/theme.dart';
 import '../foundation/panel_controls.dart';
+import '../foundation/metrics.dart';
 
 class InspectorPanel extends StatefulWidget {
   const InspectorPanel({super.key, required this.controller});
@@ -134,14 +135,14 @@ class _InspectorPanelState extends State<InspectorPanel> {
     Map<String, dynamic>? row,
     int axis,
   ) {
-    if (row == null) return const SizedBox(width: 52);
+    if (row == null) return const SizedBox(width: EditorMetrics.field);
     final v = row['value'];
     final value = v is List && axis < v.length
         ? v[axis]
         : axis == 0 && v is num
         ? v
         : null;
-    if (value is! num) return const SizedBox(width: 52);
+    if (value is! num) return const SizedBox(width: EditorMetrics.field);
     final id = '${row['id']}';
     final others = _layers.where(
       (v) => controller.selectedIds.contains(v['id']),
@@ -164,7 +165,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
       layer,
       id,
       SizedBox(
-        width: 52,
+        width: EditorMetrics.field,
         child: EditorNumericField(
           key: ValueKey('${layer['id']}:$id:$axis'),
           value: value.toDouble(),
@@ -198,8 +199,8 @@ class _InspectorPanelState extends State<InspectorPanel> {
         if (value is List)
           ...List.generate(3, (i) => _cell(layer, row, i))
         else ...[
-          const SizedBox(width: 52),
-          const SizedBox(width: 52),
+          const SizedBox(width: EditorMetrics.field),
+          const SizedBox(width: EditorMetrics.field),
           _cell(layer, row, 0),
         ],
         _key(layer, row),
@@ -209,7 +210,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
 
   Widget _key(Map<String, dynamic> layer, Map<String, dynamic>? row) =>
       SizedBox(
-        width: 20,
+        width: EditorMetrics.row,
         child: row == null
             ? null
             : panelButton(
@@ -224,8 +225,8 @@ class _InspectorPanelState extends State<InspectorPanel> {
               ),
       );
   Widget _line(String label, List<Widget> children) => Container(
-    height: 20,
-    padding: const EdgeInsets.symmetric(horizontal: 6),
+    height: EditorMetrics.row,
+    padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s6),
     decoration: BoxDecoration(
       border: Border(bottom: BorderSide(color: EditorTheme.line)),
     ),
@@ -238,7 +239,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
               label,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 11),
+              style: const TextStyle(fontSize: EditorMetrics.font),
             ),
           ),
         ),
@@ -254,13 +255,16 @@ class _InspectorPanelState extends State<InspectorPanel> {
   ) => _line(label, [
     Expanded(
       child: SizedBox(
-        height: 20,
+        height: EditorMetrics.row,
         child: DropdownButtonHideUnderline(
           child: DropdownButton<dynamic>(
             value: choices.any((e) => e.key == value) ? value : null,
             isExpanded: true,
             isDense: true,
-            style: const TextStyle(fontSize: 11, color: EditorTheme.ink),
+            style: const TextStyle(
+              fontSize: EditorMetrics.font,
+              color: EditorTheme.ink,
+            ),
             dropdownColor: EditorTheme.panel,
             items: choices
                 .map(
@@ -285,7 +289,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
     builder: (context, box) => SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: SizedBox(
-        width: box.maxWidth < 280 ? 280 : box.maxWidth,
+        width: box.maxWidth < 280 ? EditorMetrics.s280 : box.maxWidth,
         height: box.maxHeight,
         child: _content(context),
       ),
@@ -369,12 +373,15 @@ class _InspectorPanelState extends State<InspectorPanel> {
               border: Border(
                 left: BorderSide(
                   color: EditorTheme.layerColor(layer['id']),
-                  width: 3,
+                  width: EditorMetrics.s3,
                 ),
                 bottom: const BorderSide(color: EditorTheme.line),
               ),
             ),
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+            padding: const EdgeInsets.symmetric(
+              horizontal: EditorMetrics.s6,
+              vertical: EditorMetrics.s4,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -384,13 +391,13 @@ class _InspectorPanelState extends State<InspectorPanel> {
                       : '${layer['name']}',
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
-                    fontSize: 11,
+                    fontSize: EditorMetrics.font,
                   ),
                 ),
                 Text(
                   '${layer['kind']}',
                   style: const TextStyle(
-                    fontSize: 10,
+                    fontSize: EditorMetrics.dense,
                     color: EditorTheme.muted,
                   ),
                 ),
@@ -400,16 +407,19 @@ class _InspectorPanelState extends State<InspectorPanel> {
           _line('Property', [
             for (final label in ['X', 'Y', 'Z'])
               SizedBox(
-                width: 52,
+                width: EditorMetrics.field,
                 child: Text(
                   label,
                   textAlign: TextAlign.right,
-                  style: const TextStyle(fontSize: 10),
+                  style: const TextStyle(fontSize: EditorMetrics.dense),
                 ),
               ),
             const SizedBox(
-              width: 20,
-              child: Text('Key', style: TextStyle(fontSize: 10)),
+              width: EditorMetrics.row,
+              child: Text(
+                'Key',
+                style: TextStyle(fontSize: EditorMetrics.dense),
+              ),
             ),
           ]),
           Expanded(
@@ -420,8 +430,8 @@ class _InspectorPanelState extends State<InspectorPanel> {
                 if (!multiple && layer['kind'] != 'Camera')
                   _line('Anchor', [
                     SizedBox(
-                      width: 60,
-                      height: 20,
+                      width: EditorMetrics.s60,
+                      height: EditorMetrics.row,
                       child: Row(
                         children: [
                           for (final x in [0.0, .5, 1.0])
@@ -681,10 +691,10 @@ class _ColorRow extends StatelessWidget {
     return Row(
       children: [
         SizedBox(
-          width: 70,
+          width: EditorMetrics.s70,
           child: Text(
             '${color['label']}',
-            style: const TextStyle(fontSize: 11),
+            style: const TextStyle(fontSize: EditorMetrics.font),
           ),
         ),
         GestureDetector(
@@ -698,8 +708,8 @@ class _ColorRow extends StatelessWidget {
                 }
               : null,
           child: Container(
-            width: 20,
-            height: 16,
+            width: EditorMetrics.row,
+            height: EditorMetrics.s16,
             color: Color.fromARGB(
               (rgba[3].clamp(0, 1) * 255).round(),
               (rgba[0].clamp(0, 1) * 255).round(),

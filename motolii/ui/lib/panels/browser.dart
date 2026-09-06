@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 
 import '../session/editor_session.dart';
 import '../foundation/theme.dart';
+import '../foundation/metrics.dart';
 
 class BrowserPanel extends StatefulWidget {
   const BrowserPanel({
@@ -125,11 +126,7 @@ class _BrowserPanelState extends State<BrowserPanel> {
             'detail': 'Adds a shape layer',
             'glyph': '■',
           },
-          {
-            'id': 'camera',
-            'name': 'Camera',
-            'detail': 'Adds a camera layer',
-          },
+          {'id': 'camera', 'name': 'Camera', 'detail': 'Adds a camera layer'},
           {
             'id': 'cube',
             'name': 'Cube',
@@ -299,7 +296,7 @@ class _BrowserPanelState extends State<BrowserPanel> {
             children: [
               if (widget.showTabs)
                 SizedBox(
-                  height: 26,
+                  height: EditorMetrics.section,
                   child: Row(
                     children: [
                       for (final value in tabs)
@@ -314,8 +311,11 @@ class _BrowserPanelState extends State<BrowserPanel> {
                   ),
                 ),
               Container(
-                height: 28,
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                height: EditorMetrics.bar,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: EditorMetrics.s6,
+                  vertical: EditorMetrics.s3,
+                ),
                 decoration: const BoxDecoration(
                   border: Border(bottom: BorderSide(color: EditorTheme.line)),
                 ),
@@ -326,18 +326,18 @@ class _BrowserPanelState extends State<BrowserPanel> {
                         controller: search,
                         focusNode: searchFocus,
                         style: const TextStyle(
-                          fontSize: 11,
+                          fontSize: EditorMetrics.font,
                           color: EditorTheme.ink,
                         ),
                         decoration: InputDecoration(
                           isDense: true,
                           contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 4,
-                            vertical: 3,
+                            horizontal: EditorMetrics.s4,
+                            vertical: EditorMetrics.s3,
                           ),
                           hintText: 'Search $tab',
                           hintStyle: const TextStyle(
-                            fontSize: 11,
+                            fontSize: EditorMetrics.font,
                             color: EditorTheme.muted,
                           ),
                           border: InputBorder.none,
@@ -368,7 +368,7 @@ class _BrowserPanelState extends State<BrowserPanel> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Container(
-                      width: 96,
+                      width: EditorMetrics.s96,
                       decoration: const BoxDecoration(
                         border: Border(
                           right: BorderSide(color: EditorTheme.line),
@@ -378,11 +378,16 @@ class _BrowserPanelState extends State<BrowserPanel> {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           Padding(
-                            padding: const EdgeInsets.fromLTRB(7, 7, 4, 3),
+                            padding: const EdgeInsets.fromLTRB(
+                              EditorMetrics.s7,
+                              EditorMetrics.s7,
+                              EditorMetrics.s4,
+                              EditorMetrics.s3,
+                            ),
                             child: Text(
                               tab.toUpperCase(),
                               style: const TextStyle(
-                                fontSize: 9,
+                                fontSize: EditorMetrics.micro,
                                 color: EditorTheme.muted,
                               ),
                             ),
@@ -408,15 +413,15 @@ class _BrowserPanelState extends State<BrowserPanel> {
                               if (tab == 'Colors' && target != null)
                                 Padding(
                                   padding: const EdgeInsets.symmetric(
-                                    horizontal: 6,
-                                    vertical: 3,
+                                    horizontal: EditorMetrics.s6,
+                                    vertical: EditorMetrics.s3,
                                   ),
                                   child: Text(
                                     '${target['label'] ?? 'Layer color'}',
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: const TextStyle(
-                                      fontSize: 10,
+                                      fontSize: EditorMetrics.dense,
                                       color: EditorTheme.muted,
                                     ),
                                   ),
@@ -430,19 +435,23 @@ class _BrowserPanelState extends State<BrowserPanel> {
                               Expanded(
                                 child: visible.isEmpty
                                     ? const Padding(
-                                        padding: EdgeInsets.all(8),
+                                        padding: EdgeInsets.all(
+                                          EditorMetrics.s8,
+                                        ),
                                         child: Text(
                                           'No matches',
                                           style: TextStyle(
                                             color: EditorTheme.muted,
-                                            fontSize: 10,
+                                            fontSize: EditorMetrics.dense,
                                           ),
                                         ),
                                       )
                                     : GridView.builder(
                                         controller: scroll,
                                         padding: EdgeInsets.all(
-                                          tab == 'Colors' ? 6 : 1,
+                                          tab == 'Colors'
+                                              ? EditorMetrics.s6
+                                              : 1,
                                         ),
                                         gridDelegate:
                                             SliverGridDelegateWithFixedCrossAxisCount(
@@ -458,10 +467,10 @@ class _BrowserPanelState extends State<BrowserPanel> {
                                                             ? 46
                                                             : 28),
                                               crossAxisSpacing: tab == 'Colors'
-                                                  ? 4
+                                                  ? EditorMetrics.s4
                                                   : 1,
                                               mainAxisSpacing: tab == 'Colors'
-                                                  ? 4
+                                                  ? EditorMetrics.s4
                                                   : 1,
                                             ),
                                         itemCount: visible.length,
@@ -471,7 +480,7 @@ class _BrowserPanelState extends State<BrowserPanel> {
                                                 alignment: Alignment.topLeft,
                                                 child: SizedBox(
                                                   width: double.infinity,
-                                                  height: 48,
+                                                  height: EditorMetrics.s48,
                                                   child: card(visible[index]),
                                                 ),
                                               )
@@ -534,13 +543,13 @@ class _BrowserPanelState extends State<BrowserPanel> {
                       child: Container(
                         color: Colors.black.withValues(alpha: .62),
                         width: double.infinity,
-                        padding: const EdgeInsets.all(2),
+                        padding: const EdgeInsets.all(EditorMetrics.s2),
                         child: Text(
                           '${item['hex'] ?? ''}',
                           textAlign: TextAlign.center,
                           style: const TextStyle(
                             color: EditorTheme.ink,
-                            fontSize: 9,
+                            fontSize: EditorMetrics.micro,
                           ),
                         ),
                       ),
@@ -550,7 +559,7 @@ class _BrowserPanelState extends State<BrowserPanel> {
               : Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Container(height: 3, color: identityColor),
+                    Container(height: EditorMetrics.s3, color: identityColor),
                     AspectRatio(
                       aspectRatio: 16 / 9,
                       child: tab == 'Media'
@@ -559,37 +568,49 @@ class _BrowserPanelState extends State<BrowserPanel> {
                               color: const Color(0xff222222),
                               child: Center(
                                 child: id(item) == 'camera'
-                                    ? Icon(Icons.videocam_outlined, size: 28, color: identityColor)
+                                    ? Icon(
+                                        Icons.videocam_outlined,
+                                        size: EditorMetrics.bar,
+                                        color: identityColor,
+                                      )
                                     : id(item) == 'cube'
-                                    ? Icon(Icons.view_in_ar, size: 28, color: identityColor)
+                                    ? Icon(
+                                        Icons.view_in_ar,
+                                        size: EditorMetrics.bar,
+                                        color: identityColor,
+                                      )
                                     : Text(
-                                  '${item['glyph'] ?? 'ƒ'}',
-                                  style: TextStyle(
-                                    fontSize: 23,
-                                    color: identityColor,
-                                  ),
-                                ),
+                                        '${item['glyph'] ?? 'ƒ'}',
+                                        style: TextStyle(
+                                          fontSize: EditorMetrics.s23,
+                                          color: identityColor,
+                                        ),
+                                      ),
                               ),
                             ),
                     ),
                     Container(
-                      height: 20,
+                      height: EditorMetrics.row,
                       alignment: Alignment.centerLeft,
-                      padding: const EdgeInsets.symmetric(horizontal: 5),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: EditorMetrics.s5,
+                      ),
                       child: Text(
                         '${item['name'] ?? item['id']}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           color: EditorTheme.ink,
-                          fontSize: 10,
+                          fontSize: EditorMetrics.dense,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
                     ),
                     if (tab == 'Media')
                       Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 5),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: EditorMetrics.s5,
+                        ),
                         child: Text(
                           '${item['detail'] ?? (tab == 'Media' ? '${family(item)}${missing
                                         ? ' · missing'
@@ -600,7 +621,7 @@ class _BrowserPanelState extends State<BrowserPanel> {
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
                             color: EditorTheme.muted,
-                            fontSize: 9,
+                            fontSize: EditorMetrics.micro,
                           ),
                         ),
                       ),
@@ -658,7 +679,7 @@ class _BrowserPanelState extends State<BrowserPanel> {
               : family(item) == 'Audio'
               ? Icons.audiotrack
               : Icons.image_outlined,
-          size: 19,
+          size: EditorMetrics.s19,
           color: EditorTheme.muted,
         ),
       ),
@@ -693,16 +714,16 @@ Widget _smallButton(
   child: InkWell(
     onTap: press,
     child: Container(
-      height: 20,
+      height: EditorMetrics.row,
       alignment: Alignment.centerLeft,
-      padding: const EdgeInsets.symmetric(horizontal: 6),
+      padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s6),
       color: selected ? EditorTheme.raised : Colors.transparent,
       child: Text(
         label,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
-          fontSize: 10,
+          fontSize: EditorMetrics.dense,
           color: press == null
               ? EditorTheme.muted.withValues(alpha: .45)
               : selected
@@ -906,7 +927,7 @@ class _ColorPickerState extends State<_ColorPicker> {
       child: Focus(
         focusNode: pickerFocus,
         child: Padding(
-          padding: const EdgeInsets.all(6),
+          padding: const EdgeInsets.all(EditorMetrics.s6),
           child: Column(
             children: [
               GestureDetector(
@@ -919,25 +940,29 @@ class _ColorPickerState extends State<_ColorPicker> {
                   commit();
                 },
                 child: SizedBox(
-                  width: 128,
-                  height: 128,
+                  width: EditorMetrics.thumb,
+                  height: EditorMetrics.thumb,
                   child: CustomPaint(painter: _WheelPainter(color)),
                 ),
               ),
               SizedBox(
-                width: 128,
-                height: 23,
+                width: EditorMetrics.thumb,
+                height: EditorMetrics.s23,
                 child: Row(
                   children: [
-                    Container(width: 12, height: 12, color: color),
-                    const SizedBox(width: 5),
+                    Container(
+                      width: EditorMetrics.s12,
+                      height: EditorMetrics.s12,
+                      color: color,
+                    ),
+                    const SizedBox(width: EditorMetrics.s5),
                     Expanded(
                       child: TextField(
                         controller: hex,
                         focusNode: hexFocus,
                         readOnly: widget.target == null || !widget.enabled,
                         style: const TextStyle(
-                          fontSize: 11,
+                          fontSize: EditorMetrics.font,
                           color: EditorTheme.ink,
                         ),
                         decoration: const InputDecoration(
@@ -981,8 +1006,8 @@ class _ColorPickerState extends State<_ColorPicker> {
                     commit();
                   },
                   child: Container(
-                    width: 128,
-                    height: 12,
+                    width: EditorMetrics.thumb,
+                    height: EditorMetrics.s12,
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         colors: [
@@ -994,8 +1019,8 @@ class _ColorPickerState extends State<_ColorPicker> {
                     child: Align(
                       alignment: Alignment(v[3] * 2 - 1, 0),
                       child: Container(
-                        width: 3,
-                        height: 12,
+                        width: EditorMetrics.s3,
+                        height: EditorMetrics.s12,
                         decoration: BoxDecoration(
                           border: Border.all(color: Colors.white),
                         ),

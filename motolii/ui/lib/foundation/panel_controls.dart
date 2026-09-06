@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'theme.dart';
+import 'metrics.dart';
 
 Widget panelButton(
   String label,
@@ -11,16 +12,19 @@ Widget panelButton(
 }) =>
     EditorButton(label, action, tooltip: tooltip ?? label, selected: selected);
 Widget panelTitle(String title) => Container(
-  height: 22,
+  height: EditorMetrics.s22,
   alignment: Alignment.centerLeft,
-  padding: const EdgeInsets.symmetric(horizontal: 8),
+  padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s8),
   decoration: const BoxDecoration(
     color: EditorTheme.raised,
     border: Border(bottom: BorderSide(color: EditorTheme.line)),
   ),
   child: Text(
     title,
-    style: const TextStyle(fontSize: 11, color: EditorTheme.ink),
+    style: const TextStyle(
+      fontSize: EditorMetrics.font,
+      color: EditorTheme.ink,
+    ),
   ),
 );
 
@@ -114,10 +118,16 @@ class _EditorDraftFieldState extends State<EditorDraftField> {
       enabled: widget.enabled,
       minLines: 1,
       maxLines: widget.multiline ? 4 : 1,
-      style: const TextStyle(fontSize: 11, color: EditorTheme.ink),
+      style: const TextStyle(
+        fontSize: EditorMetrics.font,
+        color: EditorTheme.ink,
+      ),
       decoration: InputDecoration(
         isDense: true,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: EditorMetrics.s5,
+          vertical: EditorMetrics.s3,
+        ),
         border: InputBorder.none,
         labelText: null,
         hintText: widget.label,
@@ -311,12 +321,15 @@ class _EditorNumericFieldState extends State<EditorNumericField> {
             controller: _text,
             focusNode: _focus,
             autofocus: true,
-            style: const TextStyle(fontSize: 11, color: EditorTheme.ink),
+            style: const TextStyle(
+              fontSize: EditorMetrics.font,
+              color: EditorTheme.ink,
+            ),
             decoration: InputDecoration(
               isDense: true,
               contentPadding: const EdgeInsets.symmetric(
-                horizontal: 2,
-                vertical: 2,
+                horizontal: EditorMetrics.s2,
+                vertical: EditorMetrics.s2,
               ),
               border: InputBorder.none,
               errorText: _error,
@@ -350,9 +363,11 @@ class _EditorNumericFieldState extends State<EditorNumericField> {
               child: Tooltip(
                 message: widget.label,
                 child: Container(
-                  height: 18,
+                  height: EditorMetrics.s18,
                   alignment: Alignment.centerRight,
-                  padding: const EdgeInsets.symmetric(horizontal: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: EditorMetrics.s2,
+                  ),
                   color: _dragging ? EditorTheme.hover : EditorTheme.app,
                   child: Text(
                     widget.mixed && _shown == null
@@ -361,7 +376,7 @@ class _EditorNumericFieldState extends State<EditorNumericField> {
                     maxLines: 1,
                     overflow: TextOverflow.clip,
                     style: TextStyle(
-                      fontSize: 11,
+                      fontSize: EditorMetrics.font,
                       color: widget.enabled
                           ? EditorTheme.ink
                           : EditorTheme.muted,
