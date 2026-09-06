@@ -1,0 +1,15 @@
+name: motolii_stage5
+description: Motolii Stage 5 Flutter UI
+publish_to: none
+version: 0.1.0+1
+environment:
+  sdk: ^3.13.2
+dependencies:
+  flutter:
+    sdk: flutter
+flutter:
+  uses-material-design: true
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter

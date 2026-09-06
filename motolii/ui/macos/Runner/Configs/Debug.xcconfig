@@ -1,0 +1,4 @@
+#include "../../Flutter/Flutter-Debug.xcconfig"
+#include "Warnings.xcconfig"
+ASSETCATALOG_COMPILER_GENERATE_ASSET_SYMBOLS = NO
+ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = NO

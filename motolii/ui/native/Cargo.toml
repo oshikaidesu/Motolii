@@ -1,0 +1,25 @@
+[package]
+name = "motolii-ui"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+name = "motolii_ui"
+crate-type = ["cdylib"]
+
+[dependencies]
+motolii-doc = { path = "../../crates/motolii-doc" }
+motolii-render = { path = "../../crates/motolii-render", features = ["shared-bgra-output"] }
+wgpu = { workspace = true }
+serde_json = { workspace = true }
+serde = { workspace = true }
+peniko = { workspace = true }
+image = { workspace = true }
+base64 = { workspace = true }
+ffmpeg-sidecar = { workspace = true }
+glam = { workspace = true }
+objc2 = "0.6.4"
+objc2-metal = { version = "0.3.2", features = ["objc2-io-surface"] }
+objc2-io-surface = "0.3.2"
+

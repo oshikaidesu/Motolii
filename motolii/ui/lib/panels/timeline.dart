@@ -1,0 +1,1665 @@
+import 'dart:math' as math;
+
+import 'package:flutter/gestures.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+import '../session/editor_session.dart';
+import '../foundation/theme.dart';
+import '../input/viewport_motion.dart';
+
+part 'timeline_layout.dart';
+
+class TimelinePanel extends StatefulWidget {
+  const TimelinePanel({super.key, required this.controller});
+  final EditorSession controller;
+  @override
+  State<TimelinePanel> createState() => _TimelinePanelState();
+}
+
+class _TimelinePanelState extends State<TimelinePanel> {
+  static const rowHeight = 20.0, rulerHeight = 32.0;
+  double get labelWidth => layout.nameWidth + 82;
+  final expanded = <int>{};
+  final allProperties = <int>{};
+  final collapsedGroups = <int>{};
+  final vertical = ScrollController(), horizontal = ScrollController();
+  final focus = FocusNode();
+  double pixelsPerFrame = 4;
+  double viewportWidth = 1;
+  Offset navigationOrigin = Offset.zero;
+  int navigationRevision = 0;
+  bool navigating = false;
+  ViewportMotion? _motion;
+  ViewportMotion get motion => _motion ??= ViewportMotion(navigateView);
+  bool overTimeRuler(Offset p) =>
+      p.dx >= labelWidth && p.dy >= 22 && p.dy < 22 + rulerHeight;
+
+  double baseNameWidth = 138;
+  double resizeStart = 138;
+  double resizePointerStart = 0;
+  int? anchor;
+  String? activeLane;
+  List<_TrackRow> tracks = [];
+  _LaneLayout layout = _LaneLayout([], {}, {}, {});
+  String? gesture;
+  List<int> rowDragIds = [];
+  Map<String, dynamic>? rowDrop;
+  Rect? rowDropGuide;
+  bool rowDropInside = false;
+  Offset? start, current;
+  _TrackRow? dragRow;
+  List<_TrackRow> timingRows = [];
+  Future<void>? previewFlight;
+  Future<void>? seekFlight;
+  int? pendingSeek;
+  void requestSeek(int value) {
+    widget.controller.stopPlayback();
+    pendingSeek = value;
+    seekFlight ??= pumpSeek();
+  }
+
+  Future<void> pumpSeek() async {
+    try {
+      while (pendingSeek != null) {
+        final frame = pendingSeek!;
+        pendingSeek = null;
+        await widget.controller.command('seek', {'frame': frame});
+      }
+    } finally {
+      seekFlight = null;
+    }
+  }
+
+  List<Map<String, dynamic>>? queuedTimings;
+  bool previewUsed = false;
+  bool finishing = false;
+  Future<void> pumpPreview() async {
+    try {
+      while (queuedTimings != null) {
+        final changes = queuedTimings!;
+        queuedTimings = null;
+        await widget.controller.command('previewTimings', {'changes': changes});
+      }
+    } finally {
+      previewFlight = null;
+    }
+  }
+
+  Future<void> finishTiming(List<Map<String, dynamic>> changes) async {
+    finishing = true;
+    final used = previewUsed;
+    previewUsed = false;
+    await previewFlight;
+    if (used)
+      await widget.controller.command('commitPreview');
+    else if (has('setTimings'))
+      await widget.controller.command('setTimings', {'changes': changes});
+    else if (changes.length == 1)
+      await widget.controller.command('setTiming', changes.single);
+    finishing = false;
+  }
+
+  int deltaFrames = 0;
+  List<Map<String, dynamic>> initialKeys = [];
+  List<int> initialIds = [];
+  bool additive = false;
+  bool get primary =>
+      HardwareKeyboard.instance.isMetaPressed ||
+      HardwareKeyboard.instance.isControlPressed;
+  double get offset =>
+      horizontal.hasClients ? horizontal.positions.last.pixels : 0;
+  int get duration =>
+      (widget.controller.state['durationFrames'] as num? ?? 1).toInt();
+  List<Map<String, dynamic>> get selectedKeys =>
+      EditorSession.maps(widget.controller.state['selectedKeys']);
+  bool has(String op) => widget.controller.supports(op);
+  @override
+  void initState() {
+    super.initState();
+    horizontal.addListener(changed);
+    focus.addListener(laneFocusChanged);
+  }
+
+  void laneFocusChanged() {
+    if (!focus.hasFocus && mounted) setState(() => activeLane = null);
+  }
+
+  void changed() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _motion?.dispose();
+    pendingSeek = null;
+    queuedTimings = null;
+    if (previewUsed) widget.controller.cancelPreview();
+    horizontal.removeListener(changed);
+    horizontal.dispose();
+    vertical.dispose();
+    focus.removeListener(laneFocusChanged);
+    focus.dispose();
+    super.dispose();
+  }
+
+  int frameAt(double x) => ((x - labelWidth + offset) / pixelsPerFrame)
+      .round()
+      .clamp(0, math.max(0, duration - 1));
+  Map<String, dynamic> keyOf(_TrackRow row, Map<String, dynamic> key) => {
+    'layer': row.id,
+    'property': row.property?['id'],
+    'frame': key['frame'],
+  };
+  bool sameKey(Map<String, dynamic> a, Map<String, dynamic> b) =>
+      a['layer'] == b['layer'] &&
+      a['property'] == b['property'] &&
+      a['frame'] == b['frame'];
+  void chooseLayer(int id) {
+    var ids = widget.controller.selectedIds.toList();
+    if (HardwareKeyboard.instance.isShiftPressed && anchor != null) {
+      final ordered = widget.controller.layers
+          .map((l) => (l['id'] as num).toInt())
+          .toList();
+      final a = ordered.indexOf(anchor!), b = ordered.indexOf(id);
+      if (a >= 0 && b >= 0) {
+        final range = ordered.sublist(math.min(a, b), math.max(a, b) + 1);
+        ids = primary ? {...ids, ...range}.toList() : range;
+      }
+    } else if (primary) {
+      ids.contains(id) ? ids.remove(id) : ids.add(id);
+    } else {
+      ids = [id];
+    }
+    anchor = id;
+    widget.controller.command('select', {'ids': ids, 'keys': []});
+  }
+
+  void begin(PointerDownEvent event) {
+    focus.requestFocus();
+    if (finishing) return;
+    if (event.buttons != kPrimaryMouseButton) return;
+    final p = event.localPosition, index = layout.rowAt(p.dy);
+    start = p;
+    current = p;
+    deltaFrames = 0;
+    additive = primary || HardwareKeyboard.instance.isShiftPressed;
+    initialKeys = selectedKeys;
+    initialIds = widget.controller.selectedIds.toList();
+    if (index < 0 || index >= tracks.length) {
+      activeLane = null;
+      gesture = 'marquee';
+      setState(() {});
+      return;
+    }
+    final row = tracks[index];
+    setState(() => activeLane = row.laneId);
+    dragRow = row;
+    if (p.dx < labelWidth) {
+      if (row.property == null &&
+          p.dx >= labelWidth - 81 &&
+          p.dx < labelWidth - 65) {
+        setState(() {
+          allProperties.remove(row.id);
+          expanded.contains(row.id)
+              ? expanded.remove(row.id)
+              : expanded.add(row.id);
+        });
+        gesture = null;
+        return;
+      }
+      if (row.property == null &&
+          row.isGroup &&
+          row.disclosureBounds.contains(p)) {
+        setState(() {
+          collapsedGroups.contains(row.id)
+              ? collapsedGroups.remove(row.id)
+              : collapsedGroups.add(row.id);
+        });
+        gesture = null;
+        return;
+      }
+      if (row.property == null && p.dx >= labelWidth - 65) {
+        final column = ((p.dx - (labelWidth - 65)) / 16).floor();
+        final field = [
+          'hidden',
+          'solo',
+          'locked',
+          'clipToBelow',
+        ][column.clamp(0, 3)];
+        if (field == 'clipToBelow') {
+          if (has('clip')) widget.controller.command('clip', {'layer': row.id});
+        } else if (has('setAttrs'))
+          widget.controller.command('setAttrs', {
+            'layers': [row.id],
+            'patch': {field: row.layer[field] != true},
+          });
+        gesture = null;
+        return;
+      }
+      if (row.property != null && p.dx >= labelWidth - 25 && has('toggleKey')) {
+        widget.controller.command('toggleKey', {
+          'layer': row.id,
+          'property': row.property!['id'],
+        });
+        gesture = null;
+        return;
+      }
+      if (row.property == null) {
+        rowDragIds = initialIds.contains(row.id)
+            ? initialIds.toList()
+            : [row.id];
+        if (!initialIds.contains(row.id)) chooseLayer(row.id);
+        gesture = 'rowPending';
+      } else {
+        chooseLayer(row.id);
+        gesture = null;
+      }
+      return;
+    }
+    if (row.property != null) {
+      Map<String, dynamic>? found;
+      for (final key in row.keys) {
+        if ((labelWidth +
+                    (key['frame'] as num).toDouble() * pixelsPerFrame -
+                    offset -
+                    p.dx)
+                .abs() <=
+            7) {
+          found = keyOf(row, key);
+          break;
+        }
+      }
+      if (found != null) {
+        var chosen = selectedKeys.toList();
+        final already = chosen.any((k) => sameKey(k, found!));
+        if (additive) {
+          already
+              ? chosen.removeWhere((k) => sameKey(k, found!))
+              : chosen.add(found);
+        } else if (!already)
+          chosen = [found];
+        widget.controller.command('select', {
+          'ids': chosen.map((k) => k['layer']).toSet().toList(),
+          'keys': chosen,
+        });
+        initialKeys = chosen;
+        gesture = has('moveKeys') ? 'keys' : null;
+        setState(() {});
+        return;
+      }
+    } else {
+      final left =
+          labelWidth +
+          (row.layer['start'] as num? ?? 0).toDouble() * pixelsPerFrame -
+          offset;
+      final right =
+          left +
+          (row.layer['duration'] as num? ?? 0).toDouble() * pixelsPerFrame;
+      if (p.dx >= left - 4 && p.dx <= right + 4) {
+        if (!initialIds.contains(row.id)) chooseLayer(row.id);
+        timingRows = initialIds.contains(row.id)
+            ? widget.controller.layers
+                  .where(
+                    (l) => initialIds.contains(l['id']) && l['locked'] != true,
+                  )
+                  .map((l) => _TrackRow(l))
+                  .toList()
+            : [row];
+        if (row.layer['locked'] == true ||
+            (!has('setTiming') && !has('setTimings')) ||
+            (timingRows.length > 1 && !has('setTimings'))) {
+          gesture = null;
+          return;
+        }
+        gesture = HardwareKeyboard.instance.isAltPressed
+            ? 'slip'
+            : (p.dx - left).abs() < 6
+            ? 'trimIn'
+            : (p.dx - right).abs() < 6
+            ? 'trimOut'
+            : 'move';
+        setState(() {});
+        return;
+      }
+    }
+    gesture = 'marquee';
+    setState(() {});
+  }
+
+  void move(PointerMoveEvent event) {
+    if (gesture == null || start == null) return;
+    if (gesture == 'rowPending' || gesture == 'rowDrag') {
+      if ((event.localPosition - start!).distance < 4 &&
+          gesture == 'rowPending')
+        return;
+      setState(() {
+        gesture = 'rowDrag';
+        current = event.localPosition;
+        rowDrop = null;
+        rowDropGuide = null;
+        final index = layout.rowAt(current!.dy);
+        if (index < 0) {
+          if (current!.dy >= layout.height) {
+            rowDrop = {
+              'layers': rowDragIds,
+              'target': null,
+              'placement': 'rootEnd',
+            };
+            rowDropInside = false;
+            rowDropGuide = Rect.fromLTWH(0, layout.height, labelWidth, 0);
+          }
+          return;
+        }
+        final target = tracks[index];
+        if (rowDragIds.contains(target.id) ||
+            target.ancestors.any(rowDragIds.contains))
+          return;
+        final inside =
+            target.isGroup &&
+            target.property == null &&
+            (current!.dy - target.bounds.top) > 5 &&
+            (target.bounds.bottom - current!.dy) > 5;
+        final placement = inside
+            ? 'inside'
+            : current!.dy < target.bounds.center.dy
+            ? 'before'
+            : 'after';
+        rowDrop = {
+          'layers': rowDragIds,
+          'target': target.id,
+          'placement': placement,
+        };
+        rowDropInside = inside;
+        final container = layout.container(target.id)!;
+        rowDropGuide = inside
+            ? target.bounds
+            : Rect.fromLTWH(
+                container.bounds.left,
+                placement == 'before'
+                    ? container.bounds.top
+                    : container.bounds.bottom,
+                labelWidth - container.bounds.left,
+                0,
+              );
+      });
+      return;
+    }
+    setState(() {
+      current = event.localPosition;
+      deltaFrames = ((current!.dx - start!.dx) / pixelsPerFrame).round();
+      if (timingRows.isNotEmpty &&
+          ['move', 'trimIn', 'trimOut', 'slip'].contains(gesture)) {
+        final starts = timingRows.map(
+          (r) => (r.layer['start'] as num? ?? 0).toInt(),
+        );
+        if (gesture == 'move')
+          deltaFrames = math.max(deltaFrames, -starts.reduce(math.min));
+      }
+    });
+    if (timingRows.isNotEmpty &&
+        has('previewTimings') &&
+        ['move', 'trimIn', 'trimOut', 'slip'].contains(gesture)) {
+      queuedTimings = timingRows.map(timing).toList();
+      previewUsed = true;
+      previewFlight ??= pumpPreview();
+    }
+  }
+
+  Map<String, dynamic> timing(_TrackRow row) {
+    final s = (row.layer['start'] as num? ?? 0).toInt(),
+        d = (row.layer['duration'] as num? ?? 1).toInt(),
+        i = (row.layer['sourceIn'] as num? ?? 0).toInt();
+    switch (gesture) {
+      case 'trimIn':
+        final delta = deltaFrames.clamp(-math.min(s, i), d - 1);
+        return {
+          'layer': row.id,
+          'start': s + delta,
+          'duration': d - delta,
+          'sourceIn': i + delta,
+        };
+      case 'trimOut':
+        return {
+          'layer': row.id,
+          'start': s,
+          'duration': math.max(1, d + deltaFrames),
+          'sourceIn': i,
+        };
+      case 'slip':
+        return {
+          'layer': row.id,
+          'start': s,
+          'duration': d,
+          'sourceIn': math.max(0, i - deltaFrames),
+        };
+      default:
+        return {
+          'layer': row.id,
+          'start': math.max(0, s + deltaFrames),
+          'duration': d,
+          'sourceIn': i,
+        };
+    }
+  }
+
+  void end(PointerUpEvent event) {
+    if (gesture == null) return;
+    if (gesture == 'rowPending' || gesture == 'rowDrag') {
+      if (gesture == 'rowDrag' && rowDrop != null) {
+        if (has('moveLayers'))
+          widget.controller.command('moveLayers', Map.of(rowDrop!));
+        else
+          widget.controller.error.value =
+              'Layer move is waiting for the native update';
+      } else if (gesture == 'rowPending' && dragRow != null)
+        chooseLayer(dragRow!.id);
+      resetGesture();
+      return;
+    }
+    if (gesture == 'keys' && deltaFrames != 0)
+      widget.controller.command('moveKeys', {'deltaFrames': deltaFrames});
+    else if (['move', 'trimIn', 'trimOut', 'slip'].contains(gesture) &&
+        deltaFrames != 0 &&
+        dragRow != null)
+      finishTiming(timingRows.map(timing).toList());
+    else if (gesture == 'marquee' && start != null && current != null) {
+      final rect = Rect.fromPoints(start!, current!);
+      final keys = <Map<String, dynamic>>[if (additive) ...initialKeys];
+      final ids = <int>{if (additive) ...initialIds};
+      if (rect.width > 3 || rect.height > 3) {
+        for (var n = 0; n < tracks.length; n++) {
+          final row = tracks[n], cy = tracks[n].bounds.center.dy;
+          if (row.property != null) {
+            for (final key in row.keys) {
+              if (rect.contains(
+                Offset(
+                  labelWidth +
+                      (key['frame'] as num).toDouble() * pixelsPerFrame -
+                      offset,
+                  cy,
+                ),
+              )) {
+                final candidate = keyOf(row, key);
+                if (!keys.any((k) => sameKey(k, candidate)))
+                  keys.add(candidate);
+                ids.add(row.id);
+              }
+            }
+          } else {
+            final left =
+                labelWidth +
+                (row.layer['start'] as num? ?? 0).toDouble() * pixelsPerFrame -
+                offset;
+            final width =
+                (row.layer['duration'] as num? ?? 0).toDouble() *
+                pixelsPerFrame;
+            if (rect.overlaps(
+              Rect.fromLTWH(
+                left,
+                tracks[n].bounds.top + 2,
+                width,
+                rowHeight - 4,
+              ),
+            ))
+              ids.add(row.id);
+          }
+        }
+      }
+      widget.controller.command('select', {'ids': ids.toList(), 'keys': keys});
+    }
+    if (previewUsed) {
+      queuedTimings = null;
+      previewUsed = false;
+      widget.controller.cancelPreview();
+    }
+    resetGesture();
+  }
+
+  void cancel() {
+    queuedTimings = null;
+    if (previewUsed) {
+      previewUsed = false;
+      widget.controller.cancelPreview();
+    }
+    resetGesture();
+  }
+
+  void resetGesture() {
+    setState(() {
+      gesture = null;
+      rowDrop = null;
+      rowDropGuide = null;
+      rowDragIds = [];
+      start = null;
+      current = null;
+      dragRow = null;
+      timingRows = [];
+      deltaFrames = 0;
+    });
+  }
+
+  KeyEventResult key(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    final k = event.logicalKey;
+    if (k == LogicalKeyboardKey.escape) {
+      cancel();
+      widget.controller.cancelPreview();
+      return KeyEventResult.handled;
+    }
+    if (k == LogicalKeyboardKey.arrowLeft ||
+        k == LogicalKeyboardKey.arrowRight) {
+      final delta =
+          (k == LogicalKeyboardKey.arrowLeft ? -1 : 1) *
+          (HardwareKeyboard.instance.isShiftPressed ? 10 : 1);
+      if (selectedKeys.isNotEmpty && has('moveKeys'))
+        widget.controller.command('moveKeys', {'deltaFrames': delta});
+      else
+        requestSeek(
+          (widget.controller.frame.value + delta).clamp(
+            0,
+            math.max(0, duration - 1),
+          ),
+        );
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  void navigateView(double scale, double x, double y) {
+    final nextScale = scale.clamp(.1, 40.0);
+    final visible = math.max(1.0, viewportWidth - labelWidth);
+    final targetX = x.clamp(0.0, math.max(0.0, duration * nextScale - visible));
+    final revision = ++navigationRevision;
+    if (nextScale != pixelsPerFrame) setState(() => pixelsPerFrame = nextScale);
+    void apply() {
+      if (!mounted || revision != navigationRevision) return;
+      if (horizontal.hasClients) {
+        final position = horizontal.positions.last;
+        if (position.hasContentDimensions)
+          position.jumpTo(
+            targetX
+                .clamp(position.minScrollExtent, position.maxScrollExtent)
+                .toDouble(),
+          );
+      }
+      if (vertical.hasClients) {
+        final position = vertical.positions.last;
+        if (position.hasContentDimensions)
+          position.jumpTo(
+            y.clamp(position.minScrollExtent, position.maxScrollExtent),
+          );
+      }
+    }
+
+    apply();
+    WidgetsBinding.instance.addPostFrameCallback((_) => apply());
+  }
+
+  double get verticalOffset =>
+      vertical.hasClients ? vertical.positions.last.pixels : 0;
+  void zoomAt(double factor, double x) {
+    final anchorX = (x - labelWidth).clamp(
+      0.0,
+      math.max(1.0, viewportWidth - labelWidth),
+    );
+    final at = (offset + anchorX) / pixelsPerFrame;
+    final scale = (pixelsPerFrame * factor).clamp(.1, 40.0);
+    navigateView(scale, at * scale - anchorX, verticalOffset);
+  }
+
+  void zoom(double factor) => zoomAt(
+    factor,
+    labelWidth + math.max(1.0, viewportWidth - labelWidth) / 2,
+  );
+  void stopMomentum() {
+    _motion?.stop();
+    navigationRevision++;
+    for (final controller in [horizontal, vertical]) {
+      if (controller.hasClients) {
+        final position = controller.positions.last;
+        if (position is ScrollPositionWithSingleContext) position.goIdle();
+      }
+    }
+  }
+
+  Widget navigation(Widget child) => GestureDetector(
+    supportedDevices: const {PointerDeviceKind.trackpad},
+    onScaleStart: (e) {
+      stopMomentum();
+      navigating = true;
+      navigationOrigin = e.localFocalPoint;
+      final anchor = math.max(0.0, e.localFocalPoint.dx - labelWidth);
+      motion.begin(
+        mode: overTimeRuler(e.localFocalPoint)
+            ? ViewportGestureMode.scrubZoom
+            : ViewportGestureMode.pan,
+        scale: pixelsPerFrame,
+        frame: (offset + anchor) / pixelsPerFrame,
+        anchor: anchor,
+        y: verticalOffset,
+      );
+    },
+    onScaleUpdate: (e) => motion.update(
+      e.localFocalPoint - navigationOrigin,
+      e.scale,
+      e.sourceTimeStamp,
+    ),
+    onScaleEnd: (_) {
+      navigating = false;
+      navigationRevision++;
+      motion.end();
+    },
+    child: Listener(
+      onPointerDown: (_) => stopMomentum(),
+      onPointerSignal: (event) {
+        if (event is! PointerScrollEvent || navigating) return;
+        GestureBinding.instance.pointerSignalResolver.register(event, (_) {
+          stopMomentum();
+          if (primary || overTimeRuler(event.localPosition))
+            zoomAt(
+              math.exp(-event.scrollDelta.dy * .002),
+              event.localPosition.dx,
+            );
+          else if (HardwareKeyboard.instance.isShiftPressed)
+            navigateView(
+              pixelsPerFrame,
+              offset + event.scrollDelta.dy + event.scrollDelta.dx,
+              verticalOffset,
+            );
+          else
+            navigateView(
+              pixelsPerFrame,
+              offset + event.scrollDelta.dx,
+              verticalOffset + event.scrollDelta.dy,
+            );
+        });
+      },
+      child: child,
+    ),
+  );
+
+  Future<void> menu(TapDownDetails details) async {
+    final row = layout.rowAt(details.localPosition.dy);
+    final target = row >= 0 && row < tracks.length ? tracks[row].id : null;
+    if (row >= 0 &&
+        row < tracks.length &&
+        !widget.controller.selectedIds.contains(tracks[row].id)) {
+      await widget.controller.command('select', {
+        'ids': [tracks[row].id],
+        'keys': [],
+      });
+    }
+    if (!mounted) return;
+    final actions = <String, String>{
+      'copy': 'Copy',
+      'cut': 'Cut',
+      'paste': 'Paste',
+      'duplicate': 'Duplicate',
+      'delete': 'Delete',
+      'group': 'Group',
+      'ungroup': 'Ungroup',
+      'split': 'Split',
+    };
+    final chosen = await showMenu<String>(
+      context: context,
+      color: const Color(0xff222222),
+      elevation: 0,
+      menuPadding: const EdgeInsets.symmetric(vertical: 2),
+      shape: const RoundedRectangleBorder(
+        side: BorderSide(color: Color(0xffbbbbbb)),
+      ),
+      position: RelativeRect.fromLTRB(
+        details.globalPosition.dx,
+        details.globalPosition.dy,
+        details.globalPosition.dx,
+        details.globalPosition.dy,
+      ),
+      items: [
+        if (target != null) ...[
+          const EditorMenuItem<String>(
+            value: 'lanes:keyed',
+            child: Text('Show animated properties'),
+          ),
+          const EditorMenuItem<String>(
+            value: 'lanes:all',
+            child: Text('Show all properties'),
+          ),
+          const EditorMenuItem<String>(
+            value: 'lanes:hide',
+            child: Text('Hide properties'),
+          ),
+          const PopupMenuDivider(),
+        ],
+        for (final entry in actions.entries)
+          EditorMenuItem<String>(
+            value: entry.key,
+            enabled: has(entry.key),
+            child: SizedBox(
+              width: 244,
+              child: Row(
+                children: [
+                  Expanded(child: Text(entry.value)),
+                  Text(
+                    const {
+                          'copy': '⌘C',
+                          'cut': '⌘X',
+                          'paste': '⌘V',
+                          'duplicate': '⌘D',
+                          'delete': '⌫',
+                          'group': '⌘G',
+                          'ungroup': '⇧⌘G',
+                          'split': '⌘K',
+                        }[entry.key] ??
+                        '',
+                  ),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+    if (chosen != null && chosen.startsWith('lanes:') && target != null) {
+      setState(() {
+        allProperties.remove(target);
+        if (chosen == 'lanes:hide')
+          expanded.remove(target);
+        else {
+          expanded.add(target);
+          if (chosen == 'lanes:all') allProperties.add(target);
+        }
+      });
+    } else if (chosen != null)
+      widget.controller.command(chosen);
+  }
+
+  @override
+  Widget build(
+    BuildContext context,
+  ) => ValueListenableBuilder<Map<String, dynamic>>(
+    valueListenable: widget.controller.document,
+    builder: (context, state, _) {
+      final liveIds = widget.controller.layers
+          .map((layer) => (layer['id'] as num).toInt())
+          .toSet();
+      expanded.retainAll(liveIds);
+      allProperties.retainAll(liveIds);
+      collapsedGroups.retainAll(liveIds);
+      layout = _LaneLayout(
+        widget.controller.layers,
+        expanded,
+        allProperties,
+        collapsedGroups,
+        baseNameWidth: baseNameWidth,
+      );
+      tracks = layout.rows;
+      if (activeLane != null && !tracks.any((row) => row.laneId == activeLane))
+        activeLane = null;
+      return Focus(
+        key: const ValueKey('timeline-bounded-layout'),
+        focusNode: focus,
+        onKeyEvent: key,
+        child: ColoredBox(
+          color: EditorTheme.panel,
+          child: LayoutBuilder(
+            builder: (context, bounds) {
+              viewportWidth = bounds.maxWidth;
+              final height = math.max(layout.height, bounds.maxHeight - 66);
+              return navigation(
+                Stack(
+                  children: [
+                    Column(
+                      children: [
+                        SizedBox(
+                          height: 22,
+                          child: Row(
+                            children: [
+                              const SizedBox(width: 6),
+                              ValueListenableBuilder<bool>(
+                                valueListenable: widget.controller.playing,
+                                builder: (_, playing, __) => EditorButton(
+                                  playing ? 'Ⅱ' : '▶',
+                                  widget.controller.togglePlayback,
+                                  selected: playing,
+                                  tooltip: 'Play / Pause · Space',
+                                ),
+                              ),
+                              EditorButton('−', () => zoom(1 / 1.25)),
+                              EditorButton('+', () => zoom(1.25)),
+                              EditorButton('Fit', () {
+                                setState(
+                                  () => pixelsPerFrame = math.max(
+                                    .1,
+                                    (bounds.maxWidth - labelWidth) /
+                                        math.max(1, duration),
+                                  ),
+                                );
+                              }),
+                              Expanded(
+                                child: SizedBox(
+                                  height: 18,
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                    ),
+                                    child: LayoutBuilder(
+                                      builder: (context, overview) {
+                                        void navigate(double x) {
+                                          if (!horizontal.hasClients) return;
+                                          final target =
+                                              x /
+                                                  math.max(
+                                                    1,
+                                                    overview.maxWidth,
+                                                  ) *
+                                                  duration *
+                                                  pixelsPerFrame -
+                                              (bounds.maxWidth - labelWidth) /
+                                                  2;
+                                          horizontal.jumpTo(
+                                            target.clamp(
+                                              0,
+                                              horizontal
+                                                  .positions
+                                                  .last
+                                                  .maxScrollExtent,
+                                            ),
+                                          );
+                                        }
+
+                                        return GestureDetector(
+                                          supportedDevices: const {
+                                            PointerDeviceKind.mouse,
+                                            PointerDeviceKind.touch,
+                                            PointerDeviceKind.stylus,
+                                          },
+                                          onTapDown: (e) =>
+                                              navigate(e.localPosition.dx),
+                                          onHorizontalDragUpdate: (e) =>
+                                              navigate(e.localPosition.dx),
+                                          onDoubleTap: () {
+                                            setState(
+                                              () => pixelsPerFrame = math.max(
+                                                .1,
+                                                (bounds.maxWidth - labelWidth) /
+                                                    math.max(1, duration),
+                                              ),
+                                            );
+                                          },
+                                          child: CustomPaint(
+                                            size: Size(overview.maxWidth, 18),
+                                            painter: _ArrangementOverview(
+                                              layers: widget.controller.layers,
+                                              duration: duration,
+                                              offset: offset,
+                                              scale: pixelsPerFrame,
+                                              viewportWidth:
+                                                  bounds.maxWidth - labelWidth,
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              ValueListenableBuilder<int>(
+                                valueListenable: widget.controller.frame,
+                                builder: (_, frame, __) => Text(
+                                  '$frame / $duration',
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    color: EditorTheme.muted,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              EditorButton(
+                                'Marker',
+                                has('addMarker')
+                                    ? () =>
+                                          widget.controller.command('addMarker')
+                                    : null,
+                              ),
+                            ],
+                          ),
+                        ),
+                        ValueListenableBuilder<int>(
+                          valueListenable: widget.controller.frame,
+                          builder: (_, frame, __) => GestureDetector(
+                            supportedDevices: const {
+                              PointerDeviceKind.mouse,
+                              PointerDeviceKind.touch,
+                              PointerDeviceKind.stylus,
+                            },
+                            onTapDown: (e) {
+                              if (e.localPosition.dx >= labelWidth)
+                                requestSeek(frameAt(e.localPosition.dx));
+                            },
+                            onHorizontalDragUpdate: (e) {
+                              if (e.localPosition.dx >= labelWidth)
+                                requestSeek(frameAt(e.localPosition.dx));
+                            },
+                            child: SizedBox(
+                              height: rulerHeight,
+                              width: double.infinity,
+                              child: CustomPaint(
+                                painter: _TimelinePainter(
+                                  labelWidth: labelWidth,
+                                  rows: const [],
+                                  selected: const [],
+                                  keys: const [],
+                                  frame: frame,
+                                  scale: pixelsPerFrame,
+                                  offset: offset,
+                                  duration: duration,
+                                  fps: (state['fps'] as num? ?? 30).toDouble(),
+                                  markers: EditorSession.maps(state['markers']),
+                                  ruler: true,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: Scrollbar(
+                            controller: vertical,
+                            child: SingleChildScrollView(
+                              controller: vertical,
+                              physics: const ClampingScrollPhysics(
+                                parent: NeverScrollableScrollPhysics(),
+                              ),
+                              child: GestureDetector(
+                                onSecondaryTapDown: menu,
+                                child: Listener(
+                                  onPointerDown: begin,
+                                  onPointerMove: move,
+                                  onPointerUp: end,
+                                  onPointerCancel: (_) => cancel(),
+                                  child: ValueListenableBuilder<int>(
+                                    valueListenable: widget.controller.frame,
+                                    builder: (_, frame, __) => SizedBox(
+                                      width: bounds.maxWidth,
+                                      height: height,
+                                      child: CustomPaint(
+                                        painter: _TimelinePainter(
+                                          labelWidth: labelWidth,
+                                          rows: tracks,
+                                          rowDropGuide: rowDropGuide,
+                                          rowDropInside: rowDropInside,
+                                          containers: layout.roots,
+                                          activeLane: activeLane,
+                                          selected:
+                                              widget.controller.selectedIds,
+                                          keys: selectedKeys,
+                                          frame: frame,
+                                          scale: pixelsPerFrame,
+                                          offset: offset,
+                                          duration: duration,
+                                          fps: (state['fps'] as num? ?? 30)
+                                              .toDouble(),
+                                          markers: EditorSession.maps(
+                                            state['markers'],
+                                          ),
+                                          marquee:
+                                              gesture == 'marquee' &&
+                                                  start != null &&
+                                                  current != null
+                                              ? Rect.fromPoints(
+                                                  start!,
+                                                  current!,
+                                                )
+                                              : null,
+                                          dragKeys: gesture == 'keys'
+                                              ? initialKeys
+                                              : const [],
+                                          delta: deltaFrames,
+                                          dragLayer:
+                                              dragRow != null &&
+                                                  [
+                                                    'move',
+                                                    'trimIn',
+                                                    'trimOut',
+                                                    'slip',
+                                                  ].contains(gesture)
+                                              ? timing(dragRow!)
+                                              : null,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        Padding(
+                          padding: EdgeInsets.only(left: labelWidth),
+                          child: SizedBox(
+                            height: 12,
+                            child: Scrollbar(
+                              controller: horizontal,
+                              thumbVisibility: true,
+                              child: SingleChildScrollView(
+                                controller: horizontal,
+                                physics: const ClampingScrollPhysics(
+                                  parent: NeverScrollableScrollPhysics(),
+                                ),
+                                scrollDirection: Axis.horizontal,
+                                child: SizedBox(
+                                  width: math.max(
+                                    bounds.maxWidth - labelWidth,
+                                    duration * pixelsPerFrame,
+                                  ),
+                                  height: 12,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    Positioned(
+                      left: layout.nameWidth - 3,
+                      top: 22,
+                      bottom: 12,
+                      width: 6,
+                      child: MouseRegion(
+                        cursor: SystemMouseCursors.resizeColumn,
+                        child: GestureDetector(
+                          supportedDevices: const {
+                            PointerDeviceKind.mouse,
+                            PointerDeviceKind.touch,
+                            PointerDeviceKind.stylus,
+                          },
+                          behavior: HitTestBehavior.opaque,
+                          onHorizontalDragStart: (e) {
+                            resizeStart = layout.nameWidth - layout.indentation;
+                            resizePointerStart = e.globalPosition.dx;
+                          },
+                          onHorizontalDragUpdate: (e) => setState(() {
+                            baseNameWidth =
+                                (resizeStart +
+                                        e.globalPosition.dx -
+                                        resizePointerStart)
+                                    .clamp(114.0 - layout.indentation, 162.0);
+                          }),
+                          onHorizontalDragCancel: () =>
+                              setState(() => baseNameWidth = resizeStart),
+                          onDoubleTap: () =>
+                              setState(() => baseNameWidth = 138),
+                          child: const SizedBox.expand(),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      );
+    },
+  );
+}
+
+class _TimelinePainter extends CustomPainter {
+  _TimelinePainter({
+    required this.rows,
+    required this.selected,
+    required this.keys,
+    required this.frame,
+    required this.scale,
+    required this.offset,
+    required this.duration,
+    required this.markers,
+    this.rowDropGuide,
+    this.rowDropInside = false,
+    this.labelWidth = 220,
+    this.containers = const [],
+    this.activeLane,
+    this.fps = 30,
+    this.ruler = false,
+    this.marquee,
+    this.dragKeys = const [],
+    this.delta = 0,
+    this.dragLayer,
+  });
+  final Rect? rowDropGuide;
+  final bool rowDropInside;
+  final double labelWidth;
+  final List<_LaneContainer> containers;
+  final String? activeLane;
+  final List<_TrackRow> rows;
+  bool laneSelected(_TrackRow row) => activeLane != null
+      ? row.laneId == activeLane
+      : row.property == null && selected.contains(row.id);
+  final List<int> selected;
+  final List<Map<String, dynamic>> keys, markers, dragKeys;
+  final int frame, duration, delta;
+  final double scale, offset, fps;
+  final bool ruler;
+  final Rect? marquee;
+  final Map<String, dynamic>? dragLayer;
+  void text(
+    Canvas canvas,
+    String text,
+    Offset at, {
+    Color color = EditorTheme.ink,
+    double width = 200,
+    double size = 11,
+    bool centered = false,
+    FontWeight weight = FontWeight.w400,
+  }) {
+    final p = TextPainter(
+      text: TextSpan(
+        text: text,
+        style: TextStyle(
+          color: color,
+          fontSize: size,
+          fontFamily: 'Arial',
+          fontWeight: weight,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+      maxLines: 1,
+      ellipsis: '…',
+    )..layout(maxWidth: math.max(0, width));
+    final aligned = ruler
+        ? at
+        : Offset(
+            at.dx,
+            (at.dy / _TimelinePanelState.rowHeight).floor() *
+                    _TimelinePanelState.rowHeight +
+                (_TimelinePanelState.rowHeight - p.height) / 2,
+          );
+    p.paint(
+      canvas,
+      centered ? Offset(at.dx + (width - p.width) / 2, aligned.dy) : aligned,
+    );
+  }
+
+  bool selectedKey(
+    _TrackRow row,
+    Map<String, dynamic> key,
+    List<Map<String, dynamic>> selection,
+  ) => selection.any(
+    (s) =>
+        s['layer'] == row.id &&
+        s['property'] == row.property?['id'] &&
+        s['frame'] == key['frame'],
+  );
+  @override
+  void paint(Canvas canvas, Size size) {
+    final label = labelWidth;
+    const h = _TimelinePanelState.rowHeight;
+    canvas.drawRect(
+      Offset.zero & size,
+      Paint()..color = const Color(0xff3c3c3c),
+    );
+    final unit = 85 / scale >= fps ? fps : 1.0;
+    final desired = 85 / scale / unit;
+    final magnitude = math
+        .pow(10, (math.log(math.max(1, desired)) / math.ln10).floor())
+        .toDouble();
+    final gridStep =
+        ([1, 2, 5, 10].firstWhere(
+                  (n) => n * magnitude >= desired,
+                  orElse: () => 10,
+                ) *
+                magnitude *
+                unit)
+            .round()
+            .clamp(1, 100000000);
+    canvas.save();
+    canvas.clipRect(
+      Rect.fromLTWH(label, 0, math.max(0, size.width - label), size.height),
+    );
+    if (!ruler) {
+      for (var i = 0; i < rows.length; i++) {
+        canvas.drawRect(
+          Rect.fromLTWH(label, rows[i].bounds.top, size.width - label, h),
+          Paint()
+            ..color = laneSelected(rows[i])
+                ? const Color(0xff585858)
+                : rows[i].property != null
+                ? const Color(0xff383838)
+                : (i.isEven
+                      ? const Color(0xff3d3d3d)
+                      : const Color(0xff383838)),
+        );
+      }
+    }
+    for (
+      var t = (offset / scale / gridStep).floor() * gridStep;
+      label + t * scale - offset < size.width;
+      t += gridStep
+    ) {
+      final x = label + t * scale - offset;
+      if ((t ~/ gridStep).isEven)
+        canvas.drawRect(
+          Rect.fromLTWH(x, 0, gridStep * scale, size.height),
+          Paint()..color = Colors.white.withValues(alpha: .025),
+        );
+      canvas.drawLine(
+        Offset(x, 0),
+        Offset(x, size.height),
+        Paint()
+          ..color = const Color(0xff262626)
+          ..strokeWidth = 1.5,
+      );
+      for (var sub = 1; sub < 4; sub++) {
+        if (gridStep * scale / 4 < 12) break;
+        final sx = x + gridStep * scale * sub / 4;
+        canvas.drawLine(
+          Offset(sx, ruler ? size.height - 12 : 0),
+          Offset(sx, size.height),
+          Paint()
+            ..color = const Color(0xff303030)
+            ..strokeWidth = 1,
+        );
+      }
+      if (ruler) {
+        canvas.drawLine(
+          Offset(x, 9),
+          Offset(x, size.height),
+          Paint()..color = const Color(0xff9b9b9b),
+        );
+        for (var sub = 1; sub < 4; sub++) {
+          final sx = x + gridStep * scale * sub / 4;
+          canvas.drawLine(
+            Offset(sx, size.height - 12),
+            Offset(sx, size.height - 10),
+            Paint()..color = const Color(0xff929292),
+          );
+        }
+        final seconds = t / fps;
+        text(
+          canvas,
+          '${seconds.toStringAsFixed(seconds == seconds.roundToDouble() ? 0 : 2)}s',
+          Offset(x + 4, 2),
+          width: 78,
+          size: 10,
+        );
+        text(
+          canvas,
+          '${t}f',
+          Offset(x + 4, 17),
+          width: 78,
+          size: 9,
+          color: EditorTheme.muted,
+        );
+      }
+    }
+    if (!ruler)
+      for (var i = 0; i < rows.length; i++) {
+        final row = rows[i], y = rows[i].bounds.top;
+        if (row.property == null && row.isGroup) {
+          final children = row.descendants
+              .where((l) => l['kind'] != 'Group')
+              .toList();
+          final stripe = math.min(4.0, (h - 4) / math.max(1, children.length));
+          for (var n = 0; n < children.length; n++) {
+            final child = children[n];
+            final x = label + (child['start'] as num? ?? 0) * scale - offset;
+            final width = (child['duration'] as num? ?? 1) * scale;
+            canvas.drawRect(
+              Rect.fromLTWH(
+                x,
+                y + 2 + n * stripe,
+                math.max(1, width),
+                math.max(1, stripe - 1),
+              ),
+              Paint()
+                ..color = row.groupOpen
+                    ? EditorTheme.border
+                    : EditorTheme.layerColor(child['id']),
+            );
+          }
+        } else if (row.property == null) {
+          final timing = dragLayer?['layer'] == row.id ? dragLayer! : row.layer;
+          final x =
+              label +
+              (timing['start'] as num? ?? 0).toDouble() * scale -
+              offset;
+          final width = (timing['duration'] as num? ?? 1).toDouble() * scale;
+          final rect = Rect.fromLTWH(x, y + 2, math.max(1, width), h - 4);
+          canvas.drawRect(
+            rect,
+            Paint()
+              ..color = row.layer['hidden'] == true
+                  ? EditorTheme.raised
+                  : EditorTheme.layerColor(row.id),
+          );
+          if (laneSelected(row))
+            canvas.drawRect(
+              rect,
+              Paint()
+                ..color = const Color(0xffeeeeae)
+                ..strokeWidth = 1
+                ..style = PaintingStyle.stroke,
+            );
+        } else
+          for (final key in row.keys) {
+            final shift = selectedKey(row, key, dragKeys) ? delta : 0;
+            final x =
+                label +
+                ((key['frame'] as num).toDouble() + shift) * scale -
+                offset;
+            final path = Path()
+              ..moveTo(x, y + h / 2 - 5)
+              ..lineTo(x + 5, y + h / 2)
+              ..lineTo(x, y + h / 2 + 5)
+              ..lineTo(x - 5, y + h / 2)
+              ..close();
+            canvas.drawPath(
+              path,
+              Paint()
+                ..color = selectedKey(row, key, keys)
+                    ? EditorTheme.accent
+                    : EditorTheme.ink,
+            );
+          }
+      }
+    if (!ruler) {
+      for (double y = h; y <= rows.length * h && y <= size.height; y += h) {
+        canvas.drawLine(
+          Offset(label, y),
+          Offset(size.width, y),
+          Paint()
+            ..color = const Color(0xff242424)
+            ..strokeWidth = 2,
+        );
+      }
+    }
+    canvas.drawLine(
+      Offset(label, 0),
+      Offset(size.width, 0),
+      Paint()
+        ..color = const Color(0xff242424)
+        ..strokeWidth = 2,
+    );
+    if (ruler)
+      canvas.drawLine(
+        Offset(label, size.height - 1),
+        Offset(size.width, size.height - 1),
+        Paint()
+          ..color = const Color(0xff242424)
+          ..strokeWidth = 2,
+      );
+    for (final marker in markers) {
+      final x =
+          label + (marker['frame'] as num? ?? 0).toDouble() * scale - offset;
+      canvas.drawLine(
+        Offset(x, 0),
+        Offset(x, size.height),
+        Paint()..color = EditorTheme.muted.withValues(alpha: .4),
+      );
+      if (ruler)
+        canvas.drawCircle(Offset(x, 3), 3, Paint()..color = EditorTheme.accent);
+    }
+    final playX = label + frame * scale - offset;
+    if (ruler)
+      canvas.drawPath(
+        Path()
+          ..moveTo(playX - 5, 0)
+          ..lineTo(playX + 5, 0)
+          ..lineTo(playX, 6)
+          ..close(),
+        Paint()..color = EditorTheme.accent,
+      );
+    canvas.drawLine(
+      Offset(playX, 0),
+      Offset(playX, size.height),
+      Paint()
+        ..color = EditorTheme.accent
+        ..strokeWidth = 1.5,
+    );
+    if (marquee != null) {
+      canvas.drawRect(
+        marquee!,
+        Paint()..color = EditorTheme.accent.withValues(alpha: .15),
+      );
+      canvas.drawRect(
+        marquee!,
+        Paint()
+          ..color = EditorTheme.accent
+          ..style = PaintingStyle.stroke,
+      );
+    }
+    canvas.restore();
+    canvas.drawRect(
+      Rect.fromLTWH(0, 0, math.min(label, size.width), size.height),
+      Paint()..color = EditorTheme.panel,
+    );
+    if (!ruler) {
+      canvas.save();
+      canvas.clipRect(Rect.fromLTWH(0, 0, label - 82, size.height));
+      void surface(_LaneContainer node) {
+        final row = node.row;
+        final background = row.property == null
+            ? EditorTheme.layerColor(row.id)
+            : (laneSelected(row) ? EditorTheme.raised : EditorTheme.panel);
+        canvas.drawRect(node.bounds, Paint()..color = background);
+        for (final child in node.children) surface(child);
+        canvas.drawRect(
+          node.bounds.deflate(.5),
+          Paint()
+            ..color = EditorTheme.line
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1,
+        );
+      }
+
+      for (final root in containers) surface(root);
+      canvas.restore();
+    }
+    if (ruler)
+      text(
+        canvas,
+        'Layers',
+        const Offset(6, 16),
+        color: EditorTheme.muted,
+        size: 10,
+        weight: FontWeight.w600,
+      );
+    else
+      for (var i = 0; i < rows.length; i++) {
+        final row = rows[i], y = rows[i].bounds.top;
+        if (laneSelected(row))
+          canvas.drawRect(
+            Rect.fromLTWH(
+              row.property == null ? label - 82 : row.bounds.left,
+              y,
+              label - (row.property == null ? label - 82 : row.bounds.left),
+              h,
+            ),
+            Paint()..color = EditorTheme.raised,
+          );
+        if (row.property == null) {
+          text(
+            canvas,
+            row.isGroup ? (row.groupOpen ? '⊟' : '⊞') : '',
+            Offset(row.bounds.left + 5, y + 3),
+            width: 12,
+            centered: true,
+            color: const Color(0xff202020),
+          );
+          text(
+            canvas,
+            '${row.layer['name']}',
+            color: const Color(0xff202020),
+            Offset(row.bounds.left + 23, y + 3),
+            width: math.max(0.0, row.bounds.width - 29),
+            weight: FontWeight.w500,
+          );
+          final keysOpen = row.lanesOpen;
+          canvas.drawRect(
+            Rect.fromLTWH(label - 81, y + 2, 14, h - 4),
+            Paint()
+              ..color = keysOpen ? EditorTheme.accent : const Color(0xff242424),
+          );
+          text(
+            canvas,
+            keysOpen ? '◆' : '◇',
+            Offset(label - 81, y + 3),
+            width: 14,
+            size: 10,
+            centered: true,
+            color: keysOpen ? const Color(0xff202020) : EditorTheme.ink,
+          );
+          final states = [
+            row.layer['hidden'] == true,
+            row.layer['solo'] == true,
+            row.layer['locked'] == true,
+            row.layer['clipToBelow'] == true,
+          ];
+          const symbols = ['M', 'S', 'L', '↳'];
+          for (var column = 0; column < 4; column++) {
+            final x = label - 65 + 16 * column;
+            final on = states[column];
+            canvas.drawRect(
+              Rect.fromLTWH(x, y + 2, 14, h - 4),
+              Paint()
+                ..color = on ? EditorTheme.accent : const Color(0xff242424),
+            );
+            text(
+              canvas,
+              symbols[column],
+              Offset(x, y + 3),
+              width: 14,
+              size: 9,
+              centered: true,
+              weight: FontWeight.w600,
+              color: on ? const Color(0xff202020) : EditorTheme.muted,
+            );
+          }
+        } else {
+          text(
+            canvas,
+            '${row.property!['label'] ?? row.property!['id'] ?? 'Content'}',
+            Offset(row.bounds.left + 6, y + 3),
+            width: 160,
+            color: EditorTheme.muted,
+          );
+          text(
+            canvas,
+            row.property!['keyedNow'] == true ? '◆' : '◇',
+            Offset(label - 21, y + 3),
+            width: 17,
+            color: EditorTheme.accent,
+          );
+        }
+        canvas.drawLine(
+          Offset(row.bounds.left, y + h),
+          Offset(size.width, y + h),
+          Paint()
+            ..color = const Color(0xff242424)
+            ..strokeWidth = 2,
+        );
+      }
+    if (rowDropGuide case final Rect guide) {
+      final paint = Paint()
+        ..color = const Color(0xffaedce8)
+        ..strokeWidth = 2
+        ..style = PaintingStyle.stroke;
+      if (rowDropInside)
+        canvas.drawRect(
+          Rect.fromLTRB(
+            guide.left,
+            guide.top,
+            size.width,
+            guide.bottom,
+          ).deflate(1),
+          paint,
+        );
+      else {
+        canvas.drawLine(
+          Offset(guide.left, guide.top),
+          Offset(size.width, guide.top),
+          paint,
+        );
+        canvas.drawCircle(
+          Offset(guide.left + 3, guide.top),
+          3,
+          Paint()..color = const Color(0xffaedce8),
+        );
+      }
+    }
+    if (ruler)
+      canvas.drawLine(
+        Offset(0, size.height - 1),
+        Offset(size.width, size.height - 1),
+        Paint()
+          ..color = EditorTheme.line
+          ..strokeWidth = 2,
+      );
+    canvas.drawLine(
+      Offset(label, 0),
+      Offset(label, size.height),
+      Paint()..color = EditorTheme.line,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _TimelinePainter oldDelegate) => true;
+}
+
+class _ArrangementOverview extends CustomPainter {
+  const _ArrangementOverview({
+    required this.layers,
+    required this.duration,
+    required this.offset,
+    required this.scale,
+    required this.viewportWidth,
+  });
+  final List<Map<String, dynamic>> layers;
+  final int duration;
+  final double offset, scale, viewportWidth;
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.drawRect(Offset.zero & size, Paint()..color = EditorTheme.app);
+    final unit = size.width / math.max(1, duration);
+    final lane = 12 / math.max(1, layers.length);
+    canvas.save();
+    canvas.clipRect(Offset.zero & size);
+    for (var i = 0; i < layers.length; i++) {
+      final l = layers[i];
+      canvas.drawRect(
+        Rect.fromLTWH(
+          (l['start'] as num? ?? 0) * unit,
+          3 + i * lane,
+          (l['duration'] as num? ?? 1) * unit,
+          math.max(1, lane - 1),
+        ),
+        Paint()
+          ..color = l['hidden'] == true
+              ? EditorTheme.border
+              : EditorTheme.layerColor(l['id']),
+      );
+    }
+    final left = (offset / scale * unit).clamp(0.0, size.width);
+    final right = ((offset + viewportWidth) / scale * unit).clamp(
+      left,
+      size.width,
+    );
+    canvas.drawRect(
+      Rect.fromLTRB(left, 1, right, 17),
+      Paint()..color = Colors.white.withValues(alpha: .10),
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTRB(left, 1, right, 17),
+        const Radius.circular(3),
+      ),
+      Paint()
+        ..color = EditorTheme.tab
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5,
+    );
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _ArrangementOverview oldDelegate) => true;
+}
