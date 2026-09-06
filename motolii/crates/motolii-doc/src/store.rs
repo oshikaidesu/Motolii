@@ -18,6 +18,8 @@ pub use document::{DisplayRevision, Document, Intent, LayerId, PropertyId, Revis
 pub use effect::{EffectId, EffectInstance, ResolvedEffect};
 pub use fingerprint::{SourceFingerprintDecode, SourceFingerprintError, SourceFingerprintV1};
 pub use marker::Marker;
+mod notebook;
+pub use notebook::{Notebook, NotePage, NoteBlock, NoteContent};
 pub use mask::{Mask, MaskId, MaskMode, ResolvedMask};
 pub use persist::AutoSaveConfig;
 pub use slot::{PropertyBase, PropertyLink, PropertySource, Slot, SlotId};
@@ -135,6 +137,7 @@ pub enum LayerSource {
         fingerprint: Option<String>,
     },
     Null,
+    Camera,
     Shape,
     Text,
     Group,
@@ -145,6 +148,7 @@ impl LayerSource {
         match self {
             Self::File { .. }
             | Self::Null
+            | Self::Camera
             | Self::Shape
             | Self::Text
             | Self::Group => None,
@@ -392,6 +396,7 @@ pub struct ResolvedLayer {
     pub effects: Vec<ResolvedEffect>,
     pub blend_mode: BlendMode,
     pub matte: Option<Matte>,
+    pub clip_to_below: bool,
     pub projection: LayerProjection,
     /// 3D の素材を平面へ収めるか。既定は収めない(裁定 2026-08-30)。
     pub flatten: bool,

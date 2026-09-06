@@ -91,6 +91,73 @@ fn bleed_edges(rgba: &mut [u8], width: usize) {
     }
 }
 
+pub(super) struct TextTexture {
+    texture: crate::render::compositor::GpuTexture2D,
+    bounds: Option<crate::render::media::SpatialBounds>,
+}
+
+fn raster_alpha_bounds(raster: &crate::doc::vector::Raster) -> Option<crate::render::media::SpatialBounds> {
+    let width = raster.width as usize;
+    if width == 0 { return None; }
+    let mut min = [raster.width, raster.height];
+    let mut max = [0u32; 2];
+    let mut any = false;
+    for (index, pixel) in raster.premultiplied_rgba8.chunks_exact(4).enumerate() {
+        if pixel[3] == 0 { continue; }
+        let x = (index % width) as u32;
+        let y = (index / width) as u32;
+        min[0] = min[0].min(x);
+        min[1] = min[1].min(y);
+        max[0] = max[0].max(x + 1);
+        max[1] = max[1].max(y + 1);
+        any = true;
+    }
+    any.then_some(crate::render::media::SpatialBounds {
+        min: [min[0] as f32, min[1] as f32, 0.0],
+        max: [max[0] as f32, max[1] as f32, 0.0],
+    })
+}
+
+fn group_local_bounds(
+    view: &StoreView<'_>,
+    resolved: &[ResolvedLayer],
+    group: LayerId,
+    mut leaf_bounds: impl FnMut(&ResolvedLayer) -> Option<crate::render::media::SpatialBounds>,
+) -> Option<crate::render::media::SpatialBounds> {
+    let group_world = resolved.iter().find(|layer| layer.id == group)?.placement.world_transform?;
+    if !group_world.is_finite() || group_world.matrix3.determinant() == 0.0 { return None; }
+    let local_from_world = group_world.inverse();
+    if !local_from_world.is_finite() { return None; }
+    let parents: HashMap<_, _> = view.layers().into_iter().filter_map(|layer| {
+        Some((layer, view.attrs(layer).ok().flatten()?.parent?))
+    }).collect();
+    let matte_sources: std::collections::HashSet<_> = resolved.iter().filter(|layer| !layer.clip_to_below).filter_map(|layer| layer.matte.map(|matte| matte.layer)).collect();
+    let mut points = Vec::new();
+    for leaf in resolved {
+        if matches!(leaf.source, LayerSource::Camera | LayerSource::Group | LayerSource::Null) || leaf.placement.opacity <= 0.0 || matte_sources.contains(&leaf.id) { continue; }
+        let mut parent = parents.get(&leaf.id).copied();
+        let mut visited = std::collections::HashSet::new();
+        let mut descendant = false;
+        while let Some(id) = parent {
+            if id == group { descendant = true; break; }
+            if !visited.insert(id) { break; }
+            parent = parents.get(&id).copied();
+        }
+        if !descendant { continue; }
+        let Some(bounds) = leaf_bounds(leaf) else { continue; };
+        let world = leaf.placement.world_transform?;
+        let local = local_from_world * world;
+        for x in [bounds.min[0], bounds.max[0]] {
+            for y in [bounds.min[1], bounds.max[1]] {
+                for z in [bounds.min[2], bounds.max[2]] {
+                    points.push(local.transform_point3(glam::vec3(x, y, z)).to_array());
+                }
+            }
+        }
+    }
+    crate::render::media::SpatialBounds::from_points(points).ok()
+}
+
 impl Engine {
     pub fn selected_layer_size(
         &self,
@@ -110,41 +177,75 @@ impl Engine {
         layer_id: LayerId,
         t: RationalTime,
     ) -> Option<[f32; 2]> {
-        let composition = view.composition().ok().flatten()?;
-        let comp = composition.spec();
-        let layer = resolved.iter().find(|l| l.id == layer_id)?;
+        self.selected_layer_bounds_in(view, resolved, layer_id, t).map(|bounds| bounds.size_xy())
+    }
 
-        let natural = match &layer.source {
+    pub fn selected_layer_bounds_in(
+        &self,
+        view: &StoreView<'_>,
+        resolved: &[ResolvedLayer],
+        layer_id: LayerId,
+        t: RationalTime,
+    ) -> Option<crate::render::media::SpatialBounds> {
+        let layer = resolved.iter().find(|layer| layer.id == layer_id)?;
+        if layer.source == LayerSource::Group {
+            return group_local_bounds(view, resolved, layer_id, |leaf| self.leaf_local_bounds(view, leaf, t));
+        }
+        self.leaf_local_bounds(view, layer, t)
+    }
+
+    fn leaf_local_bounds(
+        &self,
+        view: &StoreView<'_>,
+        layer: &ResolvedLayer,
+        t: RationalTime,
+    ) -> Option<crate::render::media::SpatialBounds> {
+        use crate::render::media::SpatialBounds;
+        let layer_id = layer.id;
+        let comp = view.composition().ok().flatten()?.spec();
+        let planar = |bounds: SpatialBounds, natural: [f32; 2]| {
+            let displayed = layer_size(layer, natural);
+            let scale = [displayed[0] / natural[0], displayed[1] / natural[1]];
+            SpatialBounds::from_points([
+                [bounds.min[0] * scale[0], bounds.min[1] * scale[1], 0.0],
+                [bounds.max[0] * scale[0], bounds.max[1] * scale[1], 0.0],
+            ]).ok()
+        };
+        match &layer.source {
             LayerSource::Text => {
                 let document = view.resolved_text_document(layer_id, t).ok().flatten()?;
                 let key = TextCacheKey::new(layer_id, &document, t, comp.width, comp.height);
-                self.text_textures
-                    .get(&key)?
-                    .width_height()
-                    .map(|v| v as f32)
+                let cached = self.text_textures.get(&key)?;
+                planar(cached.bounds?, cached.texture.width_height().map(|v| v as f32))
             }
             LayerSource::Shape => {
                 let shapes = view.shapes(layer_id).ok()?;
                 let canvas = content_canvas(&shapes).ok().flatten()?;
                 let key = ShapeCacheKey::new(layer_id, &shapes, canvas.width, canvas.height);
-                self.shape_textures
-                    .get(&key)?
-                    .width_height()
-                    .map(|v| v as f32)
+                let natural = self.shape_textures.get(&key)?.width_height().map(|v| v as f32);
+                let bounds = crate::doc::vector::content_bounds(&shapes).ok().flatten()?;
+                planar(SpatialBounds {
+                    min: [bounds[0] as f32 + canvas.origin_x as f32, bounds[1] as f32 + canvas.origin_y as f32, 0.0],
+                    max: [bounds[2] as f32 + canvas.origin_x as f32, bounds[3] as f32 + canvas.origin_y as f32, 0.0],
+                }, natural)
             }
-            LayerSource::Null | LayerSource::Group => [comp.width as f32, comp.height as f32],
+            LayerSource::Camera | LayerSource::Null | LayerSource::Group => None,
             LayerSource::File { path, .. } => {
-                if crate::render::media::is_mesh_path(path) {
-                    self.models.get(path)?.bounds().size_xy()
+                let spatial = if crate::render::media::is_mesh_path(path) {
+                    Some(self.models.get(path)?.bounds())
                 } else if is_point_cloud_path(path) {
-                    self.point_clouds.get(path)?.bounds().size_xy()
+                    Some(self.point_clouds.get(path)?.bounds())
+                } else { None };
+                if let Some(bounds) = spatial {
+                    let [x, y, z] = bounds.size();
+                    Some(SpatialBounds { min: [0.0, 0.0, -z * 0.5], max: [x, y, z * 0.5] })
                 } else {
                     let info = self.probes.get(path)?;
-                    [info.width as f32, info.height as f32]
+                    let natural = [info.width as f32, info.height as f32];
+                    planar(SpatialBounds { min: [0.0; 3], max: [natural[0], natural[1], 0.0] }, natural)
                 }
             }
-        };
-        Some(layer_size(layer, natural))
+        }
     }
 
     pub(crate) fn texture_for_resolved(
@@ -190,9 +291,9 @@ impl Engine {
         };
 
         let key = TextCacheKey::new(layer_id, document, t, canvas.width, canvas.height);
-        if let Some(texture) = self.text_textures.get(&key) {
+        if let Some(cached) = self.text_textures.get(&key) {
             return Ok((
-                Some(LayerContent::Texture(texture.clone())),
+                Some(LayerContent::Texture(cached.texture.clone())),
                 [canvas.width as f32, canvas.height as f32],
             ));
         }
@@ -200,6 +301,7 @@ impl Engine {
         let Some(mut raster) = text::rasterize_text_document(document, t, &canvas)? else {
             return Ok((None, [0.0, 0.0]));
         };
+        let bounds = raster_alpha_bounds(&raster);
         unpremultiply(&mut raster.premultiplied_rgba8, raster.width as usize);
 
         let texture = self.compositor.upload_rgba(
@@ -208,7 +310,7 @@ impl Engine {
             raster.width,
             raster.height,
         )?;
-        self.text_textures.insert(key.clone(), texture.clone());
+        self.text_textures.insert(key.clone(), TextTexture { texture: texture.clone(), bounds });
         self.text_order.push_back(key);
         // 級数を擦るだけで鍵が増える。歌詞 200 行 + 擦りの残骸で GPU を食い潰さない。
         while self.text_order.len() > TEXT_CACHE_LIMIT {
@@ -539,7 +641,7 @@ impl Engine {
             LayerSource::Text | LayerSource::Shape | LayerSource::File { .. } => {
                 Ok((None, [0.0, 0.0]))
             }
-            LayerSource::Null | LayerSource::Group => Ok((None, [0.0, 0.0])),
+            LayerSource::Camera | LayerSource::Null | LayerSource::Group => Ok((None, [0.0, 0.0])),
         }
     }
 }
@@ -623,7 +725,65 @@ const DEFAULT_POINT_SIZE: f32 = 2.0;
 
 #[cfg(test)]
 mod tests {
-    use super::unpremultiply;
+    use super::*;
+
+    #[test]
+    fn cached_text_bounds_follow_nontransparent_content_not_canvas_or_rgb_bleed() {
+        let mut raster = crate::doc::vector::Raster {
+            width: 12, height: 8, premultiplied_rgba8: vec![0; 12 * 8 * 4],
+        };
+        assert!(raster_alpha_bounds(&raster).is_none());
+        for (x, y, alpha) in [(4, 2, 255), (8, 5, 1)] {
+            raster.premultiplied_rgba8[(y * 12 + x) * 4 + 3] = alpha;
+        }
+        raster.premultiplied_rgba8[0] = 255;
+        assert_eq!(raster_alpha_bounds(&raster), Some(crate::render::media::SpatialBounds {
+            min: [4.0, 2.0, 0.0], max: [9.0, 6.0, 0.0],
+        }));
+    }
+
+    #[test]
+    fn group_bounds_use_offset_descendants_in_group_space_and_empty_groups_have_no_box() {
+        use crate::doc::store::{Intent, LayerMeta, LayerTiming, LayerAttrsPatch, PropertyId, Value};
+        let mut doc = crate::doc::store::blank_project();
+        for (id, source, parent, position) in [
+            (1, LayerSource::Group, None, [100.0, 200.0]),
+            (2, LayerSource::Shape, Some(1), [10.0, 20.0]),
+            (3, LayerSource::Group, Some(1), [30.0, 40.0]),
+            (4, LayerSource::Shape, Some(3), [5.0, -10.0]),
+            (5, LayerSource::Shape, None, [-100.0, -200.0]),
+            (6, LayerSource::Group, None, [0.0, 0.0]),
+        ] {
+            let layer = LayerId(id);
+            doc.apply_all([
+                Intent::AddLayer(layer),
+                Intent::SetMeta { layer, meta: LayerMeta {
+                    source, order: id as i16, timing: LayerTiming::place(0, None, 30),
+                } },
+                Intent::SetAttrs { layer, patch: LayerAttrsPatch {
+                    parent: Some(parent.map(LayerId)), ..Default::default()
+                } },
+                Intent::SetConstant { layer, property: PropertyId::new("position").unwrap(), value: Value::Vec2(position) },
+            ]).unwrap();
+        }
+        let view = doc.view();
+        let mut resolved = view.resolved_layers(RationalTime::ZERO).unwrap();
+        let leaf = |layer: &ResolvedLayer| Some(if layer.id == LayerId(4) {
+            crate::render::media::SpatialBounds { min: [1.0, 2.0, -1.0], max: [3.0, 4.0, 1.0] }
+        } else {
+            crate::render::media::SpatialBounds { min: [0.0; 3], max: [4.0, 6.0, 0.0] }
+        });
+        assert_eq!(group_local_bounds(&view, &resolved, LayerId(1), leaf), Some(crate::render::media::SpatialBounds {
+            min: [10.0, 20.0, -1.0], max: [38.0, 34.0, 1.0],
+        }));
+        assert_eq!(group_local_bounds(&view, &resolved, LayerId(3), leaf), Some(crate::render::media::SpatialBounds {
+            min: [6.0, -8.0, -1.0], max: [8.0, -6.0, 1.0],
+        }));
+        assert!(group_local_bounds(&view, &resolved, LayerId(6), leaf).is_none());
+        resolved.iter_mut().find(|layer| layer.id == LayerId(1)).unwrap().placement.world_transform = Some(glam::Affine3A::from_scale(glam::vec3(0.0, 1.0, 1.0)));
+        assert!(group_local_bounds(&view, &resolved, LayerId(1), leaf).is_none());
+    }
+
 
     #[test]
     fn unpremultiply_restores_the_straight_color_and_leaves_the_edges() {

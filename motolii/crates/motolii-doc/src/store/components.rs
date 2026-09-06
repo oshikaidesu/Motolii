@@ -236,3 +236,7 @@ pub(crate) fn descriptor_text() -> ComponentDescriptor {
         component_type: Some(TrackJson::name()),
     }
 }
+
+pub(crate) fn descriptor_notebook() -> ComponentDescriptor {
+    ComponentDescriptor { archetype: Some(archetype_composition().into()), component: "Composition:notebook".into(), component_type: Some(TrackJson::name()) }
+}

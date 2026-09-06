@@ -207,6 +207,7 @@ pub struct CompSpec {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct LayerPlacement {
     pub transform: glam::Affine2,
+    pub world_transform: Option<glam::Affine3A>,
     pub order: i16,
     pub opacity: f32,
     pub z: f32,
@@ -218,6 +219,7 @@ impl Default for LayerPlacement {
     fn default() -> Self {
         Self {
             transform: glam::Affine2::IDENTITY,
+            world_transform: None,
             order: 0,
             opacity: 1.0,
             z: 0.0,
@@ -245,7 +247,7 @@ impl LayerPlacement {
             let axis = skew_axis_degrees.to_radians();
             let shear = Affine2::from_mat2(Mat2::from_cols(
                 Vec2::new(1.0, 0.0),
-                Vec2::new(skew.tan(), 1.0),
+                Vec2::new(-skew.tan(), 1.0),
             ));
             Affine2::from_angle(-axis) * shear * Affine2::from_angle(axis)
         };

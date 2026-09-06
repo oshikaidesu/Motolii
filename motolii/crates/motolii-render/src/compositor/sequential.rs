@@ -5,6 +5,42 @@ use re_renderer::{GpuTexture, Rgba, ScreenshotProcessor, ViewBuilderId};
 use crate::render::compositor::*;
 
 impl Compositor {
+    pub(crate) fn source_atop(
+        &mut self,
+        base: &GpuTexture2D,
+        upper: &GpuTexture2D,
+        blend: BlendMode,
+    ) -> Result<GpuTexture2D, CompositorError> {
+        let compose = 9u32;
+        let mode = match blend {
+            BlendMode::Normal => compose,
+            BlendMode::Add => return Err(CompositorError::UnsupportedBlendMode(blend)),
+            other => (vello_blend_mode(other).expect("mix mode") & !0xff) | compose,
+        };
+        let [width, height] = base.width_height();
+        if upper.width_height() != [width, height] {
+            return Err(CompositorError::Effect("Clipping inputs must share composition dimensions".into()));
+        }
+        let base_resource = self.ctx.gpu_resources.textures.get_from_handle(base.handle())
+            .map_err(|error| CompositorError::Effect(error.to_string()))?;
+        let upper_resource = self.ctx.gpu_resources.textures.get_from_handle(upper.handle())
+            .map_err(|error| CompositorError::Effect(error.to_string()))?;
+        let base_view = base_resource.texture.create_view(&Default::default());
+        let upper_view = upper_resource.texture.create_view(&Default::default());
+        let output = self.create_blend_scratch_texture(width, height);
+        let output_view = output.create_view(&Default::default());
+        let mut encoder = self.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("motolii-clipping-source-atop"),
+        });
+        let Self { ctx, blend_vism, effect_scratch, .. } = self;
+        blend_vism.record_over(
+            ctx, &mut encoder, effect_scratch, &[&base_view, &upper_view], &output_view,
+            &[("mode".to_owned(), mode as f32)], [width as f32, height as f32],
+        );
+        self.pending.push(encoder.finish());
+        self.import_premultiplied(&output)
+    }
+
     pub fn effect_passes_created_textures(&self) -> u64 {
         self.effect_scratch.created_count()
     }
@@ -63,15 +99,11 @@ impl Compositor {
                     && vello_blend_mode(i.blend_mode).is_some()
             };
             if let Some(mode_index) = vello_blend_mode(input.blend_mode).filter(|_| bakeable(input)) {
-                let (transform, z, rx, ry) = (input.transform, input.z, input.rotation_x, input.rotation_y);
-                let (corner, extent_u, extent_v) = crate::render::compositor::projected_corners(
+                let (corner, extent_u, extent_v) = crate::render::compositor::projected_placement_corners(
                     comp, input.projection_camera, input.projection,
-                    transform,
+                    input.placement,
                     input.local_min,
                     input.local_size,
-                    z,
-                    rx,
-                    ry,
                 );
 
                 let solo_rect = TexturedRect {
@@ -203,9 +235,20 @@ impl Compositor {
                     comp,
                     camera,
                     run.iter().map(|i| {
-                        let c = i.transform.transform_point2(i.local_min + i.local_size * 0.5);
-                        let c = glam::vec3(c.x, c.y, i.z);
-                        crate::doc::core::layer_projection_transform(comp, i.projection_camera, i.projection, c).transform_point3(c)
+                        let bounds = match i.content {
+                            SequentialContent::Cloud { bounds, .. } => Some(bounds),
+                            SequentialContent::Model(model) => Some(model.bounds),
+                            SequentialContent::Rect(_) => None,
+                        };
+                        if let Some(bounds) = bounds {
+                            projected_spatial_placement(comp, i.projection_camera, i.projection, i.placement, bounds)
+                                .transform_point3((glam::Vec3::from(bounds.min) + glam::Vec3::from(bounds.max)) * 0.5)
+                        } else {
+                            let (corner, u, v) = projected_placement_corners(
+                                comp, i.projection_camera, i.projection, i.placement, i.local_min, i.local_size,
+                            );
+                            corner + (u + v) * 0.5
+                        }
                     }),
                 );
                 rects.push(background_rect(
@@ -220,7 +263,6 @@ impl Compositor {
             let mut clouds: Vec<re_renderer::renderer::PointCloudDrawData> = Vec::new();
             let mut meshes: Vec<re_renderer::renderer::MeshDrawData> = Vec::new();
             for input in run {
-                let (transform, z, rx, ry) = (input.transform, input.z, input.rotation_x, input.rotation_y);
                 if let crate::render::compositor::SequentialContent::Cloud {
                     positions,
                     colors,
@@ -233,10 +275,7 @@ impl Compositor {
                         colors,
                         bounds,
                         point_size,
-                        transform,
-                        z,
-                        rx,
-                        ry,
+                        input.placement,
                         input.opacity,
                         comp, input.projection_camera, input.projection,
                     )?);
@@ -246,24 +285,18 @@ impl Compositor {
                     meshes.push(
                         self.model_draw_data(
                             model,
-                            transform,
-                            z,
-                            rx,
-                            ry,
+                            input.placement,
                             input.opacity,
                             comp, input.projection_camera, input.projection,
                         )?,
                     );
                     continue;
                 }
-                let (corner, extent_u, extent_v) = crate::render::compositor::projected_corners(
+                let (corner, extent_u, extent_v) = crate::render::compositor::projected_placement_corners(
                     comp, input.projection_camera, input.projection,
-                    transform,
+                    input.placement,
                     input.local_min,
                     input.local_size,
-                    z,
-                    rx,
-                    ry,
                 );
                 let a = match input.blend_mode {
                     BlendMode::Normal => input.opacity,
@@ -617,10 +650,7 @@ impl Compositor {
                 },
                 local_min: glam::Vec2::ZERO,
                 local_size: glam::Vec2::new(layer.size[0], layer.size[1]),
-                transform: layer.placement.transform,
-                z: layer.placement.z,
-                rotation_x: layer.placement.rotation_x,
-                rotation_y: layer.placement.rotation_y,
+                placement: layer.placement,
                 projection: layer.projection,
                 projection_camera: layer.projection_camera,
                 opacity: layer.placement.opacity,
@@ -642,10 +672,9 @@ impl Compositor {
         layer: &Layer,
         label: &'static str,
     ) -> Result<GpuTexture, CompositorError> {
-        let (corner, u, v) = projected_corners(
-            comp, layer.projection_camera, layer.projection, layer.placement.transform,
-            glam::Vec2::ZERO, glam::Vec2::from(layer.size), layer.placement.z,
-            layer.placement.rotation_x, layer.placement.rotation_y,
+        let (corner, u, v) = projected_placement_corners(
+            comp, layer.projection_camera, layer.projection, layer.placement,
+            glam::Vec2::ZERO, glam::Vec2::from(layer.size),
         );
 
         let rect = TexturedRect {
@@ -767,6 +796,7 @@ impl Compositor {
             size: [comp.width as f32, comp.height as f32],
             placement: LayerPlacement {
                 transform: glam::Affine2::IDENTITY,
+                world_transform: None,
                 opacity: 1.0,
                 order: layer.placement.order,
                 z: 0.0,

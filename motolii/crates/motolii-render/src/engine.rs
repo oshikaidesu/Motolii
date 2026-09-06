@@ -18,7 +18,7 @@ use crate::render::media::MediaError;
 use crate::render::media::MediaInfo;
 use crate::render::media::PointCloudData;
 
-use crate::render::engine::texture::{ShapeCacheKey, TextCacheKey};
+use crate::render::engine::texture::{ShapeCacheKey, TextCacheKey, TextTexture};
 
 pub use crate::render::compositor::{bind_catalog_runtime, catalog_generation, catalog_source_roots, refresh_effect_catalog, refresh_effect_catalog_for, watch_effect_catalog, CatalogRefresh, CatalogRuntime, CatalogWatcher};
 pub use crate::render::engine::translate::{
@@ -69,8 +69,7 @@ impl ObservationCamera {
         ResolvedCamera {
             center: self.pan,
             zoom: self.zoom,
-            roll_degrees: 0.0,
-        }
+            roll_degrees: 0.0, ..Default::default() }
     }
 }
 
@@ -104,7 +103,7 @@ fn still_pixels() -> StillPixels {
 pub struct Engine {
     compositor: Compositor,
     probes: HashMap<String, MediaInfo>,
-    text_textures: HashMap<TextCacheKey, GpuTexture2D>,
+    text_textures: HashMap<TextCacheKey, TextTexture>,
     /// 入れた順。上限を越えたら古い物から落とす(comp 解像度の texture を無制限に貯めない)。
     text_order: std::collections::VecDeque<TextCacheKey>,
     shape_textures: HashMap<ShapeCacheKey, GpuTexture2D>,

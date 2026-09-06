@@ -45,3 +45,6 @@ tempfile = { workspace = true }
 
 [lints]
 workspace = true
+
+[features]
+shared-bgra-output = []

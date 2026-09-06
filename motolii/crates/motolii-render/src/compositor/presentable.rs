@@ -43,7 +43,7 @@ impl Compositor {
     }
 }
 
-pub const PRESENTABLE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
+pub const PRESENTABLE_FORMAT: wgpu::TextureFormat = if cfg!(feature = "shared-bgra-output") { wgpu::TextureFormat::Bgra8UnormSrgb } else { wgpu::TextureFormat::Rgba8UnormSrgb };
 
 pub fn check_presentable_target(
     target: &wgpu::Texture,

@@ -9,7 +9,7 @@ impl Compositor {
         Self::with_device(
             gpu.device,
             gpu.queue,
-            re_renderer::ScreenshotProcessor::SCREENSHOT_COLOR_FORMAT,
+            if cfg!(feature = "shared-bgra-output") { wgpu::TextureFormat::Bgra8UnormSrgb } else { re_renderer::ScreenshotProcessor::SCREENSHOT_COLOR_FORMAT },
             |_caps| re_renderer::RenderConfig {
                 msaa_mode: re_renderer::MsaaMode::Off,
             },
@@ -84,7 +84,7 @@ impl Compositor {
         Self::with_device(
             device,
             queue,
-            re_renderer::ScreenshotProcessor::SCREENSHOT_COLOR_FORMAT,
+            if cfg!(feature = "shared-bgra-output") { wgpu::TextureFormat::Bgra8UnormSrgb } else { re_renderer::ScreenshotProcessor::SCREENSHOT_COLOR_FORMAT },
             |_caps| re_renderer::RenderConfig {
                 msaa_mode: re_renderer::MsaaMode::Off,
             },

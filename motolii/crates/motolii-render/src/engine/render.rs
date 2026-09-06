@@ -72,16 +72,18 @@ impl Engine {
     ) -> Result<Vec<LayerWithPasses>, EngineError> {
         self.layer_failures.clear();
         let mut layers: Vec<LayerWithPasses> = Vec::with_capacity(resolved.len() + 1);
+        let mut contributions: HashMap<LayerId, usize> = HashMap::new();
 
         let by_id: HashMap<LayerId, &ResolvedLayer> =
             resolved.iter().map(|layer| (layer.id, layer)).collect();
         let matte_sources: HashSet<LayerId> = resolved
             .iter()
+            .filter(|layer| !layer.clip_to_below)
             .filter_map(|layer| layer.matte.map(|matte| matte.layer))
             .collect();
 
         for layer in resolved {
-            if matte_sources.contains(&layer.id) {
+            if matte_sources.contains(&layer.id) || (layer.clip_to_below && layer.matte.is_none()) {
                 continue;
             }
 
@@ -107,6 +109,26 @@ impl Engine {
                 layer.flatten,
             )?;
             let built = self.apply_masks_to_layer(built, &layer.masks)?;
+
+            if layer.clip_to_below {
+                let Some(index) = layer.matte.and_then(|matte| contributions.get(&matte.layer).copied()) else {
+                    continue;
+                };
+                let base = layers[index].clone();
+                let opacity = base.layer.placement.opacity;
+                let mut isolated_base = base.layer;
+                isolated_base.placement.opacity = 1.0;
+                let mut base = self.bake_isolated_layer(comp, camera, isolated_base, &base.passes)?;
+                let upper = self.bake_isolated_layer(comp, camera, built, &passes)?;
+                base.content = LayerContent::Texture(self.compositor.source_atop(
+                    base.content.texture().expect("isolated base texture"),
+                    upper.content.texture().expect("isolated upper texture"),
+                    upper.blend_mode,
+                )?);
+                base.placement.opacity = opacity;
+                layers[index] = LayerWithPasses { layer: base, passes: Vec::new() };
+                continue;
+            }
 
             let (final_layer, passes) = match layer.matte {
                 None => (built, passes),
@@ -151,6 +173,7 @@ impl Engine {
                 }
             };
 
+            contributions.insert(layer.id, layers.len());
             layers.push(LayerWithPasses {
                 layer: final_layer,
                 passes,
@@ -259,8 +282,7 @@ impl Engine {
             .render_into(target, comp, camera, &layers, composition.background)?)
     }
 
-    /// 指定したカメラで撮る。**窓の視点はここへ来ない** —— 視点は撮れた絵を
-    /// 2Dで動かすだけなので、撮るのは常に書き出しのカメラ(裁定 2026-09-01)。
+    /// Render from an observation camera while retaining authored layer projection.
     pub fn render_frame_into_with_camera(
         &mut self,
         view: &StoreView<'_>,
@@ -333,6 +355,7 @@ impl Engine {
             // 焼いた絵は既に comp の座標に居るので、もう一度動かさない。
             placement: crate::doc::core::LayerPlacement {
                 transform: glam::Affine2::IDENTITY,
+                world_transform: None,
                 z: 0.0,
                 rotation_x: 0.0,
                 rotation_y: 0.0,
@@ -358,6 +381,17 @@ impl Engine {
             return Ok(layer);
         }
 
+        self.bake_isolated_layer(comp, camera, layer, passes)
+    }
+
+    fn bake_isolated_layer(
+        &mut self,
+        comp: CompSpec,
+        camera: ResolvedCamera,
+        layer: Layer,
+        passes: &[EffectPass],
+    ) -> Result<Layer, EngineError> {
+
         let output_blend = layer.blend_mode;
         let mut effected = layer.clone();
         // BlendはMatteでcoverageを得た後、作品の下層との間に一度だけ掛ける。
@@ -378,6 +412,7 @@ impl Engine {
             size: [comp.width as f32, comp.height as f32],
             placement: crate::doc::core::LayerPlacement {
                 transform: glam::Affine2::IDENTITY,
+                world_transform: None,
                 opacity: 1.0,
                 z: 0.0,
                 rotation_x: 0.0,

@@ -5,7 +5,7 @@ use re_renderer::renderer::{GpuMeshInstance, MeshDrawData};
 use re_renderer::Color32;
 
 use crate::render::compositor::{
-    spatial_world_from_bounds, Compositor, CompositorError, GpuModelData,
+    projected_spatial_placement, Compositor, CompositorError, GpuModelData,
 };
 use crate::render::media::SpatialBounds;
 
@@ -49,24 +49,13 @@ impl Compositor {
     pub(crate) fn model_draw_data(
         &mut self,
         model: &GpuModelData,
-        transform: glam::Affine2,
-        z: f32,
-        rotation_x: f32,
-        rotation_y: f32,
+        placement: crate::doc::core::LayerPlacement,
         opacity: f32,
         comp: crate::doc::core::CompSpec,
         camera: crate::doc::core::ResolvedCamera,
         projection: crate::doc::store::LayerProjection,
     ) -> Result<MeshDrawData, CompositorError> {
-        let world_from_object = spatial_world_from_bounds(
-            transform,
-            z,
-            rotation_x,
-            rotation_y,
-            model.bounds,
-        );
-        let center = world_from_object.transform_point3((glam::Vec3::from(model.bounds.min) + glam::Vec3::from(model.bounds.max)) * 0.5);
-        let world_from_object = crate::doc::core::layer_projection_transform(comp, camera, projection, center) * world_from_object;
+        let world_from_object = projected_spatial_placement(comp, camera, projection, placement, model.bounds);
         let alpha = (opacity.clamp(0.0, 1.0) * 255.0).round() as u8;
         let tint = Color32::from_rgba_unmultiplied(0, 0, 0, alpha);
         let instances: Vec<GpuMeshInstance> = model

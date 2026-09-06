@@ -307,3 +307,57 @@ fn a_text_edit_refused_by_the_document_cannot_be_shown_as_a_valid_preview() {
     assert_eq!(doc.view().text_document(layer).unwrap().unwrap(), original);
     assert_eq!((doc.edit_head(), doc.history_depth()), (head, history));
 }
+
+#[test]
+fn removing_parent_removes_descendants_and_undo_restores_their_keys() {
+    use motolii::doc::store::LayerAttrsPatch;
+    let mut doc = document();
+    let group = layer(&mut doc, 1, LayerSource::Group);
+    let child = layer(&mut doc, 2, LayerSource::Shape);
+    let grandchild = layer(&mut doc, 3, LayerSource::Shape);
+    let sibling = layer(&mut doc, 4, LayerSource::Shape);
+    doc.apply_all([
+        Intent::SetAttrs { layer: child, patch: LayerAttrsPatch { parent: Some(Some(group)), ..Default::default() } },
+        Intent::SetAttrs { layer: grandchild, patch: LayerAttrsPatch { parent: Some(Some(child)), ..Default::default() } },
+        Intent::SetTrack { layer: grandchild, property: position(), track: track([(30,[1.0,2.0]),(60,[3.0,4.0])]) },
+    ]).unwrap();
+    doc.mark_undo_floor();
+    doc.apply_all([Intent::RemoveLayer(group), Intent::RemoveLayer(child)]).unwrap();
+    assert_eq!(doc.view().layers(), vec![sibling]);
+    assert_eq!(doc.history_depth(), (1,0));
+    assert!(doc.undo());
+    assert_eq!(doc.view().layers(), vec![group,child,grandchild,sibling]);
+    assert_eq!(doc.view().attrs(grandchild).unwrap().unwrap().parent,Some(child));
+    assert_eq!(doc.view().track(grandchild,&position()).unwrap().unwrap().keys().len(),2);
+    assert!(doc.redo());
+    assert_eq!(doc.view().layers(),vec![sibling]);
+}
+
+#[test]
+fn deleting_a_locked_descendant_rejects_the_whole_subtree() {
+    use motolii::doc::store::LayerAttrsPatch;
+    let mut doc=document();
+    let group=layer(&mut doc,1,LayerSource::Group);
+    let child=layer(&mut doc,2,LayerSource::Shape);
+    doc.apply(Intent::SetAttrs{layer:child,patch:LayerAttrsPatch{parent:Some(Some(group)),locked:Some(true),..Default::default()}}).unwrap();
+    doc.mark_undo_floor();
+    assert!(doc.apply(Intent::RemoveLayer(group)).is_err());
+    assert_eq!(doc.view().layers(),vec![group,child]);
+    assert_eq!(doc.history_depth(),(0,0));
+}
+
+#[test]
+fn ungroup_reparents_children_before_removing_the_container() {
+    use motolii::doc::store::LayerAttrsPatch;
+    let mut doc=document();
+    let child=layer(&mut doc,1,LayerSource::Shape);
+    put(&mut doc,child,[12.0,24.0]);
+    let group=doc.group_layers(&[child]).unwrap().unwrap();
+    doc.mark_undo_floor();
+    assert_eq!(doc.ungroup_layers(&[group]).unwrap(),vec![child]);
+    assert_eq!(doc.view().layers(),vec![child]);
+    assert_eq!(doc.view().attrs(child).unwrap().unwrap().parent,None);
+    assert!(doc.undo());
+    assert_eq!(doc.view().attrs(child).unwrap().unwrap().parent,Some(group));
+    assert!(doc.apply(Intent::SetAttrs{layer:child,patch:LayerAttrsPatch{parent:Some(Some(LayerId(999))),..Default::default()}}).is_err());
+}

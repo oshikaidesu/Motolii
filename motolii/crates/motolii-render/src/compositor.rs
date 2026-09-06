@@ -117,6 +117,33 @@ pub(crate) fn spatial_world_from_bounds(
         * glam::Affine3A::from_translation(-glam::Vec3::from(bounds.min))
 }
 
+pub(crate) fn spatial_placement_from_bounds(
+    placement: LayerPlacement,
+    bounds: crate::render::media::SpatialBounds,
+) -> glam::Affine3A {
+    match placement.world_transform {
+        Some(world) => {
+            let origin = glam::vec3(bounds.min[0], bounds.min[1], (bounds.min[2] + bounds.max[2]) * 0.5);
+            world * glam::Affine3A::from_translation(-origin)
+        }
+        None => spatial_world_from_bounds(
+            placement.transform, placement.z, placement.rotation_x, placement.rotation_y, bounds,
+        ),
+    }
+}
+
+pub(crate) fn projected_spatial_placement(
+    comp: CompSpec,
+    camera: ResolvedCamera,
+    projection: crate::doc::store::LayerProjection,
+    placement: LayerPlacement,
+    bounds: crate::render::media::SpatialBounds,
+) -> glam::Affine3A {
+    let world = spatial_placement_from_bounds(placement, bounds);
+    let center = world.transform_point3((glam::Vec3::from(bounds.min) + glam::Vec3::from(bounds.max)) * 0.5);
+    crate::doc::core::layer_projection_transform(comp, camera, projection, center) * world
+}
+
 pub(crate) fn accumulator_plane_z(
     comp: CompSpec,
     camera: crate::doc::core::ResolvedCamera,
@@ -158,6 +185,25 @@ pub fn projected_corners(
     rotation_y: f32,
 ) -> (glam::Vec3, glam::Vec3, glam::Vec3) {
     let (corner, u, v) = tilted_corners(transform, local_min, local_size, z, rotation_x, rotation_y);
+    let correction = crate::doc::core::layer_projection_transform(comp, camera, projection, corner + (u + v) * 0.5);
+    (correction.transform_point3(corner), correction.transform_vector3(u), correction.transform_vector3(v))
+}
+
+pub fn projected_placement_corners(
+    comp: CompSpec,
+    camera: ResolvedCamera,
+    projection: crate::doc::store::LayerProjection,
+    placement: LayerPlacement,
+    local_min: glam::Vec2,
+    local_size: glam::Vec2,
+) -> (glam::Vec3, glam::Vec3, glam::Vec3) {
+    let Some(world) = placement.world_transform else {
+        return projected_corners(comp, camera, projection, placement.transform, local_min, local_size,
+            placement.z, placement.rotation_x, placement.rotation_y);
+    };
+    let corner = world.transform_point3(local_min.extend(0.0));
+    let u = world.transform_vector3(glam::vec3(local_size.x, 0.0, 0.0));
+    let v = world.transform_vector3(glam::vec3(0.0, local_size.y, 0.0));
     let correction = crate::doc::core::layer_projection_transform(comp, camera, projection, corner + (u + v) * 0.5);
     (correction.transform_point3(corner), correction.transform_vector3(u), correction.transform_vector3(v))
 }
@@ -333,10 +379,7 @@ pub(crate) struct SequentialInput<'a> {
     content: SequentialContent<'a>,
     local_min: glam::Vec2,
     local_size: glam::Vec2,
-    transform: glam::Affine2,
-    z: f32,
-    rotation_x: f32,
-    rotation_y: f32,
+    placement: LayerPlacement,
     projection: crate::doc::store::LayerProjection,
     projection_camera: ResolvedCamera,
     opacity: f32,
@@ -392,6 +435,82 @@ fn background_rect(
 #[cfg(test)]
 mod spatial_transform_tests {
     use super::*;
+
+    fn near(actual: glam::Vec3, expected: glam::Vec3) {
+        assert!((actual - expected).length() < 1e-3, "{actual:?} != {expected:?}");
+    }
+
+    #[test]
+    fn world_pose_places_padded_corners_without_reapplying_legacy_tilt() {
+        let parent = glam::Affine3A::from_rotation_translation(
+            glam::Quat::from_rotation_y(0.7), glam::vec3(30.0, 40.0, 90.0));
+        let local = glam::Affine3A::from_scale_rotation_translation(
+            glam::vec3(2.0, 3.0, 1.0), glam::Quat::from_rotation_x(-0.4), glam::vec3(8.0, 10.0, 12.0));
+        let world = parent * local;
+        let placement = LayerPlacement {
+            world_transform: Some(world),
+            transform: glam::Affine2::from_translation(glam::vec2(900.0, 800.0)),
+            z: 700.0, rotation_x: 60.0, rotation_y: 45.0,
+            ..Default::default()
+        };
+        let comp = CompSpec { width: 640, height: 480 };
+        let min = glam::vec2(-12.0, -12.0);
+        let size = glam::vec2(124.0, 74.0);
+        let (corner, u, v) = projected_placement_corners(comp, ResolvedCamera::default(),
+            crate::doc::store::LayerProjection::ThreeD, placement, min, size);
+        near(corner, world.transform_point3(glam::vec3(-12.0, -12.0, 0.0)));
+        near(corner + u, world.transform_point3(glam::vec3(112.0, -12.0, 0.0)));
+        near(corner + v, world.transform_point3(glam::vec3(-12.0, 62.0, 0.0)));
+    }
+
+    #[test]
+    fn native_bounds_pose_matches_planar_corners_and_camera_projection() {
+        let bounds = crate::render::media::SpatialBounds {
+            min: [-5.0, 8.0, -3.0], max: [15.0, 38.0, 7.0],
+        };
+        let placement = LayerPlacement {
+            world_transform: Some(glam::Affine3A::from_scale_rotation_translation(
+                glam::vec3(2.0, 3.0, 1.0), glam::Quat::from_rotation_y(0.6), glam::vec3(20.0, 30.0, 40.0))),
+            z: -900.0, rotation_x: 87.0, rotation_y: 70.0,
+            ..Default::default()
+        };
+        let comp = CompSpec { width: 640, height: 480 };
+        let camera = ResolvedCamera { center: [20.0, 40.0], zoom: 1.4, roll_degrees: 15.0, ..Default::default() };
+        for projection in [crate::doc::store::LayerProjection::ThreeD,
+            crate::doc::store::LayerProjection::TwoD, crate::doc::store::LayerProjection::TwoPointFiveD] {
+            let native = projected_spatial_placement(comp, camera, projection, placement, bounds);
+            let (corner, u, v) = projected_placement_corners(comp, camera, projection, placement,
+                glam::Vec2::ZERO, glam::vec2(20.0, 30.0));
+            near(native.transform_point3(glam::vec3(-5.0, 8.0, 2.0)), corner);
+            near(native.transform_point3(glam::vec3(15.0, 8.0, 2.0)), corner + u);
+            near(native.transform_point3(glam::vec3(-5.0, 38.0, 2.0)), corner + v);
+        }
+    }
+
+    #[test]
+    fn native_world_pose_preserves_zero_tilt_source_normalization() {
+        let bounds = crate::render::media::SpatialBounds {
+            min: [-5.0, 8.0, -3.0], max: [15.0, 38.0, 7.0],
+        };
+        let transform = glam::Affine2::from_scale_angle_translation(
+            glam::vec2(2.0, 3.0), 0.3, glam::vec2(50.0, 70.0));
+        let world = glam::Affine3A::from_cols(
+            to_vector3(transform.matrix2.x_axis).into(), to_vector3(transform.matrix2.y_axis).into(),
+            glam::Vec3A::Z, glam::vec3(50.0, 70.0, 30.0).into());
+        let legacy = LayerPlacement { transform, z: 30.0, ..Default::default() };
+        let migrated = LayerPlacement { world_transform: Some(world), ..legacy };
+        let a = spatial_placement_from_bounds(legacy, bounds);
+        let b = spatial_placement_from_bounds(migrated, bounds);
+        for point in [bounds.min, bounds.max, [5.0, 23.0, 2.0]] {
+            near(a.transform_point3(point.into()), b.transform_point3(point.into()));
+        }
+        let comp = CompSpec { width: 640, height: 480 };
+        let fallback = projected_placement_corners(comp, ResolvedCamera::default(),
+            crate::doc::store::LayerProjection::ThreeD, legacy, glam::Vec2::ZERO, glam::vec2(20.0, 30.0));
+        let original = projected_corners(comp, ResolvedCamera::default(), crate::doc::store::LayerProjection::ThreeD,
+            transform, glam::Vec2::ZERO, glam::vec2(20.0, 30.0), 30.0, 0.0, 0.0);
+        assert_eq!(fallback, original);
+    }
 
     #[test]
     fn mesh_and_points_share_a_center_preserving_xyz_transform() {

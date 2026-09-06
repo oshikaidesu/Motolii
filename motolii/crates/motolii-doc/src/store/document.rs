@@ -101,6 +101,7 @@ pub enum Intent {
         document: crate::doc::store::TextDocument,
     },
     SetComposition(crate::doc::store::Composition),
+    SetNotebook { notebook: crate::doc::store::Notebook },
     SetMarkers {
         markers: Vec<crate::doc::store::Marker>,
     },
@@ -500,6 +501,10 @@ impl Document {
                 }
             }
         }
+    }
+
+    pub fn identity(&self) -> String {
+        format!("{:?}", self.db.store_id())
     }
 
     pub fn revision(&self) -> Revision {

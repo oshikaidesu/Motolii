@@ -6,6 +6,8 @@ pub struct ResolvedCamera {
     pub center: [f32; 2],
     pub zoom: f32,
     pub roll_degrees: f32,
+    pub orbit_degrees: [f32; 2],
+    pub distance_scale: f32,
 }
 
 impl Default for ResolvedCamera {
@@ -14,6 +16,8 @@ impl Default for ResolvedCamera {
             center: [0.0, 0.0],
             zoom: 1.0,
             roll_degrees: 0.0,
+            orbit_degrees: [0.0; 2],
+            distance_scale: 1.0,
         }
     }
 }
@@ -51,15 +55,17 @@ pub fn camera_projection(comp: CompSpec, camera: ResolvedCamera) -> CameraProjec
     let half_base_fov = (CAMERA_BASE_VERTICAL_FOV_DEGREES * 0.5).to_radians();
     let vertical_fov_radians = 2.0 * (half_base_fov.tan() / zoom).atan();
 
-    let eye = glam::vec3(
+    let target = glam::vec3(
         comp.width as f32 * 0.5 + camera.center[0],
         comp.height as f32 * 0.5 + camera.center[1],
-        -distance,
+        0.0,
     );
+    let orbit = glam::Quat::from_rotation_y(camera.orbit_degrees[1].to_radians()) * glam::Quat::from_rotation_x(camera.orbit_degrees[0].to_radians());
+    let eye = target + orbit * glam::vec3(0.0, 0.0, -distance * camera.distance_scale.max(0.01));
 
-    let base = glam::Quat::from_axis_angle(glam::Vec3::X, std::f32::consts::PI);
+    let base = glam::Quat::from_xyzw(1.0, 0.0, 0.0, 0.0);
     let roll = safe_axis_angle(glam::Vec3::Z, -camera.roll_degrees.to_radians());
-    let rotation = roll * base;
+    let rotation = roll * base * orbit.inverse();
 
     CameraProjection {
         eye,
@@ -92,29 +98,22 @@ pub fn camera_screen_from_world_at_z(
     let projection = camera_projection(comp, camera);
     let clip_from_world = projection.projection_matrix() * projection.view_matrix();
 
-    let to_pixel = |world_xy: glam::Vec2| -> glam::Vec2 {
-        let clip = clip_from_world * glam::Vec4::new(world_xy.x, world_xy.y, z, 1.0);
-        let ndc = glam::vec2(clip.x / clip.w, clip.y / clip.w);
-        glam::vec2(
-            (ndc.x + 1.0) * 0.5 * comp.width as f32,
-            (1.0 - ndc.y) * 0.5 * comp.height as f32,
-        )
-    };
-
-    let origin = to_pixel(glam::Vec2::ZERO);
-    let x_axis = to_pixel(glam::Vec2::X) - origin;
-    let y_axis = to_pixel(glam::Vec2::Y) - origin;
-    glam::Affine2::from_cols(x_axis, y_axis, origin)
+    let origin = clip_from_world * glam::Vec4::new(0.0, 0.0, z, 1.0);
+    let pixel_scale = glam::vec2(comp.width as f32 * 0.5, -(comp.height as f32) * 0.5);
+    let xy = |column: glam::Vec4| glam::vec2(column.x, column.y) / origin.w * pixel_scale;
+    glam::Affine2::from_cols(
+        xy(clip_from_world.x_axis),
+        xy(clip_from_world.y_axis),
+        xy(origin) + glam::vec2(comp.width as f32 * 0.5, comp.height as f32 * 0.5),
+    )
 }
 
 pub fn camera_screen_from_world_z0(comp: CompSpec, camera: ResolvedCamera) -> glam::Affine2 {
     camera_screen_from_world_at_z(comp, camera, 0.0)
 }
 
-/// Authored world geometry enters the same Rerun view for every projection state.
-/// glam's rotation-arc contract maps +Z onto the center ray; rotating about the
-/// center keeps 2.5D rigid. 2D cancels the camera in view space, including focal
-/// scaling, while retaining each vertex's depth relative to the layer center.
+/// 2D uses a frame-relative transform. Spatial layers retain their authored
+/// world geometry; projection does not auto-orient or flatten that geometry.
 pub fn layer_projection_transform(
     comp: CompSpec,
     camera: ResolvedCamera,
@@ -123,21 +122,22 @@ pub fn layer_projection_transform(
 ) -> glam::Affine3A {
     use crate::doc::store::LayerProjection;
     use glam::{Affine3A, Vec3};
-    let projection = camera_projection(comp, camera);
     match mode {
-        LayerProjection::ThreeD => Affine3A::IDENTITY,
-        LayerProjection::TwoPointFiveD => {
-            let Some(ray) = (center - projection.eye).try_normalize() else { return Affine3A::IDENTITY };
-            let rotation = glam::Quat::from_rotation_arc(Vec3::Z, ray);
-            Affine3A::from_rotation_translation(rotation, center - rotation * center)
-        }
+        LayerProjection::ThreeD | LayerProjection::TwoPointFiveD => Affine3A::IDENTITY,
         LayerProjection::TwoD => {
+            let projection = camera_projection(comp, camera);
             let baseline = camera_projection(comp, ResolvedCamera::default());
             let focal = (projection.vertical_fov_radians * 0.5).tan()
                 / (baseline.vertical_fov_radians * 0.5).tan();
+            let frame_center = glam::vec2(comp.width as f32 * 0.5, comp.height as f32 * 0.5);
+            let displacement = (center.truncate() - frame_center) / base_distance(comp);
+            let frame_translation = Affine3A::from_mat3(glam::Mat3::from_cols(
+                Vec3::X, Vec3::Y, glam::vec3(displacement.x, displacement.y, 1.0),
+            ));
             Affine3A::from_mat4(projection.view_matrix()).inverse()
                 * Affine3A::from_scale(glam::vec3(focal, focal, 1.0))
                 * Affine3A::from_mat4(baseline.view_matrix())
+                * frame_translation
                 * Affine3A::from_translation(-Vec3::Z * center.z)
         }
     }
@@ -155,15 +155,39 @@ mod projection_tests {
     }
 
     #[test]
+    fn planar_affine_matches_direct_perspective_projection_across_the_image() {
+        let comp = CompSpec { width: 1920, height: 1080 };
+        for camera in [
+            ResolvedCamera::default(),
+            ResolvedCamera { center: [210.0, -130.0], zoom: 2.7, roll_degrees: 47.0, ..Default::default() },
+            ResolvedCamera { center: [-900.0, 600.0], zoom: 0.4, roll_degrees: -120.0, ..Default::default() },
+        ] {
+            for z in [-200.0, 0.0, 350.0] {
+                let affine = camera_screen_from_world_at_z(comp, camera, z);
+                let projection = camera_projection(comp, camera);
+                let clip = projection.projection_matrix() * projection.view_matrix();
+                assert_eq!(clip.x_axis.w, 0.0);
+                assert_eq!(clip.y_axis.w, 0.0);
+                for point in [glam::vec2(0.0, 0.0), glam::vec2(200.0, 100.0), glam::vec2(1920.0, 1080.0), glam::vec2(-400.0, 1500.0)] {
+                    let projected = pixel(comp, camera, point.extend(z));
+                    assert!(affine.transform_point2(point).distance(projected) < 0.003);
+                    assert!(affine.inverse().transform_point2(projected).distance(point) < 0.003);
+                }
+            }
+        }
+    }
+
+    #[test]
     fn two_d_cancels_camera_for_nonplanar_vertices_and_preserves_legacy_z0() {
         let comp = CompSpec { width: 1920, height: 1080 };
-        let camera = ResolvedCamera { center: [210.0, -130.0], zoom: 2.7, roll_degrees: 47.0 };
+        let camera = ResolvedCamera { center: [210.0, -130.0], zoom: 2.7, roll_degrees: 47.0, ..Default::default() };
         let center = glam::vec3(430.0, 760.0, 300.0);
         let transform = layer_projection_transform(comp, camera, LayerProjection::TwoD, center);
         for offset in [glam::vec3(-90.0, -40.0, -60.0), glam::vec3(60.0, 30.0, 80.0), glam::Vec3::ZERO] {
             let p = center + offset;
             let actual = pixel(comp, camera, transform.transform_point3(p));
-            let expected = pixel(comp, ResolvedCamera::default(), p - glam::Vec3::Z * center.z);
+            let frame_center = glam::vec2(comp.width as f32 * 0.5, comp.height as f32 * 0.5);
+            let expected = center.truncate() + pixel(comp, ResolvedCamera::default(), frame_center.extend(0.0) + offset) - frame_center;
             assert!(actual.distance(expected) < 0.003, "{actual:?} != {expected:?}");
         }
         let legacy = camera_screen_from_world_z0(comp, camera).inverse();
@@ -173,28 +197,63 @@ mod projection_tests {
     }
 
     #[test]
-    fn two_point_five_d_preserves_pose_relative_to_ray_and_rigid_volume() {
+    fn two_d_position_changes_translate_the_picture_without_changing_its_shape() {
+        let comp=CompSpec {width:1920,height:1080};
+        let centers=[glam::vec3(180.0,300.0,0.0),glam::vec3(1710.0,760.0,400.0)];
+        let rotation=glam::Quat::from_rotation_y(1.1)*glam::Quat::from_rotation_x(0.3);
+        let vertices=[glam::vec3(-80.0,-120.0,0.0),glam::vec3(80.0,-120.0,0.0),glam::vec3(80.0,120.0,0.0),glam::vec3(-80.0,120.0,0.0),glam::vec3(20.0,30.0,50.0)];
+        for camera in [ResolvedCamera::default(),ResolvedCamera {center:[210.0,-130.0],zoom:2.7,roll_degrees:47.0, ..Default::default() }] {
+            let transforms=centers.map(|center|layer_projection_transform(comp,camera,LayerProjection::TwoD,center));
+            assert!(transforms.iter().all(|t|t.matrix3.determinant().abs()>0.0001));
+            for vertex in vertices {
+                let local=rotation*vertex;
+                let relative=std::array::from_fn::<_,2,_>(|i|pixel(comp,camera,transforms[i].transform_point3(centers[i]+local))-centers[i].truncate());
+                assert!(relative[0].distance(relative[1])<0.003,"position changed the shape: {relative:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn two_point_five_d_keeps_authored_orientation_and_volume() {
         let comp = CompSpec { width: 1920, height: 1080 };
-        let camera = ResolvedCamera { center: [90.0, -30.0], zoom: 1.8, roll_degrees: 33.0 };
-        let eye = camera_projection(comp, camera).eye;
         let normal = glam::Quat::from_rotation_x(0.6) * glam::Vec3::Z;
-        let tetrahedron = [glam::Vec3::ZERO, glam::Vec3::X * 80.0, glam::Vec3::Y * 60.0, glam::Vec3::Z * 40.0];
-        for center in [glam::vec3(250.0, 200.0, 0.0), glam::vec3(1700.0, 900.0, 300.0)] {
-            let transform = layer_projection_transform(comp, camera, LayerProjection::TwoPointFiveD, center);
-            assert!(transform.transform_point3(center).distance(center) < 0.001);
-            let ray = (center - eye).normalize();
-            assert!((transform.transform_vector3(normal).dot(ray) - normal.z).abs() < 0.0001);
-            for a in tetrahedron { for b in tetrahedron {
-                assert!((transform.transform_point3(center + a).distance(transform.transform_point3(center + b)) - a.distance(b)).abs() < 0.002);
-            } }
-            assert!((transform.matrix3.determinant() - 1.0).abs() < 0.0001);
+        let vertices = [glam::Vec3::ZERO, glam::Vec3::X*80.0, glam::Vec3::Y*60.0, glam::Vec3::Z*40.0];
+        for camera in [ResolvedCamera::default(), ResolvedCamera { center:[90.0,-30.0], zoom:1.8, roll_degrees:33.0, ..Default::default() }] {
+            for center in [glam::vec3(250.0,200.0,0.0),glam::vec3(1700.0,900.0,300.0)] {
+                let transform=layer_projection_transform(comp,camera,LayerProjection::TwoPointFiveD,center);
+                assert_eq!(transform.transform_vector3(normal),normal);
+                for vertex in vertices {
+                    assert_eq!(transform.transform_point3(center+vertex),center+vertex);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn two_point_five_d_camera_pan_produces_parallax_without_added_tilt() {
+        let comp=CompSpec {width:1920,height:1080};
+        let baseline=ResolvedCamera::default();
+        let panned=ResolvedCamera {center:[100.0,0.0],..baseline};
+        let projected=|camera,point:glam::Vec3| pixel(comp,camera,
+            layer_projection_transform(comp,camera,LayerProjection::TwoPointFiveD,point).transform_point3(point));
+        let near=glam::vec3(250.0,200.0,0.0);
+        let far=glam::vec3(250.0,200.0,350.0);
+        let near_shift=projected(panned,near)-projected(baseline,near);
+        let far_shift=projected(panned,far)-projected(baseline,far);
+        assert!(near_shift.x<0.0 && far_shift.x<0.0 && near_shift.x.abs()>far_shift.x.abs());
+        for center in [near,far] {
+            let edge=projected(panned,center+glam::Vec3::X*80.0)-projected(panned,center);
+            assert!(edge.y.abs()<0.002);
+            let rolled=ResolvedCamera {roll_degrees:30.0,..panned};
+            let edge=projected(rolled,center+glam::Vec3::X*80.0)-projected(rolled,center);
+            assert!(edge.y.abs()>1.0);
         }
     }
 
     #[test]
     fn widened_user_view_keeps_two_d_on_the_same_output_pixels() {
         let comp = CompSpec { width: 1920, height: 1080 };
-        let camera = ResolvedCamera { center: [150.0, 90.0], zoom: 1.6, roll_degrees: 24.0 };
+        let camera = ResolvedCamera { center: [150.0, 90.0], zoom: 1.6, roll_degrees: 24.0, ..Default::default() };
         let wide = ResolvedCamera { zoom: camera.zoom / 3.0, ..camera };
         let center = glam::vec3(100.0, 850.0, 200.0);
         let transformed = layer_projection_transform(comp, camera, LayerProjection::TwoD, center).transform_point3(center);

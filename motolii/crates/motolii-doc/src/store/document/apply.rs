@@ -2,7 +2,7 @@ use re_types_core::SerializedComponentBatch;
 
 use crate::doc::store::components::{
     descriptor_assets, descriptor_attrs, descriptor_composition, descriptor_effects,
-    descriptor_markers, descriptor_masks, descriptor_meta, descriptor_present, descriptor_shapes,
+    descriptor_notebook, descriptor_markers, descriptor_masks, descriptor_meta, descriptor_present, descriptor_shapes,
     descriptor_slots, descriptor_text, descriptor_track, LayerPresent, TrackJson,
 };
 use crate::doc::store::slot::PropertySource;
@@ -19,9 +19,28 @@ impl Document {
         let batches = match intent {
             Intent::AddLayer(layer) => (layer.entity_path(), vec![serialize_present(true)?]),
             Intent::RemoveLayer(layer) => {
-                check_not_locked(&self.view(), layer)?;
-                check_not_frozen(&self.view(), layer)?;
-                (layer.entity_path(), vec![serialize_present(false)?])
+                let view = self.view();
+                let present = view.layers();
+                let mut removed = std::collections::HashSet::from([layer]);
+                loop {
+                    let before = removed.len();
+                    for &candidate in &present {
+                        if view.attrs(candidate)?.and_then(|attrs| attrs.parent)
+                            .is_some_and(|parent| removed.contains(&parent)) {
+                            removed.insert(candidate);
+                        }
+                    }
+                    if removed.len() == before { break; }
+                }
+                let targets: Vec<_> = present.into_iter().filter(|id| removed.contains(id)).collect();
+                for &target in &targets {
+                    check_not_locked(&view, target)?;
+                    check_not_frozen(&view, target)?;
+                }
+                for target in targets {
+                    self.ingest(target.entity_path(), vec![serialize_present(false)?], at)?;
+                }
+                return Ok(());
             }
             Intent::SetComposition(composition) => {
                 let json = serde_json::to_string(&composition)?;
@@ -33,6 +52,14 @@ impl Document {
                             .map_err(|e| StoreError::Chunk(e.to_string()))?,
                     }],
                 )
+            }
+            Intent::SetNotebook { notebook } => {
+                notebook.validate()?;
+                let json = serde_json::to_string(&notebook)?;
+                (Self::composition_path(), vec![SerializedComponentBatch {
+                    descriptor: descriptor_notebook(),
+                    array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)]).map_err(|e| StoreError::Chunk(e.to_string()))?,
+                }])
             }
             Intent::SetMarkers { markers } => {
                 let json = serde_json::to_string(&markers)?;
@@ -188,6 +215,7 @@ impl Document {
                         || patch.parent.is_some()
                         || patch.blend_mode.is_some()
                         || patch.matte.is_some()
+                        || patch.clip_to_below.is_some()
                         || patch.name.is_some()
                         || patch.auto_orient.is_some()
                         || patch.projection.is_some()

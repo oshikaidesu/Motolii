@@ -153,6 +153,8 @@ pub struct LayerAttrs {
     pub parent: Option<LayerId>,
     pub blend_mode: BlendMode,
     pub matte: Option<Matte>,
+    #[serde(default)]
+    pub clip_to_below: bool,
     pub name: String,
     pub auto_orient: bool,
     #[serde(default, alias = "pinned", deserialize_with = "read_projection")]
@@ -175,6 +177,7 @@ impl Default for LayerAttrs {
             parent: None,
             blend_mode: BlendMode::default(),
             matte: None,
+            clip_to_below: false,
             name: String::new(),
             auto_orient: false,
             projection: LayerProjection::ThreeD,
@@ -217,6 +220,7 @@ pub struct LayerAttrsPatch {
     pub parent: Option<Option<LayerId>>,
     pub blend_mode: Option<BlendMode>,
     pub matte: Option<Option<Matte>>,
+    pub clip_to_below: Option<bool>,
     pub name: Option<String>,
     pub auto_orient: Option<bool>,
     pub projection: Option<LayerProjection>,
@@ -239,6 +243,9 @@ impl LayerAttrsPatch {
         }
         if let Some(v) = self.matte {
             current.matte = v;
+        }
+        if let Some(v) = self.clip_to_below {
+            current.clip_to_below = v;
         }
         if let Some(v) = self.name {
             current.name = v;
@@ -268,6 +275,14 @@ impl LayerAttrsPatch {
 #[cfg(test)]
 mod projection_storage_tests {
     use super::*;
+
+    #[test]
+    fn old_layer_attrs_default_to_unclipped() {
+        let mut json = serde_json::to_value(LayerAttrs::default()).unwrap();
+        json.as_object_mut().unwrap().remove("clip_to_below");
+        let attrs: LayerAttrs = serde_json::from_value(json).unwrap();
+        assert!(!attrs.clip_to_below);
+    }
 
     #[test]
     fn old_pinned_and_absent_attrs_migrate_without_reframing() {

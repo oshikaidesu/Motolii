@@ -12,6 +12,11 @@ pub(super) fn validate_no_parent_cycle(
     layer: LayerId,
     new_parent: Option<LayerId>,
 ) -> Result<(), StoreError> {
+    if let Some(parent) = new_parent {
+        if !view.has_layer(parent) {
+            return Err(StoreError::Property(format!("Parent layer {} does not exist", parent.0)));
+        }
+    }
     let mut current = new_parent;
     let mut seen = std::collections::HashSet::new();
     while let Some(candidate) = current {

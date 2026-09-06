@@ -3,7 +3,7 @@ use re_renderer::renderer::PointCloudBatchFlags;
 use re_renderer::{Color32, PointCloudBuilder, Size};
 
 use crate::render::compositor::{
-    spatial_world_from_bounds, Compositor, CompositorError,
+    projected_spatial_placement, Compositor, CompositorError,
 };
 use crate::render::media::SpatialBounds;
 
@@ -16,10 +16,7 @@ impl Compositor {
         colors: &[[u8; 4]],
         bounds: SpatialBounds,
         point_size: f32,
-        transform: glam::Affine2,
-        z: f32,
-        rotation_x: f32,
-        rotation_y: f32,
+        placement: crate::doc::core::LayerPlacement,
         opacity: f32,
         comp: crate::doc::core::CompSpec,
         camera: crate::doc::core::ResolvedCamera,
@@ -39,11 +36,7 @@ impl Compositor {
             })
             .collect();
 
-        let world_from_obj =
-            spatial_world_from_bounds(transform, z, rotation_x, rotation_y, bounds);
-
-        let center = world_from_obj.transform_point3((glam::Vec3::from(bounds.min) + glam::Vec3::from(bounds.max)) * 0.5);
-        let world_from_obj = crate::doc::core::layer_projection_transform(comp, camera, projection, center) * world_from_obj;
+        let world_from_obj = projected_spatial_placement(comp, camera, projection, placement, bounds);
         let radii = vec![Size::new_ui_points(point_size.max(1e-4)); points.len()];
         let picking_ids = vec![Default::default(); points.len()];
         let mut builder = PointCloudBuilder::new(&self.ctx);

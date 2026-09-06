@@ -79,7 +79,8 @@ pub fn export_lottie(view: &StoreView<'_>) -> Result<LottieExport, LottieExportE
 
     let mut matte_sources: HashSet<LayerId> = HashSet::new();
     for &layer in &layers {
-        if let Some(matte) = attrs_of(view, layer)?.matte {
+        let attrs = attrs_of(view, layer)?;
+        if let Some(matte) = attrs.matte.filter(|_| !attrs.clip_to_below) {
             matte_sources.insert(matte.layer);
         }
     }
@@ -186,7 +187,13 @@ fn build_layer(
         }
     }
 
-    if let Some(matte) = attrs.matte {
+    if attrs.clip_to_below {
+        unsupported.push(UnsupportedForLottie {
+            layer: Some(layer),
+            category: "clipping",
+            detail: "Clip to Below preserves its base coverage as an isolated group; Lottie export of this grouping is not supported yet".to_owned(),
+        });
+    } else if let Some(matte) = attrs.matte {
         out["tt"] = serde_json::json!(matte_mode_to_int(matte.mode));
         out["tp"] = serde_json::json!(matte.layer.0);
     }
@@ -244,6 +251,10 @@ fn build_layer(
                 out["au"] = serde_json::json!({});
                 check_audio_settings_unsupported(view, layer, unsupported)?;
             }
+        }
+        LayerSource::Camera => {
+            out["ty"] = serde_json::json!(3);
+            unsupported.push(UnsupportedForLottie { layer: Some(layer), category: "camera", detail: "Camera layers are not represented by this Lottie exporter".into() });
         }
         LayerSource::Null => {
             out["ty"] = serde_json::json!(3);

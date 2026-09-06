@@ -11,7 +11,7 @@ use re_log_types::{EntityPath, Timeline};
 
 use crate::doc::store::components::{
     descriptor_assets, descriptor_attrs, descriptor_composition, descriptor_effects,
-    descriptor_markers, descriptor_masks, descriptor_meta, descriptor_present, descriptor_shapes,
+    descriptor_notebook, descriptor_markers, descriptor_masks, descriptor_meta, descriptor_present, descriptor_shapes,
     descriptor_slots, descriptor_text, descriptor_track, LayerPresent, TrackJson,
 };
 use crate::doc::store::document::{TrackCache, TransientKey};
@@ -424,6 +424,13 @@ impl<'a> StoreView<'a> {
             .map_err(StoreError::Encode)
     }
 
+    pub fn notebook(&self) -> Result<crate::doc::store::Notebook, StoreError> {
+        let descriptor = descriptor_notebook();
+        let results = self.db.latest_at(&self.query(), &Document::composition_path(), [descriptor.component]);
+        let Some(json) = results.component_batch::<TrackJson>(descriptor.component).and_then(|batch|batch.into_iter().next()) else { return Ok(Default::default()); };
+        serde_json::from_str(&json.0).map_err(StoreError::Encode)
+    }
+
     pub fn markers(&self) -> Result<Vec<Marker>, StoreError> {
         let descriptor = descriptor_markers();
         let path = Document::composition_path();
@@ -545,6 +552,30 @@ impl<'a> StoreView<'a> {
             .attrs
             .insert(layer, value.clone());
         Ok(value)
+    }
+
+    pub fn clipping_base(&self, layer: LayerId) -> Result<Option<LayerId>, StoreError> {
+        if !self.has_layer(layer) {
+            return Ok(None);
+        }
+        let Some(meta) = self.meta(layer)? else { return Ok(None) };
+        let parent = self.attrs(layer)?.unwrap_or_default().parent;
+        let mut base: Option<(i16, LayerId)> = None;
+        for sibling in self.layers() {
+            let Some(sibling_meta) = self.meta(sibling)? else { continue };
+            if sibling_meta.order >= meta.order {
+                continue;
+            }
+            let attrs = self.attrs(sibling)?.unwrap_or_default();
+            if attrs.parent != parent || attrs.clip_to_below {
+                continue;
+            }
+            let candidate = (sibling_meta.order, sibling);
+            if base.is_none_or(|current| candidate > current) {
+                base = Some(candidate);
+            }
+        }
+        Ok(base.map(|(_, layer)| layer))
     }
 
     fn attrs_uncached(&self, layer: LayerId) -> Result<Option<LayerAttrs>, StoreError> {

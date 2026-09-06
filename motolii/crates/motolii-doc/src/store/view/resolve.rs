@@ -15,6 +15,25 @@ use super::StoreView;
 
 impl<'a> StoreView<'a> {
     pub fn resolve_camera(&self, t: RationalTime) -> Result<crate::doc::core::ResolvedCamera, StoreError> {
+        let frame = self.composition()?.map(|c| t.try_to_frame_floor(c.fps)).transpose()
+            .map_err(|e| StoreError::Property(e.to_string()))?.unwrap_or(0);
+        let mut cameras = Vec::new();
+        for id in self.layers() {
+            if let Some(meta) = self.meta(id)? {
+                if meta.source == crate::doc::store::LayerSource::Camera && meta.timing.covers(frame) {
+                    let attrs = self.attrs(id)?.unwrap_or_default();
+                    if !self.resolved_hidden(id, t, attrs.hidden)? { cameras.push((self.resolved_solo(id, t, attrs.solo)?, meta.order, id)); }
+                }
+            }
+        }
+        cameras.sort();
+        if let Some((_, _, id)) = cameras.last() {
+            let get = |name| self.value_at(*id, &PropertyId::new(name)?, t);
+            let center = match get(property::CAMERA_CENTER)? { Some(Value::Vec2(v)) => [v[0] as f32,v[1] as f32], _ => [0.0,0.0] };
+            let zoom = match get(property::CAMERA_ZOOM)? { Some(Value::F64(v)) => v as f32, _ => 1.0 };
+            let roll_degrees = match get(property::CAMERA_ROLL)? { Some(Value::F64(v)) => v as f32, _ => 0.0 };
+            return Ok(crate::doc::core::ResolvedCamera { center, zoom, roll_degrees, ..Default::default() });
+        }
         let center_property = PropertyId::camera(property::CAMERA_CENTER)?;
         let center = match self.camera_value_at(&center_property, t)? {
             Some(Value::Vec2(v)) => [v[0] as f32, v[1] as f32],
@@ -54,8 +73,7 @@ impl<'a> StoreView<'a> {
         Ok(crate::doc::core::ResolvedCamera {
             center,
             zoom,
-            roll_degrees,
-        })
+            roll_degrees, ..Default::default() })
     }
 
     pub fn resolved_text_document(
@@ -298,10 +316,11 @@ impl<'a> StoreView<'a> {
         t: RationalTime,
     ) -> Result<Option<ResolvedLayer>, StoreError> {
         let any_solo = self.any_solo(t)?;
+        let world_transforms = self.world_transforms3d(t)?;
         let present: HashSet<LayerId> = self.layers().into_iter().collect();
         let mut memo = HashMap::new();
         let mut visiting = HashSet::new();
-        self.resolve_with_solo(layer, t, any_solo, &present, &mut memo, &mut visiting)
+        self.resolve_with_solo(layer, t, any_solo, &present, &world_transforms, &mut memo, &mut visiting)
     }
 
     fn resolve_with_solo(
@@ -310,6 +329,7 @@ impl<'a> StoreView<'a> {
         t: RationalTime,
         any_solo: bool,
         present: &HashSet<LayerId>,
+        world_transforms: &HashMap<LayerId, glam::Affine3A>,
         memo: &mut HashMap<LayerId, glam::Affine2>,
         visiting: &mut HashSet<LayerId>,
     ) -> Result<Option<ResolvedLayer>, StoreError> {
@@ -375,6 +395,7 @@ impl<'a> StoreView<'a> {
             id: layer,
             placement: LayerPlacement {
                 transform,
+                world_transform: world_transforms.get(&layer).copied(),
                 opacity: scalar(property::OPACITY, 1.0)?.clamp(0.0, 1.0),
                 order: meta.order,
                 z: scalar(property::POSITION_Z, 0.0)?,
@@ -387,7 +408,15 @@ impl<'a> StoreView<'a> {
             masks: self.resolved_masks(layer, t)?,
             effects: self.resolved_effects(layer, t)?,
             blend_mode: self.resolved_blend_mode(layer, t, attrs.blend_mode)?,
-            matte: self.resolved_matte(layer, t, attrs.matte)?,
+            matte: if attrs.clip_to_below {
+                self.clipping_base(layer)?.map(|base| crate::doc::store::Matte {
+                    layer: base,
+                    mode: crate::doc::store::MatteMode::Alpha,
+                })
+            } else {
+                self.resolved_matte(layer, t, attrs.matte)?
+            },
+            clip_to_below: attrs.clip_to_below,
             projection: attrs.projection,
             flatten: attrs.flatten,
         }))
@@ -395,6 +424,7 @@ impl<'a> StoreView<'a> {
 
     fn any_solo(&self, t: RationalTime) -> Result<bool, StoreError> {
         for layer in self.layers() {
+            if self.meta(layer)?.is_some_and(|m| m.source == crate::doc::store::LayerSource::Camera) { continue; }
             let static_solo = self.attrs(layer)?.unwrap_or_default().solo;
             if self.resolved_solo(layer, t, static_solo)? {
                 return Ok(true);
@@ -481,6 +511,7 @@ impl<'a> StoreView<'a> {
 
     pub fn resolved_layers(&self, t: RationalTime) -> Result<Vec<ResolvedLayer>, StoreError> {
         let any_solo = self.any_solo(t)?;
+        let world_transforms = self.world_transforms3d(t)?;
         let layers = self.layers();
         let present: HashSet<LayerId> = layers.iter().copied().collect();
         let mut memo = HashMap::new();
@@ -488,12 +519,111 @@ impl<'a> StoreView<'a> {
         let mut out = Vec::new();
         for layer in layers {
             if let Some(resolved) =
-                self.resolve_with_solo(layer, t, any_solo, &present, &mut memo, &mut visiting)?
+                self.resolve_with_solo(layer, t, any_solo, &present, &world_transforms, &mut memo, &mut visiting)?
             {
                 out.push(resolved);
             }
         }
         out.sort_by_key(|layer| layer.placement.order);
         Ok(out)
+    }
+}
+
+#[cfg(test)]
+mod clipping_contract {
+    use crate::doc::store::*;
+
+    fn add(doc: &mut Document, id: u64, order: i16, parent: Option<LayerId>, clipped: bool) -> LayerId {
+        let layer = LayerId(id);
+        doc.apply_all([
+            Intent::AddLayer(layer),
+            Intent::SetMeta { layer, meta: LayerMeta {
+                source: if id == 9 { LayerSource::Group } else { LayerSource::Shape },
+                order,
+                timing: LayerTiming::place(0, None, 300),
+            }},
+            Intent::SetAttrs { layer, patch: LayerAttrsPatch {
+                parent: Some(parent), clip_to_below: Some(clipped), ..Default::default()
+            }},
+        ]).unwrap();
+        layer
+    }
+
+    #[test]
+    fn clipping_stack_retargets_on_reorder_without_crossing_parent_boundaries() {
+        let mut doc = blank_project();
+        let base = add(&mut doc, 1, 0, None, false);
+        let first = add(&mut doc, 2, 10, None, true);
+        let second = add(&mut doc, 3, 20, None, true);
+        let group = add(&mut doc, 9, 30, None, false);
+        let child_base = add(&mut doc, 4, 5, Some(group), false);
+        let child = add(&mut doc, 5, 15, Some(group), true);
+        assert_eq!(doc.view().clipping_base(first).unwrap(), Some(base));
+        assert_eq!(doc.view().clipping_base(second).unwrap(), Some(base));
+        assert_eq!(doc.view().clipping_base(child).unwrap(), Some(child_base));
+        assert_eq!(doc.view().clipping_base(child_base).unwrap(), None);
+        assert_eq!(doc.view().clipping_base(LayerId(999)).unwrap(), None);
+        let resolved = doc.view().resolve(second, RationalTime::ZERO).unwrap().unwrap();
+        assert!(resolved.clip_to_below);
+        assert_eq!(resolved.matte, Some(Matte { layer: base, mode: MatteMode::Alpha }));
+
+        doc.apply(Intent::SetOrder { layer: base, order: 25 }).unwrap();
+        assert_eq!(doc.view().clipping_base(second).unwrap(), None);
+        let orphan = doc.view().resolve(second, RationalTime::ZERO).unwrap().unwrap();
+        assert!(orphan.clip_to_below && orphan.matte.is_none());
+        assert!(doc.undo());
+        assert_eq!(doc.view().clipping_base(second).unwrap(), Some(base));
+
+        let inserted = add(&mut doc, 6, 15, None, false);
+        assert_eq!(doc.view().clipping_base(first).unwrap(), Some(base));
+        assert_eq!(doc.view().clipping_base(second).unwrap(), Some(inserted));
+        doc.apply(Intent::SetAttrs { layer: inserted, patch: LayerAttrsPatch {
+            hidden: Some(true), ..Default::default()
+        }}).unwrap();
+        assert!(doc.view().resolve(inserted, RationalTime::ZERO).unwrap().is_none());
+        assert_eq!(doc.view().resolve(second, RationalTime::ZERO).unwrap().unwrap().matte,
+            Some(Matte { layer: inserted, mode: MatteMode::Alpha }));
+    }
+
+    #[test]
+    fn clipping_toggle_preserves_explicit_matte_lock_and_saved_relationship() {
+        let mut doc = blank_project();
+        let base = add(&mut doc, 1, 0, None, false);
+        let layer = add(&mut doc, 2, 10, None, false);
+        let explicit = Matte { layer: base, mode: MatteMode::Luma };
+        doc.apply(Intent::SetAttrs { layer, patch: LayerAttrsPatch {
+            matte: Some(Some(explicit)), ..Default::default()
+        }}).unwrap();
+        doc.apply(Intent::SetAttrs { layer, patch: LayerAttrsPatch {
+            clip_to_below: Some(true), ..Default::default()
+        }}).unwrap();
+        assert_eq!(doc.view().attrs(layer).unwrap().unwrap().matte, Some(explicit));
+        assert_eq!(doc.view().resolve(layer, RationalTime::ZERO).unwrap().unwrap().matte,
+            Some(Matte { layer: base, mode: MatteMode::Alpha }));
+        assert!(doc.undo());
+        let previous = doc.view().resolve(layer, RationalTime::ZERO).unwrap().unwrap();
+        assert!(!previous.clip_to_below);
+        assert_eq!(previous.matte, Some(explicit));
+        assert!(doc.redo());
+        doc.apply(Intent::SetAttrs { layer, patch: LayerAttrsPatch {
+            locked: Some(true), ..Default::default()
+        }}).unwrap();
+        let history = doc.history_depth();
+        assert!(doc.apply(Intent::SetAttrs { layer, patch: LayerAttrsPatch {
+            clip_to_below: Some(false), ..Default::default()
+        }}).is_err());
+        assert_eq!(doc.history_depth(), history);
+        assert!(doc.view().attrs(layer).unwrap().unwrap().clip_to_below);
+
+        let path = std::env::temp_dir().join(format!("motolii-clipping-{}-{}.rrd",
+            std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        doc.save(&path).unwrap();
+        let loaded = Document::load(&path).unwrap();
+        std::fs::remove_file(&path).unwrap();
+        assert!(loaded.view().attrs(layer).unwrap().unwrap().clip_to_below);
+        assert_eq!(loaded.view().attrs(layer).unwrap().unwrap().matte, Some(explicit));
+        assert_eq!(loaded.view().clipping_base(layer).unwrap(), Some(base));
+        assert_eq!(loaded.view().resolve(layer, RationalTime::ZERO).unwrap().unwrap().matte,
+            Some(Matte { layer: base, mode: MatteMode::Alpha }));
     }
 }

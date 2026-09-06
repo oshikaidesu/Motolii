@@ -31,10 +31,9 @@ impl Compositor {
         let rects: Vec<TexturedRect> = layers
             .iter()
             .map(|layer| {
-                let (corner, u, v) = projected_corners(
-                    comp, layer.projection_camera, layer.projection, layer.placement.transform,
-                    glam::Vec2::ZERO, glam::Vec2::from(layer.size), layer.placement.z,
-                    layer.placement.rotation_x, layer.placement.rotation_y,
+                let (corner, u, v) = projected_placement_corners(
+                    comp, layer.projection_camera, layer.projection, layer.placement,
+                    glam::Vec2::ZERO, glam::Vec2::from(layer.size),
                 );
                 let a = fixed_function_tint_alpha(layer.blend_mode, layer.placement.opacity)?;
                 Ok(TexturedRect {
