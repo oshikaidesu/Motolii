@@ -2,3 +2,11 @@ analyzer:
   exclude:
     - build/**
     - macos/**
+    - tool/**
+
+# Repo-local analyzer plugin (Dart 3.10+): red underline in the IDE and a
+# failing `flutter analyze` for raw numbers in measurements. Quick fix swaps
+# in the EditorMetrics token of the same value.
+plugins:
+  motolii_lints:
+    path: tool/motolii_lints

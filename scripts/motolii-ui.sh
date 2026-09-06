@@ -10,7 +10,11 @@ mkdir -p "$state"
 case "${1:-dev}" in
   check) exec python3 "$repo/scripts/check-stage5.py" ;;
   native) cd "$repo"; exec cargo build -p motolii-ui ;;
-  test) cd "$repo"; cargo test -p motolii-doc --test edit_transactions; cargo test -p motolii-doc --lib; cargo test -p motolii-ui --lib; cargo test -p motolii-road --test owned_budget; cd "$ui"; exec "$flutter_bin" test ;;
+  test)
+    cd "$repo"; cargo test -p motolii-doc --test edit_transactions; cargo test -p motolii-doc --lib; cargo test -p motolii-ui --lib; cargo test -p motolii-road --test owned_budget
+    dart_bin="$(dirname "$flutter_bin")/dart"
+    (cd "$ui/tool/motolii_lints" && "$dart_bin" test && "$dart_bin" run bin/check.dart "$ui/lib")
+    cd "$ui"; "$flutter_bin" analyze; exec "$flutter_bin" test ;;
   restart-ui) [[ -f "$state/flutter.pid" ]] || { echo 'No Stage 5 dev session.'; exit 1; }; kill -USR2 "$(cat "$state/flutter.pid")" ;;
   reload) [[ -f "$state/flutter.pid" ]] || { echo 'No Stage 5 dev session.'; exit 1; }; kill -USR1 "$(cat "$state/flutter.pid")" ;;
   dev)
