@@ -42,7 +42,7 @@ class _WorkspaceViewState extends State<WorkspaceView> {
         builder: (context, box) {
           final horizontal = node.axis == Axis.horizontal;
           final size = horizontal ? box.maxWidth : box.maxHeight;
-          final first = math.max(40.0, (size - 4) * node.ratio);
+          final first = node.firstExtent(size);
           final children = [
             SizedBox(
               width: horizontal ? first : null,
@@ -56,11 +56,10 @@ class _WorkspaceViewState extends State<WorkspaceView> {
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onPanUpdate: (event) => setState(
-                  () => node.ratio =
-                      (node.ratio +
-                              (horizontal ? event.delta.dx : event.delta.dy) /
-                                  size)
-                          .clamp(.1, .9),
+                  () => node.drag(
+                    horizontal ? event.delta.dx : event.delta.dy,
+                    size,
+                  ),
                 ),
                 onPanEnd: (_) => widget.onLayoutChanged(),
                 child: Container(
