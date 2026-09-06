@@ -6,6 +6,7 @@ mod blend_preview;
 mod browser;
 mod browser_selection;
 mod clipboard;
+mod clipping;
 mod color;
 mod commands;
 mod composition;

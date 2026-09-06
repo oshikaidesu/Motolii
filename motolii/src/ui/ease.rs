@@ -1,6 +1,6 @@
 use dioxus_native::prelude::*;
 
-use crate::doc::store::{Intent, Interp, KeyframeTrack, PropertyId, RationalTime};
+use crate::doc::store::{Intent, Interp, KeyframeTrack, PropertyId};
 
 use crate::ui::session::{KeySel, Session};
 
@@ -39,7 +39,7 @@ pub(super) fn segments(keys: &[KeySel]) -> Vec<KeySel> {
 }
 
 pub(super) fn apply(session: &Session, starts: &[KeySel], shape: Interp) -> Result<usize, String> {
-    apply_at(session, starts, shape, false)
+    apply_at(session, starts, EaseEdit::Preset(shape))
 }
 
 /// AE の F9 一族。Easy Ease In(⇧F9)は**キーへ入る側** = 前の区間の終わりを寝かせる。
@@ -49,15 +49,19 @@ pub(super) fn apply_easy(
     starts: &[KeySel],
     side: crate::ui::keymap::EaseSide,
 ) -> Result<usize, String> {
-    let previous = side == crate::ui::keymap::EaseSide::In;
-    apply_at(session, starts, easy_ease(side), previous)
+    apply_at(session, starts, EaseEdit::Keys(side))
+}
+
+#[derive(Clone, Copy)]
+enum EaseEdit {
+    Preset(Interp),
+    Keys(crate::ui::keymap::EaseSide),
 }
 
 fn apply_at(
     session: &Session,
     starts: &[KeySel],
-    shape: Interp,
-    previous: bool,
+    edit: EaseEdit,
 ) -> Result<usize, String> {
     let mut doc = session.doc.lock().unwrap();
     let fps = doc
@@ -67,49 +71,61 @@ fn apply_at(
         .ok_or_else(|| "Composition has no frame rate".to_owned())?
         .fps;
 
-    let mut intents = Vec::new();
+    let mut selected: std::collections::BTreeMap<
+        (crate::doc::store::LayerId, PropertyId),
+        std::collections::BTreeSet<i64>,
+    > = Default::default();
     for sel in starts {
-        let at = RationalTime::try_from_frame((sel.at_sec * fps.as_f64()).round() as i64, fps)
-            .map_err(|e| e.to_string())?;
-        let properties: Vec<PropertyId> = match &sel.property {
+        let frame = (sel.at_sec * fps.as_f64()).round() as i64;
+        let properties = match &sel.property {
             Some(p) => vec![p.clone()],
             None => doc.view().properties(sel.layer),
         };
         for property in properties {
-            let Ok(Some(track)) = doc.view().track(sel.layer, &property) else {
+            selected.entry((sel.layer, property)).or_default().insert(frame);
+        }
+    }
+    let mut intents = Vec::new();
+    for ((layer, property), frames) in selected {
+        let Some(track) = doc.view().track(layer, &property).map_err(|e| e.to_string())? else {
+            continue;
+        };
+        let mut targets: std::collections::BTreeMap<usize, u8> = Default::default();
+        for (index, key) in track.keys().iter().enumerate() {
+            let frame = key.t.try_to_frame_round(fps).map_err(|e| e.to_string())?;
+            if !frames.contains(&frame) {
                 continue;
-            };
-            let mut next = KeyframeTrack::new();
-            let mut touched = false;
-            let keys = track.keys();
-            let hit = keys.iter().position(|key| {
-                key.t
-                    .try_to_frame_round(fps)
-                    .ok()
-                    .zip(at.try_to_frame_round(fps).ok())
-                    .is_some_and(|(a, b)| a == b)
-            });
-            let target = match (hit, previous) {
-                (Some(i), true) => i.checked_sub(1),
-                (hit, false) => hit,
-                (None, true) => None,
-            };
-            for (i, key) in keys.iter().enumerate() {
-                let mut key = key.clone();
-                if Some(i) == target {
-                    key.interp = shape;
-                    touched = true;
-                }
-                next.insert(key);
             }
-            if touched {
-                intents.push(Intent::SetTrack {
-                    layer: sel.layer,
-                    property,
-                    track: next,
-                });
+            match edit {
+                EaseEdit::Preset(_) => { targets.insert(index, 3); }
+                EaseEdit::Keys(side) => {
+                    use crate::ui::keymap::EaseSide;
+                    if side != EaseSide::Out {
+                        if let Some(previous) = index.checked_sub(1) {
+                            *targets.entry(previous).or_default() |= 2;
+                        }
+                    }
+                    if side != EaseSide::In && index + 1 < track.keys().len() {
+                        *targets.entry(index).or_default() |= 1;
+                    }
+                }
             }
         }
+        if targets.is_empty() {
+            continue;
+        }
+        let mut next = KeyframeTrack::new();
+        for (index, key) in track.keys().iter().enumerate() {
+            let mut key = key.clone();
+            if let Some(&endpoints) = targets.get(&index) {
+                key.interp = match edit {
+                    EaseEdit::Preset(shape) => shape,
+                    EaseEdit::Keys(_) => ease_endpoints(key.interp, endpoints),
+                };
+            }
+            next.insert(key);
+        }
+        intents.push(Intent::SetTrack { layer, property, track: next });
     }
 
     let count = intents.len();
@@ -120,25 +136,41 @@ fn apply_at(
     Ok(count)
 }
 
-/// AE の F9 一族。両側 / 入り / 出 を寝かせる。
-pub(super) fn easy_ease(side: crate::ui::keymap::EaseSide) -> Interp {
+fn ease_endpoints(shape: Interp, endpoints: u8) -> Interp {
+    let (mut x1, mut y1, mut x2, mut y2) = match shape {
+        Interp::Bezier { x1, y1, x2, y2 } => (x1, y1, x2, y2),
+        _ => (0.0, 0.0, 1.0, 1.0),
+    };
+    if endpoints & 1 != 0 {
+        x1 = 1.0 / 3.0;
+        y1 = 0.0;
+    }
+    if endpoints & 2 != 0 {
+        x2 = 2.0 / 3.0;
+        y2 = 1.0;
+    }
+    Interp::Bezier { x1, y1, x2, y2 }
+}
+
+#[cfg(test)]
+fn easy_ease(side: crate::ui::keymap::EaseSide) -> Interp {
     use crate::ui::keymap::EaseSide;
     match side {
         EaseSide::Both => Interp::Bezier {
-            x1: 0.33,
+            x1: 1.0 / 3.0,
             y1: 0.0,
-            x2: 0.67,
+            x2: 2.0 / 3.0,
             y2: 1.0,
         },
         // In は前の区間の**終わり**を寝かせる(x2 側)。Out はこの区間の始まり(x1 側)。
         EaseSide::In => Interp::Bezier {
             x1: 0.0,
             y1: 0.0,
-            x2: 0.67,
+            x2: 2.0 / 3.0,
             y2: 1.0,
         },
         EaseSide::Out => Interp::Bezier {
-            x1: 0.33,
+            x1: 1.0 / 3.0,
             y1: 0.0,
             x2: 1.0,
             y2: 1.0,
@@ -293,7 +325,7 @@ pub(super) fn ease_panel(
 #[cfg(test)]
 mod easy {
     use super::*;
-    use crate::doc::store::{property, Keyframe, Value};
+    use crate::doc::store::{property, Keyframe, RationalTime, Value};
     use crate::ui::keymap::EaseSide;
 
     fn keyed_session() -> (
@@ -328,6 +360,149 @@ mod easy {
             prop,
             fps,
         )
+    }
+
+    #[test]
+    fn selected_intervals_on_one_track_ease_together_and_undo_together() {
+        let (session, layer, prop, fps) = keyed_session();
+        let before = {
+            let mut doc = session.doc.lock().unwrap();
+            let mut track = doc.view().track(layer, &prop).unwrap().unwrap();
+            let mut key = track.keys()[1].clone();
+            key.spatial = Some(crate::doc::store::SpatialTangent {
+                out_tangent: [4.0, 8.0],
+                in_tangent: [-3.0, -2.0],
+            });
+            track.insert(key);
+            doc.apply(Intent::SetTrack { layer, property: prop.clone(), track: track.clone() }).unwrap();
+            track
+        };
+        let selection: Vec<_> = [0, 24, 48].into_iter().map(|frame| KeySel {
+            layer,
+            property: Some(prop.clone()),
+            at_sec: frame as f64 / fps.as_f64(),
+        }).collect();
+        let mut starts = segments(&selection);
+        starts.push(selection[0].clone());
+        let shape = easy_ease(EaseSide::Both);
+        assert_eq!(apply(&session, &starts, shape).unwrap(), 1);
+        let mut doc = session.doc.lock().unwrap();
+        let after = doc.view().track(layer, &prop).unwrap().unwrap();
+        let mut expected = before.clone();
+        for old in &before.keys()[..2] {
+            let mut key = old.clone();
+            key.interp = shape;
+            expected.insert(key);
+        }
+        assert_eq!(after, expected);
+        assert!(doc.undo());
+        assert_eq!(doc.view().track(layer, &prop).unwrap().unwrap(), before);
+        assert!(doc.redo());
+        assert_eq!(doc.view().track(layer, &prop).unwrap().unwrap(), after);
+    }
+
+    #[test]
+    fn grouped_ease_rejection_preserves_tracks_and_the_redo_branch() {
+        let (session, layer, prop, fps) = keyed_session();
+        let starts: Vec<_> = [0, 24].into_iter().map(|frame| KeySel {
+            layer,
+            property: Some(prop.clone()),
+            at_sec: frame as f64 / fps.as_f64(),
+        }).collect();
+        let before = session.doc.lock().unwrap().view().track(layer, &prop).unwrap().unwrap();
+        apply(&session, &starts, Interp::Hold).unwrap();
+        assert!(session.doc.lock().unwrap().undo());
+        let invalid = Interp::Bezier { x1: -1.0, y1: 0.0, x2: 1.0, y2: 1.0 };
+        assert!(apply(&session, &starts, invalid).is_err());
+        {
+            let mut doc = session.doc.lock().unwrap();
+            assert_eq!(doc.view().track(layer, &prop).unwrap().unwrap(), before);
+            assert!(doc.redo());
+            assert!(doc.undo());
+            doc.apply(Intent::SetAttrs {
+                layer,
+                patch: crate::doc::store::LayerAttrsPatch { locked: Some(true), ..Default::default() },
+            }).unwrap();
+        }
+        assert!(apply(&session, &starts, Interp::Hold).is_err());
+        let mut doc = session.doc.lock().unwrap();
+        assert_eq!(doc.view().track(layer, &prop).unwrap().unwrap(), before);
+        assert!(doc.undo());
+        assert!(!doc.view().attrs(layer).unwrap().unwrap().locked);
+    }
+
+    // Oracle: https://helpx.adobe.com/my_en/after-effects/desktop/animate-in-after-effects/speed-between-keyframes/speed.html
+    #[test]
+    fn easy_ease_targets_selected_key_endpoints_and_preserves_neighbor_handles() {
+        let (session, layer, prop, fps) = keyed_session();
+        let original = Interp::Bezier { x1: 0.2, y1: 0.4, x2: 0.8, y2: 0.6 };
+        let before = {
+            let mut doc = session.doc.lock().unwrap();
+            let mut track = doc.view().track(layer, &prop).unwrap().unwrap();
+            for old in track.keys().to_vec() {
+                track.insert(Keyframe { interp: original, ..old });
+            }
+            doc.apply(Intent::SetTrack { layer, property: prop.clone(), track: track.clone() }).unwrap();
+            track
+        };
+        let selected = |frame| KeySel {
+            layer, property: Some(prop.clone()), at_sec: frame as f64 / fps.as_f64(),
+        };
+        apply_easy(&session, &[selected(24)], EaseSide::Both).unwrap();
+        {
+            let mut doc = session.doc.lock().unwrap();
+            let after = doc.view().track(layer, &prop).unwrap().unwrap();
+            assert_eq!(after.keys()[0].interp, Interp::Bezier { x1: 0.2, y1: 0.4, x2: 2.0 / 3.0, y2: 1.0 });
+            assert_eq!(after.keys()[1].interp, Interp::Bezier { x1: 1.0 / 3.0, y1: 0.0, x2: 0.8, y2: 0.6 });
+            assert_eq!(after.keys()[2], before.keys()[2]);
+            assert!(doc.undo());
+            assert_eq!(doc.view().track(layer, &prop).unwrap().unwrap(), before);
+        }
+        apply_easy(&session, &[selected(0), selected(24)], EaseSide::In).unwrap();
+        {
+            let mut doc = session.doc.lock().unwrap();
+            let after = doc.view().track(layer, &prop).unwrap().unwrap();
+            assert_eq!(after.keys()[0].interp, Interp::Bezier { x1: 0.2, y1: 0.4, x2: 2.0 / 3.0, y2: 1.0 });
+            assert_eq!(after.keys()[1..], before.keys()[1..]);
+            assert!(doc.undo());
+        }
+        apply_easy(&session, &[selected(0), selected(24)], EaseSide::Both).unwrap();
+        let mut doc = session.doc.lock().unwrap();
+        let after = doc.view().track(layer, &prop).unwrap().unwrap();
+        assert_eq!(after.keys()[0].interp, easy_ease(EaseSide::Both));
+        assert_eq!(after.keys()[1].interp, Interp::Bezier { x1: 1.0 / 3.0, y1: 0.0, x2: 0.8, y2: 0.6 });
+        assert!(doc.undo());
+        assert_eq!(doc.view().track(layer, &prop).unwrap().unwrap(), before);
+        assert!(doc.redo());
+        assert_eq!(doc.view().track(layer, &prop).unwrap().unwrap(), after);
+    }
+
+    #[test]
+    fn easy_ease_converts_non_bezier_interpolation_and_undo_restores_it() {
+        for source in [Interp::Hold, Interp::Bounce { first_dip: 0.27, dip: 0.2 }] {
+            let (session, layer, prop, fps) = keyed_session();
+            let selected = |frame| KeySel {
+                layer, property: Some(prop.clone()), at_sec: frame as f64 / fps.as_f64(),
+            };
+            apply(&session, &[selected(0)], source).unwrap();
+            let before = session.doc.lock().unwrap().view().track(layer, &prop).unwrap().unwrap();
+            apply_easy(&session, &[selected(24)], EaseSide::Both).unwrap();
+            let mut doc = session.doc.lock().unwrap();
+            let after = doc.view().track(layer, &prop).unwrap().unwrap();
+            // Non-Bezier intervals convert to Bezier with a neutral opposite handle.
+            assert_eq!(after.keys()[0].interp, easy_ease(EaseSide::In));
+            assert_eq!(after.keys()[1].interp, easy_ease(EaseSide::Out));
+            for (old, new) in before.keys().iter().zip(after.keys()) {
+                assert_eq!(old.t, new.t);
+                assert_eq!(old.value, new.value);
+                assert_eq!(old.spatial, new.spatial);
+            }
+            assert_eq!(after.keys()[2], before.keys()[2]);
+            assert!(doc.undo());
+            assert_eq!(doc.view().track(layer, &prop).unwrap().unwrap(), before);
+            assert!(doc.redo());
+            assert_eq!(doc.view().track(layer, &prop).unwrap().unwrap(), after);
+        }
     }
 
     /// ⇧F9 は選んだキーへ**入る**区間(前のキーが持つ形)を寝かせ、⌘F9 は出る区間を寝かせる。

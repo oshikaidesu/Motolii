@@ -12,18 +12,27 @@ pub(crate) const FIELD: &str = "input.field, textarea.field";
 /// 欄を持つ面がそれぞれ閉じ方を書くのではなく、外を押した時は欄へ Cmd+Enter を送る
 /// (書き置きは Enter が改行なので、確定は Cmd 付き)。
 /// 窓に欄が在る間は打鍵が全部そこへ行く(`aim_keystrokes`)ので、閉じ損ねは鍵の全喪失になる。
-pub(crate) fn commit_field_outside(doc: &mut DioxusDocument, x: f32, y: f32) {
+pub(crate) fn commit_field_outside(
+    doc: &mut DioxusDocument,
+    session: &crate::ui::session::Session,
+    x: f32,
+    y: f32,
+) -> bool {
     let Some(field) = doc.inner().query_selector(FIELD).ok().flatten() else {
-        return;
+        LAST_CONTROL.with(|place| place.set(None));
+        return false;
     };
     if doc
         .inner()
         .hit(x, y)
         .is_some_and(|hit| hit.node_id == field)
     {
-        return;
+        return false;
     }
+    LAST_CONTROL.with(|place| place.set(None));
     commit_field(doc);
+    doc.poll(None);
+    session.field().as_ref().and_then(crate::ui::semantic_menu::field_error).is_some()
 }
 
 /// 窓を離れる時も欄は確定して消える(§6b)。
@@ -57,6 +66,9 @@ pub(crate) fn select_new_field(doc: &mut DioxusDocument, seen: &mut Option<blitz
     };
     let Some(multiline) = ready else { return };
     *seen = field;
+    let origin = place_of(&doc.inner(), node)
+        .map(|(parent, index)| (Some(doc.id()), parent, index));
+    LAST_CONTROL.with(|place| place.set(origin));
     aim_keystrokes(doc);
     if multiline {
         send_chord(doc, keyboard_types::Key::End, keyboard_types::Code::End);
@@ -112,10 +124,10 @@ pub(crate) fn drop_role_at(doc: &DioxusDocument, x: f32, y: f32) -> crate::doc::
 }
 
 thread_local! {
-    /// 最後に焦点が居た control の場所(親と何番目か)。欄を確定して升が作り直された後も、
+    /// 入力欄を閉じた時の戻り先(documentと親と何番目か)。欄を確定して升が作り直された後も、
     /// 同じ場所に居る新しい節へ返す(NodeId は作り直しで変わる)。
-    /// 先頭は document の根 — 別窓(別の NodeId 空間)の記憶を引かない。
-    static LAST_CONTROL: std::cell::Cell<Option<(Option<blitz_dom::NodeId>, blitz_dom::NodeId, usize)>> = const { std::cell::Cell::new(None) };
+    /// 先頭は document ID — 別窓の NodeId が一致しても戻り先を共有しない。
+    static LAST_CONTROL: std::cell::Cell<Option<(Option<usize>, blitz_dom::NodeId, usize)>> = const { std::cell::Cell::new(None) };
 }
 
 fn place_of(
@@ -152,19 +164,7 @@ pub(crate) fn step_focus_back(
 /// 利用者が歩く道(欄を開けて打つ)の試験が書けない。
 pub(crate) fn aim_keystrokes(doc: &mut DioxusDocument) {
     let field = doc.inner().query_selector(FIELD).ok().flatten();
-    // 生の input(枠の設定)に焦点が在る間も「打っている」— p/s/r/t/a の素の鍵を発火させない。
-    let raw_input = {
-        let inner = doc.inner();
-        inner
-            .get_focussed_node_id()
-            .and_then(|f| inner.get_node(f))
-            .is_some_and(|n| {
-                n.element_data()
-                    .is_some_and(|e| matches!(e.name.local.as_ref(), "input" | "textarea"))
-            })
-    };
-    crate::ui::keymap::set_typing(field.is_some() || raw_input);
-    let (target, on_control) = {
+    let target = {
         let inner = doc.inner();
         let root = ["#app", "#detached"]
             .into_iter()
@@ -185,7 +185,7 @@ pub(crate) fn aim_keystrokes(doc: &mut DioxusDocument) {
         let remembered = LAST_CONTROL
             .with(|c| c.get())
             .filter(|_| field.is_none() && !on_control)
-            .filter(|place| place.0 == root)
+            .filter(|place| place.0 == Some(doc.id()))
             .and_then(|place| node_at(&inner, (place.1, place.2)))
             .filter(|n| {
                 Some(*n) != root
@@ -197,32 +197,31 @@ pub(crate) fn aim_keystrokes(doc: &mut DioxusDocument) {
                             })
                     })
             });
-        if on_control {
-            LAST_CONTROL.with(|c| {
-                c.set(
-                    focused
-                        .and_then(|f| place_of(&inner, f))
-                        .map(|(p, i)| (root, p, i)),
-                )
-            });
+        if field.is_none() {
+            LAST_CONTROL.with(|place| place.set(None));
         }
-        let (target, on_control) = if let Some(back) = remembered {
-            LAST_CONTROL.with(|c| c.set(None));
-            (Some(back), true)
+        if let Some(back) = remembered {
+            Some(back)
+        } else if on_control {
+            focused
         } else {
-            (
-                if on_control { focused } else { field.or(root) },
-                on_control,
-            )
-        };
-        (target, on_control)
+            field.or(root)
+        }
     };
-    crate::ui::keymap::set_on_control(on_control);
-    let Some(target) = target else { return };
+    let Some(target) = target else {
+        crate::ui::keymap::set_typing(false);
+        crate::ui::keymap::set_on_control(false);
+        return;
+    };
     let mut inner = doc.inner_mut();
     if inner.get_focussed_node_id() != Some(target) {
         inner.set_focus_to(target);
     }
+    let element = inner.get_node(target).and_then(|node| node.element_data());
+    crate::ui::keymap::set_typing(element.is_some_and(|e| e.text_input_data().is_some()));
+    crate::ui::keymap::set_on_control(element.is_some_and(|e| {
+        matches!(e.name.local.as_ref(), "button" | "input" | "textarea" | "select")
+    }));
 }
 
 fn descends_from(

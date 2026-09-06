@@ -68,6 +68,21 @@ def state_dir():
     return directory
 
 
+def app_inventory():
+    executable = (PRODUCT / "target/dx/motolii/debug/macos/Motolii.app/Contents/MacOS/motolii").resolve()
+    result = subprocess.run(["ps", "-axo", "pid=,ppid=,state=,comm="], capture_output=True, text=True, check=True)
+    apps = []
+    for line in result.stdout.splitlines():
+        fields = line.strip().split(None, 3)
+        if len(fields) == 4 and Path(fields[3]).resolve() == executable:
+            apps.append(dict(pid=int(fields[0]), parent=int(fields[1]), state=fields[2], executable=fields[3]))
+    return apps
+
+
+def reusable(rows, path):
+    return len(rows) == 1 and Path(rows[0]["executable"]).resolve() == path.resolve() and not rows[0]["state"].startswith("T")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=["serve", "doctor", "inventory", "binary-info"])
@@ -82,49 +97,52 @@ def main():
         return 0
     rows = inventory()
     if args.action == "doctor":
-        print(json.dumps(dict(binary=str(path), sha256=descriptor["sha256"], processes=rows, runtime=str(state_dir()))))
-        return 0 if len(rows) <= 1 and all(Path(r["executable"]).resolve() == path.resolve() and not r["state"].startswith("T") for r in rows) else 1
+        apps = app_inventory()
+        healthy = not rows or reusable(rows, path)
+        status = "unmanaged_app" if apps and not rows else "warm" if rows and healthy else "idle" if healthy else "invalid_server"
+        print(json.dumps(dict(binary=str(path), sha256=descriptor["sha256"], processes=rows, apps=apps, status=status, runtime=str(state_dir()))))
+        return 0 if healthy and status != "unmanaged_app" else 1
     directory = state_dir()
-    lock = (directory / "serve.lock").open("a+")
-    try:
-        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError:
-        rows = inventory()
-        if len(rows) == 1 and Path(rows[0]["executable"]).resolve() == path.resolve():
-            print("MOTOLII_RELOAD " + json.dumps(dict(event="warm_session_reused", **rows[0])))
-            return 0
-        raise RuntimeError("another launcher owns the lock; inspect doctor before launching")
-    if rows:
-        if len(rows) == 1 and Path(rows[0]["executable"]).resolve() == path.resolve() and not rows[0]["state"].startswith("T"):
-            print("MOTOLII_RELOAD " + json.dumps(dict(event="warm_session_reused", **rows[0])))
-            return 0
-        raise RuntimeError("existing unmanaged or duplicate dev process; no second launch: " + json.dumps(rows))
-    fields = {
-        "build_need": "MOTOLII_BUILD_NEED", "external_ruler": "MOTOLII_EXTERNAL_RULER",
-        "hotpatch_or_check_gap": "MOTOLII_HOTPATCH_OR_CHECK_GAP", "repair_owner": "MOTOLII_REPAIR_OWNER",
-    }
-    permit = {field: os.environ.get(variable, "").strip() for field, variable in fields.items()}
-    defaults = {
-        "build_need": "Initial baseline for the requested development session",
-        "external_ruler": "Dioxus 0.7.10 requires a Fat baseline before Thin patching",
-        "hotpatch_or_check_gap": "No live warm session exists for this workspace",
-        "repair_owner": "motolii-runtime",
-    }
-    permit = {field: value or defaults[field] for field, value in permit.items()}
-    permit.update(cause="initial_baseline", unix_ms=int(time.time() * 1000), command=[str(path), "serve", "--hotpatch", "--interactive", "false", *args.args])
-    permit_path = directory / "baseline-permit.json"
-    permit_path.write_text(json.dumps(permit) + "\n")
-    os.environ["MOTOLII_RUNTIME_SOURCE_REGISTRATION"] = str(directory / "runtime-sources.json")
-    os.environ["MOTOLII_RELOAD_SESSION"] = str(os.getpid()) + "-" + str(time.time_ns())
-    os.environ["MOTOLII_BASELINE_PERMIT"] = str(permit_path)
-    os.environ["MOTOLII_RELOAD_EVENTS"] = str(directory / "decisions.jsonl")
-    os.chdir(PRODUCT)
-    os.set_inheritable(lock.fileno(), True)
-    print("MOTOLII_RELOAD " + json.dumps(dict(event="serve_launch", pid=os.getpid(), **permit)), flush=True)
-    try:
+    with (directory / "serve.lock").open("a+") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            rows = inventory()
+            if reusable(rows, path):
+                print("MOTOLII_RELOAD " + json.dumps(dict(event="warm_session_reused", **rows[0])))
+                return 0
+            raise RuntimeError("another launcher owns the lock; inspect doctor before launching")
+        if rows:
+            if reusable(rows, path):
+                print("MOTOLII_RELOAD " + json.dumps(dict(event="warm_session_reused", **rows[0])))
+                return 0
+            raise RuntimeError("existing unmanaged or duplicate dev process; no second launch: " + json.dumps(rows))
+        apps = app_inventory()
+        if apps:
+            raise RuntimeError("Motolii is open without a reload server; preserve/save the open document and close that app before starting a baseline. No build or second app was started: " + json.dumps(apps))
+        fields = {
+            "build_need": "MOTOLII_BUILD_NEED", "external_ruler": "MOTOLII_EXTERNAL_RULER",
+            "hotpatch_or_check_gap": "MOTOLII_HOTPATCH_OR_CHECK_GAP", "repair_owner": "MOTOLII_REPAIR_OWNER",
+        }
+        permit = {field: os.environ.get(variable, "").strip() for field, variable in fields.items()}
+        defaults = {
+            "build_need": "Initial baseline for the requested development session",
+            "external_ruler": "Dioxus 0.7.10 requires a Fat baseline before Thin patching",
+            "hotpatch_or_check_gap": "No live warm session exists for this workspace",
+            "repair_owner": "motolii-runtime",
+        }
+        permit = {field: value or defaults[field] for field, value in permit.items()}
+        permit.update(cause="initial_baseline", unix_ms=int(time.time() * 1000), command=[str(path), "serve", "--hotpatch", "--interactive", "false", *args.args])
+        permit_path = directory / "baseline-permit.json"
+        permit_path.write_text(json.dumps(permit) + "\n")
+        os.environ["MOTOLII_RUNTIME_SOURCE_REGISTRATION"] = str(directory / "runtime-sources.json")
+        os.environ["MOTOLII_RELOAD_SESSION"] = str(os.getpid()) + "-" + str(time.time_ns())
+        os.environ["MOTOLII_BASELINE_PERMIT"] = str(permit_path)
+        os.environ["MOTOLII_RELOAD_EVENTS"] = str(directory / "decisions.jsonl")
+        os.chdir(PRODUCT)
+        os.set_inheritable(lock.fileno(), True)
+        print("MOTOLII_RELOAD " + json.dumps(dict(event="serve_launch", pid=os.getpid(), **permit)), flush=True)
         os.execv(str(path), permit["command"])
-    finally:
-        lock.close()
 
 
 if __name__ == "__main__":

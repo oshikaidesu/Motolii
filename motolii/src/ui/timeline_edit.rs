@@ -14,6 +14,7 @@ pub(super) fn attrs_to_patch(a: &LayerAttrs) -> LayerAttrsPatch {
         parent: Some(a.parent),
         blend_mode: Some(a.blend_mode.clone()),
         matte: Some(a.matte.clone()),
+        clip_to_below: Some(a.clip_to_below),
         name: Some(a.name.clone()),
         auto_orient: Some(a.auto_orient),
         projection: Some(a.projection),

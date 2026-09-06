@@ -449,11 +449,12 @@ struct ColorDrag {
     is_primary: bool,
     part: ColorDragPart,
     origin: [f64; 2],
-    slot: ColorSlot,
+    slot: Option<ColorSlot>,
+    initial: [f64; 4],
 }
 
 impl ColorDrag {
-    fn begin(evt: &PointerEvent, part: ColorDragPart, slot: ColorSlot) -> Option<Self> {
+    fn begin(evt: &PointerEvent, part: ColorDragPart, slot: Option<ColorSlot>, initial: [f64; 4]) -> Option<Self> {
         if !evt.data().is_primary()
             || evt.data().trigger_button()
                 != Some(dioxus_native::prelude::dioxus_elements::input_data::MouseButton::Primary)
@@ -469,6 +470,7 @@ impl ColorDrag {
             part,
             origin: [client.x - element.x, client.y - element.y],
             slot,
+            initial,
         })
     }
 
@@ -507,7 +509,7 @@ fn sample_color_drag(
     mut revision: Signal<u32>,
 ) {
     let [x, y] = drag.local(evt);
-    let current = read_color(&session.doc, &drag.slot).unwrap_or([0.0, 0.0, 0.0, 1.0]);
+    let current = drag.slot.as_ref().and_then(|slot| read_color(&session.doc, slot)).unwrap_or(drag.initial);
     let (h, s, v) = draft
         .peek()
         .as_ref()
@@ -517,13 +519,17 @@ fn sample_color_drag(
         ColorDragPart::Hue => {
             let h = ((y - ring / 2.0).atan2(x - ring / 2.0).to_degrees() + 90.0).rem_euclid(360.0);
             draft.set(Some((h, s, v)));
-            preview_color(&session.doc, &drag.slot, hsv_to_rgb(h, s, v));
+            if let Some(slot) = &drag.slot {
+                preview_color(&session.doc, slot, hsv_to_rgb(h, s, v));
+            }
         }
         ColorDragPart::SaturationValue => {
             let s = (x / square).clamp(0.0, 1.0);
             let v = (1.0 - y / square).clamp(0.0, 1.0);
             draft.set(Some((h, s, v)));
-            preview_color(&session.doc, &drag.slot, hsv_to_rgb(h, s, v));
+            if let Some(slot) = &drag.slot {
+                preview_color(&session.doc, slot, hsv_to_rgb(h, s, v));
+            }
         }
         ColorDragPart::Alpha => {
             alpha_draft.set(Some((x / ring).clamp(0.0, 1.0)));
@@ -534,18 +540,24 @@ fn sample_color_drag(
 
 fn commit_color_drag(
     session: &Session,
-    slot: &ColorSlot,
+    slot: &Option<ColorSlot>,
     mut draft: Signal<Option<(f64, f64, f64)>>,
+    mut unbound: Signal<[f64; 4]>,
     mut revision: Signal<u32>,
 ) {
     let Some((h, s, v)) = draft.write().take() else {
+        return;
+    };
+    let rgb = hsv_to_rgb(h, s, v);
+    let Some(slot) = slot else {
+        let alpha = unbound.peek()[3];
+        unbound.set([rgb[0], rgb[1], rgb[2], alpha]);
         return;
     };
     clear_preview(&session.doc, slot);
     if !session.writable(slot.layer()) {
         return;
     }
-    let rgb = hsv_to_rgb(h, s, v);
     let same = read_color(&session.doc, slot)
         .is_some_and(|color| (0..3).all(|i| (color[i] - rgb[i]).abs() < 1e-9));
     if same {
@@ -559,11 +571,16 @@ fn commit_color_drag(
 
 fn commit_alpha_drag(
     session: &Session,
-    slot: &ColorSlot,
+    slot: &Option<ColorSlot>,
     mut draft: Signal<Option<f64>>,
+    mut unbound: Signal<[f64; 4]>,
     mut revision: Signal<u32>,
 ) {
     let Some(alpha) = draft.write().take() else {
+        return;
+    };
+    let Some(slot) = slot else {
+        unbound.write()[3] = alpha;
         return;
     };
     if !session.writable(slot.layer()) {
@@ -577,13 +594,15 @@ fn commit_alpha_drag(
 
 fn cancel_color_drag(
     session: &Session,
-    slot: &ColorSlot,
+    slot: &Option<ColorSlot>,
     mut color: Signal<Option<(f64, f64, f64)>>,
     mut alpha: Signal<Option<f64>>,
     mut revision: Signal<u32>,
 ) {
     let changed = color.write().take().is_some() | alpha.write().take().is_some();
-    clear_preview(&session.doc, slot);
+    if let Some(slot) = slot {
+        clear_preview(&session.doc, slot);
+    }
     if changed {
         *revision.write() += 1;
     }
@@ -592,12 +611,17 @@ fn cancel_color_drag(
 #[component]
 pub(super) fn ColorWheel(
     session: Session,
-    slot: ColorSlot,
+    slot: Option<ColorSlot>,
     revision: Signal<u32>,
     #[props(default)] wake: u32,
 ) -> Element {
     let mut revision = revision;
-    let current = read_color(&session.doc, &slot).unwrap_or([0.0, 0.0, 0.0, 1.0]);
+    let _ = revision();
+    let unbound = use_signal(|| [1.0, 0.0, 0.0, 1.0]);
+    let current = match &slot {
+        Some(slot) => read_color(&session.doc, slot).unwrap_or([0.0, 0.0, 0.0, 1.0]),
+        None => unbound(),
+    };
     let draft: Signal<Option<(f64, f64, f64)>> = use_signal(|| None);
     let alpha_draft: Signal<Option<f64>> = use_signal(|| None);
     let mut capture: Signal<Option<ColorDrag>> = use_signal(|| None);
@@ -608,6 +632,7 @@ pub(super) fn ColorWheel(
         let cancel_slot = slot.clone();
         use_effect(use_reactive!(|wake| {
             let _ = wake;
+            let _ = revision();
             let cancelled = {
                 let mut seen = seen_cancel.write();
                 cancel_session.gesture.cancelled(&mut seen)
@@ -623,6 +648,30 @@ pub(super) fn ColorWheel(
             cancel_color_drag(&cancel_session, &slot, draft, alpha_draft, revision);
         }));
     }
+    {
+        let session = session.clone();
+        let slot = slot.clone();
+        use_effect(use_reactive!(|slot| {
+            let previous = capture.write().take();
+            if let Some(drag) = previous {
+                session.gesture.end();
+                cancel_color_drag(&session, &drag.slot, draft, alpha_draft, revision);
+            } else {
+                cancel_color_drag(&session, &slot, draft, alpha_draft, revision);
+            }
+        }));
+    }
+    {
+        let session = session.clone();
+        use_drop(move || {
+            if let Some(drag) = capture.peek().as_ref() {
+                if let Some(slot) = &drag.slot {
+                    clear_preview(&session.doc, slot);
+                }
+                session.gesture.end();
+            }
+        });
+    }
     let (h, s, v) = draft().unwrap_or_else(|| rgb_to_hsv([current[0], current[1], current[2]]));
     let k = session.scale.factor();
     let ring = RING * k;
@@ -637,7 +686,7 @@ pub(super) fn ColorWheel(
 
     let begin = move |part: ColorDragPart,
                       evt: &PointerEvent,
-                      slot: ColorSlot,
+                      slot: Option<ColorSlot>,
                       mut capture: Signal<Option<ColorDrag>>,
                       session: &Session,
                       draft: Signal<Option<(f64, f64, f64)>>,
@@ -646,7 +695,7 @@ pub(super) fn ColorWheel(
         if capture.peek().is_some() {
             return;
         }
-        let Some(drag) = ColorDrag::begin(evt, part, slot) else {
+        let Some(drag) = ColorDrag::begin(evt, part, slot, current) else {
             return;
         };
         evt.prevent_default();
@@ -715,10 +764,10 @@ pub(super) fn ColorWheel(
                         session.gesture.end();
                         match drag.part {
                             ColorDragPart::Hue | ColorDragPart::SaturationValue => {
-                                commit_color_drag(&session, &drag.slot, draft, revision)
+                                commit_color_drag(&session, &drag.slot, draft, unbound, revision)
                             }
                             ColorDragPart::Alpha => {
-                                commit_alpha_drag(&session, &drag.slot, alpha_draft, revision)
+                                commit_alpha_drag(&session, &drag.slot, alpha_draft, unbound, revision)
                             }
                         }
                     }
@@ -790,45 +839,49 @@ pub(super) fn ColorWheel(
         }
         div { class: "color-now",
             span { class: "dot", style: "background: {shown};" }
-            if session.field_at(&FieldAt::Hex(slot.clone())).is_some() {
-                Field {
-                    label: "Hex color",
-                    session: session.clone(),
-                    class: "hex typing",
-                    revision,
-                    oncommit: {
-                        let session = session.clone();
-                        move |field: OpenField| {
-                            let FieldAt::Hex(slot) = field.at else { return };
-                            let Some(rgb) = parse_hex(&field.draft) else { return };
-                            if !session.writable(slot.layer()) {
-                                return;
+            if let Some(slot) = slot.clone() {
+                if session.field_at(&FieldAt::Hex(slot.clone(), crate::ui::dock::Panel::Colors)).is_some() {
+                    Field {
+                        label: "Hex color",
+                        session: session.clone(),
+                        class: "hex typing",
+                        revision,
+                        oncommit: {
+                            let session = session.clone();
+                            move |field: OpenField| {
+                                let FieldAt::Hex(slot, _) = field.at else { return };
+                                let Some(rgb) = parse_hex(&field.draft) else { return };
+                                if !session.writable(slot.layer()) {
+                                    return;
+                                }
+                                match write_color(&session.doc, &slot, rgb) {
+                                    Ok(()) => *revision.write() += 1,
+                                    Err(error) => println!("PROBE room=write verdict=apply-error {error}"),
+                                }
                             }
-                            match write_color(&session.doc, &slot, rgb) {
-                                Ok(()) => *revision.write() += 1,
-                                Err(error) => println!("PROBE room=write verdict=apply-error {error}"),
+                        },
+                    }
+                } else {
+                    SemanticButton {
+                        class: "hex",
+                        title: "Type a hex color",
+                        onclick: {
+                            let session = session.clone();
+                            let slot = slot.clone();
+                            let shown = shown.clone();
+                            move |_| {
+                                session.open_field(FieldAt::Hex(slot.clone(), crate::ui::dock::Panel::Colors), shown.clone());
+                                *revision.write() += 1;
                             }
-                        }
-                    },
+                        },
+                        "{shown}"
+                    }
                 }
             } else {
-                SemanticButton {
-                    class: "hex",
-                    title: "Type a hex color",
-                    onclick: {
-                        let session = session.clone();
-                        let slot = slot.clone();
-                        let shown = shown.clone();
-                        move |_| {
-                            session.open_field(FieldAt::Hex(slot.clone()), shown.clone());
-                            *revision.write() += 1;
-                        }
-                    },
-                    "{shown}"
-                }
+                span { class: "hex", "{shown}" }
             }
         }
-        if !slot.is_shape_fill() {
+        if slot.as_ref().is_none_or(|slot| !slot.is_shape_fill()) {
             div {
                 class: "alpha-bar",
                 style: "width: {ring}px; background: linear-gradient(to right, transparent, {shown});",
@@ -870,13 +923,40 @@ mod tests {
             is_primary: true,
             part: ColorDragPart::Hue,
             origin: [100.0, 40.0],
-            slot,
+            slot: Some(slot),
+            initial: [1.0, 0.0, 0.0, 1.0],
         };
         assert!(drag.matches_identity("mouse", 0, true));
         assert!(!drag.matches_identity("pen", 0, true));
         assert!(!drag.matches_identity("mouse", 1, true));
         assert!(!drag.matches_identity("mouse", 0, false));
         assert_eq!(drag.local_client([130.0, 90.0]), [30.0, 50.0]);
+    }
+
+    #[test]
+    fn unbound_color_and_alpha_commit_locally_and_cancel_restores_committed_draft() {
+        let loaded = crate::ui::fixture::load_fixture();
+        let session = Session::new(loaded.doc, loaded.duration_sec, loaded.ui);
+        let layer = session.doc.lock().unwrap().view().layers()[0];
+        session.selection.set(Some(layer));
+        let before = session.doc.lock().unwrap().history_depth();
+        let dom = VirtualDom::new(|| rsx! { div {} });
+        dom.in_scope(ScopeId::ROOT, || {
+            let unbound = Signal::new([1.0, 0.0, 0.0, 1.0]);
+            let mut draft = Signal::new(Some((120.0, 1.0, 1.0)));
+            let mut alpha = Signal::new(Some(0.5));
+            let revision = Signal::new(0u32);
+            commit_color_drag(&session, &None, draft, unbound, revision);
+            commit_alpha_drag(&session, &None, alpha, unbound, revision);
+            assert_eq!(*unbound.peek(), [0.0, 1.0, 0.0, 0.5]);
+            draft.set(Some((240.0, 1.0, 1.0)));
+            alpha.set(Some(0.2));
+            cancel_color_drag(&session, &None, draft, alpha, revision);
+            assert!(draft.peek().is_none());
+            assert!(alpha.peek().is_none());
+            assert_eq!(*unbound.peek(), [0.0, 1.0, 0.0, 0.5]);
+        });
+        assert_eq!(session.doc.lock().unwrap().history_depth(), before);
     }
 
     #[test]

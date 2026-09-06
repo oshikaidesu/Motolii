@@ -86,18 +86,24 @@ pub(crate) fn anchor_position_plan(
             ));
         }
     }
+    anchor_point_plan(doc, layer, at, atom::scale_about(fractions, [0.0, 0.0], size.map(f64::from)))
+}
+
+pub(crate) fn anchor_point_plan(
+    doc: &Document, layer: LayerId, at: RationalTime, next: [f64; 2],
+) -> Result<Vec<Intent>, StoreError> {
+    for value in next { atom::bounded(value, None).map_err(|reason| StoreError::Property(reason.into()))?; }
     let view = doc.view().without_transients();
     let anchor_property = PropertyId::new(property::ANCHOR)?;
     let position_property = PropertyId::new(property::POSITION)?;
     let anchor = vec2(&view, layer, &anchor_property, at)?;
-    let next = atom::scale_about(fractions, [0.0, 0.0], size.map(f64::from));
     if anchor == next {
         return Ok(Vec::new());
     }
     let original_position = position(&view, layer, &position_property, at)?;
     let delta = glam::Vec2::from_array(next.map(|value| value as f32))
         - glam::Vec2::from_array(anchor.map(|value| value as f32));
-    let compensation = view.local_transform(layer, at)?.transform_vector2(delta);
+    let compensation = view.local_transform3d(layer, at)?.transform_vector3(delta.extend(0.0));
     if !compensation.is_finite() {
         return Err(StoreError::Property(
             "The anchor transform must be finite".into(),
@@ -115,6 +121,15 @@ pub(crate) fn anchor_position_plan(
         if let Some(intent) = lens::place(doc, layer, &position_property, Value::Vec2(moved), at)? {
             intents.push(intent);
         }
+    }
+    if compensation.z != 0.0 {
+        let depth_property = PropertyId::new(property::POSITION_Z)?;
+        let depth = match view.value_at(layer, &depth_property, at)? {
+            Some(Value::F64(value)) => value,
+            None => 0.0,
+            _ => return Err(StoreError::Property("Depth must be numeric".into())),
+        };
+        if let Some(intent) = lens::place(doc, layer, &depth_property, Value::F64(depth + f64::from(compensation.z)), at)? { intents.push(intent); }
     }
     Ok(intents)
 }

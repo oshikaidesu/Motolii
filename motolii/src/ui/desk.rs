@@ -287,18 +287,31 @@ pub(super) fn DeskPanel(
         let shown = shown_blend.clone();
         let watch = session.clone();
         let rev = revision;
-        use_effect(move || {
+        use_effect(use_reactive!(|echo| {
+            let _ = echo;
             // 反応源を読む(読まないと初回しか走らず、閉じた時の掃除が一度も来ない)。
             let _ = rev();
             let grid_open = matches!(*watch.desk.lock().unwrap(), DeskState::Open(Drawer::Blend))
                 || (matches!(*watch.desk.lock().unwrap(), DeskState::Follow)
                     && matches!(*watch.focus.lock().unwrap(), Some(Focus::Blend(_))));
-            if !grid_open {
+            let target = grid_open.then(|| blend_target(&watch)).flatten();
+            if shown.get().is_some_and(|layer| Some(layer) != target) {
                 if let Some(layer) = shown.take() {
                     doc.lock()
                         .unwrap()
                         .clear_transient(layer, &crate::doc::store::PropertyId::blend_mode());
                 }
+            }
+        }));
+    }
+    {
+        let doc = session.doc.clone();
+        let shown = shown_blend.clone();
+        use_drop(move || {
+            if let Some(layer) = shown.take() {
+                doc.lock()
+                    .unwrap()
+                    .clear_transient(layer, &crate::doc::store::PropertyId::blend_mode());
             }
         });
     }
@@ -489,9 +502,10 @@ pub(super) fn DeskPanel(
                             aria_label: "Remove {name}",
                             onclick: {
                                 let doc = session.doc.clone();
+                                let notice = session.project_notice.clone();
                                 let id = *id;
                                 move |_| {
-                                    crate::ui::session::noted(doc.lock().unwrap().apply(Intent::RemoveAsset { asset: id }), revision)
+                                    crate::ui::session::noted(&notice, doc.lock().unwrap().apply(Intent::RemoveAsset { asset: id }), revision)
                                 }
                             },
                             "×"
@@ -571,7 +585,6 @@ fn drawer_body(
                 // 合成は線形光(裁定 498)。AE の既定(ガンマ)とは Multiply / Screen の絵が違う。将来の切替点はここ。
                 Some((layer, current)) => {
                     let tint = blend_tint(&session, layer);
-                    shown_blend.set(Some(layer));
                     let keys = BLEND_MODES
                         .iter()
                         .map(|(mode, _)| format!("desk:blend:{mode:?}"))
@@ -603,28 +616,44 @@ fn drawer_body(
                                 // hover で Stage が下見(§4)。blend は property なので transient で足りる。
                                 onmouseenter: {
                                     let doc = session.doc.clone();
+                                    let shown = shown_blend.clone();
                                     move |_| {
-                                        doc.lock().unwrap().set_transient(
+                                        let mut doc = doc.lock().unwrap();
+                                        if let Some(previous) = shown.replace(Some(layer)) {
+                                            if previous != layer {
+                                                doc.clear_transient(previous, &crate::doc::store::PropertyId::blend_mode());
+                                            }
+                                        }
+                                        doc.set_transient(
                                             layer,
                                             crate::doc::store::PropertyId::blend_mode(),
                                             crate::doc::eval::Value::Enum(mode.to_enum_value()),
                                         );
+                                        drop(doc);
                                         *revision.write() += 1;
                                     }
                                 },
                                 onmouseleave: {
                                     let doc = session.doc.clone();
+                                    let shown = shown_blend.clone();
                                     move |_| {
                                         doc.lock().unwrap().clear_transient(layer, &crate::doc::store::PropertyId::blend_mode());
+                                        if shown.get() == Some(layer) {
+                                            shown.set(None);
+                                        }
                                         *revision.write() += 1;
                                     }
                                 },
                                 onclick: {
                                     let doc = session.doc.clone();
+                                    let shown = shown_blend.clone();
                                     move |_| {
                                         let mut cursor = blend_roving.cursor;
                                         cursor.set(index);
                                         doc.lock().unwrap().clear_transient(layer, &crate::doc::store::PropertyId::blend_mode());
+                                        if shown.get() == Some(layer) {
+                                            shown.set(None);
+                                        }
                                         match write_blend(&doc, layer, mode) {
                                             Ok(_) => *revision.write() += 1,
                                             Err(e) => println!("PROBE room=write verdict=apply-error {e}"),

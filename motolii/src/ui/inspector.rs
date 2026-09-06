@@ -623,26 +623,28 @@ fn prop_row(
                                 .collect();
                             let result = crate::ui::property_edit::commit_owned(&mut doc, owner, t, &values);
                             drop(doc);
-                            crate::ui::session::noted(result, revision);
+                            crate::ui::session::noted(&commit_session.project_notice, result, revision);
                         },
                     });
                 }
                 let opener = session.clone();
                 let grabber = session.clone();
                 let open = (property.clone(), start_value.clone());
-                let cell = c.clone();
-                let key_opener = session.clone();
-                let key_session = session.clone();
-                let key_open = open.clone();
-                let key_cell = c.clone();
-                let key_property = property.clone();
-                let mounted: MountedSlot = Rc::new(std::cell::RefCell::new(None));
-                let reveal = mounted.clone();
                 let number_now = match &start_value {
                     Value::F64(value) => Some(*value),
                     Value::Vec2(value) => value.get(i).copied(),
                     _ => None,
                 };
+                let cell = if c == "—" { c.clone() } else {
+                    number_now.map(|value| value.to_string()).unwrap_or_else(|| c.clone())
+                };
+                let key_opener = session.clone();
+                let key_session = session.clone();
+                let key_open = open.clone();
+                let key_cell = cell.clone();
+                let key_property = property.clone();
+                let mounted: MountedSlot = Rc::new(std::cell::RefCell::new(None));
+                let reveal = mounted.clone();
                 rsx!(span {
                     class: "{class}",
                     onpointerdown: move |evt: PointerEvent| {
@@ -1370,7 +1372,7 @@ pub(super) fn inspector_panel(
     session: &Session,
     choice_open: Signal<Option<ChoiceId>>,
     playhead: Signal<f64>,
-    selected_size: &Arc<Mutex<Option<[f32; 2]>>>,
+    selected_bounds: &Arc<Mutex<Option<crate::render::media::SpatialBounds>>>,
     focus: &Arc<Mutex<Option<Focus>>>,
     live_focus: Option<Focus>,
 ) -> Element {
@@ -1389,7 +1391,7 @@ pub(super) fn inspector_panel(
         Some(Focus::Color(slot)) => Some(slot),
         _ => None,
     };
-    let box_size = *selected_size.lock().unwrap();
+    let box_bounds = *selected_bounds.lock().unwrap();
     let _ = revision(); // Document書き換え後の再描画をここで購読する(値そのものは使わない)
                         // 再生位置が動いた時も描き直す。**値は時刻で決まる**ので、
                         // ここを購読しないと絵だけ動いて数字が止まる。
@@ -1444,13 +1446,15 @@ pub(super) fn inspector_panel(
     // Document のAnchor座標だけでは、箱のどこを指すかを毎回暗算させる。
     // Document の現在値を箱に対する割合へ直し、9点の現在地と任意位置を同じ表示にする。
     let anchor_fraction = if chosen.len() == 1 {
-        match (selection, box_size, PropertyId::new(property::ANCHOR).ok()) {
-            (Some(layer), Some([w, h]), Some(anchor_prop))
-                if w.abs() > f32::EPSILON && h.abs() > f32::EPSILON =>
-            {
-                match doc.lock().unwrap().view().value_at(layer, &anchor_prop, t) {
-                    Ok(Some(Value::Vec2([x, y]))) => Some((x / w as f64, y / h as f64)),
-                    _ => Some((0.0, 0.0)),
+        match (selection, box_bounds, PropertyId::new(property::ANCHOR).ok()) {
+            (Some(layer), Some(bounds), Some(anchor_prop)) => {
+                let [w, h] = bounds.size_xy();
+                if w.abs() <= f32::EPSILON || h.abs() <= f32::EPSILON { None } else {
+                    let [x, y] = match doc.lock().unwrap().view().value_at(layer, &anchor_prop, t) {
+                        Ok(Some(Value::Vec2(value))) => value,
+                        _ => [0.0, 0.0],
+                    };
+                    Some(((x - bounds.min[0] as f64) / w as f64, (y - bounds.min[1] as f64) / h as f64))
                 }
             }
             _ => None,
@@ -1681,7 +1685,7 @@ pub(super) fn inspector_panel(
             h3 { class: "sec", "Transform" }
             {transform_rows}
             // 升の並びそのものが意味なので、言葉は置かない(裁定451)。
-            if let (Some(layer), Some(size)) = (selection, box_size) {
+            if let (Some(layer), Some(bounds)) = (selection, box_bounds) {
                 div { class: "prow anchor",
                     span { class: "n", "{anchor_label}" }
                     div { class: "anchorgrid",
@@ -1695,7 +1699,7 @@ pub(super) fn inspector_panel(
                                     let session = session.clone();
                                     move |_| {
                                         let at = session.clock.current_time();
-                                        match crate::ui::utility::move_anchor(&doc, layer, size, at, fx, fy) {
+                                        match crate::ui::utility::move_anchor_in_bounds(&doc, layer, bounds, at, fx, fy) {
                                             Ok(()) => *revision.write() += 1,
                                             Err(error) => *session.project_notice.lock().unwrap() = format!("Anchor edit failed: {error}"),
                                         }
@@ -1722,7 +1726,7 @@ pub(super) fn inspector_panel(
                             class: "chip", selected: current, aria_label: projection.label(),
                             onclick: move |_| {
                                 let result = session.apply_each(Some(layer), |_, target| Ok(vec![Intent::SetAttrs { layer: target, patch: LayerAttrsPatch { projection: Some(projection), ..Default::default() } }]));
-                                crate::ui::session::noted(result.map(|_| ()), revision);
+                                crate::ui::session::noted(&session.project_notice, result.map(|_| ()), revision);
                             },
                             "{projection.label()}"
                         })
@@ -1772,13 +1776,14 @@ pub(super) fn inspector_panel(
                         selected: frozen,
                         onclick: {
                             let doc = doc.clone();
+                            let notice = session.project_notice.clone();
                             move |_| {
                                 let intent = if frozen {
                                     Intent::Unfreeze { group: layer }
                                 } else {
                                     Intent::Freeze { group: layer }
                                 };
-                                crate::ui::session::noted(doc.lock().unwrap().apply(intent), revision)
+                                crate::ui::session::noted(&notice, doc.lock().unwrap().apply(intent), revision)
                             }
                         },
                         span { class: "n", "Group" }
@@ -1786,8 +1791,8 @@ pub(super) fn inspector_panel(
                     }
                 }
             }
-            if selection.is_some() {
-                h3 { class: "sec", "Matte" }
+            if matte.is_some() && !selection.is_some_and(|layer| doc.lock().unwrap().view().attrs(layer).ok().flatten().is_some_and(|a| a.clip_to_below)) {
+                h3 { class: "sec", "Legacy matte" }
                 if let Some(action) = matte_source_action.clone() {
                     LayerChoiceRow {
                         id: ChoiceId::MatteSource,
@@ -1866,7 +1871,7 @@ pub(super) fn inspector_panel(
                     rsx!(div {
                         class: if color_focus.as_ref() == Some(slot) { "prow color focus on" } else { "prow color focus" },
                         span { class: "n", "{label}" }
-                        if session.field_at(&FieldAt::Hex(slot.clone())).is_some() {
+                        if session.field_at(&FieldAt::Hex(slot.clone(), crate::ui::dock::Panel::Inspector)).is_some() {
                             Field {
                                 label: "Hex color",
                                 session: session.clone(),
@@ -1876,7 +1881,7 @@ pub(super) fn inspector_panel(
                                 oncommit: {
                                     let session = session.clone();
                                     move |field: OpenField| {
-                                        let FieldAt::Hex(slot) = field.at else { return };
+                                        let FieldAt::Hex(slot, _) = field.at else { return };
                                         let Some(rgb) = crate::ui::color::parse_hex(&field.draft) else { return };
                                         if !session.writable(slot.layer()) { return; }
                                         match crate::ui::color::write_color(&session.doc, &slot, rgb) {
@@ -1900,7 +1905,7 @@ pub(super) fn inspector_panel(
                                         event.stop_propagation();
                                         *focus.lock().unwrap() = Some(Focus::Color(slot.clone()));
                                         session.ask_panel(crate::ui::dock::Panel::Colors);
-                                        session.open_field(FieldAt::Hex(slot.clone()), hex.clone());
+                                        session.open_field(FieldAt::Hex(slot.clone(), crate::ui::dock::Panel::Inspector), hex.clone());
                                         *revision.write() += 1;
                                     }
                                 },

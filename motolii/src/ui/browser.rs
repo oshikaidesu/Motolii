@@ -3,10 +3,13 @@ use std::sync::{Arc, Mutex};
 
 use dioxus_native::prelude::*;
 
+#[cfg(test)]
+use crate::doc::store::{Interp, Keyframe, KeyframeTrack};
+
 use crate::doc::store::{
-    property, ContentKeyframe, ContentTrack, Document, FontRef, Intent, Interp, Keyframe,
-    KeyframeTrack, LayerAttrsPatch, LayerId, LayerMeta, LayerProjection, LayerSource, LayerTiming,
-    Mask, MaskId, MaskMode, Path, PathSource, PathVertex, PropertyId, RationalTime, Shape,
+    property, ContentKeyframe, ContentTrack, Document, FontRef, Intent,
+    LayerAttrsPatch, LayerId, LayerMeta, LayerProjection, LayerSource, LayerTiming,
+    PathSource, PropertyId, RationalTime, Shape,
     ShapeNode, TextAlignmentOptions, TextDocument, TextDocumentStyle, TextJustify, TextStyleId,
     Value, VectorPoint,
 };
@@ -990,12 +993,12 @@ fn new_layer_intents(
 fn spawn_layer(
     doc: &Arc<Mutex<Document>>,
     clock: &Clock,
-    mut layer_rows: Signal<Vec<LayerRow>>,
-    mut attrs_state: Signal<Vec<(bool, bool, bool)>>,
+    layer_rows: Signal<Vec<LayerRow>>,
+    attrs_state: Signal<Vec<(bool, bool, bool)>>,
     timeline_tx: &Sender<TimelineMsg>,
     kind: NewKind,
     label: &'static str,
-    mut revision: Signal<u32>,
+    revision: Signal<u32>,
 ) {
     // 最初の曲・動画の probe(ffprobe の process)は lock の外で。握ったまま起こすと窓が止まる。
     let probed = match &kind {
@@ -1080,17 +1083,10 @@ fn spawn_layer(
     }
     match d.apply_all(intents) {
         Ok(_) => {
-            let rows = fixture::layer_rows_from_doc(&d);
-            let attrs_vec = rows
-                .iter()
-                .map(|r| (r.hidden, r.solo, r.locked))
-                .collect::<Vec<_>>();
-            let canvas_rows = fixture::canvas_rows_from_doc(&d);
             drop(d);
-            *layer_rows.write() = rows;
-            *attrs_state.write() = attrs_vec;
-            timeline_tx.send(TimelineMsg::SetRows(canvas_rows)).ok();
-            *revision.write() += 1;
+            crate::ui::app::refresh_layer_projection(
+                doc, layer_rows, attrs_state, timeline_tx, revision,
+            );
             println!(
                 "PROBE room=write verdict=created kind={label} layer={}",
                 layer.0
@@ -1101,103 +1097,17 @@ fn spawn_layer(
 }
 
 fn replace_source(
-    doc: &Arc<Mutex<Document>>,
+    session: &Session,
     layer: LayerId,
     path: String,
-    mut revision: Signal<u32>,
+    revision: Signal<u32>,
 ) {
-    let mut d = doc.lock().unwrap();
     let source = crate::doc::store::LayerSource::File {
         path,
         fingerprint: None,
     };
-    let applied = d.apply(Intent::SetSource { layer, source }).is_ok();
-    drop(d);
-    if applied {
-        *revision.write() += 1;
-    }
-}
-
-fn mask_frame(doc: &Document, layer: LayerId) -> Option<[f64; 2]> {
-    let view = doc.view();
-    let meta = view.meta(layer).ok().flatten()?;
-    let comp = view.composition().ok().flatten()?;
-    match meta.source {
-        LayerSource::Text => Some([comp.width as f64, comp.height as f64]),
-        LayerSource::Shape => {
-            let shapes = view.shapes(layer).ok()?;
-            let (width, height) = shape_natural(&shapes);
-            (width > 0.0 && height > 0.0).then_some([width, height])
-        }
-        LayerSource::File { path, .. }
-            if !crate::render::media::is_mesh_path(&path)
-                && !crate::render::media::is_point_cloud_path(&path) =>
-        {
-            let info = crate::render::media::probe(&path).ok()?;
-            Some([info.width as f64, info.height as f64])
-        }
-        LayerSource::File { .. } | LayerSource::Null | LayerSource::Group => None,
-    }
-}
-
-fn add_rectangle_mask(doc: &Arc<Mutex<Document>>, layer: LayerId, mut revision: Signal<u32>) {
-    let mut d = doc.lock().unwrap();
-    let Some([width, height]) = mask_frame(&d, layer) else {
-        println!(
-            "PROBE room=write verdict=mask-skip layer={} reason=no-2d-frame",
-            layer.0
-        );
-        return;
-    };
-    let next_id = d
-        .view()
-        .masks(layer)
-        .unwrap_or_default()
-        .iter()
-        .map(|mask| mask.id.0)
-        .max()
-        .map(|id| id + 1)
-        .unwrap_or(0);
-    let x0 = width * 0.2;
-    let x1 = width * 0.8;
-    let y0 = height * 0.2;
-    let y1 = height * 0.8;
-    let mut shape = KeyframeTrack::new();
-    shape.insert(Keyframe {
-        t: RationalTime::ZERO,
-        value: Value::Path(Path {
-            vertices: [[x0, y0], [x1, y0], [x1, y1], [x0, y1]]
-                .into_iter()
-                .map(|point| PathVertex {
-                    point,
-                    in_tangent: [0.0, 0.0],
-                    out_tangent: [0.0, 0.0],
-                })
-                .collect(),
-            closed: true,
-        }),
-        interp: Interp::Hold,
-        spatial: None,
-    });
-    match d.apply(Intent::AddMask {
-        layer,
-        mask: Mask {
-            id: MaskId(next_id),
-            mode: MaskMode::Add,
-            inverted: false,
-        },
-        shape,
-    }) {
-        Ok(_) => {
-            drop(d);
-            *revision.write() += 1;
-            println!(
-                "PROBE room=write verdict=mask-added layer={} id={next_id}",
-                layer.0
-            );
-        }
-        Err(error) => println!("PROBE room=write verdict=apply-error {error}"),
-    }
+    let result = session.doc.lock().unwrap().apply(Intent::SetSource { layer, source });
+    crate::ui::session::noted(&session.project_notice, result, revision);
 }
 
 fn commit_effect_selection(
@@ -1241,7 +1151,7 @@ fn commit_effect_selection(
 fn commit_color(
     session: &Session,
     rgba: [u8; 4],
-    mut revision: Signal<u32>,
+    revision: Signal<u32>,
     poke: &crate::ui::poke::Poke,
 ) {
     let rgb = [
@@ -1249,15 +1159,10 @@ fn commit_color(
         rgba[1] as f64 / 255.0,
         rgba[2] as f64 / 255.0,
     ];
-    if let Some(crate::ui::session::Focus::Color(
-        slot @ crate::ui::session::ColorSlot::TextStroke { .. },
-    )) = session.live_focus()
-    {
+    if let Some(crate::ui::session::Focus::Color(slot)) = session.live_focus() {
         if session.writable(slot.layer()) {
-            match crate::ui::color::write_color(&session.doc, &slot, rgb) {
-                Ok(()) => *revision.write() += 1,
-                Err(error) => println!("PROBE room=write verdict=apply-error {error}"),
-            }
+            let result = crate::ui::color::write_color(&session.doc, &slot, rgb);
+            crate::ui::session::noted(&session.project_notice, result, revision);
         }
         return;
     }
@@ -1267,7 +1172,7 @@ fn commit_color(
         return;
     }
     let result = session.apply_blocks(None, |doc, target| color_block(doc, target, rgba));
-    crate::ui::session::noted(result.map(|_| ()), revision);
+    crate::ui::session::noted(&session.project_notice, result.map(|_| ()), revision);
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1369,7 +1274,7 @@ pub(super) fn replace_with_media_asset(
         *session.project_notice.lock().unwrap() = "This media file is missing".into();
         return;
     };
-    replace_source(&session.doc, layer, path, panes.revision);
+    replace_source(session, layer, path, panes.revision);
 }
 
 pub(super) fn remove_media_asset(
@@ -1401,38 +1306,14 @@ fn commit_create_item(
     attrs_state: Signal<Vec<(bool, bool, bool)>>,
     timeline_tx: &Sender<TimelineMsg>,
     revision: Signal<u32>,
-    poke: &crate::ui::poke::Poke,
+    _poke: &crate::ui::poke::Poke,
 ) {
-    let kind = match item {
-        CreateItem::Text => Some((NewKind::Text, "Text")),
-        CreateItem::Rectangle => Some((NewKind::Rectangle, "Rectangle")),
-        CreateItem::Bezier => Some((NewKind::Bezier, "Bezier")),
-        CreateItem::Mask => None,
+    let (kind, label) = match item {
+        CreateItem::Text => (NewKind::Text, "Text"),
+        CreateItem::Rectangle => (NewKind::Rectangle, "Rectangle"),
+        CreateItem::Bezier => (NewKind::Bezier, "Bezier"),
     };
-    if let Some((kind, label)) = kind {
-        spawn_layer(
-            &session.doc,
-            &session.clock,
-            layer_rows,
-            attrs_state,
-            timeline_tx,
-            kind,
-            label,
-            revision,
-        );
-        return;
-    }
-
-    let layer = session
-        .selection
-        .get()
-        .filter(|layer| mask_frame(&session.doc.lock().unwrap(), *layer).is_some());
-    if let Some(layer) = layer {
-        add_rectangle_mask(&session.doc, layer, revision);
-    } else {
-        *session.project_notice.lock().unwrap() = "Select a 2D layer before adding a mask".into();
-        poke.poke();
-    }
+    spawn_layer(&session.doc, &session.clock, layer_rows, attrs_state, timeline_tx, kind, label, revision);
 }
 
 fn delete_selected_media(
@@ -1580,7 +1461,6 @@ pub(super) fn browser_panel(
             CreateItem::Text,
             CreateItem::Rectangle,
             CreateItem::Bezier,
-            CreateItem::Mask,
         ]
         .into_iter()
         .map(BrowserItemId::Create)
@@ -1633,7 +1513,6 @@ pub(super) fn browser_panel(
         };
         let reveal_path = a.path.clone();
         let replace_path = a.path.clone();
-        let replace_doc = doc.clone();
         let remove_doc = doc.clone();
         let select_session = session.clone();
         let select_ids = media_ids.clone();
@@ -1644,6 +1523,7 @@ pub(super) fn browser_panel(
         let commit_item = item_id.clone();
         let commit_poke = poke.clone();
         let commit_path = a.path.clone();
+        let remove_notice = session.project_notice.clone();
         let commit_name = a.name.clone();
         let commit_timeline = timeline_tx.clone();
         let context_session = session.clone();
@@ -1760,7 +1640,7 @@ pub(super) fn browser_panel(
                                 let session = session.clone();
                                 move |_| {
                                     if session.writable(layer) {
-                                        replace_source(&replace_doc, layer, path.clone(), revision)
+                                        replace_source(&session, layer, path.clone(), revision)
                                     }
                                 }
                             },
@@ -1783,7 +1663,7 @@ pub(super) fn browser_panel(
                         aria_label: "Remove from library",
                         title: "Remove from library",
                         onclick: move |_| {
-                            crate::ui::session::noted(remove_doc.lock().unwrap().apply(Intent::RemoveAsset { asset: asset_id }), revision)
+                            crate::ui::session::noted(&remove_notice, remove_doc.lock().unwrap().apply(Intent::RemoveAsset { asset: asset_id }), revision)
                         },
                         "×"
                     }
@@ -2066,14 +1946,11 @@ pub(super) fn browser_panel(
                                     div {
                                         h2 { "Colors" }
                                         span { class: "sub",
-                                            if layer.is_some() { "Choose a color to apply it" } else { "Select a layer first" }
+                                            if wheel_slot(session).is_some() { "Layer color" } else if layer.is_some() { "No color target" } else { "No selection" }
                                         }
                                     }
                                 }
-                                match wheel_slot(session) {
-                                    Some(slot) => rsx!(ColorWheel { session: session.clone(), slot, revision, wake: layout_tick }),
-                                    None => rsx!(div { class: "rcount", "No color yet · select a layer to edit one" }),
-                                }
+                                ColorWheel { session: session.clone(), slot: wheel_slot(session), revision, wake: layout_tick }
                                 if has_swatches {
                                     div { class: "{color_grid_class}", role: "grid", {cards} }
                                 } else {
@@ -2277,18 +2154,10 @@ pub(super) fn browser_panel(
                 }
             } else if panel == Panel::Create {
                 {
-                    let mask_layer = selected().filter(|layer| {
-                        mask_frame(&doc.lock().unwrap(), *layer).is_some()
-                    });
-                    let mask_count = mask_layer
-                        .and_then(|layer| doc.lock().unwrap().view().masks(layer).ok())
-                        .map(|masks| masks.len())
-                        .unwrap_or(0);
                     let all_create = [
                         (CreateItem::Text, "Text", "Adds a text layer", "T"),
                         (CreateItem::Rectangle, "Rectangle", "Adds a shape layer", "■"),
                         (CreateItem::Bezier, "Bezier", "Adds a path layer", "〜"),
-                        (CreateItem::Mask, "Mask", "layer mask", "□"),
                     ];
                     let all_create_ids: Vec<_> = all_create
                         .iter()
@@ -2330,11 +2199,7 @@ pub(super) fn browser_panel(
                         let commit_ids = create_ids.clone();
                         let commit_poke = poke.clone();
                         let commit_timeline = timeline_tx.clone();
-                        let detail = if item == CreateItem::Mask && mask_count > 0 {
-                            format!("{mask_count} attached")
-                        } else {
-                            meta.to_owned()
-                        };
+                        let detail = meta.to_owned();
                         rsx!(SemanticButton {
                             class: "{card_class}",
                             role: "gridcell",
@@ -2643,6 +2508,87 @@ pub(super) fn browser_panel(
 #[cfg(test)]
 mod placement {
     use super::*;
+
+    #[test]
+    fn a_palette_swatch_edits_only_the_focused_gradient_stop_and_undo_restores_it() {
+        use crate::ui::color::{read_color, set_shape_gradient};
+        use crate::ui::session::{ColorSlot, Focus};
+
+        let loaded = fixture::load_fixture();
+        let session = Session::new(loaded.doc, loaded.duration_sec, loaded.ui);
+        let (layer, path) = {
+            let doc = session.doc.lock().unwrap();
+            doc.view().layers().into_iter().find_map(|layer| {
+                fixture::inspector_data_from_doc(&doc.view(), layer, RationalTime::ZERO)
+                    .colors.into_iter().find_map(|row| match row.slot {
+                        ColorSlot::ShapeFill { layer, path } => Some((layer, path)),
+                        _ => None,
+                    })
+            }).expect("fixture must contain a shape fill")
+        };
+        let fill = ColorSlot::ShapeFill { layer, path: path.clone() };
+        set_shape_gradient(&session.doc, &fill, true).unwrap();
+        let start = ColorSlot::ShapeGradientStop { layer, path: path.clone(), end: false };
+        let end = ColorSlot::ShapeGradientStop { layer, path, end: true };
+        session.selection.set(Some(layer));
+        *session.focus.lock().unwrap() = Some(Focus::Color(start.clone()));
+        let untouched = read_color(&session.doc, &end).unwrap();
+        let before = session.doc.lock().unwrap().view().shapes(layer).unwrap();
+        let history = session.doc.lock().unwrap().history_depth().0;
+        let dom = VirtualDom::new(|| rsx! { div {} });
+        dom.in_scope(ScopeId::ROOT, || {
+            let revision = Signal::new(0u32);
+            commit_color(&session, [17, 34, 51, 255], revision, &crate::ui::poke::Poke(None));
+            assert_eq!(*revision.peek(), 1);
+        });
+        assert_eq!(read_color(&session.doc, &start).unwrap(), [17.0 / 255.0, 34.0 / 255.0, 51.0 / 255.0, 1.0]);
+        assert_eq!(read_color(&session.doc, &end).unwrap(), untouched);
+        let mut doc = session.doc.lock().unwrap();
+        assert_eq!(doc.history_depth().0, history + 1);
+        assert!(doc.undo());
+        assert_eq!(doc.view().shapes(layer).unwrap(), before);
+    }
+
+    #[test]
+    fn replacing_media_preserves_placement_and_animation_and_undo_restores_source() {
+        let loaded = fixture::load_fixture();
+        let session = Session::new(loaded.doc, loaded.duration_sec, loaded.ui);
+        {
+            let mut doc = session.doc.lock().unwrap();
+            let layer = doc.view().layers()[0];
+            let mut track = KeyframeTrack::new();
+            for (frame, value) in [(0, [20.0, 30.0]), (30, [80.0, 90.0])] {
+                track.insert(Keyframe {
+                    t: RationalTime::try_new(frame, 30).unwrap(), value: Value::Vec2(value),
+                    interp: Interp::Linear, spatial: None,
+                });
+            }
+            doc.apply(Intent::SetTrack { layer, property: PropertyId::new(property::POSITION).unwrap(), track }).unwrap();
+        }
+        let (layer, meta, attrs, track, before) = {
+            let doc = session.doc.lock().unwrap();
+            let view = doc.view();
+            let layer = view.layers()[0];
+            (layer, view.meta(layer).unwrap().unwrap(), view.attrs(layer).unwrap(),
+             view.track(layer, &PropertyId::new(property::POSITION).unwrap()).unwrap(), doc.history_depth().0)
+        };
+        let dom = VirtualDom::new(|| rsx! { div {} });
+        dom.in_scope(ScopeId::ROOT, || {
+            let revision = Signal::new(0u32);
+            replace_source(&session, layer, "replacement.png".into(), revision);
+            assert_eq!(*revision.peek(), 1);
+        });
+        let mut doc = session.doc.lock().unwrap();
+        let replaced = doc.view().meta(layer).unwrap().unwrap();
+        assert_eq!(replaced.timing, meta.timing);
+        assert_eq!(replaced.order, meta.order);
+        assert_eq!(doc.view().attrs(layer).unwrap(), attrs);
+        assert_eq!(doc.view().track(layer, &PropertyId::new(property::POSITION).unwrap()).unwrap(), track);
+        assert!(matches!(replaced.source, LayerSource::File { path, .. } if path == "replacement.png"));
+        assert!(doc.undo());
+        assert_eq!(doc.history_depth(), (before, 1));
+        assert_eq!(doc.view().meta(layer).unwrap().unwrap().source, meta.source);
+    }
 
     fn effect_ids(names: &[&str]) -> Vec<BrowserItemId> {
         names

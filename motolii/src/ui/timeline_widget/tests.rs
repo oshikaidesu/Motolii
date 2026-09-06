@@ -457,6 +457,48 @@ mod keys {
         assert_eq!(head.keys()[1].value, eased.eval(cut));
     }
 
+    #[test]
+    fn selected_keys_move_together_once_even_with_aggregate_selection() {
+        let (mut doc, layer, property, fps) = two_key_doc();
+        let before = doc.view().track(layer, &property).unwrap().unwrap();
+        let depth = doc.history_depth().0;
+        let keys = vec![
+            (layer, Some(property.clone()), 0.5),
+            (layer, Some(property.clone()), 1.5),
+            (layer, None, 0.5),
+        ];
+        let edits = key_selection_move_intents(&doc, &keys, 1).unwrap();
+        assert_eq!(edits.iter().filter(|edit| matches!(edit, Intent::SetTrack { property: p, .. } if *p == property)).count(), 1);
+        doc.apply_all(edits).unwrap();
+        let after = doc.view().track(layer, &property).unwrap().unwrap();
+        assert_eq!(frames_of(&after, fps), vec![13, 37]);
+        for (old, new) in before.keys().iter().zip(after.keys()) {
+            assert_eq!(old.value, new.value);
+            assert_eq!(old.interp, new.interp);
+            assert_eq!(old.spatial, new.spatial);
+        }
+        assert_eq!(doc.history_depth().0, depth + 1);
+        assert!(doc.undo());
+        assert_eq!(doc.view().track(layer, &property).unwrap().unwrap(), before);
+        assert!(doc.redo());
+        assert_eq!(doc.view().track(layer, &property).unwrap().unwrap(), after);
+    }
+
+    #[test]
+    fn moved_key_wins_an_occupied_time_in_either_direction() {
+        for (frame, delta, expected) in [(12, 24, 1.0), (36, -24, 3.0)] {
+            let (mut doc, layer, property, _) = two_key_doc();
+            let before = doc.view().track(layer, &property).unwrap().unwrap();
+            let edits = keyframe_move_intents(&doc, layer, Some(&property), &[frame], delta).unwrap();
+            doc.apply_all(edits).unwrap();
+            let after = doc.view().track(layer, &property).unwrap().unwrap();
+            assert_eq!(after.keys().len(), 1);
+            assert_eq!(after.keys()[0].value, Value::Vec2([expected, 0.0]));
+            assert!(doc.undo());
+            assert_eq!(doc.view().track(layer, &property).unwrap().unwrap(), before);
+        }
+    }
+
     fn frames_of(track: &KeyframeTrack, fps: Fps) -> Vec<i64> {
         track
             .keys()
@@ -1242,6 +1284,82 @@ mod interaction_terminals {
         assert!(!gesture.is_active());
         assert!(selection.all().is_empty());
         assert!(keys.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn marquee_selects_through_the_release_position_in_both_directions() {
+        for reverse in [false, true] {
+            for additive in [false, true] {
+                let (mut widget, doc, gesture, keys, _) = widget(false);
+                widget.rows[0].span = None;
+                widget.rows[0].keys = vec![1.0, 2.0, 3.0];
+                widget.selected = vec![(0, 2)];
+                widget.publish_keys();
+                let history = doc.lock().unwrap().history_depth();
+                let (start, end) = if reverse { (130.0, 50.0) } else { (50.0, 130.0) };
+                let y = (RULER_H + ROW_H * 0.5) as f32;
+                let mods = if additive {
+                    keyboard_types::Modifiers::SHIFT
+                } else {
+                    Default::default()
+                };
+                widget.event(
+                    &UiEvent::PointerDown(pointer(
+                        BlitzPointerId::Mouse, start, y, MouseEventButton::Main,
+                        MouseEventButtons::Primary, mods,
+                    )),
+                    &mut TimelineBindings::default(),
+                );
+                widget.event(
+                    &UiEvent::PointerUp(pointer(
+                        BlitzPointerId::Mouse, end, y, MouseEventButton::Main,
+                        MouseEventButtons::None, mods,
+                    )),
+                    &mut TimelineBindings::default(),
+                );
+                let selected: Vec<_> = keys.lock().unwrap().iter().map(|key| key.at_sec).collect();
+                assert_eq!(selected, if additive { vec![1.0, 2.0, 3.0] } else { vec![1.0, 2.0] });
+                assert!(widget.marquee.is_none());
+                assert!(!gesture.is_active());
+                assert_eq!(doc.lock().unwrap().history_depth(), history);
+            }
+        }
+    }
+
+    #[test]
+    fn a_missed_marquee_release_finishes_at_the_last_pressed_position() {
+        let (mut widget, doc, gesture, keys, _) = widget(false);
+        widget.rows[0].span = None;
+        widget.rows[0].keys = vec![1.0, 2.0];
+        let history = doc.lock().unwrap().history_depth();
+        let y = (RULER_H + ROW_H * 0.5) as f32;
+        widget.event(
+            &UiEvent::PointerDown(pointer(
+                BlitzPointerId::Mouse, 50.0, y, MouseEventButton::Main,
+                MouseEventButtons::Primary, Default::default(),
+            )),
+            &mut TimelineBindings::default(),
+        );
+        widget.event(
+            &UiEvent::PointerMove(pointer(
+                BlitzPointerId::Mouse, 70.0, y, MouseEventButton::Main,
+                MouseEventButtons::Primary, Default::default(),
+            )),
+            &mut TimelineBindings::default(),
+        );
+        widget.event(
+            &UiEvent::PointerMove(pointer(
+                BlitzPointerId::Mouse, 130.0, y, MouseEventButton::Main,
+                MouseEventButtons::None, Default::default(),
+            )),
+            &mut TimelineBindings::default(),
+        );
+        assert_eq!(widget.selected, vec![(0, 0)]);
+        assert_eq!(keys.lock().unwrap()[0].at_sec, 1.0);
+        assert!(widget.marquee.is_none());
+        assert!(widget.active_pointer.is_none());
+        assert!(!gesture.is_active());
+        assert_eq!(doc.lock().unwrap().history_depth(), history);
     }
 
     #[test]

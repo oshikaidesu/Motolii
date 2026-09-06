@@ -1,6 +1,140 @@
 mod plane_tests {
     use crate::ui::stage_widget::*;
 
+    fn geometry(placement: crate::doc::core::LayerPlacement) -> SelGeom {
+        SelGeom {
+            projection: LayerProjection::ThreeD,
+            placement,
+            z: 0.0,
+            rotation_x: 0.0,
+            rotation_y: 0.0,
+            position: (0.0, 0.0),
+            anchor: (0.0, 0.0),
+            rotation: 0.0,
+            natural: (160.0, 90.0),
+            local_bounds: crate::render::media::SpatialBounds { min: [0.0; 3], max: [160.0, 90.0, 0.0] },
+            box_: (0.0, 0.0, 160.0, 90.0),
+        }
+    }
+
+    fn project(fit: &Fit, world: glam::Vec3) -> (f64, f64) {
+        let camera = crate::doc::core::camera_projection(fit.comp, fit.camera);
+        let clip = camera.projection_matrix() * camera.view_matrix() * world.extend(1.0);
+        (
+            fit.fx + f64::from((clip.x / clip.w + 1.0) * 0.5 * fit.comp.width as f32) * fit.s,
+            fit.fy + f64::from((1.0 - clip.y / clip.w) * 0.5 * fit.comp.height as f32) * fit.s,
+        )
+    }
+
+    #[test]
+    fn evaluated_world_pose_drives_stage_handles_and_inverse_picking() {
+        let fit = Fit {
+            comp: crate::doc::core::CompSpec { width: 1280, height: 720 },
+            s: 0.75,
+            fx: 43.0,
+            fy: 29.0,
+            ..Fit::default()
+        };
+        let parent = glam::Affine3A::from_translation(glam::vec3(350.0, 180.0, 120.0))
+            * glam::Affine3A::from_quat(glam::Quat::from_rotation_x(0.5));
+        let local = glam::Affine3A::from_quat(glam::Quat::from_rotation_y(-0.35))
+            * glam::Affine3A::from_scale(glam::vec3(1.3, 0.8, 1.0));
+        for world in [parent * local, glam::Affine3A::from_translation(glam::vec3(70.0, 30.0, 40.0)) * parent * local] {
+            let geom = geometry(crate::doc::core::LayerPlacement {
+                world_transform: Some(world),
+                transform: glam::Affine2::from_translation(glam::vec2(-900.0, -800.0)),
+                z: -400.0,
+                rotation_x: 70.0,
+                rotation_y: 60.0,
+                ..Default::default()
+            });
+            let map = plane_map(&fit, &geom);
+            for (u, v) in [(0.0, 0.0), (1.0, 1.0), (0.37, 0.61)] {
+                let expected = project(&fit, world.transform_point3(glam::vec3(160.0 * u as f32, 90.0 * v as f32, 0.0)));
+                let actual = map.to_screen(u, v);
+                assert!((actual.0 - expected.0).abs() < 0.001);
+                assert!((actual.1 - expected.1).abs() < 0.001);
+                let picked = map.to_uv(expected.0, expected.1);
+                assert!((picked.0 - u).abs() < 0.00001);
+                assert!((picked.1 - v).abs() < 0.00001);
+            }
+        }
+    }
+
+    #[test]
+    fn absent_world_pose_keeps_legacy_plane_projection() {
+        let fit = Fit {
+            comp: crate::doc::core::CompSpec { width: 1280, height: 720 },
+            ..Fit::default()
+        };
+        let placement = crate::doc::core::LayerPlacement {
+            transform: glam::Affine2::from_translation(glam::vec2(300.0, 200.0)),
+            z: 70.0,
+            rotation_x: 15.0,
+            rotation_y: -20.0,
+            ..Default::default()
+        };
+        let geom = geometry(placement);
+        let map = plane_map(&fit, &geom);
+        let (corner, u, v) = crate::render::compositor::projected_corners(
+            fit.comp, fit.camera, geom.projection, placement.transform,
+            glam::Vec2::ZERO, glam::vec2(160.0, 90.0),
+            placement.z, placement.rotation_x, placement.rotation_y,
+        );
+        for (a, b) in [(0.0, 0.0), (1.0, 1.0), (0.5, 0.5)] {
+            let expected = project(&fit, corner + u * a as f32 + v * b as f32);
+            let actual = map.to_screen(a, b);
+            assert!((actual.0 - expected.0).abs() < 0.001);
+            assert!((actual.1 - expected.1).abs() < 0.001);
+        }
+    }
+
+    #[test]
+    fn offset_volume_bounds_project_all_corners_and_pick_beyond_the_manipulation_plane() {
+        let fit = Fit {
+            comp: crate::doc::core::CompSpec { width: 1280, height: 720 },
+            ..Fit::default()
+        };
+        let world = glam::Affine3A::from_translation(glam::vec3(450.0, 300.0, 80.0))
+            * glam::Affine3A::from_quat(glam::Quat::from_rotation_y(0.6));
+        let mut geom = geometry(crate::doc::core::LayerPlacement {
+            world_transform: Some(world),
+            ..Default::default()
+        });
+        geom.local_bounds = crate::render::media::SpatialBounds {
+            min: [-40.0, -20.0, -50.0], max: [80.0, 40.0, 100.0],
+        };
+        geom.natural = (120.0, 60.0);
+        let points = bounds_screen_points(&fit, &geom);
+        for (index, actual) in points.iter().enumerate() {
+            let local = glam::vec3(
+                if index & 1 == 0 { -40.0 } else { 80.0 },
+                if index & 2 == 0 { -20.0 } else { 40.0 },
+                if index & 4 == 0 { -50.0 } else { 100.0 },
+            );
+            let expected = project(&fit, world.transform_point3(local));
+            assert!((actual.x - expected.0).abs() < 0.001);
+            assert!((actual.y - expected.1).abs() < 0.001);
+        }
+        let map = plane_map(&fit, &geom);
+        let midpoint = project(&fit, world.transform_point3(glam::vec3(20.0, 10.0, 25.0)));
+        let plane_center = map.to_screen(0.5, 0.5);
+        assert!((plane_center.0 - midpoint.0).abs() < 0.001);
+        assert!((plane_center.1 - midpoint.1).abs() < 0.001);
+        let center = points.iter().copied().sum::<glam::DVec2>() / 8.0;
+        let mut outside_plane = false;
+        for corner in points {
+            let point = corner * 0.9 + center * 0.1;
+            let at = (point.x, point.y);
+            assert!(bounds_intersect_rect(points, at, at));
+            assert!(bounds_intersect_rect(points, (point.x - 1.0, point.y - 1.0), (point.x + 1.0, point.y + 1.0)));
+            let (u, v) = map.to_uv(point.x, point.y);
+            outside_plane |= !(0.0..=1.0).contains(&u) || !(0.0..=1.0).contains(&v);
+        }
+        assert!(outside_plane, "volume picking was only checked on its midpoint plane");
+        assert!(!bounds_intersect_rect(points, (-1000.0, -1000.0), (-990.0, -990.0)));
+    }
+
     // 隅だけ合っていても、**内側がずれていれば掴めない**。描く側と掴む側は
     // この1枚を共有しているので、任意の傾きの任意の点で往復できなければ、
     // 絵と当たり判定が別の場所に居る。
@@ -115,6 +249,7 @@ mod previews {
             orig_z: 0.0,
             anchor: (0.5, 0.5),
             natural: (200.0, 100.0),
+            local_bounds: crate::render::media::SpatialBounds { min: [0.0; 3], max: [200.0, 100.0, 0.0] },
             orig_box: (0.0, 50.0, 200.0, 100.0),
             fit_z: 0.0,
             projection: LayerProjection::ThreeD,
@@ -135,10 +270,29 @@ mod previews {
                     anchor: (0.5, 0.5),
                     rotation: 40.0,
                     natural: (100.0, 50.0),
+                    local_bounds: crate::render::media::SpatialBounds { min: [0.0; 3], max: [100.0, 50.0, 0.0] },
                     box_: (250.0, 275.0, 100.0, 50.0),
                 },
             )],
         }
+    }
+
+    #[test]
+    fn resize_with_offset_bounds_keeps_the_opposite_content_corner_fixed() {
+        let mut drag = drag(GizmoMode::ScaleCorner { sx: true, sy: true });
+        drag.orig_position = (300.0, 200.0);
+        drag.anchor = (0.0, 0.0);
+        drag.natural = (100.0, 50.0);
+        drag.local_bounds = crate::render::media::SpatialBounds {
+            min: [20.0, 10.0, 0.0], max: [120.0, 60.0, 0.0],
+        };
+        drag.orig_box = (320.0, 210.0, 100.0, 50.0);
+        drag.others.clear();
+        let edits = preview_values(&drag, (520.0, 310.0), false, false, 1.0);
+        let value = |name: &str| &edits.iter().find(|(_, property, _)| property.name() == name).unwrap().2;
+        assert_eq!(value(property::SCALE), &Value::Vec2([2.0, 2.0]));
+        assert_eq!(value(property::POSITION), &Value::Vec2([280.0, 190.0]));
+        assert_eq!([280.0 + 2.0 * 20.0, 190.0 + 2.0 * 10.0], [320.0, 210.0]);
     }
 
     /// Shift は支配軸に固定し、一緒に選んだ層も同じ差分で動く。
@@ -346,7 +500,7 @@ mod marquee_contract {
     }
 
     #[test]
-    fn matching_pointer_cancel_rolls_back_marquee_and_foreign_cancel_is_ignored() {
+    fn marquee_pointer_terminals_cancel_or_deselect_without_editing_the_document() {
         use crate::doc::store::{Composition, Document, Fps, Intent};
         use crate::ui::mount::SurfaceState;
         use crate::ui::session::{GestureSurface, SurfaceCapture};
@@ -366,12 +520,13 @@ mod marquee_contract {
             .unwrap();
             let clock = Arc::new(crate::ui::playback::Clock::from_document(&doc, 10.0));
             let doc = Arc::new(Mutex::new(doc));
+            let history = doc.lock().unwrap().history_depth();
             let selection = Selection::default();
             selection.set(Some(LayerId(99)));
             let gesture = GestureSurface::default();
             let mut state = StageState::new(
                 clock,
-                doc,
+                doc.clone(),
                 selection.clone(),
                 Arc::new(Mutex::new(None)),
                 Arc::new(Mutex::new(Default::default())),
@@ -420,6 +575,28 @@ mod marquee_contract {
             assert!(!gesture.is_active());
             assert!(state.marquee.is_none());
             assert_eq!(selection.all(), vec![LayerId(99)]);
+
+            for additive in [true, false] {
+                let mut down = pointer(blitz_traits::events::BlitzPointerId::Mouse);
+                if additive {
+                    down.mods = keyboard_types::Modifiers::SHIFT;
+                }
+                let mut up = down.clone();
+                up.buttons = blitz_traits::events::MouseEventButtons::None;
+                <StageState as SurfaceState>::handle_event(
+                    &mut state, &mut mount, &bindings,
+                    &blitz_traits::events::UiEvent::PointerDown(down),
+                );
+                <StageState as SurfaceState>::handle_event(
+                    &mut state, &mut mount, &bindings,
+                    &blitz_traits::events::UiEvent::PointerUp(up),
+                );
+                assert_eq!(selection.all(), if additive { vec![LayerId(99)] } else { Vec::new() });
+                assert!(state.marquee.is_none());
+                assert!(state.active_pointer.is_none());
+                assert!(!gesture.is_active());
+                assert_eq!(doc.lock().unwrap().history_depth(), history);
+            }
         });
     }
 }

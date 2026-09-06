@@ -80,7 +80,7 @@ pub(super) fn run(session: &Session, mut panes: Panes, intent: Intent) -> bool {
             let scratch = crate::ui::clipboard::Clipboard::default();
             scratch.copy_keys(&doc, &keys)?;
             let crate::ui::clipboard::PasteResult::Keys(copies) =
-                scratch.paste(&mut doc, session.selection.get(), last.saturating_add(1))?
+                scratch.paste(&mut doc, None, last.saturating_add(1))?
             else {
                 unreachable!("a keyframe duplicate changed clipboard payload kind")
             };
@@ -316,7 +316,7 @@ pub(super) fn run(session: &Session, mut panes: Panes, intent: Intent) -> bool {
             Ok(())
         }
         Intent::EasyEase(side) => {
-            let starts = crate::ui::ease::segments(&session.selected_keys.lock().unwrap());
+            let starts = session.selected_keys.lock().unwrap().clone();
             if starts.is_empty() {
                 *session.project_notice.lock().unwrap() = "Select keyframes first".to_owned();
             } else {
@@ -480,24 +480,23 @@ pub(super) fn run(session: &Session, mut panes: Panes, intent: Intent) -> bool {
                 let mut doc = session.doc.lock().unwrap();
                 let fps = crate::ui::timeline_widget::document_fps(&doc)?;
                 let by = dx.signum() as i64 * if dx.abs() >= 10.0 { 10 } else { 1 };
-                let mut edits = Vec::new();
-                for key in &keys {
-                    let frame = (key.at_sec * fps.as_f64()).round() as i64;
-                    edits.extend(crate::ui::timeline_widget::keyframe_move_intents(
-                        &doc,
-                        key.layer,
-                        key.property.as_ref(),
-                        &[frame],
-                        by,
-                    )?);
-                }
+                let selected: Vec<_> = keys.iter()
+                    .map(|key| (key.layer, key.property.clone(), key.at_sec))
+                    .collect();
+                let edits = crate::ui::timeline_widget::key_selection_move_intents(&doc, &selected, by)?;
+                if edits.is_empty() { return Ok(()); }
                 doc.apply_all(edits)?;
                 let rows = crate::ui::fixture::canvas_rows_from_doc(&doc);
                 drop(doc);
-                for key in session.selected_keys.lock().unwrap().iter_mut() {
-                    key.at_sec += by as f64 / fps.as_f64();
-                }
+                let selected = {
+                    let mut selected = session.selected_keys.lock().unwrap();
+                    for key in selected.iter_mut() {
+                        if keys.contains(key) { key.at_sec += by as f64 / fps.as_f64(); }
+                    }
+                    selected.clone()
+                };
                 let _ = session.timeline_tx.send(TimelineMsg::SetRows(rows));
+                let _ = session.timeline_tx.send(TimelineMsg::SelectKeys(selected));
             } else {
                 let targets = session.editable_selection();
                 if targets.is_empty() {

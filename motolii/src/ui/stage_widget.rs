@@ -159,6 +159,7 @@ struct GizmoDrag {
     orig_z: f64,
     anchor: (f64, f64),
     natural: (f64, f64),
+    local_bounds: crate::render::media::SpatialBounds,
     orig_box: (f64, f64, f64, f64),
     /// 掴んだ時の奥行き。掴んでいる間、写像はこの面に固定する
     /// (奥行きを動かしている最中に写像まで動くと、指と絵が食い違う)。
@@ -199,7 +200,7 @@ pub(super) struct StageState {
     marquee: Option<StageMarquee>,
     active_pointer: Option<(blitz_traits::events::BlitzPointerId, bool)>,
     capture: SurfaceCapture,
-    selected_size: Arc<Mutex<Option<[f32; 2]>>>,
+    selected_bounds: Arc<Mutex<Option<crate::render::media::SpatialBounds>>>,
     view_camera: Arc<Mutex<crate::render::engine::ObservationCamera>>,
     rings: Arc<std::sync::atomic::AtomicBool>,
     frame_dim: Arc<std::sync::atomic::AtomicU32>,
@@ -363,7 +364,7 @@ impl StageState {
         clock: Arc<Clock>,
         doc: Arc<Mutex<Document>>,
         selection: Selection,
-        selected_size: Arc<Mutex<Option<[f32; 2]>>>,
+        selected_bounds: Arc<Mutex<Option<crate::render::media::SpatialBounds>>>,
         view_camera: Arc<Mutex<crate::render::engine::ObservationCamera>>,
         rings: Arc<std::sync::atomic::AtomicBool>,
         frame_dim: Arc<std::sync::atomic::AtomicU32>,
@@ -384,7 +385,7 @@ impl StageState {
             marquee: None,
             active_pointer: None,
             capture,
-            selected_size,
+            selected_bounds,
             view_camera,
             rings,
             frame_dim,
@@ -455,14 +456,8 @@ impl StageState {
             .iter()
             .filter_map(|layer| {
                 let geom = selection_geom_resolved(&active.engine, &view, &layers, layer.id, rt)?;
-                let map = plane_map(&self.fit, &geom);
-                let points = [
-                    map.to_screen(0.0, 0.0),
-                    map.to_screen(1.0, 0.0),
-                    map.to_screen(1.0, 1.0),
-                    map.to_screen(0.0, 1.0),
-                ];
-                marquee_hits(marquee.from, marquee.to, points).then_some(layer.id)
+                bounds_intersect_rect(bounds_screen_points(&self.fit, &geom), marquee.from, marquee.to)
+                    .then_some(layer.id)
             })
             .collect()
     }
@@ -720,14 +715,7 @@ impl StageState {
             else {
                 continue;
             };
-            // 見えている台形で判定する。comp の長方形で判定すると、3D 傾斜時に
-            // 空所が層に当たり、絵そのものは当たらない。
-            let (u, v) = plane_map(&self.fit, &geom).to_uv(x, y);
-            if !u.is_finite()
-                || !v.is_finite()
-                || !(0.0..=1.0).contains(&u)
-                || !(0.0..=1.0).contains(&v)
-            {
+            if !bounds_intersect_rect(bounds_screen_points(&self.fit, &geom), (x, y), (x, y)) {
                 continue;
             }
             let order = layer.placement.order;
@@ -785,6 +773,7 @@ struct SelGeom {
     anchor: (f64, f64),
     rotation: f64,
     natural: (f64, f64),
+    local_bounds: crate::render::media::SpatialBounds,
     box_: (f64, f64, f64, f64),
 }
 
@@ -845,11 +834,12 @@ fn selection_geom_resolved(
     let anchor = vec2_at(view, layer, property::ANCHOR, rt, (0.0, 0.0));
     let scale = vec2_at(view, layer, property::SCALE, rt, (1.0, 1.0));
     let rotation = f64_at(view, layer, property::ROTATION, rt, 0.0);
-    let [w0, h0] = engine.selected_layer_size_in(view, resolved, layer, rt)?;
+    let local_bounds = engine.selected_layer_bounds_in(view, resolved, layer, rt)?;
+    let [w0, h0, _] = local_bounds.size();
     let natural = (w0 as f64, h0 as f64);
     let box_ = (
-        position.0 - scale.0 * anchor.0,
-        position.1 - scale.1 * anchor.1,
+        position.0 + scale.0 * (f64::from(local_bounds.min[0]) - anchor.0),
+        position.1 + scale.1 * (f64::from(local_bounds.min[1]) - anchor.1),
         scale.0 * natural.0,
         scale.1 * natural.1,
     );
@@ -864,6 +854,7 @@ fn selection_geom_resolved(
         anchor,
         rotation,
         natural,
+        local_bounds,
         box_,
     })
 }
@@ -1129,7 +1120,8 @@ fn preview_values(
             let (new_scale, new_pos) = compute_scale(
                 drag.orig_box,
                 drag.natural,
-                drag.anchor,
+                (drag.anchor.0 - f64::from(drag.local_bounds.min[0]),
+                 drag.anchor.1 - f64::from(drag.local_bounds.min[1])),
                 drag.mode,
                 cur,
                 shift,
@@ -1653,6 +1645,7 @@ impl SurfaceState for StageState {
                                 orig_z: self.depth(layer),
                                 anchor: geom.anchor,
                                 natural: geom.natural,
+                                local_bounds: geom.local_bounds,
                                 orig_box: geom.box_,
                                 fit_z: geom.z,
                                 projection: geom.projection,
@@ -1714,6 +1707,7 @@ impl SurfaceState for StageState {
                                 orig_z: self.depth(layer),
                                 anchor: geom.anchor,
                                 natural: geom.natural,
+                                local_bounds: geom.local_bounds,
                                 orig_box: geom.box_,
                                 fit_z: geom.z,
                                 projection: geom.projection,
@@ -1825,6 +1819,7 @@ impl SurfaceState for StageState {
                         anchor: drag.anchor,
                         rotation: drag.orig_rotation,
                         natural: drag.natural,
+                        local_bounds: drag.local_bounds,
                         box_: drag.orig_box,
                     };
                     let map = plane_map(&self.fit, &geom);
@@ -1876,6 +1871,9 @@ impl SurfaceState for StageState {
                 }
             }
             UiEvent::PointerUp(p) if self.accepts_pointer(p) => {
+                if let Some(marquee) = self.marquee.as_mut() {
+                    marquee.to = (p.element.x as f64, p.element.y as f64);
+                }
                 let shift = p.mods.contains(Modifiers::SHIFT);
                 let alt = p.mods.contains(Modifiers::ALT);
                 self.release_pointer(p);
@@ -2035,16 +2033,16 @@ impl SurfaceState for StageState {
         let primary_geom = primary_layer.and_then(|layer| {
             selection_geom_resolved(&active.engine, &view, &resolved_now, layer, rt)
         });
-        let next_size = primary_geom
+        let next_bounds = primary_geom
             .as_ref()
-            .map(|g| [g.natural.0 as f32, g.natural.1 as f32]);
-        let size_changed = {
-            let mut selected_size = self.selected_size.lock().unwrap();
-            let changed = *selected_size != next_size;
-            *selected_size = next_size;
+            .map(|g| g.local_bounds);
+        let bounds_changed = {
+            let mut selected_bounds = self.selected_bounds.lock().unwrap();
+            let changed = *selected_bounds != next_bounds;
+            *selected_bounds = next_bounds;
             changed
         };
-        if size_changed {
+        if bounds_changed {
             // Inspector はこの寸法でAnchorの現在地を割合表示する。Mutexだけを書いても
             // componentは再評価されないので、値が変わった1回だけ起こす。
             *bindings.revision.write() += 1;
@@ -2215,22 +2213,21 @@ impl SurfaceState for StageState {
         // 副次の選択も**同じ写像**で描く。長方形で描くと、回した層や奥に在る層で
         // 枠だけが別の場所に残る。
 
-        for geom in &secondary_boxes {
-            let (_, _, bw, bh) = geom.box_;
-            if bw.abs() < 1e-9 || bh.abs() < 1e-9 {
-                continue;
-            }
-            let map = plane_map(&draw, geom);
-            let p = |u: f64, v: f64| {
-                let (x, y) = map.to_screen(u, v);
-                peniko::kurbo::Point::new(x, y)
-            };
+        for geom in secondary_boxes.iter().chain(selected_box.iter().filter(|geom| {
+            geom.local_bounds.min[2] != geom.local_bounds.max[2]
+        })) {
+            let points = bounds_screen_points(&draw, geom);
+            let has_depth = geom.local_bounds.min[2] != geom.local_bounds.max[2];
             let mut outline = peniko::kurbo::BezPath::new();
-            outline.move_to(p(0.0, 0.0));
-            outline.line_to(p(1.0, 0.0));
-            outline.line_to(p(1.0, 1.0));
-            outline.line_to(p(0.0, 1.0));
-            outline.close_path();
+            for index in 0..if has_depth { 8 } else { 4 } {
+                for axis in 0..if has_depth { 3 } else { 2 } {
+                    let other = index ^ (1 << axis);
+                    if other > index {
+                        outline.move_to((points[index].x, points[index].y));
+                        outline.line_to((points[other].x, points[other].y));
+                    }
+                }
+            }
             scene.stroke(
                 &peniko::kurbo::Stroke::new(1.0),
                 Affine::IDENTITY,
@@ -2524,44 +2521,64 @@ impl PlaneMap {
     }
 }
 
-/// 層の4隅を窓の点へ落とし、写像を組む。上流が絵を置くのと同じ式で隅を出す
-/// (`tilted_corners`)ので、取っ手は必ず絵の上に乗る。
-fn plane_map(fit: &Fit, geom: &SelGeom) -> PlaneMap {
-    let placement = geom.placement;
-    let (corner, u, v) = crate::render::compositor::projected_corners(
-        fit.comp,
-        fit.camera,
-        geom.projection,
-        placement.transform,
-        glam::Vec2::ZERO,
-        glam::vec2(geom.natural.0 as f32, geom.natural.1 as f32),
-        placement.z,
-        placement.rotation_x,
-        placement.rotation_y,
-    );
+const BOUNDS_FACES: [[usize; 4]; 6] = [
+    [0, 1, 3, 2], [4, 5, 7, 6], [0, 1, 5, 4],
+    [2, 3, 7, 6], [0, 2, 6, 4], [1, 3, 7, 5],
+];
 
-    let projection = crate::doc::core::camera_projection(fit.comp, fit.camera);
-    let clip_from_world = projection.projection_matrix() * projection.view_matrix();
-    let to_screen = |p: glam::Vec3| -> glam::DVec2 {
-        let clip = clip_from_world * glam::Vec4::new(p.x, p.y, p.z, 1.0);
-        let w = if clip.w.abs() < 1e-6 { 1e-6 } else { clip.w };
-        let ndc = glam::vec2(clip.x / w, clip.y / w);
-        let image = glam::vec2(
-            (ndc.x + 1.0) * 0.5 * fit.comp.width as f32,
-            (1.0 - ndc.y) * 0.5 * fit.comp.height as f32,
+fn bounds_world_points(fit: &Fit, geom: &SelGeom) -> [glam::Vec3; 8] {
+    let bounds = geom.local_bounds;
+    if let Some(world) = geom.placement.world_transform {
+        let center = world.transform_point3(glam::Vec3::from(bounds.center()));
+        let correction = crate::doc::core::layer_projection_transform(
+            fit.comp, fit.camera, geom.projection, center,
         );
-        glam::dvec2(
-            fit.fx + image.x as f64 * fit.s,
-            fit.fy + image.y as f64 * fit.s,
-        )
-    };
+        return std::array::from_fn(|index| {
+            let local = glam::Vec3::from_array(std::array::from_fn(|axis| {
+                if index & (1 << axis) == 0 { bounds.min[axis] } else { bounds.max[axis] }
+            }));
+            correction.transform_point3(world.transform_point3(local))
+        });
+    }
+    let (corner, u, v) = crate::render::compositor::projected_placement_corners(
+        fit.comp, fit.camera, geom.projection, geom.placement,
+        glam::vec2(bounds.min[0], bounds.min[1]),
+        glam::vec2(bounds.max[0] - bounds.min[0], bounds.max[1] - bounds.min[1]),
+    );
+    std::array::from_fn(|index| corner + u * (index & 1) as f32 + v * ((index >> 1) & 1) as f32)
+}
 
-    let screen_from_uv = homography_from_unit_square([
-        to_screen(corner),
-        to_screen(corner + u),
-        to_screen(corner + u + v),
-        to_screen(corner + v),
-    ]);
+fn project_world_point(fit: &Fit, point: glam::Vec3) -> glam::DVec2 {
+    let projection = crate::doc::core::camera_projection(fit.comp, fit.camera);
+    let clip = projection.projection_matrix() * projection.view_matrix() * point.extend(1.0);
+    let w = if clip.w.abs() < 1e-6 { 1e-6 } else { clip.w };
+    glam::dvec2(
+        fit.fx + f64::from((clip.x / w + 1.0) * 0.5 * fit.comp.width as f32) * fit.s,
+        fit.fy + f64::from((1.0 - clip.y / w) * 0.5 * fit.comp.height as f32) * fit.s,
+    )
+}
+
+fn bounds_screen_points(fit: &Fit, geom: &SelGeom) -> [glam::DVec2; 8] {
+    bounds_world_points(fit, geom).map(|point| project_world_point(fit, point))
+}
+
+fn bounds_intersect_rect(points: [glam::DVec2; 8], from: (f64, f64), to: (f64, f64)) -> bool {
+    BOUNDS_FACES.iter().any(|indices| {
+        let quad = indices.map(|index| (points[index].x, points[index].y));
+        let area = (0..4).map(|i| {
+            let (a, b) = (quad[i], quad[(i + 1) % 4]);
+            a.0 * b.1 - b.0 * a.1
+        }).sum::<f64>().abs();
+        area > 1e-8 && marquee_hits(from, to, quad)
+    })
+}
+
+/// Drag coordinates lie on the local XY plane through the bounds' Z midpoint.
+fn plane_map(fit: &Fit, geom: &SelGeom) -> PlaneMap {
+    let points = bounds_world_points(fit, geom);
+    let screen_from_uv = homography_from_unit_square([0, 1, 3, 2].map(|index| {
+        project_world_point(fit, (points[index] + points[index + 4]) * 0.5)
+    }));
     PlaneMap {
         uv_from_screen: screen_from_uv.inverse(),
         screen_from_uv,

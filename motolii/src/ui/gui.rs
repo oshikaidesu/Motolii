@@ -25,6 +25,54 @@ mod flows;
 const W: u32 = 1600;
 const H: u32 = 1000;
 
+#[test]
+fn palette_labels_have_one_paint_owner_after_animation() {
+    fn visit(doc: &blitz_dom::BaseDocument, id: blitz_dom::NodeId, counts: &mut std::collections::HashMap<blitz_dom::NodeId, usize>) {
+        *counts.entry(id).or_default() += 1;
+        let node = doc.get_node(id).unwrap();
+        if let Some(children) = node.paint_children.borrow().as_ref() {
+            for &child in children { visit(doc, child, counts); }
+        }
+        if let Some(context) = &node.stacking_context {
+            for child in &context.children { visit(doc, child.node_id, counts); }
+        }
+    }
+    let mut gui = Gui::open();
+    let colors = gui.center_of("#dock-tab-Colors", 0);
+    gui.click(colors.0, colors.1);
+    gui.tick(1.0);
+    let grid = gui.h.base().query_selector_all(".color-grid").unwrap()[0];
+    gui.h.base_mut().set_style_property(grid, "opacity", "0.5");
+    gui.h.pump();
+    gui.h.base_mut().set_style_property(grid, "opacity", "1");
+    gui.h.pump();
+    let doc = gui.h.base();
+    let mut counts = std::collections::HashMap::new();
+    visit(&doc, doc.root_element().id, &mut counts);
+    let labels = doc.query_selector_all(".color-swatch .tname").unwrap();
+    assert!(!labels.is_empty());
+    for label in labels {
+        assert_eq!(counts.get(&label), Some(&1), "palette label {label:?} has multiple paint owners");
+    }
+}
+
+#[test]
+fn color_wheel_stays_available_without_a_selected_layer() {
+    let mut gui = Gui::open();
+    let colors = gui.center_of("#dock-tab-Colors", 0);
+    gui.click(colors.0, colors.1);
+    assert!(gui.session.selection.all().is_empty());
+    let before = gui.session.doc.lock().unwrap().revision();
+    assert_eq!(gui.count(".color-wheel"), 1);
+    let layer = gui.center_of(".lsurface", 1);
+    gui.click(layer.0, layer.1);
+    assert_eq!(gui.count(".color-wheel"), 1);
+    gui.key(keyboard_types::Key::Escape, keyboard_types::Modifiers::empty());
+    assert!(gui.session.selection.all().is_empty());
+    assert_eq!(gui.count(".color-wheel"), 1);
+    assert_eq!(gui.session.doc.lock().unwrap().revision(), before);
+}
+
 struct Gui {
     h: blitz_test_harness::Harness<DioxusDocument>,
     /// 窓と同じ状態への取っ手。**触った結果を数で見る**ために持つ。
@@ -250,7 +298,10 @@ impl Gui {
 
     fn click(&mut self, x: f32, y: f32) {
         self.h.move_mouse_to(x, y);
-        crate::ui::keys::commit_field_outside(&mut self.h.doc, x, y);
+        if crate::ui::keys::commit_field_outside(&mut self.h.doc, &self.session, x, y) {
+            self.settle();
+            return;
+        }
         // Native down/up are separate event-loop turns. Let Dioxus mount capture
         // overlays and apply queued focus between them instead of collapsing a
         // click into one synthetic document borrow.
@@ -337,7 +388,10 @@ impl Gui {
     /// 窓の shell と同じ順: 欄の外を押したら先に欄を確定させる(`host::Windows::window_event`)。
     fn press(&mut self, x: f32, y: f32) {
         self.h.move_mouse_to(x, y);
-        crate::ui::keys::commit_field_outside(&mut self.h.doc, x, y);
+        if crate::ui::keys::commit_field_outside(&mut self.h.doc, &self.session, x, y) {
+            self.settle();
+            return;
+        }
         self.h.mouse_down_at(x, y);
     }
 
@@ -395,6 +449,10 @@ impl Gui {
 
     /// Cmd を押しながらの一押し(選択に足す)。macOS の Cmd は SUPER。
     fn click_super(&mut self, x: f32, y: f32) {
+        if crate::ui::keys::commit_field_outside(&mut self.h.doc, &self.session, x, y) {
+            self.settle();
+            return;
+        }
         let mut down = self.pointer_raw(x, y, MouseEventButtons::Primary);
         down.mods = keyboard_types::Modifiers::SUPER;
         // Pinned Blitz's harness/native mouse path keeps Primary in `buttons`
@@ -411,7 +469,10 @@ impl Gui {
 
     fn context_click(&mut self, x: f32, y: f32) {
         self.h.move_mouse_to(x, y);
-        crate::ui::keys::commit_field_outside(&mut self.h.doc, x, y);
+        if crate::ui::keys::commit_field_outside(&mut self.h.doc, &self.session, x, y) {
+            self.settle();
+            return;
+        }
         let event = blitz_test_harness::pointer_event(
             BlitzPointerId::Mouse,
             x,
@@ -835,8 +896,8 @@ fn click_only_chrome_uses_real_buttons_and_real_disabled_state() {
 
     let create = gui.center_of("#dock-tab-Create", 0);
     gui.click(create.0, create.1);
-    assert_eq!(gui.count(".tcard"), 4);
-    assert_eq!(gui.count("button.semantic-button.tcard"), 4);
+    assert_eq!(gui.count(".tcard"), 3);
+    assert_eq!(gui.count("button.semantic-button.tcard"), 3);
 
     let effects = gui.center_of("#dock-tab-Effects", 0);
     gui.click(effects.0, effects.1);
@@ -854,46 +915,24 @@ fn click_only_chrome_uses_real_buttons_and_real_disabled_state() {
 }
 
 #[test]
-fn the_mask_card_adds_one_mask_to_the_selected_layer() {
+fn clipping_is_a_timeline_toggle_with_one_undo_step() {
     let mut gui = Gui::open();
-    let layer_row = gui.center_of(".lsurface", 1);
-    gui.click(layer_row.0, layer_row.1);
-    gui.settle();
-    let selected = gui
-        .session
-        .selection
-        .get()
-        .expect("Timeline layer selection");
-    assert!(gui
-        .session
-        .doc
-        .lock()
-        .unwrap()
-        .view()
-        .masks(selected)
-        .unwrap()
-        .is_empty());
-
+    let before = gui.session.doc.lock().unwrap().history_depth();
+    let clip = gui.center_of(".clip-toggle:not([disabled])", 0);
+    gui.click(clip.0, clip.1);
+    let clipped = {
+        let doc = gui.session.doc.lock().unwrap();
+        doc.view().layers().into_iter().filter(|id| doc.view().attrs(*id).unwrap().unwrap_or_default().clip_to_below).collect::<Vec<_>>()
+    };
+    assert_eq!(clipped.len(), 1);
+    assert_eq!(gui.session.doc.lock().unwrap().history_depth().0, before.0 + 1);
+    assert_eq!(gui.count(".clip-toggle.lit"), 1);
+    gui.key(keyboard_types::Key::Character("z".into()), keyboard_types::Modifiers::SUPER);
+    assert!(!gui.session.doc.lock().unwrap().view().attrs(clipped[0]).unwrap().unwrap().clip_to_below);
+    assert_eq!(gui.count(".clip-toggle.lit"), 0);
     let create = gui.center_of("#dock-tab-Create", 0);
     gui.click(create.0, create.1);
-    gui.settle();
-    let mask = gui.center_of(".tcard", 3);
-    gui.click(mask.0, mask.1);
-    gui.click(mask.0, mask.1);
-    gui.settle();
-
-    assert_eq!(
-        gui.session
-            .doc
-            .lock()
-            .unwrap()
-            .view()
-            .masks(selected)
-            .unwrap()
-            .len(),
-        1
-    );
-    assert!(gui.texts(".tcard")[3].contains("1 attached"));
+    assert_eq!(gui.count(".tcard"), 3);
 }
 
 #[test]
@@ -1602,4 +1641,122 @@ fn losing_window_focus_cancels_splitter_drag() {
     gui.settle();
     let after = gui.size_of_nth(".tslot", 1).0;
     assert_eq!(after, before, "focus loss left a splitter drag active");
+}
+
+
+#[test]
+fn layer_list_blank_clears_selection_but_rows_and_inspector_preserve_it() {
+    let mut gui = Gui::open_at(W, 3000);
+    let row = gui.center_of(".lsurface", 1);
+    gui.click(row.0, row.1);
+    let layer = gui.session.selection.get().expect("selected artwork");
+    let history = gui.session.doc.lock().unwrap().history_depth();
+    let inspector = gui.center_of("#dock-tab-Inspector", 0);
+    gui.click(inspector.0, inspector.1);
+    assert_eq!(gui.session.selection.get(), Some(layer));
+    let (blank_x, blank_y) = {
+        let doc = gui.h.base();
+        let id = *doc.query_selector_all("#layers .lrow").unwrap().last().unwrap();
+        let node = doc.get_node(id).unwrap();
+        let pos = node.absolute_position(0.0, 0.0);
+        let size = node.final_layout().size;
+        (pos.x as f32 + size.width * 0.5, pos.y as f32 + size.height + 10.0)
+    };
+    gui.click(blank_x, blank_y);
+    assert!(gui.session.selection.all().is_empty());
+    assert!(gui.session.selection.keys().is_empty());
+    assert_eq!(gui.session.doc.lock().unwrap().history_depth(), history);
+    gui.click(row.0, row.1);
+    assert_eq!(gui.session.selection.get(), Some(layer));
+}
+
+#[test]
+fn opening_and_committing_a_precise_number_preserves_value_and_history() {
+    use crate::doc::store::{Intent, PropertyId, Value, property};
+    let mut gui = Gui::open();
+    let row = gui.center_of(".lsurface", 1);
+    gui.click(row.0, row.1);
+    let layer = gui.session.selection.get().unwrap();
+    let prop = PropertyId::new(property::POSITION).unwrap();
+    let precise = Value::Vec2([123.4567890123, 87.6543210987]);
+    gui.session.doc.lock().unwrap().apply(Intent::SetConstant {
+        layer, property: prop.clone(), value: precise.clone(),
+    }).unwrap();
+    let other = gui.center_of(".lsurface", 2);
+    gui.click(other.0, other.1);
+    gui.click(row.0, row.1);
+    let before = gui.session.doc.lock().unwrap().history_depth();
+    let position = gui.texts(".prow .n").iter().position(|s| s == "Position").unwrap();
+    let cell = gui.h.base().query_selector_all(".prow .v").unwrap()[position * 3];
+    gui.h.base_mut().set_focus_to(cell);
+    gui.key(keyboard_types::Key::Enter, keyboard_types::Modifiers::empty());
+    assert_eq!(gui.session.field().unwrap().draft.parse::<f64>().unwrap(), 123.4567890123);
+    gui.key(keyboard_types::Key::Enter, keyboard_types::Modifiers::empty());
+    assert_eq!(gui.session.doc.lock().unwrap().view().value_at(layer, &prop, gui.session.clock.current_time()).unwrap(), Some(precise));
+    assert_eq!(gui.session.doc.lock().unwrap().history_depth(), before);
+}
+
+#[test]
+fn blend_preview_is_removed_when_keyboard_selection_changes_its_target() {
+    let mut gui = Gui::open();
+    let row = gui.center_of(".lsurface", 1);
+    gui.click(row.0, row.1);
+    let original = gui.session.selection.get().unwrap();
+    let blend = gui.center_of_text(".desk-foot .chip", "Blend");
+    gui.click(blend.0, blend.1);
+    let focus = gui.h.base().query_selector_all(".lsurface").unwrap()[2];
+    gui.h.base_mut().set_focus_to(focus);
+    gui.settle();
+    let history = gui.session.doc.lock().unwrap().history_depth();
+    let prop = crate::doc::store::PropertyId::blend_mode();
+    let at = gui.session.clock.current_time();
+    let before = gui.session.doc.lock().unwrap().view().value_at(original, &prop, at).unwrap();
+    let sample = gui.center_of(".blend-cell", 2);
+    gui.motion(sample.0, sample.1);
+    gui.settle();
+    assert_ne!(gui.session.doc.lock().unwrap().view().value_at(original, &prop, at).unwrap(), before);
+    gui.key(keyboard_types::Key::Character(" ".into()), keyboard_types::Modifiers::empty());
+    assert_ne!(gui.session.selection.get(), Some(original));
+    assert_eq!(gui.session.doc.lock().unwrap().view().value_at(original, &prop, at).unwrap(), before);
+    assert_eq!(gui.session.doc.lock().unwrap().history_depth(), history);
+}
+
+#[test]
+fn keyboard_owner_follows_clicks_out_of_search_instead_of_restoring_it() {
+    let mut gui = Gui::open();
+    gui.focus("#browser input[type=search]");
+    gui.key(keyboard_types::Key::Character(" ".into()), keyboard_types::Modifiers::empty());
+    assert!(!gui.session.clock.playing());
+    let search = gui.h.base().query_selector("#browser input[type=search]").unwrap().unwrap();
+    assert_eq!(gui.h.base().get_focussed_node_id(), Some(search));
+    let stage = gui.center_of("#stage", 0);
+    gui.click(stage.0, stage.1);
+    gui.key(keyboard_types::Key::Character(" ".into()), keyboard_types::Modifiers::empty());
+    assert!(gui.session.clock.playing(), "Space stayed owned by the old search field");
+    assert_ne!(gui.h.base().get_focussed_node_id(), Some(search));
+    assert!(!crate::ui::keymap::is_typing());
+    if gui.session.clock.playing() { gui.session.clock.toggle(); }
+}
+
+#[test]
+fn keyboard_owner_distinguishes_numeric_focus_from_active_text_editing() {
+    let mut gui = Gui::open();
+    let row = gui.center_of(".lsurface", 1);
+    gui.click(row.0, row.1);
+    gui.focus(".prow [role=spinbutton]");
+    gui.key(keyboard_types::Key::Character(" ".into()), keyboard_types::Modifiers::empty());
+    assert!(gui.session.clock.playing(), "numeric focus swallowed playback");
+    if gui.session.clock.playing() { gui.session.clock.toggle(); }
+    gui.key(keyboard_types::Key::Enter, keyboard_types::Modifiers::empty());
+    assert!(gui.session.field().is_some());
+    gui.key(keyboard_types::Key::Character(" ".into()), keyboard_types::Modifiers::empty());
+    assert!(!gui.session.clock.playing(), "editing a number started playback");
+    gui.key(keyboard_types::Key::Escape, keyboard_types::Modifiers::empty());
+    assert!(gui.session.field().is_none());
+    crate::ui::keys::aim_keystrokes(&mut gui.h.doc);
+    let original_cell = gui.h.base().query_selector(".prow [role=spinbutton]").unwrap().unwrap();
+    assert_eq!(gui.h.base().get_focussed_node_id(), Some(original_cell));
+    gui.key(keyboard_types::Key::Character(" ".into()), keyboard_types::Modifiers::empty());
+    assert!(gui.session.clock.playing(), "ending editing failed to return playback");
+    if gui.session.clock.playing() { gui.session.clock.toggle(); }
 }

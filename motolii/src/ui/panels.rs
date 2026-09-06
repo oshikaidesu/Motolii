@@ -72,7 +72,7 @@ pub(super) fn InspectorPanel(
         &session,
         choice_open,
         playhead,
-        &session.selected_size,
+        &session.selected_bounds,
         &session.focus,
         session.live_focus(),
     )
@@ -94,7 +94,7 @@ pub(super) fn StagePanel(
             session.clock.clone(),
             session.doc.clone(),
             session.selection.clone(),
-            session.selected_size.clone(),
+            session.selected_bounds.clone(),
             session.view_camera.clone(),
             session.rings.clone(),
             session.frame_dim.clone(),
@@ -162,7 +162,7 @@ pub(super) fn StagePanel(
                                     let mut d = session.doc.lock().unwrap();
                                     if let Ok(Some(comp)) = d.view().composition() {
                                         let next = crate::doc::store::Composition { width: w, height: h, ..comp };
-                                        crate::ui::session::noted(d.apply(crate::doc::store::Intent::SetComposition(next)), revision);
+                                        crate::ui::session::noted(&session.project_notice, d.apply(crate::doc::store::Intent::SetComposition(next)), revision);
                                     }
                                     drop(d);
                                     *revision.write() += 1;

@@ -1,6 +1,6 @@
 use dioxus_native::prelude::*;
 
-use crate::ui::session::{OpenField, Session};
+use crate::ui::session::{FieldAt, OpenField, Session};
 
 struct DomWork {
     runtime: std::rc::Rc<dioxus_core::Runtime>,
@@ -765,7 +765,21 @@ pub(super) fn SemanticButton(
     })
 }
 
-/// 欄。押した間だけ在り、Enter で確定、Escape で消える。外を押した時は host が
+pub(super) fn field_error(field: &OpenField) -> Option<&'static str> {
+    match &field.at {
+        FieldAt::Number { .. }
+            if !field.draft.trim().parse::<f64>().is_ok_and(f64::is_finite) =>
+        {
+            Some("Enter a finite number")
+        }
+        FieldAt::Hex(_, _) if crate::ui::color::parse_hex(&field.draft).is_none() => {
+            Some("Enter a hex color such as #ff8800")
+        }
+        _ => None,
+    }
+}
+
+/// 欄。Enter / Tab で確定、Escape で消える。外を押した時は host が
 /// Cmd+Enter を送る(`host::commit_field_outside`)ので、閉じ方はここ 1 つ。
 /// 複数行(書き置き)は Enter が改行で、確定は Cmd+Enter。
 #[component]
@@ -776,7 +790,7 @@ pub(super) fn Field(
     #[props(default)] multiline: bool,
     revision: Signal<u32>,
     oncommit: EventHandler<OpenField>,
-    /// 欄の名前(読み上げ用)。見えない文字として欄の前に置く。
+    /// 欄の名前(読み上げ用)。
     #[props(default)]
     label: Option<String>,
 ) -> Element {
@@ -785,7 +799,17 @@ pub(super) fn Field(
     // DOMから消えた欄は、全windowを見られるHost（harnessではGui::settle）が
     // Sessionと照合して閉じる。component dropは同じFieldの再mountでも走るため使わない。
     let edit = session.clone();
-    let oninput = move |evt: FormEvent| edit.edit_field(evt.value());
+    let oninput = move |evt: FormEvent| {
+        let previous_error = edit.field().as_ref().and_then(field_error);
+        edit.edit_field(evt.value());
+        if let Some(error) = previous_error {
+            let mut notice = edit.project_notice.lock().unwrap();
+            if notice.as_str() == error && edit.field().as_ref().and_then(field_error).is_none() {
+                notice.clear();
+                *revision.write() += 1;
+            }
+        }
+    };
     let onkeydown = move |evt: KeyboardEvent| {
         evt.stop_propagation();
         // 変換中の Enter は変換の確定。欄の確定ではない。
@@ -793,13 +817,22 @@ pub(super) fn Field(
             return;
         }
         match evt.key() {
-            Key::Enter
-                if !multiline
+            Key::Tab | Key::Enter
+                if evt.key() == Key::Tab
+                    || !multiline
                     || evt
                         .modifiers()
                         .intersects(Modifiers::META | Modifiers::SUPER) =>
             {
-                evt.prevent_default();
+                if let Some(error) = session.field().as_ref().and_then(field_error) {
+                    evt.prevent_default();
+                    *session.project_notice.lock().unwrap() = error.into();
+                    *revision.write() += 1;
+                    return;
+                }
+                if evt.key() == Key::Enter {
+                    evt.prevent_default();
+                }
                 if let Some(field) = session.close_field() {
                     oncommit.call(field);
                 }
@@ -813,9 +846,9 @@ pub(super) fn Field(
             _ => {}
         }
     };
-    let name = label.clone();
     if multiline {
-        rsx!(if let Some(name) = name.clone() { span { class: "a11y", "{name}" } } textarea {
+        rsx!(textarea {
+            aria_label: label.clone(),
             class: "{class} field",
             style,
             value: draft.clone(),
@@ -825,7 +858,8 @@ pub(super) fn Field(
             "{draft}"
         })
     } else {
-        rsx!(if let Some(name) = name.clone() { span { class: "a11y", "{name}" } } input {
+        rsx!(input {
+            aria_label: label.clone(),
             class: "{class} field",
             style,
             value: draft,

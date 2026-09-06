@@ -15,7 +15,6 @@ pub(super) enum CreateItem {
     Text,
     Rectangle,
     Bezier,
-    Mask,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]

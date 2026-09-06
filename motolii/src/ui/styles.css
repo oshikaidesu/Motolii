@@ -408,7 +408,7 @@ body {
 }
 
 .rcount {
-    height: var(--row);
+    min-height: var(--row);
     flex: 0 0 auto;
     display: flex;
     align-items: center;
@@ -1389,6 +1389,30 @@ body {
     text-overflow: ellipsis;
 }
 
+.clip-mark {
+    display: block;
+    position: relative;
+    width: calc(8 * var(--s) * 1px);
+    height: calc(7 * var(--s) * 1px);
+    border-left: var(--line) solid currentColor;
+    border-bottom: var(--line) solid currentColor;
+}
+
+.clip-tip {
+    position: absolute;
+    right: 0;
+    bottom: calc(-2 * var(--s) * 1px);
+    width: calc(4 * var(--s) * 1px);
+    height: calc(4 * var(--s) * 1px);
+    border-right: var(--line) solid currentColor;
+    border-top: var(--line) solid currentColor;
+    transform: rotate(45deg);
+}
+
+.lrow.clipped .lsurface {
+    padding-left: calc(12 * var(--s) * 1px);
+}
+
 .twirl {
     display: flex;
     align-items: center;
@@ -1839,6 +1863,30 @@ body {
     display: flex;
     flex-direction: column;
     min-width: calc(260 * var(--s) * 1px);
+}
+
+.settings-sheet .prow {
+    grid-template-columns: calc(76 * var(--s) * 1px) minmax(0, 1fr);
+    height: auto;
+    min-height: var(--row);
+    padding-top: var(--sp1);
+    padding-bottom: var(--sp1);
+}
+
+.settings-sheet .prow > .zoomctl {
+    margin-left: 0;
+    flex-wrap: wrap;
+    min-width: 0;
+}
+
+.settings-sheet .prow > .v {
+    min-width: 0;
+    height: auto;
+    min-height: calc(var(--row) - 4 * var(--s) * 1px);
+    white-space: normal;
+    overflow-wrap: anywhere;
+    justify-content: flex-start;
+    text-align: left;
 }
 
 /* anchor の升は 3 段あるので、1 段の行の高さに押し込まない。 */

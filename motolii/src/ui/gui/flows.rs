@@ -236,8 +236,8 @@ fn a_number_field_starts_from_the_current_value() {
         gui.h
             .attr("input.typing", "value")
             .unwrap_or_default()
-            .trim(),
-        shown.trim()
+            .trim().parse::<f64>().unwrap(),
+        shown.trim().parse::<f64>().unwrap()
     );
     enter(&mut gui);
     assert_eq!(
@@ -1543,4 +1543,156 @@ fn shift_tab_goes_back_and_a_closed_field_returns_focus() {
         "focus fell back to the root after closing the field"
     );
     let _ = cell;
+}
+
+#[test]
+fn tab_commits_number_and_shift_tab_returns_to_previous_value() {
+    let mut gui = Gui::open();
+    let row = gui.center_of(".lsurface", 1);
+    gui.click(row.0, row.1);
+    let layer = gui.session.selection.get().expect("selected layer");
+    let position_row = gui
+        .texts(".prow .n")
+        .iter()
+        .position(|label| label == "Position")
+        .expect("Position row");
+    let cell_at = |gui: &Gui, axis: usize| {
+        gui.h.base().query_selector_all(".prow .v").unwrap()[position_row * 3 + axis]
+    };
+    let x = cell_at(&gui, 0);
+    gui.h.base_mut().set_focus_to(x);
+    enter(&mut gui);
+    assert_eq!(gui.count("input.field"), 1);
+    type_chars(&mut gui, "120");
+    gui.key(keyboard_types::Key::Tab, keyboard_types::Modifiers::empty());
+    assert_eq!(gui.count("input.field"), 0, "Tab left the draft open");
+    assert!(gui.session.field().is_none());
+    assert_eq!(
+        gui.h.base().get_focussed_node_id(),
+        Some(cell_at(&gui, 1)),
+        "Tab did not focus the next value"
+    );
+
+    enter(&mut gui);
+    assert_eq!(gui.count("input.field"), 1);
+    type_chars(&mut gui, "80");
+    gui.key(keyboard_types::Key::Tab, keyboard_types::Modifiers::SHIFT);
+    assert_eq!(gui.count("input.field"), 0);
+    assert_eq!(
+        gui.h.base().get_focussed_node_id(),
+        Some(cell_at(&gui, 0)),
+        "Shift+Tab did not focus the previous value"
+    );
+    let property = crate::doc::store::PropertyId::new(crate::doc::store::property::POSITION)
+        .unwrap();
+    let at = gui.session.clock.current_time();
+    assert_eq!(
+        gui.session.doc.lock().unwrap().view().value_at(layer, &property, at).unwrap(),
+        Some(crate::doc::eval::Value::Vec2([120.0, 80.0]))
+    );
+    enter(&mut gui);
+    type_chars(&mut gui, "90");
+    enter(&mut gui);
+    assert_eq!(
+        gui.session.doc.lock().unwrap().view().value_at(layer, &property, at).unwrap(),
+        Some(crate::doc::eval::Value::Vec2([90.0, 80.0])),
+        "typing after Shift+Tab returned to the previous field"
+    );
+}
+
+fn invalid_field_can_be_corrected(gui: &mut Gui, invalid: &str, valid: &str) {
+    let revision = gui.session.doc.lock().unwrap().revision();
+    let history = history_back(gui);
+    type_chars(gui, invalid);
+    let selected = gui.session.selection.all();
+    let outside = gui.center_of(".lsurface", 0);
+    gui.click(outside.0, outside.1);
+    assert_eq!(gui.session.selection.all(), selected, "invalid draft allowed a different selection");
+    assert_eq!(gui.session.field().unwrap().draft, invalid, "outside click discarded the draft");
+    gui.context_click(outside.0, outside.1);
+    assert_eq!(gui.session.selection.all(), selected, "invalid draft allowed a context selection");
+    assert_eq!(gui.session.field().unwrap().draft, invalid);
+    for (key, mods) in [
+        (keyboard_types::Key::Enter, keyboard_types::Modifiers::empty()),
+        (keyboard_types::Key::Tab, keyboard_types::Modifiers::empty()),
+        (keyboard_types::Key::Tab, keyboard_types::Modifiers::SHIFT),
+    ] {
+        gui.key(key, mods);
+        assert_eq!(gui.count("input.field"), 1, "invalid draft was closed");
+        assert_eq!(gui.session.field().unwrap().draft, invalid);
+        assert_eq!(
+            gui.h.base().get_focussed_node_id(),
+            gui.h.base().query_selector("input.field").ok().flatten(),
+            "invalid draft lost focus"
+        );
+        assert_eq!(gui.session.doc.lock().unwrap().revision(), revision);
+        assert_eq!(history_back(gui), history);
+    }
+    gui.key(
+        keyboard_types::Key::Character("a".into()),
+        keyboard_types::Modifiers::SUPER,
+    );
+    type_chars(gui, valid);
+    assert!(gui.session.project_notice.lock().unwrap().is_empty(), "corrected input kept its validation error");
+    enter(gui);
+    assert!(gui.session.field().is_none());
+    assert_eq!(gui.count("input.field"), 0);
+    assert_ne!(gui.session.doc.lock().unwrap().revision(), revision);
+    assert_eq!(history_back(gui), history + 1);
+}
+
+fn escape_discards_invalid_field(gui: &mut Gui, invalid: &str) {
+    let revision = gui.session.doc.lock().unwrap().revision();
+    let history = history_back(gui);
+    type_chars(gui, invalid);
+    enter(gui);
+    assert!(gui.session.field().is_some());
+    gui.key(keyboard_types::Key::Escape, keyboard_types::Modifiers::empty());
+    assert!(gui.session.field().is_none());
+    assert_eq!(gui.count("input.field"), 0);
+    assert_eq!(gui.session.doc.lock().unwrap().revision(), revision);
+    assert_eq!(history_back(gui), history);
+}
+
+#[test]
+fn invalid_number_stays_editable_until_corrected_or_cancelled() {
+    let mut gui = Gui::open();
+    let row = gui.center_of(".lsurface", 1);
+    gui.click(row.0, row.1);
+    gui.focus(".prow .v");
+    enter(&mut gui);
+    assert!(matches!(gui.session.field().unwrap().at, crate::ui::session::FieldAt::Number { .. }));
+    invalid_field_can_be_corrected(&mut gui, "12x", "123.5");
+    gui.focus(".prow .v");
+    enter(&mut gui);
+    escape_discards_invalid_field(&mut gui, "NaN");
+}
+
+#[test]
+fn invalid_hex_stays_editable_until_corrected_or_cancelled() {
+    let mut gui = Gui::open();
+    for i in 1..gui.count(".lsurface") {
+        let row = gui.center_of(".lsurface", i);
+        gui.click(row.0, row.1);
+        if gui.count(".prow.color") > 0 {
+            break;
+        }
+    }
+    gui.reveal(".prow.color .glyph", 0);
+    let picker = gui.center_of(".prow.color .glyph", 0);
+    gui.click(picker.0, picker.1);
+    let colors = gui.center_of("#dock-tab-Colors", 0);
+    gui.click(colors.0, colors.1);
+    let hex = gui.center_of(".color-now .hex", 0);
+    gui.click(hex.0, hex.1);
+    invalid_field_can_be_corrected(&mut gui, "#gg0000", "#00ff00");
+    let slot = match gui.session.live_focus() {
+        Some(crate::ui::session::Focus::Color(slot)) => slot,
+        other => panic!("color focus lost: {other:?}"),
+    };
+    let color = crate::ui::color::read_color(&gui.session.doc, &slot).unwrap();
+    assert_eq!(&color[..3], &[0.0, 1.0, 0.0]);
+    let hex = gui.center_of(".color-now .hex", 0);
+    gui.click(hex.0, hex.1);
+    escape_discards_invalid_field(&mut gui, "#12");
 }

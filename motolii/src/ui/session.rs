@@ -667,7 +667,7 @@ pub(super) struct Session {
     pub selection: Selection,
     /// 選択中の層の箱の大きさ。Stage が毎フレーム書き、ユーティリティが読む
     /// (箱は engine が形/文字から測るので、Document だけでは出せない)。
-    pub selected_size: Arc<Mutex<Option<[f32; 2]>>>,
+    pub selected_bounds: Arc<Mutex<Option<crate::render::media::SpatialBounds>>>,
     /// Stage のギズモが 3D(向きと奥行き)を掴む側に居るか。
     /// タイムラインの盤面へ積む口。盤面は置き場を移すと作り直されるので、
     /// 口は窓の側で持つ。
@@ -811,7 +811,7 @@ pub(super) enum FieldAt {
     Content(LayerId),
     Name(LayerId),
     /// 色の hex(Colors の輪の下)。
-    Hex(ColorSlot),
+    Hex(ColorSlot, crate::ui::dock::Panel),
 }
 
 /// タイムラインで選んだキー。区間は「このキーから次のキーまで」。
@@ -841,7 +841,7 @@ impl Session {
             clock,
             scale: Arc::new(UiScale::new(100)),
             selection: Selection::with_keys(&selected_keys),
-            selected_size: Arc::new(Mutex::new(None)),
+            selected_bounds: Arc::new(Mutex::new(None)),
             timeline_tx,
             timeline_rx: std::rc::Rc::new(timeline_rx),
             ui: Arc::new(ui),
@@ -907,7 +907,7 @@ impl Session {
         *self.scrub.lock().unwrap() = None;
         *self.panel_ask.lock().unwrap() = None;
         self.selected_keys.lock().unwrap().clear();
-        *self.selected_size.lock().unwrap() = None;
+        *self.selected_bounds.lock().unwrap() = None;
         *self.curve_clip.lock().unwrap() = None;
         *self.view_request.lock().unwrap() = None;
         self.imports.lock().unwrap().clear();
@@ -1035,7 +1035,7 @@ impl Session {
             FieldAt::Number { layer, .. } | FieldAt::Content(layer) | FieldAt::Name(layer) => {
                 !live.contains(&layer)
             }
-            FieldAt::Hex(ref slot) => !live.contains(&slot.layer()),
+            FieldAt::Hex(ref slot, _) => !live.contains(&slot.layer()),
             FieldAt::Note(_) => false,
         });
         if field_dead {
@@ -1283,6 +1283,32 @@ mod selection_tests {
 mod project_tests {
     use super::*;
 
+    #[test]
+    fn rejected_edit_is_published_without_changing_document_history() {
+        use dioxus_native::prelude::*;
+        use crate::doc::store::{Intent, LayerAttrsPatch};
+        let loaded = crate::ui::fixture::load_fixture();
+        let session = Session::new(loaded.doc, loaded.duration_sec, loaded.ui);
+        let mut doc = session.doc.lock().unwrap();
+        let layer = doc.view().layers()[0];
+        doc.apply(Intent::SetAttrs {
+            layer,
+            patch: LayerAttrsPatch { locked: Some(true), ..Default::default() },
+        }).unwrap();
+        let before = doc.revision();
+        let result = doc.apply(Intent::RemoveLayer(layer));
+        let reason = result.as_ref().unwrap_err().to_string();
+        assert_eq!(doc.revision(), before);
+        drop(doc);
+        let dom = VirtualDom::new(|| rsx! { div {} });
+        dom.in_scope(ScopeId::ROOT, || {
+            let revision = Signal::new(0u32);
+            noted(&session.project_notice, result, revision);
+            assert_eq!(*revision.peek(), 1, "the failure must wake the visible status");
+            assert!(session.project_notice.lock().unwrap().contains(&reason));
+        });
+    }
+
     /// Undo で消えた層を名指す手は全部手放す。
     #[test]
     fn undo_forgets_selection_focus_and_field_of_a_dead_layer() {
@@ -1338,15 +1364,14 @@ mod project_tests {
     }
 }
 
-/// 書き込みの結果を 1 箇所で扱う: 通れば revision を上げ、通らなければ PROBE に残す。
-/// 同じ 4 行が 20 箇所に在った(Rust 初学者の会議)。
 pub(super) fn noted<T>(
+    notice: &Arc<Mutex<String>>,
     result: Result<T, crate::doc::store::StoreError>,
     mut revision: dioxus_native::prelude::Signal<u32>,
 ) {
     use dioxus_native::prelude::WritableExt;
-    match result {
-        Ok(_) => *revision.write() += 1,
-        Err(e) => println!("PROBE room=write verdict=apply-error {e}"),
+    if let Err(error) = result {
+        *notice.lock().unwrap() = format!("Edit failed: {error}");
     }
+    *revision.write() += 1;
 }

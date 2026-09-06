@@ -54,7 +54,7 @@ pub(super) fn transport(
 #[allow(clippy::too_many_arguments)]
 pub(super) fn timeline_shell(
     doc: Arc<Mutex<Document>>,
-    mut attrs: Signal<Vec<(bool, bool, bool)>>,
+    attrs: Signal<Vec<(bool, bool, bool)>>,
     layer_rows_data: &[LayerRow],
     layer_rows_sig: Signal<Vec<LayerRow>>,
     surface: Element,
@@ -84,7 +84,6 @@ pub(super) fn timeline_shell(
         let doc = doc.clone();
         let doc_twirl = doc.clone();
         let timeline_tx_row = timeline_tx.clone();
-        let mut layer_rows_sig = layer_rows_sig;
         let selection = selection.clone();
         let ordered_layers = ordered_layers.clone();
         let keyboard_order = ordered_layers.clone();
@@ -134,13 +133,10 @@ pub(super) fn timeline_shell(
                             .and_then(|(intents, _)| doc.apply_all(intents));
                         match result {
                             Ok(()) => {
-                                let rows = crate::ui::fixture::layer_rows_from_doc(&doc);
-                                let canvas = crate::ui::fixture::canvas_rows_from_doc(&doc);
                                 drop(doc);
-                                attrs.set(rows.iter().map(|row| (row.hidden, row.solo, row.locked)).collect());
-                                layer_rows_sig.set(rows);
-                                let _ = timeline_tx.send(TimelineMsg::SetRows(canvas));
-                                *revision.write() += 1;
+                                crate::ui::app::refresh_layer_projection(
+                                    &session.doc, layer_rows_sig, attrs, &timeline_tx, revision,
+                                );
                             }
                             Err(error) => *session.project_notice.lock().unwrap() = error.to_string(),
                         }
@@ -170,10 +166,23 @@ pub(super) fn timeline_shell(
         if let Some(name) = row.prop.clone() {
             return rsx!(
                 div { class: "lrow", style: "{indent}", oncontextmenu: context,
+                onclick: move |evt| evt.stop_propagation(),
                     span { class: "lprop", "{name}" }
                 }
             );
         }
+        let (clipped, clip_rejection, clip_hint) = {
+            let document = doc.lock().unwrap();
+            let view = document.view();
+            let clipped = layer.is_some_and(|id| view.attrs(id).ok().flatten().is_some_and(|a| a.clip_to_below));
+            let rejection = layer.and_then(|id| crate::ui::clipping::rejection(&view, id));
+            let base = layer.and_then(|id| view.clipping_base(id).ok().flatten())
+                .and_then(|id| view.attrs(id).ok().flatten()).map(|a| a.name);
+            let hint = if clipped { "Release clipping mask".to_owned() }
+                else { rejection.clone().unwrap_or_else(|| format!("Clip to layer below: {}", base.unwrap_or_default())) };
+            (clipped, rejection, hint)
+        };
+        let clip_session = session.clone();
         let expanded = row.expanded;
         let editing_name = layer.is_some_and(|l| session.field_at(&FieldAt::Name(l)).is_some());
         let opener = session.clone();
@@ -181,7 +190,8 @@ pub(super) fn timeline_shell(
         let unchanged = row.name.clone();
         let doc_rename = doc.clone();
         rsx!(
-            div { class: "lrow", style: "{indent}", oncontextmenu: context,
+            div { class: if clipped { "lrow clipped" } else { "lrow" }, style: "{indent}", oncontextmenu: context,
+                onclick: move |evt| evt.stop_propagation(),
                 SemanticButton {
                     class: "twirl",
                     selected: expanded,
@@ -194,14 +204,9 @@ pub(super) fn timeline_shell(
                                 Some(l) => crate::ui::fixture::toggle_expanded(l),
                                 None => crate::ui::fixture::toggle_camera_open(),
                             }
-                            let d = doc.lock().unwrap();
-                            let rows = crate::ui::fixture::layer_rows_from_doc(&d);
-                            let canvas = crate::ui::fixture::canvas_rows_from_doc(&d);
-                            drop(d);
-                            attrs.set(rows.iter().map(|r| (r.hidden, r.solo, r.locked)).collect());
-                            layer_rows_sig.set(rows);
-                            let _ = timeline_tx.send(TimelineMsg::SetRows(canvas));
-                            *revision.write() += 1;
+                            crate::ui::app::refresh_layer_projection(
+                                &doc, layer_rows_sig, attrs, &timeline_tx, revision,
+                            );
                         }
                     },
                     if expanded { "▾" } else { "▸" }
@@ -263,6 +268,11 @@ pub(super) fn timeline_shell(
                                         *revision.write() += 1;
                                     }
                                     Key::Character(c) if c == " " => {
+                                        if selection.contains(l)
+                                            && !evt.modifiers().contains(Modifiers::SHIFT)
+                                            && !crate::ui::keymap::primary_modifier(evt.modifiers()) {
+                                            return;
+                                        }
                                         evt.stop_propagation();
                                         evt.prevent_default();
                                         if evt.modifiers().contains(Modifiers::SHIFT) {
@@ -303,6 +313,28 @@ pub(super) fn timeline_shell(
                 }
                 if layer.is_some() {
                     div { class: "lctrl",
+                        SemanticButton {
+                            class: if clipped { "glyph clip-toggle lit" } else { "glyph clip-toggle" },
+                            selected: clipped,
+                            disabled: clip_rejection.is_some(),
+                            aria_label: if clipped { "Release clipping mask" } else { "Clip to layer below" },
+                            title: "{clip_hint}",
+                            onclick: move |_| {
+                                let Some(layer) = layer else { return };
+                                let result = crate::ui::clipping::toggle(&mut clip_session.doc.lock().unwrap(), layer);
+                                match result {
+                                    Ok(()) => crate::ui::app::refresh_layer_projection(
+                                        &clip_session.doc, layer_rows_sig, attrs,
+                                        &clip_session.timeline_tx, revision,
+                                    ),
+                                    Err(error) => {
+                                        *clip_session.project_notice.lock().unwrap() = error.to_string();
+                                        *revision.write() += 1;
+                                    }
+                                }
+                            },
+                            span { class: "clip-mark", aria_hidden: "true", span { class: "clip-tip" } }
+                        }
                         {glyph(0, "M")}
                         {glyph(1, "S")}
                         {glyph(2, "L")}
@@ -326,11 +358,21 @@ pub(super) fn timeline_shell(
         )
     });
 
+    let blank_session = session.clone();
     rsx!(
         div { id: "timelineshell",
             div { id: "timeline",
                 div {
                     id: "layers",
+                    onclick: move |evt: MouseEvent| {
+                        if evt.modifiers().contains(Modifiers::SHIFT)
+                            || crate::ui::keymap::primary_modifier(evt.modifiers()) {
+                            return;
+                        }
+                        blank_session.selection.clear();
+                        selected.set(None);
+                        *revision.write() += 1;
+                    },
                     oncontextmenu: {
                         let session = session.clone();
                         move |evt| {
@@ -357,7 +399,7 @@ pub(super) fn timeline_shell(
                         evt.prevent_default();
                         let _ = timeline_tx.send(TimelineMsg::ScrollBy(dy));
                     },
-                    div { class: "lhead", "Layer" }
+                    div { class: "lhead", onclick: move |evt| evt.stop_propagation(), "Layer" }
                     div {
                         style: "transform: translateY(-{scroll_y()}px);",
                         div { style: "height: {above_px}px;" }

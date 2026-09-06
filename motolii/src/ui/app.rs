@@ -501,7 +501,8 @@ pub fn detached() -> Element {
                         return;
                     }
                     if session.field().is_some() || crate::ui::keymap::is_typing() { return; }
-                    if crate::ui::keymap::is_on_control() && matches!(evt.key(), Key::Enter) { return; }
+                    if crate::ui::keymap::is_on_control()
+                        && (evt.key() == Key::Enter || evt.key() == Key::Character(" ".into())) { return; }
                     crate::ui::keymap::note_key_down(&evt.key());
                     let mods = evt.modifiers();
                     if let Some(intent) = crate::ui::keymap::lookup_held(&evt.key(), evt.code(),
@@ -952,7 +953,7 @@ pub fn app() -> Element {
         let sizer = session.clone();
         use_effect(move || {
             let _ = (panes.selected)();
-            *sizer.selected_size.lock().unwrap() = None;
+            *sizer.selected_bounds.lock().unwrap() = None;
             // Selection clears shared key identities on a layer-domain change.
             // Retained Timeline row/key indices must follow on its next paint.
             if sizer.selected_keys.lock().unwrap().is_empty() {

@@ -273,21 +273,6 @@ impl Host {
     }
 }
 
-fn primary_mouse_press(
-    event: &WindowEvent,
-) -> Option<dioxus_native::winit::dpi::PhysicalPosition<f64>> {
-    match event {
-        WindowEvent::PointerButton {
-            state: ElementState::Pressed,
-            button: ButtonSource::Mouse(MouseButton::Left),
-            primary: true,
-            position,
-            ..
-        } => Some(*position),
-        _ => None,
-    }
-}
-
 /// blitz-shell は IME を能力ゼロで有効にする(`ImeCapabilities::new()`)。winit はその場合、
 /// 変換候補の窓を出す位置が無いとして候補を隠す — 日本語の打ち心地が悪い根。欄が居る間は
 /// host が `cursor_area` 付きで有効にし直し、候補を欄の箱の位置へ置く。
@@ -1069,14 +1054,22 @@ impl Windows {
                 }
             }
         }
-        if let Some(position) = primary_mouse_press(&event) {
-            if let Some(view) = self.inner.windows.get_mut(&window_id) {
-                let coords = view.pointer_coords(position);
-                commit_field_outside(
-                    view.downcast_doc_mut::<DioxusDocument>(),
-                    coords.client_x,
-                    coords.client_y,
-                );
+        if let WindowEvent::PointerButton { state, position, .. } = &event {
+            let invalid_field = self.session.field().as_ref()
+                .and_then(crate::ui::semantic_menu::field_error).is_some();
+            if *state == ElementState::Pressed || invalid_field {
+                if let Some(view) = self.inner.windows.get_mut(&window_id) {
+                    let coords = view.pointer_coords(*position);
+                    if commit_field_outside(
+                        view.downcast_doc_mut::<DioxusDocument>(),
+                        &self.session,
+                        coords.client_x,
+                        coords.client_y,
+                    ) {
+                        view.request_redraw();
+                        return;
+                    }
+                }
             }
         }
         if let WindowEvent::PointerMoved { position, .. } = &event {
@@ -1269,6 +1262,7 @@ impl Windows {
             return;
         }
         let present = self.inner.windows.values_mut().any(|view| {
+            view.poll();
             view.downcast_doc_mut::<DioxusDocument>()
                 .inner()
                 .query_selector(FIELD)

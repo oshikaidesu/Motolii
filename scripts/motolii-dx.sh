@@ -4,7 +4,6 @@ repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 case "${1:-serve}" in
   serve)
     shift 2>/dev/null || true
-    "$repo_root/scripts/check-build-loop.sh"
     exec python3 "$repo_root/scripts/reload-runtime.py" serve "$@"
     ;;
   doctor)
