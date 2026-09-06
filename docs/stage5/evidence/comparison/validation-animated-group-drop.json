@@ -1,0 +1,12 @@
+{
+  "animatedParent": 6,
+  "staticChildDrop": true,
+  "animatedChildDrop": true,
+  "keyTimingAndInterpolationPreserved": true,
+  "constantPositionDelta": [
+    397.7320251464844,
+    89.56101226806643
+  ],
+  "undo": true,
+  "savedFixtureModified": false
+}

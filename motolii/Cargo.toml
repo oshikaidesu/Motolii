@@ -1,6 +1,4 @@
-# Motolii の家は5つ — doc・render・ui・vism・tests。build も家ごと。
-# crates/motolii-doc(契約)→ crates/motolii-render(描く側、vism の inventory も持つ)→ この package(ui、hotpatch が追う tip)。
-# crates/motolii-road は doc+render を 1 本の dylib に 1 回だけ link する道路(開発の feature `dynamic`)。
+# Legacy Dioxus/Blitz host. Current Flutter UI is ui/; Cargo defaults to ui/native at repository root.
 [package]
 name = "motolii"
 version = "0.0.0"
@@ -52,86 +50,5 @@ tempfile = { workspace = true }
 # 窓を開けずに窓を触る。上流の器具を借りる。
 blitz-test-harness = { git = "https://github.com/DioxusLabs/blitz", rev = "64eb27853aa2672486b7edf825fb044be78c9db3" }
 
-[workspace]
-members = ["crates/motolii-doc", "crates/motolii-render", "crates/motolii-road"]
-
-[workspace.dependencies]
-# 識別子では使わないが、custom-widget の feature を立てるために要る(Stage・Timeline の object 描画)。
-blitz-paint = { git = "https://github.com/DioxusLabs/blitz", rev = "64eb27853aa2672486b7edf825fb044be78c9db3", default-features = false, features = ["custom-widget"] }
-dioxus-native = { git = "https://github.com/DioxusLabs/blitz", rev = "64eb27853aa2672486b7edf825fb044be78c9db3", default-features = false, features = ["prelude", "system-fonts", "vello", "complex-scripts", "hot-reload", "net", "accessibility"] }
-dioxus-devtools = "0.7.10"
-dioxus-asset-resolver = { version = "=0.7.10", features = ["native"] }
-dioxus-workbench = "0.1.0"
-dioxus-dnd = { version = "3.1.0", default-features = false }
-blitz-dom = { git = "https://github.com/DioxusLabs/blitz", rev = "64eb27853aa2672486b7edf825fb044be78c9db3", default-features = false, features = ["custom-widget", "autofocus"] }
-blitz-traits = { git = "https://github.com/DioxusLabs/blitz", rev = "64eb27853aa2672486b7edf825fb044be78c9db3", default-features = false }
-blitz-shell = { git = "https://github.com/DioxusLabs/blitz", rev = "64eb27853aa2672486b7edf825fb044be78c9db3", default-features = false, features = ["data-uri", "custom-widget", "clipboard"] }
-keyboard-types = "0.7"
-anyrender = "0.13"
-tobj = "4"
-gltf = "1.4"
-stl_io = "0.11.0"
-smallvec = "1"
-wgpu_context = "0.9"
-wgpu = "29"
-peniko = "0.6"
-re_renderer = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14", default-features = false, features = ["import-gltf", "import-obj", "import-stl"] }
-re_log = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14", features = ["setup"] }
-macaw = "0.30"
-glam = "0.30"
-image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
-base64 = "0.22"
-ffmpeg-sidecar = "2.5"
-rfd = "0.17"
-re_video = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14" }
-naga = { version = "29.0", default-features = false, features = ["glsl-in", "wgsl-out"] }
-pollster = "0.4"
-re_importer = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14", default-features = false }
-re_sdk_types = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14", default-features = false }
-re_types_core = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14" }
-serde = { version = "1", features = ["derive"] }
-arrow = { version = "58.3", default-features = false }
-sha2 = "0.10"
-proptest = "1"
-re_byte_size = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14" }
-re_chunk = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14" }
-re_chunk_store = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14" }
-re_build_info = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14" }
-re_entity_db = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14" }
-re_log_encoding = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14", features = ["encoder", "decoder"] }
-re_log_types = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14" }
-re_query = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14" }
-tiny-skia = { version = "0.11", default-features = false, features = ["std", "simd"] }
-cosmic-text = "0.19"
-symphonia = { version = "0.6", default-features = false, features = ["aac", "aiff", "alac", "flac", "isomp4", "mp1", "mp2", "mp3", "ogg", "pcm", "vorbis", "wav"] }
-rubato = "0.16"
-cpal = "0.18"
-rtrb = "0.4"
-waveform-data = "=0.1.1"
-serde_json = "1"
-thiserror = "2"
-quick_cache = "0.7.0"
-tempfile = "3"
-re_build_tools = { git = "https://github.com/oshikaidesu/rerun", rev = "346a0b3ba93d65924730cd7e76abb357068abb14" }
-
-[workspace.lints.rust]
-unreachable_pub = "warn"
-
-# 「何か変」を赤緑へ翻訳する。閾値は clippy.toml(借り物)。まず warn、既存は漸進で直す(ironclaw と同じ運用)。
-[workspace.lints.clippy]
-cognitive_complexity = "warn"
-too_many_lines = "warn"
-too_many_arguments = "warn"
-type_complexity = "warn"
-
 [lints]
 workspace = true
-
-
-# 16GB機: debug情報を削り、依存(stylo/vello/rerun)だけ最適化して窓を実用速度にする。
-[profile.dev]
-debug = "line-tables-only"
-
-[profile.dev.package."*"]
-opt-level = 2
-debug = false

@@ -1,0 +1,192 @@
+{
+  "status": "current-editor-owner-with-historical-provenance",
+  "files": [
+    {
+      "source_sha256": "28feadb6725c28085efafebb851b8ca2eb5e4a7f3736e22741afa746081c4826",
+      "current": "motolii/ui/native/src/editor/blend_preview.rs",
+      "owner": "editor",
+      "historicalOrigin": "motolii/src/ui/blend_preview.rs",
+      "historical_adapted_sha256": "5e0290a74d6313da829b1c5c21885f8dadc4956fe9bd396a58f4c0f5f19727f0",
+      "current_sha256": "5e0290a74d6313da829b1c5c21885f8dadc4956fe9bd396a58f4c0f5f19727f0"
+    },
+    {
+      "source_sha256": "362c7f343f7dd053809ed4afa17e302fe40675b3a9f28d61912a23c2416df180",
+      "current": "motolii/ui/native/src/editor/clipboard.rs",
+      "owner": "editor",
+      "historicalOrigin": "motolii/src/ui/clipboard.rs",
+      "historical_adapted_sha256": "56b57ec96aa89a1675d6528960e36042e37723a7a5a92af0deb299182e5f8fdd",
+      "current_sha256": "d15a4d417dbe621f28e54045c608f3bff0343e56e7a2a4e37826a5ec12ebbb09"
+    },
+    {
+      "source_sha256": "4103e23be770d99af6b71bc79ff3ef9471f04ce8185ec803f9c090a71d93d68d",
+      "current": "motolii/ui/native/src/editor/color.rs",
+      "owner": "editor",
+      "historicalOrigin": "motolii/src/ui/color.rs",
+      "historical_adapted_sha256": "64508bb7a41cd85984a4b17b0e8c1fbcd59a051c321e59fb2fb8f1e045865acb",
+      "current_sha256": "0080d1fe278c04b44f1d657372fb3d2a55d73769bf95cc7588443a50280a8105"
+    },
+    {
+      "source_sha256": "1a325500fe903feb49f883d9dd83fc0b7247cea0f45e4f977f50770ca82e211a",
+      "current": "motolii/ui/native/src/editor/create.rs",
+      "owner": "editor",
+      "historicalOrigin": "motolii/src/ui/browser.rs",
+      "historical_adapted_sha256": "1568b4026194b895d2c412591919260ea25c06cdd84477b9dff7b2724f639ee8",
+      "current_sha256": "fe302dec1eb4507b4c1a963b91f5cac73214a1777154f7181dcf64888027b7bc"
+    },
+    {
+      "source_sha256": "d8d7836f1e311b0df3da0eb55cc85cd8f3555ae4bb47d14eb6982d5d48e31e0a",
+      "current": "motolii/ui/native/src/editor/ease.rs",
+      "owner": "editor",
+      "historicalOrigin": "motolii/src/ui/ease.rs",
+      "historical_adapted_sha256": "4ae6c08dbc4342a28839719d1d9d14839a65de2c6b3d8a4c1c462c8df509fed1",
+      "current_sha256": "71f23928d0b844aa1e092deb60151509b025c5027340db64d1936d0cac5551cb"
+    },
+    {
+      "source_sha256": "ef50644f727d8aba9b228d428261d15b21bc12ea5c66773cf8538ef94c7ae5ae",
+      "current": "motolii/ui/native/src/editor/ease_kinds.rs",
+      "owner": "editor",
+      "historicalOrigin": "motolii/src/ui/ease_model.rs",
+      "historical_adapted_sha256": "ff11de361c58527df980be065a9b68ea7be29d52c79fd9f5410bf471ef579216",
+      "current_sha256": "ff11de361c58527df980be065a9b68ea7be29d52c79fd9f5410bf471ef579216"
+    },
+    {
+      "source_sha256": "d1093265b45f73f0ba879a1fafc05feee8749c4f4c6b6da3380ba2d76c38ee86",
+      "current": "motolii/ui/native/src/editor/fixture.rs",
+      "owner": "editor",
+      "historicalOrigin": "motolii/src/ui/fixture.rs",
+      "historical_adapted_sha256": "4cfe663d8c105d4ef999a971eaaf7c41d3c150a0b5c05e3811d042e49b56a11a",
+      "current_sha256": "ce658abd3c92fd0da284c94e8e3111cc188b96c43f169a894bda9f14db3f5449"
+    },
+    {
+      "source_sha256": "3d23012cb97ed1436b4262d38a7e4058306519f460c8950b720a2dc39eabbb03",
+      "current": "motolii/ui/native/src/editor/functions/atom.rs",
+      "owner": "editor",
+      "historicalOrigin": "motolii/src/ui/functions/atom.rs",
+      "historical_adapted_sha256": "3d23012cb97ed1436b4262d38a7e4058306519f460c8950b720a2dc39eabbb03",
+      "current_sha256": "3d23012cb97ed1436b4262d38a7e4058306519f460c8950b720a2dc39eabbb03"
+    },
+    {
+      "source_sha256": "a6c290005a6f33385c4e471d3b140845935166e659c369c4c39aff8064e0f6e2",
+      "current": "motolii/ui/native/src/editor/functions/compose.rs",
+      "owner": "editor",
+      "historicalOrigin": "motolii/src/ui/functions/compose.rs",
+      "historical_adapted_sha256": "a6c290005a6f33385c4e471d3b140845935166e659c369c4c39aff8064e0f6e2",
+      "current_sha256": "a6c290005a6f33385c4e471d3b140845935166e659c369c4c39aff8064e0f6e2"
+    },
+    {
+      "source_sha256": "6c6eebfe38378eb18f8ee912ba92bbead5f1d27fe84c1c465432d5efefe07aaa",
+      "current": "motolii/ui/native/src/editor/functions/lens.rs",
+      "owner": "editor",
+      "historicalOrigin": "motolii/src/ui/functions/lens.rs",
+      "historical_adapted_sha256": "6c6eebfe38378eb18f8ee912ba92bbead5f1d27fe84c1c465432d5efefe07aaa",
+      "current_sha256": "6c6eebfe38378eb18f8ee912ba92bbead5f1d27fe84c1c465432d5efefe07aaa"
+    },
+    {
+      "source_sha256": "06290c823ae33ad7084e0f76bd60f57885e19e2b832fde3844688c395e265ab9",
+      "current": "motolii/ui/native/src/editor/functions/mod.rs",
+      "owner": "editor",
+      "historicalOrigin": "motolii/src/ui/functions/mod.rs",
+      "historical_adapted_sha256": "f324f338d7c9670292f3287fab985da227552bc69a62e82f4d14e00d046c7802",
+      "current_sha256": "f324f338d7c9670292f3287fab985da227552bc69a62e82f4d14e00d046c7802"
+    },
+    {
+      "source_sha256": "cd46a95b4b6fe24bd8f34dbaa9f0db20925b23477d6bd4bc999a2d2f2deaad76",
+      "current": "motolii/ui/native/src/editor/functions/placement.rs",
+      "owner": "editor",
+      "historicalOrigin": "motolii/src/ui/functions/placement.rs",
+      "historical_adapted_sha256": "cd46a95b4b6fe24bd8f34dbaa9f0db20925b23477d6bd4bc999a2d2f2deaad76",
+      "current_sha256": "cd46a95b4b6fe24bd8f34dbaa9f0db20925b23477d6bd4bc999a2d2f2deaad76"
+    },
+    {
+      "source_sha256": "b35a8b7360b3b38b72bba648e4400b9c14287502dd7403ccdb571e7a863c8335",
+      "current": "motolii/ui/native/src/editor/functions/read.rs",
+      "owner": "editor",
+      "historicalOrigin": "motolii/src/ui/functions/read.rs",
+      "historical_adapted_sha256": "eb00a221d79df69e9e568e896c71cf13e02ea3cc5d80a3b90789d2ed4563592f",
+      "current_sha256": "ac75795bc5336b29da10d4bbb09168330e20b8d00379ae3236cde5c59233aa27"
+    },
+    {
+      "source_sha256": "5a86047bf25760e45d97b17bd23f950484dfc58b456eb2f1833319244157af17",
+      "current": "motolii/ui/native/src/editor/functions/verb.rs",
+      "owner": "editor",
+      "historicalOrigin": "motolii/src/ui/functions/verb.rs",
+      "historical_adapted_sha256": "6ea5edcff881ba1908ca0774fb411bc35a36dc83b6b82b80235910fde4d0ae2b",
+      "current_sha256": "6ea5edcff881ba1908ca0774fb411bc35a36dc83b6b82b80235910fde4d0ae2b"
+    },
+    {
+      "source_sha256": "ed1b0fbdcdf827636f921f01674d253520308c9182a66a32a3c67034c6bae68c",
+      "current": "motolii/ui/native/src/editor/keymap.rs",
+      "owner": "editor",
+      "historicalOrigin": "motolii/src/ui/contracts.rs",
+      "historical_adapted_sha256": "b8370c66755fef0269b4f47262f652911ffb0355ba11580eb90b3fe4b5ce2ede",
+      "current_sha256": "b8370c66755fef0269b4f47262f652911ffb0355ba11580eb90b3fe4b5ce2ede"
+    },
+    {
+      "source_sha256": "420c1c9d725bb9324c3bc0ef36fdfe6b8de5642cfc8209eb3263851839c52237",
+      "current": "motolii/ui/native/src/editor/mod.rs",
+      "owner": "editor",
+      "historicalOrigin": "motolii/src/ui/mod.rs",
+      "historical_adapted_sha256": "75ab0b1d14f9abb665ca7ca1f8d0940b039857324b15d353b529092d22e49f10",
+      "current_sha256": "5637b5da887a44d10ba6824c8bc54318738ab130ee279557fea4d6c42dcf107a"
+    },
+    {
+      "source_sha256": "d2138e28e33c223cc7531ec2585bc4e485fab924002fda9969af64dfdaf2e8a2",
+      "current": "motolii/ui/native/src/editor/session.rs",
+      "owner": "editor",
+      "historicalOrigin": "motolii/src/ui/session.rs",
+      "historical_adapted_sha256": "c34d8e67d4a69f20f16edb865a90e3df0b682b9758cd1940e9fbc0589aa3380e",
+      "current_sha256": "c34d8e67d4a69f20f16edb865a90e3df0b682b9758cd1940e9fbc0589aa3380e"
+    },
+    {
+      "source_sha256": "a0f016d9ef73fa83baa9d150a96a2acfd4b22d673cf7f8cc569cb617ac199263",
+      "current": "motolii/ui/native/src/editor/stage.rs",
+      "owner": "editor",
+      "historicalOrigin": "motolii/src/ui/stage_widget.rs",
+      "historical_adapted_sha256": "f673641f69578c45fd8461ffc6b808046350e561fdc856b605e969f972de4927",
+      "current_sha256": "47f86a8b3d18c3b9d07615482e0e89b45dcd9f47e1907b683c444ef9becf3540"
+    },
+    {
+      "source_sha256": "5cf7fcc259acf81845b9d33805da24908a9a132920e836067bcba28cdff34a02",
+      "current": "motolii/ui/native/src/editor/text.rs",
+      "owner": "editor",
+      "historicalOrigin": "motolii/src/ui/inspector.rs",
+      "historical_adapted_sha256": "bc03cf7124d94c43593990ce0c03b6b2bbfe6b95be07d299e98efccdcbed96cf",
+      "current_sha256": "bc03cf7124d94c43593990ce0c03b6b2bbfe6b95be07d299e98efccdcbed96cf"
+    },
+    {
+      "source_sha256": "a077c5cda2b5318190af358984bdbebf2326dd64b3739832f971d394b0c7a9f6",
+      "current": "motolii/ui/native/src/editor/thumbnail.rs",
+      "owner": "editor",
+      "historicalOrigin": "motolii/src/ui/thumbnail.rs",
+      "historical_adapted_sha256": "736fb7308c8d18873189616da044ffc6e531c79bf7c83c9a966d1e2968ba8e99",
+      "current_sha256": "736fb7308c8d18873189616da044ffc6e531c79bf7c83c9a966d1e2968ba8e99"
+    },
+    {
+      "source_sha256": "a6244413447133f2e7c00c7064de469ae145e473f3bff15a6f0bda8e95744468",
+      "current": "motolii/ui/native/src/editor/timeline_edit.rs",
+      "owner": "editor",
+      "historicalOrigin": "motolii/src/ui/timeline_edit.rs",
+      "historical_adapted_sha256": "717d021baa3fee6175f2da4d67895b21533ff5eb0d5aad0da0591d60d429cf7b",
+      "current_sha256": "c55114c13c803aad1846a62cb030735e21bf57133f8b238c405b0f1d4dccb52f"
+    },
+    {
+      "source_sha256": "7e53bdb7dfd37b48830ac827ba14ca2cf8c5ac1231bceb96c5c8bbf66723cda4",
+      "current": "motolii/ui/native/src/editor/keyframe_edit.rs",
+      "owner": "editor",
+      "historicalOrigin": "motolii/src/ui/timeline_widget.rs",
+      "historical_adapted_sha256": "13bc12e42a2835264b1634a49cb03e8f6971a9c01bbd0495e368df8249ae9502",
+      "current_sha256": "401204c65ffbacba547fc8c3311d758be6b3e8a82275d462380df1f002845fe0"
+    },
+    {
+      "source_sha256": "a240f6758290de96c97acdae1cfe472cb1cb5cffbfc6f25445a54b67e9760645",
+      "adaptation": "visibility; fingerprint includes Level/Pan/Fade property sources read by existing AudioProgram",
+      "current": "motolii/ui/native/src/editor/playback.rs",
+      "owner": "editor",
+      "historicalOrigin": "motolii/src/ui/playback.rs",
+      "historical_adapted_sha256": "5525104b22d152842bc4c50fcdd20beb9d526dce67b447407e77d8af3ab6411b",
+      "current_sha256": "5525104b22d152842bc4c50fcdd20beb9d526dce67b447407e77d8af3ab6411b"
+    }
+  ],
+  "owner": "motolii/ui/native/src/editor",
+  "historicalPolicy": "Origins are history-only references. Current edits belong to editor; legacy UI synchronization is not required."
+}

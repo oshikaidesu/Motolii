@@ -1,0 +1,17 @@
+[
+  {
+    "file": "validation-parent-ownership.json",
+    "sha256": "5d1fb41754761b74bc559996e96635b795fb1d89a2439023e51c9e37826d1d87",
+    "scope": "Flutter comparison port before Stage 5 import; not a new run"
+  },
+  {
+    "file": "validation-layer-move.json",
+    "sha256": "d5ad987a37d9188aee775ccae4796bf81abf7f84e9db7a0c774265349e5deec6",
+    "scope": "Flutter comparison port before Stage 5 import; not a new run"
+  },
+  {
+    "file": "validation-animated-group-drop.json",
+    "sha256": "439e40f58e205f4d5e29694f55201c897b113c1ec1e906eb6fc15954543d8b27",
+    "scope": "Flutter comparison port before Stage 5 import; not a new run"
+  }
+]

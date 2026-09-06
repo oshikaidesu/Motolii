@@ -25,10 +25,10 @@
 - Independent reviewer:
 - P0 / P1 / reviewer mutation:
 
-- [ ] One ticket, one commit, one contract boundary
+- [ ] The change has a clear, reviewable scope
 - [ ] Base and authority rechecked before implementation
-- [ ] Shared seats have one semantic owner; overlapping PRs are listed
+- [ ] Shared behavior has one owner; overlapping changes are identified
 - [ ] This branch lands through current `main`, not through another feature branch
 - [ ] Actual diff stays within the issue allowlist
 - [ ] Findings outside the contract were not implemented
-- [ ] This PR remains a candidate until the top seat adopts and integrates it
+- [ ] Review and integration follow the repository maintainers and CODEOWNERS

@@ -1,0 +1,15 @@
+{
+  "dartRoot": "motolii/ui/lib",
+  "modules": {
+    "app": {"dependsOn": ["foundation", "input", "workspace", "panels", "session"], "owns": "Application and window lifecycle; OS window orchestration"},
+    "workspace": {"dependsOn": ["foundation"], "owns": "Dock layout, tabs, resize and panel focus"},
+    "input": {"dependsOn": ["session"], "owns": "Global shortcuts and gesture momentum"},
+    "foundation": {"dependsOn": [], "owns": "Theme, controls and text/numeric draft widgets"},
+    "panels": {"dependsOn": ["foundation", "session", "input"], "owns": "Panel-specific presentation and intent requests"},
+    "session": {"dependsOn": ["bridge"], "owns": "Authoritative snapshot reception, playback scheduling and command queue"},
+    "bridge": {"dependsOn": [], "owns": "Native transport and typed operation protocol"}
+  },
+  "nativeEditor": "motolii/ui/native/src/editor",
+  "legacyEditor": "motolii/src/ui",
+  "legacyPolicy": "historical reference only; changes target nativeEditor, no dual maintenance"
+}

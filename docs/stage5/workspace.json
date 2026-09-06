@@ -1,0 +1,99 @@
+{
+  "stage": 5,
+  "status": "flutter-primary",
+  "entry": "scripts/motolii-ui.sh",
+  "ui": "motolii/ui",
+  "native": "motolii/ui/native",
+  "document": "motolii/crates/motolii-doc",
+  "renderer": "motolii/crates/motolii-render",
+  "legacy_ui": "motolii/src/ui",
+  "checkpoint": {
+    "id": "20260906T083405",
+    "statePath": "motolii-stage5/checkpoints/20260906T083405",
+    "baseHead": "429c7a5a125b335d3740e54e1cdd208fa958de35",
+    "archiveSha256": "9f2ec288d6551d8dd7578c886f6421b7457fb7a26c1580df69a1b6b75269179f"
+  },
+  "pending": [
+    "Typed operation payloads and snapshot models",
+    "Panel-internal refinement",
+    "Release dylib packaging and signing",
+    "Persistent UI session restoration",
+    "Full feature and actual-window acceptance"
+  ],
+  "validation": {
+    "workspaceCheck": "passed",
+    "nativeBuild": "passed",
+    "documentUnitTests": 23,
+    "documentTransactionTests": 10,
+    "bridgeTests": 16,
+    "flutterInteractionTests": 5,
+    "actualWindow": "motolii_stage5 displayed edited Rectangle via canonical Renderer",
+    "reloadCommand": "passed; 161ms reassemble, no source delta",
+    "rootCargoMetadata": "passed; current native default and existing target directory"
+  },
+  "documents": {
+    "concept": "docs/concept.md",
+    "interaction": "docs/stage5/product-contract.md",
+    "migration": "docs/stage5/README.md",
+    "recovery": "docs/stage5/document-map.md",
+    "technical": "docs/stage5/technical-boundaries.md"
+  },
+  "entryDocuments": [
+    "README.md",
+    "CONTRIBUTING.md",
+    "motolii/ui/README.md",
+    "docs/README.md"
+  ],
+  "cargoWorkspace": "Cargo.toml",
+  "cargoDefaultMember": "motolii/ui/native",
+  "cargoTarget": "motolii/target",
+  "entryReview": {
+    "date": "2026-09-06",
+    "perspectives": [
+      "new contributor",
+      "UI implementer",
+      "tooling maintainer"
+    ],
+    "scope": "light read-only entry review; not full implementation audit",
+    "findingsResolved": [
+      "root Cargo routing",
+      "active CI legacy invocation",
+      "PR template undefined role",
+      "legacy Cargo header"
+    ],
+    "remoteCiRun": "not performed"
+  },
+  "modules": "docs/stage5/modules.json",
+  "moduleValidation": {
+    "dartAnalysis": "passed",
+    "flutterTests": 9,
+    "nativeEditorTests": 16,
+    "nativeBuild": "passed",
+    "forbiddenDependencyNegativeChecks": "passed",
+    "uiReconnect": "Rectangle selection, values, image and frame 27 retained",
+    "remaining": "typed payload/snapshot models and panel-internal refinements"
+  },
+  "adoption": {
+    "date": "2026-09-06",
+    "scope": "primary macOS UI and development route",
+    "legacyHost": "excluded from current Cargo workspace; source retained as history",
+    "productComplete": false,
+    "releaseReady": false,
+    "reviewers": [
+      "contributor",
+      "runtime implementer",
+      "operations maintainer"
+    ],
+    "validation": {
+      "workspaceAndDocs": "passed",
+      "nativeBuild": "passed",
+      "documentUnitTests": 23,
+      "documentTransactionTests": 10,
+      "editorTests": 16,
+      "flutterTests": 10,
+      "playbackReconnect": "real window continued at frame 1749 after UI restart; paused and restored to frame27",
+      "remoteCi": "not run",
+      "distribution": "not validated"
+    }
+  }
+}

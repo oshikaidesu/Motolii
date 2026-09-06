@@ -1,9 +1,60 @@
-# Stage 5 workspace. Default build target is the Flutter native bridge.
+# Motolii の家は5つ — doc・render・ui・vism・tests。build も家ごと。
+# crates/motolii-doc(契約)→ crates/motolii-render(描く側、vism の inventory も持つ)→ この package(ui、hotpatch が追う tip)。
+# crates/motolii-road は doc+render を 1 本の dylib に 1 回だけ link する道路(開発の feature `dynamic`)。
+[package]
+name = "motolii"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[features]
+default = ["dynamic"]
+dynamic = ["dep:motolii-road"]
+
+[dependencies]
+motolii-doc = { path = "crates/motolii-doc" }
+motolii-render = { path = "crates/motolii-render" }
+motolii-road = { path = "crates/motolii-road", optional = true }
+dioxus-native = { workspace = true }
+dioxus-devtools = { workspace = true }
+dioxus-cli-config = "=0.7.10"
+dioxus-asset-resolver = { workspace = true }
+dioxus-workbench = { workspace = true }
+dioxus-dnd = { workspace = true }
+blitz-dom = { workspace = true }
+blitz-paint = { workspace = true }
+blitz-traits = { workspace = true }
+blitz-shell = { workspace = true }
+accesskit = "0.24.1"
+accesskit_xplat = { git = "https://github.com/DioxusLabs/blitz", rev = "64eb27853aa2672486b7edf825fb044be78c9db3" }
+keyboard-types = { workspace = true }
+anyrender = { workspace = true }
+wgpu_context = { workspace = true }
+wgpu = { workspace = true }
+peniko = { workspace = true }
+glam = { workspace = true }
+image = { workspace = true }
+base64 = { workspace = true }
+ffmpeg-sidecar = { workspace = true }
+rfd = { workspace = true }
+re_log = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+# OSのReduce Motionを読む。rfd/winitが既に使う同じAppKit bindingを直接借りる。
+objc2-app-kit = { version = "0.3.2", default-features = false, features = ["NSAccessibility", "NSWorkspace"] }
+
+[dev-dependencies]
+proptest = { workspace = true }
+tempfile = { workspace = true }
+# 窓を開けずに窓を触る。上流の器具を借りる。
+blitz-test-harness = { git = "https://github.com/DioxusLabs/blitz", rev = "64eb27853aa2672486b7edf825fb044be78c9db3" }
+
 [workspace]
-resolver = "2"
-members = ["motolii/crates/motolii-doc", "motolii/crates/motolii-render", "motolii/crates/motolii-road", "motolii/ui/native"]
-exclude = ["motolii", "app", "next", "crates/*", "spikes/*", "ui/*"]
-default-members = ["motolii/ui/native"]
+members = ["crates/motolii-doc", "crates/motolii-render", "crates/motolii-road", "ui/native"]
+default-members = ["ui/native"]
 
 [workspace.dependencies]
 # 識別子では使わないが、custom-widget の feature を立てるために要る(Stage・Timeline の object 描画)。
@@ -74,6 +125,8 @@ too_many_lines = "warn"
 too_many_arguments = "warn"
 type_complexity = "warn"
 
+[lints]
+workspace = true
 
 
 # 16GB機: debug情報を削り、依存(stylo/vello/rerun)だけ最適化して窓を実用速度にする。
@@ -85,4 +138,4 @@ opt-level = 2
 debug = false
 
 [patch."https://github.com/DioxusLabs/blitz"]
-blitz-dom = { path = "motolii/vendor/blitz-dom" }
+blitz-dom = { path = "vendor/blitz-dom" }
