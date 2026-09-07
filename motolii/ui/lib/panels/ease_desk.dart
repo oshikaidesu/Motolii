@@ -70,10 +70,99 @@ class _EaseDeskState extends State<EaseDesk> with WidgetsBindingObserver {
     return result;
   }
 
-  bool get _canApply =>
-      _segments.isNotEmpty &&
-      !_segments.any((s) => s['locked'] == true) &&
-      c.supports('ease');
+  /// ゴーストモード(Sequence / Stagger): 複数の層を選んだ時、選んだ順に各層のゴースト 1 枚の遅れを
+  /// 曲線で配る。AE の Sequence Layers・Motion Tools Pro の Sequence を、in 点を動かさず(壊さず)やる。
+  List<Map<String, dynamic>> get _sequence {
+    if (_segments.isNotEmpty || c.selectedIds.length < 2) return const [];
+    final byId = {for (final l in c.layers) l['id']: l};
+    // ゴーストを持てない層(HDR・音声・カメラ)は並びに入れない。
+    return [
+      for (final id in c.selectedIds)
+        if (byId[id] case final l? when l['ghostable'] == true) l,
+    ];
+  }
+
+  bool get _ghostMode => _sequence.length > 1;
+  String get _identity => jsonEncode({
+    'keys': c.state['selectedKeys'] ?? [],
+    'sequence': _ghostMode ? _sequence.map((l) => l['id']).toList() : null,
+  });
+
+  bool get _canApply => _ghostMode
+      ? (c.supports('sequence') && !_sequence.any((l) => l['locked'] == true))
+      : _segments.isNotEmpty &&
+            !_segments.any((s) => s['locked'] == true) &&
+            c.supports('ease');
+
+  /// 選んだ順に i / N を曲線に通し、最後の層の遅れ(既定 6 f × N、既に在ればその最大)を全体として配る。
+  /// 最初の層は遅れ 0 = ゴースト無し。
+  Map<String, dynamic>? _sequencePayload(Map<String, dynamic> shape) {
+    final layers = _sequence;
+    if (layers.length < 2) return null;
+    final samples = (shape['samples'] as List? ?? [])
+        .whereType<List>()
+        .map((v) => Offset((v[0] as num).toDouble(), (v[1] as num).toDouble()))
+        .toList();
+    double ease(double x) {
+      if (shape['kind'] == 'Hold') return x < 1 ? 0 : 1;
+      if (samples.length < 2) return x;
+      for (var i = 0; i + 1 < samples.length; i++) {
+        final a = samples[i], b = samples[i + 1];
+        if (x <= b.dx) {
+          final t = b.dx == a.dx
+              ? 0.0
+              : ((x - a.dx) / (b.dx - a.dx)).clamp(0.0, 1.0);
+          return a.dy + (b.dy - a.dy) * t;
+        }
+      }
+      return samples.last.dy;
+    }
+
+    final n = layers.length - 1;
+    final existing = [
+      for (final l in layers)
+        if (l['ghost'] case final num d) d.toInt(),
+    ];
+    final total = existing.isEmpty ? 6 * n : existing.reduce(math.max);
+    return {
+      'layers': [for (final l in layers) l['id']],
+      'ghosts': [
+        for (var i = 0; i < layers.length; i++)
+          (total * ease(i / n)).round().clamp(-(1 << 20), 1 << 20),
+      ],
+    };
+  }
+
+  /// 放した時に 1 手(Undo 1 つ)で配る。
+  Future<void> _applySequence(Map<String, dynamic> shape) async {
+    final payload = _sequencePayload(shape);
+    if (payload != null) await c.command('sequence', payload);
+  }
+
+  /// 掴んでいる間は下書きで配る。Stage のゴーストがその場で動く。
+  /// 送るのは最新の 1 つだけ(飛行中の分が返るまで途中は捨てる)。待たせない。
+  Map<String, dynamic>? _previewPending;
+  Future<void>? _previewFlight;
+  void _previewSequence(Map<String, dynamic> shape) {
+    if (!_ghostMode || !c.supports('previewSequence')) return;
+    final payload = _sequencePayload(shape);
+    if (payload == null) return;
+    _previewPending = payload;
+    _previewFlight ??= _pumpPreview();
+  }
+
+  Future<void> _pumpPreview() async {
+    try {
+      while (_previewPending != null && mounted) {
+        final payload = _previewPending!;
+        _previewPending = null;
+        await c.command('previewSequence', payload);
+      }
+    } finally {
+      _previewFlight = null;
+    }
+  }
+
   Map<String, dynamic> _payload(Map<String, dynamic> shape) => {
     for (final e in shape.entries)
       if (e.key == 'kind' || e.value is num) e.key: e.value,
@@ -96,12 +185,12 @@ class _EaseDeskState extends State<EaseDesk> with WidgetsBindingObserver {
     final source = segments.isEmpty
         ? ''
         : jsonEncode(segments.map((s) => s['shape']).toList());
-    if (_target != _selection || (_pointer == null && source != _source)) {
+    if (_target != _identity || (_pointer == null && source != _source)) {
       _epoch++;
       _pointer = null;
       _handle = null;
       _original = null;
-      _target = _selection;
+      _target = _identity;
       _source = source;
       _shape = segments.isEmpty
           ? (EditorSession.map(c.deskWork.value['ease']).isEmpty
@@ -115,6 +204,7 @@ class _EaseDeskState extends State<EaseDesk> with WidgetsBindingObserver {
 
   void _cancel() {
     _epoch++;
+    if (_original != null && _ghostMode) c.cancelPreview();
     if (_original != null) _shape = _original!;
     _original = null;
     _pointer = null;
@@ -166,6 +256,7 @@ class _EaseDeskState extends State<EaseDesk> with WidgetsBindingObserver {
       }
       _valid = true;
       setState(() => _shape = result);
+      if (_ghostMode && _original != null) _previewSequence(result);
     } catch (e) {
       if (mounted && epoch == _epoch) c.error.value = '$e';
     }
@@ -175,7 +266,9 @@ class _EaseDeskState extends State<EaseDesk> with WidgetsBindingObserver {
     final target = _target;
     final epoch = _epoch;
     await _pending;
-    if (!mounted || target != _selection || epoch != _epoch || !_valid) return;
+    _previewPending = null;
+    await _previewFlight;
+    if (!mounted || target != _identity || epoch != _epoch || !_valid) return;
     if (_original != null &&
         jsonEncode(_payload(_original!)) == jsonEncode(_payload(_shape))) {
       _original = null;
@@ -184,11 +277,16 @@ class _EaseDeskState extends State<EaseDesk> with WidgetsBindingObserver {
     final shape = Map<String, dynamic>.of(_shape);
     _original = null;
     await c.storeDesk('ease', shape);
-    if (mounted && epoch == _epoch && _canApply && target == _selection)
+    if (!mounted || epoch != _epoch || !_canApply || target != _identity)
+      return;
+    if (_ghostMode) {
+      await _applySequence(shape);
+    } else {
       await c.command('ease', {
         ..._payload(shape),
-        'selection': jsonDecode(target),
+        'selection': jsonDecode(_selection),
       });
+    }
   }
 
   Future<void> _choose(Map<String, dynamic> shape) async {
@@ -232,7 +330,10 @@ class _EaseDeskState extends State<EaseDesk> with WidgetsBindingObserver {
       if (clip.isNotEmpty) clip,
       ...saved,
     ];
-    final target = first == null
+    final sequence = _ghostMode ? _sequence : const <Map<String, dynamic>>[];
+    final target = sequence.isNotEmpty
+        ? 'Sequence · ${sequence.length} layers · ghosts${!_canApply ? ' · Read only' : ''}'
+        : first == null
         ? 'No interval · Workspace'
         : '${first['name']} · ${first['property']} · ${first['frame']}–${first['end']}${segments.length > 1 ? ' · ${segments.length} intervals' : ''}${mixed ? ' · Mixed' : ''}${!_canApply ? ' · Read only' : ''}';
     final u = first == null
@@ -291,6 +392,11 @@ class _EaseDeskState extends State<EaseDesk> with WidgetsBindingObserver {
                   shape: _shape,
                   handles: true,
                   free: _free,
+                  ghost: sequence.isNotEmpty,
+                  marks: [
+                    for (var i = 0; i < sequence.length; i++)
+                      i / (sequence.length - 1),
+                  ],
                 );
                 final size = Size(box.maxWidth, box.maxHeight);
                 return Listener(
@@ -487,10 +593,16 @@ class EaseCurvePainter extends CustomPainter {
     this.handles = false,
     this.free = false,
     this.playhead,
+    this.ghost = false,
+    this.marks = const [],
   });
   final Map<String, dynamic> shape;
   final bool handles, free;
   final double? playhead;
+
+  /// ゴーストモード: 差し色を反転し、鎖の各ゴーストの位置を曲線上に打つ。
+  final bool ghost;
+  final List<double> marks;
   bool get expanded => free || shape['overshoots'] == true;
   double get lo => handles
       ? (expanded ? -.5 : -.35)
@@ -558,9 +670,33 @@ class EaseCurvePainter extends CustomPainter {
       path,
       Paint()
         ..style = PaintingStyle.stroke
-        ..color = EditorTheme.accent
+        ..color = ghost ? EditorTheme.ink : EditorTheme.accent
         ..strokeWidth = 1.5,
     );
+    if (ghost) {
+      double yAt(double x) {
+        if (shape['kind'] == 'Hold') return x < 1 ? 0 : 1;
+        for (var i = 0; i + 1 < samples.length; i++) {
+          final ax = (samples[i][0] as num).toDouble();
+          final bx = (samples[i + 1][0] as num).toDouble();
+          if (x <= bx) {
+            final ay = (samples[i][1] as num).toDouble();
+            final by = (samples[i + 1][1] as num).toDouble();
+            final t = bx == ax ? 0.0 : ((x - ax) / (bx - ax)).clamp(0.0, 1.0);
+            return ay + (by - ay) * t;
+          }
+        }
+        return samples.isEmpty ? x : (samples.last[1] as num).toDouble();
+      }
+
+      for (final x in marks) {
+        canvas.drawCircle(
+          p(x, yAt(x)),
+          3.5,
+          Paint()..color = EditorTheme.accent,
+        );
+      }
+    }
     if (handles) {
       final points = (shape['handles'] as List? ?? [])
           .whereType<List>()
@@ -588,5 +724,7 @@ class EaseCurvePainter extends CustomPainter {
       jsonEncode(old.shape) != jsonEncode(shape) ||
       old.free != free ||
       old.handles != handles ||
-      old.playhead != playhead;
+      old.playhead != playhead ||
+      old.ghost != ghost ||
+      jsonEncode(old.marks) != jsonEncode(marks);
 }

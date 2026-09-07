@@ -31,11 +31,17 @@ pub struct EditorRuntime {
     device_id: u64,
     render_count: u64,
     render_ms: f64,
+    picked_color: Option<[f64; 4]>,
+    pick_serial: u64,
     reply: CString,
     error: Option<String>,
     preview: Option<(u64, Vec<Intent>)>,
     stage_drag: Option<editor::stage::DragSession>,
     user_stage: bool,
+    /// Animate が入っている間、触った値は今の時刻のキーになる。
+    pub(crate) animate: bool,
+    /// 最後に全部入りの status を送った時の Document の版。同じ版で再生中なら生値だけ送る。
+    pub(crate) full_status_revision: std::cell::RefCell<Option<String>>,
     user_camera: crate::doc::core::ResolvedCamera,
 }
 
@@ -54,7 +60,7 @@ impl EditorRuntime {
         clock.sync_document(&doc);
         let clock_revision = doc.revision();
         Ok(Self { selected_ids: selected.into_iter().collect(), selected_keys: Vec::new(), clipboard: Default::default(), path: if path.is_empty() { None } else { Some(path.into()) }, saved_signature, color_target: None, exporter: Default::default(), clock, clock_revision, doc, engine, selected, frame: 0, device_id, render_count: 0,
-            render_ms: 0.0, reply: CString::new("{}").unwrap(), error: None, preview: None, stage_drag: None, user_stage: true, user_camera: crate::doc::core::ResolvedCamera { orbit_degrees:[-15.0,30.0], distance_scale:2.5, ..Default::default() } })
+            render_ms: 0.0, picked_color: None, pick_serial: 0, reply: CString::new("{}").unwrap(), error: None, preview: None, stage_drag: None, user_stage: true, animate: false, full_status_revision: Default::default(), user_camera: Default::default() })
     }
 
     fn time(&self) -> Result<RationalTime, String> {
@@ -95,7 +101,7 @@ impl EditorRuntime {
             point[0] = value;
             (PropertyId::new(property::POSITION).map_err(|e| e.to_string())?, Value::Vec2(point))
         };
-        self.doc.place_checked(layer, &property, value, self.time()?)
+        self.doc.place_checked(layer, &property, value, self.time()?, self.animate)
             .map(|edit| edit.into_iter().collect()).map_err(|e| e.to_string())
     }
 
@@ -115,7 +121,7 @@ impl EditorRuntime {
         let descriptor = MTLTextureDescriptor::new();
         unsafe {
             descriptor.setTextureType(MTLTextureType::Type2D);
-            descriptor.setPixelFormat(MTLPixelFormat::BGRA8Unorm_sRGB);
+            descriptor.setPixelFormat(MTLPixelFormat::BGRA8Unorm);
             descriptor.setWidth(comp.width as usize);
             descriptor.setHeight(comp.height as usize);
             descriptor.setMipmapLevelCount(1);
@@ -129,11 +135,11 @@ impl EditorRuntime {
         // Same-device imported attachment. The host exclusively owns a fresh surface;
         // the existing compositor clears and writes it before this function publishes it.
         let texture = unsafe {
-            let raw = wgpu::hal::metal::Device::texture_from_raw(raw, wgpu::TextureFormat::Bgra8UnormSrgb,
+            let raw = wgpu::hal::metal::Device::texture_from_raw(raw, wgpu::TextureFormat::Bgra8Unorm,
                 MTLTextureType::Type2D, 1, 1, size.into());
             device.create_texture_from_hal::<wgpu::hal::api::Metal>(raw, &wgpu::TextureDescriptor {
                 label: Some("Motolii direct IOSurface output"), size, mip_level_count: 1, sample_count: 1,
-                dimension: wgpu::TextureDimension::D2, format: wgpu::TextureFormat::Bgra8UnormSrgb,
+                dimension: wgpu::TextureDimension::D2, format: wgpu::TextureFormat::Bgra8Unorm,
                 usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING, view_formats: &[],
             })
         };

@@ -8,6 +8,8 @@ mod fingerprint;
 mod marker;
 mod mask;
 mod persist;
+pub mod kind;
+pub mod placement;
 mod slot;
 mod text;
 mod view;
@@ -16,6 +18,7 @@ pub use asset::{Asset, AssetDraft, AssetError, AssetId, AssetRole, AssetStatus, 
 pub use attrs::{BlendMode, LayerAttrs, LayerAttrsPatch, LayerProjection, Matte, MatteMode, LABEL_PALETTE_LEN};
 pub use document::{DisplayRevision, Document, Intent, LayerId, PropertyId, Revision};
 pub use effect::{EffectId, EffectInstance, ResolvedEffect};
+pub use placement::Placement;
 pub use fingerprint::{SourceFingerprintDecode, SourceFingerprintError, SourceFingerprintV1};
 pub use marker::Marker;
 mod notebook;
@@ -203,11 +206,14 @@ impl LayerTiming {
         comp_frame >= self.start && comp_frame < self.start + self.duration
     }
 
+    /// 層を置く。尺は壁ではない(裁定 2026-09-07): 素材の尺があればその長さ、無ければ
+    /// 「尺の終わりまで」を既定にするが、尺の先に置いた時も 0 にはせず尺と同じ長さにする。
     pub fn place(start: i64, source_frames: Option<i64>, comp_duration: i64) -> Self {
-        let remaining = (comp_duration - start).max(0);
+        let remaining = comp_duration - start;
         let duration = match source_frames {
-            Some(frames) => frames.min(remaining),
-            None => remaining,
+            Some(frames) => frames.max(1),
+            None if remaining > 0 => remaining,
+            None => comp_duration.max(1),
         };
         Self {
             start,
@@ -400,6 +406,13 @@ pub struct ResolvedLayer {
     pub projection: LayerProjection,
     /// 3D の素材を平面へ収めるか。既定は収めない(裁定 2026-08-30)。
     pub flatten: bool,
+    pub environment: bool,
+    /// ゴースト(同じ層を遅れて見た姿)なら true。掴めない・枠に入らない(裁定 2026-09-07)。
+    pub ghost: bool,
+    /// 配置効果が増やした何番目か。増やしていなければ 0。
+    pub copy: u32,
+    /// 配置効果より**下**に積まれた効果。配置を 1 枚に合わせてから掛かる。
+    pub after_effects: Vec<ResolvedEffect>,
 }
 
 /// 白紙。**枠だけは要る** —— 枠が無いと何も描けず、窓が空を出す。

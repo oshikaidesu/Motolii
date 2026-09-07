@@ -1,6 +1,6 @@
 //! 層をいじる手(複製・分割)。timeline_widget.rs が 1737 行の天井を越えたので分けた。
 use crate::doc::store::{
-    Document, Intent, KeyframeTrack, LayerAttrs, LayerAttrsPatch, LayerId, LayerTiming,
+    Document, Intent, KeyframeTrack, LayerAttrs, LayerAttrsPatch, LayerId, LayerSource, LayerTiming,
     PropertyBase, PropertyId, RationalTime, Slot, SlotId, StoreError, StoreView,
 };
 use crate::editor::functions::atom;
@@ -10,6 +10,8 @@ use std::sync::{Arc, Mutex};
 pub(crate) fn attrs_to_patch(a: &LayerAttrs) -> LayerAttrsPatch {
     LayerAttrsPatch {
         flatten: Some(a.flatten),
+        environment: Some(a.environment),
+        ghost: Some(a.ghost),
         hidden: Some(a.hidden),
         parent: Some(a.parent),
         blend_mode: Some(a.blend_mode.clone()),
@@ -29,6 +31,27 @@ pub(crate) fn duplicate_layer(doc: &mut Document, layer: LayerId) -> Option<Laye
     duplicate_layers(doc, &[layer]).ok()?.first().copied()
 }
 
+/// ゴーストの既定の遅れ(フレーム)。0 だと元と重なって見えないので、帯が 1 つ分ずれて見える量。
+pub(crate) const GHOST_DEFAULT_DELAY: i64 = 6;
+
+/// ゴーストを持てる層か。ゴーストは「同じ層を d だけ遅れて見た姿」なので、
+/// 姿を持たない層(カメラ・Null・環境(HDR)・音声)には旨みがない(裁定 2026-09-07 利用者)。
+pub(crate) fn ghostable(view: &StoreView, layer: LayerId) -> bool {
+    let Ok(Some(meta)) = view.meta(layer) else { return false };
+    let attrs = view.attrs(layer).ok().flatten().unwrap_or_default();
+    if attrs.environment {
+        return false;
+    }
+    match &meta.source {
+        LayerSource::Camera | LayerSource::Null => false,
+        LayerSource::File { path, .. } => {
+            !crate::render::media::is_environment_image_path(path)
+                && !crate::render::media::is_audio_path(path)
+        }
+        _ => true,
+    }
+}
+
 pub(crate) fn duplicate_layers(
     doc: &mut Document,
     layers: &[LayerId],
@@ -46,10 +69,10 @@ struct CopyPlan {
 
 #[derive(Clone, Debug)]
 pub(crate) struct LayerClipboard {
-    intents: Vec<Intent>,
-    roots: Vec<LayerId>,
-    copies: Vec<LayerId>,
-    slots: Vec<Slot>,
+    pub(crate) intents: Vec<Intent>,
+    pub(crate) roots: Vec<LayerId>,
+    pub(crate) copies: Vec<LayerId>,
+    pub(crate) slots: Vec<Slot>,
 }
 
 pub(crate) fn copy_layers(
@@ -155,7 +178,7 @@ pub(crate) fn paste_layers(
         .collect())
 }
 
-fn remap_clipboard_intent(
+pub(crate) fn remap_clipboard_intent(
     intent: Intent,
     layers: &std::collections::HashMap<LayerId, LayerId>,
     slots: &std::collections::HashMap<SlotId, SlotId>,

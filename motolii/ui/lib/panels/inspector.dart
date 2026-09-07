@@ -18,13 +18,8 @@ class _InspectorPanelState extends State<InspectorPanel> {
   EditorSession get controller => widget.controller;
   final _rows = <String, GlobalKey>{};
   final _nodes = <String, FocusNode>{};
-  List<Map<String, dynamic>> get _layers {
-    final rendered = controller.rendered.value;
-    return rendered['frame'] == controller.frame.value &&
-            rendered['documentRevision'] == controller.state['documentRevision']
-        ? panelRows(rendered['layers'])
-        : controller.layers;
-  }
+  _AxisDrag? _axisDrag;
+  List<Map<String, dynamic>> get _layers => controller.liveLayers();
 
   Map<String, dynamic>? get _active {
     for (final layer in _layers) {
@@ -76,6 +71,38 @@ class _InspectorPanelState extends State<InspectorPanel> {
     return null;
   }
 
+  void _beginAxis(
+    Map<String, dynamic> layer,
+    Map<String, dynamic> property,
+    int axis,
+  ) {
+    final id = '${property['id']}';
+    final values = <int, dynamic>{};
+    final layers = _layers;
+    for (final target in layers.where(
+      (candidate) => controller.selectedIds.contains(candidate['id']),
+    )) {
+      final value = _property(target, id)?['value'];
+      if (value is List) {
+        values[target['id'] as int] = List<dynamic>.from(value);
+      } else if (value is num) {
+        values[target['id'] as int] = value.toDouble();
+      }
+    }
+    final primary = values[layer['id'] as int];
+    final base = primary is List && axis < primary.length
+        ? primary[axis]
+        : primary;
+    if (base is num) {
+      _axisDrag = _AxisDrag(id, axis, base.toDouble(), values);
+    }
+  }
+
+  Future<void> _finishAxis(bool cancel) {
+    _axisDrag = null;
+    return controller.command(cancel ? 'cancelPreview' : 'commitPreview');
+  }
+
   Future<void> _axis(
     Map<String, dynamic> layer,
     Map<String, dynamic> property,
@@ -86,16 +113,21 @@ class _InspectorPanelState extends State<InspectorPanel> {
     final id = property['id'];
     final edits = <Map<String, dynamic>>[];
     final current = property['value'];
-    final base = current is List
-        ? (current[axis] as num).toDouble()
-        : (current as num).toDouble();
+    final drag = preview && _axisDrag?.property == id && _axisDrag?.axis == axis
+        ? _axisDrag
+        : null;
+    final base =
+        drag?.primaryBase ??
+        (current is List
+            ? (current[axis] as num).toDouble()
+            : (current as num).toDouble());
     for (final target in _layers.where(
       (v) => controller.selectedIds.contains(v['id']),
     )) {
       if (target['locked'] == true) continue;
       final row = _property(target, '$id');
       if (row == null) continue;
-      dynamic next = row['value'];
+      dynamic next = drag?.values[target['id']] ?? row['value'];
       if (next is List) {
         final values = List<dynamic>.from(next);
         if (axis >= values.length || values[axis] is! num) continue;
@@ -184,11 +216,312 @@ class _InspectorPanelState extends State<InspectorPanel> {
               panelCan(controller, 'commitPreview'),
           onPreview: (n) => _axis(layer, row, axis, n, true),
           onCommit: (n) => _axis(layer, row, axis, n, false),
-          onFinish: () => controller.command('commitPreview'),
-          onCancel: () => controller.command('cancelPreview'),
+          onBegin: () => _beginAxis(layer, row, axis),
+          onFinish: () => _finishAxis(false),
+          onCancel: () => _finishAxis(true),
         ),
       ),
     );
+  }
+
+  /// Advanced folds opened by the user, per layer and effect.
+  final _advancedOpen = <String>{};
+
+  /// A placement effect declares its own grid: a head (count, shape), then
+  /// one row per attribute with an Each and a Random cell.
+  List<Widget> _placementGrid(
+    Map<String, dynamic> layer,
+    Map<String, dynamic> effect,
+  ) {
+    final layout = panelMap(effect['layout']);
+    final params = panelRows(effect['params']);
+    Map<String, dynamic>? row(dynamic id) =>
+        id == null ? null : params.where((r) => r['id'] == id).firstOrNull;
+    Widget unit(String text) => SizedBox(
+      width: EditorMetrics.s16,
+      child: Text(
+        text,
+        style: const TextStyle(
+          fontSize: EditorMetrics.dense,
+          color: EditorTheme.muted,
+        ),
+      ),
+    );
+    Widget mark(List<Map<String, dynamic>?> rows) {
+      final live = rows.whereType<Map<String, dynamic>>();
+      final now = live.any((r) => r['keyedNow'] == true);
+      final any = live.any((r) => (r['keys'] as List? ?? const []).isNotEmpty);
+      return SizedBox(
+        width: EditorMetrics.row,
+        child: Center(
+          child: Text(
+            now
+                ? '◆'
+                : any
+                ? '◇'
+                : '',
+            style: const TextStyle(
+              fontSize: EditorMetrics.dense,
+              color: EditorTheme.muted,
+            ),
+          ),
+        ),
+      );
+    }
+
+    final canSet =
+        panelCan(controller, 'setProperty') && layer['locked'] != true;
+    Widget gridLine(Map<String, dynamic> grid) => _line('${grid['label']}', [
+      for (final id in [grid['each'], grid['random']])
+        if (row(id) case final r?)
+          _cell(layer, r, (grid['axis'] as num?)?.toInt() ?? 0)
+        else
+          const SizedBox(width: EditorMetrics.field),
+      if (grid['random'] != null && grid['random'] == layout['seed'])
+        panelButton(
+          '↻',
+          canSet
+              ? () => controller.command('setProperty', {
+                  'layer': layer['id'],
+                  'property': grid['random'],
+                  'value':
+                      (((row(grid['random'])?['value'] as num?) ?? 0) + 1) %
+                      10000,
+                })
+              : null,
+          tooltip: 'Next seed: same spread, different scatter',
+        )
+      else
+        unit('${grid['unit'] ?? ''}'),
+      mark([row(grid['each']), row(grid['random'])]),
+    ]);
+    final materials = panelRows(layout['materials']);
+    final shares = [
+      for (final m in materials)
+        ((row(m['id'])?['value'] as num?) ?? 0).toDouble(),
+    ];
+    final shareTotal = shares.fold<double>(0, (a, b) => a + b);
+    final pick = row(layout['pick']);
+    final pickChoices = pick?['choices'];
+    final subject = row(layout['subject']);
+    final subjectChoices = subject?['choices'];
+    final wholeGroup = (subject?['value'] as num?)?.round() == 1;
+    Widget choiceLine(String label, Map<String, dynamic> r, List choices) =>
+        _line(label, [
+          Expanded(
+            child: _dropdown(
+              (r['value'] as num?)?.round(),
+              [
+                for (var i = 0; i < choices.length; i++)
+                  MapEntry(i, '${choices[i]}'),
+              ],
+              canSet
+                  ? (v) => controller.command('setProperty', {
+                      'layer': layer['id'],
+                      'property': r['id'],
+                      'value': v,
+                    })
+                  : null,
+            ),
+          ),
+        ]);
+    final advancedRows = panelRows(layout['rows'])
+        .where((g) => g['advanced'] == true)
+        .toList();
+    final key = '${layer['id']}:${effect['id']}';
+    final open = _advancedOpen.contains(key);
+    bool touched = false;
+    for (final grid in advancedRows)
+      for (final id in [grid['each'], grid['random']]) {
+        final r = row(id);
+        if (r == null) continue;
+        final v = r['value'];
+        final zero = v is num ? v == 0 : v is List && v.every((c) => c == 0);
+        if (!zero || (r['keys'] as List? ?? const []).isNotEmpty)
+          touched = true;
+      }
+    final count = row(layout['count']);
+    final along = row(layout['along']);
+    final choices = along?['choices'];
+    return [
+      _line('Count', [
+        if (count != null) _cell(layer, count, 0),
+        const SizedBox(width: EditorMetrics.s8),
+        if (along != null && choices is List)
+          Expanded(
+            child: _dropdown(
+              (along['value'] as num?)?.round(),
+              [
+                for (var i = 0; i < choices.length; i++)
+                  MapEntry(i, '${choices[i]}'),
+              ],
+              panelCan(controller, 'setProperty') && layer['locked'] != true
+                  ? (v) => controller.command('setProperty', {
+                      'layer': layer['id'],
+                      'property': along['id'],
+                      'value': v,
+                    })
+                  : null,
+            ),
+          ),
+      ]),
+      if (materials.isNotEmpty) ...[
+        if (subject != null && subjectChoices is List)
+          choiceLine('Copies', subject, subjectChoices),
+      ],
+      if (materials.isNotEmpty && !wholeGroup) ...[
+        if (pick != null && pickChoices is List)
+          choiceLine('Pick', pick, pickChoices),
+        _line('Materials', [
+          SizedBox(
+            width: EditorMetrics.field,
+            child: Text(
+              'Share',
+              textAlign: TextAlign.right,
+              style: const TextStyle(fontSize: EditorMetrics.dense),
+            ),
+          ),
+        ]),
+        for (var i = 0; i < materials.length; i++)
+          if (row(materials[i]['id']) case final r?)
+            _line('${materials[i]['label']}', [
+              const SizedBox(width: EditorMetrics.field),
+              _cell(layer, r, 0),
+              SizedBox(
+                width: EditorMetrics.s32,
+                child: Text(
+                  shareTotal > 0
+                      ? '${(shares[i] / shareTotal * 100).round()}%'
+                      : '',
+                  style: const TextStyle(
+                    fontSize: EditorMetrics.dense,
+                    color: EditorTheme.muted,
+                  ),
+                ),
+              ),
+              mark([r]),
+            ]),
+      ],
+      for (final field in panelRows(layout['shape']))
+        if (row(field['id']) case final r?)
+          _line('${field['label']}', [
+            const SizedBox(width: EditorMetrics.field),
+            _cell(layer, r, 0),
+            unit('${field['unit'] ?? ''}'),
+            mark([r]),
+          ]),
+      _line('', [
+        for (final column
+            in panelRows(layout['columns']).isEmpty
+                ? (layout['columns'] as List? ?? const ['Each', 'Random'])
+                : const ['Each', 'Random'])
+          SizedBox(
+            width: EditorMetrics.field,
+            child: Text(
+              '$column',
+              textAlign: TextAlign.right,
+              style: const TextStyle(fontSize: EditorMetrics.dense),
+            ),
+          ),
+      ]),
+      for (final grid in panelRows(layout['rows']))
+        if (grid['advanced'] != true) gridLine(grid),
+      if (advancedRows.isNotEmpty) ...[
+        _line('Advanced', [
+          panelButton(
+            open ? '▾' : '▸',
+            () => setState(() {
+              open ? _advancedOpen.remove(key) : _advancedOpen.add(key);
+            }),
+            tooltip: 'Values that do not change the picture by themselves',
+          ),
+          if (!open && touched)
+            const Text('•', style: TextStyle(color: EditorTheme.muted)),
+        ]),
+        if (open)
+          for (final grid in advancedRows) gridLine(grid),
+      ],
+    ];
+  }
+
+  /// Effect rows carry their own section and, for a shape toggle, choices.
+  List<Widget> _effectRows(
+    Map<String, dynamic> layer,
+    List<Map<String, dynamic>> rows,
+  ) {
+    final out = <Widget>[];
+    String? section;
+    for (final row in rows) {
+      final here = row['section'] as String?;
+      if (here != null && here != section && here != 'Shape') {
+        out.add(_line(here, []));
+      }
+      section = here;
+      final choices = row['choices'];
+      if (choices is List) {
+        out.add(
+          _choice(
+            '${row['label'] ?? row['id']}',
+            (row['value'] as num?)?.round(),
+            [
+              for (var i = 0; i < choices.length; i++)
+                MapEntry(i, '${choices[i]}'),
+            ],
+            panelCan(controller, 'setProperty') && layer['locked'] != true
+                ? (v) => controller.command('setProperty', {
+                    'layer': layer['id'],
+                    'property': row['id'],
+                    'value': v,
+                  })
+                : null,
+          ),
+        );
+      } else {
+        out.add(_row(layer, row));
+      }
+    }
+    return out;
+  }
+
+  /// ゴースト: この層を遅れ(f)だけ後に見た姿が 1 枚。行は増えず、Stage では掴めない。
+  /// 複製が要るなら Delay の効果(Repeater)。
+  List<Widget> _ghostLines(Map<String, dynamic> layer) {
+    final ghost = (layer['ghost'] as num?)?.toInt();
+    final can = layer['locked'] != true;
+    Future<void> write(int? next) => controller.command('setAttrs', {
+      'layers': [layer['id']],
+      'patch': {'ghost': next},
+    });
+    return [
+      _line('Ghost', [
+        if (ghost != null)
+          SizedBox(
+            width: EditorMetrics.field,
+            child: EditorNumericField(
+              key: ValueKey('${layer['id']}:ghost'),
+              value: ghost.toDouble(),
+              label: 'Ghost delay',
+              speed: .25,
+              enabled: can && panelCan(controller, 'setAttrs'),
+              onPreview: (_) async {},
+              // 0 は「無し」。負は先へずらす。
+              onCommit: (n) => write(
+                n.round() == 0 ? null : n.round().clamp(-(1 << 20), 1 << 20),
+              ),
+              onFinish: () async {},
+              onCancel: () async {},
+            ),
+          ),
+        panelButton(
+          ghost == null ? 'Off' : 'On',
+          can && panelCan(controller, 'ghost')
+              ? () => controller.command('ghost', {'enabled': ghost == null})
+              : null,
+          selected: ghost != null,
+          tooltip: 'The same layer, seen later by a delay',
+        ),
+      ]),
+    ];
   }
 
   Widget _row(Map<String, dynamic> layer, Map<String, dynamic> row) {
@@ -208,22 +541,30 @@ class _InspectorPanelState extends State<InspectorPanel> {
     );
   }
 
-  Widget _key(Map<String, dynamic> layer, Map<String, dynamic>? row) =>
-      SizedBox(
-        width: EditorMetrics.row,
-        child: row == null
-            ? null
-            : panelButton(
-                row['keyedNow'] == true ? '◆' : '◇',
-                panelCan(controller, 'toggleKey') && layer['locked'] != true
-                    ? () => controller.command('toggleKey', {
-                        'layer': layer['id'],
-                        'property': row['id'],
-                      })
-                    : null,
-                tooltip: 'Toggle ${row['label']} keyframe at current time',
-              ),
-      );
+  /// Key state only. Keys are made with Animate on; moved and removed in the Timeline.
+  Widget _key(Map<String, dynamic> layer, Map<String, dynamic>? row) {
+    final keys = row == null ? const [] : (row['keys'] as List? ?? const []);
+    final mark = row == null
+        ? ''
+        : row['keyedNow'] == true
+        ? '◆'
+        : keys.isNotEmpty
+        ? '◇'
+        : '';
+    return SizedBox(
+      width: EditorMetrics.row,
+      child: Center(
+        child: Text(
+          mark,
+          style: const TextStyle(
+            fontSize: EditorMetrics.dense,
+            color: EditorTheme.muted,
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _line(String label, List<Widget> children) => Container(
     height: EditorMetrics.row,
     padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s6),
@@ -252,38 +593,40 @@ class _InspectorPanelState extends State<InspectorPanel> {
     dynamic value,
     List<MapEntry<dynamic, String>> choices,
     ValueChanged<dynamic>? changed,
-  ) => _line(label, [
-    Expanded(
-      child: SizedBox(
-        height: EditorMetrics.row,
-        child: DropdownButtonHideUnderline(
-          child: DropdownButton<dynamic>(
-            value: choices.any((e) => e.key == value) ? value : null,
-            isExpanded: true,
-            isDense: true,
-            style: const TextStyle(
-              fontSize: EditorMetrics.font,
-              color: EditorTheme.ink,
-            ),
-            dropdownColor: EditorTheme.panel,
-            items: choices
-                .map(
-                  (e) => DropdownMenuItem<dynamic>(
-                    value: e.key,
-                    child: Text(
-                      e.value,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                )
-                .toList(),
-            onChanged: changed,
-          ),
+  ) => _line(label, [Expanded(child: _dropdown(value, choices, changed))]);
+
+  Widget _dropdown(
+    dynamic value,
+    List<MapEntry<dynamic, String>> choices,
+    ValueChanged<dynamic>? changed,
+  ) => SizedBox(
+    height: EditorMetrics.row,
+    child: DropdownButtonHideUnderline(
+      child: DropdownButton<dynamic>(
+        value: choices.any((e) => e.key == value) ? value : null,
+        isExpanded: true,
+        isDense: true,
+        style: const TextStyle(
+          fontSize: EditorMetrics.font,
+          color: EditorTheme.ink,
         ),
+        dropdownColor: EditorTheme.panel,
+        items: choices
+            .map(
+              (e) => DropdownMenuItem<dynamic>(
+                value: e.key,
+                child: Text(
+                  e.value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            )
+            .toList(),
+        onChanged: changed,
       ),
     ),
-  ]);
+  );
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, box) => SingleChildScrollView(
@@ -404,6 +747,19 @@ class _InspectorPanelState extends State<InspectorPanel> {
               ],
             ),
           ),
+          _line('Animate', [
+            panelButton(
+              controller.document.value['animate'] == true ? 'On' : 'Off',
+              panelCan(controller, 'animate')
+                  ? () => controller.command('animate', {
+                      'enabled': controller.document.value['animate'] != true,
+                    })
+                  : null,
+              tooltip:
+                  'While on, values you touch become keys at the current time',
+              selected: controller.document.value['animate'] == true,
+            ),
+          ]),
           _line('Property', [
             for (final label in ['X', 'Y', 'Z'])
               SizedBox(
@@ -523,6 +879,22 @@ class _InspectorPanelState extends State<InspectorPanel> {
                             : null,
                       ),
                     ]),
+                  if (layer['kind'] == 'Image')
+                    _line('Environment', [
+                      panelButton(
+                        layer['environment'] == true ? 'On' : 'Off',
+                        panelCan(controller, 'setAttrs')
+                            ? () => controller.command('setAttrs', {
+                                'layers': [layer['id']],
+                                'patch': {
+                                  'environment': layer['environment'] != true,
+                                },
+                              })
+                            : null,
+                        selected: layer['environment'] == true,
+                      ),
+                    ]),
+                  if (layer['ghostable'] == true) ..._ghostLines(layer),
                   _line('Clip to below', [
                     panelButton(
                       layer['clipToBelow'] == true ? 'On' : 'Off',
@@ -635,6 +1007,17 @@ class _InspectorPanelState extends State<InspectorPanel> {
                 if (!multiple)
                   for (final effect in panelRows(layer['effects'])) ...[
                     _line('${effect['name'] ?? effect['pluginId']}', [
+                      if (effect['placement'] == true)
+                        panelButton(
+                          'Expand',
+                          panelCan(controller, 'expandEffect')
+                              ? () => controller.command('expandEffect', {
+                                  'layer': layer['id'],
+                                  'id': effect['id'],
+                                })
+                              : null,
+                          tooltip: 'Expand copies into layers',
+                        ),
                       panelButton(
                         '×',
                         panelCan(controller, 'removeEffect')
@@ -646,8 +1029,10 @@ class _InspectorPanelState extends State<InspectorPanel> {
                         tooltip: 'Remove effect',
                       ),
                     ]),
-                    for (final row in panelRows(effect['params']))
-                      _row(layer, row),
+                    if (effect['layout'] is Map)
+                      ..._placementGrid(layer, effect)
+                    else
+                      ..._effectRows(layer, panelRows(effect['params'])),
                   ],
               ],
             ),
@@ -656,6 +1041,14 @@ class _InspectorPanelState extends State<InspectorPanel> {
       );
     },
   );
+}
+
+class _AxisDrag {
+  const _AxisDrag(this.property, this.axis, this.primaryBase, this.values);
+  final String property;
+  final int axis;
+  final double primaryBase;
+  final Map<int, dynamic> values;
 }
 
 List<double>? _parseHex(String input) {

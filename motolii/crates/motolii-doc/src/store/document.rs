@@ -1,6 +1,7 @@
 mod apply;
 mod edit;
 mod group;
+mod projection;
 mod ids;
 mod validate;
 
@@ -330,7 +331,18 @@ impl Document {
         &mut self,
         intents: impl IntoIterator<Item = Intent>,
     ) -> Result<(), StoreError> {
-        let intents: Vec<Intent> = intents.into_iter().collect();
+        self.apply_then(intents, |_| Ok(Vec::new()))
+    }
+
+    /// 1 手で 2 段。先の intents を書き、**その結果の view** で次の intents を決めて、
+    /// 同じ履歴の段に書く。「作ってから並べる」のように後段が前段の結果を見ないと
+    /// 決まらない編集を Undo 一発にする。どちらかが失敗すれば両方とも残らない。
+    pub fn apply_then(
+        &mut self,
+        first: impl IntoIterator<Item = Intent>,
+        then: impl FnOnce(&Self) -> Result<Vec<Intent>, StoreError>,
+    ) -> Result<(), StoreError> {
+        let intents: Vec<Intent> = first.into_iter().collect();
         if intents.is_empty() {
             return Ok(());
         }
@@ -351,8 +363,8 @@ impl Document {
         let preview = std::mem::take(&mut self.preview_edits);
         self.drop_redo_space();
         let at = self.head + 1;
-        for intent in intents {
-            if let Err(error) = self.write(intent, at) {
+        if let Err(error) = self.write_staged(at, intents, then) {
+            {
                 if let Some(original) = original_db {
                     self.db = original;
                     self.head = original_head;
@@ -370,6 +382,26 @@ impl Document {
         self.head = at;
         self.tip = at;
         self.clear_all_transients();
+        Ok(())
+    }
+
+    /// 段の中身。先を書き、head を仮に進めて `then` に見せ、返った物も同じ段へ書く。
+    fn write_staged(
+        &mut self,
+        at: i64,
+        first: Vec<Intent>,
+        then: impl FnOnce(&Self) -> Result<Vec<Intent>, StoreError>,
+    ) -> Result<(), StoreError> {
+        for intent in first {
+            self.write(intent, at)?;
+        }
+        let head = self.head;
+        self.head = at;
+        let more = then(self);
+        self.head = head;
+        for intent in more? {
+            self.write(intent, at)?;
+        }
         Ok(())
     }
 

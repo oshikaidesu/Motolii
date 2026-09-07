@@ -13,6 +13,9 @@ enum DocumentOperation {
   setAttrs('setAttrs'),
   create('create'),
   duplicate('duplicate'),
+  ghost('ghost'),
+  sequence('sequence'),
+  previewSequence('previewSequence'),
   copy('copy'),
   cut('cut'),
   paste('paste'),
@@ -29,8 +32,11 @@ enum DocumentOperation {
   previewColor('previewColor'),
   focusColor('focusColor'),
   applyPalette('applyPalette'),
+  pickColor('pickColor'),
   applyEffect('applyEffect'),
   removeEffect('removeEffect'),
+  expandEffect('expandEffect'),
+  animate('animate'),
   clip('clip'),
   addMarker('addMarker'),
   setMarker('setMarker'),
@@ -69,15 +75,9 @@ enum DocumentOperation {
         throw ArgumentError.value(name, 'op', 'Unknown document operation'),
   );
 
-  bool get requiresPause => !{
-    status,
-    notes,
-    exportStatus,
-    copy,
-    save,
-    exportDocument,
-    cancelExport,
-  }.contains(this);
+  /// 再生は Ableton と同じで、止めない限り回り続け、回っている間も編集できる
+  /// (2026-09-07 利用者)。止めるのは書類そのものを入れ替える操作だけ。
+  bool get requiresPause => this == newDocument;
 
   bool get requiresRender => !{
     status,

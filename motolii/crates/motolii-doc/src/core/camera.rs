@@ -8,6 +8,7 @@ pub struct ResolvedCamera {
     pub roll_degrees: f32,
     pub orbit_degrees: [f32; 2],
     pub distance_scale: f32,
+    pub target_z: f32,
 }
 
 impl Default for ResolvedCamera {
@@ -18,6 +19,28 @@ impl Default for ResolvedCamera {
             roll_degrees: 0.0,
             orbit_degrees: [0.0; 2],
             distance_scale: 1.0,
+            target_z: 0.0,
+        }
+    }
+}
+
+impl ResolvedCamera {
+    pub fn target(&self, comp: CompSpec) -> glam::Vec3 {
+        glam::vec3(
+            comp.width as f32 * 0.5 + self.center[0],
+            comp.height as f32 * 0.5 + self.center[1],
+            self.target_z,
+        )
+    }
+
+    /// rerun `focus_entity`: look_target = the object's centre, eye = target − fwd × 1.5 × bounding-sphere radius.
+    pub fn looking_at(self, comp: CompSpec, target: glam::Vec3, radius: f32) -> Self {
+        let distance = (radius * 1.5).max(base_distance(comp) * 0.01);
+        Self {
+            center: [target.x - comp.width as f32 * 0.5, target.y - comp.height as f32 * 0.5],
+            target_z: target.z,
+            distance_scale: distance / base_distance(comp),
+            ..self
         }
     }
 }
@@ -55,11 +78,7 @@ pub fn camera_projection(comp: CompSpec, camera: ResolvedCamera) -> CameraProjec
     let half_base_fov = (CAMERA_BASE_VERTICAL_FOV_DEGREES * 0.5).to_radians();
     let vertical_fov_radians = 2.0 * (half_base_fov.tan() / zoom).atan();
 
-    let target = glam::vec3(
-        comp.width as f32 * 0.5 + camera.center[0],
-        comp.height as f32 * 0.5 + camera.center[1],
-        0.0,
-    );
+    let target = camera.target(comp);
     let orbit = glam::Quat::from_rotation_y(camera.orbit_degrees[1].to_radians()) * glam::Quat::from_rotation_x(camera.orbit_degrees[0].to_radians());
     let eye = target + orbit * glam::vec3(0.0, 0.0, -distance * camera.distance_scale.max(0.01));
 
@@ -121,26 +140,96 @@ pub fn layer_projection_transform(
     center: glam::Vec3,
 ) -> glam::Affine3A {
     use crate::doc::store::LayerProjection;
-    use glam::{Affine3A, Vec3};
     match mode {
-        LayerProjection::ThreeD | LayerProjection::TwoPointFiveD => Affine3A::IDENTITY,
-        LayerProjection::TwoD => {
-            let projection = camera_projection(comp, camera);
-            let baseline = camera_projection(comp, ResolvedCamera::default());
-            let focal = (projection.vertical_fov_radians * 0.5).tan()
-                / (baseline.vertical_fov_radians * 0.5).tan();
-            let frame_center = glam::vec2(comp.width as f32 * 0.5, comp.height as f32 * 0.5);
-            let displacement = (center.truncate() - frame_center) / base_distance(comp);
-            let frame_translation = Affine3A::from_mat3(glam::Mat3::from_cols(
-                Vec3::X, Vec3::Y, glam::vec3(displacement.x, displacement.y, 1.0),
-            ));
-            Affine3A::from_mat4(projection.view_matrix()).inverse()
-                * Affine3A::from_scale(glam::vec3(focal, focal, 1.0))
-                * Affine3A::from_mat4(baseline.view_matrix())
-                * frame_translation
-                * Affine3A::from_translation(-Vec3::Z * center.z)
+        LayerProjection::ThreeD => glam::Affine3A::IDENTITY,
+        LayerProjection::TwoPointFiveD => {
+            let rotation = camera_projection(comp, camera).rotation.inverse()
+                * camera_projection(comp, ResolvedCamera::default()).rotation;
+            glam::Affine3A::from_translation(center)
+                * glam::Affine3A::from_quat(rotation)
+                * glam::Affine3A::from_translation(-center)
         }
+        LayerProjection::TwoD => two_d_frame(comp, camera) * two_d_center(comp, center),
     }
+}
+
+/// Camera-independent part of 2D: the default camera's view scaled to the current zoom.
+fn two_d_frame(comp: CompSpec, camera: ResolvedCamera) -> glam::Affine3A {
+    use glam::Affine3A;
+    let projection = camera_projection(comp, camera);
+    let baseline = camera_projection(comp, ResolvedCamera::default());
+    let focal = (projection.vertical_fov_radians * 0.5).tan()
+        / (baseline.vertical_fov_radians * 0.5).tan();
+    Affine3A::from_mat4(projection.view_matrix()).inverse()
+        * Affine3A::from_scale(glam::vec3(focal, focal, 1.0))
+        * Affine3A::from_mat4(baseline.view_matrix())
+}
+
+/// Center-dependent part of 2D: drop the layer onto z=0 and shear its depth so the
+/// frame center's vanishing point does not tilt an off-center layer.
+fn two_d_center(comp: CompSpec, center: glam::Vec3) -> glam::Affine3A {
+    use glam::{Affine3A, Vec3};
+    let frame_center = glam::vec2(comp.width as f32 * 0.5, comp.height as f32 * 0.5);
+    let displacement = (center.truncate() - frame_center) / base_distance(comp);
+    Affine3A::from_mat3(glam::Mat3::from_cols(
+        Vec3::X, Vec3::Y, glam::vec3(displacement.x, displacement.y, 1.0),
+    )) * Affine3A::from_translation(-Vec3::Z * center.z)
+}
+
+/// World transform that draws the same picture under `to` that `world` draws under `from`.
+/// `None` when the layer's center cannot be placed in front of the camera.
+pub fn projection_switch_world(
+    comp: CompSpec,
+    camera: ResolvedCamera,
+    from: crate::doc::store::LayerProjection,
+    to: crate::doc::store::LayerProjection,
+    world: glam::Affine3A,
+    local_center: glam::Vec3,
+) -> Option<glam::Affine3A> {
+    use crate::doc::store::LayerProjection;
+    use glam::Affine3A;
+    let seen = layer_projection_transform(comp, camera, from, world.transform_point3(local_center)) * world;
+    if !matches!(to, LayerProjection::TwoD) {
+        // 3D and 2.5D act about the layer's center, which the switch leaves in place.
+        let switched = layer_projection_transform(comp, camera, to, seen.transform_point3(local_center)).inverse() * seen;
+        return switched.is_finite().then_some(switched);
+    }
+    // 2D draws the layer on z=0. Scale the seen geometry toward the eye until its center
+    // lands there: the picture is unchanged and the shear is then exact.
+    let eye = camera_projection(comp, camera).eye;
+    let unframed = two_d_frame(comp, camera).inverse();
+    let center = seen.transform_point3(local_center);
+    let a = unframed.transform_point3(eye);
+    let b = unframed.transform_vector3(center - eye);
+    let k = -a.z / b.z;
+    if !k.is_finite() || k <= 0.0 { return None; }
+    let toward_eye = Affine3A::from_translation(eye) * Affine3A::from_scale(glam::Vec3::splat(k)) * Affine3A::from_translation(-eye);
+    let flat = unframed * toward_eye * seen;
+    let switched = two_d_center(comp, flat.transform_point3(local_center)).inverse() * flat;
+    switched.is_finite().then_some(switched)
+}
+
+/// Screen positions of the 8 corners of a layer's local bounds, as the Stage shows them:
+/// `camera` decides the layer's projection, `observer` draws the result.
+pub fn projected_screen_corners(
+    comp: CompSpec,
+    camera: ResolvedCamera,
+    observer: ResolvedCamera,
+    mode: crate::doc::store::LayerProjection,
+    world: glam::Affine3A,
+    min: [f32; 3],
+    max: [f32; 3],
+) -> [glam::Vec2; 8] {
+    let projection = camera_projection(comp, observer);
+    let matrix = projection.projection_matrix() * projection.view_matrix();
+    let center = world.transform_point3((glam::Vec3::from(min) + glam::Vec3::from(max)) * 0.5);
+    let correction = layer_projection_transform(comp, camera, mode, center);
+    std::array::from_fn(|i| {
+        let p = glam::Vec3::from_array(std::array::from_fn(|a| if i & (1 << a) == 0 { min[a] } else { max[a] }));
+        let c = matrix * correction.transform_point3(world.transform_point3(p)).extend(1.0);
+        let w = if c.w.abs() < 1e-6 { 1e-6 } else { c.w };
+        glam::vec2((c.x / w + 1.0) * 0.5 * comp.width as f32, (1.0 - c.y / w) * 0.5 * comp.height as f32)
+    })
 }
 
 #[cfg(test)]
@@ -214,17 +303,24 @@ mod projection_tests {
     }
 
     #[test]
-    fn two_point_five_d_keeps_authored_orientation_and_volume() {
+    fn two_point_five_d_keeps_its_camera_facing_angle_and_volume_wherever_it_sits() {
         let comp = CompSpec { width: 1920, height: 1080 };
         let normal = glam::Quat::from_rotation_x(0.6) * glam::Vec3::Z;
-        let vertices = [glam::Vec3::ZERO, glam::Vec3::X*80.0, glam::Vec3::Y*60.0, glam::Vec3::Z*40.0];
-        for camera in [ResolvedCamera::default(), ResolvedCamera { center:[90.0,-30.0], zoom:1.8, roll_degrees:33.0, ..Default::default() }] {
+        let vertices = [glam::Vec3::X*80.0, glam::Vec3::Y*60.0, glam::Vec3::Z*40.0];
+        let facing = |camera, v: glam::Vec3| camera_projection(comp, camera).rotation * v;
+        for camera in [ResolvedCamera::default(), ResolvedCamera { center:[90.0,-30.0], zoom:1.8, roll_degrees:33.0, ..Default::default() },
+            ResolvedCamera { orbit_degrees:[20.0,-35.0], roll_degrees:-10.0, ..Default::default() }] {
             for center in [glam::vec3(250.0,200.0,0.0),glam::vec3(1700.0,900.0,300.0)] {
                 let transform=layer_projection_transform(comp,camera,LayerProjection::TwoPointFiveD,center);
-                assert_eq!(transform.transform_vector3(normal),normal);
+                assert!(transform.transform_point3(center).distance(center) < 1e-3);
+                assert!(facing(camera, transform.transform_vector3(normal)).distance(facing(ResolvedCamera::default(), normal)) < 1e-5);
                 for vertex in vertices {
-                    assert_eq!(transform.transform_point3(center+vertex),center+vertex);
+                    let moved = transform.transform_point3(center+vertex);
+                    assert!((moved.distance(center) - vertex.length()).abs() < 1e-3, "volume kept");
                 }
+            }
+            if camera.roll_degrees == 0.0 && camera.orbit_degrees == [0.0; 2] {
+                assert_eq!(layer_projection_transform(comp,camera,LayerProjection::TwoPointFiveD,glam::vec3(700.0,100.0,50.0)), glam::Affine3A::IDENTITY);
             }
         }
     }
@@ -234,19 +330,21 @@ mod projection_tests {
         let comp=CompSpec {width:1920,height:1080};
         let baseline=ResolvedCamera::default();
         let panned=ResolvedCamera {center:[100.0,0.0],..baseline};
-        let projected=|camera,point:glam::Vec3| pixel(comp,camera,
-            layer_projection_transform(comp,camera,LayerProjection::TwoPointFiveD,point).transform_point3(point));
+        let projected=|camera,center:glam::Vec3,point:glam::Vec3| pixel(comp,camera,
+            layer_projection_transform(comp,camera,LayerProjection::TwoPointFiveD,center).transform_point3(point));
         let near=glam::vec3(250.0,200.0,0.0);
         let far=glam::vec3(250.0,200.0,350.0);
-        let near_shift=projected(panned,near)-projected(baseline,near);
-        let far_shift=projected(panned,far)-projected(baseline,far);
+        let near_shift=projected(panned,near,near)-projected(baseline,near,near);
+        let far_shift=projected(panned,far,far)-projected(baseline,far,far);
         assert!(near_shift.x<0.0 && far_shift.x<0.0 && near_shift.x.abs()>far_shift.x.abs());
         for center in [near,far] {
-            let edge=projected(panned,center+glam::Vec3::X*80.0)-projected(panned,center);
+            let edge=projected(panned,center,center+glam::Vec3::X*80.0)-projected(panned,center,center);
             assert!(edge.y.abs()<0.002);
             let rolled=ResolvedCamera {roll_degrees:30.0,..panned};
-            let edge=projected(rolled,center+glam::Vec3::X*80.0)-projected(rolled,center);
-            assert!(edge.y.abs()>1.0);
+            let edge=projected(rolled,center,center+glam::Vec3::X*80.0)-projected(rolled,center,center);
+            assert!(edge.y.abs()<0.002, "2.5D stays level when the camera rolls");
+            let world=|point:glam::Vec3| pixel(comp,rolled,point);
+            assert!((world(center+glam::Vec3::X*80.0)-world(center)).y.abs()>1.0, "3D rolls with the camera");
         }
     }
 
@@ -259,5 +357,56 @@ mod projection_tests {
         let transformed = layer_projection_transform(comp, camera, LayerProjection::TwoD, center).transform_point3(center);
         let mid = glam::vec2(960.0, 540.0);
         assert!(pixel(comp, camera, transformed).distance(mid + (pixel(comp, wide, transformed) - mid) * 3.0) < 0.003);
+    }
+
+    #[test]
+    fn projection_switch_keeps_every_screen_corner_in_both_directions() {
+        let comp = CompSpec { width: 1920, height: 1080 };
+        let min = [-12.0, -20.0, 0.0];
+        let max = [212.0, 140.0, 0.0];
+        let local_center = (glam::Vec3::from(min) + glam::Vec3::from(max)) * 0.5;
+        let world = glam::Affine3A::from_scale_rotation_translation(
+            glam::vec3(1.4, 0.8, 1.0),
+            glam::Quat::from_rotation_x(0.5) * glam::Quat::from_rotation_y(-0.9) * glam::Quat::from_rotation_z(0.3),
+            glam::vec3(1500.0, 200.0, 260.0),
+        );
+        let cameras = [ResolvedCamera::default(), ResolvedCamera { center: [210.0, -130.0], zoom: 1.7, roll_degrees: 47.0, ..Default::default() }];
+        let modes = [LayerProjection::TwoD, LayerProjection::TwoPointFiveD, LayerProjection::ThreeD];
+        for camera in cameras {
+            for from in modes {
+                for to in modes {
+                    let switched = projection_switch_world(comp, camera, from, to, world, local_center).unwrap();
+                    let before = projected_screen_corners(comp, camera, camera, from, world, min, max);
+                    let after = projected_screen_corners(comp, camera, camera, to, switched, min, max);
+                    for (a, b) in before.iter().zip(after) {
+                        assert!(a.distance(b) < 0.01, "{from:?}->{to:?} {camera:?}: {a:?} != {b:?}");
+                    }
+                    if matches!(to, LayerProjection::TwoD) {
+                        assert!(switched.transform_point3(local_center).z.abs() < 0.01, "2D rests on z=0");
+                    } else {
+                        let seen = layer_projection_transform(comp, camera, from, world.transform_point3(local_center)) * world;
+                        assert!(switched.transform_point3(local_center).distance(seen.transform_point3(local_center)) < 0.01);
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn looking_at_keeps_the_target_under_the_centre_and_the_sphere_inside_the_frame() {
+        let comp = CompSpec { width: 1280, height: 720 };
+        let centre = glam::vec2(640.0, 360.0);
+        for orbit in [[0.0, 0.0], [-15.0, 30.0], [60.0, -140.0]] {
+            let before = ResolvedCamera { orbit_degrees: orbit, ..Default::default() };
+            for (target, radius) in [(glam::vec3(900.0, 200.0, -350.0), 80.0), (glam::vec3(-40.0, 700.0, 1200.0), 900.0)] {
+                let camera = before.looking_at(comp, target, radius);
+                assert_eq!(camera.orbit_degrees, orbit, "focus keeps the viewing direction");
+                assert!(pixel(comp, camera, target).distance(centre) < 0.01, "target sits under the centre");
+                let right = camera_projection(comp, camera).rotation.inverse() * glam::Vec3::X;
+                let edge = pixel(comp, camera, target + right * radius);
+                assert!(edge.x > centre.x && edge.x < comp.width as f32, "sphere edge stays inside: {edge}");
+            }
+            assert!(before.looking_at(comp, before.target(comp), 0.0).distance_scale > 0.0);
+        }
     }
 }

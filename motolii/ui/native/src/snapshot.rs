@@ -50,14 +50,14 @@ impl EditorRuntime{
     pub(crate) fn view_camera(&self)->Result<crate::doc::core::ResolvedCamera,String>{
         if self.user_stage { Ok(self.user_camera) } else { self.doc.view().resolve_camera(self.time()?).map_err(e) }
     }
-    fn depth_layout(&self)->Result<Json,String>{
+    fn depth_layout(&self,resolved:&[crate::doc::store::ResolvedLayer])->Result<Json,String>{
         let view=self.doc.view();let time=self.time()?;let comp=view.composition().map_err(e)?.ok_or("No composition")?.spec();
         let camera=crate::doc::core::camera_projection(comp,view.resolve_camera(time).map_err(e)?);
-        let resolved=view.resolved_layers(time).map_err(e)?;
         let worlds=view.world_transforms3d(time).map_err(e)?;
         let mut items=Vec::new();
-        for layer in &resolved {
-            if layer.source==LayerSource::Camera {continue}
+        for layer in resolved {
+            // 配置効果の複製は層として 1 つ(元の姿)だけ並べる
+            if layer.source==LayerSource::Camera||layer.copy!=0 {continue}
             let Some(world)=worlds.get(&layer.id) else{continue};
             let attrs=view.attrs(layer.id).map_err(e)?.unwrap_or_default();
             let local=self.engine.selected_layer_bounds_in(&view,&resolved,layer.id,time).map(|b|glam::Vec3::from(b.center())).unwrap_or(glam::Vec3::ZERO);
@@ -71,11 +71,36 @@ impl EditorRuntime{
         }
         Ok(json!({"items":items,"halfFov":(camera.vertical_fov_radians*0.5).tan()*camera.aspect_ratio}))
     }
+    /// 注視の球: 層の world 中心と、局所 bounds の 8 角を包む半径(rerun `focus_entity` の bounding sphere)。
+    pub(crate) fn focus_sphere(&self,id:LayerId)->Result<Option<(glam::Vec3,f32)>,String>{
+        let view=self.doc.view();let time=self.time()?;
+        let resolved=view.resolved_layers(time).map_err(e)?;
+        let Some(world)=view.world_transforms3d(time).map_err(e)?.get(&id).copied() else{return Ok(None)};
+        let Some(b)=self.engine.selected_layer_bounds_in(&view,&resolved,id,time) else{return Ok(None)};
+        let centre=world.transform_point3(glam::Vec3::from(b.center()));
+        let radius=(0..8).map(|i|world.transform_point3(glam::vec3(if i&1==0{b.min[0]}else{b.max[0]},if i&2==0{b.min[1]}else{b.max[1]},if i&4==0{b.min[2]}else{b.max[2]})).distance(centre)).fold(0.0,f32::max);
+        Ok(Some((centre,radius)))
+    }
+    /// 観測者の画面へ world 点を写す。カメラの後ろは None。
+    fn observer_screen(&self)->Result<impl Fn(glam::Vec3)->Option<[f32;2]>,String>{
+        let view=self.doc.view();let comp=view.composition().map_err(e)?.ok_or("No composition")?.spec();
+        let observer=crate::doc::core::camera_projection(comp,self.view_camera()?);
+        let matrix=observer.projection_matrix()*observer.view_matrix();
+        Ok(move|p:glam::Vec3|{let c=matrix*p.extend(1.0);if c.w<=0.0{return None}Some([(c.x/c.w+1.0)*0.5*comp.width as f32,(1.0-c.y/c.w)*0.5*comp.height as f32])})
+    }
+    /// User Stage の観測者: 正面か、注視点、comp 面の 4 角。Camera View では Null。
+    fn observer_status(&self)->Result<Json,String>{
+        if !self.user_stage { return Ok(Json::Null); }
+        let comp=self.doc.view().composition().map_err(e)?.ok_or("No composition")?.spec();
+        let screen=self.observer_screen()?;
+        let (w,h)=(comp.width as f32,comp.height as f32);
+        let frame:Vec<_>=[glam::Vec3::ZERO,glam::vec3(w,0.0,0.0),glam::vec3(w,h,0.0),glam::vec3(0.0,h,0.0)].into_iter().map(&screen).collect();
+        Ok(json!({"front":self.user_camera==Default::default(),"orbit":self.user_camera.orbit_degrees,"target":screen(self.user_camera.target(comp)),"frame":if frame.iter().all(Option::is_some){json!(frame)}else{Json::Null}}))
+    }
     fn camera_gizmos(&self)->Result<Json,String>{
         if !self.user_stage { return Ok(json!([])); }
         let view=self.doc.view();let time=self.time()?;let comp=view.composition().map_err(e)?.ok_or("No composition")?.spec();
-        let observer=crate::doc::core::camera_projection(comp,self.view_camera()?);
-        let matrix=observer.projection_matrix()*observer.view_matrix();
+        let screen=self.observer_screen()?;
         let mut gizmos=Vec::new();
         for id in view.layers(){
             let Some(meta)=view.meta(id).map_err(e)? else{continue};
@@ -91,26 +116,23 @@ impl EditorRuntime{
             let depth=crate::doc::core::distance_from_camera(comp,0.0);
             let height=depth*(projection.vertical_fov_radians*0.5).tan();let width=height*projection.aspect_ratio;
             let points=[glam::Vec3::ZERO,glam::vec3(-width,-height,-depth),glam::vec3(width,-height,-depth),glam::vec3(width,height,-depth),glam::vec3(-width,height,-depth)];
-            let points:Vec<_>=points.into_iter().map(|p| {let c=matrix*(projection.eye+rotation*p).extend(1.0);if c.w<=0.0{return None}Some([(c.x/c.w+1.0)*0.5*comp.width as f32,(1.0-c.y/c.w)*0.5*comp.height as f32])}).collect();
-            if points.iter().all(Option::is_some){gizmos.push(json!({"id":id.0,"points":points}));}
+            let points:Vec<_>=points.into_iter().map(|p|screen(projection.eye+rotation*p)).collect();
+            if points.iter().all(Option::is_some){gizmos.push(json!({"id":id.0,"points":points,"target":screen(camera.target(comp)),"center":camera.center,"zoom":camera.zoom,"roll":camera.roll_degrees}));}
         }
         Ok(json!(gizmos))
     }
 
     pub(crate) fn bounds(&self,layer:LayerId)->Option<Json>{
+        let resolved=self.doc.view().resolved_layers(self.time().ok()?).ok()?;
+        self.bounds_in(&resolved,layer)
+    }
+    /// 解決済みの層の並びから枠を取る。status は 1 フレームに 1 回だけ解いて、全層でこれを使う。
+    pub(crate) fn bounds_in(&self,resolved:&[crate::doc::store::ResolvedLayer],layer:LayerId)->Option<Json>{
         let view=self.doc.view();let time=self.time().ok()?;let comp=view.composition().ok()??.spec();let camera=view.resolve_camera(time).ok()?;let observer=self.view_camera().ok()?;
-        let resolved=view.resolved_layers(time).ok()?;let r=resolved.iter().find(|r|r.id==layer)?;
-        let b=self.engine.selected_layer_bounds_in(&view,&resolved,layer,time)?;
-        let projection=crate::doc::core::camera_projection(comp,observer);
-        let matrix=projection.projection_matrix()*projection.view_matrix();
+        let r=resolved.iter().find(|r|r.id==layer&&!r.ghost)?;
+        let b=self.engine.selected_layer_bounds_in(&view,resolved,layer,time)?;
         let world=r.placement.world_transform?;
-        let correction=crate::doc::core::layer_projection_transform(comp,camera,r.projection,world.transform_point3(glam::Vec3::from(b.center())));
-        let corners:Vec<_>=(0..8).map(|i|{
-            let p=glam::Vec3::from_array(std::array::from_fn(|a|if i&(1<<a)==0{b.min[a]}else{b.max[a]}));
-            let c=matrix*correction.transform_point3(world.transform_point3(p)).extend(1.0);
-            let w=if c.w.abs()<1e-6{1e-6}else{c.w};
-            [((c.x/w+1.0)*0.5*comp.width as f32)as f64,((1.0-c.y/w)*0.5*comp.height as f32)as f64]
-        }).collect();
+        let corners:Vec<_>=crate::doc::core::projected_screen_corners(comp,camera,observer,r.projection,world,b.min,b.max).into_iter().map(|p|[p.x as f64,p.y as f64]).collect();
         let anchor=match view.value_at(layer,&PropertyId::new(property::ANCHOR).ok()?,time).ok().flatten(){Some(Value::Vec2(v))=>v,_=>[0.0,0.0]};
         let fractions:[f64;2]=std::array::from_fn(|i|(anchor[i]-b.min[i]as f64)/(b.max[i]-b.min[i]).max(1e-6)as f64);
         Some(json!({"layer":layer.0,"corners":corners,"localMin":b.min,"localMax":b.max,"anchorFraction":fractions}))
@@ -118,6 +140,10 @@ impl EditorRuntime{
     pub(crate) fn status(&self)->Result<Json,String>{
         let view=self.doc.view();let comp=view.composition().map_err(e)?.ok_or("No composition")?;let at=self.time()?;
         let catalog=crate::render::engine::known_effects();
+        let resolved=view.resolved_layers(at).map_err(e)?;
+        // 再生中で Document が変わっていなければ、時刻で変わる物(値・枠)だけの軽い status にする。
+        let revision=format!("{:?}",self.doc.revision());
+        let live=self.clock.playing()&&self.full_status_revision.borrow().as_deref()==Some(revision.as_str());
         let mut ids=view.layers();ids.sort_by_key(|id|std::cmp::Reverse((view.meta(*id).ok().flatten().map_or(0,|m|m.order),id.0)));
         let mut layers=Vec::new();
         for id in ids{
@@ -149,16 +175,49 @@ impl EditorRuntime{
             }else{Json::Null};
             let colors:Vec<_>=data.colors.iter().map(|c|json!({"label":c.label,"slot":c.slot,"rgba":editor::color::read_color(&self.doc,&c.slot).unwrap_or([0.0,0.0,0.0,1.0])})).collect();
             let effects:Result<Vec<_>,String>=data.effects.iter().map(|effect|{
-                let params:Result<Vec<_>,_>=effect.params.iter().filter_map(|p|p.property.as_ref().map(|idp|prop(&view,id,idp,&p.label,&p.value,p.range,at,comp.fps))).collect();
-                Ok(json!({"id":effect.id,"pluginId":effect.plugin_id,"name":effect.plugin_id,"params":params?}))
+                let kind=crate::doc::store::placement::kind(&effect.plugin_id);
+                let mut params:Vec<Json>=effect.params.iter().filter_map(|p|p.property.as_ref().map(|idp|prop(&view,id,idp,&p.label,&p.value,p.range,at,comp.fps))).collect::<Result<_,_>>()?;
+                for row in &mut params{
+                    let name=row["id"].as_str().unwrap_or_default().rsplit(".param.").next().unwrap_or_default().to_owned();
+                    if let Some(param)=crate::doc::store::kind::kind(&effect.plugin_id).and_then(|k|k.params.iter().find(|p|p.name==name)){
+                        if !param.section.is_empty(){row["section"]=json!(param.section);}
+                    }
+                    if let Some(choices)=catalog.iter().find(|d|d.plugin_id==effect.plugin_id).and_then(|d|d.params.iter().find(|p|p.name==name)).and_then(|p|p.choices.clone()){row["choices"]=json!(choices);}
+                }
+                let layout=kind.map(|k|{
+                    let pid=|name:&str|format!("effect.{}.param.{}",effect.id,name);
+                    let shown=|name:&str|params.iter().any(|r|r["id"]==pid(name));
+                    let share=format!("effect.{}.param.{}",effect.id,crate::doc::store::placement::SHARE_PREFIX);
+                    json!({"columns":["Each","Random"],"count":pid("count"),"along":pid("mode"),"pick":pid("pick"),"subject":pid("subject"),"seed":pid("seed"),
+                        "materials":params.iter().filter(|r|r["id"].as_str().is_some_and(|i|i.starts_with(&share))).map(|r|json!({"id":r["id"],"label":r["label"]})).collect::<Vec<_>>(),
+                        "shape":k.shape.iter().filter(|n|shown(n)).map(|n|json!({"id":pid(n),"label":k.params.iter().find(|p|p.name==*n).map_or(*n,|p|p.label),"unit":crate::doc::store::placement::unit(n)})).collect::<Vec<_>>(),
+                        "rows":k.grid.iter().map(|r|json!({"label":r.label,"unit":r.unit,"each":r.each.map(pid),"random":r.random.map(pid),"axis":r.axis,"advanced":r.advanced})).collect::<Vec<_>>()})
+                });
+                Ok(json!({"id":effect.id,"pluginId":effect.plugin_id,"name":catalog.iter().find(|d|d.plugin_id==effect.plugin_id).map_or(effect.plugin_id.as_str(),|d|d.label.as_str()),"placement":kind.is_some(),"layout":layout,"params":params}))
             }).collect();
-            let position=self.position(id)?;let bounds=self.bounds(id);
+            let position=self.position(id)?;let bounds=self.bounds_in(&resolved,id);
             let tint=data.colors.first().and_then(|c|editor::color::read_color(&self.doc,&c.slot)).unwrap_or([0.9,0.5,0.2,1.0]);
-            let blend_previews:serde_json::Map<String,Json>=(0..18).filter_map(BlendMode::from_enum_value).map(|mode|(format!("{:?}",mode),json!(editor::blend_preview::BEDS.map(|bed|editor::blend_preview::blend(mode,[tint[0]as f32,tint[1]as f32,tint[2]as f32],bed))))).collect();
+            // 混ぜ方の見本は選んだ層だけ。1 フレームごとの JSON を層数に比例させない。
+            let blend_previews:serde_json::Map<String,Json>=if self.selected_ids.contains(&id){(0..18).filter_map(BlendMode::from_enum_value).map(|mode|(format!("{:?}",mode),json!(editor::blend_preview::BEDS.map(|bed|editor::blend_preview::blend(mode,[tint[0]as f32,tint[1]as f32,tint[2]as f32],bed))))).collect()}else{Default::default()};
             let content_keys:Vec<_>=properties.iter().find(|p|p["id"]=="content").and_then(|p|p["keys"].as_array()).into_iter().flatten().map(|k|json!({"frame":k["frame"],"content":k["value"]})).collect();
             let corners=bounds.as_ref().and_then(|b|b["corners"].as_array()).map(|c|[c[0].clone(),c[1].clone(),c[3].clone(),c[2].clone()]);
-            layers.push(json!({"id":id.0,"name":attrs.name,"kind":source_kind(&meta.source),"parent":attrs.parent.map(|p|p.0),"order":meta.order,"hidden":attrs.hidden,"solo":attrs.solo,"locked":attrs.locked,"clipToBelow":attrs.clip_to_below,"clipBase":view.clipping_base(id).map_err(e)?.map(|b|b.0),"projection":match attrs.projection{LayerProjection::TwoD=>"2D",LayerProjection::TwoPointFiveD=>"2.5D",LayerProjection::ThreeD=>"3D"},"flatten":attrs.flatten,"frozen":attrs.frozen,"blendMode":attrs.blend_mode,"matte":attrs.matte,"start":meta.timing.start,"duration":meta.timing.duration,"sourceIn":meta.timing.source_in,"properties":properties,"text":text,"colors":colors,"effects":effects?,"contentKeys":content_keys,"corners":corners,"blendPreviews":blend_previews,"x":position[0],"y":position[1],"bounds":bounds,"anchorFraction":bounds.as_ref().map(|b|b["anchorFraction"].clone())}));
+            layers.push(json!({"id":id.0,"name":attrs.name,"kind":source_kind(&meta.source),"ghost":attrs.ghost,"ghostable":crate::editor::timeline_edit::ghostable(&view,id),"parent":attrs.parent.map(|p|p.0),"order":meta.order,"hidden":attrs.hidden,"solo":attrs.solo,"locked":attrs.locked,"clipToBelow":attrs.clip_to_below,"clipBase":view.clipping_base(id).map_err(e)?.map(|b|b.0),"projection":match attrs.projection{LayerProjection::TwoD=>"2D",LayerProjection::TwoPointFiveD=>"2.5D",LayerProjection::ThreeD=>"3D"},"flatten":attrs.flatten,"environment":attrs.environment,"frozen":attrs.frozen,"blendMode":attrs.blend_mode,"matte":attrs.matte,"start":meta.timing.start,"duration":meta.timing.duration,"sourceIn":meta.timing.source_in,"properties":properties,"text":text,"colors":colors,"effects":effects?,"contentKeys":content_keys,"corners":corners,"blendPreviews":blend_previews,"x":position[0],"y":position[1],"bounds":bounds,"anchorFraction":bounds.as_ref().map(|b|b["anchorFraction"].clone())}));
         }
+        if live {
+            let (undo,redo)=self.doc.history_depth();
+            let selected_keys:Vec<_>=self.selected_keys.iter().map(|k|json!({"layer":k.layer.0,"property":k.property.as_ref().map(|p|p.name()),"frame":(k.at_sec*comp.fps.as_f64()).round()as i64})).collect();
+            let point=self.selected.map(|id|self.position(id)).transpose()?.unwrap_or([0.0,0.0]);
+            let live_layers:Vec<Json>=layers.iter().map(|l|{
+                let rows=|v:&Json|v.as_array().into_iter().flatten().map(|r|json!({"id":r["id"],"value":r["value"],"keyedNow":r["keyedNow"]})).collect::<Vec<_>>();
+                json!({"id":l["id"],"x":l["x"],"y":l["y"],"bounds":l["bounds"],"corners":l["corners"],"text":l["text"],"properties":rows(&l["properties"]),
+                    "effects":l["effects"].as_array().into_iter().flatten().map(|e|json!({"id":e["id"],"params":rows(&e["params"])})).collect::<Vec<_>>()})
+            }).collect();
+            // 寸法は Swift の render が毎コマ読む。軽い status でも落とさない(落とすと再生 2 コマ目で render が失敗し、再生が止まる)。
+            return Ok(json!({"frame":self.frame,"playing":self.clock.playing(),"documentRevision":revision,"undo":undo,"redo":redo,"width":comp.width,"height":comp.height,"fps":comp.fps.as_f64(),"durationFrames":comp.duration_frames,
+                "selectedId":self.selected.map(|s|s.0),"selectedIds":self.selected_ids.iter().map(|s|s.0).collect::<Vec<_>>(),"selectedKeys":selected_keys,"x":point[0],"y":point[1],
+                "stageView":if self.user_stage{"User"}else{"Camera"},"animate":self.animate,"renderCount":self.render_count,"pickedColor":self.picked_color,"pickSerial":self.pick_serial,"renderMs":self.render_ms,"liveLayers":live_layers}));
+        }
+        *self.full_status_revision.borrow_mut()=Some(revision);
         let assets:Result<Vec<_>,String>=view.assets().map_err(e)?.into_iter().map(|a|{
             let used=self.asset_used(a.id)?;
             let path=a.path_absolute.clone();let missing=path.as_ref().is_none_or(|p|!std::path::Path::new(p).exists());
@@ -179,9 +238,72 @@ impl EditorRuntime{
         let (undo,redo)=self.doc.history_depth();let point=self.selected.map(|id|self.position(id)).transpose()?.unwrap_or([0.0,0.0]);
         let color_target=self.color_target.as_ref().and_then(|slot|editor::color::read_color(&self.doc,slot).map(|rgba|json!({"layer":slot.layer().0,"slot":slot,"label":"Color","rgba":rgba})));
         let selected_keys:Vec<_>=self.selected_keys.iter().map(|k|json!({"layer":k.layer.0,"property":k.property.as_ref().map(|p|p.name()),"frame":(k.at_sec*comp.fps.as_f64()).round()as i64})).collect();
-        let mut status=json!({"stageView":if self.user_stage{"User"}else{"Camera"},"userOrbit":self.user_camera.orbit_degrees,"cameraGizmos":self.camera_gizmos()?,"width":comp.width,"height":comp.height,"fps":comp.fps.as_f64(),"fpsNum":comp.fps.num(),"fpsDen":comp.fps.den(),"durationFrames":comp.duration_frames,"background":comp.background,"frame":self.frame,"playing":self.clock.playing(),"playbackHealth":playback_health,"waveforms":waveforms,"undo":undo,"redo":redo,"path":self.path,"dirty":authored_signature(&self.doc)?!=self.saved_signature,"layers":layers,"selectedId":self.selected.map(|id|id.0),"selectedIds":self.selected_ids.iter().map(|id|id.0).collect::<Vec<_>>(),"selectedKeys":selected_keys,"selectedBounds":self.selected.and_then(|id|self.bounds(id)),"x":point[0],"y":point[1],"assets":assets?,"catalog":catalog.iter().map(|e|json!({"id":e.plugin_id,"name":e.plugin_id})).collect::<Vec<_>>(),"palette":palette,"markers":markers?,"colorTarget":color_target,"capabilities":crate::port::CAPABILITIES,"easeKinds":editor::ease_kinds::KINDS.iter().copied().map(interp).collect::<Vec<_>>(),"documentRevision":format!("{:?}",self.doc.revision()),"deviceId":self.device_id.to_string(),"renderCount":self.render_count,"renderMs":self.render_ms,"interopCopies":0,"readbacks":0,"error":self.error,"preview":self.preview.is_some(),"export":self.exporter.status()});
+        let mut status=json!({"stageView":if self.user_stage{"User"}else{"Camera"},"observer":self.observer_status()?,"cameraGizmos":self.camera_gizmos()?,"width":comp.width,"height":comp.height,"fps":comp.fps.as_f64(),"fpsNum":comp.fps.num(),"fpsDen":comp.fps.den(),"durationFrames":comp.duration_frames,"background":comp.background,"frame":self.frame,"playing":self.clock.playing(),"playbackHealth":playback_health,"waveforms":waveforms,"undo":undo,"redo":redo,"path":self.path,"dirty":authored_signature(&self.doc)?!=self.saved_signature,"layers":layers,"selectedId":self.selected.map(|id|id.0),"selectedIds":self.selected_ids.iter().map(|id|id.0).collect::<Vec<_>>(),"selectedKeys":selected_keys,"selectedBounds":self.selected.and_then(|id|self.bounds(id)),"x":point[0],"y":point[1],"assets":assets?,"catalog":catalog.iter().map(|e|json!({"id":e.plugin_id,"name":e.label})).collect::<Vec<_>>(),"palette":palette,"markers":markers?,"colorTarget":color_target,"capabilities":crate::port::CAPABILITIES,"easeKinds":if self.clock.playing(){Json::Null}else{json!(editor::ease_kinds::KINDS.iter().copied().map(interp).collect::<Vec<_>>())},"documentRevision":format!("{:?}",self.doc.revision()),"deviceId":self.device_id.to_string(),"renderCount":self.render_count,"renderMs":self.render_ms,"interopCopies":0,"readbacks":0,"error":self.error,"preview":self.preview.is_some(),"export":self.exporter.status()});
         status["notebook"]=serde_json::to_value(view.notebook().map_err(e)?).map_err(e)?;
-        status["depthLayout"]=self.depth_layout()?;
+        status["depthLayout"]=self.depth_layout(&resolved)?;
+        status["animate"]=json!(self.animate);
+        if status["easeKinds"].is_null(){status.as_object_mut().unwrap().remove("easeKinds");}
+        status["importExtensions"]=json!(crate::render::media::import_extensions());
         Ok(status)
+    }
+}
+
+#[cfg(test)]
+mod frame_cost_probe {
+    use crate::doc::store::*;
+
+    fn runtime(layers: u32, copies: f64) -> crate::EditorRuntime {
+        let mut rt = crate::EditorRuntime::open("").unwrap();
+        for i in 0..layers {
+            let layer = LayerId(100 + u64::from(i));
+            let repeat = EffectId(0);
+            rt.doc.apply_all([
+                Intent::AddLayer(layer),
+                Intent::SetMeta { layer, meta: LayerMeta { source: LayerSource::Shape, order: i as i16, timing: LayerTiming::place(0, None, 1800) } },
+                Intent::SetShapes { layer, shapes: vec![rect_shape([200, 80, 40, 255], [60.0, 60.0])] },
+                Intent::SetConstant { layer, property: PropertyId::new(property::POSITION).unwrap(), value: Value::Vec2([100.0 + 40.0 * f64::from(i), 100.0 + 150.0 * f64::from(i)]) },
+                Intent::SetEffects { layer, effects: vec![EffectInstance { id: repeat, plugin_id: placement::REPEAT.to_owned() }] },
+                Intent::SetConstant { layer, property: PropertyId::effect_param(repeat, "count").unwrap(), value: Value::F64(copies) },
+                Intent::SetConstant { layer, property: PropertyId::effect_param(repeat, "position_each").unwrap(), value: Value::Vec2([90.0, 0.0]) },
+            ]).unwrap();
+        }
+        rt
+    }
+
+    #[test]
+    #[ignore]
+    fn probe() {
+        for (layers, copies) in [(5, 1.0), (5, 30.0), (5, 100.0)] {
+            let mut rt = runtime(layers, copies);
+            let t = RationalTime::ZERO;
+            let time = |f: &mut dyn FnMut()| { let s = std::time::Instant::now(); for _ in 0..5 { f(); } s.elapsed() / 5 };
+            let resolve = time(&mut || { rt.doc.view().resolved_layers(t).unwrap(); });
+            let status = time(&mut || { rt.status().unwrap(); });
+            let status_bytes = rt.status().unwrap().to_string().len();
+            *rt.full_status_revision.borrow_mut() = Some(format!("{:?}", rt.doc.revision()));
+            rt.clock.toggle();
+            let live = time(&mut || { rt.status().unwrap(); });
+            let live_bytes = rt.status().unwrap().to_string().len();
+            rt.clock.toggle();
+            eprintln!("  live status={live:?} ({live_bytes} bytes)");
+            let sig = time(&mut || { crate::snapshot::authored_signature(&rt.doc).unwrap(); });
+            let depth = time(&mut || { let r = rt.doc.view().resolved_layers(t).unwrap(); rt.depth_layout(&r).unwrap(); });
+            let catalog = crate::render::engine::known_effects();
+            let inspector = time(&mut || { for id in rt.doc.view().layers() { crate::editor::functions::read::inspector_data_from_doc(&rt.doc.view(), id, t, &catalog); } });
+            eprintln!("  signature={sig:?} depth={depth:?} inspector={inspector:?}");
+            if copies == 1.0 {
+                let status = rt.status().unwrap();
+                let mut top: Vec<(usize, String)> = status.as_object().unwrap().iter().map(|(k, v)| (v.to_string().len(), k.clone())).collect();
+                top.sort(); top.reverse();
+                eprintln!("  top-level: {:?}", &top[..top.len().min(8)]);
+                if let Some(layer) = status["layers"].as_array().and_then(|l| l.first()) {
+                    let mut fields: Vec<(usize, String)> = layer.as_object().unwrap().iter().map(|(k, v)| (v.to_string().len(), k.clone())).collect();
+                    fields.sort(); fields.reverse();
+                    eprintln!("  one layer: {:?}", &fields[..fields.len().min(8)]);
+                }
+            }
+            let render = time(&mut || { rt.engine.render_frame_without_background(&rt.doc.view(), t).unwrap(); });
+            eprintln!("layers={layers} copies={copies:4}: resolve={resolve:?} status={status:?} ({status_bytes} bytes) render={render:?}");
+        }
     }
 }

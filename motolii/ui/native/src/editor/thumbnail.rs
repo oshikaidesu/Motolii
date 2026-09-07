@@ -29,7 +29,9 @@ pub(crate) fn warm(path: &str, video: bool) {
 
 pub(crate) fn image_data_uri(path: &str) -> Option<String> {
     remembered(path, || {
-        let image = image::ImageReader::open(path).ok()?.decode().ok()?;
+        // Stage と同じ decode(ICC 適用)。札と絵で色が違うと素材を疑う。
+        let (rgba, width, height) = crate::render::media::decode_still_srgb(path).ok()?;
+        let image = image::DynamicImage::ImageRgba8(image::RgbaImage::from_raw(width, height, rgba)?);
         encode(image.thumbnail(MAX_EDGE, MAX_EDGE))
     })
 }

@@ -17,15 +17,9 @@ class StagePanel extends StatefulWidget {
 
 class _StagePanelState extends State<StagePanel> {
   EditorSession get c => widget.controller;
-  Map<String, dynamic> get _state {
-    final rendered = c.rendered.value;
-    return rendered.isNotEmpty &&
-            rendered['frame'] == c.frame.value &&
-            (rendered['documentRevision'] == null ||
-                rendered['documentRevision'] == c.state['documentRevision'])
-        ? {...c.state, ...rendered}
-        : c.state;
-  }
+  Map<String, dynamic> get _state => c.renderedIsFresh
+      ? {...c.state, ...c.rendered.value, 'layers': c.liveLayers()}
+      : c.state;
 
   List<Map<String, dynamic>> get _layers =>
       EditorSession.maps(_state['layers']);
@@ -91,10 +85,131 @@ class _StagePanelState extends State<StagePanel> {
 
   List<Map<String, dynamic>> get _cameras =>
       _userStage ? EditorSession.maps(_state['cameraGizmos']) : [];
+  Map<String, dynamic> get _observer => EditorSession.map(_state['observer']);
+  bool get _front => !_userStage || _observer['front'] != false;
+  Offset? _point(dynamic p) => p is List && p.length >= 2
+      ? _toScreen(Offset(_num(p[0]), _num(p[1])))
+      : null;
   List<Offset> _cameraPoints(Map<String, dynamic> camera) =>
-      (camera['points'] as List)
-          .map((p) => _toScreen(Offset(_num(p[0]), _num(p[1]))))
-          .toList();
+      (camera['points'] as List).map((p) => _point(p)!).toList();
+  Map<String, dynamic>? get _selectedCamera {
+    for (final camera in _cameras) {
+      if (c.selectedIds.contains(camera['id'])) return camera;
+    }
+    return null;
+  }
+
+  /// Boxcam: 正面で見る時、カメラは comp 面に置いた箱。辺で掴んで Center、角で Zoom、上の取っ手で Roll。
+  Map<String, Offset> _cameraHandles(Map<String, dynamic> camera) {
+    final box = _cameraPoints(camera).sublist(1);
+    final centre = box.reduce((a, b) => a + b) / 4;
+    final top = (box[0] + box[1]) / 2;
+    final up = top - centre;
+    return {
+      for (var i = 0; i < 4; i++) 'zoom$i': box[i],
+      'roll':
+          top + (up.distance > 0 ? up / up.distance : const Offset(0, -1)) * 22,
+    };
+  }
+
+  double _segmentDistance(Offset p, Offset a, Offset b) {
+    final ab = b - a;
+    final t = ab.distanceSquared == 0
+        ? 0.0
+        : ((p - a).dx * ab.dx + (p - a).dy * ab.dy) / ab.distanceSquared;
+    return (p - (a + ab * t.clamp(0.0, 1.0))).distance;
+  }
+
+  bool _onCameraEdge(Map<String, dynamic> camera, Offset p) {
+    final box = _cameraPoints(camera).sublist(1);
+    for (var i = 0; i < 4; i++) {
+      if (_segmentDistance(p, box[i], box[(i + 1) % 4]) < 6) return true;
+    }
+    return false;
+  }
+
+  Map<String, dynamic>? _cameraDrag;
+  String _cameraHandle = 'center';
+  List<Map<String, dynamic>>? _cameraPending;
+  bool _cameraSending = false;
+  Future<void> _sendCamera() async {
+    if (_cameraSending) return;
+    _cameraSending = true;
+    try {
+      while (_cameraPending != null && mounted) {
+        final edits = _cameraPending!;
+        _cameraPending = null;
+        await c.command('previewProperties', {'edits': edits});
+      }
+    } finally {
+      _cameraSending = false;
+    }
+  }
+
+  void _moveCamera(Offset screen) {
+    final camera = _cameraDrag!;
+    final centre = _cameraPoints(camera).sublist(1).reduce((a, b) => a + b) / 4;
+    final start = _startScreen!;
+    final edits = <Map<String, dynamic>>[];
+    switch (_cameraHandle) {
+      case 'roll':
+        final delta =
+            (math.atan2(screen.dy - centre.dy, screen.dx - centre.dx) -
+                math.atan2(start.dy - centre.dy, start.dx - centre.dx)) *
+            180 /
+            math.pi;
+        edits.add({
+          'layer': camera['id'],
+          'property': 'camera.roll',
+          'value': _num(camera['roll']) - delta,
+        });
+      case 'center':
+        final delta = _toComp(screen) - _toComp(start);
+        final center = camera['center'] as List;
+        edits.add({
+          'layer': camera['id'],
+          'property': 'camera.center',
+          'value': [_num(center[0]) + delta.dx, _num(center[1]) + delta.dy],
+        });
+      default:
+        final ratio =
+            (screen - centre).distance / math.max(1, (start - centre).distance);
+        edits.add({
+          'layer': camera['id'],
+          'property': 'camera.zoom',
+          'value': _num(camera['zoom'], 1) / math.max(ratio, .01),
+        });
+    }
+    _cameraPending = edits;
+    _sendCamera();
+  }
+
+  Future<void> _finishCamera(bool cancel) async {
+    if (_cameraDrag == null) return;
+    _cameraDrag = null;
+    _finishing = true;
+    if (cancel) _cameraPending = null;
+    while (_cameraSending) {
+      await Future<void>.delayed(Duration.zero);
+    }
+    await c.command(cancel ? 'cancelPreview' : 'commitPreview');
+    if (mounted) setState(() => _finishing = false);
+    _pointer = null;
+  }
+
+  /// rerun 3D view: object をダブルクリックで注視、背景をダブルクリックで視点を戻す。
+  DateTime? _lastTapAt;
+  Offset? _lastTapPos;
+  bool _doubleTap(PointerDownEvent event) {
+    final now = DateTime.now();
+    final again =
+        _lastTapAt != null &&
+        now.difference(_lastTapAt!) < kDoubleTapTimeout &&
+        (_lastTapPos! - event.localPosition).distance < 6;
+    _lastTapAt = again ? null : now;
+    _lastTapPos = event.localPosition;
+    return again;
+  }
 
   final _focus = FocusNode(debugLabel: 'Stage');
   double? _zoom;
@@ -256,6 +371,7 @@ class _StagePanelState extends State<StagePanel> {
   }
 
   Future<void> _finish(bool cancel) async {
+    if (_cameraDrag != null) return _finishCamera(cancel);
     if (_finishing) return;
     _finishing = true;
     final wasDragging = _dragging;
@@ -286,9 +402,25 @@ class _StagePanelState extends State<StagePanel> {
     }
   }
 
+  /// Eyedropper: read the rendered pixel, then hand it to whatever the
+  /// palette would colour (the colour target, else the selection).
+  Future<void> _pick(Offset point) async {
+    c.eyedropper.value = false;
+    if (!c.supports('pickColor')) return;
+    await c.command('pickColor', {'x': point.dx, 'y': point.dy});
+    final rgba = c.state['pickedColor'];
+    if (rgba is List && c.supports('applyPalette')) {
+      await c.command('applyPalette', {'rgba': rgba});
+    }
+  }
+
   void _down(PointerDownEvent event) {
     if (_pointer != null || _finishing) return;
     _focus.requestFocus();
+    if (c.eyedropper.value) {
+      _pick(_toComp(event.localPosition));
+      return;
+    }
     _pointer = event.pointer;
     _startScreen = event.localPosition;
     _lastScreen = event.localPosition;
@@ -296,19 +428,43 @@ class _StagePanelState extends State<StagePanel> {
     _additive = _add;
     if (_userStage && event.buttons == kSecondaryMouseButton) {
       _orbiting = true;
-      final angles = c.state['userOrbit'] as List?;
+      final angles = _observer['orbit'] as List?;
       _orbitAngles = angles == null
-          ? [-15, 30]
+          ? [0, 0]
           : angles.map((v) => (v as num).toDouble()).toList();
       return;
     }
-    for (final camera in _cameras) {
-      if ((_cameraPoints(camera).first - event.localPosition).distance < 12) {
-        c.command('select', {
-          'ids': [camera['id']],
-        });
-        _pointer = null;
-        return;
+    if (_userStage &&
+        event.buttons == kPrimaryMouseButton &&
+        _doubleTap(event)) {
+      final layer = _hit(_startComp!);
+      c.command(
+        'stageView',
+        layer == null ? {'reset': true} : {'focus': layer['id']},
+      );
+      _pointer = null;
+      return;
+    }
+    if (_front && event.buttons == kPrimaryMouseButton) {
+      final selected = _selectedCamera;
+      if (selected != null) {
+        for (final entry in _cameraHandles(selected).entries) {
+          if ((entry.value - event.localPosition).distance < 7) {
+            _cameraDrag = selected;
+            _cameraHandle = entry.key;
+            return;
+          }
+        }
+      }
+      for (final camera in _cameras) {
+        if (_onCameraEdge(camera, event.localPosition)) {
+          c.command('select', {
+            'ids': [camera['id']],
+          });
+          _cameraDrag = camera;
+          _cameraHandle = 'center';
+          return;
+        }
       }
     }
     _panning =
@@ -359,6 +515,10 @@ class _StagePanelState extends State<StagePanel> {
     if (event.pointer != _pointer) return;
     final old = _lastScreen ?? event.localPosition;
     _lastScreen = event.localPosition;
+    if (_cameraDrag != null) {
+      _moveCamera(event.localPosition);
+      return;
+    }
     if (_orbiting) {
       final delta = event.localPosition - old;
       _orbitAngles = [
@@ -394,6 +554,10 @@ class _StagePanelState extends State<StagePanel> {
     if (_orbiting) {
       _orbiting = false;
       _pointer = null;
+      return;
+    }
+    if (_cameraDrag != null) {
+      _finishCamera(false);
       return;
     }
     final box = _marquee;
@@ -443,12 +607,18 @@ class _StagePanelState extends State<StagePanel> {
       '100%' => 'Actual size',
       '−' => 'Zoom out',
       '+' => 'Zoom in',
+      'Front' => 'Look straight at the composition (double-click background)',
       _ => title,
     },
   );
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
-    animation: Listenable.merge([c.document, c.rendered, c.textureId]),
+    animation: Listenable.merge([
+      c.document,
+      c.rendered,
+      c.textureId,
+      c.playing,
+    ]),
     builder: (context, _) => Column(
       children: [
         Container(
@@ -469,6 +639,11 @@ class _StagePanelState extends State<StagePanel> {
                 !_userStage ? '● Camera View' : 'Camera View',
                 () => c.command('stageView', {'mode': 'Camera'}),
               ),
+              if (_userStage)
+                _button(
+                  'Front',
+                  _front ? null : () => c.command('stageView', {'reset': true}),
+                ),
               const Spacer(),
               _button(
                 'Fit',
@@ -515,10 +690,11 @@ class _StagePanelState extends State<StagePanel> {
               }
               final origin = _origin;
               final scale = _scale;
+              final gizmos = !c.playing.value;
               final outlines = <List<Offset>>[];
               final volumes = <List<Offset>>[];
               for (final layer in _visible.where(
-                (l) => c.selectedIds.contains(l['id']),
+                (l) => gizmos && c.selectedIds.contains(l['id']),
               )) {
                 final points = _corners(layer);
                 final raw = _rawCorners(layer);
@@ -589,17 +765,39 @@ class _StagePanelState extends State<StagePanel> {
                             child: IgnorePointer(
                               child: CustomPaint(
                                 painter: _StageOverlay(
-                                  cameras: _cameras.map(_cameraPoints).toList(),
+                                  cameras: gizmos
+                                      ? _cameras.map(_cameraPoints).toList()
+                                      : const [],
+                                  cameraTargets: [
+                                    if (gizmos)
+                                      for (final camera in _cameras)
+                                        ?_point(camera['target']),
+                                  ],
+                                  cameraHandles:
+                                      gizmos &&
+                                          _front &&
+                                          _selectedCamera != null
+                                      ? _cameraHandles(_selectedCamera!)
+                                      : const {},
+                                  front: _front,
+                                  observerTarget: _front
+                                      ? null
+                                      : _point(_observer['target']),
                                   outlines: _outlinesCopy(outlines),
                                   volumes: volumes,
-                                  handles: _handles(),
+                                  handles: gizmos ? _handles() : const {},
                                   marquee: _marquee == null
                                       ? null
                                       : Rect.fromPoints(
                                           _toScreen(_marquee!.topLeft),
                                           _toScreen(_marquee!.bottomRight),
                                         ),
-                                  frame: Rect.fromLTWH(
+                                  frame: [
+                                    for (final p
+                                        in (_observer['frame'] as List?) ?? [])
+                                      ?_point(p),
+                                  ],
+                                  viewport: Rect.fromLTWH(
                                     origin.dx,
                                     origin.dy,
                                     _width * scale,
@@ -666,25 +864,40 @@ class _StagePanelState extends State<StagePanel> {
 class _StageOverlay extends CustomPainter {
   const _StageOverlay({
     this.cameras = const [],
+    this.cameraTargets = const [],
+    this.cameraHandles = const {},
+    this.front = true,
+    this.observerTarget,
     required this.outlines,
     required this.volumes,
     required this.handles,
     required this.frame,
+    required this.viewport,
     this.marquee,
   });
   final List<List<Offset>> outlines, volumes, cameras;
-  final Map<String, Offset> handles;
-  final Rect frame;
+  final List<Offset> cameraTargets, frame;
+  final Map<String, Offset> handles, cameraHandles;
+  final bool front;
+  final Offset? observerTarget;
+  final Rect viewport;
   final Rect? marquee;
+  void _cross(Canvas canvas, Offset at, double half, Paint paint) {
+    canvas.drawLine(at - Offset(half, 0), at + Offset(half, 0), paint);
+    canvas.drawLine(at - Offset(0, half), at + Offset(0, half), paint);
+  }
+
   @override
   void paint(Canvas canvas, Size size) {
-    canvas.drawRect(
-      frame,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..color = EditorTheme.line
-        ..strokeWidth = 1,
-    );
+    final framePaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..color = EditorTheme.line
+      ..strokeWidth = 1;
+    if (frame.length == 4) {
+      canvas.drawPath(Path()..addPolygon(frame, true), framePaint);
+    } else {
+      canvas.drawRect(viewport, framePaint);
+    }
     final line = Paint()
       ..style = PaintingStyle.stroke
       ..color = EditorTheme.accent
@@ -693,11 +906,33 @@ class _StageOverlay extends CustomPainter {
       ..color = const Color(0xff8ed9e6)
       ..strokeWidth = 1
       ..style = PaintingStyle.stroke;
+    for (final at in cameraTargets) {
+      _cross(canvas, at, 5, cameraLine);
+    }
+    if (observerTarget != null) {
+      canvas.drawCircle(observerTarget!, 6, cameraLine);
+      _cross(canvas, observerTarget!, 10, cameraLine);
+    }
+    for (final entry in cameraHandles.entries) {
+      if (entry.key == 'roll') {
+        canvas.drawCircle(entry.value, 4, Paint()..color = EditorTheme.app);
+        canvas.drawCircle(entry.value, 4, cameraLine);
+      } else {
+        final rect = Rect.fromCenter(
+          center: entry.value,
+          width: EditorMetrics.s6,
+          height: EditorMetrics.s6,
+        );
+        canvas.drawRect(rect, Paint()..color = EditorTheme.app);
+        canvas.drawRect(rect, cameraLine);
+      }
+    }
     for (final points in cameras) {
       if (points.length != 5) continue;
+      canvas.drawPath(Path()..addPolygon(points.sublist(1), true), cameraLine);
+      if (front) continue;
       for (var i = 1; i < 5; i++) {
         canvas.drawLine(points[0], points[i], cameraLine);
-        canvas.drawLine(points[i], points[i == 4 ? 1 : i + 1], cameraLine);
       }
       canvas.drawRRect(
         RRect.fromRectAndRadius(
@@ -769,7 +1004,12 @@ class _StageOverlay extends CustomPainter {
   @override
   bool shouldRepaint(covariant _StageOverlay old) =>
       old.cameras.toString() != cameras.toString() ||
-      old.frame != frame ||
+      old.cameraTargets.toString() != cameraTargets.toString() ||
+      old.cameraHandles.toString() != cameraHandles.toString() ||
+      old.front != front ||
+      old.observerTarget != observerTarget ||
+      old.frame.toString() != frame.toString() ||
+      old.viewport != viewport ||
       old.marquee != marquee ||
       old.outlines.toString() != outlines.toString() ||
       old.volumes.toString() != volumes.toString() ||

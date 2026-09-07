@@ -458,11 +458,17 @@ final class ProbeHost: NSObject {
       }
     case "pickOpen", "pickImport":
       let panel = NSOpenPanel()
-      panel.canChooseDirectories = false
+      let importing = call.method == "pickImport"
+      panel.canChooseDirectories = importing
       panel.canChooseFiles = true
-      panel.allowsMultipleSelection = call.method == "pickImport"
-      if call.method == "pickOpen" { panel.allowedContentTypes = [UTType(filenameExtension: "rrd") ?? .data] }
-      openPicker(panel, result: result, multiple: call.method == "pickImport")
+      panel.allowsMultipleSelection = importing
+      if importing {
+        let types = ((args["extensions"] as? [String]) ?? []).compactMap { UTType(filenameExtension: $0) }
+        if !types.isEmpty { panel.allowedContentTypes = types + [.folder] }
+      } else {
+        panel.allowedContentTypes = [UTType(filenameExtension: "rrd") ?? .data]
+      }
+      openPicker(panel, result: result, multiple: importing)
     case "pickSave", "pickExport":
       let panel = NSSavePanel()
       panel.nameFieldStringValue = args["name"] as? String ?? "Untitled.rrd"

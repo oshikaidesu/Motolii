@@ -229,6 +229,12 @@ impl Default for LayerPlacement {
     }
 }
 
+/// 大きさは 2 成分(x, y)しか持たない。奥行きを持つ素材(網・点群)にはその平均を掛け、
+/// 球は球のまま拡縮する。板は奥行きが無いので掛からない(Lottie/web の定規と同じ変換のまま)。
+pub fn depth_scale(x_axis: glam::Vec3, y_axis: glam::Vec3) -> f32 {
+    (x_axis.length() + y_axis.length()) * 0.5
+}
+
 impl LayerPlacement {
     pub fn from_transform(
         anchor: [f32; 2],
@@ -257,5 +263,31 @@ impl LayerPlacement {
             * skew_matrix
             * Affine2::from_scale(Vec2::new(scale[0], scale[1]))
             * Affine2::from_translation(Vec2::new(-anchor[0], -anchor[1]))
+    }
+
+    /// The layer's local 3D transform: tilt about Position, then the planar transform.
+    pub fn spatial_from_transform(
+        xy: glam::Affine2,
+        position: [f32; 2],
+        z: f32,
+        rotation_x_degrees: f32,
+        rotation_y_degrees: f32,
+    ) -> glam::Affine3A {
+        use glam::{Affine3A, Mat3, Quat, Vec3};
+        let linear = Mat3::from_cols(
+            xy.matrix2.x_axis.extend(0.0),
+            xy.matrix2.y_axis.extend(0.0),
+            Vec3::Z,
+        );
+        let anchored = Affine3A::from_mat3_translation(
+            linear,
+            xy.translation.extend(0.0) - Vec3::new(position[0], position[1], 0.0),
+        );
+        Affine3A::from_translation(Vec3::new(position[0], position[1], z))
+            * Affine3A::from_quat(
+                Quat::from_rotation_x(rotation_x_degrees.to_radians())
+                    * Quat::from_rotation_y(rotation_y_degrees.to_radians()),
+            )
+            * anchored
     }
 }

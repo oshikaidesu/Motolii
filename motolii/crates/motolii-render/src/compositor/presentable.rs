@@ -43,7 +43,10 @@ impl Compositor {
     }
 }
 
-pub const PRESENTABLE_FORMAT: wgpu::TextureFormat = if cfg!(feature = "shared-bgra-output") { wgpu::TextureFormat::Bgra8UnormSrgb } else { wgpu::TextureFormat::Rgba8UnormSrgb };
+/// 窓へ渡す形式 = re_renderer の出力形式。composite shader が自前で `srgb_from_linear` を
+/// 掛ける(composite.wgsl)ので、**sRGB 形式にしてはいけない** — hardware がもう一度 encode して
+/// 窓だけ白く浮く(export は `Rgba8Unorm` 読み戻しで正しかった。2026-09-07)。
+pub const PRESENTABLE_FORMAT: wgpu::TextureFormat = if cfg!(feature = "shared-bgra-output") { wgpu::TextureFormat::Bgra8Unorm } else { re_renderer::ScreenshotProcessor::SCREENSHOT_COLOR_FORMAT };
 
 pub fn check_presentable_target(
     target: &wgpu::Texture,

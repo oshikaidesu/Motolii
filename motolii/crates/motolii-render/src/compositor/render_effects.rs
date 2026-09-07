@@ -25,6 +25,8 @@ impl Compositor {
         let mut effective_paddings = Vec::with_capacity(layers.len());
         let mut checked_out = Vec::new();
         let mut copy_encoder: Option<wgpu::CommandEncoder> = None;
+        // 同じ素材に同じ効果列が続く(配置効果の複製)なら、鎖は 1 回だけ流して結果を配る。
+        let mut previous: Option<(GpuTexture2D, &[EffectPass], LayerContent, u32)> = None;
 
         for lwp in layers {
             let Some(layer_texture) = lwp.layer.content.texture().cloned() else {
@@ -36,6 +38,13 @@ impl Compositor {
                 effective_textures.push(LayerContent::Texture(layer_texture));
                 effective_paddings.push(0);
                 continue;
+            }
+            if let Some((source, passes, content, padding)) = &previous {
+                if source.handle() == layer_texture.handle() && *passes == lwp.passes.as_slice() {
+                    effective_textures.push(content.clone());
+                    effective_paddings.push(*padding);
+                    continue;
+                }
             }
             let [width, height] = layer_texture.width_height();
             let padding = lwp
@@ -167,6 +176,7 @@ impl Compositor {
                 .texture_manager_2d
                 .import_gpu_premultiplied(self.next_effect_key, &self.ctx, &current)
                 .map_err(|error| CompositorError::Effect(error.to_string()))?;
+            previous = Some((layer_texture, lwp.passes.as_slice(), LayerContent::Texture(imported.clone()), padding));
             effective_textures.push(LayerContent::Texture(imported));
             effective_paddings.push(padding);
             checked_out.push((padded_width, padded_height, current.format(), current));
@@ -251,6 +261,7 @@ pub(crate) fn sequential_inputs<'a>(
                         point_size: *point_size,
                     },
                     LayerContent::Model(model) => SequentialContent::Model(model),
+                    LayerContent::Environment(e) => SequentialContent::Environment(e),
                 },
                 local_min: glam::Vec2::new(-pad, -pad),
                 local_size: glam::Vec2::new(layer.size[0] + 2.0 * pad, layer.size[1] + 2.0 * pad),
@@ -260,6 +271,8 @@ pub(crate) fn sequential_inputs<'a>(
                 opacity: layer.placement.opacity,
                 depth_offset: layer.placement.order,
                 blend_mode: layer.blend_mode,
+                shading: layer.shading.clone(),
+                displace: layer.displace,
             }
         })
         .collect()

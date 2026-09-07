@@ -7,8 +7,8 @@ use crate::doc::core::RationalTime;
 use crate::doc::eval::Value;
 
 use crate::doc::store::{
-    property, LayerId, LayerPlacement, PropertyId, ResolvedEffect, ResolvedLayer, ResolvedMask,
-    StoreError, TextDocument,
+    placement, property, LayerId, LayerPlacement, PropertyId, ResolvedEffect, ResolvedLayer,
+    ResolvedMask, StoreError, TextDocument,
 };
 
 use super::StoreView;
@@ -419,7 +419,141 @@ impl<'a> StoreView<'a> {
             clip_to_below: attrs.clip_to_below,
             projection: attrs.projection,
             flatten: attrs.flatten,
+            environment: attrs.environment,
+            ghost: false,
+            copy: 0,
+            after_effects: Vec::new(),
         }))
+    }
+
+    /// 配置効果を持つ層を、その配置の数だけ増やす。配置効果より上の効果は各配置の素材に、
+    /// 下の効果は `after_effects` として全体に残す。時刻のずれた配置は、その時刻の姿を取り直す。
+    /// 配置効果を持つ層を、その配置の数だけ増やす。配置効果より上の効果は各配置の素材に、
+    /// 下の効果は `after_effects` として全体に残す。時刻のずれた配置は、その時刻の姿を取り直す。
+    /// グループなら子が素材の袋で、配置ごとに 1 つ引いた子の部分木を置く(裁定 2026-09-07)。
+    #[allow(clippy::too_many_arguments)]
+    fn push_placements(
+        &self,
+        base: ResolvedLayer,
+        t: RationalTime,
+        any_solo: bool,
+        present: &HashSet<LayerId>,
+        world_transforms: &HashMap<LayerId, glam::Affine3A>,
+        memo: &mut HashMap<LayerId, glam::Affine2>,
+        visiting: &mut HashSet<LayerId>,
+        out: &mut Vec<ResolvedLayer>,
+    ) -> Result<(), StoreError> {
+        let Some(first) = base.effects.iter().position(|e| placement::kind(&e.plugin_id).is_some()) else {
+            out.push(base);
+            return Ok(());
+        };
+        let kind = placement::kind(&base.effects[first].plugin_id).expect("found above");
+        let params = &base.effects[first].params;
+        let placements = placement::placements(kind, params);
+        let layer = base.id;
+        let parent = self.attrs(layer)?.unwrap_or_default().parent.filter(|p| present.contains(p));
+        let is_group = base.source == crate::doc::store::LayerSource::Group;
+        let children = if is_group { self.children_in_order(layer, present)? } else { Vec::new() };
+        if is_group && children.is_empty() {
+            return Ok(());
+        }
+        let whole = is_group && placement::whole_group(params);
+        let picks = placement::picks(params, &children.iter().map(|c| c.0).collect::<Vec<_>>(), placements.len());
+        for placement in placements {
+            let Ok(at) = t.try_sub(placement.time_offset) else { continue };
+            let shifted = at != t;
+            let subjects: Vec<LayerId> = if whole {
+                self.subtree(layer, present)?.into_iter().skip(1).collect()
+            } else if is_group {
+                self.subtree(children[picks[placement.index as usize]], present)?
+            } else {
+                vec![layer]
+            };
+            let mut worlds_at = HashMap::new();
+            let (mut memo_at, mut visiting_at) = (HashMap::new(), HashSet::new());
+            if shifted {
+                for subject in &subjects {
+                    worlds_at.extend(self.world_transform3d_chain(*subject, at, present)?);
+                }
+                if let Some(p) = parent {
+                    worlds_at.extend(self.world_transform3d_chain(p, at, present)?);
+                }
+            }
+            let worlds = if shifted { &worlds_at } else { world_transforms };
+            let memo = if shifted { &mut memo_at } else { &mut *memo };
+            let visiting = if shifted { &mut visiting_at } else { &mut *visiting };
+            let parent2 = parent.map(|p| self.world_affine(p, at, present, memo, visiting)).transpose()?.unwrap_or(glam::Affine2::IDENTITY);
+            let parent3 = parent.and_then(|p| worlds.get(&p).copied()).unwrap_or(glam::Affine3A::IDENTITY);
+            let pivot = glam::Vec2::from(self.resolve_position(layer, at)?);
+            for subject in subjects {
+                let mut copy = if !is_group && !shifted {
+                    base.clone()
+                } else {
+                    let Some(copy) = self.resolve_with_solo(subject, at, any_solo, present, worlds, memo, visiting)? else { continue };
+                    copy
+                };
+                if !is_group {
+                    let Some(split) = copy.effects.iter().position(|e| placement::kind(&e.plugin_id).is_some()) else {
+                        out.push(copy);
+                        continue;
+                    };
+                    copy.after_effects = copy.effects.split_off(split + 1);
+                    copy.effects.pop();
+                }
+                copy.copy = placement.index;
+                copy.placement.transform =
+                    parent2 * placement.affine2(pivot) * parent2.inverse() * copy.placement.transform;
+                if let Some(world) = copy.placement.world_transform {
+                    copy.placement.world_transform = Some(
+                        parent3 * placement.affine3(pivot.extend(copy.placement.z)) * parent3.inverse() * world,
+                    );
+                }
+                copy.placement.opacity = (copy.placement.opacity * placement.opacity).clamp(0.0, 1.0);
+                out.push(copy);
+            }
+        }
+        Ok(())
+    }
+
+    /// 直下の子を重ね順で。
+    fn children_in_order(&self, group: LayerId, present: &HashSet<LayerId>) -> Result<Vec<LayerId>, StoreError> {
+        let mut children = Vec::new();
+        for id in present {
+            if self.attrs(*id)?.unwrap_or_default().parent == Some(group) {
+                children.push((self.meta(*id)?.map_or(0, |m| m.order), *id));
+            }
+        }
+        children.sort();
+        Ok(children.into_iter().map(|(_, id)| id).collect())
+    }
+
+    /// 層とその子孫(自分が先)。
+    fn subtree(&self, root: LayerId, present: &HashSet<LayerId>) -> Result<Vec<LayerId>, StoreError> {
+        let mut out = vec![root];
+        let mut i = 0;
+        while i < out.len() {
+            let here = out[i];
+            i += 1;
+            for child in self.children_in_order(here, present)? {
+                if !out.contains(&child) {
+                    out.push(child);
+                }
+            }
+        }
+        Ok(out)
+    }
+
+    /// 配置効果を持つグループの子孫。単独では描かず、配置を通してだけ出る。
+    fn handed_out_by_a_group(&self, present: &HashSet<LayerId>) -> Result<HashSet<LayerId>, StoreError> {
+        let mut hidden = HashSet::new();
+        for id in present {
+            if self.meta(*id)?.is_some_and(|m| m.source == crate::doc::store::LayerSource::Group)
+                && self.effects(*id)?.iter().any(|e| placement::kind(&e.plugin_id).is_some())
+            {
+                hidden.extend(self.subtree(*id, present)?.into_iter().skip(1));
+            }
+        }
+        Ok(hidden)
     }
 
     fn any_solo(&self, t: RationalTime) -> Result<bool, StoreError> {
@@ -516,16 +650,59 @@ impl<'a> StoreView<'a> {
         let present: HashSet<LayerId> = layers.iter().copied().collect();
         let mut memo = HashMap::new();
         let mut visiting = HashSet::new();
+        let handed_out = self.handed_out_by_a_group(&present)?;
         let mut out = Vec::new();
         for layer in layers {
+            if handed_out.contains(&layer) {
+                continue;
+            }
+            // ゴーストは元より先に積む(同じ重ね順なら後の物が上に描かれるので、元が手前に来る)。
+            self.push_ghosts(layer, t, any_solo, &present, &mut out)?;
             if let Some(resolved) =
                 self.resolve_with_solo(layer, t, any_solo, &present, &world_transforms, &mut memo, &mut visiting)?
             {
-                out.push(resolved);
+                self.push_placements(resolved, t, any_solo, &present, &world_transforms, &mut memo, &mut visiting, &mut out)?;
             }
         }
         out.sort_by_key(|layer| layer.placement.order);
         Ok(out)
+    }
+
+    /// ゴースト: 層を遅れ d だけ後に見た姿を 1 枚、同じ id で `ghost = true` にして積む。
+    /// 層に Repeater が掛かっていれば、その時刻の配置がそのまま増える。
+    fn push_ghosts(
+        &self,
+        layer: LayerId,
+        t: RationalTime,
+        any_solo: bool,
+        present: &HashSet<LayerId>,
+        out: &mut Vec<ResolvedLayer>,
+    ) -> Result<(), StoreError> {
+        let attrs = self.attrs(layer)?.unwrap_or_default();
+        if attrs.environment { return Ok(()) }
+        let Some(composition) = self.composition()? else { return Ok(()) };
+        let fps = composition.fps;
+        let parent = attrs.parent;
+        for delay in attrs.ghost {
+            let Ok(shift) = RationalTime::try_from_frame(delay.abs(), fps) else { continue };
+            let at = if delay >= 0 { t.try_sub(shift) } else { t.try_add(shift) };
+            let Ok(at) = at else { continue };
+            let mut worlds = self.world_transform3d_chain(layer, at, present)?;
+            if let Some(parent) = parent {
+                worlds.extend(self.world_transform3d_chain(parent, at, present)?);
+            }
+            let (mut memo, mut visiting) = (HashMap::new(), HashSet::new());
+            let Some(resolved) = self.resolve_with_solo(layer, at, any_solo, present, &worlds, &mut memo, &mut visiting)? else {
+                continue;
+            };
+            let mut placed = Vec::new();
+            self.push_placements(resolved, at, any_solo, present, &worlds, &mut memo, &mut visiting, &mut placed)?;
+            for mut copy in placed {
+                copy.ghost = true;
+                out.push(copy);
+            }
+        }
+        Ok(())
     }
 }
 
@@ -625,5 +802,45 @@ mod clipping_contract {
         assert_eq!(loaded.view().clipping_base(layer).unwrap(), Some(base));
         assert_eq!(loaded.view().resolve(layer, RationalTime::ZERO).unwrap().unwrap().matte,
             Some(Matte { layer: base, mode: MatteMode::Alpha }));
+    }
+}
+
+#[cfg(test)]
+mod ghost_contract {
+    use crate::doc::store::*;
+
+    fn document() -> (Document, Fps) {
+        let fps = Fps::try_new(10, 1).unwrap();
+        let mut doc = Document::new();
+        doc.apply(Intent::SetComposition(Composition { width: 100, height: 100, fps, duration_frames: 40, background: [0.0; 4] })).unwrap();
+        (doc, fps)
+    }
+
+    fn xs(doc: &Document, id: LayerId, frame: i64, fps: Fps) -> Vec<(bool, f32)> {
+        let t = RationalTime::try_from_frame(frame, fps).unwrap();
+        doc.view().resolved_layers(t).unwrap().into_iter().filter(|l| l.id == id).map(|l| (l.ghost, l.placement.transform.translation.x)).collect()
+    }
+
+    /// ゴーストは同じ層を d だけ遅れて見た姿が 1 枚。行は増えず同じ id で、元より先に積まれ(奥)、元は ghost = false。
+    /// 層の帯の外(t − d が始まる前)では居ない。
+    #[test]
+    fn ghosts_are_the_layer_seen_d_frames_earlier_behind_the_layer() {
+        let (mut doc, fps) = document();
+        let layer = LayerId(1);
+        doc.apply_all([
+            Intent::AddLayer(layer),
+            Intent::SetMeta { layer, meta: LayerMeta { source: LayerSource::Null, order: 0, timing: LayerTiming { start: 0, duration: 30, source_in: 0, speed: Speed::NORMAL } } },
+        ]).unwrap();
+        let track = crate::doc::eval::KeyframeTrack::try_from_keys(vec![
+            crate::doc::eval::Keyframe { t: RationalTime::ZERO, value: Value::Vec2([0.0, 0.0]), interp: crate::doc::eval::Interp::Linear, spatial: None },
+            crate::doc::eval::Keyframe { t: RationalTime::try_from_frame(10, fps).unwrap(), value: Value::Vec2([100.0, 0.0]), interp: crate::doc::eval::Interp::Linear, spatial: None },
+        ]).unwrap();
+        doc.apply(Intent::SetTrack { layer, property: PropertyId::new(property::POSITION).unwrap(), track }).unwrap();
+        doc.apply(Intent::SetAttrs { layer, patch: LayerAttrsPatch { ghost: Some(Some(5)), ..Default::default() } }).unwrap();
+
+        assert_eq!(xs(&doc, layer, 8, fps), vec![(true, 30.0), (false, 80.0)], "d = 5 は 3 コマ目の姿、元が最後(手前)");
+        assert_eq!(xs(&doc, layer, 3, fps), vec![(false, 30.0)], "t − d が帯の前ならゴーストは居ない");
+        doc.apply(Intent::SetAttrs { layer, patch: LayerAttrsPatch { hidden: Some(true), ..Default::default() } }).unwrap();
+        assert!(xs(&doc, layer, 8, fps).is_empty(), "隠せばゴーストも消える");
     }
 }

@@ -100,8 +100,41 @@ pub(crate) fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: Ratio
     let effects: Vec<EffectBlock> = attached_effects
         .into_iter()
         .map(|instance| {
-            let params = catalog.iter().find(|d| d.plugin_id == instance.plugin_id).map(|d| d.params.as_slice()).unwrap_or(&[]);
             let id = instance.id;
+            if let Some(kind) = crate::doc::store::placement::kind(&instance.plugin_id) {
+                // 配置効果は形のトグルで出る欄が変わる。表の順・名前・組をそのまま運ぶ。
+                let get = |name: &str| PropertyId::effect_param(id, name).ok().and_then(|p| view.value_at(layer, &p, t).ok().flatten());
+                let mode = match get("mode") { Some(Value::F64(m)) => m.round().max(0.0) as u8, _ => 0 };
+                let rows = kind.params.iter().filter(|p| p.shown(mode)).filter_map(|param| {
+                    let prop = PropertyId::effect_param(id, param.name).ok()?;
+                    let keyed = view.track(layer, &prop).ok().flatten().is_some();
+                    let value = get(param.name).unwrap_or_else(|| param.default_value());
+                    let (cells, vec2) = match value {
+                        Value::Vec2([x, y]) => ([f(x), f(y), String::new()], true),
+                        Value::F64(v) => ([String::new(), String::new(), f(v)], false),
+                        _ => return None,
+                    };
+                    Some(PropRow { label: param.label.to_owned(), cells, dims: [false, false, false], keyed, property: Some(prop.name().to_owned()), vec2, value, range: param.range, axis: [None, None, None] })
+                }).collect::<Vec<_>>();
+                let mut rows = rows;
+                // グループなら子が素材の袋。子ごとに重み(share)の行を足す。
+                if view.meta(layer).ok().flatten().is_some_and(|m| m.source == crate::doc::store::LayerSource::Group) {
+                    let mut kids: Vec<(i16, LayerId, String)> = view.layers().into_iter().filter_map(|c| {
+                        let attrs = view.attrs(c).ok().flatten()?;
+                        (attrs.parent == Some(layer)).then(|| (view.meta(c).ok().flatten().map_or(0, |m| m.order), c, attrs.name))
+                    }).collect();
+                    kids.sort_by_key(|k| (k.0, k.1));
+                    for (_, child, name) in kids {
+                        let Ok(prop) = PropertyId::effect_param(id, &format!("{}{}", crate::doc::store::placement::SHARE_PREFIX, child.0)) else { continue };
+                        let v = match view.value_at(layer, &prop, t).ok().flatten() { Some(Value::F64(v)) => v, _ => crate::doc::store::placement::SHARE_DEFAULT };
+                        let keyed = view.track(layer, &prop).ok().flatten().is_some();
+                        let label = if name.is_empty() { format!("Layer {}", child.0) } else { name };
+                        rows.push(PropRow { label, cells: [String::new(), String::new(), f(v)], dims: [false, false, false], keyed, property: Some(prop.name().to_owned()), vec2: false, value: Value::F64(v), range: Some((0.0, 1000.0)), axis: [None, None, None] });
+                    }
+                }
+                return EffectBlock { id: id.0, plugin_id: instance.plugin_id, params: rows };
+            }
+            let params = catalog.iter().find(|d| d.plugin_id == instance.plugin_id).map(|d| d.params.as_slice()).unwrap_or(&[]);
             let rows = params
                 .iter()
                 .filter_map(move |param| {
@@ -112,7 +145,7 @@ pub(crate) fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: Ratio
                         _ => param.default,
                     };
                     Some(PropRow {
-                        label: param.name.clone(),
+                        label: param.label.clone(),
                         cells: [String::new(), String::new(), f(v)],
                         dims: [false, false, false],
                         keyed,

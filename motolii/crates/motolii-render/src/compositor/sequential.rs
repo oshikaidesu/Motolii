@@ -80,6 +80,12 @@ impl Compositor {
             -(projection.rotation * projection.eye),
         );
 
+        // 照明は comp に 1 つ: 重ね順で一番上の環境層。空を敷くのはその層の run。
+        let environment = inputs.iter().rev().find_map(|i| match i.content {
+            SequentialContent::Environment(e) => Some(e),
+            _ => None,
+        });
+
         let mut background: Option<(AccumulatorBacking, GpuTexture2D)> = None;
 
         // 層ごとに submit しない — 同期の回数が層数に比例する。
@@ -140,6 +146,7 @@ impl Compositor {
                         comp,
                         view_from_world,
                         projection,
+                        environment,
                     ),
                     ViewBuilderId::new(self.next_readback),
                     &solo_owned,
@@ -238,7 +245,7 @@ impl Compositor {
                         let bounds = match i.content {
                             SequentialContent::Cloud { bounds, .. } => Some(bounds),
                             SequentialContent::Model(model) => Some(model.bounds),
-                            SequentialContent::Rect(_) => None,
+                            SequentialContent::Rect(_) | SequentialContent::Environment(_) => None,
                         };
                         if let Some(bounds) = bounds {
                             projected_spatial_placement(comp, i.projection_camera, i.projection, i.placement, bounds)
@@ -262,7 +269,13 @@ impl Compositor {
 
             let mut clouds: Vec<re_renderer::renderer::PointCloudDrawData> = Vec::new();
             let mut meshes: Vec<re_renderer::renderer::MeshDrawData> = Vec::new();
+            let mut sky = false;
             for input in run {
+                if let SequentialContent::Environment(e) = input.content {
+                    // 一番上の環境層だけが空を敷く。下に埋もれた物は板にも空にもならない。
+                    sky |= environment.is_some_and(|top| std::ptr::eq(top, e));
+                    continue;
+                }
                 if let crate::render::compositor::SequentialContent::Cloud {
                     positions,
                     colors,
@@ -278,6 +291,7 @@ impl Compositor {
                         input.placement,
                         input.opacity,
                         comp, input.projection_camera, input.projection,
+                        input.displace,
                     )?);
                     continue;
                 }
@@ -288,6 +302,7 @@ impl Compositor {
                             input.placement,
                             input.opacity,
                             comp, input.projection_camera, input.projection,
+                            &input.shading,
                         )?,
                     );
                     continue;
@@ -341,6 +356,7 @@ impl Compositor {
                     comp,
                     view_from_world,
                     projection,
+                    environment,
                 ),
                 ViewBuilderId::new(self.next_readback),
                 &run_owned,
@@ -354,6 +370,15 @@ impl Compositor {
             }
             for mesh in meshes {
                 view_builder.queue_draw(&self.ctx, mesh);
+            }
+            if sky {
+                view_builder.queue_draw(
+                    &self.ctx,
+                    re_renderer::renderer::GenericSkyboxDrawData::new(
+                        &self.ctx,
+                        re_renderer::renderer::GenericSkyboxType::Environment,
+                    ),
+                );
             }
             let clear = if background.is_none() {
                 crate::render::compositor::clear_color(background_color)
@@ -438,6 +463,7 @@ impl Compositor {
                 comp,
                 view_from_world,
                 projection,
+                None,
             ),
             ViewBuilderId::new(self.next_readback),
         )
@@ -512,7 +538,8 @@ impl Compositor {
                     comp,
                     view_from_world,
                     projection,
-                ),
+                None,
+            ),
                 ViewBuilderId::new(self.next_readback),
             )
             .map_err(|e| CompositorError::View(e.to_string()))?;
@@ -597,7 +624,8 @@ impl Compositor {
                         comp,
                         view_from_world,
                         projection,
-                    ),
+                None,
+            ),
                     ViewBuilderId::new(self.next_readback),
                     &texture,
                 )
@@ -647,6 +675,9 @@ impl Compositor {
                     crate::render::compositor::LayerContent::Model(model) => {
                         crate::render::compositor::SequentialContent::Model(model)
                     }
+                    crate::render::compositor::LayerContent::Environment(e) => {
+                        crate::render::compositor::SequentialContent::Environment(e)
+                    }
                 },
                 local_min: glam::Vec2::ZERO,
                 local_size: glam::Vec2::new(layer.size[0], layer.size[1]),
@@ -656,6 +687,8 @@ impl Compositor {
                 opacity: layer.placement.opacity,
                 depth_offset: layer.placement.order,
                 blend_mode: layer.blend_mode,
+                shading: layer.shading.clone(),
+                displace: layer.displace,
             })
             .collect();
 
@@ -708,7 +741,7 @@ impl Compositor {
 
         let mut view_builder = ViewBuilder::new(
             &self.ctx,
-            sequential_target_config(label, comp, view_from_world, projection),
+            sequential_target_config(label, comp, view_from_world, projection, None),
             ViewBuilderId::new(self.next_readback),
         )
         .map_err(|e| CompositorError::View(e.to_string()))?;
@@ -806,6 +839,8 @@ impl Compositor {
             projection: crate::doc::store::LayerProjection::TwoD,
             projection_camera: camera,
             blend_mode: layer.blend_mode,
+            shading: Default::default(),
+            displace: Default::default(),
         })
     }
 }

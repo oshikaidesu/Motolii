@@ -15,12 +15,36 @@ pub(crate) enum IsfError {
     WgslWrite(String),
     #[error("PERSISTENT なバッファは採らない(任意の時刻へ飛べるので、持ち越すと絵が操作の履歴に依存する)")]
     PersistentBuffer,
+    #[error("STAGE `{0}` は知らない(pass / surface / field)")]
+    UnknownStage(String),
+}
+
+/// どの stage に差すか。`pass` は 2D の texture→texture、`surface`/`field` は網の hook(fork の `MeshProgram`)。
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum IsfStage {
+    #[default]
+    Pass,
+    Surface,
+    Field,
+}
+
+impl IsfStage {
+    fn from_isf_name(name: &str) -> Option<Self> {
+        match name {
+            "pass" => Some(Self::Pass),
+            "surface" => Some(Self::Surface),
+            "field" => Some(Self::Field),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum IsfInputType {
     Image,
     Float,
+    /// 選択肢(ISF の `long` + `LABELS`)。値は番号。
+    Long,
     Bool,
     Point2D,
     Color,
@@ -31,6 +55,7 @@ impl IsfInputType {
         match name {
             "image" => Some(Self::Image),
             "float" => Some(Self::Float),
+            "long" => Some(Self::Long),
             "bool" => Some(Self::Bool),
             "point2D" => Some(Self::Point2D),
             "color" => Some(Self::Color),
@@ -41,7 +66,7 @@ impl IsfInputType {
     pub fn component_count(self) -> usize {
         match self {
             Self::Image => 0,
-            Self::Float | Self::Bool => 1,
+            Self::Float | Self::Long | Self::Bool => 1,
             Self::Point2D => 2,
             Self::Color => 4,
         }
@@ -50,7 +75,7 @@ impl IsfInputType {
     fn glsl_uniform_type(self) -> &'static str {
         match self {
             Self::Image => "sampler2D",
-            Self::Float | Self::Bool => "float",
+            Self::Float | Self::Long | Self::Bool => "float",
             Self::Point2D => "vec2",
             Self::Color => "vec4",
         }
@@ -60,6 +85,10 @@ impl IsfInputType {
 #[derive(Clone, Debug)]
 pub struct IsfInput {
     pub name: String,
+    /// 窓に出る英語(`LABEL`)。無ければ name。
+    pub label: Option<String>,
+    /// `long` の選択肢(`LABELS`)。
+    pub labels: Option<Vec<String>>,
     pub ty: IsfInputType,
     pub default: [f32; 4],
     pub min: Option<[f32; 4]>,
@@ -86,6 +115,9 @@ pub struct IsfPadding {
 #[derive(Clone, Debug)]
 pub struct IsfManifest {
     pub id: Option<String>,
+    /// 棚に出す名前(`LABEL`)。
+    pub label: Option<String>,
+    pub stage: IsfStage,
     pub expose: bool,
     pub output_float: bool,
     pub padding: Option<IsfPadding>,
@@ -98,6 +130,8 @@ impl Default for IsfManifest {
     fn default() -> Self {
         Self {
             id: None,
+            label: None,
+            stage: IsfStage::Pass,
             expose: true,
             output_float: false,
             padding: None,
@@ -133,6 +167,11 @@ pub(crate) fn parse_isf_source(source: &str) -> Result<(IsfManifest, String), Is
 
     let value: serde_json::Value = serde_json::from_str(json_text)?;
     let id = value.get("ID").and_then(|v| v.as_str()).map(str::to_owned);
+    let label = value.get("LABEL").and_then(|v| v.as_str()).map(str::to_owned);
+    let stage = match value.get("STAGE").and_then(|v| v.as_str()) {
+        None => IsfStage::Pass,
+        Some(name) => IsfStage::from_isf_name(name).ok_or_else(|| IsfError::UnknownStage(name.to_owned()))?,
+    };
     let expose = value
         .get("EXPOSE")
         .and_then(|v| v.as_bool())
@@ -169,8 +208,12 @@ pub(crate) fn parse_isf_source(source: &str) -> Result<(IsfManifest, String), Is
             let min = entry.get("MIN").map(|v| read_components(Some(v)));
             let max = entry.get("MAX").map(|v| read_components(Some(v)));
             let maps = entry.get("MAPS").cloned();
+            let label = entry.get("LABEL").and_then(|v| v.as_str()).map(str::to_owned);
+            let labels = entry.get("LABELS").and_then(|v| v.as_array()).map(|a| a.iter().filter_map(|v| v.as_str().map(str::to_owned)).collect::<Vec<_>>());
             inputs.push(IsfInput {
                 name: name.to_owned(),
+                label,
+                labels,
                 ty,
                 default,
                 min,
@@ -203,6 +246,8 @@ pub(crate) fn parse_isf_source(source: &str) -> Result<(IsfManifest, String), Is
     Ok((
         IsfManifest {
             id,
+            label,
+            stage,
             expose,
             output_float,
             padding,

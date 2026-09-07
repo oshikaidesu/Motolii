@@ -24,7 +24,7 @@ pub(crate) fn place(
     value: Value,
     at: RationalTime,
 ) -> Result<Option<Intent>, StoreError> {
-    doc.place_checked(layer, property, value, at)
+    doc.place_checked(layer, property, value, at, false)
 }
 
 pub(crate) fn require_local_source(

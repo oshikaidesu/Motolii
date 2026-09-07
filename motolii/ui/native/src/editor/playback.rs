@@ -47,11 +47,11 @@ impl CompositionTimebase {
         RationalTime::try_new((sec.max(0.0) * 1_000_000.0).round() as i64, 1_000_000)
             .and_then(|t| t.try_to_frame_round(self.fps))
             .unwrap_or(0)
-            .clamp(0, self.duration_frames)
+            .max(0)
     }
 
     fn seconds_at_frame(&self, frame: i64) -> f64 {
-        RationalTime::try_from_frame(frame.clamp(0, self.duration_frames), self.fps)
+        RationalTime::try_from_frame(frame.max(0), self.fps)
             .map(|time| time.as_seconds_f64())
             .unwrap_or(0.0)
     }
@@ -296,7 +296,8 @@ fn audio_fingerprint(doc: &Document) -> String {
     pub(crate) fn seek(&self, sec: f64) {
         let mut state = self.state.lock().unwrap();
         let now = Instant::now();
-        let to = sec.clamp(0.0, state.duration);
+        // 尺は上限ではない(利用者 2026-09-07)。頭だけ 0 で止める。
+        let to = sec.max(0.0);
         // Reopening discards the old ring. `PlaybackSession::seek` cannot remove samples
         // already queued at the consumer side.
         state.session = None;
@@ -310,13 +311,8 @@ fn audio_fingerprint(doc: &Document) -> String {
         let mut state = self.state.lock().unwrap();
         let now = Instant::now();
         let duration = state.duration;
-        let position = position_of(&state, now, duration);
-        if state.playing && position >= duration {
-            state.session = None;
-            state.playing = false;
-            state.anchor = (now, duration);
-        }
-        position
+        // 尺の終わりでは止めない・戻さない。止めるのは人だけで、尺は後から伸ばせる(Ableton と同じ、利用者 2026-09-07)。
+        position_of(&state, now, duration)
     }
 
     pub(crate) fn current_frame(&self) -> i64 {
@@ -393,7 +389,8 @@ fn position_of(state: &PlaybackState, now: Instant, duration: f64) -> f64 {
             .unwrap_or(state.anchor.1);
     }
     if state.playing {
-        (state.anchor.1 + now.duration_since(state.anchor.0).as_secs_f64()).min(duration)
+        let _ = duration; // 尺は上限ではない
+        state.anchor.1 + now.duration_since(state.anchor.0).as_secs_f64()
     } else {
         state.anchor.1
     }
@@ -448,12 +445,14 @@ mod tests {
     }
 
     #[test]
-    fn seek_is_clamped_by_the_composition_timebase() {
+    /// 尺は壁ではない(利用者 2026-09-07): 先へは自由に飛べ、頭だけ 0 で止まる。
+    fn seek_stops_only_at_the_head() {
         let timebase = CompositionTimebase::from_document(&document_at(24, 1, 240)).unwrap();
         let clock = PlaybackController::visual_only(timebase);
 
         clock.seek(99.0);
-        assert_eq!(clock.now_sec(), 10.0);
+        assert_eq!(clock.now_sec(), 99.0);
+        assert_eq!(clock.current_frame(), 99 * 24);
         clock.seek(-1.0);
         assert_eq!(clock.now_sec(), 0.0);
     }

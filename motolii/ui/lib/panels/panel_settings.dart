@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../session/editor_session.dart';
 import '../foundation/panel_catalog.dart';
+import 'browser.dart';
 import '../foundation/theme.dart';
 import '../foundation/metrics.dart';
 
@@ -10,10 +11,35 @@ class PanelSettings extends StatelessWidget {
   final EditorSession controller;
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
-    animation: controller.panePlaces,
+    animation: Listenable.merge([controller.panePlaces, controller.deskWork]),
     builder: (context, _) => ListView(
       padding: const EdgeInsets.all(EditorMetrics.s8),
       children: [
+        const Text(
+          'Browser',
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            fontSize: EditorMetrics.s12,
+          ),
+        ),
+        Row(
+          children: [
+            const Text(
+              'Tile size',
+              style: TextStyle(fontSize: EditorMetrics.font),
+            ),
+            Expanded(
+              child: Slider(
+                key: const ValueKey('settings:browserTile'),
+                min: BrowserSize.min,
+                max: BrowserSize.max,
+                value: BrowserSize.tile(controller),
+                onChanged: (v) => controller.storeDesk('browserTile', v),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: EditorMetrics.s6),
         const Text(
           'Panels',
           style: TextStyle(

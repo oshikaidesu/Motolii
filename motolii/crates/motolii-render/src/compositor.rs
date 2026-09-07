@@ -6,6 +6,7 @@ use re_renderer::{RenderContext, Rgba};
 
 mod device;
 mod effects;
+mod environment;
 mod headless;
 mod matte;
 mod mesh;
@@ -98,7 +99,7 @@ pub(crate) fn spatial_world_from_bounds(
     let matrix = transform.matrix2;
     let basis_x = rotation * glam::vec3(matrix.x_axis.x, matrix.x_axis.y, 0.0);
     let basis_y = rotation * glam::vec3(matrix.y_axis.x, matrix.y_axis.y, 0.0);
-    let basis_z = rotation * glam::Vec3::Z;
+    let basis_z = rotation * glam::Vec3::Z * crate::doc::core::depth_scale(basis_x, basis_y);
     let size = glam::Vec3::from(bounds.size());
     let center = size * 0.5;
     let center_xy = transform.transform_point2(center.truncate());
@@ -124,7 +125,8 @@ pub(crate) fn spatial_placement_from_bounds(
     match placement.world_transform {
         Some(world) => {
             let origin = glam::vec3(bounds.min[0], bounds.min[1], (bounds.min[2] + bounds.max[2]) * 0.5);
-            world * glam::Affine3A::from_translation(-origin)
+            let depth = crate::doc::core::depth_scale(world.matrix3.x_axis.into(), world.matrix3.y_axis.into());
+            world * glam::Affine3A::from_scale(glam::vec3(1.0, 1.0, depth)) * glam::Affine3A::from_translation(-origin)
         }
         None => spatial_world_from_bounds(
             placement.transform, placement.z, placement.rotation_x, placement.rotation_y, bounds,
@@ -239,6 +241,7 @@ pub const NO_BACKGROUND: [f32; 4] = [0.0, 0.0, 0.0, 0.0];
 pub use headless::{HeadlessError, HeadlessGpu};
 
 pub use effects::EffectPass;
+pub use effects::catalog::EffectStage;
 
 pub(crate) use effects::catalog::catalog_snapshot;
 pub use effects::catalog::{bind_catalog_runtime, catalog_generation, catalog_source_roots, refresh_effect_catalog, refresh_effect_catalog_for, watch_effect_catalog, CatalogRefresh, CatalogRuntime, CatalogWatcher, EffectDescriptor, EffectParamDescriptor};
@@ -260,6 +263,10 @@ pub struct Layer {
     pub projection: crate::doc::store::LayerProjection,
     pub projection_camera: ResolvedCamera,
     pub blend_mode: BlendMode,
+    /// 網の描き方(hook の変種と欄)。板には効かない。
+    pub shading: effects::mesh_program::MeshShading,
+    /// 点群を動かす場(Turbulent Displace の CPU の写し)。板には効かない。
+    pub displace: point_cloud::PointDisplace,
 }
 
 #[derive(Clone)]
@@ -315,6 +322,8 @@ pub struct Compositor {
     pub(crate) next_effect_key: u64,
     pub(crate) effect_scratch: effects::EffectScratch,
     pub(crate) effect_programs: std::collections::HashMap<String, effects::EffectProgram>,
+    /// hook の変種。鍵は「field の id | surface の id | catalog の世代」。
+    pub(crate) mesh_programs: std::collections::HashMap<String, std::sync::Arc<re_renderer::renderer::MeshProgram>>,
     /// 層と背景を混ぜる Vism(vism/blend.wgsl + 借りた式)。
     pub(crate) blend_vism: effects::EffectProgram,
     /// 層をマットで切る Vism(vism/matte.wgsl + 借りた svg_lum)。
@@ -339,6 +348,10 @@ impl GpuModelData {
     }
 }
 
+pub use environment::GpuEnvironmentData;
+pub use effects::mesh_program::MeshShading;
+pub use point_cloud::PointDisplace;
+
 /// 層が持つ中身。3D の素材はテクスチャにならず、点のまま run へ渡る。
 #[derive(Clone)]
 pub enum LayerContent {
@@ -351,13 +364,15 @@ pub enum LayerContent {
         point_size: f32,
     },
     Model(std::sync::Arc<GpuModelData>),
+    /// 環境(空)。板にならず、run の背景と網の照明になる。
+    Environment(std::sync::Arc<GpuEnvironmentData>),
 }
 
 impl LayerContent {
     pub fn texture(&self) -> Option<&GpuTexture2D> {
         match self {
             Self::Texture(t) => Some(t),
-            Self::Cloud { .. } | Self::Model(_) => None,
+            Self::Cloud { .. } | Self::Model(_) | Self::Environment(_) => None,
         }
     }
 }
@@ -373,6 +388,7 @@ pub(crate) enum SequentialContent<'a> {
         point_size: f32,
     },
     Model(&'a GpuModelData),
+    Environment(&'a GpuEnvironmentData),
 }
 
 pub(crate) struct SequentialInput<'a> {
@@ -385,6 +401,8 @@ pub(crate) struct SequentialInput<'a> {
     opacity: f32,
     depth_offset: i16,
     blend_mode: BlendMode,
+    shading: effects::mesh_program::MeshShading,
+    displace: point_cloud::PointDisplace,
 }
 
 pub(crate) fn sequential_target_config(
@@ -392,6 +410,7 @@ pub(crate) fn sequential_target_config(
     comp: CompSpec,
     view_from_world: macaw::IsoTransform,
     projection: crate::doc::core::CameraProjection,
+    environment: Option<&GpuEnvironmentData>,
 ) -> TargetConfiguration {
     TargetConfiguration {
         name: name.into(),
@@ -405,6 +424,7 @@ pub(crate) fn sequential_target_config(
         },
         pixels_per_point: 1.0,
         blend_with_background: BlendWithBackground::Premultiplied,
+        environment: environment.map(|e| e.environment.clone()),
         ..Default::default()
     }
 }
@@ -438,6 +458,24 @@ mod spatial_transform_tests {
 
     fn near(actual: glam::Vec3, expected: glam::Vec3) {
         assert!((actual - expected).length() < 1e-3, "{actual:?} != {expected:?}");
+    }
+
+    /// 大きさは x/y しか無いが、3D の素材は奥行きにも同じ倍率が掛かる(球が円盤に潰れない)。
+    #[test]
+    fn spatial_scale_reaches_depth() {
+        let bounds = crate::render::media::SpatialBounds::from_points([[-1.0, -1.0, -1.0], [1.0, 1.0, 1.0]]).unwrap();
+        let world = spatial_world_from_bounds(
+            glam::Affine2::from_scale(glam::vec2(10.0, 10.0)), 0.0, 0.0, 0.0, bounds,
+        );
+        let depth = world.transform_vector3(glam::Vec3::Z).length();
+        assert!((depth - 10.0).abs() < 1e-3, "{depth}");
+        let world3d = crate::doc::core::LayerPlacement::spatial_from_transform(
+            glam::Affine2::from_scale(glam::vec2(4.0, 6.0)), [0.0, 0.0], 0.0, 0.0, 0.0,
+        );
+        let placed = spatial_placement_from_bounds(
+            LayerPlacement { world_transform: Some(world3d), ..Default::default() }, bounds,
+        );
+        assert!((placed.transform_vector3(glam::Vec3::Z).length() - 5.0).abs() < 1e-3);
     }
 
     #[test]

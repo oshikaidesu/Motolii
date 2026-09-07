@@ -9,7 +9,7 @@ impl Compositor {
         Self::with_device(
             gpu.device,
             gpu.queue,
-            if cfg!(feature = "shared-bgra-output") { wgpu::TextureFormat::Bgra8UnormSrgb } else { re_renderer::ScreenshotProcessor::SCREENSHOT_COLOR_FORMAT },
+            crate::render::compositor::PRESENTABLE_FORMAT,
             |_caps| re_renderer::RenderConfig {
                 msaa_mode: re_renderer::MsaaMode::Off,
             },
@@ -26,7 +26,7 @@ impl Compositor {
             .map_err(|e| CompositorError::Context(e.to_string()))?;
 
         let catalog = super::catalog_snapshot();
-        let effect_programs = catalog.definitions.iter().filter(|d| d.manifest.expose)
+        let effect_programs = catalog.definitions.iter().filter(|d| d.manifest.expose && d.manifest.stage == effects::IsfStage::Pass)
             .map(|d| (d.plugin_id().to_owned(), effects::EffectProgram::compile(&ctx, d))).collect();
         let builtin = |name: &str| -> Result<effects::EffectProgram, CompositorError> {
             let definition = catalog.definitions.iter().find(|d| d.source.name == name)
@@ -42,6 +42,7 @@ impl Compositor {
             next_effect_key: 1,
             effect_scratch: effects::EffectScratch::default(),
             effect_programs,
+            mesh_programs: Default::default(),
             blend_vism,
             matte_vism,
             catalog,
@@ -65,7 +66,9 @@ impl Compositor {
             pools.shader_modules.begin_frame(&self.ctx.device, &resolver, frame, &paths);
             pools.render_pipelines.begin_frame(&self.ctx.device, frame, &pools.shader_modules, &pools.pipeline_layouts);
         }
+        self.mesh_programs.clear();
         for definition in changed {
+            if definition.manifest.stage != effects::IsfStage::Pass { continue; }
             let program = effects::EffectProgram::compile(&self.ctx, definition);
             match definition.source.name.as_str() {
                 "blend" => self.blend_vism = program,
@@ -84,7 +87,7 @@ impl Compositor {
         Self::with_device(
             device,
             queue,
-            if cfg!(feature = "shared-bgra-output") { wgpu::TextureFormat::Bgra8UnormSrgb } else { re_renderer::ScreenshotProcessor::SCREENSHOT_COLOR_FORMAT },
+            crate::render::compositor::PRESENTABLE_FORMAT,
             |_caps| re_renderer::RenderConfig {
                 msaa_mode: re_renderer::MsaaMode::Off,
             },

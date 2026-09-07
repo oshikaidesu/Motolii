@@ -10,7 +10,7 @@ use crate::render::compositor::{
 };
 
 use crate::render::engine::translate::{
-    translate_blend_mode, translate_effect_passes, translate_matte_mode,
+    translate_blend_mode, translate_effect_passes, translate_matte_mode, translate_point_displace,
 };
 use crate::render::engine::{Engine, EngineError};
 
@@ -71,8 +71,10 @@ impl Engine {
         shape_documents: &HashMap<LayerId, Vec<ShapeNode>>,
     ) -> Result<Vec<LayerWithPasses>, EngineError> {
         self.layer_failures.clear();
+        self.drawn_layers = 0;
         let mut layers: Vec<LayerWithPasses> = Vec::with_capacity(resolved.len() + 1);
-        let mut contributions: HashMap<LayerId, usize> = HashMap::new();
+        // 層 id → layers の添字(通り抜けの配置なら複製の数だけ)。クリップの下地探しに使う。
+        let mut contributions: HashMap<LayerId, Vec<usize>> = HashMap::new();
 
         let by_id: HashMap<LayerId, &ResolvedLayer> =
             resolved.iter().map(|layer| (layer.id, layer)).collect();
@@ -82,51 +84,82 @@ impl Engine {
             .filter_map(|layer| layer.matte.map(|matte| matte.layer))
             .collect();
 
+        let mut skip_below = 0;
+        let mut previous_build: Option<(LayerId, i64, Layer)> = None;
+        // 配置効果の複製が何枚あるか。clip の相手を「同じ番号の複製」か「複製の和」かで選ぶのに使う。
+        let mut copies_of: HashMap<LayerId, usize> = HashMap::new();
         for layer in resolved {
-            if matte_sources.contains(&layer.id) || (layer.clip_to_below && layer.matte.is_none()) {
+            *copies_of.entry(layer.id).or_default() += 1;
+        }
+        let mut entry_copy: Vec<u32> = Vec::with_capacity(resolved.len() + 1);
+        let mut removed: HashSet<usize> = HashSet::new();
+        for (index, layer) in resolved.iter().enumerate() {
+            if index < skip_below
+                || matte_sources.contains(&layer.id)
+                || (layer.clip_to_below && layer.matte.is_none())
+            {
                 continue;
             }
 
             let blend_mode = translate_blend_mode(layer.blend_mode)?;
-            let passes = translate_effect_passes(&layer.effects);
-
-            let (content, natural) =
-                self.texture_for_resolved(layer, text_documents, shape_documents, t, comp)?;
-            let Some(content) = content else {
-                continue;
-            };
-            let built = self.flatten_if_asked(
-                comp,
-                camera,
-                Layer {
-                    content,
-                    size: layer_size(layer, natural),
-                    placement: layer.placement,
-                    projection: layer.projection,
-                    projection_camera,
-                    blend_mode,
-                },
-                layer.flatten,
-            )?;
-            let built = self.apply_masks_to_layer(built, &layer.masks)?;
-
-            if layer.clip_to_below {
-                let Some(index) = layer.matte.and_then(|matte| contributions.get(&matte.layer).copied()) else {
+            let (built, passes) = if layer.after_effects.is_empty() {
+                let Some(built) = self.build_layer_shared(&mut previous_build, layer, text_documents, shape_documents, t, comp, camera, projection_camera, blend_mode)? else {
                     continue;
                 };
-                let base = layers[index].clone();
-                let opacity = base.layer.placement.opacity;
-                let mut isolated_base = base.layer;
-                isolated_base.placement.opacity = 1.0;
-                let mut base = self.bake_isolated_layer(comp, camera, isolated_base, &base.passes)?;
-                let upper = self.bake_isolated_layer(comp, camera, built, &passes)?;
-                base.content = LayerContent::Texture(self.compositor.source_atop(
-                    base.content.texture().expect("isolated base texture"),
-                    upper.content.texture().expect("isolated upper texture"),
-                    upper.blend_mode,
-                )?);
-                base.placement.opacity = opacity;
-                layers[index] = LayerWithPasses { layer: base, passes: Vec::new() };
+                let passes = translate_effect_passes(&layer.effects);
+                // 画面の外に丸ごと居る素の層(配置の複製が主)は組まない。matte や clip に関わる物は残す。
+                if layer.matte.is_none() && !layer.clip_to_below && offscreen(comp, camera, &built, &passes) {
+                    continue;
+                }
+                (built, passes)
+            } else {
+                // 配置効果の下に効果が積まれた層: 同じ層の配置を全部 1 枚に合わせてから残りを掛ける。
+                let end = index + resolved[index..].iter().take_while(|copy| copy.id == layer.id).count();
+                skip_below = end;
+                let mut copies = Vec::new();
+                for copy in &resolved[index..end] {
+                    if let Some(built) = self.build_layer_shared(&mut previous_build, copy, text_documents, shape_documents, t, comp, camera, projection_camera, blend_mode)? {
+                        copies.push(LayerWithPasses { layer: built, passes: translate_effect_passes(&copy.effects) });
+                    }
+                }
+                if copies.is_empty() {
+                    continue;
+                }
+                let plate = self.bake_isolated_layers(comp, camera, copies, blend_mode, layer.placement)?;
+                (plate, translate_effect_passes(&layer.after_effects))
+            };
+
+            if layer.clip_to_below {
+                let Some(indices) = layer.matte.and_then(|matte| contributions.get(&matte.layer).cloned()) else {
+                    continue;
+                };
+                let indices: Vec<usize> = indices.into_iter().filter(|i| !removed.contains(i)).collect();
+                let no_texture = |engine: &mut Engine| engine.layer_failures.push(format!(
+                    "layer {} clips to a base without a texture (point cloud / model bases are not clippable)",
+                    layer.id.0
+                ));
+                if copies_of.get(&layer.id).copied().unwrap_or(1) > 1 || indices.len() <= 1 {
+                    // 複製の中(同じグループが増やされた)か、下地が 1 枚: 同じ番号の複製にだけ切る。
+                    for index in indices.into_iter().filter(|&i| entry_copy[i] == layer.copy) {
+                        let base = layers[index].clone();
+                        match self.clip_onto_base(base, &built, &passes)? {
+                            Some(clipped) => layers[index] = clipped,
+                            None => no_texture(self),
+                        }
+                    }
+                    continue;
+                }
+                // 外から、増やされた下地に切る: 複製の和を 1 枚にして 1 回だけ切る(画面上の重なり、二重に描かない)。
+                let first = indices[0];
+                let (blend, placement) = (layers[first].layer.blend_mode, layers[first].layer.placement);
+                let union = self.bake_isolated_layers(comp, camera, indices.iter().map(|&i| layers[i].clone()).collect(), blend, placement)?;
+                match self.clip_onto_base(LayerWithPasses { layer: union, passes: Vec::new() }, &built, &passes)? {
+                    Some(clipped) => {
+                        layers[first] = clipped;
+                        removed.extend(indices.into_iter().skip(1));
+                    }
+                    None => no_texture(self),
+                }
                 continue;
             }
 
@@ -155,6 +188,8 @@ impl Engine {
                         projection: source.projection,
                         projection_camera,
                         blend_mode: source_blend,
+                        shading: Default::default(),
+                        displace: Default::default(),
                     };
                     let source_layer =
                         self.flatten_if_asked(comp, camera, source_layer, source.flatten)?;
@@ -173,14 +208,20 @@ impl Engine {
                 }
             };
 
-            contributions.insert(layer.id, layers.len());
+            self.drawn_layers += 1;
+            contributions.entry(layer.id).or_default().push(layers.len());
+            entry_copy.push(layer.copy);
             layers.push(LayerWithPasses {
                 layer: final_layer,
                 passes,
             });
         }
 
-        Ok(layers)
+        if removed.is_empty() {
+            return Ok(layers);
+        }
+        self.drawn_layers -= removed.len();
+        Ok(layers.into_iter().enumerate().filter(|(i, _)| !removed.contains(i)).map(|(_, l)| l).collect())
     }
 
     pub fn render_resolved_to_texture(
@@ -364,6 +405,8 @@ impl Engine {
             projection: crate::doc::store::LayerProjection::TwoD,
             projection_camera: camera,
             blend_mode: layer.blend_mode,
+            shading: Default::default(),
+            displace: Default::default(),
         })
     }
 
@@ -391,19 +434,27 @@ impl Engine {
         layer: Layer,
         passes: &[EffectPass],
     ) -> Result<Layer, EngineError> {
+        let (blend, placement) = (layer.blend_mode, layer.placement);
+        self.bake_isolated_layers(comp, camera, vec![LayerWithPasses { layer, passes: passes.to_vec() }], blend, placement)
+    }
 
-        let output_blend = layer.blend_mode;
-        let mut effected = layer.clone();
+    /// 層(または 1 つの層の配置たち)を comp 大の 1 枚へ焼く。
+    fn bake_isolated_layers(
+        &mut self,
+        comp: CompSpec,
+        camera: ResolvedCamera,
+        mut sources: Vec<LayerWithPasses>,
+        output_blend: CompositeBlendMode,
+        placement: crate::doc::core::LayerPlacement,
+    ) -> Result<Layer, EngineError> {
         // BlendはMatteでcoverageを得た後、作品の下層との間に一度だけ掛ける。
-        effected.blend_mode = CompositeBlendMode::Normal;
-        let source = LayerWithPasses {
-            layer: effected,
-            passes: passes.to_vec(),
-        };
+        for source in &mut sources {
+            source.layer.blend_mode = CompositeBlendMode::Normal;
+        }
         let (texture, _view) = self.compositor.render_to_texture(
             comp,
             camera,
-            std::slice::from_ref(&source),
+            &sources,
             crate::render::compositor::NO_BACKGROUND,
         )?;
         let imported = self.compositor.import_premultiplied(&texture)?;
@@ -417,12 +468,86 @@ impl Engine {
                 z: 0.0,
                 rotation_x: 0.0,
                 rotation_y: 0.0,
-                ..layer.placement
+                ..placement
             },
             projection: crate::doc::store::LayerProjection::TwoD,
             projection_camera: camera,
             blend_mode: output_blend,
+            shading: Default::default(),
+            displace: Default::default(),
         })
+    }
+
+    /// 配置効果の複製は素材と mask が同じなので、直前に組んだ 1 枚を置き直すだけにする。
+    /// 平面化は置き場所で絵が変わるので共有しない。
+    #[allow(clippy::too_many_arguments)]
+    fn build_layer_shared(
+        &mut self,
+        previous: &mut Option<(LayerId, i64, Layer)>,
+        layer: &ResolvedLayer,
+        text_documents: &HashMap<LayerId, TextDocument>,
+        shape_documents: &HashMap<LayerId, Vec<ShapeNode>>,
+        t: RationalTime,
+        comp: CompSpec,
+        camera: ResolvedCamera,
+        projection_camera: ResolvedCamera,
+        blend_mode: CompositeBlendMode,
+    ) -> Result<Option<Layer>, EngineError> {
+        if let Some((id, frame, built)) = previous {
+            if *id == layer.id && *frame == layer.source_frame && layer.copy > 0 && !layer.flatten {
+                return Ok(Some(Layer { placement: layer.placement, blend_mode, ..built.clone() }));
+            }
+        }
+        let built = self.build_layer(layer, text_documents, shape_documents, t, comp, camera, projection_camera, blend_mode)?;
+        *previous = built.clone().map(|built| (layer.id, layer.source_frame, built));
+        Ok(built)
+    }
+
+    /// 素材を取り、平面化と mask まで済ませた 1 枚。素材が無ければ None。
+    #[allow(clippy::too_many_arguments)]
+    fn build_layer(
+        &mut self,
+        layer: &ResolvedLayer,
+        text_documents: &HashMap<LayerId, TextDocument>,
+        shape_documents: &HashMap<LayerId, Vec<ShapeNode>>,
+        t: RationalTime,
+        comp: CompSpec,
+        camera: ResolvedCamera,
+        projection_camera: ResolvedCamera,
+        blend_mode: CompositeBlendMode,
+    ) -> Result<Option<Layer>, EngineError> {
+        let (content, natural) =
+            self.texture_for_resolved(layer, text_documents, shape_documents, t, comp)?;
+        let Some(content) = content else {
+            return Ok(None);
+        };
+        let shading = if matches!(content, crate::render::compositor::LayerContent::Model(_)) {
+            match self.compositor.mesh_shading(&layer.effects) {
+                Ok(shading) => shading,
+                Err(reason) => {
+                    self.layer_failures.push(format!("layer {} の hook を組めない: {reason}", layer.id.0));
+                    Default::default()
+                }
+            }
+        } else {
+            Default::default()
+        };
+        let built = self.flatten_if_asked(
+            comp,
+            camera,
+            Layer {
+                content,
+                size: layer_size(layer, natural),
+                placement: layer.placement,
+                projection: layer.projection,
+                projection_camera,
+                blend_mode,
+                shading,
+                displace: translate_point_displace(&layer.effects),
+            },
+            layer.flatten,
+        )?;
+        Ok(Some(self.apply_masks_to_layer(built, &layer.masks)?))
     }
 
     fn apply_masks_to_layer(
@@ -526,6 +651,33 @@ fn collect_shape_documents(
     Ok(documents)
 }
 
+/// 層の 4 隅を画面に映して、効果の余白込みで枠の外に丸ごと出ていれば true。
+/// 3D の姿勢が無い層は判定しない(false)。
+fn offscreen(comp: CompSpec, camera: ResolvedCamera, layer: &Layer, passes: &[EffectPass]) -> bool {
+    let Some(world) = layer.placement.world_transform else { return false };
+    if layer.content.texture().is_none() {
+        return false;
+    }
+    let margin = passes.iter().map(EffectPass::padding).max().unwrap_or(0) as f32 + 2.0;
+    let corners = crate::doc::core::projected_screen_corners(
+        comp,
+        camera,
+        camera,
+        layer.projection,
+        world,
+        [0.0, 0.0, 0.0],
+        [layer.size[0], layer.size[1], 0.0],
+    );
+    if corners.iter().any(|c| !c.is_finite()) {
+        return false;
+    }
+    let (w, h) = (comp.width as f32, comp.height as f32);
+    corners.iter().all(|c| c.x < -margin)
+        || corners.iter().all(|c| c.x > w + margin)
+        || corners.iter().all(|c| c.y < -margin)
+        || corners.iter().all(|c| c.y > h + margin)
+}
+
 pub(crate) fn layer_size(layer: &ResolvedLayer, natural: [f32; 2]) -> [f32; 2] {
     [
         if layer.declared_size[0] > 0.0 {
@@ -539,4 +691,173 @@ pub(crate) fn layer_size(layer: &ResolvedLayer, natural: [f32; 2]) -> [f32; 2] {
             natural[1]
         },
     ]
+}
+
+#[cfg(test)]
+mod placement_contract {
+    //! 配置効果(motolii.repeat)は他の効果と同じ口から入り、素材を N 個置く。
+    //! 既定は通り抜け。配置効果の**下**に効果を積んだ時だけ、配置を 1 枚に合わせてから掛かる。
+    use crate::doc::store::{
+        placement, property, Composition, Document, EffectId, EffectInstance, Fps, Intent,
+        LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, Value,
+    };
+    use crate::render::engine::{known_effects, Engine};
+
+    const SIZE: u32 = 48;
+    const DOT: u32 = 4;
+
+    fn document(path: &std::path::Path, count: f64, below: &[&str]) -> Document {
+        let mut doc = Document::new();
+        doc.apply(Intent::SetComposition(Composition {
+            width: SIZE,
+            height: SIZE,
+            fps: Fps::try_new(30, 1).unwrap(),
+            duration_frames: 1,
+            background: [0.0, 0.0, 0.0, 0.0],
+        }))
+        .unwrap();
+        let layer = LayerId(1);
+        let repeat = EffectId(0);
+        let mut effects = vec![EffectInstance { id: repeat, plugin_id: placement::REPEAT.to_owned() }];
+        effects.extend(below.iter().enumerate().map(|(i, id)| EffectInstance {
+            id: EffectId(i as u32 + 1),
+            plugin_id: (*id).to_owned(),
+        }));
+        doc.apply_all([
+            Intent::AddLayer(layer),
+            Intent::SetMeta {
+                layer,
+                meta: LayerMeta {
+                    source: LayerSource::File { path: path.to_string_lossy().into_owned(), fingerprint: None },
+                    order: 0,
+                    timing: LayerTiming::place(0, None, 1),
+                },
+            },
+            Intent::SetConstant {
+                layer,
+                property: PropertyId::new(property::POSITION).unwrap(),
+                value: Value::Vec2([4.0, 4.0]),
+            },
+            Intent::SetEffects { layer, effects },
+            Intent::SetConstant { layer, property: PropertyId::effect_param(repeat, "count").unwrap(), value: Value::F64(count) },
+            Intent::SetConstant { layer, property: PropertyId::effect_param(repeat, "position_each").unwrap(), value: Value::Vec2([10.0, 0.0]) },
+        ])
+        .unwrap();
+        doc
+    }
+
+    fn covered(pixels: &[u8]) -> usize {
+        pixels.chunks(4).filter(|px| px[3] > 0).count()
+    }
+
+    fn png(dir: &std::path::Path, name: &str, rgba: [u8; 4]) -> std::path::PathBuf {
+        let path = dir.join(name);
+        let pixels = rgba.into_iter().cycle().take((DOT * DOT * 4) as usize).collect::<Vec<_>>();
+        image::save_buffer(&path, &pixels, DOT, DOT, image::ColorType::Rgba8).unwrap();
+        path
+    }
+
+    fn add_file_layer(doc: &mut Document, id: u64, order: i16, path: &std::path::Path, parent: Option<LayerId>, clip: bool) -> LayerId {
+        use crate::doc::store::LayerAttrsPatch;
+        let layer = LayerId(id);
+        doc.apply_all([
+            Intent::AddLayer(layer),
+            Intent::SetMeta {
+                layer,
+                meta: LayerMeta {
+                    source: LayerSource::File { path: path.to_string_lossy().into_owned(), fingerprint: None },
+                    order,
+                    timing: LayerTiming::place(0, None, 1),
+                },
+            },
+            Intent::SetAttrs { layer, patch: LayerAttrsPatch { parent: Some(parent), clip_to_below: Some(clip), ..Default::default() } },
+            Intent::SetConstant { layer, property: PropertyId::new(property::POSITION).unwrap(), value: Value::Vec2([4.0, 4.0]) },
+        ])
+        .unwrap();
+        layer
+    }
+
+    /// 半透明の緑を、赤の複製に clip した時の画素。二重に描かれていれば赤が 64 まで落ちる。
+    fn red_floor(pixels: &[u8]) -> u8 {
+        pixels.chunks(4).filter(|px| px[3] > 0).map(|px| px[0]).min().unwrap_or(255)
+    }
+
+    #[test]
+    fn clipping_onto_repeated_copies_is_screen_overlap_from_outside_and_per_copy_inside() {
+        let dir = tempfile::tempdir().unwrap();
+        let red = png(dir.path(), "red.png", [255, 0, 0, 255]);
+        let green = png(dir.path(), "green.png", [0, 255, 0, 128]);
+        let mut engine = Engine::new().unwrap();
+
+        // 外から: 赤 3 枚(2 px ずつ重なる)の上に緑を clip。緑は和に 1 回だけ乗るので、重なりでも赤は半分より落ちない。
+        let mut outside = document(&red, 3.0, &[]);
+        outside.apply(Intent::SetConstant { layer: LayerId(1), property: PropertyId::effect_param(EffectId(0), "position_each").unwrap(), value: Value::Vec2([2.0, 0.0]) }).unwrap();
+        add_file_layer(&mut outside, 2, 1, &green, None, true);
+        let pixels = engine.render_frame(&outside.view(), RationalTime::ZERO).unwrap();
+        assert_eq!(covered(&pixels), (DOT * (DOT + 4)) as usize, "the clip paints only where the union of copies is");
+        assert!(red_floor(&pixels) >= 120, "a half-transparent clip is drawn once over overlapping copies, got red {}", red_floor(&pixels));
+
+        // 中で: グループに赤と(赤へ clip した)緑を入れて丸ごと 2 枚に増やす。緑は自分の番号の赤にだけ切られる。
+        let mut inside = Document::new();
+        inside.apply(Intent::SetComposition(Composition { width: SIZE, height: SIZE, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 1, background: [0.0; 4] })).unwrap();
+        let group = LayerId(10);
+        inside.apply_all([
+            Intent::AddLayer(group),
+            Intent::SetMeta { layer: group, meta: LayerMeta { source: LayerSource::Group, order: 0, timing: LayerTiming::place(0, None, 1) } },
+            Intent::SetEffects { layer: group, effects: vec![EffectInstance { id: EffectId(0), plugin_id: placement::REPEAT.to_owned() }] },
+            Intent::SetConstant { layer: group, property: PropertyId::effect_param(EffectId(0), "count").unwrap(), value: Value::F64(2.0) },
+            Intent::SetConstant { layer: group, property: PropertyId::effect_param(EffectId(0), "subject").unwrap(), value: Value::F64(1.0) },
+            Intent::SetConstant { layer: group, property: PropertyId::effect_param(EffectId(0), "position_each").unwrap(), value: Value::Vec2([10.0, 0.0]) },
+        ]).unwrap();
+        add_file_layer(&mut inside, 11, 0, &red, Some(group), false);
+        add_file_layer(&mut inside, 12, 1, &green, Some(group), true);
+        let pixels = engine.render_frame(&inside.view(), RationalTime::ZERO).unwrap();
+        assert_eq!(covered(&pixels), 2 * (DOT * DOT) as usize, "each copy carries its own clipped lyric, nothing leaks outside the copies");
+        assert!(red_floor(&pixels) >= 120, "inside a copy the clip is drawn once, got red {}", red_floor(&pixels));
+    }
+
+    #[test]
+    fn the_repeat_effect_places_the_source_count_times_through_the_effect_stack() {
+        assert!(
+            known_effects().iter().any(|e| e.plugin_id == placement::REPEAT),
+            "the placement effect must sit in the same catalog as the shader effects"
+        );
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("dot.png");
+        let pixels = [255u8, 0, 0, 255].into_iter().cycle().take((DOT * DOT * 4) as usize).collect::<Vec<_>>();
+        image::save_buffer(&source, &pixels, DOT, DOT, image::ColorType::Rgba8).unwrap();
+        let mut engine = Engine::new().unwrap();
+        let mut render = |doc: &Document| engine.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+
+        let one = render(&document(&source, 1.0, &[]));
+        let three = render(&document(&source, 3.0, &[]));
+        let area = (DOT * DOT) as usize;
+        assert_eq!(covered(&one), area, "one copy is the plain layer");
+        assert_eq!(covered(&three), 3 * area, "three copies at step 10 do not overlap and are all drawn");
+
+        // 10 copies at step 10 px in a 48 px comp: the last ones fall outside and are not built.
+        let far = render(&document(&source, 10.0, &[]));
+        assert_eq!(covered(&far), 5 * area, "only the copies inside the frame paint (x = 4 … 44; 54 and beyond are outside)");
+        let mut counting = Engine::new().unwrap();
+        counting.render_frame(&document(&source, 10.0, &[]).view(), RationalTime::ZERO).unwrap();
+        assert_eq!(counting.drawn_layers(), 5, "copies wholly outside the frame are culled before they are built");
+
+        let mut blurred = document(&source, 3.0, &["motolii.blur"]);
+        blurred
+            .apply(Intent::SetConstant {
+                layer: LayerId(1),
+                property: PropertyId::effect_param(EffectId(1), "radius").unwrap(),
+                value: Value::F64(2.0),
+            })
+            .unwrap();
+        let three_then_blur = render(&blurred);
+        assert!(
+            covered(&three_then_blur) > 3 * area,
+            "a blur below the placement runs on the assembled picture and spreads past every copy"
+        );
+        assert!(
+            three.chunks(4).zip(three_then_blur.chunks(4)).all(|(sharp, soft)| sharp[3] == 0 || soft[3] > 0),
+            "every copy is still present under the blur"
+        );
+    }
 }

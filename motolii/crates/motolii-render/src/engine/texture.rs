@@ -124,7 +124,7 @@ fn group_local_bounds(
     group: LayerId,
     mut leaf_bounds: impl FnMut(&ResolvedLayer) -> Option<crate::render::media::SpatialBounds>,
 ) -> Option<crate::render::media::SpatialBounds> {
-    let group_world = resolved.iter().find(|layer| layer.id == group)?.placement.world_transform?;
+    let group_world = resolved.iter().find(|layer| layer.id == group && !layer.ghost)?.placement.world_transform?;
     if !group_world.is_finite() || group_world.matrix3.determinant() == 0.0 { return None; }
     let local_from_world = group_world.inverse();
     if !local_from_world.is_finite() { return None; }
@@ -187,7 +187,7 @@ impl Engine {
         layer_id: LayerId,
         t: RationalTime,
     ) -> Option<crate::render::media::SpatialBounds> {
-        let layer = resolved.iter().find(|layer| layer.id == layer_id)?;
+        let layer = resolved.iter().find(|layer| layer.id == layer_id && !layer.ghost)?;
         if layer.source == LayerSource::Group {
             return group_local_bounds(view, resolved, layer_id, |leaf| self.leaf_local_bounds(view, leaf, t));
         }
@@ -266,6 +266,9 @@ impl Engine {
             self.shape_texture_from_shapes(shapes, layer.id)
         } else if let LayerSource::File { path, .. } = &layer.source {
             let path = path.clone();
+            if layer.environment && crate::render::media::is_still_image_path(&path) {
+                return self.environment_content_for(&path);
+            }
             self.file_content_for(&path, layer.source_frame, layer.id, comp)
         } else {
             self.texture_for(&layer.source, layer.source_frame)
@@ -465,6 +468,39 @@ impl Engine {
         }
     }
 
+    /// 環境にした画。線形の放射輝度で上げ、照度図は上げる時に畳む。
+    /// 失敗は普通の画と同じ棚(`failed_probes`)に置く。
+    fn environment_content_for(
+        &mut self,
+        path: &str,
+    ) -> Result<(Option<LayerContent>, [f32; 2]), EngineError> {
+        if let Some(env) = self.environments.get(path) {
+            return Ok((Some(LayerContent::Environment(env.clone())), env.size));
+        }
+        if let Some(reason) = self.failed_probes.get(path) {
+            self.layer_failures.push(reason.clone());
+            return Ok((None, [0.0, 0.0]));
+        }
+        let made = decode_still_linear_rgb(path)
+            .and_then(|(rgb, w, h)| {
+                self.compositor
+                    .upload_environment("environment", &rgb, w, h)
+                    .map_err(|e| e.to_string())
+            });
+        match made {
+            Ok(env) => {
+                self.environments.insert(path.to_owned(), env.clone());
+                Ok((Some(LayerContent::Environment(env.clone())), env.size))
+            }
+            Err(err) => {
+                let reason = format!("環境を読めない: {path}: {err}");
+                self.failed_probes.insert(path.to_owned(), reason.clone());
+                self.layer_failures.push(reason);
+                Ok((None, [0.0, 0.0]))
+            }
+        }
+    }
+
     /// 静止画は1枚を焼いて置くだけ。動画の道へ入れると
     /// `load_from_bytes(.., "video/mp4", ..)` が必ず落ちて**絵が出ない**。
     ///
@@ -488,13 +524,7 @@ impl Engine {
         let pixels = &self.pixels;
         let made = self.compositor.cached_rgba(still_key(path), "still", || {
             let image = pixels.get_or_insert_with(path, || {
-                let decoded = image::ImageReader::open(path)
-                    .map_err(|e| e.to_string())
-                    .and_then(|r| r.decode().map_err(|e| e.to_string()))?
-                    .to_rgba8();
-                let (width, height) = decoded.dimensions();
-                // 非乗算のまま上げる。乗算は shader(decode の後)。
-                let premultiplied_rgba = decoded.into_raw();
+                let (premultiplied_rgba, width, height) = decode_still_srgb(path)?;
                 Ok::<_, String>(std::sync::Arc::new(crate::render::engine::StillImage {
                     premultiplied_rgba,
                     width,
@@ -646,6 +676,77 @@ impl Engine {
     }
 }
 
+/// 静止画を**非乗算 sRGB** の RGBA8 に揃える。乗算は shader(decode の後)。
+///
+/// ファイルに ICC(iPhone の Display P3、カメラの Adobe RGB)が埋まっていれば
+/// sRGB へ写す。Finder / Preview と同じ見え方になる。profile が壊れていて
+/// 読めない時は Preview と同じく無視して sRGB 扱い。
+pub fn decode_still_srgb(path: &str) -> Result<(Vec<u8>, u32, u32), String> {
+    use image::ImageDecoder as _;
+    let mut decoder = image::ImageReader::open(path)
+        .map_err(|e| e.to_string())?
+        .into_decoder()
+        .map_err(|e| e.to_string())?;
+    let icc = decoder.icc_profile().ok().flatten();
+    let decoded = image::DynamicImage::from_decoder(decoder)
+        .map_err(|e| e.to_string())?
+        .to_rgba8();
+    let (width, height) = decoded.dimensions();
+    let mut rgba = decoded.into_raw();
+    if let Some(transform) = icc.as_deref().and_then(icc_to_srgb_rgba8) {
+        let mut out = vec![0u8; rgba.len()];
+        transform
+            .transform(&rgba, &mut out)
+            .map_err(|e| format!("ICC transform failed: {e:?}"))?;
+        rgba = out;
+    }
+    Ok((rgba, width, height))
+}
+
+/// 環境用: 線形の RGB f32(`width * height * 3`)。float の画(hdr)はそのまま、
+/// 8bit の画は sRGB を線形へ戻す。ICC は写さない(環境の画に付く事が稀)。
+pub fn decode_still_linear_rgb(path: &str) -> Result<(Vec<f32>, u32, u32), String> {
+    let decoded = image::ImageReader::open(path)
+        .map_err(|e| e.to_string())?
+        .decode()
+        .map_err(|e| e.to_string())?;
+    let (width, height) = (decoded.width(), decoded.height());
+    let is_float = matches!(
+        decoded,
+        image::DynamicImage::ImageRgb32F(_) | image::DynamicImage::ImageRgba32F(_)
+    );
+    let rgb = decoded.into_rgb32f().into_raw();
+    let rgb = if is_float {
+        rgb
+    } else {
+        rgb.into_iter().map(srgb_to_linear).collect()
+    };
+    Ok((rgb, width, height))
+}
+
+/// IEC 61966-2-1 の逆変換。
+fn srgb_to_linear(v: f32) -> f32 {
+    if v <= 0.04045 {
+        v / 12.92
+    } else {
+        ((v + 0.055) / 1.055).powf(2.4)
+    }
+}
+
+/// RGB 系の ICC だけ写す。Gray / CMYK の profile は `to_rgba8` 後の並びと
+/// 合わないので None(= sRGB 扱い)。
+fn icc_to_srgb_rgba8(icc: &[u8]) -> Option<std::sync::Arc<moxcms::Transform8BitExecutor>> {
+    let source = moxcms::ColorProfile::new_from_slice(icc).ok()?;
+    source
+        .create_transform_8bit(
+            moxcms::Layout::Rgba,
+            &moxcms::ColorProfile::new_srgb(),
+            moxcms::Layout::Rgba,
+            moxcms::TransformOptions::default(),
+        )
+        .ok()
+}
+
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub(crate) struct TextCacheKey {
     layer: LayerId,
@@ -726,6 +827,49 @@ const DEFAULT_POINT_SIZE: f32 = 2.0;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Display P3 の ICC が埋まった PNG は、Finder / Preview と同じく
+    /// profile を適用して読む(適用しないと (224,64,32) が (206,76,46) 程に沈む)。
+    #[test]
+    fn still_with_embedded_icc_is_mapped_to_srgb() {
+        use image::ImageEncoder;
+        let srgb = [224u8, 64, 32, 255];
+        let p3 = moxcms::ColorProfile::new_display_p3();
+        let to_p3 = moxcms::ColorProfile::new_srgb()
+            .create_transform_8bit(
+                moxcms::Layout::Rgba,
+                &p3,
+                moxcms::Layout::Rgba,
+                moxcms::TransformOptions::default(),
+            )
+            .unwrap();
+        let mut in_p3 = [0u8; 4];
+        to_p3.transform(&srgb, &mut in_p3).unwrap();
+        assert_ne!(in_p3[..3], srgb[..3], "P3 の数字は sRGB と違うはず");
+
+        let dir = std::env::temp_dir().join(format!("motolii-icc-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("p3.png");
+        let mut encoder =
+            image::codecs::png::PngEncoder::new(std::fs::File::create(&path).unwrap());
+        encoder.set_icc_profile(p3.encode().unwrap()).unwrap();
+        encoder
+            .write_image(&in_p3.repeat(4), 2, 2, image::ExtendedColorType::Rgba8)
+            .unwrap();
+
+        let (rgba, w, h) = decode_still_srgb(path.to_str().unwrap()).unwrap();
+        assert_eq!((w, h), (2, 2));
+        for c in 0..3 {
+            assert!(
+                (rgba[c] as i32 - srgb[c] as i32).abs() <= 2,
+                "channel {c}: got {} want {}",
+                rgba[c],
+                srgb[c]
+            );
+        }
+        assert_eq!(rgba[3], 255);
+        std::fs::remove_dir_all(&dir).ok();
+    }
 
     #[test]
     fn cached_text_bounds_follow_nontransparent_content_not_canvas_or_rgb_bleed() {

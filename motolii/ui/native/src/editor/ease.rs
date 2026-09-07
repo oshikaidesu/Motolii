@@ -157,7 +157,7 @@ mod tests {
         let mut doc = crate::doc::store::blank_project();
         let layer = LayerId(1);
         let fps = Fps::try_new(30, 1).unwrap();
-        doc.apply_all(crate::editor::create::new_layer_intents(layer, 0, 0, 60, fps, (1920.0,1080.0), crate::editor::create::NewKind::Rectangle)).unwrap();
+        doc.apply_all(crate::editor::create::new_layer_intents(layer, 0, 0, 60, fps, (1920.0,1080.0), crate::editor::create::NewKind::Rectangle, None)).unwrap();
         let property = PropertyId::new(property::OPACITY).unwrap();
         let mut track = KeyframeTrack::new();
         for frame in [0, 24, 48] { track.insert(Keyframe {t:RationalTime::try_from_frame(frame,fps).unwrap(),value:Value::F64(frame as f64/48.0),interp:Interp::Linear,spatial:None}); }

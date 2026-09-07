@@ -168,6 +168,15 @@ pub struct LayerAttrs {
     /// 3D の素材を平面へ収めるか。**既定は収めない**(AE と逆。裁定 2026-08-30)。
     #[serde(default)]
     pub flatten: bool,
+    /// この画を comp の環境(空)にする。AE の Environment Layer。
+    /// 3D の網はこの画で照らされ、背景にこの画が敷かれる。重ね順で一番上の 1 枚だけ効く。
+    #[serde(default)]
+    pub environment: bool,
+    /// ゴースト: この層を遅れ(フレーム、負なら先)だけずらして見た姿。**実物は 1 つ、ゴーストも 1 つ**。
+    /// 複製が要るなら Delay の効果(Repeater)。行は増えず、Timeline に薄い帯として見え、
+    /// Stage では掴めない(裁定 2026-09-07)。
+    #[serde(default)]
+    pub ghost: Option<i64>,
 }
 
 impl Default for LayerAttrs {
@@ -186,6 +195,8 @@ impl Default for LayerAttrs {
             label_color: None,
             frozen: false,
             flatten: false,
+            environment: false,
+            ghost: None,
         }
     }
 }
@@ -228,6 +239,8 @@ pub struct LayerAttrsPatch {
     pub locked: Option<bool>,
     pub label_color: Option<Option<u8>>,
     pub flatten: Option<bool>,
+    pub environment: Option<bool>,
+    pub ghost: Option<Option<i64>>,
 }
 
 impl LayerAttrsPatch {
@@ -267,6 +280,12 @@ impl LayerAttrsPatch {
         }
         if let Some(v) = self.flatten {
             current.flatten = v;
+        }
+        if let Some(v) = self.environment {
+            current.environment = v;
+        }
+        if let Some(v) = self.ghost {
+            current.ghost = v;
         }
         current
     }

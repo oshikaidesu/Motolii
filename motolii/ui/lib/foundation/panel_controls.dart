@@ -156,6 +156,7 @@ class EditorNumericField extends StatefulWidget {
     this.enabled = true,
     this.mixed = false,
     this.idleFocus,
+    this.onBegin,
   });
   final double value, speed;
   final double? min, max;
@@ -164,6 +165,7 @@ class EditorNumericField extends StatefulWidget {
   final FocusNode? idleFocus;
   final Future<void> Function(double) onPreview, onCommit;
   final Future<void> Function() onFinish, onCancel;
+  final VoidCallback? onBegin;
   @override
   State<EditorNumericField> createState() => _EditorNumericFieldState();
 }
@@ -174,7 +176,8 @@ class _EditorNumericFieldState extends State<EditorNumericField> {
   final _ownIdle = FocusNode();
   FocusNode get _idle => widget.idleFocus ?? _ownIdle;
   bool _editing = false, _dragging = false, _sending = false;
-  double _start = 0, _delta = 0;
+  int? _pointer;
+  double _start = 0, _startGlobalX = 0;
   double? _pending, _shown;
   Future<void> _drained = Future<void>.value();
   String? _error;
@@ -252,8 +255,39 @@ class _EditorNumericFieldState extends State<EditorNumericField> {
     }();
   }
 
+  void _pointerDown(PointerDownEvent event) {
+    if (!widget.enabled || _pointer != null || event.buttons != 1) return;
+    _pointer = event.pointer;
+    _start = widget.value;
+    _startGlobalX = event.position.dx;
+    _idle.requestFocus();
+  }
+
+  void _pointerMove(PointerMoveEvent event) {
+    if (event.pointer != _pointer || event.buttons != 1) return;
+    final displacement = event.position.dx - _startGlobalX;
+    if (!_dragging) {
+      if (displacement.abs() < 3) return;
+      widget.onBegin?.call();
+      setState(() => _dragging = true);
+    }
+    final n = _bounded(_start + displacement * widget.speed);
+    setState(() => _shown = n);
+    _tick(n);
+  }
+
+  void _pointerUp(PointerEvent event, {bool cancel = false}) {
+    if (event.pointer != _pointer) return;
+    if (_dragging) {
+      _end(cancel);
+    } else {
+      _pointer = null;
+    }
+  }
+
   Future<void> _end(bool cancel) async {
     if (!_dragging) return;
+    _pointer = null;
     setState(() => _dragging = false);
     if (cancel) _pending = null;
     await _drained;
@@ -342,44 +376,33 @@ class _EditorNumericFieldState extends State<EditorNumericField> {
                 : SystemMouseCursors.basic,
             child: GestureDetector(
               onDoubleTap: _open,
-              onHorizontalDragStart: widget.enabled
-                  ? (_) {
-                      _idle.requestFocus();
-                      _start = widget.value;
-                      _delta = 0;
-                      setState(() => _dragging = true);
-                    }
-                  : null,
-              onHorizontalDragUpdate: widget.enabled
-                  ? (d) {
-                      _delta += d.delta.dx;
-                      final n = _bounded(_start + _delta * widget.speed);
-                      setState(() => _shown = n);
-                      _tick(n);
-                    }
-                  : null,
-              onHorizontalDragEnd: (_) => _end(false),
-              onHorizontalDragCancel: () => _end(true),
-              child: Tooltip(
-                message: widget.label,
-                child: Container(
-                  height: EditorMetrics.s18,
-                  alignment: Alignment.centerRight,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: EditorMetrics.s2,
-                  ),
-                  color: _dragging ? EditorTheme.hover : EditorTheme.app,
-                  child: Text(
-                    widget.mixed && _shown == null
-                        ? '—'
-                        : (_shown ?? widget.value).toStringAsFixed(2),
-                    maxLines: 1,
-                    overflow: TextOverflow.clip,
-                    style: TextStyle(
-                      fontSize: EditorMetrics.font,
-                      color: widget.enabled
-                          ? EditorTheme.ink
-                          : EditorTheme.muted,
+              child: Listener(
+                behavior: HitTestBehavior.opaque,
+                onPointerDown: _pointerDown,
+                onPointerMove: _pointerMove,
+                onPointerUp: _pointerUp,
+                onPointerCancel: (event) => _pointerUp(event, cancel: true),
+                child: Tooltip(
+                  message: widget.label,
+                  child: Container(
+                    height: EditorMetrics.s18,
+                    alignment: Alignment.centerRight,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: EditorMetrics.s2,
+                    ),
+                    color: _dragging ? EditorTheme.hover : EditorTheme.app,
+                    child: Text(
+                      widget.mixed && _shown == null
+                          ? '—'
+                          : (_shown ?? widget.value).toStringAsFixed(2),
+                      maxLines: 1,
+                      overflow: TextOverflow.clip,
+                      style: TextStyle(
+                        fontSize: EditorMetrics.font,
+                        color: widget.enabled
+                            ? EditorTheme.ink
+                            : EditorTheme.muted,
+                      ),
                     ),
                   ),
                 ),

@@ -100,7 +100,7 @@ fn changing_an_existing_key_preserves_its_time_curve_tangents_and_neighbors() {
     });
     doc.apply(Intent::SetTrack { layer, property: position(), track: authored.clone() }).unwrap();
     doc.mark_undo_floor();
-    let edit = doc.place_checked(layer, &position(), Value::Vec2([75.0, -5.0]), at(60)).unwrap().unwrap();
+    let edit = doc.place_checked(layer, &position(), Value::Vec2([75.0, -5.0]), at(60), true).unwrap().unwrap();
     doc.apply(edit).unwrap();
     let changed = doc.view().track(layer, &position()).unwrap().unwrap();
     assert_eq!(changed.keys().len(), 3);
@@ -144,7 +144,7 @@ fn direct_value_editing_cannot_silently_detach_a_slot_or_driver() {
     let (head, history) = (doc.edit_head(), doc.history_depth());
 
     for layer in [shared, driven] {
-        assert!(doc.place_checked(layer, &position(), Value::Vec2([99.0, 99.0]), at(60)).is_err());
+        assert!(doc.place_checked(layer, &position(), Value::Vec2([99.0, 99.0]), at(60), false).is_err());
     }
     assert_eq!([shared, driven].map(|layer| doc.view().property_source(layer, &position()).unwrap()), sources);
     assert_eq!(doc.view().slots().unwrap(), slots);
@@ -360,4 +360,133 @@ fn ungroup_reparents_children_before_removing_the_container() {
     assert!(doc.undo());
     assert_eq!(doc.view().attrs(child).unwrap().unwrap().parent,Some(group));
     assert!(doc.apply(Intent::SetAttrs{layer:child,patch:LayerAttrsPatch{parent:Some(Some(LayerId(999))),..Default::default()}}).is_err());
+}
+
+#[test]
+fn a_placement_effect_multiplies_the_layer_and_delays_later_copies() {
+    use motolii::doc::store::{placement, EffectId, EffectInstance};
+    let mut doc = document();
+    let paper = layer(&mut doc, 1, LayerSource::Shape);
+    put(&mut doc, paper, [100.0, 50.0]);
+    let repeat = EffectId(0);
+    doc.apply_all([
+        Intent::SetEffects {
+            layer: paper,
+            effects: vec![
+                EffectInstance { id: repeat, plugin_id: placement::REPEAT.to_owned() },
+                EffectInstance { id: EffectId(1), plugin_id: "motolii.blur".to_owned() },
+            ],
+        },
+        Intent::SetConstant { layer: paper, property: PropertyId::effect_param(repeat, "count").unwrap(), value: Value::F64(3.0) },
+        Intent::SetConstant { layer: paper, property: PropertyId::effect_param(repeat, "position_each").unwrap(), value: Value::Vec2([20.0, 0.0]) },
+        Intent::SetConstant { layer: paper, property: PropertyId::effect_param(repeat, "opacity_each").unwrap(), value: Value::F64(-0.25) },
+        Intent::SetConstant { layer: paper, property: PropertyId::effect_param(repeat, "delay_each").unwrap(), value: Value::F64(1.0) },
+    ])
+    .unwrap();
+
+    // 層は 30f から居る。90f では全部の配置が出ていて、番号順に右へ 20 ずつずれる。
+    let copies = doc.view().resolved_layers(at(90)).unwrap();
+    assert_eq!(copies.iter().map(|c| (c.id, c.copy)).collect::<Vec<_>>(), [(paper, 0), (paper, 1), (paper, 2)]);
+    let origins: Vec<[f32; 2]> = copies.iter().map(|c| c.placement.transform.translation.to_array()).collect();
+    assert_eq!(origins, [[100.0, 50.0], [120.0, 50.0], [140.0, 50.0]]);
+    assert_eq!(copies.iter().map(|c| c.placement.opacity).collect::<Vec<_>>(), [1.0, 0.75, 0.5]);
+    // 配置効果より上には何も無く、下の blur は全体に掛かる側へ残る。
+    assert!(copies.iter().all(|c| c.effects.is_empty()));
+    assert!(copies.iter().all(|c| c.after_effects.iter().map(|e| e.plugin_id.as_str()).eq(["motolii.blur"])));
+
+    // 45f では 2 番目(1 秒遅れ)はまだ 15f の姿 = 層の始まる前なので出ない。
+    let early = doc.view().resolved_layers(at(45)).unwrap();
+    assert_eq!(early.iter().map(|c| c.copy).collect::<Vec<_>>(), [0]);
+}
+
+#[test]
+fn animate_decides_whether_a_touch_becomes_a_key_or_moves_the_whole_motion() {
+    let mut doc = document();
+    let layer = layer(&mut doc, 1, LayerSource::Shape);
+    // Animate off, no keys: the value changes and no key appears.
+    doc.apply(doc.place_checked(layer, &position(), Value::Vec2([10.0, 10.0]), at(30), false).unwrap().unwrap()).unwrap();
+    assert!(doc.view().track(layer, &position()).unwrap().is_none());
+    // Animate on, no keys: the first key is born at the playhead.
+    doc.apply(doc.place_checked(layer, &position(), Value::Vec2([20.0, 10.0]), at(30), true).unwrap().unwrap()).unwrap();
+    doc.apply(doc.place_checked(layer, &position(), Value::Vec2([40.0, 10.0]), at(60), true).unwrap().unwrap()).unwrap();
+    let keys = doc.view().track(layer, &position()).unwrap().unwrap().keys().len();
+    assert_eq!(keys, 2);
+    // Animate off, keyed: every key moves by the same difference, no key is added.
+    doc.apply(doc.place_checked(layer, &position(), Value::Vec2([25.0, 15.0]), at(45), false).unwrap().unwrap()).unwrap();
+    let track = doc.view().track(layer, &position()).unwrap().unwrap();
+    assert_eq!(track.keys().len(), 2);
+    assert_eq!(track.keys()[0].value, Value::Vec2([15.0, 15.0]));
+    assert_eq!(track.keys()[1].value, Value::Vec2([35.0, 15.0]));
+    assert_eq!(value(&doc, layer, 45), Value::Vec2([25.0, 15.0]));
+}
+
+#[test]
+fn a_repeater_on_a_group_hands_out_the_children_instead_of_the_group() {
+    use motolii::doc::store::{placement, EffectId, EffectInstance, LayerAttrsPatch};
+    let mut doc = document();
+    let group = layer(&mut doc, 1, LayerSource::Group);
+    let circle = layer(&mut doc, 2, LayerSource::Shape);
+    let square = layer(&mut doc, 3, LayerSource::Shape);
+    for child in [circle, square] {
+        doc.apply(Intent::SetAttrs { layer: child, patch: LayerAttrsPatch { parent: Some(Some(group)), ..Default::default() } }).unwrap();
+    }
+    put(&mut doc, group, [100.0, 100.0]);
+    put(&mut doc, circle, [10.0, 0.0]);
+    put(&mut doc, square, [0.0, 10.0]);
+    let repeat = EffectId(0);
+    doc.apply_all([
+        Intent::SetEffects { layer: group, effects: vec![EffectInstance { id: repeat, plugin_id: placement::REPEAT.to_owned() }] },
+        Intent::SetConstant { layer: group, property: PropertyId::effect_param(repeat, "count").unwrap(), value: Value::F64(4.0) },
+        Intent::SetConstant { layer: group, property: PropertyId::effect_param(repeat, "pick").unwrap(), value: Value::F64(1.0) },
+        Intent::SetConstant { layer: group, property: PropertyId::effect_param(repeat, "position_each").unwrap(), value: Value::Vec2([50.0, 0.0]) },
+    ])
+    .unwrap();
+    // Iterate: 4 placements alternate circle, square, circle, square. The children are not drawn on their own.
+    let out = doc.view().resolved_layers(at(60)).unwrap();
+    let mut seen: Vec<(LayerId, u32, [f32; 2])> = out.iter().map(|c| (c.id, c.copy, c.placement.transform.translation.to_array())).collect();
+    seen.sort_by_key(|(id, copy, _)| (id.0, *copy));
+    assert_eq!(seen, [
+        (circle, 0, [110.0, 100.0]), (circle, 2, [210.0, 100.0]),
+        (square, 1, [150.0, 110.0]), (square, 3, [250.0, 110.0]),
+    ]);
+    assert!(out.iter().all(|c| c.id != group));
+    // Random with all the weight on the square: every placement is a square.
+    doc.apply_all([
+        Intent::SetConstant { layer: group, property: PropertyId::effect_param(repeat, "pick").unwrap(), value: Value::F64(0.0) },
+        Intent::SetConstant { layer: group, property: PropertyId::effect_param(repeat, "share.2").unwrap(), value: Value::F64(0.0) },
+    ])
+    .unwrap();
+    let out = doc.view().resolved_layers(at(60)).unwrap();
+    assert_eq!(out.len(), 4);
+    assert!(out.iter().all(|c| c.id == square));
+    // Whole group: every placement carries both children.
+    doc.apply(Intent::SetConstant { layer: group, property: PropertyId::effect_param(repeat, "subject").unwrap(), value: Value::F64(1.0) }).unwrap();
+    let out = doc.view().resolved_layers(at(60)).unwrap();
+    assert_eq!(out.len(), 8);
+    assert_eq!(out.iter().filter(|c| c.id == circle).count(), 4);
+    assert_eq!(out.iter().filter(|c| c.id == square && c.copy == 3).map(|c| c.placement.transform.translation.to_array()).next(), Some([250.0, 110.0]));
+}
+
+/// 作ってから並べる 2 段が同じ履歴の段に乗る。Undo 一発で作った層ごと消える。
+#[test]
+fn apply_then_lands_both_stages_in_one_undo_step() {
+    let mut doc = document();
+    let a = layer(&mut doc, 1, LayerSource::Shape);
+    let b = LayerId(2);
+    doc.apply_then(
+        [
+            Intent::AddLayer(b),
+            Intent::SetMeta {
+                layer: b,
+                meta: LayerMeta { source: LayerSource::Shape, order: 2, timing: LayerTiming::place(30, Some(90), 300) },
+            },
+        ],
+        |doc| doc.move_layer_intents(&[b], Some(a), "after", at(0)).map(|(intents, _)| intents),
+    )
+    .unwrap();
+    let order = |doc: &Document, layer: LayerId| doc.view().meta(layer).unwrap().unwrap().order;
+    assert!(order(&doc, b) < order(&doc, a), "after = 目標の下");
+    assert!(doc.undo());
+    assert!(!doc.view().layers().contains(&b));
+    assert_eq!(order(&doc, a), 1);
 }

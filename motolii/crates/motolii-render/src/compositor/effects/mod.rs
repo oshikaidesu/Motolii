@@ -3,9 +3,10 @@ use std::collections::HashMap;
 pub(crate) mod isf;
 pub(crate) mod vism;
 pub(crate) mod catalog;
+pub(crate) mod mesh_program;
 mod wgsl_fragment;
 
-pub use isf::{IsfInput, IsfInputType, IsfManifest};
+pub use isf::{IsfInput, IsfInputType, IsfManifest, IsfStage};
 pub(crate) use vism::FLOAT_TARGET_FORMAT;
 #[cfg(not(load_shaders_from_disk))]
 pub(crate) use wgsl_fragment::VELLO_BLEND_PRELUDE;
@@ -40,6 +41,15 @@ pub(crate) struct VismDefinition {
 
 impl VismDefinition {
     pub(crate) fn plugin_id(&self) -> &str { self.manifest.id.as_deref().unwrap_or(&self.source.name) }
+    /// 棚に出す名前: manifest の `LABEL`、無ければ file 名を Title Case に。
+    pub(crate) fn label(&self) -> String {
+        self.manifest.label.clone().unwrap_or_else(|| self.source.name.split(['_', '-']).map(|w| {
+            let mut c = w.chars();
+            c.next().map(|f| f.to_uppercase().collect::<String>() + c.as_str()).unwrap_or_default()
+        }).collect::<Vec<_>>().join(" "))
+    }
+    /// hook の snippet(stage が pass でない時)。
+    pub(crate) fn hook_source(&self) -> &str { &self.vertex_text }
     pub(crate) fn output_format(&self) -> wgpu::TextureFormat {
         if matches!(self.source.name.as_str(), "blend" | "matte") { crate::render::compositor::BLEND_TARGET_FORMAT }
         else if self.manifest.output_float { FLOAT_TARGET_FORMAT } else { wgpu::TextureFormat::Rgba8Unorm }
@@ -48,6 +58,9 @@ impl VismDefinition {
         [vism::catalog_stage_path(&self.source.name, "vertex"), vism::catalog_stage_path(&self.source.name, "fragment")]
     }
     pub(crate) fn stage(&self) -> Result<(), String> {
+        if self.manifest.stage != IsfStage::Pass {
+            return Ok(()); // hook の snippet は MeshProgram が合成する時に書く。
+        }
         let [vertex, fragment] = self.paths();
         vism::write_catalog_stage(&vertex, &self.vertex_text)?;
         vism::write_catalog_stage(&fragment, &self.fragment_text)

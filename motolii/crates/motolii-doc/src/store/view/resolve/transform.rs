@@ -53,25 +53,16 @@ impl<'a> StoreView<'a> {
         layer: LayerId,
         t: RationalTime,
     ) -> Result<glam::Affine3A, StoreError> {
-        use glam::{Affine3A, Mat3, Quat, Vec3};
         let xy = self.local_placement_transform(layer, t)?;
         let position = self.resolve_position(layer, t)?;
         let scalar = |name| self.split_position_component(layer, name, t).map(|v| v.unwrap_or(0.0));
-        let z = scalar(property::POSITION_Z)?;
-        let rx = scalar(property::ROTATION_X)?.to_radians();
-        let ry = scalar(property::ROTATION_Y)?.to_radians();
-        let linear = Mat3::from_cols(
-            xy.matrix2.x_axis.extend(0.0),
-            xy.matrix2.y_axis.extend(0.0),
-            Vec3::Z,
-        );
-        let anchored = Affine3A::from_mat3_translation(
-            linear,
-            xy.translation.extend(0.0) - Vec3::new(position[0], position[1], 0.0),
-        );
-        Ok(Affine3A::from_translation(Vec3::new(position[0], position[1], z))
-            * Affine3A::from_quat(Quat::from_rotation_x(rx) * Quat::from_rotation_y(ry))
-            * anchored)
+        Ok(LayerPlacement::spatial_from_transform(
+            xy,
+            position,
+            scalar(property::POSITION_Z)?,
+            scalar(property::ROTATION_X)?,
+            scalar(property::ROTATION_Y)?,
+        ))
     }
 
     pub fn world_transform3d(
@@ -96,6 +87,20 @@ impl<'a> StoreView<'a> {
             self.inherited_transform(layer, &present, &mut memo, &mut visiting,
                 |layer| self.local_transform3d(layer, t))?;
         }
+        Ok(memo)
+    }
+
+    /// 1 つの層とその祖先だけの 3D world。全層を回さないので、配置の時刻ずらしで層ごとに呼べる。
+    pub(super) fn world_transform3d_chain(
+        &self,
+        layer: LayerId,
+        t: RationalTime,
+        present: &HashSet<LayerId>,
+    ) -> Result<HashMap<LayerId, glam::Affine3A>, StoreError> {
+        let mut memo = HashMap::new();
+        let mut visiting = HashSet::new();
+        self.inherited_transform(layer, present, &mut memo, &mut visiting,
+            |layer| self.local_transform3d(layer, t))?;
         Ok(memo)
     }
 

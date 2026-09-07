@@ -19,6 +19,8 @@ re_renderer = { workspace = true }
 macaw = { workspace = true }
 glam = { workspace = true }
 image = { workspace = true }
+half = "2"
+moxcms = { workspace = true }
 re_video = { workspace = true }
 naga = { workspace = true }
 pollster = { workspace = true }

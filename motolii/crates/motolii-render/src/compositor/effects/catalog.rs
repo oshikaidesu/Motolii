@@ -4,9 +4,24 @@ use std::sync::{Arc, Mutex, OnceLock, atomic::{AtomicU64, AtomicBool, Ordering}}
 
 use super::{isf, VismDefinition, VismSource};
 
+/// 棚の 1 枚が何を返すか(席)。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EffectStage {
+    /// texture → texture の 2D pass。
+    Pass,
+    /// 網の面の hook(fork の `motolii_surface`)。
+    Surface,
+    /// 網の頂点の hook(fork の `motolii_field`)。点群は CPU の写しで受ける。
+    Field,
+    /// 配置の集合(shader を持たない)。
+    Placement,
+}
+
 #[derive(Clone, Debug)]
 pub struct EffectDescriptor {
     pub plugin_id: String,
+    pub label: String,
+    pub stage: EffectStage,
     pub params: Vec<EffectParamDescriptor>,
     pub(crate) padding: Option<EffectPaddingDescriptor>,
     pub(crate) output_format: wgpu::TextureFormat,
@@ -15,8 +30,12 @@ pub struct EffectDescriptor {
 #[derive(Clone, Debug)]
 pub struct EffectParamDescriptor {
     pub name: String,
+    /// 窓に出る英語。ISF は name のまま。
+    pub label: String,
     pub default: f64,
     pub range: Option<(f64, f64)>,
+    /// 選択肢。値は番号。
+    pub choices: Option<Vec<String>>,
 }
 
 #[derive(Clone, Debug)]
@@ -106,7 +125,7 @@ pub(crate) fn catalog_snapshot() -> Arc<CatalogSnapshot> {
 }
 
 fn schema(manifest: &isf::IsfManifest) -> String {
-    format!("{:?}|{}|{}|{:?}|{:?}", manifest.id, manifest.expose, manifest.output_float, manifest.passes,
+    format!("{:?}|{:?}|{}|{}|{:?}|{:?}", manifest.id, manifest.stage, manifest.expose, manifest.output_float, manifest.passes,
         manifest.inputs.iter().map(|i| (&i.name, i.ty, &i.maps)).collect::<Vec<_>>())
 }
 
@@ -169,6 +188,23 @@ fn validate_stage(source: &str, entry: &str, stage: naga::ShaderStage, manifest:
 }
 
 fn prepare(source: VismSource, prelude: &str) -> Result<VismDefinition, String> {
+    if source.extension != "fs" {
+        let (manifest, body) = isf::parse_isf_source(&source.source).map_err(|e| e.to_string())?;
+        if manifest.stage != isf::IsfStage::Pass {
+            // hook の snippet。型は fork の base と合わせて初めて決まるので、ここでは欄の型だけ縛る。
+            for input in manifest.param_inputs() {
+                if input.ty.component_count() != 1 {
+                    return Err(format!("{}: hook の欄は float / long / bool だけ", input.name));
+                }
+            }
+            if manifest.param_inputs().count() > super::mesh_program::PARAM_SLOTS {
+                return Err(format!("hook の欄は {} 個まで", super::mesh_program::PARAM_SLOTS));
+            }
+            let interface = schema(&manifest);
+            return Ok(VismDefinition { source, manifest, interface, vertex_text: body.clone(), fragment_text: body,
+                vertex_entry: String::new(), fragment_entry: String::new() });
+        }
+    }
     let (manifest, vertex, fragment, vertex_entry, fragment_entry) = if source.extension == "fs" {
         let (manifest, vertex, fragment) = isf::compiled_stages(&source.source).map_err(|e| e.to_string())?;
         (manifest, vertex, fragment, "main", "main")
@@ -185,15 +221,35 @@ fn prepare(source: VismSource, prelude: &str) -> Result<VismDefinition, String> 
 }
 
 fn descriptors(definitions: &[VismDefinition]) -> Arc<[EffectDescriptor]> {
+    // shader を持たない棚の 1 枚(配置・表面・場)は doc の 1 つの表から。棚と Inspector には同じ列で並ぶ。
+    let declared = crate::doc::store::kind::all().map(|kind| EffectDescriptor {
+        plugin_id: kind.plugin_id.to_owned(),
+        label: kind.label.to_owned(),
+        stage: EffectStage::Placement,
+        params: kind.params.iter().map(|p| EffectParamDescriptor {
+            name: p.name.to_owned(), label: p.label.to_owned(), default: p.default[0], range: p.range,
+            choices: p.choices().map(|c| c.iter().map(|s| (*s).to_owned()).collect()),
+        }).collect(),
+        padding: None,
+        output_format: wgpu::TextureFormat::Rgba8Unorm,
+    });
     definitions.iter().filter(|d| d.manifest.expose).map(|d| EffectDescriptor {
         plugin_id: d.plugin_id().to_owned(),
+        label: d.label(),
+        stage: match d.manifest.stage {
+            isf::IsfStage::Pass => EffectStage::Pass,
+            isf::IsfStage::Surface => EffectStage::Surface,
+            isf::IsfStage::Field => EffectStage::Field,
+        },
         params: d.manifest.param_inputs().map(|p| EffectParamDescriptor {
-            name: p.name.clone(), default: p.default[0] as f64,
-            range: p.min.zip(p.max).map(|(min, max)| (min[0] as f64, max[0] as f64)),
+            name: p.name.clone(), label: p.label.clone().unwrap_or_else(|| p.name.clone()), default: p.default[0] as f64,
+            range: p.min.zip(p.max).map(|(min, max)| (min[0] as f64, max[0] as f64))
+                .or_else(|| p.labels.as_ref().map(|l| (0.0, (l.len().max(1) - 1) as f64))),
+            choices: p.labels.clone(),
         }).collect(),
         padding: d.manifest.padding.as_ref().map(|p| EffectPaddingDescriptor { param: p.param.clone(), scale: p.scale }),
         output_format: d.output_format(),
-    }).collect::<Vec<_>>().into()
+    }).chain(declared).collect::<Vec<_>>().into()
 }
 
 pub fn refresh_effect_catalog() -> CatalogRefresh { refresh_runtime(&active_runtime()) }

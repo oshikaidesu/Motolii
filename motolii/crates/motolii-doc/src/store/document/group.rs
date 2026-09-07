@@ -212,12 +212,12 @@ fn reject_animated_transform(
     Ok(())
 }
 
-struct BakedChildTransform {
-    position: [f64; 2],
-    rotation_degrees: f64,
-    scale: [f64; 2],
-    skew_degrees: f64,
-    skew_axis_degrees: f64,
+pub(super) struct BakedChildTransform {
+    pub(super) position: [f64; 2],
+    pub(super) rotation_degrees: f64,
+    pub(super) scale: [f64; 2],
+    pub(super) skew_degrees: f64,
+    pub(super) skew_axis_degrees: f64,
 }
 
 impl BakedChildTransform {
@@ -263,7 +263,7 @@ fn still(value: Value) -> KeyframeTrack {
     track
 }
 
-fn bake_child_local(
+pub(super) fn bake_child_local(
     group_local: glam::Affine2,
     child_local: glam::Affine2,
     anchor: [f32; 2],
@@ -304,7 +304,7 @@ fn affine2_is_identity(m: glam::Affine2) -> bool {
         && (m.matrix2.y_axis - glam::Vec2::Y).length() < EPS
 }
 
-fn read_vec2(
+pub(super) fn read_vec2(
     view: &StoreView,
     layer: LayerId,
     name: &str,
@@ -329,6 +329,20 @@ impl Document {
         placement: &str,
         at: RationalTime,
     ) -> Result<Vec<LayerId>, StoreError> {
+        let (intents, roots) = self.move_layer_intents(layers, target, placement, at)?;
+        self.apply_all(intents)?;
+        Ok(roots)
+    }
+
+    /// 並べ替えの intents を決めるだけで書かない。作る→並べるを 1 手にする側
+    /// (`apply_then`)がこれを後段に使う。
+    pub fn move_layer_intents(
+        &self,
+        layers: &[LayerId],
+        target: Option<LayerId>,
+        placement: &str,
+        at: RationalTime,
+    ) -> Result<(Vec<Intent>, Vec<LayerId>), StoreError> {
         use std::collections::{BTreeMap, HashSet};
         let view = self.view().without_transients();
         for &layer in layers {
@@ -358,7 +372,7 @@ impl Document {
                 ));
             }
             if placement != "inside" && roots.contains(&target) {
-                return Ok(roots);
+                return Ok((Vec::new(), roots));
             }
         }
         let new_parent = match placement {
@@ -475,9 +489,7 @@ impl Document {
                 }
             }
         }
-        drop(view);
-        self.apply_all(intents)?;
-        Ok(roots)
+        Ok((intents, roots))
     }
 }
 
@@ -496,7 +508,24 @@ fn move_editable(view: &StoreView<'_>, layer: LayerId) -> Result<(), StoreError>
     Ok(())
 }
 
-fn move_static_transform(view: &StoreView<'_>, layer: LayerId) -> Result<(), StoreError> {
+pub(super) fn refuse_split_position(view: &StoreView<'_>, layer: LayerId) -> Result<(), StoreError> {
+    for name in [
+        crate::doc::store::property::POSITION_X,
+        crate::doc::store::property::POSITION_Y,
+    ] {
+        if view
+            .property_source(layer, &PropertyId::new(name)?)?
+            .is_some()
+        {
+            return Err(StoreError::Property(
+                "Cannot change coordinate systems with separate Position axes".into(),
+            ));
+        }
+    }
+    Ok(())
+}
+
+pub(super) fn move_static_transform(view: &StoreView<'_>, layer: LayerId) -> Result<(), StoreError> {
     for name in TRANSFORM_PROPERTIES.iter().copied().chain([
         crate::doc::store::property::POSITION_Z,
         crate::doc::store::property::ROTATION_X,
@@ -543,7 +572,7 @@ fn move_planar(matrix: glam::Affine3A) -> Result<glam::Affine2, StoreError> {
     ))
 }
 
-fn move_translation_values(
+pub(super) fn move_translation_values(
     view: &StoreView<'_>,
     layer: LayerId,
     delta: [f64; 3],
@@ -675,19 +704,7 @@ fn move_parent_compensation(
         );
     }
     move_static_transform(view, layer)?;
-    for name in [
-        crate::doc::store::property::POSITION_X,
-        crate::doc::store::property::POSITION_Y,
-    ] {
-        if view
-            .property_source(layer, &PropertyId::new(name)?)?
-            .is_some()
-        {
-            return Err(StoreError::Property(
-                "Cannot change coordinate systems with separate Position axes".into(),
-            ));
-        }
-    }
+    refuse_split_position(view, layer)?;
     let correction = move_planar(correction)?;
     let local = move_planar(view.local_transform3d(layer, at)?)?;
     let anchor = read_vec2(
@@ -716,26 +733,30 @@ fn move_parent_compensation(
             "Parent transform cannot be preserved without changing the layer".into(),
         ));
     }
+    write_transform_values(
+        view,
+        layer,
+        at,
+        [
+            (crate::doc::store::property::POSITION, Value::Vec2(baked.position)),
+            (crate::doc::store::property::SCALE, Value::Vec2(baked.scale)),
+            (crate::doc::store::property::ROTATION, Value::F64(baked.rotation_degrees)),
+            (crate::doc::store::property::SKEW, Value::F64(baked.skew_degrees)),
+            (crate::doc::store::property::SKEW_AXIS, Value::F64(baked.skew_axis_degrees)),
+        ],
+    )
+}
+
+/// Writes still transform values, keeping each property's key layout so Undo and the
+/// Timeline see the same rows as before.
+pub(super) fn write_transform_values(
+    view: &StoreView<'_>,
+    layer: LayerId,
+    at: RationalTime,
+    values: impl IntoIterator<Item = (&'static str, Value)>,
+) -> Result<Vec<Intent>, StoreError> {
     let mut intents = Vec::new();
-    for (name, value) in [
-        (
-            crate::doc::store::property::POSITION,
-            Value::Vec2(baked.position),
-        ),
-        (crate::doc::store::property::SCALE, Value::Vec2(baked.scale)),
-        (
-            crate::doc::store::property::ROTATION,
-            Value::F64(baked.rotation_degrees),
-        ),
-        (
-            crate::doc::store::property::SKEW,
-            Value::F64(baked.skew_degrees),
-        ),
-        (
-            crate::doc::store::property::SKEW_AXIS,
-            Value::F64(baked.skew_axis_degrees),
-        ),
-    ] {
+    for (name, value) in values {
         let property = PropertyId::new(name)?;
         let current = view
             .value_at(layer, &property, at)?

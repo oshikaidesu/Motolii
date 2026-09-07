@@ -140,7 +140,7 @@ fn selection_geom_resolved(
         scale.0 * natural.0,
         scale.1 * natural.1,
     );
-    let evaluated = resolved.iter().find(|l| l.id == layer)?;
+    let evaluated = resolved.iter().find(|l| l.id == layer && !l.ghost)?;
     Some(SelGeom {
         projection: evaluated.projection,
         placement: evaluated.placement,
@@ -554,7 +554,7 @@ impl DragSession {
         }
         Ok(Self{drag,map,revision:doc.revision(),start,moves})
     }
-    pub(crate) fn edits(&self,doc:&Document,point:[f64;2],shift:bool,alt:bool)->Result<Vec<Intent>,String>{
+    pub(crate) fn edits(&self,doc:&Document,point:[f64;2],shift:bool,alt:bool,animate:bool)->Result<Vec<Intent>,String>{
         if doc.revision()!=self.revision{return Err("Gesture canceled because document changed".into())}
         if self.drag.mode == GizmoMode::Move {
             let mut point = point;
@@ -568,13 +568,13 @@ impl DragSession {
                 let (x, y) = map.to_uv(point[0], point[1]);
                 if !x.is_finite() || !y.is_finite() { return Err("Position axes cannot reach pointer".into()); }
                 let value = Value::Vec2([position.0 + (x-x0)*MOVE_MAP_SPAN, position.1 + (y-y0)*MOVE_MAP_SPAN]);
-                if let Some(edit) = doc.place_checked(*layer, &PropertyId::new(property::POSITION).map_err(|e| e.to_string())?, value, self.drag.at).map_err(|e| e.to_string())? { out.push(edit); }
+                if let Some(edit) = doc.place_checked(*layer, &PropertyId::new(property::POSITION).map_err(|e| e.to_string())?, value, self.drag.at, animate).map_err(|e| e.to_string())? { out.push(edit); }
             }
             return Ok(out);
         }
         let(u,v)=self.map.to_uv(point[0],point[1]);if !u.is_finite()||!v.is_finite(){return Err("Point cannot project to selected plane".into())}
         let(bx,by,bw,bh)=self.drag.orig_box;let p=rotate_around(self.drag.orig_position,self.drag.orig_rotation,(bx+u*bw,by+v*bh));
-        let values=preview_values(&self.drag,p,shift,alt,1.0);let mut out=Vec::new();for(layer,property,value)in values{if let Some(edit)=doc.place_checked(layer,&property,value,self.drag.at).map_err(|e|e.to_string())?{out.push(edit)}}Ok(out)
+        let values=preview_values(&self.drag,p,shift,alt,1.0);let mut out=Vec::new();for(layer,property,value)in values{if let Some(edit)=doc.place_checked(layer,&property,value,self.drag.at,animate).map_err(|e|e.to_string())?{out.push(edit)}}Ok(out)
     }
 }
 fn orbit_angles(orig: (f64, f64), grab: (f64, f64), now: (f64, f64), scale: f64) -> (f64, f64) {

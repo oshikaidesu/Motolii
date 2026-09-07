@@ -21,8 +21,10 @@ impl Compositor {
         comp: crate::doc::core::CompSpec,
         camera: crate::doc::core::ResolvedCamera,
         projection: crate::doc::store::LayerProjection,
+        displace: PointDisplace,
     ) -> Result<re_renderer::renderer::PointCloudDrawData, CompositorError> {
-        let points: Vec<glam::Vec3> = positions.iter().copied().map(glam::Vec3::from).collect();
+        let world_from_obj = projected_spatial_placement(comp, camera, projection, placement, bounds);
+        let points = displaced_points(positions, world_from_obj, displace);
         let alpha = (opacity.clamp(0.0, 1.0) * 255.0).round() as u8;
         let colors: Vec<Color32> = colors
             .iter()
@@ -36,7 +38,6 @@ impl Compositor {
             })
             .collect();
 
-        let world_from_obj = projected_spatial_placement(comp, camera, projection, placement, bounds);
         let radii = vec![Size::new_ui_points(point_size.max(1e-4)); points.len()];
         let picking_ids = vec![Default::default(); points.len()];
         let mut builder = PointCloudBuilder::new(&self.ctx);
@@ -48,5 +49,75 @@ impl Compositor {
         builder
             .into_draw_data()
             .map_err(|e| CompositorError::Draw(e.to_string()))
+    }
+}
+
+/// Turbulent Displace の CPU の写し。点群は fork の hook を通らないので、同じ欄をここで受ける
+/// (最小コアの継ぎ目 D。網は `vism/turbulent_displace.wgsl`、点群はこれ)。
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PointDisplace {
+    pub amount: f32,
+    pub size: f32,
+    pub complexity: u32,
+    pub evolution: f32,
+    pub offset: glam::Vec3,
+}
+
+impl Default for PointDisplace {
+    fn default() -> Self {
+        Self { amount: 0.0, size: 100.0, complexity: 3, evolution: 0.0, offset: glam::Vec3::ZERO }
+    }
+}
+
+/// 点群の点を、網の頂点と同じ場(上流 `noise`、同じ座標の取り方)で動かす。点群には法線が無いので
+/// Along に関わらずベクトル場として動かす。amount 0 はそのまま。
+pub(crate) fn displaced_points(
+    positions: &[[f32; 3]],
+    world_from_obj: glam::Affine3A,
+    displace: PointDisplace,
+) -> Vec<glam::Vec3> {
+    if displace.amount == 0.0 {
+        return positions.iter().copied().map(glam::Vec3::from).collect();
+    }
+    let frame = world_from_obj.matrix3;
+    let obj_from_frame = frame.inverse();
+    let size = displace.size.max(1e-3);
+    let octaves = displace.complexity.clamp(1, 8);
+    positions
+        .iter()
+        .map(|p| {
+            let p = glam::Vec3::from(*p);
+            let frame_position = frame * p;
+            let q = (frame_position + displace.offset) / size + displace.evolution * glam::vec3(0.53, 0.71, 0.89);
+            let field = glam::vec3(
+                re_renderer::noise::fbm3(q, octaves),
+                re_renderer::noise::fbm3(q + glam::vec3(31.7, 0.0, 0.0), octaves),
+                re_renderer::noise::fbm3(q + glam::vec3(0.0, 47.3, 0.0), octaves),
+            );
+            p + obj_from_frame * (field * displace.amount)
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod displace_tests {
+    use super::*;
+
+    #[test]
+    fn points_move_by_at_most_amount_and_evolution_changes_them() {
+        let positions: Vec<[f32; 3]> = (0..50).map(|i| [i as f32 * 3.0, (i * 7 % 11) as f32, -(i as f32)]).collect();
+        let still = displaced_points(&positions, glam::Affine3A::IDENTITY, Default::default());
+        assert!(still.iter().zip(&positions).all(|(a, b)| *a == glam::Vec3::from(*b)));
+        let field = PointDisplace { amount: 5.0, size: 10.0, ..Default::default() };
+        let moved = displaced_points(&positions, glam::Affine3A::IDENTITY, field);
+        let mut any = false;
+        for (a, b) in moved.iter().zip(&positions) {
+            let d = (*a - glam::Vec3::from(*b)).abs();
+            assert!(d.max_element() <= 5.0 + 1e-3, "{d:?}");
+            any |= d.max_element() > 0.5;
+        }
+        assert!(any, "何も動かない");
+        let later = displaced_points(&positions, glam::Affine3A::IDENTITY, PointDisplace { evolution: 1.0, ..field });
+        assert!(moved.iter().zip(&later).any(|(a, b)| (*a - *b).length() > 0.1));
     }
 }

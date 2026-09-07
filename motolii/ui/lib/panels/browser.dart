@@ -1,6 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:ui'
+    as ui
+    show Vertices, VertexMode, instantiateImageCodec, ImageByteFormat;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -33,9 +36,35 @@ class _BrowserPanelState extends State<BrowserPanel> {
   final queries = <String, String>{};
   final active = <String, String>{};
   final selected = <String, Set<String>>{};
+
+  /// Colours stacked under the wheel; one is a solid, more make a gradient.
+  List<List<double>> stops = [];
   final scroll = ScrollController();
   List<Map<String, dynamic>> visible = [];
   int columns = 1;
+
+  /// Category rail width while dragging; null means "as stored".
+  double? railDrag;
+
+  static const double tileDefault = 88, railMin = 48;
+
+  /// Colours: the wheel's size is the picker's height; the grip under the
+  /// picker drags it.
+  static const double wheelDefault = 160;
+  double? wheelDrag;
+  double get wheelSize =>
+      (wheelDrag ??
+              (widget.controller.deskWork.value['browserWheel'] as num? ??
+                      wheelDefault)
+                  .toDouble())
+          .clamp(EditorMetrics.thumb, EditorMetrics.s200);
+
+  double get tile => BrowserSize.tile(widget.controller);
+  double get rail =>
+      railDrag ??
+      (widget.controller.deskWork.value['browserRail'] as num? ??
+              EditorMetrics.s96)
+          .toDouble();
 
   bool has(String op) =>
       (widget.controller.state['capabilities'] as List? ?? []).contains(op);
@@ -49,10 +78,34 @@ class _BrowserPanelState extends State<BrowserPanel> {
   void initState() {
     super.initState();
     tab = widget.fixedTab ?? 'Create';
+    widget.controller.importedAssets.addListener(_revealImported);
+    widget.controller.deskWork.addListener(_redraw);
+  }
+
+  void _redraw() {
+    if (mounted) setState(() {});
+  }
+
+  /// 取り込んだ物は Media に居る。開いて、絞り込みを外して、選んでおく。
+  void _revealImported() {
+    final ids = widget.controller.importedAssets.value;
+    if (ids.isEmpty || !mounted) return;
+    if (widget.fixedTab != null && widget.fixedTab != 'Media') return;
+    setState(() {
+      queries[tab] = search.text;
+      tab = 'Media';
+      search.text = '';
+      queries['Media'] = '';
+      classifications['Media'] = 'All';
+      selected['Media'] = ids.toSet();
+      active['Media'] = ids.first;
+    });
   }
 
   @override
   void dispose() {
+    widget.controller.importedAssets.removeListener(_revealImported);
+    widget.controller.deskWork.removeListener(_redraw);
     search.dispose();
     searchFocus.dispose();
     panelFocus.dispose();
@@ -78,6 +131,11 @@ class _BrowserPanelState extends State<BrowserPanel> {
         RegExp(r'\.(wav|mp3|flac|aac)$').hasMatch(path))
       return 'Audio';
     if (RegExp(r'\.(obj|glb|gltf|ply)$').hasMatch(path)) return '3D';
+    // 空として置く画(1.0 超を持つ形式)。native の ENVIRONMENT_EXTENSIONS と同じ 2 つ。
+    if (mime.contains('/hdr') ||
+        mime.contains('/exr') ||
+        RegExp(r'\.(hdr|exr)$').hasMatch(path))
+      return 'HDR';
     return '2D';
   }
 
@@ -103,10 +161,15 @@ class _BrowserPanelState extends State<BrowserPanel> {
               'motolii.gain': 'Color',
               'motolii.gradient': 'Color',
               'motolii.tri_led': 'Stylize',
+              'motolii.repeat': 'Place',
             }[id(item)] ??
             'Other';
       default:
-        return item['used'] == true ? 'Used here' : 'Starter';
+        return item['saved'] == true
+            ? 'Saved'
+            : item['used'] == true
+            ? 'Used here'
+            : 'Starter';
     }
   }
 
@@ -145,9 +208,19 @@ class _BrowserPanelState extends State<BrowserPanel> {
       case 'Effects':
         return rows(state['catalog']);
       default:
-        return rows(state['palette']);
+        return [
+          ...rows(state['palette']),
+          for (final (i, s) in _saved(widget.controller).indexed)
+            {...s, 'id': 'saved:$i', 'saved': true},
+        ];
     }
   }
+
+  static List<Map<String, dynamic>> _saved(EditorSession c) =>
+      EditorSession.maps(c.deskWork.value['swatches']);
+  static List<List<double>> _stops(Map<String, dynamic> item) => [
+    for (final s in item['stops'] as List? ?? [item['rgba']]) _rgba(s),
+  ];
 
   void select(Map<String, dynamic> item) {
     panelFocus.requestFocus();
@@ -200,8 +273,11 @@ class _BrowserPanelState extends State<BrowserPanel> {
         }
         break;
       case 'Colors':
-        if (has('applyPalette')) {
-          await c.command('applyPalette', {'rgba': _rgba(item['rgba'])});
+        final colors = _stops(item);
+        if (colors.length > 1) {
+          setState(() => stops = colors);
+        } else if (has('applyPalette')) {
+          await c.command('applyPalette', {'rgba': colors.single});
         }
         break;
     }
@@ -275,9 +351,17 @@ class _BrowserPanelState extends State<BrowserPanel> {
       final all = items(state);
       final rails = switch (tab) {
         'Create' => ['All', 'Text', 'Shapes', '3D', 'Paths'],
-        'Media' => ['All', 'Video', 'Images', 'Audio', '3D'],
-        'Effects' => ['All', 'Blur', 'Light', 'Color', 'Stylize', 'Other'],
-        _ => ['All', 'Used here', 'Starter'],
+        'Media' => ['All', 'Video', 'Images', 'HDR', 'Audio', '3D'],
+        'Effects' => [
+          'All',
+          'Blur',
+          'Light',
+          'Color',
+          'Stylize',
+          'Place',
+          'Other',
+        ],
+        _ => ['All', 'Saved', 'Used here', 'Starter'],
       };
       final chosen = classifications[tab] ?? 'All';
       visible = all.where((item) {
@@ -348,18 +432,10 @@ class _BrowserPanelState extends State<BrowserPanel> {
                     if (tab == 'Media')
                       _smallButton(
                         'Import',
-                        has('import')
-                            ? () async {
-                                final paths = await widget.controller.native(
-                                  'pickImport',
-                                );
-                                if (paths is List && paths.isNotEmpty)
-                                  await widget.controller.command('import', {
-                                    'paths': paths,
-                                  });
-                              }
-                            : null,
+                        has('import') ? widget.controller.importFiles : null,
                       ),
+                    if (tab == 'Colors')
+                      _smallButton('From image', _paletteFromFile),
                   ],
                 ),
               ),
@@ -367,36 +443,93 @@ class _BrowserPanelState extends State<BrowserPanel> {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Container(
-                      width: EditorMetrics.s96,
-                      decoration: const BoxDecoration(
-                        border: Border(
-                          right: BorderSide(color: EditorTheme.line),
-                        ),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(
-                              EditorMetrics.s7,
-                              EditorMetrics.s7,
-                              EditorMetrics.s4,
-                              EditorMetrics.s3,
-                            ),
-                            child: Text(
-                              tab.toUpperCase(),
-                              style: const TextStyle(
-                                fontSize: EditorMetrics.micro,
-                                color: EditorTheme.muted,
+                    if (rail >= railMin)
+                      Container(
+                        width: rail,
+                        clipBehavior: Clip.hardEdge,
+                        decoration: const BoxDecoration(),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(
+                                EditorMetrics.s7,
+                                EditorMetrics.s7,
+                                EditorMetrics.s4,
+                                EditorMetrics.s3,
+                              ),
+                              child: Text(
+                                tab.toUpperCase(),
+                                maxLines: 1,
+                                overflow: TextOverflow.clip,
+                                style: const TextStyle(
+                                  fontSize: EditorMetrics.micro,
+                                  color: EditorTheme.muted,
+                                ),
                               ),
                             ),
+                            for (final rail in rails)
+                              _smallButton(rail, () {
+                                setState(() => classifications[tab] = rail);
+                              }, selected: chosen == rail),
+                          ],
+                        ),
+                      ),
+                    if (rail < railMin)
+                      Tooltip(
+                        message: 'Show ${tab.toLowerCase()} categories',
+                        child: InkWell(
+                          key: const ValueKey('browser:rail-tab'),
+                          onTap: () => widget.controller.storeDesk(
+                            'browserRail',
+                            EditorMetrics.s96,
                           ),
-                          for (final rail in rails)
-                            _smallButton(rail, () {
-                              setState(() => classifications[tab] = rail);
-                            }, selected: chosen == rail),
-                        ],
+                          child: SizedBox(
+                            width: EditorMetrics.row,
+                            child: Column(
+                              children: [
+                                const Padding(
+                                  padding: EdgeInsets.only(
+                                    top: EditorMetrics.s4,
+                                  ),
+                                  child: Icon(
+                                    Icons.chevron_right,
+                                    size: EditorMetrics.s14,
+                                    color: EditorTheme.muted,
+                                  ),
+                                ),
+                                RotatedBox(
+                                  quarterTurns: 1,
+                                  child: Text(
+                                    chosen == 'All' ? tab : chosen,
+                                    maxLines: 1,
+                                    style: const TextStyle(
+                                      fontSize: EditorMetrics.micro,
+                                      color: EditorTheme.accent,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    _grip(
+                      key: const ValueKey('browser:rail-grip'),
+                      onDrag: (dx) => setState(
+                        () => railDrag = (rail + dx).clamp(
+                          0.0,
+                          EditorMetrics.s200,
+                        ),
+                      ),
+                      onEnd: () {
+                        final width = rail < railMin ? 0.0 : rail;
+                        railDrag = null;
+                        widget.controller.storeDesk('browserRail', width);
+                      },
+                      onDoubleTap: () => widget.controller.storeDesk(
+                        'browserRail',
+                        rail >= railMin ? 0.0 : EditorMetrics.s96,
                       ),
                     ),
                     Expanded(
@@ -404,34 +537,54 @@ class _BrowserPanelState extends State<BrowserPanel> {
                         builder: (context, constraints) {
                           columns = math.max(
                             1,
-                            (constraints.maxWidth / (tab == 'Colors' ? 52 : 88))
+                            (constraints.maxWidth /
+                                    (tab == 'Colors' ? tile * .6 : tile))
                                 .floor(),
                           );
                           return Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              if (tab == 'Colors' && target != null)
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: EditorMetrics.s6,
-                                    vertical: EditorMetrics.s3,
-                                  ),
-                                  child: Text(
-                                    '${target['label'] ?? 'Layer color'}',
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      fontSize: EditorMetrics.dense,
-                                      color: EditorTheme.muted,
+                              if (tab == 'Colors') ...[
+                                if (target != null)
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: EditorMetrics.s6,
+                                      vertical: EditorMetrics.s3,
+                                    ),
+                                    child: Text(
+                                      '${target['label'] ?? 'Layer color'}',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        fontSize: EditorMetrics.dense,
+                                        color: EditorTheme.muted,
+                                      ),
                                     ),
                                   ),
-                                ),
-                              if (tab == 'Colors')
                                 _ColorPicker(
                                   controller: widget.controller,
                                   target: target,
                                   enabled: has('setColor'),
+                                  size: wheelSize,
+                                  stops: stops,
+                                  onStops: (next) =>
+                                      setState(() => stops = next),
                                 ),
+                                _grip(
+                                  key: const ValueKey('browser:picker-grip'),
+                                  vertical: true,
+                                  onDrag: (d) =>
+                                      setState(() => wheelDrag = wheelSize + d),
+                                  onEnd: () {
+                                    final size = wheelSize;
+                                    wheelDrag = null;
+                                    widget.controller.storeDesk(
+                                      'browserWheel',
+                                      size,
+                                    );
+                                  },
+                                ),
+                              ],
                               Expanded(
                                 child: visible.isEmpty
                                     ? const Padding(
@@ -457,7 +610,7 @@ class _BrowserPanelState extends State<BrowserPanel> {
                                             SliverGridDelegateWithFixedCrossAxisCount(
                                               crossAxisCount: columns,
                                               mainAxisExtent: tab == 'Colors'
-                                                  ? 48
+                                                  ? tile * .55
                                                   : (constraints.maxWidth /
                                                                     columns -
                                                                 2) *
@@ -480,13 +633,14 @@ class _BrowserPanelState extends State<BrowserPanel> {
                                                 alignment: Alignment.topLeft,
                                                 child: SizedBox(
                                                   width: double.infinity,
-                                                  height: EditorMetrics.s48,
+                                                  height: tile * .55,
                                                   child: card(visible[index]),
                                                 ),
                                               )
                                             : card(visible[index]),
                                       ),
                               ),
+                              _zoomBar(),
                             ],
                           );
                         },
@@ -502,6 +656,123 @@ class _BrowserPanelState extends State<BrowserPanel> {
     },
   );
 
+  /// A thin line you drag; it reports the movement along its axis.
+  Widget _grip({
+    required Key key,
+    required void Function(double delta) onDrag,
+    required VoidCallback onEnd,
+    VoidCallback? onDoubleTap,
+    bool vertical = false,
+  }) => MouseRegion(
+    cursor: vertical
+        ? SystemMouseCursors.resizeUpDown
+        : SystemMouseCursors.resizeLeftRight,
+    child: GestureDetector(
+      key: key,
+      behavior: HitTestBehavior.opaque,
+      onHorizontalDragUpdate: vertical ? null : (d) => onDrag(d.delta.dx),
+      onHorizontalDragEnd: vertical ? null : (_) => onEnd(),
+      onVerticalDragUpdate: vertical ? (d) => onDrag(d.delta.dy) : null,
+      onVerticalDragEnd: vertical ? (_) => onEnd() : null,
+      onDoubleTap: onDoubleTap,
+      child: Container(
+        width: vertical ? null : EditorMetrics.s4,
+        height: vertical ? EditorMetrics.s4 : null,
+        decoration: BoxDecoration(
+          border: vertical
+              ? const Border(bottom: BorderSide(color: EditorTheme.line))
+              : const Border(right: BorderSide(color: EditorTheme.line)),
+        ),
+      ),
+    ),
+  );
+
+  static const _imageExtensions = [
+    'png',
+    'jpg',
+    'jpeg',
+    'webp',
+    'bmp',
+    'gif',
+    'tif',
+    'tiff',
+  ];
+  Future<void> _paletteFromFile() async {
+    final picked = await widget.controller.native('pickImport', {
+      'extensions': _imageExtensions,
+    });
+    if (picked is! List) return;
+    for (final path in picked.whereType<String>()) {
+      await _savePalette(await File(path).readAsBytes());
+    }
+  }
+
+  /// The picture's main colours become saved solids, shown at once.
+  Future<void> _savePalette(Uint8List bytes) async {
+    final colors = await paletteOf(bytes);
+    if (colors.isEmpty) {
+      widget.controller.error.value = 'No colours found in that image';
+      return;
+    }
+    await widget.controller.storeDesk('swatches', [
+      ..._saved(widget.controller),
+      for (final c in colors)
+        {
+          'stops': [c],
+        },
+    ]);
+    if (mounted) setState(() => classifications['Colors'] = 'Saved');
+  }
+
+  /// Tile size, relative: each step is a fixed ratio, the slider spans the
+  /// same range Settings shows.
+  Widget _zoomBar() {
+    void scale(double ratio) => widget.controller.storeDesk(
+      'browserTile',
+      (tile * ratio).clamp(BrowserSize.min, BrowserSize.max),
+    );
+    Widget step(IconData icon, double ratio, String key) => InkWell(
+      key: ValueKey(key),
+      onTap: () => scale(ratio),
+      child: SizedBox(
+        width: EditorMetrics.row,
+        child: Icon(icon, size: EditorMetrics.s14, color: EditorTheme.muted),
+      ),
+    );
+    return Container(
+      height: EditorMetrics.row,
+      decoration: const BoxDecoration(
+        border: Border(top: BorderSide(color: EditorTheme.line)),
+      ),
+      child: Row(
+        children: [
+          step(Icons.remove, .8, 'browser:tile-smaller'),
+          Expanded(
+            child: SliderTheme(
+              data: SliderThemeData(
+                trackHeight: EditorMetrics.s2,
+                thumbShape: const RoundSliderThumbShape(
+                  enabledThumbRadius: EditorMetrics.s5,
+                ),
+                overlayShape: SliderComponentShape.noOverlay,
+                activeTrackColor: EditorTheme.muted,
+                inactiveTrackColor: EditorTheme.line,
+                thumbColor: EditorTheme.ink,
+              ),
+              child: Slider(
+                min: BrowserSize.min,
+                max: BrowserSize.max,
+                value: tile,
+                onChanged: (v) => widget.controller.storeDesk('browserTile', v),
+              ),
+            ),
+          ),
+          step(Icons.add, 1.25, 'browser:tile-larger'),
+        ],
+      ),
+    );
+  }
+
   Widget card(Map<String, dynamic> item) {
     final supported = switch (tab) {
       'Create' => has('create'),
@@ -516,12 +787,21 @@ class _BrowserPanelState extends State<BrowserPanel> {
       tab == 'Media' ? family(item) : id(item),
     );
     final missing = item['missing'] == true;
-    return Tooltip(
-      message: supported
-          ? 'Select · double-click or Enter to apply'
+    final body = Tooltip(
+      message: isColor && _stops(item).length > 1
+          ? 'Double-click to edit its stops · right-click to forget'
+          : supported
+          ? 'Select · double-click or Enter to drop at the top · drag to place'
           : 'Apply unavailable',
       child: GestureDetector(
         onTap: () => select(item),
+        onSecondaryTap: item['saved'] == true
+            ? () {
+                final kept = _saved(widget.controller)
+                  ..removeAt(int.parse('${item['id']}'.split(':').last));
+                widget.controller.storeDesk('swatches', kept);
+              }
+            : null,
         onDoubleTap: () {
           select(item);
           apply(item);
@@ -534,28 +814,7 @@ class _BrowserPanelState extends State<BrowserPanel> {
             ),
           ),
           child: isColor
-              ? Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    ColoredBox(color: _color(_rgba(item['rgba']))),
-                    Align(
-                      alignment: Alignment.bottomCenter,
-                      child: Container(
-                        color: Colors.black.withValues(alpha: .62),
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(EditorMetrics.s2),
-                        child: Text(
-                          '${item['hex'] ?? ''}',
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            color: EditorTheme.ink,
-                            fontSize: EditorMetrics.micro,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                )
+              ? _gradientBox(_stops(item))
               : Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -641,12 +900,25 @@ class _BrowserPanelState extends State<BrowserPanel> {
                                       : null,
                                 ),
                               ),
+                            if (item['path'] != null &&
+                                !missing &&
+                                '${item['mime']}'.startsWith('image/'))
+                              Expanded(
+                                child: _smallButton(
+                                  'Palette',
+                                  () => _savePalette(
+                                    File('${item['path']}').readAsBytesSync(),
+                                  ),
+                                ),
+                              ),
                             if (item['path'] != null && !missing)
-                              _smallButton(
-                                'Finder',
-                                () => widget.controller.native('reveal', {
-                                  'path': item['path'],
-                                }),
+                              Expanded(
+                                child: _smallButton(
+                                  'Finder',
+                                  () => widget.controller.native('reveal', {
+                                    'path': item['path'],
+                                  }),
+                                ),
                               ),
                             if (item['used'] != true)
                               _smallButton(
@@ -665,6 +937,31 @@ class _BrowserPanelState extends State<BrowserPanel> {
                 ),
         ),
       ),
+    );
+    if (tab != 'Media' || !supported) return body;
+    // Timeline の行へ落とすと、その位置に置く。掴んだ札は名前だけ持ち出す。
+    return Draggable<Map<String, dynamic>>(
+      data: {'asset': item['id'], 'name': item['name']},
+      dragAnchorStrategy: pointerDragAnchorStrategy,
+      feedback: Material(
+        color: Colors.transparent,
+        child: Container(
+          height: EditorMetrics.row,
+          padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s6),
+          decoration: BoxDecoration(
+            color: EditorTheme.panel,
+            border: Border.all(color: EditorTheme.accent),
+          ),
+          child: Text(
+            '${item['name']}',
+            style: const TextStyle(
+              fontSize: EditorMetrics.dense,
+              color: EditorTheme.ink,
+            ),
+          ),
+        ),
+      ),
+      child: body,
     );
   }
 
@@ -763,10 +1060,18 @@ class _ColorPicker extends StatefulWidget {
     required this.controller,
     required this.target,
     required this.enabled,
+    required this.size,
+    required this.stops,
+    required this.onStops,
   });
   final EditorSession controller;
   final Map<String, dynamic>? target;
   final bool enabled;
+
+  /// Wheel side the panel asks for; the width may still shrink it.
+  final double size;
+  final List<List<double>> stops;
+  final ValueChanged<List<List<double>>> onStops;
   @override
   State<_ColorPicker> createState() => _ColorPickerState();
 }
@@ -839,38 +1144,23 @@ class _ColorPickerState extends State<_ColorPicker> {
     }
   }
 
-  bool get supportsAlpha {
-    if (widget.target == null) return true;
-    for (final layer in widget.controller.layers) {
-      if (layer['id'] == widget.target!['layer'])
-        return layer['kind'] != 'Shape';
-    }
-    return false;
-  }
-
   List<double> get value =>
       draft ??
       (widget.target == null ? unbound : _rgba(widget.target!['rgba']));
-  void sample(Offset p, {bool alpha = false}) {
+
+  /// Set by the last layout; sampling reads the same geometry the paint used.
+  _Wheel wheel = _Wheel(EditorMetrics.thumb, 'square');
+  String get shape =>
+      widget.controller.deskWork.value['colorShape'] as String? ?? 'square';
+
+  void sample(Offset p) {
     pickerFocus.requestFocus();
     final v = value;
     final hsv = HSVColor.fromColor(_color(v));
-    if (alpha) {
-      setState(() => draft = [v[0], v[1], v[2], (p.dx / 128).clamp(0.0, 1.0)]);
-      preview();
-      return;
-    }
-    dragPart ??=
-        (p.dx >= 25.6 && p.dx <= 102.4 && p.dy >= 25.6 && p.dy <= 102.4)
-        ? 'sv'
-        : 'hue';
+    dragPart ??= wheel.hitsInner(p, hsv) ? 'sv' : 'hue';
     final updated = dragPart == 'sv'
-        ? hsv
-              .withSaturation(((p.dx - 25.6) / 76.8).clamp(0.0, 1.0))
-              .withValue((1 - (p.dy - 25.6) / 76.8).clamp(0.0, 1.0))
-        : hsv.withHue(
-            (math.atan2(p.dy - 64, p.dx - 64) * 180 / math.pi + 90) % 360,
-          );
+        ? wheel.pickInner(p, hsv)
+        : hsv.withHue(wheel.hueAt(p));
     final c = updated.toColor();
     setState(() => draft = [c.r, c.g, c.b, v[3]]);
     preview();
@@ -915,6 +1205,86 @@ class _ColorPickerState extends State<_ColorPicker> {
     });
   }
 
+  static const double _stopsWidth = EditorMetrics.row;
+
+  /// Stacked colours beside the wheel: tap one to pick it, right-click to
+  /// drop it, `+` adds the current colour, Save keeps the strip as a swatch.
+  Widget _stopsBar(List<double> current) {
+    final stops = widget.stops;
+    Widget small(IconData icon, String tip, VoidCallback? press, {Key? key}) =>
+        Tooltip(
+          message: tip,
+          child: InkWell(
+            key: key,
+            onTap: press,
+            child: SizedBox(
+              width: _stopsWidth,
+              height: EditorMetrics.row,
+              child: Icon(
+                icon,
+                size: EditorMetrics.s14,
+                color: press == null
+                    ? EditorTheme.muted.withValues(alpha: .45)
+                    : EditorTheme.muted,
+              ),
+            ),
+          ),
+        );
+    return SizedBox(
+      width: _stopsWidth,
+      height: wheel.side,
+      child: Column(
+        children: [
+          small(
+            Icons.add,
+            'Add this colour as a stop',
+            () => widget.onStops([...stops, current]),
+            key: const ValueKey('browser:stop-add'),
+          ),
+          Expanded(
+            child: stops.isEmpty
+                ? const SizedBox()
+                : ClipRRect(
+                    borderRadius: BorderRadius.circular(EditorMetrics.s5),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        for (final (i, stop) in stops.indexed)
+                          Expanded(
+                            child: GestureDetector(
+                              key: ValueKey('browser:stop:$i'),
+                              onTap: () {
+                                draft = List.of(stop);
+                                commit();
+                              },
+                              onSecondaryTap: () =>
+                                  widget.onStops([...stops]..removeAt(i)),
+                              child: ColoredBox(color: _color(stop)),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+          ),
+          small(
+            Icons.bookmark_add_outlined,
+            stops.length > 1 ? 'Save gradient' : 'Save colour',
+            stops.isEmpty
+                ? null
+                : () {
+                    widget.controller.storeDesk('swatches', [
+                      ..._BrowserPanelState._saved(widget.controller),
+                      {'stops': stops},
+                    ]);
+                    widget.onStops([]);
+                  },
+            key: const ValueKey('browser:stop-save'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final v = value;
@@ -923,112 +1293,154 @@ class _ColorPickerState extends State<_ColorPicker> {
         '#${(color.toARGB32() & 0xffffff).toRadixString(16).padLeft(6, '0')}';
     if (!hexFocus.hasFocus) hex.text = display;
     return CallbackShortcuts(
-      bindings: {const SingleActivator(LogicalKeyboardKey.escape): cancel},
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.escape): () {
+          widget.controller.eyedropper.value = false;
+          cancel();
+        },
+      },
       child: Focus(
         focusNode: pickerFocus,
         child: Padding(
           padding: const EdgeInsets.all(EditorMetrics.s6),
-          child: Column(
-            children: [
-              GestureDetector(
-                onPanStart: (e) => sample(e.localPosition),
-                onPanUpdate: (e) => sample(e.localPosition),
-                onPanEnd: (_) => commit(),
-                onPanCancel: cancel,
-                onTapUp: (e) {
-                  sample(e.localPosition);
-                  commit();
-                },
-                child: SizedBox(
-                  width: EditorMetrics.thumb,
-                  height: EditorMetrics.thumb,
-                  child: CustomPaint(painter: _WheelPainter(color)),
-                ),
-              ),
-              SizedBox(
-                width: EditorMetrics.thumb,
-                height: EditorMetrics.s23,
-                child: Row(
-                  children: [
-                    Container(
-                      width: EditorMetrics.s12,
-                      height: EditorMetrics.s12,
-                      color: color,
-                    ),
-                    const SizedBox(width: EditorMetrics.s5),
-                    Expanded(
-                      child: TextField(
-                        controller: hex,
-                        focusNode: hexFocus,
-                        readOnly: widget.target == null || !widget.enabled,
-                        style: const TextStyle(
-                          fontSize: EditorMetrics.font,
-                          color: EditorTheme.ink,
-                        ),
-                        decoration: const InputDecoration(
-                          isDense: true,
-                          border: InputBorder.none,
-                          contentPadding: EdgeInsets.zero,
-                        ),
-                        onSubmitted: (text) {
-                          var raw = text.trim().replaceFirst('#', '');
-                          if (raw.length == 3)
-                            raw = raw.split('').map((s) => '$s$s').join();
-                          final parsed = raw.length == 6
-                              ? int.tryParse(raw, radix: 16)
-                              : null;
-                          if (parsed == null) {
-                            widget.controller.error.value =
-                                'Enter a valid hex color';
-                            return;
-                          }
-                          draft = [
-                            ((parsed >> 16) & 255) / 255,
-                            ((parsed >> 8) & 255) / 255,
-                            (parsed & 255) / 255,
-                            v[3],
-                          ];
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              wheel = _Wheel(
+                math
+                    .min(
+                      widget.size,
+                      constraints.maxWidth - _stopsWidth - EditorMetrics.s6,
+                    )
+                    .clamp(EditorMetrics.s96, EditorMetrics.s200),
+                shape,
+              );
+              return Column(
+                children: [
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      GestureDetector(
+                        onPanStart: (e) => sample(e.localPosition),
+                        onPanUpdate: (e) => sample(e.localPosition),
+                        onPanEnd: (_) => commit(),
+                        onPanCancel: cancel,
+                        onTapUp: (e) {
+                          sample(e.localPosition);
                           commit();
                         },
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              if (supportsAlpha)
-                GestureDetector(
-                  onPanStart: (e) => sample(e.localPosition, alpha: true),
-                  onPanUpdate: (e) => sample(e.localPosition, alpha: true),
-                  onPanEnd: (_) => commit(),
-                  onPanCancel: cancel,
-                  onTapUp: (e) {
-                    sample(e.localPosition, alpha: true);
-                    commit();
-                  },
-                  child: Container(
-                    width: EditorMetrics.thumb,
-                    height: EditorMetrics.s12,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          color.withValues(alpha: 0),
-                          color.withValues(alpha: 1),
-                        ],
-                      ),
-                    ),
-                    child: Align(
-                      alignment: Alignment(v[3] * 2 - 1, 0),
-                      child: Container(
-                        width: EditorMetrics.s3,
-                        height: EditorMetrics.s12,
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.white),
+                        child: SizedBox(
+                          width: wheel.side,
+                          height: wheel.side,
+                          child: CustomPaint(
+                            painter: _WheelPainter(color, wheel),
+                          ),
                         ),
                       ),
+                      const SizedBox(width: EditorMetrics.s6),
+                      _stopsBar(v),
+                    ],
+                  ),
+                  Container(
+                    width: wheel.side + EditorMetrics.s6 + _stopsWidth,
+                    height: EditorMetrics.s23,
+                    margin: const EdgeInsets.only(top: EditorMetrics.s6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: EditorMetrics.s5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: EditorTheme.line,
+                      borderRadius: BorderRadius.circular(EditorMetrics.s5),
+                    ),
+                    child: Row(
+                      children: [
+                        _Swatch(color: color, size: EditorMetrics.s14),
+                        const SizedBox(width: EditorMetrics.s6),
+                        Expanded(
+                          child: TextField(
+                            controller: hex,
+                            focusNode: hexFocus,
+                            readOnly: widget.target == null || !widget.enabled,
+                            style: const TextStyle(
+                              fontSize: EditorMetrics.font,
+                              color: EditorTheme.ink,
+                            ),
+                            decoration: const InputDecoration(
+                              isDense: true,
+                              border: InputBorder.none,
+                              contentPadding: EdgeInsets.zero,
+                            ),
+                            onSubmitted: (text) {
+                              var raw = text.trim().replaceFirst('#', '');
+                              if (raw.length == 3)
+                                raw = raw.split('').map((s) => '$s$s').join();
+                              final parsed = raw.length == 6
+                                  ? int.tryParse(raw, radix: 16)
+                                  : null;
+                              if (parsed == null) {
+                                widget.controller.error.value =
+                                    'Enter a valid hex color';
+                                return;
+                              }
+                              draft = [
+                                ((parsed >> 16) & 255) / 255,
+                                ((parsed >> 8) & 255) / 255,
+                                (parsed & 255) / 255,
+                                v[3],
+                              ];
+                              commit();
+                            },
+                          ),
+                        ),
+                        ValueListenableBuilder<bool>(
+                          valueListenable: widget.controller.eyedropper,
+                          builder: (context, on, _) => Tooltip(
+                            message: on
+                                ? 'Click the Stage to pick a colour · Esc cancels'
+                                : 'Pick a colour from the Stage',
+                            child: InkWell(
+                              key: const ValueKey('browser:eyedropper'),
+                              onTap: () =>
+                                  widget.controller.eyedropper.value = !on,
+                              child: Padding(
+                                padding: const EdgeInsets.only(
+                                  right: EditorMetrics.s6,
+                                ),
+                                child: Icon(
+                                  Icons.colorize,
+                                  size: EditorMetrics.s14,
+                                  color: on
+                                      ? EditorTheme.accent
+                                      : EditorTheme.muted,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        Tooltip(
+                          message: shape == 'square'
+                              ? 'Switch to triangle'
+                              : 'Switch to square',
+                          child: InkWell(
+                            key: const ValueKey('browser:color-shape'),
+                            onTap: () => widget.controller.storeDesk(
+                              'colorShape',
+                              shape == 'square' ? 'triangle' : 'square',
+                            ),
+                            child: Icon(
+                              shape == 'square'
+                                  ? Icons.change_history
+                                  : Icons.crop_square,
+                              size: EditorMetrics.s14,
+                              color: EditorTheme.muted,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ),
-            ],
+                ],
+              );
+            },
           ),
         ),
       ),
@@ -1036,71 +1448,327 @@ class _ColorPickerState extends State<_ColorPicker> {
   }
 }
 
+/// Where the ring and the inner area are, for one wheel size and shape.
+/// Sampling and painting both read this, so they cannot disagree.
+class _Wheel {
+  _Wheel(this.side, this.shape);
+  final double side;
+  final String shape;
+  static const double ring = 14;
+  Offset get center => Offset(side / 2, side / 2);
+  double get hueRadius => side / 2 - ring / 2;
+  double get inner => side / 2 - ring - EditorMetrics.s3;
+  Rect get square => Rect.fromCenter(
+    center: center,
+    width: inner * math.sqrt2,
+    height: inner * math.sqrt2,
+  );
+  Offset _rim(double degrees) {
+    final a = (degrees - 90) * math.pi / 180;
+    return center + Offset(math.cos(a), math.sin(a)) * inner;
+  }
+
+  /// Hue, white, black corners; the hue corner points at the hue handle.
+  List<Offset> triangle(double hue) => [
+    _rim(hue),
+    _rim(hue + 120),
+    _rim(hue + 240),
+  ];
+  double hueAt(Offset p) =>
+      (math.atan2(p.dy - center.dy, p.dx - center.dx) * 180 / math.pi + 90) %
+      360;
+
+  /// Barycentric weights of p against the triangle (hue, white, black).
+  List<double> _weights(Offset p, List<Offset> t) {
+    final d =
+        (t[1].dy - t[2].dy) * (t[0].dx - t[2].dx) +
+        (t[2].dx - t[1].dx) * (t[0].dy - t[2].dy);
+    final a =
+        ((t[1].dy - t[2].dy) * (p.dx - t[2].dx) +
+            (t[2].dx - t[1].dx) * (p.dy - t[2].dy)) /
+        d;
+    final b =
+        ((t[2].dy - t[0].dy) * (p.dx - t[2].dx) +
+            (t[0].dx - t[2].dx) * (p.dy - t[2].dy)) /
+        d;
+    return [a, b, 1 - a - b];
+  }
+
+  bool hitsInner(Offset p, HSVColor hsv) => shape == 'triangle'
+      ? (p - center).distance <= inner + EditorMetrics.s4
+      : square.inflate(EditorMetrics.s4).contains(p);
+  HSVColor pickInner(Offset p, HSVColor hsv) {
+    if (shape == 'triangle') {
+      final w = _weights(
+        p,
+        triangle(hsv.hue),
+      ).map((x) => x.clamp(0.0, 1.0)).toList();
+      final sum = w[0] + w[1] + w[2];
+      final a = w[0] / sum, b = w[1] / sum;
+      final value = a + b;
+      return hsv
+          .withValue(value.clamp(0.0, 1.0))
+          .withSaturation(value == 0 ? 0 : (a / value).clamp(0.0, 1.0));
+    }
+    final r = square;
+    return hsv
+        .withSaturation(((p.dx - r.left) / r.width).clamp(0.0, 1.0))
+        .withValue((1 - (p.dy - r.top) / r.height).clamp(0.0, 1.0));
+  }
+
+  Offset innerHandle(HSVColor hsv) {
+    if (shape == 'triangle') {
+      final t = triangle(hsv.hue);
+      final a = hsv.saturation * hsv.value, b = hsv.value - a;
+      return t[0] * a + t[1] * b + t[2] * (1 - a - b);
+    }
+    final r = square;
+    return Offset(
+      r.left + hsv.saturation * r.width,
+      r.top + (1 - hsv.value) * r.height,
+    );
+  }
+
+  Offset hueHandle(HSVColor hsv) {
+    final a = (hsv.hue - 90) * math.pi / 180;
+    return center + Offset(math.cos(a), math.sin(a)) * hueRadius;
+  }
+}
+
 class _WheelPainter extends CustomPainter {
-  _WheelPainter(this.color);
+  _WheelPainter(this.color, this.wheel);
   final Color color;
+  final _Wheel wheel;
+
   @override
   void paint(Canvas canvas, Size size) {
     final hsv = HSVColor.fromColor(color);
-    const center = Offset(64, 64);
-    final ring = Paint()
+    final pure = HSVColor.fromAHSV(1, hsv.hue, 1, 1).toColor();
+    final bounds = Offset.zero & size;
+    canvas.drawCircle(
+      wheel.center,
+      wheel.hueRadius,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = _Wheel.ring
+        ..shader = SweepGradient(
+          colors: [
+            for (var i = 0; i <= 6; i++)
+              HSVColor.fromAHSV(1, (i * 60) % 360, 1, 1).toColor(),
+          ],
+          transform: const GradientRotation(-math.pi / 2),
+        ).createShader(bounds),
+    );
+    // A dark hairline on both rims lifts the ring off the panel.
+    final rim = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 25.6
-      ..shader = SweepGradient(
-        startAngle: 0,
-        endAngle: math.pi * 2,
-        colors: [
-          for (var i = 0; i <= 6; i++)
-            HSVColor.fromAHSV(1, (i * 60) % 360, 1, 1).toColor(),
-        ],
-        transform: const GradientRotation(-math.pi / 2),
-      ).createShader(const Rect.fromLTWH(0, 0, 128, 128));
-    canvas.drawCircle(center, 51.2, ring);
-    const square = Rect.fromLTWH(25.6, 25.6, 76.8, 76.8);
-    canvas.drawRect(
-      square,
-      Paint()
-        ..shader = LinearGradient(
-          colors: [Colors.white, HSVColor.fromAHSV(1, hsv.hue, 1, 1).toColor()],
-        ).createShader(square),
-    );
-    canvas.drawRect(
-      square,
-      Paint()
-        ..shader = const LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Colors.transparent, Colors.black],
-        ).createShader(square),
-    );
-    for (final point in [
-      Offset(25.6 + hsv.saturation * 76.8, 25.6 + (1 - hsv.value) * 76.8),
-      center +
-          Offset(
-            math.cos((hsv.hue - 90) * math.pi / 180) * 51.2,
-            math.sin((hsv.hue - 90) * math.pi / 180) * 51.2,
-          ),
-    ]) {
-      canvas.drawCircle(
-        point,
-        4,
-        Paint()
-          ..color = Colors.black
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 2,
+      ..strokeWidth = 1
+      ..color = EditorTheme.line;
+    canvas.drawCircle(wheel.center, wheel.side / 2 - _Wheel.ring, rim);
+    canvas.drawCircle(wheel.center, wheel.side / 2 - .5, rim);
+
+    final shadow = Paint()
+      ..color = Colors.black45
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2);
+    if (wheel.shape == 'triangle') {
+      final t = wheel.triangle(hsv.hue);
+      final path = Path()..addPolygon(t, true);
+      canvas.drawPath(path.shift(const Offset(0, 1)), shadow);
+      canvas.drawVertices(
+        ui.Vertices(
+          ui.VertexMode.triangles,
+          t,
+          colors: [pure, Colors.white, Colors.black],
+        ),
+        BlendMode.srcOver,
+        Paint(),
       );
-      canvas.drawCircle(
-        point,
-        3,
-        Paint()
-          ..color = Colors.white
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1,
+      canvas.drawPath(path, rim);
+    } else {
+      final r = RRect.fromRectAndRadius(
+        wheel.square,
+        const Radius.circular(EditorMetrics.s4),
       );
+      canvas.drawRRect(r.shift(const Offset(0, 1)), shadow);
+      canvas.drawRRect(
+        r,
+        Paint()
+          ..shader = LinearGradient(colors: [Colors.white, pure])
+              .createShader(wheel.square),
+      );
+      canvas.drawRRect(
+        r,
+        Paint()
+          ..shader = const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Colors.transparent, Colors.black],
+          ).createShader(wheel.square),
+      );
+      canvas.drawRRect(r, rim);
     }
+
+    _handle(canvas, wheel.innerHandle(hsv), color.withValues(alpha: 1));
+    _handle(canvas, wheel.hueHandle(hsv), pure);
+  }
+
+  void _handle(Canvas canvas, Offset at, Color fill) {
+    canvas.drawCircle(
+      at.translate(0, 1),
+      5,
+      Paint()
+        ..color = Colors.black54
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.5),
+    );
+    canvas.drawCircle(at, 5, Paint()..color = Colors.white);
+    canvas.drawCircle(at, 3.5, Paint()..color = fill);
   }
 
   @override
   bool shouldRepaint(covariant _WheelPainter oldDelegate) =>
-      color != oldDelegate.color;
+      color != oldDelegate.color ||
+      wheel.side != oldDelegate.wheel.side ||
+      wheel.shape != oldDelegate.wheel.shape;
+}
+
+/// Transparency shows as the usual light/dark checker.
+class _CheckerPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    const cell = EditorMetrics.s4;
+    final light = Paint()..color = const Color(0xffbbbbbb);
+    final dark = Paint()..color = const Color(0xff777777);
+    for (var y = 0.0; y < size.height; y += cell)
+      for (var x = 0.0; x < size.width; x += cell)
+        canvas.drawRect(
+          Rect.fromLTWH(x, y, cell, cell),
+          ((x + y) / cell).round().isEven ? light : dark,
+        );
+  }
+
+  @override
+  bool shouldRepaint(covariant _CheckerPainter oldDelegate) => false;
+}
+
+/// A solid, or the same strip a saved gradient was made from.
+Widget _gradientBox(List<List<double>> stops) => DecoratedBox(
+  decoration: BoxDecoration(
+    color: stops.length == 1 ? _color(stops.single) : null,
+    gradient: stops.length > 1
+        ? LinearGradient(colors: [for (final s in stops) _color(s)])
+        : null,
+  ),
+);
+
+class _Swatch extends StatelessWidget {
+  const _Swatch({required this.color, required this.size});
+  final Color color;
+  final double size;
+  @override
+  Widget build(BuildContext context) => Container(
+    width: size,
+    height: size,
+    clipBehavior: Clip.antiAlias,
+    decoration: BoxDecoration(
+      borderRadius: BorderRadius.circular(EditorMetrics.s4),
+      border: Border.all(color: Colors.black26),
+    ),
+    child: CustomPaint(
+      painter: _CheckerPainter(),
+      child: ColoredBox(color: color),
+    ),
+  );
+}
+
+/// One knob for how big Browser tiles are; Settings turns it, Browser reads it.
+abstract final class BrowserSize {
+  static const double min = 48, max = 200;
+  static double tile(EditorSession c) =>
+      (c.deskWork.value['browserTile'] as num? ??
+              _BrowserPanelState.tileDefault)
+          .toDouble()
+          .clamp(min, max);
+}
+
+/// The few colours a picture is mostly made of: decode small, drop
+/// transparent pixels, k-means in RGB, brightest first.
+Future<List<List<double>>> paletteOf(Uint8List bytes, {int count = 6}) async {
+  final codec = await ui.instantiateImageCodec(bytes, targetWidth: 64);
+  final image = (await codec.getNextFrame()).image;
+  final data = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+  image.dispose();
+  if (data == null) return [];
+  final px = <List<double>>[];
+  for (var i = 0; i + 3 < data.lengthInBytes; i += 4) {
+    if (data.getUint8(i + 3) < 128) continue;
+    px.add([
+      data.getUint8(i) / 255,
+      data.getUint8(i + 1) / 255,
+      data.getUint8(i + 2) / 255,
+    ]);
+  }
+  if (px.isEmpty) return [];
+  double luma(List<double> c) => .299 * c[0] + .587 * c[1] + .114 * c[2];
+  px.sort((a, b) => luma(a).compareTo(luma(b)));
+  final k = math.min(count, px.length);
+  var centers = [
+    for (var i = 0; i < k; i++) px[(px.length - 1) * i ~/ math.max(1, k - 1)],
+  ];
+  for (var round = 0; round < 8; round++) {
+    final sums = List.generate(k, (_) => [0.0, 0.0, 0.0, 0.0]);
+    for (final p in px) {
+      var best = 0;
+      var bestD = double.infinity;
+      for (var i = 0; i < k; i++) {
+        final c = centers[i];
+        final d =
+            (p[0] - c[0]) * (p[0] - c[0]) +
+            (p[1] - c[1]) * (p[1] - c[1]) +
+            (p[2] - c[2]) * (p[2] - c[2]);
+        if (d < bestD) {
+          bestD = d;
+          best = i;
+        }
+      }
+      final s = sums[best];
+      s[0] += p[0];
+      s[1] += p[1];
+      s[2] += p[2];
+      s[3] += 1;
+    }
+    centers = [
+      for (var i = 0; i < k; i++)
+        sums[i][3] == 0
+            ? centers[i]
+            : [
+                sums[i][0] / sums[i][3],
+                sums[i][1] / sums[i][3],
+                sums[i][2] / sums[i][3],
+              ],
+    ];
+  }
+  // Edge blends and stray pixels do not count as a colour of the picture.
+  final weights = List.filled(k, 0);
+  for (final p in px) {
+    var best = 0;
+    var bestD = double.infinity;
+    for (var i = 0; i < k; i++) {
+      final c = centers[i];
+      final d =
+          (p[0] - c[0]) * (p[0] - c[0]) +
+          (p[1] - c[1]) * (p[1] - c[1]) +
+          (p[2] - c[2]) * (p[2] - c[2]);
+      if (d < bestD) {
+        bestD = d;
+        best = i;
+      }
+    }
+    weights[best]++;
+  }
+  final unique = <String, List<double>>{
+    for (final (i, c) in centers.indexed)
+      if (weights[i] * 20 >= px.length)
+        c.map((v) => (v * 255).round()).join(','): [...c, 1.0],
+  };
+  return unique.values.toList()..sort((a, b) => luma(b).compareTo(luma(a)));
 }

@@ -185,9 +185,15 @@ pub(crate) fn expand_folders(paths: &[std::path::PathBuf]) -> Vec<std::path::Pat
             if hidden {
                 continue;
             }
+            // フォルダは読める物だけ拾う。書き置きや .DS_Store 1 つで全体を止めない。
+            let admissible = path
+                .extension()
+                .and_then(|e| e.to_str())
+                .and_then(crate::render::media::asset_type_for_extension)
+                .is_some();
             if path.is_dir() {
                 walk(&path, out);
-            } else {
+            } else if admissible {
                 out.push(path);
             }
         }

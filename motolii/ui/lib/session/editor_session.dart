@@ -36,6 +36,15 @@ class EditorSession {
   final playing = ValueNotifier<bool>(false);
   final busy = ValueNotifier<bool>(false);
   final error = ValueNotifier<String?>(null);
+
+  /// 直前の取り込みで棚に入った asset の id。Browser が Media を開いて選ぶ。
+  final importedAssets = ValueNotifier<List<String>>([]);
+
+  /// While on, the next click on the Stage reads a colour instead of editing.
+  final eyedropper = ValueNotifier<bool>(false);
+
+  /// Timeline に見えているコマ数。尺の無い物を置く時の既定の長さの元(Rust が割合を決める)。
+  final visibleFrames = ValueNotifier<int?>(null);
   final deskWork = ValueNotifier<Map<String, dynamic>>({});
   Future<void> _deskSave = Future.value();
   Future<void> storeDesk(String key, dynamic value) {
@@ -62,6 +71,60 @@ class EditorSession {
   int _generation = 0;
   String _path = const String.fromEnvironment('MOTOLII_DOCUMENT');
   List<Map<String, dynamic>> get layers => maps(state['layers']);
+
+  /// Whether the last rendered frame describes the current frame of this document.
+  bool get renderedIsFresh {
+    final r = rendered.value;
+    return r.isNotEmpty &&
+        r['frame'] == frame.value &&
+        (r['documentRevision'] == null ||
+            r['documentRevision'] == state['documentRevision']);
+  }
+
+  /// Layers as of the last rendered frame. A playback frame carries only the
+  /// values that move (liveLayers); they are laid over the document layers by id.
+  List<Map<String, dynamic>> liveLayers() {
+    if (!renderedIsFresh) return layers;
+    final r = rendered.value;
+    if (r['layers'] is List) return maps(r['layers']);
+    final live = {for (final l in maps(r['liveLayers'])) l['id']: l};
+    return [
+      for (final l in layers)
+        if (live[l['id']] case final o?) overlayLayer(l, o) else l,
+    ];
+  }
+
+  static Map<String, dynamic> overlayLayer(
+    Map<String, dynamic> base,
+    Map<String, dynamic> live,
+  ) {
+    final out = {...base, ...live};
+    out['properties'] = _overlayRows(
+      maps(base['properties']),
+      maps(live['properties']),
+    );
+    final liveEffects = {for (final e in maps(live['effects'])) e['id']: e};
+    out['effects'] = [
+      for (final e in maps(base['effects']))
+        if (liveEffects[e['id']] case final o?)
+          {...e, 'params': _overlayRows(maps(e['params']), maps(o['params']))}
+        else
+          e,
+    ];
+    return out;
+  }
+
+  static List<Map<String, dynamic>> _overlayRows(
+    List<Map<String, dynamic>> base,
+    List<Map<String, dynamic>> live,
+  ) {
+    final byId = {for (final r in live) r['id']: r};
+    return [
+      for (final r in base)
+        if (byId[r['id']] case final o?) {...r, ...o} else r,
+    ];
+  }
+
   List<int> get selectedIds =>
       (state['selectedIds'] as List? ?? [state['selectedId']])
           .whereType<num>()
@@ -198,6 +261,11 @@ class EditorSession {
         await open();
         return;
       }
+      // `motolii-ui.sh dev <document>`: the launch names a document and nothing is open yet.
+      if (_path.isNotEmpty && '${state['path'] ?? ''}'.isEmpty) {
+        await open();
+        return;
+      }
       await _render();
       if (playing.value) {
         _playRequested = true;
@@ -238,6 +306,10 @@ class EditorSession {
   }
 
   Future<void> _command(String op, Map<String, dynamic> args) {
+    if ((op == 'create' || op == 'placeAsset') &&
+        !args.containsKey('visibleFrames') &&
+        visibleFrames.value != null)
+      args = {...args, 'visibleFrames': visibleFrames.value};
     final DocumentOperation operation;
     try {
       operation = DocumentOperation.parse(op);
@@ -316,8 +388,9 @@ class EditorSession {
         if (_disposed || generation != _generation) return;
         try {
           await _render(notify: false, playback: true);
-        } catch (_) {
+        } catch (e) {
           // Stop the authoritative transport as well as the request cadence.
+          debugPrint('PROBE room=playback verdict=cadence-stopped reason=$e');
           _schedulePause(renderFinal: false);
           rethrow;
         }
@@ -364,9 +437,40 @@ class EditorSession {
   }
 
   Future<void> importFiles() async {
-    final picked = await native('pickImport');
-    if (picked is List && picked.isNotEmpty)
-      await command('import', {'paths': picked});
+    final picked = await native('pickImport', {
+      'extensions': state['importExtensions'] ?? const [],
+    });
+    if (picked is List) await importPaths(picked.whereType<String>().toList());
+  }
+
+  /// 落とした物も選んだ物もここへ来る。門(拡張子)は Rust の一覧 1 本を読み、
+  /// 通らない物は名前を出して断る。フォルダは Rust 側が読める物だけ拾う。
+  Future<void> importPaths(List<String> paths) async {
+    final allowed = (state['importExtensions'] as List? ?? const [])
+        .map((e) => '$e'.toLowerCase())
+        .toSet();
+    bool admissible(String path) {
+      if (allowed.isEmpty) return true;
+      final name = path.split('/').last;
+      final dot = name.lastIndexOf('.');
+      if (dot <= 0) return true;
+      return allowed.contains(name.substring(dot + 1).toLowerCase());
+    }
+
+    Set<String> assetIds() => (state['assets'] as List? ?? const [])
+        .whereType<Map>()
+        .map((a) => '${a['id']}')
+        .toSet();
+    final accepted = paths.where(admissible).toList();
+    final skipped = paths.where((p) => !admissible(p)).toList();
+    final before = assetIds();
+    if (accepted.isNotEmpty) await command('import', {'paths': accepted});
+    final fresh = assetIds().difference(before).toList();
+    if (fresh.isNotEmpty) importedAssets.value = fresh;
+    if (skipped.isNotEmpty) {
+      final names = skipped.map((p) => p.split('/').last).join(', ');
+      error.value = 'Not supported: $names';
+    }
   }
 
   void dispose() {
@@ -393,7 +497,10 @@ class EditorSession {
     playing.dispose();
     busy.dispose();
     error.dispose();
+    importedAssets.dispose();
+    visibleFrames.dispose();
     deskWork.dispose();
+    eyedropper.dispose();
     deskDefault.dispose();
     deskDrawer.dispose();
     panePlaces.dispose();

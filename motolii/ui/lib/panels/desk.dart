@@ -46,6 +46,8 @@ class _DeskPanelState extends State<DeskPanel> {
       c.panePlaces.value[name] == null || c.panePlaces.value[name] == 'drawer';
   String? _selectionPanel() {
     if (EditorSession.maps(c.state['selectedKeys']).isNotEmpty) return 'Ease';
+    // 複数の層を選んだら Sequence(Stagger): 遅れを曲線で配る Ease のゴーストモード。
+    if (c.selectedIds.length > 1) return 'Ease';
     return switch (c.activeLayer?['kind']) {
       'Camera' => 'Depth',
       _ => null,
@@ -112,27 +114,44 @@ class _DeskPanelState extends State<DeskPanel> {
       for (final spec in panelCatalog.where(
         (p) => p.drawer && _inDrawer(p.name),
       ))
-        ListTile(
-          dense: true,
-          leading: Icon(spec.icon, size: EditorMetrics.s23),
-          title: Text(
-            spec.name,
-            style: const TextStyle(fontSize: EditorMetrics.s12),
-          ),
+        InkWell(
           onTap: () => _open(spec.name),
-          trailing: IconButton(
-            tooltip: 'Use ${spec.name} when idle',
-            iconSize: EditorMetrics.s16,
-            color: _name(c.deskDefault.value) == spec.name
-                ? EditorTheme.accent
-                : EditorTheme.muted,
-            icon: Icon(
-              _name(c.deskDefault.value) == spec.name
-                  ? Icons.star
-                  : Icons.star_border,
+          child: SizedBox(
+            height: EditorMetrics.control,
+            child: Row(
+              children: [
+                const SizedBox(width: EditorMetrics.s8),
+                Icon(spec.icon, size: EditorMetrics.s16),
+                const SizedBox(width: EditorMetrics.s8),
+                Expanded(
+                  child: Text(
+                    spec.name,
+                    style: const TextStyle(fontSize: EditorMetrics.font),
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Use ${spec.name} when idle',
+                  iconSize: EditorMetrics.s14,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints.tightFor(
+                    width: EditorMetrics.control,
+                    height: EditorMetrics.control,
+                  ),
+                  color: _name(c.deskDefault.value) == spec.name
+                      ? EditorTheme.accent
+                      : EditorTheme.muted,
+                  icon: Icon(
+                    _name(c.deskDefault.value) == spec.name
+                        ? Icons.star
+                        : Icons.star_border,
+                  ),
+                  onPressed: () => c.deskDefault.value =
+                      _name(c.deskDefault.value) == spec.name
+                      ? 'Tools'
+                      : spec.name,
+                ),
+              ],
             ),
-            onPressed: () => c.deskDefault.value =
-                _name(c.deskDefault.value) == spec.name ? 'Tools' : spec.name,
           ),
         ),
     ],

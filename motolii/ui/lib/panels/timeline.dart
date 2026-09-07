@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
 import '../session/editor_session.dart';
@@ -46,6 +47,8 @@ class _TimelinePanelState extends State<TimelinePanel> {
   String? gesture;
   List<int> rowDragIds = [];
   Map<String, dynamic>? rowDrop;
+  Offset? assetDrop;
+  final rowsKey = GlobalKey();
   Rect? rowDropGuide;
   bool rowDropInside = false;
   Offset? start, current;
@@ -54,9 +57,13 @@ class _TimelinePanelState extends State<TimelinePanel> {
   Future<void>? previewFlight;
   Future<void>? seekFlight;
   int? pendingSeek;
+
+  /// 掴んでいる間のヘッドの位置。絵(native の seek と render)が返るのを待たずにここへ描く。
+  int? scrubFrame;
   void requestSeek(int value) {
-    widget.controller.stopPlayback();
+    // 再生中でも止めない: 飛ぶだけで回り続ける(Ableton と同じ)。
     pendingSeek = value;
+    setState(() => scrubFrame = value);
     seekFlight ??= pumpSeek();
   }
 
@@ -69,6 +76,7 @@ class _TimelinePanelState extends State<TimelinePanel> {
       }
     } finally {
       seekFlight = null;
+      if (mounted) setState(() => scrubFrame = null);
     }
   }
 
@@ -112,6 +120,19 @@ class _TimelinePanelState extends State<TimelinePanel> {
       horizontal.hasClients ? horizontal.positions.last.pixels : 0;
   int get duration =>
       (widget.controller.state['durationFrames'] as num? ?? 1).toInt();
+
+  /// 縮図(レンズ)が写す幅: 尺・今のコマ・一番遠い層の端(ゴースト込み)のうち一番遠い所に、
+  /// 終わりの遊び(1 秒か全体の 1/8 の大きい方)を足した所まで。頭は 0 で詰める。
+  /// 尺は壁ではなく印なので、越えた所も写す。
+  int get overviewExtent {
+    final farthest = math.max<int>(
+      overviewExtentWithoutFrame,
+      widget.controller.frame.value + 1,
+    );
+    final fps = (widget.controller.state['fps'] as num? ?? 30).round();
+    return farthest + math.max<int>(fps, farthest ~/ 8);
+  }
+
   List<Map<String, dynamic>> get selectedKeys =>
       EditorSession.maps(widget.controller.state['selectedKeys']);
   bool has(String op) => widget.controller.supports(op);
@@ -120,6 +141,33 @@ class _TimelinePanelState extends State<TimelinePanel> {
     super.initState();
     horizontal.addListener(changed);
     focus.addListener(laneFocusChanged);
+    widget.controller.frame.addListener(frameMoved);
+  }
+
+  /// 今のコマが帯の端を越えたら、見えている幅の 2 倍ぶんまとめて伸ばす(尺は壁ではない)。
+  /// 越えていない間は組み直さない。
+  void frameMoved() {
+    if (!mounted) return;
+    final frame = widget.controller.frame.value;
+    final base = overviewExtentWithoutFrame;
+    if (frame + 1 <= base + grownFrames) return;
+    final visibleFrames =
+        (math.max(1, viewportWidth - labelWidth) / pixelsPerFrame).ceil();
+    setState(() => grownFrames = frame + 1 - base + visibleFrames * 2);
+  }
+
+  /// 縮図のうち、今のコマと遊びを除いた「物がある所」の端。
+
+  int get overviewExtentWithoutFrame {
+    var extent = duration;
+    for (final l in widget.controller.layers) {
+      final int end =
+          (l['start'] as num? ?? 0).toInt() +
+          (l['duration'] as num? ?? 0).toInt() +
+          math.max<int>(0, (l['ghost'] as num? ?? 0).toInt());
+      extent = math.max<int>(extent, end);
+    }
+    return extent;
   }
 
   void laneFocusChanged() {
@@ -137,6 +185,7 @@ class _TimelinePanelState extends State<TimelinePanel> {
     queuedTimings = null;
     if (previewUsed) widget.controller.cancelPreview();
     horizontal.removeListener(changed);
+    widget.controller.frame.removeListener(frameMoved);
     horizontal.dispose();
     vertical.dispose();
     focus.removeListener(laneFocusChanged);
@@ -144,9 +193,18 @@ class _TimelinePanelState extends State<TimelinePanel> {
     super.dispose();
   }
 
-  int frameAt(double x) => ((x - labelWidth + offset) / pixelsPerFrame)
-      .round()
-      .clamp(0, math.max(0, duration - 1));
+  /// 尺は壁ではない: 頭は 0 で止め、先は自由(再生と同じ)。
+  int frameAt(double x) =>
+      math.max(0, ((x - labelWidth + offset) / pixelsPerFrame).round());
+
+  /// 帯の幅: 物のある所 + まとめて伸ばした分 + 見えている幅ぶんの余白(先へ掴んで行ける)。
+  /// 今のコマに毎コマ追随させると Timeline 全体を毎コマ組み直してカタつくので、伸ばすのは塊で。
+  int grownFrames = 0;
+  double get contentWidth =>
+      (overviewExtentWithoutFrame +
+          grownFrames +
+          math.max(1, viewportWidth - labelWidth) / pixelsPerFrame) *
+      pixelsPerFrame;
   Map<String, dynamic> keyOf(_TrackRow row, Map<String, dynamic> key) => {
     'layer': row.id,
     'property': row.property?['id'],
@@ -258,6 +316,36 @@ class _TimelinePanelState extends State<TimelinePanel> {
       }
       return;
     }
+    if (row.property == null && !row.lanesOpen) {
+      int? frame;
+      for (final f in row.summaryFrames) {
+        if ((labelWidth + f * pixelsPerFrame - offset - p.dx).abs() <= 7) {
+          frame = f;
+          break;
+        }
+      }
+      if (frame != null) {
+        final found = row.allKeys.where((k) => k['frame'] == frame).toList();
+        var chosen = selectedKeys.toList();
+        final already = found.every((f) => chosen.any((k) => sameKey(k, f)));
+        if (additive) {
+          already
+              ? chosen.removeWhere((k) => found.any((f) => sameKey(k, f)))
+              : chosen.addAll(
+                  found.where((f) => !chosen.any((k) => sameKey(k, f))),
+                );
+        } else if (!already)
+          chosen = found;
+        widget.controller.command('select', {
+          'ids': chosen.map((k) => k['layer']).toSet().toList(),
+          'keys': chosen,
+        });
+        initialKeys = chosen;
+        gesture = has('moveKeys') ? 'keys' : null;
+        setState(() {});
+        return;
+      }
+    }
     if (row.property != null) {
       Map<String, dynamic>? found;
       for (final key in row.keys) {
@@ -337,52 +425,7 @@ class _TimelinePanelState extends State<TimelinePanel> {
       setState(() {
         gesture = 'rowDrag';
         current = event.localPosition;
-        rowDrop = null;
-        rowDropGuide = null;
-        final index = layout.rowAt(current!.dy);
-        if (index < 0) {
-          if (current!.dy >= layout.height) {
-            rowDrop = {
-              'layers': rowDragIds,
-              'target': null,
-              'placement': 'rootEnd',
-            };
-            rowDropInside = false;
-            rowDropGuide = Rect.fromLTWH(0, layout.height, labelWidth, 0);
-          }
-          return;
-        }
-        final target = tracks[index];
-        if (rowDragIds.contains(target.id) ||
-            target.ancestors.any(rowDragIds.contains))
-          return;
-        final inside =
-            target.isGroup &&
-            target.property == null &&
-            (current!.dy - target.bounds.top) > 5 &&
-            (target.bounds.bottom - current!.dy) > 5;
-        final placement = inside
-            ? 'inside'
-            : current!.dy < target.bounds.center.dy
-            ? 'before'
-            : 'after';
-        rowDrop = {
-          'layers': rowDragIds,
-          'target': target.id,
-          'placement': placement,
-        };
-        rowDropInside = inside;
-        final container = layout.container(target.id)!;
-        rowDropGuide = inside
-            ? target.bounds
-            : Rect.fromLTWH(
-                container.bounds.left,
-                placement == 'before'
-                    ? container.bounds.top
-                    : container.bounds.bottom,
-                labelWidth - container.bounds.left,
-                0,
-              );
+        aimRowDrop(current!, rowDragIds);
       });
       return;
     }
@@ -405,6 +448,74 @@ class _TimelinePanelState extends State<TimelinePanel> {
       previewUsed = true;
       previewFlight ??= pumpPreview();
     }
+  }
+
+  /// 行の上の点から落とし先を決める。行の drag も Media からの drag もこれを読む。
+  void aimRowDrop(Offset at, List<int> moving) {
+    rowDrop = null;
+    rowDropGuide = null;
+    final index = layout.rowAt(at.dy);
+    if (index < 0) {
+      if (at.dy >= layout.height) {
+        rowDrop = {'layers': moving, 'target': null, 'placement': 'rootEnd'};
+        rowDropInside = false;
+        rowDropGuide = Rect.fromLTWH(0, layout.height, labelWidth, 0);
+      }
+      return;
+    }
+    final target = tracks[index];
+    if (moving.contains(target.id) || target.ancestors.any(moving.contains))
+      return;
+    final inside =
+        target.isGroup &&
+        target.property == null &&
+        (at.dy - target.bounds.top) > 5 &&
+        (target.bounds.bottom - at.dy) > 5;
+    final placement = inside
+        ? 'inside'
+        : at.dy < target.bounds.center.dy
+        ? 'before'
+        : 'after';
+    rowDrop = {'layers': moving, 'target': target.id, 'placement': placement};
+    rowDropInside = inside;
+    final container = layout.container(target.id)!;
+    rowDropGuide = inside
+        ? target.bounds
+        : Rect.fromLTWH(
+            container.bounds.left,
+            placement == 'before'
+                ? container.bounds.top
+                : container.bounds.bottom,
+            labelWidth - container.bounds.left,
+            0,
+          );
+  }
+
+  /// Media から落ちてきた素材。落とした行の前後/中に置き、x が時間軸なら開始コマも取る。
+  void acceptAsset(DragTargetDetails<Map<String, dynamic>> details) {
+    final drop = rowDrop;
+    final at = assetDrop;
+    setState(() {
+      assetDrop = null;
+      rowDrop = null;
+      rowDropGuide = null;
+    });
+    if (drop == null) return;
+    widget.controller.command('placeAsset', {
+      'id': details.data['asset'],
+      'target': drop['target'],
+      'placement': drop['placement'],
+      if (at != null && at.dx >= labelWidth) 'start': frameAt(at.dx),
+    });
+  }
+
+  void aimAsset(DragTargetDetails<Map<String, dynamic>> details) {
+    final box = rowsKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null) return;
+    setState(() {
+      assetDrop = box.globalToLocal(details.offset);
+      aimRowDrop(assetDrop!, const []);
+    });
   }
 
   Map<String, dynamic> timing(_TrackRow row) {
@@ -488,6 +599,18 @@ class _TimelinePanelState extends State<TimelinePanel> {
               }
             }
           } else {
+            if (!row.lanesOpen)
+              for (final k in row.allKeys) {
+                final x =
+                    labelWidth +
+                    (k['frame'] as num).toDouble() * pixelsPerFrame -
+                    offset;
+                if (rect.contains(Offset(x, cy)) &&
+                    !keys.any((s) => sameKey(s, k))) {
+                  keys.add(k);
+                  ids.add(row.id);
+                }
+              }
             final left =
                 labelWidth +
                 (row.layer['start'] as num? ?? 0).toDouble() * pixelsPerFrame -
@@ -556,12 +679,7 @@ class _TimelinePanelState extends State<TimelinePanel> {
       if (selectedKeys.isNotEmpty && has('moveKeys'))
         widget.controller.command('moveKeys', {'deltaFrames': delta});
       else
-        requestSeek(
-          (widget.controller.frame.value + delta).clamp(
-            0,
-            math.max(0, duration - 1),
-          ),
-        );
+        requestSeek(math.max(0, widget.controller.frame.value + delta));
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
@@ -570,7 +688,10 @@ class _TimelinePanelState extends State<TimelinePanel> {
   void navigateView(double scale, double x, double y) {
     final nextScale = scale.clamp(.1, 40.0);
     final visible = math.max(1.0, viewportWidth - labelWidth);
-    final targetX = x.clamp(0.0, math.max(0.0, duration * nextScale - visible));
+    final targetX = x.clamp(
+      0.0,
+      math.max(0.0, overviewExtent * nextScale - visible),
+    );
     final revision = ++navigationRevision;
     if (nextScale != pixelsPerFrame) setState(() => pixelsPerFrame = nextScale);
     void apply() {
@@ -805,6 +926,13 @@ class _TimelinePanelState extends State<TimelinePanel> {
           child: LayoutBuilder(
             builder: (context, bounds) {
               viewportWidth = bounds.maxWidth;
+              final visibleFrames =
+                  ((bounds.maxWidth - labelWidth) / pixelsPerFrame).round();
+              if (widget.controller.visibleFrames.value != visibleFrames)
+                SchedulerBinding.instance.addPostFrameCallback((_) {
+                  if (mounted)
+                    widget.controller.visibleFrames.value = visibleFrames;
+                });
               final height = math.max(layout.height, bounds.maxHeight - 66);
               return navigation(
                 Stack(
@@ -832,7 +960,7 @@ class _TimelinePanelState extends State<TimelinePanel> {
                                   () => pixelsPerFrame = math.max(
                                     .1,
                                     (bounds.maxWidth - labelWidth) /
-                                        math.max(1, duration),
+                                        math.max(1, overviewExtentWithoutFrame),
                                   ),
                                 );
                               }),
@@ -853,7 +981,7 @@ class _TimelinePanelState extends State<TimelinePanel> {
                                                     1,
                                                     overview.maxWidth,
                                                   ) *
-                                                  duration *
+                                                  overviewExtent *
                                                   pixelsPerFrame -
                                               (bounds.maxWidth - labelWidth) /
                                                   2;
@@ -883,23 +1011,36 @@ class _TimelinePanelState extends State<TimelinePanel> {
                                               () => pixelsPerFrame = math.max(
                                                 .1,
                                                 (bounds.maxWidth - labelWidth) /
-                                                    math.max(1, duration),
+                                                    math.max(
+                                                      1,
+                                                      overviewExtentWithoutFrame,
+                                                    ),
                                               ),
                                             );
                                           },
-                                          child: CustomPaint(
-                                            size: Size(
-                                              overview.maxWidth,
-                                              EditorMetrics.s18,
-                                            ),
-                                            painter: _ArrangementOverview(
-                                              layers: widget.controller.layers,
-                                              duration: duration,
-                                              offset: offset,
-                                              scale: pixelsPerFrame,
-                                              viewportWidth:
-                                                  bounds.maxWidth - labelWidth,
-                                            ),
+                                          child: ValueListenableBuilder<int>(
+                                            valueListenable:
+                                                widget.controller.frame,
+                                            builder: (_, frame, __) =>
+                                                CustomPaint(
+                                                  size: Size(
+                                                    overview.maxWidth,
+                                                    EditorMetrics.s18,
+                                                  ),
+                                                  painter: _ArrangementOverview(
+                                                    layers: widget
+                                                        .controller
+                                                        .layers,
+                                                    duration: duration,
+                                                    extent: overviewExtent,
+                                                    frame: scrubFrame ?? frame,
+                                                    offset: offset,
+                                                    scale: pixelsPerFrame,
+                                                    viewportWidth:
+                                                        bounds.maxWidth -
+                                                        labelWidth,
+                                                  ),
+                                                ),
                                           ),
                                         );
                                       },
@@ -907,17 +1048,6 @@ class _TimelinePanelState extends State<TimelinePanel> {
                                   ),
                                 ),
                               ),
-                              ValueListenableBuilder<int>(
-                                valueListenable: widget.controller.frame,
-                                builder: (_, frame, __) => Text(
-                                  '$frame / $duration',
-                                  style: const TextStyle(
-                                    fontSize: EditorMetrics.dense,
-                                    color: EditorTheme.muted,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: EditorMetrics.s8),
                               EditorButton(
                                 'Marker',
                                 has('addMarker')
@@ -953,7 +1083,7 @@ class _TimelinePanelState extends State<TimelinePanel> {
                                   rows: const [],
                                   selected: const [],
                                   keys: const [],
-                                  frame: frame,
+                                  frame: scrubFrame ?? frame,
                                   scale: pixelsPerFrame,
                                   offset: offset,
                                   duration: duration,
@@ -973,61 +1103,74 @@ class _TimelinePanelState extends State<TimelinePanel> {
                               physics: const ClampingScrollPhysics(
                                 parent: NeverScrollableScrollPhysics(),
                               ),
-                              child: GestureDetector(
-                                onSecondaryTapDown: menu,
-                                child: Listener(
-                                  onPointerDown: begin,
-                                  onPointerMove: move,
-                                  onPointerUp: end,
-                                  onPointerCancel: (_) => cancel(),
-                                  child: ValueListenableBuilder<int>(
-                                    valueListenable: widget.controller.frame,
-                                    builder: (_, frame, __) => SizedBox(
-                                      width: bounds.maxWidth,
-                                      height: height,
-                                      child: CustomPaint(
-                                        painter: _TimelinePainter(
-                                          labelWidth: labelWidth,
-                                          rows: tracks,
-                                          rowDropGuide: rowDropGuide,
-                                          rowDropInside: rowDropInside,
-                                          containers: layout.roots,
-                                          activeLane: activeLane,
-                                          selected:
-                                              widget.controller.selectedIds,
-                                          keys: selectedKeys,
-                                          frame: frame,
-                                          scale: pixelsPerFrame,
-                                          offset: offset,
-                                          duration: duration,
-                                          fps: (state['fps'] as num? ?? 30)
-                                              .toDouble(),
-                                          markers: EditorSession.maps(
-                                            state['markers'],
+                              child: DragTarget<Map<String, dynamic>>(
+                                onWillAcceptWithDetails: (d) =>
+                                    d.data['asset'] != null &&
+                                    has('placeAsset'),
+                                onMove: aimAsset,
+                                onLeave: (_) => setState(() {
+                                  assetDrop = null;
+                                  rowDrop = null;
+                                  rowDropGuide = null;
+                                }),
+                                onAcceptWithDetails: acceptAsset,
+                                builder: (_, __, ___) => GestureDetector(
+                                  onSecondaryTapDown: menu,
+                                  child: Listener(
+                                    onPointerDown: begin,
+                                    onPointerMove: move,
+                                    onPointerUp: end,
+                                    onPointerCancel: (_) => cancel(),
+                                    child: ValueListenableBuilder<int>(
+                                      valueListenable: widget.controller.frame,
+                                      builder: (_, frame, __) => SizedBox(
+                                        key: rowsKey,
+                                        width: bounds.maxWidth,
+                                        height: height,
+                                        child: CustomPaint(
+                                          painter: _TimelinePainter(
+                                            labelWidth: labelWidth,
+                                            rows: tracks,
+                                            rowDropGuide: rowDropGuide,
+                                            rowDropInside: rowDropInside,
+                                            containers: layout.roots,
+                                            activeLane: activeLane,
+                                            selected:
+                                                widget.controller.selectedIds,
+                                            keys: selectedKeys,
+                                            frame: scrubFrame ?? frame,
+                                            scale: pixelsPerFrame,
+                                            offset: offset,
+                                            duration: duration,
+                                            fps: (state['fps'] as num? ?? 30)
+                                                .toDouble(),
+                                            markers: EditorSession.maps(
+                                              state['markers'],
+                                            ),
+                                            marquee:
+                                                gesture == 'marquee' &&
+                                                    start != null &&
+                                                    current != null
+                                                ? Rect.fromPoints(
+                                                    start!,
+                                                    current!,
+                                                  )
+                                                : null,
+                                            dragKeys: gesture == 'keys'
+                                                ? initialKeys
+                                                : const [],
+                                            delta: deltaFrames,
+                                            dragLayer:
+                                                dragRow != null &&
+                                                    [
+                                                      'move',
+                                                      'trimIn',
+                                                      'trimOut',
+                                                      'slip',
+                                                    ].contains(gesture)
+                                                ? timing(dragRow!)
+                                                : null,
                                           ),
-                                          marquee:
-                                              gesture == 'marquee' &&
-                                                  start != null &&
-                                                  current != null
-                                              ? Rect.fromPoints(
-                                                  start!,
-                                                  current!,
-                                                )
-                                              : null,
-                                          dragKeys: gesture == 'keys'
-                                              ? initialKeys
-                                              : const [],
-                                          delta: deltaFrames,
-                                          dragLayer:
-                                              dragRow != null &&
-                                                  [
-                                                    'move',
-                                                    'trimIn',
-                                                    'trimOut',
-                                                    'slip',
-                                                  ].contains(gesture)
-                                              ? timing(dragRow!)
-                                              : null,
                                         ),
                                       ),
                                     ),
@@ -1053,7 +1196,7 @@ class _TimelinePanelState extends State<TimelinePanel> {
                                 child: SizedBox(
                                   width: math.max(
                                     bounds.maxWidth - labelWidth,
-                                    duration * pixelsPerFrame,
+                                    contentWidth,
                                   ),
                                   height: EditorMetrics.s12,
                                 ),
@@ -1328,12 +1471,56 @@ class _TimelinePainter extends CustomPainter {
               offset;
           final width = (timing['duration'] as num? ?? 1).toDouble() * scale;
           final rect = Rect.fromLTWH(x, y + 2, math.max(1, width), h - 4);
+          final own = EditorTheme.layerColor(row.id);
+          // ゴースト: 同じ行に、遅れの分だけずれた帯が 1 つ。掴めない。
+          // 実物と重なる区間は実物の帯がそのまま語る(両方が鳴る)。描くのは
+          // はみ出し = 実物の時間の外でゴーストだけが評価される区間で、それをグレーにする。
+          // 前へずれて 0 より手前に出た分は描かず、frame 0 に切り欠きだけ置く。
+          if (row.layer['ghost'] case final num d) {
+            final ghost = rect.shift(Offset(d.toDouble() * scale, 0));
+            final zero = label - offset;
+            final only = d > 0
+                ? Rect.fromLTRB(
+                    rect.right,
+                    ghost.top,
+                    ghost.right,
+                    ghost.bottom,
+                  )
+                : Rect.fromLTRB(
+                    math.max(zero, ghost.left),
+                    ghost.top,
+                    rect.left,
+                    ghost.bottom,
+                  );
+            if (only.width > 0) {
+              canvas.drawRect(
+                only,
+                Paint()..color = EditorTheme.muted.withValues(alpha: .28),
+              );
+              canvas.drawRect(
+                only.deflate(.5),
+                Paint()
+                  ..color = own.withValues(alpha: .55)
+                  ..strokeWidth = 1
+                  ..style = PaintingStyle.stroke,
+              );
+            }
+            if (ghost.left < zero) {
+              final notch = Path()
+                ..moveTo(zero, ghost.top)
+                ..lineTo(zero + 5, ghost.center.dy)
+                ..lineTo(zero, ghost.bottom)
+                ..close();
+              canvas.drawPath(
+                notch,
+                Paint()..color = own.withValues(alpha: .9),
+              );
+            }
+          }
           canvas.drawRect(
             rect,
             Paint()
-              ..color = row.layer['hidden'] == true
-                  ? EditorTheme.raised
-                  : EditorTheme.layerColor(row.id),
+              ..color = row.layer['hidden'] == true ? EditorTheme.raised : own,
           );
           if (laneSelected(row))
             canvas.drawRect(
@@ -1343,6 +1530,32 @@ class _TimelinePainter extends CustomPainter {
                 ..strokeWidth = 1
                 ..style = PaintingStyle.stroke,
             );
+          if (!row.lanesOpen)
+            for (final f in row.summaryFrames) {
+              bool at(List<Map<String, dynamic>> sel) =>
+                  sel.any((s) => s['layer'] == row.id && s['frame'] == f);
+              final shift = at(dragKeys) ? delta : 0;
+              final kx = label + (f + shift) * scale - offset;
+              final cy = y + h / 2;
+              final diamond = Path()
+                ..moveTo(kx, cy - 3.5)
+                ..lineTo(kx + 3.5, cy)
+                ..lineTo(kx, cy + 3.5)
+                ..lineTo(kx - 3.5, cy)
+                ..close();
+              canvas.drawPath(
+                diamond,
+                Paint()
+                  ..color = at(keys) ? EditorTheme.accent : EditorTheme.ink,
+              );
+              canvas.drawPath(
+                diamond,
+                Paint()
+                  ..color = Colors.black
+                  ..strokeWidth = 1
+                  ..style = PaintingStyle.stroke,
+              );
+            }
         } else
           for (final key in row.keys) {
             final shift = selectedKey(row, key, dragKeys) ? delta : 0;
@@ -1458,7 +1671,7 @@ class _TimelinePainter extends CustomPainter {
       for (final root in containers) surface(root);
       canvas.restore();
     }
-    if (ruler)
+    if (ruler) {
       text(
         canvas,
         'Layers',
@@ -1467,7 +1680,15 @@ class _TimelinePainter extends CustomPainter {
         size: EditorMetrics.dense,
         weight: FontWeight.w600,
       );
-    else
+      // 今のコマ / 尺。定規の左の欄に固定で描くので、桁が変わっても何も押し退けない。
+      text(
+        canvas,
+        '$frame / $duration',
+        Offset(label - 82, 16),
+        color: EditorTheme.muted,
+        size: EditorMetrics.dense,
+      );
+    } else
       for (var i = 0; i < rows.length; i++) {
         final row = rows[i], y = rows[i].bounds.top;
         if (laneSelected(row))
@@ -1613,17 +1834,19 @@ class _ArrangementOverview extends CustomPainter {
   const _ArrangementOverview({
     required this.layers,
     required this.duration,
+    required this.extent,
+    required this.frame,
     required this.offset,
     required this.scale,
     required this.viewportWidth,
   });
   final List<Map<String, dynamic>> layers;
-  final int duration;
+  final int duration, extent, frame;
   final double offset, scale, viewportWidth;
   @override
   void paint(Canvas canvas, Size size) {
     canvas.drawRect(Offset.zero & size, Paint()..color = EditorTheme.app);
-    final unit = size.width / math.max(1, duration);
+    final unit = size.width / math.max(1, extent);
     final lane = 12 / math.max(1, layers.length);
     canvas.save();
     canvas.clipRect(Offset.zero & size);
@@ -1659,6 +1882,25 @@ class _ArrangementOverview extends CustomPainter {
       Paint()
         ..color = EditorTheme.tab
         ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5,
+    );
+    // 尺の印(壁ではない)と、今のコマ。
+    if (extent > duration) {
+      final x = duration * unit;
+      canvas.drawLine(
+        Offset(x, 1),
+        Offset(x, 17),
+        Paint()
+          ..color = EditorTheme.muted
+          ..strokeWidth = 1,
+      );
+    }
+    final now = frame * unit;
+    canvas.drawLine(
+      Offset(now, 0),
+      Offset(now, size.height),
+      Paint()
+        ..color = EditorTheme.accent
         ..strokeWidth = 1.5,
     );
     canvas.restore();

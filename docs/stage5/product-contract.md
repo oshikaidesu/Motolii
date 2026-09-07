@@ -44,7 +44,7 @@
 - ClipboardはDocumentとLayerの両方を識別する。別作品の同番号Layerを同じ対象と見なさない。
 - 親変更はドロップ時の姿を保ち、その後は新しい親に従う。アニメーションする親を一律禁止しない。
 - 現実装は平行移動ならアニメーション子の全Positionキーを一様補正し、時刻・補間・接線を保つ。回転／拡縮を伴う一般のアニメーション子補償は宿題であり、製品の「あえての制限」ではない。
-- マスクの編集入口はTimelineのクリッピングマスク。Photoshop／CLIP STUDIO型の親子・隣接関係として扱い、通常の切り抜き入口をエフェクト扱いに戻さない。[詳細](../reviews/2026-09-05-timeline-clipping.md)。
+- マスクの編集入口はTimelineのクリッピングマスク。Photoshop／CLIP STUDIO型の親子・隣接関係として扱い、通常の切り抜き入口をエフェクト扱いに戻さない。[詳細](../reviews/2026-09-05-timeline-clipping.md)。切り抜きは下地の局所座標で絵だけを合わせ、下地の配置(z・回転・projection)は畳まない。[詳細](../reviews/2026-09-07-clipping-local-space.md)。
 
 ## 入力と反復
 
@@ -54,15 +54,19 @@
 - UIはhot reloadで反復し、Document/GPU資源を保つ。Rust更新・初回buildは必要な時だけ。hot restartで失う表示状態は隠さない。
 - 薄く広く制作可能にすることを優先する。試験の量・型分割・ビルド成功だけを完成とせず、ユーザーが触った結果を受けて修正する。
 
-## 2.5Dの比較基準 — 2026-09-06
+## 2.5Dの定義 — 2026-09-06
 
-利用者の比較指示により、カメラ位置とレイヤー中心の方向から姿勢を変える自動回転を外した。2.5Dは当面、通常の3Dと同じ透視投影へ authored world geometryを渡す。位置変更だけで姿勢を自動補正せず、奥行き視差とカメラの回転は投影で表れる。これは立体を画像へ畳む処理ではない。2Dのフレーム基準の変換は維持する。
+2.5Dの層は向きをカメラ基準で持ち、位置は世界に置く。カメラが回る(roll、User Viewのorbit)と層は自分の中心まわりに一緒に回り、画面上の角度は利用者が打った値のまま変わらない。カメラが動く(pan・zoom・zの視差)と3Dと同じに動く。層を動かしても角度は変わらない。回転なしのカメラでは3Dと同じ絵。
 
-2.5Dという独立モードの最終的な意味を固定した宣言ではなく、余計な補正なしで使い心地を比較するための基準。フレーム固定・カメラ追従・合成時の畳みを同じスイッチへ混ぜない。
+補正はカメラの回転差の逆回転を層の中心まわりに掛けて共有カメラへ渡すだけで、textureに焼かず、奥行き・深度テスト・他の3D物体との交差は3Dと同じ式で起きる。板にはしない。9/3の「層の中心へ向かう視線」で回す案は位置で角度が変わるので採らない。フレーム固定・カメラ追従・合成時の畳みを同じスイッチへ混ぜない。
 
 ### 2Dの位置不変性
 
 2Dはフレーム基準。Positionだけを変えた場合、輪郭・傾き・大きさは保ち、同じ絵が移動する。傾いた面や奥行きのある頂点でも、画面全体の消失点から位置依存の変形を受けないよう、レイヤー中心の投影とフレーム上の配置を分ける。変換は非退化なままで、Zを潰す平面化は行わない。描画・ギズモ・ヒット判定は同じ補正関数を利用する。
+
+### 投影の切替は姿を保つ
+
+2D / 2.5D / 3D を切り替えても、その時刻・作品カメラで見えている絵は変わらない。親変更と同じ規約で、切替時の画面上の角を保つ変形を position・z・rotation x/y・rotation・scale・skew へ畳み、SetAttrs と同じ 1 undo に束ねる。値より絵を優先するので、2D から離れる時は z が 0 相当へ、2D へ入る時は層を z=0 へ寄せた大きさへ書き換わることがある。平らな層は厳密、メッシュ・点群は面の向きだけ保つ近似。キーが打ってある変形は平行移動だけ全キーへ一様に載せ、回転・拡縮を伴う補正は親変更と同じく静止した変形に限る(宿題、あえての制限ではない)。描画・ギズモ・test は同じ角関数(`projected_screen_corners`)を利用する。
 
 ### Camera layer
 
@@ -70,7 +74,7 @@ Create → Camera adds a non-rendering camera layer with the current Center, Zoo
 
 ### User Stage / Camera View
 
-Stage switches between User Stage and Camera View. User Stage uses a runtime-only observation camera (right-drag orbit); it does not author camera properties or change export. Camera View uses the active document camera. Camera bodies and frusta are selectable wire overlays only in User Stage. Both modes share the renderer and IOSurface route; layer projection uses the authored camera, while bounds and pointer projection use the displayed camera.
+Stage switches between User Stage and Camera View. User Stage uses a runtime-only observer that starts front-on at the composition plane, following the rerun 3D view: right-drag orbits around the look target, double-click on an object focuses it (look target = the object's centre, distance = 1.5 × its bounding sphere, the viewing direction kept), double-click on the background or Front returns to front-on. The observer never changes export. Front-on, the composition frame is the picture and each camera layer is a Boxcam-style box on the composition plane: drag an edge to move Center, a corner to change Zoom, the handle above the top edge to Roll, all through the ordinary property preview/commit route. Off front, the frame is drawn as the composition plane's world rectangle, cameras show their eye and frustum, and the observer's look target is marked; nothing is authored while orbiting. Camera View uses the active document camera. Both modes share the renderer and IOSurface route; layer projection uses the authored camera, while bounds and pointer projection use the displayed camera.
 
 ### Panels, Settings and Desk
 

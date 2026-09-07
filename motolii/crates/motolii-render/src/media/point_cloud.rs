@@ -30,24 +30,28 @@ pub fn is_still_image_path(path: impl AsRef<Path>) -> bool {
         .extension()
         .and_then(|e| e.to_str())
         .map(|e| e.to_ascii_lowercase())
-        .is_some_and(|e| re_importer::SUPPORTED_IMAGE_EXTENSIONS.contains(&e.as_str()))
+        .is_some_and(|e| image_extensions().any(|known| known == e))
+}
+
+/// 門で受ける画の形式 = image crate が**この build で読める**形式。別の表を持たない。
+/// 読めない物(heic 等)は門で名前を出して断る。棚に入ってから絵が出ない方が分かりにくい。
+pub fn image_extensions() -> impl Iterator<Item = &'static str> {
+    image::ImageFormat::all()
+        .filter(image::ImageFormat::reading_enabled)
+        .flat_map(|format| format.extensions_str().iter().copied())
 }
 
 pub(super) fn non_audio_asset_type_for_extension(extension: &str) -> Option<String> {
     let e = extension.to_ascii_lowercase();
     let e = e.as_str();
-    if re_importer::SUPPORTED_VIDEO_EXTENSIONS.contains(&e) {
+    if crate::render::media::VIDEO_EXTENSIONS.contains(&e) {
         Some(format!("video/{e}"))
-    } else if re_importer::SUPPORTED_IMAGE_EXTENSIONS.contains(&e) {
+    } else if image_extensions().any(|known| known == e) {
         Some(format!("image/{e}"))
     } else if re_importer::SUPPORTED_POINT_CLOUD_EXTENSIONS.contains(&e) {
         Some(format!("pointcloud.{e}"))
     } else if crate::render::media::MESH_EXTENSIONS.contains(&e) {
         Some(format!("model/{e}"))
-    } else if re_importer::SUPPORTED_MESH_EXTENSIONS.contains(&e) {
-        None
-    } else if re_importer::is_supported_file_extension(e) {
-        Some(format!("application/{e}"))
     } else {
         None
     }

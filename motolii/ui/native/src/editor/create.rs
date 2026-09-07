@@ -103,6 +103,18 @@ pub(crate) fn numbered(base: &str, taken: &[String]) -> String {
         .find(|candidate| !taken.iter().any(|n| n == candidate))
         .expect("an unbounded range always yields")
 }
+/// 尺の無い物(静止画・文字・図形)の既定の長さ = **見えている Timeline の幅の 3/4**。
+/// comp の終わりまで伸ばすと終端のトリムが画面外に出て扱えない(2026-09-07 利用者)。
+/// 動画・音のように尺のある物は素材の尺が勝つ。
+pub(crate) const UNBOUNDED_SPAN_OF_VIEW: (i64, i64) = (3, 4);
+
+/// UI が見えているコマ数を渡した時だけ短くする。渡さなければ従来どおり comp の終わりまで。
+pub(crate) fn unbounded_frames(visible_frames: Option<i64>) -> Option<i64> {
+    visible_frames
+        .filter(|v| *v > 0)
+        .map(|v| (v * UNBOUNDED_SPAN_OF_VIEW.0 / UNBOUNDED_SPAN_OF_VIEW.1).max(1))
+}
+
 pub(crate) fn new_layer_intents(
     layer: LayerId,
     order: i16,
@@ -111,6 +123,7 @@ pub(crate) fn new_layer_intents(
     fps: crate::doc::store::Fps,
     comp: (f64, f64),
     kind: NewKind,
+    unbounded: Option<i64>,
 ) -> Vec<Intent> {
     let label_color = Some(Some((layer.0 % fixture::LABEL_PALETTE.len() as u64) as u8));
     match kind {
@@ -120,7 +133,7 @@ pub(crate) fn new_layer_intents(
             Intent::SetAttrs { layer, patch: LayerAttrsPatch { name: Some("Camera".into()), label_color, ..Default::default() } },
         ],
         NewKind::Cube { path } => {
-            let mut out = new_layer_intents(layer, order, playhead, duration_frames, fps, comp, NewKind::Media { path, name: "Cube".into() });
+            let mut out = new_layer_intents(layer, order, playhead, duration_frames, fps, comp, NewKind::Media { path, name: "Cube".into() }, unbounded);
             for (name, value) in [
                 (property::POSITION, Value::Vec2([comp.0 * 0.5, comp.1 * 0.5])),
                 (property::ANCHOR, Value::Vec2([135.0, 135.0])),
@@ -135,6 +148,8 @@ pub(crate) fn new_layer_intents(
         NewKind::Media { path, name } => {
             let spatial = crate::render::media::is_point_cloud_path(&path)
                 || crate::render::media::is_mesh_path(&path);
+            // HDRI は空として置く。板として使いたければ Inspector で Environment を切る。
+            let environment = crate::render::media::is_environment_image_path(&path);
             let info = if spatial {
                 None
             } else {
@@ -161,7 +176,7 @@ pub(crate) fn new_layer_intents(
                             fingerprint: None,
                         },
                         order,
-                        timing: LayerTiming::place(playhead, source_frames, duration_frames),
+                        timing: LayerTiming::place(playhead, source_frames.or(unbounded), duration_frames),
                     },
                 },
                 Intent::SetAttrs {
@@ -174,6 +189,7 @@ pub(crate) fn new_layer_intents(
                         } else {
                             LayerProjection::TwoPointFiveD
                         }),
+                        environment: Some(environment),
                         ..Default::default()
                     },
                 },
@@ -189,7 +205,7 @@ pub(crate) fn new_layer_intents(
                     meta: LayerMeta {
                         source: LayerSource::Shape,
                         order,
-                        timing: LayerTiming::place(playhead, None, duration_frames),
+                        timing: LayerTiming::place(playhead, unbounded, duration_frames),
                     },
                 },
                 Intent::SetAttrs {
@@ -240,7 +256,7 @@ pub(crate) fn new_layer_intents(
                     meta: LayerMeta {
                         source: LayerSource::Shape,
                         order,
-                        timing: LayerTiming::place(playhead, None, duration_frames),
+                        timing: LayerTiming::place(playhead, unbounded, duration_frames),
                     },
                 },
                 Intent::SetAttrs {
@@ -310,7 +326,7 @@ pub(crate) fn new_layer_intents(
                     meta: LayerMeta {
                         source: LayerSource::Text,
                         order,
-                        timing: LayerTiming::place(playhead, None, duration_frames),
+                        timing: LayerTiming::place(playhead, unbounded, duration_frames),
                     },
                 },
                 Intent::SetAttrs {
@@ -379,12 +395,29 @@ pub(crate) fn new_layer_intents(
 #[cfg(test)]
 mod camera_tests {
     use super::*;
+    /// 尺の無い物は見えている幅の 3/4、尺のある物と、幅を渡さない時は従来どおり。
+    #[test]
+    fn unbounded_layers_take_three_quarters_of_the_visible_span() {
+        use crate::doc::store::{Document, Fps, Intent, LayerId, LayerMeta, Composition};
+        assert_eq!(super::unbounded_frames(Some(120)), Some(90));
+        assert_eq!(super::unbounded_frames(Some(1)), Some(1));
+        assert_eq!(super::unbounded_frames(None), None);
+        let fps = Fps::try_new(30, 1).unwrap();
+        let timing_of = |visible: Option<i64>| {
+            let intents = super::new_layer_intents(LayerId(1), 0, 10, 300, fps, (1920.0, 1080.0), super::NewKind::Rectangle, visible);
+            intents.into_iter().find_map(|i| match i { Intent::SetMeta { meta: LayerMeta { timing, .. }, .. } => Some(timing), _ => None }).unwrap()
+        };
+        assert_eq!(timing_of(Some(90)).duration, 90, "90 = 120 の 3/4");
+        assert_eq!(timing_of(None).duration, 290, "渡さなければ comp の終わりまで");
+        let _ = (Document::new(), Composition::default_background());
+    }
+
     #[test]
     fn camera_layer_uses_normal_properties_lifetime_and_undo() {
         let mut doc = blank_project();
         let layer = LayerId(1);
         let fps = Fps::try_new(30,1).unwrap();
-        doc.apply_all(new_layer_intents(layer,0,0,60,fps,(1920.0,1080.0),NewKind::Camera)).unwrap();
+        doc.apply_all(new_layer_intents(layer,0,0,60,fps,(1920.0,1080.0),NewKind::Camera,None)).unwrap();
         let property = PropertyId::new(property::CAMERA_ZOOM).unwrap();
         doc.apply(Intent::SetConstant { layer, property:property.clone(), value:Value::F64(2.0) }).unwrap();
         assert_eq!(doc.view().resolve_camera(RationalTime::ZERO).unwrap().zoom,2.0);
@@ -395,3 +428,25 @@ mod camera_tests {
         assert_eq!(doc.view().resolve_camera(RationalTime::ZERO).unwrap().zoom,2.0);
     }
 }
+
+#[cfg(test)]
+mod environment_media {
+    use super::*;
+
+    /// `.hdr` / `.exr` を置くと最初から環境層。普通の画は板のまま。
+    #[test]
+    fn hdr_is_placed_as_the_environment() {
+        let fps = crate::doc::store::Fps::try_new(30, 1).unwrap();
+        let environment_of = |path: &str| {
+            let intents = new_layer_intents(LayerId(7), 0, 0, 90, fps, (1280.0, 720.0), NewKind::Media { path: path.into(), name: "x".into() }, None);
+            intents.iter().find_map(|i| match i {
+                Intent::SetAttrs { patch, .. } => patch.environment,
+                _ => None,
+            })
+        };
+        assert_eq!(environment_of("/nowhere/sky.hdr"), Some(true));
+        assert_eq!(environment_of("/nowhere/sky.EXR"), Some(true));
+        assert_eq!(environment_of("/nowhere/photo.png"), Some(false));
+    }
+}
+

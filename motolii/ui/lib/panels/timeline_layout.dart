@@ -17,6 +17,28 @@ class _TrackRow {
   String get laneId =>
       '$id:${property == null ? 'layer' : property!['id'] ?? 'content'}';
   List<Map<String, dynamic>> get keys => EditorSession.maps(property?['keys']);
+
+  /// Folded layer row: every key of the layer (properties, content, effect
+  /// params) as selection entries, so the bar can show and move them like AE.
+  List<Map<String, dynamic>> get allKeys {
+    if (property != null) return const [];
+    final out = <Map<String, dynamic>>[];
+    void add(String? prop, dynamic keys) {
+      for (final k in EditorSession.maps(keys))
+        out.add({'layer': id, 'property': prop, 'frame': k['frame']});
+    }
+
+    for (final p in EditorSession.maps(layer['properties']))
+      add(p['id'] as String?, p['keys']);
+    if (layer['contentKeys'] is List) add('content', layer['contentKeys']);
+    for (final e in EditorSession.maps(layer['effects']))
+      for (final p in EditorSession.maps(e['params']))
+        add(p['id'] as String?, p['keys']);
+    return out;
+  }
+
+  List<int> get summaryFrames =>
+      allKeys.map((k) => (k['frame'] as num).toInt()).toSet().toList()..sort();
 }
 
 class _LaneContainer {

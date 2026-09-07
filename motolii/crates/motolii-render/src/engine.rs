@@ -4,8 +4,10 @@ pub mod mask;
 pub mod shape;
 pub mod text;
 
+mod clip;
 mod render;
 mod texture;
+pub use texture::{decode_still_linear_rgb, decode_still_srgb};
 mod translate;
 
 use crate::doc::core::ResolvedCamera;
@@ -109,8 +111,11 @@ pub struct Engine {
     shape_textures: HashMap<ShapeCacheKey, GpuTexture2D>,
     failed_probes: HashMap<String, String>,
     layer_failures: Vec<String>,
+    /// 直前のフレームで実際に描いた層(配置の複製を含む)の数。画面外は数えない。
+    drawn_layers: usize,
     models: HashMap<String, std::sync::Arc<crate::render::compositor::GpuModelData>>,
     failed_meshes: HashMap<String, String>,
+    environments: HashMap<String, std::sync::Arc<crate::render::compositor::GpuEnvironmentData>>,
     containers: HashMap<String, ContainerInfo>,
     failed_containers: HashMap<String, String>,
     point_clouds: HashMap<String, PointCloudData>,
@@ -129,8 +134,10 @@ impl Engine {
             shape_textures: HashMap::new(),
             failed_probes: HashMap::new(),
             layer_failures: Vec::new(),
+            drawn_layers: 0,
             models: HashMap::new(),
             failed_meshes: HashMap::new(),
+            environments: HashMap::new(),
             containers: HashMap::new(),
             failed_containers: HashMap::new(),
             point_clouds: HashMap::new(),
@@ -138,6 +145,10 @@ impl Engine {
             pixels: still_pixels(),
             videos: HashMap::new(),
         })
+    }
+
+    pub fn gpu_queue(&self) -> &wgpu::Queue {
+        &self.compositor.render_context().queue
     }
 
     pub fn gpu_device(&self) -> &wgpu::Device {
@@ -153,8 +164,10 @@ impl Engine {
             shape_textures: HashMap::new(),
             failed_probes: HashMap::new(),
             layer_failures: Vec::new(),
+            drawn_layers: 0,
             models: HashMap::new(),
             failed_meshes: HashMap::new(),
+            environments: HashMap::new(),
             containers: HashMap::new(),
             failed_containers: HashMap::new(),
             point_clouds: HashMap::new(),
@@ -174,6 +187,10 @@ impl Engine {
 
     pub fn layer_failures(&self) -> &[String] {
         &self.layer_failures
+    }
+
+    pub fn drawn_layers(&self) -> usize {
+        self.drawn_layers
     }
 
     pub fn render_frame_without_background(
@@ -340,3 +357,299 @@ mod spatial_cache_tests {
         ));
     }
 }
+
+#[cfg(test)]
+mod environment_tests {
+    use super::*;
+    use crate::doc::store::{
+        property, Composition, Document, Fps, Intent, LayerAttrsPatch, LayerId, LayerMeta,
+        LayerSource, LayerTiming, PropertyId, Value,
+    };
+
+    const SIZE: u32 = 64;
+    /// 網の中(位置 32,32 から scale 12 の板が右下へ広がる)。
+    const MESH_X: u32 = 44;
+    const MESH_Y: u32 = 44;
+
+    fn file_layer(doc: &mut Document, id: u64, order: i16, path: &std::path::Path) -> LayerId {
+        let layer = LayerId(id);
+        doc.apply_all([
+            Intent::AddLayer(layer),
+            Intent::SetMeta {
+                layer,
+                meta: LayerMeta {
+                    source: LayerSource::File { path: path.to_string_lossy().into_owned(), fingerprint: None },
+                    order,
+                    timing: LayerTiming::place(0, None, 1),
+                },
+            },
+            Intent::SetConstant {
+                layer,
+                property: PropertyId::new(property::POSITION).unwrap(),
+                value: Value::Vec2([SIZE as f64 / 2.0, SIZE as f64 / 2.0]),
+            },
+        ])
+        .unwrap();
+        layer
+    }
+
+    /// 上半分 `top`、下半分 `bottom` の等距円筒図。
+    fn sky_png(dir: &std::path::Path, name: &str, top: u8, bottom: u8) -> std::path::PathBuf {
+        let path = dir.join(name);
+        let mut img = image::RgbaImage::new(8, 4);
+        for (_, y, px) in img.enumerate_pixels_mut() {
+            let v = if y < 2 { top } else { bottom };
+            *px = image::Rgba([v, v, v, 255]);
+        }
+        img.save(&path).unwrap();
+        path
+    }
+
+    fn scene(dir: &std::path::Path, sky: &std::path::Path, environment: bool) -> Document {
+        let obj = dir.join("quad.obj");
+        // 法線はカメラ向き(世界の -z)。法線の無い obj は陰影が付かないので照明の test にならない。
+        std::fs::write(&obj, "v -1 -1 0\nv 1 -1 0\nv 1 1 0\nv -1 1 0\nvn 0 0 -1\nf 1//1 2//1 3//1\nf 1//1 3//1 4//1\n").unwrap();
+        let mut doc = Document::new();
+        doc.apply(Intent::SetComposition(Composition {
+            width: SIZE,
+            height: SIZE,
+            fps: Fps::try_new(30, 1).unwrap(),
+            duration_frames: 1,
+            background: [0.0, 0.0, 0.0, 1.0],
+        }))
+        .unwrap();
+        let sky_layer = file_layer(&mut doc, 1, 0, sky);
+        let mesh = file_layer(&mut doc, 2, 1, &obj);
+        doc.apply(Intent::SetConstant {
+            layer: mesh,
+            property: PropertyId::new(property::SCALE).unwrap(),
+            value: Value::Vec2([12.0, 12.0]),
+        })
+        .unwrap();
+        doc.apply(Intent::SetAttrs {
+            layer: sky_layer,
+            patch: LayerAttrsPatch { environment: Some(environment), ..Default::default() },
+        })
+        .unwrap();
+        doc
+    }
+
+    fn luma(pixels: &[u8], x: u32, y: u32) -> u8 {
+        pixels[((y * SIZE + x) * 4) as usize]
+    }
+
+    fn ascii(pixels: &[u8]) -> String {
+        (0..SIZE)
+            .step_by(4)
+            .map(|y| (0..SIZE).step_by(2).map(|x| b" .:-=+*#%@"[luma(pixels, x, y) as usize * 10 / 256] as char).collect::<String>())
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    /// 環境層は板にならず、空として背景に敷かれ、網をその空で照らす。
+    /// 上が白・下が黒の空: 画面の上は白、下は黒、正面を向いた網は照度 1/2 の灰。
+    #[test]
+    fn an_environment_layer_lights_the_mesh_and_fills_the_background() {
+        let dir = tempfile::tempdir().unwrap();
+        let sky = sky_png(dir.path(), "sky.png", 255, 0);
+        let mut engine = Engine::new().unwrap();
+
+        let doc = scene(dir.path(), &sky, true);
+        let pixels = engine.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+        assert!(engine.layer_failures().is_empty(), "{:?}", engine.layer_failures());
+        let art = ascii(&pixels);
+        assert!(luma(&pixels, 2, 2) >= 250, "上端は空の白\n{art}");
+        assert!(luma(&pixels, 2, SIZE - 3) <= 5, "下端は空の黒\n{art}");
+        let center = luma(&pixels, MESH_X, MESH_Y);
+        assert!((150..=215).contains(&center), "正面の網は照度 1/2 (sRGB ≈ 188)、got {center}\n{art}");
+
+        let plain = scene(dir.path(), &sky, false);
+        let pixels = engine.render_frame(&plain.view(), RationalTime::ZERO).unwrap();
+        let art = ascii(&pixels);
+        assert!(luma(&pixels, 2, SIZE - 3) <= 5 && luma(&pixels, 2, 2) <= 5, "属性を外せば空は敷かれない\n{art}");
+        let unlit = luma(&pixels, MESH_X, MESH_Y);
+        assert!(unlit > 5 && unlit != center, "属性を外せば固定の灯に戻る、got {unlit}\n{art}");
+    }
+
+    /// 面の応え方: 同じ空(下だけ白)と上を向いた面で、艶消しは薄く、鏡は上の黒を映し、
+    /// ガラスは屈折して下の白を通す。Glass は効果棚の 1 枚で、param は property。
+    #[test]
+    fn glass_and_mirror_answer_the_environment_differently_from_matte() {
+        use crate::doc::store::{EffectId, EffectInstance};
+        const GLASS: &str = "motolii.glass";
+        let dir = tempfile::tempdir().unwrap();
+        let sky = sky_png(dir.path(), "floor.png", 0, 255);
+        let obj = dir.path().join("tilted.obj");
+        // 法線は上(世界の -y)とカメラ(-z)の間。
+        std::fs::write(&obj, "v -1 -1 0\nv 1 -1 0\nv 1 1 0\nv -1 1 0\nvn 0 -0.7071 -0.7071\nf 1//1 2//1 3//1\nf 1//1 3//1 4//1\n").unwrap();
+        let mut engine = Engine::new().unwrap();
+        let render = |engine: &mut Engine, surface: &[(&str, f64)]| -> u8 {
+            let mut doc = scene(dir.path(), &sky, true);
+            std::fs::copy(&obj, dir.path().join("quad.obj")).unwrap();
+            let mesh = LayerId(2);
+            if !surface.is_empty() {
+                doc.apply(Intent::SetEffects { layer: mesh, effects: vec![EffectInstance { id: EffectId(0), plugin_id: GLASS.into() }] }).unwrap();
+                for (name, value) in surface {
+                    doc.apply(Intent::SetConstant { layer: mesh, property: PropertyId::new(&format!("effect.0.param.{name}")).unwrap(), value: Value::F64(*value) }).unwrap();
+                }
+            }
+            engine.models.clear();
+            let pixels = engine.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+            assert!(engine.layer_failures().is_empty(), "{:?}", engine.layer_failures());
+            luma(&pixels, MESH_X, MESH_Y)
+        };
+        let matte = render(&mut engine, &[]);
+        let mirror = render(&mut engine, &[("metallic", 1.0), ("roughness", 0.0), ("transmission", 0.0)]);
+        let glass = render(&mut engine, &[("ior", 1.5), ("roughness", 0.0), ("transmission", 1.0)]);
+        assert!(mirror < matte && matte < glass, "mirror {mirror} matte {matte} glass {glass}");
+        assert!(mirror <= 20, "鏡は上の黒を映す、got {mirror}");
+        assert!(glass >= 150, "ガラスは下の白を通す、got {glass}");
+    }
+
+    /// exr も hdr と同じ線形 f32 の道を通り、1.0 超が残る。
+    #[test]
+    fn exr_keeps_values_above_one() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("sun.exr");
+        let mut img = image::Rgb32FImage::new(2, 2);
+        for px in img.pixels_mut() { *px = image::Rgb([4.0, 0.5, 1.0]); }
+        img.save(&path).unwrap();
+        let (rgb, w, h) = crate::render::engine::decode_still_linear_rgb(path.to_str().unwrap()).unwrap();
+        assert_eq!((w, h), (2, 2));
+        assert!((rgb[0] - 4.0).abs() < 0.05 && (rgb[1] - 0.5).abs() < 0.01, "{:?}", &rgb[..3]);
+        assert!(crate::render::media::is_still_image_path(&path), "exr は画の門を通る");
+    }
+
+    /// Turbulent Displace は棚の 1 枚で、網の頂点を GPU で動かす: 掛けた絵は掛けない絵と違い、
+    /// Evolution を進めるとまた違う(時刻で流れる)。
+    #[test]
+    fn turbulent_displace_moves_mesh_vertices_and_evolves() {
+        use crate::doc::store::{EffectId, EffectInstance};
+        const TURBULENT_DISPLACE: &str = "motolii.turbulent_displace";
+        let dir = tempfile::tempdir().unwrap();
+        let sky = sky_png(dir.path(), "sky.png", 255, 0);
+        let mut engine = Engine::new().unwrap();
+        let mut render = |params: Option<&[(&str, f64)]>| -> Vec<u8> {
+            let mut doc = scene(dir.path(), &sky, true);
+            let mesh = LayerId(2);
+            if let Some(params) = params {
+                doc.apply(Intent::SetEffects { layer: mesh, effects: vec![EffectInstance { id: EffectId(0), plugin_id: TURBULENT_DISPLACE.into() }] }).unwrap();
+                for (name, value) in params {
+                    doc.apply(Intent::SetConstant { layer: mesh, property: PropertyId::new(&format!("effect.0.param.{name}")).unwrap(), value: Value::F64(*value) }).unwrap();
+                }
+            }
+            let pixels = engine.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+            assert!(engine.layer_failures().is_empty(), "{:?}", engine.layer_failures());
+            pixels
+        };
+        let differing = |a: &[u8], b: &[u8]| a.chunks(4).zip(b.chunks(4)).filter(|(x, y)| x[0].abs_diff(y[0]) > 8).count();
+        let still = render(None);
+        let space = render(Some(&[("amount", 30.0), ("size", 6.0), ("along", 1.0)]));
+        let later = render(Some(&[("amount", 30.0), ("size", 6.0), ("along", 1.0), ("evolution", 2.0)]));
+        let normal = render(Some(&[("amount", 8.0), ("size", 6.0), ("along", 0.0)]));
+        assert!(differing(&still, &space) > 20, "Space の変位で絵が変わる: {}", differing(&still, &space));
+        assert!(differing(&space, &later) > 20, "Evolution で流れる: {}", differing(&space, &later));
+        assert!(differing(&still, &normal) > 20, "Normal の変位で陰影が変わる: {}", differing(&still, &normal));
+    }
+
+    /// hdr の 1.0 超は潰れない。環境の意味はここにある。
+    #[test]
+    fn hdr_keeps_values_above_one() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("sun.hdr");
+        let file = std::fs::File::create(&path).unwrap();
+        image::codecs::hdr::HdrEncoder::new(file)
+            .encode(&[image::Rgb([4.0f32, 0.5, 1.0]); 4], 2, 2)
+            .unwrap();
+        let (rgb, w, h) = crate::render::engine::decode_still_linear_rgb(path.to_str().unwrap()).unwrap();
+        assert_eq!((w, h), (2, 2));
+        assert!((rgb[0] - 4.0).abs() < 0.05 && (rgb[1] - 0.5).abs() < 0.01, "{:?}", &rgb[..3]);
+        assert!(crate::render::media::is_still_image_path(&path), "hdr は画の門を通る");
+    }
+}
+
+
+/// preview = export。窓へ渡す形式(`PRESENTABLE_FORMAT`)で描いた画素が、export の
+/// 読み戻しと**1 階調も違わない**ことを縛る。sRGB 形式にすると composite shader の
+/// `srgb_from_linear` と hardware で二重に encode され、窓だけ白く浮く(2026-09-07)。
+#[cfg(test)]
+mod presentable_matches_export {
+    use crate::doc::store::{Composition, Document, Fps, Intent, RationalTime};
+
+    #[test]
+    fn the_window_target_holds_the_same_bytes_as_the_export_readback() {
+        let (w, h) = (64u32, 32u32);
+        let fps = Fps::try_new(30, 1).unwrap();
+        let mut doc = Document::new();
+        doc.apply(Intent::SetComposition(Composition {
+            width: w,
+            height: h,
+            fps,
+            duration_frames: 1,
+            // 中間調でないと encode の回数が見えない
+            background: [0.5, 0.25, 0.1, 1.0],
+        }))
+        .unwrap();
+        let mut engine = super::Engine::new().unwrap();
+        let t = RationalTime::try_from_frame(0, fps).unwrap();
+        let export = engine.render_frame(&doc.view(), t).unwrap();
+        assert!(export[0] > 8 && export[0] < 247, "中間調のはず: {:?}", &export[..4]);
+
+        let format = crate::render::compositor::PRESENTABLE_FORMAT;
+        let device = engine.gpu_device().clone();
+        let size = wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 };
+        let target = device.create_texture(&wgpu::TextureDescriptor {
+            label: None,
+            size,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                | wgpu::TextureUsages::COPY_SRC
+                | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+        engine.render_frame_into(&doc.view(), t, &target).unwrap();
+
+        let bytes_per_row = (w * 4).div_ceil(256) * 256;
+        let buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: None,
+            size: u64::from(bytes_per_row * h),
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+        let mut encoder = device.create_command_encoder(&Default::default());
+        encoder.copy_texture_to_buffer(
+            target.as_image_copy(),
+            wgpu::TexelCopyBufferInfo {
+                buffer: &buffer,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(bytes_per_row),
+                    rows_per_image: Some(h),
+                },
+            },
+            size,
+        );
+        engine.gpu_queue().submit([encoder.finish()]);
+        let slice = buffer.slice(..);
+        slice.map_async(wgpu::MapMode::Read, |_| {});
+        device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
+        let data = slice.get_mapped_range();
+
+        let bgra = format!("{format:?}").starts_with("Bgra");
+        for y in 0..h as usize {
+            for x in 0..w as usize {
+                let window = &data[y * bytes_per_row as usize + x * 4..][..4];
+                let exported = &export[(y * w as usize + x) * 4..][..4];
+                for c in 0..3 {
+                    let wc = if bgra { 2 - c } else { c };
+                    assert_eq!(window[wc], exported[c], "({x},{y}) channel {c}: 窓 {:?} export {:?}", window, exported);
+                }
+            }
+        }
+    }
+
+}
+

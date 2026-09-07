@@ -59,7 +59,7 @@ class _EditorWindowState extends State<EditorWindow> {
         });
     };
     c.filesDropped = (paths) {
-      if (paths.isNotEmpty) c.command('import', {'paths': paths});
+      if (paths.isNotEmpty) c.importPaths(paths);
     };
     _initialize();
   }

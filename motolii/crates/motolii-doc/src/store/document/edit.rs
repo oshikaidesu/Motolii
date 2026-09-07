@@ -4,12 +4,15 @@ use crate::doc::store::{
 };
 
 impl Document {
+    /// 値を置く。`animate` が入っていれば今の時刻のキーになる(無ければ 1 キー目)。
+    /// 切れていれば、キーのある属性は全部のキーに同じ差を足して形を保ち、無ければ値が変わるだけ。
     pub fn place_checked(
         &self,
         layer: LayerId,
         property: &PropertyId,
         value: Value,
         at: RationalTime,
+        animate: bool,
     ) -> Result<Option<Intent>, StoreError> {
         let view = self.view().without_transients();
         if !view.has_layer(layer) {
@@ -40,6 +43,19 @@ impl Document {
                 "Edit the shared slot explicitly".into(),
             )),
             Some(PropertyBase::Track(mut track)) => {
+                if !animate {
+                    let Some(from) = current else {
+                        return Err(StoreError::Property(format!("{} has no value to move", property.name())));
+                    };
+                    if from == value {
+                        return Ok(None);
+                    }
+                    let mut moved = crate::doc::eval::KeyframeTrack::new();
+                    for key in track.keys() {
+                        moved.insert(Keyframe { value: shifted(&key.value, &from, &value), ..key.clone() });
+                    }
+                    return Ok(Some(Intent::SetTrack { layer, property: property.clone(), track: moved }));
+                }
                 if let Some(key) = track.keys().iter().find(|key| key.t == at) {
                     if key.value == value {
                         return Ok(None);
@@ -64,6 +80,11 @@ impl Document {
                 }))
             }
             Some(PropertyBase::Constant(_)) | None => {
+                if animate {
+                    let mut track = crate::doc::eval::KeyframeTrack::new();
+                    track.insert(Keyframe { t: at, value, interp: Interp::Linear, spatial: None });
+                    return Ok(Some(Intent::SetTrack { layer, property: property.clone(), track }));
+                }
                 if current.as_ref() == Some(&value) {
                     return Ok(None);
                 }
@@ -122,6 +143,8 @@ impl Document {
                     *layer
                 }
                 Intent::SetConstant { layer, .. } => *layer,
+                // 層属性の下書き(Sequence のゴーストの遅れ等)。attrs() が patch を重ねて読む。
+                Intent::SetAttrs { layer, .. } => *layer,
                 _ => {
                     return Err(StoreError::Property(
                         "This edit has no preview projection".into(),
@@ -183,5 +206,17 @@ impl crate::doc::store::StoreView<'_> {
             | property::FADE_OUT => Some(Value::F64(0.0)),
             _ => None,
         })
+    }
+}
+
+/// `from` を `to` へ動かした差を `key` に足す。足せない型は `to` に置き換える。
+fn shifted(key: &Value, from: &Value, to: &Value) -> Value {
+    match (key, from, to) {
+        (Value::F64(k), Value::F64(a), Value::F64(b)) => Value::F64(k + (b - a)),
+        (Value::Vec2(k), Value::Vec2(a), Value::Vec2(b)) => Value::Vec2([k[0] + (b[0] - a[0]), k[1] + (b[1] - a[1])]),
+        (Value::Color(k), Value::Color(a), Value::Color(b)) => {
+            Value::Color(std::array::from_fn(|i| (k[i] + (b[i] - a[i])).clamp(0.0, 1.0)))
+        }
+        _ => to.clone(),
     }
 }

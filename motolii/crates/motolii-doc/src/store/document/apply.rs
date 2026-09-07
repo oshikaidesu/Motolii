@@ -210,6 +210,17 @@ impl Document {
                     }
                 }
                 let current = self.view().attrs(layer)?.unwrap_or_default();
+                // 環境層は空(照明)であって時間の姿ではないので、ゴーストを持たない。
+                // 環境にした瞬間に既存のゴーストも落とす(旨みがない: 裁定 2026-09-07)。
+                let mut patch = patch;
+                if patch.environment == Some(true) {
+                    patch.ghost = Some(None);
+                } else if patch.ghost.is_some_and(|g| g.is_some()) && current.environment {
+                    return Err(StoreError::Property(format!(
+                        "layer {} は環境層なのでゴーストを持てない",
+                        layer.0
+                    )));
+                }
                 if current.locked {
                     let touches_other_than_locked = patch.hidden.is_some()
                         || patch.parent.is_some()

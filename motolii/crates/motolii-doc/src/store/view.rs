@@ -539,6 +539,22 @@ impl<'a> StoreView<'a> {
     }
 
     pub fn attrs(&self, layer: LayerId) -> Result<Option<LayerAttrs>, StoreError> {
+        let mut value = self.persistent_attrs(layer)?;
+        if !self.ignore_transients {
+            let previews = self.preview_edits.iter().filter_map(|edit| match edit {
+                crate::doc::store::Intent::SetAttrs { layer: target, patch } if *target == layer => Some(patch),
+                _ => None,
+            });
+            for patch in previews {
+                // 属性の record がまだ無い層(既定のまま)にも下書きは乗る。
+                let base = value.take().unwrap_or_default();
+                value = Some(patch.clone().apply_to(base));
+            }
+        }
+        Ok(value)
+    }
+
+    fn persistent_attrs(&self, layer: LayerId) -> Result<Option<LayerAttrs>, StoreError> {
         {
             let mut cache = self.record_cache.borrow_mut();
             cache.sync(&self.revision);
