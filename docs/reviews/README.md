@@ -770,3 +770,4 @@
 - [最小コアの定義 — 今日のコードで言い直す](2026-09-07-minimal-core-definition.md)
 - [層のゴースト — 壊れないディレイ](2026-09-07-layer-ghost.md)
 - [Lumit 設計言語の調査 — トンマナの定規にできるか(比較中)](2026-09-08-lumit-design-language.md)
+- [Inspector — 揃っているのに触りたくならない(利用者提示の観察 24 項と問い)](2026-09-08-inspector-critique.md)
