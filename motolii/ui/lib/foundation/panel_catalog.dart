@@ -68,6 +68,13 @@ const panelCatalog = [
     minWidth: 300,
     width: Extent.fixed(300),
   ),
+  PanelSpec(
+    'Test',
+    'Work',
+    Icons.science_outlined,
+    minWidth: 300,
+    width: Extent.fixed(300),
+  ),
   PanelSpec('Create', 'Browse', Icons.add_box_outlined),
   PanelSpec('Media', 'Browse', Icons.perm_media_outlined),
   PanelSpec('Effects', 'Browse', Icons.auto_fix_high_outlined),

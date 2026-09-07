@@ -7,6 +7,7 @@ import '../foundation/panel_catalog.dart';
 import '../session/editor_session.dart';
 import 'browser.dart';
 import 'inspector.dart';
+import 'inspector_test.dart';
 import 'desk.dart';
 import 'timeline.dart';
 import 'stage.dart';
@@ -48,6 +49,7 @@ Widget _buildPanel(String name, EditorSession c, Key? key) {
   return switch (name) {
     'Stage' => StagePanel(key: key, controller: c),
     'Inspector' => InspectorPanel(key: key, controller: c),
+    'Test' => InspectorTestPanel(key: key, controller: c),
     'Desk' => DeskPanel(
       key: key,
       controller: c,

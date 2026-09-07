@@ -128,7 +128,7 @@ DockNode initialDock() => DockNode.split(
       DockNode.split(
         Axis.vertical,
         .76,
-        DockNode.leaf('inspector', ['Inspector']),
+        DockNode.leaf('inspector', ['Inspector', 'Test']),
         DockNode.leaf('desk', ['Desk']),
       ),
     ),

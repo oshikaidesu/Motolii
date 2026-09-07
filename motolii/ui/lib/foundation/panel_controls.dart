@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -258,11 +260,22 @@ class EditorNumericField extends StatefulWidget {
     this.mixed = false,
     this.idleFocus,
     this.onBegin,
+    this.fill = false,
+    this.unit,
+    this.decimals = 2,
   });
   final double value, speed;
   final double? min, max;
   final String label;
   final bool enabled, mixed;
+
+  /// Paint how far the value sits between min and max behind the number, so
+  /// a bounded amount reads before the digits do.
+  final bool fill;
+
+  /// A small rider after the number: px, %, °.
+  final String? unit;
+  final int decimals;
   final FocusNode? idleFocus;
   final Future<void> Function(double) onPreview, onCommit;
   final Future<void> Function() onFinish, onCancel;
@@ -487,28 +500,397 @@ class _EditorNumericFieldState extends State<EditorNumericField> {
                   message: widget.label,
                   child: Container(
                     height: EditorMetrics.s18,
-                    alignment: Alignment.centerRight,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: EditorMetrics.s2,
-                    ),
                     color: _dragging ? EditorTheme.hover : EditorTheme.app,
-                    child: Text(
-                      widget.mixed && _shown == null
-                          ? '—'
-                          : (_shown ?? widget.value).toStringAsFixed(2),
-                      maxLines: 1,
-                      overflow: TextOverflow.clip,
-                      style: TextStyle(
-                        fontSize: EditorMetrics.font,
-                        color: widget.enabled
-                            ? EditorTheme.ink
-                            : EditorTheme.muted,
-                      ),
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        if (widget.fill &&
+                            widget.min != null &&
+                            widget.max != null)
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: FractionallySizedBox(
+                              widthFactor:
+                                  (((_shown ?? widget.value) - widget.min!) /
+                                          (widget.max! - widget.min!))
+                                      .clamp(0.0, 1.0),
+                              child: const ColoredBox(
+                                color: EditorTheme.raised,
+                              ),
+                            ),
+                          ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: EditorMetrics.s2,
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  widget.mixed && _shown == null
+                                      ? '—'
+                                      : (_shown ?? widget.value)
+                                            .toStringAsFixed(widget.decimals),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.clip,
+                                  style: TextStyle(
+                                    fontSize: EditorMetrics.font,
+                                    fontFeatures: const [
+                                      FontFeature.tabularFigures(),
+                                    ],
+                                    color: widget.enabled
+                                        ? EditorTheme.ink
+                                        : EditorTheme.muted,
+                                  ),
+                                ),
+                              ),
+                              if (widget.unit != null) ...[
+                                const SizedBox(width: EditorMetrics.s2),
+                                Text(
+                                  widget.unit!,
+                                  style: const TextStyle(
+                                    fontSize: EditorMetrics.micro,
+                                    color: EditorTheme.muted,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
               ),
             ),
           ),
+  );
+}
+
+/// How a value stands to time, shown as a lamp in the control's corner
+/// (the Ableton convention): unlit = no keys, lit = keys, bright = a key at
+/// this frame, ember = keys exist but the value was touched without Animate.
+enum KeyLamp { none, keyed, now, draft }
+
+KeyLamp keyLampOf(Map<String, dynamic>? row, {bool draft = false}) {
+  if (row == null) return KeyLamp.none;
+  final keys = row['keys'] as List? ?? const [];
+  if (keys.isEmpty) return KeyLamp.none;
+  if (draft) return KeyLamp.draft;
+  return row['keyedNow'] == true ? KeyLamp.now : KeyLamp.keyed;
+}
+
+class EditorLamp extends StatelessWidget {
+  const EditorLamp({super.key, required this.state, required this.child});
+  final KeyLamp state;
+  final Widget child;
+  @override
+  Widget build(BuildContext context) {
+    final color = switch (state) {
+      KeyLamp.none => null,
+      KeyLamp.keyed => EditorTheme.accent.withValues(alpha: .55),
+      KeyLamp.now => EditorTheme.accent,
+      KeyLamp.draft => EditorTheme.accent.withValues(alpha: .3),
+    };
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        child,
+        if (color != null)
+          Positioned(
+            left: -1,
+            top: -1,
+            child: Tooltip(
+              message: switch (state) {
+                KeyLamp.now => 'Key at this frame',
+                KeyLamp.draft => 'Keys exist; this change is not a key',
+                _ => 'Animated',
+              },
+              child: Container(
+                width: EditorMetrics.s5,
+                height: EditorMetrics.s5,
+                decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// On / off with the result drawn beside it, so the switch says what it does
+/// without a word.
+class EditorSwitch extends StatelessWidget {
+  const EditorSwitch({
+    super.key,
+    required this.on,
+    required this.glyph,
+    required this.label,
+    required this.onChanged,
+  });
+  final bool on;
+  final IconData glyph;
+  final String label;
+  final ValueChanged<bool>? onChanged;
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onChanged != null;
+    return Tooltip(
+      message: label,
+      child: GestureDetector(
+        onTap: enabled ? () => onChanged!(!on) : null,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 120),
+              width: EditorMetrics.s22,
+              height: EditorMetrics.s12,
+              padding: const EdgeInsets.all(EditorMetrics.s2),
+              decoration: BoxDecoration(
+                color: on ? EditorTheme.accent : EditorTheme.raised,
+                borderRadius: BorderRadius.circular(EditorMetrics.s6),
+              ),
+              alignment: on ? Alignment.centerRight : Alignment.centerLeft,
+              child: Container(
+                width: EditorMetrics.s8,
+                height: EditorMetrics.s8,
+                decoration: BoxDecoration(
+                  color: on ? EditorTheme.tabInk : EditorTheme.ink,
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ),
+            const SizedBox(width: EditorMetrics.s4),
+            Icon(
+              glyph,
+              size: EditorMetrics.s14,
+              color: !enabled
+                  ? EditorTheme.disabledInk
+                  : on
+                  ? EditorTheme.ink
+                  : EditorTheme.muted,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// An angle as a needle in a ring; drag to turn it. Preview while dragging,
+/// finish on release, the same route as the numeric field.
+class EditorDial extends StatefulWidget {
+  const EditorDial({
+    super.key,
+    required this.degrees,
+    required this.onBegin,
+    required this.onPreview,
+    required this.onFinish,
+    required this.onCancel,
+    this.enabled = true,
+    this.size = EditorMetrics.s22,
+  });
+  final double degrees, size;
+  final bool enabled;
+  final VoidCallback onBegin;
+  final Future<void> Function(double) onPreview;
+  final Future<void> Function() onFinish, onCancel;
+  @override
+  State<EditorDial> createState() => _EditorDialState();
+}
+
+class _EditorDialState extends State<EditorDial> {
+  double? _shown;
+  double _lastAngle = 0;
+  double _angleOf(Offset local) {
+    final c = Offset(widget.size / 2, widget.size / 2);
+    final d = local - c;
+    return math.atan2(d.dy, d.dx) * 180 / math.pi;
+  }
+
+  @override
+  Widget build(BuildContext context) => Tooltip(
+    message: 'Rotation',
+    child: GestureDetector(
+      onPanStart: widget.enabled
+          ? (e) {
+              _lastAngle = _angleOf(e.localPosition);
+              _shown = widget.degrees;
+              widget.onBegin();
+            }
+          : null,
+      onPanUpdate: widget.enabled
+          ? (e) {
+              final a = _angleOf(e.localPosition);
+              var delta = a - _lastAngle;
+              if (delta > 180) delta -= 360;
+              if (delta < -180) delta += 360;
+              _lastAngle = a;
+              setState(() => _shown = (_shown ?? widget.degrees) + delta);
+              widget.onPreview(_shown!);
+            }
+          : null,
+      onPanEnd: widget.enabled
+          ? (_) {
+              widget.onFinish();
+              setState(() => _shown = null);
+            }
+          : null,
+      onPanCancel: widget.enabled
+          ? () {
+              widget.onCancel();
+              setState(() => _shown = null);
+            }
+          : null,
+      child: CustomPaint(
+        size: Size.square(widget.size),
+        painter: _DialPainter(
+          _shown ?? widget.degrees,
+          widget.enabled ? EditorTheme.ink : EditorTheme.muted,
+        ),
+      ),
+    ),
+  );
+}
+
+class _DialPainter extends CustomPainter {
+  const _DialPainter(this.degrees, this.ink);
+  final double degrees;
+  final Color ink;
+  @override
+  void paint(Canvas canvas, Size size) {
+    final c = size.center(Offset.zero);
+    final r = size.width / 2 - 1;
+    canvas.drawCircle(
+      c,
+      r,
+      Paint()
+        ..color = EditorTheme.app
+        ..style = PaintingStyle.fill,
+    );
+    canvas.drawCircle(
+      c,
+      r,
+      Paint()
+        ..color = EditorTheme.border
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1,
+    );
+    final a = (degrees - 90) * math.pi / 180;
+    canvas.drawLine(
+      c,
+      c + Offset(math.cos(a), math.sin(a)) * (r - 2),
+      Paint()
+        ..color = ink
+        ..strokeWidth = 1.5
+        ..strokeCap = StrokeCap.round,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_DialPainter old) =>
+      old.degrees != degrees || old.ink != ink;
+}
+
+/// Where the layer turns and scales from: nine places, the current one lit.
+class EditorAnchorGrid extends StatelessWidget {
+  const EditorAnchorGrid({
+    super.key,
+    required this.fraction,
+    required this.onPick,
+    this.cell = EditorMetrics.s14,
+  });
+  final List<double>? fraction;
+  final double cell;
+  final void Function(double x, double y)? onPick;
+  @override
+  Widget build(BuildContext context) => Tooltip(
+    message: 'Anchor',
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (final y in [0.0, .5, 1.0])
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (final x in [0.0, .5, 1.0])
+                GestureDetector(
+                  onTap: onPick == null ? null : () => onPick!(x, y),
+                  child: Container(
+                    width: cell,
+                    height: cell,
+                    margin: const EdgeInsets.all(1),
+                    decoration: BoxDecoration(
+                      color:
+                          fraction != null &&
+                              (fraction![0] - x).abs() < .05 &&
+                              (fraction![1] - y).abs() < .05
+                          ? EditorTheme.accent
+                          : onPick == null
+                          ? EditorTheme.raised
+                          : EditorTheme.border,
+                      borderRadius: BorderRadius.circular(EditorMetrics.s2),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+      ],
+    ),
+  );
+}
+
+/// A group of controls on one raised sheet, named by a glyph and a kicker.
+class EditorCard extends StatelessWidget {
+  const EditorCard({
+    super.key,
+    required this.title,
+    required this.glyph,
+    required this.children,
+    this.trailing,
+  });
+  final String title;
+  final IconData glyph;
+  final List<Widget> children;
+  final Widget? trailing;
+  @override
+  Widget build(BuildContext context) => Container(
+    margin: const EdgeInsets.fromLTRB(
+      EditorMetrics.s6,
+      EditorMetrics.s6,
+      EditorMetrics.s6,
+      0,
+    ),
+    padding: const EdgeInsets.all(EditorMetrics.s6),
+    decoration: BoxDecoration(
+      color: EditorTheme.panel,
+      borderRadius: BorderRadius.circular(EditorMetrics.s3),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Icon(glyph, size: EditorMetrics.s12, color: EditorTheme.muted),
+            const SizedBox(width: EditorMetrics.s4),
+            Expanded(
+              child: Text(
+                title.toUpperCase(),
+                style: const TextStyle(
+                  fontSize: EditorMetrics.micro,
+                  letterSpacing: 1,
+                  color: EditorTheme.muted,
+                ),
+              ),
+            ),
+            if (trailing != null) trailing!,
+          ],
+        ),
+        const SizedBox(height: EditorMetrics.s6),
+        ...children,
+      ],
+    ),
   );
 }
