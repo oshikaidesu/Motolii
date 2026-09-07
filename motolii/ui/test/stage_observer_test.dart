@@ -70,13 +70,15 @@ void main() {
       await tester.pump(const Duration(milliseconds: 50));
       await tester.tapAt(inside);
       await tester.pump();
-      expect(c.commands.last, ('stageView', {'focus': 7}));
+      expect(c.commands.last.$1, 'stageView');
+      expect(c.commands.last.$2, {'focus': 7});
       await tester.pump(const Duration(seconds: 1));
       await tester.tapAt(outside);
       await tester.pump(const Duration(milliseconds: 50));
       await tester.tapAt(outside);
       await tester.pump();
-      expect(c.commands.last, ('stageView', {'reset': true}));
+      expect(c.commands.last.$1, 'stageView');
+      expect(c.commands.last.$2, {'reset': true});
       expect(find.text('Front'), findsOneWidget);
       await tester.pumpWidget(const SizedBox());
     },

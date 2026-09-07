@@ -599,34 +599,8 @@ class _InspectorPanelState extends State<InspectorPanel> {
     dynamic value,
     List<MapEntry<dynamic, String>> choices,
     ValueChanged<dynamic>? changed,
-  ) => SizedBox(
-    height: EditorMetrics.row,
-    child: DropdownButtonHideUnderline(
-      child: DropdownButton<dynamic>(
-        value: choices.any((e) => e.key == value) ? value : null,
-        isExpanded: true,
-        isDense: true,
-        style: const TextStyle(
-          fontSize: EditorMetrics.font,
-          color: EditorTheme.ink,
-        ),
-        dropdownColor: EditorTheme.panel,
-        items: choices
-            .map(
-              (e) => DropdownMenuItem<dynamic>(
-                value: e.key,
-                child: Text(
-                  e.value,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            )
-            .toList(),
-        onChanged: changed,
-      ),
-    ),
-  );
+  ) =>
+      EditorChoice<dynamic>(value: value, choices: choices, onChanged: changed);
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, box) => SingleChildScrollView(

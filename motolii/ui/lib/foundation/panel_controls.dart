@@ -28,6 +28,107 @@ Widget panelTitle(String title) => Container(
   ),
 );
 
+/// A panel bar. Its Row keeps Spacer alignment while the content fits and
+/// slides sideways when it does not, instead of overflowing the pane.
+class EditorBar extends StatelessWidget {
+  const EditorBar({
+    super.key,
+    required this.children,
+    this.height = EditorMetrics.s22,
+    this.padding = EdgeInsets.zero,
+    this.decoration = const BoxDecoration(color: EditorTheme.panel),
+  });
+  final List<Widget> children;
+  final double height;
+  final EdgeInsetsGeometry padding;
+  final BoxDecoration decoration;
+  @override
+  Widget build(BuildContext context) => Container(
+    height: height,
+    decoration: decoration,
+    child: LayoutBuilder(
+      builder: (context, box) => SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minWidth: box.maxWidth),
+          child: IntrinsicWidth(
+            child: Padding(
+              padding: padding,
+              child: Row(children: children),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+/// One value out of a short list. The sheet is the app's menu (menuTheme), so
+/// rows are EditorMetrics.row high; DropdownButton cannot go under 48 and is
+/// not used.
+class EditorChoice<T> extends StatelessWidget {
+  const EditorChoice({
+    super.key,
+    required this.value,
+    required this.choices,
+    required this.onChanged,
+  });
+  final T? value;
+  final List<MapEntry<T, String>> choices;
+  final ValueChanged<T>? onChanged;
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onChanged != null;
+    final label = choices
+        .where((e) => e.key == value)
+        .map((e) => e.value)
+        .firstOrNull;
+    return MenuAnchor(
+      crossAxisUnconstrained: false,
+      menuChildren: [
+        for (final e in choices)
+          MenuItemButton(
+            onPressed: enabled ? () => onChanged!(e.key) : null,
+            child: Text(e.value, maxLines: 1, overflow: TextOverflow.ellipsis),
+          ),
+      ],
+      builder: (context, menu, _) => GestureDetector(
+        onTap: enabled ? (menu.isOpen ? menu.close : menu.open) : null,
+        child: Container(
+          height: EditorMetrics.row,
+          padding: const EdgeInsets.only(left: EditorMetrics.s4),
+          decoration: BoxDecoration(
+            color: EditorTheme.app,
+            border: Border.all(
+              color: enabled ? EditorTheme.border : EditorTheme.line,
+            ),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  label ?? '',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: EditorMetrics.font,
+                    color: enabled ? EditorTheme.ink : EditorTheme.muted,
+                  ),
+                ),
+              ),
+              const Icon(
+                Icons.arrow_drop_down,
+                size: EditorMetrics.s16,
+                color: EditorTheme.muted,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class EditorDraftField extends StatefulWidget {
   const EditorDraftField({
     super.key,

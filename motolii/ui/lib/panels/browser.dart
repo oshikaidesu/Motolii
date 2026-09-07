@@ -748,23 +748,11 @@ class _BrowserPanelState extends State<BrowserPanel> {
         children: [
           step(Icons.remove, .8, 'browser:tile-smaller'),
           Expanded(
-            child: SliderTheme(
-              data: SliderThemeData(
-                trackHeight: EditorMetrics.s2,
-                thumbShape: const RoundSliderThumbShape(
-                  enabledThumbRadius: EditorMetrics.s5,
-                ),
-                overlayShape: SliderComponentShape.noOverlay,
-                activeTrackColor: EditorTheme.muted,
-                inactiveTrackColor: EditorTheme.line,
-                thumbColor: EditorTheme.ink,
-              ),
-              child: Slider(
-                min: BrowserSize.min,
-                max: BrowserSize.max,
-                value: tile,
-                onChanged: (v) => widget.controller.storeDesk('browserTile', v),
-              ),
+            child: Slider(
+              min: BrowserSize.min,
+              max: BrowserSize.max,
+              value: tile,
+              onChanged: (v) => widget.controller.storeDesk('browserTile', v),
             ),
           ),
           step(Icons.add, 1.25, 'browser:tile-larger'),

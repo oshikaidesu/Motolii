@@ -825,12 +825,6 @@ class _TimelinePanelState extends State<TimelinePanel> {
     };
     final chosen = await showMenu<String>(
       context: context,
-      color: const Color(0xff222222),
-      elevation: 0,
-      menuPadding: const EdgeInsets.symmetric(vertical: EditorMetrics.s2),
-      shape: const RoundedRectangleBorder(
-        side: BorderSide(color: Color(0xffbbbbbb)),
-      ),
       position: RelativeRect.fromLTRB(
         details.globalPosition.dx,
         details.globalPosition.dy,

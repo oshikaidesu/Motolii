@@ -52,6 +52,7 @@
 - レーン上のトラックパッドは縦横移動とピンチ。時間目盛り上の上下スクロールは時刻を中心にズーム。通常移動・スクロールズーム・ピンチは同じ慣性処理を通す。
 - 指を離した後は減速し、次の操作で止まる。表示移動は作品・キー・再生位置を書き換えない。変換とreleaseの処理を別々に追加して慣性を落とさない。
 - UIはhot reloadで反復し、Document/GPU資源を保つ。Rust更新・初回buildは必要な時だけ。hot restartで失う表示状態は隠さない。
+- 部品の見た目は`EditorTheme.data`のcomponent theme(popupMenu・menu・menuButton・slider・dialog・textButton・inputDecoration)に一度だけ書く。panelは素のMaterial部品を置き、色・寸法をその場で上書きしない。`DropdownButton`は行高48未満を拒むので使わず、選択は`EditorChoice`(MenuAnchor)。寸法は`EditorMetrics`、色は`EditorTheme`の名前だけ(2026-09-08)。
 - 薄く広く制作可能にすることを優先する。試験の量・型分割・ビルド成功だけを完成とせず、ユーザーが触った結果を受けて修正する。
 
 ## 2.5Dの定義 — 2026-09-06

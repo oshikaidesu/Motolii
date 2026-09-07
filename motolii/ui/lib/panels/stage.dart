@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../session/editor_session.dart';
+import '../foundation/panel_controls.dart';
 import '../foundation/theme.dart';
 import '../foundation/metrics.dart';
 
@@ -621,58 +622,54 @@ class _StagePanelState extends State<StagePanel> {
     ]),
     builder: (context, _) => Column(
       children: [
-        Container(
-          height: EditorMetrics.s22,
+        EditorBar(
           decoration: const BoxDecoration(
             color: EditorTheme.panel,
             border: Border(bottom: BorderSide(color: EditorTheme.line)),
           ),
-          child: Row(
-            children: [
-              const SizedBox(width: EditorMetrics.s8),
-
+          children: [
+            const SizedBox(width: EditorMetrics.s8),
+            _button(
+              _userStage ? '● User Stage' : 'User Stage',
+              () => c.command('stageView', {'mode': 'User'}),
+            ),
+            _button(
+              !_userStage ? '● Camera View' : 'Camera View',
+              () => c.command('stageView', {'mode': 'Camera'}),
+            ),
+            if (_userStage)
               _button(
-                _userStage ? '● User Stage' : 'User Stage',
-                () => c.command('stageView', {'mode': 'User'}),
+                'Front',
+                _front ? null : () => c.command('stageView', {'reset': true}),
               ),
-              _button(
-                !_userStage ? '● Camera View' : 'Camera View',
-                () => c.command('stageView', {'mode': 'Camera'}),
-              ),
-              if (_userStage)
-                _button(
-                  'Front',
-                  _front ? null : () => c.command('stageView', {'reset': true}),
-                ),
-              const Spacer(),
-              _button(
-                'Fit',
-                () => setState(() {
-                  _zoom = null;
-                  _pan = Offset.zero;
-                }),
-              ),
-              _button(
-                '100%',
-                () => setState(() {
-                  _zoom = 1;
-                  _pan = Offset.zero;
-                }),
-              ),
-              _button(
-                '−',
-                () => _zoomAt(_scale / 1.2, _viewport.center(Offset.zero)),
-              ),
-              Text(
-                '${(_scale * 100).round()}%',
-                style: const TextStyle(fontSize: EditorMetrics.dense),
-              ),
-              _button(
-                '+',
-                () => _zoomAt(_scale * 1.2, _viewport.center(Offset.zero)),
-              ),
-            ],
-          ),
+            const Spacer(),
+            _button(
+              'Fit',
+              () => setState(() {
+                _zoom = null;
+                _pan = Offset.zero;
+              }),
+            ),
+            _button(
+              '100%',
+              () => setState(() {
+                _zoom = 1;
+                _pan = Offset.zero;
+              }),
+            ),
+            _button(
+              '−',
+              () => _zoomAt(_scale / 1.2, _viewport.center(Offset.zero)),
+            ),
+            Text(
+              '${(_scale * 100).round()}%',
+              style: const TextStyle(fontSize: EditorMetrics.dense),
+            ),
+            _button(
+              '+',
+              () => _zoomAt(_scale * 1.2, _viewport.center(Offset.zero)),
+            ),
+          ],
         ),
         Expanded(
           child: LayoutBuilder(
@@ -816,43 +813,39 @@ class _StagePanelState extends State<StagePanel> {
             },
           ),
         ),
-        Container(
-          height: EditorMetrics.s22,
+        EditorBar(
           padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s8),
-          color: EditorTheme.panel,
-          child: Row(
-            children: [
-              Text(
-                '${_width.toInt()} × ${_height.toInt()}',
+          children: [
+            Text(
+              '${_width.toInt()} × ${_height.toInt()}',
+              style: const TextStyle(
+                fontSize: EditorMetrics.dense,
+                color: EditorTheme.muted,
+              ),
+            ),
+            const Spacer(),
+            ValueListenableBuilder<int>(
+              valueListenable: c.frame,
+              builder: (context, frame, _) => Text(
+                'Frame $frame',
                 style: const TextStyle(
                   fontSize: EditorMetrics.dense,
                   color: EditorTheme.muted,
                 ),
               ),
-              const Spacer(),
-              ValueListenableBuilder<int>(
-                valueListenable: c.frame,
-                builder: (context, frame, _) => Text(
-                  'Frame $frame',
-                  style: const TextStyle(
+            ),
+            if (!c.supports('stageGesture'))
+              const Padding(
+                padding: EdgeInsets.only(left: EditorMetrics.s8),
+                child: Text(
+                  'Transform gestures unavailable',
+                  style: TextStyle(
                     fontSize: EditorMetrics.dense,
                     color: EditorTheme.muted,
                   ),
                 ),
               ),
-              if (!c.supports('stageGesture'))
-                const Padding(
-                  padding: EdgeInsets.only(left: EditorMetrics.s8),
-                  child: Text(
-                    'Transform gestures unavailable',
-                    style: TextStyle(
-                      fontSize: EditorMetrics.dense,
-                      color: EditorTheme.muted,
-                    ),
-                  ),
-                ),
-            ],
-          ),
+          ],
         ),
       ],
     ),

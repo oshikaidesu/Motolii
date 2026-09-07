@@ -13,6 +13,12 @@ abstract final class EditorTheme {
       muted = Color(0xffaaaaaa),
       accent = Color(0xffffaa61);
   static const tab = Color(0xffb7b7b7), tabInk = Color(0xff262626);
+  // Menus: a darker sheet, a pale edge, a pale hover row with dark ink.
+  static const menu = Color(0xff222222),
+      menuEdge = Color(0xffbbbbbb),
+      select = Color(0xffaedce8),
+      selectInk = Color(0xff172126),
+      disabledInk = Color(0xff888888);
   static const identityColors = [
     Color(0xff93a5f5),
     Color(0xffeedb73),
@@ -42,16 +48,85 @@ abstract final class EditorTheme {
     splashFactory: NoSplash.splashFactory,
     highlightColor: hover,
     popupMenuTheme: const PopupMenuThemeData(
-      color: Color(0xff222222),
+      color: menu,
       surfaceTintColor: Colors.transparent,
       shadowColor: Colors.transparent,
-      menuPadding: EdgeInsets.symmetric(vertical: 2),
-      textStyle: TextStyle(fontSize: 11, color: ink),
+      menuPadding: EdgeInsets.symmetric(vertical: EditorMetrics.s2),
+      textStyle: TextStyle(fontSize: EditorMetrics.font, color: ink),
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.zero,
-        side: BorderSide(color: Color(0xffbbbbbb)),
+        side: BorderSide(color: menuEdge),
       ),
+    ),
+    // MenuAnchor menus (choices, dropdowns) share the popup menu's sheet.
+    menuTheme: const MenuThemeData(
+      style: MenuStyle(
+        backgroundColor: WidgetStatePropertyAll(menu),
+        surfaceTintColor: WidgetStatePropertyAll(Colors.transparent),
+        shadowColor: WidgetStatePropertyAll(Colors.transparent),
+        elevation: WidgetStatePropertyAll(0),
+        padding: WidgetStatePropertyAll(
+          EdgeInsets.symmetric(vertical: EditorMetrics.s2),
+        ),
+        shape: WidgetStatePropertyAll(
+          RoundedRectangleBorder(
+            borderRadius: BorderRadius.zero,
+            side: BorderSide(color: menuEdge),
+          ),
+        ),
+        visualDensity: VisualDensity.compact,
+      ),
+    ),
+    menuButtonTheme: MenuButtonThemeData(
+      style: ButtonStyle(
+        minimumSize: const WidgetStatePropertyAll(Size(0, EditorMetrics.row)),
+        maximumSize: const WidgetStatePropertyAll(
+          Size(double.infinity, EditorMetrics.row),
+        ),
+        padding: const WidgetStatePropertyAll(
+          EdgeInsets.symmetric(horizontal: EditorMetrics.s8),
+        ),
+        textStyle: const WidgetStatePropertyAll(
+          TextStyle(fontSize: EditorMetrics.font),
+        ),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        // The app-wide compact density would take 8 off the row.
+        visualDensity: VisualDensity.standard,
+        shape: const WidgetStatePropertyAll(RoundedRectangleBorder()),
+        overlayColor: const WidgetStatePropertyAll(Colors.transparent),
+        backgroundColor: WidgetStateProperty.resolveWith(
+          (s) => s.contains(WidgetState.hovered) ? select : Colors.transparent,
+        ),
+        foregroundColor: WidgetStateProperty.resolveWith(
+          (s) => s.contains(WidgetState.disabled)
+              ? disabledInk
+              : s.contains(WidgetState.hovered)
+              ? selectInk
+              : ink,
+        ),
+      ),
+    ),
+    sliderTheme: SliderThemeData(
+      trackHeight: EditorMetrics.s2,
+      thumbShape: const RoundSliderThumbShape(
+        enabledThumbRadius: EditorMetrics.s5,
+      ),
+      overlayShape: SliderComponentShape.noOverlay,
+      activeTrackColor: muted,
+      inactiveTrackColor: line,
+      thumbColor: ink,
+    ),
+    dialogTheme: const DialogThemeData(
+      backgroundColor: panel,
+      surfaceTintColor: Colors.transparent,
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.zero,
+        side: BorderSide(color: border),
+      ),
+      titleTextStyle: TextStyle(fontSize: EditorMetrics.title, color: ink),
+      contentTextStyle: TextStyle(fontSize: EditorMetrics.font, color: ink),
     ),
     colorScheme: const ColorScheme.dark(
       primary: accent,
@@ -187,8 +262,8 @@ class _EditorMenuItemState<T> extends PopupMenuItemState<T, EditorMenuItem<T>> {
     onExit: (_) => setState(() => hovered = false),
     child: Theme(
       data: Theme.of(context).copyWith(
-        hoverColor: const Color(0xffaedce8),
-        highlightColor: const Color(0xffaedce8),
+        hoverColor: EditorTheme.select,
+        highlightColor: EditorTheme.select,
       ),
       child: super.build(context),
     ),
@@ -198,9 +273,9 @@ class _EditorMenuItemState<T> extends PopupMenuItemState<T, EditorMenuItem<T>> {
     style: TextStyle(
       fontSize: 11,
       color: !widget.enabled
-          ? const Color(0xff888888)
+          ? EditorTheme.disabledInk
           : hovered
-          ? const Color(0xff172126)
+          ? EditorTheme.selectInk
           : EditorTheme.ink,
     ),
     child: widget.child!,
