@@ -117,9 +117,10 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
     Map<String, dynamic> row,
     int axis, {
     String? label,
-    double width = EditorMetrics.field,
+    double? width,
     bool fill = false,
   }) {
+    width ??= _wellWidth;
     final v = row['value'];
     final value = v is List && axis < v.length
         ? v[axis]
@@ -127,6 +128,7 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
         ? v
         : null;
     if (value is! num) return SizedBox(width: width);
+    final slotWidth = width;
     final id = '${row['id']}';
     // Opacity is declared without a range; it is 0..1 by meaning.
     final min =
@@ -145,7 +147,7 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
     return EditorLamp(
       state: keyLampOf(row),
       child: SizedBox(
-        width: width,
+        width: slotWidth,
         child: EditorNumericField(
           key: ValueKey('test:${layer['id']}:$id:$axis'),
           value: value.toDouble() * shownScale,
@@ -158,12 +160,8 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
           max: max == null ? null : max * shownScale,
           speed: speed * shownScale,
           fill: fill,
-          unit: unit,
-          decimals: percent
-              ? 0
-              : id.startsWith('position')
-              ? 1
-              : 2,
+          unit: unit ?? '',
+          decimals: percent ? 0 : 2,
           enabled: _canEdit(layer),
           onPreview: (n) => _write(
             layer,
@@ -193,7 +191,7 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
   );
 
   Widget _word(String s) => SizedBox(
-    width: EditorMetrics.s60,
+    width: EditorMetrics.s48,
     child: Text(
       s,
       maxLines: 1,
@@ -203,6 +201,38 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
   );
 
   Widget _gap() => const SizedBox(width: EditorMetrics.s4);
+
+  /// One column of the grid every row shares: glyph, word, three wells, and
+  /// a fixed tail for the row's own extra (dial, link). Empty slots keep
+  /// their width so the columns never move.
+  /// Well width for the current panel width: the glyph, word and tail
+  /// columns are fixed, the three well columns share what is left.
+  double _wellWidth = EditorMetrics.field;
+  void _fit(double panelWidth) {
+    final free =
+        panelWidth -
+        EditorMetrics.s12 * 2 -
+        EditorMetrics.s18 -
+        EditorMetrics.s48 -
+        EditorMetrics.s4 * 3 -
+        EditorMetrics.s22;
+    _wellWidth = (free / 3).clamp(EditorMetrics.s36, EditorMetrics.s70);
+  }
+
+  Widget _slot([Widget? child, bool center = false]) => SizedBox(
+    width: _wellWidth,
+    height: EditorMetrics.s22,
+    child: child == null
+        ? null
+        : center
+        ? Center(child: child)
+        : child,
+  );
+  Widget _tail([Widget? child]) => SizedBox(
+    width: EditorMetrics.s22,
+    height: EditorMetrics.s22,
+    child: child == null ? null : Center(child: child),
+  );
 
   Widget _line(List<Widget> children) => Padding(
     padding: const EdgeInsets.only(bottom: EditorMetrics.s4),
@@ -228,56 +258,91 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
         _line([
           _glyph(Icons.open_with, 'Position'),
           _word('Position'),
-          _well(layer, position, 0, label: 'X'),
+          _slot(_well(layer, position, 0, label: 'X')),
           _gap(),
-          _well(layer, position, 1, label: 'Y'),
+          _slot(_well(layer, position, 1, label: 'Y')),
           _gap(),
-          if (z != null) _well(layer, z, 0, label: 'Z'),
+          _slot(z == null ? null : _well(layer, z, 0, label: 'Z')),
+          _gap(),
+          _tail(),
         ]),
       if (scale != null)
         _line([
           _glyph(Icons.aspect_ratio, 'Scale'),
           _word('Scale'),
-          if (_scaleLocked && scaleEven)
-            _well(layer, scale, 0, label: 'Scale')
-          else ...[
-            _well(layer, scale, 0, label: 'X'),
-            _gap(),
-            _well(layer, scale, 1, label: 'Y'),
-          ],
+          _slot(
+            _well(
+              layer,
+              scale,
+              0,
+              label: _scaleLocked && scaleEven ? 'Scale' : 'X',
+            ),
+          ),
           _gap(),
-          EditorSwitch(
-            on: _scaleLocked && scaleEven,
-            glyph: Icons.link,
-            label: 'Keep the shape: one number scales both axes',
-            onChanged: (on) async {
-              if (on && sv is List && sv.length >= 2 && !scaleEven) {
-                await _write(layer, scale, [sv[0], sv[0]], preview: false);
-              }
-              setState(() => _scaleLocked = on);
-            },
+          _slot(
+            _scaleLocked && scaleEven
+                ? null
+                : _well(layer, scale, 1, label: 'Y'),
+          ),
+          _gap(),
+          _slot(),
+          _gap(),
+          _tail(
+            EditorSwitch(
+              on: _scaleLocked && scaleEven,
+              glyph: Icons.link,
+              compact: true,
+              label: 'Keep the shape: one number scales both axes',
+              onChanged: (on) async {
+                if (on && sv is List && sv.length >= 2 && !scaleEven) {
+                  await _write(layer, scale, [sv[0], sv[0]], preview: false);
+                }
+                setState(() => _scaleLocked = on);
+              },
+            ),
           ),
         ]),
       if (rotation != null)
         _line([
           _glyph(Icons.rotate_right, 'Rotation'),
           _word('Rotation'),
-          EditorDial(
-            degrees: (rotation['value'] as num? ?? 0).toDouble(),
-            enabled: _canEdit(layer),
-            onBegin: () {},
-            onPreview: (d) => _write(layer, rotation, d, preview: true),
-            onFinish: () => _finish(false),
-            onCancel: () => _finish(true),
+          _slot(_well(layer, rotation, 0, label: 'Rotation')),
+          _gap(),
+          _slot(rx == null ? null : _well(layer, rx, 0, label: 'Tilt X')),
+          _gap(),
+          _slot(ry == null ? null : _well(layer, ry, 0, label: 'Tilt Y')),
+          _gap(),
+          _tail(
+            EditorDial(
+              degrees: (rotation['value'] as num? ?? 0).toDouble(),
+              enabled: _canEdit(layer),
+              onBegin: () {},
+              onPreview: (d) => _write(layer, rotation, d, preview: true),
+              onFinish: () => _finish(false),
+              onCancel: () => _finish(true),
+            ),
+          ),
+        ]),
+      if (opacity != null)
+        _line([
+          _glyph(Icons.opacity, 'Opacity'),
+          _word('Opacity'),
+          SizedBox(
+            width: _wellWidth * 2 + EditorMetrics.s4,
+            height: EditorMetrics.s22,
+            child: _well(
+              layer,
+              opacity,
+              0,
+              label: 'Opacity',
+              fill: true,
+              width: _wellWidth * 2 + EditorMetrics.s4,
+            ),
           ),
           _gap(),
-          _well(layer, rotation, 0, label: 'Rotation'),
+          _slot(),
           _gap(),
-          if (rx != null)
-            _well(layer, rx, 0, label: 'Tilt X', width: EditorMetrics.s44),
-          _gap(),
-          if (ry != null)
-            _well(layer, ry, 0, label: 'Tilt Y', width: EditorMetrics.s44),
+          _tail(),
         ]),
       _line([
         _glyph(Icons.center_focus_weak, 'Anchor'),
@@ -294,18 +359,6 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
                 })
               : null,
         ),
-        const Spacer(),
-        if (opacity != null) ...[
-          _glyph(Icons.opacity, 'Opacity'),
-          _well(
-            layer,
-            opacity,
-            0,
-            label: 'Opacity',
-            fill: true,
-            width: EditorMetrics.s70,
-          ),
-        ],
       ]),
     ];
   }
@@ -373,37 +426,43 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
         const SizedBox(width: EditorMetrics.s18),
         _word(''),
         if (layer['kind'] == 'Image') ...[
-          EditorSwitch(
-            on: layer['environment'] == true,
-            glyph: Icons.wb_sunny_outlined,
-            label: 'Environment: this image lights and surrounds the scene',
-            onChanged: can
-                ? (on) => c.command('setAttrs', {
-                    'layers': [layer['id']],
-                    'patch': {'environment': on},
-                  })
-                : null,
+          _slot(
+            EditorSwitch(
+              on: layer['environment'] == true,
+              glyph: Icons.wb_sunny_outlined,
+              label: 'Environment: this image lights and surrounds the scene',
+              onChanged: can
+                  ? (on) => c.command('setAttrs', {
+                      'layers': [layer['id']],
+                      'patch': {'environment': on},
+                    })
+                  : null,
+            ),
           ),
-          const SizedBox(width: EditorMetrics.s12),
+          _gap(),
         ],
         if (layer['ghostable'] == true) ...[
+          _slot(
+            EditorSwitch(
+              on: ghost != null,
+              glyph: Icons.blur_on,
+              label: 'Ghost: the same layer seen later by a delay',
+              onChanged: layer['locked'] != true && panelCan(c, 'ghost')
+                  ? (on) => c.command('ghost', {'enabled': on})
+                  : null,
+            ),
+          ),
+          _gap(),
+        ],
+        _slot(
           EditorSwitch(
-            on: ghost != null,
-            glyph: Icons.blur_on,
-            label: 'Ghost: the same layer seen later by a delay',
-            onChanged: layer['locked'] != true && panelCan(c, 'ghost')
-                ? (on) => c.command('ghost', {'enabled': on})
+            on: layer['clipToBelow'] == true,
+            glyph: Icons.subdirectory_arrow_right,
+            label: 'Clip to the layer below',
+            onChanged: layer['locked'] != true && panelCan(c, 'clip')
+                ? (_) => c.command('clip', {'layer': layer['id']})
                 : null,
           ),
-          const SizedBox(width: EditorMetrics.s12),
-        ],
-        EditorSwitch(
-          on: layer['clipToBelow'] == true,
-          glyph: Icons.subdirectory_arrow_right,
-          label: 'Clip to the layer below',
-          onChanged: layer['locked'] != true && panelCan(c, 'clip')
-              ? (_) => c.command('clip', {'layer': layer['id']})
-              : null,
         ),
       ]),
     ];
@@ -418,21 +477,7 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
     for (final row in params) {
       final here = row['section'] as String?;
       if (here != null && here != section) {
-        controls.add(
-          Padding(
-            padding: const EdgeInsets.only(
-              top: EditorMetrics.s4,
-              bottom: EditorMetrics.s2,
-            ),
-            child: Text(
-              here,
-              style: const TextStyle(
-                fontSize: EditorMetrics.dense,
-                color: EditorTheme.muted,
-              ),
-            ),
-          ),
-        );
+        controls.add(_SectionLabel(here));
       }
       section = here;
       controls.add(_control(layer, row));
@@ -457,10 +502,20 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
         ),
       ),
       children: [
-        Wrap(
-          spacing: EditorMetrics.s6,
-          runSpacing: EditorMetrics.s4,
-          children: controls,
+        LayoutBuilder(
+          builder: (context, box) {
+            final cell = (box.maxWidth - EditorMetrics.s6) / 2;
+            return Wrap(
+              spacing: EditorMetrics.s6,
+              runSpacing: EditorMetrics.s4,
+              children: [
+                for (final w in controls)
+                  w is _SectionLabel
+                      ? SizedBox(width: box.maxWidth, child: w)
+                      : SizedBox(width: cell, child: w),
+              ],
+            );
+          },
         ),
       ],
     );
@@ -503,7 +558,7 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
           ],
         );
       case _Kind.bounded:
-        body = _well(layer, row, 0, fill: true, width: EditorMetrics.s70);
+        body = _well(layer, row, 0, fill: true, width: EditorMetrics.s96);
       case _Kind.angle:
         body = Row(
           mainAxisSize: MainAxisSize.min,
@@ -621,34 +676,58 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
         );
       }
       final effects = panelRows(layer['effects']);
-      return ColoredBox(
-        color: EditorTheme.app,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _identity(layer),
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.only(bottom: EditorMetrics.s6),
-                children: [
-                  EditorCard(
-                    title: 'Transform',
-                    glyph: Icons.open_with,
-                    children: _transform(layer),
+      return LayoutBuilder(
+        builder: (context, box) {
+          _fit(box.maxWidth);
+          return ColoredBox(
+            color: EditorTheme.app,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _identity(layer),
+                Expanded(
+                  child: ListView(
+                    padding: const EdgeInsets.only(bottom: EditorMetrics.s6),
+                    children: [
+                      EditorCard(
+                        title: 'Transform',
+                        glyph: Icons.open_with,
+                        children: _transform(layer),
+                      ),
+                      if (layer['kind'] != 'Camera')
+                        EditorCard(
+                          title: 'World',
+                          glyph: Icons.public,
+                          children: _world(layer),
+                        ),
+                      for (final effect in effects) _effect(layer, effect),
+                    ],
                   ),
-                  if (layer['kind'] != 'Camera')
-                    EditorCard(
-                      title: 'World',
-                      glyph: Icons.public,
-                      children: _world(layer),
-                    ),
-                  for (final effect in effects) _effect(layer, effect),
-                ],
-              ),
+                ),
+              ],
             ),
-          ],
-        ),
+          );
+        },
       );
     },
+  );
+}
+
+class _SectionLabel extends StatelessWidget {
+  const _SectionLabel(this.text);
+  final String text;
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(
+      top: EditorMetrics.s4,
+      bottom: EditorMetrics.s2,
+    ),
+    child: Text(
+      text,
+      style: const TextStyle(
+        fontSize: EditorMetrics.dense,
+        color: EditorTheme.muted,
+      ),
+    ),
   );
 }

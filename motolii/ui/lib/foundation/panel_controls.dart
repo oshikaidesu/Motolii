@@ -545,13 +545,18 @@ class _EditorNumericFieldState extends State<EditorNumericField> {
                                   ),
                                 ),
                               ),
+                              // The rider keeps its slot even when empty, so
+                              // digits line up down a column of wells.
                               if (widget.unit != null) ...[
                                 const SizedBox(width: EditorMetrics.s2),
-                                Text(
-                                  widget.unit!,
-                                  style: const TextStyle(
-                                    fontSize: EditorMetrics.micro,
-                                    color: EditorTheme.muted,
+                                SizedBox(
+                                  width: EditorMetrics.s12,
+                                  child: Text(
+                                    widget.unit!,
+                                    style: const TextStyle(
+                                      fontSize: EditorMetrics.micro,
+                                      color: EditorTheme.muted,
+                                    ),
                                   ),
                                 ),
                               ],
@@ -628,14 +633,36 @@ class EditorSwitch extends StatelessWidget {
     required this.glyph,
     required this.label,
     required this.onChanged,
+    this.compact = false,
   });
   final bool on;
   final IconData glyph;
   final String label;
   final ValueChanged<bool>? onChanged;
+
+  /// Glyph only, lit when on — for a slot too narrow for the track.
+  final bool compact;
   @override
   Widget build(BuildContext context) {
     final enabled = onChanged != null;
+    if (compact) {
+      return Tooltip(
+        message: label,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: enabled ? () => onChanged!(!on) : null,
+          child: Icon(
+            glyph,
+            size: EditorMetrics.s16,
+            color: !enabled
+                ? EditorTheme.disabledInk
+                : on
+                ? EditorTheme.accent
+                : EditorTheme.muted,
+          ),
+        ),
+      );
+    }
     return Tooltip(
       message: label,
       child: GestureDetector(
