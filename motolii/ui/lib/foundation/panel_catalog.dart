@@ -72,7 +72,7 @@ const panelCatalog = [
     'Test',
     'Work',
     Icons.science_outlined,
-    minWidth: 300,
+    minWidth: 200,
     width: Extent.fixed(300),
   ),
   PanelSpec('Create', 'Browse', Icons.add_box_outlined),

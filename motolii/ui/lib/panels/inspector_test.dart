@@ -346,7 +346,8 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
           speed: speed * shownScale,
           fill: fill,
           unit: unit ?? '',
-          decimals: percent ? 0 : 2,
+          // A narrow well keeps its digits whole rather than clipping them.
+          decimals: percent || slotWidth < EditorMetrics.field ? 0 : 2,
           defaultValue: _restOf(row, axis, shownScale),
           tint: _tintOf(row),
           track: _trackOf(row),
@@ -460,13 +461,15 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
   );
 
   Widget _word(String s) => SizedBox(
-    width: EditorMetrics.s48,
-    child: Text(
-      s,
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      style: const TextStyle(fontSize: EditorMetrics.font),
-    ),
+    width: _wordWidth,
+    child: _wordWidth == 0
+        ? null
+        : Text(
+            s,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: EditorMetrics.font),
+          ),
   );
 
   Widget _gap() => const SizedBox(width: EditorMetrics.s4);
@@ -477,15 +480,23 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
   /// Well width for the current panel width: the glyph, word and tail
   /// columns are fixed, the three well columns share what is left.
   double _wellWidth = EditorMetrics.field;
+
+  /// The word column; 0 when the panel is too narrow for three wells beside
+  /// it — the glyph then carries the meaning and the tooltip keeps the word.
+  double _wordWidth = EditorMetrics.s48;
   void _fit(double panelWidth) {
-    final free =
-        panelWidth -
-        EditorMetrics.s12 * 2 -
-        EditorMetrics.s18 -
-        EditorMetrics.s48 -
-        EditorMetrics.s4 * 3 -
+    final fixed =
+        EditorMetrics.s12 * 2 +
+        EditorMetrics.s18 +
+        EditorMetrics.s4 * 3 +
         EditorMetrics.s22;
-    _wellWidth = (free / 3).clamp(EditorMetrics.s36, EditorMetrics.s70);
+    var free = panelWidth - fixed - EditorMetrics.s48;
+    _wordWidth = EditorMetrics.s48;
+    if (free / 3 < EditorMetrics.s44) {
+      _wordWidth = 0;
+      free = panelWidth - fixed;
+    }
+    _wellWidth = (free / 3).clamp(EditorMetrics.s32, EditorMetrics.s70);
   }
 
   Widget _slot([Widget? child, bool center = false]) => SizedBox(
@@ -879,10 +890,13 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
         1,
         ((box.maxWidth + gap) / (EditorMetrics.cell + gap)).floor(),
       );
-      final cell = math.min(
-        EditorMetrics.cell,
-        (box.maxWidth - gap * (columns - 1)) / columns,
-      );
+      // One column takes the whole width; more columns keep the cell's own.
+      final cell = columns == 1
+          ? box.maxWidth
+          : math.min(
+              EditorMetrics.cell,
+              (box.maxWidth - gap * (columns - 1)) / columns,
+            );
       return Wrap(
         spacing: EditorMetrics.s6,
         runSpacing: EditorMetrics.s6,
