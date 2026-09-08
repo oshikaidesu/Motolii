@@ -553,9 +553,17 @@ class _EditorNumericFieldState extends State<EditorNumericField> {
                                     fontFeatures: const [
                                       FontFeature.tabularFigures(),
                                     ],
-                                    color: widget.enabled
-                                        ? EditorTheme.ink
-                                        : EditorTheme.muted,
+                                    // Resting at its default the number is
+                                    // quiet; moved, it is ink.
+                                    color: !widget.enabled
+                                        ? EditorTheme.muted
+                                        : widget.defaultValue != null &&
+                                              (widget.value -
+                                                          widget.defaultValue!)
+                                                      .abs() <
+                                                  .0005
+                                        ? EditorTheme.tab
+                                        : EditorTheme.ink,
                                     // A number you can drag wears a dotted
                                     // underline, unless a track already says
                                     // so; a read-only one never does.
@@ -612,40 +620,81 @@ KeyLamp keyLampOf(Map<String, dynamic>? row, {bool draft = false}) {
   return row['keyedNow'] == true ? KeyLamp.now : KeyLamp.keyed;
 }
 
-class EditorLamp extends StatelessWidget {
-  const EditorLamp({super.key, required this.state, required this.child});
+class EditorLamp extends StatefulWidget {
+  const EditorLamp({
+    super.key,
+    required this.state,
+    required this.child,
+    this.onTap,
+  });
   final KeyLamp state;
   final Widget child;
+
+  /// Press the lamp to key the value at this frame, or take that key away.
+  final VoidCallback? onTap;
+  @override
+  State<EditorLamp> createState() => _EditorLampState();
+}
+
+class _EditorLampState extends State<EditorLamp> {
+  bool _hover = false;
   @override
   Widget build(BuildContext context) {
+    final state = widget.state;
     final color = switch (state) {
       KeyLamp.none => null,
       KeyLamp.keyed => EditorTheme.accent.withValues(alpha: .55),
       KeyLamp.now => EditorTheme.accent,
       KeyLamp.draft => EditorTheme.accent.withValues(alpha: .3),
     };
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        child,
-        if (color != null)
-          Positioned(
-            left: -1,
-            top: -1,
-            child: Tooltip(
-              message: switch (state) {
-                KeyLamp.now => 'Key at this frame',
-                KeyLamp.draft => 'Keys exist; this change is not a key',
-                _ => 'Animated',
-              },
-              child: Container(
-                width: EditorMetrics.s5,
-                height: EditorMetrics.s5,
-                decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+    // Unlit lamps show as a hollow ring only while the pointer is near, so
+    // the corner stays quiet until it is wanted.
+    final shown = color != null || (_hover && widget.onTap != null);
+    final hit = widget.onTap != null;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          widget.child,
+          if (shown || hit)
+            Positioned(
+              left: 0,
+              top: 0,
+              child: Tooltip(
+                message: switch (state) {
+                  KeyLamp.now => 'Key at this frame (press to remove)',
+                  KeyLamp.draft => 'Keys exist; this change is not a key',
+                  KeyLamp.keyed => 'Animated (press to key this frame)',
+                  KeyLamp.none => 'Press to key this frame',
+                },
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: widget.onTap,
+                  child: Container(
+                    width: EditorMetrics.s8,
+                    height: EditorMetrics.s8,
+                    alignment: Alignment.center,
+                    child: shown
+                        ? Container(
+                            width: EditorMetrics.s5,
+                            height: EditorMetrics.s5,
+                            decoration: BoxDecoration(
+                              color: color,
+                              shape: BoxShape.circle,
+                              border: color == null
+                                  ? Border.all(color: EditorTheme.muted)
+                                  : null,
+                            ),
+                          )
+                        : null,
+                  ),
+                ),
               ),
             ),
-          ),
-      ],
+        ],
+      ),
     );
   }
 }

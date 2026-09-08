@@ -370,44 +370,56 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
         ? .5
         : 1.0;
     final shownScale = percent ? 100.0 : 1.0;
-    return EditorLamp(
-      state: keyLampOf(row),
-      child: SizedBox(
-        width: slotWidth,
-        child: EditorNumericField(
-          key: ValueKey('test:${layer['id']}:$id:$axis'),
-          value: value.toDouble() * shownScale,
-          idleFocus: _nodes.putIfAbsent(
-            '$id:$axis',
-            () => FocusNode(debugLabel: 'Test $id $axis'),
+    return Builder(
+      builder: (context) => GestureDetector(
+        onSecondaryTapDown: (d) =>
+            _cellMenu(context, d.globalPosition, layer, row),
+        child: EditorLamp(
+          state: keyLampOf(row),
+          onTap: panelCan(c, 'toggleKey') && _canEdit(layer)
+              ? () => c.command('toggleKey', {
+                  'layer': layer['id'],
+                  'property': row['id'],
+                })
+              : null,
+          child: SizedBox(
+            width: slotWidth,
+            child: EditorNumericField(
+              key: ValueKey('test:${layer['id']}:$id:$axis'),
+              value: value.toDouble() * shownScale,
+              idleFocus: _nodes.putIfAbsent(
+                '$id:$axis',
+                () => FocusNode(debugLabel: 'Test $id $axis'),
+              ),
+              label: label ?? '${row['label']}',
+              min: min == null ? null : min * shownScale,
+              max: max == null ? null : max * shownScale,
+              speed: speed * shownScale,
+              mixed: mixed,
+              fill: fill,
+              unit: unit ?? '',
+              // A narrow well keeps its digits whole rather than clipping them.
+              decimals: percent || slotWidth < EditorMetrics.field ? 0 : 2,
+              defaultValue: _restOf(row, axis, shownScale),
+              tint: _tintOf(row),
+              track: _trackOf(row),
+              enabled: _canEdit(layer),
+              onPreview: (n) => _write(
+                layer,
+                row,
+                _withAxis(row['value'], axis, n / shownScale),
+                preview: true,
+              ),
+              onCommit: (n) => _write(
+                layer,
+                row,
+                _withAxis(row['value'], axis, n / shownScale),
+                preview: false,
+              ),
+              onFinish: () => _finish(false),
+              onCancel: () => _finish(true),
+            ),
           ),
-          label: label ?? '${row['label']}',
-          min: min == null ? null : min * shownScale,
-          max: max == null ? null : max * shownScale,
-          speed: speed * shownScale,
-          mixed: mixed,
-          fill: fill,
-          unit: unit ?? '',
-          // A narrow well keeps its digits whole rather than clipping them.
-          decimals: percent || slotWidth < EditorMetrics.field ? 0 : 2,
-          defaultValue: _restOf(row, axis, shownScale),
-          tint: _tintOf(row),
-          track: _trackOf(row),
-          enabled: _canEdit(layer),
-          onPreview: (n) => _write(
-            layer,
-            row,
-            _withAxis(row['value'], axis, n / shownScale),
-            preview: true,
-          ),
-          onCommit: (n) => _write(
-            layer,
-            row,
-            _withAxis(row['value'], axis, n / shownScale),
-            preview: false,
-          ),
-          onFinish: () => _finish(false),
-          onCancel: () => _finish(true),
         ),
       ),
     );
@@ -998,7 +1010,12 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
   /// Effects whose advanced fold is open, by effect id.
   final _advancedOpen = <String>{};
 
-  Widget _effect(Map<String, dynamic> layer, Map<String, dynamic> effect) {
+  Widget _effect(
+    Map<String, dynamic> layer,
+    Map<String, dynamic> effect, {
+    int index = 0,
+    int count = 1,
+  }) {
     final params = panelRows(effect['params']);
     // Advanced: declared on the row (ADVANCED in the manifest) or, for a
     // placement, on the grid rows the layout marks.
@@ -1075,6 +1092,28 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
+          _headGlyph(
+            Icons.arrow_upward,
+            'Apply earlier',
+            panelCan(c, 'moveEffect') && index > 0
+                ? () => c.command('moveEffect', {
+                    'layer': layer['id'],
+                    'id': effect['id'],
+                    'to': index - 1,
+                  })
+                : null,
+          ),
+          _headGlyph(
+            Icons.arrow_downward,
+            'Apply later',
+            panelCan(c, 'moveEffect') && index < count - 1
+                ? () => c.command('moveEffect', {
+                    'layer': layer['id'],
+                    'id': effect['id'],
+                    'to': index + 1,
+                  })
+                : null,
+          ),
           _headGlyph(
             Icons.casino_outlined,
             'Throw every number within its reach',
@@ -1219,6 +1258,42 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
         ),
       ],
     );
+  }
+
+  /// The cell's own menu: back to its rest value, and key / unkey.
+  Future<void> _cellMenu(
+    BuildContext context,
+    Offset at,
+    Map<String, dynamic> layer,
+    Map<String, dynamic> row,
+  ) async {
+    final rest = row['default'];
+    final chosen = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(at.dx, at.dy, at.dx, at.dy),
+      items: [
+        EditorMenuItem<String>(
+          value: 'rest',
+          enabled: rest is num && row['value'] is num && _canEdit(layer),
+          child: const Text('Reset'),
+        ),
+        EditorMenuItem<String>(
+          value: 'key',
+          enabled: panelCan(c, 'toggleKey') && _canEdit(layer),
+          child: Text(
+            row['keyedNow'] == true ? 'Remove key' : 'Key this frame',
+          ),
+        ),
+      ],
+    );
+    if (chosen == 'rest' && rest is num) {
+      await _write(layer, row, rest.toDouble(), preview: false);
+    } else if (chosen == 'key') {
+      await c.command('toggleKey', {
+        'layer': layer['id'],
+        'property': row['id'],
+      });
+    }
   }
 
   Widget _cellLabel(
@@ -1370,10 +1445,19 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
           ],
         );
     }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [_cellLabel(label, _glyphOf(row), hero, _tintOf(row)), body],
+    return Builder(
+      builder: (context) => GestureDetector(
+        onSecondaryTapDown: (d) =>
+            _cellMenu(context, d.globalPosition, layer, row),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _cellLabel(label, _glyphOf(row), hero, _tintOf(row)),
+            body,
+          ],
+        ),
+      ),
     );
   }
 
@@ -1528,7 +1612,13 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
                           ],
                         ),
                       if (!_multiple)
-                        for (final effect in effects) _effect(layer, effect),
+                        for (var i = 0; i < effects.length; i++)
+                          _effect(
+                            layer,
+                            effects[i],
+                            index: i,
+                            count: effects.length,
+                          ),
                     ],
                   ),
                 ),

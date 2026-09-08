@@ -133,6 +133,8 @@ void main() {
         'clip',
         'animate',
         'removeEffect',
+        'toggleKey',
+        'moveEffect',
       ],
       'easeKinds': [],
     };
@@ -193,6 +195,15 @@ void main() {
       ),
       isTrue,
       reason: 'radius rests at 12',
+    );
+
+    // The lamp in a well's corner keys the value at this frame.
+    final lamp = find.byType(EditorLamp).first;
+    await tester.tapAt(tester.getTopLeft(lamp) + const Offset(3, 3));
+    await tester.pumpAndSettle();
+    expect(
+      commands.any((m) => '${m['command']}'.contains('"op":"toggleKey"')),
+      isTrue,
     );
 
     // Advanced controls start folded; the fold opens them, per effect.
