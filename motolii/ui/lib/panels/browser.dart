@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../session/editor_session.dart';
+import '../foundation/panel_controls.dart';
 import '../foundation/theme.dart';
 import '../foundation/metrics.dart';
 
@@ -726,40 +727,13 @@ class _BrowserPanelState extends State<BrowserPanel> {
 
   /// Tile size, relative: each step is a fixed ratio, the slider spans the
   /// same range Settings shows.
-  Widget _zoomBar() {
-    void scale(double ratio) => widget.controller.storeDesk(
-      'browserTile',
-      (tile * ratio).clamp(BrowserSize.min, BrowserSize.max),
-    );
-    Widget step(IconData icon, double ratio, String key) => InkWell(
-      key: ValueKey(key),
-      onTap: () => scale(ratio),
-      child: SizedBox(
-        width: EditorMetrics.row,
-        child: Icon(icon, size: EditorMetrics.s14, color: EditorTheme.muted),
-      ),
-    );
-    return Container(
-      height: EditorMetrics.row,
-      decoration: const BoxDecoration(
-        border: Border(top: BorderSide(color: EditorTheme.line)),
-      ),
-      child: Row(
-        children: [
-          step(Icons.remove, .8, 'browser:tile-smaller'),
-          Expanded(
-            child: Slider(
-              min: BrowserSize.min,
-              max: BrowserSize.max,
-              value: tile,
-              onChanged: (v) => widget.controller.storeDesk('browserTile', v),
-            ),
-          ),
-          step(Icons.add, 1.25, 'browser:tile-larger'),
-        ],
-      ),
-    );
-  }
+  Widget _zoomBar() => EditorZoomBar(
+    value: tile,
+    min: BrowserSize.min,
+    max: BrowserSize.max,
+    keyPrefix: 'browser:tile',
+    onChanged: (v) => widget.controller.storeDesk('browserTile', v),
+  );
 
   Widget card(Map<String, dynamic> item) {
     final supported = switch (tab) {

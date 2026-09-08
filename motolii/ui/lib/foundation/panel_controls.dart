@@ -1268,3 +1268,55 @@ class _TrackPainter extends CustomPainter {
       old.tint != tint ||
       old.style != style;
 }
+
+/// The zoom strip at a panel's foot: a step down, the slider, a step up.
+/// Steps are ratios so the feel is the same at any size; the slider spans
+/// the range Settings shows.
+class EditorZoomBar extends StatelessWidget {
+  const EditorZoomBar({
+    super.key,
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.onChanged,
+    required this.keyPrefix,
+  });
+  final double value, min, max;
+  final ValueChanged<double> onChanged;
+
+  /// Widget keys `<prefix>-smaller` / `<prefix>-larger` for tests.
+  final String keyPrefix;
+  @override
+  Widget build(BuildContext context) {
+    void scale(double ratio) =>
+        onChanged((value * ratio).clamp(min, max).toDouble());
+    Widget step(IconData icon, double ratio, String suffix) => InkWell(
+      key: ValueKey('$keyPrefix-$suffix'),
+      onTap: () => scale(ratio),
+      child: SizedBox(
+        width: EditorMetrics.row,
+        child: Icon(icon, size: EditorMetrics.s14, color: EditorTheme.muted),
+      ),
+    );
+    return Container(
+      height: EditorMetrics.row,
+      decoration: const BoxDecoration(
+        border: Border(top: BorderSide(color: EditorTheme.line)),
+      ),
+      child: Row(
+        children: [
+          step(Icons.remove, .8, 'smaller'),
+          Expanded(
+            child: Slider(
+              min: min,
+              max: max,
+              value: value.clamp(min, max).toDouble(),
+              onChanged: onChanged,
+            ),
+          ),
+          step(Icons.add, 1.25, 'larger'),
+        ],
+      ),
+    );
+  }
+}

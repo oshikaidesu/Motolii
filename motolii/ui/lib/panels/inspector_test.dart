@@ -502,9 +502,8 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
   );
 
   /// Two wells side by side in one cell, and the wells beside a pad.
-  static const _half = (EditorMetrics.cell - EditorMetrics.s4) / 2;
-  static const _beside =
-      EditorMetrics.cell - EditorMetrics.s60 - EditorMetrics.s4;
+  double get _half => (_cellWidth - EditorMetrics.s4) / 2;
+  double get _beside => _cellWidth - EditorMetrics.s60 - EditorMetrics.s4;
 
   Widget _glyph(IconData icon, String tip) => Tooltip(
     message: tip,
@@ -1192,24 +1191,29 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
     );
   }
 
-  /// Controls in two equal columns on fixed rows (a word, then a control),
-  /// so every cell sits on the same grid; a section label spans both.
+  /// The cell width the user set at the panel's foot (the zoom strip);
+  /// EditorMetrics.cell until touched.
+  double get _cellWidth =>
+      (c.deskWork.value['inspectorCell'] as num? ?? EditorMetrics.cell)
+          .toDouble()
+          .clamp(InspectorCell.min, InspectorCell.max);
+
+  /// Controls in equal columns on fixed rows (a word, then a control), so
+  /// every cell sits on the same grid; a section label spans them all.
   Widget _cells(List<_Cell> cells) => LayoutBuilder(
     builder: (context, box) {
       // Cells keep one width and pack from the left, so the gap between
-      // items never grows; a wider panel only adds columns.
+      // items never grows; a wider panel or a smaller cell only adds columns.
       const gap = EditorMetrics.s6;
+      final wanted = _cellWidth;
       final columns = math.max(
         1,
-        ((box.maxWidth + gap) / (EditorMetrics.cell + gap)).floor(),
+        ((box.maxWidth + gap) / (wanted + gap)).floor(),
       );
       // One column takes the whole width; more columns keep the cell's own.
       final cell = columns == 1
           ? box.maxWidth
-          : math.min(
-              EditorMetrics.cell,
-              (box.maxWidth - gap * (columns - 1)) / columns,
-            );
+          : math.min(wanted, (box.maxWidth - gap * (columns - 1)) / columns);
       return Wrap(
         spacing: EditorMetrics.s6,
         runSpacing: EditorMetrics.s6,
@@ -1364,7 +1368,7 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
       case _Kind.choice:
         final choices = row['choices'];
         body = SizedBox(
-          width: EditorMetrics.cell,
+          width: _cellWidth,
           child: EditorChoice<dynamic>(
             value: (row['value'] as num?)?.round(),
             choices: [
@@ -1391,13 +1395,7 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
           ],
         );
       case _Kind.bounded:
-        body = _well(
-          layer,
-          row,
-          0,
-          fill: _tight(row),
-          width: EditorMetrics.cell,
-        );
+        body = _well(layer, row, 0, fill: _tight(row), width: _cellWidth);
       case _Kind.angle:
         body = Row(
           mainAxisSize: MainAxisSize.min,
@@ -1416,7 +1414,7 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
               layer,
               row,
               0,
-              width: EditorMetrics.cell - EditorMetrics.s22 - EditorMetrics.s4,
+              width: _cellWidth - EditorMetrics.s22 - EditorMetrics.s4,
             ),
           ],
         );
@@ -1433,8 +1431,8 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
               row,
               0,
               width: seed
-                  ? EditorMetrics.cell - EditorMetrics.s16 - EditorMetrics.s4
-                  : EditorMetrics.cell,
+                  ? _cellWidth - EditorMetrics.s16 - EditorMetrics.s4
+                  : _cellWidth,
             ),
             if (seed) ...[
               _gap(),
@@ -1539,7 +1537,7 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
-    animation: Listenable.merge([c.document, c.frame]),
+    animation: Listenable.merge([c.document, c.frame, c.deskWork]),
     builder: (context, _) {
       final layer = _active;
       if (layer == null) {
@@ -1640,6 +1638,13 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
                     ],
                   ),
                 ),
+                EditorZoomBar(
+                  value: _cellWidth,
+                  min: InspectorCell.min,
+                  max: InspectorCell.max,
+                  keyPrefix: 'inspector:cell',
+                  onChanged: (v) => c.storeDesk('inspectorCell', v),
+                ),
               ],
             ),
           );
@@ -1647,6 +1652,12 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
       );
     },
   );
+}
+
+/// How wide a card cell may be: narrow packs three columns into a dock,
+/// wide gives one number a whole row.
+abstract final class InspectorCell {
+  static const double min = 88, max = 200;
 }
 
 /// A section inside a card: the same kicker as the card's title, on a rule.
