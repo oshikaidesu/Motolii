@@ -19,6 +19,14 @@ abstract final class EditorTheme {
       select = Color(0xffaedce8),
       selectInk = Color(0xff172126),
       disabledInk = Color(0xff888888);
+  // Character families: what a number is for, told by hue (the OP-1 rule:
+  // one colour per family, on the glyph, the track and the handle alike).
+  static const spatial = Color(0xff93a5f5),
+      amount = Color(0xffe6a275),
+      time = Color(0xffc18bd3),
+      count = Color(0xff79c4ca),
+      seed = Color(0xffeedb73),
+      angle = Color(0xff95c78b);
   static const identityColors = [
     Color(0xff93a5f5),
     Color(0xffeedb73),

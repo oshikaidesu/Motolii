@@ -170,10 +170,8 @@ void main() {
     expect(find.text('50'), findsOneWidget, reason: 'opacity shown in percent');
     expect(find.text('%'), findsWidgets);
 
-    // More than four plain controls: the first four are heroes above a rule,
-    // and every number offers a play button to see what it does.
+    // More than four plain controls: the first four are heroes above a rule.
     expect(find.byType(Divider), findsWidgets);
-    expect(find.byIcon(Icons.play_arrow), findsWidgets);
 
     // The dice throws every bounded number as one edit; the reset puts every
     // number back where it rests, both through the preview-then-commit route.

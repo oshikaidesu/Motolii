@@ -158,6 +158,31 @@ _Character _characterOf(Map<String, dynamic> row) {
 IconData? _glyphOf(Map<String, dynamic> row) =>
     _characterGlyphs[_characterOf(row)];
 
+/// One hue per family, so a glance sorts the numbers before a word is read.
+Color? _tintOf(Map<String, dynamic> row) => switch (_characterOf(row)) {
+  _Character.place ||
+  _Character.size ||
+  _Character.ratio ||
+  _Character.soft => EditorTheme.spatial,
+  _Character.amount ||
+  _Character.opacity ||
+  _Character.level => EditorTheme.amount,
+  _Character.time || _Character.delay => EditorTheme.time,
+  _Character.count || _Character.detail => EditorTheme.count,
+  _Character.seed => EditorTheme.seed,
+  _Character.angle => EditorTheme.angle,
+  _ => null,
+};
+
+/// The track's grammar by family: a threshold lights its far side, a count
+/// shows whole steps, a length sits on a ruler, an amount fills.
+TrackStyle _trackOf(Map<String, dynamic> row) => switch (_characterOf(row)) {
+  _Character.level => TrackStyle.level,
+  _Character.count || _Character.detail => TrackStyle.steps,
+  _Character.size || _Character.soft => TrackStyle.ruler,
+  _ => TrackStyle.fill,
+};
+
 String? _unitOf(Map<String, dynamic> row) {
   final id = '${row['id']}';
   if (_kindOf(row) == _Kind.angle) return '°';
@@ -310,6 +335,8 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
           unit: unit ?? '',
           decimals: percent ? 0 : 2,
           defaultValue: _restOf(row, axis, shownScale),
+          tint: _tintOf(row),
+          track: _trackOf(row),
           enabled: _canEdit(layer),
           onPreview: (n) => _write(
             layer,
@@ -345,43 +372,9 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
     return null;
   }
 
-  /// Sweeps a row across its reach once (a Desmos play button), previewing
-  /// each step and cancelling at the end, so the picture tells what the
-  /// number does without a word. A second press stops it.
-  String? _sweeping;
-  Future<void> _sweep(
-    Map<String, dynamic> layer,
-    Map<String, dynamic> row,
-  ) async {
-    final id = '${row['id']}';
-    if (_sweeping == id) {
-      _sweeping = null;
-      return;
-    }
-    final v = row['value'];
-    if (v is! num || !_canEdit(layer)) return;
-    final min = (row['min'] as num?)?.toDouble(),
-        max = (row['max'] as num?)?.toDouble();
-    final base = v.toDouble();
-    final (lo, hi) = min != null && max != null
-        ? (min, max)
-        : base == 0
-        ? (-EditorMetrics.s96, EditorMetrics.s96)
-        : (base * .5, base * 1.5);
-    setState(() => _sweeping = id);
-    const steps = 24;
-    for (var i = 0; i <= steps && _sweeping == id && mounted; i++) {
-      final t = i / steps;
-      final phase = t < .5 ? t * 2 : 2 - t * 2;
-      await _write(layer, row, lo + (hi - lo) * phase, preview: true);
-      await Future<void>.delayed(const Duration(milliseconds: 40));
-    }
-    await c.command('cancelPreview');
-    if (mounted && _sweeping == id) setState(() => _sweeping = null);
-  }
-
-  /// Every bounded number of an effect thrown within its reach, seeds too,
-  /// as one edit (the Ableton dice).
+  /// Every bounded number of an effect nudged by chance — within a fifth of
+  /// its reach around where it is, so a throw stays playable — seeds fully,
+  /// counts whole, as one edit (the Ableton dice).
   Future<void> _roll(
     Map<String, dynamic> layer,
     Map<String, dynamic> effect,
@@ -396,7 +389,14 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
       if (id.endsWith('.seed')) {
         values[id] = rnd.nextInt(10000).toDouble();
       } else if (min != null && max != null) {
-        values[id] = min + (max - min) * rnd.nextDouble();
+        final reach = (max - min) * .2;
+        var next =
+            ((row['value'] as num).toDouble() +
+                    (rnd.nextDouble() * 2 - 1) * reach)
+                .clamp(min, max)
+                .toDouble();
+        if (_characterOf(row) == _Character.count) next = next.roundToDouble();
+        values[id] = next;
       }
     }
     if (values.isNotEmpty) await _writeMany(layer, values, preview: false);
@@ -882,7 +882,7 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        _cellLabel(label, Icons.open_with, hero),
+        _cellLabel(label, Icons.open_with, hero, EditorTheme.spatial),
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
@@ -891,6 +891,7 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
               x: (xRow['value'] as num).toDouble(),
               y: (yRow['value'] as num).toDouble(),
               enabled: _canEdit(layer),
+              tint: EditorTheme.spatial,
               onBegin: () {},
               onPreview: (x, y) => _writeMany(layer, {
                 '${xRow['id']}': x,
@@ -918,8 +919,7 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
     String label, [
     IconData? glyph,
     bool hero = false,
-    VoidCallback? onPlay,
-    bool playing = false,
+    Color? tint,
   ]) => Padding(
     padding: const EdgeInsets.only(bottom: EditorMetrics.s2),
     child: Row(
@@ -931,7 +931,7 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
               : Icon(
                   glyph,
                   size: EditorMetrics.s12,
-                  color: hero ? EditorTheme.accent : EditorTheme.muted,
+                  color: tint ?? EditorTheme.muted,
                 ),
         ),
         const SizedBox(width: EditorMetrics.s2),
@@ -946,19 +946,6 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
             ),
           ),
         ),
-        if (onPlay != null)
-          Tooltip(
-            message: playing ? 'Stop' : 'See what this does',
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: onPlay,
-              child: Icon(
-                playing ? Icons.stop : Icons.play_arrow,
-                size: EditorMetrics.s12,
-                color: playing ? EditorTheme.accent : EditorTheme.muted,
-              ),
-            ),
-          ),
       ],
     ),
   );
@@ -1013,6 +1000,7 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
             EditorDial(
               degrees: (row['value'] as num? ?? 0).toDouble(),
               enabled: _canEdit(layer),
+              tint: EditorTheme.angle,
               onBegin: () {},
               onPreview: (d) => _write(layer, row, d, preview: true),
               onFinish: () => _finish(false),
@@ -1061,18 +1049,7 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
-      children: [
-        _cellLabel(
-          label,
-          _glyphOf(row),
-          hero,
-          row['value'] is num && _canEdit(layer)
-              ? () => _sweep(layer, row)
-              : null,
-          _sweeping == '${row['id']}',
-        ),
-        body,
-      ],
+      children: [_cellLabel(label, _glyphOf(row), hero, _tintOf(row)), body],
     );
   }
 

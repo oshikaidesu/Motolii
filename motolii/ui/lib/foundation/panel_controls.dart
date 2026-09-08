@@ -264,6 +264,8 @@ class EditorNumericField extends StatefulWidget {
     this.unit,
     this.decimals = 2,
     this.defaultValue,
+    this.tint,
+    this.track = TrackStyle.fill,
   });
   final double value, speed;
   final double? min, max;
@@ -281,6 +283,12 @@ class EditorNumericField extends StatefulWidget {
   /// Where the value rests when untouched: a tick on the track, and the
   /// point a centre-zero track fills from.
   final double? defaultValue;
+
+  /// The hue of the number's family; colours the track and the underline.
+  final Color? tint;
+
+  /// How the track tells the amount: a fill, a threshold, steps or a ruler.
+  final TrackStyle track;
   final FocusNode? idleFocus;
   final Future<void> Function(double) onPreview, onCommit;
   final Future<void> Function() onFinish, onCancel;
@@ -518,6 +526,8 @@ class _EditorNumericFieldState extends State<EditorNumericField> {
                               min: widget.min!,
                               max: widget.max!,
                               rest: widget.defaultValue,
+                              tint: widget.tint ?? EditorTheme.raised,
+                              style: widget.track,
                             ),
                           ),
                         Padding(
@@ -549,7 +559,8 @@ class _EditorNumericFieldState extends State<EditorNumericField> {
                                         ? TextDecoration.underline
                                         : TextDecoration.none,
                                     decorationStyle: TextDecorationStyle.dotted,
-                                    decorationColor: EditorTheme.muted,
+                                    decorationColor:
+                                        widget.tint ?? EditorTheme.muted,
                                   ),
                                 ),
                               ),
@@ -726,9 +737,11 @@ class EditorDial extends StatefulWidget {
     required this.onCancel,
     this.enabled = true,
     this.size = EditorMetrics.s22,
+    this.tint,
   });
   final double degrees, size;
   final bool enabled;
+  final Color? tint;
   final VoidCallback onBegin;
   final Future<void> Function(double) onPreview;
   final Future<void> Function() onFinish, onCancel;
@@ -783,7 +796,7 @@ class _EditorDialState extends State<EditorDial> {
         size: Size.square(widget.size),
         painter: _DialPainter(
           _shown ?? widget.degrees,
-          widget.enabled ? EditorTheme.ink : EditorTheme.muted,
+          !widget.enabled ? EditorTheme.muted : widget.tint ?? EditorTheme.ink,
         ),
       ),
     ),
@@ -946,9 +959,11 @@ class EditorPad extends StatefulWidget {
     this.size = EditorMetrics.s70,
     this.span = EditorMetrics.s200,
     this.speed = 1,
+    this.tint,
   });
   final double x, y, size, span, speed;
   final bool enabled;
+  final Color? tint;
   final VoidCallback onBegin;
   final void Function(double x, double y) onPreview;
   final Future<void> Function() onFinish, onCancel;
@@ -998,7 +1013,9 @@ class _EditorPadState extends State<EditorPad> {
           painter: _PadPainter(
             _shown ?? Offset(widget.x, widget.y),
             widget.span,
-            widget.enabled ? EditorTheme.accent : EditorTheme.muted,
+            !widget.enabled
+                ? EditorTheme.muted
+                : widget.tint ?? EditorTheme.accent,
           ),
         ),
       ),
@@ -1044,27 +1061,87 @@ class _PadPainter extends CustomPainter {
       old.at != at || old.span != span || old.dot != dot;
 }
 
-/// The amount behind a bounded number: fills from the rest point (or from
-/// the left edge when there is none), with a tick where the rest point is.
+/// How a track tells its amount, by what the number is for.
+enum TrackStyle {
+  /// So much of the reach, from where it rests.
+  fill,
+
+  /// What lies above this passes: the far side is lit.
+  level,
+
+  /// Whole steps, one mark each.
+  steps,
+
+  /// A length along a ruler: fill under ticks.
+  ruler,
+}
+
+/// The amount behind a bounded number, in the family's hue, with a tick
+/// where the rest point is.
 class _TrackPainter extends CustomPainter {
   const _TrackPainter({
     required this.value,
     required this.min,
     required this.max,
+    required this.tint,
+    required this.style,
     this.rest,
   });
   final double value, min, max;
   final double? rest;
+  final Color tint;
+  final TrackStyle style;
   double _x(double v, double w) =>
       ((v - min) / (max - min)).clamp(0.0, 1.0) * w;
   @override
   void paint(Canvas canvas, Size size) {
-    final zero = rest != null && rest! > min && rest! < max ? rest! : min;
-    final a = _x(zero, size.width), b = _x(value, size.width);
-    canvas.drawRect(
-      Rect.fromLTRB(math.min(a, b), 0, math.max(a, b), size.height),
-      Paint()..color = EditorTheme.raised,
-    );
+    final wash = Paint()..color = tint.withValues(alpha: .28);
+    final b = _x(value, size.width);
+    switch (style) {
+      case TrackStyle.fill:
+      case TrackStyle.ruler:
+        final zero = rest != null && rest! > min && rest! < max ? rest! : min;
+        final a = _x(zero, size.width);
+        canvas.drawRect(
+          Rect.fromLTRB(math.min(a, b), 0, math.max(a, b), size.height),
+          wash,
+        );
+        if (style == TrackStyle.ruler) {
+          final tick = Paint()..color = tint.withValues(alpha: .5);
+          for (var i = 1; i < 8; i++) {
+            final x = size.width * i / 8;
+            canvas.drawLine(
+              Offset(x, size.height - (i.isEven ? 5 : 3)),
+              Offset(x, size.height),
+              tick,
+            );
+          }
+        }
+      case TrackStyle.level:
+        canvas.drawRect(Rect.fromLTRB(b, 0, size.width, size.height), wash);
+        canvas.drawLine(
+          Offset(b, 0),
+          Offset(b, size.height),
+          Paint()
+            ..color = tint
+            ..strokeWidth = 1.5,
+        );
+      case TrackStyle.steps:
+        final span = (max - min).round().clamp(1, 12);
+        final cell = size.width / span;
+        final lit = (value - min).round().clamp(0, span);
+        for (var i = 0; i < span; i++) {
+          canvas.drawRect(
+            Rect.fromLTRB(
+              i * cell + 1,
+              size.height - 4,
+              (i + 1) * cell - 1,
+              size.height - 1,
+            ),
+            i < lit ? (Paint()..color = tint) : wash,
+          );
+        }
+    }
     if (rest != null) {
       final x = _x(rest!, size.width);
       canvas.drawLine(
@@ -1082,5 +1159,7 @@ class _TrackPainter extends CustomPainter {
       old.value != value ||
       old.min != min ||
       old.max != max ||
-      old.rest != rest;
+      old.rest != rest ||
+      old.tint != tint ||
+      old.style != style;
 }
