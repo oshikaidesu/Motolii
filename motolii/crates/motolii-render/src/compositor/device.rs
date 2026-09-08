@@ -45,6 +45,7 @@ impl Compositor {
             mesh_programs: Default::default(),
             blend_vism,
             matte_vism,
+            coverage_programs: Default::default(),
             catalog,
             sequential_submits: 0,
             pending: Vec::new(),
@@ -72,7 +73,7 @@ impl Compositor {
             let program = effects::EffectProgram::compile(&self.ctx, definition);
             match definition.source.name.as_str() {
                 "blend" => self.blend_vism = program,
-                "matte" => self.matte_vism = program,
+                "matte" => { self.matte_vism = program; self.coverage_programs.clear(); }
                 _ if definition.manifest.expose => { self.effect_programs.insert(definition.plugin_id().to_owned(), program); }
                 _ => {}
             }

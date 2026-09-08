@@ -78,8 +78,7 @@ impl Compositor {
                     })
             });
 
-            if padding > 0 && self.effect_programs[&lwp.passes[0].plugin_id].image_input_count() > 0
-            {
+            if padding > 0 {
                 let padded = self.effect_scratch.acquire(
                     &self.ctx.device,
                     padded_width,
@@ -156,6 +155,11 @@ impl Compositor {
                     &pass.params,
                     [padded_width as f32, padded_height as f32],
                 );
+                let destination = if program.image_input_count() == 0 {
+                    self.confine_to_coverage(encoder, destination, &current, [padded_width, padded_height], format)?
+                } else {
+                    destination
+                };
                 // The previous output stays checked out until its consuming pass is recorded.
                 // Reuse thereafter is ordered by this command encoder, never within the same pass.
                 if current_is_scratch {
@@ -186,6 +190,43 @@ impl Compositor {
         }
         self.flush_pending();
         Ok((effective_textures, effective_paddings, checked_out))
+    }
+
+    /// 生成器(image 入力なし)は矩形全面を塗るので、直前の絵の alpha の中へ閉じ込める。
+    /// 素材の形(切り抜き・文字・図形)を効果が消さないための、効果側に依らない 1 箇所。
+    /// matte を生成器と同じ出力 format で組み直して使う(format を跨ぐと次の pass の decode が変わる)。
+    fn confine_to_coverage(
+        &mut self,
+        encoder: &mut wgpu::CommandEncoder,
+        generated: wgpu::Texture,
+        coverage: &wgpu::Texture,
+        [width, height]: [u32; 2],
+        format: wgpu::TextureFormat,
+    ) -> Result<wgpu::Texture, CompositorError> {
+        let confined = self.effect_scratch.acquire(&self.ctx.device, width, height, format);
+        let program = match self.coverage_programs.entry(format) {
+            std::collections::hash_map::Entry::Occupied(entry) => entry.into_mut(),
+            std::collections::hash_map::Entry::Vacant(entry) => {
+                let matte = self
+                    .catalog
+                    .definitions
+                    .iter()
+                    .find(|d| d.source.name == "matte")
+                    .ok_or_else(|| CompositorError::Effect("missing validated matte program".into()))?;
+                entry.insert(effects::EffectProgram::compile_for(&self.ctx, matte, format))
+            }
+        };
+        program.record_over(
+            &self.ctx,
+            encoder,
+            &mut self.effect_scratch,
+            &[&generated.create_view(&Default::default()), &coverage.create_view(&Default::default())],
+            &confined.create_view(&Default::default()),
+            &[("mode".to_owned(), 0.0)],
+            [width as f32, height as f32],
+        );
+        self.effect_scratch.release(width, height, format, generated);
+        Ok(confined)
     }
 
     pub fn render_with_effects(
@@ -273,6 +314,7 @@ pub(crate) fn sequential_inputs<'a>(
                 blend_mode: layer.blend_mode,
                 shading: layer.shading.clone(),
                 displace: layer.displace,
+                clip: layer.clip,
             }
         })
         .collect()
@@ -322,6 +364,57 @@ mod tests {
         ])
         .unwrap();
         doc
+    }
+
+    /// Radiance: 明るい所が光源、形が遮蔽。光は空気中に見え(Air)、遮蔽の裏は暗い。
+    #[test]
+    fn radiance_lights_the_air_around_emitters_and_occluders_cast_shadows() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("scene.png");
+        let size = 96u32;
+        let mut pixels = Vec::with_capacity((size * size * 4) as usize);
+        for y in 0..size {
+            for x in 0..size {
+                let emitter = (20..36).contains(&x) && (40..56).contains(&y);
+                let wall = (50..54).contains(&x) && (20..76).contains(&y);
+                pixels.extend_from_slice(&if emitter { [255, 255, 255, 255] } else if wall { [0, 0, 0, 255] } else { [0, 0, 0, 0] });
+            }
+        }
+        image::save_buffer(&source, &pixels, size, size, image::ColorType::Rgba8).unwrap();
+        let mut doc = document_with_effects(&source, &["motolii.radiance"]);
+        doc.apply(Intent::SetComposition(Composition {
+            width: size,
+            height: size,
+            fps: Fps::try_new(30, 1).unwrap(),
+            duration_frames: 1,
+            background: [0.0, 0.0, 0.0, 1.0],
+        }))
+        .unwrap();
+        for (name, value) in [("air", 1.0), ("intensity", 4.0), ("radius", 16.0)] {
+            doc.apply(Intent::SetConstant {
+                layer: LayerId(1),
+                property: PropertyId::effect_param(EffectId(0), name).unwrap(),
+                value: Value::F64(value),
+            })
+            .unwrap();
+        }
+        let mut engine = Engine::new().unwrap();
+        let scope = engine.gpu_device().push_error_scope(wgpu::ErrorFilter::Validation);
+        let lit = engine.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+        let error = pollster::block_on(scope.pop());
+        assert!(error.is_none(), "radiance passes must validate: {error:?}");
+        assert!(engine.layer_failures().is_empty(), "{:?}", engine.layer_failures());
+        let at = |frame: &[u8], x: u32, y: u32| frame[((y * size + x) * 4) as usize];
+        let beside = at(&lit, 42, 48);
+        let behind_wall = at(&lit, 60, 48);
+        let far_corner = at(&lit, 90, 6);
+        assert!(beside > 20, "air next to the emitter must be lit: {beside}");
+        assert!(behind_wall < beside / 2, "the wall must shadow the far side: beside {beside}, behind {behind_wall}");
+        assert!(far_corner < beside, "light falls off with distance: corner {far_corner}, beside {beside}");
+
+        doc.apply(Intent::SetEffects { layer: LayerId(1), effects: Vec::new() }).unwrap();
+        let plain = engine.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+        assert_eq!(at(&plain, 42, 48), 0, "without the effect the air is dark");
     }
 
     #[test]

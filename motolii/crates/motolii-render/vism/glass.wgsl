@@ -14,5 +14,5 @@
 // The split-sum shading itself is a borrowed ruler that lives in the fork (utils/lighting.wgsl);
 // this sheet only maps its knobs.
 fn surface(in: SurfaceIn, p: SurfaceParams) -> vec3f {
-    return shade_surface(in.albedo, in.normal, in.view_dir, vec4f(p.roughness, p.metallic, p.transmission, p.ior));
+    return shade_surface(in.albedo, in.normal, in.view_dir, in.world_position, in.thickness, vec4f(p.roughness, p.metallic, p.transmission, p.ior));
 }

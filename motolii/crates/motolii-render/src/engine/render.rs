@@ -10,7 +10,7 @@ use crate::render::compositor::{
 };
 
 use crate::render::engine::translate::{
-    translate_blend_mode, translate_effect_passes, translate_matte_mode, translate_point_displace,
+    translate_blend_mode, translate_clip, translate_effect_passes, translate_matte_mode, translate_point_displace,
 };
 use crate::render::engine::{Engine, EngineError};
 
@@ -190,6 +190,7 @@ impl Engine {
                         blend_mode: source_blend,
                         shading: Default::default(),
                         displace: Default::default(),
+                        clip: None,
                     };
                     let source_layer =
                         self.flatten_if_asked(comp, camera, source_layer, source.flatten)?;
@@ -407,6 +408,7 @@ impl Engine {
             blend_mode: layer.blend_mode,
             shading: Default::default(),
             displace: Default::default(),
+            clip: None,
         })
     }
 
@@ -475,6 +477,7 @@ impl Engine {
             blend_mode: output_blend,
             shading: Default::default(),
             displace: Default::default(),
+            clip: None,
         })
     }
 
@@ -544,6 +547,7 @@ impl Engine {
                 blend_mode,
                 shading,
                 displace: translate_point_displace(&layer.effects),
+                clip: translate_clip(&layer.effects),
             },
             layer.flatten,
         )?;
@@ -814,6 +818,42 @@ mod placement_contract {
         let pixels = engine.render_frame(&inside.view(), RationalTime::ZERO).unwrap();
         assert_eq!(covered(&pixels), 2 * (DOT * DOT) as usize, "each copy carries its own clipped lyric, nothing leaks outside the copies");
         assert!(red_floor(&pixels) >= 120, "inside a copy the clip is drawn once, got red {}", red_floor(&pixels));
+    }
+
+    /// 生成器(gradient のように image 入力の無い効果)は素材の形の中に閉じ込められる。
+    /// Repeat の上なら各複製に、下なら増えた後の全体に付くが、どちらも形は消えない。
+    #[test]
+    fn a_generator_stays_inside_the_source_shape_above_and_below_the_placement() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("disc.png");
+        let mut pixels = Vec::new();
+        for y in 0..DOT * 3 {
+            for x in 0..DOT * 3 {
+                let inside = (x as f32 - 5.5).powi(2) + (y as f32 - 5.5).powi(2) < 25.0;
+                pixels.extend_from_slice(&[255, 255, 255, if inside { 255 } else { 0 }]);
+            }
+        }
+        image::save_buffer(&source, &pixels, DOT * 3, DOT * 3, image::ColorType::Rgba8).unwrap();
+        let disc = pixels.chunks(4).filter(|px| px[3] > 0).count();
+        let mut engine = Engine::new().unwrap();
+        let mut render = |doc: &Document| engine.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+
+        let below = render(&document(&source, 3.0, &["motolii.gradient"]));
+        assert_eq!(covered(&below), 3 * disc, "below the placement the gradient fills only the three discs");
+
+        let mut above = document(&source, 3.0, &[]);
+        above
+            .apply(Intent::SetEffects {
+                layer: LayerId(1),
+                effects: vec![
+                    EffectInstance { id: EffectId(1), plugin_id: "motolii.gradient".to_owned() },
+                    EffectInstance { id: EffectId(0), plugin_id: placement::REPEAT.to_owned() },
+                ],
+            })
+            .unwrap();
+        let above = render(&above);
+        assert_eq!(covered(&above), 3 * disc, "above the placement each copy is a gradient disc");
+        assert!(above.chunks(4).filter(|px| px[3] > 0).any(|px| px[0] != px[1]), "the gradient is visibly painted");
     }
 
     #[test]

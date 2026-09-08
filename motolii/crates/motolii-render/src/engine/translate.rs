@@ -109,6 +109,31 @@ pub(crate) fn translate_point_displace(
     }
 }
 
+/// Clip の欄 → 層の枠での切断。平面を世界へ写すのは描く側(枠が決まる所)。
+pub(crate) fn translate_clip(effects: &[crate::doc::store::ResolvedEffect]) -> Option<crate::render::compositor::ClipSpec> {
+    const ID: &str = "motolii.clip";
+    let effect = effects.iter().rev().find(|e| e.plugin_id == ID)?;
+    let catalog = known_effects();
+    let descriptor = catalog.iter().find(|d| d.plugin_id == ID)?;
+    let read = |name: &str| -> f32 {
+        effect.params.iter().find(|(n, _)| n == name).and_then(|(_, v)| match v {
+            crate::doc::store::Value::F64(v) => Some(*v as f32),
+            crate::doc::store::Value::Enum(v) => Some(*v as f32),
+            crate::doc::store::Value::Bool(b) => Some(f32::from(u8::from(*b))),
+            _ => None,
+        }).or_else(|| descriptor.params.iter().find(|p| p.name == name).map(|p| p.default as f32)).unwrap_or(0.0)
+    };
+    let axis = match read("axis").round() as i32 {
+        1 => -glam::Vec3::X,
+        2 => glam::Vec3::Y,
+        3 => -glam::Vec3::Y,
+        4 => glam::Vec3::Z,
+        5 => -glam::Vec3::Z,
+        _ => glam::Vec3::X,
+    };
+    Some(crate::render::compositor::ClipSpec { axis, offset: read("offset"), cap: read("cap") > 0.5 })
+}
+
 pub fn known_effects() -> std::sync::Arc<[EffectDescriptor]> {
     crate::render::compositor::catalog_snapshot().descriptors.clone()
 }

@@ -26,6 +26,8 @@ pub enum IsfStage {
     Pass,
     Surface,
     Field,
+    /// 世界の平面で切る。shader は無く、欄だけ(fork の 1 式を板・点群・網が読む)。
+    Clip,
 }
 
 impl IsfStage {
@@ -34,6 +36,7 @@ impl IsfStage {
             "pass" => Some(Self::Pass),
             "surface" => Some(Self::Surface),
             "field" => Some(Self::Field),
+            "clip" => Some(Self::Clip),
             _ => None,
         }
     }
@@ -153,6 +156,23 @@ impl IsfManifest {
         self.inputs
             .iter()
             .filter(|input| input.ty == IsfInputType::Image)
+    }
+
+    /// 中間 buffer の名前(初出順)。ISF の TARGET は名前付き buffer なので、同じ名前を
+    /// 複数のパスが書けば同じ 1 枚を使い回す(jump flood や cascade の ping-pong)。
+    pub fn target_slots(&self) -> Vec<&str> {
+        let mut slots: Vec<&str> = Vec::new();
+        for name in self.passes.iter().filter_map(|p| p.target.as_deref()) {
+            if !slots.contains(&name) {
+                slots.push(name);
+            }
+        }
+        slots
+    }
+
+    /// 名前付き buffer が float かどうか(その名前を最初に宣言したパスに従う)。
+    pub fn target_is_float(&self, name: &str) -> bool {
+        self.passes.iter().find(|p| p.target.as_deref() == Some(name)).is_some_and(|p| p.float)
     }
 
     pub fn param_inputs(&self) -> impl Iterator<Item = &IsfInput> {

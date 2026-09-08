@@ -25,8 +25,8 @@ smallvec = "1"
 wgpu_context = "0.9"
 wgpu = "29"
 peniko = "0.6"
-re_renderer = { git = "https://github.com/oshikaidesu/rerun", rev = "ddb821ad337299299efd6e565cef5497d7a99148", default-features = false, features = ["import-gltf", "import-obj", "import-stl"] }
-re_log = { git = "https://github.com/oshikaidesu/rerun", rev = "ddb821ad337299299efd6e565cef5497d7a99148", features = ["setup"] }
+re_renderer = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "5e32b3f281803c6f9b4379fc6a6de978e50fba14", default-features = false, features = ["import-gltf", "import-obj", "import-stl"] }
+re_log = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "5e32b3f281803c6f9b4379fc6a6de978e50fba14", features = ["setup"] }
 macaw = "0.30"
 glam = "0.30"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp", "tiff", "bmp", "hdr", "exr"] }
@@ -34,24 +34,24 @@ moxcms = "0.8"
 base64 = "0.22"
 ffmpeg-sidecar = "2.5"
 rfd = "0.17"
-re_video = { git = "https://github.com/oshikaidesu/rerun", rev = "ddb821ad337299299efd6e565cef5497d7a99148" }
+re_video = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "5e32b3f281803c6f9b4379fc6a6de978e50fba14" }
 naga = { version = "29.0", default-features = false, features = ["glsl-in", "wgsl-out"] }
 pollster = "0.4"
-re_importer = { git = "https://github.com/oshikaidesu/rerun", rev = "ddb821ad337299299efd6e565cef5497d7a99148", default-features = false }
-re_sdk_types = { git = "https://github.com/oshikaidesu/rerun", rev = "ddb821ad337299299efd6e565cef5497d7a99148", default-features = false }
-re_types_core = { git = "https://github.com/oshikaidesu/rerun", rev = "ddb821ad337299299efd6e565cef5497d7a99148" }
+re_importer = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "5e32b3f281803c6f9b4379fc6a6de978e50fba14", default-features = false }
+re_sdk_types = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "5e32b3f281803c6f9b4379fc6a6de978e50fba14", default-features = false }
+re_types_core = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "5e32b3f281803c6f9b4379fc6a6de978e50fba14" }
 serde = { version = "1", features = ["derive"] }
 arrow = { version = "58.3", default-features = false }
 sha2 = "0.10"
 proptest = "1"
-re_byte_size = { git = "https://github.com/oshikaidesu/rerun", rev = "ddb821ad337299299efd6e565cef5497d7a99148" }
-re_chunk = { git = "https://github.com/oshikaidesu/rerun", rev = "ddb821ad337299299efd6e565cef5497d7a99148" }
-re_chunk_store = { git = "https://github.com/oshikaidesu/rerun", rev = "ddb821ad337299299efd6e565cef5497d7a99148" }
-re_build_info = { git = "https://github.com/oshikaidesu/rerun", rev = "ddb821ad337299299efd6e565cef5497d7a99148" }
-re_entity_db = { git = "https://github.com/oshikaidesu/rerun", rev = "ddb821ad337299299efd6e565cef5497d7a99148" }
-re_log_encoding = { git = "https://github.com/oshikaidesu/rerun", rev = "ddb821ad337299299efd6e565cef5497d7a99148", features = ["encoder", "decoder"] }
-re_log_types = { git = "https://github.com/oshikaidesu/rerun", rev = "ddb821ad337299299efd6e565cef5497d7a99148" }
-re_query = { git = "https://github.com/oshikaidesu/rerun", rev = "ddb821ad337299299efd6e565cef5497d7a99148" }
+re_byte_size = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "5e32b3f281803c6f9b4379fc6a6de978e50fba14" }
+re_chunk = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "5e32b3f281803c6f9b4379fc6a6de978e50fba14" }
+re_chunk_store = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "5e32b3f281803c6f9b4379fc6a6de978e50fba14" }
+re_build_info = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "5e32b3f281803c6f9b4379fc6a6de978e50fba14" }
+re_entity_db = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "5e32b3f281803c6f9b4379fc6a6de978e50fba14" }
+re_log_encoding = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "5e32b3f281803c6f9b4379fc6a6de978e50fba14", features = ["encoder", "decoder"] }
+re_log_types = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "5e32b3f281803c6f9b4379fc6a6de978e50fba14" }
+re_query = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "5e32b3f281803c6f9b4379fc6a6de978e50fba14" }
 tiny-skia = { version = "0.11", default-features = false, features = ["std", "simd"] }
 cosmic-text = "0.19"
 symphonia = { version = "0.6", default-features = false, features = ["aac", "aiff", "alac", "flac", "isomp4", "mp1", "mp2", "mp3", "ogg", "pcm", "vorbis", "wav"] }
@@ -63,7 +63,7 @@ serde_json = "1"
 thiserror = "2"
 quick_cache = "0.7.0"
 tempfile = "3"
-re_build_tools = { git = "https://github.com/oshikaidesu/rerun", rev = "ddb821ad337299299efd6e565cef5497d7a99148" }
+re_build_tools = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "5e32b3f281803c6f9b4379fc6a6de978e50fba14" }
 
 [workspace.lints.rust]
 unreachable_pub = "warn"

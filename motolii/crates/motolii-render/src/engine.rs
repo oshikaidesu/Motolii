@@ -506,6 +506,39 @@ mod environment_tests {
         assert!(glass >= 150, "ガラスは下の白を通す、got {glass}");
     }
 
+    /// ガラスは背後に描かれた層を屈折して通す。白い空の前に赤い板、その手前のガラス越しに赤が見える。
+    /// 鏡にすれば空の白を映して赤くならない。
+    #[test]
+    fn glass_refracts_the_layers_drawn_behind_it() {
+        use crate::doc::store::{EffectId, EffectInstance};
+        let dir = tempfile::tempdir().unwrap();
+        let sky = sky_png(dir.path(), "white.png", 255, 255);
+        let red = dir.path().join("red.png");
+        let mut img = image::RgbaImage::new(SIZE, SIZE);
+        for px in img.pixels_mut() { *px = image::Rgba([255, 0, 0, 255]); }
+        img.save(&red).unwrap();
+        let mut engine = Engine::new().unwrap();
+        let render = |engine: &mut Engine, surface: &[(&str, f64)]| -> [u8; 3] {
+            let mut doc = scene(dir.path(), &sky, true);
+            let board = file_layer(&mut doc, 3, 0, &red);
+            doc.apply(Intent::SetConstant { layer: board, property: PropertyId::new(property::POSITION).unwrap(), value: Value::Vec2([0.0, 0.0]) }).unwrap();
+            let mesh = LayerId(2);
+            doc.apply(Intent::SetEffects { layer: mesh, effects: vec![EffectInstance { id: EffectId(0), plugin_id: "motolii.glass".into() }] }).unwrap();
+            for (name, value) in surface {
+                doc.apply(Intent::SetConstant { layer: mesh, property: PropertyId::new(&format!("effect.0.param.{name}")).unwrap(), value: Value::F64(*value) }).unwrap();
+            }
+            engine.models.clear();
+            let pixels = engine.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+            assert!(engine.layer_failures().is_empty(), "{:?}", engine.layer_failures());
+            let i = ((MESH_Y * SIZE + MESH_X) * 4) as usize;
+            [pixels[i], pixels[i + 1], pixels[i + 2]]
+        };
+        let glass = render(&mut engine, &[("ior", 1.5), ("roughness", 0.0), ("transmission", 1.0), ("metallic", 0.0)]);
+        assert!(glass[0] > 150 && glass[1] < 80, "ガラス越しに赤い板が見える、got {glass:?}");
+        let mirror = render(&mut engine, &[("metallic", 1.0), ("roughness", 0.0), ("transmission", 0.0)]);
+        assert!(mirror[1] > 150, "鏡は白い空を映す、got {mirror:?}");
+    }
+
     /// exr も hdr と同じ線形 f32 の道を通り、1.0 超が残る。
     #[test]
     fn exr_keeps_values_above_one() {
@@ -652,4 +685,3 @@ mod presentable_matches_export {
     }
 
 }
-

@@ -41,6 +41,7 @@ impl Engine {
             blend_mode: CompositeBlendMode::Normal,
             shading: Default::default(),
             displace: Default::default(),
+            clip: None,
         };
         let bake = |engine: &mut Self, layer: Layer, passes: &[EffectPass]| {
             let (texture, _view) = engine.compositor.render_to_texture(

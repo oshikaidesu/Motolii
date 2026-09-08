@@ -8,6 +8,16 @@ raycastの2pass・7 WGSL・host側TypeScript設定だった。Motolii版は1pass
 texture参照を辺上のLEDを直接合成する式へ置換した。これは同じ作品の複製ではなく、
 **shader + 宣言された型付きinput + hostが渡す時間/値**というVism境界の外部証拠である。
 
+2026-09-08 に `examples/radiance-cascades` を `vism/radiance.wgsl` へ移した(jump flood → 距離場 →
+6 段の cascade → 合成)。vgpu では TypeScript が ping-pong する 6 枚の target を、ISF の「同じ TARGET 名は
+同じ buffer」で manifest に畳み、段の分岐は PASSINDEX で shader 側に持たせた。探針の間隔を 2px にして
+atlas を素材と同じ大きさに収めた。生成器ではなく、素材の明るい所と形が無ければ何も起きない効果。
+
+同日、`examples/transmission`(背後のフレームを mip ピラミッドにして屈折先を読む)と `examples/clipping`
+(平面で切って断面に蓋)も移した。前者は fork の網 shader に背後の絵を読む口を足し、後者は世界の平面を
+fork の 1 式にして板・点群・網が同じ式で切れるようにした。生成器(black-hole・fractal)は「素材があってこそ
+輝く物を取る」裁定で採らない。
+
 一次の調査・変形の全記録は
 [vgpuとVism構想](../../docs/reviews/2026-08-29-vgpu-vism-viability.md)。
 

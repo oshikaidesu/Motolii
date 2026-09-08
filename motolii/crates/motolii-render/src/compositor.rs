@@ -4,6 +4,7 @@ use re_renderer::renderer::{
 use re_renderer::view_builder::{BlendWithBackground, Projection, RenderMode, TargetConfiguration};
 use re_renderer::{RenderContext, Rgba};
 
+mod clip;
 mod device;
 mod effects;
 mod environment;
@@ -242,6 +243,7 @@ pub use headless::{HeadlessError, HeadlessGpu};
 
 pub use effects::EffectPass;
 pub use effects::catalog::EffectStage;
+pub use clip::ClipSpec;
 
 pub(crate) use effects::catalog::catalog_snapshot;
 pub use effects::catalog::{bind_catalog_runtime, catalog_generation, catalog_source_roots, refresh_effect_catalog, refresh_effect_catalog_for, watch_effect_catalog, CatalogRefresh, CatalogRuntime, CatalogWatcher, EffectDescriptor, EffectParamDescriptor};
@@ -267,6 +269,8 @@ pub struct Layer {
     pub shading: effects::mesh_program::MeshShading,
     /// 点群を動かす場(Turbulent Displace の CPU の写し)。板には効かない。
     pub displace: point_cloud::PointDisplace,
+    /// 世界の平面で切る(板・点群・網が同じ式)。
+    pub clip: Option<clip::ClipSpec>,
 }
 
 #[derive(Clone)]
@@ -328,6 +332,8 @@ pub struct Compositor {
     pub(crate) blend_vism: effects::EffectProgram,
     /// 層をマットで切る Vism(vism/matte.wgsl + 借りた svg_lum)。
     pub(crate) matte_vism: effects::EffectProgram,
+    /// 同じ matte を、生成器の出力 format ごとに組んだ物(生成器を素材の alpha に閉じ込める)。
+    pub(crate) coverage_programs: std::collections::HashMap<wgpu::TextureFormat, effects::EffectProgram>,
     pub(crate) catalog: std::sync::Arc<effects::catalog::CatalogSnapshot>,
     pub(crate) sequential_submits: u64,
     /// フレーム中に記録したパスの束。層ごとに submit せず、読み戻しが要る所まで貯める。
@@ -403,6 +409,7 @@ pub(crate) struct SequentialInput<'a> {
     blend_mode: BlendMode,
     shading: effects::mesh_program::MeshShading,
     displace: point_cloud::PointDisplace,
+    clip: Option<clip::ClipSpec>,
 }
 
 pub(crate) fn sequential_target_config(

@@ -159,10 +159,12 @@ class _BrowserPanelState extends State<BrowserPanel> {
               'motolii.blur': 'Blur',
               'motolii.isf_bloom': 'Light',
               'motolii.glow': 'Light',
+              'motolii.radiance': 'Light',
               'motolii.gain': 'Color',
               'motolii.gradient': 'Color',
               'motolii.tri_led': 'Stylize',
               'motolii.repeat': 'Place',
+              'motolii.clip': '3D',
             }[id(item)] ??
             'Other';
       default:

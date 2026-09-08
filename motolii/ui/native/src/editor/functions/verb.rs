@@ -1,6 +1,6 @@
 use super::atom;
 use crate::doc::store::{
-    Document, EffectId, EffectInstance, Intent, KeyframeTrack, LayerId, LayerSource, LayerTiming,
+    placement, Document, EffectId, EffectInstance, Intent, KeyframeTrack, LayerId, LayerSource, LayerTiming,
     RationalTime, ShapeNode, StoreError,
 };
 use crate::doc::vector::{Brush, Rgb};
@@ -88,10 +88,16 @@ pub(crate) fn effect_batch_intents(
                 .ok_or_else(|| StoreError::Property("effect id space exhausted".into()))?,
             None => 0,
         };
-        effects.push(EffectInstance {
-            id: EffectId(next_id),
-            plugin_id: plugin_id.clone(),
-        });
+        let instance = EffectInstance { id: EffectId(next_id), plugin_id: plugin_id.clone() };
+        // 普通の効果は素材側(配置効果の上)へ。配置効果より下は「増えた後の全体に 1 回」の
+        // 特別な置き方なので、自分で動かした時だけそこへ行く。配置効果同士は末尾(掛け算)。
+        let above_placement = (placement::kind(plugin_id).is_none())
+            .then(|| effects.iter().position(|e| placement::kind(&e.plugin_id).is_some()))
+            .flatten();
+        match above_placement {
+            Some(index) => effects.insert(index, instance),
+            None => effects.push(instance),
+        }
         last_id = Some(next_id);
         changed = true;
     }
@@ -280,4 +286,46 @@ pub(crate) fn retime_layer(
         )?);
     }
     Ok(intents)
+}
+
+#[cfg(test)]
+mod effect_insert_position {
+    use super::effect_batch_intents;
+    use crate::doc::store::{placement, Document, EffectId, EffectInstance, Intent, LayerId};
+
+    fn with_effects(plugins: &[&str]) -> Document {
+        let mut doc = Document::new();
+        doc.apply_all([
+            Intent::AddLayer(LayerId(1)),
+            Intent::SetEffects {
+                layer: LayerId(1),
+                effects: plugins
+                    .iter()
+                    .enumerate()
+                    .map(|(i, p)| EffectInstance { id: EffectId(i as u32), plugin_id: (*p).to_owned() })
+                    .collect(),
+            },
+        ])
+        .unwrap();
+        doc
+    }
+
+    fn order_after(doc: &Document, add: &[&str]) -> Vec<String> {
+        let add: Vec<String> = add.iter().map(|s| (*s).to_owned()).collect();
+        let intents = effect_batch_intents(doc, LayerId(1), &add).unwrap();
+        match intents.as_slice() {
+            [Intent::SetEffects { effects, .. }] => effects.iter().map(|e| e.plugin_id.clone()).collect(),
+            other => panic!("expected one SetEffects, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn ordinary_effects_land_above_the_placement_effect_and_placements_stack_below() {
+        let doc = with_effects(&["motolii.blur", placement::REPEAT]);
+        assert_eq!(order_after(&doc, &["motolii.gradient"]), ["motolii.blur", "motolii.gradient", placement::REPEAT]);
+        let repeat = vec![placement::REPEAT.to_owned()];
+        assert!(effect_batch_intents(&doc, LayerId(1), &repeat).unwrap().is_empty(), "an existing plugin is not doubled");
+        let plain = with_effects(&["motolii.blur"]);
+        assert_eq!(order_after(&plain, &["motolii.gradient"]), ["motolii.blur", "motolii.gradient"], "no placement: append as before");
+    }
 }

@@ -101,12 +101,7 @@ impl VismProgram {
         let device = &ctx.device;
         let (image_order, param_order) = orders(&manifest);
         // 読める image = 宣言された入力 + **中間ターゲット**(後続のパスが名前で読む)。
-        let target_count = manifest
-            .passes
-            .iter()
-            .filter(|p| p.target.is_some())
-            .count();
-        let image_count = image_order.len() + target_count;
+        let image_count = image_order.len() + manifest.target_slots().len();
 
         let vertex_handle = ctx.gpu_resources.shader_modules.get_or_create(
             ctx,
@@ -181,10 +176,10 @@ impl VismProgram {
             manifest
                 .passes
                 .iter()
-                .map(|pass| match (&pass.target, pass.float) {
-                    (None, _) => output_format,
-                    (Some(_), true) => FLOAT_TARGET_FORMAT,
-                    (Some(_), false) => crate::render::compositor::BLEND_TARGET_FORMAT,
+                .map(|pass| match pass.target.as_deref() {
+                    None => output_format,
+                    Some(name) if manifest.target_is_float(name) => FLOAT_TARGET_FORMAT,
+                    Some(_) => crate::render::compositor::BLEND_TARGET_FORMAT,
                 })
                 .collect()
         };
@@ -261,9 +256,10 @@ impl VismProgram {
         ];
 
         // 中間ターゲットを借りる(宣言順 = 後続パスが読む順)。
+        let slots = self.manifest.target_slots();
         let mut targets: Vec<(wgpu::Texture, wgpu::TextureView, wgpu::TextureFormat)> = Vec::new();
-        for pass in self.manifest.passes.iter().filter(|p| p.target.is_some()) {
-            let format = if pass.float {
+        for name in &slots {
+            let format = if self.manifest.target_is_float(name) {
                 FLOAT_TARGET_FORMAT
             } else {
                 crate::render::compositor::BLEND_TARGET_FORMAT
@@ -332,16 +328,13 @@ impl VismProgram {
                 render_size,
                 pass_index as u32,
             );
-            let writing = match self.manifest.passes.get(pass_index) {
-                Some(pass) if pass.target.is_some() => Some(
-                    self.image_order.len()
-                        + self.manifest.passes[..pass_index]
-                            .iter()
-                            .filter(|p| p.target.is_some())
-                            .count(),
-                ),
-                _ => None,
-            };
+            let writing = self
+                .manifest
+                .passes
+                .get(pass_index)
+                .and_then(|pass| pass.target.as_deref())
+                .and_then(|name| slots.iter().position(|slot| *slot == name))
+                .map(|slot| self.image_order.len() + slot);
             let target_view = match writing {
                 Some(slot) => views[slot],
                 None => dst_view,

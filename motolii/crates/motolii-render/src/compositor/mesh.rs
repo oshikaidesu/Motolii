@@ -78,8 +78,11 @@ impl Compositor {
         camera: crate::doc::core::ResolvedCamera,
         projection: crate::doc::store::LayerProjection,
         shading: &MeshShading,
+        clip: Option<super::ClipSpec>,
     ) -> Result<MeshDrawData, CompositorError> {
         let world_from_object = projected_spatial_placement(comp, camera, projection, placement, model.bounds);
+        let centre = world_from_object.transform_point3((glam::Vec3::from(model.bounds.min) + glam::Vec3::from(model.bounds.max)) * 0.5);
+        let clip = clip.map_or(re_renderer::ClipPlane::NONE, |c| c.world(centre, world_from_object));
         let alpha = (opacity.clamp(0.0, 1.0) * 255.0).round() as u8;
         let tint = Color32::from_rgba_unmultiplied(0, 0, 0, alpha);
         let instances: Vec<GpuMeshInstance> = model
@@ -94,7 +97,7 @@ impl Compositor {
                 instance
             })
             .collect();
-        MeshDrawData::new(&self.ctx, &instances)
+        MeshDrawData::new_clipped(&self.ctx, &instances, clip)
             .map_err(|error| CompositorError::Draw(error.to_string()))
     }
 }

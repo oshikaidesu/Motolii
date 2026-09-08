@@ -74,11 +74,15 @@ pub(crate) struct EffectProgram(vism::VismProgram);
 
 impl EffectProgram {
     pub(crate) fn compile(ctx: &re_renderer::RenderContext, definition: &VismDefinition) -> Self {
+        Self::compile_for(ctx, definition, definition.output_format())
+    }
+    /// 宣言と違う出力 format で組む(同じ shader を別 format の texture へ描く時)。
+    pub(crate) fn compile_for(ctx: &re_renderer::RenderContext, definition: &VismDefinition, output_format: wgpu::TextureFormat) -> Self {
         let [vertex, fragment] = definition.paths();
-        Self(vism::VismProgram::new(ctx, &format!("motolii-vism-{}", definition.source.name), definition.manifest.clone(),
+        Self(vism::VismProgram::new(ctx, &format!("motolii-vism-{}-{output_format:?}", definition.source.name), definition.manifest.clone(),
             vism::ShaderStageSource { path: vertex, entry_point: definition.vertex_entry.clone() },
             vism::ShaderStageSource { path: fragment, entry_point: definition.fragment_entry.clone() },
-            definition.output_format()))
+            output_format))
     }
     pub(crate) fn image_input_count(&self) -> usize { self.0.image_input_count() }
     #[allow(clippy::too_many_arguments)]

@@ -14,6 +14,8 @@ pub enum EffectStage {
     Surface,
     /// 網の頂点の hook(fork の `motolii_field`)。点群は CPU の写しで受ける。
     Field,
+    /// 世界の平面で切る。板・点群・網が同じ式に従う。
+    Clip,
     /// 配置の集合(shader を持たない)。
     Placement,
 }
@@ -172,7 +174,7 @@ fn validate_stage(source: &str, entry: &str, stage: naga::ShaderStage, manifest:
         return Err(format!("missing {stage:?} entry point {entry}"));
     }
     let params = manifest.param_inputs().collect::<Vec<_>>();
-    let images = manifest.image_inputs().count() + manifest.passes.iter().filter(|p| p.target.is_some()).count();
+    let images = manifest.image_inputs().count() + manifest.target_slots().len();
     for (_, variable) in module.global_variables.iter() {
         let Some(binding) = variable.binding.as_ref() else { continue };
         let ty = &module.types[variable.ty].inner;
@@ -218,7 +220,11 @@ fn prepare(source: VismSource, prelude: &str) -> Result<VismDefinition, String> 
             }
             let interface = schema(&manifest);
             let names = manifest.param_inputs().map(|p| p.name.clone()).collect::<Vec<_>>();
-            let stage_params = if manifest.stage == isf::IsfStage::Field { "FieldParams" } else { "SurfaceParams" };
+            let stage_params = match manifest.stage {
+                isf::IsfStage::Field => "FieldParams",
+                isf::IsfStage::Clip => "ClipParams",
+                _ => "SurfaceParams",
+            };
             let subtypes = parse_wgsl(&subtype::hook_stub(&body, stage_params, &names))
                 .map(|m| subtype::analyze_module(&m, names.len())).unwrap_or_else(|_| subtype::unknown(names.len()));
             return Ok(VismDefinition { source, manifest, interface, vertex_text: body.clone(), fragment_text: body,
@@ -263,6 +269,7 @@ fn descriptors(definitions: &[VismDefinition]) -> Arc<[EffectDescriptor]> {
             isf::IsfStage::Pass => EffectStage::Pass,
             isf::IsfStage::Surface => EffectStage::Surface,
             isf::IsfStage::Field => EffectStage::Field,
+            isf::IsfStage::Clip => EffectStage::Clip,
         },
         params: d.manifest.param_inputs().enumerate().map(|(i, p)| {
             let range = p.min.zip(p.max).map(|(min, max)| (min[0] as f64, max[0] as f64))

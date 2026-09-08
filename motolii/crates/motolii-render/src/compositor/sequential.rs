@@ -130,6 +130,7 @@ impl Compositor {
                             input.opacity,
                         ),
                         depth_offset: 0,
+                        clip: input.clip.map_or(re_renderer::ClipPlane::NONE, |c| c.world_for_rect(corner, extent_u, extent_v)),
                         ..Default::default()
                     },
                 };
@@ -232,6 +233,10 @@ impl Compositor {
 
             let run_start = idx;
             while idx < inputs.len() && !bakeable(&inputs[idx]) {
+                // 網はその手前で run を切る: 下に描いた物を 1 枚(背後)にして渡し、ガラスが屈折して通す。
+                if idx > run_start && matches!(inputs[idx].content, SequentialContent::Model(_)) {
+                    break;
+                }
                 idx += 1;
             }
             let run = &inputs[run_start..idx];
@@ -292,6 +297,7 @@ impl Compositor {
                         input.opacity,
                         comp, input.projection_camera, input.projection,
                         input.displace,
+                        input.clip,
                     )?);
                     continue;
                 }
@@ -303,6 +309,7 @@ impl Compositor {
                             input.opacity,
                             comp, input.projection_camera, input.projection,
                             &input.shading,
+                            input.clip,
                         )?,
                     );
                     continue;
@@ -338,6 +345,7 @@ impl Compositor {
                             a,
                         ),
                         depth_offset: input.depth_offset,
+                        clip: input.clip.map_or(re_renderer::ClipPlane::NONE, |c| c.world_for_rect(corner, extent_u, extent_v)),
                         ..Default::default()
                     },
                 });
@@ -346,18 +354,32 @@ impl Compositor {
             let draw_data = RectangleDrawData::new(&self.ctx, &rects)
                 .map_err(|e| CompositorError::Rectangles(e.to_string()))?;
 
+            let has_model = run.iter().any(|i| matches!(i.content, SequentialContent::Model(_)));
+            let backdrop = match (&background, has_model) {
+                (Some((backing, _)), true) => {
+                    // 背後の合成はまだ blend encoder の中かもしれない。先に流してから写す。
+                    if let Some(encoder) = blend_encoder.take() {
+                        batch.push(encoder.finish());
+                    }
+                    Some(self.backdrop_pyramid(comp, backing, &mut batch)?)
+                }
+                _ => None,
+            };
+            let mut config = sequential_target_config(
+                "motolii-comp-sequential-run",
+                comp,
+                view_from_world,
+                projection,
+                environment,
+            );
+            config.backdrop = backdrop;
+
             let run_owned = spare
                 .pop()
                 .unwrap_or_else(|| self.create_blend_scratch_texture(comp.width, comp.height));
             let mut view_builder = ViewBuilder::new_with_external_resolved(
                 &self.ctx,
-                sequential_target_config(
-                    "motolii-comp-sequential-run",
-                    comp,
-                    view_from_world,
-                    projection,
-                    environment,
-                ),
+                config,
                 ViewBuilderId::new(self.next_readback),
                 &run_owned,
             )
@@ -413,6 +435,44 @@ impl Compositor {
         drop(spare);
 
         Ok(background)
+    }
+
+    /// ここまでの合成(背後)を mip 付きで写す。ガラスの網が粗さで段を読む。
+    fn backdrop_pyramid(
+        &mut self,
+        comp: CompSpec,
+        backing: &wgpu::Texture,
+        batch: &mut Vec<wgpu::CommandBuffer>,
+    ) -> Result<GpuTexture2D, CompositorError> {
+        let size = wgpu::Extent3d { width: comp.width, height: comp.height, depth_or_array_layers: 1 };
+        let texture = self.ctx.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("motolii-backdrop-pyramid"),
+            size,
+            mip_level_count: re_renderer::resource_managers::MipmapGenerator::mip_level_count(comp.width, comp.height),
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: crate::render::compositor::BLEND_TARGET_FORMAT,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING
+                | wgpu::TextureUsages::RENDER_ATTACHMENT
+                | wgpu::TextureUsages::COPY_DST
+                | wgpu::TextureUsages::COPY_SRC,
+            view_formats: &[],
+        });
+        let mut encoder = self.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("motolii-backdrop-pyramid"),
+        });
+        fn level0(texture: &wgpu::Texture) -> wgpu::TexelCopyTextureInfo<'_> {
+            wgpu::TexelCopyTextureInfo {
+                texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            }
+        }
+        encoder.copy_texture_to_texture(level0(backing), level0(&texture), size);
+        self.ctx.texture_manager_2d.generate_mipmaps(&self.ctx, &mut encoder, &texture);
+        batch.push(encoder.finish());
+        self.import_premultiplied(&texture)
     }
 
     pub(crate) fn create_blend_scratch_texture(&self, width: u32, height: u32) -> wgpu::Texture {
@@ -689,6 +749,7 @@ impl Compositor {
                 blend_mode: layer.blend_mode,
                 shading: layer.shading.clone(),
                 displace: layer.displace,
+                clip: layer.clip,
             })
             .collect();
 
@@ -841,6 +902,7 @@ impl Compositor {
             blend_mode: layer.blend_mode,
             shading: Default::default(),
             displace: Default::default(),
+            clip: None,
         })
     }
 }
