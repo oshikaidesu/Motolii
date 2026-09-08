@@ -130,6 +130,24 @@ pub mod property {
     pub const CAMERA_CENTER: &str = "camera.center";
     pub const CAMERA_ZOOM: &str = "camera.zoom";
     pub const CAMERA_ROLL: &str = "camera.roll";
+
+    /// Stage 層: 出力枠の外側にどれだけ作業範囲を広げるか(左・上・右・下、comp px)。
+    pub const STAGE_MARGINS: [&str; 4] = ["stage.left", "stage.top", "stage.right", "stage.bottom"];
+}
+
+/// その時刻に効いている作業範囲。`layer` が無ければ出力枠そのもの。
+#[derive(Clone, Copy, Debug, PartialEq, Default)]
+pub struct StageExtent {
+    pub layer: Option<LayerId>,
+    pub margins: [f32; 4],
+}
+
+impl StageExtent {
+    /// comp 座標の [x, y, w, h]。
+    pub fn rect(&self, comp: crate::doc::core::CompSpec) -> [f32; 4] {
+        let [l, t, r, b] = self.margins;
+        [-l, -t, comp.width as f32 + l + r, comp.height as f32 + t + b]
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
@@ -141,6 +159,7 @@ pub enum LayerSource {
     },
     Null,
     Camera,
+    Stage,
     Shape,
     Text,
     Group,
@@ -152,6 +171,7 @@ impl LayerSource {
             Self::File { .. }
             | Self::Null
             | Self::Camera
+            | Self::Stage
             | Self::Shape
             | Self::Text
             | Self::Group => None,

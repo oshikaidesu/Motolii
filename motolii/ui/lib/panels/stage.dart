@@ -42,10 +42,7 @@ class _StagePanelState extends State<StagePanel> {
     final action = c.viewCommand.value;
     switch (action) {
       case 'Fit':
-        setState(() {
-          _zoom = null;
-          _pan = Offset.zero;
-        });
+        _fit();
       case 'Actual':
         setState(() {
           _zoom = 1;
@@ -88,6 +85,45 @@ class _StagePanelState extends State<StagePanel> {
       _userStage ? EditorSession.maps(_state['cameraGizmos']) : [];
   Map<String, dynamic> get _observer => EditorSession.map(_state['observer']);
   bool get _front => !_userStage || _observer['front'] != false;
+  bool get _home => !_userStage || _observer['home'] != false;
+  double get _observerScale =>
+      _userStage ? _num(_observer['scale'], 1) : 1;
+  Map<String, dynamic>? get _extent =>
+      _userStage && _observer['extent'] is Map
+      ? EditorSession.map(_observer['extent'])
+      : null;
+  bool get _extend => c.deskWork.value['stageExtend'] == true;
+  List<Offset> _extentPoints() => [
+    for (final p in (_extent?['points'] as List?) ?? []) ?_point(p),
+  ];
+  /// Boxcam の working comp: 縁を掴んで、その向きの余白を書く。
+  int? _extentEdge(Offset p) {
+    final box = _extentPoints();
+    if (box.length != 4) return null;
+    for (var i = 0; i < 4; i++) {
+      if (_segmentDistance(p, box[i], box[(i + 1) % 4]) < 6) return i;
+    }
+    return null;
+  }
+
+  Future<void> _toggleExtend() async {
+    final on = !_extend;
+    await c.storeDesk('stageExtend', on);
+    if (on && _extent == null && c.supports('create')) {
+      await c.command('create', {'kind': 'stage'});
+    }
+  }
+
+  void _fit() {
+    setState(() {
+      _zoom = null;
+      _pan = Offset.zero;
+    });
+    if (_userStage && c.supports('stageView')) {
+      c.command('stageView', {'fit': true});
+    }
+  }
+
   Offset? _point(dynamic p) => p is List && p.length >= 2
       ? _toScreen(Offset(_num(p[0]), _num(p[1])))
       : null;
@@ -129,8 +165,9 @@ class _StagePanelState extends State<StagePanel> {
     return false;
   }
 
-  Map<String, dynamic>? _cameraDrag;
+  Map<String, dynamic>? _cameraDrag, _extentDrag;
   String _cameraHandle = 'center';
+  int _extentSide = 0;
   List<Map<String, dynamic>>? _cameraPending;
   bool _cameraSending = false;
   Future<void> _sendCamera() async {
@@ -147,7 +184,34 @@ class _StagePanelState extends State<StagePanel> {
     }
   }
 
+  void _moveExtent(Offset screen) {
+    final extent = _extentDrag!;
+    final delta = (_toComp(screen) - _toComp(_startScreen!)) * _observerScale;
+    // 上辺 0・右辺 1・下辺 2・左辺 3 → 余白 [左, 上, 右, 下]
+    final (index, outward) = switch (_extentSide) {
+      0 => (1, -delta.dy),
+      1 => (2, delta.dx),
+      2 => (3, delta.dy),
+      _ => (0, -delta.dx),
+    };
+    final margins = extent['margins'] as List;
+    _cameraPending = [
+      {
+        'layer': extent['layer'],
+        'property': [
+          'stage.left',
+          'stage.top',
+          'stage.right',
+          'stage.bottom',
+        ][index],
+        'value': math.max(0, _num(margins[index]) + outward),
+      },
+    ];
+    _sendCamera();
+  }
+
   void _moveCamera(Offset screen) {
+    if (_extentDrag != null) return _moveExtent(screen);
     final camera = _cameraDrag!;
     final centre = _cameraPoints(camera).sublist(1).reduce((a, b) => a + b) / 4;
     final start = _startScreen!;
@@ -165,7 +229,7 @@ class _StagePanelState extends State<StagePanel> {
           'value': _num(camera['roll']) - delta,
         });
       case 'center':
-        final delta = _toComp(screen) - _toComp(start);
+        final delta = (_toComp(screen) - _toComp(start)) * _observerScale;
         final center = camera['center'] as List;
         edits.add({
           'layer': camera['id'],
@@ -186,8 +250,9 @@ class _StagePanelState extends State<StagePanel> {
   }
 
   Future<void> _finishCamera(bool cancel) async {
-    if (_cameraDrag == null) return;
+    if (_cameraDrag == null && _extentDrag == null) return;
     _cameraDrag = null;
+    _extentDrag = null;
     _finishing = true;
     if (cancel) _cameraPending = null;
     while (_cameraSending) {
@@ -372,7 +437,9 @@ class _StagePanelState extends State<StagePanel> {
   }
 
   Future<void> _finish(bool cancel) async {
-    if (_cameraDrag != null) return _finishCamera(cancel);
+    if (_cameraDrag != null || _extentDrag != null) {
+      return _finishCamera(cancel);
+    }
     if (_finishing) return;
     _finishing = true;
     final wasDragging = _dragging;
@@ -446,6 +513,14 @@ class _StagePanelState extends State<StagePanel> {
       _pointer = null;
       return;
     }
+    if (_front && _extend && event.buttons == kPrimaryMouseButton) {
+      final side = _extentEdge(event.localPosition);
+      if (side != null) {
+        _extentDrag = _extent;
+        _extentSide = side;
+        return;
+      }
+    }
     if (_front && event.buttons == kPrimaryMouseButton) {
       final selected = _selectedCamera;
       if (selected != null) {
@@ -516,7 +591,7 @@ class _StagePanelState extends State<StagePanel> {
     if (event.pointer != _pointer) return;
     final old = _lastScreen ?? event.localPosition;
     _lastScreen = event.localPosition;
-    if (_cameraDrag != null) {
+    if (_cameraDrag != null || _extentDrag != null) {
       _moveCamera(event.localPosition);
       return;
     }
@@ -557,7 +632,7 @@ class _StagePanelState extends State<StagePanel> {
       _pointer = null;
       return;
     }
-    if (_cameraDrag != null) {
+    if (_cameraDrag != null || _extentDrag != null) {
       _finishCamera(false);
       return;
     }
@@ -604,7 +679,9 @@ class _StagePanelState extends State<StagePanel> {
     title,
     onPressed,
     tooltip: switch (title) {
-      'Fit' => 'Fit composition',
+      'Fit' => 'Fit the working area',
+      'Extend' => 'Allow the working area edges to be dragged',
+      '● Extend' => 'Stop dragging the working area edges',
       '100%' => 'Actual size',
       '−' => 'Zoom out',
       '+' => 'Zoom in',
@@ -641,16 +718,10 @@ class _StagePanelState extends State<StagePanel> {
             if (_userStage)
               _button(
                 'Front',
-                _front ? null : () => c.command('stageView', {'reset': true}),
+                _home ? null : () => c.command('stageView', {'reset': true}),
               ),
             const Spacer(),
-            _button(
-              'Fit',
-              () => setState(() {
-                _zoom = null;
-                _pan = Offset.zero;
-              }),
-            ),
+            _button('Fit', _fit),
             _button(
               '100%',
               () => setState(() {
@@ -788,6 +859,8 @@ class _StagePanelState extends State<StagePanel> {
                                       ? _cameraHandles(_selectedCamera!)
                                       : const {},
                                   front: _front,
+                                  extent: _extentPoints(),
+                                  extendable: _front && _extend,
                                   observerTarget: _front
                                       ? null
                                       : _point(_observer['target']),
@@ -834,6 +907,15 @@ class _StagePanelState extends State<StagePanel> {
                 color: EditorTheme.muted,
               ),
             ),
+            if (_userStage)
+              Padding(
+                padding: const EdgeInsets.only(left: EditorMetrics.s8),
+                child: ValueListenableBuilder<Map<String, dynamic>>(
+                  valueListenable: c.deskWork,
+                  builder: (context, _, _) =>
+                      _button(_extend ? '● Extend' : 'Extend', _toggleExtend),
+                ),
+              ),
             const Spacer(),
             ValueListenableBuilder<int>(
               valueListenable: c.frame,
@@ -871,6 +953,8 @@ class _StageOverlay extends CustomPainter {
     this.cameraTargets = const [],
     this.cameraHandles = const {},
     this.front = true,
+    this.extent = const [],
+    this.extendable = false,
     this.observerTarget,
     this.anchorPreview,
     required this.outlines,
@@ -881,7 +965,8 @@ class _StageOverlay extends CustomPainter {
     this.marquee,
   });
   final List<List<Offset>> outlines, volumes, cameras;
-  final List<Offset> cameraTargets, frame;
+  final List<Offset> cameraTargets, frame, extent;
+  final bool extendable;
   final Map<String, Offset> handles, cameraHandles;
   final bool front;
   final Offset? observerTarget;
@@ -913,6 +998,15 @@ class _StageOverlay extends CustomPainter {
     if (anchorPreview case final at?) {
       _cross(canvas, at, EditorMetrics.s8, line);
       canvas.drawCircle(at, EditorMetrics.s3, line);
+    }
+    if (extent.length == 4) {
+      canvas.drawPath(
+        Path()..addPolygon(extent, true),
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..color = extendable ? EditorTheme.ink : EditorTheme.muted
+          ..strokeWidth = extendable ? 2 : 1,
+      );
     }
     final cameraLine = Paint()
       ..color = const Color(0xff8ed9e6)
@@ -1019,6 +1113,8 @@ class _StageOverlay extends CustomPainter {
       old.cameraTargets.toString() != cameraTargets.toString() ||
       old.cameraHandles.toString() != cameraHandles.toString() ||
       old.front != front ||
+      old.extent.toString() != extent.toString() ||
+      old.extendable != extendable ||
       old.observerTarget != observerTarget ||
       old.frame.toString() != frame.toString() ||
       old.viewport != viewport ||

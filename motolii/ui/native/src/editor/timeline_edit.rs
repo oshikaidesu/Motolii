@@ -43,7 +43,7 @@ pub(crate) fn ghostable(view: &StoreView, layer: LayerId) -> bool {
         return false;
     }
     match &meta.source {
-        LayerSource::Camera | LayerSource::Null => false,
+        LayerSource::Camera | LayerSource::Stage | LayerSource::Null => false,
         LayerSource::File { path, .. } => {
             !crate::render::media::is_environment_image_path(path)
                 && !crate::render::media::is_audio_path(path)

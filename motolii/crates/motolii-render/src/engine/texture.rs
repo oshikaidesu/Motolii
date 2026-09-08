@@ -134,7 +134,7 @@ fn group_local_bounds(
     let matte_sources: std::collections::HashSet<_> = resolved.iter().filter(|layer| !layer.clip_to_below).filter_map(|layer| layer.matte.map(|matte| matte.layer)).collect();
     let mut points = Vec::new();
     for leaf in resolved {
-        if matches!(leaf.source, LayerSource::Camera | LayerSource::Group | LayerSource::Null) || leaf.placement.opacity <= 0.0 || matte_sources.contains(&leaf.id) { continue; }
+        if matches!(leaf.source, LayerSource::Camera | LayerSource::Stage | LayerSource::Group | LayerSource::Null) || leaf.placement.opacity <= 0.0 || matte_sources.contains(&leaf.id) { continue; }
         let mut parent = parents.get(&leaf.id).copied();
         let mut visited = std::collections::HashSet::new();
         let mut descendant = false;
@@ -229,7 +229,7 @@ impl Engine {
                     max: [bounds[2] as f32 + canvas.origin_x as f32, bounds[3] as f32 + canvas.origin_y as f32, 0.0],
                 }, natural)
             }
-            LayerSource::Camera | LayerSource::Null | LayerSource::Group => None,
+            LayerSource::Camera | LayerSource::Stage | LayerSource::Null | LayerSource::Group => None,
             LayerSource::File { path, .. } => {
                 let spatial = if crate::render::media::is_mesh_path(path) {
                     Some(self.models.get(path)?.bounds())
@@ -671,7 +671,7 @@ impl Engine {
             LayerSource::Text | LayerSource::Shape | LayerSource::File { .. } => {
                 Ok((None, [0.0, 0.0]))
             }
-            LayerSource::Camera | LayerSource::Null | LayerSource::Group => Ok((None, [0.0, 0.0])),
+            LayerSource::Camera | LayerSource::Stage | LayerSource::Null | LayerSource::Group => Ok((None, [0.0, 0.0])),
         }
     }
 }

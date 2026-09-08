@@ -14,21 +14,35 @@ use crate::doc::store::{
 use super::StoreView;
 
 impl<'a> StoreView<'a> {
-    pub fn resolve_camera(&self, t: RationalTime) -> Result<crate::doc::core::ResolvedCamera, StoreError> {
+    /// Camera と同じ規則で active な非描画層を選ぶ: 区間内・可視・solo が優先・最上位。
+    fn active_guide(&self, source: crate::doc::store::LayerSource, t: RationalTime) -> Result<Option<LayerId>, StoreError> {
         let frame = self.composition()?.map(|c| t.try_to_frame_floor(c.fps)).transpose()
             .map_err(|e| StoreError::Property(e.to_string()))?.unwrap_or(0);
-        let mut cameras = Vec::new();
+        let mut guides = Vec::new();
         for id in self.layers() {
             if let Some(meta) = self.meta(id)? {
-                if meta.source == crate::doc::store::LayerSource::Camera && meta.timing.covers(frame) {
+                if meta.source == source && meta.timing.covers(frame) {
                     let attrs = self.attrs(id)?.unwrap_or_default();
-                    if !self.resolved_hidden(id, t, attrs.hidden)? { cameras.push((self.resolved_solo(id, t, attrs.solo)?, meta.order, id)); }
+                    if !self.resolved_hidden(id, t, attrs.hidden)? { guides.push((self.resolved_solo(id, t, attrs.solo)?, meta.order, id)); }
                 }
             }
         }
-        cameras.sort();
-        if let Some((_, _, id)) = cameras.last() {
-            let get = |name| self.value_at(*id, &PropertyId::new(name)?, t);
+        guides.sort();
+        Ok(guides.last().map(|(_, _, id)| *id))
+    }
+
+    pub fn resolve_stage_extent(&self, t: RationalTime) -> Result<crate::doc::store::StageExtent, StoreError> {
+        let Some(id) = self.active_guide(crate::doc::store::LayerSource::Stage, t)? else { return Ok(Default::default()) };
+        let mut margins = [0.0; 4];
+        for (margin, name) in margins.iter_mut().zip(property::STAGE_MARGINS) {
+            if let Some(Value::F64(v)) = self.value_at(id, &PropertyId::new(name)?, t)? { *margin = v.max(0.0) as f32; }
+        }
+        Ok(crate::doc::store::StageExtent { layer: Some(id), margins })
+    }
+
+    pub fn resolve_camera(&self, t: RationalTime) -> Result<crate::doc::core::ResolvedCamera, StoreError> {
+        if let Some(id) = self.active_guide(crate::doc::store::LayerSource::Camera, t)? {
+            let get = |name| self.value_at(id, &PropertyId::new(name)?, t);
             let center = match get(property::CAMERA_CENTER)? { Some(Value::Vec2(v)) => [v[0] as f32,v[1] as f32], _ => [0.0,0.0] };
             let zoom = match get(property::CAMERA_ZOOM)? { Some(Value::F64(v)) => v as f32, _ => 1.0 };
             let roll_degrees = match get(property::CAMERA_ROLL)? { Some(Value::F64(v)) => v as f32, _ => 0.0 };
@@ -558,7 +572,7 @@ impl<'a> StoreView<'a> {
 
     fn any_solo(&self, t: RationalTime) -> Result<bool, StoreError> {
         for layer in self.layers() {
-            if self.meta(layer)?.is_some_and(|m| m.source == crate::doc::store::LayerSource::Camera) { continue; }
+            if self.meta(layer)?.is_some_and(|m| matches!(m.source, crate::doc::store::LayerSource::Camera | crate::doc::store::LayerSource::Stage)) { continue; }
             let static_solo = self.attrs(layer)?.unwrap_or_default().solo;
             if self.resolved_solo(layer, t, static_solo)? {
                 return Ok(true);
@@ -703,6 +717,36 @@ impl<'a> StoreView<'a> {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod stage_extent_contract {
+    use crate::doc::store::*;
+
+    /// Boxcam の working comp / AE の guide layer: 区間内の最上位が効き、区間の外では出力枠に戻る。
+    #[test]
+    fn the_topmost_stage_layer_in_range_widens_the_frame_and_nothing_else_does() {
+        let mut doc = blank_project();
+        let comp = doc.view().composition().unwrap().unwrap().spec();
+        let fps = doc.view().composition().unwrap().unwrap().fps;
+        let at = |frame| RationalTime::try_from_frame(frame, fps).unwrap();
+        for (id, order, start, margins) in [(1u64, 0i16, 0i64, [100.0, 0.0, 100.0, 0.0]), (2, 5, 10, [0.0, 400.0, 0.0, 400.0])] {
+            let layer = LayerId(id);
+            let mut intents = vec![
+                Intent::AddLayer(layer),
+                Intent::SetMeta { layer, meta: LayerMeta { source: LayerSource::Stage, order, timing: LayerTiming::place(start, None, 10) } },
+            ];
+            for (name, value) in property::STAGE_MARGINS.iter().zip(margins) {
+                intents.push(Intent::SetConstant { layer, property: PropertyId::new(name).unwrap(), value: Value::F64(value) });
+            }
+            doc.apply_all(intents).unwrap();
+        }
+        let view = doc.view();
+        assert_eq!(view.resolve_stage_extent(at(3)).unwrap().rect(comp), [-100.0, 0.0, comp.width as f32 + 200.0, comp.height as f32]);
+        assert_eq!(view.resolve_stage_extent(at(12)).unwrap().rect(comp), [0.0, -400.0, comp.width as f32, comp.height as f32 + 800.0]);
+        assert_eq!(view.resolve_stage_extent(at(25)).unwrap(), StageExtent::default());
+        assert_eq!(view.resolve_camera(at(3)).unwrap(), crate::doc::core::ResolvedCamera::default(), "a stage layer is not a camera");
     }
 }
 

@@ -17,6 +17,12 @@ class ObserverSession extends EditorSession {
   ]) async {
     commands.add((op, args));
   }
+
+  @override
+  Future<dynamic> native(
+    String method, [
+    Map<String, dynamic> args = const {},
+  ]) async => <String, dynamic>{};
 }
 
 void main() {
@@ -83,6 +89,72 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     },
   );
+
+  /// Boxcam の working comp: 伸ばす許可を入れた時に範囲の物体が無ければ作り、Fit はその範囲へ寄る。
+  testWidgets('Extend creates the stage layer once and Fit asks the observer', (
+    tester,
+  ) async {
+    final c = ObserverSession();
+    c.document.value = {
+      'width': 400,
+      'height': 400,
+      'stageView': 'User',
+      'observer': {'front': true, 'home': true},
+      'capabilities': ['create', 'stageView'],
+      'layers': [],
+      'selectedIds': [],
+    };
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: EditorTheme.data,
+        home: Scaffold(
+          body: SizedBox(
+            width: 464,
+            height: 480,
+            child: StagePanel(controller: c),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.tap(find.text('Extend'));
+    await tester.pump();
+    expect(c.deskWork.value['stageExtend'], isTrue);
+    expect(c.commands.last.$1, 'create');
+    expect(c.commands.last.$2, {'kind': 'stage'});
+    c.document.value = {
+      ...c.document.value,
+      'observer': {
+        'front': true,
+        'home': true,
+        'extent': {
+          'layer': 3,
+          'margins': [0, 0, 0, 0],
+          'points': [
+            [0, 0],
+            [400, 0],
+            [400, 400],
+            [0, 400],
+          ],
+        },
+      },
+    };
+    await tester.pump();
+    await tester.tap(find.text('● Extend'));
+    await tester.pump();
+    await tester.tap(find.text('Extend'));
+    await tester.pump();
+    expect(
+      c.commands.where((e) => e.$1 == 'create').length,
+      1,
+      reason: 'an existing stage layer is reused',
+    );
+    await tester.tap(find.text('Fit'));
+    await tester.pump();
+    expect(c.commands.last.$1, 'stageView');
+    expect(c.commands.last.$2, {'fit': true});
+    await tester.pumpWidget(const SizedBox());
+  });
 
   testWidgets('a hovered anchor is marked on the selected layer', (
     tester,

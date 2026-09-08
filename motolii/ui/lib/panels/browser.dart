@@ -149,6 +149,7 @@ class _BrowserPanelState extends State<BrowserPanel> {
           'bezier' => 'Paths',
           'cube' => '3D',
           'camera' => '3D',
+          'stage' => '3D',
           _ => 'Other',
         };
       case 'Media':
@@ -193,6 +194,12 @@ class _BrowserPanelState extends State<BrowserPanel> {
             'glyph': '■',
           },
           {'id': 'camera', 'name': 'Camera', 'detail': 'Adds a camera layer'},
+          {
+            'id': 'stage',
+            'name': 'Stage',
+            'detail': 'Widens the working area around the frame',
+            'glyph': '⬚',
+          },
           {
             'id': 'cube',
             'name': 'Cube',

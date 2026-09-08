@@ -110,6 +110,11 @@ impl EditorRuntime{
                 self.user_camera=self.user_camera.looking_at(comp,centre,radius);
             }
             if j["reset"].as_bool()==Some(true) { self.user_camera=Default::default(); }
+            if j["fit"].as_bool()==Some(true) {
+                let view=self.doc.view();let comp=view.composition().map_err(e)?.ok_or("No composition")?.spec();
+                let [x,y,w,h]=view.resolve_stage_extent(self.time()?).map_err(e)?.rect(comp);
+                self.user_camera=crate::doc::core::ResolvedCamera { center:[x+w*0.5-comp.width as f32*0.5,y+h*0.5-comp.height as f32*0.5], distance_scale:(w/comp.width as f32).max(h/comp.height as f32), ..Default::default() };
+            }
             return Ok(());
         }
 
@@ -140,7 +145,7 @@ impl EditorRuntime{
                         layers.iter().map(|&id|(id,self.engine.selected_layer_bounds_in(&view,&resolved,id,at).map(|b|b.center()).unwrap_or([0.0;3]))).collect()};
                     self.doc.set_projection(&centers,patch,at).map_err(e)?;
                 } else {self.apply(layers.into_iter().map(|layer|Intent::SetAttrs{layer,patch:patch.clone()}))?;}}
-            "create"=>{let kind=match string(&j,"kind")?{"text"=>editor::create::NewKind::Text,"rectangle"=>editor::create::NewKind::Rectangle,"bezier"=>editor::create::NewKind::Bezier,"cube"=>editor::create::cube()?,"camera"=>editor::create::NewKind::Camera,_=>return Err("Unsupported create kind".into())};self.create_layer(kind,j["visibleFrames"].as_i64())?;}
+            "create"=>{let kind=match string(&j,"kind")?{"text"=>editor::create::NewKind::Text,"rectangle"=>editor::create::NewKind::Rectangle,"bezier"=>editor::create::NewKind::Bezier,"cube"=>editor::create::cube()?,"camera"=>editor::create::NewKind::Camera,"stage"=>editor::create::NewKind::Stage,_=>return Err("Unsupported create kind".into())};self.create_layer(kind,j["visibleFrames"].as_i64())?;}
             "copy"|"cut"=>{
                 if self.selected_keys.is_empty(){self.clipboard.copy_layers(&self.doc,self.selected_required()?).map_err(e)?;}else{self.clipboard.copy_keys(&self.doc,&self.selected_keys).map_err(e)?;}
                 if op=="cut"{self.delete_selection()?;}

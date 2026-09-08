@@ -5,6 +5,7 @@ use crate::editor::fixture;
 pub(crate) enum NewKind {
     Text,
     Camera,
+    Stage,
     Rectangle,
     Bezier,
     Cube { path: String },
@@ -131,6 +132,11 @@ pub(crate) fn new_layer_intents(
             Intent::AddLayer(layer),
             Intent::SetMeta { layer, meta: LayerMeta { source: LayerSource::Camera, order, timing: LayerTiming::place(playhead,None,duration_frames) } },
             Intent::SetAttrs { layer, patch: LayerAttrsPatch { name: Some("Camera".into()), label_color, ..Default::default() } },
+        ],
+        NewKind::Stage => vec![
+            Intent::AddLayer(layer),
+            Intent::SetMeta { layer, meta: LayerMeta { source: LayerSource::Stage, order, timing: LayerTiming::place(playhead,None,duration_frames) } },
+            Intent::SetAttrs { layer, patch: LayerAttrsPatch { name: Some("Stage".into()), label_color, ..Default::default() } },
         ],
         NewKind::Cube { path } => {
             let mut out = new_layer_intents(layer, order, playhead, duration_frames, fps, comp, NewKind::Media { path, name: "Cube".into() }, unbounded);

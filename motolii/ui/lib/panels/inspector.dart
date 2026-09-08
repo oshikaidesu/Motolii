@@ -657,6 +657,13 @@ class _InspectorPanelState extends State<InspectorPanel> {
               transform('Zoom', ['camera.zoom']),
               transform('Roll', ['camera.roll']),
             ]
+          : layer['kind'] == 'Stage'
+          ? [
+              transform('Left', ['stage.left']),
+              transform('Top', ['stage.top']),
+              transform('Right', ['stage.right']),
+              transform('Bottom', ['stage.bottom']),
+            ]
           : [
               transform('Position', ['position', 'position.z']),
               transform('Scale', ['scale']),

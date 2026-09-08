@@ -38,7 +38,7 @@ fn prop(view:&StoreView<'_>,layer:LayerId,id:&str,label:&str,fallback:&Value,ran
     Ok(json!({"id":id,"label":label,"kind":match current{Value::F64(_)=>"number",Value::Vec2(_)=>"vec2",Value::Color(_)=>"color",Value::Bool(_)|Value::Enum(_)|Value::LayerId(_)=>"enum",Value::Path(_)=>"text"},"value":value(&current),"min":range.map(|r|r.0),"max":range.map(|r|r.1),"keyedNow":keys.iter().any(|k|k["frame"]==here),"keys":keys}))
 }
 fn source_kind(source:&LayerSource)->&'static str{match source{
-    LayerSource::Camera=>"Camera",LayerSource::Text=>"Text",LayerSource::Shape=>"Shape",LayerSource::Group=>"Group",LayerSource::Null=>"Null",
+    LayerSource::Camera=>"Camera",LayerSource::Stage=>"Stage",LayerSource::Text=>"Text",LayerSource::Shape=>"Shape",LayerSource::Group=>"Group",LayerSource::Null=>"Null",
     LayerSource::File{path,..}=>{
         if crate::render::media::is_mesh_path(path){"Mesh"}else if crate::render::media::is_point_cloud_path(path){"PointCloud"}else{
             let mime=std::path::Path::new(path).extension().and_then(|e|e.to_str()).and_then(crate::render::media::asset_type_for_extension).unwrap_or_default();
@@ -57,7 +57,7 @@ impl EditorRuntime{
         let mut items=Vec::new();
         for layer in resolved {
             // 配置効果の複製は層として 1 つ(元の姿)だけ並べる
-            if layer.source==LayerSource::Camera||layer.copy!=0 {continue}
+            if matches!(layer.source,LayerSource::Camera|LayerSource::Stage)||layer.copy!=0 {continue}
             let Some(world)=worlds.get(&layer.id) else{continue};
             let attrs=view.attrs(layer.id).map_err(e)?.unwrap_or_default();
             let local=self.engine.selected_layer_bounds_in(&view,&resolved,layer.id,time).map(|b|glam::Vec3::from(b.center())).unwrap_or(glam::Vec3::ZERO);
@@ -94,8 +94,10 @@ impl EditorRuntime{
         let comp=self.doc.view().composition().map_err(e)?.ok_or("No composition")?.spec();
         let screen=self.observer_screen()?;
         let (w,h)=(comp.width as f32,comp.height as f32);
-        let frame:Vec<_>=[glam::Vec3::ZERO,glam::vec3(w,0.0,0.0),glam::vec3(w,h,0.0),glam::vec3(0.0,h,0.0)].into_iter().map(&screen).collect();
-        Ok(json!({"front":self.user_camera==Default::default(),"orbit":self.user_camera.orbit_degrees,"target":screen(self.user_camera.target(comp)),"frame":if frame.iter().all(Option::is_some){json!(frame)}else{Json::Null}}))
+        let quad=|[x,y,w,h]:[f32;4]|{let q:Vec<_>=[glam::vec3(x,y,0.0),glam::vec3(x+w,y,0.0),glam::vec3(x+w,y+h,0.0),glam::vec3(x,y+h,0.0)].into_iter().map(&screen).collect();if q.iter().all(Option::is_some){json!(q)}else{Json::Null}};
+        let extent=self.doc.view().resolve_stage_extent(self.time()?).map_err(e)?;
+        Ok(json!({"front":self.user_camera.orbit_degrees==[0.0;2],"home":self.user_camera==Default::default(),"scale":self.user_camera.distance_scale,"orbit":self.user_camera.orbit_degrees,"target":screen(self.user_camera.target(comp)),"frame":quad([0.0,0.0,w,h]),
+            "extent":extent.layer.map(|id|json!({"layer":id.0,"margins":extent.margins,"rect":extent.rect(comp),"points":quad(extent.rect(comp))}))}))
     }
     fn camera_gizmos(&self)->Result<Json,String>{
         if !self.user_stage { return Ok(json!([])); }
@@ -164,6 +166,10 @@ impl EditorRuntime{
             if meta.source == LayerSource::Camera {
                 properties = [(property::CAMERA_CENTER,"Center",Value::Vec2([0.0,0.0]),None), (property::CAMERA_ZOOM,"Zoom",Value::F64(1.0),Some((0.01,100.0))), (property::CAMERA_ROLL,"Roll",Value::F64(0.0),None)]
                     .into_iter().map(|(p,label,v,range)| prop(&view,id,p,label,&v,range,at,comp.fps)).collect::<Result<Vec<_>,_>>()?;
+            }
+            if meta.source == LayerSource::Stage {
+                properties = property::STAGE_MARGINS.iter().zip(["Left","Top","Right","Bottom"])
+                    .map(|(p,label)| prop(&view,id,p,label,&Value::F64(0.0),Some((0.0,100000.0)),at,comp.fps)).collect::<Result<Vec<_>,_>>()?;
             }
             let text=if let Some(t)=view.text_document(id).map_err(e)?{
                 let keys:Result<Vec<_>,String>=t.content.keys().iter().map(|k|Ok(json!({"frame":k.t.try_to_frame_round(comp.fps).map_err(e)?,"value":k.content,"interp":{"kind":"Hold"}}))).collect();

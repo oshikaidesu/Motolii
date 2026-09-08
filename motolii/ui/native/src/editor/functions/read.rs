@@ -172,6 +172,7 @@ pub(crate) fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: Ratio
         }
         Some(LayerSource::Null) => "null",
         Some(LayerSource::Camera) => "camera",
+        Some(LayerSource::Stage) => "stage",
         Some(LayerSource::Shape) => "shape",
         Some(LayerSource::Text) => "text",
         Some(LayerSource::Group) => "group",

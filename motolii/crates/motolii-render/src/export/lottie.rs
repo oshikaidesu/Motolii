@@ -259,6 +259,10 @@ fn build_layer(
         LayerSource::Null => {
             out["ty"] = serde_json::json!(3);
         }
+        LayerSource::Stage => {
+            out["ty"] = serde_json::json!(3);
+            unsupported.push(UnsupportedForLottie { layer: Some(layer), category: "stage", detail: "Stage layers describe the working area and are not exported".into() });
+        }
         LayerSource::Group => {
             out["ty"] = serde_json::json!(3);
         }
