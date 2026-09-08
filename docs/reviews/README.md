@@ -773,3 +773,4 @@
 - [Inspector — 揃っているのに触りたくならない(利用者提示の観察 24 項と問い)](2026-09-08-inspector-critique.md)
 - [Inspector の先例調査 — 表以外の答えは無かった](2026-09-08-inspector-prior-art.md)
 - [欄の性格を使われ方から読む — 次元解析](2026-09-08-parameter-character-analysis.md)
+- [数値のメリハリ — クリエイティブ系の外の先例](2026-09-08-number-affordance-prior-art.md)
