@@ -150,7 +150,7 @@ class _BrowserPanelState extends State<BrowserPanel> {
           'cube' => '3D',
           'camera' => '3D',
           'stage' => '3D',
-          _ => 'Other',
+          _ => id(item).startsWith('background:') ? 'Backgrounds' : 'Other',
         };
       case 'Media':
         final kind = family(item);
@@ -212,6 +212,12 @@ class _BrowserPanelState extends State<BrowserPanel> {
             'detail': 'Adds a path layer',
             'glyph': '〜',
           },
+          for (final b in rows(state['backgrounds']))
+            {
+              ...b,
+              'id': 'background:${b['id']}',
+              'detail': 'Sky and light from an HDRI (Poly Haven, CC0)',
+            },
         ];
       case 'Media':
         return rows(state['assets']);
@@ -360,7 +366,7 @@ class _BrowserPanelState extends State<BrowserPanel> {
     builder: (context, state, _) {
       final all = items(state);
       final rails = switch (tab) {
-        'Create' => ['All', 'Text', 'Shapes', '3D', 'Paths'],
+        'Create' => ['All', 'Text', 'Shapes', '3D', 'Paths', 'Backgrounds'],
         'Media' => ['All', 'Video', 'Images', 'HDR', 'Audio', '3D'],
         'Effects' => [
           'All',
@@ -792,7 +798,7 @@ class _BrowserPanelState extends State<BrowserPanel> {
                     Container(height: EditorMetrics.s3, color: identityColor),
                     AspectRatio(
                       aspectRatio: 16 / 9,
-                      child: tab == 'Media'
+                      child: tab == 'Media' || item['thumbnail'] != null
                           ? _thumbnail(item)
                           : ColoredBox(
                               color: const Color(0xff222222),

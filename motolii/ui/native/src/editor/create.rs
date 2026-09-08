@@ -12,16 +12,46 @@ pub(crate) enum NewKind {
     Media { path: String, name: String },
 }
 
-pub(crate) fn cube() -> Result<NewKind, String> {
+/// 同梱の素材を `~/.local/share/motolii/builtins` へ 1 回だけ書き出し、その path を返す。
+fn builtin(file: &str, bytes: &[u8]) -> Result<String, String> {
     let home = std::env::var_os("HOME").ok_or("User data directory unavailable")?;
     let directory = std::path::PathBuf::from(home).join(".local/share/motolii/builtins");
     std::fs::create_dir_all(&directory).map_err(|e| e.to_string())?;
-    let path = directory.join("cube-v1.obj");
-    let bytes = include_bytes!("../../assets/cube.obj");
-    if std::fs::read(&path).ok().as_deref() != Some(bytes.as_slice()) {
+    let path = directory.join(file);
+    if std::fs::metadata(&path).ok().map(|m| m.len() as usize) != Some(bytes.len()) {
         std::fs::write(&path, bytes).map_err(|e| e.to_string())?;
     }
-    Ok(NewKind::Cube { path: path.to_string_lossy().into_owned() })
+    Ok(path.to_string_lossy().into_owned())
+}
+
+pub(crate) fn cube() -> Result<NewKind, String> {
+    Ok(NewKind::Cube { path: builtin("cube-v1.obj", include_bytes!("../../assets/cube.obj"))? })
+}
+
+pub(crate) struct Background { pub id: &'static str, pub name: &'static str, pub path: String }
+
+/// 同梱の背景(Poly Haven の HDRI、CC0、1k)。置くと環境層になり、空として描かれ、光にもなる。
+pub(crate) fn backgrounds() -> &'static [Background] {
+    static MADE: std::sync::OnceLock<Vec<Background>> = std::sync::OnceLock::new();
+    MADE.get_or_init(|| {
+        let table: [(&str, &str, &[u8]); 6] = [
+            ("partly-cloudy-sky", "Partly cloudy sky", include_bytes!("../../assets/backgrounds/kloofendal_48d_partly_cloudy_puresky.hdr")),
+            ("sunset-sky", "Sunset sky", include_bytes!("../../assets/backgrounds/the_sky_is_on_fire.hdr")),
+            ("night-sky", "Night sky", include_bytes!("../../assets/backgrounds/moonless_golf.hdr")),
+            ("meadow", "Meadow", include_bytes!("../../assets/backgrounds/meadow_2.hdr")),
+            ("city-night", "City at night", include_bytes!("../../assets/backgrounds/shanghai_bund.hdr")),
+            ("photo-studio", "Photo studio", include_bytes!("../../assets/backgrounds/brown_photostudio_02.hdr")),
+        ];
+        table.into_iter().filter_map(|(id, name, bytes)| {
+            let path = builtin(&format!("background-{id}-v1.hdr"), bytes).ok()?;
+            Some(Background { id, name, path })
+        }).collect()
+    })
+}
+
+pub(crate) fn background(id: &str) -> Result<NewKind, String> {
+    let b = backgrounds().iter().find(|b| b.id == id).ok_or("Unknown background")?;
+    Ok(NewKind::Media { path: b.path.clone(), name: b.name.into() })
 }
 
 fn spatial_fit_intents(layer: LayerId, path: &str, comp: (f64, f64)) -> Vec<Intent> {
@@ -453,6 +483,19 @@ mod environment_media {
         assert_eq!(environment_of("/nowhere/sky.hdr"), Some(true));
         assert_eq!(environment_of("/nowhere/sky.EXR"), Some(true));
         assert_eq!(environment_of("/nowhere/photo.png"), Some(false));
+    }
+
+    /// 同梱の背景は書き出された実ファイルを指し、置くと環境層になる。
+    #[test]
+    fn bundled_backgrounds_exist_on_disk_and_land_as_environments() {
+        assert_eq!(backgrounds().len(), 6);
+        for b in backgrounds() {
+            assert!(std::path::Path::new(&b.path).exists(), "{}", b.path);
+            let NewKind::Media { path, name } = background(b.id).unwrap() else { panic!("media") };
+            assert_eq!((path.as_str(), name.as_str()), (b.path.as_str(), b.name));
+            assert!(crate::render::media::is_environment_image_path(&path));
+        }
+        assert!(background("nope").is_err());
     }
 }
 

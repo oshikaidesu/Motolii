@@ -81,6 +81,10 @@ Stage switches between User Stage and Camera View. User Stage uses a runtime-onl
 
 Create → Stage adds a non-rendering layer that widens the working area around the output frame: four margins (Left, Top, Right, Bottom) as ordinary properties, without keys. At each frame the highest visible Stage layer within its duration is active, with the same rule as cameras; with none, the working area is the output frame. The observer never follows the document: switching cuts changes only the drawn frame, and Fit moves the observer to the active working area. The Extend switch in the Stage footer permits dragging the working-area edges; turning it on with no Stage layer creates one through the same Create route. Stage layers are excluded from rendering, Depth, Lottie export and time remapping, like cameras. The composition keeps the output size; moving the output size onto the camera box (Boxcam custom resolution, aspect decided last) is a separate decision.
 
+### Backgrounds
+
+Composition owns a background colour (Black, Dark, Grey, White or a hex value in the Composition controls), drawn when no environment layer is active. Create → Backgrounds lists six bundled HDRIs (Poly Haven, CC0, written to the builtins directory on first use); placing one adds an ordinary environment layer through the same create route, drawn as the sky and used as light. The list, thumbnails and files come from one table in native; the browser only projects it.
+
 ### Panels, Settings and Desk
 
 Panels share one catalog, body implementation and placement route. Settings owns the complete panel list and placement controls. Normal panels support tab, separate window and hidden; auxiliary tools additionally support Desk. Stage, Timeline, Inspector, browsing collections, Notes and Web remain independent surfaces. Desk contains Depth, Ease, Blend and History: tools used for a while, between a popup and a permanent panel. A user can promote these tools to permanent surfaces through Settings. Desk is not the owner or manager of all panels.
