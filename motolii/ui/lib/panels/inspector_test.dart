@@ -99,6 +99,20 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
     if (!preview) await c.command('commitPreview');
   }
 
+  Future<void> _writeMany(
+    Map<String, dynamic> layer,
+    Map<String, double> values, {
+    required bool preview,
+  }) async {
+    await c.command('previewProperties', {
+      'edits': [
+        for (final e in values.entries)
+          {'layer': layer['id'], 'property': e.key, 'value': e.value},
+      ],
+    });
+    if (!preview) await c.command('commitPreview');
+  }
+
   dynamic _withAxis(dynamic current, int axis, double v) {
     if (current is List) {
       final out = List<dynamic>.from(current);
@@ -474,12 +488,26 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
     final params = panelRows(effect['params']);
     final controls = <Widget>[];
     String? section;
+    final byId = {for (final r in params) '${r['id']}': r};
+    final folded = <String>{};
     for (final row in params) {
+      final id = '${row['id']}';
+      if (folded.contains(id)) continue;
       final here = row['section'] as String?;
       if (here != null && here != section) {
         controls.add(_SectionLabel(here));
       }
       section = here;
+      // A declared pair `name_x` + `name_y` is one point: a pad and two wells.
+      final yId = id.endsWith('_x')
+          ? '${id.substring(0, id.length - 2)}_y'
+          : null;
+      final y = yId == null ? null : byId[yId];
+      if (y != null && row['value'] is num && y['value'] is num) {
+        folded.add(yId!);
+        controls.add(_pointControl(layer, row, y));
+        continue;
+      }
       controls.add(_control(layer, row));
     }
     return EditorCard(
@@ -521,10 +549,68 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
     );
   }
 
+  /// A pair of params as one point: drag the dot, or type either number.
+  Widget _pointControl(
+    Map<String, dynamic> layer,
+    Map<String, dynamic> xRow,
+    Map<String, dynamic> yRow,
+  ) {
+    final stem = '${xRow['label'] ?? xRow['id']}';
+    final label = stem.endsWith(' X')
+        ? stem.substring(0, stem.length - 2)
+        : stem;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _cellLabel(label),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            EditorPad(
+              x: (xRow['value'] as num).toDouble(),
+              y: (yRow['value'] as num).toDouble(),
+              enabled: _canEdit(layer),
+              onBegin: () {},
+              onPreview: (x, y) => _writeMany(layer, {
+                '${xRow['id']}': x,
+                '${yRow['id']}': y,
+              }, preview: true),
+              onFinish: () => _finish(false),
+              onCancel: () => _finish(true),
+            ),
+            _gap(),
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _well(layer, xRow, 0, label: '$label X'),
+                const SizedBox(height: EditorMetrics.s4),
+                _well(layer, yRow, 0, label: '$label Y'),
+              ],
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _cellLabel(String label) => Padding(
+    padding: const EdgeInsets.only(bottom: EditorMetrics.s2),
+    child: Text(
+      label,
+      style: const TextStyle(
+        fontSize: EditorMetrics.dense,
+        color: EditorTheme.muted,
+      ),
+    ),
+  );
+
   /// A labelled control for one declared param: the word above, the control
   /// under it, sized by its kind.
   Widget _control(Map<String, dynamic> layer, Map<String, dynamic> row) {
-    final kind = _kindOf(row);
+    // A seed is a number to roll, whatever range it declares.
+    final kind = '${row['id']}'.endsWith('.seed') ? _Kind.scalar : _kindOf(row);
     final label = '${row['label'] ?? row['id']}';
     Widget body;
     switch (kind) {
@@ -579,22 +665,42 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
       case _Kind.text:
       case _Kind.scale:
       case _Kind.scalar:
-        body = _well(layer, row, 0);
+        final seed = '${row['id']}'.endsWith('.seed');
+        body = Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _well(layer, row, 0),
+            if (seed) ...[
+              _gap(),
+              Tooltip(
+                message: 'Roll a new seed',
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: _canEdit(layer)
+                      ? () {
+                          final max = (row['max'] as num?)?.toDouble() ?? 9999;
+                          final n =
+                              (DateTime.now().microsecondsSinceEpoch %
+                                      max.round().clamp(1, 1 << 30))
+                                  .toDouble();
+                          _write(layer, row, n, preview: false);
+                        }
+                      : null,
+                  child: const Icon(
+                    Icons.casino_outlined,
+                    size: EditorMetrics.s16,
+                    color: EditorTheme.muted,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        );
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: EditorMetrics.dense,
-            color: EditorTheme.muted,
-          ),
-        ),
-        const SizedBox(height: EditorMetrics.s2),
-        body,
-      ],
+      children: [_cellLabel(label), body],
     );
   }
 

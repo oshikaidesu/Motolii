@@ -921,3 +921,117 @@ class EditorCard extends StatelessWidget {
     ),
   );
 }
+
+/// Two values as one point on a square. Dragging moves the point by the
+/// pointer's own distance (no range needed); the dot shows where the pair
+/// stands within [span] of the centre.
+class EditorPad extends StatefulWidget {
+  const EditorPad({
+    super.key,
+    required this.x,
+    required this.y,
+    required this.onBegin,
+    required this.onPreview,
+    required this.onFinish,
+    required this.onCancel,
+    this.enabled = true,
+    this.size = EditorMetrics.s70,
+    this.span = EditorMetrics.s200,
+    this.speed = 1,
+  });
+  final double x, y, size, span, speed;
+  final bool enabled;
+  final VoidCallback onBegin;
+  final void Function(double x, double y) onPreview;
+  final Future<void> Function() onFinish, onCancel;
+  @override
+  State<EditorPad> createState() => _EditorPadState();
+}
+
+class _EditorPadState extends State<EditorPad> {
+  Offset? _shown;
+  @override
+  Widget build(BuildContext context) => Tooltip(
+    message: 'Drag the point',
+    child: MouseRegion(
+      cursor: widget.enabled
+          ? SystemMouseCursors.move
+          : SystemMouseCursors.basic,
+      child: GestureDetector(
+        onPanStart: widget.enabled
+            ? (_) {
+                _shown = Offset(widget.x, widget.y);
+                widget.onBegin();
+              }
+            : null,
+        onPanUpdate: widget.enabled
+            ? (e) {
+                final next =
+                    (_shown ?? Offset(widget.x, widget.y)) +
+                    e.delta * widget.speed;
+                setState(() => _shown = next);
+                widget.onPreview(next.dx, next.dy);
+              }
+            : null,
+        onPanEnd: widget.enabled
+            ? (_) {
+                widget.onFinish();
+                setState(() => _shown = null);
+              }
+            : null,
+        onPanCancel: widget.enabled
+            ? () {
+                widget.onCancel();
+                setState(() => _shown = null);
+              }
+            : null,
+        child: CustomPaint(
+          size: Size.square(widget.size),
+          painter: _PadPainter(
+            _shown ?? Offset(widget.x, widget.y),
+            widget.span,
+            widget.enabled ? EditorTheme.accent : EditorTheme.muted,
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+class _PadPainter extends CustomPainter {
+  const _PadPainter(this.at, this.span, this.dot);
+  final Offset at;
+  final double span;
+  final Color dot;
+  @override
+  void paint(Canvas canvas, Size size) {
+    final r = RRect.fromRectAndRadius(
+      Offset.zero & size,
+      const Radius.circular(EditorMetrics.s3),
+    );
+    canvas.drawRRect(r, Paint()..color = EditorTheme.app);
+    final c = size.center(Offset.zero);
+    final hair = Paint()
+      ..color = EditorTheme.line
+      ..strokeWidth = 1;
+    canvas.drawLine(Offset(c.dx, 0), Offset(c.dx, size.height), hair);
+    canvas.drawLine(Offset(0, c.dy), Offset(size.width, c.dy), hair);
+    final half = size.width / 2 - EditorMetrics.s4;
+    final p = Offset(
+      c.dx + (at.dx / span * half).clamp(-half, half),
+      c.dy + (at.dy / span * half).clamp(-half, half),
+    );
+    canvas.drawLine(c, p, Paint()..color = EditorTheme.border);
+    canvas.drawCircle(p, EditorMetrics.s4, Paint()..color = dot);
+    canvas.drawRRect(
+      r,
+      Paint()
+        ..color = EditorTheme.border
+        ..style = PaintingStyle.stroke,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_PadPainter old) =>
+      old.at != at || old.span != span || old.dot != dot;
+}

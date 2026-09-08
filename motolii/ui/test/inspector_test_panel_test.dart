@@ -88,10 +88,9 @@ void main() {
                   1,
                   choices: ['Line', 'Circle', 'Grid'],
                 ),
-                row('effect.0.param.offset', 'Offset', [
-                  1.0,
-                  2.0,
-                ], kind: 'vec2'),
+                row('effect.0.param.offset_x', 'Offset X', 1.0),
+                row('effect.0.param.offset_y', 'Offset Y', 2.0),
+                row('effect.0.param.seed', 'Seed', 7.0),
               ],
             },
           ],
@@ -120,9 +119,11 @@ void main() {
       ),
     );
     // Transform: position x/y/z, scale (locked: one well), rotation + tilts,
-    // opacity. Effect: mix, radius, angle, offset x/y.
-    expect(find.byType(EditorNumericField), findsNWidgets(13));
+    // opacity. Effect: mix, radius, angle, offset x/y (one pad), seed.
+    expect(find.byType(EditorNumericField), findsNWidgets(14));
     expect(find.byType(EditorDial), findsOneWidget);
+    expect(find.byType(EditorPad), findsOneWidget);
+    expect(find.byIcon(Icons.casino_outlined), findsOneWidget);
     expect(find.byType(EditorAnchorGrid), findsOneWidget);
     expect(find.byType(EditorChoice<dynamic>), findsNWidgets(2));
     // Scale link, Environment, Ghost, Clip, Animate.
