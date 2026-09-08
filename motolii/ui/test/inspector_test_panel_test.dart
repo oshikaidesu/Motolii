@@ -211,4 +211,151 @@ void main() {
       reason: 'error: ${c.error.value}; sent: $commands',
     );
   });
+
+  testWidgets('two selected layers move together, and kinds get their cards', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(900, 1400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final commands = <String>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(EditorSession.channel, (call) async {
+          final args = call.arguments;
+          if (args is Map && args['command'] is String) {
+            commands.add(args['command'] as String);
+          }
+          return <String, dynamic>{};
+        });
+    final c = EditorSession();
+    Map<String, dynamic> layer(int id, String name, double x) => {
+      'id': id,
+      'name': name,
+      'kind': 'Image',
+      'properties': [
+        {
+          'id': 'position',
+          'label': 'Position',
+          'kind': 'vec2',
+          'value': [x, 0.0],
+          'keys': [],
+        },
+        {
+          'id': 'opacity',
+          'label': 'Opacity',
+          'kind': 'number',
+          'value': 1.0,
+          'keys': [],
+        },
+      ],
+      'effects': [],
+    };
+    c.document.value = {
+      'layers': [layer(1, 'a', 10.0), layer(2, 'b', 50.0)],
+      'selectedIds': [1, 2],
+      'selectedKeys': [],
+      'capabilities': ['previewProperties', 'commitPreview', 'cancelPreview'],
+      'easeKinds': [],
+    };
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: EditorTheme.data,
+        home: Scaffold(body: InspectorTestPanel(controller: c)),
+      ),
+    );
+    expect(find.text('2 layers'), findsOneWidget);
+    // Type 30 into layer 2's X: both layers get an edit, absolute.
+    await tester.tap(find.byType(EditorNumericField).first);
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.tap(find.byType(EditorNumericField).first);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), '30');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+    final edit = commands.firstWhere((m) => m.contains('previewProperties'));
+    expect(edit, contains('"layer":1'));
+    expect(edit, contains('"layer":2'));
+
+    // A camera layer gets its own card; a text layer its content; a shape
+    // its colours.
+    c.document.value = {
+      'layers': [
+        {
+          'id': 3,
+          'name': 'cam',
+          'kind': 'Camera',
+          'properties': [
+            {
+              'id': 'camera.center',
+              'label': 'Center',
+              'kind': 'vec2',
+              'value': [0.0, 0.0],
+              'keys': [],
+            },
+            {
+              'id': 'camera.zoom',
+              'label': 'Zoom',
+              'kind': 'number',
+              'value': 1.0,
+              'keys': [],
+            },
+            {
+              'id': 'camera.roll',
+              'label': 'Roll',
+              'kind': 'number',
+              'value': 0.0,
+              'keys': [],
+            },
+          ],
+          'effects': [],
+        },
+        {
+          'id': 4,
+          'name': 'words',
+          'kind': 'Text',
+          'text': {'content': 'Hello'},
+          'properties': [
+            {
+              'id': 'textSize',
+              'label': 'Size',
+              'kind': 'number',
+              'value': 72.0,
+              'keys': [],
+            },
+          ],
+          'colors': [
+            {
+              'label': 'Fill',
+              'slot': 'fill',
+              'rgba': [1.0, 0.5, 0.0, 1.0],
+            },
+          ],
+          'effects': [],
+        },
+      ],
+      'selectedIds': [3],
+      'selectedKeys': [],
+      'capabilities': [
+        'previewProperties',
+        'commitPreview',
+        'setText',
+        'focusColor',
+        'setColor',
+      ],
+      'easeKinds': [],
+    };
+    await tester.pumpAndSettle();
+    expect(find.text('CAMERA'), findsOneWidget);
+    expect(find.byType(EditorDial), findsOneWidget, reason: 'roll turns');
+    c.document.value = {
+      ...c.document.value,
+      'selectedIds': [4],
+    };
+    await tester.pumpAndSettle();
+    expect(find.text('TEXT'), findsOneWidget);
+    expect(find.text('Hello'), findsOneWidget);
+    expect(find.text('COLOR'), findsOneWidget);
+    expect(find.text('#ff8000'), findsOneWidget);
+  });
 }

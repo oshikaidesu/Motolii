@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../foundation/metrics.dart';
 import '../foundation/panel_controls.dart';
 import '../foundation/theme.dart';
+import 'inspector.dart' show EditorColorRow;
 import '../session/editor_session.dart';
 import '../session/read_model.dart';
 
@@ -256,17 +257,50 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
 
   /// One absolute value into one axis of a property: preview during a drag,
   /// preview + commit for a typed number.
+  /// Every selected, unlocked layer; the shown layer alone when it is not
+  /// part of the selection. A drag moves them all by the same amount, a
+  /// typed number sets them all.
+  List<Map<String, dynamic>> _targets(Map<String, dynamic> layer) {
+    final live = c
+        .liveLayers()
+        .where((v) => c.selectedIds.contains(v['id']) && v['locked'] != true)
+        .toList();
+    return live.any((v) => v['id'] == layer['id']) ? live : [layer];
+  }
+
+  bool get _multiple => c.selectedIds.length > 1;
+
+  /// One value into a property of every target: during a drag the change is
+  /// relative (each layer keeps its own offset), a typed number is absolute.
   Future<void> _write(
     Map<String, dynamic> layer,
     Map<String, dynamic> row,
     dynamic next, {
     required bool preview,
   }) async {
-    await c.command('previewProperties', {
-      'edits': [
-        {'layer': layer['id'], 'property': row['id'], 'value': next},
-      ],
-    });
+    final id = '${row['id']}';
+    final edits = <Map<String, dynamic>>[];
+    for (final target in _targets(layer)) {
+      final own = _property(target, id);
+      if (own == null) continue;
+      dynamic value = next;
+      if (preview && target['id'] != layer['id']) {
+        final base = row['value'], mine = own['value'];
+        if (next is num && base is num && mine is num) {
+          value = mine + (next - base);
+        } else if (next is List && base is List && mine is List) {
+          value = [
+            for (var i = 0; i < next.length; i++)
+              i < base.length && i < mine.length && next[i] is num
+                  ? (mine[i] as num) + (next[i] as num) - (base[i] as num)
+                  : next[i],
+          ];
+        }
+      }
+      edits.add({'layer': target['id'], 'property': id, 'value': value});
+    }
+    if (edits.isEmpty) return;
+    await c.command('previewProperties', {'edits': edits});
     if (!preview) await c.command('commitPreview');
   }
 
@@ -275,12 +309,14 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
     Map<String, double> values, {
     required bool preview,
   }) async {
-    await c.command('previewProperties', {
-      'edits': [
+    final edits = [
+      for (final target in _targets(layer))
         for (final e in values.entries)
-          {'layer': layer['id'], 'property': e.key, 'value': e.value},
-      ],
-    });
+          if (_property(target, e.key) != null)
+            {'layer': target['id'], 'property': e.key, 'value': e.value},
+    ];
+    if (edits.isEmpty) return;
+    await c.command('previewProperties', {'edits': edits});
     if (!preview) await c.command('commitPreview');
   }
 
@@ -315,6 +351,11 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
     if (value is! num) return SizedBox(width: width);
     final slotWidth = width;
     final id = '${row['id']}';
+    final mixed = _targets(layer).any((t) {
+      final other = _property(t, id)?['value'];
+      final n = other is List && axis < other.length ? other[axis] : other;
+      return n is num && n != value;
+    });
     // Opacity is declared without a range; it is 0..1 by meaning.
     final min =
             (row['min'] as num?)?.toDouble() ?? (id == 'opacity' ? 0 : null),
@@ -344,6 +385,7 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
           min: min == null ? null : min * shownScale,
           max: max == null ? null : max * shownScale,
           speed: speed * shownScale,
+          mixed: mixed,
           fill: fill,
           unit: unit ?? '',
           // A narrow well keeps its digits whole rather than clipping them.
@@ -520,6 +562,192 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
   );
 
   // ---- Transform ---------------------------------------------------------
+
+  /// A camera layer authors Center, Zoom and Roll instead of a transform.
+  List<Widget> _camera(Map<String, dynamic> layer) {
+    final center = _property(layer, 'camera.center');
+    final zoom = _property(layer, 'camera.zoom');
+    final roll = _property(layer, 'camera.roll');
+    return [
+      if (center != null)
+        _line([
+          _glyph(Icons.center_focus_strong, 'Center'),
+          _word('Center'),
+          _slot(_well(layer, center, 0, label: 'X')),
+          _gap(),
+          _slot(_well(layer, center, 1, label: 'Y')),
+          _gap(),
+          _slot(),
+          _gap(),
+          _tail(),
+        ]),
+      if (zoom != null)
+        _line([
+          _glyph(Icons.zoom_in, 'Zoom'),
+          _word('Zoom'),
+          _slot(_well(layer, zoom, 0, label: 'Zoom')),
+          _gap(),
+          _slot(),
+          _gap(),
+          _slot(),
+          _gap(),
+          _tail(),
+        ]),
+      if (roll != null)
+        _line([
+          _glyph(Icons.rotate_right, 'Roll'),
+          _word('Roll'),
+          _slot(_well(layer, roll, 0, label: 'Roll')),
+          _gap(),
+          _slot(),
+          _gap(),
+          _slot(),
+          _gap(),
+          _tail(
+            EditorDial(
+              degrees: (roll['value'] as num? ?? 0).toDouble(),
+              enabled: _canEdit(layer),
+              tint: EditorTheme.angle,
+              onBegin: () {},
+              onPreview: (d) => _write(layer, roll, d, preview: true),
+              onFinish: () => _finish(false),
+              onCancel: () => _finish(true),
+            ),
+          ),
+        ]),
+    ];
+  }
+
+  /// Property ids the Transform card already shows.
+  static const _transformIds = {
+    'position',
+    'position.z',
+    'scale',
+    'rotation',
+    'rotation.x',
+    'rotation.y',
+    'opacity',
+    'anchor',
+    'camera.center',
+    'camera.zoom',
+    'camera.roll',
+    'content',
+  };
+
+  bool _isTextProperty(Map<String, dynamic> r) =>
+      '${r['id']}'.startsWith('text') ||
+      const ['Size', 'Line height', 'Tracking'].contains(r['label']);
+
+  /// A text layer: what it says, then how it is set.
+  List<Widget> _text(Map<String, dynamic> layer, Map<String, dynamic> text) {
+    final content = _property(layer, 'content');
+    final rows = panelRows(layer['properties']).where(_isTextProperty).toList();
+    return [
+      EditorLamp(
+        state: keyLampOf(
+          content ??
+              {
+                'keys': panelRows(layer['contentKeys']),
+                'keyedNow': panelRows(layer['contentKeys'])
+                    .any((k) => k['frame'] == c.frame.value),
+              },
+        ),
+        child: EditorDraftField(
+          key: ValueKey('test:content:${layer['id']}'),
+          value: '${text['content'] ?? ''}',
+          label: 'Content',
+          multiline: true,
+          enabled: panelCan(c, 'setText'),
+          onCommit: (v) =>
+              c.command('setText', {'layer': layer['id'], 'content': v}),
+        ),
+      ),
+      if (rows.isNotEmpty) ...[
+        const SizedBox(height: EditorMetrics.s6),
+        _cells([for (final r in rows) _Cell(_control(layer, r))]),
+      ],
+    ];
+  }
+
+  /// The layer's colours: a swatch that opens the Colors desk, and the hex.
+  List<Widget> _colors(Map<String, dynamic> layer) {
+    final colors = panelRows(layer['colors']);
+    return [
+      if (layer['kind'] == 'Shape')
+        _line([
+          _glyph(Icons.format_color_fill, 'Fill'),
+          _word('Fill'),
+          for (final gradient in [false, true])
+            Padding(
+              padding: const EdgeInsets.only(right: EditorMetrics.s2),
+              child: EditorButton(
+                gradient ? 'Gradient' : 'Solid',
+                panelCan(c, 'setFillMode') && colors.isNotEmpty
+                    ? () => c.command('setFillMode', {
+                        'layer': layer['id'],
+                        'slot': colors.first['slot'],
+                        'gradient': gradient,
+                      })
+                    : null,
+                selected: (colors.length > 1) == gradient,
+              ),
+            ),
+        ]),
+      for (final color in colors)
+        Padding(
+          padding: const EdgeInsets.only(bottom: EditorMetrics.s4),
+          child: EditorColorRow(controller: c, layer: layer, color: color),
+        ),
+    ];
+  }
+
+  /// The old matte, still shown while a layer carries one and does not clip.
+  List<Widget> _matte(Map<String, dynamic> layer, Map<String, dynamic> matte) {
+    final others = c.layers.where((v) => v['id'] != layer['id']);
+    return [
+      _line([
+        _glyph(Icons.layers_outlined, 'Source'),
+        _word('Source'),
+        Expanded(
+          child: EditorChoice<dynamic>(
+            value: matte['source'],
+            choices: [
+              for (final v in others) MapEntry(v['id'], '${v['name']}'),
+            ],
+            onChanged: panelCan(c, 'setMatte')
+                ? (v) => c.command('setMatte', {
+                    'layer': layer['id'],
+                    'source': v,
+                    'mode': matte['mode'],
+                  })
+                : null,
+          ),
+        ),
+      ]),
+      _line([
+        _glyph(Icons.contrast, 'Mode'),
+        _word('Mode'),
+        Expanded(
+          child: EditorChoice<dynamic>(
+            value: matte['mode'],
+            choices: const [
+              MapEntry('Alpha', 'Alpha'),
+              MapEntry('AlphaInverted', 'Alpha inverted'),
+              MapEntry('Luma', 'Luma'),
+              MapEntry('LumaInverted', 'Luma inverted'),
+            ],
+            onChanged: panelCan(c, 'setMatte')
+                ? (v) => c.command('setMatte', {
+                    'layer': layer['id'],
+                    'source': matte['source'],
+                    'mode': v,
+                  })
+                : null,
+          ),
+        ),
+      ]),
+    ];
+  }
 
   List<Widget> _transform(Map<String, dynamic> layer) {
     final position = _property(layer, 'position');
@@ -734,6 +962,23 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
           ),
           _gap(),
         ],
+        if (layer['kind'] == 'Group') ...[
+          _slot(
+            EditorSwitch(
+              on: layer['frozen'] == true,
+              glyph: Icons.ac_unit,
+              label: 'Freeze: the group keeps its picture as it is',
+              onChanged: panelCan(c, 'freeze')
+                  ? (on) => c.command('freeze', {
+                      'layer': layer['id'],
+                      'enabled': on,
+                    })
+                  : null,
+            ),
+            true,
+          ),
+          _gap(),
+        ],
         _slot(
           EditorSwitch(
             on: layer['clipToBelow'] == true,
@@ -840,13 +1085,24 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
             'Back to where the numbers rest',
             _canEdit(layer) ? () => _rest(layer, effect) : null,
           ),
+          if (effect['placement'] == true)
+            _headGlyph(
+              Icons.unfold_more,
+              'Expand copies into layers',
+              panelCan(c, 'expandEffect')
+                  ? () => c.command('expandEffect', {
+                      'layer': layer['id'],
+                      'id': effect['id'],
+                    })
+                  : null,
+            ),
           _headGlyph(
             Icons.close,
             'Remove effect',
             panelCan(c, 'removeEffect')
                 ? () => c.command('removeEffect', {
                     'layer': layer['id'],
-                    'effect': effect['id'],
+                    'id': effect['id'],
                   })
                 : null,
           ),
@@ -1157,7 +1413,7 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
           child: Tooltip(
             message: '${layer['name']}',
             child: Text(
-              '${layer['name']}',
+              _multiple ? '${c.selectedIds.length} layers' : '${layer['name']}',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
@@ -1199,6 +1455,17 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
         );
       }
       final effects = panelRows(layer['effects']);
+      final text = panelMap(layer['text']);
+      final matte = panelMap(layer['matte']);
+      final rest = panelRows(layer['properties'])
+          .where(
+            (r) =>
+                !_transformIds.contains('${r['id']}') &&
+                !_isTextProperty(r) &&
+                !'${r['id']}'.startsWith('effect') &&
+                (r['value'] is num || r['value'] is List),
+          )
+          .toList();
       return LayoutBuilder(
         builder: (context, box) {
           _fit(box.maxWidth);
@@ -1212,18 +1479,56 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
                   child: ListView(
                     padding: const EdgeInsets.only(bottom: EditorMetrics.s6),
                     children: [
-                      EditorCard(
-                        title: 'Transform',
-                        glyph: Icons.open_with,
-                        children: _transform(layer),
-                      ),
+                      if (layer['kind'] == 'Camera')
+                        EditorCard(
+                          title: 'Camera',
+                          glyph: Icons.videocam_outlined,
+                          children: _camera(layer),
+                        )
+                      else
+                        EditorCard(
+                          title: 'Transform',
+                          glyph: Icons.open_with,
+                          children: _transform(layer),
+                        ),
                       if (layer['kind'] != 'Camera')
                         EditorCard(
                           title: 'World',
                           glyph: Icons.public,
                           children: _world(layer),
                         ),
-                      for (final effect in effects) _effect(layer, effect),
+                      if (!_multiple && text.isNotEmpty)
+                        EditorCard(
+                          title: 'Text',
+                          glyph: Icons.text_fields,
+                          children: _text(layer, text),
+                        ),
+                      if (!_multiple && panelRows(layer['colors']).isNotEmpty)
+                        EditorCard(
+                          title: 'Color',
+                          glyph: Icons.palette_outlined,
+                          children: _colors(layer),
+                        ),
+                      if (!_multiple &&
+                          matte.isNotEmpty &&
+                          layer['clipToBelow'] != true)
+                        EditorCard(
+                          title: 'Matte',
+                          glyph: Icons.contrast,
+                          children: _matte(layer, matte),
+                        ),
+                      if (rest.isNotEmpty)
+                        EditorCard(
+                          title: 'Properties',
+                          glyph: Icons.tune,
+                          children: [
+                            _cells([
+                              for (final r in rest) _Cell(_control(layer, r)),
+                            ]),
+                          ],
+                        ),
+                      if (!_multiple)
+                        for (final effect in effects) _effect(layer, effect),
                     ],
                   ),
                 ),

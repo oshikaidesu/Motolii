@@ -966,7 +966,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
                         ),
                     ]),
                   for (final color in panelRows(layer['colors']))
-                    _ColorRow(
+                    EditorColorRow(
                       controller: controller,
                       layer: layer,
                       color: color,
@@ -1035,8 +1035,9 @@ List<double>? _parseHex(String input) {
   ];
 }
 
-class _ColorRow extends StatelessWidget {
-  const _ColorRow({
+/// A colour of a layer: the swatch opens the Colors desk on it, the hex sets it.
+class EditorColorRow extends StatelessWidget {
+  const EditorColorRow({
     required this.controller,
     required this.layer,
     required this.color,
