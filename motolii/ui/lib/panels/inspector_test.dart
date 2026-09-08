@@ -178,10 +178,23 @@ Color? _tintOf(Map<String, dynamic> row) => switch (_characterOf(row)) {
 /// shows whole steps, a length sits on a ruler, an amount fills.
 TrackStyle _trackOf(Map<String, dynamic> row) => switch (_characterOf(row)) {
   _Character.level => TrackStyle.level,
-  _Character.count || _Character.detail => TrackStyle.steps,
+  _Character.count ||
+  _Character.detail when _span(row) <= 12 => TrackStyle.steps,
   _Character.size || _Character.soft => TrackStyle.ruler,
   _ => TrackStyle.fill,
 };
+
+double _span(Map<String, dynamic> row) =>
+    ((row['max'] as num?)?.toDouble() ?? 0) -
+    ((row['min'] as num?)?.toDouble() ?? 0);
+
+/// A range that is a real reach (opacity 0..1, octaves 1..8), not a guard
+/// (amount 0..100000): only a real reach earns a track.
+bool _tight(Map<String, dynamic> row) {
+  final v = (row['value'] as num?)?.toDouble() ?? 0;
+  final d = (row['default'] as num?)?.toDouble() ?? v;
+  return _span(row) <= 20 * math.max(d.abs(), 1);
+}
 
 String? _unitOf(Map<String, dynamic> row) {
   final id = '${row['id']}';
@@ -992,7 +1005,13 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
           ],
         );
       case _Kind.bounded:
-        body = _well(layer, row, 0, fill: true, width: EditorMetrics.s96);
+        body = _well(
+          layer,
+          row,
+          0,
+          fill: _tight(row),
+          width: EditorMetrics.s96,
+        );
       case _Kind.angle:
         body = Row(
           mainAxisSize: MainAxisSize.min,
