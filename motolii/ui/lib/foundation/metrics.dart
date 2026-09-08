@@ -8,7 +8,8 @@ abstract final class EditorMetrics {
   // Rows, bars and type come first so a matching value takes the meaning.
   static const double row = 20, control = 24, section = 26, bar = 28, tall = 30;
   static const double micro = 9, dense = 10, font = 11, title = 13;
-  static const double field = 52, thumb = 128, sheet = 320, sheetWide = 420;
+  static const double field = 52, cell = 128, thumb = 128, sheet = 320;
+  static const double sheetWide = 420;
   static const double canvas = 5000;
 
   // Spacing and size steps.

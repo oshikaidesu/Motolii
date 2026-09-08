@@ -867,7 +867,14 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
   /// so every cell sits on the same grid; a section label spans both.
   Widget _cells(List<_Cell> cells) => LayoutBuilder(
     builder: (context, box) {
-      final cell = (box.maxWidth - EditorMetrics.s6) / 2;
+      // As many columns as the width holds at the cell's minimum: two in a
+      // dock, three or four when the panel is pulled wide.
+      const gap = EditorMetrics.s6;
+      final columns = math.max(
+        2,
+        ((box.maxWidth + gap) / (EditorMetrics.cell + gap)).floor(),
+      );
+      final cell = (box.maxWidth - gap * (columns - 1)) / columns;
       return Wrap(
         spacing: EditorMetrics.s6,
         runSpacing: EditorMetrics.s6,
