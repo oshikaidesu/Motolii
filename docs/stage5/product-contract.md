@@ -83,7 +83,7 @@ Create → Stage adds a non-rendering layer that widens the working area around 
 
 ### Backgrounds
 
-Composition owns a background colour (Black, Dark, Grey, White or a hex value in the Composition controls), drawn when no environment layer is active. Create → Backgrounds lists six bundled HDRIs (Poly Haven, CC0, written to the builtins directory on first use); placing one adds an ordinary environment layer through the same create route, drawn as the sky and used as light. The list, thumbnails and files come from one table in native; the browser only projects it.
+Composition owns a background colour (Black, Dark, Grey, White or a hex value in the Composition controls), drawn when no environment layer is active. The Media tab lists six bundled HDRIs under HDR next to imported assets (Poly Haven, CC0, written to the builtins directory on first use); placing one adds an ordinary environment layer through the create route, drawn as the sky and used as light. Bundled items have no Finder, Replace or remove actions. The list, thumbnails and files come from one table in native; the browser only projects it.
 
 ### Panels, Settings and Desk
 

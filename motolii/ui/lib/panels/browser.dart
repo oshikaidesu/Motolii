@@ -150,7 +150,7 @@ class _BrowserPanelState extends State<BrowserPanel> {
           'cube' => '3D',
           'camera' => '3D',
           'stage' => '3D',
-          _ => id(item).startsWith('background:') ? 'Backgrounds' : 'Other',
+          _ => 'Other',
         };
       case 'Media':
         final kind = family(item);
@@ -212,15 +212,20 @@ class _BrowserPanelState extends State<BrowserPanel> {
             'detail': 'Adds a path layer',
             'glyph': '〜',
           },
+        ];
+      case 'Media':
+        // 同梱の HDRI は素材の棚に、取り込んだ物と同じ札で並ぶ(Finder・置換・削除は無い)。
+        return [
+          ...rows(state['assets']),
           for (final b in rows(state['backgrounds']))
             {
               ...b,
               'id': 'background:${b['id']}',
-              'detail': 'Sky and light from an HDRI (Poly Haven, CC0)',
+              'mime': 'image/hdr',
+              'builtin': true,
+              'detail': 'HDR · bundled (Poly Haven, CC0)',
             },
         ];
-      case 'Media':
-        return rows(state['assets']);
       case 'Effects':
         return rows(state['catalog']);
       default:
@@ -274,8 +279,11 @@ class _BrowserPanelState extends State<BrowserPanel> {
         if (has('create')) await c.command('create', {'kind': id(item)});
         break;
       case 'Media':
-        if (has('placeAsset') && item['missing'] != true)
+        if (item['builtin'] == true) {
+          if (has('create')) await c.command('create', {'kind': id(item)});
+        } else if (has('placeAsset') && item['missing'] != true) {
           await c.command('placeAsset', {'id': item['id']});
+        }
         break;
       case 'Effects':
         if (has('applyEffect')) {
@@ -366,7 +374,7 @@ class _BrowserPanelState extends State<BrowserPanel> {
     builder: (context, state, _) {
       final all = items(state);
       final rails = switch (tab) {
-        'Create' => ['All', 'Text', 'Shapes', '3D', 'Paths', 'Backgrounds'],
+        'Create' => ['All', 'Text', 'Shapes', '3D', 'Paths'],
         'Media' => ['All', 'Video', 'Images', 'HDR', 'Audio', '3D'],
         'Effects' => [
           'All',
@@ -753,7 +761,10 @@ class _BrowserPanelState extends State<BrowserPanel> {
   Widget card(Map<String, dynamic> item) {
     final supported = switch (tab) {
       'Create' => has('create'),
-      'Media' => has('placeAsset') && item['missing'] != true,
+      'Media' =>
+        item['builtin'] == true
+            ? has('create')
+            : has('placeAsset') && item['missing'] != true,
       'Effects' =>
         has('applyEffect') && widget.controller.selectedIds.isNotEmpty,
       _ => has('applyPalette') && widget.controller.selectedIds.isNotEmpty,
@@ -861,7 +872,7 @@ class _BrowserPanelState extends State<BrowserPanel> {
                           ),
                         ),
                       ),
-                    if (tab == 'Media')
+                    if (tab == 'Media' && item['builtin'] != true)
                       Expanded(
                         child: Row(
                           children: [

@@ -1,6 +1,6 @@
 # Bundled backgrounds
 
-Six 1k HDRIs from [Poly Haven](https://polyhaven.com), licensed CC0 (no attribution, redistribution allowed). Written to `~/.local/share/motolii/builtins/background-<id>-v1.hdr` on first use and offered under Create → Backgrounds. Placing one adds an environment layer: it is drawn as the sky and lights the scene.
+Six 1k HDRIs from [Poly Haven](https://polyhaven.com), licensed CC0 (no attribution, redistribution allowed). Written to `~/.local/share/motolii/builtins/background-<id>-v1.hdr` on first use and offered in the Media tab under HDR. Placing one adds an environment layer: it is drawn as the sky and lights the scene.
 
 | id | file | source |
 |---|---|---|
