@@ -615,17 +615,33 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
 
   // ---- Effects: one sheet per effect, controls from the declaration -------
 
+  /// Effects whose advanced fold is open, by effect id.
+  final _advancedOpen = <String>{};
+
   Widget _effect(Map<String, dynamic> layer, Map<String, dynamic> effect) {
     final params = panelRows(effect['params']);
+    // Advanced: declared on the row (ADVANCED in the manifest) or, for a
+    // placement, on the grid rows the layout marks.
+    final advancedIds = <String>{
+      for (final r in params)
+        if (r['advanced'] == true) '${r['id']}',
+      for (final g in panelRows(panelMap(effect['layout'])['rows']))
+        if (g['advanced'] == true) ...[
+          if (g['each'] is String) '${g['each']}',
+          if (g['random'] is String) '${g['random']}',
+        ],
+    };
     final controls = <Widget>[];
+    final advanced = <Widget>[];
     String? section;
     final byId = {for (final r in params) '${r['id']}': r};
     final folded = <String>{};
     for (final row in params) {
       final id = '${row['id']}';
       if (folded.contains(id)) continue;
+      final into = advancedIds.contains(id) ? advanced : controls;
       final here = row['section'] as String?;
-      if (here != null && here != section) {
+      if (here != null && here != section && !advancedIds.contains(id)) {
         controls.add(_SectionLabel(here));
       }
       section = here;
@@ -645,11 +661,13 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
       final y = yId == null ? null : byId[yId];
       if (y != null && row['value'] is num && y['value'] is num) {
         folded.add(yId!);
-        controls.add(_pointControl(layer, row, y));
+        into.add(_pointControl(layer, row, y));
         continue;
       }
-      controls.add(_control(layer, row));
+      into.add(_control(layer, row));
     }
+    final key = '${effect['id']}';
+    final open = _advancedOpen.contains(key);
     return EditorCard(
       title: '${effect['name']}',
       glyph: Icons.auto_fix_high_outlined,
@@ -670,24 +688,40 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
         ),
       ),
       children: [
-        LayoutBuilder(
-          builder: (context, box) {
-            final cell = (box.maxWidth - EditorMetrics.s6) / 2;
-            return Wrap(
-              spacing: EditorMetrics.s6,
-              runSpacing: EditorMetrics.s4,
-              children: [
-                for (final w in controls)
-                  w is _SectionLabel
-                      ? SizedBox(width: box.maxWidth, child: w)
-                      : SizedBox(width: cell, child: w),
-              ],
-            );
-          },
-        ),
+        _cells(controls),
+        if (advanced.isNotEmpty) ...[
+          const SizedBox(height: EditorMetrics.s4),
+          _Fold(
+            open: open,
+            onTap: () => setState(() {
+              open ? _advancedOpen.remove(key) : _advancedOpen.add(key);
+            }),
+          ),
+          if (open) ...[
+            const SizedBox(height: EditorMetrics.s4),
+            _cells(advanced),
+          ],
+        ],
       ],
     );
   }
+
+  /// Controls in two equal columns; a section label spans both.
+  Widget _cells(List<Widget> controls) => LayoutBuilder(
+    builder: (context, box) {
+      final cell = (box.maxWidth - EditorMetrics.s6) / 2;
+      return Wrap(
+        spacing: EditorMetrics.s6,
+        runSpacing: EditorMetrics.s4,
+        children: [
+          for (final w in controls)
+            w is _SectionLabel
+                ? SizedBox(width: box.maxWidth, child: w)
+                : SizedBox(width: cell, child: w),
+        ],
+      );
+    },
+  );
 
   /// A pair of params as one point: drag the dot, or type either number.
   Widget _pointControl(
@@ -985,6 +1019,40 @@ class _SectionLabel extends StatelessWidget {
       style: const TextStyle(
         fontSize: EditorMetrics.dense,
         color: EditorTheme.muted,
+      ),
+    ),
+  );
+}
+
+/// The fold of the seldom-used controls: a chevron and the word, one line.
+class _Fold extends StatelessWidget {
+  const _Fold({required this.open, required this.onTap});
+  final bool open;
+  final VoidCallback onTap;
+  @override
+  Widget build(BuildContext context) => Tooltip(
+    message: open ? 'Hide the advanced controls' : 'Show the advanced controls',
+    child: GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Row(
+        children: [
+          Icon(
+            open ? Icons.expand_more : Icons.chevron_right,
+            size: EditorMetrics.s14,
+            color: EditorTheme.muted,
+          ),
+          const SizedBox(width: EditorMetrics.s2),
+          const Text(
+            'Advanced',
+            style: TextStyle(
+              fontSize: EditorMetrics.dense,
+              color: EditorTheme.muted,
+            ),
+          ),
+          const SizedBox(width: EditorMetrics.s6),
+          const Expanded(child: Divider(height: 1)),
+        ],
       ),
     ),
   );

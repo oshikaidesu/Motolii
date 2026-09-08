@@ -96,6 +96,8 @@ pub struct IsfInput {
     pub maps: Option<serde_json::Value>,
     /// 性格の宣言(`SUBTYPE`、Blender の語彙)。無ければ使われ方から読む。
     pub subtype: Option<String>,
+    /// 畳んでおく欄(`ADVANCED`)。
+    pub advanced: bool,
 }
 
 /// ISF `PASSES` の1つ。`PERSISTENT` は拒否し、`WIDTH`/`HEIGHT` の式は読まない
@@ -212,12 +214,14 @@ pub(crate) fn parse_isf_source(source: &str) -> Result<(IsfManifest, String), Is
             let maps = entry.get("MAPS").cloned();
             let label = entry.get("LABEL").and_then(|v| v.as_str()).map(str::to_owned);
             let subtype = entry.get("SUBTYPE").and_then(|v| v.as_str()).map(str::to_owned);
+            let advanced = entry.get("ADVANCED").and_then(|v| v.as_bool()).unwrap_or(false);
             let labels = entry.get("LABELS").and_then(|v| v.as_array()).map(|a| a.iter().filter_map(|v| v.as_str().map(str::to_owned)).collect::<Vec<_>>());
             inputs.push(IsfInput {
                 name: name.to_owned(),
                 label,
                 labels,
                 subtype,
+                advanced,
                 ty,
                 default,
                 min,

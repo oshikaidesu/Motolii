@@ -108,6 +108,10 @@ void main() {
                   ...row('effect.0.param.spin', 'Twist', 10.0),
                   'subtype': 'ANGLE',
                 },
+                {
+                  ...row('effect.0.param.gamma', 'Gamma', 2.2),
+                  'advanced': true,
+                },
               ],
             },
           ],
@@ -162,6 +166,13 @@ void main() {
     expect(find.text('50 %'), findsNothing, reason: 'unit is its own rider');
     expect(find.text('50'), findsOneWidget, reason: 'opacity shown in percent');
     expect(find.text('%'), findsWidgets);
+
+    // Advanced controls start folded; the fold opens them, per effect.
+    expect(find.text('Gamma'), findsNothing);
+    expect(find.text('Advanced'), findsOneWidget);
+    await tester.tap(find.text('Advanced'));
+    await tester.pump();
+    expect(find.text('Gamma'), findsOneWidget);
 
     // Picking an anchor cell goes through the layer's own anchor route.
     await tester.tap(find.byType(EditorAnchorGrid));

@@ -43,6 +43,8 @@ pub struct EffectParamDescriptor {
     pub unit: Option<String>,
     /// 同じ点の仲間(先頭の欄の名前)。
     pub group: Option<String>,
+    /// 畳んでおく欄。
+    pub advanced: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -247,7 +249,7 @@ fn descriptors(definitions: &[VismDefinition]) -> Arc<[EffectDescriptor]> {
         params: kind.params.iter().map(|p| EffectParamDescriptor {
             name: p.name.to_owned(), label: p.label.to_owned(), default: p.default[0], range: p.range,
             choices: p.choices().map(|c| c.iter().map(|s| (*s).to_owned()).collect()),
-            subtype: None, unit: None, group: None,
+            subtype: None, unit: None, group: None, advanced: false,
         }).collect(),
         padding: None,
         output_format: wgpu::TextureFormat::Rgba8Unorm,
@@ -267,7 +269,7 @@ fn descriptors(definitions: &[VismDefinition]) -> Arc<[EffectDescriptor]> {
             let (subtype, unit, group) = character(p, &read, range, d);
             EffectParamDescriptor {
                 name: p.name.clone(), label: p.label.clone().unwrap_or_else(|| p.name.clone()), default: p.default[0] as f64,
-                range, choices: p.labels.clone(), subtype, unit, group,
+                range, choices: p.labels.clone(), subtype, unit, group, advanced: p.advanced,
             }
         }).collect(),
         padding: d.manifest.padding.as_ref().map(|p| EffectPaddingDescriptor { param: p.param.clone(), scale: p.scale }),
