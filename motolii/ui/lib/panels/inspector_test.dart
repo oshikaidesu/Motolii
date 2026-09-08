@@ -446,6 +446,11 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
     ),
   );
 
+  /// Two wells side by side in one cell, and the wells beside a pad.
+  static const _half = (EditorMetrics.cell - EditorMetrics.s4) / 2;
+  static const _beside =
+      EditorMetrics.cell - EditorMetrics.s60 - EditorMetrics.s4;
+
   Widget _glyph(IconData icon, String tip) => Tooltip(
     message: tip,
     child: SizedBox(
@@ -867,14 +872,17 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
   /// so every cell sits on the same grid; a section label spans both.
   Widget _cells(List<_Cell> cells) => LayoutBuilder(
     builder: (context, box) {
-      // As many columns as the width holds at the cell's minimum: two in a
-      // dock, three or four when the panel is pulled wide.
+      // Cells keep one width and pack from the left, so the gap between
+      // items never grows; a wider panel only adds columns.
       const gap = EditorMetrics.s6;
       final columns = math.max(
-        2,
+        1,
         ((box.maxWidth + gap) / (EditorMetrics.cell + gap)).floor(),
       );
-      final cell = (box.maxWidth - gap * (columns - 1)) / columns;
+      final cell = math.min(
+        EditorMetrics.cell,
+        (box.maxWidth - gap * (columns - 1)) / columns,
+      );
       return Wrap(
         spacing: EditorMetrics.s6,
         runSpacing: EditorMetrics.s6,
@@ -932,9 +940,9 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
             Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                _well(layer, xRow, 0, label: '$label X'),
+                _well(layer, xRow, 0, label: '$label X', width: _beside),
                 const SizedBox(height: EditorMetrics.s4),
-                _well(layer, yRow, 0, label: '$label Y'),
+                _well(layer, yRow, 0, label: '$label Y', width: _beside),
               ],
             ),
           ],
@@ -993,7 +1001,7 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
       case _Kind.choice:
         final choices = row['choices'];
         body = SizedBox(
-          width: EditorMetrics.s96,
+          width: EditorMetrics.cell,
           child: EditorChoice<dynamic>(
             value: (row['value'] as num?)?.round(),
             choices: [
@@ -1014,9 +1022,9 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
         body = Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _well(layer, row, 0, label: '$label X'),
+            _well(layer, row, 0, label: '$label X', width: _half),
             _gap(),
-            _well(layer, row, 1, label: '$label Y'),
+            _well(layer, row, 1, label: '$label Y', width: _half),
           ],
         );
       case _Kind.bounded:
@@ -1025,7 +1033,7 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
           row,
           0,
           fill: _tight(row),
-          width: EditorMetrics.s96,
+          width: EditorMetrics.cell,
         );
       case _Kind.angle:
         body = Row(
@@ -1041,7 +1049,12 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
               onCancel: () => _finish(true),
             ),
             _gap(),
-            _well(layer, row, 0),
+            _well(
+              layer,
+              row,
+              0,
+              width: EditorMetrics.cell - EditorMetrics.s22 - EditorMetrics.s4,
+            ),
           ],
         );
       case _Kind.color:
@@ -1052,7 +1065,14 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
         body = Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _well(layer, row, 0),
+            _well(
+              layer,
+              row,
+              0,
+              width: seed
+                  ? EditorMetrics.cell - EditorMetrics.s16 - EditorMetrics.s4
+                  : EditorMetrics.cell,
+            ),
             if (seed) ...[
               _gap(),
               Tooltip(
