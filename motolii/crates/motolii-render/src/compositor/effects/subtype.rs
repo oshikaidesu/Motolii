@@ -97,7 +97,7 @@ pub fn hook_stub(body: &str, stage_params: &str, names: &[String]) -> String {
     let mut stub = String::from(
         "struct FieldIn { frame_position: vec3f, normal: vec3f, params: array<vec4f, 3>, };\n\
          struct FieldOut { offset: vec3f, normal: vec3f, };\n\
-         struct SurfaceIn { albedo: vec3f, normal: vec3f, view_dir: vec3f, world_position: vec3f, thickness: f32, params: array<vec4f, 3>, };\n\
+         struct SurfaceIn { albedo: vec3f, normal: vec3f, view_dir: vec3f, world_position: vec3f, thickness: f32, params: array<vec4f, 3>, uv: vec2f, coverage: f32, };\n\
          fn shade_surface(albedo: vec3f, normal: vec3f, view_dir: vec3f, world_position: vec3f, thickness: f32, knobs: vec4f) -> vec3f { return albedo * knobs.x; }\n\
          fn simplex3(v: vec3f) -> f32 { return v.x; }\n\
          fn fbm3(p: vec3f, octaves: u32) -> f32 { return select(p.x, 0.0, octaves == 0u); }\n",

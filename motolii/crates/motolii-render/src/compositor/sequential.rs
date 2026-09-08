@@ -131,6 +131,8 @@ impl Compositor {
                         ),
                         depth_offset: 0,
                         clip: input.clip.map_or(re_renderer::ClipPlane::NONE, |c| c.world_for_rect(corner, extent_u, extent_v)),
+                        surface: input.shading.program.clone(),
+                        surface_params: input.shading.params,
                         ..Default::default()
                     },
                 };
@@ -140,15 +142,20 @@ impl Compositor {
                 let solo_owned = spare
                     .pop()
                     .unwrap_or_else(|| self.create_blend_scratch_texture(comp.width, comp.height));
+                let mut solo_config = sequential_target_config(
+                    "motolii-comp-sequential-solo", comp, view_from_world, projection, environment,
+                );
+                if input.shading.program.is_some() {
+                    if let Some((backing, _)) = &background {
+                        if let Some(encoder) = blend_encoder.take() {
+                            batch.push(encoder.finish());
+                        }
+                        solo_config.backdrop = Some(self.backdrop_pyramid(comp, backing, &mut batch)?);
+                    }
+                }
                 let mut solo_view_builder = ViewBuilder::new_with_external_resolved(
                     &self.ctx,
-                    sequential_target_config(
-                        "motolii-comp-sequential-solo",
-                        comp,
-                        view_from_world,
-                        projection,
-                        environment,
-                    ),
+                    solo_config,
                     ViewBuilderId::new(self.next_readback),
                     &solo_owned,
                 )
@@ -233,8 +240,8 @@ impl Compositor {
 
             let run_start = idx;
             while idx < inputs.len() && !bakeable(&inputs[idx]) {
-                // 網はその手前で run を切る: 下に描いた物を 1 枚(背後)にして渡し、ガラスが屈折して通す。
-                if idx > run_start && matches!(inputs[idx].content, SequentialContent::Model(_)) {
+                // 表面プログラムは手前で run を切り、それまでの合成を背後として読む。
+                if idx > run_start && (matches!(inputs[idx].content, SequentialContent::Model(_)) || inputs[idx].shading.program.is_some()) {
                     break;
                 }
                 idx += 1;
@@ -346,6 +353,8 @@ impl Compositor {
                         ),
                         depth_offset: input.depth_offset,
                         clip: input.clip.map_or(re_renderer::ClipPlane::NONE, |c| c.world_for_rect(corner, extent_u, extent_v)),
+                        surface: input.shading.program.clone(),
+                        surface_params: input.shading.params,
                         ..Default::default()
                     },
                 });
@@ -354,8 +363,8 @@ impl Compositor {
             let draw_data = RectangleDrawData::new(&self.ctx, &rects)
                 .map_err(|e| CompositorError::Rectangles(e.to_string()))?;
 
-            let has_model = run.iter().any(|i| matches!(i.content, SequentialContent::Model(_)));
-            let backdrop = match (&background, has_model) {
+            let needs_backdrop = run.iter().any(|i| matches!(i.content, SequentialContent::Model(_)) || i.shading.program.is_some());
+            let backdrop = match (&background, needs_backdrop) {
                 (Some((backing, _)), true) => {
                     // 背後の合成はまだ blend encoder の中かもしれない。先に流してから写す。
                     if let Some(encoder) = blend_encoder.take() {

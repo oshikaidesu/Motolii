@@ -1,12 +1,12 @@
-//! 網の hook(surface / field)を fork の `MeshProgram` へ差す — 最小コアの口 C(2026-09-07)。
+//! Shared surface programs and the mesh vertex hook, compiled from the effect manifest.
 //!
 //! 作者の file は `fn field(in: FieldIn, p: FieldParams) -> FieldOut` か
-//! `fn surface(in: SurfaceIn, p: SurfaceParams) -> vec3f` を書く。欄の struct と、instance の 16 float から
+//! `fn surface(in: SurfaceIn, p: SurfaceParams) -> vec3f` を書く。欄の struct と、instance の 12 float から
 //! それを組む wrapper はここが manifest から生成する。欄は field → surface の順に slot を取る。
 
 use std::sync::Arc;
 
-use re_renderer::renderer::{MeshProgram, MeshProgramDesc};
+use re_renderer::renderer::{SurfaceProgram, SurfaceProgramDesc};
 
 use super::catalog::EffectStage;
 use super::VismDefinition;
@@ -15,10 +15,10 @@ use crate::doc::store::ResolvedEffect;
 /// instance が hook へ渡せる float の数(頂点属性 16 か所の上限から)(fork の `GpuMeshInstance::params`)。
 pub(crate) const PARAM_SLOTS: usize = 12;
 
-/// 網 1 枚の描き方: どの変種で、欄に何を入れるか。
+/// A shared program and its parameter values for a surface.
 #[derive(Clone, Default)]
-pub struct MeshShading {
-    pub program: Option<Arc<MeshProgram>>,
+pub struct SurfaceShading {
+    pub program: Option<Arc<SurfaceProgram>>,
     pub params: [f32; PARAM_SLOTS],
 }
 
@@ -73,13 +73,13 @@ fn snippet(def: &VismDefinition, stage: EffectStage, offset: usize) -> String {
 }
 
 /// 変種の宣言。欄の slot は field → surface の順。
-pub(crate) fn program_desc(field: Option<&VismDefinition>, surface: Option<&VismDefinition>) -> Result<MeshProgramDesc, String> {
+pub(crate) fn program_desc(field: Option<&VismDefinition>, surface: Option<&VismDefinition>) -> Result<SurfaceProgramDesc, String> {
     let field_count = field.map_or(0, |d| d.manifest.param_inputs().count());
     let surface_count = surface.map_or(0, |d| d.manifest.param_inputs().count());
     if field_count + surface_count > PARAM_SLOTS {
         return Err(format!("hook の欄が合わせて {PARAM_SLOTS} 個を越える"));
     }
-    Ok(MeshProgramDesc {
+    Ok(SurfaceProgramDesc {
         label: format!("{}+{}", field.map_or("-", |d| d.plugin_id()), surface.map_or("-", |d| d.plugin_id())),
         field: field.map(|d| snippet(d, EffectStage::Field, 0)),
         surface: surface.map(|d| snippet(d, EffectStage::Surface, field_count)),
@@ -127,5 +127,66 @@ mod tests {
         assert!(desc.surface.is_none());
         let p = params(&[ResolvedEffect { plugin_id: "x.t".into(), params: vec![("along".into(), crate::doc::store::Value::F64(1.0))] }], Some(&def), None);
         assert_eq!(&p[..2], &[2.0, 1.0]);
+    }
+}
+
+impl crate::render::compositor::Compositor {
+    /// 効果列の hook(field / surface)から共有プログラムを組む。変種は catalog の世代ごとに覚える。
+    pub(crate) fn surface_shading(&mut self, effects: &[crate::doc::store::ResolvedEffect]) -> Result<SurfaceShading, String> {
+        self.refresh_catalog_programs();
+        let catalog = self.catalog.clone();
+        let (field, surface) = hooks(effects, &catalog.definitions);
+        if field.is_none() && surface.is_none() {
+            return Ok(SurfaceShading::default());
+        }
+        let key = format!("{}|{}|{}", field.map_or("", |d| d.plugin_id()), surface.map_or("", |d| d.plugin_id()), catalog.generation);
+        let program = match self.surface_programs.get(&key) {
+            Some(program) => program.clone(),
+            None => {
+                let desc = program_desc(field, surface)?;
+                let program = Arc::new(SurfaceProgram::new(&self.ctx, desc).map_err(|e| e.to_string())?);
+                self.surface_programs.insert(key, program.clone());
+                program
+            }
+        };
+        Ok(SurfaceShading { program: Some(program), params: params(effects, field, surface) })
+    }
+
+}
+
+#[cfg(test)]
+mod program_contract {
+    use crate::doc::store::ResolvedEffect;
+
+    fn compiled_without_validation_error(compositor: &mut crate::render::compositor::Compositor, effects: &[ResolvedEffect]) {
+        let scope = compositor.ctx.device.push_error_scope(wgpu::ErrorFilter::Validation);
+        let shading = compositor.surface_shading(effects).unwrap();
+        let error = pollster::block_on(scope.pop());
+        assert!(error.is_none(), "{}", error.unwrap());
+        assert_eq!(shading.program.is_some(), !effects.is_empty());
+    }
+
+    /// wgpu の validation error は非同期なので、error scope で拾って契約にする:
+    /// 既定の変種と、棚の hook(Glass・Turbulent Displace・両方)を差した変種が compile できる。
+    #[test]
+    fn default_and_shelf_hook_programs_compile() {
+        let mut compositor = crate::render::compositor::Compositor::headless().unwrap();
+        let scope = compositor.ctx.device.push_error_scope(wgpu::ErrorFilter::Validation);
+        let desc = re_renderer::renderer::SurfaceProgramDesc { label: "probe".into(), field: None, surface: None };
+        re_renderer::renderer::SurfaceProgram::new(&compositor.ctx, desc).unwrap();
+        let error = pollster::block_on(scope.pop());
+        assert!(error.is_none(), "{}", error.unwrap());
+
+        let glass = ResolvedEffect { plugin_id: "motolii.glass".into(), params: vec![] };
+        let turbulence = ResolvedEffect { plugin_id: "motolii.turbulent_displace".into(), params: vec![] };
+        compiled_without_validation_error(&mut compositor, &[]);
+        compiled_without_validation_error(&mut compositor, std::slice::from_ref(&glass));
+        compiled_without_validation_error(&mut compositor, std::slice::from_ref(&turbulence));
+        compiled_without_validation_error(&mut compositor, &[turbulence.clone(), glass.clone()]);
+        // 同じ組は同じ変種。
+        let a = compositor.surface_shading(&[turbulence.clone(), glass.clone()]).unwrap().program.unwrap();
+        let b = compositor.surface_shading(&[glass, turbulence]).unwrap().program.unwrap();
+        assert!(std::sync::Arc::ptr_eq(&a, &b));
+        assert_eq!(compositor.surface_programs.len(), 3);
     }
 }

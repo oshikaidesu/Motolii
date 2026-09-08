@@ -215,8 +215,8 @@ fn prepare(source: VismSource, prelude: &str) -> Result<VismDefinition, String> 
                     return Err(format!("{}: hook の欄は float / long / bool だけ", input.name));
                 }
             }
-            if manifest.param_inputs().count() > super::mesh_program::PARAM_SLOTS {
-                return Err(format!("hook の欄は {} 個まで", super::mesh_program::PARAM_SLOTS));
+            if manifest.param_inputs().count() > super::surface_program::PARAM_SLOTS {
+                return Err(format!("hook の欄は {} 個まで", super::surface_program::PARAM_SLOTS));
             }
             let interface = schema(&manifest);
             let names = manifest.param_inputs().map(|p| p.name.clone()).collect::<Vec<_>>();

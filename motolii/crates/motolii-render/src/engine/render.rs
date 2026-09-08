@@ -524,8 +524,8 @@ impl Engine {
         let Some(content) = content else {
             return Ok(None);
         };
-        let shading = if matches!(content, crate::render::compositor::LayerContent::Model(_)) {
-            match self.compositor.mesh_shading(&layer.effects) {
+        let shading = if matches!(content, crate::render::compositor::LayerContent::Model(_) | crate::render::compositor::LayerContent::Texture(_)) {
+            match self.compositor.surface_shading(&layer.effects) {
                 Ok(shading) => shading,
                 Err(reason) => {
                     self.layer_failures.push(format!("layer {} の hook を組めない: {reason}", layer.id.0));

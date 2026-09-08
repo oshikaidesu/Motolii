@@ -42,7 +42,7 @@ impl Compositor {
             next_effect_key: 1,
             effect_scratch: effects::EffectScratch::default(),
             effect_programs,
-            mesh_programs: Default::default(),
+            surface_programs: Default::default(),
             blend_vism,
             matte_vism,
             coverage_programs: Default::default(),
@@ -67,7 +67,7 @@ impl Compositor {
             pools.shader_modules.begin_frame(&self.ctx.device, &resolver, frame, &paths);
             pools.render_pipelines.begin_frame(&self.ctx.device, frame, &pools.shader_modules, &pools.pipeline_layouts);
         }
-        self.mesh_programs.clear();
+        self.surface_programs.clear();
         for definition in changed {
             if definition.manifest.stage != effects::IsfStage::Pass { continue; }
             let program = effects::EffectProgram::compile(&self.ctx, definition);

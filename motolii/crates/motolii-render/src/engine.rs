@@ -518,7 +518,7 @@ mod environment_tests {
         for px in img.pixels_mut() { *px = image::Rgba([255, 0, 0, 255]); }
         img.save(&red).unwrap();
         let mut engine = Engine::new().unwrap();
-        let render = |engine: &mut Engine, surface: &[(&str, f64)]| -> [u8; 3] {
+        let render = |engine: &mut Engine, surface: &[(&str, f64)], opacity: f64| -> [u8; 3] {
             let mut doc = scene(dir.path(), &sky, true);
             let board = file_layer(&mut doc, 3, 0, &red);
             doc.apply(Intent::SetConstant { layer: board, property: PropertyId::new(property::POSITION).unwrap(), value: Value::Vec2([0.0, 0.0]) }).unwrap();
@@ -527,16 +527,66 @@ mod environment_tests {
             for (name, value) in surface {
                 doc.apply(Intent::SetConstant { layer: mesh, property: PropertyId::new(&format!("effect.0.param.{name}")).unwrap(), value: Value::F64(*value) }).unwrap();
             }
+            doc.apply(Intent::SetConstant { layer: mesh, property: PropertyId::new(property::OPACITY).unwrap(), value: Value::F64(opacity) }).unwrap();
             engine.models.clear();
             let pixels = engine.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
             assert!(engine.layer_failures().is_empty(), "{:?}", engine.layer_failures());
             let i = ((MESH_Y * SIZE + MESH_X) * 4) as usize;
             [pixels[i], pixels[i + 1], pixels[i + 2]]
         };
-        let glass = render(&mut engine, &[("ior", 1.5), ("roughness", 0.0), ("transmission", 1.0), ("metallic", 0.0)]);
+        let glass = render(&mut engine, &[("ior", 1.5), ("roughness", 0.0), ("transmission", 1.0), ("metallic", 0.0)], 1.0);
         assert!(glass[0] > 150 && glass[1] < 80, "ガラス越しに赤い板が見える、got {glass:?}");
-        let mirror = render(&mut engine, &[("metallic", 1.0), ("roughness", 0.0), ("transmission", 0.0)]);
+        let mirror = render(&mut engine, &[("metallic", 1.0), ("roughness", 0.0), ("transmission", 0.0)], 1.0);
         assert!(mirror[1] > 150, "鏡は白い空を映す、got {mirror:?}");
+        let half = render(&mut engine, &[("metallic", 1.0), ("roughness", 0.0), ("transmission", 0.0)], 0.5);
+        assert!(half[1] > 80 && half[1] < mirror[1] - 10, "mesh coverage attenuates reflection, like the rectangle: half {half:?}, solid {mirror:?}");
+    }
+
+    /// The mesh Glass oracle, applied to a premultiplied 2D surface (GPU Gems 2 ch.19).
+    /// Coverage is independent of optical transmission, including the mix-mode route.
+    #[test]
+    fn shared_surface_glass_refracts_on_rectangles_and_preserves_coverage() {
+        use crate::doc::store::{BlendMode, EffectId, EffectInstance};
+        let dir = tempfile::tempdir().unwrap();
+        let sky = sky_png(dir.path(), "white.png", 255, 255);
+        let red = dir.path().join("red.png");
+        image::RgbaImage::from_pixel(SIZE, SIZE, image::Rgba([255, 0, 0, 255])).save(&red).unwrap();
+        let cutout = dir.path().join("cutout.png");
+        let mut img = image::RgbaImage::new(SIZE, SIZE);
+        for (x, _, px) in img.enumerate_pixels_mut() {
+            *px = image::Rgba([255, 255, 255, if x < 16 { 0 } else if x < 32 { 128 } else { 255 }]);
+        }
+        img.save(&cutout).unwrap();
+        let mut doc = scene(dir.path(), &sky, true);
+        doc.apply(Intent::RemoveLayer(LayerId(2))).unwrap();
+        let board = file_layer(&mut doc, 3, 0, &red);
+        let plate = file_layer(&mut doc, 4, 1, &cutout);
+        for layer in [board, plate] {
+            doc.apply(Intent::SetConstant { layer, property: PropertyId::new(property::POSITION).unwrap(), value: Value::Vec2([0.0, 0.0]) }).unwrap();
+        }
+        doc.apply(Intent::SetEffects { layer: plate, effects: vec![EffectInstance { id: EffectId(0), plugin_id: "motolii.glass".into() }] }).unwrap();
+        let mut engine = Engine::new().unwrap();
+        for blend_mode in [BlendMode::Normal, BlendMode::Screen] {
+            doc.apply(Intent::SetAttrs { layer: plate, patch: LayerAttrsPatch { blend_mode: Some(blend_mode), ..Default::default() } }).unwrap();
+            for (metallic, transmission) in [(0.0, 1.0), (1.0, 0.0)] {
+                for (name, value) in [("ior", 1.5), ("roughness", 0.0), ("metallic", metallic), ("transmission", transmission)] {
+                    doc.apply(Intent::SetConstant { layer: plate, property: PropertyId::new(&format!("effect.0.param.{name}")).unwrap(), value: Value::F64(value) }).unwrap();
+                }
+                let pixels = engine.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+                assert!(engine.layer_failures().is_empty(), "{:?}", engine.layer_failures());
+                let sample = |x: u32| { let i = ((32 * SIZE + x) * 4) as usize; &pixels[i..i+4] };
+                let hole = sample(8);
+                assert!(hole[0] > 150 && hole[1] < 10, "transparent hole retains red: {hole:?}, {blend_mode:?}");
+                let solid = sample(44);
+                if transmission > 0.0 {
+                    assert!(solid[0] > 150 && solid[1] < 80, "2D glass transmits red: {solid:?}, {blend_mode:?}");
+                } else {
+                    assert!(solid[1] > 150, "2D mirror reflects white environment: {solid:?}, {blend_mode:?}");
+                    let edge = sample(24);
+                    assert!(edge[1] > 80 && edge[1] < solid[1] - 10, "half coverage blends reflected radiance: edge {edge:?}, solid {solid:?}");
+                }
+            }
+        }
     }
 
     /// exr も hdr と同じ線形 f32 の道を通り、1.0 超が残る。

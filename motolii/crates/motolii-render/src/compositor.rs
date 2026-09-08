@@ -266,7 +266,7 @@ pub struct Layer {
     pub projection_camera: ResolvedCamera,
     pub blend_mode: BlendMode,
     /// 網の描き方(hook の変種と欄)。板には効かない。
-    pub shading: effects::mesh_program::MeshShading,
+    pub shading: effects::surface_program::SurfaceShading,
     /// 点群を動かす場(Turbulent Displace の CPU の写し)。板には効かない。
     pub displace: point_cloud::PointDisplace,
     /// 世界の平面で切る(板・点群・網が同じ式)。
@@ -327,7 +327,7 @@ pub struct Compositor {
     pub(crate) effect_scratch: effects::EffectScratch,
     pub(crate) effect_programs: std::collections::HashMap<String, effects::EffectProgram>,
     /// hook の変種。鍵は「field の id | surface の id | catalog の世代」。
-    pub(crate) mesh_programs: std::collections::HashMap<String, std::sync::Arc<re_renderer::renderer::MeshProgram>>,
+    pub(crate) surface_programs: std::collections::HashMap<String, std::sync::Arc<re_renderer::renderer::SurfaceProgram>>,
     /// 層と背景を混ぜる Vism(vism/blend.wgsl + 借りた式)。
     pub(crate) blend_vism: effects::EffectProgram,
     /// 層をマットで切る Vism(vism/matte.wgsl + 借りた svg_lum)。
@@ -355,7 +355,7 @@ impl GpuModelData {
 }
 
 pub use environment::GpuEnvironmentData;
-pub use effects::mesh_program::MeshShading;
+pub use effects::surface_program::SurfaceShading;
 pub use point_cloud::PointDisplace;
 
 /// 層が持つ中身。3D の素材はテクスチャにならず、点のまま run へ渡る。
@@ -407,7 +407,7 @@ pub(crate) struct SequentialInput<'a> {
     opacity: f32,
     depth_offset: i16,
     blend_mode: BlendMode,
-    shading: effects::mesh_program::MeshShading,
+    shading: effects::surface_program::SurfaceShading,
     displace: point_cloud::PointDisplace,
     clip: Option<clip::ClipSpec>,
 }
