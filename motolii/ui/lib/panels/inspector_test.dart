@@ -46,6 +46,7 @@ _Kind _kindOf(Map<String, dynamic> row) {
 enum _Character {
   amount,
   size,
+  ratio,
   angle,
   place,
   seed,
@@ -106,6 +107,7 @@ const _characterWords = <_Character, List<String>>{
 const _characterGlyphs = <_Character, IconData>{
   _Character.amount: Icons.tune,
   _Character.size: Icons.straighten,
+  _Character.ratio: Icons.aspect_ratio,
   _Character.angle: Icons.rotate_right,
   _Character.place: Icons.open_with,
   _Character.seed: Icons.casino_outlined,
