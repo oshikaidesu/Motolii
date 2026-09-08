@@ -871,6 +871,8 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
           fraction: anchor is List
               ? [(anchor[0] as num).toDouble(), (anchor[1] as num).toDouble()]
               : null,
+          onHover: (x, y, inside) =>
+              c.anchorPreview.value = inside ? [x, y] : null,
           onPick: panelCan(c, 'anchor') && layer['locked'] != true
               ? (x, y) => c.command('anchor', {
                   'layer': layer['id'],
@@ -1089,9 +1091,25 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
     return EditorCard(
       title: '${effect['name']}',
       glyph: Icons.auto_fix_high_outlined,
+      dim: effect['enabled'] == false,
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
+          _headGlyph(
+            effect['enabled'] == false
+                ? Icons.visibility_off_outlined
+                : Icons.visibility_outlined,
+            effect['enabled'] == false
+                ? 'Off — press to apply'
+                : 'Applied — press to bypass',
+            panelCan(c, 'enableEffect')
+                ? () => c.command('enableEffect', {
+                    'layer': layer['id'],
+                    'id': effect['id'],
+                    'enabled': effect['enabled'] == false,
+                  })
+                : null,
+          ),
           _headGlyph(
             Icons.arrow_upward,
             'Apply earlier',

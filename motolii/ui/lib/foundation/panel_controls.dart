@@ -304,7 +304,7 @@ class _EditorNumericFieldState extends State<EditorNumericField> {
   FocusNode get _idle => widget.idleFocus ?? _ownIdle;
   bool _editing = false, _dragging = false, _sending = false;
   int? _pointer;
-  double _start = 0, _startGlobalX = 0;
+  double _start = 0, _startGlobalX = 0, _startGlobalY = 0;
   double? _pending, _shown;
   Future<void> _drained = Future<void>.value();
   String? _error;
@@ -387,8 +387,22 @@ class _EditorNumericFieldState extends State<EditorNumericField> {
     _pointer = event.pointer;
     _start = widget.value;
     _startGlobalX = event.position.dx;
+    _startGlobalY = event.position.dy;
     _idle.requestFocus();
   }
+
+  /// The drag's precision, picked by how far the pointer has moved up or
+  /// down since it pressed: level is ×1, above is ×10, below ×0.1, further
+  /// below ×0.01 (the Figma ladder). Changing rung mid-drag keeps the value.
+  double _rung = 1;
+  double _rungBase = 0, _rungStartX = 0;
+  double _rungFor(double dy) => dy < -EditorMetrics.s32
+      ? 10
+      : dy < EditorMetrics.s32
+      ? 1
+      : dy < EditorMetrics.s70
+      ? .1
+      : .01;
 
   void _pointerMove(PointerMoveEvent event) {
     if (event.pointer != _pointer || event.buttons != 1) return;
@@ -396,9 +410,20 @@ class _EditorNumericFieldState extends State<EditorNumericField> {
     if (!_dragging) {
       if (displacement.abs() < 3) return;
       widget.onBegin?.call();
+      _rung = 1;
+      _rungBase = _start;
+      _rungStartX = _startGlobalX;
       setState(() => _dragging = true);
     }
-    final n = _bounded(_start + displacement * widget.speed);
+    final rung = _rungFor(event.position.dy - _startGlobalY);
+    if (rung != _rung) {
+      _rungBase = _shown ?? widget.value;
+      _rungStartX = event.position.dx;
+      _rung = rung;
+    }
+    final n = _bounded(
+      _rungBase + (event.position.dx - _rungStartX) * widget.speed * _rung,
+    );
     setState(() => _shown = n);
     _tick(n);
   }
@@ -510,7 +535,9 @@ class _EditorNumericFieldState extends State<EditorNumericField> {
                 onPointerUp: _pointerUp,
                 onPointerCancel: (event) => _pointerUp(event, cancel: true),
                 child: Tooltip(
-                  message: widget.label,
+                  message: _dragging && _rung != 1
+                      ? '${widget.label} ×$_rung'
+                      : widget.label,
                   child: Container(
                     height: EditorMetrics.row,
                     decoration: BoxDecoration(
@@ -904,11 +931,16 @@ class EditorAnchorGrid extends StatelessWidget {
     super.key,
     required this.fraction,
     required this.onPick,
+    this.onHover,
     this.cell = EditorMetrics.s14,
   });
   final List<double>? fraction;
   final double cell;
   final void Function(double x, double y)? onPick;
+
+  /// The cell under the pointer, or null when it leaves — so the Stage can
+  /// show where that pivot would land before it is chosen.
+  final void Function(double x, double y, bool inside)? onHover;
   @override
   Widget build(BuildContext context) => Tooltip(
     message: 'Anchor',
@@ -920,22 +952,26 @@ class EditorAnchorGrid extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               for (final x in [0.0, .5, 1.0])
-                GestureDetector(
-                  onTap: onPick == null ? null : () => onPick!(x, y),
-                  child: Container(
-                    width: cell,
-                    height: cell,
-                    margin: const EdgeInsets.all(1),
-                    decoration: BoxDecoration(
-                      color:
-                          fraction != null &&
-                              (fraction![0] - x).abs() < .05 &&
-                              (fraction![1] - y).abs() < .05
-                          ? EditorTheme.accent
-                          : onPick == null
-                          ? EditorTheme.raised
-                          : EditorTheme.border,
-                      borderRadius: BorderRadius.circular(EditorMetrics.s2),
+                MouseRegion(
+                  onEnter: (_) => onHover?.call(x, y, true),
+                  onExit: (_) => onHover?.call(x, y, false),
+                  child: GestureDetector(
+                    onTap: onPick == null ? null : () => onPick!(x, y),
+                    child: Container(
+                      width: cell,
+                      height: cell,
+                      margin: const EdgeInsets.all(1),
+                      decoration: BoxDecoration(
+                        color:
+                            fraction != null &&
+                                (fraction![0] - x).abs() < .05 &&
+                                (fraction![1] - y).abs() < .05
+                            ? EditorTheme.accent
+                            : onPick == null
+                            ? EditorTheme.raised
+                            : EditorTheme.border,
+                        borderRadius: BorderRadius.circular(EditorMetrics.s2),
+                      ),
                     ),
                   ),
                 ),
@@ -954,11 +990,15 @@ class EditorCard extends StatelessWidget {
     required this.glyph,
     required this.children,
     this.trailing,
+    this.dim = false,
   });
   final String title;
   final IconData glyph;
   final List<Widget> children;
   final Widget? trailing;
+
+  /// The card's contents faded: what it holds is not applied right now.
+  final bool dim;
   @override
   Widget build(BuildContext context) => Container(
     margin: const EdgeInsets.fromLTRB(
@@ -993,7 +1033,16 @@ class EditorCard extends StatelessWidget {
           ],
         ),
         const SizedBox(height: EditorMetrics.s6),
-        ...children,
+        if (dim)
+          Opacity(
+            opacity: .4,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: children,
+            ),
+          )
+        else
+          ...children,
       ],
     ),
   );

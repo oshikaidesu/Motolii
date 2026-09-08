@@ -619,6 +619,7 @@ class _StagePanelState extends State<StagePanel> {
       c.rendered,
       c.textureId,
       c.playing,
+      c.anchorPreview,
     ]),
     builder: (context, _) => Column(
       children: [
@@ -690,6 +691,7 @@ class _StagePanelState extends State<StagePanel> {
               final gizmos = !c.playing.value;
               final outlines = <List<Offset>>[];
               final volumes = <List<Offset>>[];
+              Offset? anchorPreview;
               for (final layer in _visible.where(
                 (l) => gizmos && c.selectedIds.contains(l['id']),
               )) {
@@ -698,6 +700,14 @@ class _StagePanelState extends State<StagePanel> {
                 if (raw.length == 8) volumes.add(raw.map(_toScreen).toList());
                 if (points.isNotEmpty)
                   outlines.add(points.map(_toScreen).toList());
+                // Where a hovered anchor would sit: bilinear in the corners.
+                final f = c.anchorPreview.value;
+                if (f != null && points.length >= 4 && anchorPreview == null) {
+                  final u = f[0], v = f[1];
+                  final top = points[0] + (points[1] - points[0]) * u;
+                  final bottom = points[3] + (points[2] - points[3]) * u;
+                  anchorPreview = _toScreen(top + (bottom - top) * v);
+                }
               }
               return Focus(
                 focusNode: _focus,
@@ -762,6 +772,7 @@ class _StagePanelState extends State<StagePanel> {
                             child: IgnorePointer(
                               child: CustomPaint(
                                 painter: _StageOverlay(
+                                  anchorPreview: anchorPreview,
                                   cameras: gizmos
                                       ? _cameras.map(_cameraPoints).toList()
                                       : const [],
@@ -861,6 +872,7 @@ class _StageOverlay extends CustomPainter {
     this.cameraHandles = const {},
     this.front = true,
     this.observerTarget,
+    this.anchorPreview,
     required this.outlines,
     required this.volumes,
     required this.handles,
@@ -873,6 +885,9 @@ class _StageOverlay extends CustomPainter {
   final Map<String, Offset> handles, cameraHandles;
   final bool front;
   final Offset? observerTarget;
+
+  /// The pivot a hovered anchor cell would set, drawn as a cross.
+  final Offset? anchorPreview;
   final Rect viewport;
   final Rect? marquee;
   void _cross(Canvas canvas, Offset at, double half, Paint paint) {
@@ -895,6 +910,10 @@ class _StageOverlay extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..color = EditorTheme.accent
       ..strokeWidth = 1;
+    if (anchorPreview case final at?) {
+      _cross(canvas, at, EditorMetrics.s8, line);
+      canvas.drawCircle(at, EditorMetrics.s3, line);
+    }
     final cameraLine = Paint()
       ..color = const Color(0xff8ed9e6)
       ..strokeWidth = 1

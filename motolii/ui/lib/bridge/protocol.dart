@@ -37,6 +37,7 @@ enum DocumentOperation {
   removeEffect('removeEffect'),
   expandEffect('expandEffect'),
   moveEffect('moveEffect'),
+  enableEffect('enableEffect'),
   animate('animate'),
   clip('clip'),
   addMarker('addMarker'),

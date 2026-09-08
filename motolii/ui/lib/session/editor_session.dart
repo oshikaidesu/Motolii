@@ -30,6 +30,10 @@ class EditorSession {
   }
 
   final focusProperty = ValueNotifier<String?>(null);
+
+  /// An anchor the pointer hovers in the Inspector, as a fraction of the
+  /// layer's bounds; the Stage marks where the pivot would land.
+  final anchorPreview = ValueNotifier<List<double>?>(null);
   final keyedOnly = ValueNotifier<bool>(false);
   final viewCommand = ValueNotifier<String?>(null);
   Map<String, dynamic> windowInfo = {};
@@ -504,6 +508,7 @@ class EditorSession {
     deskDefault.dispose();
     deskDrawer.dispose();
     panePlaces.dispose();
+    anchorPreview.dispose();
     browserTab.dispose();
     focusProperty.dispose();
     editingFocus.dispose();

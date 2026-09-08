@@ -83,4 +83,65 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     },
   );
+
+  testWidgets('a hovered anchor is marked on the selected layer', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(900, 700);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final c = ObserverSession();
+    c.document.value = {
+      'width': 400,
+      'height': 400,
+      'layers': [
+        {
+          'id': 7,
+          'name': 'a',
+          'kind': 'Image',
+          'corners': [
+            [0, 0],
+            [200, 0],
+            [200, 200],
+            [0, 200],
+          ],
+          'bounds': {
+            'corners': [
+              [0, 0],
+              [200, 0],
+              [200, 200],
+              [0, 200],
+            ],
+          },
+        },
+      ],
+      'selectedIds': [7],
+    };
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: EditorTheme.data,
+        home: Scaffold(
+          body: SizedBox(
+            width: 464,
+            height: 480,
+            child: StagePanel(controller: c),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    CustomPaint overlay() => tester
+        .widgetList<CustomPaint>(find.byType(CustomPaint))
+        .firstWhere((w) => '${w.painter.runtimeType}' == '_StageOverlay');
+    expect((overlay().painter as dynamic).anchorPreview, isNull);
+    c.anchorPreview.value = [1.0, 0.0];
+    await tester.pump();
+    final at = (overlay().painter as dynamic).anchorPreview as Offset?;
+    expect(at, isNotNull, reason: 'the cross appears while a cell is hovered');
+    c.anchorPreview.value = null;
+    await tester.pump();
+    expect((overlay().painter as dynamic).anchorPreview, isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
 }
