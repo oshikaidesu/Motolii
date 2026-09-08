@@ -263,6 +263,7 @@ class EditorNumericField extends StatefulWidget {
     this.fill = false,
     this.unit,
     this.decimals = 2,
+    this.defaultValue,
   });
   final double value, speed;
   final double? min, max;
@@ -276,6 +277,10 @@ class EditorNumericField extends StatefulWidget {
   /// A small rider after the number: px, %, °.
   final String? unit;
   final int decimals;
+
+  /// Where the value rests when untouched: a tick on the track, and the
+  /// point a centre-zero track fills from.
+  final double? defaultValue;
   final FocusNode? idleFocus;
   final Future<void> Function(double) onPreview, onCommit;
   final Future<void> Function() onFinish, onCancel;
@@ -507,16 +512,12 @@ class _EditorNumericFieldState extends State<EditorNumericField> {
                         if (widget.fill &&
                             widget.min != null &&
                             widget.max != null)
-                          Align(
-                            alignment: Alignment.centerLeft,
-                            child: FractionallySizedBox(
-                              widthFactor:
-                                  (((_shown ?? widget.value) - widget.min!) /
-                                          (widget.max! - widget.min!))
-                                      .clamp(0.0, 1.0),
-                              child: const ColoredBox(
-                                color: EditorTheme.raised,
-                              ),
+                          CustomPaint(
+                            painter: _TrackPainter(
+                              value: _shown ?? widget.value,
+                              min: widget.min!,
+                              max: widget.max!,
+                              rest: widget.defaultValue,
                             ),
                           ),
                         Padding(
@@ -542,6 +543,13 @@ class _EditorNumericFieldState extends State<EditorNumericField> {
                                     color: widget.enabled
                                         ? EditorTheme.ink
                                         : EditorTheme.muted,
+                                    // A number you can drag wears a dotted
+                                    // underline; a read-only one does not.
+                                    decoration: widget.enabled
+                                        ? TextDecoration.underline
+                                        : TextDecoration.none,
+                                    decorationStyle: TextDecorationStyle.dotted,
+                                    decorationColor: EditorTheme.muted,
                                   ),
                                 ),
                               ),
@@ -1034,4 +1042,45 @@ class _PadPainter extends CustomPainter {
   @override
   bool shouldRepaint(_PadPainter old) =>
       old.at != at || old.span != span || old.dot != dot;
+}
+
+/// The amount behind a bounded number: fills from the rest point (or from
+/// the left edge when there is none), with a tick where the rest point is.
+class _TrackPainter extends CustomPainter {
+  const _TrackPainter({
+    required this.value,
+    required this.min,
+    required this.max,
+    this.rest,
+  });
+  final double value, min, max;
+  final double? rest;
+  double _x(double v, double w) =>
+      ((v - min) / (max - min)).clamp(0.0, 1.0) * w;
+  @override
+  void paint(Canvas canvas, Size size) {
+    final zero = rest != null && rest! > min && rest! < max ? rest! : min;
+    final a = _x(zero, size.width), b = _x(value, size.width);
+    canvas.drawRect(
+      Rect.fromLTRB(math.min(a, b), 0, math.max(a, b), size.height),
+      Paint()..color = EditorTheme.raised,
+    );
+    if (rest != null) {
+      final x = _x(rest!, size.width);
+      canvas.drawLine(
+        Offset(x, 0),
+        Offset(x, size.height),
+        Paint()
+          ..color = EditorTheme.border
+          ..strokeWidth = 1,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_TrackPainter old) =>
+      old.value != value ||
+      old.min != min ||
+      old.max != max ||
+      old.rest != rest;
 }

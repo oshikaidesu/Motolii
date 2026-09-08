@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../foundation/metrics.dart';
@@ -307,6 +309,7 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
           fill: fill,
           unit: unit ?? '',
           decimals: percent ? 0 : 2,
+          defaultValue: _restOf(row, axis, shownScale),
           enabled: _canEdit(layer),
           onPreview: (n) => _write(
             layer,
@@ -326,6 +329,109 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
       ),
     );
   }
+
+  /// The value a row rests at: declared on the row, or by meaning for the
+  /// layer's own transform (scale 1, rotation 0, opacity 1).
+  double? _restOf(Map<String, dynamic> row, int axis, double scale) {
+    final id = '${row['id']}';
+    final d = row['default'];
+    if (d is num) return d.toDouble() * scale;
+    if (d is List && axis < d.length && d[axis] is num) {
+      return (d[axis] as num).toDouble() * scale;
+    }
+    if (id == 'scale') return 1.0;
+    if (id == 'opacity') return scale;
+    if (id.startsWith('rotation')) return 0.0;
+    return null;
+  }
+
+  /// Sweeps a row across its reach once (a Desmos play button), previewing
+  /// each step and cancelling at the end, so the picture tells what the
+  /// number does without a word. A second press stops it.
+  String? _sweeping;
+  Future<void> _sweep(
+    Map<String, dynamic> layer,
+    Map<String, dynamic> row,
+  ) async {
+    final id = '${row['id']}';
+    if (_sweeping == id) {
+      _sweeping = null;
+      return;
+    }
+    final v = row['value'];
+    if (v is! num || !_canEdit(layer)) return;
+    final min = (row['min'] as num?)?.toDouble(),
+        max = (row['max'] as num?)?.toDouble();
+    final base = v.toDouble();
+    final (lo, hi) = min != null && max != null
+        ? (min, max)
+        : base == 0
+        ? (-EditorMetrics.s96, EditorMetrics.s96)
+        : (base * .5, base * 1.5);
+    setState(() => _sweeping = id);
+    const steps = 24;
+    for (var i = 0; i <= steps && _sweeping == id && mounted; i++) {
+      final t = i / steps;
+      final phase = t < .5 ? t * 2 : 2 - t * 2;
+      await _write(layer, row, lo + (hi - lo) * phase, preview: true);
+      await Future<void>.delayed(const Duration(milliseconds: 40));
+    }
+    await c.command('cancelPreview');
+    if (mounted && _sweeping == id) setState(() => _sweeping = null);
+  }
+
+  /// Every bounded number of an effect thrown within its reach, seeds too,
+  /// as one edit (the Ableton dice).
+  Future<void> _roll(
+    Map<String, dynamic> layer,
+    Map<String, dynamic> effect,
+  ) async {
+    final rnd = math.Random();
+    final values = <String, double>{};
+    for (final row in panelRows(effect['params'])) {
+      final id = '${row['id']}';
+      if (row['value'] is! num || row['choices'] is List) continue;
+      final min = (row['min'] as num?)?.toDouble(),
+          max = (row['max'] as num?)?.toDouble();
+      if (id.endsWith('.seed')) {
+        values[id] = rnd.nextInt(10000).toDouble();
+      } else if (min != null && max != null) {
+        values[id] = min + (max - min) * rnd.nextDouble();
+      }
+    }
+    if (values.isNotEmpty) await _writeMany(layer, values, preview: false);
+  }
+
+  /// Every number of an effect back to where it rests, as one edit.
+  Future<void> _rest(
+    Map<String, dynamic> layer,
+    Map<String, dynamic> effect,
+  ) async {
+    final values = <String, double>{};
+    for (final row in panelRows(effect['params'])) {
+      final d = row['default'];
+      if (row['value'] is num && d is num && row['choices'] is! List) {
+        values['${row['id']}'] = d.toDouble();
+      }
+    }
+    if (values.isNotEmpty) await _writeMany(layer, values, preview: false);
+  }
+
+  Widget _headGlyph(IconData icon, String tip, VoidCallback? onTap) => Tooltip(
+    message: tip,
+    child: GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.only(left: EditorMetrics.s6),
+        child: Icon(
+          icon,
+          size: EditorMetrics.s12,
+          color: onTap == null ? EditorTheme.disabledInk : EditorTheme.muted,
+        ),
+      ),
+    ),
+  );
 
   Widget _glyph(IconData icon, String tip) => Tooltip(
     message: tip,
@@ -631,6 +737,22 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
           if (g['random'] is String) '${g['random']}',
         ],
     };
+    // Heroes: declared, else the first four that are not advanced (the OP-1
+    // rule: four knobs in front, the rest behind shift).
+    final plain = params
+        .where((r) => !advancedIds.contains('${r['id']}'))
+        .toList();
+    final declaredHeroes = plain.where((r) => r['hero'] == true).toList();
+    final heroIds = <String>{
+      for (final r
+          in declaredHeroes.isNotEmpty
+              ? declaredHeroes
+              : plain.length > 4
+              ? plain.take(4)
+              : const <Map<String, dynamic>>[])
+        '${r['id']}',
+    };
+    final heroes = <Widget>[];
     final controls = <Widget>[];
     final advanced = <Widget>[];
     String? section;
@@ -639,7 +761,12 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
     for (final row in params) {
       final id = '${row['id']}';
       if (folded.contains(id)) continue;
-      final into = advancedIds.contains(id) ? advanced : controls;
+      final hero = heroIds.contains(id);
+      final into = advancedIds.contains(id)
+          ? advanced
+          : hero
+          ? heroes
+          : controls;
       final here = row['section'] as String?;
       if (here != null && here != section && !advancedIds.contains(id)) {
         controls.add(_SectionLabel(here));
@@ -661,33 +788,50 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
       final y = yId == null ? null : byId[yId];
       if (y != null && row['value'] is num && y['value'] is num) {
         folded.add(yId!);
-        into.add(_pointControl(layer, row, y));
+        into.add(_pointControl(layer, row, y, hero: hero));
         continue;
       }
-      into.add(_control(layer, row));
+      into.add(_control(layer, row, hero: hero));
     }
     final key = '${effect['id']}';
     final open = _advancedOpen.contains(key);
     return EditorCard(
       title: '${effect['name']}',
       glyph: Icons.auto_fix_high_outlined,
-      trailing: Tooltip(
-        message: 'Remove effect',
-        child: GestureDetector(
-          onTap: panelCan(c, 'removeEffect')
-              ? () => c.command('removeEffect', {
-                  'layer': layer['id'],
-                  'effect': effect['id'],
-                })
-              : null,
-          child: const Icon(
-            Icons.close,
-            size: EditorMetrics.s12,
-            color: EditorTheme.muted,
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _headGlyph(
+            Icons.casino_outlined,
+            'Throw every number within its reach',
+            _canEdit(layer) ? () => _roll(layer, effect) : null,
           ),
-        ),
+          _headGlyph(
+            Icons.restart_alt,
+            'Back to where the numbers rest',
+            _canEdit(layer) ? () => _rest(layer, effect) : null,
+          ),
+          _headGlyph(
+            Icons.close,
+            'Remove effect',
+            panelCan(c, 'removeEffect')
+                ? () => c.command('removeEffect', {
+                    'layer': layer['id'],
+                    'effect': effect['id'],
+                  })
+                : null,
+          ),
+        ],
       ),
       children: [
+        if (heroes.isNotEmpty) ...[
+          _cells(heroes),
+          if (controls.isNotEmpty) ...[
+            const SizedBox(height: EditorMetrics.s6),
+            const Divider(height: 1),
+            const SizedBox(height: EditorMetrics.s6),
+          ],
+        ],
         _cells(controls),
         if (advanced.isNotEmpty) ...[
           const SizedBox(height: EditorMetrics.s4),
@@ -727,8 +871,9 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
   Widget _pointControl(
     Map<String, dynamic> layer,
     Map<String, dynamic> xRow,
-    Map<String, dynamic> yRow,
-  ) {
+    Map<String, dynamic> yRow, {
+    bool hero = false,
+  }) {
     final stem = '${xRow['label'] ?? xRow['id']}';
     final label = stem.endsWith(' X')
         ? stem.substring(0, stem.length - 2)
@@ -737,7 +882,7 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        _cellLabel(label, Icons.open_with),
+        _cellLabel(label, Icons.open_with, hero),
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
@@ -769,32 +914,62 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
     );
   }
 
-  Widget _cellLabel(String label, [IconData? glyph]) => Padding(
+  Widget _cellLabel(
+    String label, [
+    IconData? glyph,
+    bool hero = false,
+    VoidCallback? onPlay,
+    bool playing = false,
+  ]) => Padding(
     padding: const EdgeInsets.only(bottom: EditorMetrics.s2),
     child: Row(
-      mainAxisSize: MainAxisSize.min,
       children: [
         SizedBox(
           width: EditorMetrics.s14,
           child: glyph == null
               ? null
-              : Icon(glyph, size: EditorMetrics.s12, color: EditorTheme.muted),
+              : Icon(
+                  glyph,
+                  size: EditorMetrics.s12,
+                  color: hero ? EditorTheme.accent : EditorTheme.muted,
+                ),
         ),
         const SizedBox(width: EditorMetrics.s2),
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: EditorMetrics.dense,
-            color: EditorTheme.muted,
+        Expanded(
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: EditorMetrics.dense,
+              color: hero ? EditorTheme.ink : EditorTheme.muted,
+            ),
           ),
         ),
+        if (onPlay != null)
+          Tooltip(
+            message: playing ? 'Stop' : 'See what this does',
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: onPlay,
+              child: Icon(
+                playing ? Icons.stop : Icons.play_arrow,
+                size: EditorMetrics.s12,
+                color: playing ? EditorTheme.accent : EditorTheme.muted,
+              ),
+            ),
+          ),
       ],
     ),
   );
 
   /// A labelled control for one declared param: the word above, the control
   /// under it, sized by its kind.
-  Widget _control(Map<String, dynamic> layer, Map<String, dynamic> row) {
+  Widget _control(
+    Map<String, dynamic> layer,
+    Map<String, dynamic> row, {
+    bool hero = false,
+  }) {
     // A seed is a number to roll, whatever range it declares.
     final kind = '${row['id']}'.endsWith('.seed') ? _Kind.scalar : _kindOf(row);
     final label = '${row['label'] ?? row['id']}';
@@ -886,7 +1061,18 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
-      children: [_cellLabel(label, _glyphOf(row)), body],
+      children: [
+        _cellLabel(
+          label,
+          _glyphOf(row),
+          hero,
+          row['value'] is num && _canEdit(layer)
+              ? () => _sweep(layer, row)
+              : null,
+          _sweeping == '${row['id']}',
+        ),
+        body,
+      ],
     );
   }
 

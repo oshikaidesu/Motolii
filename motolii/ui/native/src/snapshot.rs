@@ -188,6 +188,8 @@ impl EditorRuntime{
                         if let Some(u)=&p.unit{row["unit"]=json!(u);}
                         if let Some(g)=&p.group{row["group"]=json!(format!("effect.{}.param.{}",effect.id,g));}
                         if p.advanced{row["advanced"]=json!(true);}
+                        if p.hero{row["hero"]=json!(true);}
+                        row["default"]=json!(p.default);
                     }
                 }
                 let layout=kind.map(|k|{

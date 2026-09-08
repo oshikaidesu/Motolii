@@ -80,7 +80,10 @@ void main() {
               'name': 'New Vism',
               'params': [
                 row('effect.0.param.mix', 'Mix', .3, min: 0, max: 1),
-                row('effect.0.param.radius', 'Radius', 12.0),
+                {
+                  ...row('effect.0.param.radius', 'Radius', 30.0),
+                  'default': 12.0,
+                },
                 row('effect.0.param.angle', 'rotation_of', 45.0),
                 row(
                   'effect.0.param.mode',
@@ -147,8 +150,8 @@ void main() {
     expect(find.byType(EditorDial), findsNWidgets(3));
     expect(find.byType(EditorPad), findsNWidgets(2));
     // Character glyphs come from the declared names: seed gets its die
-    // (label glyph and the roll button), radius a ruler, angle a dial.
-    expect(find.byIcon(Icons.casino_outlined), findsNWidgets(2));
+    // (label glyph, roll button, and the card die), radius a ruler, angle a dial.
+    expect(find.byIcon(Icons.casino_outlined), findsNWidgets(3));
     expect(find.byIcon(Icons.straighten), findsOneWidget);
     // Transform rotation, the `angle` word, and `spin` by its analysed subtype.
     expect(find.byType(EditorDial), findsNWidgets(3));
@@ -166,6 +169,33 @@ void main() {
     expect(find.text('50 %'), findsNothing, reason: 'unit is its own rider');
     expect(find.text('50'), findsOneWidget, reason: 'opacity shown in percent');
     expect(find.text('%'), findsWidgets);
+
+    // More than four plain controls: the first four are heroes above a rule,
+    // and every number offers a play button to see what it does.
+    expect(find.byType(Divider), findsWidgets);
+    expect(find.byIcon(Icons.play_arrow), findsWidgets);
+
+    // The dice throws every bounded number as one edit; the reset puts every
+    // number back where it rests, both through the preview-then-commit route.
+    await tester.tap(find.byIcon(Icons.casino_outlined).last);
+    await tester.pumpAndSettle();
+    expect(
+      commands
+          .where((m) => '${m['command']}'.contains('"op":"commitPreview"'))
+          .length,
+      1,
+    );
+    await tester.tap(find.byIcon(Icons.restart_alt));
+    await tester.pumpAndSettle();
+    expect(
+      commands.any(
+        (m) =>
+            '${m['command']}'.contains('"op":"previewProperties"') &&
+            '${m['command']}'.contains('"value":12.0'),
+      ),
+      isTrue,
+      reason: 'radius rests at 12',
+    );
 
     // Advanced controls start folded; the fold opens them, per effect.
     expect(find.text('Gamma'), findsNothing);
