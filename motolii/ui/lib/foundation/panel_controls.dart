@@ -512,8 +512,11 @@ class _EditorNumericFieldState extends State<EditorNumericField> {
                 child: Tooltip(
                   message: widget.label,
                   child: Container(
-                    height: EditorMetrics.s18,
-                    color: _dragging ? EditorTheme.hover : EditorTheme.app,
+                    height: EditorMetrics.row,
+                    decoration: BoxDecoration(
+                      color: _dragging ? EditorTheme.hover : EditorTheme.app,
+                      border: Border.all(color: EditorTheme.line),
+                    ),
                     child: Stack(
                       fit: StackFit.expand,
                       children: [
@@ -554,13 +557,17 @@ class _EditorNumericFieldState extends State<EditorNumericField> {
                                         ? EditorTheme.ink
                                         : EditorTheme.muted,
                                     // A number you can drag wears a dotted
-                                    // underline; a read-only one does not.
-                                    decoration: widget.enabled
+                                    // underline, unless a track already says
+                                    // so; a read-only one never does.
+                                    decoration:
+                                        widget.enabled &&
+                                            !(widget.fill &&
+                                                widget.min != null &&
+                                                widget.max != null)
                                         ? TextDecoration.underline
                                         : TextDecoration.none,
                                     decorationStyle: TextDecorationStyle.dotted,
-                                    decorationColor:
-                                        widget.tint ?? EditorTheme.muted,
+                                    decorationColor: EditorTheme.muted,
                                   ),
                                 ),
                               ),

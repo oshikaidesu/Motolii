@@ -765,9 +765,9 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
               : const <Map<String, dynamic>>[])
         '${r['id']}',
     };
-    final heroes = <Widget>[];
-    final controls = <Widget>[];
-    final advanced = <Widget>[];
+    final heroes = <_Cell>[];
+    final controls = <_Cell>[];
+    final advanced = <_Cell>[];
     String? section;
     final byId = {for (final r in params) '${r['id']}': r};
     final folded = <String>{};
@@ -782,7 +782,7 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
           : controls;
       final here = row['section'] as String?;
       if (here != null && here != section && !advancedIds.contains(id)) {
-        controls.add(_SectionLabel(here));
+        controls.add(_Cell(_SectionLabel(here), wide: true));
       }
       section = here;
       // A pair the shader adds to a coordinate together (group), or declared
@@ -801,10 +801,10 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
       final y = yId == null ? null : byId[yId];
       if (y != null && row['value'] is num && y['value'] is num) {
         folded.add(yId!);
-        into.add(_pointControl(layer, row, y, hero: hero));
+        into.add(_Cell(_pointControl(layer, row, y, hero: hero), tall: true));
         continue;
       }
-      into.add(_control(layer, row, hero: hero));
+      into.add(_Cell(_control(layer, row, hero: hero)));
     }
     final key = '${effect['id']}';
     final open = _advancedOpen.contains(key);
@@ -863,18 +863,25 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
     );
   }
 
-  /// Controls in two equal columns; a section label spans both.
-  Widget _cells(List<Widget> controls) => LayoutBuilder(
+  /// Controls in two equal columns on fixed rows (a word, then a control),
+  /// so every cell sits on the same grid; a section label spans both.
+  Widget _cells(List<_Cell> cells) => LayoutBuilder(
     builder: (context, box) {
       final cell = (box.maxWidth - EditorMetrics.s6) / 2;
       return Wrap(
         spacing: EditorMetrics.s6,
-        runSpacing: EditorMetrics.s4,
+        runSpacing: EditorMetrics.s6,
         children: [
-          for (final w in controls)
-            w is _SectionLabel
-                ? SizedBox(width: box.maxWidth, child: w)
-                : SizedBox(width: cell, child: w),
+          for (final c in cells)
+            SizedBox(
+              width: c.wide ? box.maxWidth : cell,
+              height: c.wide
+                  ? EditorMetrics.s16
+                  : c.tall
+                  ? EditorMetrics.s76
+                  : EditorMetrics.s36,
+              child: c.child,
+            ),
         ],
       );
     },
@@ -905,6 +912,7 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
               y: (yRow['value'] as num).toDouble(),
               enabled: _canEdit(layer),
               tint: EditorTheme.spatial,
+              size: EditorMetrics.s60,
               onBegin: () {},
               onPreview: (x, y) => _writeMany(layer, {
                 '${xRow['id']}': x,
@@ -1187,23 +1195,33 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
   );
 }
 
+/// A section inside a card: the same kicker as the card's title, on a rule.
 class _SectionLabel extends StatelessWidget {
   const _SectionLabel(this.text);
   final String text;
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(
-      top: EditorMetrics.s4,
-      bottom: EditorMetrics.s2,
+  Widget build(BuildContext context) => Container(
+    alignment: Alignment.bottomLeft,
+    decoration: const BoxDecoration(
+      border: Border(bottom: BorderSide(color: EditorTheme.line)),
     ),
     child: Text(
-      text,
+      text.toUpperCase(),
       style: const TextStyle(
-        fontSize: EditorMetrics.dense,
+        fontSize: EditorMetrics.micro,
+        letterSpacing: 1,
         color: EditorTheme.muted,
       ),
     ),
   );
+}
+
+/// One cell of a card's grid: a control, a tall one (a pad), or a wide
+/// section label.
+class _Cell {
+  const _Cell(this.child, {this.tall = false, this.wide = false});
+  final Widget child;
+  final bool tall, wide;
 }
 
 /// The fold of the seldom-used controls: a chevron and the word, one line.
