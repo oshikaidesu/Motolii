@@ -94,6 +94,8 @@ pub struct IsfInput {
     pub min: Option<[f32; 4]>,
     pub max: Option<[f32; 4]>,
     pub maps: Option<serde_json::Value>,
+    /// 性格の宣言(`SUBTYPE`、Blender の語彙)。無ければ使われ方から読む。
+    pub subtype: Option<String>,
 }
 
 /// ISF `PASSES` の1つ。`PERSISTENT` は拒否し、`WIDTH`/`HEIGHT` の式は読まない
@@ -209,11 +211,13 @@ pub(crate) fn parse_isf_source(source: &str) -> Result<(IsfManifest, String), Is
             let max = entry.get("MAX").map(|v| read_components(Some(v)));
             let maps = entry.get("MAPS").cloned();
             let label = entry.get("LABEL").and_then(|v| v.as_str()).map(str::to_owned);
+            let subtype = entry.get("SUBTYPE").and_then(|v| v.as_str()).map(str::to_owned);
             let labels = entry.get("LABELS").and_then(|v| v.as_array()).map(|a| a.iter().filter_map(|v| v.as_str().map(str::to_owned)).collect::<Vec<_>>());
             inputs.push(IsfInput {
                 name: name.to_owned(),
                 label,
                 labels,
+                subtype,
                 ty,
                 default,
                 min,

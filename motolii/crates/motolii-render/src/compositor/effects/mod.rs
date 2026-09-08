@@ -5,6 +5,7 @@ pub(crate) mod vism;
 pub(crate) mod catalog;
 pub(crate) mod mesh_program;
 mod wgsl_fragment;
+pub mod subtype;
 
 pub use isf::{IsfInput, IsfInputType, IsfManifest, IsfStage};
 pub(crate) use vism::FLOAT_TARGET_FORMAT;
@@ -37,6 +38,8 @@ pub(crate) struct VismDefinition {
     pub(crate) fragment_text: String,
     pub(crate) vertex_entry: String,
     pub(crate) fragment_entry: String,
+    /// 欄ごとの性格(manifest.param_inputs() と同じ並び)。
+    pub(crate) subtypes: Vec<subtype::ParamSubtype>,
 }
 
 impl VismDefinition {

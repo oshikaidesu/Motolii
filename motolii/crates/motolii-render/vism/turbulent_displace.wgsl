@@ -7,7 +7,7 @@
     { "NAME": "amount", "LABEL": "Amount", "TYPE": "float", "DEFAULT": 50.0, "MIN": 0.0, "MAX": 100000.0 },
     { "NAME": "size", "LABEL": "Size", "TYPE": "float", "DEFAULT": 100.0, "MIN": 1.0, "MAX": 100000.0 },
     { "NAME": "complexity", "LABEL": "Complexity", "TYPE": "float", "DEFAULT": 3.0, "MIN": 1.0, "MAX": 8.0 },
-    { "NAME": "evolution", "LABEL": "Evolution", "TYPE": "float", "DEFAULT": 0.0 },
+    { "NAME": "evolution", "LABEL": "Evolution", "TYPE": "float", "DEFAULT": 0.0, "SUBTYPE": "TIME" },
     { "NAME": "along", "LABEL": "Along", "TYPE": "long", "DEFAULT": 0, "LABELS": ["Normal", "Space"] },
     { "NAME": "offset_x", "LABEL": "Offset X", "TYPE": "float", "DEFAULT": 0.0 },
     { "NAME": "offset_y", "LABEL": "Offset Y", "TYPE": "float", "DEFAULT": 0.0 },

@@ -123,7 +123,24 @@ const _characterGlyphs = <_Character, IconData>{
   _Character.detail: Icons.grain,
 };
 
+/// The declared or analysed subtype (Blender vocabulary) wins over words.
+_Character? _declaredCharacter(Map<String, dynamic> row) =>
+    switch ('${row['subtype'] ?? ''}') {
+      'SEED' => _Character.seed,
+      'ANGLE' => _Character.angle,
+      'OPACITY' => _Character.opacity,
+      'DISTANCE' || 'PIXEL' => _Character.size,
+      'TRANSLATION' => _Character.place,
+      'TIME' => _Character.time,
+      'LEVEL' => _Character.level,
+      'FACTOR' || 'PERCENTAGE' => _Character.amount,
+      'COUNT' => _Character.count,
+      _ => null,
+    };
+
 _Character _characterOf(Map<String, dynamic> row) {
+  final declared = _declaredCharacter(row);
+  if (declared != null) return declared;
   final id = '${row['id']}'.split('.param.').last;
   final words = <String>{
     ...id.toLowerCase().split(RegExp('[^a-z]+')),
@@ -146,6 +163,7 @@ String? _unitOf(Map<String, dynamic> row) {
   if (id.startsWith('position') || id == 'anchor' || id == 'camera.center') {
     return 'px';
   }
+  if (row['unit'] is String) return row['unit'] as String;
   if (id.contains('.param.')) {
     final max = row['max'] as num?;
     return switch (_characterOf(row)) {
@@ -611,8 +629,17 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
         controls.add(_SectionLabel(here));
       }
       section = here;
-      // A declared pair `name_x` + `name_y` is one point: a pad and two wells.
-      final yId = id.endsWith('_x')
+      // A pair the shader adds to a coordinate together (group), or declared
+      // as `name_x` + `name_y`, is one point: a pad and two wells.
+      final group = row['group'];
+      final partner = group is String && group == id
+          ? params
+                .where((r) => r['group'] == group && r['id'] != id)
+                .firstOrNull
+          : null;
+      final yId = partner != null
+          ? '${partner['id']}'
+          : id.endsWith('_x')
           ? '${id.substring(0, id.length - 2)}_y'
           : null;
       final y = yId == null ? null : byId[yId];

@@ -119,7 +119,7 @@ mod tests {
         let src = super::super::VismSource { name: "t".into(), extension: "wgsl".into(),
             source: "/*{ \"ID\": \"x.t\", \"STAGE\": \"field\", \"INPUTS\": [ {\"NAME\":\"amount\",\"TYPE\":\"float\",\"DEFAULT\":2.0}, {\"NAME\":\"along\",\"TYPE\":\"long\",\"LABELS\":[\"A\",\"B\"]} ] }*/\nfn field(in: FieldIn, p: FieldParams) -> FieldOut { return FieldOut(vec3f(p.amount), in.normal); }".into() };
         let (manifest, body) = super::super::isf::parse_isf_source(&src.source).unwrap();
-        let def = VismDefinition { source: src, manifest, interface: String::new(), vertex_text: body.clone(), fragment_text: body, vertex_entry: String::new(), fragment_entry: String::new() };
+        let def = VismDefinition { subtypes: Vec::new(), source: src, manifest, interface: String::new(), vertex_text: body.clone(), fragment_text: body, vertex_entry: String::new(), fragment_entry: String::new() };
         let desc = program_desc(Some(&def), None).unwrap();
         let field = desc.field.unwrap();
         assert!(field.contains("struct FieldParams {\n    amount: f32,\n    along: f32,\n};"), "{field}");

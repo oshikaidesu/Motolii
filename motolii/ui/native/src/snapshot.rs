@@ -182,7 +182,12 @@ impl EditorRuntime{
                     if let Some(param)=crate::doc::store::kind::kind(&effect.plugin_id).and_then(|k|k.params.iter().find(|p|p.name==name)){
                         if !param.section.is_empty(){row["section"]=json!(param.section);}
                     }
-                    if let Some(choices)=catalog.iter().find(|d|d.plugin_id==effect.plugin_id).and_then(|d|d.params.iter().find(|p|p.name==name)).and_then(|p|p.choices.clone()){row["choices"]=json!(choices);}
+                    if let Some(p)=catalog.iter().find(|d|d.plugin_id==effect.plugin_id).and_then(|d|d.params.iter().find(|p|p.name==name)){
+                        if let Some(choices)=p.choices.clone(){row["choices"]=json!(choices);}
+                        if let Some(s)=&p.subtype{row["subtype"]=json!(s);}
+                        if let Some(u)=&p.unit{row["unit"]=json!(u);}
+                        if let Some(g)=&p.group{row["group"]=json!(format!("effect.{}.param.{}",effect.id,g));}
+                    }
                 }
                 let layout=kind.map(|k|{
                     let pid=|name:&str|format!("effect.{}.param.{}",effect.id,name);

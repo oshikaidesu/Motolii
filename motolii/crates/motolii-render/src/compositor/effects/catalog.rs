@@ -2,7 +2,8 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, OnceLock, atomic::{AtomicU64, AtomicBool, Ordering}};
 
-use super::{isf, VismDefinition, VismSource};
+use super::{isf, subtype, VismDefinition, VismSource};
+use super::subtype::{ParamSubtype, Subtype};
 
 /// 棚の 1 枚が何を返すか(席)。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -36,6 +37,12 @@ pub struct EffectParamDescriptor {
     pub range: Option<(f64, f64)>,
     /// 選択肢。値は番号。
     pub choices: Option<Vec<String>>,
+    /// 性格(Blender の subtype 語彙)。manifest の `SUBTYPE` か、shader の使われ方の次元解析から。
+    pub subtype: Option<String>,
+    /// px / ° / % / ""。
+    pub unit: Option<String>,
+    /// 同じ点の仲間(先頭の欄の名前)。
+    pub group: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -148,8 +155,13 @@ fn uniform_components(module: &naga::Module, ty: naga::Handle<naga::Type>) -> us
     }
 }
 
+/// WGSL の parser の唯一の口(検証も性格の解析もここを通る)。
+pub(crate) fn parse_wgsl(source: &str) -> Result<naga::Module, String> {
+    naga::front::wgsl::parse_str(source).map_err(|e| e.emit_to_string(source))
+}
+
 fn validate_stage(source: &str, entry: &str, stage: naga::ShaderStage, manifest: &isf::IsfManifest) -> Result<String, String> {
-    let module = naga::front::wgsl::parse_str(source).map_err(|e| e.emit_to_string(source))?;
+    let module = parse_wgsl(source)?;
     naga::valid::Validator::new(naga::valid::ValidationFlags::all(), naga::valid::Capabilities::all())
         .validate(&module).map_err(|e| e.to_string())?;
     if !module.entry_points.iter().any(|e| e.name == entry && e.stage == stage) {
@@ -201,8 +213,12 @@ fn prepare(source: VismSource, prelude: &str) -> Result<VismDefinition, String> 
                 return Err(format!("hook の欄は {} 個まで", super::mesh_program::PARAM_SLOTS));
             }
             let interface = schema(&manifest);
+            let names = manifest.param_inputs().map(|p| p.name.clone()).collect::<Vec<_>>();
+            let stage_params = if manifest.stage == isf::IsfStage::Field { "FieldParams" } else { "SurfaceParams" };
+            let subtypes = parse_wgsl(&subtype::hook_stub(&body, stage_params, &names))
+                .map(|m| subtype::analyze_module(&m, names.len())).unwrap_or_else(|_| subtype::unknown(names.len()));
             return Ok(VismDefinition { source, manifest, interface, vertex_text: body.clone(), fragment_text: body,
-                vertex_entry: String::new(), fragment_entry: String::new() });
+                vertex_entry: String::new(), fragment_entry: String::new(), subtypes });
         }
     }
     let (manifest, vertex, fragment, vertex_entry, fragment_entry) = if source.extension == "fs" {
@@ -216,8 +232,10 @@ fn prepare(source: VismSource, prelude: &str) -> Result<VismDefinition, String> 
         (manifest, text.clone(), text, "vs_main", "fs_main")
     };
     let interface = format!("{}|{}|{}", schema(&manifest), validate_stage(&vertex, vertex_entry, naga::ShaderStage::Vertex, &manifest)?, validate_stage(&fragment, fragment_entry, naga::ShaderStage::Fragment, &manifest)?);
+    let n = manifest.param_inputs().count();
+    let subtypes = parse_wgsl(&fragment).map(|m| subtype::analyze_module(&m, n)).unwrap_or_else(|_| subtype::unknown(n));
     Ok(VismDefinition { source, manifest, interface, vertex_text: vertex, fragment_text: fragment,
-        vertex_entry: vertex_entry.into(), fragment_entry: fragment_entry.into() })
+        vertex_entry: vertex_entry.into(), fragment_entry: fragment_entry.into(), subtypes })
 }
 
 fn descriptors(definitions: &[VismDefinition]) -> Arc<[EffectDescriptor]> {
@@ -229,6 +247,7 @@ fn descriptors(definitions: &[VismDefinition]) -> Arc<[EffectDescriptor]> {
         params: kind.params.iter().map(|p| EffectParamDescriptor {
             name: p.name.to_owned(), label: p.label.to_owned(), default: p.default[0], range: p.range,
             choices: p.choices().map(|c| c.iter().map(|s| (*s).to_owned()).collect()),
+            subtype: None, unit: None, group: None,
         }).collect(),
         padding: None,
         output_format: wgpu::TextureFormat::Rgba8Unorm,
@@ -241,15 +260,36 @@ fn descriptors(definitions: &[VismDefinition]) -> Arc<[EffectDescriptor]> {
             isf::IsfStage::Surface => EffectStage::Surface,
             isf::IsfStage::Field => EffectStage::Field,
         },
-        params: d.manifest.param_inputs().map(|p| EffectParamDescriptor {
-            name: p.name.clone(), label: p.label.clone().unwrap_or_else(|| p.name.clone()), default: p.default[0] as f64,
-            range: p.min.zip(p.max).map(|(min, max)| (min[0] as f64, max[0] as f64))
-                .or_else(|| p.labels.as_ref().map(|l| (0.0, (l.len().max(1) - 1) as f64))),
-            choices: p.labels.clone(),
+        params: d.manifest.param_inputs().enumerate().map(|(i, p)| {
+            let range = p.min.zip(p.max).map(|(min, max)| (min[0] as f64, max[0] as f64))
+                .or_else(|| p.labels.as_ref().map(|l| (0.0, (l.len().max(1) - 1) as f64)));
+            let read = d.subtypes.get(i).cloned().unwrap_or_default();
+            let (subtype, unit, group) = character(p, &read, range, d);
+            EffectParamDescriptor {
+                name: p.name.clone(), label: p.label.clone().unwrap_or_else(|| p.name.clone()), default: p.default[0] as f64,
+                range, choices: p.labels.clone(), subtype, unit, group,
+            }
         }).collect(),
         padding: d.manifest.padding.as_ref().map(|p| EffectPaddingDescriptor { param: p.param.clone(), scale: p.scale }),
         output_format: d.output_format(),
     }).chain(declared).collect::<Vec<_>>().into()
+}
+
+/// 欄の性格: 宣言(`SUBTYPE`)が先、無ければ使われ方の解析、どちらも無ければ不明のまま。
+/// 単位は性格から: 角度は °、長さは px、0〜1 か 0〜100 の量は %。
+fn character(p: &isf::IsfInput, read: &ParamSubtype, range: Option<(f64, f64)>, d: &VismDefinition) -> (Option<String>, Option<String>, Option<String>) {
+    let declared = p.subtype.as_deref().and_then(Subtype::parse);
+    let subtype = declared.or(read.subtype);
+    let percent = matches!(range, Some((0.0, max)) if max == 1.0 || max == 100.0);
+    let unit = match subtype {
+        Some(Subtype::Angle) => Some("°"),
+        Some(Subtype::Distance | Subtype::Translation) => if declared.is_some() { Some("px") } else { read.unit },
+        Some(Subtype::Factor | Subtype::Opacity) if percent => Some("%"),
+        Some(Subtype::Factor | Subtype::Opacity | Subtype::Level) => Some(""),
+        _ => None,
+    };
+    let group = read.group.and_then(|g| d.manifest.param_inputs().nth(g)).map(|g| g.name.clone());
+    (subtype.map(|s| s.name().to_owned()), unit.map(str::to_owned), group)
 }
 
 pub fn refresh_effect_catalog() -> CatalogRefresh { refresh_runtime(&active_runtime()) }
@@ -427,5 +467,49 @@ mod tests {
         assert_eq!(compositor.ctx.active_frame_idx(), frame);
         assert_eq!(compositor.ctx.device, device);
         assert_eq!(compositor.ctx.gpu_resources.shader_modules.num_resources(), shaders);
+    }
+}
+
+#[cfg(test)]
+mod character_oracle {
+    /// 棚の全 Vism について、欄の性格が使われ方から読めること(名前は見ていない)。
+    /// 期待値は 2026-09-08 の目視で確定した写像。変えるなら理由をここに書く。
+    #[test]
+    fn every_shader_param_has_its_character_read_from_use() {
+        let runtime = super::CatalogRuntime::default();
+        super::refresh_effect_catalog_for(&runtime);
+        let snapshot = runtime.0.owner.lock().unwrap().snapshot.clone().unwrap();
+        let mut seen = std::collections::BTreeMap::new();
+        for d in snapshot.descriptors.iter() {
+            for p in &d.params {
+                seen.insert(format!("{}.{}", d.plugin_id, p.name), (p.subtype.clone(), p.unit.clone(), p.group.clone()));
+            }
+        }
+        let s = |v: &str| Some(v.to_owned());
+        let expected: &[(&str, Option<String>, Option<String>, Option<String>)] = &[
+            ("motolii.isf_bloom.threshold", s("LEVEL"), s(""), None),
+            ("motolii.isf_bloom.intensity", s("FACTOR"), s(""), None),
+            ("motolii.isf_bloom.radius", s("DISTANCE"), s("px"), None),
+            ("motolii.blur.radius", s("DISTANCE"), s("px"), None),
+            ("motolii.gain.gain", s("FACTOR"), s(""), None),
+            ("motolii.glass.roughness", s("FACTOR"), s("%"), None),
+            ("motolii.glow.threshold", s("LEVEL"), s(""), None),
+            ("motolii.glow.intensity", s("FACTOR"), s(""), None),
+            ("motolii.glow.radius", s("DISTANCE"), s("px"), None),
+            // shader が読まない欄(定数式にだけ使う)は不明のまま — 嘘を付けない。
+            ("motolii.tri_led.glow", None, None, None),
+            ("motolii.turbulent_displace.size", s("DISTANCE"), s("px"), None),
+            ("motolii.turbulent_displace.complexity", s("COUNT"), None, None),
+            // 使われ方では平行移動に見える。manifest の SUBTYPE が勝つ(宣言 > 解析)。
+            ("motolii.turbulent_displace.evolution", s("TIME"), None, None),
+            ("motolii.turbulent_displace.offset_x", s("TRANSLATION"), s("px"), s("offset_x")),
+            ("motolii.turbulent_displace.offset_y", s("TRANSLATION"), s("px"), s("offset_x")),
+            ("motolii.turbulent_displace.offset_z", s("TRANSLATION"), s("px"), s("offset_x")),
+            // shader を持たない棚(配置)は解析の外。
+            ("motolii.repeat.seed", None, None, None),
+        ];
+        for (key, subtype, unit, group) in expected {
+            assert_eq!(seen.get(*key), Some(&(subtype.clone(), unit.clone(), group.clone())), "{key}");
+        }
     }
 }

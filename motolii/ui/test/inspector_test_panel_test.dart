@@ -91,6 +91,23 @@ void main() {
                 row('effect.0.param.offset_x', 'Offset X', 1.0),
                 row('effect.0.param.offset_y', 'Offset Y', 2.0),
                 row('effect.0.param.seed', 'Seed', 7.0),
+                // Read from the shader: a pair added to a coordinate, any names.
+                {
+                  ...row('effect.0.param.dx', 'Shift A', 3.0),
+                  'subtype': 'TRANSLATION',
+                  'unit': 'px',
+                  'group': 'effect.0.param.dx',
+                },
+                {
+                  ...row('effect.0.param.dy', 'Shift B', 4.0),
+                  'subtype': 'TRANSLATION',
+                  'unit': 'px',
+                  'group': 'effect.0.param.dx',
+                },
+                {
+                  ...row('effect.0.param.spin', 'Twist', 10.0),
+                  'subtype': 'ANGLE',
+                },
               ],
             },
           ],
@@ -119,15 +136,18 @@ void main() {
       ),
     );
     // Transform: position x/y/z, scale (locked: one well), rotation + tilts,
-    // opacity. Effect: mix, radius, angle, offset x/y (one pad), seed.
-    expect(find.byType(EditorNumericField), findsNWidgets(14));
-    expect(find.byType(EditorDial), findsNWidgets(2));
-    expect(find.byType(EditorPad), findsOneWidget);
+    // opacity. Effect: mix, radius, angle, offset x/y (one pad), seed,
+    // dx/dy (one pad by group), spin.
+    expect(find.byType(EditorNumericField), findsNWidgets(17));
+    // Transform rotation, the `angle` word, and `spin` by its analysed subtype.
+    expect(find.byType(EditorDial), findsNWidgets(3));
+    expect(find.byType(EditorPad), findsNWidgets(2));
     // Character glyphs come from the declared names: seed gets its die
     // (label glyph and the roll button), radius a ruler, angle a dial.
     expect(find.byIcon(Icons.casino_outlined), findsNWidgets(2));
     expect(find.byIcon(Icons.straighten), findsOneWidget);
-    expect(find.byType(EditorDial), findsNWidgets(2));
+    // Transform rotation, the `angle` word, and `spin` by its analysed subtype.
+    expect(find.byType(EditorDial), findsNWidgets(3));
     expect(find.byType(EditorAnchorGrid), findsOneWidget);
     expect(find.byType(EditorChoice<dynamic>), findsNWidgets(2));
     // Scale link, Environment, Ghost, Clip, Animate.
