@@ -121,9 +121,13 @@ void main() {
     // Transform: position x/y/z, scale (locked: one well), rotation + tilts,
     // opacity. Effect: mix, radius, angle, offset x/y (one pad), seed.
     expect(find.byType(EditorNumericField), findsNWidgets(14));
-    expect(find.byType(EditorDial), findsOneWidget);
+    expect(find.byType(EditorDial), findsNWidgets(2));
     expect(find.byType(EditorPad), findsOneWidget);
-    expect(find.byIcon(Icons.casino_outlined), findsOneWidget);
+    // Character glyphs come from the declared names: seed gets its die
+    // (label glyph and the roll button), radius a ruler, angle a dial.
+    expect(find.byIcon(Icons.casino_outlined), findsNWidgets(2));
+    expect(find.byIcon(Icons.straighten), findsOneWidget);
+    expect(find.byType(EditorDial), findsNWidgets(2));
     expect(find.byType(EditorAnchorGrid), findsOneWidget);
     expect(find.byType(EditorChoice<dynamic>), findsNWidgets(2));
     // Scale link, Environment, Ghost, Clip, Animate.

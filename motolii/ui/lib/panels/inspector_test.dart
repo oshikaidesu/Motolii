@@ -31,10 +31,111 @@ _Kind _kindOf(Map<String, dynamic> row) {
   if (kind == 'text') return _Kind.text;
   if (id == 'scale') return _Kind.scale;
   if (id.startsWith('rotation') || id == 'camera.roll') return _Kind.angle;
+  if (id.contains('.param.') &&
+      row['value'] is num &&
+      _characterOf(row) == _Character.angle) {
+    return _Kind.angle;
+  }
   if (kind == 'vec2' || row['value'] is List) return _Kind.vec2;
   if (row['min'] != null && row['max'] != null) return _Kind.bounded;
   return _Kind.scalar;
 }
+
+/// What a parameter is *for*, read off its declared name. One table, so a
+/// new Vism gets its glyph, unit and control the moment it is declared.
+enum _Character {
+  amount,
+  size,
+  angle,
+  place,
+  seed,
+  time,
+  count,
+  color,
+  level,
+  soft,
+  opacity,
+  direction,
+  choice,
+  delay,
+  detail,
+  none,
+}
+
+const _characterWords = <_Character, List<String>>{
+  _Character.seed: ['seed'],
+  _Character.angle: ['angle', 'rotation', 'roll', 'tilt', 'spin'],
+  _Character.place: ['position', 'offset', 'center', 'centre', 'origin'],
+  _Character.size: [
+    'size',
+    'radius',
+    'width',
+    'height',
+    'thickness',
+    'scale',
+    'length',
+    'distance',
+  ],
+  _Character.opacity: ['opacity', 'alpha', 'transparency'],
+  _Character.soft: ['softness', 'blur', 'feather', 'spread', 'smooth'],
+  _Character.time: ['evolution', 'time', 'phase', 'speed', 'rate', 'frequency'],
+  _Character.delay: ['delay', 'lag'],
+  _Character.count: ['count', 'columns', 'rows', 'copies', 'number', 'steps'],
+  _Character.detail: [
+    'complexity',
+    'octaves',
+    'detail',
+    'iterations',
+    'quality',
+  ],
+  _Character.color: ['color', 'colour', 'tint', 'hue'],
+  _Character.level: ['threshold', 'level', 'gamma', 'contrast', 'brightness'],
+  _Character.direction: ['along', 'direction', 'axis', 'side'],
+  _Character.amount: [
+    'amount',
+    'strength',
+    'intensity',
+    'mix',
+    'gain',
+    'weight',
+    'density',
+    'power',
+  ],
+};
+
+const _characterGlyphs = <_Character, IconData>{
+  _Character.amount: Icons.tune,
+  _Character.size: Icons.straighten,
+  _Character.angle: Icons.rotate_right,
+  _Character.place: Icons.open_with,
+  _Character.seed: Icons.casino_outlined,
+  _Character.time: Icons.timelapse,
+  _Character.count: Icons.grid_on,
+  _Character.color: Icons.palette_outlined,
+  _Character.level: Icons.linear_scale,
+  _Character.soft: Icons.blur_on,
+  _Character.opacity: Icons.opacity,
+  _Character.direction: Icons.alt_route,
+  _Character.choice: Icons.category_outlined,
+  _Character.delay: Icons.history_toggle_off,
+  _Character.detail: Icons.grain,
+};
+
+_Character _characterOf(Map<String, dynamic> row) {
+  final id = '${row['id']}'.split('.param.').last;
+  final words = <String>{
+    ...id.toLowerCase().split(RegExp('[^a-z]+')),
+    ...'${row['label'] ?? ''}'.toLowerCase().split(RegExp('[^a-z]+')),
+  }..remove('');
+  for (final entry in _characterWords.entries) {
+    if (entry.value.any(words.contains)) return entry.key;
+  }
+  if (row['choices'] is List) return _Character.choice;
+  return _Character.none;
+}
+
+IconData? _glyphOf(Map<String, dynamic> row) =>
+    _characterGlyphs[_characterOf(row)];
 
 String? _unitOf(Map<String, dynamic> row) {
   final id = '${row['id']}';
@@ -42,6 +143,16 @@ String? _unitOf(Map<String, dynamic> row) {
   if (id == 'opacity') return '%';
   if (id.startsWith('position') || id == 'anchor' || id == 'camera.center') {
     return 'px';
+  }
+  if (id.contains('.param.')) {
+    final max = row['max'] as num?;
+    return switch (_characterOf(row)) {
+      _Character.angle => '°',
+      _Character.place || _Character.size || _Character.soft => 'px',
+      _Character.opacity ||
+      _Character.amount when max == 1 || max == 100 => '%',
+      _ => null,
+    };
   }
   return null;
 }
@@ -563,7 +674,7 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        _cellLabel(label),
+        _cellLabel(label, Icons.open_with),
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
@@ -595,14 +706,26 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
     );
   }
 
-  Widget _cellLabel(String label) => Padding(
+  Widget _cellLabel(String label, [IconData? glyph]) => Padding(
     padding: const EdgeInsets.only(bottom: EditorMetrics.s2),
-    child: Text(
-      label,
-      style: const TextStyle(
-        fontSize: EditorMetrics.dense,
-        color: EditorTheme.muted,
-      ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          width: EditorMetrics.s14,
+          child: glyph == null
+              ? null
+              : Icon(glyph, size: EditorMetrics.s12, color: EditorTheme.muted),
+        ),
+        const SizedBox(width: EditorMetrics.s2),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: EditorMetrics.dense,
+            color: EditorTheme.muted,
+          ),
+        ),
+      ],
     ),
   );
 
@@ -700,7 +823,7 @@ class _InspectorTestPanelState extends State<InspectorTestPanel> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
-      children: [_cellLabel(label), body],
+      children: [_cellLabel(label, _glyphOf(row)), body],
     );
   }
 
