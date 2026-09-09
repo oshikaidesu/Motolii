@@ -1,0 +1,4 @@
+numpy==2.3.5
+trimesh==5.1.0
+embreex==4.4.0
+rtree==1.4.1

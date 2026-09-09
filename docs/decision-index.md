@@ -598,3 +598,4 @@
 | 表面応答 合成 撮影元 連続性検証 | 2026-09-09: 固定receiverと連続scene anchorで切替点の差分外れ値を抑制。逆方向・直接seek一致。反射像の自然さと深度信頼度合成は未判定、製品採用なし | 観察 | [比較結果](reviews/2026-09-09-response-composition-validation.md) | 利用者が検証を依頼 |
 | 共有反射 撮影元 安定化 influence fallback | 2026-09-09: 左右順による撮影元交代を廃止し、入力順の2receiverへ。全表面を包含する有効範囲と残余の環境fallbackを追加。交差点の差分外れ値を抑制し、59描画試験成功。深度による遮蔽判定ではない | 縮小採用 | [実装・比較](reviews/2026-09-09-stable-reflection-execution.md) | 利用者「ではお願いします」 |
 | 共有反射 内外 遮蔽 ヘッドレス診断 | 2026-09-09: 撮影元・位置・proxy一定でも球の内外を跨ぐとatlasが急変。球を撮影からだけ除く対照で静止リング上部の差分0。nearを縮めても急変は残る。製品修正はせず可視性情報の不足を診断 | 観察 | [再現・対照・geometry照合](reviews/2026-09-09-reflection-visibility-diagnosis.md) | 利用者が原因診断とheadless検証を依頼 |
+| 反射 SurfaceQuery geometry-backed 実装準備 | 2026-09-09: 深度層の欠落を測り、M4/wgpu29の最短交差・透明抜き再照会・TLAS更新を試作。共面groupと原点変換を含む約22万本の照会を確認。材質評価・非対応GPU・既定採用は未検証 | 比較中 | [試作・契約・gate](reviews/2026-09-09-reflection-query-readiness.md) | 利用者が実装可能な段階までの自走を依頼 |

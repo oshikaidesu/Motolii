@@ -1,0 +1,60 @@
+{
+  "case": "full-32",
+  "rays": 2184,
+  "oracle_hits": 764,
+  "ideal_depth_layer_coverage": {
+    "1": 0.45549738219895286,
+    "2": 0.6858638743455497,
+    "4": 0.9973821989528796
+  },
+  "proxies": [
+    {
+      "resolution": 32,
+      "layers": 1,
+      "triangles": 20859,
+      "hit_coverage": 0.3468586387434555,
+      "false_hit_fraction": 0.027014652014652016,
+      "no_candidate_fraction": 0.8516483516483516
+    },
+    {
+      "resolution": 32,
+      "layers": 2,
+      "triangles": 27776,
+      "hit_coverage": 0.45549738219895286,
+      "false_hit_fraction": 0.08104395604395605,
+      "no_candidate_fraction": 0.7596153846153846
+    },
+    {
+      "resolution": 64,
+      "layers": 1,
+      "triangles": 87091,
+      "hit_coverage": 0.3913612565445026,
+      "false_hit_fraction": 0.027472527472527472,
+      "no_candidate_fraction": 0.8356227106227107
+    },
+    {
+      "resolution": 64,
+      "layers": 2,
+      "triangles": 117884,
+      "hit_coverage": 0.5497382198952879,
+      "false_hit_fraction": 0.061813186813186816,
+      "no_candidate_fraction": 0.7458791208791209
+    },
+    {
+      "resolution": 128,
+      "layers": 1,
+      "triangles": 356054,
+      "hit_coverage": 0.42277486910994766,
+      "false_hit_fraction": 0.025183150183150184,
+      "no_candidate_fraction": 0.8269230769230769
+    },
+    {
+      "resolution": 128,
+      "layers": 2,
+      "triangles": 485333,
+      "hit_coverage": 0.5890052356020943,
+      "false_hit_fraction": 0.050824175824175824,
+      "no_candidate_fraction": 0.7431318681318682
+    }
+  ]
+}

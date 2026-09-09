@@ -804,3 +804,5 @@
 - [共有反射の選択と寄与の修正](2026-09-09-stable-reflection-execution.md)
 
 - [共有反射の撮影点を球が跨ぐ場合の診断](2026-09-09-reflection-visibility-diagnosis.md)
+
+- [反射照会の実装方式を決めるための試作](2026-09-09-reflection-query-readiness.md)

@@ -1,0 +1,2410 @@
+[
+  {
+    "alternate": false,
+    "bary": [
+      0.7098348140716553,
+      0.2901500165462494
+    ],
+    "expected_id": 1,
+    "expected_t": 1232.807861328125,
+    "front": 1,
+    "gpu_id": 3,
+    "gpu_t": 0.5912855863571167,
+    "index": 1788,
+    "primitive": 451
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.6743862628936768,
+      0.32387468218803406
+    ],
+    "expected_id": 6,
+    "expected_t": 453.7648010253906,
+    "front": 0,
+    "gpu_id": 2,
+    "gpu_t": 453.7648010253906,
+    "index": 53470,
+    "primitive": 1
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.7575491666793823,
+      0.24008917808532715
+    ],
+    "expected_id": 6,
+    "expected_t": 558.541015625,
+    "front": 0,
+    "gpu_id": 2,
+    "gpu_t": 558.541015625,
+    "index": 130522,
+    "primitive": 1
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.8475181460380554,
+      0.010589919053018093
+    ],
+    "expected_id": 2,
+    "expected_t": 497.83099365234375,
+    "front": 0,
+    "gpu_id": 6,
+    "gpu_t": 497.83099365234375,
+    "index": 146864,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.6881959438323975,
+      0.012336750514805317
+    ],
+    "expected_id": 2,
+    "expected_t": 411.5704040527344,
+    "front": 0,
+    "gpu_id": 6,
+    "gpu_t": 411.5704040527344,
+    "index": 169700,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.6597152948379517,
+      0.0006327087758108974
+    ],
+    "expected_id": 2,
+    "expected_t": 384.97509765625,
+    "front": 0,
+    "gpu_id": 6,
+    "gpu_t": 384.97509765625,
+    "index": 175760,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.645691990852356,
+      0.008447019383311272
+    ],
+    "expected_id": 2,
+    "expected_t": 379.9020080566406,
+    "front": 0,
+    "gpu_id": 6,
+    "gpu_t": 379.9019775390625,
+    "index": 177349,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.46211808919906616,
+      0.5376923680305481
+    ],
+    "expected_id": 6,
+    "expected_t": 149.26837158203125,
+    "front": 1,
+    "gpu_id": 2,
+    "gpu_t": 149.2683563232422,
+    "index": 182814,
+    "primitive": 1
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.6098018288612366,
+      0.38974839448928833
+    ],
+    "expected_id": 6,
+    "expected_t": 138.18824768066406,
+    "front": 1,
+    "gpu_id": 2,
+    "gpu_t": 138.18826293945312,
+    "index": 188259,
+    "primitive": 1
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.5702017545700073,
+      0.008655593730509281
+    ],
+    "expected_id": 2,
+    "expected_t": 298.2801208496094,
+    "front": 0,
+    "gpu_id": 6,
+    "gpu_t": 298.2801208496094,
+    "index": 198036,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.8403713703155518,
+      0.0026373027358204126
+    ],
+    "expected_id": 2,
+    "expected_t": 218.0258331298828,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 218.02581787109375,
+    "index": 203667,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.829582691192627,
+      0.009454826824367046
+    ],
+    "expected_id": 2,
+    "expected_t": 218.34326171875,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 218.34327697753906,
+    "index": 203987,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.8143158555030823,
+      0.005250175483524799
+    ],
+    "expected_id": 2,
+    "expected_t": 216.60748291015625,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 216.6074981689453,
+    "index": 204934,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.961837887763977,
+      0.006018233951181173
+    ],
+    "expected_id": 2,
+    "expected_t": 396.4508056640625,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 396.4507751464844,
+    "index": 205437,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.8023366332054138,
+      0.00286640296690166
+    ],
+    "expected_id": 2,
+    "expected_t": 215.30580139160156,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 215.30581665039062,
+    "index": 205555,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.8333539366722107,
+      0.010662274435162544
+    ],
+    "expected_id": 2,
+    "expected_t": 349.3265380859375,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 349.3265380859375,
+    "index": 205745,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.7845435738563538,
+      0.010417459532618523
+    ],
+    "expected_id": 2,
+    "expected_t": 215.7769775390625,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 215.77699279785156,
+    "index": 206166,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.5449445843696594,
+      0.4522491693496704
+    ],
+    "expected_id": 6,
+    "expected_t": 212.4612579345703,
+    "front": 1,
+    "gpu_id": 2,
+    "gpu_t": 212.4612274169922,
+    "index": 206346,
+    "primitive": 1
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.6916384100914001,
+      0.0007397540030069649
+    ],
+    "expected_id": 2,
+    "expected_t": 289.9786376953125,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 289.9786071777344,
+    "index": 206357,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.7817813754081726,
+      0.0042677330784499645
+    ],
+    "expected_id": 2,
+    "expected_t": 214.77871704101562,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 214.77871704101562,
+    "index": 206468,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.7766681909561157,
+      0.002737829927355051
+    ],
+    "expected_id": 2,
+    "expected_t": 214.7263946533203,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 214.7263946533203,
+    "index": 206767,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.5254626870155334,
+      0.4743780791759491
+    ],
+    "expected_id": 6,
+    "expected_t": 194.04141235351562,
+    "front": 1,
+    "gpu_id": 2,
+    "gpu_t": 194.04141235351562,
+    "index": 206948,
+    "primitive": 1
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.6255710124969482,
+      0.3726080060005188
+    ],
+    "expected_id": 6,
+    "expected_t": 273.5366516113281,
+    "front": 1,
+    "gpu_id": 2,
+    "gpu_t": 273.53662109375,
+    "index": 206962,
+    "primitive": 1
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.6764770150184631,
+      0.00042745511746034026
+    ],
+    "expected_id": 2,
+    "expected_t": 279.0162353515625,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 279.0162048339844,
+    "index": 206963,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.6408416628837585,
+      0.0030096385162323713
+    ],
+    "expected_id": 2,
+    "expected_t": 265.09918212890625,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 265.09918212890625,
+    "index": 207262,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.7602240443229675,
+      0.006820713635534048
+    ],
+    "expected_id": 2,
+    "expected_t": 215.24063110351562,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 215.24063110351562,
+    "index": 207359,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.6078009605407715,
+      0.008215866051614285
+    ],
+    "expected_id": 2,
+    "expected_t": 253.32400512695312,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 253.32400512695312,
+    "index": 207558,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.2778362035751343,
+      0.0014498893870040774
+    ],
+    "expected_id": 2,
+    "expected_t": 151.06968688964844,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 151.0697021484375,
+    "index": 207830,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.6316143274307251,
+      0.0050449492409825325
+    ],
+    "expected_id": 2,
+    "expected_t": 256.4071960449219,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 256.4072265625,
+    "index": 207855,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.7433372139930725,
+      0.006952326279133558
+    ],
+    "expected_id": 2,
+    "expected_t": 214.99703979492188,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 214.9970245361328,
+    "index": 207940,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.2452206164598465,
+      0.01226888969540596
+    ],
+    "expected_id": 2,
+    "expected_t": 144.75331115722656,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 144.75331115722656,
+    "index": 208119,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.6125288605690002,
+      0.01014569029211998
+    ],
+    "expected_id": 2,
+    "expected_t": 248.84800720214844,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 248.84799194335938,
+    "index": 208147,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.6136318445205688,
+      0.38446247577667236
+    ],
+    "expected_id": 6,
+    "expected_t": 246.46986389160156,
+    "front": 1,
+    "gpu_id": 2,
+    "gpu_t": 246.46986389160156,
+    "index": 208439,
+    "primitive": 1
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.7248752117156982,
+      0.008925867266952991
+    ],
+    "expected_id": 2,
+    "expected_t": 215.82763671875,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 215.82763671875,
+    "index": 208510,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.43956226110458374,
+      0.5581275820732117
+    ],
+    "expected_id": 6,
+    "expected_t": 123.57437896728516,
+    "front": 1,
+    "gpu_id": 2,
+    "gpu_t": 123.57435607910156,
+    "index": 208688,
+    "primitive": 1
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.15164814889431,
+      0.010024508461356163
+    ],
+    "expected_id": 2,
+    "expected_t": 116.92704772949219,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 116.92704772949219,
+    "index": 208969,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.7091895341873169,
+      0.0015051792142912745
+    ],
+    "expected_id": 2,
+    "expected_t": 216.7608642578125,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 216.7608642578125,
+    "index": 209067,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.7041836977005005,
+      0.011354837566614151
+    ],
+    "expected_id": 2,
+    "expected_t": 217.92088317871094,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 217.92088317871094,
+    "index": 209068,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.6174684762954712,
+      0.3816626965999603
+    ],
+    "expected_id": 6,
+    "expected_t": 234.84864807128906,
+    "front": 1,
+    "gpu_id": 2,
+    "gpu_t": 234.84861755371094,
+    "index": 209301,
+    "primitive": 1
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.637203574180603,
+      0.004845479503273964
+    ],
+    "expected_id": 2,
+    "expected_t": 234.9306182861328,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 234.93063354492188,
+    "index": 209302,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.6967543959617615,
+      0.0017340434715151787
+    ],
+    "expected_id": 2,
+    "expected_t": 218.5681915283203,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 218.56822204589844,
+    "index": 209340,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.6224471926689148,
+      0.3750970661640167
+    ],
+    "expected_id": 6,
+    "expected_t": 227.9517059326172,
+    "front": 1,
+    "gpu_id": 2,
+    "gpu_t": 227.95167541503906,
+    "index": 209590,
+    "primitive": 1
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.6736390590667725,
+      0.001808589557185769
+    ],
+    "expected_id": 2,
+    "expected_t": 220.29270935058594,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 220.29269409179688,
+    "index": 209607,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.7098348140716553,
+      0.2901500165462494
+    ],
+    "expected_id": 1,
+    "expected_t": 1232.807861328125,
+    "front": 1,
+    "gpu_id": 3,
+    "gpu_t": 0.5912855863571167,
+    "index": 1788,
+    "primitive": 451
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.6743862628936768,
+      0.32387468218803406
+    ],
+    "expected_id": 6,
+    "expected_t": 453.7648010253906,
+    "front": 0,
+    "gpu_id": 2,
+    "gpu_t": 453.7648010253906,
+    "index": 53470,
+    "primitive": 1
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.7575491666793823,
+      0.24008917808532715
+    ],
+    "expected_id": 6,
+    "expected_t": 558.541015625,
+    "front": 0,
+    "gpu_id": 2,
+    "gpu_t": 558.541015625,
+    "index": 130522,
+    "primitive": 1
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.8475181460380554,
+      0.010589919053018093
+    ],
+    "expected_id": 2,
+    "expected_t": 497.83099365234375,
+    "front": 0,
+    "gpu_id": 6,
+    "gpu_t": 497.83099365234375,
+    "index": 146864,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.6881959438323975,
+      0.012336750514805317
+    ],
+    "expected_id": 2,
+    "expected_t": 411.5704040527344,
+    "front": 0,
+    "gpu_id": 6,
+    "gpu_t": 411.5704040527344,
+    "index": 169700,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.6597152948379517,
+      0.0006327087758108974
+    ],
+    "expected_id": 2,
+    "expected_t": 384.97509765625,
+    "front": 0,
+    "gpu_id": 6,
+    "gpu_t": 384.97509765625,
+    "index": 175760,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.645691990852356,
+      0.008447019383311272
+    ],
+    "expected_id": 2,
+    "expected_t": 379.9020080566406,
+    "front": 0,
+    "gpu_id": 6,
+    "gpu_t": 379.9019775390625,
+    "index": 177349,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.46211808919906616,
+      0.5376923680305481
+    ],
+    "expected_id": 6,
+    "expected_t": 149.26837158203125,
+    "front": 1,
+    "gpu_id": 2,
+    "gpu_t": 149.2683563232422,
+    "index": 182814,
+    "primitive": 1
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.6098018288612366,
+      0.38974839448928833
+    ],
+    "expected_id": 6,
+    "expected_t": 138.18824768066406,
+    "front": 1,
+    "gpu_id": 2,
+    "gpu_t": 138.18826293945312,
+    "index": 188259,
+    "primitive": 1
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.5702017545700073,
+      0.008655593730509281
+    ],
+    "expected_id": 2,
+    "expected_t": 298.2801208496094,
+    "front": 0,
+    "gpu_id": 6,
+    "gpu_t": 298.2801208496094,
+    "index": 198036,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.8403713703155518,
+      0.0026373027358204126
+    ],
+    "expected_id": 2,
+    "expected_t": 218.0258331298828,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 218.02581787109375,
+    "index": 203667,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.829582691192627,
+      0.009454826824367046
+    ],
+    "expected_id": 2,
+    "expected_t": 218.34326171875,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 218.34327697753906,
+    "index": 203987,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.8143158555030823,
+      0.005250175483524799
+    ],
+    "expected_id": 2,
+    "expected_t": 216.60748291015625,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 216.6074981689453,
+    "index": 204934,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.961837887763977,
+      0.006018233951181173
+    ],
+    "expected_id": 2,
+    "expected_t": 396.4508056640625,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 396.4507751464844,
+    "index": 205437,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.8023366332054138,
+      0.00286640296690166
+    ],
+    "expected_id": 2,
+    "expected_t": 215.30580139160156,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 215.30581665039062,
+    "index": 205555,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.8333539366722107,
+      0.010662274435162544
+    ],
+    "expected_id": 2,
+    "expected_t": 349.3265380859375,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 349.3265380859375,
+    "index": 205745,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.7845435738563538,
+      0.010417459532618523
+    ],
+    "expected_id": 2,
+    "expected_t": 215.7769775390625,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 215.77699279785156,
+    "index": 206166,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.5449445843696594,
+      0.4522491693496704
+    ],
+    "expected_id": 6,
+    "expected_t": 212.4612579345703,
+    "front": 1,
+    "gpu_id": 2,
+    "gpu_t": 212.4612274169922,
+    "index": 206346,
+    "primitive": 1
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.6916384100914001,
+      0.0007397540030069649
+    ],
+    "expected_id": 2,
+    "expected_t": 289.9786376953125,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 289.9786071777344,
+    "index": 206357,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.7817813754081726,
+      0.0042677330784499645
+    ],
+    "expected_id": 2,
+    "expected_t": 214.77871704101562,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 214.77871704101562,
+    "index": 206468,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.7766681909561157,
+      0.002737829927355051
+    ],
+    "expected_id": 2,
+    "expected_t": 214.7263946533203,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 214.7263946533203,
+    "index": 206767,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.5254626870155334,
+      0.4743780791759491
+    ],
+    "expected_id": 6,
+    "expected_t": 194.04141235351562,
+    "front": 1,
+    "gpu_id": 2,
+    "gpu_t": 194.04141235351562,
+    "index": 206948,
+    "primitive": 1
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.6255710124969482,
+      0.3726080060005188
+    ],
+    "expected_id": 6,
+    "expected_t": 273.5366516113281,
+    "front": 1,
+    "gpu_id": 2,
+    "gpu_t": 273.53662109375,
+    "index": 206962,
+    "primitive": 1
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.6764770150184631,
+      0.00042745511746034026
+    ],
+    "expected_id": 2,
+    "expected_t": 279.0162353515625,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 279.0162048339844,
+    "index": 206963,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.6408416628837585,
+      0.0030096385162323713
+    ],
+    "expected_id": 2,
+    "expected_t": 265.09918212890625,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 265.09918212890625,
+    "index": 207262,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.7602240443229675,
+      0.006820713635534048
+    ],
+    "expected_id": 2,
+    "expected_t": 215.24063110351562,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 215.24063110351562,
+    "index": 207359,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.6078009605407715,
+      0.008215866051614285
+    ],
+    "expected_id": 2,
+    "expected_t": 253.32400512695312,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 253.32400512695312,
+    "index": 207558,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.2778362035751343,
+      0.0014498893870040774
+    ],
+    "expected_id": 2,
+    "expected_t": 151.06968688964844,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 151.0697021484375,
+    "index": 207830,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.6316143274307251,
+      0.0050449492409825325
+    ],
+    "expected_id": 2,
+    "expected_t": 256.4071960449219,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 256.4072265625,
+    "index": 207855,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.7433372139930725,
+      0.006952326279133558
+    ],
+    "expected_id": 2,
+    "expected_t": 214.99703979492188,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 214.9970245361328,
+    "index": 207940,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.2452206164598465,
+      0.01226888969540596
+    ],
+    "expected_id": 2,
+    "expected_t": 144.75331115722656,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 144.75331115722656,
+    "index": 208119,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.6125288605690002,
+      0.01014569029211998
+    ],
+    "expected_id": 2,
+    "expected_t": 248.84800720214844,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 248.84799194335938,
+    "index": 208147,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.6136318445205688,
+      0.38446247577667236
+    ],
+    "expected_id": 6,
+    "expected_t": 246.46986389160156,
+    "front": 1,
+    "gpu_id": 2,
+    "gpu_t": 246.46986389160156,
+    "index": 208439,
+    "primitive": 1
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.7248752117156982,
+      0.008925867266952991
+    ],
+    "expected_id": 2,
+    "expected_t": 215.82763671875,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 215.82763671875,
+    "index": 208510,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.43956226110458374,
+      0.5581275820732117
+    ],
+    "expected_id": 6,
+    "expected_t": 123.57437896728516,
+    "front": 1,
+    "gpu_id": 2,
+    "gpu_t": 123.57435607910156,
+    "index": 208688,
+    "primitive": 1
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.15164814889431,
+      0.010024508461356163
+    ],
+    "expected_id": 2,
+    "expected_t": 116.92704772949219,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 116.92704772949219,
+    "index": 208969,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.7091895341873169,
+      0.0015051792142912745
+    ],
+    "expected_id": 2,
+    "expected_t": 216.7608642578125,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 216.7608642578125,
+    "index": 209067,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.7041836977005005,
+      0.011354837566614151
+    ],
+    "expected_id": 2,
+    "expected_t": 217.92088317871094,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 217.92088317871094,
+    "index": 209068,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.6174684762954712,
+      0.3816626965999603
+    ],
+    "expected_id": 6,
+    "expected_t": 234.84864807128906,
+    "front": 1,
+    "gpu_id": 2,
+    "gpu_t": 234.84861755371094,
+    "index": 209301,
+    "primitive": 1
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.637203574180603,
+      0.004845479503273964
+    ],
+    "expected_id": 2,
+    "expected_t": 234.9306182861328,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 234.93063354492188,
+    "index": 209302,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.6967543959617615,
+      0.0017340434715151787
+    ],
+    "expected_id": 2,
+    "expected_t": 218.5681915283203,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 218.56822204589844,
+    "index": 209340,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.6224471926689148,
+      0.3750970661640167
+    ],
+    "expected_id": 6,
+    "expected_t": 227.9517059326172,
+    "front": 1,
+    "gpu_id": 2,
+    "gpu_t": 227.95167541503906,
+    "index": 209590,
+    "primitive": 1
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.6736390590667725,
+      0.001808589557185769
+    ],
+    "expected_id": 2,
+    "expected_t": 220.29270935058594,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 220.29269409179688,
+    "index": 209607,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.7098348140716553,
+      0.2901500165462494
+    ],
+    "expected_id": 1,
+    "expected_t": 1232.807861328125,
+    "front": 1,
+    "gpu_id": 3,
+    "gpu_t": 0.5912855863571167,
+    "index": 1788,
+    "primitive": 451
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.6743862628936768,
+      0.32387468218803406
+    ],
+    "expected_id": 6,
+    "expected_t": 453.7648010253906,
+    "front": 0,
+    "gpu_id": 2,
+    "gpu_t": 453.7648010253906,
+    "index": 53470,
+    "primitive": 1
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.7575491666793823,
+      0.24008917808532715
+    ],
+    "expected_id": 6,
+    "expected_t": 558.541015625,
+    "front": 0,
+    "gpu_id": 2,
+    "gpu_t": 558.541015625,
+    "index": 130522,
+    "primitive": 1
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.8475181460380554,
+      0.010589919053018093
+    ],
+    "expected_id": 2,
+    "expected_t": 497.83099365234375,
+    "front": 0,
+    "gpu_id": 6,
+    "gpu_t": 497.83099365234375,
+    "index": 146864,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.6881959438323975,
+      0.012336750514805317
+    ],
+    "expected_id": 2,
+    "expected_t": 411.5704040527344,
+    "front": 0,
+    "gpu_id": 6,
+    "gpu_t": 411.5704040527344,
+    "index": 169700,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.6597152948379517,
+      0.0006327087758108974
+    ],
+    "expected_id": 2,
+    "expected_t": 384.97509765625,
+    "front": 0,
+    "gpu_id": 6,
+    "gpu_t": 384.97509765625,
+    "index": 175760,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.645691990852356,
+      0.008447019383311272
+    ],
+    "expected_id": 2,
+    "expected_t": 379.9020080566406,
+    "front": 0,
+    "gpu_id": 6,
+    "gpu_t": 379.9019775390625,
+    "index": 177349,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.46211808919906616,
+      0.5376923680305481
+    ],
+    "expected_id": 6,
+    "expected_t": 149.26837158203125,
+    "front": 1,
+    "gpu_id": 2,
+    "gpu_t": 149.2683563232422,
+    "index": 182814,
+    "primitive": 1
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.6098018288612366,
+      0.38974839448928833
+    ],
+    "expected_id": 6,
+    "expected_t": 138.18824768066406,
+    "front": 1,
+    "gpu_id": 2,
+    "gpu_t": 138.18826293945312,
+    "index": 188259,
+    "primitive": 1
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.5702017545700073,
+      0.008655593730509281
+    ],
+    "expected_id": 2,
+    "expected_t": 298.2801208496094,
+    "front": 0,
+    "gpu_id": 6,
+    "gpu_t": 298.2801208496094,
+    "index": 198036,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.8403713703155518,
+      0.0026373027358204126
+    ],
+    "expected_id": 2,
+    "expected_t": 218.0258331298828,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 218.02581787109375,
+    "index": 203667,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.829582691192627,
+      0.009454826824367046
+    ],
+    "expected_id": 2,
+    "expected_t": 218.34326171875,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 218.34327697753906,
+    "index": 203987,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.8143158555030823,
+      0.005250175483524799
+    ],
+    "expected_id": 2,
+    "expected_t": 216.60748291015625,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 216.6074981689453,
+    "index": 204934,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.961837887763977,
+      0.006018233951181173
+    ],
+    "expected_id": 2,
+    "expected_t": 396.4508056640625,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 396.4507751464844,
+    "index": 205437,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.8023366332054138,
+      0.00286640296690166
+    ],
+    "expected_id": 2,
+    "expected_t": 215.30580139160156,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 215.30581665039062,
+    "index": 205555,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.8333539366722107,
+      0.010662274435162544
+    ],
+    "expected_id": 2,
+    "expected_t": 349.3265380859375,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 349.3265380859375,
+    "index": 205745,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.7845435738563538,
+      0.010417459532618523
+    ],
+    "expected_id": 2,
+    "expected_t": 215.7769775390625,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 215.77699279785156,
+    "index": 206166,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.5449445843696594,
+      0.4522491693496704
+    ],
+    "expected_id": 6,
+    "expected_t": 212.4612579345703,
+    "front": 1,
+    "gpu_id": 2,
+    "gpu_t": 212.4612274169922,
+    "index": 206346,
+    "primitive": 1
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.6916384100914001,
+      0.0007397540030069649
+    ],
+    "expected_id": 2,
+    "expected_t": 289.9786376953125,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 289.9786071777344,
+    "index": 206357,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.7817813754081726,
+      0.0042677330784499645
+    ],
+    "expected_id": 2,
+    "expected_t": 214.77871704101562,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 214.77871704101562,
+    "index": 206468,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.7766681909561157,
+      0.002737829927355051
+    ],
+    "expected_id": 2,
+    "expected_t": 214.7263946533203,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 214.7263946533203,
+    "index": 206767,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.5254626870155334,
+      0.4743780791759491
+    ],
+    "expected_id": 6,
+    "expected_t": 194.04141235351562,
+    "front": 1,
+    "gpu_id": 2,
+    "gpu_t": 194.04141235351562,
+    "index": 206948,
+    "primitive": 1
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.6255710124969482,
+      0.3726080060005188
+    ],
+    "expected_id": 6,
+    "expected_t": 273.5366516113281,
+    "front": 1,
+    "gpu_id": 2,
+    "gpu_t": 273.53662109375,
+    "index": 206962,
+    "primitive": 1
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.6764770150184631,
+      0.00042745511746034026
+    ],
+    "expected_id": 2,
+    "expected_t": 279.0162353515625,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 279.0162048339844,
+    "index": 206963,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.6408416628837585,
+      0.0030096385162323713
+    ],
+    "expected_id": 2,
+    "expected_t": 265.09918212890625,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 265.09918212890625,
+    "index": 207262,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.7602240443229675,
+      0.006820713635534048
+    ],
+    "expected_id": 2,
+    "expected_t": 215.24063110351562,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 215.24063110351562,
+    "index": 207359,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.6078009605407715,
+      0.008215866051614285
+    ],
+    "expected_id": 2,
+    "expected_t": 253.32400512695312,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 253.32400512695312,
+    "index": 207558,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.2778362035751343,
+      0.0014498893870040774
+    ],
+    "expected_id": 2,
+    "expected_t": 151.06968688964844,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 151.0697021484375,
+    "index": 207830,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.6316143274307251,
+      0.0050449492409825325
+    ],
+    "expected_id": 2,
+    "expected_t": 256.4071960449219,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 256.4072265625,
+    "index": 207855,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.7433372139930725,
+      0.006952326279133558
+    ],
+    "expected_id": 2,
+    "expected_t": 214.99703979492188,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 214.9970245361328,
+    "index": 207940,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.2452206164598465,
+      0.01226888969540596
+    ],
+    "expected_id": 2,
+    "expected_t": 144.75331115722656,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 144.75331115722656,
+    "index": 208119,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.6125288605690002,
+      0.01014569029211998
+    ],
+    "expected_id": 2,
+    "expected_t": 248.84800720214844,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 248.84799194335938,
+    "index": 208147,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.6136318445205688,
+      0.38446247577667236
+    ],
+    "expected_id": 6,
+    "expected_t": 246.46986389160156,
+    "front": 1,
+    "gpu_id": 2,
+    "gpu_t": 246.46986389160156,
+    "index": 208439,
+    "primitive": 1
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.7248752117156982,
+      0.008925867266952991
+    ],
+    "expected_id": 2,
+    "expected_t": 215.82763671875,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 215.82763671875,
+    "index": 208510,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.43956226110458374,
+      0.5581275820732117
+    ],
+    "expected_id": 6,
+    "expected_t": 123.57437896728516,
+    "front": 1,
+    "gpu_id": 2,
+    "gpu_t": 123.57435607910156,
+    "index": 208688,
+    "primitive": 1
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.15164814889431,
+      0.010024508461356163
+    ],
+    "expected_id": 2,
+    "expected_t": 116.92704772949219,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 116.92704772949219,
+    "index": 208969,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.7091895341873169,
+      0.0015051792142912745
+    ],
+    "expected_id": 2,
+    "expected_t": 216.7608642578125,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 216.7608642578125,
+    "index": 209067,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.7041836977005005,
+      0.011354837566614151
+    ],
+    "expected_id": 2,
+    "expected_t": 217.92088317871094,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 217.92088317871094,
+    "index": 209068,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.6174684762954712,
+      0.3816626965999603
+    ],
+    "expected_id": 6,
+    "expected_t": 234.84864807128906,
+    "front": 1,
+    "gpu_id": 2,
+    "gpu_t": 234.84861755371094,
+    "index": 209301,
+    "primitive": 1
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.637203574180603,
+      0.004845479503273964
+    ],
+    "expected_id": 2,
+    "expected_t": 234.9306182861328,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 234.93063354492188,
+    "index": 209302,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.6967543959617615,
+      0.0017340434715151787
+    ],
+    "expected_id": 2,
+    "expected_t": 218.5681915283203,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 218.56822204589844,
+    "index": 209340,
+    "primitive": 0
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.6224471926689148,
+      0.3750970661640167
+    ],
+    "expected_id": 6,
+    "expected_t": 227.9517059326172,
+    "front": 1,
+    "gpu_id": 2,
+    "gpu_t": 227.95167541503906,
+    "index": 209590,
+    "primitive": 1
+  },
+  {
+    "alternate": false,
+    "bary": [
+      0.6736390590667725,
+      0.001808589557185769
+    ],
+    "expected_id": 2,
+    "expected_t": 220.29270935058594,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 220.29269409179688,
+    "index": 209607,
+    "primitive": 0
+  },
+  {
+    "alternate": true,
+    "bary": [
+      0.7098348140716553,
+      0.2901500165462494
+    ],
+    "expected_id": 1,
+    "expected_t": 1232.807861328125,
+    "front": 1,
+    "gpu_id": 3,
+    "gpu_t": 0.5912855863571167,
+    "index": 1788,
+    "primitive": 451
+  },
+  {
+    "alternate": true,
+    "bary": [
+      0.6743862628936768,
+      0.32387468218803406
+    ],
+    "expected_id": 6,
+    "expected_t": 453.7648010253906,
+    "front": 0,
+    "gpu_id": 2,
+    "gpu_t": 453.7648010253906,
+    "index": 53470,
+    "primitive": 1
+  },
+  {
+    "alternate": true,
+    "bary": [
+      0.7575491666793823,
+      0.24008917808532715
+    ],
+    "expected_id": 6,
+    "expected_t": 558.541015625,
+    "front": 0,
+    "gpu_id": 2,
+    "gpu_t": 558.541015625,
+    "index": 130522,
+    "primitive": 1
+  },
+  {
+    "alternate": true,
+    "bary": [
+      0.8475181460380554,
+      0.010589919053018093
+    ],
+    "expected_id": 2,
+    "expected_t": 497.83099365234375,
+    "front": 0,
+    "gpu_id": 6,
+    "gpu_t": 497.83099365234375,
+    "index": 146864,
+    "primitive": 0
+  },
+  {
+    "alternate": true,
+    "bary": [
+      0.6881959438323975,
+      0.012336750514805317
+    ],
+    "expected_id": 2,
+    "expected_t": 411.5704040527344,
+    "front": 0,
+    "gpu_id": 6,
+    "gpu_t": 411.5704040527344,
+    "index": 169700,
+    "primitive": 0
+  },
+  {
+    "alternate": true,
+    "bary": [
+      0.6597152948379517,
+      0.0006327087758108974
+    ],
+    "expected_id": 2,
+    "expected_t": 384.97509765625,
+    "front": 0,
+    "gpu_id": 6,
+    "gpu_t": 384.97509765625,
+    "index": 175760,
+    "primitive": 0
+  },
+  {
+    "alternate": true,
+    "bary": [
+      0.645691990852356,
+      0.008447019383311272
+    ],
+    "expected_id": 2,
+    "expected_t": 379.9020080566406,
+    "front": 0,
+    "gpu_id": 6,
+    "gpu_t": 379.9019775390625,
+    "index": 177349,
+    "primitive": 0
+  },
+  {
+    "alternate": true,
+    "bary": [
+      0.46211808919906616,
+      0.5376923680305481
+    ],
+    "expected_id": 6,
+    "expected_t": 149.26837158203125,
+    "front": 1,
+    "gpu_id": 2,
+    "gpu_t": 149.2683563232422,
+    "index": 182814,
+    "primitive": 1
+  },
+  {
+    "alternate": true,
+    "bary": [
+      0.6098018288612366,
+      0.38974839448928833
+    ],
+    "expected_id": 6,
+    "expected_t": 138.18824768066406,
+    "front": 1,
+    "gpu_id": 2,
+    "gpu_t": 138.18826293945312,
+    "index": 188259,
+    "primitive": 1
+  },
+  {
+    "alternate": true,
+    "bary": [
+      0.5702017545700073,
+      0.008655593730509281
+    ],
+    "expected_id": 2,
+    "expected_t": 298.2801208496094,
+    "front": 0,
+    "gpu_id": 6,
+    "gpu_t": 298.2801208496094,
+    "index": 198036,
+    "primitive": 0
+  },
+  {
+    "alternate": true,
+    "bary": [
+      0.8403713703155518,
+      0.0026373027358204126
+    ],
+    "expected_id": 2,
+    "expected_t": 218.0258331298828,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 218.02581787109375,
+    "index": 203667,
+    "primitive": 0
+  },
+  {
+    "alternate": true,
+    "bary": [
+      0.829582691192627,
+      0.009454826824367046
+    ],
+    "expected_id": 2,
+    "expected_t": 218.34326171875,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 218.34327697753906,
+    "index": 203987,
+    "primitive": 0
+  },
+  {
+    "alternate": true,
+    "bary": [
+      0.8143158555030823,
+      0.005250175483524799
+    ],
+    "expected_id": 2,
+    "expected_t": 216.60748291015625,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 216.6074981689453,
+    "index": 204934,
+    "primitive": 0
+  },
+  {
+    "alternate": true,
+    "bary": [
+      0.961837887763977,
+      0.006018233951181173
+    ],
+    "expected_id": 2,
+    "expected_t": 396.4508056640625,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 396.4507751464844,
+    "index": 205437,
+    "primitive": 0
+  },
+  {
+    "alternate": true,
+    "bary": [
+      0.8023366332054138,
+      0.00286640296690166
+    ],
+    "expected_id": 2,
+    "expected_t": 215.30580139160156,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 215.30581665039062,
+    "index": 205555,
+    "primitive": 0
+  },
+  {
+    "alternate": true,
+    "bary": [
+      0.8333539366722107,
+      0.010662274435162544
+    ],
+    "expected_id": 2,
+    "expected_t": 349.3265380859375,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 349.3265380859375,
+    "index": 205745,
+    "primitive": 0
+  },
+  {
+    "alternate": true,
+    "bary": [
+      0.7845435738563538,
+      0.010417459532618523
+    ],
+    "expected_id": 2,
+    "expected_t": 215.7769775390625,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 215.77699279785156,
+    "index": 206166,
+    "primitive": 0
+  },
+  {
+    "alternate": true,
+    "bary": [
+      0.5449445843696594,
+      0.4522491693496704
+    ],
+    "expected_id": 6,
+    "expected_t": 212.4612579345703,
+    "front": 1,
+    "gpu_id": 2,
+    "gpu_t": 212.4612274169922,
+    "index": 206346,
+    "primitive": 1
+  },
+  {
+    "alternate": true,
+    "bary": [
+      0.6916384100914001,
+      0.0007397540030069649
+    ],
+    "expected_id": 2,
+    "expected_t": 289.9786376953125,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 289.9786071777344,
+    "index": 206357,
+    "primitive": 0
+  },
+  {
+    "alternate": true,
+    "bary": [
+      0.7817813754081726,
+      0.0042677330784499645
+    ],
+    "expected_id": 2,
+    "expected_t": 214.77871704101562,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 214.77871704101562,
+    "index": 206468,
+    "primitive": 0
+  },
+  {
+    "alternate": true,
+    "bary": [
+      0.7766681909561157,
+      0.002737829927355051
+    ],
+    "expected_id": 2,
+    "expected_t": 214.7263946533203,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 214.7263946533203,
+    "index": 206767,
+    "primitive": 0
+  },
+  {
+    "alternate": true,
+    "bary": [
+      0.5254626870155334,
+      0.4743780791759491
+    ],
+    "expected_id": 6,
+    "expected_t": 194.04141235351562,
+    "front": 1,
+    "gpu_id": 2,
+    "gpu_t": 194.04141235351562,
+    "index": 206948,
+    "primitive": 1
+  },
+  {
+    "alternate": true,
+    "bary": [
+      0.6255710124969482,
+      0.3726080060005188
+    ],
+    "expected_id": 6,
+    "expected_t": 273.5366516113281,
+    "front": 1,
+    "gpu_id": 2,
+    "gpu_t": 273.53662109375,
+    "index": 206962,
+    "primitive": 1
+  },
+  {
+    "alternate": true,
+    "bary": [
+      0.6764770150184631,
+      0.00042745511746034026
+    ],
+    "expected_id": 2,
+    "expected_t": 279.0162353515625,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 279.0162048339844,
+    "index": 206963,
+    "primitive": 0
+  },
+  {
+    "alternate": true,
+    "bary": [
+      0.6408416628837585,
+      0.0030096385162323713
+    ],
+    "expected_id": 2,
+    "expected_t": 265.09918212890625,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 265.09918212890625,
+    "index": 207262,
+    "primitive": 0
+  },
+  {
+    "alternate": true,
+    "bary": [
+      0.7602240443229675,
+      0.006820713635534048
+    ],
+    "expected_id": 2,
+    "expected_t": 215.24063110351562,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 215.24063110351562,
+    "index": 207359,
+    "primitive": 0
+  },
+  {
+    "alternate": true,
+    "bary": [
+      0.6078009605407715,
+      0.008215866051614285
+    ],
+    "expected_id": 2,
+    "expected_t": 253.32400512695312,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 253.32400512695312,
+    "index": 207558,
+    "primitive": 0
+  },
+  {
+    "alternate": true,
+    "bary": [
+      0.2778362035751343,
+      0.0014498893870040774
+    ],
+    "expected_id": 2,
+    "expected_t": 151.06968688964844,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 151.0697021484375,
+    "index": 207830,
+    "primitive": 0
+  },
+  {
+    "alternate": true,
+    "bary": [
+      0.6316143274307251,
+      0.0050449492409825325
+    ],
+    "expected_id": 2,
+    "expected_t": 256.4071960449219,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 256.4072265625,
+    "index": 207855,
+    "primitive": 0
+  },
+  {
+    "alternate": true,
+    "bary": [
+      0.7433372139930725,
+      0.006952326279133558
+    ],
+    "expected_id": 2,
+    "expected_t": 214.99703979492188,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 214.9970245361328,
+    "index": 207940,
+    "primitive": 0
+  },
+  {
+    "alternate": true,
+    "bary": [
+      0.2452206164598465,
+      0.01226888969540596
+    ],
+    "expected_id": 2,
+    "expected_t": 144.75331115722656,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 144.75331115722656,
+    "index": 208119,
+    "primitive": 0
+  },
+  {
+    "alternate": true,
+    "bary": [
+      0.6125288605690002,
+      0.01014569029211998
+    ],
+    "expected_id": 2,
+    "expected_t": 248.84800720214844,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 248.84799194335938,
+    "index": 208147,
+    "primitive": 0
+  },
+  {
+    "alternate": true,
+    "bary": [
+      0.6136318445205688,
+      0.38446247577667236
+    ],
+    "expected_id": 6,
+    "expected_t": 246.46986389160156,
+    "front": 1,
+    "gpu_id": 2,
+    "gpu_t": 246.46986389160156,
+    "index": 208439,
+    "primitive": 1
+  },
+  {
+    "alternate": true,
+    "bary": [
+      0.7248752117156982,
+      0.008925867266952991
+    ],
+    "expected_id": 2,
+    "expected_t": 215.82763671875,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 215.82763671875,
+    "index": 208510,
+    "primitive": 0
+  },
+  {
+    "alternate": true,
+    "bary": [
+      0.43956226110458374,
+      0.5581275820732117
+    ],
+    "expected_id": 6,
+    "expected_t": 123.57437896728516,
+    "front": 1,
+    "gpu_id": 2,
+    "gpu_t": 123.57435607910156,
+    "index": 208688,
+    "primitive": 1
+  },
+  {
+    "alternate": true,
+    "bary": [
+      0.15164814889431,
+      0.010024508461356163
+    ],
+    "expected_id": 2,
+    "expected_t": 116.92704772949219,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 116.92704772949219,
+    "index": 208969,
+    "primitive": 0
+  },
+  {
+    "alternate": true,
+    "bary": [
+      0.7091895341873169,
+      0.0015051792142912745
+    ],
+    "expected_id": 2,
+    "expected_t": 216.7608642578125,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 216.7608642578125,
+    "index": 209067,
+    "primitive": 0
+  },
+  {
+    "alternate": true,
+    "bary": [
+      0.7041836977005005,
+      0.011354837566614151
+    ],
+    "expected_id": 2,
+    "expected_t": 217.92088317871094,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 217.92088317871094,
+    "index": 209068,
+    "primitive": 0
+  },
+  {
+    "alternate": true,
+    "bary": [
+      0.6174684762954712,
+      0.3816626965999603
+    ],
+    "expected_id": 6,
+    "expected_t": 234.84864807128906,
+    "front": 1,
+    "gpu_id": 2,
+    "gpu_t": 234.84861755371094,
+    "index": 209301,
+    "primitive": 1
+  },
+  {
+    "alternate": true,
+    "bary": [
+      0.637203574180603,
+      0.004845479503273964
+    ],
+    "expected_id": 2,
+    "expected_t": 234.9306182861328,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 234.93063354492188,
+    "index": 209302,
+    "primitive": 0
+  },
+  {
+    "alternate": true,
+    "bary": [
+      0.6967543959617615,
+      0.0017340434715151787
+    ],
+    "expected_id": 2,
+    "expected_t": 218.5681915283203,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 218.56822204589844,
+    "index": 209340,
+    "primitive": 0
+  },
+  {
+    "alternate": true,
+    "bary": [
+      0.6224471926689148,
+      0.3750970661640167
+    ],
+    "expected_id": 6,
+    "expected_t": 227.9517059326172,
+    "front": 1,
+    "gpu_id": 2,
+    "gpu_t": 227.95167541503906,
+    "index": 209590,
+    "primitive": 1
+  },
+  {
+    "alternate": true,
+    "bary": [
+      0.6736390590667725,
+      0.001808589557185769
+    ],
+    "expected_id": 2,
+    "expected_t": 220.29270935058594,
+    "front": 1,
+    "gpu_id": 6,
+    "gpu_t": 220.29269409179688,
+    "index": 209607,
+    "primitive": 0
+  }
+]
