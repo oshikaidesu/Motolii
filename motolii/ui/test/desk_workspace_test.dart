@@ -42,10 +42,13 @@ void main() {
       await tester.tap(find.byTooltip('Save preset'));
       await tester.pumpAndSettle();
       expect((c.deskWork.value['easePresets'] as List).length, 1);
-      // Blend は W3C の族の並びだけを持ち、お気に入りは持たない。
-      // ここで見るのは道具を替えても Ease の下書きが残ることだけ。
+      // Blend keeps no draft of its own: with nothing selected its tiles are
+      // inert, and visiting it must not disturb the drafts of other tools.
       c.deskDrawer.value = 'Blend';
       await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('blend:Multiply')));
+      await tester.pumpAndSettle();
+      expect(c.deskWork.value.containsKey('blends'), isFalse);
       c.deskDrawer.value = 'Ease';
       await tester.pumpAndSettle();
       expect((c.deskWork.value['easePresets'] as List).length, 1);

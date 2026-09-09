@@ -60,11 +60,7 @@ Widget _buildPanel(String name, EditorSession c, Key? key, {Widget? leading}) {
     'Notes' => NotesPanel(key: key, controller: c),
     'Ease' => EaseDesk(key: key, controller: c, leading: leading),
     'Depth' => DepthDesk(key: key, controller: c),
-    'Blend' => AnimatedBuilder(
-      key: key,
-      animation: c.document,
-      builder: (_, __) => BlendPanel(controller: c),
-    ),
+    'Blend' => BlendPanel(key: key, controller: c),
     'History' => HistoryRecords(key: key, controller: c),
     'Web' => WebPanel(key: key, controller: c),
     'Timeline' => TimelinePanel(key: key, controller: c),
