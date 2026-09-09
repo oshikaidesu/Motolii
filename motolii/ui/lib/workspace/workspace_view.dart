@@ -28,7 +28,16 @@ class WorkspaceView extends StatefulWidget {
 }
 
 class _WorkspaceViewState extends State<WorkspaceView> {
-  String? focusedPanel;
+  /// Which pane wears the ring. Held as a listenable, not as state: the ring
+  /// is one border on two panes, and a click that moves it must not rebuild
+  /// every panel in the window.
+  final focusedPanel = ValueNotifier<String?>(null);
+  @override
+  void dispose() {
+    focusedPanel.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) => dockView(widget.layout);
   Widget dockView(DockNode node) {
@@ -104,29 +113,29 @@ class _WorkspaceViewState extends State<WorkspaceView> {
         },
         builder: (context, candidates, rejected) => Focus(
           onFocusChange: (focused) {
-            if (focused && focusedPanel != node.id)
-              setState(() => focusedPanel = node.id);
+            if (focused) focusedPanel.value = node.id;
           },
           child: Listener(
-            onPointerDown: (_) {
-              if (focusedPanel != node.id)
-                setState(() => focusedPanel = node.id);
-            },
-            child: Container(
-              decoration: BoxDecoration(
-                color: EditorTheme.panel,
-                border: candidates.isNotEmpty
-                    ? Border.all(
-                        color: EditorTheme.accent,
-                        width: EditorMetrics.s2,
-                      )
-                    : Border.all(
-                        color: focusedPanel == node.id
-                            ? const Color(0xffacacac)
-                            : Colors.transparent,
-                        width: 1,
-                      ),
-                borderRadius: BorderRadius.circular(EditorMetrics.s3),
+            onPointerDown: (_) => focusedPanel.value = node.id,
+            child: ValueListenableBuilder<String?>(
+              valueListenable: focusedPanel,
+              builder: (context, focused, child) => Container(
+                decoration: BoxDecoration(
+                  color: EditorTheme.panel,
+                  border: candidates.isNotEmpty
+                      ? Border.all(
+                          color: EditorTheme.accent,
+                          width: EditorMetrics.s2,
+                        )
+                      : Border.all(
+                          color: focused == node.id
+                              ? const Color(0xffacacac)
+                              : Colors.transparent,
+                          width: 1,
+                        ),
+                  borderRadius: BorderRadius.circular(EditorMetrics.s3),
+                ),
+                child: child,
               ),
               child: Column(
                 children: [

@@ -388,9 +388,8 @@ const _switchBudget = <String, (int, int)>{
   'Stage': (40, 8),
 };
 
-/// The whole dock, taking one selection change: the frame the window is
-/// judged on when a layer is clicked on the Stage.
-Future<String> _windowSwitch(WidgetTester tester) async {
+/// The default dock, mounted and settled, with its session.
+Future<EditorSession> _mounted(WidgetTester tester) async {
   TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
       .setMockMethodCallHandler(EditorSession.channel, (call) async {
         switch (call.method) {
@@ -414,7 +413,13 @@ Future<String> _windowSwitch(WidgetTester tester) async {
   );
   await tester.pumpAndSettle();
   final dynamic host = tester.state(find.byType(EditorWindow));
-  final c = host.c as EditorSession;
+  return host.c as EditorSession;
+}
+
+/// The whole dock, taking one selection change: the frame the window is
+/// judged on when a layer is clicked on the Stage.
+Future<String> _windowSwitch(WidgetTester tester) async {
+  final c = await _mounted(tester);
   c.document.value = _status(3, 1);
   await tester.pump();
   final pick = await _cost(tester, () async {
@@ -499,5 +504,32 @@ void _switchMain() {
       await tester.pumpWidget(const SizedBox());
     }
     debugPrint('SELECTION CHANGE\n${report.join('\n')}');
+  });
+
+  testWidgets('the first frame of a pane taking the ring', (tester) async {
+    tester.view.physicalSize = const Size(1280, 796);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await _mounted(tester);
+    // Press in one pane, then in another: the ring moves from the Stage to
+    // the Inspector, and that is all the window may do about it.
+    final first = await tester.startGesture(const Offset(640, 300));
+    await tester.pump();
+    await first.up();
+    await tester.pump();
+    final second = await tester.startGesture(const Offset(1150, 300));
+    final ring = await _cost(tester, () => tester.pump());
+    await second.up();
+    await tester.pump();
+    debugPrint(
+      'RING       press  builds ${ring.builds}   layouts ${ring.calls}',
+    );
+    expect(
+      ring.builds,
+      lessThanOrEqualTo(80),
+      reason: 'the ring must not rebuild the panels it is drawn around',
+    );
+    expect(ring.calls, lessThanOrEqualTo(20));
+    await tester.pumpWidget(const SizedBox());
   });
 }
