@@ -72,9 +72,7 @@ void main() {
       ),
     );
     Future<void> drop(Offset to) async {
-      final g = await tester.startGesture(
-        tester.getCenter(find.text('logo.png')),
-      );
+      final g = await tester.startGesture(tester.getCenter(find.text('logo')));
       await g.moveBy(const Offset(0, -20));
       await tester.pump();
       await g.moveTo(to);

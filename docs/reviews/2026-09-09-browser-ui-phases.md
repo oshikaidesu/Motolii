@@ -37,3 +37,41 @@ Validation: targeted analysis, diff whitespace checks and 3 existing browser tes
 ## Phase 3.1 — keep silhouette, soften boundaries
 
 User accepted Phase 3 silhouette and requested relief from cramped styling. Baseline immediately before this refinement is `codex/browser-ui-phase-3` (`f7c2aabff98375776b78bdbe8201e547ab147c95`); browser.dart-only rollback scope applies, and intervening color-editor changes must be preserved when reverting this small refinement. Grid geometry, columns, preview dimensions and caption height stay unchanged. Unselected borders become transparent; the caption/tile surface joins the surrounding panel; format becomes quiet unboxed secondary text; name horizontal inset increases from 4 to 6 logical pixels. The blue selection outline stays. Existing AEViewer preview-modes reference and shared theme/metrics are the implementation references. Hot reload and real-window Media inspection verified the visual changes; no operation changes or new tests.
+
+## Phase 3.2 — the AEViewer anatomy, made legible
+
+Phase 4 (a working media library) was rejected: the request was the look, not new
+behaviour. Phase 3.2 keeps Phase 3.1's silhouette, four columns, gaze path and
+every existing route, and only changes what the tile shows.
+
+One caption line replaces the two of Phase 2/3. The name owns the whole tile
+width — no field shares the line — and sits vertically centred in a line of
+`EditorMetrics.control`, so it has air above and below. The extension leaves the
+name and becomes the format badge, a `micro` label on a translucent ground in the
+picture's bottom-right corner; name and format therefore never compete for width.
+Status marks moved onto the picture's top-left: a pale dot for "in use by a
+layer", an orange warning for a missing file. The frame around a tile is now only
+ever the selection (`EditorTheme.spatial`), so selection and use cannot be read
+for each other. Unselected tiles keep no frame at all, and the gutter stays the
+regular `s6`.
+
+A mesh with no thumbnail used to be one `view_in_ar` icon for every file, so
+`torus.obj` and `sphere.obj` were indistinguishable. `_ShapeMark` now draws the
+body the file name says (sphere, torus, cube, cylinder, cone, pyramid, plane);
+an unrecognised name keeps the generic icon. The name is the only evidence
+available — the snapshot carries no mesh geometry — and no other metadata is
+invented.
+
+The bottom-right count now says what it counts: `40 items`, `12 of 40 shown`,
+`3 of 40 selected`, with the three numbers together on hover.
+
+Not done: folders, collections, history, waveforms, audition, favourites — all
+out of scope by the user's instruction. Names longer than the tile still
+ellipsize, with the full name on hover.
+
+Validation: `flutter analyze` clean for `lib/` (one pre-existing unused import in
+`test/snapshot_contract_test.dart`). `browser_tile_test.dart` (new, 4 tests) plus
+`browser_size_test.dart` pass; `browser_import_reveal_test.dart` fails on
+`importedAssets` before it reaches any Browser assertion — an EditorSession
+regression carried in from the 2026-09-09 WIP snapshot, outside this lane. Real
+window not inspected by this lane.

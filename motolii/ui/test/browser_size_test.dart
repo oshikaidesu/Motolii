@@ -36,10 +36,7 @@ void main() {
   double cardWidth(WidgetTester tester) => tester
       .getSize(
         find
-            .ancestor(
-              of: find.text('clip0.mp4'),
-              matching: find.byType(Tooltip),
-            )
+            .ancestor(of: find.text('clip0'), matching: find.byType(Tooltip))
             .first,
       )
       .width;

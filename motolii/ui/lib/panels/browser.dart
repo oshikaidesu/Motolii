@@ -53,11 +53,12 @@ class _BrowserPanelState extends State<BrowserPanel> {
 
   static const double tileDefault = BrowserSize.base, railMin = 48;
 
-  /// Grid: the gutter between tiles, and the two caption lines (name, then
-  /// status + format) under every preview.
+  /// Grid: the gutter between tiles, and the single caption line under every
+  /// preview. Nothing else shares that line, so the name keeps the tile's
+  /// whole width; format and status ride on the picture instead.
   static const double _gutter = EditorMetrics.s6,
       _inset = EditorMetrics.s8,
-      _captionHeight = EditorMetrics.row + EditorMetrics.s14;
+      _captionHeight = EditorMetrics.control;
   int total = 0;
 
   /// Colours: the wheel's size is the picker's height; the grip under the
@@ -849,18 +850,21 @@ class _BrowserPanelState extends State<BrowserPanel> {
         ],
         Expanded(child: _sizeSlider()),
         ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: EditorMetrics.s76),
+          constraints: const BoxConstraints(maxWidth: EditorMetrics.s96),
           child: Padding(
             padding: const EdgeInsets.only(left: EditorMetrics.s8),
-            child: Text(
-              _countLabel(),
-              key: const ValueKey('browser:count'),
-              maxLines: 1,
-              softWrap: false,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: EditorMetrics.dense,
-                color: EditorTheme.muted,
+            child: Tooltip(
+              message: _countTip(),
+              child: Text(
+                _countLabel(),
+                key: const ValueKey('browser:count'),
+                maxLines: 1,
+                softWrap: false,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: EditorMetrics.dense,
+                  color: EditorTheme.muted,
+                ),
               ),
             ),
           ),
@@ -878,13 +882,29 @@ class _BrowserPanelState extends State<BrowserPanel> {
     onChanged: (v) => widget.controller.storeDesk('browserTile', v),
   );
 
-  /// Selection first, then a narrowed result against the whole tab, else the
-  /// whole tab.
+  /// The number says what it counts in the same breath: the selection, the
+  /// narrowed result against the whole tab, else the whole tab.
   String _countLabel() {
     final chosen = selected[tab]?.length ?? 0;
-    if (chosen > 0) return '$chosen selected';
-    if (visible.length != total) return '${visible.length} of $total';
+    if (chosen > 0) return '$chosen of $total selected';
+    if (visible.length != total) return '${visible.length} of $total shown';
     return '$total items';
+  }
+
+  String _countTip() => [
+    '$total items in $tab',
+    '${visible.length} shown by the search and category',
+    '${selected[tab]?.length ?? 0} selected',
+  ].join('\n');
+
+  /// The badge already carries the extension, so the name drops it and keeps
+  /// the width for the part that tells one file from another.
+  String _displayName(Map<String, dynamic> item) {
+    final name = '${item['name'] ?? item['id']}';
+    final dot = name.lastIndexOf('.');
+    return dot > 0 && name.substring(dot + 1).toUpperCase() == _format(item)
+        ? name.substring(0, dot)
+        : name;
   }
 
   String _format(Map<String, dynamic> item) {
@@ -1009,67 +1029,94 @@ class _BrowserPanelState extends State<BrowserPanel> {
     // Every preview sits in the same ground so light and dark pictures read
     // as separate tiles; colours are their own ground.
     if (!isColor) preview = ColoredBox(color: EditorTheme.app, child: preview);
-    final caption = Padding(
-      padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s4),
-      child: Text(
-        name,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: const TextStyle(
-          color: EditorTheme.ink,
-          fontSize: EditorMetrics.font,
-        ),
-      ),
-    );
-    // Status first (a shape, not a word), then the fixed facts of the item.
-    // Media: the format says the kind already; the rest of the line is kept
-    // for dimensions and duration once the snapshot supplies them.
-    final facts = tab == 'Media'
-        ? format
-        : '${item['detail'] ?? classification(item)}';
-    final meta = Padding(
-      padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s4),
-      child: Row(
+    // Marks ride on the picture, never on the frame: the frame is only ever
+    // the selection. A pale dot means the item already sits in a layer; the
+    // warning means its file is gone.
+    if (missing || item['used'] == true)
+      preview = Stack(
+        fit: StackFit.expand,
         children: [
-          if (missing || item['used'] == true)
-            Padding(
-              padding: const EdgeInsets.only(right: EditorMetrics.s3),
-              child: missing
-                  ? const Icon(
-                      Icons.error_outline,
-                      size: EditorMetrics.dense,
-                      color: EditorTheme.accent,
-                    )
-                  : Container(
-                      key: const ValueKey('browser:used'),
-                      width: EditorMetrics.s5,
-                      height: EditorMetrics.s5,
-                      decoration: const BoxDecoration(
-                        color: EditorTheme.ink,
-                        shape: BoxShape.circle,
-                      ),
+          preview,
+          Positioned(
+            left: EditorMetrics.s4,
+            top: EditorMetrics.s4,
+            child: missing
+                ? const Icon(
+                    Icons.error_outline,
+                    size: EditorMetrics.dense,
+                    color: EditorTheme.accent,
+                  )
+                : Container(
+                    key: const ValueKey('browser:used'),
+                    width: EditorMetrics.s5,
+                    height: EditorMetrics.s5,
+                    decoration: const BoxDecoration(
+                      color: EditorTheme.ink,
+                      shape: BoxShape.circle,
                     ),
-            ),
-          Expanded(
-            child: Text(
-              facts,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: EditorTheme.muted,
-                fontSize: EditorMetrics.dense,
+                  ),
+          ),
+        ],
+      );
+    // The format sits in the picture's bottom right corner, quiet and small,
+    // so it never takes width from the name.
+    if (format.isNotEmpty)
+      preview = Stack(
+        fit: StackFit.expand,
+        children: [
+          preview,
+          Positioned(
+            right: EditorMetrics.s3,
+            bottom: EditorMetrics.s3,
+            child: DecoratedBox(
+              key: ValueKey('browser:format:${id(item)}'),
+              decoration: BoxDecoration(
+                color: EditorTheme.app.withValues(alpha: .7),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: EditorMetrics.s3,
+                ),
+                child: Text(
+                  format,
+                  maxLines: 1,
+                  style: const TextStyle(
+                    fontSize: EditorMetrics.micro,
+                    letterSpacing: .5,
+                    color: EditorTheme.muted,
+                  ),
+                ),
               ),
             ),
           ),
         ],
+      );
+    // One line, the whole tile wide, the text sitting between equal airs.
+    final caption = SizedBox(
+      key: ValueKey('browser:name:${id(item)}'),
+      height: _captionHeight,
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s6),
+          child: Text(
+            _displayName(item),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: EditorTheme.ink,
+              fontSize: EditorMetrics.font,
+            ),
+          ),
+        ),
       ),
     );
     final body = Tooltip(
       key: ValueKey('browser:$tab:${id(item)}'),
       message: [
         name,
-        if (missing) 'Missing',
-        if (item['used'] == true) 'In use',
+        if (missing) 'Missing file',
+        if (item['used'] == true) 'In use by a layer',
         if (item['detail'] != null) '${item['detail']}',
         supported
             ? (isColor
@@ -1106,13 +1153,7 @@ class _BrowserPanelState extends State<BrowserPanel> {
                     ? Row(
                         children: [
                           SizedBox(width: EditorMetrics.s76, child: preview),
-                          Expanded(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [caption, meta],
-                            ),
-                          ),
+                          Expanded(child: caption),
                         ],
                       )
                     : Column(
@@ -1123,8 +1164,7 @@ class _BrowserPanelState extends State<BrowserPanel> {
                               child: preview,
                             ),
                           ),
-                          SizedBox(height: EditorMetrics.row, child: caption),
-                          SizedBox(height: EditorMetrics.s14, child: meta),
+                          caption,
                         ],
                       ),
               ),
@@ -1162,20 +1202,32 @@ class _BrowserPanelState extends State<BrowserPanel> {
 
   Widget _thumbnail(Map<String, dynamic> item) {
     final path = item['thumbnail'] as String?;
+    // A mesh has no picture to show, so its name draws the body it names;
+    // otherwise every 3D file would wear one icon.
+    final shape = item['missing'] == true || family(item) != '3D'
+        ? null
+        : _shapeOf('${item['name'] ?? item['id']}');
     final fallback = Center(
-      child: Center(
-        child: Icon(
-          item['missing'] == true
-              ? Icons.broken_image_outlined
-              : family(item) == 'Audio'
-              ? Icons.audiotrack
-              : family(item) == '3D'
-              ? Icons.view_in_ar
-              : Icons.image_outlined,
-          size: EditorMetrics.s19,
-          color: EditorTheme.muted,
-        ),
-      ),
+      child: shape != null
+          ? SizedBox(
+              width: EditorMetrics.s32,
+              height: EditorMetrics.s32,
+              child: CustomPaint(
+                key: ValueKey('browser:shape:${shape.name}'),
+                painter: _ShapeMark(shape, EditorTheme.kindColor('3d')),
+              ),
+            )
+          : Icon(
+              item['missing'] == true
+                  ? Icons.broken_image_outlined
+                  : family(item) == 'Audio'
+                  ? Icons.audiotrack
+                  : family(item) == '3D'
+                  ? Icons.view_in_ar
+                  : Icons.image_outlined,
+              size: EditorMetrics.s19,
+              color: EditorTheme.muted,
+            ),
     );
     if (path == null || path.isEmpty) return fallback;
     try {
@@ -1901,6 +1953,126 @@ class _Swatch extends StatelessWidget {
       child: ColoredBox(color: color),
     ),
   );
+}
+
+/// The bodies a mesh file is usually named after. A file whose name says none
+/// of them keeps the generic 3D icon.
+enum _Shape { sphere, torus, cube, cylinder, cone, pyramid, plane }
+
+const _shapeWords = <String, _Shape>{
+  'sphere': _Shape.sphere,
+  'ball': _Shape.sphere,
+  'icosphere': _Shape.sphere,
+  'torus': _Shape.torus,
+  'donut': _Shape.torus,
+  'cube': _Shape.cube,
+  'box': _Shape.cube,
+  'cylinder': _Shape.cylinder,
+  'tube': _Shape.cylinder,
+  'cone': _Shape.cone,
+  'pyramid': _Shape.pyramid,
+  'tetra': _Shape.pyramid,
+  'plane': _Shape.plane,
+  'quad': _Shape.plane,
+};
+
+_Shape? _shapeOf(String name) {
+  final text = name.toLowerCase();
+  for (final entry in _shapeWords.entries)
+    if (text.contains(entry.key)) return entry.value;
+  return null;
+}
+
+/// The outline of one body, drawn from the box it is given so the same mark
+/// works at any tile size.
+class _ShapeMark extends CustomPainter {
+  const _ShapeMark(this.shape, this.color);
+  final _Shape shape;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final stroke = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1
+      ..color = color;
+    final s = size.shortestSide;
+    final c = Offset(size.width / 2, size.height / 2);
+    Rect around(double rx, double ry, [double dy = 0]) => Rect.fromCenter(
+      center: c.translate(0, dy * s),
+      width: rx * s,
+      height: ry * s,
+    );
+    switch (shape) {
+      case _Shape.sphere:
+        canvas.drawCircle(c, s * .38, stroke);
+        canvas.drawOval(around(.76, .3), stroke);
+      case _Shape.torus:
+        canvas.drawOval(around(.86, .5), stroke);
+        canvas.drawOval(around(.34, .2), stroke);
+      case _Shape.cube:
+        final path = Path();
+        for (var i = 0; i < 6; i++) {
+          final a = math.pi / 6 + i * math.pi / 3;
+          final p = c + Offset(math.cos(a), math.sin(a)) * s * .4;
+          i == 0 ? path.moveTo(p.dx, p.dy) : path.lineTo(p.dx, p.dy);
+        }
+        canvas.drawPath(path..close(), stroke);
+        for (final a in [math.pi / 2, math.pi * 7 / 6, math.pi * 11 / 6])
+          canvas.drawLine(
+            c,
+            c + Offset(math.cos(a), math.sin(a)) * s * .4,
+            stroke,
+          );
+      case _Shape.cylinder:
+        canvas.drawOval(around(.6, .22, -.28), stroke);
+        canvas.drawOval(around(.6, .22, .28), stroke);
+        for (final x in [-.3, .3])
+          canvas.drawLine(
+            c + Offset(x * s, -s * .28),
+            c + Offset(x * s, s * .28),
+            stroke,
+          );
+      case _Shape.cone:
+        canvas.drawOval(around(.7, .24, .3), stroke);
+        for (final x in [-.35, .35])
+          canvas.drawLine(
+            c + Offset(0, -s * .38),
+            c + Offset(x * s, s * .3),
+            stroke,
+          );
+      case _Shape.pyramid:
+        final apex = c + Offset(0, -s * .38);
+        final left = c + Offset(-s * .38, s * .3);
+        final right = c + Offset(s * .38, s * .3);
+        final back = c + Offset(s * .08, s * .12);
+        canvas.drawPath(
+          Path()
+            ..moveTo(apex.dx, apex.dy)
+            ..lineTo(left.dx, left.dy)
+            ..lineTo(right.dx, right.dy)
+            ..close(),
+          stroke,
+        );
+        canvas.drawLine(apex, back, stroke);
+        canvas.drawLine(left, back, stroke);
+        canvas.drawLine(right, back, stroke);
+      case _Shape.plane:
+        canvas.drawPath(
+          Path()
+            ..moveTo(c.dx - s * .2, c.dy - s * .22)
+            ..lineTo(c.dx + s * .44, c.dy - s * .22)
+            ..lineTo(c.dx + s * .2, c.dy + s * .22)
+            ..lineTo(c.dx - s * .44, c.dy + s * .22)
+            ..close(),
+          stroke,
+        );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_ShapeMark old) =>
+      old.shape != shape || old.color != color;
 }
 
 /// One knob for how big Browser tiles are; Settings turns it, Browser reads it.
