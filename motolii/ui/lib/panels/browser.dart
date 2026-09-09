@@ -458,7 +458,10 @@ class _BrowserPanelState extends State<BrowserPanel> {
         onKeyEvent: key,
         child: ColoredBox(
           color: EditorTheme.panel,
-          child: Column(
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+          Column(
             children: [
               if (widget.showTabs)
                 SizedBox(
@@ -536,6 +539,7 @@ class _BrowserPanelState extends State<BrowserPanel> {
                         'Import',
                         has('import') ? widget.controller.importFiles : null,
                       ),
+                      _importing(),
                     ],
                     if (tab != 'Colors') ...[
                       const SizedBox(width: EditorMetrics.s6),
@@ -775,9 +779,72 @@ class _BrowserPanelState extends State<BrowserPanel> {
               ),
             ],
           ),
+          if (tab == 'Media') _dropHint(),
+            ],
+          ),
         ),
       );
     },
+  );
+
+  /// While files are carried over the window, the shelf says where they go.
+  /// It fades in and out, and never takes the pointer.
+  Widget _dropHint() => ValueListenableBuilder<bool>(
+    valueListenable: widget.controller.dragging,
+    builder: (context, dragging, _) => IgnorePointer(
+      child: AnimatedOpacity(
+        opacity: dragging ? 1 : 0,
+        duration: const Duration(milliseconds: 120),
+        child: Container(
+          key: const ValueKey('browser:drop-hint'),
+          margin: const EdgeInsets.all(EditorMetrics.s4),
+          decoration: BoxDecoration(
+            color: EditorTheme.panel.withValues(alpha: .85),
+            border: Border.all(
+              color: EditorTheme.accent,
+              width: EditorMetrics.s2,
+            ),
+          ),
+          alignment: Alignment.center,
+          child: const Text(
+            'Drop to import',
+            style: TextStyle(fontSize: EditorMetrics.title, color: EditorTheme.ink),
+          ),
+        ),
+      ),
+    ),
+  );
+
+  /// The import at work: a small wheel beside Import, with the count.
+  Widget _importing() => ValueListenableBuilder<int>(
+    valueListenable: widget.controller.importing,
+    builder: (context, count, _) => count == 0
+        ? const SizedBox.shrink()
+        : Padding(
+            key: const ValueKey('browser:importing'),
+            padding: const EdgeInsets.only(left: EditorMetrics.s6),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(
+                  width: EditorMetrics.s14,
+                  height: EditorMetrics.s14,
+                  child: CircularProgressIndicator(
+                    strokeWidth: EditorMetrics.s2,
+                    color: EditorTheme.accent,
+                  ),
+                ),
+                const SizedBox(width: EditorMetrics.s4),
+                Text(
+                  '$count',
+                  style: const TextStyle(
+                    fontSize: EditorMetrics.dense,
+                    color: EditorTheme.muted,
+                  ),
+                ),
+              ],
+            ),
+          ),
   );
 
   /// A thin line you drag; it reports the movement along its axis.

@@ -25,9 +25,15 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate, NSDraggingDestination {
     let urls = sender.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
     return urls.filter { $0.isFileURL }.map { $0.path }
   }
-  func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation { droppedPaths(sender).isEmpty ? [] : .copy }
+  func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+    let files = !droppedPaths(sender).isEmpty
+    if files { probeHost?.dragHover(true) }
+    return files ? .copy : []
+  }
+  func draggingExited(_ sender: NSDraggingInfo?) { probeHost?.dragHover(false) }
   func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool { !droppedPaths(sender).isEmpty }
   func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+    probeHost?.dragHover(false)
     let paths = droppedPaths(sender)
     guard !paths.isEmpty else { return false }
     let point = contentView?.convert(sender.draggingLocation, from: nil) ?? sender.draggingLocation
@@ -380,6 +386,12 @@ final class ProbeHost: NSObject {
     channel.invokeMethod("filesDropped", arguments: ["paths": paths, "point": point])
   }
 
+  /// Files are being carried over the window (or just left it).
+  func dragHover(_ active: Bool) {
+    guard !closed else { return }
+    channel.invokeMethod("dragHover", arguments: ["active": active])
+  }
+
   func detachWindow() {
     guard !closed else { return }
     closed = true
@@ -618,8 +630,14 @@ final class PanelFlutterWindow: NSWindow, NSWindowDelegate, NSDraggingDestinatio
     let urls = sender.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
     return urls.filter { $0.isFileURL }.map { $0.path }
   }
-  func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation { paths(sender).isEmpty ? [] : .copy }
+  func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+    let files = !paths(sender).isEmpty
+    if files { host?.dragHover(true) }
+    return files ? .copy : []
+  }
+  func draggingExited(_ sender: NSDraggingInfo?) { host?.dragHover(false) }
   func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+    host?.dragHover(false)
     let files = paths(sender); guard !files.isEmpty else { return false }
     let point = contentView?.convert(sender.draggingLocation, from: nil) ?? sender.draggingLocation
     host?.filesDropped(files, point: [point.x, contentView?.isFlipped == true ? point.y : (contentView?.bounds.height ?? frame.height) - point.y])

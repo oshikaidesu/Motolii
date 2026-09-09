@@ -174,6 +174,12 @@ class EditorSession {
   Map<String, dynamic> windowInfo = {};
   final playing = ValueNotifier<bool>(false);
   final busy = ValueNotifier<bool>(false);
+
+  /// Files are being carried over this window; the shelves can say "drop here".
+  final dragging = ValueNotifier<bool>(false);
+
+  /// How many files an import is still working through; zero when idle.
+  final importing = ValueNotifier<int>(0);
   final error = ValueNotifier<String?>(null);
 
   /// 直前の取り込みで棚に入った asset の id。Browser が Media を開いて選ぶ。
@@ -384,6 +390,8 @@ class EditorSession {
       }
       if (call.method == 'windowClosed')
         windowClosed?.call(map(call.arguments));
+      if (call.method == 'dragHover')
+        dragging.value = map(call.arguments)['active'] == true;
       if (call.method == 'filesDropped' &&
           fileDropTarget?.call(map(call.arguments)) != true)
         filesDropped?.call(
@@ -628,7 +636,14 @@ class EditorSession {
     final accepted = paths.where(admissible).toList();
     final skipped = paths.where((p) => !admissible(p)).toList();
     final before = assetIds();
-    if (accepted.isNotEmpty) await command('import', {'paths': accepted});
+    if (accepted.isNotEmpty) {
+      importing.value += accepted.length;
+      try {
+        await command('import', {'paths': accepted});
+      } finally {
+        importing.value -= accepted.length;
+      }
+    }
     final fresh = assetIds().difference(before).toList();
     if (fresh.isNotEmpty) importedAssets.value = fresh;
     if (skipped.isNotEmpty) {
@@ -665,6 +680,8 @@ class EditorSession {
     rendered.dispose();
     playing.dispose();
     busy.dispose();
+    dragging.dispose();
+    importing.dispose();
     error.dispose();
     importedAssets.dispose();
     visibleFrames.dispose();
