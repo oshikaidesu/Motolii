@@ -3,7 +3,7 @@ use crate::doc::store::*;
 use serde_json::{Value as J,json};
 use editor::session::{KeySel,ColorSlot};
 fn e(error:impl std::fmt::Display)->String{error.to_string()}
-pub(crate) const CAPABILITIES:&[&str]=&["status","notes","stageView","select","setProperty","previewProperties","commitPreview","cancelPreview","setText","previewText","styleText","setFont","setAttrs","create","duplicate","ghost","sequence","previewSequence","copy","cut","paste","delete","group","ungroup","reorder","split","setTiming","toggleKey","moveKeys","ease","setColor","previewColor","focusColor","applyPalette","applyEffect","removeEffect","expandEffect","moveEffect","enableEffect","animate","clip","addMarker","setMarker","deleteMarker","composition","import","placeAsset","removeAsset","replaceAsset","save","new","undo","redo","seek","anchor","freeze","setFillMode","setGradient","previewBlend","setTimings","previewTimings","stageGesture","export","exportStatus","cancelExport","play","pause","tick","moveLayers","pickColor","historyGoto"];
+pub(crate) const CAPABILITIES:&[&str]=&["status","notes","stageView","select","setProperty","previewProperties","commitPreview","cancelPreview","setText","previewText","styleText","setFont","setAttrs","create","duplicate","ghost","sequence","previewSequence","copy","cut","paste","delete","group","ungroup","reorder","split","setTiming","toggleKey","moveKeys","ease","setColor","previewColor","focusColor","applyPalette","applyEffect","removeEffect","expandEffect","moveEffect","enableEffect","animate","clip","addMarker","setMarker","deleteMarker","composition","import","placeAsset","removeAsset","replaceAsset","relinkAsset","save","new","undo","redo","seek","anchor","freeze","setFillMode","setGradient","previewBlend","setTimings","previewTimings","stageGesture","export","exportStatus","cancelExport","play","pause","tick","moveLayers","pickColor","historyGoto"];
 fn num(j:&J,key:&str)->Result<f64,String>{j[key].as_f64().filter(|v|v.is_finite()).ok_or_else(||format!("Missing finite {key}"))}
 fn integer(j:&J,key:&str)->Result<i64,String>{j[key].as_i64().ok_or_else(||format!("Missing integer {key}"))}
 fn layer(j:&J)->Result<LayerId,String>{j["layer"].as_u64().map(LayerId).ok_or("Missing layer".into())}
@@ -35,7 +35,27 @@ fn attrs_patch(j:&J)->Result<LayerAttrsPatch,String>{
 impl EditorRuntime{
     fn pick(&mut self,ids:Vec<LayerId>){self.selected_ids=ids;self.selected=self.selected_ids.last().copied();}
     fn selected_required(&self)->Result<&[LayerId],String>{if self.selected_ids.is_empty(){Err("Select layers".into())}else{Ok(&self.selected_ids)}}
-    fn apply(&mut self,intents:impl IntoIterator<Item=Intent>)->Result<(),String>{self.doc.apply_all(intents).map_err(e)}
+    fn apply(&mut self,intents:impl IntoIterator<Item=Intent>)->Result<(),String>{
+        let intents:Vec<_>=intents.into_iter().collect();
+        let born=self.born_spans(&intents);
+        self.doc.apply_all(intents).map_err(e)?;
+        if !born.is_empty(){self.selected_keys=born;}
+        Ok(())
+    }
+    /// The pairs Animate From is about to give birth to: both ends of a track a property did not have yet.
+    /// They become the key selection, so the Ease desk lands on the new motion without a trip to the Timeline.
+    fn born_spans(&self,intents:&[Intent])->Vec<KeySel>{
+        let Animate::From{origin,..}=self.animate else{return Vec::new()};
+        let view=self.doc.view().without_transients();
+        let mut out=Vec::new();
+        for intent in intents{
+            let Intent::SetTrack{layer,property,track}=intent else{continue};
+            if track.keys().len()!=2||!track.keys().iter().any(|k|k.t==origin){continue}
+            if view.track(*layer,property).ok().flatten().is_some(){continue}
+            for k in track.keys(){out.push(KeySel{layer:*layer,property:Some(property.clone()),at_sec:k.t.as_seconds_f64()});}
+        }
+        out
+    }
     fn set_preview(&mut self,intents:Vec<Intent>)->Result<(),String>{
         let owner=if let Some((owner,_))=&self.preview{*owner}else{self.doc.begin_preview()};
         let projected:Vec<_>=intents.iter().filter_map(|intent|match intent{
@@ -189,7 +209,7 @@ impl EditorRuntime{
             "focusColor"=>{let slot:ColorSlot=serde_json::from_value(j["slot"].clone()).map_err(e)?;if slot.layer()!=layer(&j)?{return Err("Color target mismatch".into())}self.color_target=Some(slot);}
             "applyPalette"=>{if let Some(slot)=self.color_target.clone(){let q=json!({"layer":slot.layer().0,"slot":slot,"rgba":rgba(&j)?});let edit=self.color_intent(&q)?;self.apply([edit])?;}else{let color=rgba(&j)?.map(|v|(v*255.0).round()as u8);let mut intents=Vec::new();for id in self.selected_required()?{intents.extend(editor::functions::verb::color_intents(&self.doc,*id,color).map_err(e)?);}self.apply(intents)?;}}
             "applyEffect"=>{let plugins:Vec<String>=if let Some(a)=j["pluginIds"].as_array(){a.iter().map(|p|p.as_str().map(str::to_owned).ok_or("Invalid plugin".into())).collect::<Result<_,String>>()?}else{vec![string(&j,"pluginId")?.into()]};let catalog=crate::render::engine::known_effects();if plugins.iter().any(|p|!catalog.iter().any(|c|c.plugin_id==*p)){return Err("Unknown effect".into())}let mut intents=Vec::new();for id in self.selected_required()?{intents.extend(editor::functions::verb::effect_batch_intents(&self.doc,*id,&plugins).map_err(e)?);}self.apply(intents)?;}
-            "animate"=>{let on=j["enabled"].as_bool().ok_or("Missing enabled")?;self.animate=if !on{Animate::Off}else if j["from"].as_bool().unwrap_or(false){Animate::From(self.time()?)}else{Animate::Now};}
+            "animate"=>{let on=j["enabled"].as_bool().ok_or("Missing enabled")?;let interp=if j["shape"].is_object(){editor::ease_kinds::decode(&j["shape"])?}else{Interp::Linear};self.animate=if !on{Animate::Off}else if j["from"].as_bool().unwrap_or(false){Animate::From{origin:self.time()?,interp}}else{Animate::Now{interp}};}
             "expandEffect"=>{let id=layer(&j)?;let effect=EffectId(integer(&j,"id")?as u32);let at=self.time()?;let (intents,copies)=editor::placement_edit::expand_intents(&self.doc,id,effect,at).map_err(e)?;self.apply(intents)?;self.pick(copies);}
             "enableEffect"=>{let id=layer(&j)?;let effect=EffectId(integer(&j,"id")?as u32);let on=j["enabled"].as_bool().ok_or("Expected bool")?;if !self.doc.view().effects(id).map_err(e)?.iter().any(|x|x.id==effect){return Err("Effect missing".into())}let at=self.time()?;let edits=self.doc.place_checked(id,&PropertyId::effect_enabled(effect),Value::Bool(on),at,Animate::Off).map_err(e)?;self.apply(edits)?;}
             "moveEffect"=>{let id=layer(&j)?;let effect=integer(&j,"id")?as u32;let to=integer(&j,"to")?;let mut effects=self.doc.view().effects(id).map_err(e)?;let from=effects.iter().position(|e|e.id.0==effect).ok_or("Effect missing")?;let to=(to.max(0) as usize).min(effects.len().saturating_sub(1));let moved=effects.remove(from);effects.insert(to,moved);self.apply([Intent::SetEffects{layer:id,effects}])?;}
@@ -202,6 +222,7 @@ impl EditorRuntime{
             "composition"=>{let current=self.doc.view().composition().map_err(e)?.ok_or("No composition")?;let or=|key:&str,fallback:i64|j[key].as_i64().unwrap_or(fallback);let width:u32=or("width",current.width as i64).try_into().map_err(e)?;let height:u32=or("height",current.height as i64).try_into().map_err(e)?;let fps=Fps::try_new(or("fpsNum",current.fps.num()),or("fpsDen",current.fps.den())).map_err(e)?;let duration_frames=or("durationFrames",current.duration_frames);let background=if j.get("background").is_some(){serde_json::from_value(j["background"].clone()).map_err(e)?}else{current.background};self.apply([Intent::SetComposition(Composition{width,height,fps,duration_frames,background})])?;}
             "import"=>{let paths:Vec<std::path::PathBuf>=j["paths"].as_array().ok_or("Expected paths")?.iter().map(|p|p.as_str().map(std::path::PathBuf::from).ok_or("Invalid path".into())).collect::<Result<_,String>>()?;let paths=editor::fixture::expand_folders(&paths);if paths.is_empty(){return Err("No files to import".into())}let mut intents=Vec::new();let mut known:std::collections::HashSet<_>=self.doc.view().assets().map_err(e)?.iter().map(|a|a.content_hash.clone()).collect();for path in paths{let draft=editor::fixture::prepare_path(&path,if j["role"]=="reference"{AssetRole::Reference}else{AssetRole::Material})?;if known.insert(draft.content_hash.clone()){intents.push(Intent::AdmitAsset{draft});}}self.apply(intents)?;}
             "placeAsset"|"replaceAsset"=>{let a=self.doc.view().asset(asset_id(&j)?).map_err(e)?.ok_or("Asset missing")?;let path=a.path_absolute.ok_or("Asset path missing")?;if !std::path::Path::new(&path).exists(){return Err("Asset file missing".into())}if op=="placeAsset"{let start=j["start"].as_i64().unwrap_or(self.frame);let landing=j["placement"].as_str().map(|p|(j["target"].as_u64().map(LayerId),p.to_owned()));self.place_layer(editor::create::NewKind::Media{path,name:a.name},start,landing,j["visibleFrames"].as_i64())?;}else{let layer=self.selected.ok_or("Select layer to replace")?;self.apply([Intent::SetSource{layer,source:LayerSource::File{path,fingerprint:None}}])?;}}
+            "relinkAsset"=>{let id=asset_id(&j)?;let path=j["path"].as_str().ok_or("Missing path")?.to_owned();if !std::path::Path::new(&path).exists(){return Err("No file at that path".into())}let a=self.doc.view().asset(id).map_err(e)?.ok_or("Asset missing")?;let kind=std::path::Path::new(&path).extension().and_then(|x|x.to_str()).and_then(crate::render::media::asset_type_for_extension).ok_or("Unsupported file type")?;let same_family=kind.split('/').next()==a.asset_type.split('/').next();if !same_family{return Err(format!("Pick a {} file",a.asset_type.split('/').next().unwrap_or("matching")))}self.apply([Intent::RelinkAsset{asset:id,path_absolute:path,project_root:None}])?;}
             "removeAsset"=>{let id=asset_id(&j)?;if self.asset_used(id)?{return Err("Asset is still in use".into())}self.apply([Intent::RemoveAsset{asset:id}])?;}
             "export"=>self.exporter.start(&self.doc,std::path::PathBuf::from(string(&j,"path")?),integer(&j,"start")?,integer(&j,"end")?)?,
             "cancelExport"=>self.exporter.cancel(),

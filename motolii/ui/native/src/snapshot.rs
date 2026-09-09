@@ -216,7 +216,7 @@ impl EditorRuntime{
         let assets:Result<Vec<_>,String>=view.assets().map_err(e)?.into_iter().map(|a|{
             let used=self.asset_used(a.id)?;
             let path=a.path_absolute.clone();let missing=path.as_ref().is_none_or(|p|!std::path::Path::new(p).exists());
-            Ok(json!({"id":a.id.to_string(),"name":a.name,"path":path,"mime":a.asset_type,"used":used,"missing":missing,"thumbnail":path.as_ref().and_then(|p|if a.asset_type.starts_with("image/"){editor::thumbnail::image_data_uri(p)}else if a.asset_type.starts_with("video/"){editor::thumbnail::video_data_uri(p)}else{None}),"role":match a.role{AssetRole::Reference=>"reference",_=>"material"}}))
+            Ok(json!({"id":a.id.to_string(),"name":a.name,"path":path,"mime":a.asset_type,"used":used,"missing":missing,"thumbnail":path.as_ref().and_then(|p|if a.asset_type.starts_with("image/"){editor::thumbnail::image_data_uri(p)}else if a.asset_type.starts_with("video/"){editor::thumbnail::video_data_uri(p)}else{None}),"role":match a.role{AssetRole::Reference=>"reference",_=>"material"},"facts":path.as_ref().filter(|_|!missing).and_then(|p|editor::thumbnail::facts(p,&a.asset_type)),"seconds":a.duration.map(|d|d.as_seconds_f64())}))
         }).collect();
         let used=editor::fixture::used_colors_from_doc(&self.doc);let authored=!used.is_empty();
         let swatches=if authored{used}else{editor::fixture::default_palette()};

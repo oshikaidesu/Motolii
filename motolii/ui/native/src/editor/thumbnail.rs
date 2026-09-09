@@ -77,3 +77,46 @@ fn video_frame(path: &str) -> Option<String> {
     }
     encode_png_bytes(png)
 }
+
+/// 素材の事実: 寸法・fps・尺・音の標本化周波数と ch。札と同じく一度読んだら取っておく。
+/// 画は頭だけ読む(decode しない)。動画と音は ffprobe。読めない物は空のまま。
+static FACTS: std::sync::Mutex<Option<std::collections::HashMap<String, Option<serde_json::Value>>>> =
+    std::sync::Mutex::new(None);
+
+pub(crate) fn facts(path: &str, mime: &str) -> Option<serde_json::Value> {
+    let mut known = FACTS.lock().unwrap_or_else(|e| e.into_inner());
+    let map = known.get_or_insert_with(std::collections::HashMap::new);
+    if let Some(hit) = map.get(path) {
+        return hit.clone();
+    }
+    let fresh = make_facts(path, mime);
+    map.insert(path.to_string(), fresh.clone());
+    fresh
+}
+
+fn make_facts(path: &str, mime: &str) -> Option<serde_json::Value> {
+    use serde_json::json;
+    if mime.starts_with("image/") {
+        let (width, height) = image::ImageReader::open(path).ok()?.into_dimensions().ok()?;
+        return Some(json!({"width": width, "height": height}));
+    }
+    if mime.starts_with("video/") {
+        let info = crate::render::media::probe(path).ok()?;
+        return Some(json!({
+            "width": info.width,
+            "height": info.height,
+            "fps": info.fps.as_f64(),
+            "seconds": info.duration.map(|d| d.as_seconds_f64()),
+        }));
+    }
+    if mime.starts_with("audio/") {
+        let container = crate::render::media::probe_container(path).ok()?;
+        let stream = container.audio_streams.first()?;
+        return Some(json!({
+            "sampleRate": stream.sample_rate,
+            "channels": stream.channels,
+            "seconds": container.duration.map(|d| d.as_seconds_f64()),
+        }));
+    }
+    None
+}

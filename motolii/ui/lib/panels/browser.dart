@@ -1020,6 +1020,7 @@ class _BrowserPanelState extends State<BrowserPanel> {
           if (_format(item).isNotEmpty) _format(item),
           if (item['mime'] != null) '${item['mime']}',
         ].join(' · '),
+        _mediaFact(item),
         if (path != null && !missing) _fileFact(path),
         if (path != null) _homely(File(path).parent.path),
         if (missing) 'Missing file',
@@ -1076,6 +1077,11 @@ class _BrowserPanelState extends State<BrowserPanel> {
               value: 'copyPath',
               child: Text('Copy path'),
             ),
+          if (has('relinkAsset'))
+            EditorMenuItem<String>(
+              value: 'relink',
+              child: Text(missing ? 'Locate file…' : 'Relink to another file…'),
+            ),
           EditorMenuItem<String>(
             value: 'remove',
             enabled: has('removeAsset') && item['used'] != true,
@@ -1101,6 +1107,8 @@ class _BrowserPanelState extends State<BrowserPanel> {
           widget.controller.native('openFile', {'path': path});
         case 'copyPath':
           Clipboard.setData(ClipboardData(text: path ?? ''));
+        case 'relink':
+          _relink(item);
         case 'palette':
           _savePalette(File('$path').readAsBytesSync());
         case 'remove':
@@ -1111,6 +1119,59 @@ class _BrowserPanelState extends State<BrowserPanel> {
           widget.controller.storeDesk('swatches', kept);
       }
     });
+  }
+
+  /// Pick a file of the same family and point the asset at it. The layers
+  /// keep the asset; only the file behind it changes.
+  Future<void> _relink(Map<String, dynamic> item) async {
+    final family = '${item['mime']}'.split('/').first;
+    final extensions = switch (family) {
+      'image' => _imageExtensions,
+      'video' => const ['mp4', 'mov', 'mkv', 'webm'],
+      'audio' => const ['wav', 'mp3', 'flac', 'aac'],
+      _ => const <String>[],
+    };
+    final picked = await widget.controller.native('pickImport', {
+      if (extensions.isNotEmpty) 'extensions': extensions,
+    });
+    if (picked is! List || picked.isEmpty || !mounted) return;
+    await widget.controller.command('relinkAsset', {
+      'id': item['id'],
+      'path': '${picked.first}',
+    });
+  }
+
+  /// Dimensions, rate and length, from what the file itself says.
+  static String _mediaFact(Map<String, dynamic> item) {
+    final facts = item['facts'];
+    final seconds =
+        (facts is Map ? facts['seconds'] : null) as num? ??
+        item['seconds'] as num?;
+    final parts = <String>[
+      if (facts is Map && facts['width'] != null)
+        '${facts['width']}×${facts['height']}',
+      if (facts is Map && facts['fps'] != null)
+        '${_trim((facts['fps'] as num).toDouble())} fps',
+      if (facts is Map && facts['sampleRate'] != null)
+        '${_trim((facts['sampleRate'] as num) / 1000)} kHz',
+      if (facts is Map && facts['channels'] != null) '${facts['channels']} ch',
+      if (seconds != null) _clock(seconds.toDouble()),
+    ];
+    return parts.join(' · ');
+  }
+
+  /// 29.97 stays 29.97; 30 stays 30.
+  static String _trim(double v) =>
+      v == v.roundToDouble() ? '${v.round()}' : v.toStringAsFixed(2);
+
+  /// Seconds as m:ss.s, or h:mm:ss past an hour.
+  static String _clock(double seconds) {
+    final whole = seconds.floor();
+    final h = whole ~/ 3600, m = (whole % 3600) ~/ 60;
+    final s = seconds - h * 3600 - m * 60;
+    if (h > 0)
+      return '$h:${m.toString().padLeft(2, '0')}:${s.floor().toString().padLeft(2, '0')}';
+    return '$m:${s.toStringAsFixed(1).padLeft(4, '0')}';
   }
 
   /// The plain path behind a card; the status may carry it as a file URI.
