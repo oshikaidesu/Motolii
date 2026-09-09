@@ -523,8 +523,29 @@ fn translation_map(fit: &Fit, geom: &SelGeom, parent: glam::Affine3A, start: [f6
     PlaneMap { uv_from_screen: screen_from_uv.inverse(), screen_from_uv }
 }
 
-pub(crate) struct DragSession {drag:GizmoDrag,map:PlaneMap,revision:Revision,start:[f64;2],moves:Vec<(LayerId,(f64,f64),PlaneMap)>}
+/// Stage の掴み。**平面ケージ(2D・2.5D)と 3 軸ギズモ(3D)は別の物**で、
+/// 始まりの `mode` で分かれたきり、以後は交わらない。
+pub(crate) enum DragSession {
+    Cage(CageDrag),
+    Spatial(crate::editor::gizmo3d::SpatialDrag),
+}
 impl DragSession {
+    pub(crate) fn begin(doc:&Document,engine:&Engine,ids:&[LayerId],mode:&str,handle:&str,start:[f64;2],at:RationalTime,observer:crate::doc::core::ResolvedCamera)->Result<Self,String>{
+        if mode=="spatial" {
+            return Ok(Self::Spatial(crate::editor::gizmo3d::SpatialDrag::begin(doc,ids,start,at,observer)?));
+        }
+        Ok(Self::Cage(CageDrag::begin(doc,engine,ids,mode,handle,start,at,observer)?))
+    }
+    pub(crate) fn edits(&self,doc:&Document,point:[f64;2],shift:bool,alt:bool,animate:bool)->Result<Vec<Intent>,String>{
+        match self {
+            Self::Cage(drag)=>drag.edits(doc,point,shift,alt,animate),
+            Self::Spatial(drag)=>drag.edits(doc,point,shift,animate),
+        }
+    }
+}
+
+pub(crate) struct CageDrag {drag:GizmoDrag,map:PlaneMap,revision:Revision,start:[f64;2],moves:Vec<(LayerId,(f64,f64),PlaneMap)>}
+impl CageDrag {
     pub(crate) fn begin(doc:&Document,engine:&Engine,ids:&[LayerId],mode:&str,handle:&str,start:[f64;2],at:RationalTime,observer:crate::doc::core::ResolvedCamera)->Result<Self,String>{
         let layer=*ids.last().ok_or("Select a layer")?;
         let view=doc.view().without_transients();

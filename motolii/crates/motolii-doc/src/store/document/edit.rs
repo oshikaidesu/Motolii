@@ -192,6 +192,7 @@ impl crate::doc::store::StoreView<'_> {
         Ok(match id.name() {
             property::POSITION | property::ANCHOR => Some(Value::Vec2([0.0, 0.0])),
             property::SCALE => Some(Value::Vec2([1.0, 1.0])),
+            property::SCALE_Z => Some(Value::F64(1.0)),
             property::OPACITY => Some(Value::F64(1.0)),
             property::ROTATION
             | property::ROTATION_X

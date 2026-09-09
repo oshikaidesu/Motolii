@@ -252,7 +252,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
         ? .01
         : min != null && max != null
         ? (max - min) / 300
-        : id == 'scale'
+        : id.startsWith('scale')
         ? .005
         : _kindOf(row) == _Kind.angle
         ? .5
@@ -528,6 +528,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
     'position',
     'position.z',
     'scale',
+    'scale.z',
     'rotation',
     'rotation.x',
     'rotation.y',
@@ -664,6 +665,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
     final position = _property(layer, 'position');
     final z = _property(layer, 'position.z');
     final scale = _property(layer, 'scale');
+    final sz = _property(layer, 'scale.z');
     final rotation = _property(layer, 'rotation');
     final rx = _property(layer, 'rotation.x');
     final ry = _property(layer, 'rotation.y');
@@ -702,7 +704,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
                 : _well(layer, scale, 1, label: 'Y'),
           ),
           _gap(),
-          _slot(),
+          _slot(sz == null ? null : _well(layer, sz, 0, label: 'Z')),
           _gap(),
           _tail(
             EditorSwitch(

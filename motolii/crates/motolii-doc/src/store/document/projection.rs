@@ -95,6 +95,7 @@ fn projection_compensation(
         spatial.z,
         spatial.rotation_x_degrees,
         spatial.rotation_y_degrees,
+        1.0,
     );
     let tolerance = 1e-3 * target.translation.length().max(1.0);
     let same_face = [

@@ -667,6 +667,9 @@ name = "color"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2ec7c5eb7a16992b1904d76c517d170ab353b0e0b3d5a0c81a8a0cd1037893cf"
+dependencies = [
+ "bytemuck",
+]
 
 [[package]]
 name = "color_quant"
@@ -761,7 +764,7 @@ checksum = "be17b688510d934ce13f48a2beba700e11583e281e0fda99c22bb256a14eda73"
 dependencies = [
  "bitflags 2.13.1",
  "fontdb",
- "harfrust",
+ "harfrust 0.5.2",
  "linebender_resource_handle",
  "log",
  "rangemap",
@@ -1067,7 +1070,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6758be723a3f298bbfda4db75748bc2ba0abafe096b6383c7c32da264764fbc3"
 dependencies = [
  "bytemuck",
- "emath",
+ "emath 0.35.0",
+]
+
+[[package]]
+name = "ecolor"
+version = "0.36.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0656a7530b9e2841ee7a5f983965bdd9840c32f4012f759cfd44b912cced6b34"
+dependencies = [
+ "emath 0.36.2",
 ]
 
 [[package]]
@@ -1089,6 +1101,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cd4ec073c9898516584d8c6cfdcee95b530b3d941cd5031ef4050aa36812308b"
 
 [[package]]
+name = "emath"
+version = "0.36.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "52c8d4141cf0f60fb2f7aefaf352d3ffa5171ef0ab09731c64391801e95e48f1"
+
+[[package]]
+name = "enum_dispatch"
+version = "0.3.13"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aa18ce2bc66555b3218614519ac839ddb759a7d6720732f979ef8d13be147ecd"
+dependencies = [
+ "once_cell",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
 name = "enumset"
 version = "1.1.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1108,6 +1138,36 @@ dependencies = [
  "quote",
  "syn 2.0.119",
 ]
+
+[[package]]
+name = "epaint"
+version = "0.36.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a0ec0308dc23130fc1a7d4623a8534c2ed069c6dc84e258ee4f3de99615aa1a3"
+dependencies = [
+ "ahash",
+ "ecolor 0.36.2",
+ "emath 0.36.2",
+ "epaint_default_fonts",
+ "font-types 0.12.4",
+ "harfrust 0.12.0",
+ "log",
+ "nohash-hasher",
+ "parking_lot",
+ "profiling",
+ "self_cell",
+ "skrifa 0.44.0",
+ "smallvec",
+ "unicode-general-category",
+ "unicode-segmentation",
+ "vello_cpu",
+]
+
+[[package]]
+name = "epaint_default_fonts"
+version = "0.36.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "773fa9c96dd0dbef887e39d0ed6177f141cce4d68e6041df77570aa3702dfa13"
 
 [[package]]
 name = "equivalent"
@@ -1176,6 +1236,12 @@ checksum = "1e6853b52649d4ac5c0bd02320cddc5ba956bdb407c4b75a2c6b75bf51500f8c"
 dependencies = [
  "simd-adler32",
 ]
+
+[[package]]
+name = "fearless_simd"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b97b65636e5b9ef369943878ac74335ba1c55c1cb6adbf1e2c293c624248d693"
 
 [[package]]
 name = "ffmpeg-sidecar"
@@ -1489,6 +1555,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "glam"
+version = "0.32.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f70749695b063ecbf6b62949ccccde2e733ec3ecbbd71d467dca4e5c6c97cca0"
+dependencies = [
+ "mint",
+]
+
+[[package]]
+name = "glifo"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ed4a1bb24121291d27230c1b1b44e07d6a9b28cefdb32fe1581dfb84e14f940a"
+dependencies = [
+ "bytemuck",
+ "foldhash 0.2.0",
+ "hashbrown 0.17.1",
+ "log",
+ "peniko",
+ "skrifa 0.44.0",
+ "smallvec",
+ "vello_common",
+]
+
+[[package]]
 name = "glob"
 version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1589,6 +1680,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "guillotiere"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6b17e70c989c36bad147b27a58d148c0741c51448aa5653436547323e524d0ab"
+dependencies = [
+ "euclid",
+]
+
+[[package]]
 name = "h2"
 version = "0.4.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1647,6 +1747,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "harfrust"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c03d949a14aa089bbb282f7dd76a498a7f684428e4257202efc119ec010376f9"
+dependencies = [
+ "bitflags 2.13.1",
+ "bytemuck",
+ "read-fonts 0.41.0",
+ "smallvec",
+]
+
+[[package]]
 name = "hashbrown"
 version = "0.15.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1671,6 +1783,9 @@ name = "hashbrown"
 version = "0.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
+dependencies = [
+ "foldhash 0.2.0",
+]
 
 [[package]]
 name = "heck"
@@ -2408,7 +2523,7 @@ version = "0.30.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4c96b82556b0d4aa25cd4771b64ef9bde7c120afb588a083fcb242bf01e4a09b"
 dependencies = [
- "glam",
+ "glam 0.30.10",
  "num-traits",
 ]
 
@@ -2511,6 +2626,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "mint"
+version = "0.5.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e53debba6bda7a793e5f99b8dacf19e626084f525f7829104ba9898f367d85ff"
+
+[[package]]
 name = "mio"
 version = "1.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2528,7 +2649,7 @@ version = "0.0.0"
 dependencies = [
  "arrow",
  "cosmic-text",
- "glam",
+ "glam 0.30.10",
  "re_build_info",
  "re_byte_size",
  "re_chunk",
@@ -2552,7 +2673,7 @@ name = "motolii-render"
 version = "0.0.0"
 dependencies = [
  "cpal",
- "glam",
+ "glam 0.30.10",
  "gltf",
  "half",
  "image",
@@ -2598,7 +2719,7 @@ version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
  "ffmpeg-sidecar",
- "glam",
+ "glam 0.30.10",
  "image",
  "motolii-doc",
  "motolii-render",
@@ -2608,6 +2729,7 @@ dependencies = [
  "peniko",
  "serde",
  "serde_json",
+ "transform-gizmo",
  "wgpu",
 ]
 
@@ -3137,6 +3259,7 @@ version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "839c8299360d2e998bdb106dc0a6cd71dcc5f4df51df1b620361bf50e283cca6"
 dependencies = [
+ "bytemuck",
  "color",
  "kurbo",
  "linebender_resource_handle",
@@ -3689,7 +3812,7 @@ version = "0.35.0-alpha.1+dev"
 source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=55fa777d9b7740f40673e3a5788eee8c634b2355#55fa777d9b7740f40673e3a5788eee8c634b2355"
 dependencies = [
  "arrow",
- "glam",
+ "glam 0.30.10",
  "half",
  "parking_lot",
  "re_byte_size_derive",
@@ -3794,7 +3917,7 @@ dependencies = [
  "ahash",
  "arrow",
  "document-features",
- "emath",
+ "emath 0.35.0",
  "indexmap",
  "itertools",
  "nohash-hasher",
@@ -4218,10 +4341,10 @@ dependencies = [
  "clean-path",
  "crossbeam",
  "document-features",
- "ecolor",
+ "ecolor 0.35.0",
  "enumset",
  "getrandom 0.3.4",
- "glam",
+ "glam 0.30.10",
  "gltf",
  "half",
  "itertools",
@@ -4285,9 +4408,9 @@ dependencies = [
  "arrow",
  "bytemuck",
  "document-features",
- "ecolor",
- "emath",
- "glam",
+ "ecolor 0.35.0",
+ "emath 0.35.0",
+ "glam 0.30.10",
  "half",
  "image",
  "infer",
@@ -5662,6 +5785,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "transform-gizmo"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fcd9584531c33435ec2e9c2f194a27e60c65a36a2168f0519e1483e06934c8ec"
+dependencies = [
+ "ahash",
+ "ecolor 0.36.2",
+ "emath 0.36.2",
+ "enum_dispatch",
+ "enumset",
+ "epaint",
+ "glam 0.32.1",
+ "mint",
+]
+
+[[package]]
 name = "transpose"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5718,6 +5857,12 @@ name = "unicode-bidi"
 version = "0.3.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5c1cb5db39152898a79168971543b1cb5020dff7fe43c8dc468b0885f5e29df5"
+
+[[package]]
+name = "unicode-general-category"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0b993bddc193ae5bd0d623b49ec06ac3e9312875fdae725a975c51db1cc1677f"
 
 [[package]]
 name = "unicode-ident"
@@ -5867,6 +6012,33 @@ checksum = "eab68b56840f69efb0fefbe3ab6661499217ffdc58e2eef7c3f6f69835386322"
 dependencies = [
  "serde",
  "smallvec",
+]
+
+[[package]]
+name = "vello_common"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b2e9aed918117e8152c9eddfd8362d73c465c23f26c44786aa331707b8a64fa2"
+dependencies = [
+ "bytemuck",
+ "fearless_simd",
+ "guillotiere",
+ "log",
+ "peniko",
+ "smallvec",
+ "thiserror 2.0.20",
+]
+
+[[package]]
+name = "vello_cpu"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ac7349e1f55f6b801c7c277958df4ea53e7f20f21e8014910ad888b2ecda93ea"
+dependencies = [
+ "bytemuck",
+ "glifo",
+ "hashbrown 0.17.1",
+ "vello_common",
 ]
 
 [[package]]

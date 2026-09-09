@@ -530,6 +530,7 @@ pub(super) fn move_static_transform(view: &StoreView<'_>, layer: LayerId) -> Res
         crate::doc::store::property::POSITION_Z,
         crate::doc::store::property::ROTATION_X,
         crate::doc::store::property::ROTATION_Y,
+        crate::doc::store::property::SCALE_Z,
     ]) {
         let property = PropertyId::new(name)?;
         if let Some(source) = view.property_source(layer, &property)? {

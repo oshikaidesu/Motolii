@@ -104,6 +104,15 @@ impl EditorRuntime{
         Ok(json!({"front":self.user_camera.orbit_degrees==[0.0;2],"home":self.user_camera==Default::default(),"scale":self.user_camera.distance_scale,"orbit":self.user_camera.orbit_degrees,"target":screen(self.user_camera.target(comp)),"frame":quad([0.0,0.0,w,h]),
             "extent":extent.layer.map(|id|json!({"layer":id.0,"margins":extent.margins,"rect":extent.rect(comp),"points":quad(extent.rect(comp))}))}))
     }
+    /// 3D 層の 3 軸ギズモ。頂点は comp 座標 —— Stage は掴む所も描く所も同じ写像で扱う。
+    /// 3D 層を選んでいない時は Null。2D・2.5D の平面ケージはここを通らない。
+    fn spatial_gizmo(&self)->Result<Json,String>{
+        let view=self.doc.view();let time=self.time()?;
+        let Some(comp)=view.composition().map_err(e)? else{return Ok(Json::Null)};
+        let Ok(targets)=editor::gizmo3d::spatial_targets(&view,&self.selected_ids,time) else{return Ok(Json::Null)};
+        let Some(data)=editor::gizmo3d::draw_data(comp.spec(),self.view_camera()?,&targets) else{return Ok(Json::Null)};
+        Ok(json!({"vertices":data.vertices,"colors":data.colors,"indices":data.indices}))
+    }
     fn camera_gizmos(&self)->Result<Json,String>{
         if !self.user_stage { return Ok(json!([])); }
         let view=self.doc.view();let time=self.time()?;let comp=view.composition().map_err(e)?.ok_or("No composition")?.spec();
@@ -271,6 +280,7 @@ impl EditorRuntime{
         status["visualSamples"]=json!(true);
         status["fontFamilies"]=json!(crate::doc::vector::text::font_families());
         status["history"]=self.history.snapshot(self.doc.edit_head());
+        status["spatialGizmo"]=self.spatial_gizmo()?;
         status["notebook"]=serde_json::to_value(view.notebook().map_err(e)?).map_err(e)?;
         status["depthLayout"]=self.depth_layout(&resolved)?;
         status["backgrounds"]=json!(editor::create::backgrounds().iter().map(|b|json!({"id":b.id,"name":b.name,"thumbnail":editor::thumbnail::image_data_uri(&b.path)})).collect::<Vec<_>>());

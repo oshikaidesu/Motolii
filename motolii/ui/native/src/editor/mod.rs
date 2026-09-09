@@ -2,6 +2,7 @@ pub mod functions; pub mod timeline_edit; pub mod placement_edit; pub mod clipbo
 pub mod text;
 pub mod blend_preview; pub mod thumbnail; pub mod ease_kinds;
 pub mod stage;
+pub mod gizmo3d;
 pub mod playback;
 
 pub mod notes;

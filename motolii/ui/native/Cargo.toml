@@ -19,6 +19,7 @@ image = { workspace = true }
 base64 = { workspace = true }
 ffmpeg-sidecar = { workspace = true }
 glam = { workspace = true }
+transform-gizmo = { workspace = true }
 objc2 = "0.6.4"
 objc2-metal = { version = "0.3.2", features = ["objc2-io-surface"] }
 objc2-io-surface = "0.3.2"

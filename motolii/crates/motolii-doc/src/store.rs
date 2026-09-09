@@ -126,6 +126,7 @@ pub mod property {
     pub const POSITION_Z: &str = "position.z";
     pub const ROTATION_X: &str = "rotation.x";
     pub const ROTATION_Y: &str = "rotation.y";
+    pub const SCALE_Z: &str = "scale.z";
 
     pub const CAMERA_CENTER: &str = "camera.center";
     pub const CAMERA_ZOOM: &str = "camera.zoom";
