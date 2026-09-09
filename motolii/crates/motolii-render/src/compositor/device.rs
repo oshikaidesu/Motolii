@@ -43,7 +43,7 @@ impl Compositor {
             reflection_cache_enabled: true,
             gpu_instance_sharing_enabled: true,
             #[cfg(test)]
-            reflection_probe_experiment: 0,
+            reflection_probe_experiment: 3,
             reflection_entry: None,
             backdrop_resource: None,
             next_readback: 1,

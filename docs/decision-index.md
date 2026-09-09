@@ -596,3 +596,4 @@
 | 軽量AA TRANSIENT footprint filtering MSAA | 2026-09-09: 全画素一致のTRANSIENTを既定で有効化。通常MSAA＋反射filterは約13%の短縮を確認したが、外周とハイライトの画質差から常用採用を見送り、高品質Sampleを維持 | 縮小採用 | [実装・比較・採否](reviews/2026-09-09-lightweight-aa-execution.md) | 利用者「それやろう」 |
 | 近接 連続性 反射 probe交代 | 2026-09-09: 球X1089→1090でドーナツの反射が急変。左右順による撮影元・除外対象の交代と一致。共有反射の動的連続性は未達、AA検証とは別の欠陥 | 観察 | [再現・原因・未修正](reviews/2026-09-09-contact-reflection-continuity.md) | 利用者が近接時の不連続を報告 |
 | 表面応答 合成 撮影元 連続性検証 | 2026-09-09: 固定receiverと連続scene anchorで切替点の差分外れ値を抑制。逆方向・直接seek一致。反射像の自然さと深度信頼度合成は未判定、製品採用なし | 観察 | [比較結果](reviews/2026-09-09-response-composition-validation.md) | 利用者が検証を依頼 |
+| 共有反射 撮影元 安定化 influence fallback | 2026-09-09: 左右順による撮影元交代を廃止し、入力順の2receiverへ。全表面を包含する有効範囲と残余の環境fallbackを追加。交差点の差分外れ値を抑制し、59描画試験成功。深度による遮蔽判定ではない | 縮小採用 | [実装・比較](reviews/2026-09-09-stable-reflection-execution.md) | 利用者「ではお願いします」 |

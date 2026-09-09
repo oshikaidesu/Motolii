@@ -1,0 +1,35 @@
+{
+  "fork": "55fa777d9b7740f40673e3a5788eee8c634b2355",
+  "adapter": "Apple M4",
+  "resolution": [
+    1600,
+    1000
+  ],
+  "unit": "CPU preparation + submit + completion wait + readback ms",
+  "reverse_pixel_equality": true,
+  "direct_seek_pixel_equality": true,
+  "modes": {
+    "baseline": {
+      "crossing_delta": 5064979.0,
+      "neighbor_delta_median": 868840.0,
+      "crossing_ratio": 5.829587726163621,
+      "total_ms_median": 26.519,
+      "samples": 108
+    },
+    "stable_receivers": {
+      "crossing_delta": 781825.0,
+      "neighbor_delta_median": 774408.0,
+      "crossing_ratio": 1.0095776386607576,
+      "total_ms_median": 25.990000000000002,
+      "samples": 108
+    },
+    "spatial_influence": {
+      "crossing_delta": 781825.0,
+      "neighbor_delta_median": 774408.0,
+      "crossing_ratio": 1.0095776386607576,
+      "total_ms_median": 26.549500000000002,
+      "samples": 108
+    }
+  },
+  "legacy_baseline_png_equality": true
+}

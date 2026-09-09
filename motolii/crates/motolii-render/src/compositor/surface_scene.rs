@@ -324,29 +324,31 @@ impl Compositor {
                 bounds(comp, input).map(|(lo, hi)| (index, lo, hi))
             })
             .collect();
-        let compare = |a: &&(usize, glam::Vec3, glam::Vec3),
-                       b: &&(usize, glam::Vec3, glam::Vec3)| {
-            let a = (a.1 + a.2) * 0.5;
-            let b = (b.1 + b.2) * 0.5;
-            a.x.total_cmp(&b.x)
-                .then(a.y.total_cmp(&b.y))
-                .then(a.z.total_cmp(&b.z))
-        };
-        let Some(first) = candidates.iter().min_by(compare) else {
+        let Some(first) = candidates.first() else {
             return Ok(None);
         };
-        let last = candidates
-            .iter()
-            .max_by(compare)
-            .expect("nonempty candidates");
+        let last = candidates.last().expect("nonempty candidates");
         #[cfg(test)]
-        let (first, last) = if self.reflection_probe_experiment == 1 {
-            (candidates.first().unwrap(), candidates.last().unwrap())
-        } else { (first, last) };
+        let (first, last) = if matches!(self.reflection_probe_experiment, 0 | 2) {
+            let compare = |a: &&(usize, glam::Vec3, glam::Vec3),
+                           b: &&(usize, glam::Vec3, glam::Vec3)| {
+                let a = (a.1 + a.2) * 0.5;
+                let b = (b.1 + b.2) * 0.5;
+                a.x.total_cmp(&b.x)
+                    .then(a.y.total_cmp(&b.y))
+                    .then(a.z.total_cmp(&b.z))
+            };
+            (
+                candidates.iter().min_by(compare).unwrap(),
+                candidates.iter().max_by(compare).unwrap(),
+            )
+        } else {
+            (first, last)
+        };
         let (receiver, receiver_min, receiver_max) = *first;
         let first_origin = (first.1 + first.2) * 0.5;
         let last_origin = (last.1 + last.2) * 0.5;
-        let (receivers, origins) = if first_origin.distance_squared(last_origin) < 1e-8 {
+        let (receivers, origins) = if first.0 == last.0 {
             (vec![receiver], vec![first_origin])
         } else {
             (vec![receiver, last.0], vec![first_origin, last_origin])
@@ -381,7 +383,9 @@ impl Compositor {
             let center = (lo + hi) * 0.5;
             let offset = glam::Vec3::X * (hi.x - lo.x) * 0.25;
             (vec![usize::MAX; 2], vec![center - offset, center + offset])
-        } else { (receivers, origins) };
+        } else {
+            (receivers, origins)
+        };
         let face_size = (comp.width.min(comp.height) / 2)
             .next_power_of_two()
             .clamp(64, 512);
@@ -534,12 +538,25 @@ impl Compositor {
             .texture_manager_2d
             .generate_mipmaps(&self.ctx, &mut encoder, &resources.atlas);
         self.pending.push(encoder.finish());
+        let influence_radii = [origins[0], *origins.last().unwrap()].map(|origin| {
+            candidates
+                .iter()
+                .map(|(_, a, b)| origin.distance((*a + *b) * 0.5) + (*b - *a).length() * 0.5)
+                .fold(1.0_f32, f32::max)
+        });
+        #[cfg(test)]
+        let influence_radii = if self.reflection_probe_experiment == 3 {
+            influence_radii
+        } else {
+            [0.0; 2]
+        };
         let result = SceneReflection {
             atlas: resources.imported.clone(),
             origins: [origins[0], *origins.last().unwrap()],
             count: origins.len() as u32,
             bounds_min: lo,
             bounds_max: hi,
+            influence_radii,
         };
         self.reflection_resources = Some(resources);
         Ok(Some(result))

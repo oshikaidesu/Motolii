@@ -1,0 +1,1691 @@
+{
+  "adapter": "Apple M4",
+  "direct_seek_pixel_equality": true,
+  "records": [
+    {
+      "captures": 0,
+      "mode": "baseline",
+      "prepare_us": 2594,
+      "reverse": false,
+      "rgba_absolute_difference": 0,
+      "total_us": 15137,
+      "wait_us": 11396,
+      "x": 870
+    },
+    {
+      "captures": 0,
+      "mode": "stable_receivers",
+      "prepare_us": 2111,
+      "reverse": false,
+      "rgba_absolute_difference": 0,
+      "total_us": 18495,
+      "wait_us": 15239,
+      "x": 870
+    },
+    {
+      "captures": 0,
+      "mode": "spatial_influence",
+      "prepare_us": 2279,
+      "reverse": false,
+      "rgba_absolute_difference": 0,
+      "total_us": 20851,
+      "wait_us": 17780,
+      "x": 870
+    },
+    {
+      "captures": 12,
+      "mode": "stable_receivers",
+      "prepare_us": 4161,
+      "reverse": false,
+      "rgba_absolute_difference": 11926119,
+      "total_us": 27867,
+      "wait_us": 22887,
+      "x": 920
+    },
+    {
+      "captures": 12,
+      "mode": "spatial_influence",
+      "prepare_us": 3718,
+      "reverse": false,
+      "rgba_absolute_difference": 11926119,
+      "total_us": 27307,
+      "wait_us": 22755,
+      "x": 920
+    },
+    {
+      "captures": 12,
+      "mode": "baseline",
+      "prepare_us": 3711,
+      "reverse": false,
+      "rgba_absolute_difference": 12861391,
+      "total_us": 30052,
+      "wait_us": 25465,
+      "x": 920
+    },
+    {
+      "captures": 12,
+      "mode": "spatial_influence",
+      "prepare_us": 3957,
+      "reverse": false,
+      "rgba_absolute_difference": 10948157,
+      "total_us": 27727,
+      "wait_us": 22891,
+      "x": 970
+    },
+    {
+      "captures": 12,
+      "mode": "baseline",
+      "prepare_us": 3346,
+      "reverse": false,
+      "rgba_absolute_difference": 10852834,
+      "total_us": 27032,
+      "wait_us": 22868,
+      "x": 970
+    },
+    {
+      "captures": 12,
+      "mode": "stable_receivers",
+      "prepare_us": 3376,
+      "reverse": false,
+      "rgba_absolute_difference": 10948157,
+      "total_us": 25792,
+      "wait_us": 21593,
+      "x": 970
+    },
+    {
+      "captures": 12,
+      "mode": "baseline",
+      "prepare_us": 4005,
+      "reverse": false,
+      "rgba_absolute_difference": 9868474,
+      "total_us": 26749,
+      "wait_us": 21783,
+      "x": 1020
+    },
+    {
+      "captures": 12,
+      "mode": "stable_receivers",
+      "prepare_us": 3352,
+      "reverse": false,
+      "rgba_absolute_difference": 8386860,
+      "total_us": 24506,
+      "wait_us": 20320,
+      "x": 1020
+    },
+    {
+      "captures": 12,
+      "mode": "spatial_influence",
+      "prepare_us": 3142,
+      "reverse": false,
+      "rgba_absolute_difference": 8386860,
+      "total_us": 24533,
+      "wait_us": 20413,
+      "x": 1020
+    },
+    {
+      "captures": 12,
+      "mode": "stable_receivers",
+      "prepare_us": 3952,
+      "reverse": false,
+      "rgba_absolute_difference": 10749278,
+      "total_us": 26328,
+      "wait_us": 21594,
+      "x": 1060
+    },
+    {
+      "captures": 12,
+      "mode": "spatial_influence",
+      "prepare_us": 3155,
+      "reverse": false,
+      "rgba_absolute_difference": 10749278,
+      "total_us": 25638,
+      "wait_us": 21692,
+      "x": 1060
+    },
+    {
+      "captures": 12,
+      "mode": "baseline",
+      "prepare_us": 3662,
+      "reverse": false,
+      "rgba_absolute_difference": 11194392,
+      "total_us": 26060,
+      "wait_us": 21566,
+      "x": 1060
+    },
+    {
+      "captures": 12,
+      "mode": "spatial_influence",
+      "prepare_us": 3927,
+      "reverse": false,
+      "rgba_absolute_difference": 9071302,
+      "total_us": 26307,
+      "wait_us": 21681,
+      "x": 1080
+    },
+    {
+      "captures": 12,
+      "mode": "baseline",
+      "prepare_us": 3317,
+      "reverse": false,
+      "rgba_absolute_difference": 9886163,
+      "total_us": 24341,
+      "wait_us": 20173,
+      "x": 1080
+    },
+    {
+      "captures": 12,
+      "mode": "stable_receivers",
+      "prepare_us": 3811,
+      "reverse": false,
+      "rgba_absolute_difference": 9071302,
+      "total_us": 24524,
+      "wait_us": 20110,
+      "x": 1080
+    },
+    {
+      "captures": 12,
+      "mode": "baseline",
+      "prepare_us": 4235,
+      "reverse": false,
+      "rgba_absolute_difference": 963769,
+      "total_us": 29441,
+      "wait_us": 24225,
+      "x": 1081
+    },
+    {
+      "captures": 12,
+      "mode": "stable_receivers",
+      "prepare_us": 3306,
+      "reverse": false,
+      "rgba_absolute_difference": 774776,
+      "total_us": 27230,
+      "wait_us": 22905,
+      "x": 1081
+    },
+    {
+      "captures": 12,
+      "mode": "spatial_influence",
+      "prepare_us": 3519,
+      "reverse": false,
+      "rgba_absolute_difference": 774776,
+      "total_us": 26914,
+      "wait_us": 22865,
+      "x": 1081
+    },
+    {
+      "captures": 12,
+      "mode": "stable_receivers",
+      "prepare_us": 3757,
+      "reverse": false,
+      "rgba_absolute_difference": 772298,
+      "total_us": 26245,
+      "wait_us": 21590,
+      "x": 1082
+    },
+    {
+      "captures": 12,
+      "mode": "spatial_influence",
+      "prepare_us": 3314,
+      "reverse": false,
+      "rgba_absolute_difference": 772298,
+      "total_us": 26908,
+      "wait_us": 22560,
+      "x": 1082
+    },
+    {
+      "captures": 12,
+      "mode": "baseline",
+      "prepare_us": 3280,
+      "reverse": false,
+      "rgba_absolute_difference": 966358,
+      "total_us": 25724,
+      "wait_us": 21608,
+      "x": 1082
+    },
+    {
+      "captures": 12,
+      "mode": "spatial_influence",
+      "prepare_us": 4035,
+      "reverse": false,
+      "rgba_absolute_difference": 774652,
+      "total_us": 26448,
+      "wait_us": 21595,
+      "x": 1083
+    },
+    {
+      "captures": 12,
+      "mode": "baseline",
+      "prepare_us": 3405,
+      "reverse": false,
+      "rgba_absolute_difference": 962853,
+      "total_us": 27131,
+      "wait_us": 22869,
+      "x": 1083
+    },
+    {
+      "captures": 12,
+      "mode": "stable_receivers",
+      "prepare_us": 3288,
+      "reverse": false,
+      "rgba_absolute_difference": 774652,
+      "total_us": 24520,
+      "wait_us": 20376,
+      "x": 1083
+    },
+    {
+      "captures": 12,
+      "mode": "baseline",
+      "prepare_us": 4105,
+      "reverse": false,
+      "rgba_absolute_difference": 961549,
+      "total_us": 24977,
+      "wait_us": 20353,
+      "x": 1084
+    },
+    {
+      "captures": 12,
+      "mode": "stable_receivers",
+      "prepare_us": 3286,
+      "reverse": false,
+      "rgba_absolute_difference": 770554,
+      "total_us": 23063,
+      "wait_us": 19156,
+      "x": 1084
+    },
+    {
+      "captures": 12,
+      "mode": "spatial_influence",
+      "prepare_us": 3352,
+      "reverse": false,
+      "rgba_absolute_difference": 770554,
+      "total_us": 22213,
+      "wait_us": 17957,
+      "x": 1084
+    },
+    {
+      "captures": 12,
+      "mode": "stable_receivers",
+      "prepare_us": 3896,
+      "reverse": false,
+      "rgba_absolute_difference": 778036,
+      "total_us": 25998,
+      "wait_us": 21277,
+      "x": 1085
+    },
+    {
+      "captures": 12,
+      "mode": "spatial_influence",
+      "prepare_us": 3325,
+      "reverse": false,
+      "rgba_absolute_difference": 778036,
+      "total_us": 26651,
+      "wait_us": 22845,
+      "x": 1085
+    },
+    {
+      "captures": 12,
+      "mode": "baseline",
+      "prepare_us": 3303,
+      "reverse": false,
+      "rgba_absolute_difference": 964024,
+      "total_us": 25708,
+      "wait_us": 21654,
+      "x": 1085
+    },
+    {
+      "captures": 12,
+      "mode": "spatial_influence",
+      "prepare_us": 3831,
+      "reverse": false,
+      "rgba_absolute_difference": 776152,
+      "total_us": 27029,
+      "wait_us": 22681,
+      "x": 1086
+    },
+    {
+      "captures": 12,
+      "mode": "baseline",
+      "prepare_us": 3272,
+      "reverse": false,
+      "rgba_absolute_difference": 963334,
+      "total_us": 25339,
+      "wait_us": 21565,
+      "x": 1086
+    },
+    {
+      "captures": 12,
+      "mode": "stable_receivers",
+      "prepare_us": 3249,
+      "reverse": false,
+      "rgba_absolute_difference": 776152,
+      "total_us": 25686,
+      "wait_us": 21598,
+      "x": 1086
+    },
+    {
+      "captures": 12,
+      "mode": "baseline",
+      "prepare_us": 3989,
+      "reverse": false,
+      "rgba_absolute_difference": 959622,
+      "total_us": 26572,
+      "wait_us": 21612,
+      "x": 1087
+    },
+    {
+      "captures": 12,
+      "mode": "stable_receivers",
+      "prepare_us": 3295,
+      "reverse": false,
+      "rgba_absolute_difference": 775369,
+      "total_us": 25414,
+      "wait_us": 21611,
+      "x": 1087
+    },
+    {
+      "captures": 12,
+      "mode": "spatial_influence",
+      "prepare_us": 3193,
+      "reverse": false,
+      "rgba_absolute_difference": 775369,
+      "total_us": 25518,
+      "wait_us": 21705,
+      "x": 1087
+    },
+    {
+      "captures": 12,
+      "mode": "stable_receivers",
+      "prepare_us": 3963,
+      "reverse": false,
+      "rgba_absolute_difference": 777220,
+      "total_us": 25096,
+      "wait_us": 20306,
+      "x": 1088
+    },
+    {
+      "captures": 12,
+      "mode": "spatial_influence",
+      "prepare_us": 3215,
+      "reverse": false,
+      "rgba_absolute_difference": 777220,
+      "total_us": 26691,
+      "wait_us": 22928,
+      "x": 1088
+    },
+    {
+      "captures": 12,
+      "mode": "baseline",
+      "prepare_us": 3309,
+      "reverse": false,
+      "rgba_absolute_difference": 963733,
+      "total_us": 29525,
+      "wait_us": 25436,
+      "x": 1088
+    },
+    {
+      "captures": 12,
+      "mode": "spatial_influence",
+      "prepare_us": 4081,
+      "reverse": false,
+      "rgba_absolute_difference": 779371,
+      "total_us": 31210,
+      "wait_us": 26500,
+      "x": 1089
+    },
+    {
+      "captures": 12,
+      "mode": "baseline",
+      "prepare_us": 3322,
+      "reverse": false,
+      "rgba_absolute_difference": 968711,
+      "total_us": 31854,
+      "wait_us": 28008,
+      "x": 1089
+    },
+    {
+      "captures": 12,
+      "mode": "stable_receivers",
+      "prepare_us": 3313,
+      "reverse": false,
+      "rgba_absolute_difference": 779371,
+      "total_us": 30570,
+      "wait_us": 26748,
+      "x": 1089
+    },
+    {
+      "captures": 12,
+      "mode": "baseline",
+      "prepare_us": 3844,
+      "reverse": false,
+      "rgba_absolute_difference": 5064979,
+      "total_us": 33593,
+      "wait_us": 29098,
+      "x": 1090
+    },
+    {
+      "captures": 12,
+      "mode": "stable_receivers",
+      "prepare_us": 3219,
+      "reverse": false,
+      "rgba_absolute_difference": 781825,
+      "total_us": 34323,
+      "wait_us": 30570,
+      "x": 1090
+    },
+    {
+      "captures": 12,
+      "mode": "spatial_influence",
+      "prepare_us": 3261,
+      "reverse": false,
+      "rgba_absolute_difference": 781825,
+      "total_us": 37034,
+      "wait_us": 33009,
+      "x": 1090
+    },
+    {
+      "captures": 12,
+      "mode": "stable_receivers",
+      "prepare_us": 3845,
+      "reverse": false,
+      "rgba_absolute_difference": 776186,
+      "total_us": 29706,
+      "wait_us": 25344,
+      "x": 1091
+    },
+    {
+      "captures": 12,
+      "mode": "spatial_influence",
+      "prepare_us": 3387,
+      "reverse": false,
+      "rgba_absolute_difference": 776186,
+      "total_us": 33192,
+      "wait_us": 29200,
+      "x": 1091
+    },
+    {
+      "captures": 12,
+      "mode": "baseline",
+      "prepare_us": 3307,
+      "reverse": false,
+      "rgba_absolute_difference": 867542,
+      "total_us": 34211,
+      "wait_us": 30409,
+      "x": 1091
+    },
+    {
+      "captures": 12,
+      "mode": "spatial_influence",
+      "prepare_us": 3840,
+      "reverse": false,
+      "rgba_absolute_difference": 777377,
+      "total_us": 31266,
+      "wait_us": 26655,
+      "x": 1092
+    },
+    {
+      "captures": 12,
+      "mode": "baseline",
+      "prepare_us": 3193,
+      "reverse": false,
+      "rgba_absolute_difference": 868840,
+      "total_us": 30481,
+      "wait_us": 26584,
+      "x": 1092
+    },
+    {
+      "captures": 12,
+      "mode": "stable_receivers",
+      "prepare_us": 3271,
+      "reverse": false,
+      "rgba_absolute_difference": 777377,
+      "total_us": 28032,
+      "wait_us": 24183,
+      "x": 1092
+    },
+    {
+      "captures": 12,
+      "mode": "baseline",
+      "prepare_us": 3818,
+      "reverse": false,
+      "rgba_absolute_difference": 865463,
+      "total_us": 27518,
+      "wait_us": 22818,
+      "x": 1093
+    },
+    {
+      "captures": 12,
+      "mode": "stable_receivers",
+      "prepare_us": 3329,
+      "reverse": false,
+      "rgba_absolute_difference": 774408,
+      "total_us": 25465,
+      "wait_us": 21630,
+      "x": 1093
+    },
+    {
+      "captures": 12,
+      "mode": "spatial_influence",
+      "prepare_us": 3548,
+      "reverse": false,
+      "rgba_absolute_difference": 774408,
+      "total_us": 25733,
+      "wait_us": 21668,
+      "x": 1093
+    },
+    {
+      "captures": 12,
+      "mode": "stable_receivers",
+      "prepare_us": 3794,
+      "reverse": false,
+      "rgba_absolute_difference": 772782,
+      "total_us": 24948,
+      "wait_us": 20333,
+      "x": 1094
+    },
+    {
+      "captures": 12,
+      "mode": "spatial_influence",
+      "prepare_us": 3284,
+      "reverse": false,
+      "rgba_absolute_difference": 772782,
+      "total_us": 24550,
+      "wait_us": 20262,
+      "x": 1094
+    },
+    {
+      "captures": 12,
+      "mode": "baseline",
+      "prepare_us": 3353,
+      "reverse": false,
+      "rgba_absolute_difference": 864852,
+      "total_us": 25728,
+      "wait_us": 21613,
+      "x": 1094
+    },
+    {
+      "captures": 12,
+      "mode": "spatial_influence",
+      "prepare_us": 3842,
+      "reverse": false,
+      "rgba_absolute_difference": 771416,
+      "total_us": 24764,
+      "wait_us": 20347,
+      "x": 1095
+    },
+    {
+      "captures": 12,
+      "mode": "baseline",
+      "prepare_us": 3385,
+      "reverse": false,
+      "rgba_absolute_difference": 865492,
+      "total_us": 24628,
+      "wait_us": 20374,
+      "x": 1095
+    },
+    {
+      "captures": 12,
+      "mode": "stable_receivers",
+      "prepare_us": 3232,
+      "reverse": false,
+      "rgba_absolute_difference": 771416,
+      "total_us": 24101,
+      "wait_us": 20343,
+      "x": 1095
+    },
+    {
+      "captures": 12,
+      "mode": "baseline",
+      "prepare_us": 3761,
+      "reverse": false,
+      "rgba_absolute_difference": 856950,
+      "total_us": 27248,
+      "wait_us": 22972,
+      "x": 1096
+    },
+    {
+      "captures": 12,
+      "mode": "stable_receivers",
+      "prepare_us": 3394,
+      "reverse": false,
+      "rgba_absolute_difference": 764667,
+      "total_us": 28139,
+      "wait_us": 23925,
+      "x": 1096
+    },
+    {
+      "captures": 12,
+      "mode": "spatial_influence",
+      "prepare_us": 3643,
+      "reverse": false,
+      "rgba_absolute_difference": 764667,
+      "total_us": 25796,
+      "wait_us": 21604,
+      "x": 1096
+    },
+    {
+      "captures": 12,
+      "mode": "stable_receivers",
+      "prepare_us": 4050,
+      "reverse": false,
+      "rgba_absolute_difference": 768313,
+      "total_us": 22779,
+      "wait_us": 17878,
+      "x": 1097
+    },
+    {
+      "captures": 12,
+      "mode": "spatial_influence",
+      "prepare_us": 3762,
+      "reverse": false,
+      "rgba_absolute_difference": 768313,
+      "total_us": 26156,
+      "wait_us": 21533,
+      "x": 1097
+    },
+    {
+      "captures": 12,
+      "mode": "baseline",
+      "prepare_us": 3269,
+      "reverse": false,
+      "rgba_absolute_difference": 860517,
+      "total_us": 28446,
+      "wait_us": 24219,
+      "x": 1097
+    },
+    {
+      "captures": 12,
+      "mode": "spatial_influence",
+      "prepare_us": 4041,
+      "reverse": false,
+      "rgba_absolute_difference": 764324,
+      "total_us": 28963,
+      "wait_us": 24249,
+      "x": 1098
+    },
+    {
+      "captures": 12,
+      "mode": "baseline",
+      "prepare_us": 3274,
+      "reverse": false,
+      "rgba_absolute_difference": 858078,
+      "total_us": 26691,
+      "wait_us": 22927,
+      "x": 1098
+    },
+    {
+      "captures": 12,
+      "mode": "stable_receivers",
+      "prepare_us": 3203,
+      "reverse": false,
+      "rgba_absolute_difference": 764324,
+      "total_us": 25313,
+      "wait_us": 21598,
+      "x": 1098
+    },
+    {
+      "captures": 12,
+      "mode": "baseline",
+      "prepare_us": 3858,
+      "reverse": false,
+      "rgba_absolute_difference": 864509,
+      "total_us": 27373,
+      "wait_us": 22701,
+      "x": 1099
+    },
+    {
+      "captures": 12,
+      "mode": "stable_receivers",
+      "prepare_us": 3313,
+      "reverse": false,
+      "rgba_absolute_difference": 768665,
+      "total_us": 25574,
+      "wait_us": 21572,
+      "x": 1099
+    },
+    {
+      "captures": 12,
+      "mode": "spatial_influence",
+      "prepare_us": 3249,
+      "reverse": false,
+      "rgba_absolute_difference": 768665,
+      "total_us": 22918,
+      "wait_us": 19149,
+      "x": 1099
+    },
+    {
+      "captures": 12,
+      "mode": "stable_receivers",
+      "prepare_us": 3953,
+      "reverse": false,
+      "rgba_absolute_difference": 759729,
+      "total_us": 26098,
+      "wait_us": 21613,
+      "x": 1100
+    },
+    {
+      "captures": 12,
+      "mode": "spatial_influence",
+      "prepare_us": 3207,
+      "reverse": false,
+      "rgba_absolute_difference": 759729,
+      "total_us": 26815,
+      "wait_us": 22817,
+      "x": 1100
+    },
+    {
+      "captures": 12,
+      "mode": "baseline",
+      "prepare_us": 3287,
+      "reverse": false,
+      "rgba_absolute_difference": 854014,
+      "total_us": 26537,
+      "wait_us": 22752,
+      "x": 1100
+    },
+    {
+      "captures": 12,
+      "mode": "spatial_influence",
+      "prepare_us": 3822,
+      "reverse": false,
+      "rgba_absolute_difference": 9576530,
+      "total_us": 25833,
+      "wait_us": 21497,
+      "x": 1120
+    },
+    {
+      "captures": 12,
+      "mode": "baseline",
+      "prepare_us": 3320,
+      "reverse": false,
+      "rgba_absolute_difference": 10310482,
+      "total_us": 25710,
+      "wait_us": 21596,
+      "x": 1120
+    },
+    {
+      "captures": 12,
+      "mode": "stable_receivers",
+      "prepare_us": 3238,
+      "reverse": false,
+      "rgba_absolute_difference": 9576530,
+      "total_us": 24162,
+      "wait_us": 20060,
+      "x": 1120
+    },
+    {
+      "captures": 12,
+      "mode": "baseline",
+      "prepare_us": 3837,
+      "reverse": false,
+      "rgba_absolute_difference": 14743777,
+      "total_us": 26246,
+      "wait_us": 21514,
+      "x": 1170
+    },
+    {
+      "captures": 12,
+      "mode": "stable_receivers",
+      "prepare_us": 3206,
+      "reverse": false,
+      "rgba_absolute_difference": 14448115,
+      "total_us": 28152,
+      "wait_us": 24135,
+      "x": 1170
+    },
+    {
+      "captures": 12,
+      "mode": "spatial_influence",
+      "prepare_us": 3231,
+      "reverse": false,
+      "rgba_absolute_difference": 14448115,
+      "total_us": 32748,
+      "wait_us": 29020,
+      "x": 1170
+    },
+    {
+      "captures": 0,
+      "mode": "baseline",
+      "prepare_us": 2797,
+      "reverse": true,
+      "rgba_absolute_difference": 0,
+      "total_us": 25211,
+      "wait_us": 21594,
+      "x": 1170
+    },
+    {
+      "captures": 0,
+      "mode": "stable_receivers",
+      "prepare_us": 2160,
+      "reverse": true,
+      "rgba_absolute_difference": 0,
+      "total_us": 23071,
+      "wait_us": 20279,
+      "x": 1170
+    },
+    {
+      "captures": 0,
+      "mode": "spatial_influence",
+      "prepare_us": 2116,
+      "reverse": true,
+      "rgba_absolute_difference": 0,
+      "total_us": 24736,
+      "wait_us": 21687,
+      "x": 1170
+    },
+    {
+      "captures": 12,
+      "mode": "stable_receivers",
+      "prepare_us": 4130,
+      "reverse": true,
+      "rgba_absolute_difference": 14448115,
+      "total_us": 32062,
+      "wait_us": 26677,
+      "x": 1120
+    },
+    {
+      "captures": 12,
+      "mode": "spatial_influence",
+      "prepare_us": 3693,
+      "reverse": true,
+      "rgba_absolute_difference": 14448115,
+      "total_us": 31277,
+      "wait_us": 26685,
+      "x": 1120
+    },
+    {
+      "captures": 12,
+      "mode": "baseline",
+      "prepare_us": 3462,
+      "reverse": true,
+      "rgba_absolute_difference": 14743777,
+      "total_us": 28019,
+      "wait_us": 24059,
+      "x": 1120
+    },
+    {
+      "captures": 12,
+      "mode": "spatial_influence",
+      "prepare_us": 4099,
+      "reverse": true,
+      "rgba_absolute_difference": 9576530,
+      "total_us": 30048,
+      "wait_us": 25372,
+      "x": 1100
+    },
+    {
+      "captures": 12,
+      "mode": "baseline",
+      "prepare_us": 3274,
+      "reverse": true,
+      "rgba_absolute_difference": 10310482,
+      "total_us": 30656,
+      "wait_us": 26589,
+      "x": 1100
+    },
+    {
+      "captures": 12,
+      "mode": "stable_receivers",
+      "prepare_us": 3102,
+      "reverse": true,
+      "rgba_absolute_difference": 9576530,
+      "total_us": 26499,
+      "wait_us": 22883,
+      "x": 1100
+    },
+    {
+      "captures": 12,
+      "mode": "baseline",
+      "prepare_us": 3777,
+      "reverse": true,
+      "rgba_absolute_difference": 854014,
+      "total_us": 28494,
+      "wait_us": 24217,
+      "x": 1099
+    },
+    {
+      "captures": 12,
+      "mode": "stable_receivers",
+      "prepare_us": 3204,
+      "reverse": true,
+      "rgba_absolute_difference": 759729,
+      "total_us": 27662,
+      "wait_us": 23930,
+      "x": 1099
+    },
+    {
+      "captures": 12,
+      "mode": "spatial_influence",
+      "prepare_us": 3181,
+      "reverse": true,
+      "rgba_absolute_difference": 759729,
+      "total_us": 28128,
+      "wait_us": 24149,
+      "x": 1099
+    },
+    {
+      "captures": 12,
+      "mode": "stable_receivers",
+      "prepare_us": 3726,
+      "reverse": true,
+      "rgba_absolute_difference": 768665,
+      "total_us": 24528,
+      "wait_us": 20310,
+      "x": 1098
+    },
+    {
+      "captures": 12,
+      "mode": "spatial_influence",
+      "prepare_us": 3284,
+      "reverse": true,
+      "rgba_absolute_difference": 768665,
+      "total_us": 27850,
+      "wait_us": 24059,
+      "x": 1098
+    },
+    {
+      "captures": 12,
+      "mode": "baseline",
+      "prepare_us": 3216,
+      "reverse": true,
+      "rgba_absolute_difference": 864509,
+      "total_us": 30408,
+      "wait_us": 26688,
+      "x": 1098
+    },
+    {
+      "captures": 12,
+      "mode": "spatial_influence",
+      "prepare_us": 3991,
+      "reverse": true,
+      "rgba_absolute_difference": 764324,
+      "total_us": 28919,
+      "wait_us": 24125,
+      "x": 1097
+    },
+    {
+      "captures": 12,
+      "mode": "baseline",
+      "prepare_us": 3295,
+      "reverse": true,
+      "rgba_absolute_difference": 858078,
+      "total_us": 26972,
+      "wait_us": 22870,
+      "x": 1097
+    },
+    {
+      "captures": 12,
+      "mode": "stable_receivers",
+      "prepare_us": 3275,
+      "reverse": true,
+      "rgba_absolute_difference": 764324,
+      "total_us": 25834,
+      "wait_us": 21616,
+      "x": 1097
+    },
+    {
+      "captures": 12,
+      "mode": "baseline",
+      "prepare_us": 4093,
+      "reverse": true,
+      "rgba_absolute_difference": 860517,
+      "total_us": 26220,
+      "wait_us": 21602,
+      "x": 1096
+    },
+    {
+      "captures": 12,
+      "mode": "stable_receivers",
+      "prepare_us": 3364,
+      "reverse": true,
+      "rgba_absolute_difference": 768313,
+      "total_us": 25816,
+      "wait_us": 21657,
+      "x": 1096
+    },
+    {
+      "captures": 12,
+      "mode": "spatial_influence",
+      "prepare_us": 3164,
+      "reverse": true,
+      "rgba_absolute_difference": 768313,
+      "total_us": 25511,
+      "wait_us": 21575,
+      "x": 1096
+    },
+    {
+      "captures": 12,
+      "mode": "stable_receivers",
+      "prepare_us": 4049,
+      "reverse": true,
+      "rgba_absolute_difference": 764667,
+      "total_us": 25394,
+      "wait_us": 20427,
+      "x": 1095
+    },
+    {
+      "captures": 12,
+      "mode": "spatial_influence",
+      "prepare_us": 3117,
+      "reverse": true,
+      "rgba_absolute_difference": 764667,
+      "total_us": 25272,
+      "wait_us": 21632,
+      "x": 1095
+    },
+    {
+      "captures": 12,
+      "mode": "baseline",
+      "prepare_us": 3325,
+      "reverse": true,
+      "rgba_absolute_difference": 856950,
+      "total_us": 25560,
+      "wait_us": 21467,
+      "x": 1095
+    },
+    {
+      "captures": 12,
+      "mode": "spatial_influence",
+      "prepare_us": 3809,
+      "reverse": true,
+      "rgba_absolute_difference": 771416,
+      "total_us": 25938,
+      "wait_us": 21603,
+      "x": 1094
+    },
+    {
+      "captures": 12,
+      "mode": "baseline",
+      "prepare_us": 3312,
+      "reverse": true,
+      "rgba_absolute_difference": 865492,
+      "total_us": 23996,
+      "wait_us": 20168,
+      "x": 1094
+    },
+    {
+      "captures": 12,
+      "mode": "stable_receivers",
+      "prepare_us": 3346,
+      "reverse": true,
+      "rgba_absolute_difference": 771416,
+      "total_us": 24167,
+      "wait_us": 20308,
+      "x": 1094
+    },
+    {
+      "captures": 12,
+      "mode": "baseline",
+      "prepare_us": 3881,
+      "reverse": true,
+      "rgba_absolute_difference": 864852,
+      "total_us": 26191,
+      "wait_us": 21579,
+      "x": 1093
+    },
+    {
+      "captures": 12,
+      "mode": "stable_receivers",
+      "prepare_us": 3146,
+      "reverse": true,
+      "rgba_absolute_difference": 772782,
+      "total_us": 23331,
+      "wait_us": 19102,
+      "x": 1093
+    },
+    {
+      "captures": 12,
+      "mode": "spatial_influence",
+      "prepare_us": 3323,
+      "reverse": true,
+      "rgba_absolute_difference": 772782,
+      "total_us": 24478,
+      "wait_us": 19184,
+      "x": 1093
+    },
+    {
+      "captures": 12,
+      "mode": "stable_receivers",
+      "prepare_us": 3879,
+      "reverse": true,
+      "rgba_absolute_difference": 774408,
+      "total_us": 25226,
+      "wait_us": 20312,
+      "x": 1092
+    },
+    {
+      "captures": 12,
+      "mode": "spatial_influence",
+      "prepare_us": 3305,
+      "reverse": true,
+      "rgba_absolute_difference": 774408,
+      "total_us": 25144,
+      "wait_us": 21344,
+      "x": 1092
+    },
+    {
+      "captures": 12,
+      "mode": "baseline",
+      "prepare_us": 3196,
+      "reverse": true,
+      "rgba_absolute_difference": 865463,
+      "total_us": 25599,
+      "wait_us": 21602,
+      "x": 1092
+    },
+    {
+      "captures": 12,
+      "mode": "spatial_influence",
+      "prepare_us": 3901,
+      "reverse": true,
+      "rgba_absolute_difference": 777377,
+      "total_us": 26090,
+      "wait_us": 21667,
+      "x": 1091
+    },
+    {
+      "captures": 12,
+      "mode": "baseline",
+      "prepare_us": 3269,
+      "reverse": true,
+      "rgba_absolute_difference": 868840,
+      "total_us": 26548,
+      "wait_us": 22767,
+      "x": 1091
+    },
+    {
+      "captures": 12,
+      "mode": "stable_receivers",
+      "prepare_us": 3204,
+      "reverse": true,
+      "rgba_absolute_difference": 777377,
+      "total_us": 22943,
+      "wait_us": 19187,
+      "x": 1091
+    },
+    {
+      "captures": 12,
+      "mode": "baseline",
+      "prepare_us": 3830,
+      "reverse": true,
+      "rgba_absolute_difference": 867542,
+      "total_us": 26214,
+      "wait_us": 21603,
+      "x": 1090
+    },
+    {
+      "captures": 12,
+      "mode": "stable_receivers",
+      "prepare_us": 3176,
+      "reverse": true,
+      "rgba_absolute_difference": 776186,
+      "total_us": 26547,
+      "wait_us": 22870,
+      "x": 1090
+    },
+    {
+      "captures": 12,
+      "mode": "spatial_influence",
+      "prepare_us": 3294,
+      "reverse": true,
+      "rgba_absolute_difference": 776186,
+      "total_us": 21897,
+      "wait_us": 17796,
+      "x": 1090
+    },
+    {
+      "captures": 12,
+      "mode": "stable_receivers",
+      "prepare_us": 4046,
+      "reverse": true,
+      "rgba_absolute_difference": 781825,
+      "total_us": 26142,
+      "wait_us": 21599,
+      "x": 1089
+    },
+    {
+      "captures": 12,
+      "mode": "spatial_influence",
+      "prepare_us": 3148,
+      "reverse": true,
+      "rgba_absolute_difference": 781825,
+      "total_us": 25053,
+      "wait_us": 21384,
+      "x": 1089
+    },
+    {
+      "captures": 12,
+      "mode": "baseline",
+      "prepare_us": 3198,
+      "reverse": true,
+      "rgba_absolute_difference": 5064979,
+      "total_us": 25294,
+      "wait_us": 21598,
+      "x": 1089
+    },
+    {
+      "captures": 12,
+      "mode": "spatial_influence",
+      "prepare_us": 3764,
+      "reverse": true,
+      "rgba_absolute_difference": 779371,
+      "total_us": 27145,
+      "wait_us": 22859,
+      "x": 1088
+    },
+    {
+      "captures": 12,
+      "mode": "baseline",
+      "prepare_us": 3431,
+      "reverse": true,
+      "rgba_absolute_difference": 968711,
+      "total_us": 25638,
+      "wait_us": 21694,
+      "x": 1088
+    },
+    {
+      "captures": 12,
+      "mode": "stable_receivers",
+      "prepare_us": 3205,
+      "reverse": true,
+      "rgba_absolute_difference": 779371,
+      "total_us": 25349,
+      "wait_us": 21640,
+      "x": 1088
+    },
+    {
+      "captures": 12,
+      "mode": "baseline",
+      "prepare_us": 3961,
+      "reverse": true,
+      "rgba_absolute_difference": 963733,
+      "total_us": 25102,
+      "wait_us": 20300,
+      "x": 1087
+    },
+    {
+      "captures": 12,
+      "mode": "stable_receivers",
+      "prepare_us": 3444,
+      "reverse": true,
+      "rgba_absolute_difference": 777220,
+      "total_us": 23518,
+      "wait_us": 19079,
+      "x": 1087
+    },
+    {
+      "captures": 12,
+      "mode": "spatial_influence",
+      "prepare_us": 3198,
+      "reverse": true,
+      "rgba_absolute_difference": 777220,
+      "total_us": 24339,
+      "wait_us": 20310,
+      "x": 1087
+    },
+    {
+      "captures": 12,
+      "mode": "stable_receivers",
+      "prepare_us": 3915,
+      "reverse": true,
+      "rgba_absolute_difference": 775369,
+      "total_us": 24914,
+      "wait_us": 20499,
+      "x": 1086
+    },
+    {
+      "captures": 12,
+      "mode": "spatial_influence",
+      "prepare_us": 3404,
+      "reverse": true,
+      "rgba_absolute_difference": 775369,
+      "total_us": 24288,
+      "wait_us": 20341,
+      "x": 1086
+    },
+    {
+      "captures": 12,
+      "mode": "baseline",
+      "prepare_us": 3285,
+      "reverse": true,
+      "rgba_absolute_difference": 959622,
+      "total_us": 25467,
+      "wait_us": 21682,
+      "x": 1086
+    },
+    {
+      "captures": 12,
+      "mode": "spatial_influence",
+      "prepare_us": 3815,
+      "reverse": true,
+      "rgba_absolute_difference": 776152,
+      "total_us": 26012,
+      "wait_us": 21702,
+      "x": 1085
+    },
+    {
+      "captures": 12,
+      "mode": "baseline",
+      "prepare_us": 3264,
+      "reverse": true,
+      "rgba_absolute_difference": 963334,
+      "total_us": 24989,
+      "wait_us": 20330,
+      "x": 1085
+    },
+    {
+      "captures": 12,
+      "mode": "stable_receivers",
+      "prepare_us": 3342,
+      "reverse": true,
+      "rgba_absolute_difference": 776152,
+      "total_us": 23714,
+      "wait_us": 19179,
+      "x": 1085
+    },
+    {
+      "captures": 12,
+      "mode": "baseline",
+      "prepare_us": 4050,
+      "reverse": true,
+      "rgba_absolute_difference": 964024,
+      "total_us": 24507,
+      "wait_us": 19044,
+      "x": 1084
+    },
+    {
+      "captures": 12,
+      "mode": "stable_receivers",
+      "prepare_us": 3233,
+      "reverse": true,
+      "rgba_absolute_difference": 778036,
+      "total_us": 24582,
+      "wait_us": 20424,
+      "x": 1084
+    },
+    {
+      "captures": 12,
+      "mode": "spatial_influence",
+      "prepare_us": 3300,
+      "reverse": true,
+      "rgba_absolute_difference": 778036,
+      "total_us": 24290,
+      "wait_us": 20437,
+      "x": 1084
+    },
+    {
+      "captures": 12,
+      "mode": "stable_receivers",
+      "prepare_us": 4033,
+      "reverse": true,
+      "rgba_absolute_difference": 770554,
+      "total_us": 26058,
+      "wait_us": 21531,
+      "x": 1083
+    },
+    {
+      "captures": 12,
+      "mode": "spatial_influence",
+      "prepare_us": 3150,
+      "reverse": true,
+      "rgba_absolute_difference": 770554,
+      "total_us": 24299,
+      "wait_us": 20386,
+      "x": 1083
+    },
+    {
+      "captures": 12,
+      "mode": "baseline",
+      "prepare_us": 3232,
+      "reverse": true,
+      "rgba_absolute_difference": 961549,
+      "total_us": 27677,
+      "wait_us": 22962,
+      "x": 1083
+    },
+    {
+      "captures": 12,
+      "mode": "spatial_influence",
+      "prepare_us": 4008,
+      "reverse": true,
+      "rgba_absolute_difference": 774652,
+      "total_us": 31210,
+      "wait_us": 26642,
+      "x": 1082
+    },
+    {
+      "captures": 12,
+      "mode": "baseline",
+      "prepare_us": 3393,
+      "reverse": true,
+      "rgba_absolute_difference": 962853,
+      "total_us": 31821,
+      "wait_us": 27811,
+      "x": 1082
+    },
+    {
+      "captures": 12,
+      "mode": "stable_receivers",
+      "prepare_us": 3433,
+      "reverse": true,
+      "rgba_absolute_difference": 774652,
+      "total_us": 28124,
+      "wait_us": 22911,
+      "x": 1082
+    },
+    {
+      "captures": 12,
+      "mode": "baseline",
+      "prepare_us": 4084,
+      "reverse": true,
+      "rgba_absolute_difference": 966358,
+      "total_us": 29030,
+      "wait_us": 24086,
+      "x": 1081
+    },
+    {
+      "captures": 12,
+      "mode": "stable_receivers",
+      "prepare_us": 3420,
+      "reverse": true,
+      "rgba_absolute_difference": 772298,
+      "total_us": 29927,
+      "wait_us": 25431,
+      "x": 1081
+    },
+    {
+      "captures": 12,
+      "mode": "spatial_influence",
+      "prepare_us": 3422,
+      "reverse": true,
+      "rgba_absolute_difference": 772298,
+      "total_us": 30807,
+      "wait_us": 26817,
+      "x": 1081
+    },
+    {
+      "captures": 12,
+      "mode": "stable_receivers",
+      "prepare_us": 4304,
+      "reverse": true,
+      "rgba_absolute_difference": 774776,
+      "total_us": 28146,
+      "wait_us": 22863,
+      "x": 1080
+    },
+    {
+      "captures": 12,
+      "mode": "spatial_influence",
+      "prepare_us": 3290,
+      "reverse": true,
+      "rgba_absolute_difference": 774776,
+      "total_us": 26826,
+      "wait_us": 21739,
+      "x": 1080
+    },
+    {
+      "captures": 12,
+      "mode": "baseline",
+      "prepare_us": 3671,
+      "reverse": true,
+      "rgba_absolute_difference": 963769,
+      "total_us": 27448,
+      "wait_us": 22934,
+      "x": 1080
+    },
+    {
+      "captures": 12,
+      "mode": "spatial_influence",
+      "prepare_us": 4053,
+      "reverse": true,
+      "rgba_absolute_difference": 9071302,
+      "total_us": 25381,
+      "wait_us": 20372,
+      "x": 1060
+    },
+    {
+      "captures": 12,
+      "mode": "baseline",
+      "prepare_us": 3714,
+      "reverse": true,
+      "rgba_absolute_difference": 9886163,
+      "total_us": 25910,
+      "wait_us": 21365,
+      "x": 1060
+    },
+    {
+      "captures": 12,
+      "mode": "stable_receivers",
+      "prepare_us": 3346,
+      "reverse": true,
+      "rgba_absolute_difference": 9071302,
+      "total_us": 24487,
+      "wait_us": 19125,
+      "x": 1060
+    },
+    {
+      "captures": 12,
+      "mode": "baseline",
+      "prepare_us": 4489,
+      "reverse": true,
+      "rgba_absolute_difference": 11194392,
+      "total_us": 26820,
+      "wait_us": 20470,
+      "x": 1020
+    },
+    {
+      "captures": 12,
+      "mode": "stable_receivers",
+      "prepare_us": 3298,
+      "reverse": true,
+      "rgba_absolute_difference": 10749278,
+      "total_us": 27095,
+      "wait_us": 22952,
+      "x": 1020
+    },
+    {
+      "captures": 12,
+      "mode": "spatial_influence",
+      "prepare_us": 3521,
+      "reverse": true,
+      "rgba_absolute_difference": 10749278,
+      "total_us": 27169,
+      "wait_us": 21625,
+      "x": 1020
+    },
+    {
+      "captures": 12,
+      "mode": "stable_receivers",
+      "prepare_us": 3984,
+      "reverse": true,
+      "rgba_absolute_difference": 8386860,
+      "total_us": 28204,
+      "wait_us": 22863,
+      "x": 970
+    },
+    {
+      "captures": 12,
+      "mode": "spatial_influence",
+      "prepare_us": 3482,
+      "reverse": true,
+      "rgba_absolute_difference": 8386860,
+      "total_us": 28103,
+      "wait_us": 22856,
+      "x": 970
+    },
+    {
+      "captures": 12,
+      "mode": "baseline",
+      "prepare_us": 3557,
+      "reverse": true,
+      "rgba_absolute_difference": 9868474,
+      "total_us": 26399,
+      "wait_us": 21567,
+      "x": 970
+    },
+    {
+      "captures": 12,
+      "mode": "spatial_influence",
+      "prepare_us": 3967,
+      "reverse": true,
+      "rgba_absolute_difference": 10948157,
+      "total_us": 26402,
+      "wait_us": 21584,
+      "x": 920
+    },
+    {
+      "captures": 12,
+      "mode": "baseline",
+      "prepare_us": 3482,
+      "reverse": true,
+      "rgba_absolute_difference": 10852834,
+      "total_us": 25949,
+      "wait_us": 21632,
+      "x": 920
+    },
+    {
+      "captures": 12,
+      "mode": "stable_receivers",
+      "prepare_us": 3301,
+      "reverse": true,
+      "rgba_absolute_difference": 10948157,
+      "total_us": 24588,
+      "wait_us": 20345,
+      "x": 920
+    },
+    {
+      "captures": 12,
+      "mode": "baseline",
+      "prepare_us": 4235,
+      "reverse": true,
+      "rgba_absolute_difference": 12861391,
+      "total_us": 22865,
+      "wait_us": 17784,
+      "x": 870
+    },
+    {
+      "captures": 12,
+      "mode": "stable_receivers",
+      "prepare_us": 3314,
+      "reverse": true,
+      "rgba_absolute_difference": 11926119,
+      "total_us": 24242,
+      "wait_us": 20124,
+      "x": 870
+    },
+    {
+      "captures": 12,
+      "mode": "spatial_influence",
+      "prepare_us": 3439,
+      "reverse": true,
+      "rgba_absolute_difference": 11926119,
+      "total_us": 25969,
+      "wait_us": 21638,
+      "x": 870
+    }
+  ],
+  "resolution": [
+    1600,
+    1000
+  ],
+  "reverse_pixel_equality": true
+}

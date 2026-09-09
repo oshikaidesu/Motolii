@@ -800,3 +800,5 @@
 - [近接時の反射不連続の再現](2026-09-09-contact-reflection-continuity.md)
 
 - [表面応答の合成に向けた撮影情報の比較](2026-09-09-response-composition-validation.md)
+
+- [共有反射の選択と寄与の修正](2026-09-09-stable-reflection-execution.md)
