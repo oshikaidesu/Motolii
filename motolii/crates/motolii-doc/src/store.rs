@@ -16,7 +16,7 @@ mod view;
 
 pub use asset::{Asset, AssetDraft, AssetError, AssetId, AssetRole, AssetStatus, AssetTable};
 pub use attrs::{BlendMode, LayerAttrs, LayerAttrsPatch, LayerProjection, Matte, MatteMode, LABEL_PALETTE_LEN};
-pub use document::{DisplayRevision, Document, Intent, LayerId, PropertyId, Revision};
+pub use document::{Animate, DisplayRevision, Document, Intent, LayerId, PropertyId, Revision};
 pub use effect::{EffectId, EffectInstance, ResolvedEffect};
 pub use placement::Placement;
 pub use fingerprint::{SourceFingerprintDecode, SourceFingerprintError, SourceFingerprintV1};

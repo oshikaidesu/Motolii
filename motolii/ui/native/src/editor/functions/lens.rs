@@ -1,5 +1,5 @@
 use crate::doc::store::{
-    Document, Intent, LayerId, PropertyId, RationalTime, StoreError, StoreView, Value,
+    Animate, Document, Intent, LayerId, PropertyId, RationalTime, StoreError, StoreView, Value,
 };
 
 pub(crate) fn edit_rejection(
@@ -24,7 +24,7 @@ pub(crate) fn place(
     value: Value,
     at: RationalTime,
 ) -> Result<Option<Intent>, StoreError> {
-    doc.place_checked(layer, property, value, at, false)
+    doc.place_checked(layer, property, value, at, Animate::Off)
 }
 
 pub(crate) fn require_local_source(

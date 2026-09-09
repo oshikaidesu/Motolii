@@ -43,6 +43,33 @@ class PanelSettings extends StatelessWidget {
         ),
         const SizedBox(height: EditorMetrics.s6),
         const Text(
+          'Animate',
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            fontSize: EditorMetrics.s12,
+          ),
+        ),
+        Row(
+          children: [
+            const Expanded(
+              child: Text(
+                'Key the start too',
+                style: TextStyle(fontSize: EditorMetrics.font),
+              ),
+            ),
+            EditorSwitch(
+              key: const ValueKey('settings:animateFrom'),
+              on: controller.deskWork.value['animateFrom'] == true,
+              glyph: Icons.diamond_outlined,
+              label:
+                  'When Animate is turned on, remember the frame; the first '
+                  'touch at another frame keys both that frame and this one',
+              onChanged: (on) => controller.storeDesk('animateFrom', on),
+            ),
+          ],
+        ),
+        const SizedBox(height: EditorMetrics.s6),
+        const Text(
           'Panels',
           style: TextStyle(
             fontWeight: FontWeight.w600,

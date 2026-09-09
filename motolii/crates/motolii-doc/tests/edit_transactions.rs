@@ -5,7 +5,7 @@
 use motolii_doc as motolii;
 
 use motolii::doc::store::{
-    property, Composition, ContentKeyframe, ContentTrack, Document, FontRef, Fps, Intent, Interp, Keyframe, KeyframeTrack,
+    property, Animate, Composition, ContentKeyframe, ContentTrack, Document, FontRef, Fps, Intent, Interp, Keyframe, KeyframeTrack,
     LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, PropertyLink, RationalTime, Slot, SlotId, SpatialTangent,
     StoreView, TextDocument, TextDocumentStyle, TextJustify, TextStyleId, Value,
 };
@@ -100,7 +100,7 @@ fn changing_an_existing_key_preserves_its_time_curve_tangents_and_neighbors() {
     });
     doc.apply(Intent::SetTrack { layer, property: position(), track: authored.clone() }).unwrap();
     doc.mark_undo_floor();
-    let edit = doc.place_checked(layer, &position(), Value::Vec2([75.0, -5.0]), at(60), true).unwrap().unwrap();
+    let edit = doc.place_checked(layer, &position(), Value::Vec2([75.0, -5.0]), at(60), Animate::Now).unwrap().unwrap();
     doc.apply(edit).unwrap();
     let changed = doc.view().track(layer, &position()).unwrap().unwrap();
     assert_eq!(changed.keys().len(), 3);
@@ -144,7 +144,7 @@ fn direct_value_editing_cannot_silently_detach_a_slot_or_driver() {
     let (head, history) = (doc.edit_head(), doc.history_depth());
 
     for layer in [shared, driven] {
-        assert!(doc.place_checked(layer, &position(), Value::Vec2([99.0, 99.0]), at(60), false).is_err());
+        assert!(doc.place_checked(layer, &position(), Value::Vec2([99.0, 99.0]), at(60), Animate::Off).is_err());
     }
     assert_eq!([shared, driven].map(|layer| doc.view().property_source(layer, &position()).unwrap()), sources);
     assert_eq!(doc.view().slots().unwrap(), slots);
@@ -404,20 +404,40 @@ fn animate_decides_whether_a_touch_becomes_a_key_or_moves_the_whole_motion() {
     let mut doc = document();
     let layer = layer(&mut doc, 1, LayerSource::Shape);
     // Animate off, no keys: the value changes and no key appears.
-    doc.apply(doc.place_checked(layer, &position(), Value::Vec2([10.0, 10.0]), at(30), false).unwrap().unwrap()).unwrap();
+    doc.apply(doc.place_checked(layer, &position(), Value::Vec2([10.0, 10.0]), at(30), Animate::Off).unwrap().unwrap()).unwrap();
     assert!(doc.view().track(layer, &position()).unwrap().is_none());
     // Animate on, no keys: the first key is born at the playhead.
-    doc.apply(doc.place_checked(layer, &position(), Value::Vec2([20.0, 10.0]), at(30), true).unwrap().unwrap()).unwrap();
-    doc.apply(doc.place_checked(layer, &position(), Value::Vec2([40.0, 10.0]), at(60), true).unwrap().unwrap()).unwrap();
+    doc.apply(doc.place_checked(layer, &position(), Value::Vec2([20.0, 10.0]), at(30), Animate::Now).unwrap().unwrap()).unwrap();
+    doc.apply(doc.place_checked(layer, &position(), Value::Vec2([40.0, 10.0]), at(60), Animate::Now).unwrap().unwrap()).unwrap();
     let keys = doc.view().track(layer, &position()).unwrap().unwrap().keys().len();
     assert_eq!(keys, 2);
     // Animate off, keyed: every key moves by the same difference, no key is added.
-    doc.apply(doc.place_checked(layer, &position(), Value::Vec2([25.0, 15.0]), at(45), false).unwrap().unwrap()).unwrap();
+    doc.apply(doc.place_checked(layer, &position(), Value::Vec2([25.0, 15.0]), at(45), Animate::Off).unwrap().unwrap()).unwrap();
     let track = doc.view().track(layer, &position()).unwrap().unwrap();
     assert_eq!(track.keys().len(), 2);
     assert_eq!(track.keys()[0].value, Value::Vec2([15.0, 15.0]));
     assert_eq!(track.keys()[1].value, Value::Vec2([35.0, 15.0]));
     assert_eq!(value(&doc, layer, 45), Value::Vec2([25.0, 15.0]));
+}
+
+#[test]
+fn animate_from_keys_the_untouched_value_where_animate_was_turned_on() {
+    let mut doc = document();
+    let layer = layer(&mut doc, 1, LayerSource::Shape);
+    doc.apply(doc.place_checked(layer, &position(), Value::Vec2([10.0, 10.0]), at(30), Animate::Off).unwrap().unwrap()).unwrap();
+    // Animate turned on at 30, the touch lands at 60: both ends appear, the origin keeps the old value.
+    doc.apply(doc.place_checked(layer, &position(), Value::Vec2([40.0, 10.0]), at(60), Animate::From(at(30))).unwrap().unwrap()).unwrap();
+    let track = doc.view().track(layer, &position()).unwrap().unwrap();
+    assert_eq!(track.keys().len(), 2);
+    assert_eq!((track.keys()[0].t, track.keys()[0].value.clone()), (at(30), Value::Vec2([10.0, 10.0])));
+    assert_eq!((track.keys()[1].t, track.keys()[1].value.clone()), (at(60), Value::Vec2([40.0, 10.0])));
+    // Already keyed: the origin is not written again, only the playhead.
+    doc.apply(doc.place_checked(layer, &position(), Value::Vec2([80.0, 10.0]), at(90), Animate::From(at(30))).unwrap().unwrap()).unwrap();
+    assert_eq!(doc.view().track(layer, &position()).unwrap().unwrap().keys().len(), 3);
+    // A touch at the origin itself is one key, as with Animate::Now.
+    let scale = PropertyId::new(property::SCALE).unwrap();
+    doc.apply(doc.place_checked(layer, &scale, Value::Vec2([2.0, 1.0]), at(30), Animate::From(at(30))).unwrap().unwrap()).unwrap();
+    assert_eq!(doc.view().track(layer, &scale).unwrap().unwrap().keys().len(), 1);
 }
 
 #[test]

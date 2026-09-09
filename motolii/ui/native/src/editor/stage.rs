@@ -536,7 +536,7 @@ impl DragSession {
         }
         Ok(Self::Cage(CageDrag::begin(doc,engine,ids,mode,handle,start,at,observer)?))
     }
-    pub(crate) fn edits(&self,doc:&Document,point:[f64;2],shift:bool,alt:bool,animate:bool)->Result<Vec<Intent>,String>{
+    pub(crate) fn edits(&self,doc:&Document,point:[f64;2],shift:bool,alt:bool,animate:Animate)->Result<Vec<Intent>,String>{
         match self {
             Self::Cage(drag)=>drag.edits(doc,point,shift,alt,animate),
             Self::Spatial(drag)=>drag.edits(doc,point,shift,animate),
@@ -575,7 +575,7 @@ impl CageDrag {
         }
         Ok(Self{drag,map,revision:doc.revision(),start,moves})
     }
-    pub(crate) fn edits(&self,doc:&Document,point:[f64;2],shift:bool,alt:bool,animate:bool)->Result<Vec<Intent>,String>{
+    pub(crate) fn edits(&self,doc:&Document,point:[f64;2],shift:bool,alt:bool,animate:Animate)->Result<Vec<Intent>,String>{
         if doc.revision()!=self.revision{return Err("Gesture canceled because document changed".into())}
         if self.drag.mode == GizmoMode::Move {
             let mut point = point;

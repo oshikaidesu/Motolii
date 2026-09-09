@@ -153,6 +153,10 @@ class EditorShortcuts {
         c.keyedOnly.value = !c.keyedOnly.value;
         return KeyEventResult.handled;
       }
+      if (k == LogicalKeyboardKey.keyA && !shift) {
+        c.setAnimate(!c.animating);
+        return KeyEventResult.handled;
+      }
       final props = {
         LogicalKeyboardKey.keyP: 'position',
         LogicalKeyboardKey.keyS: 'scale',

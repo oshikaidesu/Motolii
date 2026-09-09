@@ -5,6 +5,7 @@ mod projection;
 mod ids;
 mod validate;
 
+pub use edit::Animate;
 pub use ids::{LayerId, PropertyId};
 
 use std::cell::RefCell;

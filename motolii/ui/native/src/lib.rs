@@ -10,7 +10,7 @@ use std::ffi::{c_char, CStr, CString};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::time::Instant;
 
-use motolii_doc::store::{property, Document, Intent, LayerId, PropertyId, RationalTime, Value};
+use motolii_doc::store::{property, Animate, Document, Intent, LayerId, PropertyId, RationalTime, Value};
 use motolii_render::engine::Engine;
 use objc2_io_surface::IOSurfaceRef;
 use objc2_metal::{MTLDevice, MTLPixelFormat, MTLStorageMode, MTLTextureDescriptor, MTLTextureType, MTLTextureUsage};
@@ -41,8 +41,7 @@ pub struct EditorRuntime {
     preview_tag: Option<String>,
     stage_drag: Option<editor::stage::DragSession>,
     user_stage: bool,
-    /// Animate が入っている間、触った値は今の時刻のキーになる。
-    pub(crate) animate: bool,
+    pub(crate) animate: Animate,
     /// 最後に全部入りの status を送った時の Document の版。同じ版で再生中なら生値だけ送る。
     pub(crate) full_status_revision: std::cell::RefCell<Option<String>>,
     user_camera: crate::doc::core::ResolvedCamera,
@@ -68,7 +67,7 @@ impl EditorRuntime {
         let mut history = editor::history::Ledger::open(editor::history::default_file());
         history.record("open", if path.is_empty() { "New document".to_owned() } else { path.rsplit('/').next().unwrap_or(path).to_owned() }, Some(doc.edit_head()));
         Ok(Self { selected_ids: selected.into_iter().collect(), selected_keys: Vec::new(), clipboard: Default::default(), path: if path.is_empty() { None } else { Some(path.into()) }, saved_signature, color_target: None, exporter: Default::default(), clock, clock_revision, doc, engine, selected, frame: 0, device_id, render_count: 0,
-            render_ms: 0.0, picked_color: None, pick_serial: 0, reply: CString::new("{}").unwrap(), error: None, preview: None, preview_tag: None, stage_drag: None, snapshot_cache: Default::default(), user_stage: true, animate: false, full_status_revision: Default::default(), user_camera: Default::default(), history })
+            render_ms: 0.0, picked_color: None, pick_serial: 0, reply: CString::new("{}").unwrap(), error: None, preview: None, preview_tag: None, stage_drag: None, snapshot_cache: Default::default(), user_stage: true, animate: Animate::Off, full_status_revision: Default::default(), user_camera: Default::default(), history })
     }
 
     fn time(&self) -> Result<RationalTime, String> {

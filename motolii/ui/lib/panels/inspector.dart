@@ -1689,12 +1689,13 @@ class _InspectorPanelState extends State<InspectorPanel> {
           ),
         ),
         EditorSwitch(
-          on: c.document.value['animate'] == true,
+          on: c.animating,
           glyph: Icons.diamond_outlined,
-          label: 'Animate: values you touch become keys at this frame',
-          onChanged: panelCan(c, 'animate')
-              ? (on) => c.command('animate', {'enabled': on})
-              : null,
+          label: c.deskWork.value['animateFrom'] == true
+              ? 'Animate (A): values you touch become keys at this frame, '
+                    'and at the frame Animate was turned on'
+              : 'Animate (A): values you touch become keys at this frame',
+          onChanged: panelCan(c, 'animate') ? c.setAnimate : null,
         ),
       ],
     ),

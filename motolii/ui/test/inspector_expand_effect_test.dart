@@ -168,7 +168,7 @@ void main() {
     await tester.tapAt(Offset.zero);
     await tester.pumpAndSettle();
     final animate = find.byTooltip(
-      'Animate: values you touch become keys at this frame',
+      'Animate (A): values you touch become keys at this frame',
     );
     await tester.tap(animate);
     await tester.pump();

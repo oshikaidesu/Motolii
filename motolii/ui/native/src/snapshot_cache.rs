@@ -158,7 +158,7 @@ impl EditorRuntime {
         reply["undo"] = json!(undo); reply["redo"] = json!(redo);
         reply["path"] = json!(self.path); reply["dirty"] = json!(self.is_dirty()?);
         reply["frame"] = json!(self.frame); reply["playing"] = json!(playing);
-        reply["animate"] = json!(self.animate); reply["error"] = json!(self.error);
+        reply["animate"] = json!(self.animate != Animate::Off); reply["error"] = json!(self.error);
         reply["preview"] = json!(self.preview.is_some()); reply["previewOwner"] = json!(self.preview.as_ref().map(|p|p.0));
         reply["renderCount"] = json!(self.render_count); reply["renderMs"] = json!(self.render_ms);
         reply["pickedColor"] = json!(self.picked_color); reply["pickSerial"] = json!(self.pick_serial);

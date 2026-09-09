@@ -366,7 +366,7 @@ impl SpatialDrag {
         doc: &Document,
         point: [f64; 2],
         shift: bool,
-        animate: bool,
+        animate: Animate,
     ) -> Result<Vec<Intent>, String> {
         if doc.revision() != self.revision {
             return Err("Gesture canceled because document changed".into());

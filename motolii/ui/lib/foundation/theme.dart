@@ -11,8 +11,14 @@ abstract final class EditorTheme {
   static const line = Color(0xff242424),
       border = Color(0xff666666),
       ink = Color(0xffdddddd),
-      muted = Color(0xffaaaaaa),
-      accent = Color(0xffffaa61);
+      muted = Color(0xffaaaaaa);
+
+  /// The accent while Animate is off, and its hue complement while it is on:
+  /// same lightness, opposite hue, so every accent in the window says which
+  /// mode a touch will land in.
+  static const design = Color(0xffffaa61), animate = Color(0xff61b6ff);
+  static final animating = ValueNotifier<bool>(false);
+  static Color get accent => animating.value ? animate : design;
   static const tab = Color(0xffb7b7b7), tabInk = Color(0xff262626);
   // Menus: a darker sheet, a pale edge, a pale hover row with dark ink.
   static const menu = Color(0xff222222),
@@ -182,7 +188,7 @@ abstract final class EditorTheme {
       titleTextStyle: TextStyle(fontSize: EditorMetrics.title, color: ink),
       contentTextStyle: TextStyle(fontSize: EditorMetrics.font, color: ink),
     ),
-    colorScheme: const ColorScheme.dark(
+    colorScheme: ColorScheme.dark(
       primary: accent,
       secondary: accent,
       surface: panel,
@@ -200,12 +206,12 @@ abstract final class EditorTheme {
     // tuned against; only the shapes below move to M3.
     typography: Typography.material2014(platform: defaultTargetPlatform),
     materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-    inputDecorationTheme: const InputDecorationTheme(
+    inputDecorationTheme: InputDecorationTheme(
       isDense: true,
       filled: true,
       fillColor: app,
-      contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 3),
-      enabledBorder: OutlineInputBorder(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+      enabledBorder: const OutlineInputBorder(
         borderRadius: BorderRadius.zero,
         borderSide: BorderSide(color: border),
       ),

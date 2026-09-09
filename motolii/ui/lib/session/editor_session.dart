@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 
 import '../bridge/native_bridge.dart';
 import '../bridge/protocol.dart';
+import '../foundation/theme.dart';
 
 /// A slice of the status. Panels listen to the keys they read, so a drag that
 /// moves `layers` leaves Fonts, History and the Browser alone. `derived` names
@@ -54,6 +55,14 @@ class EditorSession {
   final _bridge = NativeBridge();
   final document = ValueNotifier<Map<String, dynamic>>({});
   Map<String, dynamic> get state => document.value;
+  bool get animating => state['animate'] == true;
+
+  /// Animate on or off. With the `animateFrom` setting the frame it was turned
+  /// on at becomes the first key of anything touched later at another frame.
+  Future<void> setAnimate(bool on) => command('animate', {
+    'enabled': on,
+    'from': deskWork.value['animateFrom'] == true,
+  });
   final _slices = <String, DocumentSlice>{};
   Map<String, dynamic> _spread = const {};
 
@@ -267,6 +276,7 @@ class EditorSession {
       playing.value = next['playing'] as bool;
       if (!playing.value && _ticker != null) _cancelCadence();
     }
+    if (next['animate'] is bool) EditorTheme.animating.value = next['animate'];
     if (notify || next['layers'] is List) absorb(next);
   }
 

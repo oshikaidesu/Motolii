@@ -10,10 +10,14 @@ class EditorApp extends StatelessWidget {
   static Widget noHover(BuildContext context, Widget? child) =>
       TooltipVisibility(visible: false, child: child ?? const SizedBox());
   @override
-  Widget build(BuildContext context) => MaterialApp(
-    debugShowCheckedModeBanner: false,
-    theme: EditorTheme.data,
-    builder: noHover,
-    home: const EditorWindow(),
+  Widget build(BuildContext context) => ValueListenableBuilder(
+    valueListenable: EditorTheme.animating,
+    builder: (context, _, home) => MaterialApp(
+      debugShowCheckedModeBanner: false,
+      theme: EditorTheme.data,
+      builder: noHover,
+      home: home,
+    ),
+    child: const EditorWindow(),
   );
 }

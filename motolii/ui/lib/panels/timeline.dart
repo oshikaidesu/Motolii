@@ -1319,9 +1319,12 @@ class _TimelinePainter extends CustomPainter {
   final List<_LaneContainer> containers;
   final String? activeLane;
   final List<_TrackRow> rows;
-  bool laneSelected(_TrackRow row) => activeLane != null
-      ? row.laneId == activeLane
-      : row.property == null && selected.contains(row.id);
+  // Every selected layer keeps its mark while a lane is being worked on:
+  // the active lane adds a highlight, it never hides the others.
+  bool layerSelected(_TrackRow row) =>
+      row.property == null && selected.contains(row.id);
+  bool laneSelected(_TrackRow row) =>
+      layerSelected(row) || (activeLane != null && row.laneId == activeLane);
   final List<int> selected;
   final List<Map<String, dynamic>> keys, markers, dragKeys;
   final int frame, duration, delta;
@@ -1563,12 +1566,12 @@ class _TimelinePainter extends CustomPainter {
             Paint()
               ..color = row.layer['hidden'] == true ? EditorTheme.raised : own,
           );
-          if (laneSelected(row))
+          if (layerSelected(row))
             canvas.drawRect(
-              rect,
+              rect.deflate(1),
               Paint()
-                ..color = const Color(0xffeeeeae)
-                ..strokeWidth = 1
+                ..color = EditorTheme.accent
+                ..strokeWidth = 2
                 ..style = PaintingStyle.stroke,
             );
           if (!row.lanesOpen)
@@ -1741,6 +1744,15 @@ class _TimelinePainter extends CustomPainter {
               h,
             ),
             Paint()..color = EditorTheme.raised,
+          );
+        if (layerSelected(row))
+          canvas.drawRect(
+            Rect.fromLTWH(row.bounds.left, y, label - row.bounds.left, h)
+                .deflate(1),
+            Paint()
+              ..color = EditorTheme.accent
+              ..strokeWidth = 2
+              ..style = PaintingStyle.stroke,
           );
         if (row.property == null) {
           text(

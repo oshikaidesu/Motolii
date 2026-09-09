@@ -613,7 +613,7 @@ class _BrowserPanelState extends State<BrowserPanel> {
                                   child: Text(
                                     chosen == 'All' ? tab : chosen,
                                     maxLines: 1,
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontSize: EditorMetrics.micro,
                                       color: EditorTheme.accent,
                                     ),
@@ -1130,7 +1130,7 @@ class _BrowserPanelState extends State<BrowserPanel> {
             left: EditorMetrics.s4,
             top: EditorMetrics.s4,
             child: missing
-                ? const Icon(
+                ? Icon(
                     Icons.error_outline,
                     size: EditorMetrics.dense,
                     color: EditorTheme.accent,

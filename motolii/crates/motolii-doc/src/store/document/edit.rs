@@ -3,16 +3,25 @@ use crate::doc::store::{
     property, Interp, Keyframe, PropertyBase, RationalTime, StoreError, Value,
 };
 
+/// How a touched value lands. `Off`: keyed properties keep their shape and move as a
+/// whole. `Now`: the value becomes a key at the playhead (the first key if none).
+/// `From(t0)`: as `Now`, but a property without keys also gets its untouched value
+/// keyed at `t0`, so one edit records both ends of the motion.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Animate {
+    Off,
+    Now,
+    From(RationalTime),
+}
+
 impl Document {
-    /// 値を置く。`animate` が入っていれば今の時刻のキーになる(無ければ 1 キー目)。
-    /// 切れていれば、キーのある属性は全部のキーに同じ差を足して形を保ち、無ければ値が変わるだけ。
     pub fn place_checked(
         &self,
         layer: LayerId,
         property: &PropertyId,
         value: Value,
         at: RationalTime,
-        animate: bool,
+        animate: Animate,
     ) -> Result<Option<Intent>, StoreError> {
         let view = self.view().without_transients();
         if !view.has_layer(layer) {
@@ -43,7 +52,7 @@ impl Document {
                 "Edit the shared slot explicitly".into(),
             )),
             Some(PropertyBase::Track(mut track)) => {
-                if !animate {
+                if animate == Animate::Off {
                     let Some(from) = current else {
                         return Err(StoreError::Property(format!("{} has no value to move", property.name())));
                     };
@@ -80,8 +89,13 @@ impl Document {
                 }))
             }
             Some(PropertyBase::Constant(_)) | None => {
-                if animate {
+                if animate != Animate::Off {
                     let mut track = crate::doc::eval::KeyframeTrack::new();
+                    if let (Animate::From(origin), Some(from)) = (animate, &current) {
+                        if origin != at {
+                            track.insert(Keyframe { t: origin, value: from.clone(), interp: Interp::Linear, spatial: None });
+                        }
+                    }
                     track.insert(Keyframe { t: at, value, interp: Interp::Linear, spatial: None });
                     return Ok(Some(Intent::SetTrack { layer, property: property.clone(), track }));
                 }
