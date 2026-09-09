@@ -1055,13 +1055,11 @@ class EditorCard extends StatelessWidget {
   const EditorCard({
     super.key,
     required this.title,
-    required this.glyph,
     required this.children,
     this.trailing,
     this.dim = false,
   });
   final String title;
-  final IconData glyph;
   final List<Widget> children;
   final Widget? trailing;
 
@@ -1085,8 +1083,6 @@ class EditorCard extends StatelessWidget {
       children: [
         Row(
           children: [
-            Icon(glyph, size: EditorMetrics.s12, color: EditorTheme.muted),
-            const SizedBox(width: EditorMetrics.s4),
             Expanded(
               child: Text(
                 title.toUpperCase(),
