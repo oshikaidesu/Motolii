@@ -1,0 +1,63 @@
+{
+  "gpu": "Apple M4",
+  "resolution": [
+    1600,
+    1000
+  ],
+  "runs": 2,
+  "warmup_per_run": 5,
+  "samples_per_mode": 60,
+  "gpu_timestamps_enabled": false,
+  "results": [
+    {
+      "scenario": "static",
+      "off": {
+        "total_us": 11588.5,
+        "prepare_us": 1837.5,
+        "submit_us": 308.5,
+        "wait_us": 9118.0,
+        "readback_us": 428.5,
+        "captures": 0.0
+      },
+      "current": {
+        "total_us": 14063.5,
+        "prepare_us": 1867.0,
+        "submit_us": 297.5,
+        "wait_us": 11433.5,
+        "readback_us": 430.5,
+        "captures": 0.0
+      },
+      "increase_percent": 21.35738016136688,
+      "paired_median_increase_us": 3216.5,
+      "paired_bootstrap_95_us": [
+        3083.0,
+        3403.0
+      ]
+    },
+    {
+      "scenario": "moving",
+      "off": {
+        "total_us": 14826.5,
+        "prepare_us": 3208.5,
+        "submit_us": 398.5,
+        "wait_us": 10704.0,
+        "readback_us": 431.5,
+        "captures": 12.0
+      },
+      "current": {
+        "total_us": 19297.0,
+        "prepare_us": 3178.5,
+        "submit_us": 391.0,
+        "wait_us": 15236.0,
+        "readback_us": 422.5,
+        "captures": 12.0
+      },
+      "increase_percent": 30.152092537011434,
+      "paired_median_increase_us": 4592.0,
+      "paired_bootstrap_95_us": [
+        4154.5,
+        4848.0
+      ]
+    }
+  ]
+}

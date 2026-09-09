@@ -792,3 +792,5 @@
 - [GPUインスタンスの共有と比較](2026-09-09-gpu-instance-sharing.md)
 
 - [表面の縁のアンチエイリアス](2026-09-09-surface-antialiasing.md)
+
+- [AAの実測コストと軽量化候補](2026-09-09-aa-cost-and-options.md)

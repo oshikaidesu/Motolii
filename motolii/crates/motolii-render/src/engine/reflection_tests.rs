@@ -548,3 +548,46 @@ fn upstream_msaa_smooths_mesh_and_rectangle_coverage_without_blurring_interiors(
         } }
     }
 }
+
+#[test]
+#[ignore = "paired rendering benchmark; run explicitly without other GPU work"]
+fn antialiasing_cost_comparison() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let source = root.join("docs/reviews/assets/2026-09-09-glass-gallery/light-in-form.rrd");
+    let mut doc = Document::load(&source).unwrap();
+    let ring = doc.view().resolved_layers(RationalTime::ZERO).unwrap().into_iter().find(|l|
+        matches!(&l.source, LayerSource::File { path, .. } if path.ends_with("torus.obj"))
+    ).unwrap().id;
+    let mut current = Engine::new().unwrap();
+    let mut off = Engine::new().unwrap();
+    off.compositor = crate::render::compositor::Compositor::with_device(
+        off.gpu_device().clone(), off.gpu_queue().clone(),
+        crate::render::compositor::PRESENTABLE_FORMAT,
+        |_| re_renderer::RenderConfig { msaa_mode: re_renderer::MsaaMode::Off },
+    ).unwrap();
+    let mut rows = Vec::new();
+    for scenario in ["static", "moving"] {
+        for frame in 0..35 {
+            if scenario == "moving" { set(&mut doc, ring, "rotation.y", Value::F64(-24.0 + frame as f64 * 0.3)); }
+            for enabled in if frame % 2 == 0 { [false,true] } else { [true,false] } {
+                let engine = if enabled { &mut current } else { &mut off };
+                let before = engine.surface_work();
+                let pixels = engine.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+                assert_eq!(pixels.len(), 1600*1000*4);
+                assert!(engine.layer_failures().is_empty());
+                let m = engine.frame_measurement();
+                if frame >= 5 {
+                    rows.push(serde_json::json!({"scenario":scenario,"frame":frame-5,"aa":enabled,
+                        "total_us":m.total_us,"prepare_us":m.prepare_us,"submit_us":m.submit_us,
+                        "wait_us":m.wait_us,"readback_us":m.readback_us,
+                        "captures":engine.surface_work().scene_captures-before.scene_captures}));
+                }
+            }
+        }
+    }
+    let output = std::env::var("MOTOLII_AA_COST_OUTPUT").expect("benchmark output path");
+    std::fs::write(output, serde_json::to_vec_pretty(&serde_json::json!({
+        "warmup":5,"samples":30,"resolution":[1600,1000],"comparison":"AA Off vs 4x MSAA with per-sample mesh shading",
+        "gpu_timestamps":false,"records":rows
+    })).unwrap()).unwrap();
+}
