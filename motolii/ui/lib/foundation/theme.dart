@@ -8,6 +8,9 @@ abstract final class EditorTheme {
       panel = Color(0xff3c3c3c),
       raised = Color(0xff484848),
       hover = Color(0xff585858);
+  /// How far a chosen surface moves toward white: the step from a row's
+  /// ground to `hover`, so a lit row, its name cell and its band rise alike.
+  static const lift = .14;
   static const line = Color(0xff242424),
       border = Color(0xff666666),
       ink = Color(0xffdddddd),

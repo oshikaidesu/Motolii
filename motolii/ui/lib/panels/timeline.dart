@@ -1412,7 +1412,7 @@ class _TimelinePainter extends CustomPainter {
           Rect.fromLTWH(label, rows[i].bounds.top, size.width - label, h),
           Paint()
             ..color = laneSelected(rows[i])
-                ? const Color(0xff585858)
+                ? EditorTheme.hover
                 : rows[i].property != null
                 ? const Color(0xff383838)
                 : (i.isEven
@@ -1561,19 +1561,16 @@ class _TimelinePainter extends CustomPainter {
               );
             }
           }
+          final chosen = layerSelected(row);
           canvas.drawRect(
             rect,
             Paint()
-              ..color = row.layer['hidden'] == true ? EditorTheme.raised : own,
+              ..color = row.layer['hidden'] == true
+                  ? EditorTheme.raised
+                  : chosen
+                  ? Color.lerp(own, Colors.white, EditorTheme.lift)!
+                  : own,
           );
-          if (layerSelected(row))
-            canvas.drawRect(
-              rect.deflate(1),
-              Paint()
-                ..color = EditorTheme.accent
-                ..strokeWidth = 2
-                ..style = PaintingStyle.stroke,
-            );
           if (!row.lanesOpen)
             for (final f in row.summaryFrames) {
               bool at(List<Map<String, dynamic>> sel) =>
@@ -1590,7 +1587,7 @@ class _TimelinePainter extends CustomPainter {
               canvas.drawPath(
                 diamond,
                 Paint()
-                  ..color = at(keys) ? EditorTheme.accent : EditorTheme.ink,
+                  ..color = at(keys) ? EditorTheme.keyAccent : EditorTheme.ink,
               );
               canvas.drawPath(
                 diamond,
@@ -1617,7 +1614,7 @@ class _TimelinePainter extends CustomPainter {
               path,
               Paint()
                 ..color = selectedKey(row, key, keys)
-                    ? EditorTheme.accent
+                    ? EditorTheme.keyAccent
                     : EditorTheme.ink,
             );
           }
@@ -1667,13 +1664,13 @@ class _TimelinePainter extends CustomPainter {
           ..lineTo(playX + 5, 0)
           ..lineTo(playX, 6)
           ..close(),
-        Paint()..color = EditorTheme.accent,
+        Paint()..color = EditorTheme.keyAccent,
       );
     canvas.drawLine(
       Offset(playX, 0),
       Offset(playX, size.height),
       Paint()
-        ..color = EditorTheme.accent
+        ..color = EditorTheme.keyAccent
         ..strokeWidth = 1.5,
     );
     if (marquee != null) {
@@ -1745,14 +1742,12 @@ class _TimelinePainter extends CustomPainter {
             ),
             Paint()..color = EditorTheme.raised,
           );
+        // Chosen rows read as one lit surface from the name cell to the
+        // time field; nothing is outlined, the selection is a region.
         if (layerSelected(row))
           canvas.drawRect(
-            Rect.fromLTWH(row.bounds.left, y, label - row.bounds.left, h)
-                .deflate(1),
-            Paint()
-              ..color = EditorTheme.accent
-              ..strokeWidth = 2
-              ..style = PaintingStyle.stroke,
+            Rect.fromLTWH(row.bounds.left, y, label - row.bounds.left, h),
+            Paint()..color = Colors.white.withValues(alpha: EditorTheme.lift),
           );
         if (row.property == null) {
           text(
@@ -1825,7 +1820,7 @@ class _TimelinePainter extends CustomPainter {
             row.property!['keyedNow'] == true ? '◆' : '◇',
             Offset(label - 21, y + 3),
             width: EditorMetrics.s17,
-            color: EditorTheme.accent,
+            color: EditorTheme.keyAccent,
           );
         }
         canvas.drawLine(
@@ -1953,7 +1948,7 @@ class _ArrangementOverview extends CustomPainter {
       Offset(now, 0),
       Offset(now, size.height),
       Paint()
-        ..color = EditorTheme.accent
+        ..color = EditorTheme.keyAccent
         ..strokeWidth = 1.5,
     );
     canvas.restore();
