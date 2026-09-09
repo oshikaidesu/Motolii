@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -56,6 +57,17 @@ class BlendPanelState extends State<BlendPanel> {
   String? _wanted;
   Future<void>? _flight;
 
+  /// One tile, one look. The seventeen skeletons are built once; a snapshot
+  /// only moves the looks, and a [ValueNotifier] wakes the tiles whose look
+  /// actually differs — a new selection with the same modes wakes none.
+  final _looks = {
+    for (final mode in modes) mode: ValueNotifier(const _Look()),
+  };
+
+  /// Whether the desk has anything to blend: the one thing outside the tiles
+  /// that a snapshot can change.
+  final _idle = ValueNotifier(true);
+
   EditorSession get c => widget.controller;
 
   List<Map<String, dynamic>> get _targets => blendTargets(c);
@@ -72,14 +84,46 @@ class BlendPanelState extends State<BlendPanel> {
     super.initState();
     _selection = _mark;
     _slice.addListener(_sync);
+    _look();
   }
 
   @override
   void dispose() {
     _hoverTimer?.cancel();
     _slice.removeListener(_sync);
+    for (final look in _looks.values) look.dispose();
+    _idle.dispose();
     if (_previewing != null) c.command('cancelPreview');
     super.dispose();
+  }
+
+  /// Read the document once and hand each tile its own look.
+  void _look() {
+    final targets = _targets;
+    // The samples belong to the layer the hover previews on.
+    final fresh = panelMap(
+      (targets.isEmpty ? c.activeLayer : targets.last)?['blendPreviews'],
+    );
+    if (fresh.isNotEmpty) _samples = fresh;
+    final values = targets.map((l) => '${l['blendMode'] ?? 'Normal'}').toSet();
+    final current = values.length == 1 ? values.single : null;
+    final live = targets.isNotEmpty && !_applying;
+    _idle.value = targets.isEmpty;
+    for (final mode in modes)
+      _looks[mode]!.value = _Look(
+        beds: [
+          for (final rgb in _samples[mode] as List? ?? const [])
+            Color.fromARGB(
+              255,
+              ((rgb[0] as num).clamp(0, 1) * 255).round(),
+              ((rgb[1] as num).clamp(0, 1) * 255).round(),
+              ((rgb[2] as num).clamp(0, 1) * 255).round(),
+            ),
+        ],
+        current: mode == current,
+        hovered: _hover == mode,
+        live: live,
+      );
   }
 
   /// A new selection or a new document drops the preview this desk owns; the
@@ -92,7 +136,7 @@ class BlendPanelState extends State<BlendPanel> {
       _hover = null;
       _want(null);
     }
-    setState(() {});
+    _look();
   }
 
   /// Latest wish wins: hovering across the grid must not queue one round trip
@@ -133,7 +177,8 @@ class BlendPanelState extends State<BlendPanel> {
     if (mode != null &&
         (_applying || _targets.isEmpty || !panelCan(c, 'previewBlend')))
       return;
-    setState(() => _hover = mode);
+    _hover = mode;
+    _look();
     _hoverTimer?.cancel();
     _hoverTimer = Timer(const Duration(milliseconds: 90), () {
       if (mounted && _hover == mode) _want(mode);
@@ -144,7 +189,8 @@ class BlendPanelState extends State<BlendPanel> {
   void _leave() {
     _hoverTimer?.cancel();
     if (!mounted) return;
-    setState(() => _hover = null);
+    _hover = null;
+    _look();
     _want(null);
   }
 
@@ -158,10 +204,9 @@ class BlendPanelState extends State<BlendPanel> {
         .where((l) => '${l['blendMode'] ?? 'Normal'}' != mode)
         .map((l) => l['id'])
         .toList();
-    setState(() {
-      _applying = true;
-      _hover = null;
-    });
+    _applying = true;
+    _hover = null;
+    _look();
     try {
       if (ids.isEmpty) {
         // Already this mode: nothing to record, but the preview must go.
@@ -180,101 +225,126 @@ class BlendPanelState extends State<BlendPanel> {
           });
       }
     } finally {
-      if (mounted) setState(() => _applying = false);
+      if (mounted) {
+        _applying = false;
+        _look();
+      }
     }
   }
 
   @override
-  Widget build(BuildContext context) {
-    final targets = _targets;
-    // The samples belong to the layer the hover previews on.
-    final fresh = panelMap(
-      (targets.isEmpty ? c.activeLayer : targets.last)?['blendPreviews'],
-    );
-    if (fresh.isNotEmpty) _samples = fresh;
-    final values = targets.map((l) => '${l['blendMode'] ?? 'Normal'}').toSet();
-    final current = values.length == 1 ? values.single : null;
-    final live = targets.isNotEmpty && !_applying;
-    return Focus(
-      onKeyEvent: (_, event) {
-        if (event is KeyDownEvent &&
-            event.logicalKey == LogicalKeyboardKey.escape &&
-            _previewing != null) {
-          _leave();
-          return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
-      },
-      onFocusChange: (focused) {
-        if (!focused) _leave();
-      },
-      child: Opacity(
-        opacity: targets.isEmpty ? 0.45 : 1,
-        child: LayoutBuilder(
-          builder: (context, box) {
-            const gap = EditorMetrics.s3;
-            final room = box.maxWidth - EditorMetrics.s6 * 2;
-            final columns = math.max(
-              2,
-              (room + gap) ~/ (EditorMetrics.s70 + gap),
-            );
-            final width = (room - gap * (columns - 1)) / columns;
-            return SingleChildScrollView(
-              padding: const EdgeInsets.all(EditorMetrics.s6),
-              child: Wrap(
-                spacing: gap,
-                runSpacing: gap,
-                children: [
-                  for (final mode in modes)
-                    _tile(
-                      mode,
-                      width: width,
-                      current: mode == current,
-                      live: live,
-                    ),
-                ],
-              ),
-            );
-          },
-        ),
+  Widget build(BuildContext context) => Focus(
+    onKeyEvent: (_, event) {
+      if (event is KeyDownEvent &&
+          event.logicalKey == LogicalKeyboardKey.escape &&
+          _previewing != null) {
+        _leave();
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    },
+    onFocusChange: (focused) {
+      if (!focused) _leave();
+    },
+    child: ValueListenableBuilder<bool>(
+      valueListenable: _idle,
+      builder: (context, idle, grid) => Opacity(opacity: idle ? 0.45 : 1, child: grid),
+      child: LayoutBuilder(
+        builder: (context, box) {
+          const gap = EditorMetrics.s3;
+          final room = box.maxWidth - EditorMetrics.s6 * 2;
+          final columns = math.max(
+            2,
+            (room + gap) ~/ (EditorMetrics.s70 + gap),
+          );
+          final width = (room - gap * (columns - 1)) / columns;
+          return SingleChildScrollView(
+            padding: const EdgeInsets.all(EditorMetrics.s6),
+            child: Wrap(
+              spacing: gap,
+              runSpacing: gap,
+              children: [
+                for (final mode in modes)
+                  _BlendTile(
+                    key: ValueKey('blend:$mode'),
+                    mode: mode,
+                    width: width,
+                    look: _looks[mode]!,
+                    desk: this,
+                  ),
+              ],
+            ),
+          );
+        },
       ),
-    );
-  }
+    ),
+  );
+}
 
-  Widget _tile(
-    String mode, {
-    required double width,
-    required bool current,
-    required bool live,
-  }) {
-    final beds = _samples[mode] as List? ?? const [];
-    final ring = current
-        ? EditorTheme.accent
-        : _hover == mode
-        ? EditorTheme.select
-        : Colors.transparent;
-    return SizedBox(
-      width: width,
-      height: EditorMetrics.s36,
-      child: Semantics(
-        button: true,
-        selected: current,
-        label: mode,
-        child: MouseRegion(
-          onEnter: (_) => _aim(mode),
-          onExit: (_) {
-            if (_hover == mode) _aim(null);
-          },
-          child: Material(
-            color: EditorTheme.panel,
+/// What a snapshot can change about one tile: the beds painted across its
+/// top, whether the layer already wears the mode, whether the pointer is on
+/// it, and whether it can be clicked.
+@immutable
+class _Look {
+  const _Look({
+    this.beds = const [],
+    this.current = false,
+    this.hovered = false,
+    this.live = false,
+  });
+  final List<Color> beds;
+  final bool current, hovered, live;
+  @override
+  bool operator ==(Object other) =>
+      other is _Look &&
+      current == other.current &&
+      hovered == other.hovered &&
+      live == other.live &&
+      listEquals(beds, other.beds);
+  @override
+  int get hashCode =>
+      Object.hash(Object.hashAll(beds), current, hovered, live);
+}
+
+/// One mode. The skeleton stands for the life of the desk; only the parts
+/// under the [ValueListenableBuilder] follow the document.
+class _BlendTile extends StatelessWidget {
+  const _BlendTile({
+    super.key,
+    required this.mode,
+    required this.width,
+    required this.look,
+    required this.desk,
+  });
+  final String mode;
+  final double width;
+  final ValueListenable<_Look> look;
+  final BlendPanelState desk;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: width,
+    height: EditorMetrics.s36,
+    child: MouseRegion(
+      onEnter: (_) => desk._aim(mode),
+      onExit: (_) {
+        if (desk._hover == mode) desk._aim(null);
+      },
+      child: Material(
+        color: EditorTheme.panel,
+        child: ValueListenableBuilder<_Look>(
+          valueListenable: look,
+          builder: (context, look, _) => Semantics(
+            button: true,
+            selected: look.current,
+            label: mode,
             child: InkWell(
-              key: ValueKey('blend:$mode'),
-              onTap: live ? () => _apply(mode) : null,
+              onTap: look.live ? () => desk._apply(mode) : null,
               onFocusChange: (focused) {
                 if (focused)
-                  _aim(mode);
-                else if (_hover == mode)
-                  _aim(null);
+                  desk._aim(mode);
+                else if (desk._hover == mode)
+                  desk._aim(null);
               },
               child: Stack(
                 fit: StackFit.expand,
@@ -285,15 +355,10 @@ class BlendPanelState extends State<BlendPanel> {
                         height: EditorMetrics.s22,
                         child: Row(
                           children: [
-                            for (final rgb in beds)
+                            for (final bed in look.beds)
                               Expanded(
                                 child: ColoredBox(
-                                  color: Color.fromARGB(
-                                    255,
-                                    ((rgb[0] as num).clamp(0, 1) * 255).round(),
-                                    ((rgb[1] as num).clamp(0, 1) * 255).round(),
-                                    ((rgb[2] as num).clamp(0, 1) * 255).round(),
-                                  ),
+                                  color: bed,
                                   child: const SizedBox.expand(),
                                 ),
                               ),
@@ -309,7 +374,7 @@ class BlendPanelState extends State<BlendPanel> {
                             style: TextStyle(
                               fontSize: EditorMetrics.dense,
                               height: 1,
-                              color: current
+                              color: look.current
                                   ? EditorTheme.accent
                                   : EditorTheme.muted,
                             ),
@@ -322,7 +387,11 @@ class BlendPanelState extends State<BlendPanel> {
                     child: DecoratedBox(
                       decoration: BoxDecoration(
                         border: Border.all(
-                          color: ring,
+                          color: look.current
+                              ? EditorTheme.accent
+                              : look.hovered
+                              ? EditorTheme.select
+                              : Colors.transparent,
                           width: EditorMetrics.s2,
                         ),
                       ),
@@ -334,8 +403,8 @@ class BlendPanelState extends State<BlendPanel> {
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
 }
 
 /// The unlocked, non-camera layers a blend applies to.

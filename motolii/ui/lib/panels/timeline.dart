@@ -890,48 +890,52 @@ class _TimelinePanelState extends State<TimelinePanel> {
       widget.controller.command(chosen);
   }
 
+  DocumentSlice get _timeline => widget.controller.slice('timeline', const [
+    'layers',
+    'selectedId',
+    'selectedIds',
+    'selectedKeys',
+    'durationFrames',
+    'fps',
+    'fpsNum',
+    'fpsDen',
+    'markers',
+    'capabilities',
+  ]);
+
+  /// 板の骨格は寸法だけで建つ。目盛りより上の帯は [ValueListenableBuilder] の
+  /// `child` として一度だけ建て、書類が動いても建て直さない。
   @override
-  Widget build(
-    BuildContext context,
-  ) => ValueListenableBuilder<Map<String, dynamic>>(
-    valueListenable: widget.controller.slice('timeline', const [
-      'layers',
-      'selectedId',
-      'selectedIds',
-      'selectedKeys',
-      'durationFrames',
-      'fps',
-      'fpsNum',
-      'fpsDen',
-      'markers',
-      'capabilities',
-    ]),
-    builder: (context, state, _) {
-      final liveIds = widget.controller.layers
-          .map((layer) => (layer['id'] as num).toInt())
-          .toSet();
-      expanded.retainAll(liveIds);
-      allProperties.retainAll(liveIds);
-      collapsedGroups.retainAll(liveIds);
-      layout = _LaneLayout(
-        widget.controller.layers,
-        expanded,
-        allProperties,
-        collapsedGroups,
-        baseNameWidth: baseNameWidth,
-      );
-      tracks = layout.rows;
-      if (activeLane != null && !tracks.any((row) => row.laneId == activeLane))
-        activeLane = null;
-      return Focus(
-        key: const ValueKey('timeline-bounded-layout'),
-        focusNode: focus,
-        onKeyEvent: key,
-        child: ColoredBox(
-          color: EditorTheme.panel,
-          child: LayoutBuilder(
-            builder: (context, bounds) {
-              viewportWidth = bounds.maxWidth;
+  Widget build(BuildContext context) => Focus(
+    key: const ValueKey('timeline-bounded-layout'),
+    focusNode: focus,
+    onKeyEvent: key,
+    child: ColoredBox(
+      color: EditorTheme.panel,
+      child: LayoutBuilder(
+        builder: (context, bounds) {
+          viewportWidth = bounds.maxWidth;
+          return ValueListenableBuilder<Map<String, dynamic>>(
+            valueListenable: _timeline,
+            child: _bar(bounds),
+            builder: (context, state, bar) {
+              final liveIds = widget.controller.layers
+                  .map((layer) => (layer['id'] as num).toInt())
+                  .toSet();
+              expanded.retainAll(liveIds);
+              allProperties.retainAll(liveIds);
+              collapsedGroups.retainAll(liveIds);
+              layout = _LaneLayout(
+                widget.controller.layers,
+                expanded,
+                allProperties,
+                collapsedGroups,
+                baseNameWidth: baseNameWidth,
+              );
+              tracks = layout.rows;
+              if (activeLane != null &&
+                  !tracks.any((row) => row.laneId == activeLane))
+                activeLane = null;
               final visibleFrames =
                   ((bounds.maxWidth - labelWidth) / pixelsPerFrame).round();
               if (widget.controller.visibleFrames.value != visibleFrames)
@@ -945,148 +949,7 @@ class _TimelinePanelState extends State<TimelinePanel> {
                   children: [
                     Column(
                       children: [
-                        SizedBox(
-                          height: EditorMetrics.s22,
-                          child: Row(
-                            children: [
-                              const SizedBox(width: EditorMetrics.s6),
-                              ValueListenableBuilder<bool>(
-                                valueListenable: widget.controller.playing,
-                                builder: (_, playing, __) => EditorButton(
-                                  playing ? 'Ⅱ' : '▶',
-                                  widget.controller.togglePlayback,
-                                  selected: playing,
-                                  tooltip: 'Play / Pause · Space',
-                                ),
-                              ),
-                              EditorButton(
-                                '−',
-                                () => zoom(
-                                  ((pixelsPerFrame / 4 * 100).round() - 1)
-                                          .clamp(3, 1000) *
-                                      .04 /
-                                      pixelsPerFrame,
-                                ),
-                              ),
-                              EditorPercentField(
-                                value: pixelsPerFrame / 4 * 100,
-                                min: 3,
-                                max: 1000,
-                                label: 'Timeline zoom',
-                                onChanged: (v) =>
-                                    zoom(v * .04 / pixelsPerFrame),
-                              ),
-                              EditorButton(
-                                '+',
-                                () => zoom(
-                                  ((pixelsPerFrame / 4 * 100).round() + 1) *
-                                      .04 /
-                                      pixelsPerFrame,
-                                ),
-                              ),
-                              EditorButton('Fit', () {
-                                setState(
-                                  () => pixelsPerFrame = math.max(
-                                    .1,
-                                    (bounds.maxWidth - labelWidth) /
-                                        math.max(1, overviewExtentWithoutFrame),
-                                  ),
-                                );
-                              }),
-                              Expanded(
-                                child: SizedBox(
-                                  height: EditorMetrics.s18,
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: EditorMetrics.s8,
-                                    ),
-                                    child: LayoutBuilder(
-                                      builder: (context, overview) {
-                                        void navigate(double x) {
-                                          if (!horizontal.hasClients) return;
-                                          final target =
-                                              x /
-                                                  math.max(
-                                                    1,
-                                                    overview.maxWidth,
-                                                  ) *
-                                                  overviewExtent *
-                                                  pixelsPerFrame -
-                                              (bounds.maxWidth - labelWidth) /
-                                                  2;
-                                          horizontal.jumpTo(
-                                            target.clamp(
-                                              0,
-                                              horizontal
-                                                  .positions
-                                                  .last
-                                                  .maxScrollExtent,
-                                            ),
-                                          );
-                                        }
-
-                                        return GestureDetector(
-                                          supportedDevices: const {
-                                            PointerDeviceKind.mouse,
-                                            PointerDeviceKind.touch,
-                                            PointerDeviceKind.stylus,
-                                          },
-                                          onTapDown: (e) =>
-                                              navigate(e.localPosition.dx),
-                                          onHorizontalDragUpdate: (e) =>
-                                              navigate(e.localPosition.dx),
-                                          onDoubleTap: () {
-                                            setState(
-                                              () => pixelsPerFrame = math.max(
-                                                .1,
-                                                (bounds.maxWidth - labelWidth) /
-                                                    math.max(
-                                                      1,
-                                                      overviewExtentWithoutFrame,
-                                                    ),
-                                              ),
-                                            );
-                                          },
-                                          child: ValueListenableBuilder<int>(
-                                            valueListenable:
-                                                widget.controller.frame,
-                                            builder: (_, frame, __) =>
-                                                CustomPaint(
-                                                  size: Size(
-                                                    overview.maxWidth,
-                                                    EditorMetrics.s18,
-                                                  ),
-                                                  painter: _ArrangementOverview(
-                                                    layers: widget
-                                                        .controller
-                                                        .layers,
-                                                    duration: duration,
-                                                    extent: overviewExtent,
-                                                    frame: scrubFrame ?? frame,
-                                                    offset: offset,
-                                                    scale: pixelsPerFrame,
-                                                    viewportWidth:
-                                                        bounds.maxWidth -
-                                                        labelWidth,
-                                                  ),
-                                                ),
-                                          ),
-                                        );
-                                      },
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              EditorButton(
-                                'Marker',
-                                has('addMarker')
-                                    ? () =>
-                                          widget.controller.command('addMarker')
-                                    : null,
-                              ),
-                            ],
-                          ),
-                        ),
+                        bar!,
                         ValueListenableBuilder<int>(
                           valueListenable: widget.controller.frame,
                           builder: (_, frame, __) => GestureDetector(
@@ -1157,6 +1020,9 @@ class _TimelinePanelState extends State<TimelinePanel> {
                                         width: bounds.maxWidth,
                                         height: height,
                                         child: CustomPaint(
+                                          key: const ValueKey(
+                                            'timeline-lanes',
+                                          ),
                                           painter: _TimelinePainter(
                                             labelWidth: labelWidth,
                                             rows: tracks,
@@ -1272,10 +1138,133 @@ class _TimelinePanelState extends State<TimelinePanel> {
                 ),
               );
             },
+          );
+        },
+      ),
+    ),
+  );
+
+  /// 帯は寸法だけで建つ。書類を見る二つ — 全体図と Marker — は自分で
+  /// 書類を購読するので、帯そのものは建て直さなくてよい。
+  Widget _bar(BoxConstraints bounds) => SizedBox(
+    height: EditorMetrics.s22,
+    child: Row(
+      children: [
+        const SizedBox(width: EditorMetrics.s6),
+        ValueListenableBuilder<bool>(
+          valueListenable: widget.controller.playing,
+          builder: (_, playing, __) => EditorButton(
+            playing ? 'Ⅱ' : '▶',
+            widget.controller.togglePlayback,
+            selected: playing,
+            tooltip: 'Play / Pause · Space',
           ),
         ),
-      );
-    },
+        EditorButton(
+          '−',
+          () => zoom(
+            ((pixelsPerFrame / 4 * 100).round() - 1).clamp(3, 1000) *
+                .04 /
+                pixelsPerFrame,
+          ),
+        ),
+        EditorPercentField(
+          value: pixelsPerFrame / 4 * 100,
+          min: 3,
+          max: 1000,
+          label: 'Timeline zoom',
+          onChanged: (v) => zoom(v * .04 / pixelsPerFrame),
+        ),
+        EditorButton(
+          '+',
+          () => zoom(
+            ((pixelsPerFrame / 4 * 100).round() + 1) * .04 / pixelsPerFrame,
+          ),
+        ),
+        EditorButton('Fit', () {
+          setState(
+            () => pixelsPerFrame = math.max(
+              .1,
+              (bounds.maxWidth - labelWidth) /
+                  math.max(1, overviewExtentWithoutFrame),
+            ),
+          );
+        }),
+        Expanded(
+          child: SizedBox(
+            height: EditorMetrics.s18,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s8),
+              child: LayoutBuilder(
+                builder: (context, overview) {
+                  void navigate(double x) {
+                    if (!horizontal.hasClients) return;
+                    final target =
+                        x /
+                            math.max(1, overview.maxWidth) *
+                            overviewExtent *
+                            pixelsPerFrame -
+                        (bounds.maxWidth - labelWidth) / 2;
+                    horizontal.jumpTo(
+                      target.clamp(
+                        0,
+                        horizontal.positions.last.maxScrollExtent,
+                      ),
+                    );
+                  }
+
+                  return GestureDetector(
+                    supportedDevices: const {
+                      PointerDeviceKind.mouse,
+                      PointerDeviceKind.touch,
+                      PointerDeviceKind.stylus,
+                    },
+                    onTapDown: (e) => navigate(e.localPosition.dx),
+                    onHorizontalDragUpdate: (e) => navigate(e.localPosition.dx),
+                    onDoubleTap: () {
+                      setState(
+                        () => pixelsPerFrame = math.max(
+                          .1,
+                          (bounds.maxWidth - labelWidth) /
+                              math.max(1, overviewExtentWithoutFrame),
+                        ),
+                      );
+                    },
+                    child: ListenableBuilder(
+                      listenable: Listenable.merge([
+                        widget.controller.frame,
+                        _timeline,
+                      ]),
+                      builder: (context, _) => CustomPaint(
+                        size: Size(overview.maxWidth, EditorMetrics.s18),
+                        painter: _ArrangementOverview(
+                          layers: widget.controller.layers,
+                          duration: duration,
+                          extent: overviewExtent,
+                          frame: scrubFrame ?? widget.controller.frame.value,
+                          offset: offset,
+                          scale: pixelsPerFrame,
+                          viewportWidth: bounds.maxWidth - labelWidth,
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+        ),
+        ListenableBuilder(
+          listenable: _timeline,
+          builder: (context, _) => EditorButton(
+            'Marker',
+            has('addMarker')
+                ? () => widget.controller.command('addMarker')
+                : null,
+          ),
+        ),
+      ],
+    ),
   );
 }
 

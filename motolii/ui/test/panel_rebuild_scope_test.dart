@@ -97,7 +97,10 @@ void main() {
     );
     await tester.pumpAndSettle();
     final watched = [
-      _Rebuilds('Timeline', _inside(TimelinePanel, find.byType(Focus))),
+      _Rebuilds(
+        'Timeline',
+        _inside(TimelinePanel, find.byKey(const ValueKey('timeline-lanes'))),
+      ),
       _Rebuilds('Browser', _inside(BrowserPanel, find.byType(Focus))),
       _Rebuilds('Inspector', _inside(InspectorPanel, find.byType(LayoutBuilder))),
       _Rebuilds(

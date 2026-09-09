@@ -55,6 +55,10 @@ class _DeskPanelState extends State<DeskPanel> {
     };
   }
 
+  /// 出ている道具の名前。外枠はこれだけを見るので、選択が動いても名前が同じ
+  /// 間は枠も中の道具も build されない。
+  late final ValueNotifier<String> _drawer = ValueNotifier(_shown);
+
   @override
   void initState() {
     super.initState();
@@ -62,14 +66,23 @@ class _DeskPanelState extends State<DeskPanel> {
     _automatic = _selectionPanel();
     _slice.addListener(_read);
     c.editingFocus.addListener(_focus);
+    c.deskDrawer.addListener(_settle);
+    c.deskDefault.addListener(_settle);
+    c.panePlaces.addListener(_settle);
   }
 
   @override
   void dispose() {
     _slice.removeListener(_read);
     c.editingFocus.removeListener(_focus);
+    c.deskDrawer.removeListener(_settle);
+    c.deskDefault.removeListener(_settle);
+    c.panePlaces.removeListener(_settle);
+    _drawer.dispose();
     super.dispose();
   }
+
+  void _settle() => _drawer.value = _shown;
 
   void _read() {
     if (_identity == _selection) return;
@@ -78,8 +91,9 @@ class _DeskPanelState extends State<DeskPanel> {
   }
 
   void _follow(String? name) {
+    _automatic = name;
     c.deskDrawer.value = null;
-    setState(() => _automatic = name);
+    _settle();
   }
 
   void _focus() {
@@ -104,72 +118,74 @@ class _DeskPanelState extends State<DeskPanel> {
 
   void _open(String name) {
     if (_inDrawer(name)) {
-      setState(() => c.deskDrawer.value = name);
+      c.deskDrawer.value = name;
     } else {
       c.placePanel(name, 'show');
     }
   }
 
-  Widget _catalog() => ListView(
-    children: [
-      for (final spec in panelCatalog.where(
-        (p) => p.drawer && _inDrawer(p.name),
-      ))
-        InkWell(
-          onTap: () => _open(spec.name),
-          child: SizedBox(
-            height: EditorMetrics.control,
-            child: Row(
-              children: [
-                const SizedBox(width: EditorMetrics.s8),
-                Icon(spec.icon, size: EditorMetrics.s16),
-                const SizedBox(width: EditorMetrics.s8),
-                Expanded(
-                  child: Text(
-                    spec.name,
-                    style: const TextStyle(fontSize: EditorMetrics.font),
+  /// 棚は星と置き場だけを見る。選択が動いても並びは変わらない。
+  Widget _catalog() => ListenableBuilder(
+    listenable: Listenable.merge([c.deskDefault, c.panePlaces]),
+    builder: (context, _) => ListView(
+      children: [
+        for (final spec in panelCatalog.where(
+          (p) => p.drawer && _inDrawer(p.name),
+        ))
+          InkWell(
+            onTap: () => _open(spec.name),
+            child: SizedBox(
+              height: EditorMetrics.control,
+              child: Row(
+                children: [
+                  const SizedBox(width: EditorMetrics.s8),
+                  Icon(spec.icon, size: EditorMetrics.s16),
+                  const SizedBox(width: EditorMetrics.s8),
+                  Expanded(
+                    child: Text(
+                      spec.name,
+                      style: const TextStyle(fontSize: EditorMetrics.font),
+                    ),
                   ),
-                ),
-                IconButton(
-                  tooltip: 'Use ${spec.name} when idle',
-                  iconSize: EditorMetrics.s14,
-                  color: _name(c.deskDefault.value) == spec.name
-                      ? EditorTheme.accent
-                      : EditorTheme.muted,
-                  icon: Icon(
-                    _name(c.deskDefault.value) == spec.name
-                        ? Icons.star
-                        : Icons.star_border,
+                  EditorTooltip(
+                    message: 'Use ${spec.name} when idle',
+                    child: IconButton(
+                      iconSize: EditorMetrics.s14,
+                      color: _name(c.deskDefault.value) == spec.name
+                          ? EditorTheme.accent
+                          : EditorTheme.muted,
+                      icon: Icon(
+                        _name(c.deskDefault.value) == spec.name
+                            ? Icons.star
+                            : Icons.star_border,
+                      ),
+                      onPressed: () => c.deskDefault.value =
+                          _name(c.deskDefault.value) == spec.name
+                          ? 'Tools'
+                          : spec.name,
+                    ),
                   ),
-                  onPressed: () => c.deskDefault.value =
-                      _name(c.deskDefault.value) == spec.name
-                      ? 'Tools'
-                      : spec.name,
-                ),
-              ],
+                ],
+              ),
             ),
           ),
-        ),
-    ],
+      ],
+    ),
   );
   @override
-  Widget build(BuildContext context) => AnimatedBuilder(
-    animation: Listenable.merge([
-      _slice,
-      c.deskDrawer,
-      c.deskDefault,
-      c.panePlaces,
-    ]),
-    builder: (context, _) {
-      final shown = _shown;
+  Widget build(BuildContext context) => ValueListenableBuilder<String>(
+    valueListenable: _drawer,
+    builder: (context, shown, _) {
       final spec = panelSpec(shown);
       final live = spec?.drawer == true && _inDrawer(shown);
       final inlineTools = live && shown == 'Ease';
-      final tools = IconButton(
-        tooltip: 'Desk tools',
-        iconSize: EditorMetrics.s18,
-        onPressed: () => c.deskDrawer.value = 'Tools',
-        icon: const Icon(Icons.all_inbox_outlined),
+      final tools = EditorTooltip(
+        message: 'Desk tools',
+        child: IconButton(
+          iconSize: EditorMetrics.s18,
+          onPressed: () => c.deskDrawer.value = 'Tools',
+          icon: const Icon(Icons.all_inbox_outlined),
+        ),
       );
       return TapRegion(
         onTapInside: (_) => _inside = true,

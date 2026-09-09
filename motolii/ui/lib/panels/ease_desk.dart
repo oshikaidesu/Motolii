@@ -292,16 +292,17 @@ class _EaseDeskState extends State<EaseDesk>
     return previous.lastOrNull ?? segments.firstOrNull;
   }
 
+  /// 机が見せている物すべての指紋。ここが動かないなら、書類やヘッドが動いても
+  /// 描き直す物はない。
   void _read() {
     final segments = _segments;
     final interval = _intervalAt(segments);
-    final source = segments.isEmpty
-        ? ''
-        : jsonEncode([
-            segments.map((s) => s['shape']).toList(),
-            if (interval != null)
-              [interval['layer'], interval['property'], interval['frame']],
-          ]);
+    final source = jsonEncode([
+      segments,
+      if (interval != null)
+        [interval['layer'], interval['property'], interval['frame']],
+      _canApply,
+    ]);
     if (_target != _identity ||
         (_pointer == null &&
             _original == null &&
@@ -324,8 +325,8 @@ class _EaseDeskState extends State<EaseDesk>
                 : EditorSession.map(c.deskWork.value['ease']))
           : EditorSession.map(interval['shape']);
       _free = _shape['overshoots'] == true;
+      _redraw();
     }
-    _redraw();
   }
 
   void _cancel() {
@@ -508,7 +509,7 @@ class _EaseDeskState extends State<EaseDesk>
         : first == null
         ? 'No interval · Workspace'
         : '${first['name']} · ${first['property']} · ${first['frame']}–${first['end']}${segments.length > 1 ? ' · ${segments.length} intervals' : ''}${mixed ? ' · Mixed' : ''}${!_canApply ? ' · Read only' : ''}';
-    final u = first == null
+    double? playhead() => first == null
         ? null
         : (c.frame.value - (first['frame'] as num)) /
               ((first['end'] as num) - (first['frame'] as num));
@@ -622,7 +623,11 @@ class _EaseDeskState extends State<EaseDesk>
                   onPointerCancel: (e) {
                     if (e.pointer == _pointer) _cancel();
                   },
-                  child: _plot(_shape, handles: true, playhead: u),
+                  child: ListenableBuilder(
+                    listenable: c.frame,
+                    builder: (context, _) =>
+                        _plot(_shape, handles: true, playhead: playhead()),
+                  ),
                 );
               },
             ),
@@ -1064,21 +1069,27 @@ class _EaseDeskState extends State<EaseDesk>
                             ),
                           ),
                           const SizedBox(width: EditorMetrics.s4),
-                          Text(
-                            '${c.frame.value} f${u == null
-                                ? ''
-                                : u < 0
-                                ? ' · before'
-                                : u > 1
-                                ? ' · after'
-                                : ''}',
-                            key: const ValueKey('ease-current-frame'),
-                            style: TextStyle(
-                              fontSize: EditorMetrics.dense,
-                              color: u != null && (u < 0 || u > 1)
-                                  ? EditorTheme.muted
-                                  : EditorTheme.accent,
-                            ),
+                          ListenableBuilder(
+                            listenable: c.frame,
+                            builder: (context, _) {
+                              final u = playhead();
+                              return Text(
+                                '${c.frame.value} f${u == null
+                                    ? ''
+                                    : u < 0
+                                    ? ' · before'
+                                    : u > 1
+                                    ? ' · after'
+                                    : ''}',
+                                key: const ValueKey('ease-current-frame'),
+                                style: TextStyle(
+                                  fontSize: EditorMetrics.dense,
+                                  color: u != null && (u < 0 || u > 1)
+                                      ? EditorTheme.muted
+                                      : EditorTheme.accent,
+                                ),
+                              );
+                            },
                           ),
                         ],
                       ),
@@ -1089,20 +1100,23 @@ class _EaseDeskState extends State<EaseDesk>
                     height: EditorMetrics.s12,
                     child: EditorTooltip(
                       message: target,
-                      child: Semantics(
-                        label: first == null
-                            ? (sequence.isNotEmpty
-                                  ? 'Sequence of ${sequence.length} layers'
-                                  : 'No key interval')
-                            : 'Curve runs ${first['frame']} to ${first['end']} f, playhead at ${c.frame.value} f',
-                        child: CustomPaint(
-                          key: const ValueKey('ease-interval-rail'),
-                          painter: EaseIntervalPainter(
-                            segments: segments,
-                            active: railActive,
-                            frame: c.frame.value,
+                      child: ListenableBuilder(
+                        listenable: c.frame,
+                        builder: (context, _) => Semantics(
+                          label: first == null
+                              ? (sequence.isNotEmpty
+                                    ? 'Sequence of ${sequence.length} layers'
+                                    : 'No key interval')
+                              : 'Curve runs ${first['frame']} to ${first['end']} f, playhead at ${c.frame.value} f',
+                          child: CustomPaint(
+                            key: const ValueKey('ease-interval-rail'),
+                            painter: EaseIntervalPainter(
+                              segments: segments,
+                              active: railActive,
+                              frame: c.frame.value,
+                            ),
+                            child: const SizedBox.expand(),
                           ),
-                          child: const SizedBox.expand(),
                         ),
                       ),
                     ),
