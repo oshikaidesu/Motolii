@@ -509,8 +509,13 @@ final class ProbeHost: NSObject {
       perform(result, work: { try self.session.runtime.request(command) }) { $0 }
     case "request":
       guard var command = args["command"] as? String else { fail(result, "request requires JSON command string"); return }
+      var parsed: [String: Any]?
+      if let data = command.data(using: .utf8) { parsed = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] }
+      // A specimen or a measurement answers the window that asked; only a
+      // document change is worth waking the others with.
+      let asked = ["visualSample", "renderInfo", "easeModel"].contains(parsed?["op"] as? String ?? "")
       if args["deferSnapshot"] != nil || args["knownSnapshotId"] != nil || args["knownReferenceId"] != nil {
-        guard let data = command.data(using: .utf8), var query = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { fail(result, "Invalid command JSON"); return }
+        guard var query = parsed else { fail(result, "Invalid command JSON"); return }
         for key in ["deferSnapshot", "knownSnapshotId", "knownReferenceId"] { if let value = args[key] { query[key] = value } }
         guard let data = try? JSONSerialization.data(withJSONObject: query) else { fail(result, "Invalid snapshot context"); return }
         command = String(decoding: data, as: UTF8.self)
@@ -519,7 +524,7 @@ final class ProbeHost: NSObject {
         let status = try self.session.runtime.request(command)
         return status
       }) { status in
-        if status["error"] == nil { self.session.broadcast(status, origin: self) }
+        if !asked, status["error"] == nil { self.session.broadcast(status, origin: self) }
         return status
       }
     case "render":
