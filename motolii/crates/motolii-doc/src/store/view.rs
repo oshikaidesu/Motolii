@@ -570,52 +570,39 @@ impl<'a> StoreView<'a> {
         Ok(value)
     }
 
+    /// 全層の「切り抜きの基」を 1 回で解く。層ごとに問うと層²回になる。
+    pub fn clipping_bases(&self) -> Result<HashMap<LayerId, Option<LayerId>>, StoreError> {
+        let cacheable = self.ignore_transients || self.preview_edits.is_empty();
+        if cacheable {
+            let mut cache = self.record_cache.borrow_mut();
+            cache.sync(&self.revision);
+            if let Some(bases) = &cache.clipping { return Ok(bases.clone()); }
+        }
+        let mut ordered = Vec::new();
+        for id in self.layers() {
+            if let Some(meta) = self.meta(id)? {
+                let attrs = self.attrs(id)?.unwrap_or_default();
+                ordered.push((meta.order, id, attrs.parent, attrs.clip_to_below));
+            }
+        }
+        ordered.sort_by_key(|(order, id, _, _)| (*order, *id));
+        let mut previous = HashMap::new();
+        let mut bases = HashMap::new();
+        for group in ordered.chunk_by(|a, b| a.0 == b.0) {
+            for (_, id, parent, _) in group { bases.insert(*id, previous.get(parent).copied()); }
+            for (_, id, parent, clipped) in group { if !clipped { previous.insert(*parent, *id); } }
+        }
+        if cacheable { self.record_cache.borrow_mut().clipping = Some(bases.clone()); }
+        Ok(bases)
+    }
+
     pub fn clipping_base(&self, layer: LayerId) -> Result<Option<LayerId>, StoreError> {
         if self.ignore_transients || self.preview_edits.is_empty() {
-            {
-                let mut cache = self.record_cache.borrow_mut();
-                cache.sync(&self.revision);
-                if let Some(bases) = &cache.clipping { return Ok(bases.get(&layer).copied().flatten()); }
-            }
-            let mut ordered = Vec::new();
-            for id in self.layers() {
-                if let Some(meta) = self.meta(id)? {
-                    let attrs = self.attrs(id)?.unwrap_or_default();
-                    ordered.push((meta.order, id, attrs.parent, attrs.clip_to_below));
-                }
-            }
-            ordered.sort_by_key(|(order, id, _, _)| (*order, *id));
-            let mut previous = HashMap::new();
-            let mut bases = HashMap::new();
-            for group in ordered.chunk_by(|a, b| a.0 == b.0) {
-                for (_, id, parent, _) in group { bases.insert(*id, previous.get(parent).copied()); }
-                for (_, id, parent, clipped) in group { if !clipped { previous.insert(*parent, *id); } }
-            }
-            let result = bases.get(&layer).copied().flatten();
-            self.record_cache.borrow_mut().clipping = Some(bases);
-            return Ok(result);
+            let mut cache = self.record_cache.borrow_mut();
+            cache.sync(&self.revision);
+            if let Some(bases) = &cache.clipping { return Ok(bases.get(&layer).copied().flatten()); }
         }
-        if !self.has_layer(layer) {
-            return Ok(None);
-        }
-        let Some(meta) = self.meta(layer)? else { return Ok(None) };
-        let parent = self.attrs(layer)?.unwrap_or_default().parent;
-        let mut base: Option<(i16, LayerId)> = None;
-        for sibling in self.layers() {
-            let Some(sibling_meta) = self.meta(sibling)? else { continue };
-            if sibling_meta.order >= meta.order {
-                continue;
-            }
-            let attrs = self.attrs(sibling)?.unwrap_or_default();
-            if attrs.parent != parent || attrs.clip_to_below {
-                continue;
-            }
-            let candidate = (sibling_meta.order, sibling);
-            if base.is_none_or(|current| candidate > current) {
-                base = Some(candidate);
-            }
-        }
-        Ok(base.map(|(_, layer)| layer))
+        Ok(self.clipping_bases()?.get(&layer).copied().flatten())
     }
 
     fn attrs_uncached(&self, layer: LayerId) -> Result<Option<LayerAttrs>, StoreError> {
