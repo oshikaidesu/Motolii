@@ -5,6 +5,33 @@ use crate::doc::store::{
     PropertyId, Value,
 };
 
+#[test]
+#[ignore = "near-contact reflection continuity diagnostic"]
+fn gallery_near_contact_continuity() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let mut doc = Document::load(root.join("docs/reviews/assets/2026-09-09-glass-gallery/light-in-form.rrd")).unwrap();
+    let ball = doc.view().resolved_layers(RationalTime::ZERO).unwrap().into_iter()
+        .filter(|l| matches!(&l.source, LayerSource::File { path, .. } if path.ends_with("sphere.obj")))
+        .last().unwrap().id;
+    let out = std::path::PathBuf::from(std::env::var("MOTOLII_CONTACT_DIR").unwrap());
+    std::fs::create_dir_all(&out).unwrap();
+    let mut engine = Engine::new().unwrap();
+    let mut previous: Option<Vec<u8>> = None;
+    let mut rows = Vec::new();
+    for x in 870..=1170 {
+        set(&mut doc, ball, "position", Value::Vec2([f64::from(x), 479.21]));
+        let pixels = engine.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+        assert!(engine.layer_failures().is_empty());
+        if let Some(before) = &previous {
+            let delta: u64 = before.iter().zip(&pixels).map(|(a,b)| u64::from(a.abs_diff(*b))).sum();
+            rows.push(serde_json::json!({"x":x,"rgba_absolute_difference":delta}));
+        }
+        image::RgbaImage::from_raw(1600,1000,pixels.clone()).unwrap().save(out.join(format!("{x}.png"))).unwrap();
+        previous = Some(pixels);
+    }
+    std::fs::write(out.join("deltas.json"),serde_json::to_vec_pretty(&rows).unwrap()).unwrap();
+}
+
 pub(super) fn set(doc: &mut Document, layer: LayerId, name: &str, value: Value) {
     doc.apply(Intent::SetConstant {
         layer,

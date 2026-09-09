@@ -796,3 +796,5 @@
 - [AAの実測コストと軽量化候補](2026-09-09-aa-cost-and-options.md)
 
 - [軽量AAの実装と採否](2026-09-09-lightweight-aa-execution.md)
+
+- [近接時の反射不連続の再現](2026-09-09-contact-reflection-continuity.md)

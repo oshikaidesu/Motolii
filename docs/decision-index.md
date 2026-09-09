@@ -594,3 +594,4 @@
 | 表面 輪郭 MSAA sample shading | 2026-09-09: Offへの上書きをやめ、主描画と反射を4x MSAAへ。Full tierのmeshはsample補間、Limited/Offはcentroid。作品値を変更せず幾何と鏡面の縁を改善する | 決定 | [根拠・比較・制約](reviews/2026-09-09-surface-antialiasing.md) | 利用者が縁のザラつきを指摘 |
 | AA cost MSAA sample shading transient | 2026-09-09: Light in form.の同条件比較で現行AAはOff比約21〜30%の総時間増。通常MSAAと反射filter/鏡面AA、およびTRANSIENT allocationを次の比較候補とし、全sample陰影を常用の最終形としない | 観察 | [測定と一次資料](reviews/2026-09-09-aa-cost-and-options.md) | 利用者が負荷と軽量化資料を質問 |
 | 軽量AA TRANSIENT footprint filtering MSAA | 2026-09-09: 全画素一致のTRANSIENTを既定で有効化。通常MSAA＋反射filterは約13%の短縮を確認したが、外周とハイライトの画質差から常用採用を見送り、高品質Sampleを維持 | 縮小採用 | [実装・比較・採否](reviews/2026-09-09-lightweight-aa-execution.md) | 利用者「それやろう」 |
+| 近接 連続性 反射 probe交代 | 2026-09-09: 球X1089→1090でドーナツの反射が急変。左右順による撮影元・除外対象の交代と一致。共有反射の動的連続性は未達、AA検証とは別の欠陥 | 観察 | [再現・原因・未修正](reviews/2026-09-09-contact-reflection-continuity.md) | 利用者が近接時の不連続を報告 |
