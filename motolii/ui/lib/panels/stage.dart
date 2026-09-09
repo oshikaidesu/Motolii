@@ -264,13 +264,14 @@ class _StagePanelState extends State<StagePanel> {
   }
 
   /// rerun 3D view: object をダブルクリックで注視、背景をダブルクリックで視点を戻す。
-  DateTime? _lastTapAt;
+  /// 間隔は入力の時刻で測る。描画が詰まった時に取りこぼさない。
+  Duration? _lastTapAt;
   Offset? _lastTapPos;
   bool _doubleTap(PointerDownEvent event) {
-    final now = DateTime.now();
+    final now = event.timeStamp;
     final again =
         _lastTapAt != null &&
-        now.difference(_lastTapAt!) < kDoubleTapTimeout &&
+        now - _lastTapAt! < kDoubleTapTimeout &&
         (_lastTapPos! - event.localPosition).distance < 6;
     _lastTapAt = again ? null : now;
     _lastTapPos = event.localPosition;
