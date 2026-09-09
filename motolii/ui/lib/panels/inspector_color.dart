@@ -21,13 +21,20 @@ class EditorColorRow extends StatelessWidget {
               (v.clamp(0, 1) * 255).round().toRadixString(16).padLeft(2, '0'),
         )
         .join();
+    // The colour itself is the result: a wide swatch leads, its word sits
+    // above in the smallest type, and the hex follows for typing.
     return Row(
       children: [
         SizedBox(
-          width: EditorMetrics.s70,
+          width: EditorMetrics.s48,
           child: Text(
             '${color['label']}',
-            style: const TextStyle(fontSize: EditorMetrics.font),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: EditorMetrics.micro,
+              color: EditorTheme.muted,
+            ),
           ),
         ),
         Tooltip(
@@ -45,8 +52,8 @@ class EditorColorRow extends StatelessWidget {
                     await controller.placePanel('Colors', 'show');
                   },
             child: Container(
-              width: EditorMetrics.s32,
-              height: EditorMetrics.row,
+              width: EditorMetrics.s70,
+              height: EditorMetrics.control,
               decoration: BoxDecoration(
                 color: Color.fromARGB(
                   (rgba[3].clamp(0, 1) * 255).round(),
@@ -59,6 +66,7 @@ class EditorColorRow extends StatelessWidget {
             ),
           ),
         ),
+        const SizedBox(width: EditorMetrics.s6),
         Expanded(
           child: EditorDraftField(
             value: '#$hex',

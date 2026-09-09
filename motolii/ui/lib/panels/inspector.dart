@@ -395,37 +395,44 @@ class _InspectorPanelState extends State<InspectorPanel> {
   double get _half => (_cellWidth - EditorMetrics.s4) / 2;
   double get _beside => _cellWidth - EditorMetrics.s60 - EditorMetrics.s4;
 
-  Widget _glyph(IconData icon, String tip) => Tooltip(
-    message: tip,
-    child: SizedBox(
-      width: EditorMetrics.s18,
-      child: Icon(icon, size: EditorMetrics.s14, color: EditorTheme.muted),
-    ),
-  );
-
-  Widget _word(String s) => SizedBox(
-    width: _wordWidth,
-    child: _wordWidth == 0
+  /// One name per row, never two marks for one meaning: the word while it
+  /// fits, the glyph when the panel is too narrow for words. The name is a
+  /// step quieter than the value it names.
+  Widget _name([IconData? icon, String? label]) => SizedBox(
+    width: EditorMetrics.s18 + _wordWidth,
+    child: label == null
         ? null
+        : _wordWidth == 0
+        ? Tooltip(
+            message: label,
+            child: Icon(
+              icon,
+              size: EditorMetrics.s14,
+              color: EditorTheme.muted,
+            ),
+          )
         : Text(
-            s,
+            label,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: EditorMetrics.font),
+            style: const TextStyle(
+              fontSize: EditorMetrics.dense,
+              color: EditorTheme.muted,
+            ),
           ),
   );
 
   Widget _gap() => const SizedBox(width: EditorMetrics.s4);
 
-  /// One column of the grid every row shares: glyph, word, three wells, and
-  /// a fixed tail for the row's own extra (dial, link). Empty slots keep
-  /// their width so the columns never move.
-  /// Well width for the current panel width: the glyph, word and tail
-  /// columns are fixed, the three well columns share what is left.
+  /// One column of the grid every row shares: the name, three wells, and a
+  /// fixed tail for the row's own extra (dial, link). Empty slots keep their
+  /// width so the columns never move. The name and tail columns are fixed;
+  /// the three well columns share what is left, because the wells are what
+  /// the panel is for.
   double _wellWidth = EditorMetrics.field;
 
-  /// The word column; 0 when the panel is too narrow for three wells beside
-  /// it — the glyph then carries the meaning and the tooltip keeps the word.
+  /// The word part of the name column; 0 when the panel is too narrow for
+  /// three wells beside it — the name falls back to its glyph and tooltip.
   double _wordWidth = EditorMetrics.s48;
   void _fit(double panelWidth) {
     final fixed =
@@ -472,8 +479,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
     return [
       if (center != null)
         _line([
-          _glyph(Icons.center_focus_strong, 'Center'),
-          _word('Center'),
+          _name(Icons.center_focus_strong, 'Center'),
           _slot(_well(layer, center, 0, label: 'X')),
           _gap(),
           _slot(_well(layer, center, 1, label: 'Y')),
@@ -484,8 +490,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
         ]),
       if (zoom != null)
         _line([
-          _glyph(Icons.zoom_in, 'Zoom'),
-          _word('Zoom'),
+          _name(Icons.zoom_in, 'Zoom'),
           _slot(_well(layer, zoom, 0, label: 'Zoom')),
           _gap(),
           _slot(),
@@ -496,8 +501,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
         ]),
       if (roll != null)
         _line([
-          _glyph(Icons.rotate_right, 'Roll'),
-          _word('Roll'),
+          _name(Icons.rotate_right, 'Roll'),
           _slot(_well(layer, roll, 0, label: 'Roll')),
           _gap(),
           _slot(),
@@ -615,8 +619,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
     final others = c.layers.where((v) => v['id'] != layer['id']);
     return [
       _line([
-        _glyph(Icons.layers_outlined, 'Source'),
-        _word('Source'),
+        _name(Icons.layers_outlined, 'Source'),
         Expanded(
           child: EditorChoice<dynamic>(
             value: matte['source'],
@@ -634,8 +637,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
         ),
       ]),
       _line([
-        _glyph(Icons.contrast, 'Mode'),
-        _word('Mode'),
+        _name(Icons.contrast, 'Mode'),
         Expanded(
           child: EditorChoice<dynamic>(
             value: matte['mode'],
@@ -673,8 +675,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
     return [
       if (position != null)
         _line([
-          _glyph(Icons.open_with, 'Position'),
-          _word('Position'),
+          _name(Icons.open_with, 'Position'),
           _slot(_well(layer, position, 0, label: 'X')),
           _gap(),
           _slot(_well(layer, position, 1, label: 'Y')),
@@ -685,8 +686,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
         ]),
       if (scale != null)
         _line([
-          _glyph(Icons.aspect_ratio, 'Scale'),
-          _word('Scale'),
+          _name(Icons.aspect_ratio, 'Scale'),
           _slot(
             _well(
               layer,
@@ -718,8 +718,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
         ]),
       if (rotation != null)
         _line([
-          _glyph(Icons.rotate_right, 'Rotation'),
-          _word('Rotation'),
+          _name(Icons.rotate_right, 'Rotation'),
           _slot(_well(layer, rotation, 0, label: 'Rotation')),
           _gap(),
           _slot(rx == null ? null : _well(layer, rx, 0, label: 'Tilt X')),
@@ -739,8 +738,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
         ]),
       if (opacity != null)
         _line([
-          _glyph(Icons.opacity, 'Opacity'),
-          _word('Opacity'),
+          _name(Icons.opacity, 'Opacity'),
           SizedBox(
             width: _wellWidth * 2 + EditorMetrics.s4,
             height: EditorMetrics.s22,
@@ -759,8 +757,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
           _tail(),
         ]),
       _line([
-        _glyph(Icons.center_focus_weak, 'Anchor'),
-        _word('Anchor'),
+        _name(Icons.center_focus_weak, 'Anchor'),
         EditorAnchorGrid(
           fraction: anchor is List
               ? [(anchor[0] as num).toDouble(), (anchor[1] as num).toDouble()]
@@ -786,8 +783,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
     final ghost = (layer['ghost'] as num?)?.toInt();
     return [
       _line([
-        _glyph(Icons.view_in_ar_outlined, 'Space'),
-        _word('Space'),
+        _name(Icons.view_in_ar_outlined, 'Space'),
         for (final p in ['2D', '2.5D', '3D'])
           Padding(
             padding: const EdgeInsets.only(right: EditorMetrics.s2),
@@ -807,8 +803,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
           ),
       ]),
       _line([
-        _glyph(Icons.account_tree_outlined, 'Parent'),
-        _word('Parent'),
+        _name(Icons.account_tree_outlined, 'Parent'),
         Expanded(
           child: EditorChoice<dynamic>(
             value: layer['parent'] ?? -1,
@@ -828,8 +823,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
         ),
       ]),
       _line([
-        _glyph(Icons.layers_outlined, 'Blend'),
-        _word('Blend'),
+        _name(Icons.layers_outlined, 'Blend'),
         Expanded(
           child: EditorButton(
             '${layer['blendMode'] ?? 'Normal'}',
@@ -839,8 +833,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
         ),
       ]),
       _line([
-        const SizedBox(width: EditorMetrics.s18),
-        _word(''),
+        _name(),
         if (layer['kind'] == 'Image') ...[
           _slot(
             EditorSwitch(
@@ -905,6 +898,80 @@ class _InspectorPanelState extends State<InspectorPanel> {
 
   /// Effects whose advanced fold is open, by effect id.
   final _advancedOpen = <String>{};
+
+  /// Everything an effect can be told to do, in one list: the head keeps a
+  /// single mark instead of a row of equal glyphs.
+  Future<void> _effectMenu(
+    BuildContext context,
+    Map<String, dynamic> layer,
+    Map<String, dynamic> effect,
+    int index,
+    int count,
+  ) async {
+    final box = context.findRenderObject() as RenderBox?;
+    final at = box == null
+        ? Offset.zero
+        : box.localToGlobal(box.size.bottomLeft(Offset.zero));
+    final chosen = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(at.dx, at.dy, at.dx, at.dy),
+      items: [
+        EditorMenuItem<String>(
+          value: 'earlier',
+          enabled: panelCan(c, 'moveEffect') && index > 0,
+          child: const Text('Apply earlier'),
+        ),
+        EditorMenuItem<String>(
+          value: 'later',
+          enabled: panelCan(c, 'moveEffect') && index < count - 1,
+          child: const Text('Apply later'),
+        ),
+        EditorMenuItem<String>(
+          value: 'roll',
+          enabled: _canEdit(layer),
+          child: const Text('Throw every number within its reach'),
+        ),
+        EditorMenuItem<String>(
+          value: 'rest',
+          enabled: _canEdit(layer),
+          child: const Text('Back to where the numbers rest'),
+        ),
+        if (effect['placement'] == true)
+          EditorMenuItem<String>(
+            value: 'expand',
+            enabled: panelCan(c, 'expandEffect'),
+            child: const Text('Expand copies into layers'),
+          ),
+        EditorMenuItem<String>(
+          value: 'remove',
+          enabled: panelCan(c, 'removeEffect'),
+          child: const Text('Remove effect'),
+        ),
+      ],
+    );
+    switch (chosen) {
+      case 'earlier' || 'later':
+        await c.command('moveEffect', {
+          'layer': layer['id'],
+          'id': effect['id'],
+          'to': chosen == 'earlier' ? index - 1 : index + 1,
+        });
+      case 'roll':
+        await _roll(layer, effect);
+      case 'rest':
+        await _rest(layer, effect);
+      case 'expand':
+        await c.command('expandEffect', {
+          'layer': layer['id'],
+          'id': effect['id'],
+        });
+      case 'remove':
+        await c.command('removeEffect', {
+          'layer': layer['id'],
+          'id': effect['id'],
+        });
+    }
+  }
 
   Widget _effect(
     Map<String, dynamic> layer,
@@ -984,11 +1051,12 @@ class _InspectorPanelState extends State<InspectorPanel> {
     final open = _advancedOpen.contains(key);
     return EditorCard(
       title: '${effect['name']}',
-      glyph: Icons.auto_fix_high_outlined,
       dim: effect['enabled'] == false,
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
+          // Only the state a glance needs stays on the head; the seven
+          // same-sized glyphs that used to sit here now live behind one.
           _headGlyph(
             effect['enabled'] == false
                 ? Icons.visibility_off_outlined
@@ -1004,58 +1072,12 @@ class _InspectorPanelState extends State<InspectorPanel> {
                   })
                 : null,
           ),
-          _headGlyph(
-            Icons.arrow_upward,
-            'Apply earlier',
-            panelCan(c, 'moveEffect') && index > 0
-                ? () => c.command('moveEffect', {
-                    'layer': layer['id'],
-                    'id': effect['id'],
-                    'to': index - 1,
-                  })
-                : null,
-          ),
-          _headGlyph(
-            Icons.arrow_downward,
-            'Apply later',
-            panelCan(c, 'moveEffect') && index < count - 1
-                ? () => c.command('moveEffect', {
-                    'layer': layer['id'],
-                    'id': effect['id'],
-                    'to': index + 1,
-                  })
-                : null,
-          ),
-          _headGlyph(
-            Icons.casino_outlined,
-            'Throw every number within its reach',
-            _canEdit(layer) ? () => _roll(layer, effect) : null,
-          ),
-          _headGlyph(
-            Icons.restart_alt,
-            'Back to where the numbers rest',
-            _canEdit(layer) ? () => _rest(layer, effect) : null,
-          ),
-          if (effect['placement'] == true)
-            _headGlyph(
-              Icons.unfold_more,
-              'Expand copies into layers',
-              panelCan(c, 'expandEffect')
-                  ? () => c.command('expandEffect', {
-                      'layer': layer['id'],
-                      'id': effect['id'],
-                    })
-                  : null,
+          Builder(
+            builder: (context) => _headGlyph(
+              Icons.more_horiz,
+              'Effect actions',
+              () => _effectMenu(context, layer, effect, index, count),
             ),
-          _headGlyph(
-            Icons.close,
-            'Remove effect',
-            panelCan(c, 'removeEffect')
-                ? () => c.command('removeEffect', {
-                    'layer': layer['id'],
-                    'id': effect['id'],
-                  })
-                : null,
           ),
         ],
       ),
@@ -1135,7 +1157,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        _cellLabel(label, Icons.open_with, hero, EditorTheme.spatial),
+        _cellLabel(label, hero),
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
@@ -1205,38 +1227,19 @@ class _InspectorPanelState extends State<InspectorPanel> {
     }
   }
 
-  Widget _cellLabel(
-    String label, [
-    IconData? glyph,
-    bool hero = false,
-    Color? tint,
-  ]) => Padding(
+  /// The word over a cell's control: the smallest type in the panel, so the
+  /// value under it is what the eye lands on. A hero's word is ink, the rest
+  /// stay muted; the family's hue rides the value, not the word.
+  Widget _cellLabel(String label, [bool hero = false]) => Padding(
     padding: const EdgeInsets.only(bottom: EditorMetrics.s2),
-    child: Row(
-      children: [
-        SizedBox(
-          width: EditorMetrics.s14,
-          child: glyph == null
-              ? null
-              : Icon(
-                  glyph,
-                  size: EditorMetrics.s12,
-                  color: tint ?? EditorTheme.muted,
-                ),
-        ),
-        const SizedBox(width: EditorMetrics.s2),
-        Expanded(
-          child: Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: EditorMetrics.dense,
-              color: hero ? EditorTheme.ink : EditorTheme.muted,
-            ),
-          ),
-        ),
-      ],
+    child: Text(
+      label,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(
+        fontSize: EditorMetrics.micro,
+        color: hero ? EditorTheme.ink : EditorTheme.muted,
+      ),
     ),
   );
 
@@ -1391,7 +1394,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            _cellLabel(label, _glyphOf(row), hero, _tintOf(row)),
+            _cellLabel(label, hero),
             body,
           ],
         ),
@@ -1439,7 +1442,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
-                fontSize: EditorMetrics.font,
+                fontSize: EditorMetrics.title,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -1469,7 +1472,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
             child: Text(
               'Select a layer',
               style: TextStyle(
-                fontSize: EditorMetrics.font,
+                fontSize: EditorMetrics.title,
                 color: EditorTheme.muted,
               ),
             ),
@@ -1507,31 +1510,26 @@ class _InspectorPanelState extends State<InspectorPanel> {
                       if (layer['kind'] == 'Camera')
                         EditorCard(
                           title: 'Camera',
-                          glyph: Icons.videocam_outlined,
                           children: _camera(layer),
                         )
                       else
                         EditorCard(
                           title: 'Transform',
-                          glyph: Icons.open_with,
                           children: _transform(layer),
                         ),
                       if (layer['kind'] != 'Camera')
                         EditorCard(
                           title: 'World',
-                          glyph: Icons.public,
                           children: _world(layer),
                         ),
                       if (!_multiple && text.isNotEmpty)
                         EditorCard(
                           title: 'Text',
-                          glyph: Icons.text_fields,
                           children: _text(layer, text),
                         ),
                       if (!_multiple && panelRows(layer['colors']).isNotEmpty)
                         EditorCard(
                           title: 'Color',
-                          glyph: Icons.palette_outlined,
                           children: _colors(layer),
                         ),
                       if (!_multiple &&
@@ -1539,13 +1537,11 @@ class _InspectorPanelState extends State<InspectorPanel> {
                           layer['clipToBelow'] != true)
                         EditorCard(
                           title: 'Matte',
-                          glyph: Icons.contrast,
                           children: _matte(layer, matte),
                         ),
                       if (rest.isNotEmpty)
                         EditorCard(
                           title: 'Properties',
-                          glyph: Icons.tune,
                           children: [
                             _cells([
                               for (final r in rest) _Cell(_control(layer, r)),

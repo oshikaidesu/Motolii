@@ -159,10 +159,10 @@ void main() {
     // Transform rotation, the `angle` word, and `spin` by its analysed subtype.
     expect(find.byType(EditorDial), findsNWidgets(3));
     expect(find.byType(EditorPad), findsNWidgets(2));
-    // Character glyphs come from the declared names: seed gets its die
-    // (label glyph, roll button, and the card die), radius a ruler, angle a dial.
-    expect(find.byIcon(Icons.casino_outlined), findsNWidgets(3));
-    expect(find.byIcon(Icons.straighten), findsOneWidget);
+    // A control names itself once, in words. The only die on the sheet is the
+    // seed's own roll button; no glyph repeats a label or a menu entry.
+    expect(find.byIcon(Icons.casino_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.straighten), findsNothing);
     // Transform rotation, the `angle` word, and `spin` by its analysed subtype.
     expect(find.byType(EditorDial), findsNWidgets(3));
     expect(find.byType(EditorAnchorGrid), findsOneWidget);
@@ -185,16 +185,22 @@ void main() {
 
     // The dice throws every bounded number as one edit; the reset puts every
     // number back where it rests, both through the preview-then-commit route.
-    await tester.tap(find.byIcon(Icons.casino_outlined).last);
-    await tester.pumpAndSettle();
+    Future<void> effectAction(String label) async {
+      await tester.ensureVisible(find.byTooltip('Effect actions'));
+      await tester.tap(find.byTooltip('Effect actions'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(label));
+      await tester.pumpAndSettle();
+    }
+
+    await effectAction('Throw every number within its reach');
     expect(
       commands
           .where((m) => '${m['command']}'.contains('"op":"commitPreview"'))
           .length,
       1,
     );
-    await tester.tap(find.byIcon(Icons.restart_alt));
-    await tester.pumpAndSettle();
+    await effectAction('Back to where the numbers rest');
     expect(
       commands.any(
         (m) =>

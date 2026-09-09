@@ -154,8 +154,19 @@ void main() {
         home: Scaffold(body: InspectorPanel(controller: c)),
       ),
     );
-    expect(find.byTooltip('Expand copies into layers'), findsOneWidget);
-    expect(find.byTooltip('Remove effect'), findsOneWidget);
+    // The effect head carries one mark; everything it can be told to do is
+    // behind it, so the card's numbers are the only things at full strength.
+    Future<void> openActions() async {
+      await tester.ensureVisible(find.byTooltip('Effect actions'));
+      await tester.tap(find.byTooltip('Effect actions'));
+      await tester.pumpAndSettle();
+    }
+
+    await openActions();
+    expect(find.text('Expand copies into layers'), findsOneWidget);
+    expect(find.text('Remove effect'), findsOneWidget);
+    await tester.tapAt(Offset.zero);
+    await tester.pumpAndSettle();
     final animate = find.byTooltip(
       'Animate: values you touch become keys at this frame',
     );
@@ -175,9 +186,9 @@ void main() {
     expect(find.text('300.00'), findsOneWidget);
     expect(find.text('100.00'), findsOneWidget);
     expect(find.text('Random'), findsOneWidget);
-    await tester.ensureVisible(find.byTooltip('Expand copies into layers'));
-    await tester.tap(find.byTooltip('Expand copies into layers'));
-    await tester.pump();
+    await openActions();
+    await tester.tap(find.text('Expand copies into layers'));
+    await tester.pumpAndSettle();
     final sent = commands.map(jsonDecode).whereType<Map>().toList();
     expect(
       sent.any((m) => m['op'] == 'animate' && m['enabled'] == true),
@@ -195,7 +206,8 @@ void main() {
 
     show(layer('motolii.blur', false));
     await tester.pump();
-    expect(find.byTooltip('Expand copies into layers'), findsNothing);
-    expect(find.byTooltip('Remove effect'), findsOneWidget);
+    await openActions();
+    expect(find.text('Expand copies into layers'), findsNothing);
+    expect(find.text('Remove effect'), findsOneWidget);
   });
 }

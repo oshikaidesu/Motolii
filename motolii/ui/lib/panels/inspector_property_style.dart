@@ -84,24 +84,6 @@ const _characterWords = <_Character, List<String>>{
   ],
 };
 
-const _characterGlyphs = <_Character, IconData>{
-  _Character.amount: Icons.tune,
-  _Character.size: Icons.straighten,
-  _Character.ratio: Icons.aspect_ratio,
-  _Character.angle: Icons.rotate_right,
-  _Character.place: Icons.open_with,
-  _Character.seed: Icons.casino_outlined,
-  _Character.time: Icons.timelapse,
-  _Character.count: Icons.grid_on,
-  _Character.color: Icons.palette_outlined,
-  _Character.level: Icons.linear_scale,
-  _Character.soft: Icons.blur_on,
-  _Character.opacity: Icons.opacity,
-  _Character.direction: Icons.alt_route,
-  _Character.choice: Icons.category_outlined,
-  _Character.delay: Icons.history_toggle_off,
-  _Character.detail: Icons.grain,
-};
 
 /// The declared or analysed subtype (Blender vocabulary) wins over words.
 _Character? _declaredCharacter(Map<String, dynamic> row) =>
@@ -132,9 +114,6 @@ _Character _characterOf(Map<String, dynamic> row) {
   if (row['choices'] is List) return _Character.choice;
   return _Character.none;
 }
-
-IconData? _glyphOf(Map<String, dynamic> row) =>
-    _characterGlyphs[_characterOf(row)];
 
 /// One hue per family, so a glance sorts the numbers before a word is read.
 Color? _tintOf(Map<String, dynamic> row) => switch (_characterOf(row)) {

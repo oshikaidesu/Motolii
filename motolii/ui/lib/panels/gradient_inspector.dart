@@ -167,30 +167,19 @@ class _GradientInspectorState extends State<GradientInspector>
                                 }
                                 if (mounted) setState(() => selected = 0);
                               },
+                        // The colours are the button: no word, the picture of
+                        // the fill itself, the chosen one ringed.
                         child: Container(
-                          padding: const EdgeInsets.all(EditorMetrics.s2),
+                          height: EditorMetrics.tall,
                           decoration: BoxDecoration(
-                            border: Border.all(
-                              color: kind == type
-                                  ? EditorTheme.accent
-                                  : EditorTheme.border,
-                            ),
+                            border: kind == type
+                                ? Border.all(
+                                    color: EditorTheme.accent,
+                                    width: EditorMetrics.s2,
+                                  )
+                                : Border.all(color: EditorTheme.border),
                           ),
-                          child: Column(
-                            children: [
-                              SizedBox(
-                                height: EditorMetrics.s32,
-                                child: SizedBox.expand(child: sample(type)),
-                              ),
-                              const SizedBox(height: EditorMetrics.s3),
-                              Text(
-                                '${type[0].toUpperCase()}${type.substring(1)}',
-                                style: const TextStyle(
-                                  fontSize: EditorMetrics.dense,
-                                ),
-                              ),
-                            ],
-                          ),
+                          child: sample(type),
                         ),
                       ),
                     ),
@@ -200,7 +189,7 @@ class _GradientInspectorState extends State<GradientInspector>
           ),
           const SizedBox(height: EditorMetrics.s8),
           if (kind != 'solid') ...[
-            SizedBox(height: EditorMetrics.s32, child: sample(kind)),
+            SizedBox(height: EditorMetrics.s36, child: sample(kind)),
             SizedBox(
               height: EditorMetrics.s22,
               child: LayoutBuilder(
