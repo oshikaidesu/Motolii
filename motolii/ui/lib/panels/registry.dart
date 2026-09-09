@@ -15,6 +15,7 @@ import 'notes_desk.dart';
 import 'ease_desk.dart';
 import 'depth_desk.dart';
 import 'adjust_panels.dart';
+import 'blend_panel.dart';
 import 'web_panel.dart';
 
 Widget buildPanel(String name, EditorSession c, Key? key) {
@@ -58,11 +59,7 @@ Widget _buildPanel(String name, EditorSession c, Key? key) {
     'Notes' => NotesPanel(key: key, controller: c),
     'Ease' => EaseDesk(key: key, controller: c),
     'Depth' => DepthDesk(key: key, controller: c),
-    'Blend' => AnimatedBuilder(
-      key: key,
-      animation: c.document,
-      builder: (_, __) => BlendPanel(controller: c),
-    ),
+    'Blend' => BlendPanel(key: key, controller: c),
     'History' => AnimatedBuilder(
       key: key,
       animation: c.document,

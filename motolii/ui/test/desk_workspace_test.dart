@@ -42,13 +42,13 @@ void main() {
       await tester.tap(find.text('Save preset'));
       await tester.pumpAndSettle();
       expect((c.deskWork.value['easePresets'] as List).length, 1);
+      // Blend keeps no draft of its own: with nothing selected its tiles are
+      // inert, and visiting it must not disturb the drafts of other tools.
       c.deskDrawer.value = 'Blend';
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Multiply'));
+      await tester.tap(find.byKey(const ValueKey('blend:Multiply')));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Save preset'));
-      await tester.pumpAndSettle();
-      expect(c.deskWork.value['blends'], ['Multiply']);
+      expect(c.deskWork.value.containsKey('blends'), isFalse);
       c.deskDrawer.value = 'Ease';
       await tester.pumpAndSettle();
       expect((c.deskWork.value['easePresets'] as List).length, 1);

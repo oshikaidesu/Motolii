@@ -103,8 +103,17 @@ fn set_sat(c: [f32; 3], s: f32) -> [f32; 3] {
     out
 }
 
-/// 札に並べる下地。暗・明・青・暖の 4 つで、mode の性格が一目で分かる。
-pub(crate) const BEDS: [[f32; 3]; 4] = [[0.18, 0.18, 0.18], [0.85, 0.85, 0.85], [0.25, 0.45, 0.85], [0.9, 0.55, 0.3]];
+/// 札に並べる下地。黒→白の 4 段で式の傾き(潰れる・飛ぶ)が帯として読め、
+/// 青と橙で色相の扱い(Hue/Saturation/Color/Luminosity)が分かれる。
+/// 選んだ層の色をこの上に置いた結果が Blend desk の見本になる。
+pub(crate) const BEDS: [[f32; 3]; 6] = [
+    [0.04, 0.04, 0.05],
+    [0.30, 0.30, 0.31],
+    [0.62, 0.62, 0.62],
+    [0.94, 0.94, 0.93],
+    [0.20, 0.42, 0.85],
+    [0.92, 0.55, 0.22],
+];
 
 pub(crate) fn css(c: [f32; 3]) -> String {
     let b = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
@@ -125,5 +134,16 @@ mod tests {
         let lum_kept = blend(BlendMode::Color, [1.0, 0.0, 0.0], [0.5, 0.5, 0.5]);
         assert!((lum(lum_kept) - 0.5).abs() < 1e-4, "{lum_kept:?}");
         assert_eq!(css([1.0, 0.5, 0.0]), "#ff8000");
+    }
+
+    #[test]
+    fn the_beds_read_as_a_ramp_plus_two_hues() {
+        let luminance: Vec<f32> = BEDS[..4].iter().map(|b| lum(*b)).collect();
+        assert!(luminance.windows(2).all(|w| w[0] < w[1]), "{luminance:?}");
+        assert!(BEDS[4..].iter().all(|b| sat(*b) > 0.3), "the last two beds must carry hue");
+        // 見本は下地ごとに違う色になる。同じなら帯は読めない。
+        let strip: Vec<[f32; 3]> = BEDS.iter().map(|bed| blend(BlendMode::Multiply, [0.9, 0.5, 0.2], *bed)).collect();
+        assert_eq!(strip.len(), 6);
+        assert!(strip.windows(2).all(|w| w[0] != w[1]), "{strip:?}");
     }
 }
