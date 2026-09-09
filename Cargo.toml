@@ -29,6 +29,7 @@ re_renderer = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-2026081
 re_log = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "5e32b3f281803c6f9b4379fc6a6de978e50fba14", features = ["setup"] }
 macaw = "0.30"
 glam = "0.30"
+transform-gizmo = "0.11"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp", "tiff", "bmp", "hdr", "exr"] }
 moxcms = "0.8"
 base64 = "0.22"

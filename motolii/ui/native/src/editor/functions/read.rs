@@ -87,6 +87,10 @@ pub(crate) fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: Ratio
         Some(Value::F64(v)) => v,
         _ => 0.0,
     };
+    let scale_z = match value_of(property::SCALE_Z) {
+        Some(Value::F64(v)) => v,
+        _ => 1.0,
+    };
 
     let sel_attrs = view.attrs(layer).ok().flatten().unwrap_or_default();
     let key_count: usize = [property::POSITION, property::OPACITY]
@@ -316,14 +320,14 @@ pub(crate) fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: Ratio
         },
         PropRow {
             label: "Scale".into(),
-            cells: [f(scale_x), f(scale_y), f(1.0)],
-            dims: [false, false, true],
+            cells: [f(scale_x), f(scale_y), f(scale_z)],
+            dims: [false, false, false],
             keyed: keyed(property::SCALE),
             property: Some(property::SCALE.to_owned()),
             vec2: true,
             value: Value::Vec2([scale_x, scale_y]),
             range: None,
-            axis: [None, None, None],
+            axis: [None, None, Some((property::SCALE_Z.to_owned(), Value::F64(scale_z)))],
         },
         PropRow {
             label: "Rotation".into(),

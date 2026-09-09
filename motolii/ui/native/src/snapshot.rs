@@ -97,6 +97,15 @@ impl EditorRuntime{
         let frame:Vec<_>=[glam::Vec3::ZERO,glam::vec3(w,0.0,0.0),glam::vec3(w,h,0.0),glam::vec3(0.0,h,0.0)].into_iter().map(&screen).collect();
         Ok(json!({"front":self.user_camera==Default::default(),"orbit":self.user_camera.orbit_degrees,"target":screen(self.user_camera.target(comp)),"frame":if frame.iter().all(Option::is_some){json!(frame)}else{Json::Null}}))
     }
+    /// 3D 層の 3 軸ギズモ。頂点は comp 座標 —— Stage は掴む所も描く所も同じ写像で扱う。
+    /// 3D 層を選んでいない時は Null。2D・2.5D の平面ケージはここを通らない。
+    fn spatial_gizmo(&self)->Result<Json,String>{
+        let view=self.doc.view();let time=self.time()?;
+        let Some(comp)=view.composition().map_err(e)? else{return Ok(Json::Null)};
+        let Ok(targets)=editor::gizmo3d::spatial_targets(&view,&self.selected_ids,time) else{return Ok(Json::Null)};
+        let Some(data)=editor::gizmo3d::draw_data(comp.spec(),self.view_camera()?,&targets) else{return Ok(Json::Null)};
+        Ok(json!({"vertices":data.vertices,"colors":data.colors,"indices":data.indices}))
+    }
     fn camera_gizmos(&self)->Result<Json,String>{
         if !self.user_stage { return Ok(json!([])); }
         let view=self.doc.view();let time=self.time()?;let comp=view.composition().map_err(e)?.ok_or("No composition")?.spec();
@@ -247,6 +256,7 @@ impl EditorRuntime{
         let color_target=self.color_target.as_ref().and_then(|slot|editor::color::read_color(&self.doc,slot).map(|rgba|json!({"layer":slot.layer().0,"slot":slot,"label":"Color","rgba":rgba})));
         let selected_keys:Vec<_>=self.selected_keys.iter().map(|k|json!({"layer":k.layer.0,"property":k.property.as_ref().map(|p|p.name()),"frame":(k.at_sec*comp.fps.as_f64()).round()as i64})).collect();
         let mut status=json!({"stageView":if self.user_stage{"User"}else{"Camera"},"observer":self.observer_status()?,"cameraGizmos":self.camera_gizmos()?,"width":comp.width,"height":comp.height,"fps":comp.fps.as_f64(),"fpsNum":comp.fps.num(),"fpsDen":comp.fps.den(),"durationFrames":comp.duration_frames,"background":comp.background,"frame":self.frame,"playing":self.clock.playing(),"playbackHealth":playback_health,"waveforms":waveforms,"undo":undo,"redo":redo,"path":self.path,"dirty":authored_signature(&self.doc)?!=self.saved_signature,"layers":layers,"selectedId":self.selected.map(|id|id.0),"selectedIds":self.selected_ids.iter().map(|id|id.0).collect::<Vec<_>>(),"selectedKeys":selected_keys,"selectedBounds":self.selected.and_then(|id|self.bounds(id)),"x":point[0],"y":point[1],"assets":assets?,"catalog":catalog.iter().map(|e|json!({"id":e.plugin_id,"name":e.label})).collect::<Vec<_>>(),"palette":palette,"markers":markers?,"colorTarget":color_target,"capabilities":crate::port::CAPABILITIES,"easeKinds":if self.clock.playing(){Json::Null}else{json!(editor::ease_kinds::KINDS.iter().copied().map(interp).collect::<Vec<_>>())},"documentRevision":format!("{:?}",self.doc.revision()),"deviceId":self.device_id.to_string(),"renderCount":self.render_count,"renderMs":self.render_ms,"interopCopies":0,"readbacks":0,"error":self.error,"preview":self.preview.is_some(),"export":self.exporter.status()});
+        status["spatialGizmo"]=self.spatial_gizmo()?;
         status["notebook"]=serde_json::to_value(view.notebook().map_err(e)?).map_err(e)?;
         status["depthLayout"]=self.depth_layout(&resolved)?;
         status["animate"]=json!(self.animate);

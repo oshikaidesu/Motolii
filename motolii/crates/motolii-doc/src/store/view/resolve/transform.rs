@@ -62,6 +62,7 @@ impl<'a> StoreView<'a> {
             scalar(property::POSITION_Z)?,
             scalar(property::ROTATION_X)?,
             scalar(property::ROTATION_Y)?,
+            self.split_position_component(layer, property::SCALE_Z, t)?.unwrap_or(1.0),
         ))
     }
 

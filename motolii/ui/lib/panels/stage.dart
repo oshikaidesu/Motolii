@@ -84,6 +84,86 @@ class _StagePanelState extends State<StagePanel> {
     }
   }
 
+  /// 3D layer gizmo: the native side hands over the very triangles it hit-tests
+  /// against, in comp coordinates. Grabbing and drawing therefore cannot drift.
+  /// 2D and 2.5D layers never reach here; their cage lives in [_handles].
+  Map<String, dynamic> get _spatial => EditorSession.map(_state['spatialGizmo']);
+  List<Offset> get _spatialVertices {
+    final raw = _spatial['vertices'];
+    if (raw is! List) return const [];
+    return [
+      for (final v in raw)
+        if (v is List && v.length >= 2)
+          Offset(_num(v[0], double.nan), _num(v[1], double.nan))
+        else
+          const Offset(double.nan, double.nan),
+    ];
+  }
+
+  List<int> get _spatialIndices {
+    final raw = _spatial['indices'];
+    if (raw is! List) return const [];
+    return [for (final i in raw) (i as num).toInt()];
+  }
+
+  List<Color> get _spatialColors {
+    final raw = _spatial['colors'];
+    if (raw is! List) return const [];
+    double channel(dynamic v) =>
+        math.pow(_num(v).clamp(0.0, 1.0), 1 / 2.2).toDouble();
+    int byte(dynamic v) => (channel(v) * 255).round().clamp(0, 255);
+    return [
+      for (final c in raw)
+        if (c is List && c.length >= 4)
+          Color.fromARGB(
+            (_num(c[3], 1).clamp(0.0, 1.0) * 255).round(),
+            byte(c[0]),
+            byte(c[1]),
+            byte(c[2]),
+          )
+        else
+          const Color(0x00000000),
+    ];
+  }
+
+  /// Only a 3D layer carries the three-axis gizmo. 2D and 2.5D layers keep the
+  /// planar cage and are never reached from here.
+  bool get _spatialActive {
+    final layer = _active;
+    if (layer == null || layer['locked'] == true) return false;
+    return ['3D', 'ThreeD'].contains('${layer['projection']}');
+  }
+
+  /// What you see is what you grab: the press counts as a gizmo grab only when
+  /// it lands on a drawn triangle. The native side then picks the axis.
+  bool _spatialHit(Offset screen) {
+    if (!_spatialActive) return false;
+    final vertices = _spatialVertices;
+    final indices = _spatialIndices;
+    if (vertices.isEmpty || indices.length < 3) return false;
+    final p = _toComp(screen);
+    final slack = 6 / _scale;
+    for (var i = 0; i + 2 < indices.length; i += 3) {
+      final a = vertices[indices[i]],
+          b = vertices[indices[i + 1]],
+          v = vertices[indices[i + 2]];
+      if (!a.dx.isFinite || !b.dx.isFinite || !v.dx.isFinite) continue;
+      if (_inTriangle(p, a, b, v)) return true;
+      if (_segmentDistance(p, a, b) < slack ||
+          _segmentDistance(p, b, v) < slack ||
+          _segmentDistance(p, v, a) < slack)
+        return true;
+    }
+    return false;
+  }
+
+  static bool _inTriangle(Offset p, Offset a, Offset b, Offset c) {
+    double side(Offset u, Offset v) =>
+        (v.dx - u.dx) * (p.dy - u.dy) - (v.dy - u.dy) * (p.dx - u.dx);
+    final s = [side(a, b), side(b, c), side(c, a)];
+    return s.every((v) => v >= 0) || s.every((v) => v <= 0);
+  }
+
   List<Map<String, dynamic>> get _cameras =>
       _userStage ? EditorSession.maps(_state['cameraGizmos']) : [];
   Map<String, dynamic> get _observer => EditorSession.map(_state['observer']);
@@ -331,7 +411,9 @@ class _StagePanelState extends State<StagePanel> {
     _dragging = true;
     _ids = List.of(ids);
     _handle = handle;
-    _mode = handle == 'body'
+    _mode = handle == 'spatial'
+        ? 'spatial'
+        : handle == 'body'
         ? 'move'
         : handle == 'rotation'
         ? 'rotate'
@@ -427,7 +509,7 @@ class _StagePanelState extends State<StagePanel> {
     _lastScreen = event.localPosition;
     _startComp = _toComp(event.localPosition);
     _additive = _add;
-    if (_userStage && event.buttons == kSecondaryMouseButton) {
+    if (_userStage && event.buttons == kSecondaryMouseButton && !_dragging) {
       _orbiting = true;
       final angles = _observer['orbit'] as List?;
       _orbitAngles = angles == null
@@ -485,6 +567,10 @@ class _StagePanelState extends State<StagePanel> {
           _begin(_startComp!, c.selectedIds, entry.key);
           return;
         }
+      }
+      if (_spatialHit(event.localPosition)) {
+        _begin(_startComp!, c.selectedIds, 'spatial');
+        return;
       }
     }
     final layer = _hit(_startComp!);
@@ -794,6 +880,18 @@ class _StagePanelState extends State<StagePanel> {
                                   outlines: _outlinesCopy(outlines),
                                   volumes: volumes,
                                   handles: gizmos ? _handles() : const {},
+                                  spatial: gizmos && _spatialActive
+                                      ? [
+                                          for (final p in _spatialVertices)
+                                            _toScreen(p),
+                                        ]
+                                      : const [],
+                                  spatialColors: gizmos && _spatialActive
+                                      ? _spatialColors
+                                      : const [],
+                                  spatialIndices: gizmos && _spatialActive
+                                      ? _spatialIndices
+                                      : const [],
                                   marquee: _marquee == null
                                       ? null
                                       : Rect.fromPoints(
@@ -878,6 +976,9 @@ class _StageOverlay extends CustomPainter {
     required this.handles,
     required this.frame,
     required this.viewport,
+    this.spatial = const [],
+    this.spatialColors = const [],
+    this.spatialIndices = const [],
     this.marquee,
   });
   final List<List<Offset>> outlines, volumes, cameras;
@@ -889,7 +990,43 @@ class _StageOverlay extends CustomPainter {
   /// The pivot a hovered anchor cell would set, drawn as a cross.
   final Offset? anchorPreview;
   final Rect viewport;
+
+  /// The 3D gizmo exactly as the native side hit-tests it, already on screen.
+  final List<Offset> spatial;
+  final List<Color> spatialColors;
+  final List<int> spatialIndices;
   final Rect? marquee;
+  /// Runs of triangles that share a colour become one filled path, so the
+  /// mesh costs a handful of draws instead of one per triangle.
+  void _spatial(Canvas canvas) {
+    if (spatial.isEmpty || spatialIndices.length < 3) return;
+    var path = Path();
+    Color? colour;
+    void flush() {
+      final fill = colour;
+      if (fill != null) canvas.drawPath(path, Paint()..color = fill);
+      path = Path();
+    }
+
+    for (var i = 0; i + 2 < spatialIndices.length; i += 3) {
+      final at = [
+        for (var k = 0; k < 3; k++) spatialIndices[i + k],
+      ];
+      if (at.any((v) => v < 0 || v >= spatial.length)) continue;
+      final next = at[0] < spatialColors.length
+          ? spatialColors[at[0]]
+          : const Color(0xFFFFFFFF);
+      if (colour != next) {
+        flush();
+        colour = next;
+      }
+      final points = at.map((v) => spatial[v]).toList();
+      if (points.any((p) => !p.dx.isFinite || !p.dy.isFinite)) continue;
+      path.addPolygon(points, true);
+    }
+    flush();
+  }
+
   void _cross(Canvas canvas, Offset at, double half, Paint paint) {
     canvas.drawLine(at - Offset(half, 0), at + Offset(half, 0), paint);
     canvas.drawLine(at - Offset(0, half), at + Offset(0, half), paint);
@@ -990,6 +1127,7 @@ class _StageOverlay extends CustomPainter {
         }
       }
     }
+    _spatial(canvas);
     for (final entry in handles.entries) {
       if (entry.key == 'rotation') {
         canvas.drawCircle(entry.value, 4, Paint()..color = EditorTheme.app);
@@ -1025,7 +1163,21 @@ class _StageOverlay extends CustomPainter {
       old.marquee != marquee ||
       old.outlines.toString() != outlines.toString() ||
       old.volumes.toString() != volumes.toString() ||
-      old.handles.toString() != handles.toString();
+      old.handles.toString() != handles.toString() ||
+      _spatialChanged(old);
+
+  /// The gizmo mesh can hold thousands of points; sample it instead of
+  /// stringifying the whole thing on every frame.
+  bool _spatialChanged(_StageOverlay old) {
+    if (old.spatial.length != spatial.length ||
+        old.spatialIndices.length != spatialIndices.length ||
+        old.spatialColors.length != spatialColors.length)
+      return true;
+    for (var i = 0; i < spatial.length; i += 8) {
+      if (old.spatial[i] != spatial[i]) return true;
+    }
+    return spatial.isNotEmpty && old.spatial.last != spatial.last;
+  }
 }
 
 double _cross(Offset o, Offset a, Offset b) =>

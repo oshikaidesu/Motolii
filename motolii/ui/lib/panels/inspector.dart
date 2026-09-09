@@ -188,7 +188,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
         max = (row['max'] as num?)?.toDouble();
     final speed = min != null && max != null
         ? (max - min) / 300
-        : id == 'scale' || id == 'opacity'
+        : id.startsWith('scale') || id == 'opacity'
         ? .005
         : id.startsWith('rotation')
         ? .5
@@ -638,6 +638,16 @@ class _InspectorPanelState extends State<InspectorPanel> {
               _key(layer, base),
             ]),
           );
+        if (label == 'Scale')
+          return KeyedSubtree(
+            key: _rows.putIfAbsent('scale', () => GlobalKey()),
+            child: _line(label, [
+              _cell(layer, base, 0),
+              _cell(layer, base, 1),
+              _cell(layer, _property(layer, 'scale.z'), 0),
+              _key(layer, base),
+            ]),
+          );
         if (label == 'Rotation')
           return KeyedSubtree(
             key: _rows.putIfAbsent('rotation', () => GlobalKey()),
@@ -659,7 +669,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
             ]
           : [
               transform('Position', ['position', 'position.z']),
-              transform('Scale', ['scale']),
+              transform('Scale', ['scale', 'scale.z']),
               transform('Rotation', ['rotation', 'rotation.x', 'rotation.y']),
               transform('Opacity', ['opacity']),
               transform('Anchor', ['anchor']),

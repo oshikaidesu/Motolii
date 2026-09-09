@@ -272,12 +272,13 @@ impl LayerPlacement {
         z: f32,
         rotation_x_degrees: f32,
         rotation_y_degrees: f32,
+        scale_z: f32,
     ) -> glam::Affine3A {
         use glam::{Affine3A, Mat3, Quat, Vec3};
         let linear = Mat3::from_cols(
             xy.matrix2.x_axis.extend(0.0),
             xy.matrix2.y_axis.extend(0.0),
-            Vec3::Z,
+            Vec3::Z * scale_z,
         );
         let anchored = Affine3A::from_mat3_translation(
             linear,
