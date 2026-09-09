@@ -49,7 +49,7 @@ void main() {
         home: Scaffold(body: BrowserPanel(controller: c)),
       ),
     );
-    expect(find.text('logo.png'), findsNothing);
+    expect(find.text('logo'), findsNothing);
 
     await c.importPaths(['/tmp/logo.png', '/tmp/photo.heic']);
     await tester.pump();
@@ -57,6 +57,6 @@ void main() {
     expect(commands.single['paths'], ['/tmp/logo.png']);
     expect(c.error.value, 'Not supported: photo.heic');
     expect(c.importedAssets.value, ['a1']);
-    expect(find.text('logo.png'), findsOneWidget);
+    expect(find.text('logo'), findsOneWidget);
   });
 }
