@@ -79,7 +79,9 @@ type_complexity = "warn"
 
 
 # 16GB機: debug情報を削り、依存(stylo/vello/rerun)だけ最適化して窓を実用速度にする。
+# 自前の家も opt-level 1 —— debug のまま窓が重いのは失敗。行番号は残す。
 [profile.dev]
+opt-level = 1
 debug = "line-tables-only"
 
 [profile.dev.package."*"]
