@@ -794,3 +794,5 @@
 - [表面の縁のアンチエイリアス](2026-09-09-surface-antialiasing.md)
 
 - [AAの実測コストと軽量化候補](2026-09-09-aa-cost-and-options.md)
+
+- [軽量AAの実装と採否](2026-09-09-lightweight-aa-execution.md)

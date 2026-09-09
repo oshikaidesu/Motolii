@@ -593,3 +593,4 @@
 | GPU instance buffer 主ビュー 反射 共有 | 2026-09-09: 不透明Normal・背景不要・clipなしのmesh群を反射撮影時に一度GPUへ上げ、元input indexで部分集合を選ぶ。静止cache hitと条件外は既存経路。1000個の動的比較で転送約67%減、全画素一致 | 縮小採用 | [実装と比較](reviews/2026-09-09-gpu-instance-sharing.md) | 利用者「gpuベースで」 |
 | 表面 輪郭 MSAA sample shading | 2026-09-09: Offへの上書きをやめ、主描画と反射を4x MSAAへ。Full tierのmeshはsample補間、Limited/Offはcentroid。作品値を変更せず幾何と鏡面の縁を改善する | 決定 | [根拠・比較・制約](reviews/2026-09-09-surface-antialiasing.md) | 利用者が縁のザラつきを指摘 |
 | AA cost MSAA sample shading transient | 2026-09-09: Light in form.の同条件比較で現行AAはOff比約21〜30%の総時間増。通常MSAAと反射filter/鏡面AA、およびTRANSIENT allocationを次の比較候補とし、全sample陰影を常用の最終形としない | 観察 | [測定と一次資料](reviews/2026-09-09-aa-cost-and-options.md) | 利用者が負荷と軽量化資料を質問 |
+| 軽量AA TRANSIENT footprint filtering MSAA | 2026-09-09: 全画素一致のTRANSIENTを既定で有効化。通常MSAA＋反射filterは約13%の短縮を確認したが、外周とハイライトの画質差から常用採用を見送り、高品質Sampleを維持 | 縮小採用 | [実装・比較・採否](reviews/2026-09-09-lightweight-aa-execution.md) | 利用者「それやろう」 |

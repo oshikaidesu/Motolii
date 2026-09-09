@@ -767,3 +767,5 @@ mod presentable_matches_export {
 
 #[cfg(test)]
 mod reflection_tests;
+#[cfg(test)]
+mod antialiasing_tests;

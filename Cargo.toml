@@ -25,8 +25,8 @@ smallvec = "1"
 wgpu_context = "0.9"
 wgpu = "29"
 peniko = "0.6"
-re_renderer = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "6592bd3c96e3b12fdd57046b1aed41e11dea7563", default-features = false, features = ["import-gltf", "import-obj", "import-stl"] }
-re_log = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "6592bd3c96e3b12fdd57046b1aed41e11dea7563", features = ["setup"] }
+re_renderer = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "145ed61a3916dc556bd4d1900ceb20e9b0f977aa", default-features = false, features = ["import-gltf", "import-obj", "import-stl"] }
+re_log = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "145ed61a3916dc556bd4d1900ceb20e9b0f977aa", features = ["setup"] }
 macaw = "0.30"
 glam = "0.30"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp", "tiff", "bmp", "hdr", "exr"] }
@@ -34,24 +34,24 @@ moxcms = "0.8"
 base64 = "0.22"
 ffmpeg-sidecar = "2.5"
 rfd = "0.17"
-re_video = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "6592bd3c96e3b12fdd57046b1aed41e11dea7563" }
+re_video = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "145ed61a3916dc556bd4d1900ceb20e9b0f977aa" }
 naga = { version = "29.0", default-features = false, features = ["glsl-in", "wgsl-out"] }
 pollster = "0.4"
-re_importer = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "6592bd3c96e3b12fdd57046b1aed41e11dea7563", default-features = false }
-re_sdk_types = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "6592bd3c96e3b12fdd57046b1aed41e11dea7563", default-features = false }
-re_types_core = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "6592bd3c96e3b12fdd57046b1aed41e11dea7563" }
+re_importer = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "145ed61a3916dc556bd4d1900ceb20e9b0f977aa", default-features = false }
+re_sdk_types = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "145ed61a3916dc556bd4d1900ceb20e9b0f977aa", default-features = false }
+re_types_core = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "145ed61a3916dc556bd4d1900ceb20e9b0f977aa" }
 serde = { version = "1", features = ["derive"] }
 arrow = { version = "58.3", default-features = false }
 sha2 = "0.10"
 proptest = "1"
-re_byte_size = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "6592bd3c96e3b12fdd57046b1aed41e11dea7563" }
-re_chunk = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "6592bd3c96e3b12fdd57046b1aed41e11dea7563" }
-re_chunk_store = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "6592bd3c96e3b12fdd57046b1aed41e11dea7563" }
-re_build_info = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "6592bd3c96e3b12fdd57046b1aed41e11dea7563" }
-re_entity_db = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "6592bd3c96e3b12fdd57046b1aed41e11dea7563" }
-re_log_encoding = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "6592bd3c96e3b12fdd57046b1aed41e11dea7563", features = ["encoder", "decoder"] }
-re_log_types = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "6592bd3c96e3b12fdd57046b1aed41e11dea7563" }
-re_query = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "6592bd3c96e3b12fdd57046b1aed41e11dea7563" }
+re_byte_size = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "145ed61a3916dc556bd4d1900ceb20e9b0f977aa" }
+re_chunk = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "145ed61a3916dc556bd4d1900ceb20e9b0f977aa" }
+re_chunk_store = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "145ed61a3916dc556bd4d1900ceb20e9b0f977aa" }
+re_build_info = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "145ed61a3916dc556bd4d1900ceb20e9b0f977aa" }
+re_entity_db = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "145ed61a3916dc556bd4d1900ceb20e9b0f977aa" }
+re_log_encoding = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "145ed61a3916dc556bd4d1900ceb20e9b0f977aa", features = ["encoder", "decoder"] }
+re_log_types = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "145ed61a3916dc556bd4d1900ceb20e9b0f977aa" }
+re_query = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "145ed61a3916dc556bd4d1900ceb20e9b0f977aa" }
 tiny-skia = { version = "0.11", default-features = false, features = ["std", "simd"] }
 cosmic-text = "0.19"
 symphonia = { version = "0.6", default-features = false, features = ["aac", "aiff", "alac", "flac", "isomp4", "mp1", "mp2", "mp3", "ogg", "pcm", "vorbis", "wav"] }
@@ -63,7 +63,7 @@ serde_json = "1"
 thiserror = "2"
 quick_cache = "0.7.0"
 tempfile = "3"
-re_build_tools = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "6592bd3c96e3b12fdd57046b1aed41e11dea7563" }
+re_build_tools = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "145ed61a3916dc556bd4d1900ceb20e9b0f977aa" }
 
 [workspace.lints.rust]
 unreachable_pub = "warn"

@@ -1,0 +1,28 @@
+{
+  "fork": "145ed61a3916dc556bd4d1900ceb20e9b0f977aa",
+  "adapter": "Apple M4",
+  "unit": "ms CPU preparation + submit + GPU completion wait + readback",
+  "resolution": [
+    1600,
+    1000
+  ],
+  "measured_frames_per_mode_scenario": 60,
+  "default": "Sample + MSAA4x + transient",
+  "filtered_default_adoption": false,
+  "transient_pixel_equality": true,
+  "median_ms": {
+    "static": {
+      "persistent_high": 13.2985,
+      "transient_high": 13.402999999999999,
+      "pixel": 11.589500000000001,
+      "filtered": 11.6695
+    },
+    "moving": {
+      "persistent_high": 19.293,
+      "transient_high": 19.2715,
+      "pixel": 15.9645,
+      "filtered": 16.729
+    }
+  },
+  "high_image_sha256": "3ba1bb78eb187e9785ed322308d11b97f3a1c72da5bf12965b35fa1583f7973b"
+}
