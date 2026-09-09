@@ -403,10 +403,14 @@ class _BrowserPanelState extends State<BrowserPanel> {
         'colorTarget',
         'importExtensions',
         'capabilities',
-        'selectedId',
-        'selectedIds',
       ],
-      derived: () => _colorTarget(widget.controller),
+      // The shelf reads the selection twice only: the colour it would edit,
+      // and whether there is anything to apply to. Naming those instead of
+      // the selection keeps the shelves still while layers are picked.
+      derived: () => [
+        _colorTarget(widget.controller),
+        widget.controller.selectedIds.isEmpty,
+      ],
     ),
     builder: (context, state, _) {
       final all = items(state);
