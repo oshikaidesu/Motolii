@@ -339,6 +339,10 @@ impl Compositor {
             .iter()
             .max_by(compare)
             .expect("nonempty candidates");
+        #[cfg(test)]
+        let (first, last) = if self.reflection_probe_experiment == 1 {
+            (candidates.first().unwrap(), candidates.last().unwrap())
+        } else { (first, last) };
         let (receiver, receiver_min, receiver_max) = *first;
         let first_origin = (first.1 + first.2) * 0.5;
         let last_origin = (last.1 + last.2) * 0.5;
@@ -372,6 +376,12 @@ impl Compositor {
                 hi[axis] = center + 0.5;
             }
         }
+        #[cfg(test)]
+        let (receivers, origins) = if self.reflection_probe_experiment == 2 {
+            let center = (lo + hi) * 0.5;
+            let offset = glam::Vec3::X * (hi.x - lo.x) * 0.25;
+            (vec![usize::MAX; 2], vec![center - offset, center + offset])
+        } else { (receivers, origins) };
         let face_size = (comp.width.min(comp.height) / 2)
             .next_power_of_two()
             .clamp(64, 512);

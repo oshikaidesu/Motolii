@@ -351,6 +351,8 @@ pub struct Compositor {
     pub(crate) backdrop_resource: Option<sequential::BackdropResource>,
     pub(crate) reflection_cache_enabled: bool,
     pub(crate) gpu_instance_sharing_enabled: bool,
+    #[cfg(test)]
+    pub(crate) reflection_probe_experiment: u8,
     pub(crate) reflection_entry: Option<reflection_cache::ReflectionEntry>,
     pub(crate) reflection_resources: Option<surface_scene::ReflectionResources>,
     pub(crate) next_readback: u64,

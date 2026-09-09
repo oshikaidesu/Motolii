@@ -1,0 +1,32 @@
+{
+  "baseline_root": "d309e3ba",
+  "resolution": [
+    1600,
+    1000
+  ],
+  "reverse_pixel_equality": true,
+  "direct_seek_pixel_equality": true,
+  "modes": {
+    "baseline": {
+      "crossing_delta": 5064979.0,
+      "neighbor_delta_median": 868840.0,
+      "crossing_ratio": 5.829587726163621,
+      "total_ms_median": 27.563000000000002,
+      "samples": 108
+    },
+    "stable_receivers": {
+      "crossing_delta": 781825.0,
+      "neighbor_delta_median": 774408.0,
+      "crossing_ratio": 1.0095776386607576,
+      "total_ms_median": 26.825000000000003,
+      "samples": 108
+    },
+    "scene_anchors": {
+      "crossing_delta": 830824.0,
+      "neighbor_delta_median": 824696.0,
+      "crossing_ratio": 1.0074306168576057,
+      "total_ms_median": 26.1575,
+      "samples": 108
+    }
+  }
+}
