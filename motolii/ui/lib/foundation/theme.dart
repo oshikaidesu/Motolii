@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'metrics.dart';
@@ -18,7 +19,8 @@ abstract final class EditorTheme {
       menuEdge = Color(0xffbbbbbb),
       select = Color(0xffaedce8),
       selectInk = Color(0xff172126),
-      disabledInk = Color(0xff888888);
+      disabledInk = Color(0xff888888),
+      error = Color(0xffcf6679);
   // Character families: what a number is for, told by hue (the OP-1 rule:
   // one colour per family, on the glyph, the track and the handle alike).
   static const spatial = Color(0xff93a5f5),
@@ -49,7 +51,7 @@ abstract final class EditorTheme {
     '2d' || 'images' => const Color(0xff93a5f5),
     _ => const Color(0xffc18bd3),
   };
-  static ThemeData get data => ThemeData.dark(useMaterial3: false).copyWith(
+  static ThemeData get data => ThemeData.dark(useMaterial3: true).copyWith(
     scaffoldBackgroundColor: app,
     canvasColor: panel,
     dividerColor: line,
@@ -115,15 +117,58 @@ abstract final class EditorTheme {
         ),
       ),
     ),
+    // The icon is the button: no minimum square, no padding, no stadium ink.
+    // Every IconButton therefore measures exactly its own `iconSize`.
+    iconButtonTheme: IconButtonThemeData(
+      style: ButtonStyle(
+        padding: const WidgetStatePropertyAll(EdgeInsets.zero),
+        minimumSize: const WidgetStatePropertyAll(Size.zero),
+        maximumSize: const WidgetStatePropertyAll(Size.infinite),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        visualDensity: VisualDensity.standard,
+        shape: const WidgetStatePropertyAll(RoundedRectangleBorder()),
+        backgroundColor: const WidgetStatePropertyAll(Colors.transparent),
+        overlayColor: WidgetStateProperty.resolveWith(
+          (s) =>
+              s.contains(WidgetState.hovered) || s.contains(WidgetState.pressed)
+              ? hover
+              : Colors.transparent,
+        ),
+        iconColor: WidgetStateProperty.resolveWith(
+          (s) => s.contains(WidgetState.disabled) ? disabledInk : ink,
+        ),
+      ),
+    ),
     sliderTheme: SliderThemeData(
       trackHeight: EditorMetrics.s2,
+      // M3's own track draws a gap and a stop indicator; the flat rectangle is
+      // the one this editor has always shown.
+      trackShape: const RoundedRectSliderTrackShape(),
       thumbShape: const RoundSliderThumbShape(
         enabledThumbRadius: EditorMetrics.s5,
       ),
       overlayShape: SliderComponentShape.noOverlay,
+      padding: EdgeInsets.zero,
       activeTrackColor: muted,
       inactiveTrackColor: line,
       thumbColor: ink,
+    ),
+    // M3 forces a padded 40dp tap target on these two regardless of the
+    // app-wide `materialTapTargetSize`, so they say it again here.
+    checkboxTheme: CheckboxThemeData(
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      visualDensity: VisualDensity.compact,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(1)),
+    ),
+    switchTheme: const SwitchThemeData(
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      trackOutlineColor: WidgetStatePropertyAll(Colors.transparent),
+      thumbIcon: WidgetStatePropertyAll(null),
+    ),
+    dividerTheme: const DividerThemeData(
+      color: line,
+      thickness: 0,
+      space: EditorMetrics.s16,
     ),
     dialogTheme: const DialogThemeData(
       backgroundColor: panel,
@@ -142,12 +187,17 @@ abstract final class EditorTheme {
       surface: panel,
     ),
     textTheme: const TextTheme(
+      bodyLarge: TextStyle(fontSize: EditorMetrics.font, color: ink),
       bodyMedium: TextStyle(fontSize: EditorMetrics.font, color: ink),
       bodySmall: TextStyle(fontSize: EditorMetrics.dense, color: muted),
       titleMedium: TextStyle(fontSize: EditorMetrics.font, color: ink),
       labelLarge: TextStyle(fontSize: EditorMetrics.font, color: ink),
     ),
     visualDensity: VisualDensity.compact,
+    // M3's 2021 geometry puts a 1.5 line height on body text, which grows
+    // every field and label. The 2014 geometry is the one these sizes were
+    // tuned against; only the shapes below move to M3.
+    typography: Typography.material2014(platform: defaultTargetPlatform),
     materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
     inputDecorationTheme: const InputDecorationTheme(
       isDense: true,
@@ -165,6 +215,15 @@ abstract final class EditorTheme {
       disabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.zero,
         borderSide: BorderSide(color: line),
+      ),
+      // errorText is used by EditorField; M3 would round these corners.
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.zero,
+        borderSide: BorderSide(color: error),
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.zero,
+        borderSide: BorderSide(color: error),
       ),
     ),
     textButtonTheme: TextButtonThemeData(

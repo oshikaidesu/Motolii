@@ -67,38 +67,37 @@ class PanelSettings extends StatelessWidget {
                   'window',
                   'hidden',
                 ])
-                  Tooltip(
-                    message: switch (place) {
-                      'drawer' => 'Desk',
-                      'tab' => 'Tab',
-                      'window' => 'Window',
-                      _ => 'Hidden',
-                    },
-                    child: IconButton(
-                      key: ValueKey('placement:${spec.name}:$place'),
-                      constraints: const BoxConstraints.tightFor(
-                        width: EditorMetrics.s32,
-                        height: EditorMetrics.tall,
+                  Padding(
+                    padding: const EdgeInsets.only(left: EditorMetrics.s14),
+                    child: Tooltip(
+                      message: switch (place) {
+                        'drawer' => 'Desk',
+                        'tab' => 'Tab',
+                        'window' => 'Window',
+                        _ => 'Hidden',
+                      },
+                      child: IconButton(
+                        key: ValueKey('placement:${spec.name}:$place'),
+                        iconSize: EditorMetrics.s17,
+                        isSelected:
+                            (controller.panePlaces.value[spec.name] ??
+                                (spec.drawer ? 'drawer' : 'hidden')) ==
+                            place,
+                        color:
+                            (controller.panePlaces.value[spec.name] ??
+                                    (spec.drawer ? 'drawer' : 'hidden')) ==
+                                place
+                            ? EditorTheme.accent
+                            : EditorTheme.muted,
+                        onPressed: () =>
+                            controller.placePanel(spec.name, place),
+                        icon: Icon(switch (place) {
+                          'drawer' => Icons.all_inbox_outlined,
+                          'tab' => Icons.tab,
+                          'window' => Icons.open_in_new,
+                          _ => Icons.visibility_off_outlined,
+                        }),
                       ),
-                      padding: EdgeInsets.zero,
-                      iconSize: EditorMetrics.s17,
-                      isSelected:
-                          (controller.panePlaces.value[spec.name] ??
-                              (spec.drawer ? 'drawer' : 'hidden')) ==
-                          place,
-                      color:
-                          (controller.panePlaces.value[spec.name] ??
-                                  (spec.drawer ? 'drawer' : 'hidden')) ==
-                              place
-                          ? EditorTheme.accent
-                          : EditorTheme.muted,
-                      onPressed: () => controller.placePanel(spec.name, place),
-                      icon: Icon(switch (place) {
-                        'drawer' => Icons.all_inbox_outlined,
-                        'tab' => Icons.tab,
-                        'window' => Icons.open_in_new,
-                        _ => Icons.visibility_off_outlined,
-                      }),
                     ),
                   ),
               ],

@@ -132,11 +132,6 @@ class _DeskPanelState extends State<DeskPanel> {
                 IconButton(
                   tooltip: 'Use ${spec.name} when idle',
                   iconSize: EditorMetrics.s14,
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints.tightFor(
-                    width: EditorMetrics.control,
-                    height: EditorMetrics.control,
-                  ),
                   color: _name(c.deskDefault.value) == spec.name
                       ? EditorTheme.accent
                       : EditorTheme.muted,

@@ -288,24 +288,15 @@ class _NotesPanelState extends State<NotesPanel> {
             SizedBox(
               height: EditorMetrics.s32,
               child: Row(
+                spacing: EditorMetrics.s14,
                 children: [
                   IconButton(
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints.tightFor(
-                      width: EditorMetrics.tall,
-                      height: EditorMetrics.tall,
-                    ),
                     tooltip: 'Paste',
                     iconSize: EditorMetrics.s16,
                     onPressed: _paste,
                     icon: const Icon(Icons.content_paste),
                   ),
                   IconButton(
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints.tightFor(
-                      width: EditorMetrics.tall,
-                      height: EditorMetrics.tall,
-                    ),
                     tooltip: 'Insert image',
                     iconSize: EditorMetrics.s16,
                     onPressed: () async {
@@ -321,22 +312,12 @@ class _NotesPanelState extends State<NotesPanel> {
                     icon: const Icon(Icons.image_outlined),
                   ),
                   IconButton(
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints.tightFor(
-                      width: EditorMetrics.tall,
-                      height: EditorMetrics.tall,
-                    ),
                     tooltip: 'Link selection',
                     iconSize: EditorMetrics.s16,
                     onPressed: _reference,
                     icon: const Icon(Icons.link),
                   ),
                   IconButton(
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints.tightFor(
-                      width: EditorMetrics.tall,
-                      height: EditorMetrics.tall,
-                    ),
                     tooltip: 'Reset view',
                     iconSize: EditorMetrics.s16,
                     onPressed: () =>
@@ -345,11 +326,6 @@ class _NotesPanelState extends State<NotesPanel> {
                   ),
                   if (page != null)
                     IconButton(
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints.tightFor(
-                        width: EditorMetrics.tall,
-                        height: EditorMetrics.tall,
-                      ),
                       tooltip: 'Delete page',
                       iconSize: EditorMetrics.s16,
                       onPressed: () async {
@@ -610,11 +586,6 @@ class _NoteCardState extends State<_NoteCard> {
                         ),
                         IconButton(
                           tooltip: 'Delete note',
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints.tightFor(
-                            width: EditorMetrics.row,
-                            height: EditorMetrics.row,
-                          ),
                           iconSize: EditorMetrics.s12,
                           onPressed: () async {
                             await _flush();
