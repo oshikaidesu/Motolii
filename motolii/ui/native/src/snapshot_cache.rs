@@ -45,7 +45,9 @@ impl EditorRuntime {
     pub(crate) fn layer_keys(&self, view: &StoreView<'_>, at: RationalTime, resolved: &[ResolvedLayer], clipping: &HashMap<LayerId, Option<LayerId>>, live: bool) -> Result<HashMap<LayerId, u64>, String> {
         let e = |error: &dyn std::fmt::Display| error.to_string();
         let comp = view.composition().map_err(|x| e(&x))?;
-        let global = digest((self.doc.identity(), live, format!("{comp:?}")));
+        // 効果の台帳は plugin の読み直しで差し替わる。行の label も choices もそこから来る。
+        let catalog = std::sync::Arc::as_ptr(&crate::render::engine::known_effects()) as *const u8 as usize;
+        let global = digest((self.doc.identity(), live, format!("{comp:?}"), catalog));
         let ids = view.layers();
         let mut own = HashMap::new();
         let mut children: HashMap<LayerId, Vec<LayerId>> = HashMap::new();
