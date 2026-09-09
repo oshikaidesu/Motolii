@@ -147,6 +147,11 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    expect(calls, isEmpty, reason: 'the shelf waits for the scroll to settle');
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 200));
+    }
+    await tester.pumpAndSettle();
     expect(calls, isNotEmpty);
     expect(calls.length, lessThan(10));
     expect(calls.every((r) => r['op'] == 'visualSample'), isTrue);

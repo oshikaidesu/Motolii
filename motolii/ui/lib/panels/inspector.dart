@@ -1464,7 +1464,19 @@ class _InspectorPanelState extends State<InspectorPanel> {
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
-    animation: Listenable.merge([c.document, c.frame, c.deskWork]),
+    animation: Listenable.merge([
+      c.slice('inspector', const [
+        'layers',
+        'selectedId',
+        'selectedIds',
+        'animate',
+        'capabilities',
+        'contentRevision',
+        'documentRevision',
+      ]),
+      c.frame,
+      c.deskWork,
+    ]),
     builder: (context, _) {
       final layer = _active;
       if (layer == null) {

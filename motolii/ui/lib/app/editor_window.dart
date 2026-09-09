@@ -429,7 +429,10 @@ class _EditorWindowState extends State<EditorWindow> {
                             ),
                           const Spacer(),
                           ValueListenableBuilder<Map<String, dynamic>>(
-                            valueListenable: c.document,
+                            valueListenable: c.slice('title', const [
+                              'dirty',
+                              'path',
+                            ]),
                             builder: (_, state, __) => Text(
                               '${state['dirty'] == true ? '• ' : ''}${(state['path'] as String? ?? 'Untitled').split('/').last}  ',
                             ),

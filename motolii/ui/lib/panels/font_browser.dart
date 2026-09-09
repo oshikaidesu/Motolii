@@ -17,7 +17,11 @@ class _FontBrowserState extends State<FontBrowser> {
   String query = '';
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
-    animation: widget.controller.document,
+    animation: widget.controller.slice(
+      'fonts',
+      const ['fontFamilies', 'path', 'capabilities'],
+      derived: () => fontReading(widget.controller),
+    ),
     builder: (context, _) {
       final c = widget.controller;
       final layer = c.activeLayer;
@@ -124,8 +128,7 @@ class _FontBrowserState extends State<FontBrowser> {
                                         'kind': 'font',
                                         'layer': layer['id'],
                                         'family': name,
-                                        'sampleKey': {...text}
-                                          ..remove('fontFamily'),
+                                        'sampleKey': fontSampleKey(text),
                                         'path': c.state['path'],
                                       },
                                     ),
@@ -144,4 +147,53 @@ class _FontBrowserState extends State<FontBrowser> {
       );
     },
   );
+}
+
+/// What a specimen actually depends on. The renderer overrides the family,
+/// the fill and the stroke, drops the wrap and the justification, and scales
+/// every style so the first one lands at a fixed size; only the first line's
+/// opening words are drawn.
+Map<String, dynamic> fontSampleKey(Map<String, dynamic> text) {
+  final styles = EditorSession.maps(text['styles']);
+  final first = (styles.firstOrNull?['size'] as num?)?.toDouble() ?? 1;
+  final base = first < 1 ? 1.0 : first;
+  double? share(dynamic value) => value is num ? value / base : null;
+  return {
+    'content': '${text['content'] ?? ''}'
+        .split('\n')
+        .first
+        .split(RegExp(r'\s+'))
+        .where((word) => word.isNotEmpty)
+        .take(8)
+        .join(' '),
+    'runs': text['runs'],
+    'styles': [
+      for (final style in styles)
+        {
+          'style': EditorSession.map(style['font'])['style'],
+          'size': share(style['size']),
+          'line_height': share(style['line_height']),
+          'tracking': style['tracking'],
+          'axes': style['axes'],
+          'features': style['features'],
+        },
+    ],
+  };
+}
+
+/// The shelf follows the family in force, the words it draws, and whether the
+/// selected layer can take a font at all.
+Object? fontReading(EditorSession c) {
+  final layer = c.activeLayer;
+  if (layer == null) return null;
+  final text = EditorSession.map(layer['text']);
+  return [
+    layer['id'],
+    layer['kind'],
+    layer['locked'],
+    layer['name'],
+    text['content'],
+    text['fontFamily'],
+    fontSampleKey(text),
+  ];
 }

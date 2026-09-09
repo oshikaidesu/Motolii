@@ -27,7 +27,7 @@ class _ExportControlsState extends State<ExportControls> {
   Widget build(
     BuildContext context,
   ) => ValueListenableBuilder<Map<String, dynamic>>(
-    valueListenable: c.document,
+    valueListenable: c.slice('export', const ['export', 'capabilities']),
     builder: (_, s, __) {
       final total = (s['durationFrames'] as num? ?? 1).toInt();
       int start = 0, end = total;

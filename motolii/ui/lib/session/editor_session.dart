@@ -5,11 +5,95 @@ import 'package:flutter/services.dart';
 import '../bridge/native_bridge.dart';
 import '../bridge/protocol.dart';
 
+/// A slice of the status. Panels listen to the keys they read, so a drag that
+/// moves `layers` leaves Fonts, History and the Browser alone. `derived` names
+/// what a panel reads through a getter (the active layer, say) rather than a
+/// key; it is compared by value.
+class DocumentSlice extends ChangeNotifier
+    implements ValueListenable<Map<String, dynamic>> {
+  DocumentSlice._(this._session, this._keys, this._derived) {
+    _last = _derived?.call();
+  }
+  final EditorSession _session;
+  final Set<String> _keys;
+  final Object? Function()? _derived;
+  Object? _last;
+  @override
+  Map<String, dynamic> get value => _session.state;
+  void _consider(Set<String> changed) {
+    final now = _derived?.call();
+    final moved = !sameValue(_last, now);
+    _last = now;
+    if (moved || _keys.any(changed.contains)) notifyListeners();
+  }
+}
+
+/// Value equality over decoded JSON.
+bool sameValue(Object? a, Object? b) {
+  if (identical(a, b)) return true;
+  if (a is List) {
+    if (b is! List || a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (!sameValue(a[i], b[i])) return false;
+    }
+    return true;
+  }
+  if (a is Map) {
+    if (b is! Map || a.length != b.length) return false;
+    for (final entry in a.entries) {
+      if (!b.containsKey(entry.key) || !sameValue(entry.value, b[entry.key]))
+        return false;
+    }
+    return true;
+  }
+  return a == b;
+}
+
 class EditorSession {
   static const channel = NativeBridge.channel;
   final _bridge = NativeBridge();
   final document = ValueNotifier<Map<String, dynamic>>({});
   Map<String, dynamic> get state => document.value;
+  final _slices = <String, DocumentSlice>{};
+  Map<String, dynamic> _spread = const {};
+
+  /// The status a panel reads, as its own listenable. Named so the panels that
+  /// share a reading share one slice.
+  DocumentSlice slice(
+    String name,
+    List<String> keys, {
+    Object? Function()? derived,
+  }) => _slices[name] ??= DocumentSlice._(this, keys.toSet(), derived);
+
+  void _spreadDocument() {
+    final was = _spread, now = state;
+    _spread = now;
+    if (_slices.isEmpty) return;
+    final changed = <String>{};
+    for (final key in was.keys) {
+      if (!now.containsKey(key) || !sameValue(was[key], now[key]))
+        changed.add(key);
+    }
+    for (final key in now.keys) {
+      if (!was.containsKey(key)) changed.add(key);
+    }
+    for (final slice in _slices.values.toList()) {
+      slice._consider(changed);
+    }
+  }
+
+  /// Take in what actually moved. Keys that arrive unchanged keep the object
+  /// they had, so a reply that says nothing new notifies nobody.
+  void absorb(Map<String, dynamic> next) {
+    final was = state;
+    Map<String, dynamic>? merged;
+    for (final entry in next.entries) {
+      if (was.containsKey(entry.key) && sameValue(was[entry.key], entry.value))
+        continue;
+      (merged ??= {...was})[entry.key] = entry.value;
+    }
+    if (merged != null) document.value = merged;
+  }
   final textureId = ValueNotifier<int?>(null);
   final frame = ValueNotifier<int>(0);
   final rendered = ValueNotifier<Map<String, dynamic>>({});
@@ -178,7 +262,7 @@ class EditorSession {
       playing.value = next['playing'] as bool;
       if (!playing.value && _ticker != null) _cancelCadence();
     }
-    if (notify || next['layers'] is List) document.value = {...state, ...next};
+    if (notify || next['layers'] is List) absorb(next);
   }
 
   Future<void> _serial(
@@ -207,6 +291,7 @@ class EditorSession {
   }
 
   EditorSession() {
+    document.addListener(_spreadDocument);
     _bridge.listen((call) async {
       if (_disposed) return call.method == 'confirmClose' ? true : null;
       if (call.method == 'confirmClose') {
@@ -513,6 +598,11 @@ class EditorSession {
         await native('close');
       } catch (_) {}
     });
+    for (final slice in _slices.values) {
+      slice.dispose();
+    }
+    _slices.clear();
+    document.removeListener(_spreadDocument);
     document.dispose();
     textureId.dispose();
     frame.dispose();

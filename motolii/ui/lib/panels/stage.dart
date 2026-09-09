@@ -779,7 +779,21 @@ class _StagePanelState extends State<StagePanel> {
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: Listenable.merge([
-      c.document,
+      c.slice('stage', const [
+        'layers',
+        'selectedId',
+        'selectedIds',
+        'width',
+        'height',
+        'observer',
+        'spatialGizmo',
+        'cameraGizmos',
+        'stageView',
+        'pickedColor',
+        'capabilities',
+        'contentRevision',
+        'documentRevision',
+      ]),
       c.rendered,
       c.textureId,
       c.playing,

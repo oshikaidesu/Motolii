@@ -10,7 +10,16 @@ class CompositionControls extends StatelessWidget {
   @override
   Widget build(BuildContext context) =>
       ValueListenableBuilder<Map<String, dynamic>>(
-        valueListenable: controller.document,
+        valueListenable: controller.slice('composition', const [
+          'width',
+          'height',
+          'durationFrames',
+          'fps',
+          'fpsNum',
+          'fpsDen',
+          'background',
+          'capabilities',
+        ]),
         builder: (_, s, __) => Padding(
           padding: const EdgeInsets.all(EditorMetrics.s8),
           child: Column(

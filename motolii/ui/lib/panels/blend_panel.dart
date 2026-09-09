@@ -58,14 +58,12 @@ class BlendPanelState extends State<BlendPanel> {
 
   EditorSession get c => widget.controller;
 
-  List<Map<String, dynamic>> get _targets => c.layers
-      .where(
-        (l) =>
-            c.selectedIds.contains(l['id']) &&
-            l['locked'] != true &&
-            l['kind'] != 'Camera',
-      )
-      .toList();
+  List<Map<String, dynamic>> get _targets => blendTargets(c);
+  DocumentSlice get _slice => c.slice(
+    'blend',
+    const ['path', 'capabilities'],
+    derived: () => blendReading(c),
+  );
 
   String get _mark => jsonEncode([c.state['path'], c.selectedIds]);
 
@@ -73,13 +71,13 @@ class BlendPanelState extends State<BlendPanel> {
   void initState() {
     super.initState();
     _selection = _mark;
-    c.document.addListener(_sync);
+    _slice.addListener(_sync);
   }
 
   @override
   void dispose() {
     _hoverTimer?.cancel();
-    c.document.removeListener(_sync);
+    _slice.removeListener(_sync);
     if (_previewing != null) c.command('cancelPreview');
     super.dispose();
   }
@@ -339,3 +337,20 @@ class BlendPanelState extends State<BlendPanel> {
     );
   }
 }
+
+/// The unlocked, non-camera layers a blend applies to.
+List<Map<String, dynamic>> blendTargets(EditorSession c) => c.layers
+    .where(
+      (l) =>
+          c.selectedIds.contains(l['id']) &&
+          l['locked'] != true &&
+          l['kind'] != 'Camera',
+    )
+    .toList();
+
+/// Everything the tiles show: the mode in force and the specimens for it.
+Object blendReading(EditorSession c) => [
+  c.selectedIds,
+  for (final l in blendTargets(c)) [l['id'], l['blendMode'], l['blendPreviews']],
+  c.activeLayer?['blendPreviews'],
+];

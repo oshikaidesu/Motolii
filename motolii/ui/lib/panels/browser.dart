@@ -389,7 +389,21 @@ class _BrowserPanelState extends State<BrowserPanel> {
   Widget build(
     BuildContext context,
   ) => ValueListenableBuilder<Map<String, dynamic>>(
-    valueListenable: widget.controller.document,
+    valueListenable: widget.controller.slice(
+      'browser',
+      const [
+        'assets',
+        'backgrounds',
+        'catalog',
+        'palette',
+        'colorTarget',
+        'importExtensions',
+        'capabilities',
+        'selectedId',
+        'selectedIds',
+      ],
+      derived: () => _colorTarget(widget.controller),
+    ),
     builder: (context, state, _) {
       final all = items(state);
       final rails = switch (tab) {
@@ -2186,19 +2200,31 @@ Future<List<List<double>>> paletteOf(Uint8List bytes, {int count = 6}) async {
 class _FittedName extends StatelessWidget {
   const _FittedName(this.name);
   final String name;
+
+  /// The laid-out width of a name at the shelf's size. Names repeat across
+  /// tiles and survive rebuilds, so lay each one out once.
+  static final _natural = <String, double>{};
+  static double _widthOf(String name) {
+    if (_natural.length > 4096) _natural.clear();
+    return _natural[name] ??= () {
+        final painter = TextPainter(
+          text: TextSpan(
+            text: name,
+            style: const TextStyle(fontSize: EditorMetrics.font),
+          ),
+          maxLines: 1,
+          textDirection: TextDirection.ltr,
+        )..layout();
+        final width = painter.width;
+      painter.dispose();
+      return width;
+    }();
+  }
+
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, box) {
-      final painter = TextPainter(
-        text: TextSpan(
-          text: name,
-          style: const TextStyle(fontSize: EditorMetrics.font),
-        ),
-        maxLines: 1,
-        textDirection: TextDirection.ltr,
-      )..layout();
-      final natural = painter.width;
-      painter.dispose();
+      final natural = _widthOf(name);
       final size = natural <= box.maxWidth
           ? EditorMetrics.font
           : math.max(

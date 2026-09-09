@@ -23,14 +23,15 @@ class _DeskPanelState extends State<DeskPanel> {
   EditorSession get c => widget.controller;
   String? _automatic;
   String _selection = '';
+  DocumentSlice get _slice => c.slice(
+    'desk',
+    const ['selectedKeys', 'capabilities'],
+    derived: () => deskIdentity(c),
+  );
   bool _inside = false;
   String _name(String value) =>
       value == 'Text' || value == 'Reference' ? 'Notes' : value;
-  String get _identity => jsonEncode([
-    c.selectedIds,
-    c.state['selectedKeys'],
-    c.activeLayer?['kind'],
-  ]);
+  String get _identity => deskIdentity(c);
   String get _shown {
     final manual = c.deskDrawer.value;
     if (manual == 'Tools') return 'Tools';
@@ -59,13 +60,13 @@ class _DeskPanelState extends State<DeskPanel> {
     super.initState();
     _selection = _identity;
     _automatic = _selectionPanel();
-    c.document.addListener(_read);
+    _slice.addListener(_read);
     c.editingFocus.addListener(_focus);
   }
 
   @override
   void dispose() {
-    c.document.removeListener(_read);
+    _slice.removeListener(_read);
     c.editingFocus.removeListener(_focus);
     super.dispose();
   }
@@ -154,7 +155,7 @@ class _DeskPanelState extends State<DeskPanel> {
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: Listenable.merge([
-      c.document,
+      _slice,
       c.deskDrawer,
       c.deskDefault,
       c.panePlaces,
@@ -211,3 +212,10 @@ class _DeskPanelState extends State<DeskPanel> {
     },
   );
 }
+
+/// What the Desk follows: the selection, its keys, and the kind of layer.
+String deskIdentity(EditorSession c) => jsonEncode([
+  c.selectedIds,
+  c.state['selectedKeys'],
+  c.activeLayer?['kind'],
+]);
