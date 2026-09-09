@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -136,6 +137,63 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.byKey(const ValueKey('browser:band:a0')), findsOneWidget);
     expect(find.text('clip0'), findsOneWidget);
+    expect(find.byKey(const ValueKey('browser:band:a1')), findsNothing);
+  });
+
+  testWidgets('A long name slides under the pointer instead of shrinking', (
+    tester,
+  ) async {
+    final c = await mount(tester);
+    c.document.value = {
+      ...c.document.value,
+      'assets': [
+        {
+          'id': 'long',
+          'name': 'a very long name that will not fit in one tile.mp4',
+          'mime': 'video/mp4',
+        },
+      ],
+    };
+    c.deskWork.value = {'browserView': 0};
+    await tester.pumpAndSettle();
+    final name = find.text('a very long name that will not fit in one tile');
+    expect(name, findsOneWidget);
+    final style = tester.widget<Text>(name).style!;
+    expect(style.fontSize, 11);
+    final before = tester.getTopLeft(name).dx;
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: Offset.zero);
+    addTearDown(mouse.removePointer);
+    // The pointer rests on the caption line, not on the part that hangs out.
+    final line = find.byKey(const ValueKey('browser:name:long'));
+    await mouse.moveTo(tester.getCenter(line));
+    // The first frame starts the clock; the second is two seconds in.
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 2));
+    expect(tester.getTopLeft(name).dx, lessThan(before));
+    await mouse.moveTo(Offset.zero);
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 20));
+    expect(tester.getTopLeft(name).dx, closeTo(before, .5));
+  });
+
+  testWidgets('Pictures alone: the card under the pointer says its name', (
+    tester,
+  ) async {
+    final c = await mount(tester);
+    c.deskWork.value = {};
+    await tester.pump();
+    expect(find.text('clip1'), findsNothing);
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: Offset.zero);
+    addTearDown(mouse.removePointer);
+    await mouse.moveTo(
+      tester.getCenter(find.byKey(const ValueKey('browser:Media:a1'))),
+    );
+    await tester.pump();
+    expect(find.byKey(const ValueKey('browser:band:a1')), findsOneWidget);
+    await mouse.moveTo(Offset.zero);
+    await tester.pump();
     expect(find.byKey(const ValueKey('browser:band:a1')), findsNothing);
   });
 }

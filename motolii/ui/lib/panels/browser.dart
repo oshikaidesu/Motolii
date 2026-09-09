@@ -1239,7 +1239,8 @@ class _BrowserPanelState extends State<BrowserPanel> {
                 child: isColor
                     ? preview
                     : viewMode == 2
-                    ? Stack(
+                    ? _Hover(
+                        builder: (hovered) => Stack(
                         fit: StackFit.expand,
                         children: [
                           preview,
@@ -1249,9 +1250,10 @@ class _BrowserPanelState extends State<BrowserPanel> {
                               bottom: air,
                               child: badge,
                             ),
-                          // Only the chosen card says its name: a band over
-                          // the picture's foot, so the picture stays the point.
-                          if (isSelected)
+                          // The chosen card says its name, and so does the
+                          // one under the pointer: a band over the picture's
+                          // foot, so the picture stays the point.
+                          if (isSelected || hovered)
                             Positioned(
                               left: 0,
                               right: 0,
@@ -1269,10 +1271,12 @@ class _BrowserPanelState extends State<BrowserPanel> {
                                   _displayName(item),
                                   tileWidth - air * 2 - badgeRoom,
                                   size: captionSize,
+                                  sliding: hovered,
                                 ),
                               ),
                             ),
                         ],
+                        ),
                       )
                     : viewMode == 1
                     ? Row(
@@ -2302,10 +2306,19 @@ Future<List<List<double>>> paletteOf(Uint8List bytes, {int count = 6}) async {
 /// the pointer rests on it the name slides left until its end shows, then
 /// slides back — so nothing is ever shrunk to fit.
 class _FittedName extends StatefulWidget {
-  const _FittedName(this.name, this.width, {this.size = EditorMetrics.font});
+  const _FittedName(
+    this.name,
+    this.width, {
+    this.size = EditorMetrics.font,
+    this.sliding,
+  });
   final String name;
   final double width;
   final double size;
+
+  /// When the parent already knows the pointer is on the card, it drives the
+  /// slide; otherwise the name watches for the pointer itself.
+  final bool? sliding;
 
   /// The laid-out width of a name at a size. Names repeat across tiles and
   /// survive rebuilds, so lay each one out once.
@@ -2336,6 +2349,21 @@ class _FittedNameState extends State<_FittedName>
       math.max(0, _FittedName.widthOf(widget.name, widget.size) - widget.width);
 
   @override
+  void initState() {
+    super.initState();
+    if (widget.sliding == true) _enter();
+  }
+
+  @override
+  void didUpdateWidget(_FittedName old) {
+    super.didUpdateWidget(old);
+    if (widget.sliding != old.sliding) {
+      if (widget.sliding == true) _enter();
+      if (widget.sliding == false) _leave();
+    }
+  }
+
+  @override
   void dispose() {
     _slide.dispose();
     super.dispose();
@@ -2364,13 +2392,16 @@ class _FittedNameState extends State<_FittedName>
     );
     if (overflow <= 0) return text;
     return MouseRegion(
-      onEnter: (_) => _enter(),
-      onExit: (_) => _leave(),
+      onEnter: widget.sliding == null ? (_) => _enter() : null,
+      onExit: widget.sliding == null ? (_) => _leave() : null,
       child: ClipRect(
         child: AnimatedBuilder(
           animation: _slide,
           builder: (context, child) => Transform.translate(
-            offset: Offset(-overflow * Curves.easeInOut.transform(_slide.value), 0),
+            offset: Offset(
+              -overflow * Curves.easeInOut.transform(_slide.value),
+              0,
+            ),
             child: child,
           ),
           child: OverflowBox(
@@ -2382,4 +2413,22 @@ class _FittedNameState extends State<_FittedName>
       ),
     );
   }
+}
+
+/// Tells its child whether the pointer rests on it.
+class _Hover extends StatefulWidget {
+  const _Hover({required this.builder});
+  final Widget Function(bool hovered) builder;
+  @override
+  State<_Hover> createState() => _HoverState();
+}
+
+class _HoverState extends State<_Hover> {
+  bool hovered = false;
+  @override
+  Widget build(BuildContext context) => MouseRegion(
+    onEnter: (_) => setState(() => hovered = true),
+    onExit: (_) => setState(() => hovered = false),
+    child: widget.builder(hovered),
+  );
 }
