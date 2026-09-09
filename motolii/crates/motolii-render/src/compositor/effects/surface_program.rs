@@ -20,6 +20,7 @@ pub(crate) const PARAM_SLOTS: usize = 12;
 pub struct SurfaceShading {
     pub program: Option<Arc<SurfaceProgram>>,
     pub params: [f32; PARAM_SLOTS],
+    pub reads_backdrop: bool,
 }
 
 /// 効果列から hook を拾う。同じ stage が複数あれば下(後)が勝つ。
@@ -149,7 +150,15 @@ impl crate::render::compositor::Compositor {
                 program
             }
         };
-        Ok(SurfaceShading { program: Some(program), params: params(effects, field, surface) })
+        let params = params(effects, field, surface);
+        let offset = field.map_or(0, |d| d.manifest.param_inputs().count());
+        let reads_backdrop = surface.is_some_and(|d| {
+            d.manifest.backdrop_input.as_ref().map_or(true, |name| {
+                d.manifest.param_inputs().position(|p| &p.name == name)
+                    .is_none_or(|i| params[offset + i] != 0.0)
+            })
+        });
+        Ok(SurfaceShading { program: Some(program), params, reads_backdrop })
     }
 
 }

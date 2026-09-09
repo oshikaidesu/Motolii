@@ -72,6 +72,14 @@ impl Engine {
     ) -> Result<Vec<LayerWithPasses>, EngineError> {
         self.layer_failures.clear();
         self.drawn_layers = 0;
+        self.compositor.refresh_catalog_programs();
+        let needs_auxiliary_views = {
+            let surface_ids: HashSet<_> = self.compositor.catalog.definitions.iter()
+                .filter(|d| d.manifest.stage == crate::render::compositor::IsfStage::Surface)
+                .map(|d| d.plugin_id()).collect();
+            resolved.iter().flat_map(|l| l.effects.iter().chain(&l.after_effects))
+                .any(|e| surface_ids.contains(e.plugin_id.as_str()))
+        };
         let mut layers: Vec<LayerWithPasses> = Vec::with_capacity(resolved.len() + 1);
         // 層 id → layers の添字(通り抜けの配置なら複製の数だけ)。クリップの下地探しに使う。
         let mut contributions: HashMap<LayerId, Vec<usize>> = HashMap::new();
@@ -107,8 +115,8 @@ impl Engine {
                     continue;
                 };
                 let passes = translate_effect_passes(&layer.effects);
-                // 画面の外に丸ごと居る素の層(配置の複製が主)は組まない。matte や clip に関わる物は残す。
-                if layer.matte.is_none() && !layer.clip_to_below && offscreen(comp, camera, &built, &passes) {
+                // 補助viewが無いときだけ主カメラでカリングする。反射・matte・clipの入力は残す。
+                if !needs_auxiliary_views && layer.matte.is_none() && !layer.clip_to_below && offscreen(comp, camera, &built, &passes) {
                     continue;
                 }
                 (built, passes)

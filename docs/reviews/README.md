@@ -28,6 +28,8 @@
 
 ## 全文書索引
 
+- [演出と実装を一緒に設計する — 複数社の画作りからの採用](2026-09-09-entertainment-rendering-adoption.md)
+
 - [2D・3Dの共通表面契約と検収](2026-09-09-shared-surface-plan.md)
 - [Glassのラスタライズ反射・屈折調査](2026-09-09-glass-raster-research.md)
 
@@ -782,3 +784,5 @@
 - [Inspector の先例調査 — 表以外の答えは無かった](2026-09-08-inspector-prior-art.md)
 - [欄の性格を使われ方から読む — 次元解析](2026-09-08-parameter-character-analysis.md)
 - [数値のメリハリ — クリエイティブ系の外の先例](2026-09-08-number-affordance-prior-art.md)
+
+- [共有反射とRepeater描画の施工・検証](2026-09-09-shared-reflection-execution.md)

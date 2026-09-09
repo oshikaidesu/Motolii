@@ -177,6 +177,10 @@ impl Engine {
         })
     }
 
+    pub fn surface_work(&self) -> crate::render::compositor::SurfaceWork {
+        self.compositor.surface_work
+    }
+
     pub fn render_frame(
         &mut self,
         view: &StoreView<'_>,
@@ -366,12 +370,12 @@ mod environment_tests {
         LayerSource, LayerTiming, PropertyId, Value,
     };
 
-    const SIZE: u32 = 64;
+    pub(super) const SIZE: u32 = 64;
     /// 網の中(位置 32,32 から scale 12 の板が右下へ広がる)。
-    const MESH_X: u32 = 44;
-    const MESH_Y: u32 = 44;
+    pub(super) const MESH_X: u32 = 44;
+    pub(super) const MESH_Y: u32 = 44;
 
-    fn file_layer(doc: &mut Document, id: u64, order: i16, path: &std::path::Path) -> LayerId {
+    pub(super) fn file_layer(doc: &mut Document, id: u64, order: i16, path: &std::path::Path) -> LayerId {
         let layer = LayerId(id);
         doc.apply_all([
             Intent::AddLayer(layer),
@@ -394,7 +398,7 @@ mod environment_tests {
     }
 
     /// 上半分 `top`、下半分 `bottom` の等距円筒図。
-    fn sky_png(dir: &std::path::Path, name: &str, top: u8, bottom: u8) -> std::path::PathBuf {
+    pub(super) fn sky_png(dir: &std::path::Path, name: &str, top: u8, bottom: u8) -> std::path::PathBuf {
         let path = dir.join(name);
         let mut img = image::RgbaImage::new(8, 4);
         for (_, y, px) in img.enumerate_pixels_mut() {
@@ -405,7 +409,7 @@ mod environment_tests {
         path
     }
 
-    fn scene(dir: &std::path::Path, sky: &std::path::Path, environment: bool) -> Document {
+    pub(super) fn scene(dir: &std::path::Path, sky: &std::path::Path, environment: bool) -> Document {
         let obj = dir.join("quad.obj");
         // 法線はカメラ向き(世界の -z)。法線の無い obj は陰影が付かないので照明の test にならない。
         std::fs::write(&obj, "v -1 -1 0\nv 1 -1 0\nv 1 1 0\nv -1 1 0\nvn 0 0 -1\nf 1//1 2//1 3//1\nf 1//1 3//1 4//1\n").unwrap();
@@ -735,3 +739,6 @@ mod presentable_matches_export {
     }
 
 }
+
+#[cfg(test)]
+mod reflection_tests;

@@ -38,6 +38,9 @@ impl Compositor {
 
         Ok(Self {
             ctx,
+            surface_work: Default::default(),
+            reflection_resources: None,
+            backdrop_resource: None,
             next_readback: 1,
             next_effect_key: 1,
             effect_scratch: effects::EffectScratch::default(),

@@ -1,0 +1,52 @@
+{
+  "resolution": [
+    1280,
+    720
+  ],
+  "warmup_frames": 1,
+  "samples": 5,
+  "time_scope": "CPU preparation + GPU completion + readback; not GPU-only timing",
+  "gpu": [
+    "Apple M4"
+  ],
+  "scene_capture_origins_max": 2,
+  "face_size_max": 512,
+  "records": [
+    {
+      "copies": 10,
+      "samples_us": [
+        16942,
+        17364,
+        18447,
+        19980,
+        20040
+      ],
+      "median_us": 18447,
+      "metrics": "total_with_readback_us=[16942, 17364, 18447, 19980, 20040] captures=12 main_runs=2 backdrop_copies=0 mesh_data_batches=3"
+    },
+    {
+      "copies": 100,
+      "samples_us": [
+        19405,
+        20710,
+        12248,
+        12356,
+        18427
+      ],
+      "median_us": 18427,
+      "metrics": "total_with_readback_us=[19405, 20710, 12248, 12356, 18427] captures=12 main_runs=2 backdrop_copies=0 mesh_data_batches=3"
+    },
+    {
+      "copies": 1000,
+      "samples_us": [
+        34834,
+        31699,
+        27228,
+        24118,
+        26674
+      ],
+      "median_us": 27228,
+      "metrics": "total_with_readback_us=[34834, 31699, 27228, 24118, 26674] captures=12 main_runs=2 backdrop_copies=0 mesh_data_batches=3"
+    }
+  ]
+}

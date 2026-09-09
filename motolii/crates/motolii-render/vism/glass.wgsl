@@ -2,6 +2,7 @@
   "ID": "motolii.glass",
   "LABEL": "Glass",
   "STAGE": "surface",
+  "BACKDROP_INPUT": "transmission",
   "DESCRIPTION": "Environment-lit dielectric or metal: reflection by roughness, refracted see-through by transmission",
   "INPUTS": [
     { "NAME": "ior", "LABEL": "Refraction", "TYPE": "float", "DEFAULT": 1.5, "MIN": 1.0, "MAX": 3.0 },

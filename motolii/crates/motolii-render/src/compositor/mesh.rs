@@ -48,7 +48,7 @@ impl Compositor {
         })
     }
 
-    pub(crate) fn model_draw_data(
+    pub(crate) fn model_instances(
         &mut self,
         model: &GpuModelData,
         placement: crate::doc::core::LayerPlacement,
@@ -58,7 +58,7 @@ impl Compositor {
         projection: crate::doc::store::LayerProjection,
         shading: &SurfaceShading,
         clip: Option<super::ClipSpec>,
-    ) -> Result<MeshDrawData, CompositorError> {
+    ) -> (Vec<GpuMeshInstance>, re_renderer::ClipPlane) {
         let world_from_object = projected_spatial_placement(comp, camera, projection, placement, model.bounds);
         let centre = world_from_object.transform_point3((glam::Vec3::from(model.bounds.min) + glam::Vec3::from(model.bounds.max)) * 0.5);
         let clip = clip.map_or(re_renderer::ClipPlane::NONE, |c| c.world(centre, world_from_object));
@@ -76,7 +76,22 @@ impl Compositor {
                 instance
             })
             .collect();
+        (instances, clip)
+    }
+    pub(crate) fn model_draw_data(
+        &mut self,
+        model: &GpuModelData,
+        placement: crate::doc::core::LayerPlacement,
+        opacity: f32,
+        comp: crate::doc::core::CompSpec,
+        camera: crate::doc::core::ResolvedCamera,
+        projection: crate::doc::store::LayerProjection,
+        shading: &SurfaceShading,
+        clip: Option<super::ClipSpec>,
+    ) -> Result<MeshDrawData, CompositorError> {
+        let (instances, clip) = self.model_instances(model, placement, opacity, comp, camera, projection, shading, clip);
         MeshDrawData::new_clipped(&self.ctx, &instances, clip)
             .map_err(|error| CompositorError::Draw(error.to_string()))
     }
+
 }

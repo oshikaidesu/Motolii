@@ -129,6 +129,8 @@ pub struct IsfManifest {
     pub stage: IsfStage,
     pub expose: bool,
     pub output_float: bool,
+    /// A zero value of this input disables reads from the composited backdrop.
+    pub backdrop_input: Option<String>,
     pub padding: Option<IsfPadding>,
     pub description: Option<String>,
     pub inputs: Vec<IsfInput>,
@@ -143,6 +145,7 @@ impl Default for IsfManifest {
             stage: IsfStage::Pass,
             expose: true,
             output_float: false,
+            backdrop_input: None,
             padding: None,
             description: None,
             inputs: Vec::new(),
@@ -275,6 +278,13 @@ pub(crate) fn parse_isf_source(source: &str) -> Result<(IsfManifest, String), Is
             });
         }
     }
+    let backdrop_input = value.get("BACKDROP_INPUT").map(|v| {
+        let name = v.as_str().ok_or_else(|| IsfError::Validate("BACKDROP_INPUT must name a numeric input".into()))?;
+        if stage != IsfStage::Surface || !inputs.iter().any(|p| p.name == name && matches!(p.ty, IsfInputType::Float | IsfInputType::Long | IsfInputType::Bool)) {
+            return Err(IsfError::Validate("BACKDROP_INPUT must name a surface parameter".into()));
+        }
+        Ok(name.to_owned())
+    }).transpose()?;
     Ok((
         IsfManifest {
             id,
@@ -282,6 +292,7 @@ pub(crate) fn parse_isf_source(source: &str) -> Result<(IsfManifest, String), Is
             stage,
             expose,
             output_float,
+            backdrop_input,
             padding,
             description,
             inputs,

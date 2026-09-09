@@ -4,6 +4,12 @@ use re_renderer::{GpuTexture, Rgba, ScreenshotProcessor, ViewBuilderId};
 
 use crate::render::compositor::*;
 
+pub(crate) struct BackdropResource {
+    dimensions: [u32; 2],
+    texture: wgpu::Texture,
+    imported: GpuTexture2D,
+}
+
 impl Compositor {
     pub(crate) fn source_atop(
         &mut self,
@@ -86,6 +92,7 @@ impl Compositor {
             _ => None,
         });
 
+        let reflection = self.capture_scene_reflection(comp, inputs, environment)?;
         let mut background: Option<(AccumulatorBacking, GpuTexture2D)> = None;
 
         // 層ごとに submit しない — 同期の回数が層数に比例する。
@@ -145,7 +152,9 @@ impl Compositor {
                 let mut solo_config = sequential_target_config(
                     "motolii-comp-sequential-solo", comp, view_from_world, projection, environment,
                 );
-                if input.shading.program.is_some() {
+                solo_config.scene_reflection = reflection.clone();
+                self.surface_work.main_runs += 1;
+                if input.shading.reads_backdrop {
                     if let Some((backing, _)) = &background {
                         if let Some(encoder) = blend_encoder.take() {
                             batch.push(encoder.finish());
@@ -239,11 +248,13 @@ impl Compositor {
             }
 
             let run_start = idx;
+            let mut run_has_rect = false;
             while idx < inputs.len() && !bakeable(&inputs[idx]) {
                 // 表面プログラムは手前で run を切り、それまでの合成を背後として読む。
-                if idx > run_start && (matches!(inputs[idx].content, SequentialContent::Model(_)) || inputs[idx].shading.program.is_some()) {
+                if idx > run_start && (inputs[idx].shading.reads_backdrop || (run_has_rect && matches!(inputs[idx].content, SequentialContent::Model(_)))) {
                     break;
                 }
+                run_has_rect |= matches!(inputs[idx].content, SequentialContent::Rect(_));
                 idx += 1;
             }
             let run = &inputs[run_start..idx];
@@ -279,91 +290,10 @@ impl Compositor {
                 ));
             }
 
-            let mut clouds: Vec<re_renderer::renderer::PointCloudDrawData> = Vec::new();
-            let mut meshes: Vec<re_renderer::renderer::MeshDrawData> = Vec::new();
-            let mut sky = false;
-            for input in run {
-                if let SequentialContent::Environment(e) = input.content {
-                    // 一番上の環境層だけが空を敷く。下に埋もれた物は板にも空にもならない。
-                    sky |= environment.is_some_and(|top| std::ptr::eq(top, e));
-                    continue;
-                }
-                if let crate::render::compositor::SequentialContent::Cloud {
-                    positions,
-                    colors,
-                    bounds,
-                    point_size,
-                } = input.content
-                {
-                    clouds.push(self.point_cloud_draw_data(
-                        positions,
-                        colors,
-                        bounds,
-                        point_size,
-                        input.placement,
-                        input.opacity,
-                        comp, input.projection_camera, input.projection,
-                        input.displace,
-                        input.clip,
-                    )?);
-                    continue;
-                }
-                if let SequentialContent::Model(model) = input.content {
-                    meshes.push(
-                        self.model_draw_data(
-                            model,
-                            input.placement,
-                            input.opacity,
-                            comp, input.projection_camera, input.projection,
-                            &input.shading,
-                            input.clip,
-                        )?,
-                    );
-                    continue;
-                }
-                let (corner, extent_u, extent_v) = crate::render::compositor::projected_placement_corners(
-                    comp, input.projection_camera, input.projection,
-                    input.placement,
-                    input.local_min,
-                    input.local_size,
-                );
-                let a = match input.blend_mode {
-                    BlendMode::Normal => input.opacity,
-                    BlendMode::Add => 0.0,
-                    _ => {
-                        unreachable!("vello_blend_mode が None を返した blend_mode のみ run に入る")
-                    }
-                };
-                rects.push(TexturedRect {
-                    top_left_corner_position: corner,
-                    extent_u,
-                    extent_v,
-                    colormapped_texture: crate::render::compositor::premultiplied_texture(
-                        match input.content {
-                            crate::render::compositor::SequentialContent::Rect(t) => t.clone(),
-                            _ => unreachable!("点群は上で continue している"),
-                        },
-                    ),
-                    options: RectangleOptions {
-                        multiplicative_tint: Rgba::from_rgba_premultiplied(
-                            input.opacity,
-                            input.opacity,
-                            input.opacity,
-                            a,
-                        ),
-                        depth_offset: input.depth_offset,
-                        clip: input.clip.map_or(re_renderer::ClipPlane::NONE, |c| c.world_for_rect(corner, extent_u, extent_v)),
-                        surface: input.shading.program.clone(),
-                        surface_params: input.shading.params,
-                        ..Default::default()
-                    },
-                });
-            }
+            let sky = run.iter().any(|input| matches!(input.content, SequentialContent::Environment(e) if environment.is_some_and(|top| std::ptr::eq(top, e))));
+            let draws = self.surface_scene_draws(comp, run, rects, false, None)?;
 
-            let draw_data = RectangleDrawData::new(&self.ctx, &rects)
-                .map_err(|e| CompositorError::Rectangles(e.to_string()))?;
-
-            let needs_backdrop = run.iter().any(|i| matches!(i.content, SequentialContent::Model(_)) || i.shading.program.is_some());
+            let needs_backdrop = run.iter().any(|i| i.shading.reads_backdrop);
             let backdrop = match (&background, needs_backdrop) {
                 (Some((backing, _)), true) => {
                     // 背後の合成はまだ blend encoder の中かもしれない。先に流してから写す。
@@ -382,6 +312,8 @@ impl Compositor {
                 environment,
             );
             config.backdrop = backdrop;
+            config.scene_reflection = reflection.clone();
+            self.surface_work.main_runs += 1;
 
             let run_owned = spare
                 .pop()
@@ -395,13 +327,7 @@ impl Compositor {
             .map_err(|e| CompositorError::View(e.to_string()))?;
             self.next_readback += 1;
 
-            view_builder.queue_draw(&self.ctx, draw_data);
-            for cloud in clouds {
-                view_builder.queue_draw(&self.ctx, cloud);
-            }
-            for mesh in meshes {
-                view_builder.queue_draw(&self.ctx, mesh);
-            }
+            draws.queue(&self.ctx, &mut view_builder);
             if sky {
                 view_builder.queue_draw(
                     &self.ctx,
@@ -453,20 +379,30 @@ impl Compositor {
         backing: &wgpu::Texture,
         batch: &mut Vec<wgpu::CommandBuffer>,
     ) -> Result<GpuTexture2D, CompositorError> {
+        self.surface_work.backdrop_copies += 1;
         let size = wgpu::Extent3d { width: comp.width, height: comp.height, depth_or_array_layers: 1 };
-        let texture = self.ctx.device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("motolii-backdrop-pyramid"),
-            size,
-            mip_level_count: re_renderer::resource_managers::MipmapGenerator::mip_level_count(comp.width, comp.height),
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: crate::render::compositor::BLEND_TARGET_FORMAT,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING
-                | wgpu::TextureUsages::RENDER_ATTACHMENT
-                | wgpu::TextureUsages::COPY_DST
-                | wgpu::TextureUsages::COPY_SRC,
-            view_formats: &[],
-        });
+        let resource = match self.backdrop_resource.take() {
+            Some(resource) if resource.dimensions == [comp.width, comp.height] => resource,
+            _ => {
+                let texture = self.ctx.device.create_texture(&wgpu::TextureDescriptor {
+                    label: Some("motolii-backdrop-pyramid"),
+                    size,
+                    mip_level_count: re_renderer::resource_managers::MipmapGenerator::mip_level_count(comp.width, comp.height),
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    format: crate::render::compositor::BLEND_TARGET_FORMAT,
+                    usage: wgpu::TextureUsages::TEXTURE_BINDING
+                        | wgpu::TextureUsages::RENDER_ATTACHMENT
+                        | wgpu::TextureUsages::COPY_DST
+                        | wgpu::TextureUsages::COPY_SRC,
+                    view_formats: &[],
+                });
+                let imported = self.import_premultiplied(&texture)?;
+                self.surface_work.backdrop_allocations += 1;
+                BackdropResource { dimensions: [comp.width,comp.height], texture, imported }
+            }
+        };
+        let texture = &resource.texture;
         let mut encoder = self.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("motolii-backdrop-pyramid"),
         });
@@ -478,10 +414,12 @@ impl Compositor {
                 aspect: wgpu::TextureAspect::All,
             }
         }
-        encoder.copy_texture_to_texture(level0(backing), level0(&texture), size);
-        self.ctx.texture_manager_2d.generate_mipmaps(&self.ctx, &mut encoder, &texture);
+        encoder.copy_texture_to_texture(level0(backing), level0(texture), size);
+        self.ctx.texture_manager_2d.generate_mipmaps(&self.ctx, &mut encoder, texture);
         batch.push(encoder.finish());
-        self.import_premultiplied(&texture)
+        let result = resource.imported.clone();
+        self.backdrop_resource = Some(resource);
+        Ok(result)
     }
 
     pub(crate) fn create_blend_scratch_texture(&self, width: u32, height: u32) -> wgpu::Texture {
@@ -771,7 +709,7 @@ impl Compositor {
         comp: CompSpec,
         projection: crate::doc::core::CameraProjection,
         view_from_world: macaw::IsoTransform,
-        camera: ResolvedCamera,
+        _camera: ResolvedCamera,
         layer: &Layer,
         label: &'static str,
     ) -> Result<GpuTexture, CompositorError> {

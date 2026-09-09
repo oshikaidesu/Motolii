@@ -11,6 +11,7 @@ mod environment;
 mod headless;
 mod matte;
 mod mesh;
+mod surface_scene;
 mod point_cloud;
 mod presentable;
 mod render_basic;
@@ -248,6 +249,7 @@ pub use clip::ClipSpec;
 pub(crate) use effects::catalog::catalog_snapshot;
 pub use effects::catalog::{bind_catalog_runtime, catalog_generation, catalog_source_roots, refresh_effect_catalog, refresh_effect_catalog_for, watch_effect_catalog, CatalogRefresh, CatalogRuntime, CatalogWatcher, EffectDescriptor, EffectParamDescriptor};
 pub use effects::{IsfInput, IsfInputType, IsfManifest};
+pub(crate) use effects::IsfStage;
 
 pub use matte::MatteMode;
 
@@ -265,7 +267,7 @@ pub struct Layer {
     pub projection: crate::doc::store::LayerProjection,
     pub projection_camera: ResolvedCamera,
     pub blend_mode: BlendMode,
-    /// 網の描き方(hook の変種と欄)。板には効かない。
+    /// 板・網が共有する表面プログラムとパラメータ。
     pub shading: effects::surface_program::SurfaceShading,
     /// 点群を動かす場(Turbulent Displace の CPU の写し)。板には効かない。
     pub displace: point_cloud::PointDisplace,
@@ -320,8 +322,20 @@ impl RenderTiming {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default)]
+pub struct SurfaceWork {
+    pub scene_captures: u64,
+    pub main_runs: u64,
+    pub backdrop_copies: u64,
+    pub backdrop_allocations: u64,
+    pub mesh_batches: u64,
+}
+
 pub struct Compositor {
     pub(crate) ctx: RenderContext,
+    pub(crate) surface_work: SurfaceWork,
+    pub(crate) backdrop_resource: Option<sequential::BackdropResource>,
+    pub(crate) reflection_resources: Option<surface_scene::ReflectionResources>,
     pub(crate) next_readback: u64,
     pub(crate) next_effect_key: u64,
     pub(crate) effect_scratch: effects::EffectScratch,
