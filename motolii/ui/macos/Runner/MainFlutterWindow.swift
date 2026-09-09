@@ -7,9 +7,9 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate, NSDraggingDestination {
   private var closePending = false
   override func awakeFromNib() {
     let controller = FlutterViewController()
-    // Hover reaches Flutter whenever the app is frontmost, not only while
-    // this window is key: a shelf is browsed before it is clicked.
-    controller.mouseTrackingMode = .inActiveApp
+    // Hover reaches Flutter always, not only while this window is key: a
+    // shelf is browsed before it is clicked, and feedback is immediate.
+    controller.mouseTrackingMode = .always
     let originalFrame = frame
     contentViewController = controller
     setFrame(originalFrame, display: true)
@@ -603,7 +603,7 @@ final class PanelFlutterWindow: NSWindow, NSWindowDelegate, NSDraggingDestinatio
     minSize = NSSize(width: 320, height: 220)
     delegate = self
     let controller = FlutterViewController()
-    controller.mouseTrackingMode = .inActiveApp
+    controller.mouseTrackingMode = .always
     contentViewController = controller
     RegisterGeneratedPlugins(registry: controller)
     host = ProbeHost.install(controller: controller, window: self, id: identifier, panels: panels, main: false)

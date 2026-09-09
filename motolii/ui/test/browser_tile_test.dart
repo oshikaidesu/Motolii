@@ -171,9 +171,9 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(seconds: 2));
     expect(tester.getTopLeft(name).dx, lessThan(before));
+    // Leaving snaps back at once.
     await mouse.moveTo(Offset.zero);
     await tester.pump();
-    await tester.pump(const Duration(seconds: 20));
     expect(tester.getTopLeft(name).dx, closeTo(before, .5));
   });
 

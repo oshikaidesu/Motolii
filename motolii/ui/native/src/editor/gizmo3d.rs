@@ -550,7 +550,7 @@ mod spatial_gizmo_tests {
                         continue;
                     };
                     grabbed += 1;
-                    let held = drag.edits(&doc, start, false, false).expect("holding still is legal");
+                    let held = drag.edits(&doc, start, false, Animate::Off).expect("holding still is legal");
                     assert!(held.is_empty(), "掴んだだけで {held:?} が出た({start:?})");
                 }
             }
@@ -570,7 +570,7 @@ mod spatial_gizmo_tests {
                 let Ok(drag) = SpatialDrag::begin(&doc, &[layer], start, RationalTime::ZERO, camera) else {
                     continue;
                 };
-                let Ok(out) = drag.edits(&doc, [start[0] + 30.0, start[1]], false, false) else { continue };
+                let Ok(out) = drag.edits(&doc, [start[0] + 30.0, start[1]], false, Animate::Off) else { continue };
                 if out.is_empty() {
                     continue;
                 }

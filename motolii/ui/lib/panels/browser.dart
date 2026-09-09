@@ -90,9 +90,8 @@ class _BrowserPanelState extends State<BrowserPanel> {
       math.max(EditorMetrics.micro, EditorMetrics.font * tileScale);
   double get captionHeight => _captionHeight * tileScale;
 
-  /// A mark grows slower than the picture it marks: by the square root, so
-  /// at twice the tile it is 1.4× and stays a mark beside the name.
-  double get markScale => math.sqrt(tileScale);
+  /// The mark grows with the rest of the card.
+  double get markScale => tileScale;
   double get rail =>
       railDrag ??
       (widget.controller.deskWork.value['browserRail'] as num? ??
@@ -1069,7 +1068,12 @@ class _BrowserPanelState extends State<BrowserPanel> {
     });
   }
 
-  Widget card(Map<String, dynamic> item) {
+  /// The pointer on any part of the card is the card's hover: the name
+  /// slides, and a picture-only card shows its band.
+  Widget card(Map<String, dynamic> item) =>
+      _Hover(builder: (hovered) => _card(item, hovered));
+
+  Widget _card(Map<String, dynamic> item, bool hovered) {
     final supported = switch (tab) {
       'Create' => has('create'),
       'Media' =>
@@ -1194,6 +1198,7 @@ class _BrowserPanelState extends State<BrowserPanel> {
                   _displayName(item),
                   tileWidth - air * 2 - badgeRoom,
                   size: captionSize,
+                  sliding: hovered,
                 ),
               ),
             ),
@@ -1239,8 +1244,7 @@ class _BrowserPanelState extends State<BrowserPanel> {
                 child: isColor
                     ? preview
                     : viewMode == 2
-                    ? _Hover(
-                        builder: (hovered) => Stack(
+                    ? Stack(
                         fit: StackFit.expand,
                         children: [
                           preview,
@@ -1276,7 +1280,6 @@ class _BrowserPanelState extends State<BrowserPanel> {
                               ),
                             ),
                         ],
-                        ),
                       )
                     : viewMode == 1
                     ? Row(
@@ -2378,7 +2381,8 @@ class _FittedNameState extends State<_FittedName>
     _slide.forward();
   }
 
-  void _leave() => _slide.reverse();
+  /// Leaving snaps the name back; only the reading is animated.
+  void _leave() => _slide.value = 0;
 
   @override
   Widget build(BuildContext context) {

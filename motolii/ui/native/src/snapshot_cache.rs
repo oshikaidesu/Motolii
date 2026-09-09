@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::sync::atomic::{AtomicU64, Ordering};
-use crate::doc::store::{LayerId, PropertyBase, RationalTime, ResolvedLayer, Revision, StoreView};
+use crate::doc::store::{Animate, LayerId, PropertyBase, RationalTime, ResolvedLayer, Revision, StoreView};
 use crate::EditorRuntime;
 use serde_json::{json, Value};
 

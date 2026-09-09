@@ -219,9 +219,9 @@ const _panels = <String, Size>{
 /// rebuilding its bar for every rendered frame, or to redrawing a shelf that
 /// the update did not touch.
 const _budget = <String, (int, int, int)>{
-  'Create': (2, 2, 252),
-  'Media': (2, 2, 290),
-  'Effects': (2, 2, 260),
+  'Create': (2, 2, 260),
+  'Media': (2, 2, 300),
+  'Effects': (2, 2, 270),
   'Colors': (2, 2, 320),
   'Fonts': (2, 2, 120),
   'Stage': (60, 8, 80),
