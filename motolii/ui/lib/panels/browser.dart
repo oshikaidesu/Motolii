@@ -89,6 +89,10 @@ class _BrowserPanelState extends State<BrowserPanel> {
   double get captionSize =>
       math.max(EditorMetrics.micro, EditorMetrics.font * tileScale);
   double get captionHeight => _captionHeight * tileScale;
+
+  /// A mark grows slower than the picture it marks: by the square root, so
+  /// at twice the tile it is 1.4× and stays a mark beside the name.
+  double get markScale => math.sqrt(tileScale);
   double get rail =>
       railDrag ??
       (widget.controller.deskWork.value['browserRail'] as num? ??
@@ -1150,22 +1154,22 @@ class _BrowserPanelState extends State<BrowserPanel> {
         ? null
         : Container(
             key: ValueKey('browser:format:${id(item)}'),
-            height: EditorMetrics.s14 * tileScale,
+            height: EditorMetrics.s14 * markScale,
             padding: EdgeInsets.symmetric(
-              horizontal: EditorMetrics.s4 * tileScale,
+              horizontal: EditorMetrics.s4 * markScale,
             ),
             alignment: Alignment.center,
             decoration: BoxDecoration(
               color: identityColor,
               borderRadius: BorderRadius.circular(
-                EditorMetrics.s3 * tileScale,
+                EditorMetrics.s3 * markScale,
               ),
             ),
             child: Text(
               format,
               maxLines: 1,
               style: TextStyle(
-                fontSize: EditorMetrics.micro * tileScale,
+                fontSize: EditorMetrics.micro * markScale,
                 fontWeight: FontWeight.w600,
                 letterSpacing: .5,
                 color: EditorTheme.tabInk,
@@ -1174,7 +1178,7 @@ class _BrowserPanelState extends State<BrowserPanel> {
           );
     final badgeRoom = badge == null
         ? 0.0
-        : (_badgeWidth(format) + EditorMetrics.s4) * tileScale;
+        : (_badgeWidth(format) + EditorMetrics.s4) * markScale;
     final air = EditorMetrics.s4 * tileScale;
     final caption = SizedBox(
       key: ValueKey('browser:name:${id(item)}'),
@@ -1336,8 +1340,8 @@ class _BrowserPanelState extends State<BrowserPanel> {
     final fallback = Center(
       child: shape != null
           ? SizedBox(
-              width: EditorMetrics.s32,
-              height: EditorMetrics.s32,
+              width: EditorMetrics.s32 * tileScale,
+              height: EditorMetrics.s32 * tileScale,
               child: CustomPaint(
                 key: ValueKey('browser:shape:${shape.name}'),
                 painter: _ShapeMark(shape, EditorTheme.kindColor('3d')),
@@ -1351,7 +1355,7 @@ class _BrowserPanelState extends State<BrowserPanel> {
                   : family(item) == '3D'
                   ? Icons.view_in_ar
                   : Icons.image_outlined,
-              size: EditorMetrics.s19,
+              size: EditorMetrics.s19 * tileScale,
               color: EditorTheme.muted,
             ),
     );
