@@ -2303,46 +2303,88 @@ Future<List<List<double>>> paletteOf(Uint8List bytes, {int count = 6}) async {
 
 /// One line that keeps the whole name: the type shrinks to the tile, down to
 /// the micro size, and only past that does the tail get cut.
-class _FittedName extends StatelessWidget {
+/// A name at full size. One that does not fit is cut at the edge, and while
+/// the pointer rests on it the name slides left until its end shows, then
+/// slides back — so nothing is ever shrunk to fit.
+class _FittedName extends StatefulWidget {
   const _FittedName(this.name, this.width, {this.size = EditorMetrics.font});
   final String name;
   final double width;
-
-  /// The type size the shelf wants; the name shrinks from here to fit.
   final double size;
 
   /// The laid-out width of a name at a size. Names repeat across tiles and
   /// survive rebuilds, so lay each one out once.
   static final _natural = <String, double>{};
-  static double _widthOf(String name, double size) {
+  static double widthOf(String name, double size) {
     if (_natural.length > 4096) _natural.clear();
     return _natural['$size:$name'] ??= () {
-        final painter = TextPainter(
-          text: TextSpan(
-            text: name,
-            style: TextStyle(fontSize: size),
-          ),
-          maxLines: 1,
-          textDirection: TextDirection.ltr,
-        )..layout();
-        final width = painter.width;
+      final painter = TextPainter(
+        text: TextSpan(text: name, style: TextStyle(fontSize: size)),
+        maxLines: 1,
+        textDirection: TextDirection.ltr,
+      )..layout();
+      final width = painter.width;
       painter.dispose();
       return width;
     }();
   }
 
   @override
+  State<_FittedName> createState() => _FittedNameState();
+}
+
+class _FittedNameState extends State<_FittedName>
+    with SingleTickerProviderStateMixin {
+  late final _slide = AnimationController(vsync: this);
+
+  double get _overflow =>
+      math.max(0, _FittedName.widthOf(widget.name, widget.size) - widget.width);
+
+  @override
+  void dispose() {
+    _slide.dispose();
+    super.dispose();
+  }
+
+  void _enter() {
+    if (_overflow <= 0) return;
+    // A steady reading pace: forty pixels a second, at least half a second.
+    _slide.duration = Duration(
+      milliseconds: math.max(500, (_overflow / 40 * 1000).round()),
+    );
+    _slide.forward();
+  }
+
+  void _leave() => _slide.reverse();
+
+  @override
   Widget build(BuildContext context) {
-    final natural = _widthOf(name, size);
-    final fitted = natural <= width
-        ? size
-        : math.max(EditorMetrics.micro, size * width / natural);
-    return Text(
-      name,
+    final overflow = _overflow;
+    final text = Text(
+      widget.name,
       maxLines: 1,
       softWrap: false,
-      overflow: TextOverflow.ellipsis,
-      style: TextStyle(color: EditorTheme.ink, fontSize: fitted),
+      overflow: TextOverflow.visible,
+      style: TextStyle(color: EditorTheme.ink, fontSize: widget.size),
+    );
+    if (overflow <= 0) return text;
+    return MouseRegion(
+      onEnter: (_) => _enter(),
+      onExit: (_) => _leave(),
+      child: ClipRect(
+        child: AnimatedBuilder(
+          animation: _slide,
+          builder: (context, child) => Transform.translate(
+            offset: Offset(-overflow * Curves.easeInOut.transform(_slide.value), 0),
+            child: child,
+          ),
+          child: OverflowBox(
+            alignment: Alignment.centerLeft,
+            maxWidth: double.infinity,
+            child: text,
+          ),
+        ),
+      ),
     );
   }
 }
