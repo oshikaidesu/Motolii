@@ -153,6 +153,7 @@ impl Compositor {
         comp: CompSpec,
         inputs: &[SequentialInput<'_>],
         environment: Option<&GpuEnvironmentData>,
+        shared: &mut Option<super::surface_scene::SharedMeshScene>,
     ) -> Result<Option<SceneReflection>, CompositorError> {
         if !inputs.iter().any(|i| {
             i.shading
@@ -169,7 +170,7 @@ impl Compositor {
         if !self.reflection_cache_enabled {
             self.reflection_entry = None;
             self.surface_work.cache_retained_texture_bytes = 0;
-            return self.capture_scene_reflection(comp, inputs, environment);
+            return self.capture_scene_reflection(comp, inputs, environment, shared);
         }
         let start = std::time::Instant::now();
         let key = self.reflection_key(comp, inputs, environment);
@@ -190,7 +191,7 @@ impl Compositor {
             self.surface_work.cache_evictions += 1;
         }
         self.surface_work.cache_retained_texture_bytes = 0;
-        let result = self.capture_scene_reflection(comp, inputs, environment)?;
+        let result = self.capture_scene_reflection(comp, inputs, environment, shared)?;
         if let (Some(key), Some(reflection)) = (key, result.clone()) {
             self.surface_work.cache_retained_texture_bytes = key.bytes;
             self.reflection_entry = Some(ReflectionEntry { key, reflection });

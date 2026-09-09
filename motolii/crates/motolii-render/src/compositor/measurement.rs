@@ -3,6 +3,8 @@ use super::*;
 #[derive(Clone, Copy, Debug, Default)]
 pub struct FrameMeasurement {
     pub total_us: u64,
+    pub resolve_us: u64,
+    pub layer_build_us: u64,
     pub prepare_us: u64,
     pub submit_us: u64,
     pub wait_us: u64,

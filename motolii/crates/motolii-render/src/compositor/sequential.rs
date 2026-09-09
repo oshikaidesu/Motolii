@@ -92,7 +92,8 @@ impl Compositor {
             _ => None,
         });
 
-        let reflection = self.cached_scene_reflection(comp, inputs, environment)?;
+        let mut shared_meshes = None;
+        let reflection = self.cached_scene_reflection(comp, inputs, environment, &mut shared_meshes)?;
         let mut background: Option<(AccumulatorBacking, GpuTexture2D)> = None;
 
         // 層ごとに submit しない — 同期の回数が層数に比例する。
@@ -291,7 +292,7 @@ impl Compositor {
             }
 
             let sky = run.iter().any(|input| matches!(input.content, SequentialContent::Environment(e) if environment.is_some_and(|top| std::ptr::eq(top, e))));
-            let draws = self.surface_scene_draws(comp, run, rects, false, None)?;
+            let draws = self.surface_scene_draws(comp, run, rects, false, None, shared_meshes.as_ref(), run_start)?;
 
             let needs_backdrop = run.iter().any(|i| i.shading.reads_backdrop);
             let backdrop = match (&background, needs_backdrop) {

@@ -147,6 +147,7 @@ fn repeated_mirrors_share_captures_batches_and_do_not_copy_the_backdrop() {
     let sky = sky_png(dir.path(), "white.png", 255, 255);
     let mut engine = Engine::new().unwrap();
     engine.set_reflection_cache_enabled(false);
+    engine.set_gpu_instance_sharing_enabled(false);
     for count in [10, 100, 1000] {
         let mut doc = scene(dir.path(), &sky, true);
         let mesh = LayerId(2);
@@ -400,5 +401,108 @@ fn reflection_cache_matches_uncached_after_edits_undo_and_eviction() {
         assert_eq!(after.scene_captures, before.scene_captures);
         assert_eq!(after.cache_hits, before.cache_hits + 1, "step {step}: {after:?}");
         assert!(after.cache_retained_texture_bytes <= 128 * 1024 * 1024);
+    }
+}
+
+#[test]
+fn gpu_instance_sharing_matches_rebuilds_and_uploads_each_copy_once() {
+    let dir = tempfile::tempdir().unwrap();
+    let sky = sky_png(dir.path(), "white.png", 255, 255);
+    let mut doc = scene(dir.path(), &sky, true);
+    let mesh = LayerId(2);
+    doc.apply(Intent::SetEffects { layer: mesh, effects: vec![
+        EffectInstance { id: EffectId(0), plugin_id: "motolii.glass".into() },
+        EffectInstance { id: EffectId(1), plugin_id: placement::REPEAT.into() },
+    ] }).unwrap();
+    set(&mut doc, mesh, property::POSITION, Value::Vec2([0.0, 0.0]));
+    set(&mut doc, mesh, property::SCALE, Value::Vec2([0.7, 0.7]));
+    effect(&mut doc, mesh, 0, "transmission", Value::F64(0.0));
+    effect(&mut doc, mesh, 0, "metallic", Value::F64(1.0));
+    effect(&mut doc, mesh, 1, "mode", Value::F64(2.0));
+    effect(&mut doc, mesh, 1, "columns", Value::F64(32.0));
+    effect(&mut doc, mesh, 1, "position_each", Value::Vec2([2.0, 2.0]));
+    let mut oracle = Engine::new().unwrap();
+    let mut shared = Engine::new().unwrap();
+    oracle.set_gpu_instance_sharing_enabled(false);
+    oracle.set_reflection_cache_enabled(false);
+    shared.set_reflection_cache_enabled(false);
+    for count in [10, 100, 1000] {
+        effect(&mut doc, mesh, 1, "count", Value::F64(count as f64));
+        let expected = oracle.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+        let before = shared.surface_work();
+        let actual = shared.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+        let after = shared.surface_work();
+        assert!(shared.layer_failures().is_empty());
+        assert_eq!(actual, expected, "shared GPU subset count={count}");
+        assert_eq!(after.mesh_instances_uploaded - before.mesh_instances_uploaded, count);
+        assert_eq!(after.mesh_batches - before.mesh_batches, 1);
+        assert_eq!(after.scene_captures - before.scene_captures, 12);
+        assert_eq!(shared.drawn_layers(), count as usize + 1);
+    }
+    for opacity in [0.5, 1.0] {
+        set(&mut doc, mesh, property::OPACITY, Value::F64(opacity));
+        effect(&mut doc, mesh, 1, "count", Value::F64(10.0));
+        let expected = oracle.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+        let before = shared.surface_work();
+        let actual = shared.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+        assert_eq!(actual, expected, "transparency fallback {opacity}");
+        if opacity < 1.0 { assert!(shared.surface_work().mesh_batches - before.mesh_batches > 1); }
+    }
+    for clipped in [false, true] {
+        let mut effects = vec![
+            EffectInstance { id: EffectId(0), plugin_id: "motolii.glass".into() },
+            EffectInstance { id: EffectId(2), plugin_id: "motolii.turbulent_displace".into() },
+        ];
+        if clipped { effects.push(EffectInstance { id: EffectId(3), plugin_id: "motolii.clip".into() }); }
+        effects.push(EffectInstance { id: EffectId(1), plugin_id: placement::REPEAT.into() });
+        doc.apply(Intent::SetEffects { layer: mesh, effects }).unwrap();
+        effect(&mut doc, mesh, 2, "amount", Value::F64(0.2));
+        effect(&mut doc, mesh, 2, "evolution", Value::F64(0.5));
+        let expected = oracle.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+        let before = shared.surface_work();
+        let actual = shared.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+        assert!(shared.layer_failures().is_empty());
+        assert_eq!(expected, actual, "field with clip={clipped}");
+        if clipped { assert!(shared.surface_work().mesh_batches - before.mesh_batches > 1); }
+    }
+
+}
+
+#[test]
+fn gpu_instance_subsets_preserve_rect_mesh_boundaries_and_surface_parameters() {
+    let dir = tempfile::tempdir().unwrap();
+    let sky = sky_png(dir.path(), "white.png", 255, 255);
+    let mut doc = scene(dir.path(), &sky, true);
+    let red = dir.path().join("red.png");
+    image::RgbaImage::from_pixel(SIZE, SIZE, image::Rgba([255, 0, 0, 255])).save(&red).unwrap();
+    let sender = file_layer(&mut doc, 3, 2, &red);
+    set(&mut doc, sender, property::POSITION, Value::Vec2([-300.0, -300.0]));
+    set(&mut doc, sender, property::SCALE, Value::Vec2([10.0, 10.0]));
+    set(&mut doc, sender, "position.z", Value::F64(-200.0));
+    let second = file_layer(&mut doc, 4, 3, &dir.path().join("quad.obj"));
+    set(&mut doc, second, property::POSITION, Value::Vec2([35.0, 35.0]));
+    set(&mut doc, second, property::SCALE, Value::Vec2([8.0, 8.0]));
+    for mesh in [LayerId(2), second] {
+        doc.apply(Intent::SetEffects { layer: mesh, effects: vec![
+            EffectInstance { id: EffectId(0), plugin_id: "motolii.glass".into() },
+        ] }).unwrap();
+        effect(&mut doc, mesh, 0, "transmission", Value::F64(0.0));
+        effect(&mut doc, mesh, 0, "metallic", Value::F64(1.0));
+    }
+    let mut oracle = Engine::new().unwrap();
+    let mut shared = Engine::new().unwrap();
+    oracle.set_gpu_instance_sharing_enabled(false);
+    oracle.set_reflection_cache_enabled(false);
+    shared.set_reflection_cache_enabled(false);
+    for roughness in [0.0, 0.4, 0.0] {
+        effect(&mut doc, second, 0, "roughness", Value::F64(roughness));
+        let expected = oracle.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+        let before = shared.surface_work();
+        let actual = shared.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+        let after = shared.surface_work();
+        assert!(shared.layer_failures().is_empty());
+        assert_eq!(expected, actual, "interleaved main runs roughness={roughness}");
+        assert_eq!(after.mesh_instances_uploaded - before.mesh_instances_uploaded, 2);
+        assert!(after.main_runs - before.main_runs >= 2);
     }
 }

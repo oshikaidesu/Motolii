@@ -43,6 +43,7 @@ impl Compositor {
             surface_work: Default::default(),
             reflection_resources: None,
             reflection_cache_enabled: true,
+            gpu_instance_sharing_enabled: true,
             reflection_entry: None,
             backdrop_resource: None,
             next_readback: 1,

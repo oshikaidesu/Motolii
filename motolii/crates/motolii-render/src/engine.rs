@@ -177,6 +177,10 @@ impl Engine {
         })
     }
 
+    pub fn set_gpu_instance_sharing_enabled(&mut self, enabled: bool) {
+        self.compositor.gpu_instance_sharing_enabled = enabled;
+    }
+
     pub fn set_render_measurement_enabled(&mut self, enabled: bool) {
         self.compositor.measurement_enabled = enabled;
     }

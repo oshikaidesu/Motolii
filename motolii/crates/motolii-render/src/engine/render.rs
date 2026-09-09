@@ -42,6 +42,8 @@ impl Engine {
 
         let text_documents = collect_text_documents(view, &resolved, t)?;
         let shape_documents = collect_shape_documents(view, &resolved)?;
+        self.compositor.measurement.resolve_us = frame_start.elapsed().as_micros() as u64;
+        let layer_start = std::time::Instant::now();
         let layers = self.layers_from_resolved(
             comp,
             camera,
@@ -52,6 +54,7 @@ impl Engine {
             &shape_documents,
         )?;
 
+        self.compositor.measurement.layer_build_us = layer_start.elapsed().as_micros() as u64;
         let background_color = if include_background {
             composition.background
         } else {

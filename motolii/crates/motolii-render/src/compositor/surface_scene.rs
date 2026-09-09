@@ -17,6 +17,29 @@ pub(crate) struct ReflectionResources {
     imported: GpuTexture2D,
 }
 
+pub(super) struct SharedMeshScene {
+    draw: MeshDrawData,
+    source_layers: Vec<usize>,
+}
+
+impl SharedMeshScene {
+    fn select(&self, range: std::ops::Range<usize>, skip: Option<usize>) -> MeshDrawData {
+        if skip.is_none()
+            && self
+                .source_layers
+                .first()
+                .zip(self.source_layers.last())
+                .is_some_and(|(&first, &last)| range.contains(&first) && range.contains(&last))
+        {
+            return self.draw.clone();
+        }
+        self.draw.select_source_instances(|source| {
+            let layer = self.source_layers[source];
+            range.contains(&layer) && skip != Some(layer)
+        })
+    }
+}
+
 pub(crate) struct SceneDraws {
     rects: RectangleDrawData,
     clouds: Vec<PointCloudDrawData>,
@@ -84,6 +107,72 @@ fn bounds(comp: CompSpec, input: &SequentialInput<'_>) -> Option<(glam::Vec3, gl
 }
 
 impl Compositor {
+    pub(super) fn shared_mesh_scene(
+        &mut self,
+        comp: CompSpec,
+        inputs: &[SequentialInput<'_>],
+    ) -> Result<Option<SharedMeshScene>, CompositorError> {
+        if !self.gpu_instance_sharing_enabled {
+            return Ok(None);
+        }
+        let mut count = 0;
+        let mut instance_count = 0usize;
+        for input in inputs {
+            if let SequentialContent::Model(model) = input.content {
+                if input.blend_mode != BlendMode::Normal
+                    || input.opacity != 1.0
+                    || input.shading.reads_backdrop
+                    || input.clip.is_some()
+                    || model
+                        .instances
+                        .iter()
+                        .any(|i| i.gpu_mesh.materials.iter().any(|m| m.has_transparency))
+                {
+                    return Ok(None);
+                }
+                count += 1;
+                instance_count = instance_count.saturating_add(model.instances.len());
+            }
+        }
+        if count < 2
+            || instance_count > u32::MAX as usize
+            || instance_count.saturating_mul(MeshDrawData::gpu_instance_size_bytes()) as u64
+                > self.ctx.device.limits().max_buffer_size
+        {
+            return Ok(None);
+        }
+        let started = std::time::Instant::now();
+        let mut instances = Vec::new();
+        let mut source_layers = Vec::new();
+        for (index, input) in inputs.iter().enumerate() {
+            if let SequentialContent::Model(model) = input.content {
+                let (made, _) = self.model_instances(
+                    model,
+                    input.placement,
+                    input.opacity,
+                    comp,
+                    input.projection_camera,
+                    input.projection,
+                    &input.shading,
+                    input.clip,
+                );
+                source_layers.extend(std::iter::repeat_n(index, made.len()));
+                instances.extend(made);
+            }
+        }
+        let draw = MeshDrawData::new(&self.ctx, &instances)
+            .map_err(|e| CompositorError::Draw(e.to_string()))?;
+        self.surface_work.mesh_batches += 1;
+        self.surface_work.mesh_instances_uploaded += instances.len() as u64;
+        self.surface_work.mesh_instance_upload_bytes +=
+            (instances.len() * MeshDrawData::gpu_instance_size_bytes()) as u64;
+        self.surface_work.draw_data_prepare_us += started.elapsed().as_micros() as u64;
+        Ok(Some(SharedMeshScene {
+            draw,
+            source_layers,
+        }))
+    }
+
     /// One geometry conversion for the main view and auxiliary reflection views.
     pub(super) fn surface_scene_draws(
         &mut self,
@@ -92,11 +181,16 @@ impl Compositor {
         mut rects: Vec<TexturedRect>,
         capture: bool,
         skip: Option<usize>,
+        shared: Option<&SharedMeshScene>,
+        input_offset: usize,
     ) -> Result<SceneDraws, CompositorError> {
+        let started = std::time::Instant::now();
         let mut clouds = Vec::new();
         let mut mesh_groups: Vec<(ClipPlane, Vec<GpuMeshInstance>)> = Vec::new();
         for (index, input) in inputs.iter().enumerate() {
-            if skip == Some(index) {
+            if skip == Some(index)
+                || (shared.is_some() && matches!(input.content, SequentialContent::Model(_)))
+            {
                 continue;
             }
             let shading = input.shading.clone();
@@ -178,13 +272,27 @@ impl Compositor {
             }
         }
         self.surface_work.mesh_batches += mesh_groups.len() as u64;
-        let meshes = mesh_groups
+        let uploaded: usize = mesh_groups
+            .iter()
+            .map(|(_, instances)| instances.len())
+            .sum();
+        self.surface_work.mesh_instances_uploaded += uploaded as u64;
+        self.surface_work.mesh_instance_upload_bytes +=
+            (uploaded * MeshDrawData::gpu_instance_size_bytes()) as u64;
+        let mut meshes: Vec<MeshDrawData> = mesh_groups
             .into_iter()
             .map(|(clip, instances)| {
                 MeshDrawData::new_clipped(&self.ctx, &instances, clip)
                     .map_err(|e| CompositorError::Draw(e.to_string()))
             })
             .collect::<Result<_, _>>()?;
+        if let Some(shared) = shared {
+            meshes.push(shared.select(
+                input_offset..input_offset + inputs.len(),
+                skip.map(|i| input_offset + i),
+            ));
+        }
+        self.surface_work.draw_data_prepare_us += started.elapsed().as_micros() as u64;
         Ok(SceneDraws {
             rects: RectangleDrawData::new(&self.ctx, &rects)
                 .map_err(|e| CompositorError::Rectangles(e.to_string()))?,
@@ -199,6 +307,7 @@ impl Compositor {
         comp: CompSpec,
         inputs: &[SequentialInput<'_>],
         environment: Option<&GpuEnvironmentData>,
+        shared: &mut Option<SharedMeshScene>,
     ) -> Result<Option<SceneReflection>, CompositorError> {
         let candidates: Vec<_> = inputs
             .iter()
@@ -301,6 +410,7 @@ impl Compositor {
                 }
             }
         };
+        *shared = self.shared_mesh_scene(comp, inputs)?;
         let directions = [
             glam::Vec3::X,
             glam::Vec3::NEG_X,
@@ -319,7 +429,15 @@ impl Compositor {
         ];
         for (probe, (&receiver, &origin)) in receivers.iter().zip(&origins).enumerate() {
             // Draw data is reusable across all six camera views.
-            let draws = self.surface_scene_draws(comp, inputs, Vec::new(), true, Some(receiver))?;
+            let draws = self.surface_scene_draws(
+                comp,
+                inputs,
+                Vec::new(),
+                true,
+                Some(receiver),
+                shared.as_ref(),
+                0,
+            )?;
             for face in 0..6 {
                 let view = glam::Mat4::look_at_rh(origin, origin + directions[face], ups[face]);
                 let rotation = glam::Quat::from_mat3(&glam::Mat3::from_mat4(view));

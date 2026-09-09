@@ -1,0 +1,260 @@
+{
+  "gpu": "Apple M4 (8 cores)",
+  "api": "Metal / wgpu 29",
+  "resolution": [
+    1280,
+    720
+  ],
+  "build": "dev, unoptimized",
+  "samples_per_mode": 40,
+  "independent_runs": 2,
+  "warmup_per_run": 3,
+  "pixel_equal_pairs_including_warmup": 276,
+  "reflection_cache_enabled_in_both_modes": true,
+  "fork": "a97e03916c7bf6f03307b3cf2f9710ecebf2642b",
+  "gpu_timing_reliable": false,
+  "cpu_source_mapping_bytes_per_instance": 32,
+  "gpu_instance_bytes": 156,
+  "rows": [
+    {
+      "copies": 10,
+      "scenario": "static",
+      "per_view": {
+        "total_us": 9119.5,
+        "prepare_us": 1501.0,
+        "resolve_us": 583.0,
+        "layer_build_us": 106.5,
+        "draw_data_prepare_us": 77.0,
+        "submit_us": 282.5,
+        "wait_us": 6996.0,
+        "readback_us": 405.0,
+        "mesh_instances_uploaded": 10.0,
+        "mesh_instance_upload_bytes": 1560.0,
+        "captures": 0.0
+      },
+      "shared": {
+        "total_us": 8665.0,
+        "prepare_us": 1521.0,
+        "resolve_us": 595.0,
+        "layer_build_us": 105.0,
+        "draw_data_prepare_us": 79.5,
+        "submit_us": 287.5,
+        "wait_us": 6367.5,
+        "readback_us": 416.0,
+        "mesh_instances_uploaded": 10.0,
+        "mesh_instance_upload_bytes": 1560.0,
+        "captures": 0.0
+      },
+      "total_reduction_percent": 4.983825867646252,
+      "paired_delta_median_us": 33.0,
+      "paired_delta_bootstrap_95_us": [
+        -1121.0,
+        931.0
+      ],
+      "gpu_status": {
+        "valid": 65,
+        "non_monotonic_timestamp": 15
+      }
+    },
+    {
+      "copies": 10,
+      "scenario": "moving",
+      "per_view": {
+        "total_us": 10199.5,
+        "prepare_us": 4002.0,
+        "resolve_us": 708.5,
+        "layer_build_us": 95.0,
+        "draw_data_prepare_us": 190.0,
+        "submit_us": 413.5,
+        "wait_us": 5195.5,
+        "readback_us": 384.5,
+        "mesh_instances_uploaded": 28.0,
+        "mesh_instance_upload_bytes": 4368.0,
+        "captures": 12.0
+      },
+      "shared": {
+        "total_us": 9984.0,
+        "prepare_us": 3939.0,
+        "resolve_us": 696.0,
+        "layer_build_us": 93.5,
+        "draw_data_prepare_us": 71.0,
+        "submit_us": 436.0,
+        "wait_us": 5172.5,
+        "readback_us": 364.0,
+        "mesh_instances_uploaded": 10.0,
+        "mesh_instance_upload_bytes": 1560.0,
+        "captures": 12.0
+      },
+      "total_reduction_percent": 2.112848669052403,
+      "paired_delta_median_us": -356.0,
+      "paired_delta_bootstrap_95_us": [
+        -899.5,
+        62.5
+      ],
+      "gpu_status": {
+        "valid": 71,
+        "non_monotonic_timestamp": 9
+      }
+    },
+    {
+      "copies": 100,
+      "scenario": "static",
+      "per_view": {
+        "total_us": 9140.5,
+        "prepare_us": 2159.0,
+        "resolve_us": 1021.5,
+        "layer_build_us": 175.0,
+        "draw_data_prepare_us": 162.0,
+        "submit_us": 259.0,
+        "wait_us": 6388.5,
+        "readback_us": 376.5,
+        "mesh_instances_uploaded": 100.0,
+        "mesh_instance_upload_bytes": 15600.0,
+        "captures": 0.0
+      },
+      "shared": {
+        "total_us": 9191.0,
+        "prepare_us": 2092.0,
+        "resolve_us": 1002.0,
+        "layer_build_us": 172.5,
+        "draw_data_prepare_us": 157.5,
+        "submit_us": 255.5,
+        "wait_us": 6390.0,
+        "readback_us": 399.5,
+        "mesh_instances_uploaded": 100.0,
+        "mesh_instance_upload_bytes": 15600.0,
+        "captures": 0.0
+      },
+      "total_reduction_percent": -0.5524861878453136,
+      "paired_delta_median_us": 544.5,
+      "paired_delta_bootstrap_95_us": [
+        -78.5,
+        1179.0
+      ],
+      "gpu_status": {
+        "non_monotonic_timestamp": 12,
+        "valid": 68
+      }
+    },
+    {
+      "copies": 100,
+      "scenario": "moving",
+      "per_view": {
+        "total_us": 10994.0,
+        "prepare_us": 4921.5,
+        "resolve_us": 1085.0,
+        "layer_build_us": 157.0,
+        "draw_data_prepare_us": 421.5,
+        "submit_us": 379.5,
+        "wait_us": 5186.5,
+        "readback_us": 346.5,
+        "mesh_instances_uploaded": 298.0,
+        "mesh_instance_upload_bytes": 46488.0,
+        "captures": 12.0
+      },
+      "shared": {
+        "total_us": 11001.0,
+        "prepare_us": 4718.5,
+        "resolve_us": 1084.5,
+        "layer_build_us": 159.0,
+        "draw_data_prepare_us": 159.5,
+        "submit_us": 378.0,
+        "wait_us": 5252.0,
+        "readback_us": 347.0,
+        "mesh_instances_uploaded": 100.0,
+        "mesh_instance_upload_bytes": 15600.0,
+        "captures": 12.0
+      },
+      "total_reduction_percent": -0.06367109332363619,
+      "paired_delta_median_us": 107.0,
+      "paired_delta_bootstrap_95_us": [
+        -515.0,
+        481.5
+      ],
+      "gpu_status": {
+        "valid": 62,
+        "non_monotonic_timestamp": 18
+      }
+    },
+    {
+      "copies": 1000,
+      "scenario": "static",
+      "per_view": {
+        "total_us": 16257.5,
+        "prepare_us": 7811.0,
+        "resolve_us": 4598.0,
+        "layer_build_us": 770.5,
+        "draw_data_prepare_us": 919.5,
+        "submit_us": 251.0,
+        "wait_us": 7624.0,
+        "readback_us": 342.5,
+        "mesh_instances_uploaded": 1000.0,
+        "mesh_instance_upload_bytes": 156000.0,
+        "captures": 0.0
+      },
+      "shared": {
+        "total_us": 16476.0,
+        "prepare_us": 7908.5,
+        "resolve_us": 4609.5,
+        "layer_build_us": 765.0,
+        "draw_data_prepare_us": 926.5,
+        "submit_us": 254.0,
+        "wait_us": 7632.0,
+        "readback_us": 334.5,
+        "mesh_instances_uploaded": 1000.0,
+        "mesh_instance_upload_bytes": 156000.0,
+        "captures": 0.0
+      },
+      "total_reduction_percent": -1.3439950791942268,
+      "paired_delta_median_us": -52.0,
+      "paired_delta_bootstrap_95_us": [
+        -279.5,
+        337.0
+      ],
+      "gpu_status": {
+        "valid": 69,
+        "non_monotonic_timestamp": 11
+      }
+    },
+    {
+      "copies": 1000,
+      "scenario": "moving",
+      "per_view": {
+        "total_us": 22644.0,
+        "prepare_us": 15601.0,
+        "resolve_us": 4806.5,
+        "layer_build_us": 777.0,
+        "draw_data_prepare_us": 2809.0,
+        "submit_us": 394.0,
+        "wait_us": 6410.0,
+        "readback_us": 342.5,
+        "mesh_instances_uploaded": 2998.0,
+        "mesh_instance_upload_bytes": 467688.0,
+        "captures": 12.0
+      },
+      "shared": {
+        "total_us": 21064.5,
+        "prepare_us": 13832.5,
+        "resolve_us": 4796.0,
+        "layer_build_us": 773.5,
+        "draw_data_prepare_us": 1029.5,
+        "submit_us": 394.5,
+        "wait_us": 6413.5,
+        "readback_us": 332.0,
+        "mesh_instances_uploaded": 1000.0,
+        "mesh_instance_upload_bytes": 156000.0,
+        "captures": 12.0
+      },
+      "total_reduction_percent": 6.9753577106518305,
+      "paired_delta_median_us": -1935.5,
+      "paired_delta_bootstrap_95_us": [
+        -4399.0,
+        -340.0
+      ],
+      "gpu_status": {
+        "valid": 61,
+        "non_monotonic_timestamp": 19
+      }
+    }
+  ]
+}
