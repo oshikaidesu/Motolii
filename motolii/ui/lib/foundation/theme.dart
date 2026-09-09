@@ -148,6 +148,7 @@ abstract final class EditorTheme {
       labelLarge: TextStyle(fontSize: EditorMetrics.font, color: ink),
     ),
     visualDensity: VisualDensity.compact,
+    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
     inputDecorationTheme: const InputDecorationTheme(
       isDense: true,
       filled: true,
@@ -179,10 +180,6 @@ abstract final class EditorTheme {
       ),
     ),
     iconTheme: const IconThemeData(size: 14, color: ink),
-    tooltipTheme: const TooltipThemeData(
-      waitDuration: Duration(milliseconds: 500),
-      textStyle: TextStyle(fontSize: 11, color: Colors.white),
-    ),
   );
 }
 
