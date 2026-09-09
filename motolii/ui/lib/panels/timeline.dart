@@ -119,6 +119,10 @@ class _TimelinePanelState extends State<TimelinePanel> {
       HardwareKeyboard.instance.isControlPressed;
   double get offset =>
       horizontal.hasClients ? horizontal.positions.last.pixels : 0;
+
+  /// 横に流れた合図。絵を持つのは目盛り・レーン・全体図の三つだけなので、
+  /// 流すたびに板ごと建て直さず、その三つを起こす。
+  final scrolled = ValueNotifier<int>(0);
   int get duration =>
       (widget.controller.state['durationFrames'] as num? ?? 1).toInt();
 
@@ -178,7 +182,7 @@ class _TimelinePanelState extends State<TimelinePanel> {
   }
 
   void changed() {
-    if (mounted) setState(() {});
+    if (mounted) scrolled.value++;
   }
 
   @override
@@ -192,6 +196,7 @@ class _TimelinePanelState extends State<TimelinePanel> {
     widget.controller.frame.removeListener(frameMoved);
     horizontal.dispose();
     vertical.dispose();
+    scrolled.dispose();
     focus.removeListener(laneFocusChanged);
     focus.dispose();
     super.dispose();
@@ -955,6 +960,7 @@ class _TimelinePanelState extends State<TimelinePanel> {
                     listenable: Listenable.merge([
                       widget.controller.frame,
                       _timeline,
+                      scrolled,
                     ]),
                     builder: (context, _) => GestureDetector(
                       supportedDevices: const {
@@ -1023,6 +1029,7 @@ class _TimelinePanelState extends State<TimelinePanel> {
                                 listenable: Listenable.merge([
                                   widget.controller.frame,
                                   _timeline,
+                                  scrolled,
                                 ]),
                                 builder: (context, _) => SizedBox(
                                   key: rowsKey,
@@ -1249,6 +1256,7 @@ class _TimelinePanelState extends State<TimelinePanel> {
                       listenable: Listenable.merge([
                         widget.controller.frame,
                         _timeline,
+                        scrolled,
                       ]),
                       builder: (context, _) => CustomPaint(
                         size: Size(overview.maxWidth, EditorMetrics.s18),

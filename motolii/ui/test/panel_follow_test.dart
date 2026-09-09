@@ -5,6 +5,7 @@ import '../lib/app/editor_app.dart';
 import '../lib/foundation/theme.dart';
 import '../lib/panels/ease_desk.dart';
 import '../lib/panels/registry.dart';
+import '../lib/panels/timeline.dart';
 import '../lib/session/editor_session.dart';
 
 /// The panels below stopped rebuilding themselves for every snapshot; each
@@ -255,5 +256,11 @@ void main() {
       isTrue,
       reason: 'the lanes must redraw for the layer that took the selection',
     );
+
+    // 横に流すのは板を建て直さず painter を起こす道なので、その道を確かめる。
+    final dynamic panel = tester.state(find.byType(TimelinePanel));
+    panel.scrolled.value++;
+    await tester.pump();
+    expect(identical(after, lanes()), isFalse);
   });
 }
