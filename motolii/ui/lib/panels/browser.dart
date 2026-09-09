@@ -1011,7 +1011,7 @@ class _BrowserPanelState extends State<BrowserPanel> {
     select(item);
     final missing = item['missing'] == true;
     final own = tab == 'Media' && item['builtin'] != true;
-    final path = item['path'] as String?;
+    final path = _filePath(item);
     // What the card is, before what can be done to it: the same sheet and
     // rows every panel's menu uses, the facts as quiet rows on top.
     final facts = <String>[
@@ -1021,6 +1021,7 @@ class _BrowserPanelState extends State<BrowserPanel> {
           if (item['mime'] != null) '${item['mime']}',
         ].join(' · '),
         if (path != null && !missing) _fileFact(path),
+        if (path != null) _homely(File(path).parent.path),
         if (missing) 'Missing file',
         if (item['used'] == true) 'In use by a layer',
       ] else if (item['detail'] != null)
@@ -1059,9 +1060,10 @@ class _BrowserPanelState extends State<BrowserPanel> {
             child: const Text('Replace selected layer'),
           ),
           if (path != null && !missing) ...[
+            EditorMenuItem<String>(value: 'reveal', child: Text(_revealLabel)),
             const EditorMenuItem<String>(
-              value: 'reveal',
-              child: Text('Reveal in Finder'),
+              value: 'open',
+              child: Text('Open with default app'),
             ),
             if ('${item['mime']}'.startsWith('image/'))
               const EditorMenuItem<String>(
@@ -1069,6 +1071,11 @@ class _BrowserPanelState extends State<BrowserPanel> {
                 child: Text('Extract palette'),
               ),
           ],
+          if (path != null)
+            const EditorMenuItem<String>(
+              value: 'copyPath',
+              child: Text('Copy path'),
+            ),
           EditorMenuItem<String>(
             value: 'remove',
             enabled: has('removeAsset') && item['used'] != true,
@@ -1089,9 +1096,13 @@ class _BrowserPanelState extends State<BrowserPanel> {
         case 'replace':
           widget.controller.command('replaceAsset', {'id': item['id']});
         case 'reveal':
-          widget.controller.native('reveal', {'path': item['path']});
+          widget.controller.native('reveal', {'path': path});
+        case 'open':
+          widget.controller.native('openFile', {'path': path});
+        case 'copyPath':
+          Clipboard.setData(ClipboardData(text: path ?? ''));
         case 'palette':
-          _savePalette(File('${item['path']}').readAsBytesSync());
+          _savePalette(File('$path').readAsBytesSync());
         case 'remove':
           widget.controller.command('removeAsset', {'id': item['id']});
         case 'forget':
@@ -1102,15 +1113,36 @@ class _BrowserPanelState extends State<BrowserPanel> {
     });
   }
 
-  /// Size and folder of the file behind a card, for the menu's facts.
+  /// The plain path behind a card; the status may carry it as a file URI.
+  static String? _filePath(Map<String, dynamic> item) {
+    final raw = item['path'] as String?;
+    if (raw == null || raw.isEmpty) return null;
+    return raw.startsWith('file:') ? Uri.parse(raw).toFilePath() : raw;
+  }
+
+  /// A path the way a person reads it: the home folder as ~.
+  static String _homely(String path) {
+    final home = Platform.environment['HOME'];
+    return home != null && path.startsWith(home)
+        ? '~${path.substring(home.length)}'
+        : path;
+  }
+
+  /// The file's size, for the menu's facts.
   static String _fileFact(String path) {
-    final file = File(path.startsWith('file:') ? Uri.parse(path).toFilePath() : path);
+    final file = File(path);
     final bytes = file.existsSync() ? file.lengthSync() : 0;
-    final size = bytes >= 1 << 20
+    return bytes >= 1 << 20
         ? '${(bytes / (1 << 20)).toStringAsFixed(1)} MB'
         : '${(bytes / (1 << 10)).round()} KB';
-    return '$size · ${file.parent.path.split('/').last}';
   }
+
+  /// The system's own name for showing a file where it lives.
+  static String get _revealLabel => Platform.isMacOS
+      ? 'Reveal in Finder'
+      : Platform.isWindows
+      ? 'Show in Explorer'
+      : 'Show in file manager';
 
   /// The pointer on any part of the card is the card's hover: the name
   /// slides, and a picture-only card shows its band.

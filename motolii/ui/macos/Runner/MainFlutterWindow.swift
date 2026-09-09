@@ -487,6 +487,10 @@ final class ProbeHost: NSObject {
       guard let path = args["path"] as? String else { fail(result, "Missing file path"); return }
       NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
       result(true)
+    case "openFile":
+      // The file in whatever the system opens it with; nothing of ours.
+      guard let path = args["path"] as? String else { fail(result, "Missing file path"); return }
+      result(NSWorkspace.shared.open(URL(fileURLWithPath: path)))
     case "open":
       guard isMain else { fail(result, "Open documents from the main window"); return }
       guard let path = args["path"] as? String else { fail(result, "open requires path"); return }
