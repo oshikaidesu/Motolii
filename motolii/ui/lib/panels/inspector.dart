@@ -34,11 +34,197 @@ class _InspectorPanelState extends State<InspectorPanel> {
   List<Map<String, dynamic>>? _gestureLayers;
   void _begin() => _gestureLayers = c.liveLayers().toList();
   final _rows = <String, GlobalKey>{};
+  final _scroll = ScrollController();
+
+  /// The shown layer and its rows by id, worked out once per status. The
+  /// panel asks for the same rows dozens of times while it builds, and
+  /// `liveLayers` copies the document every time it is called.
+  Map<String, dynamic>? _fromState, _fromRendered, _shown;
+  Map<String, Map<String, dynamic>> _byId = const {};
+  List<Map<String, dynamic>> _live = const [];
+
+  /// One listenable per row: a status update pushes the rows that moved, so a
+  /// number that changes rebuilds its own well and nothing else. The frame of
+  /// the panel is rebuilt only when [_stampShape] moves.
+  final _pulse = <String, ValueNotifier<Object?>>{};
+  Object? _shape;
+  int? _shownId;
+
+  static const _watched = [
+    'layers',
+    'selectedId',
+    'selectedIds',
+    'animate',
+    'capabilities',
+    'contentRevision',
+    'documentRevision',
+  ];
 
   @override
   void initState() {
     super.initState();
     c.focusProperty.addListener(_reveal);
+    c.slice('inspector', _watched).addListener(_absorb);
+    c.rendered.addListener(_absorb);
+    _shape = _stampShape();
+    _shownId = _shown?['id'] as int?;
+  }
+
+  /// Take in one status: hand every row that moved to its own listeners, and
+  /// rebuild the frame only when the shape of the panel is not what it was.
+  void _absorb() {
+    _fromState = null;
+    _read();
+    for (final entry in _pulse.entries) {
+      final now = _stampRow(entry.key);
+      if (!sameValue(entry.value.value, now)) entry.value.value = now;
+    }
+    final shape = _stampShape();
+    if (sameValue(_shape, shape)) return;
+    _shape = shape;
+    final id = _shown?['id'] as int?;
+    if (id != _shownId) {
+      _shownId = id;
+      if (_scroll.hasClients) _scroll.jumpTo(0);
+    }
+    if (mounted) setState(() {});
+  }
+
+  void _read() {
+    if (identical(c.state, _fromState) &&
+        identical(c.rendered.value, _fromRendered))
+      return;
+    _fromState = c.state;
+    _fromRendered = c.rendered.value;
+    _live = c.liveLayers();
+    final ids = c.selectedIds;
+    Map<String, dynamic>? shown;
+    if (ids.isNotEmpty) {
+      for (final layer in _live) {
+        if (layer['id'] == ids.last) shown = layer;
+      }
+    }
+    _shown = shown ??= c.activeLayer;
+    _byId = shown == null
+        ? const {}
+        : {
+            for (final row in [
+              ...panelRows(shown['properties']),
+              for (final effect in panelRows(shown['effects']))
+                ...panelRows(effect['params']),
+            ])
+              '${row['id']}': row,
+          };
+  }
+
+  /// The row a control shows, as of the last status.
+  Map<String, dynamic>? _row(String id) {
+    _read();
+    return _byId[id];
+  }
+
+  /// What one control watches: its rows, and the same rows on the other
+  /// selected layers (a well says when they disagree).
+  Object? _stampRow(String name) {
+    _read();
+    return [
+      for (final id in name.split('+')) ...[
+        _byId[id],
+        [
+          for (final layer in _live)
+            if (layer['id'] != _shown?['id'] &&
+                c.selectedIds.contains(layer['id']))
+              _property(layer, id)?['value'],
+        ],
+      ],
+    ];
+  }
+
+  Widget _live2(List<String> ids, Widget Function() body) {
+    final name = ids.join('+');
+    return _Live(
+      pulse: _pulse.putIfAbsent(name, () => ValueNotifier(_stampRow(name))),
+      body: body,
+    );
+  }
+
+  /// What the frame of the panel is made of. The numbers are left out on
+  /// purpose: each row watches its own, so a value that moves rebuilds one
+  /// row and leaves the cards, the words and the glyphs where they are.
+  Object? _stampShape() {
+    _read();
+    final layer = _shown;
+    if (layer == null) return null;
+    return [
+      c.selectedIds,
+      c.state['animate'],
+      c.state['capabilities'],
+      for (final key in const [
+        'id',
+        'kind',
+        'name',
+        'locked',
+        'projection',
+        'parent',
+        'blendMode',
+        'ghostable',
+        'environment',
+        'frozen',
+        'clipToBelow',
+        'anchorFraction',
+        'colors',
+        'fill',
+        'matte',
+        'text',
+      ])
+        layer[key],
+      layer['ghost'] == null,
+      [
+        for (final other in _live) [other['id'], other['name']],
+      ],
+      _scaleEven(),
+      [for (final row in panelRows(layer['properties'])) _stampDeclared(row)],
+      [
+        for (final effect in panelRows(layer['effects']))
+          [
+            effect['id'],
+            effect['name'],
+            effect['enabled'],
+            effect['placement'],
+            effect['layout'],
+            [for (final row in panelRows(effect['params'])) _stampDeclared(row)],
+          ],
+      ],
+    ];
+  }
+
+  /// A row as the panel's shape reads it: what it is, never what it says.
+  static List<Object?> _stampDeclared(Map<String, dynamic> row) => [
+    row['id'],
+    row['label'],
+    row['kind'],
+    row['subtype'],
+    row['unit'],
+    row['min'],
+    row['max'],
+    row['default'],
+    row['choices'],
+    row['hero'],
+    row['advanced'],
+    row['section'],
+    row['group'],
+    switch (row['value']) {
+      final List v => 'list ${v.length}',
+      num() => 'number',
+      String() => 'text',
+      _ => 'other',
+    },
+  ];
+
+  /// Whether the scale line shows one well or two.
+  bool _scaleEven() {
+    final v = _byId['scale']?['value'];
+    return v is List && v.length >= 2 && (v[0] as num) == (v[1] as num);
   }
 
   @override
@@ -46,7 +232,13 @@ class _InspectorPanelState extends State<InspectorPanel> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.controller != c) {
       oldWidget.controller.focusProperty.removeListener(_reveal);
+      oldWidget.controller.slice('inspector', _watched).removeListener(_absorb);
+      oldWidget.controller.rendered.removeListener(_absorb);
       c.focusProperty.addListener(_reveal);
+      c.slice('inspector', _watched).addListener(_absorb);
+      c.rendered.addListener(_absorb);
+      _fromState = null;
+      _absorb();
     }
   }
 
@@ -84,19 +276,22 @@ class _InspectorPanelState extends State<InspectorPanel> {
   }
 
   Map<String, dynamic>? get _active {
-    for (final layer in c.liveLayers()) {
-      if (c.selectedIds.isNotEmpty && layer['id'] == c.selectedIds.last)
-        return layer;
-    }
-    return c.activeLayer;
+    _read();
+    return _shown;
   }
 
   @override
   void dispose() {
     c.focusProperty.removeListener(_reveal);
+    c.slice('inspector', _watched).removeListener(_absorb);
+    c.rendered.removeListener(_absorb);
     for (final n in _nodes.values) {
       n.dispose();
     }
+    for (final p in _pulse.values) {
+      p.dispose();
+    }
+    _scroll.dispose();
     super.dispose();
   }
 
@@ -217,16 +412,32 @@ class _InspectorPanelState extends State<InspectorPanel> {
     }
   }
 
-  /// The numeric well: one axis of a row. Bounded rows paint their amount.
+  /// The numeric well: one axis of a row, watching that row alone.
   Widget _well(
     Map<String, dynamic> layer,
-    Map<String, dynamic> row,
+    String id,
     int axis, {
     String? label,
     double? width,
     bool fill = false,
   }) {
-    width ??= _wellWidth;
+    final slot = width ?? _wellWidth;
+    return _live2([id], () {
+      final row = _row(id);
+      return row == null
+          ? SizedBox(width: slot)
+          : _wellBody(layer, row, axis, label: label, width: slot, fill: fill);
+    });
+  }
+
+  Widget _wellBody(
+    Map<String, dynamic> layer,
+    Map<String, dynamic> row,
+    int axis, {
+    String? label,
+    required double width,
+    bool fill = false,
+  }) {
     final v = row['value'];
     final value = v is List && axis < v.length
         ? v[axis]
@@ -274,7 +485,8 @@ class _InspectorPanelState extends State<InspectorPanel> {
           child: SizedBox(
             width: slotWidth,
             child: EditorNumericField(
-              key: ValueKey('inspector:${layer['id']}:$id:$axis'),
+              key: ValueKey('inspector:$id:$axis'),
+              owner: layer['id'],
               value: value.toDouble() * shownScale,
               idleFocus: _nodes.putIfAbsent(
                 '$id:$axis',
@@ -477,25 +689,22 @@ class _InspectorPanelState extends State<InspectorPanel> {
 
   /// A camera layer authors Center, Zoom and Roll instead of a transform.
   List<Widget> _camera(Map<String, dynamic> layer) {
-    final center = _property(layer, 'camera.center');
-    final zoom = _property(layer, 'camera.zoom');
-    final roll = _property(layer, 'camera.roll');
     return [
-      if (center != null)
+      if (_row('camera.center') != null)
         _line([
           _name(Icons.center_focus_strong, 'Center'),
-          _slot(_well(layer, center, 0, label: 'X')),
+          _slot(_well(layer, 'camera.center', 0, label: 'X')),
           _gap(),
-          _slot(_well(layer, center, 1, label: 'Y')),
+          _slot(_well(layer, 'camera.center', 1, label: 'Y')),
           _gap(),
           _slot(),
           _gap(),
           _tail(),
         ]),
-      if (zoom != null)
+      if (_row('camera.zoom') != null)
         _line([
           _name(Icons.zoom_in, 'Zoom'),
-          _slot(_well(layer, zoom, 0, label: 'Zoom')),
+          _slot(_well(layer, 'camera.zoom', 0, label: 'Zoom')),
           _gap(),
           _slot(),
           _gap(),
@@ -503,29 +712,36 @@ class _InspectorPanelState extends State<InspectorPanel> {
           _gap(),
           _tail(),
         ]),
-      if (roll != null)
+      if (_row('camera.roll') != null)
         _line([
           _name(Icons.rotate_right, 'Roll'),
-          _slot(_well(layer, roll, 0, label: 'Roll')),
+          _slot(_well(layer, 'camera.roll', 0, label: 'Roll')),
           _gap(),
           _slot(),
           _gap(),
           _slot(),
           _gap(),
-          _tail(
-            EditorDial(
-              degrees: (roll['value'] as num? ?? 0).toDouble(),
-              enabled: _canEdit(layer),
-              tint: EditorTheme.angle,
-              onBegin: _begin,
-              onPreview: (d) => _write(layer, roll, d, preview: true),
-              onFinish: () => _finish(false),
-              onCancel: () => _finish(true),
-            ),
-          ),
+          _tail(_dial(layer, 'camera.roll', EditorTheme.angle)),
         ]),
     ];
   }
+
+  /// The angle wheel of one row, watching that row alone.
+  Widget _dial(Map<String, dynamic> layer, String id, [Color? tint]) =>
+      _live2([id], () {
+        final row = _row(id);
+        return row == null
+            ? const SizedBox.shrink()
+            : EditorDial(
+                degrees: (row['value'] as num? ?? 0).toDouble(),
+                enabled: _canEdit(layer),
+                tint: tint,
+                onBegin: _begin,
+                onPreview: (d) => _write(layer, row, d, preview: true),
+                onFinish: () => _finish(false),
+                onCancel: () => _finish(true),
+              );
+      });
 
   /// Property ids the Transform card already shows.
   static const _transformIds = {
@@ -554,7 +770,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
         .where(_isTextProperty)
         .where((r) => r['id'] != 'text_justify' && r['label'] != 'Size')
         .toList();
-    final align = _property(layer, 'text_justify');
+    final align = _row('text_justify');
     return [
       RichTextEditor(
         key: ValueKey('rich:${layer['id']}'),
@@ -594,7 +810,9 @@ class _InspectorPanelState extends State<InspectorPanel> {
         ),
       if (rows.isNotEmpty) ...[
         const SizedBox(height: EditorMetrics.s6),
-        _cells([for (final r in rows) _Cell(_control(layer, r))]),
+        _cells([
+          for (final r in rows) _Cell(_control(layer, '${r['id']}')),
+        ]),
       ],
     ];
   }
@@ -666,37 +884,31 @@ class _InspectorPanelState extends State<InspectorPanel> {
   }
 
   List<Widget> _transform(Map<String, dynamic> layer) {
-    final position = _property(layer, 'position');
-    final z = _property(layer, 'position.z');
-    final scale = _property(layer, 'scale');
-    final sz = _property(layer, 'scale.z');
-    final rotation = _property(layer, 'rotation');
-    final rx = _property(layer, 'rotation.x');
-    final ry = _property(layer, 'rotation.y');
-    final opacity = _property(layer, 'opacity');
-    final sv = scale?['value'];
-    final scaleEven =
-        sv is List && sv.length >= 2 && (sv[0] as num) == (sv[1] as num);
+    final scaleEven = _scaleEven();
     final anchor = layer['anchorFraction'];
     return [
-      if (position != null)
+      if (_row('position') != null)
         _line([
           _name(Icons.open_with, 'Position'),
-          _slot(_well(layer, position, 0, label: 'X')),
+          _slot(_well(layer, 'position', 0, label: 'X')),
           _gap(),
-          _slot(_well(layer, position, 1, label: 'Y')),
+          _slot(_well(layer, 'position', 1, label: 'Y')),
           _gap(),
-          _slot(z == null ? null : _well(layer, z, 0, label: 'Z')),
+          _slot(
+            _row('position.z') == null
+                ? null
+                : _well(layer, 'position.z', 0, label: 'Z'),
+          ),
           _gap(),
           _tail(),
         ]),
-      if (scale != null)
+      if (_row('scale') != null)
         _line([
           _name(Icons.aspect_ratio, 'Scale'),
           _slot(
             _well(
               layer,
-              scale,
+              'scale',
               0,
               label: _scaleLocked && scaleEven ? 'Scale' : 'X',
             ),
@@ -705,10 +917,14 @@ class _InspectorPanelState extends State<InspectorPanel> {
           _slot(
             _scaleLocked && scaleEven
                 ? null
-                : _well(layer, scale, 1, label: 'Y'),
+                : _well(layer, 'scale', 1, label: 'Y'),
           ),
           _gap(),
-          _slot(sz == null ? null : _well(layer, sz, 0, label: 'Z')),
+          _slot(
+            _row('scale.z') == null
+                ? null
+                : _well(layer, 'scale.z', 0, label: 'Z'),
+          ),
           _gap(),
           _tail(
             EditorSwitch(
@@ -722,27 +938,26 @@ class _InspectorPanelState extends State<InspectorPanel> {
             ),
           ),
         ]),
-      if (rotation != null)
+      if (_row('rotation') != null)
         _line([
           _name(Icons.rotate_right, 'Rotation'),
-          _slot(_well(layer, rotation, 0, label: 'Rotation')),
+          _slot(_well(layer, 'rotation', 0, label: 'Rotation')),
           _gap(),
-          _slot(rx == null ? null : _well(layer, rx, 0, label: 'Tilt X')),
-          _gap(),
-          _slot(ry == null ? null : _well(layer, ry, 0, label: 'Tilt Y')),
-          _gap(),
-          _tail(
-            EditorDial(
-              degrees: (rotation['value'] as num? ?? 0).toDouble(),
-              enabled: _canEdit(layer),
-              onBegin: _begin,
-              onPreview: (d) => _write(layer, rotation, d, preview: true),
-              onFinish: () => _finish(false),
-              onCancel: () => _finish(true),
-            ),
+          _slot(
+            _row('rotation.x') == null
+                ? null
+                : _well(layer, 'rotation.x', 0, label: 'Tilt X'),
           ),
+          _gap(),
+          _slot(
+            _row('rotation.y') == null
+                ? null
+                : _well(layer, 'rotation.y', 0, label: 'Tilt Y'),
+          ),
+          _gap(),
+          _tail(_dial(layer, 'rotation')),
         ]),
-      if (opacity != null)
+      if (_row('opacity') != null)
         _line([
           _name(Icons.opacity, 'Opacity'),
           SizedBox(
@@ -750,7 +965,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
             height: EditorMetrics.s22,
             child: _well(
               layer,
-              opacity,
+              'opacity',
               0,
               label: 'Opacity',
               fill: true,
@@ -1048,10 +1263,10 @@ class _InspectorPanelState extends State<InspectorPanel> {
       final y = yId == null ? null : byId[yId];
       if (y != null && row['value'] is num && y['value'] is num) {
         folded.add(yId!);
-        into.add(_Cell(_pointControl(layer, row, y, hero: hero), tall: true));
+        into.add(_Cell(_pointControl(layer, id, yId, hero: hero), tall: true));
         continue;
       }
-      into.add(_Cell(_control(layer, row, hero: hero)));
+      into.add(_Cell(_control(layer, id, hero: hero)));
     }
     final key = '${effect['id']}';
     final open = _advancedOpen.contains(key);
@@ -1147,6 +1362,18 @@ class _InspectorPanelState extends State<InspectorPanel> {
   /// A pair of params as one point: drag the dot, or type either number.
   Widget _pointControl(
     Map<String, dynamic> layer,
+    String xId,
+    String yId, {
+    bool hero = false,
+  }) => _live2([xId, yId], () {
+    final xRow = _row(xId), yRow = _row(yId);
+    return xRow == null || yRow == null
+        ? const SizedBox.shrink()
+        : _pointBody(layer, xRow, yRow, hero: hero);
+  });
+
+  Widget _pointBody(
+    Map<String, dynamic> layer,
     Map<String, dynamic> xRow,
     Map<String, dynamic> yRow, {
     bool hero = false,
@@ -1182,9 +1409,9 @@ class _InspectorPanelState extends State<InspectorPanel> {
             Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                _well(layer, xRow, 0, label: '$label X', width: _beside),
+                _wellBody(layer, xRow, 0, label: '$label X', width: _beside),
                 const SizedBox(height: EditorMetrics.s4),
-                _well(layer, yRow, 0, label: '$label Y', width: _beside),
+                _wellBody(layer, yRow, 0, label: '$label Y', width: _beside),
               ],
             ),
           ],
@@ -1249,6 +1476,17 @@ class _InspectorPanelState extends State<InspectorPanel> {
   /// under it, sized by its kind.
   Widget _control(
     Map<String, dynamic> layer,
+    String id, {
+    bool hero = false,
+  }) => _live2([id], () {
+    final row = _row(id);
+    return row == null
+        ? const SizedBox.shrink()
+        : _controlBody(layer, row, hero: hero);
+  });
+
+  Widget _controlBody(
+    Map<String, dynamic> layer,
     Map<String, dynamic> row, {
     bool hero = false,
   }) {
@@ -1277,13 +1515,13 @@ class _InspectorPanelState extends State<InspectorPanel> {
         body = Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _well(layer, row, 0, label: '$label X', width: _half),
+            _wellBody(layer, row, 0, label: '$label X', width: _half),
             _gap(),
-            _well(layer, row, 1, label: '$label Y', width: _half),
+            _wellBody(layer, row, 1, label: '$label Y', width: _half),
           ],
         );
       case _Kind.bounded:
-        body = _well(layer, row, 0, fill: _tight(row), width: _cellWidth);
+        body = _wellBody(layer, row, 0, fill: _tight(row), width: _cellWidth);
       case _Kind.angle:
         body = Row(
           mainAxisSize: MainAxisSize.min,
@@ -1298,7 +1536,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
               onCancel: () => _finish(true),
             ),
             _gap(),
-            _well(
+            _wellBody(
               layer,
               row,
               0,
@@ -1353,7 +1591,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
         body = Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _well(
+            _wellBody(
               layer,
               row,
               0,
@@ -1464,19 +1702,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
-    animation: Listenable.merge([
-      c.slice('inspector', const [
-        'layers',
-        'selectedId',
-        'selectedIds',
-        'animate',
-        'capabilities',
-        'contentRevision',
-        'documentRevision',
-      ]),
-      c.frame,
-      c.deskWork,
-    ]),
+    animation: c.deskWork,
     builder: (context, _) {
       final layer = _active;
       if (layer == null) {
@@ -1518,7 +1744,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
                 _identity(layer),
                 Expanded(
                   child: ListView(
-                    key: ValueKey(c.selectedIds.join(',')),
+                    controller: _scroll,
                     padding: const EdgeInsets.only(bottom: EditorMetrics.s6),
                     children: [
                       if (layer['kind'] == 'Camera')
@@ -1558,7 +1784,8 @@ class _InspectorPanelState extends State<InspectorPanel> {
                           title: 'Properties',
                           children: [
                             _cells([
-                              for (final r in rest) _Cell(_control(layer, r)),
+                              for (final r in rest)
+                                _Cell(_control(layer, '${r['id']}')),
                             ]),
                           ],
                         ),
@@ -1587,6 +1814,19 @@ class _InspectorPanelState extends State<InspectorPanel> {
         },
       );
     },
+  );
+}
+
+/// One reading of the Inspector: it rebuilds when the rows it names move and
+/// stays as it is while the rest of the panel is rebuilt around it.
+class _Live extends StatelessWidget {
+  const _Live({required this.pulse, required this.body});
+  final ValueNotifier<Object?> pulse;
+  final Widget Function() body;
+  @override
+  Widget build(BuildContext context) => ValueListenableBuilder<Object?>(
+    valueListenable: pulse,
+    builder: (_, __, ___) => body(),
   );
 }
 

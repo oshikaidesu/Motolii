@@ -267,6 +267,7 @@ class EditorNumericField extends StatefulWidget {
     this.defaultValue,
     this.tint,
     this.track = TrackStyle.fill,
+    this.owner,
   });
   final double value, speed;
   final double? min, max;
@@ -291,6 +292,12 @@ class EditorNumericField extends StatefulWidget {
   /// How the track tells the amount: a fill, a threshold, steps or a ruler.
   final TrackStyle track;
   final FocusNode? idleFocus;
+
+  /// Whose number this well shows. The same well stays in place while the
+  /// panel is handed another owner's row — its keys hold the row, not the
+  /// owner, so the render objects are kept — and a draft left open belongs to
+  /// the owner it was typed for, so it is dropped rather than committed here.
+  final Object? owner;
   final Future<void> Function(double) onPreview, onCommit;
   final Future<void> Function() onFinish, onCancel;
   final VoidCallback? onBegin;
@@ -329,6 +336,18 @@ class _EditorNumericFieldState extends State<EditorNumericField> {
 
   void _lost() {
     if (!_focus.hasFocus && _editing) _commitText();
+  }
+
+  @override
+  void didUpdateWidget(covariant EditorNumericField old) {
+    super.didUpdateWidget(old);
+    if (old.owner != widget.owner && (_editing || _shown != null)) {
+      setState(() {
+        _editing = false;
+        _error = null;
+        _shown = null;
+      });
+    }
   }
 
   double _bounded(double n) => n

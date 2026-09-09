@@ -64,7 +64,7 @@ void main() {
         ),
       );
       Future<void> typeScale(String value) async {
-        final field = find.byKey(const ValueKey('inspector:1:scale:0'));
+        final field = find.byKey(const ValueKey('inspector:scale:0'));
         await tester.tap(field);
         await tester.pump(const Duration(milliseconds: 50));
         await tester.tap(field);

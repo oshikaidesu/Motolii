@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../lib/foundation/panel_controls.dart';
 import '../lib/foundation/theme.dart';
 import '../lib/panels/browser.dart';
 import '../lib/panels/font_browser.dart';
@@ -99,6 +100,10 @@ void main() {
       _Rebuilds('Timeline', _inside(TimelinePanel, find.byType(Focus))),
       _Rebuilds('Browser', _inside(BrowserPanel, find.byType(Focus))),
       _Rebuilds('Inspector', _inside(InspectorPanel, find.byType(LayoutBuilder))),
+      _Rebuilds(
+        'Position X',
+        _inside(InspectorPanel, find.byType(EditorNumericField)),
+      ),
       _Rebuilds('Fonts', _inside(FontBrowser, find.byType(ColoredBox))),
       _Rebuilds('History', _inside(HistoryRecords, find.byType(LayoutBuilder))),
     ];
@@ -122,7 +127,16 @@ void main() {
     }
     final counted = {for (final w in watched) w.name: w.count};
     debugPrint('PROBE room=rebuild-scope builds=$counted');
-    expect(counted['Inspector'], 3, reason: 'the panel that shows the value');
+    expect(
+      counted['Position X'],
+      3,
+      reason: 'the well that shows the value',
+    );
+    expect(
+      counted['Inspector'],
+      0,
+      reason: 'the frame of the panel does not read the number',
+    );
     expect(counted['Timeline'], 3, reason: 'the lanes show the same values');
     expect(counted['Browser'], 0);
     expect(counted['Fonts'], 0);

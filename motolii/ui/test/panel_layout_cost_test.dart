@@ -27,6 +27,14 @@ class _Cost {
       .take(4)
       .map((b) => '${b.name.replaceFirst('Render', '')} ${b.count}')
       .join(' ');
+
+  /// The render objects that were laid out, heaviest first: what a spike on
+  /// the first frame of a move is actually made of.
+  String get laid => heaviest
+      .where((b) => b.name.startsWith('Render') || b.name.startsWith('_Render'))
+      .take(6)
+      .map((b) => '${b.name.replaceFirst('Render', '')} ${b.count}')
+      .join(' ');
 }
 
 Future<_Cost> _cost(WidgetTester tester, Future<void> Function() act) async {
@@ -355,4 +363,141 @@ void main() {
       debugPrint('LAYOUT CALLS, $layers layers\n${report.join('\n')}');
     });
   }
+  _switchMain();
+}
+
+/// The panels that read the selection, and the pixels the dock gives them.
+/// The spike the window is judged on is the first frame after a click on the
+/// Stage, so the move measured here is one selection change.
+const _switching = <String, Size>{
+  'Inspector': Size(300, 333),
+  'Timeline': Size(1280, 255),
+  'Ease': Size(300, 200),
+  'Desk': Size(300, 200),
+  'Blend': Size(300, 200),
+  'Stage': Size(712, 537),
+};
+
+/// What one selection change may cost a panel: `(widgets rebuilt, layouts)`.
+const _switchBudget = <String, (int, int)>{
+  'Inspector': (1100, 20),
+  'Timeline': (400, 6),
+  'Ease': (420, 12),
+  'Desk': (450, 4),
+  'Blend': (660, 6),
+  'Stage': (40, 8),
+};
+
+/// The whole dock, taking one selection change: the frame the window is
+/// judged on when a layer is clicked on the Stage.
+Future<String> _windowSwitch(WidgetTester tester) async {
+  TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+      .setMockMethodCallHandler(EditorSession.channel, (call) async {
+        switch (call.method) {
+          case 'windowInfo':
+            return {'id': 'main', 'main': true};
+          case 'readSettings':
+            return {'dock': initialDock().json()};
+          case 'attach':
+          case 'render':
+            return _status(3, 0);
+          default:
+            return <String, dynamic>{};
+        }
+      });
+  await tester.pumpWidget(
+    MaterialApp(
+      theme: EditorTheme.data,
+      builder: EditorApp.noHover,
+      home: const EditorWindow(),
+    ),
+  );
+  await tester.pumpAndSettle();
+  final dynamic host = tester.state(find.byType(EditorWindow));
+  final c = host.c as EditorSession;
+  c.document.value = _status(3, 1);
+  await tester.pump();
+  final pick = await _cost(tester, () async {
+    c.document.value = {
+      ..._status(3, 1),
+      'selectedId': 2,
+      'selectedIds': const [2],
+    };
+    await tester.pump();
+  });
+  await tester.pumpWidget(const SizedBox());
+  expect(
+    pick.calls,
+    lessThanOrEqualTo(60),
+    reason: 'the window lays out too much on one selection change',
+  );
+  expect(
+    pick.builds,
+    lessThanOrEqualTo(2000),
+    reason: 'the window rebuilds too much on one selection change',
+  );
+  return '${'Window'.padRight(10)} '
+      'select builds ${pick.builds.toString().padLeft(5)}   '
+      'layouts ${pick.calls.toString().padLeft(5)}   '
+      '${pick.laid}';
+}
+
+void _switchMain() {
+  testWidgets('the first frame of a selection change', (tester) async {
+    tester.view.physicalSize = const Size(1280, 796);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final report = <String>[await _windowSwitch(tester)];
+    for (final entry in _switching.entries) {
+      final c = EditorSession();
+      addTearDown(c.dispose);
+      c.document.value = _status(3, 0);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: EditorTheme.data,
+          builder: EditorApp.noHover,
+          home: Scaffold(
+            body: Align(
+              alignment: Alignment.topLeft,
+              child: SizedBox.fromSize(
+                size: entry.value,
+                child: buildPanel(entry.key, c, const ValueKey('panel')),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      // Warm: one move of the values, so nothing mounting deferred is counted.
+      c.document.value = _status(3, 1);
+      await tester.pump();
+      final pick = await _cost(tester, () async {
+        c.document.value = {
+          ..._status(3, 1),
+          'selectedId': 2,
+          'selectedIds': const [2],
+        };
+        await tester.pump();
+      });
+      report.add(
+        '${entry.key.padRight(10)} '
+        'select builds ${pick.builds.toString().padLeft(5)}   '
+        'layouts ${pick.calls.toString().padLeft(5)}   '
+        '${pick.laid}',
+      );
+      final (rebuilt, laidOut) = _switchBudget[entry.key]!;
+      expect(
+        pick.builds,
+        lessThanOrEqualTo(rebuilt),
+        reason: '${entry.key} rebuilds too much on one selection change',
+      );
+      expect(
+        pick.calls,
+        lessThanOrEqualTo(laidOut),
+        reason: '${entry.key} lays out too much on one selection change',
+      );
+      await tester.pumpWidget(const SizedBox());
+    }
+    debugPrint('SELECTION CHANGE\n${report.join('\n')}');
+  });
 }
