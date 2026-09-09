@@ -225,7 +225,7 @@ const _budget = <String, (int, int, int)>{
   'Colors': (2, 2, 320),
   'Fonts': (2, 2, 120),
   'Stage': (60, 8, 80),
-  'Inspector': (1100, 8, 400),
+  'Inspector': (120, 8, 400),
   'Notes': (2, 2, 50),
   'Desk': (2, 2, 120),
   'Ease': (430, 12, 170),
