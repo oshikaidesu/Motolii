@@ -1492,10 +1492,14 @@ class EditorZoomBar extends StatelessWidget {
     required this.onChanged,
     required this.keyPrefix,
     required this.base,
+    this.step = 1,
   });
   final double value, min, max, base;
   final ValueChanged<double> onChanged;
   final String keyPrefix;
+
+  /// Percent moved by one press of − or +.
+  final int step;
   @override
   Widget build(BuildContext context) {
     final low = (min / base * 100).ceilToDouble();
@@ -1528,8 +1532,8 @@ class EditorZoomBar extends StatelessWidget {
           );
           return Row(
             children: [
-              step(Icons.remove, -1, 'smaller'),
-              if (box.maxWidth >= 200) ...[
+              step(Icons.remove, -this.step, 'smaller'),
+              if (box.maxWidth >= EditorMetrics.cell) ...[
                 Expanded(
                   child: Slider(
                     min: low,
@@ -1542,7 +1546,7 @@ class EditorZoomBar extends StatelessWidget {
                 field,
               ] else
                 Expanded(child: field),
-              step(Icons.add, 1, 'larger'),
+              step(Icons.add, this.step, 'larger'),
             ],
           );
         },

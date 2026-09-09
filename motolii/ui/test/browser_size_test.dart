@@ -51,7 +51,8 @@ void main() {
     expect(cardWidth(tester), lessThan(wide / 1.5));
     await tester.tap(find.byKey(const ValueKey('browser:tile-larger')));
     await tester.pump(const Duration(seconds: 1));
-    expect(c.deskWork.value['browserTile'], closeTo(49.28, .0001));
+    // One step is a tenth of the default: 60% + 10% of 120.
+    expect(c.deskWork.value['browserTile'], closeTo(84.0, .0001));
   });
 
   testWidgets('Category rail drags narrower and folds away', (tester) async {

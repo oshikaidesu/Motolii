@@ -48,6 +48,7 @@ abstract final class EditorTheme {
     'video' => const Color(0xffdd879e),
     'audio' => const Color(0xff95c78b),
     '3d' => const Color(0xffe6a275),
+    'hdr' => const Color(0xffe6c96a),
     '2d' || 'images' => const Color(0xff93a5f5),
     _ => const Color(0xffc18bd3),
   };

@@ -61,13 +61,19 @@ void main() {
     expect(find.text('clip0'), findsOneWidget);
     expect(find.text('clip0.mp4'), findsNothing);
     expect(find.text('MP4'), findsOneWidget);
-    // The name line is as wide as the tile: the badge is not beside it.
+    // The caption line is as wide as the tile; the badge sits inside it at
+    // the right edge, the way AEViewer labels a card.
     final line = find.byKey(const ValueKey('browser:name:a0'));
     // The tile's frame is the only thing between them: one hairline a side.
     expect(tester.getSize(line).width, tester.getSize(tile('a0')).width - 2);
+    final badge = tester.getRect(find.byKey(const ValueKey('browser:format:a0')));
+    final caption = tester.getRect(line);
+    expect(badge.top, greaterThanOrEqualTo(caption.top));
+    expect(badge.bottom, lessThanOrEqualTo(caption.bottom));
+    expect(badge.right, closeTo(caption.right - 4, .5));
     expect(
-      tester.getRect(find.text('MP4')).top,
-      lessThan(tester.getRect(line).top),
+      tester.getRect(find.text('clip0')).right,
+      lessThanOrEqualTo(badge.left),
     );
   });
 

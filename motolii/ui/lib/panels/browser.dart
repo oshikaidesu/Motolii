@@ -60,7 +60,7 @@ class _BrowserPanelState extends State<BrowserPanel> {
   /// Grid: the gutter between tiles, and the single caption line under every
   /// preview. Nothing else shares that line, so the name keeps the tile's
   /// whole width; format and status ride on the picture instead.
-  static const double _gutter = EditorMetrics.s6,
+  static const double _gutter = EditorMetrics.s2,
       _inset = EditorMetrics.s8,
       _captionHeight = EditorMetrics.control;
   int total = 0;
@@ -521,6 +521,10 @@ class _BrowserPanelState extends State<BrowserPanel> {
                         has('import') ? widget.controller.importFiles : null,
                       ),
                     ],
+                    if (tab != 'Colors') ...[
+                      const SizedBox(width: EditorMetrics.s6),
+                      _views(),
+                    ],
                     if (tab == 'Colors') ...[
                       const SizedBox(width: EditorMetrics.s6),
                       _action('From image', _paletteFromFile),
@@ -634,7 +638,6 @@ class _BrowserPanelState extends State<BrowserPanel> {
                           if (viewMode == 1 && tab != 'Colors') columns = 1;
                           tileWidth =
                               (constraints.maxWidth -
-                                  _inset * 2 -
                                   _gutter * (columns - 1)) /
                               columns;
                           return Column(
@@ -695,12 +698,16 @@ class _BrowserPanelState extends State<BrowserPanel> {
                                           ),
                                         ),
                                       )
-                                    : GridView.builder(
+                                    : ColoredBox(
+                                        color: tab == 'Colors'
+                                            ? EditorTheme.panel
+                                            : EditorTheme.line,
+                                        child: GridView.builder(
                                         controller: scroll,
                                         padding: EdgeInsets.all(
                                           tab == 'Colors'
                                               ? EditorMetrics.s6
-                                              : _inset,
+                                              : 0,
                                         ),
                                         gridDelegate:
                                             SliverGridDelegateWithFixedCrossAxisCount(
@@ -710,7 +717,6 @@ class _BrowserPanelState extends State<BrowserPanel> {
                                                   : viewMode == 1
                                                   ? EditorMetrics.s48
                                                   : (constraints.maxWidth -
-                                                                _inset * 2 -
                                                                 _gutter *
                                                                     (columns -
                                                                         1)) /
@@ -739,6 +745,7 @@ class _BrowserPanelState extends State<BrowserPanel> {
                                                 ),
                                               )
                                             : card(visible[index]),
+                                      ),
                                       ),
                               ),
                               _zoomBar(),
@@ -779,10 +786,12 @@ class _BrowserPanelState extends State<BrowserPanel> {
       child: Container(
         width: vertical ? null : EditorMetrics.s4,
         height: vertical ? EditorMetrics.s4 : null,
-        decoration: BoxDecoration(
-          border: vertical
-              ? const Border(bottom: BorderSide(color: EditorTheme.line))
-              : const Border(right: BorderSide(color: EditorTheme.line)),
+        color: EditorTheme.line,
+        alignment: Alignment.center,
+        child: Container(
+          width: vertical ? EditorMetrics.s16 : EditorMetrics.s2,
+          height: vertical ? EditorMetrics.s2 : EditorMetrics.s16,
+          color: EditorTheme.raised,
         ),
       ),
     ),
@@ -837,52 +846,16 @@ class _BrowserPanelState extends State<BrowserPanel> {
     ),
     child: LayoutBuilder(
       builder: (context, box) {
-        // 譲る順は 表示切替 → 件数 → 寸法棒。寸法棒は押し所 2 つ分を必ず残す。
-        final views =
-            tab != 'Colors' && box.maxWidth >= _viewsWidth + _zoomFloor;
+        // 譲る順は 件数 → 寸法棒。寸法棒は、棒が出る幅ならその分、
+        // 出ない幅でも押し所 2 つ分を必ず残す。
+        final slider = box.maxWidth >= EditorMetrics.cell + EditorMetrics.s48;
         final countRoom =
-            box.maxWidth - (views ? _viewsWidth : 0) - _zoomFloor;
+            box.maxWidth -
+            (slider ? EditorMetrics.cell : _zoomFloor + EditorMetrics.s64) -
+            EditorMetrics.s8;
+        final compact = countRoom < EditorMetrics.s48;
         return Row(
       children: [
-        if (views) ...[
-          DecoratedBox(
-            decoration: BoxDecoration(
-              color: EditorTheme.app,
-              border: Border.all(color: EditorTheme.line),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                for (final (mode, icon, label) in [
-                  (0, Icons.grid_view, 'Grid'),
-                  (1, Icons.view_list, 'List'),
-                  (2, Icons.crop_landscape, 'Thumbnails'),
-                ])
-                  Container(
-                    width: EditorMetrics.control,
-                    height: EditorMetrics.row,
-                    color: viewMode == mode
-                        ? EditorTheme.raised
-                        : Colors.transparent,
-                    child: EditorTooltip(
-                      message: label,
-                      child: IconButton(
-                        key: ValueKey('browser:view:$mode'),
-                        iconSize: EditorMetrics.s14,
-                        color: viewMode == mode
-                            ? EditorTheme.ink
-                            : EditorTheme.muted,
-                        onPressed: () =>
-                            widget.controller.storeDesk('browserView', mode),
-                        icon: Icon(icon),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(width: EditorMetrics.s8),
-        ],
         Expanded(child: _sizeSlider()),
         ConstrainedBox(
           constraints: BoxConstraints(
@@ -893,7 +866,7 @@ class _BrowserPanelState extends State<BrowserPanel> {
             child: EditorTooltip(
               message: _countTip(),
               child: Text(
-                _countLabel(),
+                compact ? '${visible.length}' : _countLabel(),
                 key: const ValueKey('browser:count'),
                 maxLines: 1,
                 softWrap: false,
@@ -912,9 +885,42 @@ class _BrowserPanelState extends State<BrowserPanel> {
     ),
   );
 
-  /// 表示切替の 3 つ分と、寸法棒が畳めない押し所 2 つ分。
-  static const _viewsWidth = EditorMetrics.control * 3 + EditorMetrics.s8;
+  /// 寸法棒が畳めない押し所 2 つ分。棒が出ない幅では、これに %の欄が足される。
   static const _zoomFloor = EditorMetrics.row * 2;
+
+  /// Grid / List / Thumbnails, beside the search field.
+  Widget _views() => DecoratedBox(
+    decoration: BoxDecoration(
+      color: EditorTheme.app,
+      border: Border.all(color: EditorTheme.line),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (final (mode, icon, label) in [
+          (0, Icons.grid_view, 'Grid'),
+          (1, Icons.view_list, 'List'),
+          (2, Icons.crop_landscape, 'Thumbnails'),
+        ])
+          Container(
+            width: EditorMetrics.control,
+            height: EditorMetrics.row,
+            color: viewMode == mode ? EditorTheme.raised : Colors.transparent,
+            child: EditorTooltip(
+              message: label,
+              child: IconButton(
+                key: ValueKey('browser:view:$mode'),
+                iconSize: EditorMetrics.s14,
+                color: viewMode == mode ? EditorTheme.ink : EditorTheme.muted,
+                onPressed: () =>
+                    widget.controller.storeDesk('browserView', mode),
+                icon: Icon(icon),
+              ),
+            ),
+          ),
+      ],
+    ),
+  );
 
   Widget _sizeSlider() => EditorZoomBar(
     base: tileDefault,
@@ -922,6 +928,8 @@ class _BrowserPanelState extends State<BrowserPanel> {
     min: BrowserSize.min,
     max: BrowserSize.max,
     keyPrefix: 'browser:tile',
+    // A press moves a tenth of the default: one visible step of tile size.
+    step: 10,
     onChanged: (v) => widget.controller.storeDesk('browserTile', v),
   );
 
@@ -949,6 +957,28 @@ class _BrowserPanelState extends State<BrowserPanel> {
         ? name.substring(0, dot)
         : name;
   }
+
+  /// The badge's laid-out width, so the name knows how much of the caption
+  /// it keeps. Formats repeat across every tile; lay each out once.
+  static final _badgeWidths = <String, double>{};
+  static double _badgeWidth(String format) =>
+      _badgeWidths[format] ??= () {
+        final painter = TextPainter(
+          text: TextSpan(
+            text: format,
+            style: const TextStyle(
+              fontSize: EditorMetrics.micro,
+              fontWeight: FontWeight.w600,
+              letterSpacing: .5,
+            ),
+          ),
+          maxLines: 1,
+          textDirection: TextDirection.ltr,
+        )..layout();
+        final width = painter.width + EditorMetrics.s4 * 2;
+        painter.dispose();
+        return width;
+      }();
 
   String _format(Map<String, dynamic> item) {
     if (tab != 'Media') return '';
@@ -1101,51 +1131,55 @@ class _BrowserPanelState extends State<BrowserPanel> {
           ),
         ],
       );
-    // The format sits in the picture's bottom right corner, quiet and small,
-    // so it never takes width from the name.
-    if (format.isNotEmpty)
-      preview = Stack(
-        fit: StackFit.expand,
-        children: [
-          preview,
-          Positioned(
-            right: EditorMetrics.s3,
-            bottom: EditorMetrics.s3,
-            child: DecoratedBox(
-              key: ValueKey('browser:format:${id(item)}'),
-              decoration: BoxDecoration(
-                color: EditorTheme.app.withValues(alpha: .7),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: EditorMetrics.s3,
-                ),
-                child: Text(
-                  format,
-                  maxLines: 1,
-                  style: const TextStyle(
-                    fontSize: EditorMetrics.micro,
-                    letterSpacing: .5,
-                    color: EditorTheme.muted,
-                  ),
-                ),
+    // The caption is one line: the name takes the tile's width, and the
+    // format sits at the right edge as a small badge in its family's colour,
+    // the way AEViewer labels a card.
+    final badge = format.isEmpty
+        ? null
+        : Container(
+            key: ValueKey('browser:format:${id(item)}'),
+            height: EditorMetrics.s14,
+            padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s4),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: identityColor,
+              borderRadius: BorderRadius.circular(EditorMetrics.s3),
+            ),
+            child: Text(
+              format,
+              maxLines: 1,
+              style: const TextStyle(
+                fontSize: EditorMetrics.micro,
+                fontWeight: FontWeight.w600,
+                letterSpacing: .5,
+                color: EditorTheme.tabInk,
               ),
             ),
-          ),
-        ],
-      );
-    // One line, the whole tile wide, the text sitting between equal airs.
+          );
+    final badgeRoom = badge == null
+        ? 0.0
+        : _badgeWidth(format) + EditorMetrics.s4;
     final caption = SizedBox(
       key: ValueKey('browser:name:${id(item)}'),
       height: _captionHeight,
-      child: Align(
-        alignment: Alignment.centerLeft,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s3),
-          child: _FittedName(
-            _displayName(item),
-            tileWidth - EditorMetrics.s3 * 2,
-          ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s4),
+        child: Row(
+          children: [
+            Expanded(
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: _FittedName(
+                  _displayName(item),
+                  tileWidth - EditorMetrics.s4 * 2 - badgeRoom,
+                ),
+              ),
+            ),
+            if (badge != null) ...[
+              const SizedBox(width: EditorMetrics.s4),
+              badge,
+            ],
+          ],
         ),
       ),
     );
@@ -1272,16 +1306,16 @@ class _BrowserPanelState extends State<BrowserPanel> {
       if (path.startsWith('data:'))
         return Image.memory(
           Uri.parse(path).data!.contentAsBytes(),
-          fit: BoxFit.contain,
+          fit: BoxFit.cover,
           gaplessPlayback: true,
           errorBuilder: (_, _, _) => fallback,
-        ).inset;
+        );
       return Image.file(
         File(path.startsWith('file:') ? Uri.parse(path).toFilePath() : path),
-        fit: BoxFit.contain,
+        fit: BoxFit.cover,
         gaplessPlayback: true,
         errorBuilder: (_, _, _) => fallback,
-      ).inset;
+      );
     } catch (_) {
       return fallback;
     }
@@ -2114,20 +2148,16 @@ class _ShapeMark extends CustomPainter {
 }
 
 /// One knob for how big Browser tiles are; Settings turns it, Browser reads it.
-extension on Widget {
-  /// The same inset for every picture, so a full-bleed and a padded source
-  /// occupy the same frame.
-  Widget get inset =>
-      Padding(padding: const EdgeInsets.all(EditorMetrics.s4), child: this);
-}
 
 abstract final class BrowserSize {
-  static const double min = 48, max = 200, base = 88;
-  static double tile(EditorSession c) =>
-      (c.deskWork.value['browserTile'] as num? ??
-              _BrowserPanelState.tileDefault)
-          .toDouble()
-          .clamp(min, max);
+  static const double min = 72, max = 240, base = 120;
+  /// A stored size below the floor came from an older, smaller scale; the
+  /// default stands in until the shelf is sized again.
+  static double tile(EditorSession c) {
+    final stored = (c.deskWork.value['browserTile'] as num?)?.toDouble();
+    if (stored == null || stored < min) return _BrowserPanelState.tileDefault;
+    return stored.clamp(min, max);
+  }
 }
 
 /// The few colours a picture is mostly made of: decode small, drop
