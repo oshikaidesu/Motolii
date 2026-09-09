@@ -133,6 +133,12 @@ class _EaseDeskState extends State<EaseDesk>
   late final AnimationController _motion;
   bool _free = false, _valid = true;
   Future<void> _pending = Future.value();
+
+  /// Dragging a handle asks the model for a shape. Latest wish wins, so a
+  /// sweep leaves one query with the port, not one per pointer move.
+  late final _handles = EditorPreviewQueue<(int, Offset)>(
+    (wish) => _model(_shape, handle: wish.$1, point: wish.$2),
+  );
   final _focus = FocusNode();
   final _presetFocus = FocusNode();
   String get _selection => jsonEncode(c.state['selectedKeys'] ?? []);
@@ -601,11 +607,11 @@ class _EaseDeskState extends State<EaseDesk>
                   },
                   onPointerMove: (e) {
                     if (e.pointer != _pointer || _handle == null) return;
-                    _pending = _model(
-                      _shape,
-                      handle: _handle,
-                      point: painter.toCurve(e.localPosition, size),
-                    );
+                    _handles.add((
+                      _handle!,
+                      painter.toCurve(e.localPosition, size),
+                    ));
+                    _pending = _handles.drained;
                   },
                   onPointerUp: (e) {
                     if (e.pointer != _pointer) return;

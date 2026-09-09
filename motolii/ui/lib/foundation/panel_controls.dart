@@ -826,6 +826,9 @@ class EditorPreviewQueue<T> {
   T? _pending;
   bool _sending = false;
   Future<void> _drained = Future<void>.value();
+
+  /// Settles when nothing is left to send.
+  Future<void> get drained => _drained;
   void add(T value) {
     _pending = value;
     if (_sending) return;
