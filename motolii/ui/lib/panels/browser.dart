@@ -1220,17 +1220,12 @@ class _BrowserPanelState extends State<BrowserPanel> {
       ].join('\n'),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: () {
-          select(item);
-          if (isColor && supported) apply(item);
-        },
+        // Selection happens on the press itself: with a double-tap handler
+        // beside it, onTap would wait out the double-tap window first.
+        onTapDown: (_) => select(item),
+        onTap: isColor && supported ? () => apply(item) : null,
         onSecondaryTapDown: (event) => _menu(item, event.globalPosition),
-        onDoubleTap: isColor
-            ? null
-            : () {
-                select(item);
-                apply(item);
-              },
+        onDoubleTap: isColor ? null : () => apply(item),
         child: Container(
           decoration: BoxDecoration(
             color: EditorTheme.panel,
