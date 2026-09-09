@@ -113,6 +113,14 @@ class EaseDesk extends StatefulWidget {
 class _EaseDeskState extends State<EaseDesk>
     with WidgetsBindingObserver, SingleTickerProviderStateMixin {
   EditorSession get c => widget.controller;
+  DocumentSlice get _slice => c.slice('ease', const [
+    'layers',
+    'selectedId',
+    'selectedIds',
+    'selectedKeys',
+    'easeKinds',
+    'capabilities',
+  ]);
   Map<String, dynamic> _shape = {'kind': 'Linear'};
   Map<String, dynamic>? _original;
   int? _pointer, _handle;
@@ -257,7 +265,7 @@ class _EaseDeskState extends State<EaseDesk>
       duration: const Duration(milliseconds: 1200),
     );
     WidgetsBinding.instance.addObserver(this);
-    c.document.addListener(_read);
+    _slice.addListener(_read);
     c.frame.addListener(_read);
     _read();
   }
@@ -341,7 +349,7 @@ class _EaseDeskState extends State<EaseDesk>
   void dispose() {
     _epoch++;
     WidgetsBinding.instance.removeObserver(this);
-    c.document.removeListener(_read);
+    _slice.removeListener(_read);
     c.frame.removeListener(_read);
     _focus.dispose();
     _presetFocus.dispose();

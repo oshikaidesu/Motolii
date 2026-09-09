@@ -84,16 +84,21 @@ class EditorSession {
 
   /// Take in what actually moved. Keys that arrive unchanged keep the object
   /// they had, so a reply that says nothing new notifies nobody.
-  void absorb(Map<String, dynamic> next) {
-    final was = state;
+  static void take(
+    ValueNotifier<Map<String, dynamic>> held,
+    Map<String, dynamic> next,
+  ) {
+    final was = held.value;
     Map<String, dynamic>? merged;
     for (final entry in next.entries) {
       if (was.containsKey(entry.key) && sameValue(was[entry.key], entry.value))
         continue;
       (merged ??= {...was})[entry.key] = entry.value;
     }
-    if (merged != null) document.value = merged;
+    if (merged != null) held.value = merged;
   }
+
+  void absorb(Map<String, dynamic> next) => take(document, next);
   final textureId = ValueNotifier<int?>(null);
   final frame = ValueNotifier<int>(0);
   final rendered = ValueNotifier<Map<String, dynamic>>({});
@@ -256,7 +261,7 @@ class EditorSession {
         next['contentRevision'] != null &&
         next['contentRevision'] == rendered.value['contentRevision'] &&
         next['frame'] == rendered.value['frame']) {
-      rendered.value = {...rendered.value, ...next};
+      take(rendered, next);
     }
     if (next['playing'] is bool) {
       playing.value = next['playing'] as bool;

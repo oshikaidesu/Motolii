@@ -56,7 +56,10 @@ class _HistoryRecordsState extends State<HistoryRecords> {
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
-    animation: widget.controller.slice('history', const ['history']),
+    animation: widget.controller.slice('history', const [
+      'history',
+      'capabilities',
+    ]),
     builder: (context, _) => _column(context),
   );
 
