@@ -262,10 +262,8 @@ class _NotesPanelState extends State<NotesPanel> {
                       ],
                     ),
                   ),
-                  EditorIconButton(
+                  IconButton(
                     tooltip: 'New page',
-                    constraints: EditorTheme.iconConstraints,
-                    padding: EdgeInsets.zero,
                     iconSize: EditorMetrics.s16,
                     onPressed: _newPage,
                     icon: const Icon(Icons.add),
@@ -586,7 +584,7 @@ class _NoteCardState extends State<_NoteCard> {
                             ),
                           ),
                         ),
-                        EditorIconButton(
+                        IconButton(
                           tooltip: 'Delete note',
                           iconSize: EditorMetrics.s12,
                           onPressed: () async {

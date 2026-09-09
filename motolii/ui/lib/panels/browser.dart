@@ -837,10 +837,9 @@ class _BrowserPanelState extends State<BrowserPanel> {
                     color: viewMode == mode
                         ? EditorTheme.raised
                         : Colors.transparent,
-                    child: EditorIconButton(
+                    child: IconButton(
                       key: ValueKey('browser:view:$mode'),
                       tooltip: label,
-                      padding: EdgeInsets.zero,
                       iconSize: EditorMetrics.s14,
                       color: viewMode == mode
                           ? EditorTheme.ink

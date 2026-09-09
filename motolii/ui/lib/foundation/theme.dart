@@ -242,55 +242,6 @@ abstract final class EditorTheme {
   );
 }
 
-class EditorIconButton extends IconButton {
-  const EditorIconButton({
-    super.key,
-    required super.icon,
-    required super.onPressed,
-    super.tooltip,
-    super.iconSize = EditorMetrics.s14,
-    super.color,
-    super.isSelected,
-    super.selectedIcon,
-    super.padding = EdgeInsets.zero,
-    super.constraints = EditorTheme.iconConstraints,
-  });
-
-  @override
-  Widget build(BuildContext context) => Theme(
-    data: ThemeData(
-      useMaterial3: true,
-      colorScheme: Theme.of(context).colorScheme,
-      textTheme: Theme.of(context).textTheme,
-      iconTheme: Theme.of(context).iconTheme,
-      iconButtonTheme: IconButtonThemeData(
-        style: ButtonStyle(
-          foregroundColor: WidgetStateProperty.resolveWith(
-            (states) => states.contains(WidgetState.disabled)
-                ? EditorTheme.disabledInk
-                : EditorTheme.ink,
-          ),
-          overlayColor: WidgetStateProperty.resolveWith((states) {
-            if (states.contains(WidgetState.pressed)) {
-              return EditorTheme.ink.withValues(alpha: .18);
-            }
-            if (states.contains(WidgetState.hovered) ||
-                states.contains(WidgetState.focused)) {
-              return EditorTheme.ink.withValues(alpha: .10);
-            }
-            return Colors.transparent;
-          }),
-          shape: const WidgetStatePropertyAll(RoundedRectangleBorder()),
-          visualDensity: VisualDensity.standard,
-          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          splashFactory: NoSplash.splashFactory,
-        ),
-      ),
-    ),
-    child: Builder(builder: (context) => super.build(context)),
-  );
-}
-
 class EditorButton extends StatelessWidget {
   const EditorButton(
     this.label,

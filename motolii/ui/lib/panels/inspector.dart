@@ -568,7 +568,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
                 1: Icons.format_align_right,
               }.entries)
                 Expanded(
-                  child: EditorIconButton(
+                  child: IconButton(
                     tooltip: const {
                       0: 'Align left',
                       2: 'Align center',

@@ -129,7 +129,7 @@ class _DeskPanelState extends State<DeskPanel> {
                     style: const TextStyle(fontSize: EditorMetrics.font),
                   ),
                 ),
-                EditorIconButton(
+                IconButton(
                   tooltip: 'Use ${spec.name} when idle',
                   iconSize: EditorMetrics.s14,
                   color: _name(c.deskDefault.value) == spec.name
@@ -164,10 +164,8 @@ class _DeskPanelState extends State<DeskPanel> {
       final spec = panelSpec(shown);
       final live = spec?.drawer == true && _inDrawer(shown);
       final inlineTools = live && shown == 'Ease';
-      final tools = EditorIconButton(
+      final tools = IconButton(
         tooltip: 'Desk tools',
-        constraints: EditorTheme.iconConstraints,
-        padding: EdgeInsets.zero,
         iconSize: EditorMetrics.s18,
         onPressed: () => c.deskDrawer.value = 'Tools',
         icon: const Icon(Icons.all_inbox_outlined),

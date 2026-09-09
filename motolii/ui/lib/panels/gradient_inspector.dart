@@ -320,7 +320,7 @@ class _GradientInspectorState extends State<GradientInspector>
                   ),
                 ),
                 const SizedBox(width: EditorMetrics.s6),
-                EditorIconButton(
+                IconButton(
                   tooltip: 'Add stop',
                   icon: const Icon(Icons.add, size: EditorMetrics.s14),
                   onPressed: !enabled || rows.length >= 32
@@ -348,7 +348,7 @@ class _GradientInspectorState extends State<GradientInspector>
                           if (mounted) setState(() => selected = index);
                         },
                 ),
-                EditorIconButton(
+                IconButton(
                   tooltip: 'Remove stop',
                   icon: const Icon(Icons.remove, size: EditorMetrics.s14),
                   onPressed: !enabled || rows.length <= 2
