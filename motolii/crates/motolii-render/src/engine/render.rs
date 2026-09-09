@@ -22,6 +22,8 @@ impl Engine {
         include_background: bool,
         camera_override: Option<ResolvedCamera>,
     ) -> Result<Vec<u8>, EngineError> {
+        let frame_start = std::time::Instant::now();
+        self.compositor.measurement = Default::default();
         self.layer_failures.clear();
         let composition = view
             .composition()
@@ -55,9 +57,11 @@ impl Engine {
         } else {
             crate::render::compositor::NO_BACKGROUND
         };
-        Ok(self
-            .compositor
-            .render_with_effects(comp, camera, &layers, background_color)?)
+        let pixels = self.compositor.render_with_effects(comp, camera, &layers, background_color)?;
+        let m = &mut self.compositor.measurement;
+        m.total_us = frame_start.elapsed().as_micros() as u64;
+        m.prepare_us = m.total_us.saturating_sub(m.submit_us + m.wait_us + m.readback_us);
+        Ok(pixels)
     }
 
     fn layers_from_resolved(

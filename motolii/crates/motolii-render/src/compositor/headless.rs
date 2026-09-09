@@ -27,7 +27,10 @@ impl HeadlessGpu {
         let caps = DeviceCaps::from_adapter(&adapter)
             .map_err(|e| HeadlessError::InsufficientCaps(e.to_string()))?;
 
-        let (device, queue) = pollster::block_on(adapter.request_device(&caps.device_descriptor()))
+        let mut descriptor = caps.device_descriptor();
+        let timestamps = wgpu::Features::TIMESTAMP_QUERY | wgpu::Features::TIMESTAMP_QUERY_INSIDE_ENCODERS;
+        if adapter.features().contains(timestamps) { descriptor.required_features |= timestamps; }
+        let (device, queue) = pollster::block_on(adapter.request_device(&descriptor))
             .map_err(|e| HeadlessError::Device(e.to_string()))?;
 
         Ok(Self {

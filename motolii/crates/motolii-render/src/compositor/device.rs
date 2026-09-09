@@ -38,8 +38,12 @@ impl Compositor {
 
         Ok(Self {
             ctx,
+            measurement_enabled: false,
+            measurement: Default::default(),
             surface_work: Default::default(),
             reflection_resources: None,
+            reflection_cache_enabled: true,
+            reflection_entry: None,
             backdrop_resource: None,
             next_readback: 1,
             next_effect_key: 1,

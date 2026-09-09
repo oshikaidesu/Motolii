@@ -786,3 +786,5 @@
 - [数値のメリハリ — クリエイティブ系の外の先例](2026-09-08-number-affordance-prior-art.md)
 
 - [共有反射とRepeater描画の施工・検証](2026-09-09-shared-reflection-execution.md)
+
+- [共有反射の内容cacheと比較結果](2026-09-09-reflection-cache-comparison.md)

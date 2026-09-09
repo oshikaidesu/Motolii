@@ -92,7 +92,7 @@ impl Compositor {
             _ => None,
         });
 
-        let reflection = self.capture_scene_reflection(comp, inputs, environment)?;
+        let reflection = self.cached_scene_reflection(comp, inputs, environment)?;
         let mut background: Option<(AccumulatorBacking, GpuTexture2D)> = None;
 
         // 層ごとに submit しない — 同期の回数が層数に比例する。
@@ -495,15 +495,22 @@ impl Compositor {
             .map_err(|e| CompositorError::Draw(e.to_string()))?;
 
         self.pending.push(command_buffer);
+        let gpu_measurement = self.measure_pending_gpu();
+        let submit_start = std::time::Instant::now();
         self.flush_pending();
+        self.measurement.submit_us = submit_start.elapsed().as_micros() as u64;
+        let wait_start = std::time::Instant::now();
         self.ctx
             .device
             .poll(wgpu::PollType::wait_indefinitely())
             .map_err(|e| CompositorError::Draw(e.to_string()))?;
 
-        self.ctx.before_submit();
-        self.ctx.begin_frame();
-
+        self.measurement.wait_us = wait_start.elapsed().as_micros() as u64;
+        let readback_start = std::time::Instant::now();
+        let measured = gpu_measurement.ok_or("disabled_or_unsupported")
+            .and_then(|m| m.finish(self.ctx.queue.get_timestamp_period()));
+        self.measurement.gpu_status = measured.as_ref().map_or_else(|e| *e, |_| "valid");
+        self.measurement.final_submission_gpu_us = measured.ok();
         let mut out: Option<Vec<u8>> = None;
         ScreenshotProcessor::next_readback_result::<()>(
             &self.ctx,
@@ -513,6 +520,7 @@ impl Compositor {
             },
         );
 
+        self.measurement.readback_us = readback_start.elapsed().as_micros() as u64;
         out.ok_or(CompositorError::ReadbackMissing)
     }
 

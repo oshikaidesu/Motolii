@@ -177,6 +177,27 @@ impl Engine {
         })
     }
 
+    pub fn set_render_measurement_enabled(&mut self, enabled: bool) {
+        self.compositor.measurement_enabled = enabled;
+    }
+
+    pub fn frame_measurement(&self) -> crate::render::compositor::FrameMeasurement {
+        self.compositor.measurement
+    }
+
+    /// Diagnostic switch; never changes the Document or reflection quality.
+    pub fn set_reflection_cache_enabled(&mut self, enabled: bool) {
+        self.compositor.reflection_cache_enabled = enabled;
+        self.clear_reflection_cache();
+    }
+
+    pub fn clear_reflection_cache(&mut self) {
+        if self.compositor.reflection_entry.take().is_some() {
+            self.compositor.surface_work.cache_evictions += 1;
+        }
+        self.compositor.surface_work.cache_retained_texture_bytes = 0;
+    }
+
     pub fn surface_work(&self) -> crate::render::compositor::SurfaceWork {
         self.compositor.surface_work
     }

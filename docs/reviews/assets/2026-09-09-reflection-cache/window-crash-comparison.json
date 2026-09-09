@@ -1,0 +1,40 @@
+[
+  {
+    "report": "motolii_stage5-2026-09-09-081419.ips",
+    "time": "2026-09-09 08:14:01.5596 +0900",
+    "exception": {
+      "codes": "0x0000000000000001, 0x0000000000000048",
+      "rawCodes": [
+        1,
+        72
+      ],
+      "type": "EXC_BAD_ACCESS",
+      "signal": "SIGSEGV",
+      "subtype": "KERN_INVALID_ADDRESS at 0x0000000000000048"
+    },
+    "top_frames": [
+      "flutter::AccessibilityBridge::CreateRemoveReparentedNodesUpdate()",
+      "flutter::AccessibilityBridge::CommitUpdates()",
+      "-[FlutterViewController updateSemantics:]"
+    ]
+  },
+  {
+    "report": "motolii_stage5-2026-09-09-131435.ips",
+    "time": "2026-09-09 13:14:30.0893 +0900",
+    "exception": {
+      "codes": "0x0000000000000001, 0x0000000000000048",
+      "rawCodes": [
+        1,
+        72
+      ],
+      "type": "EXC_BAD_ACCESS",
+      "signal": "SIGSEGV",
+      "subtype": "KERN_INVALID_ADDRESS at 0x0000000000000048"
+    },
+    "top_frames": [
+      "flutter::AccessibilityBridge::CreateRemoveReparentedNodesUpdate()",
+      "flutter::AccessibilityBridge::CommitUpdates()",
+      "-[FlutterViewController updateSemantics:]"
+    ]
+  }
+]

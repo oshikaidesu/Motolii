@@ -1,0 +1,237 @@
+{
+  "gpu": "Apple M4 (8 cores)",
+  "api": "Metal / wgpu 29",
+  "resolution": [
+    1280,
+    720
+  ],
+  "build": "dev, unoptimized",
+  "samples_per_mode": 40,
+  "independent_runs": 2,
+  "warmup_per_run": 3,
+  "pixel_equal_pairs_including_warmup": 276,
+  "gpu_timing_reliable": false,
+  "gpu_note": "Non-monotonic encoder timestamps observed; raw GPU values excluded from adoption decision.",
+  "cache_entries_limit": 1,
+  "input_texture_limit_bytes": 134217728,
+  "metadata_estimate_limit_bytes": 8388608,
+  "capture_face_limit": 512,
+  "rows": [
+    {
+      "copies": 10,
+      "scenario": "static",
+      "off": {
+        "total_us": 9435.0,
+        "prepare_us": 3574.0,
+        "submit_us": 403.0,
+        "wait_us": 5136.0,
+        "readback_us": 327.5,
+        "key_us": 0.0,
+        "captures": 12.0,
+        "hits": 0.0,
+        "retained_input_texture_bytes": 0.0
+      },
+      "on": {
+        "total_us": 5568.5,
+        "prepare_us": 1176.0,
+        "submit_us": 218.0,
+        "wait_us": 3829.0,
+        "readback_us": 336.5,
+        "key_us": 8.5,
+        "captures": 0.0,
+        "hits": 1.0,
+        "retained_input_texture_bytes": 18939904.0
+      },
+      "reduction_percent": 40.98039215686274,
+      "paired_delta_median_us": -3853.0,
+      "paired_delta_bootstrap_95_us": [
+        -3935.5,
+        -3745.0
+      ],
+      "gpu_status": {
+        "valid": 78,
+        "non_monotonic_timestamp": 2
+      }
+    },
+    {
+      "copies": 10,
+      "scenario": "moving",
+      "off": {
+        "total_us": 9431.0,
+        "prepare_us": 3705.5,
+        "submit_us": 416.0,
+        "wait_us": 5120.5,
+        "readback_us": 329.5,
+        "key_us": 0.0,
+        "captures": 12.0,
+        "hits": 0.0,
+        "retained_input_texture_bytes": 0.0
+      },
+      "on": {
+        "total_us": 9510.0,
+        "prepare_us": 3704.5,
+        "submit_us": 435.0,
+        "wait_us": 5132.0,
+        "readback_us": 335.5,
+        "key_us": 7.0,
+        "captures": 12.0,
+        "hits": 0.0,
+        "retained_input_texture_bytes": 18939904.0
+      },
+      "reduction_percent": -0.8376630261902163,
+      "paired_delta_median_us": 200.5,
+      "paired_delta_bootstrap_95_us": [
+        -69.0,
+        324.0
+      ],
+      "gpu_status": {
+        "valid": 74,
+        "non_monotonic_timestamp": 6
+      }
+    },
+    {
+      "copies": 100,
+      "scenario": "static",
+      "off": {
+        "total_us": 9786.0,
+        "prepare_us": 4657.5,
+        "submit_us": 381.0,
+        "wait_us": 3949.0,
+        "readback_us": 330.5,
+        "key_us": 0.0,
+        "captures": 12.0,
+        "hits": 0.0,
+        "retained_input_texture_bytes": 0.0
+      },
+      "on": {
+        "total_us": 5203.0,
+        "prepare_us": 1802.5,
+        "submit_us": 224.5,
+        "wait_us": 2575.0,
+        "readback_us": 332.0,
+        "key_us": 24.0,
+        "captures": 0.0,
+        "hits": 1.0,
+        "retained_input_texture_bytes": 18939904.0
+      },
+      "reduction_percent": 46.83220927856121,
+      "paired_delta_median_us": -4647.0,
+      "paired_delta_bootstrap_95_us": [
+        -4723.0,
+        -4246.0
+      ],
+      "gpu_status": {
+        "valid": 68,
+        "non_monotonic_timestamp": 12
+      }
+    },
+    {
+      "copies": 100,
+      "scenario": "moving",
+      "off": {
+        "total_us": 9607.5,
+        "prepare_us": 4925.5,
+        "submit_us": 383.5,
+        "wait_us": 3887.0,
+        "readback_us": 326.0,
+        "key_us": 0.0,
+        "captures": 12.0,
+        "hits": 0.0,
+        "retained_input_texture_bytes": 0.0
+      },
+      "on": {
+        "total_us": 9761.0,
+        "prepare_us": 4913.5,
+        "submit_us": 392.0,
+        "wait_us": 3871.0,
+        "readback_us": 328.0,
+        "key_us": 10.0,
+        "captures": 12.0,
+        "hits": 0.0,
+        "retained_input_texture_bytes": 18939904.0
+      },
+      "reduction_percent": -1.5977101223002776,
+      "paired_delta_median_us": 14.5,
+      "paired_delta_bootstrap_95_us": [
+        -378.0,
+        531.0
+      ],
+      "gpu_status": {
+        "valid": 60,
+        "non_monotonic_timestamp": 20
+      }
+    },
+    {
+      "copies": 1000,
+      "scenario": "static",
+      "off": {
+        "total_us": 22383.5,
+        "prepare_us": 15651.0,
+        "submit_us": 387.5,
+        "wait_us": 5771.0,
+        "readback_us": 322.5,
+        "key_us": 0.0,
+        "captures": 12.0,
+        "hits": 0.0,
+        "retained_input_texture_bytes": 0.0
+      },
+      "on": {
+        "total_us": 11407.0,
+        "prepare_us": 7920.0,
+        "submit_us": 239.5,
+        "wait_us": 2575.0,
+        "readback_us": 323.0,
+        "key_us": 174.5,
+        "captures": 0.0,
+        "hits": 1.0,
+        "retained_input_texture_bytes": 18939904.0
+      },
+      "reduction_percent": 49.03835414479416,
+      "paired_delta_median_us": -10133.0,
+      "paired_delta_bootstrap_95_us": [
+        -16572.0,
+        -5068.5
+      ],
+      "gpu_status": {
+        "valid": 65,
+        "non_monotonic_timestamp": 15
+      }
+    },
+    {
+      "copies": 1000,
+      "scenario": "moving",
+      "off": {
+        "total_us": 28183.5,
+        "prepare_us": 15865.0,
+        "submit_us": 388.5,
+        "wait_us": 11452.5,
+        "readback_us": 331.5,
+        "key_us": 0.0,
+        "captures": 12.0,
+        "hits": 0.0,
+        "retained_input_texture_bytes": 0.0
+      },
+      "on": {
+        "total_us": 21565.5,
+        "prepare_us": 15931.0,
+        "submit_us": 391.5,
+        "wait_us": 5142.5,
+        "readback_us": 349.5,
+        "key_us": 52.0,
+        "captures": 12.0,
+        "hits": 0.0,
+        "retained_input_texture_bytes": 18939904.0
+      },
+      "reduction_percent": 23.4818244717654,
+      "paired_delta_median_us": -3522.5,
+      "paired_delta_bootstrap_95_us": [
+        -7542.5,
+        578.5
+      ],
+      "gpu_status": {
+        "valid": 60,
+        "non_monotonic_timestamp": 20
+      }
+    }
+  ]
+}

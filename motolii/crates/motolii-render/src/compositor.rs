@@ -12,6 +12,9 @@ mod headless;
 mod matte;
 mod mesh;
 mod surface_scene;
+mod reflection_cache;
+mod measurement;
+pub use measurement::FrameMeasurement;
 mod point_cloud;
 mod presentable;
 mod render_basic;
@@ -329,12 +332,22 @@ pub struct SurfaceWork {
     pub backdrop_copies: u64,
     pub backdrop_allocations: u64,
     pub mesh_batches: u64,
+    pub cache_hits: u64,
+    pub cache_misses: u64,
+    pub cache_bypasses: u64,
+    pub cache_evictions: u64,
+    pub cache_key_us: u64,
+    pub cache_retained_texture_bytes: u64,
 }
 
 pub struct Compositor {
     pub(crate) ctx: RenderContext,
+    pub(crate) measurement_enabled: bool,
+    pub(crate) measurement: FrameMeasurement,
     pub(crate) surface_work: SurfaceWork,
     pub(crate) backdrop_resource: Option<sequential::BackdropResource>,
+    pub(crate) reflection_cache_enabled: bool,
+    pub(crate) reflection_entry: Option<reflection_cache::ReflectionEntry>,
     pub(crate) reflection_resources: Option<surface_scene::ReflectionResources>,
     pub(crate) next_readback: u64,
     pub(crate) next_effect_key: u64,
@@ -358,6 +371,7 @@ type AccumulatorBacking = wgpu::Texture;
 
 #[derive(Clone)]
 pub struct GpuModelData {
+    pub(crate) revision: u64,
     pub(crate) instances: std::sync::Arc<Vec<re_renderer::renderer::GpuMeshInstance>>,
     pub(crate) bounds: crate::render::media::SpatialBounds,
 }

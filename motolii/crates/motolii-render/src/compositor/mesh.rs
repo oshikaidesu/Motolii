@@ -42,7 +42,9 @@ impl Compositor {
         let instances = cpu
             .into_gpu_meshes(&self.ctx)
             .map_err(|error| CompositorError::Draw(error.to_string()))?;
+        static NEXT_REVISION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
         Ok(GpuModelData {
+            revision: NEXT_REVISION.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
             instances: Arc::new(instances),
             bounds,
         })

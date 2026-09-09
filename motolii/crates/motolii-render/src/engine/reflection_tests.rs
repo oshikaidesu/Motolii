@@ -146,6 +146,7 @@ fn repeated_mirrors_share_captures_batches_and_do_not_copy_the_backdrop() {
     let dir = tempfile::tempdir().unwrap();
     let sky = sky_png(dir.path(), "white.png", 255, 255);
     let mut engine = Engine::new().unwrap();
+    engine.set_reflection_cache_enabled(false);
     for count in [10, 100, 1000] {
         let mut doc = scene(dir.path(), &sky, true);
         let mesh = LayerId(2);
@@ -336,4 +337,68 @@ fn reflection_keeps_a_sender_outside_the_primary_frustum() {
         "{:?}",
         engine.layer_failures()
     );
+}
+
+
+/// A cache hit, a miss and eviction must agree with the uncached renderer at the same inputs.
+#[test]
+fn reflection_cache_matches_uncached_after_edits_undo_and_eviction() {
+    let dir = tempfile::tempdir().unwrap();
+    let sky = sky_png(dir.path(), "white.png", 255, 255);
+    let mut doc = scene(dir.path(), &sky, true);
+    let red = dir.path().join("cache-sender.png");
+    image::RgbaImage::from_pixel(SIZE, SIZE, image::Rgba([255, 0, 0, 255])).save(&red).unwrap();
+    let sender = file_layer(&mut doc, 3, 0, &red);
+    set(&mut doc, sender, property::POSITION, Value::Vec2([-300.0, -300.0]));
+    set(&mut doc, sender, property::SCALE, Value::Vec2([10.0, 10.0]));
+    set(&mut doc, sender, "position.z", Value::F64(-200.0));
+    let mesh = LayerId(2);
+    doc.apply(Intent::SetEffects { layer: mesh, effects: vec![EffectInstance {
+        id: EffectId(0), plugin_id: "motolii.glass".into(),
+    }] }).unwrap();
+    effect(&mut doc, mesh, 0, "transmission", Value::F64(0.0));
+    effect(&mut doc, mesh, 0, "metallic", Value::F64(1.0));
+    let mut cached = Engine::new().unwrap();
+    let mut oracle = Engine::new().unwrap();
+    oracle.set_reflection_cache_enabled(false);
+    for step in 0..12 {
+        match step {
+            1 => effect(&mut doc, mesh, 0, "roughness", Value::F64(0.5)),
+            2 => set(&mut doc, mesh, "rotation.y", Value::F64(35.0)),
+            3 => { assert!(doc.undo()); },
+            4 => { assert!(doc.redo()); },
+            5 => cached.clear_reflection_cache(),
+            6 => set(&mut doc, mesh, property::POSITION, Value::Vec2([30.0, 24.0])),
+            7 => set(&mut doc, sender, property::OPACITY, Value::F64(0.5)),
+            8 => {
+                doc.apply(Intent::SetEffects { layer: mesh, effects: vec![
+                    EffectInstance { id: EffectId(0), plugin_id: "motolii.glass".into() },
+                    EffectInstance { id: EffectId(1), plugin_id: "motolii.turbulent_displace".into() },
+                ] }).unwrap();
+                effect(&mut doc, mesh, 1, "amount", Value::F64(2.0));
+            },
+            9 => effect(&mut doc, mesh, 1, "evolution", Value::F64(0.5)),
+            10 => {
+                doc.apply(Intent::SetEffects { layer: sender, effects: vec![
+                    EffectInstance { id: EffectId(2), plugin_id: "motolii.blur".into() },
+                ] }).unwrap();
+            },
+            11 => { doc.apply(Intent::SetEffects { layer: sender, effects: vec![] }).unwrap(); },
+            _ => (),
+        }
+        let expected = oracle.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+        let miss = cached.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+        assert_eq!(expected, miss, "edit/eviction step {step}");
+        let before = cached.surface_work();
+        let hit = cached.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+        let after = cached.surface_work();
+        assert_eq!(expected, hit, "cache hit step {step}");
+        if step == 10 {
+            assert!(after.cache_bypasses > before.cache_bypasses, "mutable pass output must bypass");
+            continue;
+        }
+        assert_eq!(after.scene_captures, before.scene_captures);
+        assert_eq!(after.cache_hits, before.cache_hits + 1, "step {step}: {after:?}");
+        assert!(after.cache_retained_texture_bytes <= 128 * 1024 * 1024);
+    }
 }
