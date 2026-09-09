@@ -1112,16 +1112,8 @@ class _BrowserPanelState extends State<BrowserPanel> {
       child: Align(
         alignment: Alignment.centerLeft,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s6),
-          child: Text(
-            _displayName(item),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: EditorTheme.ink,
-              fontSize: EditorMetrics.font,
-            ),
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s3),
+          child: _FittedName(_displayName(item)),
         ),
       ),
     );
@@ -2187,4 +2179,39 @@ Future<List<List<double>>> paletteOf(Uint8List bytes, {int count = 6}) async {
         c.map((v) => (v * 255).round()).join(','): [...c, 1.0],
   };
   return unique.values.toList()..sort((a, b) => luma(b).compareTo(luma(a)));
+}
+
+/// One line that keeps the whole name: the type shrinks to the tile, down to
+/// the micro size, and only past that does the tail get cut.
+class _FittedName extends StatelessWidget {
+  const _FittedName(this.name);
+  final String name;
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, box) {
+      final painter = TextPainter(
+        text: TextSpan(
+          text: name,
+          style: const TextStyle(fontSize: EditorMetrics.font),
+        ),
+        maxLines: 1,
+        textDirection: TextDirection.ltr,
+      )..layout();
+      final natural = painter.width;
+      painter.dispose();
+      final size = natural <= box.maxWidth
+          ? EditorMetrics.font
+          : math.max(
+              EditorMetrics.micro,
+              EditorMetrics.font * box.maxWidth / natural,
+            );
+      return Text(
+        name,
+        maxLines: 1,
+        softWrap: false,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(color: EditorTheme.ink, fontSize: size),
+      );
+    },
+  );
 }
