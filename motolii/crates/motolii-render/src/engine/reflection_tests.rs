@@ -506,3 +506,45 @@ fn gpu_instance_subsets_preserve_rect_mesh_boundaries_and_surface_parameters() {
         assert!(after.main_runs - before.main_runs >= 2);
     }
 }
+
+/// MSAA samples geometry coverage; it must not blur fully covered image interiors.
+#[test]
+fn upstream_msaa_smooths_mesh_and_rectangle_coverage_without_blurring_interiors() {
+    let dir = tempfile::tempdir().unwrap();
+    let sky = sky_png(dir.path(), "sky.png", 255, 255);
+    let white = dir.path().join("white.png");
+    image::RgbaImage::from_pixel(24, 24, image::Rgba([255, 255, 255, 255])).save(&white).unwrap();
+    let mut aa = Engine::new().unwrap();
+    let mut single = Engine::new().unwrap();
+    single.compositor = crate::render::compositor::Compositor::with_device(
+        single.gpu_device().clone(), single.gpu_queue().clone(),
+        crate::render::compositor::PRESENTABLE_FORMAT,
+        |_| re_renderer::RenderConfig { msaa_mode: re_renderer::MsaaMode::Off },
+    ).unwrap();
+    for rectangle in [false, true] {
+        let mut doc = scene(dir.path(), &sky, false);
+        doc.apply(Intent::SetAttrs { layer: LayerId(1), patch: crate::doc::store::LayerAttrsPatch {
+            hidden: Some(true), ..Default::default()
+        } }).unwrap();
+        let layer = LayerId(2);
+        if rectangle {
+            doc.apply(Intent::SetSource { layer, source: LayerSource::File {
+                path: white.to_string_lossy().into_owned(), fingerprint: None,
+            } }).unwrap();
+        }
+        set(&mut doc, layer, "anchor", Value::Vec2(if rectangle { [12.0, 12.0] } else { [1.0, 1.0] }));
+        set(&mut doc, layer, property::SCALE, Value::Vec2(if rectangle { [1.0,1.0] } else { [12.0,12.0] }));
+        set(&mut doc, layer, "rotation", Value::F64(17.0));
+        let before = single.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+        let after = aa.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+        assert!(aa.layer_failures().is_empty());
+        let peak = before.chunks_exact(4).map(|p| p[0]).max().unwrap();
+        assert!(peak > 64);
+        let partial = |pixels: &[u8]| pixels.chunks_exact(4).filter(|p| p[0] > 4 && p[0] < peak - 4).count();
+        assert!(partial(&after) > partial(&before) + 8, "rectangle={rectangle}: {} -> {} partial pixels", partial(&before), partial(&after));
+        for y in 28..36 { for x in 28..36 {
+            let i = (y * SIZE as usize + x) * 4;
+            assert_eq!(&before[i..i+4], &after[i..i+4], "interior remains sharp");
+        } }
+    }
+}

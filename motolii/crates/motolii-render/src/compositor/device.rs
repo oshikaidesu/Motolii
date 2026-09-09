@@ -10,9 +10,7 @@ impl Compositor {
             gpu.device,
             gpu.queue,
             crate::render::compositor::PRESENTABLE_FORMAT,
-            |_caps| re_renderer::RenderConfig {
-                msaa_mode: re_renderer::MsaaMode::Off,
-            },
+            re_renderer::RenderConfig::best_for_device_caps,
         )
     }
 
@@ -97,9 +95,7 @@ impl Compositor {
             device,
             queue,
             crate::render::compositor::PRESENTABLE_FORMAT,
-            |_caps| re_renderer::RenderConfig {
-                msaa_mode: re_renderer::MsaaMode::Off,
-            },
+            re_renderer::RenderConfig::best_for_device_caps,
         )
     }
 

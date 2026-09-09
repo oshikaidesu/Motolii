@@ -591,3 +591,4 @@
 | 共有反射 Repeater capture BACKDROP_INPUT batch | 2026-09-09: 作者のカメラ・作品値を変えず、評価sceneごと最大2地点×6面の共有反射を2D/meshへ供給する。背景依存はmanifestで宣言し、不要な分割を省く。同clip meshを集約し画像資源を再利用する。透過の順序は保持 | 決定 | [施工・検証](reviews/2026-09-09-shared-reflection-execution.md) | 利用者「それで進めて」 |
 | 共有反射 内容cache 計測 R0 R1 | 2026-09-09: 入力完全一致の直前1組を再利用。外部画像・点群はbypass、保持画像128MiBとmetadata概算8MiBに制限。静止の費用減と画素一致を確認、GPU encoder時刻の逆転は欠測として採否に用いない | 縮小採用 | [比較結果](reviews/2026-09-09-reflection-cache-comparison.md) | 利用者が実装と比較を依頼 |
 | GPU instance buffer 主ビュー 反射 共有 | 2026-09-09: 不透明Normal・背景不要・clipなしのmesh群を反射撮影時に一度GPUへ上げ、元input indexで部分集合を選ぶ。静止cache hitと条件外は既存経路。1000個の動的比較で転送約67%減、全画素一致 | 縮小採用 | [実装と比較](reviews/2026-09-09-gpu-instance-sharing.md) | 利用者「gpuベースで」 |
+| 表面 輪郭 MSAA sample shading | 2026-09-09: Offへの上書きをやめ、主描画と反射を4x MSAAへ。Full tierのmeshはsample補間、Limited/Offはcentroid。作品値を変更せず幾何と鏡面の縁を改善する | 決定 | [根拠・比較・制約](reviews/2026-09-09-surface-antialiasing.md) | 利用者が縁のザラつきを指摘 |
