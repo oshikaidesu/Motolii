@@ -20,7 +20,8 @@ abstract final class EditorMetrics {
   // candidate: change the value here to try, delete the name once unused.
   static const double s5 = 5, s7 = 7, s14 = 14, s15 = 15, s17 = 17, s18 = 18;
   static const double s19 = 19, s22 = 22, s23 = 23, s34 = 34, s36 = 36;
-  static const double s44 = 44, s60 = 60, s70 = 70, s76 = 76, s78 = 78;
+  static const double s44 = 44, s60 = 60, s64 = 64, s70 = 70, s76 = 76;
+  static const double s78 = 78;
   static const double s85 = 85, s90 = 90, s96 = 96, s155 = 155, s160 = 160;
   static const double s200 = 200, s244 = 244, s280 = 280;
 }

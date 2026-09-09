@@ -1436,7 +1436,7 @@ class _EditorPercentFieldState extends State<EditorPercentField> {
       ),
     );
     return SizedBox(
-      width: 64,
+      width: EditorMetrics.s64,
       child: EditorNumericField(
         value: widget.value,
         label: widget.label,
