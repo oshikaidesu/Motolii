@@ -9,6 +9,8 @@ class EditorApp extends StatelessWidget {
   Widget build(BuildContext context) => MaterialApp(
     debugShowCheckedModeBanner: false,
     theme: EditorTheme.data,
+    builder: (context, child) =>
+        TooltipVisibility(visible: false, child: child!),
     home: const EditorWindow(),
   );
 }

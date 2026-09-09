@@ -1,8 +1,10 @@
+#![recursion_limit = "256"]
 pub use motolii_doc as doc;
 pub use motolii_render as render;
 mod editor;
 mod port;
 mod snapshot;
+mod snapshot_cache;
 mod export_job;
 use std::ffi::{c_char, CStr, CString};
 use std::panic::{catch_unwind, AssertUnwindSafe};
@@ -36,6 +38,7 @@ pub struct EditorRuntime {
     reply: CString,
     error: Option<String>,
     preview: Option<(u64, Vec<Intent>)>,
+    preview_tag: Option<String>,
     stage_drag: Option<editor::stage::DragSession>,
     user_stage: bool,
     /// Animate が入っている間、触った値は今の時刻のキーになる。
@@ -43,6 +46,7 @@ pub struct EditorRuntime {
     /// 最後に全部入りの status を送った時の Document の版。同じ版で再生中なら生値だけ送る。
     pub(crate) full_status_revision: std::cell::RefCell<Option<String>>,
     user_camera: crate::doc::core::ResolvedCamera,
+    snapshot_cache: std::cell::RefCell<snapshot_cache::SnapshotCache>,
 }
 
 impl EditorRuntime {
@@ -60,7 +64,7 @@ impl EditorRuntime {
         clock.sync_document(&doc);
         let clock_revision = doc.revision();
         Ok(Self { selected_ids: selected.into_iter().collect(), selected_keys: Vec::new(), clipboard: Default::default(), path: if path.is_empty() { None } else { Some(path.into()) }, saved_signature, color_target: None, exporter: Default::default(), clock, clock_revision, doc, engine, selected, frame: 0, device_id, render_count: 0,
-            render_ms: 0.0, picked_color: None, pick_serial: 0, reply: CString::new("{}").unwrap(), error: None, preview: None, stage_drag: None, user_stage: true, animate: false, full_status_revision: Default::default(), user_camera: Default::default() })
+            render_ms: 0.0, picked_color: None, pick_serial: 0, reply: CString::new("{}").unwrap(), error: None, preview: None, preview_tag: None, stage_drag: None, snapshot_cache: Default::default(), user_stage: true, animate: false, full_status_revision: Default::default(), user_camera: Default::default() })
     }
 
     fn time(&self) -> Result<RationalTime, String> {
@@ -85,6 +89,7 @@ impl EditorRuntime {
     }
 
     fn cancel_preview(&mut self) {
+        self.preview_tag = None;
         self.stage_drag = None;
         if let Some((owner, _)) = self.preview.take() { self.doc.clear_preview_edits(owner); }
     }
@@ -171,12 +176,30 @@ pub unsafe extern "C" fn motolii_probe_open(path: *const c_char) -> *mut EditorR
 pub unsafe extern "C" fn motolii_probe_request(ctx: *mut EditorRuntime, request: *const c_char) -> *const c_char {
     if ctx.is_null() { return c"{\"error\":\"No probe context\"}".as_ptr(); }
     let probe = unsafe { &mut *ctx };
+    let before_image = probe.image_key();
+    let mut known = None;
+    let mut known_references = None;
+    let mut defer_snapshot = false;
     let mut quiet = false;
     let mut model_reply = None;
     let outcome = catch_unwind(AssertUnwindSafe(|| -> Result<(), String> {
         if request.is_null() { return Err("Missing request".into()); }
         let bytes = unsafe { CStr::from_ptr(request) }.to_bytes();
         let value: serde_json::Value = serde_json::from_slice(bytes).map_err(|e|e.to_string())?;
+        known = value["knownSnapshotId"].as_u64();
+        known_references = value["knownReferenceId"].as_u64();
+        defer_snapshot = value["deferSnapshot"] == true;
+        if value["bootstrap"] == true { *probe.full_status_revision.borrow_mut() = None; }
+        if value["op"] == "renderInfo" {
+            model_reply = Some(probe.doc.view().composition().map_err(|e|e.to_string()).and_then(|comp| {
+                comp.map(|c|json!({"width":c.width,"height":c.height})).ok_or("No composition".into())
+            }));
+            return Ok(());
+        }
+        if value["op"] == "visualSample" {
+            model_reply = Some(editor::visual_samples::reply(&probe.doc, probe.time()?, &value));
+            return Ok(());
+        }
         if value["op"] == "easeModel" {
             model_reply = Some(editor::ease_kinds::model(&value));
             return Ok(());
@@ -194,8 +217,14 @@ pub unsafe extern "C" fn motolii_probe_request(ctx: *mut EditorRuntime, request:
         probe.reply = CString::new("{\"ok\":true}").unwrap();
         return probe.reply.as_ptr();
     }
-    let status = catch_unwind(AssertUnwindSafe(|| probe.status()));
-    let value = match status { Ok(Ok(v)) => v, Ok(Err(e)) => json!({"error":e}), Err(_) => json!({"error":"Rust status panic"}) };
+    let needs_render = before_image != probe.image_key();
+    if defer_snapshot && needs_render && probe.error.is_none() {
+        probe.reply = CString::new("{\"needsRender\":true}").unwrap();
+        return probe.reply.as_ptr();
+    }
+    let status = catch_unwind(AssertUnwindSafe(|| probe.status_response(known, known_references)));
+    let mut value = match status { Ok(Ok(v)) => v, Ok(Err(e)) => json!({"error":e}), Err(_) => json!({"error":"Rust status panic"}) };
+    value["needsRender"] = json!(needs_render);
     probe.reply = CString::new(value.to_string()).unwrap_or_else(|_| CString::new("{\"error\":\"Invalid reply\"}").unwrap());
     probe.reply.as_ptr()
 }

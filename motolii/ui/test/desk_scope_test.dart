@@ -33,7 +33,7 @@ void main() {
                 width: 280,
                 child: DeskPanel(
                   controller: c,
-                  panelBuilder: (name) => Text('Body $name'),
+                  panelBuilder: (name, {leading}) => Text('Body $name'),
                 ),
               ),
               Expanded(child: PanelSettings(controller: c)),

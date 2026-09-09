@@ -29,9 +29,14 @@ pub(crate) fn interp(i:Interp)->Json{
     out["samples"]=json!((0..=steps).map(|step|{let u=step as f64/steps as f64;[u,i.ease(u)]}).collect::<Vec<_>>());
     out
 }
-fn prop(view:&StoreView<'_>,layer:LayerId,id:&str,label:&str,fallback:&Value,range:Option<(f64,f64)>,at:RationalTime,fps:Fps)->Result<Json,String>{
+fn prop(view:&StoreView<'_>,layer:LayerId,id:&str,label:&str,fallback:&Value,range:Option<(f64,f64)>,at:RationalTime,fps:Fps,live:bool)->Result<Json,String>{
     let p=PropertyId::new(id).map_err(e)?;
     let current=view.value_at(layer,&p,at).map_err(e)?.unwrap_or_else(||fallback.clone());
+    if live {
+        let here=at.try_to_frame_round(fps).map_err(e)?;
+        let keyed=view.track(layer,&p).map_err(e)?.map(|track|track.keys().iter().any(|key|key.t.try_to_frame_round(fps).ok()==Some(here))).unwrap_or(false);
+        return Ok(json!({"id":id,"value":value(&current),"keyedNow":keyed}));
+    }
     let mut keys=Vec::new();
     if let Some(track)=view.track(layer,&p).map_err(e)?{for key in track.keys(){keys.push(json!({"frame":key.t.try_to_frame_round(fps).map_err(e)?,"value":value(&key.value),"interp":interp(key.interp)}));}}
     let here=at.try_to_frame_round(fps).map_err(e)?;
@@ -139,7 +144,7 @@ impl EditorRuntime{
         let fractions:[f64;2]=std::array::from_fn(|i|(anchor[i]-b.min[i]as f64)/(b.max[i]-b.min[i]).max(1e-6)as f64);
         Some(json!({"layer":layer.0,"corners":corners,"localMin":b.min,"localMax":b.max,"anchorFraction":fractions}))
     }
-    pub(crate) fn status(&self)->Result<Json,String>{
+    pub(crate) fn build_status(&self)->Result<Json,String>{
         let view=self.doc.view();let comp=view.composition().map_err(e)?.ok_or("No composition")?;let at=self.time()?;
         let catalog=crate::render::engine::known_effects();
         let resolved=view.resolved_layers(at).map_err(e)?;
@@ -154,35 +159,42 @@ impl EditorRuntime{
             let mut properties=Vec::new();let mut seen=std::collections::BTreeSet::new();
             for row in data.transform.iter().chain(data.text.iter()){
                 if let Some(p)=&row.property{
-                    if seen.insert(p.clone()){properties.push(prop(&view,id,p,&row.label,&row.value,row.range,at,comp.fps)?);}
+                    if seen.insert(p.clone()){properties.push(prop(&view,id,p,&row.label,&row.value,row.range,at,comp.fps,live)?);}
                 }
                 for (index,axis) in row.axis.iter().enumerate(){if let Some((p,v))=axis{
-                    if seen.insert(p.clone()){properties.push(prop(&view,id,p,&format!("{} {}",row.label,["X","Y","Z"][index]),v,row.range,at,comp.fps)?);}
+                    if seen.insert(p.clone()){properties.push(prop(&view,id,p,&format!("{} {}",row.label,["X","Y","Z"][index]),v,row.range,at,comp.fps,live)?);}
                 }}
             }
             for p in view.properties(id){if !p.name().starts_with(property::EFFECT_PREFIX)&&seen.insert(p.name().into()){
-                if let Some(v)=view.value_at(id,&p,at).map_err(e)?{properties.push(prop(&view,id,p.name(),p.name(),&v,None,at,comp.fps)?);}
+                if let Some(v)=view.value_at(id,&p,at).map_err(e)?{properties.push(prop(&view,id,p.name(),p.name(),&v,None,at,comp.fps,live)?);}
             }}
             if meta.source == LayerSource::Camera {
                 properties = [(property::CAMERA_CENTER,"Center",Value::Vec2([0.0,0.0]),None), (property::CAMERA_ZOOM,"Zoom",Value::F64(1.0),Some((0.01,100.0))), (property::CAMERA_ROLL,"Roll",Value::F64(0.0),None)]
-                    .into_iter().map(|(p,label,v,range)| prop(&view,id,p,label,&v,range,at,comp.fps)).collect::<Result<Vec<_>,_>>()?;
+                    .into_iter().map(|(p,label,v,range)| prop(&view,id,p,label,&v,range,at,comp.fps,live)).collect::<Result<Vec<_>,_>>()?;
             }
             if meta.source == LayerSource::Stage {
                 properties = property::STAGE_MARGINS.iter().zip(["Left","Top","Right","Bottom"])
-                    .map(|(p,label)| prop(&view,id,p,label,&Value::F64(0.0),Some((0.0,100000.0)),at,comp.fps)).collect::<Result<Vec<_>,_>>()?;
+                    .map(|(p,label)| prop(&view,id,p,label,&Value::F64(0.0),Some((0.0,100000.0)),at,comp.fps,live)).collect::<Result<Vec<_>,_>>()?;
             }
             let text=if let Some(t)=view.text_document(id).map_err(e)?{
-                let keys:Result<Vec<_>,String>=t.content.keys().iter().map(|k|Ok(json!({"frame":k.t.try_to_frame_round(comp.fps).map_err(e)?,"value":k.content,"interp":{"kind":"Hold"}}))).collect();
-                let keys=keys?;
-                properties.insert(0,json!({"id":"content","label":"Content","kind":"text","value":t.content.eval(at),"min":null,"max":null,"keyedNow":keys.iter().any(|k|k["frame"]==self.frame),"keys":keys}));
+                let keyed=t.content.keys().iter().any(|k|k.t.try_to_frame_round(comp.fps).ok()==Some(self.frame));
+                let content=if live { json!({"id":"content","value":t.content.eval(at),"keyedNow":keyed}) } else {
+                    let keys:Result<Vec<_>,String>=t.content.keys().iter().map(|k|Ok(json!({"frame":k.t.try_to_frame_round(comp.fps).map_err(e)?,"value":k.content,"interp":{"kind":"Hold"}}))).collect();
+                    json!({"id":"content","label":"Content","kind":"text","value":t.content.eval(at),"min":null,"max":null,"keyedNow":keyed,"keys":keys?})
+                };
+                properties.insert(0,content);
                 let resolved=view.resolved_text_document(id,at).map_err(e)?.unwrap_or(t.clone());
+                properties.retain(|p|p["id"]!="text_justify");
+                let mut justify=prop(&view,id,"text_justify","Alignment",&Value::Enum(resolved.justify.to_enum_value()),None,at,comp.fps,live)?;
+                justify["choices"]=json!(["Left","Right","Center"]);properties.push(justify);
                 let s=resolved.styles.first();
-                json!({"content":t.content.eval(at),"size":s.map(|s|s.size),"lineHeight":s.and_then(|s|s.line_height),"tracking":s.map(|s|s.tracking)})
+                json!({"classes":crate::doc::store::text_edit::classifications(t.content.eval(at)),"styles":resolved.styles,"runs":resolved.runs,"fontFamily":s.map(|s|&s.font.family),"content":t.content.eval(at),"size":s.map(|s|s.size),"lineHeight":s.and_then(|s|s.line_height),"tracking":s.map(|s|s.tracking)})
             }else{Json::Null};
-            let colors:Vec<_>=data.colors.iter().map(|c|json!({"label":c.label,"slot":c.slot,"rgba":editor::color::read_color(&self.doc,&c.slot).unwrap_or([0.0,0.0,0.0,1.0])})).collect();
+            let colors:Vec<_>=data.colors.iter().filter(|_|!live).map(|c|json!({"label":c.label,"slot":c.slot,"rgba":editor::color::read_color(&self.doc,&c.slot).unwrap_or([0.0,0.0,0.0,1.0])})).collect();
             let effects:Result<Vec<_>,String>=data.effects.iter().map(|effect|{
                 let kind=crate::doc::store::placement::kind(&effect.plugin_id);
-                let mut params:Vec<Json>=effect.params.iter().filter_map(|p|p.property.as_ref().map(|idp|prop(&view,id,idp,&p.label,&p.value,p.range,at,comp.fps))).collect::<Result<_,_>>()?;
+                let mut params:Vec<Json>=effect.params.iter().filter_map(|p|p.property.as_ref().map(|idp|prop(&view,id,idp,&p.label,&p.value,p.range,at,comp.fps,live))).collect::<Result<_,_>>()?;
+                if live { return Ok(json!({"id":effect.id,"params":params})); }
                 for row in &mut params{
                     let name=row["id"].as_str().unwrap_or_default().rsplit(".param.").next().unwrap_or_default().to_owned();
                     if let Some(param)=crate::doc::store::kind::kind(&effect.plugin_id).and_then(|k|k.params.iter().find(|p|p.name==name)){
@@ -210,24 +222,25 @@ impl EditorRuntime{
                 let enabled=!matches!(view.value_at(id,&PropertyId::effect_enabled(EffectId(effect.id)),at).map_err(e)?,Some(Value::Bool(false)));Ok(json!({"id":effect.id,"enabled":enabled,"pluginId":effect.plugin_id,"name":catalog.iter().find(|d|d.plugin_id==effect.plugin_id).map_or(effect.plugin_id.as_str(),|d|d.label.as_str()),"placement":kind.is_some(),"layout":layout,"params":params}))
             }).collect();
             let position=self.position(id)?;let bounds=self.bounds_in(&resolved,id);
-            let tint=data.colors.first().and_then(|c|editor::color::read_color(&self.doc,&c.slot)).unwrap_or([0.9,0.5,0.2,1.0]);
-            // 混ぜ方の見本は選んだ層だけ。1 フレームごとの JSON を層数に比例させない。
-            let blend_previews:serde_json::Map<String,Json>=if self.selected_ids.contains(&id){(0..18).filter_map(BlendMode::from_enum_value).map(|mode|(format!("{:?}",mode),json!(editor::blend_preview::BEDS.map(|bed|editor::blend_preview::blend(mode,[tint[0]as f32,tint[1]as f32,tint[2]as f32],bed))))).collect()}else{Default::default()};
+            let corners=bounds.as_ref().and_then(|b|b["corners"].as_array()).map(|c|[c[0].clone(),c[1].clone(),c[3].clone(),c[2].clone()]);
+            if live {
+                layers.push(json!({"id":id.0,"x":position[0],"y":position[1],"bounds":bounds,"corners":corners,"text":text,"properties":properties,"effects":effects?}));
+            if let Some(color)=data.colors.first(){layers.last_mut().unwrap()["fill"]=editor::gradient::model(&self.doc,&color.slot).unwrap_or(Json::Null);}
+                continue;
+            }
             let content_keys:Vec<_>=properties.iter().find(|p|p["id"]=="content").and_then(|p|p["keys"].as_array()).into_iter().flatten().map(|k|json!({"frame":k["frame"],"content":k["value"]})).collect();
             let corners=bounds.as_ref().and_then(|b|b["corners"].as_array()).map(|c|[c[0].clone(),c[1].clone(),c[3].clone(),c[2].clone()]);
-            layers.push(json!({"id":id.0,"name":attrs.name,"kind":source_kind(&meta.source),"ghost":attrs.ghost,"ghostable":crate::editor::timeline_edit::ghostable(&view,id),"parent":attrs.parent.map(|p|p.0),"order":meta.order,"hidden":attrs.hidden,"solo":attrs.solo,"locked":attrs.locked,"clipToBelow":attrs.clip_to_below,"clipBase":view.clipping_base(id).map_err(e)?.map(|b|b.0),"projection":match attrs.projection{LayerProjection::TwoD=>"2D",LayerProjection::TwoPointFiveD=>"2.5D",LayerProjection::ThreeD=>"3D"},"flatten":attrs.flatten,"environment":attrs.environment,"frozen":attrs.frozen,"blendMode":attrs.blend_mode,"matte":attrs.matte,"start":meta.timing.start,"duration":meta.timing.duration,"sourceIn":meta.timing.source_in,"properties":properties,"text":text,"colors":colors,"effects":effects?,"contentKeys":content_keys,"corners":corners,"blendPreviews":blend_previews,"x":position[0],"y":position[1],"bounds":bounds,"anchorFraction":bounds.as_ref().map(|b|b["anchorFraction"].clone())}));
+            layers.push(json!({"id":id.0,"name":attrs.name,"kind":source_kind(&meta.source),"ghost":attrs.ghost,"ghostable":crate::editor::timeline_edit::ghostable(&view,id),"parent":attrs.parent.map(|p|p.0),"order":meta.order,"hidden":attrs.hidden,"solo":attrs.solo,"locked":attrs.locked,"clipToBelow":attrs.clip_to_below,"clipBase":view.clipping_base(id).map_err(e)?.map(|b|b.0),"projection":match attrs.projection{LayerProjection::TwoD=>"2D",LayerProjection::TwoPointFiveD=>"2.5D",LayerProjection::ThreeD=>"3D"},"flatten":attrs.flatten,"environment":attrs.environment,"frozen":attrs.frozen,"blendMode":attrs.blend_mode,"matte":attrs.matte,"start":meta.timing.start,"duration":meta.timing.duration,"sourceIn":meta.timing.source_in,"properties":properties,"text":text,"colors":colors,"effects":effects?,"contentKeys":content_keys,"corners":corners,"x":position[0],"y":position[1],"bounds":bounds,"anchorFraction":bounds.as_ref().map(|b|b["anchorFraction"].clone())}));
+            if let Some(color)=data.colors.first(){layers.last_mut().unwrap()["fill"]=editor::gradient::model(&self.doc,&color.slot).unwrap_or(Json::Null);}
+            if let Some(color)=data.colors.first(){layers.last_mut().unwrap()["fill"]=editor::gradient::model(&self.doc,&color.slot).unwrap_or(Json::Null);}
         }
         if live {
             let (undo,redo)=self.doc.history_depth();
             let selected_keys:Vec<_>=self.selected_keys.iter().map(|k|json!({"layer":k.layer.0,"property":k.property.as_ref().map(|p|p.name()),"frame":(k.at_sec*comp.fps.as_f64()).round()as i64})).collect();
             let point=self.selected.map(|id|self.position(id)).transpose()?.unwrap_or([0.0,0.0]);
-            let live_layers:Vec<Json>=layers.iter().map(|l|{
-                let rows=|v:&Json|v.as_array().into_iter().flatten().map(|r|json!({"id":r["id"],"value":r["value"],"keyedNow":r["keyedNow"]})).collect::<Vec<_>>();
-                json!({"id":l["id"],"x":l["x"],"y":l["y"],"bounds":l["bounds"],"corners":l["corners"],"text":l["text"],"properties":rows(&l["properties"]),
-                    "effects":l["effects"].as_array().into_iter().flatten().map(|e|json!({"id":e["id"],"params":rows(&e["params"])})).collect::<Vec<_>>()})
-            }).collect();
+            let live_layers=layers;
             // 寸法は Swift の render が毎コマ読む。軽い status でも落とさない(落とすと再生 2 コマ目で render が失敗し、再生が止まる)。
-            return Ok(json!({"frame":self.frame,"playing":self.clock.playing(),"documentRevision":revision,"undo":undo,"redo":redo,"width":comp.width,"height":comp.height,"fps":comp.fps.as_f64(),"durationFrames":comp.duration_frames,
+            return Ok(json!({"frame":self.frame,"playing":self.clock.playing(),"documentRevision":revision,"preview":self.preview.is_some(),"previewOwner":self.preview.as_ref().map(|p|p.0),"previewInteraction":self.preview_tag,"undo":undo,"redo":redo,"width":comp.width,"height":comp.height,"fps":comp.fps.as_f64(),"durationFrames":comp.duration_frames,
                 "selectedId":self.selected.map(|s|s.0),"selectedIds":self.selected_ids.iter().map(|s|s.0).collect::<Vec<_>>(),"selectedKeys":selected_keys,"x":point[0],"y":point[1],
                 "stageView":if self.user_stage{"User"}else{"Camera"},"animate":self.animate,"renderCount":self.render_count,"pickedColor":self.picked_color,"pickSerial":self.pick_serial,"renderMs":self.render_ms,"liveLayers":live_layers}));
         }
@@ -252,7 +265,11 @@ impl EditorRuntime{
         let (undo,redo)=self.doc.history_depth();let point=self.selected.map(|id|self.position(id)).transpose()?.unwrap_or([0.0,0.0]);
         let color_target=self.color_target.as_ref().and_then(|slot|editor::color::read_color(&self.doc,slot).map(|rgba|json!({"layer":slot.layer().0,"slot":slot,"label":"Color","rgba":rgba})));
         let selected_keys:Vec<_>=self.selected_keys.iter().map(|k|json!({"layer":k.layer.0,"property":k.property.as_ref().map(|p|p.name()),"frame":(k.at_sec*comp.fps.as_f64()).round()as i64})).collect();
-        let mut status=json!({"stageView":if self.user_stage{"User"}else{"Camera"},"observer":self.observer_status()?,"cameraGizmos":self.camera_gizmos()?,"width":comp.width,"height":comp.height,"fps":comp.fps.as_f64(),"fpsNum":comp.fps.num(),"fpsDen":comp.fps.den(),"durationFrames":comp.duration_frames,"background":comp.background,"frame":self.frame,"playing":self.clock.playing(),"playbackHealth":playback_health,"waveforms":waveforms,"undo":undo,"redo":redo,"path":self.path,"dirty":authored_signature(&self.doc)?!=self.saved_signature,"layers":layers,"selectedId":self.selected.map(|id|id.0),"selectedIds":self.selected_ids.iter().map(|id|id.0).collect::<Vec<_>>(),"selectedKeys":selected_keys,"selectedBounds":self.selected.and_then(|id|self.bounds(id)),"x":point[0],"y":point[1],"assets":assets?,"catalog":catalog.iter().map(|e|json!({"id":e.plugin_id,"name":e.label})).collect::<Vec<_>>(),"palette":palette,"markers":markers?,"colorTarget":color_target,"capabilities":crate::port::CAPABILITIES,"easeKinds":if self.clock.playing(){Json::Null}else{json!(editor::ease_kinds::KINDS.iter().copied().map(interp).collect::<Vec<_>>())},"documentRevision":format!("{:?}",self.doc.revision()),"deviceId":self.device_id.to_string(),"renderCount":self.render_count,"renderMs":self.render_ms,"interopCopies":0,"readbacks":0,"error":self.error,"preview":self.preview.is_some(),"export":self.exporter.status()});
+        let mut status=json!({"stageView":if self.user_stage{"User"}else{"Camera"},"observer":self.observer_status()?,"cameraGizmos":self.camera_gizmos()?,"width":comp.width,"height":comp.height,"fps":comp.fps.as_f64(),"fpsNum":comp.fps.num(),"fpsDen":comp.fps.den(),"durationFrames":comp.duration_frames,"background":comp.background,"frame":self.frame,"playing":self.clock.playing(),"playbackHealth":playback_health,"waveforms":waveforms,"undo":undo,"redo":redo,"path":self.path,"dirty":self.is_dirty()?,"layers":layers,"selectedId":self.selected.map(|id|id.0),"selectedIds":self.selected_ids.iter().map(|id|id.0).collect::<Vec<_>>(),"selectedKeys":selected_keys,"selectedBounds":self.selected.and_then(|id|self.bounds(id)),"x":point[0],"y":point[1],"assets":assets?,"catalog":catalog.iter().map(|e|json!({"id":e.plugin_id,"name":e.label})).collect::<Vec<_>>(),"palette":palette,"markers":markers?,"colorTarget":color_target,"capabilities":crate::port::CAPABILITIES,"easeKinds":if self.clock.playing(){Json::Null}else{json!(editor::ease_kinds::KINDS.iter().copied().map(interp).collect::<Vec<_>>())},"documentRevision":format!("{:?}",self.doc.revision()),"deviceId":self.device_id.to_string(),"renderCount":self.render_count,"renderMs":self.render_ms,"interopCopies":0,"readbacks":0,"error":self.error,"preview":self.preview.is_some(),"export":self.exporter.status()});
+        status["previewOwner"] = json!(self.preview.as_ref().map(|p|p.0));
+        status["previewInteraction"] = json!(self.preview_tag);
+        status["visualSamples"]=json!(true);
+        status["fontFamilies"]=json!(crate::doc::vector::text::font_families());
         status["notebook"]=serde_json::to_value(view.notebook().map_err(e)?).map_err(e)?;
         status["depthLayout"]=self.depth_layout(&resolved)?;
         status["backgrounds"]=json!(editor::create::backgrounds().iter().map(|b|json!({"id":b.id,"name":b.name,"thumbnail":editor::thumbnail::image_data_uri(&b.path)})).collect::<Vec<_>>());
@@ -283,6 +300,46 @@ mod frame_cost_probe {
             ]).unwrap();
         }
         rt
+    }
+
+    #[test]
+    fn playback_values_match_full_status_without_keyframe_metadata() {
+        let mut rt = runtime(2, 1.0);
+        let p = PropertyId::new(property::OPACITY).unwrap();
+        let mut track = KeyframeTrack::new();
+        for frame in [0, 10] {
+            track.insert(Keyframe { t: RationalTime::try_from_frame(frame, rt.doc.view().composition().unwrap().unwrap().fps).unwrap(), value: Value::F64(frame as f64 / 10.0), interp: Interp::Linear, spatial: None });
+        }
+        rt.doc.apply(Intent::SetTrack { layer: LayerId(100), property: p, track }).unwrap();
+        for frame in [0, 5, 10] {
+            rt.frame = frame;
+            let full = rt.status().unwrap();
+            rt.clock.toggle();
+            let live = rt.status().unwrap();
+            rt.clock.toggle();
+            for (expected, actual) in full["layers"].as_array().unwrap().iter().zip(live["liveLayers"].as_array().unwrap()) {
+                for field in ["id", "x", "y", "bounds", "corners", "text"] { assert_eq!(expected[field], actual[field], "{field}"); }
+                let compare = |a: &serde_json::Value, b: &serde_json::Value| {
+                    assert_eq!(a.as_array().unwrap().len(), b.as_array().unwrap().len());
+                    for (a,b) in a.as_array().unwrap().iter().zip(b.as_array().unwrap()) {
+                        for field in ["id", "value", "keyedNow"] { assert_eq!(a[field],b[field], "{field}"); }
+                        assert!(b.get("keys").is_none());
+                    }
+                };
+                compare(&expected["properties"], &actual["properties"]);
+                for (a,b) in expected["effects"].as_array().unwrap().iter().zip(actual["effects"].as_array().unwrap()) { compare(&a["params"], &b["params"]); }
+            }
+        }
+        let before = rt.full_status_revision.borrow().clone();
+        let reply = unsafe { crate::motolii_probe_request(&mut rt, c"{\"op\":\"renderInfo\"}".as_ptr()) };
+        let info: serde_json::Value = serde_json::from_str(unsafe { std::ffi::CStr::from_ptr(reply) }.to_str().unwrap()).unwrap();
+        assert_eq!(info.as_object().unwrap().len(), 2);
+        assert_eq!(info["width"], rt.status().unwrap()["width"]);
+        assert_eq!(*rt.full_status_revision.borrow(), before);
+        rt.request(serde_json::json!({"op":"composition","width":640,"height":480})).unwrap();
+        let reply = unsafe { crate::motolii_probe_request(&mut rt, c"{\"op\":\"renderInfo\"}".as_ptr()) };
+        let info: serde_json::Value = serde_json::from_str(unsafe { std::ffi::CStr::from_ptr(reply) }.to_str().unwrap()).unwrap();
+        assert_eq!(info, serde_json::json!({"width":640,"height":480}));
     }
 
     #[test]

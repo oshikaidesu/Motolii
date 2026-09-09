@@ -192,6 +192,12 @@ pub(crate) fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: Ratio
                 range: None,
                 axis: [None, None, None],
             }];
+            rows.push(PropRow {
+                label: "Alignment".into(), cells: Default::default(), dims: [false; 3],
+                keyed: keyed("text_justify"), property: Some("text_justify".into()),
+                vec2: false, value: Value::Enum(doc.justify.to_enum_value()),
+                range: None, axis: [None, None, None],
+            });
             // 級数。style の size を property が上書きする(resolve と同じ順)。数の行なので擦れる。
             if let Some(style) = doc.styles.first() {
                 let prop = PropertyId::text_style_size(style.id);

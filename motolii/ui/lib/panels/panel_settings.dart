@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../session/editor_session.dart';
 import '../foundation/panel_catalog.dart';
 import 'browser.dart';
+import '../foundation/panel_controls.dart';
 import '../foundation/theme.dart';
 import '../foundation/metrics.dart';
 
@@ -29,8 +30,9 @@ class PanelSettings extends StatelessWidget {
               style: TextStyle(fontSize: EditorMetrics.font),
             ),
             Expanded(
-              child: Slider(
-                key: const ValueKey('settings:browserTile'),
+              child: EditorZoomBar(
+                keyPrefix: 'settings:browserTile',
+                base: BrowserSize.base,
                 min: BrowserSize.min,
                 max: BrowserSize.max,
                 value: BrowserSize.tile(controller),
@@ -74,7 +76,7 @@ class PanelSettings extends StatelessWidget {
                       'window' => 'Window',
                       _ => 'Hidden',
                     },
-                    child: IconButton(
+                    child: EditorIconButton(
                       key: ValueKey('placement:${spec.name}:$place'),
                       constraints: const BoxConstraints.tightFor(
                         width: EditorMetrics.s32,

@@ -26,5 +26,8 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 re_log = { workspace = true }
 
+unicode-segmentation = "=1.13.3"
+unicode-script = "=0.5.8"
+
 [lints]
 workspace = true

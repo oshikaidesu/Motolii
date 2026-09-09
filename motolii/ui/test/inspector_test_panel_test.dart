@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../lib/foundation/panel_controls.dart';
 import '../lib/foundation/theme.dart';
-import '../lib/panels/inspector_test.dart';
+import '../lib/panels/inspector.dart';
 import '../lib/session/editor_session.dart';
 
 /// The Test tab builds every control from the declaration: each kind the
@@ -141,13 +141,21 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: EditorTheme.data,
-        home: Scaffold(body: InspectorTestPanel(controller: c)),
+        home: Scaffold(body: InspectorPanel(controller: c)),
       ),
     );
     // Transform: position x/y/z, scale (locked: one well), rotation + tilts,
     // opacity. Effect: mix, radius, angle, offset x/y (one pad), seed,
     // dx/dy (one pad by group), spin.
-    expect(find.byType(EditorNumericField), findsNWidgets(17));
+    expect(
+      find.byWidgetPredicate(
+        (w) =>
+            w is EditorNumericField &&
+            w.key is ValueKey &&
+            '${(w.key as ValueKey).value}'.startsWith('inspector:'),
+      ),
+      findsNWidgets(17),
+    );
     // Transform rotation, the `angle` word, and `spin` by its analysed subtype.
     expect(find.byType(EditorDial), findsNWidgets(3));
     expect(find.byType(EditorPad), findsNWidgets(2));
@@ -272,7 +280,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: EditorTheme.data,
-        home: Scaffold(body: InspectorTestPanel(controller: c)),
+        home: Scaffold(body: InspectorPanel(controller: c)),
       ),
     );
     expect(find.text('2 layers'), findsOneWidget);

@@ -13,7 +13,8 @@ class NativeBridge {
   Future<dynamic> request(
     DocumentOperation operation, [
     Map<String, dynamic> arguments = const {},
-  ]) => invoke('request', {'command': operation.encode(arguments)});
+    Map<String, dynamic> snapshot = const {},
+  ]) => invoke('request', {'command': operation.encode(arguments), ...snapshot});
 
   void listen(Future<dynamic> Function(MethodCall)? handler) =>
       channel.setMethodCallHandler(handler);

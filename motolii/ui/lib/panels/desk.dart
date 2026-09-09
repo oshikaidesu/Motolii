@@ -14,7 +14,7 @@ class DeskPanel extends StatefulWidget {
     required this.panelBuilder,
   });
   final EditorSession controller;
-  final Widget Function(String) panelBuilder;
+  final Widget Function(String, {Widget? leading}) panelBuilder;
   @override
   State<DeskPanel> createState() => _DeskPanelState();
 }
@@ -129,7 +129,7 @@ class _DeskPanelState extends State<DeskPanel> {
                     style: const TextStyle(fontSize: EditorMetrics.font),
                   ),
                 ),
-                IconButton(
+                EditorIconButton(
                   tooltip: 'Use ${spec.name} when idle',
                   iconSize: EditorMetrics.s14,
                   padding: EdgeInsets.zero,
@@ -168,6 +168,15 @@ class _DeskPanelState extends State<DeskPanel> {
       final shown = _shown;
       final spec = panelSpec(shown);
       final live = spec?.drawer == true && _inDrawer(shown);
+      final inlineTools = live && shown == 'Ease';
+      final tools = EditorIconButton(
+        tooltip: 'Desk tools',
+        constraints: EditorTheme.iconConstraints,
+        padding: EdgeInsets.zero,
+        iconSize: EditorMetrics.s18,
+        onPressed: () => c.deskDrawer.value = 'Tools',
+        icon: const Icon(Icons.all_inbox_outlined),
+      );
       return TapRegion(
         onTapInside: (_) => _inside = true,
         onTapOutside: (_) => _inside = false,
@@ -178,26 +187,29 @@ class _DeskPanelState extends State<DeskPanel> {
             color: EditorTheme.panel,
             child: Column(
               children: [
-                SizedBox(
-                  height: EditorMetrics.bar,
-                  child: Row(
-                    children: [
-                      IconButton(
-                        tooltip: 'Desk tools',
-                        iconSize: EditorMetrics.s18,
-                        onPressed: () => c.deskDrawer.value = 'Tools',
-                        icon: const Icon(Icons.all_inbox_outlined),
-                      ),
-                      if (live) Icon(spec!.icon, size: EditorMetrics.s16),
-                      const SizedBox(width: EditorMetrics.s6),
-                      Text(
-                        live ? shown : 'Tools',
-                        style: const TextStyle(fontSize: EditorMetrics.font),
-                      ),
-                    ],
+                if (!inlineTools)
+                  SizedBox(
+                    height: EditorMetrics.bar,
+                    child: Row(
+                      children: [
+                        tools,
+                        if (live) Icon(spec!.icon, size: EditorMetrics.s16),
+                        const SizedBox(width: EditorMetrics.s6),
+                        Text(
+                          live ? shown : 'Tools',
+                          style: const TextStyle(fontSize: EditorMetrics.font),
+                        ),
+                      ],
+                    ),
                   ),
+                Expanded(
+                  child: live
+                      ? widget.panelBuilder(
+                          shown,
+                          leading: inlineTools ? tools : null,
+                        )
+                      : _catalog(),
                 ),
-                Expanded(child: live ? widget.panelBuilder(shown) : _catalog()),
               ],
             ),
           ),

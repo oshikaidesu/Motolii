@@ -1,0 +1,26 @@
+{
+  "status_full": {
+    "native_median_ms": 1.9113335,
+    "native_p95_ms": 2.409041,
+    "median_bytes": 290294.0,
+    "samples": 40,
+    "needs_render": false,
+    "render_count": 0
+  },
+  "status_ack": {
+    "native_median_ms": 0.8293755,
+    "native_p95_ms": 0.890542,
+    "median_bytes": 1152.0,
+    "samples": 40,
+    "needs_render": false,
+    "render_count": 0
+  },
+  "select_ack": {
+    "native_median_ms": 0.864208,
+    "native_p95_ms": 0.916125,
+    "median_bytes": 1154.0,
+    "samples": 40,
+    "needs_render": false,
+    "render_count": 0
+  }
+}

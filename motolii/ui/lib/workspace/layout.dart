@@ -107,9 +107,11 @@ class DockNode {
       '${m['id']}',
       (m['tabs'] as List)
           .whereType<String>()
+          .map((name) => name == 'Test' ? 'Inspector' : name)
+          .toSet()
           .where(paneNames.contains)
           .toList(),
-      active: m['active'] as String?,
+      active: m['active'] == 'Test' ? 'Inspector' : m['active'] as String?,
     );
   }
 }
@@ -128,7 +130,7 @@ DockNode initialDock() => DockNode.split(
       DockNode.split(
         Axis.vertical,
         .76,
-        DockNode.leaf('inspector', ['Inspector', 'Test']),
+        DockNode.leaf('inspector', ['Inspector']),
         DockNode.leaf('desk', ['Desk']),
       ),
     ),

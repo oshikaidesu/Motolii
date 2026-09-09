@@ -3,7 +3,7 @@ use crate::doc::store::*;
 use serde_json::{Value as J,json};
 use editor::session::{KeySel,ColorSlot};
 fn e(error:impl std::fmt::Display)->String{error.to_string()}
-pub(crate) const CAPABILITIES:&[&str]=&["status","notes","stageView","select","setProperty","previewProperties","commitPreview","cancelPreview","setText","setAttrs","create","duplicate","ghost","sequence","previewSequence","copy","cut","paste","delete","group","ungroup","reorder","split","setTiming","toggleKey","moveKeys","ease","setColor","previewColor","focusColor","applyPalette","applyEffect","removeEffect","expandEffect","moveEffect","enableEffect","animate","clip","addMarker","setMarker","deleteMarker","composition","import","placeAsset","removeAsset","replaceAsset","save","new","undo","redo","seek","anchor","freeze","setFillMode","previewBlend","setTimings","previewTimings","stageGesture","export","exportStatus","cancelExport","play","pause","tick","moveLayers","pickColor"];
+pub(crate) const CAPABILITIES:&[&str]=&["status","notes","stageView","select","setProperty","previewProperties","commitPreview","cancelPreview","setText","previewText","styleText","setFont","setAttrs","create","duplicate","ghost","sequence","previewSequence","copy","cut","paste","delete","group","ungroup","reorder","split","setTiming","toggleKey","moveKeys","ease","setColor","previewColor","focusColor","applyPalette","applyEffect","removeEffect","expandEffect","moveEffect","enableEffect","animate","clip","addMarker","setMarker","deleteMarker","composition","import","placeAsset","removeAsset","replaceAsset","save","restoreCheckpoint","new","undo","redo","seek","anchor","freeze","setFillMode","setGradient","previewBlend","setTimings","previewTimings","stageGesture","export","exportStatus","cancelExport","play","pause","tick","moveLayers","pickColor"];
 fn num(j:&J,key:&str)->Result<f64,String>{j[key].as_f64().filter(|v|v.is_finite()).ok_or_else(||format!("Missing finite {key}"))}
 fn integer(j:&J,key:&str)->Result<i64,String>{j[key].as_i64().ok_or_else(||format!("Missing integer {key}"))}
 fn layer(j:&J)->Result<LayerId,String>{j["layer"].as_u64().map(LayerId).ok_or("Missing layer".into())}
@@ -39,7 +39,6 @@ impl EditorRuntime{
     fn set_preview(&mut self,intents:Vec<Intent>)->Result<(),String>{
         let owner=if let Some((owner,_))=&self.preview{*owner}else{self.doc.begin_preview()};
         let projected:Vec<_>=intents.iter().filter_map(|intent|match intent{
-            Intent::SetShapes{..}=>None,
             Intent::SetAttrs{layer,patch} if patch.blend_mode.is_some()=>Some(Intent::SetConstant{layer:*layer,property:PropertyId::blend_mode(),value:Value::Enum(patch.blend_mode.unwrap().to_enum_value())}),
             _=>Some(intent.clone()),
         }).collect();
@@ -49,10 +48,11 @@ impl EditorRuntime{
         let layer=layer(j)?;let name=string(j,"property")?;let p=PropertyId::new(name).map_err(e)?;
         let view=self.doc.view().without_transients();
         let current=view.value_at(layer,&p,self.time()?).map_err(e)?.or(view.default_value(layer,&p).map_err(e)?);
-        let mut v=decoded_value(&j["value"],current.as_ref())?;
         let catalog=crate::render::engine::known_effects();let data=editor::functions::read::inspector_data_from_doc(&view,layer,self.time()?,&catalog);
         let rows=data.text.iter().chain(data.transform.iter()).chain(data.effects.iter().flat_map(|e|e.params.iter()));
-        if let Some(row)=rows.filter(|r|r.property.as_deref()==Some(name)).next(){if let(Value::F64(n),Some((min,max)))=(&mut v,row.range){*n=n.clamp(min,max);}}
+        let row=rows.filter(|r|r.property.as_deref()==Some(name)).next();
+        let mut v=decoded_value(&j["value"],current.as_ref().or(row.map(|r|&r.value)))?;
+        if let Some(row)=row{if let(Value::F64(n),Some((min,max)))=(&mut v,row.range){*n=n.clamp(min,max);}}
         self.doc.place_checked(layer,&p,v,self.time()?,self.animate).map(|v|v.into_iter().collect()).map_err(e)
     }
     fn color_intent(&self,j:&J)->Result<Intent,String>{
@@ -118,8 +118,16 @@ impl EditorRuntime{
             return Ok(());
         }
 
+        if op=="save" && j["copy"].as_bool()==Some(true) && self.preview.is_some(){return Err("Finish the active preview before creating a checkpoint".into());}
         if op=="tick"{self.clock_frame();self.error=None;return Ok(())}
-        if !matches!(op,"previewProperties"|"previewColor"|"previewBlend"|"previewX"|"commitPreview"|"commitX"|"previewTimings"|"previewSequence"|"stageGesture"){self.cancel_preview();}
+        if matches!(op,"cancelPreview"|"commitPreview") && j["owner"].is_u64()
+            && self.preview.as_ref().map(|p|p.0) != j["owner"].as_u64() { return Ok(()); }
+        if op.starts_with("preview") || (op == "stageGesture" && !matches!(j["phase"].as_str(),Some("hover"|"configure"))) || (matches!(op,"setFont"|"styleText"|"setGradient") && j["preview"] == true) {
+            let tag = j["interaction"].as_str().unwrap_or(op);
+            if self.preview_tag.as_deref() != Some(tag) { self.cancel_preview(); }
+            self.preview_tag = Some(tag.to_owned());
+        }
+        if !matches!(op,"previewText"|"styleText"|"restoreCheckpoint"|"setGradient"|"previewProperties"|"previewColor"|"previewBlend"|"previewX"|"commitPreview"|"commitX"|"previewTimings"|"previewSequence"|"stageGesture"){self.cancel_preview();}
         match op{
             "notes"=>self.edit_notes(&j)?,
             "select"=>{
@@ -136,6 +144,10 @@ impl EditorRuntime{
             "cancelPreview"=>{}
             "setX"=>{let edits=self.x_edit(num(&j,"value")?)?;self.apply(edits)?;}
             "previewX"=>{let edits=self.x_edit(num(&j,"value")?)?;self.set_preview(edits)?;}
+            "previewText"=>{let id=layer(&j)?;if self.doc.view().attrs(id).map_err(e)?.ok_or("Layer not found")?.locked{return Err("Layer is locked".into())}let edit=editor::text::content_intent(&self.doc,id,self.time()?,string(&j,"content")?.into()).map_err(e)?;self.set_preview(vec![edit])?;}
+            "styleText"=>{let edits=editor::text_format::edits(&self.doc,layer(&j)?,self.time()?,&j)?;if edits.is_empty(){self.cancel_preview();return Ok(());}if j["preview"]==true{let projected=edits.iter().filter(|e|!matches!(e,Intent::SetPropertySlot{..}|Intent::SetPropertyModulators{..})).cloned().collect();self.set_preview(projected)?;self.preview.as_mut().unwrap().1=edits;}else{self.cancel_preview();self.apply(edits)?;}}
+            "setFont" if j["scope"].is_string()=>{let edits=editor::text_format::edits(&self.doc,layer(&j)?,self.time()?,&j)?;self.apply(edits)?;}
+            "setFont"=>{let intent=editor::text::font_intent(&self.doc,layer(&j)?,string(&j,"family")?)?;if j["preview"].as_bool()==Some(true){self.set_preview(vec![intent])?}else{self.apply([intent])?}}
             "setText"=>{let id=layer(&j)?;if self.doc.view().text_document(id).map_err(e)?.is_none(){return Err("Select a Text layer".into())}let at=self.time()?;editor::text::write_content(&mut self.doc,id,at,string(&j,"content")?.into()).map_err(e)?;}
             "setAttrs"=>{let patch=attrs_patch(&j["patch"])?;let layers=ids(&j["layers"])?;
                 if patch.ghost.is_some_and(|g|g.is_some()){if let Some(l)=layers.iter().find(|&&l|!editor::timeline_edit::ghostable(&self.doc.view(),l)){return Err(format!("Layer {} cannot carry a ghost",l.0))}}
@@ -185,7 +197,7 @@ impl EditorRuntime{
             "ghost"=>{let ids:Vec<LayerId>=self.selected_required()?.iter().copied().filter(|&l|editor::timeline_edit::ghostable(&self.doc.view(),l)).collect();if ids.is_empty(){return Err("Nothing here can carry a ghost".into())}let on=j["enabled"].as_bool().unwrap_or(true);let intents:Vec<Intent>=ids.iter().map(|&layer|Intent::SetAttrs{layer,patch:LayerAttrsPatch{ghost:Some(on.then_some(editor::timeline_edit::GHOST_DEFAULT_DELAY)),..Default::default()}}).collect();self.apply(intents)?;}
             "sequence"|"previewSequence"=>{let layers=ids(&j["layers"])?;let delays=j["ghosts"].as_array().ok_or("Missing ghosts")?;if delays.len()!=layers.len(){return Err("layers and ghosts differ in length".into())}let intents:Vec<Intent>=layers.iter().zip(delays).filter(|(&layer,_)|editor::timeline_edit::ghostable(&self.doc.view(),layer)).map(|(&layer,d)|Intent::SetAttrs{layer,patch:LayerAttrsPatch{ghost:Some(d.as_i64().filter(|d|*d!=0)),..Default::default()}}).collect();if op=="previewSequence"{self.set_preview(intents)?;}else{self.apply(intents)?;}}
             "clip"=>{let id=layer(&j)?;let clipped=self.doc.view().attrs(id).map_err(e)?.unwrap_or_default().clip_to_below;self.apply([Intent::SetAttrs{layer:id,patch:LayerAttrsPatch{clip_to_below:Some(!clipped),..Default::default()}}])?;}
-            "previewBlend"=>{let id=layer(&j)?;let mode:BlendMode=serde_json::from_value(j["mode"].clone()).map_err(e)?;self.set_preview(vec![Intent::SetAttrs{layer:id,patch:LayerAttrsPatch{blend_mode:Some(mode),..Default::default()}}])?;}
+            "previewBlend"=>{let layers=if j["layers"].is_array(){ids(&j["layers"])?}else{vec![layer(&j)?]};let mode:BlendMode=serde_json::from_value(j["mode"].clone()).map_err(e)?;self.set_preview(layers.into_iter().map(|layer|Intent::SetAttrs{layer,patch:LayerAttrsPatch{blend_mode:Some(mode),..Default::default()}}).collect())?;}
             "addMarker"|"setMarker"|"deleteMarker"=>self.edit_marker(op,&j)?,
             "composition"=>{let current=self.doc.view().composition().map_err(e)?.ok_or("No composition")?;let or=|key:&str,fallback:i64|j[key].as_i64().unwrap_or(fallback);let width:u32=or("width",current.width as i64).try_into().map_err(e)?;let height:u32=or("height",current.height as i64).try_into().map_err(e)?;let fps=Fps::try_new(or("fpsNum",current.fps.num()),or("fpsDen",current.fps.den())).map_err(e)?;let duration_frames=or("durationFrames",current.duration_frames);let background=if j.get("background").is_some(){serde_json::from_value(j["background"].clone()).map_err(e)?}else{current.background};self.apply([Intent::SetComposition(Composition{width,height,fps,duration_frames,background})])?;}
             "import"=>{let paths:Vec<std::path::PathBuf>=j["paths"].as_array().ok_or("Expected paths")?.iter().map(|p|p.as_str().map(std::path::PathBuf::from).ok_or("Invalid path".into())).collect::<Result<_,String>>()?;let paths=editor::fixture::expand_folders(&paths);if paths.is_empty(){return Err("No files to import".into())}let mut intents=Vec::new();let mut known:std::collections::HashSet<_>=self.doc.view().assets().map_err(e)?.iter().map(|a|a.content_hash.clone()).collect();for path in paths{let draft=editor::fixture::prepare_path(&path,if j["role"]=="reference"{AssetRole::Reference}else{AssetRole::Material})?;if known.insert(draft.content_hash.clone()){intents.push(Intent::AdmitAsset{draft});}}self.apply(intents)?;}
@@ -193,7 +205,20 @@ impl EditorRuntime{
             "removeAsset"=>{let id=asset_id(&j)?;if self.asset_used(id)?{return Err("Asset is still in use".into())}self.apply([Intent::RemoveAsset{asset:id}])?;}
             "export"=>self.exporter.start(&self.doc,std::path::PathBuf::from(string(&j,"path")?),integer(&j,"start")?,integer(&j,"end")?)?,
             "cancelExport"=>self.exporter.cancel(),
-            "save"=>{let path=string(&j,"path")?;self.doc.save(path).map_err(e)?;self.path=Some(path.into());self.saved_signature=snapshot::authored_signature(&self.doc)?;}
+            "save"=>{let path=string(&j,"path")?;
+                self.doc.save(path).map_err(e)?;
+                if j["copy"].as_bool()!=Some(true){self.path=Some(path.into());self.saved_signature=snapshot::authored_signature(&self.doc)?;}
+            }
+            "restoreCheckpoint"=>{
+                let doc=Document::load(string(&j,"path")?).map_err(e)?;
+                if doc.view().composition().map_err(e)?.is_none(){return Err("Checkpoint has no composition".into());}
+                self.cancel_preview();
+                self.clock=editor::playback::Clock::from_document(&doc,60.0);
+                self.clock.sync_document(&doc);self.clock_revision=doc.revision();
+                self.doc=doc;self.path=j["source"].as_str().filter(|s|!s.is_empty()).map(str::to_owned);
+                self.saved_signature.clear();self.pick(vec![]);self.selected_keys.clear();
+                self.color_target=None;self.frame=0;self.full_status_revision.replace(None);
+            }
             "new"=>{if self.clock.playing(){self.clock.toggle();}self.doc=blank_project();self.clock=editor::playback::Clock::from_document(&self.doc,60.0);self.path=None;self.pick(vec![]);self.selected_keys.clear();self.frame=0;self.saved_signature=snapshot::authored_signature(&self.doc)?;self.color_target=None;}
             "undo"=>{self.doc.undo();self.selected_keys.clear();}
             "redo"=>{self.doc.redo();self.selected_keys.clear();}
@@ -203,6 +228,7 @@ impl EditorRuntime{
             "seek"=>{self.frame=integer(&j,"frame")?.max(0);self.clock.seek_frame(self.frame);}
             "anchor"=>{let id=layer(&j)?;let b=self.bounds(id).ok_or("Bounds unavailable until rendered")?;let min:[f64;3]=serde_json::from_value(b["localMin"].clone()).map_err(e)?;let max:[f64;3]=serde_json::from_value(b["localMax"].clone()).map_err(e)?;let point=[min[0]+(max[0]-min[0])*num(&j,"xFraction")?,min[1]+(max[1]-min[1])*num(&j,"yFraction")?];let intents=editor::functions::placement::anchor_point_plan(&self.doc,id,self.time()?,point).map_err(e)?;self.apply(intents)?;}
             "freeze"=>{let id=layer(&j)?;self.apply([if j["enabled"].as_bool().ok_or("Missing enabled")?{Intent::Freeze{group:id}}else{Intent::Unfreeze{group:id}}])?;}
+            "setGradient"=>{let slot:ColorSlot=serde_json::from_value(j["slot"].clone()).map_err(e)?;let edit=editor::gradient::edit(&self.doc,&slot,&j)?;if j["preview"]==true{self.set_preview(vec![edit])?}else{self.cancel_preview();self.apply([edit])?;}self.color_target=None;}
             "setFillMode"=>{let slot:ColorSlot=serde_json::from_value(j["slot"].clone()).map_err(e)?;if !slot.is_shape_fill(){return Err("Select a shape fill".into())}editor::color::set_shape_gradient(&mut self.doc,&slot,j["gradient"].as_bool().ok_or("Missing gradient")?).map_err(e)?;}
             other=>return Err(format!("Unsupported operation: {other}")),
         }
@@ -224,7 +250,7 @@ impl EditorRuntime{
     }
     fn stage_gesture(&mut self,j:&J)->Result<(),String>{
         match string(j,"phase")?{
-            "begin"=>{self.cancel_preview();let ids=ids(&j["ids"])?;let start=serde_json::from_value(j["start"].clone()).map_err(e)?;
+            "begin"=>{let interaction=self.preview_tag.take();self.cancel_preview();self.preview_tag=interaction;let ids=ids(&j["ids"])?;let start=serde_json::from_value(j["start"].clone()).map_err(e)?;
                 let drag=editor::stage::DragSession::begin(&self.doc,&self.engine,&ids,string(j,"mode")?,j["handle"].as_str().unwrap_or("body"),start,self.time()?,self.view_camera()?)?;
                 self.pick(ids);self.stage_drag=Some(drag);
             }
@@ -357,3 +383,32 @@ mod sequence_preview {
     }
 }
 
+
+#[cfg(test)]
+mod blend_interaction_tests {
+    use super::*;
+    #[test]
+    fn blend_preview_batches_layers_and_cannot_cancel_a_newer_interaction() {
+        let mut rt=EditorRuntime::open("").unwrap();
+        rt.request(json!({"op":"create","kind":"rectangle"})).unwrap();
+        let a=rt.selected.unwrap();
+        rt.request(json!({"op":"create","kind":"rectangle"})).unwrap();
+        let b=rt.selected.unwrap();
+        let history=rt.doc.history_depth();
+        rt.request(json!({"op":"previewBlend","layers":[a.0,b.0],"mode":"Multiply","interaction":"desk"})).unwrap();
+        let owner=rt.preview.as_ref().unwrap().0;
+        assert_eq!(rt.doc.history_depth(),history);
+        assert_eq!(rt.preview.as_ref().unwrap().1.len(),2);
+        rt.request(json!({"op":"commitPreview","owner":owner})).unwrap();
+        assert_eq!(rt.doc.history_depth().0,history.0+1);
+        assert_eq!(rt.doc.view().attrs(a).unwrap().unwrap().blend_mode,BlendMode::Multiply);
+        assert_eq!(rt.doc.view().attrs(b).unwrap().unwrap().blend_mode,BlendMode::Multiply);
+        rt.request(json!({"op":"previewBlend","layers":[a.0],"mode":"Screen","interaction":"desk"})).unwrap();
+        let owner=rt.preview.as_ref().unwrap().0;
+        rt.request(json!({"op":"previewProperties","interaction":"inspector","edits":[{"layer":a.0,"property":"opacity","value":0.5}]})).unwrap();
+        let newer=rt.preview.as_ref().unwrap().0;
+        assert_ne!(owner,newer);
+        rt.request(json!({"op":"cancelPreview","owner":owner})).unwrap();
+        assert_eq!(rt.preview.as_ref().unwrap().0,newer);
+    }
+}

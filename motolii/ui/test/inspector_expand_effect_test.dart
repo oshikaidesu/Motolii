@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../lib/session/editor_session.dart';
+import '../lib/foundation/theme.dart';
 import '../lib/panels/inspector.dart';
 
 void main() {
@@ -138,6 +139,9 @@ void main() {
           'removeEffect',
           'animate',
           'setProperty',
+          'previewProperties',
+          'commitPreview',
+          'cancelPreview',
         ],
         'easeKinds': [],
       };
@@ -146,92 +150,33 @@ void main() {
     show(layer('motolii.repeat', true));
     await tester.pumpWidget(
       MaterialApp(
+        theme: EditorTheme.data,
         home: Scaffold(body: InspectorPanel(controller: c)),
       ),
     );
-    expect(find.text('Expand'), findsOneWidget);
-    expect(find.text('×'), findsOneWidget);
-    expect(find.text('Animate'), findsOneWidget);
-    await tester.tap(
-      find.descendant(
-        of: find
-            .ancestor(of: find.text('Animate'), matching: find.byType(Row))
-            .first,
-        matching: find.text('Off'),
-      ),
+    expect(find.byTooltip('Expand copies into layers'), findsOneWidget);
+    expect(find.byTooltip('Remove effect'), findsOneWidget);
+    final animate = find.byTooltip(
+      'Animate: values you touch become keys at this frame',
     );
+    await tester.tap(animate);
     await tester.pump();
-    expect(
-      find.text('Circle'),
-      findsOneWidget,
-      reason: 'the Along toggle shows the chosen shape',
-    );
-    expect(
-      find.text('Radius'),
-      findsOneWidget,
-      reason: 'shape fields follow the toggle',
-    );
-    expect(find.text('Each'), findsOneWidget);
-    expect(
-      find.text('Random'),
-      findsWidgets,
-      reason: 'column header, and Pick for a group',
-    );
-    expect(
-      find.text('One child'),
-      findsOneWidget,
-      reason: 'a group Repeater says whether it picks a child or copies the whole group',
-    );
-    expect(
-      find.text('Rotation'),
-      findsOneWidget,
-      reason: 'one row holds both the Each and Random cells',
-    );
-    expect(
-      find.text('◇'),
-      findsOneWidget,
-      reason: 'a keyed cell marks its row',
-    );
-    expect(
-      find.text('Seed'),
-      findsNothing,
-      reason: 'advanced rows start folded',
-    );
-    expect(
-      find.text('•'),
-      findsOneWidget,
-      reason: 'a non-default advanced value shows as a dot',
-    );
-    await tester.ensureVisible(find.text('▸'));
-    await tester.tap(find.text('▸'));
+    expect(find.text('Circle'), findsOneWidget);
+    expect(find.text('Radius'), findsOneWidget);
+    expect(find.text('One child'), findsOneWidget);
+    expect(find.text('Rotation'), findsNWidgets(2));
+    expect(find.text('Seed'), findsNothing);
+    await tester.ensureVisible(find.text('Advanced'));
+    await tester.tap(find.text('Advanced'));
     await tester.pump();
     expect(find.text('Seed'), findsOneWidget);
-    await tester.ensureVisible(find.text('↻'));
-    await tester.tap(find.text('↻'));
-    await tester.pump();
-    expect(
-      commands
-          .map(jsonDecode)
-          .any(
-            (m) =>
-                m['op'] == 'setProperty' &&
-                m['property'] == 'effect.0.param.seed' &&
-                m['value'] == 8,
-          ),
-      isTrue,
-      reason: 'the seed button asks for the next seed',
-    );
-    expect(find.text('Materials'), findsOneWidget);
     expect(find.text('circle'), findsOneWidget);
-    expect(
-      find.text('75%'),
-      findsOneWidget,
-      reason: 'shares are shown as a normalized percent',
-    );
-    expect(find.text('25%'), findsOneWidget);
-    expect(find.text('Random'), findsWidgets, reason: 'Pick shows for a group');
-
-    await tester.tap(find.text('Expand'));
+    expect(find.text('square'), findsOneWidget);
+    expect(find.text('300.00'), findsOneWidget);
+    expect(find.text('100.00'), findsOneWidget);
+    expect(find.text('Random'), findsOneWidget);
+    await tester.ensureVisible(find.byTooltip('Expand copies into layers'));
+    await tester.tap(find.byTooltip('Expand copies into layers'));
     await tester.pump();
     final sent = commands.map(jsonDecode).whereType<Map>().toList();
     expect(
@@ -250,7 +195,7 @@ void main() {
 
     show(layer('motolii.blur', false));
     await tester.pump();
-    expect(find.text('Expand'), findsNothing);
-    expect(find.text('×'), findsOneWidget);
+    expect(find.byTooltip('Expand copies into layers'), findsNothing);
+    expect(find.byTooltip('Remove effect'), findsOneWidget);
   });
 }

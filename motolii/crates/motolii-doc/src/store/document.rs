@@ -167,6 +167,7 @@ pub(crate) struct RecordCache {
     revision: Option<Revision>,
     pub(crate) attrs: HashMap<LayerId, Option<super::LayerAttrs>>,
     pub(crate) meta: HashMap<LayerId, Option<super::LayerMeta>>,
+    pub(crate) clipping: Option<HashMap<LayerId, Option<LayerId>>>,
 }
 
 impl RecordCache {
@@ -174,6 +175,7 @@ impl RecordCache {
         if self.revision.as_ref() != Some(current) {
             self.attrs.clear();
             self.meta.clear();
+            self.clipping = None;
             self.revision = Some(current.clone());
         }
     }

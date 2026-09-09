@@ -39,14 +39,12 @@ void main() {
           ),
         ),
       );
-      await tester.tap(find.text('Save preset'));
+      await tester.tap(find.byTooltip('Save preset'));
       await tester.pumpAndSettle();
       expect((c.deskWork.value['easePresets'] as List).length, 1);
       c.deskDrawer.value = 'Blend';
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Multiply'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Save preset'));
+      await tester.tap(find.byTooltip('Favorite Multiply'));
       await tester.pumpAndSettle();
       expect(c.deskWork.value['blends'], ['Multiply']);
       c.deskDrawer.value = 'Ease';

@@ -5,3 +5,8 @@ pub mod stage;
 pub mod playback;
 
 pub mod notes;
+
+pub mod gradient;
+pub mod visual_samples;
+
+pub mod text_format;

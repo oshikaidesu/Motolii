@@ -1,0 +1,35 @@
+{
+  "pid": 70178,
+  "gpu": "Apple M4",
+  "condition": "No glass, repeated frame20, warmed native runtime, headless, attached Metal trace",
+  "encoder_cpu_times": [
+    {
+      "label": "motolii-comp-sequential-run - main pass",
+      "type": "Encoding",
+      "count": 594,
+      "median_ms": 0.1080835
+    },
+    {
+      "label": "motolii-comp-finalize-into - main pass",
+      "type": "Encoding",
+      "count": 297,
+      "median_ms": 0.050333
+    },
+    {
+      "label": "motolii-comp-composite-into-pass",
+      "type": "Encoding",
+      "count": 297,
+      "median_ms": 0.040417
+    },
+    {
+      "label": "Blit Command 0",
+      "type": "Encoding",
+      "count": 297,
+      "median_ms": 0.034708
+    }
+  ],
+  "logical_frames_from_finalize_pass_count": 297,
+  "metal_command_buffer_submissions": 4158,
+  "buffers_per_frame": 14,
+  "caution": "Metal buffers are not wgpu Queue::submit calls. CPU encoding duration is not GPU execution time. Other GPU clients and builds were active."
+}

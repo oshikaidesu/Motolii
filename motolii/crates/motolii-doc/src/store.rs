@@ -450,3 +450,5 @@ pub fn blank_project() -> Document {
     let _ = doc.apply(Intent::SetComposition(comp));
     doc
 }
+
+pub mod text_edit;

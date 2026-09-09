@@ -14,6 +14,7 @@ import '../panels/panel_settings.dart';
 import '../panels/composition_controls.dart';
 import '../panels/export_controls.dart';
 import '../foundation/metrics.dart';
+import '../foundation/panel_controls.dart';
 
 class EditorWindow extends StatefulWidget {
   const EditorWindow({super.key});
@@ -62,6 +63,12 @@ class _EditorWindowState extends State<EditorWindow> {
       if (paths.isNotEmpty) c.importPaths(paths);
     };
     _initialize();
+  }
+
+  @override
+  void reassemble() {
+    super.reassemble();
+    dock = DockNode.read(dock.json());
   }
 
   Future<void> _initialize() async {
@@ -349,9 +356,8 @@ class _EditorWindowState extends State<EditorWindow> {
     onSelected: menu,
     itemBuilder: (_) => [
       for (final item in items)
-        PopupMenuItem(
+        EditorMenuItem(
           value: item,
-          height: EditorMetrics.section,
           child: Text(
             item,
             style: const TextStyle(fontSize: EditorMetrics.font),
@@ -378,184 +384,184 @@ class _EditorWindowState extends State<EditorWindow> {
           fontSize: EditorMetrics.font,
           color: EditorTheme.ink,
         ),
-        child: LayoutBuilder(
-          builder: (context, box) => Transform.scale(
-            scale: uiScale,
-            alignment: Alignment.topLeft,
-            child: SizedBox(
-              width: box.maxWidth / uiScale,
-              height: box.maxHeight / uiScale,
-              child: Stack(
+        child: EditorScaledViewport(
+          scale: uiScale,
+          child: Stack(
+            children: [
+              Column(
                 children: [
-                  Column(
-                    children: [
-                      if (c.windowInfo['main'] != false)
-                        Container(
-                          height: EditorMetrics.control,
-                          color: EditorTheme.app,
-                          child: Row(
-                            children: [
-                              topMenu('File', [
-                                'New',
-                                'Open',
-                                'Save',
-                                'Save as',
-                                'Import',
-                              ]),
-                              topMenu('Edit', [
-                                'Undo',
-                                'Redo',
-                                'Cut',
-                                'Copy',
-                                'Paste',
-                                'Duplicate',
-                                'Split',
-                                'Delete',
-                                'Group',
-                                'Ungroup',
-                              ]),
-                              topMenu('View', [...paneNames, 'Reset layout']),
-                              for (final name in [
-                                'Composition',
-                                'Export',
-                                'Settings',
-                              ])
-                                EditorButton(
-                                  name,
-                                  () => setState(
-                                    () => sheet = sheet == name ? null : name,
-                                  ),
-                                ),
-                              const Spacer(),
-                              ValueListenableBuilder<Map<String, dynamic>>(
-                                valueListenable: c.document,
-                                builder: (_, state, __) => Text(
-                                  '${state['dirty'] == true ? '• ' : ''}${(state['path'] as String? ?? 'Untitled').split('/').last}  ',
-                                ),
+                  if (c.windowInfo['main'] != false)
+                    Container(
+                      height: EditorMetrics.control,
+                      color: EditorTheme.app,
+                      child: Row(
+                        children: [
+                          topMenu('File', [
+                            'New',
+                            'Open',
+                            'Save',
+                            'Save as',
+                            'Import',
+                          ]),
+                          topMenu('Edit', [
+                            'Undo',
+                            'Redo',
+                            'Cut',
+                            'Copy',
+                            'Paste',
+                            'Duplicate',
+                            'Split',
+                            'Delete',
+                            'Group',
+                            'Ungroup',
+                          ]),
+                          topMenu('View', [...paneNames, 'Reset layout']),
+                          for (final name in [
+                            'Composition',
+                            'Export',
+                            'Settings',
+                          ])
+                            EditorButton(
+                              name,
+                              () => setState(
+                                () => sheet = sheet == name ? null : name,
                               ),
-                            ],
+                            ),
+                          const Spacer(),
+                          ValueListenableBuilder<Map<String, dynamic>>(
+                            valueListenable: c.document,
+                            builder: (_, state, __) => Text(
+                              '${state['dirty'] == true ? '• ' : ''}${(state['path'] as String? ?? 'Untitled').split('/').last}  ',
+                            ),
                           ),
-                        ),
-                      Expanded(
-                        child: ready
-                            ? WorkspaceView(
-                                layout: dock,
-                                panelBuilder: pane,
-                                onMove: movePane,
-                                onClose: closePane,
-                                onDetach: detachPane,
-                                onLayoutChanged: persist,
-                              )
-                            : const Center(child: CircularProgressIndicator()),
-                      ),
-                      ValueListenableBuilder<String?>(
-                        valueListenable: c.error,
-                        builder: (_, message, __) => Container(
-                          height: EditorMetrics.row,
-                          alignment: Alignment.centerLeft,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: EditorMetrics.s6,
-                          ),
-                          color: EditorTheme.app,
-                          child: Text(
-                            message ?? '',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  if (sheet != null) ...[
-                    Positioned.fill(
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: () => setState(() => sheet = null),
+                        ],
                       ),
                     ),
-                    Positioned(
-                      left: sheet == 'Composition'
-                          ? EditorMetrics.s85
+                  Expanded(
+                    child: ready
+                        ? WorkspaceView(
+                            layout: dock,
+                            panelBuilder: pane,
+                            onMove: movePane,
+                            onClose: closePane,
+                            onDetach: detachPane,
+                            onLayoutChanged: persist,
+                          )
+                        : const Center(child: CircularProgressIndicator()),
+                  ),
+                  ValueListenableBuilder<String?>(
+                    valueListenable: c.error,
+                    builder: (_, message, __) => Container(
+                      height: EditorMetrics.row,
+                      alignment: Alignment.centerLeft,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: EditorMetrics.s6,
+                      ),
+                      color: EditorTheme.app,
+                      child: Text(
+                        message ?? '',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              if (sheet != null) ...[
+                Positioned.fill(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => setState(() => sheet = null),
+                  ),
+                ),
+                Positioned(
+                  left: sheet == 'Composition'
+                      ? EditorMetrics.s85
+                      : sheet == 'Export'
+                      ? EditorMetrics.s155
+                      : EditorMetrics.s200,
+                  top: EditorMetrics.control,
+                  child: Material(
+                    color: EditorTheme.panel,
+                    elevation: 4,
+                    child: Container(
+                      width: sheet == 'Settings'
+                          ? EditorMetrics.sheetWide
+                          : EditorMetrics.sheet,
+                      decoration: BoxDecoration(
+                        border: Border.all(color: EditorTheme.border),
+                      ),
+                      child: sheet == 'Composition'
+                          ? CompositionControls(controller: c)
                           : sheet == 'Export'
-                          ? EditorMetrics.s155
-                          : EditorMetrics.s200,
-                      top: EditorMetrics.control,
-                      child: Material(
-                        color: EditorTheme.panel,
-                        elevation: 4,
-                        child: Container(
-                          width: sheet == 'Settings'
-                              ? EditorMetrics.sheetWide
-                              : EditorMetrics.sheet,
-                          decoration: BoxDecoration(
-                            border: Border.all(color: EditorTheme.border),
-                          ),
-                          child: sheet == 'Composition'
-                              ? CompositionControls(controller: c)
-                              : sheet == 'Export'
-                              ? ExportControls(controller: c)
-                              : Column(
-                                  mainAxisSize: MainAxisSize.min,
+                          ? ExportControls(controller: c)
+                          : Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                SizedBox(
+                                  height: EditorMetrics.sheet,
+                                  child: PanelSettings(controller: c),
+                                ),
+                                const EditorSection('View', SizedBox.shrink()),
+                                Row(
                                   children: [
-                                    SizedBox(
-                                      height: EditorMetrics.sheet,
-                                      child: PanelSettings(controller: c),
+                                    const SizedBox(width: EditorMetrics.s8),
+                                    const Expanded(child: Text('Outside dim')),
+                                    EditorButton(
+                                      '−',
+                                      () => setState(
+                                        () => dim = (dim - .05).clamp(0, 1),
+                                      ),
                                     ),
-                                    const EditorSection(
-                                      'View',
-                                      SizedBox.shrink(),
-                                    ),
-                                    Row(
-                                      children: [
-                                        const SizedBox(width: EditorMetrics.s8),
-                                        const Expanded(
-                                          child: Text('Outside dim'),
-                                        ),
-                                        EditorButton(
-                                          '−',
-                                          () => setState(
-                                            () => dim = (dim - .05).clamp(0, 1),
-                                          ),
-                                        ),
-                                        Text('${(dim * 100).round()}%'),
-                                        EditorButton(
-                                          '+',
-                                          () => setState(
-                                            () => dim = (dim + .05).clamp(0, 1),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    Row(
-                                      children: [
-                                        const SizedBox(width: EditorMetrics.s8),
-                                        const Expanded(child: Text('Scale')),
-                                        EditorButton('−', () {
-                                          setState(
-                                            () => uiScale = (uiScale - .05)
-                                                .clamp(.5, 2),
-                                          );
-                                          persist();
-                                        }),
-                                        Text('${(uiScale * 100).round()}%'),
-                                        EditorButton('+', () {
-                                          setState(
-                                            () => uiScale = (uiScale + .05)
-                                                .clamp(.5, 2),
-                                          );
-                                          persist();
-                                        }),
-                                      ],
+                                    Text('${(dim * 100).round()}%'),
+                                    EditorButton(
+                                      '+',
+                                      () => setState(
+                                        () => dim = (dim + .05).clamp(0, 1),
+                                      ),
                                     ),
                                   ],
                                 ),
-                        ),
-                      ),
+                                Row(
+                                  children: [
+                                    const SizedBox(width: EditorMetrics.s8),
+                                    const Expanded(child: Text('Scale')),
+                                    EditorButton('−', () {
+                                      setState(
+                                        () => uiScale =
+                                            ((uiScale * 100).round() / 100 -
+                                                    .01)
+                                                .clamp(.5, 2),
+                                      );
+                                      persist();
+                                    }),
+                                    EditorPercentField(
+                                      value: uiScale * 100,
+                                      min: 50,
+                                      max: 200,
+                                      onChanged: (v) {
+                                        setState(() => uiScale = v / 100);
+                                        persist();
+                                      },
+                                    ),
+                                    EditorButton('+', () {
+                                      setState(
+                                        () => uiScale =
+                                            ((uiScale * 100).round() / 100 +
+                                                    .01)
+                                                .clamp(.5, 2),
+                                      );
+                                      persist();
+                                    }),
+                                  ],
+                                ),
+                              ],
+                            ),
                     ),
-                  ],
-                ],
-              ),
-            ),
+                  ),
+                ),
+              ],
+            ],
           ),
         ),
       ),

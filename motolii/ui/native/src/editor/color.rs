@@ -1,7 +1,7 @@
 use crate::doc::store::{Document,Intent,LayerId,ShapeNode,StoreError};
 use crate::doc::vector::{Brush,Fill,Gradient,GradientStop,GradientType,PathSource,Point,Rgb};
 use crate::editor::session::ColorSlot;
-fn leaf_mut<'a>(
+pub(super) fn leaf_mut<'a>(
     nodes: &'a mut [ShapeNode],
     path: &[usize],
 ) -> Option<&'a mut crate::doc::vector::Shape> {
@@ -12,15 +12,15 @@ fn leaf_mut<'a>(
         ShapeNode::Leaf(_) => None,
     }
 }
-fn shape_location(slot: &ColorSlot) -> Option<(LayerId, &[usize])> {
+pub(super) fn shape_location(slot: &ColorSlot) -> Option<(LayerId, &[usize])> {
     match slot {
-        ColorSlot::ShapeFill { layer, path } | ColorSlot::ShapeGradientStop { layer, path, .. } => {
+        ColorSlot::ShapeFill { layer, path } | ColorSlot::ShapeGradientPoint { layer, path, .. } | ColorSlot::ShapeGradientStop { layer, path, .. } => {
             Some((*layer, path))
         }
         _ => None,
     }
 }
-fn gradient_axis(source: &PathSource) -> (Point, Point) {
+pub(super) fn gradient_axis(source: &PathSource) -> (Point, Point) {
     let bounds = match source {
         PathSource::Rectangle { size } | PathSource::Ellipse { size } => {
             Some([-size.x * 0.5, -size.y * 0.5, size.x * 0.5, size.y * 0.5])
@@ -173,6 +173,13 @@ pub(crate) fn read_color(doc: &Document, slot: &ColorSlot) -> Option<[f64; 4]> {
                 _ => None,
             }
         }
+        ColorSlot::ShapeGradientPoint { layer, path, index } => {
+            let mut shapes = view.shapes(*layer).ok()?;
+            let shape = leaf_mut(&mut shapes, path)?;
+            let Brush::Gradient(g) = &shape.fill.as_ref()?.brush else { return None };
+            let c = g.stops.get(*index)?.color;
+            Some([c.r, c.g, c.b, 1.0])
+        }
         ColorSlot::ShapeGradientStop { layer, path, end } => {
             let mut shapes = view.shapes(*layer).ok()?;
             let shape = leaf_mut(&mut shapes, path)?;
@@ -235,6 +242,14 @@ pub(crate) fn write_color(
                 shapes,
             }
         }
+        ColorSlot::ShapeGradientPoint { layer, path, index } => {
+            let mut shapes = d.view().without_transients().shapes(*layer)?;
+            let shape = leaf_mut(&mut shapes, path).ok_or_else(||StoreError::Property("Gradient no longer exists".into()))?;
+            let Some(Fill { brush: Brush::Gradient(gradient), .. }) = &mut shape.fill else { return Err(StoreError::Property("Gradient no longer exists".into())) };
+            let stop = gradient.stops.get_mut(*index).ok_or_else(||StoreError::Property("Stop no longer exists".into()))?;
+            stop.color = Rgb { r, g, b };
+            Intent::SetShapes { layer: *layer, shapes }
+        }
         ColorSlot::ShapeGradientStop { layer, path, end } => {
             let mut shapes = d.view().shapes(*layer)?;
             let Some(shape) = leaf_mut(&mut shapes, path) else {
@@ -265,7 +280,7 @@ pub(crate) fn write_alpha(
         ColorSlot::TextFill { layer, style } | ColorSlot::TextStroke { layer, style } => {
             (*layer, *style)
         }
-        ColorSlot::ShapeFill { .. } | ColorSlot::ShapeGradientStop { .. } => return Ok(()),
+        ColorSlot::ShapeFill { .. } | ColorSlot::ShapeGradientStop { .. } | ColorSlot::ShapeGradientPoint { .. } => return Ok(()),
     };
     let Some(mut text) = d.view().text_document(layer)? else {
         return Ok(());

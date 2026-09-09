@@ -2,7 +2,7 @@ use crate::doc::store::{
     RationalTime, TextDocument, TextDocumentStyle, TextJustify as StoreJustify,
 };
 use crate::doc::vector::text::{
-    shape_text, GlyphFont, TextFeature, TextJustify, TextLayout, TextShapeError,
+    shape_text, shape_rich_text, StyledText, GlyphFont, TextFeature, TextJustify, TextLayout, TextShapeError,
 };
 use crate::doc::vector::{
     Brush, Canvas, Fill, FillRule, PathSource, Raster, Rgb, Shape, Stroke, VectorError,
@@ -93,11 +93,25 @@ pub fn rasterize_text_document(
     let font = to_glyph_font(style);
     // 幅は揃えに要る(無いと Center/Right が効かない)が、折り返すのは wrap 箱を持つ層だけ。
     let layout = to_layout(style, document.justify, Some(document.wrap_size.map(|s| s[0]).unwrap_or(canvas.width as f32)), document.wrap_size.is_some());
-    let mut shaped = shape_text(content, &font, &layout)?;
+    let mut shaped = if document.runs.is_empty() {
+        shape_text(content, &font, &layout)?
+    } else {
+        let ids = crate::doc::store::text_edit::style_ids(document, content);
+        let mut pieces: Vec<(String, usize)> = Vec::new();
+        for (g,id) in crate::doc::store::text_edit::graphemes(content).into_iter().zip(ids) {
+            let index = document.styles.iter().position(|s| s.id == id).unwrap_or(0);
+            if let Some((text, _)) = pieces.last_mut().filter(|(_,i)|*i==index) { text.push_str(g); }
+            else { pieces.push((g.to_owned(), index)); }
+        }
+        let fonts: Vec<_> = document.styles.iter().map(to_glyph_font).collect();
+        let layouts: Vec<_> = document.styles.iter().map(|s|to_layout(s, document.justify, layout.wrap_width, layout.wrap)).collect();
+        let spans: Vec<_> = pieces.iter().map(|(text,i)|StyledText{text,font:&fonts[*i],layout:&layouts[*i],style:*i}).collect();
+        shape_rich_text(&spans, &layout)?
+    };
 
     // 文字の塊を枠の縦中央へ。1 行目のベースラインの上に約 1 級、最終行の下に約 1/4 級を見る。
     if let (Some(first), Some(last)) = (shaped.lines.first(), shaped.lines.last()) {
-        let size = f64::from(style.size);
+        let size = shaped.contour_styles.iter().map(|i| f64::from(document.styles[*i].size)).fold(f64::from(style.size), f64::max);
         let top = f64::from(first.baseline_y) - size;
         let bottom = f64::from(last.baseline_y) + size * 0.25;
         let dy = (f64::from(canvas.height) - (bottom - top)) * 0.5 - top;
@@ -109,18 +123,33 @@ pub fn rasterize_text_document(
         }
     }
 
+    let mut result = Raster { width: canvas.width, height: canvas.height,
+        premultiplied_rgba8: vec![0; canvas.width as usize * canvas.height as usize * 4] };
+    let mut batches: Vec<(usize, Vec<crate::doc::vector::Contour>)> = Vec::new();
+    for (contour, index) in shaped.contours.into_iter().zip(shaped.contour_styles) {
+        if let Some((_,contours)) = batches.last_mut().filter(|(i,_)|*i==index) { contours.push(contour); }
+        else { batches.push((index,vec![contour])); }
+    }
+    for (index, contours) in batches {
+        let raster = paint_contours(contours, &document.styles[index], canvas)?;
+        composite_over(&mut result, &raster);
+    }
+    Ok(Some(result))
+}
+
+fn paint_contours(contours: Vec<crate::doc::vector::Contour>, style: &TextDocumentStyle, canvas: &Canvas) -> Result<Raster,TextRenderError> {
     let (fill, stroke) = to_fill_stroke(style);
     // 縁取りは既定で fill の**下**(stroke_over_fill が false)。輪郭中心の stroke は外側半分しか
     // 見えないので幅を 2 倍にし、先に焼いてから fill を上に重ねる — 字が痩せない。
     if let (Some(stroke), false) = (stroke.clone(), style.stroke_over_fill) {
         let under = Shape {
-            source: PathSource::Bezier(shaped.contours.clone()),
+            source: PathSource::Bezier(contours.clone()),
             ops: Vec::new(),
             fill: None,
             stroke: Some(Stroke { width: stroke.width * 2.0, ..stroke }),
         };
         let over = Shape {
-            source: PathSource::Bezier(shaped.contours),
+            source: PathSource::Bezier(contours),
             ops: Vec::new(),
             fill,
             stroke: None,
@@ -128,15 +157,15 @@ pub fn rasterize_text_document(
         let mut base = crate::doc::vector::render(&under, canvas)?;
         let top = crate::doc::vector::render(&over, canvas)?;
         composite_over(&mut base, &top);
-        return Ok(Some(base));
+        return Ok(base);
     }
     let shape = Shape {
-        source: PathSource::Bezier(shaped.contours),
+        source: PathSource::Bezier(contours),
         ops: Vec::new(),
         fill,
         stroke,
     };
-    Ok(Some(crate::doc::vector::render(&shape, canvas)?))
+    Ok(crate::doc::vector::render(&shape, canvas)?)
 }
 
 /// 乗算済み RGBA の `top` を `base` の上に重ねる(out = top + base × (1 − top.a))。

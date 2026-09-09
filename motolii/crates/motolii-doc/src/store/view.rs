@@ -571,6 +571,30 @@ impl<'a> StoreView<'a> {
     }
 
     pub fn clipping_base(&self, layer: LayerId) -> Result<Option<LayerId>, StoreError> {
+        if self.ignore_transients || self.preview_edits.is_empty() {
+            {
+                let mut cache = self.record_cache.borrow_mut();
+                cache.sync(&self.revision);
+                if let Some(bases) = &cache.clipping { return Ok(bases.get(&layer).copied().flatten()); }
+            }
+            let mut ordered = Vec::new();
+            for id in self.layers() {
+                if let Some(meta) = self.meta(id)? {
+                    let attrs = self.attrs(id)?.unwrap_or_default();
+                    ordered.push((meta.order, id, attrs.parent, attrs.clip_to_below));
+                }
+            }
+            ordered.sort_by_key(|(order, id, _, _)| (*order, *id));
+            let mut previous = HashMap::new();
+            let mut bases = HashMap::new();
+            for group in ordered.chunk_by(|a, b| a.0 == b.0) {
+                for (_, id, parent, _) in group { bases.insert(*id, previous.get(parent).copied()); }
+                for (_, id, parent, clipped) in group { if !clipped { previous.insert(*parent, *id); } }
+            }
+            let result = bases.get(&layer).copied().flatten();
+            self.record_cache.borrow_mut().clipping = Some(bases);
+            return Ok(result);
+        }
         if !self.has_layer(layer) {
             return Ok(None);
         }
@@ -646,6 +670,13 @@ impl<'a> StoreView<'a> {
     }
 
     pub fn shapes(&self, layer: LayerId) -> Result<Vec<ShapeNode>, StoreError> {
+        if !self.ignore_transients {
+            for edit in self.preview_edits.iter().rev() {
+                if let crate::doc::store::Intent::SetShapes { layer: target, shapes } = edit {
+                    if *target == layer { return Ok(shapes.clone()); }
+                }
+            }
+        }
         let descriptor = descriptor_shapes();
         let path = layer.entity_path();
         let results = self

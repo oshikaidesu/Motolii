@@ -731,15 +731,24 @@ class _StagePanelState extends State<StagePanel> {
             ),
             _button(
               '−',
-              () => _zoomAt(_scale / 1.2, _viewport.center(Offset.zero)),
+              () => _zoomAt(
+                ((_scale * 100).round() - 1) / 100,
+                _viewport.center(Offset.zero),
+              ),
             ),
-            Text(
-              '${(_scale * 100).round()}%',
-              style: const TextStyle(fontSize: EditorMetrics.dense),
+            EditorPercentField(
+              value: _scale * 100,
+              min: 2,
+              max: 1600,
+              label: 'Stage zoom',
+              onChanged: (v) => _zoomAt(v / 100, _viewport.center(Offset.zero)),
             ),
             _button(
               '+',
-              () => _zoomAt(_scale * 1.2, _viewport.center(Offset.zero)),
+              () => _zoomAt(
+                ((_scale * 100).round() + 1) / 100,
+                _viewport.center(Offset.zero),
+              ),
             ),
           ],
         ),

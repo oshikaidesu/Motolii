@@ -1,3 +1,5 @@
+import 'native_visual_sample.dart';
+
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
@@ -43,11 +45,20 @@ class _BrowserPanelState extends State<BrowserPanel> {
   final scroll = ScrollController();
   List<Map<String, dynamic>> visible = [];
   int columns = 1;
+  int get viewMode =>
+      (widget.controller.deskWork.value['browserView'] as num? ?? 0).toInt();
 
   /// Category rail width while dragging; null means "as stored".
   double? railDrag;
 
-  static const double tileDefault = 88, railMin = 48;
+  static const double tileDefault = BrowserSize.base, railMin = 48;
+
+  /// Grid: the gutter between tiles, and the two caption lines (name, then
+  /// status + format) under every preview.
+  static const double _gutter = EditorMetrics.s6,
+      _inset = EditorMetrics.s8,
+      _captionHeight = EditorMetrics.row + EditorMetrics.s14;
+  int total = 0;
 
   /// Colours: the wheel's size is the picker's height; the grip under the
   /// picker drags it.
@@ -300,6 +311,13 @@ class _BrowserPanelState extends State<BrowserPanel> {
         final colors = _stops(item);
         if (colors.length > 1) {
           setState(() => stops = colors);
+          final target = EditorSession.map(c.state['colorTarget']);
+          final layer = c.activeLayer;
+          final fill = EditorSession.map(layer?['fill']);
+          final slot = target['slot'] ?? fill['slot'];
+          if (has('setGradient') && slot != null) {
+            await c.command('setGradient', {'slot': slot, 'stops': colors});
+          }
         } else if (has('applyPalette')) {
           await c.command('applyPalette', {'rgba': colors.single});
         }
@@ -388,6 +406,7 @@ class _BrowserPanelState extends State<BrowserPanel> {
         _ => ['All', 'Saved', 'Used here', 'Starter'],
       };
       final chosen = classifications[tab] ?? 'All';
+      total = all.length;
       visible = all.where((item) {
         final label = '${item['name'] ?? item['hex'] ?? item['id']}'
             .toLowerCase();
@@ -419,10 +438,10 @@ class _BrowserPanelState extends State<BrowserPanel> {
                   ),
                 ),
               Container(
-                height: EditorMetrics.bar,
+                height: EditorMetrics.tall,
                 padding: const EdgeInsets.symmetric(
-                  horizontal: EditorMetrics.s6,
-                  vertical: EditorMetrics.s3,
+                  horizontal: _inset,
+                  vertical: EditorMetrics.s4,
                 ),
                 decoration: const BoxDecoration(
                   border: Border(bottom: BorderSide(color: EditorTheme.line)),
@@ -430,36 +449,59 @@ class _BrowserPanelState extends State<BrowserPanel> {
                 child: Row(
                   children: [
                     Expanded(
-                      child: TextField(
-                        controller: search,
-                        focusNode: searchFocus,
-                        style: const TextStyle(
-                          fontSize: EditorMetrics.font,
-                          color: EditorTheme.ink,
-                        ),
-                        decoration: InputDecoration(
-                          isDense: true,
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: EditorMetrics.s4,
-                            vertical: EditorMetrics.s3,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: EditorTheme.app,
+                          border: Border.all(
+                            color: searchFocus.hasFocus
+                                ? EditorTheme.border
+                                : EditorTheme.line,
                           ),
-                          hintText: 'Search $tab',
-                          hintStyle: const TextStyle(
+                        ),
+                        child: TextField(
+                          controller: search,
+                          focusNode: searchFocus,
+                          style: const TextStyle(
                             fontSize: EditorMetrics.font,
-                            color: EditorTheme.muted,
+                            color: EditorTheme.ink,
                           ),
-                          border: InputBorder.none,
+                          decoration: InputDecoration(
+                            isDense: true,
+                            prefixIcon: const Icon(
+                              Icons.search,
+                              size: EditorMetrics.s14,
+                              color: EditorTheme.muted,
+                            ),
+                            prefixIconConstraints: const BoxConstraints(
+                              minWidth: EditorMetrics.control,
+                              minHeight: EditorMetrics.row,
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: EditorMetrics.s4,
+                              vertical: EditorMetrics.s4,
+                            ),
+                            hintText: 'Search $tab',
+                            hintStyle: const TextStyle(
+                              fontSize: EditorMetrics.font,
+                              color: EditorTheme.muted,
+                            ),
+                            border: InputBorder.none,
+                          ),
+                          onChanged: (_) => setState(() {}),
                         ),
-                        onChanged: (_) => setState(() {}),
                       ),
                     ),
-                    if (tab == 'Media')
-                      _smallButton(
+                    if (tab == 'Media') ...[
+                      const SizedBox(width: EditorMetrics.s6),
+                      _action(
                         'Import',
                         has('import') ? widget.controller.importFiles : null,
                       ),
-                    if (tab == 'Colors')
-                      _smallButton('From image', _paletteFromFile),
+                    ],
+                    if (tab == 'Colors') ...[
+                      const SizedBox(width: EditorMetrics.s6),
+                      _action('From image', _paletteFromFile),
+                    ],
                   ],
                 ),
               ),
@@ -477,10 +519,10 @@ class _BrowserPanelState extends State<BrowserPanel> {
                           children: [
                             Padding(
                               padding: const EdgeInsets.fromLTRB(
-                                EditorMetrics.s7,
-                                EditorMetrics.s7,
+                                _inset,
+                                EditorMetrics.s8,
                                 EditorMetrics.s4,
-                                EditorMetrics.s3,
+                                EditorMetrics.s4,
                               ),
                               child: Text(
                                 tab.toUpperCase(),
@@ -488,6 +530,7 @@ class _BrowserPanelState extends State<BrowserPanel> {
                                 overflow: TextOverflow.clip,
                                 style: const TextStyle(
                                   fontSize: EditorMetrics.micro,
+                                  letterSpacing: 1,
                                   color: EditorTheme.muted,
                                 ),
                               ),
@@ -565,6 +608,7 @@ class _BrowserPanelState extends State<BrowserPanel> {
                                     (tab == 'Colors' ? tile * .6 : tile))
                                 .floor(),
                           );
+                          if (viewMode == 1 && tab != 'Colors') columns = 1;
                           return Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
@@ -628,27 +672,32 @@ class _BrowserPanelState extends State<BrowserPanel> {
                                         padding: EdgeInsets.all(
                                           tab == 'Colors'
                                               ? EditorMetrics.s6
-                                              : 1,
+                                              : _inset,
                                         ),
                                         gridDelegate:
                                             SliverGridDelegateWithFixedCrossAxisCount(
                                               crossAxisCount: columns,
                                               mainAxisExtent: tab == 'Colors'
                                                   ? tile * .55
-                                                  : (constraints.maxWidth /
-                                                                    columns -
-                                                                2) *
+                                                  : viewMode == 1
+                                                  ? EditorMetrics.s48
+                                                  : (constraints.maxWidth -
+                                                                _inset * 2 -
+                                                                _gutter *
+                                                                    (columns -
+                                                                        1)) /
+                                                            columns *
                                                             9 /
                                                             16 +
-                                                        (tab == 'Media'
-                                                            ? 46
-                                                            : 28),
+                                                        (viewMode == 2
+                                                            ? 0
+                                                            : _captionHeight),
                                               crossAxisSpacing: tab == 'Colors'
                                                   ? EditorMetrics.s4
-                                                  : 1,
+                                                  : _gutter,
                                               mainAxisSpacing: tab == 'Colors'
                                                   ? EditorMetrics.s4
-                                                  : 1,
+                                                  : _gutter,
                                             ),
                                         itemCount: visible.length,
                                         itemBuilder: (context, index) =>
@@ -748,15 +797,168 @@ class _BrowserPanelState extends State<BrowserPanel> {
     if (mounted) setState(() => classifications['Colors'] = 'Saved');
   }
 
-  /// Tile size, relative: each step is a fixed ratio, the slider spans the
-  /// same range Settings shows.
-  Widget _zoomBar() => EditorZoomBar(
+  /// Tile size as a percentage of its default.
+  Widget _zoomBar() => Container(
+    height: EditorMetrics.tall,
+    padding: const EdgeInsets.symmetric(
+      horizontal: _inset,
+      vertical: EditorMetrics.s4,
+    ),
+    decoration: const BoxDecoration(
+      border: Border(top: BorderSide(color: EditorTheme.line)),
+    ),
+    child: Row(
+      children: [
+        if (tab != 'Colors') ...[
+          DecoratedBox(
+            decoration: BoxDecoration(
+              color: EditorTheme.app,
+              border: Border.all(color: EditorTheme.line),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final (mode, icon, label) in [
+                  (0, Icons.grid_view, 'Grid'),
+                  (1, Icons.view_list, 'List'),
+                  (2, Icons.crop_landscape, 'Thumbnails'),
+                ])
+                  Container(
+                    width: EditorMetrics.control,
+                    height: EditorMetrics.row,
+                    color: viewMode == mode
+                        ? EditorTheme.raised
+                        : Colors.transparent,
+                    child: EditorIconButton(
+                      key: ValueKey('browser:view:$mode'),
+                      tooltip: label,
+                      padding: EdgeInsets.zero,
+                      iconSize: EditorMetrics.s14,
+                      color: viewMode == mode
+                          ? EditorTheme.ink
+                          : EditorTheme.muted,
+                      onPressed: () =>
+                          widget.controller.storeDesk('browserView', mode),
+                      icon: Icon(icon),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(width: EditorMetrics.s8),
+        ],
+        Expanded(child: _sizeSlider()),
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: EditorMetrics.s76),
+          child: Padding(
+            padding: const EdgeInsets.only(left: EditorMetrics.s8),
+            child: Text(
+              _countLabel(),
+              key: const ValueKey('browser:count'),
+              maxLines: 1,
+              softWrap: false,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: EditorMetrics.dense,
+                color: EditorTheme.muted,
+              ),
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+
+  Widget _sizeSlider() => EditorZoomBar(
+    base: tileDefault,
     value: tile,
     min: BrowserSize.min,
     max: BrowserSize.max,
     keyPrefix: 'browser:tile',
     onChanged: (v) => widget.controller.storeDesk('browserTile', v),
   );
+
+  /// Selection first, then a narrowed result against the whole tab, else the
+  /// whole tab.
+  String _countLabel() {
+    final chosen = selected[tab]?.length ?? 0;
+    if (chosen > 0) return '$chosen selected';
+    if (visible.length != total) return '${visible.length} of $total';
+    return '$total items';
+  }
+
+  String _format(Map<String, dynamic> item) {
+    if (tab != 'Media') return '';
+    if (item['builtin'] == true) return 'HDR';
+    final filename = '${item['path'] ?? item['name'] ?? ''}'.split('/').last;
+    if (filename.contains('.')) return filename.split('.').last.toUpperCase();
+    final mime = '${item['mime'] ?? ''}';
+    return mime.contains('/')
+        ? mime.split('/').last.toUpperCase()
+        : family(item);
+  }
+
+  void _menu(Map<String, dynamic> item, Offset point) {
+    select(item);
+    final missing = item['missing'] == true;
+    final own = tab == 'Media' && item['builtin'] != true;
+    showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(point.dx, point.dy, point.dx, point.dy),
+      items: [
+        PopupMenuItem(
+          value: 'apply',
+          child: Text(tab == 'Media' ? 'Place' : 'Apply'),
+        ),
+        if (own) ...[
+          PopupMenuItem(
+            value: 'replace',
+            enabled:
+                has('replaceAsset') &&
+                !missing &&
+                widget.controller.selectedIds.isNotEmpty,
+            child: const Text('Replace selected layer'),
+          ),
+          if (item['path'] != null && !missing) ...[
+            const PopupMenuItem(
+              value: 'reveal',
+              child: Text('Reveal in Finder'),
+            ),
+            if ('${item['mime']}'.startsWith('image/'))
+              const PopupMenuItem(
+                value: 'palette',
+                child: Text('Extract palette'),
+              ),
+          ],
+          PopupMenuItem(
+            value: 'remove',
+            enabled: has('removeAsset') && item['used'] != true,
+            child: const Text('Remove from library'),
+          ),
+        ],
+        if (item['saved'] == true)
+          const PopupMenuItem(value: 'forget', child: Text('Forget swatch')),
+      ],
+    ).then((action) {
+      if (!mounted) return;
+      switch (action) {
+        case 'apply':
+          apply(item);
+        case 'replace':
+          widget.controller.command('replaceAsset', {'id': item['id']});
+        case 'reveal':
+          widget.controller.native('reveal', {'path': item['path']});
+        case 'palette':
+          _savePalette(File('${item['path']}').readAsBytesSync());
+        case 'remove':
+          widget.controller.command('removeAsset', {'id': item['id']});
+        case 'forget':
+          final kept = _saved(widget.controller)
+            ..removeAt(int.parse('${item['id']}'.split(':').last));
+          widget.controller.storeDesk('swatches', kept);
+      }
+    });
+  }
 
   Widget card(Map<String, dynamic> item) {
     final supported = switch (tab) {
@@ -767,7 +969,9 @@ class _BrowserPanelState extends State<BrowserPanel> {
             : has('placeAsset') && item['missing'] != true,
       'Effects' =>
         has('applyEffect') && widget.controller.selectedIds.isNotEmpty,
-      _ => has('applyPalette') && widget.controller.selectedIds.isNotEmpty,
+      _ =>
+        (_stops(item).length > 1 ? has('setGradient') : has('applyPalette')) &&
+            widget.controller.selectedIds.isNotEmpty,
     };
     final isSelected = selected[tab]?.contains(id(item)) ?? false;
     final isColor = tab == 'Colors';
@@ -775,154 +979,157 @@ class _BrowserPanelState extends State<BrowserPanel> {
       tab == 'Media' ? family(item) : id(item),
     );
     final missing = item['missing'] == true;
+    final name = '${item['name'] ?? item['id']}';
+    final format = _format(item);
+    Widget preview = isColor
+        ? _gradientBox(widget.controller, _stops(item))
+        : tab == 'Media' || item['thumbnail'] != null
+        ? _thumbnail(item)
+        : Center(
+            child: id(item) == 'camera'
+                ? Icon(
+                    Icons.videocam_outlined,
+                    size: EditorMetrics.bar,
+                    color: identityColor,
+                  )
+                : id(item) == 'cube'
+                ? Icon(
+                    Icons.view_in_ar,
+                    size: EditorMetrics.bar,
+                    color: identityColor,
+                  )
+                : Text(
+                    '${item['glyph'] ?? 'ƒ'}',
+                    style: TextStyle(
+                      fontSize: EditorMetrics.s23,
+                      color: identityColor,
+                    ),
+                  ),
+          );
+    // Every preview sits in the same ground so light and dark pictures read
+    // as separate tiles; colours are their own ground.
+    if (!isColor) preview = ColoredBox(color: EditorTheme.app, child: preview);
+    final caption = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s4),
+      child: Text(
+        name,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(
+          color: EditorTheme.ink,
+          fontSize: EditorMetrics.font,
+        ),
+      ),
+    );
+    // Status first (a shape, not a word), then the fixed facts of the item.
+    // Media: the format says the kind already; the rest of the line is kept
+    // for dimensions and duration once the snapshot supplies them.
+    final facts = tab == 'Media'
+        ? format
+        : '${item['detail'] ?? classification(item)}';
+    final meta = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s4),
+      child: Row(
+        children: [
+          if (missing || item['used'] == true)
+            Padding(
+              padding: const EdgeInsets.only(right: EditorMetrics.s3),
+              child: missing
+                  ? const Icon(
+                      Icons.error_outline,
+                      size: EditorMetrics.dense,
+                      color: EditorTheme.accent,
+                    )
+                  : Container(
+                      key: const ValueKey('browser:used'),
+                      width: EditorMetrics.s5,
+                      height: EditorMetrics.s5,
+                      decoration: const BoxDecoration(
+                        color: EditorTheme.ink,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+            ),
+          Expanded(
+            child: Text(
+              facts,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: EditorTheme.muted,
+                fontSize: EditorMetrics.dense,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
     final body = Tooltip(
-      message: isColor && _stops(item).length > 1
-          ? 'Double-click to edit its stops · right-click to forget'
-          : supported
-          ? 'Select · double-click or Enter to drop at the top · drag to place'
-          : 'Apply unavailable',
+      key: ValueKey('browser:$tab:${id(item)}'),
+      message: [
+        name,
+        if (missing) 'Missing',
+        if (item['used'] == true) 'In use',
+        if (item['detail'] != null) '${item['detail']}',
+        supported
+            ? (isColor
+                  ? 'Click to apply · Right-click for actions'
+                  : 'Double-click or Enter to apply · Right-click for actions')
+            : 'Apply unavailable',
+      ].join('\n'),
       child: GestureDetector(
-        onTap: () => select(item),
-        onSecondaryTap: item['saved'] == true
-            ? () {
-                final kept = _saved(widget.controller)
-                  ..removeAt(int.parse('${item['id']}'.split(':').last));
-                widget.controller.storeDesk('swatches', kept);
-              }
-            : null,
-        onDoubleTap: () {
+        behavior: HitTestBehavior.opaque,
+        onTap: () {
           select(item);
-          apply(item);
+          if (isColor && supported) apply(item);
         },
+        onSecondaryTapDown: (event) => _menu(item, event.globalPosition),
+        onDoubleTap: isColor
+            ? null
+            : () {
+                select(item);
+                apply(item);
+              },
         child: Container(
           decoration: BoxDecoration(
             color: EditorTheme.panel,
             border: Border.all(
-              color: isSelected ? EditorTheme.accent : EditorTheme.line,
+              color: isSelected ? EditorTheme.spatial : Colors.transparent,
             ),
           ),
-          child: isColor
-              ? _gradientBox(_stops(item))
-              : Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Container(height: EditorMetrics.s3, color: identityColor),
-                    AspectRatio(
-                      aspectRatio: 16 / 9,
-                      child: tab == 'Media' || item['thumbnail'] != null
-                          ? _thumbnail(item)
-                          : ColoredBox(
-                              color: const Color(0xff222222),
-                              child: Center(
-                                child: id(item) == 'camera'
-                                    ? Icon(
-                                        Icons.videocam_outlined,
-                                        size: EditorMetrics.bar,
-                                        color: identityColor,
-                                      )
-                                    : id(item) == 'cube'
-                                    ? Icon(
-                                        Icons.view_in_ar,
-                                        size: EditorMetrics.bar,
-                                        color: identityColor,
-                                      )
-                                    : Text(
-                                        '${item['glyph'] ?? 'ƒ'}',
-                                        style: TextStyle(
-                                          fontSize: EditorMetrics.s23,
-                                          color: identityColor,
-                                        ),
-                                      ),
-                              ),
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: isColor || viewMode == 2
+                    ? preview
+                    : viewMode == 1
+                    ? Row(
+                        children: [
+                          SizedBox(width: EditorMetrics.s76, child: preview),
+                          Expanded(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [caption, meta],
                             ),
-                    ),
-                    Container(
-                      height: EditorMetrics.row,
-                      alignment: Alignment.centerLeft,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: EditorMetrics.s5,
-                      ),
-                      child: Text(
-                        '${item['name'] ?? item['id']}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: EditorTheme.ink,
-                          fontSize: EditorMetrics.dense,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    if (tab == 'Media')
-                      Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: EditorMetrics.s5,
-                        ),
-                        child: Text(
-                          '${item['detail'] ?? (tab == 'Media' ? '${family(item)}${missing
-                                        ? ' · missing'
-                                        : item['used'] == true
-                                        ? ' · in use'
-                                        : ''}' : 'Effect')}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: EditorTheme.muted,
-                            fontSize: EditorMetrics.micro,
                           ),
-                        ),
+                        ],
+                      )
+                    : Column(
+                        children: [
+                          Expanded(
+                            child: SizedBox(
+                              width: double.infinity,
+                              child: preview,
+                            ),
+                          ),
+                          SizedBox(height: EditorMetrics.row, child: caption),
+                          SizedBox(height: EditorMetrics.s14, child: meta),
+                        ],
                       ),
-                    if (tab == 'Media' && item['builtin'] != true)
-                      Expanded(
-                        child: Row(
-                          children: [
-                            if (widget.controller.selectedIds.isNotEmpty)
-                              Expanded(
-                                child: _smallButton(
-                                  'Replace',
-                                  has('replaceAsset') && !missing
-                                      ? () => widget.controller.command(
-                                          'replaceAsset',
-                                          {'id': item['id']},
-                                        )
-                                      : null,
-                                ),
-                              ),
-                            if (item['path'] != null &&
-                                !missing &&
-                                '${item['mime']}'.startsWith('image/'))
-                              Expanded(
-                                child: _smallButton(
-                                  'Palette',
-                                  () => _savePalette(
-                                    File('${item['path']}').readAsBytesSync(),
-                                  ),
-                                ),
-                              ),
-                            if (item['path'] != null && !missing)
-                              Expanded(
-                                child: _smallButton(
-                                  'Finder',
-                                  () => widget.controller.native('reveal', {
-                                    'path': item['path'],
-                                  }),
-                                ),
-                              ),
-                            if (item['used'] != true)
-                              _smallButton(
-                                '×',
-                                has('removeAsset')
-                                    ? () => widget.controller.command(
-                                        'removeAsset',
-                                        {'id': item['id']},
-                                      )
-                                    : null,
-                              ),
-                          ],
-                        ),
-                      ),
-                  ],
-                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -955,14 +1162,15 @@ class _BrowserPanelState extends State<BrowserPanel> {
 
   Widget _thumbnail(Map<String, dynamic> item) {
     final path = item['thumbnail'] as String?;
-    final fallback = ColoredBox(
-      color: EditorTheme.raised,
+    final fallback = Center(
       child: Center(
         child: Icon(
           item['missing'] == true
               ? Icons.broken_image_outlined
               : family(item) == 'Audio'
               ? Icons.audiotrack
+              : family(item) == '3D'
+              ? Icons.view_in_ar
               : Icons.image_outlined,
           size: EditorMetrics.s19,
           color: EditorTheme.muted,
@@ -974,21 +1182,48 @@ class _BrowserPanelState extends State<BrowserPanel> {
       if (path.startsWith('data:'))
         return Image.memory(
           Uri.parse(path).data!.contentAsBytes(),
-          fit: BoxFit.cover,
+          fit: BoxFit.contain,
           gaplessPlayback: true,
           errorBuilder: (_, _, _) => fallback,
-        );
+        ).inset;
       return Image.file(
         File(path.startsWith('file:') ? Uri.parse(path).toFilePath() : path),
-        fit: BoxFit.cover,
+        fit: BoxFit.contain,
         gaplessPlayback: true,
         errorBuilder: (_, _, _) => fallback,
-      );
+      ).inset;
     } catch (_) {
       return fallback;
     }
   }
 }
+
+/// A bordered action beside the search field.
+Widget _action(String label, VoidCallback? press) => Tooltip(
+  message: press == null ? '$label · unavailable' : label,
+  child: InkWell(
+    onTap: press,
+    child: Container(
+      height: EditorMetrics.row,
+      alignment: Alignment.center,
+      padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s8),
+      decoration: BoxDecoration(
+        color: EditorTheme.app,
+        border: Border.all(
+          color: press == null ? EditorTheme.line : EditorTheme.border,
+        ),
+      ),
+      child: Text(
+        label,
+        maxLines: 1,
+        style: TextStyle(
+          fontSize: EditorMetrics.font,
+          color: press == null ? EditorTheme.disabledInk : EditorTheme.ink,
+        ),
+      ),
+    ),
+  ),
+);
 
 Widget _smallButton(
   String label,
@@ -999,16 +1234,16 @@ Widget _smallButton(
   child: InkWell(
     onTap: press,
     child: Container(
-      height: EditorMetrics.row,
+      height: EditorMetrics.control,
       alignment: Alignment.centerLeft,
-      padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s6),
+      padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s8),
       color: selected ? EditorTheme.raised : Colors.transparent,
       child: Text(
         label,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
-          fontSize: EditorMetrics.dense,
+          fontSize: EditorMetrics.font,
           color: press == null
               ? EditorTheme.muted.withValues(alpha: .45)
               : selected
@@ -1639,14 +1874,14 @@ class _CheckerPainter extends CustomPainter {
 }
 
 /// A solid, or the same strip a saved gradient was made from.
-Widget _gradientBox(List<List<double>> stops) => DecoratedBox(
-  decoration: BoxDecoration(
-    color: stops.length == 1 ? _color(stops.single) : null,
-    gradient: stops.length > 1
-        ? LinearGradient(colors: [for (final s in stops) _color(s)])
-        : null,
-  ),
-);
+Widget _gradientBox(EditorSession controller, List<List<double>> stops) =>
+    stops.length > 1
+    ? NativeVisualSample(
+        controller: controller,
+        request: {'kind': 'gradient', 'type': 'linear', 'stops': stops},
+        fit: BoxFit.fill,
+      )
+    : ColoredBox(color: _color(stops.single));
 
 class _Swatch extends StatelessWidget {
   const _Swatch({required this.color, required this.size});
@@ -1669,8 +1904,15 @@ class _Swatch extends StatelessWidget {
 }
 
 /// One knob for how big Browser tiles are; Settings turns it, Browser reads it.
+extension on Widget {
+  /// The same inset for every picture, so a full-bleed and a padded source
+  /// occupy the same frame.
+  Widget get inset =>
+      Padding(padding: const EdgeInsets.all(EditorMetrics.s4), child: this);
+}
+
 abstract final class BrowserSize {
-  static const double min = 48, max = 200;
+  static const double min = 48, max = 200, base = 88;
   static double tile(EditorSession c) =>
       (c.deskWork.value['browserTile'] as num? ??
               _BrowserPanelState.tileDefault)

@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:ui' show ViewFocusEvent, ViewFocusState;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -302,11 +303,11 @@ class _EditorNumericFieldState extends State<EditorNumericField> {
   final _focus = FocusNode();
   final _ownIdle = FocusNode();
   FocusNode get _idle => widget.idleFocus ?? _ownIdle;
-  bool _editing = false, _dragging = false, _sending = false;
+  bool _editing = false, _dragging = false, _ending = false;
   int? _pointer;
   double _start = 0, _startGlobalX = 0, _startGlobalY = 0;
-  double? _pending, _shown;
-  Future<void> _drained = Future<void>.value();
+  double? _shown;
+  late final _queue = EditorPreviewQueue<double>((v) => widget.onPreview(v));
   String? _error;
   @override
   void initState() {
@@ -337,7 +338,7 @@ class _EditorNumericFieldState extends State<EditorNumericField> {
       )
       .toDouble();
   void _open() {
-    if (!widget.enabled) return;
+    if (!widget.enabled || _ending) return;
     setState(() {
       _editing = true;
       _text.text = widget.mixed ? '' : widget.value.toString();
@@ -352,6 +353,7 @@ class _EditorNumericFieldState extends State<EditorNumericField> {
   }
 
   void _commitText() {
+    if (!_editing) return;
     final n = double.tryParse(_text.text.trim());
     if (n == null || !n.isFinite) {
       setState(() => _error = 'Number required');
@@ -362,28 +364,15 @@ class _EditorNumericFieldState extends State<EditorNumericField> {
       _editing = false;
       _error = null;
     });
+    _idle.requestFocus();
     widget.onCommit(_bounded(n));
   }
 
-  void _tick(double n) {
-    _pending = n;
-    if (_sending) return;
-    _sending = true;
-    _drained = () async {
-      try {
-        while (_pending != null) {
-          final value = _pending!;
-          _pending = null;
-          await widget.onPreview(value);
-        }
-      } finally {
-        _sending = false;
-      }
-    }();
-  }
+  void _tick(double n) => _queue.add(n);
 
   void _pointerDown(PointerDownEvent event) {
-    if (!widget.enabled || _pointer != null || event.buttons != 1) return;
+    if (!widget.enabled || _ending || _pointer != null || event.buttons != 1)
+      return;
     _pointer = event.pointer;
     _start = widget.value;
     _startGlobalX = event.position.dx;
@@ -441,21 +430,19 @@ class _EditorNumericFieldState extends State<EditorNumericField> {
     if (!_dragging) return;
     _pointer = null;
     setState(() => _dragging = false);
-    if (cancel) _pending = null;
-    await _drained;
-    if (cancel)
-      await widget.onCancel();
-    else
-      await widget.onFinish();
-    if (mounted) setState(() => _shown = null);
+    _ending = true;
+    try {
+      await _queue.finish(cancel, cancel ? widget.onCancel : widget.onFinish);
+    } finally {
+      _ending = false;
+      if (mounted) setState(() => _shown = null);
+    }
   }
 
   @override
   void dispose() {
     if (_dragging) {
-      _pending = null;
-      final cancel = widget.onCancel;
-      _drained.whenComplete(cancel);
+      _queue.finish(true, widget.onCancel);
     }
     _focus.removeListener(_lost);
     _focus.dispose();
@@ -482,7 +469,7 @@ class _EditorNumericFieldState extends State<EditorNumericField> {
           return KeyEventResult.handled;
         }
       }
-      if (!_editing && !_dragging && widget.enabled) {
+      if (!_editing && !_dragging && !_ending && widget.enabled) {
         if (event.logicalKey == LogicalKeyboardKey.enter) {
           _open();
           return KeyEventResult.handled;
@@ -832,9 +819,79 @@ class EditorDial extends StatefulWidget {
   State<EditorDial> createState() => _EditorDialState();
 }
 
-class _EditorDialState extends State<EditorDial> {
+// Uses the numeric field's latest-pending-value rule for continuous controls.
+class EditorPreviewQueue<T> {
+  EditorPreviewQueue(this.send);
+  final Future<void> Function(T) send;
+  T? _pending;
+  bool _sending = false;
+  Future<void> _drained = Future<void>.value();
+  void add(T value) {
+    _pending = value;
+    if (_sending) return;
+    _sending = true;
+    _drained = () async {
+      try {
+        while (_pending != null) {
+          final next = _pending as T;
+          _pending = null;
+          await send(next);
+        }
+      } finally {
+        _sending = false;
+      }
+    }();
+  }
+
+  Future<void> finish(bool cancel, Future<void> Function() action) async {
+    if (cancel) _pending = null;
+    await _drained;
+    await action();
+  }
+}
+
+class _EditorDialState extends State<EditorDial> with WidgetsBindingObserver {
   double? _shown;
   double _lastAngle = 0;
+  bool _dragging = false, _ending = false;
+  late final _queue = EditorPreviewQueue<double>((v) => widget.onPreview(v));
+  final _gestureFocus = FocusNode();
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) _end(true);
+  }
+
+  @override
+  void didChangeViewFocus(ViewFocusEvent event) {
+    if (event.state == ViewFocusState.unfocused) _end(true);
+  }
+
+  Future<void> _end(bool cancel) async {
+    if (!_dragging) return;
+    _dragging = false;
+    _ending = true;
+    try {
+      await _queue.finish(cancel, cancel ? widget.onCancel : widget.onFinish);
+    } finally {
+      _ending = false;
+      if (mounted) setState(() => _shown = null);
+    }
+  }
+
+  @override
+  void dispose() {
+    if (_dragging) _queue.finish(true, widget.onCancel);
+    WidgetsBinding.instance.removeObserver(this);
+    _gestureFocus.dispose();
+    super.dispose();
+  }
+
   double _angleOf(Offset local) {
     final c = Offset(widget.size / 2, widget.size / 2);
     final d = local - c;
@@ -842,44 +899,55 @@ class _EditorDialState extends State<EditorDial> {
   }
 
   @override
-  Widget build(BuildContext context) => Tooltip(
-    message: 'Rotation',
-    child: GestureDetector(
-      onPanStart: widget.enabled
-          ? (e) {
-              _lastAngle = _angleOf(e.localPosition);
-              _shown = widget.degrees;
-              widget.onBegin();
-            }
-          : null,
-      onPanUpdate: widget.enabled
-          ? (e) {
-              final a = _angleOf(e.localPosition);
-              var delta = a - _lastAngle;
-              if (delta > 180) delta -= 360;
-              if (delta < -180) delta += 360;
-              _lastAngle = a;
-              setState(() => _shown = (_shown ?? widget.degrees) + delta);
-              widget.onPreview(_shown!);
-            }
-          : null,
-      onPanEnd: widget.enabled
-          ? (_) {
-              widget.onFinish();
-              setState(() => _shown = null);
-            }
-          : null,
-      onPanCancel: widget.enabled
-          ? () {
-              widget.onCancel();
-              setState(() => _shown = null);
-            }
-          : null,
-      child: CustomPaint(
-        size: Size.square(widget.size),
-        painter: _DialPainter(
-          _shown ?? widget.degrees,
-          !widget.enabled ? EditorTheme.muted : widget.tint ?? EditorTheme.ink,
+  Widget build(BuildContext context) => Focus(
+    focusNode: _gestureFocus,
+    onKeyEvent: (_, event) {
+      if (event is KeyDownEvent &&
+          event.logicalKey == LogicalKeyboardKey.escape &&
+          _dragging) {
+        _end(true);
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    },
+    child: Listener(
+      onPointerCancel: (_) => _end(true),
+      child: Tooltip(
+        message: 'Rotation',
+        child: GestureDetector(
+          onPanStart: widget.enabled
+              ? (e) {
+                  if (_ending) return;
+                  _dragging = true;
+                  _gestureFocus.requestFocus();
+                  _lastAngle = _angleOf(e.localPosition);
+                  _shown = widget.degrees;
+                  widget.onBegin();
+                }
+              : null,
+          onPanUpdate: widget.enabled
+              ? (e) {
+                  if (!_dragging) return;
+                  final a = _angleOf(e.localPosition);
+                  var delta = a - _lastAngle;
+                  if (delta > 180) delta -= 360;
+                  if (delta < -180) delta += 360;
+                  _lastAngle = a;
+                  setState(() => _shown = (_shown ?? widget.degrees) + delta);
+                  _queue.add(_shown!);
+                }
+              : null,
+          onPanEnd: widget.enabled ? (_) => _end(false) : null,
+          onPanCancel: widget.enabled ? () => _end(true) : null,
+          child: CustomPaint(
+            size: Size.square(widget.size),
+            painter: _DialPainter(
+              _shown ?? widget.degrees,
+              !widget.enabled
+                  ? EditorTheme.muted
+                  : widget.tint ?? EditorTheme.ink,
+            ),
+          ),
         ),
       ),
     ),
@@ -1070,57 +1138,107 @@ class EditorPad extends StatefulWidget {
   final bool enabled;
   final Color? tint;
   final VoidCallback onBegin;
-  final void Function(double x, double y) onPreview;
+  final Future<void> Function(double x, double y) onPreview;
   final Future<void> Function() onFinish, onCancel;
   @override
   State<EditorPad> createState() => _EditorPadState();
 }
 
-class _EditorPadState extends State<EditorPad> {
+class _EditorPadState extends State<EditorPad> with WidgetsBindingObserver {
   Offset? _shown;
+  bool _dragging = false, _ending = false;
+  late final _queue = EditorPreviewQueue<Offset>(
+    (v) => widget.onPreview(v.dx, v.dy),
+  );
+  final _gestureFocus = FocusNode();
   @override
-  Widget build(BuildContext context) => Tooltip(
-    message: 'Drag the point',
-    child: MouseRegion(
-      cursor: widget.enabled
-          ? SystemMouseCursors.move
-          : SystemMouseCursors.basic,
-      child: GestureDetector(
-        onPanStart: widget.enabled
-            ? (_) {
-                _shown = Offset(widget.x, widget.y);
-                widget.onBegin();
-              }
-            : null,
-        onPanUpdate: widget.enabled
-            ? (e) {
-                final next =
-                    (_shown ?? Offset(widget.x, widget.y)) +
-                    e.delta * widget.speed;
-                setState(() => _shown = next);
-                widget.onPreview(next.dx, next.dy);
-              }
-            : null,
-        onPanEnd: widget.enabled
-            ? (_) {
-                widget.onFinish();
-                setState(() => _shown = null);
-              }
-            : null,
-        onPanCancel: widget.enabled
-            ? () {
-                widget.onCancel();
-                setState(() => _shown = null);
-              }
-            : null,
-        child: CustomPaint(
-          size: Size.square(widget.size),
-          painter: _PadPainter(
-            _shown ?? Offset(widget.x, widget.y),
-            widget.span,
-            !widget.enabled
-                ? EditorTheme.muted
-                : widget.tint ?? EditorTheme.accent,
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) _end(true);
+  }
+
+  @override
+  void didChangeViewFocus(ViewFocusEvent event) {
+    if (event.state == ViewFocusState.unfocused) _end(true);
+  }
+
+  Future<void> _end(bool cancel) async {
+    if (!_dragging) return;
+    _dragging = false;
+    _ending = true;
+    try {
+      await _queue.finish(cancel, cancel ? widget.onCancel : widget.onFinish);
+    } finally {
+      _ending = false;
+      if (mounted) setState(() => _shown = null);
+    }
+  }
+
+  @override
+  void dispose() {
+    if (_dragging) _queue.finish(true, widget.onCancel);
+    WidgetsBinding.instance.removeObserver(this);
+    _gestureFocus.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Focus(
+    focusNode: _gestureFocus,
+    onKeyEvent: (_, event) {
+      if (event is KeyDownEvent &&
+          event.logicalKey == LogicalKeyboardKey.escape &&
+          _dragging) {
+        _end(true);
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    },
+    child: Listener(
+      onPointerCancel: (_) => _end(true),
+      child: Tooltip(
+        message: 'Drag the point',
+        child: MouseRegion(
+          cursor: widget.enabled
+              ? SystemMouseCursors.move
+              : SystemMouseCursors.basic,
+          child: GestureDetector(
+            onPanStart: widget.enabled
+                ? (_) {
+                    if (_ending) return;
+                    _dragging = true;
+                    _gestureFocus.requestFocus();
+                    _shown = Offset(widget.x, widget.y);
+                    widget.onBegin();
+                  }
+                : null,
+            onPanUpdate: widget.enabled
+                ? (e) {
+                    if (!_dragging) return;
+                    final next =
+                        (_shown ?? Offset(widget.x, widget.y)) +
+                        e.delta * widget.speed;
+                    setState(() => _shown = next);
+                    _queue.add(next);
+                  }
+                : null,
+            onPanEnd: widget.enabled ? (_) => _end(false) : null,
+            onPanCancel: widget.enabled ? () => _end(true) : null,
+            child: CustomPaint(
+              size: Size.square(widget.size),
+              painter: _PadPainter(
+                _shown ?? Offset(widget.x, widget.y),
+                widget.span,
+                !widget.enabled
+                    ? EditorTheme.muted
+                    : widget.tint ?? EditorTheme.accent,
+              ),
+            ),
           ),
         ),
       ),
@@ -1269,9 +1387,84 @@ class _TrackPainter extends CustomPainter {
       old.style != style;
 }
 
-/// The zoom strip at a panel's foot: a step down, the slider, a step up.
-/// Steps are ratios so the feel is the same at any size; the slider spans
-/// the range Settings shows.
+/// A logical viewport whose painted and hit-tested bounds fill its parent.
+class EditorScaledViewport extends StatelessWidget {
+  const EditorScaledViewport({
+    super.key,
+    required this.scale,
+    required this.child,
+  });
+  final double scale;
+  final Widget child;
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, box) => OverflowBox(
+      alignment: Alignment.topLeft,
+      minWidth: box.maxWidth / scale,
+      maxWidth: box.maxWidth / scale,
+      minHeight: box.maxHeight / scale,
+      maxHeight: box.maxHeight / scale,
+      child: Transform.scale(
+        scale: scale,
+        alignment: Alignment.topLeft,
+        child: child,
+      ),
+    ),
+  );
+}
+
+class EditorPercentField extends StatefulWidget {
+  const EditorPercentField({
+    super.key,
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.onChanged,
+    this.label = 'Scale',
+  });
+  final double value, min, max;
+  final String label;
+  final ValueChanged<double> onChanged;
+  @override
+  State<EditorPercentField> createState() => _EditorPercentFieldState();
+}
+
+class _EditorPercentFieldState extends State<EditorPercentField> {
+  double? _start;
+  @override
+  Widget build(BuildContext context) {
+    Future<void> change(double n) async => widget.onChanged(
+      n.roundToDouble().clamp(
+        widget.min.ceilToDouble(),
+        widget.max.floorToDouble(),
+      ),
+    );
+    return SizedBox(
+      width: 64,
+      child: EditorNumericField(
+        value: widget.value,
+        label: widget.label,
+        min: widget.min.ceilToDouble(),
+        max: widget.max.floorToDouble(),
+        decimals: 0,
+        unit: '%',
+        speed: 1,
+        onBegin: () => _start = widget.value,
+        onPreview: change,
+        onCommit: change,
+        onFinish: () async {
+          _start = null;
+        },
+        onCancel: () async {
+          if (_start != null) widget.onChanged(_start!);
+          _start = null;
+        },
+      ),
+    );
+  }
+}
+
+/// Sizes are percentages of the panel's default size.
 class EditorZoomBar extends StatelessWidget {
   const EditorZoomBar({
     super.key,
@@ -1280,19 +1473,21 @@ class EditorZoomBar extends StatelessWidget {
     required this.max,
     required this.onChanged,
     required this.keyPrefix,
+    required this.base,
   });
-  final double value, min, max;
+  final double value, min, max, base;
   final ValueChanged<double> onChanged;
-
-  /// Widget keys `<prefix>-smaller` / `<prefix>-larger` for tests.
   final String keyPrefix;
   @override
   Widget build(BuildContext context) {
-    void scale(double ratio) =>
-        onChanged((value * ratio).clamp(min, max).toDouble());
-    Widget step(IconData icon, double ratio, String suffix) => InkWell(
+    final low = (min / base * 100).ceilToDouble();
+    final high = (max / base * 100).floorToDouble();
+    final percent = value / base * 100;
+    void change(double n) =>
+        onChanged(n.roundToDouble().clamp(low, high) * base / 100);
+    Widget step(IconData icon, int delta, String suffix) => InkWell(
       key: ValueKey('$keyPrefix-$suffix'),
-      onTap: () => scale(ratio),
+      onTap: () => change(percent.roundToDouble() + delta),
       child: SizedBox(
         width: EditorMetrics.row,
         child: Icon(icon, size: EditorMetrics.s14, color: EditorTheme.muted),
@@ -1303,19 +1498,36 @@ class EditorZoomBar extends StatelessWidget {
       decoration: const BoxDecoration(
         border: Border(top: BorderSide(color: EditorTheme.line)),
       ),
-      child: Row(
-        children: [
-          step(Icons.remove, .8, 'smaller'),
-          Expanded(
-            child: Slider(
-              min: min,
-              max: max,
-              value: value.clamp(min, max).toDouble(),
-              onChanged: onChanged,
-            ),
-          ),
-          step(Icons.add, 1.25, 'larger'),
-        ],
+      child: LayoutBuilder(
+        builder: (context, box) {
+          final field = EditorPercentField(
+            key: ValueKey('$keyPrefix-percent'),
+            value: percent,
+            min: low,
+            max: high,
+            onChanged: change,
+            label: 'Size',
+          );
+          return Row(
+            children: [
+              step(Icons.remove, -1, 'smaller'),
+              if (box.maxWidth >= 200) ...[
+                Expanded(
+                  child: Slider(
+                    min: low,
+                    max: high,
+                    divisions: (high - low).round(),
+                    value: percent.clamp(low, high),
+                    onChanged: change,
+                  ),
+                ),
+                field,
+              ] else
+                Expanded(child: field),
+              step(Icons.add, 1, 'larger'),
+            ],
+          );
+        },
       ),
     );
   }

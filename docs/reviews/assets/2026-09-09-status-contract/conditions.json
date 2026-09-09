@@ -1,0 +1,9 @@
+{
+  "document": "light-in-form-observed-20260909.rrd",
+  "layers": 15,
+  "samples": 40,
+  "warmup": 5,
+  "scope": "Native request to reply creation. Excludes Flutter and GPU rendering. Stable-library copies; comparison rerun after builds.",
+  "before_library_sha256": "b077143d403db7ad37539407e948a4aa96fa798ddd66271a351294b97d363873",
+  "after_library_sha256": "cd6bad6cba42cfbb23cfde07a83bd63f4140e736672009daaebef1601d11bafd"
+}

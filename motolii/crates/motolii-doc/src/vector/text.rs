@@ -75,6 +75,7 @@ pub struct LineMeasure {
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ShapedText {
     pub contours: Vec<Contour>,
+    pub contour_styles: Vec<usize>,
     pub lines: Vec<LineMeasure>,
 }
 
@@ -93,6 +94,18 @@ fn font_system() -> std::sync::MutexGuard<'static, FontSystem> {
         .unwrap_or_else(|e| e.into_inner())
 }
 
+/// Families available to the same database used to shape the document.
+pub fn font_families() -> &'static [String] {
+    static FAMILIES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+    FAMILIES.get_or_init(|| {
+        let system = font_system();
+        let names: std::collections::BTreeSet<_> = system.db().faces()
+            .flat_map(|face| face.families.iter().map(|(name, _)| name.clone()))
+            .collect();
+        names.into_iter().collect()
+    })
+}
+
 /// family が台帳に無ければ path の file を足す。path も読めなければ、その時だけ誤り。
 fn ensure_font(system: &mut FontSystem, font: &GlyphFont) -> Result<(), TextShapeError> {
     let known = |db: &fontdb::Database| {
@@ -107,33 +120,33 @@ fn ensure_font(system: &mut FontSystem, font: &GlyphFont) -> Result<(), TextShap
         .map_err(|source| TextShapeError::FontFile { path: font.path.clone(), source })
 }
 
-pub fn shape_text(
-    content: &str,
-    font: &GlyphFont,
-    layout: &TextLayout,
-) -> Result<ShapedText, TextShapeError> {
+pub struct StyledText<'a> {
+    pub text: &'a str,
+    pub font: &'a GlyphFont,
+    pub layout: &'a TextLayout,
+    pub style: usize,
+}
+
+pub fn shape_text(content: &str, font: &GlyphFont, layout: &TextLayout) -> Result<ShapedText, TextShapeError> {
+    shape_rich_text(&[StyledText { text: content, font, layout, style: 0 }], layout)
+}
+
+pub fn shape_rich_text(spans: &[StyledText<'_>], layout: &TextLayout) -> Result<ShapedText, TextShapeError> {
     let mut guard = font_system();
     let font_system = &mut *guard;
-    ensure_font(font_system, font)?;
-
-    let line_height = layout.line_height.unwrap_or(layout.size * 1.2);
-    let metrics = Metrics::new(layout.size, line_height);
-
-    let mut features = FontFeatures::new();
-    for feature in &layout.features {
-        let bytes: &[u8] = feature.tag.as_bytes();
-        let tag: &[u8; 4] = bytes
-            .try_into()
-            .map_err(|_| TextShapeError::FeatureTag(feature.tag.clone()))?;
-        features.set(FeatureTag::new(tag), feature.value);
+    for span in spans { ensure_font(font_system, span.font)?; }
+    let metrics = Metrics::new(layout.size, layout.line_height.unwrap_or(layout.size * 1.2));
+    let mut attributes = Vec::new();
+    for span in spans {
+        let mut features = FontFeatures::new();
+        for feature in &span.layout.features {
+            let tag: &[u8;4] = feature.tag.as_bytes().try_into().map_err(|_| TextShapeError::FeatureTag(feature.tag.clone()))?;
+            features.set(FeatureTag::new(tag), feature.value);
+        }
+        attributes.push(Attrs::new().family(Family::Name(&span.font.family))
+            .metrics(Metrics::new(span.layout.size, span.layout.line_height.unwrap_or(span.layout.size * 1.2)))
+            .letter_spacing(span.layout.tracking / 1000.0).font_features(features).metadata(span.style));
     }
-
-    let attrs = Attrs::new()
-        .family(Family::Name(&font.family))
-        .metrics(metrics)
-        .letter_spacing(layout.tracking / 1000.0)
-        .font_features(features);
-
     let align = match layout.justify {
         TextJustify::Left => Align::Left,
         TextJustify::Right => Align::Right,
@@ -144,11 +157,13 @@ pub fn shape_text(
     // 幅が無いと Align::Center / Right が常に 0 補正になる。幅は wrap_size か枠の幅。
     buffer.set_size(layout.wrap_width, None);
     buffer.set_wrap(if layout.wrap { cosmic_text::Wrap::WordOrGlyph } else { cosmic_text::Wrap::None });
-    buffer.set_text(content, &attrs, Shaping::Advanced, Some(align));
+    let default_attrs = attributes.first().cloned().unwrap_or_else(Attrs::new);
+    buffer.set_rich_text(spans.iter().zip(attributes.iter()).map(|(span, attrs)| (span.text, attrs.clone())), &default_attrs, Shaping::Advanced, Some(align));
     buffer.shape_until_scroll(font_system, false);
 
     let mut swash_cache = SwashCache::new();
     let mut contours = Vec::new();
+    let mut contour_styles = Vec::new();
     let mut lines = Vec::new();
     for run in buffer.layout_runs() {
         let mut glyph_xs = Vec::with_capacity(run.glyphs.len());
@@ -161,7 +176,9 @@ pub fn shape_text(
             else {
                 continue; // 空白など、輪郭を持たない glyph。
             };
+            let before = contours.len();
             commands_to_contours(commands, pen_x, pen_y, &mut contours);
+            contour_styles.extend(std::iter::repeat_n(glyph.metadata, contours.len() - before));
         }
         lines.push(LineMeasure {
             baseline_y: run.line_y,
@@ -169,7 +186,7 @@ pub fn shape_text(
             glyph_xs,
         });
     }
-    Ok(ShapedText { contours, lines })
+    Ok(ShapedText { contours, contour_styles, lines })
 }
 
 fn commands_to_contours(commands: &[Command], pen_x: f32, pen_y: f32, out: &mut Vec<Contour>) {
@@ -239,4 +256,14 @@ fn commands_to_contours(commands: &[Command], pen_x: f32, pen_y: f32, out: &mut 
             closed: false,
         });
     }
+}
+
+/// A specimen must not silently display a different fallback family.
+pub fn font_supports_sample(family: &str, text: &str) -> bool {
+    let mut system = font_system();
+    let Some(id) = system.db().query(&fontdb::Query {
+        families: &[fontdb::Family::Name(family)], ..Default::default()
+    }) else { return false };
+    let Some(font) = system.get_font(id, fontdb::Weight::NORMAL) else { return false };
+    text.chars().filter(|c| !c.is_whitespace()).all(|c| font.as_swash().charmap().map(c) != 0)
 }

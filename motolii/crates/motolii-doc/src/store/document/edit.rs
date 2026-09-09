@@ -142,7 +142,7 @@ impl Document {
                     crate::doc::store::text::validate(document)?;
                     *layer
                 }
-                Intent::SetConstant { layer, .. } => *layer,
+                Intent::SetConstant { layer, .. } | Intent::SetShapes { layer, .. } => *layer,
                 // 層属性の下書き(Sequence のゴーストの遅れ等)。attrs() が patch を重ねて読む。
                 Intent::SetAttrs { layer, .. } => *layer,
                 _ => {

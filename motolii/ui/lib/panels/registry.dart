@@ -7,7 +7,7 @@ import '../foundation/panel_catalog.dart';
 import '../session/editor_session.dart';
 import 'browser.dart';
 import 'inspector.dart';
-import 'inspector_test.dart';
+import 'font_browser.dart';
 import 'desk.dart';
 import 'timeline.dart';
 import 'stage.dart';
@@ -17,10 +17,10 @@ import 'depth_desk.dart';
 import 'adjust_panels.dart';
 import 'web_panel.dart';
 
-Widget buildPanel(String name, EditorSession c, Key? key) {
+Widget buildPanel(String name, EditorSession c, Key? key, {Widget? leading}) {
   final spec = name == 'Desk' ? deskHostSpec : panelSpec(name);
-  if (spec == null || (name != 'Desk' && !spec.drawer))
-    return _buildPanel(name, c, key);
+  if (spec == null || name == 'Ease' || (name != 'Desk' && !spec.drawer))
+    return _buildPanel(name, c, key, leading: leading);
   return LayoutBuilder(
     key: key,
     builder: (context, box) => SingleChildScrollView(
@@ -31,14 +31,14 @@ Widget buildPanel(String name, EditorSession c, Key? key) {
         child: SizedBox(
           width: math.max(spec.minWidth, box.maxWidth),
           height: math.max(spec.minHeight, box.maxHeight),
-          child: _buildPanel(name, c, null),
+          child: _buildPanel(name, c, null, leading: leading),
         ),
       ),
     ),
   );
 }
 
-Widget _buildPanel(String name, EditorSession c, Key? key) {
+Widget _buildPanel(String name, EditorSession c, Key? key, {Widget? leading}) {
   if (['Create', 'Media', 'Effects', 'Colors'].contains(name))
     return BrowserPanel(
       key: key,
@@ -48,15 +48,16 @@ Widget _buildPanel(String name, EditorSession c, Key? key) {
     );
   return switch (name) {
     'Stage' => StagePanel(key: key, controller: c),
+    'Fonts' => FontBrowser(key: key, controller: c),
     'Inspector' => InspectorPanel(key: key, controller: c),
-    'Test' => InspectorTestPanel(key: key, controller: c),
     'Desk' => DeskPanel(
       key: key,
       controller: c,
-      panelBuilder: (name) => buildPanel(name, c, ValueKey('drawer:$name')),
+      panelBuilder: (name, {leading}) =>
+          buildPanel(name, c, ValueKey('drawer:$name'), leading: leading),
     ),
     'Notes' => NotesPanel(key: key, controller: c),
-    'Ease' => EaseDesk(key: key, controller: c),
+    'Ease' => EaseDesk(key: key, controller: c, leading: leading),
     'Depth' => DepthDesk(key: key, controller: c),
     'Blend' => AnimatedBuilder(
       key: key,

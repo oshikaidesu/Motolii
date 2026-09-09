@@ -262,8 +262,10 @@ class _NotesPanelState extends State<NotesPanel> {
                       ],
                     ),
                   ),
-                  IconButton(
+                  EditorIconButton(
                     tooltip: 'New page',
+                    constraints: EditorTheme.iconConstraints,
+                    padding: EdgeInsets.zero,
                     iconSize: EditorMetrics.s16,
                     onPressed: _newPage,
                     icon: const Icon(Icons.add),
@@ -289,7 +291,7 @@ class _NotesPanelState extends State<NotesPanel> {
               height: EditorMetrics.s32,
               child: Row(
                 children: [
-                  IconButton(
+                  EditorIconButton(
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints.tightFor(
                       width: EditorMetrics.tall,
@@ -300,7 +302,7 @@ class _NotesPanelState extends State<NotesPanel> {
                     onPressed: _paste,
                     icon: const Icon(Icons.content_paste),
                   ),
-                  IconButton(
+                  EditorIconButton(
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints.tightFor(
                       width: EditorMetrics.tall,
@@ -320,7 +322,7 @@ class _NotesPanelState extends State<NotesPanel> {
                     },
                     icon: const Icon(Icons.image_outlined),
                   ),
-                  IconButton(
+                  EditorIconButton(
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints.tightFor(
                       width: EditorMetrics.tall,
@@ -331,7 +333,7 @@ class _NotesPanelState extends State<NotesPanel> {
                     onPressed: _reference,
                     icon: const Icon(Icons.link),
                   ),
-                  IconButton(
+                  EditorIconButton(
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints.tightFor(
                       width: EditorMetrics.tall,
@@ -344,7 +346,7 @@ class _NotesPanelState extends State<NotesPanel> {
                     icon: const Icon(Icons.center_focus_strong),
                   ),
                   if (page != null)
-                    IconButton(
+                    EditorIconButton(
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints.tightFor(
                         width: EditorMetrics.tall,
@@ -608,7 +610,7 @@ class _NoteCardState extends State<_NoteCard> {
                             ),
                           ),
                         ),
-                        IconButton(
+                        EditorIconButton(
                           tooltip: 'Delete note',
                           padding: EdgeInsets.zero,
                           constraints: const BoxConstraints.tightFor(

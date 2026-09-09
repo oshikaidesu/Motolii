@@ -28,6 +28,8 @@
 
 ## 全文書索引
 
+- [夜間に作る代表作品 — 光を受ける・届ける・空間に見せる](2026-09-09-expression-dogfood-night-plan.md)
+
 - [演出と実装を一緒に設計する — 複数社の画作りからの採用](2026-09-09-entertainment-rendering-adoption.md)
 
 - [2D・3Dの共通表面契約と検収](2026-09-09-shared-surface-plan.md)
@@ -754,6 +756,8 @@
 | [2026-08-28-seams-remaining.md](2026-08-28-seams-remaining.md) | **繋げるだけの口 — 残りの一覧**(観察・**現在地**。繋いだら消す)。`grep` で数えた実測: `Intent` 24中**9接続**/`Engine` 18中**3**/`motolii-export` 10中**0**/`motolii-audio` 73中**0**/`motolii-vector` 34中**0**/`motolii-shell-state` 41中3。**バックはほぼ完成していて front が呼んでいないだけ**(2026-08-28 朝まで Intent 接続はゼロだった)。hero への距離順のタスク表 S1〜S18 — 第1波 = `SetSource`(棚の資産をレイヤーへ = インポートの切れている線)・音(73本丸ごと未接続)・`layer_failures`(**失敗が見えないのは失敗するより悪い**)・`RemoveLayer`・`SetMarkers`。第2波 = 書き出し(10本すべて未接続、`export_surface.rs` の進捗バーは何にも繋がっていない)・カメラkey・comp設定・テキスト・シェイプ。**1行 = 1レーン**、審判は裁定271/272/274 の3つ | **現在地/タスク表**(2026-08-28) |
 
 ## 追加索引 — 2026-09-06整理
+
+- [学マス・アイプラの公開技術から、次の反射実装へ](2026-09-09-qualiarts-rendering-next-plan.md)
 
 現行の判断は[Stage 5](../stage5/README.md)。以下は作成時点の調査・候補・決定の根拠。
 

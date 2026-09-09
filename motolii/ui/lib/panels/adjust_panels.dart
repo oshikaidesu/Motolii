@@ -1,235 +1,236 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 
 import '../session/editor_session.dart';
+import 'history_records.dart';
 import '../session/read_model.dart';
 import '../foundation/theme.dart';
 import '../foundation/panel_controls.dart';
 import '../foundation/metrics.dart';
 
-class HistoryPanel extends StatelessWidget {
+export 'blend_panel.dart';
+
+class HistoryPanel extends StatefulWidget {
   const HistoryPanel({super.key, required this.controller});
   final EditorSession controller;
-  EditorSession get c => controller;
   @override
-  Widget build(BuildContext context) {
-    final state = c.state;
-    int depth(String key) {
-      final v = state[key];
-      return v is num ? v.toInt() : 0;
-    }
+  State<HistoryPanel> createState() => _HistoryPanelState();
+}
 
-    final back = depth('undo'), forward = depth('redo');
-    Future<void> go(String op, int steps) async {
-      for (var i = 0; i < steps; i++) await c.command(op);
-    }
+class _HistoryPanelState extends State<HistoryPanel> {
+  bool _moving = false;
+  EditorSession get c => widget.controller;
+  int _depth(String key) => (c.state[key] as num? ?? 0).toInt();
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(EditorMetrics.s8),
-      child: Wrap(
-        spacing: EditorMetrics.s3,
-        runSpacing: EditorMetrics.s4,
-        children: [
-          for (var n = back; n >= 1; n--)
-            SizedBox(
-              width: EditorMetrics.s16,
-              height: EditorMetrics.s32,
-              child: Tooltip(
-                message: 'Back $n',
-                child: InkWell(
-                  onTap: panelCan(c, 'undo') ? () => go('undo', n) : null,
-                  child: ColoredBox(color: EditorTheme.raised),
-                ),
-              ),
-            ),
-          const SizedBox(
-            width: EditorMetrics.s4,
-            height: EditorMetrics.s32,
-            child: ColoredBox(color: EditorTheme.accent),
-          ),
-          for (var n = 1; n <= forward; n++)
-            SizedBox(
-              width: EditorMetrics.s16,
-              height: EditorMetrics.s32,
-              child: Tooltip(
-                message: 'Forward $n',
-                child: InkWell(
-                  onTap: panelCan(c, 'redo') ? () => go('redo', n) : null,
-                  child: ColoredBox(color: EditorTheme.hover),
-                ),
-              ),
-            ),
-          if (back + forward == 0)
-            const Text(
-              'No history',
-              style: TextStyle(
-                fontSize: EditorMetrics.font,
-                color: EditorTheme.muted,
-              ),
-            ),
-        ],
-      ),
-    );
+  Future<void> _go(int target) async {
+    if (_moving) return;
+    setState(() => _moving = true);
+    try {
+      final total = _depth('undo') + _depth('redo');
+      while (mounted && _depth('undo') != target) {
+        final before = _depth('undo');
+        final op = target < before ? 'undo' : 'redo';
+        if (!panelCan(c, op)) break;
+        await c.command(op);
+        if (_depth('undo') != before + (op == 'undo' ? -1 : 1) ||
+            _depth('undo') + _depth('redo') != total)
+          break;
+      }
+    } finally {
+      if (mounted) setState(() => _moving = false);
+    }
   }
-}
 
-class BlendPanel extends StatefulWidget {
-  const BlendPanel({super.key, required this.controller});
-  final EditorSession controller;
   @override
-  State<BlendPanel> createState() => BlendPanelState();
-}
+  void initState() {
+    super.initState();
+    c.refreshHistory();
+  }
 
-class BlendPanelState extends State<BlendPanel> {
-  Map<String, dynamic> _previews = {};
-  String _target = '';
-  bool _working = false;
-  EditorSession get controller => widget.controller;
-  static const modes = [
-    'Normal',
-    'Add',
-    'Multiply',
-    'Screen',
-    'Overlay',
-    'Darken',
-    'Lighten',
-    'ColorDodge',
-    'ColorBurn',
-    'HardLight',
-    'SoftLight',
-    'Difference',
-    'Exclusion',
-    'Hue',
-    'Saturation',
-    'Color',
-    'Luminosity',
-  ];
   @override
-  Widget build(BuildContext context) {
-    final layer = controller.activeLayer;
-    final source =
-        layer ?? (controller.layers.isEmpty ? null : controller.layers.first);
-    final livePreviews = panelMap(source?['blendPreviews']);
-    if (livePreviews.isNotEmpty) _previews = livePreviews;
-    if (_previews.isEmpty)
-      _previews = panelMap(controller.deskWork.value['blendPreviews']);
-    final target = jsonEncode(controller.selectedIds);
-    if (_target != target) {
-      _target = target;
-      _working = false;
-    }
-    final mode = layer != null && !_working
-        ? '${layer['blendMode'] ?? 'Normal'}'
-        : controller.deskWork.value['blend'] as String? ?? 'Normal';
-    final saved = List<String>.from(
-      controller.deskWork.value['blends'] as List? ?? [],
-    );
-    void choose(String value) => setState(() {
-      _working = true;
-      controller.storeDesk('blendPreviews', _previews);
-      controller.storeDesk('blend', value);
-    });
-    return ListView(
-      padding: const EdgeInsets.all(EditorMetrics.s6),
+  Widget build(BuildContext context) => DefaultTabController(
+    length: 3,
+    child: Column(
       children: [
-        Wrap(
-          spacing: EditorMetrics.s4,
-          children: [
-            panelButton(
-              'Load selection',
-              layer == null
-                  ? null
-                  : () => choose('${layer['blendMode'] ?? 'Normal'}'),
-            ),
-            panelButton(
-              'Apply',
-              layer == null || layer['kind'] == 'Camera'
-                  ? null
-                  : () => controller.command('setAttrs', {
-                      'layers': controller.selectedIds,
-                      'patch': {'blendMode': mode},
-                    }),
-            ),
-            panelButton(
-              'Save preset',
-              () => setState(() {
-                controller.storeDesk('blends', {...saved, mode}.toList());
-              }),
-            ),
+        TabBar(
+          labelPadding: const EdgeInsets.symmetric(
+            horizontal: EditorMetrics.s6,
+          ),
+          labelStyle: const TextStyle(fontSize: EditorMetrics.font),
+          indicatorColor: EditorTheme.accent,
+          onTap: (_) => c.refreshHistory(),
+          tabs: const [
+            Tab(text: 'Edits'),
+            Tab(text: 'Records'),
+            Tab(text: 'Checkpoints'),
           ],
         ),
-        const SizedBox(height: EditorMetrics.s5),
-        LayoutBuilder(
-          builder: (context, box) => Wrap(
-            spacing: EditorMetrics.s3,
-            runSpacing: EditorMetrics.s3,
+        Expanded(
+          child: TabBarView(
             children: [
-              for (final item in modes)
-                SizedBox(
-                  width: (box.maxWidth - 6) / 3,
-                  height: EditorMetrics.s44,
+              _edits(context),
+              HistoryRecords(controller: c, checkpoints: false),
+              HistoryRecords(controller: c, checkpoints: true),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+
+  Widget _edits(BuildContext context) => AnimatedBuilder(
+    animation: c.document,
+    builder: (context, _) {
+      final back = _depth('undo'), forward = _depth('redo');
+      final total = back + forward;
+      return Column(
+        children: [
+          EditorBar(
+            height: EditorMetrics.bar,
+            children: [
+              EditorIconButton(
+                tooltip: 'Undo',
+                constraints: EditorTheme.iconConstraints,
+                padding: EdgeInsets.zero,
+                iconSize: EditorMetrics.s16,
+                onPressed: !_moving && back > 0 && panelCan(c, 'undo')
+                    ? () => _go(back - 1)
+                    : null,
+                icon: const Icon(Icons.undo),
+              ),
+              EditorIconButton(
+                tooltip: 'Redo',
+                constraints: EditorTheme.iconConstraints,
+                padding: EdgeInsets.zero,
+                iconSize: EditorMetrics.s16,
+                onPressed: !_moving && forward > 0 && panelCan(c, 'redo')
+                    ? () => _go(back + 1)
+                    : null,
+                icon: const Icon(Icons.redo),
+              ),
+              const Spacer(),
+              Text(
+                '$back / $total',
+                style: const TextStyle(
+                  fontSize: EditorMetrics.font,
+                  color: EditorTheme.muted,
+                ),
+              ),
+              const SizedBox(width: EditorMetrics.s8),
+            ],
+          ),
+          Expanded(
+            child: ListView.builder(
+              itemExtent: EditorMetrics.bar,
+              itemCount: total + 1,
+              itemBuilder: (context, index) {
+                final step = total - index;
+                final current = step == back;
+                final future = step > back;
+                final label = step == 0 ? 'History start' : 'Edit $step';
+                final color = current
+                    ? EditorTheme.accent
+                    : future
+                    ? EditorTheme.disabledInk
+                    : EditorTheme.ink;
+                final enabled =
+                    !_moving &&
+                    !current &&
+                    panelCan(c, future ? 'redo' : 'undo');
+                return Semantics(
+                  selected: current,
                   child: Tooltip(
-                    message: item,
-                    child: InkWell(
-                      onTap: () => choose(item),
-                      child: Column(
-                        children: [
-                          Expanded(
-                            child: Row(
-                              children: [
-                                for (final rgba
-                                    in (_previews[item] as List? ?? const []))
-                                  Expanded(
-                                    child: ColoredBox(
-                                      color: Color.fromARGB(
-                                        255,
-                                        ((rgba[0] as num).clamp(0, 1) * 255)
-                                            .round(),
-                                        ((rgba[1] as num).clamp(0, 1) * 255)
-                                            .round(),
-                                        ((rgba[2] as num).clamp(0, 1) * 255)
-                                            .round(),
+                    message: current
+                        ? '$label · Current state'
+                        : '${future ? 'Redo' : 'Undo'} ${(step - back).abs()} steps to $label',
+                    child: Material(
+                      color: current ? EditorTheme.raised : Colors.transparent,
+                      child: InkWell(
+                        onTap: enabled ? () => _go(step) : null,
+                        hoverColor: EditorTheme.hover,
+                        child: Row(
+                          children: [
+                            SizedBox(
+                              width: EditorMetrics.s32,
+                              child: Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  Column(
+                                    children: [
+                                      Expanded(
+                                        child: Container(
+                                          width: EditorMetrics.s2,
+                                          color: index == 0
+                                              ? Colors.transparent
+                                              : future
+                                              ? EditorTheme.border
+                                              : EditorTheme.accent,
+                                        ),
                                       ),
-                                      child: const SizedBox.expand(),
+                                      Expanded(
+                                        child: Container(
+                                          width: EditorMetrics.s2,
+                                          color: step == 0
+                                              ? Colors.transparent
+                                              : future
+                                              ? EditorTheme.border
+                                              : EditorTheme.accent,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  Container(
+                                    width: EditorMetrics.s12,
+                                    height: EditorMetrics.s12,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: current
+                                          ? EditorTheme.accent
+                                          : EditorTheme.panel,
+                                      border: Border.all(
+                                        color: current
+                                            ? EditorTheme.accent
+                                            : color,
+                                        width: EditorMetrics.s2,
+                                      ),
                                     ),
                                   ),
-                              ],
+                                ],
+                              ),
                             ),
-                          ),
-                          panelButton(
-                            item,
-                            () => choose(item),
-                            selected: item == mode,
-                          ),
-                        ],
+                            Expanded(
+                              child: Text(
+                                label,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: EditorMetrics.font,
+                                  color: color,
+                                ),
+                              ),
+                            ),
+                            if (current)
+                              const Icon(
+                                Icons.arrow_left,
+                                size: EditorMetrics.s16,
+                                color: EditorTheme.accent,
+                              ),
+                            if (future)
+                              const Icon(
+                                Icons.redo,
+                                size: EditorMetrics.s12,
+                                color: EditorTheme.disabledInk,
+                              ),
+                            const SizedBox(width: EditorMetrics.s8),
+                          ],
+                        ),
                       ),
                     ),
                   ),
-                ),
-            ],
+                );
+              },
+            ),
           ),
-        ),
-        if (saved.isNotEmpty) const SizedBox(height: EditorMetrics.s6),
-        for (final item in saved)
-          Row(
-            children: [
-              Expanded(
-                child: panelButton(
-                  item,
-                  () => choose(item),
-                  selected: item == mode,
-                ),
-              ),
-              panelButton(
-                '×',
-                () => setState(() {
-                  controller.storeDesk('blends', [...saved]..remove(item));
-                }),
-              ),
-            ],
-          ),
-      ],
-    );
-  }
+        ],
+      );
+    },
+  );
 }

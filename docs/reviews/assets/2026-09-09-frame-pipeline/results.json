@@ -1,0 +1,747 @@
+{
+  "pid": 68378,
+  "document_sha256": "43f614f7d82612638b46bbd6e19645c2008508d28350e3ede063c17145f1d785",
+  "library_sha256": "b077143d403db7ad37539407e948a4aa96fa798ddd66271a351294b97d363873",
+  "conditions": "Debug native library, fresh IOSurface per render, no Flutter/CVPixelBuffer/presentation, 5 warmup +20 samples for frames, no saves",
+  "original": {
+    "effects": [
+      {
+        "layer": 5,
+        "id": 0,
+        "plugin": "motolii.glass"
+      },
+      {
+        "layer": 4,
+        "id": 0,
+        "plugin": "motolii.glass"
+      },
+      {
+        "layer": 3,
+        "id": 0,
+        "plugin": "motolii.glass"
+      }
+    ],
+    "removed": [],
+    "layers": 15,
+    "width": 1600,
+    "height": 1000,
+    "paused_status": {
+      "native_request_ms": {
+        "median": 12.77425,
+        "p95": 20.106792,
+        "min": 10.490166,
+        "n": 30
+      },
+      "reply_copy_ms": {
+        "median": 0.0326875,
+        "p95": 0.051542,
+        "min": 0.01625,
+        "n": 30
+      },
+      "python_decode_ms": {
+        "median": 0.823833,
+        "p95": 1.33275,
+        "min": 0.707125,
+        "n": 30
+      },
+      "bytes": {
+        "median": 286993.0,
+        "p95": 286993,
+        "min": 286993,
+        "n": 30
+      }
+    },
+    "playing_status": {
+      "native_request_ms": {
+        "median": 4.188646,
+        "p95": 6.00275,
+        "min": 3.792416,
+        "n": 30
+      },
+      "reply_copy_ms": {
+        "median": 0.0065205,
+        "p95": 0.01225,
+        "min": 0.003167,
+        "n": 30
+      },
+      "python_decode_ms": {
+        "median": 0.091375,
+        "p95": 0.193167,
+        "min": 0.08225,
+        "n": 30
+      },
+      "bytes": {
+        "median": 12488.0,
+        "p95": 12488,
+        "min": 12488,
+        "n": 30
+      }
+    },
+    "render_info": {
+      "native_request_ms": {
+        "median": 0.004833,
+        "p95": 0.006417,
+        "min": 0.004542,
+        "n": 30
+      },
+      "reply_copy_ms": {
+        "median": 0.0004165,
+        "p95": 0.000667,
+        "min": 0.000375,
+        "n": 30
+      },
+      "python_decode_ms": {
+        "median": 0.00175,
+        "p95": 0.002666,
+        "min": 0.001625,
+        "n": 30
+      },
+      "bytes": {
+        "median": 28.0,
+        "p95": 28,
+        "min": 28,
+        "n": 30
+      }
+    },
+    "selection_request": {
+      "native_request_ms": {
+        "median": 11.515854000000001,
+        "p95": 13.802334,
+        "min": 10.722792,
+        "n": 30
+      },
+      "reply_copy_ms": {
+        "median": 0.019167,
+        "p95": 0.035083,
+        "min": 0.015583,
+        "n": 30
+      },
+      "python_decode_ms": {
+        "median": 0.812417,
+        "p95": 1.088125,
+        "min": 0.7735,
+        "n": 30
+      },
+      "bytes": {
+        "median": 287092.0,
+        "p95": 287239,
+        "min": 287008,
+        "n": 30
+      }
+    },
+    "selection_render_count_change": 0,
+    "same_frame_paused": {
+      "info_and_surface_ms": {
+        "median": 0.104334,
+        "p95": 0.264875,
+        "min": 0.095,
+        "n": 20
+      },
+      "native_render_ms": {
+        "median": 21.768499499999997,
+        "p95": 28.304875,
+        "min": 12.708375,
+        "n": 20
+      },
+      "post_status_ms": {
+        "median": 13.1885835,
+        "p95": 17.44625,
+        "min": 12.333833,
+        "n": 20
+      },
+      "combined_ms": {
+        "median": 34.9271245,
+        "p95": 42.446208,
+        "min": 26.359875,
+        "n": 20
+      },
+      "reported_render_ms": {
+        "median": 21.746812499999997,
+        "p95": 28.279417000000002,
+        "min": 12.684459,
+        "n": 20
+      }
+    },
+    "same_frame_playing": {
+      "info_and_surface_ms": {
+        "median": 0.1243545,
+        "p95": 0.310125,
+        "min": 0.0795,
+        "n": 20
+      },
+      "native_render_ms": {
+        "median": 16.717125,
+        "p95": 30.509125,
+        "min": 13.119,
+        "n": 20
+      },
+      "post_status_ms": {
+        "median": 5.635229000000001,
+        "p95": 16.130666,
+        "min": 4.487583,
+        "n": 20
+      },
+      "combined_ms": {
+        "median": 23.4479585,
+        "p95": 36.698709,
+        "min": 17.779917,
+        "n": 20
+      },
+      "reported_render_ms": {
+        "median": 16.676374499999998,
+        "p95": 30.476833,
+        "min": 13.106083,
+        "n": 20
+      }
+    },
+    "moving_frames_paused": {
+      "info_and_surface_ms": {
+        "median": 0.1072295,
+        "p95": 0.211167,
+        "min": 0.08275,
+        "n": 20
+      },
+      "native_render_ms": {
+        "median": 22.457312,
+        "p95": 38.892708,
+        "min": 21.076292,
+        "n": 20
+      },
+      "post_status_ms": {
+        "median": 12.719604,
+        "p95": 16.791708,
+        "min": 11.794917,
+        "n": 20
+      },
+      "combined_ms": {
+        "median": 35.180146,
+        "p95": 54.338541,
+        "min": 33.263375,
+        "n": 20
+      },
+      "reported_render_ms": {
+        "median": 22.4367295,
+        "p95": 38.856375,
+        "min": 21.053791,
+        "n": 20
+      }
+    },
+    "moving_frames_playing": {
+      "info_and_surface_ms": {
+        "median": 0.1188125,
+        "p95": 0.207375,
+        "min": 0.082542,
+        "n": 20
+      },
+      "native_render_ms": {
+        "median": 21.807604,
+        "p95": 24.797667,
+        "min": 20.768833,
+        "n": 20
+      },
+      "post_status_ms": {
+        "median": 4.978813000000001,
+        "p95": 8.118166,
+        "min": 4.359958,
+        "n": 20
+      },
+      "combined_ms": {
+        "median": 26.895708,
+        "p95": 31.993083,
+        "min": 25.489708,
+        "n": 20
+      },
+      "reported_render_ms": {
+        "median": 21.778166499999998,
+        "p95": 24.761458,
+        "min": 20.741459,
+        "n": 20
+      }
+    }
+  },
+  "without_glass": {
+    "effects": [
+      {
+        "layer": 5,
+        "id": 0,
+        "plugin": "motolii.glass"
+      },
+      {
+        "layer": 4,
+        "id": 0,
+        "plugin": "motolii.glass"
+      },
+      {
+        "layer": 3,
+        "id": 0,
+        "plugin": "motolii.glass"
+      }
+    ],
+    "removed": [
+      {
+        "layer": 5,
+        "id": 0,
+        "plugin": "motolii.glass"
+      },
+      {
+        "layer": 4,
+        "id": 0,
+        "plugin": "motolii.glass"
+      },
+      {
+        "layer": 3,
+        "id": 0,
+        "plugin": "motolii.glass"
+      }
+    ],
+    "layers": 15,
+    "width": 1600,
+    "height": 1000,
+    "paused_status": {
+      "native_request_ms": {
+        "median": 9.8500005,
+        "p95": 10.44425,
+        "min": 9.482625,
+        "n": 30
+      },
+      "reply_copy_ms": {
+        "median": 0.0196665,
+        "p95": 0.031875,
+        "min": 0.010709,
+        "n": 30
+      },
+      "python_decode_ms": {
+        "median": 0.7355625,
+        "p95": 0.917708,
+        "min": 0.677042,
+        "n": 30
+      },
+      "bytes": {
+        "median": 284531.0,
+        "p95": 284531,
+        "min": 284531,
+        "n": 30
+      }
+    },
+    "playing_status": {
+      "native_request_ms": {
+        "median": 3.5684165,
+        "p95": 4.237834,
+        "min": 3.48525,
+        "n": 30
+      },
+      "reply_copy_ms": {
+        "median": 0.0022085,
+        "p95": 0.005375,
+        "min": 0.001083,
+        "n": 30
+      },
+      "python_decode_ms": {
+        "median": 0.072958,
+        "p95": 0.086708,
+        "min": 0.06475,
+        "n": 30
+      },
+      "bytes": {
+        "median": 11668.0,
+        "p95": 11668,
+        "min": 11668,
+        "n": 30
+      }
+    },
+    "render_info": {
+      "native_request_ms": {
+        "median": 0.0049375,
+        "p95": 0.006625,
+        "min": 0.004625,
+        "n": 30
+      },
+      "reply_copy_ms": {
+        "median": 0.000417,
+        "p95": 0.000625,
+        "min": 0.000334,
+        "n": 30
+      },
+      "python_decode_ms": {
+        "median": 0.001791,
+        "p95": 0.00275,
+        "min": 0.001708,
+        "n": 30
+      },
+      "bytes": {
+        "median": 28.0,
+        "p95": 28,
+        "min": 28,
+        "n": 30
+      }
+    },
+    "selection_request": {
+      "native_request_ms": {
+        "median": 10.0359795,
+        "p95": 10.722458,
+        "min": 9.645417,
+        "n": 30
+      },
+      "reply_copy_ms": {
+        "median": 0.016646,
+        "p95": 0.031916,
+        "min": 0.0105,
+        "n": 30
+      },
+      "python_decode_ms": {
+        "median": 0.7677704999999999,
+        "p95": 1.165916,
+        "min": 0.724375,
+        "n": 30
+      },
+      "bytes": {
+        "median": 284627.0,
+        "p95": 284774,
+        "min": 284543,
+        "n": 30
+      }
+    },
+    "selection_render_count_change": 0,
+    "same_frame_paused": {
+      "info_and_surface_ms": {
+        "median": 0.11241699999999999,
+        "p95": 0.147792,
+        "min": 0.076167,
+        "n": 20
+      },
+      "native_render_ms": {
+        "median": 20.056542,
+        "p95": 29.486666,
+        "min": 11.946792,
+        "n": 20
+      },
+      "post_status_ms": {
+        "median": 11.5469165,
+        "p95": 13.325167,
+        "min": 11.135542,
+        "n": 20
+      },
+      "combined_ms": {
+        "median": 31.5195415,
+        "p95": 40.7635,
+        "min": 24.148583,
+        "n": 20
+      },
+      "reported_render_ms": {
+        "median": 20.0339375,
+        "p95": 29.455083,
+        "min": 11.921875,
+        "n": 20
+      }
+    },
+    "same_frame_playing": {
+      "info_and_surface_ms": {
+        "median": 0.077854,
+        "p95": 0.112833,
+        "min": 0.05775,
+        "n": 20
+      },
+      "native_render_ms": {
+        "median": 13.703729,
+        "p95": 18.000666,
+        "min": 12.863584,
+        "n": 20
+      },
+      "post_status_ms": {
+        "median": 4.106292,
+        "p95": 4.342416,
+        "min": 3.992958,
+        "n": 20
+      },
+      "combined_ms": {
+        "median": 17.857125,
+        "p95": 22.077208,
+        "min": 16.966625,
+        "n": 20
+      },
+      "reported_render_ms": {
+        "median": 13.693125000000002,
+        "p95": 17.975458,
+        "min": 12.850875,
+        "n": 20
+      }
+    },
+    "moving_frames_paused": {
+      "info_and_surface_ms": {
+        "median": 0.09939600000000001,
+        "p95": 0.396625,
+        "min": 0.085,
+        "n": 20
+      },
+      "native_render_ms": {
+        "median": 20.9704165,
+        "p95": 26.547541,
+        "min": 16.8765,
+        "n": 20
+      },
+      "post_status_ms": {
+        "median": 11.5067085,
+        "p95": 14.112459,
+        "min": 11.145625,
+        "n": 20
+      },
+      "combined_ms": {
+        "median": 32.6336455,
+        "p95": 40.760542,
+        "min": 28.175833,
+        "n": 20
+      },
+      "reported_render_ms": {
+        "median": 20.950812499999998,
+        "p95": 26.517374999999998,
+        "min": 16.858667,
+        "n": 20
+      }
+    },
+    "moving_frames_playing": {
+      "info_and_surface_ms": {
+        "median": 0.1063335,
+        "p95": 0.434417,
+        "min": 0.084875,
+        "n": 20
+      },
+      "native_render_ms": {
+        "median": 15.2785005,
+        "p95": 23.128708,
+        "min": 11.109542,
+        "n": 20
+      },
+      "post_status_ms": {
+        "median": 4.568938,
+        "p95": 6.745,
+        "min": 4.170709,
+        "n": 20
+      },
+      "combined_ms": {
+        "median": 20.8243545,
+        "p95": 27.546583,
+        "min": 15.996334,
+        "n": 20
+      },
+      "reported_render_ms": {
+        "median": 15.250979,
+        "p95": 23.111290999999998,
+        "min": 11.069749999999999,
+        "n": 20
+      }
+    }
+  },
+  "blank": {
+    "effects": [],
+    "removed": [],
+    "layers": 0,
+    "width": 1920,
+    "height": 1080,
+    "paused_status": {
+      "native_request_ms": {
+        "median": 0.6241669999999999,
+        "p95": 0.703709,
+        "min": 0.593417,
+        "n": 30
+      },
+      "reply_copy_ms": {
+        "median": 0.0068745,
+        "p95": 0.015375,
+        "min": 0.006292,
+        "n": 30
+      },
+      "python_decode_ms": {
+        "median": 0.35375,
+        "p95": 0.397667,
+        "min": 0.323542,
+        "n": 30
+      },
+      "bytes": {
+        "median": 188532.0,
+        "p95": 188532,
+        "min": 188532,
+        "n": 30
+      }
+    },
+    "playing_status": {
+      "native_request_ms": {
+        "median": 0.017812,
+        "p95": 0.022958,
+        "min": 0.017292,
+        "n": 30
+      },
+      "reply_copy_ms": {
+        "median": 0.0005,
+        "p95": 0.000584,
+        "min": 0.000416,
+        "n": 30
+      },
+      "python_decode_ms": {
+        "median": 0.0034795,
+        "p95": 0.003708,
+        "min": 0.003375,
+        "n": 30
+      },
+      "bytes": {
+        "median": 387.0,
+        "p95": 387,
+        "min": 387,
+        "n": 30
+      }
+    },
+    "render_info": {
+      "native_request_ms": {
+        "median": 0.004875,
+        "p95": 0.007125,
+        "min": 0.004666,
+        "n": 30
+      },
+      "reply_copy_ms": {
+        "median": 0.000417,
+        "p95": 0.000542,
+        "min": 0.000333,
+        "n": 30
+      },
+      "python_decode_ms": {
+        "median": 0.001708,
+        "p95": 0.002583,
+        "min": 0.001625,
+        "n": 30
+      },
+      "bytes": {
+        "median": 28.0,
+        "p95": 28,
+        "min": 28,
+        "n": 30
+      }
+    },
+    "same_frame_paused": {
+      "info_and_surface_ms": {
+        "median": 0.058417,
+        "p95": 0.08425,
+        "min": 0.035583,
+        "n": 20
+      },
+      "native_render_ms": {
+        "median": 1.455666,
+        "p95": 2.843584,
+        "min": 1.376084,
+        "n": 20
+      },
+      "post_status_ms": {
+        "median": 1.2376665,
+        "p95": 1.679291,
+        "min": 1.048708,
+        "n": 20
+      },
+      "combined_ms": {
+        "median": 2.8205834999999997,
+        "p95": 4.596958,
+        "min": 2.505417,
+        "n": 20
+      },
+      "reported_render_ms": {
+        "median": 1.448979,
+        "p95": 2.825708,
+        "min": 1.371708,
+        "n": 20
+      }
+    },
+    "same_frame_playing": {
+      "info_and_surface_ms": {
+        "median": 0.0403955,
+        "p95": 0.072667,
+        "min": 0.032834,
+        "n": 20
+      },
+      "native_render_ms": {
+        "median": 1.3969170000000002,
+        "p95": 2.711875,
+        "min": 1.210375,
+        "n": 20
+      },
+      "post_status_ms": {
+        "median": 0.0355415,
+        "p95": 0.099708,
+        "min": 0.028125,
+        "n": 20
+      },
+      "combined_ms": {
+        "median": 1.4715625,
+        "p95": 2.800541,
+        "min": 1.288667,
+        "n": 20
+      },
+      "reported_render_ms": {
+        "median": 1.3911875,
+        "p95": 2.698792,
+        "min": 1.203875,
+        "n": 20
+      }
+    },
+    "moving_frames_paused": {
+      "info_and_surface_ms": {
+        "median": 0.0484585,
+        "p95": 0.11425,
+        "min": 0.038375,
+        "n": 20
+      },
+      "native_render_ms": {
+        "median": 1.431396,
+        "p95": 2.817792,
+        "min": 1.252,
+        "n": 20
+      },
+      "post_status_ms": {
+        "median": 1.2617500000000001,
+        "p95": 1.994708,
+        "min": 1.06375,
+        "n": 20
+      },
+      "combined_ms": {
+        "median": 2.712979,
+        "p95": 4.23,
+        "min": 2.545,
+        "n": 20
+      },
+      "reported_render_ms": {
+        "median": 1.4249999999999998,
+        "p95": 2.8045829999999996,
+        "min": 1.2463330000000001,
+        "n": 20
+      }
+    },
+    "moving_frames_playing": {
+      "info_and_surface_ms": {
+        "median": 0.042832999999999996,
+        "p95": 0.198708,
+        "min": 0.032208,
+        "n": 20
+      },
+      "native_render_ms": {
+        "median": 1.4080835,
+        "p95": 2.64075,
+        "min": 1.375875,
+        "n": 20
+      },
+      "post_status_ms": {
+        "median": 0.039083,
+        "p95": 0.081708,
+        "min": 0.02975,
+        "n": 20
+      },
+      "combined_ms": {
+        "median": 1.4913539999999998,
+        "p95": 2.730292,
+        "min": 1.442292,
+        "n": 20
+      },
+      "reported_render_ms": {
+        "median": 1.402771,
+        "p95": 2.632084,
+        "min": 1.371583,
+        "n": 20
+      }
+    }
+  }
+}

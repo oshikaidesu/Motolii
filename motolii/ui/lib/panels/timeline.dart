@@ -9,6 +9,7 @@ import '../session/editor_session.dart';
 import '../foundation/theme.dart';
 import '../input/viewport_motion.dart';
 import '../foundation/metrics.dart';
+import '../foundation/panel_controls.dart';
 
 part 'timeline_layout.dart';
 
@@ -947,8 +948,31 @@ class _TimelinePanelState extends State<TimelinePanel> {
                                   tooltip: 'Play / Pause · Space',
                                 ),
                               ),
-                              EditorButton('−', () => zoom(1 / 1.25)),
-                              EditorButton('+', () => zoom(1.25)),
+                              EditorButton(
+                                '−',
+                                () => zoom(
+                                  ((pixelsPerFrame / 4 * 100).round() - 1)
+                                          .clamp(3, 1000) *
+                                      .04 /
+                                      pixelsPerFrame,
+                                ),
+                              ),
+                              EditorPercentField(
+                                value: pixelsPerFrame / 4 * 100,
+                                min: 3,
+                                max: 1000,
+                                label: 'Timeline zoom',
+                                onChanged: (v) =>
+                                    zoom(v * .04 / pixelsPerFrame),
+                              ),
+                              EditorButton(
+                                '+',
+                                () => zoom(
+                                  ((pixelsPerFrame / 4 * 100).round() + 1) *
+                                      .04 /
+                                      pixelsPerFrame,
+                                ),
+                              ),
                               EditorButton('Fit', () {
                                 setState(
                                   () => pixelsPerFrame = math.max(

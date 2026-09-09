@@ -771,6 +771,22 @@ mod clipping_contract {
     }
 
     #[test]
+    fn clipping_cache_preserves_equal_order_and_preview_isolation() {
+        let mut doc = blank_project();
+        let base = add(&mut doc, 1, 0, None, false);
+        let tied = add(&mut doc, 2, 0, None, false);
+        let top = add(&mut doc, 3, 10, None, true);
+        assert_eq!(doc.view().clipping_base(tied).unwrap(), None);
+        assert_eq!(doc.view().clipping_base(top).unwrap(), Some(tied));
+        let owner = doc.begin_preview();
+        doc.preview_edits(owner, &[Intent::SetAttrs { layer: tied, patch: LayerAttrsPatch { clip_to_below: Some(true), ..Default::default() } }]).unwrap();
+        assert_eq!(doc.view().clipping_base(top).unwrap(), Some(base));
+        assert_eq!(doc.view().without_transients().clipping_base(top).unwrap(), Some(tied));
+        doc.clear_preview_edits(owner);
+        assert_eq!(doc.view().clipping_base(top).unwrap(), Some(tied));
+    }
+
+    #[test]
     fn clipping_stack_retargets_on_reorder_without_crossing_parent_boundaries() {
         let mut doc = blank_project();
         let base = add(&mut doc, 1, 0, None, false);

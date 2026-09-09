@@ -222,6 +222,7 @@ impl Default for TextAlignmentOptions {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TextRun {
+    /// Number of extended grapheme clusters (UAX #29).
     pub len: u32,
     pub style: TextStyleId,
 }

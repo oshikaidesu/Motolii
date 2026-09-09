@@ -7,6 +7,13 @@ import '../bridge/protocol.dart';
 
 class EditorSession {
   static const channel = NativeBridge.channel;
+  static void reportError(Object error, StackTrace? stack) {
+    NativeBridge().invoke('historyRecord', {
+      'title': 'Flutter error',
+      'detail': '$error\n${stack ?? ""}',
+    }).catchError((Object _) => null);
+  }
+
   final _bridge = NativeBridge();
   final document = ValueNotifier<Map<String, dynamic>>({});
   Map<String, dynamic> get state => document.value;
@@ -29,6 +36,8 @@ class EditorSession {
     editingFocus.value = {'layer': layer, 'property': property};
   }
 
+  final textStyleTarget = ValueNotifier<Map<String, dynamic>?>(null);
+
   final focusProperty = ValueNotifier<String?>(null);
 
   /// An anchor the pointer hovers in the Inspector, as a fraction of the
@@ -40,6 +49,39 @@ class EditorSession {
   final playing = ValueNotifier<bool>(false);
   final busy = ValueNotifier<bool>(false);
   final error = ValueNotifier<String?>(null);
+  final history = ValueNotifier<Map<String, dynamic>>({});
+  Future<void> refreshHistory() async {
+    try {
+      final next = map(await native('history'));
+      if (!_disposed) history.value = next;
+    } catch (e) {
+      if (!_disposed) history.value = {...history.value, 'failure': '$e'};
+    }
+  }
+
+  Future<void> createCheckpoint(String name) async {
+    await native('flushEditors');
+    await _serial(() async {
+      final next = map(await native('checkpoint', {'name': name}));
+      if (!_disposed) history.value = next;
+    });
+  }
+
+  Future<void> restoreCheckpoint(String id) async {
+    await native('flushEditors');
+    _schedulePause(renderFinal: false);
+    await _serial(() async {
+      final reply = map(await native('restoreCheckpoint', {'id': id}));
+      _accept(reply);
+      if (!_disposed) {
+        history.value = map(reply['history']);
+        rendered.value = {};
+      }
+      await _render();
+    });
+    await refreshHistory();
+  }
+
 
   /// 直前の取り込みで棚に入った asset の id。Browser が Media を開いて選ぶ。
   final importedAssets = ValueNotifier<List<String>>([]);
@@ -81,6 +123,7 @@ class EditorSession {
     final r = rendered.value;
     return r.isNotEmpty &&
         r['frame'] == frame.value &&
+        (r['contentRevision'] == null || state['contentRevision'] == null || r['contentRevision'] == state['contentRevision']) &&
         (r['documentRevision'] == null ||
             r['documentRevision'] == state['documentRevision']);
   }
@@ -165,12 +208,17 @@ class EditorSession {
     if (envelope['frameReady'] == true) {
       if (next['frame'] is num) frame.value = (next['frame'] as num).toInt();
       rendered.value = next;
+    } else if (next['needsRender'] == false &&
+        next['contentRevision'] != null &&
+        next['contentRevision'] == rendered.value['contentRevision'] &&
+        next['frame'] == rendered.value['frame']) {
+      rendered.value = {...rendered.value, ...next};
     }
     if (next['playing'] is bool) {
       playing.value = next['playing'] as bool;
       if (!playing.value && _ticker != null) _cancelCadence();
     }
-    if (notify) document.value = {...state, ...next};
+    if (notify || next['layers'] is List) document.value = {...state, ...next};
   }
 
   Future<void> _serial(
@@ -199,6 +247,13 @@ class EditorSession {
   }
 
   EditorSession() {
+    error.addListener(() {
+      final message = error.value;
+      if (message != null && message.isNotEmpty && !_disposed) {
+        native('historyRecord', {'title': 'Editor error', 'detail': message})
+            .catchError((Object _) => null);
+      }
+    });
     _bridge.listen((call) async {
       if (_disposed) return call.method == 'confirmClose' ? true : null;
       if (call.method == 'confirmClose') {
@@ -290,11 +345,15 @@ class EditorSession {
   Future<dynamic> _request(
     DocumentOperation operation, [
     Map<String, dynamic> args = const {},
-  ]) => _bridge.request(operation, args);
+  ]) => _bridge.request(operation, args, {
+    'knownSnapshotId': state['snapshotId'],
+    'knownReferenceId': state['referenceId'],
+    'deferSnapshot': operation != DocumentOperation.play && operation != DocumentOperation.pause,
+  });
   Future<void> _render({bool notify = true, bool playback = false}) async {
     final response = await native(
       'render',
-      playback ? {'playing': true} : const {},
+      {'playing': playback, 'knownSnapshotId': state['snapshotId'], 'knownReferenceId': state['referenceId']},
     );
     _accept(response, notify: notify);
   }
@@ -335,11 +394,14 @@ class EditorSession {
     return _serial(() async {
       if (requiresPause && playing.value)
         throw StateError('Playback did not stop before $op');
-      _accept(await _request(operation, args));
+      final response = map(await _request(operation, args));
+      final needsRender = response['needsRender'] as bool? ??
+          operation.requiresRender;
+      if (response.length != 1 || !needsRender) _accept(response);
       if (operation == DocumentOperation.select) {
         editingFocus.value = {'selection': true};
       }
-      if (operation.requiresRender) await _render();
+      if (needsRender) await _render();
     });
   }
 
@@ -501,6 +563,7 @@ class EditorSession {
     playing.dispose();
     busy.dispose();
     error.dispose();
+    history.dispose();
     importedAssets.dispose();
     visibleFrames.dispose();
     deskWork.dispose();
@@ -510,6 +573,7 @@ class EditorSession {
     panePlaces.dispose();
     anchorPreview.dispose();
     browserTab.dispose();
+    textStyleTarget.dispose();
     focusProperty.dispose();
     editingFocus.dispose();
     keyedOnly.dispose();

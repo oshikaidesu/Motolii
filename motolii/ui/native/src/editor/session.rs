@@ -15,6 +15,7 @@ pub(crate) enum ColorSlot {
     ShapeFill { layer: LayerId, path: Vec<usize> },
     /// 2色gradientの端。`end=false` が最小offset、`end=true` が最大offset。
     /// VecのindexをUIへ漏らさないので、stopの並び順が違う文書でも同じ端を指せる。
+    ShapeGradientPoint { layer: LayerId, path: Vec<usize>, index: usize },
     ShapeGradientStop {
         layer: LayerId,
         path: Vec<usize>,
@@ -28,6 +29,7 @@ impl ColorSlot {
             Self::TextFill { layer, .. }
             | Self::TextStroke { layer, .. }
             | Self::ShapeFill { layer, .. }
+            | Self::ShapeGradientPoint { layer, .. }
             | Self::ShapeGradientStop { layer, .. } => *layer,
         }
     }
@@ -35,7 +37,7 @@ impl ColorSlot {
     pub(crate) fn is_shape_fill(&self) -> bool {
         matches!(
             self,
-            Self::ShapeFill { .. } | Self::ShapeGradientStop { .. }
+            Self::ShapeFill { .. } | Self::ShapeGradientStop { .. } | Self::ShapeGradientPoint { .. }
         )
     }
 }

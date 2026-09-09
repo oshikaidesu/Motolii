@@ -126,10 +126,10 @@ private final class ProbeRuntime {
     return reply
   }
 
-  func status() throws -> [String: Any] { try request("{\"op\":\"status\"}") }
+  func status() throws -> [String: Any] { try request("{\"op\":\"status\",\"bootstrap\":true}") }
 
-  func render() throws -> (CVPixelBuffer, [String: Any], Int) {
-    let state = try status()
+  func render(known: Any? = nil, references: Any? = nil) throws -> (CVPixelBuffer, [String: Any], Int) {
+    let state = try request("{\"op\":\"renderInfo\"}")
     guard let width = (state["width"] as? NSNumber)?.intValue,
           let height = (state["height"] as? NSNumber)?.intValue,
           width > 0, height > 0, width <= 16384, height <= 16384 else {
@@ -155,7 +155,11 @@ private final class ProbeRuntime {
     let code = renderFunction(context, IOSurfaceGetID(surface))
     guard code == 0 else { throw ProbeFailure.message("Rust render failed: \(code)") }
     rendered += 1
-    return (buffer, try status(), rendered)
+    var query: [String: Any] = ["op": "status"]
+    if let known { query["knownSnapshotId"] = known }
+    if let references { query["knownReferenceId"] = references }
+    let data = try JSONSerialization.data(withJSONObject: query)
+    return (buffer, try request(String(decoding: data, as: UTF8.self)), rendered)
   }
 
   func close() {
@@ -218,12 +222,31 @@ final class ProbeSession {
   fileprivate var latest: CVPixelBuffer?
   fileprivate var state: [String: Any] = [:]
   fileprivate var windows: [String: PanelFlutterWindow] = [:]
+  private var historyStore: HistoryStore?
+  private var historyFailure: String?
+  fileprivate func history() throws -> HistoryStore {
+    if let historyStore { return historyStore }
+    let support = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+    let store = try HistoryStore(directory: support.appendingPathComponent("MotoliiStage5/History", isDirectory: true),
+      reportsDirectory: FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs/DiagnosticReports", isDirectory: true))
+    historyStore = store
+    return store
+  }
+  fileprivate func record(_ kind: String, _ title: String, _ detail: String = "") {
+    do { try history().record(kind, title, detail); historyFailure = nil }
+    catch { historyFailure = String(describing: error) }
+  }
+  fileprivate func historySnapshot() throws -> [String: Any] {
+    var snapshot = try history().snapshot()
+    if let historyFailure { snapshot["failure"] = historyFailure }
+    return snapshot
+  }
   private var confirming = false
   var terminationApproved = false
 
   fileprivate func broadcast(_ state: [String: Any], buffer: CVPixelBuffer? = nil, origin: ProbeHost? = nil, frameOnly: Bool = false) {
     precondition(Thread.isMainThread)
-    self.state = state
+    self.state.merge(state) { _, next in next }
     if let buffer { latest = buffer }
     for host in hosts.allObjects where !host.closed {
       do {
@@ -283,6 +306,7 @@ final class ProbeSession {
     state = [:]
     worker.async {
       self.runtime.close()
+      do { try self.historyStore?.close() } catch { NSLog("History close: %@", String(describing: error)) }
       DispatchQueue.main.async {
         for window in Array(self.windows.values) { window.close() }
         completion()
@@ -397,6 +421,29 @@ final class ProbeHost: NSObject {
     precondition(Thread.isMainThread)
     let args = call.arguments as? [String: Any] ?? [:]
     switch call.method {
+    case "history", "historyRecord", "historyReport", "checkpoint", "restoreCheckpoint":
+      perform(result, work: { () throws -> [String: Any] in
+        let history = try self.session.history()
+        switch call.method {
+        case "historyRecord":
+          try history.record("error", args["title"] as? String ?? "Flutter error", args["detail"] as? String ?? "")
+        case "historyReport":
+          return ["detail": try history.report(args["name"] as? String ?? "")]
+        case "checkpoint":
+          try history.checkpoint(args["name"] as? String ?? "", run: self.session.runtime.request)
+        case "restoreCheckpoint":
+          let state = try history.restore(args["id"] as? String ?? "", run: self.session.runtime.request)
+          return ["status": state, "history": try self.session.historySnapshot()]
+        default: break
+        }
+        return try self.session.historySnapshot()
+      }) { value in
+        if let status = value["status"] as? [String: Any] {
+          self.session.clearFrames()
+          self.session.broadcast(status, origin: self)
+        }
+        return value
+      }
     case "readSettings", "writeSettings":
       session.worker.async {
         let outcome: Result<Any, Error> = Result {
@@ -486,7 +533,13 @@ final class ProbeHost: NSObject {
       session.epoch &+= 1
       session.terminationApproved = false
       rendering = false
-      perform(result, work: { try self.session.runtime.open(path: path) }) { status in
+      perform(result, work: {
+        _ = try? self.session.history()
+        let status = try self.session.runtime.open(path: path)
+        (try? self.session.history())?.documentOpened()
+        self.session.record("open", "Document opened", path.isEmpty ? "Untitled" : path)
+        return status
+      }) { status in
         self.session.clearFrames()
         self.session.broadcast(status, origin: self)
         return self.envelope(status)
@@ -501,8 +554,25 @@ final class ProbeHost: NSObject {
       guard let data = try? JSONSerialization.data(withJSONObject: query), let command = String(data: data, encoding: .utf8) else { fail(result, "Invalid easing model query"); return }
       perform(result, work: { try self.session.runtime.request(command) }) { $0 }
     case "request":
-      guard let command = args["command"] as? String else { fail(result, "request requires JSON command string"); return }
-      perform(result, work: { try self.session.runtime.request(command) }) { status in
+      guard var command = args["command"] as? String else { fail(result, "request requires JSON command string"); return }
+      if args["deferSnapshot"] != nil || args["knownSnapshotId"] != nil || args["knownReferenceId"] != nil {
+        guard let data = command.data(using: .utf8), var query = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { fail(result, "Invalid command JSON"); return }
+        for key in ["deferSnapshot", "knownSnapshotId", "knownReferenceId"] { if let value = args[key] { query[key] = value } }
+        guard let data = try? JSONSerialization.data(withJSONObject: query) else { fail(result, "Invalid snapshot context"); return }
+        command = String(decoding: data, as: UTF8.self)
+      }
+      perform(result, work: {
+        let status = try self.session.runtime.request(command)
+        let payload = (try? JSONSerialization.jsonObject(with: Data(command.utf8))) as? [String: Any] ?? [:]
+        if let message = status["error"] as? String, !message.isEmpty {
+          self.session.record("error", "Operation failed: \(payload["op"] as? String ?? "request")", message)
+        } else if let op = payload["op"] as? String, ["save", "new", "import", "export"].contains(op) {
+          let title = ["save": "Document saved", "new": "New document", "import": "Media imported", "export": "Export requested"][op]!
+          self.session.record(op, title, payload["path"] as? String ?? "")
+          if op == "new" { (try? self.session.history())?.documentOpened() }
+        }
+        return status
+      }) { status in
         if status["error"] == nil { self.session.broadcast(status, origin: self) }
         return status
       }
@@ -515,7 +585,7 @@ final class ProbeHost: NSObject {
         } else if let frame = args["frame"] as? NSNumber {
           _ = try self.session.runtime.request("{\"op\":\"seek\",\"quiet\":true,\"frame\":\(frame.int64Value)}")
         }
-        return try self.session.runtime.render()
+        return try self.session.runtime.render(known: args["knownSnapshotId"], references: args["knownReferenceId"])
       }) { buffer, status, rendered in
         self.session.broadcast(status, buffer: buffer, origin: self, frameOnly: args["frame"] != nil || args["playing"] as? Bool == true)
         var reply = self.envelope(status, frameReady: true)
@@ -549,6 +619,9 @@ final class ProbeHost: NSObject {
     let epoch = session.epoch
     session.worker.async {
       let outcome = Result { try work() }
+      if case .failure(let error) = outcome {
+        self.session.record("error", isRender ? "Render failed" : "Operation failed", String(describing: error))
+      }
       DispatchQueue.main.async {
         guard !self.closed, epoch == self.session.epoch else {
           result(FlutterError(code: "superseded", message: "Document or window changed", details: nil)); return

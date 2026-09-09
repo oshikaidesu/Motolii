@@ -49,6 +49,10 @@ abstract final class EditorTheme {
     '2d' || 'images' => const Color(0xff93a5f5),
     _ => const Color(0xffc18bd3),
   };
+  static const iconConstraints = BoxConstraints.tightFor(
+    width: EditorMetrics.control,
+    height: EditorMetrics.control,
+  );
   static ThemeData get data => ThemeData.dark(useMaterial3: false).copyWith(
     scaffoldBackgroundColor: app,
     canvasColor: panel,
@@ -148,6 +152,7 @@ abstract final class EditorTheme {
       labelLarge: TextStyle(fontSize: EditorMetrics.font, color: ink),
     ),
     visualDensity: VisualDensity.compact,
+    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
     inputDecorationTheme: const InputDecorationTheme(
       isDense: true,
       filled: true,
@@ -183,6 +188,55 @@ abstract final class EditorTheme {
       waitDuration: Duration(milliseconds: 500),
       textStyle: TextStyle(fontSize: 11, color: Colors.white),
     ),
+  );
+}
+
+class EditorIconButton extends IconButton {
+  const EditorIconButton({
+    super.key,
+    required super.icon,
+    required super.onPressed,
+    super.tooltip,
+    super.iconSize = EditorMetrics.s14,
+    super.color,
+    super.isSelected,
+    super.selectedIcon,
+    super.padding = EdgeInsets.zero,
+    super.constraints = EditorTheme.iconConstraints,
+  });
+
+  @override
+  Widget build(BuildContext context) => Theme(
+    data: ThemeData(
+      useMaterial3: true,
+      colorScheme: Theme.of(context).colorScheme,
+      textTheme: Theme.of(context).textTheme,
+      iconTheme: Theme.of(context).iconTheme,
+      iconButtonTheme: IconButtonThemeData(
+        style: ButtonStyle(
+          foregroundColor: WidgetStateProperty.resolveWith(
+            (states) => states.contains(WidgetState.disabled)
+                ? EditorTheme.disabledInk
+                : EditorTheme.ink,
+          ),
+          overlayColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.pressed)) {
+              return EditorTheme.ink.withValues(alpha: .18);
+            }
+            if (states.contains(WidgetState.hovered) ||
+                states.contains(WidgetState.focused)) {
+              return EditorTheme.ink.withValues(alpha: .10);
+            }
+            return Colors.transparent;
+          }),
+          shape: const WidgetStatePropertyAll(RoundedRectangleBorder()),
+          visualDensity: VisualDensity.standard,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          splashFactory: NoSplash.splashFactory,
+        ),
+      ),
+    ),
+    child: Builder(builder: (context) => super.build(context)),
   );
 }
 
@@ -256,7 +310,10 @@ class EditorMenuItem<T> extends PopupMenuItem<T> {
     super.value,
     super.enabled,
     required super.child,
-  }) : super(height: 20, padding: const EdgeInsets.symmetric(horizontal: 8));
+  }) : super(
+         height: EditorMetrics.row,
+         padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s8),
+       );
   @override
   PopupMenuItemState<T, EditorMenuItem<T>> createState() =>
       _EditorMenuItemState<T>();

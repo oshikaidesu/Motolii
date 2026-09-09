@@ -166,14 +166,12 @@ class _WorkspaceViewState extends State<WorkspaceView> {
                                             0,
                                           ),
                                           items: [
-                                            const PopupMenuItem(
+                                            const EditorMenuItem(
                                               value: 'detach',
-                                              height: EditorMetrics.row,
                                               child: Text('Detach'),
                                             ),
-                                            const PopupMenuItem(
+                                            const EditorMenuItem(
                                               value: 'close',
-                                              height: EditorMetrics.row,
                                               child: Text('Close'),
                                             ),
                                           ],

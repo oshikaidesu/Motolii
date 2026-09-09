@@ -769,6 +769,7 @@ impl TextCacheKey {
             document.justify,
             document.wrap_size,
             &document.styles,
+            &document.runs,
         ))
         .unwrap_or_default();
         Self {
@@ -948,5 +949,20 @@ mod tests {
         assert_eq!(&row[4..7], &[255, 255, 255]);
         assert_eq!(&row[8..11], &[255, 255, 255]);
         assert_eq!(&row[12..15], &[0, 0, 0]);
+    }
+}
+
+#[cfg(test)]
+mod rich_text_cache_tests {
+    use super::*;
+    use crate::doc::store::*;
+    #[test]
+    fn moving_a_style_boundary_invalidates_the_texture() {
+        let style=|id,size|TextDocumentStyle{id:TextStyleId(id),font:FontRef::default(),size,fill:[1.0;4],line_height:None,tracking:0.0,stroke_color:None,stroke_width:0.0,stroke_over_fill:false,axes:vec![],features:vec![]};
+        let mut content=ContentTrack::new();content.insert(ContentKeyframe{t:RationalTime::ZERO,content:"AB".into()});
+        let mut text=TextDocument{content,justify:TextJustify::Left,wrap_size:None,styles:vec![style(0,20.0),style(1,40.0)],slot_id:None,ranges:vec![],alignment:Default::default(),runs:vec![TextRun{len:1,style:TextStyleId(0)},TextRun{len:1,style:TextStyleId(1)}]};
+        let before=TextCacheKey::new(LayerId(1),&text,RationalTime::ZERO,400,200);
+        text.runs.reverse();
+        assert!(before!=TextCacheKey::new(LayerId(1),&text,RationalTime::ZERO,400,200));
     }
 }

@@ -127,3 +127,55 @@ mod tests {
         assert_eq!(css([1.0, 0.5, 0.0]), "#ff8000");
     }
 }
+
+/// The bed is a black→light ramp tinted cool at the top and warm at the bottom, so the
+/// separable, contrast and component (Hue/Saturation/Color/Luminosity) families all read
+/// differently; the disc on top sweeps cyan→red.
+fn specimen_colors(x:u32,y:u32) -> ([f32;3],[f32;3],bool) {
+    let u=x as f32/127.0;let v=y as f32/79.0;
+    let tint=[0.3+0.7*v,0.5+0.1*v,1.0-0.7*v];
+    let bottom=[u*(0.6+0.4*tint[0]),u*(0.6+0.4*tint[1]),u*(0.6+0.4*tint[2])];
+    let t=((y as f32-10.0)/60.0).clamp(0.0,1.0);
+    let top=[0.15+0.8*t,0.75-0.5*t,0.85-0.7*t];
+    let front=(x as f32-84.0).powi(2)+(y as f32-40.0).powi(2)<30.0_f32.powi(2);
+    (bottom,top,front)
+}
+
+/// Fixed blend-behavior specimens: no Document, media decoding, GPU or Stage rendering.
+pub(crate) fn specimen(mode: BlendMode) -> Result<serde_json::Value, String> {
+    use base64::Engine as _;
+    static IMAGES: std::sync::OnceLock<Vec<Result<serde_json::Value,String>>> = std::sync::OnceLock::new();
+    IMAGES.get_or_init(|| (0..17).map(|index| {
+        let mode=BlendMode::from_enum_value(index).unwrap();
+        let image=image::RgbaImage::from_fn(128,80,|x,y| {
+            let (bottom,top,front)=specimen_colors(x,y);
+            let color=if front{blend(mode,top,bottom)}else{bottom};
+            image::Rgba([(color[0].clamp(0.0,1.0)*255.0).round() as u8,(color[1].clamp(0.0,1.0)*255.0).round() as u8,(color[2].clamp(0.0,1.0)*255.0).round() as u8,255])
+        });
+        let mut bytes=std::io::Cursor::new(Vec::new());
+        image::DynamicImage::ImageRgba8(image).write_to(&mut bytes,image::ImageFormat::Png).map_err(|e|e.to_string())?;
+        Ok(serde_json::json!({"image":base64::engine::general_purpose::STANDARD.encode(bytes.into_inner())}))
+    }).collect())[mode.to_enum_value() as usize].clone()
+}
+
+#[cfg(test)]
+mod specimen_tests {
+    use super::*;
+    use base64::Engine as _;
+    #[test]
+    fn behavior_specimens_are_cached_and_use_the_existing_blend_equations() {
+        for i in 0..17 {
+            let mode=BlendMode::from_enum_value(i).unwrap();
+            let first=specimen(mode).unwrap();
+            assert_eq!(first,specimen(mode).unwrap());
+            let png=base64::engine::general_purpose::STANDARD.decode(first["image"].as_str().unwrap()).unwrap();
+            let image=image::load_from_memory(&png).unwrap().to_rgba8();
+            assert_eq!(image.dimensions(),(128,80));
+            let (bottom,top,front)=specimen_colors(84,40);
+            assert!(front);
+            let expected=blend(mode,top,bottom);
+            assert_eq!(&image.get_pixel(84,40).0[..3], &expected.map(|v|(v.clamp(0.0,1.0)*255.0).round() as u8));
+            assert_ne!(image.get_pixel(84,40).0, image.get_pixel(20,40).0, "{mode:?}: the disc must read against the bed");
+        }
+    }
+}
