@@ -39,7 +39,7 @@ void main() {
           ),
         ),
       );
-      await tester.tap(find.text('Save preset'));
+      await tester.tap(find.byTooltip('Save preset'));
       await tester.pumpAndSettle();
       expect((c.deskWork.value['easePresets'] as List).length, 1);
       c.deskDrawer.value = 'Blend';
