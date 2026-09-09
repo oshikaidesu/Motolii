@@ -18,6 +18,60 @@ String _curveName(String kind) => kind.replaceAllMapped(
 const _easePaper = Color(0xffb7d8d1);
 const _easeInk = Color(0xff203f39);
 const _easeTime = Color(0xff854515);
+const _easeIconBox = BoxConstraints.tightFor(
+  width: EditorMetrics.control,
+  height: EditorMetrics.control,
+);
+
+/// 静かな道具の粒。Ink の波紋を持たないので Reduce Motion で走る animation が残らない。
+class _EaseIcon extends StatefulWidget {
+  const _EaseIcon({
+    required this.tooltip,
+    required this.icon,
+    required this.onPressed,
+    this.color = EditorTheme.muted,
+  });
+  final String tooltip;
+  final IconData icon;
+  final VoidCallback onPressed;
+  final Color color;
+  @override
+  State<_EaseIcon> createState() => _EaseIconState();
+}
+
+class _EaseIconState extends State<_EaseIcon> {
+  bool _over = false;
+  @override
+  Widget build(BuildContext context) => Tooltip(
+    message: widget.tooltip,
+    child: Semantics(
+      label: widget.tooltip,
+      button: true,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        onEnter: (_) => setState(() => _over = true),
+        onExit: (_) => setState(() => _over = false),
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: widget.onPressed,
+          child: Container(
+            constraints: _easeIconBox,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: _over ? EditorTheme.hover : Colors.transparent,
+              borderRadius: BorderRadius.circular(EditorMetrics.s4),
+            ),
+            child: Icon(
+              widget.icon,
+              size: EditorMetrics.s16,
+              color: _over ? EditorTheme.ink : widget.color,
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+}
 
 String _curveMeaning(String kind) => switch (kind) {
   'Hold' => 'Wait, then change in one jump.',
@@ -444,6 +498,14 @@ class _EaseDeskState extends State<EaseDesk>
         ? null
         : (c.frame.value - (first['frame'] as num)) /
               ((first['end'] as num) - (first['frame'] as num));
+    final railActive = first == null
+        ? -1
+        : segments.indexWhere(
+            (s) =>
+                s['layer'] == first['layer'] &&
+                s['property'] == first['property'] &&
+                s['frame'] == first['frame'],
+          );
     return Focus(
       focusNode: _focus,
       onKeyEvent: (_, event) {
@@ -471,6 +533,7 @@ class _EaseDeskState extends State<EaseDesk>
                 EditorMetrics.s85,
                 viewport.maxHeight -
                     EditorMetrics.row -
+                    EditorMetrics.s14 -
                     EditorMetrics.bar -
                     EditorMetrics.s16 -
                     EditorMetrics.s8 -
@@ -488,15 +551,7 @@ class _EaseDeskState extends State<EaseDesk>
               return a.key.compareTo(b.key);
             });
           Widget action(String label, IconData icon, VoidCallback onPressed) =>
-              EditorIconButton(
-                tooltip: label,
-                padding: EdgeInsets.zero,
-                constraints: EditorTheme.iconConstraints,
-                iconSize: EditorMetrics.s16,
-                color: EditorTheme.muted,
-                onPressed: onPressed,
-                icon: Icon(icon),
-              );
+              _EaseIcon(tooltip: label, icon: icon, onPressed: onPressed);
           final graph = Container(
             width: side,
             height: side,
@@ -745,9 +800,7 @@ class _EaseDeskState extends State<EaseDesk>
                       child: Tooltip(
                         message: param.key.replaceAll('_', ' '),
                         child: Text(
-                          param.key.startsWith('x') || param.key.startsWith('y')
-                              ? param.key.toUpperCase()
-                              : param.key.replaceAll('_', ' '),
+                          param.key.replaceAll('_', ' '),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
@@ -827,13 +880,11 @@ class _EaseDeskState extends State<EaseDesk>
                   height: EditorMetrics.bar,
                   child: Row(
                     children: [
-                      EditorIconButton(
+                      _EaseIcon(
                         tooltip: 'Preview motion',
-                        padding: EdgeInsets.zero,
-                        constraints: EditorTheme.iconConstraints,
-                        iconSize: EditorMetrics.s16,
+                        icon: Icons.play_arrow_outlined,
+                        color: EditorTheme.ink,
                         onPressed: _runMotion,
-                        icon: const Icon(Icons.play_arrow_outlined),
                       ),
                       const SizedBox(width: EditorMetrics.s4),
                       Expanded(
@@ -1019,6 +1070,30 @@ class _EaseDeskState extends State<EaseDesk>
                       ),
                     ),
                   ),
+                  const SizedBox(height: EditorMetrics.s2),
+                  SizedBox(
+                    height: EditorMetrics.s12,
+                    child: Tooltip(
+                      message: target,
+                      child: Semantics(
+                        label: first == null
+                            ? (sequence.isNotEmpty
+                                  ? 'Sequence of ${sequence.length} layers'
+                                  : 'No key interval')
+                            : 'Curve runs ${first['frame']} to ${first['end']} f, playhead at ${c.frame.value} f',
+                        child: CustomPaint(
+                          key: const ValueKey('ease-interval-rail'),
+                          painter: EaseIntervalPainter(
+                            segments: segments,
+                            active: railActive,
+                            frame: c.frame.value,
+                          ),
+                          child: const SizedBox.expand(),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: EditorMetrics.s2),
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -1284,4 +1359,98 @@ class EaseMotionPainter extends CustomPainter {
       time != old.time ||
       free != old.free ||
       jsonEncode(shape) != jsonEncode(old.shape);
+}
+
+/// どの区間を走っているか、を形で言う帯。選んだキー区間を時間軸のまま並べ、
+/// 今のカーブが効いている区間だけを塗り、再生位置をその上に刺す。
+/// グラフの縦線が「区間の中のどこ」なら、この帯は「どの区間」。
+class EaseIntervalPainter extends CustomPainter {
+  const EaseIntervalPainter({
+    required this.segments,
+    required this.active,
+    required this.frame,
+  });
+  final List<Map<String, dynamic>> segments;
+  final int active;
+  final int frame;
+
+  double _start(Map<String, dynamic> s) => (s['frame'] as num).toDouble();
+  double _end(Map<String, dynamic> s) => (s['end'] as num).toDouble();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final y = size.height / 2;
+    final inset = EditorMetrics.s4;
+    final width = math.max(1.0, size.width - inset * 2);
+    final rail = Paint()
+      ..color = EditorTheme.border
+      ..strokeWidth = 1;
+    if (segments.isEmpty) {
+      canvas.drawLine(Offset(inset, y), Offset(inset + width, y), rail);
+      return;
+    }
+    var lo = segments.map(_start).reduce(math.min);
+    var hi = segments.map(_end).reduce(math.max);
+    lo = math.min(lo, frame.toDouble());
+    hi = math.max(hi, frame.toDouble());
+    final pad = math.max(1.0, (hi - lo) * .04);
+    lo -= pad;
+    hi += pad;
+    double x(double f) => inset + (f - lo) / (hi - lo) * width;
+    canvas.drawLine(Offset(inset, y), Offset(inset + width, y), rail);
+    final bar = EditorMetrics.s6;
+    for (var i = 0; i < segments.length; i++) {
+      final chosen = i == active;
+      final rect = RRect.fromLTRBR(
+        x(_start(segments[i])),
+        y - bar / 2,
+        math.max(x(_start(segments[i])) + 2, x(_end(segments[i]))),
+        y + bar / 2,
+        const Radius.circular(EditorMetrics.s2),
+      );
+      canvas.drawRRect(
+        rect,
+        Paint()
+          ..color = chosen ? _easePaper : EditorTheme.muted.withValues(alpha: .35),
+      );
+      if (chosen) {
+        canvas.drawRRect(
+          rect,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1
+            ..color = _easeInk,
+        );
+      }
+      // 区間の両端 = キーフレーム。選ばれた区間だけ濃く。
+      for (final f in [_start(segments[i]), _end(segments[i])]) {
+        canvas.drawCircle(
+          Offset(x(f), y),
+          chosen ? 2.5 : 1.5,
+          Paint()..color = chosen ? _easeInk : EditorTheme.border,
+        );
+      }
+    }
+    final head = x(frame.toDouble());
+    canvas.drawLine(
+      Offset(head, 0),
+      Offset(head, size.height),
+      Paint()
+        ..color = _easeTime
+        ..strokeWidth = EditorMetrics.s2,
+    );
+    final caret = Path()
+      ..moveTo(head - EditorMetrics.s3, 0)
+      ..lineTo(head + EditorMetrics.s3, 0)
+      ..lineTo(head, EditorMetrics.s4)
+      ..close();
+    canvas.drawPath(caret, Paint()..color = _easeTime);
+  }
+
+  @override
+  bool shouldRepaint(covariant EaseIntervalPainter old) =>
+      old.frame != frame ||
+      old.active != active ||
+      jsonEncode(old.segments.map((s) => [s['frame'], s['end']]).toList()) !=
+          jsonEncode(segments.map((s) => [s['frame'], s['end']]).toList());
 }

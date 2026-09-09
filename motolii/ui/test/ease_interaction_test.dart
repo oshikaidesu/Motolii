@@ -307,7 +307,17 @@ void main() {
         final graphBounds = tester.getRect(plot);
         for (final kind in kinds) {
           final preset = find.byTooltip(kind);
-          await tester.ensureVisible(preset);
+          // 一覧だけがスクロールする。畳まれて外れた札は上へ戻して掴む。
+          await tester.scrollUntilVisible(
+            preset,
+            -80,
+            scrollable: find
+                .descendant(
+                  of: find.byKey(const ValueKey('ease-choices-scroll')),
+                  matching: find.byType(Scrollable),
+                )
+                .first,
+          );
           await tester.pumpAndSettle();
           expect(preset.hitTestable(), findsOneWidget);
           expect(tester.getRect(plot), graphBounds);
@@ -365,4 +375,110 @@ void main() {
       c.dispose();
     },
   );
+
+  testWidgets('the rail names the key interval the curve is running', (
+    tester,
+  ) async {
+    Map<String, dynamic> snapshot({List<Map<String, dynamic>>? keys}) => {
+      'selectedIds': [1],
+      'selectedKeys':
+          keys ??
+          [
+            {'layer': 1, 'property': 'opacity', 'frame': 0},
+            {'layer': 1, 'property': 'opacity', 'frame': 20},
+            {'layer': 1, 'property': 'opacity', 'frame': 50},
+          ],
+      'capabilities': ['ease'],
+      'layers': [
+        {
+          'id': 1,
+          'name': 'Rectangle',
+          'properties': [
+            {
+              'id': 'opacity',
+              'keys': [
+                for (final frame in [0, 20, 50])
+                  {
+                    'frame': frame,
+                    'interp': {'kind': 'Linear'},
+                  },
+              ],
+            },
+          ],
+        },
+      ],
+      'easeKinds': [
+        {'kind': 'Linear'},
+      ],
+    };
+    final c = EditorSession();
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(EditorSession.channel, (call) async {
+          if (call.method == 'easeModel') {
+            return Map<String, dynamic>.from(
+              (call.arguments as Map)['shape'] as Map,
+            );
+          }
+          if (call.method == 'render' || call.method == 'request') {
+            return snapshot();
+          }
+          if (call.method == 'readSettings') return {};
+          if (call.method == 'writeSettings') return true;
+          return {};
+        });
+    c.document.value = snapshot();
+    await tester.binding.setSurfaceSize(const Size(240, 240));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      MaterialApp(home: Scaffold(body: EaseDesk(controller: c))),
+    );
+    await tester.pumpAndSettle();
+    final rail = find.byKey(const ValueKey('ease-interval-rail'));
+    EaseIntervalPainter painter() =>
+        tester.widget<CustomPaint>(rail).painter! as EaseIntervalPainter;
+    String label(String key) =>
+        tester.widget<Text>(find.byKey(ValueKey(key))).data!;
+
+    expect(rail, findsOneWidget);
+    expect(painter().segments.length, 2);
+
+    c.frame.value = 5;
+    await tester.pumpAndSettle();
+    expect(painter().active, 0);
+    expect(painter().frame, 5);
+    expect(label('ease-interval-target'), contains('0–20'));
+
+    c.frame.value = 30;
+    await tester.pumpAndSettle();
+    expect(painter().active, 1);
+    expect(label('ease-interval-target'), contains('20–50'));
+    expect(label('ease-current-frame'), '30 f');
+
+    // 区間の外へ出ても、どの区間の曲線を見せているかは落ちない。
+    c.frame.value = 60;
+    await tester.pumpAndSettle();
+    expect(painter().active, 1);
+    expect(label('ease-current-frame'), contains('after'));
+
+    // グラフとハンドルは一覧をスクロールしても動かない固定位置に居る。
+    final plot = find.byKey(const ValueKey('ease-plot'));
+    final fixed = tester.getRect(plot);
+    expect(fixed.width, fixed.height);
+    await tester.drag(
+      find.byKey(const ValueKey('ease-choices-scroll')),
+      const Offset(0, -60),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.getRect(plot), fixed);
+    expect(plot.hitTestable(), findsOneWidget);
+    expect(rail.hitTestable(), findsOneWidget);
+
+    // 対象が無い時は帯が空になるだけで、消えない。
+    c.document.value = {...snapshot(), 'selectedKeys': [], 'selectedIds': []};
+    await tester.pumpAndSettle();
+    expect(painter().segments, isEmpty);
+    expect(painter().active, -1);
+    await tester.pumpWidget(const SizedBox());
+    c.dispose();
+  });
 }
