@@ -14,7 +14,8 @@ import 'stage.dart';
 import 'notes_desk.dart';
 import 'ease_desk.dart';
 import 'depth_desk.dart';
-import 'adjust_panels.dart';
+import 'blend_panel.dart';
+import 'history_records.dart';
 import 'web_panel.dart';
 
 Widget buildPanel(String name, EditorSession c, Key? key, {Widget? leading}) {
@@ -64,11 +65,7 @@ Widget _buildPanel(String name, EditorSession c, Key? key, {Widget? leading}) {
       animation: c.document,
       builder: (_, __) => BlendPanel(controller: c),
     ),
-    'History' => AnimatedBuilder(
-      key: key,
-      animation: c.document,
-      builder: (_, __) => HistoryPanel(controller: c),
-    ),
+    'History' => HistoryRecords(key: key, controller: c),
     'Web' => WebPanel(key: key, controller: c),
     'Timeline' => TimelinePanel(key: key, controller: c),
     _ => const SizedBox.shrink(),

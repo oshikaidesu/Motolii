@@ -222,25 +222,6 @@ final class ProbeSession {
   fileprivate var latest: CVPixelBuffer?
   fileprivate var state: [String: Any] = [:]
   fileprivate var windows: [String: PanelFlutterWindow] = [:]
-  private var historyStore: HistoryStore?
-  private var historyFailure: String?
-  fileprivate func history() throws -> HistoryStore {
-    if let historyStore { return historyStore }
-    let support = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
-    let store = try HistoryStore(directory: support.appendingPathComponent("MotoliiStage5/History", isDirectory: true),
-      reportsDirectory: FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs/DiagnosticReports", isDirectory: true))
-    historyStore = store
-    return store
-  }
-  fileprivate func record(_ kind: String, _ title: String, _ detail: String = "") {
-    do { try history().record(kind, title, detail); historyFailure = nil }
-    catch { historyFailure = String(describing: error) }
-  }
-  fileprivate func historySnapshot() throws -> [String: Any] {
-    var snapshot = try history().snapshot()
-    if let historyFailure { snapshot["failure"] = historyFailure }
-    return snapshot
-  }
   private var confirming = false
   var terminationApproved = false
 
@@ -306,7 +287,6 @@ final class ProbeSession {
     state = [:]
     worker.async {
       self.runtime.close()
-      do { try self.historyStore?.close() } catch { NSLog("History close: %@", String(describing: error)) }
       DispatchQueue.main.async {
         for window in Array(self.windows.values) { window.close() }
         completion()
@@ -421,29 +401,6 @@ final class ProbeHost: NSObject {
     precondition(Thread.isMainThread)
     let args = call.arguments as? [String: Any] ?? [:]
     switch call.method {
-    case "history", "historyRecord", "historyReport", "checkpoint", "restoreCheckpoint":
-      perform(result, work: { () throws -> [String: Any] in
-        let history = try self.session.history()
-        switch call.method {
-        case "historyRecord":
-          try history.record("error", args["title"] as? String ?? "Flutter error", args["detail"] as? String ?? "")
-        case "historyReport":
-          return ["detail": try history.report(args["name"] as? String ?? "")]
-        case "checkpoint":
-          try history.checkpoint(args["name"] as? String ?? "", run: self.session.runtime.request)
-        case "restoreCheckpoint":
-          let state = try history.restore(args["id"] as? String ?? "", run: self.session.runtime.request)
-          return ["status": state, "history": try self.session.historySnapshot()]
-        default: break
-        }
-        return try self.session.historySnapshot()
-      }) { value in
-        if let status = value["status"] as? [String: Any] {
-          self.session.clearFrames()
-          self.session.broadcast(status, origin: self)
-        }
-        return value
-      }
     case "readSettings", "writeSettings":
       session.worker.async {
         let outcome: Result<Any, Error> = Result {
@@ -534,10 +491,7 @@ final class ProbeHost: NSObject {
       session.terminationApproved = false
       rendering = false
       perform(result, work: {
-        _ = try? self.session.history()
         let status = try self.session.runtime.open(path: path)
-        (try? self.session.history())?.documentOpened()
-        self.session.record("open", "Document opened", path.isEmpty ? "Untitled" : path)
         return status
       }) { status in
         self.session.clearFrames()
@@ -563,14 +517,6 @@ final class ProbeHost: NSObject {
       }
       perform(result, work: {
         let status = try self.session.runtime.request(command)
-        let payload = (try? JSONSerialization.jsonObject(with: Data(command.utf8))) as? [String: Any] ?? [:]
-        if let message = status["error"] as? String, !message.isEmpty {
-          self.session.record("error", "Operation failed: \(payload["op"] as? String ?? "request")", message)
-        } else if let op = payload["op"] as? String, ["save", "new", "import", "export"].contains(op) {
-          let title = ["save": "Document saved", "new": "New document", "import": "Media imported", "export": "Export requested"][op]!
-          self.session.record(op, title, payload["path"] as? String ?? "")
-          if op == "new" { (try? self.session.history())?.documentOpened() }
-        }
         return status
       }) { status in
         if status["error"] == nil { self.session.broadcast(status, origin: self) }
@@ -619,9 +565,6 @@ final class ProbeHost: NSObject {
     let epoch = session.epoch
     session.worker.async {
       let outcome = Result { try work() }
-      if case .failure(let error) = outcome {
-        self.session.record("error", isRender ? "Render failed" : "Operation failed", String(describing: error))
-      }
       DispatchQueue.main.async {
         guard !self.closed, epoch == self.session.epoch else {
           result(FlutterError(code: "superseded", message: "Document or window changed", details: nil)); return

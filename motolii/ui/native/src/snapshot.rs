@@ -270,6 +270,7 @@ impl EditorRuntime{
         status["previewInteraction"] = json!(self.preview_tag);
         status["visualSamples"]=json!(true);
         status["fontFamilies"]=json!(crate::doc::vector::text::font_families());
+        status["history"]=self.history.snapshot(self.doc.edit_head());
         status["notebook"]=serde_json::to_value(view.notebook().map_err(e)?).map_err(e)?;
         status["depthLayout"]=self.depth_layout(&resolved)?;
         status["backgrounds"]=json!(editor::create::backgrounds().iter().map(|b|json!({"id":b.id,"name":b.name,"thumbnail":editor::thumbnail::image_data_uri(&b.path)})).collect::<Vec<_>>());

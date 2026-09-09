@@ -1,324 +1,265 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../foundation/metrics.dart';
-import '../foundation/panel_controls.dart';
 import '../foundation/theme.dart';
 import '../session/editor_session.dart';
+import '../session/read_model.dart';
 
-class HistoryRecords extends StatelessWidget {
-  const HistoryRecords({
-    super.key,
-    required this.controller,
-    required this.checkpoints,
-  });
+/// The history column: every edit and every record on one vertical line,
+/// oldest at the top, with the current position marked. Tapping a point
+/// undoes or redoes up to it.
+class HistoryRecords extends StatefulWidget {
+  const HistoryRecords({super.key, required this.controller});
   final EditorSession controller;
-  final bool checkpoints;
+  @override
+  State<HistoryRecords> createState() => _HistoryRecordsState();
+}
 
-  Future<void> _details(BuildContext context, String title, String detail) =>
-      showDialog<void>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: Text(title),
-          content: SizedBox(
-            width: EditorMetrics.sheetWide,
-            child: SingleChildScrollView(child: SelectableText(detail)),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () =>
-                  Clipboard.setData(ClipboardData(text: '$title\n$detail')),
-              child: const Text('Copy'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Close'),
-            ),
-          ],
-        ),
-      );
+class _HistoryRecordsState extends State<HistoryRecords> {
+  final _scroll = ScrollController();
+  int _followed = -1;
 
-  Future<void> _create(BuildContext context) async {
-    var draft = '';
-    final name = await showDialog<String>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, update) => AlertDialog(
-          title: const Text('New checkpoint'),
-          content: TextField(
-            autofocus: true,
-            maxLength: 120,
-            decoration: const InputDecoration(labelText: 'Name'),
-            onChanged: (value) => update(() => draft = value.trim()),
-            onSubmitted: (value) {
-              if (value.trim().isNotEmpty) Navigator.pop(context, value.trim());
-            },
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: draft.isEmpty
-                  ? null
-                  : () => Navigator.pop(context, draft),
-              child: const Text('Save'),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (name != null) {
-      try {
-        await controller.createCheckpoint(name);
-      } catch (e) {
-        controller.error.value = '$e';
-      }
-    }
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
   }
 
-  Future<void> _restore(BuildContext context, Map<String, dynamic> row) async {
-    final accepted = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Restore ${row['name']}?'),
-        content: const Text(
-          'The current document will be kept as a recovery checkpoint. '
-          'Restoring starts a new undo history. External media must still be available.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Restore'),
-          ),
-        ],
-      ),
+  static String _time(dynamic at) {
+    if (at is! num) return '';
+    final t = DateTime.fromMillisecondsSinceEpoch(
+      (at * Duration.millisecondsPerSecond).round(),
     );
-    if (accepted == true) {
-      try {
-        await controller.restoreCheckpoint('${row['id']}');
-      } catch (e) {
-        controller.error.value = '$e';
-      }
-    }
-  }
-
-  String _time(dynamic value) {
-    final date = DateTime.tryParse('$value')?.toLocal();
-    if (date == null) return '';
     String pad(int n) => n.toString().padLeft(2, '0');
-    return '${pad(date.month)}/${pad(date.day)} ${pad(date.hour)}:${pad(date.minute)}:${pad(date.second)}';
+    return '${pad(t.hour)}:${pad(t.minute)}:${pad(t.second)}';
+  }
+
+  static IconData? _mark(String kind) => switch (kind) {
+    'save' => Icons.save_outlined,
+    'open' => Icons.folder_open,
+    'end' => Icons.stop_circle_outlined,
+    'warning' => Icons.warning_amber,
+    'error' => Icons.error_outline,
+    _ => null,
+  };
+
+  void _follow(int index) {
+    if (index < 0 || _followed == index || !_scroll.hasClients) return;
+    _followed = index;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scroll.hasClients) return;
+      final view = _scroll.position.viewportDimension;
+      final target = index * EditorMetrics.row - (view - EditorMetrics.row) / 2;
+      _scroll.jumpTo(target.clamp(0.0, _scroll.position.maxScrollExtent));
+    });
   }
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
-    animation: Listenable.merge([
-      controller.history,
-      controller.busy,
-      controller.error,
-    ]),
-    builder: (context, _) {
-      final state = controller.history.value;
-      final rows = EditorSession.maps(
-        state[checkpoints ? 'checkpoints' : 'records'],
-      );
-      final reports = checkpoints
-          ? <Map<String, dynamic>>[]
-          : EditorSession.maps(state['reports']);
-      final failure = state['failure'] ?? controller.error.value;
-      return Column(
-        children: [
-          EditorBar(
-            height: EditorMetrics.bar,
-            children: [
-              if (checkpoints)
-                panelButton(
-                  'New checkpoint',
-                  controller.busy.value ||
-                          !controller.supports('restoreCheckpoint')
-                      ? null
-                      : () => _create(context),
-                ),
-              const Spacer(),
-              IconButton(
-                tooltip: 'Refresh records',
-                constraints: EditorTheme.iconConstraints,
-                iconSize: EditorMetrics.s16,
-                padding: EdgeInsets.zero,
-                onPressed: controller.refreshHistory,
-                icon: const Icon(Icons.refresh),
-              ),
-              IconButton(
-                tooltip: 'Show history files',
-                constraints: EditorTheme.iconConstraints,
-                iconSize: EditorMetrics.s16,
-                padding: EdgeInsets.zero,
-                onPressed: state['directory'] == null
-                    ? null
-                    : () => controller.native('reveal', {
-                        'path': state['directory'],
-                      }),
-                icon: const Icon(Icons.folder_open),
-              ),
-            ],
-          ),
-          if (failure != null)
-            InkWell(
-              onTap: () => _details(context, 'History error', '$failure'),
-              child: Padding(
-                padding: const EdgeInsets.all(EditorMetrics.s6),
-                child: Text(
-                  '$failure',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: EditorTheme.accent,
-                    fontSize: EditorMetrics.font,
-                  ),
-                ),
-              ),
-            ),
-          Expanded(
-            child: ListView(
-              children: [
-                if (rows.isEmpty && reports.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.all(EditorMetrics.s8),
-                    child: Text(
-                      checkpoints ? 'No checkpoints yet' : 'No records yet',
-                      style: const TextStyle(
-                        color: EditorTheme.muted,
-                        fontSize: EditorMetrics.font,
-                      ),
-                    ),
-                  ),
-                if (reports.isNotEmpty)
-                  ExpansionTile(
-                    tilePadding: const EdgeInsets.symmetric(
-                      horizontal: EditorMetrics.s6,
-                    ),
-                    title: Text(
-                      'Crash reports (${reports.length})',
-                      style: const TextStyle(fontSize: EditorMetrics.font),
-                    ),
-                    children: [
-                      for (final report in reports)
-                        _row(
-                          context,
-                          Icons.bug_report_outlined,
-                          '${report['name']}',
-                          'macOS crash report',
-                          () async {
-                            try {
-                              final reply = EditorSession.map(
-                                await controller.native('historyReport', {
-                                  'name': report['name'],
-                                }),
-                              );
-                              if (context.mounted)
-                                await _details(
-                                  context,
-                                  '${report['name']}',
-                                  '${reply['detail']}',
-                                );
-                            } catch (e) {
-                              controller.error.value = '$e';
-                            }
-                          },
-                        ),
-                    ],
-                  ),
-                for (final row in rows)
-                  _row(
-                    context,
-                    checkpoints
-                        ? Icons.bookmark_outline
-                        : switch (row['kind']) {
-                            'error' => Icons.error_outline,
-                            'warning' => Icons.warning_amber,
-                            'save' => Icons.save_outlined,
-                            'open' => Icons.folder_open,
-                            'checkpoint' => Icons.bookmark_outline,
-                            _ => Icons.notes,
-                          },
-                    '${row[checkpoints ? 'name' : 'title']}',
-                    '${_time(row['time'])}${checkpoints ? ' · ${('${row['source'] ?? ''}').split('/').lastOrNull ?? ''}' : ''}',
-                    () => _details(
-                      context,
-                      '${row[checkpoints ? 'name' : 'title']}',
-                      '${row['time']}\n${row['source'] ?? ''}\n${row['detail'] ?? ''}',
-                    ),
-                    trailing: checkpoints
-                        ? IconButton(
-                            tooltip: 'Restore checkpoint',
-                            constraints: EditorTheme.iconConstraints,
-                            padding: EdgeInsets.zero,
-                            iconSize: EditorMetrics.s16,
-                            icon: const Icon(Icons.restore),
-                            onPressed:
-                                controller.busy.value ||
-                                    !controller.supports('restoreCheckpoint')
-                                ? null
-                                : () => _restore(context, row),
-                          )
-                        : null,
-                  ),
-              ],
-            ),
-          ),
-        ],
-      );
-    },
+    animation: widget.controller.document,
+    builder: (context, _) => _column(context),
   );
 
-  Widget _row(
-    BuildContext context,
-    IconData icon,
-    String title,
-    String subtitle,
-    VoidCallback onTap, {
-    Widget? trailing,
-  }) => InkWell(
-    onTap: onTap,
-    child: Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: EditorMetrics.s6,
-        vertical: EditorMetrics.s6,
+  Widget _column(BuildContext context) {
+    final c = widget.controller;
+    final history = panelMap(c.state['history']);
+    final entries = panelRows(history['entries']);
+    final at = history['head'] is num ? (history['head'] as num).toInt() : 0;
+    if (entries.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.all(EditorMetrics.s8),
+        child: Text(
+          'No history',
+          style: TextStyle(
+            fontSize: EditorMetrics.font,
+            color: EditorTheme.muted,
+          ),
+        ),
+      );
+    }
+    // The current point is the last one standing at the current step; records
+    // taken at that step sit under it and count as reached.
+    var current = -1;
+    for (var i = 0; i < entries.length; i++) {
+      final head = entries[i]['head'];
+      if (head is num && head.toInt() <= at) current = i;
+    }
+    _follow(current);
+    final canGo = panelCan(c, 'historyGoto');
+    return LayoutBuilder(
+      builder: (context, box) => ListView.builder(
+        controller: _scroll,
+        padding: EdgeInsets.zero,
+        itemExtent: EditorMetrics.row,
+        itemCount: entries.length,
+        itemBuilder: (context, index) {
+          final row = entries[index];
+          final head = row['head'];
+          final reached = index <= current;
+          final jump = canGo && head is num && index != current;
+          final kind = '${row['kind']}';
+          return _HistoryRow(
+            label: '${row['label']}',
+            time: _time(row['at']),
+            mark: _mark(kind),
+            reached: reached,
+            current: index == current,
+            first: index == 0,
+            last: index == entries.length - 1,
+            wide: box.maxWidth >= EditorMetrics.s160,
+            onTap: jump
+                ? () => c.command('historyGoto', {'head': head.toInt()})
+                : null,
+          );
+        },
       ),
-      child: Row(
-        children: [
-          Icon(icon, size: EditorMetrics.s16, color: EditorTheme.muted),
-          const SizedBox(width: EditorMetrics.s6),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: EditorMetrics.font),
-                ),
-                Text(
-                  subtitle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: EditorMetrics.micro,
-                    color: EditorTheme.muted,
-                  ),
-                ),
-              ],
+    );
+  }
+}
+
+class _HistoryRow extends StatelessWidget {
+  const _HistoryRow({
+    required this.label,
+    required this.time,
+    required this.mark,
+    required this.reached,
+    required this.current,
+    required this.first,
+    required this.last,
+    required this.wide,
+    required this.onTap,
+  });
+  final String label, time;
+  final IconData? mark;
+  final bool reached, current, first, last, wide;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) => InkWell(
+    onTap: onTap,
+    child: Row(
+      children: [
+        SizedBox(
+          width: EditorMetrics.s16,
+          height: EditorMetrics.row,
+          child: CustomPaint(
+            painter: _RailPainter(
+              reached: reached,
+              current: current,
+              record: mark != null,
+              first: first,
+              last: last,
             ),
           ),
-          if (trailing != null) trailing,
+        ),
+        if (mark != null) ...[
+          Icon(
+            mark,
+            size: EditorMetrics.dense,
+            color: reached ? EditorTheme.muted : EditorTheme.border,
+          ),
+          const SizedBox(width: EditorMetrics.s3),
         ],
-      ),
+        Expanded(
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: EditorMetrics.font,
+              color: current
+                  ? EditorTheme.accent
+                  : reached
+                  ? EditorTheme.ink
+                  : EditorTheme.muted,
+            ),
+          ),
+        ),
+        if (wide)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s4),
+            child: Text(
+              time,
+              style: const TextStyle(
+                fontSize: EditorMetrics.micro,
+                color: EditorTheme.muted,
+              ),
+            ),
+          ),
+      ],
     ),
   );
+}
+
+/// One cell of the vertical line: the run of the line through this row and the
+/// point on it. Reached rows keep the bright line; the redo tail stays dim.
+class _RailPainter extends CustomPainter {
+  const _RailPainter({
+    required this.reached,
+    required this.current,
+    required this.record,
+    required this.first,
+    required this.last,
+  });
+  final bool reached, current, record, first, last;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final x = size.width / 2, y = size.height / 2;
+    final line = Paint()
+      ..color = reached ? EditorTheme.border : EditorTheme.line
+      ..strokeWidth = 1;
+    if (!first) canvas.drawLine(Offset(x, 0), Offset(x, y), line);
+    if (!last) canvas.drawLine(Offset(x, y), Offset(x, size.height), line);
+    final ink = current
+        ? EditorTheme.accent
+        : reached
+        ? EditorTheme.muted
+        : EditorTheme.border;
+    final fill = Paint()..color = ink;
+    if (record) {
+      canvas.drawRect(
+        Rect.fromCenter(
+          center: Offset(x, y),
+          width: EditorMetrics.s6,
+          height: EditorMetrics.s6,
+        ),
+        current || reached
+            ? fill
+            : (Paint()
+                ..color = ink
+                ..style = PaintingStyle.stroke
+                ..strokeWidth = 1),
+      );
+    } else if (reached) {
+      canvas.drawCircle(Offset(x, y), EditorMetrics.s3, fill);
+    } else {
+      canvas.drawCircle(
+        Offset(x, y),
+        EditorMetrics.s3,
+        Paint()
+          ..color = ink
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1,
+      );
+    }
+    if (current) {
+      canvas.drawCircle(
+        Offset(x, y),
+        EditorMetrics.s6,
+        Paint()
+          ..color = EditorTheme.accent
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_RailPainter old) =>
+      old.reached != reached ||
+      old.current != current ||
+      old.record != record ||
+      old.first != first ||
+      old.last != last;
 }

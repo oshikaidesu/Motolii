@@ -1,28 +1,27 @@
-# History — local records and checkpoints
+# History — one column for edits and records
 
-2026-09-09 user acceptance: lightweight logs and named checkpoints first; branches later; no merge in this increment.
+2026-09-09 利用者: 「desk の history をクリスタ形式にしてくれ、もしくは git みたいな UI にして、
+VSCode の可視化とかがいい例じゃね？」「ここで記録などクラッシュなどのログも観れると嬉しい」
+「軽くでいいので git 的な機能を将来入れれるか？でもマージが面倒か」。
 
-Authority and precedents:
-- [VS Code local history](https://code.visualstudio.com/updates/v1_66#_local-history): named local snapshots and restore.
-- [Flutter error handling](https://docs.flutter.dev/testing/errors): FlutterError.onError and PlatformDispatcher.onError.
-- [Apple crash reports](https://developer.apple.com/documentation/xcode/acquiring-crash-reports-and-diagnostic-logs): show OS reports, not inferred crashes.
-- Document::save/load in crates/motolii-doc/src/store/persist.rs: existing atomic RRD snapshot format. Checkpoints reference external media, like normal project saves.
+先例: Clip Studio Paint の履歴パレット(一覧 + 現在位置)と VS Code の Git Graph(縦の一本線)。
+採ったのは前者の並びに後者の線 — 縦一本、上が古い、現在位置は 1 点だけ。分岐の枝はまだ描かない。
 
-Implementation contract:
-- History keeps Undo separate from Records and Checkpoints. Logs do not become undo steps.
-- One native session owns disk records across windows. Records are capped at 500, details at 32 KiB; checkpoint files are retained until explicitly managed outside the app.
-- A checkpoint saves authored content without changing project path, dirty flag, or Undo cursor. Flush pending editors first; reject active previews.
-- Restore validates the target before replacement and saves a recovery checkpoint before restoring. Restore changes the project to the checkpoint source, marks it unsaved, and starts a new Undo history. Recovery remains selectable.
-- Failed persistence must not be reported as successful checkpoint creation or restoration.
-- OS crash reports are read on demand; interrupted-session markers are warnings, not proof of a crash. Reports remain local, can be copied, and are never automatically uploaded.
-- Future branch identity belongs to saved checkpoint metadata, never widget state. Automatic merge is outside this increment.
+## 今の形
 
-Acceptance: save/reload metadata; restore after editing and after restart; recovery before restore; missing/corrupt snapshot leaves current document intact; failed write has no success row; logs are bounded and survive restart; narrow panel layout and real-window save/restore.
+- 台帳は Rust が持つ(`motolii/ui/native/src/editor/history.rs`)。点は Document の
+  `edit_head` に紐づき、`status["history"]` で窓へ渡る。窓は描くだけで、数えない。
+- 編集は 1 段 = 1 点。保存・起動・前回の異常終了は同じ列に別の印で並ぶ。
+- 点を押すと `historyGoto` が段まで戻る/進む。今居る点と、前の走行から読んだ点は押せない。
+- 戻った先から編集すると、捨てられた先の点は列から消える(rerun の tip がそこで切れるため)。
+- 台帳は `~/Library/Application Support/MotoliiStage5/history.jsonl` に 200 点まで残る。
+  閉じる時に `end` を書き、次の起動でそれが無ければ「異常終了」を 1 行足す。
 
-## Verification — 2026-09-09
+## 将来 git を入れるならここ
 
-- Native build completed. `python3 motolii/ui/test/checkpoint_native_test.py` passed on the actual dylib: copy preserves path/dirty/undo; restore restores two layers and resets Undo; missing/corrupt RRD leaves the document intact; explicit save clears dirty.
-- `swiftc motolii/ui/macos/Runner/HistoryStore.swift motolii/ui/test/history_store_test.swift -o /tmp/motolii-history-store-test` and the resulting executable passed: recovery retains later work, backup failure blocks restoration, metadata survives restart, 500-record cap, report allowlist, interruption marker.
-- Flutter `history_panel_test.dart` and `history_records_test.dart` passed: Undo/Redo, rejection, details, flush-before-checkpoint, cancel/restore, narrow 240px panel. Scoped analyzer and raw-dimension lint passed.
-- Real window: History tabs, OS report list, complete report detail and Copy/Close controls observed. Subsequent crash-list folding is source/test verified only.
-- Remaining real-window gate: checkpoint create/restore. A later app build collided with a concurrent Xcode build (`build.db` locked); reconnecting to the running app by path, bundle ID, and resetting CUA still returned `AXError.failure` on click. Existing project content was not edited for verification. Do not claim end-to-end window acceptance until this gate passes.
+1. 点は既に `id`(走行 ID + 連番、再利用しない)と `parent` を持つ。線形リストではなく木。
+2. 枝を足すのは `note()` の「捨てられた先を消す」を「別の親を持つ枝として残す」に変える所だけ。
+3. 枝の名前は `Entry` に `branch` を 1 本足し、`snapshot()` が列と一緒に返す。
+4. 窓側は `_RailPainter` が 1 本の線を描いている。列 x を枝の番号で決めれば Git Graph になる。
+5. 段の実体は rerun の edit timeline の整数。枝は別の timeline か、同じ timeline の別区間になる。
+6. 合流(merge)はこの版の外。2 つの `edit_head` を混ぜる意味を Document が持っていない。

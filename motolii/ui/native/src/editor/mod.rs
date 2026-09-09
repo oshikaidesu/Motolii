@@ -10,3 +10,4 @@ pub mod gradient;
 pub mod visual_samples;
 
 pub mod text_format;
+pub mod history;
