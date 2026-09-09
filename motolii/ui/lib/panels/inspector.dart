@@ -1691,7 +1691,8 @@ class _InspectorPanelState extends State<InspectorPanel> {
         EditorSwitch(
           on: c.animating,
           glyph: Icons.diamond_outlined,
-          label: c.deskWork.value['animateFrom'] == true
+          tint: EditorTheme.keyAccent,
+          label: c.animateFrom
               ? 'Animate (A): values you touch become keys at this frame, '
                     'and at the frame Animate was turned on'
               : 'Animate (A): values you touch become keys at this frame',

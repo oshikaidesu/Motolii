@@ -59,7 +59,7 @@ class PanelSettings extends StatelessWidget {
             ),
             EditorSwitch(
               key: const ValueKey('settings:animateFrom'),
-              on: controller.deskWork.value['animateFrom'] == true,
+              on: controller.animateFrom,
               glyph: Icons.diamond_outlined,
               label:
                   'When Animate is turned on, remember the frame; the first '

@@ -57,12 +57,38 @@ class EditorSession {
   Map<String, dynamic> get state => document.value;
   bool get animating => state['animate'] == true;
 
-  /// Animate on or off. With the `animateFrom` setting the frame it was turned
-  /// on at becomes the first key of anything touched later at another frame.
+  /// On by default: the frame Animate was turned on at becomes the first key
+  /// of anything touched later at another frame. Settings can turn it off.
+  bool get animateFrom => deskWork.value['animateFrom'] != false;
+
+  /// The shape a newborn key gets; Easy Ease until the Ease desk says otherwise.
+  static const easyEase = {
+    'kind': 'Bezier',
+    'x1': 0.42,
+    'y1': 0.0,
+    'x2': 0.58,
+    'y2': 1.0,
+  };
+  Map<String, dynamic> get newKeyShape {
+    final chosen = map(deskWork.value['newKeyShape']);
+    return chosen.isEmpty ? Map.of(easyEase) : chosen;
+  }
+
   Future<void> setAnimate(bool on) => command('animate', {
     'enabled': on,
-    'from': deskWork.value['animateFrom'] == true,
+    'from': animateFrom,
+    'shape': newKeyShape,
   });
+
+  /// The key selection before the current one, with the layers it sits on,
+  /// so a shortcut can bring a motion back without a trip to the Timeline.
+  Map<String, dynamic>? previousKeys;
+  Future<void> reselectKeys() async {
+    final back = previousKeys;
+    if (back == null) return;
+    await command('select', back);
+  }
+
   final _slices = <String, DocumentSlice>{};
   Map<String, dynamic> _spread = const {};
 
@@ -107,7 +133,16 @@ class EditorSession {
     if (merged != null) held.value = merged;
   }
 
-  void absorb(Map<String, dynamic> next) => take(document, next);
+  void absorb(Map<String, dynamic> next) {
+    final keys = maps(state['selectedKeys']);
+    if (keys.isNotEmpty &&
+        next['selectedKeys'] is List &&
+        !sameValue(state['selectedKeys'], next['selectedKeys'])) {
+      previousKeys = {'ids': selectedIds, 'keys': keys};
+    }
+    take(document, next);
+  }
+
   final textureId = ValueNotifier<int?>(null);
   final frame = ValueNotifier<int>(0);
   final rendered = ValueNotifier<Map<String, dynamic>>({});
@@ -181,7 +216,9 @@ class EditorSession {
     final r = rendered.value;
     return r.isNotEmpty &&
         r['frame'] == frame.value &&
-        (r['contentRevision'] == null || state['contentRevision'] == null || r['contentRevision'] == state['contentRevision']) &&
+        (r['contentRevision'] == null ||
+            state['contentRevision'] == null ||
+            r['contentRevision'] == state['contentRevision']) &&
         (r['documentRevision'] == null ||
             r['documentRevision'] == state['documentRevision']);
   }
@@ -401,13 +438,16 @@ class EditorSession {
   ]) => _bridge.request(operation, args, {
     'knownSnapshotId': state['snapshotId'],
     'knownReferenceId': state['referenceId'],
-    'deferSnapshot': operation != DocumentOperation.play && operation != DocumentOperation.pause,
+    'deferSnapshot':
+        operation != DocumentOperation.play &&
+        operation != DocumentOperation.pause,
   });
   Future<void> _render({bool notify = true, bool playback = false}) async {
-    final response = await native(
-      'render',
-      {'playing': playback, 'knownSnapshotId': state['snapshotId'], 'knownReferenceId': state['referenceId']},
-    );
+    final response = await native('render', {
+      'playing': playback,
+      'knownSnapshotId': state['snapshotId'],
+      'knownReferenceId': state['referenceId'],
+    });
     _accept(response, notify: notify);
   }
 
@@ -448,11 +488,12 @@ class EditorSession {
       if (requiresPause && playing.value)
         throw StateError('Playback did not stop before $op');
       final response = map(await _request(operation, args));
-      final needsRender = response['needsRender'] as bool? ??
-          operation.requiresRender;
+      final needsRender =
+          response['needsRender'] as bool? ?? operation.requiresRender;
       // 状態を持たない返信は 2 つだけ — 繰り延べた {"needsRender":true} と
       // quiet な seek/tick の {"ok":true}。それ以外は必ず取り込む。
-      final stateless = response.length == 1 &&
+      final stateless =
+          response.length == 1 &&
           (response['needsRender'] == true || response['ok'] == true);
       if (!stateless) _accept(response);
       if (operation == DocumentOperation.select) {

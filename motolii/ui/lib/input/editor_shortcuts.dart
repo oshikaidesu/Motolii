@@ -63,7 +63,14 @@ class EditorShortcuts {
       if (k == LogicalKeyboardKey.keyC) op = 'copy';
       if (k == LogicalKeyboardKey.keyX) op = 'cut';
       if (k == LogicalKeyboardKey.keyV) op = 'paste';
-      if (k == LogicalKeyboardKey.keyD) op = 'duplicate';
+      if (k == LogicalKeyboardKey.keyD) {
+        if (!shift) {
+          op = 'duplicate';
+        } else {
+          c.reselectKeys();
+          return KeyEventResult.handled;
+        }
+      }
       if (k == LogicalKeyboardKey.keyG) op = shift ? 'ungroup' : 'group';
       if (k == LogicalKeyboardKey.keyA) {
         c.command('select', {'ids': c.layers.map((l) => l['id']).toList()});

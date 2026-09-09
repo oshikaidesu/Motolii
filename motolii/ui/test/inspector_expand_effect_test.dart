@@ -167,8 +167,8 @@ void main() {
     expect(find.text('Remove effect'), findsOneWidget);
     await tester.tapAt(Offset.zero);
     await tester.pumpAndSettle();
-    final animate = find.byTooltip(
-      'Animate (A): values you touch become keys at this frame',
+    final animate = find.byWidgetPredicate(
+      (w) => w is Tooltip && w.message!.startsWith('Animate (A):'),
     );
     await tester.tap(animate);
     await tester.pump();

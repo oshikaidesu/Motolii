@@ -5,13 +5,29 @@ use crate::doc::store::{
 
 /// How a touched value lands. `Off`: keyed properties keep their shape and move as a
 /// whole. `Now`: the value becomes a key at the playhead (the first key if none).
-/// `From(t0)`: as `Now`, but a property without keys also gets its untouched value
-/// keyed at `t0`, so one edit records both ends of the motion.
+/// `From`: as `Now`, but a property without keys also gets its untouched value
+/// keyed at `origin`, so one edit records both ends of the motion. `interp` is
+/// the shape a newborn key is given.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Animate {
     Off,
-    Now,
-    From(RationalTime),
+    Now { interp: Interp },
+    From { origin: RationalTime, interp: Interp },
+}
+
+impl Animate {
+    pub fn now() -> Self {
+        Animate::Now { interp: Interp::Linear }
+    }
+    pub fn from(origin: RationalTime) -> Self {
+        Animate::From { origin, interp: Interp::Linear }
+    }
+    fn interp(self) -> Interp {
+        match self {
+            Animate::Off => Interp::Linear,
+            Animate::Now { interp } | Animate::From { interp, .. } => interp,
+        }
+    }
 }
 
 impl Document {
@@ -78,7 +94,7 @@ impl Document {
                     track.insert(Keyframe {
                         t: at,
                         value,
-                        interp: Interp::Linear,
+                        interp: animate.interp(),
                         spatial: None,
                     });
                 }
@@ -91,12 +107,12 @@ impl Document {
             Some(PropertyBase::Constant(_)) | None => {
                 if animate != Animate::Off {
                     let mut track = crate::doc::eval::KeyframeTrack::new();
-                    if let (Animate::From(origin), Some(from)) = (animate, &current) {
+                    if let (Animate::From { origin, interp }, Some(from)) = (animate, &current) {
                         if origin != at {
-                            track.insert(Keyframe { t: origin, value: from.clone(), interp: Interp::Linear, spatial: None });
+                            track.insert(Keyframe { t: origin, value: from.clone(), interp, spatial: None });
                         }
                     }
-                    track.insert(Keyframe { t: at, value, interp: Interp::Linear, spatial: None });
+                    track.insert(Keyframe { t: at, value, interp: animate.interp(), spatial: None });
                     return Ok(Some(Intent::SetTrack { layer, property: property.clone(), track }));
                 }
                 if current.as_ref() == Some(&value) {

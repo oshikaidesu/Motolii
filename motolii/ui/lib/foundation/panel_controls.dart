@@ -676,9 +676,9 @@ class _EditorLampState extends State<EditorLamp> {
     final state = widget.state;
     final color = switch (state) {
       KeyLamp.none => null,
-      KeyLamp.keyed => EditorTheme.accent.withValues(alpha: .55),
-      KeyLamp.now => EditorTheme.accent,
-      KeyLamp.draft => EditorTheme.accent.withValues(alpha: .3),
+      KeyLamp.keyed => EditorTheme.keyAccent.withValues(alpha: .55),
+      KeyLamp.now => EditorTheme.keyAccent,
+      KeyLamp.draft => EditorTheme.keyAccent.withValues(alpha: .3),
     };
     // Unlit lamps show as a hollow ring only while the pointer is near, so
     // the corner stays quiet until it is wanted.
@@ -742,11 +742,15 @@ class EditorSwitch extends StatelessWidget {
     required this.label,
     required this.onChanged,
     this.compact = false,
+    this.tint,
   });
   final bool on;
   final IconData glyph;
   final String label;
   final ValueChanged<bool>? onChanged;
+
+  /// The lit colour; the accent unless the switch belongs to another mode.
+  final Color? tint;
 
   /// Glyph only, lit when on — for a slot too narrow for the track.
   final bool compact;
@@ -765,7 +769,7 @@ class EditorSwitch extends StatelessWidget {
             color: !enabled
                 ? EditorTheme.disabledInk
                 : on
-                ? EditorTheme.accent
+                ? tint ?? EditorTheme.accent
                 : EditorTheme.muted,
           ),
         ),
@@ -784,7 +788,7 @@ class EditorSwitch extends StatelessWidget {
               height: EditorMetrics.s12,
               padding: const EdgeInsets.all(EditorMetrics.s2),
               decoration: BoxDecoration(
-                color: on ? EditorTheme.accent : EditorTheme.raised,
+                color: on ? tint ?? EditorTheme.accent : EditorTheme.raised,
                 borderRadius: BorderRadius.circular(EditorMetrics.s6),
               ),
               alignment: on ? Alignment.centerRight : Alignment.centerLeft,

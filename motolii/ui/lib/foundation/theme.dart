@@ -19,14 +19,15 @@ abstract final class EditorTheme {
   static const line = Color(0xff242424),
       border = Color(0xff666666),
       ink = Color(0xffdddddd),
-      muted = Color(0xffaaaaaa);
+      muted = Color(0xffaaaaaa),
+      accent = Color(0xffffaa61);
 
-  /// The accent while Animate is off, and its hue complement while it is on:
-  /// same lightness, opposite hue, so every accent in the window says which
-  /// mode a touch will land in.
-  static const design = Color(0xffffaa61), animate = Color(0xff61b6ff);
+  /// Where a touch lands as a key — key lamps, the Animate switch, the
+  /// playhead and keys — the accent turns to its hue complement while
+  /// Animate is on. Everything else keeps the accent for "chosen".
+  static const animate = Color(0xff61b6ff);
   static final animating = ValueNotifier<bool>(false);
-  static Color get accent => animating.value ? animate : design;
+  static Color get keyAccent => animating.value ? animate : accent;
   static const tab = Color(0xffb7b7b7), tabInk = Color(0xff262626);
   // Menus: a darker sheet, a pale edge, a pale hover row with dark ink.
   static const menu = Color(0xff222222),
@@ -196,7 +197,7 @@ abstract final class EditorTheme {
       titleTextStyle: TextStyle(fontSize: EditorMetrics.title, color: ink),
       contentTextStyle: TextStyle(fontSize: EditorMetrics.font, color: ink),
     ),
-    colorScheme: ColorScheme.dark(
+    colorScheme: const ColorScheme.dark(
       primary: accent,
       secondary: accent,
       surface: panel,
@@ -214,12 +215,12 @@ abstract final class EditorTheme {
     // tuned against; only the shapes below move to M3.
     typography: Typography.material2014(platform: defaultTargetPlatform),
     materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-    inputDecorationTheme: InputDecorationTheme(
+    inputDecorationTheme: const InputDecorationTheme(
       isDense: true,
       filled: true,
       fillColor: app,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
-      enabledBorder: const OutlineInputBorder(
+      contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+      enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.zero,
         borderSide: BorderSide(color: border),
       ),

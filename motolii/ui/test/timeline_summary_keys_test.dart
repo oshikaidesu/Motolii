@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../lib/session/editor_session.dart';
@@ -100,5 +101,73 @@ void main() {
     expect(picked.map((k) => '${k['property']}@${k['frame']}').toSet(), {
       'effect.0.param.radius@30',
     }, reason: 'effect parameter keys sit on the folded row too');
+  });
+
+  testWidgets('Pressing the span between two keys chooses both ends', (
+    tester,
+  ) async {
+    final c = RecordingController();
+    c.document.value = {
+      'fps': 30,
+      'durationFrames': 300,
+      'capabilities': ['moveKeys', 'select'],
+      'selectedIds': [],
+      'selectedKeys': [],
+      'layers': [
+        {
+          'id': 1,
+          'name': 'paper',
+          'kind': 'Shape',
+          'start': 0,
+          'duration': 300,
+          'properties': [
+            {
+              'id': 'position',
+              'keys': [
+                {
+                  'frame': 10,
+                  'interp': {'kind': 'Linear'},
+                },
+                {
+                  'frame': 20,
+                  'interp': {'kind': 'Linear'},
+                },
+                {
+                  'frame': 40,
+                  'interp': {'kind': 'Linear'},
+                },
+              ],
+            },
+          ],
+          'effects': [],
+        },
+      ],
+    };
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: TimelinePanel(controller: c)),
+      ),
+    );
+    double x(int frame) => 220 + frame * 4.0;
+    // Open the lanes; the position row sits one row under the layer.
+    await tester.tapAt(const Offset(220 - 73, 64));
+    await tester.pump();
+    await tester.tapAt(Offset(x(15), 84));
+    await tester.pump();
+    var keys = c.commands.lastWhere((m) => m['op'] == 'select')['keys'] as List;
+    expect(keys.map((k) => '${k['property']}@${k['frame']}').toList(), [
+      'position@10',
+      'position@20',
+    ]);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.tapAt(Offset(x(30), 84));
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.pump();
+    keys = c.commands.lastWhere((m) => m['op'] == 'select')['keys'] as List;
+    expect(keys.map((k) => '${k['frame']}').toList(), [
+      '10',
+      '20',
+      '40',
+    ], reason: 'Shift adds the next span without dropping the first');
   });
 }

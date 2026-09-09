@@ -942,6 +942,19 @@ class _EaseDeskState extends State<EaseDesk>
               await c.storeDesk('easePresets', [...saved, Map.of(_shape)]);
               if (mounted) setState(() => _notice = 'Preset saved');
             }),
+            action(
+              'Use for new keys (now ${_curveName('${c.newKeyShape['kind']}')})',
+              Icons.fiber_new_outlined,
+              () async {
+                await c.storeDesk('newKeyShape', _payload(_shape));
+                if (c.animating) await c.setAnimate(true);
+                if (mounted)
+                  setState(
+                    () => _notice =
+                        'New keys: ${_curveName('${_shape['kind']}')}',
+                  );
+              },
+            ),
             if (saved.isNotEmpty)
               action(
                 'Clear saved presets',
@@ -1439,7 +1452,9 @@ class EaseIntervalPainter extends CustomPainter {
       canvas.drawRRect(
         rect,
         Paint()
-          ..color = chosen ? _easePaper : EditorTheme.muted.withValues(alpha: .35),
+          ..color = chosen
+              ? _easePaper
+              : EditorTheme.muted.withValues(alpha: .35),
       );
       if (chosen) {
         canvas.drawRRect(

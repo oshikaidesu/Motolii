@@ -214,6 +214,20 @@ class _TimelinePanelState extends State<TimelinePanel> {
           grownFrames +
           math.max(1, viewportWidth - labelWidth) / pixelsPerFrame) *
       pixelsPerFrame;
+
+  /// Both ends of the span under x on a property row, or null off any span.
+  List<Map<String, dynamic>>? spanAt(_TrackRow row, double x) {
+    for (var i = 0; i + 1 < row.keys.length; i++) {
+      final a = row.keys[i], b = row.keys[i + 1];
+      final x1 =
+          labelWidth + (a['frame'] as num).toDouble() * pixelsPerFrame - offset;
+      final x2 =
+          labelWidth + (b['frame'] as num).toDouble() * pixelsPerFrame - offset;
+      if (x > x1 + 7 && x < x2 - 7) return [keyOf(row, a), keyOf(row, b)];
+    }
+    return null;
+  }
+
   Map<String, dynamic> keyOf(_TrackRow row, Map<String, dynamic> key) => {
     'layer': row.id,
     'property': row.property?['id'],
@@ -368,21 +382,25 @@ class _TimelinePanelState extends State<TimelinePanel> {
           break;
         }
       }
-      if (found != null) {
+      final span = found == null ? spanAt(row, p.dx) : null;
+      if (found != null || span != null) {
+        final picked = span ?? [found!];
         var chosen = selectedKeys.toList();
-        final already = chosen.any((k) => sameKey(k, found!));
+        final already = picked.every((f) => chosen.any((k) => sameKey(k, f)));
         if (additive) {
           already
-              ? chosen.removeWhere((k) => sameKey(k, found!))
-              : chosen.add(found);
+              ? chosen.removeWhere((k) => picked.any((f) => sameKey(k, f)))
+              : chosen.addAll(
+                  picked.where((f) => !chosen.any((k) => sameKey(k, f))),
+                );
         } else if (!already)
-          chosen = [found];
+          chosen = picked;
         widget.controller.command('select', {
           'ids': chosen.map((k) => k['layer']).toSet().toList(),
           'keys': chosen,
         });
         initialKeys = chosen;
-        gesture = has('moveKeys') ? 'keys' : null;
+        gesture = has('moveKeys') && span == null ? 'keys' : null;
         setState(() {});
         return;
       }
@@ -1597,13 +1615,43 @@ class _TimelinePainter extends CustomPainter {
                   ..style = PaintingStyle.stroke,
               );
             }
-        } else
-          for (final key in row.keys) {
+        } else {
+          double keyX(Map<String, dynamic> key) {
             final shift = selectedKey(row, key, dragKeys) ? delta : 0;
-            final x =
-                label +
+            return label +
                 ((key['frame'] as num).toDouble() + shift) * scale -
                 offset;
+          }
+
+          // The span between two keys is where an ease lives: solid once it
+          // has a shape, dashed while still linear; lit when both ends are
+          // chosen. Pressing it chooses both ends.
+          for (var i = 0; i + 1 < row.keys.length; i++) {
+            final a = row.keys[i], b = row.keys[i + 1];
+            final x1 = keyX(a) + 5, x2 = keyX(b) - 5;
+            if (x2 <= x1) continue;
+            final cy = y + h / 2;
+            final chosen =
+                selectedKey(row, a, keys) && selectedKey(row, b, keys);
+            final paint = Paint()
+              ..color = chosen
+                  ? EditorTheme.keyAccent
+                  : EditorTheme.muted.withValues(alpha: .6)
+              ..strokeWidth = chosen ? 2 : 1;
+            if (a['interp']?['kind'] == 'Linear') {
+              for (var x = x1; x < x2; x += 6) {
+                canvas.drawLine(
+                  Offset(x, cy),
+                  Offset(math.min(x + 3, x2), cy),
+                  paint,
+                );
+              }
+            } else {
+              canvas.drawLine(Offset(x1, cy), Offset(x2, cy), paint);
+            }
+          }
+          for (final key in row.keys) {
+            final x = keyX(key);
             final path = Path()
               ..moveTo(x, y + h / 2 - 5)
               ..lineTo(x + 5, y + h / 2)
@@ -1618,6 +1666,7 @@ class _TimelinePainter extends CustomPainter {
                     : EditorTheme.ink,
             );
           }
+        }
       }
     if (!ruler) {
       for (double y = h; y <= rows.length * h && y <= size.height; y += h) {
