@@ -90,8 +90,9 @@ class _BrowserPanelState extends State<BrowserPanel> {
       math.max(EditorMetrics.micro, EditorMetrics.font * tileScale);
   double get captionHeight => _captionHeight * tileScale;
 
-  /// The mark grows with the rest of the card.
-  double get markScale => tileScale;
+  /// A mark grows slower than the picture it marks: by the square root, so
+  /// at twice the tile it is 1.4× and stays a mark beside the name.
+  double get markScale => math.sqrt(tileScale);
   double get rail =>
       railDrag ??
       (widget.controller.deskWork.value['browserRail'] as num? ??
@@ -1248,12 +1249,6 @@ class _BrowserPanelState extends State<BrowserPanel> {
                         fit: StackFit.expand,
                         children: [
                           preview,
-                          if (badge != null)
-                            Positioned(
-                              right: air,
-                              bottom: air,
-                              child: badge,
-                            ),
                           // The chosen card says its name, and so does the
                           // one under the pointer: a band over the picture's
                           // foot, so the picture stays the point.
@@ -1278,6 +1273,12 @@ class _BrowserPanelState extends State<BrowserPanel> {
                                   sliding: hovered,
                                 ),
                               ),
+                            ),
+                          if (badge != null)
+                            Positioned(
+                              right: air,
+                              bottom: air,
+                              child: badge,
                             ),
                         ],
                       )
@@ -2374,9 +2375,9 @@ class _FittedNameState extends State<_FittedName>
 
   void _enter() {
     if (_overflow <= 0) return;
-    // A steady reading pace: forty pixels a second, at least half a second.
+    // A brisk reading pace: ninety pixels a second, at least a third of one.
     _slide.duration = Duration(
-      milliseconds: math.max(500, (_overflow / 40 * 1000).round()),
+      milliseconds: math.max(300, (_overflow / 90 * 1000).round()),
     );
     _slide.forward();
   }
