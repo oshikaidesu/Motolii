@@ -434,7 +434,11 @@ class _InspectorPanelState extends State<InspectorPanel> {
   /// The word part of the name column; 0 when the panel is too narrow for
   /// three wells beside it — the name falls back to its glyph and tooltip.
   double _wordWidth = EditorMetrics.s48;
+  /// The room a card's contents get: the panel less the card's margin and
+  /// padding. Measured once for the panel instead of once per row of cells.
+  double _cardWidth = EditorMetrics.cell;
   void _fit(double panelWidth) {
+    _cardWidth = math.max(1, panelWidth - EditorMetrics.s6 * 4);
     final fixed =
         EditorMetrics.s12 * 2 +
         EditorMetrics.s18 +
@@ -1119,30 +1123,26 @@ class _InspectorPanelState extends State<InspectorPanel> {
 
   /// Controls in equal columns on fixed rows (a word, then a control), so
   /// every cell sits on the same grid; a section label spans them all.
-  Widget _cells(List<_Cell> cells) => LayoutBuilder(
-    builder: (context, box) {
-      // Cells keep one width and pack from the left, so the gap between
-      // items never grows; a wider panel or a smaller cell only adds columns.
-      const gap = EditorMetrics.s6;
-      final wanted = _cellWidth;
-      final columns = math.max(
-        1,
-        ((box.maxWidth + gap) / (wanted + gap)).floor(),
-      );
-      // One column takes the whole width; more columns keep the cell's own.
-      final cell = columns == 1
-          ? box.maxWidth
-          : math.min(wanted, (box.maxWidth - gap * (columns - 1)) / columns);
-      return Wrap(
-        spacing: EditorMetrics.s6,
-        runSpacing: EditorMetrics.s6,
-        children: [
-          for (final c in cells)
-            SizedBox(width: c.wide ? box.maxWidth : cell, child: c.child),
-        ],
-      );
-    },
-  );
+  Widget _cells(List<_Cell> cells) {
+    // Cells keep one width and pack from the left, so the gap between items
+    // never grows; a wider panel or a smaller cell only adds columns.
+    const gap = EditorMetrics.s6;
+    final room = _cardWidth;
+    final wanted = _cellWidth;
+    final columns = math.max(1, ((room + gap) / (wanted + gap)).floor());
+    // One column takes the whole width; more columns keep the cell's own.
+    final cell = columns == 1
+        ? room
+        : math.min(wanted, (room - gap * (columns - 1)) / columns);
+    return Wrap(
+      spacing: EditorMetrics.s6,
+      runSpacing: EditorMetrics.s6,
+      children: [
+        for (final c in cells)
+          SizedBox(width: c.wide ? room : cell, child: c.child),
+      ],
+    );
+  }
 
   /// A pair of params as one point: drag the dot, or type either number.
   Widget _pointControl(

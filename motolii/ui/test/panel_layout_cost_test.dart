@@ -200,9 +200,25 @@ const _panels = <String, Size>{
   'Timeline': Size(1280, 255),
 };
 
-/// Layout calls a panel may cost when it is laid out whole. Held so no panel
-/// goes back to laying out a tooltip, a builder and a hidden tab per card.
-const _budget = <String, int>{};
+/// What a panel may cost, as `(one status update, one whole layout)` in calls
+/// to `RenderObject.layout`. Held so no panel goes back to measuring itself
+/// once per card, or to rebuilding its bar for every rendered frame.
+const _budget = <String, (int, int)>{
+  'Create': (2, 240),
+  'Media': (2, 280),
+  'Effects': (2, 260),
+  'Colors': (2, 320),
+  'Fonts': (2, 120),
+  'Stage': (16, 80),
+  'Inspector': (8, 400),
+  'Notes': (2, 50),
+  'Desk': (2, 120),
+  'Ease': (12, 170),
+  'Depth': (2, 50),
+  'Blend': (2, 380),
+  'History': (2, 60),
+  'Timeline': (4, 60),
+};
 
 /// The default dock, whole: five panels and the three Browser tabs the dock
 /// keeps behind the front one.
@@ -309,12 +325,17 @@ void main() {
           'whole ${whole.calls.toString().padLeft(5)}   '
           '${whole.top}',
         );
-        if (_budget[entry.key] case final ceiling?)
-          expect(
-            whole.calls,
-            lessThanOrEqualTo(ceiling),
-            reason: '${entry.key} lays out too much',
-          );
+        final (perUpdate, perLayout) = _budget[entry.key]!;
+        expect(
+          update.calls,
+          lessThanOrEqualTo(perUpdate),
+          reason: '${entry.key} lays out too much for one status update',
+        );
+        expect(
+          whole.calls,
+          lessThanOrEqualTo(perLayout),
+          reason: '${entry.key} lays out too much when laid out whole',
+        );
         await tester.pumpWidget(const SizedBox());
       }
       debugPrint('LAYOUT CALLS, $layers layers\n${report.join('\n')}');
