@@ -267,11 +267,13 @@ class _NotesPanelState extends State<NotesPanel> {
                       ],
                     ),
                   ),
-                  IconButton(
-                    tooltip: 'New page',
-                    iconSize: EditorMetrics.s16,
-                    onPressed: _newPage,
-                    icon: const Icon(Icons.add),
+                  EditorTooltip(
+                    message: 'New page',
+                    child: IconButton(
+                      iconSize: EditorMetrics.s16,
+                      onPressed: _newPage,
+                      icon: const Icon(Icons.add),
+                    ),
                   ),
                 ],
               ),
@@ -295,49 +297,63 @@ class _NotesPanelState extends State<NotesPanel> {
               child: Row(
                 spacing: EditorMetrics.s14,
                 children: [
-                  IconButton(
-                    tooltip: 'Paste',
-                    iconSize: EditorMetrics.s16,
-                    onPressed: _paste,
-                    icon: const Icon(Icons.content_paste),
+                  EditorTooltip(
+                    message: 'Paste',
+                    child: IconButton(
+                      iconSize: EditorMetrics.s16,
+                      onPressed: _paste,
+                      icon: const Icon(Icons.content_paste),
+                    ),
                   ),
-                  IconButton(
-                    tooltip: 'Insert image',
-                    iconSize: EditorMetrics.s16,
-                    onPressed: () async {
-                      final paths = await c.native('pickImport');
-                      if (paths is List)
-                        for (var i = 0; i < paths.length; i++) {
-                          await _image(
-                            _insertion + Offset(i * 24, i * 24),
-                            path: '${paths[i]}',
-                          );
-                        }
-                    },
-                    icon: const Icon(Icons.image_outlined),
-                  ),
-                  IconButton(
-                    tooltip: 'Link selection',
-                    iconSize: EditorMetrics.s16,
-                    onPressed: _reference,
-                    icon: const Icon(Icons.link),
-                  ),
-                  IconButton(
-                    tooltip: 'Reset view',
-                    iconSize: EditorMetrics.s16,
-                    onPressed: () =>
-                        setState(() => _transform.value = Matrix4.identity()),
-                    icon: const Icon(Icons.center_focus_strong),
-                  ),
-                  if (page != null)
-                    IconButton(
-                      tooltip: 'Delete page',
+                  EditorTooltip(
+                    message: 'Insert image',
+                    child: IconButton(
                       iconSize: EditorMetrics.s16,
                       onPressed: () async {
-                        await c.flushEditors();
-                        await _action('deletePage', {}, page: '${page['id']}');
+                        final paths = await c.native('pickImport');
+                        if (paths is List)
+                          for (var i = 0; i < paths.length; i++) {
+                            await _image(
+                              _insertion + Offset(i * 24, i * 24),
+                              path: '${paths[i]}',
+                            );
+                          }
                       },
-                      icon: const Icon(Icons.delete_outline),
+                      icon: const Icon(Icons.image_outlined),
+                    ),
+                  ),
+                  EditorTooltip(
+                    message: 'Link selection',
+                    child: IconButton(
+                      iconSize: EditorMetrics.s16,
+                      onPressed: _reference,
+                      icon: const Icon(Icons.link),
+                    ),
+                  ),
+                  EditorTooltip(
+                    message: 'Reset view',
+                    child: IconButton(
+                      iconSize: EditorMetrics.s16,
+                      onPressed: () =>
+                          setState(() => _transform.value = Matrix4.identity()),
+                      icon: const Icon(Icons.center_focus_strong),
+                    ),
+                  ),
+                  if (page != null)
+                    EditorTooltip(
+                      message: 'Delete page',
+                      child: IconButton(
+                        iconSize: EditorMetrics.s16,
+                        onPressed: () async {
+                          await c.flushEditors();
+                          await _action(
+                            'deletePage',
+                            {},
+                            page: '${page['id']}',
+                          );
+                        },
+                        icon: const Icon(Icons.delete_outline),
+                      ),
                     ),
                 ],
               ),
@@ -589,18 +605,20 @@ class _NoteCardState extends State<_NoteCard> {
                             ),
                           ),
                         ),
-                        IconButton(
-                          tooltip: 'Delete note',
-                          iconSize: EditorMetrics.s12,
-                          onPressed: () async {
-                            await _flush();
-                            await widget.controller.command('notes', {
-                              'action': 'deleteBlock',
-                              'page': widget.page,
-                              'id': b['id'],
-                            });
-                          },
-                          icon: const Icon(Icons.close),
+                        EditorTooltip(
+                          message: 'Delete note',
+                          child: IconButton(
+                            iconSize: EditorMetrics.s12,
+                            onPressed: () async {
+                              await _flush();
+                              await widget.controller.command('notes', {
+                                'action': 'deleteBlock',
+                                'page': widget.page,
+                                'id': b['id'],
+                              });
+                            },
+                            icon: const Icon(Icons.close),
+                          ),
                         ),
                       ],
                     ),

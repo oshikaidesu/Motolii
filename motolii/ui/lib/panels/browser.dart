@@ -864,16 +864,18 @@ class _BrowserPanelState extends State<BrowserPanel> {
                     color: viewMode == mode
                         ? EditorTheme.raised
                         : Colors.transparent,
-                    child: IconButton(
-                      key: ValueKey('browser:view:$mode'),
-                      tooltip: label,
-                      iconSize: EditorMetrics.s14,
-                      color: viewMode == mode
-                          ? EditorTheme.ink
-                          : EditorTheme.muted,
-                      onPressed: () =>
-                          widget.controller.storeDesk('browserView', mode),
-                      icon: Icon(icon),
+                    child: EditorTooltip(
+                      message: label,
+                      child: IconButton(
+                        key: ValueKey('browser:view:$mode'),
+                        iconSize: EditorMetrics.s14,
+                        color: viewMode == mode
+                            ? EditorTheme.ink
+                            : EditorTheme.muted,
+                        onPressed: () =>
+                            widget.controller.storeDesk('browserView', mode),
+                        icon: Icon(icon),
+                      ),
                     ),
                   ),
               ],

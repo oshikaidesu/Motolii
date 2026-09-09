@@ -320,42 +320,46 @@ class _GradientInspectorState extends State<GradientInspector>
                   ),
                 ),
                 const SizedBox(width: EditorMetrics.s6),
-                IconButton(
-                  tooltip: 'Add stop',
-                  icon: const Icon(Icons.add, size: EditorMetrics.s14),
-                  onPressed: !enabled || rows.length >= 32
-                      ? null
-                      : () async {
-                          final stop = {
-                            ...rows[selected],
-                            'offset': selected + 1 < rows.length
-                                ? ((rows[selected]['offset'] as num) +
-                                          (rows[selected + 1]['offset']
-                                              as num)) /
-                                      2
-                                : ((rows[selected - 1]['offset'] as num) +
-                                          (rows[selected]['offset'] as num)) /
-                                      2,
-                          };
-                          final next = [...rows, stop]
-                            ..sort(
-                              (a, b) => (a['offset'] as num).compareTo(
-                                b['offset'] as num,
-                              ),
-                            );
-                          final index = next.indexOf(stop);
-                          await edit({'stops': next});
-                          if (mounted) setState(() => selected = index);
-                        },
+                EditorTooltip(
+                  message: 'Add stop',
+                  child: IconButton(
+                    icon: const Icon(Icons.add, size: EditorMetrics.s14),
+                    onPressed: !enabled || rows.length >= 32
+                        ? null
+                        : () async {
+                            final stop = {
+                              ...rows[selected],
+                              'offset': selected + 1 < rows.length
+                                  ? ((rows[selected]['offset'] as num) +
+                                            (rows[selected + 1]['offset']
+                                                as num)) /
+                                        2
+                                  : ((rows[selected - 1]['offset'] as num) +
+                                            (rows[selected]['offset'] as num)) /
+                                        2,
+                            };
+                            final next = [...rows, stop]
+                              ..sort(
+                                (a, b) => (a['offset'] as num).compareTo(
+                                  b['offset'] as num,
+                                ),
+                              );
+                            final index = next.indexOf(stop);
+                            await edit({'stops': next});
+                            if (mounted) setState(() => selected = index);
+                          },
+                  ),
                 ),
-                IconButton(
-                  tooltip: 'Remove stop',
-                  icon: const Icon(Icons.remove, size: EditorMetrics.s14),
-                  onPressed: !enabled || rows.length <= 2
-                      ? null
-                      : () => edit({
-                          'stops': [...rows]..removeAt(selected),
-                        }),
+                EditorTooltip(
+                  message: 'Remove stop',
+                  child: IconButton(
+                    icon: const Icon(Icons.remove, size: EditorMetrics.s14),
+                    onPressed: !enabled || rows.length <= 2
+                        ? null
+                        : () => edit({
+                            'stops': [...rows]..removeAt(selected),
+                          }),
+                  ),
                 ),
               ],
             ),
