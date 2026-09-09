@@ -82,10 +82,13 @@ class _BrowserPanelState extends State<BrowserPanel> {
 
   double get tile => BrowserSize.tile(widget.controller);
 
-  /// Names grow with the tile, between the smallest legible size and a cap,
-  /// so a big picture is not captioned in a whisper.
-  double get captionSize => (EditorMetrics.font * tile / BrowserSize.base)
-      .clamp(EditorMetrics.micro, EditorMetrics.s16);
+  /// The tile is one drawing that scales: caption, badge and airs keep
+  /// their proportion to the picture at every size. Only the type has a
+  /// floor, below which a name stops being legible.
+  double get tileScale => tile / BrowserSize.base;
+  double get captionSize =>
+      math.max(EditorMetrics.micro, EditorMetrics.font * tileScale);
+  double get captionHeight => _captionHeight * tileScale;
   double get rail =>
       railDrag ??
       (widget.controller.deskWork.value['browserRail'] as num? ??
@@ -734,7 +737,7 @@ class _BrowserPanelState extends State<BrowserPanel> {
                                                             16 +
                                                         (viewMode == 2
                                                             ? 0
-                                                            : _captionHeight),
+                                                            : captionHeight),
                                               crossAxisSpacing: tab == 'Colors'
                                                   ? EditorMetrics.s4
                                                   : _gutter,
@@ -1147,18 +1150,22 @@ class _BrowserPanelState extends State<BrowserPanel> {
         ? null
         : Container(
             key: ValueKey('browser:format:${id(item)}'),
-            height: EditorMetrics.s14,
-            padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s4),
+            height: EditorMetrics.s14 * tileScale,
+            padding: EdgeInsets.symmetric(
+              horizontal: EditorMetrics.s4 * tileScale,
+            ),
             alignment: Alignment.center,
             decoration: BoxDecoration(
               color: identityColor,
-              borderRadius: BorderRadius.circular(EditorMetrics.s3),
+              borderRadius: BorderRadius.circular(
+                EditorMetrics.s3 * tileScale,
+              ),
             ),
             child: Text(
               format,
               maxLines: 1,
-              style: const TextStyle(
-                fontSize: EditorMetrics.micro,
+              style: TextStyle(
+                fontSize: EditorMetrics.micro * tileScale,
                 fontWeight: FontWeight.w600,
                 letterSpacing: .5,
                 color: EditorTheme.tabInk,
@@ -1167,12 +1174,13 @@ class _BrowserPanelState extends State<BrowserPanel> {
           );
     final badgeRoom = badge == null
         ? 0.0
-        : _badgeWidth(format) + EditorMetrics.s4;
+        : (_badgeWidth(format) + EditorMetrics.s4) * tileScale;
+    final air = EditorMetrics.s4 * tileScale;
     final caption = SizedBox(
       key: ValueKey('browser:name:${id(item)}'),
-      height: _captionHeight,
+      height: captionHeight,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s4),
+        padding: EdgeInsets.symmetric(horizontal: air),
         child: Row(
           children: [
             Expanded(
@@ -1180,13 +1188,13 @@ class _BrowserPanelState extends State<BrowserPanel> {
                 alignment: Alignment.centerLeft,
                 child: _FittedName(
                   _displayName(item),
-                  tileWidth - EditorMetrics.s4 * 2 - badgeRoom,
+                  tileWidth - air * 2 - badgeRoom,
                   size: captionSize,
                 ),
               ),
             ),
             if (badge != null) ...[
-              const SizedBox(width: EditorMetrics.s4),
+              SizedBox(width: air),
               badge,
             ],
           ],
@@ -1238,8 +1246,8 @@ class _BrowserPanelState extends State<BrowserPanel> {
                           preview,
                           if (badge != null)
                             Positioned(
-                              right: EditorMetrics.s3,
-                              bottom: EditorMetrics.s3,
+                              right: air,
+                              bottom: air,
                               child: badge,
                             ),
                           // Only the chosen card says its name: a band over
@@ -1251,16 +1259,16 @@ class _BrowserPanelState extends State<BrowserPanel> {
                               bottom: 0,
                               child: Container(
                                 key: ValueKey('browser:band:${id(item)}'),
-                                height: EditorMetrics.row,
+                                height: EditorMetrics.row * tileScale,
                                 padding: EdgeInsets.only(
-                                  left: EditorMetrics.s4,
-                                  right: badgeRoom + EditorMetrics.s4,
+                                  left: air,
+                                  right: badgeRoom + air,
                                 ),
                                 alignment: Alignment.centerLeft,
                                 color: EditorTheme.app.withValues(alpha: .75),
                                 child: _FittedName(
                                   _displayName(item),
-                                  tileWidth - EditorMetrics.s4 * 2 - badgeRoom,
+                                  tileWidth - air * 2 - badgeRoom,
                                   size: captionSize,
                                 ),
                               ),
