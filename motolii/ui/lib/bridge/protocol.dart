@@ -52,6 +52,7 @@ enum DocumentOperation {
   newDocument('new'),
   undo('undo'),
   redo('redo'),
+  historyGoto('historyGoto'),
   seek('seek'),
   anchor('anchor'),
   freeze('freeze'),

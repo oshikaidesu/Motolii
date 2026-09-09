@@ -3,7 +3,7 @@ use crate::doc::store::*;
 use serde_json::{Value as J,json};
 use editor::session::{KeySel,ColorSlot};
 fn e(error:impl std::fmt::Display)->String{error.to_string()}
-pub(crate) const CAPABILITIES:&[&str]=&["status","notes","stageView","select","setProperty","previewProperties","commitPreview","cancelPreview","setText","setAttrs","create","duplicate","ghost","sequence","previewSequence","copy","cut","paste","delete","group","ungroup","reorder","split","setTiming","toggleKey","moveKeys","ease","setColor","previewColor","focusColor","applyPalette","applyEffect","removeEffect","expandEffect","moveEffect","enableEffect","animate","clip","addMarker","setMarker","deleteMarker","composition","import","placeAsset","removeAsset","replaceAsset","save","new","undo","redo","seek","anchor","freeze","setFillMode","previewBlend","setTimings","previewTimings","stageGesture","export","exportStatus","cancelExport","play","pause","tick","moveLayers","pickColor"];
+pub(crate) const CAPABILITIES:&[&str]=&["status","notes","stageView","select","setProperty","previewProperties","commitPreview","cancelPreview","setText","setAttrs","create","duplicate","ghost","sequence","previewSequence","copy","cut","paste","delete","group","ungroup","reorder","split","setTiming","toggleKey","moveKeys","ease","setColor","previewColor","focusColor","applyPalette","applyEffect","removeEffect","expandEffect","moveEffect","enableEffect","animate","clip","addMarker","setMarker","deleteMarker","composition","import","placeAsset","removeAsset","replaceAsset","save","new","undo","redo","seek","anchor","freeze","setFillMode","previewBlend","setTimings","previewTimings","stageGesture","export","exportStatus","cancelExport","play","pause","tick","moveLayers","pickColor","historyGoto"];
 fn num(j:&J,key:&str)->Result<f64,String>{j[key].as_f64().filter(|v|v.is_finite()).ok_or_else(||format!("Missing finite {key}"))}
 fn integer(j:&J,key:&str)->Result<i64,String>{j[key].as_i64().ok_or_else(||format!("Missing integer {key}"))}
 fn layer(j:&J)->Result<LayerId,String>{j["layer"].as_u64().map(LayerId).ok_or("Missing layer".into())}
@@ -192,6 +192,14 @@ impl EditorRuntime{
             "new"=>{if self.clock.playing(){self.clock.toggle();}self.doc=blank_project();self.clock=editor::playback::Clock::from_document(&self.doc,60.0);self.path=None;self.pick(vec![]);self.selected_keys.clear();self.frame=0;self.saved_signature=snapshot::authored_signature(&self.doc)?;self.color_target=None;}
             "undo"=>{self.doc.undo();self.selected_keys.clear();}
             "redo"=>{self.doc.redo();self.selected_keys.clear();}
+            // 履歴の点を押した時。段の番号まで戻る/進むを一手で。
+            "historyGoto"=>{
+                let target=integer(&j,"head")?;
+                while self.doc.edit_head()>target&&self.doc.undo(){}
+                while self.doc.edit_head()<target&&self.doc.redo(){}
+                if self.doc.edit_head()!=target{return Err("That history point is no longer reachable".into())}
+                self.selected_keys.clear();
+            }
             "play"=>{if !self.clock.playing(){self.clock.toggle();}self.clock_frame();}
             "pause"=>{if self.clock.playing(){self.clock.toggle();}self.clock_frame();}
             "pickColor"=>{let comp=self.doc.view().composition().map_err(e)?.ok_or("No composition")?;let (w,h)=(comp.width as i64,comp.height as i64);let (x,y)=(num(&j,"x")?.floor() as i64,num(&j,"y")?.floor() as i64);if x<0||y<0||x>=w||y>=h{return Err("Point is outside the composition".into())}let time=self.time()?;let rgba=self.engine.render_frame(&self.doc.view(),time).map_err(e)?;let at=((y*w+x)*4) as usize;let px=rgba.get(at..at+4).ok_or("Frame is smaller than the composition")?;self.picked_color=Some([px[0],px[1],px[2],px[3]].map(|v|v as f64/255.0));self.pick_serial+=1;}

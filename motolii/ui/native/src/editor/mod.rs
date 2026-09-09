@@ -5,3 +5,4 @@ pub mod stage;
 pub mod playback;
 
 pub mod notes;
+pub mod history;
