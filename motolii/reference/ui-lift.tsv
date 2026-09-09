@@ -1,0 +1,4 @@
+state	white_over_surface	source	applies_to	oracle
+hover	0.08	Material 3 state layer (Flutter elevated_button.dart WidgetState.hovered 0.08)	hover on any surface, one rung of the grey ladder app→panel→raised→hover	EditorTheme.hoverLift
+pressed_focus	0.10	Material 3 state layer (Flutter WidgetState.pressed/focused 0.10)	press and keyboard focus	EditorTheme.pressedLift
+chosen	0.16	Material 3 dragged layer = two hover steps	selected Timeline rows, name cells and bands	EditorTheme.lift

@@ -4,13 +4,18 @@ import 'package:flutter/material.dart';
 import 'metrics.dart';
 
 abstract final class EditorTheme {
+  // Lifts are Material 3 state layers: white over the surface at the M3
+  // opacities (reference/ui-lift.tsv). Every rise in the window is one of
+  // these, and the grey ladder below is `app` lifted by one hover step
+  // per rung, so a hover, a chosen row and a panel edge all climb the
+  // same stair.
+  static const hoverLift = .08, pressedLift = .10, draggedLift = .16;
+  /// A chosen surface: two hover steps, the M3 dragged layer.
+  static const lift = draggedLift;
   static const app = Color(0xff292929),
-      panel = Color(0xff3c3c3c),
-      raised = Color(0xff484848),
+      panel = Color(0xff3a3a3a),
+      raised = Color(0xff4a4a4a),
       hover = Color(0xff585858);
-  /// How far a chosen surface moves toward white: the step from a row's
-  /// ground to `hover`, so a lit row, its name cell and its band rise alike.
-  static const lift = .14;
   static const line = Color(0xff242424),
       border = Color(0xff666666),
       ink = Color(0xffdddddd),
