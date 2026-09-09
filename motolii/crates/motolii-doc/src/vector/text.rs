@@ -106,11 +106,25 @@ pub fn font_families() -> &'static [String] {
     })
 }
 
+/// 台帳に在る family の一覧。face を 1 枚ずつ名前で照合すると、組む度に台帳を全走査する
+/// —— 書体見本のように 1 行ごとに組み直す所では、それが組む時間の大半になる。
+/// 台帳の枚数が変わった時だけ作り直す。
+fn family_is_known(db: &fontdb::Database, family: &str) -> bool {
+    static KNOWN: std::sync::OnceLock<std::sync::Mutex<(usize, std::collections::HashSet<String>)>> = std::sync::OnceLock::new();
+    let mut cache = KNOWN
+        .get_or_init(|| std::sync::Mutex::new((usize::MAX, std::collections::HashSet::new())))
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    if cache.0 != db.len() {
+        cache.1 = db.faces().flat_map(|f| f.families.iter().map(|(name, _)| name.clone())).collect();
+        cache.0 = db.len();
+    }
+    cache.1.contains(family)
+}
+
 /// family が台帳に無ければ path の file を足す。path も読めなければ、その時だけ誤り。
 fn ensure_font(system: &mut FontSystem, font: &GlyphFont) -> Result<(), TextShapeError> {
-    let known = |db: &fontdb::Database| {
-        db.faces().any(|f| f.families.iter().any(|(name, _)| name == &font.family))
-    };
+    let known = |db: &fontdb::Database| family_is_known(db, &font.family);
     if known(system.db()) || font.path.is_empty() {
         return Ok(());
     }
