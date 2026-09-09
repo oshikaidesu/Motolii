@@ -109,6 +109,7 @@ impl Ledger {
         ledger
     }
 
+    #[cfg(test)]
     pub fn entries(&self) -> &[Entry] {
         &self.entries
     }
