@@ -42,11 +42,10 @@ void main() {
       await tester.tap(find.byTooltip('Save preset'));
       await tester.pumpAndSettle();
       expect((c.deskWork.value['easePresets'] as List).length, 1);
+      // Blend は W3C の族の並びだけを持ち、お気に入りは持たない。
+      // ここで見るのは道具を替えても Ease の下書きが残ることだけ。
       c.deskDrawer.value = 'Blend';
       await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('Favorite Multiply'));
-      await tester.pumpAndSettle();
-      expect(c.deskWork.value['blends'], ['Multiply']);
       c.deskDrawer.value = 'Ease';
       await tester.pumpAndSettle();
       expect((c.deskWork.value['easePresets'] as List).length, 1);

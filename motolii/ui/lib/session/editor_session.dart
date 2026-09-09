@@ -350,7 +350,11 @@ class EditorSession {
       final response = map(await _request(operation, args));
       final needsRender = response['needsRender'] as bool? ??
           operation.requiresRender;
-      if (response.length != 1 || !needsRender) _accept(response);
+      // 状態を持たない返信は 2 つだけ — 繰り延べた {"needsRender":true} と
+      // quiet な seek/tick の {"ok":true}。それ以外は必ず取り込む。
+      final stateless = response.length == 1 &&
+          (response['needsRender'] == true || response['ok'] == true);
+      if (!stateless) _accept(response);
       if (operation == DocumentOperation.select) {
         editingFocus.value = {'selection': true};
       }

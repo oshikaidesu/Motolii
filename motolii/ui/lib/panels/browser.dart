@@ -808,9 +808,16 @@ class _BrowserPanelState extends State<BrowserPanel> {
     decoration: const BoxDecoration(
       border: Border(top: BorderSide(color: EditorTheme.line)),
     ),
-    child: Row(
+    child: LayoutBuilder(
+      builder: (context, box) {
+        // 譲る順は 表示切替 → 件数 → 寸法棒。寸法棒は押し所 2 つ分を必ず残す。
+        final views =
+            tab != 'Colors' && box.maxWidth >= _viewsWidth + _zoomFloor;
+        final countRoom =
+            box.maxWidth - (views ? _viewsWidth : 0) - _zoomFloor;
+        return Row(
       children: [
-        if (tab != 'Colors') ...[
+        if (views) ...[
           DecoratedBox(
             decoration: BoxDecoration(
               color: EditorTheme.app,
@@ -850,7 +857,9 @@ class _BrowserPanelState extends State<BrowserPanel> {
         ],
         Expanded(child: _sizeSlider()),
         ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: EditorMetrics.s96),
+          constraints: BoxConstraints(
+            maxWidth: countRoom.clamp(0.0, EditorMetrics.s96),
+          ),
           child: Padding(
             padding: const EdgeInsets.only(left: EditorMetrics.s8),
             child: Tooltip(
@@ -870,8 +879,14 @@ class _BrowserPanelState extends State<BrowserPanel> {
           ),
         ),
       ],
+        );
+      },
     ),
   );
+
+  /// 表示切替の 3 つ分と、寸法棒が畳めない押し所 2 つ分。
+  static const _viewsWidth = EditorMetrics.control * 3 + EditorMetrics.s8;
+  static const _zoomFloor = EditorMetrics.row * 2;
 
   Widget _sizeSlider() => EditorZoomBar(
     base: tileDefault,

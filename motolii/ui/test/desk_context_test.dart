@@ -5,6 +5,7 @@ import '../lib/session/editor_session.dart';
 import '../lib/panels/desk.dart';
 import '../lib/panels/registry.dart';
 import '../lib/panels/inspector.dart';
+import '../lib/panels/ease_desk.dart';
 
 void main() {
   testWidgets(
@@ -123,7 +124,12 @@ void main() {
         ],
       );
       await tester.pumpAndSettle();
-      expect(deskText('Ease'), findsOneWidget);
+      // Ease は自分の帯に道具を持つので、Desk は見出しを重ねない。
+      expect(
+        find.descendant(of: find.byType(DeskPanel), matching: find.byType(EaseDesk)),
+        findsOneWidget,
+      );
+      expect(deskText('Ease'), findsNothing);
       expect(deskText('Apply'), findsOneWidget);
       expect(deskText('x1'), findsOneWidget);
       expect(deskText('0.42'), findsOneWidget);

@@ -19,14 +19,14 @@ void main() {
         );
     final c = EditorSession();
     c.document.value = {
-      'capabilities': ['applyPalette', 'setColor'],
-      'selectedIds': ['l'],
+      'capabilities': ['applyPalette', 'setColor', 'setGradient'],
+      'selectedIds': [1],
       'layers': [
-        {'id': 'l', 'kind': 'Solid'},
+        {'id': 1, 'kind': 'Solid'},
       ],
       'colorTarget': {
         'rgba': [1, 0, 0, 1],
-        'layer': 'l',
+        'layer': 1,
         'slot': 0,
       },
       'palette': [
@@ -53,7 +53,7 @@ void main() {
       ...c.document.value,
       'colorTarget': {
         'rgba': [0, 0, 1, 1],
-        'layer': 'l',
+        'layer': 1,
         'slot': 0,
       },
     };
@@ -69,13 +69,9 @@ void main() {
     expect((saved.single['stops'] as List).length, 2);
     expect(find.byKey(const ValueKey('browser:stop:0')), findsNothing);
 
-    // The saved gradient is a card; double-clicking loads its stops back.
-    final card = find.byTooltip(
-      'Double-click to edit its stops · right-click to forget',
-    );
+    // 色の札は 1 回押すと当たる。保存した gradient なら stops も戻る。
+    final card = find.byKey(const ValueKey('browser:Colors:saved:0'));
     expect(card, findsOneWidget);
-    await tester.tap(card);
-    await tester.pump(const Duration(milliseconds: 50));
     await tester.tap(card);
     await tester.pump(const Duration(seconds: 1));
     expect(find.byKey(const ValueKey('browser:stop:1')), findsOneWidget);
