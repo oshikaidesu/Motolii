@@ -521,7 +521,7 @@ mod spatial_transform_tests {
         let depth = world.transform_vector3(glam::Vec3::Z).length();
         assert!((depth - 10.0).abs() < 1e-3, "{depth}");
         let world3d = crate::doc::core::LayerPlacement::spatial_from_transform(
-            glam::Affine2::from_scale(glam::vec2(4.0, 6.0)), [0.0, 0.0], 0.0, 0.0, 0.0,
+            glam::Affine2::from_scale(glam::vec2(4.0, 6.0)), [0.0, 0.0], 0.0, 0.0, 0.0, 1.0,
         );
         let placed = spatial_placement_from_bounds(
             LayerPlacement { world_transform: Some(world3d), ..Default::default() }, bounds,
