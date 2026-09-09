@@ -894,7 +894,18 @@ class _TimelinePanelState extends State<TimelinePanel> {
   Widget build(
     BuildContext context,
   ) => ValueListenableBuilder<Map<String, dynamic>>(
-    valueListenable: widget.controller.document,
+    valueListenable: widget.controller.slice('timeline', const [
+      'layers',
+      'selectedId',
+      'selectedIds',
+      'selectedKeys',
+      'durationFrames',
+      'fps',
+      'fpsNum',
+      'fpsDen',
+      'markers',
+      'capabilities',
+    ]),
     builder: (context, state, _) {
       final liveIds = widget.controller.layers
           .map((layer) => (layer['id'] as num).toInt())

@@ -183,7 +183,12 @@ class _NotesPanelState extends State<NotesPanel> {
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
-    animation: c.document,
+    animation: c.slice('notes', const [
+      'notebook',
+      'assets',
+      'selectedKeys',
+      'capabilities',
+    ]),
     builder: (context, _) {
       final page = _page;
       final blocks = EditorSession.maps(page?['blocks']);

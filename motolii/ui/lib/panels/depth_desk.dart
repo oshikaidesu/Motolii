@@ -59,7 +59,12 @@ class _DepthDeskState extends State<DepthDesk> {
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
-    animation: c.document,
+    animation: c.slice('depth', const [
+      'depthLayout',
+      'selectedId',
+      'selectedIds',
+      'capabilities',
+    ]),
     builder: (context, _) {
       final data = EditorSession.map(c.state['depthLayout']);
       final items = EditorSession.maps(data['items']);
