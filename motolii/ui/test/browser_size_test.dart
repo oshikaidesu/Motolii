@@ -23,6 +23,8 @@ void main() {
           {'id': 'a$i', 'name': 'clip$i.mp4', 'mime': 'video/mp4'},
       ],
     };
+    // These read the grid; Media itself opens on pictures alone.
+    c.deskWork.value = {'browserView': 0};
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -46,7 +48,7 @@ void main() {
   ) async {
     final c = await mount(tester);
     final wide = cardWidth(tester);
-    c.deskWork.value = {'browserTile': BrowserSize.min};
+    c.deskWork.value = {'browserView': 0, 'browserTile': BrowserSize.min};
     await tester.pump();
     expect(cardWidth(tester), lessThan(wide / 1.5));
     await tester.tap(find.byKey(const ValueKey('browser:tile-larger')));

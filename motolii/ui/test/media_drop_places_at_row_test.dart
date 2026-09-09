@@ -53,6 +53,8 @@ void main() {
         },
       ],
     };
+    // These read the grid; Media itself opens on pictures alone.
+    c.deskWork.value = {'browserView': 0};
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(

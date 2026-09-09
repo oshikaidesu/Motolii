@@ -34,6 +34,8 @@ void main() {
         },
       ],
     };
+    // These read the grid; Media itself opens on pictures alone.
+    c.deskWork.value = {'browserView': 0};
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -120,4 +122,20 @@ void main() {
       expect(count().data, '1 of 4 selected');
     },
   );
+
+  testWidgets('Media opens on pictures alone; the chosen one says its name', (
+    tester,
+  ) async {
+    final c = await mount(tester);
+    c.deskWork.value = {};
+    await tester.pump();
+    expect(find.text('clip0'), findsNothing);
+    expect(find.byKey(const ValueKey('browser:format:a0')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('browser:Media:a0')));
+    // A single tap lands once the double-tap window has passed.
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byKey(const ValueKey('browser:band:a0')), findsOneWidget);
+    expect(find.text('clip0'), findsOneWidget);
+    expect(find.byKey(const ValueKey('browser:band:a1')), findsNothing);
+  });
 }

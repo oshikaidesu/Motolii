@@ -49,8 +49,12 @@ class _BrowserPanelState extends State<BrowserPanel> {
   /// One tile's width at the shelf's current size. The grid already knows it,
   /// so a card's name is fitted against this instead of measuring itself.
   double tileWidth = BrowserSize.base;
+  /// Media opens on pictures alone: its items are told apart by their
+  /// picture, not their name. Create and Effects keep the grid.
   int get viewMode =>
-      (widget.controller.deskWork.value['browserView'] as num? ?? 0).toInt();
+      (widget.controller.deskWork.value['browserView'] as num? ??
+              (tab == 'Media' ? 2 : 0))
+          .toInt();
 
   /// Category rail width while dragging; null means "as stored".
   double? railDrag;
@@ -1219,8 +1223,43 @@ class _BrowserPanelState extends State<BrowserPanel> {
           child: Stack(
             children: [
               Positioned.fill(
-                child: isColor || viewMode == 2
+                child: isColor
                     ? preview
+                    : viewMode == 2
+                    ? Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          preview,
+                          if (badge != null)
+                            Positioned(
+                              right: EditorMetrics.s3,
+                              bottom: EditorMetrics.s3,
+                              child: badge,
+                            ),
+                          // Only the chosen card says its name: a band over
+                          // the picture's foot, so the picture stays the point.
+                          if (isSelected)
+                            Positioned(
+                              left: 0,
+                              right: 0,
+                              bottom: 0,
+                              child: Container(
+                                key: ValueKey('browser:band:${id(item)}'),
+                                height: EditorMetrics.row,
+                                padding: EdgeInsets.only(
+                                  left: EditorMetrics.s4,
+                                  right: badgeRoom + EditorMetrics.s4,
+                                ),
+                                alignment: Alignment.centerLeft,
+                                color: EditorTheme.app.withValues(alpha: .75),
+                                child: _FittedName(
+                                  _displayName(item),
+                                  tileWidth - EditorMetrics.s4 * 2 - badgeRoom,
+                                ),
+                              ),
+                            ),
+                        ],
+                      )
                     : viewMode == 1
                     ? Row(
                         children: [
