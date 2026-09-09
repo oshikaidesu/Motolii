@@ -613,7 +613,7 @@ class _BrowserPanelState extends State<BrowserPanel> {
                                   child: Text(
                                     chosen == 'All' ? tab : chosen,
                                     maxLines: 1,
-                                    style: TextStyle(
+                                    style: const TextStyle(
                                       fontSize: EditorMetrics.micro,
                                       color: EditorTheme.accent,
                                     ),
@@ -1011,16 +1011,46 @@ class _BrowserPanelState extends State<BrowserPanel> {
     select(item);
     final missing = item['missing'] == true;
     final own = tab == 'Media' && item['builtin'] != true;
+    final path = item['path'] as String?;
+    // What the card is, before what can be done to it: the same sheet and
+    // rows every panel's menu uses, the facts as quiet rows on top.
+    final facts = <String>[
+      if (tab == 'Media') ...[
+        [
+          if (_format(item).isNotEmpty) _format(item),
+          if (item['mime'] != null) '${item['mime']}',
+        ].join(' · '),
+        if (path != null && !missing) _fileFact(path),
+        if (missing) 'Missing file',
+        if (item['used'] == true) 'In use by a layer',
+      ] else if (item['detail'] != null)
+        '${item['detail']}',
+    ].where((f) => f.isNotEmpty).toList();
     showMenu<String>(
       context: context,
       position: RelativeRect.fromLTRB(point.dx, point.dy, point.dx, point.dy),
       items: [
-        PopupMenuItem(
+        EditorMenuItem<String>(
+          enabled: false,
+          child: Text(
+            '${item['name'] ?? item['hex'] ?? item['id']}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(color: EditorTheme.ink),
+          ),
+        ),
+        for (final fact in facts)
+          EditorMenuItem<String>(
+            enabled: false,
+            child: Text(fact, maxLines: 1, overflow: TextOverflow.ellipsis),
+          ),
+        const PopupMenuDivider(height: EditorMetrics.s8),
+        EditorMenuItem<String>(
           value: 'apply',
           child: Text(tab == 'Media' ? 'Place' : 'Apply'),
         ),
         if (own) ...[
-          PopupMenuItem(
+          EditorMenuItem<String>(
             value: 'replace',
             enabled:
                 has('replaceAsset') &&
@@ -1028,25 +1058,28 @@ class _BrowserPanelState extends State<BrowserPanel> {
                 widget.controller.selectedIds.isNotEmpty,
             child: const Text('Replace selected layer'),
           ),
-          if (item['path'] != null && !missing) ...[
-            const PopupMenuItem(
+          if (path != null && !missing) ...[
+            const EditorMenuItem<String>(
               value: 'reveal',
               child: Text('Reveal in Finder'),
             ),
             if ('${item['mime']}'.startsWith('image/'))
-              const PopupMenuItem(
+              const EditorMenuItem<String>(
                 value: 'palette',
                 child: Text('Extract palette'),
               ),
           ],
-          PopupMenuItem(
+          EditorMenuItem<String>(
             value: 'remove',
             enabled: has('removeAsset') && item['used'] != true,
             child: const Text('Remove from library'),
           ),
         ],
         if (item['saved'] == true)
-          const PopupMenuItem(value: 'forget', child: Text('Forget swatch')),
+          const EditorMenuItem<String>(
+            value: 'forget',
+            child: Text('Forget swatch'),
+          ),
       ],
     ).then((action) {
       if (!mounted) return;
@@ -1067,6 +1100,16 @@ class _BrowserPanelState extends State<BrowserPanel> {
           widget.controller.storeDesk('swatches', kept);
       }
     });
+  }
+
+  /// Size and folder of the file behind a card, for the menu's facts.
+  static String _fileFact(String path) {
+    final file = File(path.startsWith('file:') ? Uri.parse(path).toFilePath() : path);
+    final bytes = file.existsSync() ? file.lengthSync() : 0;
+    final size = bytes >= 1 << 20
+        ? '${(bytes / (1 << 20)).toStringAsFixed(1)} MB'
+        : '${(bytes / (1 << 10)).round()} KB';
+    return '$size · ${file.parent.path.split('/').last}';
   }
 
   /// The pointer on any part of the card is the card's hover: the name
@@ -1135,7 +1178,7 @@ class _BrowserPanelState extends State<BrowserPanel> {
             left: EditorMetrics.s4,
             top: EditorMetrics.s4,
             child: missing
-                ? Icon(
+                ? const Icon(
                     Icons.error_outline,
                     size: EditorMetrics.dense,
                     color: EditorTheme.accent,
