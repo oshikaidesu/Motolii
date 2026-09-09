@@ -776,32 +776,30 @@ class _StagePanelState extends State<StagePanel> {
       _ => title,
     },
   );
+  DocumentSlice get _slice => c.slice('stage', const [
+    'layers',
+    'selectedId',
+    'selectedIds',
+    'width',
+    'height',
+    'observer',
+    'spatialGizmo',
+    'cameraGizmos',
+    'stageView',
+    'pickedColor',
+    'capabilities',
+    'contentRevision',
+    'documentRevision',
+  ]);
+
+  /// The bar reads the document; the picture reads every rendered frame. They
+  /// are rebuilt apart so a frame does not re-measure the bar's intrinsics.
   @override
-  Widget build(BuildContext context) => AnimatedBuilder(
-    animation: Listenable.merge([
-      c.slice('stage', const [
-        'layers',
-        'selectedId',
-        'selectedIds',
-        'width',
-        'height',
-        'observer',
-        'spatialGizmo',
-        'cameraGizmos',
-        'stageView',
-        'pickedColor',
-        'capabilities',
-        'contentRevision',
-        'documentRevision',
-      ]),
-      c.rendered,
-      c.textureId,
-      c.playing,
-      c.anchorPreview,
-    ]),
-    builder: (context, _) => Column(
-      children: [
-        EditorBar(
+  Widget build(BuildContext context) => Column(
+    children: [
+      AnimatedBuilder(
+        animation: _slice,
+        builder: (context, _) => EditorBar(
           decoration: const BoxDecoration(
             color: EditorTheme.panel,
             border: Border(bottom: BorderSide(color: EditorTheme.line)),
@@ -853,8 +851,17 @@ class _StagePanelState extends State<StagePanel> {
             ),
           ],
         ),
-        Expanded(
-          child: LayoutBuilder(
+      ),
+      Expanded(
+        child: AnimatedBuilder(
+          animation: Listenable.merge([
+            _slice,
+            c.rendered,
+            c.textureId,
+            c.playing,
+            c.anchorPreview,
+          ]),
+          builder: (context, _) => LayoutBuilder(
             builder: (context, box) {
               final resized = _viewport != box.biggest;
               _viewport = box.biggest;
@@ -1019,7 +1026,10 @@ class _StagePanelState extends State<StagePanel> {
             },
           ),
         ),
-        EditorBar(
+      ),
+      AnimatedBuilder(
+        animation: _slice,
+        builder: (context, _) => EditorBar(
           padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s8),
           children: [
             Text(
@@ -1062,8 +1072,8 @@ class _StagePanelState extends State<StagePanel> {
               ),
           ],
         ),
-      ],
-    ),
+      ),
+    ],
   );
   List<List<Offset>> _outlinesCopy(List<List<Offset>> p) =>
       p.map((v) => List<Offset>.of(v)).toList();

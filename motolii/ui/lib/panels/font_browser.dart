@@ -76,7 +76,7 @@ class _FontBrowserState extends State<FontBrowser> {
                 scrollCacheExtent: const ScrollCacheExtent.pixels(0),
                 itemBuilder: (context, index) {
                   final name = names[index];
-                  return Tooltip(
+                  return EditorTooltip(
                     message: name,
                     child: InkWell(
                       key: ValueKey('font:$name'),

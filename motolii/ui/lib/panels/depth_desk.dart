@@ -196,7 +196,7 @@ class _DepthDeskState extends State<DepthDesk> {
                           Positioned(
                             left: point(item).dx - EditorMetrics.micro,
                             top: point(item).dy - EditorMetrics.micro,
-                            child: Tooltip(
+                            child: EditorTooltip(
                               message: '${item['name']}',
                               child: Container(
                                 width: EditorMetrics.s18,

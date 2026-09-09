@@ -387,7 +387,7 @@ class _RichTextEditorState extends State<RichTextEditor> {
             const SizedBox(width: EditorMetrics.s6),
             SizedBox(
               width: EditorMetrics.s70,
-              child: Tooltip(
+              child: EditorTooltip(
                 message: 'Editing zoom',
                 child: EditorChoice<double>(
                   value: _text.zoom,

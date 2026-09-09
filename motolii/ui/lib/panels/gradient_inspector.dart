@@ -149,7 +149,7 @@ class _GradientInspectorState extends State<GradientInspector>
                 Expanded(
                   child: Padding(
                     padding: const EdgeInsets.only(right: EditorMetrics.s4),
-                    child: Tooltip(
+                    child: EditorTooltip(
                       message:
                           '${type[0].toUpperCase()}${type.substring(1)} fill',
                       child: InkWell(
@@ -200,7 +200,7 @@ class _GradientInspectorState extends State<GradientInspector>
                         left:
                             ((rows[i]['offset'] as num).toDouble() *
                             (box.maxWidth - EditorMetrics.s16)),
-                        child: Tooltip(
+                        child: EditorTooltip(
                           message:
                               'Stop ${i + 1} · ${((rows[i]['offset'] as num) * 100).round()}%',
                           child: Listener(

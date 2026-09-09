@@ -45,6 +45,10 @@ class _BrowserPanelState extends State<BrowserPanel> {
   final scroll = ScrollController();
   List<Map<String, dynamic>> visible = [];
   int columns = 1;
+
+  /// One tile's width at the shelf's current size. The grid already knows it,
+  /// so a card's name is fitted against this instead of measuring itself.
+  double tileWidth = BrowserSize.base;
   int get viewMode =>
       (widget.controller.deskWork.value['browserView'] as num? ?? 0).toInt();
 
@@ -558,7 +562,7 @@ class _BrowserPanelState extends State<BrowserPanel> {
                         ),
                       ),
                     if (rail < railMin)
-                      Tooltip(
+                      EditorTooltip(
                         message: 'Show ${tab.toLowerCase()} categories',
                         child: InkWell(
                           key: const ValueKey('browser:rail-tab'),
@@ -624,6 +628,11 @@ class _BrowserPanelState extends State<BrowserPanel> {
                                 .floor(),
                           );
                           if (viewMode == 1 && tab != 'Colors') columns = 1;
+                          tileWidth =
+                              (constraints.maxWidth -
+                                  _inset * 2 -
+                                  _gutter * (columns - 1)) /
+                              columns;
                           return Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
@@ -875,7 +884,7 @@ class _BrowserPanelState extends State<BrowserPanel> {
           ),
           child: Padding(
             padding: const EdgeInsets.only(left: EditorMetrics.s8),
-            child: Tooltip(
+            child: EditorTooltip(
               message: _countTip(),
               child: Text(
                 _countLabel(),
@@ -1127,11 +1136,14 @@ class _BrowserPanelState extends State<BrowserPanel> {
         alignment: Alignment.centerLeft,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s3),
-          child: _FittedName(_displayName(item)),
+          child: _FittedName(
+            _displayName(item),
+            tileWidth - EditorMetrics.s3 * 2,
+          ),
         ),
       ),
     );
-    final body = Tooltip(
+    final body = EditorTooltip(
       key: ValueKey('browser:$tab:${id(item)}'),
       message: [
         name,
@@ -1271,7 +1283,7 @@ class _BrowserPanelState extends State<BrowserPanel> {
 }
 
 /// A bordered action beside the search field.
-Widget _action(String label, VoidCallback? press) => Tooltip(
+Widget _action(String label, VoidCallback? press) => EditorTooltip(
   message: press == null ? '$label · unavailable' : label,
   child: InkWell(
     onTap: press,
@@ -1301,7 +1313,7 @@ Widget _smallButton(
   String label,
   VoidCallback? press, {
   bool selected = false,
-}) => Tooltip(
+}) => EditorTooltip(
   message: press == null ? '$label · unavailable' : label,
   child: InkWell(
     onTap: press,
@@ -1507,7 +1519,7 @@ class _ColorPickerState extends State<_ColorPicker> {
   Widget _stopsBar(List<double> current) {
     final stops = widget.stops;
     Widget small(IconData icon, String tip, VoidCallback? press, {Key? key}) =>
-        Tooltip(
+        EditorTooltip(
           message: tip,
           child: InkWell(
             key: key,
@@ -1688,7 +1700,7 @@ class _ColorPickerState extends State<_ColorPicker> {
                         ),
                         ValueListenableBuilder<bool>(
                           valueListenable: widget.controller.eyedropper,
-                          builder: (context, on, _) => Tooltip(
+                          builder: (context, on, _) => EditorTooltip(
                             message: on
                                 ? 'Click the Stage to pick a colour · Esc cancels'
                                 : 'Pick a colour from the Stage',
@@ -1711,7 +1723,7 @@ class _ColorPickerState extends State<_ColorPicker> {
                             ),
                           ),
                         ),
-                        Tooltip(
+                        EditorTooltip(
                           message: shape == 'square'
                               ? 'Switch to triangle'
                               : 'Switch to square',
@@ -2198,8 +2210,9 @@ Future<List<List<double>>> paletteOf(Uint8List bytes, {int count = 6}) async {
 /// One line that keeps the whole name: the type shrinks to the tile, down to
 /// the micro size, and only past that does the tail get cut.
 class _FittedName extends StatelessWidget {
-  const _FittedName(this.name);
+  const _FittedName(this.name, this.width);
   final String name;
+  final double width;
 
   /// The laid-out width of a name at the shelf's size. Names repeat across
   /// tiles and survive rebuilds, so lay each one out once.
@@ -2222,22 +2235,17 @@ class _FittedName extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, box) {
-      final natural = _widthOf(name);
-      final size = natural <= box.maxWidth
-          ? EditorMetrics.font
-          : math.max(
-              EditorMetrics.micro,
-              EditorMetrics.font * box.maxWidth / natural,
-            );
-      return Text(
-        name,
-        maxLines: 1,
-        softWrap: false,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(color: EditorTheme.ink, fontSize: size),
-      );
-    },
-  );
+  Widget build(BuildContext context) {
+    final natural = _widthOf(name);
+    final size = natural <= width
+        ? EditorMetrics.font
+        : math.max(EditorMetrics.micro, EditorMetrics.font * width / natural);
+    return Text(
+      name,
+      maxLines: 1,
+      softWrap: false,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(color: EditorTheme.ink, fontSize: size),
+    );
+  }
 }

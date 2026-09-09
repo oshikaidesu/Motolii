@@ -254,11 +254,22 @@ class _WorkspaceViewState extends State<WorkspaceView> {
                               style: TextStyle(color: EditorTheme.muted),
                             ),
                           )
-                        : IndexedStack(
-                            index: math.max(0, node.tabs.indexOf(node.active)),
+                        // A tab behind the front one keeps its state and is
+                        // not laid out: IndexedStack lays out every child it
+                        // hides, Offstage lays out none.
+                        : Stack(
+                            fit: StackFit.expand,
                             children: [
-                              for (final name in node.tabs)
-                                widget.panelBuilder(name),
+                              for (final (i, name) in node.tabs.indexed)
+                                Offstage(
+                                  offstage:
+                                      i !=
+                                      math.max(
+                                        0,
+                                        node.tabs.indexOf(node.active),
+                                      ),
+                                  child: widget.panelBuilder(name),
+                                ),
                             ],
                           ),
                   ),

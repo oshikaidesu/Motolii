@@ -521,7 +521,7 @@ class _EditorNumericFieldState extends State<EditorNumericField> {
                 onPointerMove: _pointerMove,
                 onPointerUp: _pointerUp,
                 onPointerCancel: (event) => _pointerUp(event, cancel: true),
-                child: Tooltip(
+                child: EditorTooltip(
                   message: _dragging && _rung != 1
                       ? '${widget.label} ×$_rung'
                       : widget.label,
@@ -676,7 +676,7 @@ class _EditorLampState extends State<EditorLamp> {
             Positioned(
               left: 0,
               top: 0,
-              child: Tooltip(
+              child: EditorTooltip(
                 message: switch (state) {
                   KeyLamp.now => 'Key at this frame (press to remove)',
                   KeyLamp.draft => 'Keys exist; this change is not a key',
@@ -735,7 +735,7 @@ class EditorSwitch extends StatelessWidget {
   Widget build(BuildContext context) {
     final enabled = onChanged != null;
     if (compact) {
-      return Tooltip(
+      return EditorTooltip(
         message: label,
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
@@ -752,7 +752,7 @@ class EditorSwitch extends StatelessWidget {
         ),
       );
     }
-    return Tooltip(
+    return EditorTooltip(
       message: label,
       child: GestureDetector(
         onTap: enabled ? () => onChanged!(!on) : null,
@@ -915,7 +915,7 @@ class _EditorDialState extends State<EditorDial> with WidgetsBindingObserver {
     },
     child: Listener(
       onPointerCancel: (_) => _end(true),
-      child: Tooltip(
+      child: EditorTooltip(
         message: 'Rotation',
         child: GestureDetector(
           onPanStart: widget.enabled
@@ -1013,7 +1013,7 @@ class EditorAnchorGrid extends StatelessWidget {
   /// show where that pivot would land before it is chosen.
   final void Function(double x, double y, bool inside)? onHover;
   @override
-  Widget build(BuildContext context) => Tooltip(
+  Widget build(BuildContext context) => EditorTooltip(
     message: 'Anchor',
     child: Column(
       mainAxisSize: MainAxisSize.min,
@@ -1200,7 +1200,7 @@ class _EditorPadState extends State<EditorPad> with WidgetsBindingObserver {
     },
     child: Listener(
       onPointerCancel: (_) => _end(true),
-      child: Tooltip(
+      child: EditorTooltip(
         message: 'Drag the point',
         child: MouseRegion(
           cursor: widget.enabled

@@ -375,7 +375,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
     if (values.isNotEmpty) await _writeMany(layer, values, preview: false);
   }
 
-  Widget _headGlyph(IconData icon, String tip, VoidCallback? onTap) => Tooltip(
+  Widget _headGlyph(IconData icon, String tip, VoidCallback? onTap) => EditorTooltip(
     message: tip,
     child: GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -403,7 +403,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
     child: label == null
         ? null
         : _wordWidth == 0
-        ? Tooltip(
+        ? EditorTooltip(
             message: label,
             child: Icon(
               icon,
@@ -789,7 +789,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
         for (final p in ['2D', '2.5D', '3D'])
           Padding(
             padding: const EdgeInsets.only(right: EditorMetrics.s2),
-            child: Tooltip(
+            child: EditorTooltip(
               message: p,
               child: EditorButton(
                 p,
@@ -1363,7 +1363,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
             ),
             if (seed) ...[
               _gap(),
-              Tooltip(
+              EditorTooltip(
                 message: 'Roll a new seed',
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
@@ -1437,7 +1437,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
         ),
         const SizedBox(width: EditorMetrics.s6),
         Expanded(
-          child: Tooltip(
+          child: EditorTooltip(
             message: '${layer['name']}',
             child: Text(
               _multiple ? '${c.selectedIds.length} layers' : '${layer['name']}',
@@ -1631,7 +1631,7 @@ class _Fold extends StatelessWidget {
   final bool open;
   final VoidCallback onTap;
   @override
-  Widget build(BuildContext context) => Tooltip(
+  Widget build(BuildContext context) => EditorTooltip(
     message: open ? 'Hide the advanced controls' : 'Show the advanced controls',
     child: GestureDetector(
       behavior: HitTestBehavior.opaque,

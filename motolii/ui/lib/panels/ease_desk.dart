@@ -42,7 +42,7 @@ class _EaseIcon extends StatefulWidget {
 class _EaseIconState extends State<_EaseIcon> {
   bool _over = false;
   @override
-  Widget build(BuildContext context) => Tooltip(
+  Widget build(BuildContext context) => EditorTooltip(
     message: widget.tooltip,
     child: Semantics(
       label: widget.tooltip,
@@ -707,7 +707,7 @@ class _EaseDeskState extends State<EaseDesk>
                         MouseRegion(
                           onEnter: (_) => _peek(presets[i], i),
                           onExit: (_) => _endPeek(),
-                          child: Tooltip(
+                          child: EditorTooltip(
                             key: ValueKey('ease-preset:$i'),
                             message: '${presets[i]['kind']}',
                             child: Semantics(
@@ -811,7 +811,7 @@ class _EaseDeskState extends State<EaseDesk>
                 child: Row(
                   children: [
                     Expanded(
-                      child: Tooltip(
+                      child: EditorTooltip(
                         message: param.key.replaceAll('_', ' '),
                         child: Text(
                           param.key.replaceAll('_', ' '),
@@ -948,7 +948,7 @@ class _EaseDeskState extends State<EaseDesk>
                 },
               ),
             Expanded(
-              child: Tooltip(
+              child: EditorTooltip(
                 message: target,
                 child: Text(
                   _notice ??
@@ -968,7 +968,7 @@ class _EaseDeskState extends State<EaseDesk>
             ),
           ];
           final applyActions = <Widget>[
-            Tooltip(
+            EditorTooltip(
               message: 'Overshoot',
               child: TextButton(
                 style: TextButton.styleFrom(
@@ -1004,7 +1004,7 @@ class _EaseDeskState extends State<EaseDesk>
               ),
             ),
             const SizedBox(width: EditorMetrics.s4),
-            Tooltip(
+            EditorTooltip(
               message: _canApply ? 'Apply to selected intervals' : target,
               child: FilledButton(
                 style: FilledButton.styleFrom(
@@ -1043,7 +1043,7 @@ class _EaseDeskState extends State<EaseDesk>
                 children: [
                   SizedBox(
                     height: EditorMetrics.row,
-                    child: Tooltip(
+                    child: EditorTooltip(
                       message: target,
                       child: Row(
                         children: [
@@ -1087,7 +1087,7 @@ class _EaseDeskState extends State<EaseDesk>
                   const SizedBox(height: EditorMetrics.s2),
                   SizedBox(
                     height: EditorMetrics.s12,
-                    child: Tooltip(
+                    child: EditorTooltip(
                       message: target,
                       child: Semantics(
                         label: first == null

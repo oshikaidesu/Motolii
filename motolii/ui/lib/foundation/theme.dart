@@ -242,6 +242,20 @@ abstract final class EditorTheme {
   );
 }
 
+/// A tooltip where tooltips are shown, and nothing at all where they are not.
+/// [TooltipVisibility] turns the panel off but leaves the widget standing, and
+/// each one that stands costs a hover region, a long-press detector and a
+/// semantics node in every layout of the window.
+class EditorTooltip extends StatelessWidget {
+  const EditorTooltip({super.key, required this.message, required this.child});
+  final String message;
+  final Widget child;
+  @override
+  Widget build(BuildContext context) => TooltipVisibility.of(context)
+      ? Tooltip(message: message, child: child)
+      : child;
+}
+
 class EditorButton extends StatelessWidget {
   const EditorButton(
     this.label,
@@ -270,7 +284,9 @@ class EditorButton extends StatelessWidget {
         ),
       ),
     );
-    return tooltip == null ? button : Tooltip(message: tooltip!, child: button);
+    return tooltip == null
+        ? button
+        : EditorTooltip(message: tooltip!, child: button);
   }
 }
 

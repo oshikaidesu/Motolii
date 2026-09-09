@@ -71,7 +71,7 @@ class PanelSettings extends StatelessWidget {
                 ])
                   Padding(
                     padding: const EdgeInsets.only(left: EditorMetrics.s14),
-                    child: Tooltip(
+                    child: EditorTooltip(
                       message: switch (place) {
                         'drawer' => 'Desk',
                         'tab' => 'Tab',

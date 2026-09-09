@@ -37,7 +37,7 @@ class EditorColorRow extends StatelessWidget {
             ),
           ),
         ),
-        Tooltip(
+        EditorTooltip(
           message: 'Choose ${color['label'] ?? 'color'}',
           child: InkWell(
             onTap:
