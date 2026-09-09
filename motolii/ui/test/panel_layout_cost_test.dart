@@ -17,8 +17,8 @@ import '../lib/workspace/layout.dart';
 /// its type and [FlutterTimeline.debugCollect] adds them up. The count is the
 /// same on every machine, so the budgets below hold counts, not milliseconds.
 class _Cost {
-  const _Cost(this.calls, this.byType);
-  final int calls;
+  const _Cost(this.calls, this.builds, this.byType);
+  final int calls, builds;
   final List<AggregatedTimedBlock> byType;
   List<AggregatedTimedBlock> get heaviest =>
       byType.toList()..sort((a, b) => b.count - a.count);
@@ -30,14 +30,19 @@ class _Cost {
 }
 
 Future<_Cost> _cost(WidgetTester tester, Future<void> Function() act) async {
+  debugProfileBuildsEnabled = true;
   debugProfileLayoutsEnabled = true;
   FlutterTimeline.debugCollectionEnabled = true;
   await act();
   final blocks = FlutterTimeline.debugCollect().aggregatedBlocks;
   FlutterTimeline.debugCollectionEnabled = false;
   debugProfileLayoutsEnabled = false;
+  debugProfileBuildsEnabled = false;
+  bool laidOut(AggregatedTimedBlock b) =>
+      b.name.startsWith('Render') || b.name.startsWith('_Render');
   return _Cost(
-    blocks.where((b) => b.name.startsWith('Render') || b.name.startsWith('_Render')).fold(0, (sum, b) => sum + b.count),
+    blocks.where(laidOut).fold(0, (sum, b) => sum + b.count),
+    blocks.where((b) => !laidOut(b) && b.name != 'BUILD').fold(0, (sum, b) => sum + b.count),
     blocks,
   );
 }
@@ -200,24 +205,26 @@ const _panels = <String, Size>{
   'Timeline': Size(1280, 255),
 };
 
-/// What a panel may cost, as `(one status update, one whole layout)` in calls
-/// to `RenderObject.layout`. Held so no panel goes back to measuring itself
-/// once per card, or to rebuilding its bar for every rendered frame.
-const _budget = <String, (int, int)>{
-  'Create': (2, 240),
-  'Media': (2, 280),
-  'Effects': (2, 260),
-  'Colors': (2, 320),
-  'Fonts': (2, 120),
-  'Stage': (16, 80),
-  'Inspector': (8, 400),
-  'Notes': (2, 50),
-  'Desk': (2, 120),
-  'Ease': (12, 170),
-  'Depth': (2, 50),
-  'Blend': (2, 380),
-  'History': (2, 60),
-  'Timeline': (4, 60),
+/// What one status update and one whole layout may cost a panel:
+/// `(widgets rebuilt, layouts on the update, layouts when laid out whole)`.
+/// Held so no panel goes back to measuring itself once per card, to
+/// rebuilding its bar for every rendered frame, or to redrawing a shelf that
+/// the update did not touch.
+const _budget = <String, (int, int, int)>{
+  'Create': (2, 2, 240),
+  'Media': (2, 2, 280),
+  'Effects': (2, 2, 260),
+  'Colors': (2, 2, 320),
+  'Fonts': (2, 2, 120),
+  'Stage': (60, 8, 80),
+  'Inspector': (1100, 8, 400),
+  'Notes': (2, 2, 50),
+  'Desk': (2, 2, 120),
+  'Ease': (430, 12, 170),
+  'Depth': (2, 2, 50),
+  'Blend': (2, 2, 380),
+  'History': (2, 2, 60),
+  'Timeline': (410, 4, 60),
 };
 
 /// The default dock, whole: five panels and the three Browser tabs the dock
@@ -264,6 +271,7 @@ Future<String> _window(WidgetTester tester, int layers) async {
   await tester.pumpWidget(const SizedBox());
   return '${'Window'.padRight(10)} '
       'update ${update.calls.toString().padLeft(5)}   '
+          'builds ${update.builds.toString().padLeft(5)}   '
       'whole ${whole.calls.toString().padLeft(5)}   '
       '${whole.top}';
 }
@@ -322,10 +330,16 @@ void main() {
         report.add(
           '${entry.key.padRight(10)} '
           'update ${update.calls.toString().padLeft(5)}   '
+          'builds ${update.builds.toString().padLeft(5)}   '
           'whole ${whole.calls.toString().padLeft(5)}   '
           '${whole.top}',
         );
-        final (perUpdate, perLayout) = _budget[entry.key]!;
+        final (rebuilt, perUpdate, perLayout) = _budget[entry.key]!;
+        expect(
+          update.builds,
+          lessThanOrEqualTo(rebuilt),
+          reason: '${entry.key} rebuilds too much for one status update',
+        );
         expect(
           update.calls,
           lessThanOrEqualTo(perUpdate),

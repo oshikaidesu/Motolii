@@ -792,13 +792,22 @@ class _StagePanelState extends State<StagePanel> {
     'documentRevision',
   ]);
 
-  /// The bar reads the document; the picture reads every rendered frame. They
-  /// are rebuilt apart so a frame does not re-measure the bar's intrinsics.
+  /// What the bars above and below the picture read. Kept apart from [_slice]
+  /// so a moved layer, and every frame drawn while it moves, leaves the bars
+  /// standing instead of re-measuring their intrinsic widths.
+  DocumentSlice get _chrome => c.slice('stage:chrome', const [
+    'stageView',
+    'observer',
+    'width',
+    'height',
+    'capabilities',
+  ]);
+
   @override
   Widget build(BuildContext context) => Column(
     children: [
       AnimatedBuilder(
-        animation: _slice,
+        animation: _chrome,
         builder: (context, _) => EditorBar(
           decoration: const BoxDecoration(
             color: EditorTheme.panel,
@@ -1028,7 +1037,7 @@ class _StagePanelState extends State<StagePanel> {
         ),
       ),
       AnimatedBuilder(
-        animation: _slice,
+        animation: _chrome,
         builder: (context, _) => EditorBar(
           padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s8),
           children: [
