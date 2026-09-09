@@ -81,6 +81,11 @@ class _BrowserPanelState extends State<BrowserPanel> {
           .clamp(EditorMetrics.thumb, EditorMetrics.s200);
 
   double get tile => BrowserSize.tile(widget.controller);
+
+  /// Names grow with the tile, between the smallest legible size and a cap,
+  /// so a big picture is not captioned in a whisper.
+  double get captionSize => (EditorMetrics.font * tile / BrowserSize.base)
+      .clamp(EditorMetrics.micro, EditorMetrics.s16);
   double get rail =>
       railDrag ??
       (widget.controller.deskWork.value['browserRail'] as num? ??
@@ -1176,6 +1181,7 @@ class _BrowserPanelState extends State<BrowserPanel> {
                 child: _FittedName(
                   _displayName(item),
                   tileWidth - EditorMetrics.s4 * 2 - badgeRoom,
+                  size: captionSize,
                 ),
               ),
             ),
@@ -1255,6 +1261,7 @@ class _BrowserPanelState extends State<BrowserPanel> {
                                 child: _FittedName(
                                   _displayName(item),
                                   tileWidth - EditorMetrics.s4 * 2 - badgeRoom,
+                                  size: captionSize,
                                 ),
                               ),
                             ),
@@ -2285,20 +2292,23 @@ Future<List<List<double>>> paletteOf(Uint8List bytes, {int count = 6}) async {
 /// One line that keeps the whole name: the type shrinks to the tile, down to
 /// the micro size, and only past that does the tail get cut.
 class _FittedName extends StatelessWidget {
-  const _FittedName(this.name, this.width);
+  const _FittedName(this.name, this.width, {this.size = EditorMetrics.font});
   final String name;
   final double width;
 
-  /// The laid-out width of a name at the shelf's size. Names repeat across
-  /// tiles and survive rebuilds, so lay each one out once.
+  /// The type size the shelf wants; the name shrinks from here to fit.
+  final double size;
+
+  /// The laid-out width of a name at a size. Names repeat across tiles and
+  /// survive rebuilds, so lay each one out once.
   static final _natural = <String, double>{};
-  static double _widthOf(String name) {
+  static double _widthOf(String name, double size) {
     if (_natural.length > 4096) _natural.clear();
-    return _natural[name] ??= () {
+    return _natural['$size:$name'] ??= () {
         final painter = TextPainter(
           text: TextSpan(
             text: name,
-            style: const TextStyle(fontSize: EditorMetrics.font),
+            style: TextStyle(fontSize: size),
           ),
           maxLines: 1,
           textDirection: TextDirection.ltr,
@@ -2311,16 +2321,16 @@ class _FittedName extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final natural = _widthOf(name);
-    final size = natural <= width
-        ? EditorMetrics.font
-        : math.max(EditorMetrics.micro, EditorMetrics.font * width / natural);
+    final natural = _widthOf(name, size);
+    final fitted = natural <= width
+        ? size
+        : math.max(EditorMetrics.micro, size * width / natural);
     return Text(
       name,
       maxLines: 1,
       softWrap: false,
       overflow: TextOverflow.ellipsis,
-      style: TextStyle(color: EditorTheme.ink, fontSize: size),
+      style: TextStyle(color: EditorTheme.ink, fontSize: fitted),
     );
   }
 }
