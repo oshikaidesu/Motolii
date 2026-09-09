@@ -188,6 +188,10 @@ impl Compositor {
         let mut clouds = Vec::new();
         let mut mesh_groups: Vec<(ClipPlane, Vec<GpuMeshInstance>)> = Vec::new();
         for (index, input) in inputs.iter().enumerate() {
+            #[cfg(test)]
+            if capture && self.reflection_diagnostic_skip == Some(index) {
+                continue;
+            }
             if skip == Some(index)
                 || (shared.is_some() && matches!(input.content, SequentialContent::Model(_)))
             {
@@ -370,6 +374,8 @@ impl Compositor {
             return Ok(None);
         }
         let near = ((hi - lo).length() * 1e-5).clamp(0.001, 0.01);
+        #[cfg(test)]
+        let near = self.reflection_diagnostic_near.unwrap_or(near);
         // Tight box projection aligns planar senders between probes. Expand only degenerate axes.
         for axis in 0..3 {
             if hi[axis] - lo[axis] < 1.0 {
@@ -558,6 +564,31 @@ impl Compositor {
             bounds_max: hi,
             influence_radii,
         };
+        #[cfg(test)]
+        if self.reflection_diagnostic_enabled {
+            let input_metadata: Vec<_> = inputs.iter().enumerate().map(|(index, input)| {
+                let mut item = serde_json::json!({"index":index,"opacity":input.opacity,
+                    "surface":input.shading.program.as_ref().is_some_and(|p|p.desc().surface.is_some()),
+                    "params":input.shading.params,"bounds":bounds(comp,input).map(|(a,b)|[a.to_array(),b.to_array()])});
+                if let SequentialContent::Model(model) = input.content {
+                    let world = projected_spatial_placement(comp,input.projection_camera,input.projection,input.placement,model.bounds);
+                    item["model_bounds"] = serde_json::json!([model.bounds.min,model.bounds.max]);
+                    item["world_from_object"] = serde_json::json!(glam::Mat4::from(world).to_cols_array());
+                }
+                item
+            }).collect();
+            let metadata = serde_json::json!({"near_plane":near,"receivers":receivers,
+                "origins":origins.iter().map(|p|p.to_array()).collect::<Vec<_>>(),
+                "bounds_min":lo.to_array(),"bounds_max":hi.to_array(),"radii":influence_radii,
+                "inputs":input_metadata,"skipped_capture_input":self.reflection_diagnostic_skip});
+            self.reflection_diagnostic =
+                Some(super::reflection_diagnostic::CaptureDiagnostic::enqueue(
+                    &self.ctx,
+                    &mut self.pending,
+                    &resources.atlas,
+                    metadata,
+                ));
+        }
         self.reflection_resources = Some(resources);
         Ok(Some(result))
     }

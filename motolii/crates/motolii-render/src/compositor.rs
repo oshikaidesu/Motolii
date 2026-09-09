@@ -12,6 +12,8 @@ mod headless;
 mod matte;
 mod mesh;
 mod surface_scene;
+#[cfg(test)]
+mod reflection_diagnostic;
 mod reflection_cache;
 mod measurement;
 pub use measurement::FrameMeasurement;
@@ -353,6 +355,14 @@ pub struct Compositor {
     pub(crate) gpu_instance_sharing_enabled: bool,
     #[cfg(test)]
     pub(crate) reflection_probe_experiment: u8,
+    #[cfg(test)]
+    pub(crate) reflection_diagnostic_enabled: bool,
+    #[cfg(test)]
+    pub(crate) reflection_diagnostic: Option<reflection_diagnostic::CaptureDiagnostic>,
+    #[cfg(test)]
+    pub(crate) reflection_diagnostic_skip: Option<usize>,
+    #[cfg(test)]
+    pub(crate) reflection_diagnostic_near: Option<f32>,
     pub(crate) reflection_entry: Option<reflection_cache::ReflectionEntry>,
     pub(crate) reflection_resources: Option<surface_scene::ReflectionResources>,
     pub(crate) next_readback: u64,

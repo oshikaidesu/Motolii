@@ -802,3 +802,5 @@
 - [表面応答の合成に向けた撮影情報の比較](2026-09-09-response-composition-validation.md)
 
 - [共有反射の選択と寄与の修正](2026-09-09-stable-reflection-execution.md)
+
+- [共有反射の撮影点を球が跨ぐ場合の診断](2026-09-09-reflection-visibility-diagnosis.md)

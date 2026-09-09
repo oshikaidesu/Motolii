@@ -1,0 +1,3793 @@
+[
+  {
+    "step": 0,
+    "origins": [
+      [
+        1090.0,
+        460.0,
+        39.99999237060547
+      ],
+      [
+        1195.0,
+        810.0,
+        0.0
+      ]
+    ],
+    "receivers": [
+      3,
+      6
+    ],
+    "queries": [
+      {
+        "probe": 0,
+        "input": 3,
+        "shape": "torus",
+        "excluded": true,
+        "rays": 64,
+        "hits": 18,
+        "backface_hits": 0,
+        "nearest_distance": 179.09109979393267,
+        "local_origin": [
+          6.1183240696038865e-09,
+          1.735984400674795e-08,
+          2.5118232382936867e-08
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -3.7096774193548363,
+          3.4677419354838706,
+          1.2903224575904106
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 64,
+        "backface_hits": 64,
+        "nearest_distance": 2.978317797861119,
+        "local_origin": [
+          -0.06895604929621024,
+          -0.7830855260795975,
+          -0.5869247486719159
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 3,
+        "shape": "torus",
+        "excluded": false,
+        "rays": 64,
+        "hits": 7,
+        "backface_hits": 0,
+        "nearest_distance": 166.15459738130582,
+        "local_origin": [
+          -0.3089366348702738,
+          1.1452932972917618,
+          -0.9186984427093703
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -2.016129032258064,
+          9.112903225806452,
+          0.6451612903225806
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 4,
+        "backface_hits": 0,
+        "nearest_distance": 172.09931251648553,
+        "local_origin": [
+          -1.637369608539987,
+          0.9966585415804552,
+          -0.846592249714473
+        ]
+      }
+    ]
+  },
+  {
+    "step": 1,
+    "origins": [
+      [
+        1090.0,
+        460.0,
+        39.99999237060547
+      ],
+      [
+        1195.0,
+        810.0,
+        0.0
+      ]
+    ],
+    "receivers": [
+      3,
+      6
+    ],
+    "queries": [
+      {
+        "probe": 0,
+        "input": 3,
+        "shape": "torus",
+        "excluded": true,
+        "rays": 64,
+        "hits": 18,
+        "backface_hits": 0,
+        "nearest_distance": 179.09109979393267,
+        "local_origin": [
+          6.1183240696038865e-09,
+          1.735984400674795e-08,
+          2.5118232382936867e-08
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -3.7096774193548363,
+          3.4677419354838706,
+          1.2903224575904106
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 64,
+        "backface_hits": 64,
+        "nearest_distance": 1.944190571685902,
+        "local_origin": [
+          -0.06835992322069906,
+          -0.7913441305446955,
+          -0.5869247486719159
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 3,
+        "shape": "torus",
+        "excluded": false,
+        "rays": 64,
+        "hits": 7,
+        "backface_hits": 0,
+        "nearest_distance": 166.15459738130582,
+        "local_origin": [
+          -0.3089366348702738,
+          1.1452932972917618,
+          -0.9186984427093703
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -2.016129032258064,
+          9.112903225806452,
+          0.6451612903225806
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 4,
+        "backface_hits": 0,
+        "nearest_distance": 171.5828006727939,
+        "local_origin": [
+          -1.6367734824644753,
+          0.9883999371153571,
+          -0.846592249714473
+        ]
+      }
+    ],
+    "atlas_delta": [
+      10467840,
+      753387
+    ]
+  },
+  {
+    "step": 2,
+    "origins": [
+      [
+        1090.0,
+        460.0,
+        39.99999237060547
+      ],
+      [
+        1195.0,
+        810.0,
+        0.0
+      ]
+    ],
+    "receivers": [
+      3,
+      6
+    ],
+    "queries": [
+      {
+        "probe": 0,
+        "input": 3,
+        "shape": "torus",
+        "excluded": true,
+        "rays": 64,
+        "hits": 18,
+        "backface_hits": 0,
+        "nearest_distance": 179.09109979393267,
+        "local_origin": [
+          6.1183240696038865e-09,
+          1.735984400674795e-08,
+          2.5118232382936867e-08
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -3.7096774193548363,
+          3.4677419354838706,
+          1.2903224575904106
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 64,
+        "backface_hits": 64,
+        "nearest_distance": 0.8867617768436508,
+        "local_origin": [
+          -0.06776379714518876,
+          -0.7996027350097954,
+          -0.5869247486719159
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 3,
+        "shape": "torus",
+        "excluded": false,
+        "rays": 64,
+        "hits": 7,
+        "backface_hits": 0,
+        "nearest_distance": 166.15459738130582,
+        "local_origin": [
+          -0.3089366348702738,
+          1.1452932972917618,
+          -0.9186984427093703
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -2.016129032258064,
+          9.112903225806452,
+          0.6451612903225806
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 4,
+        "backface_hits": 0,
+        "nearest_distance": 171.0830234760329,
+        "local_origin": [
+          -1.6361773563889654,
+          0.9801413326502573,
+          -0.846592249714473
+        ]
+      }
+    ],
+    "atlas_delta": [
+      12033183,
+      769554
+    ]
+  },
+  {
+    "step": 3,
+    "origins": [
+      [
+        1090.0,
+        460.0,
+        39.99999237060547
+      ],
+      [
+        1195.0,
+        810.0,
+        0.0
+      ]
+    ],
+    "receivers": [
+      3,
+      6
+    ],
+    "queries": [
+      {
+        "probe": 0,
+        "input": 3,
+        "shape": "torus",
+        "excluded": true,
+        "rays": 64,
+        "hits": 18,
+        "backface_hits": 0,
+        "nearest_distance": 179.09109979393267,
+        "local_origin": [
+          6.1183240696038865e-09,
+          1.735984400674795e-08,
+          2.5118232382936867e-08
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -3.7096774193548363,
+          3.4677419354838706,
+          1.2903224575904106
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 31,
+        "backface_hits": 0,
+        "nearest_distance": 0.1702223313184622,
+        "local_origin": [
+          -0.06716767106967891,
+          -0.8078613394748952,
+          -0.5869247486719159
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 3,
+        "shape": "torus",
+        "excluded": false,
+        "rays": 64,
+        "hits": 7,
+        "backface_hits": 0,
+        "nearest_distance": 166.15459738130582,
+        "local_origin": [
+          -0.3089366348702738,
+          1.1452932972917618,
+          -0.9186984427093703
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -2.016129032258064,
+          9.112903225806452,
+          0.6451612903225806
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 4,
+        "backface_hits": 0,
+        "nearest_distance": 170.58324627927198,
+        "local_origin": [
+          -1.6355812303134556,
+          0.9718827281851574,
+          -0.846592249714473
+        ]
+      }
+    ],
+    "atlas_delta": [
+      513145260,
+      794349
+    ]
+  },
+  {
+    "step": 4,
+    "origins": [
+      [
+        1090.0,
+        460.0,
+        39.99999237060547
+      ],
+      [
+        1195.0,
+        810.0,
+        0.0
+      ]
+    ],
+    "receivers": [
+      3,
+      6
+    ],
+    "queries": [
+      {
+        "probe": 0,
+        "input": 3,
+        "shape": "torus",
+        "excluded": true,
+        "rays": 64,
+        "hits": 18,
+        "backface_hits": 0,
+        "nearest_distance": 179.09109979393267,
+        "local_origin": [
+          6.1183240696038865e-09,
+          1.735984400674795e-08,
+          2.5118232382936867e-08
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -3.7096774193548363,
+          3.4677419354838706,
+          1.2903224575904106
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 30,
+        "backface_hits": 0,
+        "nearest_distance": 1.2116336980384912,
+        "local_origin": [
+          -0.06657154499416729,
+          -0.8161199439399933,
+          -0.5869247486719159
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 3,
+        "shape": "torus",
+        "excluded": false,
+        "rays": 64,
+        "hits": 7,
+        "backface_hits": 0,
+        "nearest_distance": 166.15459738130582,
+        "local_origin": [
+          -0.3089366348702738,
+          1.1452932972917618,
+          -0.9186984427093703
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -2.016129032258064,
+          9.112903225806452,
+          0.6451612903225806
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 4,
+        "backface_hits": 0,
+        "nearest_distance": 170.08346908251085,
+        "local_origin": [
+          -1.634985104237944,
+          0.9636241237200593,
+          -0.846592249714473
+        ]
+      }
+    ],
+    "atlas_delta": [
+      33041320,
+      814627
+    ]
+  },
+  {
+    "step": 5,
+    "origins": [
+      [
+        1090.0,
+        460.0,
+        39.99999237060547
+      ],
+      [
+        1195.0,
+        810.0,
+        0.0
+      ]
+    ],
+    "receivers": [
+      3,
+      6
+    ],
+    "queries": [
+      {
+        "probe": 0,
+        "input": 3,
+        "shape": "torus",
+        "excluded": true,
+        "rays": 64,
+        "hits": 18,
+        "backface_hits": 0,
+        "nearest_distance": 179.09109979393267,
+        "local_origin": [
+          6.1183240696038865e-09,
+          1.735984400674795e-08,
+          2.5118232382936867e-08
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -3.7096774193548363,
+          3.4677419354838706,
+          1.2903224575904106
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 28,
+        "backface_hits": 0,
+        "nearest_distance": 2.2530450647585276,
+        "local_origin": [
+          -0.06597541891865655,
+          -0.8243785484050914,
+          -0.5869247486719159
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 3,
+        "shape": "torus",
+        "excluded": false,
+        "rays": 64,
+        "hits": 7,
+        "backface_hits": 0,
+        "nearest_distance": 166.15459738130582,
+        "local_origin": [
+          -0.3089366348702738,
+          1.1452932972917618,
+          -0.9186984427093703
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -2.016129032258064,
+          9.112903225806452,
+          0.6451612903225806
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 4,
+        "backface_hits": 0,
+        "nearest_distance": 169.58369188574983,
+        "local_origin": [
+          -1.6343889781624332,
+          0.9553655192549613,
+          -0.846592249714473
+        ]
+      }
+    ],
+    "atlas_delta": [
+      20779759,
+      845170
+    ]
+  },
+  {
+    "step": 6,
+    "origins": [
+      [
+        1090.0,
+        460.0,
+        39.99999237060547
+      ],
+      [
+        1195.0,
+        810.0,
+        0.0
+      ]
+    ],
+    "receivers": [
+      3,
+      6
+    ],
+    "queries": [
+      {
+        "probe": 0,
+        "input": 3,
+        "shape": "torus",
+        "excluded": true,
+        "rays": 64,
+        "hits": 18,
+        "backface_hits": 0,
+        "nearest_distance": 179.09109979393267,
+        "local_origin": [
+          6.1183240696038865e-09,
+          1.735984400674795e-08,
+          2.5118232382936867e-08
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -3.7096774193548363,
+          3.4677419354838706,
+          1.2903224575904106
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 26,
+        "backface_hits": 0,
+        "nearest_distance": 3.294456431478793,
+        "local_origin": [
+          -0.06537929284314625,
+          -0.8326371528701912,
+          -0.5869247486719159
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 3,
+        "shape": "torus",
+        "excluded": false,
+        "rays": 64,
+        "hits": 7,
+        "backface_hits": 0,
+        "nearest_distance": 166.15459738130582,
+        "local_origin": [
+          -0.3089366348702738,
+          1.1452932972917618,
+          -0.9186984427093703
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -2.016129032258064,
+          9.112903225806452,
+          0.6451612903225806
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 4,
+        "backface_hits": 0,
+        "nearest_distance": 169.08391468898884,
+        "local_origin": [
+          -1.6337928520869234,
+          0.9471069147898614,
+          -0.846592249714473
+        ]
+      }
+    ],
+    "atlas_delta": [
+      16778824,
+      859858
+    ]
+  },
+  {
+    "step": 7,
+    "origins": [
+      [
+        1090.0,
+        460.0,
+        39.99999237060547
+      ],
+      [
+        1195.0,
+        810.0,
+        0.0
+      ]
+    ],
+    "receivers": [
+      3,
+      6
+    ],
+    "queries": [
+      {
+        "probe": 0,
+        "input": 3,
+        "shape": "torus",
+        "excluded": true,
+        "rays": 64,
+        "hits": 18,
+        "backface_hits": 0,
+        "nearest_distance": 179.09109979393267,
+        "local_origin": [
+          6.1183240696038865e-09,
+          1.735984400674795e-08,
+          2.5118232382936867e-08
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -3.7096774193548363,
+          3.4677419354838706,
+          1.2903224575904106
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 26,
+        "backface_hits": 0,
+        "nearest_distance": 4.335867798198825,
+        "local_origin": [
+          -0.06478316676763507,
+          -0.8408957573352893,
+          -0.5869247486719159
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 3,
+        "shape": "torus",
+        "excluded": false,
+        "rays": 64,
+        "hits": 7,
+        "backface_hits": 0,
+        "nearest_distance": 166.15459738130582,
+        "local_origin": [
+          -0.3089366348702738,
+          1.1452932972917618,
+          -0.9186984427093703
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -2.016129032258064,
+          9.112903225806452,
+          0.6451612903225806
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 4,
+        "backface_hits": 0,
+        "nearest_distance": 168.58413749222768,
+        "local_origin": [
+          -1.6331967260114117,
+          0.9388483103247633,
+          -0.846592249714473
+        ]
+      }
+    ],
+    "atlas_delta": [
+      14428219,
+      879834
+    ]
+  },
+  {
+    "step": 8,
+    "origins": [
+      [
+        1090.0,
+        460.0,
+        39.99999237060547
+      ],
+      [
+        1195.0,
+        810.0,
+        0.0
+      ]
+    ],
+    "receivers": [
+      3,
+      6
+    ],
+    "queries": [
+      {
+        "probe": 0,
+        "input": 3,
+        "shape": "torus",
+        "excluded": true,
+        "rays": 64,
+        "hits": 18,
+        "backface_hits": 0,
+        "nearest_distance": 179.09109979393267,
+        "local_origin": [
+          6.1183240696038865e-09,
+          1.735984400674795e-08,
+          2.5118232382936867e-08
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -3.7096774193548363,
+          3.4677419354838706,
+          1.2903224575904106
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 24,
+        "backface_hits": 0,
+        "nearest_distance": 5.377279164919091,
+        "local_origin": [
+          -0.06418704069212477,
+          -0.8491543618003892,
+          -0.5869247486719159
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 3,
+        "shape": "torus",
+        "excluded": false,
+        "rays": 64,
+        "hits": 7,
+        "backface_hits": 0,
+        "nearest_distance": 166.15459738130582,
+        "local_origin": [
+          -0.3089366348702738,
+          1.1452932972917618,
+          -0.9186984427093703
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -2.016129032258064,
+          9.112903225806452,
+          0.6451612903225806
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 4,
+        "backface_hits": 0,
+        "nearest_distance": 168.10264172052862,
+        "local_origin": [
+          -1.632600599935902,
+          0.9305897058596635,
+          -0.846592249714473
+        ]
+      }
+    ],
+    "atlas_delta": [
+      12905798,
+      903896
+    ]
+  },
+  {
+    "step": 9,
+    "origins": [
+      [
+        1090.0,
+        460.0,
+        39.99999237060547
+      ],
+      [
+        1195.0,
+        810.0,
+        0.0
+      ]
+    ],
+    "receivers": [
+      3,
+      6
+    ],
+    "queries": [
+      {
+        "probe": 0,
+        "input": 3,
+        "shape": "torus",
+        "excluded": true,
+        "rays": 64,
+        "hits": 18,
+        "backface_hits": 0,
+        "nearest_distance": 179.09109979393267,
+        "local_origin": [
+          6.1183240696038865e-09,
+          1.735984400674795e-08,
+          2.5118232382936867e-08
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -3.7096774193548363,
+          3.4677419354838706,
+          1.2903224575904106
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 23,
+        "backface_hits": 0,
+        "nearest_distance": 6.418690531639357,
+        "local_origin": [
+          -0.06359091461661448,
+          -0.857412966265489,
+          -0.5869247486719159
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 3,
+        "shape": "torus",
+        "excluded": false,
+        "rays": 64,
+        "hits": 7,
+        "backface_hits": 0,
+        "nearest_distance": 166.15459738130582,
+        "local_origin": [
+          -0.3089366348702738,
+          1.1452932972917618,
+          -0.9186984427093703
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -2.016129032258064,
+          9.112903225806452,
+          0.6451612903225806
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 4,
+        "backface_hits": 0,
+        "nearest_distance": 167.65683801733397,
+        "local_origin": [
+          -1.6320044738603912,
+          0.9223311013945636,
+          -0.846592249714473
+        ]
+      }
+    ],
+    "atlas_delta": [
+      11537718,
+      919789
+    ]
+  },
+  {
+    "step": 10,
+    "origins": [
+      [
+        1090.0,
+        460.0,
+        39.99999237060547
+      ],
+      [
+        1195.0,
+        810.0,
+        0.0
+      ]
+    ],
+    "receivers": [
+      3,
+      6
+    ],
+    "queries": [
+      {
+        "probe": 0,
+        "input": 3,
+        "shape": "torus",
+        "excluded": true,
+        "rays": 64,
+        "hits": 18,
+        "backface_hits": 0,
+        "nearest_distance": 179.09109979393267,
+        "local_origin": [
+          6.1183240696038865e-09,
+          1.735984400674795e-08,
+          2.5118232382936867e-08
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -3.7096774193548363,
+          3.4677419354838706,
+          1.2903224575904106
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 21,
+        "backface_hits": 0,
+        "nearest_distance": 7.460101898359393,
+        "local_origin": [
+          -0.06299478854110374,
+          -0.8656715707305871,
+          -0.5869247486719159
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 3,
+        "shape": "torus",
+        "excluded": false,
+        "rays": 64,
+        "hits": 7,
+        "backface_hits": 0,
+        "nearest_distance": 166.15459738130582,
+        "local_origin": [
+          -0.3089366348702738,
+          1.1452932972917618,
+          -0.9186984427093703
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -2.016129032258064,
+          9.112903225806452,
+          0.6451612903225806
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 4,
+        "backface_hits": 0,
+        "nearest_distance": 167.21103431413934,
+        "local_origin": [
+          -1.6314083477848804,
+          0.9140724969294656,
+          -0.846592249714473
+        ]
+      }
+    ],
+    "atlas_delta": [
+      10754942,
+      939726
+    ]
+  },
+  {
+    "step": 11,
+    "origins": [
+      [
+        1090.0,
+        460.0,
+        39.99999237060547
+      ],
+      [
+        1195.0,
+        810.0,
+        0.0
+      ]
+    ],
+    "receivers": [
+      3,
+      6
+    ],
+    "queries": [
+      {
+        "probe": 0,
+        "input": 3,
+        "shape": "torus",
+        "excluded": true,
+        "rays": 64,
+        "hits": 18,
+        "backface_hits": 0,
+        "nearest_distance": 179.09109979393267,
+        "local_origin": [
+          6.1183240696038865e-09,
+          1.735984400674795e-08,
+          2.5118232382936867e-08
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -3.7096774193548363,
+          3.4677419354838706,
+          1.2903224575904106
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 20,
+        "backface_hits": 0,
+        "nearest_distance": 8.501513265079653,
+        "local_origin": [
+          -0.062398662465593,
+          -0.8739301751956869,
+          -0.5869247486719159
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 3,
+        "shape": "torus",
+        "excluded": false,
+        "rays": 64,
+        "hits": 7,
+        "backface_hits": 0,
+        "nearest_distance": 166.15459738130582,
+        "local_origin": [
+          -0.3089366348702738,
+          1.1452932972917618,
+          -0.9186984427093703
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -2.016129032258064,
+          9.112903225806452,
+          0.6451612903225806
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 4,
+        "backface_hits": 0,
+        "nearest_distance": 166.76523061094466,
+        "local_origin": [
+          -1.6308122217093697,
+          0.9058138924643657,
+          -0.846592249714473
+        ]
+      }
+    ],
+    "atlas_delta": [
+      10122631,
+      954055
+    ]
+  },
+  {
+    "step": 12,
+    "origins": [
+      [
+        1090.0,
+        460.0,
+        39.99999237060547
+      ],
+      [
+        1195.0,
+        810.0,
+        0.0
+      ]
+    ],
+    "receivers": [
+      3,
+      6
+    ],
+    "queries": [
+      {
+        "probe": 0,
+        "input": 3,
+        "shape": "torus",
+        "excluded": true,
+        "rays": 64,
+        "hits": 18,
+        "backface_hits": 0,
+        "nearest_distance": 179.09109979393267,
+        "local_origin": [
+          6.1183240696038865e-09,
+          1.735984400674795e-08,
+          2.5118232382936867e-08
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -3.7096774193548363,
+          3.4677419354838706,
+          1.2903224575904106
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 19,
+        "backface_hits": 0,
+        "nearest_distance": 9.542924631799687,
+        "local_origin": [
+          -0.06180253639008182,
+          -0.882188779660785,
+          -0.5869247486719159
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 3,
+        "shape": "torus",
+        "excluded": false,
+        "rays": 64,
+        "hits": 7,
+        "backface_hits": 0,
+        "nearest_distance": 166.15459738130582,
+        "local_origin": [
+          -0.3089366348702738,
+          1.1452932972917618,
+          -0.9186984427093703
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -2.016129032258064,
+          9.112903225806452,
+          0.6451612903225806
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 4,
+        "backface_hits": 0,
+        "nearest_distance": 166.31942690775006,
+        "local_origin": [
+          -1.630216095633859,
+          0.8975552879992676,
+          -0.846592249714473
+        ]
+      }
+    ],
+    "atlas_delta": [
+      9485673,
+      969222
+    ]
+  },
+  {
+    "step": 13,
+    "origins": [
+      [
+        1090.0,
+        460.0,
+        39.99999237060547
+      ],
+      [
+        1195.0,
+        810.0,
+        0.0
+      ]
+    ],
+    "receivers": [
+      3,
+      6
+    ],
+    "queries": [
+      {
+        "probe": 0,
+        "input": 3,
+        "shape": "torus",
+        "excluded": true,
+        "rays": 64,
+        "hits": 18,
+        "backface_hits": 0,
+        "nearest_distance": 179.09109979393267,
+        "local_origin": [
+          6.1183240696038865e-09,
+          1.735984400674795e-08,
+          2.5118232382936867e-08
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -3.7096774193548363,
+          3.4677419354838706,
+          1.2903224575904106
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 19,
+        "backface_hits": 0,
+        "nearest_distance": 10.615415536222189,
+        "local_origin": [
+          -0.061206410314571524,
+          -0.8904473841258849,
+          -0.5869247486719159
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 3,
+        "shape": "torus",
+        "excluded": false,
+        "rays": 64,
+        "hits": 7,
+        "backface_hits": 0,
+        "nearest_distance": 166.15459738130582,
+        "local_origin": [
+          -0.3089366348702738,
+          1.1452932972917618,
+          -0.9186984427093703
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -2.016129032258064,
+          9.112903225806452,
+          0.6451612903225806
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 4,
+        "backface_hits": 0,
+        "nearest_distance": 165.87362320455537,
+        "local_origin": [
+          -1.6296199695583482,
+          0.8892966835341678,
+          -0.846592249714473
+        ]
+      }
+    ],
+    "atlas_delta": [
+      8981113,
+      975080
+    ]
+  },
+  {
+    "step": 14,
+    "origins": [
+      [
+        1090.0,
+        460.0,
+        39.99999237060547
+      ],
+      [
+        1195.0,
+        810.0,
+        0.0
+      ]
+    ],
+    "receivers": [
+      3,
+      6
+    ],
+    "queries": [
+      {
+        "probe": 0,
+        "input": 3,
+        "shape": "torus",
+        "excluded": true,
+        "rays": 64,
+        "hits": 18,
+        "backface_hits": 0,
+        "nearest_distance": 179.09109979393267,
+        "local_origin": [
+          6.1183240696038865e-09,
+          1.735984400674795e-08,
+          2.5118232382936867e-08
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -3.7096774193548363,
+          3.4677419354838706,
+          1.2903224575904106
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 19,
+        "backface_hits": 0,
+        "nearest_distance": 11.69232875828732,
+        "local_origin": [
+          -0.06061028423906034,
+          -0.8987059885909829,
+          -0.5869247486719159
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 3,
+        "shape": "torus",
+        "excluded": false,
+        "rays": 64,
+        "hits": 7,
+        "backface_hits": 0,
+        "nearest_distance": 166.15459738130582,
+        "local_origin": [
+          -0.3089366348702738,
+          1.1452932972917618,
+          -0.9186984427093703
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -2.016129032258064,
+          9.112903225806452,
+          0.6451612903225806
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 4,
+        "backface_hits": 0,
+        "nearest_distance": 165.42781950136074,
+        "local_origin": [
+          -1.6290238434828375,
+          0.8810380790690697,
+          -0.846592249714473
+        ]
+      }
+    ],
+    "atlas_delta": [
+      8577252,
+      993855
+    ]
+  },
+  {
+    "step": 15,
+    "origins": [
+      [
+        1090.0,
+        460.0,
+        39.99999237060547
+      ],
+      [
+        1195.0,
+        810.0,
+        0.0
+      ]
+    ],
+    "receivers": [
+      3,
+      6
+    ],
+    "queries": [
+      {
+        "probe": 0,
+        "input": 3,
+        "shape": "torus",
+        "excluded": true,
+        "rays": 64,
+        "hits": 18,
+        "backface_hits": 0,
+        "nearest_distance": 179.09109979393267,
+        "local_origin": [
+          6.1183240696038865e-09,
+          1.735984400674795e-08,
+          2.5118232382936867e-08
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -3.7096774193548363,
+          3.4677419354838706,
+          1.2903224575904106
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 19,
+        "backface_hits": 0,
+        "nearest_distance": 12.769241980352694,
+        "local_origin": [
+          -0.060014158163550047,
+          -0.9069645930560828,
+          -0.5869247486719159
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 3,
+        "shape": "torus",
+        "excluded": false,
+        "rays": 64,
+        "hits": 7,
+        "backface_hits": 0,
+        "nearest_distance": 166.15459738130582,
+        "local_origin": [
+          -0.3089366348702738,
+          1.1452932972917618,
+          -0.9186984427093703
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -2.016129032258064,
+          9.112903225806452,
+          0.6451612903225806
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 4,
+        "backface_hits": 0,
+        "nearest_distance": 164.9888352684871,
+        "local_origin": [
+          -1.6284277174073267,
+          0.8727794746039699,
+          -0.846592249714473
+        ]
+      }
+    ],
+    "atlas_delta": [
+      8158522,
+      1001419
+    ]
+  },
+  {
+    "step": 16,
+    "origins": [
+      [
+        1090.0,
+        460.0,
+        39.99999237060547
+      ],
+      [
+        1195.0,
+        810.0,
+        0.0
+      ]
+    ],
+    "receivers": [
+      3,
+      6
+    ],
+    "queries": [
+      {
+        "probe": 0,
+        "input": 3,
+        "shape": "torus",
+        "excluded": true,
+        "rays": 64,
+        "hits": 18,
+        "backface_hits": 0,
+        "nearest_distance": 179.09109979393267,
+        "local_origin": [
+          6.1183240696038865e-09,
+          1.735984400674795e-08,
+          2.5118232382936867e-08
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -3.7096774193548363,
+          3.4677419354838706,
+          1.2903224575904106
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 19,
+        "backface_hits": 0,
+        "nearest_distance": 13.846155202417828,
+        "local_origin": [
+          -0.05941803208803931,
+          -0.9152231975211809,
+          -0.5869247486719159
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 3,
+        "shape": "torus",
+        "excluded": false,
+        "rays": 64,
+        "hits": 7,
+        "backface_hits": 0,
+        "nearest_distance": 166.15459738130582,
+        "local_origin": [
+          -0.3089366348702738,
+          1.1452932972917618,
+          -0.9186984427093703
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -2.016129032258064,
+          9.112903225806452,
+          0.6451612903225806
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 4,
+        "backface_hits": 0,
+        "nearest_distance": 164.59903516931013,
+        "local_origin": [
+          -1.627831591331816,
+          0.8645208701388718,
+          -0.846592249714473
+        ]
+      }
+    ],
+    "atlas_delta": [
+      7868499,
+      1022571
+    ]
+  },
+  {
+    "step": 17,
+    "origins": [
+      [
+        1090.0,
+        460.0,
+        39.99999237060547
+      ],
+      [
+        1195.0,
+        810.0,
+        0.0
+      ]
+    ],
+    "receivers": [
+      3,
+      6
+    ],
+    "queries": [
+      {
+        "probe": 0,
+        "input": 3,
+        "shape": "torus",
+        "excluded": true,
+        "rays": 64,
+        "hits": 18,
+        "backface_hits": 0,
+        "nearest_distance": 179.09109979393267,
+        "local_origin": [
+          6.1183240696038865e-09,
+          1.735984400674795e-08,
+          2.5118232382936867e-08
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -3.7096774193548363,
+          3.4677419354838706,
+          1.2903224575904106
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 19,
+        "backface_hits": 0,
+        "nearest_distance": 14.923068424483196,
+        "local_origin": [
+          -0.05882190601252857,
+          -0.9234818019862807,
+          -0.5869247486719159
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 3,
+        "shape": "torus",
+        "excluded": false,
+        "rays": 64,
+        "hits": 7,
+        "backface_hits": 0,
+        "nearest_distance": 166.15459738130582,
+        "local_origin": [
+          -0.3089366348702738,
+          1.1452932972917618,
+          -0.9186984427093703
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -2.016129032258064,
+          9.112903225806452,
+          0.6451612903225806
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 4,
+        "backface_hits": 0,
+        "nearest_distance": 164.20923507013308,
+        "local_origin": [
+          -1.6272354652563052,
+          0.856262265673772,
+          -0.846592249714473
+        ]
+      }
+    ],
+    "atlas_delta": [
+      7583342,
+      1020315
+    ]
+  },
+  {
+    "step": 18,
+    "origins": [
+      [
+        1090.0,
+        460.0,
+        39.99999237060547
+      ],
+      [
+        1195.0,
+        810.0,
+        0.0
+      ]
+    ],
+    "receivers": [
+      3,
+      6
+    ],
+    "queries": [
+      {
+        "probe": 0,
+        "input": 3,
+        "shape": "torus",
+        "excluded": true,
+        "rays": 64,
+        "hits": 18,
+        "backface_hits": 0,
+        "nearest_distance": 179.09109979393267,
+        "local_origin": [
+          6.1183240696038865e-09,
+          1.735984400674795e-08,
+          2.5118232382936867e-08
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -3.7096774193548363,
+          3.4677419354838706,
+          1.2903224575904106
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 19,
+        "backface_hits": 0,
+        "nearest_distance": 15.999981646548571,
+        "local_origin": [
+          -0.05822577993701872,
+          -0.9317404064513806,
+          -0.5869247486719159
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 3,
+        "shape": "torus",
+        "excluded": false,
+        "rays": 64,
+        "hits": 7,
+        "backface_hits": 0,
+        "nearest_distance": 166.15459738130582,
+        "local_origin": [
+          -0.3089366348702738,
+          1.1452932972917618,
+          -0.9186984427093703
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -2.016129032258064,
+          9.112903225806452,
+          0.6451612903225806
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 4,
+        "backface_hits": 0,
+        "nearest_distance": 163.81943497095617,
+        "local_origin": [
+          -1.6266393391807954,
+          0.8480036612086721,
+          -0.846592249714473
+        ]
+      }
+    ],
+    "atlas_delta": [
+      7305002,
+      1033480
+    ]
+  },
+  {
+    "step": 19,
+    "origins": [
+      [
+        1090.0,
+        460.0,
+        39.99999237060547
+      ],
+      [
+        1195.0,
+        810.0,
+        0.0
+      ]
+    ],
+    "receivers": [
+      3,
+      6
+    ],
+    "queries": [
+      {
+        "probe": 0,
+        "input": 3,
+        "shape": "torus",
+        "excluded": true,
+        "rays": 64,
+        "hits": 18,
+        "backface_hits": 0,
+        "nearest_distance": 179.09109979393267,
+        "local_origin": [
+          6.1183240696038865e-09,
+          1.735984400674795e-08,
+          2.5118232382936867e-08
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -3.7096774193548363,
+          3.4677419354838706,
+          1.2903224575904106
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 19,
+        "backface_hits": 0,
+        "nearest_distance": 17.0768948686137,
+        "local_origin": [
+          -0.057629653861507535,
+          -0.9399990109164786,
+          -0.5869247486719159
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 3,
+        "shape": "torus",
+        "excluded": false,
+        "rays": 64,
+        "hits": 7,
+        "backface_hits": 0,
+        "nearest_distance": 166.15459738130582,
+        "local_origin": [
+          -0.3089366348702738,
+          1.1452932972917618,
+          -0.9186984427093703
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -2.016129032258064,
+          9.112903225806452,
+          0.6451612903225806
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 4,
+        "backface_hits": 0,
+        "nearest_distance": 163.4296348717791,
+        "local_origin": [
+          -1.6260432131052838,
+          0.839745056743574,
+          -0.846592249714473
+        ]
+      }
+    ],
+    "atlas_delta": [
+      7087992,
+      1048978
+    ]
+  },
+  {
+    "step": 20,
+    "origins": [
+      [
+        1090.0,
+        460.0,
+        39.99999237060547
+      ],
+      [
+        1195.0,
+        810.0,
+        0.0
+      ]
+    ],
+    "receivers": [
+      3,
+      6
+    ],
+    "queries": [
+      {
+        "probe": 0,
+        "input": 3,
+        "shape": "torus",
+        "excluded": true,
+        "rays": 64,
+        "hits": 18,
+        "backface_hits": 0,
+        "nearest_distance": 179.09109979393267,
+        "local_origin": [
+          6.1183240696038865e-09,
+          1.735984400674795e-08,
+          2.5118232382936867e-08
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -3.7096774193548363,
+          3.4677419354838706,
+          1.2903224575904106
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 19,
+        "backface_hits": 0,
+        "nearest_distance": 18.15380809067907,
+        "local_origin": [
+          -0.05703352778599724,
+          -0.9482576153815785,
+          -0.5869247486719159
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 3,
+        "shape": "torus",
+        "excluded": false,
+        "rays": 64,
+        "hits": 7,
+        "backface_hits": 0,
+        "nearest_distance": 166.15459738130582,
+        "local_origin": [
+          -0.3089366348702738,
+          1.1452932972917618,
+          -0.9186984427093703
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -2.016129032258064,
+          9.112903225806452,
+          0.6451612903225806
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 4,
+        "backface_hits": 0,
+        "nearest_distance": 163.03983477260218,
+        "local_origin": [
+          -1.625447087029774,
+          0.8314864522784742,
+          -0.846592249714473
+        ]
+      }
+    ],
+    "atlas_delta": [
+      6796265,
+      1051319
+    ]
+  },
+  {
+    "step": 21,
+    "origins": [
+      [
+        1090.0,
+        460.0,
+        39.99999237060547
+      ],
+      [
+        1195.0,
+        810.0,
+        0.0
+      ]
+    ],
+    "receivers": [
+      3,
+      6
+    ],
+    "queries": [
+      {
+        "probe": 0,
+        "input": 3,
+        "shape": "torus",
+        "excluded": true,
+        "rays": 64,
+        "hits": 18,
+        "backface_hits": 0,
+        "nearest_distance": 179.09109979393267,
+        "local_origin": [
+          6.1183240696038865e-09,
+          1.735984400674795e-08,
+          2.5118232382936867e-08
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -3.7096774193548363,
+          3.4677419354838706,
+          1.2903224575904106
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 19,
+        "backface_hits": 0,
+        "nearest_distance": 19.230721312744205,
+        "local_origin": [
+          -0.05643740171048606,
+          -0.9565162198466766,
+          -0.5869247486719159
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 3,
+        "shape": "torus",
+        "excluded": false,
+        "rays": 64,
+        "hits": 7,
+        "backface_hits": 0,
+        "nearest_distance": 166.15459738130582,
+        "local_origin": [
+          -0.3089366348702738,
+          1.1452932972917618,
+          -0.9186984427093703
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -2.016129032258064,
+          9.112903225806452,
+          0.6451612903225806
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 4,
+        "backface_hits": 0,
+        "nearest_distance": 162.6500346734251,
+        "local_origin": [
+          -1.6248509609542623,
+          0.8232278478133761,
+          -0.846592249714473
+        ]
+      }
+    ],
+    "atlas_delta": [
+      6528094,
+      1073166
+    ]
+  },
+  {
+    "step": 22,
+    "origins": [
+      [
+        1090.0,
+        460.0,
+        39.99999237060547
+      ],
+      [
+        1195.0,
+        810.0,
+        0.0
+      ]
+    ],
+    "receivers": [
+      3,
+      6
+    ],
+    "queries": [
+      {
+        "probe": 0,
+        "input": 3,
+        "shape": "torus",
+        "excluded": true,
+        "rays": 64,
+        "hits": 18,
+        "backface_hits": 0,
+        "nearest_distance": 179.09109979393267,
+        "local_origin": [
+          6.1183240696038865e-09,
+          1.735984400674795e-08,
+          2.5118232382936867e-08
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -3.7096774193548363,
+          3.4677419354838706,
+          1.2903224575904106
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 19,
+        "backface_hits": 0,
+        "nearest_distance": 20.30763453480958,
+        "local_origin": [
+          -0.05584127563497576,
+          -0.9647748243117764,
+          -0.5869247486719159
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 3,
+        "shape": "torus",
+        "excluded": false,
+        "rays": 64,
+        "hits": 7,
+        "backface_hits": 0,
+        "nearest_distance": 166.15459738130582,
+        "local_origin": [
+          -0.3089366348702738,
+          1.1452932972917618,
+          -0.9186984427093703
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -2.016129032258064,
+          9.112903225806452,
+          0.6451612903225806
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 4,
+        "backface_hits": 0,
+        "nearest_distance": 162.26295650487577,
+        "local_origin": [
+          -1.6242548348787524,
+          0.8149692433482763,
+          -0.846592249714473
+        ]
+      }
+    ],
+    "atlas_delta": [
+      6271807,
+      1084279
+    ]
+  },
+  {
+    "step": 23,
+    "origins": [
+      [
+        1090.0,
+        460.0,
+        39.99999237060547
+      ],
+      [
+        1195.0,
+        810.0,
+        0.0
+      ]
+    ],
+    "receivers": [
+      3,
+      6
+    ],
+    "queries": [
+      {
+        "probe": 0,
+        "input": 3,
+        "shape": "torus",
+        "excluded": true,
+        "rays": 64,
+        "hits": 18,
+        "backface_hits": 0,
+        "nearest_distance": 179.09109979393267,
+        "local_origin": [
+          6.1183240696038865e-09,
+          1.735984400674795e-08,
+          2.5118232382936867e-08
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -3.7096774193548363,
+          3.4677419354838706,
+          1.2903224575904106
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 19,
+        "backface_hits": 0,
+        "nearest_distance": 21.397367262131336,
+        "local_origin": [
+          -0.05524514955946591,
+          -0.9730334287768763,
+          -0.5869247486719159
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 3,
+        "shape": "torus",
+        "excluded": false,
+        "rays": 64,
+        "hits": 7,
+        "backface_hits": 0,
+        "nearest_distance": 166.15459738130582,
+        "local_origin": [
+          -0.3089366348702738,
+          1.1452932972917618,
+          -0.9186984427093703
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -2.016129032258064,
+          9.112903225806452,
+          0.6451612903225806
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 4,
+        "backface_hits": 0,
+        "nearest_distance": 161.93159363832333,
+        "local_origin": [
+          -1.6236587088032426,
+          0.8067106388831764,
+          -0.846592249714473
+        ]
+      }
+    ],
+    "atlas_delta": [
+      6120260,
+      1104393
+    ]
+  },
+  {
+    "step": 24,
+    "origins": [
+      [
+        1090.0,
+        460.0,
+        39.99999237060547
+      ],
+      [
+        1195.0,
+        810.0,
+        0.0
+      ]
+    ],
+    "receivers": [
+      3,
+      6
+    ],
+    "queries": [
+      {
+        "probe": 0,
+        "input": 3,
+        "shape": "torus",
+        "excluded": true,
+        "rays": 64,
+        "hits": 18,
+        "backface_hits": 0,
+        "nearest_distance": 179.09109979393267,
+        "local_origin": [
+          6.1183240696038865e-09,
+          1.735984400674795e-08,
+          2.5118232382936867e-08
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -3.7096774193548363,
+          3.4677419354838706,
+          1.2903224575904106
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 19,
+        "backface_hits": 0,
+        "nearest_distance": 22.50988290153818,
+        "local_origin": [
+          -0.054649023483954284,
+          -0.9812920332419743,
+          -0.5869247486719159
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 3,
+        "shape": "torus",
+        "excluded": false,
+        "rays": 64,
+        "hits": 7,
+        "backface_hits": 0,
+        "nearest_distance": 166.15459738130582,
+        "local_origin": [
+          -0.3089366348702738,
+          1.1452932972917618,
+          -0.9186984427093703
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -2.016129032258064,
+          9.112903225806452,
+          0.6451612903225806
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 4,
+        "backface_hits": 0,
+        "nearest_distance": 161.6002307717706,
+        "local_origin": [
+          -1.623062582727731,
+          0.7984520344180783,
+          -0.846592249714473
+        ]
+      }
+    ],
+    "atlas_delta": [
+      5938244,
+      1122023
+    ]
+  },
+  {
+    "step": 25,
+    "origins": [
+      [
+        1090.0,
+        460.0,
+        39.99999237060547
+      ],
+      [
+        1195.0,
+        810.0,
+        0.0
+      ]
+    ],
+    "receivers": [
+      3,
+      6
+    ],
+    "queries": [
+      {
+        "probe": 0,
+        "input": 3,
+        "shape": "torus",
+        "excluded": true,
+        "rays": 64,
+        "hits": 18,
+        "backface_hits": 0,
+        "nearest_distance": 179.09109979393267,
+        "local_origin": [
+          6.1183240696038865e-09,
+          1.735984400674795e-08,
+          2.5118232382936867e-08
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -3.7096774193548363,
+          3.4677419354838706,
+          1.2903224575904106
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 19,
+        "backface_hits": 0,
+        "nearest_distance": 23.622398540945277,
+        "local_origin": [
+          -0.054052897408444434,
+          -0.9895506377070742,
+          -0.5869247486719159
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 3,
+        "shape": "torus",
+        "excluded": false,
+        "rays": 64,
+        "hits": 7,
+        "backface_hits": 0,
+        "nearest_distance": 166.15459738130582,
+        "local_origin": [
+          -0.3089366348702738,
+          1.1452932972917618,
+          -0.9186984427093703
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -2.016129032258064,
+          9.112903225806452,
+          0.6451612903225806
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 4,
+        "backface_hits": 0,
+        "nearest_distance": 161.26886790521817,
+        "local_origin": [
+          -1.6224664566522211,
+          0.7901934299529785,
+          -0.846592249714473
+        ]
+      }
+    ],
+    "atlas_delta": [
+      5765937,
+      1160766
+    ]
+  },
+  {
+    "step": 26,
+    "origins": [
+      [
+        1090.0,
+        460.0,
+        39.99999237060547
+      ],
+      [
+        1195.0,
+        810.0,
+        0.0
+      ]
+    ],
+    "receivers": [
+      3,
+      6
+    ],
+    "queries": [
+      {
+        "probe": 0,
+        "input": 3,
+        "shape": "torus",
+        "excluded": true,
+        "rays": 64,
+        "hits": 18,
+        "backface_hits": 0,
+        "nearest_distance": 179.09109979393267,
+        "local_origin": [
+          6.1183240696038865e-09,
+          1.735984400674795e-08,
+          2.5118232382936867e-08
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -3.7096774193548363,
+          3.4677419354838706,
+          1.2903224575904106
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 18,
+        "backface_hits": 0,
+        "nearest_distance": 24.73491418035238,
+        "local_origin": [
+          -0.05345677133293414,
+          -0.997809242172174,
+          -0.5869247486719159
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 3,
+        "shape": "torus",
+        "excluded": false,
+        "rays": 64,
+        "hits": 7,
+        "backface_hits": 0,
+        "nearest_distance": 166.15459738130582,
+        "local_origin": [
+          -0.3089366348702738,
+          1.1452932972917618,
+          -0.9186984427093703
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -2.016129032258064,
+          9.112903225806452,
+          0.6451612903225806
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 4,
+        "backface_hits": 0,
+        "nearest_distance": 160.9375050386656,
+        "local_origin": [
+          -1.6218703305767104,
+          0.7819348254878786,
+          -0.846592249714473
+        ]
+      }
+    ],
+    "atlas_delta": [
+      5609897,
+      1186786
+    ]
+  },
+  {
+    "step": 27,
+    "origins": [
+      [
+        1090.0,
+        460.0,
+        39.99999237060547
+      ],
+      [
+        1195.0,
+        810.0,
+        0.0
+      ]
+    ],
+    "receivers": [
+      3,
+      6
+    ],
+    "queries": [
+      {
+        "probe": 0,
+        "input": 3,
+        "shape": "torus",
+        "excluded": true,
+        "rays": 64,
+        "hits": 18,
+        "backface_hits": 0,
+        "nearest_distance": 179.09109979393267,
+        "local_origin": [
+          6.1183240696038865e-09,
+          1.735984400674795e-08,
+          2.5118232382936867e-08
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -3.7096774193548363,
+          3.4677419354838706,
+          1.2903224575904106
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 16,
+        "backface_hits": 0,
+        "nearest_distance": 25.84742981975923,
+        "local_origin": [
+          -0.052860645257422956,
+          -1.0060678466372721,
+          -0.5869247486719159
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 3,
+        "shape": "torus",
+        "excluded": false,
+        "rays": 64,
+        "hits": 7,
+        "backface_hits": 0,
+        "nearest_distance": 166.15459738130582,
+        "local_origin": [
+          -0.3089366348702738,
+          1.1452932972917618,
+          -0.9186984427093703
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -2.016129032258064,
+          9.112903225806452,
+          0.6451612903225806
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 4,
+        "backface_hits": 0,
+        "nearest_distance": 160.60614217211304,
+        "local_origin": [
+          -1.6212742045011996,
+          0.7736762210227806,
+          -0.846592249714473
+        ]
+      }
+    ],
+    "atlas_delta": [
+      5431076,
+      1236011
+    ]
+  },
+  {
+    "step": 28,
+    "origins": [
+      [
+        1090.0,
+        460.0,
+        39.99999237060547
+      ],
+      [
+        1195.0,
+        810.0,
+        0.0
+      ]
+    ],
+    "receivers": [
+      3,
+      6
+    ],
+    "queries": [
+      {
+        "probe": 0,
+        "input": 3,
+        "shape": "torus",
+        "excluded": true,
+        "rays": 64,
+        "hits": 18,
+        "backface_hits": 0,
+        "nearest_distance": 179.09109979393267,
+        "local_origin": [
+          6.1183240696038865e-09,
+          1.735984400674795e-08,
+          2.5118232382936867e-08
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -3.7096774193548363,
+          3.4677419354838706,
+          1.2903224575904106
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 16,
+        "backface_hits": 0,
+        "nearest_distance": 26.959945459166324,
+        "local_origin": [
+          -0.05226451918191266,
+          -1.014326451102372,
+          -0.5869247486719159
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 3,
+        "shape": "torus",
+        "excluded": false,
+        "rays": 64,
+        "hits": 7,
+        "backface_hits": 0,
+        "nearest_distance": 166.15459738130582,
+        "local_origin": [
+          -0.3089366348702738,
+          1.1452932972917618,
+          -0.9186984427093703
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -2.016129032258064,
+          9.112903225806452,
+          0.6451612903225806
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 4,
+        "backface_hits": 0,
+        "nearest_distance": 159.82106293741035,
+        "local_origin": [
+          -1.620678078425689,
+          0.7654176165576807,
+          -0.846592249714473
+        ]
+      }
+    ],
+    "atlas_delta": [
+      5252911,
+      1279842
+    ]
+  },
+  {
+    "step": 29,
+    "origins": [
+      [
+        1090.0,
+        460.0,
+        39.99999237060547
+      ],
+      [
+        1195.0,
+        810.0,
+        0.0
+      ]
+    ],
+    "receivers": [
+      3,
+      6
+    ],
+    "queries": [
+      {
+        "probe": 0,
+        "input": 3,
+        "shape": "torus",
+        "excluded": true,
+        "rays": 64,
+        "hits": 18,
+        "backface_hits": 0,
+        "nearest_distance": 179.09109979393267,
+        "local_origin": [
+          6.1183240696038865e-09,
+          1.735984400674795e-08,
+          2.5118232382936867e-08
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -3.7096774193548363,
+          3.4677419354838706,
+          1.2903224575904106
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 16,
+        "backface_hits": 0,
+        "nearest_distance": 28.07246109857318,
+        "local_origin": [
+          -0.05166839310640148,
+          -1.02258505556747,
+          -0.5869247486719159
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 3,
+        "shape": "torus",
+        "excluded": false,
+        "rays": 64,
+        "hits": 7,
+        "backface_hits": 0,
+        "nearest_distance": 166.15459738130582,
+        "local_origin": [
+          -0.3089366348702738,
+          1.1452932972917618,
+          -0.9186984427093703
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -2.016129032258064,
+          9.112903225806452,
+          0.6451612903225806
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 4,
+        "backface_hits": 0,
+        "nearest_distance": 158.9363171645839,
+        "local_origin": [
+          -1.6200819523501782,
+          0.7571590120925826,
+          -0.846592249714473
+        ]
+      }
+    ],
+    "atlas_delta": [
+      5060357,
+      1332850
+    ]
+  },
+  {
+    "step": 30,
+    "origins": [
+      [
+        1090.0,
+        460.0,
+        39.99999237060547
+      ],
+      [
+        1195.0,
+        810.0,
+        0.0
+      ]
+    ],
+    "receivers": [
+      3,
+      6
+    ],
+    "queries": [
+      {
+        "probe": 0,
+        "input": 3,
+        "shape": "torus",
+        "excluded": true,
+        "rays": 64,
+        "hits": 18,
+        "backface_hits": 0,
+        "nearest_distance": 179.09109979393267,
+        "local_origin": [
+          6.1183240696038865e-09,
+          1.735984400674795e-08,
+          2.5118232382936867e-08
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -3.7096774193548363,
+          3.4677419354838706,
+          1.2903224575904106
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 16,
+        "backface_hits": 0,
+        "nearest_distance": 29.18497673798003,
+        "local_origin": [
+          -0.051072267030890295,
+          -1.030843660032568,
+          -0.5869247486719159
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 3,
+        "shape": "torus",
+        "excluded": false,
+        "rays": 64,
+        "hits": 7,
+        "backface_hits": 0,
+        "nearest_distance": 166.15459738130582,
+        "local_origin": [
+          -0.3089366348702738,
+          1.1452932972917618,
+          -0.9186984427093703
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -2.016129032258064,
+          9.112903225806452,
+          0.6451612903225806
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 4,
+        "backface_hits": 0,
+        "nearest_distance": 158.05157139175742,
+        "local_origin": [
+          -1.6194858262746674,
+          0.7489004076274846,
+          -0.846592249714473
+        ]
+      }
+    ],
+    "atlas_delta": [
+      4918494,
+      1395150
+    ]
+  },
+  {
+    "step": 31,
+    "origins": [
+      [
+        1090.0,
+        460.0,
+        39.99999237060547
+      ],
+      [
+        1195.0,
+        810.0,
+        0.0
+      ]
+    ],
+    "receivers": [
+      3,
+      6
+    ],
+    "queries": [
+      {
+        "probe": 0,
+        "input": 3,
+        "shape": "torus",
+        "excluded": true,
+        "rays": 64,
+        "hits": 18,
+        "backface_hits": 0,
+        "nearest_distance": 179.09109979393267,
+        "local_origin": [
+          6.1183240696038865e-09,
+          1.735984400674795e-08,
+          2.5118232382936867e-08
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -3.7096774193548363,
+          3.4677419354838706,
+          1.2903224575904106
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 16,
+        "backface_hits": 0,
+        "nearest_distance": 30.29749237738713,
+        "local_origin": [
+          -0.05047614095538,
+          -1.039102264497668,
+          -0.5869247486719159
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 3,
+        "shape": "torus",
+        "excluded": false,
+        "rays": 64,
+        "hits": 7,
+        "backface_hits": 0,
+        "nearest_distance": 166.15459738130582,
+        "local_origin": [
+          -0.3089366348702738,
+          1.1452932972917618,
+          -0.9186984427093703
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -2.016129032258064,
+          9.112903225806452,
+          0.6451612903225806
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 4,
+        "backface_hits": 0,
+        "nearest_distance": 157.1668256189308,
+        "local_origin": [
+          -1.6188897001991567,
+          0.7406418031623847,
+          -0.846592249714473
+        ]
+      }
+    ],
+    "atlas_delta": [
+      4785100,
+      1457290
+    ]
+  },
+  {
+    "step": 32,
+    "origins": [
+      [
+        1090.0,
+        460.0,
+        39.99999237060547
+      ],
+      [
+        1195.0,
+        810.0,
+        0.0
+      ]
+    ],
+    "receivers": [
+      3,
+      6
+    ],
+    "queries": [
+      {
+        "probe": 0,
+        "input": 3,
+        "shape": "torus",
+        "excluded": true,
+        "rays": 64,
+        "hits": 18,
+        "backface_hits": 0,
+        "nearest_distance": 179.09109979393267,
+        "local_origin": [
+          6.1183240696038865e-09,
+          1.735984400674795e-08,
+          2.5118232382936867e-08
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -3.7096774193548363,
+          3.4677419354838706,
+          1.2903224575904106
+        ]
+      },
+      {
+        "probe": 0,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 14,
+        "backface_hits": 0,
+        "nearest_distance": 31.410008016794226,
+        "local_origin": [
+          -0.04988001487987015,
+          -1.0473608689627678,
+          -0.5869247486719159
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 3,
+        "shape": "torus",
+        "excluded": false,
+        "rays": 64,
+        "hits": 7,
+        "backface_hits": 0,
+        "nearest_distance": 166.15459738130582,
+        "local_origin": [
+          -0.3089366348702738,
+          1.1452932972917618,
+          -0.9186984427093703
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 4,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 0,
+        "backface_hits": 0,
+        "nearest_distance": null,
+        "local_origin": [
+          -2.016129032258064,
+          9.112903225806452,
+          0.6451612903225806
+        ]
+      },
+      {
+        "probe": 1,
+        "input": 5,
+        "shape": "sphere",
+        "excluded": false,
+        "rays": 64,
+        "hits": 4,
+        "backface_hits": 0,
+        "nearest_distance": 156.28207984610427,
+        "local_origin": [
+          -1.6182935741236468,
+          0.7323831986972849,
+          -0.846592249714473
+        ]
+      }
+    ],
+    "atlas_delta": [
+      4607127,
+      1520886
+    ]
+  }
+]

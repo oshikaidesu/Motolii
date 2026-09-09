@@ -1,0 +1,596 @@
+[
+  {
+    "name": "full-00",
+    "omit_ball_from_captures": false,
+    "position": [
+      1198.0,
+      514.7
+    ],
+    "rgba_difference": 0
+  },
+  {
+    "name": "full-01",
+    "omit_ball_from_captures": false,
+    "position": [
+      1199.03125,
+      515.45
+    ],
+    "rgba_difference": 1494680
+  },
+  {
+    "name": "full-02",
+    "omit_ball_from_captures": false,
+    "position": [
+      1200.0625,
+      516.2
+    ],
+    "rgba_difference": 1550248
+  },
+  {
+    "name": "full-03",
+    "omit_ball_from_captures": false,
+    "position": [
+      1201.09375,
+      516.95
+    ],
+    "rgba_difference": 40174366
+  },
+  {
+    "name": "full-04",
+    "omit_ball_from_captures": false,
+    "position": [
+      1202.125,
+      517.7
+    ],
+    "rgba_difference": 2433005
+  },
+  {
+    "name": "full-05",
+    "omit_ball_from_captures": false,
+    "position": [
+      1203.15625,
+      518.45
+    ],
+    "rgba_difference": 1868048
+  },
+  {
+    "name": "full-06",
+    "omit_ball_from_captures": false,
+    "position": [
+      1204.1875,
+      519.2
+    ],
+    "rgba_difference": 1715447
+  },
+  {
+    "name": "full-07",
+    "omit_ball_from_captures": false,
+    "position": [
+      1205.21875,
+      519.95
+    ],
+    "rgba_difference": 1612902
+  },
+  {
+    "name": "full-08",
+    "omit_ball_from_captures": false,
+    "position": [
+      1206.25,
+      520.7
+    ],
+    "rgba_difference": 1528699
+  },
+  {
+    "name": "full-09",
+    "omit_ball_from_captures": false,
+    "position": [
+      1207.28125,
+      521.45
+    ],
+    "rgba_difference": 1494677
+  },
+  {
+    "name": "full-10",
+    "omit_ball_from_captures": false,
+    "position": [
+      1208.3125,
+      522.2
+    ],
+    "rgba_difference": 1450924
+  },
+  {
+    "name": "full-11",
+    "omit_ball_from_captures": false,
+    "position": [
+      1209.34375,
+      522.95
+    ],
+    "rgba_difference": 1435863
+  },
+  {
+    "name": "full-12",
+    "omit_ball_from_captures": false,
+    "position": [
+      1210.375,
+      523.7
+    ],
+    "rgba_difference": 1410583
+  },
+  {
+    "name": "full-13",
+    "omit_ball_from_captures": false,
+    "position": [
+      1211.40625,
+      524.45
+    ],
+    "rgba_difference": 1420200
+  },
+  {
+    "name": "full-14",
+    "omit_ball_from_captures": false,
+    "position": [
+      1212.4375,
+      525.2
+    ],
+    "rgba_difference": 1421157
+  },
+  {
+    "name": "full-15",
+    "omit_ball_from_captures": false,
+    "position": [
+      1213.46875,
+      525.95
+    ],
+    "rgba_difference": 1430220
+  },
+  {
+    "name": "full-16",
+    "omit_ball_from_captures": false,
+    "position": [
+      1214.5,
+      526.7
+    ],
+    "rgba_difference": 1441621
+  },
+  {
+    "name": "full-17",
+    "omit_ball_from_captures": false,
+    "position": [
+      1215.53125,
+      527.45
+    ],
+    "rgba_difference": 1440262
+  },
+  {
+    "name": "full-18",
+    "omit_ball_from_captures": false,
+    "position": [
+      1216.5625,
+      528.2
+    ],
+    "rgba_difference": 1451050
+  },
+  {
+    "name": "full-19",
+    "omit_ball_from_captures": false,
+    "position": [
+      1217.59375,
+      528.95
+    ],
+    "rgba_difference": 1452904
+  },
+  {
+    "name": "full-20",
+    "omit_ball_from_captures": false,
+    "position": [
+      1218.625,
+      529.7
+    ],
+    "rgba_difference": 1456610
+  },
+  {
+    "name": "full-21",
+    "omit_ball_from_captures": false,
+    "position": [
+      1219.65625,
+      530.45
+    ],
+    "rgba_difference": 1479118
+  },
+  {
+    "name": "full-22",
+    "omit_ball_from_captures": false,
+    "position": [
+      1220.6875,
+      531.2
+    ],
+    "rgba_difference": 1438812
+  },
+  {
+    "name": "full-23",
+    "omit_ball_from_captures": false,
+    "position": [
+      1221.71875,
+      531.95
+    ],
+    "rgba_difference": 1446659
+  },
+  {
+    "name": "full-24",
+    "omit_ball_from_captures": false,
+    "position": [
+      1222.75,
+      532.7
+    ],
+    "rgba_difference": 1425521
+  },
+  {
+    "name": "full-25",
+    "omit_ball_from_captures": false,
+    "position": [
+      1223.78125,
+      533.45
+    ],
+    "rgba_difference": 1408565
+  },
+  {
+    "name": "full-26",
+    "omit_ball_from_captures": false,
+    "position": [
+      1224.8125,
+      534.2
+    ],
+    "rgba_difference": 1384345
+  },
+  {
+    "name": "full-27",
+    "omit_ball_from_captures": false,
+    "position": [
+      1225.84375,
+      534.95
+    ],
+    "rgba_difference": 1363634
+  },
+  {
+    "name": "full-28",
+    "omit_ball_from_captures": false,
+    "position": [
+      1226.875,
+      535.7
+    ],
+    "rgba_difference": 1351308
+  },
+  {
+    "name": "full-29",
+    "omit_ball_from_captures": false,
+    "position": [
+      1227.90625,
+      536.45
+    ],
+    "rgba_difference": 1351492
+  },
+  {
+    "name": "full-30",
+    "omit_ball_from_captures": false,
+    "position": [
+      1228.9375,
+      537.2
+    ],
+    "rgba_difference": 1346418
+  },
+  {
+    "name": "full-31",
+    "omit_ball_from_captures": false,
+    "position": [
+      1229.96875,
+      537.95
+    ],
+    "rgba_difference": 1479824
+  },
+  {
+    "name": "full-32",
+    "omit_ball_from_captures": false,
+    "position": [
+      1231.0,
+      538.7
+    ],
+    "rgba_difference": 1568252
+  },
+  {
+    "name": "omit-00",
+    "omit_ball_from_captures": true,
+    "position": [
+      1198.0,
+      514.7
+    ],
+    "rgba_difference": 18663168
+  },
+  {
+    "name": "omit-01",
+    "omit_ball_from_captures": true,
+    "position": [
+      1199.03125,
+      515.45
+    ],
+    "rgba_difference": 1097685
+  },
+  {
+    "name": "omit-02",
+    "omit_ball_from_captures": true,
+    "position": [
+      1200.0625,
+      516.2
+    ],
+    "rgba_difference": 1091760
+  },
+  {
+    "name": "omit-03",
+    "omit_ball_from_captures": true,
+    "position": [
+      1201.09375,
+      516.95
+    ],
+    "rgba_difference": 1105293
+  },
+  {
+    "name": "omit-04",
+    "omit_ball_from_captures": true,
+    "position": [
+      1202.125,
+      517.7
+    ],
+    "rgba_difference": 1115195
+  },
+  {
+    "name": "omit-05",
+    "omit_ball_from_captures": true,
+    "position": [
+      1203.15625,
+      518.45
+    ],
+    "rgba_difference": 1144393
+  },
+  {
+    "name": "omit-06",
+    "omit_ball_from_captures": true,
+    "position": [
+      1204.1875,
+      519.2
+    ],
+    "rgba_difference": 1166714
+  },
+  {
+    "name": "omit-07",
+    "omit_ball_from_captures": true,
+    "position": [
+      1205.21875,
+      519.95
+    ],
+    "rgba_difference": 1137367
+  },
+  {
+    "name": "omit-08",
+    "omit_ball_from_captures": true,
+    "position": [
+      1206.25,
+      520.7
+    ],
+    "rgba_difference": 1133946
+  },
+  {
+    "name": "omit-09",
+    "omit_ball_from_captures": true,
+    "position": [
+      1207.28125,
+      521.45
+    ],
+    "rgba_difference": 1179155
+  },
+  {
+    "name": "omit-10",
+    "omit_ball_from_captures": true,
+    "position": [
+      1208.3125,
+      522.2
+    ],
+    "rgba_difference": 1160973
+  },
+  {
+    "name": "omit-11",
+    "omit_ball_from_captures": true,
+    "position": [
+      1209.34375,
+      522.95
+    ],
+    "rgba_difference": 1158403
+  },
+  {
+    "name": "omit-12",
+    "omit_ball_from_captures": true,
+    "position": [
+      1210.375,
+      523.7
+    ],
+    "rgba_difference": 1165280
+  },
+  {
+    "name": "omit-13",
+    "omit_ball_from_captures": true,
+    "position": [
+      1211.40625,
+      524.45
+    ],
+    "rgba_difference": 1173011
+  },
+  {
+    "name": "omit-14",
+    "omit_ball_from_captures": true,
+    "position": [
+      1212.4375,
+      525.2
+    ],
+    "rgba_difference": 1209251
+  },
+  {
+    "name": "omit-15",
+    "omit_ball_from_captures": true,
+    "position": [
+      1213.46875,
+      525.95
+    ],
+    "rgba_difference": 1226007
+  },
+  {
+    "name": "omit-16",
+    "omit_ball_from_captures": true,
+    "position": [
+      1214.5,
+      526.7
+    ],
+    "rgba_difference": 1275828
+  },
+  {
+    "name": "omit-17",
+    "omit_ball_from_captures": true,
+    "position": [
+      1215.53125,
+      527.45
+    ],
+    "rgba_difference": 1273281
+  },
+  {
+    "name": "omit-18",
+    "omit_ball_from_captures": true,
+    "position": [
+      1216.5625,
+      528.2
+    ],
+    "rgba_difference": 1295583
+  },
+  {
+    "name": "omit-19",
+    "omit_ball_from_captures": true,
+    "position": [
+      1217.59375,
+      528.95
+    ],
+    "rgba_difference": 1317937
+  },
+  {
+    "name": "omit-20",
+    "omit_ball_from_captures": true,
+    "position": [
+      1218.625,
+      529.7
+    ],
+    "rgba_difference": 1337945
+  },
+  {
+    "name": "omit-21",
+    "omit_ball_from_captures": true,
+    "position": [
+      1219.65625,
+      530.45
+    ],
+    "rgba_difference": 1326683
+  },
+  {
+    "name": "omit-22",
+    "omit_ball_from_captures": true,
+    "position": [
+      1220.6875,
+      531.2
+    ],
+    "rgba_difference": 1337369
+  },
+  {
+    "name": "omit-23",
+    "omit_ball_from_captures": true,
+    "position": [
+      1221.71875,
+      531.95
+    ],
+    "rgba_difference": 1365898
+  },
+  {
+    "name": "omit-24",
+    "omit_ball_from_captures": true,
+    "position": [
+      1222.75,
+      532.7
+    ],
+    "rgba_difference": 1346624
+  },
+  {
+    "name": "omit-25",
+    "omit_ball_from_captures": true,
+    "position": [
+      1223.78125,
+      533.45
+    ],
+    "rgba_difference": 1309933
+  },
+  {
+    "name": "omit-26",
+    "omit_ball_from_captures": true,
+    "position": [
+      1224.8125,
+      534.2
+    ],
+    "rgba_difference": 1294590
+  },
+  {
+    "name": "omit-27",
+    "omit_ball_from_captures": true,
+    "position": [
+      1225.84375,
+      534.95
+    ],
+    "rgba_difference": 1310744
+  },
+  {
+    "name": "omit-28",
+    "omit_ball_from_captures": true,
+    "position": [
+      1226.875,
+      535.7
+    ],
+    "rgba_difference": 1410361
+  },
+  {
+    "name": "omit-29",
+    "omit_ball_from_captures": true,
+    "position": [
+      1227.90625,
+      536.45
+    ],
+    "rgba_difference": 1427555
+  },
+  {
+    "name": "omit-30",
+    "omit_ball_from_captures": true,
+    "position": [
+      1228.9375,
+      537.2
+    ],
+    "rgba_difference": 1412784
+  },
+  {
+    "name": "omit-31",
+    "omit_ball_from_captures": true,
+    "position": [
+      1229.96875,
+      537.95
+    ],
+    "rgba_difference": 1539245
+  },
+  {
+    "name": "omit-32",
+    "omit_ball_from_captures": true,
+    "position": [
+      1231.0,
+      538.7
+    ],
+    "rgba_difference": 1604601
+  }
+]

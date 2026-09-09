@@ -1,0 +1,200 @@
+[
+  {
+    "name": "full-00",
+    "omit_ball_from_captures": false,
+    "position": [
+      1200.82519325279,
+      516.7546860020292
+    ],
+    "rgba_difference": 0
+  },
+  {
+    "name": "full-01",
+    "omit_ball_from_captures": false,
+    "position": [
+      1200.90519325279,
+      516.812867820211
+    ],
+    "rgba_difference": 220228
+  },
+  {
+    "name": "full-02",
+    "omit_ball_from_captures": false,
+    "position": [
+      1200.91519325279,
+      516.8201405474837
+    ],
+    "rgba_difference": 8479884
+  },
+  {
+    "name": "full-03",
+    "omit_ball_from_captures": false,
+    "position": [
+      1200.92019325279,
+      516.8237769111199
+    ],
+    "rgba_difference": 13050305
+  },
+  {
+    "name": "full-04",
+    "omit_ball_from_captures": false,
+    "position": [
+      1200.92419325279,
+      516.8266860020292
+    ],
+    "rgba_difference": 7517536
+  },
+  {
+    "name": "full-05",
+    "omit_ball_from_captures": false,
+    "position": [
+      1200.92519325279,
+      516.8274132747564
+    ],
+    "rgba_difference": 1416668
+  },
+  {
+    "name": "full-06",
+    "omit_ball_from_captures": false,
+    "position": [
+      1200.92619325279,
+      516.8281405474837
+    ],
+    "rgba_difference": 244315
+  },
+  {
+    "name": "full-07",
+    "omit_ball_from_captures": false,
+    "position": [
+      1200.93019325279,
+      516.8310496383929
+    ],
+    "rgba_difference": 2752839
+  },
+  {
+    "name": "full-08",
+    "omit_ball_from_captures": false,
+    "position": [
+      1200.93519325279,
+      516.8346860020291
+    ],
+    "rgba_difference": 5618768
+  },
+  {
+    "name": "full-09",
+    "omit_ball_from_captures": false,
+    "position": [
+      1200.94519325279,
+      516.8419587293018
+    ],
+    "rgba_difference": 1114815
+  },
+  {
+    "name": "full-10",
+    "omit_ball_from_captures": false,
+    "position": [
+      1201.02519325279,
+      516.9001405474836
+    ],
+    "rgba_difference": 679652
+  },
+  {
+    "name": "omit-00",
+    "omit_ball_from_captures": true,
+    "position": [
+      1200.82519325279,
+      516.7546860020292
+    ],
+    "rgba_difference": 16401938
+  },
+  {
+    "name": "omit-01",
+    "omit_ball_from_captures": true,
+    "position": [
+      1200.90519325279,
+      516.812867820211
+    ],
+    "rgba_difference": 105513
+  },
+  {
+    "name": "omit-02",
+    "omit_ball_from_captures": true,
+    "position": [
+      1200.91519325279,
+      516.8201405474837
+    ],
+    "rgba_difference": 14667
+  },
+  {
+    "name": "omit-03",
+    "omit_ball_from_captures": true,
+    "position": [
+      1200.92019325279,
+      516.8237769111199
+    ],
+    "rgba_difference": 8478
+  },
+  {
+    "name": "omit-04",
+    "omit_ball_from_captures": true,
+    "position": [
+      1200.92419325279,
+      516.8266860020292
+    ],
+    "rgba_difference": 6137
+  },
+  {
+    "name": "omit-05",
+    "omit_ball_from_captures": true,
+    "position": [
+      1200.92519325279,
+      516.8274132747564
+    ],
+    "rgba_difference": 2624
+  },
+  {
+    "name": "omit-06",
+    "omit_ball_from_captures": true,
+    "position": [
+      1200.92619325279,
+      516.8281405474837
+    ],
+    "rgba_difference": 2501
+  },
+  {
+    "name": "omit-07",
+    "omit_ball_from_captures": true,
+    "position": [
+      1200.93019325279,
+      516.8310496383929
+    ],
+    "rgba_difference": 6355
+  },
+  {
+    "name": "omit-08",
+    "omit_ball_from_captures": true,
+    "position": [
+      1200.93519325279,
+      516.8346860020291
+    ],
+    "rgba_difference": 7723
+  },
+  {
+    "name": "omit-09",
+    "omit_ball_from_captures": true,
+    "position": [
+      1200.94519325279,
+      516.8419587293018
+    ],
+    "rgba_difference": 13205
+  },
+  {
+    "name": "omit-10",
+    "omit_ball_from_captures": true,
+    "position": [
+      1201.02519325279,
+      516.9001405474836
+    ],
+    "rgba_difference": 104624
+  }
+]

@@ -1,0 +1,46 @@
+{
+  "frame": 17,
+  "sphere_z": 130.41171875,
+  "crossing_x_triangle_mesh": 1200.92519325279,
+  "capture_origin_0": [
+    1090,
+    460,
+    39.99999237060547
+  ],
+  "receivers_fixed": true,
+  "origins_fixed": true,
+  "proxy_bounds_fixed": true,
+  "diagnostic_does_not_change_pixels": true,
+  "coarse_interval": {
+    "from": [
+      1200.0625,
+      516.2
+    ],
+    "to": [
+      1201.09375,
+      516.95
+    ],
+    "full_rgba_difference": 40174366,
+    "omit_sphere_rgba_difference": 1105293,
+    "static_ring_roi_full_difference": 7834104,
+    "static_ring_roi_omit_difference": 0,
+    "roi_xywh": [
+      900,
+      120,
+      330,
+      125
+    ]
+  },
+  "ray_check": {
+    "method": "nearest triangle hit, 64 sampled directions, outward normals",
+    "inside_sphere_backface_hits": 64,
+    "outside_sphere_backface_hits": 0,
+    "outside_sphere_frontface_hits": 31
+  },
+  "near_plane_test": {
+    "default": 0.01,
+    "control": 0.001,
+    "result": "smaller near plane concentrates the change; does not remove it"
+  },
+  "production_rendering_changed": false
+}

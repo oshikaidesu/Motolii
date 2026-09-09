@@ -772,3 +772,6 @@ mod antialiasing_tests;
 
 #[cfg(test)]
 mod response_tests;
+
+#[cfg(test)]
+mod visibility_tests;
