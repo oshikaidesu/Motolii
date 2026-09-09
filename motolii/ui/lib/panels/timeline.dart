@@ -143,6 +143,8 @@ class _TimelinePanelState extends State<TimelinePanel> {
     horizontal.addListener(changed);
     focus.addListener(laneFocusChanged);
     widget.controller.frame.addListener(frameMoved);
+    // 一番に並びを組む。目盛りもレーンも横帯も、後から同じ書類を見る。
+    _timeline.addListener(_relane);
   }
 
   /// 今のコマが帯の端を越えたら、見えている幅の 2 倍ぶんまとめて伸ばす(尺は壁ではない)。
@@ -186,6 +188,7 @@ class _TimelinePanelState extends State<TimelinePanel> {
     queuedTimings = null;
     if (previewUsed) widget.controller.cancelPreview();
     horizontal.removeListener(changed);
+    _timeline.removeListener(_relane);
     widget.controller.frame.removeListener(frameMoved);
     horizontal.dispose();
     vertical.dispose();
@@ -905,6 +908,32 @@ class _TimelinePanelState extends State<TimelinePanel> {
 
   /// 板の骨格は寸法だけで建つ。目盛りより上の帯は [ValueListenableBuilder] の
   /// `child` として一度だけ建て、書類が動いても建て直さない。
+  /// 帯の並びは書類が動いた時に一度だけ組む。板の骨格はこれを読むだけで、
+  /// 書類を購読するのは目盛り・レーン・横帯・掴み手の四つに限る。
+  void _relane() {
+    final liveIds = widget.controller.layers
+        .map((layer) => (layer['id'] as num).toInt())
+        .toSet();
+    expanded.retainAll(liveIds);
+    allProperties.retainAll(liveIds);
+    collapsedGroups.retainAll(liveIds);
+    layout = _LaneLayout(
+      widget.controller.layers,
+      expanded,
+      allProperties,
+      collapsedGroups,
+      baseNameWidth: baseNameWidth,
+    );
+    tracks = layout.rows;
+    if (activeLane != null && !tracks.any((row) => row.laneId == activeLane))
+      activeLane = null;
+    final visible = ((viewportWidth - labelWidth) / pixelsPerFrame).round();
+    if (widget.controller.visibleFrames.value != visible)
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        if (mounted) widget.controller.visibleFrames.value = visible;
+      });
+  }
+
   @override
   Widget build(BuildContext context) => Focus(
     key: const ValueKey('timeline-bounded-layout'),
@@ -915,159 +944,138 @@ class _TimelinePanelState extends State<TimelinePanel> {
       child: LayoutBuilder(
         builder: (context, bounds) {
           viewportWidth = bounds.maxWidth;
-          return ValueListenableBuilder<Map<String, dynamic>>(
-            valueListenable: _timeline,
-            child: _bar(bounds),
-            builder: (context, state, bar) {
-              final liveIds = widget.controller.layers
-                  .map((layer) => (layer['id'] as num).toInt())
-                  .toSet();
-              expanded.retainAll(liveIds);
-              allProperties.retainAll(liveIds);
-              collapsedGroups.retainAll(liveIds);
-              layout = _LaneLayout(
-                widget.controller.layers,
-                expanded,
-                allProperties,
-                collapsedGroups,
-                baseNameWidth: baseNameWidth,
-              );
-              tracks = layout.rows;
-              if (activeLane != null &&
-                  !tracks.any((row) => row.laneId == activeLane))
-                activeLane = null;
-              final visibleFrames =
-                  ((bounds.maxWidth - labelWidth) / pixelsPerFrame).round();
-              if (widget.controller.visibleFrames.value != visibleFrames)
-                SchedulerBinding.instance.addPostFrameCallback((_) {
-                  if (mounted)
-                    widget.controller.visibleFrames.value = visibleFrames;
-                });
-              final height = math.max(layout.height, bounds.maxHeight - 66);
-              return navigation(
-                Stack(
-                  children: [
-                    Column(
-                      children: [
-                        bar!,
-                        ValueListenableBuilder<int>(
-                          valueListenable: widget.controller.frame,
-                          builder: (_, frame, __) => GestureDetector(
-                            supportedDevices: const {
-                              PointerDeviceKind.mouse,
-                              PointerDeviceKind.touch,
-                              PointerDeviceKind.stylus,
-                            },
-                            onTapDown: (e) {
-                              if (e.localPosition.dx >= labelWidth)
-                                requestSeek(frameAt(e.localPosition.dx));
-                            },
-                            onHorizontalDragUpdate: (e) {
-                              if (e.localPosition.dx >= labelWidth)
-                                requestSeek(frameAt(e.localPosition.dx));
-                            },
-                            child: SizedBox(
-                              height: rulerHeight,
-                              width: double.infinity,
-                              child: CustomPaint(
-                                painter: _TimelinePainter(
-                                  labelWidth: labelWidth,
-                                  rows: const [],
-                                  selected: const [],
-                                  keys: const [],
-                                  frame: scrubFrame ?? frame,
-                                  scale: pixelsPerFrame,
-                                  offset: offset,
-                                  duration: duration,
-                                  fps: (state['fps'] as num? ?? 30).toDouble(),
-                                  markers: EditorSession.maps(state['markers']),
-                                  ruler: true,
-                                ),
-                              ),
+          _relane();
+          return navigation(
+            ListenableBuilder(
+              listenable: _timeline,
+              child: Column(
+                children: [
+                  _bar(bounds),
+                  ListenableBuilder(
+                    listenable: Listenable.merge([
+                      widget.controller.frame,
+                      _timeline,
+                    ]),
+                    builder: (context, _) => GestureDetector(
+                      supportedDevices: const {
+                        PointerDeviceKind.mouse,
+                        PointerDeviceKind.touch,
+                        PointerDeviceKind.stylus,
+                      },
+                      onTapDown: (e) {
+                        if (e.localPosition.dx >= labelWidth)
+                          requestSeek(frameAt(e.localPosition.dx));
+                      },
+                      onHorizontalDragUpdate: (e) {
+                        if (e.localPosition.dx >= labelWidth)
+                          requestSeek(frameAt(e.localPosition.dx));
+                      },
+                      child: SizedBox(
+                        height: rulerHeight,
+                        width: double.infinity,
+                        child: CustomPaint(
+                          painter: _TimelinePainter(
+                            labelWidth: labelWidth,
+                            rows: const [],
+                            selected: const [],
+                            keys: const [],
+                            frame: scrubFrame ?? widget.controller.frame.value,
+                            scale: pixelsPerFrame,
+                            offset: offset,
+                            duration: duration,
+                            fps: (widget.controller.state['fps'] as num? ?? 30)
+                                .toDouble(),
+                            markers: EditorSession.maps(
+                              widget.controller.state['markers'],
                             ),
+                            ruler: true,
                           ),
                         ),
-                        Expanded(
-                          child: Scrollbar(
-                            controller: vertical,
-                            child: SingleChildScrollView(
-                              controller: vertical,
-                              physics: const ClampingScrollPhysics(
-                                parent: NeverScrollableScrollPhysics(),
-                              ),
-                              child: DragTarget<Map<String, dynamic>>(
-                                onWillAcceptWithDetails: (d) =>
-                                    d.data['asset'] != null &&
-                                    has('placeAsset'),
-                                onMove: aimAsset,
-                                onLeave: (_) => setState(() {
-                                  assetDrop = null;
-                                  rowDrop = null;
-                                  rowDropGuide = null;
-                                }),
-                                onAcceptWithDetails: acceptAsset,
-                                builder: (_, __, ___) => GestureDetector(
-                                  onSecondaryTapDown: menu,
-                                  child: Listener(
-                                    onPointerDown: begin,
-                                    onPointerMove: move,
-                                    onPointerUp: end,
-                                    onPointerCancel: (_) => cancel(),
-                                    child: ValueListenableBuilder<int>(
-                                      valueListenable: widget.controller.frame,
-                                      builder: (_, frame, __) => SizedBox(
-                                        key: rowsKey,
-                                        width: bounds.maxWidth,
-                                        height: height,
-                                        child: CustomPaint(
-                                          key: const ValueKey(
-                                            'timeline-lanes',
-                                          ),
-                                          painter: _TimelinePainter(
-                                            labelWidth: labelWidth,
-                                            rows: tracks,
-                                            rowDropGuide: rowDropGuide,
-                                            rowDropInside: rowDropInside,
-                                            containers: layout.roots,
-                                            activeLane: activeLane,
-                                            selected:
-                                                widget.controller.selectedIds,
-                                            keys: selectedKeys,
-                                            frame: scrubFrame ?? frame,
-                                            scale: pixelsPerFrame,
-                                            offset: offset,
-                                            duration: duration,
-                                            fps: (state['fps'] as num? ?? 30)
-                                                .toDouble(),
-                                            markers: EditorSession.maps(
-                                              state['markers'],
-                                            ),
-                                            marquee:
-                                                gesture == 'marquee' &&
-                                                    start != null &&
-                                                    current != null
-                                                ? Rect.fromPoints(
-                                                    start!,
-                                                    current!,
-                                                  )
-                                                : null,
-                                            dragKeys: gesture == 'keys'
-                                                ? initialKeys
-                                                : const [],
-                                            delta: deltaFrames,
-                                            dragLayer:
-                                                dragRow != null &&
-                                                    [
-                                                      'move',
-                                                      'trimIn',
-                                                      'trimOut',
-                                                      'slip',
-                                                    ].contains(gesture)
-                                                ? timing(dragRow!)
-                                                : null,
-                                          ),
-                                        ),
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: Scrollbar(
+                      controller: vertical,
+                      child: SingleChildScrollView(
+                        controller: vertical,
+                        physics: const ClampingScrollPhysics(
+                          parent: NeverScrollableScrollPhysics(),
+                        ),
+                        child: DragTarget<Map<String, dynamic>>(
+                          onWillAcceptWithDetails: (d) =>
+                              d.data['asset'] != null && has('placeAsset'),
+                          onMove: aimAsset,
+                          onLeave: (_) => setState(() {
+                            assetDrop = null;
+                            rowDrop = null;
+                            rowDropGuide = null;
+                          }),
+                          onAcceptWithDetails: acceptAsset,
+                          builder: (_, __, ___) => GestureDetector(
+                            onSecondaryTapDown: menu,
+                            child: Listener(
+                              onPointerDown: begin,
+                              onPointerMove: move,
+                              onPointerUp: end,
+                              onPointerCancel: (_) => cancel(),
+                              child: ListenableBuilder(
+                                listenable: Listenable.merge([
+                                  widget.controller.frame,
+                                  _timeline,
+                                ]),
+                                builder: (context, _) => SizedBox(
+                                  key: rowsKey,
+                                  width: bounds.maxWidth,
+                                  height: math.max(
+                                    layout.height,
+                                    bounds.maxHeight - 66,
+                                  ),
+                                  child: CustomPaint(
+                                    key: const ValueKey('timeline-lanes'),
+                                    painter: _TimelinePainter(
+                                      labelWidth: labelWidth,
+                                      rows: tracks,
+                                      rowDropGuide: rowDropGuide,
+                                      rowDropInside: rowDropInside,
+                                      containers: layout.roots,
+                                      activeLane: activeLane,
+                                      selected: widget.controller.selectedIds,
+                                      keys: selectedKeys,
+                                      frame:
+                                          scrubFrame ??
+                                          widget.controller.frame.value,
+                                      scale: pixelsPerFrame,
+                                      offset: offset,
+                                      duration: duration,
+                                      fps:
+                                          (widget.controller.state['fps']
+                                                      as num? ??
+                                                  30)
+                                              .toDouble(),
+                                      markers: EditorSession.maps(
+                                        widget.controller.state['markers'],
                                       ),
+                                      marquee:
+                                          gesture == 'marquee' &&
+                                              start != null &&
+                                              current != null
+                                          ? Rect.fromPoints(start!, current!)
+                                          : null,
+                                      dragKeys: gesture == 'keys'
+                                          ? initialKeys
+                                          : const [],
+                                      delta: deltaFrames,
+                                      dragLayer:
+                                          dragRow != null &&
+                                              [
+                                                'move',
+                                                'trimIn',
+                                                'trimOut',
+                                                'slip',
+                                              ].contains(gesture)
+                                          ? timing(dragRow!)
+                                          : null,
                                     ),
                                   ),
                                 ),
@@ -1075,69 +1083,76 @@ class _TimelinePanelState extends State<TimelinePanel> {
                             ),
                           ),
                         ),
-                        Padding(
-                          padding: EdgeInsets.only(left: labelWidth),
-                          child: SizedBox(
-                            height: EditorMetrics.s12,
-                            child: Scrollbar(
-                              controller: horizontal,
-                              thumbVisibility: true,
-                              child: SingleChildScrollView(
-                                controller: horizontal,
-                                physics: const ClampingScrollPhysics(
-                                  parent: NeverScrollableScrollPhysics(),
-                                ),
-                                scrollDirection: Axis.horizontal,
-                                child: SizedBox(
-                                  width: math.max(
-                                    bounds.maxWidth - labelWidth,
-                                    contentWidth,
-                                  ),
-                                  height: EditorMetrics.s12,
-                                ),
+                      ),
+                    ),
+                  ),
+                  ListenableBuilder(
+                    listenable: _timeline,
+                    builder: (context, _) => Padding(
+                      padding: EdgeInsets.only(left: labelWidth),
+                      child: SizedBox(
+                        height: EditorMetrics.s12,
+                        child: Scrollbar(
+                          controller: horizontal,
+                          thumbVisibility: true,
+                          child: SingleChildScrollView(
+                            controller: horizontal,
+                            physics: const ClampingScrollPhysics(
+                              parent: NeverScrollableScrollPhysics(),
+                            ),
+                            scrollDirection: Axis.horizontal,
+                            child: SizedBox(
+                              width: math.max(
+                                bounds.maxWidth - labelWidth,
+                                contentWidth,
                               ),
+                              height: EditorMetrics.s12,
                             ),
                           ),
                         ),
-                      ],
-                    ),
-                    Positioned(
-                      left: layout.nameWidth - EditorMetrics.s3,
-                      top: EditorMetrics.s22,
-                      bottom: EditorMetrics.s12,
-                      width: EditorMetrics.s6,
-                      child: MouseRegion(
-                        cursor: SystemMouseCursors.resizeColumn,
-                        child: GestureDetector(
-                          supportedDevices: const {
-                            PointerDeviceKind.mouse,
-                            PointerDeviceKind.touch,
-                            PointerDeviceKind.stylus,
-                          },
-                          behavior: HitTestBehavior.opaque,
-                          onHorizontalDragStart: (e) {
-                            resizeStart = layout.nameWidth - layout.indentation;
-                            resizePointerStart = e.globalPosition.dx;
-                          },
-                          onHorizontalDragUpdate: (e) => setState(() {
-                            baseNameWidth =
-                                (resizeStart +
-                                        e.globalPosition.dx -
-                                        resizePointerStart)
-                                    .clamp(114.0 - layout.indentation, 162.0);
-                          }),
-                          onHorizontalDragCancel: () =>
-                              setState(() => baseNameWidth = resizeStart),
-                          onDoubleTap: () =>
-                              setState(() => baseNameWidth = 138),
-                          child: const SizedBox.expand(),
-                        ),
                       ),
                     ),
-                  ],
-                ),
-              );
-            },
+                  ),
+                ],
+              ),
+              builder: (context, column) => Stack(
+                children: [
+                  column!,
+                  Positioned(
+                    left: layout.nameWidth - EditorMetrics.s3,
+                    top: EditorMetrics.s22,
+                    bottom: EditorMetrics.s12,
+                    width: EditorMetrics.s6,
+                    child: MouseRegion(
+                      cursor: SystemMouseCursors.resizeColumn,
+                      child: GestureDetector(
+                        supportedDevices: const {
+                          PointerDeviceKind.mouse,
+                          PointerDeviceKind.touch,
+                          PointerDeviceKind.stylus,
+                        },
+                        behavior: HitTestBehavior.opaque,
+                        onHorizontalDragStart: (e) {
+                          resizeStart = layout.nameWidth - layout.indentation;
+                          resizePointerStart = e.globalPosition.dx;
+                        },
+                        onHorizontalDragUpdate: (e) => setState(() {
+                          baseNameWidth =
+                              (resizeStart +
+                                      e.globalPosition.dx -
+                                      resizePointerStart)
+                                  .clamp(114.0 - layout.indentation, 162.0);
+                        }),
+                        onHorizontalDragCancel: () =>
+                            setState(() => baseNameWidth = resizeStart),
+                        onDoubleTap: () => setState(() => baseNameWidth = 138),
+                        child: const SizedBox.expand(),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           );
         },
       ),

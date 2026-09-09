@@ -227,12 +227,12 @@ const _budget = <String, (int, int, int)>{
   'Stage': (60, 8, 80),
   'Inspector': (120, 8, 400),
   'Notes': (2, 2, 50),
-  'Desk': (2, 2, 120),
-  'Ease': (430, 12, 170),
+  'Desk': (2, 2, 110),
+  'Ease': (2, 2, 150),
   'Depth': (2, 2, 50),
-  'Blend': (2, 2, 380),
+  'Blend': (2, 2, 340),
   'History': (2, 2, 60),
-  'Timeline': (410, 4, 60),
+  'Timeline': (130, 4, 60),
 };
 
 /// The default dock, whole: five panels and the three Browser tabs the dock
@@ -381,10 +381,10 @@ const _switching = <String, Size>{
 /// What one selection change may cost a panel: `(widgets rebuilt, layouts)`.
 const _switchBudget = <String, (int, int)>{
   'Inspector': (1100, 20),
-  'Timeline': (400, 6),
-  'Ease': (420, 12),
-  'Desk': (450, 4),
-  'Blend': (660, 6),
+  'Timeline': (130, 6),
+  'Ease': (2, 2),
+  'Desk': (2, 2),
+  'Blend': (2, 2),
   'Stage': (40, 8),
 };
 
@@ -433,12 +433,12 @@ Future<String> _windowSwitch(WidgetTester tester) async {
   await tester.pumpWidget(const SizedBox());
   expect(
     pick.calls,
-    lessThanOrEqualTo(60),
+    lessThanOrEqualTo(40),
     reason: 'the window lays out too much on one selection change',
   );
   expect(
     pick.builds,
-    lessThanOrEqualTo(2000),
+    lessThanOrEqualTo(1250),
     reason: 'the window rebuilds too much on one selection change',
   );
   return '${'Window'.padRight(10)} '
