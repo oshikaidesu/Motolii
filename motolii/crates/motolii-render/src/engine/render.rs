@@ -831,6 +831,30 @@ mod placement_contract {
         assert!(red_floor(&pixels) >= 120, "inside a copy the clip is drawn once, got red {}", red_floor(&pixels));
     }
 
+    /// 背景は世界の板でなく出力の地。カメラを回しても書き出しの全画素が背景色で、素材の無い所に穴は開かない。
+    #[test]
+    fn the_background_fills_every_pixel_under_a_tilted_camera() {
+        let dir = tempfile::tempdir().unwrap();
+        let green = png(dir.path(), "green.png", [0, 255, 0, 255]);
+        let mut engine = Engine::new().unwrap();
+        let mut doc = Document::new();
+        doc.apply(Intent::SetComposition(Composition { width: SIZE, height: SIZE, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 1, background: [1.0, 0.0, 0.0, 1.0] })).unwrap();
+        add_file_layer(&mut doc, 1, 0, &green, None, false);
+        let camera = LayerId(2);
+        doc.apply_all([
+            Intent::AddLayer(camera),
+            Intent::SetMeta { layer: camera, meta: LayerMeta { source: LayerSource::Camera, order: 1, timing: LayerTiming::place(0, None, 1) } },
+            Intent::SetConstant { layer: camera, property: PropertyId::new(property::CAMERA_ORBIT).unwrap(), value: Value::Vec2([-25.0, 60.0]) },
+            Intent::SetConstant { layer: camera, property: PropertyId::new(property::CAMERA_DISTANCE).unwrap(), value: Value::F64(0.5) },
+        ]).unwrap();
+        let pixels = engine.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+        assert_eq!(covered(&pixels), (SIZE * SIZE) as usize, "no hole in the frame");
+        let red = pixels.chunks(4).filter(|px| px[0] > 200 && px[1] < 50).count();
+        let green_px = pixels.chunks(4).filter(|px| px[1] > 200 && px[0] < 50).count();
+        assert!(green_px > 0, "the layer is still in view");
+        assert_eq!(red + green_px, (SIZE * SIZE) as usize, "every pixel is background or layer, got red {red} green {green_px}");
+    }
+
     /// 生成器(gradient のように image 入力の無い効果)は素材の形の中に閉じ込められる。
     /// Repeat の上なら各複製に、下なら増えた後の全体に付くが、どちらも形は消えない。
     #[test]

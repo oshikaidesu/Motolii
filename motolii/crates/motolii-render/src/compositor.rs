@@ -489,11 +489,18 @@ fn background_rect(
     depth_offset: i16,
     plane_z: f32,
 ) -> TexturedRect {
-    let cancel = crate::doc::core::camera_screen_from_world_at_z(comp, camera, plane_z).inverse();
+    // 画面に貼る。2D 層と同じ変換で、回したカメラでも枠いっぱいに載る(z 面の affine 近似は傾くと崩れる)。
+    let (w, h) = (comp.width as f32, comp.height as f32);
+    let pin = crate::doc::core::layer_projection_transform(
+        comp, camera, crate::doc::store::LayerProjection::TwoD, glam::vec3(w * 0.5, h * 0.5, plane_z),
+    );
+    let corner = pin.transform_point3(glam::vec3(0.0, 0.0, plane_z));
+    let u = pin.transform_vector3(glam::vec3(w, 0.0, 0.0));
+    let v = pin.transform_vector3(glam::vec3(0.0, h, 0.0));
     TexturedRect {
-        top_left_corner_position: to_point3(cancel.transform_point2(glam::Vec2::ZERO), plane_z),
-        extent_u: to_vector3(cancel.transform_vector2(glam::Vec2::new(comp.width as f32, 0.0))),
-        extent_v: to_vector3(cancel.transform_vector2(glam::Vec2::new(0.0, comp.height as f32))),
+        top_left_corner_position: to_point3(corner.truncate(), corner.z),
+        extent_u: to_vector3(u.truncate()),
+        extent_v: to_vector3(v.truncate()),
         colormapped_texture: premultiplied_texture(imported),
         options: RectangleOptions {
             multiplicative_tint: Rgba::from_rgba_premultiplied(1.0, 1.0, 1.0, 1.0),
