@@ -1,7 +1,7 @@
 use re_renderer::renderer::{
     ColorMapper, ColormappedTexture, RectangleOptions, TextureAlpha, TexturedRect,
 };
-use re_renderer::view_builder::{BlendWithBackground, Projection, RenderMode, TargetConfiguration};
+use re_renderer::view_builder::{BlendWithBackground, OrthographicCameraMode, Projection, RenderMode, TargetConfiguration};
 use re_renderer::{RenderContext, Rgba};
 
 mod clip;
@@ -47,11 +47,13 @@ pub enum BlendMode {
 
 /// 層の合成に使う、上流(`reference/vello-blend.wgsl`)の番号体系。
 /// `(mix << 8) | compose` で、compose は常に `COMPOSE_SRC_OVER`(=3)。
-/// Normal と Add は固定ブレンド段で届くのでここへは来ない。
+/// Normal は固定ブレンド段で届くのでここへは来ない。Add は `COMPOSE_PLUS`(mix は Normal)。
 fn vello_blend_mode(mode: BlendMode) -> Option<u32> {
     const SRC_OVER: u32 = 3;
+    const PLUS: u32 = 12;
     let mix = match mode {
-        BlendMode::Normal | BlendMode::Add => return None,
+        BlendMode::Normal => return None,
+        BlendMode::Add => return Some(PLUS),
         BlendMode::Multiply => 1,
         BlendMode::Screen => 2,
         BlendMode::Overlay => 3,
@@ -151,19 +153,6 @@ pub(crate) fn projected_spatial_placement(
     let world = spatial_placement_from_bounds(placement, bounds);
     let center = world.transform_point3((glam::Vec3::from(bounds.min) + glam::Vec3::from(bounds.max)) * 0.5);
     crate::doc::core::layer_projection_transform(comp, camera, projection, center) * world
-}
-
-pub(crate) fn accumulator_plane_z(
-    comp: CompSpec,
-    camera: crate::doc::core::ResolvedCamera,
-    centers: impl Iterator<Item = glam::Vec3>,
-) -> f32 {
-    let projection = crate::doc::core::camera_projection(comp, camera);
-    let base = crate::doc::core::distance_from_camera(comp, 0.0);
-    let farthest = centers
-        .map(|c| (c - projection.eye).length())
-        .fold(base, f32::max);
-    farthest - base + 1.0
 }
 
 pub fn tilted_corners(
@@ -482,29 +471,33 @@ pub(crate) fn sequential_target_config(
     }
 }
 
-fn background_rect(
-    comp: CompSpec,
-    camera: crate::doc::core::ResolvedCamera,
-    imported: GpuTexture2D,
-    depth_offset: i16,
-    plane_z: f32,
-) -> TexturedRect {
-    // 画面に貼る。2D 層と同じ変換で、回したカメラでも枠いっぱいに載る(z 面の affine 近似は傾くと崩れる)。
-    let (w, h) = (comp.width as f32, comp.height as f32);
-    let pin = crate::doc::core::layer_projection_transform(
-        comp, camera, crate::doc::store::LayerProjection::TwoD, glam::vec3(w * 0.5, h * 0.5, plane_z),
-    );
-    let corner = pin.transform_point3(glam::vec3(0.0, 0.0, plane_z));
-    let u = pin.transform_vector3(glam::vec3(w, 0.0, 0.0));
-    let v = pin.transform_vector3(glam::vec3(0.0, h, 0.0));
+/// 出力そのものを見る view: 画素 1:1、カメラを通さない(形の描画と同じ型)。
+pub(crate) fn screen_target_config(name: &'static str, comp: CompSpec) -> TargetConfiguration {
+    TargetConfiguration {
+        name: name.into(),
+        render_mode: RenderMode::Deterministic,
+        resolution_in_pixel: [comp.width, comp.height],
+        view_from_world: macaw::IsoTransform::IDENTITY,
+        projection_from_view: Projection::Orthographic {
+            camera_mode: OrthographicCameraMode::TopLeftCornerAndExtendZ,
+            vertical_world_size: comp.height as f32,
+            far_plane_distance: 1000.0,
+        },
+        pixels_per_point: 1.0,
+        blend_with_background: BlendWithBackground::Premultiplied,
+        ..Default::default()
+    }
+}
+
+/// 累算(合成の地)を出力の枠いっぱいに 1 枚。`screen_target_config` の view で描く。
+fn screen_rect(comp: CompSpec, imported: GpuTexture2D) -> TexturedRect {
     TexturedRect {
-        top_left_corner_position: to_point3(corner.truncate(), corner.z),
-        extent_u: to_vector3(u.truncate()),
-        extent_v: to_vector3(v.truncate()),
+        top_left_corner_position: glam::Vec3::ZERO,
+        extent_u: glam::vec3(comp.width as f32, 0.0, 0.0),
+        extent_v: glam::vec3(0.0, comp.height as f32, 0.0),
         colormapped_texture: premultiplied_texture(imported),
         options: RectangleOptions {
             multiplicative_tint: Rgba::from_rgba_premultiplied(1.0, 1.0, 1.0, 1.0),
-            depth_offset,
             texture_filter_magnification: re_renderer::renderer::TextureFilterMag::Nearest,
             texture_filter_minification: re_renderer::renderer::TextureFilterMin::Nearest,
             ..Default::default()

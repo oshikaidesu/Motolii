@@ -392,6 +392,24 @@ mod projection_tests {
         }
     }
 
+    /// 画面に貼る板(背景・2D 層)は、回して寄せたカメラでも出力の四隅に正確に載る。
+    #[test]
+    fn a_pinned_frame_lands_on_the_output_corners_under_an_orbiting_camera() {
+        let comp = CompSpec { width: 1920, height: 1080 };
+        let (w, h) = (comp.width as f32, comp.height as f32);
+        for camera in [
+            ResolvedCamera::default(),
+            ResolvedCamera { orbit_degrees: [-25.0, 60.0], distance_scale: 0.5, ..Default::default() },
+            ResolvedCamera { orbit_degrees: [40.0, -120.0], distance_scale: 2.0, zoom: 1.7, roll_degrees: 30.0, center: [200.0, -100.0], target_z: 300.0, ..Default::default() },
+        ] {
+            let pin = layer_projection_transform(comp, camera, LayerProjection::TwoD, glam::vec3(w * 0.5, h * 0.5, 0.0));
+            for corner in [glam::vec3(0.0, 0.0, 0.0), glam::vec3(w, 0.0, 0.0), glam::vec3(0.0, h, 0.0), glam::vec3(w, h, 0.0)] {
+                let seen = pixel(comp, camera, pin.transform_point3(corner));
+                assert!(seen.distance(corner.truncate()) < 0.05, "{camera:?}: {corner:?} -> {seen:?}");
+            }
+        }
+    }
+
     #[test]
     fn looking_at_keeps_the_target_under_the_centre_and_the_sphere_inside_the_frame() {
         let comp = CompSpec { width: 1280, height: 720 };

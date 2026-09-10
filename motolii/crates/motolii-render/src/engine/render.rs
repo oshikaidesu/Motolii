@@ -840,6 +840,8 @@ mod placement_contract {
         let mut doc = Document::new();
         doc.apply(Intent::SetComposition(Composition { width: SIZE, height: SIZE, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 1, background: [1.0, 0.0, 0.0, 1.0] })).unwrap();
         add_file_layer(&mut doc, 1, 0, &green, None, false);
+        // 注視点(comp 中心)に置く。寄せたカメラでも枠の中に残る。
+        doc.apply(Intent::SetConstant { layer: LayerId(1), property: PropertyId::new(property::POSITION).unwrap(), value: Value::Vec2([SIZE as f64 * 0.5 - DOT as f64 * 0.5; 2]) }).unwrap();
         let camera = LayerId(2);
         doc.apply_all([
             Intent::AddLayer(camera),
@@ -849,10 +851,11 @@ mod placement_contract {
         ]).unwrap();
         let pixels = engine.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
         assert_eq!(covered(&pixels), (SIZE * SIZE) as usize, "no hole in the frame");
-        let red = pixels.chunks(4).filter(|px| px[0] > 200 && px[1] < 50).count();
         let green_px = pixels.chunks(4).filter(|px| px[1] > 200 && px[0] < 50).count();
         assert!(green_px > 0, "the layer is still in view");
-        assert_eq!(red + green_px, (SIZE * SIZE) as usize, "every pixel is background or layer, got red {red} green {green_px}");
+        // 縁の画素は赤と緑の混ざり。どの画素も背景か素材の色で、黒や灰(板の外・深度の穴)は無い。
+        let stray = pixels.chunks(4).filter(|px| (u32::from(px[0]) + u32::from(px[1])) < 200 || px[2] > 50).count();
+        assert_eq!(stray, 0, "every pixel is background or layer");
     }
 
     /// 生成器(gradient のように image 入力の無い効果)は素材の形の中に閉じ込められる。

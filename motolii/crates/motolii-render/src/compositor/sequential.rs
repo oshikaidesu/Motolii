@@ -187,62 +187,7 @@ impl Compositor {
                 }
                 batch.push(command_buffer);
 
-                let layer_canvas = solo_owned;
-
-                match background.take() {
-                    None => {
-                        self.next_effect_key += 1;
-                        let key = self.next_effect_key;
-                        let imported = self
-                            .ctx
-                            .texture_manager_2d
-                            .import_gpu_premultiplied(key, &self.ctx, &layer_canvas)
-                            .map_err(|e| CompositorError::Effect(e.to_string()))?;
-                        background = Some((layer_canvas, imported));
-                    }
-                    Some((backing, _)) => {
-                        let dst_view = backing.create_view(&Default::default());
-                        let src_view = layer_canvas.create_view(&Default::default());
-                        let out_texture = spare.pop().unwrap_or_else(|| {
-                            self.create_blend_scratch_texture(comp.width, comp.height)
-                        });
-                        let out_view = out_texture.create_view(&Default::default());
-
-                        let encoder = blend_encoder.get_or_insert_with(|| {
-                            self.ctx.device.create_command_encoder(
-                                &wgpu::CommandEncoderDescriptor {
-                                    label: Some("motolii-compositor-blend-pass-encoder"),
-                                },
-                            )
-                        });
-                        let Self {
-                            ctx,
-                            blend_vism,
-                            effect_scratch,
-                            ..
-                        } = self;
-                        blend_vism.record_over(
-                            ctx,
-                            encoder,
-                            effect_scratch,
-                            &[&dst_view, &src_view],
-                            &out_view,
-                            &[("mode".to_owned(), mode_index as f32)],
-                            [comp.width as f32, comp.height as f32],
-                        );
-
-                        self.next_effect_key += 1;
-                        let key = self.next_effect_key;
-                        let imported = self
-                            .ctx
-                            .texture_manager_2d
-                            .import_gpu_premultiplied(key, &self.ctx, &out_texture)
-                            .map_err(|e| CompositorError::Effect(e.to_string()))?;
-                        background = Some((out_texture, imported));
-                        spare.push(backing);
-                        spare.push(layer_canvas);
-                    }
-                }
+                background = Some(self.stack_over(comp, background.take(), solo_owned, mode_index, &mut spare, &mut blend_encoder)?);
 
                 idx += 1;
                 continue;
@@ -260,39 +205,12 @@ impl Compositor {
             }
             let run = &inputs[run_start..idx];
 
-            let mut rects: Vec<TexturedRect> = Vec::with_capacity(run.len() + 1);
-            if let Some((_, imported)) = &background {
-                let plane_z = crate::render::compositor::accumulator_plane_z(
-                    comp,
-                    camera,
-                    run.iter().map(|i| {
-                        let bounds = match i.content {
-                            SequentialContent::Cloud { bounds, .. } => Some(bounds),
-                            SequentialContent::Model(model) => Some(model.bounds),
-                            SequentialContent::Rect(_) | SequentialContent::Environment(_) => None,
-                        };
-                        if let Some(bounds) = bounds {
-                            projected_spatial_placement(comp, i.projection_camera, i.projection, i.placement, bounds)
-                                .transform_point3((glam::Vec3::from(bounds.min) + glam::Vec3::from(bounds.max)) * 0.5)
-                        } else {
-                            let (corner, u, v) = projected_placement_corners(
-                                comp, i.projection_camera, i.projection, i.placement, i.local_min, i.local_size,
-                            );
-                            corner + (u + v) * 0.5
-                        }
-                    }),
-                );
-                rects.push(background_rect(
-                    comp,
-                    camera,
-                    imported.clone(),
-                    run[0].depth_offset.saturating_sub(1),
-                    plane_z,
-                ));
-            }
+            // 地は持ち込まない。run は自分の層だけを透明の上に描き、後で地の上へ over する(Blender の
+            // BackgroundPipeline / AE と同じ: 地は最初の clear 色で、以後どの pass にも「背景」は入らない)。
+            let rects: Vec<TexturedRect> = Vec::new();
 
             let sky = run.iter().any(|input| matches!(input.content, SequentialContent::Environment(e) if environment.is_some_and(|top| std::ptr::eq(top, e))));
-            let draws = self.surface_scene_draws(comp, run, rects, false, None, shared_meshes.as_ref(), run_start)?;
+            let draws = self.surface_scene_draws(comp, run, rects, false, &|_| false, shared_meshes.as_ref(), run_start)?;
 
             let needs_backdrop = run.iter().any(|i| i.shading.reads_backdrop);
             let backdrop = match (&background, needs_backdrop) {
@@ -353,16 +271,8 @@ impl Compositor {
             }
             batch.push(command_buffer);
 
-            self.next_effect_key += 1;
-            let key = self.next_effect_key;
-            let imported = self
-                .ctx
-                .texture_manager_2d
-                .import_gpu_premultiplied(key, &self.ctx, &run_owned)
-                .map_err(|e| CompositorError::Effect(e.to_string()))?;
-            if let Some((old, _)) = background.replace((run_owned, imported)) {
-                spare.push(old);
-            }
+            const SRC_OVER: u32 = 3;
+            background = Some(self.stack_over(comp, background.take(), run_owned, SRC_OVER, &mut spare, &mut blend_encoder)?);
         }
 
         if let Some(encoder) = blend_encoder.take() {
@@ -375,6 +285,54 @@ impl Compositor {
     }
 
     /// ここまでの合成(背後)を mip 付きで写す。ガラスの網が粗さで段を読む。
+    /// 描いた 1 枚(層または run)を地の上へ積む。地が無ければそれが地になる。
+    /// `mode` は `vello_blend_mode` の番号(Normal は `SRC_OVER`)。
+    fn stack_over(
+        &mut self,
+        comp: CompSpec,
+        background: Option<(AccumulatorBacking, GpuTexture2D)>,
+        canvas: AccumulatorBacking,
+        mode: u32,
+        spare: &mut Vec<AccumulatorBacking>,
+        blend_encoder: &mut Option<wgpu::CommandEncoder>,
+    ) -> Result<(AccumulatorBacking, GpuTexture2D), CompositorError> {
+        let stacked = match background {
+            None => canvas,
+            Some((backing, _)) => {
+                let dst_view = backing.create_view(&Default::default());
+                let src_view = canvas.create_view(&Default::default());
+                let out_texture = spare.pop().unwrap_or_else(|| self.create_blend_scratch_texture(comp.width, comp.height));
+                let out_view = out_texture.create_view(&Default::default());
+                let encoder = blend_encoder.get_or_insert_with(|| {
+                    self.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                        label: Some("motolii-compositor-blend-pass-encoder"),
+                    })
+                });
+                let Self { ctx, blend_vism, effect_scratch, .. } = self;
+                blend_vism.record_over(
+                    ctx,
+                    encoder,
+                    effect_scratch,
+                    &[&dst_view, &src_view],
+                    &out_view,
+                    &[("mode".to_owned(), mode as f32)],
+                    [comp.width as f32, comp.height as f32],
+                );
+                spare.push(backing);
+                spare.push(canvas);
+                out_texture
+            }
+        };
+        self.next_effect_key += 1;
+        let key = self.next_effect_key;
+        let imported = self
+            .ctx
+            .texture_manager_2d
+            .import_gpu_premultiplied(key, &self.ctx, &stacked)
+            .map_err(|e| CompositorError::Effect(e.to_string()))?;
+        Ok((stacked, imported))
+    }
+
     fn backdrop_pyramid(
         &mut self,
         comp: CompSpec,
@@ -455,15 +413,10 @@ impl Compositor {
         background: Option<(AccumulatorBacking, GpuTexture2D)>,
         background_color: [f32; 4],
     ) -> Result<Vec<u8>, CompositorError> {
-        let projection = crate::doc::core::camera_projection(comp, camera);
-        let view_from_world = macaw::IsoTransform::from_rotation_translation(
-            projection.rotation,
-            -(projection.rotation * projection.eye),
-        );
-
+        let _ = camera;
         let mut final_rects: Vec<TexturedRect> = Vec::with_capacity(1);
         if let Some((_, imported)) = &background {
-            final_rects.push(background_rect(comp, camera, imported.clone(), -1, 0.0));
+            final_rects.push(screen_rect(comp, imported.clone()));
         }
 
         let final_draw_data = RectangleDrawData::new(&self.ctx, &final_rects)
@@ -471,13 +424,7 @@ impl Compositor {
 
         let mut final_view_builder = ViewBuilder::new(
             &self.ctx,
-            sequential_target_config(
-                "motolii-comp-sequential-finalize",
-                comp,
-                view_from_world,
-                projection,
-                None,
-            ),
+            screen_target_config("motolii-comp-sequential-finalize", comp),
             ViewBuilderId::new(self.next_readback),
         )
         .map_err(|e| CompositorError::View(e.to_string()))?;
@@ -538,15 +485,10 @@ impl Compositor {
         background: Option<(AccumulatorBacking, GpuTexture2D)>,
         background_color: [f32; 4],
     ) -> Result<(), CompositorError> {
-        let projection = crate::doc::core::camera_projection(comp, camera);
-        let view_from_world = macaw::IsoTransform::from_rotation_translation(
-            projection.rotation,
-            -(projection.rotation * projection.eye),
-        );
-
+        let _ = camera;
         let mut final_rects: Vec<TexturedRect> = Vec::with_capacity(1);
         if let Some((_, imported)) = &background {
-            final_rects.push(background_rect(comp, camera, imported.clone(), -1, 0.0));
+            final_rects.push(screen_rect(comp, imported.clone()));
         }
         let draw_data = RectangleDrawData::new(&self.ctx, &final_rects)
             .map_err(|e| CompositorError::Rectangles(e.to_string()))?;
@@ -554,13 +496,7 @@ impl Compositor {
         let mut view_builder = {
             let mut vb = ViewBuilder::new(
                 &self.ctx,
-                sequential_target_config(
-                    "motolii-comp-finalize-into",
-                    comp,
-                    view_from_world,
-                    projection,
-                None,
-            ),
+                screen_target_config("motolii-comp-finalize-into", comp),
                 ViewBuilderId::new(self.next_readback),
             )
             .map_err(|e| CompositorError::View(e.to_string()))?;
