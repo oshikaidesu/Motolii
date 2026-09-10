@@ -59,7 +59,12 @@ impl EditorRuntime{
     }
     fn depth_layout(&self,resolved:&[crate::doc::store::ResolvedLayer])->Result<Json,String>{
         let view=self.doc.view();let time=self.time()?;let comp=view.composition().map_err(e)?.ok_or("No composition")?.spec();
-        let camera=crate::doc::core::camera_projection(comp,view.resolve_camera(time).map_err(e)?);
+        // 原点は注視点。カメラは eye の位置に置き、drag で orbit と距離を author する。
+        let seen=view.resolve_camera(time).map_err(e)?;
+        let camera=crate::doc::core::camera_projection(comp,seen);
+        let target=seen.target(comp);
+        let camera_layer=view.active_camera_layer(time).map_err(e)?;
+        let target_layer=camera_layer.map(|id|view.camera_target_layer(id,time)).transpose().map_err(e)?.flatten();
         let worlds=view.world_transforms3d(time).map_err(e)?;
         let mut items=Vec::new();
         for layer in resolved {
@@ -68,7 +73,7 @@ impl EditorRuntime{
             let Some(world)=worlds.get(&layer.id) else{continue};
             let attrs=view.attrs(layer.id).map_err(e)?.unwrap_or_default();
             let local=self.engine.selected_layer_bounds_in(&view,&resolved,layer.id,time).map(|b|glam::Vec3::from(b.center())).unwrap_or(glam::Vec3::ZERO);
-            let center=world.transform_point3(local)-camera.eye;
+            let center=world.transform_point3(local)-target;
             let parent=attrs.parent.and_then(|id|worlds.get(&id).copied()).unwrap_or(glam::Affine3A::IDENTITY);
             let inverse=parent.inverse();
             let get=|name|view.value_at(layer.id,&PropertyId::new(name).unwrap(),time).ok().flatten();
@@ -76,7 +81,9 @@ impl EditorRuntime{
             let z=match get(property::POSITION_Z){Some(Value::F64(v))=>v,_=>0.0};
             items.push(json!({"id":layer.id.0,"name":attrs.name,"point":[center.x,center.z],"local":[position[0],position[1],z],"inverseX":inverse.transform_vector3(glam::Vec3::X).to_array(),"inverseZ":inverse.transform_vector3(glam::Vec3::Z).to_array(),"locked":attrs.locked || !inverse.is_finite(),"color":attrs.label_color}));
         }
-        Ok(json!({"items":items,"halfFov":(camera.vertical_fov_radians*0.5).tan()*camera.aspect_ratio}))
+        let eye=camera.eye-target;
+        Ok(json!({"items":items,"halfFov":(camera.vertical_fov_radians*0.5).tan()*camera.aspect_ratio,
+            "camera":{"point":[eye.x,eye.z],"layer":camera_layer.map(|l|l.0),"target":target_layer.map(|l|l.0),"orbit":seen.orbit_degrees,"distance":seen.distance_scale,"baseDistance":crate::doc::core::distance_from_camera(comp,0.0)}}))
     }
     /// 注視の球: 層の world 中心と、局所 bounds の 8 角を包む半径(rerun `focus_entity` の bounding sphere)。
     pub(crate) fn focus_sphere(&self,id:LayerId)->Result<Option<(glam::Vec3,f32)>,String>{

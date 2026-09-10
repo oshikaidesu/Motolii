@@ -76,8 +76,13 @@ impl<'a> StoreView<'a> {
         })
     }
 
+    /// 時刻 `t` に効いている Camera 層。無ければ comp 常在のカメラ track が効いている。
+    pub fn active_camera_layer(&self, t: RationalTime) -> Result<Option<LayerId>, StoreError> {
+        self.active_guide(crate::doc::store::LayerSource::Camera, t)
+    }
+
     pub fn resolve_camera(&self, t: RationalTime) -> Result<crate::doc::core::ResolvedCamera, StoreError> {
-        if let Some(id) = self.active_guide(crate::doc::store::LayerSource::Camera, t)? {
+        if let Some(id) = self.active_camera_layer(t)? {
             return self.camera_of_layer(id, t);
         }
         let center_property = PropertyId::camera(property::CAMERA_CENTER)?;

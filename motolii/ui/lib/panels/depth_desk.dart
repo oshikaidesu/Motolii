@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 
 import '../session/editor_session.dart';
 import '../foundation/theme.dart';
-import '../foundation/panel_controls.dart';
 import '../foundation/metrics.dart';
 
 class DepthDesk extends StatefulWidget {
@@ -16,11 +15,12 @@ class DepthDesk extends StatefulWidget {
 
 class _DepthDeskState extends State<DepthDesk> {
   EditorSession get c => widget.controller;
-  double get _range =>
-      (c.deskWork.value['depthRange'] as num? ?? 2400).toDouble();
-  set _range(double value) {
-    c.storeDesk('depthRange', value);
-  }
+
+  /// 目盛りは中身から。注視点を原点に、カメラと全層が常に外の輪の内側へ入る。
+  static double _fit(Iterable<List> points) => points.fold<double>(
+    600,
+    (v, p) => math.max(v, math.max(p[0].abs(), p[1].abs()) * 1.25),
+  );
 
   Map<String, dynamic>? _grab;
   Offset? _start;
@@ -68,6 +68,20 @@ class _DepthDeskState extends State<DepthDesk> {
     builder: (context, _) {
       final data = EditorSession.map(c.state['depthLayout']);
       final items = EditorSession.maps(data['items']);
+      final camera = EditorSession.map(data['camera']);
+      final cameraPoint = camera['point'] is List
+          ? camera['point'] as List
+          : const [0.0, -1000.0];
+      final target = camera['target'] is num
+          ? c.layers.cast<Map<String, dynamic>?>().firstWhere(
+              (l) => l?['id'] == camera['target'],
+              orElse: () => null,
+            )
+          : null;
+      final range = _fit([
+        for (final i in items) i['point'] as List,
+        cameraPoint,
+      ]);
       return Column(
         children: [
           SizedBox(
@@ -80,35 +94,23 @@ class _DepthDeskState extends State<DepthDesk> {
                   size: EditorMetrics.s15,
                   color: EditorTheme.muted,
                 ),
-                const Spacer(),
-                panelButton(
-                  '−',
-                  () => setState(
-                    () => _range = (_range * 1.3).clamp(100, 100000),
+                if (target != null) ...[
+                  const SizedBox(width: EditorMetrics.s6),
+                  const Icon(
+                    Icons.gps_fixed,
+                    size: EditorMetrics.s15,
+                    color: EditorTheme.muted,
                   ),
-                ),
-                panelButton(
-                  '+',
-                  () => setState(
-                    () => _range = (_range / 1.3).clamp(100, 100000),
-                  ),
-                ),
-                panelButton(
-                  'Fit',
-                  () => setState(
-                    () => _range = items.fold<double>(
-                      1200,
-                      (v, i) => math.max(
-                        v,
-                        math.max(
-                              (i['point'][0] as num).abs(),
-                              (i['point'][1] as num).abs(),
-                            ) *
-                            1.3,
-                      ),
+                  const SizedBox(width: EditorMetrics.s4),
+                  Text(
+                    '${target['name']}',
+                    style: const TextStyle(
+                      fontSize: EditorMetrics.dense,
+                      color: EditorTheme.muted,
                     ),
                   ),
-                ),
+                ],
+                const Spacer(),
               ],
             ),
           ),
@@ -119,19 +121,31 @@ class _DepthDeskState extends State<DepthDesk> {
                 final origin = Offset(size.width / 2, size.height / 2);
                 final scale =
                     math.max(1, math.min(size.width, size.height) - 36) /
-                    (2 * _range);
-                Offset point(Map<String, dynamic> i) =>
+                    (2 * range);
+                Offset place(List p) =>
                     origin +
                     Offset(
-                          (i['point'][0] as num).toDouble(),
-                          -(i['point'][1] as num).toDouble(),
+                          (p[0] as num).toDouble(),
+                          -(p[1] as num).toDouble(),
                         ) *
                         scale;
+                Offset point(Map<String, dynamic> i) =>
+                    place(i['point'] as List);
+                final eye = place(cameraPoint);
                 return ClipRect(
                   child: Listener(
                     behavior: HitTestBehavior.opaque,
                     onPointerDown: (e) {
                       if (_finishing || _grab != null) return;
+                      if (camera['layer'] is num &&
+                          (eye - e.localPosition).distance < 13) {
+                        c.command('select', {
+                          'ids': [camera['layer']],
+                        });
+                        _grab = {'camera': camera};
+                        _start = e.localPosition;
+                        return;
+                      }
                       Map<String, dynamic>? hit;
                       for (final i in items.reversed) {
                         if ((point(i) - e.localPosition).distance < 13) {
@@ -153,6 +167,35 @@ class _DepthDeskState extends State<DepthDesk> {
                     onPointerMove: (e) {
                       final grab = _grab;
                       if (grab == null) return;
+                      if (grab['camera'] is Map) {
+                        // eye を注視点のまわりで動かす: 向きが yaw、平面距離 ÷ cos(pitch) が距離。
+                        final cam = grab['camera'] as Map;
+                        final orbit = cam['orbit'] as List;
+                        final pitch = (orbit[0] as num).toDouble();
+                        final p = (e.localPosition - origin) / scale;
+                        final x = p.dx, z = -p.dy;
+                        final yaw = math.atan2(-x, -z) * 180 / math.pi;
+                        final flat = math.sqrt(x * x + z * z);
+                        final cos = math.max(
+                          0.05,
+                          math.cos(pitch * math.pi / 180).abs(),
+                        );
+                        final base = (cam['baseDistance'] as num).toDouble();
+                        _pending = [
+                          {
+                            'layer': cam['layer'],
+                            'property': 'camera.orbit',
+                            'value': [pitch, yaw],
+                          },
+                          {
+                            'layer': cam['layer'],
+                            'property': 'camera.distance',
+                            'value': (flat / cos / base).clamp(0.01, 100),
+                          },
+                        ];
+                        if (!_sending) _tail = _drain();
+                        return;
+                      }
                       final delta = (e.localPosition - _start!) / scale;
                       final x = grab['inverseX'] as List,
                           z = grab['inverseZ'] as List,
@@ -186,8 +229,9 @@ class _DepthDeskState extends State<DepthDesk> {
                           child: CustomPaint(
                             painter: _DepthGrid(
                               origin,
+                              eye,
                               scale,
-                              _range,
+                              range,
                               (data['halfFov'] as num? ?? .9).toDouble(),
                             ),
                           ),
@@ -260,8 +304,10 @@ class _DepthDeskState extends State<DepthDesk> {
 }
 
 class _DepthGrid extends CustomPainter {
-  _DepthGrid(this.origin, this.scale, this.range, this.fov);
-  final Offset origin;
+  _DepthGrid(this.origin, this.eye, this.scale, this.range, this.fov);
+
+  /// 原点は注視点、eye はカメラ。frustum は eye から注視点へ向く。
+  final Offset origin, eye;
   final double scale, range, fov;
   @override
   void paint(Canvas canvas, Size size) {
@@ -277,32 +323,47 @@ class _DepthGrid extends CustomPainter {
     final view = Paint()
       ..color = const Color(0xff8ed9e6)
       ..strokeWidth = 1;
+    final toTarget = origin - eye;
+    final dir = toTarget.distance > 0
+        ? toTarget / toTarget.distance
+        : const Offset(0, -1);
+    final side = Offset(-dir.dy, dir.dx);
     for (final sign in [-1, 1])
       canvas.drawLine(
-        origin,
-        origin + Offset(sign * range * fov, -range) * scale,
+        eye,
+        eye + (dir + side * (sign * fov)) * range * scale,
         view,
       );
+    canvas.save();
+    canvas.translate(eye.dx, eye.dy);
+    canvas.rotate(math.atan2(dir.dy, dir.dx) + math.pi / 2);
     canvas.drawRect(
       Rect.fromCenter(
-        center: origin,
+        center: Offset.zero,
         width: EditorMetrics.s14,
         height: EditorMetrics.dense,
       ),
       Paint()..color = const Color(0xff8ed9e6),
     );
     final arrow = Path()
-      ..moveTo(origin.dx - 4, origin.dy - 7)
-      ..lineTo(origin.dx, origin.dy - 12)
-      ..lineTo(origin.dx + 4, origin.dy - 7)
+      ..moveTo(-4, -7)
+      ..lineTo(0, -12)
+      ..lineTo(4, -7)
       ..close();
     canvas.drawPath(arrow, view);
+    canvas.restore();
+    canvas.drawCircle(
+      origin,
+      EditorMetrics.s4,
+      view..style = PaintingStyle.stroke,
+    );
   }
 
   @override
-  bool shouldRepaint(covariant _DepthGrid old) =>
+  bool shouldRepaint(_DepthGrid old) =>
       origin != old.origin ||
+      eye != old.eye ||
       scale != old.scale ||
-      fov != old.fov ||
-      range != old.range;
+      range != old.range ||
+      fov != old.fov;
 }
