@@ -103,14 +103,21 @@ class DockNode {
         read(Map<String, dynamic>.from(m['first'] as Map)),
         read(Map<String, dynamic>.from(m['second'] as Map)),
       )..offset = (m['offset'] as num? ?? 0).toDouble();
+    final tabs = (m['tabs'] as List)
+        .whereType<String>()
+        .map((name) => name == 'Test' ? 'Inspector' : name)
+        .toSet()
+        .where(paneNames.contains)
+        .toList();
+    // A layout saved before the Files shelf existed gains it beside the
+    // other shelves, where the default dock keeps it.
+    if ('${m['id']}' == 'browser' &&
+        !tabs.contains('Files') &&
+        paneNames.contains('Files'))
+      tabs.add('Files');
     return DockNode.leaf(
       '${m['id']}',
-      (m['tabs'] as List)
-          .whereType<String>()
-          .map((name) => name == 'Test' ? 'Inspector' : name)
-          .toSet()
-          .where(paneNames.contains)
-          .toList(),
+      tabs,
       active: m['active'] == 'Test' ? 'Inspector' : m['active'] as String?,
     );
   }
