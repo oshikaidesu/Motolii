@@ -21,16 +21,20 @@ class BrowserPanel extends StatefulWidget {
     required this.controller,
     this.fixedTab,
     this.showTabs = true,
+    this.initialFolder,
   });
   final String? fixedTab;
   final bool showTabs;
+
+  /// Where the Files tab opens; the home folder when unset.
+  final String? initialFolder;
   final EditorSession controller;
   @override
   State<BrowserPanel> createState() => _BrowserPanelState();
 }
 
 class _BrowserPanelState extends State<BrowserPanel> {
-  static const tabs = ['Create', 'Media', 'Effects', 'Colors'];
+  static const tabs = ['Create', 'Media', 'Effects', 'Colors', 'Files'];
   String tab = 'Create';
   final classifications = <String, String>{};
   final search = TextEditingController();
@@ -68,6 +72,120 @@ class _BrowserPanelState extends State<BrowserPanel> {
       _inset = EditorMetrics.s8,
       _captionHeight = EditorMetrics.control;
   int total = 0;
+
+  // ---- Files: a window onto real folders, the way AEViewer sits beside AE.
+  // Nothing here touches the document; a double-click on a file admits it to
+  // Media, a double-click on a folder walks in.
+  String? folder;
+  final folderBack = <String>[];
+  final folderForward = <String>[];
+  List<Map<String, dynamic>> listing = [];
+  String? listingError;
+
+  static String get _home => Platform.environment['HOME'] ?? '/';
+  static Map<String, String> get _places => {
+    'Home': _home,
+    'Desktop': '$_home/Desktop',
+    'Downloads': '$_home/Downloads',
+    'Pictures': '$_home/Pictures',
+    'Movies': '$_home/Movies',
+    'Music': '$_home/Music',
+  };
+
+  /// Walk to a folder, remembering where we came from.
+  void _go(String path, {bool remember = true}) {
+    if (remember && folder != null && folder != path) {
+      folderBack.add(folder!);
+      folderForward.clear();
+    }
+    folder = path;
+    selected['Files']?.clear();
+    _reload();
+  }
+
+  void _back() {
+    if (folderBack.isEmpty) return;
+    folderForward.add(folder!);
+    _go(folderBack.removeLast(), remember: false);
+  }
+
+  void _forward() {
+    if (folderForward.isEmpty) return;
+    folderBack.add(folder!);
+    _go(folderForward.removeLast(), remember: false);
+  }
+
+  void _up() {
+    final parent = Directory(folder!).parent.path;
+    if (parent != folder) _go(parent);
+  }
+
+  /// Read the folder: folders first, then files the shelf can take, by name.
+  /// Hidden entries and everything else stay out of sight. The read is
+  /// synchronous: a folder of a few hundred entries lists in a millisecond,
+  /// and the answer is on screen in the same frame as the press.
+  void _reload() {
+    final path = folder;
+    if (path == null) return;
+    final allowed = (widget.controller.state['importExtensions'] as List? ?? [])
+        .map((e) => '$e'.toLowerCase())
+        .toSet();
+    final folders = <Map<String, dynamic>>[];
+    final files = <Map<String, dynamic>>[];
+    String? error;
+    try {
+      for (final entry in Directory(path).listSync(followLinks: false)) {
+        final name = entry.path.split('/').last;
+        if (name.startsWith('.')) continue;
+        if (entry is Directory) {
+          folders.add({'id': entry.path, 'name': name, 'path': entry.path, 'folder': true});
+        } else if (entry is File) {
+          final dot = name.lastIndexOf('.');
+          final ext = dot > 0 ? name.substring(dot + 1).toLowerCase() : '';
+          if (allowed.isNotEmpty && !allowed.contains(ext)) continue;
+          final mime = _mimeOf(ext);
+          files.add({
+            'id': entry.path,
+            'name': name,
+            'path': entry.path,
+            'mime': mime,
+            if (mime.startsWith('image/') && ext != 'hdr' && ext != 'exr')
+              'thumbnail': entry.path,
+          });
+        }
+      }
+    } catch (e) {
+      error = 'Cannot read this folder';
+    }
+    if (!mounted) return;
+    int byName(Map<String, dynamic> a, Map<String, dynamic> b) =>
+        '${a['name']}'.toLowerCase().compareTo('${b['name']}'.toLowerCase());
+    folders.sort(byName);
+    files.sort(byName);
+    setState(() {
+      listing = [...folders, ...files];
+      listingError = error;
+    });
+  }
+
+  /// A rough MIME from the extension, enough to colour the badge and pick
+  /// the family; the native side decides for real once a file is admitted.
+  static String _mimeOf(String ext) => switch (ext) {
+    'mp4' || 'mov' || 'mkv' || 'webm' || 'm4v' => 'video/$ext',
+    'wav' || 'mp3' || 'flac' || 'aac' || 'aiff' || 'm4a' => 'audio/$ext',
+    'obj' || 'glb' || 'gltf' || 'ply' => 'model/$ext',
+    'hdr' || 'exr' => 'image/$ext',
+    '' => 'application/octet-stream',
+    _ => 'image/$ext',
+  };
+
+  /// A path the way a person reads it: the home folder as ~.
+  static String _homely(String path) {
+    final home = Platform.environment['HOME'];
+    return home != null && path.startsWith(home)
+        ? '~${path.substring(home.length)}'
+        : path;
+  }
 
   /// Colours: the wheel's size is the picker's height; the grip under the
   /// picker drags it.
@@ -155,6 +273,7 @@ class _BrowserPanelState extends State<BrowserPanel> {
   }
 
   String family(Map<String, dynamic> item) {
+    if (item['folder'] == true) return 'Folder';
     final mime = '${item['mime'] ?? ''}'.toLowerCase();
     final path = '${item['path'] ?? ''}'.toLowerCase();
     if (mime.contains('video') ||
@@ -174,6 +293,8 @@ class _BrowserPanelState extends State<BrowserPanel> {
 
   String classification(Map<String, dynamic> item) {
     switch (tab) {
+      case 'Files':
+        return 'All';
       case 'Create':
         return switch (id(item)) {
           'text' => 'Text',
@@ -260,6 +381,8 @@ class _BrowserPanelState extends State<BrowserPanel> {
         ];
       case 'Effects':
         return rows(state['catalog']);
+      case 'Files':
+        return listing;
       default:
         return [
           ...rows(state['palette']),
@@ -315,6 +438,13 @@ class _BrowserPanelState extends State<BrowserPanel> {
           if (has('create')) await c.command('create', {'kind': id(item)});
         } else if (has('placeAsset') && item['missing'] != true) {
           await c.command('placeAsset', {'id': item['id']});
+        }
+        break;
+      case 'Files':
+        if (item['folder'] == true) {
+          _go('${item['path']}');
+        } else if (has('import')) {
+          await c.importPaths(['${item['path']}']);
         }
         break;
       case 'Effects':
@@ -442,15 +572,28 @@ class _BrowserPanelState extends State<BrowserPanel> {
           'Place',
           'Other',
         ],
+        'Files' => _places.keys.toList(),
         _ => ['All', 'Saved', 'Used here', 'Starter'],
       };
-      final chosen = classifications[tab] ?? 'All';
+      if (tab == 'Files' && folder == null) {
+        folder = widget.initialFolder ?? _home;
+        WidgetsBinding.instance.addPostFrameCallback((_) => _reload());
+      }
+      final chosen = tab == 'Files'
+          ? (_places.entries
+                .where((e) => e.value == folder)
+                .map((e) => e.key)
+                .firstOrNull ??
+            '')
+          : (classifications[tab] ?? 'All');
       total = all.length;
       visible = all.where((item) {
         final label = '${item['name'] ?? item['hex'] ?? item['id']}'
             .toLowerCase();
         return label.contains(search.text.trim().toLowerCase()) &&
-            (chosen == 'All' || classification(item) == chosen);
+            (tab == 'Files' ||
+                chosen == 'All' ||
+                classification(item) == chosen);
       }).toList();
       final target = _colorTarget(widget.controller);
       return Focus(
@@ -551,6 +694,7 @@ class _BrowserPanelState extends State<BrowserPanel> {
                   ],
                 ),
               ),
+              if (tab == 'Files') _pathRow(),
               Expanded(
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -583,7 +727,11 @@ class _BrowserPanelState extends State<BrowserPanel> {
                             ),
                             for (final rail in rails)
                               _smallButton(rail, () {
-                                setState(() => classifications[tab] = rail);
+                                if (tab == 'Files') {
+                                  _go(_places[rail]!);
+                                } else {
+                                  setState(() => classifications[tab] = rail);
+                                }
                               }, selected: chosen == rail),
                           ],
                         ),
@@ -938,6 +1086,83 @@ class _BrowserPanelState extends State<BrowserPanel> {
   /// 寸法棒が畳めない押し所 2 つ分。棒が出ない幅では、これに %の欄が足される。
   static const _zoomFloor = EditorMetrics.row * 2;
 
+  /// Where we are: back, forward, up, and the path as crumbs you can press.
+  Widget _pathRow() {
+    final here = folder ?? _home;
+    final crumbs = _homely(here).split('/').where((c) => c.isNotEmpty).toList();
+    String pathTo(int i) {
+      final head = crumbs.first == '~' ? _home : '';
+      final rest = crumbs.sublist(crumbs.first == '~' ? 1 : 0, i + 1);
+      return rest.isEmpty ? head : '$head/${rest.join('/')}';
+    }
+    Widget step(IconData icon, String label, VoidCallback? press) =>
+        EditorTooltip(
+          message: label,
+          child: IconButton(
+            iconSize: EditorMetrics.s14,
+            color: press == null ? EditorTheme.disabledInk : EditorTheme.muted,
+            onPressed: press,
+            icon: Icon(icon),
+          ),
+        );
+    return Container(
+      key: const ValueKey('browser:path'),
+      height: EditorMetrics.control,
+      padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s4),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: EditorTheme.line)),
+      ),
+      child: Row(
+        children: [
+          step(Icons.arrow_back, 'Back', folderBack.isEmpty ? null : _back),
+          step(
+            Icons.arrow_forward,
+            'Forward',
+            folderForward.isEmpty ? null : _forward,
+          ),
+          step(Icons.arrow_upward, 'Up', _up),
+          const SizedBox(width: EditorMetrics.s4),
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              reverse: true,
+              child: Row(
+                children: [
+                  for (var i = 0; i < crumbs.length; i++) ...[
+                    if (i > 0)
+                      const Text(
+                        '›',
+                        style: TextStyle(color: EditorTheme.muted),
+                      ),
+                    InkWell(
+                      onTap: i == crumbs.length - 1
+                          ? null
+                          : () => _go(pathTo(i)),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: EditorMetrics.s3,
+                        ),
+                        child: Text(
+                          crumbs[i],
+                          style: TextStyle(
+                            fontSize: EditorMetrics.font,
+                            color: i == crumbs.length - 1
+                                ? EditorTheme.ink
+                                : EditorTheme.muted,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// Grid / List / Thumbnails, beside the search field.
   Widget _views() => DecoratedBox(
     decoration: BoxDecoration(
@@ -1031,7 +1256,8 @@ class _BrowserPanelState extends State<BrowserPanel> {
       }();
 
   String _format(Map<String, dynamic> item) {
-    if (tab != 'Media') return '';
+    if (tab != 'Media' && tab != 'Files') return '';
+    if (item['folder'] == true) return '';
     if (item['builtin'] == true) return 'HDR';
     final filename = '${item['path'] ?? item['name'] ?? ''}'.split('/').last;
     if (filename.contains('.')) return filename.split('.').last.toUpperCase();
@@ -1049,7 +1275,16 @@ class _BrowserPanelState extends State<BrowserPanel> {
     // What the card is, before what can be done to it: the same sheet and
     // rows every panel's menu uses, the facts as quiet rows on top.
     final facts = <String>[
-      if (tab == 'Media') ...[
+      if (tab == 'Files') ...[
+        if (item['folder'] == true) 'Folder' else ...[
+          [
+            if (_format(item).isNotEmpty) _format(item),
+            if (item['mime'] != null) '${item['mime']}',
+          ].join(' · '),
+          if (path != null) _fileFact(path),
+        ],
+        if (path != null) _homely(File(path).parent.path),
+      ] else if (tab == 'Media') ...[
         [
           if (_format(item).isNotEmpty) _format(item),
           if (item['mime'] != null) '${item['mime']}',
@@ -1083,8 +1318,26 @@ class _BrowserPanelState extends State<BrowserPanel> {
         const PopupMenuDivider(height: EditorMetrics.s8),
         EditorMenuItem<String>(
           value: 'apply',
-          child: Text(tab == 'Media' ? 'Place' : 'Apply'),
+          child: Text(
+            tab == 'Media'
+                ? 'Place'
+                : tab == 'Files'
+                ? (item['folder'] == true ? 'Open' : 'Import to Media')
+                : 'Apply',
+          ),
         ),
+        if (tab == 'Files' && path != null) ...[
+          EditorMenuItem<String>(value: 'reveal', child: Text(_revealLabel)),
+          if (item['folder'] != true)
+            const EditorMenuItem<String>(
+              value: 'open',
+              child: Text('Open with default app'),
+            ),
+          const EditorMenuItem<String>(
+            value: 'copyPath',
+            child: Text('Copy path'),
+          ),
+        ],
         if (own) ...[
           EditorMenuItem<String>(
             value: 'replace',
@@ -1215,14 +1468,6 @@ class _BrowserPanelState extends State<BrowserPanel> {
     return raw.startsWith('file:') ? Uri.parse(raw).toFilePath() : raw;
   }
 
-  /// A path the way a person reads it: the home folder as ~.
-  static String _homely(String path) {
-    final home = Platform.environment['HOME'];
-    return home != null && path.startsWith(home)
-        ? '~${path.substring(home.length)}'
-        : path;
-  }
-
   /// The file's size, for the menu's facts.
   static String _fileFact(String path) {
     final file = File(path);
@@ -1253,6 +1498,7 @@ class _BrowserPanelState extends State<BrowserPanel> {
             : has('placeAsset') && item['missing'] != true,
       'Effects' =>
         has('applyEffect') && widget.controller.selectedIds.isNotEmpty,
+      'Files' => item['folder'] == true || has('import'),
       _ =>
         (_stops(item).length > 1 ? has('setGradient') : has('applyPalette')) &&
             widget.controller.selectedIds.isNotEmpty,
@@ -1260,14 +1506,23 @@ class _BrowserPanelState extends State<BrowserPanel> {
     final isSelected = selected[tab]?.contains(id(item)) ?? false;
     final isColor = tab == 'Colors';
     final identityColor = EditorTheme.kindColor(
-      tab == 'Media' ? family(item) : id(item),
+      tab == 'Media' || tab == 'Files' ? family(item) : id(item),
     );
+    final isFolder = item['folder'] == true;
     final missing = item['missing'] == true;
     final name = '${item['name'] ?? item['id']}';
     final format = _format(item);
     Widget preview = isColor
         ? _gradientBox(widget.controller, _stops(item))
-        : tab == 'Media' || item['thumbnail'] != null
+        : isFolder
+        ? Center(
+            child: Icon(
+              Icons.folder,
+              size: EditorMetrics.s32 * tileScale,
+              color: EditorTheme.tab,
+            ),
+          )
+        : tab == 'Media' || tab == 'Files' || item['thumbnail'] != null
         ? _thumbnail(item)
         : Center(
             child: id(item) == 'camera'

@@ -40,7 +40,7 @@ Widget buildPanel(String name, EditorSession c, Key? key, {Widget? leading}) {
 }
 
 Widget _buildPanel(String name, EditorSession c, Key? key, {Widget? leading}) {
-  if (['Create', 'Media', 'Effects', 'Colors'].contains(name))
+  if (['Create', 'Media', 'Effects', 'Colors', 'Files'].contains(name))
     return BrowserPanel(
       key: key,
       controller: c,

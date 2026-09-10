@@ -122,7 +122,7 @@ DockNode initialDock() => DockNode.split(
   DockNode.split(
     Axis.horizontal,
     .205,
-    DockNode.leaf('browser', ['Create', 'Media', 'Effects', 'Colors']),
+    DockNode.leaf('browser', ['Create', 'Media', 'Effects', 'Colors', 'Files']),
     DockNode.split(
       Axis.horizontal,
       .775,

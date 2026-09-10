@@ -73,6 +73,7 @@ const panelCatalog = [
   PanelSpec('Effects', 'Browse', Icons.auto_fix_high_outlined),
   PanelSpec('Fonts', 'Browse', Icons.font_download_outlined),
   PanelSpec('Colors', 'Browse', Icons.palette_outlined),
+  PanelSpec('Files', 'Browse', Icons.folder_outlined),
   PanelSpec(
     'Depth',
     'Adjust',
