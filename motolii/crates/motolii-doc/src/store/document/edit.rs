@@ -235,7 +235,7 @@ impl crate::doc::store::StoreView<'_> {
             | property::PAN
             | property::FADE_IN
             | property::FADE_OUT => Some(Value::F64(0.0)),
-            _ => None,
+            name => property::CAMERA_ROWS.iter().find(|row| row.0 == name).map(|row| row.2.clone()),
         })
     }
 }

@@ -40,13 +40,45 @@ impl<'a> StoreView<'a> {
         Ok(crate::doc::store::StageExtent { layer: Some(id), margins })
     }
 
+    /// Camera 層 `id` が時刻 `t` に見ている姿勢。層ターゲットが在れば、その層の位置(anchor の world 点)を注視点にする。
+    pub fn camera_of_layer(&self, id: LayerId, t: RationalTime) -> Result<crate::doc::core::ResolvedCamera, StoreError> {
+        let get = |name| self.value_at(id, &PropertyId::new(name)?, t);
+        let vec2 = |v: Option<Value>, d: [f32; 2]| match v { Some(Value::Vec2(v)) => [v[0] as f32, v[1] as f32], _ => d };
+        let f = |v: Option<Value>, d: f32| match v { Some(Value::F64(v)) if v.is_finite() => v as f32, _ => d };
+        let mut camera = crate::doc::core::ResolvedCamera {
+            center: vec2(get(property::CAMERA_CENTER)?, [0.0, 0.0]),
+            target_z: f(get(property::CAMERA_TARGET_Z)?, 0.0),
+            orbit_degrees: vec2(get(property::CAMERA_ORBIT)?, [0.0, 0.0]),
+            distance_scale: f(get(property::CAMERA_DISTANCE)?, 1.0).max(0.01),
+            zoom: f(get(property::CAMERA_ZOOM)?, 1.0),
+            roll_degrees: f(get(property::CAMERA_ROLL)?, 0.0),
+        };
+        if let Some(target) = self.camera_target_layer(id, t)? {
+            if let Some(comp) = self.composition()? {
+                let comp = comp.spec();
+                let present = self.layers().into_iter().collect();
+                if let Some(world) = self.world_transform3d_chain(target, t, &present)?.get(&target) {
+                    let anchor = vec2(self.value_at(target, &PropertyId::new(property::ANCHOR)?, t)?, [0.0, 0.0]);
+                    let point = world.transform_point3(glam::vec3(anchor[0], anchor[1], 0.0));
+                    camera.center = [point.x - comp.width as f32 * 0.5, point.y - comp.height as f32 * 0.5];
+                    camera.target_z = point.z;
+                }
+            }
+        }
+        Ok(camera)
+    }
+
+    /// `camera.target` が指す、いま在る別の層。0・消えた層・自分自身は無し。
+    pub fn camera_target_layer(&self, id: LayerId, t: RationalTime) -> Result<Option<LayerId>, StoreError> {
+        Ok(match self.value_at(id, &PropertyId::new(property::CAMERA_TARGET)?, t)? {
+            Some(Value::LayerId(raw)) if raw != 0 && raw != id.0 && self.layers().contains(&LayerId(raw)) => Some(LayerId(raw)),
+            _ => None,
+        })
+    }
+
     pub fn resolve_camera(&self, t: RationalTime) -> Result<crate::doc::core::ResolvedCamera, StoreError> {
         if let Some(id) = self.active_guide(crate::doc::store::LayerSource::Camera, t)? {
-            let get = |name| self.value_at(id, &PropertyId::new(name)?, t);
-            let center = match get(property::CAMERA_CENTER)? { Some(Value::Vec2(v)) => [v[0] as f32,v[1] as f32], _ => [0.0,0.0] };
-            let zoom = match get(property::CAMERA_ZOOM)? { Some(Value::F64(v)) => v as f32, _ => 1.0 };
-            let roll_degrees = match get(property::CAMERA_ROLL)? { Some(Value::F64(v)) => v as f32, _ => 0.0 };
-            return Ok(crate::doc::core::ResolvedCamera { center, zoom, roll_degrees, ..Default::default() });
+            return self.camera_of_layer(id, t);
         }
         let center_property = PropertyId::camera(property::CAMERA_CENTER)?;
         let center = match self.camera_value_at(&center_property, t)? {
@@ -749,6 +781,86 @@ mod stage_extent_contract {
         assert_eq!(view.resolve_stage_extent(at(12)).unwrap().rect(comp), [0.0, -400.0, comp.width as f32, comp.height as f32 + 800.0]);
         assert_eq!(view.resolve_stage_extent(at(25)).unwrap(), StageExtent::default());
         assert_eq!(view.resolve_camera(at(3)).unwrap(), crate::doc::core::ResolvedCamera::default(), "a stage layer is not a camera");
+    }
+}
+
+#[cfg(test)]
+mod camera_target_contract {
+    use crate::doc::core::{camera_projection, ResolvedCamera};
+    use crate::doc::store::*;
+
+    fn put(doc: &mut Document, layer: LayerId, name: &str, value: Value) {
+        doc.apply(Intent::SetConstant { layer, property: PropertyId::new(name).unwrap(), value }).unwrap();
+    }
+    fn add(doc: &mut Document, id: u64, source: LayerSource) -> LayerId {
+        let layer = LayerId(id);
+        doc.apply_all(vec![
+            Intent::AddLayer(layer),
+            Intent::SetMeta { layer, meta: LayerMeta { source, order: id as i16, timing: LayerTiming::place(0, None, 100) } },
+        ]).unwrap();
+        layer
+    }
+    /// world 点が出力の枠中央に来るか(注視点は常に中央)。
+    fn centred(comp: crate::doc::core::CompSpec, camera: ResolvedCamera, point: glam::Vec3) -> bool {
+        let projection = camera_projection(comp, camera);
+        let clip = projection.projection_matrix() * projection.view_matrix() * point.extend(1.0);
+        clip.w > 0.0 && (clip.x / clip.w).abs() < 1e-3 && (clip.y / clip.w).abs() < 1e-3
+    }
+
+    /// AE の Point of Interest を rerun の球面座標で持つ: 注視点・軌道・距離が Camera 層から解決へ流れ、eye は導出。
+    #[test]
+    fn orbit_distance_and_target_z_flow_from_the_camera_layer() {
+        let mut doc = blank_project();
+        let comp = doc.view().composition().unwrap().unwrap().spec();
+        let camera = add(&mut doc, 1, LayerSource::Camera);
+        put(&mut doc, camera, property::CAMERA_CENTER, Value::Vec2([120.0, -40.0]));
+        put(&mut doc, camera, property::CAMERA_TARGET_Z, Value::F64(300.0));
+        put(&mut doc, camera, property::CAMERA_ORBIT, Value::Vec2([-20.0, 35.0]));
+        put(&mut doc, camera, property::CAMERA_DISTANCE, Value::F64(2.0));
+        let resolved = doc.view().resolve_camera(RationalTime::ZERO).unwrap();
+        assert_eq!(resolved, ResolvedCamera { center: [120.0, -40.0], target_z: 300.0, orbit_degrees: [-20.0, 35.0], distance_scale: 2.0, ..Default::default() });
+        let target = resolved.target(comp);
+        assert!(centred(comp, resolved, target), "the point of interest sits under the frame centre");
+        let eye = camera_projection(comp, resolved).eye;
+        let front = camera_projection(comp, ResolvedCamera { orbit_degrees: [0.0; 2], ..resolved }).eye;
+        assert!((eye.distance(target) - front.distance(target)).abs() < 0.01, "orbit keeps the distance");
+        assert!(eye.distance(front) > 1.0, "orbit moves the eye");
+    }
+
+    /// 層ターゲット: null を動かせば注視点が追う。無い層・0・自分自身は無視して center に戻る。
+    #[test]
+    fn a_target_layer_moves_the_point_of_interest_with_its_position() {
+        let mut doc = blank_project();
+        let comp = doc.view().composition().unwrap().unwrap().spec();
+        let fps = doc.view().composition().unwrap().unwrap().fps;
+        let at = |frame| RationalTime::try_from_frame(frame, fps).unwrap();
+        let camera = add(&mut doc, 1, LayerSource::Camera);
+        let null = add(&mut doc, 2, LayerSource::Null);
+        put(&mut doc, camera, property::CAMERA_CENTER, Value::Vec2([500.0, 500.0]));
+        put(&mut doc, camera, property::CAMERA_TARGET, Value::LayerId(2));
+        put(&mut doc, null, property::POSITION_Z, Value::F64(250.0));
+        let mut track = KeyframeTrack::new();
+        for (frame, xy) in [(0, [100.0, 200.0]), (10, [300.0, 400.0])] {
+            track.insert(Keyframe { t: at(frame), value: Value::Vec2(xy), interp: Interp::Linear, spatial: None });
+        }
+        doc.apply(Intent::SetTrack { layer: null, property: PropertyId::new(property::POSITION).unwrap(), track }).unwrap();
+        for (frame, expect) in [(0, glam::vec3(100.0, 200.0, 250.0)), (5, glam::vec3(200.0, 300.0, 250.0)), (10, glam::vec3(300.0, 400.0, 250.0))] {
+            let resolved = doc.view().resolve_camera(at(frame)).unwrap();
+            assert!(resolved.target(comp).distance(expect) < 1e-3, "frame {frame}: {:?} != {expect:?}", resolved.target(comp));
+            assert!(centred(comp, resolved, expect));
+        }
+        // parent を挟んでも world の位置を見る
+        let parent = add(&mut doc, 3, LayerSource::Null);
+        put(&mut doc, parent, property::POSITION, Value::Vec2([1000.0, 0.0]));
+        doc.apply(Intent::SetAttrs { layer: null, patch: LayerAttrsPatch { parent: Some(Some(parent)), ..Default::default() } }).unwrap();
+        assert!(doc.view().resolve_camera(at(0)).unwrap().target(comp).distance(glam::vec3(1100.0, 200.0, 250.0)) < 1e-3);
+        for dead in [Value::LayerId(0), Value::LayerId(1), Value::LayerId(99)] {
+            put(&mut doc, camera, property::CAMERA_TARGET, dead.clone());
+            assert_eq!(doc.view().resolve_camera(at(0)).unwrap().center, [500.0, 500.0], "{dead:?} falls back to center");
+        }
+        put(&mut doc, camera, property::CAMERA_TARGET, Value::LayerId(2));
+        doc.apply(Intent::RemoveLayer(null)).unwrap();
+        assert_eq!(doc.view().resolve_camera(at(0)).unwrap().center, [500.0, 500.0], "a removed target falls back to center");
     }
 }
 

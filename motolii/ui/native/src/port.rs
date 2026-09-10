@@ -100,7 +100,7 @@ impl EditorRuntime{
         let mut intents=editor::create::new_layer_intents(id,order,start,comp.duration_frames,comp.fps,(comp.width as f64,comp.height as f64),kind,editor::create::unbounded_frames(visible));
         if intents.iter().any(|i| matches!(i, Intent::SetMeta { meta, .. } if meta.source == LayerSource::Camera)) {
             let camera = view.resolve_camera(self.time()?).map_err(e)?;
-            for (name,value) in [(property::CAMERA_CENTER,Value::Vec2(camera.center.map(f64::from))), (property::CAMERA_ZOOM,Value::F64(camera.zoom as f64)), (property::CAMERA_ROLL,Value::F64(camera.roll_degrees as f64))] {
+            for (name,value) in property::camera_values(&camera) {
                 intents.push(Intent::SetConstant { layer:id, property:PropertyId::new(name).map_err(e)?, value });
             }
         }

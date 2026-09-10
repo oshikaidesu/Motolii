@@ -708,6 +708,62 @@ class _InspectorPanelState extends State<InspectorPanel> {
           _gap(),
           _tail(),
         ]),
+      if (_row('camera.target.z') != null)
+        _line([
+          _name(Icons.center_focus_weak, 'Target Z'),
+          _slot(_well(layer, 'camera.target.z', 0, label: 'Z')),
+          _gap(),
+          _slot(),
+          _gap(),
+          _slot(),
+          _gap(),
+          _tail(),
+        ]),
+      if (_row('camera.target') != null)
+        _line([
+          _name(Icons.gps_fixed, 'Target'),
+          Expanded(
+            child: _live2(['camera.target'], () {
+              final current = _row('camera.target')?['value'];
+              return EditorChoice<dynamic>(
+                value: current is num ? current.toInt() : 0,
+                choices: [
+                  const MapEntry(0, 'None'),
+                  ...c.layers
+                      .where((v) => v['id'] != layer['id'])
+                      .map((v) => MapEntry(v['id'], '${v['name']}')),
+                ],
+                onChanged: (v) => c.command('setProperty', {
+                  'layer': layer['id'],
+                  'property': 'camera.target',
+                  'value': v,
+                }),
+              );
+            }),
+          ),
+        ]),
+      if (_row('camera.orbit') != null)
+        _line([
+          _name(Icons.threesixty, 'Orbit'),
+          _slot(_well(layer, 'camera.orbit', 0, label: 'Pitch')),
+          _gap(),
+          _slot(_well(layer, 'camera.orbit', 1, label: 'Yaw')),
+          _gap(),
+          _slot(),
+          _gap(),
+          _tail(),
+        ]),
+      if (_row('camera.distance') != null)
+        _line([
+          _name(Icons.straighten, 'Distance'),
+          _slot(_well(layer, 'camera.distance', 0, label: 'Scale')),
+          _gap(),
+          _slot(),
+          _gap(),
+          _slot(),
+          _gap(),
+          _tail(),
+        ]),
       if (_row('camera.zoom') != null)
         _line([
           _name(Icons.zoom_in, 'Zoom'),
@@ -762,6 +818,10 @@ class _InspectorPanelState extends State<InspectorPanel> {
     'opacity',
     'anchor',
     'camera.center',
+    'camera.target.z',
+    'camera.target',
+    'camera.orbit',
+    'camera.distance',
     'camera.zoom',
     'camera.roll',
     'content',

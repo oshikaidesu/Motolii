@@ -134,12 +134,7 @@ fn check_camera(
     ctx: &Ctx<'_, '_>,
     unsupported: &mut Vec<UnsupportedForLottie>,
 ) -> Result<(), LottieExportError> {
-    let names = [
-        property::CAMERA_CENTER,
-        property::CAMERA_ZOOM,
-        property::CAMERA_ROLL,
-    ];
-    for name in names {
+    for name in property::CAMERA_ROWS.iter().map(|row| row.0) {
         let property = PropertyId::camera(name)?;
         if ctx.view.camera_property_source(&property)?.is_some() {
             unsupported.push(UnsupportedForLottie {

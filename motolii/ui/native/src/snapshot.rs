@@ -123,19 +123,16 @@ impl EditorRuntime{
         for id in view.layers(){
             let Some(meta)=view.meta(id).map_err(e)? else{continue};
             if meta.source!=LayerSource::Camera || view.attrs(id).map_err(e)?.unwrap_or_default().hidden || !meta.timing.covers(self.frame){continue}
-            let read=|name| view.value_at(id,&PropertyId::new(name).unwrap(),time).ok().flatten();
-            let camera=crate::doc::core::ResolvedCamera {
-                center:match read(property::CAMERA_CENTER){Some(Value::Vec2(v))=>v.map(|x|x as f32),_=>[0.0;2]},
-                zoom:match read(property::CAMERA_ZOOM){Some(Value::F64(v))=>v as f32,_=>1.0},
-                roll_degrees:match read(property::CAMERA_ROLL){Some(Value::F64(v))=>v as f32,_=>0.0},..Default::default()
-            };
+            let camera=view.camera_of_layer(id,time).map_err(e)?;
             let projection=crate::doc::core::camera_projection(comp,camera);
             let rotation=projection.rotation.inverse();
-            let depth=crate::doc::core::distance_from_camera(comp,0.0);
+            // frustum の面は注視点に置く。正面(orbit 0・層ターゲット無し)ではそれが comp 面の箱で、辺・角・取っ手で author できる。
+            let depth=crate::doc::core::distance_from_camera(comp,0.0)*camera.distance_scale;
             let height=depth*(projection.vertical_fov_radians*0.5).tan();let width=height*projection.aspect_ratio;
             let points=[glam::Vec3::ZERO,glam::vec3(-width,-height,-depth),glam::vec3(width,-height,-depth),glam::vec3(width,height,-depth),glam::vec3(-width,height,-depth)];
             let points:Vec<_>=points.into_iter().map(|p|screen(projection.eye+rotation*p)).collect();
-            if points.iter().all(Option::is_some){gizmos.push(json!({"id":id.0,"points":points,"target":screen(camera.target(comp)),"center":camera.center,"zoom":camera.zoom,"roll":camera.roll_degrees}));}
+            let authorable=camera.orbit_degrees==[0.0;2] && view.camera_target_layer(id,time).map_err(e)?.is_none();
+            if points.iter().all(Option::is_some){gizmos.push(json!({"id":id.0,"points":points,"target":screen(camera.target(comp)),"authorable":authorable,"center":camera.center,"zoom":camera.zoom,"roll":camera.roll_degrees}));}
         }
         Ok(json!(gizmos))
     }
@@ -266,8 +263,7 @@ impl EditorRuntime{
             if let Some(v)=view.value_at(id,&p,at).map_err(e)?{properties.push(prop(view,id,p.name(),p.name(),&v,None,at,fps,live)?);}
         }}
         if meta.source == LayerSource::Camera {
-            properties = [(property::CAMERA_CENTER,"Center",Value::Vec2([0.0,0.0]),None), (property::CAMERA_ZOOM,"Zoom",Value::F64(1.0),Some((0.01,100.0))), (property::CAMERA_ROLL,"Roll",Value::F64(0.0),None)]
-                .into_iter().map(|(p,label,v,range)| prop(view,id,p,label,&v,range,at,fps,live)).collect::<Result<Vec<_>,_>>()?;
+            properties = property::CAMERA_ROWS.iter().map(|(p,label,v,range)| prop(view,id,p,label,v,*range,at,fps,live)).collect::<Result<Vec<_>,_>>()?;
         }
         if meta.source == LayerSource::Stage {
             properties = property::STAGE_MARGINS.iter().zip(["Left","Top","Right","Bottom"])

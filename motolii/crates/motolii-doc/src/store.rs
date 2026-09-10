@@ -131,6 +131,38 @@ pub mod property {
     pub const CAMERA_CENTER: &str = "camera.center";
     pub const CAMERA_ZOOM: &str = "camera.zoom";
     pub const CAMERA_ROLL: &str = "camera.roll";
+    /// 注視点の奥行き。XY は `camera.center`。
+    pub const CAMERA_TARGET_Z: &str = "camera.target.z";
+    /// 注視点のまわりで eye が居る角度(pitch, yaw、度)。rerun の eye と同じ球面座標。
+    pub const CAMERA_ORBIT: &str = "camera.orbit";
+    /// 注視点までの距離。comp が縦画角 55° に収まる既定距離への倍率。
+    pub const CAMERA_DISTANCE: &str = "camera.distance";
+    /// 注視する層(AE の Point of Interest に null を親付けする型)。0 は無し。あれば center と target.z より優先。
+    pub const CAMERA_TARGET: &str = "camera.target";
+
+    use crate::doc::eval::Value;
+    /// Camera 層の欄: (property, label, 既定値, 範囲)。登録・既定・生成時の複写はこの 1 表から。
+    pub const CAMERA_ROWS: &[(&str, &str, Value, Option<(f64, f64)>)] = &[
+        (CAMERA_CENTER, "Center", Value::Vec2([0.0, 0.0]), None),
+        (CAMERA_TARGET_Z, "Target Z", Value::F64(0.0), None),
+        (CAMERA_TARGET, "Target", Value::LayerId(0), None),
+        (CAMERA_ORBIT, "Orbit", Value::Vec2([0.0, 0.0]), None),
+        (CAMERA_DISTANCE, "Distance", Value::F64(1.0), Some((0.01, 100.0))),
+        (CAMERA_ZOOM, "Zoom", Value::F64(1.0), Some((0.01, 100.0))),
+        (CAMERA_ROLL, "Roll", Value::F64(0.0), None),
+    ];
+
+    /// 解決済みカメラを Camera 層の欄の値へ戻す(層ターゲットは含まない)。
+    pub fn camera_values(camera: &crate::doc::core::ResolvedCamera) -> [(&'static str, Value); 6] {
+        [
+            (CAMERA_CENTER, Value::Vec2(camera.center.map(f64::from))),
+            (CAMERA_TARGET_Z, Value::F64(camera.target_z as f64)),
+            (CAMERA_ORBIT, Value::Vec2(camera.orbit_degrees.map(f64::from))),
+            (CAMERA_DISTANCE, Value::F64(camera.distance_scale as f64)),
+            (CAMERA_ZOOM, Value::F64(camera.zoom as f64)),
+            (CAMERA_ROLL, Value::F64(camera.roll_degrees as f64)),
+        ]
+    }
 
     /// Stage 層: 出力枠の外側にどれだけ作業範囲を広げるか(左・上・右・下、comp px)。
     pub const STAGE_MARGINS: [&str; 4] = ["stage.left", "stage.top", "stage.right", "stage.bottom"];

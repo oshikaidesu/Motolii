@@ -201,9 +201,13 @@ class _StagePanelState extends State<StagePanel> {
       : null;
   List<Offset> _cameraPoints(Map<String, dynamic> camera) =>
       (camera['points'] as List).map((p) => _point(p)!).toList();
+  /// 箱で author できるのは、正面を向いて注視点が自前のカメラだけ。回した物と層を見ている物は eye と frustum を見せるだけ。
   Map<String, dynamic>? get _selectedCamera {
     for (final camera in _cameras) {
-      if (c.selectedIds.contains(camera['id'])) return camera;
+      if (c.selectedIds.contains(camera['id']) &&
+          camera['authorable'] != false) {
+        return camera;
+      }
     }
     return null;
   }
@@ -608,7 +612,8 @@ class _StagePanelState extends State<StagePanel> {
         }
       }
       for (final camera in _cameras) {
-        if (_onCameraEdge(camera, event.localPosition)) {
+        if (camera['authorable'] != false &&
+            _onCameraEdge(camera, event.localPosition)) {
           c.command('select', {
             'ids': [camera['id']],
           });
