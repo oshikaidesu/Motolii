@@ -42,6 +42,7 @@ enum DocumentOperation {
   moveEffect('moveEffect'),
   enableEffect('enableEffect'),
   animate('animate'),
+  preferences('preferences'),
   clip('clip'),
   addMarker('addMarker'),
   setMarker('setMarker'),

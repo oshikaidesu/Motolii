@@ -48,6 +48,8 @@ pub struct EditorRuntime {
     /// 最後に全部入りの status を送った時の Document の版。同じ版で再生中なら生値だけ送る。
     pub(crate) full_status_revision: std::cell::RefCell<Option<String>>,
     user_camera: crate::doc::core::ResolvedCamera,
+    /// 設定「New layers」: 平らな素材が生まれる時の投影。
+    pub(crate) flat_projection: crate::doc::store::LayerProjection,
     snapshot_cache: std::cell::RefCell<snapshot_cache::SnapshotCache>,
     /// 履歴の一本線。編集の段と保存・異常の記録を同じ列に持つ。
     pub(crate) history: editor::history::Ledger,
@@ -70,7 +72,7 @@ impl EditorRuntime {
         let mut history = editor::history::Ledger::open(editor::history::default_file());
         history.record("open", if path.is_empty() { "New document".to_owned() } else { path.rsplit('/').next().unwrap_or(path).to_owned() }, Some(doc.edit_head()));
         Ok(Self { selected_ids: selected.into_iter().collect(), selected_keys: Vec::new(), clipboard: Default::default(), path: if path.is_empty() { None } else { Some(path.into()) }, saved_signature, color_target: None, exporter: Default::default(), clock, clock_revision, doc, engine, selected, frame: 0, device_id, render_count: 0,
-            render_ms: 0.0, picked_color: None, pick_serial: 0, reply: CString::new("{}").unwrap(), error: None, preview: None, preview_tag: None, stage_drag: None, stage_pointer: None, stage_view_scale: 1.0, snapshot_cache: Default::default(), user_stage: true, animate: Animate::Off, full_status_revision: Default::default(), user_camera: Default::default(), history })
+            render_ms: 0.0, picked_color: None, pick_serial: 0, reply: CString::new("{}").unwrap(), error: None, preview: None, preview_tag: None, stage_drag: None, stage_pointer: None, stage_view_scale: 1.0, snapshot_cache: Default::default(), user_stage: true, animate: Animate::Off, full_status_revision: Default::default(), user_camera: Default::default(), flat_projection: crate::doc::store::LayerProjection::TwoPointFiveD, history })
     }
 
     fn time(&self) -> Result<RationalTime, String> {

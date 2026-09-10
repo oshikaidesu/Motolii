@@ -70,6 +70,33 @@ class PanelSettings extends StatelessWidget {
         ),
         const SizedBox(height: EditorMetrics.s6),
         const Text(
+          'Layers',
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            fontSize: EditorMetrics.s12,
+          ),
+        ),
+        Row(
+          children: [
+            const Expanded(
+              child: Text(
+                'New layers',
+                style: TextStyle(fontSize: EditorMetrics.font),
+              ),
+            ),
+            SizedBox(
+              width: EditorMetrics.s76,
+              child: EditorChoice<String>(
+                key: const ValueKey('settings:flatProjection'),
+                value: controller.flatProjection,
+                choices: const [MapEntry('2.5D', '2.5D'), MapEntry('3D', '3D')],
+                onChanged: (v) => controller.storeDesk('flatProjection', v),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: EditorMetrics.s6),
+        const Text(
           'Panels',
           style: TextStyle(
             fontWeight: FontWeight.w600,

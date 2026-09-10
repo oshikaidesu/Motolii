@@ -61,6 +61,17 @@ class EditorSession {
   /// of anything touched later at another frame. Settings can turn it off.
   bool get animateFrom => deskWork.value['animateFrom'] != false;
 
+  /// Settings: the projection flat material is born with. 2.5D faces the
+  /// camera wherever it sits; 3D stands in the world and turns with it.
+  String get flatProjection =>
+      deskWork.value['flatProjection'] == '3D' ? '3D' : '2.5D';
+  String? _sentFlatProjection;
+  void _syncPreferences() {
+    if (_sentFlatProjection == flatProjection) return;
+    _sentFlatProjection = flatProjection;
+    command('preferences', {'flatProjection': flatProjection});
+  }
+
   /// The shape a newborn key gets; Easy Ease until the Ease desk says otherwise.
   static const easyEase = {
     'kind': 'Bezier',
@@ -348,6 +359,7 @@ class EditorSession {
 
   EditorSession() {
     document.addListener(_spreadDocument);
+    deskWork.addListener(_syncPreferences);
     _bridge.listen((call) async {
       if (_disposed) return call.method == 'confirmClose' ? true : null;
       if (call.method == 'confirmClose') {

@@ -146,6 +146,15 @@ pub(crate) fn unbounded_frames(visible_frames: Option<i64>) -> Option<i64> {
         .map(|v| (v * UNBOUNDED_SPAN_OF_VIEW.0 / UNBOUNDED_SPAN_OF_VIEW.1).max(1))
 }
 
+/// 平らな素材(図形・文字・画像・動画)は 2.5D で生まれる。設定でその既定を差し替える。空間物(mesh・点群)は触らない。
+pub(crate) fn prefer_flat(intents: &mut [Intent], flat: LayerProjection) {
+    for intent in intents {
+        if let Intent::SetAttrs { patch, .. } = intent {
+            if patch.projection == Some(LayerProjection::TwoPointFiveD) { patch.projection = Some(flat); }
+        }
+    }
+}
+
 pub(crate) fn new_layer_intents(
     layer: LayerId,
     order: i16,
@@ -431,6 +440,23 @@ pub(crate) fn new_layer_intents(
 #[cfg(test)]
 mod camera_tests {
     use super::*;
+    /// 設定「New layers」: 平らな素材だけが好みの投影で生まれ、空間物(3D で生まれた物)は触らない。
+    #[test]
+    fn the_flat_preference_changes_only_flat_material() {
+        let fps = Fps::try_new(30, 1).unwrap();
+        let projection_of = |kind: NewKind, flat: LayerProjection| {
+            let mut intents = new_layer_intents(LayerId(1), 0, 0, 90, fps, (1280.0, 720.0), kind, None);
+            prefer_flat(&mut intents, flat);
+            intents.iter().find_map(|i| match i { Intent::SetAttrs { patch, .. } => patch.projection, _ => None }).unwrap()
+        };
+        assert_eq!(projection_of(NewKind::Rectangle, LayerProjection::ThreeD), LayerProjection::ThreeD);
+        assert_eq!(projection_of(NewKind::Text, LayerProjection::ThreeD), LayerProjection::ThreeD);
+        assert_eq!(projection_of(NewKind::Rectangle, LayerProjection::TwoPointFiveD), LayerProjection::TwoPointFiveD);
+        let mut spatial = vec![Intent::SetAttrs { layer: LayerId(2), patch: LayerAttrsPatch { projection: Some(LayerProjection::ThreeD), ..Default::default() } }];
+        prefer_flat(&mut spatial, LayerProjection::TwoPointFiveD);
+        assert!(matches!(&spatial[0], Intent::SetAttrs { patch, .. } if patch.projection == Some(LayerProjection::ThreeD)), "spatial stays 3D");
+    }
+
     /// 尺の無い物は見えている幅の 3/4、尺のある物と、幅を渡さない時は従来どおり。
     #[test]
     fn unbounded_layers_take_three_quarters_of_the_visible_span() {
