@@ -209,7 +209,33 @@ impl Compositor {
             // BackgroundPipeline / AE と同じ: 地は最初の clear 色で、以後どの pass にも「背景」は入らない)。
             let rects: Vec<TexturedRect> = Vec::new();
 
+            // 空は地。環境層の run に来たら、空だけを 1 枚描いて、それまでの累算の**下**へ敷く
+            // (Blender の BackgroundPipeline: 何も描かれていない画素にだけ世界が見える)。
             let sky = run.iter().any(|input| matches!(input.content, SequentialContent::Environment(e) if environment.is_some_and(|top| std::ptr::eq(top, e))));
+            if sky {
+                let sky_owned = spare
+                    .pop()
+                    .unwrap_or_else(|| self.create_blend_scratch_texture(comp.width, comp.height));
+                let mut sky_view = ViewBuilder::new_with_external_resolved(
+                    &self.ctx,
+                    sequential_target_config("motolii-comp-sequential-sky", comp, view_from_world, projection, environment),
+                    ViewBuilderId::new(self.next_readback),
+                    &sky_owned,
+                )
+                .map_err(|e| CompositorError::View(e.to_string()))?;
+                self.next_readback += 1;
+                sky_view.queue_draw(
+                    &self.ctx,
+                    re_renderer::renderer::GenericSkyboxDrawData::new(&self.ctx, re_renderer::renderer::GenericSkyboxType::Environment),
+                );
+                let command_buffer = sky_view.draw(&self.ctx, Rgba::TRANSPARENT).map_err(|e| CompositorError::Draw(e.to_string()))?;
+                if let Some(encoder) = blend_encoder.take() {
+                    batch.push(encoder.finish());
+                }
+                batch.push(command_buffer);
+                const DEST_OVER: u32 = 4;
+                background = Some(self.stack_over(comp, background.take(), sky_owned, DEST_OVER, &mut spare, &mut blend_encoder)?);
+            }
             let draws = self.surface_scene_draws(comp, run, rects, false, &|_| false, shared_meshes.as_ref(), run_start)?;
 
             let needs_backdrop = run.iter().any(|i| i.shading.reads_backdrop);
@@ -248,15 +274,6 @@ impl Compositor {
             self.next_readback += 1;
 
             draws.queue(&self.ctx, &mut view_builder);
-            if sky {
-                view_builder.queue_draw(
-                    &self.ctx,
-                    re_renderer::renderer::GenericSkyboxDrawData::new(
-                        &self.ctx,
-                        re_renderer::renderer::GenericSkyboxType::Environment,
-                    ),
-                );
-            }
             let clear = if background.is_none() {
                 crate::render::compositor::clear_color(background_color)
             } else {
