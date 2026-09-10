@@ -554,7 +554,7 @@ impl CageDrag {
         let mode=match mode {"move"=>GizmoMode::Move,"rotate"=>GizmoMode::Rotate,"scale"=>match handle {
             "nw"=>GizmoMode::ScaleCorner{sx:false,sy:false},"ne"=>GizmoMode::ScaleCorner{sx:true,sy:false},"sw"=>GizmoMode::ScaleCorner{sx:false,sy:true},"se"=>GizmoMode::ScaleCorner{sx:true,sy:true},
             "n"=>GizmoMode::ScaleEdge{axis_x:false,positive:false},"s"=>GizmoMode::ScaleEdge{axis_x:false,positive:true},"w"=>GizmoMode::ScaleEdge{axis_x:true,positive:false},"e"=>GizmoMode::ScaleEdge{axis_x:true,positive:true},_=>return Err("Unknown scale handle".into())},_=>return Err("Unsupported stage mode".into())};
-        let fit=Fit {comp:view.composition().map_err(|e|e.to_string())?.ok_or("No composition")?.spec(),camera:observer,projection_camera:view.resolve_camera(at).map_err(|e|e.to_string())?,fx:0.0,fy:0.0,s:1.0};
+        let fit=Fit {comp:view.composition().map_err(|e|e.to_string())?.ok_or("No composition")?.spec(),camera:observer,projection_camera:engine.resolve_camera(&view,at).map_err(|e|e.to_string())?,fx:0.0,fy:0.0,s:1.0};
         let map=plane_map(&fit,&geom);let(u,v)=map.to_uv(start[0],start[1]);
         if !u.is_finite()||!v.is_finite(){return Err("Selected plane is edge-on".into())}
         let(bx,by,bw,bh)=geom.box_;let grab=rotate_around(geom.position,geom.rotation,(bx+u*bw,by+v*bh));

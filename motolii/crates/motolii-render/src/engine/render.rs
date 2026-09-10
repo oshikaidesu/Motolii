@@ -31,15 +31,13 @@ impl Engine {
             .map_err(|e| EngineError::Store(e.to_string()))?
             .ok_or(EngineError::NoComposition)?;
         let comp = composition.spec();
-        let camera = match camera_override {
-            Some(camera) => camera,
-            None => view
-                .resolve_camera(t)
-                .map_err(|e| EngineError::Store(e.to_string()))?,
-        };
         let resolved = view
             .resolved_layers(t)
             .map_err(|e| EngineError::Store(e.to_string()))?;
+        let camera = match camera_override {
+            Some(camera) => camera,
+            None => self.resolve_camera_in(view, &resolved, t)?,
+        };
 
         let text_documents = collect_text_documents(view, &resolved, t)?;
         let shape_documents = collect_shape_documents(view, &resolved)?;
@@ -48,7 +46,7 @@ impl Engine {
         let layers = self.layers_from_resolved(
             comp,
             camera,
-            view.resolve_camera(t).map_err(|e| EngineError::Store(e.to_string()))?,
+            self.resolve_camera_in(view, &resolved, t)?,
             t,
             &resolved,
             &text_documents,
@@ -289,12 +287,10 @@ impl Engine {
             .map_err(|e| EngineError::Store(e.to_string()))?
             .ok_or(EngineError::NoComposition)?;
         let comp = composition.spec();
-        let camera = view
-            .resolve_camera(t)
-            .map_err(|e| EngineError::Store(e.to_string()))?;
         let resolved = view
             .resolved_layers(t)
             .map_err(|e| EngineError::Store(e.to_string()))?;
+        let camera = self.resolve_camera_in(view, &resolved, t)?;
         let text_documents = collect_text_documents(view, &resolved, t)?;
         let shape_documents = collect_shape_documents(view, &resolved)?;
         self.render_resolved_to_texture_with_shapes(
@@ -319,18 +315,16 @@ impl Engine {
             .map_err(|e| EngineError::Store(e.to_string()))?
             .ok_or(EngineError::NoComposition)?;
         let comp = composition.spec();
-        let camera = view
-            .resolve_camera(t)
-            .map_err(|e| EngineError::Store(e.to_string()))?;
         let resolved = view
             .resolved_layers(t)
             .map_err(|e| EngineError::Store(e.to_string()))?;
+        let camera = self.resolve_camera_in(view, &resolved, t)?;
         let text_documents = collect_text_documents(view, &resolved, t)?;
         let shape_documents = collect_shape_documents(view, &resolved)?;
         let layers = self.layers_from_resolved(
             comp,
             camera,
-            view.resolve_camera(t).map_err(|e| EngineError::Store(e.to_string()))?,
+            self.resolve_camera_in(view, &resolved, t)?,
             t,
             &resolved,
             &text_documents,
@@ -363,7 +357,7 @@ impl Engine {
         let layers = self.layers_from_resolved(
             comp,
             camera,
-            view.resolve_camera(t).map_err(|e| EngineError::Store(e.to_string()))?,
+            self.resolve_camera_in(view, &resolved, t)?,
             t,
             &resolved,
             &text_documents,

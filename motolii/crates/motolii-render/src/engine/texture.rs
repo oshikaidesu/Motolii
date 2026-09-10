@@ -180,6 +180,52 @@ impl Engine {
         self.selected_layer_bounds_in(view, resolved, layer_id, t).map(|bounds| bounds.size_xy())
     }
 
+    /// Camera 層 `id` の姿勢。層ターゲットは Stage の枠・Depth の点と同じ bounds の中心を見る(Document だけなら anchor)。
+    pub fn camera_of_layer_in(
+        &self,
+        view: &StoreView<'_>,
+        resolved: &[ResolvedLayer],
+        id: LayerId,
+        t: RationalTime,
+    ) -> Result<crate::doc::core::ResolvedCamera, crate::render::engine::EngineError> {
+        let store = |e: crate::doc::store::StoreError| crate::render::engine::EngineError::Store(e.to_string());
+        let mut camera = view.camera_of_layer(id, t).map_err(store)?;
+        let Some(target) = view.camera_target_layer(id, t).map_err(store)? else { return Ok(camera) };
+        let (Some(bounds), Some(comp)) = (self.selected_layer_bounds_in(view, resolved, target, t), view.composition().map_err(store)?) else { return Ok(camera) };
+        let comp = comp.spec();
+        let point = view.world_transform3d(target, t).map_err(store)?.transform_point3(glam::Vec3::from(bounds.center()));
+        camera.center = [point.x - comp.width as f32 * 0.5, point.y - comp.height as f32 * 0.5];
+        camera.target_z = point.z;
+        Ok(camera)
+    }
+
+    /// 作中カメラ。描画・Stage・Depth はすべてこれを通す。
+    pub fn resolve_camera_in(
+        &self,
+        view: &StoreView<'_>,
+        resolved: &[ResolvedLayer],
+        t: RationalTime,
+    ) -> Result<crate::doc::core::ResolvedCamera, crate::render::engine::EngineError> {
+        let store = |e: crate::doc::store::StoreError| crate::render::engine::EngineError::Store(e.to_string());
+        match view.active_camera_layer(t).map_err(store)? {
+            Some(id) => self.camera_of_layer_in(view, resolved, id, t),
+            None => view.resolve_camera(t).map_err(store),
+        }
+    }
+
+    /// 解決済みの層の並びが手元に無い時。層ターゲットがある時だけ層を解く。
+    pub fn resolve_camera(
+        &self,
+        view: &StoreView<'_>,
+        t: RationalTime,
+    ) -> Result<crate::doc::core::ResolvedCamera, crate::render::engine::EngineError> {
+        let store = |e: crate::doc::store::StoreError| crate::render::engine::EngineError::Store(e.to_string());
+        let Some(id) = view.active_camera_layer(t).map_err(store)? else { return view.resolve_camera(t).map_err(store) };
+        if view.camera_target_layer(id, t).map_err(store)?.is_none() { return view.camera_of_layer(id, t).map_err(store) }
+        let resolved = view.resolved_layers(t).map_err(store)?;
+        self.camera_of_layer_in(view, &resolved, id, t)
+    }
+
     pub fn selected_layer_bounds_in(
         &self,
         view: &StoreView<'_>,

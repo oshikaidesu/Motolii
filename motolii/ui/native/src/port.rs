@@ -99,7 +99,7 @@ impl EditorRuntime{
         let taken:Vec<_>=view.layers().iter().filter_map(|l|view.attrs(*l).ok().flatten().map(|a|a.name)).collect();
         let mut intents=editor::create::new_layer_intents(id,order,start,comp.duration_frames,comp.fps,(comp.width as f64,comp.height as f64),kind,editor::create::unbounded_frames(visible));
         if intents.iter().any(|i| matches!(i, Intent::SetMeta { meta, .. } if meta.source == LayerSource::Camera)) {
-            let camera = view.resolve_camera(self.time()?).map_err(e)?;
+            let camera = self.engine.resolve_camera(&view,self.time()?).map_err(e)?;
             for (name,value) in property::camera_values(&camera) {
                 intents.push(Intent::SetConstant { layer:id, property:PropertyId::new(name).map_err(e)?, value });
             }

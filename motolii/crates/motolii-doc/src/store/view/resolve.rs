@@ -40,7 +40,7 @@ impl<'a> StoreView<'a> {
         Ok(crate::doc::store::StageExtent { layer: Some(id), margins })
     }
 
-    /// Camera 層 `id` が時刻 `t` に見ている姿勢。層ターゲットが在れば、その層の位置(anchor の world 点)を注視点にする。
+    /// Camera 層 `id` が時刻 `t` に見ている姿勢。層ターゲットが在れば、その層の局所原点の world 点を注視点にする(描画側は bounds の中心で上書きする)。
     pub fn camera_of_layer(&self, id: LayerId, t: RationalTime) -> Result<crate::doc::core::ResolvedCamera, StoreError> {
         let get = |name| self.value_at(id, &PropertyId::new(name)?, t);
         let vec2 = |v: Option<Value>, d: [f32; 2]| match v { Some(Value::Vec2(v)) => [v[0] as f32, v[1] as f32], _ => d };
@@ -58,8 +58,7 @@ impl<'a> StoreView<'a> {
                 let comp = comp.spec();
                 let present = self.layers().into_iter().collect();
                 if let Some(world) = self.world_transform3d_chain(target, t, &present)?.get(&target) {
-                    let anchor = vec2(self.value_at(target, &PropertyId::new(property::ANCHOR)?, t)?, [0.0, 0.0]);
-                    let point = world.transform_point3(glam::vec3(anchor[0], anchor[1], 0.0));
+                    let point = world.transform_point3(glam::Vec3::ZERO);
                     camera.center = [point.x - comp.width as f32 * 0.5, point.y - comp.height as f32 * 0.5];
                     camera.target_z = point.z;
                 }

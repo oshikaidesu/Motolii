@@ -55,12 +55,12 @@ fn source_kind(source:&LayerSource)->&'static str{match source{
 struct Eye{time:RationalTime,comp:crate::doc::core::CompSpec,camera:crate::doc::core::ResolvedCamera,observer:crate::doc::core::ResolvedCamera}
 impl EditorRuntime{
     pub(crate) fn view_camera(&self)->Result<crate::doc::core::ResolvedCamera,String>{
-        if self.user_stage { Ok(self.user_camera) } else { self.doc.view().resolve_camera(self.time()?).map_err(e) }
+        if self.user_stage { Ok(self.user_camera) } else { self.engine.resolve_camera(&self.doc.view(),self.time()?).map_err(e) }
     }
     fn depth_layout(&self,resolved:&[crate::doc::store::ResolvedLayer])->Result<Json,String>{
         let view=self.doc.view();let time=self.time()?;let comp=view.composition().map_err(e)?.ok_or("No composition")?.spec();
         // 原点は注視点。カメラは eye の位置に置き、drag で orbit と距離を author する。
-        let seen=view.resolve_camera(time).map_err(e)?;
+        let seen=self.engine.resolve_camera_in(&view,resolved,time).map_err(e)?;
         let camera=crate::doc::core::camera_projection(comp,seen);
         let target=seen.target(comp);
         let camera_layer=view.active_camera_layer(time).map_err(e)?;
@@ -119,18 +119,19 @@ impl EditorRuntime{
         let view=self.doc.view();let time=self.time()?;
         let Some(comp)=view.composition().map_err(e)? else{return Ok(Json::Null)};
         let Ok(targets)=editor::gizmo3d::spatial_targets(&view,&self.selected_ids,time) else{return Ok(Json::Null)};
-        let Some(data)=editor::gizmo3d::draw_data(comp.spec(),self.view_camera()?,&targets,self.stage_pointer,self.stage_view_scale) else{return Ok(Json::Null)};
+        let Some(data)=editor::gizmo3d::draw_data(comp.spec(),self.view_camera()?,&targets,self.stage_pointer,self.stage_view_scale,self.stage_held.as_deref()) else{return Ok(Json::Null)};
         Ok(json!({"vertices":data.vertices,"colors":data.colors,"indices":data.indices}))
     }
     fn camera_gizmos(&self)->Result<Json,String>{
         if !self.user_stage { return Ok(json!([])); }
         let view=self.doc.view();let time=self.time()?;let comp=view.composition().map_err(e)?.ok_or("No composition")?.spec();
         let screen=self.observer_screen()?;
+        let resolved=view.resolved_layers(time).map_err(e)?;
         let mut gizmos=Vec::new();
         for id in view.layers(){
             let Some(meta)=view.meta(id).map_err(e)? else{continue};
             if meta.source!=LayerSource::Camera || view.attrs(id).map_err(e)?.unwrap_or_default().hidden || !meta.timing.covers(self.frame){continue}
-            let camera=view.camera_of_layer(id,time).map_err(e)?;
+            let camera=self.engine.camera_of_layer_in(&view,&resolved,id,time).map_err(e)?;
             let projection=crate::doc::core::camera_projection(comp,camera);
             let rotation=projection.rotation.inverse();
             // frustum の面は注視点に置く。正面(orbit 0・層ターゲット無し)ではそれが comp 面の箱で、辺・角・取っ手で author できる。
@@ -151,7 +152,7 @@ impl EditorRuntime{
     /// 見ている姿勢 —— comp・作中カメラ・観測者。層ごとに解き直さず、1 フレームに 1 回だけ組む。
     fn eye(&self)->Option<Eye>{
         let view=self.doc.view();let time=self.time().ok()?;
-        Some(Eye{time,comp:view.composition().ok()??.spec(),camera:view.resolve_camera(time).ok()?,observer:self.view_camera().ok()?})
+        Some(Eye{time,comp:view.composition().ok()??.spec(),camera:self.engine.resolve_camera(&view,time).ok()?,observer:self.view_camera().ok()?})
     }
     /// 解決済みの層の並びから枠を取る。status は 1 フレームに 1 回だけ解いて、全層でこれを使う。
     pub(crate) fn bounds_in(&self,resolved:&[crate::doc::store::ResolvedLayer],layer:LayerId)->Option<Json>{
@@ -430,5 +431,47 @@ mod frame_cost_probe {
             let render = time(&mut || { rt.engine.render_frame_without_background(&rt.doc.view(), t).unwrap(); });
             eprintln!("layers={layers} copies={copies:4}: resolve={resolve:?} status={status:?} ({status_bytes} bytes) render={render:?}");
         }
+    }
+}
+
+#[cfg(test)]
+mod camera_target_tests {
+    use super::*;
+    use crate::EditorRuntime;
+    use std::ffi::{CStr,CString};
+    fn request(rt:&mut EditorRuntime,command:Json)->Json{
+        let command=CString::new(command.to_string()).unwrap();
+        let reply=unsafe{crate::motolii_probe_request(rt,command.as_ptr())};
+        let reply:Json=serde_json::from_str(unsafe{CStr::from_ptr(reply)}.to_str().unwrap()).unwrap();
+        assert!(reply["error"].is_null(),"{reply}");reply
+    }
+    /// 層ターゲットは Stage の枠・Depth の点と同じ「bounds の中心」を見る。anchor をずらしても注視点は形の中心に残る。
+    #[test]
+    fn a_layer_target_aims_at_the_bounds_centre_even_when_the_anchor_moves(){
+        let mut rt=EditorRuntime::open("").unwrap();
+        request(&mut rt,json!({"op":"create","kind":"rectangle"}));
+        let shape=rt.selected.unwrap();
+        request(&mut rt,json!({"op":"create","kind":"camera"}));
+        let camera=rt.selected.unwrap();
+        request(&mut rt,json!({"op":"setProperty","layer":camera.0,"property":"camera.target","value":shape.0}));
+        request(&mut rt,json!({"op":"setProperty","layer":shape.0,"property":"anchor","value":[200.0,-80.0]}));
+        // 形の bounds は 1 度描いてから測れる。
+        let comp=rt.doc.view().composition().unwrap().unwrap().spec();
+        let texture=rt.engine.gpu_device().create_texture(&wgpu::TextureDescriptor {
+            label:Some("camera target test"),size:wgpu::Extent3d{width:comp.width,height:comp.height,depth_or_array_layers:1},mip_level_count:1,sample_count:1,
+            dimension:wgpu::TextureDimension::D2,format:wgpu::TextureFormat::Bgra8Unorm,usage:wgpu::TextureUsages::RENDER_ATTACHMENT|wgpu::TextureUsages::TEXTURE_BINDING,view_formats:&[],
+        });
+        let time=rt.time().unwrap();
+        rt.engine.render_frame_into(&rt.doc.view(),time,&texture).unwrap();
+        let status=rt.build_status().unwrap();
+        let depth=&status["depthLayout"];
+        let item=depth["items"].as_array().unwrap().iter().find(|i|i["id"]==shape.0).unwrap();
+        let point=[item["point"][0].as_f64().unwrap(),item["point"][1].as_f64().unwrap()];
+        assert!(point[0].abs()<1e-2&&point[1].abs()<1e-2,"the target sits on the origin of Depth: {point:?}");
+        assert_eq!(depth["camera"]["target"],json!(shape.0));
+        let view=rt.doc.view();
+        let seen=rt.engine.resolve_camera(&view,time).unwrap();
+        let authored=view.resolve_camera(time).unwrap();
+        assert!((seen.center[0]-authored.center[0]).abs()>100.0,"Document alone looks at the anchor; the engine looks at the shape");
     }
 }
