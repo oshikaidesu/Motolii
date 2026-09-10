@@ -219,8 +219,9 @@ pub(crate) fn prepare_path(
     else {
         return Err("unsupported file type".to_owned());
     };
-    let reader = std::fs::File::open(path).map_err(|error| format!("cannot read: {error}"))?;
-    let fingerprint = crate::doc::store::SourceFingerprintV1::from_reader(reader)
+    // Admitting reads the file's edges, not the file: a clip joins the shelf
+    // as fast as it is opened, the way footage does in AE.
+    let fingerprint = crate::doc::store::SourceFingerprintV1::from_edges(path)
         .map_err(|error| format!("cannot fingerprint: {error}"))?;
     let mut draft =
         crate::doc::store::AssetDraft::from_probed_source(asset_type, &fingerprint, path, None);

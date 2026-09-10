@@ -178,8 +178,6 @@ class EditorSession {
   /// Files are being carried over this window; the shelves can say "drop here".
   final dragging = ValueNotifier<bool>(false);
 
-  /// How many files an import is still working through; zero when idle.
-  final importing = ValueNotifier<int>(0);
   final error = ValueNotifier<String?>(null);
 
   /// 直前の取り込みで棚に入った asset の id。Browser が Media を開いて選ぶ。
@@ -636,14 +634,7 @@ class EditorSession {
     final accepted = paths.where(admissible).toList();
     final skipped = paths.where((p) => !admissible(p)).toList();
     final before = assetIds();
-    if (accepted.isNotEmpty) {
-      importing.value += accepted.length;
-      try {
-        await command('import', {'paths': accepted});
-      } finally {
-        importing.value -= accepted.length;
-      }
-    }
+    if (accepted.isNotEmpty) await command('import', {'paths': accepted});
     final fresh = assetIds().difference(before).toList();
     if (fresh.isNotEmpty) importedAssets.value = fresh;
     if (skipped.isNotEmpty) {
@@ -681,7 +672,6 @@ class EditorSession {
     playing.dispose();
     busy.dispose();
     dragging.dispose();
-    importing.dispose();
     error.dispose();
     importedAssets.dispose();
     visibleFrames.dispose();

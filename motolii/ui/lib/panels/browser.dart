@@ -539,7 +539,6 @@ class _BrowserPanelState extends State<BrowserPanel> {
                         'Import',
                         has('import') ? widget.controller.importFiles : null,
                       ),
-                      _importing(),
                     ],
                     if (tab != 'Colors') ...[
                       const SizedBox(width: EditorMetrics.s6),
@@ -813,38 +812,6 @@ class _BrowserPanelState extends State<BrowserPanel> {
         ),
       ),
     ),
-  );
-
-  /// The import at work: a small wheel beside Import, with the count.
-  Widget _importing() => ValueListenableBuilder<int>(
-    valueListenable: widget.controller.importing,
-    builder: (context, count, _) => count == 0
-        ? const SizedBox.shrink()
-        : Padding(
-            key: const ValueKey('browser:importing'),
-            padding: const EdgeInsets.only(left: EditorMetrics.s6),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const SizedBox(
-                  width: EditorMetrics.s14,
-                  height: EditorMetrics.s14,
-                  child: CircularProgressIndicator(
-                    strokeWidth: EditorMetrics.s2,
-                    color: EditorTheme.accent,
-                  ),
-                ),
-                const SizedBox(width: EditorMetrics.s4),
-                Text(
-                  '$count',
-                  style: const TextStyle(
-                    fontSize: EditorMetrics.dense,
-                    color: EditorTheme.muted,
-                  ),
-                ),
-              ],
-            ),
-          ),
   );
 
   /// A thin line you drag; it reports the movement along its axis.

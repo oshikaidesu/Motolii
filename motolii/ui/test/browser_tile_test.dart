@@ -197,32 +197,18 @@ void main() {
     expect(find.byKey(const ValueKey('browser:band:a1')), findsNothing);
   });
 
-  testWidgets('Carried files get a drop hint; an import shows its wheel', (
-    tester,
-  ) async {
+  testWidgets('Carried files get a drop hint', (tester) async {
     final c = await mount(tester);
     final hint = find.byKey(const ValueKey('browser:drop-hint'));
-    expect(
-      tester.widget<AnimatedOpacity>(
-        find.ancestor(of: hint, matching: find.byType(AnimatedOpacity)),
-      ).opacity,
-      0,
+    AnimatedOpacity fade() => tester.widget<AnimatedOpacity>(
+      find.ancestor(of: hint, matching: find.byType(AnimatedOpacity)),
     );
+    expect(fade().opacity, 0);
     c.dragging.value = true;
     await tester.pumpAndSettle();
-    expect(
-      tester.widget<AnimatedOpacity>(
-        find.ancestor(of: hint, matching: find.byType(AnimatedOpacity)),
-      ).opacity,
-      1,
-    );
-    expect(find.byKey(const ValueKey('browser:importing')), findsNothing);
-    c.importing.value = 3;
-    await tester.pump();
-    expect(find.byKey(const ValueKey('browser:importing')), findsOneWidget);
-    expect(find.text('3'), findsOneWidget);
-    c.importing.value = 0;
-    await tester.pump();
-    expect(find.byKey(const ValueKey('browser:importing')), findsNothing);
+    expect(fade().opacity, 1);
+    c.dragging.value = false;
+    await tester.pumpAndSettle();
+    expect(fade().opacity, 0);
   });
 }
