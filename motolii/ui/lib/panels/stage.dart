@@ -153,21 +153,38 @@ class _StagePanelState extends State<StagePanel> {
     return s.every((v) => v >= 0) || s.every((v) => v <= 0);
   }
 
+  /// 地が透明か。alpha が 1 未満なら書き出しは alpha を持ち、Stage は市松で見せる。
+  bool get _transparentGround {
+    final bg = _state['background'];
+    return bg is List && bg.length == 4 && _num(bg[3], 1) < 1;
+  }
+
+  /// 透明と solid を往復する。solid へ戻す時は、透明にする前の色ではなく黒
+  /// (色は Composition の欄が持つ)。1 ジェスチャ = 1 undo。
+  void _toggleGround() {
+    final bg = _state['background'];
+    final grey = bg is List && bg.length == 4
+        ? [_num(bg[0]), _num(bg[1]), _num(bg[2])]
+        : [0.0, 0.0, 0.0];
+    c.command('composition', {
+      'background': [...grey, _transparentGround ? 1.0 : 0.0],
+    });
+  }
+
   List<Map<String, dynamic>> get _cameras =>
       _userStage ? EditorSession.maps(_state['cameraGizmos']) : [];
   Map<String, dynamic> get _observer => EditorSession.map(_state['observer']);
   bool get _front => !_userStage || _observer['front'] != false;
   bool get _home => !_userStage || _observer['home'] != false;
-  double get _observerScale =>
-      _userStage ? _num(_observer['scale'], 1) : 1;
-  Map<String, dynamic>? get _extent =>
-      _userStage && _observer['extent'] is Map
+  double get _observerScale => _userStage ? _num(_observer['scale'], 1) : 1;
+  Map<String, dynamic>? get _extent => _userStage && _observer['extent'] is Map
       ? EditorSession.map(_observer['extent'])
       : null;
   bool get _extend => c.deskWork.value['stageExtend'] == true;
   List<Offset> _extentPoints() => [
     for (final p in (_extent?['points'] as List?) ?? []) ?_point(p),
   ];
+
   /// Boxcam の working comp: 縁を掴んで、その向きの余白を書く。
   int? _extentEdge(Offset p) {
     final box = _extentPoints();
@@ -977,22 +994,31 @@ class _StagePanelState extends State<StagePanel> {
                             top: origin.dy,
                             width: _width * scale,
                             height: _height * scale,
-                            child: ValueListenableBuilder<int?>(
-                              valueListenable: c.textureId,
-                              builder: (context, id, _) => id == null
-                                  ? const Center(
-                                      child: Text(
-                                        'No rendered texture',
-                                        style: TextStyle(
-                                          fontSize: EditorMetrics.font,
-                                          color: EditorTheme.muted,
+                            // 地が無い枠は市松で見せる。枠そのものの見え方なので、
+                            // 描いた絵の有無に関わらず枠いっぱいに敷く(書き出しには乗らない)。
+                            child: Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                if (_transparentGround)
+                                  const CustomPaint(painter: CheckerPainter()),
+                                ValueListenableBuilder<int?>(
+                                  valueListenable: c.textureId,
+                                  builder: (context, id, _) => id == null
+                                      ? const Center(
+                                          child: Text(
+                                            'No rendered texture',
+                                            style: TextStyle(
+                                              fontSize: EditorMetrics.font,
+                                              color: EditorTheme.muted,
+                                            ),
+                                          ),
+                                        )
+                                      : Texture(
+                                          textureId: id,
+                                          filterQuality: FilterQuality.low,
                                         ),
-                                      ),
-                                    )
-                                  : Texture(
-                                      textureId: id,
-                                      filterQuality: FilterQuality.low,
-                                    ),
+                                ),
+                              ],
                             ),
                           ),
                           Positioned.fill(
@@ -1067,6 +1093,21 @@ class _StagePanelState extends State<StagePanel> {
               style: const TextStyle(
                 fontSize: EditorMetrics.dense,
                 color: EditorTheme.muted,
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(left: EditorMetrics.s8),
+              child: EditorSwitch(
+                key: const ValueKey('stage:transparentGround'),
+                on: _transparentGround,
+                compact: true,
+                glyph: Icons.grid_on,
+                label: _transparentGround
+                    ? 'The frame has no ground; the export carries alpha'
+                    : 'Drop the ground so the export carries alpha',
+                onChanged: c.supports('composition')
+                    ? (_) => _toggleGround()
+                    : null,
               ),
             ),
             if (_userStage)

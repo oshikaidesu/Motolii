@@ -1560,3 +1560,23 @@ class EditorZoomBar extends StatelessWidget {
     );
   }
 }
+
+/// The transparency grid: the picture editors' two greys, 8 px squares.
+class CheckerPainter extends CustomPainter {
+  const CheckerPainter({this.cell = 8});
+  final double cell;
+  static const light = Color(0xff8c8c8c), dark = Color(0xff666666);
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.drawRect(Offset.zero & size, Paint()..color = light);
+    final paint = Paint()..color = dark;
+    for (var y = 0; y * cell < size.height; y++) {
+      for (var x = (y % 2); x * cell < size.width; x += 2) {
+        canvas.drawRect(Rect.fromLTWH(x * cell, y * cell, cell, cell), paint);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(CheckerPainter old) => old.cell != cell;
+}
