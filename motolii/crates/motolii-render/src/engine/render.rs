@@ -25,6 +25,7 @@ impl Engine {
         let frame_start = std::time::Instant::now();
         self.compositor.measurement = Default::default();
         self.layer_failures.clear();
+        self.purge_idle_video_players();
         let composition = view
             .composition()
             .map_err(|e| EngineError::Store(e.to_string()))?
@@ -112,6 +113,7 @@ impl Engine {
             if index < skip_below
                 || matte_sources.contains(&layer.id)
                 || (layer.clip_to_below && layer.matte.is_none())
+                || layer.placement.opacity <= 0.0
             {
                 continue;
             }
@@ -914,5 +916,21 @@ mod placement_contract {
             three.chunks(4).zip(three_then_blur.chunks(4)).all(|(sharp, soft)| sharp[3] == 0 || soft[3] > 0),
             "every copy is still present under the blur"
         );
+    }
+}
+
+/// 使われなくなった動画の再生機(ffmpeg 子プロセス)を掃く猶予。30fps で 5 秒。
+const VIDEO_PLAYER_PURGE_EVERY: u32 = 150;
+
+impl Engine {
+    fn purge_idle_video_players(&mut self) {
+        self.renders_since_video_purge += 1;
+        if self.renders_since_video_purge < VIDEO_PLAYER_PURGE_EVERY {
+            return;
+        }
+        self.renders_since_video_purge = 0;
+        for (_, video) in self.videos.values() {
+            video.begin_frame();
+        }
     }
 }

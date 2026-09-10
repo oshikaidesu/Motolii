@@ -4,7 +4,7 @@ mod testkit;
 
 use std::io::Write;
 use std::path::Path;
-use std::process::{Child, ChildStdin, Command, Stdio};
+use std::process::{Child, ChildStdin, Stdio};
 
 use crate::doc::core::{Fps, FrameDesc, PixelFormat};
 
@@ -18,7 +18,7 @@ pub struct Encoder {
 
 impl Encoder {
     pub fn open(out_path: impl AsRef<Path>, desc: &FrameDesc, fps: Fps, qp0: bool) -> Result<Self> {
-        Self::open_with_command_and_audio("ffmpeg", out_path, desc, fps, qp0, None)
+        Self::open_with_command_and_audio(crate::render::media::ffmpeg_bin(), out_path, desc, fps, qp0, None)
     }
 
     pub fn open_with_audio(
@@ -28,7 +28,7 @@ impl Encoder {
         qp0: bool,
         audio_path: &Path,
     ) -> Result<Self> {
-        Self::open_with_command_and_audio("ffmpeg", out_path, desc, fps, qp0, Some(audio_path))
+        Self::open_with_command_and_audio(crate::render::media::ffmpeg_bin(), out_path, desc, fps, qp0, Some(audio_path))
     }
 
     #[doc(hidden)]
@@ -53,7 +53,7 @@ impl Encoder {
         if desc.format != PixelFormat::Rgba8Unorm {
             return Err(MediaError::UnsupportedEncoderFormat(desc.format));
         }
-        let mut cmd = Command::new(program.as_ref());
+        let mut cmd = crate::render::media::tool_command(program.as_ref());
         cmd.args(["-v", "error", "-y", "-f", "rawvideo", "-pix_fmt", "rgba"])
             .args(["-s", &format!("{}x{}", desc.width, desc.height)])
             .args(["-r", &format!("{}/{}", fps.num(), fps.den())])

@@ -95,10 +95,10 @@ pub fn analyze_module(module: &Module, param_count: usize) -> Vec<ParamSubtype> 
 /// hook(field / surface)の snippet を読める形に: ABI の struct と欄の struct を前置する。
 pub fn hook_stub(body: &str, stage_params: &str, names: &[String]) -> String {
     let mut stub = String::from(
-        "struct FieldIn { frame_position: vec3f, normal: vec3f, params: array<vec4f, 3>, };\n\
+        "struct FieldIn { frame_position: vec3f, normal: vec3f, params: array<vec4f, 6>, };\n\
          struct FieldOut { offset: vec3f, normal: vec3f, };\n\
-         struct SurfaceIn { albedo: vec3f, normal: vec3f, view_dir: vec3f, world_position: vec3f, thickness: f32, params: array<vec4f, 3>, uv: vec2f, coverage: f32, };\n\
-         fn shade_surface(albedo: vec3f, normal: vec3f, view_dir: vec3f, world_position: vec3f, thickness: f32, knobs: vec4f) -> vec3f { return albedo * knobs.x; }\n\
+         struct SurfaceIn { albedo: vec3f, normal: vec3f, view_dir: vec3f, world_position: vec3f, thickness: f32, params: array<vec4f, 6>, uv: vec2f, coverage: f32, };\n\
+         fn shade_surface(albedo: vec3f, normal: vec3f, view_dir: vec3f, world_position: vec3f, thickness: f32, knobs: vec4f, dispersion: f32) -> vec3f { return albedo * knobs.x + dispersion; }\n\
          fn simplex3(v: vec3f) -> f32 { return v.x; }\n\
          fn fbm3(p: vec3f, octaves: u32) -> f32 { return select(p.x, 0.0, octaves == 0u); }\n",
     );

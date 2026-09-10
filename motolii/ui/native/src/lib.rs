@@ -40,6 +40,9 @@ pub struct EditorRuntime {
     preview: Option<(u64, Vec<Intent>)>,
     preview_tag: Option<String>,
     stage_drag: Option<editor::stage::DragSession>,
+    /// Stage の上の pointer(comp 座標)と、画面 px / comp px。3D ギズモの見た目と掴みやすさに使う。
+    stage_pointer: Option<[f64;2]>,
+    stage_view_scale: f64,
     user_stage: bool,
     pub(crate) animate: Animate,
     /// 最後に全部入りの status を送った時の Document の版。同じ版で再生中なら生値だけ送る。
@@ -67,7 +70,7 @@ impl EditorRuntime {
         let mut history = editor::history::Ledger::open(editor::history::default_file());
         history.record("open", if path.is_empty() { "New document".to_owned() } else { path.rsplit('/').next().unwrap_or(path).to_owned() }, Some(doc.edit_head()));
         Ok(Self { selected_ids: selected.into_iter().collect(), selected_keys: Vec::new(), clipboard: Default::default(), path: if path.is_empty() { None } else { Some(path.into()) }, saved_signature, color_target: None, exporter: Default::default(), clock, clock_revision, doc, engine, selected, frame: 0, device_id, render_count: 0,
-            render_ms: 0.0, picked_color: None, pick_serial: 0, reply: CString::new("{}").unwrap(), error: None, preview: None, preview_tag: None, stage_drag: None, snapshot_cache: Default::default(), user_stage: true, animate: Animate::Off, full_status_revision: Default::default(), user_camera: Default::default(), history })
+            render_ms: 0.0, picked_color: None, pick_serial: 0, reply: CString::new("{}").unwrap(), error: None, preview: None, preview_tag: None, stage_drag: None, stage_pointer: None, stage_view_scale: 1.0, snapshot_cache: Default::default(), user_stage: true, animate: Animate::Off, full_status_revision: Default::default(), user_camera: Default::default(), history })
     }
 
     fn time(&self) -> Result<RationalTime, String> {
@@ -154,6 +157,7 @@ impl EditorRuntime {
         drop(hal);
         let time = self.time()?;
         let view_camera = self.view_camera()?;
+        self.engine.set_realtime(self.clock.playing());
         self.engine.render_frame_into_with_camera(&self.doc.view(), time, &texture, view_camera, true).map_err(|e|e.to_string())?;
         self.engine.gpu_device().poll(wgpu::PollType::wait_indefinitely()).map_err(|e|e.to_string())?;
         self.render_count += 1;
@@ -212,7 +216,11 @@ pub unsafe extern "C" fn motolii_probe_request(ctx: *mut EditorRuntime, request:
             return Ok(());
         }
         quiet = value["quiet"] == true && (value["op"] == "seek" || value["op"] == "tick");
-        probe.request(value)
+        // 触れているだけの時は、ギズモの絵だけ返す。status 全体を組み直さない。
+        let hover = value["op"] == "stageGesture" && value["phase"] == "hover";
+        probe.request(value)?;
+        if hover { model_reply = Some(probe.spatial_gizmo().map(|gizmo| json!({"spatialGizmo": gizmo, "needsRender": false}))); }
+        Ok(())
     }));
     match outcome {
         Ok(Ok(())) => probe.history.note(&op, head_before, probe.doc.edit_head()),

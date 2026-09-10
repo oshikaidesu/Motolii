@@ -131,6 +131,8 @@ pub struct IsfManifest {
     pub output_float: bool,
     /// A zero value of this input disables reads from the composited backdrop.
     pub backdrop_input: Option<String>,
+    /// The roughness-like input that decides how far down the backdrop's mip chain reads go.
+    pub backdrop_blur_input: Option<String>,
     pub padding: Option<IsfPadding>,
     pub description: Option<String>,
     pub inputs: Vec<IsfInput>,
@@ -146,6 +148,7 @@ impl Default for IsfManifest {
             expose: true,
             output_float: false,
             backdrop_input: None,
+            backdrop_blur_input: None,
             padding: None,
             description: None,
             inputs: Vec::new(),
@@ -285,6 +288,13 @@ pub(crate) fn parse_isf_source(source: &str) -> Result<(IsfManifest, String), Is
         }
         Ok(name.to_owned())
     }).transpose()?;
+    let backdrop_blur_input = value.get("BACKDROP_BLUR").map(|v| {
+        let name = v.as_str().ok_or_else(|| IsfError::Validate("BACKDROP_BLUR must name a float input".into()))?;
+        if stage != IsfStage::Surface || !inputs.iter().any(|p| p.name == name && matches!(p.ty, IsfInputType::Float)) {
+            return Err(IsfError::Validate("BACKDROP_BLUR must name a float surface parameter".into()));
+        }
+        Ok(name.to_owned())
+    }).transpose()?;
     Ok((
         IsfManifest {
             id,
@@ -293,6 +303,7 @@ pub(crate) fn parse_isf_source(source: &str) -> Result<(IsfManifest, String), Is
             expose,
             output_float,
             backdrop_input,
+            backdrop_blur_input,
             padding,
             description,
             inputs,

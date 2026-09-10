@@ -1,2 +1,8 @@
 [build]
 target-dir = "motolii/target"
+
+# libavcodec を直接 link する(re_video の `lavc`)。ffmpeg-sys-next は pkg-config が無いと FFMPEG_DIR を見る。
+# Homebrew の ffmpeg(7.1、libavcodec 61)。他の機械では自分の置き場に合わせる。
+[env]
+FFMPEG_DIR = "/opt/homebrew/opt/ffmpeg"
+LIBCLANG_PATH = "/Library/Developer/CommandLineTools/usr/lib"

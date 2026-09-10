@@ -115,6 +115,7 @@ impl EditorRuntime{
         Ok(())
     }
     pub(crate) fn request(&mut self,j:J)->Result<(),String>{
+        self.clock.poll_audio(&self.doc);
         let op=j["op"].as_str().unwrap_or("status");
         if op=="status"||op=="exportStatus"{return Ok(())}
         if op=="stageView" {
@@ -268,9 +269,12 @@ impl EditorRuntime{
         editor::functions::verb::retime_layer(&self.doc,id,old,next,next.duration==old.duration&&next.source_in==old.source_in).map_err(e)
     }
     fn stage_gesture(&mut self,j:&J)->Result<(),String>{
+        if let Some(scale)=j["viewScale"].as_f64().filter(|s|s.is_finite()&&*s>0.0){self.stage_view_scale=scale;}
         match string(j,"phase")?{
+            // 触れているだけ。掴まないので Document には触らず、ギズモの絵だけが変わる。
+            "hover"=>{self.stage_pointer=serde_json::from_value(j["point"].clone()).ok();}
             "begin"=>{let interaction=self.preview_tag.take();self.cancel_preview();self.preview_tag=interaction;let ids=ids(&j["ids"])?;let start=serde_json::from_value(j["start"].clone()).map_err(e)?;
-                let drag=editor::stage::DragSession::begin(&self.doc,&self.engine,&ids,string(j,"mode")?,j["handle"].as_str().unwrap_or("body"),start,self.time()?,self.view_camera()?)?;
+                let drag=editor::stage::DragSession::begin(&self.doc,&self.engine,&ids,string(j,"mode")?,j["handle"].as_str().unwrap_or("body"),start,self.time()?,self.view_camera()?,self.stage_view_scale)?;
                 self.pick(ids);self.stage_drag=Some(drag);
             }
             "update"=>{let drag=self.stage_drag.as_ref().ok_or("No Stage gesture")?;let point=serde_json::from_value(j["point"].clone()).map_err(e)?;

@@ -108,11 +108,11 @@ impl EditorRuntime{
     }
     /// 3D 層の 3 軸ギズモ。頂点は comp 座標 —— Stage は掴む所も描く所も同じ写像で扱う。
     /// 3D 層を選んでいない時は Null。2D・2.5D の平面ケージはここを通らない。
-    fn spatial_gizmo(&self)->Result<Json,String>{
+    pub(crate) fn spatial_gizmo(&self)->Result<Json,String>{
         let view=self.doc.view();let time=self.time()?;
         let Some(comp)=view.composition().map_err(e)? else{return Ok(Json::Null)};
         let Ok(targets)=editor::gizmo3d::spatial_targets(&view,&self.selected_ids,time) else{return Ok(Json::Null)};
-        let Some(data)=editor::gizmo3d::draw_data(comp.spec(),self.view_camera()?,&targets) else{return Ok(Json::Null)};
+        let Some(data)=editor::gizmo3d::draw_data(comp.spec(),self.view_camera()?,&targets,self.stage_pointer,self.stage_view_scale) else{return Ok(Json::Null)};
         Ok(json!({"vertices":data.vertices,"colors":data.colors,"indices":data.indices}))
     }
     fn camera_gizmos(&self)->Result<Json,String>{

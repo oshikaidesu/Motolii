@@ -421,6 +421,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "230c5f1ca6a325a32553f8640d31ac9b49f2411e901e427570154868b46da4f7"
 
 [[package]]
+name = "bindgen"
+version = "0.70.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f49d8fed880d473ea71efb9bf597651e77201bdd4893efe54c9e5d65ae04ce6f"
+dependencies = [
+ "bitflags 2.13.1",
+ "cexpr",
+ "clang-sys",
+ "itertools 0.13.0",
+ "proc-macro2",
+ "quote",
+ "regex",
+ "rustc-hash 1.1.0",
+ "shlex 1.3.0",
+ "syn 2.0.119",
+]
+
+[[package]]
 name = "binrw"
 version = "0.15.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -608,7 +626,16 @@ dependencies = [
  "find-msvc-tools",
  "jobserver",
  "libc",
- "shlex",
+ "shlex 2.0.1",
+]
+
+[[package]]
+name = "cexpr"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6fac387a98bb7c37292057cffc56d62ecb629900026402633ae9160df93a8766"
+dependencies = [
+ "nom",
 ]
 
 [[package]]
@@ -643,6 +670,17 @@ dependencies = [
  "iana-time-zone",
  "num-traits",
  "windows-link",
+]
+
+[[package]]
+name = "clang-sys"
+version = "1.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "157a8ba7b480713b56f4c09fd13fc3e0a22a5dfab8097ba61cbc5feef950788a"
+dependencies = [
+ "glob",
+ "libc",
+ "libloading",
 ]
 
 [[package]]
@@ -1211,12 +1249,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "extended"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "af9673d8203fcb076b19dfd17e38b3d4ae9f44959416ea532ce72415a6020365"
-
-[[package]]
 name = "fastrand"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1244,6 +1276,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b97b65636e5b9ef369943878ac74335ba1c55c1cb6adbf1e2c293c624248d693"
 
 [[package]]
+name = "ffmpeg-next"
+version = "7.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "da02698288e0275e442a47fc12ca26d50daf0d48b15398ba5906f20ac2e2a9f9"
+dependencies = [
+ "bitflags 2.13.1",
+ "ffmpeg-sys-next",
+ "libc",
+]
+
+[[package]]
 name = "ffmpeg-sidecar"
 version = "2.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1254,6 +1297,20 @@ dependencies = [
  "ureq",
  "xz2",
  "zip",
+]
+
+[[package]]
+name = "ffmpeg-sys-next"
+version = "7.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f9e9c75ebd4463de9d8998fb134ba26347fe5faee62fabf0a4b4d41bd500b4ad"
+dependencies = [
+ "bindgen",
+ "cc",
+ "libc",
+ "num_cpus",
+ "pkg-config",
+ "vcpkg",
 ]
 
 [[package]]
@@ -2136,6 +2193,15 @@ checksum = "8bb03732005da905c88227371639bf1ad885cc712789c011c31c5fb3ab3ccf02"
 
 [[package]]
 name = "itertools"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "413ee7dfc52ee1a4949ceeb7dbc8a33f2d6c088194d9f922fb8318faf1f01186"
+dependencies = [
+ "either",
+]
+
+[[package]]
+name = "itertools"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2b192c782037fadd9cfa75548310488aabdbf3d2da73885b31bd0abd03351285"
@@ -2606,6 +2672,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "minimal-lexical"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "68354c5c6bd36d73ff3feceb05efa59b6acb7626617f4962be322a825e61f79a"
+
+[[package]]
 name = "miniz_oxide"
 version = "0.8.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2673,11 +2745,13 @@ name = "motolii-render"
 version = "0.0.0"
 dependencies = [
  "cpal",
+ "ffmpeg-sidecar",
  "glam 0.30.10",
  "gltf",
  "half",
  "image",
  "macaw",
+ "memmap2",
  "motolii-doc",
  "moxcms",
  "naga",
@@ -2697,7 +2771,6 @@ dependencies = [
  "serde_json",
  "smallvec",
  "stl_io",
- "symphonia",
  "tempfile",
  "thiserror 2.0.20",
  "tobj",
@@ -2856,6 +2929,16 @@ name = "nohash-hasher"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2bf50223579dc7cdcfb3bfcacf7069ff68243f8c363f62ffa99cf000a6b9c451"
+
+[[package]]
+name = "nom"
+version = "7.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d273983c5a657a70a3e8f2a01329822f3b8c8172b73826411a55751e404a0a4a"
+dependencies = [
+ "memchr",
+ "minimal-lexical",
+]
 
 [[package]]
 name = "notify"
@@ -3509,7 +3592,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b570b25f7617e43d59005d0990ccb79e950a423952cea19671b7a876da390adf"
 dependencies = [
  "anyhow",
- "itertools",
+ "itertools 0.14.0",
  "proc-macro2",
  "quote",
  "syn 2.0.119",
@@ -3543,7 +3626,7 @@ dependencies = [
  "anyhow",
  "byteorder",
  "cfg-if",
- "itertools",
+ "itertools 0.14.0",
  "parking_lot",
 ]
 
@@ -3769,13 +3852,13 @@ dependencies = [
 [[package]]
 name = "re_arrow_util"
 version = "0.35.0-alpha.1+dev"
-source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=55fa777d9b7740f40673e3a5788eee8c634b2355#55fa777d9b7740f40673e3a5788eee8c634b2355"
+source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196#cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196"
 dependencies = [
  "anyhow",
  "arrow",
  "comfy-table",
  "half",
- "itertools",
+ "itertools 0.14.0",
  "re_log",
  "re_tracing",
  "re_tuid",
@@ -3786,7 +3869,7 @@ dependencies = [
 [[package]]
 name = "re_build_info"
 version = "0.35.0-alpha.1+dev"
-source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=55fa777d9b7740f40673e3a5788eee8c634b2355#55fa777d9b7740f40673e3a5788eee8c634b2355"
+source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196#cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196"
 dependencies = [
  "re_byte_size",
  "serde",
@@ -3795,7 +3878,7 @@ dependencies = [
 [[package]]
 name = "re_build_tools"
 version = "0.35.0-alpha.1+dev"
-source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=55fa777d9b7740f40673e3a5788eee8c634b2355#55fa777d9b7740f40673e3a5788eee8c634b2355"
+source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196#cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196"
 dependencies = [
  "anyhow",
  "cargo_metadata",
@@ -3809,7 +3892,7 @@ dependencies = [
 [[package]]
 name = "re_byte_size"
 version = "0.35.0-alpha.1+dev"
-source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=55fa777d9b7740f40673e3a5788eee8c634b2355#55fa777d9b7740f40673e3a5788eee8c634b2355"
+source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196#cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196"
 dependencies = [
  "arrow",
  "glam 0.30.10",
@@ -3823,7 +3906,7 @@ dependencies = [
 [[package]]
 name = "re_byte_size_derive"
 version = "0.35.0-alpha.1+dev"
-source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=55fa777d9b7740f40673e3a5788eee8c634b2355#55fa777d9b7740f40673e3a5788eee8c634b2355"
+source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196#cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
@@ -3834,7 +3917,7 @@ dependencies = [
 [[package]]
 name = "re_case"
 version = "0.35.0-alpha.1+dev"
-source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=55fa777d9b7740f40673e3a5788eee8c634b2355#55fa777d9b7740f40673e3a5788eee8c634b2355"
+source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196#cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196"
 dependencies = [
  "convert_case",
 ]
@@ -3854,7 +3937,7 @@ dependencies = [
 [[package]]
 name = "re_chunk"
 version = "0.35.0-alpha.1+dev"
-source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=55fa777d9b7740f40673e3a5788eee8c634b2355#55fa777d9b7740f40673e3a5788eee8c634b2355"
+source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196#cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196"
 dependencies = [
  "ahash",
  "anyhow",
@@ -3863,7 +3946,7 @@ dependencies = [
  "crossbeam",
  "document-features",
  "half",
- "itertools",
+ "itertools 0.14.0",
  "nohash-hasher",
  "rand 0.9.5",
  "re_arrow_util",
@@ -3883,14 +3966,14 @@ dependencies = [
 [[package]]
 name = "re_chunk_store"
 version = "0.35.0-alpha.1+dev"
-source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=55fa777d9b7740f40673e3a5788eee8c634b2355#55fa777d9b7740f40673e3a5788eee8c634b2355"
+source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196#cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196"
 dependencies = [
  "ahash",
  "anyhow",
  "arrow",
  "document-features",
  "indent",
- "itertools",
+ "itertools 0.14.0",
  "nohash-hasher",
  "parking_lot",
  "re_arrow_util",
@@ -3912,14 +3995,14 @@ dependencies = [
 [[package]]
 name = "re_entity_db"
 version = "0.35.0-alpha.1+dev"
-source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=55fa777d9b7740f40673e3a5788eee8c634b2355#55fa777d9b7740f40673e3a5788eee8c634b2355"
+source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196#cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196"
 dependencies = [
  "ahash",
  "arrow",
  "document-features",
  "emath 0.35.0",
  "indexmap",
- "itertools",
+ "itertools 0.14.0",
  "nohash-hasher",
  "poll-promise",
  "re_arrow_util",
@@ -3948,15 +4031,15 @@ dependencies = [
 [[package]]
 name = "re_error"
 version = "0.35.0-alpha.1+dev"
-source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=55fa777d9b7740f40673e3a5788eee8c634b2355#55fa777d9b7740f40673e3a5788eee8c634b2355"
+source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196#cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196"
 
 [[package]]
 name = "re_format"
 version = "0.35.0-alpha.1+dev"
-source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=55fa777d9b7740f40673e3a5788eee8c634b2355#55fa777d9b7740f40673e3a5788eee8c634b2355"
+source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196#cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196"
 dependencies = [
  "half",
- "itertools",
+ "itertools 0.14.0",
  "num-traits",
  "re_log",
 ]
@@ -3964,7 +4047,7 @@ dependencies = [
 [[package]]
 name = "re_grpc_headers"
 version = "0.35.0-alpha.1+dev"
-source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=55fa777d9b7740f40673e3a5788eee8c634b2355#55fa777d9b7740f40673e3a5788eee8c634b2355"
+source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196#cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196"
 dependencies = [
  "http",
  "pin-project-lite",
@@ -3975,7 +4058,7 @@ dependencies = [
 [[package]]
 name = "re_importer"
 version = "0.35.0-alpha.1+dev"
-source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=55fa777d9b7740f40673e3a5788eee8c634b2355#55fa777d9b7740f40673e3a5788eee8c634b2355"
+source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196#cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196"
 dependencies = [
  "ahash",
  "anyhow",
@@ -3983,7 +4066,7 @@ dependencies = [
  "crossbeam",
  "image",
  "indexmap",
- "itertools",
+ "itertools 0.14.0",
  "mcap",
  "memmap2",
  "parking_lot",
@@ -4016,7 +4099,7 @@ dependencies = [
 [[package]]
 name = "re_lenses"
 version = "0.35.0-alpha.1+dev"
-source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=55fa777d9b7740f40673e3a5788eee8c634b2355#55fa777d9b7740f40673e3a5788eee8c634b2355"
+source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196#cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196"
 dependencies = [
  "arrow",
  "re_lenses_core",
@@ -4027,11 +4110,11 @@ dependencies = [
 [[package]]
 name = "re_lenses_core"
 version = "0.35.0-alpha.1+dev"
-source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=55fa777d9b7740f40673e3a5788eee8c634b2355#55fa777d9b7740f40673e3a5788eee8c634b2355"
+source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196#cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196"
 dependencies = [
  "ahash",
  "arrow",
- "itertools",
+ "itertools 0.14.0",
  "nohash-hasher",
  "re_arrow_util",
  "re_byte_size",
@@ -4046,7 +4129,7 @@ dependencies = [
 [[package]]
 name = "re_log"
 version = "0.35.0-alpha.1+dev"
-source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=55fa777d9b7740f40673e3a5788eee8c634b2355#55fa777d9b7740f40673e3a5788eee8c634b2355"
+source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196#cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196"
 dependencies = [
  "crossbeam",
  "log",
@@ -4061,7 +4144,7 @@ dependencies = [
 [[package]]
 name = "re_log_channel"
 version = "0.35.0-alpha.1+dev"
-source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=55fa777d9b7740f40673e3a5788eee8c634b2355#55fa777d9b7740f40673e3a5788eee8c634b2355"
+source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196#cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196"
 dependencies = [
  "camino",
  "crossbeam",
@@ -4081,12 +4164,12 @@ dependencies = [
 [[package]]
 name = "re_log_encoding"
 version = "0.35.0-alpha.1+dev"
-source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=55fa777d9b7740f40673e3a5788eee8c634b2355#55fa777d9b7740f40673e3a5788eee8c634b2355"
+source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196#cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196"
 dependencies = [
  "arrow",
  "bytes",
  "crossbeam",
- "itertools",
+ "itertools 0.14.0",
  "lz4_flex",
  "parking_lot",
  "re_arrow_util",
@@ -4112,7 +4195,7 @@ dependencies = [
 [[package]]
 name = "re_log_types"
 version = "0.35.0-alpha.1+dev"
-source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=55fa777d9b7740f40673e3a5788eee8c634b2355#55fa777d9b7740f40673e3a5788eee8c634b2355"
+source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196#cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196"
 dependencies = [
  "ahash",
  "arrow",
@@ -4121,7 +4204,7 @@ dependencies = [
  "document-features",
  "fixed",
  "half",
- "itertools",
+ "itertools 0.14.0",
  "jiff",
  "natord",
  "nohash-hasher",
@@ -4150,14 +4233,14 @@ dependencies = [
 [[package]]
 name = "re_mcap"
 version = "0.35.0-alpha.1+dev"
-source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=55fa777d9b7740f40673e3a5788eee8c634b2355#55fa777d9b7740f40673e3a5788eee8c634b2355"
+source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196#cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196"
 dependencies = [
  "ahash",
  "anyhow",
  "arrow",
  "byteorder",
  "crossbeam",
- "itertools",
+ "itertools 0.14.0",
  "mcap",
  "prost-reflect",
  "rayon",
@@ -4180,8 +4263,7 @@ dependencies = [
 [[package]]
 name = "re_mp4"
 version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "63d71dca1bc07c053ed67ccfd0b52df652192a6541fbdf85cc3d46142e20d709"
+source = "git+file:///Users/member_ottoto/rust_ae/re_mp4?rev=21d5de2a6f5a7c96970b8462d46213eed809a712#21d5de2a6f5a7c96970b8462d46213eed809a712"
 dependencies = [
  "byteorder",
  "bytes",
@@ -4194,10 +4276,10 @@ dependencies = [
 [[package]]
 name = "re_mp4_reader"
 version = "0.35.0-alpha.1+dev"
-source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=55fa777d9b7740f40673e3a5788eee8c634b2355#55fa777d9b7740f40673e3a5788eee8c634b2355"
+source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196#cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196"
 dependencies = [
  "arrow",
- "itertools",
+ "itertools 0.14.0",
  "re_chunk",
  "re_log",
  "re_log_types",
@@ -4210,7 +4292,7 @@ dependencies = [
 [[package]]
 name = "re_mutex"
 version = "0.35.0-alpha.1+dev"
-source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=55fa777d9b7740f40673e3a5788eee8c634b2355#55fa777d9b7740f40673e3a5788eee8c634b2355"
+source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196#cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196"
 dependencies = [
  "parking_lot",
  "re_byte_size",
@@ -4220,7 +4302,7 @@ dependencies = [
 [[package]]
 name = "re_parquet"
 version = "0.35.0-alpha.1+dev"
-source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=55fa777d9b7740f40673e3a5788eee8c634b2355#55fa777d9b7740f40673e3a5788eee8c634b2355"
+source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196#cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196"
 dependencies = [
  "anyhow",
  "arrow",
@@ -4237,11 +4319,11 @@ dependencies = [
 [[package]]
 name = "re_protos"
 version = "0.35.0-alpha.1+dev"
-source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=55fa777d9b7740f40673e3a5788eee8c634b2355#55fa777d9b7740f40673e3a5788eee8c634b2355"
+source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196#cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196"
 dependencies = [
  "arrow",
  "http",
- "itertools",
+ "itertools 0.14.0",
  "jiff",
  "lz4_flex",
  "opentelemetry",
@@ -4270,13 +4352,13 @@ dependencies = [
 [[package]]
 name = "re_query"
 version = "0.35.0-alpha.1+dev"
-source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=55fa777d9b7740f40673e3a5788eee8c634b2355#55fa777d9b7740f40673e3a5788eee8c634b2355"
+source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196#cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196"
 dependencies = [
  "ahash",
  "anyhow",
  "arrow",
  "indent",
- "itertools",
+ "itertools 0.14.0",
  "nohash-hasher",
  "parking_lot",
  "paste",
@@ -4296,7 +4378,7 @@ dependencies = [
 [[package]]
 name = "re_quota_channel"
 version = "0.35.0-alpha.1+dev"
-source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=55fa777d9b7740f40673e3a5788eee8c634b2355#55fa777d9b7740f40673e3a5788eee8c634b2355"
+source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196#cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196"
 dependencies = [
  "crossbeam",
  "parking_lot",
@@ -4331,7 +4413,7 @@ dependencies = [
 [[package]]
 name = "re_renderer"
 version = "0.35.0-alpha.1+dev"
-source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=55fa777d9b7740f40673e3a5788eee8c634b2355#55fa777d9b7740f40673e3a5788eee8c634b2355"
+source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196#cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4347,7 +4429,7 @@ dependencies = [
  "glam 0.30.10",
  "gltf",
  "half",
- "itertools",
+ "itertools 0.14.0",
  "js-sys",
  "macaw",
  "never",
@@ -4382,10 +4464,10 @@ dependencies = [
 [[package]]
 name = "re_ros_msg"
 version = "0.35.0-alpha.1+dev"
-source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=55fa777d9b7740f40673e3a5788eee8c634b2355#55fa777d9b7740f40673e3a5788eee8c634b2355"
+source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196#cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196"
 dependencies = [
  "anyhow",
- "itertools",
+ "itertools 0.14.0",
  "re_cdr",
  "thiserror 2.0.20",
 ]
@@ -4393,7 +4475,7 @@ dependencies = [
 [[package]]
 name = "re_rvl"
 version = "0.35.0-alpha.1+dev"
-source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=55fa777d9b7740f40673e3a5788eee8c634b2355#55fa777d9b7740f40673e3a5788eee8c634b2355"
+source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196#cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196"
 dependencies = [
  "byteorder",
  "thiserror 2.0.20",
@@ -4402,7 +4484,7 @@ dependencies = [
 [[package]]
 name = "re_sdk_types"
 version = "0.35.0-alpha.1+dev"
-source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=55fa777d9b7740f40673e3a5788eee8c634b2355#55fa777d9b7740f40673e3a5788eee8c634b2355"
+source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196#cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196"
 dependencies = [
  "array-init",
  "arrow",
@@ -4414,7 +4496,7 @@ dependencies = [
  "half",
  "image",
  "infer",
- "itertools",
+ "itertools 0.14.0",
  "macaw",
  "mime_guess2",
  "ndarray",
@@ -4440,10 +4522,10 @@ dependencies = [
 [[package]]
 name = "re_sorbet"
 version = "0.35.0-alpha.1+dev"
-source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=55fa777d9b7740f40673e3a5788eee8c634b2355#55fa777d9b7740f40673e3a5788eee8c634b2355"
+source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196#cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196"
 dependencies = [
  "arrow",
- "itertools",
+ "itertools 0.14.0",
  "nohash-hasher",
  "re_arrow_util",
  "re_byte_size",
@@ -4462,7 +4544,7 @@ dependencies = [
 [[package]]
 name = "re_span"
 version = "0.35.0-alpha.1+dev"
-source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=55fa777d9b7740f40673e3a5788eee8c634b2355#55fa777d9b7740f40673e3a5788eee8c634b2355"
+source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196#cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196"
 dependencies = [
  "num-traits",
 ]
@@ -4470,7 +4552,7 @@ dependencies = [
 [[package]]
 name = "re_string_interner"
 version = "0.35.0-alpha.1+dev"
-source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=55fa777d9b7740f40673e3a5788eee8c634b2355#55fa777d9b7740f40673e3a5788eee8c634b2355"
+source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196#cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196"
 dependencies = [
  "ahash",
  "nohash-hasher",
@@ -4484,7 +4566,7 @@ dependencies = [
 [[package]]
 name = "re_tracing"
 version = "0.35.0-alpha.1+dev"
-source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=55fa777d9b7740f40673e3a5788eee8c634b2355#55fa777d9b7740f40673e3a5788eee8c634b2355"
+source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196#cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196"
 dependencies = [
  "parking_lot",
  "puffin",
@@ -4493,7 +4575,7 @@ dependencies = [
 [[package]]
 name = "re_tuid"
 version = "0.35.0-alpha.1+dev"
-source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=55fa777d9b7740f40673e3a5788eee8c634b2355#55fa777d9b7740f40673e3a5788eee8c634b2355"
+source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196#cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196"
 dependencies = [
  "bytemuck",
  "document-features",
@@ -4508,7 +4590,7 @@ dependencies = [
 [[package]]
 name = "re_types_core"
 version = "0.35.0-alpha.1+dev"
-source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=55fa777d9b7740f40673e3a5788eee8c634b2355#55fa777d9b7740f40673e3a5788eee8c634b2355"
+source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196#cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196"
 dependencies = [
  "anyhow",
  "arrow",
@@ -4516,7 +4598,7 @@ dependencies = [
  "bytemuck",
  "document-features",
  "half",
- "itertools",
+ "itertools 0.14.0",
  "nohash-hasher",
  "quiver",
  "re_arrow_util",
@@ -4534,7 +4616,7 @@ dependencies = [
 [[package]]
 name = "re_uri"
 version = "0.35.0-alpha.1+dev"
-source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=55fa777d9b7740f40673e3a5788eee8c634b2355#55fa777d9b7740f40673e3a5788eee8c634b2355"
+source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196#cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196"
 dependencies = [
  "percent-encoding",
  "re_byte_size",
@@ -4551,7 +4633,7 @@ dependencies = [
 [[package]]
 name = "re_video"
 version = "0.35.0-alpha.1+dev"
-source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=55fa777d9b7740f40673e3a5788eee8c634b2355#55fa777d9b7740f40673e3a5788eee8c634b2355"
+source = "git+file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818?rev=cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196#cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196"
 dependencies = [
  "ahash",
  "bit-vec",
@@ -4559,11 +4641,12 @@ dependencies = [
  "cfg_aliases",
  "cros-codecs",
  "econtext",
+ "ffmpeg-next",
  "ffmpeg-sidecar",
  "getrandom 0.3.4",
  "h264-reader",
  "image",
- "itertools",
+ "itertools 0.14.0",
  "js-sys",
  "poll-promise",
  "re_byte_size",
@@ -4978,6 +5061,12 @@ dependencies = [
 
 [[package]]
 name = "shlex"
+version = "1.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
+
+[[package]]
+name = "shlex"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba"
@@ -5150,167 +5239,6 @@ dependencies = [
  "skrifa 0.44.0",
  "yazi",
  "zeno",
-]
-
-[[package]]
-name = "symphonia"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a7edef6a96b696d4e0cab5ee9ebb7ca155ed95f30a6b45bbb8b97d2727f02424"
-dependencies = [
- "lazy_static",
- "symphonia-bundle-flac",
- "symphonia-bundle-mp3",
- "symphonia-codec-aac",
- "symphonia-codec-alac",
- "symphonia-codec-pcm",
- "symphonia-codec-vorbis",
- "symphonia-core",
- "symphonia-format-isomp4",
- "symphonia-format-ogg",
- "symphonia-format-riff",
- "symphonia-metadata",
-]
-
-[[package]]
-name = "symphonia-bundle-flac"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6405d5c34ff6f8f7ca08a4101efe66d21e180f7322ef9359900a0e55698a7892"
-dependencies = [
- "log",
- "symphonia-common",
- "symphonia-core",
- "symphonia-metadata",
-]
-
-[[package]]
-name = "symphonia-bundle-mp3"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "98ea5ffc8716bff677dfb3b01b420c7b758de901a72b8c330bf2040ab74b4add"
-dependencies = [
- "lazy_static",
- "log",
- "symphonia-core",
-]
-
-[[package]]
-name = "symphonia-codec-aac"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f5bf8e39552d34a3c4c98333370e62f48c92456d2e814f273b5c3ad7c4a5f45c"
-dependencies = [
- "lazy_static",
- "log",
- "symphonia-common",
- "symphonia-core",
-]
-
-[[package]]
-name = "symphonia-codec-alac"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "920a78f96f3cf62932d0c497959c0cc2100ef36b03c7ca1417b260f432a482d8"
-dependencies = [
- "log",
- "symphonia-common",
- "symphonia-core",
-]
-
-[[package]]
-name = "symphonia-codec-pcm"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e04ba75686acbe43542fdd374571195f0530c0b7785ca25cc6840e9c6c4b6eea"
-dependencies = [
- "log",
- "symphonia-core",
-]
-
-[[package]]
-name = "symphonia-codec-vorbis"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "73d90b4fcf796137cc683c538282804ff9629f8ad9dbfd881fcbba331ac4e986"
-dependencies = [
- "log",
- "symphonia-common",
- "symphonia-core",
-]
-
-[[package]]
-name = "symphonia-common"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2acc3fcc18ec9b8cdd48614e259c4cf0d27b71d41e5d9b120b42c5adab12d7c4"
-dependencies = [
- "log",
- "symphonia-core",
- "symphonia-metadata",
-]
-
-[[package]]
-name = "symphonia-core"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "01c412864d599d4750d0c3d684d7e093ec05e5309681ef5252cc1096a437f6e0"
-dependencies = [
- "bitflags 2.13.1",
- "bytemuck",
- "lazy_static",
- "log",
- "num-complex",
- "smallvec",
-]
-
-[[package]]
-name = "symphonia-format-isomp4"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0e681a70e1870d34e02abf1dbc51e4267c3f1827801474e8870be8c689fc4dc3"
-dependencies = [
- "log",
- "symphonia-common",
- "symphonia-core",
- "symphonia-metadata",
-]
-
-[[package]]
-name = "symphonia-format-ogg"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0b5495e7f7e3c7035328d82b6d6e377eef289bb0c4105bdeb557fc93a833f994"
-dependencies = [
- "log",
- "symphonia-common",
- "symphonia-core",
- "symphonia-metadata",
-]
-
-[[package]]
-name = "symphonia-format-riff"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1ff70929083a8c1a5f6cd7c904b6071c7914ad04739b510c2f7239dfc9b7dabe"
-dependencies = [
- "extended",
- "log",
- "symphonia-core",
- "symphonia-metadata",
-]
-
-[[package]]
-name = "symphonia-metadata"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "83713a97705d77bdef7cdbc0768fd6e5a54e4cd7e48d60a806ae85639e2c87c6"
-dependencies = [
- "lazy_static",
- "log",
- "regex-lite",
- "smallvec",
- "symphonia-core",
 ]
 
 [[package]]
@@ -6003,6 +5931,12 @@ name = "valuable"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ba73ea9cf16a25df0c8caa16c51acb937d5712a8429db78a3ee29d5dcacd3a65"
+
+[[package]]
+name = "vcpkg"
+version = "0.2.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "accd4ea62f7bb7a82fe23066fb0957d48ef677f6eeb8215f372f52e48bb32426"
 
 [[package]]
 name = "vec1"

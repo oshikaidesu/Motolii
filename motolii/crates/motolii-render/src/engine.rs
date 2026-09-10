@@ -121,7 +121,11 @@ pub struct Engine {
     point_clouds: HashMap<String, PointCloudData>,
     failed_point_clouds: HashMap<String, String>,
     pixels: StillPixels,
-    videos: HashMap<String, (Vec<u8>, re_renderer::video::Video)>,
+    /// 動画は mmap で開く。触ったページだけ RAM に載り、閉じれば返る。
+    videos: HashMap<String, (memmap2::Mmap, re_renderer::video::Video)>,
+    renders_since_video_purge: u32,
+    /// 再生中は間に合ったコマで描く。止めた時と書き出しは頼んだコマを待つ。
+    realtime: bool,
 }
 
 impl Engine {
@@ -144,6 +148,8 @@ impl Engine {
             failed_point_clouds: HashMap::new(),
             pixels: still_pixels(),
             videos: HashMap::new(),
+            realtime: false,
+            renders_since_video_purge: 0,
         })
     }
 
@@ -174,7 +180,13 @@ impl Engine {
             failed_point_clouds: HashMap::new(),
             pixels: still_pixels(),
             videos: HashMap::new(),
+            realtime: false,
+            renders_since_video_purge: 0,
         })
+    }
+
+    pub fn set_realtime(&mut self, realtime: bool) {
+        self.realtime = realtime;
     }
 
     pub fn set_gpu_instance_sharing_enabled(&mut self, enabled: bool) {
@@ -569,6 +581,76 @@ mod environment_tests {
         assert!(mirror[1] > 150, "鏡は白い空を映す、got {mirror:?}");
         let half = render(&mut engine, &[("metallic", 1.0), ("roughness", 0.0), ("transmission", 0.0)], 0.5);
         assert!(half[1] > 80 && half[1] < mirror[1] - 10, "mesh coverage attenuates reflection, like the rectangle: half {half:?}, solid {mirror:?}");
+    }
+
+    /// 分散は背後の像を波長で分ける(KHR_materials_dispersion、three.js の読み)。灰色しか無い場面 —
+    /// 白い空、左黒右白の板、その手前の斜めの厚いガラス — は dispersion 0 なら灰のまま、
+    /// dispersion 2 なら境目で赤と青が割れる。
+    #[test]
+    fn dispersion_splits_the_backdrop_edge_into_colors() {
+        use crate::doc::store::{EffectId, EffectInstance};
+        let dir = tempfile::tempdir().unwrap();
+        let sky = sky_png(dir.path(), "white.png", 255, 255);
+        let edge = dir.path().join("edge.png");
+        let mut img = image::RgbaImage::new(SIZE, SIZE);
+        for (x, _, px) in img.enumerate_pixels_mut() {
+            let v = if x < SIZE / 2 + 8 { 0 } else { 255 };
+            *px = image::Rgba([v, v, v, 255]);
+        }
+        img.save(&edge).unwrap();
+        let mut engine = Engine::new().unwrap();
+        let mut spread = |dispersion: f64| -> u8 {
+            let mut doc = scene(dir.path(), &sky, true);
+            // 正面の板では屈折が曲がらず色も割れない。板を 45° に傾ける(法線は camera 側の -z 成分を持つ)。
+            std::fs::write(dir.path().join("quad.obj"), "v -1 -1 -1\nv 1 -1 1\nv 1 1 1\nv -1 1 -1\nvn 0.7071 0 -0.7071\nf 1//1 2//1 3//1\nf 1//1 3//1 4//1\n").unwrap();
+            let board = file_layer(&mut doc, 3, 0, &edge);
+            doc.apply(Intent::SetConstant { layer: board, property: PropertyId::new(property::POSITION).unwrap(), value: Value::Vec2([0.0, 0.0]) }).unwrap();
+            let mesh = LayerId(2);
+            doc.apply(Intent::SetEffects { layer: mesh, effects: vec![EffectInstance { id: EffectId(0), plugin_id: "motolii.glass".into() }] }).unwrap();
+            doc.apply(Intent::SetConstant { layer: mesh, property: PropertyId::new(property::SCALE).unwrap(), value: Value::Vec2([48.0, 48.0]) }).unwrap();
+            for (name, value) in [("ior", 3.0), ("roughness", 0.0), ("transmission", 1.0), ("metallic", 0.0), ("dispersion", dispersion)] {
+                doc.apply(Intent::SetConstant { layer: mesh, property: PropertyId::new(&format!("effect.0.param.{name}")).unwrap(), value: Value::F64(value) }).unwrap();
+            }
+            engine.models.clear();
+            let pixels = engine.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+            assert!(engine.layer_failures().is_empty(), "{:?}", engine.layer_failures());
+            pixels.chunks(4).map(|p| p[0].abs_diff(p[2])).max().unwrap()
+        };
+        let none = spread(0.0);
+        let split = spread(2.0);
+        assert!(none <= 1, "灰色の場面は分散 0 で灰のまま、got {none}");
+        assert!(split > 40, "分散 2 で境目の赤と青が割れる、got {split}");
+    }
+
+    /// backdrop の mip は粗さが読む段までしか焼かない。粗さ 0 のガラスは写し 1 段、粗さ 1 は全段。
+    #[test]
+    fn backdrop_mips_stop_where_the_roughness_stops_reading() {
+        use crate::doc::store::{EffectId, EffectInstance};
+        let dir = tempfile::tempdir().unwrap();
+        let sky = sky_png(dir.path(), "white.png", 255, 255);
+        let red = dir.path().join("red.png");
+        image::RgbaImage::from_pixel(SIZE, SIZE, image::Rgba([255, 0, 0, 255])).save(&red).unwrap();
+        let mut engine = Engine::new().unwrap();
+        let mut levels_per_copy = |roughness: f64| -> u64 {
+            let mut doc = scene(dir.path(), &sky, true);
+            let board = file_layer(&mut doc, 3, 0, &red);
+            doc.apply(Intent::SetConstant { layer: board, property: PropertyId::new(property::POSITION).unwrap(), value: Value::Vec2([0.0, 0.0]) }).unwrap();
+            let mesh = LayerId(2);
+            doc.apply(Intent::SetEffects { layer: mesh, effects: vec![EffectInstance { id: EffectId(0), plugin_id: "motolii.glass".into() }] }).unwrap();
+            doc.apply(Intent::SetConstant { layer: mesh, property: PropertyId::new("effect.0.param.roughness").unwrap(), value: Value::F64(roughness) }).unwrap();
+            engine.models.clear();
+            let before = engine.surface_work();
+            engine.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+            assert!(engine.layer_failures().is_empty(), "{:?}", engine.layer_failures());
+            let after = engine.surface_work();
+            let copies = after.backdrop_copies - before.backdrop_copies;
+            assert!(copies > 0, "ガラスは backdrop を写す");
+            (after.backdrop_mip_levels - before.backdrop_mip_levels) / copies
+        };
+        let full = u64::from(re_renderer::resource_managers::MipmapGenerator::mip_level_count(SIZE, SIZE));
+        assert_eq!(levels_per_copy(0.0), 1, "粗さ 0 は写しだけ");
+        let rough = levels_per_copy(1.0);
+        assert!(rough > 1 && rough <= full, "粗さ 1 は段を焼く、got {rough} of {full}");
     }
 
     /// The mesh Glass oracle, applied to a premultiplied 2D surface (GPU Gems 2 ch.19).

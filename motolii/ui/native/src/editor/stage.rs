@@ -530,9 +530,9 @@ pub(crate) enum DragSession {
     Spatial(crate::editor::gizmo3d::SpatialDrag),
 }
 impl DragSession {
-    pub(crate) fn begin(doc:&Document,engine:&Engine,ids:&[LayerId],mode:&str,handle:&str,start:[f64;2],at:RationalTime,observer:crate::doc::core::ResolvedCamera)->Result<Self,String>{
+    pub(crate) fn begin(doc:&Document,engine:&Engine,ids:&[LayerId],mode:&str,handle:&str,start:[f64;2],at:RationalTime,observer:crate::doc::core::ResolvedCamera,view_scale:f64)->Result<Self,String>{
         if mode=="spatial" {
-            return Ok(Self::Spatial(crate::editor::gizmo3d::SpatialDrag::begin(doc,ids,start,at,observer)?));
+            return Ok(Self::Spatial(crate::editor::gizmo3d::SpatialDrag::begin(doc,ids,start,at,observer,view_scale)?));
         }
         Ok(Self::Cage(CageDrag::begin(doc,engine,ids,mode,handle,start,at,observer)?))
     }

@@ -1082,12 +1082,13 @@ class EditorCard extends StatelessWidget {
     super.key,
     required this.title,
     required this.children,
+    this.leading,
     this.trailing,
     this.dim = false,
   });
   final String title;
   final List<Widget> children;
-  final Widget? trailing;
+  final Widget? leading, trailing;
 
   /// The card's contents faded: what it holds is not applied right now.
   final bool dim;
@@ -1109,6 +1110,7 @@ class EditorCard extends StatelessWidget {
       children: [
         Row(
           children: [
+            if (leading != null) leading!,
             Expanded(
               child: Text(
                 title.toUpperCase(),

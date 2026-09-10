@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:motolii_stage5/foundation/metrics.dart';
 import 'package:motolii_stage5/foundation/panel_controls.dart';
@@ -35,6 +36,17 @@ void main() {
     expect(find.byType(MenuItemButton), findsNWidgets(3));
     final row = tester.getSize(find.byType(MenuItemButton).first);
     expect(row.height, EditorMetrics.row);
+    // The sheet and its type are the app's menu, not Material 3's.
+    final grid = tester.renderObject<RenderParagraph>(find.text('Grid'));
+    expect(grid.text.style?.fontSize, EditorMetrics.font);
+    expect(grid.text.style?.color, EditorTheme.ink);
+    final sheet = tester
+        .widgetList<Material>(find.byType(Material))
+        .firstWhere((m) => m.color == EditorTheme.menu);
+    expect(
+      (sheet.shape as RoundedRectangleBorder).side.color,
+      EditorTheme.menuEdge,
+    );
     await tester.tap(find.text('Grid'));
     await tester.pumpAndSettle();
     expect(picked, 2);

@@ -269,7 +269,7 @@ impl Engine {
             if layer.environment && crate::render::media::is_still_image_path(&path) {
                 return self.environment_content_for(&path);
             }
-            self.file_content_for(&path, layer.source_frame, layer.id, comp)
+            self.file_content_for(&path, layer.source_time, layer.id, comp)
         } else {
             self.texture_for(&layer.source, layer.source_frame)
         }
@@ -453,7 +453,7 @@ impl Engine {
     fn file_content_for(
         &mut self,
         path: &str,
-        source_frame: i64,
+        source_time: RationalTime,
         layer: LayerId,
         comp: CompSpec,
     ) -> Result<(Option<LayerContent>, [f32; 2]), EngineError> {
@@ -464,7 +464,7 @@ impl Engine {
         } else if crate::render::media::is_still_image_path(path) {
             self.still_texture_for(path)
         } else {
-            self.media_texture_for(path, source_frame, layer)
+            self.media_texture_for(path, source_time, layer)
         }
     }
 
@@ -550,7 +550,7 @@ impl Engine {
     fn media_texture_for(
         &mut self,
         path: &str,
-        frame: i64,
+        source_time: RationalTime,
         layer: LayerId,
     ) -> Result<(Option<LayerContent>, [f32; 2]), EngineError> {
         let info = match self.probes.get(path) {
@@ -579,14 +579,19 @@ impl Engine {
         };
         let natural = [info.width as f32, info.height as f32];
 
-        let last_frame = info.nb_frames.map(|n| n - 1);
-        if frame < 0 || last_frame.is_some_and(|last| frame > last) {
+        let end = info.duration.or_else(|| {
+            info.nb_frames
+                .and_then(|n| RationalTime::try_from_frame(n, info.fps).ok())
+        });
+        if source_time < RationalTime::ZERO || end.is_some_and(|end| source_time >= end) {
             return Ok((None, natural));
         }
 
         if !self.videos.contains_key(path) {
-            let bytes = match std::fs::read(path) {
-                Ok(bytes) => bytes,
+            let bytes = match std::fs::File::open(path)
+                .and_then(|file| unsafe { memmap2::Mmap::map(&file) })
+            {
+                Ok(map) => map,
                 Err(err) => {
                     self.layer_failures
                         .push(format!("素材を読めない(read失敗): {path}: {err}"));
@@ -602,10 +607,19 @@ impl Engine {
                         return Ok((None, natural));
                     }
                 };
+            // 素材の色をそのまま受け、GPU で RGB にする。ffmpeg に変換させると CPU の色変換が
+            // 挟まり、4K で復号の 6 倍遅い(実測 M4)。probe が bt709/bt601 以外を門で断るので、
+            // ここに来る素材は必ずどちらか。
+            let source_yuv = match info.color_space {
+                crate::doc::core::ColorSpace::Rec709Full => Some((re_video::YuvRange::Full, re_video::YuvMatrixCoefficients::Bt709)),
+                crate::doc::core::ColorSpace::Rec601Limited => Some((re_video::YuvRange::Limited, re_video::YuvMatrixCoefficients::Bt601)),
+                crate::doc::core::ColorSpace::Rec709Limited => Some((re_video::YuvRange::Limited, re_video::YuvMatrixCoefficients::Bt709)),
+                crate::doc::core::ColorSpace::Srgb | crate::doc::core::ColorSpace::LinearRgb => None,
+            };
             let video = re_renderer::video::Video::load(
                 path.to_owned(),
                 descr,
-                re_video::DecodeSettings::default(),
+                re_video::DecodeSettings { source_yuv, in_process: true, ..Default::default() },
             );
             self.videos.insert(path.to_owned(), (bytes, video));
         }
@@ -616,15 +630,10 @@ impl Engine {
                 .push(format!("動画にタイムスケールが無い: {path}"));
             return Ok((None, natural));
         };
-        // frame → 時刻は正準口を通す(浮動小数の割り算で写さない)。
-        // `re_video::Time::from_secs` が秒の f64 を要求するので、
-        // 有理数で写してから最後に一度だけ f64 にする。
-        let secs = crate::doc::core::RationalTime::try_from_frame(frame, info.fps)
-            .map_err(|e| crate::render::engine::EngineError::Time(e.to_string()))?
-            .as_seconds_f64();
-        let video_time = re_video::Time::from_secs(secs, timescale);
+        // `re_video::Time::from_secs` が秒の f64 を要求するので、最後に一度だけ f64 にする。
+        let video_time = re_video::Time::from_secs(source_time.as_seconds_f64(), timescale);
         let stream_id = re_video::player::VideoPlayerStreamId(layer_stream_id(layer, path));
-        let source = re_video::player::VideoSliceSource(bytes);
+        let source = re_video::player::VideoSliceSource(&bytes[..]);
         // デコーダは非同期で、頼んだ直後は返さない。待たずに前のコマを
         // 返すと、**同じ時刻でも辿り着き方で絵が変わり**、窓と書き出しが
         // 一致しなくなる。待つのは素材ごとに初回だけ(実測 764ms、以降 65µs)。
@@ -636,6 +645,10 @@ impl Engine {
                 video_time,
                 &source,
             );
+            if self.realtime {
+                let texture = output.output.and_then(|frame| frame.texture);
+                return Ok((texture.map(LayerContent::Texture), natural));
+            }
             let ready = output.output.as_ref().is_some_and(|frame| {
                 frame.texture.is_some()
                     && matches!(
@@ -649,13 +662,13 @@ impl Engine {
             }
             if let Some(err) = output.error {
                 self.layer_failures.push(format!(
-                    "フレームを読めない(decode失敗): {path} frame={frame}: {err}"
+                    "フレームを読めない(decode失敗): {path} at={source_time:?}: {err}"
                 ));
                 return Ok((None, natural));
             }
             if std::time::Instant::now() >= deadline {
                 self.layer_failures
-                    .push(format!("コマが間に合わなかった: {path} frame={frame}"));
+                    .push(format!("コマが間に合わなかった: {path} at={source_time:?}"));
                 return Ok((None, natural));
             }
             std::thread::sleep(DECODE_POLL);
@@ -964,5 +977,254 @@ mod rich_text_cache_tests {
         let before=TextCacheKey::new(LayerId(1),&text,RationalTime::ZERO,400,200);
         text.runs.reverse();
         assert!(before!=TextCacheKey::new(LayerId(1),&text,RationalTime::ZERO,400,200));
+    }
+}
+
+/// 動画の時刻はコンポの時計で決まる。素材の fps がコンポと違っても、絵の速さは変わらない。
+#[cfg(test)]
+mod media_time_contract {
+    use crate::doc::store::{
+        Composition, Document, Fps, Intent, LayerId, LayerMeta, LayerSource, LayerTiming,
+        RationalTime,
+    };
+    use crate::render::engine::Engine;
+
+    fn ffmpeg_available() -> bool {
+        crate::render::media::test_encoders_available(&["libx264"])
+    }
+
+    /// 24fps で「1 秒黒、1 秒白」の動画を作る。
+    fn black_then_white_24fps(dir: &std::path::Path) -> std::path::PathBuf {
+        let clip = dir.join("black_then_white_24.mp4");
+        let status = crate::render::media::tool_command(crate::render::media::ffmpeg_bin())
+            .args([
+                "-v", "error", "-y",
+                "-f", "lavfi", "-i", "color=c=black:s=64x64:r=24:d=1",
+                "-f", "lavfi", "-i", "color=c=white:s=64x64:r=24:d=1",
+                "-filter_complex", "[0][1]concat=n=2:v=1:a=0",
+                "-pix_fmt", "yuv420p", "-c:v", "libx264",
+            ])
+            .arg(&clip)
+            .status()
+            .expect("spawn ffmpeg");
+        assert!(status.success(), "video fixture failed");
+        clip
+    }
+
+    fn center_pixel(engine: &mut Engine, doc: &Document, frame: i64) -> [u8; 3] {
+        let at = RationalTime::try_from_frame(frame, Fps::try_new(30, 1).unwrap()).unwrap();
+        let rgba = engine.render_frame(&doc.view(), at).unwrap();
+        assert!(
+            engine.layer_failures().is_empty(),
+            "frame {frame}: {:?}",
+            engine.layer_failures()
+        );
+        let i = ((32 * 64) + 32) * 4;
+        [rgba[i], rgba[i + 1], rgba[i + 2]]
+    }
+
+    #[test]
+    fn a_24fps_clip_in_a_30fps_comp_keeps_its_own_speed() {
+        if !ffmpeg_available() {
+            eprintln!("skip: ffmpeg not on PATH");
+            return;
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let clip = black_then_white_24fps(dir.path());
+
+        let mut doc = Document::new();
+        doc.apply(Intent::SetComposition(Composition {
+            width: 64,
+            height: 64,
+            fps: Fps::try_new(30, 1).unwrap(),
+            duration_frames: 60,
+            // 層が出なかった時に黒と見分けるため、背景は赤。
+            background: [1.0, 0.0, 0.0, 1.0],
+        }))
+        .unwrap();
+        let layer = LayerId(1);
+        doc.apply(Intent::AddLayer(layer)).unwrap();
+        doc.apply(Intent::SetMeta {
+            layer,
+            meta: LayerMeta {
+                source: LayerSource::File { path: clip.to_str().unwrap().to_owned(), fingerprint: None },
+                order: 0,
+                timing: LayerTiming::place(0, Some(60), 60),
+            },
+        })
+        .unwrap();
+
+        let mut engine = Engine::new().unwrap();
+        // 0.9 秒: 素材でも 0.9 秒なので黒。fps を取り違えると 27/24 = 1.125 秒で白になる。
+        let at_0_9 = center_pixel(&mut engine, &doc, 27);
+        // 1.1 秒: 白。
+        let at_1_1 = center_pixel(&mut engine, &doc, 33);
+        assert!(at_0_9[0] < 40 && at_0_9[1] < 40 && at_0_9[2] < 40, "0.9s should be black, got {at_0_9:?}");
+        assert!(at_1_1[0] > 200 && at_1_1[1] > 200 && at_1_1[2] > 200, "1.1s should be white, got {at_1_1:?}");
+    }
+
+    /// 可変フレームレートの素材も第一線。24fps の黒 1 秒 + 60fps の白 1 秒を 1 本にし、0.9 秒が黒、1.1 秒が白。
+    #[test]
+    fn a_variable_frame_rate_clip_is_placed_by_time() {
+        if !ffmpeg_available() {
+            eprintln!("skip: ffmpeg not on PATH");
+            return;
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let clip = dir.path().join("vfr.mp4");
+        let status = crate::render::media::tool_command(crate::render::media::ffmpeg_bin())
+            .args([
+                "-v", "error", "-y",
+                "-f", "lavfi", "-i", "color=c=black:s=64x64:r=24:d=1",
+                "-f", "lavfi", "-i", "color=c=white:s=64x64:r=60:d=1",
+                "-filter_complex", "[0][1]concat=n=2:v=1:a=0",
+                "-fps_mode", "vfr", "-pix_fmt", "yuv420p", "-c:v", "libx264",
+            ])
+            .arg(&clip)
+            .status()
+            .expect("spawn ffmpeg");
+        assert!(status.success(), "video fixture failed");
+        let info = crate::render::media::probe(&clip).expect("VFR must be admitted");
+        assert!(info.nb_frames.is_some_and(|n| n == 84), "24 + 60 frames, got {:?}", info.nb_frames);
+
+        let mut doc = Document::new();
+        doc.apply(Intent::SetComposition(Composition {
+            width: 64,
+            height: 64,
+            fps: Fps::try_new(30, 1).unwrap(),
+            duration_frames: 60,
+            background: [1.0, 0.0, 0.0, 1.0],
+        }))
+        .unwrap();
+        let layer = LayerId(1);
+        doc.apply(Intent::AddLayer(layer)).unwrap();
+        doc.apply(Intent::SetMeta {
+            layer,
+            meta: LayerMeta {
+                source: LayerSource::File { path: clip.to_str().unwrap().to_owned(), fingerprint: None },
+                order: 0,
+                timing: LayerTiming::place(0, Some(60), 60),
+            },
+        })
+        .unwrap();
+        let mut engine = Engine::new().unwrap();
+        let at_0_9 = center_pixel(&mut engine, &doc, 27);
+        let at_1_1 = center_pixel(&mut engine, &doc, 33);
+        assert!(at_0_9.iter().all(|c| *c < 40), "0.9s should be black, got {at_0_9:?}");
+        assert!(at_1_1.iter().all(|c| *c > 200), "1.1s should be white, got {at_1_1:?}");
+    }
+
+    /// tv range の bt709 素材。白は 255、黒は 0、赤は赤。range を取り違えると白が 235・黒が 16 になる。
+    #[test]
+    fn limited_range_bt709_colors_come_out_right() {
+        if !ffmpeg_available() {
+            eprintln!("skip: ffmpeg not on PATH");
+            return;
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let clip = dir.path().join("wbr_709_tv.mp4");
+        let status = crate::render::media::tool_command(crate::render::media::ffmpeg_bin())
+            .args([
+                "-v", "error", "-y",
+                "-f", "lavfi", "-i", "color=c=white:s=64x64:r=30:d=0.5",
+                "-f", "lavfi", "-i", "color=c=black:s=64x64:r=30:d=0.5",
+                "-f", "lavfi", "-i", "color=c=red:s=64x64:r=30:d=0.5",
+                "-filter_complex", "[0][1][2]concat=n=3:v=1:a=0",
+                "-pix_fmt", "yuv420p", "-c:v", "libx264", "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", "-color_range", "tv",
+            ])
+            .arg(&clip)
+            .status()
+            .expect("spawn ffmpeg");
+        assert!(status.success(), "video fixture failed");
+
+        let mut doc = Document::new();
+        doc.apply(Intent::SetComposition(Composition {
+            width: 64,
+            height: 64,
+            fps: Fps::try_new(30, 1).unwrap(),
+            duration_frames: 45,
+            background: [0.0, 1.0, 0.0, 1.0],
+        }))
+        .unwrap();
+        let layer = LayerId(1);
+        doc.apply(Intent::AddLayer(layer)).unwrap();
+        doc.apply(Intent::SetMeta {
+            layer,
+            meta: LayerMeta {
+                source: LayerSource::File { path: clip.to_str().unwrap().to_owned(), fingerprint: None },
+                order: 0,
+                timing: LayerTiming::place(0, Some(45), 45),
+            },
+        })
+        .unwrap();
+
+        let mut engine = Engine::new().unwrap();
+        let white = center_pixel(&mut engine, &doc, 7);
+        let black = center_pixel(&mut engine, &doc, 22);
+        let red = center_pixel(&mut engine, &doc, 37);
+        assert!(white.iter().all(|c| *c >= 250), "white should be 255, got {white:?}");
+        assert!(black.iter().all(|c| *c <= 5), "black should be 0, got {black:?}");
+        assert!(red[0] >= 240 && red[1] <= 20 && red[2] <= 20, "red should stay red, got {red:?}");
+    }
+
+    /// 1080p H.264、同じ測り方。
+    #[test]
+    #[ignore]
+    fn full_hd_playback_pace() {
+        if !ffmpeg_available() {
+            return;
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let clip = dir.path().join("k1.mp4");
+        let status = crate::render::media::tool_command(crate::render::media::ffmpeg_bin())
+            .args(["-v", "error", "-y", "-f", "lavfi", "-i", "testsrc2=size=1920x1080:rate=30:duration=3", "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p"])
+            .arg(&clip)
+            .status()
+            .expect("spawn ffmpeg");
+        assert!(status.success());
+        let mut doc = Document::new();
+        doc.apply(Intent::SetComposition(Composition { width: 1920, height: 1080, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 90, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
+        let layer = LayerId(1);
+        doc.apply(Intent::AddLayer(layer)).unwrap();
+        doc.apply(Intent::SetMeta { layer, meta: LayerMeta { source: LayerSource::File { path: clip.to_str().unwrap().to_owned(), fingerprint: None }, order: 0, timing: LayerTiming::place(0, Some(90), 90) } }).unwrap();
+        let mut engine = Engine::new().unwrap();
+        let fps = Fps::try_new(30, 1).unwrap();
+        let _ = engine.render_frame(&doc.view(), RationalTime::try_from_frame(0, fps).unwrap()).unwrap();
+        let started = std::time::Instant::now();
+        for frame in 1..61 {
+            let _ = engine.render_frame(&doc.view(), RationalTime::try_from_frame(frame, fps).unwrap()).unwrap();
+        }
+        println!("PROBE room=video verdict=1080p-pace ms-per-frame={:.1}", started.elapsed().as_secs_f64() * 1000.0 / 60.0);
+    }
+
+    /// 4K H.264 を順に 60 コマ描いた時の 1 コマの時間。数字を見る物(`cargo test -- --ignored four_k`)。
+    #[test]
+    #[ignore]
+    fn four_k_playback_pace() {
+        if !ffmpeg_available() {
+            return;
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let clip = dir.path().join("k4.mp4");
+        let status = crate::render::media::tool_command(crate::render::media::ffmpeg_bin())
+            .args(["-v", "error", "-y", "-f", "lavfi", "-i", "testsrc2=size=3840x2160:rate=30:duration=3", "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p"])
+            .arg(&clip)
+            .status()
+            .expect("spawn ffmpeg");
+        assert!(status.success());
+        let mut doc = Document::new();
+        doc.apply(Intent::SetComposition(Composition { width: 3840, height: 2160, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 90, background: [0.0, 0.0, 0.0, 1.0] })).unwrap();
+        let layer = LayerId(1);
+        doc.apply(Intent::AddLayer(layer)).unwrap();
+        doc.apply(Intent::SetMeta { layer, meta: LayerMeta { source: LayerSource::File { path: clip.to_str().unwrap().to_owned(), fingerprint: None }, order: 0, timing: LayerTiming::place(0, Some(90), 90) } }).unwrap();
+        let mut engine = Engine::new().unwrap();
+        let fps = Fps::try_new(30, 1).unwrap();
+        let _ = engine.render_frame(&doc.view(), RationalTime::try_from_frame(0, fps).unwrap()).unwrap();
+        let started = std::time::Instant::now();
+        for frame in 1..61 {
+            let _ = engine.render_frame(&doc.view(), RationalTime::try_from_frame(frame, fps).unwrap()).unwrap();
+        }
+        let per_frame_ms = started.elapsed().as_secs_f64() * 1000.0 / 60.0;
+        println!("PROBE room=video verdict=4k-pace ms-per-frame={per_frame_ms:.1} failures={:?}", engine.layer_failures());
     }
 }

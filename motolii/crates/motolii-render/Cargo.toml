@@ -28,8 +28,9 @@ re_importer = { workspace = true }
 re_sdk_types = { workspace = true }
 re_types_core = { workspace = true }
 serde = { workspace = true }
-symphonia = { workspace = true }
 rubato = { workspace = true }
+memmap2 = { workspace = true }
+ffmpeg-sidecar = { workspace = true }
 cpal = { workspace = true }
 rtrb = { workspace = true }
 waveform-data = { workspace = true }

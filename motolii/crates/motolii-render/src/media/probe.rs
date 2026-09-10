@@ -1,5 +1,4 @@
 use std::path::Path;
-use std::process::Command;
 
 use serde::Deserialize;
 
@@ -158,7 +157,7 @@ pub fn probe(path: impl AsRef<Path>) -> Result<MediaInfo> {
 }
 
 pub fn probe_container(path: impl AsRef<Path>) -> Result<ContainerInfo> {
-    let out = Command::new("ffprobe")
+    let out = crate::render::media::tool_command(crate::render::media::ffprobe_bin())
         .args([
             "-v",
             "error",
@@ -335,10 +334,9 @@ fn parse_video_stream(
 
     let r_fps = stream.r_frame_rate.as_deref().and_then(parse_fraction);
     let avg_fps = stream.avg_frame_rate.as_deref().and_then(parse_fraction);
-    reject_variable_frame_rate(r_fps, avg_fps)?;
-
-    let fps = r_fps
-        .or(avg_fps)
+    // 可変フレームレートも第一線(裁定 2026-09-10)。時刻は秒で渡すので fps は名目値。
+    let fps = avg_fps
+        .or(r_fps)
         .ok_or_else(|| MediaError::Probe("missing frame rate".into()))?;
 
     let (duration, nb_frames) = if still_image {
@@ -404,33 +402,6 @@ fn validate_even_dimensions(width: u32, height: u32) -> Result<()> {
              ffmpeg -i input.mp4 -vf \"scale=trunc(iw/2)*2:trunc(ih/2)*2\" -c:v libx264 output.mp4"
         )))
     }
-}
-
-fn reject_variable_frame_rate(r_fps: Option<Fps>, avg_fps: Option<Fps>) -> Result<()> {
-    let (Some(r), Some(a)) = (r_fps, avg_fps) else {
-        return Ok(());
-    };
-    if fps_differ_significantly(r, a) {
-        return Err(MediaError::Probe(format!(
-            "variable frame rate (VFR) detected: r_frame_rate {}/{} != avg_frame_rate {}/{}; \
-             re-encode to constant frame rate first, e.g. \
-             ffmpeg -i input.mp4 -vf fps=30 -c:v libx264 output.mp4",
-            r.num(),
-            r.den(),
-            a.num(),
-            a.den()
-        )));
-    }
-    Ok(())
-}
-
-fn fps_differ_significantly(a: Fps, b: Fps) -> bool {
-    let a_f = a.as_f64();
-    let b_f = b.as_f64();
-    if a_f <= 0.0 || b_f <= 0.0 {
-        return false;
-    }
-    (a_f - b_f).abs() / a_f.max(b_f) > 0.005
 }
 
 fn map_color_space(

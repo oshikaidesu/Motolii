@@ -179,6 +179,15 @@ impl PlaybackController {
         self.state.lock().unwrap().duration
     }
 
+    /// 裏で復号していた音が届いていれば、同じ位置で音を付け直す。
+    pub(crate) fn poll_audio(&self, doc: &Document) {
+        let arrived = self.state.lock().unwrap().cache.poll();
+        if arrived {
+            self.state.lock().unwrap().audio_key = None;
+            self.sync_document(doc);
+        }
+    }
+
     /// Document revision後の唯一の再投影口。decode済みPCMとpeak pyramidはcacheで再利用する。
     pub(crate) fn sync_document(&self, doc: &Document) {
         let mut state = self.state.lock().unwrap();
@@ -223,8 +232,10 @@ impl PlaybackController {
         }
     }
 
-    /// 音を決める物だけを並べた指紋: comp の fps と尺、各層の source・timing・hidden・solo。
+    /// 音を決める物だけを並べた指紋: comp の fps と尺、音を持つ層の source・timing・hidden・level・pan・fade、誰かの solo。
 fn audio_fingerprint(doc: &Document) -> String {
+    use crate::doc::store::{property, LayerSource, PropertyId};
+    use crate::render::audio::file_source_can_have_audio;
     use std::fmt::Write as _;
     let view = doc.view();
     let mut out = String::new();
@@ -232,23 +243,19 @@ fn audio_fingerprint(doc: &Document) -> String {
         let _ = write!(out, "c{:?}/{};", c.fps, c.duration_frames);
     }
     for layer in view.layers() {
-        let meta = view.meta(layer).ok().flatten();
         let attrs = view.attrs(layer).ok().flatten().unwrap_or_default();
-        let _ = write!(
-            out,
-            "l{}:{:?}:{:?}:{}{};",
-            layer.0,
-            meta.as_ref().map(|m| &m.source),
-            meta.as_ref().map(|m| &m.timing),
-            attrs.hidden as u8,
-            attrs.solo as u8
-        );
-    }
-    for layer in view.layers() {
-        for name in [crate::doc::store::property::LEVEL, crate::doc::store::property::PAN,
-            crate::doc::store::property::FADE_IN, crate::doc::store::property::FADE_OUT] {
-            if let Ok(property) = crate::doc::store::PropertyId::new(name) {
-                let _ = write!(out, "a{}:{}:{:?};", layer.0, name, view.property_source(layer, &property));
+        if attrs.solo {
+            let _ = write!(out, "s{};", layer.0);
+        }
+        let Some(meta) = view.meta(layer).ok().flatten() else { continue };
+        let LayerSource::File { path, .. } = &meta.source else { continue };
+        if !file_source_can_have_audio(path) {
+            continue;
+        }
+        let _ = write!(out, "l{}:{:?}:{:?}:{};", layer.0, meta.source, meta.timing, attrs.hidden as u8);
+        for name in [property::LEVEL, property::PAN, property::FADE_IN, property::FADE_OUT] {
+            if let Ok(property) = PropertyId::new(name) {
+                let _ = write!(out, "a{}:{:?};", name, view.property_source(layer, &property));
             }
         }
     }

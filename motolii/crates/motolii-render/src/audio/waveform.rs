@@ -247,21 +247,12 @@ fn build_levels(pcm: &PcmCache) -> Result<PeakLevels, WaveformError> {
     if frame_count > i32::MAX as u64 {
         return Err(WaveformError::TooLong { frames: frame_count });
     }
-    let interleaved = pcm
-        .read_frames(0, frame_count as usize)
-        .map_err(|err| WaveformError::Upstream(err.to_string()))?;
     let channels = format.channels as usize;
     let mut mono = Vec::with_capacity(frame_count as usize);
-    for frame in interleaved.chunks_exact(channels) {
+    for frame in pcm.samples_i16().chunks_exact(channels) {
         let sum = frame
             .iter()
-            .map(|sample| {
-                if sample.is_finite() {
-                    sample.clamp(-1.0, 1.0) as f64
-                } else {
-                    0.0
-                }
-            })
+            .map(|&sample| crate::render::audio::cache::i16_to_f32(sample) as f64)
             .sum::<f64>();
         mono.push((sum / channels as f64).clamp(-1.0, 1.0) as f32);
     }

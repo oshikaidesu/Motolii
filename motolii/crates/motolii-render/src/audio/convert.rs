@@ -1,7 +1,5 @@
 
-use crate::render::audio::cache::{PcmCache, PcmFormat};
-use crate::render::audio::error::{AudioError, Result};
-use crate::render::audio::resample::FixedRatioResampler;
+use crate::render::audio::cache::PcmFormat;
 
 pub const CANONICAL_SAMPLE_RATE: u32 = 48_000;
 pub const CANONICAL_CHANNELS: u16 = 2;
@@ -22,75 +20,99 @@ pub fn time_to_canonical_frames(t: crate::doc::core::RationalTime) -> u64 {
     ((num * u128::from(CANONICAL_SAMPLE_RATE)) / den) as u64
 }
 
-pub fn to_canonical(cache: &PcmCache) -> Result<PcmCache> {
-    let stereo = map_channels_to_stereo(cache)?;
-    if stereo.format().sample_rate == CANONICAL_SAMPLE_RATE {
-        return Ok(stereo);
+/// 音の頭は素材の頭に揃う。符号化の準備区間(AAC の priming)や edit list で前後しない。
+#[cfg(test)]
+mod head_alignment {
+    use crate::render::audio::decode::decode_file;
+
+    fn ffmpeg_available() -> bool {
+        crate::render::media::test_encoders_available(&["aac", "libmp3lame"])
     }
-    resample_whole(&stereo, CANONICAL_SAMPLE_RATE)
+
+    /// 0.5 秒の無音のあと 1kHz が鳴る素材を、指定の codec で作る。
+    fn silence_then_tone(dir: &std::path::Path, name: &str, codec_args: &[&str]) -> std::path::PathBuf {
+        let out = dir.join(name);
+        let status = crate::render::media::tool_command(crate::render::media::ffmpeg_bin())
+            .args([
+                "-v", "error", "-y",
+                "-f", "lavfi", "-i", "sine=frequency=1000:sample_rate=48000:duration=1",
+                "-af", "adelay=500:all=1",
+            ])
+            .args(codec_args)
+            .arg(&out)
+            .status()
+            .expect("spawn ffmpeg");
+        assert!(status.success(), "audio fixture failed: {name}");
+        out
+    }
+
+    /// 最初に |sample| > 0.05 となる時刻(秒)。
+    fn onset_seconds(path: &std::path::Path) -> f64 {
+        let pcm = decode_file(path).unwrap();
+        let first = pcm.samples_i16().iter().position(|s| (*s as i32).abs() > 1600).expect("tone never starts");
+        (first / 2) as f64 / 48_000.0
+    }
+
+    fn assert_onset_at_half_second(path: &std::path::Path) {
+        let onset = onset_seconds(path);
+        let error_ms = (onset - 0.5) * 1000.0;
+        assert!(
+            error_ms.abs() <= 5.0,
+            "{}: tone starts at {onset:.4}s, {error_ms:+.1} ms off",
+            path.file_name().unwrap().to_string_lossy()
+        );
+    }
+
+    #[test]
+    fn wav_head_is_where_the_file_says() {
+        if !ffmpeg_available() { eprintln!("skip: ffmpeg not on PATH"); return; }
+        let dir = tempfile::tempdir().unwrap();
+        assert_onset_at_half_second(&silence_then_tone(dir.path(), "tone.wav", &["-c:a", "pcm_s16le"]));
+    }
+
+    #[test]
+    fn aac_head_is_where_the_file_says() {
+        if !ffmpeg_available() { eprintln!("skip: ffmpeg not on PATH"); return; }
+        let dir = tempfile::tempdir().unwrap();
+        assert_onset_at_half_second(&silence_then_tone(dir.path(), "tone.m4a", &["-c:a", "aac", "-b:a", "128k"]));
+    }
+
+    #[test]
+    fn mp3_head_is_where_the_file_says() {
+        if !ffmpeg_available() { eprintln!("skip: ffmpeg not on PATH"); return; }
+        let dir = tempfile::tempdir().unwrap();
+        assert_onset_at_half_second(&silence_then_tone(dir.path(), "tone.mp3", &["-c:a", "libmp3lame", "-b:a", "128k"]));
+    }
 }
 
-fn map_channels_to_stereo(cache: &PcmCache) -> Result<PcmCache> {
-    let fmt = cache.format();
-    match fmt.channels {
-        2 => Ok(cache.clone()),
-        1 => {
-            let frames = cache.frame_count() as usize;
-            let mut out = Vec::with_capacity(frames * 2);
-            let src = cache
-                .read_frames(0, frames)
-                .expect("full cache read must succeed");
-            for &s in src {
-                out.push(s);
-                out.push(s);
-            }
-            PcmCache::from_interleaved(
-                out,
-                PcmFormat {
-                    channels: 2,
-                    sample_rate: fmt.sample_rate,
-                },
-            )
+/// 数字を見る物(`cargo test -- --ignored head_numbers --nocapture`)。codec ごとの頭の誤差 ms。
+#[cfg(test)]
+mod head_numbers {
+    #[test]
+    #[ignore]
+    fn head_error_per_codec() {
+        if !crate::render::media::test_encoders_available(&["aac", "libmp3lame"]) {
+            return;
         }
-        other => Err(AudioError::UnsupportedChannels { channels: other }),
-    }
-}
-
-fn resample_whole(cache: &PcmCache, device_rate: u32) -> Result<PcmCache> {
-    let source_rate = cache.format().sample_rate;
-    let channels = cache.format().channels;
-    let mut resampler = FixedRatioResampler::new(source_rate, device_rate, channels)?;
-    resampler.reset();
-
-    let total = cache.frame_count() as usize;
-    let mut out = Vec::new();
-    let mut cursor = 0usize;
-    while cursor < total {
-        let need = resampler.input_frames_next();
-        let remain = total - cursor;
-        if remain >= need {
-            let chunk = cache.read_frames(cursor as u64, need)?;
-            out.extend_from_slice(resampler.process_interleaved(chunk)?);
-            cursor += need;
-        } else {
-            let chunk = cache.read_frames(cursor as u64, remain)?;
-            out.extend_from_slice(resampler.process_partial_interleaved(chunk)?);
-            cursor = total;
+        let dir = tempfile::tempdir().unwrap();
+        for (name, args) in [
+            ("tone.wav", vec!["-c:a", "pcm_s16le"]),
+            ("tone.m4a", vec!["-c:a", "aac", "-b:a", "128k"]),
+            ("tone.mp3", vec!["-c:a", "libmp3lame", "-b:a", "128k"]),
+            ("tone_44k.m4a", vec!["-ar", "44100", "-c:a", "aac", "-b:a", "128k"]),
+        ] {
+            let out = dir.path().join(name);
+            let status = crate::render::media::tool_command(crate::render::media::ffmpeg_bin())
+                .args(["-v", "error", "-y", "-f", "lavfi", "-i", "sine=frequency=1000:sample_rate=48000:duration=1", "-af", "adelay=500:all=1"])
+                .args(&args)
+                .arg(&out)
+                .status()
+                .unwrap();
+            assert!(status.success());
+            let pcm = crate::render::audio::decode::decode_file(&out).unwrap();
+            let first = pcm.samples_i16().iter().position(|s| (*s as i32).abs() > 1600).unwrap();
+            let onset = (first / 2) as f64 / 48_000.0;
+            println!("PROBE room=audio verdict=head-error codec={name} error-ms={:+.2}", (onset - 0.5) * 1000.0);
         }
     }
-    for _ in 0..8 {
-        let flushed = resampler.flush_silence_chunk()?;
-        if flushed.is_empty() {
-            break;
-        }
-        out.extend_from_slice(flushed);
-    }
-
-    PcmCache::from_interleaved(
-        out,
-        PcmFormat {
-            channels,
-            sample_rate: device_rate,
-        },
-    )
 }

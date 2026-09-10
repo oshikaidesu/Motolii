@@ -4,7 +4,7 @@
 use crate::doc::store::*;
 use transform_gizmo::math::Transform as GizmoTransform;
 use transform_gizmo::{
-    mint, Gizmo, GizmoConfig, GizmoInteraction, GizmoMode, GizmoOrientation, GizmoVisuals, Rect,
+    mint, Color32, Gizmo, GizmoConfig, GizmoInteraction, GizmoMode, GizmoOrientation, GizmoVisuals, Rect,
 };
 
 type PropertyEdit = (LayerId, PropertyId, Value);
@@ -35,28 +35,37 @@ fn row_matrix(m: glam::Mat4) -> mint::RowMatrix4<f64> {
 }
 
 /// 掴む所と描く所は同じ枠で。Stage が送ってくる点は comp 座標なので、
-/// viewport も comp の矩形にする。見た目の大きさは comp の高さに比例する。
+/// viewport も comp の矩形にする。大きさと線の太さは画面の画素で決め、
+/// `view_scale`(画面 px / comp px)で comp 座標へ戻す —— 寄っても引いても同じ手触り。
+/// 色は意味だけを運ぶ: 白 = 通常、黒 = 触れている。実際の色は Stage の theme が決める。
 pub(crate) fn config(
     comp: crate::doc::core::CompSpec,
     camera: crate::doc::core::ResolvedCamera,
+    view_scale: f64,
 ) -> GizmoConfig {
     let projection = crate::doc::core::camera_projection(comp, camera);
-    let height = comp.height as f32;
+    let px = 1.0 / view_scale.max(1e-3) as f32;
     GizmoConfig {
         view_matrix: row_matrix(projection.view_matrix()),
         projection_matrix: row_matrix(gizmo_projection(&projection)),
         viewport: Rect::from_min_max(
             transform_gizmo::math::Pos2::new(0.0, 0.0),
-            transform_gizmo::math::Pos2::new(comp.width as f32, height),
+            transform_gizmo::math::Pos2::new(comp.width as f32, comp.height as f32),
         ),
-        modes: GizmoMode::all_translate() | GizmoMode::all_rotate() | GizmoMode::all_scale(),
+        modes: GizmoMode::all_translate() | GizmoMode::all_rotate(),
         orientation: GizmoOrientation::Local,
-        snap_distance: height * 0.01,
+        snap_distance: 10.0 * px,
         snap_scale: 0.1,
         visuals: GizmoVisuals {
-            gizmo_size: height * 0.13,
-            stroke_width: height * 0.005,
-            ..Default::default()
+            gizmo_size: 90.0 * px,
+            stroke_width: 3.0 * px,
+            x_color: Color32::WHITE,
+            y_color: Color32::WHITE,
+            z_color: Color32::WHITE,
+            s_color: Color32::WHITE,
+            highlight_color: Some(Color32::BLACK),
+            inactive_alpha: 0.7,
+            highlight_alpha: 1.0,
         },
         ..Default::default()
     }
@@ -280,18 +289,22 @@ fn world_from(transform: &GizmoTransform, anchor: glam::Vec3) -> glam::Affine3A 
 }
 
 /// 描くだけ(掴んでいない時)。頂点は comp 座標なので、Stage はそのまま画面へ写せる。
+/// `pointer` が乗っている部品は「触れている」色で返る。
 pub(crate) fn draw_data(
     comp: crate::doc::core::CompSpec,
     camera: crate::doc::core::ResolvedCamera,
     targets: &[SpatialTarget],
+    pointer: Option<[f64; 2]>,
+    view_scale: f64,
 ) -> Option<transform_gizmo::GizmoDrawData> {
     if targets.is_empty() {
         return None;
     }
-    let mut gizmo = Gizmo::new(config(comp, camera));
+    let mut gizmo = Gizmo::new(config(comp, camera, view_scale));
     let starts: Vec<_> = targets.iter().map(|t| t.start).collect();
+    let cursor_pos = pointer.map_or((f32::NAN, f32::NAN), |p| (p[0] as f32, p[1] as f32));
     let _ = gizmo.update(
-        GizmoInteraction { cursor_pos: (f32::NAN, f32::NAN), hovered: false, drag_started: false, dragging: false },
+        GizmoInteraction { cursor_pos, hovered: pointer.is_some(), drag_started: false, dragging: false },
         &starts,
     );
     Some(gizmo.draw())
@@ -319,6 +332,7 @@ impl SpatialDrag {
         start: [f64; 2],
         at: RationalTime,
         observer: crate::doc::core::ResolvedCamera,
+        view_scale: f64,
     ) -> Result<Self, String> {
         let e = |x: StoreError| x.to_string();
         let view = doc.view().without_transients();
@@ -338,7 +352,7 @@ impl SpatialDrag {
                 original_values.push((target.layer, PropertyId::new(name).map_err(e)?, value));
             }
         }
-        let mut gizmo = Gizmo::new(config(comp, observer));
+        let mut gizmo = Gizmo::new(config(comp, observer, view_scale));
         let current: Vec<_> = targets.iter().map(|t| t.start).collect();
         let interaction = GizmoInteraction {
             cursor_pos: (start[0] as f32, start[1] as f32),
@@ -546,7 +560,7 @@ mod spatial_gizmo_tests {
             for x in (700..1250).step_by(25) {
                 for y in (300..800).step_by(25) {
                     let start = [f64::from(x), f64::from(y)];
-                    let Ok(drag) = SpatialDrag::begin(&doc, &[LayerId(41)], start, RationalTime::ZERO, camera) else {
+                    let Ok(drag) = SpatialDrag::begin(&doc, &[LayerId(41)], start, RationalTime::ZERO, camera, 0.5) else {
                         continue;
                     };
                     grabbed += 1;
@@ -567,7 +581,7 @@ mod spatial_gizmo_tests {
         for x in (700..1250).step_by(25) {
             for y in (300..800).step_by(25) {
                 let start = [f64::from(x), f64::from(y)];
-                let Ok(drag) = SpatialDrag::begin(&doc, &[layer], start, RationalTime::ZERO, camera) else {
+                let Ok(drag) = SpatialDrag::begin(&doc, &[layer], start, RationalTime::ZERO, camera, 0.5) else {
                     continue;
                 };
                 let Ok(out) = drag.edits(&doc, [start[0] + 30.0, start[1]], false, Animate::Off) else { continue };

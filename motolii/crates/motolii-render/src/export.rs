@@ -299,7 +299,7 @@ fn render_audio_input(
     cancel: &Cancel,
 ) -> Result<Option<TempAudioInput>, ExportError> {
     let mut cache = AudioProgramCache::default();
-    let program = AudioProgram::from_view(view, &mut cache)?;
+    let program = AudioProgram::from_view_blocking(view, &mut cache)?;
     if program.sources().is_empty() || range.end <= range.start {
         return Ok(None);
     }

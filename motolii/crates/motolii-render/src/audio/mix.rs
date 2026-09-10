@@ -248,9 +248,8 @@ pub fn normalize_gain_for_peak(pcm: &PcmCache, target_peak: f64) -> Result<f64> 
     let frame_count = pcm.frame_count();
     let mut peak = 0.0f64;
     if frame_count > 0 {
-        let samples = pcm.read_frames(0, frame_count as usize)?;
-        for &sample in samples {
-            peak = peak.max(sample.abs() as f64);
+        for &sample in pcm.samples_i16() {
+            peak = peak.max(crate::render::audio::cache::i16_to_f32(sample).abs() as f64);
         }
     }
     if peak <= 0.0 {
@@ -294,9 +293,9 @@ fn lerp_stereo(pcm: &PcmCache, pos: f64) -> (f64, f64) {
     let i0 = (pos.floor() as u64).min(max_index);
     let i1 = (i0 + 1).min(max_index);
     let frac = (pos - i0 as f64).clamp(0.0, 1.0);
-    let f0 = pcm.frame_at(i0).expect("in-range");
-    let f1 = pcm.frame_at(i1).expect("in-range");
-    let l = f0[0] as f64 * (1.0 - frac) + f1[0] as f64 * frac;
-    let r = f0[1] as f64 * (1.0 - frac) + f1[1] as f64 * frac;
+    let f0 = pcm.stereo_at(i0).expect("in-range");
+    let f1 = pcm.stereo_at(i1).expect("in-range");
+    let l = f0.0 as f64 * (1.0 - frac) + f1.0 as f64 * frac;
+    let r = f0.1 as f64 * (1.0 - frac) + f1.1 as f64 * frac;
     (l, r)
 }

@@ -1,7 +1,7 @@
 //! Shared surface programs and the mesh vertex hook, compiled from the effect manifest.
 //!
 //! 作者の file は `fn field(in: FieldIn, p: FieldParams) -> FieldOut` か
-//! `fn surface(in: SurfaceIn, p: SurfaceParams) -> vec3f` を書く。欄の struct と、instance の 12 float から
+//! `fn surface(in: SurfaceIn, p: SurfaceParams) -> vec3f` を書く。欄の struct と、instance の 24 float から
 //! それを組む wrapper はここが manifest から生成する。欄は field → surface の順に slot を取る。
 
 use std::sync::Arc;
@@ -12,8 +12,8 @@ use super::catalog::EffectStage;
 use super::VismDefinition;
 use crate::doc::store::ResolvedEffect;
 
-/// instance が hook へ渡せる float の数(頂点属性 16 か所の上限から)(fork の `GpuMeshInstance::params`)。
-pub(crate) const PARAM_SLOTS: usize = 12;
+/// instance が hook へ渡せる float の数(頂点属性 16 か所の上限、法線行列を shader で出して 6 本)(fork の `GpuMeshInstance::params`)。
+pub(crate) const PARAM_SLOTS: usize = 24;
 
 /// A shared program and its parameter values for a surface.
 #[derive(Clone, Default)]
@@ -21,6 +21,8 @@ pub struct SurfaceShading {
     pub program: Option<Arc<SurfaceProgram>>,
     pub params: [f32; PARAM_SLOTS],
     pub reads_backdrop: bool,
+    /// backdrop の mip を何段まで読むかを決める粗さ(manifest の `BACKDROP_BLUR`、無ければ 1 = 全段)。
+    pub backdrop_roughness: f32,
 }
 
 /// 効果列から hook を拾う。同じ stage が複数あれば下(後)が勝つ。
@@ -158,7 +160,12 @@ impl crate::render::compositor::Compositor {
                     .is_none_or(|i| params[offset + i] != 0.0)
             })
         });
-        Ok(SurfaceShading { program: Some(program), params, reads_backdrop })
+        let backdrop_roughness = surface.and_then(|d| {
+            let name = d.manifest.backdrop_blur_input.as_ref()?;
+            let i = d.manifest.param_inputs().position(|p| &p.name == name)?;
+            Some(params[offset + i].clamp(0.0, 1.0))
+        }).unwrap_or(1.0);
+        Ok(SurfaceShading { program: Some(program), params, reads_backdrop, backdrop_roughness })
     }
 
 }

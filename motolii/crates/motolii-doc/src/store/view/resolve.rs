@@ -419,6 +419,8 @@ impl<'a> StoreView<'a> {
             declared_size: size,
             source: meta.source,
             source_frame,
+            source_time: RationalTime::try_from_frame(source_frame, composition.fps)
+                .map_err(|e| StoreError::Property(e.to_string()))?,
             masks: self.resolved_masks(layer, t)?,
             effects: self.resolved_effects(layer, t)?,
             blend_mode: self.resolved_blend_mode(layer, t, attrs.blend_mode)?,

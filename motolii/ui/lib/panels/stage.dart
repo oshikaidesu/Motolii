@@ -1,4 +1,6 @@
 import 'dart:math' as math;
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -84,43 +86,32 @@ class _StagePanelState extends State<StagePanel> {
   /// 3D layer gizmo: the native side hands over the very triangles it hit-tests
   /// against, in comp coordinates. Grabbing and drawing therefore cannot drift.
   /// 2D and 2.5D layers never reach here; their cage lives in [_handles].
-  Map<String, dynamic> get _spatial => EditorSession.map(_state['spatialGizmo']);
-  List<Offset> get _spatialVertices {
-    final raw = _spatial['vertices'];
-    if (raw is! List) return const [];
-    return [
-      for (final v in raw)
-        if (v is List && v.length >= 2)
-          Offset(_num(v[0], double.nan), _num(v[1], double.nan))
-        else
-          const Offset(double.nan, double.nan),
-    ];
+  /// Native sends the same map object until the gizmo changes, so identity
+  /// is the cache key: the mesh is parsed once per status, not once per build.
+  Object? _meshRaw;
+  _SpatialMesh? _meshParsed;
+  _SpatialMesh? get _mesh {
+    final raw = _state['spatialGizmo'];
+    if (!identical(raw, _meshRaw)) {
+      _meshRaw = raw;
+      _meshParsed = _SpatialMesh.parse(raw);
+      _screenMeshKey = null;
+    }
+    return _meshParsed;
   }
 
-  List<int> get _spatialIndices {
-    final raw = _spatial['indices'];
-    if (raw is! List) return const [];
-    return [for (final i in raw) (i as num).toInt()];
-  }
-
-  List<Color> get _spatialColors {
-    final raw = _spatial['colors'];
-    if (raw is! List) return const [];
-    double channel(dynamic v) =>
-        math.pow(_num(v).clamp(0.0, 1.0), 1 / 2.2).toDouble();
-    int byte(dynamic v) => (channel(v) * 255).round().clamp(0, 255);
-    return [
-      for (final c in raw)
-        if (c is List && c.length >= 4)
-          Color.fromARGB(
-            (_num(c[3], 1).clamp(0.0, 1.0) * 255).round(),
-            byte(c[0]),
-            byte(c[1]),
-            byte(c[2]),
-          )
-        else
-          const Color(0x00000000),
-    ];
+  /// The mesh on screen, rebuilt only when the mesh or the view moves.
+  (Object, Offset, double)? _screenMeshKey;
+  ui.Vertices? _screenMeshCache;
+  ui.Vertices? _screenMesh() {
+    final mesh = _mesh;
+    if (mesh == null) return null;
+    final key = (mesh, _origin, _scale);
+    if (_screenMeshKey != key) {
+      _screenMeshKey = key;
+      _screenMeshCache = mesh.toScreen(_origin, _scale);
+    }
+    return _screenMeshCache;
   }
 
   /// Only a 3D layer carries the three-axis gizmo. 2D and 2.5D layers keep the
@@ -135,9 +126,10 @@ class _StagePanelState extends State<StagePanel> {
   /// it lands on a drawn triangle. The native side then picks the axis.
   bool _spatialHit(Offset screen) {
     if (!_spatialActive) return false;
-    final vertices = _spatialVertices;
-    final indices = _spatialIndices;
-    if (vertices.isEmpty || indices.length < 3) return false;
+    final mesh = _mesh;
+    if (mesh == null) return false;
+    final vertices = mesh.vertices;
+    final indices = mesh.indices;
     final p = _toComp(screen);
     final slack = 6 / _scale;
     for (var i = 0; i + 2 < indices.length; i += 3) {
@@ -674,6 +666,38 @@ class _StagePanelState extends State<StagePanel> {
     }
   }
 
+  /// The 3D gizmo lights the part under the pointer. Native only hears about
+  /// the pointer while it is on the mesh, plus once when it leaves, so an
+  /// idle Stage sends nothing. Moves are coalesced: one in flight at a time.
+  bool _onMesh = false;
+  Map<String, dynamic>? _hoverPending;
+  bool _hoverSending = false;
+  void _hover(PointerHoverEvent event) {
+    if (_pointer != null || !c.supports('stageGesture')) return;
+    final on = _spatialHit(event.localPosition);
+    if (!on && !_onMesh) return;
+    _onMesh = on;
+    final p = _toComp(event.localPosition);
+    _hoverPending = {
+      'phase': 'hover',
+      'point': on ? [p.dx, p.dy] : null,
+      'viewScale': _scale,
+    };
+    if (_hoverSending) return;
+    _hoverSending = true;
+    () async {
+      try {
+        while (_hoverPending != null) {
+          final args = _hoverPending!;
+          _hoverPending = null;
+          await c.command('stageGesture', args);
+        }
+      } finally {
+        _hoverSending = false;
+      }
+    }();
+  }
+
   void _move(PointerMoveEvent event) {
     if (event.pointer != _pointer) return;
     final old = _lastScreen ?? event.localPosition;
@@ -922,6 +946,7 @@ class _StagePanelState extends State<StagePanel> {
                   onPointerDown: _down,
                   onPointerMove: _move,
                   onPointerUp: _up,
+                  onPointerHover: _hover,
                   onPointerCancel: (_) => _finish(true),
                   onPointerSignal: (event) {
                     if (event is PointerScrollEvent) {
@@ -993,18 +1018,9 @@ class _StagePanelState extends State<StagePanel> {
                                   outlines: _outlinesCopy(outlines),
                                   volumes: volumes,
                                   handles: gizmos ? _handles() : const {},
-                                  spatial: gizmos && _spatialActive
-                                      ? [
-                                          for (final p in _spatialVertices)
-                                            _toScreen(p),
-                                        ]
-                                      : const [],
-                                  spatialColors: gizmos && _spatialActive
-                                      ? _spatialColors
-                                      : const [],
-                                  spatialIndices: gizmos && _spatialActive
-                                      ? _spatialIndices
-                                      : const [],
+                                  spatialMesh: gizmos && _spatialActive
+                                      ? _screenMesh()
+                                      : null,
                                   marquee: _marquee == null
                                       ? null
                                       : Rect.fromPoints(
@@ -1103,9 +1119,7 @@ class _StageOverlay extends CustomPainter {
     required this.handles,
     required this.frame,
     required this.viewport,
-    this.spatial = const [],
-    this.spatialColors = const [],
-    this.spatialIndices = const [],
+    this.spatialMesh,
     this.marquee,
   });
   final List<List<Offset>> outlines, volumes, cameras;
@@ -1120,41 +1134,8 @@ class _StageOverlay extends CustomPainter {
   final Rect viewport;
 
   /// The 3D gizmo exactly as the native side hit-tests it, already on screen.
-  final List<Offset> spatial;
-  final List<Color> spatialColors;
-  final List<int> spatialIndices;
+  final ui.Vertices? spatialMesh;
   final Rect? marquee;
-  /// Runs of triangles that share a colour become one filled path, so the
-  /// mesh costs a handful of draws instead of one per triangle.
-  void _spatial(Canvas canvas) {
-    if (spatial.isEmpty || spatialIndices.length < 3) return;
-    var path = Path();
-    Color? colour;
-    void flush() {
-      final fill = colour;
-      if (fill != null) canvas.drawPath(path, Paint()..color = fill);
-      path = Path();
-    }
-
-    for (var i = 0; i + 2 < spatialIndices.length; i += 3) {
-      final at = [
-        for (var k = 0; k < 3; k++) spatialIndices[i + k],
-      ];
-      if (at.any((v) => v < 0 || v >= spatial.length)) continue;
-      final next = at[0] < spatialColors.length
-          ? spatialColors[at[0]]
-          : const Color(0xFFFFFFFF);
-      if (colour != next) {
-        flush();
-        colour = next;
-      }
-      final points = at.map((v) => spatial[v]).toList();
-      if (points.any((p) => !p.dx.isFinite || !p.dy.isFinite)) continue;
-      path.addPolygon(points, true);
-    }
-    flush();
-  }
-
   void _cross(Canvas canvas, Offset at, double half, Paint paint) {
     canvas.drawLine(at - Offset(half, 0), at + Offset(half, 0), paint);
     canvas.drawLine(at - Offset(0, half), at + Offset(0, half), paint);
@@ -1264,7 +1245,9 @@ class _StageOverlay extends CustomPainter {
         }
       }
     }
-    _spatial(canvas);
+    if (spatialMesh != null) {
+      canvas.drawVertices(spatialMesh!, BlendMode.srcOver, Paint());
+    }
     for (final entry in handles.entries) {
       if (entry.key == 'rotation') {
         canvas.drawCircle(entry.value, 4, Paint()..color = EditorTheme.app);
@@ -1303,20 +1286,68 @@ class _StageOverlay extends CustomPainter {
       old.outlines.toString() != outlines.toString() ||
       old.volumes.toString() != volumes.toString() ||
       old.handles.toString() != handles.toString() ||
-      _spatialChanged(old);
+      !identical(old.spatialMesh, spatialMesh);
 
-  /// The gizmo mesh can hold thousands of points; sample it instead of
-  /// stringifying the whole thing on every frame.
-  bool _spatialChanged(_StageOverlay old) {
-    if (old.spatial.length != spatial.length ||
-        old.spatialIndices.length != spatialIndices.length ||
-        old.spatialColors.length != spatialColors.length)
-      return true;
-    for (var i = 0; i < spatial.length; i += 8) {
-      if (old.spatial[i] != spatial[i]) return true;
+}
+
+/// The gizmo mesh as native sent it: comp-space vertices, linear colours
+/// already converted to sRGB, and only the triangles that are drawable.
+class _SpatialMesh {
+  const _SpatialMesh(this.vertices, this.colors, this.indices);
+  final List<Offset> vertices;
+  final List<Color> colors;
+  final Uint16List indices;
+
+  static _SpatialMesh? parse(dynamic raw) {
+    if (raw is! Map) return null;
+    final v = raw['vertices'], c = raw['colors'], i = raw['indices'];
+    if (v is! List || c is! List || i is! List) return null;
+    if (v.isEmpty || v.length > 0xFFFF || i.length < 3) return null;
+    final vertices = [
+      for (final p in v)
+        p is List && p.length >= 2
+            ? Offset(_StagePanelState._num(p[0], double.nan), _StagePanelState._num(p[1], double.nan))
+            : const Offset(double.nan, double.nan),
+    ];
+    double channel(dynamic x) =>
+        math.pow(_StagePanelState._num(x).clamp(0.0, 1.0), 1 / 2.2).toDouble();
+    int byte(dynamic x) => (channel(x) * 255).round().clamp(0, 255);
+    // Native sends meaning, not paint: white is the gizmo at rest, black is
+    // the part under the pointer. At rest it stays quiet; the accent says
+    // "this one will move if you press". Anything else is passed through.
+    Color tone(List rgba) {
+      final alpha = (_StagePanelState._num(rgba[3], 1).clamp(0.0, 1.0) * 255)
+          .round();
+      final rgb = [for (var k = 0; k < 3; k++) _StagePanelState._num(rgba[k])];
+      if (rgb.every((v) => v >= 0.999)) return EditorTheme.muted.withAlpha(alpha);
+      if (rgb.every((v) => v <= 0.001)) return EditorTheme.accent.withAlpha(alpha);
+      return Color.fromARGB(alpha, byte(rgb[0]), byte(rgb[1]), byte(rgb[2]));
     }
-    return spatial.isNotEmpty && old.spatial.last != spatial.last;
+
+    final colors = [
+      for (var k = 0; k < vertices.length; k++)
+        k < c.length && c[k] is List && (c[k] as List).length >= 4
+            ? tone(c[k] as List)
+            : const Color(0x00000000),
+    ];
+    final indices = <int>[];
+    for (var t = 0; t + 2 < i.length; t += 3) {
+      final tri = [for (var k = 0; k < 3; k++) (i[t + k] as num).toInt()];
+      if (tri.any((x) => x < 0 || x >= vertices.length)) continue;
+      if (tri.any((x) => !vertices[x].dx.isFinite || !vertices[x].dy.isFinite))
+        continue;
+      indices.addAll(tri);
+    }
+    if (indices.isEmpty) return null;
+    return _SpatialMesh(vertices, colors, Uint16List.fromList(indices));
   }
+
+  ui.Vertices toScreen(Offset origin, double scale) => ui.Vertices(
+    VertexMode.triangles,
+    [for (final p in vertices) origin + p * scale],
+    colors: colors,
+    indices: indices,
+  );
 }
 
 double _cross(Offset o, Offset a, Offset b) =>

@@ -17,7 +17,7 @@ struct InputKey {
     camera: ResolvedCamera,
     opacity: f32,
     blend: BlendMode,
-    params: [f32; 12],
+    params: [f32; super::effects::surface_program::PARAM_SLOTS],
     program: usize,
     clip: Option<ClipSpec>,
 }

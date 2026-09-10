@@ -419,6 +419,7 @@ pub struct ResolvedLayer {
     pub placement: LayerPlacement,
     pub declared_size: [f32; 2],
     pub source_frame: i64,
+    pub source_time: RationalTime,
     pub masks: Vec<ResolvedMask>,
     pub effects: Vec<ResolvedEffect>,
     pub blend_mode: BlendMode,

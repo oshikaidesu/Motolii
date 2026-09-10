@@ -25,8 +25,8 @@ smallvec = "1"
 wgpu_context = "0.9"
 wgpu = "29"
 peniko = "0.6"
-re_renderer = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "55fa777d9b7740f40673e3a5788eee8c634b2355", default-features = false, features = ["import-gltf", "import-obj", "import-stl"] }
-re_log = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "55fa777d9b7740f40673e3a5788eee8c634b2355", features = ["setup"] }
+re_renderer = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196", default-features = false, features = ["import-gltf", "import-obj", "import-stl"] }
+re_log = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196", features = ["setup"] }
 macaw = "0.30"
 glam = "0.30"
 transform-gizmo = "0.11"
@@ -35,27 +35,26 @@ moxcms = "0.8"
 base64 = "0.22"
 ffmpeg-sidecar = "2.5"
 rfd = "0.17"
-re_video = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "55fa777d9b7740f40673e3a5788eee8c634b2355" }
+re_video = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196", features = ["lavc"] }
 naga = { version = "29.0", default-features = false, features = ["glsl-in", "wgsl-out"] }
 pollster = "0.4"
-re_importer = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "55fa777d9b7740f40673e3a5788eee8c634b2355", default-features = false }
-re_sdk_types = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "55fa777d9b7740f40673e3a5788eee8c634b2355", default-features = false }
-re_types_core = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "55fa777d9b7740f40673e3a5788eee8c634b2355" }
+re_importer = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196", default-features = false }
+re_sdk_types = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196", default-features = false }
+re_types_core = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196" }
 serde = { version = "1", features = ["derive"] }
 arrow = { version = "58.3", default-features = false }
 sha2 = "0.10"
 proptest = "1"
-re_byte_size = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "55fa777d9b7740f40673e3a5788eee8c634b2355" }
-re_chunk = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "55fa777d9b7740f40673e3a5788eee8c634b2355" }
-re_chunk_store = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "55fa777d9b7740f40673e3a5788eee8c634b2355" }
-re_build_info = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "55fa777d9b7740f40673e3a5788eee8c634b2355" }
-re_entity_db = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "55fa777d9b7740f40673e3a5788eee8c634b2355" }
-re_log_encoding = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "55fa777d9b7740f40673e3a5788eee8c634b2355", features = ["encoder", "decoder"] }
-re_log_types = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "55fa777d9b7740f40673e3a5788eee8c634b2355" }
-re_query = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "55fa777d9b7740f40673e3a5788eee8c634b2355" }
+re_byte_size = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196" }
+re_chunk = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196" }
+re_chunk_store = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196" }
+re_build_info = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196" }
+re_entity_db = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196" }
+re_log_encoding = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196", features = ["encoder", "decoder"] }
+re_log_types = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196" }
+re_query = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196" }
 tiny-skia = { version = "0.11", default-features = false, features = ["std", "simd"] }
 cosmic-text = "0.19"
-symphonia = { version = "0.6", default-features = false, features = ["aac", "aiff", "alac", "flac", "isomp4", "mp1", "mp2", "mp3", "ogg", "pcm", "vorbis", "wav"] }
 rubato = "0.16"
 cpal = "0.18"
 rtrb = "0.4"
@@ -64,7 +63,8 @@ serde_json = "1"
 thiserror = "2"
 quick_cache = "0.7.0"
 tempfile = "3"
-re_build_tools = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "55fa777d9b7740f40673e3a5788eee8c634b2355" }
+memmap2 = "0.9"
+re_build_tools = { git = "file:///Users/member_ottoto/rust_ae/rerun-s2-seam-20260818", rev = "cdf83c46b6ae246768af8ed1f1ca0b4cb6df7196" }
 
 [workspace.lints.rust]
 unreachable_pub = "warn"
@@ -87,6 +87,10 @@ debug = "line-tables-only"
 [profile.dev.package."*"]
 opt-level = 2
 debug = false
+
+[patch.crates-io]
+# re_mp4 0.5.1 は edit list 付き mp4(ffmpeg の VFR 出力)で最後のコマの長さが桁溢れする。fork の 1 行修正。
+re_mp4 = { git = "file:///Users/member_ottoto/rust_ae/re_mp4", rev = "21d5de2a6f5a7c96970b8462d46213eed809a712" }
 
 [patch."https://github.com/DioxusLabs/blitz"]
 blitz-dom = { path = "motolii/vendor/blitz-dom" }

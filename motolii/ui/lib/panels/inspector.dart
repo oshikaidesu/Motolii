@@ -192,7 +192,10 @@ class _InspectorPanelState extends State<InspectorPanel> {
             effect['enabled'],
             effect['placement'],
             effect['layout'],
-            [for (final row in panelRows(effect['params'])) _stampDeclared(row)],
+            [
+              for (final row in panelRows(effect['params']))
+                _stampDeclared(row),
+            ],
           ],
       ],
     ];
@@ -587,21 +590,24 @@ class _InspectorPanelState extends State<InspectorPanel> {
     if (values.isNotEmpty) await _writeMany(layer, values, preview: false);
   }
 
-  Widget _headGlyph(IconData icon, String tip, VoidCallback? onTap) => EditorTooltip(
-    message: tip,
-    child: GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.only(left: EditorMetrics.s6),
-        child: Icon(
-          icon,
-          size: EditorMetrics.s12,
-          color: onTap == null ? EditorTheme.disabledInk : EditorTheme.muted,
+  Widget _headGlyph(IconData icon, String tip, VoidCallback? onTap) =>
+      EditorTooltip(
+        message: tip,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.only(left: EditorMetrics.s6),
+            child: Icon(
+              icon,
+              size: EditorMetrics.s12,
+              color: onTap == null
+                  ? EditorTheme.disabledInk
+                  : EditorTheme.muted,
+            ),
+          ),
         ),
-      ),
-    ),
-  );
+      );
 
   /// Two wells side by side in one cell, and the wells beside a pad.
   double get _half => (_cellWidth - EditorMetrics.s4) / 2;
@@ -646,6 +652,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
   /// The word part of the name column; 0 when the panel is too narrow for
   /// three wells beside it — the name falls back to its glyph and tooltip.
   double _wordWidth = EditorMetrics.s48;
+
   /// The room a card's contents get: the panel less the card's margin and
   /// padding. Measured once for the panel instead of once per row of cells.
   double _cardWidth = EditorMetrics.cell;
@@ -810,9 +817,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
         ),
       if (rows.isNotEmpty) ...[
         const SizedBox(height: EditorMetrics.s6),
-        _cells([
-          for (final r in rows) _Cell(_control(layer, '${r['id']}')),
-        ]),
+        _cells([for (final r in rows) _Cell(_control(layer, '${r['id']}'))]),
       ],
     ];
   }
@@ -1271,8 +1276,30 @@ class _InspectorPanelState extends State<InspectorPanel> {
     final key = '${effect['id']}';
     final open = _advancedOpen.contains(key);
     return EditorCard(
+      key: ValueKey('effect:$key'),
       title: '${effect['name']}',
       dim: effect['enabled'] == false,
+      // The order is the pipeline: grab the head to move the effect up or
+      // down it; the menu keeps the same move for one step at a time.
+      leading: panelCan(c, 'moveEffect')
+          ? ReorderableDragStartListener(
+              index: index,
+              child: EditorTooltip(
+                message: 'Drag to reorder',
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.grab,
+                  child: Padding(
+                    padding: const EdgeInsets.only(right: EditorMetrics.s4),
+                    child: Icon(
+                      Icons.drag_indicator,
+                      size: EditorMetrics.s12,
+                      color: EditorTheme.muted,
+                    ),
+                  ),
+                ),
+              ),
+            )
+          : null,
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -1474,16 +1501,13 @@ class _InspectorPanelState extends State<InspectorPanel> {
 
   /// A labelled control for one declared param: the word above, the control
   /// under it, sized by its kind.
-  Widget _control(
-    Map<String, dynamic> layer,
-    String id, {
-    bool hero = false,
-  }) => _live2([id], () {
-    final row = _row(id);
-    return row == null
-        ? const SizedBox.shrink()
-        : _controlBody(layer, row, hero: hero);
-  });
+  Widget _control(Map<String, dynamic> layer, String id, {bool hero = false}) =>
+      _live2([id], () {
+        final row = _row(id);
+        return row == null
+            ? const SizedBox.shrink()
+            : _controlBody(layer, row, hero: hero);
+      });
 
   Widget _controlBody(
     Map<String, dynamic> layer,
@@ -1633,10 +1657,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
-          children: [
-            _cellLabel(label, hero),
-            body,
-          ],
+          children: [_cellLabel(label, hero), body],
         ),
       ),
     );
@@ -1745,60 +1766,71 @@ class _InspectorPanelState extends State<InspectorPanel> {
               children: [
                 _identity(layer),
                 Expanded(
-                  child: ListView(
+                  child: CustomScrollView(
                     controller: _scroll,
-                    padding: const EdgeInsets.only(bottom: EditorMetrics.s6),
-                    children: [
-                      if (layer['kind'] == 'Camera')
-                        EditorCard(
-                          title: 'Camera',
-                          children: _camera(layer),
-                        )
-                      else
-                        EditorCard(
-                          title: 'Transform',
-                          children: _transform(layer),
-                        ),
-                      if (layer['kind'] != 'Camera')
-                        EditorCard(
-                          title: 'World',
-                          children: _world(layer),
-                        ),
-                      if (!_multiple && text.isNotEmpty)
-                        EditorCard(
-                          title: 'Text',
-                          children: _text(layer, text),
-                        ),
-                      if (!_multiple && panelRows(layer['colors']).isNotEmpty)
-                        EditorCard(
-                          title: 'Color',
-                          children: _colors(layer),
-                        ),
-                      if (!_multiple &&
-                          matte.isNotEmpty &&
-                          layer['clipToBelow'] != true)
-                        EditorCard(
-                          title: 'Matte',
-                          children: _matte(layer, matte),
-                        ),
-                      if (rest.isNotEmpty)
-                        EditorCard(
-                          title: 'Properties',
-                          children: [
-                            _cells([
-                              for (final r in rest)
-                                _Cell(_control(layer, '${r['id']}')),
-                            ]),
-                          ],
-                        ),
+                    slivers: [
+                      SliverList.list(
+                        children: [
+                          if (layer['kind'] == 'Camera')
+                            EditorCard(
+                              title: 'Camera',
+                              children: _camera(layer),
+                            )
+                          else
+                            EditorCard(
+                              title: 'Transform',
+                              children: _transform(layer),
+                            ),
+                          if (layer['kind'] != 'Camera')
+                            EditorCard(title: 'World', children: _world(layer)),
+                          if (!_multiple && text.isNotEmpty)
+                            EditorCard(
+                              title: 'Text',
+                              children: _text(layer, text),
+                            ),
+                          if (!_multiple &&
+                              panelRows(layer['colors']).isNotEmpty)
+                            EditorCard(
+                              title: 'Color',
+                              children: _colors(layer),
+                            ),
+                          if (!_multiple &&
+                              matte.isNotEmpty &&
+                              layer['clipToBelow'] != true)
+                            EditorCard(
+                              title: 'Matte',
+                              children: _matte(layer, matte),
+                            ),
+                          if (rest.isNotEmpty)
+                            EditorCard(
+                              title: 'Properties',
+                              children: [
+                                _cells([
+                                  for (final r in rest)
+                                    _Cell(_control(layer, '${r['id']}')),
+                                ]),
+                              ],
+                            ),
+                        ],
+                      ),
                       if (!_multiple)
-                        for (var i = 0; i < effects.length; i++)
-                          _effect(
+                        SliverReorderableList(
+                          itemCount: effects.length,
+                          itemBuilder: (context, i) => _effect(
                             layer,
                             effects[i],
                             index: i,
                             count: effects.length,
                           ),
+                          onReorderItem: (from, to) => c.command('moveEffect', {
+                            'layer': layer['id'],
+                            'id': effects[from]['id'],
+                            'to': to,
+                          }),
+                        ),
+                      const SliverPadding(
+                        padding: EdgeInsets.only(bottom: EditorMetrics.s6),
+                      ),
                     ],
                   ),
                 ),

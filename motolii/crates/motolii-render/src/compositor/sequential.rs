@@ -160,7 +160,7 @@ impl Compositor {
                         if let Some(encoder) = blend_encoder.take() {
                             batch.push(encoder.finish());
                         }
-                        solo_config.backdrop = Some(self.backdrop_pyramid(comp, backing, &mut batch)?);
+                        solo_config.backdrop = Some(self.backdrop_pyramid(comp, backing, &mut batch, input.shading.backdrop_roughness)?);
                     }
                 }
                 let mut solo_view_builder = ViewBuilder::new_with_external_resolved(
@@ -301,7 +301,8 @@ impl Compositor {
                     if let Some(encoder) = blend_encoder.take() {
                         batch.push(encoder.finish());
                     }
-                    Some(self.backdrop_pyramid(comp, backing, &mut batch)?)
+                    let roughness = run.iter().filter(|i| i.shading.reads_backdrop).map(|i| i.shading.backdrop_roughness).fold(0.0f32, f32::max);
+                    Some(self.backdrop_pyramid(comp, backing, &mut batch, roughness)?)
                 }
                 _ => None,
             };
@@ -379,6 +380,7 @@ impl Compositor {
         comp: CompSpec,
         backing: &wgpu::Texture,
         batch: &mut Vec<wgpu::CommandBuffer>,
+        max_roughness: f32,
     ) -> Result<GpuTexture2D, CompositorError> {
         self.surface_work.backdrop_copies += 1;
         let size = wgpu::Extent3d { width: comp.width, height: comp.height, depth_or_array_layers: 1 };
@@ -416,7 +418,10 @@ impl Compositor {
             }
         }
         encoder.copy_texture_to_texture(level0(backing), level0(texture), size);
-        self.ctx.texture_manager_2d.generate_mipmaps(&self.ctx, &mut encoder, texture);
+        // 粗さが読む段までしか焼かない(Unity の opaque texture と同じ嘘)。粗さ 0 なら写しだけ。
+        let levels = re_renderer::backdrop_levels_read(max_roughness, texture.mip_level_count());
+        self.surface_work.backdrop_mip_levels += u64::from(levels);
+        self.ctx.texture_manager_2d.generate_mipmap_levels(&self.ctx, &mut encoder, texture, levels);
         batch.push(encoder.finish());
         let result = resource.imported.clone();
         self.backdrop_resource = Some(resource);

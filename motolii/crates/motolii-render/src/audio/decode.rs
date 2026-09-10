@@ -1,20 +1,11 @@
-#[cfg(test)]
-#[path = "../../../../tests/testkit/mod.rs"]
-mod testkit;
-
-use std::fs::File;
+use std::io::Read;
 use std::path::Path;
+use std::process::Stdio;
 
-use symphonia::core::codecs::audio::AudioDecoderOptions;
-use symphonia::core::codecs::CodecParameters;
-use symphonia::core::errors::Error as SymphoniaError;
-use symphonia::core::formats::probe::Hint;
-use symphonia::core::formats::FormatOptions;
-use symphonia::core::io::MediaSourceStream;
-use symphonia::core::meta::MetadataOptions;
-
-use crate::render::audio::cache::{PcmCache, PcmFormat};
+use crate::render::audio::cache::PcmCache;
+use crate::render::audio::convert::{canonical_format, CANONICAL_CHANNELS, CANONICAL_SAMPLE_RATE};
 use crate::render::audio::error::{AudioError, Result};
+use crate::render::media::{ffmpeg_bin, probe_container, read_child_stderr, select_audio_stream, tool_command, MediaError};
 
 pub const MAX_SAMPLES: u64 = 48_000 * 60 * 60 * 4;
 
@@ -22,97 +13,64 @@ pub fn decode_file(path: impl AsRef<Path>) -> Result<PcmCache> {
     decode_file_audio_ordinal(path, 0)
 }
 
+/// 音は ffmpeg に復号させ、48kHz stereo 16bit で受け取る。edit list・encoder delay・
+/// start_time・リサンプルは ffmpeg の側で片付く。
 pub fn decode_file_audio_ordinal(path: impl AsRef<Path>, ordinal: u32) -> Result<PcmCache> {
     let path = path.as_ref();
-    let file = File::open(path)?;
-    let mss = MediaSourceStream::new(Box::new(file), Default::default());
-
-    let mut hint = Hint::new();
-    if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-        hint.with_extension(ext);
-    }
-
-    decode_stream_audio_ordinal(mss, &hint, ordinal)
-}
-
-pub fn decode_stream(mss: MediaSourceStream<'static>, hint: &Hint) -> Result<PcmCache> {
-    decode_stream_audio_ordinal(mss, hint, 0)
-}
-
-fn decode_stream_audio_ordinal(
-    mss: MediaSourceStream<'static>,
-    hint: &Hint,
-    ordinal: u32,
-) -> Result<PcmCache> {
-    let mut format = symphonia::default::get_probe().probe(
-        hint,
-        mss,
-        FormatOptions::default(),
-        MetadataOptions::default(),
-    )?;
-
-    let audio_tracks: Vec<_> = format
-        .tracks()
-        .iter()
-        .filter(|t| matches!(t.codec_params, Some(CodecParameters::Audio(_))))
-        .cloned()
-        .collect();
-    let track = audio_tracks
-        .get(ordinal as usize)
-        .ok_or(AudioError::StreamNotFound { ordinal })?;
-    let track_id = track.id;
-    let Some(CodecParameters::Audio(audio_params)) = track.codec_params.clone() else {
+    let info = probe_container(path)?;
+    if info.audio_streams.is_empty() {
         return Err(AudioError::NoAudioTrack);
-    };
+    }
+    select_audio_stream(&info, ordinal).map_err(|_| AudioError::StreamNotFound { ordinal })?;
 
-    let mut decoder = symphonia::default::get_codecs()
-        .make_audio_decoder(&audio_params, &AudioDecoderOptions::default())?;
+    let mut child = tool_command(ffmpeg_bin())
+        .args(["-v", "error", "-nostdin", "-i"])
+        .arg(path)
+        .args(["-map", &format!("0:a:{ordinal}"), "-vn", "-sn", "-dn"])
+        .args(["-f", "s16le", "-ac", &CANONICAL_CHANNELS.to_string(), "-ar", &CANONICAL_SAMPLE_RATE.to_string(), "-"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| match e.kind() {
+            std::io::ErrorKind::NotFound => AudioError::Media(MediaError::ToolNotFound("ffmpeg")),
+            _ => AudioError::Io(e),
+        })?;
 
-    let mut samples: Vec<f32> = Vec::new();
-    let mut packet_samples: Vec<f32> = Vec::new();
-    let mut pcm_format: Option<PcmFormat> = None;
+    let mut stderr = child.stderr.take().expect("piped");
+    let stderr_reader = std::thread::spawn(move || read_child_stderr(&mut stderr).unwrap_or_default());
 
+    let mut stdout = child.stdout.take().expect("piped");
+    let limit_bytes = MAX_SAMPLES as usize * std::mem::size_of::<i16>();
+    let mut bytes = Vec::new();
+    let mut chunk = vec![0u8; 1 << 16];
     loop {
-        let packet = match format.next_packet() {
-            Ok(Some(packet)) => packet,
-            Ok(None) => break, // ストリーム終端。
-            Err(SymphoniaError::ResetRequired) => {
-                decoder.reset();
-                continue;
-            }
-            Err(e) => return Err(e.into()),
-        };
-        if packet.track_id != track_id {
-            continue;
+        let n = stdout.read(&mut chunk)?;
+        if n == 0 {
+            break;
         }
-        match decoder.decode(&packet) {
-            Ok(decoded) => {
-                if pcm_format.is_none() {
-                    let spec = decoded.spec();
-                    pcm_format = Some(PcmFormat {
-                        channels: spec.channels().count() as u16,
-                        sample_rate: spec.rate(),
-                    });
-                }
-                decoded.copy_to_vec_interleaved(&mut packet_samples);
-                samples.extend_from_slice(&packet_samples);
-                check_sample_limit(samples.len() as u64)?;
-            }
-            Err(SymphoniaError::DecodeError(_)) => continue,
-            Err(e) => return Err(e.into()),
+        bytes.extend_from_slice(&chunk[..n]);
+        if bytes.len() > limit_bytes {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(AudioError::SampleCountLimit {
+                observed: (bytes.len() / std::mem::size_of::<i16>()) as u64,
+                limit: MAX_SAMPLES,
+            });
         }
     }
-
-    let pcm_format = pcm_format.ok_or(AudioError::NoAudioTrack)?;
-    PcmCache::from_interleaved(samples, pcm_format)
-}
-
-fn check_sample_limit(observed: u64) -> Result<()> {
-    if observed > MAX_SAMPLES {
-        return Err(AudioError::SampleCountLimit {
-            observed,
-            limit: MAX_SAMPLES,
-        });
+    let status = child.wait()?;
+    let stderr = stderr_reader.join().unwrap_or_default();
+    if !status.success() {
+        return Err(AudioError::Media(MediaError::Ffmpeg(stderr)));
     }
-    Ok(())
+
+    let samples: Vec<i16> = bytes
+        .chunks_exact(std::mem::size_of::<i16>())
+        .map(|b| i16::from_le_bytes([b[0], b[1]]))
+        .collect();
+    if samples.is_empty() {
+        return Err(AudioError::NoAudioTrack);
+    }
+    PcmCache::from_interleaved_i16(samples, canonical_format())
 }

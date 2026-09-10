@@ -4,8 +4,8 @@ pub enum AudioError {
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
 
-    #[error("failed to demux/decode audio source: {0}")]
-    Symphonia(#[from] symphonia::core::errors::Error),
+    #[error(transparent)]
+    Media(#[from] crate::render::media::MediaError),
 
     #[error("source has no supported audio track")]
     NoAudioTrack,

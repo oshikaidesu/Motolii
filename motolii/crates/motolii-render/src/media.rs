@@ -111,7 +111,7 @@ pub type Result<T> = std::result::Result<T, MediaError>;
 
 const MAX_STDERR_BYTES: usize = 64 * 1024;
 
-pub(crate) fn read_child_stderr(stderr: &mut impl Read) -> std::io::Result<String> {
+pub fn read_child_stderr(stderr: &mut impl Read) -> std::io::Result<String> {
     let mut out = Vec::new();
     let mut chunk = [0u8; 4096];
     loop {
@@ -130,22 +130,50 @@ pub(crate) fn read_child_stderr(stderr: &mut impl Read) -> std::io::Result<Strin
     Ok(String::from_utf8_lossy(&out).into_owned())
 }
 
+/// ffmpeg の置き場。rerun(ffmpeg-sidecar)と同じ規則: sidecar の置き場に在ればそれ、無ければ PATH。
+pub fn ffmpeg_bin() -> std::path::PathBuf {
+    ffmpeg_sidecar::paths::ffmpeg_path()
+}
+
+/// ffprobe は ffmpeg の隣に居る前提。sidecar の置き場に無ければ PATH。
+pub fn ffprobe_bin() -> std::path::PathBuf {
+    let name = if cfg!(windows) { "ffprobe.exe" } else { "ffprobe" };
+    ffmpeg_sidecar::paths::sidecar_dir()
+        .ok()
+        .map(|dir| dir.join(name))
+        .filter(|path| path.exists())
+        .unwrap_or_else(|| std::path::PathBuf::from("ffprobe"))
+}
+
+/// 外部道具を起こす器。Windows ではコンソールの窓を出さない。
+pub fn tool_command(bin: impl AsRef<std::ffi::OsStr>) -> Command {
+    #[allow(unused_mut)]
+    let mut command = Command::new(bin);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt as _;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+    command
+}
+
 pub fn tools_available() -> bool {
-    let ok = |bin: &str| {
-        Command::new(bin)
+    let ok = |bin: std::path::PathBuf| {
+        tool_command(bin)
             .arg("-version")
             .output()
             .map(|o| o.status.success())
             .unwrap_or(false)
     };
-    ok("ffmpeg") && ok("ffprobe")
+    ok(ffmpeg_bin()) && ok(ffprobe_bin())
 }
 
 pub const MIN_FFMPEG_MAJOR: u32 = 6;
 
 pub fn verify_tool_versions() -> Result<(u32, u32)> {
-    let major = |bin: &'static str| -> Result<u32> {
-        let out = Command::new(bin).arg("-version").output().map_err(|e| {
+    let major = |bin: &'static str, path: std::path::PathBuf| -> Result<u32> {
+        let out = tool_command(path).arg("-version").output().map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
                 MediaError::ToolNotFound(bin)
             } else {
@@ -180,7 +208,7 @@ pub fn verify_tool_versions() -> Result<(u32, u32)> {
             }
         }
     };
-    Ok((major("ffmpeg")?, major("ffprobe")?))
+    Ok((major("ffmpeg", ffmpeg_bin())?, major("ffprobe", ffprobe_bin())?))
 }
 
 #[cfg(test)]
@@ -222,4 +250,17 @@ mod tests {
         assert_eq!(super::asset_type_for_extension("gltf"), None);
         assert_eq!(super::asset_type_for_extension("dae"), None);
     }
+}
+
+/// test の素材づくり用: ffmpeg が居て、要る encoder を持っているか。無い環境では test を skip する。
+#[doc(hidden)]
+pub fn test_encoders_available(encoders: &[&str]) -> bool {
+    let Ok(out) = tool_command(ffmpeg_bin()).args(["-hide_banner", "-encoders"]).output() else {
+        return false;
+    };
+    if !out.status.success() {
+        return false;
+    }
+    let listing = String::from_utf8_lossy(&out.stdout);
+    encoders.iter().all(|name| listing.split_whitespace().any(|word| word == *name))
 }
