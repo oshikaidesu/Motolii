@@ -10,6 +10,8 @@ use super::subtype::{ParamSubtype, Subtype};
 pub enum EffectStage {
     /// texture → texture の 2D pass。
     Pass,
+    /// Material-local XY warp; independent of layer projection.
+    Warp,
     /// 網の面の hook(fork の `motolii_surface`)。
     Surface,
     /// 網の頂点の hook(fork の `motolii_field`)。点群は CPU の写しで受ける。
@@ -18,6 +20,25 @@ pub enum EffectStage {
     Clip,
     /// 配置の集合(shader を持たない)。
     Placement,
+    /// 形の層の輪郭(shader を持たない)。
+    Path,
+}
+
+/// 棚の札の出所。作者の絵があればそれ、無ければ見本を描く。
+#[derive(Clone, Debug)]
+pub enum EffectThumbnail {
+    Picture(Arc<[u8]>),
+    Rendered {
+        pose: Vec<(String, f64)>,
+        split: bool,
+        /// 見本の時刻(秒)。
+        time: f64,
+    },
+}
+
+impl EffectThumbnail {
+    pub const DEFAULT_TIME: f64 = 0.5;
+    pub fn split(&self) -> bool { matches!(self, Self::Rendered { split: true, .. }) }
 }
 
 #[derive(Clone, Debug)]
@@ -26,6 +47,7 @@ pub struct EffectDescriptor {
     pub label: String,
     pub stage: EffectStage,
     pub params: Vec<EffectParamDescriptor>,
+    pub thumbnail: EffectThumbnail,
     pub(crate) padding: Option<EffectPaddingDescriptor>,
     pub(crate) output_format: wgpu::TextureFormat,
 }
@@ -36,6 +58,8 @@ pub struct EffectParamDescriptor {
     /// 窓に出る英語。ISF は name のまま。
     pub label: String,
     pub default: f64,
+    /// 点の欄(Vec2)ならその既定。数の欄は None。
+    pub point: Option<[f64; 2]>,
     pub range: Option<(f64, f64)>,
     /// 選択肢。値は番号。
     pub choices: Option<Vec<String>>,
@@ -122,6 +146,15 @@ pub fn bind_catalog_runtime(runtime: &CatalogRuntime) {
 }
 
 fn directory() -> PathBuf { PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("vism") }
+
+/// 作者の札の絵(wgsl と同じ dir の file)。開発中は disk、配布物は build.rs が埋めた物。
+fn picture_bytes(file: &str) -> Option<Arc<[u8]>> {
+    if file.contains('/') || file.contains("..") { return None; }
+    #[cfg(load_shaders_from_disk)]
+    { std::fs::read(directory().join(file)).ok().map(Arc::from) }
+    #[cfg(not(load_shaders_from_disk))]
+    { super::VISM_PICTURES.iter().find(|p| p.file == file).map(|p| Arc::from(p.bytes)) }
+}
 fn prelude_path() -> PathBuf { PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../reference/vello-blend.wgsl") }
 
 pub fn catalog_source_roots() -> Vec<PathBuf> { vec![directory(), prelude_path()].into_iter().map(|p| p.canonicalize().unwrap_or(p)).collect() }
@@ -138,7 +171,7 @@ pub(crate) fn catalog_snapshot() -> Arc<CatalogSnapshot> {
 }
 
 fn schema(manifest: &isf::IsfManifest) -> String {
-    format!("{:?}|{:?}|{}|{}|{:?}|{:?}", manifest.id, manifest.stage, manifest.expose, manifest.output_float, manifest.passes,
+    format!("{:?}|{:?}|{}|{}|{:?}|{:?}", manifest.id, manifest.stage, manifest.expose, manifest.output_float, (&manifest.passes, manifest.linear_sampling, manifest.specialize_passes),
         manifest.inputs.iter().map(|i| (&i.name, i.ty, &i.maps)).collect::<Vec<_>>())
 }
 
@@ -186,6 +219,7 @@ fn validate_stage(source: &str, entry: &str, stage: naga::ShaderStage, manifest:
                 let components = if (binding.binding as usize) < params.len() { params[binding.binding as usize].ty.component_count() }
                     else if binding.binding as usize == params.len() { 2 }
                     else if binding.binding as usize == params.len() + 1 { 1 }
+                    else if manifest.stage == isf::IsfStage::Warp && binding.binding as usize == params.len() + 2 { 2 }
                     else { 0 };
                 components > 0 && uniform_components(&module, variable.ty) == components
             }
@@ -208,7 +242,10 @@ fn validate_stage(source: &str, entry: &str, stage: naga::ShaderStage, manifest:
 fn prepare(source: VismSource, prelude: &str) -> Result<VismDefinition, String> {
     if source.extension != "fs" {
         let (manifest, body) = isf::parse_isf_source(&source.source).map_err(|e| e.to_string())?;
-        if manifest.stage != isf::IsfStage::Pass {
+        if let isf::IsfThumbnail::Picture(file) = &manifest.thumbnail {
+            if picture_bytes(file).is_none() { return Err(format!("THUMBNAIL picture `{file}` is not beside the shader")); }
+        }
+        if !matches!(manifest.stage, isf::IsfStage::Pass | isf::IsfStage::Warp) {
             // hook の snippet。型は fork の base と合わせて初めて決まるので、ここでは欄の型だけ縛る。
             for input in manifest.param_inputs() {
                 if input.ty.component_count() != 1 {
@@ -236,7 +273,9 @@ fn prepare(source: VismSource, prelude: &str) -> Result<VismDefinition, String> 
         (manifest, vertex, fragment, "main", "main")
     } else {
         let manifest = isf::parse_isf_source(&source.source).map_err(|e| e.to_string())?.0;
-        let text = if matches!(source.name.as_str(), "blend" | "matte") {
+        let text = if manifest.stage == isf::IsfStage::Warp {
+            format!("{}\n{}", re_renderer::noise::WGSL, source.source)
+        } else if matches!(source.name.as_str(), "blend" | "matte") {
             format!("{prelude}\n{}", source.source)
         } else { source.source.to_string() };
         (manifest, text.clone(), text, "vs_main", "fs_main")
@@ -253,20 +292,40 @@ fn descriptors(definitions: &[VismDefinition]) -> Arc<[EffectDescriptor]> {
     let declared = crate::doc::store::kind::all().map(|kind| EffectDescriptor {
         plugin_id: kind.plugin_id.to_owned(),
         label: kind.label.to_owned(),
-        stage: EffectStage::Placement,
+        stage: match kind.family {
+            crate::doc::store::kind::Family::Placement => EffectStage::Placement,
+            crate::doc::store::kind::Family::Path => EffectStage::Path,
+        },
         params: kind.params.iter().map(|p| EffectParamDescriptor {
             name: p.name.to_owned(), label: p.label.to_owned(), default: p.default[0], range: p.range,
+            point: matches!(p.kind, crate::doc::store::kind::ParamKind::Vec2).then_some(p.default),
             choices: p.choices().map(|c| c.iter().map(|s| (*s).to_owned()).collect()),
             subtype: None, unit: None, group: None, advanced: false, hero: false,
         }).collect(),
+        thumbnail: EffectThumbnail::Rendered {
+            pose: kind.params.iter().filter_map(|p| p.sample.map(|v| (p.name.to_owned(), v))).collect(),
+            split: false,
+            time: EffectThumbnail::DEFAULT_TIME,
+        },
         padding: None,
         output_format: wgpu::TextureFormat::Rgba8Unorm,
     });
     definitions.iter().filter(|d| d.manifest.expose).map(|d| EffectDescriptor {
         plugin_id: d.plugin_id().to_owned(),
         label: d.label(),
+        thumbnail: match &d.manifest.thumbnail {
+            // 無い絵は prepare が拒んでいるので、ここでは必ず読める。
+            isf::IsfThumbnail::Picture(file) => picture_bytes(file).map(EffectThumbnail::Picture)
+                .unwrap_or(EffectThumbnail::Rendered { pose: Vec::new(), split: false, time: EffectThumbnail::DEFAULT_TIME }),
+            isf::IsfThumbnail::Rendered { pose, split, time } => EffectThumbnail::Rendered {
+                pose: pose.iter().map(|(n, v)| (n.clone(), *v as f64)).collect(),
+                split: *split,
+                time: time.map_or(EffectThumbnail::DEFAULT_TIME, |t| t as f64),
+            },
+        },
         stage: match d.manifest.stage {
             isf::IsfStage::Pass => EffectStage::Pass,
+            isf::IsfStage::Warp => EffectStage::Warp,
             isf::IsfStage::Surface => EffectStage::Surface,
             isf::IsfStage::Field => EffectStage::Field,
             isf::IsfStage::Clip => EffectStage::Clip,
@@ -277,7 +336,7 @@ fn descriptors(definitions: &[VismDefinition]) -> Arc<[EffectDescriptor]> {
             let read = d.subtypes.get(i).cloned().unwrap_or_default();
             let (subtype, unit, group) = character(p, &read, range, d);
             EffectParamDescriptor {
-                name: p.name.clone(), label: p.label.clone().unwrap_or_else(|| p.name.clone()), default: p.default[0] as f64,
+                name: p.name.clone(), label: p.label.clone().unwrap_or_else(|| p.name.clone()), default: p.default[0] as f64, point: None,
                 range, choices: p.labels.clone(), subtype, unit, group, advanced: p.advanced, hero: p.hero,
             }
         }).collect(),

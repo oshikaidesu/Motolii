@@ -230,6 +230,7 @@ impl crate::doc::store::StoreView<'_> {
             | property::POSITION_X
             | property::POSITION_Y
             | property::POSITION_Z
+            | property::DEPTH
             | property::SKEW
             | property::SKEW_AXIS
             | property::PAN

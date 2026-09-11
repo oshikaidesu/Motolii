@@ -19,6 +19,18 @@ pub(crate) fn label_rgb(ix: u8) -> [u8; 3] {
 }
 
 /// 木の中で最初に塗りを持つ葉と、そこへの道。Inspector/Deskは同じ塗りを見る。
+/// 木の最初の葉(線の色・太さの相手)。
+pub(crate) fn first_leaf(nodes: &[ShapeNode], path: Vec<usize>) -> Option<(Vec<usize>, crate::doc::vector::Shape)> {
+    nodes.iter().enumerate().find_map(|(i, node)| {
+        let mut here = path.clone();
+        here.push(i);
+        match node {
+            ShapeNode::Leaf(shape) => Some((here, shape.clone())),
+            ShapeNode::Group(group) => first_leaf(&group.children, here),
+        }
+    })
+}
+
 pub(crate) fn first_shape_fill(nodes: &[ShapeNode], path: Vec<usize>) -> Option<(Vec<usize>, crate::doc::vector::Brush)> {
     nodes.iter().enumerate().find_map(|(i, node)| {
         let mut here = path.clone();
@@ -91,6 +103,10 @@ pub(crate) fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: Ratio
         Some(Value::F64(v)) => v,
         _ => 1.0,
     };
+    let depth_v = match value_of(property::DEPTH) {
+        Some(Value::F64(v)) => v,
+        _ => 0.0,
+    };
 
     let sel_attrs = view.attrs(layer).ok().flatten().unwrap_or_default();
     let key_count: usize = [property::POSITION, property::OPACITY]
@@ -144,18 +160,22 @@ pub(crate) fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: Ratio
                 .filter_map(move |param| {
                     let prop = PropertyId::effect_param(id, &param.name).ok()?;
                     let keyed = view.track(layer, &prop).ok().flatten().is_some();
-                    let v = match view.value_at(layer, &prop, t).ok().flatten() {
-                        Some(Value::F64(v)) => v,
-                        _ => param.default,
+                    let stored = view.value_at(layer, &prop, t).ok().flatten();
+                    // 点の欄(Twist・Bend の Center)は 2 つの枡、数の欄は 1 つ。
+                    let (cells, vec2, value) = match (param.point, stored) {
+                        (Some(_), Some(Value::Vec2([x, y]))) => ([f(x), f(y), String::new()], true, Value::Vec2([x, y])),
+                        (Some([x, y]), _) => ([f(x), f(y), String::new()], true, Value::Vec2([x, y])),
+                        (None, Some(Value::F64(v))) => ([String::new(), String::new(), f(v)], false, Value::F64(v)),
+                        (None, _) => ([String::new(), String::new(), f(param.default)], false, Value::F64(param.default)),
                     };
                     Some(PropRow {
                         label: param.label.clone(),
-                        cells: [String::new(), String::new(), f(v)],
+                        cells,
                         dims: [false, false, false],
                         keyed,
                         property: Some(prop.name().to_owned()),
-                        vec2: false,
-                        value: Value::F64(v),
+                        vec2,
+                        value,
                         range: param.range,
                         axis: [None, None, None],
                     })
@@ -252,6 +272,20 @@ pub(crate) fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: Ratio
         }
         _ => Vec::new(),
     };
+    // 形の元の値(星の頂点数・半径、矩形と楕円の大きさ)。書類の値が既定で、property が上書きする。
+    let mut text = text;
+    if let Ok(shapes) = view.shapes(layer) {
+        for row in crate::doc::store::shape_props::rows(&shapes) {
+            let Ok(prop) = PropertyId::new(row.name) else { continue };
+            let value = view.value_at(layer, &prop, t).ok().flatten().unwrap_or(row.value);
+            let (cells, vec2) = match value {
+                Value::Vec2([x, y]) => ([f(x), f(y), String::new()], true),
+                Value::F64(v) => ([String::new(), String::new(), f(v)], false),
+                _ => continue,
+            };
+            text.push(PropRow { label: row.label.into(), cells, dims: [false; 3], keyed: keyed(prop.name()), property: Some(prop.name().to_owned()), vec2, value, range: row.range, axis: [None, None, None] });
+        }
+    }
 
     let mut colors = Vec::new();
     let row = |label, c: [f64; 4], slot| ColorRow {
@@ -280,7 +314,7 @@ pub(crate) fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: Ratio
                 if let Some((path, brush)) = first_shape_fill(&shapes, Vec::new()) {
                     match brush {
                         crate::doc::vector::Brush::Solid(rgb) => {
-                            colors.push(row("Color", [rgb.r, rgb.g, rgb.b, 1.0], ColorSlot::ShapeFill { layer, path }));
+                            colors.push(row("Fill", [rgb.r, rgb.g, rgb.b, 1.0], ColorSlot::ShapeFill { layer, path }));
                         }
                         crate::doc::vector::Brush::Gradient(gradient) => {
                             let start = gradient
@@ -308,12 +342,22 @@ pub(crate) fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: Ratio
                         }
                     }
                 }
+                // 線の色は塗りの有無に関わらず出す。無い物を「足す口」が無いと線の形に色が付かない。
+                if let Some((path, leaf)) = first_leaf(&shapes, Vec::new()) {
+                    let stroke = match leaf.stroke.as_ref().map(|s| &s.brush) {
+                        Some(crate::doc::vector::Brush::Solid(rgb)) => [rgb.r, rgb.g, rgb.b, 1.0],
+                        _ => [0.0, 0.0, 0.0, 1.0],
+                    };
+                    colors.push(row("Stroke", stroke, ColorSlot::ShapeStroke { layer, path }));
+                }
             }
         }
         _ => {}
     }
 
-    let transform = vec![
+    // 奥行きは板(形・文字・画・動画)だけ。網・点群は素材が奥行きを持ち、camera 等は絵が無い。
+    let flat = matches!(source_name, "shape" | "text" | "media");
+    let mut transform = vec![
         PropRow {
             label: "Position".into(),
             cells: [px, py, f1(pos_z)],
@@ -363,6 +407,19 @@ pub(crate) fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: Ratio
             axis: [None, None, None],
         },
     ];
+    if flat {
+        transform.push(PropRow {
+            label: "Depth".into(),
+            cells: [String::new(), String::new(), f(depth_v)],
+            dims: [false, false, false],
+            keyed: keyed(property::DEPTH),
+            property: Some(property::DEPTH.to_owned()),
+            vec2: false,
+            value: Value::F64(depth_v),
+            range: Some((0.0, 100000.0)),
+            axis: [None, None, None],
+        });
+    }
 
     InspectorData {
         blend: sel_attrs.blend_mode,

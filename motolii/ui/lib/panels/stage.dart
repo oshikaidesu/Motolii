@@ -38,6 +38,7 @@ class _StagePanelState extends State<StagePanel> {
   void initState() {
     super.initState();
     c.viewCommand.addListener(_viewCommand);
+    HardwareKeyboard.instance.addHandler(_heldKey);
   }
 
   void _viewCommand() {
@@ -218,6 +219,7 @@ class _StagePanelState extends State<StagePanel> {
       : null;
   List<Offset> _cameraPoints(Map<String, dynamic> camera) =>
       (camera['points'] as List).map((p) => _point(p)!).toList();
+
   /// 箱で author できるのは、正面を向いて注視点が自前のカメラだけ。回した物と層を見ている物は eye と frustum を見せるだけ。
   Map<String, dynamic>? get _selectedCamera {
     for (final camera in _cameras) {
@@ -512,6 +514,7 @@ class _StagePanelState extends State<StagePanel> {
     'viewScale': _scale,
     'shift': _shift,
     'alt': HardwareKeyboard.instance.isAltPressed,
+    'held': _held,
   };
   void _update(Offset point) {
     _pending = _gesture('update', point);
@@ -694,16 +697,61 @@ class _StagePanelState extends State<StagePanel> {
   bool _onMesh = false;
   Map<String, dynamic>? _hoverPending;
   bool _hoverSending = false;
+  Offset? _hoverScreen;
   void _hover(PointerHoverEvent event) {
+    _hoverScreen = event.localPosition;
     if (_pointer != null || !c.supports('stageGesture')) return;
     final on = _spatialHit(event.localPosition);
     if (!on && !_onMesh) return;
     _onMesh = on;
-    final p = _toComp(event.localPosition);
+    _sendHover(on ? _toComp(event.localPosition) : null);
+  }
+
+  /// AE's P / R / S, held: the gizmo narrows to position, rotation or scale
+  /// for as long as the key is down. The same key still reveals the same
+  /// property in the Inspector, so one letter means one thing everywhere.
+  static final _heldKeys = {
+    LogicalKeyboardKey.keyP: 'position',
+    LogicalKeyboardKey.keyR: 'rotation',
+    LogicalKeyboardKey.keyS: 'scale',
+  };
+  String? _held;
+
+  /// Returns true while a held letter belongs to the gizmo, so the key repeat
+  /// counts as handled — otherwise macOS beeps on every repeat. Focus-based
+  /// shortcuts still see the event; the results are OR-ed, not chained.
+  bool _heldKey(KeyEvent event) {
+    if (!_heldKeys.containsKey(event.logicalKey)) return false;
+    if (FocusManager.instance.primaryFocus?.context?.widget is EditableText)
+      return false;
+    final modified =
+        HardwareKeyboard.instance.isMetaPressed ||
+        HardwareKeyboard.instance.isControlPressed ||
+        HardwareKeyboard.instance.isAltPressed;
+    if (modified) return false;
+    final mine = _spatialActive && c.supports('stageGesture');
+    if (event is KeyRepeatEvent) return mine;
+    final pressed = HardwareKeyboard.instance.logicalKeysPressed;
+    String? held;
+    for (final entry in _heldKeys.entries) {
+      if (pressed.contains(entry.key)) held = entry.value;
+    }
+    if (held != _held) {
+      _held = held;
+      if (mine && _pointer == null) {
+        final at = _hoverScreen;
+        _sendHover(at != null && _onMesh ? _toComp(at) : null);
+      }
+    }
+    return mine && event is KeyDownEvent;
+  }
+
+  void _sendHover(Offset? point) {
     _hoverPending = {
       'phase': 'hover',
-      'point': on ? [p.dx, p.dy] : null,
+      'point': point == null ? null : [point.dx, point.dy],
       'viewScale': _scale,
+      'held': _held,
     };
     if (_hoverSending) return;
     _hoverSending = true;
@@ -798,6 +846,7 @@ class _StagePanelState extends State<StagePanel> {
 
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_heldKey);
     if (_dragging) {
       _pending = null;
       final args = _gesture('cancel', _startComp!);
@@ -933,14 +982,11 @@ class _StagePanelState extends State<StagePanel> {
               final scale = _scale;
               final gizmos = !c.playing.value;
               final outlines = <List<Offset>>[];
-              final volumes = <List<Offset>>[];
               Offset? anchorPreview;
               for (final layer in _visible.where(
                 (l) => gizmos && c.selectedIds.contains(l['id']),
               )) {
                 final points = _corners(layer);
-                final raw = _rawCorners(layer);
-                if (raw.length == 8) volumes.add(raw.map(_toScreen).toList());
                 if (points.isNotEmpty)
                   outlines.add(points.map(_toScreen).toList());
                 // Where a hovered anchor would sit: bilinear in the corners.
@@ -1047,7 +1093,6 @@ class _StagePanelState extends State<StagePanel> {
                                       ? null
                                       : _point(_observer['target']),
                                   outlines: _outlinesCopy(outlines),
-                                  volumes: volumes,
                                   handles: gizmos ? _handles() : const {},
                                   spatialMesh: gizmos && _spatialActive
                                       ? _screenMesh()
@@ -1161,14 +1206,13 @@ class _StageOverlay extends CustomPainter {
     this.observerTarget,
     this.anchorPreview,
     required this.outlines,
-    required this.volumes,
     required this.handles,
     required this.frame,
     required this.viewport,
     this.spatialMesh,
     this.marquee,
   });
-  final List<List<Offset>> outlines, volumes, cameras;
+  final List<List<Offset>> outlines, cameras;
   final List<Offset> cameraTargets, frame, extent;
   final bool extendable;
   final Map<String, Offset> handles, cameraHandles;
@@ -1283,14 +1327,6 @@ class _StageOverlay extends CustomPainter {
       path.close();
       canvas.drawPath(path, line);
     }
-    for (final points in volumes) {
-      for (var i = 0; i < 8; i++) {
-        for (final bit in [1, 2, 4]) {
-          final j = i ^ bit;
-          if (j > i) canvas.drawLine(points[i], points[j], line);
-        }
-      }
-    }
     if (spatialMesh != null) {
       canvas.drawVertices(spatialMesh!, BlendMode.srcOver, Paint());
     }
@@ -1330,10 +1366,8 @@ class _StageOverlay extends CustomPainter {
       old.viewport != viewport ||
       old.marquee != marquee ||
       old.outlines.toString() != outlines.toString() ||
-      old.volumes.toString() != volumes.toString() ||
       old.handles.toString() != handles.toString() ||
       !identical(old.spatialMesh, spatialMesh);
-
 }
 
 /// The gizmo mesh as native sent it: comp-space vertices, linear colours
@@ -1352,21 +1386,26 @@ class _SpatialMesh {
     final vertices = [
       for (final p in v)
         p is List && p.length >= 2
-            ? Offset(_StagePanelState._num(p[0], double.nan), _StagePanelState._num(p[1], double.nan))
+            ? Offset(
+                _StagePanelState._num(p[0], double.nan),
+                _StagePanelState._num(p[1], double.nan),
+              )
             : const Offset(double.nan, double.nan),
     ];
     double channel(dynamic x) =>
         math.pow(_StagePanelState._num(x).clamp(0.0, 1.0), 1 / 2.2).toDouble();
     int byte(dynamic x) => (channel(x) * 255).round().clamp(0, 255);
     // Native sends meaning, not paint: white is the gizmo at rest, black is
-    // the part under the pointer. At rest it stays quiet; the accent says
+    // the hovered part. At rest it stays quiet; the accent says
     // "this one will move if you press". Anything else is passed through.
     Color tone(List rgba) {
       final alpha = (_StagePanelState._num(rgba[3], 1).clamp(0.0, 1.0) * 255)
           .round();
       final rgb = [for (var k = 0; k < 3; k++) _StagePanelState._num(rgba[k])];
-      if (rgb.every((v) => v >= 0.999)) return EditorTheme.muted.withAlpha(alpha);
-      if (rgb.every((v) => v <= 0.001)) return EditorTheme.accent.withAlpha(alpha);
+      if (rgb.every((v) => v >= 0.999))
+        return EditorTheme.muted.withAlpha(alpha);
+      if (rgb.every((v) => v <= 0.001))
+        return EditorTheme.accent.withAlpha(alpha);
       return Color.fromARGB(alpha, byte(rgb[0]), byte(rgb[1]), byte(rgb[2]));
     }
 

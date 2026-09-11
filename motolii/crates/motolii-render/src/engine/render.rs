@@ -15,7 +15,7 @@ use crate::render::engine::translate::{
 use crate::render::engine::{Engine, EngineError};
 
 impl Engine {
-    pub(crate) fn render_with_camera_override(
+    pub fn render_with_camera_override(
         &mut self,
         view: &StoreView<'_>,
         t: RationalTime,
@@ -40,7 +40,7 @@ impl Engine {
         };
 
         let text_documents = collect_text_documents(view, &resolved, t)?;
-        let shape_documents = collect_shape_documents(view, &resolved)?;
+        let shape_documents = collect_shape_documents(view, &resolved, t)?;
         self.compositor.measurement.resolve_us = frame_start.elapsed().as_micros() as u64;
         let layer_start = std::time::Instant::now();
         let layers = self.layers_from_resolved(
@@ -92,6 +92,7 @@ impl Engine {
 
         let by_id: HashMap<LayerId, &ResolvedLayer> =
             resolved.iter().map(|layer| (layer.id, layer)).collect();
+        self.materials.retain(|id, _| by_id.contains_key(id));
         let matte_sources: HashSet<LayerId> = resolved
             .iter()
             .filter(|layer| !layer.clip_to_below)
@@ -105,19 +106,48 @@ impl Engine {
         for layer in resolved {
             *copies_of.entry(layer.id).or_default() += 1;
         }
+        // 見えない層は復号も描画もしない: 画面の外か、上の不透明な層に丸ごと覆われた層。
+        let unseen = self.unseen_layers(comp, camera, resolved, needs_auxiliary_views, &matte_sources);
         let mut entry_copy: Vec<u32> = Vec::with_capacity(resolved.len() + 1);
         let mut removed: HashSet<usize> = HashSet::new();
+        // グループの板に焼き込み済みの層。
+        let mut plated: HashSet<usize> = HashSet::new();
         for (index, layer) in resolved.iter().enumerate() {
             if index < skip_below
+                || plated.contains(&index)
                 || matte_sources.contains(&layer.id)
                 || (layer.clip_to_below && layer.matte.is_none())
                 || layer.placement.opacity <= 0.0
+                || unseen.contains(&index)
             {
                 continue;
             }
 
             let blend_mode = translate_blend_mode(layer.blend_mode)?;
-            let (built, passes) = if layer.after_effects.is_empty() {
+            let (built, passes) = if let Some(group) = layer.plate {
+                // Whole の効果を積んだグループ: 同じ板の子孫を全部 1 枚に焼いてから、板の効果を掛ける。
+                // 板の不透明度と混ぜ方はグループの物。効果はどちらの道でも「1 枚に掛かる」だけ(裁定 2026-09-11)。
+                let members: Vec<usize> = (index..resolved.len())
+                    .filter(|&j| resolved[j].plate == Some(group) && resolved[j].ghost == layer.ghost && !unseen.contains(&j))
+                    .filter(|&j| !matte_sources.contains(&resolved[j].id) && !resolved[j].clip_to_below && resolved[j].placement.opacity > 0.0)
+                    .collect();
+                plated.extend(&members);
+                let mut copies = Vec::new();
+                for &j in &members {
+                    let member = &resolved[j];
+                    if let Some(built) = self.build_layer_shared(&mut previous_build, member, text_documents, shape_documents, t, comp, camera, projection_camera, translate_blend_mode(member.blend_mode)?)? {
+                        copies.push(LayerWithPasses { layer: built, passes: translate_effect_passes(&member.effects) });
+                    }
+                }
+                if copies.is_empty() {
+                    continue;
+                }
+                let owner = by_id.get(&group).copied();
+                let plate_blend = translate_blend_mode(owner.map_or(layer.blend_mode, |g| g.blend_mode))?;
+                let mut plate = self.bake_isolated_layers(comp, camera, copies, plate_blend, layer.placement)?;
+                plate.placement.opacity = owner.map_or(1.0, |g| g.placement.opacity);
+                (plate, super::translate::translate_plate_passes(&layer.after_effects))
+            } else if layer.after_effects.is_empty() {
                 let Some(built) = self.build_layer_shared(&mut previous_build, layer, text_documents, shape_documents, t, comp, camera, projection_camera, blend_mode)? else {
                     continue;
                 };
@@ -141,7 +171,7 @@ impl Engine {
                     continue;
                 }
                 let plate = self.bake_isolated_layers(comp, camera, copies, blend_mode, layer.placement)?;
-                (plate, translate_effect_passes(&layer.after_effects))
+                (plate, super::translate::translate_plate_passes(&layer.after_effects))
             };
 
             if layer.clip_to_below {
@@ -185,31 +215,9 @@ impl Engine {
                     let Some(source) = by_id.get(&matte.layer).copied() else {
                         continue;
                     };
-                    let (source_content, source_natural) = self.texture_for_resolved(
-                        source,
-                        text_documents,
-                        shape_documents,
-                        t,
-                        comp,
-                    )?;
-                    let Some(source_content) = source_content else {
-                        continue;
-                    };
                     let source_blend = translate_blend_mode(source.blend_mode)?;
-                    let source_layer = Layer {
-                        content: source_content,
-                        size: layer_size(source, source_natural),
-                        placement: source.placement,
-                        projection: source.projection,
-                        projection_camera,
-                        blend_mode: source_blend,
-                        shading: Default::default(),
-                        displace: Default::default(),
-                        clip: None,
-                    };
-                    let source_layer =
-                        self.flatten_if_asked(comp, camera, source_layer, source.flatten)?;
-                    let source_layer = self.apply_masks_to_layer(source_layer, &source.masks)?;
+                    let Some(mut source_layer) = self.build_layer(source, text_documents, shape_documents, t, comp, camera, projection_camera, source_blend)? else { continue; };
+                    source_layer.outline = 0;
                     let source_passes = translate_effect_passes(&source.effects);
                     let source_layer = self.apply_effects_before_matte(
                         comp,
@@ -292,7 +300,7 @@ impl Engine {
             .map_err(|e| EngineError::Store(e.to_string()))?;
         let camera = self.resolve_camera_in(view, &resolved, t)?;
         let text_documents = collect_text_documents(view, &resolved, t)?;
-        let shape_documents = collect_shape_documents(view, &resolved)?;
+        let shape_documents = collect_shape_documents(view, &resolved, t)?;
         self.render_resolved_to_texture_with_shapes(
             comp,
             composition.background,
@@ -320,7 +328,7 @@ impl Engine {
             .map_err(|e| EngineError::Store(e.to_string()))?;
         let camera = self.resolve_camera_in(view, &resolved, t)?;
         let text_documents = collect_text_documents(view, &resolved, t)?;
-        let shape_documents = collect_shape_documents(view, &resolved)?;
+        let shape_documents = collect_shape_documents(view, &resolved, t)?;
         let layers = self.layers_from_resolved(
             comp,
             camera,
@@ -343,7 +351,10 @@ impl Engine {
         target: &wgpu::Texture,
         camera: ResolvedCamera,
         include_background: bool,
+        outline: &[LayerId],
     ) -> Result<(), EngineError> {
+        self.outline_layers = outline.iter().copied().take(255).collect();
+        self.outline_order = self.outline_layers.clone();
         let composition = view
             .composition()
             .map_err(|e| EngineError::Store(e.to_string()))?
@@ -353,7 +364,7 @@ impl Engine {
             .resolved_layers(t)
             .map_err(|e| EngineError::Store(e.to_string()))?;
         let text_documents = collect_text_documents(view, &resolved, t)?;
-        let shape_documents = collect_shape_documents(view, &resolved)?;
+        let shape_documents = collect_shape_documents(view, &resolved, t)?;
         let layers = self.layers_from_resolved(
             comp,
             camera,
@@ -368,9 +379,9 @@ impl Engine {
         } else {
             crate::render::compositor::NO_BACKGROUND
         };
-        Ok(self
-            .compositor
-            .render_into(target, comp, camera, &layers, background_color)?)
+        let drawn = self.compositor.render_into(target, comp, camera, &layers, background_color);
+        self.outline_layers.clear();
+        Ok(drawn?)
     }
 
     /// 平面へ収める。3D の素材を comp の絵へ一度焼き、以後は板として扱う
@@ -420,6 +431,8 @@ impl Engine {
             shading: Default::default(),
             displace: Default::default(),
             clip: None,
+            blocks_light: layer.blocks_light,
+            outline: layer.outline,
         })
     }
 
@@ -489,6 +502,8 @@ impl Engine {
             shading: Default::default(),
             displace: Default::default(),
             clip: None,
+            blocks_light: sources.iter().any(|s| s.layer.blocks_light),
+            outline: sources.iter().map(|s| s.layer.outline).max().unwrap_or(0),
         })
     }
 
@@ -508,7 +523,7 @@ impl Engine {
         blend_mode: CompositeBlendMode,
     ) -> Result<Option<Layer>, EngineError> {
         if let Some((id, frame, built)) = previous {
-            if *id == layer.id && *frame == layer.source_frame && layer.copy > 0 && !layer.flatten {
+            if *id == layer.id && *frame == layer.source_frame && layer.copy > 0 && !layer.flatten && !matches!(layer.source, LayerSource::Text | LayerSource::Shape) {
                 return Ok(Some(Layer { placement: layer.placement, blend_mode, ..built.clone() }));
             }
         }
@@ -530,45 +545,36 @@ impl Engine {
         projection_camera: ResolvedCamera,
         blend_mode: CompositeBlendMode,
     ) -> Result<Option<Layer>, EngineError> {
-        let (content, natural) =
-            self.texture_for_resolved(layer, text_documents, shape_documents, t, comp)?;
+        let (content, natural, frame) =
+            self.texture_for_resolved(layer, text_documents, shape_documents, t, comp, camera, projection_camera)?;
         let Some(content) = content else {
             return Ok(None);
         };
-        let shading = if matches!(content, crate::render::compositor::LayerContent::Model(_) | crate::render::compositor::LayerContent::Texture(_)) {
-            match self.compositor.surface_shading(&layer.effects) {
-                Ok(shading) => shading,
-                Err(reason) => {
-                    self.layer_failures.push(format!("layer {} の hook を組めない: {reason}", layer.id.0));
-                    Default::default()
-                }
-            }
-        } else {
-            Default::default()
+        let mut built = Layer {
+            content, size: layer_size(layer, natural), placement: layer.placement,
+            projection: layer.projection, projection_camera, blend_mode,
+            shading: Default::default(), displace: translate_point_displace(&layer.effects),
+            clip: translate_clip(&layer.effects), blocks_light: layer.blocks_light, outline: self.outline_id(layer.id),
         };
-        let built = self.flatten_if_asked(
-            comp,
-            camera,
-            Layer {
-                content,
-                size: layer_size(layer, natural),
-                placement: layer.placement,
-                projection: layer.projection,
-                projection_camera,
-                blend_mode,
-                shading,
-                displace: translate_point_displace(&layer.effects),
-                clip: translate_clip(&layer.effects),
-            },
-            layer.flatten,
-        )?;
-        Ok(Some(self.apply_masks_to_layer(built, &layer.masks)?))
+        let uses_material = self.compositor.catalog.descriptors.iter().any(|d| matches!(d.stage, crate::render::compositor::EffectStage::Warp | crate::render::compositor::EffectStage::Field) && layer.effects.iter().any(|e| e.plugin_id == d.plugin_id));
+        let masks_applied = (uses_material || frame.is_some()) && built.content.texture().is_some();
+        if masks_applied { built = self.apply_masks_to_layer(built, &layer.masks, natural, frame)?; }
+        built = self.apply_material_domains(built, layer, natural, frame)?;
+        if matches!(built.content, LayerContent::Model(_) | LayerContent::Texture(_) | LayerContent::LinearTexture(_)) {
+            built.shading = self.compositor.surface_shading_for(&layer.effects, matches!(&built.content, LayerContent::Model(m) if m.planar_size.is_some()))
+                .map_err(EngineError::Store)?;
+        }
+        let planar_image_pass = matches!(&built.content, LayerContent::Model(m) if m.planar_size.is_some()) && !translate_effect_passes(&layer.effects).is_empty();
+        let built = self.flatten_if_asked(comp, camera, built, layer.flatten || planar_image_pass)?;
+        Ok(Some(if masks_applied { built } else { self.apply_masks_to_layer(built, &layer.masks, natural, frame)? }))
     }
 
     fn apply_masks_to_layer(
         &mut self,
         mut layer: Layer,
         masks: &[ResolvedMask],
+        natural: [f32; 2],
+        frame: Option<crate::render::compositor::effects::vism::ImageFrame>,
     ) -> Result<Layer, EngineError> {
         if masks.is_empty() {
             return Ok(layer);
@@ -587,7 +593,19 @@ impl Engine {
             origin_x: 0,
             origin_y: 0,
         };
-        let coverage = crate::render::engine::mask::fold_masks(masks, &canvas)?;
+        let frame = frame.unwrap_or(crate::render::compositor::effects::vism::ImageFrame { size: natural, origin: [0.0;2], pixels: [width,height] });
+        let sx = width as f64 / frame.size[0].max(1.0) as f64;
+        let sy = height as f64 / frame.size[1].max(1.0) as f64;
+        let masks: Vec<_> = masks.iter().cloned().map(|mut mask| {
+            for vertex in &mut mask.shape.vertices {
+                vertex.point[0] = (vertex.point[0] - frame.origin[0] as f64) * sx;
+                vertex.point[1] = (vertex.point[1] - frame.origin[1] as f64) * sy;
+                for point in [&mut vertex.in_tangent, &mut vertex.out_tangent] { point[0] *= sx; point[1] *= sy; }
+            }
+            mask.expansion *= (sx + sy) * 0.5;
+            mask
+        }).collect();
+        let coverage = crate::render::engine::mask::fold_masks(&masks, &canvas)?;
         let rgba = coverage
             .bytes
             .into_iter()
@@ -653,17 +671,24 @@ fn collect_text_documents(
 fn collect_shape_documents(
     view: &StoreView<'_>,
     resolved: &[ResolvedLayer],
+    t: RationalTime,
 ) -> Result<HashMap<LayerId, Vec<ShapeNode>>, EngineError> {
     let mut documents = HashMap::new();
     for layer in resolved {
         if layer.source == LayerSource::Shape {
             let shapes = view
-                .shapes(layer.id)
+                .shapes_at(layer.id, t)
                 .map_err(|e| EngineError::Store(e.to_string()))?;
-            documents.insert(layer.id, shapes);
+            documents.insert(layer.id, shown_shapes(&shapes, layer));
         }
     }
     Ok(documents)
+}
+
+/// パス効果を掛けた姿。配置の上下どちらに積んでも輪郭には同じに効く(輪郭は絵より先)。
+pub(crate) fn shown_shapes(shapes: &[ShapeNode], layer: &ResolvedLayer) -> Vec<ShapeNode> {
+    let effects: Vec<_> = layer.effects.iter().chain(&layer.after_effects).cloned().collect();
+    crate::doc::store::pathop::with_effects(shapes, &effects)
 }
 
 /// 層の 4 隅を画面に映して、効果の余白込みで枠の外に丸ごと出ていれば true。
@@ -713,7 +738,7 @@ mod placement_contract {
     //! 配置効果(motolii.repeat)は他の効果と同じ口から入り、素材を N 個置く。
     //! 既定は通り抜け。配置効果の**下**に効果を積んだ時だけ、配置を 1 枚に合わせてから掛かる。
     use crate::doc::store::{
-        placement, property, Composition, Document, EffectId, EffectInstance, Fps, Intent,
+        placement, property, Composition, Document, EffectId, EffectInstance, EffectScope, Fps, Intent,
         LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, Value,
     };
     use crate::render::engine::{known_effects, Engine};
@@ -821,7 +846,7 @@ mod placement_contract {
             Intent::SetMeta { layer: group, meta: LayerMeta { source: LayerSource::Group, order: 0, timing: LayerTiming::place(0, None, 1) } },
             Intent::SetEffects { layer: group, effects: vec![EffectInstance { id: EffectId(0), plugin_id: placement::REPEAT.to_owned() }] },
             Intent::SetConstant { layer: group, property: PropertyId::effect_param(EffectId(0), "count").unwrap(), value: Value::F64(2.0) },
-            Intent::SetConstant { layer: group, property: PropertyId::effect_param(EffectId(0), "subject").unwrap(), value: Value::F64(1.0) },
+            Intent::SetConstant { layer: group, property: PropertyId::effect_scope(EffectId(0)), value: Value::Enum(EffectScope::Whole.enum_value()) },
             Intent::SetConstant { layer: group, property: PropertyId::effect_param(EffectId(0), "position_each").unwrap(), value: Value::Vec2([10.0, 0.0]) },
         ]).unwrap();
         add_file_layer(&mut inside, 11, 0, &red, Some(group), false);
@@ -829,6 +854,40 @@ mod placement_contract {
         let pixels = engine.render_frame(&inside.view(), RationalTime::ZERO).unwrap();
         assert_eq!(covered(&pixels), 2 * (DOT * DOT) as usize, "each copy carries its own clipped lyric, nothing leaks outside the copies");
         assert!(red_floor(&pixels) >= 120, "inside a copy the clip is drawn once, got red {}", red_floor(&pixels));
+    }
+
+    /// グループの効果は host が解く。Each なら子がそのまま重なり(重なりは 2 回描かれる)、
+    /// Whole を 1 つ積むと子は 1 枚に焼かれてからグループの不透明度で 1 回だけ乗る。効果(gain=1)は何も知らない。
+    #[test]
+    fn a_whole_effect_bakes_the_group_into_one_plate() {
+        let dir = tempfile::tempdir().unwrap();
+        let red = png(dir.path(), "red.png", [255, 0, 0, 255]);
+        let mut engine = Engine::new().unwrap();
+        let mut doc = Document::new();
+        doc.apply(Intent::SetComposition(Composition { width: SIZE, height: SIZE, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 1, background: [0.0; 4] })).unwrap();
+        let group = LayerId(10);
+        doc.apply_all([
+            Intent::AddLayer(group),
+            Intent::SetMeta { layer: group, meta: LayerMeta { source: LayerSource::Group, order: 0, timing: LayerTiming::place(0, None, 1) } },
+            Intent::SetConstant { layer: group, property: PropertyId::new(property::OPACITY).unwrap(), value: Value::F64(0.5) },
+            Intent::SetEffects { layer: group, effects: vec![EffectInstance { id: EffectId(0), plugin_id: "motolii.gain".to_owned() }] },
+        ]).unwrap();
+        add_file_layer(&mut doc, 11, 0, &red, Some(group), false);
+        let second = add_file_layer(&mut doc, 12, 1, &red, Some(group), false);
+        doc.apply(Intent::SetConstant { layer: second, property: PropertyId::new(property::POSITION).unwrap(), value: Value::Vec2([6.0, 4.0]) }).unwrap();
+        let alpha_max = |pixels: &[u8]| pixels.chunks(4).map(|px| px[3]).max().unwrap();
+
+        // Each(既定): グループの不透明度は子に降りず、重なりも 1 枚ずつ。全部不透明。
+        let pixels = engine.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+        assert_eq!(covered(&pixels), (DOT * (DOT + 2)) as usize);
+        assert_eq!(alpha_max(&pixels), 255, "pass-through children keep their own opacity");
+
+        // Whole: 2 枚を 1 枚に焼き、グループの 50 % で 1 回乗る。重なりも 50 % のまま。
+        doc.apply(Intent::SetConstant { layer: group, property: PropertyId::effect_scope(EffectId(0)), value: Value::Enum(EffectScope::Whole.enum_value()) }).unwrap();
+        let pixels = engine.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+        assert_eq!(covered(&pixels), (DOT * (DOT + 2)) as usize, "the plate covers the same pixels");
+        let alphas: std::collections::BTreeSet<u8> = pixels.chunks(4).filter(|px| px[3] > 0).map(|px| px[3]).collect();
+        assert!(alphas.iter().all(|a| (120..=136).contains(a)), "one plate at 50 %, overlap included, got {alphas:?}");
     }
 
     /// 背景は世界の板でなく出力の地。カメラを回しても書き出しの全画素が背景色で、素材の無い所に穴は開かない。
@@ -945,6 +1004,8 @@ const VIDEO_PLAYER_PURGE_EVERY: u32 = 150;
 
 impl Engine {
     fn purge_idle_video_players(&mut self) {
+        self.frame_cache_tick += 1;
+        self.flush_pending_frame_copies();
         self.renders_since_video_purge += 1;
         if self.renders_since_video_purge < VIDEO_PLAYER_PURGE_EVERY {
             return;
@@ -953,5 +1014,135 @@ impl Engine {
         for (_, video) in self.videos.values() {
             video.begin_frame();
         }
+    }
+}
+
+/// 画面座標の矩形(左・上・右・下)。
+type ScreenRect = [f32; 4];
+
+fn rect_inside(inner: ScreenRect, outer: ScreenRect) -> bool {
+    inner[0] >= outer[0] && inner[1] >= outer[1] && inner[2] <= outer[2] && inner[3] <= outer[3]
+}
+
+impl Engine {
+    /// 復号の前に分かる範囲で層の画面上の矩形を出す。寸が分かる動画の層だけ。
+    /// 軸に沿った矩形なら `Some((rect, true))`、回っていれば外接矩形と `false`。
+    fn media_screen_rect(&self, comp: CompSpec, camera: ResolvedCamera, layer: &ResolvedLayer) -> Option<(ScreenRect, bool)> {
+        let LayerSource::File { path, .. } = &layer.source else { return None };
+        if crate::render::media::is_still_image_path(path)
+            || crate::render::media::is_mesh_path(path)
+            || crate::render::media::is_point_cloud_path(path)
+        {
+            return None;
+        }
+        let info = self.probes.get(path)?;
+        if info.rotation != 0 {
+            return None;
+        }
+        let world = layer.placement.world_transform?;
+        let size = layer_size(layer, [info.width as f32, info.height as f32]);
+        let corners = crate::doc::core::projected_screen_corners(
+            comp, camera, camera, layer.projection, world, [0.0, 0.0, 0.0], [size[0], size[1], 0.0],
+        );
+        if corners.iter().any(|c| !c.is_finite()) {
+            return None;
+        }
+        let rect = corners.iter().fold([f32::MAX, f32::MAX, f32::MIN, f32::MIN], |r, c| {
+            [r[0].min(c.x), r[1].min(c.y), r[2].max(c.x), r[3].max(c.y)]
+        });
+        // 4 隅が矩形の角に乗っていれば軸に沿っている(回転・傾き無し)。
+        let eps = 0.5;
+        let on_corner = |c: &glam::Vec2| {
+            ((c.x - rect[0]).abs() < eps || (c.x - rect[2]).abs() < eps)
+                && ((c.y - rect[1]).abs() < eps || (c.y - rect[3]).abs() < eps)
+        };
+        Some((rect, corners.iter().all(on_corner)))
+    }
+
+    /// 上から順に不透明な矩形を積み、丸ごと覆われた層と画面の外の層を集める(Blender VSE の型)。
+    fn unseen_layers(
+        &self,
+        comp: CompSpec,
+        camera: ResolvedCamera,
+        resolved: &[ResolvedLayer],
+        needs_auxiliary_views: bool,
+        matte_sources: &HashSet<LayerId>,
+    ) -> HashSet<usize> {
+        let mut unseen = HashSet::new();
+        if needs_auxiliary_views {
+            return unseen;
+        }
+        let screen: ScreenRect = [0.0, 0.0, comp.width as f32, comp.height as f32];
+        let mut covers: Vec<ScreenRect> = Vec::new();
+        for (index, layer) in resolved.iter().enumerate().rev() {
+            // 他の層の入力になる物は消さない。
+            let feeds_others = matte_sources.contains(&layer.id) || layer.matte.is_some() || layer.clip_to_below;
+            let Some((rect, axis_aligned)) = self.media_screen_rect(comp, camera, layer) else { continue };
+            let plain = layer.effects.is_empty() && layer.after_effects.is_empty() && layer.masks.is_empty();
+            let offscreen = rect[2] < 0.0 || rect[3] < 0.0 || rect[0] > screen[2] || rect[1] > screen[3];
+            if !feeds_others && plain && (offscreen || covers.iter().any(|cover| rect_inside(rect, *cover))) {
+                unseen.insert(index);
+                continue;
+            }
+            let opaque = axis_aligned
+                && plain
+                && layer.placement.opacity >= 1.0
+                && layer.blend_mode == crate::doc::store::BlendMode::Normal
+                && layer.matte.is_none()
+                && !layer.clip_to_below
+                && !layer.ghost
+                // 面が画面に平行なら projection の種類は問わない(描画順は order のまま)。
+                && layer.placement.rotation_x == 0.0
+                && layer.placement.rotation_y == 0.0;
+            if opaque {
+                covers.push(rect);
+            }
+        }
+        unseen
+    }
+}
+
+/// 先に開いておく幅。30fps で半秒。
+const WARM_AHEAD_FRAMES: i64 = 15;
+
+impl Engine {
+    /// 再生位置の少し先で現れる動画層の復号器を、今のうちに開く。timeline は未来を知っている。
+    /// 待たず、失敗も記録しない(本番の描画で改めて分かる)。
+    pub fn warm_upcoming(&mut self, view: &StoreView<'_>, t: RationalTime) -> Result<(), EngineError> {
+        let composition = view
+            .composition()
+            .map_err(|e| EngineError::Store(e.to_string()))?
+            .ok_or(EngineError::NoComposition)?;
+        let fps = composition.fps;
+        let now_frame = t.try_to_frame_floor(fps).map_err(|e| EngineError::Time(e.to_string()))?;
+        let ahead = RationalTime::try_from_frame(now_frame + WARM_AHEAD_FRAMES, fps)
+            .map_err(|e| EngineError::Time(e.to_string()))?;
+        let now_ids: HashSet<LayerId> = view
+            .resolved_layers(t)
+            .map_err(|e| EngineError::Store(e.to_string()))?
+            .iter()
+            .map(|layer| layer.id)
+            .collect();
+        let upcoming = view
+            .resolved_layers(ahead)
+            .map_err(|e| EngineError::Store(e.to_string()))?;
+
+        let failures = std::mem::take(&mut self.layer_failures);
+        let was_realtime = self.realtime;
+        self.realtime = true;
+        for layer in upcoming.iter().filter(|layer| !now_ids.contains(&layer.id)) {
+            let LayerSource::File { path, .. } = &layer.source else { continue };
+            if crate::render::media::is_still_image_path(path)
+                || crate::render::media::is_audio_path(path)
+                || crate::render::media::is_mesh_path(path)
+                || crate::render::media::is_point_cloud_path(path)
+            {
+                continue;
+            }
+            let _ = self.media_texture_for(path, layer.source_time, layer.id);
+        }
+        self.realtime = was_realtime;
+        self.layer_failures = failures;
+        Ok(())
     }
 }

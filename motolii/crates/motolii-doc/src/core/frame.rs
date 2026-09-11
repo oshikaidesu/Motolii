@@ -235,6 +235,13 @@ pub fn depth_scale(x_axis: glam::Vec3, y_axis: glam::Vec3) -> f32 {
     (x_axis.length() + y_axis.length()) * 0.5
 }
 
+/// A layer's world transform as its volume is drawn: depth follows the mean of the x and y
+/// scales. The cage and the drag map take their corners through this same transform.
+pub fn depth_scaled(world: glam::Affine3A) -> glam::Affine3A {
+    let depth = depth_scale(world.matrix3.x_axis.into(), world.matrix3.y_axis.into());
+    world * glam::Affine3A::from_scale(glam::vec3(1.0, 1.0, depth))
+}
+
 impl LayerPlacement {
     pub fn from_transform(
         anchor: [f32; 2],

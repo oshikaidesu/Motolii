@@ -21,15 +21,21 @@ pub struct Param {
     pub range: Option<(f64, f64)>,
     /// この形の時だけ出る(配置効果の形のトグル)。None は全形。
     pub modes: Option<&'static [u8]>,
+    /// 札の姿勢: 既定では何も起きない欄(Trim の end、Twist の angle)を、見本に効く値へ。
+    pub sample: Option<f64>,
 }
 
 impl Param {
     pub const fn number(name: &'static str, label: &'static str, default: f64, range: Option<(f64, f64)>) -> Self {
-        Self { name, label, section: "", kind: ParamKind::Number, default: [default, 0.0], range, modes: None }
+        Self { name, label, section: "", kind: ParamKind::Number, default: [default, 0.0], range, modes: None, sample: None }
+    }
+    pub const fn sample(mut self, value: f64) -> Self {
+        self.sample = Some(value);
+        self
     }
 
     pub const fn choice(name: &'static str, label: &'static str, choices: &'static [&'static str]) -> Self {
-        Self { name, label, section: "", kind: ParamKind::Choice(choices), default: [0.0, 0.0], range: Some((0.0, (choices.len() - 1) as f64)), modes: None }
+        Self { name, label, section: "", kind: ParamKind::Choice(choices), default: [0.0, 0.0], range: Some((0.0, (choices.len() - 1) as f64)), modes: None, sample: None }
     }
 
     pub fn shown(&self, mode: u8) -> bool {
@@ -51,19 +57,30 @@ impl Param {
     }
 }
 
+/// shader を持たない棚の 1 枚が何を返すか。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Family {
+    /// 配置の集合。
+    Placement,
+    /// 形の層の輪郭。
+    Path,
+}
+
 /// 棚に並ぶ 1 枚の見え方。
 #[derive(Clone, Copy)]
 pub struct Kind {
     pub plugin_id: &'static str,
     pub label: &'static str,
     pub params: &'static [Param],
+    pub family: Family,
 }
 
 /// shader を持たない棚の 1 枚の全部。棚と admission はこの表と ISF の manifest だけを読む。
 pub fn all() -> impl Iterator<Item = Kind> {
     crate::doc::store::placement::KINDS
         .iter()
-        .map(|k| Kind { plugin_id: k.plugin_id, label: k.label, params: k.params })
+        .map(|k| Kind { plugin_id: k.plugin_id, label: k.label, params: k.params, family: Family::Placement })
+        .chain(crate::doc::store::pathop::KINDS.iter().map(|k| Kind { plugin_id: k.plugin_id, label: k.label, params: k.params, family: Family::Path }))
 }
 
 pub fn kind(plugin_id: &str) -> Option<Kind> {
@@ -102,5 +119,6 @@ mod tests {
         }
         assert_eq!(label(crate::doc::store::placement::REPEAT), Some("Repeater"));
         assert_eq!(choices(crate::doc::store::placement::REPEAT, "mode"), Some(crate::doc::store::placement::SHAPES));
+        assert_eq!(kind(crate::doc::store::pathop::PUCKER_BLOAT).map(|k| k.family), Some(Family::Path));
     }
 }

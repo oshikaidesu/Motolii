@@ -10,6 +10,33 @@ import '../lib/panels/ease_desk.dart';
 import '../lib/session/editor_session.dart';
 
 void main() {
+  testWidgets('Space passes through focused Ease presets to playback', (tester) async {
+    final c = EditorSession();
+    c.document.value = {'easeKinds': [{'kind': 'Linear'}, {'kind': 'Hold'}]};
+    var playbackKeys = 0;
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: Focus(
+      onKeyEvent: (_, event) {
+        if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.space) {
+          playbackKeys++;
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: EaseDesk(controller: c),
+    ))));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('ease-preset:0')));
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    await tester.pump();
+    expect(playbackKeys, 1);
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    await tester.pump();
+    expect(playbackKeys, 2);
+    await tester.pumpWidget(const SizedBox());
+    c.dispose();
+  });
+
   test('sampled motion preserves overshoot and the Hold discontinuity', () {
     expect(
       easeValueAt({

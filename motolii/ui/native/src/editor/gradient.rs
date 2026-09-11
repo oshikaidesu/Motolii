@@ -20,6 +20,7 @@ pub(crate) fn stops(j: &J) -> Result<Vec<GradientStop>, String> {
 pub(crate) fn kind(j: &J) -> Result<GradientType, String> {
     match j.as_str().unwrap_or("linear") {
         "linear" => Ok(GradientType::Linear), "radial" => Ok(GradientType::Radial),
+        "angular" => Ok(GradientType::Angular), "diamond" => Ok(GradientType::Diamond),
         _ => Err("Unknown gradient type".into()),
     }
 }
@@ -57,7 +58,7 @@ pub(crate) fn model(doc:&Document, slot:&ColorSlot) -> Option<J> {
     let slot=ColorSlot::ShapeFill{layer,path:path.to_vec()};
     Some(match &fill.brush {
         Brush::Solid(c)=>json!({"slot":slot,"kind":"solid","angle":0,"stops":[{"offset":0,"rgba":[c.r,c.g,c.b,1.0]}]}),
-        Brush::Gradient(g)=>json!({"slot":slot,"kind":match g.kind{GradientType::Linear=>"linear",GradientType::Radial=>"radial"},"angle":(g.end.y-g.start.y).atan2(g.end.x-g.start.x).to_degrees(),"stops":g.stops.iter().enumerate().map(|(index,s)|json!({"offset":s.offset,"rgba":[s.color.r,s.color.g,s.color.b,1.0],"slot":ColorSlot::ShapeGradientPoint{layer,path:path.to_vec(),index}})).collect::<Vec<_>>()}),
+        Brush::Gradient(g)=>json!({"slot":slot,"kind":match g.kind{GradientType::Linear=>"linear",GradientType::Radial=>"radial",GradientType::Angular=>"angular",GradientType::Diamond=>"diamond"},"angle":(g.end.y-g.start.y).atan2(g.end.x-g.start.x).to_degrees(),"stops":g.stops.iter().enumerate().map(|(index,s)|json!({"offset":s.offset,"rgba":[s.color.r,s.color.g,s.color.b,1.0],"slot":ColorSlot::ShapeGradientPoint{layer,path:path.to_vec(),index}})).collect::<Vec<_>>()}),
     })
 }
 

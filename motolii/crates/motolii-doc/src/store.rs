@@ -10,6 +10,8 @@ mod mask;
 mod persist;
 pub mod kind;
 pub mod placement;
+pub mod pathop;
+pub mod shape_props;
 mod slot;
 mod text;
 mod view;
@@ -17,7 +19,7 @@ mod view;
 pub use asset::{Asset, AssetDraft, AssetError, AssetId, AssetRole, AssetStatus, AssetTable};
 pub use attrs::{BlendMode, LayerAttrs, LayerAttrsPatch, LayerProjection, Matte, MatteMode, LABEL_PALETTE_LEN};
 pub use document::{Animate, DisplayRevision, Document, Intent, LayerId, PropertyId, Revision};
-pub use effect::{EffectId, EffectInstance, ResolvedEffect};
+pub use effect::{EffectId, EffectInstance, EffectScope, ResolvedEffect};
 pub use placement::Placement;
 pub use fingerprint::{SourceFingerprintDecode, SourceFingerprintError, SourceFingerprintV1};
 pub use marker::Marker;
@@ -108,6 +110,22 @@ pub mod property {
 
     pub const EFFECT_PREFIX: &str = "effect.";
 
+    /// 形の元の値(`shape_props`)。星の頂点数・半径、矩形と楕円の大きさ。
+    pub const SHAPE_PREFIX: &str = "shape.";
+    pub const SHAPE_POINTS: &str = "shape.points";
+    pub const SHAPE_OUTER_RADIUS: &str = "shape.outer_radius";
+    pub const SHAPE_INNER_RADIUS: &str = "shape.inner_radius";
+    pub const SHAPE_SIZE: &str = "shape.size";
+    pub const SHAPE_STROKE_WIDTH: &str = "shape.stroke_width";
+    pub const SHAPE_LENGTH: &str = "shape.length";
+
+    /// 塗りの gradient(`shape_props`)。軸は形の bounds に対する比で持つ: 向き・中心のずれ(%)・広がり(%)。
+    /// stop は `fill.stop.<n>.offset` / `fill.stop.<n>.color` で 1 つずつ。
+    pub const FILL_ANGLE: &str = "fill.angle";
+    pub const FILL_CENTER: &str = "fill.center";
+    pub const FILL_SPREAD: &str = "fill.spread";
+    pub const FILL_STOP_PREFIX: &str = "fill.stop.";
+
     pub const ANCHOR: &str = "anchor";
     pub const POSITION: &str = "position";
     pub const POSITION_X: &str = "position.x";
@@ -127,6 +145,8 @@ pub mod property {
     pub const ROTATION_X: &str = "rotation.x";
     pub const ROTATION_Y: &str = "rotation.y";
     pub const SCALE_Z: &str = "scale.z";
+    /// 板の奥行き(px)。0 なら板のまま。2.5D/3D で輪郭どおりに押し出され、scale.z が効く対象になる。
+    pub const DEPTH: &str = "depth";
 
     pub const CAMERA_CENTER: &str = "camera.center";
     pub const CAMERA_ZOOM: &str = "camera.zoom";
@@ -461,12 +481,19 @@ pub struct ResolvedLayer {
     /// 3D の素材を平面へ収めるか。既定は収めない(裁定 2026-08-30)。
     pub flatten: bool,
     pub environment: bool,
+    /// 押し出しの奥行き(px、素の値)。0 なら板。
+    pub depth: f32,
+    /// 光を遮る(影と透過の色を落とす)。
+    pub blocks_light: bool,
     /// ゴースト(同じ層を遅れて見た姿)なら true。掴めない・枠に入らない(裁定 2026-09-07)。
     pub ghost: bool,
     /// 配置効果が増やした何番目か。増やしていなければ 0。
     pub copy: u32,
-    /// 配置効果より**下**に積まれた効果。配置を 1 枚に合わせてから掛かる。
+    /// 配置効果より**下**に積まれた効果、または板(`plate`)に掛かる効果。1 枚に合わせてから掛かる。
     pub after_effects: Vec<ResolvedEffect>,
+    /// このグループの板の一部。Whole の効果を積んだグループの子孫は、同じ板の物を 1 枚に焼いてから
+    /// `after_effects` を掛け、板の不透明度と混ぜ方はそのグループの物(裁定 2026-09-11)。
+    pub plate: Option<LayerId>,
 }
 
 /// 白紙。**枠だけは要る** —— 枠が無いと何も描けず、窓が空を出す。

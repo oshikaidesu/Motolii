@@ -681,8 +681,7 @@ class _EaseDeskState extends State<EaseDesk>
                       : key == LogicalKeyboardKey.arrowUp
                       ? -columns
                       : 0;
-                  if (key == LogicalKeyboardKey.enter ||
-                      key == LogicalKeyboardKey.space) {
+                  if (key == LogicalKeyboardKey.enter) {
                     _choose(presets[_focused.clamp(0, presets.length - 1)]);
                     return KeyEventResult.handled;
                   }

@@ -10,6 +10,65 @@ pub struct GpuEnvironmentData {
     pub(crate) environment: re_renderer::Environment,
     /// 元の画の寸法。層の枠に使う。
     pub size: [f32; 2],
+    /// この空の太陽。光源は置かない — 影が奪うのはこの分だけ(裁定 2026-09-10)。
+    pub sun: SunSpec,
+}
+
+/// 太陽 = 環境の一番明るい方向。`weight` は拡散光のうち太陽の錐(峰の半分以上の明るさ)から来る割合。
+#[derive(Clone, Copy, Debug)]
+pub struct SunSpec {
+    /// 世界の向き(太陽の方へ)。
+    pub direction: glam::Vec3,
+    pub weight: f32,
+    /// 太陽の色(最大成分で正規化)。
+    pub color: glam::Vec3,
+}
+
+impl SunSpec {
+    /// 環境の無い作品: fork の固定 2 灯の主灯(`simple_lighting`)。
+    pub fn fixed_lights() -> Self {
+        Self { direction: glam::vec3(1.0, 2.0, 3.0).normalize(), weight: 1.0 / 1.7, color: glam::Vec3::ONE }
+    }
+}
+
+/// 等距円筒図から太陽を読む: 峰の texel の向きと、峰の半分以上の texel が担う cosine 加重エネルギーの割合。
+fn sun_from_equirect(rgb: &[f32], width: usize, height: usize, environment_from_world: glam::Mat3) -> SunSpec {
+    let lum = |p: &[f32]| 0.2126 * p[0] + 0.7152 * p[1] + 0.0722 * p[2];
+    let (mut peak, mut peak_index) = (0.0f32, 0usize);
+    for (i, px) in rgb.chunks_exact(3).enumerate() {
+        let l = lum(px);
+        if l > peak {
+            peak = l;
+            peak_index = i;
+        }
+    }
+    let direction_of = |i: usize| {
+        re_renderer::environment::direction_from_equirect_uv(glam::vec2(
+            ((i % width) as f32 + 0.5) / width as f32,
+            ((i / width) as f32 + 0.5) / height as f32,
+        ))
+    };
+    if peak <= 0.0 {
+        return SunSpec { direction: glam::Vec3::ZERO, weight: 0.0, color: glam::Vec3::ONE };
+    }
+    let sun = direction_of(peak_index);
+    let (mut total, mut from_sun, mut color) = (0.0f32, 0.0f32, glam::Vec3::ZERO);
+    for (i, px) in rgb.chunks_exact(3).enumerate() {
+        let theta = ((i / width) as f32 + 0.5) / height as f32 * std::f32::consts::PI;
+        let solid_angle = theta.sin() * (std::f32::consts::TAU / width as f32) * (std::f32::consts::PI / height as f32);
+        let cosine = direction_of(i).dot(sun).max(0.0);
+        let energy = lum(px) * cosine * solid_angle;
+        total += energy;
+        if lum(px) >= 0.5 * peak {
+            from_sun += energy;
+            color += glam::Vec3::from_slice(px) * cosine * solid_angle;
+        }
+    }
+    SunSpec {
+        direction: (environment_from_world.inverse() * sun).normalize_or_zero(),
+        weight: if total > 0.0 { (from_sun / total).clamp(0.0, 1.0) } else { 0.0 },
+        color: color / color.max_element().max(1e-6),
+    }
 }
 
 /// 照度図の寸法。拡散照明は低周波なので小さくてよい(cosine lobe は 2 次の球面調和で
@@ -52,16 +111,19 @@ impl Compositor {
             IRRADIANCE_SIZE.0 as u32,
             IRRADIANCE_SIZE.1 as u32,
         )?;
+        // 世界は x 右・y 下・z 奥(camera.rs の base 回転)。等距円筒図は y 上・-z 正面なので、
+        // X 軸まわり 180° で写す(鏡像にしない)。
+        let environment_from_world = glam::Mat3::from_diagonal(glam::vec3(1.0, -1.0, -1.0));
+        let sun = sun_from_equirect(&small, CONVOLVE_INPUT_SIZE.0, CONVOLVE_INPUT_SIZE.1, environment_from_world);
         Ok(Arc::new(GpuEnvironmentData {
             environment: re_renderer::Environment {
                 radiance,
                 irradiance,
-                // 世界は x 右・y 下・z 奥(camera.rs の base 回転)。等距円筒図は y 上・-z 正面なので、
-                // X 軸まわり 180° で写す(鏡像にしない)。
-                environment_from_world: glam::Mat3::from_diagonal(glam::vec3(1.0, -1.0, -1.0)),
+                environment_from_world,
                 strength: 1.0,
             },
             size: [width as f32, height as f32],
+            sun,
         }))
     }
 

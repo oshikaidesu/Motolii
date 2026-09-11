@@ -42,13 +42,17 @@ pub(crate) fn translate_matte_mode(
 pub(crate) fn translate_effect_passes(
     effects: &[crate::doc::store::ResolvedEffect],
 ) -> Vec<crate::render::compositor::EffectPass> {
+    translate_image_effects(effects, crate::render::compositor::EffectStage::Pass)
+}
+
+pub(crate) fn translate_image_effects(effects: &[crate::doc::store::ResolvedEffect], stage: crate::render::compositor::EffectStage) -> Vec<crate::render::compositor::EffectPass> {
     let catalog = known_effects();
     effects
         .iter()
         .filter_map(|effect| {
             let descriptor = catalog.iter()
                 .find(|descriptor| descriptor.plugin_id == effect.plugin_id)?;
-            if descriptor.stage != crate::render::compositor::EffectStage::Pass {
+            if descriptor.stage != stage {
                 return None;
             }
             let params: Vec<(String, f32)> = effect
@@ -72,7 +76,7 @@ pub(crate) fn translate_effect_passes(
                             .map(|param| param.default as f32)
                     })
                     .unwrap_or(0.0);
-                (value.round().max(0.0) * padding.scale).round() as u32
+                (value.abs() * padding.scale).ceil() as u32
             });
             Some(crate::render::compositor::EffectPass {
                 plugin_id: effect.plugin_id.clone(),
@@ -84,7 +88,17 @@ pub(crate) fn translate_effect_passes(
         .collect()
 }
 
-pub use crate::render::compositor::{EffectDescriptor, EffectParamDescriptor};
+pub(crate) fn translate_plate_passes(effects: &[crate::doc::store::ResolvedEffect]) -> Vec<crate::render::compositor::EffectPass> {
+    let catalog = known_effects();
+    effects.iter().flat_map(|effect| {
+        match catalog.iter().find(|d| d.plugin_id == effect.plugin_id).map(|d| d.stage) {
+            Some(stage @ (crate::render::compositor::EffectStage::Pass | crate::render::compositor::EffectStage::Warp)) => translate_image_effects(std::slice::from_ref(effect), stage),
+            _ => Vec::new(),
+        }
+    }).collect()
+}
+
+pub use crate::render::compositor::{EffectDescriptor, EffectParamDescriptor, EffectThumbnail};
 
 /// Turbulent Displace の欄を点群用の CPU の写しへ。既定は棚の宣言から。
 pub(crate) fn translate_point_displace(
@@ -103,9 +117,9 @@ pub(crate) fn translate_point_displace(
     crate::render::compositor::PointDisplace {
         amount: read("amount"),
         size: read("size").max(1e-3),
-        complexity: read("complexity").round().clamp(1.0, 8.0) as u32,
+        complexity: read("complexity").floor().clamp(1.0, 8.0) as u32,
         evolution: read("evolution"),
-        offset: glam::vec3(read("offset_x"), read("offset_y"), read("offset_z")),
+        offset: glam::vec3(read("offset_x"), read("offset_y"), read("offset_z")) + read("seed") * read("size").max(1e-3) * glam::vec3(0.137,0.173,0.193),
     }
 }
 
@@ -151,12 +165,12 @@ mod shelf_tests {
         assert!(glass.params.iter().any(|p| p.name == "ior" && p.label == "Refraction"));
         let turbulence = catalog.iter().find(|d| d.plugin_id == "motolii.turbulent_displace").expect("棚に在る");
         assert_eq!(turbulence.stage, EffectStage::Field);
-        assert_eq!(turbulence.params.iter().find(|p| p.name == "along").and_then(|p| p.choices.clone()), Some(vec!["Normal".to_owned(), "Space".to_owned()]));
+        assert_eq!(turbulence.params.iter().find(|p| p.name == "along").and_then(|p| p.choices.clone()), Some(vec!["Normal".to_owned(), "XYZ".to_owned()]));
         for id in ["motolii.glass", "motolii.turbulent_displace"] {
-            let effect = crate::doc::store::ResolvedEffect { plugin_id: id.into(), params: vec![] };
+            let effect = crate::doc::store::ResolvedEffect { plugin_id: id.into(), params: vec![], ..Default::default() };
             assert!(super::translate_effect_passes(std::slice::from_ref(&effect)).is_empty());
         }
-        let effect = crate::doc::store::ResolvedEffect { plugin_id: "motolii.turbulent_displace".into(), params: vec![] };
+        let effect = crate::doc::store::ResolvedEffect { plugin_id: "motolii.turbulent_displace".into(), params: vec![], ..Default::default() };
         assert_eq!(super::translate_point_displace(std::slice::from_ref(&effect)).amount, 50.0);
     }
 }

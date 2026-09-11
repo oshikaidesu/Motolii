@@ -1,4 +1,5 @@
 import 'native_visual_sample.dart';
+import 'gradient_inspector.dart';
 
 import 'dart:convert';
 import 'dart:io';
@@ -53,6 +54,7 @@ class _BrowserPanelState extends State<BrowserPanel> {
   /// One tile's width at the shelf's current size. The grid already knows it,
   /// so a card's name is fitted against this instead of measuring itself.
   double tileWidth = BrowserSize.base;
+
   /// Media opens on pictures alone: its items are told apart by their
   /// picture, not their name. Create and Effects keep the grid.
   int get viewMode =>
@@ -138,7 +140,12 @@ class _BrowserPanelState extends State<BrowserPanel> {
         final name = entry.path.split('/').last;
         if (name.startsWith('.')) continue;
         if (entry is Directory) {
-          folders.add({'id': entry.path, 'name': name, 'path': entry.path, 'folder': true});
+          folders.add({
+            'id': entry.path,
+            'name': name,
+            'path': entry.path,
+            'folder': true,
+          });
         } else if (entry is File) {
           final dot = name.lastIndexOf('.');
           final ext = dot > 0 ? name.substring(dot + 1).toLowerCase() : '';
@@ -298,12 +305,16 @@ class _BrowserPanelState extends State<BrowserPanel> {
       case 'Create':
         return switch (id(item)) {
           'text' => 'Text',
-          'rectangle' => 'Shapes',
-          'bezier' => 'Paths',
-          'cube' => '3D',
+          'rectangle' ||
+          'roundedRectangle' ||
+          'ellipse' ||
+          'star' ||
+          'polygon' => 'Shapes',
+          'bezier' || 'line' => 'Paths',
+          'null' => 'Helpers',
           'camera' => '3D',
           'stage' => '3D',
-          _ => 'Other',
+          _ => _shapeOf(id(item)) != null ? '3D' : 'Other',
         };
       case 'Media':
         final kind = family(item);
@@ -318,9 +329,14 @@ class _BrowserPanelState extends State<BrowserPanel> {
               'motolii.gradient': 'Color',
               'motolii.tri_led': 'Stylize',
               'motolii.repeat': 'Place',
-              'motolii.clip': '3D',
             }[id(item)] ??
-            'Other';
+            // shader を持たない棚の札は native の stage が族(Path = 形の層の輪郭)。
+            switch (item['stage']) {
+              'Warp' => 'Distort',
+              'Field' || 'Surface' || 'Clip' => '3D',
+              'Path' => 'Path',
+              _ => 'Other',
+            };
       default:
         return item['saved'] == true
             ? 'Saved'
@@ -340,11 +356,25 @@ class _BrowserPanelState extends State<BrowserPanel> {
             'detail': 'Adds a text layer',
             'glyph': 'T',
           },
+          // 形は AE の shape ツールの並び。矩形だけ角丸を効果として最初から積む。
+          for (final (id, name, glyph) in [
+            ('rectangle', 'Rectangle', '■'),
+            ('roundedRectangle', 'Rounded Rectangle', '▢'),
+            ('ellipse', 'Ellipse', '●'),
+            ('star', 'Star', '★'),
+            ('polygon', 'Polygon', '⬟'),
+          ])
+            {
+              'id': id,
+              'name': name,
+              'detail': 'Adds a shape layer',
+              'glyph': glyph,
+            },
           {
-            'id': 'rectangle',
-            'name': 'Rectangle',
-            'detail': 'Adds a shape layer',
-            'glyph': '■',
+            'id': 'null',
+            'name': 'Null',
+            'detail': 'Adds an empty layer to parent others to',
+            'glyph': '✛',
           },
           {'id': 'camera', 'name': 'Camera', 'detail': 'Adds a camera layer'},
           {
@@ -354,10 +384,10 @@ class _BrowserPanelState extends State<BrowserPanel> {
             'glyph': '⬚',
           },
           {
-            'id': 'cube',
-            'name': 'Cube',
-            'detail': 'Adds a 3D cube',
-            'glyph': '⬡',
+            'id': 'line',
+            'name': 'Line',
+            'detail': 'Adds a straight stroked path',
+            'glyph': '─',
           },
           {
             'id': 'bezier',
@@ -365,6 +395,9 @@ class _BrowserPanelState extends State<BrowserPanel> {
             'detail': 'Adds a path layer',
             'glyph': '〜',
           },
+          // 同梱の基本形は Rust の表そのまま。名前が線画を選ぶ(cube ⇒ 箱)。
+          for (final p in rows(state['primitives']))
+            {...p, 'detail': 'Adds a 3D ${'${p['name']}'.toLowerCase()}'},
         ];
       case 'Media':
         // 同梱の HDRI は素材の棚に、取り込んだ物と同じ札で並ぶ(Finder・置換・削除は無い)。
@@ -390,6 +423,12 @@ class _BrowserPanelState extends State<BrowserPanel> {
             {...s, 'id': 'saved:$i', 'saved': true},
         ];
     }
+  }
+
+  static bool _shapeSelected(Map<String, dynamic> state) {
+    final ids = (state['selectedIds'] as List? ?? const []).toSet();
+    return EditorSession.maps(state['layers'])
+        .any((l) => ids.contains(l['id']) && l['kind'] == 'Shape');
   }
 
   static List<Map<String, dynamic>> _saved(EditorSession c) =>
@@ -544,6 +583,7 @@ class _BrowserPanelState extends State<BrowserPanel> {
       const [
         'assets',
         'backgrounds',
+        'primitives',
         'catalog',
         'palette',
         'colorTarget',
@@ -556,12 +596,16 @@ class _BrowserPanelState extends State<BrowserPanel> {
       derived: () => [
         _colorTarget(widget.controller),
         widget.controller.selectedIds.isEmpty,
+        // The fill being edited: its kind, stops and direction redraw the
+        // editor at the top of the Colors panel.
+        _targetFill(widget.controller, _colorTarget(widget.controller)),
+        _targetLayer(widget.controller, _colorTarget(widget.controller))?['name'],
       ],
     ),
     builder: (context, state, _) {
       final all = items(state);
       final rails = switch (tab) {
-        'Create' => ['All', 'Text', 'Shapes', '3D', 'Paths'],
+        'Create' => ['All', 'Text', 'Shapes', 'Paths', '3D', 'Helpers'],
         'Media' => ['All', 'Video', 'Images', 'HDR', 'Audio', '3D'],
         'Effects' => [
           'All',
@@ -569,6 +613,9 @@ class _BrowserPanelState extends State<BrowserPanel> {
           'Light',
           'Color',
           'Stylize',
+          'Distort',
+          '3D',
+          'Path',
           'Place',
           'Other',
         ],
@@ -581,10 +628,10 @@ class _BrowserPanelState extends State<BrowserPanel> {
       }
       final chosen = tab == 'Files'
           ? (_places.entries
-                .where((e) => e.value == folder)
-                .map((e) => e.key)
-                .firstOrNull ??
-            '')
+                    .where((e) => e.value == folder)
+                    .map((e) => e.key)
+                    .firstOrNull ??
+                '')
           : (classifications[tab] ?? 'All');
       total = all.length;
       visible = all.where((item) {
@@ -604,329 +651,367 @@ class _BrowserPanelState extends State<BrowserPanel> {
           child: Stack(
             fit: StackFit.expand,
             children: [
-          Column(
-            children: [
-              if (widget.showTabs)
-                SizedBox(
-                  height: EditorMetrics.section,
-                  child: Row(
-                    children: [
-                      for (final value in tabs)
-                        Expanded(
-                          child: _smallButton(
-                            value,
-                            () => changeTab(value),
-                            selected: value == tab,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              Container(
-                height: EditorMetrics.tall,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: _inset,
-                  vertical: EditorMetrics.s4,
-                ),
-                decoration: const BoxDecoration(
-                  border: Border(bottom: BorderSide(color: EditorTheme.line)),
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: EditorTheme.app,
-                          border: Border.all(
-                            color: searchFocus.hasFocus
-                                ? EditorTheme.border
-                                : EditorTheme.line,
-                          ),
-                        ),
-                        child: TextField(
-                          controller: search,
-                          focusNode: searchFocus,
-                          style: const TextStyle(
-                            fontSize: EditorMetrics.font,
-                            color: EditorTheme.ink,
-                          ),
-                          decoration: InputDecoration(
-                            isDense: true,
-                            prefixIcon: const Icon(
-                              Icons.search,
-                              size: EditorMetrics.s14,
-                              color: EditorTheme.muted,
+              Column(
+                children: [
+                  if (widget.showTabs)
+                    SizedBox(
+                      height: EditorMetrics.section,
+                      child: Row(
+                        children: [
+                          for (final value in tabs)
+                            Expanded(
+                              child: _smallButton(
+                                value,
+                                () => changeTab(value),
+                                selected: value == tab,
+                              ),
                             ),
-                            prefixIconConstraints: const BoxConstraints(
-                              minWidth: EditorMetrics.control,
-                              minHeight: EditorMetrics.row,
-                            ),
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: EditorMetrics.s4,
-                              vertical: EditorMetrics.s4,
-                            ),
-                            hintText: 'Search $tab',
-                            hintStyle: const TextStyle(
-                              fontSize: EditorMetrics.font,
-                              color: EditorTheme.muted,
-                            ),
-                            border: InputBorder.none,
-                          ),
-                          onChanged: (_) => setState(() {}),
-                        ),
+                        ],
                       ),
                     ),
-                    if (tab == 'Media') ...[
-                      const SizedBox(width: EditorMetrics.s6),
-                      _action(
-                        'Import',
-                        has('import') ? widget.controller.importFiles : null,
+                  Container(
+                    height: EditorMetrics.tall,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: _inset,
+                      vertical: EditorMetrics.s4,
+                    ),
+                    decoration: const BoxDecoration(
+                      border: Border(
+                        bottom: BorderSide(color: EditorTheme.line),
                       ),
-                    ],
-                    if (tab != 'Colors') ...[
-                      const SizedBox(width: EditorMetrics.s6),
-                      _views(),
-                    ],
-                    if (tab == 'Colors') ...[
-                      const SizedBox(width: EditorMetrics.s6),
-                      _action('From image', _paletteFromFile),
-                    ],
-                  ],
-                ),
-              ),
-              if (tab == 'Files') _pathRow(),
-              Expanded(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (rail >= railMin)
-                      Container(
-                        width: rail,
-                        clipBehavior: Clip.hardEdge,
-                        decoration: const BoxDecoration(),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(
-                                _inset,
-                                EditorMetrics.s8,
-                                EditorMetrics.s4,
-                                EditorMetrics.s4,
-                              ),
-                              child: Text(
-                                tab.toUpperCase(),
-                                maxLines: 1,
-                                overflow: TextOverflow.clip,
-                                style: const TextStyle(
-                                  fontSize: EditorMetrics.micro,
-                                  letterSpacing: 1,
-                                  color: EditorTheme.muted,
-                                ),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: EditorTheme.app,
+                              border: Border.all(
+                                color: searchFocus.hasFocus
+                                    ? EditorTheme.border
+                                    : EditorTheme.line,
                               ),
                             ),
-                            for (final rail in rails)
-                              _smallButton(rail, () {
-                                if (tab == 'Files') {
-                                  _go(_places[rail]!);
-                                } else {
-                                  setState(() => classifications[tab] = rail);
-                                }
-                              }, selected: chosen == rail),
-                          ],
-                        ),
-                      ),
-                    if (rail < railMin)
-                      EditorTooltip(
-                        message: 'Show ${tab.toLowerCase()} categories',
-                        child: InkWell(
-                          key: const ValueKey('browser:rail-tab'),
-                          onTap: () => widget.controller.storeDesk(
-                            'browserRail',
-                            EditorMetrics.s96,
-                          ),
-                          child: SizedBox(
-                            width: EditorMetrics.row,
-                            child: Column(
-                              children: [
-                                const Padding(
-                                  padding: EdgeInsets.only(
-                                    top: EditorMetrics.s4,
-                                  ),
-                                  child: Icon(
-                                    Icons.chevron_right,
-                                    size: EditorMetrics.s14,
-                                    color: EditorTheme.muted,
-                                  ),
+                            child: TextField(
+                              controller: search,
+                              focusNode: searchFocus,
+                              style: const TextStyle(
+                                fontSize: EditorMetrics.font,
+                                color: EditorTheme.ink,
+                              ),
+                              decoration: InputDecoration(
+                                isDense: true,
+                                prefixIcon: const Icon(
+                                  Icons.search,
+                                  size: EditorMetrics.s14,
+                                  color: EditorTheme.muted,
                                 ),
-                                RotatedBox(
-                                  quarterTurns: 1,
+                                prefixIconConstraints: const BoxConstraints(
+                                  minWidth: EditorMetrics.control,
+                                  minHeight: EditorMetrics.row,
+                                ),
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: EditorMetrics.s4,
+                                  vertical: EditorMetrics.s4,
+                                ),
+                                hintText: 'Search $tab',
+                                hintStyle: const TextStyle(
+                                  fontSize: EditorMetrics.font,
+                                  color: EditorTheme.muted,
+                                ),
+                                border: InputBorder.none,
+                              ),
+                              onChanged: (_) => setState(() {}),
+                            ),
+                          ),
+                        ),
+                        if (tab == 'Media') ...[
+                          const SizedBox(width: EditorMetrics.s6),
+                          _action(
+                            'Import',
+                            has('import')
+                                ? widget.controller.importFiles
+                                : null,
+                          ),
+                        ],
+                        if (tab != 'Colors') ...[
+                          const SizedBox(width: EditorMetrics.s6),
+                          _views(),
+                        ],
+                        if (tab == 'Colors') ...[
+                          const SizedBox(width: EditorMetrics.s6),
+                          _action('From image', _paletteFromFile),
+                        ],
+                      ],
+                    ),
+                  ),
+                  if (tab == 'Files') _pathRow(),
+                  Expanded(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (rail >= railMin)
+                          Container(
+                            width: rail,
+                            clipBehavior: Clip.hardEdge,
+                            decoration: const BoxDecoration(),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Padding(
+                                  padding: const EdgeInsets.fromLTRB(
+                                    _inset,
+                                    EditorMetrics.s8,
+                                    EditorMetrics.s4,
+                                    EditorMetrics.s4,
+                                  ),
                                   child: Text(
-                                    chosen == 'All' ? tab : chosen,
+                                    tab.toUpperCase(),
                                     maxLines: 1,
+                                    overflow: TextOverflow.clip,
                                     style: const TextStyle(
                                       fontSize: EditorMetrics.micro,
-                                      color: EditorTheme.accent,
+                                      letterSpacing: 1,
+                                      color: EditorTheme.muted,
                                     ),
                                   ),
                                 ),
+                                for (final rail in rails)
+                                  _smallButton(rail, () {
+                                    if (tab == 'Files') {
+                                      _go(_places[rail]!);
+                                    } else {
+                                      setState(
+                                        () => classifications[tab] = rail,
+                                      );
+                                    }
+                                  }, selected: chosen == rail),
                               ],
                             ),
                           ),
-                        ),
-                      ),
-                    _grip(
-                      key: const ValueKey('browser:rail-grip'),
-                      onDrag: (dx) => setState(
-                        () => railDrag = (rail + dx).clamp(
-                          0.0,
-                          EditorMetrics.s200,
-                        ),
-                      ),
-                      onEnd: () {
-                        final width = rail < railMin ? 0.0 : rail;
-                        railDrag = null;
-                        widget.controller.storeDesk('browserRail', width);
-                      },
-                      onDoubleTap: () => widget.controller.storeDesk(
-                        'browserRail',
-                        rail >= railMin ? 0.0 : EditorMetrics.s96,
-                      ),
-                    ),
-                    Expanded(
-                      child: LayoutBuilder(
-                        builder: (context, constraints) {
-                          columns = math.max(
-                            1,
-                            (constraints.maxWidth /
-                                    (tab == 'Colors' ? tile * .6 : tile))
-                                .floor(),
-                          );
-                          if (viewMode == 1 && tab != 'Colors') columns = 1;
-                          tileWidth =
-                              (constraints.maxWidth -
-                                  _gutter * (columns - 1)) /
-                              columns;
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              if (tab == 'Colors') ...[
-                                if (target != null)
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: EditorMetrics.s6,
-                                      vertical: EditorMetrics.s3,
-                                    ),
-                                    child: Text(
-                                      '${target['label'] ?? 'Layer color'}',
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
-                                        fontSize: EditorMetrics.dense,
+                        if (rail < railMin)
+                          EditorTooltip(
+                            message: 'Show ${tab.toLowerCase()} categories',
+                            child: InkWell(
+                              key: const ValueKey('browser:rail-tab'),
+                              onTap: () => widget.controller.storeDesk(
+                                'browserRail',
+                                EditorMetrics.s96,
+                              ),
+                              child: SizedBox(
+                                width: EditorMetrics.row,
+                                child: Column(
+                                  children: [
+                                    const Padding(
+                                      padding: EdgeInsets.only(
+                                        top: EditorMetrics.s4,
+                                      ),
+                                      child: Icon(
+                                        Icons.chevron_right,
+                                        size: EditorMetrics.s14,
                                         color: EditorTheme.muted,
                                       ),
                                     ),
-                                  ),
-                                _ColorPicker(
-                                  controller: widget.controller,
-                                  target: target,
-                                  enabled: has('setColor'),
-                                  size: wheelSize,
-                                  stops: stops,
-                                  onStops: (next) =>
-                                      setState(() => stops = next),
+                                    RotatedBox(
+                                      quarterTurns: 1,
+                                      child: Text(
+                                        chosen == 'All' ? tab : chosen,
+                                        maxLines: 1,
+                                        style: const TextStyle(
+                                          fontSize: EditorMetrics.micro,
+                                          color: EditorTheme.accent,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                                _grip(
-                                  key: const ValueKey('browser:picker-grip'),
-                                  vertical: true,
-                                  onDrag: (d) =>
-                                      setState(() => wheelDrag = wheelSize + d),
-                                  onEnd: () {
-                                    final size = wheelSize;
-                                    wheelDrag = null;
-                                    widget.controller.storeDesk(
-                                      'browserWheel',
-                                      size,
-                                    );
-                                  },
-                                ),
-                              ],
-                              Expanded(
-                                child: visible.isEmpty
-                                    ? const Padding(
-                                        padding: EdgeInsets.all(
-                                          EditorMetrics.s8,
+                              ),
+                            ),
+                          ),
+                        _grip(
+                          key: const ValueKey('browser:rail-grip'),
+                          onDrag: (dx) => setState(
+                            () => railDrag = (rail + dx).clamp(
+                              0.0,
+                              EditorMetrics.s200,
+                            ),
+                          ),
+                          onEnd: () {
+                            final width = rail < railMin ? 0.0 : rail;
+                            railDrag = null;
+                            widget.controller.storeDesk('browserRail', width);
+                          },
+                          onDoubleTap: () => widget.controller.storeDesk(
+                            'browserRail',
+                            rail >= railMin ? 0.0 : EditorMetrics.s96,
+                          ),
+                        ),
+                        Expanded(
+                          child: LayoutBuilder(
+                            builder: (context, constraints) {
+                              columns = math.max(
+                                1,
+                                (constraints.maxWidth /
+                                        (tab == 'Colors' ? tile * .6 : tile))
+                                    .floor(),
+                              );
+                              if (viewMode == 1 && tab != 'Colors') columns = 1;
+                              tileWidth =
+                                  (constraints.maxWidth -
+                                      _gutter * (columns - 1)) /
+                                  columns;
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  if (tab == 'Colors') ...[
+                                    // What the wheel edits: the layer and its
+                                    // slot, in words. A shape's fill also gets
+                                    // its kind, stops and direction here, so
+                                    // the panel is the one place colour is made.
+                                    if (target != null)
+                                      Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: EditorMetrics.s6,
+                                          vertical: EditorMetrics.s3,
                                         ),
                                         child: Text(
-                                          'No matches',
-                                          style: TextStyle(
-                                            color: EditorTheme.muted,
+                                          _targetTitle(
+                                            widget.controller,
+                                            target,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
                                             fontSize: EditorMetrics.dense,
+                                            color: EditorTheme.ink,
                                           ),
                                         ),
-                                      )
-                                    : ColoredBox(
-                                        color: tab == 'Colors'
-                                            ? EditorTheme.panel
-                                            : EditorTheme.line,
-                                        child: GridView.builder(
-                                        controller: scroll,
-                                        padding: EdgeInsets.all(
-                                          tab == 'Colors'
-                                              ? EditorMetrics.s6
-                                              : 0,
+                                      ),
+                                    if (_targetFill(widget.controller, target)
+                                        case final fill?)
+                                      Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: EditorMetrics.s6,
                                         ),
-                                        gridDelegate:
-                                            SliverGridDelegateWithFixedCrossAxisCount(
-                                              crossAxisCount: columns,
-                                              mainAxisExtent: tab == 'Colors'
-                                                  ? tile * .55
-                                                  : viewMode == 1
-                                                  ? EditorMetrics.s48
-                                                  : (constraints.maxWidth -
-                                                                _gutter *
-                                                                    (columns -
-                                                                        1)) /
-                                                            columns *
-                                                            9 /
-                                                            16 +
-                                                        (viewMode == 2
-                                                            ? 0
-                                                            : captionHeight),
-                                              crossAxisSpacing: tab == 'Colors'
-                                                  ? EditorMetrics.s4
-                                                  : _gutter,
-                                              mainAxisSpacing: tab == 'Colors'
-                                                  ? EditorMetrics.s4
-                                                  : _gutter,
+                                        child: GradientInspector(
+                                          key: ValueKey(
+                                            'colors-fill:${target!['layer']}',
+                                          ),
+                                          controller: widget.controller,
+                                          layer: _targetLayer(
+                                            widget.controller,
+                                            target,
+                                          )!,
+                                          fill: fill,
+                                          inPanel: true,
+                                        ),
+                                      ),
+                                    _ColorPicker(
+                                      controller: widget.controller,
+                                      target: target,
+                                      enabled: has('setColor'),
+                                      size: wheelSize,
+                                      stops: stops,
+                                      onStops: (next) =>
+                                          setState(() => stops = next),
+                                    ),
+                                    _grip(
+                                      key: const ValueKey(
+                                        'browser:picker-grip',
+                                      ),
+                                      vertical: true,
+                                      onDrag: (d) => setState(
+                                        () => wheelDrag = wheelSize + d,
+                                      ),
+                                      onEnd: () {
+                                        final size = wheelSize;
+                                        wheelDrag = null;
+                                        widget.controller.storeDesk(
+                                          'browserWheel',
+                                          size,
+                                        );
+                                      },
+                                    ),
+                                  ],
+                                  Expanded(
+                                    child: visible.isEmpty
+                                        ? const Padding(
+                                            padding: EdgeInsets.all(
+                                              EditorMetrics.s8,
                                             ),
-                                        itemCount: visible.length,
-                                        itemBuilder: (context, index) =>
-                                            tab == 'Colors'
-                                            ? Align(
-                                                alignment: Alignment.topLeft,
-                                                child: SizedBox(
-                                                  width: double.infinity,
-                                                  height: tile * .55,
-                                                  child: card(visible[index]),
-                                                ),
-                                              )
-                                            : card(visible[index]),
-                                      ),
-                                      ),
-                              ),
-                              _zoomBar(),
-                            ],
-                          );
-                        },
-                      ),
+                                            child: Text(
+                                              'No matches',
+                                              style: TextStyle(
+                                                color: EditorTheme.muted,
+                                                fontSize: EditorMetrics.dense,
+                                              ),
+                                            ),
+                                          )
+                                        : ColoredBox(
+                                            color: tab == 'Colors'
+                                                ? EditorTheme.panel
+                                                : EditorTheme.line,
+                                            child: GridView.builder(
+                                              controller: scroll,
+                                              padding: EdgeInsets.all(
+                                                tab == 'Colors'
+                                                    ? EditorMetrics.s6
+                                                    : 0,
+                                              ),
+                                              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                                                crossAxisCount: columns,
+                                                mainAxisExtent: tab == 'Colors'
+                                                    ? tile * .55
+                                                    : viewMode == 1
+                                                    ? EditorMetrics.s48
+                                                    : (constraints.maxWidth -
+                                                                  _gutter *
+                                                                      (columns -
+                                                                          1)) /
+                                                              columns *
+                                                              9 /
+                                                              16 +
+                                                          (viewMode == 2
+                                                              ? 0
+                                                              : captionHeight),
+                                                crossAxisSpacing:
+                                                    tab == 'Colors'
+                                                    ? EditorMetrics.s4
+                                                    : _gutter,
+                                                mainAxisSpacing: tab == 'Colors'
+                                                    ? EditorMetrics.s4
+                                                    : _gutter,
+                                              ),
+                                              itemCount: visible.length,
+                                              itemBuilder: (context, index) =>
+                                                  tab == 'Colors'
+                                                  ? Align(
+                                                      alignment:
+                                                          Alignment.topLeft,
+                                                      child: SizedBox(
+                                                        width: double.infinity,
+                                                        height: tile * .55,
+                                                        child: card(
+                                                          visible[index],
+                                                        ),
+                                                      ),
+                                                    )
+                                                  : card(visible[index]),
+                                            ),
+                                          ),
+                                  ),
+                                  _zoomBar(),
+                                ],
+                              );
+                            },
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-            ],
-          ),
-          if (tab == 'Media') _dropHint(),
+              if (tab == 'Media') _dropHint(),
             ],
           ),
         ),
@@ -955,7 +1040,10 @@ class _BrowserPanelState extends State<BrowserPanel> {
           alignment: Alignment.center,
           child: const Text(
             'Drop to import',
-            style: TextStyle(fontSize: EditorMetrics.title, color: EditorTheme.ink),
+            style: TextStyle(
+              fontSize: EditorMetrics.title,
+              color: EditorTheme.ink,
+            ),
           ),
         ),
       ),
@@ -1053,31 +1141,31 @@ class _BrowserPanelState extends State<BrowserPanel> {
             EditorMetrics.s8;
         final compact = countRoom < EditorMetrics.s48;
         return Row(
-      children: [
-        Expanded(child: _sizeSlider()),
-        ConstrainedBox(
-          constraints: BoxConstraints(
-            maxWidth: countRoom.clamp(0.0, EditorMetrics.s96),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.only(left: EditorMetrics.s8),
-            child: EditorTooltip(
-              message: _countTip(),
-              child: Text(
-                compact ? '${visible.length}' : _countLabel(),
-                key: const ValueKey('browser:count'),
-                maxLines: 1,
-                softWrap: false,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: EditorMetrics.dense,
-                  color: EditorTheme.muted,
+          children: [
+            Expanded(child: _sizeSlider()),
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: countRoom.clamp(0.0, EditorMetrics.s96),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.only(left: EditorMetrics.s8),
+                child: EditorTooltip(
+                  message: _countTip(),
+                  child: Text(
+                    compact ? '${visible.length}' : _countLabel(),
+                    key: const ValueKey('browser:count'),
+                    maxLines: 1,
+                    softWrap: false,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: EditorMetrics.dense,
+                      color: EditorTheme.muted,
+                    ),
+                  ),
                 ),
               ),
             ),
-          ),
-        ),
-      ],
+          ],
         );
       },
     ),
@@ -1095,6 +1183,7 @@ class _BrowserPanelState extends State<BrowserPanel> {
       final rest = crumbs.sublist(crumbs.first == '~' ? 1 : 0, i + 1);
       return rest.isEmpty ? head : '$head/${rest.join('/')}';
     }
+
     Widget step(IconData icon, String label, VoidCallback? press) =>
         EditorTooltip(
           message: label,
@@ -1236,24 +1325,23 @@ class _BrowserPanelState extends State<BrowserPanel> {
   /// The badge's laid-out width, so the name knows how much of the caption
   /// it keeps. Formats repeat across every tile; lay each out once.
   static final _badgeWidths = <String, double>{};
-  static double _badgeWidth(String format) =>
-      _badgeWidths[format] ??= () {
-        final painter = TextPainter(
-          text: TextSpan(
-            text: format,
-            style: const TextStyle(
-              fontSize: EditorMetrics.micro,
-              fontWeight: FontWeight.w600,
-              letterSpacing: .5,
-            ),
-          ),
-          maxLines: 1,
-          textDirection: TextDirection.ltr,
-        )..layout();
-        final width = painter.width + EditorMetrics.s4 * 2;
-        painter.dispose();
-        return width;
-      }();
+  static double _badgeWidth(String format) => _badgeWidths[format] ??= () {
+    final painter = TextPainter(
+      text: TextSpan(
+        text: format,
+        style: const TextStyle(
+          fontSize: EditorMetrics.micro,
+          fontWeight: FontWeight.w600,
+          letterSpacing: .5,
+        ),
+      ),
+      maxLines: 1,
+      textDirection: TextDirection.ltr,
+    )..layout();
+    final width = painter.width + EditorMetrics.s4 * 2;
+    painter.dispose();
+    return width;
+  }();
 
   String _format(Map<String, dynamic> item) {
     if (tab != 'Media' && tab != 'Files') return '';
@@ -1276,7 +1364,9 @@ class _BrowserPanelState extends State<BrowserPanel> {
     // rows every panel's menu uses, the facts as quiet rows on top.
     final facts = <String>[
       if (tab == 'Files') ...[
-        if (item['folder'] == true) 'Folder' else ...[
+        if (item['folder'] == true)
+          'Folder'
+        else ...[
           [
             if (_format(item).isNotEmpty) _format(item),
             if (item['mime'] != null) '${item['mime']}',
@@ -1497,7 +1587,10 @@ class _BrowserPanelState extends State<BrowserPanel> {
             ? has('create')
             : has('placeAsset') && item['missing'] != true,
       'Effects' =>
-        has('applyEffect') && widget.controller.selectedIds.isNotEmpty,
+        has('applyEffect') &&
+            widget.controller.selectedIds.isNotEmpty &&
+            (item['stage'] != 'Path' ||
+                _shapeSelected(widget.controller.state)),
       'Files' => item['folder'] == true || has('import'),
       _ =>
         (_stops(item).length > 1 ? has('setGradient') : has('applyPalette')) &&
@@ -1524,6 +1617,21 @@ class _BrowserPanelState extends State<BrowserPanel> {
           )
         : tab == 'Media' || tab == 'Files' || item['thumbnail'] != null
         ? _thumbnail(item)
+        : tab == 'Effects'
+        ? _EffectTile(
+            controller: widget.controller,
+            item: item,
+            split: viewMode == 2 && item['split'] == true,
+            fallback: Center(
+              child: Text(
+                '${item['glyph'] ?? 'ƒ'}',
+                style: TextStyle(
+                  fontSize: EditorMetrics.s23,
+                  color: identityColor,
+                ),
+              ),
+            ),
+          )
         : Center(
             child: id(item) == 'camera'
                 ? Icon(
@@ -1531,11 +1639,13 @@ class _BrowserPanelState extends State<BrowserPanel> {
                     size: EditorMetrics.bar,
                     color: identityColor,
                   )
-                : id(item) == 'cube'
-                ? Icon(
-                    Icons.view_in_ar,
-                    size: EditorMetrics.bar,
-                    color: identityColor,
+                : _shapeOf(id(item)) != null
+                ? SizedBox(
+                    width: EditorMetrics.bar,
+                    height: EditorMetrics.bar,
+                    child: CustomPaint(
+                      painter: _ShapeMark(_shapeOf(id(item))!, identityColor),
+                    ),
                   )
                 : Text(
                     '${item['glyph'] ?? 'ƒ'}',
@@ -1591,9 +1701,7 @@ class _BrowserPanelState extends State<BrowserPanel> {
             alignment: Alignment.center,
             decoration: BoxDecoration(
               color: identityColor,
-              borderRadius: BorderRadius.circular(
-                EditorMetrics.s3 * markScale,
-              ),
+              borderRadius: BorderRadius.circular(EditorMetrics.s3 * markScale),
             ),
             child: Text(
               format,
@@ -1628,10 +1736,7 @@ class _BrowserPanelState extends State<BrowserPanel> {
                 ),
               ),
             ),
-            if (badge != null) ...[
-              SizedBox(width: air),
-              badge,
-            ],
+            if (badge != null) ...[SizedBox(width: air), badge],
           ],
         ),
       ),
@@ -1700,11 +1805,7 @@ class _BrowserPanelState extends State<BrowserPanel> {
                               ),
                             ),
                           if (badge != null)
-                            Positioned(
-                              right: air,
-                              bottom: air,
-                              child: badge,
-                            ),
+                            Positioned(right: air, bottom: air, child: badge),
                         ],
                       )
                     : viewMode == 1
@@ -1876,6 +1977,45 @@ List<double> _rgba(dynamic raw) {
 
 Color _color(List<double> rgba) =>
     Color.from(alpha: rgba[3], red: rgba[0], green: rgba[1], blue: rgba[2]);
+/// The layer a colour target points at, from the status rows.
+Map<String, dynamic>? _targetLayer(
+  EditorSession controller,
+  Map<String, dynamic>? target,
+) {
+  if (target == null) return null;
+  for (final row in controller.state['layers'] as List? ?? const []) {
+    if (row is Map && row['id'] == target['layer'])
+      return Map<String, dynamic>.from(row);
+  }
+  return null;
+}
+
+/// "Layer name · Fill" / "· Stroke": what the wheel is editing.
+String _targetTitle(EditorSession controller, Map<String, dynamic> target) {
+  final layer = _targetLayer(controller, target);
+  final slot = EditorSession.map(target['slot']);
+  final what = slot.containsKey('ShapeStroke') || slot.containsKey('TextStroke')
+      ? 'Stroke'
+      : slot.keys.any((k) => k.startsWith('ShapeGradient'))
+      ? 'Fill · stop'
+      : 'Fill';
+  final name = '${layer?['name'] ?? ''}'.trim();
+  return name.isEmpty ? what : '$name · $what';
+}
+
+/// The shape fill the target belongs to, when the target is a fill or one of
+/// its stops; null for strokes and text, which have no gradient to edit.
+Map<String, dynamic>? _targetFill(
+  EditorSession controller,
+  Map<String, dynamic>? target,
+) {
+  final layer = _targetLayer(controller, target);
+  if (layer == null || layer['fill'] is! Map) return null;
+  final slot = EditorSession.map(target!['slot']);
+  if (slot.containsKey('ShapeStroke')) return null;
+  return Map<String, dynamic>.from(layer['fill'] as Map);
+}
+
 Map<String, dynamic>? _colorTarget(EditorSession controller) {
   if (controller.state['colorTarget'] is Map)
     return Map<String, dynamic>.from(controller.state['colorTarget']);
@@ -2637,6 +2777,7 @@ class _ShapeMark extends CustomPainter {
 
 abstract final class BrowserSize {
   static const double min = 72, max = 240, base = 120;
+
   /// A stored size below the floor came from an older, smaller scale; the
   /// default stands in until the shelf is sized again.
   static double tile(EditorSession c) {
@@ -2756,7 +2897,10 @@ class _FittedName extends StatefulWidget {
     if (_natural.length > 4096) _natural.clear();
     return _natural['$size:$name'] ??= () {
       final painter = TextPainter(
-        text: TextSpan(text: name, style: TextStyle(fontSize: size)),
+        text: TextSpan(
+          text: name,
+          style: TextStyle(fontSize: size),
+        ),
         maxLines: 1,
         textDirection: TextDirection.ltr,
       )..layout();
@@ -2846,6 +2990,78 @@ class _FittedNameState extends State<_FittedName>
 }
 
 /// Tells its child whether the pointer rests on it.
+/// An effect's tile: the shelf's one sample with this effect on it. Every
+/// tile shares the sample, so the difference reads against the neighbours.
+/// Holding the pointer down shows the bare sample (Lightroom's before key);
+/// an effect that only reads as a difference splits the large tile, bare on
+/// the left and dressed on the right.
+class _EffectTile extends StatefulWidget {
+  const _EffectTile({
+    required this.controller,
+    required this.item,
+    required this.split,
+    required this.fallback,
+  });
+  final EditorSession controller;
+  final Map<String, dynamic> item;
+  final bool split;
+  final Widget fallback;
+  @override
+  State<_EffectTile> createState() => _EffectTileState();
+}
+
+class _EffectTileState extends State<_EffectTile> {
+  bool pressed = false;
+
+  Widget sample(bool before) => NativeVisualSample(
+    key: ValueKey('browser:effect:${widget.item['id']}:${before ? 'before' : 'after'}'),
+    controller: widget.controller,
+    request: {
+      'kind': 'effect',
+      'id': widget.item['id'],
+      'before': before,
+      'generation': widget.item['generation'],
+    },
+    fit: BoxFit.cover,
+  );
+
+  @override
+  Widget build(BuildContext context) => Listener(
+    onPointerDown: (_) => setState(() => pressed = true),
+    onPointerUp: (_) => setState(() => pressed = false),
+    onPointerCancel: (_) => setState(() => pressed = false),
+    child: Stack(
+      fit: StackFit.expand,
+      children: [
+        widget.fallback,
+        if (pressed)
+          sample(true)
+        else ...[
+          sample(false),
+          if (widget.split) ...[
+            ClipRect(clipper: const _LeftHalf(), child: sample(true)),
+            Center(
+              child: Container(
+                key: const ValueKey('browser:effect:divider'),
+                width: 1,
+                color: EditorTheme.line,
+              ),
+            ),
+          ],
+        ],
+      ],
+    ),
+  );
+}
+
+class _LeftHalf extends CustomClipper<Rect> {
+  const _LeftHalf();
+  @override
+  Rect getClip(Size size) => Rect.fromLTWH(0, 0, size.width / 2, size.height);
+  @override
+  bool shouldReclip(covariant CustomClipper<Rect> oldClipper) => false;
+}
+
 class _Hover extends StatefulWidget {
   const _Hover({required this.builder});
   final Widget Function(bool hovered) builder;

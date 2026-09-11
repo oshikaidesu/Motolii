@@ -94,6 +94,8 @@ impl Compositor {
 
         let mut shared_meshes = None;
         let reflection = self.cached_scene_reflection(comp, inputs, environment, &mut shared_meshes)?;
+        // 光は環境から来る。遮る層があれば太陽から見た型紙を 1 枚描き、全ての run がそれを読む。
+        let light = self.capture_light_cookie(comp, inputs, environment, shared_meshes.as_ref())?;
         let mut background: Option<(AccumulatorBacking, GpuTexture2D)> = None;
 
         // 層ごとに submit しない — 同期の回数が層数に比例する。
@@ -109,7 +111,7 @@ impl Compositor {
             // この入口で焼ける物 = 矩形かつ mix 系の blend。網・点群の mix は焼けないので run 側へ落とす
             // (落とした物を run の走査が拾わないと、idx が進まず空の run で panic か無限ループ)。
             let bakeable = |i: &crate::render::compositor::SequentialInput<'_>| {
-                matches!(i.content, crate::render::compositor::SequentialContent::Rect(_))
+                matches!(i.content, crate::render::compositor::SequentialContent::Rect(_) | crate::render::compositor::SequentialContent::LinearRect(_))
                     && vello_blend_mode(i.blend_mode).is_some()
             };
             if let Some(mode_index) = vello_blend_mode(input.blend_mode).filter(|_| bakeable(input)) {
@@ -154,6 +156,7 @@ impl Compositor {
                     "motolii-comp-sequential-solo", comp, view_from_world, projection, environment,
                 );
                 solo_config.scene_reflection = reflection.clone();
+                solo_config.light = light.clone();
                 self.surface_work.main_runs += 1;
                 if input.shading.reads_backdrop {
                     if let Some((backing, _)) = &background {
@@ -200,7 +203,7 @@ impl Compositor {
                 if idx > run_start && (inputs[idx].shading.reads_backdrop || (run_has_rect && matches!(inputs[idx].content, SequentialContent::Model(_)))) {
                     break;
                 }
-                run_has_rect |= matches!(inputs[idx].content, SequentialContent::Rect(_));
+                run_has_rect |= matches!(inputs[idx].content, SequentialContent::Rect(_) | SequentialContent::LinearRect(_));
                 idx += 1;
             }
             let run = &inputs[run_start..idx];
@@ -259,6 +262,7 @@ impl Compositor {
             );
             config.backdrop = backdrop;
             config.scene_reflection = reflection.clone();
+            config.light = light.clone();
             self.surface_work.main_runs += 1;
 
             let run_owned = spare
@@ -494,6 +498,51 @@ impl Compositor {
         out.ok_or(CompositorError::ReadbackMissing)
     }
 
+    /// 選ばれた層だけをもう 1 度、同じカメラで透明の上に描き、re_renderer の outline の object-id mask を作る
+    /// (`draw_phases/outlines.rs`)。縁は描かない — mask を `selection_bounds` が畳んで籠にする。誰も選ばれていなければ無し。
+    pub(crate) fn outline_view(
+        &mut self,
+        comp: CompSpec,
+        camera: ResolvedCamera,
+        inputs: &[SequentialInput<'_>],
+    ) -> Result<Option<(ViewBuilder, AccumulatorBacking)>, CompositorError> {
+        if !inputs.iter().any(|input| input.outline != 0) {
+            return Ok(None);
+        }
+        let projection = crate::doc::core::camera_projection(comp, camera);
+        let view_from_world = macaw::IsoTransform::from_rotation_translation(
+            projection.rotation,
+            -(projection.rotation * projection.eye),
+        );
+        let mut config = sequential_target_config("motolii-comp-outline", comp, view_from_world, projection, None);
+        config.outline_config = Some(re_renderer::OutlineConfig {
+            outline_radius_pixel: 1.0,
+            color_layer_a: Rgba::TRANSPARENT,
+            color_layer_b: Rgba::TRANSPARENT,
+        });
+        let owned = self.create_blend_scratch_texture(comp.width, comp.height);
+        let mut view_builder = ViewBuilder::new_with_external_resolved(
+            &self.ctx,
+            config,
+            ViewBuilderId::new(self.next_readback),
+            &owned,
+        )
+        .map_err(|e| CompositorError::View(e.to_string()))?;
+        self.next_readback += 1;
+        let draws = self.surface_scene_draws(comp, inputs, Vec::new(), false, &|index| inputs[index].outline == 0, None, 0)?;
+        draws.queue(&self.ctx, &mut view_builder);
+        let command_buffer = view_builder
+            .draw(&self.ctx, Rgba::TRANSPARENT)
+            .map_err(|e| CompositorError::Draw(e.to_string()))?;
+        self.pending.push(command_buffer);
+        if let (Some(mask), Some(bounds)) = (view_builder.outline_mask_texture(), self.selection_bounds.as_mut()) {
+            let mut encoder = self.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("motolii-selection-bounds") });
+            bounds.record(&self.ctx.device, &mut encoder, &mask.default_view, [comp.width, comp.height]);
+            self.pending.push(encoder.finish());
+        }
+        Ok(Some((view_builder, owned)))
+    }
+
     pub(crate) fn finalize_into(
         &mut self,
         target: &wgpu::Texture,
@@ -501,6 +550,7 @@ impl Compositor {
         camera: ResolvedCamera,
         background: Option<(AccumulatorBacking, GpuTexture2D)>,
         background_color: [f32; 4],
+        outline: Option<(ViewBuilder, AccumulatorBacking)>,
     ) -> Result<(), CompositorError> {
         let _ = camera;
         let mut final_rects: Vec<TexturedRect> = Vec::with_capacity(1);
@@ -563,6 +613,10 @@ impl Compositor {
         }
         self.pending.push(encoder.finish());
         self.flush_pending();
+        if let (true, Some(bounds)) = (outline.is_some(), self.selection_bounds.as_mut()) {
+            bounds.schedule_map();
+        }
+        drop(outline);
         // ここで poll しない — 共有 device を毎フレーム止めると blitz/vello が壊れる。
         Ok(())
     }
@@ -635,6 +689,7 @@ impl Compositor {
                     crate::render::compositor::LayerContent::Texture(t) => {
                         crate::render::compositor::SequentialContent::Rect(t)
                     }
+                    crate::render::compositor::LayerContent::LinearTexture(t) => crate::render::compositor::SequentialContent::LinearRect(t),
                     crate::render::compositor::LayerContent::Cloud {
                         positions,
                         colors,
@@ -664,6 +719,8 @@ impl Compositor {
                 shading: layer.shading.clone(),
                 displace: layer.displace,
                 clip: layer.clip,
+                blocks_light: layer.blocks_light,
+                outline: layer.outline,
             })
             .collect();
 
@@ -817,6 +874,8 @@ impl Compositor {
             shading: Default::default(),
             displace: Default::default(),
             clip: None,
+            blocks_light: layer.blocks_light,
+            outline: layer.outline,
         })
     }
 }

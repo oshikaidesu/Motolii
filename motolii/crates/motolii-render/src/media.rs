@@ -19,7 +19,7 @@ pub use point_cloud::{
     PointCloudError, POINT_CLOUD_EXTENSIONS,
     is_still_image_path,
 };
-pub use spatial::{SpatialBounds, SpatialBoundsError};
+pub use spatial::{silhouette_points, SpatialBounds, SpatialBoundsError, SILHOUETTE_DIRECTIONS};
 
 /// 素材棚が受け入れる拡張子の唯一の分類口。
 /// 映像・画像・3DはRerun importer、音声はpin済みSymphoniaのfeatureに合わせる。

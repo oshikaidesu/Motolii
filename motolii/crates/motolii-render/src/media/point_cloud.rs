@@ -72,6 +72,8 @@ pub struct PointCloudData {
     pub positions: Arc<Vec<[f32; 3]>>,
     pub colors: Arc<Vec<[u8; 4]>>,
     bounds: SpatialBounds,
+    /// The points that decide the outline from any direction (`silhouette_points`).
+    pub silhouette: Arc<Vec<glam::Vec3>>,
 }
 
 impl PointCloudData {
@@ -116,9 +118,11 @@ pub fn load_point_cloud(path: &Path) -> Result<PointCloudData, PointCloudError> 
         .unwrap_or_default();
 
     let bounds = SpatialBounds::from_points(positions.iter().copied())?;
+    let silhouette = Arc::new(super::silhouette_points(positions.iter().map(|p| glam::Vec3::from(*p))));
     Ok(PointCloudData {
         positions: Arc::new(positions),
         colors: Arc::new(colors),
         bounds,
+        silhouette,
     })
 }

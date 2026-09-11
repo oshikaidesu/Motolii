@@ -1,17 +1,24 @@
 use crate::render::compositor::*;
 
+type EffectiveLayers = (Vec<LayerContent>, Vec<u32>, Vec<(u32,u32,wgpu::TextureFormat,wgpu::Texture)>);
+
 impl Compositor {
-    pub(crate) fn effective_layer_textures(
-        &mut self,
-        layers: &[LayerWithPasses],
-    ) -> Result<
-        (
-            Vec<LayerContent>,
-            Vec<u32>,
-            Vec<(u32, u32, wgpu::TextureFormat, wgpu::Texture)>,
-        ),
-        CompositorError,
-    > {
+    pub(crate) fn convert_image_encoding(&mut self, encoder: &mut wgpu::CommandEncoder, source: &wgpu::Texture, to_linear: bool) -> wgpu::Texture {
+        const ID: &str = "motolii.material_encoding";
+        if !self.effect_programs.contains_key(ID) {
+            let definition = self.catalog.definitions.iter().find(|d| d.plugin_id() == ID).expect("material encoding shader");
+            self.effect_programs.insert(ID.into(), effects::EffectProgram::compile_for(&self.ctx, definition, wgpu::TextureFormat::Rgba16Float));
+        }
+        let out = self.effect_scratch.acquire(&self.ctx.device,source.width(),source.height(),wgpu::TextureFormat::Rgba16Float);
+        self.effect_programs[ID].record(&self.ctx, encoder, &mut self.effect_scratch, &[&source.create_view(&Default::default())], &out.create_view(&Default::default()), &[("to_linear".into(), if to_linear {1.0} else {0.0})], [source.width() as f32,source.height() as f32]);
+        out
+    }
+
+    pub(crate) fn effective_layer_textures(&mut self, layers: &[LayerWithPasses]) -> Result<EffectiveLayers, CompositorError> {
+        self.effective_layer_textures_in_frame(layers, None)
+    }
+
+    pub(crate) fn effective_layer_textures_in_frame(&mut self, layers: &[LayerWithPasses], frame: Option<effects::vism::ImageFrame>) -> Result<EffectiveLayers, CompositorError> {
         self.refresh_catalog_programs();
         for pass in layers.iter().flat_map(|layer| &layer.passes) {
             if !self.effect_programs.contains_key(&pass.plugin_id) {
@@ -35,12 +42,12 @@ impl Compositor {
                 continue;
             };
             if lwp.passes.is_empty() {
-                effective_textures.push(LayerContent::Texture(layer_texture));
+                effective_textures.push(lwp.layer.content.clone());
                 effective_paddings.push(0);
                 continue;
             }
             if let Some((source, passes, content, padding)) = &previous {
-                if source.handle() == layer_texture.handle() && *passes == lwp.passes.as_slice() {
+                if frame.is_none() && source.handle() == layer_texture.handle() && *passes == lwp.passes.as_slice() {
                     effective_textures.push(content.clone());
                     effective_paddings.push(*padding);
                     continue;
@@ -53,6 +60,7 @@ impl Compositor {
                 .map(EffectPass::padding)
                 .max()
                 .unwrap_or(0);
+            let padding = frame.map_or(padding, |f| (padding as f32 * f.density().into_iter().fold(0.0f32, f32::max)).ceil() as u32);
             let border = padding
                 .checked_mul(2)
                 .ok_or_else(|| CompositorError::Effect("effect padding overflow".into()))?;
@@ -69,6 +77,7 @@ impl Compositor {
                 .get_from_handle(layer_texture.handle())
                 .map_err(|error| CompositorError::Effect(error.to_string()))?;
             let mut current = src.texture.clone();
+            let mut current_linear = matches!(lwp.layer.content, LayerContent::LinearTexture(_)) || layer_texture.format().is_srgb();
             let mut current_is_scratch = false;
             let encoder = copy_encoder.get_or_insert_with(|| {
                 self.ctx
@@ -132,6 +141,14 @@ impl Compositor {
             }
 
             for pass in &lwp.passes {
+                let is_warp = self.catalog.descriptors.iter().any(|d| d.plugin_id == pass.plugin_id && d.stage == EffectStage::Warp);
+                if current_linear != is_warp {
+                    let converted = self.convert_image_encoding(encoder, &current, is_warp);
+                    if current_is_scratch { self.effect_scratch.release(padded_width,padded_height,current.format(),current); }
+                    current = converted;
+                    current_is_scratch = true;
+                }
+                current_linear = is_warp;
                 let program = &self.effect_programs[&pass.plugin_id];
                 let format = pass
                     .intermediate_format()
@@ -146,15 +163,12 @@ impl Compositor {
                     .then(|| current.create_view(&Default::default()));
                 let sources: Vec<_> = source_view.iter().collect();
                 let destination_view = destination.create_view(&Default::default());
-                program.record(
-                    &self.ctx,
-                    encoder,
-                    &mut self.effect_scratch,
-                    &sources,
-                    &destination_view,
-                    &pass.params,
-                    [padded_width as f32, padded_height as f32],
-                );
+                if is_warp {
+                    let frame = frame.unwrap_or(effects::vism::ImageFrame { size: [width as f32,height as f32], origin: [0.0;2], pixels: [width,height] }).padded(padding);
+                    program.record_in_frame(&self.ctx, encoder, &mut self.effect_scratch, &sources, &destination_view, &pass.params, frame);
+                } else {
+                    program.record(&self.ctx, encoder, &mut self.effect_scratch, &sources, &destination_view, &pass.params, [padded_width as f32,padded_height as f32]);
+                }
                 let destination = if program.image_input_count() == 0 {
                     self.confine_to_coverage(encoder, destination, &current, [padded_width, padded_height], format)?
                 } else {
@@ -180,8 +194,9 @@ impl Compositor {
                 .texture_manager_2d
                 .import_gpu_premultiplied(self.next_effect_key, &self.ctx, &current)
                 .map_err(|error| CompositorError::Effect(error.to_string()))?;
-            previous = Some((layer_texture, lwp.passes.as_slice(), LayerContent::Texture(imported.clone()), padding));
-            effective_textures.push(LayerContent::Texture(imported));
+            let content = if current_linear { LayerContent::LinearTexture(imported) } else { LayerContent::Texture(imported) };
+            previous = Some((layer_texture, lwp.passes.as_slice(), content.clone(), padding));
+            effective_textures.push(content);
             effective_paddings.push(padding);
             checked_out.push((padded_width, padded_height, current.format(), current));
         }
@@ -290,6 +305,7 @@ pub(crate) fn sequential_inputs<'a>(
             SequentialInput {
                 content: match content {
                     LayerContent::Texture(t) => SequentialContent::Rect(t),
+                    LayerContent::LinearTexture(t) => SequentialContent::LinearRect(t),
                     LayerContent::Cloud {
                         positions,
                         colors,
@@ -315,6 +331,8 @@ pub(crate) fn sequential_inputs<'a>(
                 shading: layer.shading.clone(),
                 displace: layer.displace,
                 clip: layer.clip,
+                blocks_light: layer.blocks_light,
+                outline: layer.outline,
             }
         })
         .collect()
@@ -412,9 +430,62 @@ mod tests {
         assert!(behind_wall < beside / 2, "the wall must shadow the far side: beside {beside}, behind {behind_wall}");
         assert!(far_corner < beside, "light falls off with distance: corner {far_corner}, beside {beside}");
 
+        doc.apply(Intent::SetConstant { layer: LayerId(1), property: PropertyId::effect_param(EffectId(0), "intensity").unwrap(), value: Value::F64(0.0) }).unwrap();
+        let dark = engine.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+        assert!(doc.undo());
+        let relit = engine.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+        assert_eq!(relit, lit, "GPU reduction must not retain a stale no-emitter result");
         doc.apply(Intent::SetEffects { layer: LayerId(1), effects: Vec::new() }).unwrap();
         let plain = engine.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+        assert_eq!(dark, plain, "without emission no light can be added");
         assert_eq!(at(&plain, 42, 48), 0, "without the effect the air is dark");
+    }
+
+    #[test]
+    fn radiance_preaverage_preserves_reference_pixels() {
+        use crate::render::compositor::effects::{self, VismSource};
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("source.png");
+        let size = 96u32;
+        let mut pixels = vec![0; (size * size * 4) as usize];
+        for y in 32..48 { for x in 20..36 { let p = ((y*size+x)*4) as usize; pixels[p..p+4].copy_from_slice(&[255,255,255,255]); } }
+        image::save_buffer(&source, &pixels, size, size, image::ColorType::Rgba8).unwrap();
+        let doc = if let Ok(path) = std::env::var("MOTOLII_RADIANCE_BENCH_DOCUMENT") {
+            let mut doc = Document::load(path).unwrap();
+            let ids = doc.view().resolved_layers(RationalTime::ZERO).unwrap().iter().map(|l| l.id).collect::<Vec<_>>();
+            for layer in ids { for effect in doc.view().effects(layer).unwrap() { doc.apply(Intent::SetConstant { layer, property: PropertyId::effect_enabled(effect.id), value: Value::Bool(true) }).unwrap(); } }
+            doc
+        } else {
+            let mut doc = document_with_effects(&source, &["motolii.radiance"]);
+            doc.apply(Intent::SetComposition(Composition { width:size, height:size, fps:Fps::try_new(30,1).unwrap(), duration_frames:150, background:[0.0,0.0,0.0,1.0] })).unwrap();
+            doc
+        };
+        let fps = doc.view().composition().unwrap().unwrap().fps;
+        let old = include_str!("../../../../reference/radiance-before-2026-09-12.wgsl");
+        let mut reference = Engine::new().unwrap();
+        let mut definition = reference.compositor.catalog.definitions.iter().find(|d| d.plugin_id() == "motolii.radiance").unwrap().clone();
+        let (manifest, body) = effects::isf::parse_isf_source(old).unwrap();
+        definition.source = VismSource { name:"radiance-reference".into(), extension:"wgsl".into(), source:old.into() };
+        definition.manifest = manifest;
+        definition.vertex_text = body.clone(); definition.fragment_text = body;
+        definition.stage().unwrap();
+        let program = effects::EffectProgram::compile(&reference.compositor.ctx, &definition);
+        reference.compositor.effect_programs.insert("motolii.radiance".into(), program);
+        let mut candidate = Engine::new().unwrap();
+        let mut times = [0.0f64; 2];
+        for frame in [0,30,60,90] {
+            let t = RationalTime::try_from_frame(frame, fps).unwrap();
+            let expected = reference.render_frame(&doc.view(), t).unwrap();
+            let actual = candidate.render_frame(&doc.view(), t).unwrap();
+            let bad = actual.iter().zip(&expected).filter(|(a,b)| a.abs_diff(**b)>3).count();
+            assert_eq!(bad, 0, "pre-averaging must retain image values, frame {frame}");
+            for (i, engine) in [&mut reference, &mut candidate].into_iter().enumerate() {
+                let start = std::time::Instant::now();
+                for _ in 0..3 { engine.render_frame(&doc.view(), t).unwrap(); }
+                times[i] += start.elapsed().as_secs_f64()*1000.0;
+            }
+        }
+        eprintln!("radiance reference {:.3} ms, optimized {:.3} ms (including readback)",times[0]/12.0,times[1]/12.0);
     }
 
     #[test]

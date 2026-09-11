@@ -24,6 +24,7 @@ struct InputKey {
 
 pub(super) struct ReflectionKey {
     comp: CompSpec,
+    scene_probe: bool,
     generation: u64,
     inputs: Vec<InputKey>,
     environment: Option<(glam::Mat3, f32)>,
@@ -35,6 +36,7 @@ pub(super) struct ReflectionKey {
 impl PartialEq for ReflectionKey {
     fn eq(&self, other: &Self) -> bool {
         self.comp == other.comp
+            && self.scene_probe == other.scene_probe
             && self.generation == other.generation
             && self.inputs == other.inputs
             && self.environment == other.environment
@@ -62,8 +64,10 @@ impl Compositor {
         if inputs.len() > MAX_INPUTS {
             return None;
         }
+        let scene_probe = self.reflection_scene_probe;
         let mut key = ReflectionKey {
             comp,
+            scene_probe,
             generation: self.catalog.generation,
             inputs: Vec::with_capacity(inputs.len()),
             environment: environment
@@ -131,18 +135,36 @@ impl Compositor {
                     key.programs.push(p.clone());
                 }
             }
-            key.inputs.push(InputKey {
-                content,
-                local_min: i.local_min,
-                local_size: i.local_size,
-                placement: i.placement,
-                projection: i.projection,
-                camera: i.projection_camera,
-                opacity: i.opacity,
-                blend: i.blend_mode,
-                params: i.shading.params,
-                program,
-                clip: i.clip,
+            // 送り手の箱から撮る時、受け手は撮影に居ない: 受け手の置き方・値は鍵に入れない。
+            let receiver = scene_probe && i.shading.program.as_ref().is_some_and(|p| p.desc().surface.is_some());
+            key.inputs.push(if receiver {
+                InputKey {
+                    content,
+                    local_min: glam::Vec2::ZERO,
+                    local_size: glam::Vec2::ZERO,
+                    placement: LayerPlacement::default(),
+                    projection: Default::default(),
+                    camera: Default::default(),
+                    opacity: 0.0,
+                    blend: Default::default(),
+                    params: [0.0; super::effects::surface_program::PARAM_SLOTS],
+                    program,
+                    clip: None,
+                }
+            } else {
+                InputKey {
+                    content,
+                    local_min: i.local_min,
+                    local_size: i.local_size,
+                    placement: i.placement,
+                    projection: i.projection,
+                    camera: i.projection_camera,
+                    opacity: i.opacity,
+                    blend: i.blend_mode,
+                    params: i.shading.params,
+                    program,
+                    clip: i.clip,
+                }
             });
         }
         Some(key)

@@ -1,0 +1,43 @@
+layer LayerId(10): Shape, effects=[]
+layer LayerId(1): Text, effects=["motolii.radiance", "motolii.glass"]
+layer LayerId(2): Text, effects=[]
+layer LayerId(3): Text, effects=[]
+layer LayerId(4): File { path: "/Users/member_ottoto/.local/share/motolii/builtins/torus-v1.obj", fingerprint: None }, effects=["motolii.glass"]
+layer LayerId(5): Camera, effects=[]
+layer LayerId(6): Camera, effects=[]
+all pass=0 cpu_ms=90.878 wait_ms=24.440 total_ms=115.318
+all captures=180 main_runs=120 mesh_upload_bytes=40320 draw_prepare_us=39432
+all pass=1 cpu_ms=6.093 wait_ms=26.753 total_ms=32.846
+all captures=180 main_runs=120 mesh_upload_bytes=40320 draw_prepare_us=3044
+no_effects pass=0 cpu_ms=3.238 wait_ms=2.437 total_ms=5.675
+no_effects captures=0 main_runs=30 mesh_upload_bytes=25200 draw_prepare_us=279
+no_effects pass=1 cpu_ms=0.725 wait_ms=2.527 total_ms=3.253
+no_effects captures=0 main_runs=30 mesh_upload_bytes=25200 draw_prepare_us=250
+no_text pass=0 cpu_ms=5.163 wait_ms=3.871 total_ms=9.034
+no_text captures=180 main_runs=60 mesh_upload_bytes=15120 draw_prepare_us=423
+no_text pass=1 cpu_ms=1.659 wait_ms=5.666 total_ms=7.326
+no_text captures=180 main_runs=60 mesh_upload_bytes=15120 draw_prepare_us=362
+no_shapes pass=0 cpu_ms=8.436 wait_ms=27.664 total_ms=36.100
+no_shapes captures=180 main_runs=120 mesh_upload_bytes=30240 draw_prepare_us=5236
+no_shapes pass=1 cpu_ms=5.169 wait_ms=26.576 total_ms=31.745
+no_shapes captures=180 main_runs=120 mesh_upload_bytes=30240 draw_prepare_us=2275
+no_files pass=0 cpu_ms=8.766 wait_ms=25.943 total_ms=34.708
+no_files captures=0 main_runs=90 mesh_upload_bytes=20160 draw_prepare_us=6401
+no_files pass=1 cpu_ms=6.904 wait_ms=25.742 total_ms=32.647
+no_files captures=0 main_runs=90 mesh_upload_bytes=20160 draw_prepare_us=3790
+text_only pass=0 cpu_ms=12.305 wait_ms=26.171 total_ms=38.476
+text_only captures=0 main_runs=90 mesh_upload_bytes=15120 draw_prepare_us=3346
+text_only pass=1 cpu_ms=8.258 wait_ms=25.588 total_ms=33.846
+text_only captures=0 main_runs=90 mesh_upload_bytes=15120 draw_prepare_us=3907
+shapes_only pass=0 cpu_ms=6.103 wait_ms=2.553 total_ms=8.656
+shapes_only captures=0 main_runs=30 mesh_upload_bytes=5040 draw_prepare_us=524
+shapes_only pass=1 cpu_ms=1.154 wait_ms=2.617 total_ms=3.771
+shapes_only captures=0 main_runs=30 mesh_upload_bytes=5040 draw_prepare_us=442
+files_only pass=0 cpu_ms=5.752 wait_ms=5.412 total_ms=11.163
+files_only captures=0 main_runs=30 mesh_upload_bytes=5040 draw_prepare_us=523
+files_only pass=1 cpu_ms=1.372 wait_ms=5.713 total_ms=7.085
+files_only captures=0 main_runs=30 mesh_upload_bytes=5040 draw_prepare_us=504
+empty pass=0 cpu_ms=2.473 wait_ms=2.048 total_ms=4.520
+empty captures=0 main_runs=0 mesh_upload_bytes=0 draw_prepare_us=0
+empty pass=1 cpu_ms=0.760 wait_ms=1.944 total_ms=2.704
+empty captures=0 main_runs=0 mesh_upload_bytes=0 draw_prepare_us=0

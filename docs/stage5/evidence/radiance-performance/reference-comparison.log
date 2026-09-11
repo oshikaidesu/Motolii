@@ -1,0 +1,217 @@
+warning: patch `blitz-dom v0.3.0-beta.2 (/Users/member_ottoto/rust_ae/Motolii/motolii/vendor/blitz-dom)` was not used in the crate graph
+help: Check that the patched package version and available features are compatible
+      with the dependency requirements. If the patch has a different version from
+      what is locked in the Cargo.lock file, run `cargo update` to use the new
+      version. This may also occur with an optional dependency that is not enabled.
+warning: for loop over an `Option`. This is more readably written as an `if let` statement
+   --> motolii/crates/motolii-doc/src/store/view/resolve.rs:798:22
+    |
+798 |         for delay in attrs.ghost {
+    |                      ^^^^^^^^^^^
+    |
+    = note: `#[warn(for_loops_over_fallibles)]` on by default
+help: to check pattern in a loop use `while let`
+    |
+798 -         for delay in attrs.ghost {
+798 +         while let Some(delay) = attrs.ghost {
+    |
+help: consider using `if let` to clear intent
+    |
+798 -         for delay in attrs.ghost {
+798 +         if let Some(delay) = attrs.ghost {
+    |
+
+   Compiling motolii-render v0.0.0 (/Users/member_ottoto/rust_ae/Motolii/motolii/crates/motolii-render)
+warning: `motolii-doc` (lib) generated 1 warning
+warning: unused import: `crate::render::compositor::GpuTexture2D`
+  --> motolii/crates/motolii-render/src/engine.rs:15:5
+   |
+15 | use crate::render::compositor::GpuTexture2D;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `bytes`
+   --> motolii/crates/motolii-render/src/engine/texture.rs:780:14
+    |
+780 |         let (bytes, video) = self.videos.get(path).expect("直前に insert した");
+    |              ^^^^^ help: if this is intentional, prefix it with an underscore: `_bytes`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: field `stamps` is never read
+   --> motolii/crates/motolii-render/src/compositor/effects/catalog.rs:100:5
+    |
+ 99 | struct CatalogOwner {
+    |        ------------ field in this struct
+100 |     stamps: BTreeMap<PathBuf, (Option<std::time::SystemTime>, u64)>,
+    |     ^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: method `model_draw_data` is never used
+  --> motolii/crates/motolii-render/src/compositor/mesh.rs:94:19
+   |
+19 | impl Compositor {
+   | --------------- method in this implementation
+...
+94 |     pub(crate) fn model_draw_data(
+   |                   ^^^^^^^^^^^^^^^
+
+warning: field `multisampled` is never read
+  --> motolii/crates/motolii-render/src/compositor/selection_bounds.rs:48:5
+   |
+41 | pub(crate) struct SelectionBounds {
+   |                   --------------- field in this struct
+...
+48 |     multisampled: bool,
+   |     ^^^^^^^^^^^^
+
+warning: method `multisampled` is never used
+   --> motolii/crates/motolii-render/src/compositor/selection_bounds.rs:178:19
+    |
+ 51 | impl SelectionBounds {
+    | -------------------- method in this implementation
+...
+178 |     pub(crate) fn multisampled(&self) -> bool {
+    |                   ^^^^^^^^^^^^
+
+warning: function `bleed_edges` is never used
+  --> motolii/crates/motolii-render/src/engine/texture.rs:50:4
+   |
+50 | fn bleed_edges(rgba: &mut [u8], width: usize) {
+   |    ^^^^^^^^^^^
+
+warning: unreachable `pub` item
+  --> motolii/crates/motolii-render/src/audio/cache.rs:21:1
+   |
+21 | pub fn i16_to_f32(sample: i16) -> f32 {
+   | ---^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   | |
+   | help: consider restricting its visibility: `pub(super)`
+   |
+   = help: or consider exporting it for use by other crates
+   = note: requested on the command line with `-W unreachable-pub`
+
+warning: unreachable `pub` item
+ --> motolii/crates/motolii-render/src/compositor/effects/mod.rs:8:1
+  |
+8 | pub mod subtype;
+  | ---^^^^^^^^^^^^
+  | |
+  | help: consider restricting its visibility: `pub(crate)`
+  |
+  = help: or consider exporting it for use by other crates
+
+warning: unreachable `pub` item
+  --> motolii/crates/motolii-render/src/compositor/effects/mod.rs:10:52
+   |
+10 | pub use isf::{IsfInput, IsfInputType, IsfManifest, IsfStage};
+   | ---                                                ^^^^^^^^
+   | |
+   | help: consider restricting its visibility: `pub(crate)`
+   |
+   = help: or consider exporting it for use by other crates
+
+warning: unreachable `pub` item
+   --> motolii/crates/motolii-render/src/compositor/effects/vism.rs:106:5
+    |
+106 |     pub fn density(self) -> [f32; 2] { std::array::from_fn(|i| self.pixels[i] as f32 / self.size[i].max(1.0)) }
+    |     ---^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |     |
+    |     help: consider restricting its visibility: `pub(crate)`
+
+warning: unreachable `pub` item
+   --> motolii/crates/motolii-render/src/compositor/effects/vism.rs:107:5
+    |
+107 |     pub fn padded(self, pixels: u32) -> Self {
+    |     ---^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |     |
+    |     help: consider restricting its visibility: `pub(crate)`
+
+warning: unreachable `pub` item
+  --> motolii/crates/motolii-render/src/compositor/effects/subtype.rs:16:1
+   |
+16 | pub enum Subtype { Count, Opacity, Factor, Level, Time, Translation, Distance, Angle, Seed }
+   | ---^^^^^^^^^^^^^
+   | |
+   | help: consider restricting its visibility: `pub(crate)`
+   |
+   = help: or consider exporting it for use by other crates
+
+warning: unreachable `pub` item
+  --> motolii/crates/motolii-render/src/compositor/effects/subtype.rs:19:5
+   |
+19 |     pub fn name(self) -> &'static str {
+   |     ---^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |     |
+   |     help: consider restricting its visibility: `pub(crate)`
+
+warning: unreachable `pub` item
+  --> motolii/crates/motolii-render/src/compositor/effects/subtype.rs:26:5
+   |
+26 |     pub fn parse(s: &str) -> Option<Self> {
+   |     ---^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |     |
+   |     help: consider restricting its visibility: `pub(crate)`
+
+warning: unreachable `pub` item
+  --> motolii/crates/motolii-render/src/compositor/effects/subtype.rs:37:1
+   |
+37 | pub struct ParamSubtype {
+   | ---^^^^^^^^^^^^^^^^^^^^
+   | |
+   | help: consider restricting its visibility: `pub(crate)`
+   |
+   = help: or consider exporting it for use by other crates
+
+warning: unreachable `pub` item
+  --> motolii/crates/motolii-render/src/compositor/effects/subtype.rs:90:1
+   |
+90 | pub fn unknown(param_count: usize) -> Vec<ParamSubtype> { vec![ParamSubtype::default(); param_count] }
+   | ---^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   | |
+   | help: consider restricting its visibility: `pub(crate)`
+   |
+   = help: or consider exporting it for use by other crates
+
+warning: unreachable `pub` item
+  --> motolii/crates/motolii-render/src/compositor/effects/subtype.rs:93:1
+   |
+93 | pub fn analyze_module(module: &Module, param_count: usize) -> Vec<ParamSubtype> { analyze(module, param_count) }
+   | ---^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   | |
+   | help: consider restricting its visibility: `pub(crate)`
+   |
+   = help: or consider exporting it for use by other crates
+
+warning: unreachable `pub` item
+  --> motolii/crates/motolii-render/src/compositor/effects/subtype.rs:96:1
+   |
+96 | pub fn hook_stub(body: &str, stage_params: &str, names: &[String]) -> String {
+   | ---^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   | |
+   | help: consider restricting its visibility: `pub(crate)`
+   |
+   = help: or consider exporting it for use by other crates
+
+warning: unreachable `pub` item
+  --> motolii/crates/motolii-render/src/media/point_cloud.rs:38:1
+   |
+38 | pub fn image_extensions() -> impl Iterator<Item = &'static str> {
+   | ---^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   | |
+   | help: consider restricting its visibility: `pub(super)`
+   |
+   = help: or consider exporting it for use by other crates
+
+warning: `motolii-render` (lib test) generated 20 warnings (run `cargo fix --lib -p motolii-render --tests` to apply 15 suggestions)
+    Finished `test` profile [optimized + debuginfo] target(s) in 13.96s
+     Running unittests src/lib.rs (motolii/target/debug/deps/motolii_render-758be6b7192d16cd)
+
+running 1 test
+radiance reference 32.450 ms, optimized 25.359 ms (including readback)
+test compositor::render_effects::tests::radiance_preaverage_preserves_reference_pixels ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 100 filtered out; finished in 15.14s
+

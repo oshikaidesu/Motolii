@@ -37,11 +37,22 @@ fn row_matrix(m: glam::Mat4) -> mint::RowMatrix4<f64> {
 /// 掴む所と描く所は同じ枠で。Stage が送ってくる点は comp 座標なので、
 /// viewport も comp の矩形にする。大きさと線の太さは画面の画素で決め、
 /// `view_scale`(画面 px / comp px)で comp 座標へ戻す —— 寄っても引いても同じ手触り。
-/// 色は意味だけを運ぶ: 白 = 通常、黒 = 触れている。実際の色は Stage の theme が決める。
+/// 色は意味だけを運ぶ: 白 = 休んでいる、黒 = hover。実際の色は Stage の theme が決める。
+/// `modes` は AE の P / R / S を押している間の絞り込み。押していなければ移動+回転。
+pub(crate) fn modes(held: Option<&str>) -> transform_gizmo::EnumSet<GizmoMode> {
+    match held {
+        Some("position") => GizmoMode::all_translate(),
+        Some("rotation") => GizmoMode::all_rotate(),
+        Some("scale") => GizmoMode::all_scale(),
+        _ => GizmoMode::all_translate() | GizmoMode::all_rotate(),
+    }
+}
+
 pub(crate) fn config(
     comp: crate::doc::core::CompSpec,
     camera: crate::doc::core::ResolvedCamera,
     view_scale: f64,
+    held: Option<&str>,
 ) -> GizmoConfig {
     let projection = crate::doc::core::camera_projection(comp, camera);
     let px = 1.0 / view_scale.max(1e-3) as f32;
@@ -52,7 +63,7 @@ pub(crate) fn config(
             transform_gizmo::math::Pos2::new(0.0, 0.0),
             transform_gizmo::math::Pos2::new(comp.width as f32, comp.height as f32),
         ),
-        modes: GizmoMode::all_translate() | GizmoMode::all_rotate(),
+        modes: modes(held),
         orientation: GizmoOrientation::Local,
         snap_distance: 10.0 * px,
         snap_scale: 0.1,
@@ -295,18 +306,19 @@ fn world_from(transform: &GizmoTransform, anchor: glam::Vec3) -> glam::Affine3A 
 }
 
 /// 描くだけ(掴んでいない時)。頂点は comp 座標なので、Stage はそのまま画面へ写せる。
-/// `pointer` が乗っている部品は「触れている」色で返る。
+/// `pointer` が乗っている部品(hover)は黒で返る。
 pub(crate) fn draw_data(
     comp: crate::doc::core::CompSpec,
     camera: crate::doc::core::ResolvedCamera,
     targets: &[SpatialTarget],
     pointer: Option<[f64; 2]>,
     view_scale: f64,
+    held: Option<&str>,
 ) -> Option<transform_gizmo::GizmoDrawData> {
     if targets.is_empty() {
         return None;
     }
-    let mut gizmo = Gizmo::new(config(comp, camera, view_scale));
+    let mut gizmo = Gizmo::new(config(comp, camera, view_scale, held));
     let starts: Vec<_> = targets.iter().map(|t| t.start).collect();
     let cursor_pos = pointer.map_or((f32::NAN, f32::NAN), |p| (p[0] as f32, p[1] as f32));
     let _ = gizmo.update(
@@ -339,6 +351,7 @@ impl SpatialDrag {
         at: RationalTime,
         observer: crate::doc::core::ResolvedCamera,
         view_scale: f64,
+        held: Option<&str>,
     ) -> Result<Self, String> {
         let e = |x: StoreError| x.to_string();
         let view = doc.view().without_transients();
@@ -358,7 +371,7 @@ impl SpatialDrag {
                 original_values.push((target.layer, PropertyId::new(name).map_err(e)?, value));
             }
         }
-        let mut gizmo = Gizmo::new(config(comp, observer, view_scale));
+        let mut gizmo = Gizmo::new(config(comp, observer, view_scale, held));
         let current: Vec<_> = targets.iter().map(|t| t.start).collect();
         let interaction = GizmoInteraction {
             cursor_pos: (start[0] as f32, start[1] as f32),
@@ -596,7 +609,7 @@ mod spatial_gizmo_tests {
             for x in (700..1250).step_by(25) {
                 for y in (300..800).step_by(25) {
                     let start = [f64::from(x), f64::from(y)];
-                    let Ok(drag) = SpatialDrag::begin(&doc, &[LayerId(41)], start, RationalTime::ZERO, camera, 0.5) else {
+                    let Ok(drag) = SpatialDrag::begin(&doc, &[LayerId(41)], start, RationalTime::ZERO, camera, 0.5, None) else {
                         continue;
                     };
                     grabbed += 1;
@@ -617,7 +630,7 @@ mod spatial_gizmo_tests {
         for x in (700..1250).step_by(25) {
             for y in (300..800).step_by(25) {
                 let start = [f64::from(x), f64::from(y)];
-                let Ok(drag) = SpatialDrag::begin(&doc, &[layer], start, RationalTime::ZERO, camera, 0.5) else {
+                let Ok(drag) = SpatialDrag::begin(&doc, &[layer], start, RationalTime::ZERO, camera, 0.5, None) else {
                     continue;
                 };
                 let Ok(out) = drag.edits(&doc, [start[0] + 30.0, start[1]], false, Animate::Off) else { continue };

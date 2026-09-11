@@ -1,0 +1,82 @@
+{
+  "status": "render_fix_passed_ui_gate_blocked",
+  "render_tests": {
+    "passed": 87,
+    "ignored": 8
+  },
+  "native_tests": {
+    "passed": 68,
+    "ignored": 4
+  },
+  "actual_window_passed": [
+    "2D outlined text: Space",
+    "2D outlined text: Normal",
+    "Evolution 0 -> 2 changes result",
+    "Amount 0 restores original paint",
+    "Undo via Edit menu before native refresh"
+  ],
+  "actual_window_remaining": [
+    "shape application",
+    "post-fix Undo under accessibility automation"
+  ],
+  "crashes": [
+    {
+      "file": "/Users/member_ottoto/Library/Logs/DiagnosticReports/motolii_stage5-2026-09-11-231623.ips",
+      "exception": {
+        "codes": "0x0000000000000001, 0x0000000000000048",
+        "rawCodes": [
+          1,
+          72
+        ],
+        "type": "EXC_BAD_ACCESS",
+        "signal": "SIGSEGV",
+        "subtype": "KERN_INVALID_ADDRESS at 0x0000000000000048"
+      },
+      "frames": [
+        "flutter::AccessibilityBridge::CreateRemoveReparentedNodesUpdate()",
+        "flutter::AccessibilityBridge::CommitUpdates()",
+        "-[FlutterViewController updateSemantics:]",
+        "-[FlutterEngine runWithEntrypoint:]::$_5::__invoke(FlutterSemanticsUpdate2 const*, void*)"
+      ]
+    },
+    {
+      "file": "/Users/member_ottoto/Library/Logs/DiagnosticReports/motolii_stage5-2026-09-11-231902.ips",
+      "exception": {
+        "codes": "0x0000000000000001, 0x0000000000000048",
+        "rawCodes": [
+          1,
+          72
+        ],
+        "type": "EXC_BAD_ACCESS",
+        "signal": "SIGSEGV",
+        "subtype": "KERN_INVALID_ADDRESS at 0x0000000000000048"
+      },
+      "frames": [
+        "flutter::AccessibilityBridge::CreateRemoveReparentedNodesUpdate()",
+        "flutter::AccessibilityBridge::CommitUpdates()",
+        "-[FlutterViewController updateSemantics:]",
+        "-[FlutterEngine runWithEntrypoint:]::$_5::__invoke(FlutterSemanticsUpdate2 const*, void*)"
+      ]
+    },
+    {
+      "file": "/Users/member_ottoto/Library/Logs/DiagnosticReports/motolii_stage5-2026-09-11-232233.ips",
+      "exception": {
+        "codes": "0x0000000000000001, 0x0000000000000048",
+        "rawCodes": [
+          1,
+          72
+        ],
+        "type": "EXC_BAD_ACCESS",
+        "signal": "SIGSEGV",
+        "subtype": "KERN_INVALID_ADDRESS at 0x0000000000000048"
+      },
+      "frames": [
+        "flutter::AccessibilityBridge::CreateRemoveReparentedNodesUpdate()",
+        "flutter::AccessibilityBridge::CommitUpdates()",
+        "-[FlutterViewController updateSemantics:]",
+        "-[FlutterEngine runWithEntrypoint:]::$_5::__invoke(FlutterSemanticsUpdate2 const*, void*)"
+      ]
+    }
+  ],
+  "fixture_sha256": "9f0c0c8349f6a30c18e0eaf9835d74aab8c669aa62fd5a887ca69a58d94baa99"
+}

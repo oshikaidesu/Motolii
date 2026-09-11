@@ -34,7 +34,7 @@ pub(crate) fn hooks<'a>(effects: &'a [ResolvedEffect], definitions: &'a [VismDef
         match def.manifest.stage {
             super::IsfStage::Field => field = Some(def),
             super::IsfStage::Surface => surface = Some(def),
-            super::IsfStage::Pass | super::IsfStage::Clip => {}
+            super::IsfStage::Pass | super::IsfStage::Warp | super::IsfStage::Clip => {}
         }
     }
     (field, surface)
@@ -128,7 +128,7 @@ mod tests {
         assert!(field.contains("struct FieldParams {\n    amount: f32,\n    along: f32,\n};"), "{field}");
         assert!(field.contains("let p = FieldParams(in.params[0][0], in.params[0][1]);"), "{field}");
         assert!(desc.surface.is_none());
-        let p = params(&[ResolvedEffect { plugin_id: "x.t".into(), params: vec![("along".into(), crate::doc::store::Value::F64(1.0))] }], Some(&def), None);
+        let p = params(&[ResolvedEffect { plugin_id: "x.t".into(), params: vec![("along".into(), crate::doc::store::Value::F64(1.0))], ..Default::default() }], Some(&def), None);
         assert_eq!(&p[..2], &[2.0, 1.0]);
     }
 }
@@ -136,17 +136,22 @@ mod tests {
 impl crate::render::compositor::Compositor {
     /// 効果列の hook(field / surface)から共有プログラムを組む。変種は catalog の世代ごとに覚える。
     pub(crate) fn surface_shading(&mut self, effects: &[crate::doc::store::ResolvedEffect]) -> Result<SurfaceShading, String> {
+        self.surface_shading_for(effects, false)
+    }
+
+    pub(crate) fn surface_shading_for(&mut self, effects: &[crate::doc::store::ResolvedEffect], unlit: bool) -> Result<SurfaceShading, String> {
         self.refresh_catalog_programs();
         let catalog = self.catalog.clone();
         let (field, surface) = hooks(effects, &catalog.definitions);
-        if field.is_none() && surface.is_none() {
+        if !unlit && field.is_none() && surface.is_none() {
             return Ok(SurfaceShading::default());
         }
-        let key = format!("{}|{}|{}", field.map_or("", |d| d.plugin_id()), surface.map_or("", |d| d.plugin_id()), catalog.generation);
+        let key = format!("{unlit}|{}|{}|{}", field.map_or("", |d| d.plugin_id()), surface.map_or("", |d| d.plugin_id()), catalog.generation);
         let program = match self.surface_programs.get(&key) {
             Some(program) => program.clone(),
             None => {
-                let desc = program_desc(field, surface)?;
+                let mut desc = program_desc(field, surface)?;
+                if unlit && surface.is_none() { desc.surface = Some("fn motolii_surface(in: SurfaceIn) -> vec3f { if frame.sun_color.w > 0.0 { return vec3f(0.0); } return in.albedo * sun_shade(in.world_position, in.normal, 0.5); }".into()); }
                 let program = Arc::new(SurfaceProgram::new(&self.ctx, desc).map_err(|e| e.to_string())?);
                 self.surface_programs.insert(key, program.clone());
                 program
@@ -193,8 +198,8 @@ mod program_contract {
         let error = pollster::block_on(scope.pop());
         assert!(error.is_none(), "{}", error.unwrap());
 
-        let glass = ResolvedEffect { plugin_id: "motolii.glass".into(), params: vec![] };
-        let turbulence = ResolvedEffect { plugin_id: "motolii.turbulent_displace".into(), params: vec![] };
+        let glass = ResolvedEffect { plugin_id: "motolii.glass".into(), params: vec![], ..Default::default() };
+        let turbulence = ResolvedEffect { plugin_id: "motolii.turbulent_displace".into(), params: vec![], ..Default::default() };
         compiled_without_validation_error(&mut compositor, &[]);
         compiled_without_validation_error(&mut compositor, std::slice::from_ref(&glass));
         compiled_without_validation_error(&mut compositor, std::slice::from_ref(&turbulence));

@@ -18,10 +18,39 @@ pub struct EffectInstance {
     pub plugin_id: String,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+/// グループに積んだ効果をどこへ掛けるか。効果自身はこれを知らず、doc と render が解く
+/// (裁定 2026-09-11: 効果製作者は「1 枚に掛ける」とだけ書く)。単層では意味を持たない。
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum EffectScope {
+    /// 子それぞれに掛ける。グループは境界にならない(既定)。
+    #[default]
+    Each,
+    /// 子を 1 枚に焼いてから掛ける。
+    Whole,
+}
+
+impl EffectScope {
+    pub const fn enum_value(self) -> i64 {
+        match self {
+            Self::Each => 0,
+            Self::Whole => 1,
+        }
+    }
+
+    pub fn from_enum_value(value: i64) -> Option<Self> {
+        match value {
+            0 => Some(Self::Each),
+            1 => Some(Self::Whole),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct ResolvedEffect {
     pub plugin_id: String,
     pub params: Vec<(String, crate::doc::store::Value)>,
+    pub scope: EffectScope,
 }
 
 pub(crate) fn validate_unique_ids(effects: &[EffectInstance]) -> Result<(), StoreError> {

@@ -23,6 +23,7 @@ impl Compositor {
         projection: crate::doc::store::LayerProjection,
         displace: PointDisplace,
         clip: Option<super::ClipSpec>,
+        outline: re_renderer::OutlineMaskPreference,
     ) -> Result<re_renderer::renderer::PointCloudDrawData, CompositorError> {
         let world_from_obj = projected_spatial_placement(comp, camera, projection, placement, bounds);
         let centre = world_from_obj.transform_point3((glam::Vec3::from(bounds.min) + glam::Vec3::from(bounds.max)) * 0.5);
@@ -48,6 +49,7 @@ impl Compositor {
             .batch("motolii-point-cloud")
             .world_from_obj(world_from_obj)
             .clip(clip)
+            .outline_mask_ids(outline)
             .add_points_slow(&points, &radii, &colors, &picking_ids)
             .flags(PointCloudBatchFlags::FLAG_ENABLE_SHADING);
         builder

@@ -7,7 +7,7 @@ import '../foundation/panel_controls.dart';
 import '../foundation/theme.dart';
 import '../session/editor_session.dart';
 import '../session/read_model.dart';
-import 'gradient_inspector.dart';
+import 'native_visual_sample.dart';
 import 'rich_text_editor.dart';
 
 part 'inspector_property_style.dart';
@@ -169,6 +169,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
         'blendMode',
         'ghostable',
         'environment',
+        'blocksLight',
         'frozen',
         'clipToBelow',
         'anchorFraction',
@@ -462,9 +463,11 @@ class _InspectorPanelState extends State<InspectorPanel> {
     final isScale = id == 'scale' || id == 'scale.z';
     final unit = isScale ? '%' : _unitOf(row);
     final percent = isScale || unit == '%' && max == 1;
+    // A declared range sets the drag speed; a range open on one side
+    // (max = f64::MAX on the native side) is unbounded and drags 1 px = 1.
     final speed = isScale
         ? .01
-        : min != null && max != null
+        : min != null && max != null && (max - min) < 1e9
         ? (max - min) / 300
         : id.startsWith('scale')
         ? .005
@@ -815,6 +818,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
     'rotation',
     'rotation.x',
     'rotation.y',
+    'depth',
     'opacity',
     'anchor',
     'camera.center',
@@ -886,14 +890,30 @@ class _InspectorPanelState extends State<InspectorPanel> {
   List<Widget> _colors(Map<String, dynamic> layer) {
     final colors = panelRows(layer['colors']);
     return [
-      if (layer['kind'] == 'Shape' && layer['fill'] is Map)
-        GradientInspector(
-          key: ValueKey('fill:${layer['id']}'),
-          controller: c,
-          layer: layer,
-          fill: panelMap(layer['fill']),
-        )
-      else
+      // A shape's fill is one row: solid shows its swatch and hex, a gradient
+      // shows its picture and kind. Editing happens in the Colors panel, which
+      // the swatch targets. The stroke keeps its own row under it.
+      if (layer['kind'] == 'Shape' && layer['fill'] is Map) ...[
+        if (panelMap(layer['fill'])['kind'] != 'solid')
+          EditorGradientRow(
+            controller: c,
+            layer: layer,
+            fill: panelMap(layer['fill']),
+          )
+        else
+          for (final color in colors)
+            if (!panelMap(color['slot']).containsKey('ShapeStroke'))
+              Padding(
+                padding: const EdgeInsets.only(bottom: EditorMetrics.s4),
+                child: EditorColorRow(controller: c, layer: layer, color: color),
+              ),
+        for (final color in colors)
+          if (panelMap(color['slot']).containsKey('ShapeStroke'))
+            Padding(
+              padding: const EdgeInsets.only(bottom: EditorMetrics.s4),
+              child: EditorColorRow(controller: c, layer: layer, color: color),
+            ),
+      ] else
         for (final color in colors)
           Padding(
             padding: const EdgeInsets.only(bottom: EditorMetrics.s4),
@@ -1022,6 +1042,19 @@ class _InspectorPanelState extends State<InspectorPanel> {
           _gap(),
           _tail(_dial(layer, 'rotation')),
         ]),
+      // Depth turns the flat picture into a body, so it only means something
+      // once the layer has left 2D; scale Z then has something to scale.
+      if (_row('depth') != null && layer['projection'] != '2D')
+        _line([
+          _name(Icons.view_in_ar, 'Depth'),
+          _slot(_well(layer, 'depth', 0, label: 'Depth')),
+          _gap(),
+          _slot(),
+          _gap(),
+          _slot(),
+          _gap(),
+          _tail(),
+        ]),
       if (_row('opacity') != null)
         _line([
           _name(Icons.opacity, 'Opacity'),
@@ -1120,6 +1153,20 @@ class _InspectorPanelState extends State<InspectorPanel> {
       ]),
       _line([
         _name(),
+        _slot(
+          EditorSwitch(
+            on: layer['blocksLight'] == true,
+            glyph: Icons.wb_shade,
+            label: 'Blocks light: casts this layer\'s shadow and colored light',
+            onChanged: can
+                ? (on) => c.command('setAttrs', {
+                    'layers': [layer['id']],
+                    'patch': {'blocksLight': on},
+                  })
+                : null,
+          ),
+        ),
+        _gap(),
         if (layer['kind'] == 'Image') ...[
           _slot(
             EditorSwitch(

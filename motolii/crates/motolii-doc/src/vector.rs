@@ -16,7 +16,7 @@ pub use geom::{Contour, Path, Point, Vertex};
 pub use group::{content_bounds, flatten, render_tree, ShapeGroup, ShapeNode};
 
 use geom::{ellipse, polystar, rect};
-use ops::Instance;
+pub use ops::Instance;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Shape {
@@ -117,6 +117,45 @@ pub enum OpKind {
         angle: f64,
         center: Point,
     },
+    /// AE の Wiggle Paths(Illustrator の Roughen は Points=Corner)。Lottie には出ない。
+    Wiggle {
+        size: f64,
+        detail: f64,
+        point_type: PointType,
+        phase: f64,
+        seed: u64,
+    },
+    /// Cavalry の Path Relax。
+    Smooth {
+        strength: f64,
+        iterations: f64,
+    },
+    /// Cavalry の Add Divisions。
+    Subdivide {
+        divisions: f64,
+    },
+    /// Cavalry の Reverse Path。
+    Reverse,
+    /// Cavalry の Extend Open Paths。
+    Extend {
+        start: f64,
+        end: f64,
+    },
+    /// Cavalry の Chop Path。
+    Chop {
+        length: f64,
+        gap: f64,
+    },
+    /// Cavalry の Resample Path。
+    Resample {
+        spacing: f64,
+        point_type: PointType,
+    },
+    /// Cavalry の Bend Deformer。
+    Bend {
+        angle: f64,
+        center: Point,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -188,6 +227,52 @@ pub enum GradientType {
     #[default]
     Linear,
     Radial,
+    /// 中心のまわりを一周(CSS の conic、Figma の angular)。start→end の向きが 0。
+    Angular,
+    /// 中心から菱形に広がる(Figma の diamond)。start→end が菱形の半対角。
+    Diamond,
+}
+
+impl Gradient {
+    /// 点が gradient のどこか(0..1)。描く側(GPU・tiny-skia)は全部これを読む。
+    pub fn parameter(&self, p: Point) -> f64 {
+        let d = self.end.sub(self.start);
+        let len2 = d.dot(d);
+        if len2 <= 0.0 { return 0.0; }
+        let v = p.sub(self.start);
+        let t = match self.kind {
+            GradientType::Linear => v.dot(d) / len2,
+            GradientType::Radial => (v.dot(v) / len2).sqrt(),
+            GradientType::Angular => {
+                let turn = (v.y.atan2(v.x) - d.y.atan2(d.x)) / std::f64::consts::TAU;
+                turn - turn.floor()
+            }
+            GradientType::Diamond => {
+                let len = len2.sqrt();
+                let along = v.dot(d) / len;
+                let across = (v.y * d.x - v.x * d.y) / len;
+                (along.abs() + across.abs()) / len
+            }
+        };
+        if t.is_nan() { 0.0 } else { t.clamp(0.0, 1.0) }
+    }
+
+    /// 0..1 の位置の色。stop の間は直線で混ぜ、外は端の色。
+    pub fn color_at(&self, t: f64) -> Rgb {
+        let mut stops = self.stops.clone();
+        stops.sort_by(|a, b| a.offset.total_cmp(&b.offset));
+        match (stops.first(), stops.last()) {
+            (None, _) | (_, None) => Rgb::BLACK,
+            (Some(first), _) if t <= first.offset => first.color,
+            (_, Some(last)) if t >= last.offset => last.color,
+            _ => {
+                let i = stops.iter().position(|s| s.offset > t).unwrap_or(stops.len() - 1);
+                let (a, b) = (&stops[i - 1], &stops[i]);
+                let u = ((t - a.offset) / (b.offset - a.offset).max(f64::EPSILON)).clamp(0.0, 1.0);
+                Rgb { r: a.color.r + (b.color.r - a.color.r) * u, g: a.color.g + (b.color.g - a.color.g) * u, b: a.color.b + (b.color.b - a.color.b) * u }
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -331,7 +416,12 @@ pub fn render(shape: &Shape, canvas: &Canvas) -> Result<Raster, VectorError> {
     render_tree(&[ShapeNode::Leaf(shape.clone())], canvas)
 }
 
-fn resolve(shape: &Shape) -> Result<Vec<Instance>, VectorError> {
+/// 輪郭ごとの純関数を、複製の全部へ。
+fn each(instances: Vec<Instance>, f: impl Fn(&Path) -> Path) -> Vec<Instance> {
+    instances.into_iter().map(|i| Instance { path: f(&i.path), opacity: i.opacity }).collect()
+}
+
+pub fn resolve(shape: &Shape) -> Result<Vec<Instance>, VectorError> {
     let mut instances = vec![Instance {
         path: shape.source.to_path(),
         opacity: 1.0,
@@ -398,6 +488,14 @@ fn resolve(shape: &Shape) -> Result<Vec<Instance>, VectorError> {
                     opacity: i.opacity,
                 })
                 .collect(),
+            OpKind::Wiggle { size, detail, point_type, phase, seed } => each(instances, |p| ops::wiggle(p, *size, *detail, *point_type, *phase, *seed)),
+            OpKind::Smooth { strength, iterations } => each(instances, |p| ops::smooth(p, *strength, *iterations)),
+            OpKind::Subdivide { divisions } => each(instances, |p| ops::subdivide(p, *divisions)),
+            OpKind::Reverse => each(instances, ops::reverse),
+            OpKind::Extend { start, end } => each(instances, |p| ops::extend(p, *start, *end)),
+            OpKind::Chop { length, gap } => each(instances, |p| ops::chop(p, *length, *gap)),
+            OpKind::Resample { spacing, point_type } => each(instances, |p| ops::resample(p, *spacing, *point_type)),
+            OpKind::Bend { angle, center } => each(instances, |p| ops::bend(p, *angle, *center)),
             OpKind::Repeater {
                 copies,
                 offset,

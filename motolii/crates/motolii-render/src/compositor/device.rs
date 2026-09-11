@@ -24,7 +24,7 @@ impl Compositor {
             .map_err(|e| CompositorError::Context(e.to_string()))?;
 
         let catalog = super::catalog_snapshot();
-        let effect_programs = catalog.definitions.iter().filter(|d| d.manifest.expose && d.manifest.stage == effects::IsfStage::Pass)
+        let effect_programs = catalog.definitions.iter().filter(|d| d.manifest.expose && matches!(d.manifest.stage, effects::IsfStage::Pass | effects::IsfStage::Warp))
             .map(|d| (d.plugin_id().to_owned(), effects::EffectProgram::compile(&ctx, d))).collect();
         let builtin = |name: &str| -> Result<effects::EffectProgram, CompositorError> {
             let definition = catalog.definitions.iter().find(|d| d.source.name == name)
@@ -34,14 +34,17 @@ impl Compositor {
         let blend_vism = builtin("blend")?;
         let matte_vism = builtin("matte")?;
 
+        let selection_bounds = selection_bounds::SelectionBounds::new(&ctx.device, re_renderer::OutlineMaskProcessor::mask_sample_count(ctx.device_caps().tier) > 1);
         Ok(Self {
             ctx,
             measurement_enabled: false,
             measurement: Default::default(),
             surface_work: Default::default(),
             reflection_resources: None,
+            light_cookie: None,
             reflection_cache_enabled: true,
             gpu_instance_sharing_enabled: true,
+            reflection_scene_probe: false,
             #[cfg(test)]
             reflection_probe_experiment: 3,
             #[cfg(test)]
@@ -60,6 +63,7 @@ impl Compositor {
             effect_programs,
             surface_programs: Default::default(),
             blend_vism,
+            selection_bounds,
             matte_vism,
             coverage_programs: Default::default(),
             catalog,
@@ -85,7 +89,7 @@ impl Compositor {
         }
         self.surface_programs.clear();
         for definition in changed {
-            if definition.manifest.stage != effects::IsfStage::Pass { continue; }
+            if !matches!(definition.manifest.stage, effects::IsfStage::Pass | effects::IsfStage::Warp) { continue; }
             let program = effects::EffectProgram::compile(&self.ctx, definition);
             match definition.source.name.as_str() {
                 "blend" => self.blend_vism = program,

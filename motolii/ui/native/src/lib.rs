@@ -21,6 +21,8 @@ pub struct EditorRuntime {
     engine: Engine,
     selected: Option<LayerId>,
     selected_ids: Vec<LayerId>,
+    /// 直前の Stage 描画で選ばれた層が描かれた画面上の範囲(絵そのものの籠)。
+    selection_bounds: std::collections::HashMap<LayerId, [f32; 4]>,
     selected_keys: Vec<editor::session::KeySel>,
     clipboard: editor::clipboard::Clipboard,
     path: Option<String>,
@@ -43,12 +45,14 @@ pub struct EditorRuntime {
     /// Stage の上の pointer(comp 座標)と、画面 px / comp px。3D ギズモの見た目と掴みやすさに使う。
     stage_pointer: Option<[f64;2]>,
     stage_view_scale: f64,
+    /// 押している P / R / S。3D ギズモをその 1 種に絞る。
+    stage_held: Option<String>,
     user_stage: bool,
     pub(crate) animate: Animate,
     /// 最後に全部入りの status を送った時の Document の版。同じ版で再生中なら生値だけ送る。
     pub(crate) full_status_revision: std::cell::RefCell<Option<String>>,
     user_camera: crate::doc::core::ResolvedCamera,
-    /// 設定「New layers」: 平らな素材が生まれる時の投影。
+    /// 設定「New layers」: 新しく作る素材の投影。
     pub(crate) flat_projection: crate::doc::store::LayerProjection,
     snapshot_cache: std::cell::RefCell<snapshot_cache::SnapshotCache>,
     /// 履歴の一本線。編集の段と保存・異常の記録を同じ列に持つ。
@@ -71,8 +75,8 @@ impl EditorRuntime {
         let clock_revision = doc.revision();
         let mut history = editor::history::Ledger::open(editor::history::default_file());
         history.record("open", if path.is_empty() { "New document".to_owned() } else { path.rsplit('/').next().unwrap_or(path).to_owned() }, Some(doc.edit_head()));
-        Ok(Self { selected_ids: selected.into_iter().collect(), selected_keys: Vec::new(), clipboard: Default::default(), path: if path.is_empty() { None } else { Some(path.into()) }, saved_signature, color_target: None, exporter: Default::default(), clock, clock_revision, doc, engine, selected, frame: 0, device_id, render_count: 0,
-            render_ms: 0.0, picked_color: None, pick_serial: 0, reply: CString::new("{}").unwrap(), error: None, preview: None, preview_tag: None, stage_drag: None, stage_pointer: None, stage_view_scale: 1.0, snapshot_cache: Default::default(), user_stage: true, animate: Animate::Off, full_status_revision: Default::default(), user_camera: Default::default(), flat_projection: crate::doc::store::LayerProjection::TwoPointFiveD, history })
+        Ok(Self { selected_ids: selected.into_iter().collect(), selection_bounds: Default::default(), selected_keys: Vec::new(), clipboard: Default::default(), path: if path.is_empty() { None } else { Some(path.into()) }, saved_signature, color_target: None, exporter: Default::default(), clock, clock_revision, doc, engine, selected, frame: 0, device_id, render_count: 0,
+            render_ms: 0.0, picked_color: None, pick_serial: 0, reply: CString::new("{}").unwrap(), error: None, preview: None, preview_tag: None, stage_drag: None, stage_pointer: None, stage_view_scale: 1.0, stage_held: None, snapshot_cache: Default::default(), user_stage: true, animate: Animate::Off, full_status_revision: Default::default(), user_camera: Default::default(), flat_projection: crate::doc::store::LayerProjection::TwoPointFiveD, history })
     }
 
     fn time(&self) -> Result<RationalTime, String> {
@@ -123,7 +127,6 @@ impl EditorRuntime {
 
 
     fn render(&mut self, surface_id: u32) -> Result<(), String> {
-        let started = Instant::now();
         let surface = IOSurfaceRef::lookup(surface_id).ok_or("IOSurface lookup failed")?;
         let comp = self.doc.view().composition().map_err(|e| e.to_string())?.ok_or("No composition")?;
         if surface.width() != comp.width as usize || surface.height() != comp.height as usize {
@@ -157,11 +160,19 @@ impl EditorRuntime {
             })
         };
         drop(hal);
+        self.render_into(&texture)
+    }
+
+    fn render_into(&mut self, texture: &wgpu::Texture) -> Result<(), String> {
+        let started = Instant::now();
         let time = self.time()?;
         let view_camera = self.view_camera()?;
         self.engine.set_realtime(self.clock.playing());
-        self.engine.render_frame_into_with_camera(&self.doc.view(), time, &texture, view_camera, true).map_err(|e|e.to_string())?;
+        self.engine.render_frame_into_with_camera(&self.doc.view(), time, texture, view_camera, true, &self.selected_ids).map_err(|e|e.to_string())?;
+        if self.clock.playing() { let _ = self.engine.warm_upcoming(&self.doc.view(), time); }
         self.engine.gpu_device().poll(wgpu::PollType::wait_indefinitely()).map_err(|e|e.to_string())?;
+        self.take_selection_bounds();
+        self.snapshot_cache.borrow_mut().invalidate_geometry();
         self.render_count += 1;
         self.render_ms = started.elapsed().as_secs_f64() * 1000.0;
         self.error = if self.engine.layer_failures().is_empty() { None } else { Some(self.engine.layer_failures().join("; ")) };
@@ -210,7 +221,8 @@ pub unsafe extern "C" fn motolii_probe_request(ctx: *mut EditorRuntime, request:
             return Ok(());
         }
         if value["op"] == "visualSample" {
-            model_reply = Some(editor::visual_samples::reply(&probe.doc, probe.time()?, &value));
+            let at = probe.time()?;
+            model_reply = Some(if value["kind"] == "effect" { editor::effect_sample::reply(&mut probe.engine, &value) } else { editor::visual_samples::reply(&probe.doc, at, &value) });
             return Ok(());
         }
         if value["op"] == "easeModel" {
@@ -218,7 +230,7 @@ pub unsafe extern "C" fn motolii_probe_request(ctx: *mut EditorRuntime, request:
             return Ok(());
         }
         quiet = value["quiet"] == true && (value["op"] == "seek" || value["op"] == "tick");
-        // 触れているだけの時は、ギズモの絵だけ返す。status 全体を組み直さない。
+        // hover の時は、ギズモの絵だけ返す。status 全体を組み直さない。
         let hover = value["op"] == "stageGesture" && value["phase"] == "hover";
         probe.request(value)?;
         if hover { model_reply = Some(probe.spatial_gizmo().map(|gizmo| json!({"spatialGizmo": gizmo, "needsRender": false}))); }

@@ -1,6 +1,6 @@
 /*{
   "ID": "motolii.turbulent_displace",
-  "LABEL": "Turbulent Displace",
+  "LABEL": "Turbulent Displace 3D",
   "STAGE": "field",
   "DESCRIPTION": "Fractal simplex noise moves the vertices: along the normal (bending normals with the gradient) or as a vector field",
   "INPUTS": [
@@ -8,17 +8,18 @@
     { "NAME": "size", "LABEL": "Size", "TYPE": "float", "DEFAULT": 100.0, "MIN": 1.0, "MAX": 100000.0 },
     { "NAME": "complexity", "LABEL": "Complexity", "TYPE": "float", "DEFAULT": 3.0, "MIN": 1.0, "MAX": 8.0 },
     { "NAME": "evolution", "LABEL": "Evolution", "TYPE": "float", "DEFAULT": 0.0, "SUBTYPE": "TIME" },
-    { "NAME": "along", "LABEL": "Along", "TYPE": "long", "DEFAULT": 0, "LABELS": ["Normal", "Space"] },
+    { "NAME": "along", "LABEL": "Direction", "TYPE": "long", "DEFAULT": 0, "LABELS": ["Normal", "XYZ"] },
     { "NAME": "offset_x", "LABEL": "Offset X", "TYPE": "float", "DEFAULT": 0.0 },
     { "NAME": "offset_y", "LABEL": "Offset Y", "TYPE": "float", "DEFAULT": 0.0 },
-    { "NAME": "offset_z", "LABEL": "Offset Z", "TYPE": "float", "DEFAULT": 0.0 }
+    { "NAME": "offset_z", "LABEL": "Offset Z", "TYPE": "float", "DEFAULT": 0.0 },
+    { "NAME": "seed", "LABEL": "Seed", "TYPE": "float", "DEFAULT": 0.0, "MIN": 0.0, "MAX": 10000.0 }
   ]
 }*/
 
 // Same coordinate as the point-cloud twin in compositor/point_cloud.rs: shifted, scaled to feature size, moved by evolution.
 fn turbulent_coordinate(frame_position: vec3f, p: FieldParams) -> vec3f {
     let size = max(p.size, 1e-3);
-    return (frame_position + vec3f(p.offset_x, p.offset_y, p.offset_z)) / size + p.evolution * vec3f(0.53, 0.71, 0.89);
+    return (frame_position + vec3f(p.offset_x, p.offset_y, p.offset_z)) / size + p.evolution * vec3f(0.53, 0.71, 0.89) + p.seed * vec3f(0.137, 0.173, 0.193);
 }
 
 fn turbulent_vector(q: vec3f, octaves: u32) -> vec3f {

@@ -11,6 +11,11 @@ use crate::render::compositor::{
 };
 use crate::render::media::SpatialBounds;
 
+pub(crate) fn next_model_revision() -> u64 {
+    static NEXT_REVISION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+    NEXT_REVISION.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+}
+
 impl Compositor {
     pub(crate) fn import_model(&mut self, path: &str) -> Result<GpuModelData, CompositorError> {
         let bytes = std::fs::read(path).map_err(|error| {
@@ -39,20 +44,23 @@ impl Compositor {
         let bbox = cpu.bbox();
         let bounds = SpatialBounds::from_points([bbox.min.to_array(), bbox.max.to_array()])
             .map_err(|error| CompositorError::Draw(error.to_string()))?;
+        let vertices = crate::render::media::silhouette_points(cpu.instance_vertex_positions());
         let instances = cpu
             .into_gpu_meshes(&self.ctx)
             .map_err(|error| CompositorError::Draw(error.to_string()))?;
-        static NEXT_REVISION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
         Ok(GpuModelData {
-            revision: NEXT_REVISION.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+            planar_size: None,
+            revision: next_model_revision(),
             instances: Arc::new(instances),
             bounds,
+            vertices: Arc::new(vertices),
         })
     }
 
     pub(crate) fn model_instances(
         &mut self,
         model: &GpuModelData,
+        size: [f32; 2],
         placement: crate::doc::core::LayerPlacement,
         opacity: f32,
         comp: crate::doc::core::CompSpec,
@@ -61,7 +69,10 @@ impl Compositor {
         shading: &SurfaceShading,
         clip: Option<super::ClipSpec>,
     ) -> (Vec<GpuMeshInstance>, re_renderer::ClipPlane) {
-        let world_from_object = projected_spatial_placement(comp, camera, projection, placement, model.bounds);
+        let world_from_object = if let Some(natural) = model.planar_size {
+            let (corner, u, v) = super::projected_placement_corners(comp, camera, projection, placement, glam::Vec2::ZERO, glam::Vec2::from(size));
+            glam::Affine3A::from_cols((u / natural[0].max(1.0)).into(), (v / natural[1].max(1.0)).into(), u.cross(v).normalize_or_zero().into(), corner.into())
+        } else { projected_spatial_placement(comp, camera, projection, placement, model.bounds) };
         let centre = world_from_object.transform_point3((glam::Vec3::from(model.bounds.min) + glam::Vec3::from(model.bounds.max)) * 0.5);
         let clip = clip.map_or(re_renderer::ClipPlane::NONE, |c| c.world(centre, world_from_object));
         let alpha = (opacity.clamp(0.0, 1.0) * 255.0).round() as u8;
@@ -83,6 +94,7 @@ impl Compositor {
     pub(crate) fn model_draw_data(
         &mut self,
         model: &GpuModelData,
+        size: [f32; 2],
         placement: crate::doc::core::LayerPlacement,
         opacity: f32,
         comp: crate::doc::core::CompSpec,
@@ -91,7 +103,7 @@ impl Compositor {
         shading: &SurfaceShading,
         clip: Option<super::ClipSpec>,
     ) -> Result<MeshDrawData, CompositorError> {
-        let (instances, clip) = self.model_instances(model, placement, opacity, comp, camera, projection, shading, clip);
+        let (instances, clip) = self.model_instances(model, size, placement, opacity, comp, camera, projection, shading, clip);
         MeshDrawData::new_clipped(&self.ctx, &instances, clip)
             .map_err(|error| CompositorError::Draw(error.to_string()))
     }

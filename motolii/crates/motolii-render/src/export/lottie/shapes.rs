@@ -176,6 +176,9 @@ fn op_kind_to_json(kind: &OpKind) -> Option<serde_json::Value> {
             "a": static_scalar(*angle),
             "c": static_vec2([center.x, center.y]),
         }),
+        // Lottie に無い演算(AE の Wiggle、Cavalry の behaviour)。書き出しでは落ちる。
+        OpKind::Wiggle { .. } | OpKind::Smooth { .. } | OpKind::Subdivide { .. } | OpKind::Reverse
+        | OpKind::Extend { .. } | OpKind::Chop { .. } | OpKind::Resample { .. } | OpKind::Bend { .. } => return None,
     })
 }
 

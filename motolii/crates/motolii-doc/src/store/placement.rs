@@ -47,20 +47,16 @@ pub const SHAPES: &[&str] = &["Line", "Circle", "Grid"];
 pub const PICK_RANDOM: u8 = 0;
 pub const PICK_ITERATE: u8 = 1;
 pub const PICKS: &[&str] = &["Random", "Iterate"];
-/// グループに掛けた時、配置ごとに子を 1 つ引くか、グループ丸ごと増やすか。
-pub const SUBJECT_ONE: u8 = 0;
-pub const SUBJECT_WHOLE: u8 = 1;
-pub const SUBJECTS: &[&str] = &["One child", "Whole group"];
 /// 子ごとの重みの param 名。`share.<layer id>`。無ければ 100。
 pub const SHARE_PREFIX: &str = "share.";
 pub const SHARE_DEFAULT: f64 = 100.0;
 
 const fn number(name: &'static str, label: &'static str, section: &'static str, default: f64, range: Option<(f64, f64)>, modes: Option<&'static [u8]>) -> PlacementParam {
-    PlacementParam { name, label, section, kind: ParamKind::Number, default: [default, 0.0], range, modes }
+    PlacementParam { name, label, section, kind: ParamKind::Number, default: [default, 0.0], range, modes, sample: None }
 }
 
 const fn vec2(name: &'static str, label: &'static str, section: &'static str, default: [f64; 2], modes: Option<&'static [u8]>) -> PlacementParam {
-    PlacementParam { name, label, section, kind: ParamKind::Vec2, default, range: None, modes }
+    PlacementParam { name, label, section, kind: ParamKind::Vec2, default, range: None, modes, sample: None }
 }
 
 /// 欄は使う人が決める順: いくつ → どんな形 → 1 つずつどう変えるか → どう散らすか。
@@ -69,9 +65,8 @@ pub const KINDS: &[PlacementKind] = &[PlacementKind {
     label: "Repeater",
     params: &[
         number("count", "Count", "Shape", 3.0, Some((1.0, 1000.0)), None),
-        PlacementParam { name: "mode", label: "Along", section: "Shape", kind: ParamKind::Choice(SHAPES), default: [0.0, 0.0], range: Some((0.0, 2.0)), modes: None },
-        PlacementParam { name: "subject", label: "Copies", section: "Shape", kind: ParamKind::Choice(SUBJECTS), default: [0.0, 0.0], range: Some((0.0, 1.0)), modes: None },
-        PlacementParam { name: "pick", label: "Pick", section: "Shape", kind: ParamKind::Choice(PICKS), default: [0.0, 0.0], range: Some((0.0, 1.0)), modes: None },
+        PlacementParam { name: "mode", label: "Along", section: "Shape", kind: ParamKind::Choice(SHAPES), default: [0.0, 0.0], range: Some((0.0, 2.0)), modes: None, sample: None },
+        PlacementParam { name: "pick", label: "Pick", section: "Shape", kind: ParamKind::Choice(PICKS), default: [0.0, 0.0], range: Some((0.0, 1.0)), modes: None, sample: None },
         number("columns", "Columns", "Shape", 3.0, Some((1.0, 1000.0)), Some(&[GRID])),
         number("radius", "Radius", "Shape", 200.0, Some((0.0, f64::MAX)), Some(&[CIRCLE])),
         number("start_angle", "Start", "Shape", 0.0, None, Some(&[CIRCLE])),
@@ -202,10 +197,6 @@ pub fn placements(kind: &PlacementKind, params: &[(String, Value)]) -> Vec<Place
 }
 
 /// グループ丸ごと増やすか(true)、配置ごとに子を 1 つ引くか(false)。
-pub fn whole_group(params: &[(String, Value)]) -> bool {
-    params.iter().any(|(n, v)| n == "subject" && matches!(v, Value::F64(v) if v.round() as u8 == SUBJECT_WHOLE))
-}
-
 /// グループの子から、配置ごとに 1 つ引く。返すのは `children` の添字。
 /// Random は `share.<id>` の重みと種で、Iterate は順番に回す。重みが全部 0 なら順番。
 pub fn picks(params: &[(String, Value)], children: &[u64], count: usize) -> Vec<usize> {
@@ -244,7 +235,7 @@ pub fn picks(params: &[(String, Value)], children: &[u64], count: usize) -> Vec<
 }
 
 /// `[-1, 1]` の一様乱数。同じ (seed, index, channel) は同じ値。
-fn noise(seed: u64, index: u32, channel: u64) -> f64 {
+pub(crate) fn noise(seed: u64, index: u32, channel: u64) -> f64 {
     let mut z = seed
         .wrapping_mul(0x9E37_79B9_7F4A_7C15)
         .wrapping_add(u64::from(index).wrapping_mul(0xBF58_476D_1CE4_E5B9))

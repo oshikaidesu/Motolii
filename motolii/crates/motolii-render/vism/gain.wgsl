@@ -2,6 +2,7 @@
   "ID": "motolii.gain",
   "DESCRIPTION": "Linear RGB gain, preserving premultiplied alpha",
   "OUTPUT_FLOAT": true,
+  "THUMBNAIL": { "gain": 0.45, "SPLIT": true },
   "INPUTS": [
     { "NAME": "source", "TYPE": "image" },
     { "NAME": "gain", "TYPE": "float", "DEFAULT": 1.0, "MIN": 0.0, "MAX": 4.0 }

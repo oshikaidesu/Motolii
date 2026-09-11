@@ -172,6 +172,10 @@ pub struct LayerAttrs {
     /// 3D の網はこの画で照らされ、背景にこの画が敷かれる。重ね順で一番上の 1 枚だけ効く。
     #[serde(default)]
     pub environment: bool,
+    /// この層が光を遮る。光は環境(空の一番明るい方向)から来るものとして、影と、ガラスなら透過の色を
+    /// 表面を持つ全ての層へ落とす。光源は置かない — 作者は光を奪うだけ(裁定 2026-09-10)。
+    #[serde(default)]
+    pub blocks_light: bool,
     /// ゴースト: この層を遅れ(フレーム、負なら先)だけずらして見た姿。**実物は 1 つ、ゴーストも 1 つ**。
     /// 複製が要るなら Delay の効果(Repeater)。行は増えず、Timeline に薄い帯として見え、
     /// Stage では掴めない(裁定 2026-09-07)。
@@ -196,6 +200,7 @@ impl Default for LayerAttrs {
             frozen: false,
             flatten: false,
             environment: false,
+            blocks_light: false,
             ghost: None,
         }
     }
@@ -240,6 +245,7 @@ pub struct LayerAttrsPatch {
     pub label_color: Option<Option<u8>>,
     pub flatten: Option<bool>,
     pub environment: Option<bool>,
+    pub blocks_light: Option<bool>,
     pub ghost: Option<Option<i64>>,
 }
 
@@ -283,6 +289,9 @@ impl LayerAttrsPatch {
         }
         if let Some(v) = self.environment {
             current.environment = v;
+        }
+        if let Some(v) = self.blocks_light {
+            current.blocks_light = v;
         }
         if let Some(v) = self.ghost {
             current.ghost = v;

@@ -15,6 +15,27 @@ use super::isf::{IsfInputType, IsfManifest};
 use super::EffectScratch;
 
 /// 入力の並びから束縛番号を決める。image は texture と sampler の2つを使う。
+fn target_format(manifest: &IsfManifest, name: &str) -> wgpu::TextureFormat {
+    let pass = manifest.passes.iter().find(|p| p.target.as_deref() == Some(name));
+    match pass.map(|p| (p.float, p.channels)) {
+        Some((true, 1)) => wgpu::TextureFormat::R16Float,
+        Some((true, 2)) => wgpu::TextureFormat::Rg16Float,
+        Some((true, _)) => FLOAT_TARGET_FORMAT,
+        _ => crate::render::compositor::BLEND_TARGET_FORMAT,
+    }
+}
+
+pub(crate) fn pass_path(path: &std::path::Path, index: usize) -> std::path::PathBuf {
+    path.with_extension(format!("pass-{index}.wgsl"))
+}
+
+pub(crate) fn specialize_pass(source: &str, params: usize, index: usize) -> String {
+    source.replace(
+        &format!("@group(1) @binding({}) var<uniform> pass_index: f32;", pass_index_binding(params)),
+        &format!("const pass_index: f32 = {index}.0;"),
+    )
+}
+
 pub(crate) fn image_texture_binding(image_index_in_order: usize) -> u32 {
     (image_index_in_order * 2) as u32
 }
@@ -74,6 +95,25 @@ pub(crate) struct ShaderStageSource {
     pub(crate) entry_point: String,
 }
 
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct ImageFrame {
+    pub size: [f32; 2],
+    pub origin: [f32; 2],
+    pub pixels: [u32; 2],
+}
+
+impl ImageFrame {
+    pub fn density(self) -> [f32; 2] { std::array::from_fn(|i| self.pixels[i] as f32 / self.size[i].max(1.0)) }
+    pub fn padded(self, pixels: u32) -> Self {
+        let density = self.density();
+        Self {
+            size: std::array::from_fn(|i| self.size[i] + 2.0 * pixels as f32 / density[i]),
+            origin: std::array::from_fn(|i| self.origin[i] - pixels as f32 / density[i]),
+            pixels: self.pixels.map(|n| n + pixels * 2),
+        }
+    }
+}
+
 pub(crate) struct VismProgram {
     manifest: IsfManifest,
     /// パスごとに1本(出力の形式が違う)。`PASSES` が無ければ1本だけ。
@@ -103,30 +143,13 @@ impl VismProgram {
         // 読める image = 宣言された入力 + **中間ターゲット**(後続のパスが名前で読む)。
         let image_count = image_order.len() + manifest.target_slots().len();
 
-        let vertex_handle = ctx.gpu_resources.shader_modules.get_or_create(
-            ctx,
-            &ShaderModuleDesc {
-                label: format!("{label}-vertex").into(),
-                source: vertex.path,
-                extra_workaround_replacements: Vec::new(),
-            },
-        );
-        let fragment_handle = ctx.gpu_resources.shader_modules.get_or_create(
-            ctx,
-            &ShaderModuleDesc {
-                label: format!("{label}-fragment").into(),
-                source: fragment.path,
-                extra_workaround_replacements: Vec::new(),
-            },
-        );
-
         let mut texture_entries: Vec<wgpu::BindGroupLayoutEntry> =
             Vec::with_capacity(image_count * 2);
         for order_index in 0..image_count {
             let tex_binding = image_texture_binding(order_index);
             texture_entries.push(wgpu::BindGroupLayoutEntry {
                 binding: tex_binding,
-                visibility: wgpu::ShaderStages::FRAGMENT,
+                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
                 ty: wgpu::BindingType::Texture {
                     sample_type: wgpu::TextureSampleType::Float { filterable: true },
                     view_dimension: wgpu::TextureViewDimension::D2,
@@ -136,7 +159,7 @@ impl VismProgram {
             });
             texture_entries.push(wgpu::BindGroupLayoutEntry {
                 binding: tex_binding + 1,
-                visibility: wgpu::ShaderStages::FRAGMENT,
+                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
                 ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                 count: None,
             });
@@ -154,6 +177,7 @@ impl VismProgram {
         param_entries.push(uniform_entry(render_size_binding(param_order.len())));
         // PASSINDEX(ISF 仕様。何段目かをシェーダへ渡す)
         param_entries.push(uniform_entry(pass_index_binding(param_order.len())));
+        if manifest.stage == super::IsfStage::Warp { param_entries.push(uniform_entry(param_order.len() as u32 + 2)); }
         let params_layout = ctx.gpu_resources.bind_group_layouts.get_or_create(
             device,
             &BindGroupLayoutDesc {
@@ -178,8 +202,7 @@ impl VismProgram {
                 .iter()
                 .map(|pass| match pass.target.as_deref() {
                     None => output_format,
-                    Some(name) if manifest.target_is_float(name) => FLOAT_TARGET_FORMAT,
-                    Some(_) => crate::render::compositor::BLEND_TARGET_FORMAT,
+                    Some(name) => target_format(&manifest, name),
                 })
                 .collect()
         };
@@ -187,6 +210,13 @@ impl VismProgram {
             .iter()
             .enumerate()
             .map(|(index, format)| {
+                let module = |stage: &str, path: &std::path::PathBuf| ctx.gpu_resources.shader_modules.get_or_create(ctx, &ShaderModuleDesc {
+                    label: format!("{label}-{stage}-{index}").into(),
+                    source: if manifest.specialize_passes { pass_path(path, index) } else { path.clone() },
+                    extra_workaround_replacements: Vec::new(),
+                });
+                let vertex_handle = module("vertex", &vertex.path);
+                let fragment_handle = module("fragment", &fragment.path);
                 ctx.gpu_resources.render_pipelines.get_or_create(
                     ctx,
                     &RenderPipelineDesc {
@@ -217,8 +247,8 @@ impl VismProgram {
             address_mode_u: wgpu::AddressMode::ClampToEdge,
             address_mode_v: wgpu::AddressMode::ClampToEdge,
             address_mode_w: wgpu::AddressMode::ClampToEdge,
-            mag_filter: wgpu::FilterMode::Nearest,
-            min_filter: wgpu::FilterMode::Nearest,
+            mag_filter: if manifest.linear_sampling { wgpu::FilterMode::Linear } else { wgpu::FilterMode::Nearest },
+            min_filter: if manifest.linear_sampling { wgpu::FilterMode::Linear } else { wgpu::FilterMode::Nearest },
             mipmap_filter: wgpu::MipmapFilterMode::Nearest,
             ..Default::default()
         });
@@ -248,23 +278,25 @@ impl VismProgram {
         params: &[(String, f32)],
         render_size: [f32; 2],
     ) {
+        self.record_in_frame(ctx, encoder, scratch, sources, dst_view, params, ImageFrame { size: render_size, origin: [0.0;2], pixels: render_size.map(|n| n.max(1.0) as u32) });
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn record_in_frame(&self, ctx: &RenderContext, encoder: &mut wgpu::CommandEncoder, scratch: &mut EffectScratch, sources: &[&wgpu::TextureView], dst_view: &wgpu::TextureView, params: &[(String,f32)], frame: ImageFrame) {
         let device = &ctx.device;
         let queue = &ctx.queue;
-        let extent = [
-            render_size[0].max(1.0) as u32,
-            render_size[1].max(1.0) as u32,
-        ];
+        let extent = frame.pixels;
+        let render_size = frame.size;
 
         // 中間ターゲットを借りる(宣言順 = 後続パスが読む順)。
         let slots = self.manifest.target_slots();
         let mut targets: Vec<(wgpu::Texture, wgpu::TextureView, wgpu::TextureFormat)> = Vec::new();
         for name in &slots {
-            let format = if self.manifest.target_is_float(name) {
-                FLOAT_TARGET_FORMAT
-            } else {
-                crate::render::compositor::BLEND_TARGET_FORMAT
-            };
-            let texture = scratch.acquire(device, extent[0], extent[1], format);
+            let format = target_format(&self.manifest, name);
+            let declaration = self.manifest.passes.iter().find(|p| p.target.as_deref() == Some(name));
+            let width = declaration.and_then(|p| p.width).map_or(extent[0], |v| v.resolve(extent[0]));
+            let height = declaration.and_then(|p| p.height).map_or(extent[1], |v| v.resolve(extent[1]));
+            let texture = scratch.acquire(device, width, height, format);
             let view = texture.create_view(&Default::default());
             targets.push((texture, view, format));
         }
@@ -325,8 +357,9 @@ impl VismProgram {
                 queue,
                 params_layout,
                 params,
-                render_size,
+                self.manifest.passes.get(pass_index).map_or(render_size, |p| [p.width.map_or(render_size[0], |w| w.resolve(extent[0]) as f32), p.height.map_or(render_size[1], |h| h.resolve(extent[1]) as f32)]),
                 pass_index as u32,
+                frame.origin,
             );
             let writing = self
                 .manifest
@@ -364,11 +397,12 @@ impl VismProgram {
             pass.set_bind_group(0, &texture_bind, &[]);
             pass.set_bind_group(1, &params_bind, &[]);
             pass.draw(0..3, 0..1);
+            drop(pass);
         }
 
         // 記録し終えたので返す。次に借りた者のパスは、この後ろで実行される。
         for (texture, _, format) in targets {
-            scratch.release(extent[0], extent[1], format, texture);
+            scratch.release(texture.width(), texture.height(), format, texture);
         }
     }
 
@@ -380,6 +414,7 @@ impl VismProgram {
         params: &[(String, f32)],
         render_size: [f32; 2],
         pass_index: u32,
+        origin: [f32; 2],
     ) -> wgpu::BindGroup {
         let mut buffers: Vec<wgpu::Buffer> = Vec::with_capacity(self.param_order.len() + 2);
         for &index in &self.param_order {
@@ -410,6 +445,13 @@ impl VismProgram {
             "vism-pass-index",
             &(pass_index as f32).to_le_bytes(),
         ));
+
+        if self.manifest.stage == super::IsfStage::Warp {
+            let mut bytes = [0u8; 8];
+            bytes[..4].copy_from_slice(&origin[0].to_le_bytes());
+            bytes[4..].copy_from_slice(&origin[1].to_le_bytes());
+            buffers.push(uniform_buffer(device, queue, "vism-material-origin", &bytes));
+        }
 
         let entries: Vec<wgpu::BindGroupEntry> = buffers
             .iter()
@@ -446,7 +488,7 @@ fn uniform_buffer(
 fn uniform_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {
     wgpu::BindGroupLayoutEntry {
         binding,
-        visibility: wgpu::ShaderStages::FRAGMENT,
+        visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
         ty: wgpu::BindingType::Buffer {
             ty: wgpu::BufferBindingType::Uniform,
             has_dynamic_offset: false,

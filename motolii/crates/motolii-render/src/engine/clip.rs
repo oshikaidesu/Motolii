@@ -42,6 +42,8 @@ impl Engine {
             shading: Default::default(),
             displace: Default::default(),
             clip: None,
+            blocks_light: base.layer.blocks_light,
+            outline: base.layer.outline,
         };
         let bake = |engine: &mut Self, layer: Layer, passes: &[EffectPass]| {
             let (texture, _view) = engine.compositor.render_to_texture(

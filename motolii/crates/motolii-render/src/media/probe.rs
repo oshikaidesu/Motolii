@@ -418,12 +418,10 @@ fn map_color_space(
         Some("smpte170m") | Some("bt470bg") => Ok(ColorSpace::Rec601Limited),
         Some("bt709") if full => Ok(ColorSpace::Rec709Full),
         Some("bt709") => Ok(ColorSpace::Rec709Limited),
-        Some("bt2020nc") | Some("bt2020c") | Some("bt2020") => Err(
-            "BT.2020/HDR color space is not supported in v1; \
-             re-encode to BT.709 (SDR) first, e.g. \
-             ffmpeg -i input.mp4 -vf zscale=transfer=linear,format=gbrpf32le,zscale=primaries=709,transfer=709,matrix=709,format=yuv420p -c:v libx264 output.mp4"
-                .to_string(),
-        ),
+        // HDR(bt2020)も第一線(裁定 2026-09-10): 断らず bt709 の行列で見せる。彩度が少し違い、
+        // HLG/PQ のトーンは写らないが、絵は出る。正しいトーンマップは後の段。
+        Some("bt2020nc") | Some("bt2020c") | Some("bt2020") if full => Ok(ColorSpace::Rec709Full),
+        Some("bt2020nc") | Some("bt2020c") | Some("bt2020") => Ok(ColorSpace::Rec709Limited),
         Some(tag) => Err(format!(
             "unsupported color_space tag '{tag}'; \
              re-encode to BT.709 (SDR) or BT.601 limited first"

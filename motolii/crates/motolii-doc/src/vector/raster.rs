@@ -96,6 +96,8 @@ fn gradient_shader(g: &Gradient, origin: Point, alpha: f64) -> Option<Shader<'st
             SpreadMode::Pad,
             Transform::identity(),
         ),
+        // The fill path paints these through a mask; a stroke in them has no tiny-skia form.
+        GradientType::Angular | GradientType::Diamond => return None,
         GradientType::Radial => {
             let radius = g.end.sub(g.start).length() as f32;
             RadialGradient::new(
@@ -166,8 +168,17 @@ pub(crate) fn draw(
         return;
     };
     if let Some(f) = fill.filter(|f| !f.hidden) {
-        let paint = paint_for(&f.brush, origin, f.opacity * weight);
-        pixmap.fill_path(&ts_path, &paint, f.rule.into(), Transform::identity(), None);
+        match &f.brush {
+            // tiny-skia has no sweep or diamond shader: cover the path with a mask and
+            // colour each pixel from the same parameter the GPU path uses.
+            Brush::Gradient(g) if matches!(g.kind, GradientType::Angular | GradientType::Diamond) => {
+                fill_by_parameter(pixmap, &ts_path, f.rule.into(), g, origin, f.opacity * weight);
+            }
+            _ => {
+                let paint = paint_for(&f.brush, origin, f.opacity * weight);
+                pixmap.fill_path(&ts_path, &paint, f.rule.into(), Transform::identity(), None);
+            }
+        }
     }
     if let Some(s) = stroke.filter(|s| !s.hidden && s.width > 0.0) {
         let paint = paint_for(&s.brush, origin, s.opacity * weight);
@@ -184,6 +195,26 @@ pub(crate) fn draw(
             }),
         };
         pixmap.stroke_path(&ts_path, &paint, &ts_stroke, Transform::identity(), None);
+    }
+}
+
+fn fill_by_parameter(pixmap: &mut Pixmap, path: &tiny_skia::Path, rule: TsFillRule, g: &Gradient, origin: Point, alpha: f64) {
+    let (w, h) = (pixmap.width(), pixmap.height());
+    let Some(mut mask) = tiny_skia::Mask::new(w, h) else { return };
+    mask.fill_path(path, rule, true, Transform::identity());
+    let coverage = mask.data();
+    let alpha = clamp01(alpha);
+    for (i, px) in pixmap.pixels_mut().iter_mut().enumerate() {
+        let cover = f64::from(coverage[i]) / 255.0 * alpha;
+        if cover <= 0.0 { continue; }
+        let (x, y) = ((i as u32 % w) as f64 + 0.5 - origin.x, (i as u32 / w) as f64 + 0.5 - origin.y);
+        let c = g.color_at(g.parameter(Point { x, y }));
+        let src = [clamp01(c.r) * cover, clamp01(c.g) * cover, clamp01(c.b) * cover, cover];
+        let dst = px.demultiply();
+        let da = f64::from(dst.alpha()) / 255.0;
+        let blend = |s: f64, d: u8| ((s + f64::from(d) / 255.0 * da * (1.0 - cover)) * 255.0).round().clamp(0.0, 255.0) as u8;
+        let out_a = ((cover + da * (1.0 - cover)) * 255.0).round().clamp(0.0, 255.0) as u8;
+        if let Some(p) = tiny_skia::PremultipliedColorU8::from_rgba(blend(src[0], dst.red()), blend(src[1], dst.green()), blend(src[2], dst.blue()), out_a) { *px = p; }
     }
 }
 

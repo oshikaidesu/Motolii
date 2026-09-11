@@ -4,8 +4,9 @@ use crate::doc::store::{
 use crate::doc::vector::text::{
     shape_text, shape_rich_text, StyledText, GlyphFont, TextFeature, TextJustify, TextLayout, TextShapeError,
 };
+use crate::doc::store::ShapeNode;
 use crate::doc::vector::{
-    Brush, Canvas, Fill, FillRule, PathSource, Raster, Rgb, Shape, Stroke, VectorError,
+    Brush, Canvas, Fill, FillRule, PathSource, Rgb, Shape, Stroke, VectorError,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -77,11 +78,12 @@ fn to_fill_stroke(style: &TextDocumentStyle) -> (Option<Fill>, Option<Stroke>) {
     (fill, stroke)
 }
 
-pub fn rasterize_text_document(
+/// 文字を形の木に組む(描くのは形の層と同じ paths renderer)。
+pub fn text_shapes(
     document: &TextDocument,
     t: RationalTime,
     canvas: &Canvas,
-) -> Result<Option<Raster>, TextRenderError> {
+) -> Result<Option<Vec<ShapeNode>>, TextRenderError> {
     let Some(style) = document.styles.first() else {
         return Ok(None);
     };
@@ -123,61 +125,29 @@ pub fn rasterize_text_document(
         }
     }
 
-    let mut result = Raster { width: canvas.width, height: canvas.height,
-        premultiplied_rgba8: vec![0; canvas.width as usize * canvas.height as usize * 4] };
     let mut batches: Vec<(usize, Vec<crate::doc::vector::Contour>)> = Vec::new();
     for (contour, index) in shaped.contours.into_iter().zip(shaped.contour_styles) {
         if let Some((_,contours)) = batches.last_mut().filter(|(i,_)|*i==index) { contours.push(contour); }
         else { batches.push((index,vec![contour])); }
     }
+    let mut result = Vec::new();
     for (index, contours) in batches {
-        let raster = paint_contours(contours, &document.styles[index], canvas)?;
-        composite_over(&mut result, &raster);
+        result.extend(paint_contours(contours, &document.styles[index]));
     }
     Ok(Some(result))
 }
 
-fn paint_contours(contours: Vec<crate::doc::vector::Contour>, style: &TextDocumentStyle, canvas: &Canvas) -> Result<Raster,TextRenderError> {
+fn paint_contours(contours: Vec<crate::doc::vector::Contour>, style: &TextDocumentStyle) -> Vec<ShapeNode> {
     let (fill, stroke) = to_fill_stroke(style);
+    let leaf = |source, fill, stroke| ShapeNode::Leaf(Shape { source, ops: Vec::new(), fill, stroke });
     // 縁取りは既定で fill の**下**(stroke_over_fill が false)。輪郭中心の stroke は外側半分しか
-    // 見えないので幅を 2 倍にし、先に焼いてから fill を上に重ねる — 字が痩せない。
+    // 見えないので幅を 2 倍にし、先に置いてから fill を上に重ねる — 字が痩せない。
     if let (Some(stroke), false) = (stroke.clone(), style.stroke_over_fill) {
-        let under = Shape {
-            source: PathSource::Bezier(contours.clone()),
-            ops: Vec::new(),
-            fill: None,
-            stroke: Some(Stroke { width: stroke.width * 2.0, ..stroke }),
-        };
-        let over = Shape {
-            source: PathSource::Bezier(contours),
-            ops: Vec::new(),
-            fill,
-            stroke: None,
-        };
-        let mut base = crate::doc::vector::render(&under, canvas)?;
-        let top = crate::doc::vector::render(&over, canvas)?;
-        composite_over(&mut base, &top);
-        return Ok(base);
+        return vec![
+            leaf(PathSource::Bezier(contours.clone()), None, Some(Stroke { width: stroke.width * 2.0, ..stroke })),
+            leaf(PathSource::Bezier(contours), fill, None),
+        ];
     }
-    let shape = Shape {
-        source: PathSource::Bezier(contours),
-        ops: Vec::new(),
-        fill,
-        stroke,
-    };
-    Ok(crate::doc::vector::render(&shape, canvas)?)
+    vec![leaf(PathSource::Bezier(contours), fill, stroke)]
 }
 
-/// 乗算済み RGBA の `top` を `base` の上に重ねる(out = top + base × (1 − top.a))。
-fn composite_over(base: &mut Raster, top: &Raster) {
-    for (b, t) in base.premultiplied_rgba8.chunks_exact_mut(4).zip(top.premultiplied_rgba8.chunks_exact(4)) {
-        let ta = t[3] as u32;
-        if ta == 0 {
-            continue;
-        }
-        let keep = 255 - ta;
-        for i in 0..4 {
-            b[i] = (t[i] as u32 + b[i] as u32 * keep / 255).min(255) as u8;
-        }
-    }
-}

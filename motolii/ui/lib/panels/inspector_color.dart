@@ -86,3 +86,78 @@ class EditorColorRow extends StatelessWidget {
     );
   }
 }
+
+/// A gradient fill as one row: its picture is the swatch, its kind the word.
+/// Pressing it makes the fill the Colors panel's target, where stops and
+/// direction are edited.
+class EditorGradientRow extends StatelessWidget {
+  const EditorGradientRow({
+    required this.controller,
+    required this.layer,
+    required this.fill,
+  });
+  final EditorSession controller;
+  final Map<String, dynamic> layer, fill;
+  @override
+  Widget build(BuildContext context) {
+    final kind = '${fill['kind'] ?? 'linear'}';
+    final stops = panelRows(fill['stops']);
+    return Row(
+      children: [
+        const SizedBox(
+          width: EditorMetrics.s48,
+          child: Text(
+            'Fill',
+            style: TextStyle(
+              fontSize: EditorMetrics.micro,
+              color: EditorTheme.muted,
+            ),
+          ),
+        ),
+        EditorTooltip(
+          message: 'Edit fill',
+          child: InkWell(
+            onTap:
+                layer['locked'] == true || !panelCan(controller, 'focusColor')
+                ? null
+                : () async {
+                    await controller.command('focusColor', {
+                      'layer': layer['id'],
+                      'slot': fill['slot'],
+                    });
+                    controller.browserTab.value = 'Colors';
+                    await controller.placePanel('Colors', 'show');
+                  },
+            child: Container(
+              width: EditorMetrics.s70,
+              height: EditorMetrics.control,
+              decoration: BoxDecoration(
+                border: Border.all(color: EditorTheme.border),
+              ),
+              child: NativeVisualSample(
+                controller: controller,
+                request: {
+                  'kind': 'gradient',
+                  'type': kind,
+                  'stops': stops,
+                  'angle': fill['angle'] ?? 0,
+                },
+                fit: BoxFit.fill,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: EditorMetrics.s6),
+        Expanded(
+          child: Text(
+            '${kind[0].toUpperCase()}${kind.substring(1)} · ${stops.length} stops',
+            style: const TextStyle(
+              fontSize: EditorMetrics.dense,
+              color: EditorTheme.muted,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}

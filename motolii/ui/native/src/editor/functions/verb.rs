@@ -91,9 +91,13 @@ pub(crate) fn effect_batch_intents(
         let instance = EffectInstance { id: EffectId(next_id), plugin_id: plugin_id.clone() };
         // 普通の効果は素材側(配置効果の上)へ。配置効果より下は「増えた後の全体に 1 回」の
         // 特別な置き方なので、自分で動かした時だけそこへ行く。配置効果同士は末尾(掛け算)。
-        let above_placement = (placement::kind(plugin_id).is_none())
-            .then(|| effects.iter().position(|e| placement::kind(&e.plugin_id).is_some()))
-            .flatten();
+        let catalog = crate::render::engine::known_effects();
+        let stage = |id: &str| catalog.iter().find(|d| d.plugin_id == id).map(|d| d.stage);
+        let above_placement = if stage(plugin_id) == Some(crate::render::compositor::EffectStage::Warp) {
+            effects.iter().position(|e| matches!(stage(&e.plugin_id), Some(crate::render::compositor::EffectStage::Field | crate::render::compositor::EffectStage::Surface | crate::render::compositor::EffectStage::Placement)))
+        } else {
+            (placement::kind(plugin_id).is_none()).then(|| effects.iter().position(|e| placement::kind(&e.plugin_id).is_some())).flatten()
+        };
         match above_placement {
             Some(index) => effects.insert(index, instance),
             None => effects.push(instance),

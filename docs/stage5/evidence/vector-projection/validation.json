@@ -1,0 +1,16 @@
+{
+  "date": "2026-09-11",
+  "status": "passed",
+  "rerun_revision": "006ce3dd930bb72a335954634990b52607fd85ca",
+  "render_tests": {
+    "passed": 86,
+    "ignored": 8
+  },
+  "native_tests": {
+    "passed": 68,
+    "ignored": 4
+  },
+  "native_build": "passed",
+  "actual_window": "magnified tilted text contour inspected; frame 96 and Torus selection restored",
+  "saved_document_sha256": "9728895e21f4ef005b6081de554897b22b86e84839654e73b593ac447400eed6"
+}

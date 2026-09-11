@@ -656,6 +656,14 @@ impl<'a> StoreView<'a> {
         serde_json::from_str(&json.0).map_err(StoreError::Encode)
     }
 
+    /// 時刻 t の形: 書類の形に `shape.*` の property を重ねた姿。描画・枠・出力はこれを読む。
+    pub fn shapes_at(&self, layer: LayerId, t: RationalTime) -> Result<Vec<ShapeNode>, StoreError> {
+        let shapes = self.shapes(layer)?;
+        if shapes.is_empty() { return Ok(shapes); }
+        let get = |name: &str| PropertyId::new(name).ok().and_then(|p| self.value_at(layer, &p, t).ok().flatten());
+        Ok(crate::doc::store::shape_props::apply(&shapes, &get))
+    }
+
     pub fn shapes(&self, layer: LayerId) -> Result<Vec<ShapeNode>, StoreError> {
         if !self.ignore_transients {
             for edit in self.preview_edits.iter().rev() {

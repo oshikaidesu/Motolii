@@ -99,7 +99,8 @@ pub(crate) fn trim_multiple_to_int(t: TrimMultiple) -> i64 {
 
 pub(crate) fn gradient_type_to_int(t: GradientType) -> i64 {
     match t {
-        GradientType::Linear => 1,
+        // Lottie knows two kinds. Angular and diamond keep their axis and go out as linear.
+        GradientType::Linear | GradientType::Angular | GradientType::Diamond => 1,
         GradientType::Radial => 2,
     }
 }

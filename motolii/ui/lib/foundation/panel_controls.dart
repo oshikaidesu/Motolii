@@ -1,6 +1,9 @@
+import 'dart:async';
+import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui' show ViewFocusEvent, ViewFocusState;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -88,9 +91,11 @@ class EditorChoice<T> extends StatelessWidget {
         .firstOrNull;
     return MenuAnchor(
       crossAxisUnconstrained: false,
+      style: EditorTheme.menuSheet,
       menuChildren: [
         for (final e in choices)
           MenuItemButton(
+            style: EditorTheme.menuRow,
             onPressed: enabled ? () => onChanged!(e.key) : null,
             child: Text(e.value, maxLines: 1, overflow: TextOverflow.ellipsis),
           ),
@@ -396,7 +401,75 @@ class _EditorNumericFieldState extends State<EditorNumericField> {
     _start = widget.value;
     _startGlobalX = event.position.dx;
     _startGlobalY = event.position.dy;
+    // A press lands on a two-finger scrub still settling: the press takes
+    // the session over, and the release will finish it.
+    if (_dragging) {
+      _settle?.cancel();
+      _settle = null;
+      _rungBase = _shown ?? widget.value;
+      _rungStartX = event.position.dx;
+    }
     _idle.requestFocus();
+  }
+
+  /// The wheel: with the left button held, each notch steps the value by
+  /// one unit (Shift ×10) — the mouse's way. A horizontal scroll needs no
+  /// button and moves the value as a drag would — the trackpad's two-finger
+  /// way — and finishes once the fingers rest. On macOS the trackpad's
+  /// two fingers arrive as a pan gesture, not a scroll signal; a horizontal
+  /// drag recognizer meets the surrounding list's vertical one in the arena,
+  /// so sideways is the number's and up-and-down stays the list's.
+  Timer? _settle;
+  void _panUpdate(DragUpdateDetails details) {
+    File('/tmp/motolii-diag.log').writeAsStringSync('${DateTime.now().toIso8601String()} panUpdate dx=${details.delta.dx} dragging=$_dragging pointer=$_pointer ending=$_ending\n', mode: FileMode.append); // DIAG(temp)
+    if (!widget.enabled || _editing || _ending || _pointer != null) return;
+    final by = HardwareKeyboard.instance.isShiftPressed ? 10 : 1;
+    // The pan is reported as the content's motion (natural scrolling), the
+    // mirror of the fingers; fingers moving right raise the number.
+    _nudge(
+      -details.delta.dx * widget.speed * _rung * by,
+      details.globalPosition.dx,
+      settle: false,
+    );
+  }
+
+  void _panEnd() {
+    File('/tmp/motolii-diag.log').writeAsStringSync('${DateTime.now().toIso8601String()} panEnd dragging=$_dragging pointer=$_pointer\n', mode: FileMode.append); // DIAG(temp)
+    if (_pointer == null) _end(false);
+  }
+
+  void _pointerSignal(PointerSignalEvent event) {
+    File('/tmp/motolii-diag.log').writeAsStringSync('${DateTime.now().toIso8601String()} signal ${event.runtimeType} ${event is PointerScrollEvent ? event.scrollDelta : ''} kind=${event.kind}\n', mode: FileMode.append); // DIAG(temp)
+    if (event is! PointerScrollEvent) return;
+    if (!widget.enabled || _editing || _ending) return;
+    final held = _pointer != null;
+    final delta = event.scrollDelta;
+    final horizontal = delta.dx.abs() > delta.dy.abs();
+    if (!held && !horizontal) return;
+    GestureBinding.instance.pointerSignalResolver.register(event, (_) {
+      final by = HardwareKeyboard.instance.isShiftPressed ? 10 : 1;
+      final step = horizontal
+          ? delta.dx * widget.speed * _rung * by
+          : -delta.dy.sign * widget.speed * _rung * by;
+      _nudge(step, event.position.dx, settle: !held);
+    });
+  }
+
+  void _nudge(double step, double x, {required bool settle}) {
+    if (!_dragging) {
+      widget.onBegin?.call();
+      _rung = 1;
+      setState(() => _dragging = true);
+    }
+    final n = _bounded((_shown ?? widget.value) + step);
+    _rungBase = n;
+    _rungStartX = x;
+    setState(() => _shown = n);
+    _tick(n);
+    _settle?.cancel();
+    _settle = settle
+        ? Timer(const Duration(milliseconds: 300), () => _end(false))
+        : null;
   }
 
   /// The drag's precision, picked by how far the pointer has moved up or
@@ -447,6 +520,8 @@ class _EditorNumericFieldState extends State<EditorNumericField> {
 
   Future<void> _end(bool cancel) async {
     if (!_dragging) return;
+    _settle?.cancel();
+    _settle = null;
     _pointer = null;
     setState(() => _dragging = false);
     _ending = true;
@@ -460,6 +535,7 @@ class _EditorNumericFieldState extends State<EditorNumericField> {
 
   @override
   void dispose() {
+    _settle?.cancel();
     if (_dragging) {
       _queue.finish(true, widget.onCancel);
     }
@@ -534,103 +610,112 @@ class _EditorNumericFieldState extends State<EditorNumericField> {
                 : SystemMouseCursors.basic,
             child: GestureDetector(
               onDoubleTap: _open,
-              child: Listener(
-                behavior: HitTestBehavior.opaque,
-                onPointerDown: _pointerDown,
-                onPointerMove: _pointerMove,
-                onPointerUp: _pointerUp,
-                onPointerCancel: (event) => _pointerUp(event, cancel: true),
-                child: EditorTooltip(
-                  message: _dragging && _rung != 1
-                      ? '${widget.label} ×$_rung'
-                      : widget.label,
-                  child: Container(
-                    height: EditorMetrics.row,
-                    decoration: BoxDecoration(
-                      color: _dragging ? EditorTheme.hover : EditorTheme.app,
-                      border: Border.all(color: EditorTheme.line),
-                    ),
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        if (widget.fill &&
-                            widget.min != null &&
-                            widget.max != null)
-                          CustomPaint(
-                            painter: _TrackPainter(
-                              value: _shown ?? widget.value,
-                              min: widget.min!,
-                              max: widget.max!,
-                              rest: widget.defaultValue,
-                              tint: widget.tint ?? EditorTheme.raised,
-                              style: widget.track,
-                            ),
-                          ),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: EditorMetrics.s2,
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.end,
-                            children: [
-                              Flexible(
-                                child: Text(
-                                  widget.mixed && _shown == null
-                                      ? '—'
-                                      : (_shown ?? widget.value)
-                                            .toStringAsFixed(widget.decimals),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.clip,
-                                  style: TextStyle(
-                                    fontSize: EditorMetrics.font,
-                                    fontFeatures: const [
-                                      FontFeature.tabularFigures(),
-                                    ],
-                                    // Resting at its default the number is
-                                    // quiet; moved, it is ink.
-                                    color: !widget.enabled
-                                        ? EditorTheme.muted
-                                        : widget.defaultValue != null &&
-                                              (widget.value -
-                                                          widget.defaultValue!)
-                                                      .abs() <
-                                                  .0005
-                                        ? EditorTheme.tab
-                                        : EditorTheme.ink,
-                                    // A number you can drag wears a dotted
-                                    // underline, unless a track already says
-                                    // so; a read-only one never does.
-                                    decoration:
-                                        widget.enabled &&
-                                            !(widget.fill &&
-                                                widget.min != null &&
-                                                widget.max != null)
-                                        ? TextDecoration.underline
-                                        : TextDecoration.none,
-                                    decorationStyle: TextDecorationStyle.dotted,
-                                    decorationColor: EditorTheme.muted,
-                                  ),
-                                ),
+              child: GestureDetector(
+                supportedDevices: const {PointerDeviceKind.trackpad},
+                onHorizontalDragUpdate: _panUpdate,
+                onHorizontalDragEnd: (_) => _panEnd(),
+                onHorizontalDragCancel: _panEnd,
+                child: Listener(
+                  behavior: HitTestBehavior.opaque,
+                  onPointerDown: _pointerDown,
+                  onPointerMove: _pointerMove,
+                  onPointerUp: _pointerUp,
+                  onPointerCancel: (event) => _pointerUp(event, cancel: true),
+                  onPointerSignal: _pointerSignal,
+                  child: EditorTooltip(
+                    message: _dragging && _rung != 1
+                        ? '${widget.label} ×$_rung'
+                        : widget.label,
+                    child: Container(
+                      height: EditorMetrics.row,
+                      decoration: BoxDecoration(
+                        color: _dragging ? EditorTheme.hover : EditorTheme.app,
+                        border: Border.all(color: EditorTheme.line),
+                      ),
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          if (widget.fill &&
+                              widget.min != null &&
+                              widget.max != null)
+                            CustomPaint(
+                              painter: _TrackPainter(
+                                value: _shown ?? widget.value,
+                                min: widget.min!,
+                                max: widget.max!,
+                                rest: widget.defaultValue,
+                                tint: widget.tint ?? EditorTheme.raised,
+                                style: widget.track,
                               ),
-                              // The rider keeps its slot even when empty, so
-                              // digits line up down a column of wells.
-                              if (widget.unit != null) ...[
-                                const SizedBox(width: EditorMetrics.s2),
-                                SizedBox(
-                                  width: EditorMetrics.s12,
+                            ),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: EditorMetrics.s2,
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                Flexible(
                                   child: Text(
-                                    widget.unit!,
-                                    style: const TextStyle(
-                                      fontSize: EditorMetrics.micro,
-                                      color: EditorTheme.muted,
+                                    widget.mixed && _shown == null
+                                        ? '—'
+                                        : (_shown ?? widget.value)
+                                              .toStringAsFixed(widget.decimals),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.clip,
+                                    style: TextStyle(
+                                      fontSize: EditorMetrics.font,
+                                      fontFeatures: const [
+                                        FontFeature.tabularFigures(),
+                                      ],
+                                      // Resting at its default the number is
+                                      // quiet; moved, it is ink.
+                                      color: !widget.enabled
+                                          ? EditorTheme.muted
+                                          : widget.defaultValue != null &&
+                                                (widget.value -
+                                                            widget
+                                                                .defaultValue!)
+                                                        .abs() <
+                                                    .0005
+                                          ? EditorTheme.tab
+                                          : EditorTheme.ink,
+                                      // A number you can drag wears a dotted
+                                      // underline, unless a track already says
+                                      // so; a read-only one never does.
+                                      decoration:
+                                          widget.enabled &&
+                                              !(widget.fill &&
+                                                  widget.min != null &&
+                                                  widget.max != null)
+                                          ? TextDecoration.underline
+                                          : TextDecoration.none,
+                                      decorationStyle:
+                                          TextDecorationStyle.dotted,
+                                      decorationColor: EditorTheme.muted,
                                     ),
                                   ),
                                 ),
+                                // The rider keeps its slot even when empty, so
+                                // digits line up down a column of wells.
+                                if (widget.unit != null) ...[
+                                  const SizedBox(width: EditorMetrics.s2),
+                                  SizedBox(
+                                    width: EditorMetrics.s12,
+                                    child: Text(
+                                      widget.unit!,
+                                      style: const TextStyle(
+                                        fontSize: EditorMetrics.micro,
+                                        color: EditorTheme.muted,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ],
-                            ],
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),

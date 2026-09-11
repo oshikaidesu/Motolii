@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
@@ -61,7 +62,7 @@ class EditorSession {
   /// of anything touched later at another frame. Settings can turn it off.
   bool get animateFrom => deskWork.value['animateFrom'] != false;
 
-  /// Settings: the projection flat material is born with. 2.5D faces the
+  /// Settings: the projection new material is born with. 2.5D faces the
   /// camera wherever it sits; 3D stands in the world and turns with it.
   String get flatProjection =>
       deskWork.value['flatProjection'] == '3D' ? '3D' : '2.5D';
@@ -506,6 +507,11 @@ class EditorSession {
       if (requiresPause && playing.value)
         throw StateError('Playback did not stop before $op');
       final response = map(await _request(operation, args));
+      // DIAG(temp)
+      File('/tmp/motolii-diag.log').writeAsStringSync(
+        '${DateTime.now().toIso8601String()} $op $args -> err=${map(response['status'])['error'] ?? response['error']} rev=${map(response['status'])['contentRevision'] ?? response['contentRevision']}\n',
+        mode: FileMode.append,
+      );
       final needsRender =
           response['needsRender'] as bool? ?? operation.requiresRender;
       // 状態を持たない返信は 2 つだけ — 繰り延べた {"needsRender":true} と

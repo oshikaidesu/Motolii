@@ -736,3 +736,11 @@ text	text-value-run	text	Text	不採用	本文をランごとに切り刻んで�
 text	text-value-run	fieldHeight	Field Height	不採用	インスペクタの欄の高さ。`runtime: false`			rive
 text	text-variation-modifier	axisTag	Axis Tag	採用済	アニメーター側の軸タグ。スパン側の軸値とは層が違い二重帳簿ではない	pub struct TextVariationAxis	text	rive
 text	text-variation-modifier	axisValue	Axis Value	採用済	軸のΔ値。**裁定76 の3層のうち「再シェープする層」の唯一の住人**	pub fn text_range_variation_axis	text	rive
+shapes	wiggle-paths	—	Wiggle Paths	該当なし	Lottie 外(AE の Wiggle Paths、Illustrator の Roughen)。Path 家族の札 motolii.wiggle_paths。書き出しでは落ちる	fn wiggle	shape-4	ae
+shapes	smooth	—	Smooth	該当なし	Lottie 外(Cavalry の Path Relax)。motolii.smooth	fn smooth	shape-4	cavalry
+shapes	subdivide	—	Subdivide	該当なし	Lottie 外(Cavalry の Add Divisions)。motolii.subdivide	fn subdivide	shape-4	cavalry
+shapes	reverse-path	—	Reverse Path	該当なし	Lottie 外(Cavalry の Reverse Path)。motolii.reverse_path	fn reverse	shape-4	cavalry
+shapes	extend-paths	—	Extend Paths	該当なし	Lottie 外(Cavalry の Extend Open Paths)。motolii.extend_paths	fn extend	shape-4	cavalry
+shapes	chop-path	—	Chop Path	該当なし	Lottie 外(Cavalry の Chop Path)。motolii.chop_path	fn chop	shape-4	cavalry
+shapes	resample-path	—	Resample	該当なし	Lottie 外(Cavalry の Resample Path)。motolii.resample_path	fn resample	shape-4	cavalry
+shapes	bend	—	Bend	該当なし	Lottie 外(Cavalry の Bend Deformer)。motolii.bend	fn bend	shape-4	cavalry

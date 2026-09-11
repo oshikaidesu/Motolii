@@ -36,6 +36,22 @@ fn main() {
         ));
     }
     inventory.push_str("];\n");
+    // 作者の札の絵(manifest の `THUMBNAIL` が名指す png)は shader と同じ dir に置く。
+    let mut pictures: Vec<_> = std::fs::read_dir(&vism_dir)
+        .expect("vism directory")
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| path.extension().and_then(|ext| ext.to_str()) == Some("png"))
+        .collect();
+    pictures.sort();
+    inventory.push_str("pub(crate) const VISM_PICTURES: &[EmbeddedVismPicture] = &[\n");
+    for path in pictures {
+        let file = path.file_name().and_then(|file| file.to_str()).expect("picture file");
+        inventory.push_str(&format!(
+            "    EmbeddedVismPicture {{ file: {file:?}, bytes: include_bytes!(concat!(env!(\"CARGO_MANIFEST_DIR\"), \"/vism/{file}\")) }},\n"
+        ));
+    }
+    inventory.push_str("];\n");
     let out_dir = std::path::PathBuf::from(std::env::var("OUT_DIR").expect("out dir"));
     std::fs::write(out_dir.join("vism_inventory.rs"), inventory).expect("write vism inventory");
 

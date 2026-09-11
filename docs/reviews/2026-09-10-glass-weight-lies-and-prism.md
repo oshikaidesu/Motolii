@@ -12,7 +12,17 @@
 | 静止・cache なし | 24.5 ms | 5.2 | 0.8 | 17.8 | 9.7 | 0.5 | 12 面 | 4 | 2 |
 | 動く(受け手を回す) | 22.5 ms | 5.4 | 0.7 | 16.2 | 8.3 | 0.5 | 12 面 | 4 | 2 |
 
-生データ: [reflection.json](assets/2026-09-10-glass-weight/reflection.json)。9/9 の[経路分離計測](2026-09-09-frame-pipeline-measurements.md)(Glass 3 枚を外すと native render 16.7→13.7 ms)と矛盾しない。
+生データ: [reflection.json](assets/2026-09-10-glass-weight/reflection.json)。
+
+同日、下の「嘘 3」(backdrop の mip を粗さが読む段まで)を入れた後の同じ計測([reflection-after-mip-limit.json](assets/2026-09-10-glass-weight/reflection-after-mip-limit.json))。この作品の Glass は粗さ 0.05 なので 11 段が 2 段になる。出力 PNG は変更前と 1,600,000 画素中 11 byte が ±1 違うだけ(法線行列を shader で出すようにした丸め)。
+
+| 条件 | 合計 | CPU 準備 | 完了待ち | GPU |
+|---|---:|---:|---:|---:|
+| 静止・反射 cache あり | 14.0 ms(−2.7) | 1.7 | 11.4 | 0.5 |
+| 静止・cache なし | 21.5 ms(−3.0) | 4.2 | 16.3 | 5.1 |
+| 動く | 21.8 ms(−0.7) | 4.4 | 16.4 | 5.5 |
+
+GPU の値は最終 submission の timestamp で、mip の pass が減った分そのまま落ちている。完了待ちの空白(GPU 実行との差 ≈ 8〜11 ms)は残ったまま。9/9 の[経路分離計測](2026-09-09-frame-pipeline-measurements.md)(Glass 3 枚を外すと native render 16.7→13.7 ms)と矛盾しない。
 
 重い順:
 
@@ -40,6 +50,20 @@
 | footprint による AA は切ってある | fork `FILTER_SURFACE_FOOTPRINT = false`、[表面 AA](2026-09-09-surface-antialiasing.md) | 細かい背景は屈折でちらつく |
 | 分散(色ずれ)は既定 0 | `vism/glass.wgsl` Dispersion | 既定は無分散。下の欄で入れる |
 
+### 同日に入れたスマホ流の嘘(利用者「おk」で 3 → 2 → 1 の順)
+
+- **3 backdrop の mip は粗さが読む段まで**(Unity URP の opaque texture の型)。manifest に `BACKDROP_BLUR: roughness`、render が run 内の最大粗さから fork の `backdrop_levels_read`(shader の lod 式の鏡)で段数を決め、`generate_mipmap_levels` で止める。oracle は render `engine.rs` `backdrop_mips_stop_where_the_roughness_stops_reading`(粗さ 0 = 1 段、粗さ 1 = 複数段)。数字は上の表。
+- **欄の上限 12 → 24**。fork の instance 属性が 16 本で満杯(Turbulent 8 + Glass 5 = 13 が入らなかった)。法線行列(vec3 × 3 本)を頂点 shader で `cofactor / det` から出して 3 本空け、hook の欄を vec4 × 6 に。厚みは inter-stage の上限 15 本に収めるため `world_position.w` へ。fork `cdf83c46`。
+- **2 反射の撮影点を送り手の箱に固定する(Arm の local cubemap)** — **比較中**。`Engine::set_reflection_scene_probe(true)` で、撮影点は受け手ではなく送り手(受け手以外)の箱の中心 1 地点・6 面、受け手は撮影に入れず、鍵からも受け手の置き方と値を外す。受け手を動かしても撮り直さない。`cargo run -p motolii-render --example probe_compare -- 作品 出力先`。
+
+  | 受け手を回した直後の 1 frame | 撮影 | 合計 |
+  |---|---:|---:|
+  | 現行(受け手追従 2 地点) | 12 面 | 27.9 ms |
+  | 送り手の箱に固定 | 0 面 | 18.7 ms |
+
+  見た目の差: 受け手同士の映り込みが消える(球に輪が映らない、輪に球が映らない)。自己像も無い。[現行](assets/2026-09-10-glass-weight/probe-receiver-pose1.png) / [固定](assets/2026-09-10-glass-weight/probe-scene-pose1.png)。既定は現行のまま。切替は利用者の合否。
+- 1(GPU を同じフレームで待たない)は未着手。
+
 coverage(素材の alpha)と透過率を分けているのは意図した嘘で、文字や切り抜きが四角いガラス板に化けないため([共通表面](2026-09-09-shared-surface-plan.md))。
 
 ## プリズム — 入れた入口
@@ -49,13 +73,30 @@ coverage(素材の alpha)と透過率を分けているのは意図した嘘で�
 - 定規は [KHR_materials_dispersion](https://github.com/KhronosGroup/glTF/blob/main/extensions/2.0/Khronos/KHR_materials_dispersion/README.md)(値 = 20 / Abbe 数、0 = 無分散、クラウンガラス 0.33、ダイヤ 0.36、ポリカ 0.63)と、three.js `transmission_pars_fragment` の読み(IOR を `(ior−1)·0.025·dispersion` だけ両側へ広げ、R と B を別の IOR で屈折させ、G は中央)。
 - fork `0ddfa2ff`: `shade_surface(…, surface, dispersion)`。backdrop の読出しを `transmitted_backdrop` に括り、dispersion > 0 の画素だけ R・B を別の出口で読む(sample 3 回 + 環境 2 回)。0 は従来と同じ 1 回で、経路も同じ。
 - Motolii: `vism/glass.wgsl` に欄(0〜2、既定 0)、`subtype.rs` の解析スタブは新しい signature。欄は manifest から生成されるので Inspector には自動で載る(実窓は未検収)。
-- 検収 oracle: render `engine.rs` `dispersion_splits_the_backdrop_edge_into_colors` — 白い空・左黒右白の板・その手前の斜め(rotation.y 60°)で厚い(scale 48)ガラス(ior 3)。灰色しか無い場面が dispersion 0 では灰のまま(|R−B| ≤ 1)、2 では境目で赤と青が割れる。
+- 検収 oracle: render `engine.rs` `dispersion_splits_the_backdrop_edge_into_colors` — 白い空・左黒右白の板・その手前の 45° に傾いた板ガラス(ior 3)。灰色しか無い場面が dispersion 0 では灰のまま(|R−B| ≤ 1)、2 で境目が割れ始め(64 px の場面では |R−B| 5)、20 で 70 台まで伸びる。実寸(1600 px)では屈折角の差がそのまま画素になるので、64 px の値を見た目の強さと読まない。
 
 含まないもの: 床の虹(集光・投影)、三角柱内部の光路・全反射、厚みの意味(上の嘘のまま)。N1 の反例(物体回転と camera 移動を分ける、受け面の移動、画面外)は未実施。「RGB を画面方向へずらすだけ」ではなく屈折角の差だが、それでも床への虹を完了扱いにはしない。
+
+## ガラスを通った光 — 影・色付きの影(2026-09-10、利用者「おk」で着手)
+
+利用者の言葉: 光源は普段気にしない、ユーザーは**光を奪うのを手段とする**。だから定義は **光は足さない、環境から来る。作者は奪うだけ**。
+
+- **太陽は環境層から導く**: HDRI(64×32 に縮めた物)の一番明るい texel の向きが太陽、その錐(峰の半分以上)が担う cosine 加重エネルギーの割合が `weight`(影が奪う分)、色は錐の平均。環境層を回せば太陽も回る。環境の無い作品は fork の固定 2 灯の主灯(`(1,2,3)`、weight 1/1.7)。render `compositor/environment.rs` `sun_from_equirect`。
+- **作者の動詞は 1 つ: 層属性 `blocks_light`(Inspector "Blocks light")**。既定 off。doc `LayerAttrs` の bool 1 つ、Intent は増えない。
+- **型紙(light cookie)**: 遮る層があれば太陽から正射影で 512² を 1 枚描く(`surface_scene.rs` `capture_light_cookie`)。遮る層だけ、表面は「通す色 × coverage」を書く(Glass なら albedo × transmission、不透明なら 0)。fork の `light_capture` モード。
+- **受け手は全部**: fork `lighting.wgsl` `sun_shade` — `1 − weight·facing·(1 − 通った光)`。網は `shade_surface` の拡散+鏡面に掛け、板(unlit の画)は `rectangle_fs` の既定表面で facing の床 0.5 を持って掛ける。透過して見える背後(backdrop)には掛けない。
+- fork `efc7826b`(frame uniform に太陽 2 vec4 + 行列、binding 10 に型紙)。oracle: render `engine.rs` `a_layer_that_blocks_light_casts_a_shadow_on_the_board_behind_it`(一点が明るい空、板を camera 側へ 20、右下の赤が 20/255 以上暗くなり、光線の外は変わらない、型紙は遮る層がある時だけ 1 枚)。
+
+[画廊の 3 枚の Glass に Blocks light](assets/2026-09-10-glass-weight/blocks-light-gallery.png)(`cargo run -p motolii-render --example light_through -- 作品 出力先`、1 frame 32.6 ms で型紙 1 枚、影無しは 32.3 ms)。
+
+既知の二重掛け(2026-09-11 に code から読めた分): `sun_shade` は rectangle の既定表面に掛かるので、**既に影の乗った絵を板として描き直す経路**では影がもう一度乗る。(a) run の背景板 `background_rect`(前の run の累算)— カメラレーンが背景を光無しの画面 pass に変える形で消える。(b) 効果を焼いた層が自分で光を遮る場合 — 焼く pass で自分の型紙が掛かり、本線でもう一度掛かる。(b) は残る嘘として記録し、遮る層の焼き pass では `light` を渡さない形で直す。画廊の影が濃すぎた一因は (a)。
+
+嘘として明示: 太陽は 1 つで平行。型紙に深度が無いので、遮る物は光線上の**全て**(手前の物も、自分自身も)に影を落とす。影は硬い(型紙 512 px、mip 未使用)。反射の撮影には影が入らない。分散の虹は型紙にまだ無い(次: 出口位置への splat)。
 
 ## 次の最小作業
 
 1. 完了待ちの空白 8 ms を分ける(poll / readback / Metal の分割)。ガラスより先に効く。
 2. 反射の鍵を「動いた物が撮影範囲に入るか」で絞る。受け手以外の移動で 12 面を撮り直さない。
 3. 厚みを欄に出す(網も板も)。2D の 1.0 固定を消す。
-4. Dispersion を実窓で触り、Undo・保存・export を確認してから N1 の分離比較へ。
+4. Dispersion と Blocks light を実窓で触り、Undo・保存・export を確認してから N1 の分離比較へ。実窓は未検収。
+5. 型紙に深度(自分と手前の物に影を落とさない)、分散の虹を型紙へ splat、mip で影の縁をぼかす。

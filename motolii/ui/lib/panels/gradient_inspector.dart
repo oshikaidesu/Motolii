@@ -15,9 +15,13 @@ class GradientInspector extends StatefulWidget {
     required this.controller,
     required this.layer,
     required this.fill,
+    this.inPanel = false,
   });
   final EditorSession controller;
   final Map<String, dynamic> layer, fill;
+
+  /// Hosted in the Colors panel: the wheel is right below, so no link to it.
+  final bool inPanel;
   @override
   State<GradientInspector> createState() => _GradientInspectorState();
 }
@@ -145,7 +149,7 @@ class _GradientInspectorState extends State<GradientInspector>
         children: [
           Row(
             children: [
-              for (final type in ['solid', 'linear', 'radial'])
+              for (final type in ['solid', 'linear', 'radial', 'angular', 'diamond'])
                 Expanded(
                   child: Padding(
                     padding: const EdgeInsets.only(right: EditorMetrics.s4),
@@ -167,19 +171,35 @@ class _GradientInspectorState extends State<GradientInspector>
                                 }
                                 if (mounted) setState(() => selected = 0);
                               },
-                        // The colours are the button: no word, the picture of
-                        // the fill itself, the chosen one ringed.
-                        child: Container(
-                          height: EditorMetrics.tall,
-                          decoration: BoxDecoration(
-                            border: kind == type
-                                ? Border.all(
-                                    color: EditorTheme.accent,
-                                    width: EditorMetrics.s2,
-                                  )
-                                : Border.all(color: EditorTheme.border),
-                          ),
-                          child: sample(type),
+                        // The picture of the fill is the button, the chosen
+                        // one ringed. A solid fill draws all three alike, so
+                        // the word under each box tells them apart.
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Container(
+                              height: EditorMetrics.tall,
+                              decoration: BoxDecoration(
+                                border: kind == type
+                                    ? Border.all(
+                                        color: EditorTheme.accent,
+                                        width: EditorMetrics.s2,
+                                      )
+                                    : Border.all(color: EditorTheme.border),
+                              ),
+                              child: sample(type),
+                            ),
+                            Text(
+                              '${type[0].toUpperCase()}${type.substring(1)}',
+                              textAlign: TextAlign.center,
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(
+                                    color: kind == type
+                                        ? EditorTheme.accent
+                                        : EditorTheme.muted,
+                                  ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
@@ -386,7 +406,7 @@ class _GradientInspectorState extends State<GradientInspector>
                 ),
               ],
             ),
-          ] else
+          ] else if (!widget.inPanel)
             InkWell(
               onTap: enabled ? () => focus(0) : null,
               child: SizedBox(

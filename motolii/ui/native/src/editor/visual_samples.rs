@@ -23,7 +23,12 @@ pub(crate) fn reply(doc:&Document, time:RationalTime, j:&J) -> Result<J,String> 
                 style.line_height=style.line_height.map(|h|h*scale);
                 style.fill=[0.86,0.86,0.86,1.0];style.stroke_color=None;
             }
-            crate::render::engine::text::rasterize_text_document(&text,RationalTime::ZERO,&Canvas{width:560,height:100,origin_x:0,origin_y:0}).map_err(|e|e.to_string())?
+            // 見本画は Flutter へ渡す画素なので CPU で焼く(層の絵は fork の paths renderer。ここは GPU 読み戻しの口が付くまでの残余)。
+            let canvas=Canvas{width:560,height:100,origin_x:0,origin_y:0};
+            match crate::render::engine::text::text_shapes(&text,RationalTime::ZERO,&canvas).map_err(|e|e.to_string())? {
+                Some(shapes)=>Some(crate::doc::vector::render_tree(&shapes,&canvas).map_err(|e|e.to_string())?),
+                None=>None,
+            }
         },
         Some("gradient")=>{
             let stops=super::gradient::stops(&j["stops"])?;

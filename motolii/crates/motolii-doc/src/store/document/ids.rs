@@ -63,6 +63,12 @@ impl PropertyId {
         Self::new(&name).expect("effect の property 名は予約語でも空でもない")
     }
 
+    /// グループに積んだ時の掛け先(`EffectScope` の enum 値)。
+    pub fn effect_scope(effect: crate::doc::store::EffectId) -> Self {
+        let name = format!("{}{effect}.scope", crate::doc::store::property::EFFECT_PREFIX);
+        Self::new(&name).expect("effect の property 名は予約語でも空でもない")
+    }
+
     pub fn text_range_selector_start(range: crate::doc::store::TextRangeId) -> Self {
         Self::text_range_selector_property(range, "start")
     }

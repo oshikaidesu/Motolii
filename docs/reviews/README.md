@@ -773,6 +773,7 @@
 - [Spatial authoring: structural repair](2026-09-05-spatial-authoring-plan.md)
 - [Timeline clipping masks](2026-09-05-timeline-clipping.md)
 - [配置効果 — 素材を置く効果(Repeat・粒子)](2026-09-06-placement-effect.md)
+- [パス効果と Create の図形 — 輪郭に掛ける物は効果の棚、置く物は Create](2026-09-10-path-effects-and-shape-create.md)
 - [クリッピングは下地の局所座標で絵だけを合わせる](2026-09-07-clipping-local-space.md)
 - [生成器は素材の形の中、効果は配置効果の上へ](2026-09-08-generators-and-effect-insert.md)
 - [Radiance — 素材の光が周りへ回る](2026-09-08-radiance-cascades.md)
@@ -818,3 +819,9 @@
 - [ガラスの重さと嘘の棚卸し、プリズムの入口](2026-09-10-glass-weight-lies-and-prism.md)
 
 - [操作応答の構造監査 — 2026-09-09](2026-09-09-responsive-editor-architecture-audit.md)
+
+- [Frame status cost — 2026-09-09](2026-09-09-frame-status-cost.md)
+
+- [操作・状態生成・描画経路の分離計測 — 2026-09-09](2026-09-09-frame-pipeline-measurements.md)
+
+- [Browser UI phases](2026-09-09-browser-ui-phases.md)

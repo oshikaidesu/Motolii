@@ -21,53 +21,8 @@ pub(super) fn shape_location(slot: &ColorSlot) -> Option<(LayerId, &[usize])> {
     }
 }
 pub(super) fn gradient_axis(source: &PathSource) -> (Point, Point) {
-    let bounds = match source {
-        PathSource::Rectangle { size } | PathSource::Ellipse { size } => {
-            Some([-size.x * 0.5, -size.y * 0.5, size.x * 0.5, size.y * 0.5])
-        }
-        PathSource::PolyStar { outer_radius, .. } => {
-            let r = outer_radius.abs();
-            Some([-r, -r, r, r])
-        }
-        PathSource::Bezier(path) => {
-            let mut bounds: Option<[f64; 4]> = None;
-            for vertex in path.iter().flat_map(|contour| &contour.vertices) {
-                // Bezier曲線は端点とcontrol pointの凸包内にある。既定軸には十分で、
-                // 曲線を小さく見積もってgradientが途中で終わることもない。
-                for point in [
-                    vertex.point,
-                    Point {
-                        x: vertex.point.x + vertex.in_tangent.x,
-                        y: vertex.point.y + vertex.in_tangent.y,
-                    },
-                    Point {
-                        x: vertex.point.x + vertex.out_tangent.x,
-                        y: vertex.point.y + vertex.out_tangent.y,
-                    },
-                ] {
-                    bounds = Some(match bounds {
-                        None => [point.x, point.y, point.x, point.y],
-                        Some(b) => [
-                            b[0].min(point.x),
-                            b[1].min(point.y),
-                            b[2].max(point.x),
-                            b[3].max(point.y),
-                        ],
-                    });
-                }
-            }
-            bounds
-        }
-    }
-    .unwrap_or([-50.0, -50.0, 50.0, 50.0]);
-    let [x0, y0, x1, y1] = bounds;
-    if (x1 - x0).abs() > f64::EPSILON {
-        let y = (y0 + y1) * 0.5;
-        (Point { x: x0, y }, Point { x: x1, y })
-    } else {
-        let x = (x0 + x1) * 0.5;
-        (Point { x, y: y0 }, Point { x, y: y1 })
-    }
+    let b = crate::doc::store::shape_props::source_bounds(source);
+    (Point { x: b[0], y: (b[1] + b[3]) * 0.5 }, Point { x: b[2], y: (b[1] + b[3]) * 0.5 })
 }
 fn endpoint_color(gradient: &Gradient, end: bool) -> Option<Rgb> {
     let choose = if end {
@@ -173,6 +128,14 @@ pub(crate) fn read_color(doc: &Document, slot: &ColorSlot) -> Option<[f64; 4]> {
                 _ => None,
             }
         }
+        ColorSlot::ShapeStroke { layer, path } => {
+            let mut shapes = view.shapes(*layer).ok()?;
+            let shape = leaf_mut(&mut shapes, path)?;
+            match shape.stroke.as_ref().map(|s| &s.brush) {
+                Some(Brush::Solid(rgb)) => Some([rgb.r, rgb.g, rgb.b, 1.0]),
+                _ => None,
+            }
+        }
         ColorSlot::ShapeGradientPoint { layer, path, index } => {
             let mut shapes = view.shapes(*layer).ok()?;
             let shape = leaf_mut(&mut shapes, path)?;
@@ -242,6 +205,18 @@ pub(crate) fn write_color(
                 shapes,
             }
         }
+        ColorSlot::ShapeStroke { layer, path } => {
+            let mut shapes = d.view().shapes(*layer)?;
+            let Some(shape) = leaf_mut(&mut shapes, path) else {
+                return Err(StoreError::Property("The color target is no longer editable".into()));
+            };
+            // 線が無い形に色を付けると線が生える(文字の縁取りと同じ流儀)。
+            let mut stroke = shape.stroke.take().unwrap_or_default();
+            stroke.brush = Brush::Solid(Rgb { r, g, b });
+            if stroke.width <= 0.0 { stroke.width = crate::doc::store::shape_props::DEFAULT_STROKE_WIDTH; }
+            shape.stroke = Some(stroke);
+            Intent::SetShapes { layer: *layer, shapes }
+        }
         ColorSlot::ShapeGradientPoint { layer, path, index } => {
             let mut shapes = d.view().without_transients().shapes(*layer)?;
             let shape = leaf_mut(&mut shapes, path).ok_or_else(||StoreError::Property("Gradient no longer exists".into()))?;
@@ -280,7 +255,7 @@ pub(crate) fn write_alpha(
         ColorSlot::TextFill { layer, style } | ColorSlot::TextStroke { layer, style } => {
             (*layer, *style)
         }
-        ColorSlot::ShapeFill { .. } | ColorSlot::ShapeGradientStop { .. } | ColorSlot::ShapeGradientPoint { .. } => return Ok(()),
+        ColorSlot::ShapeFill { .. } | ColorSlot::ShapeStroke { .. } | ColorSlot::ShapeGradientStop { .. } | ColorSlot::ShapeGradientPoint { .. } => return Ok(()),
     };
     let Some(mut text) = d.view().text_document(layer)? else {
         return Ok(());

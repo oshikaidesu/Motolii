@@ -13,6 +13,8 @@ pub(crate) enum ColorSlot {
     },
     /// ShapeNode の木の中の葉。index の列で指す。
     ShapeFill { layer: LayerId, path: Vec<usize> },
+    /// 同じ葉の線の色。線が無ければ色を付けた時に生える。
+    ShapeStroke { layer: LayerId, path: Vec<usize> },
     /// 2色gradientの端。`end=false` が最小offset、`end=true` が最大offset。
     /// VecのindexをUIへ漏らさないので、stopの並び順が違う文書でも同じ端を指せる。
     ShapeGradientPoint { layer: LayerId, path: Vec<usize>, index: usize },
@@ -29,6 +31,7 @@ impl ColorSlot {
             Self::TextFill { layer, .. }
             | Self::TextStroke { layer, .. }
             | Self::ShapeFill { layer, .. }
+            | Self::ShapeStroke { layer, .. }
             | Self::ShapeGradientPoint { layer, .. }
             | Self::ShapeGradientStop { layer, .. } => *layer,
         }

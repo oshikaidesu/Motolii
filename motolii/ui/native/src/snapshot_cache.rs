@@ -6,7 +6,7 @@ use crate::EditorRuntime;
 use serde_json::{json, Value};
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
-const REFERENCES: &[&str] = &["backgrounds", "assets", "fontFamilies", "easeKinds", "catalog", "capabilities", "importExtensions", "visualSamples", "blendSamples"];
+const REFERENCES: &[&str] = &["backgrounds", "primitives", "assets", "fontFamilies", "easeKinds", "catalog", "capabilities", "importExtensions", "visualSamples", "blendSamples"];
 
 #[derive(Default)]
 pub(crate) struct SnapshotCache {
@@ -24,6 +24,10 @@ fn digest(parts: impl Hash) -> u64 {
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     parts.hash(&mut hasher);
     hasher.finish()
+}
+
+impl SnapshotCache {
+    pub(crate) fn invalidate_geometry(&mut self) { self.key = None; }
 }
 
 /// 群れの枠は子の枠で決まる。子の指紋を親へ畳む。
@@ -89,7 +93,7 @@ impl EditorRuntime {
         format!("{}:{:?}:{}:{:?}", self.doc.identity(), self.doc.display_revision(), self.user_stage, self.user_camera)
     }
 
-    pub(crate) fn image_key(&self) -> String { format!("{}:{}", self.content_key(), self.frame) }
+    pub(crate) fn image_key(&self) -> String { format!("{}:{}:{:?}", self.content_key(), self.frame, self.selected_ids) }
 
     pub(crate) fn is_dirty(&self) -> Result<bool, String> {
         let revision = self.doc.revision();
@@ -106,7 +110,7 @@ impl EditorRuntime {
     pub(crate) fn status(&self) -> Result<Value, String> { self.status_response(None, None) }
 
     pub(crate) fn status_response(&self, known: Option<u64>, known_references: Option<u64>) -> Result<Value, String> {
-        // render は status の中身を変えない —— 変わるのは reply へ後から載せる renderCount/renderMs だけ。
+        // 描画後は読み戻した選択範囲でgeometryを更新する。文書の行と参照データは再利用する。
         // 音の健康と波形は Document 版と無関係に動くので、鍵に入れて古い body を残さない。
         let key = format!("{}:{:?}:{}", self.image_key(), self.clock.health(), self.clock.waveform_tracks().len());
         let playing = self.clock.playing();
@@ -180,6 +184,43 @@ mod tests {
         let reply: Value = serde_json::from_str(unsafe { CStr::from_ptr(reply) }.to_str().unwrap()).unwrap();
         assert!(reply["error"].is_null(), "{reply}");
         reply
+    }
+
+    #[test]
+    fn drawing_refreshes_bootstrap_bounds_and_selection_requests_a_new_mask() {
+        let mut rt = EditorRuntime::open("").unwrap();
+        request(&mut rt, json!({"op":"create","kind":"text"}));
+        let text = rt.selected.unwrap();
+        request(&mut rt, json!({"op":"create","kind":"rectangle"}));
+        let shape = rt.selected.unwrap();
+        request(&mut rt, json!({"op":"select","ids":[text.0]}));
+        let boot = request(&mut rt, json!({"op":"status","bootstrap":true}));
+        assert!(boot["selectedBounds"].is_null(), "the text has not been drawn yet");
+        let comp = rt.doc.view().composition().unwrap().unwrap().spec();
+        let texture = rt.engine.gpu_device().create_texture(&wgpu::TextureDescriptor {
+            label: Some("bootstrap selection regression"),
+            size: wgpu::Extent3d { width: comp.width, height: comp.height, depth_or_array_layers: 1 },
+            mip_level_count: 1, sample_count: 1, dimension: wgpu::TextureDimension::D2,
+            format: crate::render::compositor::PRESENTABLE_FORMAT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+        let mut previous = boot;
+        for selected in [text, shape, text] {
+            if rt.selected != Some(selected) {
+                let reply = request(&mut rt, json!({"op":"select","ids":[selected.0],"deferSnapshot":true}));
+                assert_eq!(reply, json!({"needsRender":true}), "a new selection needs its own mask");
+            }
+            rt.render_into(&texture).unwrap();
+            let after = request(&mut rt, json!({"op":"status","knownSnapshotId":previous["snapshotId"],"knownReferenceId":previous["referenceId"]}));
+            let b = rt.selection_bounds.get(&selected).expect("selected layer reached the mask");
+            assert_eq!(after["selectedBounds"]["corners"], json!([[b[0],b[1]],[b[2],b[1]],[b[2],b[3]],[b[0],b[3]]]));
+            assert_ne!(after["snapshotId"], previous["snapshotId"], "post-render geometry must reach the host");
+            assert_eq!(after["referenceId"], previous["referenceId"], "rendering does not change the catalog");
+            let row = after["layers"].as_array().unwrap().iter().find(|r| r["id"] == selected.0).unwrap();
+            assert_eq!(row["bounds"], after["selectedBounds"]);
+            previous = after;
+        }
     }
 
     /// 1 層だけ動いたら組み直すのも 1 行だけ。cache が黙って全組み直しへ戻る事故を止める。
@@ -298,12 +339,9 @@ mod tests {
         let known = full["snapshotId"].clone(); let references = full["referenceId"].clone();
         assert!(full["backgrounds"].is_array());
         let delta = request(&mut rt, json!({"op":"select","ids":[101],"knownSnapshotId":known,"knownReferenceId":references,"deferSnapshot":true}));
-        assert_eq!(delta["needsRender"], false);
-        assert_eq!(delta["selectedId"], 101);
-        assert_eq!(delta["snapshotId"], known);
-        assert!(delta.get("layers").is_none());
-        assert!(delta.get("backgrounds").is_none());
-        assert_eq!(delta["renderCount"], full["renderCount"]);
+        assert_eq!(delta,json!({"needsRender":true}));
+        assert_eq!(rt.selected,Some(layer));
+        assert_eq!(rt.render_count,full["renderCount"].as_u64().unwrap());
         let invalid = request(&mut rt, json!({"op":"status","knownSnapshotId":0,"knownReferenceId":0}));
         assert!(invalid["layers"].is_array()); assert!(invalid["backgrounds"].is_array());
         let preview = request(&mut rt, json!({"op":"previewProperties","edits":[{"layer":101,"property":"opacity","value":0.5}],"deferSnapshot":true}));

@@ -62,6 +62,8 @@ struct SelGeom {
     rotation: f64,
     natural: (f64, f64),
     local_bounds: crate::render::media::SpatialBounds,
+    /// 描く点(網なら全頂点)。2D・2.5D の籠はこれを写して包む。
+    local_outline: Vec<glam::Vec3>,
     box_: (f64, f64, f64, f64),
 }
 struct Fit {comp:crate::doc::core::CompSpec,camera:crate::doc::core::ResolvedCamera,projection_camera:crate::doc::core::ResolvedCamera,fx:f64,fy:f64,s:f64}
@@ -132,6 +134,7 @@ fn selection_geom_resolved(
     let scale = vec2_at(view, layer, property::SCALE, rt, (1.0, 1.0));
     let rotation = f64_at(view, layer, property::ROTATION, rt, 0.0);
     let local_bounds = engine.selected_layer_bounds_in(view, resolved, layer, rt)?;
+    let local_outline = engine.selected_layer_outline_in(view, resolved, layer, rt).unwrap_or_else(|| local_bounds.corners().to_vec());
     let [w0, h0, _] = local_bounds.size();
     let natural = (w0 as f64, h0 as f64);
     let box_ = (
@@ -152,6 +155,7 @@ fn selection_geom_resolved(
         rotation,
         natural,
         local_bounds,
+        local_outline,
         box_,
     })
 }
@@ -468,17 +472,9 @@ fn apply_h(m: &glam::DMat3, x: f64, y: f64) -> (f64, f64) {
 }
 fn bounds_world_points(fit: &Fit, geom: &SelGeom) -> [glam::Vec3; 8] {
     let bounds = geom.local_bounds;
-    if let Some(world) = geom.placement.world_transform {
-        let center = world.transform_point3(glam::Vec3::from(bounds.center()));
-        let correction = crate::doc::core::layer_projection_transform(
-            fit.comp, fit.projection_camera, geom.projection, center,
-        );
-        return std::array::from_fn(|index| {
-            let local = glam::Vec3::from_array(std::array::from_fn(|axis| {
-                if index & (1 << axis) == 0 { bounds.min[axis] } else { bounds.max[axis] }
-            }));
-            correction.transform_point3(world.transform_point3(local))
-        });
+    if geom.placement.world_transform.is_some() {
+        let points = local_world_points(fit, geom, &bounds.corners());
+        return std::array::from_fn(|index| points[index]);
     }
     let (corner, u, v) = crate::render::compositor::projected_placement_corners(
         fit.comp, fit.projection_camera, geom.projection, geom.placement,
@@ -486,6 +482,13 @@ fn bounds_world_points(fit: &Fit, geom: &SelGeom) -> [glam::Vec3; 8] {
         glam::vec2(bounds.max[0] - bounds.min[0], bounds.max[1] - bounds.min[1]),
     );
     std::array::from_fn(|index| corner + u * (index & 1) as f32 + v * ((index >> 1) & 1) as f32)
+}
+/// 層の局所の点を、描かれる姿(奥行きの規則と 2D・2.5D の補正込み)で世界へ写す。
+fn local_world_points(fit: &Fit, geom: &SelGeom, points: &[glam::Vec3]) -> Vec<glam::Vec3> {
+    let Some(world) = geom.placement.world_transform.map(crate::doc::core::depth_scaled) else { return Vec::new() };
+    let center = world.transform_point3(glam::Vec3::from(geom.local_bounds.center()));
+    let correction = crate::doc::core::layer_projection_transform(fit.comp, fit.projection_camera, geom.projection, center);
+    points.iter().map(|p| correction.transform_point3(world.transform_point3(*p))).collect()
 }
 fn project_world_point(fit: &Fit, point: glam::Vec3) -> glam::DVec2 {
     let projection = crate::doc::core::camera_projection(fit.comp, fit.camera);
@@ -505,6 +508,41 @@ fn plane_map(fit: &Fit, geom: &SelGeom) -> PlaneMap {
         uv_from_screen: screen_from_uv.inverse(),
         screen_from_uv,
     }
+}
+
+/// 2D・2.5D の取っ手が乗る面: 写した 8 角を包む、こちらを向いた矩形(`facing_frame`)。
+/// 回す時は角度が写像で歪まないよう、位置を軸にした相似(回転+等倍)で結ぶ。
+fn frame_map(fit: &Fit, geom: &SelGeom, rotate: bool) -> PlaneMap {
+    let points = bounds_world_points(fit, geom);
+    let bounds = geom.local_bounds;
+    let frame = match geom.placement.world_transform.map(crate::doc::core::depth_scaled) {
+        Some(world) => crate::doc::core::facing_frame(fit.comp, fit.projection_camera, fit.camera, geom.projection, world, bounds.min, bounds.max, &geom.local_outline)
+            .map(|p| glam::dvec2(fit.fx + f64::from(p.x) * fit.s, fit.fy + f64::from(p.y) * fit.s)),
+        None => {
+            let screen: Vec<glam::DVec2> = points.iter().map(|p| project_world_point(fit, *p)).collect();
+            let lo = screen.iter().fold(glam::DVec2::INFINITY, |m, p| m.min(*p));
+            let hi = screen.iter().fold(glam::DVec2::NEG_INFINITY, |m, p| m.max(*p));
+            [lo, glam::dvec2(hi.x, lo.y), hi, glam::dvec2(lo.x, hi.y)]
+        }
+    };
+    let screen_from_uv = if rotate {
+        let (bx, by, bw, bh) = geom.box_;
+        let fu = (geom.anchor.0 - f64::from(geom.local_bounds.min[0])) / geom.natural.0.max(1e-6);
+        let fv = (geom.anchor.1 - f64::from(geom.local_bounds.min[1])) / geom.natural.1.max(1e-6);
+        let face: [glam::DVec2; 4] = std::array::from_fn(|i| {
+            let (a, b) = (points[i], points[i + 4]);
+            project_world_point(fit, (a + b) * 0.5)
+        });
+        let pivot = face[0] + (face[1] - face[0]) * fu + (face[2] - face[0]) * fv;
+        let k = (frame[2] - frame[0]).length() / (bw * bw + bh * bh).sqrt().max(1e-6);
+        homography_from_unit_square([(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)].map(|(u, v)| {
+            let q = rotate_around(geom.position, geom.rotation, (bx + u * bw, by + v * bh));
+            pivot + glam::dvec2(q.0 - geom.position.0, q.1 - geom.position.1) * k
+        }))
+    } else {
+        homography_from_unit_square(frame)
+    };
+    PlaneMap { uv_from_screen: screen_from_uv.inverse(), screen_from_uv }
 }
 
 const MOVE_MAP_SPAN: f64 = 256.0;
@@ -530,9 +568,9 @@ pub(crate) enum DragSession {
     Spatial(crate::editor::gizmo3d::SpatialDrag),
 }
 impl DragSession {
-    pub(crate) fn begin(doc:&Document,engine:&Engine,ids:&[LayerId],mode:&str,handle:&str,start:[f64;2],at:RationalTime,observer:crate::doc::core::ResolvedCamera,view_scale:f64)->Result<Self,String>{
+    pub(crate) fn begin(doc:&Document,engine:&Engine,ids:&[LayerId],mode:&str,handle:&str,start:[f64;2],at:RationalTime,observer:crate::doc::core::ResolvedCamera,view_scale:f64,held:Option<&str>)->Result<Self,String>{
         if mode=="spatial" {
-            return Ok(Self::Spatial(crate::editor::gizmo3d::SpatialDrag::begin(doc,ids,start,at,observer,view_scale)?));
+            return Ok(Self::Spatial(crate::editor::gizmo3d::SpatialDrag::begin(doc,ids,start,at,observer,view_scale,held)?));
         }
         Ok(Self::Cage(CageDrag::begin(doc,engine,ids,mode,handle,start,at,observer)?))
     }
@@ -555,7 +593,7 @@ impl CageDrag {
             "nw"=>GizmoMode::ScaleCorner{sx:false,sy:false},"ne"=>GizmoMode::ScaleCorner{sx:true,sy:false},"sw"=>GizmoMode::ScaleCorner{sx:false,sy:true},"se"=>GizmoMode::ScaleCorner{sx:true,sy:true},
             "n"=>GizmoMode::ScaleEdge{axis_x:false,positive:false},"s"=>GizmoMode::ScaleEdge{axis_x:false,positive:true},"w"=>GizmoMode::ScaleEdge{axis_x:true,positive:false},"e"=>GizmoMode::ScaleEdge{axis_x:true,positive:true},_=>return Err("Unknown scale handle".into())},_=>return Err("Unsupported stage mode".into())};
         let fit=Fit {comp:view.composition().map_err(|e|e.to_string())?.ok_or("No composition")?.spec(),camera:observer,projection_camera:engine.resolve_camera(&view,at).map_err(|e|e.to_string())?,fx:0.0,fy:0.0,s:1.0};
-        let map=plane_map(&fit,&geom);let(u,v)=map.to_uv(start[0],start[1]);
+        let map=if geom.projection==LayerProjection::ThreeD{plane_map(&fit,&geom)}else{frame_map(&fit,&geom,mode==GizmoMode::Rotate)};let(u,v)=map.to_uv(start[0],start[1]);
         if !u.is_finite()||!v.is_finite(){return Err("Selected plane is edge-on".into())}
         let(bx,by,bw,bh)=geom.box_;let grab=rotate_around(geom.position,geom.rotation,(bx+u*bw,by+v*bh));
         let mut others=Vec::new();for &id in ids{if id!=layer&&crate::editor::functions::lens::edit_rejection(&view,id).map_err(|e|e.to_string())?.is_none(){if let Some(g)=selection_geom_in(engine,&view,id,at){others.push((id,g));}}}
@@ -594,7 +632,9 @@ impl CageDrag {
             return Ok(out);
         }
         let(u,v)=self.map.to_uv(point[0],point[1]);if !u.is_finite()||!v.is_finite(){return Err("Point cannot project to selected plane".into())}
-        let(bx,by,bw,bh)=self.drag.orig_box;let p=rotate_around(self.drag.orig_position,self.drag.orig_rotation,(bx+u*bw,by+v*bh));
+        let(bx,by,bw,bh)=self.drag.orig_box;let q=(bx+u*bw,by+v*bh);
+        // 拡縮は箱(無回転)の座標で測る。回転は comp の角度で測るので回した点を渡す。
+        let p=if matches!(self.drag.mode,GizmoMode::ScaleCorner{..}|GizmoMode::ScaleEdge{..}){q}else{rotate_around(self.drag.orig_position,self.drag.orig_rotation,q)};
         let values=preview_values(&self.drag,p,shift,alt,1.0);let mut out=Vec::new();for(layer,property,value)in values{if let Some(edit)=doc.place_checked(layer,&property,value,self.drag.at,animate).map_err(|e|e.to_string())?{out.push(edit)}}Ok(out)
     }
 }
@@ -617,7 +657,7 @@ mod drag_projection_tests {
             for angle in [40.0_f32, 120.0] {
                 for parent in [glam::Affine3A::IDENTITY, glam::Affine3A::from_scale_rotation_translation(glam::vec3(-1.2, 0.8, 1.0), glam::Quat::from_rotation_z(0.3), glam::Vec3::ZERO)] {
                     let world = glam::Affine3A::from_translation(glam::vec3(500.0, 400.0, 50.0)) * glam::Affine3A::from_quat(glam::Quat::from_rotation_y(angle.to_radians()));
-                    let geom = SelGeom { projection, placement: crate::doc::core::LayerPlacement { world_transform: Some(world), ..Default::default() }, z:50.0, rotation_x:0.0, rotation_y:angle as f64, position:(500.0,400.0), anchor:(0.0,0.0), rotation:0.0, natural:(272.0,272.0), local_bounds:crate::render::media::SpatialBounds { min:[0.0;3], max:[272.0,272.0,0.0] }, box_:(500.0,400.0,272.0,272.0) };
+                    let geom = SelGeom { projection, placement: crate::doc::core::LayerPlacement { world_transform: Some(world), ..Default::default() }, z:50.0, rotation_x:0.0, rotation_y:angle as f64, position:(500.0,400.0), anchor:(0.0,0.0), rotation:0.0, natural:(272.0,272.0), local_bounds:crate::render::media::SpatialBounds { min:[0.0;3], max:[272.0,272.0,0.0] }, local_outline:Vec::new(), box_:(500.0,400.0,272.0,272.0) };
                     let start = plane_map(&fit, &geom).to_screen(0.3, 0.6);
                     let mapping = translation_map(&fit, &geom, parent, [start.0, start.1]);
                     for delta in [(750.0, 120.0), (-300.0, -150.0), (0.0,0.0)] {

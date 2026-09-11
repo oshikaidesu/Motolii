@@ -23,7 +23,7 @@ fn decoded_value(raw:&J,expected:Option<&Value>)->Result<Value,String>{
 fn attrs_patch(j:&J)->Result<LayerAttrsPatch,String>{
     let mut p=LayerAttrsPatch::default();
     macro_rules! boolean {($key:literal,$field:ident)=>{if !j[$key].is_null(){p.$field=Some(j[$key].as_bool().ok_or(concat!("Invalid ",$key))?);}}}
-    boolean!("hidden",hidden);boolean!("solo",solo);boolean!("locked",locked);boolean!("flatten",flatten);boolean!("environment",environment);boolean!("clipToBelow",clip_to_below);boolean!("autoOrient",auto_orient);
+    boolean!("hidden",hidden);boolean!("solo",solo);boolean!("locked",locked);boolean!("flatten",flatten);boolean!("environment",environment);boolean!("blocksLight",blocks_light);boolean!("clipToBelow",clip_to_below);boolean!("autoOrient",auto_orient);
     if let Some(s)=j["name"].as_str(){p.name=Some(s.into());}
     if j.get("parent").is_some(){p.parent=Some(if j["parent"].is_null(){None}else{Some(LayerId(j["parent"].as_u64().ok_or("Invalid parent")?))});}
     if j.get("blendMode").is_some(){p.blend_mode=Some(serde_json::from_value(j["blendMode"].clone()).map_err(e)?);}
@@ -98,7 +98,7 @@ impl EditorRuntime{
         let id=LayerId(view.next_layer_id());let order=view.layers().iter().filter_map(|l|view.meta(*l).ok().flatten().map(|m|m.order)).max().unwrap_or(-1).checked_add(1).ok_or("Layer order full")?;
         let taken:Vec<_>=view.layers().iter().filter_map(|l|view.attrs(*l).ok().flatten().map(|a|a.name)).collect();
         let mut intents=editor::create::new_layer_intents(id,order,start,comp.duration_frames,comp.fps,(comp.width as f64,comp.height as f64),kind,editor::create::unbounded_frames(visible));
-        editor::create::prefer_flat(&mut intents,self.flat_projection);
+        editor::create::prefer_projection(&mut intents,self.flat_projection);
         if intents.iter().any(|i| matches!(i, Intent::SetMeta { meta, .. } if meta.source == LayerSource::Camera)) {
             let camera = self.engine.resolve_camera(&view,self.time()?).map_err(e)?;
             for (name,value) in property::camera_values(&camera) {
@@ -179,7 +179,7 @@ impl EditorRuntime{
                         layers.iter().map(|&id|(id,self.engine.selected_layer_bounds_in(&view,&resolved,id,at).map(|b|b.center()).unwrap_or([0.0;3]))).collect()};
                     self.doc.set_projection(&centers,patch,at).map_err(e)?;
                 } else {self.apply(layers.into_iter().map(|layer|Intent::SetAttrs{layer,patch:patch.clone()}))?;}}
-            "create"=>{let kind=match string(&j,"kind")?{"text"=>editor::create::NewKind::Text,"rectangle"=>editor::create::NewKind::Rectangle,"bezier"=>editor::create::NewKind::Bezier,"cube"=>editor::create::cube()?,"camera"=>editor::create::NewKind::Camera,"stage"=>editor::create::NewKind::Stage,k=>match k.strip_prefix("background:"){Some(id)=>editor::create::background(id)?,None=>return Err("Unsupported create kind".into())}};self.create_layer(kind,j["visibleFrames"].as_i64())?;}
+            "create"=>{let kind=match string(&j,"kind")?{"text"=>editor::create::NewKind::Text,"rectangle"=>editor::create::NewKind::Rectangle,"roundedRectangle"=>editor::create::NewKind::RoundedRectangle,"ellipse"=>editor::create::NewKind::Ellipse,"star"=>editor::create::NewKind::Star,"polygon"=>editor::create::NewKind::Polygon,"line"=>editor::create::NewKind::Line,"bezier"=>editor::create::NewKind::Bezier,"null"=>editor::create::NewKind::Null,"camera"=>editor::create::NewKind::Camera,"stage"=>editor::create::NewKind::Stage,k=>match k.strip_prefix("background:"){Some(id)=>editor::create::background(id)?,None=>editor::create::primitive(k)?}};self.create_layer(kind,j["visibleFrames"].as_i64())?;}
             "copy"|"cut"=>{
                 if self.selected_keys.is_empty(){self.clipboard.copy_layers(&self.doc,self.selected_required()?).map_err(e)?;}else{self.clipboard.copy_keys(&self.doc,&self.selected_keys).map_err(e)?;}
                 if op=="cut"{self.delete_selection()?;}
@@ -210,12 +210,13 @@ impl EditorRuntime{
             "setColor"|"previewColor"=>{let intent=self.color_intent(&j)?;if op=="previewColor"{self.set_preview(vec![intent])?;}else{self.apply([intent])?;}}
             "focusColor"=>{let slot:ColorSlot=serde_json::from_value(j["slot"].clone()).map_err(e)?;if slot.layer()!=layer(&j)?{return Err("Color target mismatch".into())}self.color_target=Some(slot);}
             "applyPalette"=>{if let Some(slot)=self.color_target.clone(){let q=json!({"layer":slot.layer().0,"slot":slot,"rgba":rgba(&j)?});let edit=self.color_intent(&q)?;self.apply([edit])?;}else{let color=rgba(&j)?.map(|v|(v*255.0).round()as u8);let mut intents=Vec::new();for id in self.selected_required()?{intents.extend(editor::functions::verb::color_intents(&self.doc,*id,color).map_err(e)?);}self.apply(intents)?;}}
-            "applyEffect"=>{let plugins:Vec<String>=if let Some(a)=j["pluginIds"].as_array(){a.iter().map(|p|p.as_str().map(str::to_owned).ok_or("Invalid plugin".into())).collect::<Result<_,String>>()?}else{vec![string(&j,"pluginId")?.into()]};let catalog=crate::render::engine::known_effects();if plugins.iter().any(|p|!catalog.iter().any(|c|c.plugin_id==*p)){return Err("Unknown effect".into())}let mut intents=Vec::new();for id in self.selected_required()?{intents.extend(editor::functions::verb::effect_batch_intents(&self.doc,*id,&plugins).map_err(e)?);}self.apply(intents)?;}
+            "applyEffect"=>{let plugins:Vec<String>=if let Some(a)=j["pluginIds"].as_array(){a.iter().map(|p|p.as_str().map(str::to_owned).ok_or("Invalid plugin".into())).collect::<Result<_,String>>()?}else{vec![string(&j,"pluginId")?.into()]};let catalog=crate::render::engine::known_effects();if plugins.iter().any(|p|!catalog.iter().any(|c|c.plugin_id==*p)){return Err("Unknown effect".into())}let warp=plugins.iter().any(|p|catalog.iter().any(|d|d.plugin_id==*p&&d.stage==crate::render::compositor::EffectStage::Warp));if warp { for id in self.selected_required()? { let meta=self.doc.view().meta(*id).map_err(e)?.ok_or("Layer missing")?;let planar=match meta.source { LayerSource::Text|LayerSource::Shape=>true,LayerSource::File{path,..}=>!crate::render::media::is_mesh_path(&path)&&!crate::render::media::is_point_cloud_path(&path),_=>false };if !planar||self.doc.view().attrs(*id).map_err(e)?.is_some_and(|a|a.environment){return Err("2D warp requires a planar material".into())} } }let mut intents=Vec::new();let path_only=plugins.iter().any(|p|crate::doc::store::pathop::kind(p).is_some());for id in self.selected_required()?{if path_only&&self.doc.view().meta(*id).map_err(e)?.is_none_or(|m|m.source!=crate::doc::store::LayerSource::Shape){return Err("Path effects apply to shape layers".into())}intents.extend(editor::functions::verb::effect_batch_intents(&self.doc,*id,&plugins).map_err(e)?);}self.apply(intents)?;}
             "preferences"=>{if j.get("flatProjection").is_some(){self.flat_projection=serde_json::from_value(j["flatProjection"].clone()).map_err(e)?;}}
             "animate"=>{let on=j["enabled"].as_bool().ok_or("Missing enabled")?;let interp=if j["shape"].is_object(){editor::ease_kinds::decode(&j["shape"])?}else{Interp::Linear};self.animate=if !on{Animate::Off}else if j["from"].as_bool().unwrap_or(false){Animate::From{origin:self.time()?,interp}}else{Animate::Now{interp}};}
             "expandEffect"=>{let id=layer(&j)?;let effect=EffectId(integer(&j,"id")?as u32);let at=self.time()?;let (intents,copies)=editor::placement_edit::expand_intents(&self.doc,id,effect,at).map_err(e)?;self.apply(intents)?;self.pick(copies);}
+            "scopeEffect"=>{let id=layer(&j)?;let effect=EffectId(integer(&j,"id")?as u32);let whole=j["whole"].as_bool().ok_or("Expected bool")?;if !self.doc.view().effects(id).map_err(e)?.iter().any(|x|x.id==effect){return Err("Effect missing".into())}let at=self.time()?;let scope=if whole{crate::doc::store::EffectScope::Whole}else{crate::doc::store::EffectScope::Each};let edits=self.doc.place_checked(id,&PropertyId::effect_scope(effect),Value::Enum(scope.enum_value()),at,Animate::Off).map_err(e)?;self.apply(edits)?;}
             "enableEffect"=>{let id=layer(&j)?;let effect=EffectId(integer(&j,"id")?as u32);let on=j["enabled"].as_bool().ok_or("Expected bool")?;if !self.doc.view().effects(id).map_err(e)?.iter().any(|x|x.id==effect){return Err("Effect missing".into())}let at=self.time()?;let edits=self.doc.place_checked(id,&PropertyId::effect_enabled(effect),Value::Bool(on),at,Animate::Off).map_err(e)?;self.apply(edits)?;}
-            "moveEffect"=>{let id=layer(&j)?;let effect=integer(&j,"id")?as u32;let to=integer(&j,"to")?;let mut effects=self.doc.view().effects(id).map_err(e)?;let from=effects.iter().position(|e|e.id.0==effect).ok_or("Effect missing")?;let to=(to.max(0) as usize).min(effects.len().saturating_sub(1));let moved=effects.remove(from);effects.insert(to,moved);self.apply([Intent::SetEffects{layer:id,effects}])?;}
+            "moveEffect"=>{let id=layer(&j)?;let effect=integer(&j,"id")?as u32;let to=integer(&j,"to")?;let mut effects=self.doc.view().effects(id).map_err(e)?;let from=effects.iter().position(|e|e.id.0==effect).ok_or("Effect missing")?;let to=(to.max(0) as usize).min(effects.len().saturating_sub(1));let moved=effects.remove(from);effects.insert(to,moved);let catalog=crate::render::engine::known_effects();let mut spatial=false;for effect in &effects {match catalog.iter().find(|d|d.plugin_id==effect.plugin_id).map(|d|d.stage){Some(crate::render::compositor::EffectStage::Placement)=>spatial=false,Some(crate::render::compositor::EffectStage::Field|crate::render::compositor::EffectStage::Surface)=>spatial=true,Some(crate::render::compositor::EffectStage::Warp) if spatial=>return Err("2D warps run before spatial effects in the same material".into()),_=>{}}}self.apply([Intent::SetEffects{layer:id,effects}])?;}
             "removeEffect"=>{let id=layer(&j)?;let effect=integer(&j,"id")?as u32;let mut effects=self.doc.view().effects(id).map_err(e)?;if !effects.iter().any(|e|e.id.0==effect){return Err("Effect missing".into())}effects.retain(|e|e.id.0!=effect);self.apply([Intent::SetEffects{layer:id,effects}])?;}
             "ghost"=>{let ids:Vec<LayerId>=self.selected_required()?.iter().copied().filter(|&l|editor::timeline_edit::ghostable(&self.doc.view(),l)).collect();if ids.is_empty(){return Err("Nothing here can carry a ghost".into())}let on=j["enabled"].as_bool().unwrap_or(true);let intents:Vec<Intent>=ids.iter().map(|&layer|Intent::SetAttrs{layer,patch:LayerAttrsPatch{ghost:Some(on.then_some(editor::timeline_edit::GHOST_DEFAULT_DELAY)),..Default::default()}}).collect();self.apply(intents)?;}
             "sequence"|"previewSequence"=>{let layers=ids(&j["layers"])?;let delays=j["ghosts"].as_array().ok_or("Missing ghosts")?;if delays.len()!=layers.len(){return Err("layers and ghosts differ in length".into())}let intents:Vec<Intent>=layers.iter().zip(delays).filter(|(&layer,_)|editor::timeline_edit::ghostable(&self.doc.view(),layer)).map(|(&layer,d)|Intent::SetAttrs{layer,patch:LayerAttrsPatch{ghost:Some(d.as_i64().filter(|d|*d!=0)),..Default::default()}}).collect();if op=="previewSequence"{self.set_preview(intents)?;}else{self.apply(intents)?;}}
@@ -272,11 +273,12 @@ impl EditorRuntime{
     }
     fn stage_gesture(&mut self,j:&J)->Result<(),String>{
         if let Some(scale)=j["viewScale"].as_f64().filter(|s|s.is_finite()&&*s>0.0){self.stage_view_scale=scale;}
+        if let Some(held)=j.get("held"){self.stage_held=held.as_str().map(str::to_owned);}
         match string(j,"phase")?{
-            // 触れているだけ。掴まないので Document には触らず、ギズモの絵だけが変わる。
+            // hover。掴まないので Document には触らず、ギズモの絵だけが変わる。
             "hover"=>{self.stage_pointer=serde_json::from_value(j["point"].clone()).ok();}
             "begin"=>{let interaction=self.preview_tag.take();self.cancel_preview();self.preview_tag=interaction;let ids=ids(&j["ids"])?;let start=serde_json::from_value(j["start"].clone()).map_err(e)?;
-                let drag=editor::stage::DragSession::begin(&self.doc,&self.engine,&ids,string(j,"mode")?,j["handle"].as_str().unwrap_or("body"),start,self.time()?,self.view_camera()?,self.stage_view_scale)?;
+                let drag=editor::stage::DragSession::begin(&self.doc,&self.engine,&ids,string(j,"mode")?,j["handle"].as_str().unwrap_or("body"),start,self.time()?,self.view_camera()?,self.stage_view_scale,self.stage_held.as_deref())?;
                 self.pick(ids);self.stage_drag=Some(drag);
             }
             "update"=>{let drag=self.stage_drag.as_ref().ok_or("No Stage gesture")?;let point=serde_json::from_value(j["point"].clone()).map_err(e)?;
@@ -435,5 +437,241 @@ mod blend_interaction_tests {
         assert_ne!(owner,newer);
         rt.request(json!({"op":"cancelPreview","owner":owner})).unwrap();
         assert_eq!(rt.preview.as_ref().unwrap().0,newer);
+    }
+}
+
+#[cfg(test)]
+mod path_effect_tests {
+    use super::*;
+    /// 棚の Path 族は形の層にだけ掛かり、掛かると描く輪郭に演算が積まれる。角丸矩形は最初から 1 枚積んで生まれる。
+    #[test]
+    fn path_effects_apply_to_shape_layers_only_and_reach_the_drawn_outline() {
+        let mut rt=EditorRuntime::open("").unwrap();
+        for kind in ["ellipse","star","polygon","line","null"] { rt.request(json!({"op":"create","kind":kind})).unwrap(); }
+        rt.request(json!({"op":"create","kind":"text"})).unwrap();
+        assert_eq!(rt.request(json!({"op":"applyEffect","pluginId":crate::doc::store::pathop::PUCKER_BLOAT})).unwrap_err(),"Path effects apply to shape layers");
+        rt.request(json!({"op":"create","kind":"roundedRectangle"})).unwrap();
+        let rect=rt.selected.unwrap();
+        assert_eq!(rt.doc.view().effects(rect).unwrap().iter().map(|e|e.plugin_id.as_str()).collect::<Vec<_>>(),vec![crate::doc::store::pathop::ROUNDED_CORNERS]);
+        rt.request(json!({"op":"applyEffect","pluginId":crate::doc::store::pathop::PUCKER_BLOAT})).unwrap();
+        let view=rt.doc.view();
+        let effects=view.resolved_effects(rect,crate::doc::core::RationalTime::ZERO).unwrap();
+        let shown=crate::doc::store::pathop::with_effects(&view.shapes(rect).unwrap(),&effects);
+        let crate::doc::store::ShapeNode::Leaf(leaf)=&shown[0] else { panic!("葉") };
+        assert_eq!(leaf.ops.iter().map(|o|std::mem::discriminant(&o.kind)).collect::<Vec<_>>().len(),2);
+        assert!(matches!(leaf.ops[0].kind,crate::doc::vector::OpKind::RoundedCorners{radius} if radius==10.0));
+        assert!(view.shapes(rect).unwrap().iter().all(|n|matches!(n,crate::doc::store::ShapeNode::Leaf(s) if s.ops.is_empty())),"書類そのものには積まれない");
+        let catalog=crate::render::engine::known_effects();
+        assert!(crate::doc::store::pathop::KINDS.iter().all(|k|catalog.iter().any(|d|d.plugin_id==k.plugin_id)),"全枚が棚に居る");
+    }
+    /// 形の元の値は property: 星の頂点数を欄で変えると描く形に届き、書類の形は既定のまま残る。
+    #[test]
+    fn shape_values_are_properties_that_reach_the_drawn_outline() {
+        let mut rt=EditorRuntime::open("").unwrap();
+        rt.request(json!({"op":"create","kind":"star"})).unwrap();
+        let star=rt.selected.unwrap();
+        let read=crate::editor::functions::read::inspector_data_from_doc(&rt.doc.view(),star,crate::doc::core::RationalTime::ZERO,&crate::render::engine::known_effects());
+        let labels:Vec<_>=read.text.iter().map(|r|r.label.as_str()).collect();
+        assert!(labels.contains(&"Points")&&labels.contains(&"Outer Radius")&&labels.contains(&"Inner Radius"),"{labels:?}");
+        rt.request(json!({"op":"setProperty","layer":star.0,"property":"shape.points","value":8.0})).unwrap();
+        let view=rt.doc.view();
+        let at=crate::doc::core::RationalTime::ZERO;
+        let crate::doc::store::ShapeNode::Leaf(shown)=&view.shapes_at(star,at).unwrap()[0] else { panic!("葉") };
+        assert!(matches!(shown.source,crate::doc::vector::PathSource::PolyStar{points,..} if points==8.0));
+        let crate::doc::store::ShapeNode::Leaf(stored)=&view.shapes(star).unwrap()[0] else { panic!("葉") };
+        assert!(matches!(stored.source,crate::doc::vector::PathSource::PolyStar{points,..} if points==5.0),"書類の形は既定のまま");
+    }
+}
+
+#[cfg(test)]
+mod poster {
+    use super::*;
+    /// 揃った素材で静的な 1 枚を組む道具。`MOTOLII_DESIGN_OUT` に書類を保存する。
+    /// `cargo test -p motolii-ui --lib poster -- --ignored` で走る。
+    #[test]
+    #[ignore]
+    fn compose_static_poster() {
+        let Some(out)=std::env::var_os("MOTOLII_DESIGN_OUT") else { return };
+        let mut rt=EditorRuntime::open("").unwrap();
+        fn go(rt:&mut EditorRuntime,j:serde_json::Value){rt.request(j.clone()).unwrap_or_else(|e|panic!("{j}: {e}"));}
+        go(&mut rt,json!({"op":"composition","width":1920,"height":1080,"background":[0.06,0.06,0.08,1.0]}));
+        fn make(rt:&mut EditorRuntime,kind:&str,name:&str)->LayerId{go(rt,json!({"op":"create","kind":kind}));let id=rt.selected.unwrap();go(rt,json!({"op":"setAttrs","layers":[id.0],"patch":{"name":name}}));id}
+        let set=|rt:&mut EditorRuntime,id:LayerId,prop:&str,v:serde_json::Value|rt.request(json!({"op":"setProperty","layer":id.0,"property":prop,"value":v})).unwrap();
+        let paint=|rt:&mut EditorRuntime,id:LayerId,rgba:[f64;4]|{rt.request(json!({"op":"select","ids":[id.0]})).unwrap();rt.request(json!({"op":"applyPalette","rgba":rgba})).unwrap();};
+        let effect=|rt:&mut EditorRuntime,id:LayerId,plugin:&str,params:&[(&str,serde_json::Value)]|{
+            rt.request(json!({"op":"select","ids":[id.0]})).unwrap();rt.request(json!({"op":"applyEffect","pluginId":plugin})).unwrap();
+            let eid=rt.doc.view().effects(id).unwrap().last().unwrap().id.0;
+            for (name,v) in params { rt.request(json!({"op":"setProperty","layer":id.0,"property":format!("effect.{eid}.param.{name}"),"value":v})).unwrap(); }
+        };
+        // 1. 光: 大きな楕円に放射の gradient。右上へ寄せる。
+        let glow=make(&mut rt,"ellipse","Glow");
+        // gradient の軸は書類の形の大きさで決まるので、広げるのは層の scale で。
+        set(&mut rt,glow,"scale",json!([5.5,5.5]));set(&mut rt,glow,"position",json!([708.0,-492.0]));
+        rt.request(json!({"op":"setGradient","slot":{"ShapeFill":{"layer":glow.0,"path":[0]}},"kind":"radial","stops":[[0.98,0.62,0.22],[0.55,0.18,0.30],[0.06,0.06,0.08]]})).unwrap();
+        // 2. 花: 12 角の星を Pucker & Bloat で丸める。深い青。
+        let bloom=make(&mut rt,"star","Bloom");
+        set(&mut rt,bloom,"shape.points",json!(12.0));set(&mut rt,bloom,"shape.outer_radius",json!(300.0));set(&mut rt,bloom,"shape.inner_radius",json!(190.0));
+        set(&mut rt,bloom,"position",json!([260.0,330.0]));paint(&mut rt,bloom,[0.16,0.28,0.78,1.0]);
+        effect(&mut rt,bloom,crate::doc::store::pathop::PUCKER_BLOAT,&[("amount",json!(45.0))]);
+        // 3. 荒い円盤: 細かい星を Wiggle で毛羽立たせる。珊瑚色。
+        let disc=make(&mut rt,"star","Rough disc");
+        set(&mut rt,disc,"shape.points",json!(28.0));set(&mut rt,disc,"shape.outer_radius",json!(330.0));set(&mut rt,disc,"shape.inner_radius",json!(300.0));
+        set(&mut rt,disc,"position",json!([950.0,300.0]));paint(&mut rt,disc,[0.98,0.42,0.36,1.0]);
+        effect(&mut rt,disc,crate::doc::store::pathop::WIGGLE_PATHS,&[("size",json!(7.0)),("detail",json!(2.0)),("seed",json!(4.0))]);
+        // 4. 曲がった帯: 細長い矩形を Bend で弓なりに。薄い黄。
+        let band=make(&mut rt,"rectangle","Band");
+        set(&mut rt,band,"shape.size",json!([1500.0,46.0]));set(&mut rt,band,"position",json!([220.0,820.0]));paint(&mut rt,band,[0.99,0.86,0.45,1.0]);
+        effect(&mut rt,band,crate::doc::store::pathop::BEND,&[("angle",json!(-28.0)),("center",json!([750.0,23.0]))]);
+        // 5. 破線: 線を横へ伸ばし、Chop で刻む。
+        let dash=make(&mut rt,"line","Dashes");
+        set(&mut rt,dash,"position",json!([136.0,470.0]));set(&mut rt,dash,"scale",json!([3.2,1.0]));
+        effect(&mut rt,dash,crate::doc::store::pathop::CHOP_PATH,&[("length",json!(18.0)),("gap",json!(9.0))]);
+        // 6. 波線: Zig Zag を Smooth 点で。
+        let wave=make(&mut rt,"line","Wave");
+        set(&mut rt,wave,"position",json!([136.0,512.0]));set(&mut rt,wave,"scale",json!([3.2,1.0]));
+        effect(&mut rt,wave,crate::doc::store::pathop::ZIG_ZAG,&[("amplitude",json!(12.0)),("frequency",json!(9.0)),("point_type",json!(1.0))]);
+        // 7. 六角の滴: 多角形を Subdivide → Smooth → Wiggle で有機的に。回して 2.5D。
+        let drop=make(&mut rt,"polygon","Drop");
+        set(&mut rt,drop,"shape.points",json!(6.0));set(&mut rt,drop,"shape.outer_radius",json!(150.0));
+        set(&mut rt,drop,"position",json!([1420.0,120.0]));set(&mut rt,drop,"rotation",json!(18.0));paint(&mut rt,drop,[0.93,0.95,0.98,1.0]);
+        effect(&mut rt,drop,crate::doc::store::pathop::SUBDIVIDE,&[("divisions",json!(3.0))]);
+        effect(&mut rt,drop,crate::doc::store::pathop::WIGGLE_PATHS,&[("size",json!(14.0)),("detail",json!(1.0)),("point_type",json!(1.0)),("seed",json!(9.0))]);
+        // 8. 円柱: 右下に小さく。3D のまま。
+        let can=make(&mut rt,"cylinder","Can");
+        set(&mut rt,can,"position",json!([1660.0,900.0]));set(&mut rt,can,"scale",json!([0.55,0.55]));set(&mut rt,can,"rotation",json!(22.0));
+        // 9. 文字: 題と添え書き。
+        let title=make(&mut rt,"text","Title");
+        go(&mut rt,json!({"op":"setText","layer":title.0,"content":"MOTOLII"}));
+        go(&mut rt,json!({"op":"styleText","layer":title.0,"scope":"all","size":230.0}));
+        set(&mut rt,title,"position",json!([130.0,110.0]));paint(&mut rt,title,[0.98,0.97,0.95,1.0]);
+        let sub=make(&mut rt,"text","Subtitle");
+        go(&mut rt,json!({"op":"setText","layer":sub.0,"content":"shapes · paths · effects"}));
+        go(&mut rt,json!({"op":"styleText","layer":sub.0,"scope":"all","size":54.0}));
+        set(&mut rt,sub,"position",json!([136.0,350.0]));paint(&mut rt,sub,[0.98,0.86,0.45,1.0]);
+        rt.request(json!({"op":"save","path":out.to_string_lossy()})).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod poster_probe {
+    use super::*;
+    #[test]
+    #[ignore]
+    fn probe_saved_poster() {
+        let Some(path)=std::env::var_os("MOTOLII_DESIGN_OUT") else { return };
+        let mut rt=EditorRuntime::open(path.to_str().unwrap()).unwrap();
+        let time=rt.time().unwrap();
+        let view=rt.doc.view();
+        let comp=view.composition().unwrap().unwrap().spec();
+        let pixels=rt.engine.render_frame(&view,time).unwrap();
+        eprintln!("failures: {:?}",rt.engine.layer_failures());
+        for (x,y) in [(1450u32,250u32),(1200,200),(1800,600),(960,540)] {
+            let i=((y*comp.width+x)*4) as usize;
+            eprintln!("({x},{y}) = {:?}",&pixels[i..i+4]);
+        }
+        for id in view.layers(){ let name=view.attrs(id).unwrap().unwrap().name; let b=rt.engine.selected_layer_bounds_in(&view,&view.resolved_layers(time).unwrap(),id,time); let pos=view.value_at(id,&PropertyId::new(property::POSITION).unwrap(),time).unwrap(); eprintln!("{name}: pos {pos:?} bounds {b:?} corners {}", rt.bounds(id).map(|b|b["corners"].to_string()).unwrap_or_default()); }
+    }
+}
+
+#[cfg(test)]
+mod swiss {
+    use super::*;
+    /// スイス風の下地: 白い地と黒い活字 2 つ。図形はアプリで置く。
+    #[test]
+    #[ignore]
+    fn compose_swiss_base() {
+        let Some(out)=std::env::var_os("MOTOLII_DESIGN_OUT") else { return };
+        let mut rt=EditorRuntime::open("").unwrap();
+        let go=|rt:&mut EditorRuntime,j:serde_json::Value|{rt.request(j.clone()).unwrap_or_else(|e|panic!("{j}: {e}"));};
+        go(&mut rt,json!({"op":"composition","width":1920,"height":1080,"background":[0.96,0.95,0.92,1.0]}));
+        let text=|rt:&mut EditorRuntime,name:&str,content:&str,size:f64,pos:[f64;2],rgba:[f64;4]|{
+            go(rt,json!({"op":"create","kind":"text"}));let id=rt.selected.unwrap();
+            go(rt,json!({"op":"setAttrs","layers":[id.0],"patch":{"name":name}}));
+            go(rt,json!({"op":"setText","layer":id.0,"content":content}));
+            go(rt,json!({"op":"styleText","layer":id.0,"scope":"all","size":size}));
+            go(rt,json!({"op":"setProperty","layer":id.0,"property":"position","value":pos}));
+            go(rt,json!({"op":"applyPalette","rgba":rgba}));
+            // 左揃え、縁取り無し(既定の黒い縁は黒い活字では滲む)。
+            let mut document=rt.doc.view().text_document(id).unwrap().unwrap();
+            document.justify=crate::doc::store::TextJustify::Left;
+            for style in document.styles.iter_mut(){style.stroke_color=None;style.stroke_width=0.0;}
+            rt.doc.apply(Intent::SetTextDocument{layer:id,document}).unwrap();
+        };
+        // 文字の position は canvas の左上。活字の縁は局所 bounds の min だけ内側(探針で測った値)。
+        text(&mut rt,"Title","Motolii",250.0,[109.0,263.0],[0.08,0.08,0.08,1.0]);
+        text(&mut rt,"Column","Shapes\nPaths\nEffects\n2026",40.0,[126.0,-180.0],[0.08,0.08,0.08,1.0]);
+        text(&mut rt,"Caption","Static composition — International style",28.0,[1018.0,401.0],[0.08,0.08,0.08,1.0]);
+        rt.request(json!({"op":"save","path":out.to_string_lossy()})).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod displacement_domain_contract {
+    use super::*;
+
+    #[test]
+    fn text_and_its_rendered_image_have_the_same_two_dimensional_warp() {
+        let mut text=EditorRuntime::open("").unwrap();
+        text.request(json!({"op":"composition","width":512,"height":512})).unwrap();
+        text.request(json!({"op":"create","kind":"text"})).unwrap();
+        let layer=text.selected.unwrap();
+        text.request(json!({"op":"styleText","layer":layer.0,"scope":"all","size":48.0})).unwrap();
+        for property in [property::POSITION,property::ANCHOR] {
+            text.request(json!({"op":"setProperty","layer":layer.0,"property":property,"value":[0.0,0.0]})).unwrap();
+        }
+        text.request(json!({"op":"setAttrs","layers":[layer.0],"patch":{"projection":"2D"}})).unwrap();
+        let pixels=text.engine.render_frame(&text.doc.view(),RationalTime::ZERO).unwrap();
+        let file=std::env::temp_dir().join(format!("motolii-domain-{}-{}.png",std::process::id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        image::save_buffer(&file,&pixels,512,512,image::ColorType::Rgba8).unwrap();
+        let mut picture=EditorRuntime::open("").unwrap();
+        picture.doc.apply_all([
+            Intent::SetComposition(text.doc.view().composition().unwrap().unwrap()),
+            Intent::AddLayer(LayerId(1)),
+            Intent::SetMeta{layer:LayerId(1),meta:LayerMeta{source:LayerSource::File{path:file.to_string_lossy().into_owned(),fingerprint:None},order:0,timing:LayerTiming::place(0,None,60)}},
+            Intent::SetAttrs{layer:LayerId(1),patch:LayerAttrsPatch{projection:Some(LayerProjection::TwoD),..Default::default()}},
+        ]).unwrap();
+        picture.pick(vec![LayerId(1)]);
+        for runtime in [&mut text,&mut picture] {
+            let layer=runtime.selected.unwrap();
+            runtime.request(json!({"op":"applyEffect","pluginId":"motolii.turbulent_warp"})).unwrap();
+            let id=runtime.doc.view().effects(layer).unwrap()[0].id;
+            for (name,value) in [("amount",12.0),("size",30.0),("evolution",0.7)] {
+                runtime.doc.apply(Intent::SetConstant{layer,property:PropertyId::effect_param(id,name).unwrap(),value:Value::F64(value)}).unwrap();
+            }
+        }
+        let a=text.engine.render_frame(&text.doc.view(),RationalTime::ZERO).unwrap();
+        let b=picture.engine.render_frame(&picture.doc.view(),RationalTime::ZERO).unwrap();
+        let different=a.chunks_exact(4).zip(b.chunks_exact(4)).filter(|(a,b)|a.iter().zip(b.iter()).any(|(a,b)|a.abs_diff(*b)>8)).count();
+        if let Some(dir)=std::env::var_os("MOTOLII_DOMAIN_EVIDENCE") {
+            let dir=std::path::PathBuf::from(dir);std::fs::create_dir_all(&dir).unwrap();
+            image::save_buffer(dir.join("text-source.png"),&pixels,512,512,image::ColorType::Rgba8).unwrap();
+            image::save_buffer(dir.join("text-warp.png"),&a,512,512,image::ColorType::Rgba8).unwrap();
+            image::save_buffer(dir.join("image-warp.png"),&b,512,512,image::ColorType::Rgba8).unwrap();
+        }
+        let _=std::fs::remove_file(&file);
+        assert!(different<300,"material source kind changed the warp: {different} pixels");
+    }
+
+    #[test]
+    fn material_warps_precede_spatial_effects_and_invalid_edits_are_atomic() {
+        let mut rt=EditorRuntime::open("").unwrap();
+        rt.request(json!({"op":"create","kind":"rectangle"})).unwrap();
+        let id=rt.selected.unwrap();
+        rt.request(json!({"op":"applyEffect","pluginId":"motolii.turbulent_displace"})).unwrap();
+        rt.request(json!({"op":"applyEffect","pluginId":"motolii.turbulent_warp"})).unwrap();
+        let effects=rt.doc.view().effects(id).unwrap();
+        assert_eq!(effects.iter().map(|e|e.plugin_id.as_str()).collect::<Vec<_>>(),["motolii.turbulent_warp","motolii.turbulent_displace"]);
+        let history=rt.doc.history_depth();
+        assert!(rt.request(json!({"op":"moveEffect","layer":id.0,"id":effects[0].id.0,"to":1})).is_err());
+        assert_eq!(rt.doc.history_depth(),history);
+        assert_eq!(rt.doc.view().effects(id).unwrap(),effects);
+        rt.request(json!({"op":"undo"})).unwrap();
+        assert_eq!(rt.doc.view().effects(id).unwrap().len(),1);
+        rt.request(json!({"op":"redo"})).unwrap();
+        assert_eq!(rt.doc.view().effects(id).unwrap(),effects);
+        rt.request(json!({"op":"create","kind":"torus"})).unwrap();
+        let history=rt.doc.history_depth();
+        assert!(rt.request(json!({"op":"applyEffect","pluginId":"motolii.turbulent_warp"})).is_err());
+        assert_eq!(rt.doc.history_depth(),history);
     }
 }

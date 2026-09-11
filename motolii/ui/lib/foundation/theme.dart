@@ -58,8 +58,13 @@ abstract final class EditorTheme {
           identityColors.length];
   static Color kindColor(String kind) => switch (kind.toLowerCase()) {
     'text' => const Color(0xffeedb73),
-    'rectangle' || 'shape' => const Color(0xff93a5f5),
-    'bezier' || 'path' => const Color(0xff79c4ca),
+    'rectangle' ||
+    'roundedrectangle' ||
+    'ellipse' ||
+    'star' ||
+    'polygon' ||
+    'shape' => const Color(0xff93a5f5),
+    'bezier' || 'line' || 'path' => const Color(0xff79c4ca),
     'video' => const Color(0xffdd879e),
     'audio' => const Color(0xff95c78b),
     '3d' => const Color(0xffe6a275),
@@ -67,6 +72,51 @@ abstract final class EditorTheme {
     '2d' || 'images' => const Color(0xff93a5f5),
     _ => const Color(0xffc18bd3),
   };
+  /// The menu sheet and its rows, for the ThemeData and for EditorChoice
+  /// (a MenuAnchor sets them itself, so a stray Theme cannot lose them).
+  static const menuSheet = MenuStyle(
+    backgroundColor: WidgetStatePropertyAll(menu),
+    surfaceTintColor: WidgetStatePropertyAll(Colors.transparent),
+    shadowColor: WidgetStatePropertyAll(Colors.transparent),
+    elevation: WidgetStatePropertyAll(0),
+    padding: WidgetStatePropertyAll(
+      EdgeInsets.symmetric(vertical: EditorMetrics.s2),
+    ),
+    shape: WidgetStatePropertyAll(
+      RoundedRectangleBorder(
+        borderRadius: BorderRadius.zero,
+        side: BorderSide(color: menuEdge),
+      ),
+    ),
+    visualDensity: VisualDensity.compact,
+  );
+  static final menuRow = ButtonStyle(
+    minimumSize: const WidgetStatePropertyAll(Size(0, EditorMetrics.row)),
+    maximumSize: const WidgetStatePropertyAll(
+      Size(double.infinity, EditorMetrics.row),
+    ),
+    padding: const WidgetStatePropertyAll(
+      EdgeInsets.symmetric(horizontal: EditorMetrics.s8),
+    ),
+    textStyle: const WidgetStatePropertyAll(
+      TextStyle(fontSize: EditorMetrics.font),
+    ),
+    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    // The app-wide compact density would take 8 off the row.
+    visualDensity: VisualDensity.standard,
+    shape: const WidgetStatePropertyAll(RoundedRectangleBorder()),
+    overlayColor: const WidgetStatePropertyAll(Colors.transparent),
+    backgroundColor: WidgetStateProperty.resolveWith(
+      (s) => s.contains(WidgetState.hovered) ? select : Colors.transparent,
+    ),
+    foregroundColor: WidgetStateProperty.resolveWith(
+      (s) => s.contains(WidgetState.disabled)
+          ? disabledInk
+          : s.contains(WidgetState.hovered)
+          ? selectInk
+          : ink,
+    ),
+  );
   static ThemeData get data => ThemeData.dark(useMaterial3: true).copyWith(
     scaffoldBackgroundColor: app,
     canvasColor: panel,
@@ -86,53 +136,8 @@ abstract final class EditorTheme {
       ),
     ),
     // MenuAnchor menus (choices, dropdowns) share the popup menu's sheet.
-    menuTheme: const MenuThemeData(
-      style: MenuStyle(
-        backgroundColor: WidgetStatePropertyAll(menu),
-        surfaceTintColor: WidgetStatePropertyAll(Colors.transparent),
-        shadowColor: WidgetStatePropertyAll(Colors.transparent),
-        elevation: WidgetStatePropertyAll(0),
-        padding: WidgetStatePropertyAll(
-          EdgeInsets.symmetric(vertical: EditorMetrics.s2),
-        ),
-        shape: WidgetStatePropertyAll(
-          RoundedRectangleBorder(
-            borderRadius: BorderRadius.zero,
-            side: BorderSide(color: menuEdge),
-          ),
-        ),
-        visualDensity: VisualDensity.compact,
-      ),
-    ),
-    menuButtonTheme: MenuButtonThemeData(
-      style: ButtonStyle(
-        minimumSize: const WidgetStatePropertyAll(Size(0, EditorMetrics.row)),
-        maximumSize: const WidgetStatePropertyAll(
-          Size(double.infinity, EditorMetrics.row),
-        ),
-        padding: const WidgetStatePropertyAll(
-          EdgeInsets.symmetric(horizontal: EditorMetrics.s8),
-        ),
-        textStyle: const WidgetStatePropertyAll(
-          TextStyle(fontSize: EditorMetrics.font),
-        ),
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        // The app-wide compact density would take 8 off the row.
-        visualDensity: VisualDensity.standard,
-        shape: const WidgetStatePropertyAll(RoundedRectangleBorder()),
-        overlayColor: const WidgetStatePropertyAll(Colors.transparent),
-        backgroundColor: WidgetStateProperty.resolveWith(
-          (s) => s.contains(WidgetState.hovered) ? select : Colors.transparent,
-        ),
-        foregroundColor: WidgetStateProperty.resolveWith(
-          (s) => s.contains(WidgetState.disabled)
-              ? disabledInk
-              : s.contains(WidgetState.hovered)
-              ? selectInk
-              : ink,
-        ),
-      ),
-    ),
+    menuTheme: const MenuThemeData(style: menuSheet),
+    menuButtonTheme: MenuButtonThemeData(style: menuRow),
     // The icon is the button: no minimum square, no padding, no stadium ink.
     // Every IconButton therefore measures exactly its own `iconSize`.
     iconButtonTheme: IconButtonThemeData(

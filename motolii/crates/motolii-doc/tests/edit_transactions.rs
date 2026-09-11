@@ -5,7 +5,7 @@
 use motolii_doc as motolii;
 
 use motolii::doc::store::{
-    property, Animate, Composition, ContentKeyframe, ContentTrack, Document, FontRef, Fps, Intent, Interp, Keyframe, KeyframeTrack,
+    property, Animate, Composition, ContentKeyframe, ContentTrack, Document, EffectScope, FontRef, Fps, Intent, Interp, Keyframe, KeyframeTrack,
     LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, PropertyLink, RationalTime, Slot, SlotId, SpatialTangent,
     StoreView, TextDocument, TextDocumentStyle, TextJustify, TextStyleId, Value,
 };
@@ -489,7 +489,7 @@ fn a_repeater_on_a_group_hands_out_the_children_instead_of_the_group() {
     assert_eq!(out.len(), 4);
     assert!(out.iter().all(|c| c.id == square));
     // Whole group: every placement carries both children.
-    doc.apply(Intent::SetConstant { layer: group, property: PropertyId::effect_param(repeat, "subject").unwrap(), value: Value::F64(1.0) }).unwrap();
+    doc.apply(Intent::SetConstant { layer: group, property: PropertyId::effect_scope(repeat), value: Value::Enum(EffectScope::Whole.enum_value()) }).unwrap();
     let out = doc.view().resolved_layers(at(60)).unwrap();
     assert_eq!(out.len(), 8);
     assert_eq!(out.iter().filter(|c| c.id == circle).count(), 4);

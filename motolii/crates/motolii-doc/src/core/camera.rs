@@ -220,16 +220,57 @@ pub fn projected_screen_corners(
     min: [f32; 3],
     max: [f32; 3],
 ) -> [glam::Vec2; 8] {
+    let corners: [glam::Vec3; 8] = std::array::from_fn(|i| {
+        glam::Vec3::from_array(std::array::from_fn(|a| if i & (1 << a) == 0 { min[a] } else { max[a] }))
+    });
+    let projected = projected_screen_points(comp, camera, observer, mode, world, min, max, &corners);
+    std::array::from_fn(|i| projected[i])
+}
+
+/// Screen positions of any local points of a layer, projected the way the layer is drawn.
+/// `min`/`max` are the layer's local bounds: their centre anchors the 2D/2.5D correction.
+#[allow(clippy::too_many_arguments)]
+pub fn projected_screen_points(
+    comp: CompSpec,
+    camera: ResolvedCamera,
+    observer: ResolvedCamera,
+    mode: crate::doc::store::LayerProjection,
+    world: glam::Affine3A,
+    min: [f32; 3],
+    max: [f32; 3],
+    points: &[glam::Vec3],
+) -> Vec<glam::Vec2> {
     let projection = camera_projection(comp, observer);
     let matrix = projection.projection_matrix() * projection.view_matrix();
     let center = world.transform_point3((glam::Vec3::from(min) + glam::Vec3::from(max)) * 0.5);
     let correction = layer_projection_transform(comp, camera, mode, center);
-    std::array::from_fn(|i| {
-        let p = glam::Vec3::from_array(std::array::from_fn(|a| if i & (1 << a) == 0 { min[a] } else { max[a] }));
-        let c = matrix * correction.transform_point3(world.transform_point3(p)).extend(1.0);
+    points.iter().map(|p| {
+        let c = matrix * correction.transform_point3(world.transform_point3(*p)).extend(1.0);
         let w = if c.w.abs() < 1e-6 { 1e-6 } else { c.w };
         glam::vec2((c.x / w + 1.0) * 0.5 * comp.width as f32, (1.0 - c.y / w) * 0.5 * comp.height as f32)
-    })
+    }).collect()
+}
+
+/// The screen-facing frame around a layer's drawn points: nw, ne, se, sw. The cage of a
+/// 2D or 2.5D layer is this frame, however the layer or the observer is tilted.
+/// Every point is projected — 4 for a flat picture, the load-time silhouette set for a
+/// mesh — so the frame is exact under perspective, where picking "the farthest corner"
+/// before projecting is not: a far corner shrinks toward the vanishing point.
+#[allow(clippy::too_many_arguments)]
+pub fn facing_frame(
+    comp: CompSpec,
+    camera: ResolvedCamera,
+    observer: ResolvedCamera,
+    mode: crate::doc::store::LayerProjection,
+    world: glam::Affine3A,
+    min: [f32; 3],
+    max: [f32; 3],
+    points: &[glam::Vec3],
+) -> [glam::Vec2; 4] {
+    let screen = projected_screen_points(comp, camera, observer, mode, world, min, max, points);
+    let lo = screen.iter().fold(glam::Vec2::INFINITY, |m, p| m.min(*p));
+    let hi = screen.iter().fold(glam::Vec2::NEG_INFINITY, |m, p| m.max(*p));
+    [lo, glam::vec2(hi.x, lo.y), hi, glam::vec2(lo.x, hi.y)]
 }
 
 #[cfg(test)]

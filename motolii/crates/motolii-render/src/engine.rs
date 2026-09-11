@@ -1,12 +1,13 @@
 use std::collections::HashMap;
 
 pub mod mask;
-pub mod shape;
 pub mod text;
 
 mod clip;
 mod render;
 mod texture;
+mod material;
+pub use texture::content_canvas;
 pub use texture::{decode_still_linear_rgb, decode_still_srgb};
 mod translate;
 
@@ -14,7 +15,7 @@ use crate::doc::core::ResolvedCamera;
 use crate::render::compositor::GpuTexture2D;
 use crate::render::compositor::{Compositor, CompositorError};
 
-use crate::doc::store::{Matte, RationalTime, StoreView};
+use crate::doc::store::{LayerId, Matte, RationalTime, StoreView};
 use crate::render::media::ContainerInfo;
 use crate::render::media::MediaError;
 use crate::render::media::MediaInfo;
@@ -24,7 +25,7 @@ use crate::render::engine::texture::{ShapeCacheKey, TextCacheKey, TextTexture};
 
 pub use crate::render::compositor::{bind_catalog_runtime, catalog_generation, catalog_source_roots, refresh_effect_catalog, refresh_effect_catalog_for, watch_effect_catalog, CatalogRefresh, CatalogRuntime, CatalogWatcher};
 pub use crate::render::engine::translate::{
-    known_effects, EffectDescriptor, EffectParamDescriptor,
+    known_effects, EffectDescriptor, EffectParamDescriptor, EffectThumbnail,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -103,17 +104,24 @@ fn still_pixels() -> StillPixels {
 }
 
 pub struct Engine {
-    compositor: Compositor,
+    pub(crate) compositor: Compositor,
+    materials: HashMap<LayerId, material::MaterialCache>,
     probes: HashMap<String, MediaInfo>,
     text_textures: HashMap<TextCacheKey, TextTexture>,
     /// 入れた順。上限を越えたら古い物から落とす(comp 解像度の texture を無制限に貯めない)。
     text_order: std::collections::VecDeque<TextCacheKey>,
-    shape_textures: HashMap<ShapeCacheKey, GpuTexture2D>,
+    shape_textures: HashMap<ShapeCacheKey, TextTexture>,
     failed_probes: HashMap<String, String>,
     layer_failures: Vec<String>,
+    /// Stage で選ばれている層。`render_frame_into_with_camera` の間だけ入る(export の描画には載らない)。
+    outline_layers: Vec<LayerId>,
+    /// 直前の Stage 描画で番号を振った順。mask の id を層へ戻す。
+    outline_order: Vec<LayerId>,
     /// 直前のフレームで実際に描いた層(配置の複製を含む)の数。画面外は数えない。
     drawn_layers: usize,
     models: HashMap<String, std::sync::Arc<crate::render::compositor::GpuModelData>>,
+    /// 層ごとの押し出し(鍵 = 絵の handle と奥行き)。絵か奥行きが変われば作り直す。
+    pub(crate) extrusions: HashMap<LayerId, (u64, std::sync::Arc<crate::render::compositor::GpuModelData>)>,
     failed_meshes: HashMap<String, String>,
     environments: HashMap<String, std::sync::Arc<crate::render::compositor::GpuEnvironmentData>>,
     containers: HashMap<String, ContainerInfo>,
@@ -124,6 +132,14 @@ pub struct Engine {
     /// 動画は mmap で開く。触ったページだけ RAM に載り、閉じれば返る。
     videos: HashMap<String, (memmap2::Mmap, re_renderer::video::Video)>,
     renders_since_video_purge: u32,
+    /// 復号した動画のコマを GPU texture のまま取っておく。2 周目は復号しない。
+    frame_cache: HashMap<(String, i64), texture::CachedVideoFrame>,
+    frame_cache_bytes: u64,
+    frame_cache_budget: u64,
+    frame_cache_tick: u64,
+    frame_cache_hits: u64,
+    /// 揃ったコマの texture。中身は frame の提出で GPU に届くので、写すのは次の frame の頭。
+    pending_frame_copies: Vec<(String, i64, crate::render::compositor::GpuTexture2D)>,
     /// 再生中は間に合ったコマで描く。止めた時と書き出しは頼んだコマを待つ。
     realtime: bool,
 }
@@ -132,14 +148,18 @@ impl Engine {
     pub fn new() -> Result<Self, EngineError> {
         Ok(Self {
             compositor: Compositor::headless()?,
+            materials: HashMap::new(),
             probes: HashMap::new(),
             text_textures: HashMap::new(),
             text_order: std::collections::VecDeque::new(),
             shape_textures: HashMap::new(),
             failed_probes: HashMap::new(),
             layer_failures: Vec::new(),
+            outline_layers: Vec::new(),
+            outline_order: Vec::new(),
             drawn_layers: 0,
             models: HashMap::new(),
+            extrusions: HashMap::new(),
             failed_meshes: HashMap::new(),
             environments: HashMap::new(),
             containers: HashMap::new(),
@@ -150,6 +170,12 @@ impl Engine {
             videos: HashMap::new(),
             realtime: false,
             renders_since_video_purge: 0,
+            frame_cache: HashMap::new(),
+            frame_cache_bytes: 0,
+            frame_cache_budget: texture::FRAME_CACHE_BUDGET,
+            frame_cache_tick: 0,
+            frame_cache_hits: 0,
+            pending_frame_copies: Vec::new(),
         })
     }
 
@@ -161,17 +187,35 @@ impl Engine {
         self.compositor.device()
     }
 
+    /// Stage で選ばれている層の mask の番号(1..=255)。選ばれていなければ 0。
+    fn outline_id(&self, id: LayerId) -> u8 {
+        self.outline_layers.iter().position(|l| *l == id).map_or(0, |i| i as u8 + 1)
+    }
+
+    /// 直前の Stage 描画で、選ばれた層が実際に描かれた画面上の範囲(comp 画素、右下は外側)。
+    /// GPU から届く前(初回)や何も描かれなかった層は入らない。
+    pub fn take_selection_bounds(&mut self) -> Option<Vec<(LayerId, [f32; 4])>> {
+        let order = self.outline_order.clone();
+        self.compositor.selection_screen_bounds().map(|found| {
+            found.into_iter().filter_map(|(id, b)| order.get(id as usize - 1).map(|l| (*l, b))).collect()
+        })
+    }
+
     pub fn with_device(device: wgpu::Device, queue: wgpu::Queue) -> Result<Self, EngineError> {
         Ok(Self {
             compositor: Compositor::with_device_using_headless_defaults(device, queue)?,
+            materials: HashMap::new(),
             probes: HashMap::new(),
             text_textures: HashMap::new(),
             text_order: std::collections::VecDeque::new(),
             shape_textures: HashMap::new(),
             failed_probes: HashMap::new(),
             layer_failures: Vec::new(),
+            outline_layers: Vec::new(),
+            outline_order: Vec::new(),
             drawn_layers: 0,
             models: HashMap::new(),
+            extrusions: HashMap::new(),
             failed_meshes: HashMap::new(),
             environments: HashMap::new(),
             containers: HashMap::new(),
@@ -182,11 +226,27 @@ impl Engine {
             videos: HashMap::new(),
             realtime: false,
             renders_since_video_purge: 0,
+            frame_cache: HashMap::new(),
+            frame_cache_bytes: 0,
+            frame_cache_budget: texture::FRAME_CACHE_BUDGET,
+            frame_cache_tick: 0,
+            frame_cache_hits: 0,
+            pending_frame_copies: Vec::new(),
         })
     }
 
     pub fn set_realtime(&mut self, realtime: bool) {
         self.realtime = realtime;
+    }
+
+    /// 動画のコマ cache の上限(byte)。既定は [`texture::FRAME_CACHE_BUDGET`]。
+    pub fn set_video_frame_cache_budget(&mut self, bytes: u64) {
+        self.frame_cache_budget = bytes;
+    }
+
+    /// (当たった回数, 入っているコマ数, byte)。
+    pub fn video_frame_cache_stats(&self) -> (u64, usize, u64) {
+        (self.frame_cache_hits, self.frame_cache.len(), self.frame_cache_bytes)
     }
 
     pub fn set_gpu_instance_sharing_enabled(&mut self, enabled: bool) {
@@ -199,6 +259,12 @@ impl Engine {
 
     pub fn frame_measurement(&self) -> crate::render::compositor::FrameMeasurement {
         self.compositor.measurement
+    }
+
+    /// 反射の撮影点を送り手の箱に固定し、受け手を撮影から外す(比較用の切替、Document は変えない)。
+    pub fn set_reflection_scene_probe(&mut self, enabled: bool) {
+        self.compositor.reflection_scene_probe = enabled;
+        self.clear_reflection_cache();
     }
 
     /// Diagnostic switch; never changes the Document or reflection quality.
@@ -584,8 +650,8 @@ mod environment_tests {
     }
 
     /// 分散は背後の像を波長で分ける(KHR_materials_dispersion、three.js の読み)。灰色しか無い場面 —
-    /// 白い空、左黒右白の板、その手前の斜めの厚いガラス — は dispersion 0 なら灰のまま、
-    /// dispersion 2 なら境目で赤と青が割れる。
+    /// 白い空、左黒右白の板、その手前の斜めのガラス — は dispersion 0 なら灰のまま、
+    /// 分散を入れると境目で赤と青が割れ、強めるほど伸びる。
     #[test]
     fn dispersion_splits_the_backdrop_edge_into_colors() {
         use crate::doc::store::{EffectId, EffectInstance};
@@ -607,7 +673,6 @@ mod environment_tests {
             doc.apply(Intent::SetConstant { layer: board, property: PropertyId::new(property::POSITION).unwrap(), value: Value::Vec2([0.0, 0.0]) }).unwrap();
             let mesh = LayerId(2);
             doc.apply(Intent::SetEffects { layer: mesh, effects: vec![EffectInstance { id: EffectId(0), plugin_id: "motolii.glass".into() }] }).unwrap();
-            doc.apply(Intent::SetConstant { layer: mesh, property: PropertyId::new(property::SCALE).unwrap(), value: Value::Vec2([48.0, 48.0]) }).unwrap();
             for (name, value) in [("ior", 3.0), ("roughness", 0.0), ("transmission", 1.0), ("metallic", 0.0), ("dispersion", dispersion)] {
                 doc.apply(Intent::SetConstant { layer: mesh, property: PropertyId::new(&format!("effect.0.param.{name}")).unwrap(), value: Value::F64(value) }).unwrap();
             }
@@ -617,9 +682,12 @@ mod environment_tests {
             pixels.chunks(4).map(|p| p[0].abs_diff(p[2])).max().unwrap()
         };
         let none = spread(0.0);
-        let split = spread(2.0);
+        let glass = spread(2.0);
+        let exaggerated = spread(20.0);
         assert!(none <= 1, "灰色の場面は分散 0 で灰のまま、got {none}");
-        assert!(split > 40, "分散 2 で境目の赤と青が割れる、got {split}");
+        // 64 px の場面では屈折角の差が画素の何分の一かにしかならない。割れが出て、値に比例して伸びることを見る。
+        assert!(glass >= 3, "分散 2 で境目の赤と青が割れ始める、got {glass}");
+        assert!(exaggerated > 40 && exaggerated > glass * 4, "分散を強めると割れが伸びる、got {glass} → {exaggerated}");
     }
 
     /// backdrop の mip は粗さが読む段までしか焼かない。粗さ 0 のガラスは写し 1 段、粗さ 1 は全段。
@@ -651,6 +719,43 @@ mod environment_tests {
         assert_eq!(levels_per_copy(0.0), 1, "粗さ 0 は写しだけ");
         let rough = levels_per_copy(1.0);
         assert!(rough > 1 && rough <= full, "粗さ 1 は段を焼く、got {rough} of {full}");
+    }
+
+    /// 光は環境から来て、作者は奪うだけ(裁定 2026-09-10)。空の一点が明るい環境(太陽は camera 側の左上)の
+    /// 前に赤い板、その手前(camera 側)に板 1 枚。板に「光を遮る」を付けると、板の右下に影が落ちて
+    /// 赤が暗くなる。付けなければ変わらない。遠くの赤も変わらない。
+    #[test]
+    fn a_layer_that_blocks_light_casts_a_shadow_on_the_board_behind_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let sky = dir.path().join("sun.png");
+        let mut img = image::RgbaImage::from_pixel(8, 4, image::Rgba([40, 40, 40, 255]));
+        img.put_pixel(0, 1, image::Rgba([255, 255, 255, 255]));
+        img.save(&sky).unwrap();
+        let red = dir.path().join("red.png");
+        image::RgbaImage::from_pixel(SIZE, SIZE, image::Rgba([255, 0, 0, 255])).save(&red).unwrap();
+        let mut engine = Engine::new().unwrap();
+        let mut render = |blocks: bool| -> (Vec<u8>, u64) {
+            let mut doc = scene(dir.path(), &sky, true);
+            let board = file_layer(&mut doc, 3, 0, &red);
+            doc.apply(Intent::SetConstant { layer: board, property: PropertyId::new(property::POSITION).unwrap(), value: Value::Vec2([0.0, 0.0]) }).unwrap();
+            let blocker = LayerId(2);
+            doc.apply(Intent::SetConstant { layer: blocker, property: PropertyId::new(property::POSITION_Z).unwrap(), value: Value::F64(-20.0) }).unwrap();
+            doc.apply(Intent::SetAttrs { layer: blocker, patch: LayerAttrsPatch { blocks_light: Some(blocks), ..Default::default() } }).unwrap();
+            engine.models.clear();
+            let before = engine.surface_work().light_captures;
+            let pixels = engine.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+            assert!(engine.layer_failures().is_empty(), "{:?}", engine.layer_failures());
+            (pixels, engine.surface_work().light_captures - before)
+        };
+        let (lit, captures_lit) = render(false);
+        let (shaded, captures) = render(true);
+        assert_eq!(captures_lit, 0, "遮る層が無ければ型紙は描かない");
+        assert_eq!(captures, 1, "遮る層があれば型紙 1 枚");
+        let red_at = |p: &[u8], x: u32, y: u32| p[((y * SIZE + x) * 4) as usize];
+        // 板(位置 32,32 から 12 倍、camera 側へ 20)の右下、板の外の赤。
+        let (sx, sy) = (60, 60);
+        assert!(red_at(&shaded, sx, sy) + 20 < red_at(&lit, sx, sy), "影で赤が暗くなる: lit {} shaded {}\n{}", red_at(&lit, sx, sy), red_at(&shaded, sx, sy), ascii(&shaded));
+        assert_eq!(red_at(&shaded, 4, 4), red_at(&lit, 4, 4), "光線から外れた赤は変わらない");
     }
 
     /// The mesh Glass oracle, applied to a premultiplied 2D surface (GPU Gems 2 ch.19).
@@ -744,6 +849,47 @@ mod environment_tests {
         assert!(differing(&still, &space) > 20, "Space の変位で絵が変わる: {}", differing(&still, &space));
         assert!(differing(&space, &later) > 20, "Evolution で流れる: {}", differing(&space, &later));
         assert!(differing(&still, &normal) > 20, "Normal の変位で陰影が変わる: {}", differing(&still, &normal));
+    }
+
+    /// 2D は 3D の部分集合: 同じ Turbulent Displace が板にも効く。板は場を「標本位置のずれ」として見せる
+    /// (面内の変位はそのまま、法線方向の変位は視差)。Space で絵が変わり、Evolution でまた変わり、
+    /// Amount 0 は掛けない絵と 1 階調も違わない。
+    #[test]
+    fn turbulent_displace_warps_a_flat_picture_too() {
+        use crate::doc::store::{EffectId, EffectInstance};
+        const TURBULENT_DISPLACE: &str = "motolii.turbulent_displace";
+        let dir = tempfile::tempdir().unwrap();
+        let sky = sky_png(dir.path(), "sky.png", 0, 0);
+        let checker = dir.path().join("checker.png");
+        let mut img = image::RgbaImage::new(SIZE, SIZE);
+        for (x, y, px) in img.enumerate_pixels_mut() {
+            let v = if (x / 8 + y / 8) % 2 == 0 { 255 } else { 0 };
+            *px = image::Rgba([v, v, v, 255]);
+        }
+        img.save(&checker).unwrap();
+        let mut engine = Engine::new().unwrap();
+        let mut render = |params: Option<&[(&str, f64)]>| -> Vec<u8> {
+            let mut doc = scene(dir.path(), &sky, false);
+            doc.apply(Intent::RemoveLayer(LayerId(2))).unwrap();
+            let plate = file_layer(&mut doc, 3, 1, &checker);
+            if let Some(params) = params {
+                doc.apply(Intent::SetEffects { layer: plate, effects: vec![EffectInstance { id: EffectId(0), plugin_id: TURBULENT_DISPLACE.into() }] }).unwrap();
+                for (name, value) in params {
+                    doc.apply(Intent::SetConstant { layer: plate, property: PropertyId::new(&format!("effect.0.param.{name}")).unwrap(), value: Value::F64(*value) }).unwrap();
+                }
+            }
+            let pixels = engine.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+            assert!(engine.layer_failures().is_empty(), "{:?}", engine.layer_failures());
+            pixels
+        };
+        let differing = |a: &[u8], b: &[u8]| a.chunks(4).zip(b.chunks(4)).filter(|(x, y)| x[0].abs_diff(y[0]) > 8).count();
+        let still = render(None);
+        let zero = render(Some(&[("amount", 0.0)]));
+        let space = render(Some(&[("amount", 6.0), ("size", 10.0), ("along", 1.0)]));
+        let later = render(Some(&[("amount", 6.0), ("size", 10.0), ("along", 1.0), ("evolution", 2.0)]));
+        assert_eq!(still, zero, "Amount 0 は掛けない絵と同じ");
+        assert!(differing(&still, &space) > 20, "Space の変位で板の絵がずれる: {}", differing(&still, &space));
+        assert!(differing(&space, &later) > 20, "Evolution で流れる: {}", differing(&space, &later));
     }
 
     /// hdr の 1.0 超は潰れない。環境の意味はここにある。

@@ -20,6 +20,12 @@ pub(crate) struct EmbeddedVismSource {
 }
 
 #[cfg(not(load_shaders_from_disk))]
+pub(crate) struct EmbeddedVismPicture {
+    file: &'static str,
+    bytes: &'static [u8],
+}
+
+#[cfg(not(load_shaders_from_disk))]
 include!(concat!(env!("OUT_DIR"), "/vism_inventory.rs"));
 
 #[derive(Clone)]
@@ -61,12 +67,19 @@ impl VismDefinition {
         [vism::catalog_stage_path(&self.source.name, "vertex"), vism::catalog_stage_path(&self.source.name, "fragment")]
     }
     pub(crate) fn stage(&self) -> Result<(), String> {
-        if self.manifest.stage != IsfStage::Pass {
+        if !matches!(self.manifest.stage, IsfStage::Pass | IsfStage::Warp) {
             return Ok(()); // hook の snippet は MeshProgram が合成する時に書く。
         }
         let [vertex, fragment] = self.paths();
-        vism::write_catalog_stage(&vertex, &self.vertex_text)?;
-        vism::write_catalog_stage(&fragment, &self.fragment_text)
+        for (path, source) in [(&vertex, &self.vertex_text), (&fragment, &self.fragment_text)] {
+            vism::write_catalog_stage(path, source)?;
+            if self.manifest.specialize_passes {
+                for index in 0..self.manifest.passes.len() {
+                    vism::write_catalog_stage(&vism::pass_path(path, index), &vism::specialize_pass(source, self.manifest.param_inputs().count(), index))?;
+                }
+            }
+        }
+        Ok(())
     }
 }
 
@@ -90,6 +103,12 @@ impl EffectProgram {
         scratch: &mut EffectScratch, sources: &[&wgpu::TextureView], dst_view: &wgpu::TextureView,
         params: &[(String, f32)], render_size: [f32; 2]) {
         self.0.record(ctx, encoder, scratch, sources, dst_view, params, render_size)
+    }
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn record_in_frame(&self, ctx: &re_renderer::RenderContext, encoder: &mut wgpu::CommandEncoder,
+        scratch: &mut EffectScratch, sources: &[&wgpu::TextureView], dst_view: &wgpu::TextureView,
+        params: &[(String, f32)], frame: vism::ImageFrame) {
+        self.0.record_in_frame(ctx, encoder, scratch, sources, dst_view, params, frame)
     }
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn record_over(&self, ctx: &re_renderer::RenderContext, encoder: &mut wgpu::CommandEncoder,

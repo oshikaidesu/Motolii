@@ -7,13 +7,19 @@ pub(crate) enum NewKind {
     Camera,
     Stage,
     Rectangle,
+    RoundedRectangle,
+    Ellipse,
+    Star,
+    Polygon,
+    Line,
     Bezier,
-    Cube { path: String },
+    Null,
+    Primitive { path: String, name: String },
     Media { path: String, name: String },
 }
 
 /// 同梱の素材を `~/.local/share/motolii/builtins` へ 1 回だけ書き出し、その path を返す。
-fn builtin(file: &str, bytes: &[u8]) -> Result<String, String> {
+pub(crate) fn builtin(file: &str, bytes: &[u8]) -> Result<String, String> {
     let home = std::env::var_os("HOME").ok_or("User data directory unavailable")?;
     let directory = std::path::PathBuf::from(home).join(".local/share/motolii/builtins");
     std::fs::create_dir_all(&directory).map_err(|e| e.to_string())?;
@@ -24,8 +30,30 @@ fn builtin(file: &str, bytes: &[u8]) -> Result<String, String> {
     Ok(path.to_string_lossy().into_owned())
 }
 
-pub(crate) fn cube() -> Result<NewKind, String> {
-    Ok(NewKind::Cube { path: builtin("cube-v1.obj", include_bytes!("../../assets/cube.obj"))? })
+pub(crate) struct Primitive { pub id: &'static str, pub name: &'static str, pub path: String }
+
+/// 同梱の基本形(Blender の Add ▸ Mesh の並び)。どれも cube と同じ 270 の箱に収まり、置くと 3D 層になる。
+pub(crate) fn primitives() -> &'static [Primitive] {
+    static MADE: std::sync::OnceLock<Vec<Primitive>> = std::sync::OnceLock::new();
+    MADE.get_or_init(|| {
+        let table: [(&str, &str, &[u8]); 6] = [
+            ("plane", "Plane", include_bytes!("../../assets/primitives/plane.obj")),
+            ("cube", "Cube", include_bytes!("../../assets/primitives/cube.obj")),
+            ("sphere", "Sphere", include_bytes!("../../assets/primitives/sphere.obj")),
+            ("cylinder", "Cylinder", include_bytes!("../../assets/primitives/cylinder.obj")),
+            ("cone", "Cone", include_bytes!("../../assets/primitives/cone.obj")),
+            ("torus", "Torus", include_bytes!("../../assets/primitives/torus.obj")),
+        ];
+        table.into_iter().filter_map(|(id, name, bytes)| {
+            let path = builtin(&format!("{id}-v1.obj"), bytes).ok()?;
+            Some(Primitive { id, name, path })
+        }).collect()
+    })
+}
+
+pub(crate) fn primitive(id: &str) -> Result<NewKind, String> {
+    let p = primitives().iter().find(|p| p.id == id).ok_or("Unsupported create kind")?;
+    Ok(NewKind::Primitive { path: p.path.clone(), name: p.name.into() })
 }
 
 pub(crate) struct Background { pub id: &'static str, pub name: &'static str, pub path: String }
@@ -78,36 +106,28 @@ fn spatial_fit_intents(layer: LayerId, path: &str, comp: (f64, f64)) -> Vec<Inte
         property: PropertyId::new(name).expect("既知の属性"),
         value,
     };
-    vec![
-        put(property::SCALE, Value::Vec2([fit, fit])),
-        put(
-            property::POSITION,
-            Value::Vec2([
-                (comp.0 - size[0] as f64 * fit) * 0.5,
-                (comp.1 - size[1] as f64 * fit) * 0.5,
-            ]),
-        ),
-    ]
+    let mut intents = center_intents(layer, [size[0] as f64 * 0.5, size[1] as f64 * 0.5], comp);
+    intents.push(put(property::SCALE, Value::Vec2([fit, fit])));
+    intents
 }
-fn center_intents(layer: LayerId, natural: (f64, f64), comp: (f64, f64)) -> Vec<Intent> {
-    let Ok(property) = crate::doc::store::PropertyId::new(crate::doc::store::property::POSITION)
-    else {
-        return Vec::new();
-    };
-    let value =
-        crate::doc::store::Value::Vec2([(comp.0 - natural.0) * 0.5, (comp.1 - natural.1) * 0.5]);
-    vec![Intent::SetConstant {
+fn center_intents(layer: LayerId, anchor: [f64; 2], comp: (f64, f64)) -> Vec<Intent> {
+    [
+        (property::ANCHOR, anchor),
+        (property::POSITION, [comp.0 * 0.5, comp.1 * 0.5]),
+    ].into_iter().map(|(name, value)| Intent::SetConstant {
         layer,
-        property,
-        value,
-    }]
+        property: PropertyId::new(name).expect("known property"),
+        value: Value::Vec2(value),
+    }).collect()
 }
-fn shape_natural(shapes: &[ShapeNode]) -> (f64, f64) {
-    crate::doc::vector::content_bounds(shapes)
-        .ok()
-        .flatten()
-        .map(|b| (b[2] - b[0], b[3] - b[1]))
-        .unwrap_or((0.0, 0.0))
+
+fn shape_anchor(shapes: &[ShapeNode]) -> [f64; 2] {
+    let bounds = crate::doc::vector::content_bounds(shapes).ok().flatten();
+    let canvas = crate::render::engine::content_canvas(shapes).ok().flatten();
+    match (bounds, canvas) {
+        (Some(b), Some(c)) => [(b[0] + b[2]) * 0.5 + c.origin_x as f64, (b[1] + b[3]) * 0.5 + c.origin_y as f64],
+        _ => [0.0, 0.0],
+    }
 }
 fn source_frames_in(
     info: &crate::render::media::MediaInfo,
@@ -122,6 +142,59 @@ fn source_frames_in(
     }
     Some((secs * fps.as_f64()).round().max(1.0) as i64)
 }
+/// 図形 1 枚のレシピ: 名前・形・塗りか線・最初から積む効果。AE の shape ツールの既定に合わせる。
+struct ShapeRecipe {
+    name: &'static str,
+    shapes: Vec<ShapeNode>,
+    effects: &'static [&'static str],
+}
+
+fn white_fill() -> Option<Fill> {
+    Some(Fill { brush: Brush::Solid(Rgb { r: 1.0, g: 1.0, b: 1.0 }), rule: FillRule::NonZero, opacity: 1.0, hidden: false })
+}
+
+fn white_stroke(cap: crate::doc::vector::LineCap) -> Option<crate::doc::vector::Stroke> {
+    Some(crate::doc::vector::Stroke {
+        brush: Brush::Solid(Rgb { r: 1.0, g: 1.0, b: 1.0 }),
+        width: 6.0,
+        cap,
+        join: crate::doc::vector::LineJoin::Round,
+        miter_limit: 4.0,
+        opacity: 1.0,
+        hidden: false,
+        dash: None,
+    })
+}
+
+fn vertex(point: VectorPoint, in_tangent: VectorPoint, out_tangent: VectorPoint) -> Vertex {
+    Vertex { point, in_tangent, out_tangent }
+}
+
+fn shape_recipe(kind: &NewKind, comp: (f64, f64)) -> ShapeRecipe {
+    use crate::doc::vector::{LineCap, PathSource, StarType};
+    let side = rect_side(comp);
+    let square = VectorPoint { x: side, y: side };
+    let point = |x: f64, y: f64| VectorPoint { x, y };
+    let filled = |name, source| ShapeRecipe { name, shapes: vec![ShapeNode::Leaf(Shape { source, ops: Vec::new(), fill: white_fill(), stroke: None })], effects: &[] };
+    let stroked = |name, contour, cap| ShapeRecipe { name, shapes: vec![ShapeNode::Leaf(Shape { source: PathSource::Bezier(vec![contour]), ops: Vec::new(), fill: None, stroke: white_stroke(cap) })], effects: &[] };
+    let star = |name, star_type, inner| filled(name, PathSource::PolyStar { points: 5.0, inner_radius: side * 0.5 * inner, outer_radius: side * 0.5, star_type });
+    match kind {
+        NewKind::Rectangle => filled("Rectangle", PathSource::Rectangle { size: square }),
+        NewKind::RoundedRectangle => ShapeRecipe { effects: &[crate::doc::store::pathop::ROUNDED_CORNERS], ..filled("Rounded Rectangle", PathSource::Rectangle { size: square }) },
+        NewKind::Ellipse => filled("Ellipse", PathSource::Ellipse { size: square }),
+        NewKind::Star => star("Star", StarType::Star, 0.5),
+        NewKind::Polygon => star("Polygon", StarType::Polygon, 1.0),
+        NewKind::Line => stroked("Line", Contour { closed: false, vertices: vec![
+            vertex(point(-side, 0.0), point(0.0, 0.0), point(0.0, 0.0)),
+            vertex(point(side, 0.0), point(0.0, 0.0), point(0.0, 0.0)),
+        ] }, LineCap::Butt),
+        _ => stroked("Bezier", Contour { closed: false, vertices: vec![
+            vertex(point(-150.0, 0.0), point(0.0, 0.0), point(100.0, -150.0)),
+            vertex(point(150.0, 0.0), point(-100.0, 150.0), point(0.0, 0.0)),
+        ] }, LineCap::Round),
+    }
+}
+
 fn rect_side(comp: (f64, f64)) -> f64 {
     (comp.0.min(comp.1) * 0.25).round().max(1.0)
 }
@@ -146,11 +219,11 @@ pub(crate) fn unbounded_frames(visible_frames: Option<i64>) -> Option<i64> {
         .map(|v| (v * UNBOUNDED_SPAN_OF_VIEW.0 / UNBOUNDED_SPAN_OF_VIEW.1).max(1))
 }
 
-/// 平らな素材(図形・文字・画像・動画)は 2.5D で生まれる。設定でその既定を差し替える。空間物(mesh・点群)は触らない。
-pub(crate) fn prefer_flat(intents: &mut [Intent], flat: LayerProjection) {
+/// 描かれる素材は設定の投影で生まれる。Camera・Stageには素材の投影を与えない。
+pub(crate) fn prefer_projection(intents: &mut [Intent], projection: LayerProjection) {
     for intent in intents {
         if let Intent::SetAttrs { patch, .. } = intent {
-            if patch.projection == Some(LayerProjection::TwoPointFiveD) { patch.projection = Some(flat); }
+            if patch.projection.is_some() { patch.projection = Some(projection); }
         }
     }
 }
@@ -177,11 +250,10 @@ pub(crate) fn new_layer_intents(
             Intent::SetMeta { layer, meta: LayerMeta { source: LayerSource::Stage, order, timing: LayerTiming::place(playhead,None,duration_frames) } },
             Intent::SetAttrs { layer, patch: LayerAttrsPatch { name: Some("Stage".into()), label_color, ..Default::default() } },
         ],
-        NewKind::Cube { path } => {
-            let mut out = new_layer_intents(layer, order, playhead, duration_frames, fps, comp, NewKind::Media { path, name: "Cube".into() }, unbounded);
+        NewKind::Primitive { path, name } => {
+            let mut out = new_layer_intents(layer, order, playhead, duration_frames, fps, comp, NewKind::Media { path, name }, unbounded);
             for (name, value) in [
                 (property::POSITION, Value::Vec2([comp.0 * 0.5, comp.1 * 0.5])),
-                (property::ANCHOR, Value::Vec2([135.0, 135.0])),
                 (property::SCALE, Value::Vec2([1.0, 1.0])),
                 (property::ROTATION_X, Value::F64(-20.0)),
                 (property::ROTATION_Y, Value::F64(30.0)),
@@ -207,7 +279,7 @@ pub(crate) fn new_layer_intents(
                     .as_ref()
                     .map(|i| (i.width as f64, i.height as f64))
                     .unwrap_or((0.0, 0.0));
-                center_intents(layer, natural, comp)
+                center_intents(layer, [natural.0 * 0.5, natural.1 * 0.5], comp)
             };
             // 動画は**素材の尺**で入る(Premiere・Resolve)。静止画と尺の無い物は comp の終わりまで。
             let source_frames = info.as_ref().and_then(|i| source_frames_in(i, fps));
@@ -242,7 +314,8 @@ pub(crate) fn new_layer_intents(
             out.extend(fit);
             out
         }
-        NewKind::Rectangle => {
+        NewKind::Rectangle | NewKind::RoundedRectangle | NewKind::Ellipse | NewKind::Star | NewKind::Polygon | NewKind::Line | NewKind::Bezier => {
+            let recipe = shape_recipe(&kind, comp);
             let mut out = vec![
                 Intent::AddLayer(layer),
                 Intent::SetMeta {
@@ -256,113 +329,30 @@ pub(crate) fn new_layer_intents(
                 Intent::SetAttrs {
                     layer,
                     patch: LayerAttrsPatch {
-                        name: Some("Rectangle".to_owned()),
+                        name: Some(recipe.name.to_owned()),
                         label_color,
                         projection: Some(LayerProjection::TwoPointFiveD),
                         ..Default::default()
                     },
                 },
-                Intent::SetShapes {
-                    layer,
-                    shapes: vec![ShapeNode::Leaf(Shape {
-                        source: PathSource::Rectangle {
-                            size: VectorPoint {
-                                x: rect_side(comp),
-                                y: rect_side(comp),
-                            },
-                        },
-                        ops: Vec::new(),
-                        fill: Some(Fill {
-                            brush: Brush::Solid(Rgb {
-                                r: 1.0,
-                                g: 1.0,
-                                b: 1.0,
-                            }),
-                            rule: FillRule::NonZero,
-                            opacity: 1.0,
-                            hidden: false,
-                        }),
-                        stroke: None,
-                    })],
-                },
             ];
-            let shapes = match out.last() {
-                Some(Intent::SetShapes { shapes, .. }) => shapes.clone(),
-                _ => Vec::new(),
-            };
-            out.extend(center_intents(layer, shape_natural(&shapes), comp));
+            if !recipe.effects.is_empty() {
+                out.push(Intent::SetEffects {
+                    layer,
+                    effects: recipe.effects.iter().enumerate().map(|(i, id)| EffectInstance { id: EffectId(i as u32), plugin_id: (*id).to_owned() }).collect(),
+                });
+            }
+            let anchor = shape_anchor(&recipe.shapes);
+            out.push(Intent::SetShapes { layer, shapes: recipe.shapes });
+            out.extend(center_intents(layer, anchor, comp));
             out
         }
-        NewKind::Bezier => {
-            let mut out = vec![
-                Intent::AddLayer(layer),
-                Intent::SetMeta {
-                    layer,
-                    meta: LayerMeta {
-                        source: LayerSource::Shape,
-                        order,
-                        timing: LayerTiming::place(playhead, unbounded, duration_frames),
-                    },
-                },
-                Intent::SetAttrs {
-                    layer,
-                    patch: LayerAttrsPatch {
-                        name: Some("Bezier".to_owned()),
-                        label_color,
-                        projection: Some(LayerProjection::TwoPointFiveD),
-                        ..Default::default()
-                    },
-                },
-                Intent::SetShapes {
-                    layer,
-                    shapes: vec![ShapeNode::Leaf(Shape {
-                        source: PathSource::Bezier(vec![Contour {
-                            closed: false,
-                            vertices: vec![
-                                Vertex {
-                                    point: VectorPoint { x: -150.0, y: 0.0 },
-                                    in_tangent: VectorPoint { x: 0.0, y: 0.0 },
-                                    out_tangent: VectorPoint {
-                                        x: 100.0,
-                                        y: -150.0,
-                                    },
-                                },
-                                Vertex {
-                                    point: VectorPoint { x: 150.0, y: 0.0 },
-                                    in_tangent: VectorPoint {
-                                        x: -100.0,
-                                        y: 150.0,
-                                    },
-                                    out_tangent: VectorPoint { x: 0.0, y: 0.0 },
-                                },
-                            ],
-                        }]),
-                        ops: Vec::new(),
-                        fill: None,
-                        stroke: Some(crate::doc::vector::Stroke {
-                            brush: Brush::Solid(Rgb {
-                                r: 1.0,
-                                g: 1.0,
-                                b: 1.0,
-                            }),
-                            width: 6.0,
-                            cap: crate::doc::vector::LineCap::Round,
-                            join: crate::doc::vector::LineJoin::Round,
-                            miter_limit: 4.0,
-                            opacity: 1.0,
-                            hidden: false,
-                            dash: None,
-                        }),
-                    })],
-                },
-            ];
-            let shapes = match out.last() {
-                Some(Intent::SetShapes { shapes, .. }) => shapes.clone(),
-                _ => Vec::new(),
-            };
-            out.extend(center_intents(layer, shape_natural(&shapes), comp));
-            out
-        }
+        NewKind::Null => vec![
+            Intent::AddLayer(layer),
+            Intent::SetMeta { layer, meta: LayerMeta { source: LayerSource::Null, order, timing: LayerTiming::place(playhead, unbounded, duration_frames) } },
+            Intent::SetAttrs { layer, patch: LayerAttrsPatch { name: Some("Null".into()), label_color, ..Default::default() } },
+            Intent::SetConstant { layer, property: PropertyId::new(property::POSITION).expect("known property"), value: Value::Vec2([comp.0 * 0.5, comp.1 * 0.5]) },
+        ],
         NewKind::Text => {
             let mut out = vec![
                 Intent::AddLayer(layer),
@@ -426,12 +416,15 @@ pub(crate) fn new_layer_intents(
                     },
                 },
             ];
-            // 文字は組んでみるまで大きさが決まらない。実寸が要らない形で
-            // 真ん中へ置く —— 左上を枠の中心に合わせる。
-            out.extend(
-                // 文字の箱は枠と同じ幅・左上起点。中央揃えが枠の中心軸に乗る(揃えは箱の幅で決まる)。
-                center_intents(layer, comp, comp),
-            );
+            let canvas = crate::doc::vector::Canvas { width: comp.0 as u32, height: comp.1 as u32, origin_x: 0, origin_y: 0 };
+            let anchor = out.iter().find_map(|intent| {
+                let Intent::SetTextDocument { document, .. } = intent else { return None };
+                let t = RationalTime::try_from_frame(playhead, fps).ok()?;
+                let shapes = crate::render::engine::text::text_shapes(document, t, &canvas).ok()??;
+                let b = crate::doc::vector::content_bounds(&shapes).ok()??;
+                Some([(b[0] + b[2]) * 0.5, (b[1] + b[3]) * 0.5])
+            }).unwrap_or([comp.0 * 0.5, comp.1 * 0.5]);
+            out.extend(center_intents(layer, anchor, comp));
             out
         }
     }
@@ -440,21 +433,44 @@ pub(crate) fn new_layer_intents(
 #[cfg(test)]
 mod camera_tests {
     use super::*;
-    /// 設定「New layers」: 平らな素材だけが好みの投影で生まれ、空間物(3D で生まれた物)は触らない。
     #[test]
-    fn the_flat_preference_changes_only_flat_material() {
+    fn new_shape_centres_stay_fixed_when_rotated() {
+        let fps = Fps::try_new(30, 1).unwrap();
+        let comp = (1920.0, 1080.0);
+        for kind in [NewKind::Rectangle, NewKind::RoundedRectangle, NewKind::Ellipse,
+            NewKind::Star, NewKind::Polygon, NewKind::Line, NewKind::Bezier] {
+            let shapes = shape_recipe(&kind, comp).shapes;
+            let b = crate::doc::vector::content_bounds(&shapes).unwrap().unwrap();
+            let canvas = crate::render::engine::content_canvas(&shapes).unwrap().unwrap();
+            let centre = glam::vec2(((b[0] + b[2]) * 0.5 + canvas.origin_x as f64) as f32,
+                ((b[1] + b[3]) * 0.5 + canvas.origin_y as f64) as f32);
+            let mut doc = blank_project();
+            let layer = LayerId(1);
+            doc.apply_all(new_layer_intents(layer, 0, 0, 90, fps, comp, kind, None)).unwrap();
+            doc.apply(Intent::SetConstant { layer, property: PropertyId::new(property::ROTATION).unwrap(), value: Value::F64(73.0) }).unwrap();
+            let world = doc.view().world_transform3d(layer, RationalTime::ZERO).unwrap();
+            let actual = world.transform_point3(centre.extend(0.0));
+            assert!((actual - glam::vec3(960.0, 540.0, 0.0)).length() < 0.001, "{actual:?}");
+        }
+    }
+
+    /// 設定「New layers」は平面素材にも空間素材にも同じように効く。
+    #[test]
+    fn the_projection_preference_applies_to_flat_and_spatial_material() {
         let fps = Fps::try_new(30, 1).unwrap();
         let projection_of = |kind: NewKind, flat: LayerProjection| {
             let mut intents = new_layer_intents(LayerId(1), 0, 0, 90, fps, (1280.0, 720.0), kind, None);
-            prefer_flat(&mut intents, flat);
+            prefer_projection(&mut intents, flat);
             intents.iter().find_map(|i| match i { Intent::SetAttrs { patch, .. } => patch.projection, _ => None }).unwrap()
         };
         assert_eq!(projection_of(NewKind::Rectangle, LayerProjection::ThreeD), LayerProjection::ThreeD);
         assert_eq!(projection_of(NewKind::Text, LayerProjection::ThreeD), LayerProjection::ThreeD);
         assert_eq!(projection_of(NewKind::Rectangle, LayerProjection::TwoPointFiveD), LayerProjection::TwoPointFiveD);
         let mut spatial = vec![Intent::SetAttrs { layer: LayerId(2), patch: LayerAttrsPatch { projection: Some(LayerProjection::ThreeD), ..Default::default() } }];
-        prefer_flat(&mut spatial, LayerProjection::TwoPointFiveD);
-        assert!(matches!(&spatial[0], Intent::SetAttrs { patch, .. } if patch.projection == Some(LayerProjection::ThreeD)), "spatial stays 3D");
+        prefer_projection(&mut spatial, LayerProjection::TwoPointFiveD);
+        assert!(matches!(&spatial[0], Intent::SetAttrs { patch, .. } if patch.projection == Some(LayerProjection::TwoPointFiveD)));
+        assert_eq!(projection_of(primitive("torus").unwrap(), LayerProjection::TwoPointFiveD), LayerProjection::TwoPointFiveD);
+        assert_eq!(projection_of(primitive("torus").unwrap(), LayerProjection::ThreeD), LayerProjection::ThreeD);
     }
 
     /// 尺の無い物は見えている幅の 3/4、尺のある物と、幅を渡さない時は従来どおり。
@@ -523,5 +539,30 @@ mod environment_media {
         }
         assert!(background("nope").is_err());
     }
-}
 
+    /// 同梱の基本形は書き出された実ファイルを指し、置くと 3D 層になって cube と同じ箱の中心に立つ。
+    #[test]
+    fn bundled_primitives_exist_on_disk_and_land_as_3d_layers() {
+        assert_eq!(primitives().len(), 6);
+        let fps = crate::doc::store::Fps::try_new(30, 1).unwrap();
+        for p in primitives() {
+            assert!(std::path::Path::new(&p.path).exists(), "{}", p.path);
+            let bounds = crate::render::media::load_mesh_bounds(&p.path).unwrap();
+            assert!(bounds.radius() > 0.0 && bounds.radius() <= 135.0 * 3f32.sqrt() + 0.1, "{}: {}", p.id, bounds.radius());
+            let intents = new_layer_intents(LayerId(3), 0, 0, 90, fps, (1280.0, 720.0), primitive(p.id).unwrap(), None);
+            let (mut name, mut projection, mut anchor) = (None, None, None);
+            for i in &intents {
+                match i {
+                    Intent::SetAttrs { patch, .. } => { name = patch.name.clone(); projection = patch.projection.clone(); }
+                    Intent::SetConstant { property, value: Value::Vec2(v), .. } if *property == PropertyId::new(property::ANCHOR).unwrap() => anchor = Some(*v),
+                    _ => {}
+                }
+            }
+            assert_eq!(name.as_deref(), Some(p.name));
+            assert_eq!(projection, Some(LayerProjection::ThreeD));
+            let size = bounds.size_xy();
+            assert_eq!(anchor, Some([size[0] as f64 * 0.5, size[1] as f64 * 0.5]));
+        }
+        assert!(primitive("nope").is_err());
+    }
+}

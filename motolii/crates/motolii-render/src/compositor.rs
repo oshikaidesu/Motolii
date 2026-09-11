@@ -6,11 +6,12 @@ use re_renderer::{RenderContext, Rgba};
 
 mod clip;
 mod device;
-mod effects;
+pub(crate) mod effects;
 mod environment;
+mod extrude;
 mod headless;
 mod matte;
-mod mesh;
+pub(crate) mod mesh;
 mod surface_scene;
 #[cfg(test)]
 mod reflection_diagnostic;
@@ -21,7 +22,9 @@ mod point_cloud;
 mod presentable;
 mod render_basic;
 mod render_effects;
+pub(crate) mod paths;
 mod sequential;
+mod selection_bounds;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum BlendMode {
@@ -134,8 +137,7 @@ pub(crate) fn spatial_placement_from_bounds(
     match placement.world_transform {
         Some(world) => {
             let origin = glam::vec3(bounds.min[0], bounds.min[1], (bounds.min[2] + bounds.max[2]) * 0.5);
-            let depth = crate::doc::core::depth_scale(world.matrix3.x_axis.into(), world.matrix3.y_axis.into());
-            world * glam::Affine3A::from_scale(glam::vec3(1.0, 1.0, depth)) * glam::Affine3A::from_translation(-origin)
+            crate::doc::core::depth_scaled(world) * glam::Affine3A::from_translation(-origin)
         }
         None => spatial_world_from_bounds(
             placement.transform, placement.z, placement.rotation_x, placement.rotation_y, bounds,
@@ -241,7 +243,7 @@ pub use effects::catalog::EffectStage;
 pub use clip::ClipSpec;
 
 pub(crate) use effects::catalog::catalog_snapshot;
-pub use effects::catalog::{bind_catalog_runtime, catalog_generation, catalog_source_roots, refresh_effect_catalog, refresh_effect_catalog_for, watch_effect_catalog, CatalogRefresh, CatalogRuntime, CatalogWatcher, EffectDescriptor, EffectParamDescriptor};
+pub use effects::catalog::{bind_catalog_runtime, catalog_generation, catalog_source_roots, refresh_effect_catalog, refresh_effect_catalog_for, watch_effect_catalog, CatalogRefresh, CatalogRuntime, CatalogWatcher, EffectDescriptor, EffectParamDescriptor, EffectThumbnail};
 pub use effects::{IsfInput, IsfInputType, IsfManifest};
 pub(crate) use effects::IsfStage;
 
@@ -261,12 +263,17 @@ pub struct Layer {
     pub projection: crate::doc::store::LayerProjection,
     pub projection_camera: ResolvedCamera,
     pub blend_mode: BlendMode,
-    /// 板・網が共有する表面プログラムとパラメータ。
+    /// 板・網が共有する場と表面のプログラムとパラメータ(板は場を標本位置のずれとして見せる)。
     pub shading: effects::surface_program::SurfaceShading,
-    /// 点群を動かす場(Turbulent Displace の CPU の写し)。板には効かない。
+    /// 点群を動かす場(Turbulent Displace の CPU の写し)。板と網は `shading` の hook が動かす。
     pub displace: point_cloud::PointDisplace,
     /// 世界の平面で切る(板・点群・網が同じ式)。
     pub clip: Option<clip::ClipSpec>,
+    /// 光を遮る: 太陽から見た型紙に描かれ、表面を持つ全ての層へ影(透過なら色)を落とす。
+    pub blocks_light: bool,
+    /// Stage で選ばれている層の番号(1..=255、0 は無し): outline の object-id mask に描かれ、
+    /// その画面上の広がりが籠になる(export には出ない)。
+    pub outline: u8,
 }
 
 #[derive(Clone)]
@@ -319,6 +326,8 @@ impl RenderTiming {
 #[derive(Clone, Copy, Debug, Default)]
 pub struct SurfaceWork {
     pub scene_captures: u64,
+    /// 太陽から見た型紙(light cookie)を描いた回数。
+    pub light_captures: u64,
     pub main_runs: u64,
     pub backdrop_copies: u64,
     pub backdrop_allocations: u64,
@@ -344,6 +353,8 @@ pub struct Compositor {
     pub(crate) backdrop_resource: Option<sequential::BackdropResource>,
     pub(crate) reflection_cache_enabled: bool,
     pub(crate) gpu_instance_sharing_enabled: bool,
+    /// 反射の撮影点を受け手ではなく送り手の箱に固定し、受け手は撮影から外す(Arm の local cubemap)。
+    pub(crate) reflection_scene_probe: bool,
     #[cfg(test)]
     pub(crate) reflection_probe_experiment: u8,
     #[cfg(test)]
@@ -356,6 +367,7 @@ pub struct Compositor {
     pub(crate) reflection_diagnostic_near: Option<f32>,
     pub(crate) reflection_entry: Option<reflection_cache::ReflectionEntry>,
     pub(crate) reflection_resources: Option<surface_scene::ReflectionResources>,
+    pub(crate) light_cookie: Option<surface_scene::LightCookieResources>,
     pub(crate) next_readback: u64,
     pub(crate) next_effect_key: u64,
     pub(crate) effect_scratch: effects::EffectScratch,
@@ -364,6 +376,7 @@ pub struct Compositor {
     pub(crate) surface_programs: std::collections::HashMap<String, std::sync::Arc<re_renderer::renderer::SurfaceProgram>>,
     /// 層と背景を混ぜる Vism(vism/blend.wgsl + 借りた式)。
     pub(crate) blend_vism: effects::EffectProgram,
+    pub(crate) selection_bounds: Option<selection_bounds::SelectionBounds>,
     /// 層をマットで切る Vism(vism/matte.wgsl + 借りた svg_lum)。
     pub(crate) matte_vism: effects::EffectProgram,
     /// 同じ matte を、生成器の出力 format ごとに組んだ物(生成器を素材の alpha に閉じ込める)。
@@ -378,9 +391,12 @@ type AccumulatorBacking = wgpu::Texture;
 
 #[derive(Clone)]
 pub struct GpuModelData {
+    pub(crate) planar_size: Option<[f32; 2]>,
     pub(crate) revision: u64,
     pub(crate) instances: std::sync::Arc<Vec<re_renderer::renderer::GpuMeshInstance>>,
     pub(crate) bounds: crate::render::media::SpatialBounds,
+    /// Every drawn vertex in model space. The Stage fits its frame to these, not to `bounds`.
+    pub(crate) vertices: std::sync::Arc<Vec<glam::Vec3>>,
 }
 
 impl GpuModelData {
@@ -397,6 +413,8 @@ pub use point_cloud::PointDisplace;
 #[derive(Clone)]
 pub enum LayerContent {
     Texture(GpuTexture2D),
+    /// Explicit linear premultiplied image, independent of its storage format.
+    LinearTexture(GpuTexture2D),
     Cloud {
         positions: std::sync::Arc<Vec<[f32; 3]>>,
         colors: std::sync::Arc<Vec<[u8; 4]>>,
@@ -412,7 +430,7 @@ pub enum LayerContent {
 impl LayerContent {
     pub fn texture(&self) -> Option<&GpuTexture2D> {
         match self {
-            Self::Texture(t) => Some(t),
+            Self::Texture(t) | Self::LinearTexture(t) => Some(t),
             Self::Cloud { .. } | Self::Model(_) | Self::Environment(_) => None,
         }
     }
@@ -422,6 +440,7 @@ impl LayerContent {
 /// (焼かない。深度で刺さり合う)。
 pub(crate) enum SequentialContent<'a> {
     Rect(&'a GpuTexture2D),
+    LinearRect(&'a GpuTexture2D),
     Cloud {
         positions: &'a [[f32; 3]],
         colors: &'a [[u8; 4]],
@@ -430,6 +449,23 @@ pub(crate) enum SequentialContent<'a> {
     },
     Model(&'a GpuModelData),
     Environment(&'a GpuEnvironmentData),
+}
+
+impl SequentialContent<'_> {
+    fn image(&self) -> Option<ColormappedTexture> {
+        match self {
+            Self::Rect(t) => Some(premultiplied_texture((*t).clone())),
+            Self::LinearRect(t) => Some(linear_texture((*t).clone())),
+            _ => None,
+        }
+    }
+}
+
+fn linear_texture(texture: GpuTexture2D) -> ColormappedTexture {
+    let mut mapped = premultiplied_texture(texture);
+    mapped.decode_srgb = false;
+    mapped.texture_alpha = TextureAlpha::AlreadyPremultiplied;
+    mapped
 }
 
 pub(crate) struct SequentialInput<'a> {
@@ -445,6 +481,13 @@ pub(crate) struct SequentialInput<'a> {
     shading: effects::surface_program::SurfaceShading,
     displace: point_cloud::PointDisplace,
     clip: Option<clip::ClipSpec>,
+    blocks_light: bool,
+    outline: u8,
+}
+
+/// 選択の mask: channel A に層の番号。B は空けておく(hover を後で載せる口)。
+pub(crate) fn outline_mask(id: u8) -> re_renderer::OutlineMaskPreference {
+    if id != 0 { re_renderer::OutlineMaskPreference::some(id, 0) } else { re_renderer::OutlineMaskPreference::NONE }
 }
 
 pub(crate) fn sequential_target_config(

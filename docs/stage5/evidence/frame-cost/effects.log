@@ -1,0 +1,59 @@
+no_glass pass=0 cpu_ms=12.588 wait_ms=27.556 total_ms=40.144
+no_glass captures=0 main_runs=90 mesh_upload_bytes=25200 draw_prepare_us=4420
+no_glass pass=1 cpu_ms=2.646 wait_ms=26.883 total_ms=29.529
+no_glass captures=0 main_runs=90 mesh_upload_bytes=25200 draw_prepare_us=1155
+no_radiance pass=0 cpu_ms=6.083 wait_ms=3.942 total_ms=10.025
+no_radiance captures=360 main_runs=90 mesh_upload_bytes=65520 draw_prepare_us=634
+no_radiance pass=1 cpu_ms=2.199 wait_ms=3.959 total_ms=6.159
+no_radiance captures=360 main_runs=90 mesh_upload_bytes=65520 draw_prepare_us=403
+no_text_glass pass=0 cpu_ms=7.690 wait_ms=27.044 total_ms=34.734
+no_text_glass captures=180 main_runs=120 mesh_upload_bytes=40320 draw_prepare_us=5067
+no_text_glass pass=1 cpu_ms=5.789 wait_ms=27.640 total_ms=33.429
+no_text_glass captures=180 main_runs=120 mesh_upload_bytes=40320 draw_prepare_us=2757
+no_torus_glass pass=0 cpu_ms=17.131 wait_ms=26.516 total_ms=43.646
+no_torus_glass captures=0 main_runs=90 mesh_upload_bytes=25200 draw_prepare_us=19761
+no_torus_glass pass=1 cpu_ms=15.113 wait_ms=27.392 total_ms=42.506
+no_torus_glass captures=0 main_runs=90 mesh_upload_bytes=25200 draw_prepare_us=55786
+layer LayerId(10): Shape, effects=[]
+layer LayerId(1): Text, effects=["motolii.radiance", "motolii.glass"]
+layer LayerId(2): Text, effects=[]
+layer LayerId(3): Text, effects=[]
+layer LayerId(4): File { path: "/Users/member_ottoto/.local/share/motolii/builtins/torus-v1.obj", fingerprint: None }, effects=["motolii.glass"]
+layer LayerId(5): Camera, effects=[]
+layer LayerId(6): Camera, effects=[]
+all pass=0 cpu_ms=15.773 wait_ms=26.736 total_ms=42.508
+all captures=180 main_runs=120 mesh_upload_bytes=40320 draw_prepare_us=13011
+all pass=1 cpu_ms=6.259 wait_ms=26.872 total_ms=33.131
+all captures=180 main_runs=120 mesh_upload_bytes=40320 draw_prepare_us=2868
+no_effects pass=0 cpu_ms=3.607 wait_ms=2.430 total_ms=6.036
+no_effects captures=0 main_runs=30 mesh_upload_bytes=25200 draw_prepare_us=177
+no_effects pass=1 cpu_ms=0.625 wait_ms=2.519 total_ms=3.144
+no_effects captures=0 main_runs=30 mesh_upload_bytes=25200 draw_prepare_us=115
+no_text pass=0 cpu_ms=4.925 wait_ms=3.690 total_ms=8.614
+no_text captures=180 main_runs=60 mesh_upload_bytes=15120 draw_prepare_us=241
+no_text pass=1 cpu_ms=2.199 wait_ms=4.047 total_ms=6.247
+no_text captures=180 main_runs=60 mesh_upload_bytes=15120 draw_prepare_us=444
+no_shapes pass=0 cpu_ms=8.610 wait_ms=27.930 total_ms=36.540
+no_shapes captures=180 main_runs=120 mesh_upload_bytes=30240 draw_prepare_us=5100
+no_shapes pass=1 cpu_ms=6.234 wait_ms=27.444 total_ms=33.678
+no_shapes captures=180 main_runs=120 mesh_upload_bytes=30240 draw_prepare_us=2363
+no_files pass=0 cpu_ms=8.656 wait_ms=27.902 total_ms=36.558
+no_files captures=0 main_runs=90 mesh_upload_bytes=20160 draw_prepare_us=6754
+no_files pass=1 cpu_ms=6.527 wait_ms=28.078 total_ms=34.605
+no_files captures=0 main_runs=90 mesh_upload_bytes=20160 draw_prepare_us=3359
+text_only pass=0 cpu_ms=21.642 wait_ms=30.504 total_ms=52.146
+text_only captures=0 main_runs=90 mesh_upload_bytes=15120 draw_prepare_us=4930
+text_only pass=1 cpu_ms=15.983 wait_ms=27.435 total_ms=43.419
+text_only captures=0 main_runs=90 mesh_upload_bytes=15120 draw_prepare_us=16322
+shapes_only pass=0 cpu_ms=7.061 wait_ms=3.439 total_ms=10.501
+shapes_only captures=0 main_runs=30 mesh_upload_bytes=5040 draw_prepare_us=471
+shapes_only pass=1 cpu_ms=1.291 wait_ms=3.304 total_ms=4.595
+shapes_only captures=0 main_runs=30 mesh_upload_bytes=5040 draw_prepare_us=902
+files_only pass=0 cpu_ms=7.816 wait_ms=5.778 total_ms=13.594
+files_only captures=0 main_runs=30 mesh_upload_bytes=5040 draw_prepare_us=660
+files_only pass=1 cpu_ms=1.736 wait_ms=6.290 total_ms=8.026
+files_only captures=0 main_runs=30 mesh_upload_bytes=5040 draw_prepare_us=572
+empty pass=0 cpu_ms=2.947 wait_ms=2.187 total_ms=5.134
+empty captures=0 main_runs=0 mesh_upload_bytes=0 draw_prepare_us=0
+empty pass=1 cpu_ms=0.818 wait_ms=2.246 total_ms=3.064
+empty captures=0 main_runs=0 mesh_upload_bytes=0 draw_prepare_us=0

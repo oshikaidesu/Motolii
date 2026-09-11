@@ -97,13 +97,13 @@ mod tests {
         let mut doc=project();let layer=LayerId(1);let time=RationalTime::ZERO;
         let before=doc.view().resolved_text_document(layer,time).unwrap().unwrap();
         let canvas=crate::doc::vector::Canvas{width:800,height:240,origin_x:0,origin_y:0};
-        let a=crate::render::engine::text::rasterize_text_document(&before,time,&canvas).unwrap().unwrap();
+        let a=crate::render::engine::text::text_shapes(&before,time,&canvas).unwrap().unwrap();
         let family=crate::doc::vector::text::font_families().iter().find(|f|f.as_str()=="Georgia").unwrap();
         doc.apply_all(edits(&doc,layer,time,&json!({"scope":"selection","start":7,"end":8,"size":120.0,"family":family})).unwrap()).unwrap();
         let after=doc.view().resolved_text_document(layer,time).unwrap().unwrap();
         let ids=text_edit::style_ids(&after,after.content.eval(time));
         let selected=after.styles.iter().find(|s|s.id==ids[5]).unwrap();assert_eq!(selected.size,120.0);assert_eq!(&selected.font.family,family);
-        let b=crate::render::engine::text::rasterize_text_document(&after,time,&canvas).unwrap().unwrap();assert_ne!(a.premultiplied_rgba8,b.premultiplied_rgba8);
+        let b=crate::render::engine::text::text_shapes(&after,time,&canvas).unwrap().unwrap();assert_ne!(a,b,"級数と書体の変更が輪郭に届く");
         crate::editor::text::write_content(&mut doc,layer,time,"あカ漢か\u{3099}😀a!b".into()).unwrap();
         let changed=doc.view().text_document(layer).unwrap().unwrap();let new_ids=text_edit::style_ids(&changed,changed.content.eval(time));
         assert_eq!(new_ids[5],ids[5]);assert_eq!(new_ids[6],ids[5]);assert_eq!(new_ids[7],ids[6]);

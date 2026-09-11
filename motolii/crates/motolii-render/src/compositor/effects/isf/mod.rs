@@ -15,7 +15,7 @@ pub(crate) enum IsfError {
     WgslWrite(String),
     #[error("PERSISTENT なバッファは採らない(任意の時刻へ飛べるので、持ち越すと絵が操作の履歴に依存する)")]
     PersistentBuffer,
-    #[error("STAGE `{0}` は知らない(pass / surface / field)")]
+    #[error("STAGE `{0}` は知らない(pass / warp / surface / field)")]
     UnknownStage(String),
 }
 
@@ -24,6 +24,8 @@ pub(crate) enum IsfError {
 pub enum IsfStage {
     #[default]
     Pass,
+    /// Material-local XY image warp, evaluated before placement and spatial fields.
+    Warp,
     Surface,
     Field,
     /// 世界の平面で切る。shader は無く、欄だけ(fork の 1 式を板・点群・網が読む)。
@@ -34,6 +36,7 @@ impl IsfStage {
     fn from_isf_name(name: &str) -> Option<Self> {
         match name {
             "pass" => Some(Self::Pass),
+            "warp" => Some(Self::Warp),
             "surface" => Some(Self::Surface),
             "field" => Some(Self::Field),
             "clip" => Some(Self::Clip),
@@ -105,20 +108,48 @@ pub struct IsfInput {
     pub hero: bool,
 }
 
-/// ISF `PASSES` の1つ。`PERSISTENT` は拒否し、`WIDTH`/`HEIGHT` の式は読まない
-/// (中間ターゲットは常に描画サイズ)。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum IsfDimension { Fixed(u32), Divided(u32), Tiles(u32, u32) }
+impl IsfDimension {
+    pub fn resolve(self, source: u32) -> u32 { match self { Self::Fixed(n) => n, Self::Divided(n) => source.div_ceil(n).max(1), Self::Tiles(tile, size) => source.div_ceil(tile).saturating_mul(size).clamp(1,16384) } }
+}
+
+/// ISF pass; constant WIDTH/HEIGHT expressions size temporary targets.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct IsfPass {
+    pub width: Option<IsfDimension>,
+    pub height: Option<IsfDimension>,
     /// 後続のパスから**この名前で読める**。最後のパスは省略でき、呼び手の出力へ描く。
     pub target: Option<String>,
     /// 32bit float の中間(蓄積・HDR)。
     pub float: bool,
+    pub channels: u8,
 }
 
 #[derive(Clone, Debug)]
 pub struct IsfPadding {
     pub param: String,
     pub scale: f32,
+}
+
+/// 棚の札。`"THUMBNAIL": "echo.png"` は作者の絵(wgsl と同じ dir)、
+/// `"THUMBNAIL": {"intensity": 2.0, "SPLIT": true, "TIME": 1.0}` は見本を描く姿勢。
+/// 無ければ見本を HERO の欄を 75% にして描く。
+#[derive(Clone, Debug, PartialEq)]
+pub enum IsfThumbnail {
+    Picture(String),
+    Rendered {
+        /// 欄の名前と値。既定値の代わりに置く。
+        pose: Vec<(String, f32)>,
+        /// 左 before / 右 after で見せる(差でしか読めない効果)。
+        split: bool,
+        /// 見本のどの時刻を描くか(秒)。無ければ 0.5s。
+        time: Option<f32>,
+    },
+}
+
+impl Default for IsfThumbnail {
+    fn default() -> Self { Self::Rendered { pose: Vec::new(), split: false, time: None } }
 }
 
 #[derive(Clone, Debug)]
@@ -129,6 +160,8 @@ pub struct IsfManifest {
     pub stage: IsfStage,
     pub expose: bool,
     pub output_float: bool,
+    pub linear_sampling: bool,
+    pub specialize_passes: bool,
     /// A zero value of this input disables reads from the composited backdrop.
     pub backdrop_input: Option<String>,
     /// The roughness-like input that decides how far down the backdrop's mip chain reads go.
@@ -137,6 +170,7 @@ pub struct IsfManifest {
     pub description: Option<String>,
     pub inputs: Vec<IsfInput>,
     pub passes: Vec<IsfPass>,
+    pub thumbnail: IsfThumbnail,
 }
 
 impl Default for IsfManifest {
@@ -146,13 +180,16 @@ impl Default for IsfManifest {
             label: None,
             stage: IsfStage::Pass,
             expose: true,
-            output_float: false,
+            linear_sampling: false,
+            specialize_passes: false,
+        output_float: false,
             backdrop_input: None,
             backdrop_blur_input: None,
             padding: None,
             description: None,
             inputs: Vec::new(),
             passes: Vec::new(),
+            thumbnail: IsfThumbnail::default(),
         }
     }
 }
@@ -272,12 +309,32 @@ pub(crate) fn parse_isf_source(source: &str) -> Result<(IsfManifest, String), Is
             if truthy("PERSISTENT") {
                 return Err(IsfError::PersistentBuffer);
             }
+            let dimension = |key: &str| -> Result<Option<IsfDimension>, IsfError> {
+                let Some(value) = entry.get(key) else { return Ok(None) };
+                if let Some((tile, size)) = value.as_str().and_then(|s| s.strip_prefix(&format!("ceil(${key}/"))).and_then(|s| s.split_once(")*")) {
+                    if let (Ok(tile), Ok(size)) = (tile.parse::<u32>(), size.parse::<u32>()) {
+                        if tile > 0 && size > 0 && size <= 16384 { return Ok(Some(IsfDimension::Tiles(tile, size))); }
+                    }
+                    return Err(IsfError::Validate(format!("invalid {key} tile expression")));
+                }
+                if let Some(divisor) = value.as_str().and_then(|s| s.strip_prefix(&format!("${key}/"))).and_then(|s| s.parse::<u32>().ok()).filter(|n| *n > 0) {
+                    return Ok(Some(IsfDimension::Divided(divisor)));
+                }
+                let number = value.as_f64().or_else(|| value.as_str()?.parse().ok());
+                match number {
+                    Some(n) if n.is_finite() && n >= 1.0 && n <= 16384.0 && n.fract() == 0.0 => Ok(Some(IsfDimension::Fixed(n as u32))),
+                    _ => Err(IsfError::Validate(format!("{key} must be a positive constant integer no greater than 16384"))),
+                }
+            };
             passes.push(IsfPass {
+                width: dimension("WIDTH")?,
+                height: dimension("HEIGHT")?,
                 target: entry
                     .get("TARGET")
                     .and_then(|v| v.as_str())
                     .map(str::to_owned),
                 float: truthy("FLOAT"),
+                channels: match entry.get("CHANNELS").and_then(|v| v.as_u64()) { None => 4, Some(n @ (1 | 2 | 4)) => n as u8, _ => return Err(IsfError::Validate("CHANNELS must be 1, 2, or 4".into())) },
             });
         }
     }
@@ -295,6 +352,31 @@ pub(crate) fn parse_isf_source(source: &str) -> Result<(IsfManifest, String), Is
         }
         Ok(name.to_owned())
     }).transpose()?;
+    let thumbnail = match value.get("THUMBNAIL") {
+        None => IsfThumbnail::default(),
+        Some(serde_json::Value::String(file)) => IsfThumbnail::Picture(file.clone()),
+        Some(serde_json::Value::Object(fields)) => {
+            let mut pose = Vec::new();
+            for (key, v) in fields {
+                match key.as_str() {
+                    "SPLIT" | "TIME" => {}
+                    name => {
+                        if !inputs.iter().any(|p| p.name == name && p.ty != IsfInputType::Image) {
+                            return Err(IsfError::Validate(format!("THUMBNAIL names no parameter `{name}`")));
+                        }
+                        let number = v.as_f64().ok_or_else(|| IsfError::Validate(format!("THUMBNAIL `{name}` must be a number")))?;
+                        pose.push((name.to_owned(), number as f32));
+                    }
+                }
+            }
+            IsfThumbnail::Rendered {
+                pose,
+                split: fields.get("SPLIT").and_then(|v| v.as_bool()).unwrap_or(false),
+                time: fields.get("TIME").and_then(|v| v.as_f64()).map(|t| t as f32),
+            }
+        }
+        Some(_) => return Err(IsfError::Validate("THUMBNAIL must be a picture file name or a pose object".into())),
+    };
     Ok((
         IsfManifest {
             id,
@@ -302,12 +384,15 @@ pub(crate) fn parse_isf_source(source: &str) -> Result<(IsfManifest, String), Is
             stage,
             expose,
             output_float,
+            linear_sampling: value.get("FILTER").and_then(|v| v.as_str()) == Some("linear"),
+            specialize_passes: value.get("SPECIALIZE_PASSES").and_then(|v| v.as_bool()).unwrap_or(false),
             backdrop_input,
             backdrop_blur_input,
             padding,
             description,
             inputs,
             passes,
+            thumbnail,
         },
         body,
     ))
@@ -419,4 +504,39 @@ pub(super) fn compiled_stages(isf_source: &str) -> Result<(IsfManifest, String, 
         let vertex_wgsl = compile_glsl_to_wgsl(VERTEX_SOURCE, naga::ShaderStage::Vertex)?;
 
     Ok((manifest, vertex_wgsl, fragment_wgsl))
+}
+
+#[cfg(test)]
+mod thumbnail_tests {
+    use super::*;
+
+    fn manifest(header: &str) -> Result<IsfManifest, IsfError> {
+        parse_isf_source(&format!("/*{{ \"INPUTS\": [{{\"NAME\":\"source\",\"TYPE\":\"image\"}}, {{\"NAME\":\"gain\",\"TYPE\":\"float\",\"DEFAULT\":1.0}}]{header} }}*/ fn f() {{}}")).map(|(m, _)| m)
+    }
+
+    #[test]
+    fn constant_pass_dimensions_follow_isf_target_declarations() {
+        let m = manifest(r#", "PASSES": [{"TARGET":"summary","WIDTH":"64","HEIGHT":"8","FLOAT":true},{}]"#).unwrap();
+        assert_eq!((m.passes[0].width, m.passes[0].height), (Some(IsfDimension::Fixed(64)), Some(IsfDimension::Fixed(8))));
+        assert_eq!((m.passes[1].width, m.passes[1].height), (None, None));
+        let m = manifest(r#", "PASSES": [{"TARGET":"half","WIDTH":"$WIDTH/2","HEIGHT":"$HEIGHT/2"}]"#).unwrap();
+        assert_eq!(m.passes[0].width.unwrap().resolve(97), 49);
+        for value in ["0", "-1", "1.5", "16385", "\"$WIDTH/0\""] {
+            assert!(manifest(&format!(", \"PASSES\": [{{\"TARGET\":\"summary\",\"WIDTH\":{value}}}]")).is_err());
+        }
+    }
+
+    /// 作者の絵は file 名、姿勢は欄の名前と値。知らない欄は落とす(黙って既定の札にしない)。
+    #[test]
+    fn thumbnail_is_a_picture_or_a_pose() {
+        assert_eq!(manifest("").unwrap().thumbnail, IsfThumbnail::default());
+        assert_eq!(manifest(", \"THUMBNAIL\": \"gain.png\"").unwrap().thumbnail, IsfThumbnail::Picture("gain.png".into()));
+        assert_eq!(
+            manifest(", \"THUMBNAIL\": {\"gain\": 2.5, \"SPLIT\": true, \"TIME\": 1.0}").unwrap().thumbnail,
+            IsfThumbnail::Rendered { pose: vec![("gain".into(), 2.5)], split: true, time: Some(1.0) }
+        );
+        assert!(matches!(manifest(", \"THUMBNAIL\": {\"nope\": 1}"), Err(IsfError::Validate(_))));
+        assert!(matches!(manifest(", \"THUMBNAIL\": {\"source\": 1}"), Err(IsfError::Validate(_))), "image の欄は姿勢にならない");
+        assert!(matches!(manifest(", \"THUMBNAIL\": 3"), Err(IsfError::Validate(_))));
+    }
 }

@@ -33,13 +33,20 @@ impl Compositor {
             &effective_paddings,
         );
         let background = self.accumulate_sequential(comp, camera, &inputs, background_color)?;
-        self.finalize_into(target, comp, camera, background, background_color)?;
+        let outline = self.outline_view(comp, camera, &inputs)?;
+        self.finalize_into(target, comp, camera, background, background_color, outline)?;
 
         for (width, height, format, scratch_texture) in checked_out {
             self.effect_scratch
                 .release(width, height, format, scratch_texture);
         }
         Ok(())
+    }
+
+    /// 直前の `render_into` で選ばれていた層の画面上の広がり(番号 → `[x0, y0, x1, y1]` 画素)。
+    /// GPU から届く前なら `None`。
+    pub fn selection_screen_bounds(&mut self) -> Option<Vec<(u8, [f32; 4])>> {
+        self.selection_bounds.as_mut()?.take(&self.ctx.device)
     }
 }
 

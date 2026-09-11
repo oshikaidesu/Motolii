@@ -17,14 +17,106 @@ pub(crate) struct ReflectionResources {
     imported: GpuTexture2D,
 }
 
+/// 太陽から見た型紙(light cookie)の置き場。1 枚を frame ごとに描き直す。
+pub(crate) struct LightCookieResources {
+    texture: wgpu::Texture,
+    imported: GpuTexture2D,
+}
+
+/// 型紙の一辺。影の縁の粗さはこれで決まる(スマホの shadow map と同じ嘘)。
+const LIGHT_COOKIE_SIZE: u32 = 512;
+
+impl Compositor {
+    /// 「光を遮る」層があれば、太陽から正射影で 1 枚描く: 遮る層だけ、透過の色 × coverage。
+    /// 光は環境の太陽(無ければ固定灯)。深度は持たない — 遮る物は光線上の全てに影を落とす。
+    pub(super) fn capture_light_cookie(
+        &mut self,
+        comp: CompSpec,
+        inputs: &[SequentialInput<'_>],
+        environment: Option<&GpuEnvironmentData>,
+        shared: Option<&SharedMeshScene>,
+    ) -> Result<Option<re_renderer::environment::SunLight>, CompositorError> {
+        if !inputs.iter().any(|i| i.blocks_light) {
+            return Ok(None);
+        }
+        let sun = environment.map_or(super::environment::SunSpec::fixed_lights(), |e| e.sun);
+        let direction = sun.direction.normalize_or_zero();
+        if sun.weight <= 0.0 || direction == glam::Vec3::ZERO {
+            return Ok(None);
+        }
+        let (mut lo, mut hi, mut any) = (glam::Vec3::INFINITY, glam::Vec3::NEG_INFINITY, false);
+        for input in inputs {
+            if let Some((a, b)) = bounds(comp, input) {
+                lo = lo.min(a);
+                hi = hi.max(b);
+                any = true;
+            }
+        }
+        if !any {
+            return Ok(None);
+        }
+        let center = (lo + hi) * 0.5;
+        let radius = ((hi - lo).length() * 0.5).max(1e-3);
+        let up = if direction.y.abs() > 0.9 { glam::Vec3::X } else { glam::Vec3::Y };
+        let view = glam::Mat4::look_at_rh(center + direction * radius * 2.0, center, up);
+        let rotation = glam::Quat::from_mat3(&glam::Mat3::from_mat4(view));
+        let view_from_world = macaw::IsoTransform::from_rotation_translation(rotation, view.w_axis.truncate());
+        let ortho = glam::Mat4::orthographic_rh(-radius, radius, -radius, radius, 0.0, radius * 4.0);
+        let uv_from_world = glam::Mat4::from_translation(glam::vec3(0.5, 0.5, 0.0))
+            * glam::Mat4::from_scale(glam::vec3(0.5, -0.5, 1.0))
+            * ortho
+            * view;
+        let resources = match self.light_cookie.take() {
+            Some(r) => r,
+            None => {
+                let texture = self.create_blend_scratch_texture(LIGHT_COOKIE_SIZE, LIGHT_COOKIE_SIZE);
+                let imported = self.import_premultiplied(&texture)?;
+                LightCookieResources { texture, imported }
+            }
+        };
+        let draws = self.surface_scene_draws(comp, inputs, Vec::new(), true, &|layer| !inputs[layer].blocks_light, shared, 0)?;
+        let config = TargetConfiguration {
+            name: "light-cookie".into(),
+            render_mode: RenderMode::Deterministic,
+            resolution_in_pixel: [LIGHT_COOKIE_SIZE, LIGHT_COOKIE_SIZE],
+            view_from_world,
+            projection_from_view: Projection::Orthographic {
+                camera_mode: re_renderer::view_builder::OrthographicCameraMode::NearPlaneCenter,
+                vertical_world_size: radius * 2.0,
+                far_plane_distance: radius * 4.0,
+            },
+            pixels_per_point: 1.0,
+            blend_with_background: BlendWithBackground::Premultiplied,
+            environment: environment.map(|e| e.environment.clone()),
+            light_capture: true,
+            ..Default::default()
+        };
+        let mut builder = ViewBuilder::new_with_external_resolved(&self.ctx, config, ViewBuilderId::new(self.next_readback), &resources.texture)
+            .map_err(|e| CompositorError::View(e.to_string()))?;
+        self.next_readback += 1;
+        builder.queue_draw(&self.ctx, draws.rects.clone());
+        for cloud in &draws.clouds {
+            builder.queue_draw(&self.ctx, cloud.clone());
+        }
+        for mesh in &draws.meshes {
+            builder.queue_draw(&self.ctx, mesh.clone());
+        }
+        self.pending.push(builder.draw(&self.ctx, Rgba::TRANSPARENT).map_err(|e| CompositorError::Draw(e.to_string()))?);
+        self.surface_work.light_captures += 1;
+        let cookie = resources.imported.clone();
+        self.light_cookie = Some(resources);
+        Ok(Some(re_renderer::environment::SunLight { direction, weight: sun.weight, color: sun.color, uv_from_world, cookie }))
+    }
+}
+
 pub(super) struct SharedMeshScene {
     draw: MeshDrawData,
     source_layers: Vec<usize>,
 }
 
 impl SharedMeshScene {
-    fn select(&self, range: std::ops::Range<usize>, skip: Option<usize>) -> MeshDrawData {
-        if skip.is_none()
+    fn select(&self, range: std::ops::Range<usize>, skip: &dyn Fn(usize) -> bool) -> MeshDrawData {
+        if !self.source_layers.iter().any(|&l| skip(l))
             && self
                 .source_layers
                 .first()
@@ -35,7 +127,7 @@ impl SharedMeshScene {
         }
         self.draw.select_source_instances(|source| {
             let layer = self.source_layers[source];
-            range.contains(&layer) && skip != Some(layer)
+            range.contains(&layer) && !skip(layer)
         })
     }
 }
@@ -63,7 +155,7 @@ fn bounds(comp: CompSpec, input: &SequentialInput<'_>) -> Option<(glam::Vec3, gl
         SequentialContent::Environment(_) => return None,
         SequentialContent::Model(m) => Some(m.bounds),
         SequentialContent::Cloud { bounds, .. } => Some(bounds),
-        SequentialContent::Rect(_) => None,
+        SequentialContent::Rect(_) | SequentialContent::LinearRect(_) => None,
     };
     let points: Vec<glam::Vec3> = if let Some(b) = spatial {
         let world = projected_spatial_placement(
@@ -148,6 +240,7 @@ impl Compositor {
             if let SequentialContent::Model(model) = input.content {
                 let (made, _) = self.model_instances(
                     model,
+                    input.local_size.to_array(),
                     input.placement,
                     input.opacity,
                     comp,
@@ -180,7 +273,8 @@ impl Compositor {
         inputs: &[SequentialInput<'_>],
         mut rects: Vec<TexturedRect>,
         capture: bool,
-        skip: Option<usize>,
+        // Layers (absolute input index) left out of these draws.
+        skip: &dyn Fn(usize) -> bool,
         shared: Option<&SharedMeshScene>,
         input_offset: usize,
     ) -> Result<SceneDraws, CompositorError> {
@@ -192,7 +286,7 @@ impl Compositor {
             if capture && self.reflection_diagnostic_skip == Some(index) {
                 continue;
             }
-            if skip == Some(index)
+            if skip(input_offset + index)
                 || (shared.is_some() && matches!(input.content, SequentialContent::Model(_)))
             {
                 continue;
@@ -218,11 +312,13 @@ impl Compositor {
                         input.projection,
                         input.displace,
                         input.clip,
+                        outline_mask(input.outline),
                     )?);
                 }
                 SequentialContent::Model(model) => {
-                    let (instances, clip) = self.model_instances(
+                    let (mut instances, clip) = self.model_instances(
                         model,
+                        input.local_size.to_array(),
                         input.placement,
                         input.opacity,
                         comp,
@@ -231,13 +327,16 @@ impl Compositor {
                         &shading,
                         input.clip,
                     );
+                    for instance in &mut instances {
+                        instance.outline_mask_ids = outline_mask(input.outline);
+                    }
                     if let Some((_, group)) = mesh_groups.iter_mut().find(|(c, _)| *c == clip) {
                         group.extend(instances);
                     } else {
                         mesh_groups.push((clip, instances));
                     }
                 }
-                SequentialContent::Rect(texture) => {
+                SequentialContent::Rect(_) | SequentialContent::LinearRect(_) => {
                     let (corner, u, v) = projected_placement_corners(
                         comp,
                         input.projection_camera,
@@ -255,7 +354,7 @@ impl Compositor {
                         top_left_corner_position: corner,
                         extent_u: u,
                         extent_v: v,
-                        colormapped_texture: premultiplied_texture(texture.clone()),
+                        colormapped_texture: input.content.image().expect("planar image"),
                         options: RectangleOptions {
                             multiplicative_tint: Rgba::from_rgba_premultiplied(
                                 input.opacity,
@@ -269,6 +368,7 @@ impl Compositor {
                                 .map_or(ClipPlane::NONE, |c| c.world_for_rect(corner, u, v)),
                             surface: shading.program,
                             surface_params: shading.params,
+                            outline_mask: outline_mask(input.outline),
                             ..Default::default()
                         },
                     });
@@ -291,10 +391,7 @@ impl Compositor {
             })
             .collect::<Result<_, _>>()?;
         if let Some(shared) = shared {
-            meshes.push(shared.select(
-                input_offset..input_offset + inputs.len(),
-                skip.map(|i| input_offset + i),
-            ));
+            meshes.push(shared.select(input_offset..input_offset + inputs.len(), skip));
         }
         self.surface_work.draw_data_prepare_us += started.elapsed().as_micros() as u64;
         Ok(SceneDraws {
@@ -317,6 +414,9 @@ impl Compositor {
             .iter()
             .enumerate()
             .filter_map(|(index, input)| {
+                if matches!(input.content, SequentialContent::Model(m) if m.planar_size.is_some()) && !input.shading.reads_backdrop {
+                    return None;
+                }
                 if !input
                     .shading
                     .program
@@ -352,16 +452,16 @@ impl Compositor {
         let (receiver, receiver_min, receiver_max) = *first;
         let first_origin = (first.1 + first.2) * 0.5;
         let last_origin = (last.1 + last.2) * 0.5;
-        let (receivers, origins) = if first.0 == last.0 {
-            (vec![receiver], vec![first_origin])
-        } else {
-            (vec![receiver, last.0], vec![first_origin, last_origin])
-        };
-        let mut lo = receiver_min;
-        let mut hi = receiver_max;
+        let is_receiver = |i: usize| candidates.iter().any(|(c, _, _)| *c == i);
+        // Arm's local cubemap: the senders are captured once from the middle of their box and every
+        // receiver reads it through box projection, so a receiver moving does not retake the scene.
+        // Receivers are not in the capture (no self-image, no receiver-to-receiver reflection).
+        let scene_probe = self.reflection_scene_probe;
+        let mut lo = if scene_probe { glam::Vec3::INFINITY } else { receiver_min };
+        let mut hi = if scene_probe { glam::Vec3::NEG_INFINITY } else { receiver_max };
         let mut has_other = false;
         for (i, input) in inputs.iter().enumerate() {
-            if i == receiver {
+            if i == receiver || (scene_probe && is_receiver(i)) {
                 continue;
             }
             if let Some((a, b)) = bounds(comp, input) {
@@ -373,6 +473,13 @@ impl Compositor {
         if !has_other {
             return Ok(None);
         }
+        let (receivers, origins) = if scene_probe {
+            (vec![usize::MAX], vec![(lo + hi) * 0.5])
+        } else if first.0 == last.0 {
+            (vec![receiver], vec![first_origin])
+        } else {
+            (vec![receiver, last.0], vec![first_origin, last_origin])
+        };
         let near = ((hi - lo).length() * 1e-5).clamp(0.001, 0.01);
         #[cfg(test)]
         let near = self.reflection_diagnostic_near.unwrap_or(near);
@@ -449,12 +556,13 @@ impl Compositor {
         ];
         for (probe, (&receiver, &origin)) in receivers.iter().zip(&origins).enumerate() {
             // Draw data is reusable across all six camera views.
+            let skip = |layer: usize| if scene_probe { is_receiver(layer) } else { layer == receiver };
             let draws = self.surface_scene_draws(
                 comp,
                 inputs,
                 Vec::new(),
                 true,
-                Some(receiver),
+                &skip,
                 shared.as_ref(),
                 0,
             )?;

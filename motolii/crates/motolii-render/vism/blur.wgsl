@@ -3,6 +3,7 @@
   "DESCRIPTION": "ガウスぼかし(横→縦の 2 段)。出入りの「ぼけて入って締まる」、影、被写界深度の土台",
   "OUTPUT_FLOAT": true,
   "PADDING": { "PARAM": "radius", "SCALE": 3.0 },
+  "THUMBNAIL": { "radius": 24.0 },
   "INPUTS": [
     { "NAME": "source", "TYPE": "image" },
     { "NAME": "radius", "TYPE": "float", "DEFAULT": 8.0, "MIN": 0.0, "MAX": 128.0 }
