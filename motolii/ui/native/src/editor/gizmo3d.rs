@@ -188,7 +188,8 @@ fn is_similarity(m: glam::Affine3A) -> bool {
         && columns[1].dot(columns[2]).abs() <= tolerance * lengths[0]
 }
 
-/// 選んだ層のうち、3 軸ギズモが立つ物だけ。2D・2.5D の層はここに来ない。
+/// 選んだ層のうち、3 軸ギズモが立つ物だけ。2D・2.5D の層と、
+/// 変換を持たない案内の層(Camera・Stage)はここに来ない。
 pub(crate) fn spatial_targets(
     view: &StoreView<'_>,
     ids: &[LayerId],
@@ -202,6 +203,11 @@ pub(crate) fn spatial_targets(
             continue;
         }
         let Some(meta) = view.meta(layer).map_err(e)? else { continue };
+        // Camera は Center/Orbit/Distance を、Stage は余白を author する。position を持たないので
+        // 3 軸を立てると、掴んでも Document に何も届かない札が世界の別の場所に出る。
+        if matches!(meta.source, LayerSource::Camera | LayerSource::Stage) {
+            continue;
+        }
         let Some(comp) = view.composition().map_err(e)? else { continue };
         let Ok(frame) = at.try_to_frame_floor(comp.fps) else { continue };
         if !meta.timing.covers(frame) {
@@ -469,6 +475,36 @@ mod spatial_gizmo_tests {
 
     fn comp() -> crate::doc::core::CompSpec {
         crate::doc::core::CompSpec { width: 1920, height: 1080 }
+    }
+
+    /// 案内の層(Camera・Stage)には 3 軸が立たない。position を持たないので、
+    /// 立てると掴んでも何も届かない札が世界の別の場所に出る。
+    #[test]
+    fn guide_layers_get_no_three_axis_handle() {
+        let mut doc = blank_project();
+        let fps = doc.view().composition().unwrap().unwrap().fps;
+        let at = RationalTime::ZERO;
+        let mut make = |id: u64, source: LayerSource| {
+            let layer = LayerId(id);
+            doc.apply_all(crate::editor::create::new_layer_intents(
+                layer, id as i16, 0, 60, fps, (1920.0, 1080.0),
+                match source {
+                    LayerSource::Camera => crate::editor::create::NewKind::Camera,
+                    LayerSource::Stage => crate::editor::create::NewKind::Stage,
+                    _ => crate::editor::create::NewKind::Rectangle,
+                },
+                None,
+            )).unwrap();
+            doc.apply(Intent::SetAttrs { layer, patch: LayerAttrsPatch { projection: Some(LayerProjection::ThreeD), ..Default::default() } }).unwrap();
+            layer
+        };
+        let camera = make(1, LayerSource::Camera);
+        let stage = make(2, LayerSource::Stage);
+        let shape = make(3, LayerSource::Shape);
+        let view = doc.view();
+        assert!(spatial_targets(&view, &[camera, stage], at).unwrap().is_empty(), "a camera or a stage carries no transform");
+        let targets = spatial_targets(&view, &[camera, stage, shape], at).unwrap();
+        assert_eq!(targets.iter().map(|t| t.layer).collect::<Vec<_>>(), vec![shape], "the drawn layer still gets its handle");
     }
 
     /// Motolii の投影と、ギズモへ渡す深度規約だけ差し替えた投影が、
