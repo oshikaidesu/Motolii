@@ -14,6 +14,7 @@
 | 6 | 効果の広がり(Blur が comp の縁で切れる) | 完了・実窓確認済み(commit 008b631f) | 2026-09-12 利用者報告。図形・文字の絵の効果が comp 大 flatten で切れていた退行。素材座標・投影密度・内容範囲 + 余白で描く。[合成の 3 法](../reviews/2026-09-12-effect-extent-and-spill.md) §1 |
 | 7 | 効果の溢れ(Glow が周りを照らさない) | 完了・GPU 試験(commit 81251924) | coverage 外の光を層の Blend と独立に screen で下へ。manifest `SPILL`、合成側 1 箇所。同 §2 |
 | 8 | Glow の作り直し | 実装済み・見本 5 枚、実窓は利用者検収待ち | Bevy bloom(CoD の mip 鎖)+ Deep Glow の札(Exposure・Radius・Anamorphic・Chromatic・Tint・Composite)。7 の後 |
+| 9 | 2D/2.5D/3D の法(仕切り・中心保持・3D が選べない) | 実装済み・実窓は利用者検収待ち | [2D/2.5D/3D の法](../reviews/2026-09-12-projection-law.md)。Torus で 3D が押せなかったのは animate された位置を切替が拒んでいたため |
 | 5 | 拡大・カメラ接近時のパス／文字のジャギー | 完了・実窓確認済み | 利用者の22:09:36スクリーンショットで黒い文字の曲線に大きな階段を確認。文字・図形の輪郭を最終投影まで保持。画像効果の境界、Stage／export一致、負荷を検証する |
 
 ## 1の参考と調査入口

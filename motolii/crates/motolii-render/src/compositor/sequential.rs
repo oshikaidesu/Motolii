@@ -193,7 +193,14 @@ impl Compositor {
 
             let run_start = idx;
             let mut run_has_rect = false;
+            // 2D は世界に居ない(法 2026-09-12): 深度に参加せず、積み順だけで重なる。2D と非 2D を同じ run に
+            // 入れないことで、2D の連続は 1 つの面、間の 3D 群は自分たちだけで深度を解き、run 同士は積み順で
+            // over になる(AE の「2D 層は 3D 世界の仕切り」)。描くのはどちらも re_renderer の同じ view。
+            let flat = |i: &SequentialInput<'_>| i.projection == crate::doc::store::LayerProjection::TwoD;
             while idx < inputs.len() && !bakeable(&inputs[idx]) {
+                if idx > run_start && flat(&inputs[idx]) != flat(&inputs[run_start]) {
+                    break;
+                }
                 // 表面プログラムは手前で run を切り、それまでの合成を背後として読む。
                 if idx > run_start && (inputs[idx].shading.reads_backdrop || (run_has_rect && matches!(inputs[idx].content, SequentialContent::Model(_)))) {
                     break;

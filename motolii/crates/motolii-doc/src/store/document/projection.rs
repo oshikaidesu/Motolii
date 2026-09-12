@@ -1,12 +1,9 @@
-use crate::doc::core::{projection_switch_world, LayerPlacement, RationalTime};
+use crate::doc::core::{projection_switch_world, RationalTime};
 use crate::doc::eval::Value;
 use crate::doc::store::view::StoreView;
 use crate::doc::store::{property, LayerAttrsPatch, LayerProjection, StoreError};
 
-use super::group::{
-    bake_child_local, move_static_transform, move_translation_values, read_vec2,
-    refuse_split_position, write_transform_values,
-};
+use super::group::move_translation_values;
 use super::{Document, Intent, LayerId};
 
 impl Document {
@@ -59,106 +56,21 @@ fn projection_compensation(
         .and_then(|id| worlds.get(&id).copied())
         .unwrap_or(glam::Affine3A::IDENTITY);
     let switched = projection_switch_world(comp, camera, from, to, world, local_center.into())
-        .ok_or_else(|| StoreError::Property("Cannot keep this layer's picture across the projection change; it is not in front of the camera".into()))?;
-    let local = view.local_transform3d(layer, at)?;
-    let target = parent.inverse() * switched;
-    let in_layer = local.inverse() * target;
-    if !in_layer.is_finite() {
+        .ok_or_else(|| StoreError::Property("Cannot keep this layer's place across the projection change; it is not in front of the camera".into()))?;
+    // 法(2026-09-12): 札を変えても**中心は画面の同じ場所**に留める。面の向きは新しい札の意味に従う
+    // (2D は画面に正対、2.5D は既定カメラに正対、3D は自分の回転)ので、回転や scale は書き換えない。
+    // 動かすのは位置だけなので、位置が animate されていても全 key を同じ量ずらせる。
+    let center = glam::Vec3::from(local_center);
+    let before = world.transform_point3(center);
+    let after = switched.transform_point3(center);
+    let delta = parent.inverse().transform_vector3(after - before);
+    if !delta.is_finite() {
         return Err(StoreError::Property("Projection change needs a finite transform".into()));
     }
-    // Only the face (local x and y) is drawn, so a change along local z alone is invisible.
-    let face_unchanged = glam::Vec3::from(in_layer.matrix3.x_axis).distance(glam::Vec3::X) <= 1e-4
-        && glam::Vec3::from(in_layer.matrix3.y_axis).distance(glam::Vec3::Y) <= 1e-4;
-    if face_unchanged {
-        let delta = local.transform_vector3(in_layer.translation.into());
-        if delta.length() <= 1e-3 {
-            return Ok(Vec::new());
-        }
-        return move_translation_values(view, layer, delta.to_array().map(f64::from));
+    if delta.length() <= 1e-3 {
+        return Ok(Vec::new());
     }
-    move_static_transform(view, layer)?;
-    refuse_split_position(view, layer)?;
-    let anchor = read_vec2(view, layer, property::ANCHOR, [0.0, 0.0], at)?;
-    let spatial = decompose_spatial(target, anchor).ok_or_else(|| {
-        StoreError::Property("Projection change would fold the layer flat".into())
-    })?;
-    let rebuilt = LayerPlacement::spatial_from_transform(
-        LayerPlacement::from_transform(
-            anchor,
-            spatial.planar.position.map(|v| v as f32),
-            spatial.planar.scale.map(|v| v as f32),
-            spatial.planar.rotation_degrees as f32,
-            spatial.planar.skew_degrees as f32,
-            spatial.planar.skew_axis_degrees as f32,
-        ),
-        spatial.planar.position.map(|v| v as f32),
-        spatial.z,
-        spatial.rotation_x_degrees,
-        spatial.rotation_y_degrees,
-        1.0,
-    );
-    let tolerance = 1e-3 * target.translation.length().max(1.0);
-    let same_face = [
-        (target.matrix3.x_axis, rebuilt.matrix3.x_axis),
-        (target.matrix3.y_axis, rebuilt.matrix3.y_axis),
-        (target.translation, rebuilt.translation),
-    ]
-    .into_iter()
-    .all(|(a, b)| (glam::Vec3::from(a) - glam::Vec3::from(b)).length() <= tolerance);
-    if !same_face {
-        return Err(StoreError::Property(
-            "Projection change cannot be preserved without changing the layer".into(),
-        ));
-    }
-    write_transform_values(
-        view,
-        layer,
-        at,
-        [
-            (property::POSITION, Value::Vec2(spatial.planar.position)),
-            (property::POSITION_Z, Value::F64(f64::from(spatial.z))),
-            (property::ROTATION_X, Value::F64(f64::from(spatial.rotation_x_degrees))),
-            (property::ROTATION_Y, Value::F64(f64::from(spatial.rotation_y_degrees))),
-            (property::SCALE, Value::Vec2(spatial.planar.scale)),
-            (property::ROTATION, Value::F64(spatial.planar.rotation_degrees)),
-            (property::SKEW, Value::F64(spatial.planar.skew_degrees)),
-            (property::SKEW_AXIS, Value::F64(spatial.planar.skew_axis_degrees)),
-        ],
-    )
-}
-
-struct SpatialValues {
-    planar: super::group::BakedChildTransform,
-    z: f32,
-    rotation_x_degrees: f32,
-    rotation_y_degrees: f32,
-}
-
-/// Splits a local 3D transform into the layer's properties. Exact for the layer's face
-/// (its x and y axes); the face normal is rebuilt from them, so a volume's depth axis
-/// keeps only its direction.
-fn decompose_spatial(local: glam::Affine3A, anchor: [f32; 2]) -> Option<SpatialValues> {
-    use glam::{Affine2, Quat, Vec3};
-    let bx = Vec3::from(local.matrix3.x_axis);
-    let by = Vec3::from(local.matrix3.y_axis);
-    let normal = bx.cross(by).try_normalize()?;
-    let rotation_y = normal.x.clamp(-1.0, 1.0).asin();
-    let rotation_x = (-normal.y).atan2(normal.z);
-    let tilt = Quat::from_rotation_x(rotation_x) * Quat::from_rotation_y(rotation_y);
-    let untilted = glam::Mat3::from_quat(tilt.inverse()) * glam::Mat3::from(local.matrix3);
-    let matrix2 = glam::Mat2::from_cols(untilted.x_axis.truncate(), untilted.y_axis.truncate());
-    let position = local.transform_point3(Vec3::new(anchor[0], anchor[1], 0.0));
-    let xy = Affine2::from_mat2_translation(
-        matrix2,
-        position.truncate() - matrix2 * glam::Vec2::from(anchor),
-    );
-    let planar = bake_child_local(Affine2::IDENTITY, xy, anchor);
-    (position.is_finite() && planar.position.iter().all(|v| v.is_finite())).then_some(SpatialValues {
-        planar,
-        z: position.z,
-        rotation_x_degrees: rotation_x.to_degrees(),
-        rotation_y_degrees: rotation_y.to_degrees(),
-    })
+    move_translation_values(view, layer, delta.to_array().map(f64::from))
 }
 
 #[cfg(test)]
@@ -209,14 +121,21 @@ mod projection_switch_tests {
         let world = view.world_transform3d(layer, RationalTime::ZERO).unwrap();
         projected_screen_corners(comp, camera, camera, attrs.projection, world, MIN, MAX)
     }
+    /// 中心が画面のどこに映るか(法: 札を変えても中心は動かない。面の向きは札の意味に従う)。
+    fn center_on_screen(doc: &Document, layer: LayerId) -> glam::Vec2 {
+        let view = doc.view();
+        let comp = view.composition().unwrap().unwrap().spec();
+        let camera = view.resolve_camera(RationalTime::ZERO).unwrap();
+        let attrs = view.attrs(layer).unwrap().unwrap_or_default();
+        let world = view.world_transform3d(layer, RationalTime::ZERO).unwrap();
+        projected_screen_corners(comp, camera, camera, attrs.projection, world, center(), center())[0]
+    }
     fn switch(doc: &mut Document, layer: LayerId, to: LayerProjection) {
-        let before = corners(doc, layer);
+        let before = center_on_screen(doc, layer);
         doc.set_projection(&[(layer, center())], LayerAttrsPatch { projection: Some(to), ..Default::default() }, RationalTime::ZERO).unwrap();
         assert_eq!(doc.view().attrs(layer).unwrap().unwrap().projection, to);
-        let after = corners(doc, layer);
-        for (a, b) in before.iter().zip(after) {
-            assert!(a.distance(b) < 0.05, "{to:?}: {a:?} != {b:?}");
-        }
+        let after = center_on_screen(doc, layer);
+        assert!(before.distance(after) < 0.05, "{to:?}: center moved {before:?} -> {after:?}");
     }
     fn scalar(doc: &Document, layer: LayerId, name: &str) -> f64 {
         match doc.view().value_at(layer, &PropertyId::new(name).unwrap(), RationalTime::ZERO).unwrap() {
@@ -227,7 +146,7 @@ mod projection_switch_tests {
     }
 
     #[test]
-    fn tilted_child_under_a_moved_camera_keeps_its_picture_through_every_switch() {
+    fn tilted_child_under_a_moved_camera_keeps_its_center_through_every_switch() {
         let mut doc = blank_project();
         camera(&mut doc);
         let group = shape(&mut doc, 1, None);
@@ -245,7 +164,8 @@ mod projection_switch_tests {
         for to in [LayerProjection::ThreeD, LayerProjection::TwoD, LayerProjection::TwoPointFiveD, LayerProjection::TwoD, LayerProjection::ThreeD] {
             switch(&mut doc, layer, to);
         }
-        assert!(scalar(&doc, layer, property::ROTATION_X).abs() > 1.0, "the tilt survives as a value");
+        assert!((scalar(&doc, layer, property::ROTATION_X) - 30.0).abs() < 1e-6, "rotation is not rewritten by a projection change");
+        let _ = corners(&doc, layer);
     }
 
     #[test]
@@ -278,8 +198,12 @@ mod projection_switch_tests {
         let keys = doc.view().track(layer, &PropertyId::new(property::POSITION).unwrap()).unwrap().unwrap().keys().len();
         assert_eq!(keys, 2);
         assert!(scalar(&doc, layer, property::POSITION_Z).abs() < 1e-3, "2D drew it on z=0, so 3D places it there");
+        // 傾いていて位置が animate されていても切り替えられる(回転は触らず、中心だけ全 key をずらす)。
         put(&mut doc, layer, property::ROTATION_X, Value::F64(30.0));
-        let err = doc.set_projection(&[(layer, center())], LayerAttrsPatch { projection: Some(LayerProjection::TwoD), ..Default::default() }, RationalTime::ZERO).unwrap_err();
-        assert!(err.to_string().contains("animated"), "{err}");
+        camera(&mut doc);
+        switch(&mut doc, layer, LayerProjection::TwoD);
+        let keys = doc.view().track(layer, &PropertyId::new(property::POSITION).unwrap()).unwrap().unwrap().keys().len();
+        assert_eq!(keys, 2, "the animation survives the switch");
+        assert!((scalar(&doc, layer, property::ROTATION_X) - 30.0).abs() < 1e-6);
     }
 }
