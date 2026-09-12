@@ -49,7 +49,11 @@ Motolii に、効果が層の外・他の層へ及ぶ時の法が無かった。
 
 先例: Photoshop の layer style は Outer Glow が既定 Screen、Drop Shadow が既定 Multiply を**効果自身が**持ち、層の blend とは別。Figma の effects も同じ。AE は層の blend を Add にしないと光らない(「そういうものだ」なので引き継がない)。
 
-形: manifest に `"SPILL": "screen"`。合成側の 1 箇所(sequential の焼く経路)で、SPILL を持つ層だけ coverage 内 = 層の Blend、coverage 外 = screen の 2 枚で描く。効果作者は分岐しない。
+形(実装済み、2026-09-12): manifest に `"SPILL": "screen" | "add" | "multiply"`。効果の鎖の出口 1 箇所(`effective_layer_textures_in_frame`)で、SPILL を持つ層だけ出力を素材の coverage で内と外に分け(`matte_by_coverage`、生成器の閉じ込めと同じ matte program の mode 0/1)、外は同じ置き場の 2 枚目の入力として宣言の混ぜ方で積む(`sequential_inputs`)。内は層の Blend のまま。効果作者は分岐しない。Glow が `SPILL: screen` を宣言。
+
+ついでに、焼く経路(mix 系 blend の矩形)が `LinearRect` で `unreachable!` に落ちる穴を `SequentialContent::image()` で塞いだ。
+
+審判 `domain_contract::a_glow_halo_spills_as_light_independent_of_the_layer_blend`: Normal の青い矩形に Glow。白地では素材の外が白のまま(screen は白を変えない — SPILL 無しだと 1968 画素が濁る)、黒地では halo が 200 画素以上光る。
 
 ## 3. 下を読む法(後)
 

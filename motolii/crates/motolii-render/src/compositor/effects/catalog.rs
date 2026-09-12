@@ -49,6 +49,8 @@ pub struct EffectDescriptor {
     pub params: Vec<EffectParamDescriptor>,
     pub thumbnail: EffectThumbnail,
     pub(crate) padding: Option<EffectPaddingDescriptor>,
+    /// coverage 外の出力を下へ合成する混ぜ方(溢れの法)。無ければ層の Blend のまま。
+    pub(crate) spill: Option<crate::render::compositor::BlendMode>,
     pub(crate) output_format: wgpu::TextureFormat,
 }
 
@@ -308,6 +310,7 @@ fn descriptors(definitions: &[VismDefinition]) -> Arc<[EffectDescriptor]> {
             time: EffectThumbnail::DEFAULT_TIME,
         },
         padding: None,
+        spill: None,
         output_format: wgpu::TextureFormat::Rgba8Unorm,
     });
     definitions.iter().filter(|d| d.manifest.expose).map(|d| EffectDescriptor {
@@ -341,6 +344,7 @@ fn descriptors(definitions: &[VismDefinition]) -> Arc<[EffectDescriptor]> {
             }
         }).collect(),
         padding: d.manifest.padding.as_ref().map(|p| EffectPaddingDescriptor { param: p.param.clone(), scale: p.scale }),
+        spill: d.manifest.spill.as_deref().map(|mode| match mode { "add" => crate::render::compositor::BlendMode::Add, "multiply" => crate::render::compositor::BlendMode::Multiply, _ => crate::render::compositor::BlendMode::Screen }),
         output_format: d.output_format(),
     }).chain(declared).collect::<Vec<_>>().into()
 }

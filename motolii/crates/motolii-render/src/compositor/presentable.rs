@@ -24,13 +24,14 @@ impl Compositor {
     ) -> Result<(), CompositorError> {
         check_presentable_target(target, comp)?;
 
-        let (effective_textures, effective_paddings, checked_out) =
+        let (effective_textures, effective_paddings, effective_spills, checked_out) =
             self.effective_layer_textures(layers)?;
 
         let inputs = crate::render::compositor::render_effects::sequential_inputs(
             layers,
             &effective_textures,
             &effective_paddings,
+            &effective_spills,
         );
         let background = self.accumulate_sequential(comp, camera, &inputs, background_color)?;
         let outline = self.outline_view(comp, camera, &inputs)?;

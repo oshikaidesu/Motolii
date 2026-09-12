@@ -83,6 +83,7 @@ pub(crate) fn translate_image_effects(effects: &[crate::doc::store::ResolvedEffe
                 params,
                 padding,
                 output_format: descriptor.output_format,
+                spill: descriptor.spill,
             })
         })
         .collect()

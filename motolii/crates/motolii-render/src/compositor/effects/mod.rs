@@ -125,6 +125,8 @@ pub struct EffectPass {
     pub(crate) params: Vec<(String, f32)>,
     pub(crate) padding: u32,
     pub(crate) output_format: wgpu::TextureFormat,
+    /// coverage 外の出力の混ぜ方(溢れの法)。
+    pub(crate) spill: Option<crate::render::compositor::BlendMode>,
 }
 
 impl EffectPass {

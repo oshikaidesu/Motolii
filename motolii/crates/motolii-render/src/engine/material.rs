@@ -85,7 +85,7 @@ impl Engine {
             let mut frame = source_frame.unwrap_or(ImageFrame { size: natural, origin: [0.0;2], pixels: texture.width_height() });
             for pass in warps {
                 let input = LayerWithPasses { layer: image_layer(texture, frame.size), passes: vec![pass] };
-                let (mut outputs,padding,_owned_outputs) = self.compositor.effective_layer_textures_in_frame(&[input], Some(frame))?;
+                let (mut outputs,padding,_spills,_owned_outputs) = self.compositor.effective_layer_textures_in_frame(&[input], Some(frame))?;
                 texture = outputs.remove(0).texture().expect("image effect output").clone();
                 frame = frame.padded(padding[0]);
             }
@@ -186,7 +186,7 @@ mod domain_contract {
             let passes=super::super::translate::translate_image_effects(&[effect],EffectStage::Warp);
             let frame=ImageFrame{size:[64.0;2],origin:[0.0;2],pixels:[extent;2]};
             let input=LayerWithPasses{layer:image_layer(source,frame.size),passes};
-            let (mut output,padding,_owned)=compositor.effective_layer_textures_in_frame(&[input],Some(frame)).unwrap();
+            let (mut output,padding,_spills,_owned)=compositor.effective_layer_textures_in_frame(&[input],Some(frame)).unwrap();
             let frame=frame.padded(padding[0]);
             let texture=output.remove(0).texture().unwrap().clone();
             let layer=LayerWithPasses{layer:image_layer(texture,frame.size),passes:Vec::new()};
@@ -197,6 +197,36 @@ mod domain_contract {
             if a[3]>250 && b[3]>250 {total+=3;error+=a[..3].iter().zip(&b[..3]).map(|(a,b)|a.abs_diff(*b) as usize).sum::<usize>();}
         }
         assert!(total>6000 && error<total*2,"pixel density changed the material-local warp: {error}/{total}");
+    }
+
+    /// 溢れの法: Glow の halo(coverage の外)は層の Blend が Normal でも screen で下へ乗る。
+    /// 白の上では白のまま(screen は白を変えない)、黒の上では光る。Normal の over なら白が halo の色に濁る。
+    #[test]
+    fn a_glow_halo_spills_as_light_independent_of_the_layer_blend() {
+        let scene = |background: [f32; 4]| {
+            let mut doc = document(LayerSource::Shape, 96, [48.0, 48.0]);
+            let mut comp = doc.view().composition().unwrap().unwrap();
+            comp.background = background;
+            doc.apply(Intent::SetComposition(comp)).unwrap();
+            shape(&mut doc);
+            effect(&mut doc, 0, "motolii.glow", &[("threshold", 0.0), ("intensity", 3.0), ("radius", 6.0)]);
+            doc
+        };
+        let mut engine = Engine::new().unwrap();
+        let on_white = engine.render_frame(&scene([1.0; 4]).view(), RationalTime::ZERO).unwrap();
+        let on_black = engine.render_frame(&scene([0.0, 0.0, 0.0, 1.0]).view(), RationalTime::ZERO).unwrap();
+        let plain = engine.render_frame(&{ let mut d = document(LayerSource::Shape, 96, [48.0, 48.0]); shape(&mut d); d }.view(), RationalTime::ZERO).unwrap();
+        let mut tinted_white = 0;
+        let mut lit_black = 0;
+        for (i, px) in plain.chunks_exact(4).enumerate() {
+            if px[3] != 0 { continue; } // 素材の中は見ない
+            let w = &on_white[i * 4..i * 4 + 4];
+            if w[0] < 250 || w[1] < 250 || w[2] < 250 { tinted_white += 1; }
+            let b = &on_black[i * 4..i * 4 + 4];
+            if b[2] > 24 { lit_black += 1; }
+        }
+        assert!(lit_black > 200, "the halo must light the black background: {lit_black} pixels");
+        assert!(tinted_white < 20, "a Normal layer's halo must screen over white, not tint it: {tinted_white} pixels");
     }
 
     #[test]

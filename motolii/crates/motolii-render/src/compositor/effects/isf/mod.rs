@@ -167,6 +167,9 @@ pub struct IsfManifest {
     /// The roughness-like input that decides how far down the backdrop's mip chain reads go.
     pub backdrop_blur_input: Option<String>,
     pub padding: Option<IsfPadding>,
+    /// 溢れの法: 素材の coverage の外へ出た出力(光・影)を、層の Blend と独立にこの混ぜ方で下へ合成する
+    /// (`"SPILL": "screen" | "add" | "multiply"`。Photoshop の layer style が効果ごとに blend を持つのと同じ)。
+    pub spill: Option<String>,
     pub description: Option<String>,
     pub inputs: Vec<IsfInput>,
     pub passes: Vec<IsfPass>,
@@ -186,6 +189,7 @@ impl Default for IsfManifest {
             backdrop_input: None,
             backdrop_blur_input: None,
             padding: None,
+            spill: None,
             description: None,
             inputs: Vec::new(),
             passes: Vec::new(),
@@ -255,6 +259,10 @@ pub(crate) fn parse_isf_source(source: &str) -> Result<(IsfManifest, String), Is
             scale: v.get("SCALE").and_then(|v| v.as_f64()).unwrap_or(1.0) as f32,
         })
     });
+    let spill = value.get("SPILL").map(|v| match v.as_str() {
+        Some(mode @ ("screen" | "add" | "multiply")) => Ok(mode.to_owned()),
+        _ => Err(IsfError::Validate("SPILL must be \"screen\", \"add\" or \"multiply\"".into())),
+    }).transpose()?;
     let description = value
         .get("DESCRIPTION")
         .and_then(|v| v.as_str())
@@ -389,6 +397,7 @@ pub(crate) fn parse_isf_source(source: &str) -> Result<(IsfManifest, String), Is
             backdrop_input,
             backdrop_blur_input,
             padding,
+            spill,
             description,
             inputs,
             passes,

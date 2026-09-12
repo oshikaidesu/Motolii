@@ -2,6 +2,7 @@
   "ID": "motolii.glow",
   "DESCRIPTION": "明部を抜いて広げ、元へ足す。段は ISF の PASSES で宣言する(1フレーム内の中間ターゲットだけ。PERSISTENT は採らない)",
   "OUTPUT_FLOAT": true,
+  "SPILL": "screen",
   "PADDING": { "PARAM": "radius", "SCALE": 2.0 },
   "THUMBNAIL": { "threshold": 0.8, "intensity": 1.5, "radius": 24.0 },
   "INPUTS": [

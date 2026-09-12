@@ -126,12 +126,7 @@ impl Compositor {
                     top_left_corner_position: corner,
                     extent_u,
                     extent_v,
-                    colormapped_texture: crate::render::compositor::premultiplied_texture(
-                        match input.content {
-                            crate::render::compositor::SequentialContent::Rect(t) => t.clone(),
-                            _ => unreachable!("焼く経路へ来るのは矩形だけ"),
-                        },
-                    ),
+                    colormapped_texture: input.content.image().expect("焼く経路へ来るのは矩形だけ"),
                     options: RectangleOptions {
                         multiplicative_tint: Rgba::from_rgba_premultiplied(
                             input.opacity,
