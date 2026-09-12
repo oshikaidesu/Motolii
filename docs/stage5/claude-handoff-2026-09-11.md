@@ -11,9 +11,9 @@
 | 2b | macOSアクセシビリティ更新時のクラッシュ | 未修正・検収を妨げる | Flutter 3.47.2 `AccessibilityBridge::CreateRemoveReparentedNodesUpdate`でSIGSEGV。Undoメニュー・図形選択で再発。図形の実窓検収を再開する前に切り分ける |
 | 3 | エフェクトサムネイル | 検収待ち | 各席の見本、作者画像、押下before、大表示の半分割、カタログ更新、適用操作を検収。見本native試験は停止直前に成功 |
 | 4 | グループ効果Each／Whole | 未完 | 既存doc/render/native口を確認。板の入れ子・clip／matteの欠落を解消し、Repeater互換とUndoを検証。UI詳細は利用者の「後で詰める」を守る。Each／Randomの全param展開は別の残課題として扱う |
-| 6 | 効果の広がり(Blur が comp の縁で切れる) | 描画修正・render 回帰中 | 2026-09-12 利用者報告。図形・文字の絵の効果が comp 大 flatten で切れていた退行。素材座標・投影密度・内容範囲 + 余白で描く。[合成の 3 法](../reviews/2026-09-12-effect-extent-and-spill.md) §1 |
-| 7 | 効果の溢れ(Glow が周りを照らさない) | 未着手 | coverage 外の光を層の Blend と独立に screen で下へ。manifest `SPILL`、合成側 1 箇所。同 §2 |
-| 8 | Glow の作り直し | 未着手 | Bevy bloom(CoD の mip 鎖)+ Deep Glow の札(Exposure・Radius・Anamorphic・Chromatic・Tint・Composite)。7 の後 |
+| 6 | 効果の広がり(Blur が comp の縁で切れる) | 完了・実窓確認済み(commit 008b631f) | 2026-09-12 利用者報告。図形・文字の絵の効果が comp 大 flatten で切れていた退行。素材座標・投影密度・内容範囲 + 余白で描く。[合成の 3 法](../reviews/2026-09-12-effect-extent-and-spill.md) §1 |
+| 7 | 効果の溢れ(Glow が周りを照らさない) | 完了・GPU 試験(commit 81251924) | coverage 外の光を層の Blend と独立に screen で下へ。manifest `SPILL`、合成側 1 箇所。同 §2 |
+| 8 | Glow の作り直し | 実装済み・見本 5 枚、実窓は利用者検収待ち | Bevy bloom(CoD の mip 鎖)+ Deep Glow の札(Exposure・Radius・Anamorphic・Chromatic・Tint・Composite)。7 の後 |
 | 5 | 拡大・カメラ接近時のパス／文字のジャギー | 完了・実窓確認済み | 利用者の22:09:36スクリーンショットで黒い文字の曲線に大きな階段を確認。文字・図形の輪郭を最終投影まで保持。画像効果の境界、Stage／export一致、負荷を検証する |
 
 ## 1の参考と調査入口

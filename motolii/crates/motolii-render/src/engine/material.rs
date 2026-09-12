@@ -229,6 +229,32 @@ mod domain_contract {
         assert!(tinted_white < 20, "a Normal layer's halo must screen over white, not tint it: {tinted_white} pixels");
     }
 
+    /// 見本(目視用、MOTOLII_GLOW_EVIDENCE=dir): 黒地に明るい図形、Glow の既定・Radius 小・Chromatic・Anamorphic。
+    #[test]
+    fn glow_gallery_for_the_eye() {
+        let Some(dir) = std::env::var_os("MOTOLII_GLOW_EVIDENCE") else { return };
+        let dir = std::path::PathBuf::from(dir); std::fs::create_dir_all(&dir).unwrap();
+        let mut engine = Engine::new().unwrap();
+        for (name, params) in [
+            ("default", vec![]),
+            ("radius-16", vec![("radius", 16.0)]),
+            ("radius-256-spread", vec![("radius", 256.0), ("spread", 1.0), ("intensity", 3.0)]),
+            ("chromatic", vec![("radius", 128.0), ("chromatic", 1.0), ("intensity", 2.5)]),
+            ("anamorphic", vec![("radius", 128.0), ("anamorphic", 0.8), ("intensity", 2.5)]),
+        ] {
+            let mut doc = document(LayerSource::Shape, 256, [128.0, 128.0]);
+            let mut comp = doc.view().composition().unwrap().unwrap(); comp.background = [0.02, 0.02, 0.03, 1.0];
+            doc.apply(Intent::SetComposition(comp)).unwrap();
+            doc.apply(Intent::SetShapes { layer: LayerId(1), shapes: vec![ShapeNode::Leaf(Shape {
+                source: PathSource::Ellipse { size: Point { x: 40.0, y: 40.0 } }, ops: Vec::new(), stroke: None,
+                fill: Some(Fill { brush: Brush::Solid(Rgb { r: 1.0, g: 0.85, b: 0.4 }), ..Default::default() }),
+            })] }).unwrap();
+            effect(&mut doc, 0, "motolii.glow", &params);
+            let pixels = engine.render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+            image::save_buffer(dir.join(format!("glow-{name}.png")), &pixels, 256, 256, image::ColorType::Rgba8).unwrap();
+        }
+    }
+
     #[test]
     fn neutral_warp_is_identity_and_evolution_and_seed_have_distinct_results() {
         let mut doc=document(LayerSource::Shape,128,[40.0,40.0]);shape(&mut doc);

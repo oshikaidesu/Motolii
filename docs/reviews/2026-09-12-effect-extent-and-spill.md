@@ -55,6 +55,16 @@ Motolii に、効果が層の外・他の層へ及ぶ時の法が無かった。
 
 審判 `domain_contract::a_glow_halo_spills_as_light_independent_of_the_layer_blend`: Normal の青い矩形に Glow。白地では素材の外が白のまま(screen は白を変えない — SPILL 無しだと 1968 画素が濁る)、黒地では halo が 200 画素以上光る。
 
+## Glow の作り直し(2026-09-12、実装済み)
+
+利用者「Deep Glow の画は素晴らしいが実装は過剰」。取説を読んで、Bevy の bloom(Call of Duty: Advanced Warfare の作法、MIT)を 1 つの Vism に畳んだ。ID `motolii.glow` と `threshold / intensity / radius` は据え置き(保存済みの作品はそのまま開く)。
+
+- **中身**: 余白込みの絵を 13 tap で半分ずつ 6 段に落とし(初段だけ Catlike Coding の soft knee と Karis 平均)、3×3 tent で戻しながら段ごとの重みで足す。ISF の `PASSES` の `$WIDTH/2 … /64` と `FILTER: linear` だけで書けた。runtime の変更なし。
+- **札**: Threshold・Softness(knee)・Intensity(HDR、1 を越えて足す)・Radius(届く段 = log2 radius)・Spread(遠い段の持ち上げ、Bevy の low_frequency_boost)・Anamorphic(標本間隔を x に伸ばす、Bevy の scale)・Chromatic(深い段ほど YIQ で色相を回す、外周ほど色が変わる)。Tint(光の色)は ISF の color 欄が pass の params に乗らないので宿題。
+- **嘘**: 段の和は正規化しない。近くは全段が重なって白く飛び、遠くは深い段だけで淡い — bloom の形。正規化すると光が消える(最初の版で確認)。
+- **溢れ**: `SPILL: screen` で halo は Normal の層でも周りを照らす。
+- 見本: `domain_contract::glow_gallery_for_the_eye`(`MOTOLII_GLOW_EVIDENCE=dir`)で既定・Radius 16・Radius 256+Spread・Chromatic・Anamorphic の 5 枚。
+
 ## 3. 下を読む法(後)
 
 Figma の Background blur、ガラスの屈折のように、下に描かれた絵を入力にする効果。glass 用の「run を切って backdrop の mip を渡す」口を画像 pass にも開く。
