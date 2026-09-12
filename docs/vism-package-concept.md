@@ -52,6 +52,7 @@ MotoliiはVismを扱う最初のリファレンスHostを目指す。VismはMoto
 - Vism packageが複数の役割を持ち得ても、通常一覧で内部entryや`PluginKind`を読ませない。
 - `Vism`と`.vism`は、開発者向け文書、ファイル選択、詳細な由来・診断、Advanced情報で識別できればよい。
 - プラグイン一覧は名前だけにせず、表現のthumbnail／preview、用途tag、導入・互換状態、同梱／local file等の由来を併用する。具体manifest fieldはPhase B/Cの決定前に固定しない。
+  - thumbnail だけは決着済み(2026-09-12): manifest field ではなく **shader の隣の `<plugin_id>_snapshot.png`**(任意で `_snapshot_2.0x.png`)。VST3 の Plug-in Snapshot と同じ置き方で、無ければ札は fx の印のまま。
 - ユーザーのFolder／Label／Historyはstable package identityを参照するUser library投影とし、install先、`.vism`配置path、package内部path、実装module階層から生成しない。更新・再導入・保存場所変更でユーザー整理を動かさず、実pathは必要時の診断／Developer infoへ隔離する。
 
 ## 3. Project、Preset、Asset、Cacheと混ぜない

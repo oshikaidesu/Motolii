@@ -38,6 +38,8 @@ void main() {
     );
     final tile = find.byKey(const ValueKey('browser:effect:motolii.blur'));
     expect(tile, findsOneWidget);
+    // The glyph stays under the picture, so an effect without one keeps it.
+    expect(find.text('ƒ'), findsOneWidget);
     expect(tester.widget<NativeVisualSample>(tile).request, {
       'kind': 'effect',
       'id': 'motolii.blur',
