@@ -2,12 +2,63 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' show ViewFocusEvent, ViewFocusState;
 
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'theme.dart';
 import 'metrics.dart';
+
+/// One item's view of a selection signal: rebuilds only when [test] flips for
+/// this item, so a pick in a shelf of hundreds redraws the two it touches.
+class Picked<T> extends StatefulWidget {
+  const Picked({
+    super.key,
+    required this.of,
+    required this.test,
+    required this.builder,
+  });
+  final ValueListenable<T> of;
+  final bool Function(T value) test;
+  final Widget Function(bool picked) builder;
+  @override
+  State<Picked<T>> createState() => _PickedState<T>();
+}
+
+class _PickedState<T> extends State<Picked<T>> {
+  late bool on = widget.test(widget.of.value);
+
+  void _check() {
+    final now = widget.test(widget.of.value);
+    if (now != on) setState(() => on = now);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    widget.of.addListener(_check);
+  }
+
+  @override
+  void didUpdateWidget(Picked<T> old) {
+    super.didUpdateWidget(old);
+    if (old.of != widget.of) {
+      old.of.removeListener(_check);
+      widget.of.addListener(_check);
+    }
+    on = widget.test(widget.of.value);
+  }
+
+  @override
+  void dispose() {
+    widget.of.removeListener(_check);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.builder(on);
+}
 
 Widget panelButton(
   String label,

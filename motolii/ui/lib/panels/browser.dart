@@ -8,7 +8,6 @@ import 'dart:ui'
     as ui
     show Vertices, VertexMode, instantiateImageCodec, ImageByteFormat;
 
-import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/gestures.dart' show kPrimaryButton;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -286,9 +285,22 @@ class _BrowserPanelState extends State<BrowserPanel> {
     if (mounted) setState(_derive);
   }
 
-  /// Saved swatches are the one thing the desk feeds the list.
+  /// The desk keys this shelf reads; a write to any other leaves it still.
+  /// Saved swatches are the one that feeds the list.
+  Object? _deskSeen;
   void _redraw() {
-    if (mounted) setState(() => tab == 'Colors' ? _derive() : null);
+    final d = widget.controller.deskWork.value;
+    final now = (
+      d['browserView'],
+      d['browserTile'],
+      d['browserRail'],
+      d['browserWheel'],
+      d['colorShape'],
+      d['swatches'],
+    );
+    if (now == _deskSeen || !mounted) return;
+    _deskSeen = now;
+    setState(() => tab == 'Colors' ? _derive() : null);
   }
 
   /// Files opens on a folder; every tab opens on its own list and selection.
@@ -1615,9 +1627,9 @@ class _BrowserPanelState extends State<BrowserPanel> {
 
   /// The pointer on any part of the card is the card's hover: the name
   /// slides, and a picture-only card shows its band.
-  Widget card(Map<String, dynamic> item) => _Picked(
+  Widget card(Map<String, dynamic> item) => Picked<Set<String>>(
     of: picked,
-    id: id(item),
+    test: (chosen) => chosen.contains(id(item)),
     builder: (isSelected) =>
         _Hover(builder: (hovered) => _card(item, hovered, isSelected)),
   );
@@ -3114,51 +3126,6 @@ class _LeftHalf extends CustomClipper<Rect> {
   Rect getClip(Size size) => Rect.fromLTWH(0, 0, size.width / 2, size.height);
   @override
   bool shouldReclip(covariant CustomClipper<Rect> oldClipper) => false;
-}
-
-/// Rebuilds only when this id enters or leaves the picked set: a pick of one
-/// tile in a shelf of hundreds redraws two.
-class _Picked extends StatefulWidget {
-  const _Picked({required this.of, required this.id, required this.builder});
-  final ValueListenable<Set<String>> of;
-  final String id;
-  final Widget Function(bool picked) builder;
-  @override
-  State<_Picked> createState() => _PickedState();
-}
-
-class _PickedState extends State<_Picked> {
-  late bool on = widget.of.value.contains(widget.id);
-
-  void _check() {
-    final now = widget.of.value.contains(widget.id);
-    if (now != on) setState(() => on = now);
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    widget.of.addListener(_check);
-  }
-
-  @override
-  void didUpdateWidget(_Picked old) {
-    super.didUpdateWidget(old);
-    if (old.of != widget.of) {
-      old.of.removeListener(_check);
-      widget.of.addListener(_check);
-    }
-    on = widget.of.value.contains(widget.id);
-  }
-
-  @override
-  void dispose() {
-    widget.of.removeListener(_check);
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => widget.builder(on);
 }
 
 class _Hover extends StatefulWidget {

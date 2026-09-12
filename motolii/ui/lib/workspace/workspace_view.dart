@@ -40,58 +40,204 @@ class _WorkspaceViewState extends State<WorkspaceView> {
 
   @override
   Widget build(BuildContext context) => dockView(widget.layout);
+
+  /// A divider drag and a tab click are each one node's own state: the split
+  /// and the leaf hold it, so the panels they hand back are the same objects
+  /// and do not rebuild.
   Widget dockView(DockNode node) {
     if (!node.leaf) {
       final firstEmpty = node.first!.leaves.every((n) => n.tabs.isEmpty);
       final secondEmpty = node.second!.leaves.every((n) => n.tabs.isEmpty);
       if (firstEmpty && !secondEmpty) return dockView(node.second!);
       if (secondEmpty && !firstEmpty) return dockView(node.first!);
+      return _Split(
+        node: node,
+        first: dockView(node.first!),
+        second: dockView(node.second!),
+        onLayoutChanged: widget.onLayoutChanged,
+      );
     }
-    if (!node.leaf)
-      return LayoutBuilder(
-        builder: (context, box) {
-          final horizontal = node.axis == Axis.horizontal;
-          final size = horizontal ? box.maxWidth : box.maxHeight;
-          final first = node.firstExtent(size);
-          final children = [
-            SizedBox(
-              width: horizontal ? first : null,
-              height: horizontal ? null : first,
-              child: dockView(node.first!),
+    return _Leaf(
+      node: node,
+      focusedPanel: focusedPanel,
+      panelBuilder: widget.panelBuilder,
+      onMove: widget.onMove,
+      onClose: widget.onClose,
+      onDetach: widget.onDetach,
+    );
+  }
+}
+
+class _Split extends StatefulWidget {
+  const _Split({
+    required this.node,
+    required this.first,
+    required this.second,
+    required this.onLayoutChanged,
+  });
+  final DockNode node;
+  final Widget first, second;
+  final VoidCallback onLayoutChanged;
+  @override
+  State<_Split> createState() => _SplitState();
+}
+
+class _SplitState extends State<_Split> {
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, box) {
+      final node = widget.node;
+      final horizontal = node.axis == Axis.horizontal;
+      final size = horizontal ? box.maxWidth : box.maxHeight;
+      final first = node.firstExtent(size);
+      final children = [
+        SizedBox(
+          width: horizontal ? first : null,
+          height: horizontal ? null : first,
+          child: widget.first,
+        ),
+        MouseRegion(
+          cursor: horizontal
+              ? SystemMouseCursors.resizeColumn
+              : SystemMouseCursors.resizeRow,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onPanUpdate: (event) => setState(
+              () =>
+                  node.drag(horizontal ? event.delta.dx : event.delta.dy, size),
             ),
-            MouseRegion(
-              cursor: horizontal
-                  ? SystemMouseCursors.resizeColumn
-                  : SystemMouseCursors.resizeRow,
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onPanUpdate: (event) => setState(
-                  () => node.drag(
-                    horizontal ? event.delta.dx : event.delta.dy,
-                    size,
-                  ),
-                ),
-                onPanEnd: (_) => widget.onLayoutChanged(),
-                child: Container(
-                  width: horizontal ? EditorMetrics.s4 : null,
-                  height: horizontal ? null : EditorMetrics.s4,
-                  color: EditorTheme.line,
-                ),
+            onPanEnd: (_) => widget.onLayoutChanged(),
+            child: Container(
+              width: horizontal ? EditorMetrics.s4 : null,
+              height: horizontal ? null : EditorMetrics.s4,
+              color: EditorTheme.line,
+            ),
+          ),
+        ),
+        Expanded(child: widget.second),
+      ];
+      return horizontal
+          ? Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: children,
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: children,
+            );
+    },
+  );
+}
+
+class _Leaf extends StatefulWidget {
+  const _Leaf({
+    required this.node,
+    required this.focusedPanel,
+    required this.panelBuilder,
+    required this.onMove,
+    required this.onClose,
+    required this.onDetach,
+  });
+  final DockNode node;
+  final ValueNotifier<String?> focusedPanel;
+  final Widget Function(String) panelBuilder;
+  final void Function(String, DockNode, String) onMove;
+  final void Function(String) onClose, onDetach;
+  @override
+  State<_Leaf> createState() => _LeafState();
+}
+
+class _LeafState extends State<_Leaf> {
+  /// The tab in front, as a signal: the strip and the stack's index follow it,
+  /// the panels behind it are built once and stay.
+  late final active = ValueNotifier<String>(widget.node.active);
+
+  @override
+  void didUpdateWidget(_Leaf old) {
+    super.didUpdateWidget(old);
+    if (active.value != widget.node.active) active.value = widget.node.active;
+  }
+
+  @override
+  void dispose() {
+    active.dispose();
+    super.dispose();
+  }
+
+  void _show(String name) {
+    widget.node.active = name;
+    active.value = name;
+  }
+
+  Widget _tab(String name, String shown) => Draggable<String>(
+    data: name,
+    feedback: Material(
+      color: EditorTheme.raised,
+      child: Padding(
+        padding: const EdgeInsets.all(EditorMetrics.s8),
+        child: Text(name),
+      ),
+    ),
+    childWhenDragging: Opacity(opacity: .4, child: Text(name)),
+    child: GestureDetector(
+      onSecondaryTapDown: (details) async {
+        final action = await showEditorMenu<String>(
+          context,
+          details.globalPosition,
+          [
+            const EditorMenuItem(value: 'detach', child: Text('Detach')),
+            const EditorMenuItem(value: 'close', child: Text('Close')),
+          ],
+        );
+        if (action == 'detach' || action == 'window') widget.onDetach(name);
+        if (action == 'close') widget.onClose(name);
+      },
+      child: InkWell(
+        onTap: () => _show(name),
+        child: Container(
+          height: EditorMetrics.row,
+          alignment: Alignment.center,
+          padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s5),
+          decoration: BoxDecoration(
+            color: widget.node.tabs.length > 1 && shown == name
+                ? EditorTheme.tab
+                : EditorTheme.app,
+            border: const Border(
+              right: BorderSide(
+                color: EditorTheme.line,
+                width: EditorMetrics.s2,
               ),
             ),
-            Expanded(child: dockView(node.second!)),
-          ];
-          return horizontal
-              ? Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: children,
-                )
-              : Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: children,
-                );
-        },
-      );
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                panelSpec(name)?.icon ?? Icons.all_inbox_outlined,
+                size: EditorMetrics.title,
+              ),
+              const SizedBox(width: EditorMetrics.s4),
+              Text(
+                name,
+                style: TextStyle(
+                  color: widget.node.tabs.length > 1 && shown == name
+                      ? EditorTheme.tabInk
+                      : EditorTheme.ink,
+                  fontWeight: FontWeight.w600,
+                  fontSize: EditorMetrics.dense,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final node = widget.node;
+    final panes = [for (final name in node.tabs) widget.panelBuilder(name)];
     return LayoutBuilder(
       builder: (context, box) => DragTarget<String>(
         onWillAcceptWithDetails: (d) => paneNames.contains(d.data),
@@ -113,12 +259,12 @@ class _WorkspaceViewState extends State<WorkspaceView> {
         },
         builder: (context, candidates, rejected) => Focus(
           onFocusChange: (focused) {
-            if (focused) focusedPanel.value = node.id;
+            if (focused) widget.focusedPanel.value = node.id;
           },
           child: Listener(
-            onPointerDown: (_) => focusedPanel.value = node.id,
+            onPointerDown: (_) => widget.focusedPanel.value = node.id,
             child: ValueListenableBuilder<String?>(
-              valueListenable: focusedPanel,
+              valueListenable: widget.focusedPanel,
               builder: (context, focused, child) => Container(
                 decoration: BoxDecoration(
                   color: EditorTheme.panel,
@@ -146,99 +292,14 @@ class _WorkspaceViewState extends State<WorkspaceView> {
                         Expanded(
                           child: SingleChildScrollView(
                             scrollDirection: Axis.horizontal,
-                            child: Row(
-                              children: [
-                                for (final name in node.tabs)
-                                  Draggable<String>(
-                                    data: name,
-                                    feedback: Material(
-                                      color: EditorTheme.raised,
-                                      child: Padding(
-                                        padding: const EdgeInsets.all(
-                                          EditorMetrics.s8,
-                                        ),
-                                        child: Text(name),
-                                      ),
-                                    ),
-                                    childWhenDragging: Opacity(
-                                      opacity: .4,
-                                      child: Text(name),
-                                    ),
-                                    child: GestureDetector(
-                                      onSecondaryTapDown: (details) async {
-                                        final action =
-                                            await showEditorMenu<String>(
-                                              context,
-                                              details.globalPosition,
-                                              [
-                                                const EditorMenuItem(
-                                                  value: 'detach',
-                                                  child: Text('Detach'),
-                                                ),
-                                                const EditorMenuItem(
-                                                  value: 'close',
-                                                  child: Text('Close'),
-                                                ),
-                                              ],
-                                            );
-                                        if (action == 'detach' ||
-                                            action == 'window')
-                                          widget.onDetach(name);
-                                        if (action == 'close')
-                                          widget.onClose(name);
-                                      },
-                                      child: InkWell(
-                                        onTap: () =>
-                                            setState(() => node.active = name),
-                                        child: Container(
-                                          height: EditorMetrics.row,
-                                          alignment: Alignment.center,
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: EditorMetrics.s5,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color:
-                                                node.tabs.length > 1 &&
-                                                    node.active == name
-                                                ? EditorTheme.tab
-                                                : EditorTheme.app,
-                                            border: const Border(
-                                              right: BorderSide(
-                                                color: EditorTheme.line,
-                                                width: EditorMetrics.s2,
-                                              ),
-                                            ),
-                                          ),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Icon(
-                                                panelSpec(name)?.icon ??
-                                                    Icons.all_inbox_outlined,
-                                                size: EditorMetrics.title,
-                                              ),
-                                              const SizedBox(
-                                                width: EditorMetrics.s4,
-                                              ),
-                                              Text(
-                                                name,
-                                                style: TextStyle(
-                                                  color:
-                                                      node.tabs.length > 1 &&
-                                                          node.active == name
-                                                      ? EditorTheme.tabInk
-                                                      : EditorTheme.ink,
-                                                  fontWeight: FontWeight.w600,
-                                                  fontSize: EditorMetrics.dense,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                              ],
+                            child: ValueListenableBuilder<String>(
+                              valueListenable: active,
+                              builder: (context, shown, _) => Row(
+                                children: [
+                                  for (final name in node.tabs)
+                                    _tab(name, shown),
+                                ],
+                              ),
                             ),
                           ),
                         ),
@@ -259,12 +320,12 @@ class _WorkspaceViewState extends State<WorkspaceView> {
                               style: TextStyle(color: EditorTheme.muted),
                             ),
                           )
-                        : IndexedStack(
-                            index: math.max(0, node.tabs.indexOf(node.active)),
-                            children: [
-                              for (final name in node.tabs)
-                                widget.panelBuilder(name),
-                            ],
+                        : ValueListenableBuilder<String>(
+                            valueListenable: active,
+                            builder: (context, shown, _) => IndexedStack(
+                              index: math.max(0, node.tabs.indexOf(shown)),
+                              children: panes,
+                            ),
                           ),
                   ),
                 ],

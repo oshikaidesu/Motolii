@@ -66,8 +66,20 @@ class _InspectorPanelState extends State<InspectorPanel> {
     c.focusProperty.addListener(_reveal);
     c.slice('inspector', _watched).addListener(_absorb);
     c.rendered.addListener(_absorb);
+    c.deskWork.addListener(_deskMoved);
+    _deskSeen = (_cellWidth, c.animateFrom);
     _shape = _stampShape();
     _shownId = _shown?['id'] as int?;
+  }
+
+  /// The desk feeds this panel its cell width and the Animate default; a
+  /// write to any other desk key leaves it still.
+  (double, bool)? _deskSeen;
+  void _deskMoved() {
+    final now = (_cellWidth, c.animateFrom);
+    if (now == _deskSeen || !mounted) return;
+    _deskSeen = now;
+    setState(() {});
   }
 
   /// Take in one status: hand every row that moved to its own listeners, and
@@ -296,11 +308,13 @@ class _InspectorPanelState extends State<InspectorPanel> {
       p.dispose();
     }
     _scroll.dispose();
+    c.deskWork.removeListener(_deskMoved);
+    _advancedOpen.dispose();
     super.dispose();
   }
 
   Map<String, dynamic>? _property(Map<String, dynamic> layer, String id) {
-    for (final row in [
+    for (final row in _rowsOf[layer] ??= [
       ...panelRows(layer['properties']),
       for (final effect in panelRows(layer['effects']))
         ...panelRows(effect['params']),
@@ -320,12 +334,24 @@ class _InspectorPanelState extends State<InspectorPanel> {
   /// Every selected, unlocked layer; the shown layer alone when it is not
   /// part of the selection. A drag moves them all by the same amount, a
   /// typed number sets them all.
+  /// Once per (gesture, document, frame): every well asks, and the live
+  /// layers are a copy of the whole document.
+  Object? _targetsKey;
+  List<Map<String, dynamic>>? _targetsCache;
   List<Map<String, dynamic>> _targets(Map<String, dynamic> layer) {
-    final live = (_gestureLayers ?? c.liveLayers())
-        .where((v) => c.selectedIds.contains(v['id']) && v['locked'] != true)
-        .toList();
-    return live.any((v) => v['id'] == layer['id']) ? live : [layer];
+    final key = (_gestureLayers, c.state, c.rendered.value, layer['id']);
+    if (key != _targetsKey) {
+      _targetsKey = key;
+      final live = (_gestureLayers ?? c.liveLayers())
+          .where((v) => c.selectedIds.contains(v['id']) && v['locked'] != true)
+          .toList();
+      _targetsCache = live.any((v) => v['id'] == layer['id']) ? live : [layer];
+    }
+    return _targetsCache!;
   }
+
+  /// A layer's rows, flattened once per layer object rather than per well.
+  static final _rowsOf = Expando<List<Map<String, dynamic>>>();
 
   bool get _multiple => c.selectedIds.length > 1;
 
@@ -732,9 +758,11 @@ class _InspectorPanelState extends State<InspectorPanel> {
                 value: current is num ? current.toInt() : 0,
                 choices: [
                   const MapEntry(0, 'None'),
-                  ...c.layers
-                      .where((v) => v['id'] != layer['id'])
-                      .map((v) => MapEntry(v['id'], '${v['name']}')),
+                  for (final v
+                      in (c.state['layers'] as List? ?? const [])
+                          .whereType<Map>())
+                    if (v['id'] != layer['id'])
+                      MapEntry(v['id'], '${v['name']}'),
                 ],
                 onChanged: (v) => c.command('setProperty', {
                   'layer': layer['id'],
@@ -1132,9 +1160,9 @@ class _InspectorPanelState extends State<InspectorPanel> {
             value: layer['parent'] ?? -1,
             choices: [
               const MapEntry(-1, 'None'),
-              ...c.layers
-                  .where((v) => v['id'] != layer['id'])
-                  .map((v) => MapEntry(v['id'], '${v['name']}')),
+              for (final v
+                  in (c.state['layers'] as List? ?? const []).whereType<Map>())
+                if (v['id'] != layer['id']) MapEntry(v['id'], '${v['name']}'),
             ],
             onChanged: can
                 ? (v) => c.command('setAttrs', {
@@ -1234,7 +1262,9 @@ class _InspectorPanelState extends State<InspectorPanel> {
   // ---- Effects: one sheet per effect, controls from the declaration -------
 
   /// Effects whose advanced fold is open, by effect id.
-  final _advancedOpen = <String>{};
+  /// Which effects show their advanced rows: a fold's own signal, so opening
+  /// one does not rebuild the panel.
+  final _advancedOpen = ValueNotifier<Set<String>>(const {});
 
   /// Everything an effect can be told to do, in one list: the head keeps a
   /// single mark instead of a row of equal glyphs.
@@ -1381,7 +1411,6 @@ class _InspectorPanelState extends State<InspectorPanel> {
       into.add(_Cell(_control(layer, id, hero: hero)));
     }
     final key = '${effect['id']}';
-    final open = _advancedOpen.contains(key);
     return EditorCard(
       key: ValueKey('effect:$key'),
       title: '${effect['name']}',
@@ -1446,19 +1475,27 @@ class _InspectorPanelState extends State<InspectorPanel> {
           ],
         ],
         _cells(controls),
-        if (advanced.isNotEmpty) ...[
-          const SizedBox(height: EditorMetrics.s4),
-          _Fold(
-            open: open,
-            onTap: () => setState(() {
-              open ? _advancedOpen.remove(key) : _advancedOpen.add(key);
-            }),
+        if (advanced.isNotEmpty)
+          Picked<Set<String>>(
+            of: _advancedOpen,
+            test: (opened) => opened.contains(key),
+            builder: (open) => Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SizedBox(height: EditorMetrics.s4),
+                _Fold(
+                  open: open,
+                  onTap: () => _advancedOpen.value = open
+                      ? ({..._advancedOpen.value}..remove(key))
+                      : {..._advancedOpen.value, key},
+                ),
+                if (open) ...[
+                  const SizedBox(height: EditorMetrics.s4),
+                  _cells(advanced),
+                ],
+              ],
+            ),
           ),
-          if (open) ...[
-            const SizedBox(height: EditorMetrics.s4),
-            _cells(advanced),
-          ],
-        ],
       ],
     );
   }
@@ -1825,131 +1862,119 @@ class _InspectorPanelState extends State<InspectorPanel> {
   );
 
   @override
-  Widget build(BuildContext context) => AnimatedBuilder(
-    animation: c.deskWork,
-    builder: (context, _) {
-      final layer = _active;
-      if (layer == null) {
-        return const ColoredBox(
-          color: EditorTheme.app,
-          child: Center(
-            child: Text(
-              'Select a layer',
-              style: TextStyle(
-                fontSize: EditorMetrics.title,
-                color: EditorTheme.muted,
-              ),
+  Widget build(BuildContext context) {
+    final layer = _active;
+    if (layer == null) {
+      return const ColoredBox(
+        color: EditorTheme.app,
+        child: Center(
+          child: Text(
+            'Select a layer',
+            style: TextStyle(
+              fontSize: EditorMetrics.title,
+              color: EditorTheme.muted,
             ),
           ),
-        );
-      }
-      final effects = panelRows(layer['effects']);
-      final text = panelMap(layer['text']);
-      final matte = panelMap(layer['matte']);
-      final rest = panelRows(layer['properties'])
-          .where(
-            (r) =>
-                !_transformIds.contains('${r['id']}') &&
-                !_isTextProperty(r) &&
-                !'${r['id']}'.startsWith('effect') &&
-                (r['value'] is num ||
-                    r['value'] is List ||
-                    r['value'] is String),
-          )
-          .toList();
-      return LayoutBuilder(
-        builder: (context, box) {
-          _fit(box.maxWidth);
-          return ColoredBox(
-            color: EditorTheme.app,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _identity(layer),
-                Expanded(
-                  child: CustomScrollView(
-                    controller: _scroll,
-                    slivers: [
-                      SliverList.list(
-                        children: [
-                          if (layer['kind'] == 'Camera')
-                            EditorCard(
-                              title: 'Camera',
-                              children: _camera(layer),
-                            )
-                          else
-                            EditorCard(
-                              title: 'Transform',
-                              children: _transform(layer),
-                            ),
-                          if (layer['kind'] != 'Camera')
-                            EditorCard(title: 'World', children: _world(layer)),
-                          if (!_multiple && text.isNotEmpty)
-                            EditorCard(
-                              title: 'Text',
-                              children: _text(layer, text),
-                            ),
-                          if (!_multiple &&
-                              panelRows(layer['colors']).isNotEmpty)
-                            EditorCard(
-                              title: 'Color',
-                              children: _colors(layer),
-                            ),
-                          if (!_multiple &&
-                              matte.isNotEmpty &&
-                              layer['clipToBelow'] != true)
-                            EditorCard(
-                              title: 'Matte',
-                              children: _matte(layer, matte),
-                            ),
-                          if (rest.isNotEmpty)
-                            EditorCard(
-                              title: 'Properties',
-                              children: [
-                                _cells([
-                                  for (final r in rest)
-                                    _Cell(_control(layer, '${r['id']}')),
-                                ]),
-                              ],
-                            ),
-                        ],
-                      ),
-                      if (!_multiple)
-                        SliverReorderableList(
-                          itemCount: effects.length,
-                          itemBuilder: (context, i) => _effect(
-                            layer,
-                            effects[i],
-                            index: i,
-                            count: effects.length,
-                          ),
-                          onReorderItem: (from, to) => c.command('moveEffect', {
-                            'layer': layer['id'],
-                            'id': effects[from]['id'],
-                            'to': to,
-                          }),
-                        ),
-                      const SliverPadding(
-                        padding: EdgeInsets.only(bottom: EditorMetrics.s6),
-                      ),
-                    ],
-                  ),
-                ),
-                EditorZoomBar(
-                  base: EditorMetrics.cell,
-                  value: _cellWidth,
-                  min: InspectorCell.min,
-                  max: InspectorCell.max,
-                  keyPrefix: 'inspector:cell',
-                  onChanged: (v) => c.storeDesk('inspectorCell', v),
-                ),
-              ],
-            ),
-          );
-        },
+        ),
       );
-    },
-  );
+    }
+    final effects = panelRows(layer['effects']);
+    final text = panelMap(layer['text']);
+    final matte = panelMap(layer['matte']);
+    final rest = panelRows(layer['properties'])
+        .where(
+          (r) =>
+              !_transformIds.contains('${r['id']}') &&
+              !_isTextProperty(r) &&
+              !'${r['id']}'.startsWith('effect') &&
+              (r['value'] is num || r['value'] is List || r['value'] is String),
+        )
+        .toList();
+    return LayoutBuilder(
+      builder: (context, box) {
+        _fit(box.maxWidth);
+        return ColoredBox(
+          color: EditorTheme.app,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _identity(layer),
+              Expanded(
+                child: CustomScrollView(
+                  controller: _scroll,
+                  slivers: [
+                    SliverList.list(
+                      children: [
+                        if (layer['kind'] == 'Camera')
+                          EditorCard(title: 'Camera', children: _camera(layer))
+                        else
+                          EditorCard(
+                            title: 'Transform',
+                            children: _transform(layer),
+                          ),
+                        if (layer['kind'] != 'Camera')
+                          EditorCard(title: 'World', children: _world(layer)),
+                        if (!_multiple && text.isNotEmpty)
+                          EditorCard(
+                            title: 'Text',
+                            children: _text(layer, text),
+                          ),
+                        if (!_multiple && panelRows(layer['colors']).isNotEmpty)
+                          EditorCard(title: 'Color', children: _colors(layer)),
+                        if (!_multiple &&
+                            matte.isNotEmpty &&
+                            layer['clipToBelow'] != true)
+                          EditorCard(
+                            title: 'Matte',
+                            children: _matte(layer, matte),
+                          ),
+                        if (rest.isNotEmpty)
+                          EditorCard(
+                            title: 'Properties',
+                            children: [
+                              _cells([
+                                for (final r in rest)
+                                  _Cell(_control(layer, '${r['id']}')),
+                              ]),
+                            ],
+                          ),
+                      ],
+                    ),
+                    if (!_multiple)
+                      SliverReorderableList(
+                        itemCount: effects.length,
+                        itemBuilder: (context, i) => _effect(
+                          layer,
+                          effects[i],
+                          index: i,
+                          count: effects.length,
+                        ),
+                        onReorderItem: (from, to) => c.command('moveEffect', {
+                          'layer': layer['id'],
+                          'id': effects[from]['id'],
+                          'to': to,
+                        }),
+                      ),
+                    const SliverPadding(
+                      padding: EdgeInsets.only(bottom: EditorMetrics.s6),
+                    ),
+                  ],
+                ),
+              ),
+              EditorZoomBar(
+                base: EditorMetrics.cell,
+                value: _cellWidth,
+                min: InspectorCell.min,
+                max: InspectorCell.max,
+                keyPrefix: 'inspector:cell',
+                onChanged: (v) => c.storeDesk('inspectorCell', v),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
 }
 
 /// One reading of the Inspector: it rebuilds when the rows it names move and

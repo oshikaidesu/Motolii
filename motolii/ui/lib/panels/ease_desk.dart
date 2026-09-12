@@ -126,8 +126,28 @@ class _EaseDeskState extends State<EaseDesk>
   int? _pointer, _handle;
   int _epoch = 0, _focused = 0, _commits = 0;
   Map<String, dynamic>? _interval;
-  String _target = '', _source = '';
+  String _target = '';
+
+  /// What the desk showed last: the segments by content (a moved layer
+  /// re-derives the same empty list), the interval and whether it can apply.
+  (List<Map<String, dynamic>>, Object?, Object?, Object?, bool)? _source;
+  bool _moved(
+    (List<Map<String, dynamic>>, Object?, Object?, Object?, bool) now,
+  ) {
+    final was = _source;
+    return was == null ||
+        !sameValue(was.$1, now.$1) ||
+        was.$2 != now.$2 ||
+        was.$3 != now.$3 ||
+        was.$4 != now.$4 ||
+        was.$5 != now.$5;
+  }
+
   int? _hover;
+
+  /// The tallest preset label, measured once per width and preset set.
+  Object? _labelKey;
+  double _labelHeight = 0;
   Map<String, dynamic>? _audition;
   String? _notice;
   late final AnimationController _motion;
@@ -142,7 +162,22 @@ class _EaseDeskState extends State<EaseDesk>
   final _focus = FocusNode();
   final _presetFocus = FocusNode();
   String get _selection => jsonEncode(c.state['selectedKeys'] ?? []);
+
+  /// Once per (selection, layers): the session keeps an unchanged key's
+  /// object, so a frame tick or a hover reads the same list.
+  (Object?, Object?)? _segmentsFrom;
+  List<Map<String, dynamic>> _segmentsCache = const [];
   List<Map<String, dynamic>> get _segments {
+    final from = (c.state['selectedKeys'], c.state['layers']);
+    if (!identical(from.$1, _segmentsFrom?.$1) ||
+        !identical(from.$2, _segmentsFrom?.$2)) {
+      _segmentsFrom = from;
+      _segmentsCache = _deriveSegments();
+    }
+    return _segmentsCache;
+  }
+
+  List<Map<String, dynamic>> _deriveSegments() {
     final selected = EditorSession.maps(c.state['selectedKeys']);
     final result = <Map<String, dynamic>>[];
     for (final layer in c.layers) {
@@ -297,17 +332,18 @@ class _EaseDeskState extends State<EaseDesk>
   void _read() {
     final segments = _segments;
     final interval = _intervalAt(segments);
-    final source = jsonEncode([
+    final source = (
       segments,
-      if (interval != null)
-        [interval['layer'], interval['property'], interval['frame']],
+      interval?['layer'],
+      interval?['property'],
+      interval?['frame'],
       _canApply,
-    ]);
+    );
     if (_target != _identity ||
         (_pointer == null &&
             _original == null &&
             _commits == 0 &&
-            source != _source)) {
+            _moved(source))) {
       _epoch++;
       _motion.reset();
       _hover = null;
@@ -503,6 +539,10 @@ class _EaseDeskState extends State<EaseDesk>
       if (clip.isNotEmpty) clip,
       ...saved,
     ];
+    // Which preset is the shape in force: encoded once each, not four times
+    // per tile.
+    final shapeKey = jsonEncode(_payload(_shape));
+    final presetKeys = [for (final p in presets) jsonEncode(_payload(p))];
     final sequence = _ghostMode ? _sequence : const <Map<String, dynamic>>[];
     final target = sequence.isNotEmpty
         ? 'Sequence · ${sequence.length} layers · ghosts${!_canApply ? ' · Read only' : ''}'
@@ -646,18 +686,27 @@ class _EaseDeskState extends State<EaseDesk>
                   (box.maxWidth - (columns - 1) * EditorMetrics.s4) / columns;
               final labelStyle = DefaultTextStyle.of(context).style
                   .copyWith(fontSize: EditorMetrics.font);
-              final labelHeight = presets.fold<double>(0, (height, preset) {
-                final label = TextPainter(
-                  text: TextSpan(
-                    text: _curveName('${preset['kind']}'),
-                    style: labelStyle,
-                  ),
-                  maxLines: 2,
-                  textDirection: Directionality.of(context),
-                  textScaler: MediaQuery.textScalerOf(context),
-                )..layout(maxWidth: tileWidth - EditorMetrics.s12);
-                return math.max(height, label.height);
-              });
+              final labelKey = (
+                tileWidth,
+                [for (final p in presets) p['kind']].join('|'),
+                MediaQuery.textScalerOf(context),
+              );
+              if (labelKey != _labelKey) {
+                _labelKey = labelKey;
+                _labelHeight = presets.fold<double>(0, (height, preset) {
+                  final label = TextPainter(
+                    text: TextSpan(
+                      text: _curveName('${preset['kind']}'),
+                      style: labelStyle,
+                    ),
+                    maxLines: 2,
+                    textDirection: Directionality.of(context),
+                    textScaler: MediaQuery.textScalerOf(context),
+                  )..layout(maxWidth: tileWidth - EditorMetrics.s12);
+                  return math.max(height, label.height);
+                });
+              }
+              final labelHeight = _labelHeight;
               final tileHeight = math.max(
                 EditorMetrics.s70,
                 EditorMetrics.s44 + EditorMetrics.s12 + labelHeight,
@@ -717,9 +766,7 @@ class _EaseDeskState extends State<EaseDesk>
                             child: Semantics(
                               label: '${presets[i]['kind']} preset',
                               button: true,
-                              selected:
-                                  jsonEncode(_payload(presets[i])) ==
-                                  jsonEncode(_payload(_shape)),
+                              selected: presetKeys[i] == shapeKey,
                               child: InkWell(
                                 canRequestFocus: false,
                                 onTap: () {
@@ -734,9 +781,7 @@ class _EaseDeskState extends State<EaseDesk>
                                   width: tileWidth,
                                   height: tileHeight,
                                   decoration: BoxDecoration(
-                                    color:
-                                        jsonEncode(_payload(presets[i])) ==
-                                            jsonEncode(_payload(_shape))
+                                    color: presetKeys[i] == shapeKey
                                         ? _easePaper
                                         : _hover == i
                                         ? EditorTheme.hover
@@ -764,12 +809,7 @@ class _EaseDeskState extends State<EaseDesk>
                                               child: _plot(
                                                 presets[i],
                                                 selected:
-                                                    jsonEncode(
-                                                      _payload(presets[i]),
-                                                    ) ==
-                                                    jsonEncode(
-                                                      _payload(_shape),
-                                                    ),
+                                                    presetKeys[i] == shapeKey,
                                               ),
                                             ),
                                           ),
@@ -781,11 +821,7 @@ class _EaseDeskState extends State<EaseDesk>
                                           overflow: TextOverflow.ellipsis,
                                           style: TextStyle(
                                             fontSize: EditorMetrics.font,
-                                            color:
-                                                jsonEncode(
-                                                      _payload(presets[i]),
-                                                    ) ==
-                                                    jsonEncode(_payload(_shape))
+                                            color: presetKeys[i] == shapeKey
                                                 ? _easeInk
                                                 : EditorTheme.ink,
                                           ),
@@ -1348,13 +1384,13 @@ class EaseCurvePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant EaseCurvePainter old) =>
-      jsonEncode(old.shape) != jsonEncode(shape) ||
+      !sameValue(old.shape, shape) ||
       old.free != free ||
       old.handles != handles ||
       old.selected != selected ||
       old.playhead != playhead ||
       old.ghost != ghost ||
-      jsonEncode(old.marks) != jsonEncode(marks);
+      !sameValue(old.marks, marks);
 }
 
 class EaseMotionPainter extends CustomPainter {
@@ -1396,9 +1432,7 @@ class EaseMotionPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant EaseMotionPainter old) =>
-      time != old.time ||
-      free != old.free ||
-      jsonEncode(shape) != jsonEncode(old.shape);
+      time != old.time || free != old.free || !sameValue(shape, old.shape);
 }
 
 /// どの区間を走っているか、を形で言う帯。選んだキー区間を時間軸のまま並べ、
@@ -1493,6 +1527,13 @@ class EaseIntervalPainter extends CustomPainter {
   bool shouldRepaint(covariant EaseIntervalPainter old) =>
       old.frame != frame ||
       old.active != active ||
-      jsonEncode(old.segments.map((s) => [s['frame'], s['end']]).toList()) !=
-          jsonEncode(segments.map((s) => [s['frame'], s['end']]).toList());
+      !identical(old.segments, segments) &&
+          !sameValue(
+            [
+              for (final s in old.segments) [s['frame'], s['end']],
+            ],
+            [
+              for (final s in segments) [s['frame'], s['end']],
+            ],
+          );
 }

@@ -46,6 +46,11 @@ class StyledTextController extends TextEditingController {
       buffer = StringBuffer();
     }
 
+    // A run's graphemes share one style object, so a style is built where
+    // the format, the highlight or the composing mark changes — not per
+    // grapheme on every keystroke.
+    Map<String, dynamic>? previousFormat;
+    bool previousHighlight = false, previousComposing = false;
     for (final g in text.characters) {
       final highlight = highlighted.contains(index);
       final format = formats[index++];
@@ -55,27 +60,34 @@ class StyledTextController extends TextEditingController {
           value.composing.isValid &&
           value.composing.start < end &&
           value.composing.end > offset;
-      final size = (format['size'] as num? ?? 24).toDouble();
-      final nextStyle = TextStyle(
-        fontFamily: EditorSession.map(format['font'])['family'] as String?,
-        fontSize: size * zoom,
-        height: (format['line_height'] as num?)?.toDouble() == null
-            ? 1.2
-            : (format['line_height'] as num).toDouble() / math.max(1, size),
-        letterSpacing:
-            (format['tracking'] as num? ?? 0).toDouble() / 1000 * size * zoom,
-        fontFeatures: [
-          for (final f in EditorSession.maps(format['features']))
-            if ('${f['tag']}'.length == 4)
-              FontFeature('${f['tag']}', (f['value'] as num? ?? 1).toInt()),
-        ],
-        decoration: composing ? TextDecoration.underline : null,
-        backgroundColor: highlight ? EditorTheme.select : null,
-        color: highlight ? EditorTheme.selectInk : null,
-      );
-      if (nextStyle != previousStyle) {
-        flush();
-        previousStyle = nextStyle;
+      if (!identical(format, previousFormat) ||
+          highlight != previousHighlight ||
+          composing != previousComposing) {
+        previousFormat = format;
+        previousHighlight = highlight;
+        previousComposing = composing;
+        final size = (format['size'] as num? ?? 24).toDouble();
+        final nextStyle = TextStyle(
+          fontFamily: EditorSession.map(format['font'])['family'] as String?,
+          fontSize: size * zoom,
+          height: (format['line_height'] as num?)?.toDouble() == null
+              ? 1.2
+              : (format['line_height'] as num).toDouble() / math.max(1, size),
+          letterSpacing:
+              (format['tracking'] as num? ?? 0).toDouble() / 1000 * size * zoom,
+          fontFeatures: [
+            for (final f in EditorSession.maps(format['features']))
+              if ('${f['tag']}'.length == 4)
+                FontFeature('${f['tag']}', (f['value'] as num? ?? 1).toInt()),
+          ],
+          decoration: composing ? TextDecoration.underline : null,
+          backgroundColor: highlight ? EditorTheme.select : null,
+          color: highlight ? EditorTheme.selectInk : null,
+        );
+        if (nextStyle != previousStyle) {
+          flush();
+          previousStyle = nextStyle;
+        }
       }
       buffer.write(g);
       offset = end;

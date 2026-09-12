@@ -60,9 +60,7 @@ class BlendPanelState extends State<BlendPanel> {
   /// One tile, one look. The seventeen skeletons are built once; a snapshot
   /// only moves the looks, and a [ValueNotifier] wakes the tiles whose look
   /// actually differs — a new selection with the same modes wakes none.
-  final _looks = {
-    for (final mode in modes) mode: ValueNotifier(const _Look()),
-  };
+  final _looks = {for (final mode in modes) mode: ValueNotifier(const _Look())};
 
   /// Whether the desk has anything to blend: the one thing outside the tiles
   /// that a snapshot can change.
@@ -71,11 +69,10 @@ class BlendPanelState extends State<BlendPanel> {
   EditorSession get c => widget.controller;
 
   List<Map<String, dynamic>> get _targets => blendTargets(c);
-  DocumentSlice get _slice => c.slice(
-    'blend',
-    const ['path', 'capabilities'],
-    derived: () => blendReading(c),
-  );
+  DocumentSlice get _slice => c.slice('blend', const [
+    'path',
+    'capabilities',
+  ], derived: () => blendReading(c));
 
   String get _mark => jsonEncode([c.state['path'], c.selectedIds]);
 
@@ -248,7 +245,8 @@ class BlendPanelState extends State<BlendPanel> {
     },
     child: ValueListenableBuilder<bool>(
       valueListenable: _idle,
-      builder: (context, idle, grid) => Opacity(opacity: idle ? 0.45 : 1, child: grid),
+      builder: (context, idle, grid) =>
+          Opacity(opacity: idle ? 0.45 : 1, child: grid),
       child: LayoutBuilder(
         builder: (context, box) {
           const gap = EditorMetrics.s3;
@@ -302,8 +300,7 @@ class _Look {
       live == other.live &&
       listEquals(beds, other.beds);
   @override
-  int get hashCode =>
-      Object.hash(Object.hashAll(beds), current, hovered, live);
+  int get hashCode => Object.hash(Object.hashAll(beds), current, hovered, live);
 }
 
 /// One mode. The skeleton stands for the life of the desk; only the parts
@@ -408,18 +405,19 @@ class _BlendTile extends StatelessWidget {
 }
 
 /// The unlocked, non-camera layers a blend applies to.
-List<Map<String, dynamic>> blendTargets(EditorSession c) => c.layers
-    .where(
-      (l) =>
-          c.selectedIds.contains(l['id']) &&
-          l['locked'] != true &&
-          l['kind'] != 'Camera',
-    )
-    .toList();
+List<Map<String, dynamic>> blendTargets(EditorSession c) {
+  final ids = c.selectedIds;
+  return [
+    for (final l in (c.state['layers'] as List? ?? const []).whereType<Map>())
+      if (ids.contains(l['id']) && l['locked'] != true && l['kind'] != 'Camera')
+        Map<String, dynamic>.from(l),
+  ];
+}
 
 /// Everything the tiles show: the mode in force and the specimens for it.
 Object blendReading(EditorSession c) => [
   c.selectedIds,
-  for (final l in blendTargets(c)) [l['id'], l['blendMode'], l['blendPreviews']],
+  for (final l in blendTargets(c))
+    [l['id'], l['blendMode'], l['blendPreviews']],
   c.activeLayer?['blendPreviews'],
 ];

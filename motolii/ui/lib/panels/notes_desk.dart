@@ -23,7 +23,10 @@ class _NotesPanelState extends State<NotesPanel> {
   final _transform = TransformationController();
   final _viewport = GlobalKey();
   final _focus = FocusNode();
-  String? _pageId, _selected, _autoFocus;
+  String? _pageId, _autoFocus;
+
+  /// The chosen card, as a signal each card watches for itself.
+  final _selection = ValueNotifier<String?>(null);
   Offset _insertion = const Offset(24, 24);
   int _sequence = 0;
   List<Map<String, dynamic>> get _pages =>
@@ -42,6 +45,7 @@ class _NotesPanelState extends State<NotesPanel> {
     if (c.fileDropTarget == _drop) c.fileDropTarget = null;
     _transform.dispose();
     _focus.dispose();
+    _selection.dispose();
     super.dispose();
   }
 
@@ -70,7 +74,7 @@ class _NotesPanelState extends State<NotesPanel> {
     if (mounted && c.error.value == null)
       setState(() {
         _pageId = id;
-        _selected = null;
+        _selection.value = null;
         _transform.value = Matrix4.identity();
       });
   }
@@ -89,11 +93,10 @@ class _NotesPanelState extends State<NotesPanel> {
     await _action('putBlock', {
       'block': {..._block(id, p), 'kind': 'text', 'text': text},
     }, page: page);
-    if (mounted && c.error.value == null)
-      setState(() {
-        _selected = id;
-        _autoFocus = id;
-      });
+    if (mounted && c.error.value == null) {
+      _selection.value = id;
+      setState(() => _autoFocus = id);
+    }
   }
 
   Future<void> _image(Offset point, {String? path, String? png}) async {
@@ -105,7 +108,7 @@ class _NotesPanelState extends State<NotesPanel> {
       if (path != null) 'path': path,
       if (png != null) 'png': png,
     }, page: page);
-    if (mounted && c.error.value == null) setState(() => _selected = id);
+    if (mounted && c.error.value == null) _selection.value = id;
   }
 
   Future<void> _paste() async {
@@ -224,9 +227,9 @@ class _NotesPanelState extends State<NotesPanel> {
           }
           if ((event.logicalKey == LogicalKeyboardKey.delete ||
                   event.logicalKey == LogicalKeyboardKey.backspace) &&
-              _selected != null) {
-            _action('deleteBlock', {'id': _selected});
-            setState(() => _selected = null);
+              _selection.value != null) {
+            _action('deleteBlock', {'id': _selection.value});
+            _selection.value = null;
             return KeyEventResult.handled;
           }
           return KeyEventResult.ignored;
@@ -248,7 +251,7 @@ class _NotesPanelState extends State<NotesPanel> {
                               if (mounted)
                                 setState(() {
                                   _pageId = p['id'];
-                                  _selected = null;
+                                  _selection.value = null;
                                   _transform.value = Matrix4.identity();
                                 });
                             },
@@ -413,15 +416,18 @@ class _NotesPanelState extends State<NotesPanel> {
                             top: (b['y'] as num).toDouble(),
                             width: (b['width'] as num).toDouble(),
                             height: (b['height'] as num).toDouble(),
-                            child: _NoteCard(
+                            child: Picked<String?>(
                               key: ValueKey('${page!['id']}:${b['id']}'),
-                              controller: c,
-                              page: '${page['id']}',
-                              block: b,
-                              selected: _selected == b['id'],
-                              autoFocus: _autoFocus == b['id'],
-                              onSelect: () =>
-                                  setState(() => _selected = b['id']),
+                              of: _selection,
+                              test: (chosen) => chosen == b['id'],
+                              builder: (selected) => _NoteCard(
+                                controller: c,
+                                page: '${page['id']}',
+                                block: b,
+                                selected: selected,
+                                autoFocus: _autoFocus == b['id'],
+                                onSelect: () => _selection.value = b['id'],
+                              ),
                             ),
                           ),
                       ],
@@ -439,7 +445,6 @@ class _NotesPanelState extends State<NotesPanel> {
 
 class _NoteCard extends StatefulWidget {
   const _NoteCard({
-    super.key,
     required this.controller,
     required this.page,
     required this.block,

@@ -84,7 +84,6 @@ const _characterWords = <_Character, List<String>>{
   ],
 };
 
-
 /// The declared or analysed subtype (Blender vocabulary) wins over words.
 _Character? _declaredCharacter(Map<String, dynamic> row) =>
     switch ('${row['subtype'] ?? ''}') {
@@ -100,7 +99,12 @@ _Character? _declaredCharacter(Map<String, dynamic> row) =>
       _ => null,
     };
 
-_Character _characterOf(Map<String, dynamic> row) {
+/// Read once per row object: the kind, tint, track and unit all ask.
+final _characters = Expando<_Character>();
+_Character _characterOf(Map<String, dynamic> row) =>
+    _characters[row] ??= _deriveCharacter(row);
+
+_Character _deriveCharacter(Map<String, dynamic> row) {
   final declared = _declaredCharacter(row);
   if (declared != null) return declared;
   final id = '${row['id']}'.split('.param.').last;

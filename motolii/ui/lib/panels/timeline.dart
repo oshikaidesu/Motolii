@@ -1262,39 +1262,47 @@ class _TimelinePanelState extends State<TimelinePanel> {
                     );
                   }
 
-                  return GestureDetector(
-                    supportedDevices: const {
-                      PointerDeviceKind.mouse,
-                      PointerDeviceKind.touch,
-                      PointerDeviceKind.stylus,
+                  // The jump is on the press, below the arena: beside the
+                  // double-tap, onTapDown would wait out the press deadline.
+                  return Listener(
+                    onPointerDown: (e) {
+                      if (e.buttons == kPrimaryButton)
+                        navigate(e.localPosition.dx);
                     },
-                    onTapDown: (e) => navigate(e.localPosition.dx),
-                    onHorizontalDragUpdate: (e) => navigate(e.localPosition.dx),
-                    onDoubleTap: () {
-                      setState(
-                        () => pixelsPerFrame = math.max(
-                          .1,
-                          (bounds.maxWidth - labelWidth) /
-                              math.max(1, overviewExtentWithoutFrame),
-                        ),
-                      );
-                    },
-                    child: ListenableBuilder(
-                      listenable: Listenable.merge([
-                        widget.controller.frame,
-                        _timeline,
-                        scrolled,
-                      ]),
-                      builder: (context, _) => CustomPaint(
-                        size: Size(overview.maxWidth, EditorMetrics.s18),
-                        painter: _ArrangementOverview(
-                          layers: widget.controller.layers,
-                          duration: duration,
-                          extent: overviewExtent,
-                          frame: scrubFrame ?? widget.controller.frame.value,
-                          offset: offset,
-                          scale: pixelsPerFrame,
-                          viewportWidth: bounds.maxWidth - labelWidth,
+                    child: GestureDetector(
+                      supportedDevices: const {
+                        PointerDeviceKind.mouse,
+                        PointerDeviceKind.touch,
+                        PointerDeviceKind.stylus,
+                      },
+                      onHorizontalDragUpdate: (e) =>
+                          navigate(e.localPosition.dx),
+                      onDoubleTap: () {
+                        setState(
+                          () => pixelsPerFrame = math.max(
+                            .1,
+                            (bounds.maxWidth - labelWidth) /
+                                math.max(1, overviewExtentWithoutFrame),
+                          ),
+                        );
+                      },
+                      child: ListenableBuilder(
+                        listenable: Listenable.merge([
+                          widget.controller.frame,
+                          _timeline,
+                          scrolled,
+                        ]),
+                        builder: (context, _) => CustomPaint(
+                          size: Size(overview.maxWidth, EditorMetrics.s18),
+                          painter: _ArrangementOverview(
+                            layers: widget.controller.layers,
+                            duration: duration,
+                            extent: overviewExtent,
+                            frame: scrubFrame ?? widget.controller.frame.value,
+                            offset: offset,
+                            scale: pixelsPerFrame,
+                            viewportWidth: bounds.maxWidth - labelWidth,
+                          ),
                         ),
                       ),
                     ),

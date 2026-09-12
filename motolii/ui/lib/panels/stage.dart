@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart' show listEquals, mapEquals;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -278,10 +279,18 @@ class _StagePanelState extends State<StagePanel> {
       ? _toScreen(Offset(_num(p[0]), _num(p[1])))
       : null;
 
-  /// The box on the look plane: four corners, always. The eye is drawn only
-  /// when it lies in front of the observer.
-  List<Offset> _cameraPoints(Map<String, dynamic> camera) =>
-      (camera['points'] as List).map((p) => _point(p)!).toList();
+  /// The box where the camera looks on the composition plane. A corner the
+  /// observer cannot see is null; authoring needs all four. The eye is drawn
+  /// only when it lies in front of the observer.
+  List<Offset?> _cameraCorners(Map<String, dynamic> camera) =>
+      (camera['points'] as List).map(_point).toList();
+  List<Offset> _cameraPoints(Map<String, dynamic> camera) {
+    final corners = _cameraCorners(camera);
+    return corners.length == 4 && corners.every((c) => c != null)
+        ? corners.cast<Offset>()
+        : const [];
+  }
+
   Offset? _cameraEye(Map<String, dynamic> camera) => _point(camera['eye']);
 
   /// 箱で author できるのは、正面を向いて注視点が自前のカメラだけ。回した物と層を見ている物は eye と frustum を見せるだけ。
@@ -298,6 +307,7 @@ class _StagePanelState extends State<StagePanel> {
   /// Boxcam: 正面で見る時、カメラは comp 面に置いた箱。辺で掴んで Center、角で Zoom、上の取っ手で Roll。
   Map<String, Offset> _cameraHandles(Map<String, dynamic> camera) {
     final box = _cameraPoints(camera);
+    if (box.length != 4) return {};
     final centre = box.reduce((a, b) => a + b) / 4;
     final top = (box[0] + box[1]) / 2;
     final up = top - centre;
@@ -318,6 +328,7 @@ class _StagePanelState extends State<StagePanel> {
 
   bool _onCameraEdge(Map<String, dynamic> camera, Offset p) {
     final box = _cameraPoints(camera);
+    if (box.length != 4) return false;
     for (var i = 0; i < 4; i++) {
       if (_segmentDistance(p, box[i], box[(i + 1) % 4]) < 6) return true;
     }
@@ -372,7 +383,9 @@ class _StagePanelState extends State<StagePanel> {
   void _moveCamera(Offset screen) {
     if (_extentDrag != null) return _moveExtent(screen);
     final camera = _cameraDrag!;
-    final centre = _cameraPoints(camera).reduce((a, b) => a + b) / 4;
+    final box = _cameraPoints(camera);
+    if (box.length != 4) return;
+    final centre = box.reduce((a, b) => a + b) / 4;
     final start = _startScreen!;
     final edits = <Map<String, dynamic>>[];
     switch (_cameraHandle) {
@@ -1169,7 +1182,7 @@ class _StagePanelState extends State<StagePanel> {
                                         anchorPreview: anchorPreview,
                                         cameras: gizmos
                                             ? _cameras
-                                                  .map(_cameraPoints)
+                                                  .map(_cameraCorners)
                                                   .toList()
                                             : const [],
                                         cameraEyes: gizmos
@@ -1322,7 +1335,8 @@ class _StageOverlay extends CustomPainter {
     this.spatialMesh,
     this.marquee,
   });
-  final List<List<Offset>> outlines, cameras;
+  final List<List<Offset>> outlines;
+  final List<List<Offset?>> cameras;
   final List<Offset?> cameraEyes;
   final List<Offset> cameraTargets, frame, extent;
   final bool extendable;
@@ -1409,11 +1423,16 @@ class _StageOverlay extends CustomPainter {
     }
     for (final (index, box) in cameras.indexed) {
       if (box.length != 4) continue;
-      canvas.drawPath(Path()..addPolygon(box, true), cameraLine);
+      // Corners the observer cannot see are left open: the box is drawn as
+      // far as it is known.
+      for (var i = 0; i < 4; i++) {
+        final a = box[i], b = box[(i + 1) % 4];
+        if (a != null && b != null) canvas.drawLine(a, b, cameraLine);
+      }
       final eye = index < cameraEyes.length ? cameraEyes[index] : null;
       if (front || eye == null) continue;
       for (final corner in box) {
-        canvas.drawLine(eye, corner, cameraLine);
+        if (corner != null) canvas.drawLine(eye, corner, cameraLine);
       }
       canvas.drawRRect(
         RRect.fromRectAndRadius(
@@ -1479,21 +1498,31 @@ class _StageOverlay extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _StageOverlay old) =>
-      old.cameras.toString() != cameras.toString() ||
-      old.cameraEyes.toString() != cameraEyes.toString() ||
-      old.cameraTargets.toString() != cameraTargets.toString() ||
-      old.cameraHandles.toString() != cameraHandles.toString() ||
+      !_samePolylines(old.cameras, cameras) ||
+      !listEquals(old.cameraEyes, cameraEyes) ||
+      !listEquals(old.cameraTargets, cameraTargets) ||
+      !mapEquals(old.cameraHandles, cameraHandles) ||
       old.front != front ||
-      old.extent.toString() != extent.toString() ||
+      !listEquals(old.extent, extent) ||
       old.extendable != extendable ||
       old.observerTarget != observerTarget ||
+      old.anchorPreview != anchorPreview ||
       old.dimOutside != dimOutside ||
-      old.frame.toString() != frame.toString() ||
+      !listEquals(old.frame, frame) ||
       old.viewport != viewport ||
       old.marquee != marquee ||
-      old.outlines.toString() != outlines.toString() ||
-      old.handles.toString() != handles.toString() ||
+      !_samePolylines(old.outlines, outlines) ||
+      !mapEquals(old.handles, handles) ||
       !identical(old.spatialMesh, spatialMesh);
+
+  static bool _samePolylines<T>(List<List<T>> a, List<List<T>> b) {
+    if (identical(a, b)) return true;
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (!listEquals(a[i], b[i])) return false;
+    }
+    return true;
+  }
 }
 
 /// The gizmo mesh as native sent it: comp-space vertices, linear colours
