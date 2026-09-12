@@ -114,6 +114,7 @@ impl Compositor {
         for i in inputs {
             let content = match i.content {
                 SequentialContent::Rect(t) => (0, texture(t, &mut key)?),
+                SequentialContent::LinearRect(t) => (3, texture(t, &mut key)?),
                 SequentialContent::Model(m) => (1, m.revision),
                 SequentialContent::Environment(_) => (2, 0),
                 SequentialContent::Cloud { .. } => return None,

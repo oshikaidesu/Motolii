@@ -35,7 +35,10 @@ impl Compositor {
         // 同じ素材に同じ効果列が続く(配置効果の複製)なら、鎖は 1 回だけ流して結果を配る。
         let mut previous: Option<(GpuTexture2D, &[EffectPass], LayerContent, u32)> = None;
 
+        let shared_frame = frame;
         for lwp in layers {
+            // 層が自分の枠を持てば(密度 > 1 の素材)それで評価する。呼び手の枠が優先。
+            let frame = shared_frame.or(lwp.layer.frame);
             let Some(layer_texture) = lwp.layer.content.texture().cloned() else {
                 effective_textures.push(lwp.layer.content.clone());
                 effective_paddings.push(0);
@@ -47,7 +50,7 @@ impl Compositor {
                 continue;
             }
             if let Some((source, passes, content, padding)) = &previous {
-                if frame.is_none() && source.handle() == layer_texture.handle() && *passes == lwp.passes.as_slice() {
+                if shared_frame.is_none() && source.handle() == layer_texture.handle() && *passes == lwp.passes.as_slice() {
                     effective_textures.push(content.clone());
                     effective_paddings.push(*padding);
                     continue;
@@ -61,6 +64,9 @@ impl Compositor {
                 .max()
                 .unwrap_or(0);
             let padding = frame.map_or(padding, |f| (padding as f32 * f.density().into_iter().fold(0.0f32, f32::max)).ceil() as u32);
+            // 上限を越える texture は wgpu が無効な物を返し、pool に入ると以後の全フレームを壊す。reach を削ってでも収める。
+            let limit = self.ctx.device.limits().max_texture_dimension_2d;
+            let padding = padding.min(limit.saturating_sub(width.max(height)) / 2);
             let border = padding
                 .checked_mul(2)
                 .ok_or_else(|| CompositorError::Effect("effect padding overflow".into()))?;
@@ -167,7 +173,10 @@ impl Compositor {
                     let frame = frame.unwrap_or(effects::vism::ImageFrame { size: [width as f32,height as f32], origin: [0.0;2], pixels: [width,height] }).padded(padding);
                     program.record_in_frame(&self.ctx, encoder, &mut self.effect_scratch, &sources, &destination_view, &pass.params, frame);
                 } else {
-                    program.record(&self.ctx, encoder, &mut self.effect_scratch, &sources, &destination_view, &pass.params, [padded_width as f32,padded_height as f32]);
+                    // pass は ISF の作法(render_size = 画素)。論理 px の欄だけ host が密度で画素へ写す。
+                    let density = frame.map_or(1.0, |f| f.density().into_iter().fold(1.0f32, f32::max));
+                    let params = program.params_at_density(&pass.params, density);
+                    program.record(&self.ctx, encoder, &mut self.effect_scratch, &sources, &destination_view, &params, [padded_width as f32,padded_height as f32]);
                 }
                 let destination = if program.image_input_count() == 0 {
                     self.confine_to_coverage(encoder, destination, &current, [padded_width, padded_height], format)?
@@ -301,7 +310,9 @@ pub(crate) fn sequential_inputs<'a>(
         .zip(effective_paddings.iter())
         .map(|((lwp, content), &padding)| {
             let layer = &lwp.layer;
-            let pad = padding as f32;
+            // 余白は絵の画素。置く時は論理 px(密度 > 1 の素材は密度で割る)。
+            let density = layer.frame.map_or([1.0, 1.0], |f| f.density());
+            let pad = [padding as f32 / density[0].max(1.0), padding as f32 / density[1].max(1.0)];
             SequentialInput {
                 content: match content {
                     LayerContent::Texture(t) => SequentialContent::Rect(t),
@@ -320,8 +331,8 @@ pub(crate) fn sequential_inputs<'a>(
                     LayerContent::Model(model) => SequentialContent::Model(model),
                     LayerContent::Environment(e) => SequentialContent::Environment(e),
                 },
-                local_min: glam::Vec2::new(-pad, -pad),
-                local_size: glam::Vec2::new(layer.size[0] + 2.0 * pad, layer.size[1] + 2.0 * pad),
+                local_min: glam::Vec2::new(-pad[0], -pad[1]),
+                local_size: glam::Vec2::new(layer.size[0] + 2.0 * pad[0], layer.size[1] + 2.0 * pad[1]),
                 placement: layer.placement,
                 projection: layer.projection,
                 projection_camera: layer.projection_camera,

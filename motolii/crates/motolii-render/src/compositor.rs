@@ -274,6 +274,9 @@ pub struct Layer {
     /// Stage で選ばれている層の番号(1..=255、0 は無し): outline の object-id mask に描かれ、
     /// その画面上の広がりが籠になる(export には出ない)。
     pub outline: u8,
+    /// 絵の論理の枠(素材座標の大きさ・原点・画素数)。効果はこの枠の論理 px で評価し、
+    /// 描画密度を上げても reach・radius が変わらない。無ければ 1 px = 1 論理 px。
+    pub frame: Option<effects::vism::ImageFrame>,
 }
 
 #[derive(Clone)]

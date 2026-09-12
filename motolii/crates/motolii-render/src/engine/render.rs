@@ -433,6 +433,7 @@ impl Engine {
             clip: None,
             blocks_light: layer.blocks_light,
             outline: layer.outline,
+            frame: None,
         })
     }
 
@@ -504,6 +505,7 @@ impl Engine {
             clip: None,
             blocks_light: sources.iter().any(|s| s.layer.blocks_light),
             outline: sources.iter().map(|s| s.layer.outline).max().unwrap_or(0),
+            frame: None,
         })
     }
 
@@ -555,6 +557,7 @@ impl Engine {
             projection: layer.projection, projection_camera, blend_mode,
             shading: Default::default(), displace: translate_point_displace(&layer.effects),
             clip: translate_clip(&layer.effects), blocks_light: layer.blocks_light, outline: self.outline_id(layer.id),
+            frame,
         };
         let uses_material = self.compositor.catalog.descriptors.iter().any(|d| matches!(d.stage, crate::render::compositor::EffectStage::Warp | crate::render::compositor::EffectStage::Field) && layer.effects.iter().any(|e| e.plugin_id == d.plugin_id));
         let masks_applied = (uses_material || frame.is_some()) && built.content.texture().is_some();
@@ -564,8 +567,12 @@ impl Engine {
             built.shading = self.compositor.surface_shading_for(&layer.effects, matches!(&built.content, LayerContent::Model(m) if m.planar_size.is_some()))
                 .map_err(EngineError::Store)?;
         }
-        let planar_image_pass = matches!(&built.content, LayerContent::Model(m) if m.planar_size.is_some()) && !translate_effect_passes(&layer.effects).is_empty();
-        let built = self.flatten_if_asked(comp, camera, built, layer.flatten || planar_image_pass)?;
+        // 場を通った板(material_plane)の後ろの絵の効果は、描いた物を 1 枚の絵として受ける
+        // (Blender の Visual Effects の作法)。平らな素材そのものの絵の効果はここへ来ない —
+        // texture_for_resolved が素材座標の絵にしている(広がりの法)。空間の物の枠を comp でなく
+        // 物の投影範囲 + reach にするのは宿題。
+        let picture_of_spatial = matches!(&built.content, LayerContent::Model(m) if m.planar_size.is_some()) && !translate_effect_passes(&layer.effects).is_empty();
+        let built = self.flatten_if_asked(comp, camera, built, layer.flatten || picture_of_spatial)?;
         Ok(Some(if masks_applied { built } else { self.apply_masks_to_layer(built, &layer.masks, natural, frame)? }))
     }
 

@@ -104,9 +104,13 @@ impl Compositor {
 
     /// 形の木を canvas の大きさの texture に描く。何も描かなければ None。
     /// 出口は他の層と同じ premultiplied texture なので、raster 効果はそのまま掛かる。
-    pub(crate) fn render_paths(&mut self, label: &'static str, shapes: &[ShapeNode], canvas: &Canvas, density: f32) -> Result<Option<GpuTexture2D>, CompositorError> {
+    /// `pixel_budget`: 絵に使ってよい画素数の上限。投影の密度がそれを越える(層が comp の何倍も大きい・
+    /// 極端な拡大)時は密度を落とす — 効果は素材全体に掛かる(広がりの法)が、費用は comp の定数倍で止める。
+    pub(crate) fn render_paths(&mut self, label: &'static str, shapes: &[ShapeNode], canvas: &Canvas, density: f32, pixel_budget: u64) -> Result<Option<GpuTexture2D>, CompositorError> {
         let limit = self.ctx.device.limits().max_texture_dimension_2d;
-        let density = density.max(1.0).min(limit as f32 / canvas.width.max(canvas.height).max(1) as f32);
+        let area = (canvas.width.max(1) as f64) * (canvas.height.max(1) as f64);
+        let by_budget = ((pixel_budget.max(1) as f64) / area).sqrt() as f32;
+        let density = density.max(1.0).min(by_budget.max(1.0)).min(limit as f32 / canvas.width.max(canvas.height).max(1) as f32);
         let width = (canvas.width as f32 * density).ceil() as u32;
         let height = (canvas.height as f32 * density).ceil() as u32;
         let builder = build_at_tolerance(shapes, canvas, 0.05 / density)?;

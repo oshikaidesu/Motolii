@@ -321,7 +321,10 @@ impl Engine {
         projection_camera: crate::doc::core::ResolvedCamera,
     ) -> Result<(Option<LayerContent>, [f32; 2], Option<crate::render::compositor::effects::vism::ImageFrame>), EngineError> {
         let needs_material = self.compositor.catalog.descriptors.iter().any(|d| matches!(d.stage, crate::render::compositor::EffectStage::Warp | crate::render::compositor::EffectStage::Field) && layer.effects.iter().any(|e| e.plugin_id == d.plugin_id));
-        let vector = layer.depth == 0.0 && layer.masks.is_empty() && !needs_material;
+        // 絵を読む効果(pass)は素材座標の絵を要る。comp 大に焼くと comp の外が失われ、
+        // Blur が縁で切れる(広がりの法: 評価の入力を view・comp・カメラで切らない)。
+        let needs_image = !super::translate::translate_effect_passes(&layer.effects).is_empty();
+        let vector = layer.depth == 0.0 && layer.masks.is_empty() && !needs_material && !needs_image;
         let natural = if layer.source == LayerSource::Shape {
             let canvas = content_canvas(shape_documents.get(&layer.id).map(Vec::as_slice).unwrap_or(&[]))?;
             canvas.map_or([1.0; 2], |c| [c.width as f32, c.height as f32])
@@ -338,8 +341,20 @@ impl Engine {
             [(project(p + u / natural[0].max(1.0)) - project(p)).length(),
              (project(p + v / natural[1].max(1.0)) - project(p)).length()]
         }).filter(|v| v.is_finite()).fold(1.0f32, f32::max);
+        // 浮動小数の 20.000002 が 361 画素を生み、置いた時に 1 画素ずれて縁が甘くなる — 1/1024 に丸める。
+        let mut exact_density = ((density.max(1.0) * 1024.0).round() / 1024.0).max(1.0);
+        if needs_image {
+            // 絵 + 効果の reach(余白)が device の texture 上限を越えると wgpu は無効な texture を返し、
+            // それが scratch pool に入って以後の全フレームが壊れる。密度の側で先に収める。
+            let reach = super::translate::translate_effect_passes(&layer.effects).iter().map(|p| p.padding() as f32).fold(0.0f32, f32::max);
+            let limit = self.compositor.ctx.device.limits().max_texture_dimension_2d as f32;
+            let extent = natural[0].max(natural[1]).max(1.0) + 2.0 * reach;
+            exact_density = exact_density.min((limit / extent).max(1.0));
+        }
         let density = (density * (1.0 - 1e-4)).log2().ceil().exp2().max(1.0);
-        let tolerance = (0.05 / density).max(1e-6);
+        // 輪郭の細分は 2 の冪の段で cache を使い回す。絵に描く時は投影の密度そのもので描く
+        // (段に丸めると置いた時に再標本化され、縁が甘くなる)。
+        let tolerance = (0.05 / if vector { density } else { exact_density }).max(1e-6);
         let (content, natural, frame) = if layer.source == LayerSource::Text {
             self.text_texture_from_document(text_documents.get(&layer.id), layer.id, t, comp, vector, tolerance, layer.depth == 0.0)?
         } else if layer.source == LayerSource::Shape {
@@ -347,7 +362,10 @@ impl Engine {
                 .get(&layer.id)
                 .map(Vec::as_slice)
                 .unwrap_or(&[]);
-            { let (content,natural)=self.shape_texture_from_shapes(shapes, layer.id, vector, tolerance)?; (content,natural,None) }
+            let (content,natural)=self.shape_texture_from_shapes(shapes, layer.id, vector, tolerance, comp)?;
+            // 密度 > 1 で描いた絵は、その枠を持ち歩く(効果の reach・radius は論理 px)。
+            let frame = content.as_ref().and_then(|c| c.texture()).map(|t| crate::render::compositor::effects::vism::ImageFrame { size: natural, origin: [0.0; 2], pixels: t.width_height() });
+            (content,natural,frame)
         } else if let LayerSource::File { path, .. } = &layer.source {
             let path = path.clone();
             if layer.environment && crate::render::media::is_still_image_path(&path) {
@@ -457,7 +475,7 @@ impl Engine {
         let raster_canvas = if !vector && crop { content_canvas(&shapes)?.unwrap_or_else(|| canvas.clone()) } else { canvas.clone() };
         let content = if vector {
             self.compositor.path_model(&shapes, &canvas, tolerance)?.map(|m| LayerContent::Model(std::sync::Arc::new(m)))
-        } else { self.compositor.render_paths("text", &shapes, &raster_canvas, 0.05 / tolerance)?.map(LayerContent::Texture) };
+        } else { self.compositor.render_paths("text", &shapes, &raster_canvas, 0.05 / tolerance, raster_pixel_budget(comp))?.map(LayerContent::Texture) };
         let Some(texture) = content else {
             return Ok((None, [0.0, 0.0], None));
         };
@@ -487,6 +505,7 @@ impl Engine {
         layer_id: LayerId,
         vector: bool,
         tolerance: f32,
+        comp: CompSpec,
     ) -> Result<(Option<LayerContent>, [f32; 2]), EngineError> {
         if shapes.is_empty() {
             return Ok((None, [0.0, 0.0]));
@@ -506,7 +525,7 @@ impl Engine {
 
         let content = if vector {
             self.compositor.path_model(shapes, &canvas, tolerance)?.map(|m| LayerContent::Model(std::sync::Arc::new(m)))
-        } else { self.compositor.render_paths("shape", shapes, &canvas, 0.05 / tolerance)?.map(LayerContent::Texture) };
+        } else { self.compositor.render_paths("shape", shapes, &canvas, 0.05 / tolerance, raster_pixel_budget(comp))?.map(LayerContent::Texture) };
         let Some(texture) = content else {
             return Ok((None, [0.0, 0.0]));
         };
@@ -1039,6 +1058,12 @@ impl ShapeCacheKey {
 
 /// 形が占める範囲だけの canvas。層の箱が中身に吸い付く。
 /// 反アリアスのはみ出しを1画素見込む。
+/// 絵に描く画素の予算 = comp の 4 倍。層が comp より大きい・極端な拡大でも、効果 1 段の費用を
+/// comp の定数倍で止める(古い「comp 大に焼く」道の費用の上限に近い)。
+pub(crate) fn raster_pixel_budget(comp: CompSpec) -> u64 {
+    4 * u64::from(comp.width.max(1)) * u64::from(comp.height.max(1))
+}
+
 pub fn content_canvas(
     shapes: &[ShapeNode],
 ) -> Result<Option<crate::doc::vector::Canvas>, EngineError> {
@@ -1646,6 +1671,65 @@ mod vector_projection_contract {
         doc
     }
 
+    /// 広がりの法: 効果は素材全体に素材座標で評価する。comp からはみ出した円の Blur が、
+    /// comp の縁で切れない(comp を広げても、重なる範囲の絵は同じ)。
+    #[test]
+    fn blur_reaches_past_the_composition_edge() {
+        let scene = |width: u32| {
+            let mut doc = circle(48.0, 1.0, false);
+            let mut comp = doc.view().composition().unwrap().unwrap();
+            comp.width = width; comp.height = 64;
+            doc.apply_all([
+                Intent::SetComposition(comp),
+                Intent::SetConstant { layer: LayerId(1), property: PropertyId::new(property::POSITION).unwrap(), value: Value::Vec2([64.0, 32.0]) },
+                Intent::SetEffects { layer: LayerId(1), effects: vec![EffectInstance { id: EffectId(0), plugin_id: "motolii.blur".into() }] },
+                Intent::SetConstant { layer: LayerId(1), property: PropertyId::new("effect.0.param.radius").unwrap(), value: Value::F64(8.0) },
+            ]).unwrap();
+            doc
+        };
+        let mut engine = Engine::new().unwrap();
+        let narrow = engine.render_frame(&scene(64).view(), RationalTime::ZERO).unwrap();
+        let wide = engine.render_frame(&scene(128).view(), RationalTime::ZERO).unwrap();
+        let mut differing = 0;
+        let mut blurred_edge = 0;
+        for y in 0..64usize {
+            for x in 0..64usize {
+                let a = &narrow[(y * 64 + x) * 4..(y * 64 + x) * 4 + 4];
+                let b = &wide[(y * 128 + x) * 4..(y * 128 + x) * 4 + 4];
+                if a.iter().zip(b).any(|(a, b)| a.abs_diff(*b) > 3) { differing += 1; }
+                // 縁の 1 列: 円の中(白地に黒)がぼけて灰になっている画素
+                if x == 63 && a[0] > 8 && a[0] < 247 { blurred_edge += 1; }
+            }
+        }
+        assert!(blurred_edge > 4, "the circle must straddle the right edge and be blurred there");
+        assert!(differing < 20, "the composition edge cut the blur: {differing} pixels differ from the wider composition");
+    }
+
+    /// 広がりの法(密度): 効果の radius・reach は論理 px。20 倍に置いた小さな円の Blur 4 は、
+    /// 大きな円の Blur 80 と同じ絵になる(余白の置き方も密度で割れている)。
+    #[test]
+    fn blur_radius_is_measured_in_logical_pixels_at_any_raster_density() {
+        let blur = |mut doc: Document, radius: f64| {
+            doc.apply_all([
+                Intent::SetEffects { layer: LayerId(1), effects: vec![EffectInstance { id: EffectId(0), plugin_id: "motolii.blur".into() }] },
+                Intent::SetConstant { layer: LayerId(1), property: PropertyId::new("effect.0.param.radius").unwrap(), value: Value::F64(radius) },
+            ]).unwrap();
+            doc
+        };
+        let mut engine = Engine::new().unwrap();
+        let a = engine.render_frame(&blur(circle(16.0, 20.0, false), 4.0).view(), RationalTime::ZERO).unwrap();
+        let b = engine.render_frame(&blur(circle(320.0, 1.0, false), 80.0).view(), RationalTime::ZERO).unwrap();
+        if let Some(out) = std::env::var_os("MOTOLII_VECTOR_EVIDENCE") {
+            let dir = std::path::PathBuf::from(out); std::fs::create_dir_all(&dir).unwrap();
+            image::save_buffer(dir.join("blur-density20.png"), &a, 512,512,image::ColorType::Rgba8).unwrap();
+            image::save_buffer(dir.join("blur-density1.png"), &b, 512,512,image::ColorType::Rgba8).unwrap();
+        }
+        let bad = a.chunks_exact(4).zip(b.chunks_exact(4)).filter(|(a, b)| a[0].abs_diff(b[0]) > 12).count();
+        let soft = a.chunks_exact(4).filter(|p| p[0] > 16 && p[0] < 240).count();
+        assert!(soft > 20000, "the magnified circle must be visibly blurred: {soft} soft pixels");
+        assert!(bad < 1500, "blur width or padding changed with raster density: {bad} differing pixels");
+    }
+
     #[test]
     fn a_slow_field_does_not_tear_the_fill_and_stroke_of_one_plane() {
         let scene = |opacity: f64, evolution: f64| {
@@ -1733,14 +1817,14 @@ mod vector_projection_contract {
             let b = engine.render_frame(&circle(320.0,1.0,pass).view(), RationalTime::ZERO).unwrap();
             let bad = a.chunks_exact(4).zip(b.chunks_exact(4)).filter(|(a,b)| a[0].abs_diff(b[0]) > 16).count();
             let ink = a.chunks_exact(4).filter(|p| p[0] < 128).count();
-            assert!(ink > 70000 && ink < 90000, "the unlit circle keeps its size and paint: {ink}");
-            assert!(bad < 300, "magnifying a contour introduced {bad} differing pixels (image effect={pass})");
             if let Some(out) = std::env::var_os("MOTOLII_VECTOR_EVIDENCE") {
                 let dir = std::path::PathBuf::from(out); std::fs::create_dir_all(&dir).unwrap();
                 image::save_buffer(dir.join(format!("circle-scale20-pass{pass}.png")), &a, 512,512,image::ColorType::Rgba8).unwrap();
                 image::save_buffer(dir.join(format!("circle-reference-pass{pass}.png")), &b, 512,512,image::ColorType::Rgba8).unwrap();
                 std::fs::write(dir.join(format!("circle-comparison-pass{pass}.json")), serde_json::json!({"different_pixels_over_16":bad,"ink_pixels":ink,"pixels":512*512,"scale":20,"image_effect":pass}).to_string()).unwrap();
             }
+            assert!(ink > 70000 && ink < 90000, "the unlit circle keeps its size and paint: {ink}");
+            assert!(bad < 300, "magnifying a contour introduced {bad} differing pixels (image effect={pass})");
         }
     }
 }

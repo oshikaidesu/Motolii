@@ -21,7 +21,7 @@ fn image_layer(texture: GpuTexture2D, size: [f32; 2]) -> Layer {
         content: LayerContent::LinearTexture(texture), size, placement: Default::default(),
         projection: LayerProjection::TwoD, projection_camera: Default::default(),
         blend_mode: BlendMode::Normal, shading: Default::default(), displace: Default::default(),
-        clip: None, blocks_light: false, outline: 0,
+        clip: None, blocks_light: false, outline: 0, frame: None,
     }
 }
 
@@ -103,6 +103,7 @@ impl Engine {
             if let Some(world) = &mut layer.placement.world_transform { *world *= glam::Affine3A::from_translation(offset.extend(0.0)); }
             layer.size = [cached.frame.size[0]*scale[0],cached.frame.size[1]*scale[1]];
             layer.content = LayerContent::LinearTexture(cached.output.clone());
+            layer.frame = Some(cached.frame);
         }
         self.materials.insert(resolved.id, cached);
         Ok(layer)

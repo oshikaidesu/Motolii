@@ -98,6 +98,7 @@ impl EffectProgram {
             output_format))
     }
     pub(crate) fn image_input_count(&self) -> usize { self.0.image_input_count() }
+    pub(crate) fn params_at_density(&self, params: &[(String, f32)], density: f32) -> Vec<(String, f32)> { self.0.params_at_density(params, density) }
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn record(&self, ctx: &re_renderer::RenderContext, encoder: &mut wgpu::CommandEncoder,
         scratch: &mut EffectScratch, sources: &[&wgpu::TextureView], dst_view: &wgpu::TextureView,

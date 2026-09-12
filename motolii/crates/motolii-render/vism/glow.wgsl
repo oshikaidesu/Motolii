@@ -8,7 +8,7 @@
     { "NAME": "source", "TYPE": "image" },
     { "NAME": "threshold", "TYPE": "float", "DEFAULT": 1.0, "MIN": 0.0, "MAX": 1.0 },
     { "NAME": "intensity", "TYPE": "float", "DEFAULT": 0.75, "MIN": 0.0, "MAX": 4.0 },
-    { "NAME": "radius", "TYPE": "float", "DEFAULT": 1.0, "MIN": 1.0, "MAX": 64.0 }
+    { "NAME": "radius", "TYPE": "float", "DEFAULT": 1.0, "MIN": 1.0, "MAX": 64.0, "SUBTYPE": "DISTANCE" }
   ],
   "PASSES": [
     { "TARGET": "bright", "FLOAT": true },

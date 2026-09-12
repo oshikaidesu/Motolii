@@ -876,6 +876,7 @@ impl Compositor {
             clip: None,
             blocks_light: layer.blocks_light,
             outline: layer.outline,
+            frame: None,
         })
     }
 }

@@ -130,6 +130,17 @@ impl VismProgram {
         self.image_order.len()
     }
 
+    /// 論理 px で書かれた欄(`SUBTYPE` が DISTANCE / TRANSLATION)を、絵の密度で画素へ写す。
+    /// shader は ISF の作法どおり画素で書き、密度は host が知っている(広がりの法)。
+    pub(crate) fn params_at_density(&self, params: &[(String, f32)], density: f32) -> Vec<(String, f32)> {
+        if (density - 1.0).abs() < 1e-6 { return params.to_vec(); }
+        params.iter().map(|(name, value)| {
+            let scaled = self.manifest.inputs.iter().any(|input| &input.name == name
+                && matches!(input.subtype.as_deref(), Some("DISTANCE" | "TRANSLATION")));
+            (name.clone(), if scaled { value * density } else { *value })
+        }).collect()
+    }
+
     pub(crate) fn new(
         ctx: &RenderContext,
         label: &str,
