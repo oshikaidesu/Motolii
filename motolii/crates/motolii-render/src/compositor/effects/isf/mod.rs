@@ -417,6 +417,16 @@ fn wrap_fragment_source(
             name = input.name
         ));
     }
+    // 中間 buffer(PASSES の TARGET)。image 入力の後ろに、初出順で並ぶ(Rust 側の target_slots と同じ順)。
+    for (slot, name) in manifest.target_slots().iter().enumerate() {
+        let tex_binding = super::vism::image_texture_binding(image_order.len() + slot);
+        let samp_binding = tex_binding + 1;
+        out.push_str(&format!(
+            "layout(set = 0, binding = {tex_binding}) uniform texture2D {name}__tex;\n\
+             layout(set = 0, binding = {samp_binding}) uniform sampler {name}__samp;\n\
+             #define {name} sampler2D({name}__tex, {name}__samp)\n"
+        ));
+    }
     out.push('\n');
     for (binding, &index) in param_order.iter().enumerate() {
         let input = &manifest.inputs[index];
@@ -427,12 +437,19 @@ fn wrap_fragment_source(
         ));
     }
     out.push_str(&format!(
-        "layout(set = 1, binding = {binding}) uniform RenderInfo {{ vec2 RENDERSIZE; }};\n\n",
+        "layout(set = 1, binding = {binding}) uniform RenderInfo {{ vec2 RENDERSIZE; }};\n",
         binding = super::vism::render_size_binding(param_order.len())
     ));
+    // 何段目か(ISF の PASSINDEX)。host は f32 で送るので、綴りは int へ写して渡す。
+    out.push_str(&format!(
+        "layout(set = 1, binding = {binding}) uniform PassInfo {{ float isf_PassIndex; }};\n",
+        binding = super::vism::pass_index_binding(param_order.len())
+    ));
+    out.push_str("#define PASSINDEX int(isf_PassIndex)\n\n");
 
-    out.push_str("#define IMG_THIS_PIXEL(image) texture(image, isf_FragNormCoord)\n");
-    out.push_str("#define IMG_NORM_PIXEL(image, coord) texture(image, coord)\n\n");
+    // ISF の座標は下端が 0(GL の作法)、wgpu の texture は上端が 0。読む時に裏返す。
+    out.push_str("#define IMG_THIS_PIXEL(image) texture(image, vec2(isf_FragNormCoord.x, 1.0 - isf_FragNormCoord.y))\n");
+    out.push_str("#define IMG_NORM_PIXEL(image, coord) texture(image, vec2((coord).x, 1.0 - (coord).y))\n\n");
 
     out.push_str(filter_body);
     out
@@ -475,6 +492,27 @@ mod manifest_tests {
 
     fn manifest(header: &str) -> Result<IsfManifest, IsfError> {
         parse_isf_source(&format!("/*{{ \"INPUTS\": [{{\"NAME\":\"source\",\"TYPE\":\"image\"}}, {{\"NAME\":\"gain\",\"TYPE\":\"float\",\"DEFAULT\":1.0}}]{header} }}*/ fn f() {{}}")).map(|(m, _)| m)
+    }
+
+    /// 複数パスの器: 何段目か(PASSINDEX)と中間 buffer の名前が、shader から見えること。
+    /// どちらも host 側の束縛は在ったのに宣言が無く、PASSES を書いた効果が通らなかった
+    /// (2026-09-12、実写の bloom で発覚)。
+    #[test]
+    fn a_multi_pass_effect_can_see_its_index_and_its_buffers() {
+        let source = "/*{ \"INPUTS\": [{\"NAME\":\"inputImage\",\"TYPE\":\"image\"}], \"PASSES\": [{\"TARGET\":\"half\"}, {}] }*/\n\
+                      void main() { gl_FragColor = PASSINDEX == 0 ? IMG_THIS_PIXEL(inputImage) : IMG_THIS_PIXEL(half); }";
+        let (_manifest, _vertex, fragment) = compiled_stages(source).expect("PASSES が書ける");
+        assert!(fragment.contains("fn main"), "{fragment}");
+    }
+
+    /// 上下の向き: ISF の座標は下端が 0、wgpu の texture は上端が 0。読む macro で裏返す。
+    /// 裏返さないと実写が上下逆になる(対称な効果では気づけない)。
+    #[test]
+    fn the_picture_is_read_right_side_up() {
+        let (manifest, body) = parse_isf_source("/*{ \"INPUTS\": [{\"NAME\":\"inputImage\",\"TYPE\":\"image\"}] }*/ void main() {}").unwrap();
+        let (images, params) = crate::render::compositor::effects::vism::orders(&manifest);
+        let glsl = wrap_fragment_source(&manifest, &images, &params, &body);
+        assert!(glsl.contains("1.0 - isf_FragNormCoord.y"), "{glsl}");
     }
 
     #[test]

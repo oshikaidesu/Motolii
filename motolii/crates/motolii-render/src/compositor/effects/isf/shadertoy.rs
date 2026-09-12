@@ -66,6 +66,9 @@ pub fn isf_from_shadertoy(id: &str, label: &str, source: &str) -> Result<String,
         inputs.join(",\n")
     ));
     // 名前の結び直し。Shadertoy は画素の座標(左下原点)、ISF は 0..1 の座標。
+    // Shadertoy の座標は下端が 0、wgpu の texture は上端が 0。座標は Shadertoy の作法のまま渡し、
+    // 読む時だけ裏返す(macro は自分自身へ展開し直されないので、中の texture は組み込みのまま)。
+    out.push_str("#define texture(smp, coord) texture(smp, vec2((coord).x, 1.0 - (coord).y))\n");
     out.push_str("#define iResolution vec3(RENDERSIZE, 1.0)\n");
     out.push_str("#define iTimeDelta (1.0 / 60.0)\n");
     out.push_str("#define iFrameRate 60.0\n");
@@ -77,8 +80,7 @@ pub fn isf_from_shadertoy(id: &str, label: &str, source: &str) -> Result<String,
     }
     out.push('\n');
     out.push_str(source.trim_end());
-    // ISF の座標は上端が 1、texture の v は上端が 0。裏返さずに渡すと、素材を読む位置が上下逆になる。
-    out.push_str("\n\nvoid main() {\n    vec2 isf_shadertoy_coord = vec2(isf_FragNormCoord.x, 1.0 - isf_FragNormCoord.y) * RENDERSIZE;\n    mainImage(gl_FragColor, isf_shadertoy_coord);\n}\n");
+    out.push_str("\n\nvoid main() {\n    mainImage(gl_FragColor, isf_FragNormCoord * RENDERSIZE);\n}\n");
     Ok(out)
 }
 
@@ -164,7 +166,7 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     #[test]
     fn the_picture_is_read_right_side_up() {
         let isf = isf_from_shadertoy("import.swap", "Swap", WITH_CHANNEL).unwrap();
-        assert!(isf.contains("1.0 - isf_FragNormCoord.y"), "{isf}");
+        assert!(isf.contains("#define texture(smp, coord)"), "{isf}");
     }
 
     #[test]
