@@ -30,10 +30,12 @@ file 名が効果の名前になり、ID は `import.<file 名>`。棚には同�
 | `mainImage(out vec4, in vec2)` | ISF の `main()` から呼ばれる |
 | `fragCoord` | 画素の座標。**上下を裏返して**渡す(§5) |
 | `iResolution` | `vec3(RENDERSIZE, 1.0)` |
-| `iTime` | `SUBTYPE: TIME` の欄。host が時刻を流す |
+| `iTime` | ホストの時計 `TIME`(comp の秒)。欄ではない |
 | `iChannel0..3` | **使われている物だけ** image 入力の欄になる |
 | `iMouse` | 使われていれば point2D の欄 |
-| `iFrame` / `iTimeDelta` / `iFrameRate` / `iDate` / `iSampleRate` | `iTime` と 60fps から組む定数 |
+| `iFrame` / `iTimeDelta` / `iFrameRate` | ホストの時計 `FRAMEINDEX` / `TIMEDELTA` / `1/TIMEDELTA`(comp の fps) |
+| `iDate` | `DATE` = 0 固定。壁時計は使わない — 同じ時刻は何度描いても同じ絵 |
+| `iSampleRate` | 定数 44100 |
 
 写せない名前(`iChannelResolution`・`iChannelTime`)は、黙って壊れずに**名前を挙げて断る**。manifest の無い素の GLSL(`void main()` だけ)も、理由を添えて断る。
 
@@ -149,3 +151,21 @@ void main() {
 - 名指した欄が無い(または float でない)場合は、黙って 0 にせず名前を挙げて断る。
 - 費用は、ずれ 1 つにつき復号 1 回 + 写し 1 枚。cache はまだ効かない。
 - 速度を変えた層(time stretch)は、素材側のずれが comp の秒とは一致しない。
+
+## 9. shader へ届く欄と uniform(2026-09-12 に全部開けた)
+
+| 宣言 | 窓 | shader |
+|---|---|---|
+| `float` / `long` / `bool` | 数・選択・真偽 | `float` |
+| `point2D` | 点(pad + X/Y の枡) | `vec2`。2 成分とも届く |
+| `point3D` | 点(X/Y の枡。z は既定のまま — 窓に vec3 の部品が無い) | `vec3` |
+| `color` | hex の欄 | `vec4`。4 成分とも届く |
+| `image` | 層の絵 / `TIME_OFFSET` の別時刻 / `PASSES` の中間 buffer | `sampler2D` |
+| `RENDERSIZE` `PASSINDEX` | — | ホストの uniform |
+| **`TIME` `TIMEDELTA` `FRAMEINDEX` `DATE`** | — | ホストの時計(comp の秒・1/fps・コマ番号・0)。読む効果だけ時刻で焼き直す |
+
+多成分の欄は成分ごとに 1 つの f32 で運ぶ(`name`, `name.1`, `name.2`, `name.3` — `effects::component_key` が
+唯一の綴り)。`SUBTYPE: TIME` の欄は**利用者がキーフレームを打つただの float**で、時計は流れない(AE の
+Evolution と同じ)。時計が要るなら `TIME` を読む。
+
+まだ無い物: 別の層の絵(層を指す欄)、compute shader・storage buffer、音。

@@ -55,12 +55,21 @@ pub(crate) fn translate_image_effects(effects: &[crate::doc::store::ResolvedEffe
             if descriptor.stage != stage {
                 return None;
             }
+            // 欄の値は成分ごとに 1 つの f32 で運ぶ(点は 2、色は 4)。鍵は effects::component_key。
             let params: Vec<(String, f32)> = effect
                 .params
                 .iter()
-                .filter_map(|(name, value)| match value {
-                    crate::doc::store::Value::F64(value) => Some((name.clone(), *value as f32)),
-                    _ => None,
+                .flat_map(|(name, value)| -> Vec<(String, f32)> {
+                    use crate::doc::store::Value;
+                    let key = |i: usize| crate::render::compositor::effects::component_key(name, i);
+                    match value {
+                        Value::F64(v) => vec![(key(0), *v as f32)],
+                        Value::Vec2(v) => v.iter().enumerate().map(|(i, c)| (key(i), *c as f32)).collect(),
+                        Value::Color(v) => v.iter().enumerate().map(|(i, c)| (key(i), *c as f32)).collect(),
+                        Value::Bool(b) => vec![(key(0), if *b { 1.0 } else { 0.0 })],
+                        Value::Enum(n) => vec![(key(0), *n as f32)],
+                        Value::Path(_) | Value::LayerId(_) => Vec::new(),
+                    }
                 })
                 .collect();
             let padding = descriptor.padding.as_ref().map_or(0, |padding| {
@@ -79,6 +88,7 @@ pub(crate) fn translate_image_effects(effects: &[crate::doc::store::ResolvedEffe
                 (value.abs() * padding.scale).ceil() as u32
             });
             Some(crate::render::compositor::EffectPass {
+                uses_clock: descriptor.uses_clock,
                 image_time_offsets: descriptor.image_time_offsets.iter().map(|offset| match offset {
                     crate::render::compositor::effects::isf::TimeOffset::Fixed(seconds) => *seconds,
                     crate::render::compositor::effects::isf::TimeOffset::Param(name) => params.iter()
@@ -163,6 +173,23 @@ pub fn known_effects() -> std::sync::Arc<[EffectDescriptor]> {
 #[cfg(test)]
 mod shelf_tests {
     use crate::render::compositor::EffectStage;
+
+    /// 点・色・真偽は成分ごとに 1 つの f32 で運ぶ(鍵は effects::component_key)。F64 以外を捨てない。
+    #[test]
+    fn every_component_of_a_field_travels() {
+        use crate::doc::store::{ResolvedEffect, Value};
+        let effect = ResolvedEffect { plugin_id: "motolii.blur".into(), params: vec![
+            ("center".into(), Value::Vec2([3.0, 4.0])),
+            ("tint".into(), Value::Color([0.1, 0.2, 0.3, 0.4])),
+            ("on".into(), Value::Bool(true)),
+            ("radius".into(), Value::F64(8.0)),
+        ], ..Default::default() };
+        let pass = super::translate_effect_passes(&[effect]).remove(0);
+        let get = |k: &str| pass.params.iter().find(|(n, _)| n == k).map(|(_, v)| *v);
+        assert_eq!((get("center"), get("center.1")), (Some(3.0), Some(4.0)));
+        assert_eq!((get("tint"), get("tint.1"), get("tint.2"), get("tint.3")), (Some(0.1), Some(0.2), Some(0.3), Some(0.4)));
+        assert_eq!((get("on"), get("radius")), (Some(1.0), Some(8.0)));
+    }
 
     /// 別の時刻のずれは、欄の値(無ければ欄の既定)で決まる — 作者が固定するのではなく利用者が回す。
     #[test]

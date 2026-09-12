@@ -50,6 +50,12 @@ pub(crate) fn pass_index_binding(param_count: usize) -> u32 {
     param_count as u32 + 1
 }
 
+/// 時計(`TIME` `TIMEDELTA` `FRAMEINDEX`、ISF 仕様)は pass_index と同じ 1 つの buffer に乗る
+/// (x = 段, y = TIME, z = TIMEDELTA, w = FRAMEINDEX)。uniform buffer の数は shader ごとに上限があり
+/// (turbulent_warp は既に 12 本)、束縛を 1 つ増やすと組めなくなる。
+/// 時計の値は欄と同じ列で運ぶ(署名を増やさない)。この名前は ISF が予約しているので欄とは衝突しない。
+pub(crate) const CLOCK_KEYS: [&str; 3] = ["TIME", "TIMEDELTA", "FRAMEINDEX"];
+
 /// `FLOAT` を宣言した中間ターゲットの形式(蓄積・HDR)。
 pub(crate) const FLOAT_TARGET_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
 
@@ -135,7 +141,9 @@ impl VismProgram {
     pub(crate) fn params_at_density(&self, params: &[(String, f32)], density: f32) -> Vec<(String, f32)> {
         if (density - 1.0).abs() < 1e-6 { return params.to_vec(); }
         params.iter().map(|(name, value)| {
-            let scaled = self.manifest.inputs.iter().any(|input| &input.name == name
+            // 成分の鍵 `name.1` も、その欄の性格で決める。
+            let base = name.split_once('.').map_or(name.as_str(), |(base, tail)| if tail.chars().all(|c| c.is_ascii_digit()) { base } else { name.as_str() });
+            let scaled = self.manifest.inputs.iter().any(|input| input.name == base
                 && matches!(input.subtype.as_deref(), Some("DISTANCE" | "TRANSLATION")));
             (name.clone(), if scaled { value * density } else { *value })
         }).collect()
@@ -432,8 +440,11 @@ impl VismProgram {
             let input = &self.manifest.inputs[index];
             let count = input.ty.component_count().max(1);
             let mut components = input.default;
-            if let Some((_, value)) = params.iter().find(|(name, _)| name == &input.name) {
-                components[0] = *value;
+            for i in 0..count {
+                let key = super::component_key(&input.name, i);
+                if let Some((_, value)) = params.iter().find(|(name, _)| name == &key) {
+                    components[i] = *value;
+                }
             }
             let mut bytes = vec![0u8; count * 4];
             for i in 0..count {
@@ -450,12 +461,14 @@ impl VismProgram {
             "vism-render-info",
             &render_info,
         ));
-        buffers.push(uniform_buffer(
-            device,
-            queue,
-            "vism-pass-index",
-            &(pass_index as f32).to_le_bytes(),
-        ));
+        // (段, TIME, TIMEDELTA, FRAMEINDEX)。同梱の WGSL は先頭の f32 だけを pass_index として読む。
+        let mut pass_info = [0u8; 16];
+        pass_info[..4].copy_from_slice(&(pass_index as f32).to_le_bytes());
+        for (i, key) in CLOCK_KEYS.iter().enumerate() {
+            let v = params.iter().find(|(name, _)| name == key).map_or(0.0, |(_, v)| *v);
+            pass_info[(i + 1) * 4..(i + 2) * 4].copy_from_slice(&v.to_le_bytes());
+        }
+        buffers.push(uniform_buffer(device, queue, "vism-pass-index", &pass_info));
 
         if self.manifest.stage == super::IsfStage::Warp {
             let mut bytes = [0u8; 8];
@@ -463,6 +476,7 @@ impl VismProgram {
             bytes[4..].copy_from_slice(&origin[1].to_le_bytes());
             buffers.push(uniform_buffer(device, queue, "vism-material-origin", &bytes));
         }
+
 
         let entries: Vec<wgpu::BindGroupEntry> = buffers
             .iter()

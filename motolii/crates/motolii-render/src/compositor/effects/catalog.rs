@@ -40,6 +40,8 @@ pub struct EffectDescriptor {
     pub(crate) output_format: wgpu::TextureFormat,
     /// 2 枚目以降の image が要求する時刻のずれ(秒。負が過去)。宣言順。
     pub(crate) image_time_offsets: Vec<isf::TimeOffset>,
+    /// 時計(`TIME` 系)を読む。読む効果だけ、時刻が変われば焼き直す。
+    pub(crate) uses_clock: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -50,6 +52,8 @@ pub struct EffectParamDescriptor {
     pub default: f64,
     /// 点の欄(Vec2)ならその既定。数の欄は None。
     pub point: Option<[f64; 2]>,
+    /// 色の欄(RGBA 0..1)ならその既定。
+    pub color: Option<[f64; 4]>,
     pub range: Option<(f64, f64)>,
     /// 選択肢。値は番号。
     pub choices: Option<Vec<String>>,
@@ -212,10 +216,12 @@ fn validate_stage(source: &str, entry: &str, stage: naga::ShaderStage, manifest:
             1 if variable.space == naga::AddressSpace::Uniform => {
                 let components = if (binding.binding as usize) < params.len() { params[binding.binding as usize].ty.component_count() }
                     else if binding.binding as usize == params.len() { 2 }
-                    else if binding.binding as usize == params.len() + 1 { 1 }
+                    // 段の buffer は (段, TIME, TIMEDELTA, FRAMEINDEX)。同梱の WGSL は先頭の f32 だけ、ISF は vec4 で読む。
+                    else if binding.binding as usize == params.len() + 1 { 4 }
                     else if manifest.stage == isf::IsfStage::Warp && binding.binding as usize == params.len() + 2 { 2 }
                     else { 0 };
-                components > 0 && uniform_components(&module, variable.ty) == components
+                let found = uniform_components(&module, variable.ty);
+                components > 0 && (found == components || (binding.binding as usize == params.len() + 1 && found == 1))
             }
             _ => false,
         };
@@ -327,6 +333,7 @@ fn descriptors(definitions: &[VismDefinition]) -> Arc<[EffectDescriptor]> {
         params: kind.params.iter().map(|p| EffectParamDescriptor {
             name: p.name.to_owned(), label: p.label.to_owned(), default: p.default[0], range: p.range,
             point: matches!(p.kind, crate::doc::store::kind::ParamKind::Vec2).then_some(p.default),
+            color: None,
             choices: p.choices().map(|c| c.iter().map(|s| (*s).to_owned()).collect()),
             subtype: None, unit: None, group: None, advanced: false, hero: false,
         }).collect(),
@@ -335,6 +342,7 @@ fn descriptors(definitions: &[VismDefinition]) -> Arc<[EffectDescriptor]> {
         spill: None,
         output_format: wgpu::TextureFormat::Rgba8Unorm,
         image_time_offsets: Vec::new(),
+        uses_clock: false,
     });
     definitions.iter().filter(|d| d.manifest.expose).map(|d| EffectDescriptor {
         image_time_offsets: d.manifest.inputs.iter()
@@ -342,6 +350,7 @@ fn descriptors(definitions: &[VismDefinition]) -> Arc<[EffectDescriptor]> {
             .skip(1)
             .filter_map(|i| i.time_offset.clone())
             .collect(),
+        uses_clock: d.manifest.uses_clock,
         plugin_id: d.plugin_id().to_owned(),
         label: d.label(),
         snapshot: snapshot(d.plugin_id()),
@@ -358,7 +367,10 @@ fn descriptors(definitions: &[VismDefinition]) -> Arc<[EffectDescriptor]> {
             let read = d.subtypes.get(i).cloned().unwrap_or_default();
             let (subtype, unit, group) = character(p, &read, range, d);
             EffectParamDescriptor {
-                name: p.name.clone(), label: p.label.clone().unwrap_or_else(|| p.name.clone()), default: p.default[0] as f64, point: None,
+                name: p.name.clone(), label: p.label.clone().unwrap_or_else(|| p.name.clone()), default: p.default[0] as f64,
+                // 点(2 と 3 成分)は x,y を窓へ。3 成分目は窓に部品が無く既定のまま。
+                point: matches!(p.ty, isf::IsfInputType::Point2D | isf::IsfInputType::Point3D).then(|| [p.default[0] as f64, p.default[1] as f64]),
+                color: matches!(p.ty, isf::IsfInputType::Color).then(|| [p.default[0] as f64, p.default[1] as f64, p.default[2] as f64, p.default[3] as f64]),
                 range, choices: p.labels.clone(), subtype, unit, group, advanced: p.advanced, hero: p.hero,
             }
         }).collect(),
@@ -550,6 +562,66 @@ mod tests {
         assert_eq!(rebound.generation(), 7);
         assert!(rebound.0.dirty.load(Ordering::Acquire));
         assert!(Arc::ptr_eq(rebound.0.owner.lock().unwrap().snapshot.as_ref().unwrap(), &snapshot));
+    }
+
+    /// 貼った ISF に、点・色の**全成分**と時計が届く(実 GPU、program 1 つで 2×2 を描いて読む)。
+    /// `name` は shader の本文の置き場になる — 並走する test 同士で同じ名前を使うと上書きし合う。
+    fn run_once(name: &str, source: &str, params: &[(&str, f32)]) -> [u8; 4] {
+        let mut compositor = crate::render::compositor::Compositor::headless().unwrap();
+        let definition = prepare(VismSource { name: name.into(), extension: "fs".into(), source: source.into() }, "").unwrap();
+        // shader の本文は棚が書く。ここは棚を通らないので自分で書く(radiance の参照 test と同じ)。
+        definition.stage().unwrap();
+        let building = compositor.ctx.device.push_error_scope(wgpu::ErrorFilter::Validation);
+        let program = super::super::EffectProgram::compile_for(&compositor.ctx, &definition, wgpu::TextureFormat::Rgba8Unorm);
+        // pipeline は次の frame の頭で組まれる。組ませてから記録し、転送を流してから submit。
+        compositor.ctx.before_submit();
+        compositor.ctx.begin_frame();
+        let error = pollster::block_on(building.pop());
+        assert!(error.is_none(), "pipeline が組めない: {error:?}");
+        let ctx = &compositor.ctx;
+        let texture = |usage| ctx.device.create_texture(&wgpu::TextureDescriptor {
+            label: None, size: wgpu::Extent3d { width: 2, height: 2, depth_or_array_layers: 1 }, mip_level_count: 1, sample_count: 1,
+            dimension: wgpu::TextureDimension::D2, format: wgpu::TextureFormat::Rgba8Unorm, usage, view_formats: &[],
+        });
+        let src = texture(wgpu::TextureUsages::TEXTURE_BINDING);
+        let dst = texture(wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC);
+        let mut scratch = super::super::EffectScratch::default();
+        let params: Vec<(String, f32)> = params.iter().map(|(k, v)| ((*k).to_owned(), *v)).collect();
+        let scope = ctx.device.push_error_scope(wgpu::ErrorFilter::Validation);
+        let mut encoder = ctx.device.create_command_encoder(&Default::default());
+        program.record(ctx, &mut encoder, &mut scratch, &[&src.create_view(&Default::default())], &dst.create_view(&Default::default()), &params, [2.0, 2.0]);
+        let buffer = ctx.device.create_buffer(&wgpu::BufferDescriptor { label: None, size: 256 * 2, usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ, mapped_at_creation: false });
+        encoder.copy_texture_to_buffer(dst.as_image_copy(), wgpu::TexelCopyBufferInfo { buffer: &buffer, layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(256), rows_per_image: Some(2) } }, wgpu::Extent3d { width: 2, height: 2, depth_or_array_layers: 1 });
+        let commands = encoder.finish();
+        drop(ctx);
+        compositor.ctx.before_submit();
+        let ctx = &compositor.ctx;
+        ctx.queue.submit([commands]);
+        let error = pollster::block_on(scope.pop());
+        assert!(error.is_none(), "GPU の検証に落ちた: {error:?}");
+        let slice = buffer.slice(..);
+        slice.map_async(wgpu::MapMode::Read, |_| {});
+        ctx.device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
+        let data = slice.get_mapped_range();
+        [data[0], data[1], data[2], data[3]]
+    }
+
+    #[test]
+    fn a_point_and_a_colour_arrive_with_every_component() {
+        let source = "/*{ \"INPUTS\": [{\"NAME\":\"inputImage\",\"TYPE\":\"image\"}, {\"NAME\":\"p\",\"TYPE\":\"point2D\",\"DEFAULT\":[0.0,0.0]}, {\"NAME\":\"c\",\"TYPE\":\"color\",\"DEFAULT\":[0.0,0.0,0.0,0.0]}] }*/\n\
+                      void main() { gl_FragColor = vec4(p.x / 64.0, p.y / 64.0, c.b, c.a); }";
+        let px = run_once("contract-point", source, &[("p", 16.0), ("p.1", 32.0), ("c.2", 1.0), ("c.3", 0.5)]);
+        let near = |a: u8, b: u8| a.abs_diff(b) <= 2;
+        assert!(near(px[0], 64) && near(px[1], 128) && near(px[2], 255) && near(px[3], 128), "{px:?}: 成分が欠けている");
+    }
+
+    #[test]
+    fn the_clock_reaches_the_shader() {
+        let source = "/*{ \"INPUTS\": [{\"NAME\":\"inputImage\",\"TYPE\":\"image\"}] }*/\n\
+                      void main() { gl_FragColor = vec4(TIME / 10.0, float(FRAMEINDEX) / 255.0, TIMEDELTA * 10.0, 1.0); }";
+        let px = run_once("contract-clock", source, &[("TIME", 2.0), ("FRAMEINDEX", 48.0), ("TIMEDELTA", 0.1)]);
+        let near = |a: u8, b: u8| a.abs_diff(b) <= 2;
+        assert!(near(px[0], 51) && near(px[1], 48) && near(px[2], 255), "{px:?}: 時計が届いていない");
     }
 
     #[cfg(load_shaders_from_disk)]

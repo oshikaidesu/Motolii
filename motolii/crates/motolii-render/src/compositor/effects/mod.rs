@@ -129,6 +129,14 @@ pub struct EffectPass {
     pub(crate) spill: Option<crate::render::compositor::BlendMode>,
     /// 2 枚目以降の image が要る時刻のずれ(秒。負が過去)。ホストがその時刻の絵を渡す。
     pub(crate) image_time_offsets: Vec<f32>,
+    /// 時計(`TIME` 系)を読む。合成側が記録の直前に時計の値を欄の列へ足す。
+    pub(crate) uses_clock: bool,
+}
+
+/// 多成分の欄(点・色)は、成分ごとに 1 つの f32 として運ぶ。0 番は欄の名前そのまま、
+/// 1 番以降は `name.1` `name.2` `name.3`。書く側(translate)と読む側(vism)はこの 1 つを使う。
+pub(crate) fn component_key(name: &str, component: usize) -> String {
+    if component == 0 { name.to_owned() } else { format!("{name}.{component}") }
 }
 
 impl EffectPass {

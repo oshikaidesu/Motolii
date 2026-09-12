@@ -55,7 +55,6 @@ pub fn isf_from_shadertoy(id: &str, label: &str, source: &str) -> Result<String,
         .iter()
         .map(|name| format!("    {{ \"NAME\": \"{name}\", \"LABEL\": \"{name}\", \"TYPE\": \"image\" }}"))
         .collect();
-    inputs.push("    { \"NAME\": \"iTime\", \"LABEL\": \"Time\", \"TYPE\": \"float\", \"DEFAULT\": 0.0, \"SUBTYPE\": \"TIME\" }".into());
     if mouse {
         inputs.push("    { \"NAME\": \"iMousePoint\", \"LABEL\": \"Mouse\", \"TYPE\": \"point2D\", \"DEFAULT\": [0.0, 0.0] }".into());
     }
@@ -70,10 +69,12 @@ pub fn isf_from_shadertoy(id: &str, label: &str, source: &str) -> Result<String,
     // 読む時だけ裏返す(macro は自分自身へ展開し直されないので、中の texture は組み込みのまま)。
     out.push_str("#define texture(smp, coord) texture(smp, vec2((coord).x, 1.0 - (coord).y))\n");
     out.push_str("#define iResolution vec3(RENDERSIZE, 1.0)\n");
-    out.push_str("#define iTimeDelta (1.0 / 60.0)\n");
-    out.push_str("#define iFrameRate 60.0\n");
-    out.push_str("#define iFrame int(iTime * 60.0)\n");
-    out.push_str("#define iDate vec4(0.0)\n");
+    // 時計はホストの uniform(ISF の TIME 系)。comp の時刻と fps がそのまま来る。
+    out.push_str("#define iTime TIME\n");
+    out.push_str("#define iTimeDelta TIMEDELTA\n");
+    out.push_str("#define iFrameRate (1.0 / TIMEDELTA)\n");
+    out.push_str("#define iFrame FRAMEINDEX\n");
+    out.push_str("#define iDate DATE\n");
     out.push_str("#define iSampleRate 44100.0\n");
     if mouse {
         out.push_str("#define iMouse vec4(iMousePoint, 0.0, 0.0)\n");
@@ -83,6 +84,9 @@ pub fn isf_from_shadertoy(id: &str, label: &str, source: &str) -> Result<String,
     out.push_str("\n\nvoid main() {\n    mainImage(gl_FragColor, isf_FragNormCoord * RENDERSIZE);\n}\n");
     Ok(out)
 }
+
+/// 注釈を外した本文(ISF 側の時計の判定も使う)。
+pub(super) fn strip_comments_pub(source: &str) -> String { strip_comments(source) }
 
 /// 注釈を外した本文。名前を探す時に、注釈の中の語で誤判定しないため。
 fn strip_comments(source: &str) -> String {
@@ -143,9 +147,9 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
         let isf = isf_from_shadertoy("import.ripple", "Ripple", PLAIN).unwrap();
         let (manifest, _vertex, fragment) = super::super::compiled_stages(&isf).unwrap();
         assert_eq!(manifest.label.as_deref(), Some("Ripple"));
-        // iTime は時刻の欄になる。
-        let time = manifest.inputs.iter().find(|i| i.name == "iTime").expect("iTime input");
-        assert_eq!(time.subtype.as_deref(), Some("TIME"));
+        // iTime は欄ではなくホストの時計。
+        assert!(!manifest.inputs.iter().any(|i| i.name == "iTime"));
+        assert!(manifest.uses_clock, "iTime を読む効果は時計を読む");
         assert!(fragment.contains("fn main"), "{fragment}");
     }
 

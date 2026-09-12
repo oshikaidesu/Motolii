@@ -64,6 +64,7 @@ impl Compositor {
             baked_effects: Default::default(),
             effect_programs,
             surface_programs: Default::default(),
+            clock: None,
             blend_vism,
             selection_bounds,
             matte_vism,

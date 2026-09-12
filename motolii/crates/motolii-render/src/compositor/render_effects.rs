@@ -11,10 +11,11 @@ pub(crate) struct BakedEffects {
     entries: Vec<BakedEntry>,
     generation: u64,
 }
-struct BakedKey { source: GpuTexture2D, passes: Vec<EffectPass>, frame: Option<effects::vism::ImageFrame>, others: Vec<GpuTexture2D> }
+struct BakedKey { source: GpuTexture2D, passes: Vec<EffectPass>, frame: Option<effects::vism::ImageFrame>, others: Vec<GpuTexture2D>, clock: Option<Clock> }
 impl PartialEq for BakedKey {
     fn eq(&self, other: &Self) -> bool {
         self.source.handle() == other.source.handle() && self.passes == other.passes && self.frame == other.frame
+            && self.clock == other.clock
             && self.others.len() == other.others.len()
             && self.others.iter().zip(&other.others).all(|(a, b)| a.handle() == b.handle())
     }
@@ -100,7 +101,7 @@ impl Compositor {
                 continue;
             }
             if let Some((source, passes, content, padding, spill)) = &previous {
-                if shared_frame.is_none() && lwp.pass_sources.iter().all(Vec::is_empty)
+                if shared_frame.is_none() && lwp.pass_sources.iter().all(Vec::is_empty) && !lwp.passes.iter().any(|p| p.uses_clock)
                     && source.handle() == layer_texture.handle() && *passes == lwp.passes.as_slice() {
                     effective_textures.push(content.clone());
                     effective_paddings.push(*padding);
@@ -108,7 +109,9 @@ impl Compositor {
                     continue;
                 }
             }
-            let baked_key = BakedKey { source: layer_texture.clone(), passes: lwp.passes.clone(), frame, others: lwp.pass_sources.iter().flatten().cloned().collect() };
+            // 時計を読む効果が 1 つでもあれば時刻が鍵に入る。読まない列は時刻で焼き直さない。
+            let clock = lwp.passes.iter().any(|p| p.uses_clock).then_some(self.clock).flatten();
+            let baked_key = BakedKey { source: layer_texture.clone(), passes: lwp.passes.clone(), frame, others: lwp.pass_sources.iter().flatten().cloned().collect(), clock };
             if let Some((content, padding, spill)) = self.baked_effects.hit(&baked_key) {
                 self.surface_work.baked_hits += 1;
                 previous = Some((layer_texture, lwp.passes.as_slice(), content.clone(), padding, spill.clone()));
@@ -321,7 +324,10 @@ impl Compositor {
             } else {
                 // pass は ISF の作法(render_size = 画素)。論理 px の欄だけ host が密度で画素へ写す。
                 let density = frame.map_or(1.0, |f| f.density().into_iter().fold(1.0f32, f32::max));
-                let params = program.params_at_density(&pass.params, density);
+                let mut params = program.params_at_density(&pass.params, density);
+                if pass.uses_clock {
+                    params.extend(self.clock_params());
+                }
                 program.record(&self.ctx, encoder, &mut self.effect_scratch, &sources, &destination_view, &params, [padded_width as f32,padded_height as f32]);
             }
             let destination = if program.image_input_count() == 0 {
@@ -343,6 +349,12 @@ impl Compositor {
             current_is_scratch = true;
         }
         Ok((current, current_linear, current_is_scratch))
+    }
+
+    /// 欄の列に足す時計(TIME 秒・TIMEDELTA 秒・FRAMEINDEX)。engine が frame ごとに `clock` を置く。
+    fn clock_params(&self) -> Vec<(String, f32)> {
+        let [time, delta, frame] = self.clock.unwrap_or([0.0; 3]);
+        effects::vism::CLOCK_KEYS.iter().zip([time, delta, frame]).map(|(k, v)| ((*k).to_owned(), v)).collect()
     }
 
     /// 別の時刻の絵を 1 枚だけ写し取る。

@@ -140,6 +140,12 @@ impl Engine {
             resolved.iter().flat_map(|l| l.effects.iter().chain(&l.after_effects))
                 .any(|e| surface_ids.contains(e.plugin_id.as_str()))
         };
+        // 時計(TIME 系)は comp の時刻と fps から。壁時計は使わない — 同じ時刻は何度描いても同じ絵。
+        self.compositor.clock = view.composition().ok().flatten().map(|c| {
+            let fps = c.fps;
+            let frame = t.try_to_frame_round(fps).unwrap_or(0) as f32;
+            [t.as_seconds_f64() as f32, fps.den() as f32 / fps.num() as f32, frame]
+        });
         // 別の時刻を要求した効果があれば、その時刻の層の姿をここで 1 回だけ引き直す(同じずれは共有)。
         let mut other_times: OtherTimes = BTreeMap::new();
         for layer in resolved {

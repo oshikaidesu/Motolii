@@ -162,11 +162,14 @@ pub(crate) fn inspector_data_from_doc(view: &StoreView, layer: LayerId, t: Ratio
                     let keyed = view.track(layer, &prop).ok().flatten().is_some();
                     let stored = view.value_at(layer, &prop, t).ok().flatten();
                     // 点の欄(Twist・Bend の Center)は 2 つの枡、数の欄は 1 つ。
-                    let (cells, vec2, value) = match (param.point, stored) {
-                        (Some(_), Some(Value::Vec2([x, y]))) => ([f(x), f(y), String::new()], true, Value::Vec2([x, y])),
-                        (Some([x, y]), _) => ([f(x), f(y), String::new()], true, Value::Vec2([x, y])),
-                        (None, Some(Value::F64(v))) => ([String::new(), String::new(), f(v)], false, Value::F64(v)),
-                        (None, _) => ([String::new(), String::new(), f(param.default)], false, Value::F64(param.default)),
+                    // 色の欄は値の形(Color)だけで窓が hex の部品を出す。枡は使わない。
+                    let (cells, vec2, value) = match (param.point, param.color, stored) {
+                        (_, Some(_), Some(Value::Color(c))) => ([String::new(), String::new(), String::new()], false, Value::Color(c)),
+                        (_, Some(c), _) => ([String::new(), String::new(), String::new()], false, Value::Color(c)),
+                        (Some(_), _, Some(Value::Vec2([x, y]))) => ([f(x), f(y), String::new()], true, Value::Vec2([x, y])),
+                        (Some([x, y]), _, _) => ([f(x), f(y), String::new()], true, Value::Vec2([x, y])),
+                        (None, None, Some(Value::F64(v))) => ([String::new(), String::new(), f(v)], false, Value::F64(v)),
+                        (None, None, _) => ([String::new(), String::new(), f(param.default)], false, Value::F64(param.default)),
                     };
                     Some(PropRow {
                         label: param.label.clone(),

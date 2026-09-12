@@ -57,6 +57,8 @@ pub enum IsfInputType {
     Long,
     Bool,
     Point2D,
+    /// 3 成分の点(ISF の `point3D`)。窓には vec3 の部品が無いので、z は既定のまま(取説に明記)。
+    Point3D,
     Color,
 }
 
@@ -68,6 +70,7 @@ impl IsfInputType {
             "long" => Some(Self::Long),
             "bool" => Some(Self::Bool),
             "point2D" => Some(Self::Point2D),
+            "point3D" => Some(Self::Point3D),
             "color" => Some(Self::Color),
             _ => None,
         }
@@ -78,6 +81,7 @@ impl IsfInputType {
             Self::Image => 0,
             Self::Float | Self::Long | Self::Bool => 1,
             Self::Point2D => 2,
+            Self::Point3D => 3,
             Self::Color => 4,
         }
     }
@@ -87,6 +91,7 @@ impl IsfInputType {
             Self::Image => "sampler2D",
             Self::Float | Self::Long | Self::Bool => "float",
             Self::Point2D => "vec2",
+            Self::Point3D => "vec3",
             Self::Color => "vec4",
         }
     }
@@ -158,6 +163,8 @@ pub struct IsfManifest {
     pub output_float: bool,
     pub linear_sampling: bool,
     pub specialize_passes: bool,
+    /// 本文が時計(`TIME` `TIMEDELTA` `FRAMEINDEX` `DATE`)を読むか。読む効果だけ時刻で焼き直す。
+    pub uses_clock: bool,
     /// A zero value of this input disables reads from the composited backdrop.
     pub backdrop_input: Option<String>,
     /// The roughness-like input that decides how far down the backdrop's mip chain reads go.
@@ -180,6 +187,7 @@ impl Default for IsfManifest {
             expose: true,
             linear_sampling: false,
             specialize_passes: false,
+            uses_clock: false,
         output_float: false,
             backdrop_input: None,
             backdrop_blur_input: None,
@@ -377,6 +385,7 @@ pub(crate) fn parse_isf_source(source: &str) -> Result<(IsfManifest, String), Is
             output_float,
             linear_sampling: value.get("FILTER").and_then(|v| v.as_str()) == Some("linear"),
             specialize_passes: value.get("SPECIALIZE_PASSES").and_then(|v| v.as_bool()).unwrap_or(false),
+            uses_clock: reads_clock(&body),
             backdrop_input,
             backdrop_blur_input,
             padding,
@@ -468,12 +477,17 @@ fn wrap_fragment_source(
         "layout(set = 1, binding = {binding}) uniform RenderInfo {{ vec2 RENDERSIZE; }};\n",
         binding = super::vism::render_size_binding(param_order.len())
     ));
-    // 何段目か(ISF の PASSINDEX)。host は f32 で送るので、綴りは int へ写して渡す。
+    // (段, TIME, TIMEDELTA, FRAMEINDEX) が 1 つの vec4 で届く(ISF の綴りへ写す)。
+    // DATE は壁時計で、どの時刻を 2 回描いても同じ絵にするため 0 固定。
     out.push_str(&format!(
-        "layout(set = 1, binding = {binding}) uniform PassInfo {{ float isf_PassIndex; }};\n",
+        "layout(set = 1, binding = {binding}) uniform PassInfo {{ vec4 isf_PassInfo; }};\n",
         binding = super::vism::pass_index_binding(param_order.len())
     ));
-    out.push_str("#define PASSINDEX int(isf_PassIndex)\n\n");
+    out.push_str("#define PASSINDEX int(isf_PassInfo.x)\n");
+    out.push_str("#define TIME isf_PassInfo.y\n");
+    out.push_str("#define TIMEDELTA isf_PassInfo.z\n");
+    out.push_str("#define FRAMEINDEX int(isf_PassInfo.w)\n");
+    out.push_str("#define DATE vec4(0.0)\n\n");
 
     // ISF の座標は下端が 0(GL の作法)、wgpu の texture は上端が 0。読む時に裏返す。
     out.push_str("#define IMG_THIS_PIXEL(image) texture(image, vec2(isf_FragNormCoord.x, 1.0 - isf_FragNormCoord.y))\n");
@@ -551,6 +565,29 @@ mod manifest_tests {
         assert!(error.contains("nope") && error.contains("past"), "{error}");
     }
 
+    /// 時計は ISF の綴り(TIME / TIMEDELTA / FRAMEINDEX / DATE)で、ホストの uniform として届く。
+    /// 読む効果だけ `uses_clock` が立つ(注釈の中の語や TIMER のような別名では立たない)。
+    #[test]
+    fn the_clock_is_declared_and_only_readers_are_marked() {
+        let reader = "/*{ \"INPUTS\": [{\"NAME\":\"inputImage\",\"TYPE\":\"image\"}] }*/\nvoid main() { gl_FragColor = vec4(sin(TIME), float(FRAMEINDEX), TIMEDELTA, 1.0) + DATE; }";
+        let (manifest, _v, fragment) = compiled_stages(reader).expect("時計が読める");
+        assert!(manifest.uses_clock);
+        assert!(fragment.contains("fn main"), "{fragment}");
+        let quiet = "/*{ \"INPUTS\": [] }*/\n// TIME is only mentioned here\nfloat TIMER = 1.0; void main() { gl_FragColor = vec4(TIMER); }";
+        assert!(!parse_isf_source(quiet).unwrap().0.uses_clock);
+    }
+
+    /// point3D は 3 成分の欄。窓には x,y だけが出て z は既定のまま(取説に明記)。
+    #[test]
+    fn a_point3d_field_has_three_components() {
+        let source = "/*{ \"INPUTS\": [{\"NAME\":\"p\",\"TYPE\":\"point3D\",\"DEFAULT\":[1.0,2.0,3.0]}] }*/ void main() { gl_FragColor = vec4(p, 1.0); }";
+        let (manifest, _v, fragment) = compiled_stages(source).expect("point3D が通る");
+        let p = &manifest.inputs[0];
+        assert_eq!((p.ty, p.ty.component_count()), (IsfInputType::Point3D, 3));
+        assert_eq!(&p.default[..3], &[1.0, 2.0, 3.0]);
+        assert!(fragment.contains("fn main"), "{fragment}");
+    }
+
     #[test]
     fn constant_pass_dimensions_follow_isf_target_declarations() {
         let m = manifest(r#", "PASSES": [{"TARGET":"summary","WIDTH":"64","HEIGHT":"8","FLOAT":true},{}]"#).unwrap();
@@ -562,4 +599,17 @@ mod manifest_tests {
             assert!(manifest(&format!(", \"PASSES\": [{{\"TARGET\":\"summary\",\"WIDTH\":{value}}}]")).is_err());
         }
     }
+}
+
+/// 本文が時計の名前を識別子として読むか(注釈は外して見る)。
+fn reads_clock(body: &str) -> bool {
+    let text = shadertoy::strip_comments_pub(body);
+    let is_ident = |c: char| c.is_ascii_alphanumeric() || c == '_';
+    ["TIME", "TIMEDELTA", "FRAMEINDEX", "DATE"].iter().any(|name| {
+        text.match_indices(name).any(|(i, _)| {
+            let before = text[..i].chars().last().is_none_or(|c| !is_ident(c));
+            let after = text[i + name.len()..].chars().next().is_none_or(|c| !is_ident(c));
+            before && after
+        })
+    })
 }

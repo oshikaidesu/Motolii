@@ -308,6 +308,9 @@ pub struct Layer {
     pub frame: Option<effects::vism::ImageFrame>,
 }
 
+/// engine が frame ごとに置く時計: (TIME 秒, TIMEDELTA 秒, FRAMEINDEX)。時計を読む効果だけが使う。
+pub(crate) type Clock = [f32; 3];
+
 #[derive(Clone)]
 pub struct LayerWithPasses {
     pub layer: Layer,
@@ -416,6 +419,8 @@ pub struct Compositor {
     pub(crate) effect_programs: std::collections::HashMap<String, effects::EffectProgram>,
     /// hook の変種。鍵は「field の id | surface の id | catalog の世代」。
     pub(crate) surface_programs: std::collections::HashMap<String, std::sync::Arc<re_renderer::renderer::SurfaceProgram>>,
+    /// この frame の時計。engine が描く前に置く(無ければ 0)。
+    pub(crate) clock: Option<Clock>,
     /// 層と背景を混ぜる Vism(vism/blend.wgsl + 借りた式)。
     pub(crate) blend_vism: effects::EffectProgram,
     pub(crate) selection_bounds: Option<selection_bounds::SelectionBounds>,
