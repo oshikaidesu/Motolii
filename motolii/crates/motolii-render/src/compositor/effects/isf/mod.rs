@@ -13,7 +13,7 @@ pub(crate) enum IsfError {
     Validate(String),
     #[error("naga が WGSL を書き出せない: {0}")]
     WgslWrite(String),
-    #[error("PERSISTENT なバッファは採らない(任意の時刻へ飛べるので、持ち越すと絵が操作の履歴に依存する)")]
+    #[error("PERSISTENT なバッファは採らない — 効果が自分で前フレームを覚えると追跡できなくなる(純関数契約・フレーム並列・スクラブが壊れ、同じ時刻を 2 回描くと違う絵になる)。時間を使う表現はホストが渡す時間参照へ繋ぐ(docs/plugin-resources.md §6、口は予約済み・未実装)")]
     PersistentBuffer,
     #[error("STAGE `{0}` は知らない(pass / warp / surface / field)")]
     UnknownStage(String),
