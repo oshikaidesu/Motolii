@@ -850,15 +850,10 @@ class _TimelinePanelState extends State<TimelinePanel> {
       'ungroup': 'Ungroup',
       'split': 'Split',
     };
-    final chosen = await showMenu<String>(
-      context: context,
-      position: RelativeRect.fromLTRB(
-        details.globalPosition.dx,
-        details.globalPosition.dy,
-        details.globalPosition.dx,
-        details.globalPosition.dy,
-      ),
-      items: [
+    final chosen = await showEditorMenu<String>(
+      context,
+      details.globalPosition,
+      [
         if (target != null) ...[
           const EditorMenuItem<String>(
             value: 'lanes:keyed',

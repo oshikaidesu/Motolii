@@ -599,7 +599,10 @@ class _BrowserPanelState extends State<BrowserPanel> {
         // The fill being edited: its kind, stops and direction redraw the
         // editor at the top of the Colors panel.
         _targetFill(widget.controller, _colorTarget(widget.controller)),
-        _targetLayer(widget.controller, _colorTarget(widget.controller))?['name'],
+        _targetLayer(
+          widget.controller,
+          _colorTarget(widget.controller),
+        )?['name'],
       ],
     ),
     builder: (context, state, _) {
@@ -1387,91 +1390,87 @@ class _BrowserPanelState extends State<BrowserPanel> {
       ] else if (item['detail'] != null)
         '${item['detail']}',
     ].where((f) => f.isNotEmpty).toList();
-    showMenu<String>(
-      context: context,
-      position: RelativeRect.fromLTRB(point.dx, point.dy, point.dx, point.dy),
-      items: [
+    showEditorMenu<String>(context, point, [
+      EditorMenuItem<String>(
+        enabled: false,
+        child: Text(
+          '${item['name'] ?? item['hex'] ?? item['id']}',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(color: EditorTheme.ink),
+        ),
+      ),
+      for (final fact in facts)
         EditorMenuItem<String>(
           enabled: false,
-          child: Text(
-            '${item['name'] ?? item['hex'] ?? item['id']}',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: EditorTheme.ink),
-          ),
+          child: Text(fact, maxLines: 1, overflow: TextOverflow.ellipsis),
         ),
-        for (final fact in facts)
-          EditorMenuItem<String>(
-            enabled: false,
-            child: Text(fact, maxLines: 1, overflow: TextOverflow.ellipsis),
+      const PopupMenuDivider(height: EditorMetrics.s8),
+      EditorMenuItem<String>(
+        value: 'apply',
+        child: Text(
+          tab == 'Media'
+              ? 'Place'
+              : tab == 'Files'
+              ? (item['folder'] == true ? 'Open' : 'Import to Media')
+              : 'Apply',
+        ),
+      ),
+      if (tab == 'Files' && path != null) ...[
+        EditorMenuItem<String>(value: 'reveal', child: Text(_revealLabel)),
+        if (item['folder'] != true)
+          const EditorMenuItem<String>(
+            value: 'open',
+            child: Text('Open with default app'),
           ),
-        const PopupMenuDivider(height: EditorMetrics.s8),
+        const EditorMenuItem<String>(
+          value: 'copyPath',
+          child: Text('Copy path'),
+        ),
+      ],
+      if (own) ...[
         EditorMenuItem<String>(
-          value: 'apply',
-          child: Text(
-            tab == 'Media'
-                ? 'Place'
-                : tab == 'Files'
-                ? (item['folder'] == true ? 'Open' : 'Import to Media')
-                : 'Apply',
-          ),
+          value: 'replace',
+          enabled:
+              has('replaceAsset') &&
+              !missing &&
+              widget.controller.selectedIds.isNotEmpty,
+          child: const Text('Replace selected layer'),
         ),
-        if (tab == 'Files' && path != null) ...[
+        if (path != null && !missing) ...[
           EditorMenuItem<String>(value: 'reveal', child: Text(_revealLabel)),
-          if (item['folder'] != true)
+          const EditorMenuItem<String>(
+            value: 'open',
+            child: Text('Open with default app'),
+          ),
+          if ('${item['mime']}'.startsWith('image/'))
             const EditorMenuItem<String>(
-              value: 'open',
-              child: Text('Open with default app'),
+              value: 'palette',
+              child: Text('Extract palette'),
             ),
+        ],
+        if (path != null)
           const EditorMenuItem<String>(
             value: 'copyPath',
             child: Text('Copy path'),
           ),
-        ],
-        if (own) ...[
+        if (has('relinkAsset'))
           EditorMenuItem<String>(
-            value: 'replace',
-            enabled:
-                has('replaceAsset') &&
-                !missing &&
-                widget.controller.selectedIds.isNotEmpty,
-            child: const Text('Replace selected layer'),
+            value: 'relink',
+            child: Text(missing ? 'Locate file…' : 'Relink to another file…'),
           ),
-          if (path != null && !missing) ...[
-            EditorMenuItem<String>(value: 'reveal', child: Text(_revealLabel)),
-            const EditorMenuItem<String>(
-              value: 'open',
-              child: Text('Open with default app'),
-            ),
-            if ('${item['mime']}'.startsWith('image/'))
-              const EditorMenuItem<String>(
-                value: 'palette',
-                child: Text('Extract palette'),
-              ),
-          ],
-          if (path != null)
-            const EditorMenuItem<String>(
-              value: 'copyPath',
-              child: Text('Copy path'),
-            ),
-          if (has('relinkAsset'))
-            EditorMenuItem<String>(
-              value: 'relink',
-              child: Text(missing ? 'Locate file…' : 'Relink to another file…'),
-            ),
-          EditorMenuItem<String>(
-            value: 'remove',
-            enabled: has('removeAsset') && item['used'] != true,
-            child: const Text('Remove from library'),
-          ),
-        ],
-        if (item['saved'] == true)
-          const EditorMenuItem<String>(
-            value: 'forget',
-            child: Text('Forget swatch'),
-          ),
+        EditorMenuItem<String>(
+          value: 'remove',
+          enabled: has('removeAsset') && item['used'] != true,
+          child: const Text('Remove from library'),
+        ),
       ],
-    ).then((action) {
+      if (item['saved'] == true)
+        const EditorMenuItem<String>(
+          value: 'forget',
+          child: Text('Forget swatch'),
+        ),
+    ]).then((action) {
       if (!mounted) return;
       switch (action) {
         case 'apply':
@@ -1977,6 +1976,7 @@ List<double> _rgba(dynamic raw) {
 
 Color _color(List<double> rgba) =>
     Color.from(alpha: rgba[3], red: rgba[0], green: rgba[1], blue: rgba[2]);
+
 /// The layer a colour target points at, from the status rows.
 Map<String, dynamic>? _targetLayer(
   EditorSession controller,
@@ -3014,7 +3014,9 @@ class _EffectTileState extends State<_EffectTile> {
   bool pressed = false;
 
   Widget sample(bool before) => NativeVisualSample(
-    key: ValueKey('browser:effect:${widget.item['id']}:${before ? 'before' : 'after'}'),
+    key: ValueKey(
+      'browser:effect:${widget.item['id']}:${before ? 'before' : 'after'}',
+    ),
     controller: widget.controller,
     request: {
       'kind': 'effect',

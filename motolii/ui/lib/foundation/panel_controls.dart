@@ -421,7 +421,10 @@ class _EditorNumericFieldState extends State<EditorNumericField> {
   /// so sideways is the number's and up-and-down stays the list's.
   Timer? _settle;
   void _panUpdate(DragUpdateDetails details) {
-    File('/tmp/motolii-diag.log').writeAsStringSync('${DateTime.now().toIso8601String()} panUpdate dx=${details.delta.dx} dragging=$_dragging pointer=$_pointer ending=$_ending\n', mode: FileMode.append); // DIAG(temp)
+    File('/tmp/motolii-diag.log').writeAsStringSync(
+      '${DateTime.now().toIso8601String()} panUpdate dx=${details.delta.dx} dragging=$_dragging pointer=$_pointer ending=$_ending\n',
+      mode: FileMode.append,
+    ); // DIAG(temp)
     if (!widget.enabled || _editing || _ending || _pointer != null) return;
     final by = HardwareKeyboard.instance.isShiftPressed ? 10 : 1;
     // The pan is reported as the content's motion (natural scrolling), the
@@ -434,12 +437,18 @@ class _EditorNumericFieldState extends State<EditorNumericField> {
   }
 
   void _panEnd() {
-    File('/tmp/motolii-diag.log').writeAsStringSync('${DateTime.now().toIso8601String()} panEnd dragging=$_dragging pointer=$_pointer\n', mode: FileMode.append); // DIAG(temp)
+    File('/tmp/motolii-diag.log').writeAsStringSync(
+      '${DateTime.now().toIso8601String()} panEnd dragging=$_dragging pointer=$_pointer\n',
+      mode: FileMode.append,
+    ); // DIAG(temp)
     if (_pointer == null) _end(false);
   }
 
   void _pointerSignal(PointerSignalEvent event) {
-    File('/tmp/motolii-diag.log').writeAsStringSync('${DateTime.now().toIso8601String()} signal ${event.runtimeType} ${event is PointerScrollEvent ? event.scrollDelta : ''} kind=${event.kind}\n', mode: FileMode.append); // DIAG(temp)
+    File('/tmp/motolii-diag.log').writeAsStringSync(
+      '${DateTime.now().toIso8601String()} signal ${event.runtimeType} ${event is PointerScrollEvent ? event.scrollDelta : ''} kind=${event.kind}\n',
+      mode: FileMode.append,
+    ); // DIAG(temp)
     if (event is! PointerScrollEvent) return;
     if (!widget.enabled || _editing || _ending) return;
     final held = _pointer != null;
@@ -1494,6 +1503,18 @@ class _TrackPainter extends CustomPainter {
       old.rest != rest ||
       old.tint != tint ||
       old.style != style;
+}
+
+/// The editor's one scale, set above the Navigator so pages and their menus,
+/// dialogs and drawers all grow together.
+class EditorScale extends InheritedNotifier<ValueNotifier<double>> {
+  const EditorScale({
+    super.key,
+    required ValueNotifier<double> super.notifier,
+    required super.child,
+  });
+  static ValueNotifier<double>? of(BuildContext context) =>
+      context.getInheritedWidgetOfExactType<EditorScale>()?.notifier;
 }
 
 /// A logical viewport whose painted and hit-tested bounds fill its parent.

@@ -10,6 +10,7 @@ abstract final class EditorTheme {
   // per rung, so a hover, a chosen row and a panel edge all climb the
   // same stair.
   static const hoverLift = .08, pressedLift = .10, draggedLift = .16;
+
   /// A chosen surface: two hover steps, the M3 dragged layer.
   static const lift = draggedLift;
   static const app = Color(0xff292929),
@@ -72,6 +73,7 @@ abstract final class EditorTheme {
     '2d' || 'images' => const Color(0xff93a5f5),
     _ => const Color(0xffc18bd3),
   };
+
   /// The menu sheet and its rows, for the ThemeData and for EditorChoice
   /// (a MenuAnchor sets them itself, so a stray Theme cannot lose them).
   static const menuSheet = MenuStyle(
@@ -340,6 +342,23 @@ class EditorSection extends StatelessWidget {
       ),
       child,
     ],
+  );
+}
+
+/// A context menu at a pointer's screen position. The whole app is scaled
+/// above the Navigator, so the overlay's coordinates are not the screen's.
+Future<T?> showEditorMenu<T>(
+  BuildContext context,
+  Offset at,
+  List<PopupMenuEntry<T>> items,
+) {
+  final overlay =
+      Navigator.of(context).overlay!.context.findRenderObject() as RenderBox;
+  final p = overlay.globalToLocal(at);
+  return showMenu<T>(
+    context: context,
+    position: RelativeRect.fromLTRB(p.dx, p.dy, p.dx, p.dy),
+    items: items,
   );
 }
 

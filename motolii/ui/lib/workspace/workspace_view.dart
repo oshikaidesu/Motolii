@@ -166,25 +166,21 @@ class _WorkspaceViewState extends State<WorkspaceView> {
                                     ),
                                     child: GestureDetector(
                                       onSecondaryTapDown: (details) async {
-                                        final action = await showMenu<String>(
-                                          context: context,
-                                          position: RelativeRect.fromLTRB(
-                                            details.globalPosition.dx,
-                                            details.globalPosition.dy,
-                                            0,
-                                            0,
-                                          ),
-                                          items: [
-                                            const EditorMenuItem(
-                                              value: 'detach',
-                                              child: Text('Detach'),
-                                            ),
-                                            const EditorMenuItem(
-                                              value: 'close',
-                                              child: Text('Close'),
-                                            ),
-                                          ],
-                                        );
+                                        final action =
+                                            await showEditorMenu<String>(
+                                              context,
+                                              details.globalPosition,
+                                              [
+                                                const EditorMenuItem(
+                                                  value: 'detach',
+                                                  child: Text('Detach'),
+                                                ),
+                                                const EditorMenuItem(
+                                                  value: 'close',
+                                                  child: Text('Close'),
+                                                ),
+                                              ],
+                                            );
                                         if (action == 'detach' ||
                                             action == 'window')
                                           widget.onDetach(name);

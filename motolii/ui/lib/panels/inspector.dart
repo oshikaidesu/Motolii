@@ -905,7 +905,11 @@ class _InspectorPanelState extends State<InspectorPanel> {
             if (!panelMap(color['slot']).containsKey('ShapeStroke'))
               Padding(
                 padding: const EdgeInsets.only(bottom: EditorMetrics.s4),
-                child: EditorColorRow(controller: c, layer: layer, color: color),
+                child: EditorColorRow(
+                  controller: c,
+                  layer: layer,
+                  color: color,
+                ),
               ),
         for (final color in colors)
           if (panelMap(color['slot']).containsKey('ShapeStroke'))
@@ -1245,43 +1249,39 @@ class _InspectorPanelState extends State<InspectorPanel> {
     final at = box == null
         ? Offset.zero
         : box.localToGlobal(box.size.bottomLeft(Offset.zero));
-    final chosen = await showMenu<String>(
-      context: context,
-      position: RelativeRect.fromLTRB(at.dx, at.dy, at.dx, at.dy),
-      items: [
+    final chosen = await showEditorMenu<String>(context, at, [
+      EditorMenuItem<String>(
+        value: 'earlier',
+        enabled: panelCan(c, 'moveEffect') && index > 0,
+        child: const Text('Apply earlier'),
+      ),
+      EditorMenuItem<String>(
+        value: 'later',
+        enabled: panelCan(c, 'moveEffect') && index < count - 1,
+        child: const Text('Apply later'),
+      ),
+      EditorMenuItem<String>(
+        value: 'roll',
+        enabled: _canEdit(layer),
+        child: const Text('Throw every number within its reach'),
+      ),
+      EditorMenuItem<String>(
+        value: 'rest',
+        enabled: _canEdit(layer),
+        child: const Text('Back to where the numbers rest'),
+      ),
+      if (effect['placement'] == true)
         EditorMenuItem<String>(
-          value: 'earlier',
-          enabled: panelCan(c, 'moveEffect') && index > 0,
-          child: const Text('Apply earlier'),
+          value: 'expand',
+          enabled: panelCan(c, 'expandEffect'),
+          child: const Text('Expand copies into layers'),
         ),
-        EditorMenuItem<String>(
-          value: 'later',
-          enabled: panelCan(c, 'moveEffect') && index < count - 1,
-          child: const Text('Apply later'),
-        ),
-        EditorMenuItem<String>(
-          value: 'roll',
-          enabled: _canEdit(layer),
-          child: const Text('Throw every number within its reach'),
-        ),
-        EditorMenuItem<String>(
-          value: 'rest',
-          enabled: _canEdit(layer),
-          child: const Text('Back to where the numbers rest'),
-        ),
-        if (effect['placement'] == true)
-          EditorMenuItem<String>(
-            value: 'expand',
-            enabled: panelCan(c, 'expandEffect'),
-            child: const Text('Expand copies into layers'),
-          ),
-        EditorMenuItem<String>(
-          value: 'remove',
-          enabled: panelCan(c, 'removeEffect'),
-          child: const Text('Remove effect'),
-        ),
-      ],
-    );
+      EditorMenuItem<String>(
+        value: 'remove',
+        enabled: panelCan(c, 'removeEffect'),
+        child: const Text('Remove effect'),
+      ),
+    ]);
     switch (chosen) {
       case 'earlier' || 'later':
         await c.command('moveEffect', {
@@ -1562,24 +1562,18 @@ class _InspectorPanelState extends State<InspectorPanel> {
     Map<String, dynamic> row,
   ) async {
     final rest = row['default'];
-    final chosen = await showMenu<String>(
-      context: context,
-      position: RelativeRect.fromLTRB(at.dx, at.dy, at.dx, at.dy),
-      items: [
-        EditorMenuItem<String>(
-          value: 'rest',
-          enabled: rest is num && row['value'] is num && _canEdit(layer),
-          child: const Text('Reset'),
-        ),
-        EditorMenuItem<String>(
-          value: 'key',
-          enabled: panelCan(c, 'toggleKey') && _canEdit(layer),
-          child: Text(
-            row['keyedNow'] == true ? 'Remove key' : 'Key this frame',
-          ),
-        ),
-      ],
-    );
+    final chosen = await showEditorMenu<String>(context, at, [
+      EditorMenuItem<String>(
+        value: 'rest',
+        enabled: rest is num && row['value'] is num && _canEdit(layer),
+        child: const Text('Reset'),
+      ),
+      EditorMenuItem<String>(
+        value: 'key',
+        enabled: panelCan(c, 'toggleKey') && _canEdit(layer),
+        child: Text(row['keyedNow'] == true ? 'Remove key' : 'Key this frame'),
+      ),
+    ]);
     if (chosen == 'rest' && rest is num) {
       await _write(layer, row, rest.toDouble(), preview: false);
     } else if (chosen == 'key') {
