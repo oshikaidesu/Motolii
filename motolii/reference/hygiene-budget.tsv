@@ -2,5 +2,5 @@ key	limit	note
 target_gb	10	build 物の disk advisory。超過時は build-artifacts.tsv で所有者と生存を分類し、総量だけで消さない
 incremental_sessions	60	target/debug/incremental の session 数。正常値は crate 4 × (lib/test) + 統合 test 12 本 ≈ 25。昨日は 827
 file_lines_soft	800	file の長さの目安。超えた file の数を files_over_soft で見張る
-longest_file_lines	1737	今の最長。天井は現状。増やさない
-files_over_soft	8	800 行超の file 数。天井は現状。増やさない
+longest_file_lines	2104	今の最長(ui/lib/panels/inspector.dart)。天井は現状。増やさない。数える家は doc・render・ui/lib(Dart)・ui/native、旧 src/ui は数えない
+files_over_soft	14	800 行超の file 数(Rust + Dart)。天井は現状。増やさない

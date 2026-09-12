@@ -20,8 +20,11 @@ else
 fi
 incr=$( [ -d target/debug/incremental ] && ls target/debug/incremental | wc -l | tr -d ' ' || echo 0 )
 check incremental_sessions "$incr"
-longest=$(find src crates/*/src -name '*.rs' -exec wc -l {} + | grep -v ' total$' | sort -rn | head -1 | awk '{print $1}')
+# 生きている家だけ数える(doc・render・ui/lib の Dart・ui/native)。旧 src/ui は比較用なので数えない。
+sizes() { find crates/*/src ui/native/src -name '*.rs' -exec wc -l {} + ; find ui/lib -name '*.dart' -exec wc -l {} + ; }
+longest=$(sizes | grep -v ' total$' | sort -rn | head -1 | awk '{print $1}')
 check longest_file_lines "$longest"
-files_over=$(find src crates/*/src -name '*.rs' -exec wc -l {} + | grep -v ' total$' | awk -v l="$(val file_lines_soft)" '$1>l' | wc -l | tr -d ' ')
+files_over=$(sizes | grep -v ' total$' | awk -v l="$(val file_lines_soft)" '$1>l' | wc -l | tr -d ' ')
 check files_over_soft "$files_over"
+[ "$fail" -ne 0 ] && sizes | grep -v ' total$' | awk -v l="$(val file_lines_soft)" '$1>l' | sort -rn
 [ "$fail" -eq 0 ] && echo "OK: hygiene 全項目通過" || { echo "FAILED"; exit 1; }
