@@ -232,6 +232,18 @@ fn validate_stage(source: &str, entry: &str, stage: naga::ShaderStage, manifest:
 }
 
 fn prepare(source: VismSource, prelude: &str) -> Result<VismDefinition, String> {
+    // 貼られた物はここで ISF の言い方へ写し、以後は同梱の効果と同じ道を通る。
+    let source = match isf::shadertoy::dialect(&source.source) {
+        Some(isf::shadertoy::Dialect::Shadertoy) => {
+            let id = format!("import.{}", source.name);
+            let text = isf::shadertoy::isf_from_shadertoy(&id, &source.name, &source.source)?;
+            VismSource { source: text.into(), extension: "fs".into(), ..source }
+        }
+        Some(isf::shadertoy::Dialect::Glsl) => {
+            return Err(format!("{}: manifest が無い — ISF の /*{{ ... }}*/ を書くか、Shadertoy の mainImage で書く", source.name));
+        }
+        _ => source,
+    };
     if source.extension != "fs" {
         let (manifest, body) = isf::parse_isf_source(&source.source).map_err(|e| e.to_string())?;
         if !matches!(manifest.stage, isf::IsfStage::Pass | isf::IsfStage::Warp) {
@@ -355,7 +367,7 @@ fn refresh_runtime(runtime: &CatalogRuntime) -> CatalogRefresh {
     #[cfg(load_shaders_from_disk)]
     let (sources, prelude) = {
         let mut paths = match std::fs::read_dir(directory()) {
-            Ok(entries) => entries.filter_map(Result::ok).map(|e| e.path()).filter(|p| matches!(p.extension().and_then(|x| x.to_str()), Some("wgsl" | "fs"))).collect::<Vec<_>>(),
+            Ok(entries) => entries.filter_map(Result::ok).map(|e| e.path()).filter(|p| matches!(p.extension().and_then(|x| x.to_str()), Some("wgsl" | "fs" | "frag" | "glsl"))).collect::<Vec<_>>(),
             Err(e) => { errors.push(format!("catalog directory: {e}")); Vec::new() }
         };
         paths.sort();
@@ -442,6 +454,18 @@ mod tests {
 
     fn blur(text: String) -> Result<VismDefinition, String> {
         prepare(VismSource { name: "blur".into(), extension: "wgsl".into(), source: text.into() }, "")
+    }
+
+    /// 貼った Shadertoy が、同梱の効果と同じ道で棚に出る(棚に出る条件 = ここを抜けること)。
+    #[test]
+    fn a_pasted_shadertoy_becomes_an_effect() {
+        let source = "void mainImage(out vec4 c, in vec2 p) { c = vec4(p / iResolution.xy, sin(iTime), 1.0); }";
+        let definition = prepare(VismSource { name: "city".into(), extension: "frag".into(), source: source.into() }, "").unwrap();
+        assert_eq!(definition.plugin_id(), "import.city");
+        assert!(matches!(definition.manifest.stage, isf::IsfStage::Pass));
+        // manifest の無い素の GLSL は、理由を名前つきで断る。
+        let plain = prepare(VismSource { name: "bare".into(), extension: "frag".into(), source: "void main() { gl_FragColor = vec4(1.0); }".into() }, "").err().expect("manifest の無い GLSL は断る");
+        assert!(plain.contains("bare") && plain.contains("manifest"), "{plain}");
     }
 
     #[test]

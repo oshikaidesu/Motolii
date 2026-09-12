@@ -19,6 +19,8 @@ pub(crate) enum IsfError {
     UnknownStage(String),
 }
 
+pub mod shadertoy;
+
 /// どの stage に差すか。`pass` は 2D の texture→texture、`surface`/`field` は網の hook(fork の `MeshProgram`)。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum IsfStage {

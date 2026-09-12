@@ -12,7 +12,7 @@ fn main() {
         .filter(|path| {
             matches!(
                 path.extension().and_then(|ext| ext.to_str()),
-                Some("wgsl" | "fs")
+                Some("wgsl" | "fs" | "frag" | "glsl")
             )
         })
         .collect();
